@@ -103,12 +103,14 @@ REFERENCE_SEP = [
      "title": "Wang Yangming", "tex_needle": "Wang Yangming"},
 ]
 REFERENCE_KNOWN = [
-    {"key": "Beth 1953", "status": "HATA", "priority": "P1",
-     "note": ".tex 'Journal of Symbolic Logic 18(1): 8-13' diyor; doğrusu "
-             "Indagationes Mathematicae 15 (1953): 330-339 (Proc. KNAW A56)."},
-    {"key": "Fosl 1998", "status": "DOGRULANAMADI", "priority": "INFO",
-     "note": "Kitap (Norton & Norton 1996) doğru; 'JHP 36(2)' yeri teyit edilemedi "
-             "(ECSSS Newsletter 11, 35-36 bulundu)."},
+    # V5h (2026-08-17): Beth 1953 ve Fosl 1998 düzeltildi — .tex'te artık
+    # doğru kaynakça var; sabit denetim artık sadece bilgi amaçlı.
+    {"key": "Beth 1953", "status": "DUZELTILDI", "priority": "INFO",
+     "note": "V5h fix: Indagationes Mathematicae 15: 330-339 "
+             "(+ Proc. KNAW A56). Önceki 'JSL 18(1):8-13' hatası düzeltildi."},
+    {"key": "Fosl 1998", "status": "DUZELTILDI", "priority": "INFO",
+     "note": "V5h fix: ECSSS Newsletter 11: 35-36. Önceki 'JHP 36(2)' "
+             "teyit edilememişti; doğru kaynak ECSSS Newsletter."},
     {"key": "Popkin 1952", "status": "KUCUK NOT", "priority": "INFO",
      "note": "Ana kayıt RoM 6(1):65-81 doğru; yeniden basım sayfası 133-147 "
              "(metin 133-148 yazmış)."},
