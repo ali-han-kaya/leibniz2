@@ -27,6 +27,7 @@ concurrency:
 
 permissions:
   contents: read
+  pull-requests: write  # bütçe aşımı uyarısını PR yorumu olarak düşmek için
 
 jobs:
   verify:
@@ -192,6 +193,9 @@ jobs:
     name: Budget shield (aggregated)
     runs-on: ubuntu-latest
     needs: [verify, symbolic, lean]
+    # Bütçe aşımı (P1) üst job'ları FAIL yapsa bile bu job koşmalı ki
+    # uyarıyı hem run summary'e hem PR yorumuna düşebilsin.
+    if: always()
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -206,7 +210,7 @@ jobs:
       - name: Consolidate budget report
         run: |
           mkdir -p budget
-          cp budget_sidecars/*.json budget/ 2>/dev/null || cp budget_verify.json budget/ 2>/dev/null || true
+          cp budget_sidecars/*.json budget/ 2>/dev/null || true
           # Index: hangi job ne kadar token/maliyet üretti?
           python3 - <<'PY'
           import json, glob, sys
@@ -218,18 +222,103 @@ jobs:
                   rows.append(r)
               except Exception as e:
                   print(f"skip {p}: {e}", file=sys.stderr)
+          failures = [
+              {
+                  "source": r.get("source"),
+                  "limit": r.get("limit"),
+                  "estimated_usd": r.get("estimated_usd"),
+                  "tokens_est": r.get("tokens_est"),
+                  "method": r.get("method"),
+              }
+              for r in rows
+              if r.get("verdict") != "OK"
+          ]
           summary = {
               "tool": "verify_delivery.py bütçe kalkanı",
               "date": rows[0]["date"] if rows else None,
               "method": "v3_verify.py H4 (token ≈ bytes/4, $3/M token + $0.55)",
               "runs": rows,
-              "any_fail": any(r["verdict"] != "OK" for r in rows),
+              "any_fail": bool(failures),
+              "failures": failures,
           }
           json.dump(summary, open("budget/index.json", "w"), indent=2, ensure_ascii=False)
           print(json.dumps(summary, indent=2, ensure_ascii=False))
           PY
 
+      # ─── Bütçe aşımı uyarısını run summary'e yaz ────────────────────────
+      - name: Budget gate — run summary
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os
+          path = "budget/index.json"
+          if not os.path.isfile(path):
+              with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as s:
+                  s.write("## ⚠️ Bütçe kalkanı: sidecar bulunamadı (üst job'lar çalışmadı)\n")
+              raise SystemExit(0)
+          summary = json.load(open(path))
+          failures = summary.get("failures", [])
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as s:
+              if failures:
+                  s.write("## ⚠️ Bütçe limiti aşıldı\n\n")
+                  for f in failures:
+                      src = f.get("source") or "bilinmeyen"
+                      lim = f.get("limit")
+                      est = f.get("estimated_usd")
+                      tok = f.get("tokens_est")
+                      over = round((est or 0) - (lim or 0), 2)
+                      s.write(f"- **{src}**: ${est} / ${lim} limiti "
+                              f"(+${over} aşım, ~{tok} token)\n")
+                  s.write(f"\n> Yöntem: `{summary.get('method', '')}`. "
+                          f"Fail-closed: P1 bulgusu olarak işaretlendi.\n")
+              else:
+                  runs = summary.get("runs", [])
+                  total = round(sum(r.get("estimated_usd", 0) or 0 for r in runs), 2)
+                  s.write("## ✅ Bütçe kalkanı: tüm job'lar limit içinde\n\n")
+                  for r in runs:
+                      s.write(f"- **{r.get('source')}**: ${r.get('estimated_usd')} "
+                              f"/ ${r.get('limit')} (~{r.get('tokens_est')} token)\n")
+                  if runs:
+                      s.write(f"\nToplam: ${total}\n")
+          print("Budget summary written to run summary.")
+          PY
+
+      # ─── Bütçe aşımı uyarısını PR yorumu olarak düş ─────────────────────
+      - name: Budget gate — PR comment (on exceedance)
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = 'budget/index.json';
+            if (!fs.existsSync(path)) return;
+            const summary = JSON.parse(fs.readFileSync(path, 'utf8'));
+            const failures = summary.failures || [];
+            if (failures.length === 0) return;
+
+            const lines = failures.map(f =>
+              `- **${f.source || 'bilinmeyen'}**: $${f.estimated_usd} / $${f.limit} limiti ` +
+              `(+$${(f.estimated_usd - f.limit).toFixed(2)} aşım, ~${f.tokens_est} token)`
+            );
+            const body = [
+              '⚠️ **Bütçe limiti aşıldı**',
+              '',
+              ...lines,
+              '',
+              `> Yöntem: \`${summary.method}\`. Fail-closed: P1 bulgusu olarak işaretlendi.`,
+              `> Detay: [run #${context.runId}](${context.payload.repository.html_url}/actions/runs/${context.runId})`,
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body,
+            });
+
       - name: Upload budget bundle
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: budget
