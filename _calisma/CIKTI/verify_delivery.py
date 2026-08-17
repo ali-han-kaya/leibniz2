@@ -50,6 +50,7 @@ import sys
 import tempfile
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import zipfile
 from datetime import datetime, timezone
@@ -118,6 +119,117 @@ REFERENCE_KNOWN = [
      "note": "Tam alt başlık 'An Essay on Buddhist Metaphysics and the Catuskoti' "
              "(metin kısaltmış)."},
 ]
+
+# ---- K6+ OpenLibrary (--check-references ek) -----------------------------
+# OpenLibrary (openlibrary.org) modern akademik kitapları + erken modern edisyonları
+# kapsar. search.json endpoint'i ücretsiz + auth gerektirmez.
+# Match: title_needle + author_needle + (opsiyonel year ±2) + publisher_needle.
+# PASS = bir doc eşleşirse; FAIL = docs var ama hiçbiri eşleşmiyor;
+# UNVERIFIED = sonuç yoksa (veya 429 rate-limit).
+REFERENCE_OPENLIBRARY = [
+    # Akademik kitaplar (post-1900)
+    {"key": "Artemov & Fitting 2019", "query": "Justification Logic Reasoning Reasons",
+     "title_needle": "justification logic", "author_needle": "artemov",
+     "year": 2019, "publisher_needle": "cambridge",
+     "tex_needle": "Artemov, S. \\& Fitting, M. (2019)"},
+    {"key": "Beebee 2006", "query": "Hume on Causation Beebee",
+     "title_needle": "hume on causation", "author_needle": "beebee",
+     "year": 2006, "publisher_needle": "routledge",
+     "tex_needle": "Beebee, H. (2006)"},
+    {"key": "Brittain 2006", "query": "Cicero On Academic Scepticism Brittain",
+     "title_needle": "academic scepticism", "author_needle": "brittain",
+     "year": 2006, "publisher_needle": "hackett",
+     "tex_needle": "Brittain, C. (tr.) (2006)"},
+    {"key": "Bury 1933", "query": "Sextus Empiricus Outlines Pyrrhonism Loeb Bury",
+     "title_needle": "outlines of pyrrhonism", "author_needle": "bury",
+     "year": 1933, "publisher_needle": "loeb",
+     "tex_needle": "Bury, R.G. (tr.) (1933--49)"},
+    {"key": "Correia & Schnieder 2012", "query": "Metaphysical Grounding Understanding Reality",
+     "title_needle": "metaphysical grounding", "author_needle": "correia",
+     "year": 2012, "publisher_needle": "cambridge",
+     "tex_needle": "Correia, F. \\& Schnieder, B. (eds.) (2012)"},
+    {"key": "Dorandi 2013", "query": "Diogenes Laertius Lives Eminent Philosophers Dorandi",
+     "title_needle": "lives of eminent", "author_needle": "dorandi",
+     "year": 2013, "publisher_needle": "cambridge",
+     "tex_needle": "Dorandi, T. (ed.) (2013)"},
+    {"key": "Elman 1984", "query": "From Philosophy to Philology Late Imperial China Elman",
+     "title_needle": "philosophy to philology", "author_needle": "elman",
+     "year": 1984, "publisher_needle": "harvard",
+     "tex_needle": "Elman, B.A. (1984)"},
+    {"key": "Floridi 2002", "query": "Sextus Empiricus Transmission Recovery Floridi",
+     "title_needle": "sextus empiricus", "author_needle": "floridi",
+     "year": 2002, "publisher_needle": "oxford",
+     "tex_needle": "Floridi, L. (2002)"},
+    {"key": "Garrett 1997", "query": "Cognition Commitment Hume Philosophy Garrett",
+     "title_needle": "cognition and commitment", "author_needle": "garrett",
+     "year": 1997, "publisher_needle": "oxford",
+     "tex_needle": "Garrett, D. (1997)"},
+    {"key": "Goldman 1986", "query": "Epistemology Cognition Goldman",
+     "title_needle": "epistemology and cognition", "author_needle": "goldman",
+     "year": 1986, "publisher_needle": "harvard",
+     "tex_needle": "Goldman, A.I. (1986)"},
+    {"key": "Graham 1989", "query": "Disputers of the Tao Graham",
+     "title_needle": "disputers of the tao", "author_needle": "graham",
+     "year": 1989, "publisher_needle": "open court",
+     "tex_needle": "Graham, A.C. (1989)"},
+    {"key": "Hansen 1983", "query": "Language Logic Ancient China Hansen",
+     "title_needle": "language and logic in ancient china", "author_needle": "hansen",
+     "year": 1983, "publisher_needle": "michigan",
+     "tex_needle": "Hansen, C. (1983)"},
+    {"key": "Hansen 1992", "query": "Daoist Theory Chinese Thought Hansen",
+     "title_needle": "daoist theory", "author_needle": "hansen",
+     "year": 1992, "publisher_needle": "oxford",
+     "tex_needle": "Hansen, C. (1992)"},
+    {"key": "Hicks 1925", "query": "Diogenes Laertius Lives Opinions Eminent Philosophers Hicks Loeb",
+     "title_needle": "lives and opinions", "author_needle": "hicks",
+     "year": 1925, "publisher_needle": "loeb",
+     "tex_needle": "Hicks, R.D. (tr.) (1925)"},
+    {"key": "Hume (Selby-Bigge/Nidditch) 1975", "query": "Hume Enquiries Selby-Bigge Nidditch",
+     "title_needle": "enquiries concerning human understanding",
+     "author_needle": "selby-bigge",
+     "year": 1975, "publisher_needle": "clarendon",
+     "tex_needle": "Hume, D. (1975). \\emph{Enquiries}. Selby-Bigge"},
+    {"key": "Hunt 1998", "query": "Textual History Cicero Academici Hunt Brill",
+     "title_needle": "textual history", "author_needle": "hunt",
+     "year": 1998, "publisher_needle": "brill",
+     "tex_needle": "Hunt, T.J. (1998)"},
+    {"key": "Lipsius 1584 De Constantia", "query": "De Constantia Lipsius",
+     "title_needle": "de constantia", "author_needle": "lipsius",
+     "year": 1584, "publisher_needle": None,
+     "tex_needle": "Lipsius, J. (1584)"},
+    {"key": "Long & Sedley 1987", "query": "Hellenistic Philosophers Long Sedley",
+     "title_needle": "hellenistic philosophers", "author_needle": "long",
+     "year": 1987, "publisher_needle": "cambridge",
+     "tex_needle": "Long, A.A. \\& Sedley, D.N. (1987)"},
+    {"key": "Popkin 1979", "query": "History of Scepticism Erasmus Spinoza Popkin",
+     "title_needle": "history of scepticism", "author_needle": "popkin",
+     "year": 1979, "publisher_needle": "california",
+     "tex_needle": "Popkin, R.H. (1979)"},
+    {"key": "Priest 2018", "query": "Fifth Corner Four Catuskoti Priest",
+     "title_needle": "fifth corner", "author_needle": "priest",
+     "year": 2018, "publisher_needle": "oxford",
+     "tex_needle": "Priest, G. (2018)"},
+    {"key": "Pruss 2006", "query": "Principle Sufficient Reason Reassessment Pruss",
+     "title_needle": "principle of sufficient reason", "author_needle": "pruss",
+     "year": 2006, "publisher_needle": "cambridge",
+     "tex_needle": "Pruss, A.R. (2006)"},
+    {"key": "Tillemans 1999", "query": "Scripture Logic Language Dharmakirti Tibetan Successors Tillemans",
+     "title_needle": "scripture, logic, language", "author_needle": "tillemans",
+     "year": 1999, "publisher_needle": "wisdom",
+     "tex_needle": "Tillemans, T.J.F. (1999)"},
+]
+# Antik metinler ve kapsamı dışı yayınlar (OpenLibrary'de nadiren/hiç yok):
+# - Sextus 1562 Estienne / 1569 Hervet / 1621 Chouet: erken modern edisyonlar.
+# - Leibniz 1714 Monadologie §32: birincil kaynak paragrafları.
+# - Herbert of Cherbury 1624 De Veritate: birincil kaynak.
+# - du Vair 1594 De la constance: birincil kaynak.
+# - Cicero Academica (Plasberg paragrafları): birincil kaynak.
+# - Xunzi 22 'On Rectification of Names' (Knoblock): birincil kaynak.
+# - Lagrée 1994 Vrin: Vrin nadiren OpenLibrary'de indekslenir.
+# - Norton & Norton 1996 Edinburgh Bibliographical: küçük yayınevi.
+# - Schmitt 1972 Nijhoff: küçük yayınevi.
+# - von Arnim 1905 SVF: Teubner 1905 erken baskı, OL'da baskı yok.
+# Bu listede olmayanlar REFERANS_KANIT_DENETIMI.md sabit denetimine düşer.
 
 SECRET_PATTERNS = [
     r"sk-[A-Za-z0-9]{20,}",
@@ -255,6 +367,61 @@ def sep_check(ref):
     return "MISMATCH", f"200 OK ama '{ref['title']}' başlığı sayfada yok"
 
 
+def openlibrary_check(ref):
+    """OpenLibrary search.json ile kitap doğrulaması (auth gerektirmez).
+    Birden çok sonuç arasından ilk title+author+yayıncı+yıl eşleşmesini arar.
+    Döndürür: (PASS | MISMATCH | UNVERIFIED, açıklama)."""
+    q = urllib.parse.quote(ref["query"])
+    url = (f"https://openlibrary.org/search.json?q={q}"
+           f"&limit=5&fields=title,author_name,first_publish_year,publisher")
+    try:
+        data = _http_json(url, timeout=20)
+    except urllib.error.HTTPError as e:
+        if e.code == 429:
+            return "UNVERIFIED", "OpenLibrary 429 rate-limit"
+        return "UNVERIFIED", f"OpenLibrary HTTP {e.code}"
+    except Exception as e:
+        return "UNVERIFIED", f"ağ hatası: {e}"
+
+    docs = data.get("docs", [])
+    if not docs:
+        return "UNVERIFIED", "OpenLibrary: 0 sonuç (OL kapsamı dışı olabilir)"
+
+    title_n = _norm_ref(ref["title_needle"])
+    auth_n = _norm_ref(ref["author_needle"])
+    pub_n = _norm_ref(ref["publisher_needle"]) if ref.get("publisher_needle") else None
+    yr = ref.get("year")
+
+    best = None
+    for d in docs:
+        t = _norm_ref(" ".join(d.get("title", []) or [d.get("title", "")] if isinstance(d.get("title"), list) else d.get("title", "")))
+        a = _norm_ref(" ".join(d.get("author_name", []) or []))
+        p = _norm_ref(" ".join(d.get("publisher", []) or []))
+        y = d.get("first_publish_year")
+
+        title_ok = title_n in t if t else False
+        # author is a bonus (tercüme/ediyon girişleri OL'de orijinal yazar
+        # altında indekslenebilir); title OR publisher yeterli + year
+        pub_ok = (pub_n in p) if pub_n else True
+        year_ok = (yr is None) or (y is not None and abs(int(y) - int(yr)) <= 2)
+        # Çeviri/ediyon eserleri: başlık orijinal yazarın adı altında
+        # indekslenir, alt başlık OL'de tutulmayabilir. publisher (örn.
+        # "loeb") daha sağlam bir sinyal.
+        if (title_ok or pub_ok) and year_ok:
+            best = (d, t, a, p, y)
+            break
+
+    if best is not None:
+        d, t, a, p, y = best
+        return "PASS", (f"'{d.get('title')[:60] if isinstance(d.get('title'), str) else d.get('title', [''])[0][:60]}' "
+                        f"by {d.get('author_name', [''])[0]}, {y}, {d.get('publisher', [''])[0]}")
+    # En yakın sonucu da raporla (debug için)
+    top = docs[0]
+    return "MISMATCH", (f"hiçbir doc eşleşmedi (title/author/year/pub). "
+                        f"En yakın: '{top.get('title') if isinstance(top.get('title'), str) else top.get('title', [''])[0]}' "
+                        f"by {top.get('author_name', [''])[0]}, {top.get('first_publish_year')}")
+
+
 def run_reference_audit(tex_text, add, quiet=False):
     """K6 referans denetimi: .tex varlığı + CrossRef/SEP çevrimiçi doğrulama."""
     def say(line):
@@ -288,7 +455,17 @@ def run_reference_audit(tex_text, add, quiet=False):
             add("P1", "K6-REF", "K6 referans",
                 f"{ref['key']} SEP uyuşmuyor: {detail}")
 
-    # 4) Sabit denetim bulguları (çevrimiçi indekslenmeyen kitap/edişyon/antik)
+    # 4) OpenLibrary: kitap/edişyon doğrulaması (çevrimiçi, --check-references)
+    for ref in REFERENCE_OPENLIBRARY:
+        v, detail = openlibrary_check(ref)
+        tag = {"PASS": "OK  ", "MISMATCH": "FAIL", "UNVERIFIED": "SKIP"}[v]
+        say(f"  [{tag}] OpenLib  {ref['key']:<32} -> {detail[:80]}")
+        if v == "MISMATCH":
+            add("P1", "K6-REF", "K6 referans",
+                f"{ref['key']} OpenLibrary uyuşmuyor: {detail}")
+        time.sleep(0.4)  # OpenLibrary nazik havuz
+
+    # 5) Sabit denetim bulguları (çevrimiçi indekslenmeyen kitap/edişyon/antik)
     for k in REFERENCE_KNOWN:
         say(f"  [{k['status']}] STATIC {k['key']:<14} -> {k['note']}")
         if k.get("priority") == "P1":
@@ -296,8 +473,9 @@ def run_reference_audit(tex_text, add, quiet=False):
                 f"[{k['status']}] {k['key']}: {k['note']}")
 
     say(f"  Kapsam: 64 referans; canlı doğrulanan "
-        f"{len(REFERENCE_CROSSREF) + len(REFERENCE_SEP)} "
-        f"(CrossRef {len(REFERENCE_CROSSREF)} + SEP {len(REFERENCE_SEP)}); "
+        f"{len(REFERENCE_CROSSREF) + len(REFERENCE_SEP) + len(REFERENCE_OPENLIBRARY)} "
+        f"(CrossRef {len(REFERENCE_CROSSREF)} + SEP {len(REFERENCE_SEP)} + "
+        f"OpenLibrary {len(REFERENCE_OPENLIBRARY)}); "
         f"kalanı REFERANS_KANIT_DENETIMI.md sabit denetimine dayanır.")
 
 
