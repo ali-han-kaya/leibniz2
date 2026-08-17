@@ -128,4 +128,50 @@ Not: Bu rapor zip'lerin dışında verildiği için yeni hash'leri sabitleyebili
 
 ---
 
-*Bu rapor `ALI_KOMUT_TOOLKIT_v3`'ün `M0_ANA_KOMUT.md` §8 rapor sırasına birebir uyar: karar → kontrol edilenler → başarısızlar → değişiklikler → belirsizler → doğrulama kanıtları → geçerlilik → bütçe → final dosya listesi.*
+## 10. CLEANUP LOG (silme kaydı)
+
+Bayat (superseded) zip'lerin silinme kaydı. Kanonik teslim yalnızca
+`_calisma/CIKTI/` altındaki tek kopyadır; önceki nesiller yeniden üretimle
+(repack) üzerine yazılarak bayat kalır. Aşağıdaki hash'ler silinme anında
+dondurulmuş kanıttır ve yeniden türetilebilir: §9 tablosu + `git log` +
+yanındaki `.sha256` sidecar.
+
+### 10.1 Bayat zip — dondurulmuş orijinal hash
+
+```text
+TESLIM_KLASOR_V5_2026-08-17.zip  (bayat / orijinal) = 363a06e36d71666e70fead77bf44d4c82da2edb57c1be1a30095da1a179a08aa
+```
+
+### 10.2 Silme kaydı
+
+| Tarih | Silinen (bayat) | Hash (dondurulmuş) | Neden |
+|---|---|---|---|
+| 2026-08-17 | `TESLIM_KLASOR_V5_2026-08-17.zip` (orijinal) | `363a06e3…` | M0 optimizasyonu (FIX-001…FIX-006) sonrası bayat kaldı; kanonik konumda üzerine yazıldı (bkz. §9) |
+| 2026-08-17 | sonraki nesiller (`3ef74cae…`, `af8067ca…`, `d7f63d72…`, `fe731022…`) | yukarıdaki kısaltmalar | deterministik repack (commit `2e7c425`) ile bayat kaldı |
+
+Dış zip'in tam soy hattı (kanıtlanabilir zincir):
+
+```text
+363a06e3…  (orijinal, §9)
+3ef74cae…  (yeni, §9)
+af8067ca…  (git init, 9f72b0e)
+d7f63d72…  (K6-DETERM, a92682d)
+fe731022…  (V5i, bad86f4)
+bec0bb0a…  (deterministik repack, 2e7c425) ← GÜNCEL KANONİK
+```
+
+### 10.3 Güncel kanonik hash'ler (yanındaki sidecar ile birebir)
+
+```text
+TESLIM_KLASOR_V5_2026-08-17.zip = bec0bb0a4fd2fff2dfaeee38f9afb1f0442640029dcf793aac9073e41d9cf900
+TESLIM_V5_FINAL_2026-08-17.zip  = b32fda0fca08c5a1b35043159ff0d853795ddcdc932351c11bd7d899c77e033c
+```
+
+Not: `363a06e3…` değeri §9'da zaten "orijinal" olarak sabitlenmişti; §10 bu
+değeri "bayat zip" olarak adlandırıp silme/supersede olayını kaydeder. K0
+katmanı (`verify_delivery.py`) CIKTI dışındaki zip'leri P1 işaretleyerek yeni
+bayat kopyaların sessizce birikmesini engeller.
+
+---
+
+*Bu rapor `ALI_KOMUT_TOOLKIT_v3`'ün `M0_ANA_KOMUT.md` §8 rapor sırasına birebir uyar: karar → kontrol edilenler → başarısızlar → değişiklikler → belirsizler → doğrulama kanıtları → geçerlilik → bütçe → final dosya listesi. §10 (Cleanup log) bu sıraya eklenmiş bir teslim-sonrası uzantıdır.*
