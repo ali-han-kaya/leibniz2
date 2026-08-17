@@ -642,6 +642,10 @@ def main():
     ap.add_argument("--budget-out", default=None,
                     help="Bütçe kalkanı sonucunu ayrı bir JSON dosyasına yaz "
                          "(CI artifact sidecar için)")
+    ap.add_argument("--config-out", default=None,
+                    help="Etkin konfigürasyonu (çözümlenmiş değerler) ayrı bir "
+                         "JSON dosyasına yaz — hangi config'in kullanıldığını "
+                         "denetlenebilir kılar (CI artifact sidecar için)")
     ap.add_argument("--budget-method", choices=["universal", "weighted", "both"],
                     default=None,
                     help="Bütçe tahmin yöntemi: universal (bytes/4), "
@@ -672,6 +676,7 @@ def main():
         os.path.dirname(os.path.abspath(__file__)),
         "verify_delivery.config.json")
     cfg = {}
+    cfg_loaded = False
     if os.path.isfile(cfg_path):
         try:
             with open(cfg_path, encoding="utf-8") as cf:
@@ -690,6 +695,7 @@ def main():
                 print(f"  - {e}")
             print("  (bkz. verify_delivery.config.schema.json)")
             return 2
+        cfg_loaded = True
     else:
         print(f"UYARI: konfig dosyası yok ({cfg_path}), varsayılanlar kullanılacak")
 
@@ -703,6 +709,29 @@ def main():
     globals()["EXPECTED_MANIFEST"] = cfg.get("expected_manifest", EXPECTED_MANIFEST)
     globals()["EXPECTED_REFS"] = cfg.get("expected_refs", EXPECTED_REFS)
     globals()["EXPECTED_PAGES"] = cfg.get("expected_pages", EXPECTED_PAGES)
+
+    # ---- Etkin konfig (çözümlenmiş değerler) ----
+    # Hangi config'in kullanıldığını (dosya mı, varsayılan mı; CLI override'ları
+    # dahil) denetlenebilir kılmak için rapora ve --config-out sidecar'ına yazılır.
+    effective_config = {
+        "config_path": cfg_path,
+        "source": "file" if cfg_loaded else "defaults",
+        "budget_usd": args.budget,
+        "budget_method": args.budget_method,
+        "budget_ratios": cfg.get("budget_ratios"),
+        "expected_pages": cfg.get("expected_pages", EXPECTED_PAGES),
+        "expected_refs": cfg.get("expected_refs", EXPECTED_REFS),
+        "expected_manifest": cfg.get("expected_manifest", EXPECTED_MANIFEST),
+    }
+    if args.config_out:
+        try:
+            with open(args.config_out, "w", encoding="utf-8") as cf_out:
+                json.dump(effective_config, cf_out, indent=2, ensure_ascii=False)
+            if not args.json:
+                print(f"[CONFIG] effective snapshot yazıldı: {args.config_out}")
+        except OSError as e:
+            print(f"UYARI: effective config yazılamadı ({args.config_out}): {e}",
+                  file=sys.stderr)
 
     findings = []  # {id, priority, check, issue, evidence}
 
@@ -1058,6 +1087,7 @@ def main():
         "findings": findings,
         "pdf_pages": pages,
         "ref_count": refs,
+        "config": effective_config,
         "budget": budget_report,
         "pdf_hash": pdf_meta_report,
     }
@@ -1074,6 +1104,12 @@ def main():
         if pdf_meta_report and pdf_meta_report.get("stripped"):
             print(f"PDF hash: raw={pdf_meta_report['raw'][:16]}… "
                   f"metadata-stripped={pdf_meta_report['stripped'][:16]}…")
+        print(f"Config: {effective_config['source']} ← {effective_config['config_path']} "
+              f"(budget_usd={effective_config['budget_usd']}, "
+              f"method={effective_config['budget_method']}, "
+              f"pages={effective_config['expected_pages']}, "
+              f"refs={effective_config['expected_refs']}, "
+              f"manifest={effective_config['expected_manifest']})")
         if budget_report:
             print(f"Bütçe: ~{budget_report['tokens_est']} token → ${budget_report['estimated_usd']} "
                   f"(limit ${budget_report['limit']})")

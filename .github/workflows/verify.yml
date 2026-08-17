@@ -80,7 +80,8 @@ jobs:
         run: |
           set -o pipefail
           python3 _calisma/CIKTI/verify_delivery.py --dir _calisma/CIKTI --full \
-            --budget-out budget_verify.json 2>&1 | tee verify_report.txt
+            --budget-out budget_verify.json \
+            --config-out effective_config.json 2>&1 | tee verify_report.txt
 
       - name: Generate SHA-256 for verify artifacts
         shell: bash
@@ -90,6 +91,27 @@ jobs:
 
       # `if: always()` — kapı FAIL olsa bile rapor (neden başarısız olduğu)
       # artifact olarak yüklenir. Tek rapor, tüm K1-K9 katmanlarını içerir.
+      # Hangi config'in kullanıldığını denetlenebilir kılar: ham config,
+      # şeması ve verify_delivery.py'nin çözümlediği etkin değerler.
+      - name: Bundle config snapshot
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p config
+          cp _calisma/CIKTI/verify_delivery.config.json        config/
+          cp _calisma/CIKTI/verify_delivery.config.schema.json config/
+          cp effective_config.json config/ 2>/dev/null || true
+          sha256sum config/* 2>/dev/null > config/config.sha256 || true
+
+      - name: Upload config snapshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: config
+          path: config/
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Upload verification report
         if: always()
         uses: actions/upload-artifact@v4
@@ -300,7 +322,7 @@ jobs:
         with:
           path: all_artifacts/
           merge-multiple: true
-          pattern: '{verify-report,budget,reports}'
+          pattern: '{verify-report,budget,reports,config}'
 
       # ─── 2) manifest.txt üret ───────────────────────────────────────────
       - name: Generate reproducibility manifest
