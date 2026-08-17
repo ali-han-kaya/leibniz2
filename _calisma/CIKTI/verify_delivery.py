@@ -109,18 +109,19 @@ REFERENCE_SEP = [
 REFERENCE_KNOWN = [
     # V5h (2026-08-17): Beth 1953 ve Fosl 1998 düzeltildi — .tex'te artık
     # doğru kaynakça var; sabit denetim artık sadece bilgi amaçlı.
+    # V5j (2026-08-17): Popkin 1952 (sayfa) ve Priest 2018 (alt başlık) da
+    # düzeltildi — kalan KUCUK NOT'lar kapatıldı; tümü artık DUZELTILDI.
     {"key": "Beth 1953", "status": "DUZELTILDI", "priority": "INFO",
      "note": "V5h fix: Indagationes Mathematicae 15: 330-339 "
              "(+ Proc. KNAW A56). Önceki 'JSL 18(1):8-13' hatası düzeltildi."},
     {"key": "Fosl 1998", "status": "DUZELTILDI", "priority": "INFO",
      "note": "V5h fix: ECSSS Newsletter 11: 35-36. Önceki 'JHP 36(2)' "
              "teyit edilememişti; doğru kaynak ECSSS Newsletter."},
-    {"key": "Popkin 1952", "status": "KUCUK NOT", "priority": "INFO",
-     "note": "Ana kayıt RoM 6(1):65-81 doğru; yeniden basım sayfası 133-147 "
-             "(metin 133-148 yazmış)."},
-    {"key": "Priest 2018", "status": "KUCUK NOT", "priority": "INFO",
-     "note": "Tam alt başlık 'An Essay on Buddhist Metaphysics and the Catuskoti' "
-             "(metin kısaltmış)."},
+    {"key": "Popkin 1952", "status": "DUZELTILDI", "priority": "INFO",
+     "note": "V5j fix: yeniden basım sayfası 133-148 → 133-147 düzeltildi."},
+    {"key": "Priest 2018", "status": "DUZELTILDI", "priority": "INFO",
+     "note": "V5j fix: tam alt başlık 'An Essay on Buddhist Metaphysics "
+             "and the Catuskoti' eklendi."},
 ]
 
 # ---- K6+ OpenLibrary (--check-references ek) -----------------------------
