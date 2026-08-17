@@ -28,7 +28,8 @@ Yalnızca Python 3 standart kütüphanesi kullanır (hashlib, zipfile, subproces
 tempfile; --check-references için ayrıca urllib). Harici `unzip`/`shasum`/`diff`
 GEREKMEZ. pdfinfo varsa PDF sayfa kontrolü eklenir, yoksa atlanır (FAIL değil).
 
-Doğrulama zinciri (Katman 1..9):
+Doğrulama zinciri (Katman 0..9):
+  K0  Bayat    CIKTI dışında (_calisma/ kökü) kalan zip taraması (P1)
   K1  Dış zip  SHA-256 sidecar (kurcalanma)
   K2  Klasör   KLASOR_CHECKSUMLARI.sha256 (tüm dosyalar)
   K3  İç zip   SHA-256 sidecar (kurcalanma)
@@ -746,6 +747,22 @@ def main():
     if not os.path.isfile(kzip):
         print(f"FAIL: {KLASOR_ZIP} bulunamadı ({d})")
         return 2
+
+    # ---- K0: bayat zip taraması ----
+    # Kanonik teslim yalnızca CIKTI/'da olmalı. _calisma/ kökünde (--dir'in
+    # üst dizini) CIKTI dışında kalan .zip'ler "başıboş/bayat kopya" riskidir:
+    # yanlışlıkla dağıtılabilir/commit edilebilir. .gitignore'daki başıboş
+    # kopya listesiyle aynı kapsam (kök seviyesi; alt dizinlerdeki repack ara
+    # ürünleri kapsam dışı). Bulunan her zip P1 olarak işaretlenir.
+    parent = os.path.dirname(d)
+    if os.path.isdir(parent):
+        for entry in sorted(os.listdir(parent)):
+            if entry.lower().endswith(".zip"):
+                p = os.path.join(parent, entry)
+                if os.path.isfile(p):
+                    add("P1", "K0-STALE", "K0 bayat zip",
+                        f"CIKTI dışında zip bulundu: {entry}",
+                        f"{sha256_file(p)}  {p}")
 
     # ---- K1: dış zip sidecar ----
     want = None
