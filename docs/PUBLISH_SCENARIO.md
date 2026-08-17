@@ -15,7 +15,7 @@ cd /Users/alikaya/Desktop/leibniz2
 
 # (a) Repo temiz mi?
 git status --short         # ← boş olmalı
-git log --oneline -5       # ← 5d62685 ve öncesi görünmeli
+git log --oneline -5       # ← temiz linear history; test-marker commit'i olmamalı
 
 # (b) Pre-commit hooks çalışıyor mu?
 git commit --allow-empty -m "smoke: empty commit pre-commit test" 2>&1 | grep -E "Passed|Failed"
@@ -109,7 +109,7 @@ Branch 'main' set up to track remote 'origin/main'.
 **Süre:** ~5-15 sn (küçük repo, ~30 dosya).
 
 **Görsel doğrulama:** https://github.com/<user>/leibniz2 adresinde:
-- 5 commit (9f72b0e · 3d114e5 · 5d62685 · d863977 · 991473d)
+- Temiz linear history (20 commit; test-marker `d863977`/`991473d` rebase ile ezildi)
 - README.md render edilmiş
 - `.github/workflows/verify.yml` görünür
 
@@ -196,7 +196,7 @@ git reset --hard <commit-hash-where-you-want-to-be>
 - `9f72b0e` (ana kurulum, gerçek) — **kal**
 - `3d114e5` (ignore eklentisi, gerçek) — **kal**
 - `5d62685` (budget shield + config + rapor, gerçek) — **kal**
-- `d863977` + `991473d` (test markers) — istersen `git rebase -i 5d62685` ile ez; yoksa kalsın (zararsız)
+- `d863977` + `991473d` (test markers) — **EZİLDİ**: `git rebase --onto 5d62685 991473d` ile net-sıfır diff temizlendi (add+remove aynı dosya olduğundan tek anlamlı sonuç silmekti)
 
 ---
 
