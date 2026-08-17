@@ -973,6 +973,8 @@ def main():
         "verdict": verdict,
         "counts": {"P0": p0, "P1": p1},
         "findings": findings,
+        "pdf_pages": pages,
+        "ref_count": refs,
         "budget": budget_report,
         "pdf_hash": pdf_meta_report,
     }
