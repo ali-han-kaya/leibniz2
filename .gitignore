@@ -1,0 +1,21 @@
+# Freebuff / yerel araçlar
+.freebuff/
+
+# Z3 ispatı için proje-içi sanal ortam (CI'da pip ile kurulur, commit edilmez)
+_calisma/.venv_z3/
+
+# Teslim kaynak dizinleri — içerik teslim zip'lerinde taşınır (self-verifying);
+# extraction çalışma dizinleri yeniden üretilebilir olduğu için commit edilmez:
+#   unzip -o TESLIM_KLASOR_V5_2026-08-17.zip   (dış klasör)
+#   unzip -o TESLIM_V5_FINAL_2026-08-17.zip    (iç klasör)
+_calisma/TESLIM/
+_calisma/V5_ICERIK/
+_calisma/TOOLKIT/
+
+# Python önbellekleri
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# macOS
+.DS_Store

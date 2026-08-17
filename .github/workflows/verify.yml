@@ -1,0 +1,94 @@
+name: verify-delivery
+
+# Stoic-Hume V5 tesliminin fail-closed doğrulama kapısı.
+# Her push ve pull_request'te çalışır; manuel tetikleme için workflow_dispatch.
+#
+# İki bağımsız kapı (paralel job):
+#   1) verify    : MANIFEST + checksum + script + PDF + referans zinciri
+#                  (verify_delivery.py, yalnızca stdlib; exit 0 = PASS)
+#   2) symbolic  : core_section.tex teoremlerinin Z3 ile sembolik ispatı
+#                  (symbolic_proof_z3.py; exit 0 = tüm ispatlar PASS)
+#
+# Herhangi bir job'un sıfır-dışı exit kodu build'i FAIL yapar (fail-closed).
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: verify-delivery-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Delivery verification (fail-closed)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # pdfinfo yalnızca PDF sayfa kapısı (33 sayfa) için gerekir; yoksa
+      # verify_delivery.py bu kontrolü atlar (FAIL etmez). Kapıyı eksiksiz
+      # çalıştırmak için kuruyoruz.
+      - name: Install pdfinfo (poppler-utils)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y poppler-utils
+
+      # `pipefail` + `tee`: çıktı hem log'a hem dosyaya yazılır, ama exit kodu
+      # python'dan gelir (boru, fail-closed kapıyı gizleyemez).
+      - name: Run delivery verification
+        shell: bash
+        run: |
+          set -o pipefail
+          python3 _calisma/CIKTI/verify_delivery.py --dir _calisma/CIKTI 2>&1 | tee verify_report.txt
+
+      # `if: always()` — kapı FAIL olsa bile rapor (neden başarısız olduğu)
+      # artifact olarak yüklenir.
+      - name: Upload verification report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-report
+          path: verify_report.txt
+          if-no-files-found: error
+
+  symbolic:
+    name: Symbolic proof (Z3) — K8
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # Yerel ispatla aynı sürüm (tekrarlanabilirlik).
+      - name: Install Z3
+        run: pip install z3-solver==5.1.0.0
+
+      # K8: sembolik ispat, verify_delivery.py'nin tek giriş noktası üzerinden.
+      - name: Run symbolic proof (verify_delivery.py K8)
+        shell: bash
+        run: |
+          set -o pipefail
+          python3 _calisma/CIKTI/verify_delivery.py --dir _calisma/CIKTI --symbolic-proof 2>&1 | tee symbolic_report.txt
+
+      - name: Upload symbolic proof report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: symbolic-report
+          path: symbolic_report.txt
+          if-no-files-found: error

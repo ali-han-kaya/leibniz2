@@ -1,0 +1,30 @@
+# Stoic-Hume V5 — commit öncesi fail-closed doğrulama kapısı.
+#
+# Kurulum (bir kez):
+#   pip install pre-commit
+#   pre-commit install
+#
+# Bu noktadan sonra her `git commit` sırasında verify_delivery.py çalışır;
+# herhangi bir P0/P1 bulgusu (bozuk zip, hash uyuşmazlığı, script sapması,
+# PDF sayfa/referans sapması) commit'i bloke eder (sıfır-dışı exit).
+#
+# Manuel çalıştırma:
+#   pre-commit run --all-files
+#   pre-commit run verify-delivery --files _calisma/CIKTI/TESLIM_KLASOR_V5_2026-08-17.zip
+#
+# Hook read-only'dir: dosya değiştirmez, yalnızca doğrular (fail-closed).
+repos:
+  - repo: local
+    hooks:
+      - id: verify-delivery
+        name: Verify Stoic-Hume V5 delivery (fail-closed)
+        description: >-
+          MANIFEST MD5 (18/18) + KLASOR_CHECKSUMLARI + iç zip sidecar +
+          3 script byte-for-byte + PDF 33 sayfa + 64 referans. Bulgu varsa
+          commit bloke edilir.
+        entry: python3 _calisma/CIKTI/verify_delivery.py --dir _calisma/CIKTI
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
