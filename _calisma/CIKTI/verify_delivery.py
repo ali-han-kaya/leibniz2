@@ -248,6 +248,72 @@ HIGIENE_PATTERNS = [
 ]
 SKIP_SECRET_EXT = {".pdf", ".zip", ".png", ".jpg", ".svg"}
 
+# ---- Konfig şeması (stdlib yapısal doğrulama) ---------------------------
+# verify_delivery.config.schema.json ile aynı kısıtları yansıtır; jsonschema
+# CI'da ayrıca bağımsız olarak doğrular. Buradaki stdlib doğrulaması her
+# ortamda (pre-commit, yerel) fail-closed davranış sağlar.
+CONFIG_SCHEMA = {
+    "required": ["budget_usd", "budget_method", "budget_ratios",
+                 "expected_pages", "expected_refs", "expected_manifest"],
+    "types": {
+        "budget_usd": (int, float),
+        "budget_method": str,
+        "budget_ratios": dict,
+        "expected_pages": int,
+        "expected_refs": int,
+        "expected_manifest": int,
+    },
+    "budget_method_enum": {"universal", "weighted", "both"},
+    "budget_ratio_keys": ("text", "pdf", "archive", "binary"),
+}
+
+
+def validate_config(cfg):
+    """stdlib-only yapısal doğrulama. Hataların listesini döndürür (boş = OK).
+
+    verify_delivery.config.schema.json (draft-07) ile aynı kısıtları yansıtır:
+    zorunlu anahtarlar, tipler, enum ve pozitif sayı aralıkları.
+    """
+    errors = []
+    for key in CONFIG_SCHEMA["required"]:
+        if key not in cfg:
+            errors.append(f"eksik anahtar: {key}")
+            continue
+        expected = CONFIG_SCHEMA["types"].get(key)
+        if expected is not None and not isinstance(cfg[key], expected):
+            want = " veya ".join(t.__name__ for t in expected) \
+                if isinstance(expected, tuple) else expected.__name__
+            errors.append(f"{key}: tip hatalı (beklenen {want}, "
+                          f"alınan {type(cfg[key]).__name__})")
+
+    # budget_usd: pozitif sayı
+    if "budget_usd" in cfg and isinstance(cfg["budget_usd"], (int, float)):
+        if cfg["budget_usd"] <= 0:
+            errors.append("budget_usd: 0'dan büyük olmalı")
+
+    # budget_method: enum
+    if ("budget_method" in cfg
+            and cfg["budget_method"] not in CONFIG_SCHEMA["budget_method_enum"]):
+        errors.append(f"budget_method: geçersiz değer {cfg['budget_method']!r} "
+                      f"(beklenen: {sorted(CONFIG_SCHEMA['budget_method_enum'])})")
+
+    # budget_ratios: zorunlu anahtarlar + pozitif sayı
+    if "budget_ratios" in cfg and isinstance(cfg["budget_ratios"], dict):
+        for k in CONFIG_SCHEMA["budget_ratio_keys"]:
+            if k not in cfg["budget_ratios"]:
+                errors.append(f"budget_ratios: eksik oran {k!r}")
+            elif (not isinstance(cfg["budget_ratios"][k], (int, float))
+                  or cfg["budget_ratios"][k] <= 0):
+                errors.append(f"budget_ratios.{k}: pozitif sayı olmalı "
+                              f"(alınan {cfg['budget_ratios'][k]!r})")
+
+    # expected_*: pozitif tamsayı
+    for key in ("expected_pages", "expected_refs", "expected_manifest"):
+        if key in cfg and isinstance(cfg[key], int) and cfg[key] <= 0:
+            errors.append(f"{key}: pozitif tamsayı olmalı (alınan {cfg[key]!r})")
+
+    return errors
+
 
 def sha256_file(path):
     h = hashlib.sha256()
@@ -600,6 +666,8 @@ def main():
         args.lean_proof = True
 
     # ---- Konfig yükleme (CLI bayrakları config'ten öncelikli) ----
+    # Fail-closed: geçersiz JSON veya şema ihlali artık sessizce varsayılana
+    # düşmez — exit 2 ile bloke eder (CI/jsonschema ile aynı sonuç).
     cfg_path = args.config or os.path.join(
         os.path.dirname(os.path.abspath(__file__)),
         "verify_delivery.config.json")
@@ -608,8 +676,20 @@ def main():
         try:
             with open(cfg_path, encoding="utf-8") as cf:
                 cfg = json.load(cf)
-        except (OSError, json.JSONDecodeError) as e:
-            print(f"UYARI: konfig okunamadı ({cfg_path}): {e}")
+        except json.JSONDecodeError as e:
+            print(f"HATA: konfig geçerli JSON değil ({cfg_path}): {e}")
+            return 2
+        except OSError as e:
+            print(f"HATA: konfig okunamadı ({cfg_path}): {e}")
+            return 2
+        # Şema doğrulaması (stdlib; jsonschema CI'da ayrıca doğrular)
+        cfg_errors = validate_config(cfg)
+        if cfg_errors:
+            print(f"HATA: konfig şema doğrulaması başarısız ({cfg_path}):")
+            for e in cfg_errors:
+                print(f"  - {e}")
+            print("  (bkz. verify_delivery.config.schema.json)")
+            return 2
     else:
         print(f"UYARI: konfig dosyası yok ({cfg_path}), varsayılanlar kullanılacak")
 
@@ -905,8 +985,11 @@ def main():
         # (a) evrensel
         universal_tokens = total_bytes // 4
         universal_cost = round(universal_tokens / 1_000_000 * 3.0, 2) + 0.55
-        # (b) ağırlıklı
-        ratios = {"text": 3, "pdf": 8, "archive": 12, "binary": 20}
+        # (b) ağırlıklı — oranlar config'ten okunur (şema ile doğrulanır);
+        #     config yoksa varsayılan oranlar kullanılır.
+        _default_ratios = {"text": 3, "pdf": 8, "archive": 12, "binary": 20}
+        ratios = {k: cfg.get("budget_ratios", {}).get(k, v)
+                  for k, v in _default_ratios.items()}
         weighted_tokens = sum(
             type_bytes[k] // ratios[k] for k in ratios)
         weighted_cost = round(weighted_tokens / 1_000_000 * 3.0, 2) + 0.55

@@ -46,6 +46,13 @@ jobs:
         with:
           python-version: '3.12'
 
+      # Konfig şema doğrulaması (jsonschema) — parse/schema hatalarını
+      # henüz Z3/Lean kurulumuna girmeden bloke eder (fail-fast).
+      - name: Validate config schema (jsonschema)
+        run: |
+          pip install jsonschema
+          python3 _calisma/CIKTI/validate_config_schema.py
+
       # pdfinfo (PDF sayfa kapısı 33) + qpdf (K6-DETERM metadata-stripped hash).
       # Yoksa verify_delivery.py bu kontrolleri atlar (FAIL etmez); kapıyı
       # eksiksiz çalıştırmak için kuruyoruz.

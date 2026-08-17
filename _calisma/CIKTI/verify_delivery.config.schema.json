@@ -1,0 +1,63 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "verify_delivery.config.schema.json",
+  "title": "verify_delivery.py configuration",
+  "description": "verify_delivery.py defaults schema (Stoic-Hume V5 fail-closed CI). CLI flags override config values. validate_config_schema.py + verify_delivery.py (stdlib) both enforce this shape.",
+  "type": "object",
+  "required": [
+    "budget_usd",
+    "budget_method",
+    "budget_ratios",
+    "expected_pages",
+    "expected_refs",
+    "expected_manifest"
+  ],
+  "properties": {
+    "_doc": {
+      "type": "string",
+      "description": "Human-readable purpose note (meta, ignored by validation)."
+    },
+    "_schema": {
+      "type": "string",
+      "description": "Reference to this schema file (meta, ignored by validation)."
+    },
+    "budget_usd": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "Budget ceiling in USD. Estimated production cost must stay at or below this."
+    },
+    "budget_method": {
+      "type": "string",
+      "enum": ["universal", "weighted", "both"],
+      "description": "Budget estimate method: universal (bytes/4), weighted (type-based), both (pessimistic max)."
+    },
+    "budget_ratios": {
+      "type": "object",
+      "description": "Bytes-per-token ratios for the weighted estimate, by file type.",
+      "required": ["text", "pdf", "archive", "binary"],
+      "properties": {
+        "text": { "type": "number", "exclusiveMinimum": 0 },
+        "pdf": { "type": "number", "exclusiveMinimum": 0 },
+        "archive": { "type": "number", "exclusiveMinimum": 0 },
+        "binary": { "type": "number", "exclusiveMinimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "expected_pages": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Expected PDF page count (K6)."
+    },
+    "expected_refs": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Expected reference count (K6)."
+    },
+    "expected_manifest": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Expected MANIFEST.txt file count (K4)."
+    }
+  },
+  "additionalProperties": true
+}
