@@ -4,15 +4,19 @@
 #   pip install pre-commit
 #   pre-commit install
 #
-# Bu noktadan sonra her `git commit` sırasında verify_delivery.py çalışır;
-# herhangi bir P0/P1 bulgusu (bozuk zip, hash uyuşmazlığı, script sapması,
-# PDF sayfa/referans sapması) commit'i bloke eder (sıfır-dışı exit).
+# Bu noktadan sonra her `git commit` sırasında üç kapı çalışır:
+#   1) verify-delivery        : paket bütünlüğü (K1-K7, stdlib-only)
+#   2) verify-delivery-symbolic: Z3 sembolik ispat (z3-solver, izole venv)
+#   3) verify-delivery-lean    : Lean 4 reduct-invariance (lean, system)
+# Herhangi bir P0/P1 bulgusu commit'i bloke eder (sıfır-dışı exit).
 #
 # Manuel çalıştırma:
 #   pre-commit run --all-files
 #   pre-commit run verify-delivery --files _calisma/CIKTI/TESLIM_KLASOR_V5_2026-08-17.zip
+#   pre-commit run verify-delivery-symbolic
+#   pre-commit run verify-delivery-lean
 #
-# Hook read-only'dir: dosya değiştirmez, yalnızca doğrular (fail-closed).
+# Hook'lar read-only'dir: dosya değiştirmez, yalnızca doğrular (fail-closed).
 repos:
   - repo: local
     hooks:
@@ -23,6 +27,34 @@ repos:
           3 script byte-for-byte + PDF 33 sayfa + 64 referans. Bulgu varsa
           commit bloke edilir.
         entry: python3 _calisma/CIKTI/verify_delivery.py --dir _calisma/CIKTI
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
+      - id: verify-delivery-symbolic
+        name: Verify formal core symbolically (Z3, fail-closed)
+        description: >-
+          symbolic_proof_z3.py — core_section.tex teoremlerinin 12 Z3
+          kontrolü (Prop 1, bridge collapse, çift/global karakterizasyon,
+          Prop 2 model çifti). Beklenmedik sonuç commit'i bloke eder.
+          z3-solver pre-commit tarafından izole bir ortamda otomatik kurulur.
+        entry: python3 _calisma/CIKTI/symbolic_proof_z3.py
+        language: python
+        additional_dependencies: [z3-solver==5.1.0.0]
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
+      - id: verify-delivery-lean
+        name: Verify Lean 4 reduct-invariance (fail-closed)
+        description: >-
+          ReductInvariance.lean — L₀-reduct invariance lemmasının Lean 4
+          biçimselleştirilmesi. Tümevarımsal kanıt derlenerek doğrulanır.
+          lean (elan) gerektirir; PATH'te veya ~/.elan/bin'de aranır.
+        entry: sh _calisma/CIKTI/verify_lean.sh
         language: system
         always_run: true
         pass_filenames: false

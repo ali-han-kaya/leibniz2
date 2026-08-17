@@ -12,10 +12,15 @@ Kullanım (tek komut):
     python3 verify_delivery.py --json         # CI için makine-okunur JSON
     python3 verify_delivery.py --budget 30    # bütçe kalkanı: tahmini USD üretim maliyeti
                                               #   (token ≈ bytes/4; $3/M token + $0.55; v3_verify.py H4)
+                                              # Varsayılan değer verify_delivery.config.json'dan okunur.
     python3 verify_delivery.py --check-references
                                               # K6: CrossRef/SEP çevrimiçi referans denetimi
     python3 verify_delivery.py --symbolic-proof
                                               # K8: Z3 sembolik ispat (core_section.tex teoremleri)
+    python3 verify_delivery.py --lean-proof
+                                              # K9: Lean 4 reduct-invariance (tümevarımsal kanıt)
+    python3 verify_delivery.py --full          # tüm katmanlar: K1-K9 + CrossRef/SEP + Z3 + Lean
+                                              #   (--check-references + --symbolic-proof + --lean-proof)
 
 Exit kodu: 0 = PASS, 1 = FAIL, 2 = kullanım/ortam hatası.
 
@@ -23,7 +28,7 @@ Yalnızca Python 3 standart kütüphanesi kullanır (hashlib, zipfile, subproces
 tempfile; --check-references için ayrıca urllib). Harici `unzip`/`shasum`/`diff`
 GEREKMEZ. pdfinfo varsa PDF sayfa kontrolü eklenir, yoksa atlanır (FAIL değil).
 
-Doğrulama zinciri (Katman 1..8):
+Doğrulama zinciri (Katman 1..9):
   K1  Dış zip  SHA-256 sidecar (kurcalanma)
   K2  Klasör   KLASOR_CHECKSUMLARI.sha256 (tüm dosyalar)
   K3  İç zip   SHA-256 sidecar (kurcalanma)
@@ -33,6 +38,7 @@ Doğrulama zinciri (Katman 1..8):
                + (--check-references ile) CrossRef DOI + SEP URL çevrimiçi denetimi
   K7  Hijyen   secret/anahtar + artefakt taraması
   K8  İspat    Z3 sembolik ispat (--symbolic-proof; z3-solver gerektirir)
+  K9  Lean     Lean 4 reduct-invariance tümevarımsal kanıt (--lean-proof; lean gerektirir)
 """
 import argparse
 import hashlib
@@ -56,6 +62,7 @@ EXPECTED_MANIFEST = 18
 EXPECTED_REFS = 64
 EXPECTED_PAGES = 33
 SYMBOLIC_PROOF_SCRIPT = "symbolic_proof_z3.py"
+LEAN_PROOF_SCRIPT = "../lean_reduct/ReductInvariance.lean"
 SCRIPTS = [
     ("core_formal_model_check.py", "test_output.txt"),
     ("encoding_sensitivity_check.py", "encoding_sensitivity_output.txt"),
@@ -331,16 +338,82 @@ def run_symbolic_proof(py, script):
     return False, f"Z3 beklenmedik sonuç: {detail}"
 
 
+def run_lean_proof(lean_path, lean_file):
+    """K9: Lean 4 reduct-invariance (tümevarımsal kanıt). Döndürür (ok: bool, detail: str)."""
+    lean_dir = os.path.dirname(lean_file)
+    try:
+        r = subprocess.run([lean_path, lean_file], capture_output=True, text=True,
+                           timeout=120, cwd=lean_dir or ".")
+    except FileNotFoundError:
+        return False, f"lean bulunamadı: {lean_path}"
+    except subprocess.TimeoutExpired:
+        return False, "Lean derleme zaman aşımı (>120s)"
+    out = (r.stdout or "") + (r.stderr or "")
+    if r.returncode == 0:
+        return True, "Lean 4 reduct-invariance derlendi ve geçti"
+    tail = [l.strip() for l in out.splitlines() if l.strip()][-3:]
+    detail = " | ".join(tail) if tail else f"exit={r.returncode}"
+    return False, f"Lean derleme hatası: {detail}"
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dir", default=os.path.dirname(os.path.abspath(__file__)))
     ap.add_argument("--json", action="store_true")
-    ap.add_argument("--budget", type=float, default=30.0)
+    ap.add_argument("--budget", type=float, default=None,
+                    help="Bütçe kalkanı: tahmini USD üretim maliyeti "
+                         "(token ≈ bytes/4; $3/M token + $0.55; v3_verify.py H4). "
+                         "Varsayılan: verify_delivery.config.json → budget_usd")
+    ap.add_argument("--budget-out", default=None,
+                    help="Bütçe kalkanı sonucunu ayrı bir JSON dosyasına yaz "
+                         "(CI artifact sidecar için)")
+    ap.add_argument("--budget-method", choices=["universal", "weighted", "both"],
+                    default=None,
+                    help="Bütçe tahmin yöntemi: universal (bytes/4), "
+                         "weighted (tip bazlı ağırlık), both (en kötümser). "
+                         "Varsayılan: verify_delivery.config.json → budget_method")
+    ap.add_argument("--config", default=None,
+                    help="Konfig dosyası yolu (varsayılan: verify_delivery.py ile aynı dizindeki "
+                         "verify_delivery.config.json)")
     ap.add_argument("--check-references", action="store_true",
                     help="K6: CrossRef DOI + SEP URL çevrimiçi referans denetimi")
     ap.add_argument("--symbolic-proof", action="store_true",
                     help="K8: Z3 sembolik ispat (symbolic_proof_z3.py; z3-solver gerektirir)")
+    ap.add_argument("--lean-proof", action="store_true",
+                    help="K9: Lean 4 reduct-invariance (ReductInvariance.lean; lean gerektirir)")
+    ap.add_argument("--full", action="store_true",
+                    help="Tüm katmanları (--check-references + --symbolic-proof + --lean-proof) tek komutla koş")
     args = ap.parse_args()
+    # --full, tüm isteğe bağlı katmanları aktifleştirir
+    if args.full:
+        args.check_references = True
+        args.symbolic_proof = True
+        args.lean_proof = True
+
+    # ---- Konfig yükleme (CLI bayrakları config'ten öncelikli) ----
+    cfg_path = args.config or os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "verify_delivery.config.json")
+    cfg = {}
+    if os.path.isfile(cfg_path):
+        try:
+            with open(cfg_path, encoding="utf-8") as cf:
+                cfg = json.load(cf)
+        except (OSError, json.JSONDecodeError) as e:
+            print(f"UYARI: konfig okunamadı ({cfg_path}): {e}")
+    else:
+        print(f"UYARI: konfig dosyası yok ({cfg_path}), varsayılanlar kullanılacak")
+
+    if args.budget is None:
+        args.budget = cfg.get("budget_usd", 30.0)
+    if isinstance(args.budget, int):
+        args.budget = float(args.budget)
+    if args.budget_method is None:
+        args.budget_method = cfg.get("budget_method", "both")
+    # Bütçe hesabının kullanacağı beklenen sayıları da config'ten doldur
+    globals()["EXPECTED_MANIFEST"] = cfg.get("expected_manifest", EXPECTED_MANIFEST)
+    globals()["EXPECTED_REFS"] = cfg.get("expected_refs", EXPECTED_REFS)
+    globals()["EXPECTED_PAGES"] = cfg.get("expected_pages", EXPECTED_PAGES)
 
     findings = []  # {id, priority, check, issue, evidence}
 
@@ -428,15 +501,35 @@ def main():
             add("P0", "K4-MANIFEST", "K4 manifest", "paket dizini bulunamadı", pkg)
             pkg = None
 
-        # bütçe kalkanı için içerik toplam baytı (iç zip içeriği; token ≈ bytes/4)
+        # bütçe kalkanı için içerik toplam baytı + dosya tipi kırılımı
+        # (iç zip içeriği; token ≈ bytes/4 evrensel, ama ağırlıklı yöntem
+        # dosya tipine göre bytes-per-token oranı kullanır: metin 1/3, PDF 1/8,
+        # arşiv 1/12, diğer binary 1/20).
         ic_root = os.path.join(tmp, IC_ZIP[:-4])
+        type_bytes = {"text": 0, "pdf": 0, "archive": 0, "binary": 0}
         if os.path.isdir(ic_root):
             for _root, _dirs, files in os.walk(ic_root):
                 for fn in files:
+                    p = os.path.join(_root, fn)
                     try:
-                        total_bytes += os.path.getsize(os.path.join(_root, fn))
+                        sz = os.path.getsize(p)
                     except OSError:
-                        pass
+                        continue
+                    total_bytes += sz
+                    ext = os.path.splitext(fn)[1].lower()
+                    if ext in (".pdf",):
+                        type_bytes["pdf"] += sz
+                    elif ext in (".zip", ".tar", ".gz", ".bz2", ".7z", ".rar"):
+                        type_bytes["archive"] += sz
+                    elif ext in (
+                        ".tex", ".py", ".md", ".json", ".txt", ".csv", ".tsv",
+                        ".yaml", ".yml", ".html", ".xml", ".css", ".js",
+                        ".sh", ".rb", ".rs", ".lean", ".toml", ".ini", ".cfg",
+                        ".bst", ".bib", ".sty", ".cls",
+                    ):
+                        type_bytes["text"] += sz
+                    else:
+                        type_bytes["binary"] += sz
 
         # ---- K4: manifest 18/18 ----
         mf = os.path.join(pkg, "MANIFEST.txt") if pkg else None
@@ -538,21 +631,92 @@ def main():
             if not ok:
                 add("P0", "K8-Z3", "K8 sembolik ispat", detail)
 
-    # ---- Bütçe kalkanı (v3_verify.py H4 yöntemi: token ≈ bytes/4) ----
+    # ---- K9: Lean 4 reduct-invariance (tümevarımsal kanıt, isteğe bağlı) ----
+    if args.lean_proof:
+        lp = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                          LEAN_PROOF_SCRIPT)
+        # lean'i PATH'ten, /opt/homebrew/bin'den veya ~/.elan/bin'den bul
+        lean_cmd = "lean"
+        for candidate in ["lean",
+                          "/opt/homebrew/bin/lean",
+                          os.path.expanduser("~/.elan/bin/lean")]:
+            if os.path.isfile(candidate):
+                lean_cmd = candidate
+                break
+        if not os.path.isfile(lp):
+            add("P0", "K9-LEAN", "K9 Lean ispatı", f"{LEAN_PROOF_SCRIPT} yok", lp)
+        else:
+            ok, detail = run_lean_proof(lean_cmd, lp)
+            if not args.json:
+                print(f"[K9] Lean 4 reduct-invariance: {'PASS' if ok else 'FAIL'} — {detail}")
+            if not ok:
+                add("P0", "K9-LEAN", "K9 Lean ispatı", detail)
+
+    # ---- Bütçe kalkanı: iki yöntem yan yana ----
+    # (a) Evrensel: token ≈ bytes/4      (v3_verify.py H4, bağımsız referans)
+    # (b) Ağırlıklı: token ≈ bytes/r_i    (dosya tipine göre bytes-per-token)
     budget_report = None
     if args.budget is not None:
-        total_tokens = total_bytes // 4
-        est_cost = round(total_tokens / 1_000_000 * 3.0, 2) + 0.55
-        budget_report = {"limit": args.budget, "estimated_usd": est_cost,
-                         "tokens_est": total_tokens, "total_bytes": total_bytes,
-                         "verdict": "OK" if est_cost <= args.budget else "FAIL"}
+        # (a) evrensel
+        universal_tokens = total_bytes // 4
+        universal_cost = round(universal_tokens / 1_000_000 * 3.0, 2) + 0.55
+        # (b) ağırlıklı
+        ratios = {"text": 3, "pdf": 8, "archive": 12, "binary": 20}
+        weighted_tokens = sum(
+            type_bytes[k] // ratios[k] for k in ratios)
+        weighted_cost = round(weighted_tokens / 1_000_000 * 3.0, 2) + 0.55
+
+        # Karar: hangi yöntem kullanılsın?
+        #   --budget-method=universal | weighted | both(default)
+        method = getattr(args, "budget_method", "both")
+        if method == "universal":
+            est_cost, total_tokens = universal_cost, universal_tokens
+        elif method == "weighted":
+            est_cost, total_tokens = weighted_cost, weighted_tokens
+        else:  # both: en kötümser (maliyet-yüksek) tahmini kullan
+            est_cost = max(universal_cost, weighted_cost)
+            total_tokens = max(universal_tokens, weighted_tokens)
+
+        budget_report = {
+            "limit": args.budget,
+            "estimated_usd": est_cost,
+            "tokens_est": total_tokens,
+            "total_bytes": total_bytes,
+            "verdict": "OK" if est_cost <= args.budget else "FAIL",
+            "method": method,
+            "comparison": {
+                "universal": {"tokens": universal_tokens, "usd": universal_cost,
+                              "ratio": "bytes/4 (v3_verify.py H4)"},
+                "weighted":  {"tokens": weighted_tokens, "usd": weighted_cost,
+                              "ratios": ratios,
+                              "by_type": type_bytes},
+            },
+        }
         if not args.json:
             print(f"[BÜTÇE] ~{total_tokens} token → ${est_cost} "
-                  f"(limit ${args.budget}, içerik {total_bytes} B)")
+                  f"(limit ${args.budget}, içerik {total_bytes} B, yöntem={method})")
+            print(f"[BÜTÇE]   evrensel (bytes/4):  {universal_tokens} tok → ${universal_cost}")
+            print(f"[BÜTÇE]   ağırlıklı (tip bazlı): {weighted_tokens} tok → ${weighted_cost}")
+            tb = budget_report["comparison"]["weighted"]["by_type"]
+            print(f"[BÜTÇE]   kırılım: text={tb['text']}B "
+                  f"pdf={tb['pdf']}B archive={tb['archive']}B binary={tb['binary']}B")
         if est_cost > args.budget:
             add("P1", "BUDGET", "Bütçe",
                 f"tahmini maliyet ${est_cost} limiti (${args.budget}) aşıyor",
                 f"~{total_tokens} token, {total_bytes} B içerik")
+        if args.budget_out:
+            try:
+                with open(args.budget_out, "w", encoding="utf-8") as bf:
+                    json.dump({
+                        **budget_report,
+                        "date": datetime.now(timezone.utc).isoformat(),
+                        "check": "v3_verify.py H4 (token ≈ bytes/4, "
+                                 "$3/M token + $0.55)",
+                    }, bf, indent=2, ensure_ascii=False)
+                print(f"[BÜTÇE] sidecar yazıldı: {args.budget_out}")
+            except OSError as e:
+                add("P1", "BUDGET-OUT", "Bütçe sidecar",
+                    f"yazılamadı: {args.budget_out}", str(e))
 
     p0 = sum(1 for f in findings if f["priority"] == "P0")
     p1 = sum(1 for f in findings if f["priority"] == "P1")

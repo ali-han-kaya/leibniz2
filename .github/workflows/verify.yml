@@ -3,11 +3,13 @@ name: verify-delivery
 # Stoic-Hume V5 tesliminin fail-closed doğrulama kapısı.
 # Her push ve pull_request'te çalışır; manuel tetikleme için workflow_dispatch.
 #
-# İki bağımsız kapı (paralel job):
+# Üç bağımsız kapı (paralel job):
 #   1) verify    : MANIFEST + checksum + script + PDF + referans zinciri
 #                  (verify_delivery.py, yalnızca stdlib; exit 0 = PASS)
 #   2) symbolic  : core_section.tex teoremlerinin Z3 ile sembolik ispatı
-#                  (symbolic_proof_z3.py; exit 0 = tüm ispatlar PASS)
+#                  (verify_delivery.py --symbolic-proof; exit 0 = tüm ispatlar PASS)
+#   3) lean      : ReductInvariance.lean tümevarımsal kanıtı
+#                  (verify_delivery.py --lean-proof; exit 0 = derleme başarılı)
 #
 # Herhangi bir job'un sıfır-dışı exit kodu build'i FAIL yapar (fail-closed).
 
@@ -50,7 +52,8 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          python3 _calisma/CIKTI/verify_delivery.py --dir _calisma/CIKTI 2>&1 | tee verify_report.txt
+          python3 _calisma/CIKTI/verify_delivery.py --dir _calisma/CIKTI \
+            --budget-out budget_verify.json 2>&1 | tee verify_report.txt
 
       # `if: always()` — kapı FAIL olsa bile rapor (neden başarısız olduğu)
       # artifact olarak yüklenir.
@@ -61,6 +64,16 @@ jobs:
           name: verify-report
           path: verify_report.txt
           if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload budget sidecar (verify)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: budget-verify
+          path: budget_verify.json
+          if-no-files-found: ignore
+          retention-days: 30
 
   symbolic:
     name: Symbolic proof (Z3) — K8
@@ -83,7 +96,8 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          python3 _calisma/CIKTI/verify_delivery.py --dir _calisma/CIKTI --symbolic-proof 2>&1 | tee symbolic_report.txt
+          python3 _calisma/CIKTI/verify_delivery.py --dir _calisma/CIKTI --symbolic-proof \
+            --budget-out budget_symbolic.json 2>&1 | tee symbolic_report.txt
 
       - name: Upload symbolic proof report
         if: always()
@@ -92,3 +106,136 @@ jobs:
           name: symbolic-report
           path: symbolic_report.txt
           if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload budget sidecar (symbolic)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: budget-symbolic
+          path: budget_symbolic.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+  lean:
+    name: Lean 4 reduct-invariance — K9
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # Lean 4 kurulumu (elan + stable toolchain)
+      - name: Install Lean 4
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+
+      # K9: Lean reduct-invariance, verify_delivery.py'nin tek giriş noktası üzerinden.
+      - name: Run Lean proof (verify_delivery.py K9)
+        shell: bash
+        run: |
+          set -o pipefail
+          python3 _calisma/CIKTI/verify_delivery.py --dir _calisma/CIKTI --lean-proof \
+            --budget-out budget_lean.json 2>&1 | tee lean_report.txt- name: Upload Lean proof report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lean-report
+          path: lean_report.txt
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload budget sidecar (lean)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: budget-lean
+          path: budget_lean.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # Statik markdown raporları tek bir artifact'ta topla. Bu raporlar depoda
+  # commitlenmiş durumdadır; CI çıktısı ayrı tutulur (verify-report, symbolic-report,
+  # lean-report). Ama CI log'undan bağımsız olarak delil olarak indirilebilmesi için
+  # ayrı artifact olarak ekliyoruz.
+  budget:
+    name: Budget shield (aggregated)
+    runs-on: ubuntu-latest
+    needs: [verify, symbolic, lean]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Her job kendi budget_<job>.json dosyasını artifact olarak yükledi;
+      # burada hepsini tek bir artifact'ta topluyoruz.
+      - name: Download budget sidecars
+        uses: actions/download-artifact@v4
+        with:
+          pattern: budget-*
+          path: budget_sidecars/
+          merge-multiple: true
+
+      - name: Consolidate budget report
+        run: |
+          mkdir -p budget
+          cp budget_sidecars/*.json budget/ 2>/dev/null || cp budget_verify.json budget/ 2>/dev/null || true
+          # Index: hangi job ne kadar token/maliyet üretti?
+          _calisma/.venv_z3/bin/python - <<'PY'
+          import json, glob, sys
+          rows = []
+          for p in sorted(glob.glob("budget/*.json")):
+              try:
+                  r = json.load(open(p))
+                  r["source"] = p.split("/")[-1]
+                  rows.append(r)
+              except Exception as e:
+                  print(f"skip {p}: {e}", file=sys.stderr)
+          summary = {
+              "tool": "verify_delivery.py bütçe kalkanı",
+              "date": rows[0]["date"] if rows else None,
+              "method": "v3_verify.py H4 (token ≈ bytes/4, $3/M token + $0.55)",
+              "runs": rows,
+              "any_fail": any(r["verdict"] != "OK" for r in rows),
+          }
+          json.dump(summary, open("budget/index.json", "w"), indent=2, ensure_ascii=False)
+          print(json.dumps(summary, indent=2, ensure_ascii=False))
+          PY
+
+      - name: Upload budget bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: budget
+          path: budget/
+          retention-days: 30
+          if-no-files-found: error
+
+  reports:
+    name: Static markdown reports
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Bundle markdown reports
+        run: |
+          mkdir -p reports
+          cp _calisma/CIKTI/M0_TOOLKIT_DENETIM_RAPORU.md      reports/
+          cp _calisma/CIKTI/REFERANS_KANIT_DENETIMI.md        reports/
+          cp _calisma/CIKTI/SEMBOLIK_ISPAT_RAPORU.md          reports/
+          cp _calisma/lean_reduct/LEAN_ISPAT_RAPORU.md        reports/
+          echo "=== Rapor içeriği ==="
+          ls -la reports/
+          wc -l reports/*.md
+
+      - name: Upload reports bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports
+          path: reports/
+          if-no-files-found: error
+          retention-days: 30

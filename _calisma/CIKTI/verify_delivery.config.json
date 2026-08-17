@@ -1,0 +1,15 @@
+{
+  "_doc": "Defaults for verify_delivery.py. CLI flags override these. KEEP git-tracked.",
+  "_schema": "https://example.invalid/schemas/verify-delivery.v1.json",
+  "budget_usd": 30.0,
+  "budget_method": "both",
+  "budget_ratios": {
+    "text": 3,
+    "pdf": 8,
+    "archive": 12,
+    "binary": 20
+  },
+  "expected_pages": 33,
+  "expected_refs": 64,
+  "expected_manifest": 18
+}
