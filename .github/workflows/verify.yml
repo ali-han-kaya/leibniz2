@@ -3,18 +3,22 @@ name: verify-delivery
 # Stoic-Hume V5 tesliminin fail-closed doğrulama kapısı.
 # Her push ve pull_request'te çalışır; manuel tetikleme için workflow_dispatch.
 #
-# Üç bağımsız kapı (paralel job):
-#   1) verify    : MANIFEST + checksum + script + PDF + referans zinciri
-#                  (verify_delivery.py, yalnızca stdlib; exit 0 = PASS)
-#   2) symbolic  : core_section.tex teoremlerinin Z3 ile sembolik ispatı
-#                  (verify_delivery.py --symbolic-proof; exit 0 = tüm ispatlar PASS)
-#   3) lean      : ReductInvariance.lean tümevarımsal kanıtı
-#                  (verify_delivery.py --lean-proof; exit 0 = derleme başarılı)
+# TEK GİRİŞ NOKTASI: verify job'u, `verify_delivery.py --full` ile
+#   K1-K7 (manifest/checksum/script/PDF/referans) +
+#   K8 (Z3 sembolik ispat) +
+#   K9 (Lean 4 reduct-invariance) +
+#   bütçe kalkanı (--budget-out) hepsini tek komutta koşar.
+# Z3 ve Lean, verify_delivery.py'nin içinden subprocess olarak çağrılır;
+# tek bir rapor dosyasında (verify_report.txt) birleşir.
 #
-# Herhangi bir job'un sıfır-dışı exit kodu build'i FAIL yapar (fail-closed).
+# Tek job'un sıfır-dışı exit kodu build'i FAIL yapar (fail-closed).
 #
-# Son job: reproducibility — tüm artifact'ları indirir, SHA-256 + run_id
-# hesaplar, manifest.txt yazar ve tek artifact olarak yükler.
+# Yardımcı job'lar:
+#   budget        : bütçe sidecar'ını toplar; aşım varsa run summary +
+#                   PR yorumu üretir.
+#   reports       : statik markdown raporları tek artifact'ta toplar.
+#   reproducibility: tüm artifact'ları SHA-256 + run_id ile manifest'ler,
+#                   tek artifact olarak yükler.
 
 on:
   push:
@@ -31,7 +35,7 @@ permissions:
 
 jobs:
   verify:
-    name: Delivery verification (fail-closed)
+    name: Delivery verification — K1-K9 (single entry point)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -42,21 +46,33 @@ jobs:
         with:
           python-version: '3.12'
 
-      # pdfinfo yalnızca PDF sayfa kapısı (33 sayfa) için gerekir; yoksa
-      # verify_delivery.py bu kontrolü atlar (FAIL etmez). Kapıyı eksiksiz
-      # çalıştırmak için kuruyoruz.
+      # pdfinfo (PDF sayfa kapısı 33) + qpdf (K6-DETERM metadata-stripped hash).
+      # Yoksa verify_delivery.py bu kontrolleri atlar (FAIL etmez); kapıyı
+      # eksiksiz çalıştırmak için kuruyoruz.
       - name: Install pdfinfo (poppler-utils) + qpdf (K6-DETERM)
         run: |
           sudo apt-get update
           sudo apt-get install -y poppler-utils qpdf
 
+      # K8: Z3 sembolik ispat. Yerel ispatla aynı sürüm (tekrarlanabilirlik).
+      - name: Install Z3 (K8)
+        run: pip install z3-solver==5.1.0.0
+
+      # K9: Lean 4 reduct-invariance (elan + stable toolchain).
+      - name: Install Lean 4 (K9)
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+
       # `pipefail` + `tee`: çıktı hem log'a hem dosyaya yazılır, ama exit kodu
       # python'dan gelir (boru, fail-closed kapıyı gizleyemez).
-      - name: Run delivery verification
+      # --full: K1-K7 + K8 (Z3) + K9 (Lean) + CrossRef/SEP/OpenLibrary + bütçe.
+      # --budget-out: bütçe sonucunu ayrı JSON'a yazar (budget job'u tüketir).
+      - name: Run full verification (K1-K9, single entry point)
         shell: bash
         run: |
           set -o pipefail
-          python3 _calisma/CIKTI/verify_delivery.py --dir _calisma/CIKTI \
+          python3 _calisma/CIKTI/verify_delivery.py --dir _calisma/CIKTI --full \
             --budget-out budget_verify.json 2>&1 | tee verify_report.txt
 
       - name: Generate SHA-256 for verify artifacts
@@ -66,7 +82,7 @@ jobs:
             > verify_report.sha256 || true
 
       # `if: always()` — kapı FAIL olsa bile rapor (neden başarısız olduğu)
-      # artifact olarak yüklenir.
+      # artifact olarak yüklenir. Tek rapor, tüm K1-K9 katmanlarını içerir.
       - name: Upload verification report
         if: always()
         uses: actions/upload-artifact@v4
@@ -87,113 +103,11 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
-  symbolic:
-    name: Symbolic proof (Z3) — K8
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      # Yerel ispatla aynı sürüm (tekrarlanabilirlik).
-      - name: Install Z3
-        run: pip install z3-solver==5.1.0.0
-
-      # K8: sembolik ispat, verify_delivery.py'nin tek giriş noktası üzerinden.
-      - name: Run symbolic proof (verify_delivery.py K8)
-        shell: bash
-        run: |
-          set -o pipefail
-          python3 _calisma/CIKTI/verify_delivery.py --dir _calisma/CIKTI --symbolic-proof \
-            --budget-out budget_symbolic.json 2>&1 | tee symbolic_report.txt
-
-      - name: Generate SHA-256 for symbolic artifacts
-        shell: bash
-        run: |
-          sha256sum symbolic_report.txt budget_symbolic.json 2>/dev/null \
-            > symbolic_report.sha256 || true
-
-      - name: Upload symbolic proof report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: symbolic-report
-          path: |
-            symbolic_report.txt
-            symbolic_report.sha256
-          if-no-files-found: error
-          retention-days: 30
-
-      - name: Upload budget sidecar (symbolic)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: budget-symbolic
-          path: budget_symbolic.json
-          if-no-files-found: ignore
-          retention-days: 30
-
-  lean:
-    name: Lean 4 reduct-invariance — K9
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      # Lean 4 kurulumu (elan + stable toolchain)
-      - name: Install Lean 4
-        run: |
-          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
-          echo "$HOME/.elan/bin" >> $GITHUB_PATH
-
-      # K9: Lean reduct-invariance, verify_delivery.py'nin tek giriş noktası üzerinden.
-      - name: Run Lean proof (verify_delivery.py K9)
-        shell: bash
-        run: |
-          set -o pipefail
-          python3 _calisma/CIKTI/verify_delivery.py --dir _calisma/CIKTI --lean-proof \
-            --budget-out budget_lean.json 2>&1 | tee lean_report.txt
-
-      - name: Generate SHA-256 for lean artifacts
-        shell: bash
-        run: |
-          sha256sum lean_report.txt budget_lean.json 2>/dev/null \
-            > lean_report.sha256 || true
-
-      - name: Upload Lean proof report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: lean-report
-          path: |
-            lean_report.txt
-            lean_report.sha256
-          if-no-files-found: error
-          retention-days: 30
-
-      - name: Upload budget sidecar (lean)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: budget-lean
-          path: budget_lean.json
-          if-no-files-found: ignore
-          retention-days: 30
-
   budget:
     name: Budget shield (aggregated)
     runs-on: ubuntu-latest
-    needs: [verify, symbolic, lean]
-    # Bütçe aşımı (P1) üst job'ları FAIL yapsa bile bu job koşmalı ki
+    needs: [verify]
+    # Bütçe aşımı (P1) üst job'u FAIL yapsa bile bu job koşmalı ki
     # uyarıyı hem run summary'e hem PR yorumuna düşebilsin.
     if: always()
     steps:
@@ -211,7 +125,7 @@ jobs:
         run: |
           mkdir -p budget
           cp budget_sidecars/*.json budget/ 2>/dev/null || true
-          # Index: hangi job ne kadar token/maliyet üretti?
+          # Index: bütçe sidecar'larını topla, aşanları failures listesine koy.
           python3 - <<'PY'
           import json, glob, sys
           rows = []
@@ -255,7 +169,7 @@ jobs:
           path = "budget/index.json"
           if not os.path.isfile(path):
               with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as s:
-                  s.write("## ⚠️ Bütçe kalkanı: sidecar bulunamadı (üst job'lar çalışmadı)\n")
+                  s.write("## ⚠️ Bütçe kalkanı: sidecar bulunamadı (verify job'u çalışmadı)\n")
               raise SystemExit(0)
           summary = json.load(open(path))
           failures = summary.get("failures", [])
@@ -358,15 +272,11 @@ jobs:
   # Tüm artifact'ları indirir, her dosya için SHA-256 üretir,
   # manifest.txt yazar (github.run_id + github.sha + dosya hash'leri),
   # her şeyi tek bir artifact olarak yükler.
-  #
-  # Bu artifact tek bir download ile projenin tam doğrulanabilirliğini
-  # sunar: herhangi bir commit'in hangi CI run'ında, hangi checksum'larla
-  # doğrulandığını kanıtlar.
   # ──────────────────────────────────────────────────────────────────────
   reproducibility:
     name: Reproducibility bundle
     runs-on: ubuntu-latest
-    needs: [verify, symbolic, lean, budget, reports]
+    needs: [verify, budget, reports]
     if: always()
     steps:
       - name: Checkout
@@ -383,7 +293,7 @@ jobs:
         with:
           path: all_artifacts/
           merge-multiple: true
-          pattern: '{verify-report,symbolic-report,lean-report,budget,reports}'
+          pattern: '{verify-report,budget,reports}'
 
       # ─── 2) manifest.txt üret ───────────────────────────────────────────
       - name: Generate reproducibility manifest
