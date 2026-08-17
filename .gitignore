@@ -16,6 +16,9 @@ _calisma/TOOLKIT/
 _calisma/ALI_KOMUT_TOOLKIT_v3.zip
 _calisma/TESLIM_KLASOR_V5_2026-08-17.zip
 
+# Publish/CI yerel logları (kullanıcı adı, run id vs. içerir; commit edilmez)
+logs/
+
 # Python önbellekleri
 __pycache__/
 *.py[cod]
