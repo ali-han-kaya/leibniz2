@@ -52,27 +52,27 @@ gh repo create leibniz2 \
     --disable-projects=true \
     --add-readme=false     # bizim README'miz commit'lenecek; çakışmasın
 
-# (b) Branch koruması ekle (main'e doğrudan push koruması — CI yeşil olmalı)
-gh api -X PUT /repos/$(gh repo view --json owner,name -q '.owner.login + "/" + .name')/branches/main/protection \
-  --input - <<'JSON'
-{
-  "required_status_checks": {
-    "strict": true,
-    "contexts": ["verify", "symbolic", "lean", "reports", "budget"]
-  },
-  "enforce_admins": true,
-  "required_pull_request_reviews": null,
-  "restrictions": null,
-  "required_linear_history": false,
-  "allow_force_pushes": false,
-  "allow_deletions": false
-}
-JSON
+# (b) Branch koruması — GitHub web UI (gh api yerine; manuel + şeffaf)
+#     Hazır tarayıcı linki (kopyala-yapıştır):
+#       https://github.com/<user>/leibniz2/settings/branches
+#
+#     macOS'ta doğrudan açmak için:
+open "https://github.com/<user>/leibniz2/settings/branches"
+#
+#     Web UI'da:
+#       "Add branch protection rule" → Branch name pattern: `main`
+#       ✓ Require status checks to pass before merging
+#           → ara ve ekle: verify, budget, reports, precommit, reproducibility
+#             (status check adları = workflow job `name:` alanları)
+#           → ✓ "Require branches to be up to date before merging" (strict)
+#       ✓ Do not allow bypassing the above settings   (enforce_admins)
+#       ✓ Disallow force pushes
+#       ✓ Disallow deletions
 ```
 
 **Beklenen çıktılar:**
 - `gh repo create` → "Created repository <user>/leibniz2"
-- API PUT → HTTP 200 (branch protection kuruldu)
+- Tarayıcıda Settings → Branches → `main` için kural eklendi (koruma aktif)
 
 **Görsel doğrulama:** https://github.com/<user>/leibniz2 adresi boş repo olarak açılmalı.
 
@@ -244,4 +244,4 @@ gh repo edit --enable-squash-merge --enable-rebase-merge \
 
 - `git push` **iki kez onay gerektirir**: (i) bu senaryoyu çalıştırma kararı (sen), (ii) terminalde push komutunun çalıştırılması (sen).
 - Repo **public** oluşturulur — kişisel/özel veri yok ama workflow artifact'ları herkes erişebilir. İçerik tamamen akademik makale + matematiksel ispat; gizlilik riski yok.
-- Branch protection **strict** — ilk push'ta CI yeşil olmalı. Eğer yanlışlıkla kırmızı kalırsa, `gh api DELETE .../branches/main/protection` ile koruma kaldırılabilir (geçici).
+- Branch protection **strict** — ilk push'ta CI yeşil olmalı. Eğer yanlışlıkla kırmızı kalırsa, tarayıcıda Settings → Branches → kuralı sil (`.../settings/branches`) ile koruma kaldırılabilir (geçici).
