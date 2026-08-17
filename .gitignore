@@ -12,6 +12,10 @@ _calisma/TESLIM/
 _calisma/V5_ICERIK/
 _calisma/TOOLKIT/
 
+# Başıboş çalışma kopyaları (kanonik kopyalar CIKTI/'da; toolkit zip'i iCloud'da)
+_calisma/ALI_KOMUT_TOOLKIT_v3.zip
+_calisma/TESLIM_KLASOR_V5_2026-08-17.zip
+
 # Python önbellekleri
 __pycache__/
 *.py[cod]
