@@ -36,9 +36,9 @@ MANIFEST_FILES = [
     "core_formal_model_check.py", "test_output.txt", "requirements.txt",
     "REPRODUCIBILITY.md", "INTEGRATION_NOTE.md", "internal_review_report.md",
     "original_manuscript.pdf", "README.md", "ingiliz_empirizmi_v3.tex",
-    "ingiliz_empirizmi_v3.pdf", "encoding_sensitivity_check.py",
-    "encoding_sensitivity_output.txt", "gate15_check.py",
-    "gate15_output.txt", "provenance2_supplement.md",
+    "ingiliz_empirizmi_v3.pdf","encoding_sensitivity_check.py", "encoding_sensitivity_output.txt",
+    "gate15_check.py", "gate15_output.txt", "provenance2_supplement.md",
+    "ingiliz_empirizmi_v3.pdf.metadata.sha256",
 ]
 
 SKIP = {".DS_Store", "__MACOSX"}
@@ -145,6 +145,30 @@ def write_sidecar(zip_path, name):
 
 
 def main():
+    # 0) PDF metadata-stripped hash sidecar (build determinism proxy).
+    #    build_zip'dan ÖNCE yapılır (çünkü MANIFEST.txt sidecar'ı listeler).
+    import subprocess as _sp, tempfile as _tf
+    pdf = os.path.join(PKG, "ingiliz_empirizmi_v3.pdf")
+    pdf_sidecar = os.path.join(PKG, "ingiliz_empirizmi_v3.pdf.metadata.sha256")
+    qpdf = None
+    for cand in ("qpdf", "/opt/homebrew/bin/qpdf"):
+        if os.path.isfile(cand):
+            qpdf = cand
+            break
+    if qpdf and os.path.isfile(pdf):
+        with _tf.NamedTemporaryFile(suffix=".pdf", delete=False) as _t:
+            _tmp = _t.name
+        _sp.run([qpdf, "--remove-metadata", pdf, _tmp],
+                       capture_output=True, timeout=60)
+        if os.path.isfile(_tmp):
+            with open(pdf_sidecar, "w") as f:
+                f.write(f"{sha256(_tmp)}  ingiliz_empirizmi_v3.pdf.metadata\n")
+            os.unlink(_tmp)
+        else:
+            print(f"  UYARI: qpdf başarısız, sidecar oluşturulmadı")
+    else:
+        print(f"  UYARI: qpdf bulunamadı ({qpdf}), sidecar oluşturulmadı")
+
     write_manifest()
 
     # 1) iç zip + sidecar

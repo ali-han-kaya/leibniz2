@@ -59,9 +59,11 @@ KLASOR_ZIP = "TESLIM_KLASOR_V5_2026-08-17.zip"
 KLASOR_DIR = "Stoic-Hume-Final-V5_2026-08-17"
 IC_ZIP = "TESLIM_V5_FINAL_2026-08-17.zip"
 PKG_REL = "TESLIM_V5_FINAL_2026-08-17/stoic_hume_package/Stoic_Hume_Formal_Section_2026-08-17"
-EXPECTED_MANIFEST = 18
+EXPECTED_MANIFEST = 19
 EXPECTED_REFS = 64
 EXPECTED_PAGES = 33
+PDF_METADATA_SIDECAR = "ingiliz_empirizmi_v3.pdf.metadata.sha256"
+PDF_RAW_SIDECAR = "ingiliz_empirizmi_v3.pdf.sha256"
 SYMBOLIC_PROOF_SCRIPT = "symbolic_proof_z3.py"
 LEAN_PROOF_SCRIPT = "../lean_reduct/ReductInvariance.lean"
 SCRIPTS = [
@@ -493,6 +495,31 @@ def pdf_pages(pdf_path):
     return None
 
 
+def qpdf_check_determinism(pdf_path):
+    """PDF'in metadata-stripped SHA-256 hash'ini hesapla (build determinism ölçümü).
+    qpdf --remove-metadata ile volatile alanlar (/Info, /ID, /CreationDate) temizlenir.
+    qpdf yoksa (None, None) döner — bu durumda kontrol atlanır.
+    Döndürür: (raw_sha256, stripped_sha256) veya (raw_sha256, None)."""
+    raw = sha256_file(pdf_path)
+    qpdf = "qpdf"
+    for candidate in ("qpdf", "/opt/homebrew/bin/qpdf"):
+        if os.path.isfile(candidate):
+            qpdf = candidate
+            break
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+            tmp_path = tmp.name
+        r = subprocess.run([qpdf, "--remove-metadata", pdf_path, tmp_path],
+                           capture_output=True, text=True, timeout=60)
+        if r.returncode != 0:
+            return raw, None
+        stripped = sha256_file(tmp_path)
+        os.unlink(tmp_path)
+        return raw, stripped
+    except (OSError, subprocess.TimeoutExpired):
+        return raw, None
+
+
 def run_script(py, script):
     r = subprocess.run([py, script], capture_output=True, text=True,
                        timeout=120, cwd=os.path.dirname(script) or ".")
@@ -540,6 +567,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dir", default=os.path.dirname(os.path.abspath(__file__)))
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--strict-determinism", action="store_true",
+                    help="K6-DETERM: PDF metadata-stripped hash sidecar drift'ini P1'e çevir")
     ap.add_argument("--budget", type=float, default=None,
                     help="Bütçe kalkanı: tahmini USD üretim maliyeti "
                          "(token ≈ bytes/4; $3/M token + $0.55; v3_verify.py H4). "
@@ -625,7 +654,7 @@ def main():
         add("P0", "K1-SIDECAR", "K1 dış zip", "sidecar yok", kside)
 
     tmp = tempfile.mkdtemp(prefix="verify_delivery_")
-    pages = refs = None
+    pages = refs = pdf_meta_report = None
     total_bytes = 0
     try:
         with zipfile.ZipFile(kzip) as z:
@@ -761,6 +790,42 @@ def main():
         refs = count_references(tex) if tex and os.path.isfile(tex) else None
         if refs is not None and refs != EXPECTED_REFS:
             add("P0", "K6-REFS", "K6 içerik", f"References {refs} (beklenen {EXPECTED_REFS})")
+
+        # ---- K6-DETERM: PDF metadata-stripped hash (build determinism proxy) ----
+        # qpdf --remove-metadata ile volatile alanlar (/Info, /ID, /CreationDate)
+        # çıkarılır. Sidecar varsa karşılaştırılır; default'ta BİLGİ amaçlı
+        # (tectonic non-deterministic olduğundan strict karşılaştırma her
+        # repack'te yanlış pozitif üretir). --strict-determinism ile P1'e
+        # çevrilebilir.
+        pdf_meta_report = None
+        if pdf and os.path.isfile(pdf):
+            raw_h, stripped_h = qpdf_check_determinism(pdf)
+            pdf_meta_report = {"raw": raw_h, "stripped": stripped_h,
+                               "strict": getattr(args, "strict_determinism", False)}
+            if stripped_h:
+                sidecar_path = os.path.join(pkg, PDF_METADATA_SIDECAR)
+                if os.path.isfile(sidecar_path):
+                    expected_stripped = parse_sha256sums(sidecar_path).get(
+                        PDF_METADATA_SIDECAR.replace(".sha256", "").replace(
+                            "ingiliz_empirizmi_v3.pdf.", "ingiliz_empirizmi_v3.pdf.metadata."))
+                    # Yukarıdaki karmaşık extract'i basitleştir:
+                    expected_stripped = None
+                    with open(sidecar_path) as sf:
+                        for line in sf:
+                            parts = line.split()
+                            if len(parts) == 2 and "metadata" in parts[1]:
+                                expected_stripped = parts[0]
+                                break
+                    pdf_meta_report["expected_stripped"] = expected_stripped
+                    pdf_meta_report["drift"] = (
+                        expected_stripped is not None
+                        and stripped_h != expected_stripped)
+                    if pdf_meta_report["drift"]:
+                        if getattr(args, "strict_determinism", False):
+                            add("P1", "K6-DETERM", "K6 build determinism",
+                                f"PDF metadata-stripped hash drift (strict): "
+                                f"expected={expected_stripped[:16]}… "
+                                f"actual={stripped_h[:16]}…")
 
         # ---- K6+: referans denetimi (CrossRef/SEP çevrimiçi, isteğe bağlı) ----
         if args.check_references:
@@ -909,6 +974,7 @@ def main():
         "counts": {"P0": p0, "P1": p1},
         "findings": findings,
         "budget": budget_report,
+        "pdf_hash": pdf_meta_report,
     }
     if args.json:
         print(json.dumps(out, indent=2, ensure_ascii=False))
@@ -920,6 +986,9 @@ def main():
         print(f"\nSONUÇ: {verdict}  (P0={p0}, P1={p1})")
         if pages is not None or refs is not None:
             print(f"PDF: {pages} sayfa | References: {refs}")
+        if pdf_meta_report and pdf_meta_report.get("stripped"):
+            print(f"PDF hash: raw={pdf_meta_report['raw'][:16]}… "
+                  f"metadata-stripped={pdf_meta_report['stripped'][:16]}…")
         if budget_report:
             print(f"Bütçe: ~{budget_report['tokens_est']} token → ${budget_report['estimated_usd']} "
                   f"(limit ${budget_report['limit']})")

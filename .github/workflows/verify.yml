@@ -41,10 +41,10 @@ jobs:
       # pdfinfo yalnızca PDF sayfa kapısı (33 sayfa) için gerekir; yoksa
       # verify_delivery.py bu kontrolü atlar (FAIL etmez). Kapıyı eksiksiz
       # çalıştırmak için kuruyoruz.
-      - name: Install pdfinfo (poppler-utils)
+      - name: Install pdfinfo (poppler-utils) + qpdf (K6-DETERM)
         run: |
           sudo apt-get update
-          sudo apt-get install -y poppler-utils
+          sudo apt-get install -y poppler-utils qpdf
 
       # `pipefail` + `tee`: çıktı hem log'a hem dosyaya yazılır, ama exit kodu
       # python'dan gelir (boru, fail-closed kapıyı gizleyemez).
