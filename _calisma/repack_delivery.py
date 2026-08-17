@@ -154,27 +154,43 @@ def write_sidecar(zip_path, name):
 def main():
     # 0) PDF metadata-stripped hash sidecar (build determinism proxy).
     #    build_zip'dan ÖNCE yapılır (çünkü MANIFEST.txt sidecar'ı listeler).
+    #    DETERMİNİZM: qpdf --remove-metadata aynı PDF üzerinde farklı byte'lar
+    #    üretir (non-deterministic). Bu yüzden sidecar yalnızca PDF'in ham
+    #    SHA-256'sı DEĞİŞTİĞİNDE yeniden üretilir; PDF aynıysa mevcut sidecar
+    #    korunur. Böylece ardışık repack'ler byte-identical zip üretir ve
+    #    sidecar gerçekten "senkron" kalır (hash gürültüden arındırılır).
     import subprocess as _sp, tempfile as _tf
     pdf = os.path.join(PKG, "ingiliz_empirizmi_v3.pdf")
     pdf_sidecar = os.path.join(PKG, "ingiliz_empirizmi_v3.pdf.metadata.sha256")
+    raw_hash = sha256(pdf) if os.path.isfile(pdf) else None
+    # Mevcut sidecar'daki ham hash'i oku (varsa); PDF değişmediyse qpdf'i atla.
+    cached_raw = None
+    if os.path.isfile(pdf_sidecar):
+        for line in open(pdf_sidecar, encoding="utf-8", errors="ignore"):
+            if line.startswith("# raw:"):
+                cached_raw = line.split()[2]
+                break
     qpdf = None
     for cand in ("qpdf", "/opt/homebrew/bin/qpdf"):
         if os.path.isfile(cand):
             qpdf = cand
             break
-    if qpdf and os.path.isfile(pdf):
+    if qpdf and raw_hash and cached_raw == raw_hash:
+        print(f"  (metadata sidecar reuse — PDF raw hash değişmedi: {raw_hash[:12]}…)")
+    elif qpdf and raw_hash:
         with _tf.NamedTemporaryFile(suffix=".pdf", delete=False) as _t:
             _tmp = _t.name
         _sp.run([qpdf, "--remove-metadata", pdf, _tmp],
                        capture_output=True, timeout=60)
         if os.path.isfile(_tmp):
-            with open(pdf_sidecar, "w") as f:
+            with open(pdf_sidecar, "w", encoding="utf-8") as f:
                 f.write(f"{sha256(_tmp)}  ingiliz_empirizmi_v3.pdf.metadata\n")
+                f.write(f"# raw: {raw_hash}  ingiliz_empirizmi_v3.pdf\n")
             os.unlink(_tmp)
         else:
             print(f"  UYARI: qpdf başarısız, sidecar oluşturulmadı")
-    else:
-        print(f"  UYARI: qpdf bulunamadı ({qpdf}), sidecar oluşturulmadı")
+    elif not qpdf:
+        print(f"  UYARI: qpdf bulunamadı, sidecar oluşturulmadı")
 
     write_manifest()
 
