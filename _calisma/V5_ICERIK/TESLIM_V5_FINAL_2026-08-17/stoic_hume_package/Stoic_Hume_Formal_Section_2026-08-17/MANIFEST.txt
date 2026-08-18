@@ -60,6 +60,11 @@
 #   existing sidecar is reused. PROOF: consecutive repacks are byte-identical
 #   (zip hash stable). The sidecar therefore stays in sync with the package
 #   without adding hash noise to the bundle.
+# V5m (2026-08-18): qpdf determinism experiment extracted to
+#   qpdf_determinism_experiment.py + frozen output (qpdf_determinism_output.txt).
+#   Default mode prints the byte-stable frozen record (K5 girişi); --rerun [N]
+#   re-runs qpdf --remove-metadata N times on the same input (output varies run
+#   to run — that is the experiment itself). K5 now checks 4 script/frozen pairs.
 # Python: Python 3.11 (also verified 3.10, 3.12)
 # LaTeX: core_section.tex (885 lines) + L0_Lplus_spec.md (354 lines);
 #   ingiliz_empirizmi_v3.tex compiled with tectonic 0.17.0, 33 pp.
