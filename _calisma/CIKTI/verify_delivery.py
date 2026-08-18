@@ -86,6 +86,7 @@ import argparse
 import hashlib
 import json
 import os
+import platform
 import re
 import shutil
 import subprocess
@@ -1535,6 +1536,55 @@ def check_repro_manifest_self_consistency(add):
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def _run_quiet(cmd, timeout=10):
+    """Kısa bir komutu çalıştır, ilk satırı döndür (yoksa/hata → None)."""
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    out = (r.stdout or r.stderr or "").strip()
+    return out.splitlines()[0].strip() if out else None
+
+
+def _resolve_lean():
+    """lean'i PATH'ten, /opt/homebrew/bin'den veya ~/.elan/bin'den bul."""
+    for candidate in ["lean", "/opt/homebrew/bin/lean",
+                      os.path.expanduser("~/.elan/bin/lean")]:
+        if shutil.which(candidate) or os.path.isfile(candidate):
+            return candidate
+    return "lean"
+
+
+def _resolve_precommit():
+    """pre-commit'i PATH'ten veya proje venv'inden bul (yerel simülasyon gibi)."""
+    if shutil.which("pre-commit"):
+        return "pre-commit"
+    venv_pc = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                           "..", ".venv_z3", "bin", "pre-commit")
+    if os.path.isfile(venv_pc):
+        return venv_pc
+    return "pre-commit"
+
+
+def probe_tool_versions():
+    """Hook env sürümleri (zaman serisi için). Eksik araç → None (advisory).
+
+    verify_delivery.py'nin KOŞTUĞU araçların sürümlerini yakalar: python (bu
+    süreç), z3 (sys.executable — K8'i koşan yorumlayıcı), lean (K9), ve
+    pre-commit/pdfinfo/qpdf (CI'da kurulu; yerelde yoksa None). Sürüm
+    değişiklikleri history.jsonl'a `hook_env` olarak yazılır → dashboard
+    zaman serisi olarak gösterir.
+    """
+    versions = {"python": platform.python_version()}
+    versions["z3"] = _run_quiet([sys.executable, "-c",
+                                 "import z3; print(z3.get_version_string())"])
+    versions["lean"] = _run_quiet([_resolve_lean(), "--version"])
+    versions["pre_commit"] = _run_quiet([_resolve_precommit(), "--version"])
+    versions["pdfinfo"] = _run_quiet(["pdfinfo", "-v"])
+    versions["qpdf"] = _run_quiet(["qpdf", "--version"])
+    return versions
+
+
 def main():
     t0 = time.time()  # run duvar saati (history.jsonl duration_s için)
     ap = argparse.ArgumentParser()
@@ -2253,6 +2303,10 @@ def main():
     p1 = sum(1 for f in findings if f["priority"] == "P1")
     verdict = "PASS" if (p0 == 0 and p1 == 0) else "FAIL"
 
+    # Hook env sürümleri (zaman serisi) — --json ve --history-out için; aksi
+    # halde gereksiz subprocess probe yapma (verify'yi hızlandır).
+    hook_env = probe_tool_versions() if (args.json or args.history_out) else None
+
     out = {
         "tool": "verify_delivery.py (Stoic-Hume V5 fail-closed CI)",
         "date": datetime.now(timezone.utc).isoformat(),
@@ -2265,6 +2319,7 @@ def main():
         "budget": budget_report,
         "pdf_hash": pdf_meta_report,
         "references_online": refs_online_report,
+        "hook_env": hook_env,
         "manifest_digest": manifest_digest_report,
         "config_drift": config_drift_report,
         "repro_manifest": repro_manifest_report,
@@ -2330,6 +2385,7 @@ def main():
             "refs_total": (refs_online_report or {}).get("total_online"),
             "refs_mismatch": (refs_online_report or {}).get("mismatch"),
             "refs_by_source": (refs_online_report or {}).get("by_source"),
+            "hook_env": hook_env,
         }
         try:
             with open(args.history_out, "a", encoding="utf-8") as hf:

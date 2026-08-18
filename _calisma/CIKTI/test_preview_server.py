@@ -263,5 +263,24 @@ class ConfigDiffDriftTests(unittest.TestCase):
         self.assertEqual(rows[0]["effective"], 99.0)
 
 
+class HookEnvPlumbingTests(unittest.TestCase):
+    """hook_env (zaman serisi) veri hattı: LATEST slotu + HISTORY_KEYS."""
+
+    def test_history_keys_include_hook_env(self):
+        # history.jsonl kaydına hook_env girmeli (dashboard zaman serisi için).
+        self.assertIn("hook_env", ps.HISTORY_KEYS)
+
+    def test_latest_has_hook_env_slot(self):
+        self.assertIn("hook_env", ps.LATEST)
+
+    def test_snapshot_dict_carries_hook_env(self):
+        ps.LATEST["hook_env"] = {"z3": "5.1.0"}
+        try:
+            snap = ps.snapshot_dict()
+        finally:
+            ps.LATEST["hook_env"] = None
+        self.assertEqual(snap["hook_env"], {"z3": "5.1.0"})
+
+
 if __name__ == "__main__":
     unittest.main()

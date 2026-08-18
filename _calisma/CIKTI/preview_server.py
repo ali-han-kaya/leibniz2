@@ -85,6 +85,7 @@ LATEST = {
     "refs_mismatch": None,
     "refs_by_source": None,
     "config_diff": None,        # son run'un raw↔effective config diff özeti (dashboard)
+    "hook_env": None,           # hook env sürümleri (zaman serisi; python/z3/lean/…)
 }
 LOCK = threading.Lock()
 SSE_CLIENTS = []      # bağlı /api/run client listesi (snapshot broadcast)
@@ -97,7 +98,7 @@ HISTORY_MAX = 100               # disk'te tutulacak en son run sayısı
 HISTORY_KEYS = ("ts", "verdict", "p0", "p1", "duration_s", "budget_usd",
                 "pdf_pages", "ref_count", "raw_sha256", "stripped_sha256",
                 "exit_code", "refs_verified", "refs_total", "refs_mismatch",
-                "refs_by_source")
+                "refs_by_source", "hook_env")
 
 
 def snapshot_dict():
@@ -404,6 +405,8 @@ def _finalize_run(stdout, stderr, rc, duration, data, verify_dir=None):
             # raw↔effective config diff özeti (dashboard config-diff bölümü)
             "config_diff": {"changed": bool(diff_rows),
                             "differences": diff_rows},
+            # hook env sürümleri (python/z3/lean/…; zaman serisi paneli)
+            "hook_env": data.get("hook_env"),
         })
         # Extract pages + refs from stdout for richer dashboard
         for line in stdout.splitlines():
