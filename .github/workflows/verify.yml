@@ -620,6 +620,9 @@ jobs:
   # düşer — gözden geçiren, dosyaları indirmeden her artifact'ın SHA-256
   # özetini yorumda görür. Yalnızca pull_request olayında çalışır; push'ta
   # atlanır (if: github.event_name == 'pull_request').
+  # TEK YORUM GÜNCELLE: her run'da yeni yorum açmaz; gövdedeki gizli
+  # marker'ı (<!-- stoic-hume-v5-reproducibility-manifest -->) arayıp mevcut
+  # yorumu bulur ve günceller; yoksa oluşturur (upsert).
   # ──────────────────────────────────────────────────────────────────────
   manifest-comment:
     name: Manifest PR comment
@@ -636,7 +639,7 @@ jobs:
           name: reproducibility
           path: reproducibility/
 
-      - name: Post manifest.txt as PR comment
+      - name: Upsert manifest.txt PR comment (tek yorum güncelle)
         uses: actions/github-script@v8
         with:
           script: |
@@ -655,6 +658,8 @@ jobs:
               if (m) meta[m[1]] = m[2];
             }
 
+            const MARKER = '<!-- stoic-hume-v5-reproducibility-manifest -->';
+
             const code = '```text\n' + manifest + '\n```';
             const body = [
               '## 📦 Reproducibility manifest (SHA-256)',
@@ -666,14 +671,37 @@ jobs:
               meta.github_run_id
                 ? `> Run: [${meta.github_run_id}](${context.payload.repository.html_url}/actions/runs/${meta.github_run_id})`
                 : '',
+              '',
+              MARKER,
             ].join('\n').trim();
 
-            await github.rest.issues.createComment({
+            // Tek yorum güncelle (upsert): marker'lı mevcut yorumu bul, varsa
+            // güncelle; yoksa oluştur. Her run'da yeni yorum birikmez.
+            const existing = await github.rest.issues.listComments({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body,
+              per_page: 100,
             });
+            const found = existing.data.find(c => c.body && c.body.includes(MARKER));
+
+            if (found) {
+              await github.rest.issues.updateComment({
+                comment_id: found.id,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body,
+              });
+              console.log(`Mevcut yorum güncellendi: comment_id=${found.id}`);
+            } else {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body,
+              });
+              console.log('Yeni yorum oluşturuldu (marker bulunamadı)');
+            }
 
   # ──────────────────────────────────────────────────────────────────────
   # CONFIG DRIFT CHECK
