@@ -57,7 +57,8 @@ Doğrulama zinciri (Katman 0..13):
   K2  Klasör   KLASOR_CHECKSUMLARI.sha256 (tüm dosyalar)
   K3  İç zip   SHA-256 sidecar (kurcalanma)
   K4  Manifest MANIFEST.txt 19/19 (boyut + MD5)
-  K5  Scriptler 3 script byte-for-byte (donmuş çıktılarla)
+  K5  Scriptler 4 script byte-for-byte (donmuş çıktılarla; qpdf deneyi
+      donmuş kaydı byte-stabil, --rerun canlı deneyi üretir)
   K6  İçerik   PDF sayfa sayısı (pdfinfo, isteğe bağlı) + References 64/64
                + (--check-references ile) CrossRef DOI + SEP URL + OpenLibrary /
                Internet Archive / Perseus çevrimiçi denetimi
@@ -116,6 +117,9 @@ SCRIPTS = [
     ("core_formal_model_check.py", "test_output.txt"),
     ("encoding_sensitivity_check.py", "encoding_sensitivity_output.txt"),
     ("gate15_check.py", "gate15_output.txt"),
+    # V5l qpdf determinizm deneyi: donmuş kayıt byte-stabil; --rerun canlı
+    # deneyi üretir (hash'ler run'dan run'a değişir — deneyin kendisi).
+    ("qpdf_determinism_experiment.py", "qpdf_determinism_output.txt"),
 ]
 
 # ---- K6 referans denetimi (CrossRef/SEP çevrimiçi, --check-references) ----

@@ -46,6 +46,7 @@ MANIFEST_FILES = [
     "original_manuscript.pdf", "README.md", "ingiliz_empirizmi_v3.tex",
     "ingiliz_empirizmi_v3.pdf","encoding_sensitivity_check.py", "encoding_sensitivity_output.txt",
     "gate15_check.py", "gate15_output.txt", "provenance2_supplement.md",
+    "qpdf_determinism_experiment.py", "qpdf_determinism_output.txt",
     "ingiliz_empirizmi_v3.pdf.metadata.sha256",
 ]
 

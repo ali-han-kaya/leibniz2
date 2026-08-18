@@ -86,5 +86,7 @@ encoding_sensitivity_output.txt                 1239  ece0c79b00a5e4a16e5ea65acd
 gate15_check.py                                 6023  347db78d2eabc88c1ba4de46fac84368
 gate15_output.txt                                618  10e4c756a176bb511aca7ab17234cade
 provenance2_supplement.md                       8981  09476e318c6ad2147543141ccdf69c99
+qpdf_determinism_experiment.py                  7133  933360e29e348730f0a38c6c755f539c
+qpdf_determinism_output.txt                     1191  eca3cb095ed758847001d4e032a54754
 ingiliz_empirizmi_v3.pdf.metadata.sha256         198  d771b3a49a3008d29cc8193f060a3790
 MANIFEST.txt                                       0  (self; excluded — recompute on use)

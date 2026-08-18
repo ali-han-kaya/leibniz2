@@ -1,0 +1,19 @@
+qpdf determinism experiment — frozen record (V5l, 2026-08-18)
+====================================================================
+input PDF      : ingiliz_empirizmi_v3.pdf
+raw SHA-256    : e7b0bc0bcfd89bb3ceeecafcc88850438ddfa286d61c66105edb2ba5e7507e1e   (on-disk PDF'ten hesaplanır)
+qpdf           : qpdf --remove-metadata  (V5l: NOT byte-deterministic)
+====================================================================
+HISTORICAL RECORD (V5l, 2026-08-18, MANIFEST notu): aynı girdi PDF
+(raw e7b0bc0b…) üzerinde 3 ardışık çalıştırma 3 FARKLI stripped çıktı
+üretti (hash'ler MANIFEST'ta önek olarak kayıtlı):
+  run 1  b090ac01…
+  run 2  429984da…
+  run 3  509a47a6…
+verdict        : NON-DETERMINISTIC — metadata-stripped SHA-256
+                 serbestçe yeniden hesaplanamaz; repack sidecar'ı
+                 yalnızca raw hash değişince yeniden üretir (V5l fix).
+====================================================================
+Bu dosya donmuş kayıttır (K5 byte-for-byte). Yukarıdaki raw SHA-256
+kayıttakinden farklıysa (PDF yeniden derlendi) kaydı yeniden üretin:
+  python3 qpdf_determinism_experiment.py > qpdf_determinism_output.txt
