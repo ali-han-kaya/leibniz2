@@ -493,12 +493,18 @@ def openlibrary_check(ref):
 
 
 def run_reference_audit(tex_text, add, quiet=False):
-    """K6 referans denetimi: .tex varlığı + CrossRef/SEP çevrimiçi doğrulama."""
+    """K6 referans denetimi: .tex varlığı + CrossRef/SEP/OpenLibrary çevrimiçi
+    doğrulama.
+
+    Döndürür: çevrimiçi doğrulama sonuçlarının listesi (VERSION JSON kaynağı)
+    — her öğe {key, source, verdict, detail, doi|url} — böylece her run'da
+    kaç referansın çevrimiçi doğrulandığı izlenebilir."""
     def say(line):
         if not quiet:
             print(line)
 
     say("\n--- K6 referans denetimi (CrossRef/SEP çevrimiçi) ---")
+    online_results = []
 
     # 1) .tex'te varlık (çevrimdışı, deterministik)
     for ref in REFERENCE_CROSSREF + REFERENCE_SEP:
@@ -511,6 +517,9 @@ def run_reference_audit(tex_text, add, quiet=False):
         v, detail = crossref_check(ref)
         tag = {"PASS": "OK  ", "MISMATCH": "FAIL", "UNVERIFIED": "SKIP"}[v]
         say(f"  [{tag}] CrossRef {ref['key']:<14} {ref['doi']:<32} -> {detail}")
+        online_results.append({"key": ref["key"], "source": "crossref",
+                               "verdict": v, "detail": detail,
+                               "doi": ref["doi"]})
         if v == "MISMATCH":
             add("P1", "K6-REF", "K6 referans",
                 f"{ref['key']} CrossRef uyuşmuyor: {detail}")
@@ -521,6 +530,9 @@ def run_reference_audit(tex_text, add, quiet=False):
         v, detail = sep_check(ref)
         tag = {"PASS": "OK  ", "MISMATCH": "FAIL", "UNVERIFIED": "SKIP"}[v]
         say(f"  [{tag}] SEP     {ref['key']:<14} -> {detail}")
+        online_results.append({"key": ref["key"], "source": "sep",
+                               "verdict": v, "detail": detail,
+                               "url": ref["url"]})
         if v == "MISMATCH":
             add("P1", "K6-REF", "K6 referans",
                 f"{ref['key']} SEP uyuşmuyor: {detail}")
@@ -530,6 +542,9 @@ def run_reference_audit(tex_text, add, quiet=False):
         v, detail = openlibrary_check(ref)
         tag = {"PASS": "OK  ", "MISMATCH": "FAIL", "UNVERIFIED": "SKIP"}[v]
         say(f"  [{tag}] OpenLib  {ref['key']:<32} -> {detail[:80]}")
+        online_results.append({"key": ref["key"], "source": "openlibrary",
+                               "verdict": v, "detail": detail,
+                               "query": ref["query"]})
         if v == "MISMATCH":
             add("P1", "K6-REF", "K6 referans",
                 f"{ref['key']} OpenLibrary uyuşmuyor: {detail}")
@@ -547,6 +562,7 @@ def run_reference_audit(tex_text, add, quiet=False):
         f"(CrossRef {len(REFERENCE_CROSSREF)} + SEP {len(REFERENCE_SEP)} + "
         f"OpenLibrary {len(REFERENCE_OPENLIBRARY)}); "
         f"kalanı REFERANS_KANIT_DENETIMI.md sabit denetimine dayanır.")
+    return online_results
 
 
 def pdf_pages(pdf_path):
@@ -648,6 +664,11 @@ def main():
                     help="Etkin konfigürasyonu (çözümlenmiş değerler) ayrı bir "
                          "JSON dosyasına yaz — hangi config'in kullanıldığını "
                          "denetlenebilir kılar (CI artifact sidecar için)")
+    ap.add_argument("--refs-out", default=None,
+                    help="Çevrimiçi referans denetimi (CrossRef/SEP/OpenLibrary) "
+                         "sonuçlarını ayrı bir VERSION JSON'a yaz — her run'da kaç "
+                         "referansın çevrimiçi doğrulandığını izlemek için "
+                         "(CI artifact sidecar için)")
     ap.add_argument("--budget-method", choices=["universal", "weighted", "both"],
                     default=None,
                     help="Bütçe tahmin yöntemi: universal (bytes/4), "
@@ -782,6 +803,7 @@ def main():
 
     tmp = tempfile.mkdtemp(prefix="verify_delivery_")
     pages = refs = pdf_meta_report = None
+    online_refs = []  # K6 çevrimiçi denetim sonuçları (VERSION JSON kaynağı)
     total_bytes = 0
     try:
         with zipfile.ZipFile(kzip) as z:
@@ -954,11 +976,13 @@ def main():
                                 f"expected={expected_stripped[:16]}… "
                                 f"actual={stripped_h[:16]}…")
 
-        # ---- K6+: referans denetimi (CrossRef/SEP çevrimiçi, isteğe bağlı) ----
+        # ---- K6+: referans denetimi (CrossRef/SEP/OpenLibrary çevrimiçi) ----
+        # Sonuçlar online_refs'e toplanır; --refs-out ile her run'ın kaç
+        # referansı çevrimiçi doğruladığını izleyen VERSION JSON'a yazılır.
         if args.check_references:
             if tex and os.path.isfile(tex):
                 tex_text = open(tex, encoding="utf-8", errors="ignore").read()
-                run_reference_audit(tex_text, add, quiet=args.json)
+                online_refs = run_reference_audit(tex_text, add, quiet=args.json)
             else:
                 add("P0", "K6-REF", "K6 referans",
                     ".tex okunamadı, çevrimiçi denetim atlandı")
@@ -1093,6 +1117,40 @@ def main():
                 add("P1", "BUDGET-OUT", "Bütçe sidecar",
                     f"yazılamadı: {args.budget_out}", str(e))
 
+    # ---- Çevrimiçi referans denetimi VERSION JSON ----
+    # Her run'da kaç referansın çevrimiçi doğrulandığını (kaynak ve sonuç
+    # kırılımıyla) izleyen makine-okunur kayıt. --refs-out ile CI artifact
+    # sidecar'ı olarak ayrıca yazılır; --json çıktısına da gömülür.
+    refs_online_report = None
+    if online_refs:
+        by_source = {}
+        by_verdict = {}
+        for r in online_refs:
+            by_source[r["source"]] = by_source.get(r["source"], 0) + 1
+            by_verdict[r["verdict"]] = by_verdict.get(r["verdict"], 0) + 1
+        refs_online_report = {
+            "tool": "verify_delivery.py K6 referans denetimi "
+                    "(CrossRef/SEP/OpenLibrary)",
+            "date": datetime.now(timezone.utc).isoformat(),
+            "total_online": len(online_refs),
+            "verified": by_verdict.get("PASS", 0),
+            "unverified": by_verdict.get("UNVERIFIED", 0),
+            "mismatch": by_verdict.get("MISMATCH", 0),
+            "by_source": by_source,
+            "by_verdict": by_verdict,
+            "results": online_refs,
+        }
+        if args.refs_out:
+            try:
+                with open(args.refs_out, "w", encoding="utf-8") as rf:
+                    json.dump(refs_online_report, rf, indent=2, ensure_ascii=False)
+                if not args.json:
+                    print(f"[REF] çevrimiçi denetim VERSION JSON yazıldı: "
+                          f"{args.refs_out} ({len(online_refs)} kayıt)")
+            except OSError as e:
+                add("P1", "REFS-OUT", "Referans sidecar",
+                    f"yazılamadı: {args.refs_out}", str(e))
+
     p0 = sum(1 for f in findings if f["priority"] == "P0")
     p1 = sum(1 for f in findings if f["priority"] == "P1")
     verdict = "PASS" if (p0 == 0 and p1 == 0) else "FAIL"
@@ -1108,6 +1166,7 @@ def main():
         "config": effective_config,
         "budget": budget_report,
         "pdf_hash": pdf_meta_report,
+        "references_online": refs_online_report,
     }
     if args.json:
         print(json.dumps(out, indent=2, ensure_ascii=False))
@@ -1131,6 +1190,14 @@ def main():
         if budget_report:
             print(f"Bütçe: ~{budget_report['tokens_est']} token → ${budget_report['estimated_usd']} "
                   f"(limit ${budget_report['limit']})")
+        if refs_online_report:
+            ror = refs_online_report
+            print(f"Çevrimiçi referans: {ror['verified']}/{ror['total_online']} doğrulandı "
+                  f"(PASS={ror['verified']}, UNVERIFIED={ror['unverified']}, "
+                  f"MISMATCH={ror['mismatch']}; "
+                  f"CrossRef {ror['by_source'].get('crossref', 0)} + "
+                  f"SEP {ror['by_source'].get('sep', 0)} + "
+                  f"OpenLibrary {ror['by_source'].get('openlibrary', 0)})")
     return 0 if verdict == "PASS" else 1
 
 

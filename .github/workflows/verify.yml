@@ -77,19 +77,24 @@ jobs:
       # python'dan gelir (boru, fail-closed kapıyı gizleyemez).
       # --full: K1-K7 + K8 (Z3) + K9 (Lean) + CrossRef/SEP/OpenLibrary + bütçe.
       # --budget-out: bütçe sonucunu ayrı JSON'a yazar (budget job'u tüketir).
+      # --refs-out: çevrimiçi referans denetim sonuçlarını VERSION JSON olarak
+      # yazar (her run'da kaç referansın çevrimiçi doğrulandığını izlemek için).
       - name: Run full verification (K1-K9, single entry point)
         shell: bash
         run: |
           set -o pipefail
           python3 _calisma/CIKTI/verify_delivery.py --dir _calisma/CIKTI --full \
             --budget-out budget_verify.json \
-            --config-out effective_config.json 2>&1 | tee verify_report.txt
+            --config-out effective_config.json \
+            --refs-out references_online.json 2>&1 | tee verify_report.txt
 
       - name: Generate SHA-256 for verify artifacts
         shell: bash
         run: |
-          sha256sum verify_report.txt budget_verify.json 2>/dev/null \
-            > verify_report.sha256 || true
+          sha256sum verify_report.txt budget_verify.json references_online.json \
+            2>/dev/null > verify_report.sha256 || true
+          sha256sum references_online.json 2>/dev/null \
+            > references_online.json.sha256 || true
 
       # `if: always()` — kapı FAIL olsa bile rapor (neden başarısız olduğu)
       # artifact olarak yüklenir. Tek rapor, tüm K1-K9 katmanlarını içerir.
@@ -131,6 +136,21 @@ jobs:
         with:
           name: budget-verify
           path: budget_verify.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+      # Çevrimiçi referans denetimi VERSION JSON (CrossRef/SEP/OpenLibrary):
+      # her push'ta kaç referansın çevrimiçi doğrulandığını (kaynak + sonuç
+      # kırılımıyla) izleyen makine-okunur kayıt. --full her zaman üretir;
+      # kapı FAIL olsa bile yüklenir (if: always).
+      - name: Upload online references report (VERSION JSON)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: refs-online
+          path: |
+            references_online.json
+            references_online.json.sha256
           if-no-files-found: ignore
           retention-days: 30
 
@@ -465,7 +485,7 @@ jobs:
         with:
           path: all_artifacts/
           merge-multiple: true
-          pattern: '{verify-report,budget,reports,config,precommit-logs}'
+          pattern: '{verify-report,budget,reports,config,precommit-logs,refs-online}'
 
       # ─── 2) manifest.txt üret ───────────────────────────────────────────
       - name: Generate reproducibility manifest
