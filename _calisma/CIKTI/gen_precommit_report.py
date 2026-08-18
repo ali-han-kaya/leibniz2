@@ -26,14 +26,41 @@ def main() -> None:
     except Exception:
         exit_code = 1
 
+    status_re = re.compile(r"^(.*?)\.{4,}(Passed|Failed)\s*$", re.M)
     hooks = [
         {"name": m.group(1).strip(), "status": m.group(2)}
-        for m in re.finditer(r"^(.*?)\.{4,}(Passed|Failed)\s*$", log_text, re.M)
+        for m in status_re.finditer(log_text)
     ]
+
+    # update-config: adım durumu + kendi çıktısı (UYARI/HATA/drift diff'leri).
+    # Hook satırı ("Sync config …Passed/Failed") ile bir SONRAKİ hook satırı
+    # arasındaki satırlar o hook'un stdout/stderr çıktısıdır (verbose: true).
+    uc_status = None
+    uc_output = []
+    for m in status_re.finditer(log_text):
+        if "Sync config" in m.group(1) or "gen_config" in m.group(1):
+            uc_status = m.group(2)
+            nxt = status_re.search(log_text, m.end())
+            end = nxt.start() if nxt else len(log_text)
+            for line in log_text[m.end():end].splitlines():
+                s = line.strip()
+                if not s or s.startswith("- hook id:") or s.startswith("- duration:"):
+                    continue
+                uc_output.append(s)
+            break
+
     findings = []
     for pri in ("P0", "P1"):
         for m in re.finditer(rf"^\[{pri}\] (.+)$", log_text, re.M):
             findings.append((pri, m.group(1).strip()))
+
+    # update-config FAIL → ayrı bir bulgu (CI'da drift/modifikasyon işareti).
+    if uc_status == "Failed":
+        detail = " | ".join(uc_output) if uc_output else "çıktı yok"
+        findings.append(("P1",
+                         f"update-config FAIL — config paket içeriğiyle "
+                         f"senkronlanamadı (CI'da drift/modifikasyon). "
+                         f"Çıktı: {detail}"))
 
     now = datetime.datetime.utcnow().isoformat() + "Z"
     verdict = "PASS" if exit_code == 0 else "FAIL"
@@ -55,6 +82,17 @@ def main() -> None:
             lines.append(f"| {h['name']} | {h['status']} |")
     else:
         lines.append("| (hook sonucu ayrıştırılamadı) | — |")
+
+    # update-config'e özel bölüm: PASS/FAIL + kendi çıktısı (denetim izi).
+    lines += ["", "## update-config (config senkronu)", ""]
+    if uc_status:
+        out_txt = "; ".join(uc_output) if uc_output else "çıktı yok (drift yok)"
+        escaped_out = out_txt.replace("|", "\\|")
+        lines.append("| Adım | Durum | Çıktı |")
+        lines.append("|---|---|---|")
+        lines.append(f"| Sync config (gen_config.py) | {uc_status} | {escaped_out} |")
+    else:
+        lines.append("(update-config hook satırı çıktıda bulunamadı)")
 
     lines += ["", "## Bulgular (P0/P1)", ""]
     if findings:
