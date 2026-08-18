@@ -12,6 +12,7 @@ Tek dosyalık Python HTTP sunucusu (stdlib-only):
   - /api/run-now → manuel tetikleme (GET/POST): interval beklemeden hemen
                    verify_delivery.py --full koşar; sonuç SSE ile anında broadcast
   - /api/latest  → en son çalıştırmanın JSON özeti (P0/P1, SONUÇ, bütçe, vs.)
+                   + tam references_online raporu (verified/total, by_source)
 
 Çalıştırma:
   /usr/bin/python3 preview_server.py --dir /path/to/_calisma/CIKTI
@@ -75,6 +76,11 @@ LATEST = {
     "ref_count": None,
     "raw_sha256": None,
     "stripped_sha256": None,
+    "refs_online": None,        # tam references_online raporu (/api/latest için)
+    "refs_verified": None,      # özet alanlar (SSE snapshot + history trend için)
+    "refs_total": None,
+    "refs_mismatch": None,
+    "refs_by_source": None,
 }
 LOCK = threading.Lock()
 SSE_CLIENTS = []      # bağlı /api/run client listesi (snapshot broadcast)
@@ -86,7 +92,8 @@ HISTORY_MAX = 100               # disk'te tutulacak en son run sayısı
 
 HISTORY_KEYS = ("ts", "verdict", "p0", "p1", "duration_s", "budget_usd",
                 "pdf_pages", "ref_count", "raw_sha256", "stripped_sha256",
-                "exit_code")
+                "exit_code", "refs_verified", "refs_total", "refs_mismatch",
+                "refs_by_source")
 
 
 def snapshot_dict():
@@ -294,6 +301,13 @@ def _finalize_run(stdout, stderr, rc, duration, data):
             "ref_count": data.get("ref_count"),
             "raw_sha256": (data.get("pdf_hash") or {}).get("raw"),
             "stripped_sha256": (data.get("pdf_hash") or {}).get("stripped"),
+            # Çevrimiçi referans denetimi (K6): tam rapor /api/latest'e,
+            # özet alanlar SSE snapshot + history'ye gider.
+            "refs_online": data.get("references_online"),
+            "refs_verified": (data.get("references_online") or {}).get("verified"),
+            "refs_total": (data.get("references_online") or {}).get("total_online"),
+            "refs_mismatch": (data.get("references_online") or {}).get("mismatch"),
+            "refs_by_source": (data.get("references_online") or {}).get("by_source"),
         })
         # Extract pages + refs from stdout for richer dashboard
         for line in stdout.splitlines():
