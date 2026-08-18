@@ -104,7 +104,10 @@ step "AŞAMA 1 — GitHub repo oluştur (interaktif değil)"
 run gh repo create "$REPO_NAME" \
   --description "$DESCRIPTION" \
   --public \
-  --disable-wiki
+  --disable-issues=false \
+  --disable-wiki=true \
+  --disable-projects=true \
+  --add-readme=false
 done_msg "repo oluşturuldu: $OWNER/$REPO_NAME ✓"
 
 # Branch protection artık web UI üzerinden (manuel). Linki logla + hatırlat:
@@ -166,17 +169,18 @@ if [ "$WITH_STAGE4" = "1" ]; then
   run git checkout -b test/protection-check
   if [ "$DRY_RUN" = "1" ]; then
     log "[DRY-RUN] marker dosyası oluşturulur + commit atılır:"
-    log "[DRY-RUN]   printf '# protection smoke\\n' > protection_smoke.md"
-    log "[DRY-RUN]   git add protection_smoke.md && git commit --no-verify"
+    log "[DRY-RUN]   printf '# protection smoke\\n' > _calisma/CIKTI/PROTECTION_SMOKE.md"
+    log "[DRY-RUN]   git add _calisma/CIKTI/PROTECTION_SMOKE.md && git commit --no-verify"
   else
-    echo "protection smoke $(date +%s)" > protection_smoke.md
-    git add protection_smoke.md
+    # Doc ile aynı yol (PUBLISH_SCENARIO AŞAMA 4).
+    printf '# protection smoke\n' > _calisma/CIKTI/PROTECTION_SMOKE.md
+    git add _calisma/CIKTI/PROTECTION_SMOKE.md
     # --no-verify: bu test uzak branch korumasını denetler, yerel pre-commit
     # kapısını değil.
     git commit --no-verify -m "docs: protection smoke marker" || {
       git checkout main
       git branch -D test/protection-check >/dev/null 2>&1 || true
-      rm -f protection_smoke.md
+      rm -f _calisma/CIKTI/PROTECTION_SMOKE.md
       fail "AŞAMA 4 test commit'i oluşturulamadı"
     }
   fi
@@ -205,8 +209,8 @@ if [ "$WITH_STAGE4" = "1" ]; then
     log "[DRY-RUN] temizlik: branch -D + marker sil + PR kapat + uzak branch sil"
   else
     git branch -D test/protection-check >/dev/null 2>&1 || true
-    rm -f protection_smoke.md
-    gh pr close test/protection-check >/dev/null 2>&1 || true
+    rm -f _calisma/CIKTI/PROTECTION_SMOKE.md
+    gh pr close test/protection-check --comment "protection smoke sonlandı" >/dev/null 2>&1 || true
     git push origin --delete test/protection-check >/dev/null 2>&1 || true
   fi
 else

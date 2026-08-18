@@ -12,6 +12,29 @@ Bu senaryo, `_calisma/CIKTI/` ve kök config'leri (workflow, pre-commit, README)
 
 ---
 
+## TEK KOMUT — publish_wrapper.sh (tüm senaryo)
+
+Aşağıdaki manuel aşamaların **birebir aynısını tek komutla, interaktif olmadan**
+çalıştıran wrapper: [`docs/publish_wrapper.sh`](publish_wrapper.sh).
+
+| Kullanım | Davranış |
+|---|---|
+| `bash docs/publish_wrapper.sh` | AŞAMA 0-3: precheck → repo oluştur → remote+push → CI izle (5-15 dk) |
+| `bash docs/publish_wrapper.sh --with-stage4` | AŞAMA 0-4 (opsiyonel koruma testi dahil) |
+| `bash docs/publish_wrapper.sh --dry-run` | **Prova:** hiçbir komut çalışmaz; her kalıcı komut `[DRY-RUN] çalıştırılacak: ...` olarak önizlenir (exit 0) |
+| `bash docs/publish_wrapper.sh --dry-run --with-stage4` | AŞAMA 0-4'ün tam önizlemesi |
+
+- **Log:** `logs/publish_<timestamp>.log` — hem terminale hem dosyaya yazılır.
+- AŞAMA 0 kapıları (`publish_precheck.sh`) yeşil değilse DURUR; `git push`
+  yalnızca tüm kapılar geçerse çalışır (fail-closed).
+- Branch protection **web UI'dan manuel** kalır (şeffaflık) — wrapper yalnızca
+  linki + `status_checks.py` adımlarını loglar.
+- **Senkron:** wrapper, bu belgedeki manuel komutları birebir uygular (repo
+  create bayrakları, marker yolu vb. aynıdır); fark oluşursa bu belgeyi ve
+  wrapper'ı birlikte güncelle.
+
+---
+
 ## AŞAMA 0 — Ön-kontrol (güvenli, otomatik)
 
 > **Tek komut (otomatik):** aşağıdaki tüm kontrollerin birebir aynısı
@@ -176,6 +199,10 @@ gh run watch $RUN_ID --exit-status
 gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_bytes) B)"'
 ```
 
+**Wrapper:** bu aşamayı `publish_wrapper.sh` otomatik yapar — `gh run watch
+--exit-status` + artifact listesi; sonuç `SONUÇ: PASS/FAIL` olarak loglanır
+(dry-run'da yalnızca önizlenir).
+
 **Beklenen (7 job):**
 | Job | Beklenen sonuç |
 |---|---|
@@ -231,6 +258,10 @@ git push origin --delete test/protection-check
 gh repo view --web
 # Settings → Branches → main → "Require status checks to pass before merging" ✅
 ```
+
+**Wrapper:** `bash docs/publish_wrapper.sh --with-stage4` bu adımları aynen koşar
+(marker dosyası, commit, push, PR, merge denemesi, temizlik) ve merge reddedilme
+beklentisini exit koduyla raporlar.
 
 ---
 
@@ -290,6 +321,7 @@ gh repo edit --enable-squash-merge --enable-rebase-merge \
 | 2. Push | `git push -u origin main` | AŞAMA 1 yeşilse |
 | 3. CI izle | `gh run watch` | AŞAMA 2 sonrası 5-15 dk |
 | 4. Doğrula | artifact listesi + PASS | AŞAMA 3 sonrası |
+| — (tek komut) | `bash docs/publish_wrapper.sh [--with-stage4] [--dry-run]` | AŞAMA 0 yeşilse; önce `--dry-run` ile prova |
 
 **Bilinen sınırlar:**
 - K6-DETERM metadata-stripped PDF hash'i run'lar arası DEĞİŞEBİLİR — belgelenmiş
