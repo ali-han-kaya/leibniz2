@@ -28,15 +28,20 @@ Kullanım (tek komut):
                                               # run özetini JSONL kaydı olarak yaz (preview
                                               # history.jsonl formatıyla birebir) — CI
                                               # reproducibility manifest'ine SHA-256 sabitlenir
+    python3 verify_delivery.py --check-config-drift
+                                              # K11: gen_config.py --dry-run (config'teki expected_
+                                              #      pages/refs/manifest paket içeriğiyle uyuşuyor mu;
+                                              #      drift → P1, fail-closed, --full'a dahil)
     python3 verify_delivery.py --check-plist
-                                              # K11: update_preview.sh --plist-check exit kodunu
+                                              # K12: update_preview.sh --plist-check exit kodunu
                                               #      denetle (0=GÜNCEL, 1=BAYAT, 2=şablon yok)
     python3 verify_delivery.py --check-repro-manifest
-                                              # K12: gen_repro_manifest.py'yi mock artifact'larla
+                                              # K13: gen_repro_manifest.py'yi mock artifact'larla
                                               #      koşup manifest tutarlılığını denetle
-    python3 verify_delivery.py --full          # tüm katmanlar: K1-K12 + referans denetimi + Z3 + Lean
+    python3 verify_delivery.py --full          # tüm katmanlar: K1-K13 + referans denetimi + Z3 + Lean
                                               #   (--check-references + --symbolic-proof +
-                                              #    --lean-proof + --check-lineage + --check-repro-manifest)
+                                              #    --lean-proof + --check-lineage +
+                                              #    --check-config-drift + --check-repro-manifest)
 
 Exit kodu: 0 = PASS, 1 = FAIL, 2 = kullanım/ortam hatası.
 
@@ -44,12 +49,12 @@ Yalnızca Python 3 standart kütüphanesi kullanır (hashlib, zipfile, subproces
 tempfile; --check-references için ayrıca urllib). Harici `unzip`/`shasum`/`diff`
 GEREKMEZ. pdfinfo varsa PDF sayfa kontrolü eklenir, yoksa atlanır (FAIL değil).
 
-Doğrulama zinciri (Katman 0..12):
+Doğrulama zinciri (Katman 0..13):
   K0  Bayat    CIKTI dışında kalan HER zip taraması (recursive; P1)
   K1  Dış zip  SHA-256 sidecar (kurcalanma)
   K2  Klasör   KLASOR_CHECKSUMLARI.sha256 (tüm dosyalar)
   K3  İç zip   SHA-256 sidecar (kurcalanma)
-  K4  Manifest MANIFEST.txt 18/18 (boyut + MD5)
+  K4  Manifest MANIFEST.txt 19/19 (boyut + MD5)
   K5  Scriptler 3 script byte-for-byte (donmuş çıktılarla)
   K6  İçerik   PDF sayfa sayısı (pdfinfo, isteğe bağlı) + References 64/64
                + (--check-references ile) CrossRef DOI + SEP URL + OpenLibrary /
@@ -60,10 +65,14 @@ Doğrulama zinciri (Katman 0..12):
   K10 Manifest gen_repro_manifest.py çıktısı manifest.json'daki her dosyanın
                SHA-256'sını gerçek dosyayla karşılaştır (--verify-manifest PATH;
                reproducibility bütünlüğü — fail-closed: uyuşmazlık P1)
-  K11 Plist    LaunchAgent plist şablonu: update_preview.sh --plist-check
+  K11 Config  gen_config.py --dry-run: config'teki expected_pages/refs/manifest
+               paketin GERÇEK içeriğinden yeniden hesaplanır ve commit'li
+               config'le karşılaştırılır; fark → P1 (fail-closed,
+               --check-config-drift, --full'a dahil)
+  K12 Plist    LaunchAgent plist şablonu: update_preview.sh --plist-check
                exit kodu (0=GÜNCEL, 1=BAYAT, 2=şablon yok) — drift → P1
                (--check-plist; macOS'a özgü, --full'a dahil değil)
-  K12 Repro    gen_repro_manifest.py self-testi: mock artifact'lardan manifest
+  K13 Repro    gen_repro_manifest.py self-testi: mock artifact'lardan manifest
                üretip kapsam + SHA-256 tutarlılığını denetler (fail-closed;
                --check-repro-manifest, --full'a dahil)
 """
@@ -1203,7 +1212,7 @@ def verify_manifest_digest(manifest_path, add, check_id="K10-MANIFEST",
 
 
 def check_repro_manifest_self_consistency(add):
-    """K12: gen_repro_manifest.py'yi mock artifact'larla koşup manifest
+    """K13: gen_repro_manifest.py'yi mock artifact'larla koşup manifest
     tutarlılığını denetler (fail-closed).
 
     Reproducibility manifest üreticisinin self-testi: bilinen içerikli mock
@@ -1216,7 +1225,7 @@ def check_repro_manifest_self_consistency(add):
     script = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                           "gen_repro_manifest.py")
     if not os.path.isfile(script):
-        add("P0", "K12-REPRO", "K12 repro manifest",
+        add("P0", "K13-REPRO", "K13 repro manifest",
             "gen_repro_manifest.py yok", script)
         return False, f"{script} yok"
 
@@ -1246,30 +1255,30 @@ def check_repro_manifest_self_consistency(add):
                  "--out-dir", out],
                 capture_output=True, text=True, env=env, timeout=60)
         except (OSError, subprocess.TimeoutExpired) as e:
-            add("P0", "K12-REPRO", "K12 repro manifest",
+            add("P0", "K13-REPRO", "K13 repro manifest",
                 f"gen_repro_manifest.py çalıştırılamadı: {e}")
             return False, f"üretici çalıştırılamadı: {e}"
         if r.returncode != 0:
             detail = (r.stderr or r.stdout or "").strip()[:300]
-            add("P0", "K12-REPRO", "K12 repro manifest",
+            add("P0", "K13-REPRO", "K13 repro manifest",
                 f"gen_repro_manifest.py exit={r.returncode}", detail)
             return False, f"üretici başarısız (exit={r.returncode}): {detail}"
 
         mpath = os.path.join(out, "manifest.json")
         if not os.path.isfile(mpath):
-            add("P0", "K12-REPRO", "K12 repro manifest",
+            add("P0", "K13-REPRO", "K13 repro manifest",
                 "manifest.json üretilmedi", out)
             return False, f"manifest.json üretilmedi: {out}"
         try:
             with open(mpath, encoding="utf-8") as mf:
                 m = json.load(mf)
         except (json.JSONDecodeError, OSError) as e:
-            add("P0", "K12-REPRO", "K12 repro manifest",
+            add("P0", "K13-REPRO", "K13 repro manifest",
                 f"manifest.json okunamadı: {e}", mpath)
             return False, f"manifest okunamadı: {e}"
         files = m.get("files")
         if not isinstance(files, dict) or not files:
-            add("P0", "K12-REPRO", "K12 repro manifest",
+            add("P0", "K13-REPRO", "K13 repro manifest",
                 "manifest 'files' yok/boş")
             return False, "manifest 'files' yok/boş"
 
@@ -1279,7 +1288,7 @@ def check_repro_manifest_self_consistency(add):
         if got != expected:
             missing = sorted(expected - got)
             extra = sorted(got - expected)
-            add("P1", "K12-REPRO", "K12 repro manifest",
+            add("P1", "K13-REPRO", "K13 repro manifest",
                 f"manifest kapsamı mock'larla uyuşmuyor "
                 f"(eksik={missing}, fazla={extra})")
             return False, f"kapsam uyuşmuyor: eksik={missing} fazla={extra}"
@@ -1291,7 +1300,7 @@ def check_repro_manifest_self_consistency(add):
             actual = hashlib.sha256(open(fp, "rb").read()).hexdigest()
             if actual != files[rel]:
                 n_bad += 1
-                add("P1", "K12-REPRO", "K12 repro manifest",
+                add("P1", "K13-REPRO", "K13 repro manifest",
                     f"SHA-256 uyuşmazlığı: {rel}",
                     f"beklenen {files[rel][:16]}… gerçek {actual[:16]}…")
         ok = n_bad == 0
@@ -1354,17 +1363,22 @@ def main():
                     help="K10: gen_repro_manifest.py çıktısı manifest.json'u oku; "
                          "her dosyanın SHA-256'sını gerçek dosyayla karşılaştır "
                          "(reproducibility bütünlüğü; uyuşmazlık P1)")
+    ap.add_argument("--check-config-drift", action="store_true",
+                    help="K11: gen_config.py --dry-run ile config'teki "
+                         "expected_pages/refs/manifest değerlerinin paketin "
+                         "GERÇEK içeriğiyle uyuştuğunu doğrula (drift → P1, "
+                         "fail-closed, --full'a dahil)")
     ap.add_argument("--check-plist", action="store_true",
-                    help="K11: update_preview.sh --plist-check exit kodunu denetle "
+                    help="K12: update_preview.sh --plist-check exit kodunu denetle "
                          "(0=GÜNCEL, 1=BAYAT, 2=şablon yok; macOS'a özgü, "
                          "--full'a dahil değil)")
     ap.add_argument("--check-repro-manifest", action="store_true",
-                    help="K12: gen_repro_manifest.py'yi mock artifact'larla koşup "
+                    help="K13: gen_repro_manifest.py'yi mock artifact'larla koşup "
                          "manifest tutarlılığını denetle (fail-closed)")
     ap.add_argument("--full", action="store_true",
                     help="Tüm katmanları tek komutla koş: --check-references + "
                          "--symbolic-proof + --lean-proof + --check-lineage + "
-                         "--check-repro-manifest")
+                         "--check-config-drift + --check-repro-manifest")
     args = ap.parse_args()
     # --full, tüm isteğe bağlı katmanları aktifleştirir
     if args.full:
@@ -1373,6 +1387,7 @@ def main():
         args.lean_proof = True
         args.check_lineage = True
         args.check_repro_manifest = True
+        args.check_config_drift = True
 
     # ---- Konfig yükleme (CLI bayrakları config'ten öncelikli) ----
     # Fail-closed: geçersiz JSON veya şema ihlali artık sessizce varsayılana
@@ -1617,7 +1632,7 @@ def main():
                     add("P0", "K4-MANIFEST", "K4 manifest", f"MD5 uyuşmuyor: {fn}")
             if ok != EXPECTED_MANIFEST:
                 add("P0", "K4-MANIFEST", "K4 manifest",
-                    f"manifest {ok}/{EXPECTED_MANIFEST} (beklenen 18/18)")
+                    f"manifest {ok}/{EXPECTED_MANIFEST}")
         else:
             add("P0", "K4-MANIFEST", "K4 manifest", "MANIFEST.txt yok")
 
@@ -1776,7 +1791,49 @@ def main():
             add("P1", "K10-MANIFEST", "K10 manifest digest",
                 f"manifest bütünlüğü bozuk: {manifest_detail}")
 
-    # ---- K11: LaunchAgent plist şablon doğrulaması (--check-plist) ----
+    # ---- K11: config drift (gen_config.py --dry-run) ----
+    # verify_delivery.config.json'daki expected_pages/expected_refs/
+    # expected_manifest değerleri paketin GERÇEK içeriğinden türetilmelidir
+    # (gen_config.py). --dry-run yeniden hesaplar ve commit'li config'le
+    # karşılaştırır; fark varsa exit 1 → P1 (fail-closed, CI config-drift
+    # job'ıyla aynı felsefe; --full'a dahil).
+    config_drift_report = None
+    if args.check_config_drift:
+        gen = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                           "gen_config.py")
+        if not os.path.isfile(gen):
+            add("P0", "K11-CONFIG", "K11 config drift", "gen_config.py yok", gen)
+            config_drift_report = {"ok": False, "exit": None, "detail": f"yok: {gen}"}
+        else:
+            try:
+                r = subprocess.run([sys.executable, gen, "--dry-run",
+                                    "--dir", d],
+                                   capture_output=True, text=True, timeout=180)
+            except (OSError, subprocess.TimeoutExpired) as e:
+                add("P0", "K11-CONFIG", "K11 config drift",
+                    f"çalıştırılamadı: {e}", str(e))
+                config_drift_report = {"ok": False, "exit": None, "detail": str(e)}
+            else:
+                drift_txt = (r.stderr or "").strip()
+                if r.returncode != 0:
+                    add("P1", "K11-CONFIG", "K11 config drift",
+                        "config paket içeriğiyle uyuşmuyor (gen_config.py "
+                        "--dry-run exit≠0)",
+                        "; ".join(drift_txt.splitlines()[-4:])
+                        or (r.stdout or "").strip()[:300])
+                config_drift_report = {"ok": r.returncode == 0,
+                                       "exit": r.returncode,
+                                       "detail": drift_txt if drift_txt
+                                       else "config paket içeriğiyle uyumlu"}
+                if not args.json:
+                    print(f"[K11] config drift: "
+                          f"{'PASS' if r.returncode == 0 else 'FAIL'} "
+                          f"(exit={r.returncode})")
+                    if drift_txt:
+                        for line in drift_txt.splitlines()[-6:]:
+                            print(f"  {line}")
+
+    # ---- K12: LaunchAgent plist şablon doğrulaması (--check-plist) ----
     # update_preview.sh --plist-check exit kodu: 0=GÜNCEL, 1=BAYAT/GEÇERSİZ,
     # 2=şablon yok. Plist, launchd GUI agent'ının TCC-safe mirror'dan preview
     # sunucusunu başlattığı operasyonel artefaktır; şablondan drift P1'dir.
@@ -1788,7 +1845,7 @@ def main():
         upd = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                            "update_preview.sh")
         if not os.path.isfile(upd):
-            add("P1", "K11-PLIST", "K11 plist", "update_preview.sh yok", upd)
+            add("P1", "K12-PLIST", "K12 plist", "update_preview.sh yok", upd)
             plist_report = {"ok": False, "exit": None, "output": f"yok: {upd}"}
         else:
             try:
@@ -1797,24 +1854,24 @@ def main():
                 rc, txt = r.returncode, (r.stdout + r.stderr).strip()
             except (OSError, subprocess.TimeoutExpired) as e:
                 rc, txt = None, str(e)
-                add("P1", "K11-PLIST", "K11 plist",
+                add("P1", "K12-PLIST", "K12 plist",
                     f"çalıştırılamadı: {e}", upd)
             else:
                 if rc == 1:
-                    add("P1", "K11-PLIST", "K11 plist",
+                    add("P1", "K12-PLIST", "K12 plist",
                         "kurulu plist şablondan farklı (bayat/geçersiz)", txt)
                 elif rc == 2:
-                    add("P1", "K11-PLIST", "K11 plist",
+                    add("P1", "K12-PLIST", "K12 plist",
                         "plist şablonu yok (önce --plist çalıştır)", txt)
                 elif rc != 0:
-                    add("P1", "K11-PLIST", "K11 plist",
+                    add("P1", "K12-PLIST", "K12 plist",
                         f"beklenmedik exit kodu {rc}", txt)
             plist_report = {"ok": rc == 0, "exit": rc, "output": txt}
             if not args.json:
-                print(f"[K11] plist şablon: "
+                print(f"[K12] plist şablon: "
                       f"{'PASS' if rc == 0 else 'FAIL'} (exit={rc}) — {txt[:100]}")
 
-    # ---- K12: reproducibility manifest üreticisi self-testi ----
+    # ---- K13: reproducibility manifest üreticisi self-testi ----
     # gen_repro_manifest.py'yi bilinen içerikli mock artifact'larla koşar;
     # üretilen manifest'in kapsamı + SHA-256'ları fail-closed denetlenir.
     # Üreticideki bir drift/bug paketin reproducibility zincirini bozar → P0/P1.
@@ -1823,7 +1880,7 @@ def main():
         repro_ok, repro_detail = check_repro_manifest_self_consistency(add)
         repro_manifest_report = {"ok": repro_ok, "detail": repro_detail}
         if not args.json:
-            print(f"[K12] repro manifest: "
+            print(f"[K13] repro manifest: "
                   f"{'PASS' if repro_ok else 'FAIL'} — {repro_detail}")
 
     # ---- Bütçe kalkanı: iki yöntem yan yana ----
@@ -1955,6 +2012,7 @@ def main():
         "pdf_hash": pdf_meta_report,
         "references_online": refs_online_report,
         "manifest_digest": manifest_digest_report,
+        "config_drift": config_drift_report,
         "repro_manifest": repro_manifest_report,
         "lineage": lineage_report,
         "plist": plist_report,

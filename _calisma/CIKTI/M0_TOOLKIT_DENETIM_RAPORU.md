@@ -96,13 +96,13 @@ verify_delivery.py --verify-manifest (K10) → PASS (mock 3/3); tamper→exit 1,
 
 `python3 ALI_KOMUT_TOOLKIT_v3/scripts/v3_verify.py <paket_klasoru>` çalıştırıldı; fail-closed gate **ham bulgulardan yeniden hesaplanan** P0/P1 sayısına göre `PASS` üretti. Çıktının özeti (dosya sayısı, toplam boyut, secret/hijyen/bütçe bulguları) §9'daki doğrulama raporuna eşlik eder.
 
-### 6.2 Katman tablosu — `verify_delivery.py` (K0–K12)
+### 6.2 Katman tablosu — `verify_delivery.py` (K0–K13)
 
 M0 raporunun yazıldığı tarihteki `v3_verify.py` kapısı, sonradan tek giriş
-noktasına genişletildi: `verify_delivery.py` (K0–K12). Bu tablo güncel
+noktasına genişletildi: `verify_delivery.py` (K0–K13). Bu tablo güncel
 fail-closed zincirini katman katman listeler; her satır çalıştırılmış bir
 komutun çıktısına dayanır (tahmin yok). `--full` = K1-K7 + K6-referans +
-K8 + K9 + soy hattı + K12; K10 ve K11 ayrıca çağrılır.
+K8 + K9 + soy hattı + K11 + K13; K10 ve K12 ayrıca çağrılır.
 
 | Katman | Kontrol | Durum (son doğrulama) |
 |---|---|---|
@@ -116,9 +116,10 @@ K8 + K9 + soy hattı + K12; K10 ve K11 ayrıca çağrılır.
 | K7 | Hijyen + secret/anahtar taraması | PASS |
 | K8 | Z3 sembolik ispat (12/12) | PASS |
 | K9 | Lean 4 reduct-invariance (tümevarımsal) | PASS |
-| K10 | reproducibility manifest digest (`--verify-manifest`) | PASS (yeni — aşağıda) |
-| K11 | LaunchAgent plist şablonu (`--check-plist`) | PASS (yerel macOS; Linux CI'da koşmaz) |
-| K12 | gen_repro_manifest.py self-testi (`--check-repro-manifest`) | PASS |
+| K10 | reproducibility manifest digest (`--verify-manifest`) | PASS (aşağıda) |
+| K11 | config drift (`gen_config.py --dry-run`; `--check-config-drift`) | PASS |
+| K12 | LaunchAgent plist şablonu (`--check-plist`) | PASS (yerel macOS; Linux CI'da koşmaz) |
+| K13 | gen_repro_manifest.py self-testi (`--check-repro-manifest`) | PASS |
 
 **K10 bulguları (yeni katman — commit `7e28f2c`):** `verify_delivery.py
 --verify-manifest reproducibility/manifest.json`, `gen_repro_manifest.py`
