@@ -24,6 +24,9 @@ Kullanım (tek komut):
                                               # K10: manifest.json'daki her SHA-256'yı gerçek dosyayla
                                               #      karşılaştır (reproducibility bütünlüğü)
     python3 verify_delivery.py --check-lineage  # soy hattı: zip_lineage.json + git show ile her nesli doğrula
+    python3 verify_delivery.py --check-plist
+                                              # K11: update_preview.sh --plist-check exit kodunu
+                                              #      denetle (0=GÜNCEL, 1=BAYAT, 2=şablon yok)
     python3 verify_delivery.py --full          # tüm katmanlar: K1-K9 + referans denetimi + Z3 + Lean
                                               #   (--check-references + --symbolic-proof + --lean-proof)
 
@@ -33,7 +36,7 @@ Yalnızca Python 3 standart kütüphanesi kullanır (hashlib, zipfile, subproces
 tempfile; --check-references için ayrıca urllib). Harici `unzip`/`shasum`/`diff`
 GEREKMEZ. pdfinfo varsa PDF sayfa kontrolü eklenir, yoksa atlanır (FAIL değil).
 
-Doğrulama zinciri (Katman 0..9):
+Doğrulama zinciri (Katman 0..11):
   K0  Bayat    CIKTI dışında kalan HER zip taraması (recursive; P1)
   K1  Dış zip  SHA-256 sidecar (kurcalanma)
   K2  Klasör   KLASOR_CHECKSUMLARI.sha256 (tüm dosyalar)
@@ -49,6 +52,9 @@ Doğrulama zinciri (Katman 0..9):
   K10 Manifest gen_repro_manifest.py çıktısı manifest.json'daki her dosyanın
                SHA-256'sını gerçek dosyayla karşılaştır (--verify-manifest PATH;
                reproducibility bütünlüğü — fail-closed: uyuşmazlık P1)
+  K11 Plist    LaunchAgent plist şablonu: update_preview.sh --plist-check
+               exit kodu (0=GÜNCEL, 1=BAYAT, 2=şablon yok) — drift → P1
+               (--check-plist; macOS'a özgü, --full'a dahil değil)
 """
 import argparse
 import hashlib
@@ -1228,6 +1234,10 @@ def main():
                     help="K10: gen_repro_manifest.py çıktısı manifest.json'u oku; "
                          "her dosyanın SHA-256'sını gerçek dosyayla karşılaştır "
                          "(reproducibility bütünlüğü; uyuşmazlık P1)")
+    ap.add_argument("--check-plist", action="store_true",
+                    help="K11: update_preview.sh --plist-check exit kodunu denetle "
+                         "(0=GÜNCEL, 1=BAYAT, 2=şablon yok; macOS'a özgü, "
+                         "--full'a dahil değil)")
     ap.add_argument("--full", action="store_true",
                     help="Tüm katmanları (--check-references + --symbolic-proof + --lean-proof) tek komutla koş")
     args = ap.parse_args()
@@ -1640,6 +1650,44 @@ def main():
             add("P1", "K10-MANIFEST", "K10 manifest digest",
                 f"manifest bütünlüğü bozuk: {manifest_detail}")
 
+    # ---- K11: LaunchAgent plist şablon doğrulaması (--check-plist) ----
+    # update_preview.sh --plist-check exit kodu: 0=GÜNCEL, 1=BAYAT/GEÇERSİZ,
+    # 2=şablon yok. Plist, launchd GUI agent'ının TCC-safe mirror'dan preview
+    # sunucusunu başlattığı operasyonel artefaktır; şablondan drift P1'dir.
+    # Bu katman macOS'a özgüdür (plutil/LaunchAgents) — Linux CI'da şablon
+    # yok (exit 2) olacağından --full'a bilerek dahil DEĞİLDİR; açıkça
+    # --check-plist ile koşulur.
+    plist_report = None
+    if args.check_plist:
+        upd = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                           "update_preview.sh")
+        if not os.path.isfile(upd):
+            add("P1", "K11-PLIST", "K11 plist", "update_preview.sh yok", upd)
+            plist_report = {"ok": False, "exit": None, "output": f"yok: {upd}"}
+        else:
+            try:
+                r = subprocess.run(["bash", upd, "--plist-check"],
+                                   capture_output=True, text=True, timeout=60)
+                rc, txt = r.returncode, (r.stdout + r.stderr).strip()
+            except (OSError, subprocess.TimeoutExpired) as e:
+                rc, txt = None, str(e)
+                add("P1", "K11-PLIST", "K11 plist",
+                    f"çalıştırılamadı: {e}", upd)
+            else:
+                if rc == 1:
+                    add("P1", "K11-PLIST", "K11 plist",
+                        "kurulu plist şablondan farklı (bayat/geçersiz)", txt)
+                elif rc == 2:
+                    add("P1", "K11-PLIST", "K11 plist",
+                        "plist şablonu yok (önce --plist çalıştır)", txt)
+                elif rc != 0:
+                    add("P1", "K11-PLIST", "K11 plist",
+                        f"beklenmedik exit kodu {rc}", txt)
+            plist_report = {"ok": rc == 0, "exit": rc, "output": txt}
+            if not args.json:
+                print(f"[K11] plist şablon: "
+                      f"{'PASS' if rc == 0 else 'FAIL'} (exit={rc}) — {txt[:100]}")
+
     # ---- Bütçe kalkanı: iki yöntem yan yana ----
     # (a) Evrensel: token ≈ bytes/4      (v3_verify.py H4, bağımsız referans)
     # (b) Ağırlıklı: token ≈ bytes/r_i    (dosya tipine göre bytes-per-token)
@@ -1769,6 +1817,7 @@ def main():
         "references_online": refs_online_report,
         "manifest_digest": manifest_digest_report,
         "lineage": lineage_report,
+        "plist": plist_report,
     }
     if args.json:
         print(json.dumps(out, indent=2, ensure_ascii=False))
