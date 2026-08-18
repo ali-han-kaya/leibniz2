@@ -33,6 +33,9 @@ name: verify-delivery
 #                   dosyalarla byte-identical olduğunu (git diff boş) ve
 #                   verify_delivery.py base'in geçtiğini doğrular — sidecar
 #                   senkronu her push'ta otomatik garanti edilir.
+#   refs-trend    : refs-online artifact'larını run'lar arası toplayıp
+#                   "online verification trend" tablosu üretir (advisory;
+#                   actions: read ile API'den geçmiş run'ları çeker).
 
 on:
   push:
@@ -908,3 +911,53 @@ jobs:
           path: repack_verify_report.txt
           retention-days: 30
           if-no-files-found: error
+
+  # ──────────────────────────────────────────────────────────────────────
+  # REFS TREND (ADVISORY)
+  #
+  # refs-online artifact'larını run'lar arası toplar ve "online
+  # verification trend" tablosu üretir: her run'da kaç referansın çevrimiçi
+  # doğrulandığının zaman serisi (CrossRef/SEP/OpenLibrary/Perseus/IA).
+  # GitHub API'den son N run'ın refs-online artifact'ını çeker (GITHUB_TOKEN
+  # + actions: read), refs_trend.py özetler. Advisory: API/hız sınırı
+  # hataları build'i bloke etmez (continue-on-error).
+  # ──────────────────────────────────────────────────────────────────────
+  refs-trend:
+    name: Online verification trend (refs-online across runs)
+    runs-on: ubuntu-latest
+    needs: [verify]
+    # verify FAIL olsa bile trend geçmiş run'ları gösterir.
+    if: always()
+    permissions:
+      contents: read
+      actions: read    # artifact listeleme + zip indirme için
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # Son 100 refs-online artifact'ını API'den çekip trend tablosu üretir.
+      # Token yoksa script `gh api`'ye düşer; CI'da GITHUB_TOKEN kullanılır.
+      - name: Build refs trend table
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          python3 _calisma/CIKTI/refs_trend.py \
+            --repo "$GITHUB_REPOSITORY" \
+            --out-dir refs-trend \
+            --max-artifacts 100
+
+      - name: Upload refs trend
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: refs-trend
+          path: refs-trend/
+          if-no-files-found: ignore
+          retention-days: 30
