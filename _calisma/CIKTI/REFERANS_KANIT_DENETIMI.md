@@ -2,7 +2,7 @@
 
 **Hedef:** `ingiliz_empirizmi_v3.tex` §References (64 girdi)
 **Yöntem:** CrossRef API (dergi makaleleri) + bağımsız web araması (kitaplar/edişyonlar) + SEP doğrudan URL (5 girdi). Her "GEÇTİ" bir bağımsız kaynağa dayanır; kaynak adresi `Kanıt` sütunundadır.
-**Tarih:** 2026-08-17 · **Sonuç etiketi:** GEÇTİ (birebir) / KÜÇÜK NOT (bibliyografik küçük sapma) / HATA (düzeltme gerekir) / DOĞRULANAMADI.
+**Tarih:** 2026-08-17 · **Güncelleme:** 2026-08-18 (V5h/V5j düzeltmeleri işlendi) · **Sonuç etiketi:** GEÇTİ (birebir) / DÜZELTİLDİ (V5h/V5j) / KÜÇÜK NOT (bibliyografik küçük sapma) / HATA (düzeltme gerekir) / DOĞRULANAMADI.
 
 ---
 
@@ -10,12 +10,17 @@
 
 | Durum | Sayı |
 |---|---|
-| GEÇTİ (birebir) | **62** |
-| KÜÇÜK NOT (2: Popkin 1952 baskı sayfası, Priest 2018 alt başlık) | 2 |
-| **HATA (Beth 1953 — dergi/cilt/sayfa yanlış)** | **1** |
-| DOĞRULANAMADI (Fosl 1998 — yayın yeri) | 1 |
+| GEÇTİ (birebir) | **60** |
+| DÜZELTİLDİ (V5h: Beth 1953, Fosl 1998 · V5j: Popkin 1952, Priest 2018) | **4** |
+| KÜÇÜK NOT | 0 |
+| HATA | 0 |
+| DOĞRULANAMADI | 0 |
 
-**Gerçek bulgu:** Beth 1953 girişi, "Journal of Symbolic Logic 18(1): 8–13" olarak yazılmış; doğrusu **Indagationes Mathematicae 15 (1953): 330–339** (ayrıca Proc. Kon. Ned. Akad. Wetensch. A56: 330–339). Başlık, yazar ve yıl doğru; yalnızca dergi/cilt/sayfa yanlış.
+**Orijinal bulgu (2026-08-17):** Beth 1953 girişi "Journal of Symbolic Logic 18(1): 8–13" olarak yazılmıştı; doğrusu Indagationes Mathematicae 15 (1953): 330–339 (+ Proc. KNAW A56: 330–339).
+
+**Güncelleme (2026-08-18):** işaretlenen 4 girdi `ingiliz_empirizmi_v3.tex`'te düzeltildi — V5h (Beth 1953, Fosl 1998) ve V5j (Popkin 1952, Priest 2018). 64/64 kaynak artık ya birebir doğrulanmış ya da bibliyografik olarak düzeltilmiştir. Detay → §5.
+
+> Not: önceki özetteki "62 GEÇTİ" aritmetik hataydı (62+2+1+1 = 66 ≠ 64). Gerçek sayım 60 GEÇTİ + 4 işaretli = 64.
 
 ---
 
@@ -27,7 +32,7 @@
 | 2 | Artemov & Fitting 2019, CUP | GEÇTİ | CUP/Google Books |
 | 3 | Beauchamp (ed.) 1999, OUP | GEÇTİ | OUP Oxford Philosophical Texts |
 | 4 | Beebee 2006, Routledge | GEÇTİ | Routledge/Taylor&Francis |
-| 5 | **Beth 1953, "JSL 18(1):8–13"** | **HATA** | Gerçek: Indag. Math. 15 (1953) 330–339 (cambridge.org JSL inceleme kaydı + Princeton/Synthese/nLab) |
+| 5 | Beth 1953, Indag. Math. 15:330–339 | DÜZELTİLDİ (V5h) | JSL 18(1):8–13 → Indag. Math. 15 (1953) 330–339 (+ Proc. KNAW A56) |
 | 6 | Bobzien 2003, 85–123 | GEÇTİ | Cambridge Companion to the Stoics (CUP) |
 | 7 | Brittain 2006, Hackett | GEÇTİ | Hackett / BMCR |
 | 8 | Bury 1933–49, Loeb 4 cilt | GEÇTİ | Loeb (LCL 291 = Against Logicians, 1935) |
@@ -39,7 +44,7 @@
 | 14 | Elman 1984, Harvard | GEÇTİ | Harvard East Asian Monographs 110 |
 | 15 | Fine 2012, "Guide to Ground", 37–80 | GEÇTİ | CUP (ch. 1, pp. 37–80) |
 | 16 | Floridi 2002, OUP (ACS 46) | GEÇTİ | OUP/PhilPapers |
-| 17 | **Fosl 1998, "JHP 36(2)"** | DOĞRULANAMADI | Norton&Norton 1996 doğru; Fosl incelemesi ECSSS Newsletter no.11 (35–36) olarak bulundu, JHP 36(2) teyit edilemedi |
+| 17 | Fosl 1998, ECSSS Newsletter 11:35–36 | DÜZELTİLDİ (V5h) | JHP 36(2) → ECSSS Newsletter no.11 (35–36) |
 | 18 | Frede 1983, 65–93 | GEÇTİ | PhilPapers (Skeptical Tradition, UC Press) |
 | 19 | Garrett 1997, OUP | GEÇTİ | OUP |
 | 20 | Goldman 1979, 1–23 | GEÇTİ | PhilPapers/Springer (D. Reidel) |
@@ -67,10 +72,10 @@
 | 42 | Norton 1981, HEI 1(4):331–344 | GEÇTİ | ScienceDirect/PhilPapers |
 | 43 | Norton & Norton 1996, Edinburgh | GEÇTİ | Edinburgh Bibliographical Society |
 | 44 | Popkin 1951, PQ 1(5):385–407 | GEÇTİ | OUP/PhilPapers/JSTOR |
-| 45 | Popkin 1952, RoM 6(1):65–81 | KÜÇÜK NOT | Ana kayıt doğru; "High Road to Pyrrhonism" yeniden basımı 133–147 (metin 133–148 yazmış) |
+| 45 | Popkin 1952, RoM 6(1):65–81 | DÜZELTİLDİ (V5j) | yeniden basım sayfası 133–148 → 133–147 |
 | 46 | Popkin 1979, UC Press | GEÇTİ | UC Press |
 | 47 | Priest 2010, Comp. Phil. 1(2) | GEÇTİ | CrossRef DOI 10.31979/2151-6014(2010).010206 |
-| 48 | Priest 2018, OUP | KÜÇÜK NOT | Ana kayıt doğru; tam alt başlık "An Essay on Buddhist Metaphysics and the Catuṣkoṭi" (metin kısaltmış) |
+| 48 | Priest 2018, OUP | DÜZELTİLDİ (V5j) | tam alt başlık "An Essay on Buddhist Metaphysics and the Catuṣkoṭi" eklendi |
 | 49 | Pruss 2006, CUP | GEÇTİ | CUP |
 | 50 | Rošker, SEP "Epistemology in Chinese Philosophy" | GEÇTİ | plato.stanford.edu (2014; rev. 2025) |
 | 51 | Baltzly/Durand/Shogry 2023, SEP "Stoicism" | GEÇTİ | plato.stanford.edu (2023) |
@@ -90,7 +95,9 @@
 
 ---
 
-## 3. Düzeltilmesi önerilen tek giriş (Beth 1953)
+## 3. Düzeltilen giriş (Beth 1953 — V5h)
+
+**Durum (2026-08-18): DÜZELTİLDİ** — `.tex`'te JSL 18(1):8–13 künyesi Indagationes Mathematicae 15: 330–339 (+ Proc. KNAW A56) ile değiştirildi. Aşağıdaki orijinal tespit artık tarihsel kayıttır.
 
 ```text
 MEVCUT (hatalı):
@@ -104,8 +111,34 @@ Indagationes Mathematicae 15: 330--339. (Proc. Kon. Ned. Akad. Wetensch. A56: 33
 
 **Kanıt:** cambridge.org'un JSL "review" kaydı, makaleyi "Koninklijke Nederlandse Akademie van Wetenschappen, Proceedings, series A, vol. 56 (1953), pp. 330–339; also Indagationes Mathematicae, vol. 15, pp. 330–339" olarak verir. Princeton (Tennant 1985), Synthese (2011), nLab ve JSTOR kaynakları aynı koordinatları tekrarlar. "JSL 18(1): 8–13" hiçbir kaynakta bulunamadı.
 
-## 4. Doğrulanamayan giriş (Fosl 1998)
+## 4. Düzeltilen giriş (Fosl 1998 — V5h)
+
+**Durum (2026-08-18): DÜZELTİLDİ** — `.tex`'te JHP 36(2) künyesi ECSSS Newsletter 11: 35–36 ile değiştirildi. Aşağıdaki orijinal tespit artık tarihsel kayıttır.
 
 `Fosl, P.S. (1998). Review of Norton & Norton, The David Hume Library. Journal of the History of Philosophy 36(2).`
 - Norton & Norton 1996 kitabı **doğrulandı**.
 - Fosl'un kitap hakkındaki incelemesi **ECSSS Newsletter no. 11 (ss. 35–36)** olarak bulundu; "JHP 36(2)" yeri teyit edilemedi. Güncelleme önerisi: ya ECSSS newsletter künyesine çevir, ya da `UNVERIFIED_SOURCE` etiketiyle bırak.
+
+---
+
+## 5. Düzeltme kaydı ve paket hash
+
+### 5.1 Düzeltmeler
+
+| Sürüm | Girdi | Düzeltme |
+|---|---|---|
+| V5h | Beth 1953 | "JSL 18(1):8–13" → Indagationes Mathematicae 15: 330–339 (+ Proc. KNAW A56: 330–339) |
+| V5h | Fosl 1998 | "JHP 36(2)" → ECSSS Newsletter 11: 35–36 |
+| V5j | Popkin 1952 | yeniden basım sayfası 133–148 → 133–147 |
+| V5j | Priest 2018 | tam alt başlık "An Essay on Buddhist Metaphysics and the Catuṣkoṭi" eklendi |
+
+### 5.2 V5i determinism notu (referans bağlamı dışı)
+
+V5i (2026-08-17) K6-DETERM katmanını ekledi: `qpdf --remove-metadata` ile PDF'in metadata-stripped SHA-256'sı hesaplanır (`ingiliz_empirizmi_v3.pdf.metadata.sha256`). **Known limitation:** tectonic 0.17.0 byte-deterministic olmadığından `--strict-determinism` varsayılan kapalıdır; drift bilgi amaçlı raporlanır (P0/P1 yok). Bu, referans doğruluğunu değil yalnızca PDF derleme tekrarlanabilirliğini etkiler (bkz. MANIFEST V5k notu).
+
+### 5.3 Paket hash (2026-08-18 repack)
+
+| Dosya | SHA-256 |
+|---|---|
+| `TESLIM_KLASOR_V5_2026-08-17.zip` (dış) | `34e81dff5410e6095fa4d0e79c867bec0b892fabde1fc7db6c0b1ac6445f8bd8` |
+| `TESLIM_V5_FINAL_2026-08-17.zip` (iç) | `6ba67ff8dfb39753730450c74464dc122c630427992e8b6373eaf044b62298fd` |
