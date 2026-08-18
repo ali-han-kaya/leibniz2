@@ -753,6 +753,9 @@ jobs:
   config-drift:
     name: Config drift check (gen_config --dry-run)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -767,9 +770,83 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y poppler-utils
 
-      - name: Run gen_config.py --dry-run (drift = FAIL)
+      - name: Run gen_config.py --dry-run (capture exit; kapı sonra)
+        id: drift
+        shell: bash
         run: |
-          python3 _calisma/CIKTI/gen_config.py --dry-run --dir _calisma/CIKTI
+          set +e
+          python3 _calisma/CIKTI/gen_config.py --dry-run --dir _calisma/CIKTI \
+            > drift_stdout.txt 2> drift_stderr.txt
+          rc=$?
+          set -e
+          echo "$rc" > drift_rc.txt
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          echo "Config drift exit code: $rc"
+          if [ -s drift_stderr.txt ]; then
+            echo "--- stderr (drift bulguları) ---"
+            cat drift_stderr.txt
+          fi
+
+      # Drift tespit edilirse (exit 1) bulguları PR yorumuna düş.
+      # Yalnızca pull_request olayında; push'ta atlanır. Upsert: aynı yorumu
+      # günceller, yeni yorum biriktirmez. Fail-closed kapı SONRAKİ adımda.
+      - name: Post config drift findings as PR comment
+        if: github.event_name == 'pull_request' && steps.drift.outputs.rc != '0'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const rc = fs.readFileSync('drift_rc.txt', 'utf8').trim();
+            const findings = fs.existsSync('drift_stderr.txt')
+              ? fs.readFileSync('drift_stderr.txt', 'utf8').trim() : '';
+
+            const MARKER = '<!-- stoic-hume-v5-config-drift -->';
+            const body = [
+              '## ⚠️ Config drift tespit edildi',
+              '',
+              '`gen_config.py --dry-run` config ile paket içeriği arasında fark buldu (exit `' + rc + '`):',
+              '',
+              findings ? '```text\n' + findings + '\n```' : '_bulgu boş_',
+              '',
+              "Düzeltme: `python3 _calisma/CIKTI/gen_config.py` çalıştırıp config'i paket içeriğinden yeniden üret.",
+              '',
+              MARKER,
+            ].join('\n').trim();
+
+            const existing = await github.rest.issues.listComments({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              per_page: 100,
+            });
+            const found = existing.data.find(c => c.body && c.body.includes(MARKER));
+            if (found) {
+              await github.rest.issues.updateComment({
+                comment_id: found.id,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body,
+              });
+              console.log(`Config drift yorumu güncellendi: comment_id=${found.id}`);
+            } else {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body,
+              });
+              console.log('Config drift yorumu oluşturuldu');
+            }
+
+      # Fail-closed kapı (yorumdan SONRA): drift exit koduyla çık.
+      # Job fail-closed kalır; yorum adımı yalnızca bilgilendirme ekler.
+      - name: Config drift fail-closed gate
+        if: always()
+        shell: bash
+        run: |
+          rc=$(cat drift_rc.txt 2>/dev/null || echo 1)
+          echo "Config drift final exit code: $rc"
+          exit "$rc"
 
   # ──────────────────────────────────────────────────────────────────────
   # REPACK → VERIFY (SIDECAR SYNC)
