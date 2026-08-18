@@ -14,12 +14,13 @@ Kullanım (tek komut):
                                               #   (token ≈ bytes/4; $3/M token + $0.55; v3_verify.py H4)
                                               # Varsayılan değer verify_delivery.config.json'dan okunur.
     python3 verify_delivery.py --check-references
-                                              # K6: CrossRef/SEP çevrimiçi referans denetimi
+                                              # K6: CrossRef/SEP/OpenLibrary/Internet Archive/Perseus
+                                              #     çevrimiçi referans denetimi
     python3 verify_delivery.py --symbolic-proof
                                               # K8: Z3 sembolik ispat (core_section.tex teoremleri)
     python3 verify_delivery.py --lean-proof
                                               # K9: Lean 4 reduct-invariance (tümevarımsal kanıt)
-    python3 verify_delivery.py --full          # tüm katmanlar: K1-K9 + CrossRef/SEP + Z3 + Lean
+    python3 verify_delivery.py --full          # tüm katmanlar: K1-K9 + referans denetimi + Z3 + Lean
                                               #   (--check-references + --symbolic-proof + --lean-proof)
 
 Exit kodu: 0 = PASS, 1 = FAIL, 2 = kullanım/ortam hatası.
@@ -36,7 +37,8 @@ Doğrulama zinciri (Katman 0..9):
   K4  Manifest MANIFEST.txt 18/18 (boyut + MD5)
   K5  Scriptler 3 script byte-for-byte (donmuş çıktılarla)
   K6  İçerik   PDF sayfa sayısı (pdfinfo, isteğe bağlı) + References 64/64
-               + (--check-references ile) CrossRef DOI + SEP URL çevrimiçi denetimi
+               + (--check-references ile) CrossRef DOI + SEP URL + OpenLibrary /
+               Internet Archive / Perseus çevrimiçi denetimi
   K7  Hijyen   secret/anahtar + artefakt taraması
   K8  İspat    Z3 sembolik ispat (--symbolic-proof; z3-solver gerektirir)
   K9  Lean     Lean 4 reduct-invariance tümevarımsal kanıt (--lean-proof; lean gerektirir)
@@ -234,6 +236,99 @@ REFERENCE_OPENLIBRARY = [
 # - Schmitt 1972 Nijhoff: küçük yayınevi.
 # - von Arnim 1905 SVF: Teubner 1905 erken baskı, OL'da baskı yok.
 # Bu listede olmayanlar REFERANS_KANIT_DENETIMI.md sabit denetimine düşer.
+
+# ---- K6+ Internet Archive (--check-references ek) --------------------------
+# Internet Archive advancedsearch.php (archive.org): modern kitaplar + erken
+# modern edisyonlar; auth gerektirmez. Match: title_needle normalize edilmiş
+# başlıkta geçer; opsiyonel creator_needle yazar alanını da kısıtlar.
+# PASS = eşleşen doc; UNVERIFIED = 0 sonuç/ağ hatası (IA kapsamı dışı);
+# MISMATCH = sonuç var ama eşleşme yok.
+#
+# KAPSAM DIŞI (IA indekslemez; REFERANS_KANIT_DENETIMI.md sabit denetimine düşer):
+# - Dergi makaleleri: Della Rocca 2010 (Philosophers' Imprint), Norton 1981
+#   (History of European Ideas), Popkin 1951 (Philosophical Quarterly) — IA
+#   kitapları/eşyaları indeksler, tek tek makaleleri değil.
+# - Erken modern Sextus imprinted baskıları (1562 Estienne / 1569 Hervet /
+#   1621 Chouet) ve Sextus Loeb #62 (Adversus Mathematicos VII): IA'da modern
+#   edisyonlar var ama bu spesifik imprinted baskılar yok (yanlış pozitif riski).
+REFERENCE_ARCHIVE = [
+    {"key": "Beauchamp 1999 (ed.)", "query": "Enquiry Concerning Human Understanding Beauchamp",
+     "title_needle": "enquiry concerning human understanding",
+     "tex_needle": "Beauchamp, T.L. (ed.) (1999)"},
+    {"key": "Bobzien 2003", "query": "Cambridge Companion to the Stoics",
+     "title_needle": "cambridge companion to the stoics",
+     "tex_needle": "Bobzien, S. (2003)"},
+    {"key": "Fine 2012", "query": "Metaphysical Grounding Correia Schnieder",
+     "title_needle": "metaphysical grounding", "creator_needle": "correia",
+     "tex_needle": "Fine, K. (2012)"},
+    {"key": "Frede 1983", "query": "Skeptical Tradition Burnyeat",
+     "title_needle": "skeptical tradition",
+     "tex_needle": "Frede, M. (1983)"},
+    {"key": "Goldman 1979", "query": "Justification and Knowledge Pappas",
+     "title_needle": "justification and knowledge",
+     "tex_needle": "Goldman, A.I. (1979)"},
+    {"key": "Graham 1978", "query": "Later Mohist Logic Ethics Science Graham",
+     "title_needle": "later mohist logic",
+     "tex_needle": "Graham, A.C. (1978)"},
+    {"key": "Herbert of Cherbury 1624", "query": "De Veritate Herbert Cherbury",
+     "title_needle": "de veritate", "creator_needle": "herbert",
+     "tex_needle": "Herbert of Cherbury. (1624)"},
+    {"key": "Hume 1739-40 Treatise", "query": "Treatise of Human Nature Norton",
+     "title_needle": "treatise of human nature",
+     "tex_needle": "Hume, D. (1739--40)"},
+    {"key": "Hume 1748 Enquiry", "query": "Enquiry Concerning Human Understanding Beauchamp",
+     "title_needle": "enquiry concerning human understanding",
+     "tex_needle": "Hume, D. (1748)"},
+    {"key": "Kjellberg 1996", "query": "Skepticism Relativism Ethics Zhuangzi",
+     "title_needle": "zhuangzi", "creator_needle": "kjellberg",
+     "tex_needle": "Kjellberg, P. (1996)"},
+    {"key": "Lagree 1994", "query": "Juste Lipse restauration stoicisme",
+     "title_needle": "lipse", "creator_needle": "lagree",
+     "tex_needle": "Lagrée, J. (1994)"},
+    {"key": "Leibniz 1714", "query": "Monadologie Leibniz",
+     "title_needle": "monadologie", "creator_needle": "leibniz",
+     "tex_needle": "Leibniz, G.W. (1714)"},
+    {"key": "Lipsius 1604", "query": "Manuductionis Stoicam philosophiam Lipsius",
+     "title_needle": "manuductionis",
+     "tex_needle": "Lipsius, J. (1604)"},
+    {"key": "Locke 1689", "query": "Essay Concerning Human Understanding Nidditch",
+     "title_needle": "essay concerning human understanding",
+     "tex_needle": "Locke, J. (1689)"},
+    {"key": "Millican 2002", "query": "Reading Hume Human Understanding Millican",
+     "title_needle": "reading hume",
+     "tex_needle": "Millican, P. (2002)"},
+    {"key": "Nidditch 1975", "query": "Essay Concerning Human Understanding Nidditch",
+     "title_needle": "essay concerning human understanding",
+     "tex_needle": "Nidditch, P.H. (ed.) (1975)"},
+    {"key": "Norton & Norton 1996", "query": "David Hume Library Norton",
+     "title_needle": "david hume library",
+     "tex_needle": "Norton, D.F. & Norton, M.J. (eds.) (1996)"},
+    {"key": "du Vair 1594", "query": "De la constance consolation calamites",
+     "title_needle": "constance", "creator_needle": "vair",
+     "tex_needle": "du Vair, G. (1594)"},
+    {"key": "Schmitt 1972", "query": "Cicero Scepticus Schmitt",
+     "title_needle": "cicero scepticus",
+     "tex_needle": "Schmitt, C.B. (1972)"},
+    {"key": "Schmitt 1983", "query": "Rediscovery Ancient Skepticism Schmitt",
+     "title_needle": "skeptical tradition",
+     "tex_needle": "Schmitt, C.B. (1983)"},
+    {"key": "Xunzi Knoblock", "query": "Xunzi translation Knoblock",
+     "title_needle": "xunzi", "creator_needle": "knoblock",
+     "tex_needle": "Xunzi."},
+]
+
+# ---- K6+ Perseus CTS (--check-references ek) -------------------------------
+# Perseus Digital Library CTS API (legacy, perseus.tufts.edu/hopper/CTS):
+# antik birincil metinlerin pasaj düzeyinde doğrulanması (auth gerektirmez).
+# GetPassage + expected_marker (eserin başlığı) 200 yanıtında aranır.
+REFERENCE_PERSEUS = [
+    {"key": "Cicero Academica", "urn": "urn:cts:latinLit:phi0474.phi045",
+     "passage": "1.1", "expected_marker": "Academica",
+     "tex_needle": "Cicero. \\emph{Academica}"},
+    {"key": "Diogenes Laertius", "urn": "urn:cts:greekLit:tlg0004.tlg001",
+     "passage": "7.1", "expected_marker": "Vitae philosophorum",
+     "tex_needle": "Diogenes Laertius. \\emph{Vitae Philosophorum}"},
+]
 
 SECRET_PATTERNS = [
     r"sk-[A-Za-z0-9]{20,}",
@@ -492,18 +587,100 @@ def openlibrary_check(ref):
                         f"by {top.get('author_name', [''])[0]}, {top.get('first_publish_year')}")
 
 
+def _archive_query(ref):
+    """Internet Archive advancedsearch için alan-bazlı Lucene sorgusu üret.
+    title:"..." tamlaması + (varsa) creator: alanı — genel kelime araması yerine
+    gürültüyü (podcast/CIA kayıtları vb.) düşürmek için."""
+    q = f'title:"{ref["title_needle"]}"'
+    if ref.get("creator_needle"):
+        q += f' AND creator:{ref["creator_needle"]}'
+    return q
+
+
+def archive_check(ref):
+    """Internet Archive advancedsearch ile kitap/edişyon doğrulaması (auth gerektirmez).
+    title:"..." alan sorgusu kullanır; dönen doc'ların başlığı title_needle ile
+    (ve opsiyonel creator_needle ile) tekrar doğrulanır.
+    Döndürür: (PASS | MISMATCH | UNVERIFIED, açıklama)."""
+    url = ("https://archive.org/advancedsearch.php?" +
+           urllib.parse.urlencode({
+               "q": _archive_query(ref),
+               "fl[]": ["identifier", "title", "creator", "year"],
+               "rows": "10",
+               "output": "json",
+           }, doseq=True))
+    try:
+        data = _http_json(url, timeout=25)
+    except urllib.error.HTTPError as e:
+        return "UNVERIFIED", f"Internet Archive HTTP {e.code}"
+    except Exception as e:
+        return "UNVERIFIED", f"ağ hatası: {e}"
+
+    docs = data.get("response", {}).get("docs", []) or []
+    if not docs:
+        return "UNVERIFIED", "Internet Archive: 0 sonuç (IA kapsamı dışı olabilir)"
+
+    title_n = _norm_ref(ref["title_needle"])
+    creator_n = _norm_ref(ref["creator_needle"]) if ref.get("creator_needle") else None
+    for d in docs:
+        t = _norm_ref(str(d.get("title") or ""))
+        if title_n not in t:
+            continue
+        if creator_n:
+            c = _norm_ref(str(d.get("creator") or ""))
+            if creator_n not in c:
+                continue
+        ident = d.get("identifier", "?")
+        year = d.get("year")
+        return "PASS", (f"'{str(d.get('title'))[:60]}' ({ident}, {year})")
+    top = docs[0]
+    return "MISMATCH", (f"hiçbir sonuç eşleşmedi. En yakın: "
+                        f"'{str(top.get('title'))[:60]}' ({top.get('identifier')})")
+
+
+def perseus_check(ref):
+    """Perseus CTS API (legacy) ile antik birincil metin pasajı doğrulaması.
+    GetPassage + expected_marker (eser başlığı) 200 yanıtında aranır.
+    Döndürür: (PASS | MISMATCH | UNVERIFIED, açıklama)."""
+    cts_urn = ref["urn"] + ":" + ref["passage"]
+    url = ("http://www.perseus.tufts.edu/hopper/CTS?request=GetPassage"
+           f"&urn={urllib.parse.quote(cts_urn)}")
+    body = None
+    last_err = None
+    for attempt in (1, 2):
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "verify_delivery.py (Stoic-Hume V5 CI)",
+        })
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                body = r.read().decode("utf-8", "replace")
+            break
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                return "MISMATCH", f"Perseus CTS 404: {cts_urn}"
+            last_err = f"Perseus CTS HTTP {e.code}"
+        except Exception as e:
+            last_err = f"ağ hatası: {e}"
+        time.sleep(2.0)
+    if body is None:
+        return "UNVERIFIED", f"{last_err} (2 deneme)"
+    if ref["expected_marker"].lower() in body.lower():
+        return "PASS", f"CTS {cts_urn} — '{ref['expected_marker']}' mevcut"
+    return "MISMATCH", f"CTS 200 ama '{ref['expected_marker']}' pasajda yok"
+
+
 def run_reference_audit(tex_text, add, quiet=False):
-    """K6 referans denetimi: .tex varlığı + CrossRef/SEP/OpenLibrary çevrimiçi
-    doğrulama.
+    """K6 referans denetimi: .tex varlığı + CrossRef/SEP/OpenLibrary/
+    Internet Archive/Perseus çevrimiçi doğrulama.
 
     Döndürür: çevrimiçi doğrulama sonuçlarının listesi (VERSION JSON kaynağı)
-    — her öğe {key, source, verdict, detail, doi|url} — böylece her run'da
-    kaç referansın çevrimiçi doğrulandığı izlenebilir."""
+    — her öğe {key, source, verdict, detail, doi|url|urn|query} — böylece her
+    run'da kaç referansın çevrimiçi doğrulandığı izlenebilir."""
     def say(line):
         if not quiet:
             print(line)
 
-    say("\n--- K6 referans denetimi (CrossRef/SEP çevrimiçi) ---")
+    say("\n--- K6 referans denetimi (CrossRef/SEP/OpenLibrary/IA/Perseus çevrimiçi) ---")
     online_results = []
 
     # 1) .tex'te varlık (çevrimdışı, deterministik)
@@ -550,6 +727,31 @@ def run_reference_audit(tex_text, add, quiet=False):
                 f"{ref['key']} OpenLibrary uyuşmuyor: {detail}")
         time.sleep(0.4)  # OpenLibrary nazik havuz
 
+    # 4b) Internet Archive: kitap/edişyon doğrulaması (çevrimiçi, --check-references)
+    for ref in REFERENCE_ARCHIVE:
+        v, detail = archive_check(ref)
+        tag = {"PASS": "OK  ", "MISMATCH": "FAIL", "UNVERIFIED": "SKIP"}[v]
+        say(f"  [{tag}] Archive {ref['key']:<30} -> {detail[:80]}")
+        online_results.append({"key": ref["key"], "source": "archive",
+                               "verdict": v, "detail": detail,
+                               "query": _archive_query(ref)})
+        if v == "MISMATCH":
+            add("P1", "K6-REF", "K6 referans",
+                f"{ref['key']} Internet Archive uyuşmuyor: {detail}")
+        time.sleep(0.4)  # Internet Archive nazik havuz
+
+    # 4c) Perseus: antik birincil metin pasajı (çevrimiçi, --check-references)
+    for ref in REFERENCE_PERSEUS:
+        v, detail = perseus_check(ref)
+        tag = {"PASS": "OK  ", "MISMATCH": "FAIL", "UNVERIFIED": "SKIP"}[v]
+        say(f"  [{tag}] Perseus {ref['key']:<30} -> {detail[:80]}")
+        online_results.append({"key": ref["key"], "source": "perseus",
+                               "verdict": v, "detail": detail,
+                               "urn": ref["urn"] + ":" + ref["passage"]})
+        if v == "MISMATCH":
+            add("P1", "K6-REF", "K6 referans",
+                f"{ref['key']} Perseus uyuşmuyor: {detail}")
+
     # 5) Sabit denetim bulguları (çevrimiçi indekslenmeyen kitap/edişyon/antik)
     for k in REFERENCE_KNOWN:
         say(f"  [{k['status']}] STATIC {k['key']:<14} -> {k['note']}")
@@ -558,9 +760,11 @@ def run_reference_audit(tex_text, add, quiet=False):
                 f"[{k['status']}] {k['key']}: {k['note']}")
 
     say(f"  Kapsam: 64 referans; canlı doğrulanan "
-        f"{len(REFERENCE_CROSSREF) + len(REFERENCE_SEP) + len(REFERENCE_OPENLIBRARY)} "
+        f"{len(REFERENCE_CROSSREF) + len(REFERENCE_SEP) + len(REFERENCE_OPENLIBRARY) + len(REFERENCE_ARCHIVE) + len(REFERENCE_PERSEUS)} "
         f"(CrossRef {len(REFERENCE_CROSSREF)} + SEP {len(REFERENCE_SEP)} + "
-        f"OpenLibrary {len(REFERENCE_OPENLIBRARY)}); "
+        f"OpenLibrary {len(REFERENCE_OPENLIBRARY)} + "
+        f"Internet Archive {len(REFERENCE_ARCHIVE)} + "
+        f"Perseus {len(REFERENCE_PERSEUS)}); "
         f"kalanı REFERANS_KANIT_DENETIMI.md sabit denetimine dayanır.")
     return online_results
 
