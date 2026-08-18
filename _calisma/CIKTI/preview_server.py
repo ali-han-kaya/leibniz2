@@ -6,6 +6,8 @@ Tek dosyalık Python HTTP sunucusu (stdlib-only):
   - /            ve /preview.html  → statik HTML
   - /api/run     → Server-Sent Events (SSE): verify_delivery.py --full çıktısını
                    her RUN_INTERVAL saniyede bir stream eder
+  - /api/run-now → manuel tetikleme (GET/POST): interval beklemeden hemen
+                   verify_delivery.py --full koşar; sonuç SSE ile anında broadcast
   - /api/latest  → en son çalıştırmanın JSON özeti (P0/P1, SONUÇ, bütçe, vs.)
 
 Çalıştırma:
@@ -73,9 +75,27 @@ LATEST = {
 }
 LOCK = threading.Lock()
 SSE_CLIENTS = []  # bağlı client listesi (broadcast için)
+VERIFY_BUSY = threading.Lock()  # aynı anda yalnızca bir verify koşsun (loop + run-now)
+VERIFY_DIR = None               # main()'de set edilir; /api/run-now handler'ı kullanır
 
 
 def run_verify(verify_dir):
+    """verify_delivery.py --full koş; zaten koşuyorsa atla.
+
+    Busy-guard: verify_loop ve /api/run-now aynı anda iki verify
+    çalıştırmasın (LATEST üzerine yazışma / çift maliyet).
+    """
+    if not VERIFY_BUSY.acquire(blocking=False):
+        sys.stderr.write("[verify] zaten koşuyor — atlandı\n")
+        sys.stderr.flush()
+        return False
+    try:
+        return _run_verify_locked(verify_dir)
+    finally:
+        VERIFY_BUSY.release()
+
+
+def _run_verify_locked(verify_dir):
     """verify_delivery.py --full komutunu çalıştır, sonucu LATEST'e yaz + broadcast.
 
     Bu server user shell context'te çalışıyor (bash -c exec argv ...); tüm
@@ -150,6 +170,7 @@ def run_verify(verify_dir):
                 q.put(snapshot)
             except Exception:
                 pass
+    return True
 
 
 def verify_loop(verify_dir, interval):
@@ -197,10 +218,41 @@ class Handler(BaseHTTPRequestHandler):
             self.serve_latest()
         elif self.path == "/api/run":
             self.serve_sse()
+        elif self.path == "/api/run-now":
+            self.trigger_run_now()
         elif self.path == "/api/health":
             self._send(200, "ok")
         else:
             self._send(404, "404 not found")
+
+    def do_POST(self):
+        if self.path == "/api/run-now":
+            self.trigger_run_now()
+        else:
+            self._send(404, "404 not found")
+
+    def trigger_run_now(self):
+        """Manuel tetikleme: interval beklemeden hemen verify koşar.
+
+        Arka plan thread'inde çalışır, istek anında döner; sonuç hazır
+        olunca run_verify içindeki broadcast ile SSE client'larına düşer.
+        Zaten bir verify koşuyorsa 409 döner (çakışma yok).
+        """
+        ts = datetime.now(timezone.utc).isoformat()
+        if not VERIFY_BUSY.acquire(blocking=False):
+            self._send(409,
+                       json.dumps({"status": "already_running", "ts": ts,
+                                   "note": "bir verify zaten koşuyor"}),
+                       content_type="application/json; charset=utf-8")
+            return
+        VERIFY_BUSY.release()  # thread acquire etsin; kilit tutma
+        t = threading.Thread(target=run_verify, args=(VERIFY_DIR,),
+                             daemon=True, name="run-now")
+        t.start()
+        self._send(200,
+                   json.dumps({"status": "started", "ts": ts,
+                               "note": "verify başladı; sonuç /api/run (SSE) ile anında yayınlanacak"}),
+                   content_type="application/json; charset=utf-8")
 
     def serve_preview(self):
         with open(os.path.join(PREVIEW_DIR, "preview.html"), encoding="utf-8") as f:
@@ -294,8 +346,9 @@ def main():
                     help="verify_delivery.py --full kaç saniyede bir koşsun")
     args = ap.parse_args()
 
-    global PREVIEW_DIR
+    global PREVIEW_DIR, VERIFY_DIR
     PREVIEW_DIR = args.preview_dir
+    VERIFY_DIR = args.dir
 
     if not os.path.isfile(os.path.join(PREVIEW_DIR, "preview.html")):
         print(f"UYARI: {PREVIEW_DIR}/preview.html bulunamadı; "
