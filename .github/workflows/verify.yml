@@ -524,6 +524,57 @@ jobs:
           )
           print(f"PRECOMMIT_RAPORU.md yazıldı: {len(hooks)} hook, {len(findings)} bulgu")
 
+      # ÖZET: pre-commit cache durumu + hook env sürümleri. Tekrarlanabilirlik
+      # denetimi için: hangi pre-commit sürümü, hangi hook ortamları (env
+      # hash'leri) ve hangi araç sürümleri kullanıldı. PRECOMMIT_CACHE.md
+      # logs/ içine yazıldığından artifact'a otomatik girer ve reproducibility
+      # manifest'ine hash'lenir.
+      - name: Pre-commit cache + hook env summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "# PRECOMMIT ORTAM ÖZETİ (cache + hook env)"
+            echo ""
+            echo "- **pre-commit sürümü:** $(pre-commit --version 2>/dev/null || echo yok)"
+            echo "- **Toplamak zamanı (UTC):** $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo ""
+            echo "## Hook env sürümleri"
+            echo ""
+            echo "| Araç | Sürüm |"
+            echo "|---|---|"
+            echo "| python3 | $(python3 --version 2>&1 | awk '{print $2}') |"
+            echo "| pre-commit | $(pre-commit --version 2>/dev/null | awk '{print $2}' || echo yok) |"
+            echo "| pdfinfo | $(pdfinfo -v 2>&1 | head -1 | sed 's/.*version //' || echo yok) |"
+            echo "| qpdf | $(qpdf --version 2>&1 | head -1 | awk '{print $NF}' || echo yok) |"
+            echo "| z3 | $(python3 -c 'import z3; print(z3.get_version_string())' 2>/dev/null || echo yok) |"
+            echo "| lean | $(lean --version 2>/dev/null || echo yok) |"
+            echo ""
+            echo "## pre-commit cache durumu"
+            echo ""
+            echo '```text'
+            if [ -d "$HOME/.cache/pre-commit" ]; then
+              echo "cache dizini: $HOME/.cache/pre-commit"
+              du -sh "$HOME/.cache/pre-commit" 2>/dev/null
+              echo ""
+              echo "env sürümleri (hash dizinleri):"
+              ls -1 "$HOME/.cache/pre-commit" 2>/dev/null | head -20
+              echo ""
+              if [ -d "$HOME/.cache/pre-commit/repocache" ]; then
+                echo "repocache:"
+                ls -1 "$HOME/.cache/pre-commit/repocache" 2>/dev/null | head -10
+              fi
+            else
+              echo "cache dizini yok: $HOME/.cache/pre-commit"
+            fi
+            echo '```'
+            echo ""
+            echo "> Not: env hash dizinleri hook ortamlarının (additional_dependencies"
+            echo "> dahil) içerik hash'leridir — aynı env yeniden kurulmadan reuse edilir."
+          } > logs/PRECOMMIT_CACHE.md
+          echo "PRECOMMIT_CACHE.md yazıldı:"
+          cat logs/PRECOMMIT_CACHE.md
+
       - name: Upload pre-commit log + findings report
         if: always()
         uses: actions/upload-artifact@v4
