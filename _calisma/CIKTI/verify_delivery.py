@@ -20,6 +20,9 @@ Kullanım (tek komut):
                                               # K8: Z3 sembolik ispat (core_section.tex teoremleri)
     python3 verify_delivery.py --lean-proof
                                               # K9: Lean 4 reduct-invariance (tümevarımsal kanıt)
+    python3 verify_delivery.py --verify-manifest reproducibility/manifest.json
+                                              # K10: manifest.json'daki her SHA-256'yı gerçek dosyayla
+                                              #      karşılaştır (reproducibility bütünlüğü)
     python3 verify_delivery.py --full          # tüm katmanlar: K1-K9 + referans denetimi + Z3 + Lean
                                               #   (--check-references + --symbolic-proof + --lean-proof)
 
@@ -42,6 +45,9 @@ Doğrulama zinciri (Katman 0..9):
   K7  Hijyen   secret/anahtar + artefakt taraması
   K8  İspat    Z3 sembolik ispat (--symbolic-proof; z3-solver gerektirir)
   K9  Lean     Lean 4 reduct-invariance tümevarımsal kanıt (--lean-proof; lean gerektirir)
+  K10 Manifest gen_repro_manifest.py çıktısı manifest.json'daki her dosyanın
+               SHA-256'sını gerçek dosyayla karşılaştır (--verify-manifest PATH;
+               reproducibility bütünlüğü — fail-closed: uyuşmazlık P1)
 """
 import argparse
 import hashlib
@@ -895,6 +901,54 @@ def run_lean_proof(lean_path, lean_file):
     return False, f"Lean derleme hatası: {detail}"
 
 
+def verify_manifest_digest(manifest_path, add):
+    """K10: manifest.json'daki her dosyanın SHA-256'sını gerçek dosyayla karşılaştır.
+
+    manifest.json gen_repro_manifest.py tarafından üretilir: {"files": {rel: sha256}}.
+    rel yollar manifest'in bulunduğu dizine göre çözülür (bundle kökü). Her dosya
+    yeniden hash'lenir; uyuşmazlık veya eksik dosya P1 bulgusu olur (fail-closed:
+    sessiz geçiş yok). Döndürür (ok: bool, detail: str).
+    """
+    mpath = os.path.abspath(manifest_path)
+    if not os.path.isfile(mpath):
+        return False, f"manifest yok: {mpath}"
+    try:
+        with open(mpath, encoding="utf-8") as mf:
+            m = json.load(mf)
+    except (json.JSONDecodeError, OSError) as e:
+        return False, f"manifest okunamadı ({mpath}): {e}"
+    files = m.get("files")
+    if not isinstance(files, dict) or not files:
+        return False, f"manifest'te 'files' yok/boş ({mpath})"
+
+    base = os.path.dirname(mpath)
+    n_ok = n_bad = n_missing = 0
+    bad_rows = []
+    for rel, expected in sorted(files.items()):
+        fp = os.path.join(base, rel)
+        if not os.path.isfile(fp):
+            n_missing += 1
+            bad_rows.append(f"{rel} (EKSİK)")
+            add("P1", "K10-MANIFEST", "K10 manifest digest",
+                f"manifest'teki dosya yok: {rel}")
+            continue
+        actual = hashlib.sha256(open(fp, "rb").read()).hexdigest()
+        if actual != expected:
+            n_bad += 1
+            bad_rows.append(f"{rel} (beklenen {expected[:16]}… ≠ {actual[:16]}…)")
+            add("P1", "K10-MANIFEST", "K10 manifest digest",
+                f"SHA-256 uyuşmazlığı: {rel}",
+                f"beklenen {expected[:16]}… gerçek {actual[:16]}…")
+        else:
+            n_ok += 1
+
+    detail = (f"{n_ok} OK / {n_bad} uyuşmazlık / {n_missing} eksik "
+              f"({len(files)} dosya)")
+    if bad_rows:
+        detail += " | " + "; ".join(bad_rows[:5])
+    return (n_bad == 0 and n_missing == 0), detail
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dir", default=os.path.dirname(os.path.abspath(__file__)))
@@ -931,6 +985,10 @@ def main():
                     help="K8: Z3 sembolik ispat (symbolic_proof_z3.py; z3-solver gerektirir)")
     ap.add_argument("--lean-proof", action="store_true",
                     help="K9: Lean 4 reduct-invariance (ReductInvariance.lean; lean gerektirir)")
+    ap.add_argument("--verify-manifest", default=None, metavar="PATH",
+                    help="K10: gen_repro_manifest.py çıktısı manifest.json'u oku; "
+                         "her dosyanın SHA-256'sını gerçek dosyayla karşılaştır "
+                         "(reproducibility bütünlüğü; uyuşmazlık P1)")
     ap.add_argument("--full", action="store_true",
                     help="Tüm katmanları (--check-references + --symbolic-proof + --lean-proof) tek komutla koş")
     args = ap.parse_args()
@@ -1296,6 +1354,19 @@ def main():
             if not ok:
                 add("P0", "K9-LEAN", "K9 Lean ispatı", detail)
 
+    # ---- K10: reproducibility manifest digest (--verify-manifest) ----
+    # gen_repro_manifest.py çıktısı manifest.json'daki her dosyanın SHA-256'sı
+    # gerçek dosyayla karşılaştırılır. Uyuşmazlık/eksik → P1 (fail-closed).
+    manifest_ok = None
+    if args.verify_manifest:
+        manifest_ok, manifest_detail = verify_manifest_digest(
+            args.verify_manifest, add)
+        if not args.json:
+            print(f"[K10] manifest digest: {'PASS' if manifest_ok else 'FAIL'} — {manifest_detail}")
+        if not manifest_ok:
+            add("P1", "K10-MANIFEST", "K10 manifest digest",
+                f"manifest bütünlüğü bozuk: {manifest_detail}")
+
     # ---- Bütçe kalkanı: iki yöntem yan yana ----
     # (a) Evrensel: token ≈ bytes/4      (v3_verify.py H4, bağımsız referans)
     # (b) Ağırlıklı: token ≈ bytes/r_i    (dosya tipine göre bytes-per-token)
@@ -1399,6 +1470,14 @@ def main():
                 add("P1", "REFS-OUT", "Referans sidecar",
                     f"yazılamadı: {args.refs_out}", str(e))
 
+    manifest_digest_report = None
+    if args.verify_manifest:
+        manifest_digest_report = {
+            "path": os.path.abspath(args.verify_manifest),
+            "ok": bool(manifest_ok),
+            "detail": manifest_detail,
+        }
+
     p0 = sum(1 for f in findings if f["priority"] == "P0")
     p1 = sum(1 for f in findings if f["priority"] == "P1")
     verdict = "PASS" if (p0 == 0 and p1 == 0) else "FAIL"
@@ -1415,6 +1494,7 @@ def main():
         "budget": budget_report,
         "pdf_hash": pdf_meta_report,
         "references_online": refs_online_report,
+        "manifest_digest": manifest_digest_report,
     }
     if args.json:
         print(json.dumps(out, indent=2, ensure_ascii=False))
