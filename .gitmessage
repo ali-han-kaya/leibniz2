@@ -1,0 +1,30 @@
+<kapsam>: <eylem — örn. "verify.yml: precommit job'unu verify job'una göm">
+
+<GÖVDE — DEĞİŞİKLİĞİN NEDENİ (diff ne yaptığını zaten söyler). Teslim
+zincirini etkiliyorsa kanıta referans ver: hash, rapor, test sonucu.>
+
+# ─────────────────────────────────────────────────────────────────────
+# .gitmessage — bu repo'nun commit mesaj kuralı (bkz. docs/HISTORY_CLEANUP.md)
+#
+# KURULUM (bir kez, makine başına):
+#   git config commit.template .gitmessage
+#   pre-commit install --hook-type commit-msg      # başlık denetimi için
+#
+# DENETİM: pre-commit commit-msg hook'u (commit_msg_hook.sh) kural dışı
+# başlığı commit'i BLOKE EDER — şablonu düzenlemeden commit atılamaz.
+#
+# KURALLAR
+#   1) Başlık formatı: "<kapsam>: <eylem>", ≤72 karakter. Örnekler:
+#        verify.yml: precommit job'unu verify job'una göm
+#        M0 §10.5: kök-seviye bayat zip'in rm kaydı
+#        docs/: PUBLISH_SCENARIO'ya .gitmessage kurulum adımı ekle
+#   2) NOISE COMMIT YASAK: wip, smoke, "test marker", "test:", "fix typo",
+#      "minor fix", asd/foo/lorem vb. başlıklar reddedilir.
+#      (Tarihçe: d863977/991473d test marker'ları rebase ile ezildi — tekrar
+#      üretme.)
+#   3) Tek mantıksal değişiklik = tek commit; alakasız dosyaları karıştırma.
+#   4) --no-verify yalnızca BELGELENMİŞ istisnada (ör. bayat-zip kapısı);
+#      kapı yeşilken kullanma; bypass'ı gövdede belgele.
+#   5) Teslim zincirini (zip/manifest/checksum/sidecar) değiştiriyorsan
+#      repack_delivery.py'yi koş ve kanıtı (hash) gövdeye yaz.
+# ─────────────────────────────────────────────────────────────────────

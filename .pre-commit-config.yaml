@@ -4,13 +4,16 @@
 #   pip install pre-commit
 #   pre-commit install
 #
-# Bu noktadan sonra her `git commit` sırasında dört kapı çalışır:
+# Bu noktadan sonra her `git commit` sırasında beş kapı çalışır:
 #   0) update-config         : config'i paket içeriğinden senkron et (gen_config.py)
 #                              — repack sayıları değiştirdiyse verify_delivery.config.json'u
 #                              otomatik günceller ve stage eder; değişmediyse dokunmaz.
 #   1) verify-delivery        : paket bütünlüğü (K1-K7, stdlib-only)
 #   2) verify-delivery-symbolic: Z3 sembolik ispat (z3-solver, izole venv)
 #   3) verify-delivery-lean    : Lean 4 reduct-invariance (lean, system)
+#   4) commit-msg-style       : başlık denetimi (.gitmessage kuralları) — noise
+#                              commit'leri (wip/smoke/test marker/şablon) reddeder.
+#                              commit-msg stage'inde; CI --all-files'ta ÇALIŞMAZ.
 # Herhangi bir P0/P1 bulgusu commit'i bloke eder (sıfır-dışı exit).
 #
 # Not: update-config TEK yazan hook'tur (config'i stage eder). Diğer üç kapı
@@ -80,4 +83,20 @@ repos:
         always_run: true
         pass_filenames: false
         stages: [pre-commit]
+        verbose: true
+
+      - id: commit-msg-style
+        name: Commit message style (noise prevention)
+        description: >-
+          .gitmessage kurallarını uygular: başlık '<kapsam>: <eylem>'
+          formatında ve ≤72 karakter olmalı; wip/smoke/test marker/şablon
+          placeholder'ı gibi noise başlıklar commit'i BLOKE EDER.
+          commit-msg stage'inde çalışır (CI --all-files'ta değil).
+          Kurulum: pre-commit install --hook-type commit-msg
+        entry: sh _calisma/CIKTI/commit_msg_hook.sh
+        language: system
+        # commit-msg stage'inde pre-commit mesaj dosyasını $1 olarak geçer;
+        # pass_filenames true olmalı (always_run bu geçişi ezer — kullanma).
+        pass_filenames: true
+        stages: [commit-msg]
         verbose: true

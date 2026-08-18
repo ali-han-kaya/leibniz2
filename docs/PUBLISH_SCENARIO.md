@@ -17,6 +17,10 @@ cd /Users/alikaya/Desktop/leibniz2
 git status --short         # ← boş olmalı
 git log --oneline -5       # ← temiz linear history; test-marker commit'i olmamalı
 
+# (a2) Commit mesaj kuralı kurulu mu? (bkz. docs/HISTORY_CLEANUP.md)
+git config commit.template      # ← ".gitmessage" olmalı
+ls .git/hooks/commit-msg        # ← var olmalı (pre-commit install --hook-type commit-msg)
+
 # (b) Pre-commit hooks çalışıyor mu?
 git commit --allow-empty -m "smoke: empty commit pre-commit test" 2>&1 | grep -E "Passed|Failed"
 git reset --hard HEAD^     # smoke commit'i geri al (branch ilerletme)
@@ -196,7 +200,7 @@ git reset --hard <commit-hash-where-you-want-to-be>
 - `9f72b0e` (ana kurulum, gerçek) — **kal**
 - `3d114e5` (ignore eklentisi, gerçek) — **kal**
 - `5d62685` (budget shield + config + rapor, gerçek) — **kal**
-- `d863977` + `991473d` (test markers) — **EZİLDİ**: `git rebase --onto 5d62685 991473d` ile net-sıfır diff temizlendi (add+remove aynı dosya olduğundan tek anlamlı sonuç silmekti)
+- `d863977` + `991473d` (test markers) — **EZİLDİ**: `git rebase --onto 5d62685 991473d` ile net-sıfır diff temizlendi (add+remove aynı dosya olduğundan tek anlamlı sonuç silmekti). **Tam kayıt + önleme kuralları: [`docs/HISTORY_CLEANUP.md`](HISTORY_CLEANUP.md)**
 
 ---
 
