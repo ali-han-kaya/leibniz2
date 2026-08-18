@@ -56,14 +56,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # Soy hattı (--check-lineage) zip_lineage.json'daki nesilleri
           # `git show <commit>:<path>` ile yeniden türetir — tam geçmiş gerekir.
           fetch-depth: 0
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
@@ -312,7 +312,7 @@ jobs:
       # Yalnızca pull_request olayında; budget PR yorumuyla aynı desen.
       - name: Pre-commit P0 — PR label + comment
         if: always() && github.event_name == 'pull_request'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const fs = require('fs');
@@ -468,7 +468,7 @@ jobs:
 
       - name: Upload config snapshot
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: config
           path: config/
@@ -477,7 +477,7 @@ jobs:
 
       - name: Upload K0 findings sidecar
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: k0-findings
           path: k0_findings.json
@@ -486,7 +486,7 @@ jobs:
 
       - name: Upload verification report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: verify-report
           path: |
@@ -497,7 +497,7 @@ jobs:
 
       - name: Upload budget sidecar (verify)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: budget-verify
           path: budget_verify.json
@@ -510,7 +510,7 @@ jobs:
       # kapı FAIL olsa bile yüklenir (if: always).
       - name: Upload online references report (VERSION JSON)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: refs-online
           path: |
@@ -521,7 +521,7 @@ jobs:
 
       - name: Upload pre-commit log + findings report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: precommit-logs
           path: logs/
@@ -537,10 +537,10 @@ jobs:
     if: always()
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Download budget sidecars
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           pattern: budget-*
           path: budget_sidecars/
@@ -626,7 +626,7 @@ jobs:
       # ─── Bütçe aşımı uyarısını PR yorumu olarak düş ─────────────────────
       - name: Budget gate — PR comment (on exceedance)
         if: always() && github.event_name == 'pull_request'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const fs = require('fs');
@@ -658,7 +658,7 @@ jobs:
 
       - name: Upload budget bundle
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: budget
           path: budget/
@@ -671,13 +671,13 @@ jobs:
     needs: [verify]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # precommit advisory bölümünün bulgularını indir (yoksa atla — dep
       # kurulumu başarısız olmuşsa rapor üretilmemiş olabilir).
       - name: Download pre-commit findings
         continue-on-error: true
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: precommit-logs
           path: precommit_findings/
@@ -695,7 +695,7 @@ jobs:
           wc -l reports/*.md
 
       - name: Upload reports bundle
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: reports
           path: reports/
@@ -716,16 +716,16 @@ jobs:
     if: always()
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
       # ─── 1) Tüm artifact'ları indir ────────────────────────────────────
       - name: Download all job artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           path: all_artifacts/
           merge-multiple: true
@@ -747,7 +747,7 @@ jobs:
 
       # ─── 3) Tek artifact olarak yükle ───────────────────────────────────
       - name: Upload reproducibility bundle
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: reproducibility
           path: reproducibility/
@@ -772,13 +772,13 @@ jobs:
       pull-requests: write
     steps:
       - name: Download reproducibility bundle
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: reproducibility
           path: reproducibility/
 
       - name: Post manifest.txt as PR comment
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const fs = require('fs');
@@ -830,10 +830,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
@@ -863,10 +863,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
@@ -905,7 +905,7 @@ jobs:
 
       - name: Upload repack-verify report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: repack-verify
           path: repack_verify_report.txt
@@ -933,10 +933,10 @@ jobs:
       actions: read    # artifact listeleme + zip indirme için
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
@@ -955,7 +955,7 @@ jobs:
 
       - name: Upload refs trend
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: refs-trend
           path: refs-trend/
