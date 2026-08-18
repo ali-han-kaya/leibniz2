@@ -459,12 +459,35 @@ jobs:
           path: budget_sidecars/
           merge-multiple: true
 
+      # effective_config.json (verify job'unun --config-out çıktısı) config
+      # artifact'ının içindedir; CLI override uyarısı için indirilir. advisory:
+      # yoksa (ör. config yüklenemedi) adımı patlatmaz — betik UYARI yazar.
+      - name: Download config snapshot (effective_config.json)
+        continue-on-error: true
+        uses: actions/download-artifact@v7
+        with:
+          name: config
+          path: config_snapshot/
+
       - name: Consolidate budget report
         run: |
           mkdir -p budget
           cp budget_sidecars/*.json budget/ 2>/dev/null || true
           # Index: bütçe sidecar'larını topla, aşanları failures listesine koy.
           python3 _calisma/CIKTI/consolidate_budget.py
+
+      # effective_config.json'daki cli_overrides.<param>.override==true
+      # durumunu bütçe raporu artifact'ına uyarı olarak yaz. Advisory
+      # (exit 0): bütçe kapısı aşım kontrolüdür; override kaydı denetim izi
+      # sağlar ve tekrarlanabilirlik sapmasını görünür kılar.
+      - name: CLI overrides — budget report warning
+        if: always()
+        shell: bash
+        run: |
+          python3 _calisma/CIKTI/check_cli_overrides.py \
+            --config config_snapshot/effective_config.json \
+            --index budget/index.json \
+            --out-dir budget
 
       # ─── Bütçe aşımı uyarısını run summary'e yaz ────────────────────────
       - name: Budget gate — run summary

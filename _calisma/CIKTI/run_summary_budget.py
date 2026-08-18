@@ -54,6 +54,17 @@ def main() -> None:
                         f"/ ${r.get('limit')} (~{r.get('tokens_est')} token)\n")
             if runs:
                 s.write(f"\nToplam: ${total}\n")
+        # CLI override uyarısı (check_cli_overrides.py tarafından index.json'a
+        # eklenir): bütçe dosya config değeriyle DEĞİL CLI değeriyle koştuysa
+        # tekrarlanabilirlik sapmasını run summary'de görünür yap.
+        ov = summary.get("cli_overrides")
+        if isinstance(ov, dict) and ov.get("warning"):
+            s.write("\n## ⚠️ Bütçe CLI override uyarısı\n\n")
+            for o in ov.get("overrides", []):
+                s.write(f"- **{o.get('key')}**: {o.get('file_value')!r} → "
+                        f"{o.get('effective')!r} (CLI verildi)\n")
+            s.write("\n> Bütçe kalkanı bu parametrelerde dosya config "
+                    "değeriyle DEĞİL, CLI değeriyle koştu.\n")
     print("Budget summary written to run summary.")
 
 
