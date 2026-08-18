@@ -196,7 +196,7 @@ TESLIM_KLASOR_V5_2026-08-17.zip  (bayat / orijinal) = 363a06e36d71666e70fead77bf
 | 2026-08-17 | sonraki nesiller (`3ef74cae…`, `af8067ca…`, `d7f63d72…`, `fe731022…`) | yukarıdaki kısaltmalar | deterministik repack (commit `2e7c425`) ile bayat kaldı |
 
 Dış zip'in tam soy hattı (kanıtlanabilir zincir) — **tek kaynak:**
-`_calisma/CIKTI/zip_lineage.json` (10 nesil: 2 pre-git dondurulmuş + 8
+`_calisma/CIKTI/zip_lineage.json` (11 nesil: 2 pre-git dondurulmuş + 9
 git'ten yeniden türetilebilir). `verify_delivery.py --check-lineage`
 her commit'li nesli `git show <commit>:<path> | sha256` ile yeniden
 hesaplayıp kayıtlı hash'le karşılaştırır; `current` nesli ayrıca canlı
@@ -212,14 +212,15 @@ fe731022…  (V5i: K6-DETERM known limitation, e232ab2) [git show ile doğrulan�
 bec0bb0a…  (deterministik repack, 2492e98)         [git show ile doğrulanır]
 8b390996…  (Popkin 1952 + Priest 2018, fad15f0)   [git show ile doğrulanır]
 34e81dff…  (V5k: tectonic non-determinism, 07793f6) [git show ile doğrulanır]
-58f7d1c6…  (V5l: repack determinizm kanıtı, 6bb9cb6) ← GÜNCEL KANONİK (canlı dosya ile doğrulanır)
+58f7d1c6…  (V5l: repack determinizm kanıtı, 6bb9cb6) [git show ile doğrulanır]
+918e0545…  (V5m: qpdf deneyi script + donmuş çıktı, d02cda8) ← GÜNCEL KANONİK (canlı dosya ile doğrulanır)
 ```
 
 ### 10.3 Güncel kanonik hash'ler (yanındaki sidecar ile birebir)
 
 ```text
-TESLIM_KLASOR_V5_2026-08-17.zip = 58f7d1c65aadf9dd6a25f3e9dc0cc4e7968c67b98b8bdd697b114de85cc90454
-TESLIM_V5_FINAL_2026-08-17.zip  = 2879d83e6a709e21fecc2bcdf0506a360f814893fb4c295ff40ba8dfd78632a0
+TESLIM_KLASOR_V5_2026-08-17.zip = 918e054595f798d48843ece59f48582b2b22147edb0cdb06188f0c543b2e13aa
+TESLIM_V5_FINAL_2026-08-17.zip  = 81a0244855cc574562bc18a611c94bf3ffbb0086c3ea32775de9d5f32473c28a
 ```
 
 Not: `363a06e3…` değeri §9'da zaten "orijinal" olarak sabitlenmişti; §10 bu
