@@ -254,6 +254,53 @@ jobs:
           echo "PRECOMMIT_CACHE.md yazıldı:"
           cat logs/PRECOMMIT_CACHE.md
 
+      # ─── Pre-commit bulgularını run summary'de ayrı bölüm olarak göster ──
+      # "Generate pre-commit findings report" adımının ürettiği
+      # logs/PRECOMMIT_RAPORU.md'deki P0/P1 bulgularını + hook durumlarını
+      # ayrıştırıp GITHUB_STEP_SUMMARY'ye ayrı bir bölüm yazar — K0/bütçe
+      # bölümleriyle birlikte tek bakışta görünür. if: always(): --full
+      # başarısız olsa bile advisory bulgular özetlenir.
+      - name: Pre-commit findings — run summary
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os, re, pathlib
+
+          report = pathlib.Path("logs/PRECOMMIT_RAPORU.md")
+          summary_path = os.environ["GITHUB_STEP_SUMMARY"]
+          if not report.exists():
+              with open(summary_path, "a") as s:
+                  s.write("## 🔍 Pre-commit: rapor bulunamadı\n\n"
+                          "> `logs/PRECOMMIT_RAPORU.md` üretilmedi "
+                          "(pre-commit kurulumu başarısız?).\n")
+              raise SystemExit(0)
+
+          text = report.read_text(encoding="utf-8")
+          findings = re.findall(r"^\| (P0|P1) \| (.+) \|$", text, re.M)
+          hooks = re.findall(r"^\| ([^|]+?) \| (Passed|Failed) \|$", text, re.M)
+          m = re.search(r"^- \*\*Sonuç:\*\* (.+)$", text, re.M)
+          verdict = m.group(1).strip() if m else "bilinmiyor"
+
+          with open(summary_path, "a") as s:
+              if findings:
+                  s.write(f"## 🔴 Pre-commit bulguları: {len(findings)} bulgu\n\n")
+                  for pri, msg in findings:
+                      s.write(f"- **{pri}**: {msg}\n")
+                  s.write("\n> Advisory — build'i bloke etmez; denetim içindir. "
+                          "Detay: `precommit-logs` artifact'ındaki PRECOMMIT_RAPORU.md.\n")
+              else:
+                  s.write("## ✅ Pre-commit: bulgu yok (tüm hook'lar geçti)\n\n")
+              s.write(f"> Sonuç: {verdict}\n")
+              if hooks:
+                  parts = " | ".join(
+                      f"`{h}` " + (":white_check_mark:" if st == "Passed" else ":x:")
+                      for h, st in hooks
+                  )
+                  s.write(f"> Hook'lar: {parts}\n")
+          print(f"Pre-commit summary written ({len(findings)} bulgu, {len(hooks)} hook).")
+          PY
+
       # ─── K0 bulgularını run summary'de ayrı bölüm olarak göster ────────────
       # verify_delivery.py --k0-out k0_findings.json sidecar'ından okur;
       # CI run summary'ye "K0 bayat zip" başlıklı ayrı bir bölüm yazar.
