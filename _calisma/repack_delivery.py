@@ -239,10 +239,22 @@ def main():
         with open(os.path.join(OUTER_SRC, fn), "rb") as src, \
              open(os.path.join(CIKTI, fn), "wb") as dst:
             dst.write(src.read())
+    inner_size = os.path.getsize(inner_zip)
+    outer_size = os.path.getsize(outer_zip)
+
+    # 5) Self-clean: OUTER_SRC içindeki transient iç zip + sidecar'ı sil.
+    #    İç zip artık dış zip'in İÇİNDE paketlendi ve kanonik kopyası
+    #    CIKTI/'da — OUTER_SRC'de duran kopya yalnızca ara üründür. Recursive
+    #    K0 (verify_delivery.py) bunu bayat kopya olarak P1 işaretler; repack
+    #    kendi ara ürününü silerek normal akışta K0'ı yeşil tutar.
+    for fn in (INNER_ZIP, INNER_ZIP + ".sha256"):
+        p = os.path.join(OUTER_SRC, fn)
+        if os.path.isfile(p):
+            os.unlink(p)
 
     print("MANIFEST güncellendi; iç/dış zip + sidecar + KLASOR_CHECKSUMLARI yeniden üretildi.")
-    print(f"  iç zip : {INNER_ZIP} ({os.path.getsize(inner_zip)} B)")
-    print(f"  dış zip : {OUTER_ZIP} ({os.path.getsize(outer_zip)} B)")
+    print(f"  iç zip : {INNER_ZIP} ({inner_size} B) → CIKTI/ + dış zip içine gömüldü")
+    print(f"  dış zip : {OUTER_ZIP} ({outer_size} B)")
 
 
 if __name__ == "__main__":

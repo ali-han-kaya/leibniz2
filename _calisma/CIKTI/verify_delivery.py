@@ -33,7 +33,7 @@ tempfile; --check-references için ayrıca urllib). Harici `unzip`/`shasum`/`dif
 GEREKMEZ. pdfinfo varsa PDF sayfa kontrolü eklenir, yoksa atlanır (FAIL değil).
 
 Doğrulama zinciri (Katman 0..9):
-  K0  Bayat    CIKTI dışında (_calisma/ kökü) kalan zip taraması (P1)
+  K0  Bayat    CIKTI dışında kalan HER zip taraması (recursive; P1)
   K1  Dış zip  SHA-256 sidecar (kurcalanma)
   K2  Klasör   KLASOR_CHECKSUMLARI.sha256 (tüm dosyalar)
   K3  İç zip   SHA-256 sidecar (kurcalanma)
@@ -1143,21 +1143,29 @@ def main():
         print(f"FAIL: {KLASOR_ZIP} bulunamadı ({d})")
         return 2
 
-    # ---- K0: bayat zip taraması ----
-    # Kanonik teslim yalnızca CIKTI/'da olmalı. _calisma/ kökünde (--dir'in
-    # üst dizini) CIKTI dışında kalan .zip'ler "başıboş/bayat kopya" riskidir:
-    # yanlışlıkla dağıtılabilir/commit edilebilir. .gitignore'daki başıboş
-    # kopya listesiyle aynı kapsam (kök seviyesi; alt dizinlerdeki repack ara
-    # ürünleri kapsam dışı). Bulunan her zip P1 olarak işaretlenir.
+    # ---- K0: bayat zip taraması (recursive) ----
+    # Kanonik teslim yalnızca CIKTI/'da olmalı. _calisma/ altındaki HER zip
+    # (alt dizinler dahil — repack ara ürünleri TESLIM/ ve V5_ICERIK/ altında,
+    # kökteki başıboş kopyalar) "başıboş/bayat kopya" riskidir: yanlışlıkla
+    # dağıtılabilir/commit edilebilir. İstisnalar: CIKTI (kanonik kopya),
+    # TOOLKIT (toolkit'in kendi çalışma kopyası; kanonik iCloud'da), .venv_z3
+    # + gizli dizinler (ortam). repack_delivery.py kendi transient ara
+    # ürününü (OUTER_SRC içindeki iç zip) build sonrası siler — yani normal
+    # repack akışı K0'ı yeşil bırakır; kalan her zip gerçek bayat kopyadır.
     parent = os.path.dirname(d)
+    k0_skip = {"CIKTI", "TOOLKIT", ".venv_z3"}
     if os.path.isdir(parent):
-        for entry in sorted(os.listdir(parent)):
-            if entry.lower().endswith(".zip"):
-                p = os.path.join(parent, entry)
-                if os.path.isfile(p):
-                    add("P1", "K0-STALE", "K0 bayat zip",
-                        f"CIKTI dışında zip bulundu: {entry}",
-                        f"{sha256_file(p)}  {p}")
+        for root, dirs, files in os.walk(parent):
+            dirs[:] = sorted(x for x in dirs
+                             if x not in k0_skip and not x.startswith("."))
+            for fn in sorted(files):
+                if fn.lower().endswith(".zip"):
+                    p = os.path.join(root, fn)
+                    if os.path.isfile(p):
+                        rel = os.path.relpath(p, parent)
+                        add("P1", "K0-STALE", "K0 bayat zip",
+                            f"CIKTI dışında zip bulundu: {rel}",
+                            f"{sha256_file(p)}  {p}")
 
     # ---- K1: dış zip sidecar ----
     want = None
