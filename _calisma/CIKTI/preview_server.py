@@ -5,7 +5,10 @@ preview_server.py — Stoic-Hume V5 preview dashboard.
 Tek dosyalık Python HTTP sunucusu (stdlib-only):
   - /            ve /preview.html  → statik HTML
   - /api/run     → Server-Sent Events (SSE): verify_delivery.py --full çıktısını
-                   her RUN_INTERVAL saniyede bir stream eder
+                   her RUN_INTERVAL saniyede bir stream eder (snapshot event'leri)
+  - /api/run-stream → canlı satır akışı: verify subprocess'inin stdout/stderr
+                   satırları koşarken anında yayınlanır (K8 Z3 ilerlemesi dahil);
+                   run bitince `end` event'i + son snapshot gelir
   - /api/run-now → manuel tetikleme (GET/POST): interval beklemeden hemen
                    verify_delivery.py --full koşar; sonuç SSE ile anında broadcast
   - /api/latest  → en son çalıştırmanın JSON özeti (P0/P1, SONUÇ, bütçe, vs.)
@@ -74,7 +77,8 @@ LATEST = {
     "stripped_sha256": None,
 }
 LOCK = threading.Lock()
-SSE_CLIENTS = []  # bağlı client listesi (broadcast için)
+SSE_CLIENTS = []      # bağlı /api/run client listesi (snapshot broadcast)
+STREAM_CLIENTS = []   # bağlı /api/run-stream client listesi (satır akışı)
 VERIFY_BUSY = threading.Lock()  # aynı anda yalnızca bir verify koşsun (loop + run-now)
 VERIFY_DIR = None               # main()'de set edilir; /api/run-now handler'ı kullanır
 HISTORY_PATH = None             # main()'de set edilir; JSONL trend dosyası
@@ -158,11 +162,43 @@ def run_verify(verify_dir):
         VERIFY_BUSY.release()
 
 
+def _broadcast_stream(tag, line):
+    """Bir satırı /api/run-stream client'larına gönder (blocking değil).
+
+    tag: "stdout" | "stderr". Kuyruk doluysa en yeni satırlar önemli
+    olduğundan eski satırlar düşer (put_nowait).
+    """
+    msg = json.dumps({"stream": tag, "line": line}, ensure_ascii=False)
+    with LOCK:
+        clients = list(STREAM_CLIENTS)
+    for q in clients:
+        try:
+            q.put_nowait(msg)
+        except Exception:
+            pass
+
+
+def _broadcast_run_end(rec):
+    """Run bitti sinyali: /api/run-stream client'larına son snapshot'ı gönder."""
+    msg = json.dumps({"stream": "end", "snapshot": rec}, ensure_ascii=False)
+    with LOCK:
+        clients = list(STREAM_CLIENTS)
+    for q in clients:
+        try:
+            q.put_nowait(msg)
+        except Exception:
+            pass
+
+
 def _run_verify_locked(verify_dir):
     """verify_delivery.py --full komutunu çalıştır, sonucu LATEST'e yaz + broadcast.
 
     Bu server user shell context'te çalışıyor (bash -c exec argv ...); tüm
     proje dosyalarına tam erişim var. Venv python doğrudan çağrılır.
+
+    Subprocess Popen ile satır satır okunur: her satır /api/run-stream
+    client'larına canlı broadcast edilir (K8 Z3 ilerlemesi dahil —
+    verify_delivery.py K8 Z3 stdout'unu kendi stderr'ine relay eder).
 
     venv python tercih et; yoksa system python fallback.
     """
@@ -171,28 +207,77 @@ def _run_verify_locked(verify_dir):
              "--dir", verify_dir, "--full", "--json"]
     cmd = inner
     t0 = time.monotonic()
+    timed_out = False
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=300,
-                           cwd=verify_dir)
-        stdout, stderr, rc = r.stdout, r.stderr, r.returncode
-    except subprocess.TimeoutExpired:
-        stdout = ""; stderr = "TIMEOUT (>300s)"; rc = 124
-    duration = round(time.monotonic() - t0, 2)
+        # PYTHONUNBUFFERED=1: verify_delivery.py'nin print'leri flush=True
+        # içermese bile satır satır pipe'a aksın (canlı run-stream için).
+        env = dict(os.environ)
+        env["PYTHONUNBUFFERED"] = "1"
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                             text=True, bufsize=1, cwd=verify_dir, env=env)
+    except OSError as e:
+        stdout, stderr, rc = "", f"başlatılamadı: {e}", 127
+        duration = round(time.monotonic() - t0, 2)
+        data = {}
+        _finalize_run(stdout, stderr, rc, duration, data)
+        return True
 
-    # Parse JSON for structured fields
-    data = {}
-    try:
-        # --json prints a single JSON blob as the entire stdout.
-        # Eğer stdout'un tamamı parse edilemezse, son { ... } bloğunu dene.
+    out_chunks, err_chunks = [], []
+
+    def _drain(pipe, sink, tag):
         try:
-            data = json.loads(stdout)
-        except json.JSONDecodeError:
-            json_start = stdout.rfind("{")
-            json_end = stdout.rfind("}")
-            if json_start >= 0 and json_end > json_start:
-                data = json.loads(stdout[json_start:json_end + 1])
-    except (json.JSONDecodeError, ValueError):
-        pass
+            for line in iter(pipe.readline, ""):
+                sink.append(line)
+                _broadcast_stream(tag, line.rstrip("\n"))
+        except Exception:
+            pass
+        finally:
+            try:
+                pipe.close()
+            except Exception:
+                pass
+
+    t_out = threading.Thread(target=_drain, args=(p.stdout, out_chunks, "stdout"))
+    t_err = threading.Thread(target=_drain, args=(p.stderr, err_chunks, "stderr"))
+    t_out.start(); t_err.start()
+    try:
+        rc = p.wait(timeout=300)
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        try:
+            p.kill()
+            p.wait()
+        except Exception:
+            pass
+    t_out.join(); t_err.join()
+    stdout = "".join(out_chunks)
+    stderr = "".join(err_chunks)
+    if timed_out:
+        stderr = (stderr + "\nTIMEOUT (>300s)").strip()
+        rc = 124
+    duration = round(time.monotonic() - t0, 2)
+    _finalize_run(stdout, stderr, rc, duration, None)
+    return True
+
+
+def _finalize_run(stdout, stderr, rc, duration, data):
+    """Run sonucunu LATEST'e yaz, SSE_CLIENTS'a broadcast et, history'ye ekle."""
+
+    # Parse JSON for structured fields (sadece stdout; stderr insan-okur çıktı)
+    if data is None:
+        data = {}
+        try:
+            # --json prints a single JSON blob as the entire stdout.
+            # Eğer stdout'un tamamı parse edilemezse, son { ... } bloğunu dene.
+            try:
+                data = json.loads(stdout)
+            except json.JSONDecodeError:
+                json_start = stdout.rfind("{")
+                json_end = stdout.rfind("}")
+                if json_start >= 0 and json_end > json_start:
+                    data = json.loads(stdout[json_start:json_end + 1])
+        except (json.JSONDecodeError, ValueError):
+            pass
 
     with LOCK:
         LATEST.update({
@@ -222,7 +307,7 @@ def _run_verify_locked(verify_dir):
                     except (ValueError, IndexError):
                         pass
 
-    # Broadcast to all SSE clients + disk'e yaz (trend)
+    # Broadcast to all SSE clients + disk'e yaz (trend) + run-stream sonu
     with LOCK:
         rec = {k: LATEST[k] for k in HISTORY_KEYS}
         snapshot = json.dumps(rec)
@@ -232,7 +317,7 @@ def _run_verify_locked(verify_dir):
             except Exception:
                 pass
         persist_history(rec)
-    return True
+    _broadcast_run_end(rec)
 
 
 def verify_loop(verify_dir, interval):
@@ -282,6 +367,8 @@ class Handler(BaseHTTPRequestHandler):
             self.serve_sse()
         elif self.path == "/api/run-now":
             self.trigger_run_now()
+        elif self.path == "/api/run-stream":
+            self.serve_run_stream()
         elif self.path == "/api/history":
             self.serve_history()
         elif self.path == "/api/health":
@@ -294,6 +381,49 @@ class Handler(BaseHTTPRequestHandler):
             self.trigger_run_now()
         else:
             self._send(404, "404 not found")
+
+    def serve_run_stream(self):
+        """Server-Sent Events: verify subprocess'inin satırlarını canlı akıt.
+
+        Her satır bir `line` event'idir (data: {"stream": "stdout"|"stderr",
+        "line": ...}); run bittiğinde `run-end` event'i (son snapshot) gelir.
+        Bağlantı anında bekleyen bir verify yoksa keepalive ile bekler.
+        """
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Connection", "keep-alive")
+        self.send_header("X-Accel-Buffering", "no")
+        self.end_headers()
+
+        import queue
+        q = queue.Queue(maxsize=512)
+        with LOCK:
+            STREAM_CLIENTS.append(q)
+            # Bağlantı anında mevcut durumu bildir
+            info = json.dumps({"stream": "info",
+                               "ts": LATEST["ts"],
+                               "verdict": LATEST["verdict"]},
+                              ensure_ascii=False)
+        try:
+            self.wfile.write(f"event: info\ndata: {info}\n\n".encode())
+            self.wfile.flush()
+            while True:
+                try:
+                    msg = q.get(timeout=15)
+                    self.wfile.write(f"event: {json.loads(msg)['stream']}\ndata: {msg}\n\n".encode())
+                    self.wfile.flush()
+                except queue.Empty:
+                    self.wfile.write(b": keepalive\n\n")
+                    self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+        finally:
+            with LOCK:
+                try:
+                    STREAM_CLIENTS.remove(q)
+                except ValueError:
+                    pass
 
     def serve_history(self):
         """JSONL'daki son run'ları JSON array olarak döndür (trend grafiği için)."""

@@ -51,6 +51,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -815,21 +816,64 @@ def run_script(py, script):
 
 
 def run_symbolic_proof(py, script):
-    """K8: sembolik ispat (Z3). Döndürür (ok: bool, detail: str)."""
+    """K8: sembolik ispat (Z3). Döndürür (ok: bool, detail: str).
+
+    Z3 script'inin stdout'u satır satır kendi stderr'ine relay edilir
+    (canlı ilerleme — dashboard /api/run-stream'de K8 adımlarını gösterir);
+    toplanan çıktı yine de döndürülür. --json modunda stderr serbest
+    olduğundan makine-okunur JSON stdout'u bozulmaz.
+    """
+    timed_out = False
     try:
-        r = subprocess.run([py, script], capture_output=True, text=True,
-                           timeout=180, cwd=os.path.dirname(script) or ".")
+        # PYTHONUNBUFFERED=1: script'in print'leri flush=True içermese bile
+        # stdout satır satır pipe'a aksın (canlı ilerleme için kritik).
+        env = dict(os.environ)
+        env["PYTHONUNBUFFERED"] = "1"
+        p = subprocess.Popen([py, script], stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE, text=True,
+                             cwd=os.path.dirname(script) or ".", env=env)
     except FileNotFoundError:
         return False, f"yorumlayıcı bulunamadı: {py}"
+    out_chunks, err_chunks = [], []
+
+    def _drain(pipe, sink, relay):
+        try:
+            for line in iter(pipe.readline, ""):
+                sink.append(line)
+                if relay:
+                    # Canlı ilerleme: ana sürecin stderr'ine satır satır yaz.
+                    sys.stderr.write(line)
+                    sys.stderr.flush()
+        except Exception:
+            pass
+        finally:
+            try:
+                pipe.close()
+            except Exception:
+                pass
+
+    t1 = threading.Thread(target=_drain, args=(p.stdout, out_chunks, True))
+    t2 = threading.Thread(target=_drain, args=(p.stderr, err_chunks, False))
+    t1.start(); t2.start()
+    try:
+        rc = p.wait(timeout=180)
     except subprocess.TimeoutExpired:
+        timed_out = True
+        try:
+            p.kill()
+            p.wait()
+        except Exception:
+            pass
+    t1.join(); t2.join()
+    if timed_out:
         return False, "sembolik ispat zaman aşımı (>180s)"
-    out = (r.stdout or "") + (r.stderr or "")
-    if r.returncode == 0:
+    out = "".join(out_chunks) + "".join(err_chunks)
+    if rc == 0:
         return True, "Z3 ispatı geçti (12/12)"
     if "No module named 'z3'" in out or "ModuleNotFoundError" in out:
         return False, "z3-solver kurulu değil — pip install z3-solver"
-    tail = [l.strip() for l in (r.stdout or "").splitlines() if l.strip()][-2:]
-    detail = " | ".join(tail) if tail else f"exit={r.returncode}"
+    tail = [l.strip() for l in out_chunks if l.strip()][-2:]
+    detail = " | ".join(tail) if tail else f"exit={rc}"
     return False, f"Z3 beklenmedik sonuç: {detail}"
 
 
