@@ -21,8 +21,9 @@ git log --oneline -5       # ← temiz linear history; test-marker commit'i olma
 git config commit.template      # ← ".gitmessage" olmalı
 ls .git/hooks/commit-msg        # ← var olmalı (pre-commit install --hook-type commit-msg)
 
-# (b) Pre-commit hooks çalışıyor mu?
-git commit --allow-empty -m "smoke: empty commit pre-commit test" 2>&1 | grep -E "Passed|Failed"
+# (b) Pre-commit hooks çalışıyor mu? (commit-msg kuralına uygun mesaj —
+#     "smoke:" başlığı artık commit-msg-style hook'u tarafından REDDEDİLİR)
+git commit --allow-empty -m "docs: pre-commit smoke test" 2>&1 | grep -E "Passed|Failed"
 git reset --hard HEAD^     # smoke commit'i geri al (branch ilerletme)
 
 # (c) gh CLI kurulu mu ve auth var mı?
@@ -36,7 +37,8 @@ git branch --show-current  # ← "main" olmalı
 
 **Beklenen çıktılar:**
 - `git status` → boş
-- pre-commit smoke test → 3 Passed
+- pre-commit smoke test → 4 Passed (update-config + verify-delivery + symbolic + lean;
+  commit-msg-style ayrı stage — `pre-commit run` çıktısında görünmez)
 - `gh auth status` → "Logged in"
 - `git remote -v` → boş
 
@@ -65,9 +67,14 @@ open "https://github.com/<user>/leibniz2/settings/branches"
 #
 #     Web UI'da:
 #       "Add branch protection rule" → Branch name pattern: `main`
-#       ✓ Require status checks to pass before merging
-#           → ara ve ekle: verify, budget, reports, precommit, reproducibility
-#             (status check adları = workflow job `name:` alanları)
+#       ✓ Require status checks to pass before merging#       → ara ve ekle (6 kapı; adlar = workflow job `name:` alanları):
+#           Delivery verification — K1-K9 (single entry point)
+#           Budget shield (aggregated)
+#           Static markdown reports (incl. pre-commit findings)
+#           Reproducibility bundle
+#           Config drift check (gen_config --dry-run)
+#           Repack determinism + verify (sidecar sync)
+#         (manifest-comment job'ı yalnızca PR'da koşar — required check değil)
 #           → ✓ "Require branches to be up to date before merging" (strict)
 #       ✓ Do not allow bypassing the above settings   (enforce_admins)
 #       ✓ Disallow force pushes
@@ -110,10 +117,11 @@ To github.com:<user>/leibniz2.git
 Branch 'main' set up to track remote 'origin/main'.
 ```
 
-**Süre:** ~5-15 sn (küçük repo, ~30 dosya).
+**Süre:** ~5-15 sn (küçük repo, 73 dosya, ~10 MiB).
 
 **Görsel doğrulama:** https://github.com/<user>/leibniz2 adresinde:
-- Temiz linear history (20 commit; test-marker `d863977`/`991473d` rebase ile ezildi)
+- Temiz linear history (56 commit; test-marker `d863977`/`991473d` rebase ile
+  ezildi — tam kayıt: [`docs/HISTORY_CLEANUP.md`](HISTORY_CLEANUP.md))
 - README.md render edilmiş
 - `.github/workflows/verify.yml` görünür
 
@@ -130,31 +138,35 @@ gh run list --limit 3 --json databaseId,status,conclusion,name
 RUN_ID=$(gh run list --limit 1 --json databaseId -q '.[0].databaseId')
 gh run watch $RUN_ID --exit-status
 
-# (c) Artifact'ları kontrol et (5 adet olmalı)
+# (c) Artifact'ları kontrol et (10 adet olmalı — liste aşağıda)
 gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_bytes) B)"'
 ```
 
-**Beklenen:**
+**Beklenen (7 job):**
 | Job | Beklenen sonuç |
 |---|---|
-| verify | ✅ PASS (K1-K7) |
-| symbolic | ✅ PASS (12/12 Z3) |
-| lean | ✅ PASS (Lean 4 reduct-invariance) |
-| budget | ✅ PASS (3 sidecar birleştirildi) |
-| reports | ✅ bundle yüklendi |
+| Delivery verification — K1-K9 (single entry point) | ✅ PASS (P0=0, P1=0) — K1-K7 + K0 + soy hattı + bütçe + K8 (Z3 12/12) + K9 (Lean) tek komutta; pre-commit 4 hook'u advisory bölüm olarak aynı job içinde |
+| Budget shield (aggregated) | ✅ limit içinde (sidecar birleştirildi) |
+| Static markdown reports (incl. pre-commit findings) | ✅ bundle yüklendi |
+| Reproducibility bundle | ✅ manifest.txt + SHA-256 (run_id ile) |
+| Config drift check (gen_config --dry-run) | ✅ config paketle uyumlu |
+| Repack determinism + verify (sidecar sync) | ✅ repack byte-identical, base verify PASS |
+| Manifest PR comment | yalnızca PR'da: manifest.txt PR yorumu olarak düşer |
 
-**Artifact listesi (5):**
-- `verify-report` (~2 KB)
-- `budget-verify` (~600 B)
-- `symbolic-report` (~5 KB)
-- `budget-symbolic` (~600 B)
-- `lean-report` (~3 KB)
-- `budget-lean` (~600 B)
-- `budget` (~2 KB, aggregator)
-- `reports` (~30 KB, 4 markdown)
+**Artifact listesi (10):**
+- `verify-report` (tek log: K1-K9 + pre-commit bölümü + .sha256)
+- `budget-verify` + `budget` (bütçe sidecar + aggregator)
+- `config` (ham + şema + etkin config + diff)
+- `k0-findings` (bayat-zip taraması JSON)
+- `refs-online` (çevrimiçi referans denetimi VERSION JSON)
+- `precommit-logs` (ham log + PRECOMMIT_RAPORU.md + cache/env özeti)
+- `reports` (statik markdown raporları)
+- `reproducibility` (tüm artifact'ların SHA-256 manifest'i)
+- `repack-verify` (repack sonrası base verify raporu)
 
-**Not:** `--check-references` + Beth 1953 düzeltmesi olmadan `--full` exit 1 verir.
-Bu BİLİNEN ve PLANLANMIŞ bir P1 bulgusudur; ilk commit'te yeşil olması **beklenmez**.
+**Not:** Kapı artık `verify_delivery.py --full`'dur (K1-K9, fail-closed) ve yeşildir —
+Beth 1953 / Fosl 1998 gibi referans düzeltmeleri V5h'te yapıldı; Kalan çevrimdışı
+kaynaklar `refs-online`'da advisory olarak izlenir (kapıyı kırmaz).
 
 ---
 
@@ -238,8 +250,13 @@ gh repo edit --enable-squash-merge --enable-rebase-merge \
 | 4. Doğrula | artifact listesi + PASS | AŞAMA 3 sonrası |
 
 **Bilinen sınırlar:**
-- İlk CI run'ı `--check-references` veya `--full` içermez (henüz eklenmedi); yeşil olur.
-- `--full` eklemek için Beth 1953 düzeltmesi + manifest yeniden üretimi gerekir — ayrı görev.
+- K6-DETERM metadata-stripped PDF hash'i run'lar arası DEĞİŞEBİLİR — belgelenmiş
+  qpdf non-determinizmi (MANIFEST V5i/V5k/V5l); bilgi amaçlı, P0/P1 üretmez.
+  Repack tarafı sidecar reuse ile byte-identical (V5l + repack-verify kapısı).
+- İlk run soğuk başlangıç: Z3 + Lean 4 (elan stable) kurulumu toplam süreyi
+  uzatır (~5-15 dk); sonraki run'lar cache ile hızlanır.
+- `manifest-comment` ve PR yorumları (bütçe aşımı, pre-commit P0) yalnızca
+  `pull_request` olayında çalışır; push'ta üretilmez.
 - Branch protection `strict:true` — fork'tan PR'lerde CI çalışmayabilir; bu beklenen davranış.
 
 ---
