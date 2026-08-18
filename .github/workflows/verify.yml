@@ -67,6 +67,14 @@ jobs:
         with:
           python-version: '3.12'
 
+      # preview_server.py birim testleri (persist/load/deadlock) — fail-closed.
+      # stdlib unittest; ek bağımlılık yok. history.jsonl bütünlüğünün
+      # (append/trim/atomik replace + LOCK altında asılmama) regresyon kapısı.
+      - name: Run preview_server unit tests (persist/load/deadlock)
+        shell: bash
+        run: |
+          python3 -m unittest discover -s _calisma/CIKTI -p "test_preview_server.py" -v
+
       - name: Install pre-commit (advisory pre-commit section)
         run: pip install pre-commit
 
