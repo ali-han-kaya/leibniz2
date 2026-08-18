@@ -1,10 +1,17 @@
 #!/usr/bin/env python3
 """run_summary_budget.py — bütçe kalkanı sonucunu GITHUB_STEP_SUMMARY'ye yaz.
 
-verify.yml'deki 'Budget gate — run summary' adımının inline Python mantığının
-standalone hali. budget/index.json (consolidate_budget.py çıktısı) okur; limit
-aşımı varsa uyarı, yoksa onay bölümü yazar.
+İki girdi şeklini destekler:
 
+1. Aggregated: `budget/index.json` (consolidate_budget.py çıktısı)
+   `{failures[], runs[], method, cli_overrides}` — budget job'unda koşar.
+2. Single-run: `budget_verify.json` (verify_delivery.py --budget-out çıktısı)
+   `{limit, estimated_usd, tokens_est, verdict, method, comparison, ...}` —
+   verify job'unda koşar (aynı job'un kendi bütçe sonucu; aggregation
+   gerektirmez). Böylece verify job'unun GITHUB_STEP_SUMMARY'si pre-commit +
+   K0 + bütçe bölümlerini TEK summary'de birleştirir.
+
+İlk konumsal argüman girdi yolu; yoksa varsayılan `budget/index.json`.
 GITHUB_STEP_SUMMARY env'i yoksa (yerel test) çıktı stdout'a yazılır.
 """
 import contextlib
@@ -13,6 +20,7 @@ import os
 import sys
 
 SUMMARY_PATH = os.environ.get("GITHUB_STEP_SUMMARY")
+DEFAULT_PATH = "budget/index.json"
 
 
 @contextlib.contextmanager
@@ -24,14 +32,41 @@ def summary_sink():
         yield sys.stdout
 
 
-def main() -> None:
-    path = "budget/index.json"
+def _normalize(summary):
+    """Aggregated ve single-run şeklini ortak {failures, runs} yapısına indir.
+
+    Single-run şeklinde `verdict == "FAIL"` ise tek failure olarak sayılır;
+    `verdict == "OK"` ise tek run olarak sayılır. `source` verify job'unun
+    kendi bütçesi olduğundan "verify" sabittir.
+    """
+    if "runs" in summary or "failures" in summary:
+        return summary.get("failures", []), summary.get("runs", [])
+
+    # single-run: budget_verify.json (verify_delivery.py --budget-out)
+    run = {
+        "source": summary.get("source", "verify"),
+        "limit": summary.get("limit"),
+        "estimated_usd": summary.get("estimated_usd"),
+        "tokens_est": summary.get("tokens_est"),
+    }
+    if summary.get("verdict") == "FAIL":
+        return [run], []
+    return [], [run]
+
+
+def main(argv=None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    path = argv[0] if argv else DEFAULT_PATH
     if not os.path.isfile(path):
         with summary_sink() as s:
-            s.write("## ⚠️ Bütçe kalkanı: sidecar bulunamadı (verify job'u çalışmadı)\n")
-        return
-    summary = json.load(open(path))
-    failures = summary.get("failures", [])
+            s.write("## ⚠️ Bütçe kalkanı: sidecar bulunamadı "
+                    f"(`{path}` — verify job'u çalışmadı?)\n")
+        return 0
+
+    with open(path, encoding="utf-8") as f:
+        summary = json.load(f)
+    failures, runs = _normalize(summary)
+
     with summary_sink() as s:
         if failures:
             s.write("## ⚠️ Bütçe limiti aşıldı\n\n")
@@ -46,9 +81,8 @@ def main() -> None:
             s.write(f"\n> Yöntem: `{summary.get('method', '')}`. "
                     f"Fail-closed: P1 bulgusu olarak işaretlendi.\n")
         else:
-            runs = summary.get("runs", [])
             total = round(sum(r.get("estimated_usd", 0) or 0 for r in runs), 2)
-            s.write("## ✅ Bütçe kalkanı: tüm job'lar limit içinde\n\n")
+            s.write("## ✅ Bütçe kalkanı: limit içinde\n\n")
             for r in runs:
                 s.write(f"- **{r.get('source')}**: ${r.get('estimated_usd')} "
                         f"/ ${r.get('limit')} (~{r.get('tokens_est')} token)\n")
@@ -66,7 +100,8 @@ def main() -> None:
             s.write("\n> Bütçe kalkanı bu parametrelerde dosya config "
                     "değeriyle DEĞİL, CLI değeriyle koştu.\n")
     print("Budget summary written to run summary.")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

@@ -326,6 +326,18 @@ jobs:
         run: |
           python3 _calisma/CIKTI/run_summary_k0.py
 
+      # ─── Bütçe bölümünü de aynı verify summary'sine yaz ─────────────────
+      # verify job'u kendi --budget-out budget_verify.json sidecar'ını üretir;
+      # aggregation beklemeden (budget job'u needs:[verify]) bu sidecar'dan
+      # bütçe bölümünü GITHUB_STEP_SUMMARY'ye ekler. Böylece pre-commit + K0
+      # + bütçe üç bölüm TEK verify summary'sinde birlikte görünür.
+      # run_summary_budget.py tek-run (budget_verify.json) şeklini de okur.
+      - name: Budget — run summary
+        if: always()
+        shell: bash
+        run: |
+          python3 _calisma/CIKTI/run_summary_budget.py budget_verify.json
+
       - name: Generate SHA-256 for verify artifacts
         shell: bash
         run: |
