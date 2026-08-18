@@ -1011,6 +1011,9 @@ def main():
                          "sonuçlarını ayrı bir VERSION JSON'a yaz — her run'da kaç "
                          "referansın çevrimiçi doğrulandığını izlemek için "
                          "(CI artifact sidecar için)")
+    ap.add_argument("--k0-out", default=None,
+                    help="K0 bayat-zip bulgularını ayrı bir JSON'a yaz "
+                         "(CI run summary'de ayrı bölüm göstermek için)")
     ap.add_argument("--budget-method", choices=["universal", "weighted", "both"],
                     default=None,
                     help="Bütçe tahmin yöntemi: universal (bytes/4), "
@@ -1154,6 +1157,7 @@ def main():
     # repack akışı K0'ı yeşil bırakır; kalan her zip gerçek bayat kopyadır.
     parent = os.path.dirname(d)
     k0_skip = {"CIKTI", "TOOLKIT", ".venv_z3"}
+    k0_findings = []  # {rel, sha256} — run summary için ayrı sidecar
     if os.path.isdir(parent):
         for root, dirs, files in os.walk(parent):
             dirs[:] = sorted(x for x in dirs
@@ -1163,9 +1167,20 @@ def main():
                     p = os.path.join(root, fn)
                     if os.path.isfile(p):
                         rel = os.path.relpath(p, parent)
+                        k0_findings.append({"rel": rel, "sha256": sha256_file(p)})
                         add("P1", "K0-STALE", "K0 bayat zip",
                             f"CIKTI dışında zip bulundu: {rel}",
                             f"{sha256_file(p)}  {p}")
+    if args.k0_out:
+        try:
+            with open(args.k0_out, "w", encoding="utf-8") as kf:
+                json.dump({"count": len(k0_findings), "findings": k0_findings},
+                          kf, indent=2, ensure_ascii=False)
+            if not args.json:
+                print(f"[K0] bulgu sidecar'ı yazıldı: {args.k0_out} "
+                      f"({len(k0_findings)} bayat zip)")
+        except OSError as e:
+            add("P1", "K0-OUT", "K0 sidecar", f"yazılamadı: {args.k0_out}", str(e))
 
     # ---- K1: dış zip sidecar ----
     want = None

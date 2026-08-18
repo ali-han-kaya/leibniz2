@@ -98,7 +98,43 @@ jobs:
           python3 _calisma/CIKTI/verify_delivery.py --dir _calisma/CIKTI --full \
             --budget-out budget_verify.json \
             --config-out effective_config.json \
-            --refs-out references_online.json 2>&1 | tee verify_report.txt
+            --refs-out references_online.json \
+            --k0-out k0_findings.json 2>&1 | tee verify_report.txt
+
+      # ─── K0 bulgularını run summary'de ayrı bölüm olarak göster ────────────
+      # verify_delivery.py --k0-out k0_findings.json sidecar'ından okur;
+      # CI run summary'ye "K0 bayat zip" başlıklı ayrı bir bölüm yazar.
+      # Bulgu yoksa yeşil onay satırı; varsa her zip rel yolu + SHA-256 ile.
+      - name: K0 findings — run summary
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os
+          path = "k0_findings.json"
+          summary_path = os.environ["GITHUB_STEP_SUMMARY"]
+          if not os.path.isfile(path):
+              with open(summary_path, "a") as s:
+                  s.write("## 🔍 K0 bayat zip: sidecar bulunamadı\n\n"
+                          "> `verify_delivery.py` `--k0-out` üretmedi "
+                          "(verify job'u çalışmadı?).\n")
+              raise SystemExit(0)
+          data = json.load(open(path))
+          count = data.get("count", 0)
+          findings = data.get("findings", [])
+          with open(summary_path, "a") as s:
+              if count:
+                  s.write(f"## 🔴 K0 bayat zip: {count} bulgu\n\n")
+                  for f in findings:
+                      s.write(f"- `{f['rel']}`  (`{f['sha256'][:16]}…`)\n")
+                  s.write("\n> Fail-closed: P1 bulgusu olarak işaretlendi. "
+                          "Kanonik kopya yalnızca `_calisma/CIKTI/` altında "
+                          "olmalıdır.\n")
+              else:
+                  s.write("## ✅ K0 bayat zip: temiz (bulgu yok)\n\n"
+                          "> CIKTI dışında zip bulunamadı.\n")
+          print(f"K0 summary written ({count} findings).")
+          PY
 
       - name: Generate SHA-256 for verify artifacts
         shell: bash
@@ -143,6 +179,15 @@ jobs:
           path: config/
           if-no-files-found: error
           retention-days: 30
+
+      - name: Upload K0 findings sidecar
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k0-findings
+          path: k0_findings.json
+          retention-days: 30
+          if-no-files-found: error
 
       - name: Upload verification report
         if: always()
