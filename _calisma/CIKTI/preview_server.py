@@ -77,6 +77,69 @@ LOCK = threading.Lock()
 SSE_CLIENTS = []  # bağlı client listesi (broadcast için)
 VERIFY_BUSY = threading.Lock()  # aynı anda yalnızca bir verify koşsun (loop + run-now)
 VERIFY_DIR = None               # main()'de set edilir; /api/run-now handler'ı kullanır
+HISTORY_PATH = None             # main()'de set edilir; JSONL trend dosyası
+HISTORY_MAX = 100               # disk'te tutulacak en son run sayısı
+
+HISTORY_KEYS = ("ts", "verdict", "p0", "p1", "duration_s", "budget_usd",
+                "pdf_pages", "ref_count", "raw_sha256", "stripped_sha256",
+                "exit_code")
+
+
+def snapshot_dict():
+    """LATEST'ten SSE/broadcast/history için ortak snapshot alanlarını al."""
+    with LOCK:
+        return {k: LATEST[k] for k in HISTORY_KEYS}
+
+
+def persist_history(rec):
+    """Bir run kaydını JSONL dosyasına append et; HISTORY_MAX ile sınırla.
+
+    Her satır tek bir run'ın snapshot'ıdır (JSON). En eski satırlar atılır,
+    böylece dosya disk'te sonsuz büyümez. Thread-safe: LOCK altında çağrılır
+    ve rec zaten LOCK altında alınmış olarak gelir (kilit tekrar alınmaz).
+    """
+    if not HISTORY_PATH:
+        return
+    if not rec.get("ts"):
+        return
+    try:
+        lines = []
+        if os.path.isfile(HISTORY_PATH):
+            with open(HISTORY_PATH, encoding="utf-8") as f:
+                lines = [ln for ln in (l.strip() for l in f) if ln]
+        lines.append(json.dumps(rec, ensure_ascii=False))
+        # En yeni HISTORY_MAX satırı tut (en eskiyi at)
+        if len(lines) > HISTORY_MAX:
+            lines = lines[-HISTORY_MAX:]
+        tmp = HISTORY_PATH + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+        os.replace(tmp, HISTORY_PATH)  # atomik: yarı yazılmış dosya asla okunmaz
+    except OSError as e:
+        sys.stderr.write(f"[history] yazılamadı: {e}\n")
+        sys.stderr.flush()
+
+
+def load_history():
+    """Disk'teki JSONL'ı oku, en son HISTORY_MAX kaydı döndür (en yeni önce)."""
+    if not HISTORY_PATH or not os.path.isfile(HISTORY_PATH):
+        return []
+    out = []
+    try:
+        with open(HISTORY_PATH, encoding="utf-8") as f:
+            for ln in f:
+                ln = ln.strip()
+                if not ln:
+                    continue
+                try:
+                    out.append(json.loads(ln))
+                except json.JSONDecodeError:
+                    continue  # bozuk satırı atla, dosyayı silme
+    except OSError as e:
+        sys.stderr.write(f"[history] okunamadı: {e}\n")
+        sys.stderr.flush()
+        return []
+    return out[-HISTORY_MAX:]
 
 
 def run_verify(verify_dir):
@@ -159,17 +222,16 @@ def _run_verify_locked(verify_dir):
                     except (ValueError, IndexError):
                         pass
 
-    # Broadcast to all SSE clients
-    snapshot = json.dumps({k: LATEST[k] for k in
-                          ("ts", "verdict", "p0", "p1", "duration_s",
-                           "budget_usd", "pdf_pages", "ref_count",
-                           "raw_sha256", "stripped_sha256", "exit_code")})
+    # Broadcast to all SSE clients + disk'e yaz (trend)
     with LOCK:
+        rec = {k: LATEST[k] for k in HISTORY_KEYS}
+        snapshot = json.dumps(rec)
         for q in SSE_CLIENTS:
             try:
                 q.put(snapshot)
             except Exception:
                 pass
+        persist_history(rec)
     return True
 
 
@@ -220,6 +282,8 @@ class Handler(BaseHTTPRequestHandler):
             self.serve_sse()
         elif self.path == "/api/run-now":
             self.trigger_run_now()
+        elif self.path == "/api/history":
+            self.serve_history()
         elif self.path == "/api/health":
             self._send(200, "ok")
         else:
@@ -230,6 +294,12 @@ class Handler(BaseHTTPRequestHandler):
             self.trigger_run_now()
         else:
             self._send(404, "404 not found")
+
+    def serve_history(self):
+        """JSONL'daki son run'ları JSON array olarak döndür (trend grafiği için)."""
+        data = load_history()
+        self._send(200, json.dumps(data, ensure_ascii=False, indent=2),
+                   content_type="application/json; charset=utf-8")
 
     def trigger_run_now(self):
         """Manuel tetikleme: interval beklemeden hemen verify koşar.
@@ -284,10 +354,8 @@ class Handler(BaseHTTPRequestHandler):
         with LOCK:
             SSE_CLIENTS.append(q)
             # Bağlantı anında mevcut snapshot'ı gönder
-            snapshot = json.dumps({k: LATEST[k] for k in
-                                  ("ts", "verdict", "p0", "p1", "duration_s",
-                                   "budget_usd", "pdf_pages", "ref_count",
-                                   "raw_sha256", "stripped_sha256", "exit_code")})
+            # (snapshot_dict() çağrılmaz: LOCK zaten tutuluyor, reentrant değil)
+            snapshot = json.dumps({k: LATEST[k] for k in HISTORY_KEYS})
         try:
             self.wfile.write(f"event: snapshot\ndata: {snapshot}\n\n".encode())
             self.wfile.flush()
@@ -346,9 +414,10 @@ def main():
                     help="verify_delivery.py --full kaç saniyede bir koşsun")
     args = ap.parse_args()
 
-    global PREVIEW_DIR, VERIFY_DIR
+    global PREVIEW_DIR, VERIFY_DIR, HISTORY_PATH
     PREVIEW_DIR = args.preview_dir
     VERIFY_DIR = args.dir
+    HISTORY_PATH = os.path.join(args.preview_dir, "history.jsonl")
 
     if not os.path.isfile(os.path.join(PREVIEW_DIR, "preview.html")):
         print(f"UYARI: {PREVIEW_DIR}/preview.html bulunamadı; "
