@@ -4,7 +4,7 @@
   "path_in_repo": "_calisma/CIKTI/TESLIM_KLASOR_V5_2026-08-17.zip",
   "generations": [
     {
-      "note": "orijinal (§9)",
+      "note": "pre-git kaynak (iCloud orijinal §9)",
       "hash": "363a06e36d71666e70fead77bf44d4c82da2edb57c1be1a30095da1a179a08aa",
       "commit": null,
       "current": false

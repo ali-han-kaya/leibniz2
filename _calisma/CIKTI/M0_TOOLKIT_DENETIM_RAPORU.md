@@ -205,7 +205,7 @@ hesaplayıp kayıtlı hash'le karşılaştırır; `current` nesli ayrıca canlı
 dosyayla doğrular (P0). Bu bölüm artık yalnızca o kaynağın özetidir:
 
 ```text
-363a06e3…  (orijinal, §9)                          [pre-git, dondurulmuş]
+363a06e3…  (pre-git kaynak: iCloud orijinal, §9)   [pre-git, dondurulmuş]
 3ef74cae…  (yeni, §9)                              [pre-git, dondurulmuş]
 af8067ca…  (git init, 9f72b0e)                     [git show ile doğrulanır]
 295aae0c…  (V5h: Beth 1953 + Fosl 1998, c65e84b)  [git show ile doğrulanır]
