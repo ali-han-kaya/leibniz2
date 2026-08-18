@@ -68,9 +68,11 @@ jobs:
         run: pip install z3-solver==5.1.0.0
 
       # K9: Lean 4 reduct-invariance (elan + stable toolchain).
+      # NOT: `--default-toolchain none` + lean-toolchain dosyası yok = lean
+      # çalışmaz; bu yüzden stable toolchain açıkça kurulur.
       - name: Install Lean 4 (K9)
         run: |
-          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain leanprover/lean4:stable
           echo "$HOME/.elan/bin" >> $GITHUB_PATH
 
       # `pipefail` + `tee`: çıktı hem log'a hem dosyaya yazılır, ama exit kodu
@@ -363,7 +365,7 @@ jobs:
       # alanından pre-commit tarafından otomatik kurulur.
       - name: Install Lean 4 (verify-delivery-lean hook)
         run: |
-          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain leanprover/lean4:stable
           echo "$HOME/.elan/bin" >> $GITHUB_PATH
 
       # ADVISORY: continue-on-error — build'i BLOKE ETMEZ (gate rolü verify
