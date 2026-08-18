@@ -24,6 +24,10 @@ Kullanım (tek komut):
                                               # K10: manifest.json'daki her SHA-256'yı gerçek dosyayla
                                               #      karşılaştır (reproducibility bütünlüğü)
     python3 verify_delivery.py --check-lineage  # soy hattı: zip_lineage.json + git show ile her nesli doğrula
+    python3 verify_delivery.py --history-out history.jsonl
+                                              # run özetini JSONL kaydı olarak yaz (preview
+                                              # history.jsonl formatıyla birebir) — CI
+                                              # reproducibility manifest'ine SHA-256 sabitlenir
     python3 verify_delivery.py --check-plist
                                               # K11: update_preview.sh --plist-check exit kodunu
                                               #      denetle (0=GÜNCEL, 1=BAYAT, 2=şablon yok)
@@ -1189,6 +1193,7 @@ def check_zip_lineage(zip_path, lineage_path, add):
 
 
 def main():
+    t0 = time.time()  # run duvar saati (history.jsonl duration_s için)
     ap = argparse.ArgumentParser()
     ap.add_argument("--dir", default=os.path.dirname(os.path.abspath(__file__)))
     ap.add_argument("--json", action="store_true")
@@ -1213,6 +1218,11 @@ def main():
     ap.add_argument("--k0-out", default=None,
                     help="K0 bayat-zip bulgularını ayrı bir JSON'a yaz "
                          "(CI run summary'de ayrı bölüm göstermek için)")
+    ap.add_argument("--history-out", default=None,
+                    help="Run özetini JSONL kaydı olarak yaz (preview_server.py "
+                         "history.jsonl formatıyla birebir) — CI'da verify sonrası "
+                         "artifact'a yüklenir ve reproducibility manifest'inde "
+                         "SHA-256 ile sabitlenir")
     ap.add_argument("--budget-method", choices=["universal", "weighted", "both"],
                     default=None,
                     help="Bütçe tahmin yöntemi: universal (bytes/4), "
@@ -1854,6 +1864,39 @@ def main():
                   f"CrossRef {ror['by_source'].get('crossref', 0)} + "
                   f"SEP {ror['by_source'].get('sep', 0)} + "
                   f"OpenLibrary {ror['by_source'].get('openlibrary', 0)})")
+    # ---- Run-history sidecar (history.jsonl — CI reproducibility) ----
+    # preview_server.py'nin HISTORY_KEYS formatıyla birebir. CI'da verify
+    # sonrası artifact'a yüklenir; reproducibility job'ı (gen_repro_manifest.py)
+    # tüm artifact'ları hash'lediğinden SHA-256 ile otomatik sabitlenir.
+    # Append semantiği: aynı dosyaya tekrar koşulursa birikir (JSONL).
+    if args.history_out:
+        history_entry = {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "verdict": verdict,
+            "p0": p0,
+            "p1": p1,
+            "duration_s": round(time.time() - t0, 2),
+            "budget_usd": (budget_report or {}).get("estimated_usd"),
+            "pdf_pages": pages,
+            "ref_count": refs,
+            "raw_sha256": (pdf_meta_report or {}).get("raw"),
+            "stripped_sha256": (pdf_meta_report or {}).get("stripped"),
+            "exit_code": 0 if verdict == "PASS" else 1,
+            "refs_verified": (refs_online_report or {}).get("verified"),
+            "refs_total": (refs_online_report or {}).get("total_online"),
+            "refs_mismatch": (refs_online_report or {}).get("mismatch"),
+            "refs_by_source": (refs_online_report or {}).get("by_source"),
+        }
+        try:
+            with open(args.history_out, "a", encoding="utf-8") as hf:
+                hf.write(json.dumps(history_entry, ensure_ascii=False) + "\n")
+            if not args.json:
+                print(f"[HISTORY] run kaydı yazıldı: {args.history_out}")
+        except OSError as e:
+            print(f"HATA: history sidecar yazılamadı ({args.history_out}): {e}",
+                  file=sys.stderr)
+            return 1
+
     return 0 if verdict == "PASS" else 1
 
 

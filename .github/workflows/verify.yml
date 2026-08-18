@@ -111,6 +111,7 @@ jobs:
             --budget-out budget_verify.json \
             --config-out effective_config.json \
             --refs-out references_online.json \
+            --history-out history.jsonl \
             --k0-out k0_findings.json 2>&1 | tee verify_report.txt
           # (--full içinde --check-lineage: zip_lineage.json soy hattı doğrulanır)
 
@@ -438,6 +439,7 @@ jobs:
             2>/dev/null > verify_report.sha256 || true
           sha256sum references_online.json 2>/dev/null \
             > references_online.json.sha256 || true
+          sha256sum history.jsonl 2>/dev/null > history.jsonl.sha256 || true
 
       # `if: always()` — kapı FAIL olsa bile rapor (neden başarısız olduğu)
       # artifact olarak yüklenir. Tek rapor, tüm K1-K9 katmanlarını içerir.
@@ -517,6 +519,22 @@ jobs:
           path: |
             references_online.json
             references_online.json.sha256
+          if-no-files-found: ignore
+          retention-days: 30
+
+      # Run-history (history.jsonl): verify_delivery.py --history-out ile
+      # üretilen, preview_server.py'nin history formatıyla birebir tek JSONL
+      # kaydı (ts/verdict/p0/p1/duration_s/budget_usd/…). reproducibility
+      # job'ı tüm artifact'ları hash'lediğinden bu dosya da SHA-256 ile
+      # otomatik sabitlenir. if: always() — kapı FAIL olsa da yüklenir.
+      - name: Upload run history (history.jsonl)
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: run-history
+          path: |
+            history.jsonl
+            history.jsonl.sha256
           if-no-files-found: ignore
           retention-days: 30
 
@@ -730,7 +748,7 @@ jobs:
         with:
           path: all_artifacts/
           merge-multiple: true
-          pattern: '{verify-report,budget,reports,config,precommit-logs,refs-online}'
+          pattern: '{verify-report,budget,reports,config,precommit-logs,refs-online,run-history}'
 
       # ─── 2) manifest.txt üret (gen_repro_manifest.py — tek kaynak) ─────────
       - name: Generate reproducibility manifest
