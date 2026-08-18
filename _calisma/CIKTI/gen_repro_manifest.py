@@ -7,9 +7,16 @@ mantığının standalone hali. Aynı kod hem CI'da hem yerelde (mock artifact'l
 simülasyon / doğrulama) çalışır → CI ile yerel arasında drift olmaz.
 
 Çıktılar (--out-dir altına):
-  manifest.txt    — insan-okur: FILE + SHA-256 tablosu
+  manifest.txt    — insan-okur: FILE + SHA-256 tablosu + CONFIG bölümü
   manifest.json   — makine-okur: tool/generated/run/sha/ref/files{rel: sha256}
+                    + config{files, combined_sha256}
   + tüm artifact'ların kopyası (bundle)
+
+CONFIG bölümü: artifacts-dir altındaki config/ önekiyle dosyalar ayrıca
+hash'lenir (FILE tablosunda zaten var — bu ayrı bölüm denetlenebilirliği
+artırır). combined_sha256 = tüm config dosyalarının (rel\0hash\n sıralı
+birleşiminin) SHA-256'sı — deterministik, config'in hangi sürümünün
+kullanıldığını tek hash ile özetler.
 
 Ortam değişkenleri (CI'da GitHub Actions set eder; yerelde override edilebilir):
   GITHUB_RUN_ID, GITHUB_SHA, GITHUB_REF, GITHUB_REPOSITORY, GITHUB_RUN_URL
@@ -75,6 +82,29 @@ def main() -> None:
 
     lines += ["", "-" * 72, f"Total files: {len(file_hashes)}", ""]
 
+    # ── CONFIG bölümü: config/ önekli dosyalar ayrıca işaretlenir ──────────
+    config_hashes = {rel: h for rel, h in file_hashes.items()
+                     if rel.startswith("config/")}
+    config_combined = None
+    if config_hashes:
+        sorted_rel = sorted(config_hashes)
+        config_combined = hashlib.sha256(
+            "".join(f"{rel}\0{config_hashes[rel]}\n" for rel in sorted_rel).encode()
+        ).hexdigest()
+        cfg_block = [
+            "",
+            "=" * 72,
+            "CONFIG ARTIFACT (ayrı bölüm)",
+            "=" * 72,
+            f"{'FILE':<55} {'SHA-256'}",
+            "-" * 72,
+        ]
+        cfg_block += [f"{rel:<55} {config_hashes[rel]}" for rel in sorted_rel]
+        cfg_block += ["-" * 72,
+                      f"config_combined_sha256: {config_combined}",
+                      "=" * 72]
+        lines += cfg_block
+
     manifest_json = {
         "tool": "stoic-hume-v5-reproducibility",
         "generated": now,
@@ -85,6 +115,11 @@ def main() -> None:
         "github_run_url": run_url,
         "files": file_hashes,
     }
+    if config_hashes:
+        manifest_json["config"] = {
+            "files": dict(sorted(config_hashes.items())),
+            "combined_sha256": config_combined,
+        }
 
     out_dir = pathlib.Path(args.out_dir)
     out_dir.mkdir(exist_ok=True)
