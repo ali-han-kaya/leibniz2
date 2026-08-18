@@ -26,6 +26,11 @@ name: verify-delivery
 #   config-drift  : gen_config.py --dry-run ile commit'li config'in paket
 #                   içeriğinden türetilen değerlerle uyuştuğunu doğrular
 #                   (fark = FAIL, fail-closed).
+#   repack-verify : commit'li zip'lerden kaynak ağacını yeniden kurar,
+#                   repack_delivery.py'yi deterministik koşar, çıktının
+#                   commit'li zip'lerle byte-identical olduğunu (git diff
+#                   boş) ve verify_delivery.py base'in geçtiğini doğrular —
+#                   sidecar senkronu her push'ta otomatik garanti edilir.
 
 on:
   push:
@@ -621,3 +626,85 @@ jobs:
       - name: Run gen_config.py --dry-run (drift = FAIL)
         run: |
           python3 _calisma/CIKTI/gen_config.py --dry-run --dir _calisma/CIKTI
+
+  # ──────────────────────────────────────────────────────────────────────
+  # REPACK → VERIFY (SIDECAR SYNC)
+  #
+  # Kaynak ağacı (V5_ICERIK/, TESLIM/) git'te YOK — yalnızca CIKTI/'daki
+  # zip'ler commit'li. Bu job commit'li zip'lerden kaynak ağacını yeniden
+  # kurar, repack_delivery.py'yi deterministik koşar ve çıktının commit'li
+  # zip'lerle BYTE-IDENTICAL olduğunu doğrular (git diff boş). Fark varsa
+  # ya repack determinizmi bozulmuş ya da commit'li zip'ler bayat demektir
+  # → FAIL. Ardından verify_delivery.py base (K1-K7) repack sonucu üzerinde
+  # koşar. Böylece sidecar senkronu (zip ↔ .sha256) her push'ta otomatik
+  # garanti edilir.
+  # ──────────────────────────────────────────────────────────────────────
+  repack-verify:
+    name: Repack determinism + verify (sidecar sync)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # repack PDF sidecar için qpdf kullanır (K6-DETERM reuse mantığı);
+      # verify base K6 için pdfinfo gerekir.
+      - name: Install pdfinfo + qpdf (repack + verify deps)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y poppler-utils qpdf
+
+      # Kaynak ağacını commit'li zip'lerden yeniden kur:
+      #   dış zip  → _calisma/TESLIM/Stoic-Hume-Final-V5_2026-08-17/
+      #   iç zip   → _calisma/V5_ICERIK/TESLIM_V5_FINAL_2026-08-17/
+      - name: Reconstruct source tree from committed zips
+        run: |
+          python3 - <<'EOF'
+          import pathlib, zipfile
+          jobs = [
+              ("_calisma/CIKTI/TESLIM_KLASOR_V5_2026-08-17.zip", "_calisma/TESLIM"),
+              ("_calisma/CIKTI/TESLIM_V5_FINAL_2026-08-17.zip", "_calisma/V5_ICERIK"),
+          ]
+          for zf, dest in jobs:
+              pathlib.Path(dest).mkdir(parents=True, exist_ok=True)
+              with zipfile.ZipFile(zf) as z:
+                  z.extractall(dest)
+          print("kaynak agaci commit'li zip'lerden kuruldu")
+          EOF
+
+      # Deterministik repack — çıktı commit'li zip'lerle aynı olmalı.
+      - name: Run repack_delivery.py (deterministic)
+        run: |
+          python3 _calisma/repack_delivery.py
+
+      # SIDECAR SYNC KAPISI: repack çıktısı commit'li dosyaları değiştiriyorsa
+      # (git diff boş değilse) byte-identical değildir → FAIL. Kanıt: repack
+      # öncesi/sonrası CIKTI/ dosyaları aynı hash.
+      - name: Verify byte-identical repack (git diff must be empty)
+        run: |
+          if ! git diff --exit-code -- _calisma/CIKTI/; then
+            echo "::error::repack ciktisi commit'li zip'lerle byte-identical DEGIL — sidecar senkronu bozuk"
+            git diff --stat -- _calisma/CIKTI/
+            exit 1
+          fi
+          echo "byte-identical repack OK: commit'li zip'ler <-> repack ciktisi ayni"
+
+      # Repack sonucu üzerinde base verify (K1-K7) — sidecar'lar senkron,
+      # manifest tutarlı.
+      - name: Verify repacked package (base K1-K7)
+        run: |
+          set -o pipefail
+          python3 _calisma/CIKTI/verify_delivery.py --dir _calisma/CIKTI 2>&1 | tee repack_verify_report.txt
+
+      - name: Upload repack-verify report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: repack-verify
+          path: repack_verify_report.txt
+          retention-days: 30
+          if-no-files-found: error
