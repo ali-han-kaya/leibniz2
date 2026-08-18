@@ -1,7 +1,7 @@
 # REFERANS KANIT DENETİMİ — 64/64
 
 **Hedef:** `ingiliz_empirizmi_v3.tex` §References (64 girdi)
-**Yöntem:** CrossRef API (dergi makaleleri) + bağımsız web araması (kitaplar/edişyonlar) + SEP doğrudan URL (5 girdi). Her "GEÇTİ" bir bağımsız kaynağa dayanır; kaynak adresi `Kanıt` sütunundadır.
+**Yöntem:** CrossRef API (4 dergi makalesi) + SEP doğrudan URL (5) + OpenLibrary (22 kitap/edişyon) + Internet Archive (21; kapsam dışı kalanlar HathiTrust + Google Books fallback) + Perseus CTS (2 antik birincil metin) — çevrimiçi doğrulanan 54/64. Çevrimiçi indekslenmeyen kalan girdiler bağımsız web/bibliyografik kaynağa dayanır. Her "GEÇTİ" bir bağımsız kaynağa dayanır; kaynak adresi `Kanıt` sütunundadır.
 **Tarih:** 2026-08-17 · **Güncelleme:** 2026-08-18 (V5h/V5j düzeltmeleri işlendi) · **Sonuç etiketi:** GEÇTİ (birebir) / DÜZELTİLDİ (V5h/V5j) / KÜÇÜK NOT (bibliyografik küçük sapma) / HATA (düzeltme gerekir) / DOĞRULANAMADI.
 
 ---
@@ -142,3 +142,17 @@ V5i (2026-08-17) K6-DETERM katmanını ekledi: `qpdf --remove-metadata` ile PDF'
 |---|---|
 | `TESLIM_KLASOR_V5_2026-08-17.zip` (dış) | `34e81dff5410e6095fa4d0e79c867bec0b892fabde1fc7db6c0b1ac6445f8bd8` |
 | `TESLIM_V5_FINAL_2026-08-17.zip` (iç) | `6ba67ff8dfb39753730450c74464dc122c630427992e8b6373eaf044b62298fd` |
+
+### 5.4 Çevrimiçi kapsam genişletmesi (IA/Perseus + fallback)
+
+Denetim başlangıçta CrossRef + SEP + "bağımsız web araması" idi. `verify_delivery.py --check-references` çevrimiçi doğrulamayı şu kaynaklara genişletti:
+
+| Kaynak | Girdi | Yöntem |
+|---|---|---|
+| CrossRef | 4 | DOI canlı doğrulama (dergi makaleleri) |
+| SEP | 5 | doğrudan URL |
+| OpenLibrary | 22 | search.json (kitap/edişyon) |
+| Internet Archive | 21 | advancedsearch; kapsam dışı kalanlar HathiTrust (identifier) + Google Books (GBOOKS_API_KEY) fallback'iyle denenir |
+| Perseus CTS | 2 | GetPassage (antik birincil metin pasajı) |
+
+Toplam **54 canlı girdi**; kalan girdiler §2 tablosuna ve sabit denetim notlarına dayanır. Sonuçlar her CI run'ında `refs-online` VERSION JSON + `refs-trend` zaman serisinde izlenir. İki dürüst sınır: Google Books anahtarsız **429** (kota) döndürür — tam denetim `GBOOKS_API_KEY` ister; HathiTrust ISBN yerine **OCLC** indeksler — ISBN'li `ht_ids` çoğu modern telifli kitapta kayıt bulamaz. Her ikisi de yanlış PASS üretmez, `UNVERIFIED` izi bırakır.
