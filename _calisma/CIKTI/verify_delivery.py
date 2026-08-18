@@ -31,8 +31,12 @@ Kullanım (tek komut):
     python3 verify_delivery.py --check-plist
                                               # K11: update_preview.sh --plist-check exit kodunu
                                               #      denetle (0=GÜNCEL, 1=BAYAT, 2=şablon yok)
-    python3 verify_delivery.py --full          # tüm katmanlar: K1-K9 + referans denetimi + Z3 + Lean
-                                              #   (--check-references + --symbolic-proof + --lean-proof)
+    python3 verify_delivery.py --check-repro-manifest
+                                              # K12: gen_repro_manifest.py'yi mock artifact'larla
+                                              #      koşup manifest tutarlılığını denetle
+    python3 verify_delivery.py --full          # tüm katmanlar: K1-K12 + referans denetimi + Z3 + Lean
+                                              #   (--check-references + --symbolic-proof +
+                                              #    --lean-proof + --check-lineage + --check-repro-manifest)
 
 Exit kodu: 0 = PASS, 1 = FAIL, 2 = kullanım/ortam hatası.
 
@@ -40,7 +44,7 @@ Yalnızca Python 3 standart kütüphanesi kullanır (hashlib, zipfile, subproces
 tempfile; --check-references için ayrıca urllib). Harici `unzip`/`shasum`/`diff`
 GEREKMEZ. pdfinfo varsa PDF sayfa kontrolü eklenir, yoksa atlanır (FAIL değil).
 
-Doğrulama zinciri (Katman 0..11):
+Doğrulama zinciri (Katman 0..12):
   K0  Bayat    CIKTI dışında kalan HER zip taraması (recursive; P1)
   K1  Dış zip  SHA-256 sidecar (kurcalanma)
   K2  Klasör   KLASOR_CHECKSUMLARI.sha256 (tüm dosyalar)
@@ -59,12 +63,16 @@ Doğrulama zinciri (Katman 0..11):
   K11 Plist    LaunchAgent plist şablonu: update_preview.sh --plist-check
                exit kodu (0=GÜNCEL, 1=BAYAT, 2=şablon yok) — drift → P1
                (--check-plist; macOS'a özgü, --full'a dahil değil)
+  K12 Repro    gen_repro_manifest.py self-testi: mock artifact'lardan manifest
+               üretip kapsam + SHA-256 tutarlılığını denetler (fail-closed;
+               --check-repro-manifest, --full'a dahil)
 """
 import argparse
 import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -1145,6 +1153,8 @@ def check_zip_lineage(zip_path, lineage_path, add):
     return False, detail
 
 
+def verify_manifest_digest(manifest_path, add, check_id="K10-MANIFEST",
+                           check_label="K10 manifest digest"):
     """K10: manifest.json'daki her dosyanın SHA-256'sını gerçek dosyayla karşılaştır.
 
     manifest.json gen_repro_manifest.py tarafından üretilir: {"files": {rel: sha256}}.
@@ -1172,14 +1182,14 @@ def check_zip_lineage(zip_path, lineage_path, add):
         if not os.path.isfile(fp):
             n_missing += 1
             bad_rows.append(f"{rel} (EKSİK)")
-            add("P1", "K10-MANIFEST", "K10 manifest digest",
+            add("P1", check_id, check_label,
                 f"manifest'teki dosya yok: {rel}")
             continue
         actual = hashlib.sha256(open(fp, "rb").read()).hexdigest()
         if actual != expected:
             n_bad += 1
             bad_rows.append(f"{rel} (beklenen {expected[:16]}… ≠ {actual[:16]}…)")
-            add("P1", "K10-MANIFEST", "K10 manifest digest",
+            add("P1", check_id, check_label,
                 f"SHA-256 uyuşmazlığı: {rel}",
                 f"beklenen {expected[:16]}… gerçek {actual[:16]}…")
         else:
@@ -1190,6 +1200,106 @@ def check_zip_lineage(zip_path, lineage_path, add):
     if bad_rows:
         detail += " | " + "; ".join(bad_rows[:5])
     return (n_bad == 0 and n_missing == 0), detail
+
+
+def check_repro_manifest_self_consistency(add):
+    """K12: gen_repro_manifest.py'yi mock artifact'larla koşup manifest
+    tutarlılığını denetler (fail-closed).
+
+    Reproducibility manifest üreticisinin self-testi: bilinen içerikli mock
+    dosyalar (alt dizin + config/ dahil) üretilir, gen_repro_manifest.py
+    bunlardan manifest.json üretir, üretilen her SHA-256 gerçek dosyayla
+    yeniden hash'lenerek karşılaştırılır. Üretici bug'ı/drift'i (eksik
+    kayıt, yanlış hash, üretilemeyen manifest) P0/P1 ile patlar.
+    Döndürür (ok: bool, detail: str).
+    """
+    script = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                          "gen_repro_manifest.py")
+    if not os.path.isfile(script):
+        add("P0", "K12-REPRO", "K12 repro manifest",
+            "gen_repro_manifest.py yok", script)
+        return False, f"{script} yok"
+
+    mock = {
+        "a.txt": b"hello A\n",
+        "sub/b.bin": b"\x00\x01\x02\x03",
+        "config/cfg.json": b'{"k": 1}',
+    }
+    tmp = tempfile.mkdtemp(prefix="repro_manifest_")
+    try:
+        art = os.path.join(tmp, "artifacts")
+        out = os.path.join(tmp, "out")
+        for rel, data in mock.items():
+            fp = os.path.join(art, rel)
+            os.makedirs(os.path.dirname(fp), exist_ok=True)
+            with open(fp, "wb") as f:
+                f.write(data)
+        env = dict(os.environ)
+        env.update({
+            "GITHUB_RUN_ID": "local-selftest",
+            "GITHUB_SHA": "mock-sha",
+            "GITHUB_REF": "refs/heads/local-selftest",
+        })
+        try:
+            r = subprocess.run(
+                [sys.executable, script, "--artifacts-dir", art,
+                 "--out-dir", out],
+                capture_output=True, text=True, env=env, timeout=60)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            add("P0", "K12-REPRO", "K12 repro manifest",
+                f"gen_repro_manifest.py çalıştırılamadı: {e}")
+            return False, f"üretici çalıştırılamadı: {e}"
+        if r.returncode != 0:
+            detail = (r.stderr or r.stdout or "").strip()[:300]
+            add("P0", "K12-REPRO", "K12 repro manifest",
+                f"gen_repro_manifest.py exit={r.returncode}", detail)
+            return False, f"üretici başarısız (exit={r.returncode}): {detail}"
+
+        mpath = os.path.join(out, "manifest.json")
+        if not os.path.isfile(mpath):
+            add("P0", "K12-REPRO", "K12 repro manifest",
+                "manifest.json üretilmedi", out)
+            return False, f"manifest.json üretilmedi: {out}"
+        try:
+            with open(mpath, encoding="utf-8") as mf:
+                m = json.load(mf)
+        except (json.JSONDecodeError, OSError) as e:
+            add("P0", "K12-REPRO", "K12 repro manifest",
+                f"manifest.json okunamadı: {e}", mpath)
+            return False, f"manifest okunamadı: {e}"
+        files = m.get("files")
+        if not isinstance(files, dict) or not files:
+            add("P0", "K12-REPRO", "K12 repro manifest",
+                "manifest 'files' yok/boş")
+            return False, "manifest 'files' yok/boş"
+
+        # Tamlık: her mock dosya manifest'te olmalı, fazla/eksik kayıt olmamalı.
+        expected = set(mock)
+        got = set(files)
+        if got != expected:
+            missing = sorted(expected - got)
+            extra = sorted(got - expected)
+            add("P1", "K12-REPRO", "K12 repro manifest",
+                f"manifest kapsamı mock'larla uyuşmuyor "
+                f"(eksik={missing}, fazla={extra})")
+            return False, f"kapsam uyuşmuyor: eksik={missing} fazla={extra}"
+
+        # Hash tutarlılığı: manifest'teki her SHA-256 bundle kopyasıyla aynı mı?
+        n_bad = 0
+        for rel in sorted(expected):
+            fp = os.path.join(out, rel)  # bundle kökü = out/ (üretici kopyalar)
+            actual = hashlib.sha256(open(fp, "rb").read()).hexdigest()
+            if actual != files[rel]:
+                n_bad += 1
+                add("P1", "K12-REPRO", "K12 repro manifest",
+                    f"SHA-256 uyuşmazlığı: {rel}",
+                    f"beklenen {files[rel][:16]}… gerçek {actual[:16]}…")
+        ok = n_bad == 0
+        detail = (f"{len(expected) - n_bad} OK / {n_bad} uyuşmazlık "
+                  f"({len(expected)} mock dosya)")
+        return ok, detail
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 def main():
@@ -1248,8 +1358,13 @@ def main():
                     help="K11: update_preview.sh --plist-check exit kodunu denetle "
                          "(0=GÜNCEL, 1=BAYAT, 2=şablon yok; macOS'a özgü, "
                          "--full'a dahil değil)")
+    ap.add_argument("--check-repro-manifest", action="store_true",
+                    help="K12: gen_repro_manifest.py'yi mock artifact'larla koşup "
+                         "manifest tutarlılığını denetle (fail-closed)")
     ap.add_argument("--full", action="store_true",
-                    help="Tüm katmanları (--check-references + --symbolic-proof + --lean-proof) tek komutla koş")
+                    help="Tüm katmanları tek komutla koş: --check-references + "
+                         "--symbolic-proof + --lean-proof + --check-lineage + "
+                         "--check-repro-manifest")
     args = ap.parse_args()
     # --full, tüm isteğe bağlı katmanları aktifleştirir
     if args.full:
@@ -1257,6 +1372,7 @@ def main():
         args.symbolic_proof = True
         args.lean_proof = True
         args.check_lineage = True
+        args.check_repro_manifest = True
 
     # ---- Konfig yükleme (CLI bayrakları config'ten öncelikli) ----
     # Fail-closed: geçersiz JSON veya şema ihlali artık sessizce varsayılana
@@ -1698,6 +1814,18 @@ def main():
                 print(f"[K11] plist şablon: "
                       f"{'PASS' if rc == 0 else 'FAIL'} (exit={rc}) — {txt[:100]}")
 
+    # ---- K12: reproducibility manifest üreticisi self-testi ----
+    # gen_repro_manifest.py'yi bilinen içerikli mock artifact'larla koşar;
+    # üretilen manifest'in kapsamı + SHA-256'ları fail-closed denetlenir.
+    # Üreticideki bir drift/bug paketin reproducibility zincirini bozar → P0/P1.
+    repro_manifest_report = None
+    if args.check_repro_manifest:
+        repro_ok, repro_detail = check_repro_manifest_self_consistency(add)
+        repro_manifest_report = {"ok": repro_ok, "detail": repro_detail}
+        if not args.json:
+            print(f"[K12] repro manifest: "
+                  f"{'PASS' if repro_ok else 'FAIL'} — {repro_detail}")
+
     # ---- Bütçe kalkanı: iki yöntem yan yana ----
     # (a) Evrensel: token ≈ bytes/4      (v3_verify.py H4, bağımsız referans)
     # (b) Ağırlıklı: token ≈ bytes/r_i    (dosya tipine göre bytes-per-token)
@@ -1826,6 +1954,7 @@ def main():
         "pdf_hash": pdf_meta_report,
         "references_online": refs_online_report,
         "manifest_digest": manifest_digest_report,
+        "repro_manifest": repro_manifest_report,
         "lineage": lineage_report,
         "plist": plist_report,
     }
