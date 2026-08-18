@@ -1068,12 +1068,19 @@ def main():
     else:
         print(f"UYARI: konfig dosyası yok ({cfg_path}), varsayılanlar kullanılacak")
 
+    # CLI override takibi: dosyadan gelen değerler, çözümleme öncesi yakalanır
+    # (args.budget/args.budget_method None ise CLI'da verilmemiş demektir).
+    file_budget_usd = cfg.get("budget_usd", 30.0)
+    file_budget_method = cfg.get("budget_method", "both")
+    cli_gave_budget = args.budget is not None
+    cli_gave_method = args.budget_method is not None
+
     if args.budget is None:
-        args.budget = cfg.get("budget_usd", 30.0)
+        args.budget = file_budget_usd
     if isinstance(args.budget, int):
         args.budget = float(args.budget)
     if args.budget_method is None:
-        args.budget_method = cfg.get("budget_method", "both")
+        args.budget_method = file_budget_method
     # Bütçe hesabının kullanacağı beklenen sayıları da config'ten doldur
     globals()["EXPECTED_MANIFEST"] = cfg.get("expected_manifest", EXPECTED_MANIFEST)
     globals()["EXPECTED_REFS"] = cfg.get("expected_refs", EXPECTED_REFS)
@@ -1082,6 +1089,18 @@ def main():
     # ---- Etkin konfig (çözümlenmiş değerler) ----
     # Hangi config'in kullanıldığını (dosya mı, varsayılan mı; CLI override'ları
     # dahil) denetlenebilir kılmak için rapora ve --config-out sidecar'ına yazılır.
+    # cli_overrides: her bütçe parametresi için CLI'da verilen değer (yoksa null),
+    # dosyadan gelen değer ve hangisinin etkin olduğu — override'lar ayrı
+    # alanlarda görünür, dosyayla karşılaştırılabilir.
+    def _override_rec(cli_given, cli_val, file_val, eff_val):
+        return {
+            "cli_given": cli_given,
+            "cli_value": cli_val,
+            "file_value": file_val,
+            "effective": eff_val,
+            "override": cli_given and cli_val != file_val,
+        }
+
     effective_config = {
         "config_path": cfg_path,
         "source": "file" if cfg_loaded else "defaults",
@@ -1091,6 +1110,14 @@ def main():
         "expected_pages": cfg.get("expected_pages", EXPECTED_PAGES),
         "expected_refs": cfg.get("expected_refs", EXPECTED_REFS),
         "expected_manifest": cfg.get("expected_manifest", EXPECTED_MANIFEST),
+        "cli_overrides": {
+            "budget": _override_rec(
+                cli_gave_budget, args.budget if cli_gave_budget else None,
+                file_budget_usd, args.budget),
+            "budget_method": _override_rec(
+                cli_gave_method, args.budget_method if cli_gave_method else None,
+                file_budget_method, args.budget_method),
+        },
     }
     if args.config_out:
         try:
@@ -1531,6 +1558,11 @@ def main():
               f"pages={effective_config['expected_pages']}, "
               f"refs={effective_config['expected_refs']}, "
               f"manifest={effective_config['expected_manifest']})")
+        ov = effective_config.get("cli_overrides", {})
+        for k, rec in ov.items():
+            if rec.get("override"):
+                print(f"  [CLI override] {k}: {rec['file_value']!r} → {rec['effective']!r} "
+                      f"(CLI verildi)")
         if budget_report:
             print(f"Bütçe: ~{budget_report['tokens_est']} token → ${budget_report['estimated_usd']} "
                   f"(limit ${budget_report['limit']})")
