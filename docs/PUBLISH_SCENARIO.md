@@ -109,19 +109,18 @@ gh repo create leibniz2 \
 #     macOS'ta doğrudan açmak için:
 open "https://github.com/<user>/leibniz2/settings/branches"
 #
-#     Web UI'da:
+#     Web UI'da (adım adım → aşağıdaki "Branch protection — web UI adım adım"):
 #       "Add branch protection rule" → Branch name pattern: `main`
 #       ✓ Require status checks to pass before merging
-#         → ara ve ekle: önce otomatik ad listesini al (tek kaynak = workflow):
+#         → 7 check (adlar = workflow job `name:` alanları — tek kaynaktan al):
 #             python3 _calisma/CIKTI/status_checks.py
-#           (6 kapı; adlar = workflow job `name:` alanları — elle yazma,
-#           workflow değişince sürüklenmesin):
 #           Delivery verification — K1-K9 (single entry point)
 #           Budget shield (aggregated)
 #           Static markdown reports (incl. pre-commit findings)
 #           Reproducibility bundle
 #           Config drift check (gen_config --dry-run)
 #           Repack determinism + verify (sidecar sync)
+#           Online verification trend (refs-online across runs)
 #         (manifest-comment job'ı yalnızca PR'da koşar — required check değil)
 #           → ✓ "Require branches to be up to date before merging" (strict)
 #       ✓ Do not allow bypassing the above settings   (enforce_admins)
@@ -129,20 +128,66 @@ open "https://github.com/<user>/leibniz2/settings/branches"
 #       ✓ Disallow deletions
 ```
 
+### Branch protection — web UI adım adım (7 required check)
+
+> Kural yalnızca `main` içindir. Check adları TEK KAYNAKTAN (workflow job
+> `name:` alanları) gelir — güncel listeyi üret:
+> `python3 _calisma/CIKTI/status_checks.py`
+
+1. **GitHub web'e gir** — tarayıcıda:
+   `https://github.com/<user>/leibniz2/settings/branches`
+   (Repo sayfasında **Settings → Branches** — sol menüde "Code and automation" altında.)
+
+2. **Yeni kural başlat** — sağ üstte **"Add branch protection rule"** (veya **"Add rule"**).
+
+3. **Branch name pattern:** kutuya `main` yaz. **"All branches"** seçeneğini kullanma
+   — kural yalnızca `main` için.
+
+4. **PR şartı (önerilen):** **"Require a pull request before merging"** ✓ işaretle —
+   main'e doğrudan push artık reddedilir. "Require approvals" için 1 bırak
+   (tek kişilik repoda 0 da olur).
+
+5. **Status checks (ANA kapı):** **"Require status checks to pass before merging"** ✓.
+   Kutucuk genişleyince:
+   - **Ön koşul:** check'lerin arama listesinde görünmesi için o branch'te CI'ın
+     **en az bir kez koşmuş** olması gerekir. Yeni/boş repoda kural kuruyorsan önce
+     bir push ya da PR ile workflow'u tetikle, yeşil run'ı bekle, sonra bu adıma dön.
+   - Arama kutusuna şu **7 adı** tek tek yazıp seç (birebir, `—` karakteri dahil):
+     1. `Delivery verification — K1-K9 (single entry point)`
+     2. `Budget shield (aggregated)`
+     3. `Static markdown reports (incl. pre-commit findings)`
+     4. `Reproducibility bundle`
+     5. `Config drift check (gen_config --dry-run)`
+     6. `Repack determinism + verify (sidecar sync)`
+     7. `Online verification trend (refs-online across runs)`
+     > `manifest-comment` job'ı yalnızca PR'da koşar — required check DEĞİL; ekleme.
+   - **"Require branches to be up to date before merging"** ✓ (strict) — PR'ın base'i
+     main'in gerisindeyse merge reddedilir.
+
+6. **Enforce admins:** **"Do not allow bypassing the above settings"** ✓ — adminler de
+   kapıya takılır.
+
+7. **Güvenlik:** **"Disallow force pushes"** ✓ ve **"Disallow deletions"** ✓ (Allow
+   seçenekleri kapalı kalmalı).
+
+8. **Kaydet:** **"Create"** (kural zaten varsa **"Save changes"**).
+
+9. **Doğrula (otomatik):** koruma kurulduktan sonra:
+   ```bash
+   python3 _calisma/CIKTI/status_checks.py --gh
+   # SONUÇ: PASS — 7 check birebir eşleşiyor (workflow ↔ GitHub)
+   ```
+   Eksik/fazla check → exit 1 (fail-closed): listeyi `status_checks.py` çıktısıyla
+   eşitle veya workflow'u güncelle.
+
 **Beklenen çıktılar:**
 - `gh repo create` → "Created repository <user>/leibniz2"
 - Tarayıcıda Settings → Branches → `main` için kural eklendi (koruma aktif)
 
 **Görsel doğrulama:** https://github.com/<user>/leibniz2 adresi boş repo olarak açılmalı.
 
-**Sonraki doğrulama (koruma kurulduktan sonra):** workflow ↔ GitHub eşleşmesi
-otomatik kontrol edilir — AŞAMA 0'ı `--allow-remote` ile tekrar çalıştır veya:
-```bash
-python3 _calisma/CIKTI/status_checks.py --gh
-# SONUÇ: PASS — 6 check birebir eşleşiyor (workflow ↔ GitHub)
-```
-Eksik/fazla check → exit 1 (fail-closed): web UI'da listeyi `status_checks.py`
-çıktısıyla eşitle veya workflow'u güncelle.
+Koruma kurulduktan sonra doğrulama → yukarıdaki adım 9 (veya AŞAMA 0'ı
+`--allow-remote` ile tekrar çalıştır — (e) adımı aynı eşleşmeyi denetler).
 
 ---
 
@@ -195,7 +240,7 @@ gh run list --limit 3 --json databaseId,status,conclusion,name
 RUN_ID=$(gh run list --limit 1 --json databaseId -q '.[0].databaseId')
 gh run watch $RUN_ID --exit-status
 
-# (c) Artifact'ları kontrol et (10 adet olmalı — liste aşağıda)
+# (c) Artifact'ları kontrol et (11 adet olmalı — liste aşağıda)
 gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_bytes) B)"'
 ```
 
@@ -203,7 +248,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 --exit-status` + artifact listesi; sonuç `SONUÇ: PASS/FAIL` olarak loglanır
 (dry-run'da yalnızca önizlenir).
 
-**Beklenen (7 job):**
+**Beklenen (8 job):**
 | Job | Beklenen sonuç |
 |---|---|
 | Delivery verification — K1-K9 (single entry point) | ✅ PASS (P0=0, P1=0) — K1-K7 + K0 + soy hattı + bütçe + K8 (Z3 12/12) + K9 (Lean) tek komutta; pre-commit 4 hook'u advisory bölüm olarak aynı job içinde |
@@ -212,9 +257,10 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 | Reproducibility bundle | ✅ manifest.txt + SHA-256 (run_id ile) |
 | Config drift check (gen_config --dry-run) | ✅ config paketle uyumlu |
 | Repack determinism + verify (sidecar sync) | ✅ repack byte-identical, base verify PASS |
+| Online verification trend (refs-online across runs) | ✅ trend tablosu üretildi (advisory, run'lar arası) |
 | Manifest PR comment | yalnızca PR'da: manifest.txt PR yorumu olarak düşer |
 
-**Artifact listesi (10):**
+**Artifact listesi (11):**
 - `verify-report` (tek log: K1-K9 + pre-commit bölümü + .sha256)
 - `budget-verify` + `budget` (bütçe sidecar + aggregator)
 - `config` (ham + şema + etkin config + diff)
@@ -224,6 +270,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 - `reports` (statik markdown raporları)
 - `reproducibility` (tüm artifact'ların SHA-256 manifest'i)
 - `repack-verify` (repack sonrası base verify raporu)
+- `refs-trend` (run'lar arası çevrimiçi referans zaman serisi)
 
 **Not:** Kapı artık `verify_delivery.py --full`'dur (K1-K9, fail-closed) ve yeşildir —
 Beth 1953 / Fosl 1998 gibi referans düzeltmeleri V5h'te yapıldı; Kalan çevrimdışı
@@ -246,7 +293,7 @@ git push origin test/protection-check  # ← feature branch: geçer
 # Şimdi main'e PR aç:
 gh pr create --base main --head test/protection-check --title "docs: protection smoke"
 # Merge denenir. CI artık YEŞİL olduğundan reddedilme nedeni "FAIL check" değil:
-# required check'ler (6 kapı) TAMAMLANMADAN veya branch main'in gerisindeyken
+# required check'ler (7 kapı) TAMAMLANMADAN veya branch main'in gerisindeyken
 # (strict) merge REDDEDİLMELİ.
 gh pr merge --squash
 git checkout main
