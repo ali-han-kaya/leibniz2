@@ -1934,6 +1934,7 @@ def main():
         manifest_digest_report = {
             "path": os.path.abspath(args.verify_manifest),
             "ok": bool(manifest_ok),
+            "verdict": "PASS" if manifest_ok else "FAIL",
             "detail": manifest_detail,
         }
 
@@ -1971,6 +1972,8 @@ def main():
         if pdf_meta_report and pdf_meta_report.get("stripped"):
             print(f"PDF hash: raw={pdf_meta_report['raw'][:16]}… "
                   f"metadata-stripped={pdf_meta_report['stripped'][:16]}…")
+        if args.verify_manifest:
+            print(f"K10 manifest digest: {'PASS' if manifest_ok else 'FAIL'}")
         print(f"Config: {effective_config['source']} ← {effective_config['config_path']} "
               f"(budget_usd={effective_config['budget_usd']}, "
               f"method={effective_config['budget_method']}, "
