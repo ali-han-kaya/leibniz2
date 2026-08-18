@@ -460,7 +460,8 @@ jobs:
       # manifest'ine otomatik girer.
       - name: Generate config diff (advisory warning)
         if: always()
-        shell: python3 {0}
+        continue-on-error: true
+        shell: bash
         run: |
           python3 _calisma/CIKTI/diff_config_artifacts.py \
             --config-dir config \
@@ -733,7 +734,7 @@ jobs:
 
       # ─── 2) manifest.txt üret (gen_repro_manifest.py — tek kaynak) ─────────
       - name: Generate reproducibility manifest
-        shell: python3 {0}
+        shell: bash
         env:
           GITHUB_RUN_ID: ${{ github.run_id }}
           GITHUB_SHA: ${{ github.sha }}
