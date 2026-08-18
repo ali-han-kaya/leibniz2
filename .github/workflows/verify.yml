@@ -117,6 +117,19 @@ jobs:
           cp effective_config.json config/ 2>/dev/null || true
           sha256sum config/* 2>/dev/null > config/config.sha256 || true
 
+      # Config değiştiyse uyarı: ham config (verify_delivery.config.json) ile
+      # etkin config (effective_config.json) arasındaki farkları diff olarak
+      # üretir. Advisory (exit 0 — bloke etmez); bloke eden kapı config-drift.
+      # Çıktı config/ içine yazılır → config artifact'ına ve reproducibility
+      # manifest'ine otomatik girer.
+      - name: Generate config diff (advisory warning)
+        if: always()
+        shell: python3 {0}
+        run: |
+          python3 _calisma/CIKTI/diff_config_artifacts.py \
+            --config-dir config \
+            --out-dir config
+
       - name: Upload config snapshot
         if: always()
         uses: actions/upload-artifact@v4
