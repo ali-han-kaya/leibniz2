@@ -154,66 +154,9 @@ jobs:
 
       - name: Generate pre-commit findings report
         if: always()
-        shell: python3 {0}
+        shell: bash
         run: |
-          import re, datetime, pathlib
-
-          log = pathlib.Path("logs/precommit.log")
-          log_text = log.read_text(encoding="utf-8", errors="replace") if log.exists() else ""
-          try:
-              exit_code = int(pathlib.Path("logs/precommit.exit").read_text().strip())
-          except Exception:
-              exit_code = 1
-
-          hooks = [
-              {"name": m.group(1).strip(), "status": m.group(2)}
-              for m in re.finditer(r"^(.*?)\.{4,}(Passed|Failed)\s*$", log_text, re.M)
-          ]
-          findings = []
-          for pri in ("P0", "P1"):
-              for m in re.finditer(rf"^\[{pri}\] (.+)$", log_text, re.M):
-                  findings.append((pri, m.group(1).strip()))
-
-          now = datetime.datetime.utcnow().isoformat() + "Z"
-          verdict = "PASS" if exit_code == 0 else "FAIL"
-          lines = [
-              "# PRECOMMIT DENETİM RAPORU (CI advisory)",
-              "",
-              f"- **Tarih (UTC):** {now}",
-              "- **Komut:** `pre-commit run --all-files --show-diff-on-failure`",
-              f"- **Sonuç:** {verdict} (exit {exit_code})",
-              "- **Rol:** advisory — build'i bloke etmez; bulgular denetim içindir.",
-              "",
-              "## Hook sonuçları",
-              "",
-              "| Hook | Durum |",
-              "|---|---|",
-          ]
-          if hooks:
-              for h in hooks:
-                  lines.append(f"| {h['name']} | {h['status']} |")
-          else:
-              lines.append("| (hook sonucu ayrıştırılamadı) | — |")
-
-          lines += ["", "## Bulgular (P0/P1)", ""]
-          if findings:
-              lines += ["| Öncelik | Bulgu |", "|---|---|"]
-              for pri, text in findings:
-                  lines.append(f"| {pri} | {text.replace('|', '\\|')} |")
-          else:
-              lines.append("Bulgu yok — tüm hook'lar geçti.")
-          lines += [
-              "",
-              "## Ham log",
-              "",
-              "Tam çıktı `precommit.log` dosyasında (bu artifact içinde) saklanır.",
-              "",
-          ]
-
-          pathlib.Path("logs/PRECOMMIT_RAPORU.md").write_text(
-              "\n".join(lines), encoding="utf-8"
-          )
-          print(f"PRECOMMIT_RAPORU.md yazıldı: {len(hooks)} hook, {len(findings)} bulgu")
+          python3 _calisma/CIKTI/gen_precommit_report.py
 
       # ÖZET: pre-commit cache durumu + hook env sürümleri. Tekrarlanabilirlik
       # denetimi için: hangi pre-commit sürümü, hangi hook ortamları (env
@@ -276,42 +219,7 @@ jobs:
         if: always()
         shell: bash
         run: |
-          python3 - <<'PY'
-          import os, re, pathlib
-
-          report = pathlib.Path("logs/PRECOMMIT_RAPORU.md")
-          summary_path = os.environ["GITHUB_STEP_SUMMARY"]
-          if not report.exists():
-              with open(summary_path, "a") as s:
-                  s.write("## 🔍 Pre-commit: rapor bulunamadı\n\n"
-                          "> `logs/PRECOMMIT_RAPORU.md` üretilmedi "
-                          "(pre-commit kurulumu başarısız?).\n")
-              raise SystemExit(0)
-
-          text = report.read_text(encoding="utf-8")
-          findings = re.findall(r"^\| (P0|P1) \| (.+) \|$", text, re.M)
-          hooks = re.findall(r"^\| ([^|]+?) \| (Passed|Failed) \|$", text, re.M)
-          m = re.search(r"^- \*\*Sonuç:\*\* (.+)$", text, re.M)
-          verdict = m.group(1).strip() if m else "bilinmiyor"
-
-          with open(summary_path, "a") as s:
-              if findings:
-                  s.write(f"## 🔴 Pre-commit bulguları: {len(findings)} bulgu\n\n")
-                  for pri, msg in findings:
-                      s.write(f"- **{pri}**: {msg}\n")
-                  s.write("\n> Advisory — build'i bloke etmez; denetim içindir. "
-                          "Detay: `precommit-logs` artifact'ındaki PRECOMMIT_RAPORU.md.\n")
-              else:
-                  s.write("## ✅ Pre-commit: bulgu yok (tüm hook'lar geçti)\n\n")
-              s.write(f"> Sonuç: {verdict}\n")
-              if hooks:
-                  parts = " | ".join(
-                      f"`{h}` " + (":white_check_mark:" if st == "Passed" else ":x:")
-                      for h, st in hooks
-                  )
-                  s.write(f"> Hook'lar: {parts}\n")
-          print(f"Pre-commit summary written ({len(findings)} bulgu, {len(hooks)} hook).")
-          PY
+          python3 _calisma/CIKTI/run_summary_precommit.py
 
       # ─── P0 varsa PR etiketi + yorum ─────────────────────────────────────
       # Advisory pre-commit bulgularında P0 varsa PR'ye otomatik etiket
@@ -413,32 +321,7 @@ jobs:
         if: always()
         shell: bash
         run: |
-          python3 - <<'PY'
-          import json, os
-          path = "k0_findings.json"
-          summary_path = os.environ["GITHUB_STEP_SUMMARY"]
-          if not os.path.isfile(path):
-              with open(summary_path, "a") as s:
-                  s.write("## 🔍 K0 bayat zip: sidecar bulunamadı\n\n"
-                          "> `verify_delivery.py` `--k0-out` üretmedi "
-                          "(verify job'u çalışmadı?).\n")
-              raise SystemExit(0)
-          data = json.load(open(path))
-          count = data.get("count", 0)
-          findings = data.get("findings", [])
-          with open(summary_path, "a") as s:
-              if count:
-                  s.write(f"## 🔴 K0 bayat zip: {count} bulgu\n\n")
-                  for f in findings:
-                      s.write(f"- `{f['rel']}`  (`{f['sha256'][:16]}…`)\n")
-                  s.write("\n> Fail-closed: P1 bulgusu olarak işaretlendi. "
-                          "Kanonik kopya yalnızca `_calisma/CIKTI/` altında "
-                          "olmalıdır.\n")
-              else:
-                  s.write("## ✅ K0 bayat zip: temiz (bulgu yok)\n\n"
-                          "> CIKTI dışında zip bulunamadı.\n")
-          print(f"K0 summary written ({count} findings).")
-          PY
+          python3 _calisma/CIKTI/run_summary_k0.py
 
       - name: Generate SHA-256 for verify artifacts
         shell: bash
@@ -578,77 +461,14 @@ jobs:
           mkdir -p budget
           cp budget_sidecars/*.json budget/ 2>/dev/null || true
           # Index: bütçe sidecar'larını topla, aşanları failures listesine koy.
-          python3 - <<'PY'
-          import json, glob, sys
-          rows = []
-          for p in sorted(glob.glob("budget/*.json")):
-              try:
-                  r = json.load(open(p))
-                  r["source"] = p.split("/")[-1]
-                  rows.append(r)
-              except Exception as e:
-                  print(f"skip {p}: {e}", file=sys.stderr)
-          failures = [
-              {
-                  "source": r.get("source"),
-                  "limit": r.get("limit"),
-                  "estimated_usd": r.get("estimated_usd"),
-                  "tokens_est": r.get("tokens_est"),
-                  "method": r.get("method"),
-              }
-              for r in rows
-              if r.get("verdict") != "OK"
-          ]
-          summary = {
-              "tool": "verify_delivery.py bütçe kalkanı",
-              "date": rows[0]["date"] if rows else None,
-              "method": "v3_verify.py H4 (token ≈ bytes/4, $3/M token + $0.55)",
-              "runs": rows,
-              "any_fail": bool(failures),
-              "failures": failures,
-          }
-          json.dump(summary, open("budget/index.json", "w"), indent=2, ensure_ascii=False)
-          print(json.dumps(summary, indent=2, ensure_ascii=False))
-          PY
+          python3 _calisma/CIKTI/consolidate_budget.py
 
       # ─── Bütçe aşımı uyarısını run summary'e yaz ────────────────────────
       - name: Budget gate — run summary
         if: always()
         shell: bash
         run: |
-          python3 - <<'PY'
-          import json, os
-          path = "budget/index.json"
-          if not os.path.isfile(path):
-              with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as s:
-                  s.write("## ⚠️ Bütçe kalkanı: sidecar bulunamadı (verify job'u çalışmadı)\n")
-              raise SystemExit(0)
-          summary = json.load(open(path))
-          failures = summary.get("failures", [])
-          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as s:
-              if failures:
-                  s.write("## ⚠️ Bütçe limiti aşıldı\n\n")
-                  for f in failures:
-                      src = f.get("source") or "bilinmeyen"
-                      lim = f.get("limit")
-                      est = f.get("estimated_usd")
-                      tok = f.get("tokens_est")
-                      over = round((est or 0) - (lim or 0), 2)
-                      s.write(f"- **{src}**: ${est} / ${lim} limiti "
-                              f"(+${over} aşım, ~{tok} token)\n")
-                  s.write(f"\n> Yöntem: `{summary.get('method', '')}`. "
-                          f"Fail-closed: P1 bulgusu olarak işaretlendi.\n")
-              else:
-                  runs = summary.get("runs", [])
-                  total = round(sum(r.get("estimated_usd", 0) or 0 for r in runs), 2)
-                  s.write("## ✅ Bütçe kalkanı: tüm job'lar limit içinde\n\n")
-                  for r in runs:
-                      s.write(f"- **{r.get('source')}**: ${r.get('estimated_usd')} "
-                              f"/ ${r.get('limit')} (~{r.get('tokens_est')} token)\n")
-                  if runs:
-                      s.write(f"\nToplam: ${total}\n")
-          print("Budget summary written to run summary.")
-          PY
+          python3 _calisma/CIKTI/run_summary_budget.py
 
       # ─── Bütçe aşımı uyarısını PR yorumu olarak düş ─────────────────────
       - name: Budget gate — PR comment (on exceedance)
