@@ -4,11 +4,17 @@
 #   pip install pre-commit
 #   pre-commit install
 #
-# Bu noktadan sonra her `git commit` sırasında üç kapı çalışır:
+# Bu noktadan sonra her `git commit` sırasında dört kapı çalışır:
+#   0) update-config         : config'i paket içeriğinden senkron et (gen_config.py)
+#                              — repack sayıları değiştirdiyse verify_delivery.config.json'u
+#                              otomatik günceller ve stage eder; değişmediyse dokunmaz.
 #   1) verify-delivery        : paket bütünlüğü (K1-K7, stdlib-only)
 #   2) verify-delivery-symbolic: Z3 sembolik ispat (z3-solver, izole venv)
 #   3) verify-delivery-lean    : Lean 4 reduct-invariance (lean, system)
 # Herhangi bir P0/P1 bulgusu commit'i bloke eder (sıfır-dışı exit).
+#
+# Not: update-config TEK yazan hook'tur (config'i stage eder). Diğer üç kapı
+# read-only'dir: dosya değiştirmez, yalnızca doğrular (fail-closed).
 #
 # Manuel çalıştırma:
 #   pre-commit run --all-files
@@ -16,10 +22,25 @@
 #   pre-commit run verify-delivery-symbolic
 #   pre-commit run verify-delivery-lean
 #
-# Hook'lar read-only'dir: dosya değiştirmez, yalnızca doğrular (fail-closed).
+# update-config hariç hook'lar read-only'dir: dosya değiştirmez, yalnızca
+# doğrular (fail-closed). update-config, config'i paket içeriğiyle senkron eder.
 repos:
   - repo: local
     hooks:
+      - id: update-config
+        name: Sync config from package content (gen_config.py)
+        description: >-
+          Repack sayfa/referans/manifest sayılarını değiştirdiyse
+          verify_delivery.config.json'u gen_config.py ile otomatik günceller
+          ve stage eder (verify-delivery kapısı her zaman güncel config'i
+          görür). Değişiklik yoksa dosyaya dokunmaz. Ortam eksikse (pdfinfo)
+          uyarı ile geçer — CI config-drift job'ı orada yakalar.
+        entry: sh _calisma/CIKTI/update_config_hook.sh
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
       - id: verify-delivery
         name: Verify Stoic-Hume V5 delivery (fail-closed)
         description: >-
