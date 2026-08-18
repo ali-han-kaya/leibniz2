@@ -21,6 +21,8 @@ name: verify-delivery
 #                   bulguları rapor (reports) artifact'ına yazar.
 #   reproducibility: tüm artifact'ları SHA-256 + run_id ile manifest'ler,
 #                   tek artifact olarak yükler.
+#   manifest-comment: reproducibility manifest.txt içeriğini PR yorumu olarak
+#                   düşer (PR gözden geçirmesi için; yalnızca pull_request).
 
 on:
   push:
@@ -511,3 +513,65 @@ jobs:
           path: reproducibility/
           retention-days: 90
           if-no-files-found: error
+
+  # ──────────────────────────────────────────────────────────────────────
+  # MANIFEST PR COMMENT
+  #
+  # reproducibility bundle'ındaki manifest.txt içeriğini PR yorumu olarak
+  # düşer — gözden geçiren, dosyaları indirmeden her artifact'ın SHA-256
+  # özetini yorumda görür. Yalnızca pull_request olayında çalışır; push'ta
+  # atlanır (if: github.event_name == 'pull_request').
+  # ──────────────────────────────────────────────────────────────────────
+  manifest-comment:
+    name: Manifest PR comment
+    runs-on: ubuntu-latest
+    needs: [reproducibility]
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Download reproducibility bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: reproducibility
+          path: reproducibility/
+
+      - name: Post manifest.txt as PR comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = 'reproducibility/manifest.txt';
+            if (!fs.existsSync(path)) {
+              console.log('manifest.txt yok — yorum atlanıyor');
+              return;
+            }
+            const manifest = fs.readFileSync(path, 'utf8');
+
+            // run_id/sha/ref üst bilgilerini ayrıştır (manifest başlığı)
+            const meta = {};
+            for (const line of manifest.split('\n')) {
+              const m = line.match(/^(github_\w+):\s+(.+)$/);
+              if (m) meta[m[1]] = m[2];
+            }
+
+            const code = '```text\n' + manifest + '\n```';
+            const body = [
+              '## 📦 Reproducibility manifest (SHA-256)',
+              '',
+              'Bu run için üretilen tüm artifact dosyalarının bütünlük özeti:',
+              '',
+              code,
+              '',
+              meta.github_run_id
+                ? `> Run: [${meta.github_run_id}](${context.payload.repository.html_url}/actions/runs/${meta.github_run_id})`
+                : '',
+            ].join('\n').trim();
+
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body,
+            });
