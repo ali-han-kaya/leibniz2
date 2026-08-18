@@ -592,19 +592,9 @@ jobs:
             --artifacts-dir all_artifacts \
             --out-dir reproducibility
 
-      # ─── 2b) K10: bundle bütünlüğünü fail-closed doğrula ────────────────
-      # manifest.json üretildikten HEMEN sonra verify_delivery.py --verify-manifest
-      # koşulur: manifest'teki her dosyanın SHA-256'sı gerçek dosyayla
-      # karşılaştırılır (eksik/uyuşmazlık → P1 → exit 1). gen_repro_manifest.py
-      # artifact'ları bundle'a (reproducibility/) kopyaladığı için manifest'teki
-      # rel yollar reproducibility/ altında çözülür. Fail-closed: sessiz geçiş yok.
-      - name: Verify bundle integrity (K10)
-        shell: bash
-        run: |
-          python3 _calisma/CIKTI/verify_delivery.py \
-            --verify-manifest reproducibility/manifest.json
-
       # ─── 3) Tek artifact olarak yükle ───────────────────────────────────
+      # K10 kapısından ÖNCE yüklenir: K10 FAIL olsa bile bundle yüklenir,
+      # böylece manifest-comment job'ı rozetini (PASS/FAIL) gösterebilir.
       - name: Upload reproducibility bundle
         uses: actions/upload-artifact@v6
         with:
@@ -612,6 +602,19 @@ jobs:
           path: reproducibility/
           retention-days: 90
           if-no-files-found: error
+
+      # ─── 4) K10: bundle bütünlüğünü fail-closed doğrula (son kapı) ──────
+      # manifest.json üretildikten sonra verify_delivery.py --verify-manifest
+      # koşulur: manifest'teki her dosyanın SHA-256'sı gerçek dosyayla
+      # karşılaştırılır (eksik/uyuşmazlık → P1 → exit 1). gen_repro_manifest.py
+      # artifact'ları bundle'a (reproducibility/) kopyaladığı için manifest'teki
+      # rel yollar reproducibility/ altında çözülür. Fail-closed: sessiz geçiş yok.
+      # Job'ın SON adımı olduğu için FAIL, job'ı kırmızıya çevirir.
+      - name: Verify bundle integrity (K10)
+        shell: bash
+        run: |
+          python3 _calisma/CIKTI/verify_delivery.py \
+            --verify-manifest reproducibility/manifest.json
 
   # ──────────────────────────────────────────────────────────────────────
   # MANIFEST PR COMMENT
@@ -628,16 +631,39 @@ jobs:
     name: Manifest PR comment
     runs-on: ubuntu-latest
     needs: [reproducibility]
-    if: github.event_name == 'pull_request'
+    if: always() && github.event_name == 'pull_request'
     permissions:
       contents: read
       pull-requests: write
     steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
       - name: Download reproducibility bundle
         uses: actions/download-artifact@v7
         with:
           name: reproducibility
           path: reproducibility/
+
+      # ─── K10: bundle bütünlüğünü koşup PASS/FAIL rozetini yakala ────────
+      # Fail-closed kapı reproducibility job'ında; burada yalnızca rozet için
+      # koşulur (FAIL olursa adımı patlatmaz — rozet FAIL gösterir).
+      - name: Run K10 bundle integrity check (rozet için)
+        shell: bash
+        run: |
+          python3 _calisma/CIKTI/verify_delivery.py \
+            --dir _calisma/CIKTI \
+            --json \
+            --verify-manifest reproducibility/manifest.json \
+            > k10_result.json 2>/dev/null || true
+          verdict=$(python3 -c "import json;d=json.load(open('k10_result.json'));print(d.get('manifest_digest',{}).get('verdict','FAIL'))" 2>/dev/null || echo "FAIL")
+          echo "$verdict" > k10_verdict.txt
+          echo "K10 manifest digest verdict: $verdict"
 
       - name: Upsert manifest.txt PR comment (tek yorum güncelle)
         uses: actions/github-script@v8
@@ -660,9 +686,21 @@ jobs:
 
             const MARKER = '<!-- stoic-hume-v5-reproducibility-manifest -->';
 
+            // K10 bundle bütünlüğü rozeti (önceki adım k10_verdict.txt yazdı)
+            const k10 = fs.existsSync('k10_verdict.txt')
+              ? fs.readFileSync('k10_verdict.txt', 'utf8').trim()
+              : 'N/A';
+            const k10Badge = k10 === 'PASS'
+              ? '✅ **K10 manifest digest: PASS**'
+              : (k10 === 'FAIL'
+                  ? '❌ **K10 manifest digest: FAIL**'
+                  : `⚠️ **K10 manifest digest: ${k10}**`);
+
             const code = '```text\n' + manifest + '\n```';
             const body = [
               '## 📦 Reproducibility manifest (SHA-256)',
+              '',
+              k10Badge,
               '',
               'Bu run için üretilen tüm artifact dosyalarının bütünlük özeti:',
               '',
