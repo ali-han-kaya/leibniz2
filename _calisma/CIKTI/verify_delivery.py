@@ -102,6 +102,9 @@ PKG_REL = "TESLIM_V5_FINAL_2026-08-17/stoic_hume_package/Stoic_Hume_Formal_Secti
 EXPECTED_MANIFEST = 19
 EXPECTED_REFS = 64
 EXPECTED_PAGES = 33
+# Bütçe oranlarının varsayılanı (config dosyası yoksa kullanılır).
+# gen_config.py compute_budget_ratios'un total<=0 fallback'iyle aynı; tek kaynak.
+DEFAULT_BUDGET_RATIOS = {"text": 3, "pdf": 8, "archive": 12, "binary": 20}
 PDF_METADATA_SIDECAR = "ingiliz_empirizmi_v3.pdf.metadata.sha256"
 PDF_RAW_SIDECAR = "ingiliz_empirizmi_v3.pdf.sha256"
 SYMBOLIC_PROOF_SCRIPT = "symbolic_proof_z3.py"
@@ -1538,7 +1541,7 @@ def main():
         "source": "file" if cfg_loaded else "defaults",
         "budget_usd": args.budget,
         "budget_method": args.budget_method,
-        "budget_ratios": cfg.get("budget_ratios"),
+        "budget_ratios": cfg.get("budget_ratios") or DEFAULT_BUDGET_RATIOS,
         "expected_pages": cfg.get("expected_pages", EXPECTED_PAGES),
         "expected_refs": cfg.get("expected_refs", EXPECTED_REFS),
         "expected_manifest": cfg.get("expected_manifest", EXPECTED_MANIFEST),
@@ -1551,6 +1554,29 @@ def main():
                 file_budget_method, args.budget_method),
         },
     }
+    # ---- Etkin config şema doğrulaması (fail-closed) ----
+    # Ham config dosyası yükleme anında validate_config ile denetlenir; ama
+    # CLI override'ları (--budget, --budget-method) çözümlenmiş değerleri
+    # geçersiz hale getirebilir (ör. --budget -5). effective_config.json
+    # üretilmeden ÖNCE çözümlenmiş değerler yeniden doğrulanır — geçersiz
+    # etkin config exit 2 ile bloke edilir (fail-closed; CI'da build kırmızı).
+    eff_schema_check = {
+        "budget_usd": effective_config["budget_usd"],
+        "budget_method": effective_config["budget_method"],
+        "budget_ratios": effective_config["budget_ratios"],
+        "expected_pages": effective_config["expected_pages"],
+        "expected_refs": effective_config["expected_refs"],
+        "expected_manifest": effective_config["expected_manifest"],
+    }
+    eff_cfg_errors = validate_config(eff_schema_check)
+    if eff_cfg_errors:
+        print("HATA: etkin config şema doğrulaması başarısız:")
+        for e in eff_cfg_errors:
+            print(f"  - {e}")
+        print("  (CLI override'ları geçersiz değer üretti; bkz. "
+              "verify_delivery.config.schema.json)")
+        return 2
+
     if args.config_out:
         try:
             with open(args.config_out, "w", encoding="utf-8") as cf_out:
@@ -1974,9 +2000,8 @@ def main():
         universal_cost = round(universal_tokens / 1_000_000 * 3.0, 2) + 0.55
         # (b) ağırlıklı — oranlar config'ten okunur (şema ile doğrulanır);
         #     config yoksa varsayılan oranlar kullanılır.
-        _default_ratios = {"text": 3, "pdf": 8, "archive": 12, "binary": 20}
-        ratios = {k: cfg.get("budget_ratios", {}).get(k, v)
-                  for k, v in _default_ratios.items()}
+        ratios = {k: (cfg.get("budget_ratios") or {}).get(k, v)
+                  for k, v in DEFAULT_BUDGET_RATIOS.items()}
         weighted_tokens = sum(
             type_bytes[k] // ratios[k] for k in ratios)
         weighted_cost = round(weighted_tokens / 1_000_000 * 3.0, 2) + 0.55
