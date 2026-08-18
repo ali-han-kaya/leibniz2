@@ -489,7 +489,7 @@ jobs:
           merge-multiple: true
           pattern: '{verify-report,budget,reports,config,precommit-logs,refs-online}'
 
-      # ─── 2) manifest.txt üret ───────────────────────────────────────────
+      # ─── 2) manifest.txt üret (gen_repro_manifest.py — tek kaynak) ─────────
       - name: Generate reproducibility manifest
         shell: python3 {0}
         env:
@@ -499,72 +499,9 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          import hashlib, json, os, pathlib, datetime
-
-          RUN_ID    = os.environ["GITHUB_RUN_ID"]
-          SHA       = os.environ["GITHUB_SHA"]
-          REF       = os.environ["GITHUB_REF"]
-          REPO      = os.environ["GITHUB_REPOSITORY"]
-          RUN_URL   = os.environ["GITHUB_RUN_URL"]
-          NOW       = datetime.datetime.utcnow().isoformat() + "Z"
-          ROOT      = pathlib.Path("all_artifacts")
-
-          lines = [
-              "=" * 72,
-              "STOIC-HUME V5  —  REPRODUCIBILITY MANIFEST",
-              f"generated: {NOW}",
-              f"github_run_id: {RUN_ID}",
-              f"github_sha: {SHA}",
-              f"github_ref: {REF}",
-              f"github_repository: {REPO}",
-              f"github_run_url: {RUN_URL}",
-              "=" * 72,
-              "",
-              f"{'FILE':<55} {'SHA-256'}",
-              "-" * 72,
-          ]
-
-          file_hashes = {}
-          for p in sorted(ROOT.rglob("*")):
-              if p.is_file():
-                  h = hashlib.sha256(p.read_bytes()).hexdigest()
-                  rel = str(p.relative_to(ROOT))
-                  file_hashes[rel] = h
-                  lines.append(f"{rel:<55} {h}")
-
-          lines += ["", "-" * 72, f"Total files: {len(file_hashes)}", ""]
-
-          # JSON manifest (machine-readable)
-          manifest_json = {
-              "tool": "stoic-hume-v5-reproducibility",
-              "generated": NOW,
-              "github_run_id": RUN_ID,
-              "github_sha": SHA,
-              "github_ref": REF,
-              "github_repository": REPO,
-              "github_run_url": RUN_URL,
-              "files": file_hashes,
-          }
-
-          out_dir = pathlib.Path("reproducibility")
-          out_dir.mkdir(exist_ok=True)
-          (out_dir / "manifest.txt").write_text("\n".join(lines), encoding="utf-8")
-          (out_dir / "manifest.json").write_text(
-              json.dumps(manifest_json, indent=2, ensure_ascii=False), encoding="utf-8"
-          )
-
-          # Copy all artifacts into the bundle alongside the manifest
-          import shutil
-          for child in ROOT.iterdir():
-              dest = out_dir / child.name
-              if child.is_dir():
-                  shutil.copytree(child, dest, dirs_exist_ok=True)
-              else:
-                  shutil.copy2(child, dest)
-
-          # Print summary to workflow log
-          print(f"Manifest: {len(file_hashes)} files hashed, run_id={RUN_ID}")
-          print(f"Bundle size: {sum(f.stat().st_size for f in out_dir.rglob('*') if f.is_file())} bytes")
+          python3 _calisma/CIKTI/gen_repro_manifest.py \
+            --artifacts-dir all_artifacts \
+            --out-dir reproducibility
 
       # ─── 3) Tek artifact olarak yükle ───────────────────────────────────
       - name: Upload reproducibility bundle
