@@ -73,6 +73,21 @@ class TestProvenance(unittest.TestCase):
         self.assertTrue(
             (self.out / "config" / "verify_delivery.config.json").is_file())
 
+    def test_precommit_logs_section(self):
+        # PRECOMMIT_CACHE.md dahil precommit-logs/ dosyaları CONFIG gibi ayrı
+        # bölümde işaretlenir + tek-hash combined_sha256 özetlenir.
+        (self.artifacts / "precommit-logs" / "PRECOMMIT_CACHE.md").write_text(
+            "cache\n", encoding="utf-8")
+        self._gen()
+        txt = (self.out / "manifest.txt").read_text(encoding="utf-8")
+        self.assertIn("PRECOMMIT LOGS ARTIFACT (ayrı bölüm)", txt)
+        self.assertIn("precommit_combined_sha256", txt)
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        pc = m["precommit_logs"]
+        self.assertIn(
+            "precommit-logs/PRECOMMIT_CACHE.md", pc["files"])
+        self.assertTrue(len(pc["combined_sha256"]) == 64)
+
     def test_env_override_artifact_jobs(self):
         env = dict(os.environ)
         env["REPRO_ARTIFACT_JOBS"] = '{"precommit-logs": "custom-job"}'

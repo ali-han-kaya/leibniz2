@@ -144,6 +144,32 @@ def main() -> None:
                       "=" * 72]
         lines += cfg_block
 
+    # ── PRECOMMIT LOGS bölümü: precommit-logs/ önekli dosyalar (CONFIG gibi) ──
+    # PRECOMMIT_CACHE.md (hook env + cache özeti) öncülüğünde precommit-logs
+    # artifact'ının tüm dosyaları ayrıca işaretlenir; combined_sha256 tek hash
+    # ile özetler (config.combined_sha256 ile aynı deterministik yöntem).
+    precommit_hashes = {rel: h for rel, h in file_hashes.items()
+                        if rel.startswith("precommit-logs/")}
+    precommit_combined = None
+    if precommit_hashes:
+        sorted_rel = sorted(precommit_hashes)
+        precommit_combined = hashlib.sha256(
+            "".join(f"{rel}\0{precommit_hashes[rel]}\n" for rel in sorted_rel).encode()
+        ).hexdigest()
+        pc_block = [
+            "",
+            "=" * 72,
+            "PRECOMMIT LOGS ARTIFACT (ayrı bölüm)",
+            "=" * 72,
+            f"{'FILE':<55} {'SHA-256'}",
+            "-" * 72,
+        ]
+        pc_block += [f"{rel:<55} {precommit_hashes[rel]}" for rel in sorted_rel]
+        pc_block += ["-" * 72,
+                     f"precommit_combined_sha256: {precommit_combined}",
+                     "=" * 72]
+        lines += pc_block
+
     # ── PROVENANCE bölümü: artifact → üreten job (denetim izi) ──────────────
     # Her artifact hangi job'da üretildi — tek bakışta kaynak. Prefixed
     # indirilenler (config/, precommit-logs/) bundle'da kendi adı altındadır;
@@ -190,6 +216,11 @@ def main() -> None:
         manifest_json["config"] = {
             "files": dict(sorted(config_hashes.items())),
             "combined_sha256": config_combined,
+        }
+    if precommit_hashes:
+        manifest_json["precommit_logs"] = {
+            "files": dict(sorted(precommit_hashes.items())),
+            "combined_sha256": precommit_combined,
         }
 
     out_dir = pathlib.Path(args.out_dir)
