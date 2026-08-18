@@ -85,8 +85,11 @@ git branch --show-current  # ← "main" olmalı
 
 **Beklenen çıktılar:**
 - `git status` → boş
-- pre-commit smoke test → 4 Passed (update-config + verify-delivery + symbolic + lean;
-  commit-msg-style ayrı stage — `pre-commit run` çıktısında görünmez)
+- pre-commit smoke test → **5/5 Passed (tamamen yeşil)** — update-config + verify-delivery
+  (K1-K7) + verify-delivery-symbolic (K8/Z3, z3-solver izole ortamda) +
+  verify-delivery-lean (K9) `--all-files` içinde; commit-msg-style ayrı stage
+  (`--hook-stage commit-msg` ile doğrulanır). ✅ Yerel pre-commit artık `--no-verify`
+  olmadan tam yeşil — AŞAMA 1'e geçmeden bu doğrulandı.
 - `gh auth status` → "Logged in"
 - `git remote -v` → boş
 
