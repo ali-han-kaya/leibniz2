@@ -61,6 +61,29 @@ def classify(field, raw_val, eff_val, effective):
     return "drift"
 
 
+def compute_differences(raw, effective):
+    """raw vs effective config farklarını döndürür (tek kaynak).
+
+    main() ve preview_server.py (canlı dashboard) bu fonksiyonu / birebir aynı
+    mantığı kullanır; fark çıktısı her iki yerde de aynı olmalıdır.
+    Döndürür: [{field, raw, effective, reason}] — reason ∈
+    {cli_override, default, drift}.
+    """
+    differences = []
+    for field in COMPARE_KEYS:
+        raw_val = raw.get(field)
+        eff_val = effective.get(field)
+        if raw_val == eff_val:
+            continue
+        differences.append({
+            "field": field,
+            "raw": raw_val,
+            "effective": eff_val,
+            "reason": classify(field, raw_val, eff_val, effective),
+        })
+    return differences
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--config-dir", default="config",
@@ -86,18 +109,7 @@ def main(argv=None) -> int:
     raw = json.loads(raw_path.read_text(encoding="utf-8"))
     effective = json.loads(eff_path.read_text(encoding="utf-8"))
 
-    differences = []
-    for field in COMPARE_KEYS:
-        raw_val = raw.get(field)
-        eff_val = effective.get(field)
-        if raw_val == eff_val:
-            continue
-        differences.append({
-            "field": field,
-            "raw": raw_val,
-            "effective": eff_val,
-            "reason": classify(field, raw_val, eff_val, effective),
-        })
+    differences = compute_differences(raw, effective)
 
     now = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
     out = {

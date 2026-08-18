@@ -24,6 +24,7 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
 import preview_server as ps
+import diff_config_artifacts as dca
 
 
 def _rec(ts, verdict="PASS", **kw):
@@ -202,6 +203,64 @@ class ReplayHandlerTests(unittest.TestCase):
     def test_no_ts_writes_nothing(self):
         self.assertEqual(self._replay(None, "PASS", "o", "e"), "")
         self.assertEqual(self._replay("", "PASS", "o", "e"), "")
+
+
+class ConfigDiffDriftTests(unittest.TestCase):
+    """preview_server._config_diff ↔ diff_config_artifacts.compute_differences
+    drift guard: iki uygulama aynı girdide aynı çıktıyı üretmelidir."""
+
+    RAW = {
+        "budget_usd": 30.0, "budget_method": "both",
+        "budget_ratios": {"text": 8, "pdf": 8, "archive": 100, "binary": 100},
+        "expected_pages": 33, "expected_refs": 64, "expected_manifest": 19,
+    }
+
+    @staticmethod
+    def _eff(budget=30.0, method="both", cli_overrides=None):
+        raw = ConfigDiffDriftTests.RAW
+        return {
+            "budget_usd": budget, "budget_method": method,
+            "budget_ratios": raw["budget_ratios"],
+            "expected_pages": 33, "expected_refs": 64, "expected_manifest": 19,
+            "cli_overrides": cli_overrides if cli_overrides is not None else {
+                "budget": {"cli_given": False, "cli_value": None,
+                           "file_value": 30.0, "effective": budget,
+                           "override": False},
+                "budget_method": {"cli_given": False, "cli_value": None,
+                                  "file_value": "both", "effective": method,
+                                  "override": False},
+            },
+        }
+
+    def test_matches_diff_config_artifacts(self):
+        cli_override = {
+            "budget": {"cli_given": True, "cli_value": 25.0,
+                       "file_value": 30.0, "effective": 25.0, "override": True},
+            "budget_method": {"cli_given": True, "cli_value": "universal",
+                              "file_value": "both", "effective": "universal",
+                              "override": True},
+        }
+        raw_no_pages = dict(self.RAW)
+        raw_no_pages.pop("expected_pages")
+        cases = [
+            (self.RAW, self._eff()),                       # fark yok
+            (self.RAW, self._eff(budget=99.0)),            # drift
+            (self.RAW, self._eff(budget=25.0, method="universal",
+                                  cli_overrides=cli_override)),  # cli_override
+            (raw_no_pages, self._eff()),                   # default
+        ]
+        for raw, eff in cases:
+            self.assertEqual(
+                ps._config_diff(raw, eff), dca.compute_differences(raw, eff),
+                msg=f"drift: raw={raw!r} eff={eff!r}")
+
+    def test_drift_reason(self):
+        rows = ps._config_diff(self.RAW, self._eff(budget=99.0))
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["field"], "budget_usd")
+        self.assertEqual(rows[0]["reason"], "drift")
+        self.assertEqual(rows[0]["raw"], 30.0)
+        self.assertEqual(rows[0]["effective"], 99.0)
 
 
 if __name__ == "__main__":

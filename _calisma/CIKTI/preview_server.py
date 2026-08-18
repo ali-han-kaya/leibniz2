@@ -84,6 +84,7 @@ LATEST = {
     "refs_total": None,
     "refs_mismatch": None,
     "refs_by_source": None,
+    "config_diff": None,        # son run'un raw↔effective config diff özeti (dashboard)
 }
 LOCK = threading.Lock()
 SSE_CLIENTS = []      # bağlı /api/run client listesi (snapshot broadcast)
@@ -257,7 +258,7 @@ def _run_verify_locked(verify_dir):
         stdout, stderr, rc = "", f"başlatılamadı: {e}", 127
         duration = round(time.monotonic() - t0, 2)
         data = {}
-        _finalize_run(stdout, stderr, rc, duration, data)
+        _finalize_run(stdout, stderr, rc, duration, data, verify_dir)
         return True
 
     out_chunks, err_chunks = [], []
@@ -294,12 +295,58 @@ def _run_verify_locked(verify_dir):
         stderr = (stderr + "\nTIMEOUT (>300s)").strip()
         rc = 124
     duration = round(time.monotonic() - t0, 2)
-    _finalize_run(stdout, stderr, rc, duration, None)
+    _finalize_run(stdout, stderr, rc, duration, None, verify_dir)
     return True
 
 
-def _finalize_run(stdout, stderr, rc, duration, data):
-    """Run sonucunu LATEST'e yaz, SSE_CLIENTS'a broadcast et, history'ye ekle."""
+# ---- config diff (raw vs effective) — diff_config_artifacts.py ile birebir ----
+# preview_server.py bu mantığı SATIR İÇİ taşır: launchd route'unda verify
+# mirror'da diff_config_artifacts.py bulunmayabilir (import edilmez).
+# test_preview_server.py iki uygulamanın aynı sonucu ürettiğini denetler (drift
+# guard) — buradaki sabitler/sınıflandırma diff_config_artifacts.py ile aynı.
+_COMPARE_KEYS = ("budget_usd", "budget_method", "budget_ratios",
+                 "expected_pages", "expected_refs", "expected_manifest")
+_OVERRIDE_KEY = {"budget_usd": "budget", "budget_method": "budget_method"}
+
+
+def _config_diff_classify(field, raw_val, eff_val, effective):
+    effective = effective if isinstance(effective, dict) else {}
+    ov_key = _OVERRIDE_KEY.get(field)
+    ov = (effective.get("cli_overrides") or {}).get(ov_key) if ov_key else None
+    if ov and ov.get("override"):
+        return "cli_override"
+    if raw_val is None:
+        return "default"
+    return "drift"
+
+
+def _config_diff(raw_cfg, eff_cfg):
+    """raw vs effective config farkları — diff_config_artifacts.compute_differences
+    ile birebir aynı çıktı: [{field, raw, effective, reason}] döndürür."""
+    raw_cfg = raw_cfg if isinstance(raw_cfg, dict) else {}
+    eff_cfg = eff_cfg if isinstance(eff_cfg, dict) else {}
+    differences = []
+    for field in _COMPARE_KEYS:
+        raw_val = raw_cfg.get(field)
+        eff_val = eff_cfg.get(field)
+        if raw_val == eff_val:
+            continue
+        differences.append({
+            "field": field,
+            "raw": raw_val,
+            "effective": eff_val,
+            "reason": _config_diff_classify(field, raw_val, eff_val, eff_cfg),
+        })
+    return differences
+
+
+def _finalize_run(stdout, stderr, rc, duration, data, verify_dir=None):
+    """Run sonucunu LATEST'e yaz, SSE_CLIENTS'a broadcast et, history'ye ekle.
+
+    verify_dir verilirse raw config (verify_delivery.config.json) okunup
+    effective config (data['config']) ile karşılaştırılır; sonuç
+    LATEST['config_diff'] alanına yazılır (dashboard config-diff bölümü).
+    """
 
     # Parse JSON for structured fields (sadece stdout; stderr insan-okur çıktı)
     if data is None:
@@ -316,6 +363,18 @@ def _finalize_run(stdout, stderr, rc, duration, data):
                     data = json.loads(stdout[json_start:json_end + 1])
         except (json.JSONDecodeError, ValueError):
             pass
+
+    # config diff: raw (verify_delivery.config.json) vs effective (data['config'])
+    raw_cfg = {}
+    if verify_dir:
+        cfg_path = os.path.join(verify_dir, "verify_delivery.config.json")
+        if os.path.isfile(cfg_path):
+            try:
+                with open(cfg_path, encoding="utf-8") as f:
+                    raw_cfg = json.load(f)
+            except (OSError, ValueError):
+                raw_cfg = {}
+    diff_rows = _config_diff(raw_cfg, data.get("config") or {})
 
     with LOCK:
         LATEST.update({
@@ -342,6 +401,9 @@ def _finalize_run(stdout, stderr, rc, duration, data):
             "refs_total": (data.get("references_online") or {}).get("total_online"),
             "refs_mismatch": (data.get("references_online") or {}).get("mismatch"),
             "refs_by_source": (data.get("references_online") or {}).get("by_source"),
+            # raw↔effective config diff özeti (dashboard config-diff bölümü)
+            "config_diff": {"changed": bool(diff_rows),
+                            "differences": diff_rows},
         })
         # Extract pages + refs from stdout for richer dashboard
         for line in stdout.splitlines():
