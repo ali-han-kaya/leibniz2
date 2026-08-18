@@ -149,28 +149,39 @@ TESLIM_KLASOR_V5_2026-08-17.zip  (bayat / orijinal) = 363a06e36d71666e70fead77bf
 | 2026-08-17 | `TESLIM_KLASOR_V5_2026-08-17.zip` (orijinal) | `363a06e3…` | M0 optimizasyonu (FIX-001…FIX-006) sonrası bayat kaldı; kanonik konumda üzerine yazıldı (bkz. §9) |
 | 2026-08-17 | sonraki nesiller (`3ef74cae…`, `af8067ca…`, `d7f63d72…`, `fe731022…`) | yukarıdaki kısaltmalar | deterministik repack (commit `2e7c425`) ile bayat kaldı |
 
-Dış zip'in tam soy hattı (kanıtlanabilir zincir):
+Dış zip'in tam soy hattı (kanıtlanabilir zincir) — **tek kaynak:**
+`_calisma/CIKTI/zip_lineage.json` (10 nesil: 2 pre-git dondurulmuş + 8
+git'ten yeniden türetilebilir). `verify_delivery.py --check-lineage`
+her commit'li nesli `git show <commit>:<path> | sha256` ile yeniden
+hesaplayıp kayıtlı hash'le karşılaştırır; `current` nesli ayrıca canlı
+dosyayla doğrular (P0). Bu bölüm artık yalnızca o kaynağın özetidir:
 
 ```text
-363a06e3…  (orijinal, §9)
-3ef74cae…  (yeni, §9)
-af8067ca…  (git init, 9f72b0e)
-d7f63d72…  (K6-DETERM, a92682d)
-fe731022…  (V5i, bad86f4)
-bec0bb0a…  (deterministik repack, 2e7c425) ← GÜNCEL KANONİK
+363a06e3…  (orijinal, §9)                          [pre-git, dondurulmuş]
+3ef74cae…  (yeni, §9)                              [pre-git, dondurulmuş]
+af8067ca…  (git init, 9f72b0e)                     [git show ile doğrulanır]
+295aae0c…  (V5h: Beth 1953 + Fosl 1998, c65e84b)  [git show ile doğrulanır]
+d7f63d72…  (K6-DETERM, c962bbf)                   [git show ile doğrulanır]
+fe731022…  (V5i: K6-DETERM known limitation, e232ab2) [git show ile doğrulanır]
+bec0bb0a…  (deterministik repack, 2492e98)         [git show ile doğrulanır]
+8b390996…  (Popkin 1952 + Priest 2018, fad15f0)   [git show ile doğrulanır]
+34e81dff…  (V5k: tectonic non-determinism, 07793f6) [git show ile doğrulanır]
+58f7d1c6…  (V5l: repack determinizm kanıtı, 6bb9cb6) ← GÜNCEL KANONİK (canlı dosya ile doğrulanır)
 ```
 
 ### 10.3 Güncel kanonik hash'ler (yanındaki sidecar ile birebir)
 
 ```text
-TESLIM_KLASOR_V5_2026-08-17.zip = bec0bb0a4fd2fff2dfaeee38f9afb1f0442640029dcf793aac9073e41d9cf900
-TESLIM_V5_FINAL_2026-08-17.zip  = b32fda0fca08c5a1b35043159ff0d853795ddcdc932351c11bd7d899c77e033c
+TESLIM_KLASOR_V5_2026-08-17.zip = 58f7d1c65aadf9dd6a25f3e9dc0cc4e7968c67b98b8bdd697b114de85cc90454
+TESLIM_V5_FINAL_2026-08-17.zip  = 2879d83e6a709e21fecc2bcdf0506a360f814893fb4c295ff40ba8dfd78632a0
 ```
 
 Not: `363a06e3…` değeri §9'da zaten "orijinal" olarak sabitlenmişti; §10 bu
 değeri "bayat zip" olarak adlandırıp silme/supersede olayını kaydeder. K0
 katmanı (`verify_delivery.py`) CIKTI dışındaki zip'leri P1 işaretleyerek yeni
-bayat kopyaların sessizce birikmesini engeller.
+bayat kopyaların sessizce birikmesini engeller. Soy hattı artık `zip_lineage.json`
+tek kaynağından denetlenir (`--check-lineage`; CI'da `--full` içinde koşar,
+`fetch-depth: 0` ile tam geçmiş kullanılır).
 
 ### 10.4 Toolkit zip — kökten `_calisma/TOOLKIT/` altına taşındı (K0 yeşil)
 

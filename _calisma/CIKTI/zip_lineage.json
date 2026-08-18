@@ -1,0 +1,67 @@
+{
+  "_doc": "Dış zip (TESLIM_KLASOR_V5_2026-08-17.zip) soy hattı — TEK KAYNAK. M0_TOOLKIT_DENETIM_RAPORU.md §10 ve verify_delivery.py --check-lineage bu dosyadan beslenir. commit'li nesiller `git show <commit>:<path>` ile yeniden türetilip hash karşılaştırılarak doğrulanabilir; pre-git nesiller (§9'da dondurulmuş) yalnızca kayıt olarak tutulur. current=true olan nesil ayrıca canlı dosya ile karşılaştırılır.",
+  "file": "TESLIM_KLASOR_V5_2026-08-17.zip",
+  "path_in_repo": "_calisma/CIKTI/TESLIM_KLASOR_V5_2026-08-17.zip",
+  "generations": [
+    {
+      "note": "orijinal (§9)",
+      "hash": "363a06e36d71666e70fead77bf44d4c82da2edb57c1be1a30095da1a179a08aa",
+      "commit": null,
+      "current": false
+    },
+    {
+      "note": "yeni (§9)",
+      "hash": "3ef74caeb6d1afa8ad7967dd5bd71b97c2eb597651456dcbd8e39c4db94481bc",
+      "commit": null,
+      "current": false
+    },
+    {
+      "note": "git init",
+      "hash": "af8067ca07a68360defeeb9d4ce999df04bb2af692b7d718e5d197d74419fba1",
+      "commit": "9f72b0e",
+      "current": false
+    },
+    {
+      "note": "V5h: Beth 1953 + Fosl 1998",
+      "hash": "295aae0c1e27330a835891c21dbb2867fa94b7df576182cb3468018a6a58110d",
+      "commit": "c65e84b",
+      "current": false
+    },
+    {
+      "note": "K6-DETERM",
+      "hash": "d7f63d72455c8a5401d880dc5de0919bbee5f62ba2d6a31557bcaa3bf51c4eef",
+      "commit": "c962bbf",
+      "current": false
+    },
+    {
+      "note": "V5i: K6-DETERM known limitation",
+      "hash": "fe7310224dff947545f845f82253e54fd94a2c45f89a29f4db5e61f71b7a4b8f",
+      "commit": "e232ab2",
+      "current": false
+    },
+    {
+      "note": "deterministik repack",
+      "hash": "bec0bb0a4fd2fff2dfaeee38f9afb1f0442640029dcf793aac9073e41d9cf900",
+      "commit": "2492e98",
+      "current": false
+    },
+    {
+      "note": "Popkin 1952 + Priest 2018",
+      "hash": "8b390996b0374dd8c131b3b850a4d0bce4963461dd6688e814a27e43b91741cd",
+      "commit": "fad15f0",
+      "current": false
+    },
+    {
+      "note": "V5k: tectonic non-determinism",
+      "hash": "34e81dff5410e6095fa4d0e79c867bec0b892fabde1fc7db6c0b1ac6445f8bd8",
+      "commit": "07793f6",
+      "current": false
+    },
+    {
+      "note": "V5l: repack determinizm kanıtı",
+      "hash": "58f7d1c65aadf9dd6a25f3e9dc0cc4e7968c67b98b8bdd697b114de85cc90454",
+      "commit": "6bb9cb6",
+      "current": true
+    }
+  ]
+}

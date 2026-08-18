@@ -52,6 +52,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Soy hattı (--check-lineage) zip_lineage.json'daki nesilleri
+          # `git show <commit>:<path>` ile yeniden türetir — tam geçmiş gerekir.
+          fetch-depth: 0
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -100,6 +104,7 @@ jobs:
             --config-out effective_config.json \
             --refs-out references_online.json \
             --k0-out k0_findings.json 2>&1 | tee verify_report.txt
+          # (--full içinde --check-lineage: zip_lineage.json soy hattı doğrulanır)
 
       # ─── K0 bulgularını run summary'de ayrı bölüm olarak göster ────────────
       # verify_delivery.py --k0-out k0_findings.json sidecar'ından okur;

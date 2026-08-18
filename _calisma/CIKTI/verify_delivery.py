@@ -23,6 +23,7 @@ Kullanım (tek komut):
     python3 verify_delivery.py --verify-manifest reproducibility/manifest.json
                                               # K10: manifest.json'daki her SHA-256'yı gerçek dosyayla
                                               #      karşılaştır (reproducibility bütünlüğü)
+    python3 verify_delivery.py --check-lineage  # soy hattı: zip_lineage.json + git show ile her nesli doğrula
     python3 verify_delivery.py --full          # tüm katmanlar: K1-K9 + referans denetimi + Z3 + Lean
                                               #   (--check-references + --symbolic-proof + --lean-proof)
 
@@ -941,7 +942,82 @@ def run_lean_proof(lean_path, lean_file):
     return False, f"Lean derleme hatası: {detail}"
 
 
-def verify_manifest_digest(manifest_path, add):
+def check_zip_lineage(zip_path, lineage_path, add):
+    """Soy hattı: zip_lineage.json'daki her nesli tek kaynaktan doğrula.
+
+    zip_lineage.json (M0 §10 ile AYNI kaynak) dış zip'in nesil zincirini
+    tutar: {note, hash, commit, current}. commit'li nesiller git'ten
+    yeniden türetilir (`git show <commit>:<path> | sha256`) ve kayıtlı
+    hash ile karşılaştırılır — uyuşmazlık P1. current=true olan nesil
+    ayrıca CANLI dosya ile karşılaştırılır — uyuşmazlık P0. commit=null
+    (pre-git, §9'da dondurulmuş) nesiller yalnızca kayıttır (INFO).
+    git repo/commit yoksa ilgili nesil UNVERIFIED (INFO) sayılır.
+    Döndürür (ok: bool, detail: str).
+    """
+    if not os.path.isfile(lineage_path):
+        return True, f"soy hattı dosyası yok: {lineage_path} (atlandı)"
+    try:
+        with open(lineage_path, encoding="utf-8") as lf:
+            lineage = json.load(lf)
+    except (json.JSONDecodeError, OSError) as e:
+        add("P1", "LINEAGE-LOAD", "Soy hattı", f"okunamadı: {lineage_path}", str(e))
+        return False, f"soy hattı okunamadı: {e}"
+    gens = lineage.get("generations", [])
+    if not gens:
+        add("P1", "LINEAGE-EMPTY", "Soy hattı", "generations boş", lineage_path)
+        return False, "soy hattı boş"
+
+    cur_hash = sha256_file(zip_path) if os.path.isfile(zip_path) else None
+    rows = []
+    ok = True
+    for g in gens:
+        note = g.get("note", "?")
+        rec_hash = g.get("hash")
+        commit = g.get("commit")
+        is_cur = bool(g.get("current"))
+        if is_cur:
+            # CANLI dosya ile karşılaştır — P0
+            if cur_hash and rec_hash and cur_hash == rec_hash:
+                rows.append(("current", note, rec_hash[:12], "PASS (canlı dosya ile aynı)"))
+            else:
+                ok = False
+                add("P0", "LINEAGE-CUR", "Soy hattı", f"current nesil canlı dosya ile uyuşmuyor ({note})",
+                    f"kayıt={rec_hash} canlı={cur_hash}")
+                rows.append(("current", note, rec_hash[:12] if rec_hash else "?", "FAIL"))
+            continue
+        if commit is None:
+            rows.append(("pre-git", note, rec_hash[:12] if rec_hash else "?", "INFO (dondurulmuş §9)"))
+            continue
+        # git'ten yeniden türet
+        try:
+            r = subprocess.run(
+                ["git", "show", f"{commit}:{lineage.get('path_in_repo', zip_path)}"],
+                capture_output=True)
+        except FileNotFoundError:
+            rows.append((commit[:8], note, rec_hash[:12], "UNVERIFIED (git yok)"))
+            continue
+        if r.returncode != 0:
+            rows.append((commit[:8], note, rec_hash[:12], "UNVERIFIED (commit yok)"))
+            continue
+        got = hashlib.sha256(r.stdout).hexdigest()
+        if got == rec_hash:
+            rows.append((commit[:8], note, rec_hash[:12], "PASS (git show ile aynı)"))
+        else:
+            ok = False
+            add("P1", "LINEAGE-HASH", "Soy hattı", f"nesil hash'i git'ten türetilenle uyuşmuyor ({note})",
+                f"kayıt={rec_hash} git_show={got}")
+            rows.append((commit[:8], note, rec_hash[:12], "FAIL"))
+
+    lines = ["Soy hattı (zip_lineage.json — tek kaynak):",
+             f"{'NESİL':<12} {'NOTE':<30} {'HASH':<14} DURUM",
+             "-" * 80]
+    lines += [f"{r[0]:<12} {r[1]:<30} {r[2]:<14} {r[3]}" for r in rows]
+    detail = "\n".join(lines)
+    if ok:
+        return True, detail
+    return False, detail
+
+
     """K10: manifest.json'daki her dosyanın SHA-256'sını gerçek dosyayla karşılaştır.
 
     manifest.json gen_repro_manifest.py tarafından üretilir: {"files": {rel: sha256}}.
@@ -1022,6 +1098,9 @@ def main():
     ap.add_argument("--config", default=None,
                     help="Konfig dosyası yolu (varsayılan: verify_delivery.py ile aynı dizindeki "
                          "verify_delivery.config.json)")
+    ap.add_argument("--check-lineage", action="store_true",
+                    help="Soy hattı: zip_lineage.json'daki her nesli git show ile\n"
+                         "yeniden türetip doğrula; current nesli canlı dosyayla karşılaştır")
     ap.add_argument("--check-references", action="store_true",
                     help="K6: CrossRef DOI + SEP URL çevrimiçi referans denetimi")
     ap.add_argument("--symbolic-proof", action="store_true",
@@ -1040,6 +1119,7 @@ def main():
         args.check_references = True
         args.symbolic_proof = True
         args.lean_proof = True
+        args.check_lineage = True
 
     # ---- Konfig yükleme (CLI bayrakları config'ten öncelikli) ----
     # Fail-closed: geçersiz JSON veya şema ihlali artık sessizce varsayılana
@@ -1196,6 +1276,16 @@ def main():
             add("P0", "K1-SIDECAR", "K1 dış zip", "sidecar okunamadı/parse edilemedi")
     else:
         add("P0", "K1-SIDECAR", "K1 dış zip", "sidecar yok", kside)
+
+    # ---- Soy hattı (zip_lineage.json — M0 §10 ile tek kaynak) ----
+    lineage_report = None
+    if args.check_lineage:
+        lineage_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                    "zip_lineage.json")
+        lineage_ok, lineage_detail = check_zip_lineage(kzip, lineage_path, add)
+        lineage_report = {"ok": lineage_ok, "detail": lineage_detail}
+        if not args.json:
+            print(f"\n{lineage_detail}")
 
     tmp = tempfile.mkdtemp(prefix="verify_delivery_")
     pages = refs = pdf_meta_report = None
@@ -1561,6 +1651,7 @@ def main():
         "pdf_hash": pdf_meta_report,
         "references_online": refs_online_report,
         "manifest_digest": manifest_digest_report,
+        "lineage": lineage_report,
     }
     if args.json:
         print(json.dumps(out, indent=2, ensure_ascii=False))
