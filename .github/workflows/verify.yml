@@ -67,13 +67,16 @@ jobs:
         with:
           python-version: '3.12'
 
-      # preview_server.py birim testleri (persist/load/deadlock) — fail-closed.
-      # stdlib unittest; ek bağımlılık yok. history.jsonl bütünlüğünün
-      # (append/trim/atomik replace + LOCK altında asılmama) regresyon kapısı.
-      - name: Run preview_server unit tests (persist/load/deadlock)
+      # _calisma/CIKTI/test_*.py birim testleri — fail-closed. stdlib unittest;
+      # ek bağımlılık yok. Kapsam:
+      #   test_preview_server.py — history.jsonl bütünlüğü (append/trim/atomik
+      #     replace + LOCK altında asılmama) regresyon kapısı.
+      #   test_gen_config.py     — compute_budget_ratios (pay 0 / baskınlık /
+      #     eşit karışım / clamp sınırları) regresyon kapısı.
+      - name: Run CIKTI unit tests (test_*.py)
         shell: bash
         run: |
-          python3 -m unittest discover -s _calisma/CIKTI -p "test_preview_server.py" -v
+          python3 -m unittest discover -s _calisma/CIKTI -p "test_*.py" -v
 
       - name: Install pre-commit (advisory pre-commit section)
         run: pip install pre-commit
