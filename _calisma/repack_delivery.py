@@ -16,8 +16,12 @@ Sıra:
      config-drift job'ı orada yakalar), şema hatası repack'i bloke eder.
 
 Zip'ler sıralı girdiler + sabit zaman damgasıyla üretilir (tekrarlanabilir).
-Çalıştırma:  python3 repack_delivery.py   (repo kökünden)
+Çalıştırma:  python3 repack_delivery.py            (repo kökünden)
+             python3 repack_delivery.py --verify  (repack sonrası zip'lerin
+               SHA-256'sını .sha256 sidecar'larıyla doğrular; uyuşmazlık/eksik
+               → exit 1, fail-closed)
 """
+import argparse
 import hashlib
 import os
 import re
@@ -176,6 +180,53 @@ def write_sidecar(zip_path, name):
         f.write(f"{sha256(zip_path)}  {name}\n")
 
 
+def verify_sidecars(ci_dir=None):
+    """CIKTI/'daki her zip'in SHA-256'sını kendi .sha256 sidecar'ıyla karşılaştırır.
+
+    Sidecar formatı write_sidecar ile birebir: "<sha256>  <name>\n". Denetim
+    hash'e bakar (name bilgi amaçlıdır — repack'in yazdığı formatla aynı).
+    ZIP veya sidecar eksikse / hash uyuşmuyorsa FAIL.
+
+    Dönüş: True = tüm zip↔sidecar eşleşmeleri PASS; False = en az bir eksik
+           veya uyuşmazlık (fail-closed çağıran exit 1 yapar).
+    """
+    ci = ci_dir or CIKTI
+    pairs = [
+        (INNER_ZIP, os.path.join(ci, INNER_ZIP),
+         os.path.join(ci, INNER_ZIP + ".sha256")),
+        (OUTER_ZIP, os.path.join(ci, OUTER_ZIP),
+         os.path.join(ci, OUTER_ZIP + ".sha256")),
+    ]
+    ok = True
+    print("--- zip ↔ sidecar bütünlük denetimi (--verify) ---")
+    for name, zip_path, sc_path in pairs:
+        if not os.path.isfile(zip_path):
+            print(f"  [EKSİK] {name} — zip yok")
+            ok = False
+            continue
+        if not os.path.isfile(sc_path):
+            print(f"  [EKSİK] {name}.sha256 — sidecar yok")
+            ok = False
+            continue
+        actual = sha256(zip_path)
+        expected = ""
+        try:
+            with open(sc_path, encoding="utf-8", errors="ignore") as f:
+                first = f.readline().strip()
+            expected = first.split()[0] if first else ""
+        except OSError:
+            expected = ""
+        match = bool(expected) and actual == expected
+        tag = "PASS" if match else "FAIL"
+        shown = expected[:16] if expected else "(boş/okunamadı)"
+        print(f"  [{tag}] {name}: {actual[:16]}…")
+        print(f"        sidecar: {shown} — {'eşleşti' if match else 'UYUŞMUYOR / EKSİK'}")
+        if not match:
+            ok = False
+    print(f"  bütünlük: {'TÜMÜ PASS' if ok else 'FAIL (en az bir uyuşmazlık/eksik)'}")
+    return ok
+
+
 def sync_config():
     """Repack sonrası config'i paket içeriğiyle senkron et (update-config felsefesi).
 
@@ -227,6 +278,17 @@ def sync_config():
 
 
 def main():
+    ap = argparse.ArgumentParser(
+        description="Stoic-Hume V5 teslim zincirini deterministik yeniden paketler.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="--verify: repack SONRASI CIKTI/'daki zip'lerin SHA-256'sını "
+               "kendi .sha256 sidecar'larıyla karşılaştırır; uyuşmazlık/eksik "
+               "→ exit 1 (fail-closed bütünlük kapısı).")
+    ap.add_argument("--verify", action="store_true",
+                    help="repack sonrası zip hash'lerini sidecar'larla doğrula "
+                         "(eksik/uyuşmazlık → exit 1)")
+    args = ap.parse_args()
+
     # 0) PDF metadata-stripped hash sidecar (build determinism proxy).
     #    build_zip'dan ÖNCE yapılır (çünkü MANIFEST.txt sidecar'ı listeler).
     #    DETERMİNİZM: qpdf --remove-metadata aynı PDF üzerinde farklı byte'lar
@@ -314,7 +376,11 @@ def main():
     print(f"  iç zip : {INNER_ZIP} ({inner_size} B) → CIKTI/ + dış zip içine gömüldü")
     print(f"  dış zip : {OUTER_ZIP} ({outer_size} B)")
 
-    return 0 if sync_ok else 1
+    verify_ok = True
+    if args.verify:
+        verify_ok = verify_sidecars()
+
+    return 0 if (sync_ok and verify_ok) else 1
 
 
 if __name__ == "__main__":

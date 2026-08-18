@@ -1068,10 +1068,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y poppler-utils qpdf
 
-      # Deterministik repack — kaynak ağacı commit'li olduğundan doğrudan koşar.
-      - name: Run repack_delivery.py (deterministic)
+      # Deterministik repack — kaynak ağacı commit'li olduğundan doğrudan
+      # koşar; --verify repack SONRASI zip'lerin SHA-256'sını .sha256
+      # sidecar'larıyla karşılaştırır (eksik/uyuşmazlık → exit 1, fail-closed).
+      - name: Run repack_delivery.py (deterministic + sidecar verify)
         run: |
-          python3 _calisma/repack_delivery.py
+          python3 _calisma/repack_delivery.py --verify
 
       # SIDECAR SYNC KAPISI: repack çıktısı commit'li dosyaları değiştiriyorsa
       # (git diff boş değilse) byte-identical değildir → FAIL. Kapsam: CIKTI/
