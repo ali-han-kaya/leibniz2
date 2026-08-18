@@ -96,13 +96,13 @@ verify_delivery.py --verify-manifest (K10) → PASS (mock 3/3); tamper→exit 1,
 
 `python3 ALI_KOMUT_TOOLKIT_v3/scripts/v3_verify.py <paket_klasoru>` çalıştırıldı; fail-closed gate **ham bulgulardan yeniden hesaplanan** P0/P1 sayısına göre `PASS` üretti. Çıktının özeti (dosya sayısı, toplam boyut, secret/hijyen/bütçe bulguları) §9'daki doğrulama raporuna eşlik eder.
 
-### 6.2 Katman tablosu — `verify_delivery.py` (K0–K13)
+### 6.2 Katman tablosu — `verify_delivery.py` (K0–K14)
 
 M0 raporunun yazıldığı tarihteki `v3_verify.py` kapısı, sonradan tek giriş
-noktasına genişletildi: `verify_delivery.py` (K0–K13). Bu tablo güncel
+noktasına genişletildi: `verify_delivery.py` (K0–K14). Bu tablo güncel
 fail-closed zincirini katman katman listeler; her satır çalıştırılmış bir
 komutun çıktısına dayanır (tahmin yok). `--full` = K1-K7 + K6-referans +
-K8 + K9 + soy hattı + K11 + K13; K10 ve K12 ayrıca çağrılır.
+K8 + K9 + soy hattı + K11 + K13 + K14; K10 ve K12 ayrıca çağrılır.
 
 | Katman | Kontrol | Durum (son doğrulama) |
 |---|---|---|
@@ -120,6 +120,22 @@ K8 + K9 + soy hattı + K11 + K13; K10 ve K12 ayrıca çağrılır.
 | K11 | config drift (`gen_config.py --dry-run`; `--check-config-drift`) | PASS |
 | K12 | LaunchAgent plist şablonu (`--check-plist`) | PASS (yerel macOS; Linux CI'da koşmaz) |
 | K13 | gen_repro_manifest.py self-testi (`--check-repro-manifest`) | PASS |
+| K14 | Cleanup kaydı: M0 §10 silme/taşıma kayıtları (`--check-cleanup`) | PASS |
+
+**K14 bulguları (yeni katman — commit `[K14]`):** `cleanup_log.json` (M0 §10
+ile aynı kaynak) okunur ve §10'daki her silme/taşıma kaydı dosya sistemiyle
+karşılaştırılır — `expect_absent` yolları yok olmalı (P1), `moved.from` yok
+(P1) + `moved.to` varsa hash birebir (P1), `canonical` hash'ler birebir (P0).
+Canlı doğrulama:
+
+| Kayıt | Sonuç |
+|---|---|
+| `_calisma/ALI_KOMUT_TOOLKIT_v3.zip` (kök) | PASS (yok — §10.4 taşındı) |
+| `_calisma/TESLIM_KLASOR_V5_2026-08-17.zip` (kök) | PASS (yok — §10.5 rm) |
+| `_calisma/TOOLKIT/ALI_KOMUT_TOOLKIT_v3.zip` | PASS (`aff84c80…` eşleşti) |
+| Kanonik dış zip + iç zip (§10.3) | PASS (hash birebir) |
+
+K14, `--full` zincirine dahildir; `--check-cleanup` ile tek başına da koşar.
 
 **K10 bulguları (yeni katman — commit `7e28f2c`):** `verify_delivery.py
 --verify-manifest reproducibility/manifest.json`, `gen_repro_manifest.py`
@@ -182,7 +198,10 @@ Bayat (superseded) zip'lerin silinme kaydı. Kanonik teslim yalnızca
 `_calisma/CIKTI/` altındaki tek kopyadır; önceki nesiller yeniden üretimle
 (repack) üzerine yazılarak bayat kalır. Aşağıdaki hash'ler silinme anında
 dondurulmuş kanıttır ve yeniden türetilebilir: §9 tablosu + `git log` +
-yanındaki `.sha256` sidecar.
+yanındaki `.sha256` sidecar. Bu bölümün makine-okunur aynası
+`_calisma/CIKTI/cleanup_log.json`'dur; `verify_delivery.py --check-cleanup`
+(K14, §6.2) bu dosyayı okuyup her silme/taşıma kaydını dosya sistemiyle
+doğrular (fail-closed).
 
 ### 10.1 Bayat zip — dondurulmuş orijinal hash
 

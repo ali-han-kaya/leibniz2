@@ -1,0 +1,33 @@
+{
+  "_doc": "M0_TOOLKIT_DENETIM_RAPORU.md §10 CLEANUP LOG'un makine-okunur AYNASI — TEK KAYNAK. verify_delivery.py --check-cleanup (K14) bu dosyayı okur ve §10'daki silme/taşıma kayıtlarının dosya sistemindeki GERÇEK durumla uyuştuğunu denetler. Yollar repo köküne göredir.",
+  "expect_absent": [
+    {
+      "path": "_calisma/ALI_KOMUT_TOOLKIT_v3.zip",
+      "note": "§10.4: kök kopyası _calisma/TOOLKIT/ altına taşındı (gitignore'da)"
+    },
+    {
+      "path": "_calisma/TESLIM_KLASOR_V5_2026-08-17.zip",
+      "note": "§10.5: başıboş kök kopyası rm edildi (kanonik CIKTI/'da, kaynak iCloud'da)"
+    }
+  ],
+  "moved": [
+    {
+      "from": "_calisma/ALI_KOMUT_TOOLKIT_v3.zip",
+      "to": "_calisma/TOOLKIT/ALI_KOMUT_TOOLKIT_v3.zip",
+      "hash": "aff84c80b9c13253fb2bd1541400a0dfb4f51cac7492dcf143b40fe66663f991",
+      "note": "§10.4: kök → TOOLKIT/ (to gitignore'da; yoksa INFO — CI fresh clone'da beklenir)"
+    }
+  ],
+  "canonical": [
+    {
+      "path": "_calisma/CIKTI/TESLIM_KLASOR_V5_2026-08-17.zip",
+      "hash": "918e054595f798d48843ece59f48582b2b22147edb0cdb06188f0c543b2e13aa",
+      "note": "§10.3: güncel kanonik dış zip"
+    },
+    {
+      "path": "_calisma/CIKTI/TESLIM_V5_FINAL_2026-08-17.zip",
+      "hash": "81a0244855cc574562bc18a611c94bf3ffbb0086c3ea32775de9d5f32473c28a",
+      "note": "§10.3: güncel kanonik iç zip"
+    }
+  ]
+}

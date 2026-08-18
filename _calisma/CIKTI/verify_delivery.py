@@ -40,10 +40,14 @@ Kullanım (tek komut):
     python3 verify_delivery.py --check-repro-manifest
                                               # K13: gen_repro_manifest.py'yi mock artifact'larla
                                               #      koşup manifest tutarlılığını denetle
-    python3 verify_delivery.py --full          # tüm katmanlar: K1-K13 + referans denetimi + Z3 + Lean
+    python3 verify_delivery.py --check-cleanup
+                                              # K14: M0 §10 silme/taşıma kayıtlarını dosya
+                                              #      sistemiyle doğrula (cleanup_log.json)
+    python3 verify_delivery.py --full          # tüm katmanlar: K1-K14 + referans denetimi + Z3 + Lean
                                               #   (--check-references + --symbolic-proof +
                                               #    --lean-proof + --check-lineage +
-                                              #    --check-config-drift + --check-repro-manifest)
+                                              #    --check-config-drift + --check-repro-manifest +
+                                              #    --check-cleanup)
 
 Exit kodu: 0 = PASS, 1 = FAIL, 2 = kullanım/ortam hatası.
 
@@ -81,6 +85,10 @@ Doğrulama zinciri (Katman 0..13):
   K13 Repro    gen_repro_manifest.py self-testi: mock artifact'lardan manifest
                üretip kapsam + SHA-256 tutarlılığını denetler (fail-closed;
                --check-repro-manifest, --full'a dahil)
+  K14 Cleanup  M0 §10 CLEANUP LOG (silme/taşıma kayıtları) — cleanup_log.json
+               (M0 §10 ile aynı kaynak) okunur: expect_absent yolları yok olmalı
+               (P1), moved.from yok (P1) + moved.to varsa hash (P1), canonical
+               hash'ler birebir (P0). --check-cleanup, --full'a dahil.
 """
 import argparse
 import hashlib
@@ -1175,6 +1183,105 @@ def check_zip_lineage(zip_path, lineage_path, add):
     return False, detail
 
 
+def check_cleanup(cleanup_path, add, repo_root=None):
+    """K14: silme/taşıma kayıtlarını (M0 §10 CLEANUP LOG) dosya sistemiyle doğrula.
+
+    cleanup_log.json (M0 §10 ile AYNI kaynak) üç kayıt türü tutar — hepsi
+    repo köküne göre yollardır:
+      - expect_absent: kaydın "silindi/taşındı" dediği yollar artık VAR
+        OLMAMALI (varsa P1 — başıboş kopya geri döndü demektir).
+      - moved: taşıma kayıtları — from yolu yok olmalı (P1); to yolu
+        gitignore'da olduğundan yalnızca VARSA hash'i doğrulanır
+        (yoksa INFO — CI fresh clone'da beklenir).
+      - canonical: güncel kanonik hash'ler — dosya varsa hash birebir
+        eşleşmeli (uyuşmazlık P0; dosya yoksa P0).
+    Döndürür (ok: bool, detail: str).
+    """
+    if not os.path.isfile(cleanup_path):
+        return True, f"cleanup_log.json yok: {cleanup_path} (atlandı)"
+    try:
+        with open(cleanup_path, encoding="utf-8") as cf:
+            log = json.load(cf)
+    except (json.JSONDecodeError, OSError) as e:
+        add("P1", "K14-LOAD", "K14 cleanup", f"okunamadı: {cleanup_path}", str(e))
+        return False, f"cleanup_log.json okunamadı: {e}"
+
+    if repo_root is None:
+        # verify_delivery.py konumu: <repo>/_calisma/CIKTI/verify_delivery.py
+        repo_root = os.path.dirname(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+    def _resolve(rel):
+        return os.path.join(repo_root, rel)
+
+    rows = []
+    ok = True
+
+    for rec in log.get("expect_absent", []):
+        p = _resolve(rec.get("path", ""))
+        note = rec.get("note", "?")
+        if os.path.exists(p):
+            ok = False
+            h = sha256_file(p) if os.path.isfile(p) else None
+            add("P1", "K14-RESURRECT", "K14 cleanup",
+                f"silinmiş/taşınmış yol yeniden var: {rec.get('path')}",
+                f"{note} | {p} | sha256={h}")
+            rows.append(("absent", rec.get("path"), "FAIL (yol var)", note))
+        else:
+            rows.append(("absent", rec.get("path"), "PASS (yok)", note))
+
+    for rec in log.get("moved", []):
+        frm = rec.get("from", "")
+        to = rec.get("to", "")
+        note = rec.get("note", "?")
+        want = rec.get("hash")
+        if os.path.exists(_resolve(frm)):
+            ok = False
+            add("P1", "K14-MOVE-FROM", "K14 cleanup",
+                f"taşınmış kaynak yol hâlâ var: {frm}", f"{note} | {_resolve(frm)}")
+            rows.append(("move", frm, "FAIL (kaynak hâlâ var)", note))
+        elif os.path.isfile(_resolve(to)):
+            got = sha256_file(_resolve(to))
+            if want and got == want:
+                rows.append(("move", to, "PASS (hash eşleşti)", note))
+            else:
+                ok = False
+                add("P1", "K14-MOVE-HASH", "K14 cleanup",
+                    f"taşınmış dosya hash uyuşmuyor: {to}",
+                    f"kayıt={want} canlı={got}")
+                rows.append(("move", to, "FAIL (hash uyuşmuyor)", note))
+        else:
+            # to yolu gitignore'da — CI fresh clone'da yok; INFO.
+            rows.append(("move", to, "INFO (yok — gitignore/CI)", note))
+
+    for rec in log.get("canonical", []):
+        p = _resolve(rec.get("path", ""))
+        want = rec.get("hash")
+        note = rec.get("note", "?")
+        if not os.path.isfile(p):
+            ok = False
+            add("P0", "K14-CANON-MISSING", "K14 cleanup",
+                f"kanonik dosya yok: {rec.get('path')}", note)
+            rows.append(("canon", rec.get("path"), "FAIL (yok)", note))
+            continue
+        got = sha256_file(p)
+        if want and got == want:
+            rows.append(("canon", rec.get("path"), "PASS (hash eşleşti)", note))
+        else:
+            ok = False
+            add("P0", "K14-CANON-HASH", "K14 cleanup",
+                f"kanonik hash uyuşmuyor: {rec.get('path')}",
+                f"kayıt={want} canlı={got}")
+            rows.append(("canon", rec.get("path"), "FAIL (hash uyuşmuyor)", note))
+
+    lines = ["Cleanup kaydı (cleanup_log.json — M0 §10 ile tek kaynak):",
+             f"{'TÜR':<8} {'YOL':<46} DURUM   NOT",
+             "-" * 100]
+    lines += [f"{r[0]:<8} {r[1]:<46} {r[2]:<22} {r[3]}" for r in rows]
+    detail = "\n".join(lines)
+    return ok, detail
+
+
 def _config_combined_sha256(config_files):
     """config.files {rel: sha256} → combined_sha256 (gen_repro_manifest.py formülü).
 
@@ -1649,10 +1756,14 @@ def main():
     ap.add_argument("--check-repro-manifest", action="store_true",
                     help="K13: gen_repro_manifest.py'yi mock artifact'larla koşup "
                          "manifest tutarlılığını denetle (fail-closed)")
+    ap.add_argument("--check-cleanup", action="store_true",
+                    help="K14: cleanup_log.json (M0 §10 CLEANUP LOG) silme/taşıma "
+                         "kayıtlarını dosya sistemiyle doğrula (fail-closed)")
     ap.add_argument("--full", action="store_true",
                     help="Tüm katmanları tek komutla koş: --check-references + "
                          "--symbolic-proof + --lean-proof + --check-lineage + "
-                         "--check-config-drift + --check-repro-manifest")
+                         "--check-config-drift + --check-repro-manifest + "
+                         "--check-cleanup")
     args = ap.parse_args()
     # --full, tüm isteğe bağlı katmanları aktifleştirir
     if args.full:
@@ -1662,6 +1773,7 @@ def main():
         args.check_lineage = True
         args.check_repro_manifest = True
         args.check_config_drift = True
+        args.check_cleanup = True
 
     # ---- Konfig yükleme (CLI bayrakları config'ten öncelikli) ----
     # Fail-closed: geçersiz JSON veya şema ihlali artık sessizce varsayılana
@@ -1859,6 +1971,16 @@ def main():
         lineage_report = {"ok": lineage_ok, "detail": lineage_detail}
         if not args.json:
             print(f"\n{lineage_detail}")
+
+    # ---- K14: Cleanup kaydı (M0 §10 silme/taşıma) ----
+    cleanup_report = None
+    if args.check_cleanup:
+        cleanup_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                    "cleanup_log.json")
+        cleanup_ok, cleanup_detail = check_cleanup(cleanup_path, add)
+        cleanup_report = {"ok": cleanup_ok, "detail": cleanup_detail}
+        if not args.json:
+            print(f"\n{cleanup_detail}")
 
     tmp = tempfile.mkdtemp(prefix="verify_delivery_")
     pages = refs = pdf_meta_report = None
@@ -2325,6 +2447,7 @@ def main():
         "repro_manifest": repro_manifest_report,
         "lineage": lineage_report,
         "plist": plist_report,
+        "cleanup": cleanup_report,
     }
     if args.json:
         print(json.dumps(out, indent=2, ensure_ascii=False))
@@ -2341,6 +2464,9 @@ def main():
                   f"metadata-stripped={pdf_meta_report['stripped'][:16]}…")
         if args.verify_manifest:
             print(f"K10 manifest digest: {'PASS' if manifest_ok else 'FAIL'}")
+        if cleanup_report:
+            print(f"K14 cleanup: {'PASS' if cleanup_report['ok'] else 'FAIL'} "
+                  f"(silme/taşıma kayıtları)")
         print(f"Config: {effective_config['source']} ← {effective_config['config_path']} "
               f"(budget_usd={effective_config['budget_usd']}, "
               f"method={effective_config['budget_method']}, "
