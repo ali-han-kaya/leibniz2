@@ -31,6 +31,13 @@ done
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
+# status_checks.py PyYAML ister — venv'de varsa onu kullan (yoksa python3).
+if [ -x _calisma/.venv_z3/bin/python ]; then
+  PY=_calisma/.venv_z3/bin/python
+else
+  PY=python3
+fi
+
 echo "════════════ AŞAMA 0 — Publish ön-kontrolü ════════════"
 
 # ── (a) Repo + working tree + history ─────────────────────────────────────
@@ -135,6 +142,35 @@ if git rev-parse --verify origin/main >/dev/null 2>&1; then
 else
   info "origin/main yok (henüz push edilmemiş)"
 fi
+
+# ── (e) Status check adları — TEK KAYNAK: workflow job name'leri ──────────
+# status_checks.py, verify.yml'deki job `name:` alanlarından required check
+# adaylarını üretir (manifest-comment hariç). --gh ile GitHub branch
+# protection'daki gerçek liste karşılaştırılır: eksik/fazla = FAIL (drift),
+# koruma kurulu değilse UYARI (publish öncesi normal).
+SC_OUT="$(mktemp)"
+if "$PY" _calisma/CIKTI/status_checks.py >"$SC_OUT" 2>&1; then
+  N="$(grep -cE '^  +[0-9]+\. ' "$SC_OUT")"
+  pass "status check adları workflow'dan türetildi ($N kapı)"
+else
+  fail "status_checks.py çalışmadı — $(tail -1 "$SC_OUT")"
+fi
+if [ "$ALLOW_REMOTE" = "1" ] && command -v gh >/dev/null 2>&1; then
+  if "$PY" _calisma/CIKTI/status_checks.py --gh >"$SC_OUT" 2>&1; then
+    if grep -q "SONUÇ: PASS" "$SC_OUT"; then
+      pass "branch protection: workflow ↔ GitHub birebir eşleşiyor"
+    elif grep -q "UYARI: branch protection" "$SC_OUT"; then
+      warn "branch protection kurulu değil — AŞAMA 1 (b) web UI'da kur"
+    else
+      info "branch protection durumu: $(grep -E 'SONUÇ|UYARI' "$SC_OUT" | head -1)"
+    fi
+  else
+    fail "branch protection uyumsuz — _calisma/CIKTI/status_checks.py --gh"
+  fi
+else
+  info "branch protection GitHub doğrulaması atlandı (--allow-remote + gh gerekli)"
+fi
+rm -f "$SC_OUT"
 
 # ── Sonuç ─────────────────────────────────────────────────────────────────
 echo ""

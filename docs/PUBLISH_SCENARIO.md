@@ -83,7 +83,10 @@ open "https://github.com/<user>/leibniz2/settings/branches"
 #     Web UI'da:
 #       "Add branch protection rule" → Branch name pattern: `main`
 #       ✓ Require status checks to pass before merging
-#         → ara ve ekle (6 kapı; adlar = workflow job `name:` alanları):
+#         → ara ve ekle: önce otomatik ad listesini al (tek kaynak = workflow):
+#             python3 _calisma/CIKTI/status_checks.py
+#           (6 kapı; adlar = workflow job `name:` alanları — elle yazma,
+#           workflow değişince sürüklenmesin):
 #           Delivery verification — K1-K9 (single entry point)
 #           Budget shield (aggregated)
 #           Static markdown reports (incl. pre-commit findings)
@@ -102,6 +105,15 @@ open "https://github.com/<user>/leibniz2/settings/branches"
 - Tarayıcıda Settings → Branches → `main` için kural eklendi (koruma aktif)
 
 **Görsel doğrulama:** https://github.com/<user>/leibniz2 adresi boş repo olarak açılmalı.
+
+**Sonraki doğrulama (koruma kurulduktan sonra):** workflow ↔ GitHub eşleşmesi
+otomatik kontrol edilir — AŞAMA 0'ı `--allow-remote` ile tekrar çalıştır veya:
+```bash
+python3 _calisma/CIKTI/status_checks.py --gh
+# SONUÇ: PASS — 6 check birebir eşleşiyor (workflow ↔ GitHub)
+```
+Eksik/fazla check → exit 1 (fail-closed): web UI'da listeyi `status_checks.py`
+çıktısıyla eşitle veya workflow'u güncelle.
 
 ---
 
