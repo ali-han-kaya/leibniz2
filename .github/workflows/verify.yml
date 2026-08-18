@@ -1089,6 +1089,39 @@ jobs:
           fi
           echo "byte-identical repack OK: commit'li dosyalar <-> repack ciktisi ayni"
 
+      # BYTE-IDENTICAL KANITI (önce/sonra hash): commit'li HEAD zip hash'i
+      # ile repack çıktısının hash'ini yan yana hesaplayıp run summary'ye yazar.
+      # Önceki adım git diff'i boş kıldığı için burada iki hash BİREBİR aynı
+      # olur; tablo denetim izidir (tam SHA-256, kısaltılmamış).
+      - name: Write byte-identical proof (before/after hashes) to summary
+        run: |
+          outer="TESLIM_KLASOR_V5_2026-08-17.zip"
+          inner="TESLIM_V5_FINAL_2026-08-17.zip"
+          identical=0
+          total=0
+          {
+            echo "## Repack byte-identical kanıtı (önce/sonra SHA-256)"
+            echo
+            echo "| Dosya | before (HEAD) | after (repack) | Sonuç |"
+            echo "|---|---|---|---|"
+            for z in "$outer" "$inner"; do
+              before="$(git show "HEAD:_calisma/CIKTI/$z" | sha256sum | cut -d' ' -f1)"
+              after="$(sha256sum "_calisma/CIKTI/$z" | cut -d' ' -f1)"
+              total=$((total + 1))
+              if [ "$before" = "$after" ]; then
+                verdict="✅ identical"
+                identical=$((identical + 1))
+              else
+                verdict="❌ DIFF"
+              fi
+              echo "| \`$z\` | \`$before\` | \`$after\` | $verdict |"
+            done
+            echo
+            echo "**SONUÇ:** $identical/$total zip byte-identical (HEAD ↔ repack çıktısı)."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "byte-identical kanıtı run summary'ye yazıldı ($identical/$total)"
+          [ "$identical" = "$total" ] || { echo "::error::byte-identical DEĞİL (önce/sonra hash farklı)"; exit 1; }
+
       # Repack sonucu üzerinde base verify (K1-K7) — sidecar'lar senkron,
       # manifest tutarlı.
       - name: Verify repacked package (base K1-K7)
