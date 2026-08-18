@@ -15,10 +15,12 @@ budget_method, budget_ratios, _doc, _schema) korunur.
 Kullanım:
     python3 gen_config.py                # config'i yerinde güncelle
     python3 gen_config.py --dry-run      # hesapla + göster, yazma
+                                          #   (drift varsa exit 1 — CI kapısı)
     python3 gen_config.py --out /tmp/cfg.json   # farklı yola yaz
     python3 gen_config.py --dir <zip'lerin olduğu dizin>
 
-Exit kodu: 0 = güncellendi, 1 = şema doğrulaması başarısız,
+Exit kodu: 0 = güncellendi (veya dry-run'da drift yok),
+           1 = şema doğrulaması başarısız / dry-run'da drift,
            2 = ortam/hesap hatası (zip/pdfinfo/tex eksik).
 """
 import argparse
@@ -172,8 +174,22 @@ def main():
 
     # 4) Yaz (veya dry-run göster)
     if args.dry_run:
+        # CI drift kapısı: hesaplanan değerler commit'li config'ten farklıysa
+        # exit 1 (fail-closed) — config elle/grepli değişmiş ya da paket
+        # güncellenmiş ama config unutulmuş olabilir.
+        drift = {k: (before.get(k), v) for k, v in
+                 (("expected_pages", pages), ("expected_refs", refs),
+                  ("expected_manifest", manifest_count))
+                 if before.get(k) != v}
         print(f"DRY-RUN (yazılmadı) → {out_path}")
         print(json.dumps(cfg, indent=2, ensure_ascii=False))
+        if drift:
+            print("\nDRIFT TESPİT EDİLDİ (config paket içeriğiyle uyuşmuyor):",
+                  file=sys.stderr)
+            for k, (old_v, new_v) in drift.items():
+                print(f"  {k}: {old_v!r} → {new_v!r}  (önce → paket)", file=sys.stderr)
+            print("Düzeltme: 'gen_config.py' çalıştırıp config'i güncelle.", file=sys.stderr)
+            return 1
     else:
         with open(out_path, "w", encoding="utf-8") as f:
             json.dump(cfg, f, indent=2, ensure_ascii=False)

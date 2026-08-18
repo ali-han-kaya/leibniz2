@@ -23,6 +23,9 @@ name: verify-delivery
 #                   tek artifact olarak yükler.
 #   manifest-comment: reproducibility manifest.txt içeriğini PR yorumu olarak
 #                   düşer (PR gözden geçirmesi için; yalnızca pull_request).
+#   config-drift  : gen_config.py --dry-run ile commit'li config'in paket
+#                   içeriğinden türetilen değerlerle uyuştuğunu doğrular
+#                   (fark = FAIL, fail-closed).
 
 on:
   push:
@@ -575,3 +578,33 @@ jobs:
               repo: context.repo.repo,
               body,
             });
+
+  # ──────────────────────────────────────────────────────────────────────
+  # CONFIG DRIFT CHECK
+  #
+  # verify_delivery.config.json'daki expected_pages/expected_refs/
+  # expected_manifest değerleri paketin GERÇEK içeriğinden türetilmelidir
+  # (gen_config.py). Bu job dry-run ile hesaplar ve commit'li config'le
+  # karşılaştırır; fark varsa exit 1 → build FAIL (fail-closed). Config
+  # elle/grepli değişmiş veya paket güncellenip config unutulmuş olabilir.
+  # ──────────────────────────────────────────────────────────────────────
+  config-drift:
+    name: Config drift check (gen_config --dry-run)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install pdfinfo (poppler-utils)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y poppler-utils
+
+      - name: Run gen_config.py --dry-run (drift = FAIL)
+        run: |
+          python3 _calisma/CIKTI/gen_config.py --dry-run --dir _calisma/CIKTI
