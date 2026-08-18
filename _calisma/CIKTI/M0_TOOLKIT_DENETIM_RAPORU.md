@@ -200,6 +200,20 @@ ALI_KOMUT_TOOLKIT_v3.zip (kök → TOOLKIT/) = aff84c80b9c13253fb2bd1541400a0dfb
 |---|---|---|---|
 | 2026-08-18 | `ALI_KOMUT_TOOLKIT_v3.zip` (`_calisma/` kökü → `_calisma/TOOLKIT/`) | `aff84c80…` | K0 P1'i (başıboş kök kopyası); kanonik iCloud'da, gitignore'da → TOOLKIT/ altına taşındı |
 
+### 10.5 Kök-seviye başıboş `TESLIM_KLASOR_V5_2026-08-17.zip` — rm kaydı
+
+`_calisma/` kökünde, CIKTI/ dışında duran başıboş `TESLIM_KLASOR_V5_2026-08-17.zip`
+kopyası silindi (rm). Kanonik kopya yalnızca `_calisma/CIKTI/` altındadır;
+kök kopyası `.gitignore`'da olduğundan hiç commit edilmedi (bkz. commit
+`3d114e5`), yani **kendi hash'i silinme sonrası yeniden türetilemez**
+(post-hoc dondurulamaz — şeffaflık notu). İçeriği kanonik dış zip'in
+kopyasıydı; iCloud'daki kaynak orijinal (`363a06e3…`, §9 ile aynı)
+508447 B olarak doğrulandı ve hâlâ mevcuttur.
+
+| Tarih | Silinen | Hash | Neden |
+|---|---|---|---|
+| 2026-08-18 | `TESLIM_KLASOR_V5_2026-08-17.zip` (`_calisma/` kökü) | türetilemez (gitignore, rm sonrası); iCloud kaynak `363a06e3…` | başıboş kök kopyası; kanonik CIKTI/'da, kaynak iCloud'da — kök kopyası gereksizdi |
+
 ---
 
 *Bu rapor `ALI_KOMUT_TOOLKIT_v3`'ün `M0_ANA_KOMUT.md` §8 rapor sırasına birebir uyar: karar → kontrol edilenler → başarısızlar → değişiklikler → belirsizler → doğrulama kanıtları → geçerlilik → bütçe → final dosya listesi. §10 (Cleanup log) bu sıraya eklenmiş bir teslim-sonrası uzantıdır.*
