@@ -3,8 +3,12 @@
 Bu senaryo, `_calisma/CIKTI/` ve kök config'leri (workflow, pre-commit, README) içeren
 **yerel repo'yu** GitHub'a taşır ve **CI'ı ilk kez çalıştırır**.
 
-> **Ana prensip:** `git push` zaten istenmeden yapılmaz. Bu senaryo **3 aşamalıdır**;
-> her aşama, bir sonrakine geçmeden önce bilinçli onay gerektirir.
+> **Ana prensip:** `git push` zaten istenmeden yapılmaz. Bu senaryo **4 aşamalıdır**
+> (4. opsiyonel); her aşama, bir sonrakine geçmeden önce bilinçli onay gerektirir.
+>
+> **Durum:** senaryo 2026-08-18'de uygulandı — repo `ali-han-kaya/leibniz2`
+> GitHub'da (PUBLIC, default `main`). Yeniden çalıştırmak istersen AŞAMA 0'ı
+> `bash docs/publish_precheck.sh --allow-remote` ile başlat (incremental push).
 
 ---
 
@@ -78,7 +82,8 @@ open "https://github.com/<user>/leibniz2/settings/branches"
 #
 #     Web UI'da:
 #       "Add branch protection rule" → Branch name pattern: `main`
-#       ✓ Require status checks to pass before merging#       → ara ve ekle (6 kapı; adlar = workflow job `name:` alanları):
+#       ✓ Require status checks to pass before merging
+#         → ara ve ekle (6 kapı; adlar = workflow job `name:` alanları):
 #           Delivery verification — K1-K9 (single entry point)
 #           Budget shield (aggregated)
 #           Static markdown reports (incl. pre-commit findings)
@@ -184,17 +189,25 @@ kaynaklar `refs-online`'da advisory olarak izlenir (kapıyı kırmaz).
 ## OPSİYONEL AŞAMA 4 — Branch protection'ın çalıştığını kanıtla
 
 ```bash
-# (a) Main'e doğrudan bir değişiklik push'la — branch protection REDDETMELI
-echo "test" > /tmp/should-fail.md
+# (a) Main'e doğrudan bir değişiklik push'la — branch protection REDDETMELI.
+#     (commit-msg kuralına uygun mesaj; "test:"/"should be blocked..." başlıkları
+#     commit-msg hook'u tarafından REDDEDİLİR — --no-verify ile baypas edilir,
+#     çünkü bu test UZAK branch korumasını denetler, yerel kapıyı değil.)
 git checkout -b test/protection-check
-git add /tmp/should-fail.md  # (ya da uygun dosya)
-git commit -m "should be blocked by protection"
+printf '# protection smoke\n' > _calisma/CIKTI/PROTECTION_SMOKE.md
+git add _calisma/CIKTI/PROTECTION_SMOKE.md
+git commit --no-verify -m "docs: protection smoke marker"
 git push origin test/protection-check  # ← feature branch: geçer
 # Şimdi main'e PR aç:
-gh pr create --base main --head test/protection-check --title "test: protection"
-gh pr merge --squash  # ← status check FAIL olduğu için REDDEDİLMELI
+gh pr create --base main --head test/protection-check --title "docs: protection smoke"
+# Merge denenir. CI artık YEŞİL olduğundan reddedilme nedeni "FAIL check" değil:
+# required check'ler (6 kapı) TAMAMLANMADAN veya branch main'in gerisindeyken
+# (strict) merge REDDEDİLMELİ.
+gh pr merge --squash
 git checkout main
 git branch -D test/protection-check
+gh pr close test/protection-check --comment "protection smoke sonlandı"
+git push origin --delete test/protection-check
 
 # (b) Kullanıcı olarak "Status checks required" görünür
 gh repo view --web
@@ -254,7 +267,7 @@ gh repo edit --enable-squash-merge --enable-rebase-merge \
 
 | Adım | Komut | Ne zaman |
 |---|---|---|
-| 0. Ön-kontrol | `git status` + `gh auth status` | her şeyden önce |
+| 0. Ön-kontrol | `bash docs/publish_precheck.sh` (tek komut) | her şeyden önce |
 | 1. Repo oluştur | `gh repo create leibniz2 --public ...` | AŞAMA 0 yeşilse |
 | 2. Push | `git push -u origin main` | AŞAMA 1 yeşilse |
 | 3. CI izle | `gh run watch` | AŞAMA 2 sonrası 5-15 dk |
