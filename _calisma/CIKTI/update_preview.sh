@@ -12,35 +12,37 @@
 # (tarayıcıda yenilemek yeterlidir). Build damgası header'da görünür, böylece
 # "preview gerçekten yenilendi mi" sorusu sayfada kanıtlanır.
 #
-# BÖLÜM 2 — LaunchAgent plist (Homebrew-style)
-# Kurulu plist tam yolu KORUNUR: ~/Library/LaunchAgents/com.freebuff.preview-leibniz2.plist
-# Ancak plist İÇERİĞİ şablon olarak TCC-safe dizinde tutulur:
-#   ~/Library/Caches/com.freebuff/preview-template/com.freebuff.preview-leibniz2.plist.tmpl
-# Şablonda {{HOME}} / {{PORT}} / {{INTERVAL}} placeholder'ları vardır; script
-# bunları verilen profile göre render eder. Böylece aynı şablon her kullanıcı/
-# makinede (farklı HOME) doğru mutlak yolları üretir. Şablon yoksa script
-# yerleşik varsayılanı yazar (tek kaynak = script; Caches kopyası operasyonel).
+# BÖLÜM 2 — LaunchAgent plist'leri (Homebrew-style, tek komut)
+# İKİ plist yönetilir (tek --plist komutuyla): com.freebuff.preview-leibniz2
+# (birincil; KeepAlive=true, interval 30) ve com.freebuff.preview-server
+# (legacy; interval 60). Kurulu tam yollar korunur:
+#   ~/Library/LaunchAgents/<label>.plist
+# İçerikleri şablon olarak TCC-safe dizinde tutulur:
+#   ~/Library/Caches/com.freebuff/preview-template/<label>.plist.tmpl
+# Şablonda {{HOME}} / {{LABEL}} / {{LOGNAME}} / {{PORT}} / {{INTERVAL}} /
+# {{KEEPALIVE}} placeholder'ları vardır; script bunları her profile göre
+# render eder. İkisi de aynı TCC-safe mirror --dir'ini kullanır (launchd GUI
+# agent'ı repo dizinini TCC nedeniyle okuyamaz). Şablon yoksa script yerleşik
+# varsayılanı yazar (tek kaynak = script; Caches kopyası operasyonel).
 #
 # Kullanım:
 #   update_preview.sh                      # HTML build (kaynak değişmediyse atla)
 #   update_preview.sh --force              # HTML yeniden build
 #   update_preview.sh --check              # HTML güncel mi? (0 güncel / 1 bayat / 2 hata)
 #   update_preview.sh --watch [N]          # HTML izle; değişince build
-#   update_preview.sh --plist [HOME]       # plist'i şablondan üret (vars. $HOME)
-#   update_preview.sh --plist-force [HOME] # stamp tazelense bile yeniden üret
-#   update_preview.sh --plist-check [HOME] # kurulu plist güncel mi? (0/1/2)
-#   update_preview.sh --plist-watch [N]    # şablonu izle; değişince yeniden üret
-#   update_preview.sh --plist-reset        # şablonu yerleşik varsayılandan geri yaz
+#   update_preview.sh --plist [HOME]       # her iki plist'i şablonlardan üret (vars. $HOME)
+#   update_preview.sh --plist-force [HOME] # her iki plist'i her zaman yeniden üret
+#   update_preview.sh --plist-check [HOME] # kurulu plist'ler güncel mi? (0 hepsi/1 bayat/2 şablon yok)
+#   update_preview.sh --plist-watch [N]    # şablonları izle; değişince yeniden üret
+#   update_preview.sh --plist-reset        # şablonları yerleşik varsayılandan geri yaz
 #   update_preview.sh --help
 #
 # Ortam değişkenleri (override):
 #   SRC         kaynak HTML   (varsayılan: <repo>/.freebuff/preview.html)
 #   DST         TCC-safe kopya (varsayılan: ~/Library/Caches/com.freebuff/preview/preview.html)
 #   INTERVAL    --watch bekleme süresi (varsayılan: 3)
-#   PLIST_LABEL LaunchAgent etiketi (varsayılan: com.freebuff.preview-leibniz2)
-#   PLIST_LOGNAME log dosya adı (varsayılan: preview-leibniz2)
-#   PLIST_PORT  plist'teki port (varsayılan: 8000)
-#   PLIST_INTERVAL plist'teki interval (varsayılan: 30)
+#   (plist profilleri script içindeki PLIST_PROFILES dizisindedir:
+#    label|logname|port|interval|keepalive — env ile override edilmez)
 # =============================================================================
 set -euo pipefail
 
@@ -50,12 +52,15 @@ SRC="${SRC:-$ROOT/.freebuff/preview.html}"
 DST="${DST:-$HOME/Library/Caches/com.freebuff/preview/preview.html}"
 INTERVAL="${INTERVAL:-3}"
 
-PLIST_LABEL="${PLIST_LABEL:-com.freebuff.preview-leibniz2}"
-PLIST_LOGNAME="${PLIST_LOGNAME:-preview-leibniz2}"
 PLIST_TMPL_DIR="$HOME/Library/Caches/com.freebuff/preview-template"
-PLIST_TMPL="$PLIST_TMPL_DIR/$PLIST_LABEL.plist.tmpl"
-PLIST_PORT="${PLIST_PORT:-8000}"
-PLIST_INTERVAL="${PLIST_INTERVAL:-30}"
+# Her profil: "label|logname|port|interval|keepalive". İkisi de aynı
+# preview_server.py'yi aynı TCC-safe mirror --dir'iyle başlatır (launchd GUI
+# agent'ı repo dizinini TCC nedeniyle okuyamaz); şablonda {{HOME}}/.../verify
+# sabittir. Farklar yalnızca label/logname/interval/keepalive'dir.
+PLIST_PROFILES=(
+  "com.freebuff.preview-leibniz2|preview-leibniz2|8000|30|true"
+  "com.freebuff.preview-server|preview-server|8000|60|false"
+)
 
 say() { printf '%s\n' "$*"; }
 err() { printf 'HATA: %s\n' "$*" >&2; }
@@ -115,8 +120,8 @@ PY
 # BÖLÜM 2 — plist şablonu
 # ============================================================================
 
-# Yerleşik varsayılan şablon (tek kaynak). {{HOME}}/{{PORT}}/{{INTERVAL}}
-# placeholder'ları per-profile render edilir.
+# Yerleşik varsayılan şablon (tek kaynak). {{HOME}}/{{LABEL}}/{{LOGNAME}}/
+# {{PORT}}/{{INTERVAL}}/{{KEEPALIVE}} placeholder'ları per-profile render edilir.
 plist_default_template() {
   cat <<'TPL'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -138,7 +143,7 @@ plist_default_template() {
     <string>{{INTERVAL}}</string>
   </array>
   <key>RunAtLoad</key><true/>
-  <key>KeepAlive</key><true/>
+  <key>KeepAlive</key>{{KEEPALIVE}}
   <key>StandardOutPath</key>
   <string>{{HOME}}/Library/Logs/com.freebuff/{{LOGNAME}}.log</string>
   <key>StandardErrorPath</key>
@@ -148,29 +153,45 @@ plist_default_template() {
 TPL
 }
 
-# Şablon dizinini hazırla; şablon yoksa yerleşik varsayılanı yaz.
-plist_ensure_template() {
-  mkdir -p "$PLIST_TMPL_DIR"
-  if [ ! -f "$PLIST_TMPL" ]; then
-    plist_default_template > "$PLIST_TMPL"
-    say "Şablon yazıldı: $PLIST_TMPL"
-  fi
+# Profil listesini yayınla (her satır "label|logname|port|interval|keepalive").
+plist_profiles() {
+  printf '%s\n' "${PLIST_PROFILES[@]}"
 }
 
-# {{HOME}} gibi placeholder'ları verilen profile göre doldur; stdout'a basar.
+# Bir profilin şablon dosyası yolu.
+plist_tmpl_for() {
+  printf '%s/%s.plist.tmpl' "$PLIST_TMPL_DIR" "$1"
+}
+
+# Şablon dizinini hazırla; eksik her profil şablonunu yerleşik varsayılandan yaz.
+plist_ensure_templates() {
+  mkdir -p "$PLIST_TMPL_DIR"
+  while IFS='|' read -r label _; do
+    local tmpl
+    tmpl="$(plist_tmpl_for "$label")"
+    if [ ! -f "$tmpl" ]; then
+      plist_default_template > "$tmpl"
+      say "Şablon yazıldı: $tmpl"
+    fi
+  done < <(plist_profiles)
+}
+
+# {{HOME}} gibi placeholder'ları bir profile göre doldur; stdout'a basar.
+# $1=home $2=label $3=logname $4=port $5=interval $6=keepalive(true|false)
 plist_render() {
-  local home="$1"
+  local home="$1" label="$2" logname="$3" port="$4" interval="$5" keepalive="$6"
   sed -e "s|{{HOME}}|${home}|g" \
-      -e "s|{{LABEL}}|${PLIST_LABEL}|g" \
-      -e "s|{{LOGNAME}}|${PLIST_LOGNAME}|g" \
-      -e "s|{{PORT}}|${PLIST_PORT}|g" \
-      -e "s|{{INTERVAL}}|${PLIST_INTERVAL}|g" \
-      "$PLIST_TMPL"
+      -e "s|{{LABEL}}|${label}|g" \
+      -e "s|{{LOGNAME}}|${logname}|g" \
+      -e "s|{{PORT}}|${port}|g" \
+      -e "s|{{INTERVAL}}|${interval}|g" \
+      -e "s|{{KEEPALIVE}}|<${keepalive}/>|g" \
+      "$(plist_tmpl_for "$label")"
 }
 
 # Kurulu plist'in tam yolu (Homebrew-style, per-profile).
 plist_dst_for() {
-  printf '%s/Library/LaunchAgents/%s.plist' "$1" "$PLIST_LABEL"
+  printf '%s/Library/LaunchAgents/%s.plist' "$1" "$2"
 }
 
 # HOME argümanını normalleştir (varsayılan $HOME, ~ ile başlıyorsa genişlet).
@@ -191,23 +212,23 @@ plist_validate() {
   fi
 }
 
-# Bir HOME için: kurulu plist, şablondan üretilecek içerikle aynı mı?
+# Bir profile göre: kurulu plist, şablondan üretilecek içerikle aynı mı?
 plist_up_to_date() {
-  local home="$1" dst rendered
-  dst="$(plist_dst_for "$home")"
+  local home="$1" label="$2" dst rendered
+  dst="$(plist_dst_for "$home" "$label")"
   [ -f "$dst" ] || return 1
-  rendered="$(plist_render "$home")" || return 2
+  rendered="$(plist_render "$@")" || return 2
   [ "$(cat "$dst")" = "$rendered" ] || return 1
   plist_validate "$dst" || return 1
   return 0
 }
 
 plist_install() {
-  local home="$1" dst tmp
-  dst="$(plist_dst_for "$home")"
+  local home="$1" label="$2" port="$4" interval="$5" dst tmp
+  dst="$(plist_dst_for "$home" "$label")"
   mkdir -p "$(dirname "$dst")"
   tmp="$(mktemp "$dst.tmp.XXXXXX")" || { err "geçici dosya oluşturulamadı"; return 1; }
-  plist_render "$home" > "$tmp" || { rm -f "$tmp"; return 1; }
+  plist_render "$@" > "$tmp" || { rm -f "$tmp"; return 1; }
   if ! plist_validate "$tmp"; then
     rm -f "$tmp"
     err "üretilen plist geçersiz (plutil/python doğrulaması başarısız) — yazılmadı"
@@ -215,63 +236,90 @@ plist_install() {
   fi
   mv "$tmp" "$dst"
   say "OK: $dst"
-  say "    plist şablondan üretildi (port $PLIST_PORT, interval ${PLIST_INTERVAL}s)"
+  say "    plist şablondan üretildi (port $port, interval ${interval}s)"
 }
 
 plist_do() {
   local home
   home="$(plist_home "${1:-}")"
-  plist_ensure_template
-  if plist_up_to_date "$home"; then
-    say "GÜNCEL: $(plist_dst_for "$home") zaten şablondan üretilmiş (--plist-force ile zorla)."
-  else
-    plist_install "$home"
-  fi
+  plist_ensure_templates
+  local rc=0
+  while IFS='|' read -r label logname port interval keepalive; do
+    if plist_up_to_date "$home" "$label" "$logname" "$port" "$interval" "$keepalive"; then
+      say "GÜNCEL: $(plist_dst_for "$home" "$label") zaten şablondan üretilmiş (--plist-force ile zorla)."
+    else
+      plist_install "$home" "$label" "$logname" "$port" "$interval" "$keepalive" || rc=1
+    fi
+  done < <(plist_profiles)
+  return $rc
 }
 
 plist_force() {
   local home
   home="$(plist_home "${1:-}")"
-  plist_ensure_template
-  plist_install "$home"
+  plist_ensure_templates
+  local rc=0
+  while IFS='|' read -r label logname port interval keepalive; do
+    plist_install "$home" "$label" "$logname" "$port" "$interval" "$keepalive" || rc=1
+  done < <(plist_profiles)
+  return $rc
 }
 
 plist_check() {
   local home
   home="$(plist_home "${1:-}")"
-  if [ ! -f "$PLIST_TMPL" ]; then
-    err "şablon yok: $PLIST_TMPL (önce --plist çalıştır)"
-    exit 2
-  fi
-  if plist_up_to_date "$home"; then
-    say "GÜNCEL: $(plist_dst_for "$home")  (şablonla aynı, plutil geçerli)"
-    exit 0
-  else
-    say "BAYAT/GEÇERSİZ: $(plist_dst_for "$home") şablondan farklı"
-    exit 1
-  fi
+  local rc=0 missing=0
+  while IFS='|' read -r label logname port interval keepalive; do
+    local tmpl
+    tmpl="$(plist_tmpl_for "$label")"
+    if [ ! -f "$tmpl" ]; then
+      err "şablon yok: $tmpl (önce --plist çalıştır)"
+      missing=1
+      continue
+    fi
+    if plist_up_to_date "$home" "$label" "$logname" "$port" "$interval" "$keepalive"; then
+      say "GÜNCEL: $(plist_dst_for "$home" "$label")  (şablonla aynı, plutil geçerli)"
+    else
+      say "BAYAT/GEÇERSİZ: $(plist_dst_for "$home" "$label") şablondan farklı"
+      rc=1
+    fi
+  done < <(plist_profiles)
+  if [ "$missing" -ne 0 ]; then exit 2; fi
+  if [ "$rc" -ne 0 ]; then exit 1; fi
+  exit 0
+}
+
+plist_reset() {
+  mkdir -p "$PLIST_TMPL_DIR"
+  while IFS='|' read -r label _; do
+    plist_default_template > "$(plist_tmpl_for "$label")"
+    say "Şablon yerleşik varsayılandan geri yazıldı: $(plist_tmpl_for "$label")"
+  done < <(plist_profiles)
+}
+
+# Tüm şablonların birleşik SHA-256'sı (--plist-watch değişim algısı için).
+plist_templates_hash() {
+  { while IFS='|' read -r label _; do
+      cat "$(plist_tmpl_for "$label")" 2>/dev/null || true
+    done < <(plist_profiles); } | shasum -a 256 | awk '{print $1}'
 }
 
 plist_watch() {
   local interval last_h last_t
   interval="${1:-$INTERVAL}"
-  plist_ensure_template
+  plist_ensure_templates
   last_h=""
   last_t=""
-  say "İzleniyor: $PLIST_TMPL (her ${interval}s) — Ctrl+C ile durdur"
+  say "İzleniyor: $PLIST_TMPL_DIR (her ${interval}s) — Ctrl+C ile durdur"
   trap 'say "durduruldu."; exit 0' INT TERM
   while true; do
     local h t
-    h="$(shasum -a 256 "$PLIST_TMPL" 2>/dev/null | awk '{print $1}')"
+    h="$(plist_templates_hash)"
     t="$(date +%s)"
     if [ "$h" != "$last_h" ]; then
       if [ -n "$last_t" ]; then
         # ilk turda değilse ve şablon değiştiyse yeniden üret
-        if ! plist_up_to_date "$HOME"; then
-          plist_install "$HOME"
-        else
-          say "şablon değişti ama kurulu plist zaten güncel"
-        fi
+        plist_do "$HOME" || say "plist yeniden üretilirken sorun oluştu"
       fi
       last_h="$h"
     fi
@@ -335,9 +383,7 @@ case "${1:-build}" in
     plist_watch "${2:-}"
     ;;
   --plist-reset)
-    mkdir -p "$PLIST_TMPL_DIR"
-    plist_default_template > "$PLIST_TMPL"
-    say "Şablon yerleşik varsayılandan geri yazıldı: $PLIST_TMPL"
+    plist_reset
     ;;
   build)
     [ -f "$SRC" ] || { err "kaynak yok: $SRC"; exit 2; }
