@@ -22,7 +22,8 @@ Kullanım (tek komut):
                                               # K9: Lean 4 reduct-invariance (tümevarımsal kanıt)
     python3 verify_delivery.py --verify-manifest reproducibility/manifest.json
                                               # K10: manifest.json'daki her SHA-256'yı gerçek dosyayla
-                                              #      karşılaştır (reproducibility bütünlüğü)
+                                              #      karşılaştır + config.combined_sha256'ı YENİDEN
+                                              #      hesaplayıp doğrula (reproducibility bütünlüğü)
     python3 verify_delivery.py --check-lineage  # soy hattı: zip_lineage.json + git show ile her nesli doğrula
     python3 verify_delivery.py --history-out history.jsonl
                                               # run özetini JSONL kaydı olarak yaz (preview
@@ -63,7 +64,8 @@ Doğrulama zinciri (Katman 0..13):
   K8  İspat    Z3 sembolik ispat (--symbolic-proof; z3-solver gerektirir)
   K9  Lean     Lean 4 reduct-invariance tümevarımsal kanıt (--lean-proof; lean gerektirir)
   K10 Manifest gen_repro_manifest.py çıktısı manifest.json'daki her dosyanın
-               SHA-256'sını gerçek dosyayla karşılaştır (--verify-manifest PATH;
+               SHA-256'sını gerçek dosyayla karşılaştır + config.combined_sha256'ı
+               config.files'tan YENİDEN hesaplayıp doğrula (--verify-manifest PATH;
                reproducibility bütünlüğü — fail-closed: uyuşmazlık P1)
   K11 Config  gen_config.py --dry-run: config'teki expected_pages/refs/manifest
                paketin GERÇEK içeriğinden yeniden hesaplanır ve commit'li
@@ -1162,6 +1164,20 @@ def check_zip_lineage(zip_path, lineage_path, add):
     return False, detail
 
 
+def _config_combined_sha256(config_files):
+    """config.files {rel: sha256} → combined_sha256 (gen_repro_manifest.py formülü).
+
+    Deterministik: rel yolları sıralanır, her girdi "{rel}\0{sha256}\n"
+    olarak birleştirilir ve SHA-256 alınır. gen_repro_manifest.py ile birebir
+    aynıdır — K10 burada YENİDEN hesaplar, böylece kayıtlı değerle
+    uyuşmazlık (üretici drift'i / kurcalama) fail-closed yakalanır.
+    """
+    return hashlib.sha256(
+        "".join(f"{rel}\0{config_files[rel]}\n"
+                for rel in sorted(config_files)).encode()
+    ).hexdigest()
+
+
 def verify_manifest_digest(manifest_path, add, check_id="K10-MANIFEST",
                            check_label="K10 manifest digest"):
     """K10: manifest.json'daki her dosyanın SHA-256'sını gerçek dosyayla karşılaştır.
@@ -1169,7 +1185,12 @@ def verify_manifest_digest(manifest_path, add, check_id="K10-MANIFEST",
     manifest.json gen_repro_manifest.py tarafından üretilir: {"files": {rel: sha256}}.
     rel yollar manifest'in bulunduğu dizine göre çözülür (bundle kökü). Her dosya
     yeniden hash'lenir; uyuşmazlık veya eksik dosya P1 bulgusu olur (fail-closed:
-    sessiz geçiş yok). Döndürür (ok: bool, detail: str).
+    sessiz geçiş yok).
+
+    Ek olarak config objesi denetlenir (varsa): config.files girdileri files
+    ile tutarlı olmalı ve config.combined_sha256, config.files'tan YENİDEN
+    hesaplanan değerle eşleşmelidir — config sürümünün tek-hash özeti
+    kurcalama/drift'e karşı doğrulanır. Döndürür (ok: bool, detail: str).
     """
     mpath = os.path.abspath(manifest_path)
     if not os.path.isfile(mpath):
@@ -1204,11 +1225,71 @@ def verify_manifest_digest(manifest_path, add, check_id="K10-MANIFEST",
         else:
             n_ok += 1
 
+    # ---- config.combined_sha256: YENİDEN hesapla + doğrula (fail-closed) ----
+    # gen_repro_manifest.py config/ önekli dosyaları ayrıca "config" objesine
+    # yazar: {files: {rel: sha256}, combined_sha256}. combined, o dosyaların
+    # sıralı "{rel}\0{hash}\n" birleşiminin SHA-256'sıdır. K10 burada onu
+    # config.files'tan yeniden hesaplar; kayıtlı değerle uyuşmazsa P1.
+    cfg_ok = True
+    cfg_rows = []
+    cfg = m.get("config")
+    if cfg is not None and not isinstance(cfg, dict):
+        cfg_ok = False
+        cfg_rows.append("config: dict değil")
+        add("P1", check_id, check_label, "config alanı dict değil")
+    elif isinstance(cfg, dict):
+        cfg_files = cfg.get("files")
+        stored_combined = cfg.get("combined_sha256")
+        # (a) config.files → files tutarlılığı (her girdi files'ta ve aynı hash)
+        if not isinstance(cfg_files, dict):
+            cfg_ok = False
+            cfg_rows.append("config.files: dict değil")
+            add("P1", check_id, check_label, "config.files dict değil")
+            cfg_files = {}
+        else:
+            for rel, h in sorted(cfg_files.items()):
+                if rel not in files:
+                    cfg_ok = False
+                    cfg_rows.append(f"{rel} (files'ta yok)")
+                    add("P1", check_id, check_label,
+                        f"config.files'taki dosya files'ta yok: {rel}")
+                elif files[rel] != h:
+                    cfg_ok = False
+                    cfg_rows.append(f"{rel} (hash farklı)")
+                    add("P1", check_id, check_label,
+                        f"config.files hash'i files ile uyuşmuyor: {rel}",
+                        f"config={h[:16]}… files={files[rel][:16]}…")
+        # (b) combined_sha256 yeniden hesapla + karşılaştır
+        if isinstance(cfg_files, dict):
+            if cfg_files and not stored_combined:
+                cfg_ok = False
+                cfg_rows.append("combined_sha256 eksik")
+                add("P1", check_id, check_label,
+                    "config.combined_sha256 eksik (config.files dolu)")
+            elif stored_combined is not None:
+                recalc = _config_combined_sha256(cfg_files)
+                if stored_combined != recalc:
+                    cfg_ok = False
+                    cfg_rows.append("combined_sha256 uyuşmazlığı")
+                    add("P1", check_id, check_label,
+                        "config.combined_sha256 uyuşmazlığı",
+                        f"yeniden {recalc[:16]}… ≠ kayıtlı {stored_combined[:16]}…")
+    elif any(rel.startswith("config/") for rel in files):
+        # config objesi yok ama files'ta config/ girdileri var → üretici drift'i
+        # (gen_repro_manifest.py config/ dosyası varsa config objesini her zaman yazar).
+        cfg_ok = False
+        cfg_rows.append("config objesi eksik")
+        add("P1", check_id, check_label,
+            "config objesi eksik (files'ta config/ girdileri var)")
+
+    cfg_detail = ("config.combined_sha256: PASS" if cfg_ok
+                  else ("config.combined_sha256: FAIL — " + "; ".join(cfg_rows[:5])))
+
     detail = (f"{n_ok} OK / {n_bad} uyuşmazlık / {n_missing} eksik "
-              f"({len(files)} dosya)")
+              f"({len(files)} dosya); {cfg_detail}")
     if bad_rows:
         detail += " | " + "; ".join(bad_rows[:5])
-    return (n_bad == 0 and n_missing == 0), detail
+    return (n_bad == 0 and n_missing == 0 and cfg_ok), detail
 
 
 def check_repro_manifest_self_consistency(add):
