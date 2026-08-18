@@ -592,6 +592,18 @@ jobs:
             --artifacts-dir all_artifacts \
             --out-dir reproducibility
 
+      # ─── 2b) K10: bundle bütünlüğünü fail-closed doğrula ────────────────
+      # manifest.json üretildikten HEMEN sonra verify_delivery.py --verify-manifest
+      # koşulur: manifest'teki her dosyanın SHA-256'sı gerçek dosyayla
+      # karşılaştırılır (eksik/uyuşmazlık → P1 → exit 1). gen_repro_manifest.py
+      # artifact'ları bundle'a (reproducibility/) kopyaladığı için manifest'teki
+      # rel yollar reproducibility/ altında çözülür. Fail-closed: sessiz geçiş yok.
+      - name: Verify bundle integrity (K10)
+        shell: bash
+        run: |
+          python3 _calisma/CIKTI/verify_delivery.py \
+            --verify-manifest reproducibility/manifest.json
+
       # ─── 3) Tek artifact olarak yükle ───────────────────────────────────
       - name: Upload reproducibility bundle
         uses: actions/upload-artifact@v6
