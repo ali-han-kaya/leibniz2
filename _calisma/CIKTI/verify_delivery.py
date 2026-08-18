@@ -268,6 +268,7 @@ REFERENCE_ARCHIVE = [
      "tex_needle": "Bobzien, S. (2003)"},
     {"key": "Fine 2012", "query": "Metaphysical Grounding Correia Schnieder",
      "title_needle": "metaphysical grounding", "creator_needle": "correia",
+     "ht_ids": ["isbn:1107022894", "isbn:9781107460287"],
      "tex_needle": "Fine, K. (2012)"},
     {"key": "Frede 1983", "query": "Skeptical Tradition Burnyeat",
      "title_needle": "skeptical tradition",
@@ -292,6 +293,7 @@ REFERENCE_ARCHIVE = [
      "tex_needle": "Kjellberg, P. (1996)"},
     {"key": "Lagree 1994", "query": "Juste Lipse restauration stoicisme",
      "title_needle": "lipse", "creator_needle": "lagree",
+     "ht_ids": ["isbn:2711612074", "isbn:9782711612079"],
      "tex_needle": "Lagrée, J. (1994)"},
     {"key": "Leibniz 1714", "query": "Monadologie Leibniz",
      "title_needle": "monadologie", "creator_needle": "leibniz",
@@ -304,6 +306,7 @@ REFERENCE_ARCHIVE = [
      "tex_needle": "Locke, J. (1689)"},
     {"key": "Millican 2002", "query": "Reading Hume Human Understanding Millican",
      "title_needle": "reading hume",
+     "ht_ids": ["isbn:9780198752103", "isbn:0198752113"],
      "tex_needle": "Millican, P. (2002)"},
     {"key": "Nidditch 1975", "query": "Essay Concerning Human Understanding Nidditch",
      "title_needle": "essay concerning human understanding",
@@ -316,12 +319,14 @@ REFERENCE_ARCHIVE = [
      "tex_needle": "du Vair, G. (1594)"},
     {"key": "Schmitt 1972", "query": "Cicero Scepticus Schmitt",
      "title_needle": "cicero scepticus",
+     "ht_ids": ["isbn:9401710376", "isbn:9789401710374"],
      "tex_needle": "Schmitt, C.B. (1972)"},
     {"key": "Schmitt 1983", "query": "Rediscovery Ancient Skepticism Schmitt",
      "title_needle": "skeptical tradition",
      "tex_needle": "Schmitt, C.B. (1983)"},
     {"key": "Xunzi Knoblock", "query": "Xunzi translation Knoblock",
      "title_needle": "xunzi", "creator_needle": "knoblock",
+     "ht_ids": ["isbn:9780231129657", "isbn:0231129653"],
      "tex_needle": "Xunzi."},
 ]
 
@@ -677,6 +682,108 @@ def perseus_check(ref):
     return "MISMATCH", f"CTS 200 ama '{ref['expected_marker']}' pasajda yok"
 
 
+def google_books_check(ref):
+    """Google Books API (volumes) ile kitap doğrulaması — fallback kaynak.
+
+    GBOOKS_API_KEY ortam değişkeni varsa anahtarlı çağrı; yoksa anahtarsız
+    (kota dar — çoğu IP'de 429). intitle/inauthor alan sorgusu kullanır.
+    Döndürür (PASS | MISMATCH | UNVERIFIED, açıklama)."""
+    title_n = _norm_ref(ref["title_needle"])
+    creator = ref.get("creator_needle")
+    q = f'intitle:"{ref["title_needle"]}"'
+    if creator:
+        q += f' inauthor:"{creator}"'
+    url = ("https://www.googleapis.com/books/v1/volumes?q="
+           + urllib.parse.quote(q) + "&country=US&maxResults=5")
+    key = os.environ.get("GBOOKS_API_KEY")
+    if key:
+        url += f"&key={urllib.parse.quote(key)}"
+    try:
+        data = _http_json(url, timeout=20)
+    except urllib.error.HTTPError as e:
+        if e.code == 429:
+            return "UNVERIFIED", ("Google Books 429 (anahtarsız kota; "
+                                  "GBOOKS_API_KEY ile tam denetim)")
+        return "UNVERIFIED", f"Google Books HTTP {e.code}"
+    except Exception as e:
+        return "UNVERIFIED", f"Google Books ağ hatası: {e}"
+
+    items = data.get("items", [])
+    if not items:
+        return "UNVERIFIED", "Google Books: 0 sonuç"
+    creator_n = _norm_ref(creator) if creator else None
+    for it in items:
+        vi = it.get("volumeInfo") or {}
+        t = _norm_ref(str(vi.get("title") or ""))
+        if title_n not in t:
+            continue
+        if creator_n:
+            a = _norm_ref(" ".join(vi.get("authors") or []))
+            if creator_n not in a:
+                continue
+        authors = ", ".join(vi.get("authors") or [])
+        return "PASS", (f"'{str(vi.get('title'))[:60]}' by {authors}, "
+                        f"{vi.get('publishedDate') or '?'} "
+                        f"({it.get('id') or '?'})")
+    top = items[0].get("volumeInfo") or {}
+    return "MISMATCH", (f"Google Books sonuç var ama eşleşme yok. En yakın: "
+                        f"'{str(top.get('title'))[:60]}'")
+
+
+def hathitrust_check(ref):
+    """HathiTrust Bib API ile kitap doğrulaması — fallback kaynak.
+
+    ref['ht_ids'] içindeki identifier'lar (isbn:/oclc:/lccn:/htid: önekli)
+    sırayla denenir; ilk kayıt title_needle ile eşleşirse PASS.
+    Döndürür (PASS | MISMATCH | UNVERIFIED, açıklama)."""
+    ht_ids = ref.get("ht_ids") or []
+    if not ht_ids:
+        return "UNVERIFIED", "HathiTrust: identifier yok (ht_ids)"
+    title_n = _norm_ref(ref["title_needle"])
+    last_mismatch = None
+    for ident in ht_ids:
+        url = ("https://catalog.hathitrust.org/api/volumes/brief/json/"
+               + urllib.parse.quote(ident))
+        try:
+            data = _http_json(url, timeout=20)
+        except urllib.error.HTTPError as e:
+            return "UNVERIFIED", f"HathiTrust HTTP {e.code}"
+        except Exception as e:
+            return "UNVERIFIED", f"HathiTrust ağ hatası: {e}"
+        recs = (data.get(ident, {}) or {}).get("records", {}) or {}
+        if not recs:
+            continue
+        for rec in recs.values():
+            for t in rec.get("titles") or []:
+                if title_n in _norm_ref(str(t)):
+                    return "PASS", f"HathiTrust {ident}: '{str(t)[:50]}'"
+        last_mismatch = (f"HathiTrust {ident}: kayıt var ama "
+                         f"'{ref['title_needle']}' başlık eşleşmedi")
+    if last_mismatch:
+        return "MISMATCH", last_mismatch
+    return "UNVERIFIED", "HathiTrust: verilen identifier'larda kayıt yok"
+
+
+def _archive_fallback(ref):
+    """Internet Archive UNVERIFIED kalınca ek kaynakları dene.
+
+    HathiTrust (identifier bazlı) + Google Books (key isteğe bağlı) denenir;
+    ilk PASS kazanır. Hepsi başarısızsa birleşik denetim iziyle UNVERIFIED
+    döner (kaynak 'archive' kalır — by_source'ı şişirmez).
+    Döndürür (verdict, detail, source)."""
+    attempts = []
+    if ref.get("ht_ids"):
+        hv, hd = hathitrust_check(ref)
+        attempts.append(hd[:70])
+        if hv == "PASS":
+            return hv, hd, "hathitrust"
+    gv, gd = google_books_check(ref)
+    attempts.append(gd[:70])
+    if gv == "PASS":
+        return gv, gd, "google_books"
+    return "UNVERIFIED", "; ".join(attempts), "archive"
+
+
 def run_reference_audit(tex_text, add, quiet=False):
     """K6 referans denetimi: .tex varlığı + CrossRef/SEP/OpenLibrary/
     Internet Archive/Perseus çevrimiçi doğrulama.
@@ -688,7 +795,8 @@ def run_reference_audit(tex_text, add, quiet=False):
         if not quiet:
             print(line)
 
-    say("\n--- K6 referans denetimi (CrossRef/SEP/OpenLibrary/IA/Perseus çevrimiçi) ---")
+    say("\n--- K6 referans denetimi "
+        "(CrossRef/SEP/OpenLibrary/IA/HathiTrust/Google Books/Perseus çevrimiçi) ---")
     online_results = []
 
     # 1) .tex'te varlık (çevrimdışı, deterministik)
@@ -738,14 +846,22 @@ def run_reference_audit(tex_text, add, quiet=False):
     # 4b) Internet Archive: kitap/edişyon doğrulaması (çevrimiçi, --check-references)
     for ref in REFERENCE_ARCHIVE:
         v, detail = archive_check(ref)
+        source = "archive"
+        # IA kapsamı dışı kaldıysa HathiTrust + Google Books fallback dene
+        # (ilk PASS kazanır; hepsi başarısızsa birleşik denetim izi kalır).
+        if v == "UNVERIFIED":
+            fv, fd, fs = _archive_fallback(ref)
+            v, detail, source = fv, f"{detail} | {fd}", fs
+        src_label = {"archive": "Internet Archive", "hathitrust": "HathiTrust",
+                     "google_books": "Google Books"}.get(source, source)
         tag = {"PASS": "OK  ", "MISMATCH": "FAIL", "UNVERIFIED": "SKIP"}[v]
-        say(f"  [{tag}] Archive {ref['key']:<30} -> {detail[:80]}")
-        online_results.append({"key": ref["key"], "source": "archive",
+        say(f"  [{tag}] {src_label:<10} {ref['key']:<30} -> {detail[:80]}")
+        online_results.append({"key": ref["key"], "source": source,
                                "verdict": v, "detail": detail,
                                "query": _archive_query(ref)})
         if v == "MISMATCH":
             add("P1", "K6-REF", "K6 referans",
-                f"{ref['key']} Internet Archive uyuşmuyor: {detail}")
+                f"{ref['key']} {src_label} uyuşmuyor: {detail}")
         time.sleep(0.4)  # Internet Archive nazik havuz
 
     # 4c) Perseus: antik birincil metin pasajı (çevrimiçi, --check-references)
@@ -771,7 +887,8 @@ def run_reference_audit(tex_text, add, quiet=False):
         f"{len(REFERENCE_CROSSREF) + len(REFERENCE_SEP) + len(REFERENCE_OPENLIBRARY) + len(REFERENCE_ARCHIVE) + len(REFERENCE_PERSEUS)} "
         f"(CrossRef {len(REFERENCE_CROSSREF)} + SEP {len(REFERENCE_SEP)} + "
         f"OpenLibrary {len(REFERENCE_OPENLIBRARY)} + "
-        f"Internet Archive {len(REFERENCE_ARCHIVE)} + "
+        f"Internet Archive {len(REFERENCE_ARCHIVE)} "
+        f"[HathiTrust + Google Books fallback] + "
         f"Perseus {len(REFERENCE_PERSEUS)}); "
         f"kalanı REFERANS_KANIT_DENETIMI.md sabit denetimine dayanır.")
     return online_results
