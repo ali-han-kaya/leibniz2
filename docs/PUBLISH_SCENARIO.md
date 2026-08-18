@@ -23,7 +23,13 @@ Bu senaryo, `_calisma/CIKTI/` ve kök config'leri (workflow, pre-commit, README)
 > bash docs/publish_precheck.sh --skip-smoke    # smoke testini atla (commit yok)
 > ```
 > `publish_wrapper.sh` AŞAMA 0'da bu scripti çağırır — manuel adımlar yalnızca
-> referans/denetim içindir.
+> referans/denetim içindir. Tam akışı **risksiz** önizlemek için:
+> ```bash
+> bash docs/publish_wrapper.sh --dry-run                # AŞAMA 0-3 önizle
+> bash docs/publish_wrapper.sh --dry-run --with-stage4  # AŞAMA 0-4 önizle
+> ```
+> Dry-run'da hiçbir komut çalışmaz: repo oluşturma/push/PR yalnızca
+> `[DRY-RUN] çalıştırılacak: ...` olarak basılır (log: `logs/publish_*.log`).
 
 ```bash
 cd /Users/alikaya/Desktop/leibniz2
