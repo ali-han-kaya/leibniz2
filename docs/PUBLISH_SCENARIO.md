@@ -6,9 +6,13 @@ Bu senaryo, `_calisma/CIKTI/` ve kök config'leri (workflow, pre-commit, README)
 > **Ana prensip:** `git push` zaten istenmeden yapılmaz. Bu senaryo **4 aşamalıdır**
 > (4. opsiyonel); her aşama, bir sonrakine geçmeden önce bilinçli onay gerektirir.
 >
-> **Durum:** senaryo 2026-08-18'de uygulandı — repo `ali-han-kaya/leibniz2`
-> GitHub'da (PUBLIC, default `main`). Yeniden çalıştırmak istersen AŞAMA 0'ı
-> `bash docs/publish_precheck.sh --allow-remote` ile başlat (incremental push).
+> **Durum:** senaryo 2026-08-18'de uygulandı — repo **canlı**:
+> https://github.com/ali-han-kaya/leibniz2 (PUBLIC, default `main`).
+> AŞAMA 3'teki job tablosu, `.github/workflows/verify.yml`'deki canlı job
+> `name:` alanlarının birebir aynısıdır (8 job); required check adları da aynı
+> tek kaynaktan türer (`python3 _calisma/CIKTI/status_checks.py --json`).
+> Yeniden çalıştırmak istersen AŞAMA 0'ı `bash docs/publish_precheck.sh
+> --allow-remote` ile başlat (incremental push).
 
 ---
 
@@ -72,7 +76,7 @@ git reset --hard HEAD^     # smoke commit'i geri al (branch ilerletme)
 
 # (c) gh CLI kurulu mu ve auth var mı?
 gh --version
-gh auth status             # ← "Logged in to github.com as <user>" görmeli
+gh auth status             # ← "Logged in to github.com as ali-han-kaya" görmeli
 
 # (d) Push'lanacak branch + remote yokluğu:
 git remote -v              # ← boş olmalı (henüz remote yok)
@@ -104,10 +108,10 @@ gh repo create leibniz2 \
 
 # (b) Branch koruması — GitHub web UI (gh api yerine; manuel + şeffaf)
 #     Hazır tarayıcı linki (kopyala-yapıştır):
-#       https://github.com/<user>/leibniz2/settings/branches
+#       https://github.com/ali-han-kaya/leibniz2/settings/branches
 #
 #     macOS'ta doğrudan açmak için:
-open "https://github.com/<user>/leibniz2/settings/branches"
+open "https://github.com/ali-han-kaya/leibniz2/settings/branches"
 #
 #     Web UI'da (adım adım → aşağıdaki "Branch protection — web UI adım adım"):
 #       "Add branch protection rule" → Branch name pattern: `main`
@@ -135,7 +139,7 @@ open "https://github.com/<user>/leibniz2/settings/branches"
 > `python3 _calisma/CIKTI/status_checks.py`
 
 1. **GitHub web'e gir** — tarayıcıda:
-   `https://github.com/<user>/leibniz2/settings/branches`
+   `https://github.com/ali-han-kaya/leibniz2/settings/branches`
    (Repo sayfasında **Settings → Branches** — sol menüde "Code and automation" altında.)
 
 2. **Yeni kural başlat** — sağ üstte **"Add branch protection rule"** (veya **"Add rule"**).
@@ -181,10 +185,10 @@ open "https://github.com/<user>/leibniz2/settings/branches"
    eşitle veya workflow'u güncelle.
 
 **Beklenen çıktılar:**
-- `gh repo create` → "Created repository <user>/leibniz2"
+- `gh repo create` → "Created repository ali-han-kaya/leibniz2"
 - Tarayıcıda Settings → Branches → `main` için kural eklendi (koruma aktif)
 
-**Görsel doğrulama:** https://github.com/<user>/leibniz2 adresi boş repo olarak açılmalı.
+**Görsel doğrulama:** https://github.com/ali-han-kaya/leibniz2 adresi boş repo olarak açılmalı.
 
 Koruma kurulduktan sonra doğrulama → yukarıdaki adım 9 (veya AŞAMA 0'ı
 `--allow-remote` ile tekrar çalıştır — (e) adımı aynı eşleşmeyi denetler).
@@ -202,8 +206,8 @@ git remote add origin git@github.com:$(gh repo view --json owner -q '.owner.logi
 
 # Doğrula:
 git remote -v
-# origin  git@github.com:<user>/leibniz2.git (fetch)
-# origin  git@github.com:<user>/leibniz2.git (push)
+# origin  git@github.com:ali-han-kaya/leibniz2.git (fetch)
+# origin  git@github.com:ali-han-kaya/leibniz2.git (push)
 
 # (b) İlk push — main branch + upstream set
 git push -u origin main
@@ -214,14 +218,14 @@ git push -u origin main
 Enumerating objects: N, done.
 Counting objects: 100% (N/N), done.
 ...
-To github.com:<user>/leibniz2.git
+To github.com:ali-han-kaya/leibniz2.git
  * [new branch]      main -> main
 Branch 'main' set up to track remote 'origin/main'.
 ```
 
 **Süre:** ~5-15 sn (küçük repo, 73 dosya, ~10 MiB).
 
-**Görsel doğrulama:** https://github.com/<user>/leibniz2 adresinde:
+**Görsel doğrulama:** https://github.com/ali-han-kaya/leibniz2 adresinde:
 - Temiz linear history (56 commit; test-marker `d863977`/`991473d` rebase ile
   ezildi — tam kayıt: [`docs/HISTORY_CLEANUP.md`](HISTORY_CLEANUP.md))
 - README.md render edilmiş
