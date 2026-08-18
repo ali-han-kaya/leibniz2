@@ -23,7 +23,8 @@ Kullanım (tek komut):
     python3 verify_delivery.py --verify-manifest reproducibility/manifest.json
                                               # K10: manifest.json'daki her SHA-256'yı gerçek dosyayla
                                               #      karşılaştır + config.combined_sha256'ı YENİDEN
-                                              #      hesaplayıp doğrula (reproducibility bütünlüğü)
+                                              #      hesaplayıp doğrula + cli_overrides ↔ config bundle
+                                              #      tutarlılığını denetle (reproducibility bütünlüğü)
     python3 verify_delivery.py --check-lineage  # soy hattı: zip_lineage.json + git show ile her nesli doğrula
     python3 verify_delivery.py --history-out history.jsonl
                                               # run özetini JSONL kaydı olarak yaz (preview
@@ -65,8 +66,10 @@ Doğrulama zinciri (Katman 0..13):
   K9  Lean     Lean 4 reduct-invariance tümevarımsal kanıt (--lean-proof; lean gerektirir)
   K10 Manifest gen_repro_manifest.py çıktısı manifest.json'daki her dosyanın
                SHA-256'sını gerçek dosyayla karşılaştır + config.combined_sha256'ı
-               config.files'tan YENİDEN hesaplayıp doğrula (--verify-manifest PATH;
-               reproducibility bütünlüğü — fail-closed: uyuşmazlık P1)
+               config.files'tan YENİDEN hesaplayıp doğrula + effective_config.json'
+               daki cli_overrides'ın dosya config'iyle tutarlılığını denetle
+               (--verify-manifest PATH; reproducibility bütünlüğü — fail-closed:
+               uyuşmazlık P1)
   K11 Config  gen_config.py --dry-run: config'teki expected_pages/refs/manifest
                paketin GERÇEK içeriğinden yeniden hesaplanır ve commit'li
                config'le karşılaştırılır; fark → P1 (fail-closed,
@@ -1181,6 +1184,124 @@ def _config_combined_sha256(config_files):
     ).hexdigest()
 
 
+def _cli_overrides_consistency(files, base, add, check_id="K10-OVERRIDE",
+                               check_label="K10 cli_overrides tutarlılığı"):
+    """cli_overrides ↔ config bundle tutarlılığı (config.combined_sha256 ile).
+
+    config bundle'ındaki effective_config.json (cli_overrides kaydı) ile
+    verify_delivery.config.json (dosya değerleri) aynı config sürümünü
+    yansıtmalıdır. config.combined_sha256 ikisini birden tek hash ile
+    özetlediğinden, bu ikilinin tutarlılığı cli_overrides'ın manifest'teki
+    config.combined_sha256 ile tutarlılığını kanıtlar (fail-closed).
+
+    Denetimler:
+      - file_value, verify_delivery.config.json'daki karşılıkla eşleşmeli
+        (budget→budget_usd, budget_method→budget_method).
+      - override bayrağı == (cli_given and cli_value != file_value).
+      - override=True ise effective == cli_value; False ise effective == file_value.
+      - effective_config'ın üst alanı (budget_usd/budget_method), cli_overrides'
+        .effective ile eşleşmeli.
+
+    files: manifest.json'daki files dict'i ({rel: sha256}); base: bundle kökü.
+    Döndürür (ok: bool, rows: list[str]).
+    """
+    ok = True
+    rows = []
+
+    def _find_rel(*basenames):
+        for rel in sorted(files):
+            if os.path.basename(rel) in basenames:
+                return rel
+        return None
+
+    eff_rel = _find_rel("effective_config.json")
+    file_rel = _find_rel("verify_delivery.config.json")
+    if not eff_rel and not file_rel:
+        return True, ["cli_overrides denetimi atlandı (config çifti bundle'da yok)"]
+    if eff_rel and not file_rel:
+        add("P1", check_id, check_label,
+            "effective_config.json var ama verify_delivery.config.json yok")
+        return False, ["effective_config.json var, verify_delivery.config.json yok"]
+    if file_rel and not eff_rel:
+        add("P1", check_id, check_label,
+            "verify_delivery.config.json var ama effective_config.json yok")
+        return False, ["verify_delivery.config.json var, effective_config.json yok"]
+
+    eff_path = os.path.join(base, eff_rel)
+    file_path = os.path.join(base, file_rel)
+    try:
+        with open(eff_path, encoding="utf-8") as f:
+            eff = json.load(f)
+    except (OSError, ValueError) as e:
+        add("P1", check_id, check_label,
+            f"effective_config.json okunamadı: {e}")
+        return False, [f"effective_config.json okunamadı: {e}"]
+    try:
+        with open(file_path, encoding="utf-8") as f:
+            fcfg = json.load(f)
+    except (OSError, ValueError) as e:
+        add("P1", check_id, check_label,
+            f"verify_delivery.config.json okunamadı: {e}")
+        return False, [f"verify_delivery.config.json okunamadı: {e}"]
+
+    ov = eff.get("cli_overrides")
+    if not isinstance(ov, dict):
+        add("P1", check_id, check_label,
+            "effective_config.json'da cli_overrides dict değil/yok")
+        return False, ["cli_overrides dict değil/yok"]
+
+    param_to_key = {"budget": "budget_usd", "budget_method": "budget_method"}
+    for param, cfg_key in param_to_key.items():
+        rec = ov.get(param)
+        if not isinstance(rec, dict):
+            ok = False
+            rows.append(f"cli_overrides.{param} eksik veya dict değil")
+            add("P1", check_id, check_label,
+                f"cli_overrides.{param} eksik veya dict değil")
+            continue
+        fv = rec.get("file_value")
+        cfgv = fcfg.get(cfg_key)
+        if fv != cfgv:
+            ok = False
+            rows.append(f"cli_overrides.{param}.file_value={fv!r} "
+                        f"≠ config {cfg_key}={cfgv!r}")
+            add("P1", check_id, check_label,
+                f"cli_overrides.{param}.file_value config ile uyuşmuyor",
+                f"{fv!r} ≠ {cfgv!r}")
+        cli_given = rec.get("cli_given")
+        cli_val = rec.get("cli_value")
+        eff_val = rec.get("effective")
+        expected_override = bool(cli_given) and (cli_val != fv)
+        if bool(rec.get("override")) != expected_override:
+            ok = False
+            rows.append(f"cli_overrides.{param}.override bayrağı tutarsız")
+            add("P1", check_id, check_label,
+                f"cli_overrides.{param}.override bayrağı tutarsız",
+                f"override={rec.get('override')} beklenen={expected_override}")
+        if rec.get("override"):
+            if eff_val != cli_val:
+                ok = False
+                rows.append(f"cli_overrides.{param}.effective≠cli_value")
+                add("P1", check_id, check_label,
+                    f"cli_overrides.{param}.effective cli_value ile uyuşmuyor")
+        else:
+            if eff_val != fv:
+                ok = False
+                rows.append(f"cli_overrides.{param}.effective≠file_value")
+                add("P1", check_id, check_label,
+                    f"cli_overrides.{param}.effective file_value ile uyuşmuyor")
+        if eff.get(cfg_key) != eff_val:
+            ok = False
+            rows.append(f"effective_config.{cfg_key}≠"
+                        f"cli_overrides.{param}.effective")
+            add("P1", check_id, check_label,
+                f"effective_config.{cfg_key} cli_overrides.effective ile uyuşmuyor",
+                f"{eff.get(cfg_key)!r} ≠ {eff_val!r}")
+    if ok:
+        rows.append("cli_overrides ↔ config bundle: PASS")
+    return ok, rows
+
+
 def verify_manifest_digest(manifest_path, add, check_id="K10-MANIFEST",
                            check_label="K10 manifest digest"):
     """K10: manifest.json'daki her dosyanın SHA-256'sını gerçek dosyayla karşılaştır.
@@ -1193,7 +1314,11 @@ def verify_manifest_digest(manifest_path, add, check_id="K10-MANIFEST",
     Ek olarak config objesi denetlenir (varsa): config.files girdileri files
     ile tutarlı olmalı ve config.combined_sha256, config.files'tan YENİDEN
     hesaplanan değerle eşleşmelidir — config sürümünün tek-hash özeti
-    kurcalama/drift'e karşı doğrulanır. Döndürür (ok: bool, detail: str).
+    kurcalama/drift'e karşı doğrulanır. Son olarak cli_overrides kaydı
+    (effective_config.json) ile dosya config'i (verify_delivery.config.json)
+    arasındaki tutarlılık denetlenir — ikisi de combined_sha256 ile
+    sabitlendiğinden bu, cli_overrides'ın manifest'teki config.combined_sha256
+    ile tutarlılığını kanıtlar. Döndürür (ok: bool, detail: str).
     """
     mpath = os.path.abspath(manifest_path)
     if not os.path.isfile(mpath):
@@ -1285,14 +1410,25 @@ def verify_manifest_digest(manifest_path, add, check_id="K10-MANIFEST",
         add("P1", check_id, check_label,
             "config objesi eksik (files'ta config/ girdileri var)")
 
+    # ---- cli_overrides ↔ config bundle (config.combined_sha256 ile sabitlenir) ----
+    # effective_config.json'un cli_overrides kaydı, dosya config'iyle
+    # (verify_delivery.config.json) aynı config sürümünü yansıtmalıdır. İkisi
+    # de config.combined_sha256 ile özetlendiğinden bu tutarlılık, cli_overrides'
+    # ın manifest'teki config.combined_sha256 ile tutarlılığını kanıtlar.
+    # Not: ov_ok ayrı tutulur — config.combined_sha256 etiketi yalnızca kendi
+    # denetimini anlatır; cli_overrides sonucu ayrı ov_detail alanında görünür.
+    ov_ok, ov_rows = _cli_overrides_consistency(files, base, add)
+
     cfg_detail = ("config.combined_sha256: PASS" if cfg_ok
                   else ("config.combined_sha256: FAIL — " + "; ".join(cfg_rows[:5])))
+    ov_detail = ("cli_overrides: PASS" if ov_ok
+                 else ("cli_overrides: FAIL — " + "; ".join(ov_rows[:3])))
 
     detail = (f"{n_ok} OK / {n_bad} uyuşmazlık / {n_missing} eksik "
-              f"({len(files)} dosya); {cfg_detail}")
+              f"({len(files)} dosya); {cfg_detail}; {ov_detail}")
     if bad_rows:
         detail += " | " + "; ".join(bad_rows[:5])
-    return (n_bad == 0 and n_missing == 0 and cfg_ok), detail
+    return (n_bad == 0 and n_missing == 0 and cfg_ok and ov_ok), detail
 
 
 def check_repro_manifest_self_consistency(add):

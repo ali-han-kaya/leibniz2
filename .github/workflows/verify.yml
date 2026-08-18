@@ -597,12 +597,23 @@ jobs:
           python-version: '3.12'
 
       # ─── 1) Tüm artifact'ları indir ────────────────────────────────────
-      - name: Download all job artifacts
+      # config artifact'ı AYRI indirilip config/ alt dizinine yazılır;
+      # gen_repro_manifest.py'nin CONFIG bölümü config/ önekli dosyaları
+      # yakalar → config.combined_sha256 gerçekten üretilir. merge-multiple
+      # artifact'ları köke düzleştirdiği için config'i pattern'e koymak
+      # CONFIG bölümünü boş bırakırdı (öneki kaybolurdu).
+      - name: Download remaining artifacts (merge)
         uses: actions/download-artifact@v7
         with:
           path: all_artifacts/
           merge-multiple: true
-          pattern: '{verify-report,budget,reports,config,precommit-logs,refs-online,run-history,config-drift}'
+          pattern: '{verify-report,budget,reports,precommit-logs,refs-online,run-history,config-drift}'
+
+      - name: Download config artifact (config/ prefix)
+        uses: actions/download-artifact@v7
+        with:
+          name: config
+          path: all_artifacts/config/
 
       # ─── 2) manifest.txt üret (gen_repro_manifest.py — tek kaynak) ─────────
       - name: Generate reproducibility manifest

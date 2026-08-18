@@ -97,6 +97,12 @@ config_combined_sha256: ffcdf1aa8097b4442163a3609238ccbe8910e853900922cd3ea054e7
 - `config.files` girdileri `files` ile tutarlı olmalıdır.
 - `config.combined_sha256`, `config.files`'tan yukarıdaki formülle yeniden
   hesaplanıp kayıtlı değerle eşleşmelidir.
+- `effective_config.json`'un `cli_overrides` kaydı, aynı config bundle'ındaki
+  `verify_delivery.config.json` ile tutarlı olmalıdır: `file_value` dosya
+  değeriyle eşleşmeli, `override` bayrağı `cli_given and cli_value != file_value`
+  olmalı ve `effective` (override varsa `cli_value`, yoksa `file_value`) ile
+  uyuşmalıdır. İkisi de `combined_sha256` ile sabitlendiğinden bu denetim,
+  cli_overrides'ın manifest'teki config.combined_sha256 ile tutarlılığını kanıtlar.
 
 Teslim kaynak dizinleri (`_calisma/TESLIM/`, `_calisma/V5_ICERIK/`,
 `_calisma/TOOLKIT/`) kasıtlı olarak commit edilmez — içerik zip'lerin
