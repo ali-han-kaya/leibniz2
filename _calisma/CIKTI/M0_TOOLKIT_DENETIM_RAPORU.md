@@ -172,6 +172,23 @@ değeri "bayat zip" olarak adlandırıp silme/supersede olayını kaydeder. K0
 katmanı (`verify_delivery.py`) CIKTI dışındaki zip'leri P1 işaretleyerek yeni
 bayat kopyaların sessizce birikmesini engeller.
 
+### 10.4 Toolkit zip — kökten `_calisma/TOOLKIT/` altına taşındı (K0 yeşil)
+
+`_calisma/ALI_KOMUT_TOOLKIT_v3.zip` (45941 B, iCloud kanonik kopyasıyla
+byte-identical `aff84c80…`) `_calisma/` kökünde başıboş duruyordu; K0
+(`verify_delivery.py`) bunu P1 ile işaretliyordu. Kanonik kopya iCloud'da
+(`ai önemli çıktılar/ALI_KOMUT_TOOLKIT_v3.zip`, aynı hash) olduğundan kök
+kopyası yalnızca yerel çalışma kopyasıydı → `_calisma/TOOLKIT/` (gitignore'da,
+extracted kopya zaten orada) altına taşındı. K0 artık PASS (P0=0, P1=0).
+
+```text
+ALI_KOMUT_TOOLKIT_v3.zip (kök → TOOLKIT/) = aff84c80b9c13253fb2bd1541400a0dfb4f51cac7492dcf143b40fe66663f991
+```
+
+| Tarih | Taşınan | Hash (dondurulmuş) | Neden |
+|---|---|---|---|
+| 2026-08-18 | `ALI_KOMUT_TOOLKIT_v3.zip` (`_calisma/` kökü → `_calisma/TOOLKIT/`) | `aff84c80…` | K0 P1'i (başıboş kök kopyası); kanonik iCloud'da, gitignore'da → TOOLKIT/ altına taşındı |
+
 ---
 
 *Bu rapor `ALI_KOMUT_TOOLKIT_v3`'ün `M0_ANA_KOMUT.md` §8 rapor sırasına birebir uyar: karar → kontrol edilenler → başarısızlar → değişiklikler → belirsizler → doğrulama kanıtları → geçerlilik → bütçe → final dosya listesi. §10 (Cleanup log) bu sıraya eklenmiş bir teslim-sonrası uzantıdır.*
