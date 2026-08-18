@@ -1,0 +1,45 @@
+═══════════════════════════════════════════════════════════════
+ TEK-DOSYA TAŞIMA TALİMATI — Stoic-Hume V5 (2026-08-17)
+ Ana taşıma birimi: TESLIM_KLASOR_V5_2026-08-17.zip
+═══════════════════════════════════════════════════════════════
+
+[1] DROPBOX'A KOPYALA (2 dosya)
+───────────────────────────────────────────────────────────────
+cd ~/Downloads/port
+cp TESLIM_KLASOR_V5_2026-08-17.zip TESLIM_KLASOR_V5_2026-08-17.zip.sha256 ~/Dropbox/
+cd ~/Dropbox
+
+[2] TAŞIMA SONRASI KURCALANMA KONTROLÜ (tek satır)
+───────────────────────────────────────────────────────────────
+shasum -a 256 -c TESLIM_KLASOR_V5_2026-08-17.zip.sha256 && echo "OK - KURCALANMAMIŞ" || echo "FAIL - UYUMSUZ!"
+
+[3] İÇ KATMANLARI DOĞRULA (isteğe bağlı)
+───────────────────────────────────────────────────────────────
+unzip -q TESLIM_KLASOR_V5_2026-08-17.zip
+cd Stoic-Hume-Final-V5_2026-08-17
+shasum -a 256 -c KLASOR_CHECKSUMLARI.sha256          # klasör 10/10 OK (11 öğe, kendini listelemez)
+shasum -a 256 -c TESLIM_V5_FINAL_2026-08-17.zip.sha256  # iç zip OK
+
+[4] ZIP İÇİ PAKET DOĞRULAMASI (tam denetim)
+───────────────────────────────────────────────────────────────
+unzip -q TESLIM_V5_FINAL_2026-08-17.zip
+cd TESLIM_V5_FINAL_2026-08-17/stoic_hume_package/Stoic_Hume_Formal_Section_2026-08-17
+python3 core_formal_model_check.py && python3 encoding_sensitivity_check.py && python3 gate15_check.py
+# MANIFEST 18/18 · 3 script byte-for-byte · PDF 33 sayfa
+
+[5] SIDECAR KAYBOLURSA BAĞIMSIZ HASH
+───────────────────────────────────────────────────────────────
+shasum -a 256 TESLIM_KLASOR_V5_2026-08-17.zip
+# çıktıyı sidecar dosyasındaki değerle karşılaştır (yukarıda [1] ile birlikte taşındı)
+
+[6] WINDOWS KARŞILIĞI
+───────────────────────────────────────────────────────────────
+certutil -hashfile TESLIM_KLASOR_V5_2026-08-17.zip SHA256
+
+NOTLAR
+───────────────────────────────────────────────────────────────
+· İki zip vardır: TESLIM_KLASOR (ana taşıma birimi, Dropbox'a bunu kopyala)
+  ve TESLIM_V5_FINAL (iç zip — TESLIM_KLASOR'un içinde, gerekmez ayrıca taşıma).
+· Sidecar'ı zip ile AYNI klasörde tut; dosya adını DEĞİŞTİRME (hash ada bağlı).
+· Güncel hash'ler her zaman sidecar'lardadır — bu talimat zip dışında durur,
+  sabit hash içermez (self-reference çözümü).

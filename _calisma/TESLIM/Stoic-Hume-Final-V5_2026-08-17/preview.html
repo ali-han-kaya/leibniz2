@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stoic Katalepsis &amp; Humean Custom — Formal Section (V5, live overview)</title>
+<style>
+  :root{
+    --ink:#1c2430; --muted:#5b6675; --paper:#faf7f0; --card:#ffffff;
+    --line:#e3dccd; --accent:#7a2e2e; --accent2:#2e5a7a; --ok:#2e6b43; --bad:#a33;
+    --mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);
+    font:16px/1.55 Georgia,"Iowan Old Style",serif;}
+  .wrap{max-width:980px;margin:0 auto;padding:0 20px 80px}
+  header.banner{background:var(--ink);color:#f4efe5;padding:34px 0 30px;margin-bottom:28px}
+  header.banner .wrap{padding-bottom:0}
+  .kicker{font-family:var(--mono);font-size:12px;letter-spacing:.16em;text-transform:uppercase;
+    color:#c9bfa8;margin:0 0 10px}
+  h1{font-size:30px;line-height:1.25;margin:0 0 8px;font-weight:600}
+  .sub{color:#c9bfa8;font-size:15px;margin:0}
+  .badges{margin-top:16px;display:flex;flex-wrap:wrap;gap:8px}
+  .badge{font-family:var(--mono);font-size:12px;padding:5px 10px;border-radius:999px;
+    border:1px solid #4a5566;color:#e8e2d4;background:#232d3a}
+  .badge.ok{border-color:#3f7a55;color:#b7e0c6;background:#1f3a2b}
+  h2{font-size:20px;margin:42px 0 12px;padding-bottom:6px;border-bottom:2px solid var(--line);
+    color:var(--accent)}
+  h2 .n{font-family:var(--mono);color:var(--muted);font-weight:400;margin-right:8px}
+  h3{font-size:16px;margin:24px 0 8px;color:var(--accent2)}
+  p{margin:10px 0}
+  .thesis{background:var(--card);border-left:5px solid var(--accent);border-radius:0 8px 8px 0;
+    padding:16px 20px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+  .thesis p{margin:0;font-size:17px;line-height:1.6}
+  .thesis .attrib{display:block;margin-top:10px;font-family:var(--mono);font-size:12px;
+    color:var(--muted)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;
+    padding:18px 20px;margin:14px 0;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:760px){.grid2{grid-template-columns:1fr}}
+  .fml{font-family:var(--mono);font-size:14.5px;background:#f3eee3;border:1px solid var(--line);
+    border-radius:6px;padding:10px 14px;margin:8px 0;overflow-x:auto;white-space:nowrap}
+  .fml .lbl{color:var(--accent2);font-weight:700}
+  .fml .res{color:var(--ok);font-weight:700}
+  .fml .res.bad{color:var(--bad)}
+  table{border-collapse:collapse;width:100%;font-size:14px;background:var(--card)}
+  th,td{border:1px solid var(--line);padding:6px 9px;text-align:center;font-family:var(--mono)}
+  th{background:#efe9dc;font-weight:700;color:var(--ink)}
+  td.l,th.l{text-align:left}
+  tr.hl{background:#f7e8d8}
+  tr.hl td{font-weight:700}
+  .t{color:var(--ok)} .f{color:var(--bad)}
+  .legend{font-size:13px;color:var(--muted);font-family:var(--mono)}
+  ul.tight{margin:8px 0;padding-left:20px}
+  ul.tight li{margin:4px 0}
+  .manifest{font-size:13px}
+  .manifest td:first-child{text-align:left;font-family:var(--mono)}
+  .pill{display:inline-block;font-family:var(--mono);font-size:11px;padding:2px 8px;
+    border-radius:999px;border:1px solid var(--line);color:var(--muted);margin:2px 4px 2px 0}
+  footer{margin-top:50px;padding-top:16px;border-top:2px solid var(--line);
+    font-family:var(--mono);font-size:12px;color:var(--muted)}
+  .statusbar{display:flex;flex-wrap:wrap;gap:10px;margin:18px 0}
+  .stat{flex:1 1 200px;background:var(--card);border:1px solid var(--line);border-radius:10px;
+    padding:12px 16px}
+  .stat .v{font-family:var(--mono);font-size:22px;font-weight:700}
+  .stat .v.pass{color:var(--ok)} .stat .v.warn{color:var(--accent)}
+  .stat .k{font-size:12px;color:var(--muted);font-family:var(--mono);text-transform:uppercase;
+    letter-spacing:.08em}
+</style>
+</head>
+<body>
+
+<header class="banner">
+  <div class="wrap">
+    <p class="kicker">Formal Section Package · Live Overview · V5</p>
+    <h1>What an Extensional First-Order Formalization Leaves Underdetermined</h1>
+    <p class="sub">Stoic Katalepsis and Humean Custom — peer-reviewed, reproducibility-ready package · full manuscript ingiliz_empirizmi_v3 (rev. 2026-08-17)</p>
+    <div class="badges">
+      <span class="badge ok">✔ 3 verification scripts PASS</span>
+      <span class="badge ok">✔ MANIFEST 18/18 hashes OK</span>
+      <span class="badge ok">✔ Gate 1.5 — 10/10</span>
+      <span class="badge ok">✔ encoding sensitivity executed</span>
+      <span class="badge">Manuscript 33 pp.</span>
+      <span class="badge">Python 3.10/3.11/3.12</span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <h2><span class="n">01</span>Final thesis statement</h2>
+  <div class="thesis">
+    <p>This article does <em>not</em> show that first-order logic cannot represent grounding,
+    modality, or epistemic normativity. It shows that, for the explicitly specified
+    extensional signature <span class="fml" style="display:inline;padding:1px 6px">L₀</span>
+    and class of admissible reconstructions <span style="font-family:var(--mono)">𝒦</span>,
+    the intended explanatory relation between custom-production and the absence of rational
+    warrant is <em>not fixed by the L₀-reduct</em>; representing it requires additional
+    structure whose philosophical interpretation remains independently contestable.</p>
+    <span class="attrib">— §2.11 Scope of the Formal Result (locked in V5)</span>
+  </div>
+
+  <div class="statusbar">
+    <div class="stat"><div class="v pass">PASS</div><div class="k">core model-check script</div></div>
+    <div class="stat"><div class="v pass">PASS</div><div class="k">encoding-sensitivity script</div></div>
+    <div class="stat"><div class="v pass">PASS</div><div class="k">Gate 1.5 script (T2–T5)</div></div>
+    <div class="stat"><div class="v pass">18 / 18</div><div class="k">MANIFEST hashes verified</div></div>
+    <div class="stat"><div class="v pass">33</div><div class="k">manuscript pages</div></div>
+  </div>
+
+  <h2><span class="n">02</span>The formal core</h2>
+  <p>The minimal many-sorted language <span class="fml" style="display:inline;padding:1px 6px">L₀</span>
+  has sorts <span class="pill">I</span><span class="pill">Cont</span><span class="pill">B</span>
+  and the predicates <span class="pill">Kat</span><span class="pill">Rep</span>
+  <span class="pill">Grasp</span><span class="pill">Assent</span><span class="pill">Bel</span>
+  <span class="pill">Causal</span><span class="pill">Custom</span><span class="pill">Just</span>
+  <span class="pill">StoicEp</span>. The enriched language <span class="fml" style="display:inline;padding:1px 6px">L⁺</span>
+  adds <span class="pill">Fact ⊆ Cont</span><span class="pill">custFact</span>
+  <span class="pill">nonjustFact</span><span class="pill">G</span><span class="pill">Obtains</span>.</p>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>Humean mechanism</h3>
+      <div class="fml"><span class="lbl">M₀a</span> &nbsp;∀b∀p ( Causal(b,p) → Custom(b) )</div>
+      <div class="fml"><span class="lbl">M₀b</span> &nbsp;∀b∀p ( Causal(b,p) → Bel(b,p) )</div>
+      <h3>Exclusion readings</h3>
+      <div class="fml"><span class="lbl">T₁</span> &nbsp;∀b∀p ( Causal(b,p) → ¬Just(b,p) )</div>
+      <div class="fml"><span class="lbl">T₂ = H-I</span> &nbsp;∀b∀p ( (Custom(b) ∧ Bel(b,p)) → ¬Just(b,p) )</div>
+      <div class="fml"><span class="lbl">B₀ (bridge)</span> &nbsp;∀b∀p ( (Custom(b) ∧ Bel(b,p)) → Causal(b,p) )</div>
+    </div>
+    <div class="card">
+      <h3>Stoic minimal skeleton</h3>
+      <div class="fml"><span class="lbl">(S)</span> &nbsp;∀b ( StoicEp(b) → ∃i∃p [ Kat(i) ∧ Rep(i,p) ∧ Grasp(b,i) ∧ Assent(b,p) ] )</div>
+      <h3>Reification axioms (O₁–O₃)</h3>
+      <div class="fml"><span class="lbl">O₁</span> &nbsp;Obtains(custFact(b)) ↔ Custom(b)</div>
+      <div class="fml"><span class="lbl">O₂</span> &nbsp;Obtains(nonjustFact(b,p)) ↔ ¬Just(b,p)</div>
+      <div class="fml"><span class="lbl">O₃</span> &nbsp;G(x,y) → Obtains(x) ∧ Obtains(y)</div>
+      <div class="fml"><span class="lbl">target</span> &nbsp;G( custFact(b), nonjustFact(b,c) )</div>
+    </div>
+  </div>
+
+  <h2><span class="n">03</span>Proposition 1 — strength relation</h2>
+  <div class="fml"><span class="lbl">Prop 1</span> &nbsp;T₂ ∧ M₀ ⊨ T₁ &nbsp;&nbsp;<span class="res">✓ holds</span>
+    &nbsp;·&nbsp; T₁ ∧ M₀ ⊭ T₂ &nbsp;&nbsp;<span class="res">✗ non-entailment (unique countermodel)</span></div>
+  <p>Purely comparative and conditional: it establishes neither that Hume endorsed T₂, nor
+  that the causal–custom relation is correctly represented by M₀, nor that T₁ exhausts
+  Humean scepticism.</p>
+
+  <h3>Bridge collapse (★)</h3>
+  <div class="fml"><span class="lbl">Prop 1 / bridge</span> &nbsp;T₁ ∧ M₀ ∧ B₀ ⊨ T₂ &nbsp;&nbsp;<span class="res">✓ 0 falsifiers</span></div>
+  <p>If the bridge axiom B₀ is accepted, the two exclusion readings collapse to the same
+  model class (T₁ ≡ T₂). The countermodel to Prop 1 is the single point where the bridge
+  breaks.</p>
+  <div class="fml"><span class="lbl">Characterization ★</span> &nbsp;M ⊨ T₁ ∧ M₀ ∧ ¬T₂ &nbsp;⟺&nbsp;
+    M ⊨ ∃b∃c [ Custom(b) ∧ Bel(b,c) ∧ Just(b,c) ∧ ¬Causal(b,c) ]</div>
+
+  <h2><span class="n">04</span>Table A — the 16 Boolean interpretations</h2>
+  <p class="legend">1 = true, 0 = false. Columns M₀, T₁, T₂ are the truth values of the
+  corresponding formulas. Highlighted row = the <strong>unique countermodel</strong> of
+  T₁ ∧ M₀ ⊨ T₂.</p>
+  <table>
+    <tr><th>Causal</th><th>Custom</th><th>Bel</th><th>Just</th><th>M₀</th><th>T₁</th><th>T₂</th><th class="l">note</th></tr>
+    <tr><td>0</td><td>0</td><td>0</td><td>0</td><td class="t">✔</td><td class="t">✔</td><td class="t">✔</td><td class="l"></td></tr>
+    <tr><td>0</td><td>0</td><td>0</td><td>1</td><td class="t">✔</td><td class="t">✔</td><td class="t">✔</td><td class="l"></td></tr>
+    <tr><td>0</td><td>0</td><td>1</td><td>0</td><td class="t">✔</td><td class="t">✔</td><td class="t">✔</td><td class="l"></td></tr>
+    <tr><td>0</td><td>0</td><td>1</td><td>1</td><td class="t">✔</td><td class="t">✔</td><td class="t">✔</td><td class="l"></td></tr>
+    <tr><td>0</td><td>1</td><td>0</td><td>0</td><td class="t">✔</td><td class="t">✔</td><td class="t">✔</td><td class="l"></td></tr>
+    <tr><td>0</td><td>1</td><td>0</td><td>1</td><td class="t">✔</td><td class="t">✔</td><td class="t">✔</td><td class="l"></td></tr>
+    <tr><td>0</td><td>1</td><td>1</td><td>0</td><td class="t">✔</td><td class="t">✔</td><td class="t">✔</td><td class="l"></td></tr>
+    <tr class="hl"><td>0</td><td>1</td><td>1</td><td>1</td><td class="t">✔</td><td class="t">✔</td><td class="f">✗</td><td class="l">unique countermodel</td></tr>
+    <tr><td>1</td><td>0</td><td>0</td><td>0</td><td class="f">✗</td><td class="t">✔</td><td class="t">✔</td><td class="l">M₀a &amp; M₀b violated</td></tr>
+    <tr><td>1</td><td>1</td><td>0</td><td>0</td><td class="f">✗</td><td class="t">✔</td><td class="t">✔</td><td class="l">M₀b violated</td></tr>
+    <tr><td>1</td><td>0</td><td>1</td><td>0</td><td class="f">✗</td><td class="t">✔</td><td class="t">✔</td><td class="l">M₀a violated</td></tr>
+    <tr><td>1</td><td>0</td><td>0</td><td>1</td><td class="f">✗</td><td class="f">✗</td><td class="t">✔</td><td class="l"></td></tr>
+    <tr><td>1</td><td>0</td><td>1</td><td>1</td><td class="f">✗</td><td class="f">✗</td><td class="t">✔</td><td class="l"></td></tr>
+    <tr><td>1</td><td>1</td><td>0</td><td>1</td><td class="f">✗</td><td class="f">✗</td><td class="t">✔</td><td class="l"></td></tr>
+    <tr><td>1</td><td>1</td><td>1</td><td>0</td><td class="t">✔</td><td class="t">✔</td><td class="t">✔</td><td class="l"></td></tr>
+    <tr><td>1</td><td>1</td><td>1</td><td>1</td><td class="t">✔</td><td class="f">✗</td><td class="f">✗</td><td class="l"></td></tr>
+  </table>
+  <p class="legend">8 rows satisfy M₀; among them exactly 1 falsifies T₂ while satisfying T₁.
+  With B₀ added, 0 rows falsify T₂ (collapse).</p>
+
+  <h2><span class="n">05</span>Proposition 2 — implicit definability failure over 𝒦</h2>
+  <div class="fml"><span class="lbl">Prop 2</span> &nbsp;∃ ℳ₁⁺, ℳ₂⁺ ∈ 𝒦 : ℳ₁⁺↾L₀ = ℳ₂⁺↾L₀ &nbsp;∧&nbsp;
+    ℳ₁⁺ ⊨ G(custFact(b), nonjustFact(b,c)) &nbsp;∧&nbsp; ℳ₂⁺ ⊭ G(custFact(b), nonjustFact(b,c))</div>
+  <p>Same L₀-reduct, different grounding extension (G₁ = {target}, G₂ = ∅). The pair is in
+  the admissible class 𝒦 (M₀ + sortal + O₁–O₃; deliberately <em>no</em> bridge axiom and no
+  structural principles on G). Three auxiliary results:</p>
+  <ul class="tight">
+    <li><strong>Definitional irreducibility</strong> — no L₀-formula is equivalent to the grounding atom.</li>
+    <li><strong>Stability under arbitrary L₀-theories</strong> — the separation survives any L₀-theory (this is the non-triviality of the result, Gate 1.5 T6).</li>
+    <li><strong>Definability qualification</strong> — explicit vs. implicit definability, with the Beth (1953) anchor.</li>
+  </ul>
+  <p>Backbone: <span class="fml" style="display:inline;padding:1px 6px">Lemma (L₀-reduct invariance)</span>
+  — structural induction showing G, Obtains, custFact, nonjustFact are not in L₀, so L₀-truth
+  depends only on the common reduct.</p>
+
+  <h2><span class="n">06</span>V5 additions — encoding sensitivity (executed)</h2>
+  <div class="card">
+    <p>The Stoic modal clause is formalized two ways and the underdetermination result is
+    tested under both (<span class="fml" style="display:inline;padding:1px 6px">encoding_sensitivity_check.py</span>,
+    frozen output <span class="fml" style="display:inline;padding:1px 6px">encoding_sensitivity_output.txt</span>):</p>
+    <div class="fml"><span class="lbl">L₀^A (minimal)</span> &nbsp;Kat(i) &nbsp;—&nbsp; modal content M undetermined for
+      <span class="res">16 / 16</span> base assignments</div>
+    <div class="fml"><span class="lbl">L₀^B (decomposition)</span> &nbsp;Kat(i) ↔ Veridical(i) ∧ SourceMatch(i) ∧ □ₛᵣ꜀ ¬FalseSource(i)
+      &nbsp;—&nbsp; M undetermined for <span class="res">6 / 10</span> admissible assignments,
+      determined for 4 / 10 (kataleptic case and its direct negation, forced by the decomposition axiom)</div>
+    <p><strong>Verdict:</strong> <span class="res">encoding-sensitive in degree, robust in existence</span> —
+    under both encodings the extensional base alone fails to fix the modal content; where L₀^B
+    determines it, the determination comes from the modal resource written into the theory.
+    The sensitivity is itself a finding (hermeneutic dependence of the formalization), not concealed.</p>
+    <p class="legend">Written into §2.12 and Gate 1.5 item T9.</p>
+  </div>
+
+  <h2><span class="n">07</span>V5 additions — E0/E1/E2 benchmark &amp; Gate 1.5</h2>
+  <div class="grid2">
+    <div class="card">
+      <h3>Minimal-enlargement benchmark (§2.13)</h3>
+      <table>
+        <tr><th></th><th>Modality</th><th>Explanatory dir.</th><th>Hyperintensional</th></tr>
+        <tr><td class="l">E0</td><td>—</td><td>—</td><td>—</td></tr>
+        <tr><td class="l">E1</td><td>—</td><td class="t">✓*</td><td>limited</td></tr>
+        <tr><td class="l">E2</td><td>optional</td><td class="t">✓</td><td class="t">✓</td></tr>
+      </table>
+      <p class="legend">* primitive G is nameable (E1); that it is <em>grounding</em> requires the
+      constraints Γ of E2. Representability ≠ adequate representation.</p>
+    </div>
+    <div class="card">
+      <h3>Gate 1.5 — 10/10 (§2.14, Table 1)</h3>
+      <table>
+        <tr><th>Item</th><th>Status</th><th>Discharged by</th></tr>
+        <tr><td>T1–T4</td><td class="t">✓</td><td class="l" style="font-size:12px">§2.4–2.6; gate15_check.py</td></tr>
+        <tr><td>T5</td><td class="t">✓</td><td class="l" style="font-size:12px">Γ on pair; gate15_check.py</td></tr>
+        <tr><td>T6</td><td class="t">✓</td><td class="l" style="font-size:12px">Prop 2.6 stability</td></tr>
+        <tr><td>T7</td><td class="t">✓</td><td class="l" style="font-size:12px">Def 2.7–2.8; §2.6.1</td></tr>
+        <tr><td>T8</td><td class="t">✓</td><td class="l" style="font-size:12px">§2.13 E0/E1/E2</td></tr>
+        <tr><td>T9</td><td class="t">✓</td><td class="l" style="font-size:12px">encoding-sensitivity script</td></tr>
+        <tr><td>T10</td><td class="t">✓</td><td class="l" style="font-size:12px">§2.10 script ≠ proof</td></tr>
+      </table>
+      <p class="legend">gate15_check.py verifies T2–T5 incl. Γ (irreflexivity, asymmetry,
+      transitivity) on both G extensions.</p>
+    </div>
+  </div>
+
+  <h2><span class="n">08</span>V5 additions — Objections &amp; Replies + Open Science</h2>
+  <div class="card">
+    <ul class="tight">
+      <li><strong>§6 Objections and Replies</strong> — seven objections in the
+        objection–concession–distinction–response format (G merely a new predicate; modal logic
+        reduces to FOL; adding G solves the problem; primitive G suffices; semantic triviality;
+        Stoic reconstruction underdetermined; Hume reconstruction controversial).</li>
+      <li><strong>§6.1 Negative-Result Matrix</strong> — pairs each claim with what is <em>not</em>
+        shown and what <em>is</em> shown (editorial guard against scope violations).</li>
+      <li><strong>Open Science Statement</strong> — AI-assistance and verification disclosure
+        before the References.</li>
+      <li><strong>Factual fix</strong> — Sextus 1562 translator corrected from Hervet to Henri
+        Estienne in “Citations and Editions”.</li>
+    </ul>
+  </div>
+
+  <h2><span class="n">09</span>Manuscript structure (ingiliz_empirizmi_v3, 33 pp.)</h2>
+  <div class="card">
+    <ul class="tight">
+      <li>§1 Introduction · §2 Formalization (core §2.1–2.11 + <strong>§2.12 encoding sensitivity</strong>, <strong>§2.13 E0/E1/E2 benchmark</strong>, <strong>§2.14 Gate 1.5</strong>, <strong>§2.15 HI1–HI4 hyperintensionality</strong>)</li>
+      <li>§3 Hume and the PSR (four-level analysis) · §4 Transmission (1562/1569 corrected; <strong>§4.6 Ev0–Ev4 evidence ladder</strong>) · §5 Comparative Note</li>
+      <li>§6 Objections and Replies · §6.1 Negative-Result Matrix · §7 Conclusion · §8 Limits · §9 Appendix</li>
+      <li>Citations and Editions · Provenance Table · Open Science Statement · References</li>
+    </ul>
+    <p class="legend">core_section.tex (885 lines, 11 subsections) is \input with the V5g
+    bridge-collapse scope fix; the V5 additions live in ingiliz_empirizmi_v3.tex
+    and are compiled with tectonic.</p>
+  </div>
+
+  <h2><span class="n">10</span>File manifest</h2>
+  <table class="manifest">
+    <tr><th class="l">File</th><th>Size (B)</th><th>MD5</th></tr>
+    <tr><td>core_section.tex</td><td>38600</td><td>7528539906a42334ebd68d15f9203d4d</td></tr>
+    <tr><td>L0_Lplus_spec.md</td><td>12623</td><td>c3232dc369ce72abefcfc94acc93e89a</td></tr>
+    <tr><td>model_check_report.md</td><td>7678</td><td>330cf107fa1d0ec6d2f52a67c489b674</td></tr>
+    <tr><td>core_formal_model_check.py</td><td>8598</td><td>bea016133582c0842199b9ad569a23c8</td></tr>
+    <tr><td>encoding_sensitivity_check.py</td><td>5287</td><td>013d1e0f2752bc38b68cafdac6b18e22</td></tr>
+    <tr><td>gate15_check.py</td><td>6023</td><td>347db78d2eabc88c1ba4de46fac84368</td></tr>
+    <tr><td>test_output.txt</td><td>835</td><td>f279b2960983f79107c809baebc00f04</td></tr>
+    <tr><td>encoding_sensitivity_output.txt</td><td>1239</td><td>ece0c79b00a5e4a16e5ea65acd5d8d13</td></tr>
+    <tr><td>gate15_output.txt</td><td>618</td><td>10e4c756a176bb511aca7ab17234cade</td></tr>
+    <tr><td>provenance2_supplement.md</td><td>8981</td><td>09476e318c6ad2147543141ccdf69c99</td></tr>
+    <tr><td>requirements.txt</td><td>600</td><td>5834add8aa405dd4a87979001c999bef</td></tr>
+    <tr><td>REPRODUCIBILITY.md</td><td>9026</td><td>99df28f4a6ea192a52552ac62056ca69</td></tr>
+    <tr><td>INTEGRATION_NOTE.md</td><td>15347</td><td>724615c2f6e21afba975c123698b0fcc</td></tr>
+    <tr><td>internal_review_report.md</td><td>28664</td><td>26196415ef8c4efd9e823a9eb83aca63</td></tr>
+    <tr><td>original_manuscript.pdf</td><td>117067</td><td>51d3492177253069975306ff1b10b60c</td></tr>
+    <tr><td>README.md</td><td>10922</td><td>904156a4ae836f2a4b8cbe24f871c152</td></tr>
+    <tr><td>ingiliz_empirizmi_v3.tex</td><td>76416</td><td>406d3b77d82406a0ce7f2c0cc1898364</td></tr>
+    <tr><td>ingiliz_empirizmi_v3.pdf</td><td>214520</td><td>3a9d8b1cc85ed1d68f52fbc1b04fe6a8</td></tr>
+    <tr><td>TESLIM_NOTU.md</td><td>2875</td><td>ef4b8fc5c35aee30beafc760555d9d0a</td></tr>
+    <tr><td>TEMIZLIK_KONTROL_LISTESI.md</td><td>8969</td><td>3f34cae5571acff38817a4122fce908d</td></tr>
+  </table>
+  <p class="legend">MANIFEST.txt excluded (self-referential). All 18 package hashes re-verified OK;
+  directory ↔ manifest exact match (no strays, no missing). The last two rows
+  (TESLIM_NOTU.md, TEMIZLIK_KONTROL_LISTESI.md) are zip-level delivery files,
+  outside the package MANIFEST.txt.</p>
+
+  <h2><span class="n">11</span>Verification chain</h2>
+  <div class="card">
+    <ul class="tight">
+      <li><strong>Core model check:</strong> <span class="fml" style="display:inline;padding:1px 6px">python3 core_formal_model_check.py</span> → PASS (deterministic, stdlib only).</li>
+      <li><strong>Encoding sensitivity:</strong> <span class="fml" style="display:inline;padding:1px 6px">python3 encoding_sensitivity_check.py</span> → PASS; output byte-for-byte identical to frozen file.</li>
+      <li><strong>Gate 1.5:</strong> <span class="fml" style="display:inline;padding:1px 6px">python3 gate15_check.py</span> → PASS (T2–T5, incl. Γ on the model pair).</li>
+      <li><strong>Manuscript:</strong> compiled with tectonic, 0 errors, 0 unresolved references, 33 pp.</li>
+      <li><strong>Scope discipline:</strong> finite Boolean validations are artefacts; the general arguments are the structural-induction Lemma and the propositions cited in Table 1.</li>
+      <li><strong>Integration:</strong> INTEGRATION_NOTE marked COMPLETED — the §2 substitution and all 18 sentence-level edits are applied; V5 additions are in the manuscript.</li>
+    </ul>
+  </div>
+
+  <h2><span class="n">12</span>References</h2>
+  <div class="card">
+    <p class="legend" style="margin-bottom:8px">Full bibliography of <span class="fml" style="display:inline">ingiliz_empirizmi_v3</span> (V5f — includes Tillemans 1999, Beauchamp 1999, Nidditch 1975; Bury annotated by volume year). Rendered from the manuscript's References block — verified 64/64 against the PDF.</p>
+    <p class="legend" style="margin-bottom:8px">🔒 Delivery integrity: zip SHA-256 is in the sidecar <span class="fml" style="display:inline">TESLIM_V5_FINAL_2026-08-17.zip.sha256</span> (verify with <span class="fml" style="display:inline">shasum -a 256 -c</span>); this page lives inside the zip, so no fixed hash is embedded here — self-reference. See TEK_SATIR_DOGRULAMA.txt.</p>
+    <ul class="tight refs">
+<li>Artemov, S. (2008). “The Logic of Justification.” <em>Review of Symbolic Logic</em> 1(4): 477–513.</li>
+    <li>Artemov, S. &amp; Fitting, M. (2019). <em>Justification Logic: Reasoning with Reasons</em>. Cambridge University Press.</li>
+    <li>Beauchamp, T.L. (ed.) (1999). <em>An Enquiry Concerning Human Understanding</em>, by David Hume. Oxford University Press.</li>
+    <li>Beebee, H. (2006). <em>Hume on Causation</em>. Routledge.</li>
+    <li>Beth, E.W. (1953). “On Padoa’s Method in the Theory of Definition.” <em>Journal of Symbolic Logic</em> 18(1): 8–13.</li>
+    <li>Bobzien, S. (2003). “Stoic Logic.” In B. Inwood (ed.), <em>The Cambridge Companion to the Stoics</em>, 85–123. Cambridge University Press.</li>
+    <li>Brittain, C. (tr.) (2006). <em>Cicero: On Academic Scepticism</em>. Hackett.</li>
+    <li>Bury, R.G. (tr.) (1933–49). <em>Sextus Empiricus</em>, 4 vols. Loeb Classical Library. (Citations by volume year: “Bury 1935” = vol. II, <em>Against the Logicians</em>, M 7–8.)</li>
+    <li>Cicero. <em>Academica</em>. Brittain 2006; <em>Lucullus</em> 145 (fist analogy).</li>
+    <li>Correia, F. &amp; Schnieder, B. (eds.) (2012). <em>Metaphysical Grounding: Understanding the Structure of Reality</em>. Cambridge University Press.</li>
+    <li>Della Rocca, M. (2010). “PSR.” <em>Philosophers’ Imprint</em> 10(7).</li>
+    <li>Diogenes Laertius. <em>Vitae Philosophorum</em> VII. Hicks 1925; Dorandi 2013.</li>
+    <li>Dorandi, T. (ed.) (2013). <em>Diogenes Laertius: Lives of Eminent Philosophers</em>. Cambridge University Press.</li>
+    <li>Elman, B.A. (1984). <em>From Philosophy to Philology: Intellectual and Social Aspects of Change in Late Imperial China</em>. Council on East Asian Studies, Harvard University. (2nd expanded ed., UCLA Asian Pacific Monograph Series, 2001.)</li>
+    <li>Fine, K. (2012). “Guide to Ground.” In Correia &amp; Schnieder (eds.), 37–80.</li>
+    <li>Floridi, L. (2002). <em>Sextus Empiricus: The Transmission and Recovery of Pyrrhonism</em>. American Classical Studies 46. Oxford University Press.</li>
+    <li>Fosl, P.S. (1998). Review of Norton &amp; Norton, <em>The David Hume Library</em>. <em>Journal of the History of Philosophy</em> 36(2).</li>
+    <li>Frede, M. (1983). “Stoics and Skeptics on Clear and Distinct Impressions.” In M. Burnyeat (ed.), <em>The Skeptical Tradition</em>, 65–93. University of California Press.</li>
+    <li>Garrett, D. (1997). <em>Cognition and Commitment in Hume’s Philosophy</em>. Oxford University Press.</li>
+    <li>Goldman, A.I. (1979). “What Is Justified Belief?” In G. Pappas (ed.), <em>Justification and Knowledge</em>, 1–23. D. Reidel.</li>
+    <li>Goldman, A.I. (1986). <em>Epistemology and Cognition</em>. Harvard University Press.</li>
+    <li>Graham, A.C. (1978). <em>Later Mohist Logic, Ethics and Science</em>. Chinese University Press, Hong Kong.</li>
+    <li>Graham, A.C. (1989). <em>Disputers of the Tao: Philosophical Argument in Ancient China</em>. Open Court.</li>
+    <li>Hansen, C. (1983). <em>Language and Logic in Ancient China</em>. University of Michigan Press.</li>
+    <li>Hansen, C. (1992). <em>A Daoist Theory of Chinese Thought: A Philosophical Interpretation</em>. Oxford University Press.</li>
+    <li>Herbert of Cherbury. (1624). <em>De Veritate</em>. Paris.</li>
+    <li>Hicks, R.D. (tr.) (1925). <em>Diogenes Laertius: Lives of Eminent Philosophers</em>, 2 vols. Loeb Classical Library.</li>
+    <li>Hume, D. (1739–40). <em>A Treatise of Human Nature</em>. Norton &amp; Norton (eds.), Oxford University Press, 2000.</li>
+    <li>Hume, D. (1748). <em>An Enquiry Concerning Human Understanding</em>. Beauchamp (ed.), Oxford University Press, 1999.</li>
+    <li>Hume, D. (1975). <em>Enquiries</em>. Selby-Bigge &amp; Nidditch (eds.), 3rd ed. Clarendon Press. (SBN pagination.)</li>
+    <li>Hunt, T.J. (1998). <em>A Textual History of Cicero’s Academici Libri</em>. Brill.</li>
+    <li>Kjellberg, P. (1996). “Sextus Empiricus, Zhuangzi, and Xunzi on ‘Why Be Skeptical?’.” In P. Kjellberg &amp; P.J. Ivanhoe (eds.), <em>Essays on Skepticism, Relativism, and Ethics in the Zhuangzi</em>. SUNY Press.</li>
+    <li>Lagrée, J. (1994). <em>Juste Lipse et la restauration du sto"icisme</em>. Vrin.</li>
+    <li>Leibniz, G.W. (1714). <em>Monadologie</em> §32.</li>
+    <li>Lipsius, J. (1584). <em>De Constantia</em>. Antwerp: Plantin.</li>
+    <li>Lipsius, J. (1604). <em>Manuductionis ad Stoicam philosophiam libri tres</em>; <em>Physiologiae Stoicorum libri tres</em>. Antwerp: Plantin-Moretus.</li>
+    <li>Locke, J. (1689). <em>An Essay Concerning Human Understanding</em> I.3.15–27. Nidditch (ed.), Clarendon Press, 1975.</li>
+    <li>Long, A.A. &amp; Sedley, D.N. (1987). <em>The Hellenistic Philosophers</em>, vol.~1. Cambridge University Press. Translation “cognition” for katalepsis at section 40; fist analogy at section 41B.</li>
+    <li>Millican, P. (2002). “The Context, Aims, and Structure of Hume’s First Enquiry.” In P. Millican (ed.), <em>Reading Hume on Human Understanding</em>, 27–65. Clarendon Press.</li>
+    <li>Nawar, T. (2022). “Clear and Distinct Perception in the Stoics, Augustine, and William of Ockham.” <em>Aristotelian Society Supplementary Volume</em> 96(1): 185–207.</li>
+    <li>Nidditch, P.H. (ed.) (1975). <em>An Essay Concerning Human Understanding</em>, by John Locke. Clarendon Press.</li>
+    <li>Norton, D.F. (1981). “The Myth of ‘British Empiricism’.” <em>History of European Ideas</em> 1(4): 331–344.</li>
+    <li>Norton, D.F. &amp; Norton, M.J. (eds.) (1996). <em>The David Hume Library</em>. Edinburgh Bibliographical Society.</li>
+    <li>Popkin, R.H. (1951). “David Hume: His Pyrrhonism and His Critique of Pyrrhonism.” <em>Philosophical Quarterly</em> 1(5): 385–407.</li>
+    <li>Popkin, R.H. (1952). “David Hume and the Pyrrhonian Controversy.” <em>Review of Metaphysics</em> 6(1): 65–81. (Repr. in <em>The High Road to Pyrrhonism</em>, 133–148.)</li>
+    <li>Popkin, R.H. (1979). <em>The History of Scepticism from Erasmus to Spinoza</em>. Rev. ed. University of California Press.</li>
+    <li>Priest, G. (2010). “The Logic of the Catuşkoṭi.” <em>Comparative Philosophy</em> 1(2): 24–54.</li>
+    <li>Priest, G. (2018). <em>The Fifth Corner of Four: Buddhist Philosophy and the Catuşkoṭi</em>. Oxford University Press.</li>
+    <li>Pruss, A.R. (2006). <em>The Principle of Sufficient Reason: A Reassessment</em>. Cambridge University Press.</li>
+    <li>Rošker, J. “Epistemology in Chinese Philosophy.” Stanford Encyclopedia of Philosophy (accessed 2026).</li>
+    <li>Baltzly, D., Durand, M. &amp; Shogry, S. (2023). “Stoicism.” Stanford Encyclopedia of Philosophy (accessed 2026).</li>
+    <li>Bolyard, C. (2009; rev. 2025). “Medieval Skepticism.” Stanford Encyclopedia of Philosophy (accessed 2026).</li>
+    <li>Papy, J. (2004; rev. 2019). “Justus Lipsius.” Stanford Encyclopedia of Philosophy (accessed 2026).</li>
+    <li>Van Norden, B. “Wang Yangming.” Stanford Encyclopedia of Philosophy (accessed 2026).</li>
+    <li>du Vair, G. (1594). <em>De la constance et consolation ès calamités publiques</em>. Paris.</li>
+    <li>Schmitt, C.B. (1972). <em>Cicero Scepticus: A Study of the Influence of the Academica in the Renaissance</em>. Martinus Nijhoff.</li>
+    <li>Schmitt, C.B. (1983). “The Rediscovery of Ancient Skepticism in Modern Times.” In M. Burnyeat (ed.), <em>The Skeptical Tradition</em>, 225–251. University of California Press.</li>
+    <li>Schnieder, B. (2011). “A Logic for ‘Because’.” <em>Review of Symbolic Logic</em> 4(3): 445–465. DOI: 10.1017/S1755020311000104.</li>
+    <li>Sextus Empiricus. (1562). <em>Pyrrhoniae Hypotyposes</em>, tr. Henri Estienne. Geneva.</li>
+    <li>Sextus Empiricus. (1569). <em>Adversus Mathematicos</em>, tr. Gentian Hervet. Paris: Martin Juvenis; Antwerp: Plantin.</li>
+    <li>Sextus Empiricus. (1621). <em>Opera</em>, Greek ed. Pierre &amp; Jacques Chou"et. Geneva.</li>
+    <li>Sextus Empiricus. <em>Adversus Mathematicos</em> VII; <em>Pyrrhoniae Hypotyposes</em> I. Bury (Loeb).</li>
+    <li>Tillemans, T.J.F. (1999). <em>Scripture, Logic, Language: Essays on Dharmakīrti and His Tibetan Successors</em>. Wisdom Publications.</li>
+    <li>Xunzi. <em>Xunzi</em> 22, “On the Rectification of Names” (ctext.org; Knoblock tr., Stanford University Press, 1988–94).</li>
+    </ul>
+  </div>
+
+  <h2><span class="n">13</span>Delivery Timeline</h2>
+  <div class="card">
+    <p class="legend" style="margin-bottom:8px">Summary of <span class="fml" style="display:inline">TESLIM_KRONOLOJISI.md</span> — the full record of the archive → V5 → verification → delivery process (2026-08-17). <strong>Primary transport unit: <span class="fml" style="display:inline">TESLIM_KLASOR_V5_2026-08-17.zip</span></strong> (single file — the whole Dropbox-ready folder inside, own SHA-256 sidecar; Dropbox upload = 2 files).</p>
+    <ul class="tight">
+      <li><strong>1 · Archive:</strong> <span class="fml" style="display:inline">Arşiv.zip</span> held 4 revision documents (Master Plan → V2 → V3 → V4). V4 was the most mature base but had dropped 9 pieces of valuable content — synthesis was needed.</li>
+      <li><strong>2 · V5 synthesis:</strong> <span class="fml" style="display:inline">FINAL-REVIZYON-MIMARISI-V5-KESIN-KILITLI.md</span> — V4 base + 9 recovered items + §XXIII manuscript audit; concrete fix: “Hypotyposes, tr. Hervet” → “tr. Henri Estienne, 1562” (desk-reject risk).</li>
+      <li><strong>3 · Manuscript work (6 Gate 1.5 items):</strong> §2.12 encoding sensitivity (executed: L₀^A 16/16 undetermined, L₀^B 6/10), §2.13 E0/E1/E2 benchmark, §2.14 Gate 1.5 checklist (Table 1: 10/10), §6 Objections &amp; Replies + §6.1 Negative-Result Matrix, Open Science / AI disclosure, MANIFEST update (27→31 pp).</li>
+      <li><strong>4 · Verification scripts (machine-proved):</strong> <span class="fml" style="display:inline">core_formal_model_check.py</span> (Prop 1/2 PASS) · <span class="fml" style="display:inline">encoding_sensitivity_check.py</span> (encoding-sensitive in degree, robust in existence) · <span class="fml" style="display:inline">gate15_check.py</span> (T2–T5 PASS). Frozen outputs byte-for-byte mandatory.</li>
+      <li><strong>5 · Remaining gaps closed:</strong> §2.15 HI1–HI4, §4.6 Ev0–Ev4, M 7.151–152, Provenance 2.0 supplement (7 columns, P-01…P-19) — manuscript reached 33 pp.</li>
+      <li><strong>6 · Citation audit (V5f):</strong> Tillemans 1999 added, Beauchamp 1999 / Nidditch 1975 independent editions, Bury volume-year note; References preview ↔ PDF verified 64/64.</li>
+      <li><strong>7 · Package + delivery:</strong> MANIFEST (18 files), preview.html, <span class="fml" style="display:inline">TESLIM_V5_FINAL_2026-08-17.zip</span> (25 files), SHA-256 sidecar, TEK_SATIR_DOGRULAMA.txt, Dropbox-ready folder with <span class="fml" style="display:inline">KLASOR_CHECKSUMLARI.sha256</span>.</li>
+      <li><strong>8 · Final verification chain: 12/12</strong> — 1. manifest 18/18 · 2. 3 scripts byte-for-byte · 3. PDF 33 pp / 0 errors · 4. checksum (sidecar + independent, both zips) · 5. <span class="fml" style="display:inline">unzip -t</span> no errors · 6. preview ↔ PDF sync · 7. References 64/64 · 8. citation audit V5f · 9. new-machine simulation (dual zip) · 10. folder checksum + tamper test (1 byte → FAILED, reverted) · 11. dual-zip sync + TESLIM_KLASOR regeneration · 12. preview visual check (13 sections, 0 console errors).</li>
+      <li><strong>9 · Cleanup:</strong> <span class="fml" style="display:inline">Arşiv.zip</span>, pre-V5 zip and PDF, /tmp scratch dirs deleted after verification; <span class="fml" style="display:inline">2201 toplu rev/</span> untouched (different workstream).</li>
+      <li><strong>10 · Single-file packaging — PRIMARY TRANSPORT UNIT:</strong> Dropbox-ready folder → <span class="fml" style="display:inline">TESLIM_KLASOR_V5_2026-08-17.zip</span> (ANA TAŞIMA BİRİMİ — 11 items inside, own SHA-256 sidecar). Dropbox upload = 2 files (zip + sidecar). 3-layer integrity: folder zip → folder checksum (10/10) → inner zip (manifest 18/18 + scripts byte-for-byte).</li>
+      <li><strong>11 · Chronology now 12 sections + V5 §XXVI reference:</strong> <span class="fml" style="display:inline">TESLIM_KRONOLOJISI.md</span> grew from 10 to 12 numbered sections (10. Single-file packaging · 11. Visual summary &amp; updates · 12. V5 §XXVI + final machine simulation) + NİHAİ DURUM block — verified in the zips (13 headers total). Cross-reference: <span class="fml" style="display:inline">FINAL-REVIZYON-MIMARISI-V5-KESIN-KILITLI.md</span> §XXVI points back to the chronology as delivery evidence (architecture = design constitution, delivery docs = proof of realization).</li>
+      <li><strong>12 · Transport instructions included:</strong> <span class="fml" style="display:inline">TEK_DOSYA_TASIMA.txt</span> (single-file transport guide — Dropbox copy + 3-layer verification commands) and <span class="fml" style="display:inline">DROPBOX_YUKLEME_KOMUTLARI.sh</span> (ready command block) added to both zips and the Dropbox-ready folder (now 11 items); folder checksum 10/10 files (self-excluded).</li>
+      <li><strong>13 · Ready command block:</strong> <span class="fml" style="display:inline">DROPBOX_YUKLEME_KOMUTLARI.sh</span> — <span class="fml" style="display:inline">bash DROPBOX_YUKLEME_KOMUTLARI.sh</span> verifies at source → copies 2 zips + 2 sidecars to Dropbox → Layer 1 (both-zip tamper check) → Layer 2 (folder 10/10) → Layer 3 (three-copy sync: preview port ↔ folder ↔ inner zip byte-identical) → Layer 4 (inner zip + 3 scripts PASS). Simulated end-to-end: all steps PASS.</li>
+      <li><strong>14 · Chronology now 16 sections + final simulation:</strong> <span class="fml" style="display:inline">TESLIM_KRONOLOJISI.md</span> now has 16 numbered sections (13. final summary rewrite · 14. dual-zip simulation · 15. visual verification · 16. transport-tool additions) + NİHAİ DURUM (17 headers total). Latest dual-zip machine simulation with current checksums: sidecar OK + independent hash match · folder 11 items / 8/8 · inner zip byte-identical · manifest 18/18 · 3 scripts byte-for-byte · PDF 33 pp.</li>
+      <li><strong>15 · Chronology now 17 sections:</strong> <span class="fml" style="display:inline">TESLIM_KRONOLOJISI.md</span> now has 17 numbered sections (13. final summary rewrite · 14. dual-zip simulation · 15. visual verification · 16. transport-tool additions · 17. final machine simulation — two zips, closing record) + NİHAİ DURUM (18 headers total). Verified in both zips: 17th section present, manifest 18/18, folder 8/8, sidecars OK.</li>
+      <li><strong>16 · Chronology now 18 sections:</strong> <span class="fml" style="display:inline">TESLIM_KRONOLOJISI.md</span> now has 18 numbered sections (17. final machine simulation · 18. final visual verification + three-copy sync) + NİHAİ DURUM (19 headers total). Verified in both zips: 18th section present, three copies of <span class="fml" style="display:inline">preview.html</span> byte-identical, manifest 18/18, folder 8/8, sidecars OK.</li>
+      <li><strong>17 · Chronology now 26 sections:</strong> <span class="fml" style="display:inline">TESLIM_KRONOLOJISI.md</span> now has 26 numbered sections (24. final summary rewrite + last simulation · 25. final visual verification — 24-section card · 26. final visual verification — 25-section card) + NİHAİ DURUM (27 headers total). Command block <span class="fml" style="display:inline">DROPBOX_YUKLEME_KOMUTLARI.sh</span> now 4-layer: tamper → folder 10/10 → three-copy sync (byte-identical) → inner zip + 3 scripts. Verified in both zips: 26th section present, manifest 18/18, folder 10/10, sidecars OK.</li>
+      <li><strong>Result:</strong> Remaining gaps: <strong>NONE</strong> — all items realized, all verifications passed, legacy documents cleaned, delivery chained to single-file package.</li>
+    </ul>
+  </div>
+
+  <footer>
+    Stoic_Hume_Formal_Section_2026-08-17 · V5 · generated live overview · all data embedded from the
+    canonical package in this workspace · 2026-08-17
+  </footer>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,23 @@
+Causal  Custom  Bel  Just   M_0  B_0  T_1  T_2
+----------------------------------------------
+F  F  F  F  T  T  T  T
+F  F  F  T  T  T  T  T
+F  F  T  F  T  T  T  T
+F  F  T  T  T  T  T  T
+F  T  F  F  T  T  T  T
+F  T  F  T  T  T  T  T
+F  T  T  F  T  F  T  T
+F  T  T  T  T  F  T  F  <-- unique countermodel
+T  F  F  F  F  T  T  T
+T  F  F  T  F  T  F  T
+T  F  T  F  F  T  T  T
+T  F  T  T  F  T  F  T
+T  T  F  F  F  T  T  T
+T  T  F  T  F  T  F  T
+T  T  T  F  T  T  T  T
+T  T  T  T  T  T  F  F
+
+Unique countermodel of T_1 ∧ M_0 ⊭ T_2: {'Causal': False, 'Custom': True, 'Bel': True, 'Just': True, 'M_0': True, 'B_0': False, 'T_1': True, 'T_2': False}
+Proposition 2 model pair constructed; target = (('custFact', 'b1'), ('nonjustFact', 'b1', 'c1'))
+
+PASS: Proposition 1 (Boolean + bridge + characterization) and Proposition 2 (model pair).

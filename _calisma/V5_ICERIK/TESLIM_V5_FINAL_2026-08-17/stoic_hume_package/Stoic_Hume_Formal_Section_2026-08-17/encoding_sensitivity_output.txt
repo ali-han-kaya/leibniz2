@@ -1,0 +1,21 @@
+Encoding sensitivity check: Stoic modal clause M
+M = Box_src not FalseSource(i), standard translation over {i, j}
+Base E = (Kat, Veridical, SourceMatch, FalseSource(i));
+modal resource = (R(i,i), R(i,j), FalseSource(j)).
+
+L0^A (minimal):        16/16 base assignments leave M undetermined
+L0^B (decomposition):  6/10 admissible base assignments leave M undetermined, 4/10 determine it
+
+Determined under L0^B (base assignment, forced M):
+   Kat=0, Veridical=1, SourceMatch=1, FalseSource(i)=0  -> M = 0 (forced by decomposition axiom)
+   Kat=0, Veridical=1, SourceMatch=1, FalseSource(i)=1  -> M = 0 (forced by decomposition axiom)
+   Kat=1, Veridical=1, SourceMatch=1, FalseSource(i)=0  -> M = 1 (forced by decomposition axiom)
+   Kat=1, Veridical=1, SourceMatch=1, FalseSource(i)=1  -> M = 1 (forced by decomposition axiom)
+
+VERDICT: ENCODING-SENSITIVE: the two encodings yield different underdetermination results
+Subsidiary: under BOTH encodings there exist admissible base
+assignments on which the extensional base does not fix M;
+where L0^B determines M, the determination comes from the
+modal resource written into the theory itself. General thesis
+(extensional base alone does not fix the modal content) holds
+under both encodings.

@@ -4,12 +4,14 @@
 # Z3 ispatı için proje-içi sanal ortam (CI'da pip ile kurulur, commit edilmez)
 _calisma/.venv_z3/
 
-# Teslim kaynak dizinleri — içerik teslim zip'lerinde taşınır (self-verifying);
-# extraction çalışma dizinleri yeniden üretilebilir olduğu için commit edilmez:
-#   unzip -o TESLIM_KLASOR_V5_2026-08-17.zip   (dış klasör)
-#   unzip -o TESLIM_V5_FINAL_2026-08-17.zip    (iç klasör)
-_calisma/TESLIM/
-_calisma/V5_ICERIK/
+# Teslim kaynak dizinleri artık git'te (repack fresh clone'da da çalışsın).
+# Yalnızca repack'in YENİDEN ÜRETTİĞİ derived çıktılar ignore edilir:
+#   dış klasör içindeki iç zip + sidecar'ı + KLASOR_CHECKSUMLARI (hepsi
+#   repack_delivery.py tarafından deterministik yeniden üretilir; kanonik
+#   kopyalar CIKTI/'da).
+_calisma/TESLIM/Stoic-Hume-Final-V5_2026-08-17/TESLIM_V5_FINAL_2026-08-17.zip
+_calisma/TESLIM/Stoic-Hume-Final-V5_2026-08-17/TESLIM_V5_FINAL_2026-08-17.zip.sha256
+_calisma/TESLIM/Stoic-Hume-Final-V5_2026-08-17/KLASOR_CHECKSUMLARI.sha256
 _calisma/TOOLKIT/
 
 # Başıboş çalışma kopyaları (kanonik kopyalar CIKTI/'da; toolkit zip'i iCloud'da)

@@ -1,0 +1,90 @@
+# MANIFEST — Stoic_Hume_Formal_Section_2026-08-17
+# Generated: 2026-08-17 (added revised manuscript ingiliz_empirizmi_v3.tex/.pdf after INTEGRATION_NOTE)
+# V5 (2026-08-17): manuscript recompiled with V5 additions — §2.12 encoding sensitivity (L0^A/L0^B),
+#   §2.13 E0/E1/E2 minimal-enlargement benchmark, §2.14 Gate 1.5 non-triviality check, new §6
+#   Objections & Replies (with negative-result matrix), Open Science Statement; 33 pp.
+# V5b (2026-08-17): encoding-sensitivity test EXECUTED — §2.12 now reports the
+#   computational result (L0^A: 16/16 undetermined; L0^B: 6/10 undetermined, 4/10
+#   determined by the decomposition axiom): encoding-sensitive in degree, robust
+#   in existence. New files: encoding_sensitivity_check.py + frozen output.
+# V5c (2026-08-17): Gate 1.5 items T1-T10 verified individually; §2.14 now has the
+#   full 10/10 Table 1. New files: gate15_check.py (T2-T5, incl. Gamma on the
+#   model pair) + frozen output. Manuscript recompiled (31 pp).
+# V5d (2026-08-17): remaining V5 gaps closed — §2.15 HI1-HI4 hyperintensionality
+#   four-layer claim, §4.6 Ev0-Ev4 historical-evidence ladder, M 7.151-152
+#   katalepsis/episteme hierarchy added to Appendix + Provenance. 33 pp.
+# V5e (2026-08-17): Provenance 2.0 seven-column evidence register added as
+#   provenance2_supplement.md (optional supplement; not part of the page count).
+#   This closes the last remaining V5 architecture item.
+# V5f (2026-08-17): citation audit fixes — Tillemans 1999 added to References;
+#   standalone editor entries for Beauchamp 1999 and Nidditch 1975; Bury entry
+#   annotated by volume year (1935 = Loeb vol. II); body Nidditch citation now
+#   year-bearing. Manuscript recompiled (still 33 pp). Supplement note added.
+# V5g (2026-08-17): bridge-collapse characterization SCOPE FIX — the previous
+#   'if and only if' between 'a model separates T1 from T2' and (⋆) was valid
+#   only at the single-pair level. Now: pair-level iff, one-way global
+#   implication, and the corrected global equivalence T1∧M0∧¬T2 ⟺ T1∧M0∧(⋆).
+#   Z3-verified (symbolic_proof_z3.py P4-d/P4-e UNSAT). core_section.tex and
+#   L0_Lplus_spec.md updated; manuscript recompiled (still 33 pp).
+# V5h (2026-08-17): bibliographic fixes — Beth 1953 entry corrected from
+#   Journal of Symbolic Logic 18(1): 8-13 to Indagationes Math
+#   15: 330-339 (also Proc. KNAW A56: 330-339). Fosl 1998 review moved from
+#   Journal of the History of Philosophy 36(2) (uncorroborated) to ECSSS
+#   Newsletter 11: 35-36 (corroborated). Manuscript recompiled (still 33 pp).
+#   verify_delivery.py --check-references now exits 0.
+# V5i (2026-08-17): PDF build determinism (K6-DETERM) added. qpdf --remove-metadata
+#   computes metadata-stripped SHA-256 (qpdf 12.4.0); sidecar stored alongside
+#   the PDF (ingiliz_empirizmi_v3.pdf.metadata.sha256). KNOWN LIMITATION:
+#   tectonic 0.17.0 byte-deterministic değildir — ardışık derleme farklı
+#   metadata-stripped hash üretir. Bu nedenle --strict-determinism bayrağı
+#   varsayılan kapalıdır; drift bilgi amaçlı raporlanır (P0/P1 yok). TeXLive
+#   + SOURCE_DATE_EPOCH geçişi determinism'i sağlayabilir (henüz değil).
+# V5j (2026-08-17): bibliographic fixes — Popkin 1952 reprint pages 133-148
+#   corrected to 133-147; Priest 2018 full subtitle restored ('An Essay on
+#   Buddhist Metaphysics and the Catuskoti'). Reference audit KUCUK NOTs
+#   closed; all REFERENCE_KNOWN entries now DUZELTILDI (INFO only).
+# V5k (2026-08-18): KNOWN LIMITATION — tectonic non-determinism. The manuscript
+#   PDF is still compiled with tectonic 0.17.0, which is NOT byte-deterministic:
+#   consecutive builds of the same .tex produce different byte streams, hence
+#   different metadata-stripped SHA-256 hashes. Therefore K6-DETERM is
+#   informational by default (--strict-determinism OFF) and must not be enabled
+#   until the build migrates to TeXLive + SOURCE_DATE_EPOCH (TEXMFOUTPUT). This
+#   limits build reproducibility only — NOT the logical content (K1-K5, K8, K9
+#   unaffected).
+# V5l (2026-08-18): REPACK DETERMINISM — qpdf non-determinism experiment +
+#   fix. EXPERIMENT: qpdf --remove-metadata is NOT deterministic — the same
+#   input PDF produced 3 different outputs in 3 runs (b090ac01…, 429984da…,
+#   509a47a6…; raw PDF e7b0bc0b…). So the metadata-stripped hash cannot be
+#   recomputed freely. FIX: repack_delivery.py regenerates the sidecar only
+#   when the PDF's raw SHA-256 changes; if the raw hash is unchanged, the
+#   existing sidecar is reused. PROOF: consecutive repacks are byte-identical
+#   (zip hash stable). The sidecar therefore stays in sync with the package
+#   without adding hash noise to the bundle.
+# Python: Python 3.11 (also verified 3.10, 3.12)
+# LaTeX: core_section.tex (885 lines) + L0_Lplus_spec.md (354 lines);
+#   ingiliz_empirizmi_v3.tex compiled with tectonic 0.17.0, 33 pp.
+# Verification: PASS (Prop 1 Boolean + bridge + pair/global characterization +
+#   Prop 2 model pair with O_1-O_3); symbolic re-proof via Z3 (12 checks).
+
+File                                        Size (B)  MD5
+------------------------------------------ ---------  --------------------------------
+core_section.tex                               38600  7528539906a42334ebd68d15f9203d4d
+L0_Lplus_spec.md                               12623  c3232dc369ce72abefcfc94acc93e89a
+model_check_report.md                           7678  330cf107fa1d0ec6d2f52a67c489b674
+core_formal_model_check.py                      8598  bea016133582c0842199b9ad569a23c8
+test_output.txt                                  835  f279b2960983f79107c809baebc00f04
+requirements.txt                                 600  5834add8aa405dd4a87979001c999bef
+REPRODUCIBILITY.md                              9026  99df28f4a6ea192a52552ac62056ca69
+INTEGRATION_NOTE.md                            15347  724615c2f6e21afba975c123698b0fcc
+internal_review_report.md                      28664  26196415ef8c4efd9e823a9eb83aca63
+original_manuscript.pdf                       117067  51d3492177253069975306ff1b10b60c
+README.md                                      10944  5d68d9e5c0b6069dbe1c03b33f57389d
+ingiliz_empirizmi_v3.tex                       76478  b7fa5be5aece3f975ec4ec1d89663aee
+ingiliz_empirizmi_v3.pdf                      214755  3ff1262357561b221fc753a74d502be2
+encoding_sensitivity_check.py                   5287  013d1e0f2752bc38b68cafdac6b18e22
+encoding_sensitivity_output.txt                 1239  ece0c79b00a5e4a16e5ea65acd5d8d13
+gate15_check.py                                 6023  347db78d2eabc88c1ba4de46fac84368
+gate15_output.txt                                618  10e4c756a176bb511aca7ab17234cade
+provenance2_supplement.md                       8981  09476e318c6ad2147543141ccdf69c99
+ingiliz_empirizmi_v3.pdf.metadata.sha256         198  d771b3a49a3008d29cc8193f060a3790
+MANIFEST.txt                                       0  (self; excluded — recompute on use)

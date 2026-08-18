@@ -1,0 +1,15 @@
+Gate 1.5 model-pair check (items T2-T5)
+target grounding atom = (('custFact', 'b1'), ('nonjustFact', 'b1', 'c1'))
+G_1 = [(('custFact', 'b1'), ('nonjustFact', 'b1', 'c1'))]
+G_2 = {}
+
+T2  PASS  (M_1^G, M_2^G in K: O_1-O_3 and M_0 hold)
+T3  PASS  (identical L_0-reduct)
+T4  PASS  (G_1 != G_2 at the target atom)
+T5  PASS  (Gamma = {irreflexivity, asymmetry, transitivity} on both G_1 and G_2)
+
+T1/T6/T7/T8/T10: discharged by proof/definition in the manuscript
+(T1 §2.4-2.5; T6 Prop. 2.6; T7 Def. 2.7-2.8; T8 §2.13; T10 §2.10).
+T9: separate script encoding_sensitivity_check.py.
+
+PASS: Gate 1.5 model-pair items T2-T5.

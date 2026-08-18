@@ -26,11 +26,11 @@ name: verify-delivery
 #   config-drift  : gen_config.py --dry-run ile commit'li config'in paket
 #                   içeriğinden türetilen değerlerle uyuştuğunu doğrular
 #                   (fark = FAIL, fail-closed).
-#   repack-verify : commit'li zip'lerden kaynak ağacını yeniden kurar,
-#                   repack_delivery.py'yi deterministik koşar, çıktının
-#                   commit'li zip'lerle byte-identical olduğunu (git diff
-#                   boş) ve verify_delivery.py base'in geçtiğini doğrular —
-#                   sidecar senkronu her push'ta otomatik garanti edilir.
+#   repack-verify : kaynak ağacı (V5_ICERIK/, TESLIM/) commit'li olduğundan
+#                   repack_delivery.py'yi doğrudan koşar, çıktının commit'li
+#                   dosyalarla byte-identical olduğunu (git diff boş) ve
+#                   verify_delivery.py base'in geçtiğini doğrular — sidecar
+#                   senkronu her push'ta otomatik garanti edilir.
 
 on:
   push:
@@ -658,40 +658,24 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y poppler-utils qpdf
 
-      # Kaynak ağacını commit'li zip'lerden yeniden kur:
-      #   dış zip  → _calisma/TESLIM/Stoic-Hume-Final-V5_2026-08-17/
-      #   iç zip   → _calisma/V5_ICERIK/TESLIM_V5_FINAL_2026-08-17/
-      - name: Reconstruct source tree from committed zips
-        run: |
-          python3 - <<'EOF'
-          import pathlib, zipfile
-          jobs = [
-              ("_calisma/CIKTI/TESLIM_KLASOR_V5_2026-08-17.zip", "_calisma/TESLIM"),
-              ("_calisma/CIKTI/TESLIM_V5_FINAL_2026-08-17.zip", "_calisma/V5_ICERIK"),
-          ]
-          for zf, dest in jobs:
-              pathlib.Path(dest).mkdir(parents=True, exist_ok=True)
-              with zipfile.ZipFile(zf) as z:
-                  z.extractall(dest)
-          print("kaynak agaci commit'li zip'lerden kuruldu")
-          EOF
-
-      # Deterministik repack — çıktı commit'li zip'lerle aynı olmalı.
+      # Deterministik repack — kaynak ağacı commit'li olduğundan doğrudan koşar.
       - name: Run repack_delivery.py (deterministic)
         run: |
           python3 _calisma/repack_delivery.py
 
       # SIDECAR SYNC KAPISI: repack çıktısı commit'li dosyaları değiştiriyorsa
-      # (git diff boş değilse) byte-identical değildir → FAIL. Kanıt: repack
-      # öncesi/sonrası CIKTI/ dosyaları aynı hash.
+      # (git diff boş değilse) byte-identical değildir → FAIL. Kapsam: CIKTI/
+      # zip'leri + sidecar'ları + paket içindeki MANIFEST.txt (hepsi repack
+      # tarafından yeniden yazılır; gitignore'daki derived çıktılar diff'e
+      # girmez).
       - name: Verify byte-identical repack (git diff must be empty)
         run: |
-          if ! git diff --exit-code -- _calisma/CIKTI/; then
-            echo "::error::repack ciktisi commit'li zip'lerle byte-identical DEGIL — sidecar senkronu bozuk"
-            git diff --stat -- _calisma/CIKTI/
+          if ! git diff --exit-code -- _calisma/CIKTI/ _calisma/V5_ICERIK/ _calisma/TESLIM/; then
+            echo "::error::repack ciktisi commit'li dosyalarla byte-identical DEGIL — sidecar senkronu bozuk"
+            git diff --stat -- _calisma/CIKTI/ _calisma/V5_ICERIK/ _calisma/TESLIM/
             exit 1
           fi
-          echo "byte-identical repack OK: commit'li zip'ler <-> repack ciktisi ayni"
+          echo "byte-identical repack OK: commit'li dosyalar <-> repack ciktisi ayni"
 
       # Repack sonucu üzerinde base verify (K1-K7) — sidecar'lar senkron,
       # manifest tutarlı.

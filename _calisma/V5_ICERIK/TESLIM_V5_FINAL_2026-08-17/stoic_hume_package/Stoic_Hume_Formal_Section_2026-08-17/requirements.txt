@@ -1,0 +1,15 @@
+# Core formal section — Reproducibility package
+# Manuscript: "What an Extensional First-Order Formalization Leaves
+# Underdetermined: Stoic Katalepsis and Humean Custom" (2026-08-17 rev.)
+#
+# This package depends ONLY on the Python 3 standard library.
+# No third-party package is required. This file is intentionally
+# empty of dependency declarations; it is included so that a
+# `pip install -r requirements.txt` step in a CI pipeline
+# (a) does not silently install something, and
+# (b) makes the "no dependencies" claim auditable.
+#
+# Tested on:
+#   Python 3.10
+#   Python 3.11
+#   Python 3.12

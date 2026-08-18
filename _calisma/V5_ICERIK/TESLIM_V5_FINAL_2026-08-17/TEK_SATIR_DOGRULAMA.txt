@@ -1,0 +1,29 @@
+TESLIM PAKETİ — KURCALANMA KONTROLÜ (tek satır)
+
+ANA TAŞIMA BİRİMİ: TESLIM_KLASOR_V5_2026-08-17.zip (Dropbox'a 2 dosya — zip + sidecar).
+İÇ ZIP: TESLIM_V5_FINAL_2026-08-17.zip (klasör zip'inin içinde; ayrıca taşımaya gerek yok).
+
+Dropbox/iCloud'a taşımadan ÖNCE ve taşıdıktan SONRA, zip'lerin bulunduğu dizinde şu komutları çalıştır:
+
+  # 1) Ana taşıma birimi — kurcalanma kontrolü (tek satır)
+  shasum -a 256 -c TESLIM_KLASOR_V5_2026-08-17.zip.sha256 && echo "OK - KURCALANMAMIŞ" || echo "FAIL - UYUMSUZ!"
+
+  # 2) İç zip (isteğe bağlı, kaynak makinede)
+  shasum -a 256 -c TESLIM_V5_FINAL_2026-08-17.zip.sha256 && echo "OK - KURCALANMAMIŞ" || echo "FAIL - UYUMSUZ!"
+
+Beklenen çıktı: "TESLIM_KLASOR_V5_2026-08-17.zip: OK" (ve iç zip için "TESLIM_V5_FINAL_2026-08-17.zip: OK").
+Gerçek hash'ler zip'lerin yanındaki .sha256 sidecar dosyalarındadır — bu talimat zip'lerin
+içinde yaşadığı için sabit hash yazılamaz (self-reference: zip yeniden üretilince hash değişir;
+sidecar her üretimde güncellenir). Hash'i bağımsız görmek için:
+  cat TESLIM_KLASOR_V5_2026-08-17.zip.sha256
+  cat TESLIM_V5_FINAL_2026-08-17.zip.sha256
+
+SON MAKİNE SİMÜLASYONU (2026-08-17, çift zip): yalnızca zip + sidecar kopyalanarak bağımsız
+konumda doğrulandı — sidecar OK + bağımsız hash eşleşmesi · unzip -t no errors · klasör 10/10 OK
+· iç zip sidecar OK · manifest 18/18 · 3 script byte-for-byte · PDF 33 sayfa. Tümü geçti.
+
+Notlar:
+- Sidecar (.sha256) dosyaları zip'lerle BİRLİKTE taşınmalıdır (aynı klasörde).
+- Sidecar kaybolursa, zip'i yeniden indirin veya kaynak makinedeki kopyayla karşılaştırın.
+- Windows'ta: certutil -hashfile TESLIM_KLASOR_V5_2026-08-17.zip SHA256
+               certutil -hashfile TESLIM_V5_FINAL_2026-08-17.zip SHA256
