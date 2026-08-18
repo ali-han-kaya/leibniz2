@@ -79,7 +79,7 @@ Bu raporda beyan edilen hiçbir `PASS`, ham bulgulardan bağımsız bir "verdict
 ## 6. DOĞRULAMA KANITLARI (çalıştırılmış çıktılar)
 
 ```text
-MANIFEST.txt MD5 denetimi        → 19/19 OK, 0 eksik, 0 uyumsuz
+MANIFEST.txt MD5 denetimi        → 21/21 OK, 0 eksik, 0 uyumsuz
 core_formal_model_check.py       → PASS + test_output.txt ile byte-for-byte
 encoding_sensitivity_check.py    → PASS + frozen output ile byte-for-byte
 gate15_check.py                  → PASS + frozen output ile byte-for-byte
@@ -110,8 +110,8 @@ K8 + K9 + soy hattı + K11 + K13; K10 ve K12 ayrıca çağrılır.
 | K1 | Dış zip SHA-256 sidecar (kurcalanma) | PASS |
 | K2 | KLASOR_CHECKSUMLARI.sha256 (klasör) | PASS |
 | K3 | İç zip SHA-256 sidecar (kurcalanma) | PASS |
-| K4 | MANIFEST.txt 19/19 (boyut + MD5) | PASS |
-| K5 | 3 script byte-for-byte (donmuş çıktı) | PASS |
+| K4 | MANIFEST.txt 21/21 (boyut + MD5) | PASS |
+| K5 | 4 script byte-for-byte (donmuş çıktı) | PASS |
 | K6 | PDF 33 sayfa + References 64/64 (+ `--check-references` çevrimiçi) | PASS |
 | K7 | Hijyen + secret/anahtar taraması | PASS |
 | K8 | Z3 sembolik ispat (12/12) | PASS |
@@ -139,14 +139,16 @@ denetim, Z3, Lean yok).
 
 **Özet sayımı düzeltmesi:** §2 faz 10 ve §3 C5'teki "18/18", M0 denetim
 tarihinin (2026-08-17) tarihsel kaydıdır; V5i'de `ingiliz_empirizmi_v3.pdf.metadata.sha256`
-sidecar'ı eklenince MANIFEST 19 girdiye çıktı. §6/§7/§9 güncel sayıyı (19/19) taşır.
+sidecar'ı eklenince MANIFEST 19 girdiye, V5m'de `qpdf_determinism_experiment.py`
++ `qpdf_determinism_output.txt` eklenince 21 girdiye çıktı. §6/§7/§9 güncel
+sayıyı (21/21) taşır.
 
 ---
 
 ## 7. GEÇERLİLİK KANITLARI (kapsam)
 
-- **Gereksinim kapsamı:** V5 mimari anayasasındaki maddelerin gerçekleşmesi — paketin kendi 12/12 zinciri yeniden doğrulandı (manifest, 3 script, PDF, checksum, zip bütünlüğü, preview↔PDF, 64/64 referans).
-- **Kanıt kapsamı:** Açık DOI'li 1 kaynak CrossRef'ten doğrulandı (1/1); 3 script deterministik olarak yeniden üretildi (3/3); MANIFEST 19/19; klasör checksum'ı 10/10; K10 reproducibility manifest digest (mock 3/3, tamper/silme → exit 1).
+- **Gereksinim kapsamı:** V5 mimari anayasasındaki maddelerin gerçekleşmesi — paketin kendi 12/12 zinciri yeniden doğrulandı (manifest, 4 script, PDF, checksum, zip bütünlüğü, preview↔PDF, 64/64 referans).
+- **Kanıt kapsamı:** Açık DOI'li 1 kaynak CrossRef'ten doğrulandı (1/1); 4 script deterministik olarak yeniden üretildi (4/4); MANIFEST 21/21; klasör checksum'ı 10/10; K10 reproducibility manifest digest (mock 3/3, tamper/silme → exit 1).
 - **Sınır (paketin kendi belirttiği):** finite-check scriptleri genel ispatın (yapısal indüksiyon, Lemma) yerine geçmez — bu sınır pakette zaten dürüstçe yazılıdır.
 
 ---
@@ -159,7 +161,7 @@ sidecar'ı eklenince MANIFEST 19 girdiye çıktı. §6/§7/§9 güncel sayıyı 
 
 ## 9. FİNAL DOSYA LİSTESİ + HASH
 
-İç paketin **MANIFEST.txt** dosyası, 19 dosyanın güncel boyut + MD5 kaydını içerir (FIX-006 sonrası README/REPRODUCIBILITY hash'leri güncellendi; V5i'de eklenen `ingiliz_empirizmi_v3.pdf.metadata.sha256` dahil 19/19 doğrulandı).
+İç paketin **MANIFEST.txt** dosyası, 21 dosyanın güncel boyut + MD5 kaydını içerir (FIX-006 sonrası README/REPRODUCIBILITY hash'leri güncellendi; V5i'de eklenen `ingiliz_empirizmi_v3.pdf.metadata.sha256` ve V5m'de eklenen `qpdf_determinism_experiment.py` + `qpdf_determinism_output.txt` dahil 21/21 doğrulandı).
 
 Orijinal (denetim öncesi) ve yeni (denetim sonrası, optimize) zip hash'leri — kurcalanabilirlik zinciri için burada sabitlenmiştir:
 

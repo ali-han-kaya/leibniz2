@@ -136,12 +136,14 @@ Indagationes Mathematicae 15: 330--339. (Proc. Kon. Ned. Akad. Wetensch. A56: 33
 
 V5i (2026-08-17) K6-DETERM katmanını ekledi: `qpdf --remove-metadata` ile PDF'in metadata-stripped SHA-256'sı hesaplanır (`ingiliz_empirizmi_v3.pdf.metadata.sha256`). **Known limitation:** tectonic 0.17.0 byte-deterministic olmadığından `--strict-determinism` varsayılan kapalıdır; drift bilgi amaçlı raporlanır (P0/P1 yok). Bu, referans doğruluğunu değil yalnızca PDF derleme tekrarlanabilirliğini etkiler (bkz. MANIFEST V5k notu).
 
-### 5.3 Paket hash (2026-08-18 repack)
+**V5l/V5m eki (2026-08-18):** qpdf non-determinizm deneyi `qpdf_determinism_experiment.py` + donmuş çıktı `qpdf_determinism_output.txt` olarak yeniden üretilebilir hale getirildi (K5 4. script çifti; varsayılan mod donmuş kayıt, `--rerun [N]` canlı deney). V5l bulgusu aynen teyit edildi: `qpdf --remove-metadata` aynı girdi üzerinde farklı çıktılar üretir; repack sidecar'ı yalnızca raw hash değişince yeniden üretir. Bu, referans doğruluğunu değil yalnızca PDF derleme/repack tekrarlanabilirliğini etkiler (bkz. MANIFEST V5l/V5m notu).
+
+### 5.3 Paket hash (2026-08-18 repack, V5m)
 
 | Dosya | SHA-256 |
 |---|---|
-| `TESLIM_KLASOR_V5_2026-08-17.zip` (dış) | `34e81dff5410e6095fa4d0e79c867bec0b892fabde1fc7db6c0b1ac6445f8bd8` |
-| `TESLIM_V5_FINAL_2026-08-17.zip` (iç) | `6ba67ff8dfb39753730450c74464dc122c630427992e8b6373eaf044b62298fd` |
+| `TESLIM_KLASOR_V5_2026-08-17.zip` (dış) | `918e054595f798d48843ece59f48582b2b22147edb0cdb06188f0c543b2e13aa` |
+| `TESLIM_V5_FINAL_2026-08-17.zip` (iç) | `81a0244855cc574562bc18a611c94bf3ffbb0086c3ea32775de9d5f32473c28a` |
 
 ### 5.4 Çevrimiçi kapsam genişletmesi (IA/Perseus + fallback)
 

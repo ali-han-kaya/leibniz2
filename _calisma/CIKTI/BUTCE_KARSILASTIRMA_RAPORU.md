@@ -9,6 +9,13 @@ evrensel `bytes/4` tahminini yan yana karşılaştırmak ve `budget_ratios`'un g
 > **değil**; `gen_config.py` tarafından paketin gerçek bayt karışımından
 > otomatik türetiliyor. Bu, ağırlıklı tahminin yönünü ve büyüklüğünü kökten
 > değiştirdi — ayrıntı §3'te.
+>
+> **V5l/V5m (2026-08-18) paket güncellemesi:** qpdf non-determinizm deneyi
+> `qpdf_determinism_experiment.py` + donmuş çıktı `qpdf_determinism_output.txt`
+> iç zip'e eklendi (V5l bulgusu artık yeniden üretilebilir; K5 4. script çifti).
+> Bu, iç zip bayt karışımını 695 076 B → 703 961 B'ye taşıdı (text +8 885 B);
+> aşağıdaki tüm tablolar ve çıktılar bu güncel paket üzerinden yeniden üretildi.
+> Yeni dış/iç zip hash'leri: `918e0545…` / `81a02448…` (bkz. M0 §10.3).
 
 ## 1. İki yöntem
 
@@ -35,8 +42,8 @@ Sıfır baytlı tipler `ratio=100` (marjinal, token katkısı yok).
 
 | Tip | Güncel ratio | Nereden geliyor |
 |---|---|---|
-| text | **8** | pay≈52.2% → round(4/0.522) = 8 |
-| pdf | **8** | pay≈47.7% → round(4/0.477) = 8 |
+| text | **8** | pay≈52.8% → round(4/0.528) = 8 |
+| pdf | **8** | pay≈47.1% → round(4/0.471) = 8 |
 | archive | **100** | 0 bayt → marjinal |
 | binary | **100** | pay≈0.03% → clamp(4/0.0003)=14042 → 100 |
 
@@ -51,39 +58,39 @@ Gerçek teslim içeriği (`_calisma/CIKTI/TESLIM_V5_FINAL_2026-08-17.zip`, açı
 
 | Tip | Bayt | Pay | Token (evrensel) | Token (ağırlıklı) |
 |---|---:|---:|---:|---:|
-| text | 363 056 | 52.2 % | 90 764 | **45 382** (÷8) |
-| pdf | 331 822 | 47.7 % | 82 955 | **41 477** (÷8) |
+| text | 371 941 | 52.8 % | 92 985 | **46 492** (÷8) |
+| pdf | 331 822 | 47.1 % | 82 955 | **41 477** (÷8) |
 | archive | 0 | 0 % | 0 | 0 (÷100) |
 | binary | 198 | 0.03 % | 49 | **1** (÷100) |
-| **TOPLAM** | **695 076** | 100 % | **173 769** | **86 860** |
+| **TOPLAM** | **703 961** | 100 % | **175 990** | **87 970** |
 
-> Not: evrensel toplam `total_bytes // 4 = 173 769` olarak **bütün üzerinden**
-> hesaplanır (kod davranışı); tip başına floor'ların toplamı 173 768'dir —
+> Not: evrensel toplam `total_bytes // 4 = 175 990` olarak **bütün üzerinden**
+> hesaplanır (kod davranışı); tip başına floor'ların toplamı 175 989'dur —
 > aradaki 1-token farkı floor yuvarlaması artefaktıdır, anlamlı değildir.
-> Ağırlıklı toplam tip başına floor'ların toplamıdır (45 382+41 477+0+1=86 860),
+> Ağırlıklı toplam tip başına floor'ların toplamıdır (46 492+41 477+0+1=87 970),
 > birebir kod davranışı.
 
 | Yöntem | Token | USD ($3/M + $0.55) |
 |---|---:|---:|
-| Evrensel (bytes/4) | 173 769 | **$1.07** |
-| Ağırlıklı (tip bazlı, 8/8/100/100) | 86 860 | **$0.81** |
-| **Fark** | **-86 909 (-50.0 %)** | **-$0.26** |
+| Evrensel (bytes/4) | 175 990 | **$1.08** |
+| Ağırlıklı (tip bazlı, 8/8/100/100) | 87 970 | **$0.81** |
+| **Fark** | **-88 020 (-50.0 %)** | **-$0.26** |
 
 ## 3. Yorum
 
 - **Fark artık büyük ve yönü net:** eski rapor (oranlar 3/8/12/20) ağırlıklı
   tahmini `161 582` token ($1.03) veriyordu — evrensele göre yalnızca **-6.6 %**.
-  Yeni otomatik oranlarla (8/8/100/100) ağırlıklı tahmin `86 860` token ($0.81) →
+  Yeni otomatik oranlarla (8/8/100/100) ağırlıklı tahmin `87 970` token ($0.81) →
   **-50.0 %**. Bunun nedeni text oranının **3 → 8**'e çıkmasıdır: paketin en
-  büyük sınıfı (text, %52) artık yarı yoğunlukta sayılıyor.
+  büyük sınıfı (text, %52.8) artık yarı yoğunlukta sayılıyor.
 - **Neden text 8'e, pdf 8'e çıktı?** Eski 3/8/12/20 oranları *içerik
   yoğunluğu* sezgisini kodluyordu (text en yoğun, arşiv/binary en seyrek).
   Yeni formül ise *pay* sezgisini kodluyor: baskın tipler düşük oran, marjinal
   tipler yüksek oran. Paketimiz neredeyse eşit iki sınıftan oluştuğu için
-  (text %52.2, pdf %47.7) ikisi de round(4/pay) ≈ 8'e oturdu → ağırlıklı
+  (text %52.8, pdf %47.1) ikisi de round(4/pay) ≈ 8'e oturdu → ağırlıklı
   tahmin kabaca `bytes/8` oldu, yani evrenselin yarısı.
-- **`both` modu hâlâ fail-closed:** `max($1.07, $0.81) = $1.07` → kalkan
-  evrenseli seçer. Yani raporlanan sınır **değişmedi** ($1.07 / limit $30);
+- **`both` modu hâlâ fail-closed:** `max($1.08, $0.81) = $1.08` → kalkan
+  evrenseli seçer. Yani raporlanan sınır **değişmedi** ($1.08 / limit $30);
   ağırlıklı tahmin yalnızca karşılaştırma ve analiz içindir.
 - **Hangi yöntem doğru?** Bu artık bir ampirik/tokenizer sorusu. Pay-tabanlı
   formül, "ana gövde daha çok token almalı" ön kabulüne dayanır; içerik
@@ -101,20 +108,20 @@ python3 verify_delivery.py --dir _calisma/CIKTI --budget-method weighted
 
 Çıktı kırılım satırı:
 ```
-[BÜTÇE] ~173769 token → $1.07 (limit $30.0, içerik 695076 B, yöntem=both)
-[BÜTÇE]   evrensel (bytes/4):  173769 tok → $1.07
-[BÜTÇE]   ağırlıklı (tip bazlı): 86860 tok → $0.81
-[BÜTÇE]   kırılım: text=363056B pdf=331822B archive=0B binary=198B
+[BÜTÇE] ~175990 token → $1.08 (limit $30.0, içerik 703961 B, yöntem=both)
+[BÜTÇE]   evrensel (bytes/4):  175990 tok → $1.08
+[BÜTÇE]   ağırlıklı (tip bazlı): 87970 tok → $0.81
+[BÜTÇE]   kırılım: text=371941B pdf=331822B archive=0B binary=198B
 ```
 
 `--budget-out` ile yazılan sidecar tam `comparison` objesi içeriyor:
 ```json
 {
   "comparison": {
-    "universal": {"tokens": 173769, "usd": 1.07, "ratio": "bytes/4 (v3_verify.py H4)"},
-    "weighted":  {"tokens": 86860, "usd": 0.81,
+    "universal": {"tokens": 175990, "usd": 1.08, "ratio": "bytes/4 (v3_verify.py H4)"},
+    "weighted":  {"tokens": 87970, "usd": 0.81,
                   "ratios": {"text": 8, "pdf": 8, "archive": 100, "binary": 100},
-                  "by_type": {"text": 363056, "pdf": 331822, "archive": 0, "binary": 198}}
+                  "by_type": {"text": 371941, "pdf": 331822, "archive": 0, "binary": 198}}
   }
 }
 ```
@@ -122,7 +129,7 @@ python3 verify_delivery.py --dir _calisma/CIKTI --budget-method weighted
 `gen_config.py --dry-run` (oranların tek kaynağı) doğrulaması:
 ```
 budget_ratios     : {'text': 8, 'pdf': 8, 'archive': 100, 'binary': 100}
-tip kırılımı      : {'text': 363056, 'pdf': 331822, 'archive': 0, 'binary': 198} (695076 B)
+tip kırılımı      : {'text': 371941, 'pdf': 331822, 'archive': 0, 'binary': 198} (703961 B)
 ```
 
 ## 5. Şeffaflık

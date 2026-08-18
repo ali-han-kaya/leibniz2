@@ -82,3 +82,8 @@ $ echo $?
 
 Kurulum: `elan` + `leanprover/lean4:stable` (v4.33.0), Homebrew `elan-init`
 üzerinden; proje-içi değil ama standart `~/.elan` kurulumu, sudo yok.
+
+**Sürüm notu (V5l/V5m, 2026-08-18):** bu ispat içerik hakkındadır;
+tectonic/qpdf byte-non-determinizminin PDF/zip tekrarlanabilirliğine getirdiği
+bilinen sınır (MANIFEST V5k/V5l; `qpdf_determinism_experiment.py` ile yeniden
+üretilebilir) bu teoremin doğruluğunu etkilemez.

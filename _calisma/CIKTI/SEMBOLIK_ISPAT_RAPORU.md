@@ -122,7 +122,7 @@ sürüm: çift düzeyinde iff + global tek yön + global doğru eşdeğerlik
 `T₁∧M₀∧¬T₂ ⟺ T₁∧M₀∧(⋆)` (Z3 P4-d/P4-e UNSAT ile yeniden doğrulandı).
 `core_section.tex` "vacuous quantification" cümlesi kaldırıldı, kanıt iki yönü
 ayrı ayrı gösteriyor. PDF `tectonic 0.17.0` ile yeniden derlendi (33 sayfa,
-214.520 B); MANIFEST + checksum + zip zinciri yeniden üretildi;
+214 755 B); MANIFEST + checksum + zip zinciri yeniden üretildi;
 `verify_delivery.py` PASS (P0=0, P1=0).
 
 Bu düzeltme makalenin tezini **zayıflatmaz** — aksine, iff'in doğru biçimini
@@ -144,3 +144,8 @@ giderir.
   değil, biçimsel gerektirmeleri kapsar.
 - Çıktı dosyaları: `_calisma/CIKTI/symbolic_proof_z3.py` + bu rapor.
   Venv `_calisma/.venv_z3` proje içindedir, global kurulum yapılmadı.
+- **V5l/V5m determinism notu (2026-08-18):** tectonic/qpdf byte-deterministik
+  olmadığından PDF ve zip'lerin byte-düzeyinde yeniden üretilebilirliği bilinen
+  bir sınırdır (MANIFEST V5k/V5l; deney `qpdf_determinism_experiment.py` ile
+  yeniden üretilebilir). Bu rapordaki Z3 sonuçları (UNSAT/SAT) biçimsel İÇERİK
+  hakkındadır ve derleme/repack tekrarlanabilirliğinden bağımsızdır.
