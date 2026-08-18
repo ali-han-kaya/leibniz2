@@ -585,7 +585,7 @@ jobs:
   reproducibility:
     name: Reproducibility bundle
     runs-on: ubuntu-latest
-    needs: [verify, budget, reports, config-drift]
+    needs: [verify, budget, reports, config-drift, repack-verify]
     if: always()
     steps:
       - name: Checkout
@@ -602,12 +602,15 @@ jobs:
       # yakalar → config.combined_sha256 gerçekten üretilir. merge-multiple
       # artifact'ları köke düzleştirdiği için config'i pattern'e koymak
       # CONFIG bölümünü boş bırakırdı (öneki kaybolurdu).
+      # repack-verify tek düz dosya (repack_verify_report.txt) olduğundan
+      # merge ile köke düzleşmesi sorun değildir → manifest'e rel yolu
+      # repack_verify_report.txt olarak girer.
       - name: Download remaining artifacts (merge)
         uses: actions/download-artifact@v7
         with:
           path: all_artifacts/
           merge-multiple: true
-          pattern: '{verify-report,budget,reports,precommit-logs,refs-online,run-history,config-drift}'
+          pattern: '{verify-report,budget,reports,precommit-logs,refs-online,run-history,config-drift,repack-verify}'
 
       - name: Download config artifact (config/ prefix)
         uses: actions/download-artifact@v7
