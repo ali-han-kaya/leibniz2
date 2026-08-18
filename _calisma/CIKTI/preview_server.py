@@ -74,6 +74,7 @@ LATEST = {
     "p0": 0,
     "p1": 0,
     "budget_usd": None,
+    "budget": None,           # tam bütçe raporu (comparison.ratios + by_type)
     "pdf_pages": None,
     "ref_count": None,
     "raw_sha256": None,
@@ -327,6 +328,9 @@ def _finalize_run(stdout, stderr, rc, duration, data):
             "p0": data.get("counts", {}).get("P0", 0),
             "p1": data.get("counts", {}).get("P1", 0),
             "budget_usd": (data.get("budget") or {}).get("estimated_usd"),
+            # Tam bütçe raporu: comparison.ratios (budget_ratios) + by_type
+            # (type_bytes) kırılımı — dashboard kartı için.
+            "budget": data.get("budget"),
             "pdf_pages": data.get("pdf_pages"),
             "ref_count": data.get("ref_count"),
             "raw_sha256": (data.get("pdf_hash") or {}).get("raw"),
