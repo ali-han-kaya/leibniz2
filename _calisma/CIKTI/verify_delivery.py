@@ -883,6 +883,46 @@ def run_symbolic_proof(py, script):
     return False, f"Z3 beklenmedik sonuç: {detail}"
 
 
+TEXT_EXTS = frozenset({
+    ".tex", ".py", ".md", ".json", ".txt", ".csv", ".tsv",
+    ".yaml", ".yml", ".html", ".xml", ".css", ".js",
+    ".sh", ".rb", ".rs", ".lean", ".toml", ".ini", ".cfg",
+    ".bst", ".bib", ".sty", ".cls",
+})
+ARCHIVE_EXTS = frozenset({".zip", ".tar", ".gz", ".bz2", ".7z", ".rar"})
+
+
+def compute_type_bytes(ic_root):
+    """Bir dizin ağacının içeriğini dosya tipine göre bayt kırılımına ayır.
+
+    Döndürür (type_bytes, total_bytes): type_bytes = {text, pdf, archive,
+    binary} bayt toplamları; total_bytes = tümü. gen_config.py (budget
+    ratios) ve verify_delivery.py (ağırlıklı bütçe) tek kaynaktan kullanır.
+    """
+    type_bytes = {"text": 0, "pdf": 0, "archive": 0, "binary": 0}
+    total_bytes = 0
+    if not os.path.isdir(ic_root):
+        return type_bytes, 0
+    for _root, _dirs, files in os.walk(ic_root):
+        for fn in files:
+            p = os.path.join(_root, fn)
+            try:
+                sz = os.path.getsize(p)
+            except OSError:
+                continue
+            total_bytes += sz
+            ext = os.path.splitext(fn)[1].lower()
+            if ext == ".pdf":
+                type_bytes["pdf"] += sz
+            elif ext in ARCHIVE_EXTS:
+                type_bytes["archive"] += sz
+            elif ext in TEXT_EXTS:
+                type_bytes["text"] += sz
+            else:
+                type_bytes["binary"] += sz
+    return type_bytes, total_bytes
+
+
 def run_lean_proof(lean_path, lean_file):
     """K9: Lean 4 reduct-invariance (tümevarımsal kanıt). Döndürür (ok: bool, detail: str)."""
     lean_dir = os.path.dirname(lean_file)
@@ -1166,34 +1206,10 @@ def main():
             pkg = None
 
         # bütçe kalkanı için içerik toplam baytı + dosya tipi kırılımı
-        # (iç zip içeriği; token ≈ bytes/4 evrensel, ama ağırlıklı yöntem
-        # dosya tipine göre bytes-per-token oranı kullanır: metin 1/3, PDF 1/8,
-        # arşiv 1/12, diğer binary 1/20).
+        # (iç zip içeriği; tek kaynak: compute_type_bytes — gen_config.py da
+        # aynı fonksiyonu kullanır, sınıflandırma drift'i olmaz).
         ic_root = os.path.join(tmp, IC_ZIP[:-4])
-        type_bytes = {"text": 0, "pdf": 0, "archive": 0, "binary": 0}
-        if os.path.isdir(ic_root):
-            for _root, _dirs, files in os.walk(ic_root):
-                for fn in files:
-                    p = os.path.join(_root, fn)
-                    try:
-                        sz = os.path.getsize(p)
-                    except OSError:
-                        continue
-                    total_bytes += sz
-                    ext = os.path.splitext(fn)[1].lower()
-                    if ext in (".pdf",):
-                        type_bytes["pdf"] += sz
-                    elif ext in (".zip", ".tar", ".gz", ".bz2", ".7z", ".rar"):
-                        type_bytes["archive"] += sz
-                    elif ext in (
-                        ".tex", ".py", ".md", ".json", ".txt", ".csv", ".tsv",
-                        ".yaml", ".yml", ".html", ".xml", ".css", ".js",
-                        ".sh", ".rb", ".rs", ".lean", ".toml", ".ini", ".cfg",
-                        ".bst", ".bib", ".sty", ".cls",
-                    ):
-                        type_bytes["text"] += sz
-                    else:
-                        type_bytes["binary"] += sz
+        type_bytes, total_bytes = compute_type_bytes(ic_root)
 
         # ---- K4: manifest 18/18 ----
         mf = os.path.join(pkg, "MANIFEST.txt") if pkg else None

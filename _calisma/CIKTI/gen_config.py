@@ -2,15 +2,23 @@
 """gen_config.py — paket içeriğinden beklenen değerleri hesaplayıp config'i günceller.
 
 verify_delivery.config.json'daki expected_pages / expected_refs /
-expected_manifest değerleri, paketin GERÇEK içeriğinden türetilir:
+expected_manifest değerleri ve budget_ratios, paketin GERÇEK içeriğinden
+türetilir:
 
   expected_pages    → ingiliz_empirizmi_v3.pdf  sayfa sayısı (pdfinfo)
   expected_refs     → ingiliz_empirizmi_v3.tex  References \item sayısı
   expected_manifest → MANIFEST.txt girdi sayısı (MANIFEST.txt hariç)
+  budget_ratios     → iç zip içeriğinin text/pdf/archive/binary bayt
+                      karışımından (compute_type_bytes — verify_delivery.py
+                      ile tek kaynak). Formül: pay_k = bytes_k/total;
+                      ratio_k = clamp(round(4/pay_k), 1, 100). Yani pakette
+                      çok yer kaplayan tip (yüksek pay) düşük bytes-per-token
+                      (daha çok token) alır; marjinal tipler yüksek oran
+                      (az token) alır. 4 = evrensel bytes/token sabiti.
 
 Betik, verify_delivery.py ile AYNI sabitleri ve yardımcı fonksiyonları
 kullanır (tek kaynak, drift yok). Diğer config alanları (budget_usd,
-budget_method, budget_ratios, _doc, _schema) korunur.
+budget_method, _doc, _schema) korunur.
 
 Kullanım:
     python3 gen_config.py                # config'i yerinde güncelle
@@ -42,9 +50,11 @@ TEX_NAME = "ingiliz_empirizmi_v3.tex"
 
 
 def extract_package_dir(zip_dir):
-    """Dış zip + iç zip'i temp altına çıkar; pkg dizininin path'ini döndür.
+    """Dış zip + iç zip'i temp altına çıkar; pkg + ic_root path'lerini döndür.
 
-    Döndürür: (pkg_path, temp_root) — temp_root çağıran tarafından silinmeli.
+    Döndürür: (pkg_path, ic_root, temp_root) — ic_root iç zip'in kök dizini
+    (budget ratios için type_bytes hesabı), temp_root çağıran tarafından
+    silinmeli.
     """
     outer_zip = os.path.join(zip_dir, vd.KLASOR_ZIP)
     inner_rel = f"{vd.KLASOR_DIR}/{vd.IC_ZIP}"
@@ -64,7 +74,8 @@ def extract_package_dir(zip_dir):
         pkg = os.path.join(tmp, vd.PKG_REL)
         if not os.path.isdir(pkg):
             raise RuntimeError(f"paket dizini bulunamadı: {pkg}")
-        return pkg, tmp
+        ic_root = os.path.join(tmp, vd.IC_ZIP[:-4])
+        return pkg, ic_root, tmp
     except Exception:
         shutil.rmtree(tmp, ignore_errors=True)
         raise
@@ -99,6 +110,32 @@ def compute_expected(pkg):
         raise RuntimeError(f"MANIFEST.txt'te girdi bulunamadı ({manifest})")
 
     return pages, refs, manifest_count
+
+
+def compute_budget_ratios(type_bytes, total_bytes):
+    """Paketin gerçek bayt karışımından bytes-per-token oranlarını türet.
+
+    Formül (belgeli, deterministik):
+      pay_k = bytes_k / total_bytes          (0 ise çok küçük pay varsay)
+      ratio_k = clamp(round(4 / pay_k), 1, 100)
+    4 = evrensel bytes/token (v3_verify.py H4). Yorum: pakette baskın tip
+    (yüksek pay) düşük oran → daha çok token (işin ana gövdesi); marjinal
+    tip (düşük pay) yüksek oran → az token. Böylece ağırlıklı tahmin, tip
+    karışımındaki gerçek dağılımı yansıtır ve paket değişince oranlar da
+    otomatik güncellenir (repack → gen_config).
+    """
+    if total_bytes <= 0:
+        return {"text": 3, "pdf": 8, "archive": 12, "binary": 20}
+    ratios = {}
+    for k in ("text", "pdf", "archive", "binary"):
+        b = type_bytes.get(k, 0)
+        if b <= 0:
+            ratios[k] = 100  # sıfır bayt → marjinal, token katkısı yok
+        else:
+            pay = b / total_bytes
+            r = round(4 / pay) if pay > 0 else 100
+            ratios[k] = max(1, min(r, 100))
+    return ratios
 
 
 def load_config(path):
@@ -144,8 +181,12 @@ def main():
     # 1) Paketi çıkar + hesapla
     tmp = None
     try:
-        pkg, tmp = extract_package_dir(args.dir)
+        pkg, ic_root, tmp = extract_package_dir(args.dir)
         pages, refs, manifest_count = compute_expected(pkg)
+        # budget ratios: iç zip içeriğinin gerçek text/pdf/archive/binary
+        # bayt karışımından (tek kaynak: vd.compute_type_bytes)
+        type_bytes, total_bytes = vd.compute_type_bytes(ic_root)
+        budget_ratios = compute_budget_ratios(type_bytes, total_bytes)
     except RuntimeError as e:
         print(f"HATA: {e}", file=sys.stderr)
         return 2
@@ -159,10 +200,12 @@ def main():
         "expected_pages": cfg.get("expected_pages"),
         "expected_refs": cfg.get("expected_refs"),
         "expected_manifest": cfg.get("expected_manifest"),
+        "budget_ratios": cfg.get("budget_ratios"),
     }
     cfg["expected_pages"] = pages
     cfg["expected_refs"] = refs
     cfg["expected_manifest"] = manifest_count
+    cfg["budget_ratios"] = budget_ratios
 
     # 3) Doğrula (fail-closed)
     errs = validate_final_config(cfg)
@@ -179,7 +222,8 @@ def main():
         # güncellenmiş ama config unutulmuş olabilir.
         drift = {k: (before.get(k), v) for k, v in
                  (("expected_pages", pages), ("expected_refs", refs),
-                  ("expected_manifest", manifest_count))
+                  ("expected_manifest", manifest_count),
+                  ("budget_ratios", budget_ratios))
                  if before.get(k) != v}
         print(f"DRY-RUN (yazılmadı) → {out_path}")
         print(json.dumps(cfg, indent=2, ensure_ascii=False))
@@ -201,6 +245,8 @@ def main():
     print(f"  expected_pages    : {before['expected_pages']!r} → {pages}")
     print(f"  expected_refs     : {before['expected_refs']!r} → {refs}")
     print(f"  expected_manifest : {before['expected_manifest']!r} → {manifest_count}")
+    print(f"  budget_ratios     : {before['budget_ratios']!r} → {budget_ratios}")
+    print(f"  tip kırılımı      : {type_bytes} ({total_bytes} B)")
     print(f"  kaynak            : {vd.KLASOR_ZIP} → {vd.IC_ZIP} → {vd.PKG_REL}")
     return 0
 
