@@ -61,14 +61,17 @@ def classify(field, raw_val, eff_val, effective):
     return "drift"
 
 
-def main() -> None:
+def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--config-dir", default="config",
                     help="config artifact'larının bulunduğu dizin "
                          "(verify_delivery.config.json + effective_config.json)")
     ap.add_argument("--out-dir", default="config",
                     help="diff çıktı dizini (varsayılan: --config-dir)")
-    args = ap.parse_args()
+    ap.add_argument("--fail-on-drift", action="store_true",
+                    help="'drift' nedenli fark varsa exit 1 (fail-closed); "
+                         "cli_override/default farkları advisory kalır")
+    args = ap.parse_args(argv)
 
     cfg_dir = pathlib.Path(args.config_dir)
     raw_path = cfg_dir / "verify_delivery.config.json"
@@ -141,6 +144,19 @@ def main() -> None:
                   f"({d['reason']})")
     else:
         print(f"[CONFIG-DIFF] fark yok → {out_dir / 'config-diff.txt'}")
+
+    # --fail-on-drift: "drift" nedenli fark fail-closed yapar. drift = raw
+    # config'te alan VAR ama etkin değer CLI override'ı OLMADAN farklı →
+    # açıklanamayan tutarsızlık. cli_override (CLI ile verildi) ve default
+    # (raw'de alan yok) meşru farklardır; advisory kalır.
+    drift_diffs = [d for d in differences if d["reason"] == "drift"]
+    if args.fail_on_drift and drift_diffs:
+        print(f"[CONFIG-DIFF] FAIL-ON-DRIFT: {len(drift_diffs)} drift farkı "
+              f"(açıklanamayan) → exit 1", file=sys.stderr)
+        for d in drift_diffs:
+            print(f"  {d['field']}: {d['raw']!r} → {d['effective']!r} "
+                  f"({d['reason']})", file=sys.stderr)
+        return 1
     return 0
 
 

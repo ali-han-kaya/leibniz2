@@ -863,15 +863,19 @@ jobs:
   # ──────────────────────────────────────────────────────────────────────
   # CONFIG DRIFT CHECK
   #
-  # verify_delivery.config.json'daki expected_pages/expected_refs/
-  # expected_manifest değerleri paketin GERÇEK içeriğinden türetilmelidir
-  # (gen_config.py). Bu job dry-run ile hesaplar ve commit'li config'le
-  # karşılaştırır; fark varsa exit 1 → build FAIL (fail-closed). Config
-  # elle/grepli değişmiş veya paket güncellenip config unutulmuş olabilir.
+  # İki bağımsız fail-closed kapı:
+  # 1) gen_config.py --dry-run: commit'li config'in expected_pages/refs/
+  #    manifest değerleri paketin GERÇEK içeriğinden türetilmeli; fark → P1.
+  # 2) diff_config_artifacts.py --fail-on-drift: effective_config.json ile
+  #    verify_delivery.config.json karşılaştırılır; "drift" nedenli (CLI
+  #    override'ı OLMADAN farklı) değerler → exit 1. cli_override/default
+  #    farkları meşru, advisory kalır. effective_config.json verify job'unun
+  #    config artifact'ından indirilir (needs: verify).
   # ──────────────────────────────────────────────────────────────────────
   config-drift:
-    name: Config drift check (gen_config --dry-run)
+    name: Config drift check (gen_config + diff-on-drift)
     runs-on: ubuntu-latest
+    needs: [verify]
     permissions:
       contents: read
       pull-requests: write
@@ -906,6 +910,39 @@ jobs:
           if [ -s drift_stderr.txt ]; then
             echo "--- stderr (drift bulguları) ---"
             cat drift_stderr.txt
+          fi
+
+      # effective_config.json (verify job'unun --config-out çıktısı) config
+      # artifact'ının içindedir; raw↔effective "drift" kapısı için indirilir.
+      - name: Download config snapshot (effective_config.json)
+        continue-on-error: true
+        uses: actions/download-artifact@v7
+        with:
+          name: config
+          path: config_snapshot/
+
+      # raw (verify_delivery.config.json) vs effective (effective_config.json)
+      # karşılaştırması; --fail-on-drift: yalnızca "drift" nedenli fark exit 1
+      # yapar (cli_override/default advisory kalır). Eksik dosya → advisory
+      # (exit 0) — config artifact'ı indirilemediyse bu kapı sessizce geçer,
+      # gen_config kapısı yine fail-closed kalır.
+      - name: Config diff — fail on drift (raw vs effective)
+        id: diffdrift
+        shell: bash
+        run: |
+          set +e
+          python3 _calisma/CIKTI/diff_config_artifacts.py \
+            --config-dir config_snapshot --out-dir config_snapshot --fail-on-drift \
+            > diffdrift_stdout.txt 2> diffdrift_stderr.txt
+          rc=$?
+          set -e
+          echo "$rc" > diffdrift_rc.txt
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          echo "config diff (fail-on-drift) exit code: $rc"
+          cat diffdrift_stdout.txt
+          if [ -s diffdrift_stderr.txt ]; then
+            echo "--- stderr (drift farkları) ---"
+            cat diffdrift_stderr.txt
           fi
 
       # Drift tespit edilirse (exit 1) bulguları PR yorumuna düş.
@@ -966,8 +1003,12 @@ jobs:
         shell: bash
         run: |
           rc=$(cat drift_rc.txt 2>/dev/null || echo 1)
-          echo "Config drift final exit code: $rc"
-          exit "$rc"
+          diffrc=$(cat diffdrift_rc.txt 2>/dev/null || echo 0)
+          final=0
+          [ "$rc" != "0" ] && final=$rc
+          [ "$diffrc" != "0" ] && final=$diffrc
+          echo "Config drift final exit code: $final (gen_config=$rc, diff-on-drift=$diffrc)"
+          exit "$final"
 
       # Drift raporunu artifact yap (kapı FAIL olsa bile yüklenir) — böylece
       # reproducibility job'ı manifest.json'a SHA-256 ile sabitler.
@@ -979,8 +1020,14 @@ jobs:
           cp drift_rc.txt config-drift/exit_code.txt
           cp drift_stderr.txt config-drift/findings.txt
           rc=$(cat drift_rc.txt 2>/dev/null || echo 1)
-          verdict=PASS; [ "$rc" != "0" ] && verdict=FAIL
-          printf 'config-drift exit=%s verdict=%s\n' "$rc" "$verdict" > config-drift/summary.txt
+          diffrc=$(cat diffdrift_rc.txt 2>/dev/null || echo 0)
+          printf '%s\n' "$diffrc" > config-drift/diff_on_drift_exit.txt
+          cp diffdrift_stderr.txt config-drift/diff_on_drift_findings.txt 2>/dev/null \
+            || printf '(diff adımı çalışmadı)\n' > config-drift/diff_on_drift_findings.txt
+          final=0; [ "$rc" != "0" ] && final=$rc; [ "$diffrc" != "0" ] && final=$diffrc
+          verdict=PASS; [ "$final" != "0" ] && verdict=FAIL
+          printf 'config-drift exit=%s (gen_config=%s, diff-on-drift=%s) verdict=%s\n' \
+            "$final" "$rc" "$diffrc" "$verdict" > config-drift/summary.txt
 
       - name: Upload config drift report
         if: always()
