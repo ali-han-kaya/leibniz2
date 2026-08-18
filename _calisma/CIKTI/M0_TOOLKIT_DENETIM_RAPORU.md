@@ -79,7 +79,7 @@ Bu raporda beyan edilen hiçbir `PASS`, ham bulgulardan bağımsız bir "verdict
 ## 6. DOĞRULAMA KANITLARI (çalıştırılmış çıktılar)
 
 ```text
-MANIFEST.txt MD5 denetimi        → 18/18 OK, 0 eksik, 0 uyumsuz
+MANIFEST.txt MD5 denetimi        → 19/19 OK, 0 eksik, 0 uyumsuz
 core_formal_model_check.py       → PASS + test_output.txt ile byte-for-byte
 encoding_sensitivity_check.py    → PASS + frozen output ile byte-for-byte
 gate15_check.py                  → PASS + frozen output ile byte-for-byte
@@ -89,18 +89,63 @@ core_section.tex yapısı          → 877 satır · 11 subsection · 9 subsubse
 References (LaTeX)               → 64 \item
 KLASOR_CHECKSUMLARI.sha256       → 10/10 OK (orijinal klasör)
 v3_verify.py (fail-closed gate)  → P0=0, P1=0 → PASS  [bkz. §6.1]
+verify_delivery.py --verify-manifest (K10) → PASS (mock 3/3); tamper→exit 1, silme→exit 1  [bkz. §6.2]
 ```
 
 ### 6.1 Toolkit betiği çıktısı (`v3_verify.py` — mekanik, modelden bağımsız)
 
 `python3 ALI_KOMUT_TOOLKIT_v3/scripts/v3_verify.py <paket_klasoru>` çalıştırıldı; fail-closed gate **ham bulgulardan yeniden hesaplanan** P0/P1 sayısına göre `PASS` üretti. Çıktının özeti (dosya sayısı, toplam boyut, secret/hijyen/bütçe bulguları) §9'daki doğrulama raporuna eşlik eder.
 
+### 6.2 Katman tablosu — `verify_delivery.py` (K0–K12)
+
+M0 raporunun yazıldığı tarihteki `v3_verify.py` kapısı, sonradan tek giriş
+noktasına genişletildi: `verify_delivery.py` (K0–K12). Bu tablo güncel
+fail-closed zincirini katman katman listeler; her satır çalıştırılmış bir
+komutun çıktısına dayanır (tahmin yok). `--full` = K1-K7 + K6-referans +
+K8 + K9 + soy hattı + K12; K10 ve K11 ayrıca çağrılır.
+
+| Katman | Kontrol | Durum (son doğrulama) |
+|---|---|---|
+| K0 | Bayat zip taraması (CIKTI dışı, recursive) | PASS |
+| K1 | Dış zip SHA-256 sidecar (kurcalanma) | PASS |
+| K2 | KLASOR_CHECKSUMLARI.sha256 (klasör) | PASS |
+| K3 | İç zip SHA-256 sidecar (kurcalanma) | PASS |
+| K4 | MANIFEST.txt 19/19 (boyut + MD5) | PASS |
+| K5 | 3 script byte-for-byte (donmuş çıktı) | PASS |
+| K6 | PDF 33 sayfa + References 64/64 (+ `--check-references` çevrimiçi) | PASS |
+| K7 | Hijyen + secret/anahtar taraması | PASS |
+| K8 | Z3 sembolik ispat (12/12) | PASS |
+| K9 | Lean 4 reduct-invariance (tümevarımsal) | PASS |
+| K10 | reproducibility manifest digest (`--verify-manifest`) | PASS (yeni — aşağıda) |
+| K11 | LaunchAgent plist şablonu (`--check-plist`) | PASS (yerel macOS; Linux CI'da koşmaz) |
+| K12 | gen_repro_manifest.py self-testi (`--check-repro-manifest`) | PASS |
+
+**K10 bulguları (yeni katman — commit `7e28f2c`):** `verify_delivery.py
+--verify-manifest reproducibility/manifest.json`, `gen_repro_manifest.py`
+çıktısındaki her SHA-256'yı gerçek dosyayla karşılaştırır; eksik/uyuşmazlık
+→ P1 → exit 1 (fail-closed, sessiz geçiş yok). Mock-3-dosya simülasyonu:
+
+| Yol | Sonuç |
+|---|---|
+| PASS | `[K10] PASS — 3 OK / 0 uyuşmazlık / 0 eksik` → exit 0 |
+| Tamper (`verify-report.md`'ye ekleme) | `2 OK / 1 uyuşmazlık` → exit 1 |
+| Silme (`run-history/history.jsonl`) | `…(EKSİK)` → exit 1 |
+
+K10, CI `reproducibility` job'ında manifest üretiminin hemen ardından koşar.
+Bilinçli sınır: `manifest.sha256` sidecar'ı üretilir ama K10 henüz denetlemez;
+`--verify-manifest` çevrimdışı K1-K7 taban kapısını da koşar (K6 çevrimiçi
+denetim, Z3, Lean yok).
+
+**Özet sayımı düzeltmesi:** §2 faz 10 ve §3 C5'teki "18/18", M0 denetim
+tarihinin (2026-08-17) tarihsel kaydıdır; V5i'de `ingiliz_empirizmi_v3.pdf.metadata.sha256`
+sidecar'ı eklenince MANIFEST 19 girdiye çıktı. §6/§7/§9 güncel sayıyı (19/19) taşır.
+
 ---
 
 ## 7. GEÇERLİLİK KANITLARI (kapsam)
 
 - **Gereksinim kapsamı:** V5 mimari anayasasındaki maddelerin gerçekleşmesi — paketin kendi 12/12 zinciri yeniden doğrulandı (manifest, 3 script, PDF, checksum, zip bütünlüğü, preview↔PDF, 64/64 referans).
-- **Kanıt kapsamı:** Açık DOI'li 1 kaynak CrossRef'ten doğrulandı (1/1); 3 script deterministik olarak yeniden üretildi (3/3); MANIFEST 18/18; klasör checksum'ı 10/10.
+- **Kanıt kapsamı:** Açık DOI'li 1 kaynak CrossRef'ten doğrulandı (1/1); 3 script deterministik olarak yeniden üretildi (3/3); MANIFEST 19/19; klasör checksum'ı 10/10; K10 reproducibility manifest digest (mock 3/3, tamper/silme → exit 1).
 - **Sınır (paketin kendi belirttiği):** finite-check scriptleri genel ispatın (yapısal indüksiyon, Lemma) yerine geçmez — bu sınır pakette zaten dürüstçe yazılıdır.
 
 ---
@@ -113,7 +158,7 @@ v3_verify.py (fail-closed gate)  → P0=0, P1=0 → PASS  [bkz. §6.1]
 
 ## 9. FİNAL DOSYA LİSTESİ + HASH
 
-İç paketin **MANIFEST.txt** dosyası, 18 dosyanın güncel boyut + MD5 kaydını içerir (FIX-006 sonrası README/REPRODUCIBILITY hash'leri güncellendi; 18/18 doğrulandı).
+İç paketin **MANIFEST.txt** dosyası, 19 dosyanın güncel boyut + MD5 kaydını içerir (FIX-006 sonrası README/REPRODUCIBILITY hash'leri güncellendi; V5i'de eklenen `ingiliz_empirizmi_v3.pdf.metadata.sha256` dahil 19/19 doğrulandı).
 
 Orijinal (denetim öncesi) ve yeni (denetim sonrası, optimize) zip hash'leri — kurcalanabilirlik zinciri için burada sabitlenmiştir:
 
