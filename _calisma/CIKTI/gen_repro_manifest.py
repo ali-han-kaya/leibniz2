@@ -10,6 +10,8 @@ simülasyon / doğrulama) çalışır → CI ile yerel arasında drift olmaz.
   manifest.txt    — insan-okur: FILE + SHA-256 tablosu + CONFIG bölümü
   manifest.json   — makine-okur: tool/generated/run/sha/ref/files{rel: sha256}
                     + config{files, combined_sha256}
+  manifest.sha256 — manifest.json'un kendi SHA-256'sı (sha256sum formatı;
+                    kurcalanma / yeniden üretim farkı tek hash ile denetlenir)
   + tüm artifact'ların kopyası (bundle)
 
 CONFIG bölümü: artifacts-dir altındaki config/ önekiyle dosyalar ayrıca
@@ -127,6 +129,13 @@ def main() -> None:
     (out_dir / "manifest.json").write_text(
         json.dumps(manifest_json, indent=2, ensure_ascii=False), encoding="utf-8")
 
+    # manifest.json'un kendi SHA-256'sı — sidecar (sha256sum formatı).
+    # manifest.json içeriği değişirse sidecar artık eşleşmez; böylece
+    # manifest'in kendisi (dosya hash'lerinin listesi) tek hash ile denetlenir.
+    manifest_sha = sha256_file(out_dir / "manifest.json")
+    (out_dir / "manifest.sha256").write_text(
+        f"{manifest_sha}  manifest.json\n", encoding="utf-8")
+
     # Artifact'ları bundle'a kopyala (manifest yanında)
     for child in root.iterdir():
         dest = out_dir / child.name
@@ -138,7 +147,8 @@ def main() -> None:
     total_bytes = sum(f.stat().st_size for f in out_dir.rglob("*") if f.is_file())
     print(f"Manifest: {len(file_hashes)} files hashed, run_id={run_id}")
     print(f"Bundle size: {total_bytes} bytes")
-    print(f"Output: {out_dir}/manifest.txt, {out_dir}/manifest.json")
+    print(f"Output: {out_dir}/manifest.txt, {out_dir}/manifest.json, "
+          f"{out_dir}/manifest.sha256")
 
 
 if __name__ == "__main__":
