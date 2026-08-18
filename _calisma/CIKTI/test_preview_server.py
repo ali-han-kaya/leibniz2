@@ -122,5 +122,87 @@ class DeadlockTests(unittest.TestCase):
         self.assertIn("OK", r.stdout)
 
 
+class ReplayEventsTests(unittest.TestCase):
+    """build_replay_events — /api/run-stream geriye dönük akışı.
+
+    Son tamamlanmış run'un satırları, canlı akıştan ÖNCE, replay-start/end
+    sınırları arasında ve `replay: true` işaretiyle üretilmelidir.
+    """
+
+    def test_no_ts_returns_empty(self):
+        self.assertEqual(ps.build_replay_events(None, "PASS", "x", "y"), [])
+        self.assertEqual(ps.build_replay_events("", "PASS", "x", "y"), [])
+
+    def test_orders_stderr_then_stdout(self):
+        ev = ps.build_replay_events("t", "PASS", "out1\nout2", "err1")
+        names = [n for n, _ in ev]
+        self.assertEqual(names, ["replay-start", "stderr", "stdout", "stdout",
+                                 "replay-end"])
+        payloads = [json.loads(d) for _, d in ev]
+        # sıra: stderr satırı önce, sonra stdout satırları (zamansal sıra)
+        self.assertEqual(payloads[1], {"stream": "stderr", "line": "err1",
+                                       "replay": True})
+        self.assertEqual(payloads[2]["line"], "out1")
+        self.assertEqual(payloads[3]["line"], "out2")
+
+    def test_replay_start_carries_verdict_and_end_boundary(self):
+        ev = ps.build_replay_events("t", "FAIL", "o", "e")
+        first = json.loads(ev[0][1])
+        last = json.loads(ev[-1][1])
+        self.assertEqual(first["stream"], "replay-start")
+        self.assertEqual(first["verdict"], "FAIL")
+        self.assertEqual(first["ts"], "t")
+        self.assertEqual(last["stream"], "replay-end")
+        self.assertEqual(last["ts"], "t")
+
+    def test_empty_streams_produce_only_boundaries(self):
+        ev = ps.build_replay_events("t", "PASS", "", "")
+        self.assertEqual([n for n, _ in ev], ["replay-start", "replay-end"])
+
+    def test_multiline_stdout_is_split_into_events(self):
+        # splitlines() çok satırlı metni satır başına bir event'e böler;
+        # hiçbir data alanı gerçek newline içermez (SSE tek fiziksel satır).
+        ev = ps.build_replay_events("t", "PASS", "a\nb", "")
+        lines = [json.loads(d)["line"] for n, d in ev if n == "stdout"]
+        self.assertEqual(lines, ["a", "b"])
+        for _, d in ev:
+            self.assertNotIn("\n", d)
+
+
+class FakeWfile:
+    def __init__(self):
+        self.buf = b""
+
+    def write(self, b):
+        self.buf += b
+
+    def flush(self):
+        pass
+
+
+class ReplayHandlerTests(unittest.TestCase):
+    """Handler._replay_last_run — SSE serileştirme (event: X\ndata: Y\n\n)."""
+
+    def _replay(self, ts, verdict, stdout, stderr):
+        h = type("FakeHandler", (), {"wfile": FakeWfile()})()
+        ps.Handler._replay_last_run(h, ts, verdict, stdout, stderr)
+        return h.wfile.buf.decode("utf-8")
+
+    def test_writes_sse_events_in_order(self):
+        out = self._replay("t", "PASS", "o1\no2", "e1")
+        self.assertTrue(out.startswith("event: replay-start\n"))
+        self.assertIn("event: stderr\ndata: ", out)
+        self.assertIn("event: stdout\ndata: ", out)
+        # stderr satırı stdout'tan ÖNCE gelir (canlı akıştaki zamansal sıra)
+        self.assertLess(out.index("event: stderr"), out.index("event: stdout"))
+        self.assertTrue(
+            out.rstrip().endswith(
+                'event: replay-end\ndata: {"stream": "replay-end", "ts": "t"}'))
+
+    def test_no_ts_writes_nothing(self):
+        self.assertEqual(self._replay(None, "PASS", "o", "e"), "")
+        self.assertEqual(self._replay("", "PASS", "o", "e"), "")
+
+
 if __name__ == "__main__":
     unittest.main()

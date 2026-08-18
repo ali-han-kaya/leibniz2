@@ -8,7 +8,9 @@ Tek dosyalık Python HTTP sunucusu (stdlib-only):
                    her RUN_INTERVAL saniyede bir stream eder (snapshot event'leri)
   - /api/run-stream → canlı satır akışı: verify subprocess'inin stdout/stderr
                    satırları koşarken anında yayınlanır (K8 Z3 ilerlemesi dahil);
-                   run bitince `end` event'i + son snapshot gelir
+                   run bitince `end` event'i + son snapshot gelir. Bağlantı
+                   anında son tamamlanmış run'un satırları geriye dönük akıtılır
+                   (replay-start/end arasında) — sayfa açılınca kutu boş kalmaz
   - /api/run-now → manuel tetikleme (GET/POST): interval beklemeden hemen
                    verify_delivery.py --full koşar; sonuç SSE ile anında broadcast
   - /api/latest  → en son çalıştırmanın JSON özeti (P0/P1, SONUÇ, bütçe, vs.)
@@ -195,6 +197,34 @@ def _broadcast_run_end(rec):
             q.put_nowait(msg)
         except Exception:
             pass
+
+
+def build_replay_events(ts, verdict, stdout, stderr):
+    """Son tamamlanmış run'un satırlarını SSE event listesi olarak üret.
+
+    Dönüş: [(event_adı, data_json), ...] — replay-start, ardından stderr
+    satırları, ardından stdout satırları (her biri `replay: true` işaretli),
+    en sonda replay-end. ts yoksa boş liste döner (henüz hiç run yok).
+
+    Sıra, canlı akıştaki zamansal sırayı yansıtır: verify --full --json
+    koşusunda insan-okur ilerleme satırları (K8 Z3 dahil) stderr'e akar,
+    makine-okur JSON ise en sonda stdout'a yazılır.
+    """
+    if not ts:
+        return []
+    events = [("replay-start", json.dumps(
+        {"stream": "replay-start", "ts": ts, "verdict": verdict},
+        ensure_ascii=False))]
+    for tag, text in (("stderr", stderr), ("stdout", stdout)):
+        if not text:
+            continue
+        for line in text.splitlines():
+            events.append((tag, json.dumps(
+                {"stream": tag, "line": line, "replay": True},
+                ensure_ascii=False)))
+    events.append(("replay-end", json.dumps(
+        {"stream": "replay-end", "ts": ts}, ensure_ascii=False)))
+    return events
 
 
 def _run_verify_locked(verify_dir):
@@ -396,12 +426,29 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self._send(404, "404 not found")
 
+    def _replay_last_run(self, ts, verdict, stdout, stderr):
+        """Son tamamlanmış run'un satırlarını canlı akıştan ÖNCE gönder.
+
+        replay-start/end event'leri sınırı işaretler; her satır `replay: true`
+        taşır, böylece client geçmiş satırları canlı satırlardan ayırt eder.
+        """
+        events = build_replay_events(ts, verdict, stdout, stderr)
+        if not events:
+            return
+        buf = "".join(f"event: {ev}\ndata: {data}\n\n" for ev, data in events)
+        self.wfile.write(buf.encode())
+        self.wfile.flush()
+
     def serve_run_stream(self):
         """Server-Sent Events: verify subprocess'inin satırlarını canlı akıt.
 
         Her satır bir `line` event'idir (data: {"stream": "stdout"|"stderr",
         "line": ...}); run bittiğinde `run-end` event'i (son snapshot) gelir.
         Bağlantı anında bekleyen bir verify yoksa keepalive ile bekler.
+
+        Bağlantı anında SON TAMAMLANMIŞ run'un satırları geriye dönük akıtılır
+        (replay-start/end arasında), böylece sayfa açıldığında kutu boş kalmaz:
+        önce son run'un satırları, sonra canlı satırlar gelir.
         """
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream; charset=utf-8")
@@ -414,14 +461,21 @@ class Handler(BaseHTTPRequestHandler):
         q = queue.Queue(maxsize=512)
         with LOCK:
             STREAM_CLIENTS.append(q)
-            # Bağlantı anında mevcut durumu bildir
+            # Bağlantı anında mevcut durumu bildir + son run'u replay için
+            # snapshot'la (canlı satırlar queue'da birikir, önce replay gider).
             info = json.dumps({"stream": "info",
                                "ts": LATEST["ts"],
                                "verdict": LATEST["verdict"]},
                               ensure_ascii=False)
+            replay_ts = LATEST["ts"]
+            replay_verdict = LATEST["verdict"]
+            replay_stdout = LATEST["stdout"]
+            replay_stderr = LATEST["stderr"]
         try:
             self.wfile.write(f"event: info\ndata: {info}\n\n".encode())
             self.wfile.flush()
+            self._replay_last_run(replay_ts, replay_verdict,
+                                  replay_stdout, replay_stderr)
             while True:
                 try:
                     msg = q.get(timeout=15)
