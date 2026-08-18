@@ -1762,10 +1762,18 @@ def main():
                     p = os.path.join(root, fn)
                     if os.path.isfile(p):
                         rel = os.path.relpath(p, parent)
-                        k0_findings.append({"rel": rel, "sha256": sha256_file(p)})
-                        add("P1", "K0-STALE", "K0 bayat zip",
-                            f"CIKTI dışında zip bulundu: {rel}",
-                            f"{sha256_file(p)}  {p}")
+                        h = sha256_file(p)
+                        k0_findings.append({"rel": rel, "sha256": h})
+                        issue = f"CIKTI dışında zip bulundu: {rel}"
+                        # Kök düzeyindeki başıboş kopya için hint: TOOLKIT/
+                        # K0'ın skip kümesindedir — oraya taşınırsa P1 otomatik
+                        # düşer (kanonik kopya CIKTI/ + toolkit kopyası
+                        # TOOLKIT/ ayrışır). Alt dizindeki (repack ara ürünü)
+                        # ziplere bu hint verilmez — repack onları kendi siler.
+                        if os.path.dirname(rel) == "":
+                            issue += (" — ipucu: kök zip'i `TOOLKIT/` dizinine "
+                                      "taşıyabilirsin (K0 atlar; P1 giderilir)")
+                        add("P1", "K0-STALE", "K0 bayat zip", issue, f"{h}  {p}")
     if args.k0_out:
         try:
             with open(args.k0_out, "w", encoding="utf-8") as kf:
