@@ -43,6 +43,7 @@ MANIFEST_FILES = [
     "ingiliz_empirizmi_v3.pdf","encoding_sensitivity_check.py", "encoding_sensitivity_output.txt",
     "gate15_check.py", "gate15_output.txt", "provenance2_supplement.md",
     "ingiliz_empirizmi_v3.pdf.metadata.sha256",
+    "e2e_config_probe.txt",  # E2E test probe — test commit'inden sonra kaldırılacak
 ]
 
 SKIP = {".DS_Store", "__MACOSX"}
