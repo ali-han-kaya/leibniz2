@@ -10,6 +10,10 @@ Sıra:
   4) dış zip  TESLIM_KLASOR_V5_2026-08-17.zip  (TESLIM/Stoic-Hume-Final-V5_2026-08-17/)
   5) dış sidecar
   6) iki zip + sidecar'ı CIKTI/'ya kopyalar
+  7) config'i paket içeriğiyle senkron eder (gen_config.py) — update-config
+     hook'u ile AYNI felsefe: önce --dry-run; drift yoksa dokunmaz, varsa
+     yazma modunda günceller. Ortam eksikse (exit 2) uyarı ile geçer (CI
+     config-drift job'ı orada yakalar), şema hatası repack'i bloke eder.
 
 Zip'ler sıralı girdiler + sabit zaman damgasıyla üretilir (tekrarlanabilir).
 Çalıştırma:  python3 repack_delivery.py   (repo kökünden)
@@ -172,6 +176,56 @@ def write_sidecar(zip_path, name):
         f.write(f"{sha256(zip_path)}  {name}\n")
 
 
+def sync_config():
+    """Repack sonrası config'i paket içeriğiyle senkron et (update-config felsefesi).
+
+    update_config_hook.sh ile aynı kural: önce gen_config.py --dry-run;
+    drift yoksa dosyaya dokunmaz (yazma modu her zaman yeniden yazar → byte
+    farkı + gereksiz değişiklik üretirdi), drift varsa yazma modunda
+    günceller. Ortam eksikse (exit 2) UYARI ile geç — CI'daki config-drift
+    job'ı orada fail-closed denetler. Şema doğrulaması başarısızlığı (1)
+    repack'i bloke eder.
+
+    Dönüş: True = senkron tamam (dokunulmadı / güncellendi / ortam uyarısı),
+           False = şema hatası veya beklenmedik exit (repack FAIL).
+    """
+    import subprocess
+    import sys
+
+    gen = os.path.join(CIKTI, "gen_config.py")
+
+    def run(dry):
+        cmd = [sys.executable, gen, "--dir", CIKTI]
+        if dry:
+            cmd.append("--dry-run")
+        return subprocess.run(cmd, capture_output=True, text=True)
+
+    r = run(True)
+    if r.returncode == 0:
+        print("  config senkron : drift yok (config paket içeriğiyle güncel)")
+        return True
+    if r.returncode == 2:
+        print("  UYARI: gen_config ortam hatası (exit 2) — config güncellenemedi; "
+              "CI config-drift kapısı denetler.")
+        return True
+    if r.returncode == 1:
+        print("  config drift tespit edildi — gen_config yazma modunda güncelleniyor…")
+        w = run(False)
+        if w.returncode == 0:
+            print(f"  config senkron : güncellendi → "
+                  f"{os.path.join(CIKTI, 'verify_delivery.config.json')}")
+            return True
+        if w.returncode == 2:
+            print("  UYARI: gen_config yazma modunda ortam hatası (exit 2) — "
+                  "config güncellenemedi; CI config-drift kapısı denetler.")
+            return True
+        print(f"  HATA: gen_config yazma modunda başarısız (exit {w.returncode}) — "
+              "config güncellenemedi.")
+        return False
+    print(f"  HATA: gen_config beklenmedik exit ({r.returncode}).")
+    return False
+
+
 def main():
     # 0) PDF metadata-stripped hash sidecar (build determinism proxy).
     #    build_zip'dan ÖNCE yapılır (çünkü MANIFEST.txt sidecar'ı listeler).
@@ -252,9 +306,15 @@ def main():
         if os.path.isfile(p):
             os.unlink(p)
 
+    # 6) Config senkronu (update-config felsefesi) — zip'ler CIKTI/'ya
+    #    kopyalandıktan SONRA, böylece gen_config güncel paketi okur.
+    sync_ok = sync_config()
+
     print("MANIFEST güncellendi; iç/dış zip + sidecar + KLASOR_CHECKSUMLARI yeniden üretildi.")
     print(f"  iç zip : {INNER_ZIP} ({inner_size} B) → CIKTI/ + dış zip içine gömüldü")
     print(f"  dış zip : {OUTER_ZIP} ({outer_size} B)")
+
+    return 0 if sync_ok else 1
 
 
 if __name__ == "__main__":
