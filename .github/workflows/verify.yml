@@ -9,7 +9,9 @@ name: verify-delivery
 #   K9 (Lean 4 reduct-invariance) +
 #   bütçe kalkanı (--budget-out) hepsini tek komutta koşar.
 # Z3 ve Lean, verify_delivery.py'nin içinden subprocess olarak çağrılır;
-# tek bir rapor dosyasında (verify_report.txt) birleşir.
+# tek bir rapor dosyasında (verify_report.txt) birleşir. Ardından pre-commit
+# hook'ları (verify-delivery / symbolic / lean) AYNI job içinde ADVISORY
+# koşulur ve çıktıları aynı log'a (verify_report.txt) eklenir.
 #
 # Tek job'un sıfır-dışı exit kodu build'i FAIL yapar (fail-closed).
 #
@@ -17,8 +19,8 @@ name: verify-delivery
 #   budget        : bütçe sidecar'ını toplar; aşım varsa run summary +
 #                   PR yorumu üretir.
 #   reports       : statik markdown raporları tek artifact'ta toplar.
-#   precommit     : pre-commit hook'larını ADVISORY koşar (build bloke etmez);
-#                   bulguları rapor (reports) artifact'ına yazar.
+#   (pre-commit hook'ları ayrı job değil — verify job'unun İÇİNDE advisory
+#    bölüm olarak koşulur; çıktısı aynı log'a eklenir, tek giriş noktası.)
 #   reproducibility: tüm artifact'ları SHA-256 + run_id ile manifest'ler,
 #                   tek artifact olarak yükler.
 #   manifest-comment: reproducibility manifest.txt içeriğini PR yorumu olarak
@@ -61,6 +63,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+
+      - name: Install pre-commit (advisory pre-commit section)
+        run: pip install pre-commit
 
       # Konfig şema doğrulaması (jsonschema) — parse/schema hatalarını
       # henüz Z3/Lean kurulumuna girmeden bloke eder (fail-fast).
@@ -105,6 +110,149 @@ jobs:
             --refs-out references_online.json \
             --k0-out k0_findings.json 2>&1 | tee verify_report.txt
           # (--full içinde --check-lineage: zip_lineage.json soy hattı doğrulanır)
+
+      # ─── PRECOMMIT (ADVISORY) — aynı job içinde, tek log ────────────────
+      # pre-commit hook'ları (verify-delivery / symbolic / lean) commit
+      # öncesi kapının birebir aynısıdır. --full'den SONRA AYNI job içinde
+      # koşulur ve çıktısı verify_report.txt'ye EKLENİR → tek giriş noktası,
+      # tek log. continue-on-error: build'i BLOKE ETMEZ (gate rolü --full'de);
+      # P0/P1 bulguları PRECOMMIT_RAPORU.md'ye ayrıştırılıp reports
+      # artifact'ına eklenir. if: always(): --full başarısız olsa bile
+      # advisory bulgular toplanır.
+      - name: Run pre-commit (advisory, all files, show diff on failure)
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: |
+          mkdir -p logs
+          pre-commit run --all-files --show-diff-on-failure --color=never \
+            > logs/precommit.log 2>&1
+          status=$?
+          echo "$status" > logs/precommit.exit
+          {
+            echo ""
+            echo "════════════════════════════════════════════════════════"
+            echo "PRECOMMIT (ADVISORY) — pre-commit run --all-files"
+            echo "exit code: $status"
+            echo "════════════════════════════════════════════════════════"
+            cat logs/precommit.log
+          } >> verify_report.txt
+          cat logs/precommit.log
+          exit $status
+
+      - name: Generate pre-commit findings report
+        if: always()
+        shell: python3 {0}
+        run: |
+          import re, datetime, pathlib
+
+          log = pathlib.Path("logs/precommit.log")
+          log_text = log.read_text(encoding="utf-8", errors="replace") if log.exists() else ""
+          try:
+              exit_code = int(pathlib.Path("logs/precommit.exit").read_text().strip())
+          except Exception:
+              exit_code = 1
+
+          hooks = [
+              {"name": m.group(1).strip(), "status": m.group(2)}
+              for m in re.finditer(r"^(.*?)\.{4,}(Passed|Failed)\s*$", log_text, re.M)
+          ]
+          findings = []
+          for pri in ("P0", "P1"):
+              for m in re.finditer(rf"^\[{pri}\] (.+)$", log_text, re.M):
+                  findings.append((pri, m.group(1).strip()))
+
+          now = datetime.datetime.utcnow().isoformat() + "Z"
+          verdict = "PASS" if exit_code == 0 else "FAIL"
+          lines = [
+              "# PRECOMMIT DENETİM RAPORU (CI advisory)",
+              "",
+              f"- **Tarih (UTC):** {now}",
+              "- **Komut:** `pre-commit run --all-files --show-diff-on-failure`",
+              f"- **Sonuç:** {verdict} (exit {exit_code})",
+              "- **Rol:** advisory — build'i bloke etmez; bulgular denetim içindir.",
+              "",
+              "## Hook sonuçları",
+              "",
+              "| Hook | Durum |",
+              "|---|---|",
+          ]
+          if hooks:
+              for h in hooks:
+                  lines.append(f"| {h['name']} | {h['status']} |")
+          else:
+              lines.append("| (hook sonucu ayrıştırılamadı) | — |")
+
+          lines += ["", "## Bulgular (P0/P1)", ""]
+          if findings:
+              lines += ["| Öncelik | Bulgu |", "|---|---|"]
+              for pri, text in findings:
+                  lines.append(f"| {pri} | {text.replace('|', '\\|')} |")
+          else:
+              lines.append("Bulgu yok — tüm hook'lar geçti.")
+          lines += [
+              "",
+              "## Ham log",
+              "",
+              "Tam çıktı `precommit.log` dosyasında (bu artifact içinde) saklanır.",
+              "",
+          ]
+
+          pathlib.Path("logs/PRECOMMIT_RAPORU.md").write_text(
+              "\n".join(lines), encoding="utf-8"
+          )
+          print(f"PRECOMMIT_RAPORU.md yazıldı: {len(hooks)} hook, {len(findings)} bulgu")
+
+      # ÖZET: pre-commit cache durumu + hook env sürümleri. Tekrarlanabilirlik
+      # denetimi için: hangi pre-commit sürümü, hangi hook ortamları (env
+      # hash'leri) ve hangi araç sürümleri kullanıldı. PRECOMMIT_CACHE.md
+      # logs/ içine yazıldığından artifact'a otomatik girer ve reproducibility
+      # manifest'ine hash'lenir.
+      - name: Pre-commit cache + hook env summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "# PRECOMMIT ORTAM ÖZETİ (cache + hook env)"
+            echo ""
+            echo "- **pre-commit sürümü:** $(pre-commit --version 2>/dev/null || echo yok)"
+            echo "- **Toplamak zamanı (UTC):** $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo ""
+            echo "## Hook env sürümleri"
+            echo ""
+            echo "| Araç | Sürüm |"
+            echo "|---|---|"
+            echo "| python3 | $(python3 --version 2>&1 | awk '{print $2}') |"
+            echo "| pre-commit | $(pre-commit --version 2>/dev/null | awk '{print $2}' || echo yok) |"
+            echo "| pdfinfo | $(pdfinfo -v 2>&1 | head -1 | sed 's/.*version //' || echo yok) |"
+            echo "| qpdf | $(qpdf --version 2>&1 | head -1 | awk '{print $NF}' || echo yok) |"
+            echo "| z3 | $(python3 -c 'import z3; print(z3.get_version_string())' 2>/dev/null || echo yok) |"
+            echo "| lean | $(lean --version 2>/dev/null || echo yok) |"
+            echo ""
+            echo "## pre-commit cache durumu"
+            echo ""
+            echo '```text'
+            if [ -d "$HOME/.cache/pre-commit" ]; then
+              echo "cache dizini: $HOME/.cache/pre-commit"
+              du -sh "$HOME/.cache/pre-commit" 2>/dev/null
+              echo ""
+              echo "env sürümleri (hash dizinleri):"
+              ls -1 "$HOME/.cache/pre-commit" 2>/dev/null | head -20
+              echo ""
+              if [ -d "$HOME/.cache/pre-commit/repocache" ]; then
+                echo "repocache:"
+                ls -1 "$HOME/.cache/pre-commit/repocache" 2>/dev/null | head -10
+              fi
+            else
+              echo "cache dizini yok: $HOME/.cache/pre-commit"
+            fi
+            echo '```'
+            echo ""
+            echo "> Not: env hash dizinleri hook ortamlarının (additional_dependencies"
+            echo "> dahil) içerik hash'leridir — aynı env yeniden kurulmadan reuse edilir."
+          } > logs/PRECOMMIT_CACHE.md
+          echo "PRECOMMIT_CACHE.md yazıldı:"
+          cat logs/PRECOMMIT_CACHE.md
 
       # ─── K0 bulgularını run summary'de ayrı bölüm olarak göster ────────────
       # verify_delivery.py --k0-out k0_findings.json sidecar'ından okur;
@@ -227,6 +375,15 @@ jobs:
             references_online.json
             references_online.json.sha256
           if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Upload pre-commit log + findings report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: precommit-logs
+          path: logs/
+          if-no-files-found: error
           retention-days: 30
 
   budget:
@@ -369,12 +526,12 @@ jobs:
   reports:
     name: Static markdown reports (incl. pre-commit findings)
     runs-on: ubuntu-latest
-    needs: [precommit]
+    needs: [verify]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # precommit advisory job'unun bulgularını indir (yoksa atla — dep
+      # precommit advisory bölümünün bulgularını indir (yoksa atla — dep
       # kurulumu başarısız olmuşsa rapor üretilmemiş olabilir).
       - name: Download pre-commit findings
         continue-on-error: true
@@ -404,187 +561,6 @@ jobs:
           retention-days: 30
 
   # ──────────────────────────────────────────────────────────────────────
-  # PRECOMMIT (ADVISORY) — commit öncesi kapının aynısını CI'da koş, bulguları
-  # rapor artifact'ına yaz. verify job'u --full koşarken, bu job
-  # .pre-commit-config.yaml'daki üç hook'u (verify-delivery / symbolic / lean)
-  # `pre-commit run` üzerinden birebir çalıştırır. continue-on-error:
-  # build'i BLOKE ETMEZ (gate rolü verify job'unda); P0/P1 bulguları
-  # PRECOMMIT_RAPORU.md'ye ayrıştırılıp reports artifact'ına eklenir.
-  # ──────────────────────────────────────────────────────────────────────
-  precommit:
-    name: Pre-commit hooks + logs (artifact)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install pre-commit
-        run: pip install pre-commit
-
-      # verify-delivery hook'u (base mod) K6 için pdfinfo + qpdf kullanır;
-      # yoksa ilgili kontroller atlanır — tam kapı için kuruyoruz.
-      - name: Install pdfinfo + qpdf (verify-delivery hook deps)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y poppler-utils qpdf
-
-      # verify-delivery-lean hook'u `lean` gerektirir (elan + stable toolchain).
-      # z3-solver, verify-delivery-symbolic hook'unun additional_dependencies
-      # alanından pre-commit tarafından otomatik kurulur.
-      - name: Install Lean 4 (verify-delivery-lean hook)
-        run: |
-          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain leanprover/lean4:stable
-          echo "$HOME/.elan/bin" >> $GITHUB_PATH
-
-      # ADVISORY: continue-on-error — build'i BLOKE ETMEZ (gate rolü verify
-      # job'unda); başarısızlık UI'da kırmızı görünür ama job geçer.
-      # --show-diff-on-failure: başarısız bir hook dosya DEĞİŞTİRSEYDİ diff'i
-      # gösterir (bu repo'nun hook'ları read-only; geleceğe dönük güvence).
-      - name: Run pre-commit (advisory, all files, show diff on failure)
-        continue-on-error: true
-        shell: bash
-        run: |
-          mkdir -p logs
-          pre-commit run --all-files --show-diff-on-failure --color=never \
-            > logs/precommit.log 2>&1
-          status=$?
-          echo "$status" > logs/precommit.exit
-          { echo ""; echo "=== pre-commit exit code: $status ==="; } >> logs/precommit.log
-          cat logs/precommit.log
-          exit $status
-
-      # Ham logdan hook durumlarını + P0/P1 bulgularını ayrıştırıp markdown
-      # bir rapora dönüştürür. Bu rapor reports job'u tarafından `reports`
-      # artifact'ına eklenir (bulgular tek yerde denetlenir).
-      - name: Generate pre-commit findings report
-        if: always()
-        shell: python3 {0}
-        run: |
-          import re, datetime, pathlib
-
-          log = pathlib.Path("logs/precommit.log")
-          log_text = log.read_text(encoding="utf-8", errors="replace") if log.exists() else ""
-          try:
-              exit_code = int(pathlib.Path("logs/precommit.exit").read_text().strip())
-          except Exception:
-              exit_code = 1
-
-          hooks = [
-              {"name": m.group(1).strip(), "status": m.group(2)}
-              for m in re.finditer(r"^(.*?)\.{4,}(Passed|Failed)\s*$", log_text, re.M)
-          ]
-          findings = []
-          for pri in ("P0", "P1"):
-              for m in re.finditer(rf"^\[{pri}\] (.+)$", log_text, re.M):
-                  findings.append((pri, m.group(1).strip()))
-
-          now = datetime.datetime.utcnow().isoformat() + "Z"
-          verdict = "PASS" if exit_code == 0 else "FAIL"
-          lines = [
-              "# PRECOMMIT DENETİM RAPORU (CI advisory)",
-              "",
-              f"- **Tarih (UTC):** {now}",
-              "- **Komut:** `pre-commit run --all-files --show-diff-on-failure`",
-              f"- **Sonuç:** {verdict} (exit {exit_code})",
-              "- **Rol:** advisory — build'i bloke etmez; bulgular denetim içindir.",
-              "",
-              "## Hook sonuçları",
-              "",
-              "| Hook | Durum |",
-              "|---|---|",
-          ]
-          if hooks:
-              for h in hooks:
-                  lines.append(f"| {h['name']} | {h['status']} |")
-          else:
-              lines.append("| (hook sonucu ayrıştırılamadı) | — |")
-
-          lines += ["", "## Bulgular (P0/P1)", ""]
-          if findings:
-              lines += ["| Öncelik | Bulgu |", "|---|---|"]
-              for pri, text in findings:
-                  lines.append(f"| {pri} | {text.replace('|', '\\|')} |")
-          else:
-              lines.append("Bulgu yok — tüm hook'lar geçti.")
-          lines += [
-              "",
-              "## Ham log",
-              "",
-              "Tam çıktı `precommit.log` dosyasında (bu artifact içinde) saklanır.",
-              "",
-          ]
-
-          pathlib.Path("logs/PRECOMMIT_RAPORU.md").write_text(
-              "\n".join(lines), encoding="utf-8"
-          )
-          print(f"PRECOMMIT_RAPORU.md yazıldı: {len(hooks)} hook, {len(findings)} bulgu")
-
-      # ÖZET: pre-commit cache durumu + hook env sürümleri. Tekrarlanabilirlik
-      # denetimi için: hangi pre-commit sürümü, hangi hook ortamları (env
-      # hash'leri) ve hangi araç sürümleri kullanıldı. PRECOMMIT_CACHE.md
-      # logs/ içine yazıldığından artifact'a otomatik girer ve reproducibility
-      # manifest'ine hash'lenir.
-      - name: Pre-commit cache + hook env summary
-        if: always()
-        shell: bash
-        run: |
-          {
-            echo "# PRECOMMIT ORTAM ÖZETİ (cache + hook env)"
-            echo ""
-            echo "- **pre-commit sürümü:** $(pre-commit --version 2>/dev/null || echo yok)"
-            echo "- **Toplamak zamanı (UTC):** $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-            echo ""
-            echo "## Hook env sürümleri"
-            echo ""
-            echo "| Araç | Sürüm |"
-            echo "|---|---|"
-            echo "| python3 | $(python3 --version 2>&1 | awk '{print $2}') |"
-            echo "| pre-commit | $(pre-commit --version 2>/dev/null | awk '{print $2}' || echo yok) |"
-            echo "| pdfinfo | $(pdfinfo -v 2>&1 | head -1 | sed 's/.*version //' || echo yok) |"
-            echo "| qpdf | $(qpdf --version 2>&1 | head -1 | awk '{print $NF}' || echo yok) |"
-            echo "| z3 | $(python3 -c 'import z3; print(z3.get_version_string())' 2>/dev/null || echo yok) |"
-            echo "| lean | $(lean --version 2>/dev/null || echo yok) |"
-            echo ""
-            echo "## pre-commit cache durumu"
-            echo ""
-            echo '```text'
-            if [ -d "$HOME/.cache/pre-commit" ]; then
-              echo "cache dizini: $HOME/.cache/pre-commit"
-              du -sh "$HOME/.cache/pre-commit" 2>/dev/null
-              echo ""
-              echo "env sürümleri (hash dizinleri):"
-              ls -1 "$HOME/.cache/pre-commit" 2>/dev/null | head -20
-              echo ""
-              if [ -d "$HOME/.cache/pre-commit/repocache" ]; then
-                echo "repocache:"
-                ls -1 "$HOME/.cache/pre-commit/repocache" 2>/dev/null | head -10
-              fi
-            else
-              echo "cache dizini yok: $HOME/.cache/pre-commit"
-            fi
-            echo '```'
-            echo ""
-            echo "> Not: env hash dizinleri hook ortamlarının (additional_dependencies"
-            echo "> dahil) içerik hash'leridir — aynı env yeniden kurulmadan reuse edilir."
-          } > logs/PRECOMMIT_CACHE.md
-          echo "PRECOMMIT_CACHE.md yazıldı:"
-          cat logs/PRECOMMIT_CACHE.md
-
-      - name: Upload pre-commit log + findings report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: precommit-logs
-          path: logs/
-          if-no-files-found: error
-          retention-days: 30
-
-  # ──────────────────────────────────────────────────────────────────────
   # REPRODUCIBILITY BUNDLE
   #
   # Tüm artifact'ları indirir, her dosya için SHA-256 üretir,
@@ -594,7 +570,7 @@ jobs:
   reproducibility:
     name: Reproducibility bundle
     runs-on: ubuntu-latest
-    needs: [verify, budget, reports, precommit]
+    needs: [verify, budget, reports]
     if: always()
     steps:
       - name: Checkout
