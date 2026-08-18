@@ -10,6 +10,17 @@ Bu senaryo, `_calisma/CIKTI/` ve kök config'leri (workflow, pre-commit, README)
 
 ## AŞAMA 0 — Ön-kontrol (güvenli, otomatik)
 
+> **Tek komut (otomatik):** aşağıdaki tüm kontrollerin birebir aynısı
+> [`docs/publish_precheck.sh`](publish_precheck.sh) ile koşar — her kontrol
+> `[PASS]/[FAIL]` raporlanır, herhangi bir FAIL exit 1 (fail-closed):
+> ```bash
+> bash docs/publish_precheck.sh                 # ilk publish (remote boş beklenir)
+> bash docs/publish_precheck.sh --allow-remote  # repo zaten GitHub'da (incremental)
+> bash docs/publish_precheck.sh --skip-smoke    # smoke testini atla (commit yok)
+> ```
+> `publish_wrapper.sh` AŞAMA 0'da bu scripti çağırır — manuel adımlar yalnızca
+> referans/denetim içindir.
+
 ```bash
 cd /Users/alikaya/Desktop/leibniz2
 

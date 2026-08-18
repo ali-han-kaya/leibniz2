@@ -39,46 +39,19 @@ log "publish_wrapper.sh başladı"
 log "repo_root: $REPO_ROOT · repo_name: $REPO_NAME · log: $LOG"
 
 # ─────────────────────────────────────────────────────────────────────────────
-step "AŞAMA 0 — Ön-kontrol"
+step "AŞAMA 0 — Ön-kontrol (publish_precheck.sh — tek komut)"
 
-# (a) Repo temiz + history temiz mi?
-if [ -n "$(git status --short)" ]; then
-  fail "working tree temiz değil — önce commit/stash et"
-fi
-log "git status: temiz ✓"
-
-git log --oneline -5 | sed 's/^/    /'
-if git log --oneline | grep -qiE "test marker"; then
-  fail "history'de test-marker commit'i var — önce rebase ile temizle"
-fi
-log "history: temiz (test-marker yok) ✓"
-
-# (b) pre-commit smoke test — GÜVENLİ: başarısızsa commit oluşmaz, reset atılmaz.
-#     (doc'taki `git reset --hard HEAD^` hatasını tekrarlamaz.)
-SMOKE_BEFORE="$(git rev-parse HEAD)"
-if git commit --allow-empty -m "smoke: empty commit pre-commit test"; then
-  git reset --hard "$SMOKE_BEFORE" >/dev/null
-  log "pre-commit smoke: PASS ✓"
-else
-  fail "pre-commit smoke: FAIL — kapı kırmızı (genellikle K0/toolkit zip). Önce yeşile çevir."
+# AŞAMA 0'ın tamamı tek kaynak scriptte (docs/publish_precheck.sh): repo/tree/
+# history temizliği + commit-msg kuralı + pre-commit smoke (5 kapı) + gh auth +
+# branch/remote. Herhangi bir FAIL → senaryo DURUR (fail-closed).
+# Not: smoke testi artık commit-msg kuralına uygun mesajla koşar ("docs: ...");
+# eski "smoke:" başlığı commit-msg-style hook'u tarafından reddedilir.
+if ! bash docs/publish_precheck.sh; then
+  fail "AŞAMA 0 kapıları geçilemedi — log: $LOG"
 fi
 
-# (c) gh CLI + auth
-command -v gh >/dev/null 2>&1 || fail "gh CLI kurulu değil (brew install gh)"
-gh --version | head -1 | sed 's/^/    /'
-gh auth status >/dev/null 2>&1 || fail "gh auth yok — önce 'gh auth login'"
+# gh kullanıcısı AŞAMA 1/2 için gerekli (precheck içinde doğrulandı).
 OWNER="$(gh api user -q .login 2>/dev/null || true)"
-[ -n "$OWNER" ] || fail "gh kullanıcı adı alınamadı"
-log "gh auth: $OWNER ✓"
-
-# (d) remote yokluğu + branch
-if [ -n "$(git remote -v)" ]; then
-  fail "remote zaten var: $(git remote -v)"
-fi
-log "remote: yok ✓"
-BRANCH="$(git branch --show-current)"
-[ "$BRANCH" = "main" ] || fail "branch '$BRANCH' — 'main' olmalı"
-log "branch: $BRANCH ✓"
 
 # ─────────────────────────────────────────────────────────────────────────────
 step "AŞAMA 1 — GitHub repo oluştur (interaktif değil)"
