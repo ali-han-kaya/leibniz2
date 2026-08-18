@@ -40,6 +40,42 @@ def sha256_file(p: pathlib.Path) -> str:
     return hashlib.sha256(p.read_bytes()).hexdigest()
 
 
+# Artifact → üreten job eşlemesi. verify.yml'deki her job'ın
+# upload-artifact `name` alanının aynasıdır (TEK KAYNAK kuralı: bu tablo ile
+# verify.yml birlikte değiştirilmelidir). merge-multiple indirmeleri
+# artifact adını köke düzleştirdiği için bu eşleme, bir dosyanın hangi
+# job'dan geldiğini denetlenebilir kılar. REPRO_ARTIFACT_JOBS env'i (JSON)
+# geçersiz kılma sağlar.
+ARTIFACT_JOBS = {
+    "verify-report": "verify",
+    "budget-verify": "verify",
+    "config": "verify",
+    "k0-findings": "verify",
+    "refs-online": "verify",
+    "run-history": "verify",
+    "precommit-logs": "verify",
+    "budget": "budget",
+    "reports": "reports",
+    "config-drift": "config-drift",
+    "repack-verify": "repack-verify",
+    "reproducibility": "reproducibility",
+}
+
+
+def _load_artifact_jobs() -> dict:
+    """ARTIFACT_JOBS'ı env override ile birleştir (REPRO_ARTIFACT_JOBS JSON)."""
+    jobs = dict(ARTIFACT_JOBS)
+    raw = os.environ.get("REPRO_ARTIFACT_JOBS")
+    if raw:
+        try:
+            override = json.loads(raw)
+        except json.JSONDecodeError:
+            return jobs
+        if isinstance(override, dict):
+            jobs.update(override)
+    return jobs
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--artifacts-dir", default="all_artifacts",
@@ -47,6 +83,7 @@ def main() -> None:
     ap.add_argument("--out-dir", default="reproducibility",
                     help="manifest + bundle çıktı dizini")
     args = ap.parse_args()
+    artifact_jobs = _load_artifact_jobs()
 
     run_id  = os.environ.get("GITHUB_RUN_ID", "local-sim")
     sha     = os.environ.get("GITHUB_SHA", "local-" + hashlib.sha256(b"mock").hexdigest()[:12])
@@ -107,6 +144,37 @@ def main() -> None:
                       "=" * 72]
         lines += cfg_block
 
+    # ── PROVENANCE bölümü: artifact → üreten job (denetim izi) ──────────────
+    # Her artifact hangi job'da üretildi — tek bakışta kaynak. Prefixed
+    # indirilenler (config/, precommit-logs/) bundle'da kendi adı altındadır;
+    # merge ile indirilenler köke düzleştiği için yalnızca eşleme üzerinden
+    # işaretlenir (dosya bazlı değil, artifact bazlı).
+    present = {}
+    for rel in file_hashes:
+        top = rel.split("/", 1)[0]
+        if top in artifact_jobs:
+            present.setdefault(top, []).append(rel)
+    prov_block = [
+        "",
+        "=" * 72,
+        "PROVENANCE (artifact → job kaynağı)",
+        "=" * 72,
+        f"{'ARTIFACT':<20} {'JOB':<22} BUNDLE",
+        "-" * 72,
+    ]
+    for art in sorted(artifact_jobs):
+        job = artifact_jobs[art]
+        files = present.get(art)
+        if files:
+            note = f"prefixed ({len(files)} dosya)"
+        elif art in ("config", "precommit-logs"):
+            note = "YOK (indirilmedi)"
+        else:
+            note = "merge (köke düzleştirildi)"
+        prov_block.append(f"{art:<20} {job:<22} {note}")
+    prov_block.append("=" * 72)
+    lines += prov_block
+
     manifest_json = {
         "tool": "stoic-hume-v5-reproducibility",
         "generated": now,
@@ -116,6 +184,7 @@ def main() -> None:
         "github_repository": repo,
         "github_run_url": run_url,
         "files": file_hashes,
+        "provenance": {"artifact_jobs": dict(sorted(artifact_jobs.items()))},
     }
     if config_hashes:
         manifest_json["config"] = {

@@ -609,11 +609,12 @@ jobs:
           python-version: '3.12'
 
       # ─── 1) Tüm artifact'ları indir ────────────────────────────────────
-      # config artifact'ı AYRI indirilip config/ alt dizinine yazılır;
-      # gen_repro_manifest.py'nin CONFIG bölümü config/ önekli dosyaları
-      # yakalar → config.combined_sha256 gerçekten üretilir. merge-multiple
-      # artifact'ları köke düzleştirdiği için config'i pattern'e koymak
-      # CONFIG bölümünü boş bırakırdı (öneki kaybolurdu).
+      # config VE precommit-logs artifact'ları AYRI indirilip kendi adları
+      # altına yazılır; gen_repro_manifest.py'nin CONFIG bölümü config/,
+      # PROVENANCE bölümü ise precommit-logs/ önekini yakalar → job kaynağı
+      # dosya bazında denetlenebilir. merge-multiple artifact'ları köke
+      # düzleştirdiği için bu ikisini pattern'e koymak öneklerini
+      # kaybettirirdi.
       # repack-verify tek düz dosya (repack_verify_report.txt) olduğundan
       # merge ile köke düzleşmesi sorun değildir → manifest'e rel yolu
       # repack_verify_report.txt olarak girer.
@@ -622,13 +623,19 @@ jobs:
         with:
           path: all_artifacts/
           merge-multiple: true
-          pattern: '{verify-report,budget,reports,precommit-logs,refs-online,run-history,config-drift,repack-verify}'
+          pattern: '{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify}'
 
       - name: Download config artifact (config/ prefix)
         uses: actions/download-artifact@v7
         with:
           name: config
           path: all_artifacts/config/
+
+      - name: Download precommit-logs artifact (precommit-logs/ prefix)
+        uses: actions/download-artifact@v7
+        with:
+          name: precommit-logs
+          path: all_artifacts/precommit-logs/
 
       # ─── 2) manifest.txt üret (gen_repro_manifest.py — tek kaynak) ─────────
       - name: Generate reproducibility manifest
