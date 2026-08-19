@@ -1,8 +1,8 @@
 # REFERANS KANIT DENETİMİ — 64/64
 
 **Hedef:** `ingiliz_empirizmi_v3.tex` §References (64 girdi)
-**Yöntem:** CrossRef API (4 dergi makalesi) + SEP doğrudan URL (5) + OpenLibrary (22 kitap/edişyon) + Internet Archive (21; kapsam dışı kalanlar HathiTrust + Google Books fallback) + Perseus CTS (2 antik birincil metin) — çevrimiçi doğrulanan 54/64. Çevrimiçi indekslenmeyen kalan girdiler bağımsız web/bibliyografik kaynağa dayanır. Her "GEÇTİ" bir bağımsız kaynağa dayanır; kaynak adresi `Kanıt` sütunundadır.
-**Tarih:** 2026-08-17 · **Güncelleme:** 2026-08-18 (V5h/V5j düzeltmeleri işlendi) · **Sonuç etiketi:** GEÇTİ (birebir) / DÜZELTİLDİ (V5h/V5j) / KÜÇÜK NOT (bibliyografik küçük sapma) / HATA (düzeltme gerekir) / DOĞRULANAMADI.
+**Yöntem:** CrossRef API (6 dergi makalesi) + SEP doğrudan URL (5) + OpenLibrary (22 kitap/edişyon) + Internet Archive (21; kapsam dışı kalanlar HathiTrust + Google Books fallback) + Perseus CTS (2 antik birincil metin) — çevrimiçi doğrulanan 56/64. Çevrimiçi indekslenmeyen kalan girdiler bağımsız web/bibliyografik kaynağa dayanır. Her "GEÇTİ" bir bağımsız kaynağa dayanır; kaynak adresi `Kanıt` sütunundadır.
+**Tarih:** 2026-08-17 · **Güncelleme:** 2026-08-18 (V5h/V5j düzeltmeleri işlendi) · 2026-08-19 (V5n: Norton 1981 + Popkin 1951 CrossRef'e eklendi — canlı kapsam 54→56) · **Sonuç etiketi:** GEÇTİ (birebir) / DÜZELTİLDİ (V5h/V5j) / KÜÇÜK NOT (bibliyografik küçük sapma) / HATA (düzeltme gerekir) / DOĞRULANAMADI.
 
 ---
 
@@ -151,10 +151,10 @@ Denetim başlangıçta CrossRef + SEP + "bağımsız web araması" idi. `verify_
 
 | Kaynak | Girdi | Yöntem |
 |---|---|---|
-| CrossRef | 4 | DOI canlı doğrulama (dergi makaleleri) |
+| CrossRef | 6 | DOI canlı doğrulama (dergi makaleleri) |
 | SEP | 5 | doğrudan URL |
 | OpenLibrary | 22 | search.json (kitap/edişyon) |
 | Internet Archive | 21 | advancedsearch; kapsam dışı kalanlar HathiTrust (identifier) + Google Books (GBOOKS_API_KEY) fallback'iyle denenir |
 | Perseus CTS | 2 | GetPassage (antik birincil metin pasajı) |
 
-Toplam **54 canlı girdi**; kalan girdiler §2 tablosuna ve sabit denetim notlarına dayanır. Sonuçlar her CI run'ında `refs-online` VERSION JSON + `refs-trend` zaman serisinde izlenir. İki dürüst sınır: Google Books anahtarsız **429** (kota) döndürür — tam denetim `GBOOKS_API_KEY` ister; HathiTrust ISBN yerine **OCLC** indeksler — ISBN'li `ht_ids` çoğu modern telifli kitapta kayıt bulamaz. Her ikisi de yanlış PASS üretmez, `UNVERIFIED` izi bırakır.
+Toplam **56 canlı girdi**; kalan 8 girdi (64 − 56) §2 tablosuna ve sabit denetim notlarına dayanır. **V5n:** Norton 1981 (`10.1016/0191-6599(81)90026-7`) ve Popkin 1951 (`10.2307/2216311`) DOI'leri CrossRef'ten doğrulandı — kapsam-dışı kalan son 2 dergi makalesi artık çevrimiçi doğrulanır (kapsam-dışı 10 → 8). Sonuçlar her CI run'ında `refs-online` VERSION JSON + `refs-trend` zaman serisinde izlenir. İki dürüst sınır: Google Books anahtarsız **429** (kota) döndürür — tam denetim `GBOOKS_API_KEY` ister; HathiTrust ISBN yerine **OCLC** indeksler — ISBN'li `ht_ids` çoğu modern telifli kitapta kayıt bulamaz. Her ikisi de yanlış PASS üretmez, `UNVERIFIED` izi bırakır.

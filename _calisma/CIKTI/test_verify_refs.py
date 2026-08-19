@@ -90,10 +90,23 @@ class TestAuditBudget(unittest.TestCase):
                     "", lambda *a, **k: None, quiet=True)
             finally:
                 mock.patch.stopall()
-        self.assertEqual(len(results), 54)
+        self.assertEqual(len(results), 56)
         self.assertTrue(all(r["verdict"] == "UNVERIFIED" for r in results))
         self.assertTrue(all("bütçesi aşıldı" in r["detail"]
                            for r in results))
+
+
+class TestCrossRefCoverage(unittest.TestCase):
+    def test_v5n_norton_popkin_added(self):
+        # V5n: Norton 1981 + Popkin 1951 DOI'leri CrossRef'e eklendi
+        # (canlı kapsam 54 → 56); bu girişler yanlışlıkla düşerse test FAIL.
+        keys = {r["key"] for r in vd.REFERENCE_CROSSREF}
+        self.assertIn("Norton 1981", keys)
+        self.assertIn("Popkin 1951", keys)
+        self.assertEqual(len(vd.REFERENCE_CROSSREF), 6)
+        for r in vd.REFERENCE_CROSSREF:
+            if r["key"] in ("Norton 1981", "Popkin 1951"):
+                self.assertTrue(r["doi"].startswith("10."))
 
 
 class TestOpenLibraryFallback(unittest.TestCase):

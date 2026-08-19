@@ -217,6 +217,14 @@ REFERENCE_CROSSREF = [
     {"key": "Schnieder 2011", "doi": "10.1017/S1755020311000104",
      "container_needle": "review of symbolic logic", "volume": "4",
      "year": "2011", "tex_needle": "Schnieder, B. (2011)"},
+    # V5n: Norton 1981 ve Popkin 1951 DOI'leri CrossRef'ten doğrulandı —
+    # kapsam-dışı (static) kalan son 2 dergi makalesi çevrimiçi doğrulanır.
+    {"key": "Norton 1981", "doi": "10.1016/0191-6599(81)90026-7",
+     "container_needle": "history of european ideas", "volume": "1",
+     "year": "1981", "tex_needle": "Norton, D.F. (1981)"},
+    {"key": "Popkin 1951", "doi": "10.2307/2216311",
+     "container_needle": "philosophical quarterly", "volume": "1",
+     "year": "1951", "tex_needle": "Popkin, R.H. (1951)"},
 ]
 REFERENCE_SEP = [
     {"key": "Rosker SEP", "url": "https://plato.stanford.edu/entries/chinese-epistemology/",
@@ -368,9 +376,9 @@ REFERENCE_OPENLIBRARY = [
 # MISMATCH = sonuç var ama eşleşme yok.
 #
 # KAPSAM DIŞI (IA indekslemez; REFERANS_KANIT_DENETIMI.md sabit denetimine düşer):
-# - Dergi makaleleri: Della Rocca 2010 (Philosophers' Imprint), Norton 1981
-#   (History of European Ideas), Popkin 1951 (Philosophical Quarterly) — IA
-#   kitapları/eşyaları indeksler, tek tek makaleleri değil.
+# - Dergi makaleleri: Della Rocca 2010 (Philosophers' Imprint) — IA kitapları/
+#   eşyaları indeksler, tek tek makaleleri değil. (V5n: Norton 1981 ve Popkin
+#   1951 artık CrossRef'te — bu listeden çıktı, çevrimiçi doğrulanır.)
 # - Erken modern Sextus imprinted baskıları (1562 Estienne / 1569 Hervet /
 #   1621 Chouet) ve Sextus Loeb #62 (Adversus Mathematicos VII): IA'da modern
 #   edisyonlar var ama bu spesifik imprinted baskılar yok (yanlış pozitif riski).
