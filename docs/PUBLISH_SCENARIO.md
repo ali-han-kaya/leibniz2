@@ -296,7 +296,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 - `config` (ham + şema + etkin config + diff)
 - `k0-findings` (bayat-zip taraması JSON)
 - `refs-online` (çevrimiçi referans denetimi VERSION JSON)
-- `precommit-logs` (ham log + PRECOMMIT_RAPORU.md + cache/env özeti)
+- `precommit-logs` (ham log + PRECOMMIT_RAPORU.md/.json + cache/env özeti)
 - `reports` (statik markdown raporları)
 - `reproducibility` (tüm artifact'ların SHA-256 manifest'i)
 - `repack-verify` (repack sonrası base verify raporu)
@@ -407,7 +407,7 @@ gh repo edit --enable-squash-merge --enable-rebase-merge \
   Repack tarafı sidecar reuse ile byte-identical (V5l + repack-verify kapısı).
 - İlk run soğuk başlangıç: Z3 + Lean 4 (elan stable) kurulumu toplam süreyi
   uzatır (~5-15 dk); sonraki run'lar cache ile hızlanır.
-- `manifest-comment` ve PR yorumları (bütçe aşımı, pre-commit P0) yalnızca
+- `manifest-comment` ve PR yorumları (bütçe aşımı, pre-commit P0/P1) yalnızca
   `pull_request` olayında çalışır; push'ta üretilmez.
 - Branch protection `strict:true` — fork'tan PR'lerde CI çalışmayabilir; bu beklenen davranış.
 

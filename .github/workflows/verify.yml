@@ -231,96 +231,104 @@ jobs:
           echo "PRECOMMIT_CACHE.md yazıldı:"
           cat logs/PRECOMMIT_CACHE.md
 
-      # ─── P0 varsa PR etiketi + yorum ─────────────────────────────────────
-      # Advisory pre-commit bulgularında P0 varsa PR'ye otomatik etiket
-      # (precommit-p0) ekler ve yorum düşer. Yorum spam'ini önlemek için aynı
-      # marker'lı eski yorum GÜNCELLENİR (yenisi oluşturulmaz); P0 yoksa
-      # etiket kaldırılır — etiket her zaman PR'nin güncel durumunu yansıtır.
-      # Yalnızca pull_request olayında; budget PR yorumuyla aynı desen.
-      - name: Pre-commit P0 — PR label + comment
+      # ─── P0/P1 varsa PR etiketi + yorum ──────────────────────────────────
+      # Advisory pre-commit bulgularında P0 ve P1 için AYRI etiket ve AYRI
+      # yorum düşülür: precommit-p0 (🔴) + precommit-p1 (🟠). Yorum spam'ini
+      # önlemek için aynı marker'lı eski yorum GÜNCELLENİR (yenisi oluşturulmaz);
+      # bulgu yoksa o etiket kaldırılır — etiketler PR'nin güncel durumunu
+      # yansıtır. Yalnızca pull_request olayında; budget PR yorumuyla aynı desen.
+      - name: Pre-commit P0/P1 — PR labels + comments
         if: always() && github.event_name == 'pull_request'
         uses: actions/github-script@v8
         with:
           script: |
             const fs = require('fs');
             const path = 'logs/PRECOMMIT_RAPORU.md';
-            const marker = '<!-- precommit-p0-bot -->';
-            const label = 'precommit-p0';
+
+            // P0 (kritik) ve P1 (uyarı) aynı desenle yönetilir: ayrı etiket,
+            // ayrı marker, ayrı yorum. İkisi de advisory'dir.
+            const TARGETS = [
+              { priority: 'P0', label: 'precommit-p0', marker: '<!-- precommit-p0-bot -->', emoji: '🔴', title: 'Pre-commit P0 bulgusu (advisory)' },
+              { priority: 'P1', label: 'precommit-p1', marker: '<!-- precommit-p1-bot -->', emoji: '🟠', title: 'Pre-commit P1 bulgusu (advisory)' },
+            ];
 
             if (!fs.existsSync(path)) {
               console.log('PRECOMMIT_RAPORU.md yok — atlanıyor');
               return;
             }
             const text = fs.readFileSync(path, 'utf8');
-            const findings = [];
-            const re = /^\| (P0) \| (.+) \|$/gm;
-            let m;
-            while ((m = re.exec(text)) !== null) findings.push(m[2].trim());
-            const hasP0 = findings.length > 0;
 
-            // Etiketi PR'nin güncel durumuyla senkron tut: P0 varsa ekle,
-            // yoksa kaldır (aynı etiketi tekrar eklemek no-op'tur).
-            const labels = await github.rest.issues.listLabelsOnIssue({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-            });
-            const hasLabel = labels.data.some(l => l.name === label);
-            if (hasP0 && !hasLabel) {
-              await github.rest.issues.addLabels({
+            for (const t of TARGETS) {
+              const findings = [];
+              const re = new RegExp(`^\\| ${t.priority} \\| (.+) \\|$`, 'gm');
+              let m;
+              while ((m = re.exec(text)) !== null) findings.push(m[1].trim());
+              const has = findings.length > 0;
+
+              // Etiketi PR'nin güncel durumuyla senkron tut: bulgu varsa ekle,
+              // yoksa kaldır (aynı etiketi tekrar eklemek no-op'tur).
+              const labels = await github.rest.issues.listLabelsOnIssue({
                 issue_number: context.issue.number,
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                labels: [label],
               });
-              console.log(`Etiket eklendi: ${label}`);
-            } else if (!hasP0 && hasLabel) {
-              await github.rest.issues.removeLabel({
+              const hasLabel = labels.data.some(l => l.name === t.label);
+              if (has && !hasLabel) {
+                await github.rest.issues.addLabels({
+                  issue_number: context.issue.number,
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  labels: [t.label],
+                });
+                console.log(`Etiket eklendi: ${t.label}`);
+              } else if (!has && hasLabel) {
+                await github.rest.issues.removeLabel({
+                  issue_number: context.issue.number,
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  name: t.label,
+                });
+                console.log(`Etiket kaldırıldı: ${t.label}`);
+              }
+
+              if (!has) {
+                console.log(`${t.priority} bulgusu yok — yorum atlanıyor`);
+                continue;
+              }
+
+              const body = [
+                t.marker,
+                `${t.emoji} **${t.title}**`,
+                '',
+                ...findings.map(f => `- ${f}`),
+                '',
+                `> Detay: [run #${context.runId}](${context.payload.repository.html_url}/actions/runs/${context.runId}) — ` +
+                '`precommit-logs` artifact\'ındaki PRECOMMIT_RAPORU.md.',
+              ].join('\n');
+
+              const { data: comments } = await github.rest.issues.listComments({
                 issue_number: context.issue.number,
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                name: label,
               });
-              console.log(`Etiket kaldırıldı: ${label}`);
-            }
-
-            if (!hasP0) {
-              console.log('P0 bulgusu yok — yorum atlanıyor');
-              return;
-            }
-
-            const body = [
-              marker,
-              '🔴 **Pre-commit P0 bulgusu (advisory)**',
-              '',
-              ...findings.map(f => `- ${f}`),
-              '',
-              `> Detay: [run #${context.runId}](${context.payload.repository.html_url}/actions/runs/${context.runId}) — ` +
-              '`precommit-logs` artifact\'ındaki PRECOMMIT_RAPORU.md.',
-            ].join('\n');
-
-            const { data: comments } = await github.rest.issues.listComments({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-            });
-            const existing = comments.find(c => (c.body || '').includes(marker));
-            if (existing) {
-              await github.rest.issues.updateComment({
-                comment_id: existing.id,
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                body,
-              });
-              console.log('Mevcut P0 yorumu güncellendi');
-            } else {
-              await github.rest.issues.createComment({
-                issue_number: context.issue.number,
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                body,
-              });
-              console.log('P0 yorumu oluşturuldu');
+              const existing = comments.find(c => (c.body || '').includes(t.marker));
+              if (existing) {
+                await github.rest.issues.updateComment({
+                  comment_id: existing.id,
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  body,
+                });
+                console.log(`Mevcut ${t.priority} yorumu güncellendi`);
+              } else {
+                await github.rest.issues.createComment({
+                  issue_number: context.issue.number,
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  body,
+                });
+                console.log(`${t.priority} yorumu oluşturuldu`);
+              }
             }
 
       # ─── Tüm run summary bölümlerini TEK giriş noktasından üret ─────────
