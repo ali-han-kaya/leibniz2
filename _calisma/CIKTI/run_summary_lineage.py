@@ -33,42 +33,45 @@ def _icon(status):
     return "ℹ️"  # INFO / UNVERIFIED
 
 
-def main(argv=None) -> int:
-    argv = sys.argv[1:] if argv is None else argv
-    path = argv[0] if argv else "lineage_findings.json"
+def render(sink, path="lineage_findings.json"):
+    """Soy hattı bölümünü sink'e yaz (sidecar yoksa advisory not)."""
     if not os.path.isfile(path):
-        with summary_sink() as s:
-            s.write("## ⚠️ Soy hattı: sidecar bulunamadı\n\n"
-                    "> `verify_delivery.py` `--lineage-out` üretmedi "
-                    "(`--check-lineage` koşmadı?).\n")
-        print("Lineage summary written (missing sidecar).")
-        return 0
+        sink.write("## ⚠️ Soy hattı: sidecar bulunamadı\n\n"
+                   "> `verify_delivery.py` `--lineage-out` üretmedi "
+                   "(`--check-lineage` koşmadı?).\n")
+        return
 
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
     gens = data.get("generations", [])
     ok = bool(data.get("ok", False))
 
+    if ok:
+        sink.write(f"## ✅ Soy hattı (zip_lineage.json): {len(gens)} nesil doğrulandı\n\n")
+    else:
+        sink.write(f"## 🔴 Soy hattı (zip_lineage.json): doğrulama başarısız ({len(gens)} nesil)\n\n")
+    sink.write("| NESİL | NOTE | HASH | DURUM |\n")
+    sink.write("|---|---|---|---|\n")
+    for g in gens:
+        h = (g.get("hash") or "?")[:16]
+        note = (g.get("note") or "?").replace("|", "\\|")
+        status = g.get("status") or "?"
+        sink.write(f"| {g.get('gen', '?')} | {note} | `{h}…` | "
+                   f"{_icon(status)} {status} |\n")
+    if ok:
+        sink.write("\n> Fail-closed: tüm commit'li nesiller `git show` ile, "
+                   "`current` nesil canlı dosya ile doğrulandı.\n")
+    else:
+        sink.write("\n> Fail-closed: P0/P1 bulgusu olarak işaretlendi; "
+                   "kanonik hash/soy hattı sapması var.\n")
+
+
+def main(argv=None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    path = argv[0] if argv else "lineage_findings.json"
     with summary_sink() as s:
-        if ok:
-            s.write(f"## ✅ Soy hattı (zip_lineage.json): {len(gens)} nesil doğrulandı\n\n")
-        else:
-            s.write(f"## 🔴 Soy hattı (zip_lineage.json): doğrulama başarısız ({len(gens)} nesil)\n\n")
-        s.write("| NESİL | NOTE | HASH | DURUM |\n")
-        s.write("|---|---|---|---|\n")
-        for g in gens:
-            h = (g.get("hash") or "?")[:16]
-            note = (g.get("note") or "?").replace("|", "\\|")
-            status = g.get("status") or "?"
-            s.write(f"| {g.get('gen', '?')} | {note} | `{h}…` | "
-                    f"{_icon(status)} {status} |\n")
-        if ok:
-            s.write("\n> Fail-closed: tüm commit'li nesiller `git show` ile, "
-                    "`current` nesil canlı dosya ile doğrulandı.\n")
-        else:
-            s.write("\n> Fail-closed: P0/P1 bulgusu olarak işaretlendi; "
-                    "kanonik hash/soy hattı sapması var.\n")
-    print(f"Lineage summary written ({len(gens)} generations, ok={ok}).")
+        render(s, path)
+    print("Lineage summary written.")
     return 0
 
 

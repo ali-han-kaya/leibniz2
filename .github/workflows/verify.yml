@@ -231,18 +231,6 @@ jobs:
           echo "PRECOMMIT_CACHE.md yazıldı:"
           cat logs/PRECOMMIT_CACHE.md
 
-      # ─── Pre-commit bulgularını run summary'de ayrı bölüm olarak göster ──
-      # "Generate pre-commit findings report" adımının ürettiği
-      # logs/PRECOMMIT_RAPORU.md'deki P0/P1 bulgularını + hook durumlarını
-      # ayrıştırıp GITHUB_STEP_SUMMARY'ye ayrı bir bölüm yazar — K0/bütçe
-      # bölümleriyle birlikte tek bakışta görünür. if: always(): --full
-      # başarısız olsa bile advisory bulgular özetlenir.
-      - name: Pre-commit findings — run summary
-        if: always()
-        shell: bash
-        run: |
-          python3 _calisma/CIKTI/run_summary_precommit.py
-
       # ─── P0 varsa PR etiketi + yorum ─────────────────────────────────────
       # Advisory pre-commit bulgularında P0 varsa PR'ye otomatik etiket
       # (precommit-p0) ekler ve yorum düşer. Yorum spam'ini önlemek için aynı
@@ -335,49 +323,17 @@ jobs:
               console.log('P0 yorumu oluşturuldu');
             }
 
-      # ─── K0 bulgularını run summary'de ayrı bölüm olarak göster ────────────
-      # verify_delivery.py --k0-out k0_findings.json sidecar'ından okur;
-      # CI run summary'ye "K0 bayat zip" başlıklı ayrı bir bölüm yazar.
-      # Bulgu yoksa yeşil onay satırı; varsa her zip rel yolu + SHA-256 ile.
-      - name: K0 findings — run summary
+      # ─── Tüm run summary bölümlerini TEK giriş noktasından üret ─────────
+      # consolidate_summary.py, pre-commit + K0 + bütçe + soy hattı + K
+      # katmanları bölümlerini AYNI GITHUB_STEP_SUMMARY'ye sırayla yazar
+      # (her bölümün render mantığı ilgili run_summary_*.py modülündedir —
+      # tek kaynak; sidecar'lar verify job'unun çalışma dizinindedir).
+      # if: always(): --full başarısız olsa bile advisory bulgular özetlenir.
+      - name: Consolidate run summary (pre-commit + K0 + bütçe + soy hattı + K katmanları)
         if: always()
         shell: bash
         run: |
-          python3 _calisma/CIKTI/run_summary_k0.py
-
-      # ─── Bütçe bölümünü de aynı verify summary'sine yaz ─────────────────
-      # verify job'u kendi --budget-out budget_verify.json sidecar'ını üretir;
-      # aggregation beklemeden (budget job'u needs:[verify]) bu sidecar'dan
-      # bütçe bölümünü GITHUB_STEP_SUMMARY'ye ekler. Böylece pre-commit + K0
-      # + bütçe üç bölüm TEK verify summary'sinde birlikte görünür.
-      # run_summary_budget.py tek-run (budget_verify.json) şeklini de okur.
-      - name: Budget — run summary
-        if: always()
-        shell: bash
-        run: |
-          python3 _calisma/CIKTI/run_summary_budget.py budget_verify.json
-
-      # ─── Soy hattı sonucunu da aynı verify summary'sine yaz ──────────────
-      # verify_delivery.py --lineage-out lineage_findings.json sidecar'ından
-      # okur; CI run summary'ye "Soy hattı" başlıklı ayrı bir bölüm yazar
-      # (k0_findings.json ile aynı desen). --check-lineage sonucu böylece
-      # run summary'de görünür; ayrıca lineage-findings artifact'ına yazılır.
-      - name: Lineage — run summary
-        if: always()
-        shell: bash
-        run: |
-          python3 _calisma/CIKTI/run_summary_lineage.py lineage_findings.json
-
-      # ─── K1-K10 katmanlarını da ayrı bölümler olarak yaz ────────────────
-      # verify_delivery.py --klayers-out klayers.json sidecar'ından okur;
-      # run summary'ye her K katmanı (K1-K10) için ayrı bir bölüm yazar:
-      # PASS ✅ / FAIL 🔴 (bulgularla) / SKIP ⏭️ (ör. K10 reproducibility
-      # job'unda, K12 macOS'ta). K0 ayrı run_summary_k0.py'de.
-      - name: K layers (K1-K10) — run summary
-        if: always()
-        shell: bash
-        run: |
-          python3 _calisma/CIKTI/run_summary_klayers.py klayers.json
+          python3 _calisma/CIKTI/consolidate_summary.py
 
       - name: Generate SHA-256 for verify artifacts
         shell: bash

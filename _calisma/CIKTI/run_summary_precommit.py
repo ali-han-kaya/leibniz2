@@ -25,13 +25,13 @@ def summary_sink():
         yield sys.stdout
 
 
-def main() -> None:
-    report = pathlib.Path("logs/PRECOMMIT_RAPORU.md")
+def render(sink, path="logs/PRECOMMIT_RAPORU.md"):
+    """Pre-commit bölümünü sink'e yaz (rapor yoksa advisory not)."""
+    report = pathlib.Path(path)
     if not report.exists():
-        with summary_sink() as s:
-            s.write("## 🔍 Pre-commit: rapor bulunamadı\n\n"
-                    "> `logs/PRECOMMIT_RAPORU.md` üretilmedi "
-                    "(pre-commit kurulumu başarısız?).\n")
+        sink.write("## 🔍 Pre-commit: rapor bulunamadı\n\n"
+                   "> `logs/PRECOMMIT_RAPORU.md` üretilmedi "
+                   "(pre-commit kurulumu başarısız?).\n")
         return
 
     text = report.read_text(encoding="utf-8")
@@ -40,23 +40,27 @@ def main() -> None:
     m = re.search(r"^- \*\*Sonuç:\*\* (.+)$", text, re.M)
     verdict = m.group(1).strip() if m else "bilinmiyor"
 
+    if findings:
+        sink.write(f"## 🔴 Pre-commit bulguları: {len(findings)} bulgu\n\n")
+        for pri, msg in findings:
+            sink.write(f"- **{pri}**: {msg}\n")
+        sink.write("\n> Advisory — build'i bloke etmez; denetim içindir. "
+                   "Detay: `precommit-logs` artifact'ındaki PRECOMMIT_RAPORU.md.\n")
+    else:
+        sink.write("## ✅ Pre-commit: bulgu yok (tüm hook'lar geçti)\n\n")
+    sink.write(f"> Sonuç: {verdict}\n")
+    if hooks:
+        parts = " | ".join(
+            f"`{h}` " + (":white_check_mark:" if st == "Passed" else ":x:")
+            for h, st in hooks
+        )
+        sink.write(f"> Hook'lar: {parts}\n")
+
+
+def main() -> None:
     with summary_sink() as s:
-        if findings:
-            s.write(f"## 🔴 Pre-commit bulguları: {len(findings)} bulgu\n\n")
-            for pri, msg in findings:
-                s.write(f"- **{pri}**: {msg}\n")
-            s.write("\n> Advisory — build'i bloke etmez; denetim içindir. "
-                    "Detay: `precommit-logs` artifact'ındaki PRECOMMIT_RAPORU.md.\n")
-        else:
-            s.write("## ✅ Pre-commit: bulgu yok (tüm hook'lar geçti)\n\n")
-        s.write(f"> Sonuç: {verdict}\n")
-        if hooks:
-            parts = " | ".join(
-                f"`{h}` " + (":white_check_mark:" if st == "Passed" else ":x:")
-                for h, st in hooks
-            )
-            s.write(f"> Hook'lar: {parts}\n")
-    print(f"Pre-commit summary written ({len(findings)} bulgu, {len(hooks)} hook).")
+        render(s)
+    print("Pre-commit summary written.")
 
 
 if __name__ == "__main__":

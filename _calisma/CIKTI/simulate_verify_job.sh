@@ -150,31 +150,13 @@ step_cache_summary() {
   echo "PRECOMMIT_CACHE.md yazıldı"
 }
 
-# ── 5-7) run summary bölümleri (tek GITHUB_STEP_SUMMARY) ──────────────────
-step_summary_precommit() {
+# ── 5) run summary bölümleri (tek GITHUB_STEP_SUMMARY, tek giriş noktası) ──
+# consolidate_summary.py pre-commit + K0 + bütçe + soy hattı + K katmanları
+# bölümlerini AYNI summary.md'ye sırayla yazar (CI'daki tek adımla birebir).
+step_consolidate_summary() {
   cd "$SIM_DIR"
   GITHUB_STEP_SUMMARY="$SIM_DIR/summary.md" \
-    "$PY" "$REPO_ROOT/_calisma/CIKTI/run_summary_precommit.py"
-}
-step_summary_k0() {
-  cd "$SIM_DIR"
-  GITHUB_STEP_SUMMARY="$SIM_DIR/summary.md" \
-    "$PY" "$REPO_ROOT/_calisma/CIKTI/run_summary_k0.py"
-}
-step_summary_budget() {
-  cd "$SIM_DIR"
-  GITHUB_STEP_SUMMARY="$SIM_DIR/summary.md" \
-    "$PY" "$REPO_ROOT/_calisma/CIKTI/run_summary_budget.py" budget_verify.json
-}
-step_summary_lineage() {
-  cd "$SIM_DIR"
-  GITHUB_STEP_SUMMARY="$SIM_DIR/summary.md" \
-    "$PY" "$REPO_ROOT/_calisma/CIKTI/run_summary_lineage.py" lineage_findings.json
-}
-step_summary_klayers() {
-  cd "$SIM_DIR"
-  GITHUB_STEP_SUMMARY="$SIM_DIR/summary.md" \
-    "$PY" "$REPO_ROOT/_calisma/CIKTI/run_summary_klayers.py" klayers.json
+    "$PY" "$REPO_ROOT/_calisma/CIKTI/consolidate_summary.py"
 }
 
 # ── 8) SHA-256 sidecar'ları ────────────────────────────────────────────────
@@ -219,11 +201,7 @@ main() {
   run_step "Run pre-commit (advisory, --all-files)"      advisory step_precommit
   run_step "Generate pre-commit findings report"         closed step_gen_report
   run_step "Pre-commit cache + hook env summary"         closed step_cache_summary
-  run_step "Pre-commit findings — run summary"           closed step_summary_precommit
-  run_step "K0 findings — run summary"                   closed step_summary_k0
-  run_step "Budget — run summary"                        closed step_summary_budget
-  run_step "Lineage — run summary"                       closed step_summary_lineage
-  run_step "K layers (K1-K10) — run summary"              closed step_summary_klayers
+  run_step "Consolidate run summary (5 bölüm)"            closed step_consolidate_summary
   run_step "Generate SHA-256 for verify artifacts"       closed step_sha256
   run_step "Bundle config snapshot"                      closed step_config_bundle
   run_step "Generate config diff (advisory)"             advisory step_config_diff

@@ -24,28 +24,33 @@ def summary_sink():
         yield sys.stdout
 
 
-def main() -> None:
-    path = "k0_findings.json"
+def render(sink, path="k0_findings.json"):
+    """K0 bölümünü sink'e yaz (sidecar yoksa advisory not). Döndürür bulgu sayısı."""
     if not os.path.isfile(path):
-        with summary_sink() as s:
-            s.write("## 🔍 K0 bayat zip: sidecar bulunamadı\n\n"
-                    "> `verify_delivery.py` `--k0-out` üretmedi "
-                    "(verify job'u çalışmadı?).\n")
-        return
-    data = json.load(open(path))
+        sink.write("## 🔍 K0 bayat zip: sidecar bulunamadı\n\n"
+                   "> `verify_delivery.py` `--k0-out` üretmedi "
+                   "(verify job'u çalışmadı?).\n")
+        return 0
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
     count = data.get("count", 0)
     findings = data.get("findings", [])
+    if count:
+        sink.write(f"## 🔴 K0 bayat zip: {count} bulgu\n\n")
+        for f in findings:
+            sink.write(f"- `{f['rel']}`  (`{f['sha256'][:16]}…`)\n")
+        sink.write("\n> Fail-closed: P1 bulgusu olarak işaretlendi. "
+                   "Kanonik kopya yalnızca `_calisma/CIKTI/` altında "
+                   "olmalıdır.\n")
+    else:
+        sink.write("## ✅ K0 bayat zip: temiz (bulgu yok)\n\n"
+                   "> CIKTI dışında zip bulunamadı.\n")
+    return count
+
+
+def main() -> None:
     with summary_sink() as s:
-        if count:
-            s.write(f"## 🔴 K0 bayat zip: {count} bulgu\n\n")
-            for f in findings:
-                s.write(f"- `{f['rel']}`  (`{f['sha256'][:16]}…`)\n")
-            s.write("\n> Fail-closed: P1 bulgusu olarak işaretlendi. "
-                    "Kanonik kopya yalnızca `_calisma/CIKTI/` altında "
-                    "olmalıdır.\n")
-        else:
-            s.write("## ✅ K0 bayat zip: temiz (bulgu yok)\n\n"
-                    "> CIKTI dışında zip bulunamadı.\n")
+        count = render(s)
     print(f"K0 summary written ({count} findings).")
 
 

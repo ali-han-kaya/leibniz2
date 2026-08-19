@@ -29,41 +29,44 @@ def summary_sink():
         yield sys.stdout
 
 
-def main(argv=None) -> int:
-    argv = sys.argv[1:] if argv is None else argv
-    path = argv[0] if argv else "klayers.json"
+def render(sink, path="klayers.json"):
+    """K1-K10 bölümlerini sink'e yaz (sidecar yoksa advisory not)."""
     if not os.path.isfile(path):
-        with summary_sink() as s:
-            s.write("## ⚠️ K katmanları: sidecar bulunamadı\n\n"
-                    "> `verify_delivery.py` `--klayers-out` üretmedi "
-                    "(verify job'u çalışmadı?).\n")
-        print("K layers summary written (missing sidecar).")
-        return 0
+        sink.write("## ⚠️ K katmanları: sidecar bulunamadı\n\n"
+                   "> `verify_delivery.py` `--klayers-out` üretmedi "
+                   "(verify job'u çalışmadı?).\n")
+        return
 
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
     layers = data.get("layers", {})
 
+    for key in RENDER_LAYERS:
+        lyr = layers.get(key)
+        if not lyr:
+            sink.write(f"## ⏭️ {key}: sidecar'da yok\n\n")
+            continue
+        label = lyr.get("label", "?")
+        status = lyr.get("status", "SKIP")
+        fl = lyr.get("findings", [])
+        if status == "SKIP":
+            sink.write(f"## ⏭️ {key} {label}: bu job'da koşmadı (N/A)\n\n")
+        elif status == "FAIL":
+            sink.write(f"## 🔴 {key} {label}: {len(fl)} bulgu\n\n")
+            for f in fl:
+                ev = f" ({f.get('evidence')})" if f.get("evidence") else ""
+                sink.write(f"- [{f.get('priority', '?')}] {f.get('check', '?')}: "
+                           f"{f.get('issue', '?')}{ev}\n")
+            sink.write("\n")
+        else:  # PASS
+            sink.write(f"## ✅ {key} {label}: PASS\n\n")
+
+
+def main(argv=None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    path = argv[0] if argv else "klayers.json"
     with summary_sink() as s:
-        for key in RENDER_LAYERS:
-            lyr = layers.get(key)
-            if not lyr:
-                s.write(f"## ⏭️ {key}: sidecar'da yok\n\n")
-                continue
-            label = lyr.get("label", "?")
-            status = lyr.get("status", "SKIP")
-            fl = lyr.get("findings", [])
-            if status == "SKIP":
-                s.write(f"## ⏭️ {key} {label}: bu job'da koşmadı (N/A)\n\n")
-            elif status == "FAIL":
-                s.write(f"## 🔴 {key} {label}: {len(fl)} bulgu\n\n")
-                for f in fl:
-                    ev = f" ({f.get('evidence')})" if f.get("evidence") else ""
-                    s.write(f"- [{f.get('priority', '?')}] {f.get('check', '?')}: "
-                            f"{f.get('issue', '?')}{ev}\n")
-                s.write("\n")
-            else:  # PASS
-                s.write(f"## ✅ {key} {label}: PASS\n\n")
+        render(s, path)
     print(f"K layers summary written ({len(RENDER_LAYERS)} layers).")
     return 0
 
