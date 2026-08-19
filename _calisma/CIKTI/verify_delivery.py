@@ -552,6 +552,36 @@ def md5_file(path):
     return h.hexdigest()
 
 
+def scan_stale_zips(parent, skip_dirs=None):
+    """K0: parent altındaki HER .zip'i recursive tara (bayat kopya riski).
+
+    Kanonik teslim yalnızca CIKTI/'da olmalı; parent (_calisma/) altındaki
+    diğer zip'ler (alt dizinler dahil — repack ara ürünleri TESLIM/ ve
+    V5_ICERIK/ altında, kökteki başıboş kopyalar) bayat kopyadır. İstisnalar:
+      - skip_dirs: CIKTI (kanonik), TOOLKIT (toolkit çalışma kopyası),
+        .venv_z3 (ortam) — varsayılan {"CIKTI", "TOOLKIT", ".venv_z3"}.
+      - nokta ile başlayan GİZLİ dizinler (.git, .freebuff, .venv_z3, ...).
+
+    Döndürür [{rel, sha256}] — rel parent'a göre yol, sha256 tam hash.
+    Bulgu sırası deterministic (dizinler + dosyalar sorted).
+    """
+    if skip_dirs is None:
+        skip_dirs = {"CIKTI", "TOOLKIT", ".venv_z3"}
+    findings = []
+    if not os.path.isdir(parent):
+        return findings
+    for root, dirs, files in os.walk(parent):
+        dirs[:] = sorted(x for x in dirs
+                         if x not in skip_dirs and not x.startswith("."))
+        for fn in sorted(files):
+            if fn.lower().endswith(".zip"):
+                p = os.path.join(root, fn)
+                if os.path.isfile(p):
+                    rel = os.path.relpath(p, parent)
+                    findings.append({"rel": rel, "sha256": sha256_file(p)})
+    return findings
+
+
 def parse_sha256sums(path):
     """sha256sum formatı: <hash>  <dosya>  (dosya adında iki boşluk olabilir)."""
     out = {}
@@ -1993,29 +2023,19 @@ def main():
     # ürününü (OUTER_SRC içindeki iç zip) build sonrası siler — yani normal
     # repack akışı K0'ı yeşil bırakır; kalan her zip gerçek bayat kopyadır.
     parent = os.path.dirname(d)
-    k0_skip = {"CIKTI", "TOOLKIT", ".venv_z3"}
-    k0_findings = []  # {rel, sha256} — run summary için ayrı sidecar
-    if os.path.isdir(parent):
-        for root, dirs, files in os.walk(parent):
-            dirs[:] = sorted(x for x in dirs
-                             if x not in k0_skip and not x.startswith("."))
-            for fn in sorted(files):
-                if fn.lower().endswith(".zip"):
-                    p = os.path.join(root, fn)
-                    if os.path.isfile(p):
-                        rel = os.path.relpath(p, parent)
-                        h = sha256_file(p)
-                        k0_findings.append({"rel": rel, "sha256": h})
-                        issue = f"CIKTI dışında zip bulundu: {rel}"
-                        # Kök düzeyindeki başıboş kopya için hint: TOOLKIT/
-                        # K0'ın skip kümesindedir — oraya taşınırsa P1 otomatik
-                        # düşer (kanonik kopya CIKTI/ + toolkit kopyası
-                        # TOOLKIT/ ayrışır). Alt dizindeki (repack ara ürünü)
-                        # ziplere bu hint verilmez — repack onları kendi siler.
-                        if os.path.dirname(rel) == "":
-                            issue += (" — ipucu: kök zip'i `TOOLKIT/` dizinine "
-                                      "taşıyabilirsin (K0 atlar; P1 giderilir)")
-                        add("P1", "K0-STALE", "K0 bayat zip", issue, f"{h}  {p}")
+    k0_findings = scan_stale_zips(parent)  # {rel, sha256} — run summary sidecar'ı
+    for f in k0_findings:
+        issue = f"CIKTI dışında zip bulundu: {f['rel']}"
+        # Kök düzeyindeki başıboş kopya için hint: TOOLKIT/
+        # K0'ın skip kümesindedir — oraya taşınırsa P1 otomatik
+        # düşer (kanonik kopya CIKTI/ + toolkit kopyası
+        # TOOLKIT/ ayrışır). Alt dizindeki (repack ara ürünü)
+        # ziplere bu hint verilmez — repack onları kendi siler.
+        if os.path.dirname(f["rel"]) == "":
+            issue += (" — ipucu: kök zip'i `TOOLKIT/` dizinine "
+                      "taşıyabilirsin (K0 atlar; P1 giderilir)")
+        add("P1", "K0-STALE", "K0 bayat zip", issue,
+            f"{f['sha256']}  {os.path.join(parent, f['rel'])}")
     if args.k0_out:
         try:
             with open(args.k0_out, "w", encoding="utf-8") as kf:
