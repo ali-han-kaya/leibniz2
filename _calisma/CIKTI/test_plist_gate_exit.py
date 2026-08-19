@@ -15,6 +15,7 @@ DOKUNMAZ, bu yüzden Linux CI'da da çalışır):
        1 = drift  (render golden'dan farklı)
        2 = hata   (script/golden yok, render başarısız)
 """
+import json
 import os
 import subprocess
 import sys
@@ -24,6 +25,7 @@ import unittest
 HERE = os.path.dirname(os.path.abspath(__file__))
 UPDATE_PREVIEW = os.path.join(HERE, "update_preview.sh")
 CHECK_DRIFT = os.path.join(HERE, "check_plist_drift.py")
+VERIFY_DELIVERY = os.path.join(HERE, "verify_delivery.py")
 GOLDEN_DIR = os.path.join(HERE, "plist-golden")
 
 
@@ -103,6 +105,49 @@ class TestCheckPlistDriftExitCodes(unittest.TestCase):
                     "--golden-dir", GOLDEN_DIR)
             self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
             self.assertIn("update_preview.sh yok", r.stdout)
+
+
+class TestPlistOutSidecar(unittest.TestCase):
+    """--plist-out: --plist-check ham çıktısı + K12 raporu tek sidecar JSON'da."""
+
+    def test_sidecar_written_with_output_and_report(self):
+        with tempfile.TemporaryDirectory(prefix="plist-gate-") as home:
+            # Şablon + kurulu plist üret → GÜNCEL (exit 0) olsun.
+            gen = run(home, "bash", UPDATE_PREVIEW, "--plist-force", home)
+            self.assertEqual(gen.returncode, 0, gen.stderr)
+
+            out = os.path.join(home, "plist_report.json")
+            r = run(home, sys.executable, VERIFY_DELIVERY,
+                    "--check-plist", "--plist-out", out)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+            self.assertTrue(os.path.isfile(out), "sidecar JSON yazılmadı")
+            with open(out, encoding="utf-8") as f:
+                d = json.load(f)
+            # K12 raporu (layer + ok + exit + detail) VE ham --plist-check
+            # çıktısı (output) aynı sidecar'da birlikte olmalı.
+            self.assertEqual(d["layer"], "K12")
+            self.assertTrue(d["ok"])
+            self.assertEqual(d["exit"], 0)
+            self.assertIn("GÜNCEL", d["detail"])
+            self.assertIn("GÜNCEL", d["output"])
+
+    def test_sidecar_fail_detail_on_no_template(self):
+        with tempfile.TemporaryDirectory(prefix="plist-gate-") as home:
+            # Hiç üretmeden → --plist-check exit 2 (şablon yok); sidecar yine
+            # yazılmalı ve ok=False + exit=2 + detail şablon yok olmalı.
+            out = os.path.join(home, "plist_report.json")
+            r = run(home, sys.executable, VERIFY_DELIVERY,
+                    "--check-plist", "--plist-out", out)
+            # --check-plist P1 üretir → genel exit 1 (P0=0 ama P1>0).
+            self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+            with open(out, encoding="utf-8") as f:
+                d = json.load(f)
+            self.assertEqual(d["layer"], "K12")
+            self.assertFalse(d["ok"])
+            self.assertEqual(d["exit"], 2)
+            self.assertIn("şablon yok", d["detail"])
+            self.assertIn("şablon yok", d["output"])
 
 
 if __name__ == "__main__":

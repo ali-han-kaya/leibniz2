@@ -1525,6 +1525,8 @@ jobs:
 
       # 2) K12 kapısının macOS'ta uçtan uca kanıtı: gerçek HOME'a üret
       #    (LaunchAgents yazılabilir), sonra --check-plist GÜNCEL olmalı.
+      #    --plist-out: --plist-check ham çıktısı + K12 raporu tek sidecar
+      #    JSON'a yazılır (plist_report.json) — artifact'ta makine-okunur.
       - name: Run K12 --check-plist (update_preview.sh --plist-check)
         id: k12
         continue-on-error: true
@@ -1532,6 +1534,7 @@ jobs:
           set +e
           bash _calisma/CIKTI/update_preview.sh --plist-force
           python3 _calisma/CIKTI/verify_delivery.py --check-plist \
+            --plist-out plist_report.json \
             2>&1 | tee -a plist_check_report.txt
           rc=${PIPESTATUS[0]}
           set -e
@@ -1552,11 +1555,13 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload plist check report
+      - name: Upload plist check report + sidecar JSON
         if: always()
         uses: actions/upload-artifact@v6
         with:
           name: plist-check
-          path: plist_check_report.txt
+          path: |
+            plist_check_report.txt
+            plist_report.json
           if-no-files-found: ignore
           retention-days: 30

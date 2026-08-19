@@ -2183,6 +2183,10 @@ def main():
                     help="K12: update_preview.sh --plist-check exit kodunu denetle "
                          "(0=GÜNCEL, 1=BAYAT, 2=şablon yok; macOS'a özgü, "
                          "--full'a dahil değil)")
+    ap.add_argument("--plist-out", default=None,
+                    help="K12: update_preview.sh --plist-check ham çıktısını "
+                         "K12 raporuyla birlikte ayrı bir sidecar JSON'a yaz "
+                         "(CI artifact + run summary için)")
     ap.add_argument("--check-repro-manifest", action="store_true",
                     help="K13: gen_repro_manifest.py'yi mock artifact'larla koşup "
                          "manifest tutarlılığını denetle (fail-closed)")
@@ -2719,30 +2723,51 @@ def main():
                            "update_preview.sh")
         if not os.path.isfile(upd):
             add("P1", "K12-PLIST", "K12 plist", "update_preview.sh yok", upd)
-            plist_report = {"ok": False, "exit": None, "output": f"yok: {upd}"}
+            plist_report = {"layer": "K12", "ok": False, "exit": None,
+                            "detail": "update_preview.sh yok",
+                            "output": f"yok: {upd}"}
         else:
+            detail = None
             try:
                 r = subprocess.run(["bash", upd, "--plist-check"],
                                    capture_output=True, text=True, timeout=60)
                 rc, txt = r.returncode, (r.stdout + r.stderr).strip()
             except (OSError, subprocess.TimeoutExpired) as e:
                 rc, txt = None, str(e)
+                detail = f"çalıştırılamadı: {e}"
                 add("P1", "K12-PLIST", "K12 plist",
                     f"çalıştırılamadı: {e}", upd)
             else:
-                if rc == 1:
+                if rc == 0:
+                    detail = "GÜNCEL (şablonla birebir + plutil geçerli)"
+                elif rc == 1:
+                    detail = "BAYAT/GEÇERSİZ (kurulu plist şablondan farklı)"
                     add("P1", "K12-PLIST", "K12 plist",
                         "kurulu plist şablondan farklı (bayat/geçersiz)", txt)
                 elif rc == 2:
+                    detail = "şablon yok (önce --plist çalıştır)"
                     add("P1", "K12-PLIST", "K12 plist",
                         "plist şablonu yok (önce --plist çalıştır)", txt)
-                elif rc != 0:
+                else:
+                    detail = f"beklenmedik exit kodu {rc}"
                     add("P1", "K12-PLIST", "K12 plist",
                         f"beklenmedik exit kodu {rc}", txt)
-            plist_report = {"ok": rc == 0, "exit": rc, "output": txt}
+            plist_report = {"layer": "K12", "ok": rc == 0,
+                            "exit": rc, "detail": detail, "output": txt}
             if not args.json:
                 print(f"[K12] plist şablon: "
                       f"{'PASS' if rc == 0 else 'FAIL'} (exit={rc}) — {txt[:100]}")
+        # Sidecar: update_preview.sh --plist-check ham çıktısı + K12 raporu.
+        if args.plist_out:
+            try:
+                with open(args.plist_out, "w", encoding="utf-8") as pf:
+                    json.dump(plist_report, pf, indent=2, ensure_ascii=False)
+                if not args.json:
+                    print(f"[K12] plist sidecar'ı yazıldı: {args.plist_out} "
+                          f"(exit={plist_report['exit']})")
+            except OSError as e:
+                add("P1", "K12-OUT", "K12 plist sidecar",
+                    f"yazılamadı: {args.plist_out}", str(e))
 
     # ---- K13: reproducibility manifest üreticisi self-testi ----
     # gen_repro_manifest.py'yi bilinen içerikli mock artifact'larla koşar;
