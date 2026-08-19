@@ -138,8 +138,10 @@ jobs:
             --config-out effective_config.json \
             --refs-out references_online.json \
             --history-out history.jsonl \
-            --k0-out k0_findings.json 2>&1 | tee verify_report.txt
-          # (--full içinde --check-lineage: zip_lineage.json soy hattı doğrulanır)
+            --k0-out k0_findings.json \
+            --lineage-out lineage_findings.json 2>&1 | tee verify_report.txt
+          # (--full içinde --check-lineage: zip_lineage.json soy hattı doğrulanır;
+          #  --lineage-out ayrı artifact + run summary için sidecar yazar)
 
       # ─── PRECOMMIT (ADVISORY) — aynı job içinde, tek log ────────────────
       # pre-commit hook'ları (verify-delivery / symbolic / lean) commit
@@ -353,6 +355,17 @@ jobs:
         run: |
           python3 _calisma/CIKTI/run_summary_budget.py budget_verify.json
 
+      # ─── Soy hattı sonucunu da aynı verify summary'sine yaz ──────────────
+      # verify_delivery.py --lineage-out lineage_findings.json sidecar'ından
+      # okur; CI run summary'ye "Soy hattı" başlıklı ayrı bir bölüm yazar
+      # (k0_findings.json ile aynı desen). --check-lineage sonucu böylece
+      # run summary'de görünür; ayrıca lineage-findings artifact'ına yazılır.
+      - name: Lineage — run summary
+        if: always()
+        shell: bash
+        run: |
+          python3 _calisma/CIKTI/run_summary_lineage.py lineage_findings.json
+
       - name: Generate SHA-256 for verify artifacts
         shell: bash
         run: |
@@ -405,6 +418,15 @@ jobs:
         with:
           name: k0-findings
           path: k0_findings.json
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Upload lineage findings sidecar
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: lineage-findings
+          path: lineage_findings.json
           retention-days: 30
           if-no-files-found: error
 

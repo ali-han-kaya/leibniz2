@@ -81,7 +81,8 @@ step_full() {
     --config-out "$SIM_DIR/effective_config.json" \
     --refs-out "$SIM_DIR/references_online.json" \
     --history-out "$SIM_DIR/history.jsonl" \
-    --k0-out "$SIM_DIR/k0_findings.json" 2>&1 | tee "$SIM_DIR/verify_report.txt"
+    --k0-out "$SIM_DIR/k0_findings.json" \
+    --lineage-out "$SIM_DIR/lineage_findings.json" 2>&1 | tee "$SIM_DIR/verify_report.txt"
   return "${PIPESTATUS[0]}"
 }
 
@@ -164,6 +165,11 @@ step_summary_budget() {
   GITHUB_STEP_SUMMARY="$SIM_DIR/summary.md" \
     "$PY" "$REPO_ROOT/_calisma/CIKTI/run_summary_budget.py" budget_verify.json
 }
+step_summary_lineage() {
+  cd "$SIM_DIR"
+  GITHUB_STEP_SUMMARY="$SIM_DIR/summary.md" \
+    "$PY" "$REPO_ROOT/_calisma/CIKTI/run_summary_lineage.py" lineage_findings.json
+}
 
 # ── 8) SHA-256 sidecar'ları ────────────────────────────────────────────────
 step_sha256() {
@@ -210,6 +216,7 @@ main() {
   run_step "Pre-commit findings — run summary"           closed step_summary_precommit
   run_step "K0 findings — run summary"                   closed step_summary_k0
   run_step "Budget — run summary"                        closed step_summary_budget
+  run_step "Lineage — run summary"                       closed step_summary_lineage
   run_step "Generate SHA-256 for verify artifacts"       closed step_sha256
   run_step "Bundle config snapshot"                      closed step_config_bundle
   run_step "Generate config diff (advisory)"             advisory step_config_diff
@@ -236,7 +243,7 @@ main() {
 
   echo "Çıktılar: $SIM_DIR"
   echo "  verify_report.txt        (--full + pre-commit append, tek log)"
-  echo "  summary.md               (pre-commit + K0 + bütçe 3 bölüm)"
+  echo "  summary.md               (pre-commit + K0 + bütçe + soy hattı 4 bölüm)"
   echo "  verify_report.sha256     (+ refs/history .sha256)"
   echo "  config/                  (ham + şema + etkin + diff + .sha256)"
   echo "  logs/                    (precommit.log + PRECOMMIT_RAPORU.md + CACHE)"

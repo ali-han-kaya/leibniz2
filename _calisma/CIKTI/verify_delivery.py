@@ -1117,23 +1117,25 @@ def check_zip_lineage(zip_path, lineage_path, add):
     ayrıca CANLI dosya ile karşılaştırılır — uyuşmazlık P0. commit=null
     (pre-git, §9'da dondurulmuş) nesiller yalnızca kayıttır (INFO).
     git repo/commit yoksa ilgili nesil UNVERIFIED (INFO) sayılır.
-    Döndürür (ok: bool, detail: str).
+    Döndürür (ok: bool, detail: str, records: list[dict]) — records,
+    --lineage-out sidecar'ı ve run summary için makine-okunur nesil
+    kayıtlarıdır: {gen, note, hash, commit, status}.
     """
     if not os.path.isfile(lineage_path):
-        return True, f"soy hattı dosyası yok: {lineage_path} (atlandı)"
+        return True, f"soy hattı dosyası yok: {lineage_path} (atlandı)", []
     try:
         with open(lineage_path, encoding="utf-8") as lf:
             lineage = json.load(lf)
     except (json.JSONDecodeError, OSError) as e:
         add("P1", "LINEAGE-LOAD", "Soy hattı", f"okunamadı: {lineage_path}", str(e))
-        return False, f"soy hattı okunamadı: {e}"
+        return False, f"soy hattı okunamadı: {e}", []
     gens = lineage.get("generations", [])
     if not gens:
         add("P1", "LINEAGE-EMPTY", "Soy hattı", "generations boş", lineage_path)
-        return False, "soy hattı boş"
+        return False, "soy hattı boş", []
 
     cur_hash = sha256_file(zip_path) if os.path.isfile(zip_path) else None
-    rows = []
+    records = []
     ok = True
     for g in gens:
         note = g.get("note", "?")
@@ -1143,15 +1145,18 @@ def check_zip_lineage(zip_path, lineage_path, add):
         if is_cur:
             # CANLI dosya ile karşılaştır — P0
             if cur_hash and rec_hash and cur_hash == rec_hash:
-                rows.append(("current", note, rec_hash[:12], "PASS (canlı dosya ile aynı)"))
+                records.append({"gen": "current", "note": note, "hash": rec_hash,
+                                "commit": None, "status": "PASS (canlı dosya ile aynı)"})
             else:
                 ok = False
                 add("P0", "LINEAGE-CUR", "Soy hattı", f"current nesil canlı dosya ile uyuşmuyor ({note})",
                     f"kayıt={rec_hash} canlı={cur_hash}")
-                rows.append(("current", note, rec_hash[:12] if rec_hash else "?", "FAIL"))
+                records.append({"gen": "current", "note": note, "hash": rec_hash,
+                                "commit": None, "status": "FAIL"})
             continue
         if commit is None:
-            rows.append(("pre-git", note, rec_hash[:12] if rec_hash else "?", "INFO (dondurulmuş §9)"))
+            records.append({"gen": "pre-git", "note": note, "hash": rec_hash,
+                            "commit": None, "status": "INFO (dondurulmuş §9)"})
             continue
         # git'ten yeniden türet
         try:
@@ -1159,28 +1164,32 @@ def check_zip_lineage(zip_path, lineage_path, add):
                 ["git", "show", f"{commit}:{lineage.get('path_in_repo', zip_path)}"],
                 capture_output=True)
         except FileNotFoundError:
-            rows.append((commit[:8], note, rec_hash[:12], "UNVERIFIED (git yok)"))
+            records.append({"gen": commit[:8], "note": note, "hash": rec_hash,
+                            "commit": commit, "status": "UNVERIFIED (git yok)"})
             continue
         if r.returncode != 0:
-            rows.append((commit[:8], note, rec_hash[:12], "UNVERIFIED (commit yok)"))
+            records.append({"gen": commit[:8], "note": note, "hash": rec_hash,
+                            "commit": commit, "status": "UNVERIFIED (commit yok)"})
             continue
         got = hashlib.sha256(r.stdout).hexdigest()
         if got == rec_hash:
-            rows.append((commit[:8], note, rec_hash[:12], "PASS (git show ile aynı)"))
+            records.append({"gen": commit[:8], "note": note, "hash": rec_hash,
+                            "commit": commit, "status": "PASS (git show ile aynı)"})
         else:
             ok = False
             add("P1", "LINEAGE-HASH", "Soy hattı", f"nesil hash'i git'ten türetilenle uyuşmuyor ({note})",
                 f"kayıt={rec_hash} git_show={got}")
-            rows.append((commit[:8], note, rec_hash[:12], "FAIL"))
+            records.append({"gen": commit[:8], "note": note, "hash": rec_hash,
+                            "commit": commit, "status": "FAIL"})
 
     lines = ["Soy hattı (zip_lineage.json — tek kaynak):",
              f"{'NESİL':<12} {'NOTE':<30} {'HASH':<14} DURUM",
              "-" * 80]
-    lines += [f"{r[0]:<12} {r[1]:<30} {r[2]:<14} {r[3]}" for r in rows]
+    for r in records:
+        h = (r["hash"] or "?")[:12]
+        lines.append(f"{r['gen']:<12} {r['note']:<30} {h:<14} {r['status']}")
     detail = "\n".join(lines)
-    if ok:
-        return True, detail
-    return False, detail
+    return ok, detail, records
 
 
 def check_cleanup(cleanup_path, add, repo_root=None):
@@ -1718,6 +1727,10 @@ def main():
     ap.add_argument("--k0-out", default=None,
                     help="K0 bayat-zip bulgularını ayrı bir JSON'a yaz "
                          "(CI run summary'de ayrı bölüm göstermek için)")
+    ap.add_argument("--lineage-out", default=None,
+                    help="Soy hattı (--check-lineage) sonucunu ayrı bir JSON'a "
+                         "yaz — k0_findings.json gibi CI artifact + run summary "
+                         "bölümü için")
     ap.add_argument("--history-out", default=None,
                     help="Run özetini JSONL kaydı olarak yaz (preview_server.py "
                          "history.jsonl formatıyla birebir) — CI'da verify sonrası "
@@ -1967,10 +1980,23 @@ def main():
     if args.check_lineage:
         lineage_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                     "zip_lineage.json")
-        lineage_ok, lineage_detail = check_zip_lineage(kzip, lineage_path, add)
-        lineage_report = {"ok": lineage_ok, "detail": lineage_detail}
+        lineage_ok, lineage_detail, lineage_records = check_zip_lineage(
+            kzip, lineage_path, add)
+        lineage_report = {"ok": lineage_ok, "detail": lineage_detail,
+                          "count": len(lineage_records),
+                          "generations": lineage_records}
         if not args.json:
             print(f"\n{lineage_detail}")
+        if args.lineage_out:
+            try:
+                with open(args.lineage_out, "w", encoding="utf-8") as lof:
+                    json.dump(lineage_report, lof, indent=2, ensure_ascii=False)
+                if not args.json:
+                    print(f"[LINEAGE] soy hattı sidecar'ı yazıldı: "
+                          f"{args.lineage_out} ({len(lineage_records)} nesil)")
+            except OSError as e:
+                add("P1", "LINEAGE-OUT", "Soy hattı sidecar",
+                    f"yazılamadı: {args.lineage_out}", str(e))
 
     # ---- K14: Cleanup kaydı (M0 §10 silme/taşıma) ----
     cleanup_report = None
