@@ -389,16 +389,20 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 | Publish precheck (AŞAMA 0, advisory) | ✅ AŞAMA 0 kapıları (tree/noise/gh/status_checks) her push'ta otomatik denetlenir; yerel-only kontroller INFO (required check DEĞİL) |
 | Manifest PR comment | yalnızca PR'da: manifest.txt PR yorumu olarak düşer |
 
-**Artifact listesi (13):**
+**Artifact listesi (17):**
 - `verify-report` (tek log: K1-K9 + pre-commit bölümü + .sha256)
 - `action-runtimes` (her action'ın runs.using denetimi JSON — node24 kapısı)
 - `budget-verify` + `budget` (bütçe sidecar + aggregator)
 - `config` (ham + şema + etkin config + diff)
 - `k0-findings` (bayat-zip taraması JSON)
+- `lineage-findings` (zip soy hattı doğrulaması JSON)
+- `klayers` (K1-K14 PASS/FAIL/SKIP özeti — run summary)
 - `refs-online` (çevrimiçi referans denetimi VERSION JSON)
+- `run-history` (history.jsonl — run zaman serisi)
 - `precommit-logs` (ham log + PRECOMMIT_RAPORU.md/.json + cache/env özeti)
 - `reports` (statik markdown raporları)
 - `reproducibility` (tüm artifact'ların SHA-256 manifest'i)
+- `config-drift` (gen_config + diff-on-drift bulguları)
 - `repack-verify` (repack sonrası base verify raporu)
 - `refs-trend` (run'lar arası çevrimiçi referans zaman serisi)
 - `precheck-report` (AŞAMA 0 ön-kontrol logu — advisory, her push'ta)
