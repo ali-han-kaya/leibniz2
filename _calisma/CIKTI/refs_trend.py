@@ -37,13 +37,30 @@ import zipfile
 API = "https://api.github.com"
 
 
+class _NoAuthRedirect(urllib.request.HTTPRedirectHandler):
+    """Redirect'te Authorization başlığını düşürür.
+
+    GitHub `/zip` endpoint'i imzalı Azure blob URL'ine 302 yönlendirir.
+    urllib varsayılan olarak Authorization'ı redirect'e taşır; blob depolama
+    geçersiz Bearer token'ı 401 (InvalidAuthenticationInfo) ile reddeder.
+    İmza URL'in kendisindedir — redirect'te auth başlığı gerekmez.
+    """
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        new = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if new is not None:
+            new.remove_header("Authorization")
+        return new
+
+
 def api_get(path, token, binary=False):
     """GitHub API GET. Token varsa urllib, yoksa `gh api` (yerel auth)."""
     if token:
         req = urllib.request.Request(f"{API}{path}")
         req.add_header("Authorization", f"Bearer {token}")
         req.add_header("User-Agent", "refs-trend")
-        with urllib.request.urlopen(req, timeout=60) as r:
+        # Redirect'te Authorization'ı düşür (Azure blob 401'inin kökü).
+        opener = urllib.request.build_opener(_NoAuthRedirect)
+        with opener.open(req, timeout=60) as r:
             data = r.read()
         return data if binary else json.loads(data.decode("utf-8"))
     cmd = ["gh", "api", path]
