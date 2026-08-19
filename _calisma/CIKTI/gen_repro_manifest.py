@@ -52,6 +52,7 @@ ARTIFACT_JOBS = {
     "config": "verify",
     "k0-findings": "verify",
     "lineage-findings": "verify",
+    "klayers": "verify",
     "refs-online": "verify",
     "run-history": "verify",
     "precommit-logs": "verify",

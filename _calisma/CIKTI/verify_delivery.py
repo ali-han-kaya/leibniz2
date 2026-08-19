@@ -131,6 +131,69 @@ SCRIPTS = [
     ("qpdf_determinism_experiment.py", "qpdf_determinism_output.txt"),
 ]
 
+# ---- K-katman etiketleri (run summary + --klayers-out sidecar) ----
+# TEK KAYNAK: bu tablo, dosyanın başındaki docstring katman tablosuyla aynı
+# anlama gelir; yeni bir K katmanı eklenince İKİSİ birden güncellenmelidir.
+LAYER_LABELS = {
+    "K0": "Bayat zip taraması",
+    "K1": "Dış zip sidecar",
+    "K2": "Klasör checksum",
+    "K3": "İç zip sidecar",
+    "K4": "Manifest 19/19",
+    "K5": "Script byte-for-byte",
+    "K6": "İçerik (PDF + referans)",
+    "K7": "Hijyen (secret/artefakt)",
+    "K8": "Z3 sembolik ispat",
+    "K9": "Lean reduct-invariance",
+    "K10": "Manifest digest",
+    "K11": "Config drift",
+    "K12": "Plist şablon",
+    "K13": "Repro self-test",
+    "K14": "Cleanup kaydı",
+}
+
+# K0-K7 çekirdek katmanlar: --full olsun olmasın her run'da koşar.
+_CORE_LAYERS = frozenset({"K0", "K1", "K2", "K3", "K4", "K5", "K6", "K7"})
+
+# İsteğe bağlı katman → onu aktifleştiren bayrağın args üzerindeki getter'ı.
+_OPTIONAL_LAYERS = {
+    "K8": lambda a: a.symbolic_proof,
+    "K9": lambda a: a.lean_proof,
+    "K10": lambda a: bool(a.verify_manifest),
+    "K11": lambda a: a.check_config_drift,
+    "K12": lambda a: a.check_plist,
+    "K13": lambda a: a.check_repro_manifest,
+    "K14": lambda a: a.check_cleanup,
+}
+
+
+def build_layers_summary(args, findings):
+    """findings listesini K-katmanına göre gruplayıp sıralı özet üret.
+
+    Döndürür {layer: {label, status, ran, findings}}. status:
+      - PASS: katman koştu, bulgu yok
+      - FAIL: katman koştu, en az bir P0/P1 bulgu var
+      - SKIP: katman bu run'da koşmadı (bayrak verilmedi; ör. K10 verify
+        job'unda değil reproducibility job'unda, K12 yalnızca macOS)
+    """
+    by_layer = {}
+    for f in findings:
+        layer = f.get("check", "").split("-")[0]
+        if layer in LAYER_LABELS:
+            by_layer.setdefault(layer, []).append(f)
+    layers = {}
+    for layer in LAYER_LABELS:
+        if layer in _CORE_LAYERS:
+            ran = True
+        else:
+            getter = _OPTIONAL_LAYERS.get(layer)
+            ran = bool(getter(args)) if getter else False
+        fl = by_layer.get(layer, [])
+        status = "FAIL" if fl else ("PASS" if ran else "SKIP")
+        layers[layer] = {"label": LAYER_LABELS[layer], "status": status,
+                         "ran": ran, "findings": fl}
+    return layers
+
 # ---- K6 referans denetimi (CrossRef/SEP çevrimiçi, --check-references) ----
 # Kaynak: REFERANS_KANIT_DENETIMI.md (2026-08-17, 64/64 denetimi).
 # crossref : DOI'ye göre CrossRef'ten canlı doğrulanır (kesin, tekrarlanabilir).
@@ -1731,6 +1794,10 @@ def main():
                     help="Soy hattı (--check-lineage) sonucunu ayrı bir JSON'a "
                          "yaz — k0_findings.json gibi CI artifact + run summary "
                          "bölümü için")
+    ap.add_argument("--klayers-out", default=None,
+                    help="K-katman (K0-K14) PASS/FAIL/SKIP özetini ayrı bir JSON'a "
+                         "yaz — verify job'unun run summary'sinde K1-K10 bölümlerini "
+                         "üretmek için")
     ap.add_argument("--history-out", default=None,
                     help="Run özetini JSONL kaydı olarak yaz (preview_server.py "
                          "history.jsonl formatıyla birebir) — CI'da verify sonrası "
@@ -2475,6 +2542,26 @@ def main():
         "plist": plist_report,
         "cleanup": cleanup_report,
     }
+
+    # ---- K-katman özeti sidecar (run summary için) ----
+    # findings tek kaynağından K0-K14'ün PASS/FAIL/SKIP durumunu türetir;
+    # verify job'unun GITHUB_STEP_SUMMARY'sinde K1-K10 bölümlerini üretmek
+    # için run_summary_klayers.py tarafından okunur.
+    if args.klayers_out:
+        try:
+            klayers = build_layers_summary(args, findings)
+            with open(args.klayers_out, "w", encoding="utf-8") as kf:
+                json.dump({"verdict": verdict,
+                           "counts": {"P0": p0, "P1": p1},
+                           "layers": klayers},
+                          kf, indent=2, ensure_ascii=False)
+            if not args.json:
+                print(f"[SUMMARY] K-katman özeti yazıldı: {args.klayers_out} "
+                      f"({sum(1 for l in klayers.values() if l['status'] == 'FAIL')} FAIL)")
+        except OSError as e:
+            add("P1", "SUMMARY-OUT", "Summary sidecar",
+                f"yazılamadı: {args.klayers_out}", str(e))
+
     if args.json:
         print(json.dumps(out, indent=2, ensure_ascii=False))
     else:

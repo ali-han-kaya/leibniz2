@@ -139,9 +139,11 @@ jobs:
             --refs-out references_online.json \
             --history-out history.jsonl \
             --k0-out k0_findings.json \
-            --lineage-out lineage_findings.json 2>&1 | tee verify_report.txt
+            --lineage-out lineage_findings.json \
+            --klayers-out klayers.json 2>&1 | tee verify_report.txt
           # (--full içinde --check-lineage: zip_lineage.json soy hattı doğrulanır;
-          #  --lineage-out ayrı artifact + run summary için sidecar yazar)
+          #  --lineage-out ayrı artifact + run summary için sidecar yazar;
+          #  --klayers-out K1-K14 PASS/FAIL/SKIP özetini run summary'ye taşır)
 
       # ─── PRECOMMIT (ADVISORY) — aynı job içinde, tek log ────────────────
       # pre-commit hook'ları (verify-delivery / symbolic / lean) commit
@@ -366,6 +368,17 @@ jobs:
         run: |
           python3 _calisma/CIKTI/run_summary_lineage.py lineage_findings.json
 
+      # ─── K1-K10 katmanlarını da ayrı bölümler olarak yaz ────────────────
+      # verify_delivery.py --klayers-out klayers.json sidecar'ından okur;
+      # run summary'ye her K katmanı (K1-K10) için ayrı bir bölüm yazar:
+      # PASS ✅ / FAIL 🔴 (bulgularla) / SKIP ⏭️ (ör. K10 reproducibility
+      # job'unda, K12 macOS'ta). K0 ayrı run_summary_k0.py'de.
+      - name: K layers (K1-K10) — run summary
+        if: always()
+        shell: bash
+        run: |
+          python3 _calisma/CIKTI/run_summary_klayers.py klayers.json
+
       - name: Generate SHA-256 for verify artifacts
         shell: bash
         run: |
@@ -427,6 +440,15 @@ jobs:
         with:
           name: lineage-findings
           path: lineage_findings.json
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Upload K layers sidecar
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: klayers
+          path: klayers.json
           retention-days: 30
           if-no-files-found: error
 
