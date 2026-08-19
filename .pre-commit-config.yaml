@@ -19,12 +19,16 @@
 #                               patlamasını commit öncesi yakalar; OFFLINE, stdlib-only).
 #   4) verify-delivery-symbolic: Z3 sembolik ispat (z3-solver, izole venv)
 #   5) verify-delivery-lean    : Lean 4 reduct-invariance (lean, system)
-#   6) commit-msg-style       : başlık denetimi (.gitmessage kuralları) — noise
+#   6) check-plist-drift       : plist kapısının exit 0/1/2 davranışını koşan
+#                               birim testler (update_preview.sh --plist-check
+#                               + check_plist_drift.py) — fake HOME'da koşar,
+#                               gerçek LaunchAgents/Caches'a dokunmaz.
+#   7) commit-msg-style       : başlık denetimi (.gitmessage kuralları) — noise
 #                               commit'leri (wip/smoke/test marker/şablon) reddeder.
 #                               commit-msg stage'inde; CI --all-files'ta ÇALIŞMAZ.
 # Herhangi bir P0/P1 bulgusu commit'i bloke eder (sıfır-dışı exit).
 #
-# Not: update-config TEK yazan hook'tur (config'i stage eder). Diğer üç kapı
+# Not: update-config TEK yazan hook'tur (config'i stage eder). Diğer kapılar
 # read-only'dir: dosya değiştirmez, yalnızca doğrular (fail-closed).
 #
 # Manuel çalıştırma:
@@ -120,6 +124,21 @@ repos:
           biçimselleştirilmesi. Tümevarımsal kanıt derlenerek doğrulanır.
           lean (elan) gerektirir; PATH'te veya ~/.elan/bin'de aranır.
         entry: sh _calisma/CIKTI/verify_lean.sh
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
+      - id: check-plist-drift
+        name: "Plist gate unit tests (exit 0/1/2)"
+        description: >-
+          update_preview.sh --plist-check (K12 kapısı) + check_plist_drift.py
+          exit 0/1/2 davranışını kapsayan birim testleri koşar
+          (0=GÜNCEL/PASS, 1=BAYAT/drift, 2=şablon yok/hata). Fake HOME
+          altında koşar — gerçek LaunchAgents/Caches'a dokunmaz, plistlib
+          fallback'i sayesinde Linux CI'da da çalışır.
+        entry: python3 -m unittest discover -s _calisma/CIKTI -p "test_plist_gate_exit.py"
         language: system
         always_run: true
         pass_filenames: false
