@@ -17,6 +17,12 @@
 #
 # Log: logs/publish_<timestamp>.log  (hem stdout'a hem dosyaya yazılır).
 #
+# İDEMPOTENT RE-RUN (repo zaten yayındaysa):
+#   - AŞAMA 0: origin varsa --allow-remote ile koşar (ilk publish'te düz koşar).
+#   - AŞAMA 1: repo zaten varsa oluşturma atlanır.
+#   - AŞAMA 2: origin eşleşiyorsa dokunulmaz; bekleyen commit yoksa push atlanır.
+#   - AŞAMA 3: push yoksa HEAD için MEVCUT run'ı izler (yeni run yoksa atlar).
+#
 # GÜVENLİK:
 #   - AŞAMA 0 kapıları (repo temiz, gh auth, remote yok, branch main) başarısız
 #     olursa senaryo DURUR; `git push` yalnızca tüm kapılar yeşilse çalışır.
@@ -89,7 +95,13 @@ if [ "$DRY_RUN" = "1" ]; then
     warn "precheck FAIL — dry-run olduğundan akış önizlenmeye devam ediyor"
   fi
 else
-  if ! bash docs/publish_precheck.sh; then
+  # İdempotent: origin zaten varsa (repo yayında) --allow-remote ile koş;
+  # ilk publish'te (origin yok) düz koş. Smoke testi yerelde 5 kapıyı doğrular.
+  PRECHECK_ARGS=""
+  if [ -n "$(git remote -v | head -1)" ]; then
+    PRECHECK_ARGS="--allow-remote"
+  fi
+  if ! bash docs/publish_precheck.sh $PRECHECK_ARGS; then
     fail "AŞAMA 0 kapıları geçilemedi — log: $LOG"
   fi
 fi
@@ -98,17 +110,22 @@ fi
 OWNER="$(gh api user -q .login 2>/dev/null || true)"
 
 # ─────────────────────────────────────────────────────────────────────────────
-step "AŞAMA 1 — GitHub repo oluştur (interaktif değil)"
+step "AŞAMA 1 — GitHub repo oluştur (interaktif değil, idempotent)"
 
 # gh repo create: isim + --public verildiğinde prompt sormaz (non-interactive).
-run gh repo create "$REPO_NAME" \
-  --description "$DESCRIPTION" \
-  --public \
-  --disable-issues=false \
-  --disable-wiki=true \
-  --disable-projects=true \
-  --add-readme=false
-done_msg "repo oluşturuldu: $OWNER/$REPO_NAME ✓"
+# İdempotent: repo zaten varsa oluşturma atlanır (re-run / repo zaten yayında).
+if gh repo view "$OWNER/$REPO_NAME" >/dev/null 2>&1; then
+  log "repo zaten mevcut: $OWNER/$REPO_NAME (idempotent — oluşturulmuyor)"
+else
+  run gh repo create "$REPO_NAME" \
+    --description "$DESCRIPTION" \
+    --public \
+    --disable-issues=false \
+    --disable-wiki=true \
+    --disable-projects=true \
+    --add-readme=false
+  done_msg "repo oluşturuldu: $OWNER/$REPO_NAME ✓"
+fi
 
 # Branch protection artık web UI üzerinden (manuel). Linki logla + hatırlat:
 # ilk push'tan SONRA kurmak daha pratiktir (enforce-admins ilk push'u bloke edebilir).
@@ -118,48 +135,100 @@ log "required check adları otomatik: python3 _calisma/CIKTI/status_checks.py"
 log "sonrasında doğrulama:            python3 _calisma/CIKTI/status_checks.py --gh"
 
 # ─────────────────────────────────────────────────────────────────────────────
-step "AŞAMA 2 — Remote ekle + push"
+step "AŞAMA 2 — Remote ekle + push (idempotent)"
 
 run gh repo set-default "$REPO_NAME" || true
-run git remote add origin "git@github.com:$OWNER/$REPO_NAME.git"
+
+# Remote: origin YOKSA ekle; VARSA repo adı eşleşiyorsa dokunma (idempotent),
+# eşleşmiyorsa set-url ile düzelt. SSH/HTTPS farkı geçerli sayılır (ikisi de ok).
+REMOTE_URL="$(git remote get-url origin 2>/dev/null || true)"
+if [ -n "$REMOTE_URL" ]; then
+  case "$REMOTE_URL" in
+    *"$OWNER/$REPO_NAME"*)
+      log "origin zaten doğru repo: $REMOTE_URL (idempotent — eklenmiyor)"
+      ;;
+    *)
+      warn "origin beklenen repo değil: $REMOTE_URL → set-url ile düzeltiliyor"
+      run git remote set-url origin "git@github.com:$OWNER/$REPO_NAME.git"
+      ;;
+  esac
+else
+  run git remote add origin "git@github.com:$OWNER/$REPO_NAME.git"
+fi
 log "remote -v: (güncel durum)"
 git remote -v | sed 's/^/    /' || true
-run git push -u origin main
-done_msg "push tamamlandı: $OWNER/$REPO_NAME (main) ✓"
+
+# Push: yalnızca bekleyen commit varsa (idempotent — up-to-date'te atlanır).
+PUSHED=0
+if git rev-parse --verify origin/main >/dev/null 2>&1; then
+  AHEAD="$(git rev-list --count origin/main..main 2>/dev/null || echo 0)"
+  if [ "$AHEAD" -gt 0 ]; then
+    run git push -u origin main
+    PUSHED=1
+  else
+    log "push gerekmiyor — origin/main ile eşit (idempotent)"
+  fi
+else
+  run git push -u origin main
+  PUSHED=1
+fi
+if [ "$PUSHED" = "1" ]; then
+  done_msg "push tamamlandı: $OWNER/$REPO_NAME (main) ✓"
+else
+  log "AŞAMA 2: push atlandı (bekleyen commit yok)"
+fi
 
 # ─────────────────────────────────────────────────────────────────────────────
 step "AŞAMA 3 — CI çalıştığını doğrula (5-15 dk)"
 
 if [ "$DRY_RUN" = "1" ]; then
-  log "[DRY-RUN] push sonrası otomatik tetiklenen CI run'ı şöyle izlenir:"
-  log "[DRY-RUN]   gh run list --limit 3 --json databaseId,status,conclusion,name"
+  log "[DRY-RUN] push sonrası otomatik tetiklenen CI run'ı şöyle izlenir (HEAD commit'ine göre):"
+  log "[DRY-RUN]   gh run list --commit <HEAD_SHA> --limit 1 --json databaseId"
   log "[DRY-RUN]   gh run watch <RUN_ID> --exit-status   (5-15 dk bloklar)"
   log "[DRY-RUN]   gh run view <RUN_ID> --json artifacts \\"
   log "[DRY-RUN]     --jq '.artifacts[] | \"\\(.name) (\\(.size_in_bytes) B)\"'"
   RUN_ID="" ; CONCL="(dry-run — çalıştırılmadı)"
 else
-  # Push'un tetiklediği run'ın listede görünmesini bekle (birkaç sn gecikebilir).
-  RUN_ID=""
-  for _ in $(seq 1 12); do
-    RUN_ID="$(gh run list --limit 1 --json databaseId -q '.[0].databaseId' 2>/dev/null || true)"
-    [ -n "$RUN_ID" ] && break
-    sleep 5
-  done
-  [ -n "$RUN_ID" ] || fail "CI run listelenemedi (gh run list boş)"
-  log "CI run ID: $RUN_ID"
+  HEAD_SHA="$(git rev-parse HEAD)"
+  if [ "$PUSHED" = "1" ]; then
+    # Push'un tetiklediği run'ı bekle — HEAD commit'iyle eşle (idempotent:
+    # aynı HEAD daha önce koşmuşsa eski run'ı da kabul et).
+    RUN_ID=""
+    for _ in $(seq 1 12); do
+      RUN_ID="$(gh run list --commit "$HEAD_SHA" --limit 1 --json databaseId \
+        -q '.[0].databaseId' 2>/dev/null || true)"
+      [ -n "$RUN_ID" ] && break
+      sleep 5
+    done
+    [ -n "$RUN_ID" ] || fail "push yapıldı ama CI run listelenemedi (gh run list --commit $HEAD_SHA)"
+  else
+    # Push yapılmadı — HEAD için ÖNCEDEN var olan run'ı izle (idempotent).
+    RUN_ID="$(gh run list --commit "$HEAD_SHA" --limit 1 --json databaseId \
+      -q '.[0].databaseId' 2>/dev/null || true)"
+    if [ -n "$RUN_ID" ]; then
+      log "push yok; HEAD ($HEAD_SHA) için mevcut run izleniyor: $RUN_ID"
+    else
+      log "push yok ve HEAD için run yok — CI doğrulaması atlanıyor (idempotent)"
+      CONCL="no-run"
+    fi
+  fi
 
-  # Run bitene kadar izle (non-interactive). Sonuç FAIL olsa bile script'i
-  # düşürmemek için exit kodu elle yakalanır (FAIL bir SONUÇ, script hatası değil).
-  set +e
-  gh run watch "$RUN_ID" --exit-status
-  CI_EXIT=$?
-  set -e
-  CONCL="$(gh run view "$RUN_ID" --json conclusion -q '.conclusion' 2>/dev/null || echo "unknown")"
-  log "CI sonucu: $CONCL (gh run watch exit=$CI_EXIT)"
+  if [ -n "$RUN_ID" ]; then
+    log "CI run ID: $RUN_ID"
 
-  log "Artifact'lar:"
-  gh run view "$RUN_ID" --json artifacts \
-    --jq '.artifacts[] | "    \(.name) (\(.size_in_bytes) B)"' 2>/dev/null || true
+    # Run bitene kadar izle (non-interactive). Sonuç FAIL olsa bile script'i
+    # düşürmemek için exit kodu elle yakalanır (FAIL bir SONUÇ, script hatası değil).
+    set +e
+    gh run watch "$RUN_ID" --exit-status
+    CI_EXIT=$?
+    set -e
+    CONCL="$(gh run view "$RUN_ID" --json conclusion -q '.conclusion' 2>/dev/null || echo "unknown")"
+    log "CI sonucu: $CONCL (gh run watch exit=$CI_EXIT)"
+
+    log "Artifact'lar:"
+    gh run view "$RUN_ID" --json artifacts \
+      --jq '.artifacts[] | "    \(.name) (\(.size_in_bytes) B)"' 2>/dev/null || true
+  fi
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -236,6 +305,8 @@ log "Log dosyası: $LOG"
 
 if [ "${CONCL:-unknown}" = "success" ]; then
   log "SONUÇ: PASS ✓"
+elif [ "${CONCL:-unknown}" = "no-run" ]; then
+  log "SONUÇ: PASS ✓ (yeni run yok — bekleyen push yok, idempotent re-run)"
 else
   log "SONUÇ: CI conclusion '$CONCL' — raporları incele (fail-closed kapı bir bulgu yakalamış olabilir)"
 fi
