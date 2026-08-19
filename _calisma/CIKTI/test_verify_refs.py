@@ -308,17 +308,17 @@ class TestHathiTrustIdentifiers(unittest.TestCase):
         expect = {
             "Lagree 1994": ["oclc:32045786", "lccn:95174106"],
             "Millican 2002": ["oclc:48957942", "lccn:2002020030"],
-            "Schmitt 1972": ["oclc:1194850"],
+            "Schmitt 1972": ["oclc:1194850", "lccn:73155022"],
             "Xunzi Knoblock": ["lccn:87033578", "oclc:17265207"],
+            # V5r: edisyon kayıtlarındaki lccn değerleri de eklendi (HT'de 0
+            # kayıt ama doğru identifier — HT ileride alırsa eşleşir)
+            "Fine 2012": ["lccn:2012014618", "isbn:1107022894"],
         }
         for key, ids in expect.items():
             self.assertIn(key, by_key, f"{key} arşiv listesinde yok")
             ht = by_key[key]["ht_ids"]
             for i in ids:
                 self.assertIn(i, ht, f"{key} eksik {i}")
-        # Fine 2012 OL'de oclc/lccn VERMEDİ (V5p bulgusu) — isbn listesi korunur
-        fine = by_key["Fine 2012"]["ht_ids"]
-        self.assertIn("isbn:1107022894", fine)
 
     def test_hathitrust_pass_via_lccn(self):
         # HT yanıtındaki kayıt başlığı title_needle içeriyorsa PASS (ağsız).

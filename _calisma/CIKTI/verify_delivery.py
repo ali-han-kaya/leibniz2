@@ -390,13 +390,16 @@ REFERENCE_ARCHIVE = [
     {"key": "Bobzien 2003", "query": "Cambridge Companion to the Stoics",
      "title_needle": "cambridge companion to the stoics",
      "tex_needle": "Bobzien, S. (2003)"},
-    # V5p: OpenLibrary'den çekilen OCLC/LCCN identifier'ları ht_ids'e eklendi
+    # V5p/V5r: OpenLibrary'den çekilen OCLC/LCCN identifier'ları ht_ids'e eklendi
     # (HathiTrust ISBN yerine OCLC/LCCN indeksler). Xunzi lccn:87033578 ile HT'de
-    # gerçek kayıta çözülür (PASS). Lagrée/Millican/Schmitt/Fine kitapları HT
-    # kataloğunda YOK (oclc+lccn+isbn için 0 kayıt — V5p kanıtı) — OL fallback'te.
+    # gerçek kayıta çözülür (PASS). V5r kesinleştirdi: OL EDİSYON kayıtlarında bu
+    # kitapların hiçbirinde oclc alanı YOK (yalnızca lccn/isbn) — V5p'teki oclc'ler
+    # arama indeksinden geldi. Lagrée/Millican/Schmitt/Fine kitapları HT
+    # kataloğunda YOK: tüm oclc+lccn+isbn değerleri HT Bib API'de 0 kayıt döndürdü
+    # (Fine 2012014618 + Schmitt 73155022 dahil) — OL fallback'te kalırlar.
     {"key": "Fine 2012", "query": "Metaphysical Grounding Correia Schnieder",
      "title_needle": "metaphysical grounding", "creator_needle": "correia",
-     "ht_ids": ["isbn:1107022894", "isbn:9781107460287"],
+     "ht_ids": ["lccn:2012014618", "isbn:1107022894", "isbn:9781107460287"],
      "tex_needle": "Fine, K. (2012)"},
     {"key": "Frede 1983", "query": "Skeptical Tradition Burnyeat",
      "title_needle": "skeptical tradition",
@@ -449,7 +452,8 @@ REFERENCE_ARCHIVE = [
      "tex_needle": "du Vair, G. (1594)"},
     {"key": "Schmitt 1972", "query": "Cicero Scepticus Schmitt",
      "title_needle": "cicero scepticus",
-     "ht_ids": ["oclc:1194850", "isbn:9401710376", "isbn:9789401710374"],
+     "ht_ids": ["oclc:1194850", "lccn:73155022",
+                 "isbn:9401710376", "isbn:9789401710374"],
      "tex_needle": "Schmitt, C.B. (1972)"},
     {"key": "Schmitt 1983", "query": "Rediscovery Ancient Skepticism Schmitt",
      "title_needle": "skeptical tradition",
