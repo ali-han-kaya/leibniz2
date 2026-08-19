@@ -6,6 +6,7 @@
 #   bash docs/publish_precheck.sh                 # ilk publish (remote boş beklenir)
 #   bash docs/publish_precheck.sh --allow-remote  # repo zaten GitHub'da (incremental push öncesi)
 #   bash docs/publish_precheck.sh --skip-smoke    # smoke testi atla (commit oluşturmaz)
+#   bash docs/publish_precheck.sh --ci            # CI advisory job: yerel-only kontrolleri INFO yapar
 #
 # Her kontrol [PASS]/[FAIL] raporlanır; herhangi bir FAIL → exit 1 (fail-closed):
 # senaryonun AŞAMA 1'ine ancak tüm kapılar yeşilse geçilir.
@@ -20,11 +21,13 @@ info() { printf '  [INFO] %s\n' "$*"; }
 
 ALLOW_REMOTE=0
 SKIP_SMOKE=0
+CI_MODE=0
 for a in "$@"; do
   case "$a" in
     --allow-remote) ALLOW_REMOTE=1 ;;
     --skip-smoke)   SKIP_SMOKE=1 ;;
-    *) echo "Bilinmeyen bayrak: $a (geçerli: --allow-remote, --skip-smoke)" >&2; exit 2 ;;
+    --ci)           CI_MODE=1 ;;
+    *) echo "Bilinmeyen bayrak: $a (geçerli: --allow-remote, --skip-smoke, --ci)" >&2; exit 2 ;;
   esac
 done
 
@@ -63,33 +66,44 @@ fi
 BRANCH="$(git branch --show-current 2>/dev/null || echo "")"
 if [ "$BRANCH" = "main" ]; then
   pass "branch: main"
+elif [ "$CI_MODE" = "1" ]; then
+  info "branch: '$BRANCH' (CI — event branch'i; main push'unda 'main' olur)"
 else
   fail "branch '$BRANCH' — 'main' olmalı"
 fi
 
 # ── (a2) Commit mesaj kuralı kurulu (docs/HISTORY_CLEANUP.md) ──────────────
-TMPL="$(git config commit.template || true)"
-if [ "$TMPL" = ".gitmessage" ] && [ -f .gitmessage ]; then
-  pass "commit.template = .gitmessage"
+# CI modunda bu kontroller anlamsızdır: runner'da hook kurulu değildir ama 5
+# kapı verify job'unda `pre-commit run --all-files` + commit-msg CI denetimi
+# ile zaten koşar. Yerel-only olduklarından INFO ile işaretlenir (FAIL değil).
+if [ "$CI_MODE" = "1" ]; then
+  info "(CI) hook kurulum kontrolü atlandı — pre-commit verify job'unda koşar; commit.template kurulumu yerel içindir (setup_commit_hooks.sh)"
 else
-  fail "commit.template kurulu değil: git config commit.template .gitmessage"
-fi
-if [ -x .git/hooks/commit-msg ]; then
-  pass "commit-msg git hook'u kurulu"
-else
-  fail "commit-msg hook'u yok: pre-commit install --hook-type commit-msg"
-fi
-if [ -x .git/hooks/pre-commit ]; then
-  pass "pre-commit git hook'u kurulu"
-else
-  fail "pre-commit hook'u yok: pre-commit install"
+  TMPL="$(git config commit.template || true)"
+  if [ "$TMPL" = ".gitmessage" ] && [ -f .gitmessage ]; then
+    pass "commit.template = .gitmessage"
+  else
+    fail "commit.template kurulu değil: git config commit.template .gitmessage"
+  fi
+  if [ -x .git/hooks/commit-msg ]; then
+    pass "commit-msg git hook'u kurulu"
+  else
+    fail "commit-msg hook'u yok: pre-commit install --hook-type commit-msg"
+  fi
+  if [ -x .git/hooks/pre-commit ]; then
+    pass "pre-commit git hook'u kurulu"
+  else
+    fail "pre-commit hook'u yok: pre-commit install"
+  fi
 fi
 
 # ── (b) Pre-commit smoke test — GÜVENLİ ───────────────────────────────────
 # Yalnızca tree temizse ve daha önce FAIL yoksa koşar. Başarısızsa commit
 # oluşmaz; başarılıysa SMOKE_BEFORE'a reset atılır (doc'taki `reset --hard
 # HEAD^` hatasını tekrarlamaz — HEAD'i kendisi geri alır).
-if [ "$SKIP_SMOKE" = "1" ]; then
+if [ "$CI_MODE" = "1" ]; then
+  info "smoke testi CI modunda atlanır — 5 kapı verify job'unda koşuyor (pre-commit run --all-files + commit-msg CI denetimi)"
+elif [ "$SKIP_SMOKE" = "1" ]; then
   warn "smoke testi --skip-smoke ile atlandı"
 elif [ "$FAILED" -ne 0 ] || [ -n "$(git status --porcelain)" ]; then
   warn "smoke testi atlandı (önceki FAIL veya kirli tree)"
@@ -110,7 +124,15 @@ fi
 # ── (c) gh CLI + auth ─────────────────────────────────────────────────────
 if command -v gh >/dev/null 2>&1; then
   pass "gh CLI kurulu ($(gh --version 2>/dev/null | head -1 | awk '{print $3}'))"
-  if gh auth status >/dev/null 2>&1; then
+  if [ "$CI_MODE" = "1" ]; then
+    # CI: GH_TOKEN env token'ı — `gh auth status` env-token'ı her zaman
+    # göstermeyebilir; gerçek API erişimini `gh api user` ile doğrula.
+    if gh api user >/dev/null 2>&1; then
+      pass "gh auth: $(gh api user -q .login 2>/dev/null || echo '?')"
+    else
+      fail "gh auth yok — workflow GH_TOKEN env'i set etmeli (github.token)"
+    fi
+  elif gh auth status >/dev/null 2>&1; then
     pass "gh auth: $(gh api user -q .login 2>/dev/null || echo '?')"
   else
     fail "gh auth yok — 'gh auth login' çalıştır"

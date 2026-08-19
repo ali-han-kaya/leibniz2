@@ -1330,3 +1330,42 @@ jobs:
           path: refs-trend/
           if-no-files-found: ignore
           retention-days: 30
+
+  # ──────────────────────────────────────────────────────────────────────
+  # PRE-PUSH DENETİMİ (advisory) — AŞAMA 0 kapıları her push'ta otomatik.
+  # publish_precheck.sh, docs/PUBLISH_SCENARIO.md AŞAMA 0 ön-kontrolünün tek
+  # komutluk karşılığıdır. CI'da --ci modunda koşar: yerel-only kontroller
+  # (hook kurulumu + smoke) INFO olur — onlar verify job'unda zaten koşar.
+  # --allow-remote: repo canlı olduğundan remote/upstream kontrolü geçer.
+  # continue-on-error: ADVISORY — build'i bloke etmez; bulgular
+  # precheck-report artifact'ında denetlenebilir. status_checks.py'de
+  # GATE_EXCLUDE'dadır (required check DEĞİL — aday listesi 8'de kalır).
+  precheck:
+    name: Publish precheck (AŞAMA 0, advisory)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history — noise-commit + status denetimi için)
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Install PyYAML (status_checks.py dependency)
+        run: pip install pyyaml
+
+      - name: Run AŞAMA 0 precheck (publish_precheck.sh)
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          bash docs/publish_precheck.sh --allow-remote --ci 2>&1 | tee precheck_report.txt
+
+      - name: Upload precheck report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: precheck-report
+          path: precheck_report.txt
+          if-no-files-found: ignore
+          retention-days: 30

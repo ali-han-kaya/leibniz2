@@ -40,7 +40,7 @@ except ImportError:  # pragma: no cover
 
 WORKFLOW = ".github/workflows/verify.yml"
 # Required check OLMAYAN job'lar: PR-only/advisory (yanlış kapı olmasın).
-GATE_EXCLUDE = {"manifest-comment"}
+GATE_EXCLUDE = {"manifest-comment", "precheck"}  # precheck: AŞAMA 0 advisory
 
 
 def gate_jobs():

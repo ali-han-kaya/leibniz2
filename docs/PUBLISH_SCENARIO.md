@@ -9,7 +9,7 @@ Bu senaryo, `_calisma/CIKTI/` ve kök config'leri (workflow, pre-commit, README)
 > **Durum:** senaryo 2026-08-18'de uygulandı — repo **canlı**:
 > https://github.com/ali-han-kaya/leibniz2 (PUBLIC, default `main`).
 > AŞAMA 3'teki job tablosu, `.github/workflows/verify.yml`'deki canlı job
-> `name:` alanlarının birebir aynısıdır (9 job); required check adları da aynı
+> `name:` alanlarının birebir aynısıdır (10 job); required check adları da aynı
 > tek kaynaktan türer (`python3 _calisma/CIKTI/status_checks.py --json`).
 > Yeniden çalıştırmak istersen AŞAMA 0'ı `bash docs/publish_precheck.sh
 > --allow-remote` ile başlat (incremental push).
@@ -353,7 +353,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 --exit-status` + artifact listesi; sonuç `SONUÇ: PASS/FAIL` olarak loglanır
 (dry-run'da yalnızca önizlenir).
 
-**Beklenen (9 job):**
+**Beklenen (10 job):**
 | Job | Beklenen sonuç |
 |---|---|
 | Delivery verification — K1-K9 (single entry point) | ✅ PASS (P0=0, P1=0) — K1-K7 + K0 + soy hattı + bütçe + K8 (Z3 12/12) + K9 (Lean) tek komutta; pre-commit 4 hook'u advisory bölüm olarak aynı job içinde |
@@ -364,9 +364,10 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 | Config drift check (gen_config + diff-on-drift) | ✅ config paketle uyumlu |
 | Repack determinism + verify (sidecar sync) | ✅ repack byte-identical, base verify PASS |
 | Online verification trend (refs-online across runs) | ✅ trend tablosu üretildi (advisory, run'lar arası) |
+| Publish precheck (AŞAMA 0, advisory) | ✅ AŞAMA 0 kapıları (tree/noise/gh/status_checks) her push'ta otomatik denetlenir; yerel-only kontroller INFO (required check DEĞİL) |
 | Manifest PR comment | yalnızca PR'da: manifest.txt PR yorumu olarak düşer |
 
-**Artifact listesi (11):**
+**Artifact listesi (12):**
 - `verify-report` (tek log: K1-K9 + pre-commit bölümü + .sha256)
 - `budget-verify` + `budget` (bütçe sidecar + aggregator)
 - `config` (ham + şema + etkin config + diff)
@@ -377,6 +378,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 - `reproducibility` (tüm artifact'ların SHA-256 manifest'i)
 - `repack-verify` (repack sonrası base verify raporu)
 - `refs-trend` (run'lar arası çevrimiçi referans zaman serisi)
+- `precheck-report` (AŞAMA 0 ön-kontrol logu — advisory, her push'ta)
 
 **Not:** Kapı artık `verify_delivery.py --full`'dur (K1-K9, fail-closed) ve yeşildir —
 Beth 1953 / Fosl 1998 gibi referans düzeltmeleri V5h'te yapıldı; Kalan çevrimdışı
