@@ -38,7 +38,7 @@ repos:
           ve stage eder (verify-delivery kapısı her zaman güncel config'i
           görür). Değişiklik yoksa dosyaya dokunmaz. Ortam eksikse (pdfinfo)
           uyarı ile geçer — CI config-drift job'ı orada yakalar.
-        entry: sh _calisma/CIKTI/update_config_hook.sh
+        entry: bash _calisma/CIKTI/update_config_hook.sh
         language: system
         always_run: true
         pass_filenames: false
