@@ -9,7 +9,7 @@ Bu senaryo, `_calisma/CIKTI/` ve kök config'leri (workflow, pre-commit, README)
 > **Durum:** senaryo 2026-08-18'de uygulandı — repo **canlı**:
 > https://github.com/ali-han-kaya/leibniz2 (PUBLIC, default `main`).
 > AŞAMA 3'teki job tablosu, `.github/workflows/verify.yml`'deki canlı job
-> `name:` alanlarının birebir aynısıdır (8 job); required check adları da aynı
+> `name:` alanlarının birebir aynısıdır (9 job); required check adları da aynı
 > tek kaynaktan türer (`python3 _calisma/CIKTI/status_checks.py --json`).
 > Yeniden çalıştırmak istersen AŞAMA 0'ı `bash docs/publish_precheck.sh
 > --allow-remote` ile başlat (incremental push).
@@ -142,23 +142,25 @@ open "https://github.com/ali-han-kaya/leibniz2/settings/branches"
 #     Web UI'da (adım adım → aşağıdaki "Branch protection — web UI adım adım"):
 #       "Add branch protection rule" → Branch name pattern: `main`
 #       ✓ Require status checks to pass before merging
-#         → 7 check (adlar = workflow job `name:` alanları — tek kaynaktan al):
+#         → 8 check (adlar = workflow job `name:` alanları — tek kaynaktan al):
 #             python3 _calisma/CIKTI/status_checks.py
 #           Delivery verification — K1-K9 (single entry point)
 #           Budget shield (aggregated)
+#           Pre-commit P0 label gate
 #           Static markdown reports (incl. pre-commit findings)
 #           Reproducibility bundle
-#           Config drift check (gen_config --dry-run)
+#           Config drift check (gen_config + diff-on-drift)
 #           Repack determinism + verify (sidecar sync)
 #           Online verification trend (refs-online across runs)
-#         (manifest-comment job'ı yalnızca PR'da koşar — required check değil)
+#         (manifest-comment job'ı yalnızca PR'da koşar — required check değil;
+#          label-gate de PR'da koşar ama BİLEREK required check — etiket kapısı)
 #           → ✓ "Require branches to be up to date before merging" (strict)
 #       ✓ Do not allow bypassing the above settings   (enforce_admins)
 #       ✓ Disallow force pushes
 #       ✓ Disallow deletions
 ```
 
-### Branch protection — web UI adım adım (7 required check)
+### Branch protection — web UI adım adım (8 required check)
 
 > Kural yalnızca `main` içindir. Check adları TEK KAYNAKTAN (workflow job
 > `name:` alanları) gelir — güncel listeyi üret:
@@ -182,15 +184,19 @@ open "https://github.com/ali-han-kaya/leibniz2/settings/branches"
    - **Ön koşul:** check'lerin arama listesinde görünmesi için o branch'te CI'ın
      **en az bir kez koşmuş** olması gerekir. Yeni/boş repoda kural kuruyorsan önce
      bir push ya da PR ile workflow'u tetikle, yeşil run'ı bekle, sonra bu adıma dön.
-   - Arama kutusuna şu **7 adı** tek tek yazıp seç (birebir, `—` karakteri dahil):
+   - Arama kutusuna şu **8 adı** tek tek yazıp seç (birebir, `—` karakteri dahil):
      1. `Delivery verification — K1-K9 (single entry point)`
      2. `Budget shield (aggregated)`
-     3. `Static markdown reports (incl. pre-commit findings)`
-     4. `Reproducibility bundle`
-     5. `Config drift check (gen_config --dry-run)`
-     6. `Repack determinism + verify (sidecar sync)`
-     7. `Online verification trend (refs-online across runs)`
+     3. `Pre-commit P0 label gate`
+     4. `Static markdown reports (incl. pre-commit findings)`
+     5. `Reproducibility bundle`
+     6. `Config drift check (gen_config + diff-on-drift)`
+     7. `Repack determinism + verify (sidecar sync)`
+     8. `Online verification trend (refs-online across runs)`
      > `manifest-comment` job'ı yalnızca PR'da koşar — required check DEĞİL; ekleme.
+     > `Pre-commit P0 label gate` de yalnızca PR'da koşar ama BİLEREK required
+     > check'tir: precommit-p0 etiketi varken FAIL verip merge'i bloke eder
+     > (aşağıdaki "P0 label gate — etiket kapısı" bölümüne bak).
    - **"Require branches to be up to date before merging"** ✓ (strict) — PR'ın base'i
      main'in gerisindeyse merge reddedilir.
 
@@ -205,7 +211,7 @@ open "https://github.com/ali-han-kaya/leibniz2/settings/branches"
 9. **Doğrula (otomatik):** koruma kurulduktan sonra:
    ```bash
    python3 _calisma/CIKTI/status_checks.py --gh
-   # SONUÇ: PASS — 7 check birebir eşleşiyor (workflow ↔ GitHub)
+   # SONUÇ: PASS — 8 check birebir eşleşiyor (workflow ↔ GitHub)
    ```
    Eksik/fazla check → exit 1 (fail-closed): listeyi `status_checks.py` çıktısıyla
    eşitle veya workflow'u güncelle.
@@ -218,6 +224,46 @@ open "https://github.com/ali-han-kaya/leibniz2/settings/branches"
 
 Koruma kurulduktan sonra doğrulama → yukarıdaki adım 9 (veya AŞAMA 0'ı
 `--allow-remote` ile tekrar çalıştır — (e) adımı aynı eşleşmeyi denetler).
+
+### P0 label gate — precommit-p0 etiketini merge kapısına bağla
+
+> **GitHub'da yerleşik "required labels" YOKTUR.** Branch protection settings
+> listesi yalnızca status checks / reviews / conversation resolution / signed
+> commits / linear history / merge queue / deployments içerir (kaynak:
+> docs.github.com "About protected branches"). Bu yüzden etiketi kapıya
+> bağlamanın desteklenen yolu, etiket VARSA FAIL veren bir **required status
+> check**'tir — yukarıdaki 3. adımdaki `Pre-commit P0 label gate`.
+
+**Nasıl çalışır (uçtan uca):**
+1. `verify` job'u pre-commit bulgularını `PRECOMMIT_RAPORU.json`'a yazar.
+2. `budget` job'ının "PR status" adımı P0 varsa PR'a `precommit-p0` etiketini
+   ekler, yoksa kaldırır (etiket her zaman PR'nin güncel durumunu yansıtır).
+3. `label-gate` job'ı (`needs: [budget]`) PR'ın **canlı** etiketini REST ile
+   okur: `precommit-p0` varsa `core.setFailed` → check FAIL.
+4. Bu check branch protection'da required olduğundan, etiket kalkana dek
+   (P0 giderilene dek) merge butonu bloke kalır.
+
+**Neden `needs: [budget]` ve REST okuma:** etiket aynı run içinde budget
+adımında güncellenir; `context.payload.pull_request.labels` event başındaki
+ESKİ anlık görüntüdür. Bu yüzden kapı etiketi REST ile canlı okur — bayat
+etikete göre yanlış geçmez/bloke etmez.
+
+**Doğrula (yerel, git gerektirmez):**
+```bash
+python3 _calisma/CIKTI/status_checks.py
+# → listede "Pre-commit P0 label gate" (toplam 8 check)
+```
+
+**Davranış tablosu:**
+
+| PR'da `precommit-p0` | label-gate sonucu | Merge |
+|---|---|---|
+| Yok | ✅ PASS | izinli |
+| Var | ❌ FAIL | bloke (P0 giderilene dek) |
+
+> P1 (`precommit-p1`) bilinçli olarak kapı DEĞİLDİR — advisory uyarı olarak
+> kalır (yalnızca P0 kritik bulgu merge'i bloke eder). İstenirse aynı desenle
+> bir `precommit-p1` kapısı da eklenebilir.
 
 ---
 
@@ -278,14 +324,15 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 --exit-status` + artifact listesi; sonuç `SONUÇ: PASS/FAIL` olarak loglanır
 (dry-run'da yalnızca önizlenir).
 
-**Beklenen (8 job):**
+**Beklenen (9 job):**
 | Job | Beklenen sonuç |
 |---|---|
 | Delivery verification — K1-K9 (single entry point) | ✅ PASS (P0=0, P1=0) — K1-K7 + K0 + soy hattı + bütçe + K8 (Z3 12/12) + K9 (Lean) tek komutta; pre-commit 4 hook'u advisory bölüm olarak aynı job içinde |
 | Budget shield (aggregated) | ✅ limit içinde (sidecar birleştirildi); PR'da tek "PR doğrulama durumu" yorumu (bütçe + pre-commit) + precommit-p0/p1 etiketi |
+| Pre-commit P0 label gate | ✅ precommit-p0 etiketi yoksa PASS; varsa FAIL (merge bloke — required check) |
 | Static markdown reports (incl. pre-commit findings) | ✅ bundle yüklendi |
 | Reproducibility bundle | ✅ manifest.txt + SHA-256 (run_id ile) |
-| Config drift check (gen_config --dry-run) | ✅ config paketle uyumlu |
+| Config drift check (gen_config + diff-on-drift) | ✅ config paketle uyumlu |
 | Repack determinism + verify (sidecar sync) | ✅ repack byte-identical, base verify PASS |
 | Online verification trend (refs-online across runs) | ✅ trend tablosu üretildi (advisory, run'lar arası) |
 | Manifest PR comment | yalnızca PR'da: manifest.txt PR yorumu olarak düşer |
@@ -323,7 +370,7 @@ git push origin test/protection-check  # ← feature branch: geçer
 # Şimdi main'e PR aç:
 gh pr create --base main --head test/protection-check --title "docs: protection smoke"
 # Merge denenir. CI artık YEŞİL olduğundan reddedilme nedeni "FAIL check" değil:
-# required check'ler (7 kapı) TAMAMLANMADAN veya branch main'in gerisindeyken
+# required check'ler (8 kapı) TAMAMLANMADAN veya branch main'in gerisindeyken
 # (strict) merge REDDEDİLMELİ.
 gh pr merge --squash
 git checkout main

@@ -592,9 +592,7 @@ jobs:
                 body,
               });
               console.log('Durum yorumu oluşturuldu');
-            }
-
-      - name: Upload budget bundle
+            }      - name: Upload budget bundle
         if: always()
         uses: actions/upload-artifact@v6
         with:
@@ -602,6 +600,48 @@ jobs:
           path: budget/
           retention-days: 30
           if-no-files-found: error
+
+  # ──────────────────────────────────────────────────────────────────────
+  # P0 LABEL GATE — precommit-p0 etiketi merge'i bloke eder.
+  #
+  # GitHub branch protection'da yerleşik "required labels" yoktur (kaynak:
+  # docs.github.com "About protected branches" — settings listesi yalnızca
+  # status checks / reviews / conversations / signed commits / linear history
+  # / merge queue / deployments içerir). Etiketi kapıya bağlamanın desteklenen
+  # yolu: precommit-p0 etiketi VARSA FAIL veren bir REQUIRED STATUS CHECK.
+  #
+  # Bu job budget sonrası koşar (etiket, budget job'ının "PR status" adımında
+  # güncellenmiştir), PR'ın GÜNCEL etiketini REST ile canlı okur ve P0 varsa
+  # core.setFailed ile kırar. Branch protection'da bu check adı required
+  # listesine eklenince P0 çözülene dek (etiket kalkana dek) merge bloke olur.
+  # Yalnızca pull_request'te koşar; push'ta "skipped" olur — branch protection
+  # skipped durumunu geçerli kabul eder, dolayısıyla push yolu etkilenmez.
+  # ──────────────────────────────────────────────────────────────────────
+  label-gate:
+    name: Pre-commit P0 label gate
+    runs-on: ubuntu-latest
+    needs: [budget]
+    if: always() && github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Fail if precommit-p0 label is present
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const { data: labels } = await github.rest.issues.listLabelsOnIssue({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+            const hasP0 = labels.some(l => l.name === 'precommit-p0');
+            if (hasP0) {
+              core.setFailed('precommit-p0 etiketi var — P0 bulgusu giderilene kadar merge bloke.');
+            } else {
+              console.log('precommit-p0 etiketi yok — P0 label gate PASS');
+            }
+
 
   reports:
     name: Static markdown reports (incl. pre-commit findings)
