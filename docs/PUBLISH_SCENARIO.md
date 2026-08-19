@@ -1,18 +1,30 @@
 # GitHub Publish Senaryosu — Stoic-Hume V5
 
 Bu senaryo, `_calisma/CIKTI/` ve kök config'leri (workflow, pre-commit, README) içeren
-**yerel repo'yu** GitHub'a taşır ve **CI'ı ilk kez çalıştırır**.
+**yerel repo'yu** GitHub'a taşır ve CI'ı çalıştırır. Repo canlı olduğundan
+(AŞAMA 1-2 UYGULANDI) ana akış **incremental push** döngüsüdür; aşağıdaki
+aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 
-> **Ana prensip:** `git push` zaten istenmeden yapılmaz. Bu senaryo **4 aşamalıdır**
-> (4. opsiyonel); her aşama, bir sonrakine geçmeden önce bilinçli onay gerektirir.
+> **Ana prensip:** `git push` zaten istenmeden yapılmaz. Her aşama, bir
+> sonrakine geçmeden önce bilinçli onay gerektirir.
 >
-> **Durum:** senaryo 2026-08-18'de uygulandı — repo **canlı**:
-> https://github.com/ali-han-kaya/leibniz2 (PUBLIC, default `main`).
-> AŞAMA 3'teki job tablosu, `.github/workflows/verify.yml`'deki canlı job
-> `name:` alanlarının birebir aynısıdır (11 job); required check adları da aynı
-> tek kaynaktan türer (`python3 _calisma/CIKTI/status_checks.py --json`).
-> Yeniden çalıştırmak istersen AŞAMA 0'ı `bash docs/publish_precheck.sh
-> --allow-remote` ile başlat (incremental push).
+> **DURUM (2026-08-19):** repo **canlı** — https://github.com/ali-han-kaya/leibniz2
+> (PUBLIC, default `main`). AŞAMA 1-2 **UYGULANDI**; kalan akış **incremental
+> push** odaklıdır:
+>
+> | Aşama | Durum |
+> |---|---|
+> | AŞAMA 0 — ön-kontrol | ✅ araç hazır — her push öncesi koşulur |
+> | AŞAMA 1 (a) — repo oluşturma | ✅ **UYGULANDI** (2026-08-18, `gh repo create leibniz2 --public`) |
+> | AŞAMA 1 (b) — branch protection | ⏳ **BEKLEMEDE** — web UI'dan kurulacak (aşağıda adım adım + görsel kılavuz) |
+> | AŞAMA 2 — remote + ilk push | ✅ **UYGULANDI** (2026-08-18) |
+> | AŞAMA 3 — CI doğrulama | 🔄 **aktif** — her push'ta tekrarlanır (incremental) |
+> | AŞAMA 4 — koruma kanıtı | ⏸️ opsiyonel (1 (b) sonrası) |
+>
+> Job tablosu (AŞAMA 3), `.github/workflows/verify.yml`'deki canlı job `name:`
+> alanlarının birebir aynısıdır (11 job); required check adları tek kaynaktan
+> türer (`python3 _calisma/CIKTI/status_checks.py --json`). Günlük akış için
+> **aşağıdaki "INCREMENTAL PUSH" bölümüne** geç.
 
 ---
 
@@ -45,6 +57,7 @@ Bu senaryo, `_calisma/CIKTI/` ve kök config'leri (workflow, pre-commit, README)
 | 2026-08-19 | TEK KOMUT | publish_wrapper AŞAMA 0-3 idempotent yapıldı (repo zaten yayındaysa no-op re-run) | `6abf365` |
 | 2026-08-19 | AŞAMA 1 | publish_wrapper'a status_checks.py otomatik doğrulaması bağlandı (repo oluşturma sonrası) | `5f614cf` |
 | 2026-08-19 | TEK KOMUT | publish_wrapper'a `--dry-run-summary` bayrağı eklendi (komut akışını tek markdown'da özetler) | `c21b8e9` |
+| 2026-08-19 | (tümü) | Repo canlı duruma göre yeniden yazıldı: AŞAMA 1-2 `UYGULANDI` işaretlendi, ana akış `INCREMENTAL PUSH` günlük döngüsü oldu (AŞAMA 1 (b) BEKLEMEDE) | `26c01e2` |
 | 2026-08-19 | AŞAMA 1/3 | Node 24 yükseltmesi işlendi: `action-runtimes` job'ı + `check-action-pins` pre-commit kapısı (job 11, required check 9, pre-commit 6) | `1f84ba4` |
 
 ---
@@ -71,6 +84,42 @@ Aşağıdaki manuel aşamaların **birebir aynısını tek komutla, interaktif o
 - **Senkron:** wrapper, bu belgedeki manuel komutları birebir uygular (repo
   create bayrakları, marker yolu vb. aynıdır); fark oluşursa bu belgeyi ve
   wrapper'ı birlikte güncelle.
+
+---
+
+## INCREMENTAL PUSH — günlük döngü (repo canlı, 4 komut)
+
+Repo yayında olduğundan **ana akış budur**: her değişiklik → kapılar → push → CI.
+
+```bash
+cd ~/Desktop/leibniz2
+
+# 1) AŞAMA 0 kapıları (fail-closed: herhangi bir FAIL push'u durdurur)
+bash docs/publish_precheck.sh --allow-remote
+
+# 2) Push (kapılar yeşilse)
+git push origin main
+
+# 3) CI'ı izle (11 job — K1-K9 + action-runtimes + budget + ...)
+RUN_ID=$(gh run list --limit 1 --json databaseId -q '.[0].databaseId')
+gh run watch $RUN_ID --exit-status
+
+# 4) Son durum + artifact'lar (17 adet beklenir)
+gh run view $RUN_ID --json jobs --jq '.jobs[] | "\(.name)\t\(.conclusion)"'
+gh api "repos/ali-han-kaya/leibniz2/actions/runs/$RUN_ID/artifacts" \
+  --jq '.artifacts[].name' | sort
+```
+
+> **Tek komut karşılığı:** `bash docs/publish_wrapper.sh` — repo zaten yayında
+> olduğundan **idempotent**: precheck → push → CI izle; repo/remote adımları
+> atlanır. Önce `--dry-run` ile önizle.
+>
+> **AŞAMA 1 (b) tamamlandıysa** 4. adıma ek olarak:
+> `python3 _calisma/CIKTI/status_checks.py --gh` → `SONUÇ: PASS` (9 check +
+> merge engeli smoke) — koruma/check eşleşmesini canlı doğrular.
+
+Her adımın ayrıntısı aşağıdaki AŞAMA bölümlerindedir; bu döngü onların günlük
+kullanım karşılığıdır.
 
 ---
 
@@ -159,8 +208,12 @@ KEEP_WORKTREE=1 bash _calisma/CIKTI/ci_repack_test.sh  # geçici worktree'yi sak
 
 ## AŞAMA 1 — GitHub'da repo oluştur (`gh` ile, interaktif değil)
 
+> **Durum:** (a) ✅ **UYGULANDI** (2026-08-18) — repo canlı; komutlar yalnızca
+> kayıt/tarihçe içindir. (b) ⏳ **BEKLEMEDE** — branch protection henüz
+> kurulmadı; kalan tek kurulum adımı (aşağıda adım adım + görsel kılavuz).
+
 ```bash
-# (a) Kişisel hesabın altında boş repo oluştur
+# (a) ✅ UYGULANDI — kişisel hesabın altında boş repo oluştur (kayıt amaçlı)
 gh repo create leibniz2 \
     --description "Stoic-Hume V5 — fail-closed academic delivery with Z3 + Lean 4 proofs" \
     --public \
@@ -170,11 +223,11 @@ gh repo create leibniz2 \
     --add-readme=false     # bizim README'miz commit'lenecek; çakışmasın
 
 # Wrapper (publish_wrapper.sh) kullanılıyorsa burada OTOMATİK doğrulama koşar:
-#   python3 _calisma/CIKTI/status_checks.py      # 8 ad workflow'dan türetilir
+#   python3 _calisma/CIKTI/status_checks.py      # 9 ad workflow'dan türetilir
 #   python3 _calisma/CIKTI/status_checks.py --gh # GitHub eşleşmesi (koruma yoksa UYARI,
 #                                                # gerçek drift varsa FAIL — fail-closed)
 
-# (b) Branch koruması — GitHub web UI (gh api yerine; manuel + şeffaf)
+# (b) ⏳ BEKLEMEDE — Branch koruması — GitHub web UI (gh api yerine; manuel + şeffaf)
 #     Hazır tarayıcı linki (kopyala-yapıştır):
 #       https://github.com/ali-han-kaya/leibniz2/settings/branches
 #
@@ -266,10 +319,12 @@ open "https://github.com/ali-han-kaya/leibniz2/settings/branches"
    eşitle veya workflow'u güncelle.
 
 **Beklenen çıktılar:**
-- `gh repo create` → "Created repository ali-han-kaya/leibniz2"
-- Tarayıcıda Settings → Branches → `main` için kural eklendi (koruma aktif)
+- (a) ✅ UYGULANDI — `gh repo create` → "Created repository ali-han-kaya/leibniz2" (2026-08-18)
+- (b) ⏳ BEKLEMEDE — Tarayıcıda Settings → Branches → `main` için kural eklendi (koruma aktif)
 
-**Görsel doğrulama:** https://github.com/ali-han-kaya/leibniz2 adresi boş repo olarak açılmalı.
+**Görsel doğrulama:** https://github.com/ali-han-kaya/leibniz2 — repo yayında
+(README render edilmiş, Actions sekmesinde run'lar, `.github/workflows/verify.yml`
+görünür).
 
 Koruma kurulduktan sonra doğrulama → yukarıdaki adım 9 (veya AŞAMA 0'ı
 `--allow-remote` ile tekrar çalıştır — (e) adımı aynı eşleşmeyi VE
@@ -319,10 +374,14 @@ python3 _calisma/CIKTI/status_checks.py
 
 ## AŞAMA 2 — Remote ekle + push (geri dönüşü olan adım)
 
+> **Durum:** ✅ **UYGULANDI** (2026-08-18) — `origin` ekli, ilk push yapıldı.
+> Komutlar yalnızca kayıt/tarihçe içindir; günlük push = `git push origin main`
+> (yukarıdaki INCREMENTAL PUSH bölümü). Bu akışı tekrarlama.
+
 ```bash
 cd ~/Desktop/leibniz2
 
-# (a) Remote ekle (token değil — SSH veya gh'nin auth'u yeterli)
+# (a) ✅ UYGULANDI — Remote ekle (token değil — SSH veya gh'nin auth'u yeterli)
 gh repo set-default leibniz2  # (opsiyonel; repo'yu default yapar)
 git remote add origin git@github.com:$(gh repo view --json owner -q '.owner.login')/leibniz2.git
 
@@ -355,10 +414,13 @@ Branch 'main' set up to track remote 'origin/main'.
 
 ---
 
-## AŞAMA 3 — CI çalıştığını doğrula (5-15 dk bekle)
+## AŞAMA 3 — CI doğrulama (her push'ta — incremental)
+
+> **Durum:** 🔄 **aktif** — her push'ta tekrarlanır. Bu bölüm, INCREMENTAL
+> PUSH döngüsündeki 3-4. adımların detayıdır (job tablosu + artifact listesi).
 
 ```bash
-# (a) İlk run'ı tetikle (push zaten tetiklemiş olmalı; kontrol için bekle)
+# (a) Push'u tetikleyen run'ı bul (push zaten run başlatır; kontrol için bekle)
 gh run list --limit 3 --json databaseId,status,conclusion,name
 # Tüm run'lar "in_progress" veya "completed" olmalı
 
@@ -366,7 +428,7 @@ gh run list --limit 3 --json databaseId,status,conclusion,name
 RUN_ID=$(gh run list --limit 1 --json databaseId -q '.[0].databaseId')
 gh run watch $RUN_ID --exit-status
 
-# (c) Artifact'ları kontrol et (11 adet olmalı — liste aşağıda)
+# (c) Artifact'ları kontrol et (17 adet olmalı — liste aşağıda)
 gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_bytes) B)"'
 ```
 
@@ -377,7 +439,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 **Beklenen (11 job):**
 | Job | Beklenen sonuç |
 |---|---|
-| Delivery verification — K1-K9 (single entry point) | ✅ PASS (P0=0, P1=0) — K1-K7 + K0 + soy hattı + bütçe + K8 (Z3 12/12) + K9 (Lean) tek komutta; pre-commit 5 hook'u advisory bölüm olarak aynı job içinde |
+| Delivery verification — K1-K9 (single entry point) | ✅ PASS (P0=0, P1=0) — K1-K7 + K0 + soy hattı + bütçe + K8 (Z3 12/12) + K9 (Lean) tek komutta; pre-commit 6 hook'u advisory bölüm olarak aynı job içinde |
 | Action runtime check (node24) | ✅ her `uses:` action'ın `runs.using=node24` olduğu doğrulanır (deprecated node → FAIL); verify ile paralel |
 | Budget shield (aggregated) | ✅ limit içinde (sidecar birleştirildi); PR'da tek "PR doğrulama durumu" yorumu (bütçe + pre-commit) + precommit-p0/p1 etiketi |
 | Pre-commit P0 label gate | ✅ precommit-p0 etiketi yoksa PASS; varsa FAIL (merge bloke — required check) |
@@ -413,7 +475,7 @@ kaynaklar `refs-online`'da advisory olarak izlenir (kapıyı kırmaz).
 
 ---
 
-## OPSİYONEL AŞAMA 4 — Branch protection'ın çalıştığını kanıtla
+## OPSİYONEL AŞAMA 4 — Branch protection'ın çalıştığını kanıtla (1 (b) sonrası)
 
 ```bash
 # (a) Main'e doğrudan bir değişiklik push'la — branch protection REDDETMELI.
@@ -496,15 +558,16 @@ gh repo edit --enable-squash-merge --enable-rebase-merge \
 
 ## ÖZET (tek bakışta)
 
-| Adım | Komut | Ne zaman |
+| Adım | Komut | Durum / Ne zaman |
 |---|---|---|
-| 0. Ön-kontrol | `bash docs/publish_precheck.sh` (tek komut) | her şeyden önce |
-| 0.5 Repack testi | `bash _calisma/CIKTI/ci_repack_test.sh` | AŞAMA 0 yeşilse (opsiyonel, önerilir) |
-| 1. Repo oluştur | `gh repo create leibniz2 --public ...` | AŞAMA 0 yeşilse |
-| 2. Push | `git push -u origin main` | AŞAMA 1 yeşilse |
-| 3. CI izle | `gh run watch` | AŞAMA 2 sonrası 5-15 dk |
-| 4. Doğrula | artifact listesi + PASS | AŞAMA 3 sonrası |
-| — (tek komut) | `bash docs/publish_wrapper.sh [--with-stage4] [--dry-run]` | AŞAMA 0 yeşilse; önce `--dry-run` ile prova |
+| 0. Ön-kontrol | `bash docs/publish_precheck.sh --allow-remote` | ✅ hazır — her push öncesi |
+| 0.5 Repack testi | `bash _calisma/CIKTI/ci_repack_test.sh` | opsiyonel, önerilir |
+| 1 (a). Repo oluştur | `gh repo create leibniz2 --public ...` | ✅ UYGULANDI — kayıt amaçlı |
+| 1 (b). Branch protection | web UI (link + görsel kılavuz) | ⏳ BEKLEMEDE — kalan kurulum adımı |
+| 2. Remote + ilk push | `git remote add origin …; git push -u origin main` | ✅ UYGULANDI — kayıt amaçlı |
+| 3. Push (günlük) | `git push origin main` | 🔄 her değişiklikte (INCREMENTAL PUSH) |
+| 4. CI izle + doğrula | `gh run watch` + job/artifact kontrolü | 🔄 her push'ta |
+| — (tek komut) | `bash docs/publish_wrapper.sh` | idempotent; önce `--dry-run` ile prova |
 
 **Bilinen sınırlar:**
 - K6-DETERM metadata-stripped PDF hash'i run'lar arası DEĞİŞEBİLİR — belgelenmiş
