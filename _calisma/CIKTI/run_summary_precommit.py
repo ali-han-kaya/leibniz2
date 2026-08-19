@@ -25,20 +25,38 @@ def summary_sink():
         yield sys.stdout
 
 
-def render(sink, path="logs/PRECOMMIT_RAPORU.md"):
-    """Pre-commit bölümünü sink'e yaz (rapor yoksa advisory not)."""
+def _load(path="logs/PRECOMMIT_RAPORU.md"):
+    """(findings, hooks, verdict) — rapor yoksa None (tek kaynak ayrıştırma)."""
     report = pathlib.Path(path)
     if not report.exists():
-        sink.write("## 🔍 Pre-commit: rapor bulunamadı\n\n"
-                   "> `logs/PRECOMMIT_RAPORU.md` üretilmedi "
-                   "(pre-commit kurulumu başarısız?).\n")
-        return
-
+        return None
     text = report.read_text(encoding="utf-8")
     findings = re.findall(r"^\| (P0|P1) \| (.+) \|$", text, re.M)
     hooks = re.findall(r"^\| ([^|]+?) \| (Passed|Failed) \|$", text, re.M)
     m = re.search(r"^- \*\*Sonuç:\*\* (.+)$", text, re.M)
     verdict = m.group(1).strip() if m else "bilinmiyor"
+    return findings, hooks, verdict
+
+
+def status(path="logs/PRECOMMIT_RAPORU.md"):
+    """'PASS' | 'FAIL' | 'MISSING' — durum panosu için tek satır özet."""
+    loaded = _load(path)
+    if loaded is None:
+        return "MISSING"
+    findings, _, _ = loaded
+    return "FAIL" if findings else "PASS"
+
+
+def render(sink, path="logs/PRECOMMIT_RAPORU.md"):
+    """Pre-commit bölümünü sink'e yaz (rapor yoksa advisory not)."""
+    loaded = _load(path)
+    if loaded is None:
+        sink.write("## 🔍 Pre-commit: rapor bulunamadı\n\n"
+                   "> `logs/PRECOMMIT_RAPORU.md` üretilmedi "
+                   "(pre-commit kurulumu başarısız?).\n")
+        return
+
+    findings, hooks, verdict = loaded
 
     if findings:
         sink.write(f"## 🔴 Pre-commit bulguları: {len(findings)} bulgu\n\n")

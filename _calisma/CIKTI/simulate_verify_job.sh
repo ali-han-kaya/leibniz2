@@ -228,7 +228,7 @@ main() {
 
   echo "Çıktılar: $SIM_DIR"
   echo "  verify_report.txt        (--full + pre-commit append, tek log)"
-  echo "  summary.md               (pre-commit + K0 + bütçe + soy hattı + K katmanları 5 bölüm)"
+  echo "  summary.md               (durum panosu + pre-commit + K0 + bütçe + soy hattı + K katmanları)"
   echo "  verify_report.sha256     (+ refs/history .sha256)"
   echo "  config/                  (ham + şema + etkin + diff + .sha256)"
   echo "  logs/                    (precommit.log + PRECOMMIT_RAPORU.md + CACHE)"

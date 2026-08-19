@@ -24,15 +24,30 @@ def summary_sink():
         yield sys.stdout
 
 
+def _load(path="k0_findings.json"):
+    """K0 sidecar'ı — yoksa None (tek kaynak okuma)."""
+    if not os.path.isfile(path):
+        return None
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def status(path="k0_findings.json"):
+    """'PASS' | 'FAIL' | 'MISSING' — durum panosu için tek satır özet."""
+    data = _load(path)
+    if data is None:
+        return "MISSING"
+    return "FAIL" if data.get("count", 0) else "PASS"
+
+
 def render(sink, path="k0_findings.json"):
     """K0 bölümünü sink'e yaz (sidecar yoksa advisory not). Döndürür bulgu sayısı."""
-    if not os.path.isfile(path):
+    data = _load(path)
+    if data is None:
         sink.write("## 🔍 K0 bayat zip: sidecar bulunamadı\n\n"
                    "> `verify_delivery.py` `--k0-out` üretmedi "
                    "(verify job'u çalışmadı?).\n")
         return 0
-    with open(path, encoding="utf-8") as f:
-        data = json.load(f)
     count = data.get("count", 0)
     findings = data.get("findings", [])
     if count:

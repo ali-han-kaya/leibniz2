@@ -54,6 +54,16 @@ def _normalize(summary):
     return [], [run]
 
 
+def status(path=DEFAULT_PATH):
+    """'PASS' | 'FAIL' | 'MISSING' — durum panosu için tek satır özet."""
+    if not os.path.isfile(path):
+        return "MISSING"
+    with open(path, encoding="utf-8") as f:
+        summary = json.load(f)
+    failures, _ = _normalize(summary)
+    return "FAIL" if failures else "PASS"
+
+
 def render(sink, path=DEFAULT_PATH):
     """Bütçe bölümünü sink'e yaz (aggregated veya single-run şekli)."""
     if not os.path.isfile(path):

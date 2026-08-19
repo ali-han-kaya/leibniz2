@@ -64,6 +64,10 @@ class TestConsolidateSummary(unittest.TestCase):
             paths = self._sidecars(d)
             code, out = self._run(paths)
         self.assertEqual(code, 0)
+        # Durum panosu en üstte, tek satırda, üç ✅ ile.
+        self.assertTrue(
+            out.startswith("## 📊 Durum panosu: Pre-commit ✅ · K0 ✅ · Bütçe ✅\n"),
+            repr(out[:80]))
         headers = [
             "## ✅ Pre-commit: bulgu yok",
             "## ✅ K0 bayat zip: temiz",
@@ -86,11 +90,48 @@ class TestConsolidateSummary(unittest.TestCase):
             paths["precommit"] = dd / "logs" / "PRECOMMIT_RAPORU.md"
             code, out = self._run(paths)
         self.assertEqual(code, 0)
+        # Panoda eksik sidecar ⚠️ olarak görünür (tek satır korunur).
+        self.assertTrue(out.startswith(
+            "## 📊 Durum panosu: Pre-commit ⚠️ · K0 ⚠️ · Bütçe ⚠️\n"),
+            repr(out[:80]))
         self.assertIn("Pre-commit: rapor bulunamadı", out)
         self.assertIn("K0 bayat zip: sidecar bulunamadı", out)
         self.assertIn("Bütçe kalkanı: sidecar bulunamadı", out)
         self.assertIn("Soy hattı: sidecar bulunamadı", out)
         self.assertIn("K katmanları: sidecar bulunamadı", out)
+
+    def test_dashboard_fail_states(self):
+        with tempfile.TemporaryDirectory() as d:
+            dd = pathlib.Path(d)
+            (dd / "logs").mkdir(parents=True, exist_ok=True)
+            (dd / "logs" / "PRECOMMIT_RAPORU.md").write_text(
+                "| P1 | bir bulgu |\n- **Sonuç:** 4/5 Passed\n",
+                encoding="utf-8")
+            (dd / "k0_findings.json").write_text(
+                json.dumps({"count": 1, "findings": [
+                    {"rel": "x.zip", "sha256": "b" * 64}]}),
+                encoding="utf-8")
+            (dd / "budget_verify.json").write_text(
+                json.dumps({"limit": 5.0, "estimated_usd": 7.5,
+                            "verdict": "FAIL"}), encoding="utf-8")
+            (dd / "lineage_findings.json").write_text(
+                json.dumps({"ok": True, "count": 0, "generations": []}),
+                encoding="utf-8")
+            (dd / "klayers.json").write_text(
+                json.dumps({"verdict": "PASS", "counts": {"P0": 0, "P1": 0},
+                            "layers": {}}), encoding="utf-8")
+            paths = {
+                "precommit": dd / "logs" / "PRECOMMIT_RAPORU.md",
+                "k0": dd / "k0_findings.json",
+                "budget": dd / "budget_verify.json",
+                "lineage": dd / "lineage_findings.json",
+                "klayers": dd / "klayers.json",
+            }
+            code, out = self._run(paths)
+        self.assertEqual(code, 0)
+        self.assertTrue(out.startswith(
+            "## 📊 Durum panosu: Pre-commit 🔴 · K0 🔴 · Bütçe 🔴\n"),
+            repr(out[:80]))
 
 
 if __name__ == "__main__":
