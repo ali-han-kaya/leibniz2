@@ -1358,14 +1358,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
-          bash docs/publish_precheck.sh --allow-remote --ci 2>&1 | tee precheck_report.txt
+          # Raporu gitignore'lu .freebuff/ altına yaz — yoksa tee, tree-temiz
+          # kontrolü sırasında repo kökünde untracked dosya oluşturup
+          # "working tree temiz değil" FAIL'ine yol açar.
+          mkdir -p .freebuff
+          bash docs/publish_precheck.sh --allow-remote --ci 2>&1 | tee .freebuff/precheck_report.txt
 
       - name: Upload precheck report
         if: always()
         uses: actions/upload-artifact@v6
         with:
           name: precheck-report
-          path: precheck_report.txt
+          path: .freebuff/precheck_report.txt
           if-no-files-found: ignore
           retention-days: 30

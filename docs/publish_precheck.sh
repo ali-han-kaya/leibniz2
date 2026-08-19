@@ -8,6 +8,9 @@
 #   bash docs/publish_precheck.sh --skip-smoke    # smoke testi atla (commit oluşturmaz)
 #   bash docs/publish_precheck.sh --ci            # CI advisory job: yerel-only kontrolleri INFO yapar
 #
+#   Not: çıktıyı repo içine yazacaksan gitignore'lu bir yola yönlendir
+#        (ör. tee .freebuff/precheck_report.txt) — yoksa tree-temiz kontrolü FAIL olur.
+#
 # Her kontrol [PASS]/[FAIL] raporlanır; herhangi bir FAIL → exit 1 (fail-closed):
 # senaryonun AŞAMA 1'ine ancak tüm kapılar yeşilse geçilir.
 # AŞAMA 0'ın manuel karşılığı: docs/PUBLISH_SCENARIO.md → "AŞAMA 0".
@@ -50,10 +53,11 @@ else
   fail "git repo yok: $REPO_ROOT"
 fi
 
-if [ -z "$(git status --porcelain)" ]; then
+DIRTY="$(git status --porcelain)"
+if [ -z "$DIRTY" ]; then
   pass "working tree temiz"
 else
-  fail "working tree temiz değil — önce commit/stash et (git status --short)"
+  fail "working tree temiz değil — git status --porcelain: $(echo "$DIRTY" | head -5 | tr '\n' '; ')"
 fi
 
 # History'deki noise/marker başlıklar (commit-msg hook'uyla AYNI ölçüt).
@@ -125,12 +129,13 @@ fi
 if command -v gh >/dev/null 2>&1; then
   pass "gh CLI kurulu ($(gh --version 2>/dev/null | head -1 | awk '{print $3}'))"
   if [ "$CI_MODE" = "1" ]; then
-    # CI: GH_TOKEN env token'ı — `gh auth status` env-token'ı her zaman
-    # göstermeyebilir; gerçek API erişimini `gh api user` ile doğrula.
-    if gh api user >/dev/null 2>&1; then
-      pass "gh auth: $(gh api user -q .login 2>/dev/null || echo '?')"
+    # CI: GITHUB_TOKEN repo-kapsamlıdır — `gh api user` (GET /user) her token
+    # tipiyle çalışmayabilir; repo-scoped çağrı (contents: read yeterli)
+    # garantilidir. Workflow GITHUB_REPOSITORY + GH_TOKEN/GITHUB_TOKEN verir.
+    if OUT="$(gh api "repos/${GITHUB_REPOSITORY:-_/none}" -q .full_name 2>&1)"; then
+      pass "gh auth: $OUT"
     else
-      fail "gh auth yok — workflow GH_TOKEN env'i set etmeli (github.token)"
+      fail "gh auth yok — gh api repos/${GITHUB_REPOSITORY:-?}: $(echo "$OUT" | head -1)"
     fi
   elif gh auth status >/dev/null 2>&1; then
     pass "gh auth: $(gh api user -q .login 2>/dev/null || echo '?')"
