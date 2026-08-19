@@ -282,7 +282,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 | Job | Beklenen sonuç |
 |---|---|
 | Delivery verification — K1-K9 (single entry point) | ✅ PASS (P0=0, P1=0) — K1-K7 + K0 + soy hattı + bütçe + K8 (Z3 12/12) + K9 (Lean) tek komutta; pre-commit 4 hook'u advisory bölüm olarak aynı job içinde |
-| Budget shield (aggregated) | ✅ limit içinde (sidecar birleştirildi) |
+| Budget shield (aggregated) | ✅ limit içinde (sidecar birleştirildi); PR'da tek "PR doğrulama durumu" yorumu (bütçe + pre-commit) + precommit-p0/p1 etiketi |
 | Static markdown reports (incl. pre-commit findings) | ✅ bundle yüklendi |
 | Reproducibility bundle | ✅ manifest.txt + SHA-256 (run_id ile) |
 | Config drift check (gen_config --dry-run) | ✅ config paketle uyumlu |
@@ -407,8 +407,8 @@ gh repo edit --enable-squash-merge --enable-rebase-merge \
   Repack tarafı sidecar reuse ile byte-identical (V5l + repack-verify kapısı).
 - İlk run soğuk başlangıç: Z3 + Lean 4 (elan stable) kurulumu toplam süreyi
   uzatır (~5-15 dk); sonraki run'lar cache ile hızlanır.
-- `manifest-comment` ve PR yorumları (bütçe aşımı, pre-commit P0/P1) yalnızca
-  `pull_request` olayında çalışır; push'ta üretilmez.
+- `manifest-comment` ve tek "PR doğrulama durumu" yorumu (bütçe + pre-commit
+  P0/P1) yalnızca `pull_request` olayında çalışır; push'ta üretilmez.
 - Branch protection `strict:true` — fork'tan PR'lerde CI çalışmayabilir; bu beklenen davranış.
 
 ---

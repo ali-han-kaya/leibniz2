@@ -231,105 +231,9 @@ jobs:
           echo "PRECOMMIT_CACHE.md yazıldı:"
           cat logs/PRECOMMIT_CACHE.md
 
-      # ─── P0/P1 varsa PR etiketi + yorum ──────────────────────────────────
-      # Advisory pre-commit bulgularında P0 ve P1 için AYRI etiket ve AYRI
-      # yorum düşülür: precommit-p0 (🔴) + precommit-p1 (🟠). Yorum spam'ini
-      # önlemek için aynı marker'lı eski yorum GÜNCELLENİR (yenisi oluşturulmaz);
-      # bulgu yoksa o etiket kaldırılır — etiketler PR'nin güncel durumunu
-      # yansıtır. Yalnızca pull_request olayında; budget PR yorumuyla aynı desen.
-      - name: Pre-commit P0/P1 — PR labels + comments
-        if: always() && github.event_name == 'pull_request'
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const fs = require('fs');
-            const path = 'logs/PRECOMMIT_RAPORU.md';
-
-            // P0 (kritik) ve P1 (uyarı) aynı desenle yönetilir: ayrı etiket,
-            // ayrı marker, ayrı yorum. İkisi de advisory'dir.
-            const TARGETS = [
-              { priority: 'P0', label: 'precommit-p0', marker: '<!-- precommit-p0-bot -->', emoji: '🔴', title: 'Pre-commit P0 bulgusu (advisory)' },
-              { priority: 'P1', label: 'precommit-p1', marker: '<!-- precommit-p1-bot -->', emoji: '🟠', title: 'Pre-commit P1 bulgusu (advisory)' },
-            ];
-
-            if (!fs.existsSync(path)) {
-              console.log('PRECOMMIT_RAPORU.md yok — atlanıyor');
-              return;
-            }
-            const text = fs.readFileSync(path, 'utf8');
-
-            for (const t of TARGETS) {
-              const findings = [];
-              const re = new RegExp(`^\\| ${t.priority} \\| (.+) \\|$`, 'gm');
-              let m;
-              while ((m = re.exec(text)) !== null) findings.push(m[1].trim());
-              const has = findings.length > 0;
-
-              // Etiketi PR'nin güncel durumuyla senkron tut: bulgu varsa ekle,
-              // yoksa kaldır (aynı etiketi tekrar eklemek no-op'tur).
-              const labels = await github.rest.issues.listLabelsOnIssue({
-                issue_number: context.issue.number,
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-              });
-              const hasLabel = labels.data.some(l => l.name === t.label);
-              if (has && !hasLabel) {
-                await github.rest.issues.addLabels({
-                  issue_number: context.issue.number,
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  labels: [t.label],
-                });
-                console.log(`Etiket eklendi: ${t.label}`);
-              } else if (!has && hasLabel) {
-                await github.rest.issues.removeLabel({
-                  issue_number: context.issue.number,
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  name: t.label,
-                });
-                console.log(`Etiket kaldırıldı: ${t.label}`);
-              }
-
-              if (!has) {
-                console.log(`${t.priority} bulgusu yok — yorum atlanıyor`);
-                continue;
-              }
-
-              const body = [
-                t.marker,
-                `${t.emoji} **${t.title}**`,
-                '',
-                ...findings.map(f => `- ${f}`),
-                '',
-                `> Detay: [run #${context.runId}](${context.payload.repository.html_url}/actions/runs/${context.runId}) — ` +
-                '`precommit-logs` artifact\'ındaki PRECOMMIT_RAPORU.md.',
-              ].join('\n');
-
-              const { data: comments } = await github.rest.issues.listComments({
-                issue_number: context.issue.number,
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-              });
-              const existing = comments.find(c => (c.body || '').includes(t.marker));
-              if (existing) {
-                await github.rest.issues.updateComment({
-                  comment_id: existing.id,
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  body,
-                });
-                console.log(`Mevcut ${t.priority} yorumu güncellendi`);
-              } else {
-                await github.rest.issues.createComment({
-                  issue_number: context.issue.number,
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  body,
-                });
-                console.log(`${t.priority} yorumu oluşturuldu`);
-              }
-            }
+      # PR etiket + yorum yönetimi budget job'ının "PR status — labels +
+      # comment" adımına taşındı: tek PR yorumu hem bütçe hem pre-commit
+      # durumunu gösterir; precommit-p0/p1 etiketleri de orada yönetilir.
 
       # ─── Tüm run summary bölümlerini TEK giriş noktasından üret ─────────
       # consolidate_summary.py, pre-commit + K0 + bütçe + soy hattı + K
@@ -504,6 +408,17 @@ jobs:
           name: config
           path: config_snapshot/
 
+      # PR durum yorumu (bütçe + pre-commit) için verify job'unun
+      # PRECOMMIT_RAPORU.json sidecar'ı. advisory: yoksa (verify --full
+      # çöküp rapor üretemediyse) yorum pre-commit bölümünü 'rapor
+      # bulunamadı' olarak gösterir.
+      - name: Download pre-commit findings (PRECOMMIT_RAPORU.json)
+        continue-on-error: true
+        uses: actions/download-artifact@v7
+        with:
+          name: precommit-logs
+          path: precommit_findings/
+
       - name: Consolidate budget report
         run: |
           mkdir -p budget
@@ -531,38 +446,153 @@ jobs:
         run: |
           python3 _calisma/CIKTI/run_summary_budget.py
 
-      # ─── Bütçe aşımı uyarısını PR yorumu olarak düş ─────────────────────
-      - name: Budget gate — PR comment (on exceedance)
+      # ─── Tek PR yorumu: bütçe + pre-commit durumu ─────────────────────
+      # Eski ayrı "Budget gate — PR comment" adımı ile verify job'undaki
+      # pre-commit etiket/yorum adımı burada BİRLEŞTİRİLDİ. TEK yorum
+      # (marker upsert) hem bütçe aşımını hem pre-commit P0/P1 bulgularını
+      # gösterir; precommit-p0/p1 etiketleri de burada senkronlanır.
+      - name: PR status — labels + comment (bütçe + pre-commit)
         if: always() && github.event_name == 'pull_request'
         uses: actions/github-script@v8
         with:
           script: |
             const fs = require('fs');
-            const path = 'budget/index.json';
-            if (!fs.existsSync(path)) return;
-            const summary = JSON.parse(fs.readFileSync(path, 'utf8'));
-            const failures = summary.failures || [];
-            if (failures.length === 0) return;
+            const BUDGET_PATH = 'budget/index.json';
+            const PC_PATH = 'precommit_findings/PRECOMMIT_RAPORU.json';
+            const MARKER = '<!-- stoic-hume-v5-pr-status -->';
 
-            const lines = failures.map(f =>
-              `- **${f.source || 'bilinmeyen'}**: $${f.estimated_usd} / $${f.limit} limiti ` +
-              `(+$${(f.estimated_usd - f.limit).toFixed(2)} aşım, ~${f.tokens_est} token)`
-            );
-            const body = [
-              '⚠️ **Bütçe limiti aşıldı**',
-              '',
-              ...lines,
-              '',
-              `> Yöntem: \`${summary.method}\`. Fail-closed: P1 bulgusu olarak işaretlendi.`,
-              `> Detay: [run #${context.runId}](${context.payload.repository.html_url}/actions/runs/${context.runId})`,
-            ].join('\n');
+            const budget = fs.existsSync(BUDGET_PATH)
+              ? JSON.parse(fs.readFileSync(BUDGET_PATH, 'utf8'))
+              : null;
+            const pc = fs.existsSync(PC_PATH)
+              ? JSON.parse(fs.readFileSync(PC_PATH, 'utf8'))
+              : null;
 
-            await github.rest.issues.createComment({
+            // ── Bütçe bölümü ──
+            const budgetLines = [];
+            let budgetBadge;
+            if (budget) {
+              const failures = budget.failures || [];
+              const runs = budget.runs || [];
+              if (failures.length) {
+                budgetBadge = '⚠️ **Bütçe: limit aşıldı**';
+                for (const f of failures) {
+                  budgetLines.push(
+                    `- **${f.source || 'bilinmeyen'}**: $${f.estimated_usd} / $${f.limit} limiti ` +
+                    `(+$${(f.estimated_usd - f.limit).toFixed(2)} aşım, ~${f.tokens_est} token)`);
+                }
+              } else {
+                budgetBadge = '✅ **Bütçe: limit içinde**';
+                for (const r of runs) {
+                  budgetLines.push(`- **${r.source || 'verify'}**: $${r.estimated_usd} / $${r.limit} (~${r.tokens_est} token)`);
+                }
+              }
+              if (budget.method) budgetLines.push(`> Yöntem: \`${budget.method}\``);
+            } else {
+              budgetBadge = '⚠️ **Bütçe: sidecar bulunamadı**';
+            }
+
+            // ── Pre-commit bölümü ──
+            const pcLines = [];
+            let pcBadge;
+            const pcFindings = pc ? (pc.findings || []) : [];
+            const p0 = pcFindings.filter(f => f.priority === 'P0');
+            const p1 = pcFindings.filter(f => f.priority === 'P1');
+            if (pc) {
+              if (p0.length || p1.length) {
+                pcBadge = '🔴 **Pre-commit: bulgu var**';
+                if (p0.length) {
+                  pcLines.push(`- 🔴 P0 (${p0.length})`);
+                  for (const f of p0) pcLines.push(`  - ${f.message}`);
+                }
+                if (p1.length) {
+                  pcLines.push(`- 🟠 P1 (${p1.length})`);
+                  for (const f of p1) pcLines.push(`  - ${f.message}`);
+                }
+              } else {
+                pcBadge = '✅ **Pre-commit: bulgu yok**';
+                const c = pc.counts || {};
+                if (c.hooks != null && c.passed != null) {
+                  pcLines.push(`- ${c.passed}/${c.hooks} hook geçti`);
+                }
+              }
+            } else {
+              pcBadge = '⚠️ **Pre-commit: rapor bulunamadı**';
+            }
+
+            // ── Etiket senkronu (precommit-p0 / precommit-p1) ──
+            const LABELS = [
+              { label: 'precommit-p0', has: p0.length > 0 },
+              { label: 'precommit-p1', has: p1.length > 0 },
+            ];
+            const labels = await github.rest.issues.listLabelsOnIssue({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body,
             });
+            for (const L of LABELS) {
+              const hasLabel = labels.data.some(l => l.name === L.label);
+              if (L.has && !hasLabel) {
+                await github.rest.issues.addLabels({
+                  issue_number: context.issue.number,
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  labels: [L.label],
+                });
+                console.log(`Etiket eklendi: ${L.label}`);
+              } else if (!L.has && hasLabel) {
+                await github.rest.issues.removeLabel({
+                  issue_number: context.issue.number,
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  name: L.label,
+                });
+                console.log(`Etiket kaldırıldı: ${L.label}`);
+              }
+            }
+
+            // ── Tek yorum (upsert) ──
+            const runUrl = `${context.payload.repository.html_url}/actions/runs/${context.runId}`;
+            const body = [
+              '## 📊 PR doğrulama durumu (advisory)',
+              '',
+              '### 💰 Bütçe',
+              budgetBadge,
+              ...budgetLines,
+              '',
+              '### 🛡️ Pre-commit',
+              pcBadge,
+              ...pcLines,
+              '',
+              `> Detay: [run #${context.runId}](${runUrl})`,
+              '',
+              MARKER,
+            ].join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              per_page: 100,
+            });
+            const existing = comments.find(c => c.body && c.body.includes(MARKER));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                comment_id: existing.id,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body,
+              });
+              console.log(`Mevcut durum yorumu güncellendi: comment_id=${existing.id}`);
+            } else {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body,
+              });
+              console.log('Durum yorumu oluşturuldu');
+            }
 
       - name: Upload budget bundle
         if: always()
