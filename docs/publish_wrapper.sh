@@ -21,6 +21,8 @@
 #   - AŞAMA 0: origin varsa --allow-remote ile koşar (ilk publish'te düz koşar).
 #   - AŞAMA 1: repo zaten varsa oluşturma atlanır.
 #   - AŞAMA 2: origin eşleşiyorsa dokunulmaz; bekleyen commit yoksa push atlanır.
+#   - AŞAMA 1: repo oluşturma/varolma sonrası status_checks.py otomatik koşar
+#     (required check adları workflow'dan türetilir + --gh ile GitHub eşleşmesi).
 #   - AŞAMA 3: push yoksa HEAD için MEVCUT run'ı izler (yeni run yoksa atlar).
 #
 # GÜVENLİK:
@@ -127,12 +129,45 @@ else
   done_msg "repo oluşturuldu: $OWNER/$REPO_NAME ✓"
 fi
 
+# ── status_checks.py — required check adlarını workflow'dan türet ve (repo
+# oluşturulduysa) GitHub ile karşılaştır. TEK KAYNAK: workflow job `name:`'leri.
+# Branch protection henüz kurulu değilse --gh UYARI basar (web UI'dan kurulur)
+# — bu bir hata değil, "kapı henüz yok" demektir. Gerçek drift (eksik/fazla
+# check) FAIL eder (fail-closed).
+if [ -x _calisma/.venv_z3/bin/python ]; then
+  SC_PY=_calisma/.venv_z3/bin/python
+else
+  SC_PY=python3
+fi
+
+log "status_checks.py — beklenen required check adları:"
+if ! "$SC_PY" _calisma/CIKTI/status_checks.py | sed 's/^/    /'; then
+  fail "status_checks.py çalışmadı — workflow job adları ayrıştırılamadı"
+fi
+
+log "status_checks.py --gh — GitHub eşleşmesi:"
+set +e
+SC_GH_OUT="$("$SC_PY" _calisma/CIKTI/status_checks.py --gh 2>&1)"
+SC_GH_EXIT=$?
+set -e
+echo "$SC_GH_OUT" | sed 's/^/    /'
+if [ "$SC_GH_EXIT" -eq 0 ]; then
+  if echo "$SC_GH_OUT" | grep -q "SONUÇ: PASS"; then
+    log "branch protection birebir eşleşiyor ✓ (workflow ↔ GitHub)"
+  else
+    log "branch protection henüz kurulu değil — AŞAMA 1 (b) web UI'da kur (beklenen)"
+  fi
+elif [ "$DRY_RUN" = "1" ]; then
+  warn "status_checks.py --gh dry-run'da GitHub'a ulaşamadı (repo yeni oluşturulacak?) — önizleme devam"
+else
+  fail "status_checks.py --gh FAIL (exit $SC_GH_EXIT) — eksik/fazla check; listeyi workflow'la eşitle"
+fi
+
 # Branch protection artık web UI üzerinden (manuel). Linki logla + hatırlat:
 # ilk push'tan SONRA kurmak daha pratiktir (enforce-admins ilk push'u bloke edebilir).
 log "branch protection (manuel, push sonrası):"
 log "    https://github.com/$OWNER/$REPO_NAME/settings/branches"
-log "required check adları otomatik: python3 _calisma/CIKTI/status_checks.py"
-log "sonrasında doğrulama:            python3 _calisma/CIKTI/status_checks.py --gh"
+log "sonrasında doğrulama (tekrar):    python3 _calisma/CIKTI/status_checks.py --gh"
 
 # ─────────────────────────────────────────────────────────────────────────────
 step "AŞAMA 2 — Remote ekle + push (idempotent)"

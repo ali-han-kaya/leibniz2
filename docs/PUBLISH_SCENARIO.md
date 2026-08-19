@@ -164,6 +164,11 @@ gh repo create leibniz2 \
     --disable-projects=true \
     --add-readme=false     # bizim README'miz commit'lenecek; çakışmasın
 
+# Wrapper (publish_wrapper.sh) kullanılıyorsa burada OTOMATİK doğrulama koşar:
+#   python3 _calisma/CIKTI/status_checks.py      # 8 ad workflow'dan türetilir
+#   python3 _calisma/CIKTI/status_checks.py --gh # GitHub eşleşmesi (koruma yoksa UYARI,
+#                                                # gerçek drift varsa FAIL — fail-closed)
+
 # (b) Branch koruması — GitHub web UI (gh api yerine; manuel + şeffaf)
 #     Hazır tarayıcı linki (kopyala-yapıştır):
 #       https://github.com/ali-han-kaya/leibniz2/settings/branches
