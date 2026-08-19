@@ -7,7 +7,10 @@ hem yerelde çalışır → CI ile yerel arasında drift olmaz.
 
 Girdi : logs/precommit.log   (pre-commit run --all-files çıktısı)
         logs/precommit.exit  (exit kodu)
-Çıktı : logs/PRECOMMIT_RAPORU.md  (hook sonuçları + P0/P1 bulguları + ham log notu)
+        logs/commit_msg_findings.json  (check_commit_messages.py sidecar'ı —
+                                        varsa "Commit-msg (CI advisory)" bölümü)
+Çıktı : logs/PRECOMMIT_RAPORU.md  (hook sonuçları + P0/P1 bulguları + commit-msg
+                                     + ham log notu)
         logs/PRECOMMIT_RAPORU.json (aynı içeriğin makine-okunur hali: hook
                                      durumları Passed/Failed + bulgular + sayımlar)
         → her ikisi de `logs/` altında olduğundan precommit-logs artifact'ına
@@ -57,6 +60,17 @@ def parse_update_config(log_text):
     return uc_status, uc_output
 
 
+def load_commit_msg(path="logs/commit_msg_findings.json"):
+    """check_commit_messages.py sidecar'ı — yoksa/bozuksa None."""
+    p = pathlib.Path(path)
+    if not p.exists():
+        return None
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
 def parse_findings(log_text, uc_status, uc_output):
     """P0/P1 bulgularını ayrıştır; update-config FAIL'i ayrı P1 bulgusu yapar."""
     findings = []
@@ -74,8 +88,12 @@ def parse_findings(log_text, uc_status, uc_output):
     return findings
 
 
-def build_data(log_text, exit_code):
-    """Ayrıştırma sonucunu tek kaynak bir sözlüğe topla (MD + JSON ortak)."""
+def build_data(log_text, exit_code, commit_msg=None):
+    """Ayrıştırma sonucunu tek kaynak bir sözlüğe topla (MD + JSON ortak).
+
+    commit_msg (check_commit_messages.py sidecar'ı) verilirse 'commit_msg'
+    alanı olarak eklenir; None ise alan hiç yazılmaz (rapor geriye uyumlu).
+    """
     hooks = parse_hooks(log_text)
     uc_status, uc_output = parse_update_config(log_text)
     findings = parse_findings(log_text, uc_status, uc_output)
@@ -87,7 +105,7 @@ def build_data(log_text, exit_code):
     p0 = sum(1 for pri, _ in findings if pri == "P0")
     p1 = sum(1 for pri, _ in findings if pri == "P1")
 
-    return {
+    data = {
         "generated_at": now,
         "command": "pre-commit run --all-files --show-diff-on-failure",
         "exit_code": exit_code,
@@ -109,6 +127,9 @@ def build_data(log_text, exit_code):
             "p1": p1,
         },
     }
+    if commit_msg is not None:
+        data["commit_msg"] = commit_msg
+    return data
 
 
 def render_markdown(data):
@@ -156,6 +177,21 @@ def render_markdown(data):
             lines.append(f"| {f['priority']} | {escaped} |")
     else:
         lines.append("Bulgu yok — tüm hook'lar geçti.")
+
+    # Commit-msg (CI advisory): check_commit_messages.py sidecar'ı varsa.
+    cm = data.get("commit_msg")
+    if cm is not None:
+        checked = cm.get("checked", 0)
+        violations = cm.get("violations", [])
+        lines += ["", "## Commit-msg (CI advisory)", ""]
+        if violations:
+            lines.append(f"- ⚠️ {len(violations)} ihlal ({checked} commit denetlendi):")
+            for v in violations:
+                subject = (v.get("subject") or "").replace("|", "\\|")
+                detail = (v.get("detail") or "").replace("|", "\\|")
+                lines.append(f"  - `{v.get('commit', '?')}` — \"{subject}\": {detail}")
+        else:
+            lines.append(f"- ✅ İhlal yok ({checked} commit denetlendi).")
     lines += [
         "",
         "## Ham log",
@@ -175,7 +211,7 @@ def main() -> None:
     except Exception:
         exit_code = 1
 
-    data = build_data(log_text, exit_code)
+    data = build_data(log_text, exit_code, load_commit_msg())
 
     pathlib.Path("logs").mkdir(parents=True, exist_ok=True)
     pathlib.Path("logs/PRECOMMIT_RAPORU.md").write_text(

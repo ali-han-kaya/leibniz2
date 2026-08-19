@@ -111,7 +111,18 @@ step_precommit() {
   return "$status"
 }
 
-# ── 3) pre-commit bulgu raporu ─────────────────────────────────────────────
+# ── 3) commit-msg (advisory) — commit geçmişi kural denetimi ──────────────
+# CI'daki "Check commit messages (advisory)" adımıyla birebir: son N commit'i
+# commit_msg_hook.sh ile denetler, ihlalleri logs/commit_msg_findings.json'a
+# yazar. step_gen_report bu sidecar'ı PRECOMMIT_RAPORU'na ekler.
+step_commit_msg() {
+  cd "$SIM_DIR"
+  "$PY" "$REPO_ROOT/_calisma/CIKTI/check_commit_messages.py" \
+    --range "HEAD~10...HEAD" \
+    --out "$SIM_DIR/logs/commit_msg_findings.json"
+}
+
+# ── 4) pre-commit bulgu raporu ─────────────────────────────────────────────
 step_gen_report() {
   cd "$SIM_DIR"
   "$PY" "$REPO_ROOT/_calisma/CIKTI/gen_precommit_report.py"
@@ -199,6 +210,7 @@ main() {
 
   run_step "Run full verification (K1-K13, single entry)" closed step_full
   run_step "Run pre-commit (advisory, --all-files)"      advisory step_precommit
+  run_step "Check commit messages (advisory)"            advisory step_commit_msg
   run_step "Generate pre-commit findings report"         closed step_gen_report
   run_step "Pre-commit cache + hook env summary"         closed step_cache_summary
   run_step "Consolidate run summary (5 bölüm)"            closed step_consolidate_summary

@@ -116,5 +116,33 @@ class TestMain(unittest.TestCase):
         self.assertIn("Verify Stoic-Hume V5 delivery (fail-closed)", md_hooks)
 
 
+class TestCommitMsg(unittest.TestCase):
+    CM = {
+        "checked": 3,
+        "violations": [
+            {"commit": "abc1234", "subject": "wip: yarım iş",
+             "detail": "commit-msg: HATA — noise/marker başlık yasak"},
+        ],
+    }
+
+    def test_build_data_includes_commit_msg(self):
+        data = gpr.build_data(LOG_PASS, 0, self.CM)
+        self.assertEqual(data["commit_msg"], self.CM)
+
+    def test_build_data_omits_commit_msg_when_none(self):
+        data = gpr.build_data(LOG_PASS, 0)
+        self.assertNotIn("commit_msg", data)
+
+    def test_render_markdown_commit_msg_section(self):
+        data = gpr.build_data(LOG_PASS, 0, self.CM)
+        md = gpr.render_markdown(data)
+        self.assertIn("## Commit-msg (CI advisory)", md)
+        self.assertIn("1 ihlal (3 commit denetlendi)", md)
+        self.assertIn("wip: yarım iş", md)
+
+    def test_load_commit_msg_missing(self):
+        self.assertIsNone(gpr.load_commit_msg("/nonexistent/commit_msg.json"))
+
+
 if __name__ == "__main__":
     unittest.main()
