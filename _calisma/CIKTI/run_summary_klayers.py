@@ -14,7 +14,6 @@ import json
 import os
 import sys
 
-SUMMARY_PATH = os.environ.get("GITHUB_STEP_SUMMARY")
 
 # Bu script'in run summary'de gösterdiği katmanlar (sıralı).
 RENDER_LAYERS = ["K1", "K2", "K3", "K4", "K5", "K6", "K7", "K8", "K9", "K10"]
@@ -22,8 +21,9 @@ RENDER_LAYERS = ["K1", "K2", "K3", "K4", "K5", "K6", "K7", "K8", "K9", "K10"]
 
 @contextlib.contextmanager
 def summary_sink():
-    if SUMMARY_PATH:
-        with open(SUMMARY_PATH, "a", encoding="utf-8") as f:
+    summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary_path:
+        with open(summary_path, "a", encoding="utf-8") as f:
             yield f
     else:
         yield sys.stdout

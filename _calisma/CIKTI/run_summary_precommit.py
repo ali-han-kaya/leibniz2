@@ -13,13 +13,13 @@ import pathlib
 import re
 import sys
 
-SUMMARY_PATH = os.environ.get("GITHUB_STEP_SUMMARY")
 
 
 @contextlib.contextmanager
 def summary_sink():
-    if SUMMARY_PATH:
-        with open(SUMMARY_PATH, "a", encoding="utf-8") as f:
+    summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary_path:
+        with open(summary_path, "a", encoding="utf-8") as f:
             yield f
     else:
         yield sys.stdout

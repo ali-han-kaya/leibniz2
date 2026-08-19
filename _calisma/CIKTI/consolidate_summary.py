@@ -27,7 +27,6 @@ import run_summary_klayers as _klayers
 import run_summary_lineage as _lineage
 import run_summary_precommit as _precommit
 
-SUMMARY_PATH = os.environ.get("GITHUB_STEP_SUMMARY")
 
 # Bölüm → varsayılan sidecar yolu (verify job'uyla birebir).
 DEFAULT_PATHS = {
@@ -56,8 +55,9 @@ _STATUS_ICONS = {"PASS": "✅", "FAIL": "🔴", "MISSING": "⚠️"}
 
 @contextlib.contextmanager
 def summary_sink():
-    if SUMMARY_PATH:
-        with open(SUMMARY_PATH, "a", encoding="utf-8") as f:
+    summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary_path:
+        with open(summary_path, "a", encoding="utf-8") as f:
             yield f
     else:
         yield sys.stdout

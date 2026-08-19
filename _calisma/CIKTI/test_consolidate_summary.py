@@ -9,6 +9,7 @@ durumunda advisory (exit 0) davrandığını doğrular.
 import contextlib
 import io
 import json
+import os
 import pathlib
 import sys
 import tempfile
@@ -21,6 +22,15 @@ import consolidate_summary as cs  # noqa: E402
 
 
 class TestConsolidateSummary(unittest.TestCase):
+    def setUp(self):
+        # CI'da GITHUB_STEP_SUMMARY set olduğunda summary_sink() dosyaya
+        # yazar; bu testler stdout çıktısını doğrular — env'i temizle.
+        self._saved = os.environ.pop("GITHUB_STEP_SUMMARY", None)
+
+    def tearDown(self):
+        if self._saved is not None:
+            os.environ["GITHUB_STEP_SUMMARY"] = self._saved
+
     def _run(self, paths):
         buf = io.StringIO()
         argv = []

@@ -15,6 +15,15 @@ import run_summary_klayers as rsk
 
 
 class TestMain(unittest.TestCase):
+    def setUp(self):
+        # CI'da GITHUB_STEP_SUMMARY set olduğunda summary_sink() dosyaya
+        # yazar; bu testler stdout çıktısını doğrular — env'i temizle.
+        self._saved = os.environ.pop("GITHUB_STEP_SUMMARY", None)
+
+    def tearDown(self):
+        if self._saved is not None:
+            os.environ["GITHUB_STEP_SUMMARY"] = self._saved
+
     def _run(self, path):
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
