@@ -25,6 +25,13 @@
 # agent'ı repo dizinini TCC nedeniyle okuyamaz). Şablon yoksa script yerleşik
 # varsayılanı yazar (tek kaynak = script; Caches kopyası operasyonel).
 #
+# BÖLÜM 3 — verify mirror senkronu (sync_verify_mirror.sh'e delege eder)
+# verify_delivery.py --full koşusu launchd GUI agent rotasında repo yerine
+# TCC-safe mirror'dan (--dir) çalışır; mirror, CIKTI runtime dosyalarının ve
+# Lean ispatının kopyasıdır. --mirror bunu TEK KOMUTLA senkron eder (run.md
+# adım 4'ün yerine geçer); --mirror-check bayatlığı denetler (fail-closed:
+# 0 güncel / 1 bayat / 2 hata).
+#
 # Kullanım:
 #   update_preview.sh                      # HTML build (kaynak değişmediyse atla)
 #   update_preview.sh --force              # HTML yeniden build
@@ -35,6 +42,9 @@
 #   update_preview.sh --plist-check [HOME] # kurulu plist'ler güncel mi? (0 hepsi/1 bayat/2 şablon yok)
 #   update_preview.sh --plist-watch [N]    # şablonları izle; değişince yeniden üret
 #   update_preview.sh --plist-reset        # şablonları yerleşik varsayılandan geri yaz
+#   update_preview.sh --mirror             # verify mirror'ı senkron et (sync_verify_mirror.sh)
+#   update_preview.sh --mirror-check       # mirror güncel mi? (0 güncel/1 bayat/2 hata)
+#   update_preview.sh --mirror-force       # mirror'ı koşulsuz yeniden kopyala
 #   update_preview.sh --help
 #
 # Ortam değişkenleri (override):
@@ -384,6 +394,15 @@ case "${1:-build}" in
     ;;
   --plist-reset)
     plist_reset
+    ;;
+  --mirror)
+    "$SCRIPT_DIR/sync_verify_mirror.sh"
+    ;;
+  --mirror-force)
+    "$SCRIPT_DIR/sync_verify_mirror.sh" --force
+    ;;
+  --mirror-check)
+    "$SCRIPT_DIR/sync_verify_mirror.sh" --check
     ;;
   build)
     [ -f "$SRC" ] || { err "kaynak yok: $SRC"; exit 2; }

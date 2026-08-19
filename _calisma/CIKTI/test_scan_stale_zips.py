@@ -97,6 +97,41 @@ class TestScanStaleZips(unittest.TestCase):
             self.assertEqual(vd.scan_stale_zips(missing), [])
 
 
+class TestK0SkipDirs(unittest.TestCase):
+    def test_canonical_basename_always_skipped(self):
+        # Repo: --dir .../_calisma/CIKTI → "CIKTI" atlanır.
+        self.assertIn("CIKTI", vd.k0_skip_dirs("/x/_calisma/CIKTI"))
+        # TCC-safe mirror: --dir .../verify → "verify" atlanır (K0 false-P1
+        # önlenir — mirror kendi zip'lerini bayat sanmaz).
+        self.assertIn("verify",
+                      vd.k0_skip_dirs("/Users/x/Library/Caches/com.freebuff/verify"))
+        # Yine de CIKTI/TOOLKIT/.venv_z3 sabit istisnaları korunur.
+        self.assertTrue({"CIKTI", "TOOLKIT", ".venv_z3"}
+                        .issubset(vd.k0_skip_dirs("/x/_calisma/CIKTI")))
+
+    def test_toolkit_tolerant_drops_toolkit(self):
+        self.assertIn("TOOLKIT", vd.k0_skip_dirs("/x/_calisma/CIKTI"))
+        self.assertNotIn("TOOLKIT",
+                         vd.k0_skip_dirs("/x/_calisma/CIKTI", True))
+        # kanonik basename tolerant modda da korunur
+        self.assertIn("CIKTI", vd.k0_skip_dirs("/x/_calisma/CIKTI", True))
+
+    def test_mirror_dir_not_flagged_by_scan(self):
+        with tempfile.TemporaryDirectory() as d:
+            parent = pathlib.Path(d)
+            canonical = parent / "verify"  # TCC-safe mirror senaryosu
+            _touch(canonical / "TESLIM_KLASOR_V5_2026-08-17.zip")
+            _touch(canonical / "TESLIM_V5_FINAL_2026-08-17.zip")
+            # parent altında başka gerçek bayat kopya da olsun
+            _touch(parent / "stale_root.zip")
+            rels = sorted(
+                f["rel"].replace("\\", "/")
+                for f in vd.scan_stale_zips(parent, skip_dirs=vd.k0_skip_dirs(canonical))
+            )
+        # mirror'ın kendi zip'leri atlanır; yalnızca gerçek bayat kopya kalır
+        self.assertEqual(rels, ["stale_root.zip"])
+
+
 class TestToolkitTolerant(unittest.TestCase):
     def test_is_toolkit_rel(self):
         self.assertTrue(vd.is_toolkit_rel("TOOLKIT/x.zip"))

@@ -1,0 +1,218 @@
+#!/usr/bin/env bash
+# =============================================================================
+# sync_verify_mirror.sh — repo → TCC-safe verify mirror TEK KOMUT senkronu.
+#
+# Neden: preview_server.py launchd GUI agent rotasında çalışırken
+# verify_delivery.py'yi repo dizininden değil, TCC-safe mirror'dan koşar:
+#   ~/Library/Caches/com.freebuff/verify   (--dir)
+#   ~/Library/Caches/com.freebuff/lean_reduct  (K9: ../lean_reduct/…)
+# launchd GUI agent'ı /Users/.../Desktop altını TCC nedeniyle okuyamaz;
+# mirror bunu aşar. Bu script, CIKTI runtime dosyalarını ve Lean ispatını
+# mirror'a taşır — idempotent (yalnızca değişen dosya kopyalanır) ve
+# fail-closed (eksik kaynak → exit 2, hiçbir şey kopyalanmaz).
+#
+# Kapsam = run.md "How to reproduce the artifacts" adım 4 (verify mirror).
+# preview_server.py (adım 2) ve venv_z3 (adım 3) tek-seferlik ayrı işlerdir;
+# bu script YALNIZCA verify mirror'ını yönetir.
+#
+# Kullanım:
+#   sync_verify_mirror.sh             # senkron (değişeni kopyala, raporla)
+#   sync_verify_mirror.sh --force     # hepsini koşulsuz kopyala
+#   sync_verify_mirror.sh --check     # mirror güncel mi? (0 güncel/1 bayat/2 hata)
+#   sync_verify_mirror.sh --list      # dosya eşlemesini bas (denetim için)
+#   sync_verify_mirror.sh --help
+#
+# Ortam değişkenleri (override):
+#   MIRROR_DIR       verify mirror dizini
+#                    (varsayılan: ~/Library/Caches/com.freebuff/verify)
+#   LEAN_MIRROR_DIR  Lean mirror dizini (K9)
+#                    (varsayılan: ~/Library/Caches/com.freebuff/lean_reduct)
+#   ROOT             repo kökü (varsayılan: script'in ../../)
+# =============================================================================
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="${ROOT:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
+CIKTI="$ROOT/_calisma/CIKTI"
+LEAN_SRC="$ROOT/_calisma/lean_reduct"
+
+MIRROR_DIR="${MIRROR_DIR:-$HOME/Library/Caches/com.freebuff/verify}"
+LEAN_MIRROR_DIR="${LEAN_MIRROR_DIR:-$HOME/Library/Caches/com.freebuff/lean_reduct}"
+
+# (kaynak_rel | dest_rel) — kaynak CIKTI'ya, dest MIRROR_DIR'a göre.
+# Sıra deterministic: her satır bir dosya; önce runtime, sonra zips.
+FILES=(
+  "verify_delivery.py|verify_delivery.py"
+  "verify_delivery.config.json|verify_delivery.config.json"
+  "verify_delivery.config.schema.json|verify_delivery.config.schema.json"
+  "symbolic_proof_z3.py|symbolic_proof_z3.py"
+  "verify_lean.sh|verify_lean.sh"
+  "zip_lineage.json|zip_lineage.json"
+  "gen_repro_manifest.py|gen_repro_manifest.py"
+  "gen_config.py|gen_config.py"
+  "cleanup_log.json|cleanup_log.json"
+  "TESLIM_KLASOR_V5_2026-08-17.zip|TESLIM_KLASOR_V5_2026-08-17.zip"
+  "TESLIM_KLASOR_V5_2026-08-17.zip.sha256|TESLIM_KLASOR_V5_2026-08-17.zip.sha256"
+  "TESLIM_V5_FINAL_2026-08-17.zip|TESLIM_V5_FINAL_2026-08-17.zip"
+  "TESLIM_V5_FINAL_2026-08-17.zip.sha256|TESLIM_V5_FINAL_2026-08-17.zip.sha256"
+)
+
+# Lean dosyaları: kaynak LEAN_SRC'ye, dest LEAN_MIRROR_DIR'a göre.
+LEAN_FILES=(
+  "ReductInvariance.lean|ReductInvariance.lean"
+)
+
+say() { printf '%s\n' "$*"; }
+err() { printf 'HATA: %s\n' "$*" >&2; }
+
+git_short() {
+  git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || printf '%s' "-"
+}
+
+# Tüm kaynakların var olduğunu doğrula (fail-closed). Eksik → stderr + return 1.
+validate_sources() {
+  local rc=0 src dst
+  while IFS='|' read -r src dst; do
+    [ -n "$src" ] || continue
+    if [ ! -f "$CIKTI/$src" ]; then
+      err "kaynak yok: $CIKTI/$src"
+      rc=1
+    fi
+  done < <(printf '%s\n' "${FILES[@]}")
+  while IFS='|' read -r src dst; do
+    [ -n "$src" ] || continue
+    if [ ! -f "$LEAN_SRC/$src" ]; then
+      err "kaynak yok: $LEAN_SRC/$src"
+      rc=1
+    fi
+  done < <(printf '%s\n' "${LEAN_FILES[@]}")
+  return "$rc"
+}
+
+# Tek dosya: dest var ve içerik aynı mı? (0 aynı / 1 farklı/eksik)
+same_file() {
+  [ -f "$2" ] && cmp -s "$1" "$2"
+}
+
+# Tek dosyayı kopyala (yalnızca değiştiyse). Döndürür: "GÜNCEL"/"GÜNCELLENDİ"/"YAZILDI".
+sync_one() {
+  local src="$1" dst="$2" mode="${3:-sync}"
+  if [ "$mode" = "force" ]; then
+    cp "$src" "$dst"
+    printf 'GÜNCELLENDİ'
+  elif same_file "$src" "$dst"; then
+    printf 'GÜNCEL'
+  else
+    cp "$src" "$dst"
+    printf 'GÜNCELLENDİ'
+  fi
+}
+
+# Her eşleme için sync_one çalıştır; "(rel)" başına durum basar.
+run_sync() {
+  local mode="${1:-sync}" src dst st
+  local changed=0 total=0
+  while IFS='|' read -r src dst; do
+    [ -n "$src" ] || continue
+    total=$((total + 1))
+    st="$(sync_one "$CIKTI/$src" "$MIRROR_DIR/$dst" "$mode")"
+    [ "$st" = "GÜNCELLENDİ" ] && changed=$((changed + 1))
+    say "$st: $dst"
+  done < <(printf '%s\n' "${FILES[@]}")
+  while IFS='|' read -r src dst; do
+    [ -n "$src" ] || continue
+    total=$((total + 1))
+    st="$(sync_one "$LEAN_SRC/$src" "$LEAN_MIRROR_DIR/$dst" "$mode")"
+    [ "$st" = "GÜNCELLENDİ" ] && changed=$((changed + 1))
+    say "$st: lean_reduct/$dst"
+  done < <(printf '%s\n' "${LEAN_FILES[@]}")
+  say "ÖZET: $total dosya, $changed güncellendi · git $(git_short)"
+}
+
+# Her eşleme için aynılık denetimi (--check). Bayat dosya → stdout + return 1.
+run_check() {
+  local src dst stale=0
+  while IFS='|' read -r src dst; do
+    [ -n "$src" ] || continue
+    if same_file "$CIKTI/$src" "$MIRROR_DIR/$dst"; then
+      say "GÜNCEL: $dst"
+    else
+      say "BAYAT/EKSİK: $dst"
+      stale=1
+    fi
+  done < <(printf '%s\n' "${FILES[@]}")
+  while IFS='|' read -r src dst; do
+    [ -n "$src" ] || continue
+    if same_file "$LEAN_SRC/$src" "$LEAN_MIRROR_DIR/$dst"; then
+      say "GÜNCEL: lean_reduct/$dst"
+    else
+      say "BAYAT/EKSİK: lean_reduct/$dst"
+      stale=1
+    fi
+  done < <(printf '%s\n' "${LEAN_FILES[@]}")
+  return "$stale"
+}
+
+run_list() {
+  local src dst
+  say "MIRROR_DIR      = $MIRROR_DIR"
+  say "LEAN_MIRROR_DIR = $LEAN_MIRROR_DIR"
+  say "CIKTI           = $CIKTI"
+  say "LEAN_SRC        = $LEAN_SRC"
+  say "---"
+  while IFS='|' read -r src dst; do
+    [ -n "$src" ] || continue
+    say "$CIKTI/$src -> $MIRROR_DIR/$dst"
+  done < <(printf '%s\n' "${FILES[@]}")
+  while IFS='|' read -r src dst; do
+    [ -n "$src" ] || continue
+    say "$LEAN_SRC/$src -> $LEAN_MIRROR_DIR/$dst"
+  done < <(printf '%s\n' "${LEAN_FILES[@]}")
+}
+
+usage() {
+  awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "${BASH_SOURCE[0]}"
+}
+
+main() {
+  local mode="${1:-sync}"
+  case "$mode" in
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    --list)
+      run_list
+      exit 0
+      ;;
+    --check)
+      validate_sources || exit 2
+      mkdir -p "$MIRROR_DIR" "$LEAN_MIRROR_DIR"
+      if run_check; then
+        say "SONUÇ: mirror güncel · git $(git_short)"
+        exit 0
+      else
+        say "SONUÇ: mirror BAYAT — 'sync_verify_mirror.sh' çalıştırın"
+        exit 1
+      fi
+      ;;
+    --force)
+      validate_sources || exit 2
+      mkdir -p "$MIRROR_DIR" "$LEAN_MIRROR_DIR"
+      run_sync force
+      exit 0
+      ;;
+    sync)
+      validate_sources || exit 2
+      mkdir -p "$MIRROR_DIR" "$LEAN_MIRROR_DIR"
+      run_sync sync
+      exit 0
+      ;;
+    *)
+      err "bilinmeyen mod: $mode (--help)"
+      exit 2
+      ;;
+  esac
+}
+
+main "$@"

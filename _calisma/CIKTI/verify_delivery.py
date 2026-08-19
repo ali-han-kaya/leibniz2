@@ -603,6 +603,22 @@ def is_toolkit_rel(rel):
     return rel.startswith("TOOLKIT" + os.sep)
 
 
+def k0_skip_dirs(canonical_dir, toolkit_tolerant=False):
+    """K0 bayat-zip taramasında atlanacak dizin kümesi (tek kaynak).
+
+    Kanonik dizinin KENDİ adı her zaman atlanır: repo'da "CIKTI", TCC-safe
+    mirror'da "verify" — aksi halde mirror kendi zip'lerini bayat kopya sanar
+    (K0 false-P1). Ek olarak CIKTI (repo kanonik adı), TOOLKIT (toolkit
+    kopyası) ve .venv_z3 (ortam) atlanır; toolkit_tolerant=True ise TOOLKIT
+    taranır (bulguları INFO olur — fail-closed değil).
+    """
+    skip = {"CIKTI", "TOOLKIT", ".venv_z3",
+            os.path.basename(os.path.abspath(canonical_dir))}
+    if toolkit_tolerant:
+        skip.discard("TOOLKIT")
+    return skip
+
+
 def parse_sha256sums(path):
     """sha256sum formatı: <hash>  <dosya>  (dosya adında iki boşluk olabilir)."""
     out = {}
@@ -2153,11 +2169,10 @@ def main():
     # ürününü (OUTER_SRC içindeki iç zip) build sonrası siler — yani normal
     # repack akışı K0'ı yeşil bırakır; kalan her zip gerçek bayat kopyadır.
     parent = os.path.dirname(d)
-    k0_skip = {"CIKTI", "TOOLKIT", ".venv_z3"}
-    if args.k0_toolkit_tolerant:
-        # TOOLKIT artık taranır; bulguları P1 değil INFO olur (fail-closed
-        # değil — görünür ama kapıyı kırmaz).
-        k0_skip = {"CIKTI", ".venv_z3"}
+    # Kanonik dizin (--dir'in kendi adı) HER ZAMAN atlanır: repo'da "CIKTI",
+    # TCC-safe mirror'da "verify" — aksi halde mirror kendi zip'lerini bayat
+    # kopya sanar (K0 false-P1). Kural tek kaynakta: k0_skip_dirs().
+    k0_skip = k0_skip_dirs(d, args.k0_toolkit_tolerant)
     k0_records = scan_stale_zips(parent, skip_dirs=k0_skip)
     k0_findings = []  # P1 (fail-closed) — run summary sidecar'ı
     for f in k0_records:
