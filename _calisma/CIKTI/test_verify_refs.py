@@ -7,9 +7,11 @@ _http_json'u mock'layarak eşleşme mantığını (title + creator, aksan-duyars
 ağsız ve deterministik doğrular. Ayrıca _fold'un aksan katlama davranışını
 test eder. stdlib unittest — ek bağımlılık yok.
 """
+import io
 import pathlib
 import sys
 import unittest
+import urllib.error
 from unittest import mock
 
 CIKTI = pathlib.Path(__file__).resolve().parent
@@ -34,6 +36,64 @@ class TestFold(unittest.TestCase):
     def test_no_accent_unchanged(self):
         self.assertEqual(vd._fold("Metaphysical Grounding"),
                          "metaphysicalgrounding")
+
+
+class TestHttpGet(unittest.TestCase):
+    def test_retry_on_transient_then_success(self):
+        calls = []
+
+        def urlopen(req, timeout):
+            calls.append(timeout)
+            if len(calls) == 1:
+                raise urllib.error.URLError("geçici")
+            return io.BytesIO(b"ok")
+
+        with mock.patch.object(vd.urllib.request, "urlopen",
+                               side_effect=urlopen), \
+                mock.patch.object(vd.time, "sleep"):
+            data = vd._http_get("http://x", timeout=15, retries=2)
+        self.assertEqual(data, b"ok")
+        self.assertEqual(len(calls), 2)
+
+    def test_no_retry_on_404(self):
+        calls = []
+
+        def urlopen(req, timeout):
+            calls.append(1)
+            raise urllib.error.HTTPError("http://x", 404, "nf", {}, None)
+
+        with mock.patch.object(vd.urllib.request, "urlopen",
+                               side_effect=urlopen), \
+                mock.patch.object(vd.time, "sleep") as m:
+            with self.assertRaises(urllib.error.HTTPError):
+                vd._http_get("http://x", timeout=15, retries=3)
+        self.assertEqual(len(calls), 1)  # 404 fail-fast — retry yok
+        m.assert_not_called()
+
+
+class TestAuditBudget(unittest.TestCase):
+    def test_budget_exceeded_skips_network(self):
+        # Bütçe 0 → tüm ağ kontrolleri UNVERIFIED atlanır; hiçbir check çağrılmaz
+        # (yanlış PASS yok). Polite sleep'ler de mock'lanır (test hızı için).
+        with mock.patch.object(vd, "REFERENCE_AUDIT_BUDGET_S", 0), \
+                mock.patch.object(vd.time, "sleep"):
+            for fn in ("crossref_check", "sep_check", "openlibrary_check",
+                       "archive_check", "perseus_check",
+                       "openlibrary_fallback_check", "hathitrust_check",
+                       "google_books_check"):
+                mock.patch.object(
+                    vd, fn,
+                    side_effect=lambda *a, **k: (_ for _ in ()).throw(
+                        AssertionError("ağ çağrısı yapılmamalı"))).start()
+            try:
+                results = vd.run_reference_audit(
+                    "", lambda *a, **k: None, quiet=True)
+            finally:
+                mock.patch.stopall()
+        self.assertEqual(len(results), 54)
+        self.assertTrue(all(r["verdict"] == "UNVERIFIED" for r in results))
+        self.assertTrue(all("bütçesi aşıldı" in r["detail"]
+                           for r in results))
 
 
 class TestOpenLibraryFallback(unittest.TestCase):

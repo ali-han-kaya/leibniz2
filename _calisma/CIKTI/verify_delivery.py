@@ -647,12 +647,57 @@ def _fold(s):
     return re.sub(r"\s+", "", s).lower()
 
 
-def _http_json(url, timeout=20):
-    req = urllib.request.Request(url, headers={
-        "User-Agent": "verify_delivery.py (Stoic-Hume V5 CI; mailto:noreply@example.com)",
-    })
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return json.loads(r.read().decode("utf-8", "replace"))
+# ---- K6 referans denetimi ağ parametreleri (timeout + retry + bütçe) ----
+# Per-request timeout (s): tek bir yavaş/yanıt vermeyen endpoint tüm run'ı
+# asmasın (Perseus'un eski 60s'si ve fallback zincirleri toplamı şişiriyordu).
+REFERENCE_HTTP_TIMEOUT = 15
+# Geçici hatalarda (429/5xx/ağ/timeout) toplam deneme sayısı (ilk dahil).
+REFERENCE_HTTP_RETRIES = 2
+# Referans denetiminin toplam süre bütçesi (s). Aşılırsa kalan kaynaklar
+# UNVERIFIED işaretlenir (dürüst atlama — yanlış PASS yok); böylece --full
+# 300 sn sınırını aşmaz. Polite sleep'ler + ağ bu bütçeyle ~<240 sn kalır.
+REFERENCE_AUDIT_BUDGET_S = 200
+
+_USER_AGENT = ("verify_delivery.py (Stoic-Hume V5 CI; "
+               "mailto:noreply@example.com)")
+
+
+def _http_get(url, timeout=REFERENCE_HTTP_TIMEOUT,
+              retries=REFERENCE_HTTP_RETRIES):
+    """GET isteği: per-request timeout + geçici hatalarda sınırlı retry.
+
+    retries: toplam deneme sayısı (ilk dahil). 429/5xx ve ağ/timeout hataları
+    backoff ile tekrarlanır; kalıcı 4xx (401/403/404) fail-fast (retry yok).
+    Başarısız olursa son istisna yükselir (çağıranın except bloğu işler).
+    """
+    last = None
+    for attempt in range(retries):
+        req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return r.read()
+        except urllib.error.HTTPError as e:
+            last = e
+            if e.code in (401, 403, 404):
+                raise
+            if attempt < retries - 1:
+                time.sleep(1.0 * (attempt + 1))
+                continue
+            raise
+        except Exception as e:
+            last = e
+            if attempt < retries - 1:
+                time.sleep(1.0 * (attempt + 1))
+                continue
+            raise
+    raise last  # pragma: no cover — yukarıdaki raise'lar her yolu kapatır
+
+
+def _http_json(url, timeout=REFERENCE_HTTP_TIMEOUT,
+               retries=REFERENCE_HTTP_RETRIES):
+    """GET + JSON decode (_http_get üzerinden; timeout + retry dahil)."""
+    return json.loads(_http_get(url, timeout=timeout,
+                                retries=retries).decode("utf-8", "replace"))
 
 
 def crossref_check(ref):
@@ -660,16 +705,11 @@ def crossref_check(ref):
     Döndürür: (PASS | MISMATCH | UNVERIFIED, açıklama)."""
     url = f"https://api.crossref.org/works/{ref['doi']}"
     try:
-        data = _http_json(url)
+        data = _http_json(url)  # 429/5xx retry'si _http_get içinde
     except urllib.error.HTTPError as e:
-        if e.code == 429:  # rate-limit: bir kez tekrar dene
-            time.sleep(2.0)
-            try:
-                data = _http_json(url)
-            except Exception as e2:
-                return "UNVERIFIED", f"CrossRef 429 + tekrar başarısız: {e2}"
-        else:
-            return "MISMATCH", f"CrossRef HTTP {e.code} (DOI çözümlenmedi)"
+        if e.code == 429:
+            return "UNVERIFIED", f"CrossRef 429 (retry sonrası): {e}"
+        return "MISMATCH", f"CrossRef HTTP {e.code} (DOI çözümlenmedi)"
     except Exception as e:
         return "UNVERIFIED", f"ağ hatası: {e}"
 
@@ -694,12 +734,8 @@ def crossref_check(ref):
 
 def sep_check(ref):
     """SEP girişini doğrudan URL'den doğrula (HTTP 200 + başlık)."""
-    req = urllib.request.Request(ref["url"], headers={
-        "User-Agent": "verify_delivery.py (Stoic-Hume V5 CI)",
-    })
     try:
-        with urllib.request.urlopen(req, timeout=20) as r:
-            body = r.read().decode("utf-8", "replace")
+        body = _http_get(ref["url"]).decode("utf-8", "replace")
     except urllib.error.HTTPError as e:
         if e.code == 404:
             return "MISMATCH", f"SEP 404: {ref['url']}"
@@ -719,7 +755,7 @@ def openlibrary_check(ref):
     url = (f"https://openlibrary.org/search.json?q={q}"
            f"&limit=5&fields=title,author_name,first_publish_year,publisher")
     try:
-        data = _http_json(url, timeout=20)
+        data = _http_json(url)
     except urllib.error.HTTPError as e:
         if e.code == 429:
             return "UNVERIFIED", "OpenLibrary 429 rate-limit"
@@ -789,7 +825,7 @@ def archive_check(ref):
                "output": "json",
            }, doseq=True))
     try:
-        data = _http_json(url, timeout=25)
+        data = _http_json(url)
     except urllib.error.HTTPError as e:
         return "UNVERIFIED", f"Internet Archive HTTP {e.code}"
     except Exception as e:
@@ -824,25 +860,14 @@ def perseus_check(ref):
     cts_urn = ref["urn"] + ":" + ref["passage"]
     url = ("http://www.perseus.tufts.edu/hopper/CTS?request=GetPassage"
            f"&urn={urllib.parse.quote(cts_urn)}")
-    body = None
-    last_err = None
-    for attempt in (1, 2):
-        req = urllib.request.Request(url, headers={
-            "User-Agent": "verify_delivery.py (Stoic-Hume V5 CI)",
-        })
-        try:
-            with urllib.request.urlopen(req, timeout=60) as r:
-                body = r.read().decode("utf-8", "replace")
-            break
-        except urllib.error.HTTPError as e:
-            if e.code == 404:
-                return "MISMATCH", f"Perseus CTS 404: {cts_urn}"
-            last_err = f"Perseus CTS HTTP {e.code}"
-        except Exception as e:
-            last_err = f"ağ hatası: {e}"
-        time.sleep(2.0)
-    if body is None:
-        return "UNVERIFIED", f"{last_err} (2 deneme)"
+    try:
+        body = _http_get(url).decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return "MISMATCH", f"Perseus CTS 404: {cts_urn}"
+        return "UNVERIFIED", f"Perseus CTS HTTP {e.code}"
+    except Exception as e:
+        return "UNVERIFIED", f"Perseus CTS ağ hatası: {e}"
     if ref["expected_marker"].lower() in body.lower():
         return "PASS", f"CTS {cts_urn} — '{ref['expected_marker']}' mevcut"
     return "MISMATCH", f"CTS 200 ama '{ref['expected_marker']}' pasajda yok"
@@ -865,7 +890,7 @@ def google_books_check(ref):
     if key:
         url += f"&key={urllib.parse.quote(key)}"
     try:
-        data = _http_json(url, timeout=20)
+        data = _http_json(url)
     except urllib.error.HTTPError as e:
         if e.code == 429:
             return "UNVERIFIED", ("Google Books 429 (anahtarsız kota; "
@@ -911,7 +936,7 @@ def hathitrust_check(ref):
         url = ("https://catalog.hathitrust.org/api/volumes/brief/json/"
                + urllib.parse.quote(ident))
         try:
-            data = _http_json(url, timeout=20)
+            data = _http_json(url)
         except urllib.error.HTTPError as e:
             return "UNVERIFIED", f"HathiTrust HTTP {e.code}"
         except Exception as e:
@@ -944,7 +969,7 @@ def openlibrary_fallback_check(ref):
     url = (f"https://openlibrary.org/search.json?q={q}"
            f"&limit=5&fields=title,author_name,first_publish_year,publisher")
     try:
-        data = _http_json(url, timeout=20)
+        data = _http_json(url)
     except urllib.error.HTTPError as e:
         if e.code == 429:
             return "UNVERIFIED", "OpenLibrary 429 rate-limit"
@@ -1017,6 +1042,17 @@ def run_reference_audit(tex_text, add, quiet=False):
         "(CrossRef/SEP/OpenLibrary/IA/HathiTrust/Google Books/Perseus çevrimiçi) ---")
     online_results = []
 
+    # Toplam süre bütçesi: aşılırsa kalan kaynaklar UNVERIFIED işaretlenir
+    # (dürüst atlama) — tek bir yavaş endpoint --full'ı 300 sn üstüne
+    # taşıyamaz. Bütçe yalnızca ağ adımlarını kapsar (statik §5 hariç).
+    deadline = time.monotonic() + REFERENCE_AUDIT_BUDGET_S
+
+    def budgeted(check_fn, ref):
+        """Bütçe aşıldıysa check'i atla; yoksa çalıştır. Yanlış PASS üretmez."""
+        if time.monotonic() > deadline:
+            return "UNVERIFIED", "denetim bütçesi aşıldı (atlandı)"
+        return check_fn(ref)
+
     # 1) .tex'te varlık (çevrimdışı, deterministik)
     for ref in REFERENCE_CROSSREF + REFERENCE_SEP:
         if ref["tex_needle"] not in tex_text:
@@ -1025,7 +1061,7 @@ def run_reference_audit(tex_text, add, quiet=False):
 
     # 2) CrossRef DOI canlı doğrulama
     for ref in REFERENCE_CROSSREF:
-        v, detail = crossref_check(ref)
+        v, detail = budgeted(crossref_check, ref)
         tag = {"PASS": "OK  ", "MISMATCH": "FAIL", "UNVERIFIED": "SKIP"}[v]
         say(f"  [{tag}] CrossRef {ref['key']:<14} {ref['doi']:<32} -> {detail}")
         online_results.append({"key": ref["key"], "source": "crossref",
@@ -1038,7 +1074,7 @@ def run_reference_audit(tex_text, add, quiet=False):
 
     # 3) SEP doğrudan URL doğrulama
     for ref in REFERENCE_SEP:
-        v, detail = sep_check(ref)
+        v, detail = budgeted(sep_check, ref)
         tag = {"PASS": "OK  ", "MISMATCH": "FAIL", "UNVERIFIED": "SKIP"}[v]
         say(f"  [{tag}] SEP     {ref['key']:<14} -> {detail}")
         online_results.append({"key": ref["key"], "source": "sep",
@@ -1050,7 +1086,7 @@ def run_reference_audit(tex_text, add, quiet=False):
 
     # 4) OpenLibrary: kitap/edişyon doğrulaması (çevrimiçi, --check-references)
     for ref in REFERENCE_OPENLIBRARY:
-        v, detail = openlibrary_check(ref)
+        v, detail = budgeted(openlibrary_check, ref)
         tag = {"PASS": "OK  ", "MISMATCH": "FAIL", "UNVERIFIED": "SKIP"}[v]
         say(f"  [{tag}] OpenLib  {ref['key']:<32} -> {detail[:80]}")
         online_results.append({"key": ref["key"], "source": "openlibrary",
@@ -1063,13 +1099,17 @@ def run_reference_audit(tex_text, add, quiet=False):
 
     # 4b) Internet Archive: kitap/edişyon doğrulaması (çevrimiçi, --check-references)
     for ref in REFERENCE_ARCHIVE:
-        v, detail = archive_check(ref)
-        source = "archive"
-        # IA kapsamı dışı kaldıysa HathiTrust + Google Books fallback dene
-        # (ilk PASS kazanır; hepsi başarısızsa birleşik denetim izi kalır).
-        if v == "UNVERIFIED":
-            fv, fd, fs = _archive_fallback(ref)
-            v, detail, source = fv, f"{detail} | {fd}", fs
+        if time.monotonic() > deadline:
+            v, detail, source = "UNVERIFIED", "denetim bütçesi aşıldı (atlandı)", "archive"
+        else:
+            v, detail = archive_check(ref)
+            source = "archive"
+            # IA kapsamı dışı kaldıysa OpenLibrary + HathiTrust + Google Books
+            # fallback dene (ilk PASS kazanır; hepsi başarısızsa birleşik
+            # denetim izi kalır).
+            if v == "UNVERIFIED":
+                fv, fd, fs = _archive_fallback(ref)
+                v, detail, source = fv, f"{detail} | {fd}", fs
         src_label = {"archive": "Internet Archive", "hathitrust": "HathiTrust",
                      "google_books": "Google Books",
                      "openlibrary": "OpenLibrary"}.get(source, source)
@@ -1085,7 +1125,7 @@ def run_reference_audit(tex_text, add, quiet=False):
 
     # 4c) Perseus: antik birincil metin pasajı (çevrimiçi, --check-references)
     for ref in REFERENCE_PERSEUS:
-        v, detail = perseus_check(ref)
+        v, detail = budgeted(perseus_check, ref)
         tag = {"PASS": "OK  ", "MISMATCH": "FAIL", "UNVERIFIED": "SKIP"}[v]
         say(f"  [{tag}] Perseus {ref['key']:<30} -> {detail[:80]}")
         online_results.append({"key": ref["key"], "source": "perseus",
