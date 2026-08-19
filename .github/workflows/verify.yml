@@ -1322,6 +1322,14 @@ jobs:
             --out-dir refs-trend \
             --max-artifacts 100
 
+      # Trend tablosunu run summary'ye de yaz — her push'ta son durum görünsün.
+      # refs_trend.py tek kaynak; bu adım yalnızca refs-trend.md'yi taşır.
+      - name: Write refs trend to run summary
+        if: always()
+        run: |
+          python3 _calisma/CIKTI/run_summary_refs_trend.py \
+            refs-trend/refs-trend.md
+
       - name: Upload refs trend
         if: always()
         uses: actions/upload-artifact@v6
