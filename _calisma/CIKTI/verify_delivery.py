@@ -188,7 +188,10 @@ def build_layers_summary(args, findings):
         else:
             getter = _OPTIONAL_LAYERS.get(layer)
             ran = bool(getter(args)) if getter else False
-        fl = by_layer.get(layer, [])
+        # Yalnızca P0/P1 fail-closed sayılır; INFO görünür ama katmanı FAIL
+        # yapmaz (ör. --k0-toolkit-tolerant TOOLKIT zip'leri INFO olur).
+        fl = [f for f in by_layer.get(layer, [])
+              if f.get("priority") in ("P0", "P1")]
         status = "FAIL" if fl else ("PASS" if ran else "SKIP")
         layers[layer] = {"label": LAYER_LABELS[layer], "status": status,
                          "ran": ran, "findings": fl}
@@ -580,6 +583,15 @@ def scan_stale_zips(parent, skip_dirs=None):
                     rel = os.path.relpath(p, parent)
                     findings.append({"rel": rel, "sha256": sha256_file(p)})
     return findings
+
+
+def is_toolkit_rel(rel):
+    """rel (parent'a göre) TOOLKIT/ altında mı? (--k0-toolkit-tolerant sınıflaması).
+
+    `rel.startswith("TOOLKIT/")` — yalnızca TOOLKIT dizini altındaki yollar
+    eşleşir; `TOOLKIT2/...` gibi benzer adlar eşleşmez (os.sep sınırı).
+    """
+    return rel.startswith("TOOLKIT" + os.sep)
 
 
 def parse_sha256sums(path):
@@ -1820,6 +1832,10 @@ def main():
     ap.add_argument("--k0-out", default=None,
                     help="K0 bayat-zip bulgularını ayrı bir JSON'a yaz "
                          "(CI run summary'de ayrı bölüm göstermek için)")
+    ap.add_argument("--k0-toolkit-tolerant", action="store_true",
+                    help="K0: TOOLKIT/ altındaki zip'leri P1 yerine INFO olarak "
+                         "raporla (fail-closed değil). Varsayılan: TOOLKIT/ "
+                         "tamamen atlanır.")
     ap.add_argument("--lineage-out", default=None,
                     help="Soy hattı (--check-lineage) sonucunu ayrı bir JSON'a "
                          "yaz — k0_findings.json gibi CI artifact + run summary "
@@ -2023,19 +2039,33 @@ def main():
     # ürününü (OUTER_SRC içindeki iç zip) build sonrası siler — yani normal
     # repack akışı K0'ı yeşil bırakır; kalan her zip gerçek bayat kopyadır.
     parent = os.path.dirname(d)
-    k0_findings = scan_stale_zips(parent)  # {rel, sha256} — run summary sidecar'ı
-    for f in k0_findings:
-        issue = f"CIKTI dışında zip bulundu: {f['rel']}"
+    k0_skip = {"CIKTI", "TOOLKIT", ".venv_z3"}
+    if args.k0_toolkit_tolerant:
+        # TOOLKIT artık taranır; bulguları P1 değil INFO olur (fail-closed
+        # değil — görünür ama kapıyı kırmaz).
+        k0_skip = {"CIKTI", ".venv_z3"}
+    k0_records = scan_stale_zips(parent, skip_dirs=k0_skip)
+    k0_findings = []  # P1 (fail-closed) — run summary sidecar'ı
+    for f in k0_records:
+        rel = f["rel"]
+        issue = f"CIKTI dışında zip bulundu: {rel}"
+        if args.k0_toolkit_tolerant and is_toolkit_rel(rel):
+            # toolkit-tolerant: TOOLKIT/ kopyası INFO — fail-closed DEĞİL.
+            add("INFO", "K0-TOOLKIT", "K0 bayat zip",
+                issue + " (toolkit-tolerant — P1 değil INFO)",
+                f"{f['sha256']}  {os.path.join(parent, rel)}")
+            continue
         # Kök düzeyindeki başıboş kopya için hint: TOOLKIT/
         # K0'ın skip kümesindedir — oraya taşınırsa P1 otomatik
         # düşer (kanonik kopya CIKTI/ + toolkit kopyası
         # TOOLKIT/ ayrışır). Alt dizindeki (repack ara ürünü)
         # ziplere bu hint verilmez — repack onları kendi siler.
-        if os.path.dirname(f["rel"]) == "":
+        if os.path.dirname(rel) == "":
             issue += (" — ipucu: kök zip'i `TOOLKIT/` dizinine "
                       "taşıyabilirsin (K0 atlar; P1 giderilir)")
+        k0_findings.append(f)
         add("P1", "K0-STALE", "K0 bayat zip", issue,
-            f"{f['sha256']}  {os.path.join(parent, f['rel'])}")
+            f"{f['sha256']}  {os.path.join(parent, rel)}")
     if args.k0_out:
         try:
             with open(args.k0_out, "w", encoding="utf-8") as kf:

@@ -15,6 +15,7 @@ import pathlib
 import re
 import sys
 import tempfile
+import types
 import unittest
 
 CIKTI = pathlib.Path(__file__).resolve().parent
@@ -94,6 +95,44 @@ class TestScanStaleZips(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             missing = pathlib.Path(d) / "nope"
             self.assertEqual(vd.scan_stale_zips(missing), [])
+
+
+class TestToolkitTolerant(unittest.TestCase):
+    def test_is_toolkit_rel(self):
+        self.assertTrue(vd.is_toolkit_rel("TOOLKIT/x.zip"))
+        self.assertTrue(vd.is_toolkit_rel("TOOLKIT/sub/y.zip"))
+        self.assertFalse(vd.is_toolkit_rel("TOOLKIT2/x.zip"))
+        self.assertFalse(vd.is_toolkit_rel("TESLIM/x.zip"))
+        self.assertFalse(vd.is_toolkit_rel("x.zip"))
+
+    def test_tolerant_skip_set_scans_toolkit(self):
+        with tempfile.TemporaryDirectory() as d:
+            parent = pathlib.Path(d)
+            _touch(parent / "TOOLKIT" / "toolkit.zip")
+            _touch(parent / "TESLIM" / "stale.zip")
+            _touch(parent / "CIKTI" / "canonical.zip")
+            # varsayılan skip → TOOLKIT atlanır
+            default_rels = _rels(parent)
+            # --k0-toolkit-tolerant skip kümesi → TOOLKIT taranır
+            tolerant_rels = sorted(
+                f["rel"].replace("\\", "/")
+                for f in vd.scan_stale_zips(
+                    parent, skip_dirs={"CIKTI", ".venv_z3"})
+            )
+        self.assertEqual(default_rels, ["TESLIM/stale.zip"])
+        self.assertEqual(tolerant_rels,
+                         ["TESLIM/stale.zip", "TOOLKIT/toolkit.zip"])
+
+    def test_build_layers_summary_info_not_fail(self):
+        args = types.SimpleNamespace(
+            symbolic_proof=False, lean_proof=False, verify_manifest=None,
+            check_config_drift=False, check_plist=False,
+            check_repro_manifest=False, check_cleanup=False)
+        findings = [{"id": "K0-TOOLKIT", "priority": "INFO",
+                     "check": "K0-TOOLKIT", "issue": "toolkit", "evidence": ""}]
+        layers = vd.build_layers_summary(args, findings)
+        self.assertEqual(layers["K0"]["status"], "PASS")
+        self.assertEqual(layers["K0"]["findings"], [])
 
 
 if __name__ == "__main__":
