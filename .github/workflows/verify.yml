@@ -1475,3 +1475,88 @@ jobs:
           path: .freebuff/precheck_report.txt
           if-no-files-found: ignore
           retention-days: 30
+
+  # ──────────────────────────────────────────────────────────────────────
+  # PLIST DRIFT CHECK (advisory, macOS) — LaunchAgent plist'leri şablondan
+  # drift ederse her push'ta raporla. verify_delivery.py --check-plist (K12)
+  # update_preview.sh --plist-check'i çağırır; macOS'a özgüdür (plutil +
+  # LaunchAgents) — Linux'ta şablon yok (exit 2) olur, o yüzden ayrı bir
+  # macOS job'unda koşar ve --full'a bilerek dahil DEĞİLDİR.
+  #
+  # İki sinyal:
+  #   1) check_plist_drift.py: şablonu kanonik HOME (/Users/ci) ile render
+  #      eder, commit'li golden plist'lerle karşılaştırır + plutil lint.
+  #      Şablondaki her değişiklik (port/path/KeepAlive/ProgramArguments)
+  #      drift olarak yakalanır.
+  #   2) verify_delivery.py --check-plist: K12 kapısının macOS'ta uçtan uca
+  #      çalıştığının kanıtı (--plist-force ile üret → --plist-check GÜNCEL).
+  # continue-on-error: ADVISORY — build'i bloke etmez; bulgular plist-check
+  # artifact'ında + run summary'de denetlenebilir.
+  plist-check:
+    name: Plist drift check (macOS, advisory)
+    runs-on: macos-latest
+    needs: [verify]
+    if: always()
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      # 1) Golden drift denetimi: şablon → render → normalize → diff + lint.
+      #    Kanonik HOME (/Users/ci) portable'dır; gerçek kullanıcı yolu
+      #    golden'a gömülmez. Drift = exit 1 (advisory).
+      - name: Check plist drift vs golden (advisory)
+        id: drift
+        continue-on-error: true
+        run: |
+          set +e
+          python3 _calisma/CIKTI/check_plist_drift.py \
+            2>&1 | tee plist_check_report.txt
+          rc=${PIPESTATUS[0]}
+          set -e
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          echo "plist drift gate exit: $rc"
+
+      # 2) K12 kapısının macOS'ta uçtan uca kanıtı: gerçek HOME'a üret
+      #    (LaunchAgents yazılabilir), sonra --check-plist GÜNCEL olmalı.
+      - name: Run K12 --check-plist (update_preview.sh --plist-check)
+        id: k12
+        continue-on-error: true
+        run: |
+          set +e
+          bash _calisma/CIKTI/update_preview.sh --plist-force
+          python3 _calisma/CIKTI/verify_delivery.py --check-plist \
+            2>&1 | tee -a plist_check_report.txt
+          rc=${PIPESTATUS[0]}
+          set -e
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          echo "K12 --check-plist exit: $rc"
+
+      # Her iki sinyali run summary'ye yaz (durum + çıktı).
+      - name: Write plist drift to run summary
+        if: always()
+        run: |
+          {
+            echo "## Plist drift check (macOS)"
+            echo ""
+            echo "- drift gate: exit \`${{ steps.drift.outputs.rc }}\`"
+            echo "- K12 --check-plist: exit \`${{ steps.k12.outputs.rc }}\`"
+            echo '```'
+            cat plist_check_report.txt 2>/dev/null || echo '(rapor yok)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload plist check report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: plist-check
+          path: plist_check_report.txt
+          if-no-files-found: ignore
+          retention-days: 30
