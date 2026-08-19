@@ -10,6 +10,7 @@ simülasyon / doğrulama) çalışır → CI ile yerel arasında drift olmaz.
   manifest.txt    — insan-okur: FILE + SHA-256 tablosu + CONFIG bölümü
   manifest.json   — makine-okur: tool/generated/run/sha/ref/files{rel: sha256}
                     + config{files, combined_sha256}
+                    + refs_trend{files, combined_sha256}
   manifest.sha256 — manifest.json'un kendi SHA-256'sı (sha256sum formatı;
                     kurcalanma / yeniden üretim farkı tek hash ile denetlenir)
   + tüm artifact'ların kopyası (bundle)
@@ -54,6 +55,7 @@ ARTIFACT_JOBS = {
     "lineage-findings": "verify",
     "klayers": "verify",
     "refs-online": "verify",
+    "refs-trend": "refs-trend",
     "run-history": "verify",
     "precommit-logs": "verify",
     "budget": "budget",
@@ -172,6 +174,33 @@ def main() -> None:
                      "=" * 72]
         lines += pc_block
 
+    # ── REFS TREND bölümü: refs-trend/ önekli dosyalar (CONFIG gibi) ──────
+    # refs_trend.py'nin çıktısı (refs-trend.md + refs-trend.json) ayrıca
+    # işaretlenir; combined_sha256 tek hash ile özetler (config.combined_sha256
+    # ile aynı deterministik yöntem). Böylece çevrimiçi referans doğrulama
+    # trendi zaman serisi de tek hash ile denetlenebilir.
+    refs_trend_hashes = {rel: h for rel, h in file_hashes.items()
+                         if rel.startswith("refs-trend/")}
+    refs_trend_combined = None
+    if refs_trend_hashes:
+        sorted_rel = sorted(refs_trend_hashes)
+        refs_trend_combined = hashlib.sha256(
+            "".join(f"{rel}\0{refs_trend_hashes[rel]}\n" for rel in sorted_rel).encode()
+        ).hexdigest()
+        rt_block = [
+            "",
+            "=" * 72,
+            "REFS TREND ARTIFACT (ayrı bölüm)",
+            "=" * 72,
+            f"{'FILE':<55} {'SHA-256'}",
+            "-" * 72,
+        ]
+        rt_block += [f"{rel:<55} {refs_trend_hashes[rel]}" for rel in sorted_rel]
+        rt_block += ["-" * 72,
+                     f"refs_trend_combined_sha256: {refs_trend_combined}",
+                     "=" * 72]
+        lines += rt_block
+
     # ── PROVENANCE bölümü: artifact → üreten job (denetim izi) ──────────────
     # Her artifact hangi job'da üretildi — tek bakışta kaynak. Prefixed
     # indirilenler (config/, precommit-logs/) bundle'da kendi adı altındadır;
@@ -195,7 +224,7 @@ def main() -> None:
         files = present.get(art)
         if files:
             note = f"prefixed ({len(files)} dosya)"
-        elif art in ("config", "precommit-logs"):
+        elif art in ("config", "precommit-logs", "refs-trend"):
             note = "YOK (indirilmedi)"
         else:
             note = "merge (köke düzleştirildi)"
@@ -223,6 +252,11 @@ def main() -> None:
         manifest_json["precommit_logs"] = {
             "files": dict(sorted(precommit_hashes.items())),
             "combined_sha256": precommit_combined,
+        }
+    if refs_trend_hashes:
+        manifest_json["refs_trend"] = {
+            "files": dict(sorted(refs_trend_hashes.items())),
+            "combined_sha256": refs_trend_combined,
         }
 
     out_dir = pathlib.Path(args.out_dir)

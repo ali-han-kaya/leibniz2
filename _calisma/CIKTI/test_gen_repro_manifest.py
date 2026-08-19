@@ -88,6 +88,37 @@ class TestProvenance(unittest.TestCase):
             "precommit-logs/PRECOMMIT_CACHE.md", pc["files"])
         self.assertTrue(len(pc["combined_sha256"]) == 64)
 
+    def test_refs_trend_section(self):
+        # refs-trend/ dosyaları (refs_trend.py çıktısı) CONFIG gibi ayrı
+        # bölümde işaretlenir + tek-hash combined_sha256 özetlenir.
+        (self.artifacts / "refs-trend").mkdir(parents=True)
+        (self.artifacts / "refs-trend" / "refs-trend.md").write_text(
+            "trend\n", encoding="utf-8")
+        (self.artifacts / "refs-trend" / "refs-trend.json").write_text(
+            "{}", encoding="utf-8")
+        self._gen()
+        txt = (self.out / "manifest.txt").read_text(encoding="utf-8")
+        self.assertIn("REFS TREND ARTIFACT (ayrı bölüm)", txt)
+        self.assertIn("refs_trend_combined_sha256", txt)
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        rt = m["refs_trend"]
+        self.assertIn("refs-trend/refs-trend.md", rt["files"])
+        self.assertIn("refs-trend/refs-trend.json", rt["files"])
+        self.assertTrue(len(rt["combined_sha256"]) == 64)
+
+    def test_refs_trend_artifact_job_provenance(self):
+        (self.artifacts / "refs-trend").mkdir(parents=True)
+        (self.artifacts / "refs-trend" / "refs-trend.md").write_text(
+            "trend\n", encoding="utf-8")
+        (self.artifacts / "refs-trend" / "refs-trend.json").write_text(
+            "{}", encoding="utf-8")
+        self._gen()
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        jobs = m["provenance"]["artifact_jobs"]
+        self.assertEqual(jobs["refs-trend"], "refs-trend")
+        txt = (self.out / "manifest.txt").read_text(encoding="utf-8")
+        self.assertIn("prefixed (2 dosya)", txt)  # refs-trend 2 dosya
+
     def test_env_override_artifact_jobs(self):
         env = dict(os.environ)
         env["REPRO_ARTIFACT_JOBS"] = '{"precommit-logs": "custom-job"}'

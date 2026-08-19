@@ -717,7 +717,7 @@ jobs:
   reproducibility:
     name: Reproducibility bundle
     runs-on: ubuntu-latest
-    needs: [verify, budget, reports, config-drift, repack-verify]
+    needs: [verify, budget, reports, config-drift, repack-verify, refs-trend]
     if: always()
     steps:
       - name: Checkout
@@ -729,12 +729,12 @@ jobs:
           python-version: '3.12'
 
       # ─── 1) Tüm artifact'ları indir ────────────────────────────────────
-      # config VE precommit-logs artifact'ları AYRI indirilip kendi adları
-      # altına yazılır; gen_repro_manifest.py'nin CONFIG bölümü config/,
-      # PROVENANCE bölümü ise precommit-logs/ önekini yakalar → job kaynağı
-      # dosya bazında denetlenebilir. merge-multiple artifact'ları köke
-      # düzleştirdiği için bu ikisini pattern'e koymak öneklerini
-      # kaybettirirdi.
+      # config, precommit-logs VE refs-trend artifact'ları AYRI indirilip
+      # kendi adları altına yazılır; gen_repro_manifest.py'nin CONFIG bölümü
+      # config/, PRECOMMIT bölümü precommit-logs/, REFS TREND bölümü
+      # refs-trend/ önekini yakalar → job kaynağı dosya bazında denetlenebilir.
+      # merge-multiple artifact'ları köke düzleştirdiği için bu üçünü
+      # pattern'e koymak öneklerini kaybettirirdi.
       # repack-verify ve k0-findings tek düz dosya (repack_verify_report.txt /
       # k0_findings.json) olduğundan merge ile köke düzleşmesi sorun değildir
       # → manifest'e rel yolu repack_verify_report.txt / k0_findings.json
@@ -757,6 +757,17 @@ jobs:
         with:
           name: precommit-logs
           path: all_artifacts/precommit-logs/
+
+      # refs-trend advisory bir job'dur; artifact'ı yoksa (tablo üretilemedi)
+      # manifest refs-trend'siz üretilir — continue-on-error ile build
+      # bloke edilmez. Prefixed indirme sayesinde gen_repro_manifest.py'nin
+      # REFS TREND bölümü refs-trend/ önekini yakalar + ayrı hash'ler.
+      - name: Download refs-trend artifact (refs-trend/ prefix)
+        continue-on-error: true
+        uses: actions/download-artifact@v7
+        with:
+          name: refs-trend
+          path: all_artifacts/refs-trend/
 
       # ─── 2) manifest.txt üret (gen_repro_manifest.py — tek kaynak) ─────────
       - name: Generate reproducibility manifest
