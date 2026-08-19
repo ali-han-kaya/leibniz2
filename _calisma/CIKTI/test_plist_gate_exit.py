@@ -134,10 +134,9 @@ class TestPlistOutSidecar(unittest.TestCase):
             self.assertEqual(d["exit"], 0)
             self.assertIn("GÜNCEL", d["detail"])
             self.assertIn("GÜNCEL", d["output"])
-            # ÇOK-PROFİLLİ: iki profil de ayrı kayıt olarak rapora girmeli.
-            labels = sorted(p["label"] for p in d["profiles"])
-            self.assertEqual(labels, ["com.freebuff.preview-leibniz2",
-                                      "com.freebuff.preview-server"])
+            # Tek-profil yönetimi: yalnızca birincil leibniz2 rapora girmeli.
+            labels = [p["label"] for p in d["profiles"]]
+            self.assertEqual(labels, ["com.freebuff.preview-leibniz2"])
             for p in d["profiles"]:
                 self.assertEqual(p["status"], "GÜNCEL")
                 self.assertTrue(p["path"].endswith(p["label"] + ".plist"))
