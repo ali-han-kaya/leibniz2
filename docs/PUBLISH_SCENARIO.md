@@ -59,7 +59,7 @@ Aşağıdaki manuel aşamaların **birebir aynısını tek komutla, interaktif o
 > `[DRY-RUN] çalıştırılacak: ...` olarak basılır (log: `logs/publish_*.log`).
 
 ```bash
-cd /Users/alikaya/Desktop/leibniz2
+cd ~/Desktop/leibniz2
 
 # (a) Repo temiz mi?
 git status --short         # ← boş olmalı
@@ -271,7 +271,7 @@ python3 _calisma/CIKTI/status_checks.py
 ## AŞAMA 2 — Remote ekle + push (geri dönüşü olan adım)
 
 ```bash
-cd /Users/alikaya/Desktop/leibniz2
+cd ~/Desktop/leibniz2
 
 # (a) Remote ekle (token değil — SSH veya gh'nin auth'u yeterli)
 gh repo set-default leibniz2  # (opsiyonel; repo'yu default yapar)
