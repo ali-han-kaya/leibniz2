@@ -231,7 +231,7 @@ main() {
   echo "  summary.md               (durum panosu + pre-commit + K0 + bütçe + soy hattı + K katmanları)"
   echo "  verify_report.sha256     (+ refs/history .sha256)"
   echo "  config/                  (ham + şema + etkin + diff + .sha256)"
-  echo "  logs/                    (precommit.log + PRECOMMIT_RAPORU.md + CACHE)"
+  echo "  logs/                    (precommit.log + PRECOMMIT_RAPORU.md/.json + CACHE)"
 
   if [ "$fail_closed" -ne 0 ]; then
     echo ""
