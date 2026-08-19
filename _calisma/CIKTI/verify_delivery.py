@@ -91,6 +91,7 @@ Doğrulama zinciri (Katman 0..13):
                hash'ler birebir (P0). --check-cleanup, --full'a dahil.
 """
 import argparse
+import concurrent.futures
 import hashlib
 import json
 import os
@@ -680,7 +681,11 @@ REFERENCE_HTTP_RETRIES = 2
 # Referans denetiminin toplam süre bütçesi (s). Aşılırsa kalan kaynaklar
 # UNVERIFIED işaretlenir (dürüst atlama — yanlış PASS yok); böylece --full
 # 300 sn sınırını aşmaz. Polite sleep'ler + ağ bu bütçeyle ~<240 sn kalır.
-REFERENCE_AUDIT_BUDGET_S = 200
+REFERENCE_AUDIT_BUDGET_S = 260
+# Çevrimiçi denetim paralel havuz boyutu: tek bir yavaş endpoint (örn. rate-
+# limit edilen OpenLibrary ~8 sn/çağrı) tüm bütçeyi bitirip kalan kaynakları
+# UNVERIFIED bırakmasın. 4 işçi, 56 kaynağın tamamını ~90-140 sn'de bitirir.
+REFERENCE_POOL_SIZE = 4
 
 _USER_AGENT = ("verify_delivery.py (Stoic-Hume V5 CI; "
                "mailto:noreply@example.com)")
@@ -1051,6 +1056,20 @@ def _archive_fallback(ref):
     return "UNVERIFIED", "; ".join(attempts), "archive"
 
 
+def _archive_with_fallback(ref):
+    """IA denetimi + UNVERIFIED kalırsa fallback zinciri (paralel işçi).
+
+    Paralel havuzun tek görevi: archive_check'i koşar; IA kapsamı dışı
+    kalırsa OpenLibrary/HathiTrust/Google Books fallback'i dener ve gerçek
+    kaynağı döndürür. Döndürür (verdict, detail, source)."""
+    v, detail = archive_check(ref)
+    source = "archive"
+    if v == "UNVERIFIED":
+        fv, fd, fs = _archive_fallback(ref)
+        v, detail, source = fv, f"{detail} | {fd}", fs
+    return v, detail, source
+
+
 def run_reference_audit(tex_text, add, quiet=False):
     """K6 referans denetimi: .tex varlığı + CrossRef/SEP/OpenLibrary/
     Internet Archive/Perseus çevrimiçi doğrulama.
@@ -1067,15 +1086,12 @@ def run_reference_audit(tex_text, add, quiet=False):
     online_results = []
 
     # Toplam süre bütçesi: aşılırsa kalan kaynaklar UNVERIFIED işaretlenir
-    # (dürüst atlama) — tek bir yavaş endpoint --full'ı 300 sn üstüne
-    # taşıyamaz. Bütçe yalnızca ağ adımlarını kapsar (statik §5 hariç).
+    # (dürüst atlama) — tek bir yavaş endpoint --full'ı taşıyamaz. Bütçe
+    # yalnızca ağ adımlarını kapsar (statik §5 hariç). V5o: kontroller sınırlı
+    # bir havuzda PARALEL koşulur (REFERENCE_POOL_SIZE) — böylece rate-limit
+    # edilen OpenLibrary (~8 sn/çağrı) tek başına bütçeyi bitirip kalan
+    # kaynakları (IA/Perseus) budget-skip'e düşürmez.
     deadline = time.monotonic() + REFERENCE_AUDIT_BUDGET_S
-
-    def budgeted(check_fn, ref):
-        """Bütçe aşıldıysa check'i atla; yoksa çalıştır. Yanlış PASS üretmez."""
-        if time.monotonic() > deadline:
-            return "UNVERIFIED", "denetim bütçesi aşıldı (atlandı)"
-        return check_fn(ref)
 
     # 1) .tex'te varlık (çevrimdışı, deterministik)
     for ref in REFERENCE_CROSSREF + REFERENCE_SEP:
@@ -1083,9 +1099,49 @@ def run_reference_audit(tex_text, add, quiet=False):
             add("P1", "K6-REF", "K6 referans",
                 f".tex'te yok: {ref['tex_needle']} ({ref['key']})")
 
-    # 2) CrossRef DOI canlı doğrulama
+    # 2-4c) Çevrimiçi kontroller — girdi sırasında görev listesi, sınırlı
+    # havuzda paralel çalıştırılır (ex.map sırayı korur). Her işçi, çağrıdan
+    # HEMEN ÖNCE bütçeyi denetler (bütçe aşıldıysa ağ çağrısı yapılmaz;
+    # yanlış PASS üretilmez). Archive görevleri IA + fallback zincirini tek
+    # işçide koşar (_archive_with_fallback).
+    tasks = []
     for ref in REFERENCE_CROSSREF:
-        v, detail = budgeted(crossref_check, ref)
+        tasks.append((ref, crossref_check, "crossref"))
+    for ref in REFERENCE_SEP:
+        tasks.append((ref, sep_check, "sep"))
+    for ref in REFERENCE_OPENLIBRARY:
+        tasks.append((ref, openlibrary_check, "openlibrary"))
+    for ref in REFERENCE_ARCHIVE:
+        tasks.append((ref, _archive_with_fallback, "archive"))
+    for ref in REFERENCE_PERSEUS:
+        tasks.append((ref, perseus_check, "perseus"))
+
+    def run_task(t):
+        ref, check, kind = t
+        if time.monotonic() > deadline:
+            return ref, kind, "UNVERIFIED", \
+                "denetim bütçesi aşıldı (atlandı)", "archive"
+        if kind == "archive":
+            v, detail, src = check(ref)
+            return ref, kind, v, detail, src
+        v, detail = check(ref)
+        return ref, kind, v, detail, kind
+
+    online = []
+    if REFERENCE_POOL_SIZE > 1 and tasks:
+        with concurrent.futures.ThreadPoolExecutor(
+                max_workers=REFERENCE_POOL_SIZE) as ex:
+            online = list(ex.map(run_task, tasks))
+    else:
+        online = [run_task(t) for t in tasks]
+
+    def results_for(kind):
+        """Belirli kaynağın (girdi sırasında) sonuçları."""
+        return [(ref, v, detail, src)
+                for ref, k, v, detail, src in online if k == kind]
+
+    # 2) CrossRef DOI canlı doğrulama
+    for ref, v, detail, src in results_for("crossref"):
         tag = {"PASS": "OK  ", "MISMATCH": "FAIL", "UNVERIFIED": "SKIP"}[v]
         say(f"  [{tag}] CrossRef {ref['key']:<14} {ref['doi']:<32} -> {detail}")
         online_results.append({"key": ref["key"], "source": "crossref",
@@ -1094,11 +1150,9 @@ def run_reference_audit(tex_text, add, quiet=False):
         if v == "MISMATCH":
             add("P1", "K6-REF", "K6 referans",
                 f"{ref['key']} CrossRef uyuşmuyor: {detail}")
-        time.sleep(0.4)  # CrossRef polite-pool
 
     # 3) SEP doğrudan URL doğrulama
-    for ref in REFERENCE_SEP:
-        v, detail = budgeted(sep_check, ref)
+    for ref, v, detail, src in results_for("sep"):
         tag = {"PASS": "OK  ", "MISMATCH": "FAIL", "UNVERIFIED": "SKIP"}[v]
         say(f"  [{tag}] SEP     {ref['key']:<14} -> {detail}")
         online_results.append({"key": ref["key"], "source": "sep",
@@ -1109,8 +1163,7 @@ def run_reference_audit(tex_text, add, quiet=False):
                 f"{ref['key']} SEP uyuşmuyor: {detail}")
 
     # 4) OpenLibrary: kitap/edişyon doğrulaması (çevrimiçi, --check-references)
-    for ref in REFERENCE_OPENLIBRARY:
-        v, detail = budgeted(openlibrary_check, ref)
+    for ref, v, detail, src in results_for("openlibrary"):
         tag = {"PASS": "OK  ", "MISMATCH": "FAIL", "UNVERIFIED": "SKIP"}[v]
         say(f"  [{tag}] OpenLib  {ref['key']:<32} -> {detail[:80]}")
         online_results.append({"key": ref["key"], "source": "openlibrary",
@@ -1119,37 +1172,23 @@ def run_reference_audit(tex_text, add, quiet=False):
         if v == "MISMATCH":
             add("P1", "K6-REF", "K6 referans",
                 f"{ref['key']} OpenLibrary uyuşmuyor: {detail}")
-        time.sleep(0.4)  # OpenLibrary nazik havuz
 
     # 4b) Internet Archive: kitap/edişyon doğrulaması (çevrimiçi, --check-references)
-    for ref in REFERENCE_ARCHIVE:
-        if time.monotonic() > deadline:
-            v, detail, source = "UNVERIFIED", "denetim bütçesi aşıldı (atlandı)", "archive"
-        else:
-            v, detail = archive_check(ref)
-            source = "archive"
-            # IA kapsamı dışı kaldıysa OpenLibrary + HathiTrust + Google Books
-            # fallback dene (ilk PASS kazanır; hepsi başarısızsa birleşik
-            # denetim izi kalır).
-            if v == "UNVERIFIED":
-                fv, fd, fs = _archive_fallback(ref)
-                v, detail, source = fv, f"{detail} | {fd}", fs
+    for ref, v, detail, src in results_for("archive"):
         src_label = {"archive": "Internet Archive", "hathitrust": "HathiTrust",
                      "google_books": "Google Books",
-                     "openlibrary": "OpenLibrary"}.get(source, source)
+                     "openlibrary": "OpenLibrary"}.get(src, src)
         tag = {"PASS": "OK  ", "MISMATCH": "FAIL", "UNVERIFIED": "SKIP"}[v]
         say(f"  [{tag}] {src_label:<10} {ref['key']:<30} -> {detail[:80]}")
-        online_results.append({"key": ref["key"], "source": source,
+        online_results.append({"key": ref["key"], "source": src,
                                "verdict": v, "detail": detail,
                                "query": _archive_query(ref)})
         if v == "MISMATCH":
             add("P1", "K6-REF", "K6 referans",
                 f"{ref['key']} {src_label} uyuşmuyor: {detail}")
-        time.sleep(0.4)  # Internet Archive nazik havuz
 
     # 4c) Perseus: antik birincil metin pasajı (çevrimiçi, --check-references)
-    for ref in REFERENCE_PERSEUS:
-        v, detail = budgeted(perseus_check, ref)
+    for ref, v, detail, src in results_for("perseus"):
         tag = {"PASS": "OK  ", "MISMATCH": "FAIL", "UNVERIFIED": "SKIP"}[v]
         say(f"  [{tag}] Perseus {ref['key']:<30} -> {detail[:80]}")
         online_results.append({"key": ref["key"], "source": "perseus",

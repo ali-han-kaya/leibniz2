@@ -2,7 +2,7 @@
 
 **Hedef:** `ingiliz_empirizmi_v3.tex` §References (64 girdi)
 **Yöntem:** CrossRef API (6 dergi makalesi) + SEP doğrudan URL (5) + OpenLibrary (22 kitap/edişyon) + Internet Archive (21; kapsam dışı kalanlar HathiTrust + Google Books fallback) + Perseus CTS (2 antik birincil metin) — çevrimiçi doğrulanan 56/64. Çevrimiçi indekslenmeyen kalan girdiler bağımsız web/bibliyografik kaynağa dayanır. Her "GEÇTİ" bir bağımsız kaynağa dayanır; kaynak adresi `Kanıt` sütunundadır.
-**Tarih:** 2026-08-17 · **Güncelleme:** 2026-08-18 (V5h/V5j düzeltmeleri işlendi) · 2026-08-19 (V5n: Norton 1981 + Popkin 1951 CrossRef'e eklendi — canlı kapsam 54→56) · **Sonuç etiketi:** GEÇTİ (birebir) / DÜZELTİLDİ (V5h/V5j) / KÜÇÜK NOT (bibliyografik küçük sapma) / HATA (düzeltme gerekir) / DOĞRULANAMADI.
+**Tarih:** 2026-08-17 · **Güncelleme:** 2026-08-18 (V5h/V5j düzeltmeleri işlendi) · 2026-08-19 (V5n: Norton 1981 + Popkin 1951 CrossRef'e eklendi — canlı kapsam 54→56; V5o: çevrimiçi denetim paralel havuzda koşar — bütçe-skip kapanır, 56/56) · **Sonuç etiketi:** GEÇTİ (birebir) / DÜZELTİLDİ (V5h/V5j) / KÜÇÜK NOT (bibliyografik küçük sapma) / HATA (düzeltme gerekir) / DOĞRULANAMADI.
 
 ---
 
@@ -158,3 +158,23 @@ Denetim başlangıçta CrossRef + SEP + "bağımsız web araması" idi. `verify_
 | Perseus CTS | 2 | GetPassage (antik birincil metin pasajı) |
 
 Toplam **56 canlı girdi**; kalan 8 girdi (64 − 56) §2 tablosuna ve sabit denetim notlarına dayanır. **V5n:** Norton 1981 (`10.1016/0191-6599(81)90026-7`) ve Popkin 1951 (`10.2307/2216311`) DOI'leri CrossRef'ten doğrulandı — kapsam-dışı kalan son 2 dergi makalesi artık çevrimiçi doğrulanır (kapsam-dışı 10 → 8). Sonuçlar her CI run'ında `refs-online` VERSION JSON + `refs-trend` zaman serisinde izlenir. İki dürüst sınır: Google Books anahtarsız **429** (kota) döndürür — tam denetim `GBOOKS_API_KEY` ister; HathiTrust ISBN yerine **OCLC** indeksler — ISBN'li `ht_ids` çoğu modern telifli kitapta kayıt bulamaz. Her ikisi de yanlış PASS üretmez, `UNVERIFIED` izi bırakır.
+
+**V5o (2026-08-19): 11 UNVERIFIED kaynak kapatıldı → 56/56 canlı.** `refs-trend`'de 43/54 (11 UNVERIFIED) görünen dönemdeki kaynakların tümü artık gerçek API yanıtıyla doğrulanır: 6 OpenLibrary girdisi (Hansen 1983/1992, Hicks 1925, Hunt 1998, Lipsius 1584, Long & Sedley 1987) o dönemde ağ zaman aşımına düşmüştü — sorgu değil geçici ağ hatası; 5 Internet Archive girdisi (Fine 2012, Lagrée 1994, Millican 2002, Schmitt 1972, Xunzi/Knoblock) IA'da indekslenmez, OpenLibrary fallback'i ile PASS olur (aşağıdaki canlı kanıt). Kök neden: denetim 200 sn bütçeyle **sıralı** koşuyordu ve rate-limit edilen OpenLibrary (~8 sn/çağrı) bütçeyi bitirip kalan kaynakları budget-skip'e düşürüyordu. V5o: kontroller `REFERENCE_POOL_SIZE=4` havuzda paralel koşar (`concurrent.futures`, ex.map sırayı korur; her işçi çağrıdan önce bütçeyi denetler — yanlış PASS yok); bütçe 260 sn'ye çıkarıldı. Canlı doğrulama (2026-08-19, varsayılan bütçeyle): **56/56 PASS, 94 sn** — crossref 6, sep 5, openlibrary 27 (22 doğrudan + 5 IA-fallback), archive 16, perseus 2.
+
+V5o kanıtı — hedefli canlı sorgu sonuçları (11 kaynağın her biri):
+
+| Kaynak | Sonuç | Gerçek API yanıtı |
+|---|---|---|
+| Hansen 1983 | PASS | OL: 'Language and logic in ancient China' by Chad Hansen, 1983, Univ. of Michigan Press |
+| Hansen 1992 | PASS | OL: 'A Daoist theory of Chinese thought' by Chad Hansen, 1992, OUP |
+| Hicks 1925 | PASS | OL: 'Diogenes Laertius', 1925 (Loeb edisyonu bulundu) |
+| Hunt 1998 | PASS | OL: 'A textual history of Cicero's Academici libri' by T.J. Hunt, 1998, Brill |
+| Lipsius 1584 | PASS | OL: 'De constantia' by Justus Lipsius, 1586 baskısı (eşleşme) |
+| Long & Sedley 1987 | PASS | OL: 'The Hellenistic philosophers' by A.A. Long, 1987, CUP |
+| Fine 2012 | PASS | IA: 0 sonuç → OL fallback: 'Metaphysical Grounding' (Correia, 2012, CUP) |
+| Lagrée 1994 | PASS | IA: 0 sonuç → OL fallback: 'Juste Lipse et la restauration du stoïcisme' (Vrin, 1994) |
+| Millican 2002 | PASS | IA: 0 sonuç → OL fallback: 'Reading Hume on Human Understanding' (OUP, 2002) |
+| Schmitt 1972 | PASS | IA: 0 sonuç → OL fallback: 'Cicero Scepticus' (Springer/Nijhoff) |
+| Xunzi (Knoblock) | PASS | IA: 0 sonuç → OL fallback: 'Xunzi' by John Knoblock (Stanford) |
+
+Not: HathiTrust ISBN araması 5 kaynakta da 0 kayıt döndürdü (telifli kitaplar, ISBN indeksi yok) ve IA mediatype:texts varyantı da 0 sonuç verdi — OL fallback'i bu kaynaklar için tek geçerli çevrimiçi kanıttır; `UNVERIFIED` izi bırakmaz, kaynağı doğru işaretler (`by_source`'ta openlibrary).

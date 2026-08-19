@@ -10,6 +10,7 @@ test eder. stdlib unittest — ek bağımlılık yok.
 import io
 import pathlib
 import sys
+import time
 import unittest
 import urllib.error
 from unittest import mock
@@ -94,6 +95,97 @@ class TestAuditBudget(unittest.TestCase):
         self.assertTrue(all(r["verdict"] == "UNVERIFIED" for r in results))
         self.assertTrue(all("bütçesi aşıldı" in r["detail"]
                            for r in results))
+
+
+class TestParallelAudit(unittest.TestCase):
+    """V5o: çevrimiçi denetim sınırlı havuzda paralel koşar (bütçe-skip
+    aynı kalır), sonuçlar girdi sırasında döner, archive fallback kaynağı
+    doğru işaretlenir. Ağ çağrısı yok — tüm check fonksiyonları mock."""
+
+    def _run(self, pool, archive_side):
+        with mock.patch.object(vd, "REFERENCE_POOL_SIZE", pool), \
+                mock.patch.object(vd, "crossref_check",
+                                  return_value=("PASS", "x")), \
+                mock.patch.object(vd, "sep_check",
+                                  return_value=("PASS", "x")), \
+                mock.patch.object(vd, "openlibrary_check",
+                                  return_value=("PASS", "x")), \
+                mock.patch.object(vd, "_archive_with_fallback",
+                                  side_effect=archive_side), \
+                mock.patch.object(vd, "perseus_check",
+                                  return_value=("PASS", "x")):
+            return vd.run_reference_audit(
+                "", lambda *a, **k: None, quiet=True)
+
+    def test_order_preserved_parallel(self):
+        # ex.map girdi sırasını korur: crossref(6) + sep(5) + ol(22) +
+        # archive(21) + perseus(2) = 56, listelerdeki sırayla.
+        results = self._run(
+            4, lambda r: ("PASS", "ok", "archive"))
+        self.assertEqual(len(results), 56)
+        order = [r["key"] for r in results]
+        expected = ([r["key"] for r in vd.REFERENCE_CROSSREF]
+                    + [r["key"] for r in vd.REFERENCE_SEP]
+                    + [r["key"] for r in vd.REFERENCE_OPENLIBRARY]
+                    + [r["key"] for r in vd.REFERENCE_ARCHIVE]
+                    + [r["key"] for r in vd.REFERENCE_PERSEUS])
+        self.assertEqual(order, expected)
+        self.assertTrue(all(r["verdict"] == "PASS" for r in results))
+
+    def test_archive_fallback_source(self):
+        # Archive görevleri IA kapsamı dışında kalınca gerçek kaynağı
+        # (openlibrary) döndürür — by_source'u şişirmez, kaynağı doğru verir.
+        results = self._run(
+            4, lambda r: ("PASS", "fallback ile doğrulandı", "openlibrary"))
+        # Gerçek OpenLibrary girdileriyle karışmasın: archive kümesindeki
+        # anahtarlara göre filtrele.
+        arch_keys = {r["key"] for r in vd.REFERENCE_ARCHIVE}
+        arc = [r for r in results if r["key"] in arch_keys]
+        self.assertEqual(len(arc), 21)
+        self.assertTrue(all(r["source"] == "openlibrary" for r in arc))
+        self.assertTrue(all("fallback" in r["detail"] for r in arc))
+
+    def test_concurrent_execution(self):
+        # Havuz 4: yavaş OpenLibrary görevleri eşzamanlı çalışmalı (max_active
+        # >= 2) ve toplam süre sıralı sürenin belirgin altında kalmalı.
+        import threading
+        active, max_active = 0, 0
+        lock = threading.Lock()
+
+        def slow(ref):
+            nonlocal active, max_active
+            with lock:
+                active += 1
+                max_active = max(max_active, active)
+            time.sleep(0.15)
+            with lock:
+                active -= 1
+            return "PASS", "ok"
+
+        with mock.patch.object(vd, "REFERENCE_POOL_SIZE", 4), \
+                mock.patch.object(vd, "crossref_check",
+                                  return_value=("PASS", "x")), \
+                mock.patch.object(vd, "sep_check",
+                                  return_value=("PASS", "x")), \
+                mock.patch.object(vd, "openlibrary_check", side_effect=slow), \
+                mock.patch.object(vd, "_archive_with_fallback",
+                                  side_effect=lambda r: ("PASS", "x", "archive")), \
+                mock.patch.object(vd, "perseus_check",
+                                  return_value=("PASS", "x")):
+            t0 = time.time()
+            results = vd.run_reference_audit(
+                "", lambda *a, **k: None, quiet=True)
+            dt = time.time() - t0
+        self.assertEqual(len(results), 56)
+        self.assertGreaterEqual(max_active, 2)  # paralellik kanıtı
+        self.assertLess(dt, 2.5)  # 22 × 0.15 sn sıralı ~3.3 sn olurdu
+
+    def test_pool1_sequential(self):
+        # Havuz 1 → sıralı (eski davranış); sonuç yine 56, hepsi PASS.
+        results = self._run(
+            1, lambda r: ("PASS", "ok", "archive"))
+        self.assertEqual(len(results), 56)
+        self.assertTrue(all(r["verdict"] == "PASS" for r in results))
 
 
 class TestCrossRefCoverage(unittest.TestCase):
