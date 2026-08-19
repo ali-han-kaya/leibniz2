@@ -102,6 +102,7 @@ import sys
 import tempfile
 import threading
 import time
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -634,6 +635,18 @@ def _norm_ref(s):
     return re.sub(r"\s+", "", s).lower()
 
 
+def _fold(s):
+    """Aksan-duyarsız normalleştirme (bibliyografik eşleşme).
+
+    _norm_ref ile aynı + NFD → combining mark sil: "Lagrée" → "lagree",
+    "stoïcisme" → "stoicisme". Aksan farkları bibliyografik kimliği
+    değiştirmez; yalnızca yanlış UNVERIFIED'ı (yanlış negatif) önler.
+    """
+    s = unicodedata.normalize("NFD", str(s))
+    s = "".join(c for c in s if unicodedata.category(c) != "Mn")
+    return re.sub(r"\s+", "", s).lower()
+
+
 def _http_json(url, timeout=20):
     req = urllib.request.Request(url, headers={
         "User-Agent": "verify_delivery.py (Stoic-Hume V5 CI; mailto:noreply@example.com)",
@@ -917,14 +930,66 @@ def hathitrust_check(ref):
     return "UNVERIFIED", "HathiTrust: verilen identifier'larda kayıt yok"
 
 
+def openlibrary_fallback_check(ref):
+    """Open Library search.json ile kitap doğrulaması — arşiv fallback.
+
+    _archive_fallback, IA + HathiTrust + Google Books'un UNVERIFIED bıraktığı
+    kaynaklarda Open Library'yi de dener (auth gerektirmez; modern akademik
+    kitaplar OL'de indekslenir). archive ref alanlarını kullanır: query
+    (arama) + title_needle (başlık) + creator_needle (opsiyonel yazar).
+    Eşleşme aksan-duyarsızdır (_fold) — "Lagrée" ↔ "lagree" gibi farklar
+    yanlış UNVERIFIED üretmez. Döndürür (PASS | MISMATCH | UNVERIFIED, açıklama).
+    """
+    q = urllib.parse.quote(ref["query"])
+    url = (f"https://openlibrary.org/search.json?q={q}"
+           f"&limit=5&fields=title,author_name,first_publish_year,publisher")
+    try:
+        data = _http_json(url, timeout=20)
+    except urllib.error.HTTPError as e:
+        if e.code == 429:
+            return "UNVERIFIED", "OpenLibrary 429 rate-limit"
+        return "UNVERIFIED", f"OpenLibrary HTTP {e.code}"
+    except Exception as e:
+        return "UNVERIFIED", f"OpenLibrary ağ hatası: {e}"
+
+    docs = data.get("docs", []) or []
+    if not docs:
+        return "UNVERIFIED", "OpenLibrary: 0 sonuç (OL kapsamı dışı olabilir)"
+
+    title_n = _fold(ref["title_needle"])
+    creator_n = _fold(ref["creator_needle"]) if ref.get("creator_needle") else None
+    for d in docs:
+        t = d.get("title")
+        t = t[0] if isinstance(t, list) else t
+        if title_n not in _fold(str(t or "")):
+            continue
+        a = d.get("author_name") or []
+        if creator_n and creator_n not in _fold(" ".join(a)):
+            continue
+        y = d.get("first_publish_year")
+        pub = d.get("publisher") or []
+        pub_s = pub[0] if isinstance(pub, list) else str(pub or "")
+        return "PASS", (f"OpenLibrary: '{str(t)[:60]}' "
+                        f"by {a[0] if a else '?'}, {y}, {pub_s}")
+    top = docs[0].get("title")
+    top = top[0] if isinstance(top, list) else top
+    return "MISMATCH", (f"OpenLibrary sonuç var ama eşleşme yok. En yakın: "
+                        f"'{str(top)[:60]}'")
+
+
 def _archive_fallback(ref):
     """Internet Archive UNVERIFIED kalınca ek kaynakları dene.
 
-    HathiTrust (identifier bazlı) + Google Books (key isteğe bağlı) denenir;
-    ilk PASS kazanır. Hepsi başarısızsa birleşik denetim iziyle UNVERIFIED
-    döner (kaynak 'archive' kalır — by_source'ı şişirmez).
+    Open Library (title+creator, aksan-duyarsız) + HathiTrust (identifier
+    bazlı) + Google Books (key isteğe bağlı) denenir; ilk PASS kazanır. Hepsi
+    başarısızsa birleşik denetim iziyle UNVERIFIED döner (kaynak 'archive'
+    kalır — by_source'ı şişirmez).
     Döndürür (verdict, detail, source)."""
     attempts = []
+    ov, od = openlibrary_fallback_check(ref)
+    attempts.append(od[:70])
+    if ov == "PASS":
+        return ov, od, "openlibrary"
     if ref.get("ht_ids"):
         hv, hd = hathitrust_check(ref)
         attempts.append(hd[:70])
@@ -1006,7 +1071,8 @@ def run_reference_audit(tex_text, add, quiet=False):
             fv, fd, fs = _archive_fallback(ref)
             v, detail, source = fv, f"{detail} | {fd}", fs
         src_label = {"archive": "Internet Archive", "hathitrust": "HathiTrust",
-                     "google_books": "Google Books"}.get(source, source)
+                     "google_books": "Google Books",
+                     "openlibrary": "OpenLibrary"}.get(source, source)
         tag = {"PASS": "OK  ", "MISMATCH": "FAIL", "UNVERIFIED": "SKIP"}[v]
         say(f"  [{tag}] {src_label:<10} {ref['key']:<30} -> {detail[:80]}")
         online_results.append({"key": ref["key"], "source": source,
@@ -1041,7 +1107,7 @@ def run_reference_audit(tex_text, add, quiet=False):
         f"(CrossRef {len(REFERENCE_CROSSREF)} + SEP {len(REFERENCE_SEP)} + "
         f"OpenLibrary {len(REFERENCE_OPENLIBRARY)} + "
         f"Internet Archive {len(REFERENCE_ARCHIVE)} "
-        f"[HathiTrust + Google Books fallback] + "
+        f"[OpenLibrary + HathiTrust + Google Books fallback] + "
         f"Perseus {len(REFERENCE_PERSEUS)}); "
         f"kalanı REFERANS_KANIT_DENETIMI.md sabit denetimine dayanır.")
     return online_results
