@@ -205,6 +205,11 @@ open "https://github.com/ali-han-kaya/leibniz2/settings/branches"
 
 ### Branch protection — web UI adım adım (9 required check)
 
+> 📷 **Görsel kılavuz:** her adımın ekran görüntüsü
+> [`docs/branch-protection-guide/`](branch-protection-guide/) altında (8
+> ekran, kırmızı numaralı rozetlerle işaretli). Aşağıdaki adımlar o
+> kılavuzdaki ekranlarla birebir eşleşir.
+
 > Kural yalnızca `main` içindir. Check adları TEK KAYNAKTAN (workflow job
 > `name:` alanları) gelir — güncel listeyi üret:
 > `python3 _calisma/CIKTI/status_checks.py`

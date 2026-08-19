@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>Branch Protection — Görsel Kılavuz</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { background: #eaeef2; }
+  body { font-family: -apple-system, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif; color: #1f2328; padding: 20px 0 40px; }
+  .screen { width: 1240px; margin: 0 auto 28px; background: #fff; border: 1px solid #d0d7de; border-radius: 10px; overflow: hidden; box-shadow: 0 1px 4px rgba(31,35,40,.12); }
+  .caption { background: #0d1117; color: #e6edf3; padding: 12px 20px; font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+  .caption .step { background: #d1242f; color: #fff; border-radius: 50%; width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+  .caption .desc { color: #8b949e; font-weight: 400; font-size: 13px; margin-left: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .topbar { background: #fff; border-bottom: 1px solid #d0d7de; padding: 10px 24px; display: flex; align-items: center; gap: 14px; }
+  .logo { font-weight: 800; font-size: 16px; color: #1f2328; display: flex; align-items: center; gap: 8px; }
+  .logo .mark { background: #1f2328; color: #fff; width: 30px; height: 30px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 14px; }
+  .crumbs { color: #0969da; font-size: 14px; }
+  .crumbs .sep { color: #656d76; margin: 0 4px; }
+  .crumb-cur { color: #1f2328; font-weight: 600; }
+  .tabbar { background: #fff; border-bottom: 1px solid #d0d7de; padding: 0 24px; display: flex; gap: 18px; }
+  .tab { padding: 12px 2px; color: #656d76; font-size: 14px; border-bottom: 2px solid transparent; }
+  .tab.active { color: #1f2328; font-weight: 600; border-bottom-color: #fd8c73; }
+  .settings { display: flex; min-height: 500px; }
+  .sidebar { width: 296px; border-right: 1px solid #d0d7de; padding: 20px 0; background: #f6f8fa; flex-shrink: 0; }
+  .nav-sec { padding: 10px 20px 4px; font-size: 11px; color: #656d76; text-transform: uppercase; letter-spacing: .05em; font-weight: 600; }
+  .nav-item { padding: 6px 20px; font-size: 14px; color: #1f2328; }
+  .nav-item.active { background: #fff; font-weight: 600; border: 1px solid #d0d7de; border-right: none; border-left: 3px solid #fd8c73; }
+  .main { flex: 1; padding: 28px 36px; background: #fff; }
+  .page-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+  .page-head h1 { font-size: 20px; font-weight: 600; }
+  .breadcrumb { font-size: 14px; color: #0969da; margin-bottom: 16px; }
+  .breadcrumb .sep { color: #656d76; margin: 0 6px; }
+  .breadcrumb .cur { color: #1f2328; font-weight: 600; }
+  .btn { border-radius: 6px; padding: 6px 16px; font-size: 14px; font-weight: 600; border: none; cursor: pointer; }
+  .btn-green { background: #1f883d; color: #fff; }
+  .btn-blue { background: #0969da; color: #fff; }
+  .btn-sec { background: #f6f8fa; color: #1f2328; border: 1px solid #d0d7de; }
+  .link { color: #0969da; font-size: 14px; }
+  .field { margin-bottom: 20px; }
+  .field label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+  .field .hint { font-size: 12px; color: #656d76; margin-top: 6px; }
+  input[type=text] { width: 100%; max-width: 520px; padding: 6px 12px; border: 1px solid #d0d7de; border-radius: 6px; font-size: 14px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .rules-label { font-size: 14px; font-weight: 600; margin: 22px 0 10px; }
+  .rule-item { border: 1px solid #d0d7de; border-radius: 6px; padding: 12px 16px; margin-bottom: 8px; background: #fff; }
+  .rule-item .row { display: flex; align-items: flex-start; gap: 10px; }
+  .rule-item .title { font-size: 14px; font-weight: 600; }
+  .rule-item .sub { font-size: 12px; color: #656d76; margin-top: 2px; }
+  input[type=checkbox], input[type=radio] { width: 16px; height: 16px; accent-color: #0969da; margin-top: 2px; flex-shrink: 0; }
+  .expand { margin: 10px 0 0 26px; padding: 12px; background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 6px; }
+  .expand .erow { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 13px; }
+  .expand .erow:last-child { margin-bottom: 0; }
+  .expand input[type=number] { width: 70px; padding: 5px 8px; border: 1px solid #d0d7de; border-radius: 6px; }
+  .search { width: 100%; max-width: 420px; padding: 6px 12px; border: 1px solid #d0d7de; border-radius: 6px; font-size: 13px; margin-bottom: 10px; }
+  .check-list { max-height: 218px; overflow-y: auto; border: 1px solid #d0d7de; border-radius: 6px; background: #fff; padding: 6px; }
+  .check-list .chk { display: flex; align-items: center; gap: 8px; padding: 4px 8px; font-size: 13px; border-radius: 4px; }
+  .check-list .chk.checked { background: #ddf4ff; }
+  .radio-row { display: flex; gap: 24px; margin: 8px 0 0 26px; font-size: 14px; align-items: center; }
+  .radio-row label { display: flex; align-items: center; gap: 6px; }
+  .footer-bar { border-top: 1px solid #d0d7de; padding: 16px 0 4px; margin-top: 24px; display: flex; align-items: center; gap: 10px; font-size: 14px; }
+  .annot { position: relative; outline: 2px dashed #d1242f; outline-offset: 3px; border-radius: 4px; }
+  .badge { position: absolute; top: -13px; left: -13px; width: 26px; height: 26px; background: #d1242f; color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.35); z-index: 6; }
+  .rule-card { border: 1px solid #d0d7de; border-radius: 6px; padding: 16px 18px; display: flex; align-items: center; gap: 14px; }
+  .rule-card .name { font-size: 16px; font-weight: 700; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .rule-card .desc { font-size: 13px; color: #656d76; margin-top: 3px; }
+  .rule-card .actions { margin-left: auto; display: flex; gap: 12px; color: #0969da; font-size: 14px; }
+  .term { background: #0d1117; color: #e6edf3; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; padding: 20px 24px; border-radius: 8px; margin-top: 12px; line-height: 1.55; }
+  .term .prompt { color: #7ee787; }
+  .term .ok { color: #7ee787; font-weight: 700; }
+  .term .warn { color: #d29922; }
+  .term .dim { color: #8b949e; }
+  .empty-state { border: 2px dashed #d0d7de; border-radius: 6px; padding: 44px; text-align: center; color: #656d76; font-size: 14px; background: #f6f8fa; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════ ADIM 1 — Branches sayfası ═══════════════ -->
+<div class="screen" id="screen-01">
+  <div class="caption"><span class="step">1</span> Ayarlar → Branches — kural listesi boş <span class="desc">github.com/ali-han-kaya/leibniz2/settings/branches</span></div>
+  <div class="topbar">
+    <div class="logo"><span class="mark">GH</span> GitHub</div>
+    <div class="crumbs">ali-han-kaya <span class="sep">/</span> leibniz2</div>
+  </div>
+  <div class="tabbar">
+    <div class="tab">Code</div><div class="tab">Issues</div><div class="tab">Pull requests</div>
+    <div class="tab">Actions</div><div class="tab">Security</div><div class="tab active">Settings</div>
+  </div>
+  <div class="settings">
+    <div class="sidebar">
+      <div class="nav-item">General</div>
+      <div class="nav-sec">Code and automation</div>
+      <div class="nav-item active">Branches</div>
+      <div class="nav-item">Rules</div>
+      <div class="nav-item">Tags</div>
+      <div class="nav-item">Environments</div>
+      <div class="nav-item">Pages</div>
+      <div class="nav-sec">Security</div>
+      <div class="nav-item">Code security and analysis</div>
+      <div class="nav-item">Deploy keys</div>
+      <div class="nav-item">Secrets and variables</div>
+    </div>
+    <div class="main">
+      <div class="page-head">
+        <h1>Branch protection rules</h1>
+        <div class="annot"><button class="btn btn-green">Add branch protection rule</button><span class="badge">1</span></div>
+      </div>
+      <div class="empty-state">No branch protection rules yet.<br>Add a rule to protect branches like <code>main</code>.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ ADIM 2 — Branch name pattern ═══════════════ -->
+<div class="screen" id="screen-02">
+  <div class="caption"><span class="step">2</span> Branch name pattern: <code>main</code> <span class="desc">…/settings/branches/new</span></div>
+  <div class="topbar">
+    <div class="logo"><span class="mark">GH</span> GitHub</div>
+    <div class="crumbs">ali-han-kaya <span class="sep">/</span> leibniz2</div>
+  </div>
+  <div class="tabbar"><div class="tab">Code</div><div class="tab">Issues</div><div class="tab">Pull requests</div><div class="tab">Actions</div><div class="tab">Security</div><div class="tab active">Settings</div></div>
+  <div class="settings">
+    <div class="sidebar">
+      <div class="nav-item">General</div>
+      <div class="nav-sec">Code and automation</div>
+      <div class="nav-item active">Branches</div>
+      <div class="nav-item">Rules</div>
+      <div class="nav-item">Tags</div>
+      <div class="nav-item">Environments</div>
+      <div class="nav-item">Pages</div>
+    </div>
+    <div class="main">
+      <div class="breadcrumb">Branches <span class="sep">/</span> <span class="cur">Add rule</span></div>
+      <div class="annot">
+        <div class="field">
+          <label for="pat">Branch name pattern</label>
+          <input type="text" id="pat" value="main">
+          <div class="hint">For example: main, main-*, releases/**</div>
+        </div>
+        <span class="badge">1</span>
+      </div>
+      <div class="rules-label">Protect matching branches</div>
+      <div class="rule-item"><div class="row"><input type="checkbox"><div><div class="title">Require a pull request before merging</div></div></div></div>
+      <div class="rule-item"><div class="row"><input type="checkbox"><div><div class="title">Require status checks to pass before merging</div></div></div></div>
+      <div class="rule-item"><div class="row"><input type="checkbox"><div><div class="title">Require conversation resolution</div></div></div></div>
+      <div class="rule-item"><div class="row"><input type="checkbox"><div><div class="title">Require signed commits</div></div></div></div>
+      <div class="rule-item"><div class="row"><input type="checkbox"><div><div class="title">Require linear history</div></div></div></div>
+      <div class="rule-item"><div class="row"><input type="checkbox"><div><div class="title">Require deployments to succeed before merging</div></div></div></div>
+      <div class="rule-item"><div class="row"><input type="checkbox"><div><div class="title">Lock branch</div></div></div></div>
+      <div class="rule-item"><div class="row"><input type="checkbox"><div><div class="title">Do not allow bypassing the above settings</div></div></div></div>
+      <div class="rule-item"><div class="row"><input type="checkbox"><div><div class="title">Allow force pushes</div></div></div></div>
+      <div class="rule-item"><div class="row"><input type="checkbox"><div><div class="title">Allow deletions</div></div></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ ADIM 3 — PR review ═══════════════ -->
+<div class="screen" id="screen-03">
+  <div class="caption"><span class="step">3</span> Require a pull request before merging ✓ <span class="desc">onay sayısı: 1</span></div>
+  <div class="topbar"><div class="logo"><span class="mark">GH</span> GitHub</div><div class="crumbs">ali-han-kaya <span class="sep">/</span> leibniz2</div></div>
+  <div class="tabbar"><div class="tab">Code</div><div class="tab">Issues</div><div class="tab">Pull requests</div><div class="tab">Actions</div><div class="tab">Security</div><div class="tab active">Settings</div></div>
+  <div class="settings">
+    <div class="sidebar">
+      <div class="nav-item">General</div>
+      <div class="nav-sec">Code and automation</div>
+      <div class="nav-item active">Branches</div>
+      <div class="nav-item">Rules</div>
+      <div class="nav-item">Tags</div>
+      <div class="nav-item">Environments</div>
+      <div class="nav-item">Pages</div>
+    </div>
+    <div class="main">
+      <div class="breadcrumb">Branches <span class="sep">/</span> <span class="cur">Add rule</span></div>
+      <div class="field"><label>Branch name pattern</label><input type="text" value="main" style="max-width:200px"></div>
+      <div class="rules-label">Protect matching branches</div>
+      <div class="annot">
+        <div class="rule-item">
+          <div class="row"><input type="checkbox" checked><div><div class="title">Require a pull request before merging</div><div class="sub">When enabled, all commits must be made to a non-protected branch and submitted via a pull request before they can merge into branches matching this rule.</div></div></div>
+          <div class="expand">
+            <div class="erow">Requiring <b>&nbsp;1&nbsp;</b> approval from reviewers</div>
+            <div class="erow"><input type="checkbox" checked><span>Dismiss stale pull request approvals when new commits are pushed</span></div>
+            <div class="erow"><input type="checkbox"><span>Require review from Code Owners</span></div>
+            <div class="erow"><input type="checkbox"><span>Restrict who can dismiss pull request reviews</span></div>
+            <div class="erow"><input type="checkbox"><span>Allow specified actors to bypass required pull requests</span></div>
+          </div>
+        </div>
+        <span class="badge">1</span>
+      </div>
+      <div class="rule-item"><div class="row"><input type="checkbox"><div><div class="title">Require status checks to pass before merging</div></div></div></div>
+      <div class="rule-item"><div class="row"><input type="checkbox"><div><div class="title">Require conversation resolution</div></div></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ ADIM 4 — Status checks (9 kapı) ═══════════════ -->
+<div class="screen" id="screen-04">
+  <div class="caption"><span class="step">4</span> Require status checks — 9 check + up-to-date ✓ <span class="desc">status_checks.py --json'dan</span></div>
+  <div class="topbar"><div class="logo"><span class="mark">GH</span> GitHub</div><div class="crumbs">ali-han-kaya <span class="sep">/</span> leibniz2</div></div>
+  <div class="tabbar"><div class="tab">Code</div><div class="tab">Issues</div><div class="tab">Pull requests</div><div class="tab">Actions</div><div class="tab">Security</div><div class="tab active">Settings</div></div>
+  <div class="settings">
+    <div class="sidebar">
+      <div class="nav-item">General</div>
+      <div class="nav-sec">Code and automation</div>
+      <div class="nav-item active">Branches</div>
+      <div class="nav-item">Rules</div>
+      <div class="nav-item">Tags</div>
+      <div class="nav-item">Environments</div>
+      <div class="nav-item">Pages</div>
+    </div>
+    <div class="main">
+      <div class="breadcrumb">Branches <span class="sep">/</span> <span class="cur">Add rule</span></div>
+      <div class="field"><label>Branch name pattern</label><input type="text" value="main" style="max-width:200px"></div>
+      <div class="rules-label">Protect matching branches</div>
+      <div class="rule-item"><div class="row"><input type="checkbox"><div><div class="title">Require a pull request before merging</div></div></div></div>
+      <div class="annot">
+        <div class="rule-item">
+          <div class="row"><input type="checkbox" checked><div><div class="title">Require status checks to pass before merging</div><div class="sub">Choose which status checks must pass before branches can be merged into a branch matching this rule.</div></div></div>
+          <div class="expand">
+            <input class="search" placeholder="Search by check name">
+            <div class="check-list">
+              <div class="chk checked"><input type="checkbox" checked><span>Delivery verification — K1-K9 (single entry point)</span></div>
+              <div class="chk checked"><input type="checkbox" checked><span>Action runtime check (node24)</span></div>
+              <div class="chk checked"><input type="checkbox" checked><span>Budget shield (aggregated)</span></div>
+              <div class="chk checked"><input type="checkbox" checked><span>Pre-commit P0 label gate</span></div>
+              <div class="chk checked"><input type="checkbox" checked><span>Static markdown reports (incl. pre-commit findings)</span></div>
+              <div class="chk checked"><input type="checkbox" checked><span>Reproducibility bundle</span></div>
+              <div class="chk checked"><input type="checkbox" checked><span>Config drift check (gen_config + diff-on-drift)</span></div>
+              <div class="chk checked"><input type="checkbox" checked><span>Repack determinism + verify (sidecar sync)</span></div>
+              <div class="chk checked"><input type="checkbox" checked><span>Online verification trend (refs-online across runs)</span></div>
+            </div>
+            <div class="erow" style="margin-top:10px"><input type="checkbox" checked><span><b>Require branches to be up to date before merging</b> <span style="color:#656d76">(strict)</span></span></div>
+          </div>
+        </div>
+        <span class="badge">1</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ ADIM 5 — Enforce admins + güvenlik ═══════════════ -->
+<div class="screen" id="screen-05">
+  <div class="caption"><span class="step">5</span> Enforce admins + force-push/deletions kapat <span class="desc">bypass yok</span></div>
+  <div class="topbar"><div class="logo"><span class="mark">GH</span> GitHub</div><div class="crumbs">ali-han-kaya <span class="sep">/</span> leibniz2</div></div>
+  <div class="tabbar"><div class="tab">Code</div><div class="tab">Issues</div><div class="tab">Pull requests</div><div class="tab">Actions</div><div class="tab">Security</div><div class="tab active">Settings</div></div>
+  <div class="settings">
+    <div class="sidebar">
+      <div class="nav-item">General</div>
+      <div class="nav-sec">Code and automation</div>
+      <div class="nav-item active">Branches</div>
+      <div class="nav-item">Rules</div>
+      <div class="nav-item">Tags</div>
+      <div class="nav-item">Environments</div>
+      <div class="nav-item">Pages</div>
+    </div>
+    <div class="main">
+      <div class="breadcrumb">Branches <span class="sep">/</span> <span class="cur">Add rule</span></div>
+      <div class="field"><label>Branch name pattern</label><input type="text" value="main" style="max-width:200px"></div>
+      <div class="rules-label">Protect matching branches</div>
+      <div class="annot">
+        <div class="rule-item"><div class="row"><input type="checkbox" checked><div><div class="title">Do not allow bypassing the above settings</div><div class="sub">Enforce all configured restrictions for administrators and custom roles with "bypass branch protections" permission. (Requires "Allow force pushes" to be unselected.)</div></div></div></div>
+        <span class="badge">1</span>
+      </div>
+      <div class="annot">
+        <div class="rule-item"><div class="row"><input type="checkbox" checked><div><div class="title">Allow force pushes</div></div></div></div>
+        <div class="radio-row">
+          <label><input type="radio" name="fp" checked> <span><b>Block</b> force pushes</span></label>
+          <label><input type="radio" name="fp"> <span>Allow force pushes</span></label>
+        </div>
+        <span class="badge">2</span>
+      </div>
+      <div class="annot">
+        <div class="rule-item"><div class="row"><input type="checkbox"><div><div class="title">Allow deletions</div><div class="sub">Allow users with push access to delete matching branches.</div></div></div></div>
+        <span class="badge">3</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ ADIM 6 — Create ═══════════════ -->
+<div class="screen" id="screen-06">
+  <div class="caption"><span class="step">6</span> Create — kuralı kaydet <span class="desc">Create / Cancel</span></div>
+  <div class="topbar"><div class="logo"><span class="mark">GH</span> GitHub</div><div class="crumbs">ali-han-kaya <span class="sep">/</span> leibniz2</div></div>
+  <div class="tabbar"><div class="tab">Code</div><div class="tab">Issues</div><div class="tab">Pull requests</div><div class="tab">Actions</div><div class="tab">Security</div><div class="tab active">Settings</div></div>
+  <div class="settings">
+    <div class="sidebar">
+      <div class="nav-item">General</div>
+      <div class="nav-sec">Code and automation</div>
+      <div class="nav-item active">Branches</div>
+      <div class="nav-item">Rules</div>
+      <div class="nav-item">Tags</div>
+      <div class="nav-item">Environments</div>
+      <div class="nav-item">Pages</div>
+    </div>
+    <div class="main">
+      <div class="breadcrumb">Branches <span class="sep">/</span> <span class="cur">Add rule</span></div>
+      <div class="field"><label>Branch name pattern</label><input type="text" value="main" style="max-width:200px"></div>
+      <div class="rules-label">Protect matching branches</div>
+      <div class="rule-item"><div class="row"><input type="checkbox" checked><div><div class="title">Require a pull request before merging</div></div></div></div>
+      <div class="rule-item"><div class="row"><input type="checkbox" checked><div><div class="title">Require status checks to pass before merging</div><div class="sub">9 status checks selected · strict</div></div></div></div>
+      <div class="rule-item"><div class="row"><input type="checkbox" checked><div><div class="title">Do not allow bypassing the above settings</div></div></div></div>
+      <div class="rule-item"><div class="row"><input type="checkbox" checked><div><div class="title">Allow force pushes — <b>Block</b></div></div></div></div>
+      <div class="annot footer-bar">
+        <button class="btn btn-green">Create</button>
+        <span>or</span>
+        <a class="link">Cancel</a>
+        <span class="badge">1</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ ADIM 7 — Kural oluştu ═══════════════ -->
+<div class="screen" id="screen-07">
+  <div class="caption"><span class="step">7</span> Kural oluştu — liste: <code>main</code> <span class="desc">9 status checks · 1 approving review</span></div>
+  <div class="topbar"><div class="logo"><span class="mark">GH</span> GitHub</div><div class="crumbs">ali-han-kaya <span class="sep">/</span> leibniz2</div></div>
+  <div class="tabbar"><div class="tab">Code</div><div class="tab">Issues</div><div class="tab">Pull requests</div><div class="tab">Actions</div><div class="tab">Security</div><div class="tab active">Settings</div></div>
+  <div class="settings">
+    <div class="sidebar">
+      <div class="nav-item">General</div>
+      <div class="nav-sec">Code and automation</div>
+      <div class="nav-item active">Branches</div>
+      <div class="nav-item">Rules</div>
+      <div class="nav-item">Tags</div>
+      <div class="nav-item">Environments</div>
+      <div class="nav-item">Pages</div>
+    </div>
+    <div class="main">
+      <div class="page-head">
+        <h1>Branch protection rules</h1>
+        <button class="btn btn-green">Add branch protection rule</button>
+      </div>
+      <div class="annot rule-card">
+        <div>
+          <div class="name">main</div>
+          <div class="desc">9 status checks · 1 approving review — All changes to branches matching this rule will be blocked.</div>
+        </div>
+        <div class="actions"><span>Edit</span><span>Delete</span></div>
+        <span class="badge">1</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ ADIM 8 — Terminal doğrulama ═══════════════ -->
+<div class="screen" id="screen-08">
+  <div class="caption"><span class="step">8</span> Doğrula: status_checks.py --gh <span class="desc">AŞAMA 1 (b) adım 9</span></div>
+  <div class="term">
+    <div><span class="prompt">$</span> python3 _calisma/CIKTI/status_checks.py --gh</div>
+    <div class="dim">Beklenen status check adları (9) — kaynak: .github/workflows/verify.yml</div>
+    <div class="dim">&nbsp;&nbsp;1. Delivery verification — K1-K9 (single entry point)</div>
+    <div class="dim">&nbsp;&nbsp;2. Action runtime check (node24)</div>
+    <div class="dim">&nbsp;&nbsp;… (9 kapı)</div>
+    <div>GitHub karşılaştırması: ali-han-kaya/leibniz2 (branch: main)</div>
+    <div>&nbsp;&nbsp;[PASS] Action runtime check (node24)</div>
+    <div>&nbsp;&nbsp;[PASS] Delivery verification — K1-K9 (single entry point)</div>
+    <div>&nbsp;&nbsp;[PASS] … (9/9)</div>
+    <div>── PR-merge engeli smoke (koruma ayarları) ──</div>
+    <div>&nbsp;&nbsp;[PASS] required_status_checks.strict (up-to-date zorunlu)</div>
+    <div>&nbsp;&nbsp;[PASS] enforce_admins.enabled (admin bypass kapalı)</div>
+    <div>&nbsp;&nbsp;[PASS] allow_force_pushes.enabled == false</div>
+    <div>&nbsp;&nbsp;[PASS] allow_deletions.enabled == false</div>
+    <div><span class="ok">SONUÇ: PASS — 9 check birebir eşleşiyor (workflow ↔ GitHub) ve merge engeli etkin</span></div>
+  </div>
+</div>
+
+</body>
+</html>
