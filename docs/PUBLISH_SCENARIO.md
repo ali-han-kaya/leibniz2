@@ -58,6 +58,7 @@ Aşağıdaki manuel aşamaların **birebir aynısını tek komutla, interaktif o
 | `bash docs/publish_wrapper.sh --with-stage4` | AŞAMA 0-4 (opsiyonel koruma testi dahil) |
 | `bash docs/publish_wrapper.sh --dry-run` | **Prova:** hiçbir komut çalışmaz; her kalıcı komut `[DRY-RUN] çalıştırılacak: ...` olarak önizlenir (exit 0) |
 | `bash docs/publish_wrapper.sh --dry-run --with-stage4` | AŞAMA 0-4'ün tam önizlemesi |
+| `bash docs/publish_wrapper.sh --dry-run-summary` | **Prova + özet:** dry-run komut akışını tek markdown dosyasına yazar (`logs/PUBLISH_DRY_RUN_SUMMARY.md`) |
 | `bash docs/publish_wrapper.sh` (repo zaten yayında) | **İdempotent:** repo/remote varsa atlanır; bekleyen commit yoksa push atlanır; HEAD için mevcut CI run'ı izlenir |
 
 - **Log:** `logs/publish_<timestamp>.log` — hem terminale hem dosyaya yazılır.

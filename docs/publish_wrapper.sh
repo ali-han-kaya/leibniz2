@@ -10,6 +10,9 @@
 #                                             # push, PR gibi kalıcı komutlar
 #                                             # ÇALIŞTIRILMAZ; akış önizlenir
 #   ./docs/publish_wrapper.sh --dry-run --with-stage4
+#   ./docs/publish_wrapper.sh --dry-run-summary
+#                           # = --dry-run + komut akışını tek markdown dosyasına
+#                           #   özetle (logs/PUBLISH_DRY_RUN_SUMMARY.md)
 #
 # DRY-RUN: her kalıcı komut "[DRY-RUN] çalıştırılacak: ..." olarak basılır;
 # AŞAMA 0 precheck --skip-smoke --allow-remote ile koşar (fail olsa bile akış
@@ -40,14 +43,17 @@ DESCRIPTION="Stoic-Hume V5 — fail-closed academic delivery with Z3 + Lean 4 pr
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 LOG_DIR="$REPO_ROOT/logs"
 LOG="$LOG_DIR/publish_${TIMESTAMP}.log"
+SUMMARY_MD="$LOG_DIR/PUBLISH_DRY_RUN_SUMMARY.md"
 
 WITH_STAGE4=0
 DRY_RUN=0
+DRY_RUN_SUMMARY=0
 for a in "$@"; do
   case "$a" in
     --with-stage4) WITH_STAGE4=1 ;;
     --dry-run)     DRY_RUN=1 ;;
-    *) echo "Bilinmeyen bayrak: $a (geçerli: --with-stage4, --dry-run)" >&2; exit 2 ;;
+    --dry-run-summary) DRY_RUN=1; DRY_RUN_SUMMARY=1 ;;
+    *) echo "Bilinmeyen bayrak: $a (geçerli: --with-stage4, --dry-run, --dry-run-summary)" >&2; exit 2 ;;
   esac
 done
 
@@ -72,6 +78,44 @@ run() {
 
 # DRY-RUN dışında tamamlanma mesajı basar (önizlemede yalnızca run() yeter).
 done_msg() { [ "$DRY_RUN" = "1" ] || log "$*"; }
+
+# --dry-run-summary: dry-run komut akışını TEK markdown dosyasında özetle.
+# AŞAMA başlıkları + [DRY-RUN] komut önizlemeleri yapılandırılmış liste olur;
+# tam çıktı da denetim için fenced blokta saklanır.
+gen_dryrun_summary() {
+  local log="$1" out="$2"
+  {
+    echo "# Publish Wrapper — Dry-Run Komut Akışı"
+    echo ""
+    echo "- **Tarih:** $(date '+%Y-%m-%d %H:%M:%S')"
+    echo "- **Repo:** $OWNER/$REPO_NAME"
+    echo "- **Kaynak log:** $log"
+    echo "- **Mod:** dry-run — hiçbir kalıcı komut çalıştırılmadı"
+    echo ""
+    echo "## Komut akışı"
+    echo ""
+    awk '
+      /===== AŞAMA|===== SONUÇ/ {
+        gsub(/^\[[^]]*\] /, ""); gsub(/^===== /, ""); gsub(/ =====$/, "");
+        print ""; print "### " $0; next
+      }
+      /\[DRY-RUN\] çalıştırılacak:/ {
+        gsub(/^\[[^]]*\] \[DRY-RUN\] çalıştırılacak: /, "");
+        print "- `" $0 "`"; next
+      }
+      /\[DRY-RUN\] / {
+        gsub(/^\[[^]]*\] \[DRY-RUN\] /, "");
+        print "- " $0; next
+      }
+    ' "$log"
+    echo ""
+    echo "## Tam çıktı (denetim)"
+    echo ""
+    echo '```text'
+    sed 's/^\[[0-9:]*\] //' "$log"
+    echo '```'
+  } > "$out"
+}
 
 if [ "$DRY_RUN" = "1" ]; then
   log "publish_wrapper.sh DRY-RUN modunda — hiçbir komut çalıştırılmayacak"
@@ -328,6 +372,10 @@ if [ "$DRY_RUN" = "1" ]; then
   log "Repo:        https://github.com/$OWNER/$REPO_NAME  (dry-run — oluşturulmayacak)"
   log "CI run:      $RUN_ID (dry-run — çalıştırılmadı)"
   log "Log dosyası: $LOG"
+  if [ "$DRY_RUN_SUMMARY" = "1" ]; then
+    gen_dryrun_summary "$LOG" "$SUMMARY_MD"
+    log "Dry-run özeti: $SUMMARY_MD"
+  fi
   log "SONUÇ: DRY-RUN ✓ — hiçbir komut çalıştırılmadı (yalnızca önizleme)"
   exit 0
 fi
