@@ -18,6 +18,9 @@ name: verify-delivery
 # Yardımcı job'lar:
 #   budget        : bütçe sidecar'ını toplar; aşım varsa run summary +
 #                   PR yorumu üretir.
+#   action-runtimes: her uses: action'ın action.yml'ini çekip runs.using'i
+#                   node24'e karşı denetler (fail-closed; deprecated node
+#                   veya doğrulanamayan action → FAIL).
 #   reports       : statik markdown raporları tek artifact'ta toplar.
 #   (pre-commit hook'ları ayrı job değil — verify job'unun İÇİNDE advisory
 #    bölüm olarak koşulur; çıktısı aynı log'a eklenir, tek giriş noktası.)
@@ -403,6 +406,88 @@ jobs:
         with:
           name: precommit-logs
           path: logs/
+          if-no-files-found: error
+          retention-days: 30
+
+  # ──────────────────────────────────────────────────────────────────────
+  # ACTION RUNTIME GATE (node24)
+  #
+  # Her `uses:` action'ın action.yml'ini raw.githubusercontent.com'dan çeker
+  # ve runs.using'i hedef Node sürümüne (node24) karşı denetler.
+  #   nodeN >= node24 → PASS; node20/16/12 → FAIL (GitHub Actions Node
+  #   deprecation uyarısının kaynağı); composite/docker → SKIP (Node tabanlı
+  #   değil); lokal action → SKIP (markette değil).
+  # Fail-closed: action.yml çekilemezse (404/ağ) action PASS sayılmaz → job
+  # FAIL. Böylece bir action yanlışlıkla deprecated Node'a düşürülürse build
+  # kırmızıya döner. Ağ bağımlılığı 2 retry (backoff) ile yumuşatılır.
+  # Job kendi action'larını da denetler (checkout/setup-python/upload-artifact
+  # dahil) — self-checking. `needs` yok: verify ile PARALEL koşar, böylece
+  # deprecated action hatası ~11 dk'lık verify'ı beklemeden erken görünür.
+  # ──────────────────────────────────────────────────────────────────────
+  action-runtimes:
+    name: Action runtime check (node24)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      # workflow YAML ayrıştırma için (status_checks.py ile aynı bağımlılık).
+      - name: Install PyYAML
+        run: pip install pyyaml
+
+      # Fail-closed kapı: deprecated node VEYA doğrulanamayan action → exit 1.
+      # --out: makine-okur raporu artifact'a yazar (denetim izi).
+      - name: Check action runtimes (node24)
+        shell: bash
+        run: |
+          python3 _calisma/CIKTI/check_action_runtimes.py \
+            --workflow .github/workflows/verify.yml \
+            --json --out action_runtimes.json
+
+      # Kapı FAIL olsa bile (if: always) sonucu run summary'e yaz — tek bakışta
+      # hangi action'ın deprecated olduğu görünür.
+      - name: Write action runtime result to run summary
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PYEOF'
+          import json, os
+          path = 'action_runtimes.json'
+          if not os.path.exists(path):
+              print('action_runtimes.json yok — run summary atlanıyor')
+              raise SystemExit(0)
+          d = json.load(open(path, encoding='utf-8'))
+          s = d['summary']
+          verdict = 'PASS' if s['fail'] == 0 else 'FAIL'
+          lines = [
+              '## Action runtime denetimi — hedef: ' + d['target'],
+              '',
+              ('**✅ PASS**' if verdict == 'PASS' else '**❌ FAIL**') +
+              ' — ' + str(s['pass']) + ' PASS, ' + str(s['fail']) + ' FAIL, ' +
+              str(s['skip']) + ' SKIP (toplam ' + str(s['total']) + ' action)',
+              '',
+              '| Action | runs.using | Verdict |',
+              '|---|---|---|',
+          ]
+          for r in d['actions']:
+              using = r.get('using') or '?'
+              lines.append('| `' + r['action'] + '` | `' + using + '` | ' + r['verdict'] + ' |')
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as f:
+              f.write('\n'.join(lines) + '\n')
+          print('action runtime summary yazıldı: ' + verdict)
+          PYEOF
+
+      - name: Upload action runtime report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: action-runtimes
+          path: action_runtimes.json
           if-no-files-found: error
           retention-days: 30
 
