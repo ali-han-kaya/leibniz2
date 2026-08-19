@@ -109,14 +109,11 @@ jobs:
       # pdfinfo (PDF sayfa kapısı 33) + qpdf (K6-DETERM metadata-stripped hash).
       # Yoksa verify_delivery.py bu kontrolleri atlar (FAIL etmez); kapıyı
       # eksiksiz çalıştırmak için kuruyoruz.
-      # apt-get update GitHub Actions runner'larında nadiren takılabilir
-      # (2026-08-19 iki run üst üste bu adımda asılı kaldı); retry + timeout
-      # ile adım ya hızlı geçer ya da anında başarısız olur (sonsuz asılı kalmaz).
+      # apt-get GitHub Actions runner'larında mirror'a göre takılabilir
+      # (azure.archive.ubuntu.com runner'a göre erişilemez — 2026-08-19);
+      # apt_install.sh mirror'ı archive.ubuntu.com'a sabitler + retry/timeout.
       - name: Install pdfinfo (poppler-utils) + qpdf (K6-DETERM)
-        run: |
-          timeout 300 sudo apt-get update -o Acquire::Retries=5 || \
-            { sudo rm -rf /var/lib/apt/lists/*; timeout 300 sudo apt-get update -o Acquire::Retries=5; }
-          timeout 300 sudo apt-get install -y -o Acquire::Retries=5 poppler-utils qpdf
+        run: bash _calisma/CIKTI/apt_install.sh poppler-utils qpdf
 
       # K8: Z3 sembolik ispat. Yerel ispatla aynı sürüm (tekrarlanabilirlik).
       - name: Install Z3 (K8)
@@ -1134,10 +1131,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install pdfinfo (poppler-utils)
-        run: |
-          timeout 300 sudo apt-get update -o Acquire::Retries=5 || \
-            { sudo rm -rf /var/lib/apt/lists/*; timeout 300 sudo apt-get update -o Acquire::Retries=5; }
-          timeout 300 sudo apt-get install -y -o Acquire::Retries=5 poppler-utils
+        run: bash _calisma/CIKTI/apt_install.sh poppler-utils
 
       - name: Run gen_config.py --dry-run (capture exit; kapı sonra)
         id: drift
@@ -1308,10 +1302,7 @@ jobs:
       # repack PDF sidecar için qpdf kullanır (K6-DETERM reuse mantığı);
       # verify base K6 için pdfinfo gerekir.
       - name: Install pdfinfo + qpdf (repack + verify deps)
-        run: |
-          timeout 300 sudo apt-get update -o Acquire::Retries=5 || \
-            { sudo rm -rf /var/lib/apt/lists/*; timeout 300 sudo apt-get update -o Acquire::Retries=5; }
-          timeout 300 sudo apt-get install -y -o Acquire::Retries=5 poppler-utils qpdf
+        run: bash _calisma/CIKTI/apt_install.sh poppler-utils qpdf
 
       # Deterministik repack — kaynak ağacı commit'li olduğundan doğrudan
       # koşar; --verify repack SONRASI zip'lerin SHA-256'sını .sha256
