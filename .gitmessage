@@ -6,7 +6,9 @@ zincirini etkiliyorsa kanıta referans ver: hash, rapor, test sonucu.>
 # ─────────────────────────────────────────────────────────────────────
 # .gitmessage — bu repo'nun commit mesaj kuralı (bkz. docs/HISTORY_CLEANUP.md)
 #
-# KURULUM (bir kez, makine başına):
+# KURULUM (bir kez, makine başına) — TEK komut:
+#   bash _calisma/CIKTI/setup_commit_hooks.sh
+# Eşdeğeri (elle):
 #   git config commit.template .gitmessage
 #   pre-commit install --hook-type commit-msg      # başlık denetimi için
 #

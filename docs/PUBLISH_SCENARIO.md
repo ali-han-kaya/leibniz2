@@ -66,6 +66,7 @@ git status --short         # ← boş olmalı
 git log --oneline -5       # ← temiz linear history; test-marker commit'i olmamalı
 
 # (a2) Commit mesaj kuralı kurulu mu? (bkz. docs/HISTORY_CLEANUP.md)
+#      Kurulu değilse TEK komutla kur: bash _calisma/CIKTI/setup_commit_hooks.sh
 git config commit.template      # ← ".gitmessage" olmalı
 ls .git/hooks/commit-msg        # ← var olmalı (pre-commit install --hook-type commit-msg)
 

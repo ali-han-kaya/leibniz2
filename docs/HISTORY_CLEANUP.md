@@ -60,7 +60,9 @@ yerel diskteki denetim izidir.
    - `wip`, `smoke*`, `test marker*`, `test:*`, `fix typo*`, `minor fix*`, `asd`,
      `foo`, `lorem` vb. noise başlıkları **commit'i BLOKE EDER**.
    - `Merge ...` / `Revert ...` başlıklarına izin verir (git üretir).
-   - Kurulum: `pre-commit install --hook-type commit-msg`
+   - Kurulum (tek komut): `bash _calisma/CIKTI/setup_commit_hooks.sh`
+     (→ `git config commit.template .gitmessage` + `pre-commit install` +
+     `pre-commit install --hook-type commit-msg` hepsini kurar)
    - **Not:** commit-msg stage'i CI `pre-commit run --all-files`'ta ÇALIŞMAZ
      (yalnızca yerel commit'lerde) — CI davranışı değişmez.
 3. **`docs/PUBLISH_SCENARIO.md` AŞAMA 0** ön-kontrolü: `git log --oneline -5`'te
