@@ -28,6 +28,9 @@ CHECK_DRIFT = os.path.join(HERE, "check_plist_drift.py")
 VERIFY_DELIVERY = os.path.join(HERE, "verify_delivery.py")
 GOLDEN_DIR = os.path.join(HERE, "plist-golden")
 
+sys.path.insert(0, HERE)
+from verify_delivery import parse_plist_check_output  # noqa: E402
+
 
 def run(home, *args):
     """HOME'u fake dizine sabitleyip komutu koş; CompletedProcess döner."""
@@ -131,6 +134,13 @@ class TestPlistOutSidecar(unittest.TestCase):
             self.assertEqual(d["exit"], 0)
             self.assertIn("GÜNCEL", d["detail"])
             self.assertIn("GÜNCEL", d["output"])
+            # ÇOK-PROFİLLİ: iki profil de ayrı kayıt olarak rapora girmeli.
+            labels = sorted(p["label"] for p in d["profiles"])
+            self.assertEqual(labels, ["com.freebuff.preview-leibniz2",
+                                      "com.freebuff.preview-server"])
+            for p in d["profiles"]:
+                self.assertEqual(p["status"], "GÜNCEL")
+                self.assertTrue(p["path"].endswith(p["label"] + ".plist"))
 
     def test_sidecar_fail_detail_on_no_template(self):
         with tempfile.TemporaryDirectory(prefix="plist-gate-") as home:
@@ -148,6 +158,51 @@ class TestPlistOutSidecar(unittest.TestCase):
             self.assertEqual(d["exit"], 2)
             self.assertIn("şablon yok", d["detail"])
             self.assertIn("şablon yok", d["output"])
+
+
+class TestParsePlistCheckOutput(unittest.TestCase):
+    """parse_plist_check_output: çok-profilli çıktıyı profil bazında ayrıştırır."""
+
+    def test_two_profiles_all_guncel(self):
+        txt = (
+            "GÜNCEL: /h/Library/LaunchAgents/com.freebuff.preview-leibniz2.plist"
+            "  (şablonla aynı, plutil geçerli)\n"
+            "GÜNCEL: /h/Library/LaunchAgents/com.freebuff.preview-server.plist"
+            "  (şablonla aynı, plutil geçerli)\n"
+        )
+        profiles = parse_plist_check_output(txt)
+        self.assertEqual(len(profiles), 2)
+        self.assertEqual([p["label"] for p in profiles],
+                         ["com.freebuff.preview-leibniz2",
+                          "com.freebuff.preview-server"])
+        self.assertTrue(all(p["status"] == "GÜNCEL" for p in profiles))
+
+    def test_mixed_status(self):
+        txt = (
+            "BAYAT/GEÇERSİZ: /h/Library/LaunchAgents/com.freebuff.preview-leibniz2.plist"
+            " şablondan farklı\n"
+            "GÜNCEL: /h/Library/LaunchAgents/com.freebuff.preview-server.plist"
+            "  (şablonla aynı, plutil geçerli)\n"
+        )
+        profiles = parse_plist_check_output(txt)
+        self.assertEqual(len(profiles), 2)
+        by_label = {p["label"]: p["status"] for p in profiles}
+        self.assertEqual(by_label["com.freebuff.preview-leibniz2"], "BAYAT")
+        self.assertEqual(by_label["com.freebuff.preview-server"], "GÜNCEL")
+
+    def test_sablon_yok_line(self):
+        txt = ("şablon yok: /h/Library/Caches/com.freebuff/preview-template/"
+               "com.freebuff.preview-leibniz2.plist.tmpl (önce --plist çalıştır)\n")
+        profiles = parse_plist_check_output(txt)
+        self.assertEqual(len(profiles), 1)
+        self.assertEqual(profiles[0]["label"], "com.freebuff.preview-leibniz2")
+        self.assertEqual(profiles[0]["status"], "ŞABLON_YOK")
+
+    def test_unrecognized_lines_skipped(self):
+        txt = "bazı özet satırı\nGÜNCEL: /h/x.plist  (ok)\nboş satır sonrası\n"
+        profiles = parse_plist_check_output(txt)
+        self.assertEqual(len(profiles), 1)
+        self.assertEqual(profiles[0]["label"], "x")
 
 
 if __name__ == "__main__":

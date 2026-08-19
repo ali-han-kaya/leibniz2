@@ -2110,6 +2110,45 @@ def probe_tool_versions():
     return versions
 
 
+def parse_plist_check_output(txt):
+    """update_preview.sh --plist-check çıktısını profil bazında ayrıştır.
+
+    Çok-profilli çıktı satır satır çözülür — her profil ayrı kayıt olur:
+      "GÜNCEL: /yol/<label>.plist  (şablonla aynı, plutil geçerli)"
+      "BAYAT/GEÇERSİZ: /yol/<label>.plist şablondan farklı"
+      "şablon yok: /yol/<label>.plist.tmpl (önce --plist çalıştır)"
+    Döner: [ {"label", "status", "path"}, ... ] — status ∈ {GÜNCEL, BAYAT,
+    ŞABLON_YOK}. Tanınmayan satırlar (özet/boş) atlanır.
+    """
+    profiles = []
+    if not txt:
+        return profiles
+    for line in txt.splitlines():
+        line = line.strip()
+        if line.startswith("GÜNCEL: "):
+            rest = line[len("GÜNCEL: "):].strip()
+            status = "GÜNCEL"
+        elif line.startswith("BAYAT/GEÇERSİZ: "):
+            rest = line[len("BAYAT/GEÇERSİZ: "):].strip()
+            status = "BAYAT"
+        elif line.startswith("şablon yok: "):
+            rest = line[len("şablon yok: "):].strip()
+            status = "ŞABLON_YOK"
+        else:
+            continue
+        # Yol, ilk boşlukta biter (açıklama parantezi onu izler).
+        path = rest.split(" ")[0]
+        base = os.path.basename(path)
+        if status == "ŞABLON_YOK" and base.endswith(".plist.tmpl"):
+            label = base[:-len(".plist.tmpl")]
+        elif base.endswith(".plist"):
+            label = base[:-len(".plist")]
+        else:
+            label = base
+        profiles.append({"label": label, "status": status, "path": path})
+    return profiles
+
+
 def main():
     t0 = time.time()  # run duvar saati (history.jsonl duration_s için)
     ap = argparse.ArgumentParser()
@@ -2725,23 +2764,30 @@ def main():
             add("P1", "K12-PLIST", "K12 plist", "update_preview.sh yok", upd)
             plist_report = {"layer": "K12", "ok": False, "exit": None,
                             "detail": "update_preview.sh yok",
-                            "output": f"yok: {upd}"}
+                            "output": f"yok: {upd}", "profiles": []}
         else:
             detail = None
+            profiles = []
             try:
                 r = subprocess.run(["bash", upd, "--plist-check"],
                                    capture_output=True, text=True, timeout=60)
                 rc, txt = r.returncode, (r.stdout + r.stderr).strip()
+                profiles = parse_plist_check_output(txt)
             except (OSError, subprocess.TimeoutExpired) as e:
                 rc, txt = None, str(e)
                 detail = f"çalıştırılamadı: {e}"
                 add("P1", "K12-PLIST", "K12 plist",
                     f"çalıştırılamadı: {e}", upd)
             else:
+                n = len(profiles)
                 if rc == 0:
-                    detail = "GÜNCEL (şablonla birebir + plutil geçerli)"
+                    detail = (f"GÜNCEL ({n}/{n} profil şablonla birebir + "
+                              f"plutil geçerli)")
                 elif rc == 1:
-                    detail = "BAYAT/GEÇERSİZ (kurulu plist şablondan farklı)"
+                    bad = [p["label"] for p in profiles
+                           if p["status"] != "GÜNCEL"]
+                    detail = (f"BAYAT/GEÇERSİZ — {len(bad)}/{n} profil "
+                              f"şablondan farklı: {', '.join(bad) or '?'}")
                     add("P1", "K12-PLIST", "K12 plist",
                         "kurulu plist şablondan farklı (bayat/geçersiz)", txt)
                 elif rc == 2:
@@ -2753,10 +2799,14 @@ def main():
                     add("P1", "K12-PLIST", "K12 plist",
                         f"beklenmedik exit kodu {rc}", txt)
             plist_report = {"layer": "K12", "ok": rc == 0,
-                            "exit": rc, "detail": detail, "output": txt}
+                            "exit": rc, "detail": detail,
+                            "output": txt, "profiles": profiles}
             if not args.json:
                 print(f"[K12] plist şablon: "
-                      f"{'PASS' if rc == 0 else 'FAIL'} (exit={rc}) — {txt[:100]}")
+                      f"{'PASS' if rc == 0 else 'FAIL'} (exit={rc}) — "
+                      f"{len(profiles)} profil")
+                for p in profiles:
+                    print(f"    [{p['status']}] {p['label']}")
         # Sidecar: update_preview.sh --plist-check ham çıktısı + K12 raporu.
         if args.plist_out:
             try:
