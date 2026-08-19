@@ -91,7 +91,7 @@ class TestAuditBudget(unittest.TestCase):
                     "", lambda *a, **k: None, quiet=True)
             finally:
                 mock.patch.stopall()
-        self.assertEqual(len(results), 56)
+        self.assertEqual(len(results), 61)  # V5q: +4 Sextus (IA) +1 Della Rocca (URL)
         self.assertTrue(all(r["verdict"] == "UNVERIFIED" for r in results))
         self.assertTrue(all("bütçesi aşıldı" in r["detail"]
                            for r in results))
@@ -119,15 +119,16 @@ class TestParallelAudit(unittest.TestCase):
 
     def test_order_preserved_parallel(self):
         # ex.map girdi sırasını korur: crossref(6) + sep(5) + ol(22) +
-        # archive(21) + perseus(2) = 56, listelerdeki sırayla.
+        # archive(25) + url(1) + perseus(2) = 61, listelerdeki sırayla.
         results = self._run(
             4, lambda r: ("PASS", "ok", "archive"))
-        self.assertEqual(len(results), 56)
+        self.assertEqual(len(results), 61)
         order = [r["key"] for r in results]
         expected = ([r["key"] for r in vd.REFERENCE_CROSSREF]
                     + [r["key"] for r in vd.REFERENCE_SEP]
                     + [r["key"] for r in vd.REFERENCE_OPENLIBRARY]
                     + [r["key"] for r in vd.REFERENCE_ARCHIVE]
+                    + [r["key"] for r in vd.REFERENCE_URL]
                     + [r["key"] for r in vd.REFERENCE_PERSEUS])
         self.assertEqual(order, expected)
         self.assertTrue(all(r["verdict"] == "PASS" for r in results))
@@ -141,7 +142,7 @@ class TestParallelAudit(unittest.TestCase):
         # anahtarlara göre filtrele.
         arch_keys = {r["key"] for r in vd.REFERENCE_ARCHIVE}
         arc = [r for r in results if r["key"] in arch_keys]
-        self.assertEqual(len(arc), 21)
+        self.assertEqual(len(arc), 25)  # V5q: +4 Sextus edisyonu
         self.assertTrue(all(r["source"] == "openlibrary" for r in arc))
         self.assertTrue(all("fallback" in r["detail"] for r in arc))
 
@@ -176,16 +177,112 @@ class TestParallelAudit(unittest.TestCase):
             results = vd.run_reference_audit(
                 "", lambda *a, **k: None, quiet=True)
             dt = time.time() - t0
-        self.assertEqual(len(results), 56)
+        self.assertEqual(len(results), 61)
         self.assertGreaterEqual(max_active, 2)  # paralellik kanıtı
         self.assertLess(dt, 2.5)  # 22 × 0.15 sn sıralı ~3.3 sn olurdu
 
     def test_pool1_sequential(self):
-        # Havuz 1 → sıralı (eski davranış); sonuç yine 56, hepsi PASS.
+        # Havuz 1 → sıralı (eski davranış); sonuç yine 61, hepsi PASS.
         results = self._run(
             1, lambda r: ("PASS", "ok", "archive"))
-        self.assertEqual(len(results), 56)
+        self.assertEqual(len(results), 61)
         self.assertTrue(all(r["verdict"] == "PASS" for r in results))
+
+
+class TestCoverageGap(unittest.TestCase):
+    """V5q: kapsam boşluğu kapatıldı — 64 .tex referansının tamamı çevrimiçi
+    listelerde (veya REFERENCE_KNOWN sabit listesinde). 4 Sextus edisyonu IA
+    (ia_ids), Della Rocca 2010 URL listesinde. Yanlışlıkla düşerse test FAIL."""
+
+    def test_sextus_entries_with_ia_ids(self):
+        by_key = {r["key"]: r for r in vd.REFERENCE_ARCHIVE}
+        expect = {
+            "Sextus 1562 Estienne": ["bub_gb_ddgo3O27ItcC"],
+            "Sextus 1569 Hervet": ["bub_gb_RyhI9DhB82sC", "bub_gb_nHEaGbVSZMcC"],
+            "Sextus 1621 Chouet": ["bub_gb_-Yio5nIT2m0C"],
+        }
+        for key, ids in expect.items():
+            self.assertIn(key, by_key, f"{key} arşiv listesinde yok")
+            self.assertEqual(by_key[key].get("ia_ids"), ids)
+        self.assertIn("Sextus Loeb Bury", by_key)
+
+    def test_della_rocca_url_entry(self):
+        keys = {r["key"] for r in vd.REFERENCE_URL}
+        self.assertIn("Della Rocca 2010", keys)
+        dr = [r for r in vd.REFERENCE_URL if r["key"] == "Della Rocca 2010"][0]
+        self.assertIn("web.archive.org", dr["url"])
+        self.assertEqual(dr["title"], "PSR")
+        self.assertIn("Della Rocca", dr.get("markers", []))
+
+    def test_ia_ident_check_pass(self):
+        # ia_ids metadata'sı title+creator eşleşiyorsa PASS (ağsız).
+        ref = {"key": "Sextus 1562 Estienne",
+               "title_needle": "pyrrhoniarum hypotyposeon",
+               "creator_needle": "sextus",
+               "ia_ids": ["bub_gb_ddgo3O27ItcC"]}
+        payload = {"response": {"docs": [{
+            "identifier": "bub_gb_ddgo3O27ItcC",
+            "title": "Sexti Philosophi Pyrrhoniarum hypotypōseōn libri 3",
+            "creator": "Sextus : Empiricus",
+            "year": 1562}]}}
+        with mock.patch.object(vd, "_http_json", return_value=payload):
+            v, d = vd._archive_ident_check(ref, "bub_gb_ddgo3O27ItcC")
+        self.assertEqual(v, "PASS")
+        self.assertIn("bub_gb_ddgo3O27ItcC", d)
+
+    def test_ia_ident_check_latin_uv(self):
+        # erken-modern 'Aduersus' (u) ↔ needle 'adversus' (v) eşleşir.
+        ref = {"key": "Sextus 1569 Hervet",
+               "title_needle": "adversus mathematicos",
+               "creator_needle": "sextus",
+               "ia_ids": ["bub_gb_RyhI9DhB82sC"]}
+        payload = {"response": {"docs": [{
+            "identifier": "bub_gb_RyhI9DhB82sC",
+            "title": "Sexti Empirici ... Aduersus mathematicos, hoc est, "
+                     "aduersus eos qui profitentur disciplinas",
+            "creator": "Sextus : Empiricus",
+            "year": 1569}]}}
+        with mock.patch.object(vd, "_http_json", return_value=payload):
+            v, d = vd._archive_ident_check(ref, "bub_gb_RyhI9DhB82sC")
+        self.assertEqual(v, "PASS")
+
+    def test_ia_ids_no_title_fallback(self):
+        # ia_ids hiçbiri eşleşmediyse title sorgusu ÇALIŞMAMALI (yanlış
+        # edisyon riski) — UNVERIFIED döner, ağ çağrısı title'a gitmez.
+        ref = {"key": "Sextus 1569 Hervet",
+               "title_needle": "adversus", "creator_needle": "sextus",
+               "ia_ids": ["bub_gb_nope1", "bub_gb_nope2"]}
+        with mock.patch.object(vd, "_archive_ident_check",
+                               return_value=("UNVERIFIED", "eşleşmedi")), \
+                mock.patch.object(
+                    vd, "_http_json",
+                    side_effect=lambda *a, **k: (_ for _ in ()).throw(
+                        AssertionError("title sorgusu çağrılmamalı"))):
+            v, d = vd.archive_check(ref)
+        self.assertEqual(v, "UNVERIFIED")
+        self.assertIn("ia_ids", d)
+
+    def test_ia_ident_check_wrong_creator(self):
+        ref = {"key": "X", "title_needle": "adversus",
+               "creator_needle": "hervet", "ia_ids": ["x"]}
+        payload = {"response": {"docs": [{
+            "identifier": "x", "title": "Adversus mathematicos",
+            "creator": "Sextus", "year": 1569}]}}
+        with mock.patch.object(vd, "_http_json", return_value=payload):
+            v, d = vd._archive_ident_check(ref, "x")
+        self.assertEqual(v, "UNVERIFIED")
+
+    def test_sep_check_markers(self):
+        # markers listesinin TÜMÜ sayfada olmalı; eksikse MISMATCH.
+        ref = {"url": "http://x", "title": "PSR", "markers": ["Della Rocca"]}
+        with mock.patch.object(vd, "_http_get",
+                               return_value=b"PSR paper by Della Rocca here"):
+            v, d = vd.sep_check(ref)
+        self.assertEqual(v, "PASS")
+        with mock.patch.object(vd, "_http_get", return_value=b"PSR only"):
+            v, d = vd.sep_check(ref)
+        self.assertEqual(v, "MISMATCH")
+        self.assertIn("Della Rocca", d)
 
 
 class TestCrossRefCoverage(unittest.TestCase):

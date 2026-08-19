@@ -459,6 +459,43 @@ REFERENCE_ARCHIVE = [
      "ht_ids": ["lccn:87033578", "oclc:17265207",
                  "isbn:9780231129657", "isbn:0231129653"],
      "tex_needle": "Xunzi."},
+    # V5q: kapsam boşluğu kapatıldı — Sextus edisyonları IA'da gerçek kayıtlarla
+    # (Google Books taraması bub_gb_* identifier'ları). Title sorgusu gürültülü
+    # olduğundan (aynı eserin farklı baskıları aynı kelimeleri taşır) ia_ids ile
+    # BİREBİR identifier doğrulaması kullanılır: identifier + başlık/creator
+    # eşleşmesi (yanlış edisyon riski yok).
+    {"key": "Sextus 1562 Estienne", "query": "Sexti Empirici Pyrrhoniarum hypotyposeon Estienne",
+     "title_needle": "pyrrhoniarum hypotyposeon", "creator_needle": "sextus",
+     "ia_ids": ["bub_gb_ddgo3O27ItcC"],
+     "tex_needle": "Sextus Empiricus. (1562)"},
+    {"key": "Sextus 1569 Hervet", "query": "Sexti Empirici Adversus Mathematicos Hervet",
+     "title_needle": "adversus mathematicos", "creator_needle": "sextus",
+     "ia_ids": ["bub_gb_RyhI9DhB82sC", "bub_gb_nHEaGbVSZMcC"],
+     "tex_needle": "Sextus Empiricus. (1569)"},
+    {"key": "Sextus 1621 Chouet", "query": "Sexti Empirici opera Chouet",
+     "title_needle": "sozomena", "creator_needle": "sextus",
+     "ia_ids": ["bub_gb_-Yio5nIT2m0C"],
+     "tex_needle": "Sextus Empiricus. (1621)"},
+    {"key": "Sextus Loeb Bury", "query": "Sextus Empiricus Bury Loeb",
+     "title_needle": "sextus empiricus", "creator_needle": "bury",
+     "tex_needle": "Sextus Empiricus. Adversus Mathematicos VII"},
+]
+
+# ---- K6+ Doğrudan URL (--check-references ek) ------------------------------
+# Açık erişimli dergi makaleleri için doğrudan URL doğrulaması (sep_check ile
+# aynı mantık: HTTP 200 + başlık/bulgu sayfada). CrossRef'te DOI'si kayıtlı
+# olmayan, kendi sitesi bot-korumalı (Anubis) makaleler arşivlenmiş kopyadan
+# doğrulanır.
+# Della Rocca 2010 "PSR" (Philosophers' Imprint 10(7)): PI sitesi script
+# erişimini engeller, CrossRef DOI kayıtlı değil (10.3998/... 404); makalenin
+# arşivlenmiş kopyası Wayback Machine'de (quod.lib.umich.edu --psr anlık
+# görüntüsü) — içerikte 'Della Rocca' + 'PSR' bulunur (V5q kanıtı).
+REFERENCE_URL = [
+    {"key": "Della Rocca 2010",
+     "url": ("https://web.archive.org/web/20210221211420id_/"
+             "https://quod.lib.umich.edu/p/phimp/3521354.0010.007/--psr"),
+     "title": "PSR", "markers": ["Della Rocca"],
+     "tex_needle": "Della Rocca, M. (2010)"},
 ]
 
 # ---- K6+ Perseus CTS (--check-references ek) -------------------------------
@@ -769,7 +806,11 @@ def crossref_check(ref):
 
 
 def sep_check(ref):
-    """SEP girişini doğrudan URL'den doğrula (HTTP 200 + başlık)."""
+    """SEP girişini doğrudan URL'den doğrula (HTTP 200 + başlık).
+
+    V5q: REFERENCE_URL (açık erişim/arşivlenmiş makaleler) de aynı mantığı
+    kullanır — `title` artı opsiyonel `markers` listesinin TÜMÜ sayfada
+    bulunmalıdır (zayıf tek-sözcük işaretlerini güçlendirir)."""
     try:
         body = _http_get(ref["url"]).decode("utf-8", "replace")
     except urllib.error.HTTPError as e:
@@ -778,9 +819,11 @@ def sep_check(ref):
         return "UNVERIFIED", f"SEP HTTP {e.code}"
     except Exception as e:
         return "UNVERIFIED", f"ağ hatası: {e}"
-    if ref["title"].lower() in body.lower():
-        return "PASS", f"200 OK, '{ref['title']}' mevcut"
-    return "MISMATCH", f"200 OK ama '{ref['title']}' başlığı sayfada yok"
+    markers = [ref["title"]] + list(ref.get("markers") or [])
+    for m in markers:
+        if m.lower() not in body.lower():
+            return "MISMATCH", f"200 OK ama '{m}' sayfada yok"
+    return "PASS", f"200 OK, '{ref['title']}' mevcut"
 
 
 def openlibrary_check(ref):
@@ -848,11 +891,73 @@ def _archive_query(ref):
     return q
 
 
+def _fold_latin(s):
+    """_fold + erken-modern Latin u/v normalizasyonu (yalnızca IA identifier
+    doğrulamasında kullanılır): 'Aduersus' ↔ 'Adversus' baskı varyantları
+    bibliyografik kimliği değiştirmez; 1569 Hervet edisyonu başlığında 'u'
+    ile yazılır ('Aduersus'), modern needle 'v' kullanır."""
+    return _fold(s).replace("u", "v")
+
+
+def _archive_ident_check(ref, ident):
+    """Belirli bir IA identifier'ının metadata'sını doğrula (kesin, V5q).
+
+    Erken-modern edisyonların title sorgusu gürültülü olabilir (aynı eserin
+    farklı baskıları/çağdaş reprint'ler aynı kelimeleri taşır) — birebir
+    identifier + başlık/creator eşleşmesi yanlış edisyonu eler. IA
+    identifier'ları kararlıdır; metadata'yı (başlık/creator/year) canlı çeker.
+    Döndürür (PASS | UNVERIFIED, açıklama)."""
+    url = ("https://archive.org/advancedsearch.php?" +
+           urllib.parse.urlencode({
+               "q": f'identifier:"{ident}"',
+               "fl[]": ["identifier", "title", "creator", "year"],
+               "rows": "3",
+               "output": "json",
+           }, doseq=True))
+    try:
+        data = _http_json(url)
+    except urllib.error.HTTPError as e:
+        return "UNVERIFIED", f"IA identifier '{ident}': HTTP {e.code}"
+    except Exception as e:
+        return "UNVERIFIED", f"IA identifier '{ident}': ağ hatası: {e}"
+
+    docs = data.get("response", {}).get("docs", []) or []
+    # _fold_latin (aksan + u/v): erken-modern başlıklardaki ō/æ/é harfleri
+    # NFD sonrası eşleşir — "hypotypōseōn" ↔ "hypotyposeon"; "Aduersus"
+    # ↔ "Adversus" u/v varyantları da eşleşir.
+    title_n = _fold_latin(ref["title_needle"])
+    creator_n = _fold_latin(ref["creator_needle"]) if ref.get("creator_needle") else None
+    for d in docs:
+        t = _fold_latin(str(d.get("title") or ""))
+        if title_n not in t:
+            continue
+        if creator_n:
+            c = _fold_latin(str(d.get("creator") or ""))
+            if creator_n not in c:
+                continue
+        return "PASS", (f"'{str(d.get('title'))[:60]}' "
+                        f"({ident}, {d.get('year') or '?'})")
+    return "UNVERIFIED", f"IA identifier '{ident}': başlık/creator eşleşmedi"
+
+
 def archive_check(ref):
     """Internet Archive advancedsearch ile kitap/edişyon doğrulaması (auth gerektirmez).
     title:"..." alan sorgusu kullanır; dönen doc'ların başlığı title_needle ile
-    (ve opsiyonel creator_needle ile) tekrar doğrulanır.
+    (ve opsiyonel creator_needle ile) tekrar doğrulanır. V5q: ref'te ia_ids
+    varsa ÖNCE birebir identifier doğrulaması denenir (yanlış edisyon
+    eşleşmesini önler) — hiçbiri PASS değilse title sorgusu devam eder.
     Döndürür: (PASS | MISMATCH | UNVERIFIED, açıklama)."""
+    for ident in ref.get("ia_ids") or []:
+        iv, idetail = _archive_ident_check(ref, ident)
+        if iv == "PASS":
+            return iv, idetail
+    if ref.get("ia_ids"):
+        # ia_ids'li kayıtlar yalnızca birebir identifier doğrulamasıyla geçer;
+        # title sorgusu gürültülü olabilir (aynı eserin çağdaş reprint'i aynı
+        # kelimeleri taşır → yanlış edisyon PASS riski). Hiçbiri eşleşmediyse
+        # dürüst UNVERIFIED dön (fallback zinciri OL/HT/GB devreye girer).
+        return "UNVERIFIED", ("Internet Archive: ia_ids eşleşmedi "
+                               "(birebir identifier doğrulaması başarısız)")
     url = ("https://archive.org/advancedsearch.php?" +
            urllib.parse.urlencode({
                "q": _archive_query(ref),
@@ -871,14 +976,16 @@ def archive_check(ref):
     if not docs:
         return "UNVERIFIED", "Internet Archive: 0 sonuç (IA kapsamı dışı olabilir)"
 
-    title_n = _norm_ref(ref["title_needle"])
-    creator_n = _norm_ref(ref["creator_needle"]) if ref.get("creator_needle") else None
+    # _fold (aksan-duyarsız): erken-modern başlıklardaki ō/æ/é eşleşmesi
+    # (ör. "hypotypōseōn" ↔ "hypotyposeon") — _norm_ref macron'u katlamaz.
+    title_n = _fold(ref["title_needle"])
+    creator_n = _fold(ref["creator_needle"]) if ref.get("creator_needle") else None
     for d in docs:
-        t = _norm_ref(str(d.get("title") or ""))
+        t = _fold(str(d.get("title") or ""))
         if title_n not in t:
             continue
         if creator_n:
-            c = _norm_ref(str(d.get("creator") or ""))
+            c = _fold(str(d.get("creator") or ""))
             if creator_n not in c:
                 continue
         ident = d.get("identifier", "?")
@@ -1105,7 +1212,7 @@ def run_reference_audit(tex_text, add, quiet=False):
     deadline = time.monotonic() + REFERENCE_AUDIT_BUDGET_S
 
     # 1) .tex'te varlık (çevrimdışı, deterministik)
-    for ref in REFERENCE_CROSSREF + REFERENCE_SEP:
+    for ref in REFERENCE_CROSSREF + REFERENCE_SEP + REFERENCE_URL:
         if ref["tex_needle"] not in tex_text:
             add("P1", "K6-REF", "K6 referans",
                 f".tex'te yok: {ref['tex_needle']} ({ref['key']})")
@@ -1124,6 +1231,8 @@ def run_reference_audit(tex_text, add, quiet=False):
         tasks.append((ref, openlibrary_check, "openlibrary"))
     for ref in REFERENCE_ARCHIVE:
         tasks.append((ref, _archive_with_fallback, "archive"))
+    for ref in REFERENCE_URL:
+        tasks.append((ref, sep_check, "url"))
     for ref in REFERENCE_PERSEUS:
         tasks.append((ref, perseus_check, "perseus"))
 
@@ -1198,6 +1307,17 @@ def run_reference_audit(tex_text, add, quiet=False):
             add("P1", "K6-REF", "K6 referans",
                 f"{ref['key']} {src_label} uyuşmuyor: {detail}")
 
+    # 4b2) Doğrudan URL: açık erişimli/arşivlenmiş makaleler (V5q)
+    for ref, v, detail, src in results_for("url"):
+        tag = {"PASS": "OK  ", "MISMATCH": "FAIL", "UNVERIFIED": "SKIP"}[v]
+        say(f"  [{tag}] URL     {ref['key']:<14} -> {detail}")
+        online_results.append({"key": ref["key"], "source": "url",
+                               "verdict": v, "detail": detail,
+                               "url": ref["url"]})
+        if v == "MISMATCH":
+            add("P1", "K6-REF", "K6 referans",
+                f"{ref['key']} URL uyuşmuyor: {detail}")
+
     # 4c) Perseus: antik birincil metin pasajı (çevrimiçi, --check-references)
     for ref, v, detail, src in results_for("perseus"):
         tag = {"PASS": "OK  ", "MISMATCH": "FAIL", "UNVERIFIED": "SKIP"}[v]
@@ -1217,12 +1337,12 @@ def run_reference_audit(tex_text, add, quiet=False):
                 f"[{k['status']}] {k['key']}: {k['note']}")
 
     say(f"  Kapsam: 64 referans; canlı doğrulanan "
-        f"{len(REFERENCE_CROSSREF) + len(REFERENCE_SEP) + len(REFERENCE_OPENLIBRARY) + len(REFERENCE_ARCHIVE) + len(REFERENCE_PERSEUS)} "
+        f"{len(REFERENCE_CROSSREF) + len(REFERENCE_SEP) + len(REFERENCE_OPENLIBRARY) + len(REFERENCE_ARCHIVE) + len(REFERENCE_URL) + len(REFERENCE_PERSEUS)} "
         f"(CrossRef {len(REFERENCE_CROSSREF)} + SEP {len(REFERENCE_SEP)} + "
         f"OpenLibrary {len(REFERENCE_OPENLIBRARY)} + "
         f"Internet Archive {len(REFERENCE_ARCHIVE)} "
         f"[OpenLibrary + HathiTrust + Google Books fallback] + "
-        f"Perseus {len(REFERENCE_PERSEUS)}); "
+        f"URL {len(REFERENCE_URL)} + Perseus {len(REFERENCE_PERSEUS)}); "
         f"kalanı REFERANS_KANIT_DENETIMI.md sabit denetimine dayanır.")
     return online_results
 
