@@ -618,7 +618,8 @@ jobs:
                 body,
               });
               console.log('Durum yorumu oluşturuldu');
-            }      - name: Upload budget bundle
+            }
+      - name: Upload budget bundle
         if: always()
         uses: actions/upload-artifact@v6
         with:
