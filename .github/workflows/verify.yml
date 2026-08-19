@@ -652,15 +652,16 @@ jobs:
       # dosya bazında denetlenebilir. merge-multiple artifact'ları köke
       # düzleştirdiği için bu ikisini pattern'e koymak öneklerini
       # kaybettirirdi.
-      # repack-verify tek düz dosya (repack_verify_report.txt) olduğundan
-      # merge ile köke düzleşmesi sorun değildir → manifest'e rel yolu
-      # repack_verify_report.txt olarak girer.
+      # repack-verify ve k0-findings tek düz dosya (repack_verify_report.txt /
+      # k0_findings.json) olduğundan merge ile köke düzleşmesi sorun değildir
+      # → manifest'e rel yolu repack_verify_report.txt / k0_findings.json
+      # olarak girer ve SHA-256 ile sabitlenir.
       - name: Download remaining artifacts (merge)
         uses: actions/download-artifact@v7
         with:
           path: all_artifacts/
           merge-multiple: true
-          pattern: '{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify}'
+          pattern: '{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,k0-findings}'
 
       - name: Download config artifact (config/ prefix)
         uses: actions/download-artifact@v7
