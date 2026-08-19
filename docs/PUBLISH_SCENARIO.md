@@ -97,6 +97,29 @@ git branch --show-current  # ← "main" olmalı
 
 ---
 
+## AŞAMA 0.5 — Yerel repack fresh-clone testi (tek komut, opsiyonel ama önerilir)
+
+Push'tan önce `repack-verify` job'unun fresh-clone simülasyonunu yerelde koş
+(`ci_repack_test.sh` — çalışma ağacını KİRLETMEZ, tüm adımlar geçici bir
+worktree'de koşar):
+
+```bash
+bash _calisma/CIKTI/ci_repack_test.sh                  # PASS/FAIL özetler (exit 0/1)
+KEEP_WORKTREE=1 bash _calisma/CIKTI/ci_repack_test.sh  # geçici worktree'yi sakla
+```
+
+**Ne kanıtlar (CI `repack-verify` job'uyla birebir):**
+1. HEAD'in izole worktree kopyası (`git worktree add --detach HEAD` — CI checkout karşılığı)
+2. `repack_delivery.py --verify` — deterministik repack + sidecar bütünlüğü
+3. byte-identical kapısı — `git diff --exit-code` boş (commit'li ↔ repack çıktısı)
+4. önce/sonra SHA-256 kanıtı — 2/2 zip identical (tam hash, kısaltılmamış)
+5. base verify K1-K7 — `SONUÇ: PASS (P0=0, P1=0)`
+
+Çıktılar gitignored `.freebuff/sim/repack_verify/` altına yazılır
+(`repack_verify_report.txt` + `byte_identical_proof.md`).
+
+---
+
 ## AŞAMA 1 — GitHub'da repo oluştur (`gh` ile, interaktif değil)
 
 ```bash
@@ -371,6 +394,7 @@ gh repo edit --enable-squash-merge --enable-rebase-merge \
 | Adım | Komut | Ne zaman |
 |---|---|---|
 | 0. Ön-kontrol | `bash docs/publish_precheck.sh` (tek komut) | her şeyden önce |
+| 0.5 Repack testi | `bash _calisma/CIKTI/ci_repack_test.sh` | AŞAMA 0 yeşilse (opsiyonel, önerilir) |
 | 1. Repo oluştur | `gh repo create leibniz2 --public ...` | AŞAMA 0 yeşilse |
 | 2. Push | `git push -u origin main` | AŞAMA 1 yeşilse |
 | 3. CI izle | `gh run watch` | AŞAMA 2 sonrası 5-15 dk |
