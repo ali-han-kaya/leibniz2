@@ -42,6 +42,8 @@
 #   update_preview.sh --plist-check [HOME] # kurulu plist'ler güncel mi? (0 hepsi/1 bayat/2 şablon yok)
 #   update_preview.sh --plist-watch [N]    # şablonları izle; değişince yeniden üret
 #   update_preview.sh --plist-reset        # şablonları yerleşik varsayılandan geri yaz
+#   update_preview.sh --start [LABEL]       # plist'i üret + launchctl bootstrap (vars. birincil)
+#   update_preview.sh --stop [LABEL|all]    # launchctl bootout (all = her iki agent)
 #   update_preview.sh --mirror             # verify mirror'ı senkron et (sync_verify_mirror.sh)
 #   update_preview.sh --mirror-check       # mirror güncel mi? (0 güncel/1 bayat/2 hata)
 #   update_preview.sh --mirror-force       # mirror'ı koşulsuz yeniden kopyala
@@ -307,6 +309,93 @@ plist_reset() {
   done < <(plist_profiles)
 }
 
+# ============================================================================
+# BÖLÜM 2b — launchctl bootstrap/bootout (--start / --stop)
+# ============================================================================
+
+# Birincil label (KeepAlive, otomatik yeniden başlatma) — --start varsayılanı.
+plist_primary_label() {
+  plist_profiles | head -1 | awk -F'|' '{print $1}'
+}
+
+# launchd hedef domain'i (kullanıcı GUI agent'ı).
+launchctl_domain() { printf 'gui/%s' "$(id -u)"; }
+
+# Profil satırını label'a göre bul (label|logname|port|interval|keepalive).
+plist_profile_for() {
+  local want="$1"
+  while IFS='|' read -r label logname port interval keepalive; do
+    [ "$label" = "$want" ] || continue
+    printf '%s|%s|%s|%s|%s\n' "$label" "$logname" "$port" "$interval" "$keepalive"
+    return 0
+  done < <(plist_profiles)
+  return 1
+}
+
+# label launchd'ye yüklü mü? (launchctl list 3. sütun = label)
+plist_is_loaded() {
+  launchctl list 2>/dev/null | awk -v l="$1" '$3 == l {found=1} END {exit found ? 0 : 1}'
+}
+
+# Tek label'ı bootstrap et (idempotent: varsa sök → yükle → enable).
+plist_start_one() {
+  local label="$1" profile dst logname port interval keepalive
+  profile="$(plist_profile_for "$label")" || {
+    err "bilinmeyen label: $label"
+    say "  profiller:"
+    while IFS='|' read -r l _; do say "    $l"; done < <(plist_profiles)
+    return 1
+  }
+  IFS='|' read -r label logname port interval keepalive <<< "$profile"
+  dst="$(plist_dst_for "$HOME" "$label")"
+
+  # Kurulu plist yok/başka ise önce üret (generate + validate) — tek komut.
+  if ! plist_up_to_date "$HOME" "$label" "$logname" "$port" "$interval" "$keepalive"; then
+    plist_install "$HOME" "$label" "$logname" "$port" "$interval" "$keepalive" || return 1
+  fi
+
+  # İdem-potent: önce varsa sök, sonra yükle, sonra enable.
+  launchctl bootout "$(launchctl_domain)" "$dst" 2>/dev/null || true
+  launchctl bootstrap "$(launchctl_domain)" "$dst" || { err "bootstrap başarısız: $dst"; return 1; }
+  launchctl enable "$(launchctl_domain)/$label" 2>/dev/null || true
+  say "START: $label → bootstrap edildi ($dst)"
+  say "       yüklü: $(plist_is_loaded "$label" && echo evet || echo hayır)"
+}
+
+# Tek label'ı bootout et.
+plist_stop_one() {
+  local label="$1" dst
+  dst="$(plist_dst_for "$HOME" "$label")"
+  if plist_is_loaded "$label"; then
+    launchctl bootout "$(launchctl_domain)" "$dst" 2>/dev/null \
+      && say "STOP: $label → bootout edildi" \
+      || { err "bootout başarısız: $label ($dst)"; return 1; }
+  else
+    say "STOP: $label zaten yüklü değil"
+  fi
+}
+
+plist_start() {
+  local label="${1:-$(plist_primary_label)}"
+  if [ "$label" = "all" ]; then
+    err "--start all desteklenmez (iki agent aynı 8000 portunu paylaşır); birincil label'ı kullanın"
+    return 1
+  fi
+  plist_start_one "$label"
+}
+
+plist_stop() {
+  local label="${1:-$(plist_primary_label)}"
+  if [ "$label" = "all" ]; then
+    local rc=0
+    while IFS='|' read -r l _; do
+      plist_stop_one "$l" || rc=1
+    done < <(plist_profiles)
+    return $rc
+  fi
+  plist_stop_one "$label"
+}
+
 # Tüm şablonların birleşik SHA-256'sı (--plist-watch değişim algısı için).
 plist_templates_hash() {
   { while IFS='|' read -r label _; do
@@ -394,6 +483,12 @@ case "${1:-build}" in
     ;;
   --plist-reset)
     plist_reset
+    ;;
+  --start)
+    plist_start "${2:-}"
+    ;;
+  --stop)
+    plist_stop "${2:-}"
     ;;
   --mirror)
     "$SCRIPT_DIR/sync_verify_mirror.sh"
