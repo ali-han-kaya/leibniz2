@@ -66,6 +66,25 @@ class TestParseReport(unittest.TestCase):
             rt.parse_report(buf.getvalue())
 
 
+class TestChangelog(unittest.TestCase):
+    def test_changelog_has_hicks_hume(self):
+        lines = rt.changelog_lines()
+        self.assertTrue(lines)
+        joined = "\n".join(lines)
+        self.assertIn("## Changelog", joined)
+        self.assertIn("Hicks 1925", joined)
+        self.assertIn("Hume 1975", joined)
+        self.assertIn("31/31", joined)
+
+    def test_changelog_empty_when_no_entries(self):
+        saved = rt.CHANGELOG
+        try:
+            rt.CHANGELOG = []
+            self.assertEqual(rt.changelog_lines(), [])
+        finally:
+            rt.CHANGELOG = saved
+
+
 class TestShortDate(unittest.TestCase):
     def test_iso_z(self):
         self.assertEqual(rt.short_date("2026-08-19T12:08:38Z"),

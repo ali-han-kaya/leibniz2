@@ -36,6 +36,15 @@ import zipfile
 
 API = "https://api.github.com"
 
+# refs-trend raporu changelog'u (kısa kayıt; en yeni üstte).
+# Kaynak: verify_delivery.py K6 denetimindeki düzeltmeler. Yeni bir denetim
+# düzeltmesi yapıldığında buraya tek satır eklenir (denetlenebilir geçmiş).
+CHANGELOG = [
+    ("2026-08-18",
+     "Hicks 1925 ve Hume 1975 OpenLibrary sorguları güçlendirildi "
+     "(29/31 → 31/31 çevrimiçi doğrulama; ce5523b)."),
+]
+
 
 class _NoAuthRedirect(urllib.request.HTTPRedirectHandler):
     """Redirect'te Authorization başlığını düşürür.
@@ -111,6 +120,21 @@ def short_date(iso):
         return dt.strftime("%Y-%m-%d %H:%M")
     except Exception:
         return (iso or "")[:16]
+
+
+def changelog_lines():
+    """CHANGELOG kaydını markdown satırlarına çevirir (boş liste = changelog yok).
+
+    Tek kaynak: CHANGELOG sabiti. Denetim düzeltmelerinin kısa, denetlenebilir
+    geçmişini refs-trend.md'nin altına ekler (en yeni üstte).
+    """
+    if not CHANGELOG:
+        return []
+    out = ["## Changelog", ""]
+    for date, note in CHANGELOG:
+        out.append(f"- **{date}:** {note}")
+    out.append("")
+    return out
 
 
 def main():
@@ -208,6 +232,9 @@ def main():
             f"{rows[0]['verified']}/{rows[0]['total_online']} doğrulanan",
             "",
         ]
+
+    # Changelog: denetim düzeltmelerinin kısa kaydı (kaynak: CHANGELOG).
+    lines += changelog_lines()
 
     md_path = os.path.join(args.out_dir, "refs-trend.md")
     with open(md_path, "w", encoding="utf-8") as f:
