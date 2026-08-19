@@ -11,6 +11,7 @@ PyYAML gerektirir (status_checks.py modül-seviyesi import). CI birim test
 adımında pyyaml yoksa bu dosya bütünüyle SKIP olur (test_check_action_runtimes.py
 ile aynı desen).
 """
+import io
 import json
 import pathlib
 import sys
@@ -161,6 +162,43 @@ class TestGhIntegration(unittest.TestCase):
                                side_effect=RuntimeError("Branch not protected")):
             rc = sc.main(["--gh", "--repo", "owner/name"])
         self.assertIsNone(rc)
+
+    def test_gh_json_pass(self):
+        checks = list(sc.gate_jobs().values())
+        buf = io.StringIO()
+        with mock.patch.object(sc, "run_gh",
+                               return_value=json.dumps(_protection(checks))), \
+                mock.patch.object(sys, "stdout", new=buf):
+            rc = sc.main(["--gh", "--repo", "owner/name", "--json"])
+        self.assertIsNone(rc)
+        d = json.loads(buf.getvalue())
+        self.assertEqual(d["verdict"], "PASS")
+        self.assertTrue(d["names_ok"])
+        self.assertTrue(d["enforcement_ok"])
+
+    def test_gh_json_fail_exits_1(self):
+        checks = list(sc.gate_jobs().values())
+        bad = _protection(checks, strict=False)
+        buf = io.StringIO()
+        with mock.patch.object(sc, "run_gh",
+                               return_value=json.dumps(bad)), \
+                mock.patch.object(sys, "stdout", new=buf):
+            with self.assertRaises(SystemExit) as cm:
+                sc.main(["--gh", "--repo", "owner/name", "--json"])
+        self.assertEqual(cm.exception.code, 1)
+        d = json.loads(buf.getvalue())
+        self.assertEqual(d["verdict"], "FAIL")
+        self.assertFalse(d["enforcement_ok"])
+
+    def test_gh_json_not_set_up(self):
+        buf = io.StringIO()
+        with mock.patch.object(sc, "run_gh",
+                               side_effect=RuntimeError("Branch not protected")), \
+                mock.patch.object(sys, "stdout", new=buf):
+            rc = sc.main(["--gh", "--repo", "owner/name", "--json"])
+        self.assertIsNone(rc)
+        d = json.loads(buf.getvalue())
+        self.assertEqual(d["verdict"], "NOT_SET_UP")
 
 
 if __name__ == "__main__":

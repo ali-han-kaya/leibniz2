@@ -17,6 +17,7 @@ Kullanım:
   python3 _calisma/CIKTI/status_checks.py --gh             # GitHub ile doğrula
   python3 _calisma/CIKTI/status_checks.py --gh --repo owner/name
   python3 _calisma/CIKTI/status_checks.py --json           # makine-okur çıktı
+  python3 _calisma/CIKTI/status_checks.py --gh --json      # doğrulama (names+smoke) JSON
 
 Çıkış kodları:
   0 — liste üretildi; veya --gh'de birebir eşleşme; veya koruma kurulu değil
@@ -132,15 +133,16 @@ def main(argv=None):
         "checks": expected,
     }
 
-    if args.json:
+    if args.json and not args.gh:
         print(json.dumps(payload, indent=2, ensure_ascii=False))
         return
 
-    print(f"Beklenen status check adları ({len(expected)}) — kaynak: {WORKFLOW}")
-    print(f"  (required aday job'lar: {', '.join(gates)}; "
-          f"hariç: {', '.join(sorted(GATE_EXCLUDE))})")
-    for i, n in enumerate(expected, 1):
-        print(f"  {i:2d}. {n}")
+    if not args.json:
+        print(f"Beklenen status check adları ({len(expected)}) — kaynak: {WORKFLOW}")
+        print(f"  (required aday job'lar: {', '.join(gates)}; "
+              f"hariç: {', '.join(sorted(GATE_EXCLUDE))})")
+        for i, n in enumerate(expected, 1):
+            print(f"  {i:2d}. {n}")
 
     if not args.gh:
         print("\nGitHub ile doğrulamak için: --gh (branch protection kuruluysa)")
@@ -153,17 +155,44 @@ def main(argv=None):
             repo = run_gh(["gh", "repo", "view", "--json", "nameWithOwner",
                            "-q", ".nameWithOwner"])
         except RuntimeError as e:
-            print(f"HATA: repo belirlenemedi ({e}) — --repo owner/name verin",
-                  file=sys.stderr)
+            if args.json:
+                print(json.dumps({"error": f"repo belirlenemedi: {e}",
+                                  "verdict": "ERROR"},
+                                 indent=2, ensure_ascii=False))
+            else:
+                print(f"HATA: repo belirlenemedi ({e}) — --repo owner/name verin",
+                      file=sys.stderr)
             sys.exit(2)
 
-    print(f"\nGitHub karşılaştırması: {repo} (branch: main)")
+    gh_result = {
+        "workflow": WORKFLOW,
+        "repo": repo,
+        "branch": "main",
+        "checks": expected,
+        "names_ok": None,
+        "missing": [],
+        "extra": [],
+        "configured": [],
+        "enforcement_ok": None,
+        "smoke": [],
+        "verdict": "ERROR",
+        "warning": None,
+    }
+
+    if not args.json:
+        print(f"\nGitHub karşılaştırması: {repo} (branch: main)")
+
     try:
         raw = run_gh(["gh", "api", f"repos/{repo}/branches/main/protection"])
     except RuntimeError as e:
-        print(f"UYARI: branch protection kurulu değil/erişilemedi — {e}")
-        print("  (publish öncesi normaldir; AŞAMA 1 (b) web UI'dan kurulur — "
-              "yukarıdaki listeyi yapıştır)")
+        gh_result["warning"] = str(e)
+        gh_result["verdict"] = "NOT_SET_UP"
+        if args.json:
+            print(json.dumps(gh_result, indent=2, ensure_ascii=False))
+        else:
+            print(f"UYARI: branch protection kurulu değil/erişilemedi — {e}")
+            print("  (publish öncesi normaldir; AŞAMA 1 (b) web UI'dan kurulur — "
+                  "yukarıdaki listeyi yapıştır)")
         return
 
     try:
@@ -171,13 +200,34 @@ def main(argv=None):
         if not isinstance(protection, dict):
             protection = {}
     except json.JSONDecodeError:
-        print("UYARI: gh api çıktısı ayrıştırılamadı — koruma yapısı farklı",
-              file=sys.stderr)
         protection = {}
+        if not args.json:
+            print("UYARI: gh api çıktısı ayrıştırılamadı — koruma yapısı farklı",
+                  file=sys.stderr)
 
     result = evaluate_protection(expected, protection)
-    expected_set = set(expected)
+    smoke_json = [{"label": label, "ok": ok, "note": note}
+                  for (label, ok, note) in result["smoke"]]
+    verdict = "PASS" if (result["names_ok"] and result["enforcement_ok"]) \
+        else "FAIL"
+    gh_result.update({
+        "names_ok": result["names_ok"],
+        "missing": result["missing"],
+        "extra": result["extra"],
+        "configured": result["configured"],
+        "enforcement_ok": result["enforcement_ok"],
+        "smoke": smoke_json,
+        "verdict": verdict,
+    })
 
+    if args.json:
+        print(json.dumps(gh_result, indent=2, ensure_ascii=False))
+        if verdict == "FAIL":
+            sys.exit(1)
+        return
+
+    # ── insan-okur çıktı ──
+    expected_set = set(expected)
     for c in result["configured"]:
         print(f"  [{'PASS' if c in expected_set else 'FAZLA'}] {c}")
     for c in result["missing"]:

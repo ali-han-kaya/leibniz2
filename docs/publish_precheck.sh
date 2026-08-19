@@ -170,11 +170,12 @@ else
   info "origin/main yok (henüz push edilmemiş)"
 fi
 
-# ── (e) Status check adları — TEK KAYNAK: workflow job name'leri ──────────
+# ── (e) Status check adları + PR-merge engeli — TEK KAYNAK ──────────────
 # status_checks.py, verify.yml'deki job `name:` alanlarından required check
-# adaylarını üretir (manifest-comment hariç). --gh ile GitHub branch
-# protection'daki gerçek liste karşılaştırılır: eksik/fazla = FAIL (drift),
-# koruma kurulu değilse UYARI (publish öncesi normal).
+# adaylarını üretir (manifest-comment/precheck hariç). --gh --json ile GitHub
+# branch protection'daki gerçek liste VE merge engeli (strict / enforce_admins
+# / force-push / deletions smoke) AYRI doğrulanır; koruma kurulu değilse
+# UYARI (publish öncesi normal). AŞAMA 1 tek komutla burada doğrulanır.
 SC_OUT="$(mktemp)"
 if "$PY" _calisma/CIKTI/status_checks.py >"$SC_OUT" 2>&1; then
   N="$(grep -cE '^  +[0-9]+\. ' "$SC_OUT")"
@@ -183,17 +184,49 @@ else
   fail "status_checks.py çalışmadı — $(tail -1 "$SC_OUT")"
 fi
 if [ "$ALLOW_REMOTE" = "1" ] && command -v gh >/dev/null 2>&1; then
-  if "$PY" _calisma/CIKTI/status_checks.py --gh >"$SC_OUT" 2>&1; then
-    if grep -q "SONUÇ: PASS" "$SC_OUT"; then
-      pass "branch protection: workflow ↔ GitHub birebir eşleşiyor"
-    elif grep -q "UYARI: branch protection" "$SC_OUT"; then
-      warn "branch protection kurulu değil — AŞAMA 1 (b) web UI'da kur"
-    else
-      info "branch protection durumu: $(grep -E 'SONUÇ|UYARI' "$SC_OUT" | head -1)"
-    fi
-  else
-    fail "branch protection uyumsuz — _calisma/CIKTI/status_checks.py --gh"
-  fi
+  GH_JSON="$(mktemp)"
+  "$PY" _calisma/CIKTI/status_checks.py --gh --json >"$GH_JSON" 2>/dev/null
+  # JSON'u tek geçişte shell değişkenlerine ayrıştır (eval + heredoc).
+  GH_VERDICT="ERROR"; GH_NAMES_OK="false"; GH_ENFORCEMENT_OK="false"
+  GH_MISSING=""; GH_EXTRA=""; GH_SMOKE_FAIL=""
+  eval "$(GH_JSON_PATH="$GH_JSON" "$PY" - <<'PYEOF'
+import json, os
+d = json.load(open(os.environ["GH_JSON_PATH"]))
+def esc(s): return str(s).replace("'", "'\\''")
+print("GH_VERDICT='%s'" % esc(d.get("verdict", "ERROR")))
+print("GH_NAMES_OK='%s'" % ("true" if d.get("names_ok") else "false"))
+print("GH_ENFORCEMENT_OK='%s'" % ("true" if d.get("enforcement_ok") else "false"))
+print("GH_MISSING='%s'" % esc("; ".join(d.get("missing") or [])))
+print("GH_EXTRA='%s'" % esc("; ".join(d.get("extra") or [])))
+smoke_fail = "; ".join(s["label"] for s in d.get("smoke", []) if not s.get("ok"))
+print("GH_SMOKE_FAIL='%s'" % esc(smoke_fail))
+PYEOF
+)"
+  case "$GH_VERDICT" in
+    PASS)
+      pass "branch protection: check adları birebir eşleşiyor (workflow ↔ GitHub)"
+      pass "merge engeli: strict/enforce_admins/force-push/deletions etkin"
+      ;;
+    FAIL)
+      if [ "$GH_NAMES_OK" = "true" ]; then
+        pass "branch protection: check adları birebir eşleşiyor (workflow ↔ GitHub)"
+      else
+        fail "branch protection: check adları uyumsuz — eksik: $GH_MISSING; fazla: $GH_EXTRA"
+      fi
+      if [ "$GH_ENFORCEMENT_OK" = "true" ]; then
+        pass "merge engeli: strict/enforce_admins/force-push/deletions etkin"
+      else
+        fail "merge engeli etkin değil — eksik: $GH_SMOKE_FAIL"
+      fi
+      ;;
+    NOT_SET_UP)
+      warn "branch protection kurulu değil — AŞAMA 1 (b) web UI'da kur (gh api 404)"
+      ;;
+    *)
+      info "branch protection durumu: $GH_VERDICT"
+      ;;
+  esac
+  rm -f "$GH_JSON"
 else
   info "branch protection GitHub doğrulaması atlandı (--allow-remote + gh gerekli)"
 fi

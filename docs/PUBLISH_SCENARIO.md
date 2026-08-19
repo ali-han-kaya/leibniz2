@@ -267,7 +267,8 @@ open "https://github.com/ali-han-kaya/leibniz2/settings/branches"
 **Görsel doğrulama:** https://github.com/ali-han-kaya/leibniz2 adresi boş repo olarak açılmalı.
 
 Koruma kurulduktan sonra doğrulama → yukarıdaki adım 9 (veya AŞAMA 0'ı
-`--allow-remote` ile tekrar çalıştır — (e) adımı aynı eşleşmeyi denetler).
+`--allow-remote` ile tekrar çalıştır — (e) adımı aynı eşleşmeyi VE
+merge engelini (strict/enforce_admins/force-push/deletions smoke) denetler).
 
 ### P0 label gate — precommit-p0 etiketini merge kapısına bağla
 
