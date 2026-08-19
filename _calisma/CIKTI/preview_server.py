@@ -455,7 +455,14 @@ def verify_loop(verify_dir, interval):
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         # Sunucu loglarını kendi dosyamıza yönlendir (stderr'i kirletmesin).
-        sys.stderr.write(f"[preview_server] {self.address_string()} {fmt % args}\n")
+        # EBADF'e dayanıklı: daemon modu fds'yi /dev/null'a yönlendirse bile,
+        # log kaybı asla bir HTTP isteğini öldürmesin.
+        try:
+            sys.stderr.write(
+                f"[preview_server] {self.address_string()} {fmt % args}\n")
+            sys.stderr.flush()
+        except Exception:
+            pass
 
     def _send(self, status, body, content_type="text/plain; charset=utf-8",
               extra_headers=None):
@@ -648,6 +655,26 @@ class Handler(BaseHTTPRequestHandler):
                     pass
 
 
+def redirect_stdio_to_devnull():
+    """fd 0/1/2'yi /dev/null'a YÖNLENDİR (KAPATMAZ — EBADF üretmez).
+
+    Daemon modunda std fds'yi kapatmak, sonraki sys.stderr.write çağrılarını
+    (log_message her HTTP isteğinde çalışır) EBADF ile patlatıp isteği
+    öldürüyordu. Standart daemon kalıbı kapatmak değil dup2 ile /dev/null'a
+    bağlamaktır: fds açık kalır (write güvenli), terminal tutulmaz.
+    """
+    devnull = os.open(os.devnull, os.O_RDWR)
+    try:
+        for fd in (0, 1, 2):
+            try:
+                os.dup2(devnull, fd)
+            except OSError:
+                pass
+    finally:
+        if devnull > 2:
+            os.close(devnull)
+
+
 def main():
     # Daemon modunda: yeni process group + session oluştur (tamamen detach).
     # Bu, parent shell exit ettiğinde SIGHUP/SIGTERM almamızı engeller.
@@ -656,19 +683,8 @@ def main():
             os.setsid()
         except OSError:
             pass
-        # std fds'yi kapat
-        try:
-            os.close(0)
-        except OSError:
-            pass
-        try:
-            os.close(1)
-        except OSError:
-            pass
-        try:
-            os.close(2)
-        except OSError:
-            pass
+        # std fds'yi KAPATMA (EBADF üretir); /dev/null'a YÖNLENDİR.
+        redirect_stdio_to_devnull()
 
     ap = argparse.ArgumentParser()
     ap.add_argument("--dir", default=ROOT,

@@ -282,5 +282,79 @@ class HookEnvPlumbingTests(unittest.TestCase):
         self.assertEqual(snap["hook_env"], {"z3": "5.1.0"})
 
 
+class DaemonStdioTests(unittest.TestCase):
+    """PREVIEW_DAEMON fd davranışı: kapatma (EBADF) değil /dev/null'a yönlendirme.
+
+    Eski kod os.close(0/1/2) yapıyordu; bu, sonraki sys.stderr.write çağrılarını
+    (log_message her HTTP isteğinde) EBADF ile patlatıp isteği öldürüyordu.
+    redirect_stdio_to_devnull, dup2 ile fds'yi /dev/null'a bağlar — write
+    güvenli kalır. Subprocess'te test edilir çünkü fd 0/1/2 GLOBAL'dür ve
+    aynı süreçte test edilirse test runner çıktısı yutulur.
+    """
+
+    def test_redirect_keeps_stderr_writable(self):
+        code = (
+            "import sys\n"
+            f"sys.path.insert(0, {HERE!r})\n"
+            "import preview_server as ps\n"
+            "ps.redirect_stdio_to_devnull()\n"
+            "sys.stderr.write('EBADF olmasın')\n"
+            "sys.stderr.flush()\n"
+        )
+        r = subprocess.run([sys.executable, "-c", code],
+                           capture_output=True, text=True, timeout=10)
+        # Eski davranışta (os.close(2)) sys.stderr.write EBADF fırlatır →
+        # süreç non-zero exit. Yeni davranışta yazı sessizce /dev/null'a gider.
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.stderr, "")
+
+    def test_redirect_keeps_stdout_writable(self):
+        code = (
+            "import sys\n"
+            f"sys.path.insert(0, {HERE!r})\n"
+            "import preview_server as ps\n"
+            "ps.redirect_stdio_to_devnull()\n"
+            "print('OK')\n"
+        )
+        r = subprocess.run([sys.executable, "-c", code],
+                           capture_output=True, text=True, timeout=10)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.stdout, "")  # /dev/null'a gitti
+
+
+class LogMessageTests(unittest.TestCase):
+    """Handler.log_message EBADF'e (ve format hatalarına) dayanıklı olmalı."""
+
+    def _call(self):
+        h = type("FakeHandler", (), {
+            "address_string": lambda self: "127.0.0.1"})()
+        ps.Handler.log_message(h, "%s", "test")
+
+    def test_swallows_broken_stderr(self):
+        class Broken:
+            def write(self, s):
+                raise OSError(9, "Bad file descriptor")
+
+            def flush(self):
+                raise OSError(9, "Bad file descriptor")
+
+        old = sys.stderr
+        sys.stderr = Broken()
+        try:
+            self._call()  # raise etmemeli
+        finally:
+            sys.stderr = old
+
+    def test_swallows_format_error(self):
+        old = sys.stderr
+        try:
+            h = type("FakeHandler", (), {
+                "address_string": lambda self: "127.0.0.1"})()
+            # %d + string → TypeError; log yine de isteği öldürmesin
+            ps.Handler.log_message(h, "%d", "abc")
+        finally:
+            sys.stderr = old
+
+
 if __name__ == "__main__":
     unittest.main()
