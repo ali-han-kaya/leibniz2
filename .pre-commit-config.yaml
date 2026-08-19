@@ -4,14 +4,17 @@
 #   pip install pre-commit
 #   pre-commit install
 #
-# Bu noktadan sonra her `git commit` sırasında beş kapı çalışır:
+# Bu noktadan sonra her `git commit` sırasında altı kapı çalışır:
 #   0) update-config         : config'i paket içeriğinden senkron et (gen_config.py)
 #                              — repack sayıları değiştirdiyse verify_delivery.config.json'u
 #                              otomatik günceller ve stage eder; değişmediyse dokunmaz.
 #   1) verify-delivery        : paket bütünlüğü (K1-K7, stdlib-only)
-#   2) verify-delivery-symbolic: Z3 sembolik ispat (z3-solver, izole venv)
-#   3) verify-delivery-lean    : Lean 4 reduct-invariance (lean, system)
-#   4) commit-msg-style       : başlık denetimi (.gitmessage kuralları) — noise
+#   2) check-action-pins      : action major sürümlerini pin'ler — downgrade
+#                              (ör. checkout@v7 → v6) commit'i bloke eder; yeni
+#                              action da pin gerektirir (--update ile ekle).
+#   3) verify-delivery-symbolic: Z3 sembolik ispat (z3-solver, izole venv)
+#   4) verify-delivery-lean    : Lean 4 reduct-invariance (lean, system)
+#   5) commit-msg-style       : başlık denetimi (.gitmessage kuralları) — noise
 #                              commit'leri (wip/smoke/test marker/şablon) reddeder.
 #                              commit-msg stage'inde; CI --all-files'ta ÇALIŞMAZ.
 # Herhangi bir P0/P1 bulgusu commit'i bloke eder (sıfır-dışı exit).
@@ -24,6 +27,7 @@
 #   pre-commit run verify-delivery --files _calisma/CIKTI/TESLIM_KLASOR_V5_2026-08-17.zip
 #   pre-commit run verify-delivery-symbolic
 #   pre-commit run verify-delivery-lean
+#   pre-commit run check-action-pins
 #
 # update-config hariç hook'lar read-only'dir: dosya değiştirmez, yalnızca
 # doğrular (fail-closed). update-config, config'i paket içeriğiyle senkron eder.
@@ -51,6 +55,21 @@ repos:
           3 script byte-for-byte + PDF 33 sayfa + 64 referans. Bulgu varsa
           commit bloke edilir.
         entry: python3 _calisma/CIKTI/verify_delivery.py --dir _calisma/CIKTI
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
+      - id: check-action-pins
+        name: Pin action major versions (no downgrade)
+        description: >-
+          action_pins.json'daki minimum major sürümlerini denetler; bir
+          action'ı ESKİ major'a düşürmek (ör. checkout@v7 → v6) commit'i
+          bloke eder. Yeni action da pin gerektirir (--update ile ekle).
+          Lokal + OFFLINE (ağ/PyYAML yok) — ağ bağımlısı node24 runtime
+          denetimi (check_action_runtimes.py) CI'da ayrı koşar.
+        entry: python3 _calisma/CIKTI/check_action_pins.py --workflow .github/workflows/verify.yml
         language: system
         always_run: true
         pass_filenames: false
