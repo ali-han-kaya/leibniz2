@@ -2,7 +2,7 @@
 
 **Hedef:** `ingiliz_empirizmi_v3.tex` §References (64 girdi)
 **Yöntem:** CrossRef API (6 dergi makalesi) + SEP doğrudan URL (5) + OpenLibrary (22 kitap/edişyon) + Internet Archive (21; kapsam dışı kalanlar HathiTrust + Google Books fallback) + Perseus CTS (2 antik birincil metin) — çevrimiçi doğrulanan 56/64. Çevrimiçi indekslenmeyen kalan girdiler bağımsız web/bibliyografik kaynağa dayanır. Her "GEÇTİ" bir bağımsız kaynağa dayanır; kaynak adresi `Kanıt` sütunundadır.
-**Tarih:** 2026-08-17 · **Güncelleme:** 2026-08-18 (V5h/V5j düzeltmeleri işlendi) · 2026-08-19 (V5n: Norton 1981 + Popkin 1951 CrossRef'e eklendi — canlı kapsam 54→56; V5o: çevrimiçi denetim paralel havuzda koşar — bütçe-skip kapanır, 56/56) · **Sonuç etiketi:** GEÇTİ (birebir) / DÜZELTİLDİ (V5h/V5j) / KÜÇÜK NOT (bibliyografik küçük sapma) / HATA (düzeltme gerekir) / DOĞRULANAMADI.
+**Tarih:** 2026-08-17 · **Güncelleme:** 2026-08-18 (V5h/V5j düzeltmeleri işlendi) · 2026-08-19 (V5n: Norton 1981 + Popkin 1951 CrossRef'e eklendi — canlı kapsam 54→56; V5o: çevrimiçi denetim paralel havuzda koşar — bütçe-skip kapanır, 56/56; V5p: OL'den OCLC/LCCN çekildi, HathiTrust fallback'i OL'den önce denenir — Xunzi HT kaydıyla PASS) · **Sonuç etiketi:** GEÇTİ (birebir) / DÜZELTİLDİ (V5h/V5j) / KÜÇÜK NOT (bibliyografik küçük sapma) / HATA (düzeltme gerekir) / DOĞRULANAMADI.
 
 ---
 
@@ -178,3 +178,15 @@ V5o kanıtı — hedefli canlı sorgu sonuçları (11 kaynağın her biri):
 | Xunzi (Knoblock) | PASS | IA: 0 sonuç → OL fallback: 'Xunzi' by John Knoblock (Stanford) |
 
 Not: HathiTrust ISBN araması 5 kaynakta da 0 kayıt döndürdü (telifli kitaplar, ISBN indeksi yok) ve IA mediatype:texts varyantı da 0 sonuç verdi — OL fallback'i bu kaynaklar için tek geçerli çevrimiçi kanıttır; `UNVERIFIED` izi bırakmaz, kaynağı doğru işaretler (`by_source`'ta openlibrary).
+
+**V5p (2026-08-19): OpenLibrary'den OCLC/LCCN çekildi, HathiTrust önceliklendirildi.** OpenLibrary edition/search kayıtlarından alınan identifier'lar `REFERENCE_ARCHIVE.ht_ids`'e eklendi (HathiTrust ISBN yerine OCLC/LCCN indeksler — `oclc:`/`lccn:` önekleri `hathitrust_check` tarafından zaten destekleniyordu):
+
+| Kaynak | OL'den alınan identifier | HathiTrust canlı sonucu |
+|---|---|---|
+| Lagrée 1994 | `oclc:32045786`, `lccn:95174106` (OL kaydı) | 0 kayıt — Vrin kitabı HT kataloğunda yok → OL fallback PASS |
+| Millican 2002 | `oclc:48957942`, `lccn:2002020030` (OL kaydı) | 0 kayıt — OUP 2002 telifli → OL fallback PASS |
+| Schmitt 1972 | `oclc:1194850` (OL kaydı) | 0 kayıt — Nijhoff 1972 → OL fallback PASS |
+| Xunzi (Knoblock) | `lccn:87033578` (Stanford 1988 edisyonu), `oclc:17265207` (HT kaydının kendi OCLC'si) | **MATCH** — "Xunzi: a translation and study of the complete works", Stanford 1988, 2 item (uc1.b3817880/81) → **HathiTrust PASS** |
+| Fine 2012 | OL'de oclc/lccn YOK (Metaphysical Grounding, CUP 2012) — isbn listesi korundu | 0 kayıt → OL fallback PASS |
+
+Fallback sırası da değişti: `_archive_fallback` artık **HathiTrust'ı OpenLibrary'den ÖNCE** dener — HT kaydı başlıkla birebir katalog kanıtıdır, OL arama eşleşmesinden daha güçlü; HT'de kayıt yoksa (0 kayıt, ~1 sn) OL devreye girer. Canlı doğrulama: Xunzi → `hathitrust` kaynağı, diğer 4 → `openlibrary` (hepsi PASS). Dürüst sınır: Lagrée/Millican/Schmitt/Fine kitapları HT kataloğunda gerçekten YOK (her üç identifier tipi — oclc, lccn, isbn — HT Bib API'de 0 kayıt döndürdü); OL fallback'i bu dört kaynak için tek çevrimiçi kanıttır.

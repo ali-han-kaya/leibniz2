@@ -201,6 +201,59 @@ class TestCrossRefCoverage(unittest.TestCase):
                 self.assertTrue(r["doi"].startswith("10."))
 
 
+class TestHathiTrustIdentifiers(unittest.TestCase):
+    """V5p: OpenLibrary'den çekilen OCLC/LCCN identifier'ları ht_ids'e eklendi.
+    HathiTrust ISBN yerine OCLC/LCCN indeksler — Xunzi lccn:87033578 ile gerçek
+    kayıta çözülür. Bu girişler yanlışlıkla düşerse test FAIL."""
+
+    def test_v5p_oclc_lccn_added(self):
+        by_key = {r["key"]: r for r in vd.REFERENCE_ARCHIVE}
+        expect = {
+            "Lagree 1994": ["oclc:32045786", "lccn:95174106"],
+            "Millican 2002": ["oclc:48957942", "lccn:2002020030"],
+            "Schmitt 1972": ["oclc:1194850"],
+            "Xunzi Knoblock": ["lccn:87033578", "oclc:17265207"],
+        }
+        for key, ids in expect.items():
+            self.assertIn(key, by_key, f"{key} arşiv listesinde yok")
+            ht = by_key[key]["ht_ids"]
+            for i in ids:
+                self.assertIn(i, ht, f"{key} eksik {i}")
+        # Fine 2012 OL'de oclc/lccn VERMEDİ (V5p bulgusu) — isbn listesi korunur
+        fine = by_key["Fine 2012"]["ht_ids"]
+        self.assertIn("isbn:1107022894", fine)
+
+    def test_hathitrust_pass_via_lccn(self):
+        # HT yanıtındaki kayıt başlığı title_needle içeriyorsa PASS (ağsız).
+        ref = {"key": "Xunzi Knoblock", "title_needle": "xunzi",
+               "ht_ids": ["lccn:87033578", "isbn:9780231129657"]}
+        payload = {
+            "lccn:87033578": {
+                "records": {
+                    "001082130": {
+                        "titles": ["Xunzi : a translation and study "
+                                   "of the complete works"],
+                    }
+                },
+                "items": [],
+            }
+        }
+        with mock.patch.object(vd, "_http_json", return_value=payload):
+            v, d = vd.hathitrust_check(ref)
+        self.assertEqual(v, "PASS")
+        self.assertIn("Xunzi", d)
+
+    def test_hathitrust_no_record_unverified(self):
+        ref = {"key": "X", "title_needle": "z",
+               "ht_ids": ["oclc:999999999", "isbn:123"]}
+        with mock.patch.object(vd, "_http_json",
+                               return_value={"oclc:999999999":
+                                             {"records": {}, "items": []}}):
+            v, d = vd.hathitrust_check(ref)
+        self.assertEqual(v, "UNVERIFIED")
+        self.assertIn("kayıt yok", d)
+
+
 class TestOpenLibraryFallback(unittest.TestCase):
     def _call(self, ref, payload):
         with mock.patch.object(vd, "_http_json", return_value=payload):

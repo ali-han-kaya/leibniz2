@@ -390,6 +390,10 @@ REFERENCE_ARCHIVE = [
     {"key": "Bobzien 2003", "query": "Cambridge Companion to the Stoics",
      "title_needle": "cambridge companion to the stoics",
      "tex_needle": "Bobzien, S. (2003)"},
+    # V5p: OpenLibrary'den çekilen OCLC/LCCN identifier'ları ht_ids'e eklendi
+    # (HathiTrust ISBN yerine OCLC/LCCN indeksler). Xunzi lccn:87033578 ile HT'de
+    # gerçek kayıta çözülür (PASS). Lagrée/Millican/Schmitt/Fine kitapları HT
+    # kataloğunda YOK (oclc+lccn+isbn için 0 kayıt — V5p kanıtı) — OL fallback'te.
     {"key": "Fine 2012", "query": "Metaphysical Grounding Correia Schnieder",
      "title_needle": "metaphysical grounding", "creator_needle": "correia",
      "ht_ids": ["isbn:1107022894", "isbn:9781107460287"],
@@ -417,7 +421,8 @@ REFERENCE_ARCHIVE = [
      "tex_needle": "Kjellberg, P. (1996)"},
     {"key": "Lagree 1994", "query": "Juste Lipse restauration stoicisme",
      "title_needle": "lipse", "creator_needle": "lagree",
-     "ht_ids": ["isbn:2711612074", "isbn:9782711612079"],
+     "ht_ids": ["oclc:32045786", "lccn:95174106",
+                 "isbn:2711612074", "isbn:9782711612079"],
      "tex_needle": "Lagrée, J. (1994)"},
     {"key": "Leibniz 1714", "query": "Monadologie Leibniz",
      "title_needle": "monadologie", "creator_needle": "leibniz",
@@ -430,7 +435,8 @@ REFERENCE_ARCHIVE = [
      "tex_needle": "Locke, J. (1689)"},
     {"key": "Millican 2002", "query": "Reading Hume Human Understanding Millican",
      "title_needle": "reading hume",
-     "ht_ids": ["isbn:9780198752103", "isbn:0198752113"],
+     "ht_ids": ["oclc:48957942", "lccn:2002020030",
+                 "isbn:9780198752103", "isbn:0198752113"],
      "tex_needle": "Millican, P. (2002)"},
     {"key": "Nidditch 1975", "query": "Essay Concerning Human Understanding Nidditch",
      "title_needle": "essay concerning human understanding",
@@ -443,14 +449,15 @@ REFERENCE_ARCHIVE = [
      "tex_needle": "du Vair, G. (1594)"},
     {"key": "Schmitt 1972", "query": "Cicero Scepticus Schmitt",
      "title_needle": "cicero scepticus",
-     "ht_ids": ["isbn:9401710376", "isbn:9789401710374"],
+     "ht_ids": ["oclc:1194850", "isbn:9401710376", "isbn:9789401710374"],
      "tex_needle": "Schmitt, C.B. (1972)"},
     {"key": "Schmitt 1983", "query": "Rediscovery Ancient Skepticism Schmitt",
      "title_needle": "skeptical tradition",
      "tex_needle": "Schmitt, C.B. (1983)"},
     {"key": "Xunzi Knoblock", "query": "Xunzi translation Knoblock",
      "title_needle": "xunzi", "creator_needle": "knoblock",
-     "ht_ids": ["isbn:9780231129657", "isbn:0231129653"],
+     "ht_ids": ["lccn:87033578", "oclc:17265207",
+                 "isbn:9780231129657", "isbn:0231129653"],
      "tex_needle": "Xunzi."},
 ]
 
@@ -1034,21 +1041,25 @@ def openlibrary_fallback_check(ref):
 def _archive_fallback(ref):
     """Internet Archive UNVERIFIED kalınca ek kaynakları dene.
 
-    Open Library (title+creator, aksan-duyarsız) + HathiTrust (identifier
-    bazlı) + Google Books (key isteğe bağlı) denenir; ilk PASS kazanır. Hepsi
-    başarısızsa birleşik denetim iziyle UNVERIFIED döner (kaynak 'archive'
-    kalır — by_source'ı şişirmez).
+    HathiTrust (identifier bazlı — V5p: oclc/lccn ile gerçek katalog kaydı)
+    + Open Library (title+creator, aksan-duyarsız) + Google Books (key
+    isteğe bağlı) denenir; ilk PASS kazanır. HathiTrust, OpenLibrary'den
+    ÖNCE denenir: HT kaydı başlıkla birebir katalog kanıtıdır, OL arama
+    eşleşmesinden daha güçlüdür; HT'de kayıt yoksa hızlıca UNVERIFIED
+    döner (0 kayıt) ve OL fallback'i devreye girer. Hepsi başarısızsa
+    birleşik denetim iziyle UNVERIFIED döner (kaynak 'archive' kalır —
+    by_source'ı şişirmez).
     Döndürür (verdict, detail, source)."""
     attempts = []
-    ov, od = openlibrary_fallback_check(ref)
-    attempts.append(od[:70])
-    if ov == "PASS":
-        return ov, od, "openlibrary"
     if ref.get("ht_ids"):
         hv, hd = hathitrust_check(ref)
         attempts.append(hd[:70])
         if hv == "PASS":
             return hv, hd, "hathitrust"
+    ov, od = openlibrary_fallback_check(ref)
+    attempts.append(od[:70])
+    if ov == "PASS":
+        return ov, od, "openlibrary"
     gv, gd = google_books_check(ref)
     attempts.append(gd[:70])
     if gv == "PASS":
