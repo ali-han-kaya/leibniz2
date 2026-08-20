@@ -29,6 +29,23 @@ def summary_sink():
         yield sys.stdout
 
 
+def status(path="klayers.json"):
+    """'PASS' | 'FAIL' | 'MISSING' — durum panosu için tek satır özet."""
+    if not os.path.isfile(path):
+        return "MISSING"
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return "FAIL"
+    layers = data.get("layers", {})
+    for key in RENDER_LAYERS:
+        lyr = layers.get(key)
+        if lyr and lyr.get("status") == "FAIL":
+            return "FAIL"
+    return "PASS"
+
+
 def render(sink, path="klayers.json"):
     """K1-K10 bölümlerini sink'e yaz (sidecar yoksa advisory not)."""
     if not os.path.isfile(path):

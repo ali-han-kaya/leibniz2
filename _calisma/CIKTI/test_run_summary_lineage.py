@@ -23,6 +23,32 @@ class TestIcon(unittest.TestCase):
         self.assertEqual(rsl._icon("UNVERIFIED (git yok)"), "ℹ️")
 
 
+class TestStatus(unittest.TestCase):
+    def test_pass(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "lineage_findings.json")
+            with open(p, "w") as f:
+                json.dump({"ok": True, "generations": []}, f)
+            self.assertEqual(rsl.status(p), "PASS")
+
+    def test_fail(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "lineage_findings.json")
+            with open(p, "w") as f:
+                json.dump({"ok": False, "generations": []}, f)
+            self.assertEqual(rsl.status(p), "FAIL")
+
+    def test_missing(self):
+        self.assertEqual(rsl.status("nonexistent.json"), "MISSING")
+
+    def test_corrupt(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "lineage_findings.json")
+            with open(p, "w") as f:
+                f.write("not json")
+            self.assertEqual(rsl.status(p), "FAIL")
+
+
 class TestMain(unittest.TestCase):
     def setUp(self):
         # CI'da GITHUB_STEP_SUMMARY set olduğunda summary_sink() dosyaya

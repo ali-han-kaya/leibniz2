@@ -14,6 +14,46 @@ import unittest
 import run_summary_klayers as rsk
 
 
+class TestStatus(unittest.TestCase):
+    def test_pass(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "klayers.json")
+            layers = {k: {"label": "X", "status": "PASS", "findings": []}
+                      for k in rsk.RENDER_LAYERS}
+            with open(p, "w") as f:
+                json.dump({"layers": layers}, f)
+            self.assertEqual(rsk.status(p), "PASS")
+
+    def test_fail(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "klayers.json")
+            layers = {k: {"label": "X", "status": "PASS", "findings": []}
+                      for k in rsk.RENDER_LAYERS}
+            layers["K4"] = {"label": "X", "status": "FAIL", "findings": []}
+            with open(p, "w") as f:
+                json.dump({"layers": layers}, f)
+            self.assertEqual(rsk.status(p), "FAIL")
+
+    def test_missing(self):
+        self.assertEqual(rsk.status("nonexistent.json"), "MISSING")
+
+    def test_corrupt(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "klayers.json")
+            with open(p, "w") as f:
+                f.write("not json")
+            self.assertEqual(rsk.status(p), "FAIL")
+
+    def test_all_skip_is_pass(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "klayers.json")
+            layers = {k: {"label": "X", "status": "SKIP", "findings": []}
+                      for k in rsk.RENDER_LAYERS}
+            with open(p, "w") as f:
+                json.dump({"layers": layers}, f)
+            self.assertEqual(rsk.status(p), "PASS")
+
+
 class TestMain(unittest.TestCase):
     def setUp(self):
         # CI'da GITHUB_STEP_SUMMARY set olduğunda summary_sink() dosyaya

@@ -33,6 +33,18 @@ def _icon(status):
     return "ℹ️"  # INFO / UNVERIFIED
 
 
+def status(path="lineage_findings.json"):
+    """'PASS' | 'FAIL' | 'MISSING' — durum panosu için tek satır özet."""
+    if not os.path.isfile(path):
+        return "MISSING"
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return "FAIL"
+    return "PASS" if data.get("ok") else "FAIL"
+
+
 def render(sink, path="lineage_findings.json"):
     """Soy hattı bölümünü sink'e yaz (sidecar yoksa advisory not)."""
     if not os.path.isfile(path):
