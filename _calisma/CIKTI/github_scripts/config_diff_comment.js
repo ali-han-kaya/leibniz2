@@ -18,7 +18,13 @@
   }
   const diff = JSON.parse(fs.readFileSync(path, 'utf8'));
   const diffs = diff.differences || [];
-  const existing = await listComments();
+  // Yorum listesi: CI'da birleştirilmiş adım (manifest + config-diff) listeyi
+  // BİR KEZ çekip EXISTING_COMMENTS olarak verir (API çağrısı 2'den 1'e iner);
+  // tek başına koşulursa kendi listComments çağrısına düşer — iki yol aynı
+  // create/update/delete davranışını üretir.
+  const existing = (typeof EXISTING_COMMENTS !== 'undefined' && EXISTING_COMMENTS)
+    ? EXISTING_COMMENTS
+    : await listComments();
   const found = existing.find(c => c.body && c.body.includes(MARKER));
 
   if (diffs.length === 0) {

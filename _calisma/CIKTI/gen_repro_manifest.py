@@ -82,6 +82,22 @@ CONFIG_BASENAMES = frozenset({
 })
 
 
+# Run summary sidecar dosyalarının bilinen ADLARI (basename).
+# consolidate_summary.py tarafından üretilen/run summary tarafından okunan
+# sidecar dosyaları merge-multiple ile köke düzleşebilir; isimle tanınır.
+SUMMARY_BASENAMES = frozenset({
+    "klayers.json",
+    "lineage_findings.json",
+    "k0_findings.json",
+    "budget_verify.json",
+})
+
+
+def _is_summary_rel(rel: str) -> bool:
+    """Bir rel yolunun run summary sidecar dosyası olup olmadığını isimle tanı."""
+    return os.path.basename(rel) in SUMMARY_BASENAMES
+
+
 def _is_config_rel(rel: str) -> bool:
     """Bir rel yolunun config dosyası olup olmadığını isimle tanı (önek + basename).
 
@@ -229,6 +245,60 @@ def main() -> None:
                      "=" * 72]
         lines += rt_block
 
+    # ── LINEAGE bölümü: lineage-findings/ önekli dosyalar (CONFIG gibi) ──
+    # zip_lineage.json sidecar'ı ve --check-lineage çıktısı ayrıca
+    # işaretlenir; combined_sha256 tek hash ile özetler (config.combined_sha256
+    # ile aynı deterministik yöntem). Böylece soy hattı denetim zinciri
+    # (zincir→hash→manifest→sidecar→CI kapısı) tek bir bundle'da tamamlanır.
+    lineage_hashes = {rel: h for rel, h in file_hashes.items()
+                      if rel.startswith("lineage-findings/")}
+    lineage_combined = None
+    if lineage_hashes:
+        sorted_rel = sorted(lineage_hashes)
+        lineage_combined = hashlib.sha256(
+            "".join(f"{rel}\0{lineage_hashes[rel]}\n" for rel in sorted_rel).encode()
+        ).hexdigest()
+        ln_block = [
+            "",
+            "=" * 72,
+            "LINEAGE ARTIFACT (ayrı bölüm)",
+            "=" * 72,
+            f"{'FILE':<55} {'SHA-256'}",
+            "-" * 72,
+        ]
+        ln_block += [f"{rel:<55} {lineage_hashes[rel]}" for rel in sorted_rel]
+        ln_block += ["-" * 72,
+                     f"lineage_combined_sha256: {lineage_combined}",
+                     "=" * 72]
+        lines += ln_block
+
+    # ── SUMMARY bölümü: run summary sidecar dosyaları (LINEAGE gibi) ──────
+    # consolidate_summary.py tarafından üretilen/run summary tarafından okunan
+    # sidecar dosyaları (klayers.json, lineage_findings.json, k0_findings.json,
+    # budget_verify.json) ayrıca işaretlenir; combined_sha256 tek hash ile
+    # özetler. Böylece run summary üretiminin girdileri de denetim zincirinde.
+    summary_hashes = {rel: h for rel, h in file_hashes.items()
+                      if _is_summary_rel(rel)}
+    summary_combined = None
+    if summary_hashes:
+        sorted_rel = sorted(summary_hashes)
+        summary_combined = hashlib.sha256(
+            "".join(f"{rel}\0{summary_hashes[rel]}\n" for rel in sorted_rel).encode()
+        ).hexdigest()
+        sm_block = [
+            "",
+            "=" * 72,
+            "SUMMARY ARTIFACT (ayrı bölüm)",
+            "=" * 72,
+            f"{'FILE':<55} {'SHA-256'}",
+            "-" * 72,
+        ]
+        sm_block += [f"{rel:<55} {summary_hashes[rel]}" for rel in sorted_rel]
+        sm_block += ["-" * 72,
+                     f"summary_combined_sha256: {summary_combined}",
+                     "=" * 72]
+        lines += sm_block
+
     # ── PROVENANCE bölümü: artifact → üreten job (denetim izi) ──────────────
     # Her artifact hangi job'da üretildi — tek bakışta kaynak. Prefixed
     # indirilenler (config/, precommit-logs/) bundle'da kendi adı altındadır;
@@ -241,6 +311,18 @@ def main() -> None:
         # (merge-multiple köke düzleştirir) "config" artifact'ına bağlanır.
         if top not in artifact_jobs and _is_config_rel(rel):
             top = "config"
+        # Summary sidecar dosyaları isimle tanınır: merge-multiple ile
+        # köke düzleşen klayers.json, lineage_findings.json vb. "klayers"
+        # artifact'ına bağlanır.
+        if top not in artifact_jobs and _is_summary_rel(rel):
+            bn = os.path.basename(rel)
+            _SUMMARY_ARTIFACT_MAP = {
+                "klayers.json": "klayers",
+                "lineage_findings.json": "lineage-findings",
+                "k0_findings.json": "k0-findings",
+                "budget_verify.json": "budget-verify",
+            }
+            top = _SUMMARY_ARTIFACT_MAP.get(bn, "klayers")
         if top in artifact_jobs:
             present.setdefault(top, []).append(rel)
     prov_block = [
@@ -289,6 +371,16 @@ def main() -> None:
         manifest_json["refs_trend"] = {
             "files": dict(sorted(refs_trend_hashes.items())),
             "combined_sha256": refs_trend_combined,
+        }
+    if lineage_hashes:
+        manifest_json["lineage"] = {
+            "files": dict(sorted(lineage_hashes.items())),
+            "combined_sha256": lineage_combined,
+        }
+    if summary_hashes:
+        manifest_json["summary"] = {
+            "files": dict(sorted(summary_hashes.items())),
+            "combined_sha256": summary_combined,
         }
 
     out_dir = pathlib.Path(args.out_dir)

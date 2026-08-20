@@ -1558,6 +1558,89 @@ def run_lean_proof(lean_path, lean_file):
     return False, f"Lean derleme hatası: {detail}"
 
 
+_HASH_RE = re.compile(r"^[0-9a-f]{64}$")
+
+
+def validate_lineage_schema(lineage, add, check_id="K17-LINEAGE",
+                            check_label="K17 lineage şema"):
+    """zip_lineage.json şema doğrulaması (fail-closed).
+
+    Kontroller:
+      (a) Üst düzey: file (str), path_in_repo (str), generations (list, boş değil)
+      (b) Her nesil: note (str), hash (64-char hex SHA-256), commit (str|null),
+          current (bool) — zorunlu alanlar
+      (c) Hash formatı: [0-9a-f]{64}
+      (d) Tam olarak BİR current=true nesli olmalı (son nesil)
+    Döndürür (ok: bool, errors: list[str]).
+    """
+    errors = []
+
+    # (a) Üst düzey alanlar
+    for key in ("file", "path_in_repo", "generations"):
+        if key not in lineage:
+            errors.append(f"üst düzey alan eksik: {key}")
+            add("P1", check_id, check_label, f"üst düzey alan eksik: {key}")
+
+    file_val = lineage.get("file")
+    if not isinstance(file_val, str) or not file_val:
+        errors.append("file: boş veya string değil")
+        add("P1", check_id, check_label, "file alanı boş veya string değil")
+
+    path_val = lineage.get("path_in_repo")
+    if not isinstance(path_val, str) or not path_val:
+        errors.append("path_in_repo: boş veya string değil")
+        add("P1", check_id, check_label, "path_in_repo alanı boş veya string değil")
+
+    gens = lineage.get("generations")
+    if not isinstance(gens, list) or not gens:
+        errors.append("generations: boş veya list değil")
+        add("P1", check_id, check_label, "generations alanı boş veya list değil")
+        return False, errors  # nesil yoksa ileriye.devam anlamsız
+
+    # (b)+(c) Her nesil: zorunlu alanlar + hash formatı
+    current_count = 0
+    for i, g in enumerate(gens):
+        if not isinstance(g, dict):
+            errors.append(f"generations[{i}]: dict değil")
+            add("P1", check_id, check_label, f"generations[{i}] dict değil")
+            continue
+        for key in ("note", "hash", "commit", "current"):
+            if key not in g:
+                errors.append(f"generations[{i}]: '{key}' eksik")
+                add("P1", check_id, check_label,
+                    f"generations[{i}] zorunlu alan eksik: {key}")
+        h = g.get("hash", "")
+        h_repr = str(h)[:20] if not isinstance(h, str) else h[:20]
+        if not isinstance(h, str) or not _HASH_RE.match(h):
+            errors.append(f"generations[{i}]: hash geçersiz ({h_repr}…)")
+            add("P1", check_id, check_label,
+                f"generations[{i}] hash formatı geçersiz (beklenen 64-char hex)",
+                f"alınan: {h_repr}")
+        commit = g.get("commit")
+        if commit is not None and not isinstance(commit, str):
+            errors.append(f"generations[{i}]: commit null veya string değil")
+            add("P1", check_id, check_label,
+                f"generations[{i}] commit null veya string değil")
+        cur = g.get("current")
+        if not isinstance(cur, bool):
+            errors.append(f"generations[{i}]: current bool değil")
+            add("P1", check_id, check_label,
+                f"generations[{i}] current alanı bool değil")
+        elif cur:
+            current_count += 1
+
+    # (d) Tek current
+    if current_count == 0:
+        errors.append("current=true nesli yok")
+        add("P1", check_id, check_label, "current=true olan nesil yok")
+    elif current_count > 1:
+        errors.append(f"{current_count} tane current=true nesli var (beklenen 1)")
+        add("P1", check_id, check_label,
+            f"{current_count} tane current=true nesli var (tam olarak 1 olmalı)")
+
+    return len(errors) == 0, errors
+
+
 def check_zip_lineage(zip_path, lineage_path, add):
     """Soy hattı: zip_lineage.json'daki her nesli tek kaynaktan doğrula.
 
@@ -1584,6 +1667,12 @@ def check_zip_lineage(zip_path, lineage_path, add):
     if not gens:
         add("P1", "LINEAGE-EMPTY", "Soy hattı", "generations boş", lineage_path)
         return False, "soy hattı boş", []
+
+    # ---- K17: şema doğrulaması (fail-closed) ----
+    schema_ok, schema_errors = validate_lineage_schema(lineage, add)
+    if not schema_ok:
+        schema_detail = "; ".join(schema_errors[:5])
+        return False, f"şema hatası ({len(schema_errors)} hata): {schema_detail}", []
 
     cur_hash = sha256_file(zip_path) if os.path.isfile(zip_path) else None
     records = []
@@ -1834,6 +1923,27 @@ def _is_config_rel(rel):
     """
     return (rel.startswith("config/") or
             os.path.basename(rel) in _config_basenames())
+
+
+_SUMMARY_BASENAMES = frozenset({
+    "klayers.json",
+    "lineage_findings.json",
+    "k0_findings.json",
+    "budget_verify.json",
+})
+
+
+def _is_summary_rel(rel):
+    """Bir rel yolunun run summary sidecar dosyası olup olmadığını isimle tanı."""
+    return os.path.basename(rel) in _SUMMARY_BASENAMES
+
+
+def _summary_combined_sha256(summary_files):
+    """summary.files {rel: sha256} → combined_sha256 (gen_repro_manifest.py formülü)."""
+    return hashlib.sha256(
+        "".join(f"{rel}\0{summary_files[rel]}\n"
+                for rel in sorted(summary_files)).encode()
+    ).hexdigest()
 
 
 def _config_combined_sha256(config_files):
@@ -2156,6 +2266,128 @@ def verify_manifest_digest(manifest_path, add, check_id="K10-MANIFEST",
     ov_detail = ("cli_overrides: PASS" if ov_ok
                  else ("cli_overrides: FAIL — " + "; ".join(ov_rows[:3])))
 
+    # ---- lineage.combined_sha256: YENİDEN hesapla + doğrula (fail-closed) ----
+    # gen_repro_manifest.py lineage-findings dosyalarını (zip_lineage.json,
+    # lineage-check sonuçları) "lineage" objesine yazar:
+    # {files: {rel: sha256}, combined_sha256}. combined, o dosyaların
+    # sıralı "{rel}\0{hash}\n" birleşiminin SHA-256'sıdır. K10 burada
+    # onu lineage.files'tan yeniden hesaplar; kayıtlı değerle uyuşmazsa P1.
+    ln_ok = True
+    ln_rows = []
+    ln = m.get("lineage")
+    if ln is not None and not isinstance(ln, dict):
+        ln_ok = False
+        ln_rows.append("lineage: dict değil")
+        add("P1", check_id, check_label, "lineage alanı dict değil")
+    elif isinstance(ln, dict):
+        ln_files = ln.get("files")
+        stored_combined = ln.get("combined_sha256")
+        # (a) lineage.files → files tutarlılığı
+        if not isinstance(ln_files, dict):
+            ln_ok = False
+            ln_rows.append("lineage.files: dict değil")
+            add("P1", check_id, check_label, "lineage.files dict değil")
+            ln_files = {}
+        else:
+            for rel, h in sorted(ln_files.items()):
+                if rel not in files:
+                    ln_ok = False
+                    ln_rows.append(f"{rel} (files'ta yok)")
+                    add("P1", check_id, check_label,
+                        f"lineage.files'taki dosya files'ta yok: {rel}")
+                elif files[rel] != h:
+                    ln_ok = False
+                    ln_rows.append(f"{rel} (hash farklı)")
+                    add("P1", check_id, check_label,
+                        f"lineage.files hash'i files ile uyuşmuyor: {rel}",
+                        f"lineage={h[:16]}… files={files[rel][:16]}…")
+        # (b) combined_sha256 yeniden hesapla + karşılaştır
+        if isinstance(ln_files, dict):
+            if ln_files and not stored_combined:
+                ln_ok = False
+                ln_rows.append("combined_sha256 eksik")
+                add("P1", check_id, check_label,
+                    "lineage.combined_sha256 eksik (lineage.files dolu)")
+            elif stored_combined is not None:
+                recalc = hashlib.sha256(
+                    "".join(f"{rel}\0{ln_files[rel]}\n"
+                             for rel in sorted(ln_files)).encode()
+                ).hexdigest()
+                if stored_combined != recalc:
+                    ln_ok = False
+                    ln_rows.append("combined_sha256 uyuşmazlığı")
+                    add("P1", check_id, check_label,
+                        "lineage.combined_sha256 uyuşmazlığı",
+                        f"yeniden {recalc[:16]}… ≠ kayıtlı {stored_combined[:16]}…")
+    elif any(rel.startswith("lineage-findings/") for rel in files):
+        # lineage objesi yok ama files'ta lineage dosyaları var
+        ln_ok = False
+        ln_rows.append("lineage objesi eksik")
+        add("P1", check_id, check_label,
+            "lineage objesi eksik (files'ta lineage dosyaları var)")
+
+    ln_detail = ("lineage_combined_sha256: PASS" if ln_ok
+                  else ("lineage_combined_sha256: FAIL — " + "; ".join(ln_rows[:5])))
+
+    # ---- summary.combined_sha256: YENİDEN hesapla + doğrula (fail-closed) ----
+    # gen_repro_manifest.py run summary sidecar dosyalarını (klayers.json,
+    # lineage_findings.json, k0_findings.json, budget_verify.json) "summary"
+    # objesine yazar: {files: {rel: sha256}, combined_sha256}. K10 burada
+    # onu summary.files'tan yeniden hesaplar; kayıtlı değerle uyuşmazsa P1.
+    sm_ok = True
+    sm_rows = []
+    sm = m.get("summary")
+    if sm is not None and not isinstance(sm, dict):
+        sm_ok = False
+        sm_rows.append("summary: dict değil")
+        add("P1", check_id, check_label, "summary alanı dict değil")
+    elif isinstance(sm, dict):
+        sm_files = sm.get("files")
+        stored_combined = sm.get("combined_sha256")
+        # (a) summary.files → files tutarlılığı
+        if not isinstance(sm_files, dict):
+            sm_ok = False
+            sm_rows.append("summary.files: dict değil")
+            add("P1", check_id, check_label, "summary.files dict değil")
+            sm_files = {}
+        else:
+            for rel, h in sorted(sm_files.items()):
+                if rel not in files:
+                    sm_ok = False
+                    sm_rows.append(f"{rel} (files'ta yok)")
+                    add("P1", check_id, check_label,
+                        f"summary.files'taki dosya files'ta yok: {rel}")
+                elif files[rel] != h:
+                    sm_ok = False
+                    sm_rows.append(f"{rel} (hash farklı)")
+                    add("P1", check_id, check_label,
+                        f"summary.files hash'i files ile uyuşmuyor: {rel}",
+                        f"summary={h[:16]}… files={files[rel][:16]}…")
+        # (b) combined_sha256 yeniden hesapla + karşılaştır
+        if isinstance(sm_files, dict):
+            if sm_files and not stored_combined:
+                sm_ok = False
+                sm_rows.append("combined_sha256 eksik")
+                add("P1", check_id, check_label,
+                    "summary.combined_sha256 eksik (summary.files dolu)")
+            elif stored_combined is not None:
+                recalc = _summary_combined_sha256(sm_files)
+                if stored_combined != recalc:
+                    sm_ok = False
+                    sm_rows.append("combined_sha256 uyuşmazlığı")
+                    add("P1", check_id, check_label,
+                        "summary.combined_sha256 uyuşmazlığı",
+                        f"yeniden {recalc[:16]}… ≠ kayıtlı {stored_combined[:16]}…")
+    elif any(_is_summary_rel(rel) for rel in files):
+        # summary objesi yok ama files'ta summary dosyaları var
+        sm_ok = False
+        sm_rows.append("summary objesi eksik")
+        add("P1", check_id, check_label,
+            "summary objesi eksik (files'ta summary dosyaları var)")
+
+    sm_detail = ("summary_combined_sha256: PASS" if sm_ok
+                  else ("summary_combined_sha256: FAIL — " + "; ".join(sm_rows[:5])))
+
     # ---- manifest.sha256 ↔ manifest.json: sidecar eşleşmesi (fail-closed) ----
     # Ortak helper (K10 + K13 tek kaynak). Sidecar manifest dosyasının KENDİ
     # hash'ini sabitler: manifest.json içeriği değişirse (ör. JSON'a boşluk
@@ -2165,10 +2397,11 @@ def verify_manifest_digest(manifest_path, add, check_id="K10-MANIFEST",
                  else ("manifest.sha256: FAIL — " + "; ".join(sc_rows[:3])))
 
     detail = (f"{n_ok} OK / {n_bad} uyuşmazlık / {n_missing} eksik "
-              f"({len(files)} dosya); {cfg_detail}; {ov_detail}; {sc_detail}")
+              f"({len(files)} dosya); {cfg_detail}; {ov_detail}; "
+              f"{ln_detail}; {sm_detail}; {sc_detail}")
     if bad_rows:
         detail += " | " + "; ".join(bad_rows[:5])
-    return (n_bad == 0 and n_missing == 0 and cfg_ok and ov_ok and sc_ok), detail
+    return (n_bad == 0 and n_missing == 0 and cfg_ok and ov_ok and ln_ok and sm_ok and sc_ok), detail
 
 
 def check_repro_manifest_self_consistency(add):
@@ -2200,6 +2433,10 @@ def check_repro_manifest_self_consistency(add):
         # (config/ öneki yok) — isimle tanınmalı (CONFIG_BASENAMES).
         "effective_config.json": b'{"effective": true}',
         "config-diff.json": b'{"diffs": []}',
+        # lineage-findings: soy hattı sidecar dosyası (LINEAGE bölümü)
+        "lineage-findings/zip_lineage.json": b'{"generations": []}',
+        # summary sidecar: run summary girdileri (SUMMARY bölümü)
+        "klayers.json": b'{"layers": {}}',
     }
     tmp = tempfile.mkdtemp(prefix="repro_manifest_")
     try:
@@ -2299,9 +2536,48 @@ def check_repro_manifest_self_consistency(add):
                 "config.combined_sha256 yeniden hesap uyuşmuyor")
             return False, "config.combined_sha256 uyuşmuyor"
 
+        # lineage objesi: lineage-findings/ dosyaları tanınmalı.
+        ln = m.get("lineage")
+        ln_ok = isinstance(ln, dict) and isinstance(ln.get("files"), dict)
+        ln_rel = set(ln["files"]) if ln_ok else set()
+        want_ln = {"lineage-findings/zip_lineage.json"}
+        missing_ln = sorted(want_ln - ln_rel)
+        if not ln_ok or missing_ln:
+            add("P1", "K13-REPRO", "K13 repro manifest",
+                "lineage objesi lineage-findings dosyalarını kapsamıyor",
+                f"eksik={missing_ln}")
+            return False, f"lineage kapsamı eksik: {missing_ln}"
+        if ln["combined_sha256"] != hashlib.sha256(
+                "".join(f"{rel}\0{ln['files'][rel]}\n"
+                         for rel in sorted(ln['files'])).encode()
+        ).hexdigest():
+            add("P1", "K13-REPRO", "K13 repro manifest",
+                "lineage.combined_sha256 yeniden hesap uyuşmuyor")
+            return False, "lineage.combined_sha256 uyuşmuyor"
+
+        # summary objesi: run summary sidecar dosyaları tanınmalı.
+        sm = m.get("summary")
+        sm_ok = isinstance(sm, dict) and isinstance(sm.get("files"), dict)
+        sm_rel = set(sm["files"]) if sm_ok else set()
+        want_sm = {"klayers.json"}
+        missing_sm = sorted(want_sm - sm_rel)
+        if not sm_ok or missing_sm:
+            add("P1", "K13-REPRO", "K13 repro manifest",
+                "summary objesi run summary sidecarlarını kapsamıyor",
+                f"eksik={missing_sm}")
+            return False, f"summary kapsamı eksik: {missing_sm}"
+        if sm["combined_sha256"] != hashlib.sha256(
+                "".join(f"{rel}\0{sm['files'][rel]}\n"
+                         for rel in sorted(sm['files'])).encode()
+        ).hexdigest():
+            add("P1", "K13-REPRO", "K13 repro manifest",
+                "summary.combined_sha256 yeniden hesap uyuşmuyor")
+            return False, "summary.combined_sha256 uyuşmuyor"
+
         ok = n_bad == 0 and sc_ok
         detail = (f"{len(expected) - n_bad} OK / {n_bad} uyuşmazlık "
                   f"({len(expected)} mock dosya); config {len(cfg_rel)} dosya; "
+                  f"lineage {len(ln_rel)} dosya; summary {len(sm_rel)} dosya; "
                   f"{sc_detail}")
         return ok, detail
     finally:
@@ -3342,6 +3618,23 @@ def main():
             add("P1", "SUMMARY-OUT", "Summary sidecar",
                 f"yazılamadı: {args.klayers_out}", str(e))
 
+    # CLI override uyarıları + bütçe özeti: HER İKİ modda da dashboard'un
+    # canlı akışına gider. --json modunda stdout yalnızca JSON olmalı; bu
+    # satırlar stderr'e relay edilir (K9 deseni — preview_server stderr'i
+    # ayrı akıtır). Böylece manuel override run'ında [CLI override] + Bütçe
+    # satırları canlı akışta sarı/mor görünür; JSON yine bozulmaz.
+    ov = effective_config.get("cli_overrides", {})
+    for k, rec in ov.items():
+        if rec.get("override"):
+            print(f"  [CLI override] {k}: {rec['file_value']!r} → "
+                  f"{rec['effective']!r} (CLI verildi)",
+                  file=(sys.stderr if args.json else None))
+    if budget_report:
+        print(f"Bütçe: ~{budget_report['tokens_est']} token → "
+              f"${budget_report['estimated_usd']} "
+              f"(limit ${budget_report['limit']})",
+              file=(sys.stderr if args.json else None))
+
     if args.json:
         print(json.dumps(out, indent=2, ensure_ascii=False))
     else:
@@ -3370,11 +3663,6 @@ def main():
               f"pages={effective_config['expected_pages']}, "
               f"refs={effective_config['expected_refs']}, "
               f"manifest={effective_config['expected_manifest']})")
-        ov = effective_config.get("cli_overrides", {})
-        for k, rec in ov.items():
-            if rec.get("override"):
-                print(f"  [CLI override] {k}: {rec['file_value']!r} → {rec['effective']!r} "
-                      f"(CLI verildi)")
         if budget_report:
             print(f"Bütçe: ~{budget_report['tokens_est']} token → ${budget_report['estimated_usd']} "
                   f"(limit ${budget_report['limit']})")

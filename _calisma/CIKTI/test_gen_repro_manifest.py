@@ -60,6 +60,8 @@ class TestProvenance(unittest.TestCase):
             "raw\n", encoding="utf-8")
         (self.artifacts / "precommit-logs" / "precommit.log").write_text(
             "log\n", encoding="utf-8")
+        (self.artifacts / "precommit-logs" / "commit_msg_findings.json").write_text(
+            json.dumps({"checked": 3, "violations": []}) + "\n", encoding="utf-8")
         (self.artifacts / "verify_report.txt").write_text(
             "flat\n", encoding="utf-8")
         self.out = self.root / "reproducibility"
@@ -86,13 +88,15 @@ class TestProvenance(unittest.TestCase):
         txt = (self.out / "manifest.txt").read_text(encoding="utf-8")
         self.assertIn("PROVENANCE (artifact → job kaynağı)", txt)
         self.assertIn("precommit-logs", txt)
-        self.assertIn("prefixed (1 dosya)", txt)  # precommit-logs tek dosya
+        self.assertIn("prefixed (2 dosya)", txt)  # precommit-logs: precommit.log + commit_msg_findings.json
 
     def test_prefixed_files_present_in_bundle(self):
         self._gen()
         # gen_repro_manifest.py bundle'a kopyalar → rel yol korunmalı.
         self.assertTrue(
             (self.out / "precommit-logs" / "precommit.log").is_file())
+        self.assertTrue(
+            (self.out / "precommit-logs" / "commit_msg_findings.json").is_file())
         self.assertTrue(
             (self.out / "config" / "verify_delivery.config.json").is_file())
 
@@ -141,6 +145,98 @@ class TestProvenance(unittest.TestCase):
         self.assertEqual(jobs["refs-trend"], "refs-trend")
         txt = (self.out / "manifest.txt").read_text(encoding="utf-8")
         self.assertIn("prefixed (2 dosya)", txt)  # refs-trend 2 dosya
+
+    def test_lineage_section(self):
+        # lineage-findings/ dosyaları CONFIG gibi ayrı bölümde işaretlenir
+        # + tek-hash combined_sha256 özetlenir.
+        (self.artifacts / "lineage-findings").mkdir(parents=True)
+        (self.artifacts / "lineage-findings" / "zip_lineage.json").write_text(
+            '{"generations": []}', encoding="utf-8")
+        self._gen()
+        txt = (self.out / "manifest.txt").read_text(encoding="utf-8")
+        self.assertIn("LINEAGE ARTIFACT (ayrı bölüm)", txt)
+        self.assertIn("lineage_combined_sha256", txt)
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        ln = m["lineage"]
+        self.assertIn(
+            "lineage-findings/zip_lineage.json", ln["files"])
+        self.assertTrue(len(ln["combined_sha256"]) == 64)
+
+    def test_lineage_combined_recomputes_deterministically(self):
+        (self.artifacts / "lineage-findings").mkdir(parents=True)
+        (self.artifacts / "lineage-findings" / "zip_lineage.json").write_text(
+            '{"generations": []}', encoding="utf-8")
+        self._gen()
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        ln = m["lineage"]["files"]
+        expected = hashlib.sha256(
+            "".join(f"{rel}\0{ln[rel]}\n" for rel in sorted(ln)).encode()
+        ).hexdigest()
+        self.assertEqual(m["lineage"]["combined_sha256"], expected)
+        self.assertRegex(m["lineage"]["combined_sha256"], r"^[0-9a-f]{64}$")
+
+    def test_lineage_artifact_job_provenance(self):
+        (self.artifacts / "lineage-findings").mkdir(parents=True)
+        (self.artifacts / "lineage-findings" / "zip_lineage.json").write_text(
+            '{"generations": []}', encoding="utf-8")
+        self._gen()
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        jobs = m["provenance"]["artifact_jobs"]
+        self.assertEqual(jobs["lineage-findings"], "verify")
+        txt = (self.out / "manifest.txt").read_text(encoding="utf-8")
+        self.assertIn("prefixed (1 dosya)", txt)  # lineage-findings tek dosya
+
+    def test_no_lineage_section_when_absent(self):
+        # lineage-findings/ hiç yoksa manifest.json'da 'lineage' anahtarı
+        # da olmamalı (boş bölüm şişirmek yerine yok sayılır).
+        bare = self.root / "bare"
+        bare.mkdir(parents=True)
+        (bare / "a.txt").write_text("x", encoding="utf-8")
+        out = self.root / "bare-out"
+        r = _run_gen(str(bare), str(out))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        m = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        self.assertNotIn("lineage", m)
+        self.assertIn("a.txt", m["files"])
+
+    def test_summary_section(self):
+        # Run summary sidecar dosyaları (klayers.json, vb.) CONFIG gibi
+        # ayrı bölümde işaretlenir + tek-hash combined_sha256 özetlenir.
+        (self.artifacts / "klayers.json").write_text(
+            '{"layers": {}}', encoding="utf-8")
+        (self.artifacts / "k0_findings.json").write_text(
+            '{"count": 0}', encoding="utf-8")
+        self._gen()
+        txt = (self.out / "manifest.txt").read_text(encoding="utf-8")
+        self.assertIn("SUMMARY ARTIFACT (ayrı bölüm)", txt)
+        self.assertIn("summary_combined_sha256", txt)
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        sm = m["summary"]
+        self.assertIn("klayers.json", sm["files"])
+        self.assertIn("k0_findings.json", sm["files"])
+        self.assertTrue(len(sm["combined_sha256"]) == 64)
+
+    def test_summary_combined_recomputes_deterministically(self):
+        (self.artifacts / "klayers.json").write_text(
+            '{"layers": {}}', encoding="utf-8")
+        self._gen()
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        sm = m["summary"]["files"]
+        expected = hashlib.sha256(
+            "".join(f"{rel}\0{sm[rel]}\n" for rel in sorted(sm)).encode()
+        ).hexdigest()
+        self.assertEqual(m["summary"]["combined_sha256"], expected)
+        self.assertRegex(m["summary"]["combined_sha256"], r"^[0-9a-f]{64}$")
+
+    def test_no_summary_section_when_absent(self):
+        bare = self.root / "bare"
+        bare.mkdir(parents=True)
+        (bare / "a.txt").write_text("x", encoding="utf-8")
+        out = self.root / "bare-out"
+        r = _run_gen(str(bare), str(out))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        m = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        self.assertNotIn("summary", m)
 
     def test_env_override_artifact_jobs(self):
         env = dict(os.environ)

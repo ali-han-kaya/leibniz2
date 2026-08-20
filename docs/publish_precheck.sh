@@ -83,21 +83,69 @@ fi
 if [ "$CI_MODE" = "1" ]; then
   info "(CI) hook kurulum kontrolü atlandı — pre-commit verify job'unda koşar; commit.template kurulumu yerel içindir (setup_commit_hooks.sh)"
 else
+  # İlk doğrulama
+  a2_failed=0
   TMPL="$(git config commit.template || true)"
   if [ "$TMPL" = ".gitmessage" ] && [ -f .gitmessage ]; then
     pass "commit.template = .gitmessage"
   else
-    fail "commit.template kurulu değil: git config commit.template .gitmessage"
+    a2_failed=1
   fi
   if [ -x .git/hooks/commit-msg ]; then
     pass "commit-msg git hook'u kurulu"
   else
-    fail "commit-msg hook'u yok: pre-commit install --hook-type commit-msg"
+    a2_failed=1
   fi
   if [ -x .git/hooks/pre-commit ]; then
     pass "pre-commit git hook'u kurulu"
   else
-    fail "pre-commit hook'u yok: pre-commit install"
+    a2_failed=1
+  fi
+
+  # Otomatik onarım: eksik varsa setup_commit_hooks.sh çalıştır, sonra yeniden doğrula
+  if [ "$a2_failed" -ne 0 ]; then
+    SETUP_SCRIPT=""
+    for candidate in "_calisma/CIKTI/setup_commit_hooks.sh" "$(dirname "${BASH_SOURCE[0]}")/../_calisma/CIKTI/setup_commit_hooks.sh"; do
+      if [ -x "$candidate" ]; then
+        SETUP_SCRIPT="$candidate"
+        break
+      fi
+    done
+    if [ -n "$SETUP_SCRIPT" ]; then
+      warn "hook kurulum eksik — setup_commit_hooks.sh otomatik çalıştırılıyor"
+      if bash "$SETUP_SCRIPT" >/dev/null 2>&1; then
+        info "setup_commit_hooks.sh tamamlandı — yeniden doğrulanıyor"
+      else
+        warn "setup_commit_hooks.sh başarısız — manuel kurulum gerekli"
+      fi
+      # Yeniden doğrulama (aynı ölçüt)
+      a2_failed=0
+      TMPL="$(git config commit.template || true)"
+      if [ "$TMPL" = ".gitmessage" ] && [ -f .gitmessage ]; then
+        pass "commit.template = .gitmessage (otomatik onarım sonrası)"
+      else
+        fail "commit.template kurulu değil (onarım sonrası hâlâ eksik): git config commit.template .gitmessage"
+        a2_failed=1
+      fi
+      if [ -x .git/hooks/commit-msg ]; then
+        pass "commit-msg git hook'u kurulu (otomatik onarım sonrası)"
+      else
+        fail "commit-msg hook'u yok (onarım sonrası hâlâ eksik): pre-commit install --hook-type commit-msg"
+        a2_failed=1
+      fi
+      if [ -x .git/hooks/pre-commit ]; then
+        pass "pre-commit git hook'u kurulu (otomatik onarım sonrası)"
+      else
+        fail "pre-commit hook'u yok (onarım sonrası hâlâ eksik): pre-commit install"
+        a2_failed=1
+      fi
+      if [ "$a2_failed" -ne 0 ]; then
+        FAILED=1
+      fi
+    else
+      fail "setup_commit_hooks.sh bulunamadı — manuel kurulum gerekli: bash _calisma/CIKTI/setup_commit_hooks.sh"
+      FAILED=1
+    fi
   fi
 fi
 

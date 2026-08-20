@@ -437,6 +437,56 @@ class HookEnvPlumbingTests(unittest.TestCase):
         self.assertEqual(snap["hook_env"], {"z3": "5.1.0"})
 
 
+class CliOverridesPlumbingTests(unittest.TestCase):
+    """cli_overrides veri hattı: LATEST slotu — override akış satırı beklemeden görünür.
+
+    verify_delivery.py --json çıktısındaki config.cli_overrides (override=true
+    kayıtları) _finalize_run'da LATEST['cli_overrides']'a taşınır; dashboard
+    bunu 'Budget override' rozeti için kullanır. /api/latest (serve_latest)
+    LATEST dict'ini bütünüyle döndürdüğü için slot oraya otomatik girer.
+    """
+
+    def test_latest_has_cli_overrides_slot(self):
+        self.assertIn("cli_overrides", ps.LATEST)
+
+    def test_latest_dict_carries_cli_overrides(self):
+        # /api/latest (serve_latest) LATEST dict'ini bütünüyle döndürür —
+        # cli_overrides slotu oraya otomatik girer (akış satırı beklemeden).
+        ov = {"budget": {"cli_given": True, "file_value": 30.0,
+                         "effective": 25.0, "override": True}}
+        ps.LATEST["cli_overrides"] = ov
+        try:
+            self.assertEqual(ps.LATEST["cli_overrides"], ov)
+        finally:
+            ps.LATEST["cli_overrides"] = None
+
+    def test_override_count_scalar_in_history_keys(self):
+        # Skaler sayaç trend'e (history.jsonl) gider; tam dict oraya DEĞİL —
+        # rozet için tam dict yalnızca SSE snapshot'larına eklenir.
+        self.assertIn("cli_override_count", ps.HISTORY_KEYS)
+        self.assertNotIn("cli_overrides", ps.HISTORY_KEYS)
+
+    def test_sse_snapshot_carries_full_cli_overrides(self):
+        # Broadcast/connect snapshot'ları {k: LATEST[k] for k in HISTORY_KEYS}
+        # + cli_overrides taşır — dashboard rozeti SSE üzerinden de alır.
+        ov = {"budget": {"override": True, "file_value": 30.0,
+                         "effective": 25.0},
+              "budget_method": {"override": False}}
+        ps.LATEST["cli_overrides"] = ov
+        try:
+            snap = {k: ps.LATEST[k] for k in ps.HISTORY_KEYS}
+            snap["cli_overrides"] = ps.LATEST["cli_overrides"]
+            self.assertEqual(snap["cli_overrides"], ov)
+            # skaler sayaç hesabı (_finalize_run satırıyla aynı): override=true
+            # anahtar sayısı — trend'e temiz int olarak gider.
+            n = sum(1 for v in (ps.LATEST.get("cli_overrides") or {}).values()
+                    if (v or {}).get("override"))
+            self.assertEqual(n, 1)
+            self.assertIn("cli_override_count", snap)
+        finally:
+            ps.LATEST["cli_overrides"] = None
+
+
 class DaemonStdioTests(unittest.TestCase):
     """PREVIEW_DAEMON fd davranışı: kapatma (EBADF) değil /dev/null'a yönlendirme.
 
@@ -509,6 +559,265 @@ class LogMessageTests(unittest.TestCase):
             ps.Handler.log_message(h, "%d", "abc")
         finally:
             sys.stderr = old
+
+
+class BuildVerifyCmdTests(unittest.TestCase):
+    """_build_verify_cmd: override parametreleri komuta doğru eklenmeli.
+
+    /api/run-now?budget=25&budget_method=weighted manuel override senaryosu:
+    bütçe kalkanı dosya config yerine CLI değerleriyle koşar. Override yoksa
+    komut default kalır (--full --json), override varsa --budget/--budget-method
+    eklenir — canlı akışta [CLI override] uyarısı + sarı vurgu üretir.
+    """
+
+    def _cmd(self, **kw):
+        return ps._build_verify_cmd("/py", "/verify", **kw)
+
+    def test_no_override_default_flags(self):
+        cmd = self._cmd()
+        self.assertIn("--full", cmd)
+        self.assertIn("--json", cmd)
+        self.assertNotIn("--budget", cmd)
+        self.assertNotIn("--budget-method", cmd)
+
+    def test_budget_override_adds_flag(self):
+        cmd = self._cmd(budget_usd=25.0)
+        i = cmd.index("--budget")
+        self.assertEqual(cmd[i + 1], "25.0")
+
+    def test_budget_method_override_adds_flag(self):
+        cmd = self._cmd(budget_method="weighted")
+        i = cmd.index("--budget-method")
+        self.assertEqual(cmd[i + 1], "weighted")
+
+    def test_both_overrides_added_in_order(self):
+        cmd = self._cmd(budget_usd=25.0, budget_method="both")
+        self.assertIn("--budget", cmd)
+        self.assertIn("--budget-method", cmd)
+
+    def test_zero_budget_is_still_an_override(self):
+        # 0.0 geçerli bir override — None ile karıştırılmamalı (bool(0)=False).
+        cmd = self._cmd(budget_usd=0.0)
+        i = cmd.index("--budget")
+        self.assertEqual(cmd[i + 1], "0.0")
+
+
+class LineageSummaryTests(unittest.TestCase):
+    """lineage_summary: _finalize_run'un verify JSON'undan soy hattı özetini
+    ayrıştırıp LATEST'e yazması ve SSE snapshot'ına taşıması.
+    """
+
+    def test_lineage_ok_in_latest_and_history_keys(self):
+        """lineage_summary LATEST'te var, lineage_ok/lineage_count HISTORY_KEYS'te."""
+        import preview_server as ps
+        # Reset lineage_summary to initial state
+        with ps.LOCK:
+            ps.LATEST["lineage_summary"] = None
+            ps.LATEST["lineage_ok"] = None
+            ps.LATEST["lineage_count"] = None
+        self.assertIsNone(ps.LATEST.get("lineage_summary"))
+        self.assertIn("lineage_ok", ps.HISTORY_KEYS)
+        self.assertIn("lineage_count", ps.HISTORY_KEYS)
+        # lineage_summary本身 HISTORY_KEYS'te değil (dict trend'i şişirir)
+        self.assertNotIn("lineage_summary", ps.HISTORY_KEYS)
+
+    def test_finalize_populates_lineage_summary(self):
+        """_finalize_run lineage_summary'yi LATEST'e yazar."""
+        import preview_server as ps
+        stdout = json.dumps({
+            "verdict": "PASS", "counts": {"P0": 0, "P1": 0},
+            "lineage": {
+                "ok": True, "count": 2,
+                "generations": [
+                    {"gen": "pre-git", "note": "iCloud", "hash": "a" * 64,
+                     "commit": None, "status": "INFO"},
+                    {"gen": "current", "note": "V5m", "hash": "b" * 64,
+                     "commit": "d02cda8", "status": "PASS (canlı dosya ile aynı)"},
+                ],
+            },
+        })
+        with ps.LOCK:
+            ps.LATEST.update({"cli_overrides": None})
+        ps._finalize_run(stdout, "", 0, 1.0, data=None, verify_dir=None)
+        with ps.LOCK:
+            ls = ps.LATEST.get("lineage_summary")
+        self.assertIsNotNone(ls)
+        self.assertTrue(ls["ok"])
+        self.assertEqual(ls["count"], 2)
+        self.assertEqual(ls["current_note"], "V5m")
+        self.assertEqual(ls["current_hash"], "b" * 16)
+
+    def test_finalize_no_lineage(self):
+        """lineage alanı yoksa lineage_summary None kalır."""
+        import preview_server as ps
+        stdout = json.dumps({"verdict": "PASS", "counts": {"P0": 0, "P1": 0}})
+        with ps.LOCK:
+            ps.LATEST.update({"cli_overrides": None})
+        ps._finalize_run(stdout, "", 0, 1.0, data=None, verify_dir=None)
+        with ps.LOCK:
+            self.assertIsNone(ps.LATEST.get("lineage_summary"))
+            self.assertIsNone(ps.LATEST.get("lineage_ok"))
+            self.assertIsNone(ps.LATEST.get("lineage_count"))
+
+    def test_lineage_summary_in_sse_broadcast(self):
+        """SSE broadcast snapshot'ında lineage_summary alanı olmalı."""
+        import preview_server as ps
+        import queue
+        stdout = json.dumps({
+            "verdict": "PASS", "counts": {"P0": 0, "P1": 0},
+            "lineage": {
+                "ok": True, "count": 5,
+                "generations": [
+                    {"gen": "current", "note": "test", "hash": "c" * 64,
+                     "commit": "abc1234", "status": "PASS"},
+                ],
+            },
+        })
+        q = queue.Queue()
+        ps.SSE_CLIENTS.clear()
+        ps.SSE_CLIENTS.append(q)
+        try:
+            with ps.LOCK:
+                ps.LATEST.update({"cli_overrides": None})
+            ps._finalize_run(stdout, "", 0, 1.0, data=None, verify_dir=None)
+            snap = json.loads(q.get_nowait())
+            self.assertIn("lineage_summary", snap)
+            ls = snap["lineage_summary"]
+            self.assertTrue(ls["ok"])
+            self.assertEqual(ls["current_note"], "test")
+        finally:
+            ps.SSE_CLIENTS.clear()
+
+
+class StatusBoardTests(unittest.TestCase):
+    """status_board: 5 ikonlu tek satır durum panosu (CI consolidate_summary.py ile tutarlı)."""
+
+    def test_all_pass(self):
+        """Tüm alanlar PASS ise 5 ✅ üretmeli."""
+        import preview_server as ps
+        with ps.LOCK:
+            ps.LATEST.update({
+                "layers": {"K1": {"status": "PASS"}, "K2": {"status": "PASS"},
+                            "K3": {"status": "PASS"}, "K4": {"status": "PASS"},
+                            "K5": {"status": "PASS"}, "K6": {"status": "PASS"},
+                            "K7": {"status": "PASS"},
+                            "K8": {"status": "PASS"}, "K9": {"status": "PASS"},
+                            "K10": {"status": "PASS"}},
+                "p0": 0, "p1": 0, "budget_usd": 1.0, "lineage_ok": True,
+            })
+        board = ps._compute_status_board()
+        self.assertIn("Pre-commit ✅", board)
+        self.assertIn("K0 ✅", board)
+        self.assertIn("Bütçe ✅", board)
+        self.assertIn("Soy hattı ✅", board)
+        self.assertIn("K katmanları ✅", board)
+        self.assertEqual(board.count("✅"), 5)
+
+    def test_one_fail(self):
+        """K4 FAIL ise Pre-commit 🔴 olmalı."""
+        import preview_server as ps
+        with ps.LOCK:
+            ps.LATEST.update({
+                "layers": {"K1": {"status": "PASS"}, "K4": {"status": "FAIL"},
+                            "K8": {"status": "PASS"}},
+                "p0": 0, "p1": 0, "budget_usd": 1.0, "lineage_ok": True,
+            })
+        board = ps._compute_status_board()
+        self.assertIn("Pre-commit 🔴", board)
+        self.assertIn("K0 ✅", board)
+
+    def test_no_data(self):
+        """Veri yoksa (layers=None, p0=None, p1=None, budget=None, lineage=None) tümü ⚠️ olmalı."""
+        import preview_server as ps
+        with ps.LOCK:
+            ps.LATEST["layers"] = None
+            ps.LATEST["p0"] = None
+            ps.LATEST["p1"] = None
+            ps.LATEST["budget_usd"] = None
+            ps.LATEST["lineage_ok"] = None
+        board = ps._compute_status_board()
+        self.assertEqual(board.count("⚠️"), 5)
+
+    def test_status_board_in_sse(self):
+        """SSE snapshot'ında status_board alanı olmalı."""
+        import preview_server as ps
+        import queue
+        stdout = json.dumps({
+            "verdict": "PASS", "counts": {"P0": 0, "P1": 0},
+            "layers": {"K1": {"status": "PASS"}, "K8": {"status": "PASS"}},
+        })
+        q = queue.Queue()
+        ps.SSE_CLIENTS.clear()
+        ps.SSE_CLIENTS.append(q)
+        try:
+            with ps.LOCK:
+                ps.LATEST.update({"cli_overrides": None})
+            ps._finalize_run(stdout, "", 0, 1.0, data=None, verify_dir=None)
+            snap = json.loads(q.get_nowait())
+            self.assertIn("status_board", snap)
+            self.assertIsNotNone(snap["status_board"])
+        finally:
+            ps.SSE_CLIENTS.clear()
+
+
+    def test_precommit_hooks_parsed(self):
+        """Pre-commit hook parsed从 stderr'den."""
+        import preview_server as ps
+        stderr = (
+            "verify-delivery................................................Passed\n"
+            "z3-symbolic-proof..............................................Passed\n"
+            "lean-reduct-build..............................................Failed\n"
+        )
+        hooks = ps._parse_precommit_hooks(stderr)
+        self.assertEqual(len(hooks), 3)
+        self.assertEqual(hooks[0]["name"], "verify-delivery")
+        self.assertEqual(hooks[0]["status"], "Passed")
+        self.assertEqual(hooks[2]["name"], "lean-reduct-build")
+        self.assertEqual(hooks[2]["status"], "Failed")
+
+    def test_precommit_hooks_empty(self):
+        """Boş stderr'de hook listesi None (consistent with other parsers)."""
+        import preview_server as ps
+        hooks = ps._parse_precommit_hooks("")
+        self.assertIsNone(hooks)
+
+    def test_precommit_hooks_in_latest(self):
+        """LATEST dict'te precommit_hooks alanı olmalı."""
+        import preview_server as ps
+        stdout = json.dumps({
+            "verdict": "PASS", "counts": {"P0": 0, "P1": 0},
+            "layers": {"K1": {"status": "PASS"}},
+        })
+        stderr = (
+            "verify-delivery................................................Passed\n"
+            "lean-reduct-build..............................................Failed\n"
+        )
+        ps._finalize_run(stdout, stderr, 0, 1.0, data=None, verify_dir=None)
+        self.assertIn("precommit_hooks", ps.LATEST)
+        self.assertEqual(len(ps.LATEST["precommit_hooks"]), 2)
+        self.assertEqual(ps.LATEST["precommit_hooks"][0]["name"], "verify-delivery")
+
+    def test_precommit_hooks_in_sse(self):
+        """SSE snapshot'ında precommit_hooks alanı olmalı."""
+        import preview_server as ps
+        import queue
+        stdout = json.dumps({
+            "verdict": "PASS", "counts": {"P0": 0, "P1": 0},
+            "layers": {"K1": {"status": "PASS"}},
+        })
+        stderr = (
+            "verify-delivery................................................Passed\n"
+        )
+        q = queue.Queue()
+        ps.SSE_CLIENTS.clear()
+        ps.SSE_CLIENTS.append(q)
+        try:
+            ps._finalize_run(stdout, stderr, 0, 1.0, data=None, verify_dir=None)
+            snap = json.loads(q.get_nowait())
+            self.assertIn("precommit_hooks", snap)
+            self.assertEqual(len(snap["precommit_hooks"]), 1)
+        finally:
+            ps.SSE_CLIENTS.clear()
 
 
 if __name__ == "__main__":

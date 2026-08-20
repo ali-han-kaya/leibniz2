@@ -37,6 +37,25 @@ MARKER_DRIFT = "<!-- stoic-hume-v5-config-drift -->"
 
 REPO_URL = "https://github.com/mock-owner/mock-repo"
 
+# Birleşik adım sarmalayıcısı — verify.yml'deki TEK github-script adımının
+# ("Upsert manifest + config-diff PR comments") birebir aynısı. İki script aynı
+# kapsamda koşar; yorum listesi BİR KEZ çekilir, her ikisine EXISTING_COMMENTS
+# olarak verilir (API çağrısı 2'den 1'e iner). __SCRIPTS_DIR__ run_battery'de
+# gerçek scripts_dir ile değiştirilir. Bu şablon workflow'dan saparsa birleşik
+# senaryolar FAIL eder — adım ile mock arasında drift yakalanır.
+COMBINED_WRAPPER_TMPL = r'''const fs = require('fs');
+const { data: EXISTING_COMMENTS } = await github.rest.issues.listComments({
+  issue_number: context.issue.number,
+  owner: context.repo.owner,
+  repo: context.repo.repo,
+  per_page: 100,
+});
+const mBody = fs.readFileSync('__SCRIPTS_DIR__/manifest_comment.js', 'utf8');
+await eval(`(async () => {\n${mBody}\n})()`);
+const cBody = fs.readFileSync('__SCRIPTS_DIR__/config_diff_comment.js', 'utf8');
+await eval(`(async () => {\n${cBody}\n})()`);
+'''
+
 
 def _ctx(issue=1, run=42):
     return {
@@ -61,7 +80,7 @@ def _ctx(issue=1, run=42):
 SCENARIOS = [
     # ── pr_status_comment.js ────────────────────────────────────────────────
     (
-        "pr_status: bütçe OK + pre-commit temiz + yeni yorum",
+        "pr_state_sync: bütçe OK + pre-commit temiz + K0/lineage/klayers → yorum yok",
         "pr_status_comment.js",
         {
             "budget/index.json": json.dumps({
@@ -70,16 +89,51 @@ SCENARIOS = [
                 "method": "weighted"}),
             "precommit_findings/PRECOMMIT_RAPORU.json": json.dumps({
                 "findings": [], "counts": {"hooks": 9, "passed": 9}}),
+            "k0_findings.json": json.dumps({"count": 0, "findings": []}),
+            "lineage_findings.json": json.dumps({
+                "ok": True,
+                "generations": [
+                    {"gen": 1, "note": "ilk", "hash": "aabbccdd00112233", "status": "PASS"}
+                ]}),
+            "klayers.json": json.dumps({"layers": {
+                "K1": {"status": "PASS", "label": "manifest"},
+                "K8": {"status": "PASS", "label": "Z3"}}}),
         },
         None, [], [],
         {
             "ok": True, "set_failed": False,
-            "call_counts": {"issues.listComments": 1,
-                            "issues.createComment": 1},
-            "body_contains": {"issues.createComment": [
-                "Bütçe: limit içinde", "$1.2 / $30",
-                "Pre-commit: bulgu yok", "9/9 hook geçti",
-                MARKER_STATUS]},
+            "call_counts": {"issues.listComments": 1},
+            "console_any": ["Bulgular çözüldü — yorum yok"],
+            "add_labels": [], "remove_labels": [],
+        },
+    ),
+    (
+        "pr_state_sync: bulgular çözüldü → mevcut marker yorumunu sil",
+        "pr_status_comment.js",
+        {
+            "budget/index.json": json.dumps({
+                "runs": [{"source": "verify", "estimated_usd": 1.2,
+                          "limit": 30, "tokens_est": 400000}],
+                "method": "weighted"}),
+            "precommit_findings/PRECOMMIT_RAPORU.json": json.dumps({
+                "findings": [], "counts": {"hooks": 9, "passed": 9}}),
+            "k0_findings.json": json.dumps({"count": 0, "findings": []}),
+            "lineage_findings.json": json.dumps({
+                "ok": True,
+                "generations": [
+                    {"gen": 1, "note": "ilk", "hash": "aabbccdd00112233", "status": "PASS"}
+                ]}),
+            "klayers.json": json.dumps({"layers": {
+                "K1": {"status": "PASS", "label": "manifest"},
+                "K8": {"status": "PASS", "label": "Z3"}}}),
+        },
+        None, [],
+        [{"id": 400, "body": "eski uyarı " + MARKER_STATUS}],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.listComments": 1},
+            "delete_comments": [400],
+            "console_any": ["Bulgular çözüldü — bayat yorum kaldırıldı"],
             "add_labels": [], "remove_labels": [],
         },
     ),
@@ -202,8 +256,185 @@ SCENARIOS = [
             "add_labels": [], "remove_labels": [],
         },
     ),
-
-    # ── label_gate.js ───────────────────────────────────────────────────────
+    (
+        "pr_status: eski bot yorumları silinir (precommit-p0-bot/p1-bot marker)",
+        "pr_status_comment.js",
+        {
+            "budget/index.json": json.dumps({
+                "runs": [{"source": "verify", "estimated_usd": 1.0,
+                          "limit": 30, "tokens_est": 330000}],
+                "method": "weighted"}),
+            "precommit_findings/PRECOMMIT_RAPORU.json": json.dumps({
+                "findings": [], "counts": {"hooks": 9, "passed": 9}}),
+        },
+        None, [],
+        [
+            {"id": 100, "body": "eski p0 yorumu <!-- precommit-p0-bot -->"},
+            {"id": 101, "body": "eski p1 yorumu <!-- precommit-p1-bot -->"},
+            {"id": 102, "body": "normal yorum marker yok"},
+        ],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.createComment": 1},
+            "body_contains": {"issues.createComment": ["limit içinde", MARKER_STATUS]},
+            "delete_comments": [100, 101],
+            "console_any": ["Eski bot yorumu silindi"],
+            "add_labels": [], "remove_labels": [],
+        },
+    ),
+    (
+        "pr_status: mevcut marker yorumu silinmez, yalnızca eski bot marker'lar silinir",
+        "pr_status_comment.js",
+        {
+            "budget/index.json": json.dumps({
+                "runs": [{"source": "verify", "estimated_usd": 1.0,
+                          "limit": 30, "tokens_est": 330000}],
+                "method": "weighted"}),
+            "precommit_findings/PRECOMMIT_RAPORU.json": json.dumps({
+                "findings": [], "counts": {"hooks": 9, "passed": 9}}),
+        },
+        None, [],
+        [
+            {"id": 200, "body": "mevcut yorum " + MARKER_STATUS},
+            {"id": 201, "body": "eski <!-- precommit-p0-bot --> yorumu"},
+        ],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.updateComment": 1},
+            "target_ids": {"issues.updateComment": [200]},
+            "body_contains": {"issues.updateComment": ["limit içinde", MARKER_STATUS]},
+            "delete_comments": [201],
+            "add_labels": [], "remove_labels": [],
+        },
+    ),
+    (
+        "pr_status: bulgular çözüldü → mevcut yorum sil (state-sync)",
+        "pr_status_comment.js",
+        {
+            "budget/index.json": json.dumps({
+                "runs": [{"source": "verify", "estimated_usd": 1.0,
+                          "limit": 30, "tokens_est": 330000}],
+                "method": "weighted"}),
+            "precommit_findings/PRECOMMIT_RAPORU.json": json.dumps({
+                "findings": [], "counts": {"hooks": 9, "passed": 9}}),
+            "k0_findings.json": json.dumps({"count": 0, "findings": []}),
+            "lineage_findings.json": json.dumps({"ok": True, "generations": []}),
+            "klayers.json": json.dumps({"layers": {"K1": {"status": "PASS"}}}),
+        },
+        None, [],
+        [{"id": 300, "body": "eski uyarı " + MARKER_STATUS}],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {},
+            "delete_comments": [300],
+            "console_any": ["Bulgular çözüldü — bayat yorum kaldırıldı"],
+            "add_labels": [], "remove_labels": [],
+        },
+    ),
+    (
+        "pr_status: bulgular çözüldü + yorum yok → temiz geç",
+        "pr_status_comment.js",
+        {
+            "budget/index.json": json.dumps({
+                "runs": [{"source": "verify", "estimated_usd": 1.0,
+                          "limit": 30, "tokens_est": 330000}],
+                "method": "weighted"}),
+            "precommit_findings/PRECOMMIT_RAPORU.json": json.dumps({
+                "findings": [], "counts": {"hooks": 9, "passed": 9}}),
+            "k0_findings.json": json.dumps({"count": 0, "findings": []}),
+            "lineage_findings.json": json.dumps({"ok": True, "generations": []}),
+            "klayers.json": json.dumps({"layers": {"K1": {"status": "PASS"}}}),
+        },
+        None, [], [],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {},
+            "console_any": ["Bulgular çözüldü — yorum yok"],
+            "add_labels": [], "remove_labels": [],
+        },
+    ),
+    (
+        "pr_status: commit-msg ihlali var → bölüm göster + yorum düşür",
+        "pr_status_comment.js",
+        {
+            "budget/index.json": json.dumps({
+                "runs": [{"source": "verify", "estimated_usd": 1.0,
+                          "limit": 30, "tokens_est": 330000}],
+                "method": "weighted"}),
+            "precommit_findings/PRECOMMIT_RAPORU.json": json.dumps({
+                "findings": [], "counts": {"hooks": 9, "passed": 9},
+                "commit_msg": {
+                    "checked": 3,
+                    "violations": [
+                        {"commit": "abc123def456",
+                         "subject": "fix: boklu başlık",
+                         "detail": "commit-msg: HATA — noise/marker başlık yasak"},
+                        {"commit": "789abc012345",
+                         "subject": "WIP",
+                         "detail": "commit-msg: HATA — WIP başlık yasak"}
+                    ]}}),
+            "k0_findings.json": json.dumps({"count": 0, "findings": []}),
+            "lineage_findings.json": json.dumps({"ok": True, "generations": []}),
+            "klayers.json": json.dumps({"layers": {"K1": {"status": "PASS"}}}),
+        },
+        None, [], [],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.createComment": 1},
+            "body_contains": {"issues.createComment": [
+                "Commit-msg: 2 ihlal", "3 commit denetlendi",
+                "abc123def456", "noise/marker başlık yasak",
+                MARKER_STATUS]},
+            "add_labels": [], "remove_labels": [],
+        },
+    ),
+    (
+        "pr_status: commit-msg temiz → bölüm göster ama bulgu yok",
+        "pr_status_comment.js",
+        {
+            "budget/index.json": json.dumps({
+                "runs": [{"source": "verify", "estimated_usd": 1.0,
+                          "limit": 30, "tokens_est": 330000}],
+                "method": "weighted"}),
+            "precommit_findings/PRECOMMIT_RAPORU.json": json.dumps({
+                "findings": [], "counts": {"hooks": 9, "passed": 9},
+                "commit_msg": {
+                    "checked": 5,
+                    "violations": []}}),
+            "k0_findings.json": json.dumps({"count": 0, "findings": []}),
+            "lineage_findings.json": json.dumps({"ok": True, "generations": []}),
+            "klayers.json": json.dumps({"layers": {"K1": {"status": "PASS"}}}),
+        },
+        None, [], [],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.listComments": 1},
+            "console_any": ["Bulgular çözüldü — yorum yok"],
+            "add_labels": [], "remove_labels": [],
+        },
+    ),
+    (
+        "pr_status: commit_msg yoksa → skip badge",
+        "pr_status_comment.js",
+        {
+            "budget/index.json": json.dumps({
+                "runs": [{"source": "verify", "estimated_usd": 1.0,
+                          "limit": 30, "tokens_est": 330000}],
+                "method": "weighted"}),
+            "precommit_findings/PRECOMMIT_RAPORU.json": json.dumps({
+                "findings": [], "counts": {"hooks": 9, "passed": 9}}),
+            "k0_findings.json": json.dumps({"count": 0, "findings": []}),
+            "lineage_findings.json": json.dumps({"ok": True, "generations": []}),
+            "klayers.json": json.dumps({"layers": {"K1": {"status": "PASS"}}}),
+        },
+        None, [], [],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.listComments": 1},
+            "console_any": ["Bulgular çözüldü — yorum yok"],
+            "add_labels": [], "remove_labels": [],
+        },
+    ),
     (
         "label_gate: precommit-p0 etiketi yok → PASS (setFailed yok)",
         "label_gate.js",
@@ -215,15 +446,245 @@ SCENARIOS = [
     (
         "label_gate: precommit-p0 etiketi var → setFailed (merge bloke)",
         "label_gate.js",
-        {}, None, [{"name": "precommit-p0"}], [],
-        {
-            "ok": True, "set_failed": True,
-            "call_counts": {"issues.listLabelsOnIssue": 1},
-            "set_failed_contains": ["precommit-p0 etiketi var — P0 bulgusu"],
+        {}, None, [{"name": "precommit-p0"}], [],        {"ok": True, "set_failed": True,
+         "call_counts": {"issues.listLabelsOnIssue": 1},
+         "set_failed_contains": ["precommit-p0 etiketi var — P0 bulgusu"],
         },
     ),
 
-    # ── manifest_comment.js ─────────────────────────────────────────────────
+    # ── label_gate_p1.js ──────────────────────────────────────────────────────
+    (
+        "label_gate_p1: precommit-p1 etiketi yok → PASS (setFailed yok)",
+        "label_gate_p1.js",
+        {}, None, [], [],
+        {"ok": True, "set_failed": False, "call_counts": {
+            "issues.listLabelsOnIssue": 1},
+         "console_any": ["precommit-p1 etiketi yok — P1 label gate PASS"]},
+    ),
+    (
+        "label_gate_p1: precommit-p1 etiketi var → setFailed (merge bloke)",
+        "label_gate_p1.js",
+        {}, None, [{"name": "precommit-p1"}], [],
+        {
+            "ok": True, "set_failed": True,
+            "call_counts": {"issues.listLabelsOnIssue": 1},
+            "set_failed_contains": ["precommit-p1 etiketi var — P1 bulgusu"],
+        },
+    ),
+
+    # ── commit_msg_gate.js ──────────────────────────────────────────────────
+    (
+        "commit_msg_gate: ihlal yok → PASS",
+        "commit_msg_gate.js",
+        {"logs/commit_msg_findings.json": json.dumps({
+            "checked": 5, "violations": []})},
+        None, [], [],
+        {
+            "ok": True, "set_failed": False,
+            "console_any": ["commit-msg gate: PASS"],
+        },
+    ),
+    (
+        "commit_msg_gate: ihlal var → setFailed",
+        "commit_msg_gate.js",
+        {"logs/commit_msg_findings.json": json.dumps({
+            "checked": 3,
+            "violations": [
+                {"commit": "abc123def456",
+                 "subject": "fix: noise başlık",
+                 "detail": "commit-msg: HATA — noise/marker başlık yasak"},
+                {"commit": "789abc012345",
+                 "subject": "WIP",
+                 "detail": "commit-msg: HATA — WIP başlık yasak"}
+            ]})},
+        None, [], [],
+        {
+            "ok": True, "set_failed": True,
+            "console_any": ["commit-msg gate: FAIL", "2 commit-msg ihlali"],
+        },
+    ),
+    (
+        "commit_msg_gate: sidecar yok → PASS (boş)",
+        "commit_msg_gate.js",
+        {},  # logs/commit_msg_findings.json yok
+        None, [], [],
+        {
+            "ok": True, "set_failed": False,
+            "console_any": ["commit_msg_findings.json bulunamadı"],
+        },
+    ),
+    (
+        "commit_msg_gate: bozuk JSON → setFailed",
+        "commit_msg_gate.js",
+        {"logs/commit_msg_findings.json": "{bad json}"},
+        None, [], [],
+        {
+            "ok": True, "set_failed": True,
+            "console_any": ["ayrıştırma hatası"],
+        },
+    ),
+
+    # ── sync_labels.js ─────────────────────────────────────────────────────
+    (
+        "sync_labels: etiketler yok → oluştur",
+        "sync_labels.js",
+        {"_calisma/CIKTI/label_definitions.json": json.dumps({
+            "labels": [
+                {"name": "precommit-p0", "color": "d93f0b",
+                 "description": "P0 bulgusu: kritik sorun"},
+                {"name": "precommit-p1", "color": "e3b341",
+                 "description": "P1 bulgusu: iyileştirme gerekli"},
+            ]}),
+         "mock_repo_labels.json": "[]"},
+        None, [], [],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.listLabels": 1,
+                            "issues.createLabel": 2},
+            "console_any": ["Etiket oluşturuldu: precommit-p0"],
+        },
+    ),
+    (
+        "sync_labels: etiketler güncel → dokunma",
+        "sync_labels.js",
+        {"_calisma/CIKTI/label_definitions.json": json.dumps({
+            "labels": [
+                {"name": "precommit-p0", "color": "d93f0b",
+                 "description": "P0 bulgusu: kritik sorun"},
+            ]}),
+         "mock_repo_labels.json": json.dumps([
+             {"name": "precommit-p0", "color": "d93f0b",
+              "description": "P0 bulgusu: kritik sorun"}
+         ])},
+        None, [], [],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.listLabels": 1},
+            "console_any": ["Etiket güncel: precommit-p0"],
+        },
+    ),
+    (
+        "sync_labels: renk yanlış → güncelle",
+        "sync_labels.js",
+        {"_calisma/CIKTI/label_definitions.json": json.dumps({
+            "labels": [
+                {"name": "precommit-p0", "color": "d93f0b",
+                 "description": "P0 bulgusu: kritik sorun"},
+            ]}),
+         "mock_repo_labels.json": json.dumps([
+             {"name": "precommit-p0", "color": "ff0000",
+              "description": "eski açıklama"}
+         ])},
+        None, [], [],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.listLabels": 1,
+                            "issues.updateLabel": 1},
+            "console_any": ["Etiket güncellendi: precommit-p0"],
+        },
+    ),
+    # ── validate_labels.js ────────────────────────────────────────────────
+    (
+        "validate_labels: etiketler tanımlı ve eşleşiyor → PASS",
+        "validate_labels.js",
+        {"_calisma/CIKTI/label_definitions.json": json.dumps({
+            "labels": [
+                {"name": "precommit-p0", "color": "d93f0b",
+                 "description": "P0 bulgusu: kritik sorun"},
+                {"name": "precommit-p1", "color": "e3b341",
+                 "description": "P1 bulgusu: iyileştirme gerekli"},
+            ]}),
+         "mock_repo_labels.json": json.dumps([
+             {"name": "precommit-p0", "color": "d93f0b",
+              "description": "P0 bulgusu: kritik sorun"},
+             {"name": "precommit-p1", "color": "e3b341",
+              "description": "P1 bulgusu: iyileştirme gerekli"},
+         ])},
+        None, [], [],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.listLabels": 1},
+            "console_any": ["SONUÇ: PASS"],
+        },
+    ),
+    (
+        "validate_labels: etiket eksik → FAIL",
+        "validate_labels.js",
+        {"_calisma/CIKTI/label_definitions.json": json.dumps({
+            "labels": [
+                {"name": "precommit-p0", "color": "d93f0b",
+                 "description": "P0"},
+                {"name": "precommit-p1", "color": "e3b341",
+                 "description": "P1"},
+            ]}),
+         "mock_repo_labels.json": json.dumps([
+             {"name": "precommit-p0", "color": "d93f0b",
+              "description": "P0"}
+         ])},
+        None, [], [],
+        {
+            "ok": True, "set_failed": True,
+            "call_counts": {"issues.listLabels": 1},
+            "console_any": ["SONUÇ: FAIL"],
+        },
+    ),
+    (
+        "validate_labels: renk yanlış → FAIL",
+        "validate_labels.js",
+        {"_calisma/CIKTI/label_definitions.json": json.dumps({
+            "labels": [
+                {"name": "precommit-p0", "color": "d93f0b",
+                 "description": "P0"},
+            ]}),
+         "mock_repo_labels.json": json.dumps([
+             {"name": "precommit-p0", "color": "ff0000",
+              "description": "P0"}
+         ])},
+        None, [], [],
+        {
+            "ok": True, "set_failed": True,
+            "call_counts": {"issues.listLabels": 1},
+            "console_any": ["renk uyuşmuyor"],
+        },
+    ),
+    (
+        "validate_labels: açıklama yanlış → FAIL",
+        "validate_labels.js",
+        {"_calisma/CIKTI/label_definitions.json": json.dumps({
+            "labels": [
+                {"name": "precommit-p0", "color": "d93f0b",
+                 "description": "P0 bulgusu: kritik sorun"},
+            ]}),
+         "mock_repo_labels.json": json.dumps([
+             {"name": "precommit-p0", "color": "d93f0b",
+              "description": "eski açıklama"}
+         ])},
+        None, [], [],
+        {
+            "ok": True, "set_failed": True,
+            "call_counts": {"issues.listLabels": 1},
+            "console_any": ["açıklama uyuşmuyor"],
+        },
+    ),
+    (
+        "validate_labels: hiçbir etiket yok → tamamı FAIL",
+        "validate_labels.js",
+        {"_calisma/CIKTI/label_definitions.json": json.dumps({
+            "labels": [
+                {"name": "precommit-p0", "color": "d93f0b",
+                 "description": "P0"},
+                {"name": "precommit-p1", "color": "e3b341",
+                 "description": "P1"},
+            ]}),
+         "mock_repo_labels.json": "[]"},
+        None, [], [],
+        {
+            "ok": True, "set_failed": True,
+            "call_counts": {"issues.listLabels": 1},
+            "console_any": ["SONUÇ: FAIL", "2 uyuşmazlık"],
+        },
+    ),
+    # ── manifest_comment.js ────────────────────────────────────────────────
     (
         "manifest_comment: K10 PASS + yeni yorum",
         "manifest_comment.js",
@@ -356,6 +817,55 @@ SCENARIOS = [
          "console_any": ["atlanıyor"]},
     ),
 
+    # ── Birleşik adım (verify.yml: manifest + config-diff TEK github-script) ──
+    # İki script aynı kapsamda koşar; yorum listesi BİR KEZ çekilip her ikisine
+    # EXISTING_COMMENTS olarak verilir → issues.listComments TAM 1 çağrı (tek
+    # başına koşumda 2 çağrı olurdu — birleştirmenin API kazancı burada kanıtlanır).
+    # Wrapper, workflow adımının birebir aynısıdır; saparsa bu senaryolar FAIL.
+    (
+        "combined: manifest update + config-diff create (paylaşılan liste, 1 listComments)",
+        {"inline": COMBINED_WRAPPER_TMPL},
+        {
+            "reproducibility/manifest.txt": "github_run_id: 42\n"
+                                             "github_sha: abc\n",
+            "reproducibility/config/config-diff.json": json.dumps({
+                "differences": [{"field": "budget_usd", "raw": 30,
+                                 "effective": 25, "reason": "cli_override"}]}),
+        },
+        None, [],
+        [{"id": 777, "body": "eski " + MARKER_MANIFEST}],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.listComments": 1,
+                            "issues.updateComment": 1,
+                            "issues.createComment": 1},
+            "target_ids": {"issues.updateComment": [777]},
+            "body_contains": {"issues.updateComment": [MARKER_MANIFEST],
+                              "issues.createComment": [MARKER_CFGDIFF,
+                                                       "Config diff"]},
+        },
+    ),
+    (
+        "combined: manifest create + config-diff delete (fark yok, bayat yorum)",
+        {"inline": COMBINED_WRAPPER_TMPL},
+        {
+            "reproducibility/manifest.txt": "github_run_id: 42\n",
+            "reproducibility/config/config-diff.json":
+                json.dumps({"differences": []}),
+        },
+        None, [],
+        [{"id": 888, "body": "bayat " + MARKER_CFGDIFF}],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.listComments": 1,
+                            "issues.deleteComment": 1,
+                            "issues.createComment": 1},
+            "target_ids": {"issues.deleteComment": [888]},
+            "body_contains": {"issues.createComment": [MARKER_MANIFEST]},
+            "console_any": ["bayat yorum kaldırıldı"],
+        },
+    ),
+
     # ── config_drift_comment.js ─────────────────────────────────────────────
     (
         "config_drift: exit 1 + bulgular + yeni yorum",
@@ -419,6 +929,102 @@ SCENARIOS = [
                 "CLI override tespit edildi (tekrarlanabilirlik sapması)",
                 "`budget`: 30 → 25 (CLI verildi)",
                 MARKER_DRIFT]},
+        },
+    ),
+    # State-sync: drift ÇÖZÜLDÜYSE (exit 0) bayat uyarı SİLİNİR — önceki
+    # run'ın "Config drift tespit edildi" yorumu yanıltıcı kalmasın.
+    (
+        "config_drift: fark yok (exit 0) + bayat yorum varsa SİLİNİR",
+        "config_drift_comment.js",
+        {"drift_rc.txt": "0"},
+        None, [],
+        [{"id": 999, "body": "eski " + MARKER_DRIFT}],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.deleteComment": 1,
+                            "issues.createComment": 0},
+            "target_ids": {"issues.deleteComment": [999]},
+            "console_any": ["bayat yorum kaldırıldı"],
+        },
+    ),
+    (
+        "config_drift: fark yok (exit 0) + yorum yok → sessiz geç",
+        "config_drift_comment.js",
+        {"drift_rc.txt": "0"},
+        None, [], [],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.deleteComment": 0,
+                            "issues.createComment": 0},
+            "console_any": ["yorum yok"],
+        },
+    ),
+    (
+        "config_drift: drift_rc.txt yok → atlanır (REST çağrısı yok)",
+        "config_drift_comment.js",
+        {}, None, [], [],
+        {"ok": True, "set_failed": False,
+         "call_counts": {"issues.listComments": 0},
+         "console_any": ["atlanıyor"]},
+    ),
+    # diff-on-drift kapısı: bulguları TEK yorumda gen_config drift'iyle birleşir.
+    (
+        "config_drift: gen_config OK + diff-on-drift FAIL → yalnız diff bölümü",
+        "config_drift_comment.js",
+        {
+            "drift_rc.txt": "0",
+            "diffdrift_rc.txt": "1",
+            "diffdrift_stderr.txt": "[CONFIG-DIFF] FAIL-ON-DRIFT: 1 drift farkı\n"
+                                    "  budget_usd: 30.0 → 25.0 (drift)",
+        },
+        None, [], [],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.createComment": 1},
+            "body_contains": {"issues.createComment": [
+                "Config drift tespit edildi",
+                "diff-on-drift --fail-on-drift (exit `1`)",
+                "budget_usd: 30.0 → 25.0 (drift)",
+                MARKER_DRIFT]},
+            "body_not_contains": {"issues.createComment": [
+                "gen_config.py --dry-run (exit"]},
+        },
+    ),
+    (
+        "config_drift: her iki kapı FAIL → iki bölüm tek yorumda",
+        "config_drift_comment.js",
+        {
+            "drift_rc.txt": "1",
+            "drift_stderr.txt": "expected_pages: config 33, paket 34",
+            "diffdrift_rc.txt": "2",
+            "diffdrift_stderr.txt": "[CONFIG-DIFF] FAIL-ON-DRIFT: 1 drift farkı\n"
+                                    "  budget_usd: 30.0 → 25.0 (drift)",
+        },
+        None, [], [],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.createComment": 1},
+            "body_contains": {"issues.createComment": [
+                "gen_config.py --dry-run (exit `1`)",
+                "expected_pages: config 33, paket 34",
+                "diff-on-drift --fail-on-drift (exit `2`)",
+                "budget_usd: 30.0 → 25.0 (drift)",
+                "kapılar: gen_config.py --dry-run + diff-on-drift",
+                MARKER_DRIFT]},
+        },
+    ),
+    (
+        "config_drift: her iki kapı OK → bayat yorum SİLİNİR (state-sync)",
+        "config_drift_comment.js",
+        {"drift_rc.txt": "0", "diffdrift_rc.txt": "0"},
+        None, [],
+        [{"id": 999, "body": "eski " + MARKER_DRIFT}],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.deleteComment": 1,
+                            "issues.createComment": 0},
+            "target_ids": {"issues.deleteComment": [999]},
+            "console_any": ["bayat yorum kaldırıldı"],
         },
     ),
 ]
@@ -491,6 +1097,14 @@ def _check_expect(rec, expect):
                 problems.append(
                     f"{fn} comment_id {tid}, beklenen {ids}")
 
+    # delete_comments: issues.deleteComment ile silinmesi beklenen comment_id'leri
+    exp_del = expect.get("delete_comments")
+    if exp_del is not None:
+        actual_del = sorted(targets.get("issues.deleteComment", []))
+        if sorted(exp_del) != actual_del:
+            problems.append(
+                f"deleteComments: gerçek {actual_del}, beklenen {sorted(exp_del)}")
+
     exp_add = expect.get("add_labels")
     if exp_add is not None and sorted(added) != sorted(exp_add):
         problems.append(f"addLabels: gerçek {sorted(added)}, beklenen {sorted(exp_add)}")
@@ -523,11 +1137,26 @@ def run_battery(node=None, scripts_dir=None, timeout=30):
     scripts_dir = scripts_dir or os.path.join(HERE, "github_scripts")
     results = []
     for name, script, fixtures, ctx, labels, comments, expect in SCENARIOS:
-        script_path = os.path.join(scripts_dir, script)
+        if isinstance(script, dict) and script.get("inline"):
+            # Birleşik adım sarmalayıcısı (verify.yml'deki tek github-script
+            # adımının birebir aynısı) — fixture dizinine yazılır; böylece
+            # github_scripts/ klasörü test-only dosyalarla kirlenmez ve
+            # scripts_dir parametresi (run time) wrapper'a doğru gömülür.
+            script_path = None  # tmp içinde belirlenir
+            inline_script = script["inline"].replace("__SCRIPTS_DIR__",
+                                                       scripts_dir)
+        else:
+            script_path = os.path.join(scripts_dir, script)
+            inline_script = None
         if node is None:
             results.append((name, False, "node bulunamadı"))
             continue
         with tempfile.TemporaryDirectory(prefix="gscripts_") as tmp:
+            if inline_script is not None:
+                wp = os.path.join(tmp, "wrapper.js")
+                with open(wp, "w", encoding="utf-8") as f:
+                    f.write(inline_script)
+                script_path = wp
             for rel, data in fixtures.items():
                 fp = os.path.join(tmp, rel)
                 os.makedirs(os.path.dirname(fp), exist_ok=True)

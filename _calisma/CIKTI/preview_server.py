@@ -31,6 +31,7 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.parse
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -87,6 +88,8 @@ LATEST = {
     "refs_mismatch": None,
     "refs_by_source": None,
     "config_diff": None,        # son run'un raw↔effective config diff özeti (dashboard)
+    "cli_overrides": None,       # son run'un config.cli_overrides'ı (override=true → 'Budget override' rozeti)
+    "cli_override_count": 0,     # skaler: override=true anahtar sayısı (trend'e temiz; tam dict sadece SSE'de)
     "hook_env": None,           # hook env sürümleri (zaman serisi; python/z3/lean/…)
     "z3_passed": None,          # K8 Z3: stderr'deki [PASS] P1-5 sayısı (son run)
     "z3_failed": None,          # K8 Z3: stderr'deki [FAIL] P1-5 sayısı
@@ -94,6 +97,11 @@ LATEST = {
     "lean_ok": None,            # K9 Lean: stderr'deki [K9] PASS/FAIL (True/False/None=koşulmadı)
     "lean_detail": None,        # K9 Lean: [K9] satırındaki ayrıntı metni (varsa)
     "layers": None,             # K0-K16 per-katman PASS/FAIL/SKIP (JSON'dan; dashboard "K1-K7" rozeti)
+    "lineage_summary": None,    # soy hattı özeti: {ok, count, current_note, current_hash_prefix}
+    "lineage_ok": None,          # skaler trend alanı (True/False/None)
+    "lineage_count": None,       # skaler trend alanı (int/None)
+    "status_board": None,        # tek satır durum panosu (5 ikon: Pre-commit · K0 · Bütçe · Soy hattı · K katmanları)
+    "precommit_hooks": None,     # [{name, status}] — pre-commit hook sonuçları (Passed/Failed)
 }
 LOCK = threading.Lock()
 SSE_CLIENTS = []      # bağlı /api/run client listesi (snapshot broadcast)
@@ -109,13 +117,70 @@ HISTORY_KEYS = ("ts", "verdict", "p0", "p1", "duration_s", "budget_usd",
                 "pdf_pages", "ref_count", "raw_sha256", "stripped_sha256",
                 "exit_code", "refs_verified", "refs_total", "refs_mismatch",
                 "refs_by_source", "hook_env", "z3_passed", "z3_failed",
-                "z3_total", "lean_ok", "lean_detail")
+                "z3_total", "lean_ok", "lean_detail", "cli_override_count",
+                "lineage_ok", "lineage_count")
 
 
 def snapshot_dict():
     """LATEST'ten SSE/broadcast/history için ortak snapshot alanlarını al."""
     with LOCK:
         return {k: LATEST[k] for k in HISTORY_KEYS}
+
+
+# Durum panosu ikonları (CI consolidate_summary.py ile aynı).
+_STATUS_ICONS = {True: "✅", False: "🔴", None: "⚠️"}
+
+
+def _compute_status_board():
+    """LATEST alanlarından 5 ikonlu tek satır durum panosu üret.
+
+    CI consolidate_summary.py'deki run summary dashboard ile aynı 5 ikon:
+      Pre-commit · K0 · Bütçe · Soy hattı · K katmanları
+    Her biri LATEST'teki mevcut veriden hesaplanır; veri yoksa ⚠️.
+    """
+    ls = LATEST.get("layers") or {}
+    budget = LATEST.get("budget_usd")
+
+    # 1. Pre-commit: K1-K7 durumları (layers'dan)
+    core = ["K1", "K2", "K3", "K4", "K5", "K6", "K7"]
+    core_statuses = [(ls.get(k) or {}).get("status") for k in core]
+    core_known = [s for s in core_statuses if s in ("PASS", "FAIL", "SKIP")]
+    if any(s == "FAIL" for s in core_known):
+        pc_ok = False
+    elif core_known and all(s in ("PASS", "SKIP") for s in core_known):
+        pc_ok = True
+    else:
+        pc_ok = None
+
+    # 2. K0: P0=0, P1=0 → PASS
+    p0 = LATEST.get("p0")
+    p1 = LATEST.get("p1")
+    k0_ok = (p0 == 0 and p1 == 0) if p0 is not None else None
+
+    # 3. Bütçe: $30 limit altında → PASS
+    budget_ok = (budget is not None and budget < 30) if budget is not None else None
+
+    # 4. Soy hattı: lineage_summary.ok → PASS
+    lin_ok = LATEST.get("lineage_ok")
+
+    # 5. K katmanları: K8-K16 (K8 Z3, K9 Lean, K10-K16)
+    ext = ["K8", "K9", "K10", "K11", "K12", "K13", "K14", "K16"]
+    ext_statuses = [(ls.get(k) or {}).get("status") for k in ext]
+    if any(s == "FAIL" for s in ext_statuses):
+        kl_ok = False
+    elif any(s == "PASS" for s in ext_statuses):
+        kl_ok = True
+    else:
+        kl_ok = None
+
+    parts = [
+        ("Pre-commit", pc_ok),
+        ("K0", k0_ok),
+        ("Bütçe", budget_ok),
+        ("Soy hattı", lin_ok),
+        ("K katmanları", kl_ok),
+    ]
+    return " · ".join(f"{label} {_STATUS_ICONS.get(ok, '❓')}" for label, ok in parts)
 
 
 def persist_history(rec):
@@ -240,18 +305,22 @@ def load_run_logs(limit=None):
     return out
 
 
-def run_verify(verify_dir):
+def run_verify(verify_dir, budget_usd=None, budget_method=None):
     """verify_delivery.py --full koş; zaten koşuyorsa atla.
 
     Busy-guard: verify_loop ve /api/run-now aynı anda iki verify
     çalıştırmasın (LATEST üzerine yazışma / çift maliyet).
+
+    budget_usd / budget_method: manuel override (/api/run-now?budget=…).
+    None = dosya config değeri kullanılır (default davranış).
     """
     if not VERIFY_BUSY.acquire(blocking=False):
         sys.stderr.write("[verify] zaten koşuyor — atlandı\n")
         sys.stderr.flush()
         return False
     try:
-        return _run_verify_locked(verify_dir)
+        return _run_verify_locked(verify_dir, budget_usd=budget_usd,
+                                  budget_method=budget_method)
     finally:
         VERIFY_BUSY.release()
 
@@ -344,7 +413,25 @@ def build_replay_events_multi(records):
     return events
 
 
-def _run_verify_locked(verify_dir):
+def _build_verify_cmd(py, verify_dir, budget_usd=None, budget_method=None):
+    """verify_delivery.py --full komutunu kur (override parametreleriyle).
+
+    Manuel override (/api/run-now?budget=25&budget_method=weighted):
+    bütçe kalkanı dosya config yerine bu değerlerle koşar — verify_delivery.py
+    bunu effective_config.json'a cli_overrides olarak işler; canlı akışta
+    [CLI override] uyarısı + sarı vurgu üretir (dashboard renk kuralı).
+    None = dosya config değeri (default davranış).
+    """
+    cmd = [py, os.path.join(verify_dir, "verify_delivery.py"),
+           "--dir", verify_dir, "--full", "--json"]
+    if budget_usd is not None:
+        cmd += ["--budget", str(budget_usd)]
+    if budget_method is not None:
+        cmd += ["--budget-method", str(budget_method)]
+    return cmd
+
+
+def _run_verify_locked(verify_dir, budget_usd=None, budget_method=None):
     """verify_delivery.py --full komutunu çalıştır, sonucu LATEST'e yaz + broadcast.
 
     Bu server user shell context'te çalışıyor (bash -c exec argv ...); tüm
@@ -357,9 +444,8 @@ def _run_verify_locked(verify_dir):
     venv python tercih et; yoksa system python fallback.
     """
     py = _find_python(verify_dir)
-    inner = [py, os.path.join(verify_dir, "verify_delivery.py"),
-             "--dir", verify_dir, "--full", "--json"]
-    cmd = inner
+    cmd = _build_verify_cmd(py, verify_dir, budget_usd=budget_usd,
+                            budget_method=budget_method)
     t0 = time.monotonic()
     timed_out = False
     try:
@@ -496,6 +582,107 @@ def _parse_lean_result(stderr):
     return ok, detail
 
 
+_HOOK_RE = re.compile(r"^(.+?)\.{4,}(Passed|Failed)\s*$", re.M)
+
+
+def _parse_precommit_hooks(stderr):
+    """stderr'deki pre-commit hook satırlarından [{name, status}] çıkar.
+
+    pre-commit verbose çıktısı:
+      Verify Stoic-Hume V5 delivery (fail-closed)........................Passed
+    Satır Sonucu/Passed/Failed içeren her hook sonucunu yakalar.
+    """
+    hooks = []
+    for m in _HOOK_RE.finditer(stderr or ""):
+        hooks.append({"name": m.group(1).strip(), "status": m.group(2)})
+    return hooks or None
+
+
+def _refresh_precommit_hooks_bg(verify_dir):
+    """Arka planda pre-commit çalıştırıp LATEST['precommit_hooks'] güncelle.
+
+    Verify tamamlandıktan sonra çağrılır; pre-commit run (~10-30s)
+    ana thread'i bloke etmez. Sonuç doğrudan LATEST'e yazılır +
+    status_board yeniden hesaplanır.
+    """
+    _debug_log = os.path.expanduser("~/Library/Caches/com.freebuff/precommit_bg.log")
+    try:
+        os.makedirs(os.path.dirname(_debug_log), exist_ok=True)
+        with open(_debug_log, "a") as f:
+            f.write(f"{time.strftime('%H:%M:%S')} [precommit-bg] baslatildi, verify_dir={verify_dir}\n")
+    except Exception:
+        pass
+    try:
+        # pre-commit venv'de olmalı (_find_python system python döndürebilir)
+        # ROOT = _calisma/CIKTI; venv _calisma/.venv_z3'de (1 seviye yukarı)
+        calisma_dir = os.path.dirname(ROOT)
+        venv_py = os.path.join(calisma_dir, ".venv_z3", "bin", "python3")
+        if not os.path.isfile(venv_py):
+            venv_py = os.path.join(calisma_dir, ".venv", "bin", "python3")
+        if not os.path.isfile(venv_py):
+            # Fallback: bilinen konumlarda venv ara
+            for candidate in (
+                os.path.expanduser("~/Desktop/leibniz2/_calisma"),
+                os.path.join(os.getcwd(), "_calisma"),
+            ):
+                c = os.path.join(candidate, ".venv_z3", "bin", "python3")
+                if os.path.isfile(c):
+                    venv_py = c
+                    break
+        if os.path.isfile(venv_py):
+            py = venv_py
+        else:
+            py = _find_python(verify_dir)
+        # Debug: hangi python kullanılıyor
+        try:
+            with open(_debug_log, "a") as f:
+                f.write(f"{time.strftime('%H:%M:%S')} [precommit-bg] python={py} venv={venv_py} cwd={verify_dir}\n")
+        except Exception:
+            pass
+        # pre-commit run --all-files --show-diff-on-failure verbose çıktı üretir
+        env = dict(os.environ)
+        env["PYTHONUNBUFFERED"] = "1"
+        result = subprocess.run(
+            [py, "-m", "pre_commit", "run", "--all-files",
+             "--show-diff-on-failure"],
+            cwd=verify_dir or os.getcwd(),
+            timeout=300, capture_output=True, text=True, env=env)
+        # Debug: sonuç
+        try:
+            with open(_debug_log, "a") as f:
+                f.write(f"{time.strftime('%H:%M:%S')} [precommit-bg] rc={result.returncode} stderr_len={len(result.stderr or '')}\n")
+                # stderr'in son 500 karakterini de yaz
+                if result.stderr:
+                    f.write(f"{time.strftime('%H:%M:%S')} [precommit-bg] stderr_tail={result.stderr[-500:]}\n")
+        except Exception:
+            pass
+        # pre-commit verbose çıktısı stderr'de
+        output = result.stderr or result.stdout or ""
+        hooks = _parse_precommit_hooks(output)
+        if hooks:
+            with LOCK:
+                LATEST["precommit_hooks"] = hooks
+                LATEST["status_board"] = _compute_status_board()
+            # SSE broadcast
+            for q in list(SSE_CLIENTS):
+                try:
+                    q.put_nowait(json.dumps({
+                        "precommit_hooks": hooks,
+                        "status_board": _compute_status_board(),
+                    }, ensure_ascii=False))
+                except Exception:
+                    pass
+    except Exception as e:
+        # Debug: arka plan hatasını dosyaya yaz
+        try:
+            _debug_log = os.path.expanduser("~/Library/Caches/com.freebuff/precommit_bg.log")
+            os.makedirs(os.path.dirname(_debug_log), exist_ok=True)
+            with open(_debug_log, "a") as f:
+                f.write(f"{time.strftime('%H:%M:%S')} [precommit-bg] hata: {e}\n")
+        except Exception:
+            pass
+
+
 def _finalize_run(stdout, stderr, rc, duration, data, verify_dir=None):
     """Run sonucunu LATEST'e yaz, SSE_CLIENTS'a broadcast et, history'ye ekle.
 
@@ -534,6 +721,46 @@ def _finalize_run(stdout, stderr, rc, duration, data, verify_dir=None):
 
     z3_passed, z3_failed = _parse_z3_counts(stderr)
     lean_ok, lean_detail = _parse_lean_result(stderr)
+    precommit_hooks = _parse_precommit_hooks(stderr)
+    # Fallback: CI'da stderr pre-commit çıktısı üretir, yerel run'larda boş
+    # olabilir. PRECOMMIT_RAPORU.json sidecar'ından okumayı dene.
+    if not precommit_hooks and verify_dir:
+        for candidate in (
+            os.path.join(verify_dir, "logs", "PRECOMMIT_RAPORU.json"),
+            os.path.join(os.path.dirname(verify_dir), "logs", "PRECOMMIT_RAPORU.json"),
+            os.path.join(os.getcwd(), "logs", "PRECOMMIT_RAPORU.json"),
+        ):
+            if os.path.isfile(candidate):
+                try:
+                    with open(candidate, encoding="utf-8") as f:
+                        rpt = json.load(f)
+                    hooks_raw = rpt.get("hooks") or []
+                    if isinstance(hooks_raw, list):
+                        precommit_hooks = [
+                            {"name": h.get("name", "?"), "status": h.get("status", "Unknown")}
+                            for h in hooks_raw if isinstance(h, dict)
+                        ] or None
+                except (OSError, ValueError, KeyError):
+                    pass
+                if precommit_hooks:
+                    break
+
+    # Soy hattı özeti: verify_delivery.py --json lineage.generations'dan
+    # son nesil (current=true) bilgisini çıkarır — dashboard rozeti için.
+    lineage_summary = None
+    lin = data.get("lineage") or {}
+    lin_gens = lin.get("generations") or []
+    if lin_gens:
+        cur_gen = next((g for g in lin_gens if g.get("status", "").startswith("PASS")), None)
+        if cur_gen is None and lin_gens:
+            cur_gen = lin_gens[-1]  # fallback: son nesil
+        if cur_gen:
+            lineage_summary = {
+                "ok": bool(lin.get("ok")),
+                "count": len(lin_gens),
+                "current_note": cur_gen.get("note", "?"),
+                "current_hash": (cur_gen.get("hash") or "?")[:16],
+            }
 
     with LOCK:
         LATEST.update({
@@ -563,6 +790,16 @@ def _finalize_run(stdout, stderr, rc, duration, data, verify_dir=None):
             # raw↔effective config diff özeti (dashboard config-diff bölümü)
             "config_diff": {"changed": bool(diff_rows),
                             "differences": diff_rows},
+            # cli_overrides özeti: bütçe kalkanı dosya config yerine CLI
+            # değeriyle koştuysa (--budget/--budget-method override) burada
+            # işaretlenir — dashboard akış satırını beklemeden "Budget
+            # override" rozeti gösterebilsin. Boş = override yok.
+            "cli_overrides": (data.get("config") or {}).get("cli_overrides"),
+            # skaler sayaç — tam dict'i history.jsonl'e koymadan trend/SSE'de
+            # override varlığını izlenebilir yap (rozete tam dict SSE'de eklenir)
+            "cli_override_count": sum(1 for v in
+                ((data.get("config") or {}).get("cli_overrides") or {}).values()
+                if (v or {}).get("override")),
             # hook env sürümleri (python/z3/lean/…; zaman serisi paneli)
             "hook_env": data.get("hook_env"),
             # K8 Z3: son run'un gerçek sonucu (stderr özet tablosundan)
@@ -573,6 +810,13 @@ def _finalize_run(stdout, stderr, rc, duration, data, verify_dir=None):
             # K9 Lean: son run'un gerçek sonucu (stderr [K9] satırından)
             "lean_ok": lean_ok,
             "lean_detail": lean_detail,
+            # Soy hattı özeti: son nesil hash + toplam nesil (dashboard)
+            "lineage_summary": lineage_summary,
+            # skaler trend alanları (history.jsonl trend grafiği için)
+            "lineage_ok": (lineage_summary or {}).get("ok"),
+            "lineage_count": (lineage_summary or {}).get("count"),
+            # Pre-commit hook durumları (stderr'den ayrıştırıldı)
+            "precommit_hooks": precommit_hooks,
         })
         # Extract pages + refs from stdout for richer dashboard
         for line in stdout.splitlines():
@@ -585,6 +829,15 @@ def _finalize_run(stdout, stderr, rc, duration, data, verify_dir=None):
                         LATEST["ref_count"] = int(parts[1].split()[-1])
                     except (ValueError, IndexError):
                         pass
+        # Durum panosu: 5 ikonlu tek satır (CI consolidate_summary.py ile tutarlı)
+        LATEST["status_board"] = _compute_status_board()
+
+    # Arka planda pre-commit hook'larını yenile (verify bitti, şimdi hook'dan
+    # sonuçları da dashboard'a getir —较重 ~10-30s, async;
+    # ana thread'i bloke etmez).
+    if verify_dir:
+        threading.Thread(target=_refresh_precommit_hooks_bg,
+                         args=(verify_dir,), daemon=True).start()
 
     # Broadcast to all SSE clients + disk'e yaz (trend + run log) + stream sonu
     with LOCK:
@@ -592,6 +845,13 @@ def _finalize_run(stdout, stderr, rc, duration, data, verify_dir=None):
         full_rec = dict(rec)
         full_rec["stdout"] = LATEST["stdout"]
         full_rec["stderr"] = LATEST["stderr"]
+        # rozet için tam cli_overrides dict'i de SSE snapshot'ına gitsin
+        # (history kaydına DEĞİL — trend orada sadece skaler cli_override_count
+        # okur; dict yalnızca canlı/geçmiş run görünümünde gerekli)
+        rec["cli_overrides"] = LATEST["cli_overrides"]
+        rec["lineage_summary"] = LATEST["lineage_summary"]
+        rec["status_board"] = LATEST["status_board"]
+        rec["precommit_hooks"] = LATEST["precommit_hooks"]
         snapshot = json.dumps(rec)
         for q in SSE_CLIENTS:
             try:
@@ -655,7 +915,7 @@ class Handler(BaseHTTPRequestHandler):
             self.serve_latest()
         elif self.path == "/api/run":
             self.serve_sse()
-        elif self.path == "/api/run-now":
+        elif self.path.startswith("/api/run-now"):
             self.trigger_run_now()
         elif self.path == "/api/run-stream":
             self.serve_run_stream()
@@ -667,7 +927,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, "404 not found")
 
     def do_POST(self):
-        if self.path == "/api/run-now":
+        if self.path.startswith("/api/run-now"):
             self.trigger_run_now()
         else:
             self._send(404, "404 not found")
@@ -764,8 +1024,28 @@ class Handler(BaseHTTPRequestHandler):
         Arka plan thread'inde çalışır, istek anında döner; sonuç hazır
         olunca run_verify içindeki broadcast ile SSE client'larına düşer.
         Zaten bir verify koşuyorsa 409 döner (çakışma yok).
+
+        Query parametreleri (GET/POST):
+          budget=25.0        → --budget 25.0 (bütçe limitini CLI ile override et;
+                               CLI override kaydı + sarı vurgu + VERSION JSON)
+          budget_method=X    → --budget-method X (universal|weighted|both)
+        Böylece override senaryosu canlı akışta test edilebilir.
         """
         ts = datetime.now(timezone.utc).isoformat()
+        parsed = urllib.parse.urlparse(self.path)
+        qs = urllib.parse.parse_qs(parsed.query)
+
+        budget_usd = None
+        budget_method = None
+        if qs.get("budget"):
+            try:
+                budget_usd = float(qs["budget"][0])
+            except ValueError:
+                budget_usd = None
+        if qs.get("budget_method") and qs["budget_method"][0] in \
+                ("universal", "weighted", "both"):
+            budget_method = qs["budget_method"][0]
+
         if not VERIFY_BUSY.acquire(blocking=False):
             self._send(409,
                        json.dumps({"status": "already_running", "ts": ts,
@@ -773,12 +1053,22 @@ class Handler(BaseHTTPRequestHandler):
                        content_type="application/json; charset=utf-8")
             return
         VERIFY_BUSY.release()  # thread acquire etsin; kilit tutma
-        t = threading.Thread(target=run_verify, args=(VERIFY_DIR,),
+        t = threading.Thread(target=run_verify,
+                             args=(VERIFY_DIR,),
+                             kwargs={"budget_usd": budget_usd,
+                                     "budget_method": budget_method},
                              daemon=True, name="run-now")
         t.start()
+        note = ("verify başladı; sonuç /api/run (SSE) ile anında yayınlanacak"
+                + (f" (override: budget={budget_usd}"
+                   if budget_usd is not None else "")
+                + (f", method={budget_method}" if budget_method is not None
+                   else "") + (")" if budget_usd is not None else ""))
         self._send(200,
                    json.dumps({"status": "started", "ts": ts,
-                               "note": "verify başladı; sonuç /api/run (SSE) ile anında yayınlanacak"}),
+                               "budget_override": budget_usd,
+                               "budget_method_override": budget_method,
+                               "note": note}),
                    content_type="application/json; charset=utf-8")
 
     def serve_preview(self):
@@ -812,7 +1102,11 @@ class Handler(BaseHTTPRequestHandler):
             SSE_CLIENTS.append(q)
             # Bağlantı anında mevcut snapshot'ı gönder
             # (snapshot_dict() çağrılmaz: LOCK zaten tutuluyor, reentrant değil)
-            snapshot = json.dumps({k: LATEST[k] for k in HISTORY_KEYS})
+            snapshot = json.dumps({k: LATEST[k] for k in HISTORY_KEYS} |
+                                  {"cli_overrides": LATEST["cli_overrides"]} |
+                                  {"lineage_summary": LATEST["lineage_summary"]} |
+                                  {"status_board": LATEST["status_board"]} |
+                                  {"precommit_hooks": LATEST["precommit_hooks"]})
         try:
             self.wfile.write(f"event: snapshot\ndata: {snapshot}\n\n".encode())
             self.wfile.flush()

@@ -5,7 +5,8 @@
 <title>Stoic-Hume V5 — Live CI Dashboard</title>
 <style>
   :root { --bg:#0e1116; --fg:#e6edf3; --muted:#8b949e; --accent:#58a6ff;
-          --ok:#3fb950; --warn:#d29922; --err:#f85149; --border:#30363d; }
+          --ok:#3fb950; --warn:#d29922; --err:#f85149; --border:#30363d;
+          --budget:#bc8cff; }
   * { box-sizing:border-box; }
   body { margin:0; font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",
          Helvetica,Arial,sans-serif; background:var(--bg); color:var(--fg); }
@@ -29,6 +30,7 @@
   .ok   { background:rgba(63,185,80,.15); color:var(--ok); border:1px solid var(--ok); }
   .warn { background:rgba(210,153,34,.15); color:var(--warn); border:1px solid var(--warn); }
   .err  { background:rgba(248,81,73,.15); color:var(--err); border:1px solid var(--err); }
+  .budget { background:rgba(188,140,255,.12); color:var(--budget); border:1px solid var(--budget); }
   .info { background:rgba(88,166,255,.15); color:var(--accent); border:1px solid var(--accent); }
   .unknown { background:rgba(139,148,158,.15); color:var(--muted); border:1px solid var(--muted); }
   .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; }
@@ -48,6 +50,7 @@
   pre .ok  { color:var(--ok); }
   pre .muted { color:var(--muted); }
   pre .warn { color:var(--warn); }
+  pre .budget { color:var(--budget); }
   .ref-list { list-style:none; padding:0; margin:0; max-height:340px; overflow:auto; }
   .ref-list li { padding:4px 0; border-bottom:1px solid var(--border); display:flex;
                  align-items:center; gap:8px; font-size:13px; }
@@ -62,6 +65,7 @@
             transition: width 0.3s; border-radius:4px; }
   .z3fill.ok { background:var(--ok); }
   .z3fill.err { background:var(--err); }
+  .z3fill.budget { background:var(--budget); }
   .z3count { font-family:"SF Mono",monospace; font-size:12px; color:var(--muted); }
   .z3count.ok { color:var(--ok); font-weight:600; }
   .ts { color:var(--muted); font-size:11px; font-family:"SF Mono",monospace; }
@@ -90,6 +94,8 @@
 <main>
   <section>
     <h2>Verification chain</h2>
+    <div id="status-board" style="font-size:15px;font-weight:600;padding:6px 0;letter-spacing:0.3px;color:#555">⏳ bekleniyor…</div>
+    <div id="precommit-hooks" style="font-size:12px;color:#888;padding:2px 0 6px 0"></div>
     <div class="badges" id="badges">
       <span class="badge unknown">K1-K7: ?</span>
       <span class="badge unknown">K8 Z3: ?</span>
@@ -125,6 +131,11 @@
       <div class="z3bar"><div id="z3-fill" class="z3fill"></div></div>
       <span id="z3-count" class="z3count">0/12</span>
     </div>
+    <div class="z3row">
+      <span class="z3label">Bütçe</span>
+      <div class="z3bar"><div id="budget-fill" class="z3fill"></div></div>
+      <span id="budget-count" class="z3count">—</span>
+    </div>
     <pre id="runstream" class="runstream">—</pre>
   </section>
 
@@ -132,6 +143,7 @@
     <h2>Live stdout (verify_delivery.py --full)</h2>
     <div class="ts" style="margin-top:6px">
       Renk: <span style="color:var(--ok)">■ yeşil = K8/SAT/PASS</span> ·
+      <span style="color:var(--budget)">■ mor = bütçe/BÜTÇE kalkanı</span> ·
       <span style="color:var(--err)">■ kırmızı = hata/P0</span> ·
       <span style="color:var(--warn)">■ sarı = P1/CLI override</span> ·
       <span style="color:var(--muted)">■ gri = ayraç/K katmanı</span>
@@ -240,10 +252,12 @@ function setLive(state) {
   else { dot.className = "live-dot"; txt.textContent = "connecting…"; }
 }
 
-// Tek satırı vurgula: kırmızı (hata/P0 bulgu) > sarı (P1 bulgu + CLI override) > yeşil (K8/Z3 SAT-UNSAT + PASS) > gri (ayraç/K-header).
+// Tek satırı vurgula: kırmızı (hata/P0 bulgu) > mor (bütçe/BÜTÇE kalkanı) > sarı (P1 bulgu + CLI override) > yeşil (K8/Z3 SAT-UNSAT + PASS) > gri (ayraç/K-header).
 function colorizeLine(line) {
   if (/^\[P0\]|^\[FAIL\]|^SONUÇ: FAIL|FAIL \(P0=|^Error|Exception|^Traceback|^HATA/.test(line))
     return '<span class="err">' + escapeHTML(line) + '</span>';
+  if (/^\[BÜTÇE\]|^Bütçe:|^Budget:|^\$[0-9.]+ \/ \$[0-9.]+|aşım/.test(line))
+    return '<span class="budget">' + escapeHTML(line) + '</span>';
   if (/^\[P1\]|\[CLI override\]|\[CLI-OVERRIDE\]/.test(line))
     return '<span class="warn">' + escapeHTML(line) + '</span>';
   if (/\[K8\]|\bUNSAT\b|\bSAT\b|^\[PASS\]|^SONUÇ: PASS|^SONUÇ: TÜMÜ PASS|^Verdict: PASS/.test(line))
@@ -501,6 +515,38 @@ function renderRefsTrend(rows) {
 }
 
 let runStreamES = null;
+// ---- Bütçe ilerleme çubuğu (stream'deki [BÜTÇE] satırlarından) ----
+let budgetState = null;   // {est, limit} — son bilinen bütçe kalkanı değeri
+
+function updateBudgetBar() {
+  const bar = $("budget-fill"), cnt = $("budget-count");
+  if (!bar || !cnt) return;
+  if (!budgetState || !budgetState.limit || !budgetState.est) {
+    bar.style.width = "0%";
+    bar.className = "z3fill budget";
+    cnt.className = "z3count";
+    cnt.textContent = "—";
+    return;
+  }
+  const { est, limit } = budgetState;
+  const pct = Math.min(100, Math.round(est / limit * 100));
+  bar.style.width = pct + "%";
+  const over = est > limit;
+  bar.className = over ? "z3fill err" : "z3fill budget";
+  cnt.className = over ? "z3count" : "z3count ok";
+  cnt.textContent = "$" + est.toFixed(2) + " / $" + limit.toFixed(2)
+    + (over ? " · AŞIM" : "");
+}
+
+// "[BÜTÇE] ~175990 token → $1.08 (limit $30.0, …)" → {est:1.08, limit:30}
+function scanBudget(line) {
+  const m = line.match(/\[BÜTÇE\][^→]*→\s*\$([0-9.]+)\s*\(limit\s*\$([0-9.]+)/);
+  if (m) {
+    budgetState = { est: parseFloat(m[1]), limit: parseFloat(m[2]) };
+    updateBudgetBar();
+  }
+}
+
 // ---- K8 Z3 ilerleme çubuğu (stream'deki PASS satırlarından) ----
 const Z3_TOTAL = 12;
 let z3Seen = new Set();    // tamamlanan kontroller (bireysel [P1-a] satırları)
@@ -552,6 +598,7 @@ function connectStream() {
   });
   const push = (tag, line, replay) => {
     scanZ3(line);
+    scanBudget(line);
     const arrow = tag === "stderr" ? '<span class="muted">⟶ </span>' : "";
     const mark = replay ? '<span class="muted">⏪ </span>' : "";
     streamLines.push(mark + arrow + colorizeLine(line));
@@ -564,10 +611,13 @@ function connectStream() {
     try { sum = JSON.parse(e.data); } catch(_) {}
     if (sum && sum.first) {
       // İlk run'un başında (yeniden bağlantıda) eski satırları temizle ki
-      // replay + canlı satırlar çift görünmesin; K8 sayacını sıfırla.
+      // replay + canlı satırlar çift görünmesin; K8 sayacını ve bütçe
+      // çubuğunu sıfırla (replay son run'u baştan sayar).
       streamLines = [];
       z3Seen.clear(); z3Passed.clear(); z3Failed.clear();
       updateZ3Bar();
+      budgetState = null;
+      updateBudgetBar();
       st.textContent = "geçmiş runlar yükleniyor…";
     }
     // Her run'un özeti (verdict/P0/P1/bütçe) — geçmiş run sınırında
@@ -800,6 +850,24 @@ function fmtVal(v) {
 }
 
 function applySnapshot(d) {
+  // Status board: CI consolidate_summary.py ile aynı 5 ikonlu tek satır
+  if (d.status_board) {
+    $("status-board").textContent = d.status_board;
+    $("status-board").style.color = d.status_board.includes("🔴") ? "#c0392b" : "#27ae60";
+  }
+
+  // Pre-commit hooks panel: PRECOMMIT_RAPORU.json'dan okunan hook durumları
+  const hooksEl = $("precommit-hooks");
+  if (hooksEl && d.precommit_hooks && d.precommit_hooks.length > 0) {
+    hooksEl.innerHTML = d.precommit_hooks.map(h => {
+      const icon = h.status === "Passed" ? "✅" : "❌";
+      const color = h.status === "Passed" ? "var(--ok)" : "var(--err)";
+      return `<span style="margin-right:10px;color:${color}">${icon} <span style="color:var(--fg)">${h.name}</span></span>`;
+    }).join("");
+  } else if (hooksEl) {
+    hooksEl.innerHTML = "<span style='color:var(--muted)'>⏳ hook verisi bekleniyor…</span>";
+  }
+
   // Verdict badge + value
   const verdict = d.verdict || "UNKNOWN";
   $("m-verdict").textContent = verdict;
@@ -876,6 +944,27 @@ function applySnapshot(d) {
     addBadge("warn", "K9 Lean: ? (koşulmadı)");
   }
   addBadge(p1 === 0 ? "ok" : "warn", "Beth 1953: " + (p1 === 0 ? "düzeltildi" : p1 + " P1"));
+  // Soy hattı rozeti — son run'ın lineage_summary durumundan (sunucu
+  // verify_delivery.py --json lineage.generations'dan çıkarılan son nesil
+  // bilgisi; akış satırını beklemeden anında görünür).
+  const lin = d.lineage_summary;
+  if (lin) {
+    const lcls = lin.ok ? "ok" : "err";
+    addBadge(lcls, "Soy hattı: " + lin.current_note +
+      " (" + lin.current_hash + "…) · " + lin.count + " nesil");
+  }
+  // Budget override rozeti — son run'ın cli_overrides durumundan (sunucu
+  // verify_delivery.py --json config.cli_overrides'ını LATEST'e taşır; akış
+  // satırını beklemeden anında görünür). override=true varsa sarı (sapma),
+  // yoksa gri/sessiz geçer (rozet gürültü yapmaz).
+  const cov = d.cli_overrides || {};
+  const ovKeys = Object.keys(cov).filter(k => (cov[k] || {}).override);
+  if (ovKeys.length) {
+    const ovDetail = ovKeys.map(k =>
+      "`" + k + "`: " + (cov[k].file_value != null ? cov[k].file_value : "?") +
+      " → " + cov[k].effective).join(" · ");
+    addBadge("warn", "Budget override: " + ovKeys.length + " (" + ovDetail + ")");
+  }
   // refs rozeti — son run'ın GERÇEK references_online sonucundan, Z3 rozetiyle
   // aynı stilde: uyuşmazlık/doğrulanamayan sayısını ayrı gösterir.
   if (d.refs_total != null && d.refs_verified != null) {

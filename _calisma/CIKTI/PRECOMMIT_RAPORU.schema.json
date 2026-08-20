@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stoic-hume-v5/precommit-raporu.schema.json",
+  "title": "PRECOMMIT_RAPORU.json",
+  "description": "Pre-commit denetim raporu sidecar'ı (gen_precommit_report.py üretir, run_summary_precommit.py tüketir).",
+  "type": "object",
+  "required": ["generated_at", "exit_code", "verdict", "role", "hooks", "findings", "counts"],
+  "properties": {
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 UTC zaman damgası (ör. 2026-08-20T12:00:00Z)"
+    },
+    "command": {
+      "type": "string",
+      "description": "Çalıştırılan pre-commit komutu"
+    },
+    "exit_code": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 255,
+      "description": "pre-commit run --all-files çıkış kodu"
+    },
+    "verdict": {
+      "type": "string",
+      "enum": ["PASS", "FAIL"],
+      "description": "exit_code==0 ise PASS, aksi halde FAIL"
+    },
+    "role": {
+      "type": "string",
+      "const": "advisory",
+      "description": "Pre-commit bulguları advisory — build'i bloke etmez"
+    },
+    "hooks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "status"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Hook adı (ör. 'Verify Stoic-Hume V5 delivery')"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["Passed", "Failed"],
+            "description": "Hook durumu"
+          }
+        },
+        "additionalProperties": false
+      },
+      "minItems": 0,
+      "description": "Pre-commit hook sonuçları listesi"
+    },
+    "update_config": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": ["string", "null"],
+          "enum": ["Passed", "Failed", null]
+        },
+        "output": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "additionalProperties": false,
+      "description": "update-config hook durumu + çıktısı"
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["priority", "message"],
+        "properties": {
+          "priority": {
+            "type": "string",
+            "enum": ["P0", "P1"],
+            "description": "Bulgu önceliği: P0 (fail-closed) veya P1 (advisory)"
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Bulgu açıklaması"
+          }
+        },
+        "additionalProperties": false
+      },
+      "description": "P0/P1 bulguları listesi (boş = temiz)"
+    },
+    "counts": {
+      "type": "object",
+      "required": ["hooks", "passed", "failed", "p0", "p1"],
+      "properties": {
+        "hooks": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Toplam hook sayısı"
+        },
+        "passed": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Geçen hook sayısı"
+        },
+        "failed": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Başarısız hook sayısı"
+        },
+        "p0": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "P0 bulgu sayısı"
+        },
+        "p1": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "P1 bulgu sayısı"
+        }
+      },
+      "additionalProperties": false,
+      "description": "Hook ve bulgu sayımları"
+    },
+    "commit_msg": {
+      "type": ["object", "null"],
+      "description": "check_commit_messages.py sidecar'ı (varsa)"
+    }
+  },
+  "additionalProperties": false
+}

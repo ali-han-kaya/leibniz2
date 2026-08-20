@@ -1,6 +1,9 @@
   const fs = require('fs');
   const BUDGET_PATH = 'budget/index.json';
   const PC_PATH = 'precommit_findings/PRECOMMIT_RAPORU.json';
+  const K0_PATH = 'k0_findings.json';
+  const LINEAGE_PATH = 'lineage_findings.json';
+  const KLAYERS_PATH = 'klayers.json';
   const MARKER = '<!-- stoic-hume-v5-pr-status -->';
 
   const budget = fs.existsSync(BUDGET_PATH)
@@ -9,12 +12,17 @@
   const pc = fs.existsSync(PC_PATH)
     ? JSON.parse(fs.readFileSync(PC_PATH, 'utf8'))
     : null;
+  const k0 = fs.existsSync(K0_PATH)
+    ? JSON.parse(fs.readFileSync(K0_PATH, 'utf8'))
+    : null;
+  const lineage = fs.existsSync(LINEAGE_PATH)
+    ? JSON.parse(fs.readFileSync(LINEAGE_PATH, 'utf8'))
+    : null;
+  const klayers = fs.existsSync(KLAYERS_PATH)
+    ? JSON.parse(fs.readFileSync(KLAYERS_PATH, 'utf8'))
+    : null;
 
   // ── Bütçe bölümü ──
-  // CLI override + aşım BİRLİKTEYSE tek uyarı bloğunda gösterilir:
-  // aşımın olası nedeni (bütçe kalkanı dosya config yerine CLI değeriyle
-  // koşmuş) görünür olur — override bilgisi budget/index.json'un
-  // cli_overrides alanından gelir (check_cli_overrides.py yazar).
   const budgetLines = [];
   let budgetBadge;
   const cliOverrides = budget && budget.cli_overrides
@@ -31,7 +39,6 @@
           `- **${f.source || 'bilinmeyen'}**: $${f.estimated_usd} / $${f.limit} limiti ` +
           `(+$${(f.estimated_usd - f.limit).toFixed(2)} aşım, ~${f.tokens_est} token)`);
       }
-      // Aşım + CLI override → aynı blokta neden-görünürlüğü (tek uyarı).
       if (hasCliOverride) {
         budgetLines.push('');
         budgetLines.push('🔧 **CLI override tespit edildi — bütçe kalkanı dosya '
@@ -48,8 +55,6 @@
       for (const r of runs) {
         budgetLines.push(`- **${r.source || 'verify'}**: $${r.estimated_usd} / $${r.limit} (~${r.tokens_est} token)`);
       }
-      // Aşım YOK ama override var → override yine görünür (bilgilendirme),
-      // tek blok değil ama aynı bütçe bölümünde.
       if (hasCliOverride) {
         budgetLines.push('');
         budgetLines.push('🔧 **CLI override aktif** (tekrarlanabilirlik sapması):');
@@ -93,6 +98,98 @@
     pcBadge = '⚠️ **Pre-commit: rapor bulunamadı**';
   }
 
+  // ── Commit-msg bölümü ──
+  const cmLines = [];
+  let cmBadge;
+  const cm = pc && pc.commit_msg ? pc.commit_msg : null;
+  if (cm) {
+    const violations = cm.violations || [];
+    const checked = cm.checked || 0;
+    if (violations.length) {
+      cmBadge = `🟠 **Commit-msg: ${violations.length} ihlal** (${checked} commit denetlendi)`;
+      for (const v of violations) {
+        const sha = (v.commit || '?').slice(0, 12);
+        const subj = (v.subject || '?').replace(/\|/g, '\\|');
+        cmLines.push(`- \`${sha}\` ${subj}`);
+        if (v.detail) cmLines.push(`  - ${v.detail}`);
+      }
+    } else {
+      cmBadge = `✅ **Commit-msg: temiz** (${checked} commit denetlendi)`;
+    }
+  } else {
+    cmBadge = '⏭️ **Commit-msg: denetim çalışmadı**';
+  }
+
+  // ── K0 bayat zip bölümü ──
+  const k0Lines = [];
+  let k0Badge;
+  if (k0) {
+    const k0Count = k0.count || 0;
+    if (k0Count > 0) {
+      k0Badge = `🔴 **K0 bayat zip: ${k0Count} bulgu**`;
+      for (const f of (k0.findings || [])) {
+        k0Lines.push(`- \`${f.rel}\`  (\`${(f.sha256 || '?').slice(0, 16)}…\`)`);
+      }
+    } else {
+      k0Badge = '✅ **K0 bayat zip: temiz**';
+      k0Lines.push('- CIKTI dışında bayat zip bulunamadı');
+    }
+  } else {
+    k0Badge = '⚠️ **K0 bayat zip: sidecar bulunamadı**';
+  }
+
+  // ── Soy hattı bölümü ──
+  const lineageLines = [];
+  let lineageBadge;
+  if (lineage) {
+    const gens = lineage.generations || [];
+    const ok = !!lineage.ok;
+    if (ok) {
+      lineageBadge = `✅ **Soy hattı: ${gens.length} nesil doğrulandı**`;
+    } else {
+      lineageBadge = `🔴 **Soy hattı: doğrulama başarısız (${gens.length} nesil)**`;
+    }
+    const recent = gens.slice(-3);
+    for (const g of recent) {
+      const h = (g.hash || '?').slice(0, 16);
+      const note = (g.note || '?').replace(/\|/g, '\\|');
+      const icon = (g.status || '').startsWith('PASS') ? '✅' : '❌';
+      lineageLines.push(`- ${icon} ${note} (\`${h}…\`)`);
+    }
+    if (gens.length > 3) {
+      lineageLines.unshift(`- _…ve ${gens.length - 3} önceki nesil_`);
+    }
+  } else {
+    lineageBadge = '⚠️ **Soy hattı: sidecar bulunamadı**';
+  }
+
+  // ── K katmanları bölümü ──
+  const kLayerLines = [];
+  let kLayerBadge;
+  if (klayers && klayers.layers) {
+    const layers = klayers.layers;
+    const layerKeys = ['K1','K2','K3','K4','K5','K6','K7','K8','K9','K10','K11','K12','K13','K14','K16'];
+    let passCount = 0, failCount = 0, skipCount = 0;
+    const failedLayers = [];
+    for (const key of layerKeys) {
+      const lyr = layers[key];
+      if (!lyr) continue;
+      const s = lyr.status || 'SKIP';
+      if (s === 'PASS') passCount++;
+      else if (s === 'FAIL') { failCount++; failedLayers.push(`${key}: ${lyr.label || '?'}`); }
+      else skipCount++;
+    }
+    if (failCount > 0) {
+      kLayerBadge = `🔴 **K katmanları: ${failCount} FAIL**`;
+      for (const fl of failedLayers) kLayerLines.push(`- ❌ ${fl}`);
+    } else {
+      kLayerBadge = `✅ **K katmanları: ${passCount} PASS**` +
+        (skipCount > 0 ? `, ${skipCount} SKIP` : '');
+    }
+  } else {
+    kLayerBadge = '⚠️ **K katmanları: sidecar bulunamadı**';
+  }
+
   // ── Etiket senkronu (precommit-p0 / precommit-p1) ──
   const LABELS = [
     { label: 'precommit-p0', has: p0.length > 0 },
@@ -124,7 +221,71 @@
     }
   }
 
-  // ── Tek yorum (upsert) ──
+  // ── State-sync: bulgu yoksa bayat yorumu sil ──
+  // Tüm bulgular çözüldüyse (bütçe aşımsız, P0/P1 yok, K0 temiz,
+  // soy hattı başarılı, K katmanları FAIL yok) bayat uyarı yorumu
+  // yanıltıcı kalmasın — config_diff_comment.js aynı deseni kullanır.
+  const hasBudgetOverflow = budget && (budget.failures || []).length > 0;
+  const hasP0P1 = p0.length > 0 || p1.length > 0;
+  const hasK0Findings = k0 && (k0.count || 0) > 0;
+  const hasLineageFail = lineage && !lineage.ok;
+  let hasKlayersFail = false;
+  if (klayers && klayers.layers) {
+    for (const key of ['K1','K2','K3','K4','K5','K6','K7','K8','K9','K10','K11','K12','K13','K14','K16']) {
+      const lyr = klayers.layers[key];
+      if (lyr && lyr.status === 'FAIL') { hasKlayersFail = true; break; }
+    }
+  }
+  const hasCommitMsgViolations = cm && (cm.violations || []).length > 0;
+  const hasMissingSidecars = !budget || !pc || !k0 || !lineage || !klayers;
+  const hasAnyFindings = hasBudgetOverflow || hasP0P1 || hasK0Findings
+    || hasLineageFail || hasKlayersFail || hasMissingSidecars || hasCliOverride
+    || hasCommitMsgViolations;
+
+  const { data: comments } = await github.rest.issues.listComments({
+    issue_number: context.issue.number,
+    owner: context.repo.owner,
+    repo: context.repo.repo,
+    per_page: 100,
+  });
+
+  // ── Geçiş temizliği: eski precommit-p0-bot / precommit-p1-bot marker'lı ──
+  const LEGACY_MARKERS = [
+    '<!-- precommit-p0-bot -->',
+    '<!-- precommit-p1-bot -->',
+  ];
+  for (const c of comments) {
+    if (!c.body) continue;
+    const isLegacy = LEGACY_MARKERS.some(m => c.body.includes(m));
+    const isCurrent = c.body.includes(MARKER);
+    if (isLegacy && !isCurrent) {
+      await github.rest.issues.deleteComment({
+        comment_id: c.id,
+        owner: context.repo.owner,
+        repo: context.repo.repo,
+      });
+      console.log(`Eski bot yorumu silindi: comment_id=${c.id}`);
+    }
+  }
+
+  const existing = comments.find(c => c.body && c.body.includes(MARKER));
+
+  if (!hasAnyFindings) {
+    // Tüm bulgular çözüldü: mevcut yorum varsa sil (state-sync).
+    if (existing) {
+      await github.rest.issues.deleteComment({
+        comment_id: existing.id,
+        owner: context.repo.owner,
+        repo: context.repo.repo,
+      });
+      console.log(`Bulgular çözüldü — bayat yorum kaldırıldı: comment_id=${existing.id}`);
+    } else {
+      console.log('Bulgular çözüldü — yorum yok (temiz)');
+    }
+    return;
+  }
+
+  // Bulgu var: yorumu oluştur veya güncelle.
   const runUrl = `${context.payload.repository.html_url}/actions/runs/${context.runId}`;
   const body = [
     '## 📊 PR doğrulama durumu (advisory)',
@@ -137,18 +298,27 @@
     pcBadge,
     ...pcLines,
     '',
+    '### 📝 Commit-msg',
+    cmBadge,
+    ...cmLines,
+    '',
+    '### 🔍 K0 bayat zip',
+    k0Badge,
+    ...k0Lines,
+    '',
+    '### 🧬 Soy hattı',
+    lineageBadge,
+    ...lineageLines,
+    '',
+    '### 📦 K katmanları',
+    kLayerBadge,
+    ...kLayerLines,
+    '',
     `> Detay: [run #${context.runId}](${runUrl})`,
     '',
     MARKER,
   ].join('\n');
 
-  const { data: comments } = await github.rest.issues.listComments({
-    issue_number: context.issue.number,
-    owner: context.repo.owner,
-    repo: context.repo.repo,
-    per_page: 100,
-  });
-  const existing = comments.find(c => c.body && c.body.includes(MARKER));
   if (existing) {
     await github.rest.issues.updateComment({
       comment_id: existing.id,

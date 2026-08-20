@@ -42,6 +42,7 @@ function loadJson(name, fallback) {
 
 const labels = loadJson('mock_labels.json', []);
 const comments = loadJson('mock_comments.json', []);
+const repoLabels = loadJson('mock_repo_labels.json', []);
 const ctx = loadJson('mock_context.json', null);
 
 const calls = [];          // her REST çağrısı: {fn, args}
@@ -69,6 +70,12 @@ const github = {
       createComment: record('issues.createComment'),
       updateComment: record('issues.updateComment'),
       deleteComment: record('issues.deleteComment'),
+      listLabels: async (a) => {
+        calls.push({ fn: 'issues.listLabels', args: a || {} });
+        return { data: repoLabels };
+      },
+      createLabel: record('issues.createLabel'),
+      updateLabel: record('issues.updateLabel'),
     },
   },
 };

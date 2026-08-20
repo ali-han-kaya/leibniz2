@@ -43,8 +43,14 @@ class TestConsolidateSummary(unittest.TestCase):
     def _sidecars(self, d):
         d = pathlib.Path(d)
         (d / "logs").mkdir(parents=True, exist_ok=True)
-        (d / "logs" / "PRECOMMIT_RAPORU.md").write_text(
-            "- **Sonuç:** 5/5 Passed\n", encoding="utf-8")
+        (d / "logs" / "PRECOMMIT_RAPORU.json").write_text(
+            json.dumps({"generated_at": "2026-08-20T12:00:00Z",
+                        "exit_code": 0, "verdict": "PASS", "role": "advisory",
+                        "hooks": [{"name": "hook1", "status": "Passed"},
+                                   {"name": "hook2", "status": "Passed"}],
+                        "findings": [],
+                        "counts": {"hooks": 5, "passed": 5, "failed": 0,
+                                   "p0": 0, "p1": 0}}), encoding="utf-8")
         (d / "k0_findings.json").write_text(
             json.dumps({"count": 0, "findings": []}), encoding="utf-8")
         (d / "budget_verify.json").write_text(
@@ -62,7 +68,7 @@ class TestConsolidateSummary(unittest.TestCase):
             json.dumps({"verdict": "PASS", "counts": {"P0": 0, "P1": 0},
                         "layers": layers}), encoding="utf-8")
         return {
-            "precommit": d / "logs" / "PRECOMMIT_RAPORU.md",
+            "precommit": d / "logs" / "PRECOMMIT_RAPORU.json",
             "k0": d / "k0_findings.json",
             "budget": d / "budget_verify.json",
             "lineage": d / "lineage_findings.json",
@@ -74,10 +80,10 @@ class TestConsolidateSummary(unittest.TestCase):
             paths = self._sidecars(d)
             code, out = self._run(paths)
         self.assertEqual(code, 0)
-        # Durum panosu en üstte, tek satırda, üç ✅ ile.
+        # Durum panosu en üstte, tek satırda, beş ✅ ile.
         self.assertTrue(
-            out.startswith("## 📊 Durum panosu: Pre-commit ✅ · K0 ✅ · Bütçe ✅\n"),
-            repr(out[:80]))
+            out.startswith("## 📊 Durum panosu: Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅\n"),
+            repr(out[:120]))
         headers = [
             "## ✅ Pre-commit: bulgu yok",
             "## ✅ K0 bayat zip: temiz",
@@ -97,13 +103,13 @@ class TestConsolidateSummary(unittest.TestCase):
             dd = pathlib.Path(d)
             paths = {k: dd / f"{k}.json" for k in
                      ("k0", "budget", "lineage", "klayers")}
-            paths["precommit"] = dd / "logs" / "PRECOMMIT_RAPORU.md"
+            paths["precommit"] = dd / "logs" / "PRECOMMIT_RAPORU.json"
             code, out = self._run(paths)
         self.assertEqual(code, 0)
         # Panoda eksik sidecar ⚠️ olarak görünür (tek satır korunur).
         self.assertTrue(out.startswith(
-            "## 📊 Durum panosu: Pre-commit ⚠️ · K0 ⚠️ · Bütçe ⚠️\n"),
-            repr(out[:80]))
+            "## 📊 Durum panosu: Pre-commit ⚠️ · K0 ⚠️ · Bütçe ⚠️ · Soy hattı ⚠️ · K katmanları ⚠️\n"),
+            repr(out[:120]))
         self.assertIn("Pre-commit: rapor bulunamadı", out)
         self.assertIn("K0 bayat zip: sidecar bulunamadı", out)
         self.assertIn("Bütçe kalkanı: sidecar bulunamadı", out)
@@ -132,8 +138,8 @@ class TestConsolidateSummary(unittest.TestCase):
             self.assertNotIn("Durum panosu", buf.getvalue())
             file_txt = summary_file.read_text(encoding="utf-8")
             self.assertTrue(file_txt.startswith(
-                "## 📊 Durum panosu: Pre-commit ✅ · K0 ✅ · Bütçe ✅\n"),
-                repr(file_txt[:80]))
+                "## 📊 Durum panosu: Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅\n"),
+                repr(file_txt[:120]))
             for h in ("## ✅ Pre-commit: bulgu yok",
                       "## ✅ K0 bayat zip: temiz",
                       "## ✅ Bütçe kalkanı: limit içinde"):
@@ -143,8 +149,15 @@ class TestConsolidateSummary(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             dd = pathlib.Path(d)
             (dd / "logs").mkdir(parents=True, exist_ok=True)
-            (dd / "logs" / "PRECOMMIT_RAPORU.md").write_text(
-                "| P1 | bir bulgu |\n- **Sonuç:** 4/5 Passed\n",
+            (dd / "logs" / "PRECOMMIT_RAPORU.json").write_text(
+                json.dumps({"generated_at": "2026-08-20T12:00:00Z",
+                            "exit_code": 1, "verdict": "FAIL", "role": "advisory",
+                            "hooks": [{"name": "hook1", "status": "Passed"},
+                                       {"name": "hook2", "status": "Failed"}],
+                            "findings": [{"priority": "P1",
+                                           "message": "bir bulgu"}],
+                            "counts": {"hooks": 5, "passed": 4, "failed": 1,
+                                       "p0": 0, "p1": 1}}),
                 encoding="utf-8")
             (dd / "k0_findings.json").write_text(
                 json.dumps({"count": 1, "findings": [
@@ -160,7 +173,7 @@ class TestConsolidateSummary(unittest.TestCase):
                 json.dumps({"verdict": "PASS", "counts": {"P0": 0, "P1": 0},
                             "layers": {}}), encoding="utf-8")
             paths = {
-                "precommit": dd / "logs" / "PRECOMMIT_RAPORU.md",
+                "precommit": dd / "logs" / "PRECOMMIT_RAPORU.json",
                 "k0": dd / "k0_findings.json",
                 "budget": dd / "budget_verify.json",
                 "lineage": dd / "lineage_findings.json",
@@ -168,9 +181,119 @@ class TestConsolidateSummary(unittest.TestCase):
             }
             code, out = self._run(paths)
         self.assertEqual(code, 0)
-        self.assertTrue(out.startswith(
-            "## 📊 Durum panosu: Pre-commit 🔴 · K0 🔴 · Bütçe 🔴\n"),
-            repr(out[:80]))
+        self.assertIn("Durum panosu", out)
+        self.assertIn("Pre-commit 🔴", out)
+        self.assertIn("K0 🔴", out)
+        self.assertIn("Bütçe 🔴", out)
+        self.assertIn("Soy hattı ✅", out)
+        self.assertIn("K katmanları ✅", out)
+
+
+class TestDashboardOnlyAndSkip(unittest.TestCase):
+    """--dashboard-only ve --skip-dashboard flag davranışları."""
+
+    def setUp(self):
+        self._saved = os.environ.pop("GITHUB_STEP_SUMMARY", None)
+
+    def tearDown(self):
+        if self._saved is not None:
+            os.environ["GITHUB_STEP_SUMMARY"] = self._saved
+
+    def _run(self, argv):
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            code = cs.main(argv)
+        return code, buf.getvalue()
+
+    def _sidecars(self, d):
+        d = pathlib.Path(d)
+        (d / "logs").mkdir(parents=True, exist_ok=True)
+        (d / "logs" / "PRECOMMIT_RAPORU.md").write_text(
+            "- **Sonuç:** 5/5 Passed\n", encoding="utf-8")
+        (d / "k0_findings.json").write_text(
+            json.dumps({"count": 0, "findings": []}), encoding="utf-8")
+        (d / "budget_verify.json").write_text(
+            json.dumps({"limit": 30.0, "estimated_usd": 1.08,
+                        "tokens_est": 175990, "verdict": "OK"}),
+            encoding="utf-8")
+        (d / "lineage_findings.json").write_text(
+            json.dumps({"ok": True, "count": 1, "generations": [
+                {"gen": "current", "note": "V5m", "hash": "a" * 64,
+                 "commit": None, "status": "PASS"}]}),
+            encoding="utf-8")
+        layers = {f"K{n}": {"label": "X", "status": "PASS", "ran": True,
+                            "findings": []} for n in range(1, 11)}
+        (d / "klayers.json").write_text(
+            json.dumps({"verdict": "PASS", "counts": {"P0": 0, "P1": 0},
+                        "layers": layers}), encoding="utf-8")
+        return {
+            "precommit": d / "logs" / "PRECOMMIT_RAPORU.md",
+            "k0": d / "k0_findings.json",
+            "budget": d / "budget_verify.json",
+            "lineage": d / "lineage_findings.json",
+            "klayers": d / "klayers.json",
+        }
+
+    def test_dashboard_only_writes_only_dashboard(self):
+        with tempfile.TemporaryDirectory() as d:
+            paths = self._sidecars(d)
+            argv = []
+            for key, p in paths.items():
+                argv += [f"--{key}", str(p)]
+            argv.append("--dashboard-only")
+            code, out = self._run(argv)
+        self.assertEqual(code, 0)
+        # Yalnızca dashboard satırı yazılır (detay bölüm yok).
+        self.assertTrue(out.startswith("## 📊 Durum panosu:"), repr(out[:80]))
+        self.assertNotIn("Pre-commit bulguları", out)
+        self.assertNotIn("K0 bayat zip", out)
+        self.assertNotIn("Bütçe kalkanı", out)
+        self.assertNotIn("Soy hattı (zip_lineage", out)
+        self.assertNotIn("K1 X", out)
+
+    def test_skip_dashboard_skips_dashboard(self):
+        with tempfile.TemporaryDirectory() as d:
+            paths = self._sidecars(d)
+            argv = []
+            for key, p in paths.items():
+                argv += [f"--{key}", str(p)]
+            argv.append("--skip-dashboard")
+            code, out = self._run(argv)
+        self.assertEqual(code, 0)
+        # Dashboard satırı YAZILMAZ (yalnızca detay bölümler).
+        self.assertNotIn("Durum panosu", out)
+        self.assertIn("Pre-commit:", out)
+        self.assertIn("K0", out)
+        self.assertIn("Bütçe", out)
+        self.assertIn("Soy hattı", out)
+        self.assertIn("K1 X", out)
+
+    def test_dashboard_only_then_skip_creates_correct_flow(self):
+        # CI akışı: önce --dashboard-only, sonra --skip-dashboard.
+        # İkisi birlikte tam çıktıyı üretmeli (dashboard üstte, detay altta).
+        with tempfile.TemporaryDirectory() as d:
+            paths = self._sidecars(d)
+            argv = []
+            for key, p in paths.items():
+                argv += [f"--{key}", str(p)]
+
+            # Adım 1: dashboard-only
+            code1, out1 = self._run(argv + ["--dashboard-only"])
+            # Adım 2: skip-dashboard
+            code2, out2 = self._run(argv + ["--skip-dashboard"])
+        self.assertEqual(code1, 0)
+        self.assertEqual(code2, 0)
+        # out1 dashboard içerir ama detay içermez.
+        self.assertTrue(out1.startswith("## 📊 Durum panosu:"))
+        self.assertNotIn("Pre-commit bulguları", out1)
+        # out2 dashboard içermez ama detay içerir.
+        self.assertNotIn("Durum panosu", out2)
+        self.assertIn("Pre-commit:", out2)
+        # Birleştirilmiş çıktı: dashboard üstte, detay altta.
+        combined = out1 + out2
+        dashboard_pos = combined.index("Durum panosu")
+        detail_pos = combined.index("Pre-commit:")
+        self.assertLess(dashboard_pos, detail_pos)
 
 
 if __name__ == "__main__":

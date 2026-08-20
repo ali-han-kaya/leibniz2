@@ -22,7 +22,7 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 > | AŞAMA 4 — koruma kanıtı | ⏸️ opsiyonel (1 (b) sonrası) |
 >
 > Job tablosu (AŞAMA 3), `.github/workflows/verify.yml`'deki canlı job `name:`
-> alanlarının birebir aynısıdır (12 job); required check adları tek kaynaktan
+> alanlarının birebir aynısıdır (13 job); required check adları tek kaynaktan
 > türer (`python3 _calisma/CIKTI/status_checks.py --json`). Günlük akış için
 > **aşağıdaki "INCREMENTAL PUSH" bölümüne** geç.
 
@@ -59,8 +59,10 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 | 2026-08-19 | TEK KOMUT | publish_wrapper'a `--dry-run-summary` bayrağı eklendi (komut akışını tek markdown'da özetler) | `c21b8e9` |
 | 2026-08-20 | AŞAMA 3 | K12 (plist) katman listesine eklendi; job tablosu 12'ye, artifact listesi 19'a güncellendi (plist-check job + unit-tests/plist-check artifact'ları) | (çalışma ağacı — commit yok) |
 | 2026-08-20 | AŞAMA 3 | Job tablosu `scriptPath` referanslarıyla senkronlandı: 5 github-script bloğu `github_scripts/*.js`'e çıkarıldı (pr_status_comment/label_gate/manifest_comment/config_diff_comment/config_drift_comment), inline `script:` yok; label-gate'e checkout eklendi; drift kapısı `test_github_scripts.py` (5 test) | (çalışma ağacı — commit yok) |
+| 2026-08-20 | AŞAMA 1/3 | `Pre-commit P1 label gate (optional)` eklendi: `label_gate_p1.js` + `label-gate-p1` job'u + `test_label_gate_contracts.py` (19 test, CI advisory); required check listesi 9→10; job tablosu 13 | (çalışma ağacı — commit yok) |
 | 2026-08-19 | (tümü) | Repo canlı duruma göre yeniden yazıldı: AŞAMA 1-2 `UYGULANDI` işaretlendi, ana akış `INCREMENTAL PUSH` günlük döngüsü oldu (AŞAMA 1 (b) BEKLEMEDE) | `e708e45` |
 | 2026-08-19 | AŞAMA 1/3 | Node 24 yükseltmesi işlendi: `action-runtimes` job'ı + `check-action-pins` pre-commit kapısı (job 11, required check 9, pre-commit 6) | `1f84ba4` |
+| 2026-08-21 | AŞAMA 3 | commit-msg blokaj kanıtı: `gen_commit_msg_evidence.py` (28 test senaryosu) + `COMMIT_MSG_BLOCK_EVIDENCE.md` CI'da periyodik üretilir; `setup_commit_hooks.sh --check-only` CI advisory adımı eklendi | (çalışma ağacı — commit yok) |
 
 ---
 
@@ -102,7 +104,7 @@ bash docs/publish_precheck.sh --allow-remote
 # 2) Push (kapılar yeşilse)
 git push origin main
 
-# 3) CI'ı izle (12 job — K1-K14 + action-runtimes + budget + plist-check + ...)
+# 3) CI'ı izle (13 job — K1-K14 + action-runtimes + budget + plist-check + label-gate-p1 + ...)
 RUN_ID=$(gh run list --limit 1 --json databaseId -q '.[0].databaseId')
 gh run watch $RUN_ID --exit-status
 
@@ -117,7 +119,7 @@ gh api "repos/ali-han-kaya/leibniz2/actions/runs/$RUN_ID/artifacts" \
 > atlanır. Önce `--dry-run` ile önizle.
 >
 > **AŞAMA 1 (b) tamamlandıysa** 4. adıma ek olarak:
-> `python3 _calisma/CIKTI/status_checks.py --gh` → `SONUÇ: PASS` (9 check +
+> `python3 _calisma/CIKTI/status_checks.py --gh` → `SONUÇ: PASS` (10 check +
 > merge engeli smoke) — koruma/check eşleşmesini canlı doğrular.
 
 Her adımın ayrıntısı aşağıdaki AŞAMA bölümlerindedir; bu döngü onların günlük
@@ -155,6 +157,8 @@ git log --oneline -5       # ← temiz linear history; test-marker commit'i olma
 #      Kurulu değilse TEK komutla kur: bash _calisma/CIKTI/setup_commit_hooks.sh
 git config commit.template      # ← ".gitmessage" olmalı
 ls .git/hooks/commit-msg        # ← var olmalı (pre-commit install --hook-type commit-msg)
+#      Kanıt: COMMIT_MSG_BLOCK_EVIDENCE.md — 28 test senaryosuyla hook'un
+#      hangi başlıkları bloke ettiği/izni belgelenmiş (CI'da periyodik üretilir).
 
 # (b) Pre-commit hooks çalışıyor mu? (commit-msg kuralına uygun mesaj —
 #     "smoke:" başlığı artık commit-msg-style hook'u tarafından REDDEDİLİR)
@@ -239,26 +243,27 @@ open "https://github.com/ali-han-kaya/leibniz2/settings/branches"
 #     Web UI'da (adım adım → aşağıdaki "Branch protection — web UI adım adım"):
 #       "Add branch protection rule" → Branch name pattern: `main`
 #       ✓ Require status checks to pass before merging
-#         → 9 check (adlar = workflow job `name:` alanları — tek kaynaktan al):
+#         → 10 check (adlar = workflow job `name:` alanları — tek kaynaktan al):
 #             python3 _calisma/CIKTI/status_checks.py
 #           Delivery verification — K1-K9 (single entry point)
 #           Action runtime check (node24)
 #           Budget shield (aggregated)
 #           Pre-commit P0 label gate
+#           Pre-commit P1 label gate (optional)
 #           Static markdown reports (incl. pre-commit findings)
 #           Reproducibility bundle
 #           Config drift check (gen_config + diff-on-drift)
 #           Repack determinism + verify (sidecar sync)
 #           Online verification trend (refs-online across runs)
 #         (manifest-comment job'ı yalnızca PR'da koşar — required check değil;
-#          label-gate de PR'da koşar ama BİLEREK required check — etiket kapısı)
+#          label-gate/label-gate-p1 PR'da koşar ama BİLEREK required check — etiket kapıları)
 #           → ✓ "Require branches to be up to date before merging" (strict)
 #       ✓ Do not allow bypassing the above settings   (enforce_admins)
 #       ✓ Disallow force pushes
 #       ✓ Disallow deletions
 ```
 
-### Branch protection — web UI adım adım (9 required check)
+### Branch protection — web UI adım adım (10 required check)
 
 > 📷 **Görsel kılavuz:** her adımın ekran görüntüsü
 > [`docs/branch-protection-guide/`](branch-protection-guide/) altında (8
@@ -287,20 +292,24 @@ open "https://github.com/ali-han-kaya/leibniz2/settings/branches"
    - **Ön koşul:** check'lerin arama listesinde görünmesi için o branch'te CI'ın
      **en az bir kez koşmuş** olması gerekir. Yeni/boş repoda kural kuruyorsan önce
      bir push ya da PR ile workflow'u tetikle, yeşil run'ı bekle, sonra bu adıma dön.
-   - Arama kutusuna şu **9 adı** tek tek yazıp seç (birebir, `—` karakteri dahil):
+   -   Arama kutusuna şu **10 adı** tek tek yazıp seç (birebir, `—` karakteri dahil):
      1. `Delivery verification — K1-K9 (single entry point)`
      2. `Action runtime check (node24)`
      3. `Budget shield (aggregated)`
      4. `Pre-commit P0 label gate`
-     5. `Static markdown reports (incl. pre-commit findings)`
-     6. `Reproducibility bundle`
-     7. `Config drift check (gen_config + diff-on-drift)`
-     8. `Repack determinism + verify (sidecar sync)`
-     9. `Online verification trend (refs-online across runs)`
+     5. `Pre-commit P1 label gate (optional)`
+     6. `Static markdown reports (incl. pre-commit findings)`
+     7. `Reproducibility bundle`
+     8. `Config drift check (gen_config + diff-on-drift)`
+     9. `Repack determinism + verify (sidecar sync)`
+     10. `Online verification trend (refs-online across runs)`
      > `manifest-comment` job'ı yalnızca PR'da koşar — required check DEĞİL; ekleme.
-     > `Pre-commit P0 label gate` de yalnızca PR'da koşar ama BİLEREK required
+     > `Pre-commit P0 label gate` yalnızca PR'da koşar ama BİLEREK required
      > check'tir: precommit-p0 etiketi varken FAIL verip merge'i bloke eder
-     > (aşağıdaki "P0 label gate — etiket kapısı" bölümüne bak).
+     > (aşağıdaki "P0 label gate" bölümüne bak).
+     > `Pre-commit P1 label gate (optional)` aynı desende opsiyonel bir gatedir:
+     > branch protection'a eklenirse P1 bulguları merge'i bloke eder; eklenmezse
+     > sadece bilgilendirme rozeti olarak kalır.
    - **"Require branches to be up to date before merging"** ✓ (strict) — PR'ın base'i
      main'in gerisindeyse merge reddedilir.
 
@@ -315,7 +324,7 @@ open "https://github.com/ali-han-kaya/leibniz2/settings/branches"
 9. **Doğrula (otomatik):** koruma kurulduktan sonra:
    ```bash
    python3 _calisma/CIKTI/status_checks.py --gh
-   # SONUÇ: PASS — 9 check birebir eşleşiyor (workflow ↔ GitHub)
+   # SONUÇ: PASS — 10 check birebir eşleşiyor (workflow ↔ GitHub)
    ```
    Eksik/fazla check → exit 1 (fail-closed): listeyi `status_checks.py` çıktısıyla
    eşitle veya workflow'u güncelle.
@@ -358,19 +367,28 @@ etikete göre yanlış geçmez/bloke etmez.
 **Doğrula (yerel, git gerektirmez):**
 ```bash
 python3 _calisma/CIKTI/status_checks.py
-# → listede "Pre-commit P0 label gate" (toplam 9 check)
+# → listede "Pre-commit P0 label gate" ve "Pre-commit P1 label gate (optional)"
+#   (toplam 10 check)
 ```
 
-**Davranış tablosu:**
+**Davranış tablosu (P0 — zorunlu):**
 
 | PR'da `precommit-p0` | label-gate sonucu | Merge |
 |---|---|---|
 | Yok | ✅ PASS | izinli |
 | Var | ❌ FAIL | bloke (P0 giderilene dek) |
 
-> P1 (`precommit-p1`) bilinçli olarak kapı DEĞİLDİR — advisory uyarı olarak
-> kalır (yalnızca P0 kritik bulgu merge'i bloke eder). İstenirse aynı desenle
-> bir `precommit-p1` kapısı da eklenebilir.
+**Davranış tablosu (P1 — opsiyonel):**
+
+| PR'da `precommit-p1` | label-gate-p1 sonucu | Merge |
+|---|---|---|
+| Yok | ✅ PASS | izinli |
+| Var | ❌ FAIL | branch protection'a ekliyse bloke, ekli değilse izinli |
+
+> P0 ve P1 gate'leri aynı deseni kullanır: `budget` job'u etiketi PR'a ekler/
+> kaldırır, `label-gate`/`label-gate-p1` job'u `needs: [budget]` ile canlı
+> REST okumasıyla doğrular. P0 her zaman required; P1 opsiyoneldir —
+> branch protection'a eklenirse merge'i bloke eder.
 
 ---
 
@@ -438,13 +456,14 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 --exit-status` + artifact listesi; sonuç `SONUÇ: PASS/FAIL` olarak loglanır
 (dry-run'da yalnızca önizlenir).
 
-**Beklenen (12 job):**
+**Beklenen (13 job):**
 | Job | Beklenen sonuç |
 |---|---|
-| Delivery verification — K1-K9 (single entry point) | ✅ PASS (P0=0, P1=0) — K0-K7 + K8 (Z3 12/12) + K9 (Lean) + K11 (config drift) + K13 (repro self-test) + K14 (cleanup) tek komutta (`--full`); pre-commit 9 hook'u advisory bölüm olarak aynı job içinde. *Job adı branch-protection required check'i olduğu için değiştirilmedi; kapsam K1-K14'tür* |
+| Delivery verification — K1-K9 (single entry point) | ✅ PASS (P0=0, P1=0) — K0-K7 + K8 (Z3 12/12) + K9 (Lean) + K11 (config drift) + K13 (repro self-test) + K14 (cleanup) tek komutta (`--full`); pre-commit 9 hook'u advisory bölüm olarak aynı job içinde. Ayrıca: hook kurulum doğrulama (`setup_commit_hooks.sh --check-only`) + commit-msg blokaj kanıtı (`gen_commit_msg_evidence.py` → `COMMIT_MSG_BLOCK_EVIDENCE.md`, 28 test senaryosu). *Job adı branch-protection required check'i olduğu için değiştirilmedi; kapsam K1-K14'tür* |
 | Action runtime check (node24) | ✅ her `uses:` action'ın `runs.using=node24` olduğu doğrulanır (deprecated node → FAIL); verify ile paralel |
 | Budget shield (aggregated) | ✅ limit içinde (sidecar birleştirildi); PR'da tek "PR doğrulama durumu" yorumu (bütçe + pre-commit) + precommit-p0/p1 etiketi — yorum `github_scripts/pr_status_comment.js`'ten (`scriptPath`, inline `script:` yok) |
 | Pre-commit P0 label gate | ✅ precommit-p0 etiketi yoksa PASS; varsa FAIL (merge bloke — required check) — kontrol `github_scripts/label_gate.js`'ten (`scriptPath`); checkout eklendi (scriptPath çalışma dizini gerektirir) |
+| Pre-commit P1 label gate (optional) | ✅ precommit-p1 etiketi yoksa PASS; varsa FAIL — P0 ile aynı desen (`label_gate_p1.js`); branch protection'a eklenirse merge bloke, eklenmezse bilgilendirme rozeti |
 | Static markdown reports (incl. pre-commit findings) | ✅ bundle yüklendi |
 | Reproducibility bundle | ✅ manifest.txt + SHA-256 (run_id ile) — K10 `--verify-manifest` fail-closed digest bu job'da koşar; ayrıca `manifest.sha256` AYRI adım olarak `sha256sum -c` ile doğrulanır (K10'dan bağımsız standart araç, upload sonrası) |
 | Config drift check (gen_config + diff-on-drift) | ✅ config paketle uyumlu; drift bulguları PR yorumu olarak `github_scripts/config_drift_comment.js`'ten düşer (`scriptPath`) |

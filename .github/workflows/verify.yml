@@ -105,6 +105,49 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      # ─── Label gate sözleşme denetimi (advisory) ────────────────────────
+      # label_gate.js / label_gate_p1.js ile verify.yml label-gate job'ları
+      # arasındaki tutarlılığı doğrular: doğru etiket adı, listLabelsOnIssue
+      # çağrısı, setFailed onComplete, workflow job referansları. Drift
+      # tespit edilirse (yanlış etiket adı, eksik JS, job JS eşleşmiyor)
+      # test FAIL eder ama continue-on-error build'i bloke ETMEZ.
+      - name: Label gate contract check (advisory)
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: |
+          python3 -m unittest _calisma.CIKTI.test_label_gate_contracts -v 2>&1
+          echo "label gate contract check: $?"
+
+      # ─── Label senkronizasyonu (advisory) ──────────────────────────────
+      # label_definitions.json'daki tanımlara göre precommit-p0/p1
+      # etiketlerinin renk/açıklamasını repo ile eşitler. Yeni etiket
+      # oluşturur, mevcut olanları günceller. push'ta çalışır (PR'da
+      # GITHUB_TOKEN label oluşturamayabilir — advisory: hata bloke etmez).
+      # ─── Label tanım doğrulama (advisory) ──────────────────────────────
+      # label_definitions.json'daki precommit-p0/p1 etiketlerinin repo'da
+      # tanımlı olduğunu, renk/açıklamanın eşleştiğini doğrular.
+      # Değişiklik yapmaz (dry-run); sync_labels.js'den önce çalışır.
+      - name: Validate label definitions (advisory)
+        if: always()
+        continue-on-error: true
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('_calisma/CIKTI/github_scripts/validate_labels.js', 'utf8');
+            await eval(`(async () => {\n${body}\n})()`);
+
+      - name: Sync label definitions (advisory)
+        if: always() && github.event_name == 'push'
+        continue-on-error: true
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('_calisma/CIKTI/github_scripts/sync_labels.js', 'utf8');
+            await eval(`(async () => {\n${body}\n})()`);
+
       - name: Install pre-commit (advisory pre-commit section)
         run: pip install pre-commit
 
@@ -228,11 +271,47 @@ jobs:
           python3 _calisma/CIKTI/check_commit_messages.py --range "$RANGE" \
             --out logs/commit_msg_findings.json
 
+      # ─── HOOK KURULUM DOĞRULAMA (advisory) ──────────────────────────────
+      # setup_commit_hooks.sh'i CI'da koşarak pre-commit + commit-msg
+      # hook'larının kurulabildiğini ve kurulu olduğunu doğrular.
+      # Yereldeki publish_precheck.sh (a2) ile aynı ölçütü test eder.
+      - name: Verify hook installation (advisory)
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: |
+          bash _calisma/CIKTI/setup_commit_hooks.sh --check-only
+
+      # ─── COMMIT-MSG BLOCK EVIDENCE (advisory) ──────────────────────────
+      # commit_msg_hook.sh'i 28 test mesajıyla çalıştırıp hangi başlıkların
+      # bloke/izin olduğunu COMMIT_MSG_BLOCK_EVIDENCE.md olarak raporlar.
+      # Hook kuralları değişirse bu dosya da değişir (deterministik kanıt).
+      - name: Generate commit-msg block evidence (advisory)
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: |
+          python3 _calisma/CIKTI/gen_commit_msg_evidence.py \
+            --out COMMIT_MSG_BLOCK_EVIDENCE.md
+
       - name: Generate pre-commit findings report
         if: always()
         shell: bash
         run: |
           python3 _calisma/CIKTI/gen_precommit_report.py
+
+      # Şema doğrulaması: PRECOMMIT_RAPORU.json'un yapısı schema ile
+      # eşleşmeli (fail-closed: bozuk JSON=FAIL). jsonschema pip'te var
+      # (CI setup-python adımında); schema dosyası _calisma/CIKTI/ altındadır.
+      - name: Validate PRECOMMIT_RAPORU.json schema
+        if: always()
+        shell: bash
+        run: |
+          if [ -f logs/PRECOMMIT_RAPORU.json ]; then
+            python3 -c 'import json, jsonschema, sys; schema=json.load(open("logs/PRECOMMIT_RAPORU.schema.json")); data=json.load(open("logs/PRECOMMIT_RAPORU.json")); jsonschema.validate(data, schema); print("PRECOMMIT_RAPORU.json schema: PASS")' 2>&1 | tee -a logs/precommit_schema_check.txt || echo "PRECOMMIT_RAPORU.json schema: FAIL" >> logs/precommit_schema_check.txt
+          else
+            echo 'PRECOMMIT_RAPORU.json yok — atlandı'
+          fi
 
       # ÖZET: pre-commit cache durumu + hook env sürümleri. Tekrarlanabilirlik
       # denetimi için: hangi pre-commit sürümü, hangi hook ortamları (env
@@ -289,17 +368,29 @@ jobs:
       # comment" adımına taşındı: tek PR yorumu hem bütçe hem pre-commit
       # durumunu gösterir; precommit-p0/p1 etiketleri de orada yönetilir.
 
+      # ─── Durum panosu: GITHUB_STEP_SUMMARY'nin en başına yaz ──────────
+      # Dashboard satırı job summary'nin İLK satırı olarak yazılır; böylece
+      # GitHub Actions UI'ında run summary'nin en üstünde görünür. Detay
+      # bölümler consolidate_summary.py tarafından altına eklenir.
+      - name: Write status dashboard header (top of job summary)
+        if: always()
+        shell: bash
+        run: |
+          python3 _calisma/CIKTI/consolidate_summary.py --dashboard-only
+
       # ─── Tüm run summary bölümlerini TEK giriş noktasından üret ─────────
       # consolidate_summary.py, pre-commit + K0 + bütçe + soy hattı + K
       # katmanları bölümlerini AYNI GITHUB_STEP_SUMMARY'ye sırayla yazar
       # (her bölümün render mantığı ilgili run_summary_*.py modülündedir —
       # tek kaynak; sidecar'lar verify job'unun çalışma dizinindedir).
+      # --skip-dashboard: dashboard zaten yukarıda yazıldı, burada yalnızca
+      # detay bölümler eklenir (çift yazım önlenir).
       # if: always(): --full başarısız olsa bile advisory bulgular özetlenir.
       - name: Consolidate run summary (pre-commit + K0 + bütçe + soy hattı + K katmanları)
         if: always()
         shell: bash
         run: |
-          python3 _calisma/CIKTI/consolidate_summary.py
+          python3 _calisma/CIKTI/consolidate_summary.py --skip-dashboard
 
       - name: Generate SHA-256 for verify artifacts
         shell: bash
@@ -647,6 +738,63 @@ jobs:
             const body = fs.readFileSync('_calisma/CIKTI/github_scripts/label_gate.js', 'utf8');
             await eval(`(async () => {\n${body}\n})()`);
 
+  # ──────────────────────────────────────────────────────────────────────
+  # P1 LABEL GATE — precommit-p1 etiketi merge'i opsiyonel olarak bloke eder.
+  #
+  # P0 ile aynı desen: budget job'unun "PR status" adımında üretilen
+  # precommit-p1 etiketi PR'da varsa core.setFailed ile FAIL verir.
+  # Branch protection'da bu check adı required listesine eklenirse
+  # P1 bulguları giderilene dek merge bloke olur.
+  # P0'dan FARK: bu gate opsiyoneldir — branch protection'a eklenmezse
+  # etiket yalnızca bilgilendirme purposes ile kalır (P0 gate zorunlu,
+  # P1 gate tercihe bağlı). Yalnızca pull_request'te koşar.
+  # ──────────────────────────────────────────────────────────────────────
+  label-gate-p1:
+    name: Pre-commit P1 label gate (optional)
+    runs-on: ubuntu-latest
+    needs: [budget]
+    if: always() && github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Fail if precommit-p1 label is present
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('_calisma/CIKTI/github_scripts/label_gate_p1.js', 'utf8');
+            await eval(`(async () => {\n${body}\n})()`);
+
+  # ──────────────────────────────────────────────────────────────────────
+  # COMMIT-MSG GATE — commit-msg ihlali varsa PR'ı bloke eder.
+  #
+  # verify job'unda check_commit_messages.py'nin ürettiği
+  # logs/commit_msg_findings.json sidecar'ını okur; violations boş
+  # değilse core.setFailed ile FAIL verir. Branch protection'da bu
+  # check adı required listesine eklenince tüm commit-msg ihlalleri
+  # giderilene dek merge bloke olur.
+  # ──────────────────────────────────────────────────────────────────────
+  commit-msg-gate:
+    name: Commit-msg gate
+    runs-on: ubuntu-latest
+    needs: [verify]
+    if: always() && github.event_name == 'pull_request'
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Fail if commit-msg violations exist
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('_calisma/CIKTI/github_scripts/commit_msg_gate.js', 'utf8');
+            await eval(`(async () => {\n${body}\n})()`);
+
 
   reports:
     name: Static markdown reports (incl. pre-commit findings)
@@ -851,33 +999,42 @@ jobs:
           echo "$verdict" > k10_verdict.txt
           echo "K10 manifest digest verdict: $verdict"
 
-      - name: Upsert manifest.txt PR comment (tek yorum güncelle)
+      # ─── Manifest + config-diff PR yorumları — TEK github-script adımı ──
+      # github-script@v8 scriptPath input'unu DESTEKLEMEZ (yalnızca 'script').
+      # Dosyalar TEK KAYNAK kalır: selftest harness'ıyla aynı (async () => { …
+      # })() sarmalıyla okunup eval edilir. İki script aynı github-script
+      # kapsamında koştuğu için yorum listesi BİR KEZ çekilir ve her ikisine
+      # EXISTING_COMMENTS olarak verilir — API çağrısı 2'den 1'e iner (script
+      # içindeki fallback sayesinde tek başına koşum da çalışır).
+      #
+      # manifest_comment.js — reproducibility manifest.txt içeriğini tek yorum
+      #   olarak upsert eder (marker: stoic-hume-v5-reproducibility-manifest).
+      # config_diff_comment.js — config/config-diff.json (verify job'unun
+      #   diff_config_artifacts.py çıktısı) okur; fark varsa ayrı bir upsert
+      #   yorum düşülür (marker: stoic-hume-v5-config-diff), fark yoksa bayat
+      #   uyarı yorumu KALDIRILIR (yanıltıcı kalmaz). Advisory: bloke etmez;
+      #   bloke eden kapı config-drift.
+      - name: Upsert manifest + config-diff PR comments (tek adım, paylaşılan yorum listesi)
         uses: actions/github-script@v8
         with:
-          # github-script@v8 scriptPath input'unu DESTEKLEMEZ (yalnızca
-          # 'script'). Dosya TEK KAYNAK kalır: selftest harness'ıyla aynı
-          # (async () => { … })() sarmalıyla okunup çalıştırılır.
           script: |
             const fs = require('fs');
-            const body = fs.readFileSync('_calisma/CIKTI/github_scripts/manifest_comment.js', 'utf8');
-            await eval(`(async () => {\n${body}\n})()`);
+            // Yorum listesini BİR KEZ çek — iki script paylaşır (API çağrısı
+            // azalır). Script'ler EXISTING_COMMENTS'i görürse kendi
+            // listComments çağrısını yapmaz; görmezse (selftest harness'ı)
+            // fallback'e düşer — davranış aynıdır.
+            const { data: EXISTING_COMMENTS } = await github.rest.issues.listComments({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              per_page: 100,
+            });
 
-      # ─── Config diff (raw vs effective) — advisory PR yorumu ────────────
-      # reproducibility bundle'ındaki config/config-diff.json (verify job'unun
-      # diff_config_artifacts.py çıktısı) okunur; fark varsa ayrı bir upsert
-      # yorum düşülür (marker: stoic-hume-v5-config-diff). Fark yoksa bayat
-      # uyarı yorumu KALDIRILIR — böylece çözülen diff yanıltıcı kalmaz.
-      # Advisory: config-diff bloke etmez (bloke eden kapı config-drift).
-      - name: Upsert config-diff PR comment (tek yorum güncelle)
-        uses: actions/github-script@v8
-        with:
-          # github-script@v8 scriptPath input'unu DESTEKLEMEZ (yalnızca
-          # 'script'). Dosya TEK KAYNAK kalır: selftest harness'ıyla aynı
-          # (async () => { … })() sarmalıyla okunup çalıştırılır.
-          script: |
-            const fs = require('fs');
-            const body = fs.readFileSync('_calisma/CIKTI/github_scripts/config_diff_comment.js', 'utf8');
-            await eval(`(async () => {\n${body}\n})()`);
+            const mBody = fs.readFileSync('_calisma/CIKTI/github_scripts/manifest_comment.js', 'utf8');
+            await eval(`(async () => {\n${mBody}\n})()`);
+
+            const cBody = fs.readFileSync('_calisma/CIKTI/github_scripts/config_diff_comment.js', 'utf8');
+            await eval(`(async () => {\n${cBody}\n})()`);
 
   # ──────────────────────────────────────────────────────────────────────
   # CONFIG DRIFT CHECK
@@ -981,11 +1138,14 @@ jobs:
             > cli_override_stdout.txt 2>&1 || true
           cat cli_override_stdout.txt
 
-      # Drift tespit edilirse (exit 1) bulguları PR yorumuna düş.
+      # Drift durumunu PR yorumuna SENKRONLAR (state-sync): drift tespit
+      # edilirse (exit 1/2) bulguları yorum olarak düşer, drift ÇÖZÜLDÜYSE
+      # (exit 0) önceki run'ın bayat uyarısını SİLER — yanıltıcı kalmaz
+      # (config_diff_comment.js ile aynı create/update/delete deseni).
       # Yalnızca pull_request olayında; push'ta atlanır. Upsert: aynı yorumu
       # günceller, yeni yorum biriktirmez. Fail-closed kapı SONRAKİ adımda.
       - name: Post config drift findings as PR comment
-        if: github.event_name == 'pull_request' && steps.drift.outputs.rc != '0'
+        if: github.event_name == 'pull_request'
         uses: actions/github-script@v8
         with:
           # github-script@v8 scriptPath input'unu DESTEKLEMEZ (yalnızca

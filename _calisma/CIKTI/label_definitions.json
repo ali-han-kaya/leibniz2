@@ -1,0 +1,14 @@
+{
+  "labels": [
+    {
+      "name": "precommit-p0",
+      "color": "d93f0b",
+      "description": "P0 bulgusu: kritik sorun — merge bloke (required status check)"
+    },
+    {
+      "name": "precommit-p1",
+      "color": "e3b341",
+      "description": "P1 bulgusu: iyileştirme gerekli — opsiyonel bloke"
+    }
+  ]
+}

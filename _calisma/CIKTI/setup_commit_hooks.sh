@@ -10,11 +10,20 @@
 # birebir aynısıdır — betik kurar, precheck doğrular (tek ölçüt).
 #
 # Kullanım (repo kökünden veya herhangi bir yerden):
-#   bash _calisma/CIKTI/setup_commit_hooks.sh
+#   bash _calisma/CIKTI/setup_commit_hooks.sh              # kur + doğrula
+#   bash _calisma/CIKTI/setup_commit_hooks.sh --check-only  # yalnızca denetle
 #
 # Ön koşul: pre-commit kurulu (PATH'te veya _calisma/.venv_z3/bin altında).
 #   pip install pre-commit
 set -uo pipefail
+
+CHECK_ONLY=0
+for a in "$@"; do
+  case "$a" in
+    --check-only) CHECK_ONLY=1 ;;
+    *) echo "Bilinmeyen bayrak: $a (geçerli: --check-only)" >&2; exit 2 ;;
+  esac
+done
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
@@ -33,7 +42,11 @@ else
   exit 2
 fi
 
-echo "=== commit-msg + pre-commit kurulumu ==="
+if [ "$CHECK_ONLY" -eq 1 ]; then
+  echo "=== denetleme (--check-only) ==="
+else
+  echo "=== commit-msg + pre-commit kurulumu ==="
+fi
 echo "repo      : $REPO_ROOT"
 echo "pre-commit: $PC ($("$PC" --version 2>/dev/null))"
 echo ""
@@ -41,34 +54,41 @@ echo ""
 cd "$REPO_ROOT" || exit 2
 FAILED=0
 
-# 1) commit.template — şablon başlık (commit_msg_hook.sh ile aynı kural).
-git config commit.template .gitmessage
-if [ "$(git config commit.template)" = ".gitmessage" ] && [ -f .gitmessage ]; then
-  pass "commit.template = .gitmessage"
-else
-  fail "commit.template kurulamadı (.gitmessage kökte olmalı)"
-  FAILED=1
-fi
+if [ "$CHECK_ONLY" -eq 0 ]; then
+  # ── Kurulum modu ────────────────────────────────────────────────────────
+  # 1) commit.template — şablon başlık (commit_msg_hook.sh ile aynı kural).
+  git config commit.template .gitmessage
+  if [ "$(git config commit.template)" = ".gitmessage" ] && [ -f .gitmessage ]; then
+    pass "commit.template = .gitmessage"
+  else
+    fail "commit.template kurulamadı (.gitmessage kökte olmalı)"
+    FAILED=1
+  fi
 
-# 2) pre-commit stage (update-config + verify-delivery + Z3 + Lean kapıları).
-if "$PC" install >/dev/null 2>&1; then
-  pass "pre-commit stage kuruldu (.git/hooks/pre-commit)"
-else
-  fail "pre-commit install başarısız"
-  FAILED=1
-fi
+  # 2) pre-commit stage (update-config + verify-delivery + Z3 + Lean kapıları).
+  if "$PC" install >/dev/null 2>&1; then
+    pass "pre-commit stage kuruldu (.git/hooks/pre-commit)"
+  else
+    fail "pre-commit install başarısız"
+    FAILED=1
+  fi
 
-# 3) commit-msg stage (commit_msg_hook.sh — başlık denetimi).
-if "$PC" install --hook-type commit-msg >/dev/null 2>&1; then
-  pass "commit-msg stage kuruldu (.git/hooks/commit-msg)"
-else
-  fail "pre-commit install --hook-type commit-msg başarısız"
-  FAILED=1
+  # 3) commit-msg stage (commit_msg_hook.sh — başlık denetimi).
+  if "$PC" install --hook-type commit-msg >/dev/null 2>&1; then
+    pass "commit-msg stage kuruldu (.git/hooks/commit-msg)"
+  else
+    fail "pre-commit install --hook-type commit-msg başarısız"
+    FAILED=1
+  fi
 fi
 
 # ── Doğrulama (docs/publish_precheck.sh (a2) ile AYNI ölçüt) ─────────────
 echo ""
-echo "=== doğrulama (publish_precheck.sh (a2) ile aynı ölçüt) ==="
+if [ "$CHECK_ONLY" -eq 1 ]; then
+  echo "=== denetleme sonucu (--check-only) ==="
+else
+  echo "=== doğrulama (publish_precheck.sh (a2) ile aynı ölçüt) ==="
+fi
 TMPL="$(git config commit.template || true)"
 if [ "$TMPL" = ".gitmessage" ]; then
   pass "commit.template = $TMPL"
