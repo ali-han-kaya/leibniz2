@@ -88,10 +88,7 @@ jobs:
           # actionlint exit 2 = warnings/hints (shellcheck info), exit 1 = errors
           # YAML yapışıklığı / syntax hataları exit 1 verir; shellcheck
           # bilgi notları exit 2 — bunlar fail-closed DEĞİL advisory.
-          set +e
-          /tmp/actionlint --color .github/workflows/verify.yml 2>&1
-          ACT_RC=$?
-          set -eo pipefail
+          ACT_RC=0; /tmp/actionlint --color .github/workflows/verify.yml 2>&1 || ACT_RC=$?
           if [ "$ACT_RC" -eq 1 ]; then
             echo "actionlint: FAIL — workflow syntax/structural error"
             exit 1
