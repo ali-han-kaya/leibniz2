@@ -44,7 +44,14 @@ except ImportError:  # pragma: no cover
 
 WORKFLOW = ".github/workflows/verify.yml"
 # Required check OLMAYAN job'lar: PR-only/advisory (yanlış kapı olmasın).
-GATE_EXCLUDE = {"manifest-comment", "precheck"}  # precheck: AŞAMA 0 advisory
+GATE_EXCLUDE = {
+    "manifest-comment",    # PR-only: yorum düşürme
+    "precheck",             # AŞAMA 0 advisory
+    "label-gate",           # PR-only: P0 etiket blokajı
+    "label-gate-p1",        # PR-only: P1 etiket opsiyonel blokaj
+    "commit-msg-gate",      # PR-only: commit-msg ihlal blokajı
+    "plist-check",          # macOS-advisory: push'ta çalışmaz
+}
 
 
 def gate_jobs():

@@ -52,15 +52,20 @@ class TestGateJobs(unittest.TestCase):
         gates = sc.gate_jobs()
         self.assertNotIn("manifest-comment", gates)
         self.assertNotIn("precheck", gates)
+        self.assertNotIn("label-gate", gates)       # PR-only
+        self.assertNotIn("label-gate-p1", gates)    # PR-only
+        self.assertNotIn("commit-msg-gate", gates)   # PR-only
+        self.assertNotIn("plist-check", gates)       # macOS-advisory
         # Node 24 yükseltmesiyle eklenen job required aday olmalı.
         self.assertIn("action-runtimes", gates)
         self.assertEqual(gates["action-runtimes"],
                          "Action runtime check (node24)")
 
     def test_count_matches_workflow_minus_excludes(self):
-        # 14 job − 2 hariç = 12 required aday (tek kaynak: workflow).
-        # (commit-msg-gate eklendi: commit-msg ihlali bloke gate)
-        self.assertEqual(len(sc.gate_jobs()), 12)
+        # 14 job − 6 hariç = 8 required aday (tek kaynak: workflow).
+        # Hariç: manifest-comment, precheck, label-gate, label-gate-p1,
+        #        commit-msg-gate, plist-check
+        self.assertEqual(len(sc.gate_jobs()), 8)
 
 
 @unittest.skipUnless(HAVE_YAML, "PyYAML gerekli")
