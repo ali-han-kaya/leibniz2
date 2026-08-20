@@ -9,7 +9,9 @@
 #   2. pre-commit run --all-files (advisory) → verify_report.txt'ye APPEND
 #   3. gen_precommit_report.py → logs/PRECOMMIT_RAPORU.md
 #   4. pre-commit cache + hook env özeti → logs/PRECOMMIT_CACHE.md
-#   5-7. run_summary_{precommit,k0,budget} → GITHUB_STEP_SUMMARY (3 bölüm)
+#   5a. dashboard header → GITHUB_STEP_SUMMARY (--dashboard-only)
+#   5b. detail sections → GITHUB_STEP_SUMMARY (--skip-dashboard, append)
+#   5c. validate summary.md (env-snapshot)
 #   8. sha256sum → verify_report.sha256 + refs/history .sha256
 #   9. config bundle → config/ + config.sha256
 #   10. diff_config_artifacts.py → config/config-diff.json (advisory)
@@ -161,13 +163,61 @@ step_cache_summary() {
   echo "PRECOMMIT_CACHE.md yazıldı"
 }
 
-# ── 5) run summary bölümleri (tek GITHUB_STEP_SUMMARY, tek giriş noktası) ──
-# consolidate_summary.py pre-commit + K0 + bütçe + soy hattı + K katmanları
-# bölümlerini AYNI summary.md'ye sırayla yazar (CI'daki tek adımla birebir).
+# ── 5a) dashboard header (GITHUB_STEP_SUMMARY --dashboard-only) ──────────
+# CI'daki "Write status dashboard header" adımıyla birebir: GITHUB_STEP_SUMMARY
+# env'i set edilir, yoksa summary_sink() stdout'a düşer (env-snapshot hatası
+# yakalanmaz). Bu adım, env dosyası olduğunda write hatasını yerelde yakalar.
+step_dashboard_header() {
+  cd "$SIM_DIR"
+  export GITHUB_STEP_SUMMARY="$SIM_DIR/summary.md"
+  # Dizin yoksa oluştur — CI'da runner zaten /tmp'de çalışır.
+  mkdir -p "$(dirname "$GITHUB_STEP_SUMMARY")"
+  "$PY" "$REPO_ROOT/_calisma/CIKTI/consolidate_summary.py" --dashboard-only
+}
+
+# ── 5b) consolidate detail sections (--skip-dashboard) ─────────────────────
+# CI'daki "Consolidate run summary" adımıyla birebir: dashboard zaten
+# step_dashboard_header tarafından yazıldı, burada yalnızca detay bölümler
+# GITHUB_STEP_SUMMARY'ye APPEND edilir (append modu: stdout fallback yok).
 step_consolidate_summary() {
   cd "$SIM_DIR"
-  GITHUB_STEP_SUMMARY="$SIM_DIR/summary.md" \
-    "$PY" "$REPO_ROOT/_calisma/CIKTI/consolidate_summary.py"
+  export GITHUB_STEP_SUMMARY="$SIM_DIR/summary.md"
+  "$PY" "$REPO_ROOT/_calisma/CIKTI/consolidate_summary.py" --skip-dashboard
+}
+
+# ── 5c) env-snapshot validation ─────────────────────────────────────────────
+# summary.md oluştu mu, boş mu, yazılabilir mi — CI'da GITHUB_STEP_SUMMARY
+# dosyası GitHub tarafından otomatik create edilir; yerelde biz oluşturduk,
+# ama write hatası, encoding sorunu veya empty summary yakalanmalı.
+step_validate_summary() {
+  cd "$SIM_DIR"
+  local summary="$SIM_DIR/summary.md"
+  local errors=0
+  if [ ! -f "$summary" ]; then
+    echo "❌ HATA: summary.md oluşturulamadı — GITHUB_STEP_SUMMARY write başarısız"
+    errors=$((errors + 1))
+  elif [ ! -s "$summary" ]; then
+    echo "❌ HATA: summary.md boş — dashboard header veya detail sections yazmadı"
+    errors=$((errors + 1))
+  else
+    local lines=$(wc -l < "$summary")
+    local bytes=$(wc -c < "$summary" | tr -d ' ')
+    echo "✅ summary.md: $lines satır, $bytes bayt"
+    # Dashboard satırı var mı?
+    if grep -q '📊 Durum panosu' "$summary"; then
+      echo "✅ Dashboard header mevcut"
+    else
+      echo "⚠️  Dashboard header summary.md içinde bulunamadı (eksik olabilir)"
+    fi
+    # Detail sections var mı? (en az bir section header)
+    if grep -qE '^## ' "$summary"; then
+      local sections=$(grep -cE '^## ' "$summary")
+      echo "✅ Detail sections: $sections bölüm"
+    else
+      echo "⚠️  Detail section başlığı bulunamadı (boş olabilir)"
+    fi
+  fi
+  return $errors
 }
 
 # ── 8) SHA-256 sidecar'ları ────────────────────────────────────────────────
@@ -213,7 +263,9 @@ main() {
   run_step "Check commit messages (advisory)"            advisory step_commit_msg
   run_step "Generate pre-commit findings report"         closed step_gen_report
   run_step "Pre-commit cache + hook env summary"         closed step_cache_summary
-  run_step "Consolidate run summary (5 bölüm)"            closed step_consolidate_summary
+  run_step "Write status dashboard header (GITHUB_STEP_SUMMARY)" closed step_dashboard_header
+  run_step "Consolidate detail sections (--skip-dashboard)"      closed step_consolidate_summary
+  run_step "Validate env-snapshot (summary.md)"          closed step_validate_summary
   run_step "Generate SHA-256 for verify artifacts"       closed step_sha256
   run_step "Bundle config snapshot"                      closed step_config_bundle
   run_step "Generate config diff (advisory)"             advisory step_config_diff
@@ -240,7 +292,7 @@ main() {
 
   echo "Çıktılar: $SIM_DIR"
   echo "  verify_report.txt        (--full + pre-commit append, tek log)"
-  echo "  summary.md               (durum panosu + pre-commit + K0 + bütçe + soy hattı + K katmanları)"
+  echo "  summary.md               (dashboard header + pre-commit + K0 + bütçe + soy hattı + K katmanları)"
   echo "  verify_report.sha256     (+ refs/history .sha256)"
   echo "  config/                  (ham + şema + etkin + diff + .sha256)"
   echo "  logs/                    (precommit.log + PRECOMMIT_RAPORU.md/.json + CACHE)"
