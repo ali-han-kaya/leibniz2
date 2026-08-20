@@ -63,8 +63,82 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 | 2026-08-19 | (tümü) | Repo canlı duruma göre yeniden yazıldı: AŞAMA 1-2 `UYGULANDI` işaretlendi, ana akış `INCREMENTAL PUSH` günlük döngüsü oldu (AŞAMA 1 (b) BEKLEMEDE) | `e708e45` |
 | 2026-08-19 | AŞAMA 1/3 | Node 24 yükseltmesi işlendi: `action-runtimes` job'ı + `check-action-pins` pre-commit kapısı (job 11, required check 9, pre-commit 6) | `1f84ba4` |
 | 2026-08-21 | AŞAMA 3 | commit-msg blokaj kanıtı: `gen_commit_msg_evidence.py` (28 test senaryosu) + `COMMIT_MSG_BLOCK_EVIDENCE.md` CI'da periyodik üretilir; `setup_commit_hooks.sh --check-only` CI advisory adımı eklendi | (çalışma ağacı — commit yok) |
+| 2026-08-21 | AŞAMA 3 | label sync/validate Octokit düzeltmesi: `listLabels` → `listLabelsForRepo` (selftest mock + battery expectations güncellendi) | `309a14f` |
+| 2026-08-21 | AŞAMA 3 | simulate_verify_job.sh: GITHUB_STEP_SUMMARY + env-snapshot validation + iki aşamalı summary (dashboard-only → skip-dashboard) | `2282925` |
+| 2026-08-21 | AŞAMA 3 | shellcheck lint: `shellcheck_hooks.sh` (sh: verify_lean + commit_msg; bash: update_config) + `lint_actionlint.sh` (RC≤2 advisory) + pre-commit + CI adımı | `ae55009` |
 
 ---
+
+## Regresyon Notları — Son 3 CI Kırılması (2026-08-21)
+
+> Bu bölüm, 2026-08-19/21 döneminde yaşanan ve CI'ıRED'e düşüren 3 kök-nedenli kırılmayı,
+> nedenlerini ve kalıcı düzeltmelerini belgeler.
+
+### R1: Yapışık YAML Adımı (`d57a60c`, 2026-08-19)
+
+**Belirti:** CI run'ları 0 saniyede `success` dönüyordu amahiçbir job çalışmıyordu
+(0 job); GitHub Actions UI'ında run boş görünüyordu.
+
+**Kök neden:** `verify.yml` bütçe job'undaki "PR status" script'inin kapanış `}` karakteri ile
+sonraki "Upload budget bundle" adımının `uses:`/`if:` anahtarı aynı satıra yapışmıştı.
+Bu, YAML parser'ın script bloğunu sonraki adıma gömmesine yol açıyordu —
+ıki uses:/if: aynı step'e düşüyordu ve workflow ayrıştırılamıyordu.
+
+**Düzeltme:** Satır ayrımı + `yamllint`/`actionlint` ile doğrulama.
+
+**Önleme:** `actionlint` pre-commit kapısı + CI advisory adımında her push'ta
+YAML syntax doğrulanıyor; yapışık satır ≥2-Level hata olarak yakalanıyor.
+
+### R2: Env-Snapshot Boşlu (`2282925`, 2026-08-21)
+
+**Belirti:** `simulate_verify_job.sh` yerelde koşulduğunda, `consolidate_summary.py`
+`GITHUB_STEP_SUMMARY` env'i set olmadığı için stdout'a yazıyordu —
+write hatası,encoding sorunu veya boş summary yerelde yakalanmıyordu.
+
+**Kök neden:** CI'da GitHub runner `GITHUB_STEP_SUMMARY` dosyasınıotomatik oluşturur;
+yerel simülasyonda ise env boştu ve `summary_sink()` stdout'a düşüyordu.
+
+**Düzeltme:** `simulate_verify_job.sh`'e 3 yeni adım eklendi:
+1. `step_dashboard_header` — `GITHUB_STEP_SUMMARY="$SIM_DIR/summary.md"` + `--dashboard-only`
+2. `step_consolidate_summary` — `--skip-dashboard` (CI ile aynı iki aşamalı akış)
+3. `step_validate_summary` — dosya oluştu mu? boş mu? dashboard var mı? section sayısı?
+
+**Önleme:** Env-snapshot validation artık yerelde de fail-closed çalışıyor;
+boş/eksik summaryhatası simulate'da yakalanıyor.
+
+### R3: Dash/Bash Lint Çelişkisi (`ae55009`, 2026-08-21)
+
+**Belirti:** `actionlint` pre-commit hook'u, workflow YAML shell scriptlerindeki
+SC2086/SC2012 info-level shellcheck uyarılarını hata olarak dönüyordu
+(RC=1); pre-commit bu yüzden `Failed` veriyor, commit bloke oluyordu.
+
+**Kök neden:** actionlint, yerleşik shellcheck'i ile workflow YAML'daki `run:` bloklarını
+denetliyor ve info-level uyarılar için bile exit 1 dönüyordu.
+Pre-commit hook'u bu exit kodunu olduğu gibi passOrFail olarak yorumluyordu.
+
+**Düzeltme (3 katman):**
+1. `lint_actionlint.sh` — standalone wrapper; RC≤2'yi PASS olarak kabul ediyor
+   (RC=0: temiz, RC=1-2: shellcheck info/hint — advisory, RC>2: hata — FAIL)
+2. `shellcheck_hooks.sh` — sh entry'li hook betiklerini (verify_lean.sh,
+   commit_msg_hook.sh) POSIX shellcheck ile denetliyor; update_config_hook.sh'yi
+   bash modunda denetliyor
+3. `commit_msg_hook.sh` — SC2221/SC2222 disable directive eklendi
+   (glob escape `\\` false-positive: `test:*` ≠ `fix\\ typo*`)
+
+**Önleme:** Pre-commit'te 13/13 hook yeşil; actionlintinfo-level uyarıları advisory
+olarak kabul ediliyor; sh hook betikleri POSIX uyumluluğu açısındanPeriyodik olarak denetleniyor.
+
+### Ek: Octokit API Yanlış Adı (`309a14f`, 2026-08-21)
+
+**Belirti:** CI annotation'larında `github.rest.issues.listLabels is not a function` hatası;
+validate_labels.js ve sync_labels.js CI'da `TypeError` fırlatıyordu.
+
+**Kök neden:** Octokit'te `issues.listLabels` yok — doğru的是 `issues.listLabelsForRepo`.
+Selftest mock'u da eski adı kullanıyordu.
+
+**Düzeltme:** 4 dosya güncellendi (validate_labels.js, sync_labels.js,
+github_scripts_selftest.js, github_scripts_battery.py).
+
 
 ## TEK KOMUT — publish_wrapper.sh (tüm senaryo)
 
