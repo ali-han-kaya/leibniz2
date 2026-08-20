@@ -118,6 +118,22 @@ repos:
         stages: [pre-commit]
         verbose: true
 
+      - id: actionlint
+        name: Lint workflow YAML (actionlint)
+        description: >-
+          actionlint ile .github/workflows/*.yml'ı statik olarak denetler:
+          YAML syntax, ${{ }} expression, action input/ref, job dependency,
+          secret/env erişim hatalarını yakalar. Yapışık satır / indentation
+          sorunlarını fail-closed olarak commit öncesi bloke eder.
+          actionlint binary'si yoksa indirir (ilk koşumda ~2s, sonraki
+          koşumlarda cached). OFFLINE, ~1s.
+        entry: bash -c 'AL=/tmp/actionlint; if [ ! -x "$AL" ]; then OS=$(uname -s | tr A-Z a-z); ARCH=$(uname -m | sed s/x86_64/amd64/); curl -sL "https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_${OS}_${ARCH}.tar.gz" | tar xz -C /tmp actionlint; fi; "$AL" --color .github/workflows/verify.yml'
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
       - id: verify-delivery-symbolic
         name: Verify formal core symbolically (Z3, fail-closed)
         description: >-

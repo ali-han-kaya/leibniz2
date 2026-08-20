@@ -70,6 +70,22 @@ jobs:
         with:
           python-version: '3.12'
 
+      # ─── ACTIONLINT — workflow YAML yapışıklığını fail-closed yakala ──
+      # actionlint, .github/workflows/*..yml'ı statik olarak denetler:
+      #   - YAML syntax hataları (yapışık satır, indentation)
+      #   - Expression syntax hataları (${{ }})
+      #   - Action input/ref hataları (uses:_wrong_version)
+      #   - Job dependency hataları (needs: olmayan job)
+      #   - Secret/env erişim hataları
+      # Hata varsa exit 1 → job fail → push/pipeline durur.
+      - name: Lint workflow with actionlint
+        if: always()
+        shell: bash
+        run: |
+          curl -sL https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz | tar xz -C /usr/local/bin actionlint
+          actionlint --color .github/workflows/verify.yml
+          echo "actionlint: PASS"
+
       # _calisma/CIKTI/test_*.py birim testleri — fail-closed. stdlib unittest;
       # ek bağımlılık yok. Kapsam:
       #   test_preview_server.py — history.jsonl bütünlüğü (append/trim/atomik
