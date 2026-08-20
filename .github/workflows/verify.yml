@@ -161,7 +161,11 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
+          # TEMP-TEST (test/config-diff-comment): --budget/--budget-method
+          # CLI override'ları config-diff yorumunu tetikler (create/update/
+          # delete uçtan uca doğrulaması). Merge edilmeden kaldırılacak.
           python3 _calisma/CIKTI/verify_delivery.py --dir _calisma/CIKTI --full \
+            --budget 25 --budget-method weighted \
             --budget-out budget_verify.json \
             --config-out effective_config.json \
             --refs-out references_online.json \
