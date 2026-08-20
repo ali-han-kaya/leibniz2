@@ -74,9 +74,25 @@ def load_pins(path):
     return data
 
 
+# actions/github-script@v8 scriptPath input'unu DESTEKLEMEZ (yalnızca
+# 'script'). scriptPath kullanımı runtime'da "Input required and not supplied:
+# script" ile patlar — çalışma dizininde dosya okunup eval edilmelidir
+# (github_scripts_selftest.js harness deseni). Gelecekteki eklemeleri
+# fail-closed yakalamak için workflow'da scriptPath geçmemelidir.
+_SCRIPTPATH_RE = re.compile(r"^\s*scriptPath:\s*[\"']?([^\s\"'#]+)")
+
+
 def check(workflow_text, pins):
     """Denetle. Döndürür finding listesi (verdict: PASS|FAIL|WARN|SKIP)."""
     findings = []
+    for lineno, line in enumerate(workflow_text.splitlines(), 1):
+        m = _SCRIPTPATH_RE.match(line)
+        if m:
+            findings.append({"action": "github-script", "major": None,
+                             "pinned": None, "verdict": "FAIL",
+                             "note": f"scriptPath desteklenmiyor (satır {lineno}: "
+                                     f"{m.group(1)}) — 'script' input'uyla "
+                                     "eval edilmeli (selftest harness deseni)"})
     for action in extract_uses(workflow_text):
         if action.startswith("./") or action.startswith("../"):
             findings.append({"action": action, "major": None, "pinned": None,

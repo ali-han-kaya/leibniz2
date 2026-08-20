@@ -592,7 +592,14 @@ jobs:
         if: always() && github.event_name == 'pull_request'
         uses: actions/github-script@v8
         with:
-          scriptPath: _calisma/CIKTI/github_scripts/pr_status_comment.js
+          # github-script@v8 scriptPath input'unu DESTEKLEMEZ (yalnızca
+          # 'script'). Dosya TEK KAYNAK kalır: github_scripts_selftest.js
+          # harness'ıyla aynı (async () => { … })() sarmalıyla okunup
+          # çalıştırılır — CI ile K16 self-testi aynı kodu koşar.
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('_calisma/CIKTI/github_scripts/pr_status_comment.js', 'utf8');
+            await eval(`(async () => {\n${body}\n})()`);
       - name: Upload budget bundle
         if: always()
         uses: actions/upload-artifact@v6
@@ -627,14 +634,18 @@ jobs:
       contents: read
       pull-requests: read
     steps:
-      # scriptPath github-script'i gerektirir — dosyanın çalışma dizininde
-      # olması için checkout şart.
+      # github-script@v8 scriptPath input'unu DESTEKLEMEZ (yalnızca
+      # 'script'). Dosya TEK KAYNAK kalır: selftest harness'ıyla aynı
+      # (async () => { … })() sarmalıyla okunup çalıştırılır.
       - name: Checkout
         uses: actions/checkout@v7
       - name: Fail if precommit-p0 label is present
         uses: actions/github-script@v8
         with:
-          scriptPath: _calisma/CIKTI/github_scripts/label_gate.js
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('_calisma/CIKTI/github_scripts/label_gate.js', 'utf8');
+            await eval(`(async () => {\n${body}\n})()`);
 
 
   reports:
@@ -843,7 +854,13 @@ jobs:
       - name: Upsert manifest.txt PR comment (tek yorum güncelle)
         uses: actions/github-script@v8
         with:
-          scriptPath: _calisma/CIKTI/github_scripts/manifest_comment.js
+          # github-script@v8 scriptPath input'unu DESTEKLEMEZ (yalnızca
+          # 'script'). Dosya TEK KAYNAK kalır: selftest harness'ıyla aynı
+          # (async () => { … })() sarmalıyla okunup çalıştırılır.
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('_calisma/CIKTI/github_scripts/manifest_comment.js', 'utf8');
+            await eval(`(async () => {\n${body}\n})()`);
 
       # ─── Config diff (raw vs effective) — advisory PR yorumu ────────────
       # reproducibility bundle'ındaki config/config-diff.json (verify job'unun
@@ -854,7 +871,13 @@ jobs:
       - name: Upsert config-diff PR comment (tek yorum güncelle)
         uses: actions/github-script@v8
         with:
-          scriptPath: _calisma/CIKTI/github_scripts/config_diff_comment.js
+          # github-script@v8 scriptPath input'unu DESTEKLEMEZ (yalnızca
+          # 'script'). Dosya TEK KAYNAK kalır: selftest harness'ıyla aynı
+          # (async () => { … })() sarmalıyla okunup çalıştırılır.
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('_calisma/CIKTI/github_scripts/config_diff_comment.js', 'utf8');
+            await eval(`(async () => {\n${body}\n})()`);
 
   # ──────────────────────────────────────────────────────────────────────
   # CONFIG DRIFT CHECK
@@ -965,7 +988,13 @@ jobs:
         if: github.event_name == 'pull_request' && steps.drift.outputs.rc != '0'
         uses: actions/github-script@v8
         with:
-          scriptPath: _calisma/CIKTI/github_scripts/config_drift_comment.js
+          # github-script@v8 scriptPath input'unu DESTEKLEMEZ (yalnızca
+          # 'script'). Dosya TEK KAYNAK kalır: selftest harness'ıyla aynı
+          # (async () => { … })() sarmalıyla okunup çalıştırılır.
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('_calisma/CIKTI/github_scripts/config_drift_comment.js', 'utf8');
+            await eval(`(async () => {\n${body}\n})()`);
 
       # Fail-closed kapı (yorumdan SONRA): drift exit koduyla çık.
       # Job fail-closed kalır; yorum adımı yalnızca bilgilendirme ekler.

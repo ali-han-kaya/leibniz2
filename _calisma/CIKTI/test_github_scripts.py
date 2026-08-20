@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
 """test_github_scripts.py — github-script JS drift kapısı (fail-closed).
 
-github-script adımlarının inline `script:` blokları `_calisma/CIKTI/
-github_scripts/*.js` dosyalarına çıkarıldı (workflow yalnızca `scriptPath`
-referanslar). Bu test, drift'in GERİ dönmesini engeller:
+github-script adımları `_calisma/CIKTI/github_scripts/*.js` dosyalarını
+`script:` input'uyla OKUYUP eval eder. NOT: actions/github-script@v8
+`scriptPath` input'unu DESTEKLEMEZ (yalnızca `script`) — CI'da
+"Input required and not supplied: script" ile patlar. Bu yüzden workflow
+selftest harness'ıyla (github_scripts_selftest.js) AYNI deseni kullanır:
+`readFileSync(...)` + `(async () => { … })()` sarmalı. Bu test drift'in GERİ
+dönmesini engeller:
 
-  1) verify.yml'de github-script adımlarında inline `script: |` bloğu
-     YOK olmalı (inline JS yeniden eklenirse test FAIL).
-  2) Her github-script adımının BİR scriptPath'i olmalı ve dosya VAR olmalı.
+  1) verify.yml'de `scriptPath:` YOK olmalı (github-script@v8'de patlar).
+  2) Her github-script adımı `script: |` ile github_scripts/ altında BİR
+     .js dosyasını readFileSync edip eval etmeli; referanslı dosya VAR
+     olmalı.
   3) Her referanslı .js dosyası sözdizimsel geçerli olmalı (node --check;
      top-level await github-script çalışma zamanı özelliği olduğundan dosya
      async IIFE'ye sarılarak denetlenir). node yoksa dürüstçe SKIP.
@@ -27,35 +32,52 @@ SCRIPTS_DIR = pathlib.Path(__file__).resolve().parent / "github_scripts"
 
 
 class TestNoInlineGithubScript(unittest.TestCase):
+    """github-script adımları TEK KAYNAK .js dosyalarını script: ile eval etmeli.
+
+    github-script@v8 scriptPath DESTEKLEMEZ — workflow, selftest harness'ıyla
+    aynı deseni kullanır: her adım `script: |` ile bir .js dosyasını
+    readFileSync edip (async () => { … })() sarmalında eval eder. Bu test,
+    (a) scriptPath geri dönüşünü, (b) dosyasız/eksik inline JS'yi ve
+    (c) referanslı dosyanın yokluğunu fail-closed yakalar.
+    """
+    _JS_RE = re.compile(r"readFileSync\('([^']+github_scripts/[^']+\.js)'")
+
     def setUp(self):
         self.text = WF.read_text(encoding="utf-8")
 
-    def test_no_inline_script_blocks(self):
-        # `script: |` github-script adımlarında kalmamalı (drift = geri dönüş).
-        self.assertNotIn("script: |", self.text,
-                         "verify.yml'de inline github-script bloğu var — "
-                         "scriptPath kullanılmalı")
+    def test_no_script_path_blocks(self):
+        # github-script@v8 scriptPath input'unu desteklemez — kullanımı CI'da
+        # "Input required and not supplied: script" ile patlar (fail-closed).
+        # (Yorumlardaki 'scriptPath' sözü değil, gerçek YAML anahtarı yasak.)
+        self.assertNotIn("scriptPath:", self.text,
+                         "scriptPath github-script@v8'de yok — 'script' input'uyla "
+                         "eval edilmeli (selftest harness deseni)")
 
-    def test_every_github_script_step_has_script_path(self):
+    def test_every_github_script_step_reads_one_js_file(self):
         uses = self.text.count("uses: actions/github-script")
-        paths = re.findall(r"scriptPath:\s*(.+)$", self.text, re.M)
+        refs = self._JS_RE.findall(self.text)
         self.assertGreater(uses, 0, "github-script adımı bekleniyor")
         self.assertEqual(
-            uses, len(paths),
-            f"{uses} github-script adımı ama {len(paths)} scriptPath "
-            "(her adımın birebir bir scriptPath'i olmalı)")
+            uses, len(refs),
+            f"{uses} github-script adımı ama {len(refs)} .js referansı "
+            "(her adım birebir bir dosyayı readFileSync edip eval etmeli)")
 
-    def test_every_script_path_exists(self):
-        paths = re.findall(r"scriptPath:\s*(.+)$", self.text, re.M)
-        for rel in paths:
-            p = (ROOT / rel.strip()).resolve()
-            self.assertTrue(p.is_file(), f"scriptPath dosyası yok: {rel}")
+    def test_every_referenced_js_exists(self):
+        for rel in self._JS_RE.findall(self.text):
+            p = (ROOT / rel).resolve()
+            self.assertTrue(p.is_file(), f"js dosyası yok: {rel}")
+            self.assertTrue(
+                p.is_relative_to(SCRIPTS_DIR),
+                f"js github_scripts/ altında olmalı: {rel}")
 
-    def test_script_paths_are_under_github_scripts_dir(self):
-        paths = re.findall(r"scriptPath:\s*(.+)$", self.text, re.M)
-        for rel in paths:
-            self.assertIn("github_scripts/", rel,
-                          f"scriptPath github_scripts/ altında olmalı: {rel}")
+    def test_every_script_block_has_async_eval_wrap(self):
+        # Selftest harness deseni: readFileSync + (async () => { … })() eval.
+        blocks = self.text.split("uses: actions/github-script")
+        for i, blk in enumerate(blocks[1:], 1):
+            self.assertIn("readFileSync", blk, f"adım {i}: readFileSync yok")
+            self.assertIn("await eval", blk, f"adım {i}: await eval yok")
+            self.assertIn("(async () => {", blk,
+                          f"adım {i}: async sarmalı yok")
 
 
 class TestJsSyntax(unittest.TestCase):

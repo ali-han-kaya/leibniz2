@@ -103,6 +103,29 @@ class TestCheck(unittest.TestCase):
         self.assertEqual(rows[0]["verdict"], "FAIL")
         self.assertIn("major ayrıştırılamadı", rows[0]["note"])
 
+    def test_scriptpath_usage_fails_closed(self):
+        # github-script@v8 scriptPath input'unu desteklemez — kullanımı
+        # fail-closed yakalanmalı (runtime'da "Input required: script" ile
+        # patlar). Dosya 'script' input'uyla eval edilmelidir.
+        wf = ("jobs:\n  a:\n    steps:\n"
+              "      - uses: actions/github-script@v8\n"
+              "        with:\n"
+              "          scriptPath: _calisma/CIKTI/github_scripts/label_gate.js\n")
+        rows = cap.check(wf, PINS)
+        fails = [r for r in rows if r["verdict"] == "FAIL"]
+        self.assertTrue(fails, "scriptPath kullanımı FAIL üretmeli")
+        self.assertTrue(any("scriptPath" in r["note"] for r in fails))
+
+    def test_script_plain_ok(self):
+        # 'script' input'u kuralı tetiklemez (scriptPath regex'i eşleşmez).
+        wf = ("jobs:\n  a:\n    steps:\n"
+              "      - uses: actions/github-script@v8\n"
+              "        with:\n"
+              "          script: |\n"
+              "            const body = fs.readFileSync('x.js', 'utf8');\n")
+        rows = cap.check(wf, PINS)
+        self.assertFalse(any("scriptPath" in r["note"] for r in rows))
+
 
 class TestCollectPins(unittest.TestCase):
     def test_collects_only_vn(self):
