@@ -82,8 +82,10 @@ jobs:
         if: always()
         shell: bash
         run: |
-          curl -sL https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz | tar xz -C /usr/local/bin actionlint
-          actionlint --color .github/workflows/verify.yml
+          ACTIONLINT_VERSION=1.7.7
+          curl -sL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" -o /tmp/actionlint.tar.gz
+          tar xzf /tmp/actionlint.tar.gz -C /tmp actionlint
+          /tmp/actionlint --color .github/workflows/verify.yml
           echo "actionlint: PASS"
 
       # _calisma/CIKTI/test_*.py birim testleri — fail-closed. stdlib unittest;
