@@ -161,12 +161,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          # TEMP-TEST (test/diff-on-drift): --config ile test dosyası verilir;
-          # effective_config o dosyadan türetilir, raw (commit'li) farklı kalır
-          # → diff-on-drift kapısı 'drift' nedenli exit 1 verir. Merge edilmeden
-          # kaldırılacak.
           python3 _calisma/CIKTI/verify_delivery.py --dir _calisma/CIKTI --full \
-            --config _calisma/CIKTI/verify_delivery.test_drift.config.json \
             --budget-out budget_verify.json \
             --config-out effective_config.json \
             --refs-out references_online.json \
