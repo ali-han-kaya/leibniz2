@@ -3342,6 +3342,23 @@ def main():
             add("P1", "SUMMARY-OUT", "Summary sidecar",
                 f"yazılamadı: {args.klayers_out}", str(e))
 
+    # CLI override uyarıları + bütçe özeti: HER İKİ modda da dashboard'un
+    # canlı akışına gider. --json modunda stdout yalnızca JSON olmalı; bu
+    # satırlar stderr'e relay edilir (K9 deseni — preview_server stderr'i
+    # ayrı akıtır). Böylece manuel override run'ında [CLI override] + Bütçe
+    # satırları canlı akışta sarı/mor görünür; JSON yine bozulmaz.
+    ov = effective_config.get("cli_overrides", {})
+    for k, rec in ov.items():
+        if rec.get("override"):
+            print(f"  [CLI override] {k}: {rec['file_value']!r} → "
+                  f"{rec['effective']!r} (CLI verildi)",
+                  file=(sys.stderr if args.json else None))
+    if budget_report:
+        print(f"Bütçe: ~{budget_report['tokens_est']} token → "
+              f"${budget_report['estimated_usd']} "
+              f"(limit ${budget_report['limit']})",
+              file=(sys.stderr if args.json else None))
+
     if args.json:
         print(json.dumps(out, indent=2, ensure_ascii=False))
     else:
@@ -3370,11 +3387,6 @@ def main():
               f"pages={effective_config['expected_pages']}, "
               f"refs={effective_config['expected_refs']}, "
               f"manifest={effective_config['expected_manifest']})")
-        ov = effective_config.get("cli_overrides", {})
-        for k, rec in ov.items():
-            if rec.get("override"):
-                print(f"  [CLI override] {k}: {rec['file_value']!r} → {rec['effective']!r} "
-                      f"(CLI verildi)")
         if budget_report:
             print(f"Bütçe: ~{budget_report['tokens_est']} token → ${budget_report['estimated_usd']} "
                   f"(limit ${budget_report['limit']})")

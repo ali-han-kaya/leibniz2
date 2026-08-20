@@ -68,12 +68,20 @@
 
   // Tek yorum güncelle (upsert): marker'lı mevcut yorumu bul, varsa
   // güncelle; yoksa oluştur. Her run'da yeni yorum birikmez.
-  const existing = await github.rest.issues.listComments({
-    issue_number: context.issue.number,
-    owner: context.repo.owner,
-    repo: context.repo.repo,
-    per_page: 100,
-  });
+  //
+  // Yorum listesi: CI'da birleştirilmiş adım (manifest + config-diff) yorum
+  // listesini BİR KEZ çekip EXISTING_COMMENTS olarak verir — API çağrısı
+  // 2'den 1'e iner. Script tek başına koşarsa (selftest harness'ı / bağımsız
+  // kullanım) kendi listComments çağrısına düşer; iki yol da aynı upsert
+  // davranışını üretir (mock'lar ve gerçek CI aynı sözleşmeyi doğrular).
+  const existing = (typeof EXISTING_COMMENTS !== 'undefined' && EXISTING_COMMENTS)
+    ? { data: EXISTING_COMMENTS }
+    : await github.rest.issues.listComments({
+        issue_number: context.issue.number,
+        owner: context.repo.owner,
+        repo: context.repo.repo,
+        per_page: 100,
+      });
   const found = existing.data.find(c => c.body && c.body.includes(MARKER));
 
   if (found) {

@@ -53,14 +53,39 @@ class TestNoInlineGithubScript(unittest.TestCase):
                          "scriptPath github-script@v8'de yok — 'script' input'uyla "
                          "eval edilmeli (selftest harness deseni)")
 
-    def test_every_github_script_step_reads_one_js_file(self):
+    def test_every_github_script_step_reads_at_least_one_js_file(self):
+        # Her adım BİR veya DAHA FAZLA .js dosyasını readFileSync edip eval
+        # etmeli (inline JS yasak — TEK KAYNAK github_scripts/ dosyaları).
+        # Not: manifest + config-diff yorumları TEK adımda birleşiktir (yorum
+        # listesi bir kez çekilir); o adım 2 dosya okur — kural "en az 1".
         uses = self.text.count("uses: actions/github-script")
         refs = self._JS_RE.findall(self.text)
         self.assertGreater(uses, 0, "github-script adımı bekleniyor")
-        self.assertEqual(
-            uses, len(refs),
+        self.assertGreaterEqual(
+            len(refs), uses,
             f"{uses} github-script adımı ama {len(refs)} .js referansı "
-            "(her adım birebir bir dosyayı readFileSync edip eval etmeli)")
+            "(her adım en az bir dosyayı readFileSync edip eval etmeli)")
+
+    def test_manifest_and_config_diff_share_one_step(self):
+        # Birleşik adım iki script'i AYNI github-script kapsamında koşar —
+        # yorum listesi bir kez çekilir (API çağrısı 2→1). Bunu sürdürmek
+        # için: (a) iki readFileSync arasında başka bir github-script adımı
+        # olmamalı, (b) paylaşılan liste çekimi (EXISTING_COMMENTS + tek
+        # listComments) manifest readFileSync'inden ÖNCE gelmeli (adım başı).
+        mpos = self.text.index(
+            "readFileSync('_calisma/CIKTI/github_scripts/manifest_comment.js'")
+        cpos = self.text.index(
+            "readFileSync('_calisma/CIKTI/github_scripts/config_diff_comment.js'")
+        between = self.text[min(mpos, cpos):max(mpos, cpos)]
+        self.assertNotIn(
+            "uses: actions/github-script", between,
+            "manifest_comment.js + config_diff_comment.js AYNI github-script "
+            "adımında olmalı (paylaşılan EXISTING_COMMENTS — tek listComments)")
+        prefix = self.text[:mpos]
+        self.assertIn("EXISTING_COMMENTS", prefix,
+                      "paylaşılan yorum listesi adımın başında çekilmeli")
+        self.assertIn("listComments", prefix,
+                      "yorum listesi BİR KEZ çekilmeli (script içi fallback yok)")
 
     def test_every_referenced_js_exists(self):
         for rel in self._JS_RE.findall(self.text):

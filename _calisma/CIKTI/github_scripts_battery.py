@@ -37,6 +37,25 @@ MARKER_DRIFT = "<!-- stoic-hume-v5-config-drift -->"
 
 REPO_URL = "https://github.com/mock-owner/mock-repo"
 
+# Birleşik adım sarmalayıcısı — verify.yml'deki TEK github-script adımının
+# ("Upsert manifest + config-diff PR comments") birebir aynısı. İki script aynı
+# kapsamda koşar; yorum listesi BİR KEZ çekilir, her ikisine EXISTING_COMMENTS
+# olarak verilir (API çağrısı 2'den 1'e iner). __SCRIPTS_DIR__ run_battery'de
+# gerçek scripts_dir ile değiştirilir. Bu şablon workflow'dan saparsa birleşik
+# senaryolar FAIL eder — adım ile mock arasında drift yakalanır.
+COMBINED_WRAPPER_TMPL = r'''const fs = require('fs');
+const { data: EXISTING_COMMENTS } = await github.rest.issues.listComments({
+  issue_number: context.issue.number,
+  owner: context.repo.owner,
+  repo: context.repo.repo,
+  per_page: 100,
+});
+const mBody = fs.readFileSync('__SCRIPTS_DIR__/manifest_comment.js', 'utf8');
+await eval(`(async () => {\n${mBody}\n})()`);
+const cBody = fs.readFileSync('__SCRIPTS_DIR__/config_diff_comment.js', 'utf8');
+await eval(`(async () => {\n${cBody}\n})()`);
+'''
+
 
 def _ctx(issue=1, run=42):
     return {
@@ -356,6 +375,55 @@ SCENARIOS = [
          "console_any": ["atlanıyor"]},
     ),
 
+    # ── Birleşik adım (verify.yml: manifest + config-diff TEK github-script) ──
+    # İki script aynı kapsamda koşar; yorum listesi BİR KEZ çekilip her ikisine
+    # EXISTING_COMMENTS olarak verilir → issues.listComments TAM 1 çağrı (tek
+    # başına koşumda 2 çağrı olurdu — birleştirmenin API kazancı burada kanıtlanır).
+    # Wrapper, workflow adımının birebir aynısıdır; saparsa bu senaryolar FAIL.
+    (
+        "combined: manifest update + config-diff create (paylaşılan liste, 1 listComments)",
+        {"inline": COMBINED_WRAPPER_TMPL},
+        {
+            "reproducibility/manifest.txt": "github_run_id: 42\n"
+                                             "github_sha: abc\n",
+            "reproducibility/config/config-diff.json": json.dumps({
+                "differences": [{"field": "budget_usd", "raw": 30,
+                                 "effective": 25, "reason": "cli_override"}]}),
+        },
+        None, [],
+        [{"id": 777, "body": "eski " + MARKER_MANIFEST}],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.listComments": 1,
+                            "issues.updateComment": 1,
+                            "issues.createComment": 1},
+            "target_ids": {"issues.updateComment": [777]},
+            "body_contains": {"issues.updateComment": [MARKER_MANIFEST],
+                              "issues.createComment": [MARKER_CFGDIFF,
+                                                       "Config diff"]},
+        },
+    ),
+    (
+        "combined: manifest create + config-diff delete (fark yok, bayat yorum)",
+        {"inline": COMBINED_WRAPPER_TMPL},
+        {
+            "reproducibility/manifest.txt": "github_run_id: 42\n",
+            "reproducibility/config/config-diff.json":
+                json.dumps({"differences": []}),
+        },
+        None, [],
+        [{"id": 888, "body": "bayat " + MARKER_CFGDIFF}],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.listComments": 1,
+                            "issues.deleteComment": 1,
+                            "issues.createComment": 1},
+            "target_ids": {"issues.deleteComment": [888]},
+            "body_contains": {"issues.createComment": [MARKER_MANIFEST]},
+            "console_any": ["bayat yorum kaldırıldı"],
+        },
+    ),
+
     # ── config_drift_comment.js ─────────────────────────────────────────────
     (
         "config_drift: exit 1 + bulgular + yeni yorum",
@@ -419,6 +487,102 @@ SCENARIOS = [
                 "CLI override tespit edildi (tekrarlanabilirlik sapması)",
                 "`budget`: 30 → 25 (CLI verildi)",
                 MARKER_DRIFT]},
+        },
+    ),
+    # State-sync: drift ÇÖZÜLDÜYSE (exit 0) bayat uyarı SİLİNİR — önceki
+    # run'ın "Config drift tespit edildi" yorumu yanıltıcı kalmasın.
+    (
+        "config_drift: fark yok (exit 0) + bayat yorum varsa SİLİNİR",
+        "config_drift_comment.js",
+        {"drift_rc.txt": "0"},
+        None, [],
+        [{"id": 999, "body": "eski " + MARKER_DRIFT}],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.deleteComment": 1,
+                            "issues.createComment": 0},
+            "target_ids": {"issues.deleteComment": [999]},
+            "console_any": ["bayat yorum kaldırıldı"],
+        },
+    ),
+    (
+        "config_drift: fark yok (exit 0) + yorum yok → sessiz geç",
+        "config_drift_comment.js",
+        {"drift_rc.txt": "0"},
+        None, [], [],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.deleteComment": 0,
+                            "issues.createComment": 0},
+            "console_any": ["yorum yok"],
+        },
+    ),
+    (
+        "config_drift: drift_rc.txt yok → atlanır (REST çağrısı yok)",
+        "config_drift_comment.js",
+        {}, None, [], [],
+        {"ok": True, "set_failed": False,
+         "call_counts": {"issues.listComments": 0},
+         "console_any": ["atlanıyor"]},
+    ),
+    # diff-on-drift kapısı: bulguları TEK yorumda gen_config drift'iyle birleşir.
+    (
+        "config_drift: gen_config OK + diff-on-drift FAIL → yalnız diff bölümü",
+        "config_drift_comment.js",
+        {
+            "drift_rc.txt": "0",
+            "diffdrift_rc.txt": "1",
+            "diffdrift_stderr.txt": "[CONFIG-DIFF] FAIL-ON-DRIFT: 1 drift farkı\n"
+                                    "  budget_usd: 30.0 → 25.0 (drift)",
+        },
+        None, [], [],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.createComment": 1},
+            "body_contains": {"issues.createComment": [
+                "Config drift tespit edildi",
+                "diff-on-drift --fail-on-drift (exit `1`)",
+                "budget_usd: 30.0 → 25.0 (drift)",
+                MARKER_DRIFT]},
+            "body_not_contains": {"issues.createComment": [
+                "gen_config.py --dry-run (exit"]},
+        },
+    ),
+    (
+        "config_drift: her iki kapı FAIL → iki bölüm tek yorumda",
+        "config_drift_comment.js",
+        {
+            "drift_rc.txt": "1",
+            "drift_stderr.txt": "expected_pages: config 33, paket 34",
+            "diffdrift_rc.txt": "2",
+            "diffdrift_stderr.txt": "[CONFIG-DIFF] FAIL-ON-DRIFT: 1 drift farkı\n"
+                                    "  budget_usd: 30.0 → 25.0 (drift)",
+        },
+        None, [], [],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.createComment": 1},
+            "body_contains": {"issues.createComment": [
+                "gen_config.py --dry-run (exit `1`)",
+                "expected_pages: config 33, paket 34",
+                "diff-on-drift --fail-on-drift (exit `2`)",
+                "budget_usd: 30.0 → 25.0 (drift)",
+                "kapılar: gen_config.py --dry-run + diff-on-drift",
+                MARKER_DRIFT]},
+        },
+    ),
+    (
+        "config_drift: her iki kapı OK → bayat yorum SİLİNİR (state-sync)",
+        "config_drift_comment.js",
+        {"drift_rc.txt": "0", "diffdrift_rc.txt": "0"},
+        None, [],
+        [{"id": 999, "body": "eski " + MARKER_DRIFT}],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.deleteComment": 1,
+                            "issues.createComment": 0},
+            "target_ids": {"issues.deleteComment": [999]},
+            "console_any": ["bayat yorum kaldırıldı"],
         },
     ),
 ]
@@ -523,11 +687,26 @@ def run_battery(node=None, scripts_dir=None, timeout=30):
     scripts_dir = scripts_dir or os.path.join(HERE, "github_scripts")
     results = []
     for name, script, fixtures, ctx, labels, comments, expect in SCENARIOS:
-        script_path = os.path.join(scripts_dir, script)
+        if isinstance(script, dict) and script.get("inline"):
+            # Birleşik adım sarmalayıcısı (verify.yml'deki tek github-script
+            # adımının birebir aynısı) — fixture dizinine yazılır; böylece
+            # github_scripts/ klasörü test-only dosyalarla kirlenmez ve
+            # scripts_dir parametresi (run time) wrapper'a doğru gömülür.
+            script_path = None  # tmp içinde belirlenir
+            inline_script = script["inline"].replace("__SCRIPTS_DIR__",
+                                                       scripts_dir)
+        else:
+            script_path = os.path.join(scripts_dir, script)
+            inline_script = None
         if node is None:
             results.append((name, False, "node bulunamadı"))
             continue
         with tempfile.TemporaryDirectory(prefix="gscripts_") as tmp:
+            if inline_script is not None:
+                wp = os.path.join(tmp, "wrapper.js")
+                with open(wp, "w", encoding="utf-8") as f:
+                    f.write(inline_script)
+                script_path = wp
             for rel, data in fixtures.items():
                 fp = os.path.join(tmp, rel)
                 os.makedirs(os.path.dirname(fp), exist_ok=True)
