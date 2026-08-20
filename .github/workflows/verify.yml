@@ -90,12 +90,12 @@ jobs:
           # bilgi notları exit 2 — bunlar fail-closed DEĞİL advisory.
           set +e
           /tmp/actionlint --color .github/workflows/verify.yml 2>&1
-          RC=$?
-          set -e
-          if [ "$RC" -eq 1 ]; then
+          ACT_RC=$?
+          set -eo pipefail
+          if [ "$ACT_RC" -eq 1 ]; then
             echo "actionlint: FAIL — workflow syntax/structural error"
             exit 1
-          elif [ "$RC" -eq 2 ]; then
+          elif [ "$ACT_RC" -eq 2 ]; then
             echo "actionlint: WARN — shellcheck hints (advisory, bloke etmez)"
           else
             echo "actionlint: PASS"
