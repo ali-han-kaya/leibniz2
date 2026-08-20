@@ -1,0 +1,876 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Stoic-Hume V5 — Live CI Dashboard</title>
+<style>
+  :root { --bg:#0e1116; --fg:#e6edf3; --muted:#8b949e; --accent:#58a6ff;
+          --ok:#3fb950; --warn:#d29922; --err:#f85149; --border:#30363d; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",
+         Helvetica,Arial,sans-serif; background:var(--bg); color:var(--fg); }
+  header { padding:18px 28px; border-bottom:1px solid var(--border);
+           background:linear-gradient(180deg,#161b22,#0e1116);
+           display:flex; align-items:center; gap:18px; flex-wrap:wrap; }
+  h1 { margin:0; font-size:20px; flex:1; }
+  .live-dot { width:10px; height:10px; border-radius:50%; background:var(--err);
+              display:inline-block; box-shadow:0 0 8px currentColor;
+              transition: background-color 0.4s, box-shadow 0.4s; }
+  .live-dot.connected { background:var(--ok); animation: pulse 1.6s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  .live-dot.warn { background:var(--warn); }
+  main { padding:20px 28px; max-width:1080px; margin:0 auto; }
+  section { margin-bottom:24px; }
+  h2 { font-size:14px; border-bottom:1px solid var(--border); padding-bottom:4px;
+       text-transform:uppercase; letter-spacing:0.05em; color:var(--muted); }
+  .badges { display:flex; flex-wrap:wrap; gap:8px; margin:10px 0; }
+  .badge { display:inline-block; padding:4px 10px; border-radius:12px;
+           font-size:12px; font-weight:600; }
+  .ok   { background:rgba(63,185,80,.15); color:var(--ok); border:1px solid var(--ok); }
+  .warn { background:rgba(210,153,34,.15); color:var(--warn); border:1px solid var(--warn); }
+  .err  { background:rgba(248,81,73,.15); color:var(--err); border:1px solid var(--err); }
+  .info { background:rgba(88,166,255,.15); color:var(--accent); border:1px solid var(--accent); }
+  .unknown { background:rgba(139,148,158,.15); color:var(--muted); border:1px solid var(--muted); }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; }
+  .card { background:#161b22; border:1px solid var(--border); border-radius:8px; padding:14px; }
+  .card .label { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:0.05em; }
+  .card .value { font-size:18px; font-weight:600; font-family:"SF Mono",monospace; margin-top:4px; }
+  .card .sub { color:var(--muted); font-size:11px; margin-top:4px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--border); }
+  th { color:var(--muted); font-weight:600; background:#161b22; }
+  code { font-family:"SF Mono",Menlo,Consolas,monospace; background:#161b22;
+         padding:2px 6px; border-radius:4px; font-size:12px; word-break:break-all; }
+  pre { background:#161b22; border:1px solid var(--border); border-radius:6px;
+        padding:12px; overflow:auto; font-size:11px; line-height:1.4;
+        max-height:420px; margin:0; white-space:pre-wrap; }
+  pre .err { color:var(--err); }
+  pre .ok  { color:var(--ok); }
+  pre .muted { color:var(--muted); }
+  pre .warn { color:var(--warn); }
+  .ref-list { list-style:none; padding:0; margin:0; max-height:340px; overflow:auto; }
+  .ref-list li { padding:4px 0; border-bottom:1px solid var(--border); display:flex;
+                 align-items:center; gap:8px; font-size:13px; }
+  .ref-list li:last-child { border-bottom:0; }
+  .runstream { max-height:180px; font-size:11px; }
+  .z3row { display:flex; align-items:center; gap:10px; margin:8px 0 6px; }
+  .z3label { color:var(--muted); font-size:11px; text-transform:uppercase;
+             letter-spacing:0.05em; font-weight:600; }
+  .z3bar { flex:1; max-width:320px; height:8px; background:#21262d;
+           border:1px solid var(--border); border-radius:5px; overflow:hidden; }
+  .z3fill { height:100%; width:0%; background:var(--accent);
+            transition: width 0.3s; border-radius:4px; }
+  .z3fill.ok { background:var(--ok); }
+  .z3fill.err { background:var(--err); }
+  .z3count { font-family:"SF Mono",monospace; font-size:12px; color:var(--muted); }
+  .z3count.ok { color:var(--ok); font-weight:600; }
+  .ts { color:var(--muted); font-size:11px; font-family:"SF Mono",monospace; }
+  .tip { position:fixed; z-index:9999; pointer-events:none; background:#161b22;
+         border:1px solid var(--border); border-radius:6px; padding:8px 10px;
+         font-size:12px; line-height:1.5; color:var(--fg);
+         box-shadow:0 8px 24px rgba(0,0,0,.5); max-width:300px;
+         white-space:pre; display:none; }
+  a { color:var(--accent); text-decoration:none; }
+  a:hover { text-decoration:underline; }
+  button { background:var(--accent); color:#fff; border:0; padding:6px 14px;
+           border-radius:6px; cursor:pointer; font-size:12px; font-weight:600; }
+  button:hover { opacity:0.85; }
+  button:disabled { opacity:0.5; cursor:not-allowed; }
+  .footer { padding:14px 28px; border-top:1px solid var(--border);
+            color:var(--muted); font-size:11px; text-align:center; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Stoic-Hume V5 — Live CI Dashboard</h1>
+  <span id="live-dot" class="live-dot"></span>
+  <span id="live-status" class="ts">connecting…</span>
+  <button id="reconnect">reconnect</button>
+</header>
+<main>
+  <section>
+    <h2>Verification chain</h2>
+    <div class="badges" id="badges">
+      <span class="badge unknown">K1-K7: ?</span>
+      <span class="badge unknown">K8 Z3: ?</span>
+      <span class="badge unknown">K9 Lean: ?</span>
+      <span class="badge unknown">Beth 1953: ?</span>
+      <span class="badge unknown">refs: ?</span>
+    </div>
+    <div class="grid" id="metrics">
+      <div class="card"><div class="label">Verdict</div><div class="value" id="m-verdict">—</div><div class="sub" id="m-ts">no run yet</div></div>
+      <div class="card"><div class="label">P0 / P1 findings</div><div class="value" id="m-p0p1">— / —</div><div class="sub">fail-closed gate</div></div>
+      <div class="card"><div class="label">Run duration</div><div class="value" id="m-dur">—</div><div class="sub">verify_delivery.py --full</div></div>
+      <div class="card"><div class="label">Budget (universal)</div><div class="value" id="m-budget">—</div><div class="sub" id="m-budget-sub">limit $30</div></div>
+      <div class="card"><div class="label">Budget ratios</div><div class="value" id="m-br" style="font-size:12px">—</div><div class="sub">bytes/token · text/pdf/archive/binary</div></div>
+      <div class="card"><div class="label">Type bytes</div><div class="value" id="m-tb" style="font-size:12px">—</div><div class="sub" id="m-tb-sub">iç zip kırılımı</div></div>
+      <div class="card"><div class="label">PDF pages / refs</div><div class="value" id="m-pdf">— / —</div><div class="sub">33 / 64 expected</div></div>
+      <div class="card"><div class="label">PDF metadata-stripped</div><div class="value" id="m-meta" style="font-size:11px">—</div><div class="sub" id="m-meta-sub">qpdf</div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>P0 / P1 trend — son 100 run <span class="ts" id="trend-count"></span></h2>
+    <div class="card" style="padding:10px">
+      <svg id="trend" viewBox="0 0 1160 240" width="100%" height="240" role="img"
+           aria-label="P0/P1 + duration + budget zaman serisi grafiği"></svg>
+      <div class="ts" id="trend-legend" style="margin-top:6px">yükleniyor…</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Live run stream <span class="ts" id="stream-state">bağlanıyor…</span></h2>
+    <div class="z3row">
+      <span class="z3label">K8 Z3</span>
+      <div class="z3bar"><div id="z3-fill" class="z3fill"></div></div>
+      <span id="z3-count" class="z3count">0/12</span>
+    </div>
+    <pre id="runstream" class="runstream">—</pre>
+  </section>
+
+  <section>
+    <h2>Live stdout (verify_delivery.py --full)</h2>
+    <div class="ts" style="margin-top:6px">
+      Renk: <span style="color:var(--ok)">■ yeşil = K8/SAT/PASS</span> ·
+      <span style="color:var(--err)">■ kırmızı = hata/P0</span> ·
+      <span style="color:var(--warn)">■ sarı = P1/CLI override</span> ·
+      <span style="color:var(--muted)">■ gri = ayraç/K katmanı</span>
+    </div>
+    <pre id="stdout">Waiting for first run…</pre>
+  </section>
+
+  <section>
+    <h2>Reference verification (CrossRef / SEP / OpenLibrary)</h2>
+    <ul class="ref-list" id="refs">
+      <li class="muted">no data</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Online reference stats <span class="ts" id="ro-ts"></span></h2>
+    <div class="grid" id="ro-metrics">
+      <div class="card"><div class="label">Verified / total</div><div class="value" id="ro-vt">—</div><div class="sub">çevrimiçi denetlenebilir referanslar</div></div>
+      <div class="card"><div class="label">Unverified</div><div class="value" id="ro-unv">—</div><div class="sub">çevrimdışı / bulunamadı</div></div>
+      <div class="card"><div class="label">Mismatch</div><div class="value" id="ro-mis">—</div><div class="sub">yanlış eşleşme (P1)</div></div>
+      <div class="card"><div class="label">Coverage</div><div class="value" id="ro-cov">—</div><div class="sub">verified / total yüzdesi</div></div>
+    </div>
+    <div class="card" style="padding:12px" id="ro-sources">
+      <div class="muted">veri bekleniyor…</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Reference verification trend <span class="ts" id="refs-trend-count"></span></h2>
+    <div class="card" style="padding:10px">
+      <svg id="refs-trend" viewBox="0 0 1160 240" width="100%" height="240" role="img"
+           aria-label="verified/total zaman serisi grafiği"></svg>
+      <div class="ts" id="refs-trend-legend" style="margin-top:6px">yükleniyor…</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Config diff (raw vs effective) <span class="ts" id="cd-ts"></span></h2>
+    <div class="card" style="padding:12px" id="cd-body">
+      <div class="muted">veri bekleniyor…</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Hook env sürümleri <span class="ts" id="he-ts"></span></h2>
+    <div class="card" style="padding:12px" id="he-body">
+      <div class="muted">veri bekleniyor…</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Artifacts</h2>
+    <table>
+      <thead><tr><th>File</th><th>Size</th><th>SHA-256 (kısa)</th></tr></thead>
+      <tbody>
+        <tr><td><code>TESLIM_KLASOR_V5_2026-08-17.zip</code></td><td>508 KB</td><td><code>0ef74cae…</code></td></tr>
+        <tr><td><code>TESLIM_V5_FINAL_2026-08-17.zip</code></td><td>464 KB</td><td><code>1e5161e2…</code></td></tr>
+        <tr><td><code>ingiliz_empirizmi_v3.pdf</code></td><td>214 KB</td><td><code id="pdf-hash">—</code></td></tr>
+        <tr><td><code>ingiliz_empirizmi_v3.tex</code></td><td>≈ 47 KB</td><td>—</td></tr>
+        <tr><td><code>core_section.tex</code> (formal core, V5g)</td><td>—</td><td>—</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>CI / pre-commit gates</h2>
+    <table>
+      <thead><tr><th>Layer</th><th>Where</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td>GitHub Actions</td><td><code>.github/workflows/verify.yml</code></td><td>4 job (verify · symbolic · lean · reports)</td></tr>
+        <tr><td>Pre-commit hook</td><td><code>.pre-commit-config.yaml</code></td><td>3 hook (verify-delivery · verify-delivery-symbolic · verify-delivery-lean)</td></tr>
+        <tr><td>Single-command gate</td><td><code>verify_delivery.py --full</code></td><td>K1-K9 + CrossRef/SEP + bütçe</td></tr>
+      </tbody>
+    </table>
+  </section>
+</main>
+<div class="footer">
+  Fail-closed CI gate · P0 = paket kırılır · P1 = düzeltilebilir bulgu ·
+  PASS = (P0=0 ∧ P1=0) · SSE stream via <code>/api/run</code>
+</div>
+<div id="tip" class="tip" aria-hidden="true"></div>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+let evtSource = null;
+let lastTs = 0;
+
+function fmtBytes(b) {
+  if (b == null) return "—";
+  if (b > 1048576) return (b/1048576).toFixed(2) + " MB";
+  return Math.round(b/1024) + " KB";
+}
+function fmtTs(iso) {
+  if (!iso) return "no run yet";
+  try {
+    const d = new Date(iso);
+    return d.toLocaleTimeString() + " (" + iso.split("T")[1].slice(0,5) + " UTC)";
+  } catch(e) { return iso; }
+}
+function setLive(state) {
+  const dot = $("live-dot"), txt = $("live-status");
+  if (state === "ok") { dot.className = "live-dot connected"; txt.textContent = "live"; }
+  else if (state === "warn") { dot.className = "live-dot warn"; txt.textContent = "stale"; }
+  else if (state === "err") { dot.className = "live-dot"; txt.textContent = "disconnected"; }
+  else { dot.className = "live-dot"; txt.textContent = "connecting…"; }
+}
+
+// Tek satırı vurgula: kırmızı (hata/P0 bulgu) > sarı (P1 bulgu + CLI override) > yeşil (K8/Z3 SAT-UNSAT + PASS) > gri (ayraç/K-header).
+function colorizeLine(line) {
+  if (/^\[P0\]|^\[FAIL\]|^SONUÇ: FAIL|FAIL \(P0=|^Error|Exception|^Traceback|^HATA/.test(line))
+    return '<span class="err">' + escapeHTML(line) + '</span>';
+  if (/^\[P1\]|\[CLI override\]|\[CLI-OVERRIDE\]/.test(line))
+    return '<span class="warn">' + escapeHTML(line) + '</span>';
+  if (/\[K8\]|\bUNSAT\b|\bSAT\b|^\[PASS\]|^SONUÇ: PASS|^SONUÇ: TÜMÜ PASS|^Verdict: PASS/.test(line))
+    return '<span class="ok">' + escapeHTML(line) + '</span>';
+  if (/^=== |^--- |^\[K[0-9]/.test(line))
+    return '<span class="muted">' + escapeHTML(line) + '</span>';
+  return escapeHTML(line);
+}
+
+function colorizeStdout(text) {
+  return text.split("\n").map(colorizeLine).join("\n");
+}
+
+function escapeHTML(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// ---- P0/P1 trend (son 100 run) ----
+let trendCache = [];
+
+function renderTrend(rows) {
+  const svg = $("trend");
+  const legend = $("trend-legend");
+  if (!rows || rows.length === 0) {
+    svg.innerHTML = "";
+    legend.textContent = "henüz veri yok — ilk run bekleniyor";
+    return;
+  }
+  trendCache = rows;
+  const W = 1160, H = 240, PL = 44, PR = 150, PT = 12, PB = 32;
+  const iw = W - PL - PR, ih = H - PT - PB;
+  const plotRight = PL + iw;
+  const n = rows.length;
+
+  // Üç ayrı ölçek: sol = P0/P1 (adet), sağ-iç = duration_s, sağ-dış = budget_usd
+  const maxP = Math.max(1, ...rows.map(r => Math.max(r.p0||0, r.p1||0)));
+  const durs = rows.map(r => r.duration_s).filter(v => v != null && isFinite(v));
+  const buds = rows.map(r => r.budget_usd).filter(v => v != null && isFinite(v));
+  const maxDur = durs.length ? Math.max(...durs, 1) : 1;
+  const maxBud = buds.length ? Math.max(...buds, 0.01) : 1;
+
+  const x = (i) => PL + (n === 1 ? iw / 2 : iw * i / (n - 1));
+  const yP = (v) => PT + ih - (ih * (v||0) / maxP);
+  const yD = (v) => (v == null || !isFinite(v)) ? null : PT + ih - (ih * v / maxDur);
+  const yB = (v) => (v == null || !isFinite(v)) ? null : PT + ih - (ih * v / maxBud);
+
+  let parts = [];
+  // sol eksen grid + etiketler (P0/P1)
+  for (let g = 0; g <= maxP; g++) {
+    const gy = yP(g);
+    parts.push(`<line x1="${PL}" y1="${gy}" x2="${plotRight}" y2="${gy}" stroke="#21262d" stroke-width="1"/>`);
+    parts.push(`<text x="${PL-6}" y="${gy+4}" fill="#8b949e" font-size="10" text-anchor="end">${g}</text>`);
+  }
+  // P0 (kırmızı), P1 (sarı)
+  if (rows.some(r => (r.p0||0) > 0)) {
+    parts.push(`<polyline fill="none" stroke="#f85149" stroke-width="2" points="` +
+      rows.map((r,i) => `${x(i)},${yP(r.p0||0)}`).join(" ") + `"/>`);
+  }
+  parts.push(`<polyline fill="none" stroke="#d29922" stroke-width="2" points="` +
+    rows.map((r,i) => `${x(i)},${yP(r.p1||0)}`).join(" ") + `"/>`);
+  // duration_s (mavi, kesikli) — ikinci eksen
+  const durPts = rows.map((r,i) => { const y = yD(r.duration_s); return y == null ? null : `${x(i)},${y}`; }).filter(Boolean);
+  if (durPts.length) {
+    parts.push(`<polyline fill="none" stroke="#58a6ff" stroke-width="2" stroke-dasharray="4 3" points="${durPts.join(" ")}"/>`);
+  }
+  // budget_usd (mor) — üçüncü eksen
+  const budPts = rows.map((r,i) => { const y = yB(r.budget_usd); return y == null ? null : `${x(i)},${y}`; }).filter(Boolean);
+  if (budPts.length) {
+    parts.push(`<polyline fill="none" stroke="#bc8cff" stroke-width="2" points="${budPts.join(" ")}"/>`);
+  }
+  // sağ eksenler: duration (iç) + budget (dış)
+  const durAxisX = plotRight + 26;
+  const budAxisX = plotRight + 88;
+  if (durs.length) {
+    parts.push(`<line x1="${durAxisX}" y1="${PT}" x2="${durAxisX}" y2="${PT+ih}" stroke="#58a6ff" stroke-width="1" opacity="0.5"/>`);
+    parts.push(`<text x="${durAxisX+6}" y="${PT+4}" fill="#58a6ff" font-size="9">${maxDur.toFixed(0)}s</text>`);
+    parts.push(`<text x="${durAxisX+6}" y="${PT+ih+2}" fill="#58a6ff" font-size="9">0s</text>`);
+  }
+  if (buds.length) {
+    parts.push(`<line x1="${budAxisX}" y1="${PT}" x2="${budAxisX}" y2="${PT+ih}" stroke="#bc8cff" stroke-width="1" opacity="0.5"/>`);
+    parts.push(`<text x="${budAxisX+6}" y="${PT+4}" fill="#bc8cff" font-size="9">$${maxBud.toFixed(2)}</text>`);
+    parts.push(`<text x="${budAxisX+6}" y="${PT+ih+2}" fill="#bc8cff" font-size="9">$0</text>`);
+  }
+  // noktalar (verdict rengi)
+  rows.forEach((r, i) => {
+    const c = r.p0 > 0 ? "#f85149" : (r.p1 > 0 ? "#d29922" : "#3fb950");
+    parts.push(`<circle cx="${x(i)}" cy="${yP(Math.max(r.p0||0, r.p1||0))}" r="2.5" fill="${c}"/>`);
+  });
+  // hover hit alanları (transparan sütun) — tooltip için
+  const colW = n === 1 ? iw : iw / (n - 1);
+  const halfW = Math.max(4, Math.min(10, colW / 2));
+  rows.forEach((r, i) => {
+    const cx = x(i);
+    parts.push(`<rect x="${(cx - halfW).toFixed(2)}" y="${PT}" width="${(halfW * 2).toFixed(2)}" height="${ih}" fill="transparent" style="cursor:crosshair" onmousemove="showTrendTip(${i}, event)" onmouseleave="hideTrendTip()"/>`);
+  });
+  // x ekseni zaman etiketleri (ilk/orta/son)
+  const pick = [0, Math.floor((n-1)/2), n-1].filter((v,i,a) => a.indexOf(v) === i);
+  pick.forEach(i => {
+    const r = rows[i];
+    let lbl = "?";
+    if (r.ts) { const d = new Date(r.ts); lbl = d.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}); }
+    parts.push(`<text x="${x(i)}" y="${H-12}" fill="#8b949e" font-size="10" text-anchor="middle">${lbl}</text>`);
+  });
+  svg.innerHTML = parts.join("");
+  legend.textContent = "Kırmızı = P0 · Sarı = P1 · Yeşil nokta = PASS · Mavi (kesikli) = duration_s · Mor = budget_usd · " +
+    "aralık: " + (rows[0].ts ? new Date(rows[0].ts).toLocaleString() : "?") +
+    " → " + (rows[n-1].ts ? new Date(rows[n-1].ts).toLocaleString() : "?") +
+    ` · ${n} run`;
+  $("trend-count").textContent = `(${n} run)`;
+}
+
+// ---- trend hover tooltip ----
+function fmtTrendDur(v) {
+  if (v == null || !isFinite(v)) return "—";
+  if (v < 60) return v.toFixed(1) + " s";
+  return Math.floor(v / 60) + " m " + Math.round(v % 60) + " s";
+}
+function fmtTrendBudget(v) {
+  if (v == null || !isFinite(v)) return "—";
+  return "$" + v.toFixed(2);
+}
+function showTrendTip(i, ev) {
+  const r = trendCache[i];
+  if (!r) return;
+  const verdict = (r.p0 || 0) > 0 ? "FAIL (P0)" : ((r.p1 || 0) > 0 ? "WARN (P1)" : "PASS");
+  const ts = r.ts ? new Date(r.ts).toLocaleString() : "?";
+  const tip = $("tip");
+  tip.textContent =
+    ts + "\n" +
+    "verdict : " + verdict + "\n" +
+    "duration: " + fmtTrendDur(r.duration_s) + "\n" +
+    "budget  : " + fmtTrendBudget(r.budget_usd);
+  tip.style.display = "block";
+  positionTip(ev);
+}
+function hideTrendTip() {
+  $("tip").style.display = "none";
+}
+function positionTip(ev) {
+  const tip = $("tip");
+  const pad = 14;
+  let x = ev.clientX + pad, y = ev.clientY + pad;
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  if (x + w > window.innerWidth - 8) x = ev.clientX - w - pad;
+  if (y + h > window.innerHeight - 8) y = ev.clientY - h - pad;
+  tip.style.left = Math.max(4, x) + "px";
+  tip.style.top = Math.max(4, y) + "px";
+}
+
+// ---- Reference verification trend (verified/total zaman serisi) ----
+function renderRefsTrend(rows) {
+  const svg = $("refs-trend");
+  const legend = $("refs-trend-legend");
+  const have = (rows || []).filter(r => r.refs_verified != null && r.refs_total != null);
+  if (!have.length) {
+    svg.innerHTML = "";
+    legend.textContent = "çevrimiçi referans verisi yok — bu run'larda --check-references veri üretmedi";
+    $("refs-trend-count").textContent = "";
+    return;
+  }
+  const W = 1160, H = 240, PL = 44, PR = 110, PT = 12, PB = 32;
+  const iw = W - PL - PR, ih = H - PT - PB;
+  const plotRight = PL + iw;
+  const n = have.length;
+  const maxT = Math.max(1, ...have.map(r => r.refs_total || 0));
+  const x = (i) => PL + (n === 1 ? iw / 2 : iw * i / (n - 1));
+  const y = (v) => PT + ih - (ih * (v == null || !isFinite(v) ? 0 : v) / maxT);
+
+  let parts = [];
+  // sol eksen grid (0..maxT)
+  const steps = Math.min(maxT, 5);
+  for (let s = 0; s <= steps; s++) {
+    const g = Math.round(maxT * s / steps);
+    const gy = y(g);
+    parts.push(`<line x1="${PL}" y1="${gy}" x2="${plotRight}" y2="${gy}" stroke="#21262d" stroke-width="1"/>`);
+    parts.push(`<text x="${PL-6}" y="${gy+4}" fill="#8b949e" font-size="10" text-anchor="end">${g}</text>`);
+  }
+  // total (mavi, kesikli) — çevrimiçi denetlenebilir girdi sayısı
+  parts.push(`<polyline fill="none" stroke="#58a6ff" stroke-width="2" stroke-dasharray="4 3" points="` +
+    have.map((r,i) => `${x(i)},${y(r.refs_total)}`).join(" ") + `"/>`);
+  // verified (yeşil, dolu) — doğrulanan
+  parts.push(`<polyline fill="none" stroke="#3fb950" stroke-width="2.5" points="` +
+    have.map((r,i) => `${x(i)},${y(r.refs_verified)}`).join(" ") + `"/>`);
+  // mismatch (kırmızı) — yalnızca >0 varsa
+  if (have.some(r => (r.refs_mismatch || 0) > 0)) {
+    parts.push(`<polyline fill="none" stroke="#f85149" stroke-width="2" points="` +
+      have.map((r,i) => `${x(i)},${y(r.refs_mismatch || 0)}`).join(" ") + `"/>`);
+  }
+  // noktalar: tam kapsam yeşil, eksik amber
+  have.forEach((r, i) => {
+    const full = r.refs_verified === r.refs_total;
+    parts.push(`<circle cx="${x(i)}" cy="${y(r.refs_verified)}" r="2.5" fill="${full ? "#3fb950" : "#d29922"}"/>`);
+  });
+  // x ekseni zaman etiketleri (ilk/orta/son)
+  const pick = [0, Math.floor((n-1)/2), n-1].filter((v,i,a) => a.indexOf(v) === i);
+  pick.forEach(i => {
+    const r = have[i];
+    let lbl = "?";
+    if (r.ts) { const d = new Date(r.ts); lbl = d.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}); }
+    parts.push(`<text x="${x(i)}" y="${H-12}" fill="#8b949e" font-size="10" text-anchor="middle">${lbl}</text>`);
+  });
+  svg.innerHTML = parts.join("");
+  const last = have[n-1];
+  const pct = last.refs_total > 0 ? Math.round(100 * last.refs_verified / last.refs_total) : 0;
+  legend.textContent = "Yeşil = verified · Mavi (kesikli) = total · Kırmızı = mismatch · Son: " +
+    `${last.refs_verified}/${last.refs_total} (${pct}%) · ` +
+    (have[0].ts ? new Date(have[0].ts).toLocaleString() : "?") +
+    " → " + (last.ts ? new Date(last.ts).toLocaleString() : "?") + ` · ${n} run`;
+  $("refs-trend-count").textContent = `(${n} run)`;
+}
+
+let runStreamES = null;
+// ---- K8 Z3 ilerleme çubuğu (stream'deki PASS satırlarından) ----
+const Z3_TOTAL = 12;
+let z3Seen = new Set();    // tamamlanan kontroller (bireysel [P1-a] satırları)
+let z3Passed = new Set();  // PASS veren kontroller (özet [PASS] P1-a satırları)
+let z3Failed = new Set();  // FAIL veren kontroller (özet [FAIL] P1-a satırları)
+
+function updateZ3Bar() {
+  const bar = $("z3-fill"), cnt = $("z3-count");
+  if (!bar || !cnt) return;
+  const done = z3Seen.size, passed = z3Passed.size, failed = z3Failed.size;
+  bar.style.width = Math.round(done / Z3_TOTAL * 100) + "%";
+  if (failed > 0) { bar.className = "z3fill err"; cnt.className = "z3count"; }
+  else if (passed === Z3_TOTAL) { bar.className = "z3fill ok"; cnt.className = "z3count ok"; }
+  else { bar.className = "z3fill"; cnt.className = "z3count"; }
+  cnt.textContent = passed + "/" + Z3_TOTAL + (failed > 0 ? " · " + failed + " FAIL" : "");
+}
+
+function scanZ3(line) {
+  // Yeni bir K8 Z3 koşusu başlarsa sayaçları sıfırla (bayat kalmayı önler).
+  if (/SEMBOLİK İSPAT/.test(line)) {
+    z3Seen.clear(); z3Passed.clear(); z3Failed.clear();
+    updateZ3Bar();
+    return;
+  }
+  // Özet tablo: "  [PASS] P1-a ..." / "  [FAIL] P4-b ..."
+  let m = line.match(/\[\s*(PASS|FAIL)\s*\]\s*(P[1-5](?:-(?:[a-e]|note))?)\b/);
+  if (m) {
+    (m[1] === "PASS" ? z3Passed : z3Failed).add(m[2]);
+    z3Seen.add(m[2]);
+    updateZ3Bar();
+    return;
+  }
+  // Bireysel kontrol satırı: "[P1-a] ... : UNSAT ..." (canlı ilerleme)
+  m = line.match(/^\[(P[1-5](?:-(?:[a-e]|note))?)\]/);
+  if (m) {
+    z3Seen.add(m[1]);
+    updateZ3Bar();
+  }
+}
+
+let streamLines = [];  // renklendirilmiş HTML satırları (son 120)
+function connectStream() {
+  const el = $("runstream"), st = $("stream-state");
+  if (runStreamES) runStreamES.close();
+  runStreamES = new EventSource("/api/run-stream");
+  runStreamES.addEventListener("info", (e) => {
+    try { const d = JSON.parse(e.data); st.textContent = "bağlı"; } catch(_) {}
+  });
+  const push = (tag, line, replay) => {
+    scanZ3(line);
+    const arrow = tag === "stderr" ? '<span class="muted">⟶ </span>' : "";
+    const mark = replay ? '<span class="muted">⏪ </span>' : "";
+    streamLines.push(mark + arrow + colorizeLine(line));
+    if (streamLines.length > 120) streamLines = streamLines.slice(-120);
+    el.innerHTML = streamLines.join("\n");
+    el.scrollTop = el.scrollHeight;
+  };
+  runStreamES.addEventListener("replay-start", (e) => {
+    // Her (yeniden) bağlantıda son tamamlanmış run baştan gelir: eski
+    // satırları temizle ki replay + canlı satırlar çift görünmesin;
+    // K8 sayacını da sıfırla (replay son run'u baştan sayar).
+    streamLines = [];
+    z3Seen.clear(); z3Passed.clear(); z3Failed.clear();
+    updateZ3Bar();
+    st.textContent = "geçmiş run yükleniyor…";
+    streamLines.push('<span class="muted">── geçmiş run (son tamamlanmış) ──</span>');
+    el.innerHTML = streamLines.join("\n");
+    el.scrollTop = el.scrollHeight;
+  });
+  runStreamES.addEventListener("stdout", (e) => {
+    try { const d = JSON.parse(e.data); push("stdout", d.line, d.replay); } catch(_) {}
+  });
+  runStreamES.addEventListener("stderr", (e) => {
+    try { const d = JSON.parse(e.data); push("stderr", d.line, d.replay); } catch(_) {}
+  });
+  runStreamES.addEventListener("replay-end", (e) => {
+    st.textContent = "bağlı";
+    streamLines.push('<span class="muted">── canlı akış ──</span>');
+    if (streamLines.length > 120) streamLines = streamLines.slice(-120);
+    el.innerHTML = streamLines.join("\n");
+    el.scrollTop = el.scrollHeight;
+  });
+  runStreamES.addEventListener("end", (e) => {
+    st.textContent = "run bitti";
+    streamLines.push('<span class="muted">── run sonu ──</span>');
+    if (streamLines.length > 120) streamLines = streamLines.slice(-120);
+    el.innerHTML = streamLines.join("\n");
+    el.scrollTop = el.scrollHeight;
+  });
+  runStreamES.onerror = () => { st.textContent = "bağlantı koptu"; };
+}
+
+function loadTrend() {
+  fetch("/api/history").then(r => r.json()).then(rows => {
+    renderTrend(rows);
+    renderRefsTrend(rows);
+    renderHookEnv(rows);
+  }).catch(err => {
+    $("trend-legend").textContent = "trend yüklenemedi: " + err;
+  });
+}
+
+// ---- Budget breakdown (ratios + type_bytes) ----
+function renderBudget(b) {
+  const brEl = $("m-br"), tbEl = $("m-tb"), tbSub = $("m-tb-sub");
+  const w = b && b.comparison && b.comparison.weighted;
+  const ratios = w && w.ratios;
+  const byType = w && w.by_type;
+  if (!ratios || !byType) {
+    brEl.textContent = "—";
+    tbEl.textContent = "—";
+    tbSub.textContent = "iç zip kırılımı";
+    return;
+  }
+  const order = ["text", "pdf", "archive", "binary"];
+  brEl.textContent = order.map(k => k + "=" + (ratios[k] != null ? ratios[k] : "?")).join(" · ");
+  tbEl.textContent = order.map(k => fmtBytes(byType[k])).join(" · ");
+  tbSub.textContent = "toplam " + fmtBytes(b.total_bytes);
+}
+
+// ---- Online reference stats (verified/total, by_source) ----
+function renderRefsOnline(d) {
+  const tsEl = $("ro-ts"), sourcesEl = $("ro-sources");
+  const total   = d.refs_total   != null ? d.refs_total   : d.total_online;
+  const verified = d.refs_verified != null ? d.refs_verified : d.verified;
+  const mismatch = d.refs_mismatch != null ? d.refs_mismatch : d.mismatch;
+  const unverified = d.refs_unverified != null ? d.refs_unverified
+                 : (total != null && verified != null ? Math.max(0, total - verified) : null);
+  const bySource = d.refs_by_source || d.by_source;
+  const ts = d.ts || d.date;
+
+  if (total == null) {
+    $("ro-vt").textContent = "—";
+    $("ro-unv").textContent = "—";
+    $("ro-mis").textContent = "—";
+    $("ro-cov").textContent = "—";
+    $("ro-vt").className = "value"; $("ro-cov").className = "value";
+    sourcesEl.innerHTML = '<div class="muted">çevrimiçi referans denetimi bu run\'da veri üretmedi (ağ/denetim çalışmadı veya 0 kayıt)</div>';
+    if (tsEl) tsEl.textContent = "";
+    return;
+  }
+
+  const v = verified || 0;
+  $("ro-vt").textContent = v + " / " + total;
+  $("ro-vt").className = "value " + (v === total ? "ok" : "warn");
+  $("ro-unv").textContent = unverified != null ? unverified : "?";
+  $("ro-mis").textContent = mismatch || 0;
+  const pct = total > 0 ? Math.round(100 * v / total) : 0;
+  $("ro-cov").textContent = pct + "%";
+  $("ro-cov").className = "value " + (pct === 100 ? "ok" : "warn");
+  if (tsEl) tsEl.textContent = fmtTs(ts);
+
+  const names = { crossref: "CrossRef", openlibrary: "OpenLibrary", sep: "SEP",
+                  archive: "Internet Archive", internetarchive: "Internet Archive",
+                  perseus: "Perseus" };
+  const order = ["crossref", "openlibrary", "sep", "archive", "internetarchive", "perseus"];
+  const rows = order.filter(k => bySource && bySource[k] != null);
+  if (!rows.length) {
+    sourcesEl.innerHTML = '<div class="muted">kaynak kırılımı yok (by_source boş)</div>';
+    return;
+  }
+  const max = Math.max(...rows.map(k => bySource[k]));
+  let html = '<table><thead><tr><th>Source</th><th>Count</th><th style="width:55%">Share</th></tr></thead><tbody>';
+  for (const k of rows) {
+    const c = bySource[k];
+    const w = max > 0 ? Math.round(100 * c / max) : 0;
+    html += `<tr><td>${names[k] || k}</td><td>${c}</td><td>` +
+      `<div style="display:flex;align-items:center;gap:8px">` +
+      `<div style="flex:1;height:10px;background:#21262d;border-radius:5px;overflow:hidden">` +
+      `<div style="width:${w}%;height:100%;background:var(--accent)"></div></div>` +
+      `<span class="ts">${w}%</span></div></td></tr>`;
+  }
+  html += '</tbody></table>';
+  sourcesEl.innerHTML = html;
+}
+
+// ---- Config diff (raw vs effective) ----
+function renderConfigDiff(cd, ts) {
+  const bodyEl = $("cd-body"), tsEl = $("cd-ts");
+  if (!bodyEl) return;
+  if (tsEl) tsEl.textContent = ts ? fmtTs(ts) : "";
+  if (cd == null) {
+    bodyEl.innerHTML = '<div class="muted">veri bekleniyor…</div>';
+    return;
+  }
+  const diffs = cd.differences;
+  if (!diffs || !diffs.length) {
+    bodyEl.innerHTML = '<span class="badge ok">fark yok</span> ' +
+      '<span class="muted">raw config ile effective config aynı (CLI override / drift yok)</span>';
+    return;
+  }
+  const reasonLabel = { cli_override: "CLI override", default: "default", drift: "DRIFT" };
+  const reasonCls = { cli_override: "info", default: "warn", drift: "err" };
+  let h = '<table><thead><tr><th>Field</th><th>Raw</th><th>Effective</th><th>Neden</th></tr></thead><tbody>';
+  for (const r of diffs) {
+    const cls = reasonCls[r.reason] || "unknown";
+    const lbl = reasonLabel[r.reason] || r.reason;
+    h += '<tr><td><code>' + escapeHTML(r.field) + '</code></td>' +
+      '<td><code>' + escapeHTML(fmtVal(r.raw)) + '</code></td>' +
+      '<td><code>' + escapeHTML(fmtVal(r.effective)) + '</code></td>' +
+      '<td><span class="badge ' + cls + '">' + lbl + '</span></td></tr>';
+  }
+  h += '</tbody></table>';
+  bodyEl.innerHTML = h;
+}
+
+// ---- Hook env sürümleri (zaman serisi: python/z3/lean/…) ----
+const HOOK_TOOLS = ["python", "z3", "lean", "pre_commit", "pdfinfo", "qpdf"];
+const HOOK_LABELS = { python: "Python", z3: "Z3", lean: "Lean",
+                      pre_commit: "pre-commit", pdfinfo: "pdfinfo", qpdf: "qpdf" };
+
+function shortVer(v) {
+  if (v == null) return "—";
+  const s = String(v);
+  return s.length > 44 ? s.slice(0, 44) + "…" : s;
+}
+
+function renderHookEnv(rows) {
+  const body = $("he-body"), tsEl = $("he-ts");
+  if (!body) return;
+  if (!rows || !rows.length) {
+    body.innerHTML = '<div class="muted">henüz run yok</div>';
+    if (tsEl) tsEl.textContent = "";
+    return;
+  }
+  const lastSeen = {};
+  const transitions = [];
+  for (const r of rows) {
+    const env = r.hook_env;
+    if (!env || typeof env !== "object") continue;
+    for (const tool of HOOK_TOOLS) {
+      const v = env[tool];
+      if (v == null) continue;
+      if (lastSeen[tool] === undefined) {
+        lastSeen[tool] = { v, ts: r.ts };
+      } else if (lastSeen[tool].v !== v) {
+        transitions.push({ tool, from: lastSeen[tool].v, to: v, ts: r.ts });
+        lastSeen[tool] = { v, ts: r.ts };
+      } else {
+        lastSeen[tool].ts = r.ts;
+      }
+    }
+  }
+  let html = '<table><thead><tr><th>Tool</th><th>Current version</th>' +
+    '<th>Değişiklik</th><th>Son görülme</th></tr></thead><tbody>';
+  for (const tool of HOOK_TOOLS) {
+    const s = lastSeen[tool];
+    const n = transitions.filter(t => t.tool === tool).length;
+    html += '<tr><td><code>' + (HOOK_LABELS[tool] || tool) + '</code></td>' +
+      '<td><code>' + (s ? escapeHTML(shortVer(s.v)) : "—") + '</code></td>' +
+      '<td>' + (n ? '<span class="badge warn">' + n + '</span>' : '<span class="badge ok">0</span>') + '</td>' +
+      '<td class="ts">' + (s ? fmtTs(s.ts) : "—") + '</td></tr>';
+  }
+  html += '</tbody></table>';
+  if (transitions.length) {
+    html += '<div class="ts" style="margin-top:8px">Sürüm değişiklikleri (yeni → eski):</div>';
+    const rev = transitions.slice().reverse().slice(0, 20);
+    for (const t of rev) {
+      html += '<div style="margin:3px 0"><span class="badge info">' + (HOOK_LABELS[t.tool] || t.tool) + '</span> ' +
+        '<code>' + escapeHTML(shortVer(t.from)) + '</code> → <code>' + escapeHTML(shortVer(t.to)) + '</code> ' +
+        '<span class="ts">' + fmtTs(t.ts) + '</span></div>';
+    }
+  } else {
+    html += '<div class="muted" style="margin-top:8px">henüz sürüm değişikliği yok</div>';
+  }
+  body.innerHTML = html;
+  if (tsEl) tsEl.textContent = fmtTs(rows[rows.length - 1].ts);
+}
+
+function fmtVal(v) {
+  if (v == null) return "—";
+  if (typeof v === "object") return JSON.stringify(v);
+  return String(v);
+}
+
+function applySnapshot(d) {
+  // Verdict badge + value
+  const verdict = d.verdict || "UNKNOWN";
+  $("m-verdict").textContent = verdict;
+  $("m-verdict").className = "value " + (
+    verdict === "PASS" ? "ok" :
+    verdict === "FAIL" ? "err" : "");
+  $("m-ts").textContent = fmtTs(d.ts);
+
+  // P0/P1
+  const p0 = d.p0 ?? "?", p1 = d.p1 ?? "?";
+  $("m-p0p1").textContent = p0 + " / " + p1;
+  $("m-p0p1").className = "value " + (
+    p0 === 0 && p1 === 0 ? "ok" :
+    p0 > 0 ? "err" : "warn");
+
+  // Duration
+  $("m-dur").textContent = d.duration_s != null ? d.duration_s + " s" : "—";
+
+  // Budget
+  $("m-budget").textContent = d.budget_usd != null ? "$" + d.budget_usd.toFixed(2) : "—";
+  $("m-budget-sub").textContent = (d.budget_usd != null && d.budget_usd < 30)
+    ? "✓ under $30 limit" : (d.budget_usd != null ? "⚠ over $30" : "limit $30");
+
+  // PDF + refs
+  $("m-pdf").textContent = (d.pdf_pages || "—") + " / " + (d.ref_count || "—");
+
+  // Metadata-stripped
+  if (d.stripped_sha256) {
+    $("m-meta").textContent = d.stripped_sha256.slice(0, 16) + "…";
+    $("m-meta-sub").textContent = "drift: " + (d.stripped_sha256 !== (d.expected_stripped || "").slice(0,16) ? "yes" : "no");
+    $("pdf-hash").textContent = d.stripped_sha256.slice(0, 16) + "…";
+  }
+
+  // Top-level badges
+  const badges = $("badges");
+  badges.innerHTML = "";
+  const addBadge = (cls, text) => {
+    const s = document.createElement("span");
+    s.className = "badge " + cls;
+    s.textContent = text;
+    badges.appendChild(s);
+  };
+  const isOk = verdict === "PASS";
+  addBadge(isOk ? "ok" : "err", "K1-K7: " + verdict);
+  addBadge(isOk ? "ok" : "warn", "K8 Z3: 12/12 (son çalıştırma)");
+  addBadge(isOk ? "ok" : "warn", "K9 Lean: reduct-invariance (son çalıştırma)");
+  addBadge(p1 === 0 ? "ok" : "warn", "Beth 1953: " + (p1 === 0 ? "düzeltildi" : p1 + " P1"));
+  if (d.refs_total != null && d.refs_verified != null) {
+    const full = d.refs_verified === d.refs_total;
+    addBadge(full ? "ok" : "warn", "refs: " + d.refs_verified + "/" + d.refs_total + " online");
+  } else {
+    addBadge(d.ref_count === 64 ? "ok" : "warn", "refs: " + (d.ref_count || "?"));
+  }
+
+  // Refs list (extract from stdout if present)
+  loadTrend();
+  renderRefsOnline(d);
+  renderConfigDiff(d.config_diff, d.ts);
+
+  if (d.stdout_short) {
+    const refItems = [];
+    const lines = d.stdout_short.split("\n");
+    for (const line of lines) {
+      const m = line.match(/^\s*\[(OK|FAIL|SKIP)\]\s+(CrossRef|SEP|OpenLib)\s+(\S.*?)\s+->\s+(.*)$/);
+      if (m) refItems.push({tag: m[1], src: m[2], name: m[3], detail: m[4].trim()});
+    }
+    if (refItems.length) {
+      const list = $("refs");
+      list.innerHTML = "";
+      for (const r of refItems.slice(0, 50)) {
+        const li = document.createElement("li");
+        const tag = r.tag === "OK" ? "ok" : r.tag === "FAIL" ? "err" : "warn";
+        li.innerHTML = `<span class="badge ${tag}" style="min-width:42px;text-align:center">${r.tag}</span>` +
+          `<span style="min-width:60px;color:var(--muted)">${r.src}</span>` +
+          `<span style="flex:1">${escapeHTML(r.name)}</span>`;
+        list.appendChild(li);
+      }
+    }
+  }
+}
+
+function applyStdout(text) {
+  const el = $("stdout");
+  el.innerHTML = colorizeStdout(text);
+  el.scrollTop = el.scrollHeight;
+}
+
+function connect() {
+  if (evtSource) evtSource.close();
+  setLive("connecting");
+  evtSource = new EventSource("/api/run");
+  evtSource.addEventListener("snapshot", (e) => {
+    try {
+      const d = JSON.parse(e.data);
+      applySnapshot(d);
+      setLive("ok");
+      lastTs = Date.now();
+      // snapshot sonrası stdout_short varsa onu da yükle
+      fetch("/api/latest").then(r => r.json()).then(full => {
+        if (full.stdout_short) applyStdout(full.stdout_short);
+        if (full.stderr_short && full.exit_code !== 0) applyStdout(full.stderr_short);
+        if (full.refs_online) renderRefsOnline(full.refs_online);
+        if (full.budget) renderBudget(full.budget);
+        if (full.config_diff) renderConfigDiff(full.config_diff, full.ts);
+      });
+    } catch(err) { console.error("snapshot parse", err); }
+  });
+  evtSource.addEventListener("update", (e) => {
+    try {
+      const d = JSON.parse(e.data);
+      applySnapshot(d);
+      setLive("ok");
+      lastTs = Date.now();
+      // güncellenmiş son çıktıyı da çek
+      fetch("/api/latest").then(r => r.json()).then(full => {
+        if (full.stdout_short) applyStdout(full.stdout_short);
+        if (full.refs_online) renderRefsOnline(full.refs_online);
+        if (full.budget) renderBudget(full.budget);
+        if (full.config_diff) renderConfigDiff(full.config_diff, full.ts);
+      });
+    } catch(err) { console.error("update parse", err); }
+  });
+  evtSource.onerror = () => {
+    setLive("err");
+    // 3 saniye sonra yeniden bağlan
+    setTimeout(connect, 3000);
+  };
+}
+
+$("reconnect").addEventListener("click", connect);
+
+// staleness watchdog: 90s boyunca güncelleme yoksa "stale" göster
+setInterval(() => {
+  if (Date.now() - lastTs > 90000) setLive("warn");
+}, 30000);
+
+loadTrend();
+connectStream();
+connect();
+</script>
+</body>
+</html>

@@ -6,7 +6,7 @@
 # BÖLÜM 1 — HTML dashboard
 # Neden: preview_server.py (TCC-safe dizinden çalışır) preview.html'ı HER
 # İSTEKTE ~/Library/Caches/com.freebuff/preview/preview.html'den okur.
-# Kaynak dosya (.freebuff/preview.html) değiştiğinde bu script, içine build
+# Kaynak dosya (_calisma/CIKTI/preview.html) değiştiğinde bu script, içine build
 # damgası (UTC zaman + kaynak SHA-256 + git short SHA) gömülü kopyayı
 # TCC-safe dizine yazar; sunucu YENİDEN BAŞLATMADAN yeni içeriği servis eder
 # (tarayıcıda yenilemek yeterlidir). Build damgası header'da görünür, böylece
@@ -52,7 +52,7 @@
 #   update_preview.sh --help
 #
 # Ortam değişkenleri (override):
-#   SRC         kaynak HTML   (varsayılan: <repo>/.freebuff/preview.html)
+#   SRC         kaynak HTML   (varsayılan: <repo>/_calisma/CIKTI/preview.html)
 #   DST         TCC-safe kopya (varsayılan: ~/Library/Caches/com.freebuff/preview/preview.html)
 #   INTERVAL    --watch bekleme süresi (varsayılan: 3)
 #   (plist profilleri script içindeki PLIST_PROFILES dizisindedir:
@@ -62,7 +62,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-SRC="${SRC:-$ROOT/.freebuff/preview.html}"
+SRC="${SRC:-$ROOT/_calisma/CIKTI/preview.html}"
 DST="${DST:-$HOME/Library/Caches/com.freebuff/preview/preview.html}"
 INTERVAL="${INTERVAL:-3}"
 
