@@ -39,8 +39,9 @@ LEN=$(printf '%s' "$SUBJECT" | wc -m | tr -d ' ')
 
 # 5) Noise/marker başlıklar — küçük harfe çevirip eşle (tam kelime/önek).
 LOW=$(printf '%s' "$SUBJECT" | tr '[:upper:]' '[:lower:]')
+# shellcheck disable=SC2221,SC2222  # \\\\ escape false-positive: test:* ≠ fix\\ typo*
 case "$LOW" in
-    wip|wip:*|*' wip'|*' wip '*|*' wip:'*|smoke*|test\ marker*|test:*|test|fix\ typo*|minor\ fix*|temp|tmp|asd|asdf|foo|foo:*|bar|bar:*|lorem*|lorem\ ipsum*)
+    wip|wip:*|*' wip'|*' wip '*|*' wip:'*|smoke*|test\ marker*|test:*|fix\ typo*|minor\ fix*|temp|tmp|asd|asdf|foo|foo:*|bar|bar:*|lorem*|lorem\ ipsum*)
         fail "noise/marker başlık yasak" ;;
 esac
 

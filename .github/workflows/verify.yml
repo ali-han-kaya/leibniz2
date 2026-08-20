@@ -95,6 +95,13 @@ jobs:
             echo "actionlint: INFO — exited $ACT_RC (shellcheck hints, advisory)"
           fi
 
+      - name: Lint shell hooks (shellcheck, POSIX/bash)
+        if: always()
+        shell: bash
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck > /dev/null 2>&1
+          bash _calisma/CIKTI/shellcheck_hooks.sh
+
       # _calisma/CIKTI/test_*.py birim testleri — fail-closed. stdlib unittest;
       # ek bağımlılık yok. Kapsam:
       #   test_preview_server.py — history.jsonl bütünlüğü (append/trim/atomik

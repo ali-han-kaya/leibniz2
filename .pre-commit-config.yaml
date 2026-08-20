@@ -127,7 +127,7 @@ repos:
           sorunlarını fail-closed olarak commit öncesi bloke eder.
           actionlint binary'si yoksa indirir (ilk koşumda ~2s, sonraki
           koşumlarda cached). OFFLINE, ~1s.
-        entry: bash -c 'AL=/tmp/actionlint; if [ ! -x "$AL" ]; then OS=$(uname -s | tr A-Z a-z); ARCH=$(uname -m | sed s/x86_64/amd64/); curl -sL "https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_${OS}_${ARCH}.tar.gz" | tar xz -C /tmp actionlint; fi; "$AL" --color .github/workflows/verify.yml'
+        entry: sh _calisma/CIKTI/lint_actionlint.sh
         language: system
         always_run: true
         pass_filenames: false
@@ -226,6 +226,19 @@ repos:
         pass_filenames: false
         stages: [pre-commit]
         verbose: true
+
+      - id: shellcheck-hooks
+        name: Lint shell hooks (shellcheck, POSIX/bash)
+        description: >-
+          verify_lean.sh, commit_msg_hook.sh (POSIX sh) ve
+          update_config_hook.sh (bash) betiklerini shellcheck ile
+          denetler — dash uyumluluğu, glob hataları, regex sorunları.
+          CI'da continue-on-error ile advisory olarak da çalışır.
+        entry: bash _calisma/CIKTI/shellcheck_hooks.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
 
       - id: commit-msg-style
         name: Commit message style (noise prevention)
