@@ -43,6 +43,9 @@ Kullanım (tek komut):
     python3 verify_delivery.py --check-cleanup
                                               # K14: M0 §10 silme/taşıma kayıtlarını dosya
                                               #      sistemiyle doğrula (cleanup_log.json)
+    python3 verify_delivery.py --check-history ~/Library/Caches/com.freebuff/preview/history.jsonl
+                                              # K15: history.jsonl ↔ .sha256 sidecar bütünlüğü
+                                              #      (preview_server.py persist_history çıktısı)
     python3 verify_delivery.py --full          # tüm katmanlar: K1-K14 + referans denetimi + Z3 + Lean
                                               #   (--check-references + --symbolic-proof +
                                               #    --lean-proof + --check-lineage +
@@ -55,7 +58,7 @@ Yalnızca Python 3 standart kütüphanesi kullanır (hashlib, zipfile, subproces
 tempfile; --check-references için ayrıca urllib). Harici `unzip`/`shasum`/`diff`
 GEREKMEZ. pdfinfo varsa PDF sayfa kontrolü eklenir, yoksa atlanır (FAIL değil).
 
-Doğrulama zinciri (Katman 0..13):
+Doğrulama zinciri (Katman 0..14):
   K0  Bayat    CIKTI dışında kalan HER zip taraması (recursive; P1)
   K1  Dış zip  SHA-256 sidecar (kurcalanma)
   K2  Klasör   KLASOR_CHECKSUMLARI.sha256 (tüm dosyalar)
@@ -89,6 +92,15 @@ Doğrulama zinciri (Katman 0..13):
                (M0 §10 ile aynı kaynak) okunur: expect_absent yolları yok olmalı
                (P1), moved.from yok (P1) + moved.to varsa hash (P1), canonical
                hash'ler birebir (P0). --check-cleanup, --full'a dahil.
+  K15 History  preview_server.py'nin history.jsonl ↔ history.jsonl.sha256
+               sidecar bütünlüğü (persist_history çıktısı); eksik/geçersiz/
+               uyuşmazlık → P1. --check-history PATH; --full'a dahil değil
+               (history.jsonl repo dışı TCC-safe mirror'da, yerel makineye özgü).
+  K16 GScripts github_scripts/*.js self-testi: 15 senaryoda MOCK girdi
+               (fixture + mock REST yanıtları) ile gerçek Node'da çalıştırıp
+               ÇIKTI eşleşmesini denetler (hangi çağrı/body/comment_id/setFailed).
+               Script çıkarımı davranışı değiştirirse P0/P1. node yoksa P0
+               (fail-closed, --check-github-scripts, --full'a dahil).
 """
 import argparse
 import concurrent.futures
@@ -152,6 +164,8 @@ LAYER_LABELS = {
     "K12": "Plist şablon",
     "K13": "Repro self-test",
     "K14": "Cleanup kaydı",
+    "K15": "History sidecar",
+    "K16": "GScripts self-test",
 }
 
 # K0-K7 çekirdek katmanlar: --full olsun olmasın her run'da koşar.
@@ -166,6 +180,8 @@ _OPTIONAL_LAYERS = {
     "K12": lambda a: a.check_plist,
     "K13": lambda a: a.check_repro_manifest,
     "K14": lambda a: a.check_cleanup,
+    "K15": lambda a: bool(a.check_history),
+    "K16": lambda a: a.check_github_scripts,
 }
 
 
@@ -399,7 +415,8 @@ REFERENCE_ARCHIVE = [
     # (Fine 2012014618 + Schmitt 73155022 dahil) — OL fallback'te kalırlar.
     {"key": "Fine 2012", "query": "Metaphysical Grounding Correia Schnieder",
      "title_needle": "metaphysical grounding", "creator_needle": "correia",
-     "ht_ids": ["lccn:2012014618", "isbn:1107022894", "isbn:9781107460287"],
+     "ht_ids": ["oclc:793497146", "lccn:2012014618",
+                 "isbn:1107022894", "isbn:9781107460287"],
      "tex_needle": "Fine, K. (2012)"},
     {"key": "Frede 1983", "query": "Skeptical Tradition Burnyeat",
      "title_needle": "skeptical tradition",
@@ -1352,10 +1369,21 @@ def run_reference_audit(tex_text, add, quiet=False):
 
 
 def pdf_pages(pdf_path):
-    """pdfinfo varsa sayfa sayısı; yoksa None (atlanır, FAIL değil)."""
+    """pdfinfo varsa sayfa sayısı; yoksa None (atlanır, FAIL değil).
+
+    pdfinfo poppler ile gelir (/opt/homebrew/bin — Homebrew). launchd GUI
+    agent PATH'i minimal olduğundan bilinen konumlar da denenir
+    (qpdf_check_determinism'deki qpdf fallback deseniyle aynı).
+    """
+    pdfinfo = "pdfinfo"
+    for candidate in ("pdfinfo", "/opt/homebrew/bin/pdfinfo",
+                      "/usr/local/bin/pdfinfo"):
+        if os.path.isfile(candidate):
+            pdfinfo = candidate
+            break
     try:
         r = subprocess.run(
-            ["pdfinfo", pdf_path], capture_output=True, text=True, timeout=30)
+            [pdfinfo, pdf_path], capture_output=True, text=True, timeout=30)
         if r.returncode == 0:
             m = re.search(r"^Pages:\s+(\d+)", r.stdout, re.M)
             if m:
@@ -1397,12 +1425,17 @@ def run_script(py, script):
 
 
 def run_symbolic_proof(py, script):
-    """K8: sembolik ispat (Z3). Döndürür (ok: bool, detail: str).
+    """K8: sembolik ispat (Z3). Döndürür (ok: bool, detail: str, passed: int, failed: int).
 
     Z3 script'inin stdout'u satır satır kendi stderr'ine relay edilir
     (canlı ilerleme — dashboard /api/run-stream'de K8 adımlarını gösterir);
     toplanan çıktı yine de döndürülür. --json modunda stderr serbest
     olduğundan makine-okunur JSON stdout'u bozulmaz.
+
+    passed/failed: Z3 script'inin özet tablosundaki '[PASS]/[FAIL] P1-5'
+    satır sayıları (history.jsonl zaman serisi + dashboard trendi için;
+    preview_server._parse_z3_counts ile AYNI regex — iki uygulama arasında
+    sayım sapması olmaz). Script çalışamazsa (0, 0) döner.
     """
     timed_out = False
     try:
@@ -1414,7 +1447,7 @@ def run_symbolic_proof(py, script):
                              stderr=subprocess.PIPE, text=True,
                              cwd=os.path.dirname(script) or ".", env=env)
     except FileNotFoundError:
-        return False, f"yorumlayıcı bulunamadı: {py}"
+        return False, f"yorumlayıcı bulunamadı: {py}", 0, 0
     out_chunks, err_chunks = [], []
 
     def _drain(pipe, sink, relay):
@@ -1447,15 +1480,24 @@ def run_symbolic_proof(py, script):
             pass
     t1.join(); t2.join()
     if timed_out:
-        return False, "sembolik ispat zaman aşımı (>180s)"
+        return False, "sembolik ispat zaman aşımı (>180s)", 0, 0
+    # Özet tablosu Z3 script'inin STDOUT'undadır (relay → ana süreç stderr'i).
+    passed = failed = 0
+    for line in out_chunks:
+        m = re.match(r"\s*\[\s*(PASS|FAIL)\s*\]\s*P[1-5]\b", line)
+        if m:
+            if m.group(1) == "PASS":
+                passed += 1
+            else:
+                failed += 1
     out = "".join(out_chunks) + "".join(err_chunks)
     if rc == 0:
-        return True, "Z3 ispatı geçti (12/12)"
+        return True, "Z3 ispatı geçti (12/12)", passed, failed
     if "No module named 'z3'" in out or "ModuleNotFoundError" in out:
-        return False, "z3-solver kurulu değil — pip install z3-solver"
+        return False, "z3-solver kurulu değil — pip install z3-solver", passed, failed
     tail = [l.strip() for l in out_chunks if l.strip()][-2:]
     detail = " | ".join(tail) if tail else f"exit={rc}"
-    return False, f"Z3 beklenmedik sonuç: {detail}"
+    return False, f"Z3 beklenmedik sonuç: {detail}", passed, failed
 
 
 TEXT_EXTS = frozenset({
@@ -1601,18 +1643,20 @@ def check_zip_lineage(zip_path, lineage_path, add):
     return ok, detail, records
 
 
-def check_cleanup(cleanup_path, add, repo_root=None):
+def check_cleanup(cleanup_path, add, repo_root=None, dir_arg=None):
     """K14: silme/taşıma kayıtlarını (M0 §10 CLEANUP LOG) dosya sistemiyle doğrula.
 
-    cleanup_log.json (M0 §10 ile AYNI kaynak) üç kayıt türü tutar — hepsi
-    repo köküne göre yollardır:
+    cleanup_log.json (M0 §10 ile AYNI kaynak) üç kayıt türü tutar:
       - expect_absent: kaydın "silindi/taşındı" dediği yollar artık VAR
-        OLMAMALI (varsa P1 — başıboş kopya geri döndü demektir).
+        OLMAMALI (varsa P1 — başıboş kopya geri döndü demektir). Repo
+        köküne göre çözülür.
       - moved: taşıma kayıtları — from yolu yok olmalı (P1); to yolu
         gitignore'da olduğundan yalnızca VARSA hash'i doğrulanır
-        (yoksa INFO — CI fresh clone'da beklenir).
+        (yoksa INFO — CI fresh clone'da beklenir). Repo köküne göre çözülür.
       - canonical: güncel kanonik hash'ler — dosya varsa hash birebir
-        eşleşmeli (uyuşmazlık P0; dosya yoksa P0).
+        eşleşmeli (uyuşmazlık P0; dosya yoksa P0). Verilen --dir'e göre
+        çözülür: repo'da CIKTI/, TCC-safe mirror'da verify/ (basename join
+        her iki durumda kanonik kopyayı bulur).
     Döndürür (ok: bool, detail: str).
     """
     if not os.path.isfile(cleanup_path):
@@ -1630,6 +1674,15 @@ def check_cleanup(cleanup_path, add, repo_root=None):
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
     def _resolve(rel):
+        return os.path.join(repo_root, rel)
+
+    def _resolve_canon(rel):
+        # Canonical kopyalar --dir'e göre çözülür: repo'da CIKTI/ (basename
+        # zaten _calisma/CIKTI/<zip> kaydının son bileşeni), mirror'da
+        # ~/Library/Caches/com.freebuff/verify/. dir_arg verilmezse eski
+        # davranış korunur: repo_root + rel (test çağrıları).
+        if dir_arg:
+            return os.path.join(dir_arg, os.path.basename(rel))
         return os.path.join(repo_root, rel)
 
     rows = []
@@ -1673,7 +1726,7 @@ def check_cleanup(cleanup_path, add, repo_root=None):
             rows.append(("move", to, "INFO (yok — gitignore/CI)", note))
 
     for rec in log.get("canonical", []):
-        p = _resolve(rec.get("path", ""))
+        p = _resolve_canon(rec.get("path", ""))
         want = rec.get("hash")
         note = rec.get("note", "?")
         if not os.path.isfile(p):
@@ -1698,6 +1751,89 @@ def check_cleanup(cleanup_path, add, repo_root=None):
     lines += [f"{r[0]:<8} {r[1]:<46} {r[2]:<22} {r[3]}" for r in rows]
     detail = "\n".join(lines)
     return ok, detail
+
+
+def check_history_sidecar(history_path, add):
+    """K15: history.jsonl ↔ history.jsonl.sha256 bütünlüğü (fail-closed).
+
+    preview_server.py persist_history() her run kaydında history.jsonl'i
+    atomik yazar ve yanına sha256sum formatında history.jsonl.sha256
+    sidecar'ını üretir. Bu katman sidecar'ı yeniden hesaplar; eksik/
+    geçersiz/uyuşmazlık → P1. history.jsonl yoksa (henüz run yok) atlanır.
+    Döndürür (ok: bool, detail: str).
+    """
+    sidecar = history_path + ".sha256"
+    if not os.path.isfile(history_path):
+        return True, f"history.jsonl yok: {history_path} (henüz run yok — atlandı)"
+    got = sha256_file(history_path)
+    if not os.path.isfile(sidecar):
+        add("P1", "K15-HISTORY", "K15 history sidecar",
+            f"sidecar yok: {os.path.basename(sidecar)}",
+            f"{history_path} (canlı sha256={got})")
+        return False, f"sidecar yok (canlı sha256={got})"
+    try:
+        with open(sidecar, encoding="utf-8") as sf:
+            raw = sf.read().strip()
+    except OSError as e:
+        add("P1", "K15-HISTORY", "K15 history sidecar",
+            f"sidecar okunamadı: {os.path.basename(sidecar)}", str(e))
+        return False, f"sidecar okunamadı: {e}"
+    # sha256sum formatı "hex  filename" ya da yalnızca "hex" olabilir.
+    want = raw.split()[0] if raw else ""
+    if not re.fullmatch(r"[0-9a-fA-F]{64}", want):
+        add("P1", "K15-HISTORY", "K15 history sidecar",
+            f"sidecar geçersiz biçim: {os.path.basename(sidecar)}", raw[:120])
+        return False, f"sidecar biçimi geçersiz: {raw[:120]!r}"
+    want = want.lower()
+    if got == want:
+        return True, f"PASS (history.jsonl ↔ sidecar sha256={got})"
+    add("P1", "K15-HISTORY", "K15 history sidecar",
+        "history.jsonl hash'i sidecar ile uyuşmuyor",
+        f"sidecar={want} canlı={got}")
+    return False, f"hash uyuşmuyor (sidecar={want}, canlı={got})"
+
+
+_CONFIG_BASENAMES = None
+
+
+def _config_basenames():
+    """Config dosya adlarını gen_repro_manifest.py'den TEK KAYNAK olarak alır.
+
+    İçe aktarma başarısız olursa (örn. farklı bir dizinden tek başına
+    çalıştırma) aynı kümeyi yerel olarak yeniden kurar — K10 ile üretici
+    arasında isim seti drift'i olmaması için önce modül denenir.
+    """
+    global _CONFIG_BASENAMES
+    if _CONFIG_BASENAMES is not None:
+        return _CONFIG_BASENAMES
+    try:
+        here = os.path.dirname(os.path.abspath(__file__))
+        if here not in sys.path:
+            sys.path.insert(0, here)
+        import gen_repro_manifest as _grm  # noqa: E402
+        _CONFIG_BASENAMES = frozenset(_grm.CONFIG_BASENAMES)
+    except Exception:
+        # Aynı küme (verify.yml "Bundle config snapshot" ile senkron).
+        _CONFIG_BASENAMES = frozenset({
+            "verify_delivery.config.json",
+            "verify_delivery.config.schema.json",
+            "effective_config.json",
+            "config.sha256",
+            "config-diff.txt",
+            "config-diff.json",
+        })
+    return _CONFIG_BASENAMES
+
+
+def _is_config_rel(rel):
+    """Bir rel yolunun config dosyası olup olmadığını isimle tanı (önek + basename).
+
+    Önek eşleşmesi (config/…) geriye dönük uyumluluk içindir; basename
+    eşleşmesi merge-multiple'ın köke düzleştirmesine karşı dayanıklılık
+    sağlar (config/ öneki kaybolsa bile dosya ismiyle tanınır).
+    """
+    return (rel.startswith("config/") or
+            os.path.basename(rel) in _config_basenames())
 
 
 def _config_combined_sha256(config_files):
@@ -1832,6 +1968,60 @@ def _cli_overrides_consistency(files, base, add, check_id="K10-OVERRIDE",
     return ok, rows
 
 
+def _check_manifest_sidecar(mpath, add, check_id, check_label):
+    """manifest.sha256 ↔ manifest.json eşleşmesi (fail-closed, ORTAK tek kaynak).
+
+    manifest.json'un yanındaki sha256sum biçimli sidecar'ı denetler: varlık,
+    biçim ("{hex}  {dosya}" / "{hex} *{dosya}"), dosya adı alanı, hash uyumu.
+    Her sapma add(...) ile P1 bulgusu olur. K10 (verify_manifest_digest) ve
+    K13 (repro self-test) aynı kodu kullanır — iki katman arasında sürüklenme
+    olmaz. Döndürür (ok: bool, rows: [str]).
+    """
+    base = os.path.dirname(os.path.abspath(mpath))
+    sc_ok = True
+    sc_rows = []
+    sc_path = os.path.join(base, "manifest.sha256")
+    if not os.path.isfile(sc_path):
+        sc_ok = False
+        sc_rows.append("eksik")
+        add("P1", check_id, check_label, "manifest.sha256 sidecar'ı yok",
+            sc_path)
+    else:
+        try:
+            with open(sc_path, encoding="utf-8") as scf:
+                sc_text = scf.read().strip()
+        except OSError as e:
+            sc_ok = False
+            sc_rows.append(f"okunamadı: {e}")
+            add("P1", check_id, check_label, "manifest.sha256 okunamadı",
+                str(e))
+            sc_text = ""
+        # sha256sum biçimi: "{hex}  {dosya}" (metin) / "{hex} *{dosya}" (ikili)
+        m = re.match(r"^([0-9a-f]{64})[\s*]+(\S+)\s*$", sc_text)
+        if not m:
+            sc_ok = False
+            sc_rows.append("biçim geçersiz")
+            add("P1", check_id, check_label,
+                "manifest.sha256 sha256sum biçiminde değil", sc_text[:80])
+        else:
+            sc_hash, sc_name = m.group(1), m.group(2)
+            if sc_name != "manifest.json":
+                sc_ok = False
+                sc_rows.append(f"dosya adı '{sc_name}' ≠ manifest.json")
+                add("P1", check_id, check_label,
+                    "manifest.sha256 dosya adı uyuşmuyor",
+                    f"sidecar '{sc_name}', beklenen 'manifest.json'")
+            with open(mpath, "rb") as mf:
+                actual_sc = hashlib.sha256(mf.read()).hexdigest()
+            if sc_hash != actual_sc:
+                sc_ok = False
+                sc_rows.append("hash uyuşmazlığı")
+                add("P1", check_id, check_label,
+                    "manifest.sha256 manifest.json ile uyuşmuyor",
+                    f"sidecar {sc_hash[:16]}… ≠ gerçek {actual_sc[:16]}…")
+    return sc_ok, sc_rows
+
+
 def verify_manifest_digest(manifest_path, add, check_id="K10-MANIFEST",
                            check_label="K10 manifest digest"):
     """K10: manifest.json'daki her dosyanın SHA-256'sını gerçek dosyayla karşılaştır.
@@ -1848,7 +2038,15 @@ def verify_manifest_digest(manifest_path, add, check_id="K10-MANIFEST",
     (effective_config.json) ile dosya config'i (verify_delivery.config.json)
     arasındaki tutarlılık denetlenir — ikisi de combined_sha256 ile
     sabitlendiğinden bu, cli_overrides'ın manifest'teki config.combined_sha256
-    ile tutarlılığını kanıtlar. Döndürür (ok: bool, detail: str).
+    ile tutarlılığını kanıtlar.
+
+    Ayrıca manifest.sha256 ↔ manifest.json eşleşmesi fail-closed denetlenir:
+    gen_repro_manifest.py manifest.json'un yanına sha256sum biçiminde
+    "{hex}  manifest.json" sidecar'ı yazar. Sidecar manifest dosyasının
+    KENDİ hash'ini sabitler — manifest.json içeriği değişirse (ör. JSON'a
+    boşluk ekleme; dosya hash'leri aynı kalsa bile) sidecar artık eşleşmez.
+    Sidecar yok / biçim geçersiz / dosya adı farklı / hash uyuşmaz → P1.
+    Döndürür (ok: bool, detail: str).
     """
     mpath = os.path.abspath(manifest_path)
     if not os.path.isfile(mpath):
@@ -1873,7 +2071,8 @@ def verify_manifest_digest(manifest_path, add, check_id="K10-MANIFEST",
             add("P1", check_id, check_label,
                 f"manifest'teki dosya yok: {rel}")
             continue
-        actual = hashlib.sha256(open(fp, "rb").read()).hexdigest()
+        with open(fp, "rb") as ff:
+            actual = hashlib.sha256(ff.read()).hexdigest()
         if actual != expected:
             n_bad += 1
             bad_rows.append(f"{rel} (beklenen {expected[:16]}… ≠ {actual[:16]}…)")
@@ -1884,8 +2083,9 @@ def verify_manifest_digest(manifest_path, add, check_id="K10-MANIFEST",
             n_ok += 1
 
     # ---- config.combined_sha256: YENİDEN hesapla + doğrula (fail-closed) ----
-    # gen_repro_manifest.py config/ önekli dosyaları ayrıca "config" objesine
-    # yazar: {files: {rel: sha256}, combined_sha256}. combined, o dosyaların
+    # gen_repro_manifest.py config dosyalarını (config/ öneki VEYA bilinen
+    # basename — merge-multiple'a dayanıklı) ayrıca "config" objesine yazar:
+    # {files: {rel: sha256}, combined_sha256}. combined, o dosyaların
     # sıralı "{rel}\0{hash}\n" birleşiminin SHA-256'sıdır. K10 burada onu
     # config.files'tan yeniden hesaplar; kayıtlı değerle uyuşmazsa P1.
     cfg_ok = True
@@ -1932,13 +2132,15 @@ def verify_manifest_digest(manifest_path, add, check_id="K10-MANIFEST",
                     add("P1", check_id, check_label,
                         "config.combined_sha256 uyuşmazlığı",
                         f"yeniden {recalc[:16]}… ≠ kayıtlı {stored_combined[:16]}…")
-    elif any(rel.startswith("config/") for rel in files):
-        # config objesi yok ama files'ta config/ girdileri var → üretici drift'i
-        # (gen_repro_manifest.py config/ dosyası varsa config objesini her zaman yazar).
+    elif any(_is_config_rel(rel) for rel in files):
+        # config objesi yok ama files'ta config dosyaları var → üretici drift'i
+        # (gen_repro_manifest.py config dosyası varsa config objesini her zaman
+        # yazar; tanıma önek + bilinen basename — merge-multiple düzleştirmesi
+        # öneki kaybettirse bile isimle yakalanır).
         cfg_ok = False
         cfg_rows.append("config objesi eksik")
         add("P1", check_id, check_label,
-            "config objesi eksik (files'ta config/ girdileri var)")
+            "config objesi eksik (files'ta config dosyaları var)")
 
     # ---- cli_overrides ↔ config bundle (config.combined_sha256 ile sabitlenir) ----
     # effective_config.json'un cli_overrides kaydı, dosya config'iyle
@@ -1954,11 +2156,19 @@ def verify_manifest_digest(manifest_path, add, check_id="K10-MANIFEST",
     ov_detail = ("cli_overrides: PASS" if ov_ok
                  else ("cli_overrides: FAIL — " + "; ".join(ov_rows[:3])))
 
+    # ---- manifest.sha256 ↔ manifest.json: sidecar eşleşmesi (fail-closed) ----
+    # Ortak helper (K10 + K13 tek kaynak). Sidecar manifest dosyasının KENDİ
+    # hash'ini sabitler: manifest.json içeriği değişirse (ör. JSON'a boşluk
+    # ekleme — dosya hash'leri aynı kalsa bile) sidecar artık eşleşmez.
+    sc_ok, sc_rows = _check_manifest_sidecar(mpath, add, check_id, check_label)
+    sc_detail = ("manifest.sha256: PASS" if sc_ok
+                 else ("manifest.sha256: FAIL — " + "; ".join(sc_rows[:3])))
+
     detail = (f"{n_ok} OK / {n_bad} uyuşmazlık / {n_missing} eksik "
-              f"({len(files)} dosya); {cfg_detail}; {ov_detail}")
+              f"({len(files)} dosya); {cfg_detail}; {ov_detail}; {sc_detail}")
     if bad_rows:
         detail += " | " + "; ".join(bad_rows[:5])
-    return (n_bad == 0 and n_missing == 0 and cfg_ok and ov_ok), detail
+    return (n_bad == 0 and n_missing == 0 and cfg_ok and ov_ok and sc_ok), detail
 
 
 def check_repro_manifest_self_consistency(add):
@@ -1968,8 +2178,11 @@ def check_repro_manifest_self_consistency(add):
     Reproducibility manifest üreticisinin self-testi: bilinen içerikli mock
     dosyalar (alt dizin + config/ dahil) üretilir, gen_repro_manifest.py
     bunlardan manifest.json üretir, üretilen her SHA-256 gerçek dosyayla
-    yeniden hash'lenerek karşılaştırılır. Üretici bug'ı/drift'i (eksik
-    kayıt, yanlış hash, üretilemeyen manifest) P0/P1 ile patlar.
+    yeniden hash'lenerek karşılaştırılır. Ayrıca manifest.sha256 ↔
+    manifest.json eşleşmesi (varlık + biçim + dosya adı + hash) K10 ile ORTAK
+    helper (_check_manifest_sidecar) üzerinden fail-closed denetlenir —
+    üretici sidecar'ı üretmez/bozuk üretirse P1. Üretici bug'ı/drift'i
+    (eksik kayıt, yanlış hash, üretilemeyen manifest) P0/P1 ile patlar.
     Döndürür (ok: bool, detail: str).
     """
     script = os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -1983,6 +2196,10 @@ def check_repro_manifest_self_consistency(add):
         "a.txt": b"hello A\n",
         "sub/b.bin": b"\x00\x01\x02\x03",
         "config/cfg.json": b'{"k": 1}',
+        # merge-multiple düzleştirmesi senaryosu: config dosyası KÖKTE
+        # (config/ öneki yok) — isimle tanınmalı (CONFIG_BASENAMES).
+        "effective_config.json": b'{"effective": true}',
+        "config-diff.json": b'{"diffs": []}',
     }
     tmp = tempfile.mkdtemp(prefix="repro_manifest_")
     try:
@@ -2047,18 +2264,101 @@ def check_repro_manifest_self_consistency(add):
         n_bad = 0
         for rel in sorted(expected):
             fp = os.path.join(out, rel)  # bundle kökü = out/ (üretici kopyalar)
-            actual = hashlib.sha256(open(fp, "rb").read()).hexdigest()
+            with open(fp, "rb") as ff:
+                actual = hashlib.sha256(ff.read()).hexdigest()
             if actual != files[rel]:
                 n_bad += 1
                 add("P1", "K13-REPRO", "K13 repro manifest",
                     f"SHA-256 uyuşmazlığı: {rel}",
                     f"beklenen {files[rel][:16]}… gerçek {actual[:16]}…")
-        ok = n_bad == 0
+
+        # manifest.sha256 ↔ manifest.json: sidecar varlığı + hash eşleşmesi.
+        # K10 ile ORTAK helper (_check_manifest_sidecar) — üretici sidecar'ı
+        # hiç üretmezse, yanlış biçimde/dosya adıyla yazarsa veya manifest.json
+        # ile eşleşmeyen hash koyarsa P1 → fail-closed.
+        sc_ok, sc_rows = _check_manifest_sidecar(
+            mpath, add, "K13-REPRO", "K13 repro manifest")
+        sc_detail = ("manifest.sha256: PASS" if sc_ok
+                     else ("manifest.sha256: FAIL — " + "; ".join(sc_rows[:3])))
+
+        # config objesi: hem config/ önekli hem KÖKE düzleşmiş (merge-multiple)
+        # config dosyaları isimle tanınmalı — config/ öneki varsayımı yok.
+        cfg = m.get("config")
+        cfg_ok = isinstance(cfg, dict) and isinstance(cfg.get("files"), dict)
+        cfg_rel = set(cfg["files"]) if cfg_ok else set()
+        want_cfg = {"config/cfg.json", "effective_config.json",
+                    "config-diff.json"}
+        missing_cfg = sorted(want_cfg - cfg_rel)
+        if not cfg_ok or missing_cfg:
+            add("P1", "K13-REPRO", "K13 repro manifest",
+                "config objesi kök-düzleşmiş dosyaları kapsamıyor",
+                f"eksik={missing_cfg}")
+            return False, f"config kapsamı eksik: {missing_cfg}"
+        if cfg["combined_sha256"] != _config_combined_sha256(cfg["files"]):
+            add("P1", "K13-REPRO", "K13 repro manifest",
+                "config.combined_sha256 yeniden hesap uyuşmuyor")
+            return False, "config.combined_sha256 uyuşmuyor"
+
+        ok = n_bad == 0 and sc_ok
         detail = (f"{len(expected) - n_bad} OK / {n_bad} uyuşmazlık "
-                  f"({len(expected)} mock dosya)")
+                  f"({len(expected)} mock dosya); config {len(cfg_rel)} dosya; "
+                  f"{sc_detail}")
         return ok, detail
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+
+
+def check_github_scripts_self_test(add):
+    """K16: github_scripts/*.js self-testi (mock girdi + çıktı eşleşmesi).
+
+    github_scripts_battery.py'yi koşar: 15 senaryoda her script'i gerçek
+    Node'da MOCK github/context/core ile çalıştırır ve beklenen davranışla
+    (hangi REST çağrısı, hangi body, hangi comment_id, setFailed var/yok)
+    eşleştirir. Script çıkarımı/refactor davranışı değiştirirse FAIL.
+    node yoksa P0 (fail-closed — K8'in Z3 yorumlayıcı kuralıyla aynı).
+    Döndürür (ok: bool, detail: str).
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    battery = os.path.join(here, "github_scripts_battery.py")
+    if not os.path.isfile(battery):
+        add("P0", "K16-GSCRIPTS", "K16 github-scripts self-test",
+            "github_scripts_battery.py yok", battery)
+        return False, f"{battery} yok"
+    node = shutil.which("node")
+    if node is None:
+        # launchd GUI agent PATH'i minimal (/usr/bin:/bin:…) — Homebrew node
+        # bilinen konumlardan aranır (macOS; Linux'ta PATH yeterli olur).
+        for cand in ("/opt/homebrew/bin/node", "/usr/local/bin/node",
+                     "/home/linuxbrew/.linuxbrew/bin/node"):
+            if os.path.isfile(cand) and os.access(cand, os.X_OK):
+                node = cand
+                break
+    if node is None:
+        add("P0", "K16-GSCRIPTS", "K16 github-scripts self-test",
+            "node bulunamadı — battery çalıştırılamaz")
+        return False, "node bulunamadı"
+    try:
+        r = subprocess.run([sys.executable, battery],
+                           capture_output=True, text=True, timeout=180)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        add("P0", "K16-GSCRIPTS", "K16 github-scripts self-test",
+            f"battery çalıştırılamadı: {e}")
+        return False, f"battery çalıştırılamadı: {e}"
+    if r.returncode != 0:
+        # İlk FAIL satırını yakala (detay için); tam çıktı stderr'de.
+        fail_lines = [ln for ln in (r.stdout or "").splitlines()
+                      if "[FAIL]" in ln]
+        detail = (fail_lines[0].strip()[:200] if fail_lines
+                  else (r.stderr or r.stdout or "").strip()[:300])
+        add("P0", "K16-GSCRIPTS", "K16 github-scripts self-test",
+            f"battery exit={r.returncode}", detail)
+        return False, detail or f"battery exit={r.returncode}"
+    summary = ""
+    for ln in (r.stdout or "").splitlines():
+        if ln.startswith("SONUÇ:"):
+            summary = ln.strip()
+            break
+    return True, summary or f"battery exit=0"
 
 
 def _run_quiet(cmd, timeout=10):
@@ -2232,11 +2532,21 @@ def main():
     ap.add_argument("--check-cleanup", action="store_true",
                     help="K14: cleanup_log.json (M0 §10 CLEANUP LOG) silme/taşıma "
                          "kayıtlarını dosya sistemiyle doğrula (fail-closed)")
+    ap.add_argument("--check-history", default=None, metavar="PATH",
+                    help="K15: history.jsonl ↔ history.jsonl.sha256 sidecar "
+                         "bütünlüğünü doğrula (preview_server.py persist_history "
+                         "çıktısı; uyuşmazlık P1). Yerel varsayılan: "
+                         "~/Library/Caches/com.freebuff/preview/history.jsonl")
+    ap.add_argument("--check-github-scripts", action="store_true",
+                    help="K16: github_scripts/*.js self-testi — 15 senaryoda "
+                         "mock girdi + çıktı eşleşmesi (REST çağrısı/body/"
+                         "comment_id/setFailed); script davranışı değişirse "
+                         "fail-closed P0/P1 (--full'a dahil)")
     ap.add_argument("--full", action="store_true",
                     help="Tüm katmanları tek komutla koş: --check-references + "
                          "--symbolic-proof + --lean-proof + --check-lineage + "
                          "--check-config-drift + --check-repro-manifest + "
-                         "--check-cleanup")
+                         "--check-cleanup + --check-github-scripts")
     args = ap.parse_args()
     # --full, tüm isteğe bağlı katmanları aktifleştirir
     if args.full:
@@ -2247,6 +2557,7 @@ def main():
         args.check_repro_manifest = True
         args.check_config_drift = True
         args.check_cleanup = True
+        args.check_github_scripts = True
 
     # ---- Konfig yükleme (CLI bayrakları config'ten öncelikli) ----
     # Fail-closed: geçersiz JSON veya şema ihlali artık sessizce varsayılana
@@ -2466,10 +2777,25 @@ def main():
     if args.check_cleanup:
         cleanup_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                     "cleanup_log.json")
-        cleanup_ok, cleanup_detail = check_cleanup(cleanup_path, add)
+        cleanup_ok, cleanup_detail = check_cleanup(
+            cleanup_path, add, dir_arg=args.dir)
         cleanup_report = {"ok": cleanup_ok, "detail": cleanup_detail}
         if not args.json:
             print(f"\n{cleanup_detail}")
+
+    # ---- K15: history.jsonl ↔ .sha256 sidecar bütünlüğü ----
+    # preview_server.py persist_history() her run kaydında history.jsonl'in
+    # yanına sha256sum formatında .sha256 sidecar'ı yazar. Bu katman sidecar'ı
+    # yeniden hesaplar (fail-closed P1). history.jsonl repo DIŞI TCC-safe
+    # mirror'da yaşadığı için --full'a dahil DEĞİLDİR (açık --check-history).
+    history_sidecar_report = None
+    if args.check_history:
+        hok, hdetail = check_history_sidecar(args.check_history, add)
+        history_sidecar_report = {"ok": hok, "detail": hdetail,
+                                  "path": args.check_history}
+        if not args.json:
+            print(f"[K15] history sidecar: "
+                  f"{'PASS' if hok else 'FAIL'} — {hdetail}")
 
     tmp = tempfile.mkdtemp(prefix="verify_delivery_")
     pages = refs = pdf_meta_report = None
@@ -2661,13 +2987,14 @@ def main():
         shutil.rmtree(tmp, ignore_errors=True)
 
     # ---- K8: sembolik ispat (Z3, isteğe bağlı) ----
+    z3_passed = z3_failed = None   # koşulmadıysa None (history/trend '?' gösterir)
     if args.symbolic_proof:
         sp = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                           SYMBOLIC_PROOF_SCRIPT)
         if not os.path.isfile(sp):
             add("P0", "K8-Z3", "K8 sembolik ispat", f"{SYMBOLIC_PROOF_SCRIPT} yok", sp)
         else:
-            ok, detail = run_symbolic_proof(sys.executable, sp)
+            ok, detail, z3_passed, z3_failed = run_symbolic_proof(sys.executable, sp)
             if not args.json:
                 print(f"[K8] sembolik ispat (Z3): {'PASS' if ok else 'FAIL'} — {detail}")
             if not ok:
@@ -2689,8 +3016,14 @@ def main():
             add("P0", "K9-LEAN", "K9 Lean ispatı", f"{LEAN_PROOF_SCRIPT} yok", lp)
         else:
             ok, detail = run_lean_proof(lean_cmd, lp)
+            k9_line = f"[K9] Lean 4 reduct-invariance: {'PASS' if ok else 'FAIL'} — {detail}"
             if not args.json:
-                print(f"[K9] Lean 4 reduct-invariance: {'PASS' if ok else 'FAIL'} — {detail}")
+                print(k9_line)
+            else:
+                # --json modunda stdout yalnızca JSON olmalı; K9 sonucu
+                # dashboard'un gerçek rozet için stderr'e relay edilir
+                # (preview_server._parse_lean_result bunu ayrıştırır).
+                print(k9_line, file=sys.stderr)
             if not ok:
                 add("P0", "K9-LEAN", "K9 Lean ispatı", detail)
 
@@ -2831,6 +3164,19 @@ def main():
             print(f"[K13] repro manifest: "
                   f"{'PASS' if repro_ok else 'FAIL'} — {repro_detail}")
 
+    # ---- K16: github-script'ler self-testi (mock girdi + çıktı eşleşmesi) ----
+    # github_scripts/*.js dosyaları github-script çalışma zamanına bağımlı;
+    # davranışlarını gerçek Node'da MOCK github/context/core ile denetler.
+    # Script çıkarımında davranış değişirse (yanlış çağrı, eksik marker,
+    # beklenmeyen setFailed) fail-closed P0/P1. K13'le aynı desen.
+    github_scripts_report = None
+    if args.check_github_scripts:
+        gok, gdetail = check_github_scripts_self_test(add)
+        github_scripts_report = {"ok": gok, "detail": gdetail}
+        if not args.json:
+            print(f"[K16] github-scripts self-test: "
+                  f"{'PASS' if gok else 'FAIL'} — {gdetail}")
+
     # ---- Bütçe kalkanı: iki yöntem yan yana ----
     # (a) Evrensel: token ≈ bytes/4      (v3_verify.py H4, bağımsız referans)
     # (b) Ağırlıklı: token ≈ bytes/r_i    (dosya tipine göre bytes-per-token)
@@ -2966,13 +3312,19 @@ def main():
         "manifest_digest": manifest_digest_report,
         "config_drift": config_drift_report,
         "repro_manifest": repro_manifest_report,
+        "github_scripts": github_scripts_report,
         "lineage": lineage_report,
         "plist": plist_report,
         "cleanup": cleanup_report,
+        "history_sidecar": history_sidecar_report,
+        # Per-katman PASS/FAIL/SKIP — dashboard'un "K1-K7" rozeti bunu
+        # gerçek veriden türetir (genel verdict değil); --klayers-out
+        # sidecar'ı ile aynı build_layers_summary kaynağı.
+        "layers": build_layers_summary(args, findings),
     }
 
     # ---- K-katman özeti sidecar (run summary için) ----
-    # findings tek kaynağından K0-K14'ün PASS/FAIL/SKIP durumunu türetir;
+    # findings tek kaynağından K0-K16'nın PASS/FAIL/SKIP durumunu türetir;
     # verify job'unun GITHUB_STEP_SUMMARY'sinde K1-K10 bölümlerini üretmek
     # için run_summary_klayers.py tarafından okunur.
     if args.klayers_out:
@@ -3008,6 +3360,10 @@ def main():
         if cleanup_report:
             print(f"K14 cleanup: {'PASS' if cleanup_report['ok'] else 'FAIL'} "
                   f"(silme/taşıma kayıtları)")
+        if history_sidecar_report:
+            print(f"K15 history sidecar: "
+                  f"{'PASS' if history_sidecar_report['ok'] else 'FAIL'} "
+                  f"({history_sidecar_report['path']})")
         print(f"Config: {effective_config['source']} ← {effective_config['config_path']} "
               f"(budget_usd={effective_config['budget_usd']}, "
               f"method={effective_config['budget_method']}, "
@@ -3053,6 +3409,12 @@ def main():
             "refs_mismatch": (refs_online_report or {}).get("mismatch"),
             "refs_by_source": (refs_online_report or {}).get("by_source"),
             "hook_env": hook_env,
+            # K8 Z3: özet tablosundan sayılan [PASS]/[FAIL] P1-5 (trend için;
+            # koşulmadıysa None). preview_server HISTORY_KEYS'iyle birebir.
+            "z3_passed": z3_passed,
+            "z3_failed": z3_failed,
+            "z3_total": (z3_passed + z3_failed
+                         if z3_passed is not None else None),
         }
         try:
             with open(args.history_out, "a", encoding="utf-8") as hf:

@@ -26,5 +26,9 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 
+# Lean 4 (lake build çıktıları — tek dosya teslim spec'i `rm -rf .lake` der)
+.lake/
+lake-manifest.json
+
 # macOS
 .DS_Store

@@ -4,7 +4,7 @@
 #   pip install pre-commit
 #   pre-commit install
 #
-# Bu noktadan sonra her `git commit` sırasında yedi kapı çalışır:
+# Bu noktadan sonra her `git commit` sırasında dokuz kapı çalışır:
 #   0) update-config          : config'i paket içeriğinden senkron et (gen_config.py)
 #                               — repack sayıları değiştirdiyse verify_delivery.config.json'u
 #                               otomatik günceller ve stage eder; değişmediyse dokunmaz.
@@ -23,7 +23,20 @@
 #                               birim testler (update_preview.sh --plist-check
 #                               + check_plist_drift.py) — fake HOME'da koşar,
 #                               gerçek LaunchAgents/Caches'a dokunmaz.
-#   7) commit-msg-style       : başlık denetimi (.gitmessage kuralları) — noise
+#   7) check-repro-manifest    : reproducibility manifest + merge pattern
+#                               kapsamını test_gen_repro_manifest.py ile
+#                               doğrular (ARTIFACT_JOBS ↔ verify.yml pattern);
+#                               artifact pattern'den düşerse commit bloke edilir.
+#   8) verify-delivery-repro-manifest: K13 KATMANI — verify_delivery.py
+#                               --check-repro-manifest'i koşar: gen_repro_manifest.py
+#                               mock artifact'lardan manifest üretir ve her SHA-256'yı
+#                               gerçek dosyayla karşılaştırır (fail-closed). Üreticideki
+#                               drift/bug her commit'te yakalanır. stdlib-only, OFFLINE.
+#   9) verify-delivery-github-scripts: K16 KATMANI — github_scripts/*.js
+#                               self-testi: 15 senaryoda MOCK girdi + çıktı
+#                               eşleşmesi (github_scripts_battery.py + node
+#                               harness). Script davranışı değişirse bloke.
+#   10) commit-msg-style      : başlık denetimi (.gitmessage kuralları) — noise
 #                               commit'leri (wip/smoke/test marker/şablon) reddeder.
 #                               commit-msg stage'inde; CI --all-files'ta ÇALIŞMAZ.
 # Herhangi bir P0/P1 bulgusu commit'i bloke eder (sıfır-dışı exit).
@@ -37,6 +50,9 @@
 #   pre-commit run verify-delivery-symbolic
 #   pre-commit run verify-delivery-lean
 #   pre-commit run check-action-pins
+#   pre-commit run check-repro-manifest
+#   pre-commit run verify-delivery-repro-manifest
+#   pre-commit run verify-delivery-github-scripts
 #
 # update-config hariç hook'lar read-only'dir: dosya değiştirmez, yalnızca
 # doğrular (fail-closed). update-config, config'i paket içeriğiyle senkron eder.
@@ -139,6 +155,56 @@ repos:
           altında koşar — gerçek LaunchAgents/Caches'a dokunmaz, plistlib
           fallback'i sayesinde Linux CI'da da çalışır.
         entry: python3 -m unittest discover -s _calisma/CIKTI -p "test_plist_gate_exit.py"
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
+      - id: check-repro-manifest
+        name: "Repro manifest + pattern coverage (fail-closed)"
+        description: >-
+          test_gen_repro_manifest.py'i koşar: gen_repro_manifest.py'nin
+          provenance bölümü (artifact → job) doğru üretilir ve verify.yml'deki
+          reproducibility merge pattern'i ARTIFACT_JOBS'ı EKSİKSİZ kapsar.
+          Bir artifact pattern'den düşerse (manifest'e girmeden kaybolursa)
+          commit bloke edilir. stdlib unittest + subprocess.
+        entry: python3 -m unittest discover -s _calisma/CIKTI -p "test_gen_repro_manifest.py"
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
+      - id: verify-delivery-github-scripts
+        name: "Verify github-scripts self-test (K16, fail-closed)"
+        description: >-
+          verify_delivery.py --check-github-scripts (K16 katmanı):
+          github_scripts_battery.py 15 senaryoda çıkarılmış github-script'leri
+          MOCK girdiyle gerçek Node'da çalıştırır ve çıktı eşleşmesini denetler
+          (REST çağrısı, yorum body'si, comment_id, setFailed). Script'lerin
+          davranışı değişirse (refactor/çıkarım hatası) P0/P1 → commit bloke
+          edilir. node gerektirir (dev makinesinde mevcut); node yoksa kapı
+          P0 verir. OFFLINE, ~2s.
+        entry: python3 _calisma/CIKTI/verify_delivery.py --dir _calisma/CIKTI --check-github-scripts
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
+      - id: verify-delivery-repro-manifest
+        name: "Verify repro-manifest producer (K13, fail-closed)"
+        description: >-
+          verify_delivery.py --check-repro-manifest (K13 katmanı):
+          gen_repro_manifest.py'yi bilinen içerikli mock artifact'larla koşar,
+          üretilen manifest.json'daki her SHA-256'yı gerçek dosyayla yeniden
+          hash'leyerek karşılaştırır. Eksik kayıt / yanlış hash / üretilemeyen
+          manifest → P0/P1 → commit bloke edilir (reproducibility zinciri
+          her commit'te doğrulanır). stdlib-only, OFFLINE, saniyeler sürer.
+          (Not: repro-manifest katmanı verify_delivery.py'de K13'tür; K12
+          plist kapısıdır — o, check-plist-drift hook'unca kapsanır.)
+        entry: python3 _calisma/CIKTI/verify_delivery.py --dir _calisma/CIKTI --check-repro-manifest
         language: system
         always_run: true
         pass_filenames: false

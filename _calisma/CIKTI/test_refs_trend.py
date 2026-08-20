@@ -94,5 +94,114 @@ class TestShortDate(unittest.TestCase):
         self.assertEqual(rt.short_date(""), "")
 
 
+class TestParseHistoryRecord(unittest.TestCase):
+    def _zip_jsonl(self, records):
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as z:
+            z.writestr(
+                "history.jsonl",
+                "\n".join(json.dumps(r, ensure_ascii=False)
+                           for r in records) + "\n",
+            )
+        return buf.getvalue()
+
+    def test_parses_last_record(self):
+        rec = rt.parse_history_record(self._zip_jsonl([
+            {"ts": "a", "duration_s": 1.0, "budget_usd": 0.5},
+            {"ts": "b", "duration_s": 2.0, "budget_usd": 1.08},
+        ]))
+        self.assertEqual(rec["ts"], "b")
+        self.assertEqual(rec["duration_s"], 2.0)
+        self.assertEqual(rec["budget_usd"], 1.08)
+
+    def test_skips_blank_lines(self):
+        rec = rt.parse_history_record(self._zip_jsonl([
+            {"ts": "a", "duration_s": 3.0},
+        ]))
+        self.assertEqual(rec["duration_s"], 3.0)
+
+    def test_missing_jsonl_raises(self):
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as z:
+            z.writestr("other.txt", "x")
+        with self.assertRaises(ValueError):
+            rt.parse_history_record(buf.getvalue())
+
+    def test_empty_jsonl_raises(self):
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as z:
+            z.writestr("history.jsonl", "\n")
+        with self.assertRaises(ValueError):
+            rt.parse_history_record(buf.getvalue())
+
+
+class TestStats(unittest.TestCase):
+    def test_basic(self):
+        self.assertEqual(rt.stats([1, 2, 3]),
+                         {"count": 3, "min": 1, "max": 3, "avg": 2})
+
+    def test_ignores_non_numbers(self):
+        s = rt.stats([None, "x", 5, 15])
+        self.assertEqual(s["count"], 2)
+        self.assertEqual(s["min"], 5)
+        self.assertEqual(s["max"], 15)
+        self.assertEqual(s["avg"], 10)
+
+    def test_empty(self):
+        self.assertEqual(rt.stats([]),
+                         {"count": 0, "min": None, "max": None, "avg": None})
+
+
+class TestFetchArtifactsByName(unittest.TestCase):
+    def test_filters_sorts_by_date(self):
+        artifacts = [
+            {"name": "refs-online", "id": 1,
+             "created_at": "2026-08-18T00:00:00Z"},
+            {"name": "other", "id": 2,
+             "created_at": "2026-08-19T00:00:00Z"},
+            {"name": "refs-online", "id": 3,
+             "created_at": "2026-08-17T00:00:00Z"},
+        ]
+        orig = rt.api_get
+
+        def fake_api(path, token, binary=False):
+            return {"artifacts": artifacts}
+
+        rt.api_get = fake_api
+        try:
+            out = rt.fetch_artifacts_by_name("o/r", "", "refs-online", 100)
+        finally:
+            rt.api_get = orig
+        self.assertEqual([a["id"] for a in out], [3, 1])
+
+
+WORKFLOW = CIKTI.parent.parent / ".github" / "workflows" / "verify.yml"
+
+
+class TestWorkflowCliConsistency(unittest.TestCase):
+    """verify.yml'in refs-trend job'ı refs_trend.py CLI'sıyla senkron olmalı.
+
+    refs_trend.py --out-dir refs-trend altına refs-trend.md + refs-trend.json
+    üretir; gen_repro_manifest.py'nin REFS TREND bölümü refs-trend/ önekini ve
+    reproducibility job'ı `name: refs-trend` artifact'ını ayrıca indirir.
+    CLI/artifact drift bu zinciri sessizce koparır — fail-closed.
+    """
+    def _workflow(self):
+        return WORKFLOW.read_text(encoding="utf-8")
+
+    def test_job_uses_refs_trend_out_dir(self):
+        text = self._workflow()
+        self.assertIn("_calisma/CIKTI/refs_trend.py", text)
+        self.assertIn("--out-dir refs-trend", text)
+        self.assertIn("--max-artifacts 100", text)
+
+    def test_artifact_name_matches_output_prefix(self):
+        # refs_trend.py çıktısı refs-trend/ altına yazılır; reproducibility
+        # job'ı aynı adla indirir → manifest REFS TREND bölümüne girer.
+        text = self._workflow()
+        self.assertIn("name: refs-trend", text)
+        self.assertIn("path: all_artifacts/refs-trend/", text)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -5,17 +5,21 @@ refs_trend.py — `refs-online` artifact'larını run'lar arası toplar ve
 "online verification trend" tablosu üretir (CrossRef/SEP/OpenLibrary ve
 diğer kaynaklardan çevrimiçi doğrulanan referans sayısının zaman serisi).
 
-Kaynak: GitHub Actions API — `repos/{owner}/{repo}/actions/artifacts?name=
-refs-online` → her artifact'ın zip'inden `references_online.json` çıkarılır
-(verify_delivery.py --refs-out'un ürettiği VERSION JSON).
+Kaynak: GitHub Actions API — iki artifact türü run'lar arası toplanır:
+  - `refs-online` → her zip'ten `references_online.json` (verify_delivery.py
+    --refs-out'un ürettiği VERSION JSON) → çevrimiçi doğrulama zaman serisi.
+  - `run-history` → her zip'ten `history.jsonl` (verify_delivery.py
+    --history-out'un tek JSONL kaydı; ts/duration_s/budget_usd/verdict) →
+    duration + budget trendi.
 
 Kimlik:
   - CI: GITHUB_TOKEN env (workflow'da `actions: read` gerekir).
   - Yerel: token yoksa `gh api` (kullanıcı auth'u) kullanılır.
 
 Çıktı (--out-dir):
-  - refs-trend.md  — insan-okur trend tablosu + özet
-  - refs-trend.json — makine-okur {generated, repo, rows[], summary}
+  - refs-trend.md  — insan-okur tablo: refs trendi + duration/budget trendi
+  - refs-trend.json — makine-okur {generated, repo, rows[], totals,
+                     duration_budget{rows[], summary}}
 
 Kullanım:
   GITHUB_TOKEN=... python3 _calisma/CIKTI/refs_trend.py --repo owner/name \\
@@ -83,17 +87,17 @@ def api_get(path, token, binary=False):
     return json.loads(out.decode("utf-8") if isinstance(out, bytes) else out)
 
 
-def fetch_refs_online_artifacts(repo, token, max_artifacts):
-    """Son max_artifacts adet `refs-online` artifact'ını toplar -> [dict]."""
+def fetch_artifacts_by_name(repo, token, name, max_artifacts):
+    """Son max_artifacts adet `name` artifact'ını toplar -> [dict] (tarih sıralı)."""
     rows = []
     page = 1
     while len(rows) < max_artifacts:
-        path = (f"/repos/{repo}/actions/artifacts?name=refs-online"
+        path = (f"/repos/{repo}/actions/artifacts?name={name}"
                 f"&per_page=100&page={page}")
         data = api_get(path, token)
         artifacts = data.get("artifacts", [])
         for a in artifacts:
-            if a.get("name") == "refs-online":
+            if a.get("name") == name:
                 rows.append(a)
         if len(artifacts) < 100 or len(rows) >= max_artifacts:
             break
@@ -104,6 +108,11 @@ def fetch_refs_online_artifacts(repo, token, max_artifacts):
     return rows[-max_artifacts:]
 
 
+def fetch_refs_online_artifacts(repo, token, max_artifacts):
+    """Son max_artifacts adet `refs-online` artifact'ını toplar -> [dict]."""
+    return fetch_artifacts_by_name(repo, token, "refs-online", max_artifacts)
+
+
 def parse_report(blob):
     """Artifact zip'inden references_online.json'u ayrıştırır."""
     with zipfile.ZipFile(io.BytesIO(blob)) as z:
@@ -112,6 +121,36 @@ def parse_report(blob):
         if not names:
             raise ValueError("zip içinde references_online.json yok")
         return json.loads(z.read(names[0]).decode("utf-8"))
+
+
+def parse_history_record(blob):
+    """Artifact zip'inden history.jsonl'in son (en güncel) kaydını döndürür."""
+    with zipfile.ZipFile(io.BytesIO(blob)) as z:
+        names = [n for n in z.namelist() if n.endswith("history.jsonl")]
+        if not names:
+            raise ValueError("zip içinde history.jsonl yok")
+        text = z.read(names[0]).decode("utf-8")
+    last = None
+    for line in text.splitlines():
+        line = line.strip()
+        if line:
+            last = json.loads(line)
+    if last is None:
+        raise ValueError("history.jsonl boş")
+    return last
+
+
+def stats(vals):
+    """Sayı listesi için {count,min,max,avg} özeti; boşsa {count:0,...}."""
+    vals = [v for v in vals if isinstance(v, (int, float))]
+    if not vals:
+        return {"count": 0, "min": None, "max": None, "avg": None}
+    return {
+        "count": len(vals),
+        "min": round(min(vals), 2),
+        "max": round(max(vals), 2),
+        "avg": round(sum(vals) / len(vals), 2),
+    }
 
 
 def short_date(iso):
@@ -157,6 +196,15 @@ def main():
         print(f"HATA: refs-online artifact listelenemedi — {e}", file=sys.stderr)
         sys.exit(1)
 
+    try:
+        hist_artifacts = fetch_artifacts_by_name(args.repo, token,
+                                                 "run-history",
+                                                 args.max_artifacts)
+    except Exception as e:
+        print(f"  (run-history listelenemedi — {e}; duration/budget trendi boş)",
+              file=sys.stderr)
+        hist_artifacts = []
+
     rows = []
     for a in artifacts:
         aid = a["id"]
@@ -180,6 +228,28 @@ def main():
         })
 
     rows.sort(key=lambda r: r["date"])
+
+    history_rows = []
+    for a in hist_artifacts:
+        aid = a["id"]
+        try:
+            blob = api_get(f"/repos/{args.repo}/actions/artifacts/{aid}/zip",
+                           token, binary=True)
+            rec = parse_history_record(blob)
+        except Exception as e:
+            print(f"  (atlandı: run-history artifact {aid} "
+                  f"({a.get('created_at')}) — {e})", file=sys.stderr)
+            continue
+        history_rows.append({
+            "date": rec.get("ts", a.get("created_at", "")),
+            "run_id": (a.get("workflow_run") or {}).get("id"),
+            "duration_s": rec.get("duration_s"),
+            "budget_usd": rec.get("budget_usd"),
+            "verdict": rec.get("verdict"),
+            "p0": rec.get("p0"),
+            "p1": rec.get("p1"),
+        })
+    history_rows.sort(key=lambda r: r["date"])
 
     # ── Markdown tablo ───────────────────────────────────────────────────
     lines = [
@@ -233,6 +303,48 @@ def main():
             "",
         ]
 
+    # ── Duration / Budget trendi (run-history) ───────────────────────────
+    if history_rows:
+        lines += [
+            "## Duration / Budget trendi (run-history)",
+            "",
+            f"- **Kaynak:** `run-history` artifact'ları (son {len(history_rows)} run)",
+            "",
+            "| # | Tarih (UTC) | Run ID | Duration (s) | Budget (USD) | Verdict |",
+            "|---|---|---|---|---|---|",
+        ]
+        for i, r in enumerate(history_rows, 1):
+            dur = (f"{r['duration_s']:.1f}"
+                   if isinstance(r["duration_s"], (int, float))
+                   else (r["duration_s"]
+                         if r["duration_s"] is not None else "—"))
+            bud = (f"${r['budget_usd']:.2f}"
+                   if isinstance(r["budget_usd"], (int, float))
+                   else (r["budget_usd"]
+                         if r["budget_usd"] is not None else "—"))
+            lines.append(
+                f"| {i} | {short_date(r['date'])} | {r['run_id'] or '-'} | "
+                f"{dur} | {bud} | {r['verdict'] or '-'} |"
+            )
+        lines += [""]
+
+        ds = stats([r["duration_s"] for r in history_rows])
+        bs = stats([r["budget_usd"] for r in history_rows])
+
+        def num(v, nd=1):
+            return f"{v:.{nd}f}" if v is not None else "—"
+
+        lines += [
+            "**Duration özeti:** "
+            f"min {num(ds['min'])} s · max {num(ds['max'])} s · "
+            f"avg {num(ds['avg'])} s",
+            "",
+            "**Budget özeti:** "
+            f"min ${num(bs['min'], 2)} · max ${num(bs['max'], 2)} · "
+            f"avg ${num(bs['avg'], 2)}",
+            "",
+        ]
+
     # Changelog: denetim düzeltmelerinin kısa kaydı (kaynak: CHANGELOG).
     lines += changelog_lines()
 
@@ -241,6 +353,14 @@ def main():
         f.write("\n".join(lines))
     print("\n".join(lines))
 
+    duration_budget = {
+        "run_count": len(history_rows),
+        "rows": history_rows,
+        "summary": {
+            "duration_s": stats([r["duration_s"] for r in history_rows]),
+            "budget_usd": stats([r["budget_usd"] for r in history_rows]),
+        },
+    }
     summary = {
         "generated": generated,
         "repo": args.repo,
@@ -249,18 +369,14 @@ def main():
         "totals": {
             "verified": sum(r["verified"] for r in rows),
             "total_online": sum(r["total_online"] for r in rows),
-        },
-    } if rows else {
-        "generated": generated,
-        "repo": args.repo,
-        "run_count": 0,
-        "rows": [],
-        "totals": {"verified": 0, "total_online": 0},
+        } if rows else {"verified": 0, "total_online": 0},
+        "duration_budget": duration_budget,
     }
     with open(os.path.join(args.out_dir, "refs-trend.json"), "w",
               encoding="utf-8") as f:
         json.dump(summary, f, indent=2, ensure_ascii=False)
-    print(f"[refs-trend] yazıldı: {md_path} ({len(rows)} run)")
+    print(f"[refs-trend] yazıldı: {md_path} "
+          f"({len(rows)} refs + {len(history_rows)} history run)")
 
 
 if __name__ == "__main__":

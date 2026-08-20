@@ -16,7 +16,7 @@ import sys
 
 
 # Bu script'in run summary'de gösterdiği katmanlar (sıralı).
-RENDER_LAYERS = ["K1", "K2", "K3", "K4", "K5", "K6", "K7", "K8", "K9", "K10"]
+RENDER_LAYERS = ["K1", "K2", "K3", "K4", "K5", "K6", "K7", "K8", "K9", "K10", "K11", "K12", "K13", "K14", "K16"]
 
 
 @contextlib.contextmanager

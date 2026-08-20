@@ -162,7 +162,8 @@ class TestToolkitTolerant(unittest.TestCase):
         args = types.SimpleNamespace(
             symbolic_proof=False, lean_proof=False, verify_manifest=None,
             check_config_drift=False, check_plist=False,
-            check_repro_manifest=False, check_cleanup=False)
+            check_repro_manifest=False, check_cleanup=False,
+            check_history=None, check_github_scripts=False)
         findings = [{"id": "K0-TOOLKIT", "priority": "INFO",
                      "check": "K0-TOOLKIT", "issue": "toolkit", "evidence": ""}]
         layers = vd.build_layers_summary(args, findings)

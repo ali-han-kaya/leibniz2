@@ -1,0 +1,8 @@
+name = "leibniz2_reduct"
+version = "0.1.0"
+description = "Illustrative representation-loss example - NOT a Stoa/Hume formalization"
+defaultTargets = ["Leibniz2Reduct"]
+
+[[lean_lib]]
+name = "Leibniz2Reduct"
+srcDir = "."

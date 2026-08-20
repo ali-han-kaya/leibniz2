@@ -156,6 +156,38 @@ class ReplayEventsTests(unittest.TestCase):
         self.assertEqual(last["stream"], "replay-end")
         self.assertEqual(last["ts"], "t")
 
+    def test_replay_start_carries_summary_fields(self):
+        # Son run'un özet alanları (verdict/P0/P1/bütçe/süre) replay-start
+        # event'inde taşınmalı ki client geçmiş run sınırında özet satırını
+        # render edebilsin.
+        ev = ps.build_replay_events("t", "FAIL", "o", "e", p0=2, p1=1,
+                                    budget_usd=1.08, duration_s=30.5)
+        first = json.loads(ev[0][1])
+        self.assertEqual(first["p0"], 2)
+        self.assertEqual(first["p1"], 1)
+        self.assertEqual(first["budget_usd"], 1.08)
+        self.assertEqual(first["duration_s"], 30.5)
+
+    def test_build_replay_events_multi_marks_first_and_last(self):
+        recs = [
+            {"ts": "t1", "verdict": "PASS", "stdout": "a", "stderr": ""},
+            {"ts": "t2", "verdict": "FAIL", "stdout": "b", "stderr": "c"},
+        ]
+        ev = ps.build_replay_events_multi(recs)
+        names = [n for n, _ in ev]
+        self.assertEqual(names, ["replay-start", "stdout", "replay-end",
+                                 "replay-start", "stderr", "stdout",
+                                 "replay-end"])
+        starts = [json.loads(d) for n, d in ev if n == "replay-start"]
+        self.assertTrue(starts[0]["first"])
+        self.assertFalse(starts[1]["first"])
+        ends = [json.loads(d) for n, d in ev if n == "replay-end"]
+        self.assertNotIn("last", ends[0])
+        self.assertTrue(ends[1]["last"])
+
+    def test_build_replay_events_multi_empty(self):
+        self.assertEqual(ps.build_replay_events_multi([]), [])
+
     def test_empty_streams_produce_only_boundaries(self):
         ev = ps.build_replay_events("t", "PASS", "", "")
         self.assertEqual([n for n, _ in ev], ["replay-start", "replay-end"])
@@ -203,6 +235,129 @@ class ReplayHandlerTests(unittest.TestCase):
     def test_no_ts_writes_nothing(self):
         self.assertEqual(self._replay(None, "PASS", "o", "e"), "")
         self.assertEqual(self._replay("", "PASS", "o", "e"), "")
+
+
+class RunLogTests(unittest.TestCase):
+    """persist_run_log / load_run_logs / _prune_run_logs — son N run replay."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self._runs = os.path.join(self._tmp.name, "runs")
+        self._old_dir = ps.RUNS_DIR
+        self._old_max = ps.RUN_LOG_MAX
+        ps.RUNS_DIR = self._runs
+        ps.RUN_LOG_MAX = 3
+
+    def tearDown(self):
+        ps.RUNS_DIR = self._old_dir
+        ps.RUN_LOG_MAX = self._old_max
+        self._tmp.cleanup()
+
+    def test_persist_and_load_roundtrip_with_stdout(self):
+        ps.persist_run_log({"ts": "2026-01-01T00:00:01.000000+00:00",
+                            "verdict": "PASS", "p0": 0, "p1": 0,
+                            "budget_usd": 1.08, "stdout": "o1\no2",
+                            "stderr": "e1"})
+        ps.persist_run_log({"ts": "2026-01-01T00:00:02.000000+00:00",
+                            "verdict": "FAIL", "p0": 2, "p1": 1,
+                            "budget_usd": 1.10, "stdout": "o3", "stderr": ""})
+        rows = ps.load_run_logs()
+        self.assertEqual([r["ts"] for r in rows],
+                         ["2026-01-01T00:00:01.000000+00:00",
+                          "2026-01-01T00:00:02.000000+00:00"])
+        self.assertEqual(rows[-1]["stdout"], "o3")
+        self.assertEqual(rows[0]["stderr"], "e1")
+        self.assertEqual(rows[-1]["p0"], 2)
+
+    def test_load_trims_to_run_log_max(self):
+        for i in range(5):
+            ps.persist_run_log({"ts": f"2026-01-01T00:00:0{i}.000000+00:00",
+                                "verdict": "PASS", "stdout": f"o{i}",
+                                "stderr": ""})
+        rows = ps.load_run_logs()
+        self.assertEqual([r["stdout"] for r in rows], ["o2", "o3", "o4"])
+
+    def test_load_missing_dir_returns_empty(self):
+        ps.RUNS_DIR = os.path.join(self._tmp.name, "nope")
+        self.assertEqual(ps.load_run_logs(), [])
+
+    def test_load_skips_corrupt_log(self):
+        os.makedirs(self._runs, exist_ok=True)
+        with open(os.path.join(self._runs, "run-bad.json"), "w",
+                  encoding="utf-8") as f:
+            f.write("{not json")
+        ps.persist_run_log({"ts": "2026-01-01T00:00:01.000000+00:00",
+                            "verdict": "PASS", "stdout": "ok", "stderr": ""})
+        rows = ps.load_run_logs()
+        self.assertEqual([r["stdout"] for r in rows], ["ok"])
+
+    def test_persist_ignores_record_without_ts(self):
+        ps.persist_run_log({"verdict": "PASS", "stdout": "x", "stderr": ""})
+        self.assertEqual(ps.load_run_logs(), [])
+
+
+class Z3ParseTests(unittest.TestCase):
+    """_parse_z3_counts — K8 Z3 özet tablosu sayımı (rozet gerçek sonuçtan)."""
+
+    def test_counts_12_pass(self):
+        # 12 kontrol: P1-a, P1-b, P2, P3-a, P3-b, P4-a..e, P5, P5-note
+        z3 = ["P1-a", "P1-b", "P2", "P3-a", "P3-b",
+              "P4-a", "P4-b", "P4-c", "P4-d", "P4-e", "P5", "P5-note"]
+        stderr = "\n".join(f"  [PASS] {p}  beklenen=UNSAT alınan=UNSAT" for p in z3)
+        self.assertEqual(ps._parse_z3_counts(stderr), (12, 0))
+
+    def test_counts_failures(self):
+        stderr = ("  [PASS] P1-a x\n"
+                  "  [FAIL] P4-b y\n"
+                  "  [PASS] P2 z\n"
+                  "  [FAIL] P5-note w")
+        self.assertEqual(ps._parse_z3_counts(stderr), (2, 2))
+
+    def test_ignores_non_z3_lines(self):
+        stderr = ("[PASS] K0 tarama\n"
+                  "  [OK  ] Internet Archive Fine 2012 -> x\n"
+                  "[P1-a] (T2 ∧ M0) → T1 : UNSAT\n"
+                  "SONUÇ: TÜMÜ PASS\n"
+                  "  [PASS] P1-a ...\n")
+        self.assertEqual(ps._parse_z3_counts(stderr), (1, 0))
+
+    def test_empty_and_none(self):
+        self.assertEqual(ps._parse_z3_counts(""), (0, 0))
+        self.assertEqual(ps._parse_z3_counts(None), (0, 0))
+
+
+class LeanParseTests(unittest.TestCase):
+    """_parse_lean_result — K9 Lean rozeti gerçek sonuçtan (stderr [K9] satırı)."""
+
+    def test_pass_with_detail(self):
+        stderr = ("[K8] sembolik ispat (Z3): PASS — ...\n"
+                  "[K9] Lean 4 reduct-invariance: PASS — Lean 4 reduct-invariance "
+                  "derlendi ve geçti\n")
+        ok, detail = ps._parse_lean_result(stderr)
+        self.assertIs(ok, True)
+        self.assertIn("derlendi", detail)
+
+    def test_fail_with_detail(self):
+        stderr = "[K9] Lean 4 reduct-invariance: FAIL — Lean derleme hatası: error: ..."
+        ok, detail = ps._parse_lean_result(stderr)
+        self.assertIs(ok, False)
+        self.assertIn("Lean derleme hatası", detail)
+
+    def test_missing_line_is_none(self):
+        # --lean-proof koşulmamış run: K9 satırı yok → (None, None), '?' rozeti
+        stderr = "[K8] sembolik ispat (Z3): PASS — ...\nSONUÇ: PASS\n"
+        self.assertEqual(ps._parse_lean_result(stderr), (None, None))
+
+    def test_empty_and_none(self):
+        self.assertEqual(ps._parse_lean_result(""), (None, None))
+        self.assertEqual(ps._parse_lean_result(None), (None, None))
+
+    def test_last_line_wins(self):
+        stderr = ("[K9] Lean 4 reduct-invariance: PASS — ilk\n"
+                  "[K9] Lean 4 reduct-invariance: FAIL — ikinci\n")
+        ok, detail = ps._parse_lean_result(stderr)
+        self.assertIs(ok, False)
+        self.assertEqual(detail, "ikinci")
 
 
 class ConfigDiffDriftTests(unittest.TestCase):

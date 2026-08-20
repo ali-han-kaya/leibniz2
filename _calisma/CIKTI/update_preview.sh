@@ -12,17 +12,19 @@
 # (tarayıcıda yenilemek yeterlidir). Build damgası header'da görünür, böylece
 # "preview gerçekten yenilendi mi" sorusu sayfada kanıtlanır.
 #
-# BÖLÜM 2 — LaunchAgent plist'i (Homebrew-style, tek komut)
-# TEK plist yönetilir (tek --plist komutuyla): com.freebuff.preview-leibniz2
-# (birincil; KeepAlive=true, interval 30). Legacy com.freebuff.preview-server
-# profili kaldırıldı; --remove-legacy bir kerelik taşımayı yapar (launchd'den
-# bootout + kurulu plist/şablon/log silme). Kurulu tam yollar korunur:
+# BÖLÜM 2 — LaunchAgent plist'leri (Homebrew-style, tek komut)
+# İKİ plist üretilir (tek --plist komutuyla): com.freebuff.preview-leibniz2
+# (birincil; KeepAlive=true, interval 30) ve com.freebuff.preview-server
+# (legacy; KeepAlive=false, interval 60). Yalnızca birincil canlı tutulur
+# (--start varsayılanı leibniz2); legacy launchd'den kaldırılmıştır —
+# --remove-legacy bootout + kurulu plist/şablon/log temizliği yapar. Kurulu
+# tam yollar korunur:
 #   ~/Library/LaunchAgents/<label>.plist
 # İçerikleri şablon olarak TCC-safe dizinde tutulur:
 #   ~/Library/Caches/com.freebuff/preview-template/<label>.plist.tmpl
 # Şablonda {{HOME}} / {{LABEL}} / {{LOGNAME}} / {{PORT}} / {{INTERVAL}} /
-# {{KEEPALIVE}} placeholder'ları vardır; script bunları profile göre
-# render eder. Aynı TCC-safe mirror --dir'ini kullanır (launchd GUI
+# {{KEEPALIVE}} placeholder'ları vardır; script bunları her profile göre
+# render eder. İkisi de aynı TCC-safe mirror --dir'ini kullanır (launchd GUI
 # agent'ı repo dizinini TCC nedeniyle okuyamaz). Şablon yoksa script yerleşik
 # varsayılanı yazar (tek kaynak = script; Caches kopyası operasyonel).
 #
@@ -38,14 +40,14 @@
 #   update_preview.sh --force              # HTML yeniden build
 #   update_preview.sh --check              # HTML güncel mi? (0 güncel / 1 bayat / 2 hata)
 #   update_preview.sh --watch [N]          # HTML izle; değişince build
-#   update_preview.sh --plist [HOME]       # plist'i şablondan üret (vars. $HOME)
-#   update_preview.sh --plist-force [HOME] # plist'i her zaman yeniden üret
-#   update_preview.sh --plist-check [HOME] # kurulu plist güncel mi? (0 güncel/1 bayat/2 şablon yok)
+#   update_preview.sh --plist [HOME]       # her iki plist'i şablonlardan üret (vars. $HOME)
+#   update_preview.sh --plist-force [HOME] # her iki plist'i her zaman yeniden üret
+#   update_preview.sh --plist-check [HOME] # kurulu plist'ler güncel mi? (0 hepsi/1 bayat/2 şablon yok)
 #   update_preview.sh --plist-watch [N]    # şablonları izle; değişince yeniden üret
-#   update_preview.sh --plist-reset        # şablonu yerleşik varsayılandan geri yaz
+#   update_preview.sh --plist-reset        # şablonları yerleşik varsayılandan geri yaz
 #   update_preview.sh --start [LABEL]       # plist'i üret + launchctl bootstrap (vars. birincil)
 #   update_preview.sh --stop [LABEL|all]    # launchctl bootout
-#   update_preview.sh --remove-legacy [HOME] # legacy preview-server'ı kaldır (bootout + sil)
+#   update_preview.sh --remove-legacy [HOME] # legacy preview-server'ı launchd'den sök + temizle
 #   update_preview.sh --mirror             # verify mirror'ı senkron et (sync_verify_mirror.sh)
 #   update_preview.sh --mirror-check       # mirror güncel mi? (0 güncel/1 bayat/2 hata)
 #   update_preview.sh --mirror-force       # mirror'ı koşulsuz yeniden kopyala
@@ -67,12 +69,14 @@ DST="${DST:-$HOME/Library/Caches/com.freebuff/preview/preview.html}"
 INTERVAL="${INTERVAL:-3}"
 
 PLIST_TMPL_DIR="$HOME/Library/Caches/com.freebuff/preview-template"
-# Tek profil: "label|logname|port|interval|keepalive". Birincil
-# preview_server.py'yi TCC-safe mirror --dir'iyle başlatır (launchd GUI
+# Her profil: "label|logname|port|interval|keepalive". İkisi de aynı
+# preview_server.py'yi aynı TCC-safe mirror --dir'iyle başlatır (launchd GUI
 # agent'ı repo dizinini TCC nedeniyle okuyamaz); şablonda {{HOME}}/.../verify
-# sabittir. Legacy preview-server profili kaldırıldı (--remove-legacy).
+# sabittir. Farklar yalnızca label/logname/interval/keepalive'dir.
+# Yalnızca birincil canlı tutulur; legacy launchd'den kaldırılmıştır.
 PLIST_PROFILES=(
   "com.freebuff.preview-leibniz2|preview-leibniz2|8000|30|true"
+  "com.freebuff.preview-server|preview-server|8000|60|false"
 )
 
 say() { printf '%s\n' "$*"; }
@@ -401,8 +405,9 @@ plist_stop() {
 # BÖLÜM 2c — legacy profil temizliği (--remove-legacy)
 # ============================================================================
 
-# Kaldırılan legacy profil (artık PLIST_PROFILES'te DEĞİL — bir kerelik taşıma
-# hedefi olarak sabit tutulur). Birincil leibniz2 tek canlı profil kalır.
+# Legacy profil PLIST_PROFILES'te TANIMLI kalır (üretilebilir) ama launchd'den
+# kaldırılmıştır — yalnızca birincil leibniz2 canlıdır. --remove-legacy bir
+# kerelik taşımayı yapar: bootout + kurulu plist/şablon/log silme.
 LEGACY_LABEL="com.freebuff.preview-server"
 LEGACY_LOGNAME="preview-server"
 

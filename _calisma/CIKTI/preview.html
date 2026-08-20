@@ -273,22 +273,26 @@ function renderTrend(rows) {
     return;
   }
   trendCache = rows;
-  const W = 1160, H = 240, PL = 44, PR = 150, PT = 12, PB = 32;
+  const W = 1160, H = 240, PL = 44, PR = 212, PT = 12, PB = 32;
   const iw = W - PL - PR, ih = H - PT - PB;
   const plotRight = PL + iw;
   const n = rows.length;
 
-  // Üç ayrı ölçek: sol = P0/P1 (adet), sağ-iç = duration_s, sağ-dış = budget_usd
+  // Dört ayrı ölçek: sol = P0/P1 (adet), sağ-iç = duration_s, sağ-orta =
+  // budget_usd, sağ-dış = K8 Z3 (PASS/FAIL sayısı, toplam 12'ye kadar)
   const maxP = Math.max(1, ...rows.map(r => Math.max(r.p0||0, r.p1||0)));
   const durs = rows.map(r => r.duration_s).filter(v => v != null && isFinite(v));
   const buds = rows.map(r => r.budget_usd).filter(v => v != null && isFinite(v));
+  const ztots = rows.map(r => r.z3_total).filter(v => v != null && isFinite(v));
   const maxDur = durs.length ? Math.max(...durs, 1) : 1;
   const maxBud = buds.length ? Math.max(...buds, 0.01) : 1;
+  const maxZ = ztots.length ? Math.max(...ztots, 1) : 1;
 
   const x = (i) => PL + (n === 1 ? iw / 2 : iw * i / (n - 1));
   const yP = (v) => PT + ih - (ih * (v||0) / maxP);
   const yD = (v) => (v == null || !isFinite(v)) ? null : PT + ih - (ih * v / maxDur);
   const yB = (v) => (v == null || !isFinite(v)) ? null : PT + ih - (ih * v / maxBud);
+  const yZ = (v) => (v == null || !isFinite(v)) ? null : PT + ih - (ih * v / maxZ);
 
   let parts = [];
   // sol eksen grid + etiketler (P0/P1)
@@ -309,14 +313,46 @@ function renderTrend(rows) {
   if (durPts.length) {
     parts.push(`<polyline fill="none" stroke="#58a6ff" stroke-width="2" stroke-dasharray="4 3" points="${durPts.join(" ")}"/>`);
   }
-  // budget_usd (mor) — üçüncü eksen
+  // budget_usd (mor) — üçüncü eksen (sağ-orta eksen konumu referans çizgisi
+  // etiketi için burada tanımlanır — TDZ'yi önler).
+  const budAxisX = plotRight + 88;
   const budPts = rows.map((r,i) => { const y = yB(r.budget_usd); return y == null ? null : `${x(i)},${y}`; }).filter(Boolean);
   if (budPts.length) {
     parts.push(`<polyline fill="none" stroke="#bc8cff" stroke-width="2" points="${budPts.join(" ")}"/>`);
   }
-  // sağ eksenler: duration (iç) + budget (dış)
+  // Bütçe limiti referans çizgisi ($30) — verify_delivery.config.json
+  // budget_usd aynası. Bütçe eksenindeki gerçek konumunda çizilir; gözlenen
+  // bütçe limitin çok altındaysa (0..maxBud ölçeği) üst kenara kıstırılıp
+  // "↑" ile işaretlenir — altı güvenli bölge (yeşil), üstü aşım (kırmızı kare).
+  const BUDGET_LIMIT = 30.0;
+  if (buds.length) {
+    const rawLimitY = yB(BUDGET_LIMIT);
+    const offScale = rawLimitY < PT;          // limit ölçeğin üstünde kaldı
+    const limitY = offScale ? PT + 3 : rawLimitY;
+    parts.push(`<line x1="${PL}" y1="${limitY}" x2="${plotRight}" y2="${limitY}" stroke="#ffa657" stroke-width="1.5" stroke-dasharray="6 4"/>`);
+    parts.push(`<text x="${budAxisX + 6}" y="${limitY - 3}" fill="#ffa657" font-size="9">${offScale ? "limit $30 ↑" : "limit $30"}</text>`);
+    // Aşım işaretleri: limiti geçen bütçe noktaları kırmızı kare (üstü = aşım)
+    rows.forEach((r, i) => {
+      if (r.budget_usd != null && r.budget_usd > BUDGET_LIMIT) {
+        const yy = yB(r.budget_usd);
+        if (yy != null) {
+          parts.push(`<rect x="${x(i) - 3}" y="${yy - 3}" width="6" height="6" fill="#f85149"/>`);
+        }
+      }
+    });
+  }
+  // K8 Z3 — dördüncü eksen: PASS (yeşil, düz) + FAIL (kırmızı, kesikli)
+  const zPassPts = rows.map((r,i) => { const y = yZ(r.z3_passed); return y == null ? null : `${x(i)},${y}`; }).filter(Boolean);
+  if (zPassPts.length) {
+    parts.push(`<polyline fill="none" stroke="#3fb950" stroke-width="2" points="${zPassPts.join(" ")}"/>`);
+  }
+  const zFailPts = rows.map((r,i) => { const y = yZ(r.z3_failed); return y == null ? null : `${x(i)},${y}`; }).filter(Boolean);
+  if (zFailPts.length) {
+    parts.push(`<polyline fill="none" stroke="#f85149" stroke-width="2" stroke-dasharray="3 3" points="${zFailPts.join(" ")}"/>`);
+  }
+  // sağ eksenler: duration (iç) + budget (orta) + Z3 (dış)
   const durAxisX = plotRight + 26;
-  const budAxisX = plotRight + 88;
+  const zAxisX = plotRight + 150;
   if (durs.length) {
     parts.push(`<line x1="${durAxisX}" y1="${PT}" x2="${durAxisX}" y2="${PT+ih}" stroke="#58a6ff" stroke-width="1" opacity="0.5"/>`);
     parts.push(`<text x="${durAxisX+6}" y="${PT+4}" fill="#58a6ff" font-size="9">${maxDur.toFixed(0)}s</text>`);
@@ -326,6 +362,11 @@ function renderTrend(rows) {
     parts.push(`<line x1="${budAxisX}" y1="${PT}" x2="${budAxisX}" y2="${PT+ih}" stroke="#bc8cff" stroke-width="1" opacity="0.5"/>`);
     parts.push(`<text x="${budAxisX+6}" y="${PT+4}" fill="#bc8cff" font-size="9">$${maxBud.toFixed(2)}</text>`);
     parts.push(`<text x="${budAxisX+6}" y="${PT+ih+2}" fill="#bc8cff" font-size="9">$0</text>`);
+  }
+  if (ztots.length) {
+    parts.push(`<line x1="${zAxisX}" y1="${PT}" x2="${zAxisX}" y2="${PT+ih}" stroke="#3fb950" stroke-width="1" opacity="0.5"/>`);
+    parts.push(`<text x="${zAxisX+6}" y="${PT+4}" fill="#3fb950" font-size="9">${maxZ} PASS</text>`);
+    parts.push(`<text x="${zAxisX+6}" y="${PT+ih+2}" fill="#3fb950" font-size="9">0</text>`);
   }
   // noktalar (verdict rengi)
   rows.forEach((r, i) => {
@@ -349,6 +390,8 @@ function renderTrend(rows) {
   });
   svg.innerHTML = parts.join("");
   legend.textContent = "Kırmızı = P0 · Sarı = P1 · Yeşil nokta = PASS · Mavi (kesikli) = duration_s · Mor = budget_usd · " +
+    "Yeşil çizgi = Z3 PASS · Kırmızı (noktalı) = Z3 FAIL · " +
+    "Turuncu (kesikli) = bütçe limiti $30 — altı güvenli, üstü (kırmızı kare) aşım · " +
     "aralık: " + (rows[0].ts ? new Date(rows[0].ts).toLocaleString() : "?") +
     " → " + (rows[n-1].ts ? new Date(rows[n-1].ts).toLocaleString() : "?") +
     ` · ${n} run`;
@@ -375,7 +418,9 @@ function showTrendTip(i, ev) {
     ts + "\n" +
     "verdict : " + verdict + "\n" +
     "duration: " + fmtTrendDur(r.duration_s) + "\n" +
-    "budget  : " + fmtTrendBudget(r.budget_usd);
+    "budget  : " + fmtTrendBudget(r.budget_usd) + "\n" +
+    "z3      : " + (r.z3_passed != null ? r.z3_passed + "/" + (r.z3_total != null ? r.z3_total : "?") +
+      ((r.z3_failed || 0) > 0 ? " (" + r.z3_failed + " FAIL)" : "") : "—");
   tip.style.display = "block";
   positionTip(ev);
 }
@@ -496,7 +541,8 @@ function scanZ3(line) {
   }
 }
 
-let streamLines = [];  // renklendirilmiş HTML satırları (son 120)
+let streamLines = [];  // renklendirilmiş HTML satırları (son STREAM_MAX)
+const STREAM_MAX = 600;  // son N run replay edilirken yeterli bağlam kalsın
 function connectStream() {
   const el = $("runstream"), st = $("stream-state");
   if (runStreamES) runStreamES.close();
@@ -509,19 +555,36 @@ function connectStream() {
     const arrow = tag === "stderr" ? '<span class="muted">⟶ </span>' : "";
     const mark = replay ? '<span class="muted">⏪ </span>' : "";
     streamLines.push(mark + arrow + colorizeLine(line));
-    if (streamLines.length > 120) streamLines = streamLines.slice(-120);
+    if (streamLines.length > STREAM_MAX) streamLines = streamLines.slice(-STREAM_MAX);
     el.innerHTML = streamLines.join("\n");
     el.scrollTop = el.scrollHeight;
   };
   runStreamES.addEventListener("replay-start", (e) => {
-    // Her (yeniden) bağlantıda son tamamlanmış run baştan gelir: eski
-    // satırları temizle ki replay + canlı satırlar çift görünmesin;
-    // K8 sayacını da sıfırla (replay son run'u baştan sayar).
-    streamLines = [];
-    z3Seen.clear(); z3Passed.clear(); z3Failed.clear();
-    updateZ3Bar();
-    st.textContent = "geçmiş run yükleniyor…";
-    streamLines.push('<span class="muted">── geçmiş run (son tamamlanmış) ──</span>');
+    let sum = null;
+    try { sum = JSON.parse(e.data); } catch(_) {}
+    if (sum && sum.first) {
+      // İlk run'un başında (yeniden bağlantıda) eski satırları temizle ki
+      // replay + canlı satırlar çift görünmesin; K8 sayacını sıfırla.
+      streamLines = [];
+      z3Seen.clear(); z3Passed.clear(); z3Failed.clear();
+      updateZ3Bar();
+      st.textContent = "geçmiş runlar yükleniyor…";
+    }
+    // Her run'un özeti (verdict/P0/P1/bütçe) — geçmiş run sınırında
+    // görünür bir özet satırı olarak yazılır.
+    const sv = sum && sum.verdict ? sum.verdict : "UNKNOWN";
+    const scls = sv === "PASS" ? "ok" : (sv === "FAIL" || sv === "ERROR" ? "err" : "warn");
+    const p0 = sum && sum.p0 != null ? sum.p0 : 0;
+    const p1 = sum && sum.p1 != null ? sum.p1 : 0;
+    const bud = sum && sum.budget_usd != null ? "$" + sum.budget_usd.toFixed(2) : "—";
+    const dur = sum && sum.duration_s != null ? " · " + sum.duration_s + "s" : "";
+    const tlabel = sum && sum.ts && sum.ts.indexOf("T") >= 0
+      ? sum.ts.split("T")[1].slice(0, 8) : "";
+    const label = tlabel ? "geçmiş run " + tlabel : "geçmiş run";
+    streamLines.push(
+      '<span class="muted">── ' + label + ' ── </span>' +
+      '<span class="' + scls + '">' + sv + '</span>' +
+      '<span class="muted"> · P0=' + p0 + ' · P1=' + p1 + ' · bütçe ' + bud + dur + '</span>');
     el.innerHTML = streamLines.join("\n");
     el.scrollTop = el.scrollHeight;
   });
@@ -532,16 +595,21 @@ function connectStream() {
     try { const d = JSON.parse(e.data); push("stderr", d.line, d.replay); } catch(_) {}
   });
   runStreamES.addEventListener("replay-end", (e) => {
-    st.textContent = "bağlı";
-    streamLines.push('<span class="muted">── canlı akış ──</span>');
-    if (streamLines.length > 120) streamLines = streamLines.slice(-120);
+    let d = null;
+    try { d = JSON.parse(e.data); } catch(_) {}
+    if (!d || d.last) {
+      // Son run'un sonunda canlı akış sınırını çiz (ara runlarda değil).
+      st.textContent = "bağlı";
+      streamLines.push('<span class="muted">── canlı akış ──</span>');
+    }
+    if (streamLines.length > STREAM_MAX) streamLines = streamLines.slice(-STREAM_MAX);
     el.innerHTML = streamLines.join("\n");
     el.scrollTop = el.scrollHeight;
   });
   runStreamES.addEventListener("end", (e) => {
     st.textContent = "run bitti";
     streamLines.push('<span class="muted">── run sonu ──</span>');
-    if (streamLines.length > 120) streamLines = streamLines.slice(-120);
+    if (streamLines.length > STREAM_MAX) streamLines = streamLines.slice(-STREAM_MAX);
     el.innerHTML = streamLines.join("\n");
     el.scrollTop = el.scrollHeight;
   });
@@ -774,14 +842,53 @@ function applySnapshot(d) {
     s.textContent = text;
     badges.appendChild(s);
   };
-  const isOk = verdict === "PASS";
-  addBadge(isOk ? "ok" : "err", "K1-K7: " + verdict);
-  addBadge(isOk ? "ok" : "warn", "K8 Z3: 12/12 (son çalıştırma)");
-  addBadge(isOk ? "ok" : "warn", "K9 Lean: reduct-invariance (son çalıştırma)");
+  // K1-K7 rozeti — genel verdict DEĞİL, JSON'daki per-katman durumundan
+  // (d.layers). Sunucu bu veriyi verify_delivery.py --json çıktısındaki
+  // "layers" alanından taşır; yoksa eski davranışa düş (genel verdict).
+  const ls = d.layers || {};
+  const core = ["K1", "K2", "K3", "K4", "K5", "K6", "K7"];
+  const coreSt = core.map(k => (ls[k] || {}).status);
+  const k17 = coreSt.some(s => s === "FAIL") ? "FAIL" :
+              (coreSt.length && coreSt.every(s => s === "PASS") ? "PASS" :
+               (coreSt.some(s => s === "SKIP") ? "SKIP" : "?"));
+  addBadge(k17 === "PASS" ? "ok" : k17 === "FAIL" ? "err" : "warn",
+           "K1-K7: " + k17);
+  // K8 Z3 rozeti — son run'ın GERÇEK sonucundan (sunucu stderr'deki
+  // [PASS]/[FAIL] P1-5 özet tablosunu sayar; veri yoksa '?' gösterir).
+  if (d.z3_passed != null) {
+    const ztot = d.z3_total != null ? d.z3_total : 12;
+    const zcls = (d.z3_failed || 0) > 0 ? "err" : (d.z3_passed >= ztot ? "ok" : "warn");
+    addBadge(zcls, "K8 Z3: " + d.z3_passed + "/" + ztot +
+      ((d.z3_failed || 0) > 0 ? " (" + d.z3_failed + " FAIL)" : "") +
+      " (son çalıştırma)");
+  } else {
+    addBadge("warn", "K8 Z3: ? (son çalıştırma yok)");
+  }
+  // K9 Lean rozeti — son run'ın GERÇEK sonucundan (sunucu stderr'deki
+  // '[K9] Lean 4 reduct-invariance: PASS/FAIL — detail' satırını ayrıştırır;
+  // K9 satırı yoksa '?' gösterir — koşulmamış run'ları FAIL gibi göstermez).
+  if (d.lean_ok === true) {
+    addBadge("ok", "K9 Lean: PASS (son çalıştırma)");
+  } else if (d.lean_ok === false) {
+    addBadge("err", "K9 Lean: FAIL" +
+      (d.lean_detail ? " — " + d.lean_detail : "") + " (son çalıştırma)");
+  } else {
+    addBadge("warn", "K9 Lean: ? (koşulmadı)");
+  }
   addBadge(p1 === 0 ? "ok" : "warn", "Beth 1953: " + (p1 === 0 ? "düzeltildi" : p1 + " P1"));
+  // refs rozeti — son run'ın GERÇEK references_online sonucundan, Z3 rozetiyle
+  // aynı stilde: uyuşmazlık/doğrulanamayan sayısını ayrı gösterir.
   if (d.refs_total != null && d.refs_verified != null) {
     const full = d.refs_verified === d.refs_total;
-    addBadge(full ? "ok" : "warn", "refs: " + d.refs_verified + "/" + d.refs_total + " online");
+    const mism = d.refs_mismatch || 0;
+    const unv = Math.max(0, d.refs_total - d.refs_verified - mism);
+    const cls = mism > 0 ? "err" : (full ? "ok" : "warn");
+    let txt = "refs: " + d.refs_verified + "/" + d.refs_total + " online";
+    const parts = [];
+    if (mism > 0) parts.push(mism + " MISMATCH");
+    if (unv > 0) parts.push(unv + " UNVERIFIED");
+    if (parts.length) txt += " (" + parts.join(", ") + ")";
+    addBadge(cls, txt);
   } else {
     addBadge(d.ref_count === 64 ? "ok" : "warn", "refs: " + (d.ref_count || "?"));
   }

@@ -58,8 +58,9 @@ class TestGateJobs(unittest.TestCase):
                          "Action runtime check (node24)")
 
     def test_count_matches_workflow_minus_excludes(self):
-        # 11 job − 2 hariç = 9 required aday (tek kaynak: workflow).
-        self.assertEqual(len(sc.gate_jobs()), 9)
+        # 12 job − 2 hariç = 10 required aday (tek kaynak: workflow).
+        # (repack-verify + refs-trend + plist-check eklendikçe güncellendi.)
+        self.assertEqual(len(sc.gate_jobs()), 10)
 
 
 @unittest.skipUnless(HAVE_YAML, "PyYAML gerekli")

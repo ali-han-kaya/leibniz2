@@ -12,7 +12,8 @@ kayda değer bir sapmadır; advisory uyarı olarak budget/index.json'a
 
 Kullanım:
   python3 check_cli_overrides.py --config effective_config.json \
-      --index budget/index.json --out-dir budget
+      --index budget/index.json --out-dir budget \
+      --version-out budget/cli_overrides_version.json
 
 Davranış:
   - config yoksa / okunamıyorsa: UYARI yazar, exit 0 (advisory; bütçe kapısı
@@ -20,6 +21,9 @@ Davranış:
   - override yoksa: "override yok" kaydı yazar (denetim izi her zaman tam).
   - override varsa: her parametre için file_value → effective kaydı yazar ve
     index.json'a cli_overrides.warning=true işaretler.
+  - --version-out verilirse refs-online/run-history deseninde bir VERSION
+    JSON yazar (tool/date/ts + warning + overrides + summary) — her run'da
+    override trendini makine-okur takip etmek için (CI artifact sidecar).
 """
 import argparse
 import json
@@ -75,6 +79,9 @@ def main(argv=None) -> int:
                     help="güncellenecek budget/index.json yolu")
     ap.add_argument("--out-dir", default="budget",
                     help="cli_overrides_warning.txt çıktı dizini")
+    ap.add_argument("--version-out", default=None,
+                    help="VERSION JSON sidecar yolu (refs-online/run-history "
+                         "deseninde; her run'da override trendi için)")
     args = ap.parse_args(argv)
 
     cfg = None
@@ -123,6 +130,33 @@ def main(argv=None) -> int:
             with open(args.index, "w", encoding="utf-8") as f:
                 json.dump(index, f, indent=2, ensure_ascii=False)
             print(f"[CLI-OVERRIDE] index.json güncellendi: {args.index}")
+
+    # 3) VERSION JSON sidecar (refs-online/run-history deseni) — her run'da
+    # override trendini makine-okur izle: ts + warning + overrides + özet.
+    if args.version_out:
+        os.makedirs(os.path.dirname(os.path.abspath(args.version_out)),
+                    exist_ok=True)
+        version = {
+            "tool": "check_cli_overrides.py — CLI override denetimi "
+                    "(effective_config.json cli_overrides)",
+            "ts": __import__("datetime").datetime.now(
+                __import__("datetime").timezone.utc).isoformat(),
+            "warning": warning,
+            "override_count": len(overrides),
+            "overrides": overrides,
+            "config_read": cfg is not None,
+            # refs-online/run-history trend'lerinde kullanılan özet alanlar:
+            "summary": "CLI override TESPİT EDİLDİ (%d parametre)" % len(overrides)
+                        if overrides else "CLI override YOK",
+        }
+        try:
+            with open(args.version_out, "w", encoding="utf-8") as f:
+                json.dump(version, f, indent=2, ensure_ascii=False)
+            print(f"[CLI-OVERRIDE] VERSION JSON yazıldı: "
+                  f"{args.version_out} (override={len(overrides)})")
+        except OSError as e:
+            print(f"UYARI: VERSION JSON yazılamadı ({args.version_out}): {e}",
+                  file=sys.stderr)
 
     return 0
 

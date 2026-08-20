@@ -15,7 +15,8 @@ simülasyon / doğrulama) çalışır → CI ile yerel arasında drift olmaz.
                     kurcalanma / yeniden üretim farkı tek hash ile denetlenir)
   + tüm artifact'ların kopyası (bundle)
 
-CONFIG bölümü: artifacts-dir altındaki config/ önekiyle dosyalar ayrıca
+CONFIG bölümü: config dosyaları (config/ önekli VEYA CONFIG_BASENAMES ile
+isimle tanınan — merge-multiple'ın köke düzleştirmesine dayanıklı) ayrıca
 hash'lenir (FILE tablosunda zaten var — bu ayrı bölüm denetlenebilirliği
 artırır). combined_sha256 = tüm config dosyalarının (rel\0hash\n sıralı
 birleşiminin) SHA-256'sı — deterministik, config'in hangi sürümünün
@@ -54,6 +55,7 @@ ARTIFACT_JOBS = {
     "k0-findings": "verify",
     "lineage-findings": "verify",
     "klayers": "verify",
+    "unit-tests": "verify",
     "refs-online": "verify",
     "refs-trend": "refs-trend",
     "run-history": "verify",
@@ -64,6 +66,30 @@ ARTIFACT_JOBS = {
     "repack-verify": "repack-verify",
     "reproducibility": "reproducibility",
 }
+
+# Config artifact'ının bilinen dosya ADLARI (basename). Config dosyaları
+# normalde bundle'da config/ önekiyle durur; ancak merge-multiple bir gün
+# config artifact'ını köke düzleştirirse (config/ öneki kaybolur) bu isimler
+# sayesinde config dosyaları yine tanınır. Tek kaynak: config artifact'ının
+# içeriği verify.yml "Bundle config snapshot" adımıyla senkron tutulmalıdır.
+CONFIG_BASENAMES = frozenset({
+    "verify_delivery.config.json",
+    "verify_delivery.config.schema.json",
+    "effective_config.json",
+    "config.sha256",
+    "config-diff.txt",
+    "config-diff.json",
+})
+
+
+def _is_config_rel(rel: str) -> bool:
+    """Bir rel yolunun config dosyası olup olmadığını isimle tanı (önek + basename).
+
+    Önek eşleşmesi (config/…) geriye dönük uyumluluk içindir; basename
+    eşleşmesi merge-multiple'ın köke düzleştirmesine karşı dayanıklılık
+    sağlar (config/ öneki kaybolsa bile dosya ismiyle tanınır).
+    """
+    return rel.startswith("config/") or os.path.basename(rel) in CONFIG_BASENAMES
 
 
 def _load_artifact_jobs() -> dict:
@@ -125,9 +151,11 @@ def main() -> None:
 
     lines += ["", "-" * 72, f"Total files: {len(file_hashes)}", ""]
 
-    # ── CONFIG bölümü: config/ önekli dosyalar ayrıca işaretlenir ──────────
+    # ── CONFIG bölümü: config dosyaları ayrıca işaretlenir ──────────────────
+    # Tanıma: config/ öneki VEYA bilinen config basename'i (merge-multiple'
+    # ın köke düzleştirmesi öneki kaybettirse de isimle tanınır).
     config_hashes = {rel: h for rel, h in file_hashes.items()
-                     if rel.startswith("config/")}
+                     if _is_config_rel(rel)}
     config_combined = None
     if config_hashes:
         sorted_rel = sorted(config_hashes)
@@ -209,6 +237,10 @@ def main() -> None:
     present = {}
     for rel in file_hashes:
         top = rel.split("/", 1)[0]
+        # Config dosyaları isimle tanınır: config/ öneki kaybolsa bile
+        # (merge-multiple köke düzleştirir) "config" artifact'ına bağlanır.
+        if top not in artifact_jobs and _is_config_rel(rel):
+            top = "config"
         if top in artifact_jobs:
             present.setdefault(top, []).append(rel)
     prov_block = [

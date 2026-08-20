@@ -76,10 +76,34 @@ jobs:
       #     replace + LOCK altında asılmama) regresyon kapısı.
       #   test_gen_config.py     — compute_budget_ratios (pay 0 / baskınlık /
       #     eşit karışım / clamp sınırları) regresyon kapısı.
+      #   test_refs_trend.py     — refs-online + run-history trend (parse/stats/
+      #     artifact fetch) + refs-trend job CLI senkronu.
+      #   test_gen_repro_manifest.py — provenance + config/precommit/refs-trend
+      #     bölümleri + merge pattern ↔ ARTIFACT_JOBS + job CLI senkronu.
+      #   test_run_summary_k0.py / test_run_summary_precommit.py — rapor
+      #     ayrıştırma (K0 bulguları + PRECOMMIT_RAPORU.md bulgu/hook/sonuç).
+      #   test_consolidate_budget.py — bütçe sidecar konsolidasyonu (aşım →
+      #     failures, bozuk JSON atlama). test_validate_config_schema.py —
+      #     config şema kapısı exit 0/1/2 (jsonschema yoksa dürüstçe SKIP).
+      #   test_consolidate_summary.py — summary fallback: GITHUB_STEP_SUMMARY
+      #     dosyasına yazma + stdout fallback.
       - name: Run CIKTI unit tests (test_*.py)
         shell: bash
         run: |
-          python3 -m unittest discover -s _calisma/CIKTI -p "test_*.py" -v
+          set -o pipefail
+          python3 -m unittest discover -s _calisma/CIKTI -p "test_*.py" -v 2>&1 | tee unit_tests.log
+
+      # Birim test çıktısı ayrı 'unit-tests' artifact'ına yazılır. Kapı
+      # fail-closed'dur (test düşerse job kırılır); if: always() sayesinde
+      # log başarısızlıkta da yüklenir → düşen testin nedeni görünür.
+      - name: Upload unit tests log
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: unit-tests
+          path: unit_tests.log
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Install pre-commit (advisory pre-commit section)
         run: pip install pre-commit
@@ -549,7 +573,8 @@ jobs:
           python3 _calisma/CIKTI/check_cli_overrides.py \
             --config config_snapshot/effective_config.json \
             --index budget/index.json \
-            --out-dir budget
+            --out-dir budget \
+            --version-out budget/cli_overrides_version.json
 
       # ─── Bütçe aşımı uyarısını run summary'e yaz ────────────────────────
       - name: Budget gate — run summary
@@ -567,144 +592,7 @@ jobs:
         if: always() && github.event_name == 'pull_request'
         uses: actions/github-script@v8
         with:
-          script: |
-            const fs = require('fs');
-            const BUDGET_PATH = 'budget/index.json';
-            const PC_PATH = 'precommit_findings/PRECOMMIT_RAPORU.json';
-            const MARKER = '<!-- stoic-hume-v5-pr-status -->';
-
-            const budget = fs.existsSync(BUDGET_PATH)
-              ? JSON.parse(fs.readFileSync(BUDGET_PATH, 'utf8'))
-              : null;
-            const pc = fs.existsSync(PC_PATH)
-              ? JSON.parse(fs.readFileSync(PC_PATH, 'utf8'))
-              : null;
-
-            // ── Bütçe bölümü ──
-            const budgetLines = [];
-            let budgetBadge;
-            if (budget) {
-              const failures = budget.failures || [];
-              const runs = budget.runs || [];
-              if (failures.length) {
-                budgetBadge = '⚠️ **Bütçe: limit aşıldı**';
-                for (const f of failures) {
-                  budgetLines.push(
-                    `- **${f.source || 'bilinmeyen'}**: $${f.estimated_usd} / $${f.limit} limiti ` +
-                    `(+$${(f.estimated_usd - f.limit).toFixed(2)} aşım, ~${f.tokens_est} token)`);
-                }
-              } else {
-                budgetBadge = '✅ **Bütçe: limit içinde**';
-                for (const r of runs) {
-                  budgetLines.push(`- **${r.source || 'verify'}**: $${r.estimated_usd} / $${r.limit} (~${r.tokens_est} token)`);
-                }
-              }
-              if (budget.method) budgetLines.push(`> Yöntem: \`${budget.method}\``);
-            } else {
-              budgetBadge = '⚠️ **Bütçe: sidecar bulunamadı**';
-            }
-
-            // ── Pre-commit bölümü ──
-            const pcLines = [];
-            let pcBadge;
-            const pcFindings = pc ? (pc.findings || []) : [];
-            const p0 = pcFindings.filter(f => f.priority === 'P0');
-            const p1 = pcFindings.filter(f => f.priority === 'P1');
-            if (pc) {
-              if (p0.length || p1.length) {
-                pcBadge = '🔴 **Pre-commit: bulgu var**';
-                if (p0.length) {
-                  pcLines.push(`- 🔴 P0 (${p0.length})`);
-                  for (const f of p0) pcLines.push(`  - ${f.message}`);
-                }
-                if (p1.length) {
-                  pcLines.push(`- 🟠 P1 (${p1.length})`);
-                  for (const f of p1) pcLines.push(`  - ${f.message}`);
-                }
-              } else {
-                pcBadge = '✅ **Pre-commit: bulgu yok**';
-                const c = pc.counts || {};
-                if (c.hooks != null && c.passed != null) {
-                  pcLines.push(`- ${c.passed}/${c.hooks} hook geçti`);
-                }
-              }
-            } else {
-              pcBadge = '⚠️ **Pre-commit: rapor bulunamadı**';
-            }
-
-            // ── Etiket senkronu (precommit-p0 / precommit-p1) ──
-            const LABELS = [
-              { label: 'precommit-p0', has: p0.length > 0 },
-              { label: 'precommit-p1', has: p1.length > 0 },
-            ];
-            const labels = await github.rest.issues.listLabelsOnIssue({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-            });
-            for (const L of LABELS) {
-              const hasLabel = labels.data.some(l => l.name === L.label);
-              if (L.has && !hasLabel) {
-                await github.rest.issues.addLabels({
-                  issue_number: context.issue.number,
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  labels: [L.label],
-                });
-                console.log(`Etiket eklendi: ${L.label}`);
-              } else if (!L.has && hasLabel) {
-                await github.rest.issues.removeLabel({
-                  issue_number: context.issue.number,
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  name: L.label,
-                });
-                console.log(`Etiket kaldırıldı: ${L.label}`);
-              }
-            }
-
-            // ── Tek yorum (upsert) ──
-            const runUrl = `${context.payload.repository.html_url}/actions/runs/${context.runId}`;
-            const body = [
-              '## 📊 PR doğrulama durumu (advisory)',
-              '',
-              '### 💰 Bütçe',
-              budgetBadge,
-              ...budgetLines,
-              '',
-              '### 🛡️ Pre-commit',
-              pcBadge,
-              ...pcLines,
-              '',
-              `> Detay: [run #${context.runId}](${runUrl})`,
-              '',
-              MARKER,
-            ].join('\n');
-
-            const { data: comments } = await github.rest.issues.listComments({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              per_page: 100,
-            });
-            const existing = comments.find(c => c.body && c.body.includes(MARKER));
-            if (existing) {
-              await github.rest.issues.updateComment({
-                comment_id: existing.id,
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                body,
-              });
-              console.log(`Mevcut durum yorumu güncellendi: comment_id=${existing.id}`);
-            } else {
-              await github.rest.issues.createComment({
-                issue_number: context.issue.number,
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                body,
-              });
-              console.log('Durum yorumu oluşturuldu');
-            }
+          scriptPath: _calisma/CIKTI/github_scripts/pr_status_comment.js
       - name: Upload budget bundle
         if: always()
         uses: actions/upload-artifact@v6
@@ -739,21 +627,14 @@ jobs:
       contents: read
       pull-requests: read
     steps:
+      # scriptPath github-script'i gerektirir — dosyanın çalışma dizininde
+      # olması için checkout şart.
+      - name: Checkout
+        uses: actions/checkout@v7
       - name: Fail if precommit-p0 label is present
         uses: actions/github-script@v8
         with:
-          script: |
-            const { data: labels } = await github.rest.issues.listLabelsOnIssue({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-            });
-            const hasP0 = labels.some(l => l.name === 'precommit-p0');
-            if (hasP0) {
-              core.setFailed('precommit-p0 etiketi var — P0 bulgusu giderilene kadar merge bloke.');
-            } else {
-              console.log('precommit-p0 etiketi yok — P0 label gate PASS');
-            }
+          scriptPath: _calisma/CIKTI/github_scripts/label_gate.js
 
 
   reports:
@@ -821,16 +702,16 @@ jobs:
       # refs-trend/ önekini yakalar → job kaynağı dosya bazında denetlenebilir.
       # merge-multiple artifact'ları köke düzleştirdiği için bu üçünü
       # pattern'e koymak öneklerini kaybettirirdi.
-      # repack-verify ve k0-findings tek düz dosya (repack_verify_report.txt /
-      # k0_findings.json) olduğundan merge ile köke düzleşmesi sorun değildir
-      # → manifest'e rel yolu repack_verify_report.txt / k0_findings.json
-      # olarak girer ve SHA-256 ile sabitlenir.
+      # Verify job'unun düz (tek dosya) sidecar'ları — k0_findings.json,
+      # budget_verify.json, lineage_findings.json, klayers.json ve
+      # repack_verify_report.txt — merge ile köke düzleşir ve manifest'e
+      # rel yolu olarak girer (SHA-256 ile sabitlenir).
       - name: Download remaining artifacts (merge)
         uses: actions/download-artifact@v7
         with:
           path: all_artifacts/
           merge-multiple: true
-          pattern: '{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,k0-findings}'
+          pattern: '{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,k0-findings,budget-verify,lineage-findings,klayers,unit-tests}'
 
       - name: Download config artifact (config/ prefix)
         uses: actions/download-artifact@v7
@@ -880,13 +761,30 @@ jobs:
           retention-days: 90
           if-no-files-found: error
 
-      # ─── 4) K10: bundle bütünlüğünü fail-closed doğrula (son kapı) ──────
+      # ─── 4) manifest.sha256 sidecar'ını AYRI doğrula (standart araç) ────
+      # gen_repro_manifest.py sha256sum biçiminde "{hex}  manifest.json" sidecar
+      # yazar. Bu adım sidecar'ı K10'un Python denetiminden BAĞIMSIZ olarak
+      # `sha256sum -c` ile doğrular (canonical araç = ikinci görüş): sidecar yoksa
+      # veya manifest.json ile eşleşmiyorsa exit ≠ 0 → job fail-closed kızar.
+      # Upload'dan SONRA koşar — FAIL olsa bile bundle yüklenmiştir, böylece
+      # manifest-comment job'ı rozetini (PASS/FAIL) gösterebilir.
+      - name: Verify manifest.sha256 sidecar (standalone)
+        shell: bash
+        working-directory: reproducibility
+        run: |
+          set -euo pipefail
+          test -f manifest.sha256 || { echo "FAIL: manifest.sha256 yok"; exit 1; }
+          sha256sum -c manifest.sha256
+          echo "PASS: manifest.sha256 ↔ manifest.json eşleşti"
+
+      # ─── 5) K10: bundle bütünlüğünü fail-closed doğrula (son kapı) ──────
       # manifest.json üretildikten sonra verify_delivery.py --verify-manifest
       # koşulur: manifest'teki her dosyanın SHA-256'sı gerçek dosyayla
-      # karşılaştırılır (eksik/uyuşmazlık → P1 → exit 1). gen_repro_manifest.py
-      # artifact'ları bundle'a (reproducibility/) kopyaladığı için manifest'teki
-      # rel yollar reproducibility/ altında çözülür. Fail-closed: sessiz geçiş yok.
-      # Job'ın SON adımı olduğu için FAIL, job'ı kırmızıya çevirir.
+      # karşılaştırılır (eksik/uyuşmazlık → P1 → exit 1); sidecar eşleşmesi
+      # de K10 içinde yeniden denetlenir (adım 4'teki sha256sum'dan ayrı yol).
+      # gen_repro_manifest.py artifact'ları bundle'a (reproducibility/) kopyaladığı
+      # için manifest'teki rel yollar reproducibility/ altında çözülür. Fail-closed:
+      # sessiz geçiş yok. Job'ın SON adımı olduğu için FAIL, job'ı kırmızıya çevirir.
       - name: Verify bundle integrity (K10)
         shell: bash
         run: |
@@ -945,78 +843,7 @@ jobs:
       - name: Upsert manifest.txt PR comment (tek yorum güncelle)
         uses: actions/github-script@v8
         with:
-          script: |
-            const fs = require('fs');
-            const path = 'reproducibility/manifest.txt';
-            if (!fs.existsSync(path)) {
-              console.log('manifest.txt yok — yorum atlanıyor');
-              return;
-            }
-            const manifest = fs.readFileSync(path, 'utf8');
-
-            // run_id/sha/ref üst bilgilerini ayrıştır (manifest başlığı)
-            const meta = {};
-            for (const line of manifest.split('\n')) {
-              const m = line.match(/^(github_\w+):\s+(.+)$/);
-              if (m) meta[m[1]] = m[2];
-            }
-
-            const MARKER = '<!-- stoic-hume-v5-reproducibility-manifest -->';
-
-            // K10 bundle bütünlüğü rozeti (önceki adım k10_verdict.txt yazdı)
-            const k10 = fs.existsSync('k10_verdict.txt')
-              ? fs.readFileSync('k10_verdict.txt', 'utf8').trim()
-              : 'N/A';
-            const k10Badge = k10 === 'PASS'
-              ? '✅ **K10 manifest digest: PASS**'
-              : (k10 === 'FAIL'
-                  ? '❌ **K10 manifest digest: FAIL**'
-                  : `⚠️ **K10 manifest digest: ${k10}**`);
-
-            const code = '```text\n' + manifest + '\n```';
-            const body = [
-              '## 📦 Reproducibility manifest (SHA-256)',
-              '',
-              k10Badge,
-              '',
-              'Bu run için üretilen tüm artifact dosyalarının bütünlük özeti:',
-              '',
-              code,
-              '',
-              meta.github_run_id
-                ? `> Run: [${meta.github_run_id}](${context.payload.repository.html_url}/actions/runs/${meta.github_run_id})`
-                : '',
-              '',
-              MARKER,
-            ].join('\n').trim();
-
-            // Tek yorum güncelle (upsert): marker'lı mevcut yorumu bul, varsa
-            // güncelle; yoksa oluştur. Her run'da yeni yorum birikmez.
-            const existing = await github.rest.issues.listComments({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              per_page: 100,
-            });
-            const found = existing.data.find(c => c.body && c.body.includes(MARKER));
-
-            if (found) {
-              await github.rest.issues.updateComment({
-                comment_id: found.id,
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                body,
-              });
-              console.log(`Mevcut yorum güncellendi: comment_id=${found.id}`);
-            } else {
-              await github.rest.issues.createComment({
-                issue_number: context.issue.number,
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                body,
-              });
-              console.log('Yeni yorum oluşturuldu (marker bulunamadı)');
-            }
+          scriptPath: _calisma/CIKTI/github_scripts/manifest_comment.js
 
       # ─── Config diff (raw vs effective) — advisory PR yorumu ────────────
       # reproducibility bundle'ındaki config/config-diff.json (verify job'unun
@@ -1027,78 +854,7 @@ jobs:
       - name: Upsert config-diff PR comment (tek yorum güncelle)
         uses: actions/github-script@v8
         with:
-          script: |
-            const fs = require('fs');
-            const path = 'reproducibility/config/config-diff.json';
-            const MARKER = '<!-- stoic-hume-v5-config-diff -->';
-
-            const listComments = async () => {
-              const { data } = await github.rest.issues.listComments({
-                issue_number: context.issue.number,
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                per_page: 100,
-              });
-              return data;
-            };
-
-            if (!fs.existsSync(path)) {
-              console.log('config-diff.json yok — yorum atlanıyor');
-              return;
-            }
-            const diff = JSON.parse(fs.readFileSync(path, 'utf8'));
-            const diffs = diff.differences || [];
-            const existing = await listComments();
-            const found = existing.find(c => c.body && c.body.includes(MARKER));
-
-            if (diffs.length === 0) {
-              // Fark yok: önceki run'ın bayat uyarısını kaldır (yanıltıcı kalmasın).
-              if (found) {
-                await github.rest.issues.deleteComment({
-                  comment_id: found.id,
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                });
-                console.log('config-diff fark yok — bayat yorum kaldırıldı');
-              } else {
-                console.log('config-diff fark yok — yorum yok');
-              }
-              return;
-            }
-
-            const lines = diffs.map(d =>
-              `- **${d.field}**: \`${JSON.stringify(d.raw)}\` → ` +
-              `\`${JSON.stringify(d.effective)}\` _(${d.reason})_`
-            );
-            const runUrl = `${context.payload.repository.html_url}/actions/runs/${context.runId}`;
-            const body = [
-              '## ⚙️ Config diff (raw vs effective)',
-              '',
-              ...lines,
-              '',
-              "> Advisory: bloke etmez; bloke eden kapı config-drift job'ıdır.",
-              `> Detay: [run #${context.runId}](${runUrl})`,
-              '',
-              MARKER,
-            ].join('\n').trim();
-
-            if (found) {
-              await github.rest.issues.updateComment({
-                comment_id: found.id,
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                body,
-              });
-              console.log(`config-diff yorumu güncellendi: comment_id=${found.id}`);
-            } else {
-              await github.rest.issues.createComment({
-                issue_number: context.issue.number,
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                body,
-              });
-              console.log('config-diff yorumu oluşturuldu');
-            }
+          scriptPath: _calisma/CIKTI/github_scripts/config_diff_comment.js
 
   # ──────────────────────────────────────────────────────────────────────
   # CONFIG DRIFT CHECK
@@ -1183,6 +939,25 @@ jobs:
             cat diffdrift_stderr.txt
           fi
 
+      # cli_overrides tutarlılık denetimi: effective_config.json'daki CLI
+      # override'ları (bütçe kalkanının dosya config yerine CLI değeriyle
+      # koştuğu sapma) drift raporuna AYRI satır olarak girer. Advisory
+      # (exit 0): bloke eden kapı drift'tir; override kaydı denetim izidir.
+      # --version-out config-drift artifact'ına VERSION JSON yazar;
+      # summary.txt'ye 'cli_overrides=' satırı Bundle adımında eklenir.
+      - name: CLI overrides consistency (config drift raporu)
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p config-drift
+          python3 _calisma/CIKTI/check_cli_overrides.py \
+            --config config_snapshot/effective_config.json \
+            --index cli_override_index.json \
+            --out-dir config-drift \
+            --version-out config-drift/cli_overrides_version.json \
+            > cli_override_stdout.txt 2>&1 || true
+          cat cli_override_stdout.txt
+
       # Drift tespit edilirse (exit 1) bulguları PR yorumuna düş.
       # Yalnızca pull_request olayında; push'ta atlanır. Upsert: aynı yorumu
       # günceller, yeni yorum biriktirmez. Fail-closed kapı SONRAKİ adımda.
@@ -1190,49 +965,7 @@ jobs:
         if: github.event_name == 'pull_request' && steps.drift.outputs.rc != '0'
         uses: actions/github-script@v8
         with:
-          script: |
-            const fs = require('fs');
-            const rc = fs.readFileSync('drift_rc.txt', 'utf8').trim();
-            const findings = fs.existsSync('drift_stderr.txt')
-              ? fs.readFileSync('drift_stderr.txt', 'utf8').trim() : '';
-
-            const MARKER = '<!-- stoic-hume-v5-config-drift -->';
-            const body = [
-              '## ⚠️ Config drift tespit edildi',
-              '',
-              '`gen_config.py --dry-run` config ile paket içeriği arasında fark buldu (exit `' + rc + '`):',
-              '',
-              findings ? '```text\n' + findings + '\n```' : '_bulgu boş_',
-              '',
-              "Düzeltme: `python3 _calisma/CIKTI/gen_config.py` çalıştırıp config'i paket içeriğinden yeniden üret.",
-              '',
-              MARKER,
-            ].join('\n').trim();
-
-            const existing = await github.rest.issues.listComments({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              per_page: 100,
-            });
-            const found = existing.data.find(c => c.body && c.body.includes(MARKER));
-            if (found) {
-              await github.rest.issues.updateComment({
-                comment_id: found.id,
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                body,
-              });
-              console.log(`Config drift yorumu güncellendi: comment_id=${found.id}`);
-            } else {
-              await github.rest.issues.createComment({
-                issue_number: context.issue.number,
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                body,
-              });
-              console.log('Config drift yorumu oluşturuldu');
-            }
+          scriptPath: _calisma/CIKTI/github_scripts/config_drift_comment.js
 
       # Fail-closed kapı (yorumdan SONRA): drift exit koduyla çık.
       # Job fail-closed kalır; yorum adımı yalnızca bilgilendirme ekler.
@@ -1266,6 +999,14 @@ jobs:
           verdict=PASS; [ "$final" != "0" ] && verdict=FAIL
           printf 'config-drift exit=%s (gen_config=%s, diff-on-drift=%s) verdict=%s\n' \
             "$final" "$rc" "$diffrc" "$verdict" > config-drift/summary.txt
+          # cli_overrides tutarlılık denetimi — ayrı satır (VERSION JSON'da
+          # warning/override_count; dosya yoksa N/A). Advisory; kapıyı etkilemez.
+          if [ -f config-drift/cli_overrides_version.json ]; then
+            cov=$(python3 -c "import json;d=json.load(open('config-drift/cli_overrides_version.json'));print('WARNING' if d.get('warning') else 'OK', d.get('override_count',0))" 2>/dev/null)
+            printf 'cli_overrides=%s (override_count=%s)\n' $cov >> config-drift/summary.txt
+          else
+            printf 'cli_overrides=N/A (denetim yok)\n' >> config-drift/summary.txt
+          fi
 
       - name: Upload config drift report
         if: always()
@@ -1402,7 +1143,8 @@ jobs:
         with:
           python-version: '3.12'
 
-      # Son 100 refs-online artifact'ını API'den çekip trend tablosu üretir.
+      # Son 100 refs-online + run-history artifact'ını API'den çekip iki trend
+      # üretir: çevrimiçi referans doğrulama + duration/budget zaman serisi.
       # Token yoksa script `gh api`'ye düşer; CI'da GITHUB_TOKEN kullanılır.
       - name: Build refs trend table
         continue-on-error: true

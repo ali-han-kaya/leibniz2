@@ -23,8 +23,10 @@ Tek dosyalık Python HTTP sunucusu (stdlib-only):
 ~/Library/Caches/com.freebuff/preview/) çalıştırılır.
 """
 import argparse
+import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -86,6 +88,12 @@ LATEST = {
     "refs_by_source": None,
     "config_diff": None,        # son run'un raw↔effective config diff özeti (dashboard)
     "hook_env": None,           # hook env sürümleri (zaman serisi; python/z3/lean/…)
+    "z3_passed": None,          # K8 Z3: stderr'deki [PASS] P1-5 sayısı (son run)
+    "z3_failed": None,          # K8 Z3: stderr'deki [FAIL] P1-5 sayısı
+    "z3_total": None,           # K8 Z3: toplam (passed + failed)
+    "lean_ok": None,            # K9 Lean: stderr'deki [K9] PASS/FAIL (True/False/None=koşulmadı)
+    "lean_detail": None,        # K9 Lean: [K9] satırındaki ayrıntı metni (varsa)
+    "layers": None,             # K0-K16 per-katman PASS/FAIL/SKIP (JSON'dan; dashboard "K1-K7" rozeti)
 }
 LOCK = threading.Lock()
 SSE_CLIENTS = []      # bağlı /api/run client listesi (snapshot broadcast)
@@ -94,11 +102,14 @@ VERIFY_BUSY = threading.Lock()  # aynı anda yalnızca bir verify koşsun (loop 
 VERIFY_DIR = None               # main()'de set edilir; /api/run-now handler'ı kullanır
 HISTORY_PATH = None             # main()'de set edilir; JSONL trend dosyası
 HISTORY_MAX = 100               # disk'te tutulacak en son run sayısı
+RUNS_DIR = None                 # main()'de set edilir; run logları (stdout+stderr) dizini
+RUN_LOG_MAX = 20                # disk'te tutulacak + replay edilecek en son run sayısı
 
 HISTORY_KEYS = ("ts", "verdict", "p0", "p1", "duration_s", "budget_usd",
                 "pdf_pages", "ref_count", "raw_sha256", "stripped_sha256",
                 "exit_code", "refs_verified", "refs_total", "refs_mismatch",
-                "refs_by_source", "hook_env")
+                "refs_by_source", "hook_env", "z3_passed", "z3_failed",
+                "z3_total", "lean_ok", "lean_detail")
 
 
 def snapshot_dict():
@@ -113,6 +124,10 @@ def persist_history(rec):
     Her satır tek bir run'ın snapshot'ıdır (JSON). En eski satırlar atılır,
     böylece dosya disk'te sonsuz büyümez. Thread-safe: LOCK altında çağrılır
     ve rec zaten LOCK altında alınmış olarak gelir (kilit tekrar alınmaz).
+
+    Her yazımda history.jsonl.sha256 sidecar'ı da atomik üretilir (içeriğin
+    tam SHA-256'sı, sha256sum formatında) — verify_delivery.py --check-history
+    (K15) bu sidecar'ı fail-closed doğrular.
     """
     if not HISTORY_PATH:
         return
@@ -127,10 +142,18 @@ def persist_history(rec):
         # En yeni HISTORY_MAX satırı tut (en eskiyi at)
         if len(lines) > HISTORY_MAX:
             lines = lines[-HISTORY_MAX:]
+        content = "\n".join(lines) + "\n"
         tmp = HISTORY_PATH + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
-            f.write("\n".join(lines) + "\n")
+            f.write(content)
         os.replace(tmp, HISTORY_PATH)  # atomik: yarı yazılmış dosya asla okunmaz
+        # Yanına .sha256 sidecar'ı yaz (K15 doğrulaması + reproducibility).
+        digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
+        sidecar = HISTORY_PATH + ".sha256"
+        stmp = sidecar + ".tmp"
+        with open(stmp, "w", encoding="utf-8") as f:
+            f.write(f"{digest}  history.jsonl\n")
+        os.replace(stmp, sidecar)  # atomik: yarı yazılmış sidecar asla okunmaz
     except OSError as e:
         sys.stderr.write(f"[history] yazılamadı: {e}\n")
         sys.stderr.flush()
@@ -156,6 +179,65 @@ def load_history():
         sys.stderr.flush()
         return []
     return out[-HISTORY_MAX:]
+
+
+def _prune_run_logs():
+    """RUNS_DIR'deki run loglarını RUN_LOG_MAX ile sınırla (en eskiyi at)."""
+    try:
+        files = sorted(f for f in os.listdir(RUNS_DIR) if f.endswith(".json"))
+    except OSError:
+        return
+    while len(files) > RUN_LOG_MAX:
+        oldest = files.pop(0)
+        try:
+            os.remove(os.path.join(RUNS_DIR, oldest))
+        except OSError:
+            pass
+
+
+def persist_run_log(rec):
+    """Bir run'un TAM kaydını (stdout+stderr dahil) RUNS_DIR'e atomik yaz.
+
+    history.jsonl yalnızca özet alanları tutar (küçük kalsın); stdout/stderr
+    run loglarında saklanır ki son N run /api/run-stream'den geriye dönük
+    replay edilebilsin. Dosya adı sıralanabilir ISO ts'den üretilir
+    (run-<ts>.json), böylece lexicographic sıra = kronolojik sıra. Run'lar
+    VERIFY_BUSY ile serileştiği için aynı anda yazışma olmaz.
+    """
+    if not RUNS_DIR or not rec.get("ts"):
+        return
+    try:
+        os.makedirs(RUNS_DIR, exist_ok=True)
+        safe = rec["ts"].replace(":", "").replace("+", "").replace(".", "")
+        path = os.path.join(RUNS_DIR, f"run-{safe}.json")
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(rec, f, ensure_ascii=False)
+        os.replace(tmp, path)  # atomik: yarı yazılmış log asla okunmaz
+        _prune_run_logs()
+    except OSError as e:
+        sys.stderr.write(f"[runs] yazılamadı: {e}\n")
+        sys.stderr.flush()
+
+
+def load_run_logs(limit=None):
+    """RUNS_DIR'deki son `limit` run logunu oku (en eski → en yeni sırada)."""
+    if not RUNS_DIR or not os.path.isdir(RUNS_DIR):
+        return []
+    limit = RUN_LOG_MAX if limit is None else limit
+    try:
+        files = sorted(f for f in os.listdir(RUNS_DIR) if f.endswith(".json"))
+    except OSError:
+        return []
+    files = files[-limit:]
+    out = []
+    for fn in files:
+        try:
+            with open(os.path.join(RUNS_DIR, fn), encoding="utf-8") as f:
+                out.append(json.load(f))
+        except (OSError, json.JSONDecodeError):
+            continue  # bozuk logu atla; replay zincirini kırma
+    return out
 
 
 def run_verify(verify_dir):
@@ -202,12 +284,17 @@ def _broadcast_run_end(rec):
             pass
 
 
-def build_replay_events(ts, verdict, stdout, stderr):
+def build_replay_events(ts, verdict, stdout, stderr, p0=None, p1=None,
+                        budget_usd=None, duration_s=None, first=False):
     """Son tamamlanmış run'un satırlarını SSE event listesi olarak üret.
 
     Dönüş: [(event_adı, data_json), ...] — replay-start, ardından stderr
     satırları, ardından stdout satırları (her biri `replay: true` işaretli),
     en sonda replay-end. ts yoksa boş liste döner (henüz hiç run yok).
+
+    replay-start event'i son run'un özet alanlarını da taşır (verdict/p0/p1/
+    budget_usd/duration_s) — client bunu geçmiş run sınırında görünür bir
+    özet satırı olarak render eder (verdict/P0/P1/bütçe).
 
     Sıra, canlı akıştaki zamansal sırayı yansıtır: verify --full --json
     koşusunda insan-okur ilerleme satırları (K8 Z3 dahil) stderr'e akar,
@@ -216,7 +303,9 @@ def build_replay_events(ts, verdict, stdout, stderr):
     if not ts:
         return []
     events = [("replay-start", json.dumps(
-        {"stream": "replay-start", "ts": ts, "verdict": verdict},
+        {"stream": "replay-start", "ts": ts, "verdict": verdict,
+         "p0": p0, "p1": p1, "budget_usd": budget_usd,
+         "duration_s": duration_s, "first": first},
         ensure_ascii=False))]
     for tag, text in (("stderr", stderr), ("stdout", stdout)):
         if not text:
@@ -227,6 +316,31 @@ def build_replay_events(ts, verdict, stdout, stderr):
                 ensure_ascii=False)))
     events.append(("replay-end", json.dumps(
         {"stream": "replay-end", "ts": ts}, ensure_ascii=False)))
+    return events
+
+
+def build_replay_events_multi(records):
+    """Birden çok run kaydını tek SSE replay listesi olarak üret.
+
+    records: en eski → en yeni sıralı run kaydı listesi (load_run_logs çıktısı).
+    Her run replay-start (ilk run `first: true`) … satırlar … replay-end
+    (son run `last: true`) üretir; client ilk run'da kutuyu temizler, son run'da
+    canlı akış sınırını çizer.
+    """
+    events = []
+    n = len(records)
+    for i, rec in enumerate(records):
+        run_ev = build_replay_events(
+            rec.get("ts"), rec.get("verdict"), rec.get("stdout", ""),
+            rec.get("stderr", ""), rec.get("p0"), rec.get("p1"),
+            rec.get("budget_usd"), rec.get("duration_s"), first=(i == 0))
+        if i == n - 1 and run_ev:
+            # son run'un replay-end'ine last=true işaretle
+            last_name, last_data = run_ev[-1]
+            last_data = json.loads(last_data)
+            last_data["last"] = True
+            run_ev[-1] = (last_name, json.dumps(last_data, ensure_ascii=False))
+        events.extend(run_ev)
     return events
 
 
@@ -341,6 +455,47 @@ def _config_diff(raw_cfg, eff_cfg):
     return differences
 
 
+def _parse_z3_counts(stderr):
+    """stderr'deki K8 Z3 özet tablosundan [PASS]/[FAIL] P1-5 sayılarını çıkar.
+
+    symbolic_proof_z3.py çıktısındaki özet tablo satırları indented
+    '  [PASS] P1-a  …' biçimindedir (canlı ilerleme satırları '[P1-a] …'
+    değil). Yalnızca P1-5 etiketleri sayılır — diğer katmanların
+    '[PASS] K…' / '[OK]' satırları eşleşmez (yanlış sayım yok).
+    Döndürür: (passed, failed).
+    """
+    passed = failed = 0
+    for line in (stderr or "").splitlines():
+        m = re.match(r"\s*\[\s*(PASS|FAIL)\s*\]\s*P[1-5]\b", line)
+        if m:
+            if m.group(1) == "PASS":
+                passed += 1
+            else:
+                failed += 1
+    return passed, failed
+
+
+def _parse_lean_result(stderr):
+    """stderr'deki K9 Lean sonuç satırından (ok, detail) çıkar.
+
+    verify_delivery.py --full çıktısındaki satır:
+      '[K9] Lean 4 reduct-invariance: PASS — Lean 4 reduct-invariance derlendi ve geçti'
+    K9 satırı hiç yoksa (--lean-proof koşulmamışsa) → (None, None) döner;
+    dashboard o zaman '?' gösterir. K9 satırı birden çok kez geçerse sonuncusu
+    kazanır (tek run, tek K9 sonucu olması gerekir).
+    Döndürür: (ok: bool|None, detail: str|None).
+    """
+    ok = None
+    detail = None
+    for line in (stderr or "").splitlines():
+        m = re.match(r"\s*\[K9\]\s+Lean\s+4\s+reduct-invariance:\s+(PASS|FAIL)"
+                     r"(?:\s*[—\-:]\s*(.*))?", line)
+        if m:
+            ok = m.group(1) == "PASS"
+            detail = (m.group(2) or "").strip() or None
+    return ok, detail
+
+
 def _finalize_run(stdout, stderr, rc, duration, data, verify_dir=None):
     """Run sonucunu LATEST'e yaz, SSE_CLIENTS'a broadcast et, history'ye ekle.
 
@@ -377,6 +532,9 @@ def _finalize_run(stdout, stderr, rc, duration, data, verify_dir=None):
                 raw_cfg = {}
     diff_rows = _config_diff(raw_cfg, data.get("config") or {})
 
+    z3_passed, z3_failed = _parse_z3_counts(stderr)
+    lean_ok, lean_detail = _parse_lean_result(stderr)
+
     with LOCK:
         LATEST.update({
             "ts": datetime.now(timezone.utc).isoformat(),
@@ -407,6 +565,14 @@ def _finalize_run(stdout, stderr, rc, duration, data, verify_dir=None):
                             "differences": diff_rows},
             # hook env sürümleri (python/z3/lean/…; zaman serisi paneli)
             "hook_env": data.get("hook_env"),
+            # K8 Z3: son run'un gerçek sonucu (stderr özet tablosundan)
+            "z3_passed": z3_passed,
+            "z3_failed": z3_failed,
+            "z3_total": z3_passed + z3_failed,
+            "layers": data.get("layers"),
+            # K9 Lean: son run'un gerçek sonucu (stderr [K9] satırından)
+            "lean_ok": lean_ok,
+            "lean_detail": lean_detail,
         })
         # Extract pages + refs from stdout for richer dashboard
         for line in stdout.splitlines():
@@ -420,9 +586,12 @@ def _finalize_run(stdout, stderr, rc, duration, data, verify_dir=None):
                     except (ValueError, IndexError):
                         pass
 
-    # Broadcast to all SSE clients + disk'e yaz (trend) + run-stream sonu
+    # Broadcast to all SSE clients + disk'e yaz (trend + run log) + stream sonu
     with LOCK:
         rec = {k: LATEST[k] for k in HISTORY_KEYS}
+        full_rec = dict(rec)
+        full_rec["stdout"] = LATEST["stdout"]
+        full_rec["stderr"] = LATEST["stderr"]
         snapshot = json.dumps(rec)
         for q in SSE_CLIENTS:
             try:
@@ -430,6 +599,7 @@ def _finalize_run(stdout, stderr, rc, duration, data, verify_dir=None):
             except Exception:
                 pass
         persist_history(rec)
+    persist_run_log(full_rec)  # stdout/stderr dahil — son N run replay için
     _broadcast_run_end(rec)
 
 
@@ -502,13 +672,30 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self._send(404, "404 not found")
 
-    def _replay_last_run(self, ts, verdict, stdout, stderr):
+    def _replay_last_run(self, ts, verdict, stdout, stderr, p0=None, p1=None,
+                         budget_usd=None, duration_s=None):
         """Son tamamlanmış run'un satırlarını canlı akıştan ÖNCE gönder.
 
         replay-start/end event'leri sınırı işaretler; her satır `replay: true`
         taşır, böylece client geçmiş satırları canlı satırlardan ayırt eder.
+        replay-start event'i son run'un özetini de taşır (verdict/P0/P1/bütçe).
         """
-        events = build_replay_events(ts, verdict, stdout, stderr)
+        events = build_replay_events(ts, verdict, stdout, stderr,
+                                     p0, p1, budget_usd, duration_s)
+        if not events:
+            return
+        buf = "".join(f"event: {ev}\ndata: {data}\n\n" for ev, data in events)
+        self.wfile.write(buf.encode())
+        self.wfile.flush()
+
+    def _replay_runs(self, records):
+        """Son N run'un loglarını canlı akıştan ÖNCE geriye dönük gönder.
+
+        Her run replay-start (ilk run first=true) … satırlar … replay-end
+        (son run last=true) üretir; client ilk run'da kutuyu temizler, son
+        run'da canlı akış sınırını çizer.
+        """
+        events = build_replay_events_multi(records)
         if not events:
             return
         buf = "".join(f"event: {ev}\ndata: {data}\n\n" for ev, data in events)
@@ -522,9 +709,9 @@ class Handler(BaseHTTPRequestHandler):
         "line": ...}); run bittiğinde `run-end` event'i (son snapshot) gelir.
         Bağlantı anında bekleyen bir verify yoksa keepalive ile bekler.
 
-        Bağlantı anında SON TAMAMLANMIŞ run'un satırları geriye dönük akıtılır
-        (replay-start/end arasında), böylece sayfa açıldığında kutu boş kalmaz:
-        önce son run'un satırları, sonra canlı satırlar gelir.
+        Bağlantı anında SON N run'un logları geriye dönük akıtılır (her run
+        replay-start/end arasında), böylece sayfa açıldığında kutu boş kalmaz:
+        önce son N run'un satırları, sonra canlı satırlar gelir.
         """
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream; charset=utf-8")
@@ -543,15 +730,11 @@ class Handler(BaseHTTPRequestHandler):
                                "ts": LATEST["ts"],
                                "verdict": LATEST["verdict"]},
                               ensure_ascii=False)
-            replay_ts = LATEST["ts"]
-            replay_verdict = LATEST["verdict"]
-            replay_stdout = LATEST["stdout"]
-            replay_stderr = LATEST["stderr"]
+        replay_records = load_run_logs(RUN_LOG_MAX)
         try:
             self.wfile.write(f"event: info\ndata: {info}\n\n".encode())
             self.wfile.flush()
-            self._replay_last_run(replay_ts, replay_verdict,
-                                  replay_stdout, replay_stderr)
+            self._replay_runs(replay_records)
             while True:
                 try:
                     msg = q.get(timeout=15)
@@ -676,6 +859,7 @@ def redirect_stdio_to_devnull():
 
 
 def main():
+    global PREVIEW_DIR, VERIFY_DIR, HISTORY_PATH, RUNS_DIR, RUN_LOG_MAX
     # Daemon modunda: yeni process group + session oluştur (tamamen detach).
     # Bu, parent shell exit ettiğinde SIGHUP/SIGTERM almamızı engeller.
     if os.environ.get("PREVIEW_DAEMON") == "1":
@@ -695,12 +879,16 @@ def main():
     ap.add_argument("--bind", default="127.0.0.1")
     ap.add_argument("--interval", type=int, default=60,
                     help="verify_delivery.py --full kaç saniyede bir koşsun")
+    ap.add_argument("--replay-runs", type=int, default=RUN_LOG_MAX,
+                    help="/api/run-stream'de replay edilecek + disk'te "
+                         "tutulacak son run sayısı")
     args = ap.parse_args()
 
-    global PREVIEW_DIR, VERIFY_DIR, HISTORY_PATH
     PREVIEW_DIR = args.preview_dir
     VERIFY_DIR = args.dir
     HISTORY_PATH = os.path.join(args.preview_dir, "history.jsonl")
+    RUNS_DIR = os.path.join(args.preview_dir, "runs")
+    RUN_LOG_MAX = args.replay_runs
 
     if not os.path.isfile(os.path.join(PREVIEW_DIR, "preview.html")):
         print(f"UYARI: {PREVIEW_DIR}/preview.html bulunamadı; "

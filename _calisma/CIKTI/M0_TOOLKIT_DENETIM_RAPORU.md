@@ -119,7 +119,7 @@ K8 + K9 + soy hattı + K11 + K13 + K14; K10 ve K12 ayrıca çağrılır.
 | K10 | reproducibility manifest digest (`--verify-manifest`) | PASS (aşağıda) |
 | K11 | config drift (`gen_config.py --dry-run`; `--check-config-drift`) | PASS |
 | K12 | LaunchAgent plist şablonu (`--check-plist`) | PASS (yerel macOS; Linux CI'da koşmaz) |
-| K13 | gen_repro_manifest.py self-testi (`--check-repro-manifest`) | PASS |
+| K13 | gen_repro_manifest.py self-testi (`--check-repro-manifest`) — mock üretimde manifest.sha256 ↔ manifest.json eşleşmesi de denetlenir (K10 ile ortak helper) | PASS |
 | K14 | Cleanup kaydı: M0 §10 silme/taşıma kayıtları (`--check-cleanup`) | PASS |
 
 **K14 bulguları (yeni katman — commit `[K14]`):** `cleanup_log.json` (M0 §10
@@ -149,7 +149,14 @@ K14, `--full` zincirine dahildir; `--check-cleanup` ile tek başına da koşar.
 | Silme (`run-history/history.jsonl`) | `…(EKSİK)` → exit 1 |
 
 K10, CI `reproducibility` job'ında manifest üretiminin hemen ardından koşar.
-Bilinçli sınır: `manifest.sha256` sidecar'ı üretilir ama K10 henüz denetlemez;
+**V5s kapsam genişletmesi (K10):** artık `manifest.sha256 ↔ manifest.json`
+eşleşmesi de fail-closed denetlenir — sidecar yok / sha256sum biçimi geçersiz /
+dosya adı alanı `manifest.json` değil / hash uyuşmaz → P1 → exit 1. Sidecar
+manifest dosyasının KENDİ hash'ini sabitler: manifest.json içeriği değişirse
+(ör. JSON boşluk kurcalaması — içindeki dosya hash'leri aynı kalsa bile)
+sidecar artık eşleşmez; `test_verify_manifest_sidecar.py` (9 test) bunu kapsar
+(`test_json_tamper_breaks_sidecar_even_when_file_hashes_intact`). Önceki
+"Bilinçli sınır" notu kaldırıldı — kapandı.
 `--verify-manifest` çevrimdışı K1-K7 taban kapısını da koşar (K6 çevrimiçi
 denetim, Z3, Lean yok).
 

@@ -70,7 +70,7 @@ class TestRenderLines(unittest.TestCase):
 
 
 class TestMainEndToEnd(unittest.TestCase):
-    def _run(self, config_json=None):
+    def _run(self, config_json=None, version_out=False):
         with tempfile.TemporaryDirectory() as d:
             out = os.path.join(d, "budget")
             os.makedirs(out, exist_ok=True)
@@ -84,16 +84,24 @@ class TestMainEndToEnd(unittest.TestCase):
                     json.dump(config_json, f)
             argv = ["--config", cfg_path or "",
                     "--index", index, "--out-dir", out]
+            vpath = None
+            if version_out:
+                vpath = os.path.join(out, "cli_overrides_version.json")
+                argv += ["--version-out", vpath]
             rc = co.main(argv)
             txt_path = os.path.join(out, "cli_overrides_warning.txt")
             with open(txt_path, encoding="utf-8") as f:
                 txt = f.read()
             with open(index, encoding="utf-8") as f:
                 idx = json.load(f)
-            return rc, txt, idx
+            ver = None
+            if vpath and os.path.isfile(vpath):
+                with open(vpath, encoding="utf-8") as f:
+                    ver = json.load(f)
+            return rc, txt, idx, ver
 
     def test_no_override(self):
-        rc, txt, idx = self._run(_cfg({
+        rc, txt, idx, _ = self._run(_cfg({
             "budget": {"cli_given": False, "override": False},
         }))
         self.assertEqual(rc, 0)
@@ -101,7 +109,7 @@ class TestMainEndToEnd(unittest.TestCase):
         self.assertFalse(idx["cli_overrides"]["warning"])
 
     def test_override_written(self):
-        rc, txt, idx = self._run(_cfg({
+        rc, txt, idx, _ = self._run(_cfg({
             "budget": {"cli_given": True, "cli_value": 25.0,
                        "file_value": 30.0, "effective": 25.0,
                        "override": True},
@@ -113,10 +121,50 @@ class TestMainEndToEnd(unittest.TestCase):
 
     def test_missing_config_advisory(self):
         # config yok → UYARI, exit 0 (advisory; fail-closed değil).
-        rc, txt, idx = self._run(None)
+        rc, txt, idx, _ = self._run(None)
         self.assertEqual(rc, 0)
         self.assertIn("bulunamadı", txt)
         self.assertFalse(idx["cli_overrides"]["warning"])
+
+
+class TestVersionOut(unittest.TestCase):
+    def _cfg(self, override=True):
+        return {"cli_overrides": {
+            "budget": {"cli_given": override, "cli_value": 25.0,
+                       "file_value": 30.0, "effective": 25.0,
+                       "override": override},
+        }}
+
+    def test_version_json_written_with_override(self):
+        rc, _, _, ver = TestMainEndToEnd()._run(self._cfg(True),
+                                                version_out=True)
+        self.assertEqual(rc, 0)
+        self.assertIsNotNone(ver)
+        self.assertIn("tool", ver)
+        self.assertIn("ts", ver)
+        self.assertTrue(ver["warning"])
+        self.assertEqual(ver["override_count"], 1)
+        self.assertEqual(ver["overrides"][0]["key"], "budget")
+        self.assertTrue(ver["config_read"])
+        self.assertIn("TESPİT EDİLDİ", ver["summary"])
+
+    def test_version_json_written_no_override(self):
+        rc, _, _, ver = TestMainEndToEnd()._run(self._cfg(False),
+                                                version_out=True)
+        self.assertEqual(rc, 0)
+        self.assertIsNotNone(ver)
+        self.assertFalse(ver["warning"])
+        self.assertEqual(ver["override_count"], 0)
+        self.assertIn("YOK", ver["summary"])
+
+    def test_version_json_written_config_missing(self):
+        # config yoksa da VERSION JSON yazılır (denetim izi tam) — warning
+        # false + config_read false (advisory).
+        rc, _, _, ver = TestMainEndToEnd()._run(None, version_out=True)
+        self.assertEqual(rc, 0)
+        self.assertIsNotNone(ver)
+        self.assertFalse(ver["warning"])
+        self.assertFalse(ver["config_read"])
 
 
 if __name__ == "__main__":

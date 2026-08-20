@@ -22,7 +22,7 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 > | AŞAMA 4 — koruma kanıtı | ⏸️ opsiyonel (1 (b) sonrası) |
 >
 > Job tablosu (AŞAMA 3), `.github/workflows/verify.yml`'deki canlı job `name:`
-> alanlarının birebir aynısıdır (11 job); required check adları tek kaynaktan
+> alanlarının birebir aynısıdır (12 job); required check adları tek kaynaktan
 > türer (`python3 _calisma/CIKTI/status_checks.py --json`). Günlük akış için
 > **aşağıdaki "INCREMENTAL PUSH" bölümüne** geç.
 
@@ -57,6 +57,8 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 | 2026-08-19 | TEK KOMUT | publish_wrapper AŞAMA 0-3 idempotent yapıldı (repo zaten yayındaysa no-op re-run) | `6abf365` |
 | 2026-08-19 | AŞAMA 1 | publish_wrapper'a status_checks.py otomatik doğrulaması bağlandı (repo oluşturma sonrası) | `5f614cf` |
 | 2026-08-19 | TEK KOMUT | publish_wrapper'a `--dry-run-summary` bayrağı eklendi (komut akışını tek markdown'da özetler) | `c21b8e9` |
+| 2026-08-20 | AŞAMA 3 | K12 (plist) katman listesine eklendi; job tablosu 12'ye, artifact listesi 19'a güncellendi (plist-check job + unit-tests/plist-check artifact'ları) | (çalışma ağacı — commit yok) |
+| 2026-08-20 | AŞAMA 3 | Job tablosu `scriptPath` referanslarıyla senkronlandı: 5 github-script bloğu `github_scripts/*.js`'e çıkarıldı (pr_status_comment/label_gate/manifest_comment/config_diff_comment/config_drift_comment), inline `script:` yok; label-gate'e checkout eklendi; drift kapısı `test_github_scripts.py` (5 test) | (çalışma ağacı — commit yok) |
 | 2026-08-19 | (tümü) | Repo canlı duruma göre yeniden yazıldı: AŞAMA 1-2 `UYGULANDI` işaretlendi, ana akış `INCREMENTAL PUSH` günlük döngüsü oldu (AŞAMA 1 (b) BEKLEMEDE) | `e708e45` |
 | 2026-08-19 | AŞAMA 1/3 | Node 24 yükseltmesi işlendi: `action-runtimes` job'ı + `check-action-pins` pre-commit kapısı (job 11, required check 9, pre-commit 6) | `1f84ba4` |
 
@@ -100,11 +102,11 @@ bash docs/publish_precheck.sh --allow-remote
 # 2) Push (kapılar yeşilse)
 git push origin main
 
-# 3) CI'ı izle (11 job — K1-K9 + action-runtimes + budget + ...)
+# 3) CI'ı izle (12 job — K1-K14 + action-runtimes + budget + plist-check + ...)
 RUN_ID=$(gh run list --limit 1 --json databaseId -q '.[0].databaseId')
 gh run watch $RUN_ID --exit-status
 
-# 4) Son durum + artifact'lar (17 adet beklenir)
+# 4) Son durum + artifact'lar (19 adet beklenir)
 gh run view $RUN_ID --json jobs --jq '.jobs[] | "\(.name)\t\(.conclusion)"'
 gh api "repos/ali-han-kaya/leibniz2/actions/runs/$RUN_ID/artifacts" \
   --jq '.artifacts[].name' | sort
@@ -428,7 +430,7 @@ gh run list --limit 3 --json databaseId,status,conclusion,name
 RUN_ID=$(gh run list --limit 1 --json databaseId -q '.[0].databaseId')
 gh run watch $RUN_ID --exit-status
 
-# (c) Artifact'ları kontrol et (17 adet olmalı — liste aşağıda)
+# (c) Artifact'ları kontrol et (19 adet olmalı — liste aşağıda)
 gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_bytes) B)"'
 ```
 
@@ -436,23 +438,25 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 --exit-status` + artifact listesi; sonuç `SONUÇ: PASS/FAIL` olarak loglanır
 (dry-run'da yalnızca önizlenir).
 
-**Beklenen (11 job):**
+**Beklenen (12 job):**
 | Job | Beklenen sonuç |
 |---|---|
-| Delivery verification — K1-K9 (single entry point) | ✅ PASS (P0=0, P1=0) — K1-K7 + K0 + soy hattı + bütçe + K8 (Z3 12/12) + K9 (Lean) tek komutta; pre-commit 6 hook'u advisory bölüm olarak aynı job içinde |
+| Delivery verification — K1-K9 (single entry point) | ✅ PASS (P0=0, P1=0) — K0-K7 + K8 (Z3 12/12) + K9 (Lean) + K11 (config drift) + K13 (repro self-test) + K14 (cleanup) tek komutta (`--full`); pre-commit 9 hook'u advisory bölüm olarak aynı job içinde. *Job adı branch-protection required check'i olduğu için değiştirilmedi; kapsam K1-K14'tür* |
 | Action runtime check (node24) | ✅ her `uses:` action'ın `runs.using=node24` olduğu doğrulanır (deprecated node → FAIL); verify ile paralel |
-| Budget shield (aggregated) | ✅ limit içinde (sidecar birleştirildi); PR'da tek "PR doğrulama durumu" yorumu (bütçe + pre-commit) + precommit-p0/p1 etiketi |
-| Pre-commit P0 label gate | ✅ precommit-p0 etiketi yoksa PASS; varsa FAIL (merge bloke — required check) |
+| Budget shield (aggregated) | ✅ limit içinde (sidecar birleştirildi); PR'da tek "PR doğrulama durumu" yorumu (bütçe + pre-commit) + precommit-p0/p1 etiketi — yorum `github_scripts/pr_status_comment.js`'ten (`scriptPath`, inline `script:` yok) |
+| Pre-commit P0 label gate | ✅ precommit-p0 etiketi yoksa PASS; varsa FAIL (merge bloke — required check) — kontrol `github_scripts/label_gate.js`'ten (`scriptPath`); checkout eklendi (scriptPath çalışma dizini gerektirir) |
 | Static markdown reports (incl. pre-commit findings) | ✅ bundle yüklendi |
-| Reproducibility bundle | ✅ manifest.txt + SHA-256 (run_id ile) |
-| Config drift check (gen_config + diff-on-drift) | ✅ config paketle uyumlu |
+| Reproducibility bundle | ✅ manifest.txt + SHA-256 (run_id ile) — K10 `--verify-manifest` fail-closed digest bu job'da koşar; ayrıca `manifest.sha256` AYRI adım olarak `sha256sum -c` ile doğrulanır (K10'dan bağımsız standart araç, upload sonrası) |
+| Config drift check (gen_config + diff-on-drift) | ✅ config paketle uyumlu; drift bulguları PR yorumu olarak `github_scripts/config_drift_comment.js`'ten düşer (`scriptPath`) |
 | Repack determinism + verify (sidecar sync) | ✅ repack byte-identical, base verify PASS |
 | Online verification trend (refs-online across runs) | ✅ trend tablosu üretildi (advisory, run'lar arası) |
 | Publish precheck (AŞAMA 0, advisory) | ✅ AŞAMA 0 kapıları (tree/noise/gh/status_checks) her push'ta otomatik denetlenir; yerel-only kontroller INFO (required check DEĞİL) |
-| Manifest PR comment | yalnızca PR'da: manifest.txt PR yorumu olarak düşer |
+| Plist drift check (macOS, advisory) | ✅ **K12** — `verify_delivery.py --check-plist` (update_preview.sh --plist-check) + golden drift karşılaştırması; macOS-runner'lı, `--full`'a dahil DEĞİL (K12 macOS'a özgü), drift varsa advisory rapor + `plist-check` artifact'ı |
+| Manifest PR comment | yalnızca PR'da: manifest.txt PR yorumu olarak düşer (`github_scripts/manifest_comment.js`) + config-diff advisory yorumu (`github_scripts/config_diff_comment.js`) — her ikisi de `scriptPath` |
 
-**Artifact listesi (17):**
-- `verify-report` (tek log: K1-K9 + pre-commit bölümü + .sha256)
+**Artifact listesi (19):**
+- `unit-tests` (CIKTI birim test logu — `test_*.py` glob'u)
+- `verify-report` (tek log: K1-K14 + pre-commit bölümü + .sha256)
 - `action-runtimes` (her action'ın runs.using denetimi JSON — node24 kapısı)
 - `budget-verify` + `budget` (bütçe sidecar + aggregator)
 - `config` (ham + şema + etkin config + diff)
@@ -468,10 +472,13 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 - `repack-verify` (repack sonrası base verify raporu)
 - `refs-trend` (run'lar arası çevrimiçi referans zaman serisi)
 - `precheck-report` (AŞAMA 0 ön-kontrol logu — advisory, her push'ta)
+- `plist-check` (K12 raporu + --plist-check sidecar JSON — macOS advisory job)
 
-**Not:** Kapı artık `verify_delivery.py --full`'dur (K1-K9, fail-closed) ve yeşildir —
+**Not:** Kapı artık `verify_delivery.py --full`'dur (K1-K14, fail-closed) ve yeşildir —
 Beth 1953 / Fosl 1998 gibi referans düzeltmeleri V5h'te yapıldı; Kalan çevrimdışı
-kaynaklar `refs-online`'da advisory olarak izlenir (kapıyı kırmaz).
+kaynaklar `refs-online`'da advisory olarak izlenir (kapıyı kırmaz). K12 (plist)
+`--full`'a dahil değildir — macOS'a özgü olduğundan ayrı `plist-check` advisory
+job'ında koşar (Linux runner'larında SKIP).
 
 ---
 

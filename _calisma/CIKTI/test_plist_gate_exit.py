@@ -17,6 +17,7 @@ DOKUNMAZ, bu yüzden Linux CI'da da çalışır):
 """
 import json
 import os
+import plistlib
 import subprocess
 import sys
 import tempfile
@@ -134,9 +135,12 @@ class TestPlistOutSidecar(unittest.TestCase):
             self.assertEqual(d["exit"], 0)
             self.assertIn("GÜNCEL", d["detail"])
             self.assertIn("GÜNCEL", d["output"])
-            # Tek-profil yönetimi: yalnızca birincil leibniz2 rapora girmeli.
+            # Çok-profilli yönetim: birincil leibniz2 + preview-server ikisi
+            # de rapora girmeli (K11 --plist iki profili tek komutta denetler).
             labels = [p["label"] for p in d["profiles"]]
-            self.assertEqual(labels, ["com.freebuff.preview-leibniz2"])
+            self.assertEqual(labels,
+                             ["com.freebuff.preview-leibniz2",
+                              "com.freebuff.preview-server"])
             for p in d["profiles"]:
                 self.assertEqual(p["status"], "GÜNCEL")
                 self.assertTrue(p["path"].endswith(p["label"] + ".plist"))
@@ -157,6 +161,58 @@ class TestPlistOutSidecar(unittest.TestCase):
             self.assertEqual(d["exit"], 2)
             self.assertIn("şablon yok", d["detail"])
             self.assertIn("şablon yok", d["output"])
+
+
+class TestOutOfScopeExtraFile(unittest.TestCase):
+    """Kapsam-dışı fazla dosya senaryosu (ekstra mock) — GERÇEK uçtan uca.
+
+    K12'nin kapsamı yalnızca PLIST_PROFILES'teki yönetilen profillerdir:
+    LaunchAgents'e düşen, şablonda/profillerde OLMAYAN bir plist (ör. başka
+    bir uygulamanın agent'ı) kapsam-dışıdır ve --plist-check'i bozmamalı:
+    yanlış BAYAT/exit 1 üretmemeli, K12 raporuna da girmemeli. Her iki kapı
+    da GERÇEK script yoluyla koşulur (update_preview.sh --plist-force +
+    --plist-check; verify_delivery.py --check-plist --plist-out) — mock
+    içerik değil, gerçek üretim hattı.
+    """
+
+    EXTRA = ("<plist version=\"1.0\"><dict><key>Label</key>"
+             "<string>com.example.out-of-scope</string></dict></plist>")
+
+    def _setup_with_extra(self, home):
+        gen = run(home, "bash", UPDATE_PREVIEW, "--plist-force", home)
+        self.assertEqual(gen.returncode, 0, gen.stderr)
+        extra = os.path.join(home, "Library", "LaunchAgents",
+                             "com.example.out-of-scope.plist")
+        with open(extra, "w", encoding="utf-8") as f:
+            f.write(self.EXTRA)
+
+    def test_plist_check_ignores_out_of_scope_extra_file(self):
+        with tempfile.TemporaryDirectory(prefix="plist-gate-") as home:
+            self._setup_with_extra(home)
+            chk = run(home, "bash", UPDATE_PREVIEW, "--plist-check", home)
+            # Kapsam-dışı dosya yönetilen profilleri etkilemez → exit 0 GÜNCEL.
+            self.assertEqual(chk.returncode, 0, chk.stdout + chk.stderr)
+            self.assertIn("GÜNCEL", chk.stdout)
+            self.assertNotIn("out-of-scope", chk.stdout)
+
+    def test_k12_layer_passes_with_out_of_scope_extra_file(self):
+        with tempfile.TemporaryDirectory(prefix="plist-gate-") as home:
+            self._setup_with_extra(home)
+            out = os.path.join(home, "plist_report.json")
+            r = run(home, sys.executable, VERIFY_DELIVERY,
+                    "--check-plist", "--plist-out", out)
+            # K12 gerçek hattı: ekstra dosya varken de exit 0 (PASS).
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            with open(out, encoding="utf-8") as f:
+                d = json.load(f)
+            self.assertTrue(d["ok"])
+            self.assertEqual(d["exit"], 0)
+            # Rapor yalnızca yönetilen profilleri içerir — ekstra dosya girmez.
+            labels = [p["label"] for p in d["profiles"]]
+            self.assertEqual(labels, ["com.freebuff.preview-leibniz2",
+                                      "com.freebuff.preview-server"])
+            self.assertTrue(all(p["status"] == "GÜNCEL" for p in d["profiles"]))
+            self.assertNotIn("out-of-scope", json.dumps(d))
 
 
 class TestParsePlistCheckOutput(unittest.TestCase):

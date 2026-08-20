@@ -51,6 +51,13 @@ FILES=(
   "gen_repro_manifest.py|gen_repro_manifest.py"
   "gen_config.py|gen_config.py"
   "cleanup_log.json|cleanup_log.json"
+  "github_scripts_battery.py|github_scripts_battery.py"
+  "github_scripts_selftest.js|github_scripts_selftest.js"
+  "github_scripts/config_diff_comment.js|github_scripts/config_diff_comment.js"
+  "github_scripts/config_drift_comment.js|github_scripts/config_drift_comment.js"
+  "github_scripts/label_gate.js|github_scripts/label_gate.js"
+  "github_scripts/manifest_comment.js|github_scripts/manifest_comment.js"
+  "github_scripts/pr_status_comment.js|github_scripts/pr_status_comment.js"
   "TESLIM_KLASOR_V5_2026-08-17.zip|TESLIM_KLASOR_V5_2026-08-17.zip"
   "TESLIM_KLASOR_V5_2026-08-17.zip.sha256|TESLIM_KLASOR_V5_2026-08-17.zip.sha256"
   "TESLIM_V5_FINAL_2026-08-17.zip|TESLIM_V5_FINAL_2026-08-17.zip"
@@ -97,6 +104,9 @@ same_file() {
 # Tek dosyayı kopyala (yalnızca değiştiyse). Döndürür: "GÜNCEL"/"GÜNCELLENDİ"/"YAZILDI".
 sync_one() {
   local src="$1" dst="$2" mode="${3:-sync}"
+  # Alt dizin hedefleri (github_scripts/…): hedef klasör yoksa cp başarısız
+  # olur — önce oluştur (exit kodu set -e ile yakalanır).
+  mkdir -p "$(dirname "$dst")"
   if [ "$mode" = "force" ]; then
     cp "$src" "$dst"
     printf 'GÜNCELLENDİ'

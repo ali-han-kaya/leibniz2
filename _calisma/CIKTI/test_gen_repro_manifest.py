@@ -1,20 +1,43 @@
 #!/usr/bin/env python3
 """test_gen_repro_manifest.py — gen_repro_manifest.py regresyon kapısı.
 
-PROVENANCE bölümünü (artifact → job kaynağı) denetler: precommit-logs ve
-config artifact'ları verify job'undan gelir ve prefixed indirme sayesinde
-bundle'da kendi adları altında işaretlenir. stdlib unittest + subprocess —
-ek bağımlılık yok.
+Kapsanan bölümler:
+  PROVENANCE — artifact → job kaynağı (precommit-logs/config prefixed indirme)
+  BUNDLE/HASH/CONFIG — manifest.json'daki her SHA-256 gerçek dosyayla birebir
+      eşleşmeli; hashlanan HER dosya bundle'a kopyalanmış olmalı; config/
+      dosyaları ayrı bölümde işaretlenir ve config.combined_sha256 sıralı
+      'rel\0hash\n' birleşiminden deterministik olarak yeniden hesaplanabilmeli
+      (K10 bu değeri verify_delivery.py'de aynen yeniden hesaplar).
+  WORKFLOW — merge pattern'i ARTIFACT_JOBS'ı eksiksiz kapsar, CLI senkron.
+  SIDECAR — manifest.sha256: canonical sha256sum -c uyumu (CI'nın ayrı
+      doğrulama adımıyla aynı sözleşme), kesin biçim, öz-tutarlılık, hash
+      tablosu determinizmi (zaman damgası bilinçli provenance alanıdır —
+      byte-determinizm sözü başlık için değil, files/config içindir),
+      içerik değişikliğine duyarlılık, kurcalama → sha256sum FAIL.
+  BUNDLE — tam içerik sözleşmesi (artifact kopyaları + manifest üçlüsü,
+      fazla dosya yok), dizin yapısı korunumu, boş girdi, boş dosya hash'i
+      (bilinen sabit), artifact kopyalarının run'lar arası byte determinizmi,
+      üreticinin artifacts dizinini DEĞİŞTİRMEMESİ (yan etkisizlik).
+
+stdlib unittest + subprocess — ek bağımlılık yok (sha256sum varsa kullanılır,
+bulunamazsa o testler dürüstçe SKIP edilir).
 """
+import hashlib
 import json
 import os
 import pathlib
+import re
+import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
 CIKTI = pathlib.Path(__file__).resolve().parent
 GEN = CIKTI / "gen_repro_manifest.py"
+sys.path.insert(0, str(CIKTI))
+
+import gen_repro_manifest as gen_manifest  # noqa: E402
 
 
 def _run_gen(artifacts_dir, out_dir):
@@ -131,6 +154,479 @@ class TestProvenance(unittest.TestCase):
         m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
         self.assertEqual(
             m["provenance"]["artifact_jobs"]["precommit-logs"], "custom-job")
+
+
+class TestWorkflowPatternCoverage(unittest.TestCase):
+    """reproducibility merge pattern'i ARTIFACT_JOBS'ı eksiksiz kapsamalı.
+
+    Prefixed ayrı indirilenler (config/precommit-logs/refs-trend) ve çıktı
+    (reproducibility) pattern'e girmez; kalan HER artifact merge pattern'de
+    olmalı — yoksa o artifact manifest'e girmeden sessizce düşer (ör. bugün
+    budget-verify/lineage-findings/klayers eksikti).
+    """
+    EXCLUDED = {"config", "precommit-logs", "refs-trend", "reproducibility"}
+
+    def _workflow_merge_pattern(self):
+        wf = CIKTI.parent.parent / ".github" / "workflows" / "verify.yml"
+        text = wf.read_text(encoding="utf-8")
+        m = re.search(
+            r"merge-multiple:\s*true\s*\n\s*pattern:\s*'\{([^}]+)\}'\s*\n",
+            text,
+        )
+        self.assertIsNotNone(m, "verify.yml'de brace merge pattern bulunamadı")
+        return {s.strip() for s in m.group(1).split(",")}
+
+    def test_pattern_covers_all_merge_artifacts(self):
+        expected = set(gen_manifest.ARTIFACT_JOBS) - self.EXCLUDED
+        pattern = self._workflow_merge_pattern()
+        self.assertEqual(pattern, expected)
+
+    def test_no_duplicate_artifacts_in_pattern(self):
+        pattern = self._workflow_merge_pattern()
+        self.assertEqual(len(pattern), len(set(pattern)))
+
+
+class TestWorkflowCliConsistency(unittest.TestCase):
+    """verify.yml'in reproducibility job'ı gen_repro_manifest.py CLI'sıyla senkron olmalı."""
+    def _workflow(self):
+        wf = CIKTI.parent.parent / ".github" / "workflows" / "verify.yml"
+        return wf.read_text(encoding="utf-8")
+
+    def test_job_uses_artifacts_dir_and_out_dir(self):
+        text = self._workflow()
+        self.assertIn("_calisma/CIKTI/gen_repro_manifest.py", text)
+        self.assertIn("--artifacts-dir all_artifacts", text)
+        self.assertIn("--out-dir reproducibility", text)
+
+
+class TestManifestSections(unittest.TestCase):
+    """bundle/hash/config bölümleri — deterministik üretim + fail-closed doğrulama.
+
+    gen_repro_manifest.py'nin üç çekirdek sözü:
+      (1) HASH:   manifest.json'daki her files[rel] = gerçek dosyanın SHA-256'sı
+                  (yeniden hesaplanınca birebir eşleşmeli).
+      (2) BUNDLE: hashlanan HER dosya out_dir'e kopyalanmış olmalı (eksik kopya
+                  = manifest'te var ama bundle'da yok → reproducibility kırık).
+      (3) CONFIG: config/ dosyaları ayrı bölümde işaretlenir ve
+                  config.combined_sha256 sıralı 'rel\0hash\n' birleşiminden
+                  DETERMINISTİK olarak yeniden hesaplanabilmeli.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = pathlib.Path(self.tmp.name)
+        self.artifacts = self.root / "all_artifacts"
+        self.artifacts.mkdir(parents=True)
+        # flat + alt dizin + config (2 dosya) + binary — tüm biçimler
+        (self.artifacts / "verify_report.txt").write_text("flat\n", encoding="utf-8")
+        (self.artifacts / "sub").mkdir(parents=True)
+        (self.artifacts / "sub" / "nested.json").write_text(
+            '{"n": 1}', encoding="utf-8")
+        (self.artifacts / "config").mkdir(parents=True)
+        (self.artifacts / "config" / "verify_delivery.config.json").write_text(
+            '{"budget_usd": 30.0}', encoding="utf-8")
+        (self.artifacts / "config" / "effective_config.json").write_text(
+            '{"effective": true}', encoding="utf-8")
+        (self.artifacts / "binary.bin").write_bytes(b"\x00\x01\x02\xff")
+        self.out = self.root / "reproducibility"
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _gen(self):
+        r = _run_gen(str(self.artifacts), str(self.out))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+
+    # ── HASH bölümü ──────────────────────────────────────────────────────
+    def test_every_hash_recomputes_to_actual_file(self):
+        m = self._gen()
+        for rel, h in m["files"].items():
+            self.assertEqual(gen_manifest.sha256_file(self.out / rel), h,
+                             f"hash sapması: {rel}")
+
+    def test_hash_format(self):
+        m = self._gen()
+        for rel, h in m["files"].items():
+            self.assertRegex(h, r"^[0-9a-f]{64}$", f"kötü hash formatı: {rel}")
+
+    def test_files_count_matches_disk(self):
+        m = self._gen()
+        disk = [p for p in self.artifacts.rglob("*") if p.is_file()]
+        self.assertEqual(len(m["files"]), len(disk))
+
+    def test_manifest_sha256_sidecar(self):
+        m = self._gen()  # noqa: F841
+        sc = (self.out / "manifest.sha256").read_text(encoding="utf-8").strip()
+        self.assertTrue(sc.endswith("  manifest.json"))
+        self.assertEqual(sc.split()[0],
+                         gen_manifest.sha256_file(self.out / "manifest.json"))
+
+    # ── BUNDLE bölümü ────────────────────────────────────────────────────
+    def test_bundle_contains_every_hashed_file(self):
+        m = self._gen()
+        for rel in m["files"]:
+            self.assertTrue((self.out / rel).is_file(), f"bundle'da yok: {rel}")
+
+    def test_bundle_bytes_identical(self):
+        m = self._gen()
+        for rel in m["files"]:
+            self.assertEqual((self.out / rel).read_bytes(),
+                             (self.artifacts / rel).read_bytes(),
+                             f"bundle kopyası bozuk: {rel}")
+
+    def test_bundle_has_manifest_triple(self):
+        self._gen()
+        for f in ("manifest.txt", "manifest.json", "manifest.sha256"):
+            self.assertTrue((self.out / f).is_file(), f"eksik: {f}")
+
+    # ── CONFIG bölümü ────────────────────────────────────────────────────
+    def test_config_files_subset_of_files_with_same_hashes(self):
+        m = self._gen()
+        cfg = m["config"]["files"]
+        self.assertEqual(set(cfg),
+                         {rel for rel in m["files"] if gen_manifest._is_config_rel(rel)})
+        for rel, h in cfg.items():
+            self.assertEqual(m["files"][rel], h)
+
+    def test_config_detection_accepts_known_basenames_anywhere(self):
+        # merge-multiple'ın köke düzleştirmesi: config/ öneki olmasa bile
+        # bilinen config basename'leri tanınmalı (isimle tanıma).
+        for rel in ("verify_delivery.config.json",
+                    "verify_delivery.config.schema.json",
+                    "effective_config.json",
+                    "config.sha256",
+                    "config-diff.txt",
+                    "config-diff.json"):
+            self.assertTrue(gen_manifest._is_config_rel(rel), rel)
+            self.assertTrue(
+                gen_manifest._is_config_rel("config/" + rel), "config/" + rel)
+        # İlgisiz dosyalar yanlışlıkla config sanılmamalı.
+        for rel in ("verify_report.txt", "a.txt", "sub/nested.json",
+                    "effective_config.json.bak", "my_effective_config.json"):
+            self.assertFalse(gen_manifest._is_config_rel(rel), rel)
+
+    def test_config_combined_recomputes_deterministically(self):
+        m = self._gen()
+        cfg = m["config"]["files"]
+        expected = hashlib.sha256(
+            "".join(f"{rel}\0{cfg[rel]}\n" for rel in sorted(cfg)).encode()
+        ).hexdigest()
+        self.assertEqual(m["config"]["combined_sha256"], expected)
+        self.assertRegex(m["config"]["combined_sha256"], r"^[0-9a-f]{64}$")
+
+    def test_config_combined_recomputes_deterministically(self):
+        m = self._gen()
+        cfg = m["config"]["files"]
+        expected = hashlib.sha256(
+            "".join(f"{rel}\0{cfg[rel]}\n" for rel in sorted(cfg)).encode()
+        ).hexdigest()
+        self.assertEqual(m["config"]["combined_sha256"], expected)
+        self.assertRegex(m["config"]["combined_sha256"], r"^[0-9a-f]{64}$")
+
+    def test_config_combined_is_stable_across_runs(self):
+        first = self._gen()["config"]["combined_sha256"]
+        out2 = self.root / "reproducibility2"
+        r = _run_gen(str(self.artifacts), str(out2))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        m2 = json.loads((out2 / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(m2["config"]["combined_sha256"], first)
+
+    def test_manifest_txt_config_section(self):
+        self._gen()
+        txt = (self.out / "manifest.txt").read_text(encoding="utf-8")
+        self.assertIn("CONFIG ARTIFACT (ayrı bölüm)", txt)
+        self.assertIn("config_combined_sha256", txt)
+        self.assertIn("config/verify_delivery.config.json", txt)
+        self.assertIn("config/effective_config.json", txt)
+
+    def test_no_config_section_when_config_absent(self):
+        # config/ hiç yoksa manifest.json'da 'config' anahtarı da olmamalı
+        # (boş bölüm şişirmek yerine yok sayılır).
+        bare = self.root / "bare"
+        bare.mkdir(parents=True)
+        (bare / "a.txt").write_text("x", encoding="utf-8")
+        out = self.root / "bare-out"
+        r = _run_gen(str(bare), str(out))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        m = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        self.assertNotIn("config", m)
+        self.assertIn("a.txt", m["files"])
+
+
+class TestManifestSha256Sidecar(unittest.TestCase):
+    """manifest.sha256 — canonical sha256sum biçimi + determinizm + duyarlılık.
+
+    CI'da reproducibility job'ı sidecar'ı AYRI adımda `sha256sum -c` ile
+    doğrular; bu testler sidecar'ın o sözleşmeyi (biçim, birebir eşleşme,
+    kurcalamaya duyarlılık) her koşuda karşıladığını kanıtlar.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = pathlib.Path(self.tmp.name)
+        self.artifacts = self.root / "all_artifacts"
+        self.artifacts.mkdir(parents=True)
+        (self.artifacts / "verify_report.txt").write_text(
+            "flat\n", encoding="utf-8")
+        self.out = self.root / "reproducibility"
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _gen(self):
+        r = _run_gen(str(self.artifacts), str(self.out))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return (self.out / "manifest.sha256").read_text(encoding="utf-8")
+
+    def test_sidecar_is_sha256sum_canonical(self):
+        # CI adımı (`sha256sum -c manifest.sha256`) ile aynı sözleşme:
+        # sidecar standart araçla birebir doğrulanabilmeli.
+        if shutil.which("sha256sum") is None:
+            self.skipTest("sha256sum yok")
+        self._gen()
+        r = subprocess.run(["sha256sum", "-c", "manifest.sha256"],
+                           capture_output=True, text=True, cwd=self.out)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("manifest.json: OK", r.stdout)
+
+    def test_sidecar_exact_format(self):
+        sc = self._gen()
+        # tek satır, sha256sum metin biçimi: "{64 hex}  manifest.json\n"
+        self.assertTrue(sc.endswith("  manifest.json\n"),
+                        f"biçim bozuk: {sc!r}")
+        self.assertEqual(len(sc.splitlines()), 1)
+        h, name = sc.strip().split()
+        self.assertRegex(h, r"^[0-9a-f]{64}$")
+        self.assertEqual(name, "manifest.json")
+
+    def test_sidecar_matches_manifest_json_exactly(self):
+        self._gen()
+        sc = (self.out / "manifest.sha256").read_text(encoding="utf-8")
+        self.assertEqual(
+            sc.split()[0],
+            gen_manifest.sha256_file(self.out / "manifest.json"))
+
+    def test_sidecar_deterministic_across_runs(self):
+        # Reproducibility sözü: aynı artifact'ler → aynı files hash tablosu
+        # (+ config bölümü). manifest.json başlığındaki `generated:` zaman
+        # damgası bilinçli provenance alanıdır ve run'lar arası değişir —
+        # byte-determinizm sözü HASH TABLOSU içindir, başlık için değil.
+        self._gen()
+        first = json.loads(
+            (self.out / "manifest.json").read_text(encoding="utf-8"))
+        out2 = self.root / "reproducibility2"
+        r = _run_gen(str(self.artifacts), str(out2))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        second = json.loads(
+            (out2 / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(first["files"], second["files"])
+        if "config" in first:
+            self.assertEqual(first["config"], second["config"])
+        # Her run'ın sidecar'ı KENDİ manifest.json'unu doğrular.
+        for out in (self.out, out2):
+            sc = (out / "manifest.sha256").read_text(encoding="utf-8")
+            self.assertEqual(
+                sc.split()[0],
+                gen_manifest.sha256_file(out / "manifest.json"))
+
+    def test_sidecar_sensitive_to_artifact_change(self):
+        self._gen()
+        first = json.loads(
+            (self.out / "manifest.json").read_text(encoding="utf-8"))
+        # İçerik değişince files hash tablosu değişmeli (gerçek duyarlılık
+        # sinyali — zaman damgası her run'da zaten farklıdır, o yüzden
+        # sidecar değil, hash tablosu karşılaştırılır).
+        (self.artifacts / "verify_report.txt").write_text(
+            "değişti\n", encoding="utf-8")
+        out2 = self.root / "reproducibility2"
+        r = _run_gen(str(self.artifacts), str(out2))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        second = json.loads(
+            (out2 / "manifest.json").read_text(encoding="utf-8"))
+        self.assertNotEqual(first["files"]["verify_report.txt"],
+                            second["files"]["verify_report.txt"])
+        # Yeni run'ın sidecar'ı yeni manifest.json'u doğrular (öz-tutarlı).
+        sc = (out2 / "manifest.sha256").read_text(encoding="utf-8")
+        self.assertEqual(
+            sc.split()[0],
+            gen_manifest.sha256_file(out2 / "manifest.json"))
+
+    def test_tampered_manifest_json_fails_sha256sum(self):
+        # manifest.json'a boşluk kurcalaması → sha256sum -c FAIL (exit≠0).
+        if shutil.which("sha256sum") is None:
+            self.skipTest("sha256sum yok")
+        self._gen()
+        with open(self.out / "manifest.json", "a", encoding="utf-8") as f:
+            f.write(" ")
+        r = subprocess.run(["sha256sum", "-c", "manifest.sha256"],
+                           capture_output=True, text=True, cwd=self.out)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("FAILED", r.stdout)
+
+
+class TestBundleBehavior(unittest.TestCase):
+    """bundle — tam içerik sözleşmesi, yapı korunumu, kenar durumlar."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = pathlib.Path(self.tmp.name)
+        self.artifacts = self.root / "all_artifacts"
+        self.artifacts.mkdir(parents=True)
+        (self.artifacts / "verify_report.txt").write_text(
+            "flat\n", encoding="utf-8")
+        (self.artifacts / "sub").mkdir(parents=True)
+        (self.artifacts / "sub" / "nested.json").write_text(
+            '{"n": 1}', encoding="utf-8")
+        self.out = self.root / "reproducibility"
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _gen(self):
+        r = _run_gen(str(self.artifacts), str(self.out))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return r
+
+    def _bundle_rels(self):
+        return {str(p.relative_to(self.out))
+                for p in self.out.rglob("*") if p.is_file()}
+
+    def _artifact_rels(self):
+        return {str(p.relative_to(self.artifacts))
+                for p in self.artifacts.rglob("*") if p.is_file()}
+
+    def test_bundle_is_exactly_artifacts_plus_manifest_triple(self):
+        self._gen()
+        triple = {"manifest.txt", "manifest.json", "manifest.sha256"}
+        self.assertEqual(self._bundle_rels(), self._artifact_rels() | triple)
+
+    def test_bundle_preserves_directory_structure(self):
+        self._gen()
+        # manifest üçlüsü dışındaki her rel yol, artifacts'taki ile birebir
+        # aynı olmalı (düzleştirme yok — sub/nested.json korunur).
+        self.assertEqual(self._bundle_rels() - {"manifest.txt",
+                                                "manifest.json",
+                                                "manifest.sha256"},
+                         self._artifact_rels())
+
+    def test_empty_artifacts_dir_produces_valid_bundle(self):
+        empty = self.root / "empty"
+        empty.mkdir(parents=True)
+        out = self.root / "empty-out"
+        r = _run_gen(str(empty), str(out))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        m = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(m["files"], {})
+        # Üçlü yine de üretilmeli ve sidecar boş manifest'i doğrulamalı.
+        for f in ("manifest.txt", "manifest.json", "manifest.sha256"):
+            self.assertTrue((out / f).is_file(), f"eksik: {f}")
+        if shutil.which("sha256sum") is not None:
+            r = subprocess.run(["sha256sum", "-c", "manifest.sha256"],
+                               capture_output=True, text=True, cwd=out)
+            self.assertEqual(r.returncode, 0, r.stderr)
+
+    def test_empty_file_hashed_with_known_sha256(self):
+        (self.artifacts / "empty.txt").write_bytes(b"")
+        self._gen()
+        m = json.loads((self.out / "manifest.json").read_text(
+            encoding="utf-8"))
+        # sha256("") bilinen sabit — boş dosyalar atlanmamalı.
+        self.assertEqual(
+            m["files"]["empty.txt"],
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+
+    def test_bundle_bytes_deterministic_across_runs(self):
+        # Bundle'daki ARTIFACT KOPYALARI run'lar arası byte-identical;
+        # manifest.txt/json (zaman damgası başlığı) determinizm sözüne girmez.
+        triple = {"manifest.txt", "manifest.json", "manifest.sha256"}
+        self._gen()
+        first = {rel: (self.out / rel).read_bytes()
+                 for rel in self._bundle_rels() - triple}
+        out2 = self.root / "reproducibility2"
+        r = _run_gen(str(self.artifacts), str(out2))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        for rel, data in first.items():
+            self.assertEqual((out2 / rel).read_bytes(), data,
+                             f"run'lar arası byte sapması: {rel}")
+
+    def test_generation_does_not_mutate_artifacts(self):
+        before = {rel: (self.artifacts / rel).read_bytes()
+                  for rel in self._artifact_rels()}
+        self._gen()
+        after = {rel: (self.artifacts / rel).read_bytes()
+                 for rel in self._artifact_rels()}
+        self.assertEqual(after, before)
+        # Bundle kopyaları source'u değiştirmedi (byte-for-byte aynı kaldı).
+        for rel in before:
+            self.assertEqual((self.out / rel).read_bytes(), before[rel])
+
+
+class TestFlattenedConfigMerge(unittest.TestCase):
+    """merge-multiple köke düzleştirdiğinde config dosyaları isimle tanınmalı.
+
+    Eski davranış yalnızca config/ ÖNEKİNİ arıyordu; config artifact'ı
+    merge-multiple ile köke düzleşirse (önek kaybolur) config bölümü
+    sessizce düşüyordu. Yeni davranış: config/ öneki VEYA CONFIG_BASENAMES
+    ile isimle tanıma — düzleştirilmiş config dosyaları da config objesine
+    girer, provenance "config" job'ına bağlanır.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = pathlib.Path(self.tmp.name)
+        self.artifacts = self.root / "all_artifacts"
+        self.artifacts.mkdir(parents=True)
+        # Config artifact'ı KÖKE düzleşmiş (config/ öneki YOK).
+        (self.artifacts / "verify_report.txt").write_text("flat\n",
+                                                           encoding="utf-8")
+        (self.artifacts / "verify_delivery.config.json").write_text(
+            '{"budget_usd": 30.0}', encoding="utf-8")
+        (self.artifacts / "effective_config.json").write_text(
+            '{"effective": true}', encoding="utf-8")
+        (self.artifacts / "config-diff.json").write_text(
+            '{"diffs": []}', encoding="utf-8")
+        self.out = self.root / "reproducibility"
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_flattened_config_still_in_config_section(self):
+        r = _run_gen(str(self.artifacts), str(self.out))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        cfg = m["config"]["files"]
+        # Önek yok ama isimle tanındılar.
+        self.assertIn("verify_delivery.config.json", cfg)
+        self.assertIn("effective_config.json", cfg)
+        self.assertIn("config-diff.json", cfg)
+        # İlgisiz dosya config sayılmaz.
+        self.assertNotIn("verify_report.txt", cfg)
+        for rel, h in cfg.items():
+            self.assertEqual(m["files"][rel], h)
+        # combined deterministik yeniden hesaplanabilir.
+        expected = hashlib.sha256(
+            "".join(f"{rel}\0{cfg[rel]}\n" for rel in sorted(cfg)).encode()
+        ).hexdigest()
+        self.assertEqual(m["config"]["combined_sha256"], expected)
+
+    def test_flattened_config_maps_to_config_artifact_in_provenance(self):
+        r = _run_gen(str(self.artifacts), str(self.out))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        prov = m["provenance"]["artifact_jobs"]
+        self.assertEqual(prov["config"], "verify")
+
+    def test_no_config_section_when_only_unrelated_files(self):
+        bare = self.root / "bare"
+        bare.mkdir(parents=True)
+        (bare / "a.txt").write_text("x", encoding="utf-8")
+        (bare / "my_effective_config.json").write_text("y", encoding="utf-8")
+        out = self.root / "bare-out"
+        r = _run_gen(str(bare), str(out))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        m = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        self.assertNotIn("config", m)
 
 
 if __name__ == "__main__":

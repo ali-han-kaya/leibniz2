@@ -47,10 +47,11 @@ class TestMain(unittest.TestCase):
             p = self._write(d, layers)
             code, out = self._run(p)
         self.assertEqual(code, 0)
-        # Her K1-K10 bölümü bir kez ve PASS rozetiyle
+        # Her RENDER_LAYERS bölümü bir kez ve PASS rozetiyle (K1-K14 + K16;
+        # K15 yerel-only olduğundan bilerek listede yok).
         for k in rsk.RENDER_LAYERS:
             self.assertIn(f"## ✅ {k}", out)
-        self.assertEqual(out.count("PASS"), 10)
+        self.assertEqual(out.count("PASS"), len(rsk.RENDER_LAYERS))
 
     def test_fail_renders_findings(self):
         layers = {k: self._layer("PASS") for k in rsk.RENDER_LAYERS}

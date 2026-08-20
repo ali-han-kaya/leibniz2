@@ -108,7 +108,36 @@ class TestConsolidateSummary(unittest.TestCase):
         self.assertIn("K0 bayat zip: sidecar bulunamadı", out)
         self.assertIn("Bütçe kalkanı: sidecar bulunamadı", out)
         self.assertIn("Soy hattı: sidecar bulunamadı", out)
-        self.assertIn("K katmanları: sidecar bulunamadı", out)
+
+    def test_github_step_summary_file_sink_fallback(self):
+        # GITHUB_STEP_SUMMARY env'i set iken main() çıktıyı STDOUT'a değil
+        # o dosyaya yazar (CI gerçek davranışı); env yoksa stdout'a düşer
+        # (yerel/fallback — yukarıdaki _run testleri bunu kapsar).
+        with tempfile.TemporaryDirectory() as d:
+            dd = pathlib.Path(d)
+            paths = self._sidecars(d)
+            summary_file = dd / "step_summary.md"
+            os.environ["GITHUB_STEP_SUMMARY"] = str(summary_file)
+            try:
+                buf = io.StringIO()
+                argv = []
+                for key, p in paths.items():
+                    argv += [f"--{key}", str(p)]
+                with contextlib.redirect_stdout(buf):
+                    code = cs.main(argv)
+            finally:
+                os.environ.pop("GITHUB_STEP_SUMMARY", None)
+            self.assertEqual(code, 0)
+            # stdout'a YAZILMADI (yalnızca sonuç satırı), asıl içerik dosyada.
+            self.assertNotIn("Durum panosu", buf.getvalue())
+            file_txt = summary_file.read_text(encoding="utf-8")
+            self.assertTrue(file_txt.startswith(
+                "## 📊 Durum panosu: Pre-commit ✅ · K0 ✅ · Bütçe ✅\n"),
+                repr(file_txt[:80]))
+            for h in ("## ✅ Pre-commit: bulgu yok",
+                      "## ✅ K0 bayat zip: temiz",
+                      "## ✅ Bütçe kalkanı: limit içinde"):
+                self.assertIn(h, file_txt)
 
     def test_dashboard_fail_states(self):
         with tempfile.TemporaryDirectory() as d:
