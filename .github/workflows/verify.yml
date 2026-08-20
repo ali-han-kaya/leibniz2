@@ -161,7 +161,12 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
+          # TEMP-TEST (test/diff-on-drift): --config ile test dosyası verilir;
+          # effective_config o dosyadan türetilir, raw (commit'li) farklı kalır
+          # → diff-on-drift kapısı 'drift' nedenli exit 1 verir. Merge edilmeden
+          # kaldırılacak.
           python3 _calisma/CIKTI/verify_delivery.py --dir _calisma/CIKTI --full \
+            --config _calisma/CIKTI/verify_delivery.test_drift.config.json \
             --budget-out budget_verify.json \
             --config-out effective_config.json \
             --refs-out references_online.json \
@@ -851,33 +856,42 @@ jobs:
           echo "$verdict" > k10_verdict.txt
           echo "K10 manifest digest verdict: $verdict"
 
-      - name: Upsert manifest.txt PR comment (tek yorum güncelle)
+      # ─── Manifest + config-diff PR yorumları — TEK github-script adımı ──
+      # github-script@v8 scriptPath input'unu DESTEKLEMEZ (yalnızca 'script').
+      # Dosyalar TEK KAYNAK kalır: selftest harness'ıyla aynı (async () => { …
+      # })() sarmalıyla okunup eval edilir. İki script aynı github-script
+      # kapsamında koştuğu için yorum listesi BİR KEZ çekilir ve her ikisine
+      # EXISTING_COMMENTS olarak verilir — API çağrısı 2'den 1'e iner (script
+      # içindeki fallback sayesinde tek başına koşum da çalışır).
+      #
+      # manifest_comment.js — reproducibility manifest.txt içeriğini tek yorum
+      #   olarak upsert eder (marker: stoic-hume-v5-reproducibility-manifest).
+      # config_diff_comment.js — config/config-diff.json (verify job'unun
+      #   diff_config_artifacts.py çıktısı) okur; fark varsa ayrı bir upsert
+      #   yorum düşülür (marker: stoic-hume-v5-config-diff), fark yoksa bayat
+      #   uyarı yorumu KALDIRILIR (yanıltıcı kalmaz). Advisory: bloke etmez;
+      #   bloke eden kapı config-drift.
+      - name: Upsert manifest + config-diff PR comments (tek adım, paylaşılan yorum listesi)
         uses: actions/github-script@v8
         with:
-          # github-script@v8 scriptPath input'unu DESTEKLEMEZ (yalnızca
-          # 'script'). Dosya TEK KAYNAK kalır: selftest harness'ıyla aynı
-          # (async () => { … })() sarmalıyla okunup çalıştırılır.
           script: |
             const fs = require('fs');
-            const body = fs.readFileSync('_calisma/CIKTI/github_scripts/manifest_comment.js', 'utf8');
-            await eval(`(async () => {\n${body}\n})()`);
+            // Yorum listesini BİR KEZ çek — iki script paylaşır (API çağrısı
+            // azalır). Script'ler EXISTING_COMMENTS'i görürse kendi
+            // listComments çağrısını yapmaz; görmezse (selftest harness'ı)
+            // fallback'e düşer — davranış aynıdır.
+            const { data: EXISTING_COMMENTS } = await github.rest.issues.listComments({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              per_page: 100,
+            });
 
-      # ─── Config diff (raw vs effective) — advisory PR yorumu ────────────
-      # reproducibility bundle'ındaki config/config-diff.json (verify job'unun
-      # diff_config_artifacts.py çıktısı) okunur; fark varsa ayrı bir upsert
-      # yorum düşülür (marker: stoic-hume-v5-config-diff). Fark yoksa bayat
-      # uyarı yorumu KALDIRILIR — böylece çözülen diff yanıltıcı kalmaz.
-      # Advisory: config-diff bloke etmez (bloke eden kapı config-drift).
-      - name: Upsert config-diff PR comment (tek yorum güncelle)
-        uses: actions/github-script@v8
-        with:
-          # github-script@v8 scriptPath input'unu DESTEKLEMEZ (yalnızca
-          # 'script'). Dosya TEK KAYNAK kalır: selftest harness'ıyla aynı
-          # (async () => { … })() sarmalıyla okunup çalıştırılır.
-          script: |
-            const fs = require('fs');
-            const body = fs.readFileSync('_calisma/CIKTI/github_scripts/config_diff_comment.js', 'utf8');
-            await eval(`(async () => {\n${body}\n})()`);
+            const mBody = fs.readFileSync('_calisma/CIKTI/github_scripts/manifest_comment.js', 'utf8');
+            await eval(`(async () => {\n${mBody}\n})()`);
+
+            const cBody = fs.readFileSync('_calisma/CIKTI/github_scripts/config_diff_comment.js', 'utf8');
+            await eval(`(async () => {\n${cBody}\n})()`);
 
   # ──────────────────────────────────────────────────────────────────────
   # CONFIG DRIFT CHECK
@@ -981,11 +995,14 @@ jobs:
             > cli_override_stdout.txt 2>&1 || true
           cat cli_override_stdout.txt
 
-      # Drift tespit edilirse (exit 1) bulguları PR yorumuna düş.
+      # Drift durumunu PR yorumuna SENKRONLAR (state-sync): drift tespit
+      # edilirse (exit 1/2) bulguları yorum olarak düşer, drift ÇÖZÜLDÜYSE
+      # (exit 0) önceki run'ın bayat uyarısını SİLER — yanıltıcı kalmaz
+      # (config_diff_comment.js ile aynı create/update/delete deseni).
       # Yalnızca pull_request olayında; push'ta atlanır. Upsert: aynı yorumu
       # günceller, yeni yorum biriktirmez. Fail-closed kapı SONRAKİ adımda.
       - name: Post config drift findings as PR comment
-        if: github.event_name == 'pull_request' && steps.drift.outputs.rc != '0'
+        if: github.event_name == 'pull_request'
         uses: actions/github-script@v8
         with:
           # github-script@v8 scriptPath input'unu DESTEKLEMEZ (yalnızca
