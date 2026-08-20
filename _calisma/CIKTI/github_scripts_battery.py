@@ -539,7 +539,7 @@ SCENARIOS = [
         None, [], [],
         {
             "ok": True, "set_failed": False,
-            "call_counts": {"issues.listLabels": 1,
+            "call_counts": {"issues.listLabelsForRepo": 1,
                             "issues.createLabel": 2},
             "console_any": ["Etiket oluşturuldu: precommit-p0"],
         },
@@ -559,7 +559,7 @@ SCENARIOS = [
         None, [], [],
         {
             "ok": True, "set_failed": False,
-            "call_counts": {"issues.listLabels": 1},
+            "call_counts": {"issues.listLabelsForRepo": 1},
             "console_any": ["Etiket güncel: precommit-p0"],
         },
     ),
@@ -578,7 +578,7 @@ SCENARIOS = [
         None, [], [],
         {
             "ok": True, "set_failed": False,
-            "call_counts": {"issues.listLabels": 1,
+            "call_counts": {"issues.listLabelsForRepo": 1,
                             "issues.updateLabel": 1},
             "console_any": ["Etiket güncellendi: precommit-p0"],
         },
@@ -603,7 +603,7 @@ SCENARIOS = [
         None, [], [],
         {
             "ok": True, "set_failed": False,
-            "call_counts": {"issues.listLabels": 1},
+            "call_counts": {"issues.listLabelsForRepo": 1},
             "console_any": ["SONUÇ: PASS"],
         },
     ),
@@ -624,7 +624,7 @@ SCENARIOS = [
         None, [], [],
         {
             "ok": True, "set_failed": True,
-            "call_counts": {"issues.listLabels": 1},
+            "call_counts": {"issues.listLabelsForRepo": 1},
             "console_any": ["SONUÇ: FAIL"],
         },
     ),
@@ -643,7 +643,7 @@ SCENARIOS = [
         None, [], [],
         {
             "ok": True, "set_failed": True,
-            "call_counts": {"issues.listLabels": 1},
+            "call_counts": {"issues.listLabelsForRepo": 1},
             "console_any": ["renk uyuşmuyor"],
         },
     ),
@@ -662,7 +662,7 @@ SCENARIOS = [
         None, [], [],
         {
             "ok": True, "set_failed": True,
-            "call_counts": {"issues.listLabels": 1},
+            "call_counts": {"issues.listLabelsForRepo": 1},
             "console_any": ["açıklama uyuşmuyor"],
         },
     ),
@@ -680,7 +680,7 @@ SCENARIOS = [
         None, [], [],
         {
             "ok": True, "set_failed": True,
-            "call_counts": {"issues.listLabels": 1},
+            "call_counts": {"issues.listLabelsForRepo": 1},
             "console_any": ["SONUÇ: FAIL", "2 uyuşmazlık"],
         },
     ),

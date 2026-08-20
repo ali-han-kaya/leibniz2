@@ -10,7 +10,7 @@
   const expected = defs.labels || [];
 
   // Repo'daki mevcut etiketleri çek
-  const { data: existingLabels } = await github.rest.issues.listLabels({
+  const { data: existingLabels } = await github.rest.issues.listLabelsForRepo({
     owner: context.repo.owner,
     repo: context.repo.repo,
     per_page: 100,

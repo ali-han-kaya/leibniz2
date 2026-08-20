@@ -70,8 +70,8 @@ const github = {
       createComment: record('issues.createComment'),
       updateComment: record('issues.updateComment'),
       deleteComment: record('issues.deleteComment'),
-      listLabels: async (a) => {
-        calls.push({ fn: 'issues.listLabels', args: a || {} });
+      listLabelsForRepo: async (a) => {
+        calls.push({ fn: 'issues.listLabelsForRepo', args: a || {} });
         return { data: repoLabels };
       },
       createLabel: record('issues.createLabel'),
