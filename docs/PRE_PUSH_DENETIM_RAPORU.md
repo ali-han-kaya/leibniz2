@@ -13,8 +13,9 @@ hatalar bir daha `gh run watch` sırasında sürpriz olmasın.
   (Kullanıcı istemindeki "28 commit" gerçek bekleyen kümenin alt kümesiydi — 68'in
   tamamı push edildi.)
 - **Push edilen toplam:** 68 bekleyen commit + 3 düzeltme commit'i = **71 commit**.
-- **Son durum:** `origin/main` == `HEAD` == `965182d`, working tree temiz,
-  son run **`32435636927` → ✓ success** (12/12 job), `--ci-simulate` PASS (§8).
+- **Son durum:** `origin/main` == `HEAD` == `e15d0f4`, working tree temiz,
+  son run **`32469434595` → ✓ success**, `--verify-checks` PASS (§9.4),
+  `gen_changelog.py --check` PASS (§9.3).
 
 | Deneme | Run | Sonuç | Bulunan hata |
 |---|---|---|---|
@@ -156,6 +157,8 @@ eklenebilir: push öncesi `actionlint` + `GITHUB_STEP_SUMMARY` setlenmiş yerel 
 
 - `d57a60c`, `5d10771`, `da6cb21` — §1-3'teki üç düzeltme commit'i.
 - `309a14f`..`8878847` — §7'deki ikinci oturumun 10 commit'i.
+- `a309b23`..`965182d` — §8'deki üçüncü oturum (ci-simulate) commit'leri.
+- `694b367`..`e15d0f4` — §9'daki dördüncü oturumun 6 commit'i (precheck manifest + changelog otomasyonu + verify-checks).
 - `docs/HISTORY_CLEANUP.md` — noise commit temizliği (farklı denetim alanı).
 - `docs/PUBLISH_SCENARIO.md` — yayın akışı ve AŞAMA 0 ön-kontrolü.
 - `docs/COMMIT_MSG_BLOCK_EVIDENCE.md` — commit-msg hook kanıt belgesi.
@@ -313,6 +316,94 @@ dosya sistemi state'i (config/, logs/, sim/) bir sonraki koşuda overwritten olu
 | `status_checks.py --gh` | ✓ PASS (8/8 check + enforce_admins) |
 | pre-commit (14 hook) | ✓ Tümü Passed |
 | publish_wrapper.sh (dry-run) | ✓ Komut akışı doküman ile senkron |
+
+---
+
+## 9. Oturum 3 — Precheck Manifest + Changelog Otomasyonu + Verify-Checks (2026-08-21)
+
+> Bu bölüm, §8'in (`965182d`) ardından bugün yapılan **6 commit**'in tam
+> kaydıdır. Tema: (1) precheck job raporunun reproducibility manifest'ine
+> SHA-256 ile sabitlenmesi, (2) changelog üretiminin otomasyonu (git log ←
+> README/PUBLISH_SCENARIO senkronu), (3) wrapper'ın `--verify-checks` ile
+> status_checks doğrulamasını bağımsız çağrılabilir yapması.
+
+### 9.1 Commit listesi (6 commit, tek push döngüsü)
+
+| # | Commit | Tür | Açıklama |
+|---|---|---|---|
+| 1 | `5d9b6c6` | docs | §8 publish wrapper idempotency verification (önceki oturum — burada bağlam için) |
+| 2 | `694b367` | feat | **precheck job** raporu reproducibility manifest'ine SHA-256 ile dahil edildi (prefixed download + PRECHECK section + `precheck_combined_sha256`) |
+| 3 | `b07f5f4` | docs | README'ye repo-level changelog + regresyon notları (R1-R4) eklendi |
+| 4 | `4286b4a` | feat | `gen_changelog.py` — git log'dan conventional-commit ayrıştırıp changelog tablosu üretir; `--update`/`--check`/`--print` modları; 30 birim test |
+| 5 | `5d5daf2` | fix | `check-changelog-sync` hook'u **auto-sync** yapıldı (update-config deseni) — chicken-and-egg kırılması çözüldü |
+| 6 | `e15d0f4` | feat | `publish_wrapper.sh` — **`--verify-checks`** bağımsız modu (status_checks.py + `--gh` tek fonksiyon `verify_checks()` |
+
+**Toplam:** 3 feat + 2 docs + 1 fix = **6 commit**  
+**Push döngüsü:** disable-protect → push → CI yeşil → re-enable protect (×2 push)
+
+### 9.2 Precheck job → reproducibility manifest (`694b367`)
+
+`precheck-report` artifact'ı (AŞAMA 0 ön-kontrol logu, advisory) artık
+reproducibility manifest'ine SHA-256 ile sabitleniyor:
+
+| Değişiklik | Dosya | Detay |
+|---|---|---|
+| Prefixed download | `verify.yml` | `continue-on-error: true` ile advisory precheck indirme |
+| ARTIFACT_JOBS | `gen_repro_manifest.py` | `"precheck-report": "precheck"` eklendi |
+| PRECHECK section | `gen_repro_manifest.py` | `precheck_combined_sha256` ile ayrı bölüm (CONFIG/REFS TREND deseni) |
+| manifest_json | `gen_repro_manifest.py` | `precheck_report.files` + `combined_sha256` alanı |
+| 4 yeni test | `test_gen_repro_manifest.py` | section/combined/provenance/absent |
+
+**Kanıt:** CI run `32436904645` — `Download precheck-report artifact` →
+`Generate reproducibility manifest` → `Verify manifest.sha256` → `Verify bundle
+integrity (K10)` adımları yeşil. 575 test OK, 14 hook yeşil.
+
+### 9.3 Changelog otomasyonu (`b07f5f4`, `4286b4a`, `5d5daf2`)
+
+**Amaç:** README ve PUBLISH_SCENARIO'daki changelog tablolarını git log ile
+otomatik senkron tutmak (çift kaynağı tek kaynağa indirmek).
+
+| Commit | Katkı |
+|---|---|
+| `b07f5f4` | README'ye repo-level changelog (30 satır) + regresyon notları (R1-R4) eklendi |
+| `4286b4a` | `gen_changelog.py` — conventional-commit ayrıştırıcı (feat/fix/ci/docs/refs/publish/history/teslim/ispat + V5h:/Add:/Basic: prefix'leri); `--update` (tablo genişlet), `--check` (drift → exit 1), `--print`; 30 birim test |
+| `5d5daf2` | **Chicken-and-egg düzeltmesi:** commit'in kendi hash'i ancak commit oluştuktan sonra bilinir → check-only kapı her zaman bir commit geride kalıp sonraki commit'i bloke ediyordu. `update_changelog_hook.sh` (update-config deseni) drift varsa `--update` + stage eder; kapı artık hiç kırılmaz |
+
+**Davranış:** `gen_changelog.py --update` → yalnızca tablodaki en yeni
+commit'ten daha yeni commit'leri ekler (geçmişteki bilinçli seçilmemiş
+commit'leri drift olarak raporlamaz); insan özetleri korunur.
+
+### 9.4 Wrapper `--verify-checks` — status_checks bağlantısı (`e15d0f4`)
+
+AŞAMA 1 doğrulaması (`status_checks.py` + `--gh`) tek `verify_checks()`
+fonksiyonuna çıkarıldı; hem normal akış (AŞAMA 1) hem de bağımsız
+`--verify-checks` modu bu fonksiyondan beslenir:
+
+| Özellik | Detay |
+|---|---|
+| Mod | `--verify-checks` — yalnızca AŞAMA 1 doğrulaması; repo oluşturma/push/CI izleme ÇALIŞMAZ |
+| AŞAMA 0 atlaması | Mod, temiz tree + smoke precheck'ini çalıştırmaz (salt okunur — geliştirme ortamında dahi çağrılabilir) |
+| gh auth kapısı | Mod kendi `gh auth status` denetimini yapar (precheck'e bağımlı değil) |
+| Tek kaynak | `verify_checks()` — workflow job `name:`'lerinden; drift yok (tek tanım) |
+| Docs senkronu | `PUBLISH_SCENARIO.md` wrapper tablosuna `--verify-checks` satırı eklendi |
+
+**Kanıt:** `bash docs/publish_wrapper.sh --verify-checks` →
+`SONUÇ: PASS — 8 check birebir eşleşiyor (workflow ↔ GitHub) ve merge engeli etkin`;
+`SONUÇ: VERIFY-CHECKS ✓`. Normal akış (`--dry-run`) da aynı fonksiyondan
+`SONUÇ: PASS — 8 check` verir.
+
+### 9.5 Yeşil kanıt (son durum)
+
+| Kapı | Run / Kaynak | Sonuç |
+|---|---|---|
+| CI run `32469434595` (e15d0f4 sonrası) | `gh run view` | ✓ success |
+| `status_checks.py --gh` | canlı | ✓ PASS (8/8 check + enforce_admins + force_push kapalı) |
+| `--verify-checks` wrapper modu | canlı | ✓ PASS (8 check birebir eşleşiyor) |
+| pre-commit (14 hook) | yerel | ✓ Tümü Passed |
+| unit test (605) | yerel | ✓ 605/605 OK (↑30: gen_changelog) |
+| `check_doc_wrapper_sync.py` | yerel | ✓ 12 çapa grubu senkron |
+| `gen_changelog.py --check` | yerel | ✓ TÜMÜ PASS (tablo ↔ git log senkron) |
+| Branch protection | `gh api` | enforce:true · strict:false · checks:8 · fp:false · del:false |
 
 ---
 
