@@ -453,10 +453,28 @@ function positionTip(ev) {
 }
 
 // ---- Reference verification trend (verified/total zaman serisi) ----
+let refsTrendCache = [];
+function showRefsTrendTip(i, ev) {
+  const r = refsTrendCache[i];
+  if (!r) return;
+  const verdict = r.verdict || ((r.p0 || 0) > 0 ? "FAIL (P0)"
+                : ((r.p1 || 0) > 0 ? "WARN (P1)" : "PASS"));
+  const ts = r.ts ? new Date(r.ts).toLocaleString() : "?";
+  const tip = $("tip");
+  tip.textContent =
+    ts + "\n" +
+    "refs    : " + (r.refs_verified != null ? r.refs_verified : "?") + " / " +
+      (r.refs_total != null ? r.refs_total : "?") + "\n" +
+    "verdict : " + verdict + "\n" +
+    "mismatch: " + (r.refs_mismatch || 0);
+  tip.style.display = "block";
+  positionTip(ev);
+}
 function renderRefsTrend(rows) {
   const svg = $("refs-trend");
   const legend = $("refs-trend-legend");
   const have = (rows || []).filter(r => r.refs_verified != null && r.refs_total != null);
+  refsTrendCache = have;
   if (!have.length) {
     svg.innerHTML = "";
     legend.textContent = "çevrimiçi referans verisi yok — bu run'larda --check-references veri üretmedi";
@@ -528,6 +546,12 @@ function renderRefsTrend(rows) {
   have.forEach((r, i) => {
     const full = r.refs_verified === r.refs_total;
     parts.push(`<circle cx="${x(i)}" cy="${y(r.refs_verified)}" r="2.5" fill="${full ? "#3fb950" : "#d29922"}"/>`);
+  });
+  // hover hit alanları (transparan sütun) — tooltip: run ts + verified/total + verdict
+  const rColW = n === 1 ? iw : iw / (n - 1);
+  const rHalfW = Math.max(4, Math.min(10, rColW / 2));
+  have.forEach((r, i) => {
+    parts.push(`<rect x="${(x(i) - rHalfW).toFixed(2)}" y="${PT}" width="${(rHalfW * 2).toFixed(2)}" height="${ih}" fill="transparent" style="cursor:crosshair" onmousemove="showRefsTrendTip(${i}, event)" onmouseleave="hideTrendTip()"/>`);
   });
   // x ekseni zaman etiketleri (ilk/orta/son)
   const pick = [0, Math.floor((n-1)/2), n-1].filter((v,i,a) => a.indexOf(v) === i);
