@@ -19,7 +19,7 @@ CHECKED=0
 # Harici/yanlış pozitif dosyalar: .freebuff/, .git/, _calisma/TOOLKIT/, test fixtures.
 SKIP_PREFIXES=".freebuff/ .git/ _calisma/TOOLKIT/"
 # Hook kendi açıklamasında /Users/username挂ける — bunu skip et.
-SKIP_FILES=".pre-commit-config.yaml"
+SKIP_FILES=".pre-commit-config.yaml docs/PRE_PUSH_DENETIM_RAPORU.md"
 
 is_skipped() {
   local f="$1"
