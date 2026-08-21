@@ -1551,6 +1551,70 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
+  # ──────────────────────────────────────────────────────────────────────
+  # DAEMON MODE HTTP 200 (advisory) — preview_server.py'nin daemon dalını
+  # (PREVIEW_DAEMON=1 → setsid + stdio'yu /dev/null'a dup2 YÖNLENDİR, EBADF
+  # üretmez) GERÇEK süreçte uçtan uca doğrular: daemon modda sunucuyu geçici
+  # portta başlatır, /preview.html + /api/latest + /api/history'nin üçünün de
+  # HTTP 200 döndüğünü ve sürecin canlı kaldığını poll eder.
+  # continue-on-error: ADVISORY — build'i bloke etmez; rapor daemon-http
+  # artifact'ında + run summary'de denetlenebilir.
+  daemon-http:
+    name: Daemon mode HTTP 200 (advisory)
+    runs-on: macos-latest
+    needs: [verify]
+    if: always()
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      # Daemon-modu end-to-end HTTP testi: gerçek preview_server.py daemon
+      # modda (PREVIEW_DAEMON=1) geçici portta başlar; üç endpoint de 200
+      # dönmeli ve süreç canlı kalmalı. --out: rapor JSON'u (ok/endpoints/
+      # daemon_alive/error) — artifact'ta makine-okunur.
+      - name: Run daemon-mode HTTP 200 test
+        id: daemon
+        continue-on-error: true
+        run: |
+          set +e
+          python3 _calisma/CIKTI/daemon_http_test.py \
+            --out daemon_http_report.json \
+            2>&1 | tee daemon_http_report.txt
+          rc=${PIPESTATUS[0]}
+          set -e
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          echo "daemon-http exit: $rc"
+
+      - name: Write daemon HTTP check to run summary
+        if: always()
+        run: |
+          {
+            echo "## Daemon mode HTTP 200 (advisory)"
+            echo ""
+            echo "- daemon-http test: exit \`${{ steps.daemon.outputs.rc }}\`"
+            echo '```'
+            cat daemon_http_report.txt 2>/dev/null || echo '(rapor yok)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload daemon HTTP report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: daemon-http
+          path: |
+            daemon_http_report.txt
+            daemon_http_report.json
+          if-no-files-found: ignore
+          retention-days: 30
+
   # MIRROR SYNC CHECK (macOS, fail-closed) — sync_verify_mirror.sh --check
   # (K17). launchd GUI agent'ı TCC nedeniyle Desktop altını okuyamaz;
   # verify mirror'ı (~/Library/Caches/com.freebuff/verify) bunu aşar. K17,

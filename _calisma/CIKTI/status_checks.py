@@ -52,6 +52,7 @@ GATE_EXCLUDE = {
     "commit-msg-gate",      # PR-only: commit-msg ihlal blokajı
     "plist-check",          # macOS-advisory: push'ta çalışmaz
     "mirror-check",         # macOS: sync sonrası K17 fail-closed (advisory)
+    "daemon-http",          # advisory: daemon-modu HTTP 200 smoke (advisory)
 }
 
 
