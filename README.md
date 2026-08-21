@@ -176,6 +176,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-21 | feat | render_screens PNG uretimini mock HTML ile dogrula | `0a4f32b` |
 | 2026-08-21 | feat | canli CI denetimini audit_live_ci_sync.py'ye cevir | `799409c` |
 | 2026-08-21 | fix | audit kendini karsilastirmasin — CI yanlis-pozitif duzeltildi | `1499b93` |
+| 2026-08-21 | docs | denetim bulgusunu changelog + REFERANS_KANIT_DENETIMI'ne isle | `031ed0f` |
 
 ### Regresyon notları
 
