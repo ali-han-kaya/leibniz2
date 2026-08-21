@@ -50,6 +50,12 @@ CHANGELOG = [
      "(hdl.handle.net/2027/spo.3521354.0010.007), DOI yok; kaynak sayısı "
      "değişmedi (61/61 PASS)."),
     ("2026-08-19",
+     "V5o: 11 UNVERIFIED kaynak kapatıldı → 56/56 tam çevrimiçi kapsam. "
+     "Denetim REFERENCE_POOL_SIZE=4 havuzda PARALEL koşar — sıralı koşudaki "
+     "rate-limit (OpenLibrary ~8 sn/çağrı) bütçe-skip'e düşürüp UNVERIFIED "
+     "bırakıyordu; bütçe 260 sn'ye çıkarıldı. Canlı doğrulama: 56/56 PASS, "
+     "94 sn (crossref 6, sep 5, openlibrary 27, archive 16, perseus 2)."),
+    ("2026-08-19",
      "V5n: Norton 1981 ve Popkin 1951 DOI'leri CrossRef'e eklendi — kapsam-dışı "
      "kalan son 2 dergi makalesi artık çevrimiçi doğrulanır "
      "(canlı kapsam 54→56; 4fe2ccc)."),

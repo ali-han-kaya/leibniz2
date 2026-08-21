@@ -178,6 +178,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-21 | fix | audit kendini karsilastirmasin — CI yanlis-pozitif duzeltildi | `1499b93` |
 | 2026-08-21 | docs | denetim bulgusunu changelog + REFERANS_KANIT_DENETIMI'ne isle | `031ed0f` |
 | 2026-08-21 | docs | status_checks --gh canli dogrulamasini senaryoya isle | `7012f96` |
+| 2026-08-21 | feat | publish_wrapper --incremental (INCREMENTAL push tek komut) | `1bbd2e5` |
 
 ### Regresyon notları
 

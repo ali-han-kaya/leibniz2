@@ -88,6 +88,18 @@ class TestChangelog(unittest.TestCase):
         # En yeni üstte: V5n (2026-08-19), Hicks/Hume (2026-08-18)'den önce.
         self.assertLess(joined.index("V5n"), joined.index("Hicks 1925"))
 
+    def test_changelog_has_v5o(self):
+        """V5o: 11 UNVERIFIED → 56/56 tam kapsam changelog'da olmalı."""
+        lines = rt.changelog_lines()
+        self.assertTrue(lines)
+        joined = "\n".join(lines)
+        self.assertIn("V5o", joined)
+        self.assertIn("56/56", joined)
+        self.assertIn("REFERENCE_POOL_SIZE", joined)
+        # En yeni üstte: V5o (2026-08-19), V5n (2026-08-19)'den önce (aynı gün,
+        # V5n'den sonraki değişiklik).
+        self.assertLess(joined.index("V5o"), joined.index("V5n"))
+
     def test_changelog_has_v5t_handle(self):
         """V5t: Della Rocca 2010 Handle System doğrulaması changelog'da olmalı."""
         lines = rt.changelog_lines()
