@@ -70,6 +70,7 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 | 2026-08-21 | AŞAMA 1 (b) | Job tablosu 3 kategoride yeniden yapılandırıldı: push-required (8), push-advisory (2), PR-only (4); status_checks.py `GATE_EXCLUDE` güncellendi | `df92ada` |
 | 2026-08-21 | AŞAMA 3 | `status_checks.py --gh` fail-closed: protection kurulu değilken exit 1 | `df92ada` |
 | 2026-08-21 | docs | add repo-level changelog + regression notes to README | `b07f5f4` |
+| 2026-08-21 | AŞAMA 1 (b) | Adım 9 (Doğrula) notuna merge-engeli smoke açıklaması eklendi (`enforce_admins`/force-push/deletions — `--gh --json` `smoke[]`) | (çalışma ağacı) |
 | 2026-08-21 | feat | (ci) add precheck-report to reproducibility manifest | `694b367` |
 | 2026-08-21 | docs | add §8 publish wrapper idempotency verification | `5d9b6c6` |
 | 2026-08-21 | fix | (ci) remove local keyword outside function | `965182d` |
@@ -97,6 +98,7 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 | 2026-08-21 | feat | (preview) refs trend noktalarına hover tooltip ekle | `78a3076` |
 | 2026-08-21 | feat | (ci) action_runtimes.json'u repro manifest'ine kat (SHA-256) | `683333d` |
 | 2026-08-21 | feat | (ci) action_pins.json'u manifest CONFIG bölümüne kat (SHA-256) | `800d76e` |
+| 2026-08-21 | feat | --bump modu (WARN pin'lerini otomatik yükselt) | `e6abee6` |
 
 ---
 
@@ -433,6 +435,13 @@ open "https://github.com/ali-han-kaya/leibniz2/settings/branches"
    ```
    Eksik/fazla check → exit 1 (fail-closed): listeyi `status_checks.py` çıktısıyla
    eşitle veya workflow'u güncelle.
+
+   > **Merge-engeli smoke:** `--gh` yalnızca check adlarını değil, merge
+   > butonunun gerçekten BLOKE edip etmediğini de denetler (`enforce_admins`
+   > açık, `allow_force_pushes=false`, `allow_deletions=false` — admin bypass
+   > / force push / silme kapalı). Smoke alanlarından biri bile uygunsuzsa
+   > `names_ok` doğru olsa bile `verdict: FAIL` (exit 1). `--json` çıktısında
+   > `smoke[]` dizisi her alanı ayrı gösterir — hepsi `ok: true` olmalı.
 
 **Beklenen çıktılar:**
 - (a) ✅ UYGULANDI — `gh repo create` → "Created repository ali-han-kaya/leibniz2" (2026-08-18)
