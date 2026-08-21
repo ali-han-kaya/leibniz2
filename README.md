@@ -185,6 +185,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-21 | docs | PUBLISH_SCENARIO artifact listesine python3-shell eklendi | `845206a` |
 | 2026-08-21 | refactor | check_python3_shell çoklu workflow denetimi | `1491551` |
 | 2026-08-21 | feat | audit_refs_trend.py (trend satırları ↔ kaynak artifact denetimi) | `c6ff4e1` |
+| 2026-08-21 | feat | Lagree/Millican/Schmitt/Fine icin LoC katalog kaniti (V5w) | `7bc8363` |
 
 ### Regresyon notları
 

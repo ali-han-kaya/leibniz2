@@ -122,6 +122,19 @@ class TestChangelog(unittest.TestCase):
         # En yeni üstte: V5w (2026-08-21), V5v'den önce.
         self.assertLess(joined.index("V5w"), joined.index("V5v"))
 
+    def test_changelog_has_v5p_oclc_lccn(self):
+        """V5p: OL'den OCLC/LCCN çekimi + Xunzi HT kaydı changelog'da olmalı."""
+        lines = rt.changelog_lines()
+        self.assertTrue(lines)
+        joined = "\n".join(lines)
+        self.assertIn("V5p", joined)
+        self.assertIn("OCLC/LCCN", joined)
+        self.assertIn("HathiTrust", joined)
+        self.assertIn("Xunzi", joined)
+        # Sıralama: V5p (08-19, V5o'dan sonra) → V5o → V5n (aynı gün).
+        self.assertLess(joined.index("V5p"), joined.index("V5o"))
+        self.assertLess(joined.index("V5o"), joined.index("V5n"))
+
     def test_changelog_empty_when_no_entries(self):
         saved = rt.CHANGELOG
         try:

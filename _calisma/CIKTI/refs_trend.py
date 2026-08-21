@@ -61,6 +61,10 @@ CHANGELOG = [
      "(hdl.handle.net/2027/spo.3521354.0010.007), DOI yok; kaynak sayısı "
      "değişmedi (61/61 PASS)."),
     ("2026-08-19",
+     "V5p: OpenLibrary'den OCLC/LCCN identifier'ları çekildi, HathiTrust "
+     "fallback'i OL'den önce denenir (V5p: Xunzi `lccn:87033578` ile HT "
+     "katalog kaydıyla PASS; oclc/lccn değerleri ht_ids'e eklendi)."),
+    ("2026-08-19",
      "V5o: 11 UNVERIFIED kaynak kapatıldı → 56/56 tam çevrimiçi kapsam. "
      "Denetim REFERENCE_POOL_SIZE=4 havuzda PARALEL koşar — sıralı koşudaki "
      "rate-limit (OpenLibrary ~8 sn/çağrı) bütçe-skip'e düşürüp UNVERIFIED "
