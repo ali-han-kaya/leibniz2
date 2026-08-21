@@ -12,6 +12,7 @@ simülasyon / doğrulama) çalışır → CI ile yerel arasında drift olmaz.
                     + config{files, combined_sha256}
                     + refs_trend{files, combined_sha256}
                     + action_runtimes{files, combined_sha256}
+                    + python3_shell{files, combined_sha256}
   manifest.sha256 — manifest.json'un kendi SHA-256'sı (sha256sum formatı;
                     kurcalanma / yeniden üretim farkı tek hash ile denetlenir)
   + tüm artifact'ların kopyası (bundle)
@@ -67,6 +68,7 @@ ARTIFACT_JOBS = {
     "repack-verify": "repack-verify",
     "precheck-report": "precheck",
     "action-runtimes": "action-runtimes",
+    "python3-shell": "verify",
     "reproducibility": "reproducibility",
 }
 
@@ -375,6 +377,37 @@ def main() -> None:
                      "=" * 72]
         lines += ar_block
 
+    # ── PYTHON3 SHELL bölümü: python3-shell/ önekli dosyalar (CONFIG gibi) ──
+    # check_python3_shell.py --json çıktısı (python3_shell_findings.json)
+    # ayrıca işaretlenir; combined_sha256 tek hash ile özetler
+    # (config.combined_sha256 ile aynı deterministik yöntem). Böylece
+    # `shell: python3 {0}` kabuk-komutu denetiminin makine-okur raporu da
+    # SHA-256 ile sabitlenmiş denetim zincirinde (python3-shell → hash →
+    # manifest → bundle).
+    python3_shell_hashes = {rel: h for rel, h in file_hashes.items()
+                            if rel.startswith("python3-shell/")}
+    python3_shell_combined = None
+    if python3_shell_hashes:
+        sorted_rel = sorted(python3_shell_hashes)
+        python3_shell_combined = hashlib.sha256(
+            "".join(f"{rel}\0{python3_shell_hashes[rel]}\n"
+                     for rel in sorted_rel).encode()
+        ).hexdigest()
+        ps_block = [
+            "",
+            "=" * 72,
+            "PYTHON3 SHELL ARTIFACT (ayrı bölüm)",
+            "=" * 72,
+            f"{'FILE':<55} {'SHA-256'}",
+            "-" * 72,
+        ]
+        ps_block += [f"{rel:<55} {python3_shell_hashes[rel]}"
+                     for rel in sorted_rel]
+        ps_block += ["-" * 72,
+                     f"python3_shell_combined_sha256: {python3_shell_combined}",
+                     "=" * 72]
+        lines += ps_block
+
     # ── PROVENANCE bölümü: artifact → üreten job (denetim izi) ──────────────
     # Her artifact hangi job'da üretildi — tek bakışta kaynak. Prefixed
     # indirilenler (config/, precommit-logs/) bundle'da kendi adı altındadır;
@@ -419,7 +452,7 @@ def main() -> None:
         if files:
             note = f"prefixed ({len(files)} dosya)"
         elif art in ("config", "precommit-logs", "refs-trend", "precheck-report",
-                     "action-runtimes"):
+                     "action-runtimes", "python3-shell"):
             note = "YOK (indirilmedi)"
         else:
             note = "merge (köke düzleştirildi)"
@@ -472,6 +505,11 @@ def main() -> None:
         manifest_json["action_runtimes"] = {
             "files": dict(sorted(action_runtimes_hashes.items())),
             "combined_sha256": action_runtimes_combined,
+        }
+    if python3_shell_hashes:
+        manifest_json["python3_shell"] = {
+            "files": dict(sorted(python3_shell_hashes.items())),
+            "combined_sha256": python3_shell_combined,
         }
 
     out_dir = pathlib.Path(args.out_dir)

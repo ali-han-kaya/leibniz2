@@ -2453,6 +2453,69 @@ def verify_manifest_digest(manifest_path, add, check_id="K10-MANIFEST",
     sm_detail = ("summary_combined_sha256: PASS" if sm_ok
                   else ("summary_combined_sha256: FAIL — " + "; ".join(sm_rows[:5])))
 
+    # ---- python3_shell.combined_sha256: YENİDEN hesapla + doğrula ---------
+    # gen_repro_manifest.py check_python3_shell.py --json çıktısını
+    # (python3-shell/ önekli python3_shell_findings.json) "python3_shell"
+    # objesine yazar: {files: {rel: sha256}, combined_sha256}. K10 burada
+    # onu python3_shell.files'tan yeniden hesaplar; kayıtlı değerle
+    # uyuşmazsa P1 — `shell: python3 {0}` denetim raporu SHA-256 ile
+    # sabitlenir (config/lineage/summary bölümleriyle aynı yöntem).
+    ps_ok = True
+    ps_rows = []
+    ps = m.get("python3_shell")
+    if ps is not None and not isinstance(ps, dict):
+        ps_ok = False
+        ps_rows.append("python3_shell: dict değil")
+        add("P1", check_id, check_label, "python3_shell alanı dict değil")
+    elif isinstance(ps, dict):
+        ps_files = ps.get("files")
+        stored_combined = ps.get("combined_sha256")
+        # (a) python3_shell.files → files tutarlılığı
+        if not isinstance(ps_files, dict):
+            ps_ok = False
+            ps_rows.append("python3_shell.files: dict değil")
+            add("P1", check_id, check_label, "python3_shell.files dict değil")
+            ps_files = {}
+        else:
+            for rel, h in sorted(ps_files.items()):
+                if rel not in files:
+                    ps_ok = False
+                    ps_rows.append(f"{rel} (files'ta yok)")
+                    add("P1", check_id, check_label,
+                        f"python3_shell.files'taki dosya files'ta yok: {rel}")
+                elif files[rel] != h:
+                    ps_ok = False
+                    ps_rows.append(f"{rel} (hash farklı)")
+                    add("P1", check_id, check_label,
+                        f"python3_shell.files hash'i files ile uyuşmuyor: {rel}",
+                        f"python3_shell={h[:16]}… files={files[rel][:16]}…")
+        # (b) combined_sha256 yeniden hesapla + karşılaştır
+        if isinstance(ps_files, dict):
+            if ps_files and not stored_combined:
+                ps_ok = False
+                ps_rows.append("combined_sha256 eksik")
+                add("P1", check_id, check_label,
+                    "python3_shell.combined_sha256 eksik "
+                    "(python3_shell.files dolu)")
+            elif stored_combined is not None:
+                recalc = _summary_combined_sha256(ps_files)
+                if stored_combined != recalc:
+                    ps_ok = False
+                    ps_rows.append("combined_sha256 uyuşmazlığı")
+                    add("P1", check_id, check_label,
+                        "python3_shell.combined_sha256 uyuşmazlığı",
+                        f"yeniden {recalc[:16]}… ≠ kayıtlı {stored_combined[:16]}…")
+    elif any(rel.startswith("python3-shell/") for rel in files):
+        # python3_shell objesi yok ama files'ta python3-shell dosyaları var
+        ps_ok = False
+        ps_rows.append("python3_shell objesi eksik")
+        add("P1", check_id, check_label,
+            "python3_shell objesi eksik (files'ta python3-shell dosyaları var)")
+
+    ps_detail = ("python3_shell_combined_sha256: PASS" if ps_ok
+                  else ("python3_shell_combined_sha256: FAIL — "
+                        + "; ".join(ps_rows[:5])))
+
     # ---- manifest.sha256 ↔ manifest.json: sidecar eşleşmesi (fail-closed) ----
     # Ortak helper (K10 + K13 tek kaynak). Sidecar manifest dosyasının KENDİ
     # hash'ini sabitler: manifest.json içeriği değişirse (ör. JSON'a boşluk
@@ -2463,10 +2526,11 @@ def verify_manifest_digest(manifest_path, add, check_id="K10-MANIFEST",
 
     detail = (f"{n_ok} OK / {n_bad} uyuşmazlık / {n_missing} eksik "
               f"({len(files)} dosya); {cfg_detail}; {ov_detail}; "
-              f"{ln_detail}; {sm_detail}; {sc_detail}")
+              f"{ln_detail}; {sm_detail}; {ps_detail}; {sc_detail}")
     if bad_rows:
         detail += " | " + "; ".join(bad_rows[:5])
-    return (n_bad == 0 and n_missing == 0 and cfg_ok and ov_ok and ln_ok and sm_ok and sc_ok), detail
+    return (n_bad == 0 and n_missing == 0 and cfg_ok and ov_ok and ln_ok
+            and sm_ok and ps_ok and sc_ok), detail
 
 
 def check_repro_manifest_self_consistency(add):

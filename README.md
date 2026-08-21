@@ -180,6 +180,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-21 | docs | status_checks --gh canli dogrulamasini senaryoya isle | `7012f96` |
 | 2026-08-21 | feat | publish_wrapper --incremental (INCREMENTAL push tek komut) | `1bbd2e5` |
 | 2026-08-21 | docs | refs-trend changelog'una V5o satırı (11 UNVERIFIED → 56/56) | `bed5f67` |
+| 2026-08-21 | feat | ia_ol_fallback_evidence.py (5 IA kaynağın kanıtı) | `a8fadb0` |
 
 ### Regresyon notları
 

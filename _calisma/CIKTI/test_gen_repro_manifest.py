@@ -288,6 +288,58 @@ class TestProvenance(unittest.TestCase):
         m = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         self.assertNotIn("precheck_report", m)
 
+    def test_python3_shell_section(self):
+        # python3-shell/ dosyaları (check_python3_shell.py --json çıktısı)
+        # CONFIG gibi ayrı bölümde işaretlenir + tek-hash combined_sha256.
+        (self.artifacts / "python3-shell").mkdir(parents=True)
+        (self.artifacts / "python3-shell" / "python3_shell_findings.json").write_text(
+            json.dumps({"tool": "check_python3_shell.py", "verdict": "PASS",
+                        "fail": 0}) + "\n", encoding="utf-8")
+        self._gen()
+        txt = (self.out / "manifest.txt").read_text(encoding="utf-8")
+        self.assertIn("PYTHON3 SHELL ARTIFACT (ayrı bölüm)", txt)
+        self.assertIn("python3_shell_combined_sha256", txt)
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        ps = m["python3_shell"]
+        self.assertIn(
+            "python3-shell/python3_shell_findings.json", ps["files"])
+        self.assertTrue(len(ps["combined_sha256"]) == 64)
+
+    def test_python3_shell_combined_recomputes_deterministically(self):
+        (self.artifacts / "python3-shell").mkdir(parents=True)
+        (self.artifacts / "python3-shell" / "python3_shell_findings.json").write_text(
+            json.dumps({"tool": "check_python3_shell.py", "verdict": "PASS"})
+            + "\n", encoding="utf-8")
+        self._gen()
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        ps = m["python3_shell"]["files"]
+        expected = hashlib.sha256(
+            "".join(f"{rel}\0{ps[rel]}\n" for rel in sorted(ps)).encode()
+        ).hexdigest()
+        self.assertEqual(m["python3_shell"]["combined_sha256"], expected)
+        self.assertRegex(m["python3_shell"]["combined_sha256"], r"^[0-9a-f]{64}$")
+
+    def test_python3_shell_artifact_job_provenance(self):
+        (self.artifacts / "python3-shell").mkdir(parents=True)
+        (self.artifacts / "python3-shell" / "python3_shell_findings.json").write_text(
+            "{}", encoding="utf-8")
+        self._gen()
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        jobs = m["provenance"]["artifact_jobs"]
+        self.assertEqual(jobs["python3-shell"], "verify")
+        txt = (self.out / "manifest.txt").read_text(encoding="utf-8")
+        self.assertIn("prefixed (1 dosya)", txt)  # python3-shell tek dosya
+
+    def test_no_python3_shell_section_when_absent(self):
+        bare = self.root / "bare"
+        bare.mkdir(parents=True)
+        (bare / "a.txt").write_text("x", encoding="utf-8")
+        out = self.root / "bare-out"
+        r = _run_gen(str(bare), str(out))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        m = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        self.assertNotIn("python3_shell", m)
+
     def test_env_override_artifact_jobs(self):
         env = dict(os.environ)
         env["REPRO_ARTIFACT_JOBS"] = '{"precommit-logs": "custom-job"}'
@@ -310,7 +362,8 @@ class TestWorkflowPatternCoverage(unittest.TestCase):
     olmalı — yoksa o artifact manifest'e girmeden sessizce düşer (ör. bugün
     budget-verify/lineage-findings/klayers eksikti).
     """
-    EXCLUDED = {"config", "precommit-logs", "refs-trend", "precheck-report", "reproducibility"}
+    EXCLUDED = {"config", "precommit-logs", "refs-trend", "precheck-report",
+                "python3-shell", "reproducibility"}
 
     def _workflow_merge_pattern(self):
         wf = CIKTI.parent.parent / ".github" / "workflows" / "verify.yml"

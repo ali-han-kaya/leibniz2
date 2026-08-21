@@ -76,6 +76,35 @@ def _build_bundle(files=None, sidecar=None, tamper_json=None):
     return d, mpath
 
 
+def _with_python3_shell_section(d, mpath, tamper_combined=None):
+    """manifest'e python3_shell bölümü ekler (files + combined_sha256).
+
+    gen_repro_manifest.py'nin PYTHON3 SHELL bölümüyle birebir aynı formül:
+    sorted '{rel}\0{hash}\n' birleşiminin SHA-256'sı. tamper_combined verilirse
+    kayıtlı combined'ı bozar (K10 kurcalamayı yakalamalı).
+    """
+    with open(mpath, encoding="utf-8") as mf:
+        m = json.load(mf)
+    rel = "python3-shell/python3_shell_findings.json"
+    ps_files = {rel: m["files"][rel]}
+    combined = hashlib.sha256(
+        "".join(f"{r}\0{ps_files[r]}\n" for r in sorted(ps_files)).encode()
+    ).hexdigest()
+    m["python3_shell"] = {
+        "files": ps_files,
+        "combined_sha256": (tamper_combined if tamper_combined else combined),
+    }
+    with open(mpath, "w", encoding="utf-8") as f:
+        json.dump(m, f)
+    # Sidecar'ı manifest'in yeni haline göre yeniden hesapla (K10'un diğer
+    # bölüm denetimlerini gölgelememek için).
+    real = hashlib.sha256(open(mpath, "rb").read()).hexdigest()
+    with open(os.path.join(d, "manifest.sha256"), "w",
+              encoding="utf-8") as f:
+        f.write(f"{real}  manifest.json\n")
+    return mpath
+
+
 def _run(d, mpath):
     collector = _Collector()
     ok, detail = vd.verify_manifest_digest(mpath, collector)
@@ -278,6 +307,58 @@ class TestEndToEnd(unittest.TestCase):
         ok, detail, _ = _run(self.out, mpath)
         self.assertFalse(ok)
         self.assertIn("manifest.sha256: FAIL", detail)
+
+
+class TestPython3ShellSection(unittest.TestCase):
+    """K10: python3_shell bölümünün combined_sha256'sı yeniden hesaplanıp
+    doğrulanır; kurcalama → P1 (fail-closed)."""
+
+    def test_pass_with_valid_python3_shell_section(self):
+        files = {"a.txt": b"hello\n",
+                 "python3-shell/python3_shell_findings.json": b'{"v": 1}\n'}
+        d, mpath = _build_bundle(files=files)
+        try:
+            _with_python3_shell_section(d, mpath)
+            ok, detail, findings = _run(d, mpath)
+        finally:
+            import shutil
+            shutil.rmtree(d, ignore_errors=True)
+        self.assertTrue(ok, detail)
+        self.assertIn("python3_shell_combined_sha256: PASS", detail)
+        self.assertEqual(findings, [])
+
+    def test_tampered_combined_is_p1(self):
+        files = {"a.txt": b"hello\n",
+                 "python3-shell/python3_shell_findings.json": b'{"v": 1}\n'}
+        d, mpath = _build_bundle(files=files)
+        try:
+            _with_python3_shell_section(d, mpath, tamper_combined="0" * 64)
+            ok, detail, findings = _run(d, mpath)
+        finally:
+            import shutil
+            shutil.rmtree(d, ignore_errors=True)
+        self.assertFalse(ok)
+        self.assertIn("python3_shell_combined_sha256: FAIL", detail)
+        self.assertTrue(any(
+            f[1] == "K10-MANIFEST" and "python3_shell" in f[2]
+            for f in findings))
+
+    def test_missing_section_with_files_is_p1(self):
+        # files'ta python3-shell/ dosyası var ama manifest'te python3_shell
+        # objesi yok → üretici drift'i K10 tarafından yakalanmalı.
+        files = {"a.txt": b"hello\n",
+                 "python3-shell/python3_shell_findings.json": b'{"v": 1}\n'}
+        d, mpath = _build_bundle(files=files)
+        try:
+            ok, detail, findings = _run(d, mpath)
+        finally:
+            import shutil
+            shutil.rmtree(d, ignore_errors=True)
+        self.assertFalse(ok)
+        self.assertIn("python3_shell objesi eksik", detail)
+        self.assertTrue(any(
+            f[1] == "K10-MANIFEST" and "python3_shell" in f[2]
+            for f in findings))
 
 
 if __name__ == "__main__":

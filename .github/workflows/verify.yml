@@ -363,6 +363,25 @@ jobs:
             echo 'PRECOMMIT_RAPORU.json yok — atlandı'
           fi
 
+      # ─── PYTHON3-SHELL DENETİMİ (advisory, makine-okur sidecar) ────────
+      # check_python3_shell.py — workflow adımlarında `shell: python3 {0}`
+      # altında kabuk komutu kullanımını denetler. Yerelde aynı script
+      # pre-commit hook'u olarak commit'i BLOKE eder; burada yalnızca
+      # makine-okur JSON kanıtı (python3_shell_findings.json) üretilir ve
+      # python3-shell artifact'ı olarak yüklenir → reproducibility manifest'inde
+      # SHA-256 ile sabitlenir (python3_shell bölümü). Advisory: build'i
+      # bloke etmez (gate rolü --full/pre-commit'tedir). if: always() —
+      # --full başarısız olsa bile kanıt toplanır.
+      - name: Generate python3-shell findings (JSON sidecar)
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: |
+          python3 _calisma/CIKTI/check_python3_shell.py \
+            --workflow .github/workflows/verify.yml \
+            --json --out python3_shell_findings.json
+          echo "python3-shell denetimi tamam — python3_shell_findings.json"
+
       # ÖZET: pre-commit cache durumu + hook env sürümleri. Tekrarlanabilirlik
       # denetimi için: hangi pre-commit sürümü, hangi hook ortamları (env
       # hash'leri) ve hangi araç sürümleri kullanıldı. PRECOMMIT_CACHE.md
@@ -574,6 +593,18 @@ jobs:
           name: precommit-logs
           path: logs/
           if-no-files-found: error
+          retention-days: 30
+
+      # check_python3_shell.py --json çıktısı — ayrı artifact; reproducibility
+      # job'ı python3-shell/ önekiyle indirir ve manifest'te SHA-256 ile
+      # sabitler (PYTHON3 SHELL bölümü). Advisory — dosya üretilemezse yüklenmez.
+      - name: Upload python3-shell findings sidecar
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: python3-shell
+          path: python3_shell_findings.json
+          if-no-files-found: ignore
           retention-days: 30
 
   # ──────────────────────────────────────────────────────────────────────
@@ -956,6 +987,17 @@ jobs:
         with:
           name: precheck-report
           path: all_artifacts/precheck-report/
+
+      # python3-shell advisory bir artifact'tır; yoksa manifest python3_shell'siz
+      # üretilir — continue-on-error ile build bloke edilmez. Prefixed indirme
+      # sayesinde gen_repro_manifest.py'nin PYTHON3 SHELL bölümü
+      # python3-shell/ önekini yakalar + ayrı hash'ler (SHA-256 ile sabitlenir).
+      - name: Download python3-shell artifact (python3-shell/ prefix)
+        continue-on-error: true
+        uses: actions/download-artifact@v7
+        with:
+          name: python3-shell
+          path: all_artifacts/python3-shell/
 
       # ─── 2) manifest.txt üret (gen_repro_manifest.py — tek kaynak) ─────────
       - name: Generate reproducibility manifest
