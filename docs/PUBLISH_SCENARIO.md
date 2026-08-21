@@ -125,6 +125,7 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 | 2026-08-21 | docs | refs-trend changelog'una V5p satiri (OCLC/LCCN + Xunzi HT) | `3548341` |
 | 2026-08-21 | docs | V5q changelog satırı + §2 tablo doğrulaması | `db61c80` |
 | 2026-08-21 | docs | HathiTrust katalog yol haritası (4 telifli kitap) | `fa43551` |
+| 2026-08-21 | feat | refs-online VERSION JSON'a ht_ids_summary ekle | `efdd45a` |
 
 ---
 
