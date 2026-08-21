@@ -157,6 +157,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-21 | feat | (ci) K17 mirror sync kapısı (sync_verify_mirror.sh --check) | `7c3ab53` |
 | 2026-08-21 | feat | (preview) update_preview.sh --bootstrap tek adım modu | `169a6c8` |
 | 2026-08-21 | feat | fresh_clone_setup.sh — tek komutta TCC-safe ortam kurulumu | `ee772b6` |
+| 2026-08-21 | feat | fresh_clone_setup.sh — tek komutta TCC-safe ortam kurulumu | `a09f1a2` |
 
 ### Regresyon notları
 

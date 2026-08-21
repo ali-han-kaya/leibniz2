@@ -16,6 +16,7 @@ Linux CI'da da çalışır):
 """
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -168,6 +169,35 @@ class TestVerifyDeliveryK17(unittest.TestCase):
             self.assertEqual(rc, None)
             self.assertIn("sync_verify_mirror.sh yok", detail)
             self.assertTrue(any(f["check"] == "K17-MIRROR" for f in findings))
+
+
+class TestMirrorFileCoverage(unittest.TestCase):
+    """Mirror FILES listesi repo'daki tüm runtime dosyalarını kapsar.
+
+    Regresyon: launchd rotasında K16 battery github_scripts/*.js'i mirror'dan
+    koşar; eksik bir script (ör. label_gate_p1.js) K16'yı P0/FAIL'e düşürürdü
+    (gerçek bir canlı hataydı). Bu test, repo'daki her github_script'in mirror
+    FILES listesinde olduğunu fail-closed doğrular.
+    """
+
+    def test_all_github_scripts_in_mirror_files(self):
+        with open(SYNC_MIRROR, encoding="utf-8") as f:
+            text = f.read()
+        # FILES listesindeki github_scripts girdileri (kaynak|dest formatı).
+        listed = set(re.findall(r"github_scripts/[a-z0-9_]+\.js", text))
+        # Repo'daki gerçek script dosyaları.
+        scripts_dir = os.path.join(HERE, "github_scripts")
+        repo_scripts = {f"github_scripts/{n}" for n in os.listdir(scripts_dir)
+                        if n.endswith(".js")}
+        missing = repo_scripts - listed
+        self.assertEqual(missing, set(),
+                         f"mirror FILES listesinde eksik script'ler: {missing}")
+
+    def test_lean_mirror_files_listed(self):
+        with open(SYNC_MIRROR, encoding="utf-8") as f:
+            text = f.read()
+        # LEAN_FILES ReductInvariance.lean'ı içermeli (K9 launchd rotası).
+        self.assertIn("ReductInvariance.lean", text)
 
 
 class TestMirrorOutSidecar(unittest.TestCase):
