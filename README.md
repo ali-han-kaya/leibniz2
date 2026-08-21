@@ -174,6 +174,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-21 | feat | (ci) precheck job'ına status_checks --gh --json sidecar'ı ekle | `d6b58a6` |
 | 2026-08-21 | feat | (preview) /guide.html rotası + mirror senkronu | `d184c3c` |
 | 2026-08-21 | feat | render_screens PNG uretimini mock HTML ile dogrula | `0a4f32b` |
+| 2026-08-21 | feat | canli CI denetimini audit_live_ci_sync.py'ye cevir | `799409c` |
 
 ### Regresyon notları
 

@@ -38,6 +38,13 @@ HERE = pathlib.Path(__file__).resolve().parent
 REPO_ROOT = HERE.parents[1]
 DEFAULT_DOC = REPO_ROOT / "docs" / "PUBLISH_SCENARIO.md"
 
+# Bu job'ın KENDİ adı/artifact'ı karşılaştırmadan hariç tutulur — meta-denetçi
+# olarak run'ın içinde koşar; kendi artifact'ı denetim ADIMINDAN SONRA yüklenir
+# (her run'da "fazla job/eksik artifact" yanlış-pozitif üretir). Doc tablosu
+# bu job'ı içermez (advisory meta-araçtır, teslim pipeline'ı değil).
+SELF_JOB = "Live CI doc↔GitHub sync audit (advisory)"
+SELF_ARTIFACT = "audit-live-ci"
+
 # ── Doc parse ────────────────────────────────────────────────────────────
 # Job tablosu satırları: "| 1 | A | Delivery verification — K1-K9 (...) | ✅ ... |"
 _JOB_ROW_RE = re.compile(
@@ -151,6 +158,12 @@ def compare(expected, live, label):
     }
 
 
+def exclude_self(live_jobs, live_artifacts):
+    """Denetçi job'ının kendi adını/artifact'ını canlı listeden çıkarır."""
+    return ([n for n in live_jobs if n != SELF_JOB],
+            [n for n in live_artifacts if n != SELF_ARTIFACT])
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -194,6 +207,9 @@ def main(argv=None):
     except RuntimeError as e:
         print(f"HATA: canlı veri çekilemedi ({e})", file=sys.stderr)
         return 2
+
+    # Meta-denetçi kendini karşılaştırmaz (bkz. SELF_JOB/SELF_ARTIFACT).
+    live_jobs, live_artifacts = exclude_self(live_jobs, live_artifacts)
 
     doc_job_names = [name for (_cat, name) in doc_jobs]
     job_cmp = compare(doc_job_names, live_jobs, "jobs")

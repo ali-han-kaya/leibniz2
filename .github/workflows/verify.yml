@@ -1444,7 +1444,15 @@ jobs:
   audit-live-ci:
     name: Live CI doc↔GitHub sync audit (advisory)
     runs-on: ubuntu-latest
-    needs: [verify]
+    # TÜM job'ların bitmesini bekle — audit, canlı run'ın job/artifact
+    # listesini okur; yalnızca verify beklenirse diğer job'lar hâlâ koşarken
+    # eksik/fazla yanlış-pozitif üretir (önceki çalıştırmada FAIL gelmişti).
+    # Döngüsel bağımlılık olmasın diye kendini içermez; push'ta PR-only
+    # job'lar skipped olarak yine listededir → isim eşleşmesi çalışır.
+    needs: [verify, action-runtimes, budget, reports, reproducibility,
+            config-drift, repack-verify, refs-trend, precheck, plist-check,
+            daemon-http, mirror-check, label-gate, label-gate-p1,
+            commit-msg-gate, manifest-comment]
     if: always()
     steps:
       - name: Checkout

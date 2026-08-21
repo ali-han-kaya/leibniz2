@@ -71,6 +71,19 @@ class TestParseDocArtifacts(unittest.TestCase):
         self.assertEqual(als.parse_doc_artifacts("no section here"), [])
 
 
+class TestExcludeSelf(unittest.TestCase):
+    def test_removes_own_job_and_artifact(self):
+        jobs, arts = als.exclude_self(
+            ["Job A", als.SELF_JOB], ["art1", als.SELF_ARTIFACT])
+        self.assertEqual(jobs, ["Job A"])
+        self.assertEqual(arts, ["art1"])
+
+    def test_absent_self_is_noop(self):
+        jobs, arts = als.exclude_self(["Job A"], ["art1"])
+        self.assertEqual(jobs, ["Job A"])
+        self.assertEqual(arts, ["art1"])
+
+
 class TestCompare(unittest.TestCase):
     def test_perfect_match(self):
         r = als.compare(["a", "b"], ["b", "a"], "jobs")
