@@ -117,6 +117,7 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 | 2026-08-21 | feat | publish_wrapper --incremental (INCREMENTAL push tek komut) | `1bbd2e5` |
 | 2026-08-21 | docs | refs-trend changelog'una V5o satırı (11 UNVERIFIED → 56/56) | `bed5f67` |
 | 2026-08-21 | feat | ia_ol_fallback_evidence.py (5 IA kaynağın kanıtı) | `a8fadb0` |
+| 2026-08-21 | feat | python3-shell denetimini manifest'e SHA-256 ile sabitle | `1f9706f` |
 
 ---
 
@@ -237,7 +238,7 @@ git push origin main
 RUN_ID=$(gh run list --limit 1 --json databaseId -q '.[0].databaseId')
 gh run watch $RUN_ID --exit-status
 
-# 4) Son durum + artifact'lar (21 adet — doc listesi; canlı run'da 22,
+# 4) Son durum + artifact'lar (22 adet — doc listesi; canlı run'da 23,
 #    audit-live-ci meta-denetçinin kendi artifact'ı dahil)
 gh run view $RUN_ID --json jobs --jq '.jobs[] | "\(.name)\t\(.conclusion)"'
 gh api "repos/ali-han-kaya/leibniz2/actions/runs/$RUN_ID/artifacts" \
@@ -584,8 +585,8 @@ gh run list --limit 3 --json databaseId,status,conclusion,name
 RUN_ID=$(gh run list --limit 1 --json databaseId -q '.[0].databaseId')
 gh run watch $RUN_ID --exit-status
 
-# (c) Artifact'ları kontrol et (21 adet olmalı — liste aşağıda; canlı run'da
-#     22, audit-live-ci meta-denetçinin kendi artifact'ı dahil)
+# (c) Artifact'ları kontrol et (22 adet olmalı — liste aşağıda; canlı run'da
+#     23, audit-live-ci meta-denetçinin kendi artifact'ı dahil)
 gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_bytes) B)"'
 ```
 
@@ -622,7 +623,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 | | **D — PR-only (yorum/etiket düşürme)** | | |
 | 16 | D | Manifest PR comment | ✅ manifest.txt + config-diff PR yorumu |
 
-**Artifact listesi (21):**
+**Artifact listesi (22):**
 - `unit-tests` (CIKTI birim test logu — `test_*.py` glob'u)
 - `verify-report` (tek log: K1-K14 + pre-commit bölümü + .sha256)
 - `action-runtimes` (her action'ın runs.using denetimi JSON — node24 kapısı)
@@ -634,6 +635,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 - `refs-online` (çevrimiçi referans denetimi VERSION JSON)
 - `run-history` (history.jsonl — run zaman serisi)
 - `precommit-logs` (ham log + PRECOMMIT_RAPORU.md/.json + cache/env özeti)
+- `python3-shell` (check_python3_shell.py --json denetimi — SHA-256 ile manifest'te sabitlenir)
 - `reports` (statik markdown raporları)
 - `reproducibility` (tüm artifact'ların SHA-256 manifest'i)
 - `config-drift` (gen_config + diff-on-drift bulguları)
@@ -653,9 +655,10 @@ job'ında koşar (Linux runner'larında SKIP). Aynı şekilde K17 (mirror sync)
 (sync sonrası GÜNCEL olmalı; repo ↔ mirror drift'i P1 → job FAIL).
 
 **Denetim bulgusu (2026-08-21, `audit_live_ci_sync.py`):** "11 job / 17 artifact"
-beklentisi güncel pipeline ile uyuşmuyor — canlı run **17 job / 22 artifact**
+beklentisi güncel pipeline ile uyuşmuyor — canlı run **17 job / 23 artifact**
 üretiyor (16 kapı + `audit-live-ci` meta-denetçi; denetim kendini hariç tutunca
-16/21, doc ile birebir). 11/17 rakamları eski pipeline durumuna aittir;
+16/22, doc ile birebir; 2026-08-21 `1f9706f` ile `python3-shell` artifact'ı
+eklendi — 21→22). 11/17 rakamları eski pipeline durumuna aittir;
 denetim script'i doc↔GitHub senkronunu her push'ta fail-closed doğrular
 (drift → exit 1, advisory `audit-live-ci` job'ı + `audit-live-ci` artifact'ı).
 
