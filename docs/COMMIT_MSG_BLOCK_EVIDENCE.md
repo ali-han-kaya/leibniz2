@@ -6,7 +6,7 @@ kayıt altına alır. Deneme `git commit --allow-empty` ile yapıldı — commit
 oluşmadığı için çalışma ağacına ve history'ye hiçbir etkisi yoktur.
 
 - **Tarih:** 2026-08-19
-- **Ortam:** macOS, repo kökü `/Users/alikaya/Desktop/leibniz2`
+- **Ortam:** macOS, repo kökü `~/Desktop/leibniz2`
 - **Başlangıç HEAD:** `e6cbdca7fcd86669f043f7a44e4306056dbd4791`
 - **Bitiş HEAD:** `e6cbdca7fcd86669f043f7a44e4306056dbd4791` (değişmedi → commit oluşmadı)
 - **Çalışma ağacı:** temiz (`git status --short` boş)

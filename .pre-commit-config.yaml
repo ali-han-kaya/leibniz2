@@ -118,6 +118,19 @@ repos:
         stages: [pre-commit]
         verbose: true
 
+      - id: check-absolute-paths
+        name: Block absolute user paths (/Users/username, /home/username)
+        description: >-
+          Commit'teki takip edilen dosyalarda /Users/<kullanıcı>/ veya
+          /home/<kullanıcı>/ mutlak yollarını yakalar (/Users/ci ve
+          /home/linuxbrew hariç — kanonik portable yollar). .freebuff/
+          ve _calisma/TOOLKIT/ atlanır. OFFLINE, stdlib-only.
+        entry: sh _calisma/CIKTI/check_absolute_paths.sh
+        language: system
+        always_run: true
+        pass_filenames: true
+        stages: [pre-commit]
+
       - id: actionlint
         name: Lint workflow YAML (actionlint)
         description: >-
