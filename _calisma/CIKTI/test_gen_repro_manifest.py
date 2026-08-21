@@ -441,6 +441,7 @@ class TestManifestSections(unittest.TestCase):
         for rel in ("verify_delivery.config.json",
                     "verify_delivery.config.schema.json",
                     "effective_config.json",
+                    "action_pins.json",
                     "config.sha256",
                     "config-diff.txt",
                     "config-diff.json"):
@@ -498,6 +499,23 @@ class TestManifestSections(unittest.TestCase):
         m = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         self.assertNotIn("config", m)
         self.assertIn("a.txt", m["files"])
+
+    def test_action_pins_in_config_section(self):
+        # action_pins.json (action pin baseline'ı) config/ önekiyle gelir ve
+        # CONFIG bölümünde ayrıca hash'lenir — tek kaynak: verify.yml'deki
+        # "Bundle config snapshot" adımı (cp action_pins.json config/).
+        (self.artifacts / "config" / "action_pins.json").write_text(
+            '{"actions/checkout": 7}', encoding="utf-8")
+        m = self._gen()
+        cfg = m["config"]["files"]
+        self.assertIn("config/action_pins.json", cfg)
+        txt = (self.out / "manifest.txt").read_text(encoding="utf-8")
+        self.assertIn("action_pins.json", txt)
+        # combined_sha256 sıralı birleşimle deterministik yeniden hesaplanır.
+        expected = hashlib.sha256(
+            "".join(f"{rel}\0{cfg[rel]}\n" for rel in sorted(cfg)).encode()
+        ).hexdigest()
+        self.assertEqual(m["config"]["combined_sha256"], expected)
 
     # ── ACTION RUNTIMES bölümü ───────────────────────────────────────────
     def test_action_runtimes_section(self):

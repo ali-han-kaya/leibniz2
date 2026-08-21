@@ -455,6 +455,7 @@ jobs:
           mkdir -p config
           cp _calisma/CIKTI/verify_delivery.config.json        config/
           cp _calisma/CIKTI/verify_delivery.config.schema.json config/
+          cp _calisma/CIKTI/action_pins.json                  config/
           cp effective_config.json config/ 2>/dev/null || true
           sha256sum config/* 2>/dev/null > config/config.sha256 || true
 

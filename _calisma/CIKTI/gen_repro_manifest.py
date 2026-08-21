@@ -79,6 +79,7 @@ CONFIG_BASENAMES = frozenset({
     "verify_delivery.config.json",
     "verify_delivery.config.schema.json",
     "effective_config.json",
+    "action_pins.json",
     "config.sha256",
     "config-diff.txt",
     "config-diff.json",

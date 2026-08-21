@@ -163,6 +163,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-21 | feat | (ci) preview mirror'ı sync_verify_mirror.sh'e kat (adım 2+4) | `c57bb90` |
 | 2026-08-21 | feat | (preview) refs trend grafiğine by_source yığılmış alan serisi | `4c41069` |
 | 2026-08-21 | feat | (preview) refs trend noktalarına hover tooltip ekle | `78a3076` |
+| 2026-08-21 | feat | (ci) action_runtimes.json'u repro manifest'ine kat (SHA-256) | `683333d` |
 
 ### Regresyon notları
 
