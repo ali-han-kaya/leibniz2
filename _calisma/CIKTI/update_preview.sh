@@ -51,6 +51,7 @@
 #   update_preview.sh --mirror             # verify mirror'ı senkron et (sync_verify_mirror.sh)
 #   update_preview.sh --mirror-check       # mirror güncel mi? (0 güncel/1 bayat/2 hata)
 #   update_preview.sh --mirror-force       # mirror'ı koşulsuz yeniden kopyala
+#   update_preview.sh --bootstrap [HOME]   # mirror + HTML + plist TEK ADIMDA (fail-closed)
 #   update_preview.sh --help
 #
 # Ortam değişkenleri (override):
@@ -474,6 +475,34 @@ plist_watch() {
   done
 }
 
+# ============================================================================
+# BÖLÜM 4 — tek komut bootstrap (--bootstrap): mirror + HTML + plist
+# ============================================================================
+# preview sunucusunu TCC-safe rotadan ayağa kaldırmak için gereken ÜÇ
+# artefaktı tek adımda kurar: (1) verify mirror senkronu (sync_verify_mirror.sh
+# — launchd GUI agent'ının --dir'i), (2) HTML dashboard build'i (TCC-safe
+# kopya), (3) LaunchAgent plist'leri (şablondan üretim). Her adım
+# fail-closed'dur: kaynak yok / senkron hatası / geçersiz plist → hata ile
+# durur (exit ≠ 0). launchctl bootstrap'i AYRI yapılır (--start) — bu mod
+# yalnızca artefaktları kurar; --start ile daemon ayağa kaldırılır.
+bootstrap_all() {
+  local home
+  home="$(plist_home "${1:-}")"
+
+  say "=== BOOTSTRAP 1/3: verify mirror senkronu ==="
+  "$SCRIPT_DIR/sync_verify_mirror.sh" || return $?
+
+  say "=== BOOTSTRAP 2/3: HTML dashboard build'i ==="
+  [ -f "$SRC" ] || { err "kaynak yok: $SRC"; return 2; }
+  build || return $?
+
+  say "=== BOOTSTRAP 3/3: LaunchAgent plist üretimi ==="
+  plist_do "$home" || return $?
+
+  say "BOOTSTRAP: tamam — mirror senkron, HTML build, plist'ler hazır"
+  say "           sonraki adım: update_preview.sh --start (launchctl bootstrap)"
+}
+
 usage() {
   awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "${BASH_SOURCE[0]}"
 }
@@ -548,6 +577,9 @@ case "${1:-build}" in
     ;;
   --mirror-check)
     "$SCRIPT_DIR/sync_verify_mirror.sh" --check
+    ;;
+  --bootstrap)
+    bootstrap_all "${2:-}"
     ;;
   build)
     [ -f "$SRC" ] || { err "kaynak yok: $SRC"; exit 2; }

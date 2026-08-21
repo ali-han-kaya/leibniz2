@@ -35,10 +35,17 @@ from verify_delivery import parse_plist_check_output  # noqa: E402
 
 def run(home, *args):
     """HOME'u fake dizine sabitleyip komutu koş; CompletedProcess döner."""
+    return run_env(home, None, *args)
+
+
+def run_env(home, extra_env, *args):
+    """HOME'u fake dizine sabitleyip (opsiyonel ek env ile) komutu koşar."""
     env = dict(os.environ)
     env["HOME"] = home
+    if extra_env:
+        env.update(extra_env)
     return subprocess.run(list(args), env=env, capture_output=True,
-                          text=True, timeout=120)
+                          text=True, timeout=300)
 
 
 class TestPlistCheckExitCodes(unittest.TestCase):
@@ -213,6 +220,66 @@ class TestOutOfScopeExtraFile(unittest.TestCase):
                                       "com.freebuff.preview-server"])
             self.assertTrue(all(p["status"] == "GÜNCEL" for p in d["profiles"]))
             self.assertNotIn("out-of-scope", json.dumps(d))
+
+
+class TestBootstrapAll(unittest.TestCase):
+    """--bootstrap: mirror senkronu + HTML build + plist TEK ADIMDA.
+
+    Üç artefaktın tümü fake HOME altında üretilir (gerçek
+    ~/Library/Caches + LaunchAgents'a DOKUNMAZ, Linux CI'da da çalışır):
+      (1) verify mirror senkronu → fake HOME/.../com.freebuff/verify/*
+      (2) HTML build            → fake HOME/.../com.freebuff/preview/preview.html
+      (3) plist üretimi         → fake HOME/Library/LaunchAgents/<label>.plist
+    Her adım fail-closed: kaynak yoksa (SRC env ile yok sayılır) exit 2.
+    """
+
+    def _artifacts(self, home):
+        return {
+            "mirror": os.path.join(home, "Library", "Caches",
+                                   "com.freebuff", "verify", "verify_delivery.py"),
+            "html": os.path.join(home, "Library", "Caches",
+                                 "com.freebuff", "preview", "preview.html"),
+            "plist": os.path.join(home, "Library", "LaunchAgents",
+                                  "com.freebuff.preview-leibniz2.plist"),
+        }
+
+    def test_bootstrap_all_three_artifacts(self):
+        with tempfile.TemporaryDirectory(prefix="plist-gate-") as home:
+            r = run(home, "bash", UPDATE_PREVIEW, "--bootstrap", home)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertIn("BOOTSTRAP 1/3", r.stdout)
+            self.assertIn("BOOTSTRAP 2/3", r.stdout)
+            self.assertIn("BOOTSTRAP 3/3", r.stdout)
+            self.assertIn("BOOTSTRAP: tamam", r.stdout)
+            arts = self._artifacts(home)
+            for name, p in arts.items():
+                self.assertTrue(os.path.isfile(p), f"{name} üretilmedi: {p}")
+
+    def test_bootstrap_idempotent_second_run(self):
+        with tempfile.TemporaryDirectory(prefix="plist-gate-") as home:
+            r1 = run(home, "bash", UPDATE_PREVIEW, "--bootstrap", home)
+            self.assertEqual(r1.returncode, 0, r1.stdout + r1.stderr)
+            r2 = run(home, "bash", UPDATE_PREVIEW, "--bootstrap", home)
+            self.assertEqual(r2.returncode, 0, r2.stdout + r2.stderr)
+            # İkinci koşuda da üç artefakt yerinde ve geçerli.
+            arts = self._artifacts(home)
+            for name, p in arts.items():
+                self.assertTrue(os.path.isfile(p), f"{name} kayboldu: {p}")
+            # Mirror yeniden senkron edildi (bayat değil).
+            chk = run_env(home, {"MIRROR_DIR": os.path.join(
+                home, "Library", "Caches", "com.freebuff", "verify"),
+                "LEAN_MIRROR_DIR": os.path.join(
+                    home, "Library", "Caches", "com.freebuff", "lean_reduct")},
+                "bash", os.path.join(HERE, "sync_verify_mirror.sh"), "--check")
+            self.assertEqual(chk.returncode, 0, chk.stdout + chk.stderr)
+
+    def test_bootstrap_fail_closed_missing_src(self):
+        with tempfile.TemporaryDirectory(prefix="plist-gate-") as home:
+            # SRC env ile yok bir yola işaret et → build adımı exit 2.
+            r = run_env(home, {"SRC": os.path.join(home, "yok.html")},
+                        "bash", UPDATE_PREVIEW, "--bootstrap", home)
+            self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+            self.assertIn("kaynak yok", r.stderr)
 
 
 class TestParsePlistCheckOutput(unittest.TestCase):
