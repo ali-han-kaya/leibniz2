@@ -100,6 +100,7 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 | 2026-08-21 | feat | (ci) action_pins.json'u manifest CONFIG bölümüne kat (SHA-256) | `800d76e` |
 | 2026-08-21 | feat | --bump modu (WARN pin'lerini otomatik yükselt) | `e6abee6` |
 | 2026-08-21 | docs | AŞAMA 1 (b) adım 9'a merge-engeli smoke notu ekle | `f632f20` |
+| 2026-08-21 | fix | precheck (e) — status_checks --gh smoke'u fail-closed kapı yap | `ce0f633` |
 
 ---
 
