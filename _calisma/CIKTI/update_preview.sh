@@ -49,6 +49,7 @@
 #   update_preview.sh --start [LABEL]       # plist'i üret + launchctl bootstrap (vars. birincil)
 #   update_preview.sh --stop [LABEL|all]    # launchctl bootout
 #   update_preview.sh --remove-legacy [HOME] # legacy preview-server'ı launchd'den sök + temizle
+#   update_preview.sh --status              # her label için yüklü/PID/exit/HTTP durumu
 #   update_preview.sh --mirror             # verify mirror'ı senkron et (sync_verify_mirror.sh)
 #   update_preview.sh --mirror-check       # mirror güncel mi? (0 güncel/1 bayat/2 hata)
 #   update_preview.sh --mirror-force       # mirror'ı koşulsuz yeniden kopyala
@@ -486,6 +487,85 @@ plist_watch() {
 # fail-closed'dur: kaynak yok / senkron hatası / geçersiz plist → hata ile
 # durur (exit ≠ 0). launchctl bootstrap'i AYRI yapılır (--start) — bu mod
 # yalnızca artefaktları kurar; --start ile daemon ayağa kaldırılır.
+
+# ============================================================================
+# BÖLÜM 3b — durum göstergesi (--status)
+# =============================================================================
+# Her label için yüklü mü, PID, son exit code ve HTTP durumu tek çıktıda.
+plist_status() {
+  local prim
+  prim="$(plist_primary_label)"
+  say ""
+  say "=== Preview Sunucu Durumu ==="
+  say ""
+
+  while IFS='|' read -r label logname port interval keepalive; do
+    local loaded pid http_code dst
+    dst="$(plist_dst_for "$HOME" "$label")"
+
+    if plist_is_loaded "$label"; then
+      loaded="evet"
+    else
+      loaded="hayır"
+    fi
+
+    pid=$(launchctl list 2>/dev/null | awk -v l="$label" '$3 == l {print $1}')
+    [ -z "$pid" ] && pid="-"
+
+    http_code="-"
+    if [ "$loaded" = "evet" ]; then
+      http_code=$(curl -sf -o /dev/null -w '%{http_code}' "http://127.0.0.1:${port}/api/latest" 2>/dev/null || echo "DOWN")
+    fi
+
+    local proc_alive="hayır"
+    if [ "$pid" != "-" ] && kill -0 "$pid" 2>/dev/null; then
+      proc_alive="evet"
+    fi
+
+    say "  [$label]"
+    say "    Yüklü:    $loaded"
+    say "    PID:      $pid  (süreç: $proc_alive)"
+    say "    Port:     $port"
+    say "    Interval: ${interval}s  KeepAlive: $keepalive"
+    say "    HTTP:     $http_code"
+    say "    Plist:    $dst"
+    if [ "$label" = "$prim" ]; then
+      say "    Rol:      birincil"
+    else
+      say "    Rol:      legacy"
+    fi
+    say ""
+  done < <(plist_profiles)
+
+  # Legacy label (PLIST_PROFILES dışı)
+  local ll="$LEGACY_LABEL"
+  if [ -n "$ll" ]; then
+    local lloaded lpid lhttp
+    if plist_is_loaded "$ll"; then lloaded="evet"; else lloaded="hayır"; fi
+    lpid=$(launchctl list 2>/dev/null | awk -v l="$ll" '$3 == l {print $1}')
+    [ -z "$lpid" ] && lpid="-"
+    lhttp="-"
+    if [ "$lloaded" = "evet" ]; then
+      lhttp=$(curl -sf -o /dev/null -w '%{http_code}' "http://127.0.0.1:8000/api/latest" 2>/dev/null || echo "DOWN")
+    fi
+    say "  [$ll] (legacy)"
+    say "    Yüklü: $lloaded  PID: $lpid  HTTP: $lhttp"
+    say ""
+  fi
+
+  # Özet
+  local any_loaded=false
+  while IFS='|' read -r l _; do
+    if plist_is_loaded "$l"; then any_loaded=true; break; fi
+  done < <(plist_profiles)
+  if $any_loaded; then
+    say "  [OK] En az bir sunucu aktif (port 8000)"
+  else
+    say "  [WARN] Hicbir sunucu yuklu degil — --start ile baslatilabilir"
+  fi
+  say ""
+}
+
 bootstrap_all() {
   local home
   home="$(plist_home "${1:-}")"
@@ -569,6 +649,9 @@ case "${1:-build}" in
     ;;
   --remove-legacy)
     plist_remove_legacy "${2:-}"
+    ;;
+  --status)
+    plist_status
     ;;
   --mirror)
     "$SCRIPT_DIR/sync_verify_mirror.sh"
