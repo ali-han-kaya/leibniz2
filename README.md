@@ -183,6 +183,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-21 | feat | ia_ol_fallback_evidence.py (5 IA kaynağın kanıtı) | `a8fadb0` |
 | 2026-08-21 | feat | python3-shell denetimini manifest'e SHA-256 ile sabitle | `1f9706f` |
 | 2026-08-21 | docs | PUBLISH_SCENARIO artifact listesine python3-shell eklendi | `845206a` |
+| 2026-08-21 | refactor | check_python3_shell çoklu workflow denetimi | `1491551` |
 
 ### Regresyon notları
 

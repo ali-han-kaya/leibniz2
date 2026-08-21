@@ -119,6 +119,7 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 | 2026-08-21 | feat | ia_ol_fallback_evidence.py (5 IA kaynağın kanıtı) | `a8fadb0` |
 | 2026-08-21 | feat | python3-shell denetimini manifest'e SHA-256 ile sabitle | `1f9706f` |
 | 2026-08-21 | docs | PUBLISH_SCENARIO artifact listesine python3-shell eklendi | `845206a` |
+| 2026-08-21 | refactor | check_python3_shell çoklu workflow denetimi | `1491551` |
 
 ---
 
@@ -595,7 +596,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 --exit-status` + artifact listesi; sonuç `SONUÇ: PASS/FAIL` olarak loglanır
 (dry-run'da yalnızca önizlenir).
 
-**Job kategorileri (16 job = 8 required + 4 advisory + 3 PR-only + 1 manifest):**
+**Job kategorileri (17 job = 8 required + 5 advisory + 3 PR-only + 1 manifest):**
 
 > **Kural:** Branch protection **yalnızca A kategorisindeki** job'ları required check olarak
 > kabul eder. B (advisory) job'ları push'ta çalışır ama required değildir;
@@ -617,14 +618,15 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 | 10 | B | Plist drift check (macOS, advisory) | ✅ K12 — macOS-runner'lı, `continue-on-error` |
 | 11 | B | Mirror sync check (macOS, fail-closed) | ✅ K17 — sync sonrası `--check-mirror` GÜNCEL olmalı; drift/hata → job FAIL |
 | 12 | B | Daemon mode HTTP 200 (advisory) | ✅ daemon-modu (`PREVIEW_DAEMON=1`) üç endpoint'te 200; süreç canlı (advisory smoke) |
+| 13 | B | Refs-trend audit (advisory) | ✅ `refs-trend.json` satırları kaynak `refs-online` artifact'larıyla birebir (sahte satır/sayı drift'i/bayat trend → exit 1) |
 | | **C — PR-only (push'ta çalışmaz, PR'da çalışır)** | | |
-| 13 | C | Pre-commit P0 label gate | ✅ precommit-p0 etiketi varsa FAIL (merge bloke) |
-| 14 | C | Pre-commit P1 label gate (optional) | ✅ precommit-p1 etiketi varsa FAIL |
-| 15 | C | Commit-msg gate | ✅ commit_msg_findings.json ihlal varsa FAIL |
+| 14 | C | Pre-commit P0 label gate | ✅ precommit-p0 etiketi varsa FAIL (merge bloke) |
+| 15 | C | Pre-commit P1 label gate (optional) | ✅ precommit-p1 etiketi varsa FAIL |
+| 16 | C | Commit-msg gate | ✅ commit_msg_findings.json ihlal varsa FAIL |
 | | **D — PR-only (yorum/etiket düşürme)** | | |
-| 16 | D | Manifest PR comment | ✅ manifest.txt + config-diff PR yorumu |
+| 17 | D | Manifest PR comment | ✅ manifest.txt + config-diff PR yorumu |
 
-**Artifact listesi (22):**
+**Artifact listesi (23):**
 - `unit-tests` (CIKTI birim test logu — `test_*.py` glob'u)
 - `verify-report` (tek log: K1-K14 + pre-commit bölümü + .sha256)
 - `action-runtimes` (her action'ın runs.using denetimi JSON — node24 kapısı)
@@ -646,6 +648,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 - `plist-check` (K12 raporu + --plist-check sidecar JSON — macOS advisory job)
 - `mirror-check` (K17 raporu + --check-mirror sidecar JSON — macOS fail-closed job)
 - `daemon-http` (daemon-modu HTTP 200 test raporu + JSON — advisory smoke)
+- `audit-refs-trend` (refs-trend satırları ↔ kaynak artifact denetimi JSON — advisory)
 
 **Not:** Kapı artık `verify_delivery.py --full`'dur (K1-K14, fail-closed) ve yeşildir —
 Beth 1953 / Fosl 1998 gibi referans düzeltmeleri V5h'te yapıldı; Kalan çevrimdışı

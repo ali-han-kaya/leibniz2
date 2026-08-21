@@ -45,6 +45,12 @@ API = "https://api.github.com"
 # düzeltmesi yapıldığında buraya tek satır eklenir (denetlenebilir geçmiş).
 CHANGELOG = [
     ("2026-08-21",
+     "V5v: refs-trend denetimi tekrarlanabilir script oldu — "
+     "audit_refs_trend.py, refs-trend.json satırlarını kaynak refs-online "
+     "artifact'larıyla karşılaştırır (sahte satır / sayı / by_source drift'i "
+     "/ bayat trend → exit 1; advisory audit-refs-trend job'ı). Canlı "
+     "denetim 83/83 satır birebir PASS."),
+    ("2026-08-21",
      "V5t: Della Rocca 2010 'PSR' artık CrossRef DIŞI Handle System API'den "
      "doğrulanır — makalenin kendi DC.identifier'ı bir Handle'dır "
      "(hdl.handle.net/2027/spo.3521354.0010.007), DOI yok; kaynak sayısı "

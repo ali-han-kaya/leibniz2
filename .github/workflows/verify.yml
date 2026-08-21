@@ -1469,6 +1469,61 @@ jobs:
           retention-days: 30
 
   # ──────────────────────────────────────────────────────────────────────
+  # REFS-TREND DENETİMİ (advisory) — trend satırları ↔ kaynak artifact'lar.
+  # audit_refs_trend.py, refs_trend.py'nin ürettiği refs-trend.json'u aynı
+  # penceredeki KAYNAK refs-online artifact'larıyla karşılaştırır: sahte
+  # satır, sayı/by_source drift'i, bayat trend (kaynakta var trendde yok)
+  # → exit 1. continue-on-error: ADVISORY — build'i bloke etmez; bulgular
+  # audit-refs-trend artifact'ında. GATE_EXCLUDE'dadır (required DEĞİL).
+  audit-refs-trend:
+    name: Refs-trend audit (advisory)
+    runs-on: ubuntu-latest
+    needs: [refs-trend]
+    if: always()
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Download refs-trend artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: refs-trend
+          path: refs-trend
+          merge-multiple: true
+
+      - name: Run refs-trend audit (trend rows vs source artifacts)
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          # Trend json yoksa (refs-trend build'i advisory ve atlanabilir)
+          # exit 2 → advisory tolere eder; varsa fail-closed karşılaştır.
+          python3 _calisma/CIKTI/audit_refs_trend.py \
+            --repo "$GITHUB_REPOSITORY" \
+            --trend-json refs-trend/refs-trend.json \
+            --max-artifacts 100 --json \
+            > audit_refs_trend.json 2>&1 || true
+          cat audit_refs_trend.json
+
+      - name: Upload refs-trend audit report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: audit-refs-trend
+          path: audit_refs_trend.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # ──────────────────────────────────────────────────────────────────────
   # PRE-PUSH DENETİMİ (advisory) — AŞAMA 0 kapıları her push'ta otomatik.
   # publish_precheck.sh, docs/PUBLISH_SCENARIO.md AŞAMA 0 ön-kontrolünün tek
   # komutluk karşılığıdır. CI'da --ci modunda koşar: yerel-only kontroller
@@ -1493,9 +1548,9 @@ jobs:
     # Döngüsel bağımlılık olmasın diye kendini içermez; push'ta PR-only
     # job'lar skipped olarak yine listededir → isim eşleşmesi çalışır.
     needs: [verify, action-runtimes, budget, reports, reproducibility,
-            config-drift, repack-verify, refs-trend, precheck, plist-check,
-            daemon-http, mirror-check, label-gate, label-gate-p1,
-            commit-msg-gate, manifest-comment]
+            config-drift, repack-verify, refs-trend, audit-refs-trend,
+            precheck, plist-check, daemon-http, mirror-check, label-gate,
+            label-gate-p1, commit-msg-gate, manifest-comment]
     if: always()
     steps:
       - name: Checkout
