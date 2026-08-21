@@ -12,8 +12,10 @@ Kapsam:
 stdlib `unittest` kullanır — ek bağımlılık yok. CI'da:
     python3 -m unittest discover -s _calisma/CIKTI -p "test_preview_server.py" -v
 """
+import hashlib
 import json
 import os
+import pathlib
 import subprocess
 import sys
 import tempfile
@@ -83,6 +85,26 @@ class PersistHistoryTests(unittest.TestCase):
         ps.persist_history(_rec("2026-01-01T00:00:00Z"))
         self.assertTrue(os.path.isfile(self._path))
         self.assertFalse(os.path.exists(self._path + ".tmp"))
+
+    def test_persist_writes_sha256_sidecar(self):
+        """persist_history her yazımda .sha256 sidecar üretmeli."""
+        ps.persist_history(_rec("2026-01-01T00:00:00Z"))
+        sidecar = pathlib.Path(self._path + ".sha256")
+        self.assertTrue(sidecar.is_file())
+        content = pathlib.Path(self._path).read_text(encoding="utf-8")
+        want = hashlib.sha256(content.encode("utf-8")).hexdigest()
+        raw = sidecar.read_text(encoding="utf-8").strip()
+        self.assertEqual(raw.split()[0], want)
+        self.assertIn("history.jsonl", raw)
+
+    def test_sidecar_tracks_append(self):
+        """Sidecar her append之后 güncellenmeli."""
+        ps.persist_history(_rec("2026-01-01T00:00:00Z"))
+        ps.persist_history(_rec("2026-01-01T00:01:00Z"))
+        content = pathlib.Path(self._path).read_text(encoding="utf-8")
+        want = hashlib.sha256(content.encode("utf-8")).hexdigest()
+        sidecar = pathlib.Path(self._path + ".sha256")
+        self.assertEqual(sidecar.read_text(encoding="utf-8").split()[0], want)
 
 
 class DeadlockTests(unittest.TestCase):
