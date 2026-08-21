@@ -1459,12 +1459,41 @@ jobs:
           mkdir -p .freebuff
           bash docs/publish_precheck.sh --allow-remote --ci 2>&1 | tee .freebuff/precheck_report.txt
 
+      # status_checks.py --gh --json ham çıktısı — publish_precheck.sh içinde
+      # koşulur ama JSON orada yalnızca ayrıştırılıp atılır. Burada TEK
+      # kaynaktan ayrıca üretilip artifact'a yazılır: makine-okur kanıt
+      # (verdict/names_ok/enforcement_ok/smoke[]). GITHUB_TOKEN admin
+      # scope'u olmadığından CI'da genelde UNREADABLE döner — o da gerçek
+      # durumu belgeler (exit 1 olur, advisory olduğundan bloke etmez).
+      - name: Run status_checks --gh --json (sidecar kanıt)
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set +e
+          python3 _calisma/CIKTI/status_checks.py --gh --json \
+            > .freebuff/status_checks_gh.json 2> .freebuff/status_checks_gh.err
+          SC_GH_RC=$?
+          set -e
+          echo "exit=$SC_GH_RC" >> .freebuff/status_checks_gh.err
+          if [ -s .freebuff/status_checks_gh.json ]; then
+            python3 -c 'import json; d=json.load(open(".freebuff/status_checks_gh.json")); print("verdict:", d.get("verdict"), "| names_ok:", d.get("names_ok"), "| enforcement_ok:", d.get("enforcement_ok"))'
+          else
+            echo "status_checks --gh --json çıktı üretmedi — stderr:"
+            cat .freebuff/status_checks_gh.err
+          fi
+
       - name: Upload precheck report
         if: always()
         uses: actions/upload-artifact@v6
         with:
           name: precheck-report
-          path: .freebuff/precheck_report.txt
+          path: |
+            .freebuff/precheck_report.txt
+            .freebuff/status_checks_gh.json
+            .freebuff/status_checks_gh.err
           if-no-files-found: ignore
           retention-days: 30
 
