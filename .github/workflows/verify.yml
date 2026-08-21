@@ -122,6 +122,9 @@ jobs:
       #   test_gen_changelog.py  — conventional-commit ayrıştırma + missing/
       #     stale detection + check/update modları (README ↔ PUBLISH_SCENARIO ↔
       #     git log senkronu).
+      #   test_dryrun_summary.py — publish_wrapper.sh `--dry-run-summary`
+      #     regresyon kapısı: gen_dryrun_summary fonksiyonunu gerçek kaynaktan
+      #     ayıklayıp örnek logla koşar; markdown yapısını doğrular (OFDLINE).
       - name: Install jsonschema for unit tests
         if: always()
         shell: bash

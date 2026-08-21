@@ -44,6 +44,10 @@
 #                               (drift varsa --update + stage — update-config
 #                               deseni; commit'in kendi hash'i ancak sonraki
 #                               commit'te bilinir, bu yüzden auto-sync yapar).
+#   12) check-dryrun-summary  : publish_wrapper.sh `--dry-run-summary`
+#                               regresyon kapısı — gen_dryrun_summary
+#                               fonksiyonunu gerçek kaynaktan ayıklayıp örnek
+#                               logla koşar; markdown üretilemiyorsa bloke.
 # Herhangi bir P0/P1 bulgusu commit'i bloke eder (sıfır-dışı exit).
 #
 # Not: update-config TEK yazan hook'tur (config'i stage eder). Diğer kapılar
@@ -58,6 +62,7 @@
 #   pre-commit run check-repro-manifest
 #   pre-commit run verify-delivery-repro-manifest
 #   pre-commit run verify-delivery-github-scripts
+#   pre-commit run check-dryrun-summary
 #   pre-commit run check-changelog-sync
 #
 # update-config hariç hook'lar read-only'dir: dosya değiştirmez, yalnızca
@@ -270,6 +275,23 @@ repos:
           yapar, kapı hiç kırılmaz. Mevcut insan özetleri korunur; yalnızca
           yeni commit'ler eklenir.
         entry: bash _calisma/CIKTI/update_changelog_hook.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+        verbose: true
+
+      - id: check-dryrun-summary
+        name: Verify dry-run-summary markdown generation (regression gate)
+        description: >-
+          test_dryrun_summary.py — publish_wrapper.sh `--dry-run-summary`
+          regresyon kapısı. gen_dryrun_summary fonksiyonunu GERÇEK kaynaktan
+          (docs/publish_wrapper.sh) ayıklayıp örnek log üzerinde koşar;
+          markdown yapısı (başlık, AŞAMA başlıkları, `[DRY-RUN]` komut
+          önizlemeleri, fenced tam çıktı) üretilebiliyorsa PASS. Fonksiyon
+          taşınırsa/awk-sed bozulursa ayıklama başarısız olur → commit bloke.
+          OFFLINE, ~0.1s.
+        entry: python3 -m unittest discover -s _calisma/CIKTI -p "test_dryrun_summary.py"
         language: system
         pass_filenames: false
         always_run: true
