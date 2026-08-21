@@ -168,7 +168,7 @@
   let kLayerBadge;
   if (klayers && klayers.layers) {
     const layers = klayers.layers;
-    const layerKeys = ['K1','K2','K3','K4','K5','K6','K7','K8','K9','K10','K11','K12','K13','K14','K16'];
+    const layerKeys = ['K1','K2','K3','K4','K5','K6','K7','K8','K9','K10','K11','K12','K13','K14','K16','K17'];
     let passCount = 0, failCount = 0, skipCount = 0;
     const failedLayers = [];
     for (const key of layerKeys) {
@@ -231,7 +231,7 @@
   const hasLineageFail = lineage && !lineage.ok;
   let hasKlayersFail = false;
   if (klayers && klayers.layers) {
-    for (const key of ['K1','K2','K3','K4','K5','K6','K7','K8','K9','K10','K11','K12','K13','K14','K16']) {
+    for (const key of ['K1','K2','K3','K4','K5','K6','K7','K8','K9','K10','K11','K12','K13','K14','K16','K17']) {
       const lyr = klayers.layers[key];
       if (lyr && lyr.status === 'FAIL') { hasKlayersFail = true; break; }
     }

@@ -46,6 +46,10 @@ Kullanım (tek komut):
     python3 verify_delivery.py --check-history ~/Library/Caches/com.freebuff/preview/history.jsonl
                                               # K15: history.jsonl ↔ .sha256 sidecar bütünlüğü
                                               #      (preview_server.py persist_history çıktısı)
+    python3 verify_delivery.py --check-mirror
+                                              # K17: sync_verify_mirror.sh --check exit kodunu
+                                              #      denetle (0=GÜNCEL, 1=BAYAT, 2=hata) —
+                                              #      mirror bayatlığı fail-closed P1
     python3 verify_delivery.py --full          # tüm katmanlar: K1-K14 + referans denetimi + Z3 + Lean
                                               #   (--check-references + --symbolic-proof +
                                               #    --lean-proof + --check-lineage +
@@ -101,6 +105,12 @@ Doğrulama zinciri (Katman 0..14):
                ÇIKTI eşleşmesini denetler (hangi çağrı/body/comment_id/setFailed).
                Script çıkarımı davranışı değiştirirse P0/P1. node yoksa P0
                (fail-closed, --check-github-scripts, --full'a dahil).
+  K17 Mirror   sync_verify_mirror.sh --check exit kodu: 0=GÜNCEL,
+               1=BAYAT (repo ↔ TCC-safe mirror drift), 2=hata (kaynak yok /
+               kullanım hatası). BAYAT/hata → P1 (fail-closed). macOS'a özgü
+               (mirror ~/Library/Caches/com.freebuff/verify, launchd GUI
+               agent rotası) — --full'a dahil değil, açıkça --check-mirror ile
+               koşulur.
 """
 import argparse
 import concurrent.futures
@@ -166,6 +176,7 @@ LAYER_LABELS = {
     "K14": "Cleanup kaydı",
     "K15": "History sidecar",
     "K16": "GScripts self-test",
+    "K17": "Mirror sync",
 }
 
 # K0-K7 çekirdek katmanlar: --full olsun olmasın her run'da koşar.
@@ -182,6 +193,7 @@ _OPTIONAL_LAYERS = {
     "K14": lambda a: a.check_cleanup,
     "K15": lambda a: bool(a.check_history),
     "K16": lambda a: a.check_github_scripts,
+    "K17": lambda a: a.check_mirror,
 }
 
 
@@ -196,9 +208,13 @@ def build_layers_summary(args, findings):
     """
     by_layer = {}
     for f in findings:
-        layer = f.get("check", "").split("-")[0]
-        if layer in LAYER_LABELS:
-            by_layer.setdefault(layer, []).append(f)
+        # Katman anahtarı öncelikle id'den ("K0-STALE" → "K0"), yoksa
+        # check'ten (testlerde "K0-TOOLKIT" biçimi) türetilir. check alanı
+        # insan-okunur etiket taşır ("K0 bayat zip") — ondan türetmek
+        # gruplamayı bozardı (bulgular hiçbir katmana düşmez, hep PASS).
+        key = f.get("id", "").split("-")[0] or f.get("check", "").split("-")[0]
+        if key in LAYER_LABELS:
+            by_layer.setdefault(key, []).append(f)
     layers = {}
     for layer in LAYER_LABELS:
         if layer in _CORE_LAYERS:
@@ -2686,6 +2702,52 @@ def check_github_scripts_self_test(add):
     return True, summary or f"battery exit=0"
 
 
+def check_mirror_sync(add):
+    """K17: sync_verify_mirror.sh --check exit kodunu denetle (fail-closed).
+
+    sync_verify_mirror.sh --check sözleşmesi:
+      0 = GÜNCEL   (repo ↔ TCC-safe mirror birebir; launchd GUI agent rotası)
+      1 = BAYAT    (en az bir dosya farklı/eksik → mirror drift)
+      2 = hata     (kaynak dosyalardan biri yok, kullanım hatası)
+    BAYAT (1) ve hata (2) → P1 (fail-closed). Script yoksa P1. macOS'a
+    özgü bir katmandır (mirror ~/Library/Caches/com.freebuff/verify) —
+    --full'a bilerek dahil DEĞİLDİR, açıkça --check-mirror ile koşulur
+    (K12 plist deseniyle aynı). Döndürür (ok: bool, detail: str, rc: int,
+    txt: str).
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    script = os.path.join(here, "sync_verify_mirror.sh")
+    if not os.path.isfile(script):
+        add("P1", "K17-MIRROR", "K17 mirror sync",
+            "sync_verify_mirror.sh yok", script)
+        return False, "sync_verify_mirror.sh yok", None, ""
+    try:
+        r = subprocess.run(["bash", script, "--check"],
+                           capture_output=True, text=True, timeout=120)
+        rc, txt = r.returncode, (r.stdout + r.stderr).strip()
+    except (OSError, subprocess.TimeoutExpired) as e:
+        add("P1", "K17-MIRROR", "K17 mirror sync",
+            f"çalıştırılamadı: {e}", script)
+        return False, f"çalıştırılamadı: {e}", None, ""
+    if rc == 0:
+        detail = "GÜNCEL — repo ↔ mirror birebir (sync_verify_mirror.sh --check)"
+        return True, detail, rc, txt
+    if rc == 1:
+        detail = "BAYAT — mirror repo'dan farklı (sync_verify_mirror.sh çalıştırın)"
+        add("P1", "K17-MIRROR", "K17 mirror sync",
+            "mirror bayat (repo ↔ mirror drift)", txt)
+        return False, detail, rc, txt
+    if rc == 2:
+        detail = "hata — kaynak yok / kullanım hatası (sync_verify_mirror.sh --check)"
+        add("P1", "K17-MIRROR", "K17 mirror sync",
+            f"sync_verify_mirror.sh --check exit 2 (hata)", txt)
+        return False, detail, rc, txt
+    detail = f"beklenmedik exit kodu {rc}"
+    add("P1", "K17-MIRROR", "K17 mirror sync",
+        f"beklenmedik exit kodu {rc}", txt)
+    return False, detail, rc, txt
+
+
 def _run_quiet(cmd, timeout=10):
     """Kısa bir komutu çalıştır, ilk satırı döndür (yoksa/hata → None)."""
     try:
@@ -2867,6 +2929,14 @@ def main():
                          "mock girdi + çıktı eşleşmesi (REST çağrısı/body/"
                          "comment_id/setFailed); script davranışı değişirse "
                          "fail-closed P0/P1 (--full'a dahil)")
+    ap.add_argument("--check-mirror", action="store_true",
+                    help="K17: sync_verify_mirror.sh --check exit kodunu denetle "
+                         "(0=GÜNCEL, 1=BAYAT, 2=hata; macOS'a özgü mirror, "
+                         "--full'a dahil değil)")
+    ap.add_argument("--mirror-out", default=None,
+                    help="K17: sync_verify_mirror.sh --check ham çıktısını "
+                         "K17 raporuyla birlikte ayrı bir sidecar JSON'a yaz "
+                         "(CI artifact + run summary için)")
     ap.add_argument("--full", action="store_true",
                     help="Tüm katmanları tek komutla koş: --check-references + "
                          "--symbolic-proof + --lean-proof + --check-lineage + "
@@ -3502,6 +3572,33 @@ def main():
             print(f"[K16] github-scripts self-test: "
                   f"{'PASS' if gok else 'FAIL'} — {gdetail}")
 
+    # ---- K17: verify mirror senkronu (--check-mirror) ----
+    # sync_verify_mirror.sh --check exit kodu: 0=GÜNCEL, 1=BAYAT, 2=hata.
+    # Mirror, launchd GUI agent'ının TCC-safe yoldan verify_delivery.py'yi
+    # koştuğu operasyonel artefakttır; repo ile drift → P1 (fail-closed).
+    # macOS'a özgüdür (mirror ~/Library/Caches/com.freebuff/verify) — Linux
+    # CI'da mirror yok (exit 1) olacağından --full'a bilerek dahil DEĞİLDİR;
+    # açıkça --check-mirror ile koşulur (K12 plist deseniyle aynı).
+    mirror_report = None
+    if args.check_mirror:
+        mok, mdetail, mrc, mtxt = check_mirror_sync(add)
+        mirror_report = {"layer": "K17", "ok": mok, "exit": mrc,
+                         "detail": mdetail, "output": mtxt}
+        if not args.json:
+            print(f"[K17] mirror sync: "
+                  f"{'PASS' if mok else 'FAIL'} (exit={mrc}) — {mdetail}")
+        # Sidecar: sync_verify_mirror.sh --check ham çıktısı + K17 raporu.
+        if args.mirror_out:
+            try:
+                with open(args.mirror_out, "w", encoding="utf-8") as mf:
+                    json.dump(mirror_report, mf, indent=2, ensure_ascii=False)
+                if not args.json:
+                    print(f"[K17] mirror sidecar'ı yazıldı: {args.mirror_out} "
+                          f"(exit={mrc})")
+            except OSError as e:
+                add("P1", "MIRROR-OUT", "Mirror sidecar",
+                    f"yazılamadı: {args.mirror_out}", str(e))
+
     # ---- Bütçe kalkanı: iki yöntem yan yana ----
     # (a) Evrensel: token ≈ bytes/4      (v3_verify.py H4, bağımsız referans)
     # (b) Ağırlıklı: token ≈ bytes/r_i    (dosya tipine göre bytes-per-token)
@@ -3640,6 +3737,7 @@ def main():
         "github_scripts": github_scripts_report,
         "lineage": lineage_report,
         "plist": plist_report,
+        "mirror": mirror_report,
         "cleanup": cleanup_report,
         "history_sidecar": history_sidecar_report,
         # Per-katman PASS/FAIL/SKIP — dashboard'un "K1-K7" rozeti bunu
@@ -3649,7 +3747,7 @@ def main():
     }
 
     # ---- K-katman özeti sidecar (run summary için) ----
-    # findings tek kaynağından K0-K16'nın PASS/FAIL/SKIP durumunu türetir;
+    # findings tek kaynağından K0-K17'nin PASS/FAIL/SKIP durumunu türetir;
     # verify job'unun GITHUB_STEP_SUMMARY'sinde K1-K10 bölümlerini üretmek
     # için run_summary_klayers.py tarafından okunur.
     if args.klayers_out:

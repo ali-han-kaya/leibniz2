@@ -121,6 +121,7 @@ K8 + K9 + soy hattı + K11 + K13 + K14; K10 ve K12 ayrıca çağrılır.
 | K12 | LaunchAgent plist şablonu (`--check-plist`) | PASS (yerel macOS; Linux CI'da koşmaz) |
 | K13 | gen_repro_manifest.py self-testi (`--check-repro-manifest`) — mock üretimde manifest.sha256 ↔ manifest.json eşleşmesi de denetlenir (K10 ile ortak helper) | PASS |
 | K14 | Cleanup kaydı: M0 §10 silme/taşıma kayıtları (`--check-cleanup`) | PASS |
+| K17 | Mirror sync: `sync_verify_mirror.sh --check` (0=GÜNCEL, 1=BAYAT, 2=hata; `--check-mirror`) | PASS (yerel macOS; Linux CI'da koşmaz) |
 
 **K14 bulguları (yeni katman — commit `[K14]`):** `cleanup_log.json` (M0 §10
 ile aynı kaynak) okunur ve §10'daki her silme/taşıma kaydı dosya sistemiyle

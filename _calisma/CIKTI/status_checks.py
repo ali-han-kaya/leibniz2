@@ -51,6 +51,7 @@ GATE_EXCLUDE = {
     "label-gate-p1",        # PR-only: P1 etiket opsiyonel blokaj
     "commit-msg-gate",      # PR-only: commit-msg ihlal blokajı
     "plist-check",          # macOS-advisory: push'ta çalışmaz
+    "mirror-check",         # macOS: sync sonrası K17 fail-closed (advisory)
 }
 
 

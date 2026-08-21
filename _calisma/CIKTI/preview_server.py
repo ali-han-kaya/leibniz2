@@ -96,7 +96,7 @@ LATEST = {
     "z3_total": None,           # K8 Z3: toplam (passed + failed)
     "lean_ok": None,            # K9 Lean: stderr'deki [K9] PASS/FAIL (True/False/None=koşulmadı)
     "lean_detail": None,        # K9 Lean: [K9] satırındaki ayrıntı metni (varsa)
-    "layers": None,             # K0-K16 per-katman PASS/FAIL/SKIP (JSON'dan; dashboard "K1-K7" rozeti)
+    "layers": None,             # K0-K17 per-katman PASS/FAIL/SKIP (JSON'dan; dashboard "K1-K7" rozeti)
     "lineage_summary": None,    # soy hattı özeti: {ok, count, current_note, current_hash_prefix}
     "lineage_ok": None,          # skaler trend alanı (True/False/None)
     "lineage_count": None,       # skaler trend alanı (int/None)
@@ -163,8 +163,8 @@ def _compute_status_board():
     # 4. Soy hattı: lineage_summary.ok → PASS
     lin_ok = LATEST.get("lineage_ok")
 
-    # 5. K katmanları: K8-K16 (K8 Z3, K9 Lean, K10-K16)
-    ext = ["K8", "K9", "K10", "K11", "K12", "K13", "K14", "K16"]
+    # 5. K katmanları: K8-K17 (K8 Z3, K9 Lean, K10-K17)
+    ext = ["K8", "K9", "K10", "K11", "K12", "K13", "K14", "K16", "K17"]
     ext_statuses = [(ls.get(k) or {}).get("status") for k in ext]
     if any(s == "FAIL" for s in ext_statuses):
         kl_ok = False

@@ -1,0 +1,195 @@
+#!/usr/bin/env python3
+"""K17 (verify mirror sync) kapısının birim testleri.
+
+İki kapı birlikte test edilir — her ikisi de fake MIRROR_DIR/LEAN_MIRROR_DIR
+altında koşar (gerçek ~/Library/Caches/com.freebuff'a DOKUNMAZ, bu yüzden
+Linux CI'da da çalışır):
+
+  1) sync_verify_mirror.sh --check (K17 kapısının sözleşmesi):
+       0 = GÜNCEL  (repo ↔ mirror birebir)
+       1 = BAYAT   (en az bir dosya farklı/eksik)
+       2 = hata    (kaynak dosyalardan biri yok / kullanım hatası)
+
+  2) verify_delivery.py --check-mirror (K17 katmanı):
+       exit 0 + GÜNCEL → PASS; BAYAT/hata → P1 bulgu (fail-closed);
+       --mirror-out ham çıktı + K17 raporunu tek sidecar JSON'a yazar.
+"""
+import json
+import os
+import subprocess
+import sys
+import tempfile
+import unittest
+from unittest import mock
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+SYNC_MIRROR = os.path.join(HERE, "sync_verify_mirror.sh")
+VERIFY_DELIVERY = os.path.join(HERE, "verify_delivery.py")
+
+
+def run(env_extra, *args):
+    """Belirtilen env override'larıyla komutu koş; CompletedProcess döner."""
+    env = dict(os.environ)
+    env.update(env_extra)
+    return subprocess.run(list(args), env=env, capture_output=True,
+                          text=True, timeout=300)
+
+
+def make_mirror(work):
+    """Fake mirror dizinleri kurar; (mirror_dir, lean_mirror_dir) döner."""
+    mirror_dir = os.path.join(work, "verify-mirror")
+    lean_mirror_dir = os.path.join(work, "lean-mirror")
+    return mirror_dir, lean_mirror_dir
+
+
+def sync_env(work):
+    """sync_verify_mirror.sh'i fake mirror'a yönlendiren env sözlüğü."""
+    mirror_dir, lean_mirror_dir = make_mirror(work)
+    return {"MIRROR_DIR": mirror_dir, "LEAN_MIRROR_DIR": lean_mirror_dir}
+
+
+class TestSyncMirrorCheckExitCodes(unittest.TestCase):
+    """sync_verify_mirror.sh --check → 0=GÜNCEL / 1=BAYAT / 2=hata."""
+
+    def test_exit_0_guncel(self):
+        with tempfile.TemporaryDirectory(prefix="mirror-k17-") as work:
+            env = sync_env(work)
+            # Senkron et → mirror repo ile birebir olur.
+            syn = run(env, "bash", SYNC_MIRROR)
+            self.assertEqual(syn.returncode, 0, syn.stderr)
+            chk = run(env, "bash", SYNC_MIRROR, "--check")
+            self.assertEqual(chk.returncode, 0, chk.stdout + chk.stderr)
+            self.assertIn("SONUÇ: mirror güncel", chk.stdout)
+
+    def test_exit_1_bayat(self):
+        with tempfile.TemporaryDirectory(prefix="mirror-k17-") as work:
+            env = sync_env(work)
+            syn = run(env, "bash", SYNC_MIRROR)
+            self.assertEqual(syn.returncode, 0, syn.stderr)
+            # Mirror'daki bir dosyayı boz (içerik repo'dan farklı olsun).
+            mirror_dir, _ = make_mirror(work)
+            target = os.path.join(mirror_dir, "verify_delivery.py")
+            self.assertTrue(os.path.isfile(target), target)
+            with open(target, "a", encoding="utf-8") as f:
+                f.write("\n# mirror drift\n")
+            chk = run(env, "bash", SYNC_MIRROR, "--check")
+            self.assertEqual(chk.returncode, 1, chk.stdout + chk.stderr)
+            self.assertIn("BAYAT", chk.stdout)
+
+    def test_exit_2_kaynak_yok(self):
+        with tempfile.TemporaryDirectory(prefix="mirror-k17-") as work:
+            # ROOT'u boş bir dizine çevir → CIKTI kaynak dosyaları yok.
+            empty = os.path.join(work, "empty-root")
+            os.makedirs(empty)
+            env = dict(os.environ)
+            env["ROOT"] = empty
+            chk = run(env, "bash", SYNC_MIRROR, "--check")
+            self.assertEqual(chk.returncode, 2, chk.stdout + chk.stderr)
+            self.assertIn("HATA", chk.stderr)
+
+    def test_exit_2_bilinmeyen_mod(self):
+        with tempfile.TemporaryDirectory(prefix="mirror-k17-") as work:
+            chk = run(sync_env(work), "bash", SYNC_MIRROR, "--nope")
+            self.assertEqual(chk.returncode, 2, chk.stdout + chk.stderr)
+            self.assertIn("bilinmeyen mod", chk.stderr)
+
+
+class TestVerifyDeliveryK17(unittest.TestCase):
+    """verify_delivery.py --check-mirror → K17 P1 (fail-closed) + sidecar."""
+
+    def test_k17_guncel_pass(self):
+        with tempfile.TemporaryDirectory(prefix="mirror-k17-") as work:
+            env = sync_env(work)
+            syn = run(env, "bash", SYNC_MIRROR)
+            self.assertEqual(syn.returncode, 0, syn.stderr)
+            out = os.path.join(work, "mirror_report.json")
+            r = run(env, sys.executable, VERIFY_DELIVERY, "--check-mirror",
+                    "--mirror-out", out)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertIn("[K17] mirror sync: PASS", r.stdout)
+            with open(out, encoding="utf-8") as f:
+                d = json.load(f)
+            self.assertEqual(d["layer"], "K17")
+            self.assertTrue(d["ok"])
+            self.assertEqual(d["exit"], 0)
+
+    def test_k17_bayat_p1_fail_closed(self):
+        with tempfile.TemporaryDirectory(prefix="mirror-k17-") as work:
+            env = sync_env(work)
+            syn = run(env, "bash", SYNC_MIRROR)
+            self.assertEqual(syn.returncode, 0, syn.stderr)
+            mirror_dir, _ = make_mirror(work)
+            target = os.path.join(mirror_dir, "verify_delivery.py")
+            with open(target, "a", encoding="utf-8") as f:
+                f.write("\n# mirror drift\n")
+            out = os.path.join(work, "mirror_report.json")
+            r = run(env, sys.executable, VERIFY_DELIVERY, "--check-mirror",
+                    "--mirror-out", out)
+            # P1 bulgu → genel exit 1 (fail-closed).
+            self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+            self.assertIn("[P1] K17 mirror sync", r.stdout)
+            with open(out, encoding="utf-8") as f:
+                d = json.load(f)
+            self.assertFalse(d["ok"])
+            self.assertEqual(d["exit"], 1)
+            self.assertIn("BAYAT", d["detail"])
+
+    def test_k17_kaynak_yok_p1(self):
+        with tempfile.TemporaryDirectory(prefix="mirror-k17-") as work:
+            empty = os.path.join(work, "empty-root")
+            os.makedirs(empty)
+            env = dict(os.environ)
+            env["ROOT"] = empty
+            r = run(env, sys.executable, VERIFY_DELIVERY, "--check-mirror")
+            self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+            self.assertIn("[P1] K17 mirror sync", r.stdout)
+
+    def test_k17_script_yok_p1(self):
+        # check_mirror_sync, script yolunu __file__'a göre sabit hesaplar;
+        # os.path.isfile'i patch'leyerek script-yok dalını uyarırız.
+        sys.path.insert(0, HERE)
+        import verify_delivery as vd  # noqa: E402
+        with tempfile.TemporaryDirectory(prefix="mirror-k17-") as work:
+            env = sync_env(work)
+            script = os.path.join(HERE, "sync_verify_mirror.sh")
+
+            def fake_isfile(p):
+                if p == script:
+                    return False
+                return os.path.isfile(p)
+
+            with mock.patch.object(vd.os.path, "isfile", side_effect=fake_isfile):
+                findings = []
+                add = lambda prio, cid, label, issue, evidence="": findings.append(
+                    {"priority": prio, "check": cid, "issue": issue,
+                     "evidence": evidence})
+                ok, detail, rc, txt = vd.check_mirror_sync(add)
+            self.assertFalse(ok)
+            self.assertEqual(rc, None)
+            self.assertIn("sync_verify_mirror.sh yok", detail)
+            self.assertTrue(any(f["check"] == "K17-MIRROR" for f in findings))
+
+
+class TestMirrorOutSidecar(unittest.TestCase):
+    """--mirror-out: --check-mirror ham çıktısı + K17 raporu tek JSON'da."""
+
+    def test_sidecar_contains_output_and_report(self):
+        with tempfile.TemporaryDirectory(prefix="mirror-k17-") as work:
+            env = sync_env(work)
+            syn = run(env, "bash", SYNC_MIRROR)
+            self.assertEqual(syn.returncode, 0, syn.stderr)
+            out = os.path.join(work, "mirror_report.json")
+            r = run(env, sys.executable, VERIFY_DELIVERY, "--check-mirror",
+                    "--mirror-out", out)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            with open(out, encoding="utf-8") as f:
+                d = json.load(f)
+            # K17 raporu (layer + ok + exit + detail) VE ham --check çıktısı
+            # (SONUÇ satırı) sidecar'da olmalı.
+            self.assertEqual(d["layer"], "K17")
+            self.assertTrue(d["ok"])
+            self.assertIn("SONUÇ: mirror güncel", d["output"])
+
+
+if __name__ == "__main__":
+    unittest.main()

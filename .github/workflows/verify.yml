@@ -1550,3 +1550,81 @@ jobs:
             plist_report.json
           if-no-files-found: ignore
           retention-days: 30
+
+  # MIRROR SYNC CHECK (macOS, fail-closed) — sync_verify_mirror.sh --check
+  # (K17). launchd GUI agent'ı TCC nedeniyle Desktop altını okuyamaz;
+  # verify mirror'ı (~/Library/Caches/com.freebuff/verify) bunu aşar. K17,
+  # repo ↔ mirror drift'ini fail-closed denetler: BAYAT (exit 1) veya hata
+  # (exit 2) → P1 → verify_delivery.py exit 1 → job FAIL.
+  #
+  # CI rotası: gerçek TCC cache'ine dokunmamak için MIRROR_DIR/LEAN_MIRROR_DIR
+  # RUNNER_TEMP altına yönlendirilir; önce sync (mirror'ı repo'dan kur), sonra
+  # --check-mirror GÜNCEL (exit 0) olmalı. Mirror kurulamıyorsa veya check
+  # drift bulursa job kırılır (fail-closed). macOS'a özgüdür; --full'a
+  # bilerek dahil DEĞİLDİR (K12 plist deseniyle aynı).
+  mirror-check:
+    name: Mirror sync check (macOS, fail-closed)
+    runs-on: macos-latest
+    needs: [verify]
+    if: always()
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      # Mirror'ı CI'da kur: RUNNER_TEMP altına senkron et (gerçek TCC
+      # cache'ine dokunmaz). Kaynak dosyalardan biri eksikse sync exit 2
+      # → job fail (fail-closed, validate_sources kapısı).
+      - name: Sync verify mirror (RUNNER_TEMP)
+        id: sync
+        run: |
+          set -euo pipefail
+          export MIRROR_DIR="$RUNNER_TEMP/verify-mirror"
+          export LEAN_MIRROR_DIR="$RUNNER_TEMP/lean-mirror"
+          echo "MIRROR_DIR=$MIRROR_DIR" >> "$GITHUB_ENV"
+          echo "LEAN_MIRROR_DIR=$LEAN_MIRROR_DIR" >> "$GITHUB_ENV"
+          bash _calisma/CIKTI/sync_verify_mirror.sh --force
+
+      # K17 kapısı: sync sonrası mirror GÜNCEL (exit 0) olmalı. BAYAT/hata
+      # → P1 → exit 1 → fail-closed. --mirror-out: ham çıktı + K17 raporu
+      # tek sidecar JSON'a yazılır (mirror_report.json) — artifact'ta
+      # makine-okunur.
+      - name: Run K17 --check-mirror (sync_verify_mirror.sh --check)
+        id: k17
+        run: |
+          set -euo pipefail
+          python3 _calisma/CIKTI/verify_delivery.py --check-mirror \
+            --mirror-out mirror_report.json \
+            2>&1 | tee -a mirror_check_report.txt
+          rc=${PIPESTATUS[0]}
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          echo "K17 --check-mirror exit: $rc"
+
+      - name: Write mirror check to run summary
+        if: always()
+        run: |
+          {
+            echo "## Mirror sync check (macOS)"
+            echo ""
+            echo "- K17 --check-mirror: exit \`${{ steps.k17.outputs.rc }}\`"
+            echo '```'
+            cat mirror_check_report.txt 2>/dev/null || echo '(rapor yok)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload mirror check report + sidecar JSON
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: mirror-check
+          path: |
+            mirror_check_report.txt
+            mirror_report.json
+          if-no-files-found: ignore
+          retention-days: 30

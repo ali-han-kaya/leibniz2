@@ -85,6 +85,7 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 | 2026-08-21 | docs | §9 oturum 3 denetim kaydı | `c6a221c` |
 | 2026-08-21 | feat | (ci) --dry-run-summary regresyon kapısı (test_dryrun_summary.py) | `b5327e5` |
 | 2026-08-21 | refs | V5n satırını refs-trend changelog'una işle (54→56) | `4216895` |
+| 2026-08-21 | refs | Della Rocca 2010'ı Handle System API ile doğrula (V5t) | `a124e66` |
 
 ---
 
@@ -569,14 +570,15 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 | | **B — Advisory (push'ta çalışır, required değil)** | | |
 | 9 | B | Publish precheck (AŞAMA 0, advisory) | ✅ AŞAMA 0 kapıları otomatik denetlenir (`continue-on-error`) |
 | 10 | B | Plist drift check (macOS, advisory) | ✅ K12 — macOS-runner'lı, `continue-on-error` |
+| 11 | B | Mirror sync check (macOS, fail-closed) | ✅ K17 — sync sonrası `--check-mirror` GÜNCEL olmalı; drift/hata → job FAIL |
 | | **C — PR-only (push'ta çalışmaz, PR'da çalışır)** | | |
-| 11 | C | Pre-commit P0 label gate | ✅ precommit-p0 etiketi varsa FAIL (merge bloke) |
-| 12 | C | Pre-commit P1 label gate (optional) | ✅ precommit-p1 etiketi varsa FAIL |
-| 13 | C | Commit-msg gate | ✅ commit_msg_findings.json ihlal varsa FAIL |
+| 12 | C | Pre-commit P0 label gate | ✅ precommit-p0 etiketi varsa FAIL (merge bloke) |
+| 13 | C | Pre-commit P1 label gate (optional) | ✅ precommit-p1 etiketi varsa FAIL |
+| 14 | C | Commit-msg gate | ✅ commit_msg_findings.json ihlal varsa FAIL |
 | | **D — PR-only (yorum/etiket düşürme)** | | |
-| 14 | D | Manifest PR comment | ✅ manifest.txt + config-diff PR yorumu |
+| 15 | D | Manifest PR comment | ✅ manifest.txt + config-diff PR yorumu |
 
-**Artifact listesi (19):**
+**Artifact listesi (20):**
 - `unit-tests` (CIKTI birim test logu — `test_*.py` glob'u)
 - `verify-report` (tek log: K1-K14 + pre-commit bölümü + .sha256)
 - `action-runtimes` (her action'ın runs.using denetimi JSON — node24 kapısı)
@@ -595,12 +597,15 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 - `refs-trend` (run'lar arası çevrimiçi referans zaman serisi)
 - `precheck-report` (AŞAMA 0 ön-kontrol logu — advisory, her push'ta)
 - `plist-check` (K12 raporu + --plist-check sidecar JSON — macOS advisory job)
+- `mirror-check` (K17 raporu + --check-mirror sidecar JSON — macOS fail-closed job)
 
 **Not:** Kapı artık `verify_delivery.py --full`'dur (K1-K14, fail-closed) ve yeşildir —
 Beth 1953 / Fosl 1998 gibi referans düzeltmeleri V5h'te yapıldı; Kalan çevrimdışı
 kaynaklar `refs-online`'da advisory olarak izlenir (kapıyı kırmaz). K12 (plist)
 `--full`'a dahil değildir — macOS'a özgü olduğundan ayrı `plist-check` advisory
-job'ında koşar (Linux runner'larında SKIP).
+job'ında koşar (Linux runner'larında SKIP). Aynı şekilde K17 (mirror sync)
+`--full`'a dahil değildir — ayrı `mirror-check` macOS job'ında fail-closed koşar
+(sync sonrası GÜNCEL olmalı; repo ↔ mirror drift'i P1 → job FAIL).
 
 ---
 
