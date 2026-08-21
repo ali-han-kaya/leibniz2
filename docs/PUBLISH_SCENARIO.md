@@ -181,7 +181,7 @@ bash docs/publish_precheck.sh --allow-remote
 # 2) Push (kapılar yeşilse)
 git push origin main
 
-# 3) CI'ı izle (13 job — K1-K14 + action-runtimes + budget + plist-check + label-gate-p1 + ...)
+# 3) CI'ı izle (14 job — K1-K14 + action-runtimes + budget + plist-check + label-gate-p1 + ...)
 RUN_ID=$(gh run list --limit 1 --json databaseId -q '.[0].databaseId')
 gh run watch $RUN_ID --exit-status
 
@@ -196,7 +196,7 @@ gh api "repos/ali-han-kaya/leibniz2/actions/runs/$RUN_ID/artifacts" \
 > atlanır. Önce `--dry-run` ile önizle.
 >
 > **AŞAMA 1 (b) tamamlandıysa** 4. adıma ek olarak:
-> `python3 _calisma/CIKTI/status_checks.py --gh` → `SONUÇ: PASS` (10 check +
+> `python3 _calisma/CIKTI/status_checks.py --gh` → `SONUÇ: PASS` (8 check +
 > merge engeli smoke) — koruma/check eşleşmesini canlı doğrular.
 
 Her adımın ayrıntısı aşağıdaki AŞAMA bölümlerindedir; bu döngü onların günlük
@@ -400,7 +400,7 @@ open "https://github.com/ali-han-kaya/leibniz2/settings/branches"
 9. **Doğrula (otomatik):** koruma kurulduktan sonra:
    ```bash
    python3 _calisma/CIKTI/status_checks.py --gh
-   # SONUÇ: PASS — 10 check birebir eşleşiyor (workflow ↔ GitHub)
+   # SONUÇ: PASS — 8 check birebir eşleşiyor (workflow ↔ GitHub)
    ```
    Eksik/fazla check → exit 1 (fail-closed): listeyi `status_checks.py` çıktısıyla
    eşitle veya workflow'u güncelle.
@@ -444,7 +444,7 @@ etikete göre yanlış geçmez/bloke etmez.
 ```bash
 python3 _calisma/CIKTI/status_checks.py
 # → listede "Pre-commit P0 label gate" ve "Pre-commit P1 label gate (optional)"
-#   (toplam 10 check)
+#   (toplam 8 check)
 ```
 
 **Davranış tablosu (P0 — zorunlu):**
