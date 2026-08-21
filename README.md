@@ -107,3 +107,51 @@ config_combined_sha256: ffcdf1aa8097b4442163a3609238ccbe8910e853900922cd3ea054e7
 Teslim kaynak dizinleri (`_calisma/TESLIM/`, `_calisma/V5_ICERIK/`,
 `_calisma/TOOLKIT/`) kasıtlı olarak commit edilmez — içerik zip'lerin
 içindedir ve `unzip` ile yeniden üretilebilir.
+
+## Değişiklik Geçmişi (repo-level changelog)
+
+> Her satır `git show <commit>` ile denetlenebilir. Yayın öncesi denetim:
+> [`docs/PRE_PUSH_DENETIM_RAPORU.md`](docs/PRE_PUSH_DENETIM_RAPORU.md).
+> Yayın senaryosu: [`docs/PUBLISH_SCENARIO.md`](docs/PUBLISH_SCENARIO.md).
+
+| Tarih | Kategori | Değişiklik | Commit |
+|---|---|---|---|
+| 2026-08-17 | teslim | İlk teslim: V5 zip + sidecar + manifest + verify_delivery.py (K1-K7) | `a3544d8` |
+| 2026-08-17 | ispat | Z3 sembolik ispat (12/12) + `symbolic_proof_z3.py` | `a3544d8` |
+| 2026-08-17 | ispat | Lean 4 reduct-invariance (8 teorem, Mathlib-free) | `a3544d8` |
+| 2026-08-18 | ci | GitHub Actions workflow (3 kapı: verify + Z3 + lake build) | `a3544d8` |
+| 2026-08-18 | ci | Bütçe kalkanı + `verify_delivery.config.json` + statik raporlar | `5d62685` |
+| 2026-08-18 | ci | Reproducibility manifest (K10, SHA-256 + manifest.sha256) | `5d62685` |
+| 2026-08-18 | history | Test-marker commit'leri squash ile ezildi (`d863977`/`991473d`) | `0fab281` |
+| 2026-08-18 | ci | `--check-references` (CrossRef/SEP çevrimiçi) | `a3544d8` |
+| 2026-08-18 | publish | `PUBLISH_SCENARIO.md` + `publish_wrapper.sh` (tek komut) | `a3544d8` |
+| 2026-08-18 | publish | `status_checks.py` — required check adları workflow'dan tek kaynaktan | `b4f0f6c` |
+| 2026-08-18 | ci | Repack determinism + sidecar sync (`repack_delivery.py --verify`) | `60a8aed` |
+| 2026-08-19 | ci | K0 stale-zip taraması (recursive, `_calisma/` altı) | `e3aa72a` |
+| 2026-08-19 | ci | K11 config drift (`gen_config.py --dry-run`) | `a3544d8` |
+| 2026-08-19 | ci | K12 plist drift (macOS advisory) | `231844e` |
+| 2026-08-19 | ci | K13 commit-msg gate + `setup_commit_hooks.sh` | `18ce1df` |
+| 2026-08-19 | ci | K14 cleanup katmanı (silme/taşıma kayıtları) | `716da90` |
+| 2026-08-19 | ci | K15 history.jsonl ↔ `.sha256` sidecar | `a3544d8` |
+| 2026-08-19 | ci | K16 github-scripts self-test (mock fixture'lar) | `18ce1df` |
+| 2026-08-19 | publish | `--ci-simulate` modu (`publish_wrapper.sh`) | `a309b23` |
+| 2026-08-19 | refs | Çevrimiçi referans denetimi 54/54 (OpenLibrary + CrossRef + SEP) | `0057e22` |
+| 2026-08-20 | ci | `consolidate_summary.py` (run summary 5 bölüm → tek kaynak) | `91af275` |
+| 2026-08-20 | ci | `PRECOMMIT_RAPORU.json` + JSON Schema doğrulaması | `683b3f7` |
+| 2026-08-20 | ci | actionlint pre-commit + CI advisory (YAML yapışık yakalama) | `0f458b5` |
+| 2026-08-20 | ci | `check-action-pins` (action major pinleme, downgrade kapısı) | `1f84ba4` |
+| 2026-08-20 | ci | `check_absolute_paths.sh` (mutlak yol commit'leri bloke) | `8116715` |
+| 2026-08-20 | ci | `shellcheck_hooks.sh` (POSIX sh hook betikleri) | `ae55009` |
+| 2026-08-21 | publish | Branch protection GH API ile kuruldu (8 required check) | `dc9ab4f` |
+| 2026-08-21 | ci | `status_checks.py --gh` fail-closed (protection yoksa exit 1) | `df92ada` |
+| 2026-08-21 | ci | `simulate_verify_job.sh` — `GITHUB_STEP_SUMMARY` + env-snapshot validation | `2282925` |
+| 2026-08-21 | ci | precheck-report → reproducibility manifest (SHA-256) | `694b367` |
+
+### Regresyon notları
+
+| ID | Tarih | Kırılma | Kök neden | Düzeltme | Commit |
+|---|---|---|---|---|---|
+| R1 | 2026-08-19 | CI 0s/0 job boş run | YAML adım `}` + `uses:` aynı satıra yapıştı | satır ayrımı + actionlint | `d57a60c` |
+| R2 | 2026-08-21 | summary yerelde yazılmıyor | `GITHUB_STEP_SUMMARY` env boştu | iki aşamalı write + validate | `2282925` |
+| R3 | 2026-08-21 | pre-commit block (actionlint RC=1) | shellcheck info hints advisory iken fail | `lint_actionlint.sh` RC≤2 PASS | `ae55009` |
+| R4 | 2026-08-21 | `listLabels is not a function` | Octokit `listLabels` → `listLabelsForRepo` | 4 dosya güncellendi | `309a14f` |
