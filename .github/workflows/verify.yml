@@ -377,8 +377,9 @@ jobs:
         continue-on-error: true
         shell: bash
         run: |
+          # --workflow verilmez: TÜM .github/workflows/*.yml denetlenir —
+          # yeni workflow dosyaları kapıya otomatik girer (tek kaynak glob).
           python3 _calisma/CIKTI/check_python3_shell.py \
-            --workflow .github/workflows/verify.yml \
             --json --out python3_shell_findings.json
           echo "python3-shell denetimi tamam — python3_shell_findings.json"
 

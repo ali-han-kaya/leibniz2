@@ -6,6 +6,7 @@ Workflow ayrıştırma + denetim mantığını ağsız ve deterministik doğrula
 geçerli Python `shell: python3 {0}` adımı PASS, kabuk komutu FAIL,
 bash adımları kapsam dışı (PASS). stdlib unittest.
 """
+import os
 import pathlib
 import sys
 import unittest
@@ -184,6 +185,89 @@ class TestAudit(unittest.TestCase):
         findings = cps.audit(path.read_text(encoding="utf-8"))
         fails = [f for f in findings if f["verdict"] == "FAIL"]
         self.assertEqual(fails, [])
+
+
+class TestMultiWorkflow(unittest.TestCase):
+    """`--workflow` çoklu yol + varsayılan glob (tüm .github/workflows/*.yml)."""
+
+    GOOD = wf("""      - name: Iyi
+        shell: python3 {0}
+        run: |
+          import json
+          print("ok")
+""")
+    BAD = wf("""      - name: Kotu
+        shell: python3 {0}
+        run: |
+          cd /tmp && python3 run.py
+""")
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = pathlib.Path(self.tmp.name)
+        self.a = self.dir / "a.yml"
+        self.b = self.dir / "b.yml"
+        self.a.write_text(self.GOOD, encoding="utf-8")
+        self.b.write_text(self.BAD, encoding="utf-8")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_audit_file_report(self):
+        r = cps.audit_file(str(self.a))
+        self.assertEqual(r["verdict"], "PASS")
+        self.assertEqual(r["python3_shell_steps"], 1)
+        r2 = cps.audit_file(str(self.b))
+        self.assertEqual(r2["verdict"], "FAIL")
+        self.assertEqual(r2["fail"], 1)
+
+    def test_main_multi_workflow_json(self):
+        rc = cps.main(["--workflow", str(self.a), str(self.b), "--json"])
+        self.assertEqual(rc, 1)  # b FAIL → genel FAIL
+
+    def test_main_multi_workflow_json_content(self):
+        import io
+        import json
+        out = io.StringIO()
+        err = io.StringIO()
+        old_out, old_err = sys.stdout, sys.stderr
+        sys.stdout, sys.stderr = out, err
+        try:
+            rc = cps.main(["--workflow", str(self.a), str(self.b), "--json"])
+        finally:
+            sys.stdout, sys.stderr = old_out, old_err
+        self.assertEqual(rc, 1)
+        report = json.loads(out.getvalue())
+        self.assertEqual(report["verdict"], "FAIL")
+        self.assertEqual(len(report["workflows"]), 2)
+        by_path = {os.path.basename(r["path"]): r for r in report["files"]}
+        self.assertEqual(by_path["a.yml"]["verdict"], "PASS")
+        self.assertEqual(by_path["b.yml"]["verdict"], "FAIL")
+
+    def test_main_all_good_returns_zero(self):
+        rc = cps.main(["--workflow", str(self.a)])
+        self.assertEqual(rc, 0)
+
+    def test_main_missing_file_exit_2(self):
+        rc = cps.main(["--workflow", str(self.dir / "yok.yml")])
+        self.assertEqual(rc, 2)
+
+    def test_resolve_default_globs_all_workflows(self):
+        # Varsayılan glob: .github/workflows/*.yml — yeni workflow dosyaları
+        # kapıya otomatik girer (tek komutta tümü denetlenir).
+        wf_dir = pathlib.Path(CIKTI).parent.parent / ".github" / "workflows"
+        paths = cps.resolve_workflows([])
+        self.assertIn(str(wf_dir / "verify.yml"), paths)
+
+    def test_resolve_deduplicates(self):
+        paths = cps.resolve_workflows([str(self.a), str(self.a), str(self.b)])
+        self.assertEqual(paths, sorted({str(self.a), str(self.b)}))
+
+    def test_default_glob_main_returns_zero_on_real_repo(self):
+        # Tek komut (--workflow'suz) gerçek repo'da PASS vermeli.
+        rc = cps.main([])
+        self.assertEqual(rc, 0)
 
 
 if __name__ == "__main__":

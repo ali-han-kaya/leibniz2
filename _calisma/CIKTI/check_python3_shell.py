@@ -23,15 +23,24 @@ yanlış pozitif üretmez. Yanlış PASS üretmez: doğrulanamayan adım (ayrı�
 belirsizliği) FAIL sayılır.
 
 Kullanım:
-    python3 check_python3_shell.py --workflow .github/workflows/verify.yml
+    python3 check_python3_shell.py                      # TÜM .github/workflows/*.yml
+    python3 check_python3_shell.py --workflow A.yml B.yml
     python3 check_python3_shell.py --workflow X.yml --json      # makine-okur
     python3 check_python3_shell.py --workflow X.yml --out rapor.json
 
-Exit: 0 = PASS (python3-shell adımı yok ya da hepsi geçerli Python),
-      1 = FAIL (kabuk komutu python3 adımında), 2 = kullanım/ortam hatası.
+`--workflow` birden çok yol alır; verilmezse `.github/workflows/*.yml` glob'u
+(sıralı) denetlenir — böylece yeni workflow dosyaları kapıya otomatik girer.
+JSON rapor her dosyayı ayrı `files[]` kaydında toplar (fail dosya bazında
+görünür), üst düzey `verdict` tüm dosyaların PASS'idir.
+
+Exit: 0 = PASS (tüm dosyalar — python3-shell adımı yok ya da hepsi geçerli
+Python), 1 = FAIL (herhangi bir dosyada kabuk komutu python3 adımında),
+2 = kullanım/ortam hatası (dosya yok / glob boş).
 """
 import argparse
+import glob
 import json
+import os
 import re
 import sys
 
@@ -169,52 +178,106 @@ def audit(text):
     return findings
 
 
+def resolve_workflows(workflows=None):
+    """Denetlenecek workflow dosyalarını belirler (sıralı, tekil).
+
+    workflows verilirse o listeyi sıralar (tekil); boş/None ise
+    `.github/workflows/*.yml` glob'unu döner — yeni workflow dosyaları kapıya
+    otomatik girer. Döndürür: [yol]. Glob boşsa [] döner (çağıran exit 2).
+    """
+    if workflows:
+        seen = set()
+        out = []
+        for w in workflows:
+            if w not in seen:
+                seen.add(w)
+                out.append(w)
+        return sorted(out)
+    root = os.path.join(os.getcwd(), ".github", "workflows")
+    return sorted(glob.glob(os.path.join(root, "*.yml")))
+
+
+def audit_file(path):
+    """Tek workflow dosyasını denetler. Döndürür: rapor dict
+    (path/steps/python3_shell_steps/fail/verdict/findings). OSError → None."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+    except OSError as e:
+        return {"path": path, "error": str(e)}
+    findings = audit(text)
+    fails = [f for f in findings if f["verdict"] == "FAIL"]
+    checked = [f for f in findings if f["shell"] and
+               PY_SHELL_RE.match(f["shell"])]
+    return {
+        "path": path,
+        "steps": len(findings),
+        "python3_shell_steps": len(checked),
+        "fail": len(fails),
+        "verdict": "PASS" if not fails else "FAIL",
+        "findings": findings,
+    }
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--workflow", required=True,
-                    help="denetlenecek GitHub Actions workflow YAML dosyası")
+    ap.add_argument("--workflow", nargs="*", default=None,
+                    help="denetlenecek GitHub Actions workflow YAML dosya(lar)ı; "
+                         "verilmezse TÜM .github/workflows/*.yml denetlenir")
     ap.add_argument("--json", action="store_true",
                     help="makine-okunur JSON rapor bas (stdout'a yalnızca JSON)")
     ap.add_argument("--out", help="raporu bu dosyaya da yaz")
     args = ap.parse_args(argv)
 
-    try:
-        with open(args.workflow, encoding="utf-8") as f:
-            text = f.read()
-    except OSError as e:
-        print(f"HATA: workflow okunamadı: {e}", file=sys.stderr)
+    paths = resolve_workflows(args.workflow)
+    if not paths:
+        print("HATA: denetlenecek workflow dosyası yok "
+              "(--workflow ver veya .github/workflows/*.yml glob'u boş)",
+              file=sys.stderr)
         return 2
 
-    findings = audit(text)
-    fails = [f for f in findings if f["verdict"] == "FAIL"]
-    checked = [f for f in findings if f["shell"] and
-               PY_SHELL_RE.match(f["shell"])]
-    total = len(findings)
+    file_reports = [audit_file(p) for p in paths]
+    errors = [r for r in file_reports if "error" in r]
+    if errors:
+        for r in errors:
+            print(f"HATA: workflow okunamadı: {r['path']}: {r['error']}",
+                  file=sys.stderr)
+        return 2
+
+    total_steps = sum(r["steps"] for r in file_reports)
+    total_checked = sum(r["python3_shell_steps"] for r in file_reports)
+    total_fails = sum(r["fail"] for r in file_reports)
+    ok_all = total_fails == 0
 
     if args.json:
         report = {
             "tool": "check_python3_shell.py",
-            "workflow": args.workflow,
-            "steps": total,
-            "python3_shell_steps": len(checked),
-            "fail": len(fails),
-            "verdict": "PASS" if not fails else "FAIL",
-            "findings": findings,
+            "workflows": paths,
+            "steps": total_steps,
+            "python3_shell_steps": total_checked,
+            "fail": total_fails,
+            "verdict": "PASS" if ok_all else "FAIL",
+            "files": file_reports,
         }
         out = json.dumps(report, ensure_ascii=False, indent=1)
         print(out)
         if args.out:
             with open(args.out, "w", encoding="utf-8") as f:
                 f.write(out)
-        return 0 if not fails else 1
+        return 0 if ok_all else 1
 
-    for f in findings:
-        if f["verdict"] == "FAIL":
-            print(f"[FAIL] satır {f['line']:<4} {f['step']:<40} "
-                  f"-> {f['detail']}")
-    print(f"SONUÇ: {'FAIL' if fails else 'PASS'} — {len(fails)} FAIL / "
-          f"{len(checked)} python3-shell adım / {total} toplam adım")
-    return 1 if fails else 0
+    for r in file_reports:
+        for f in r["findings"]:
+            if f["verdict"] == "FAIL":
+                print(f"[FAIL] {r['path']}: satır {f['line']:<4} "
+                      f"{f['step']:<40} -> {f['detail']}")
+        print(f"{r['path']}: {'FAIL' if r['fail'] else 'PASS'} — "
+              f"{r['fail']} FAIL / {r['python3_shell_steps']} "
+              f"python3-shell adım / {r['steps']} toplam adım")
+    print(f"SONUÇ: {'FAIL' if not ok_all else 'PASS'} — {total_fails} FAIL / "
+          f"{total_checked} python3-shell adım / {total_steps} toplam adım "
+          f"({len(paths)} workflow)")
+    return 1 if not ok_all else 0
 
 
 if __name__ == "__main__":

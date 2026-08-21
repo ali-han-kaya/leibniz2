@@ -122,7 +122,7 @@ repos:
           run bloğu geçerli Python DEĞİLSE veya asla-Python-olmayan kabuk
           kalıbı içeriyorsa commit bloke edilir. `;`/`|` (bitwise) Python'da
           geçerli olduğundan bilerek denetlenmez (yanlış pozitif yok).
-        entry: python3 _calisma/CIKTI/check_python3_shell.py --workflow .github/workflows/verify.yml
+        entry: python3 _calisma/CIKTI/check_python3_shell.py
         language: system
         always_run: true
         pass_filenames: false
