@@ -53,6 +53,7 @@ GATE_EXCLUDE = {
     "plist-check",          # macOS-advisory: push'ta çalışmaz
     "mirror-check",         # macOS: sync sonrası K17 fail-closed (advisory)
     "daemon-http",          # advisory: daemon-modu HTTP 200 smoke (advisory)
+    "audit-live-ci",        # advisory: doc↔GitHub senkron denetimi
 }
 
 

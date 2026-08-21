@@ -1434,6 +1434,45 @@ jobs:
   # continue-on-error: ADVISORY — build'i bloke etmez; bulgular
   # precheck-report artifact'ında denetlenebilir. status_checks.py'de
   # GATE_EXCLUDE'dadır (required check DEĞİL — aday listesi 8'de kalır).
+  # ──────────────────────────────────────────────────────────────────────
+  # CANLI CI DENETİMİ (advisory) — doc ↔ GitHub senkronunu her push'ta
+  # otomatik denetler. audit_live_ci_sync.py, PUBLISH_SCENARIO.md'deki Job
+  # kategorileri tablosunu + Artifact listesini canlı run'ın gerçek job/
+  # artifact adlarıyla karşılaştırır; eksik/fazla = drift (exit 1).
+  # continue-on-error: ADVISORY — build'i bloke etmez; bulgular run
+  # summary'de + artifact'ta. GATE_EXCLUDE'dadır (required check DEĞİL).
+  audit-live-ci:
+    name: Live CI doc↔GitHub sync audit (advisory)
+    runs-on: ubuntu-latest
+    needs: [verify]
+    if: always()
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Run live CI audit (audit_live_ci_sync.py)
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Mevcut run'ı denetle (--run-id) — push'ta verify+audit aynı run'da;
+          # PR'da PR run'ının kendi job/artifact'ları denetlenir.
+          python3 _calisma/CIKTI/audit_live_ci_sync.py --json \
+            --run-id ${{ github.run_id }} \
+            > audit_live_ci_sync.json 2>&1 || true
+          cat audit_live_ci_sync.json
+
+      - name: Upload live CI audit report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: audit-live-ci
+          path: audit_live_ci_sync.json
+          if-no-files-found: ignore
+          retention-days: 30
+
   precheck:
     name: Publish precheck (AŞAMA 0, advisory)
     runs-on: ubuntu-latest

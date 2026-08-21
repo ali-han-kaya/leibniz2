@@ -71,6 +71,7 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 | 2026-08-21 | AŞAMA 3 | `status_checks.py --gh` fail-closed: protection kurulu değilken exit 1 | `df92ada` |
 | 2026-08-21 | docs | add repo-level changelog + regression notes to README | `b07f5f4` |
 | 2026-08-21 | AŞAMA 1 (b) | Adım 9 (Doğrula) notuna merge-engeli smoke açıklaması eklendi (`enforce_admins`/force-push/deletions — `--gh --json` `smoke[]`) | (çalışma ağacı) |
+| 2026-08-21 | AŞAMA 3 | `audit_live_ci_sync.py` — canlı CI denetimi tekrarlanabilir script: doc Job tablosu + Artifact listesi ↔ canlı run (fail-closed; advisory `audit-live-ci` job'ı); daemon-http job/artifact'ı doc'a eklendi (16 job / 21 artifact) | (çalışma ağacı) |
 | 2026-08-21 | feat | (ci) add precheck-report to reproducibility manifest | `694b367` |
 | 2026-08-21 | docs | add §8 publish wrapper idempotency verification | `5d9b6c6` |
 | 2026-08-21 | fix | (ci) remove local keyword outside function | `965182d` |
@@ -106,6 +107,7 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 | 2026-08-21 | fix | status_checks --gh 404 ile yetki hatasını ayır (UNREADABLE) | `3226656` |
 | 2026-08-21 | feat | (ci) precheck job'ına status_checks --gh --json sidecar'ı ekle | `d6b58a6` |
 | 2026-08-21 | feat | (preview) /guide.html rotası + mirror senkronu | `d184c3c` |
+| 2026-08-21 | feat | render_screens PNG uretimini mock HTML ile dogrula | `0a4f32b` |
 
 ---
 
@@ -577,7 +579,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 --exit-status` + artifact listesi; sonuç `SONUÇ: PASS/FAIL` olarak loglanır
 (dry-run'da yalnızca önizlenir).
 
-**Job kategorileri (14 job = 8 required + 2 advisory + 3 PR-only + 1 manifest):**
+**Job kategorileri (16 job = 8 required + 4 advisory + 3 PR-only + 1 manifest):**
 
 > **Kural:** Branch protection **yalnızca A kategorisindeki** job'ları required check olarak
 > kabul eder. B (advisory) job'ları push'ta çalışır ama required değildir;
@@ -598,14 +600,15 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 | 9 | B | Publish precheck (AŞAMA 0, advisory) | ✅ AŞAMA 0 kapıları otomatik denetlenir (`continue-on-error`) |
 | 10 | B | Plist drift check (macOS, advisory) | ✅ K12 — macOS-runner'lı, `continue-on-error` |
 | 11 | B | Mirror sync check (macOS, fail-closed) | ✅ K17 — sync sonrası `--check-mirror` GÜNCEL olmalı; drift/hata → job FAIL |
+| 12 | B | Daemon mode HTTP 200 (advisory) | ✅ daemon-modu (`PREVIEW_DAEMON=1`) üç endpoint'te 200; süreç canlı (advisory smoke) |
 | | **C — PR-only (push'ta çalışmaz, PR'da çalışır)** | | |
-| 12 | C | Pre-commit P0 label gate | ✅ precommit-p0 etiketi varsa FAIL (merge bloke) |
-| 13 | C | Pre-commit P1 label gate (optional) | ✅ precommit-p1 etiketi varsa FAIL |
-| 14 | C | Commit-msg gate | ✅ commit_msg_findings.json ihlal varsa FAIL |
+| 13 | C | Pre-commit P0 label gate | ✅ precommit-p0 etiketi varsa FAIL (merge bloke) |
+| 14 | C | Pre-commit P1 label gate (optional) | ✅ precommit-p1 etiketi varsa FAIL |
+| 15 | C | Commit-msg gate | ✅ commit_msg_findings.json ihlal varsa FAIL |
 | | **D — PR-only (yorum/etiket düşürme)** | | |
-| 15 | D | Manifest PR comment | ✅ manifest.txt + config-diff PR yorumu |
+| 16 | D | Manifest PR comment | ✅ manifest.txt + config-diff PR yorumu |
 
-**Artifact listesi (20):**
+**Artifact listesi (21):**
 - `unit-tests` (CIKTI birim test logu — `test_*.py` glob'u)
 - `verify-report` (tek log: K1-K14 + pre-commit bölümü + .sha256)
 - `action-runtimes` (her action'ın runs.using denetimi JSON — node24 kapısı)
@@ -625,6 +628,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 - `precheck-report` (AŞAMA 0 ön-kontrol logu — advisory, her push'ta)
 - `plist-check` (K12 raporu + --plist-check sidecar JSON — macOS advisory job)
 - `mirror-check` (K17 raporu + --check-mirror sidecar JSON — macOS fail-closed job)
+- `daemon-http` (daemon-modu HTTP 200 test raporu + JSON — advisory smoke)
 
 **Not:** Kapı artık `verify_delivery.py --full`'dur (K1-K14, fail-closed) ve yeşildir —
 Beth 1953 / Fosl 1998 gibi referans düzeltmeleri V5h'te yapıldı; Kalan çevrimdışı
