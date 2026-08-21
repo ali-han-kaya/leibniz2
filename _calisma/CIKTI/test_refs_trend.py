@@ -76,6 +76,18 @@ class TestChangelog(unittest.TestCase):
         self.assertIn("Hume 1975", joined)
         self.assertIn("31/31", joined)
 
+    def test_changelog_has_v5n_norton_popkin(self):
+        """V5n: Norton/Popkin CrossRef girişi changelog'da olmalı (54→56)."""
+        lines = rt.changelog_lines()
+        self.assertTrue(lines)
+        joined = "\n".join(lines)
+        self.assertIn("V5n", joined)
+        self.assertIn("Norton 1981", joined)
+        self.assertIn("Popkin 1951", joined)
+        self.assertIn("54→56", joined)
+        # En yeni üstte: V5n (2026-08-19), Hicks/Hume (2026-08-18)'den önce.
+        self.assertLess(joined.index("V5n"), joined.index("Hicks 1925"))
+
     def test_changelog_empty_when_no_entries(self):
         saved = rt.CHANGELOG
         try:

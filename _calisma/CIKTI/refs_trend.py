@@ -44,6 +44,10 @@ API = "https://api.github.com"
 # Kaynak: verify_delivery.py K6 denetimindeki düzeltmeler. Yeni bir denetim
 # düzeltmesi yapıldığında buraya tek satır eklenir (denetlenebilir geçmiş).
 CHANGELOG = [
+    ("2026-08-19",
+     "V5n: Norton 1981 ve Popkin 1951 DOI'leri CrossRef'e eklendi — kapsam-dışı "
+     "kalan son 2 dergi makalesi artık çevrimiçi doğrulanır "
+     "(canlı kapsam 54→56; 4fe2ccc)."),
     ("2026-08-18",
      "Hicks 1925 ve Hume 1975 OpenLibrary sorguları güçlendirildi "
      "(29/31 → 31/31 çevrimiçi doğrulama; ce5523b)."),
