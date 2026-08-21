@@ -126,6 +126,7 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 | 2026-08-21 | docs | V5q changelog satırı + §2 tablo doğrulaması | `db61c80` |
 | 2026-08-21 | docs | HathiTrust katalog yol haritası (4 telifli kitap) | `fa43551` |
 | 2026-08-21 | feat | refs-online VERSION JSON'a ht_ids_summary ekle | `efdd45a` |
+| 2026-08-21 | docs | bilinen CI olayları kaydı (KNOWN_INCIDENTS.md) | `cf82c25` |
 
 ---
 
@@ -602,37 +603,38 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 --exit-status` + artifact listesi; sonuç `SONUÇ: PASS/FAIL` olarak loglanır
 (dry-run'da yalnızca önizlenir).
 
-**Job kategorileri (17 job = 8 required + 5 advisory + 3 PR-only + 1 manifest):**
+**Job kategorileri (18 job = 8 required + 6 advisory + 3 PR-only + 1 manifest):**
 
 > **Kural:** Branch protection **yalnızca A kategorisindeki** job'ları required check olarak
 > kabul eder. B (advisory) job'ları push'ta çalışır ama required değildir;
 > C (PR-only) job'ları push'ta hiç çalışmaz.
 
-| # | Kategori | Job | Beklenen sonuç |
+| # | Kategori | Job | Son run (32527379342) |
 |---|---|---|---|
 | | **A — Required (push'ta çalışır, merge bloke)** | | |
-| 1 | A | Delivery verification — K1-K9 (single entry point) | ✅ K0-K7 + K8 (Z3 12/12) + K9 (Lean) + K11 + K13 + K14 tek komutta (`--full`); pre-commit advisory bölüm |
-| 2 | A | Action runtime check (node24) | ✅ her `uses:` action'ın `runs.using=node24` olduğu doğrulanır |
-| 3 | A | Budget shield (aggregated) | ✅ limit içinde (sidecar birleştirildi); PR'da tek yorum |
-| 4 | A | Static markdown reports (incl. pre-commit findings) | ✅ bundle yüklendi |
-| 5 | A | Reproducibility bundle | ✅ manifest.txt + SHA-256 — K10 `--verify-manifest` + `manifest.sha256` |
-| 6 | A | Config drift check (gen_config + diff-on-drift) | ✅ config uyumlu; drift PR yorumu olarak düşer |
-| 7 | A | Repack determinism + verify (sidecar sync) | ✅ repack byte-identical, base verify PASS |
-| 8 | A | Online verification trend (refs-online across runs) | ✅ trend tablosu üretildi |
+| 1 | A | Delivery verification — K1-K9 (single entry point) | ✅ success (4m21s) — K0-K7 + K8 (Z3) + K9 (Lean) + K11 + K13 + K14 tek komutta (`--full`); pre-commit advisory bölüm |
+| 2 | A | Action runtime check (node24) | ✅ success (9s) — her `uses:` action'ın `runs.using=node24` olduğu doğrulanır |
+| 3 | A | Budget shield (aggregated) | ✅ success (7s) — limit içinde (sidecar birleştirildi) |
+| 4 | A | Static markdown reports (incl. pre-commit findings) | ✅ success (6s) — bundle yüklendi |
+| 5 | A | Reproducibility bundle | ✅ success (10s) — manifest.txt + SHA-256 — K10 `--verify-manifest` + `manifest.sha256` |
+| 6 | A | Config drift check (gen_config + diff-on-drift) | ✅ success (24s) — config uyumlu; drift PR yorumu olarak düşer |
+| 7 | A | Repack determinism + verify (sidecar sync) | ✅ success (26s) — repack byte-identical, base verify PASS |
+| 8 | A | Online verification trend (refs-online across runs) | ✅ success (50s) — trend tablosu üretildi (91 satır, son: 61/61 hathitrust=1) |
 | | **B — Advisory (push'ta çalışır, required değil)** | | |
-| 9 | B | Publish precheck (AŞAMA 0, advisory) | ✅ AŞAMA 0 kapıları otomatik denetlenir (`continue-on-error`) |
-| 10 | B | Plist drift check (macOS, advisory) | ✅ K12 — macOS-runner'lı, `continue-on-error` |
-| 11 | B | Mirror sync check (macOS, fail-closed) | ✅ K17 — sync sonrası `--check-mirror` GÜNCEL olmalı; drift/hata → job FAIL |
-| 12 | B | Daemon mode HTTP 200 (advisory) | ✅ daemon-modu (`PREVIEW_DAEMON=1`) üç endpoint'te 200; süreç canlı (advisory smoke) |
-| 13 | B | Refs-trend audit (advisory) | ✅ `refs-trend.json` satırları kaynak `refs-online` artifact'larıyla birebir (sahte satır/sayı drift'i/bayat trend → exit 1) |
+| 9 | B | Publish precheck (AŞAMA 0, advisory) | ✅ success (9s) — AŞAMA 0 kapıları otomatik denetlenir |
+| 10 | B | Plist drift check (macOS, advisory) | ✅ success (11s) — K12, macOS-runner'lı |
+| 11 | B | Mirror sync check (macOS, fail-closed) | ✅ success (12s) — K17, sync sonrası GÜNCEL |
+| 12 | B | Daemon mode HTTP 200 (advisory) | ✅ success (45s) — üç endpoint'te 200 |
+| 13 | B | Refs-trend audit (advisory) | ✅ success (56s) — trend satırları kaynak artifact'larla birebir |
+| 14 | B | Live CI doc↔GitHub sync audit (advisory) | ✅ success (8s) — doc 24 artifact = canlı 24 artifact, PASS |
 | | **C — PR-only (push'ta çalışmaz, PR'da çalışır)** | | |
-| 14 | C | Pre-commit P0 label gate | ✅ precommit-p0 etiketi varsa FAIL (merge bloke) |
-| 15 | C | Pre-commit P1 label gate (optional) | ✅ precommit-p1 etiketi varsa FAIL |
-| 16 | C | Commit-msg gate | ✅ commit_msg_findings.json ihlal varsa FAIL |
+| 15 | C | Pre-commit P0 label gate | — skipped (push'ta çalışmaz) |
+| 16 | C | Pre-commit P1 label gate (optional) | — skipped (push'ta çalışmaz) |
+| 17 | C | Commit-msg gate | — skipped (push'ta çalışmaz) |
 | | **D — PR-only (yorum/etiket düşürme)** | | |
-| 17 | D | Manifest PR comment | ✅ manifest.txt + config-diff PR yorumu |
+| 18 | D | Manifest PR comment | — skipped (PR'da çalışır) |
 
-**Artifact listesi (23):**
+**Artifact listesi (24):**
 - `unit-tests` (CIKTI birim test logu — `test_*.py` glob'u)
 - `verify-report` (tek log: K1-K14 + pre-commit bölümü + .sha256)
 - `action-runtimes` (her action'ın runs.using denetimi JSON — node24 kapısı)
@@ -641,7 +643,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 - `k0-findings` (bayat-zip taraması JSON)
 - `lineage-findings` (zip soy hattı doğrulaması JSON)
 - `klayers` (K1-K14 PASS/FAIL/SKIP özeti — run summary)
-- `refs-online` (çevrimiçi referans denetimi VERSION JSON)
+- `refs-online` (çevrimiçi referans denetimi VERSION JSON — `ht_ids_summary` dahil)
 - `run-history` (history.jsonl — run zaman serisi)
 - `precommit-logs` (ham log + PRECOMMIT_RAPORU.md/.json + cache/env özeti)
 - `python3-shell` (check_python3_shell.py --json denetimi — SHA-256 ile manifest'te sabitlenir)
@@ -655,6 +657,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 - `mirror-check` (K17 raporu + --check-mirror sidecar JSON — macOS fail-closed job)
 - `daemon-http` (daemon-modu HTTP 200 test raporu + JSON — advisory smoke)
 - `audit-refs-trend` (refs-trend satırları ↔ kaynak artifact denetimi JSON — advisory)
+- `audit-live-ci` (doc↔GitHub senkron denetimi JSON — advisory; doc artifact listesi ↔ canlı run)
 
 **Not:** Kapı artık `verify_delivery.py --full`'dur (K1-K14, fail-closed) ve yeşildir —
 Beth 1953 / Fosl 1998 gibi referans düzeltmeleri V5h'te yapıldı; Kalan çevrimdışı
@@ -664,13 +667,13 @@ job'ında koşar (Linux runner'larında SKIP). Aynı şekilde K17 (mirror sync)
 `--full`'a dahil değildir — ayrı `mirror-check` macOS job'ında fail-closed koşar
 (sync sonrası GÜNCEL olmalı; repo ↔ mirror drift'i P1 → job FAIL).
 
-**Denetim bulgusu (2026-08-21, `audit_live_ci_sync.py`):** "11 job / 17 artifact"
-beklentisi güncel pipeline ile uyuşmuyor — canlı run **17 job / 23 artifact**
-üretiyor (16 kapı + `audit-live-ci` meta-denetçi; denetim kendini hariç tutunca
-16/22, doc ile birebir; 2026-08-21 `1f9706f` ile `python3-shell` artifact'ı
-eklendi — 21→22). 11/17 rakamları eski pipeline durumuna aittir;
-denetim script'i doc↔GitHub senkronunu her push'ta fail-closed doğrular
-(drift → exit 1, advisory `audit-live-ci` job'ı + `audit-live-ci` artifact'ı).
+**Canlı doğrulama (2026-08-21, run `32527379342`, success):**
+- **18 job** çalışıldı (8 required ✅ + 6 advisory ✅ + 3 PR-only ⏭ skipped + 1 PR-only ⏭)
+- **24 artifact** yüklendi (doc listesiyle birebir — `audit-live-ci` PASS)
+- refs-online: **61/61 PASS** (by_source: crossref 6, sep 5, openlibrary 22, archive 20, loc 4, hathitrust 1, handle 1, perseus 2)
+- `ht_ids_summary`: loc 4 refs/16 ids, hathitrust 1 ref/4 ids
+- refs-trend: **91 satır** (son 62'si 61/61)
+- `audit-live-ci`: PASS — doc 24 artifact = canlı 24 artifact, drift yok
 
 ---
 
