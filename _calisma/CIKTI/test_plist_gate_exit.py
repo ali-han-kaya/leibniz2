@@ -22,6 +22,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import shutil
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 UPDATE_PREVIEW = os.path.join(HERE, "update_preview.sh")
@@ -326,6 +327,285 @@ class TestParsePlistCheckOutput(unittest.TestCase):
         self.assertEqual(len(profiles), 1)
         self.assertEqual(profiles[0]["label"], "x")
 
+
+SUMMARY_SCRIPT = os.path.join(HERE, "summary_plist_table.py")
+
+
+class TestSummaryPlistTable(unittest.TestCase):
+    """summary_plist_table.py markdown tablo üretimi."""
+
+    def _run(self, json_str):
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json",
+                                         delete=False) as f:
+            f.write(json_str)
+            f.flush()
+            out = subprocess.run(
+                [sys.executable, SUMMARY_SCRIPT, f.name],
+                capture_output=True, text=True, timeout=30)
+        os.unlink(f.name)
+        return out.stdout
+
+    def test_valid_profiles(self):
+        data = json.dumps({
+            "ok": True, "exit": 0, "detail": "GÜNCEL (2/2)",
+            "profiles": [
+                {"label": "com.freebuff.preview-leibniz2",
+                 "status": "GÜNCEL", "path": "/Users/r/.../a.plist"},
+                {"label": "com.freebuff.preview-server",
+                 "status": "GÜNCEL", "path": "/Users/r/.../b.plist"},
+            ]})
+        out = self._run(data)
+        self.assertIn("✅ **K12**", out)
+        self.assertIn("| com.freebuff.preview-leibniz2 | ✅ GÜNCEL |", out)
+        self.assertIn("| com.freebuff.preview-server | ✅ GÜNCEL |", out)
+        self.assertIn("| Profil | Durum | Yol |", out)
+
+    def test_bayat_profile(self):
+        data = json.dumps({
+            "ok": False, "exit": 1, "detail": "BAYAT (1/2)",
+            "profiles": [
+                {"label": "a", "status": "BAYAT", "path": "/x"},
+                {"label": "b", "status": "GÜNCEL", "path": "/y"},
+            ]})
+        out = self._run(data)
+        self.assertIn("❌ **K12**", out)
+        self.assertIn("| a | ❌ BAYAT |", out)
+        self.assertIn("| b | ✅ GÜNCEL |", out)
+
+    def test_missing_file(self):
+        out = subprocess.run(
+            [sys.executable, SUMMARY_SCRIPT, "/nonexistent.json"],
+            capture_output=True, text=True, timeout=30)
+        self.assertIn("plist_report.json yok", out.stdout)
+
+
+
+# ============================================================================
+# Single-profile check_plist_drift tests
+# ============================================================================
+PLIST_DRIFT = os.path.join(HERE, "check_plist_drift.py")
+
+SAMPLE_PLIST = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.freebuff.preview-leibniz2</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>/tmp/test.py</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/err.log</string>
+</dict>
+</plist>
+"""
+
+SAMPLE_PLIST_DIFFERENT = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.freebuff.preview-leibniz2</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>/tmp/CHANGED.py</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/err.log</string>
+</dict>
+</plist>
+"""
+
+
+class TestSingleProfileCheck(unittest.TestCase):
+    """Tek-profil golden ile check_plist_drift.check() davranışı."""
+
+    def _setup(self, golden_plists, rendered_plists):
+        """golden + render dizinlerini kur, (golden_dir, render_home) dön."""
+        golden = tempfile.mkdtemp(prefix="golden-")
+        render = tempfile.mkdtemp(prefix="render-")
+        la = os.path.join(render, "Library", "LaunchAgents")
+        os.makedirs(la, exist_ok=True)
+        for name, content in golden_plists.items():
+            with open(os.path.join(golden, name), "w") as f:
+                f.write(content)
+        for name, content in rendered_plists.items():
+            with open(os.path.join(la, name), "w") as f:
+                f.write(content)
+        return golden, render
+
+    def test_single_profile_pass(self):
+        """Tek golden plist, tek render → PASS."""
+        from check_plist_drift import check
+        golden, render = self._setup(
+            {"com.freebuff.preview-leibniz2.plist": SAMPLE_PLIST},
+            {"com.freebuff.preview-leibniz2.plist": SAMPLE_PLIST})
+        results, drift, error = check(render, golden, "/Users/ci")
+        self.assertFalse(drift)
+        self.assertFalse(error)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["verdict"], "PASS")
+
+    def test_single_profile_drift(self):
+        """Tek golden plist, render farklı → DRIFT."""
+        from check_plist_drift import check
+        golden, render = self._setup(
+            {"com.freebuff.preview-leibniz2.plist": SAMPLE_PLIST},
+            {"com.freebuff.preview-leibniz2.plist": SAMPLE_PLIST_DIFFERENT})
+        results, drift, error = check(render, golden, "/Users/ci")
+        self.assertTrue(drift)
+        self.assertFalse(error)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["verdict"], "DRIFT")
+
+    def test_single_profile_missing_render(self):
+        """Tek golden plist, render'da yok → DRIFT."""
+        from check_plist_drift import check
+        golden, render = self._setup(
+            {"com.freebuff.preview-leibniz2.plist": SAMPLE_PLIST},
+            {})  # render boş
+        results, drift, error = check(render, golden, "/Users/ci")
+        self.assertTrue(drift)
+        self.assertEqual(results[0]["detail"], "render edilmedi (eksik)")
+
+    def test_extra_rendered_profile(self):
+        """Tek golden, render'da fazla profil → DRIFT."""
+        from check_plist_drift import check
+        golden, render = self._setup(
+            {"com.freebuff.preview-leibniz2.plist": SAMPLE_PLIST},
+            {"com.freebuff.preview-leibniz2.plist": SAMPLE_PLIST,
+             "com.freebuff.extra.plist": SAMPLE_PLIST})
+        results, drift, error = check(render, golden, "/Users/ci")
+        self.assertTrue(drift)
+        labels = [r["label"] for r in results]
+        self.assertIn("com.freebuff.extra.plist", labels)
+        extra = [r for r in results if r["label"] == "com.freebuff.extra.plist"][0]
+        self.assertIn("fazla profil", extra["detail"])
+
+    def test_no_golden_returns_error(self):
+        """Golden dizini boşsa → error=True."""
+        from check_plist_drift import check
+        golden = tempfile.mkdtemp(prefix="golden-empty-")
+        render = tempfile.mkdtemp(prefix="render-empty-")
+        results, drift, error = check(render, golden, "/Users/ci")
+        self.assertTrue(error)
+
+    def test_check_plist_drift_main_single_profile(self):
+        """check_plist_drift.py main() tek golden plist ile exit 0."""
+        golden = tempfile.mkdtemp(prefix="golden-main-")
+        render = tempfile.mkdtemp(prefix="render-main-")
+        la = os.path.join(render, "Library", "LaunchAgents")
+        os.makedirs(la, exist_ok=True)
+        with open(os.path.join(golden, "com.freebuff.preview-leibniz2.plist"), "w") as f:
+            f.write(SAMPLE_PLIST)
+        with open(os.path.join(la, "com.freebuff.preview-leibniz2.plist"), "w") as f:
+            f.write(SAMPLE_PLIST)
+        # main() normally runs update_preview.sh --plist-force which we can't
+        # do in a unit test, so test check() directly via main's internals.
+        from check_plist_drift import check
+        results, drift, _ = check(render, golden, "/Users/ci")
+        self.assertFalse(drift)
+        self.assertEqual(len(results), 1)
+        shutil.rmtree(golden)
+        shutil.rmtree(render)
+
+
+# ============================================================================
+# --remove-legacy tests
+# ============================================================================
+
+class TestRemoveLegacy(unittest.TestCase):
+    """update_preview.sh --remove-legacy davranış testleri."""
+
+    def _run(self, *args, home=None):
+        env = dict(os.environ)
+        if home:
+            env["HOME"] = home
+        return subprocess.run(
+            ["bash", UPDATE_PREVIEW] + list(args),
+            env=env, capture_output=True, text=True, timeout=30)
+
+    def test_remove_legacy_deletes_plist(self):
+        """Legacy plist dosyası silinmeli."""
+        with tempfile.TemporaryDirectory(prefix="legacy-") as home:
+            la = os.path.join(home, "Library", "LaunchAgents")
+            os.makedirs(la, exist_ok=True)
+            legacy = os.path.join(la, "com.freebuff.preview-server.plist")
+            with open(legacy, "w") as f:
+                f.write(SAMPLE_PLIST)
+            self.assertTrue(os.path.exists(legacy))
+            r = self._run("--remove-legacy", home)
+            # bootout may fail on CI (no launchd), but file removal is idempotent
+            self.assertFalse(os.path.exists(legacy),
+                             "Legacy plist should be deleted")
+
+    def test_remove_legacy_idempotent(self):
+        """İki kez çalıştırılmalı — hata vermemeli."""
+        with tempfile.TemporaryDirectory(prefix="legacy-idem-") as home:
+            la = os.path.join(home, "Library", "LaunchAgents")
+            os.makedirs(la, exist_ok=True)
+            r1 = self._run("--remove-legacy", home)
+            r2 = self._run("--remove-legacy", home)
+            # İkincisi de hata vermemeli (zaten silinmiş)
+            self.assertNotIn("HATA", r2.stdout + r2.stderr)
+
+    def test_remove_legacy_preserves_primary(self):
+        """Birincil profil korunmalı."""
+        with tempfile.TemporaryDirectory(prefix="legacy-prim-") as home:
+            la = os.path.join(home, "Library", "LaunchAgents")
+            os.makedirs(la, exist_ok=True)
+            legacy = os.path.join(la, "com.freebuff.preview-server.plist")
+            primary = os.path.join(la, "com.freebuff.preview-leibniz2.plist")
+            with open(legacy, "w") as f:
+                f.write(SAMPLE_PLIST)
+            with open(primary, "w") as f:
+                f.write(SAMPLE_PLIST)
+            r = self._run("--remove-legacy", home)
+            self.assertFalse(os.path.exists(legacy))
+            self.assertTrue(os.path.exists(primary),
+                            "Primary plist should be preserved")
+
+    def test_remove_legacy_no_legacy_files(self):
+        """Legacy dosya yoksa bile çalışmalı."""
+        with tempfile.TemporaryDirectory(prefix="legacy-none-") as home:
+            r = self._run("--remove-legacy", home)
+            self.assertNotIn("HATA", r.stdout + r.stderr)
+
+    def test_remove_legacy_reports_primary_status(self):
+        """Birincil profil durumu raporda görünmeli."""
+        with tempfile.TemporaryDirectory(prefix="legacy-report-") as home:
+            la = os.path.join(home, "Library", "LaunchAgents")
+            os.makedirs(la, exist_ok=True)
+            r = self._run("--remove-legacy", home)
+            out = r.stdout + r.stderr
+            # Should mention either primary is loaded or warning about --start
+            self.assertTrue(
+                "birincil" in out.lower() or "leibniz2" in out.lower() or
+                "UYARI" in out or "CANLI" in out,
+                f"Expected primary profile status in output: {out}")
+
+
+if __name__ == "__main__":
+    unittest.main()
 
 if __name__ == "__main__":
     unittest.main()
