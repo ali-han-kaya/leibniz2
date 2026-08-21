@@ -502,19 +502,25 @@ REFERENCE_ARCHIVE = [
      "tex_needle": "Sextus Empiricus. Adversus Mathematicos VII"},
 ]
 
-# ---- K6+ Doğrudan URL (--check-references ek) ------------------------------
+# ---- K6+ Doğrudan URL / Handle (--check-references ek) ---------------------
 # Açık erişimli dergi makaleleri için doğrudan URL doğrulaması (sep_check ile
 # aynı mantık: HTTP 200 + başlık/bulgu sayfada). CrossRef'te DOI'si kayıtlı
 # olmayan, kendi sitesi bot-korumalı (Anubis) makaleler arşivlenmiş kopyadan
 # doğrulanır.
 # Della Rocca 2010 "PSR" (Philosophers' Imprint 10(7)): PI sitesi script
-# erişimini engeller, CrossRef DOI kayıtlı değil (10.3998/... 404); makalenin
-# arşivlenmiş kopyası Wayback Machine'de (quod.lib.umich.edu --psr anlık
-# görüntüsü) — içerikte 'Della Rocca' + 'PSR' bulunur (V5q kanıtı).
+# erişimini engeller, CrossRef DOI kayıtlı değil (10.3998/... 404) VE makalenin
+# kendi metadata'sı (DC.identifier) DOI değil HANDLE verir:
+#   http://hdl.handle.net/2027/spo.3521354.0010.007  (V5t, 2026-08-21)
+# Handle System API (hdl.handle.net/api/handles/...) — DOI ile aynı altyapı,
+# CrossRef dışı kayıt — 200 + responseCode 1 + URL değeri döndürür; URL değeri
+# makalenin quod.lib.umich.edu adresine çözülür (handle_needle ile doğrulanır).
+# handle alanı varsa handle_check, yoksa sep_check koşar (dispatch'e bak).
 REFERENCE_URL = [
     {"key": "Della Rocca 2010",
      "url": ("https://web.archive.org/web/20210221211420id_/"
              "https://quod.lib.umich.edu/p/phimp/3521354.0010.007/--psr"),
+     "handle": "2027/spo.3521354.0010.007",
+     "handle_needle": "quod.lib.umich.edu/p/phimp",
      "title": "PSR", "markers": ["Della Rocca"],
      "tex_needle": "Della Rocca, M. (2010)"},
 ]
@@ -824,6 +830,37 @@ def crossref_check(ref):
         return "PASS", got
     return "MISMATCH", (f"CrossRef: {got} | beklenen: {ref['container_needle']}, "
                         f"c.{ref['volume']}, {ref['year']}")
+
+
+def handle_check(ref):
+    """Handle System API ile kalıcı tanımlayıcıyı doğrula (CrossRef dışı).
+
+    Philosophers' Imprint 2010 öncesi makalelerde DOI yok; makalenin kendi
+    `DC.identifier`'ı bir Handle'dır (hdl.handle.net/2027/spo.XXXX). Handle
+    System API (https://hdl.handle.net/api/handles/<handle>) — DOI ile aynı
+    altyapı, CrossRef dışı kayıt — 200 + responseCode 1 + URL değeri döndürür.
+    Döndürür: (PASS | MISMATCH | UNVERIFIED, açıklama).
+    """
+    handle = ref.get("handle")
+    url = f"https://hdl.handle.net/api/handles/{handle}"
+    try:
+        data = _http_json(url)
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return "MISMATCH", f"Handle 404: {handle}"
+        return "UNVERIFIED", f"Handle HTTP {e.code}"
+    except Exception as e:
+        return "UNVERIFIED", f"ağ hatası: {e}"
+    if data.get("responseCode") != 1:
+        return "MISMATCH", f"Handle responseCode != 1 ({handle})"
+    url_vals = [v for v in data.get("values", []) if v.get("type") == "URL"]
+    if not url_vals:
+        return "MISMATCH", f"Handle'da URL değeri yok ({handle})"
+    target = url_vals[0]["data"]["value"]
+    needle = ref.get("handle_needle")
+    if needle and needle not in target:
+        return "MISMATCH", f"Handle URL '{target}' beklenen '{needle}' içermiyor"
+    return "PASS", f"Handle çözüldü: {target}"
 
 
 def sep_check(ref):
@@ -1253,7 +1290,10 @@ def run_reference_audit(tex_text, add, quiet=False):
     for ref in REFERENCE_ARCHIVE:
         tasks.append((ref, _archive_with_fallback, "archive"))
     for ref in REFERENCE_URL:
-        tasks.append((ref, sep_check, "url"))
+        # V5t: `handle` alanı varsa Handle System API (CrossRef dışı kayıt)
+        # ile doğrula; yoksa arşivlenmiş URL içerik kontrolü (sep_check).
+        fn = handle_check if ref.get("handle") else sep_check
+        tasks.append((ref, fn, "url"))
     for ref in REFERENCE_PERSEUS:
         tasks.append((ref, perseus_check, "perseus"))
 
@@ -1328,16 +1368,25 @@ def run_reference_audit(tex_text, add, quiet=False):
             add("P1", "K6-REF", "K6 referans",
                 f"{ref['key']} {src_label} uyuşmuyor: {detail}")
 
-    # 4b2) Doğrudan URL: açık erişimli/arşivlenmiş makaleler (V5q)
+    # 4b2) Doğrudan URL / Handle: açık erişimli/arşivlenmiş makaleler (V5q)
+    # V5t: `handle` alanı varsa kaynak 'handle' (Handle System API, CrossRef
+    # dışı); yoksa 'url' (arşivlenmiş kopya içerik kontrolü).
     for ref, v, detail, src in results_for("url"):
+        is_handle = bool(ref.get("handle"))
+        src_label = "Handle" if is_handle else "URL"
         tag = {"PASS": "OK  ", "MISMATCH": "FAIL", "UNVERIFIED": "SKIP"}[v]
-        say(f"  [{tag}] URL     {ref['key']:<14} -> {detail}")
-        online_results.append({"key": ref["key"], "source": "url",
-                               "verdict": v, "detail": detail,
-                               "url": ref["url"]})
+        say(f"  [{tag}] {src_label:<6} {ref['key']:<14} -> {detail}")
+        entry = {"key": ref["key"],
+                 "source": "handle" if is_handle else "url",
+                 "verdict": v, "detail": detail}
+        if is_handle:
+            entry["handle"] = ref["handle"]
+        else:
+            entry["url"] = ref["url"]
+        online_results.append(entry)
         if v == "MISMATCH":
             add("P1", "K6-REF", "K6 referans",
-                f"{ref['key']} URL uyuşmuyor: {detail}")
+                f"{ref['key']} {src_label} uyuşmuyor: {detail}")
 
     # 4c) Perseus: antik birincil metin pasajı (çevrimiçi, --check-references)
     for ref, v, detail, src in results_for("perseus"):
@@ -1363,7 +1412,7 @@ def run_reference_audit(tex_text, add, quiet=False):
         f"OpenLibrary {len(REFERENCE_OPENLIBRARY)} + "
         f"Internet Archive {len(REFERENCE_ARCHIVE)} "
         f"[OpenLibrary + HathiTrust + Google Books fallback] + "
-        f"URL {len(REFERENCE_URL)} + Perseus {len(REFERENCE_PERSEUS)}); "
+        f"URL/Handle {len(REFERENCE_URL)} + Perseus {len(REFERENCE_PERSEUS)}); "
         f"kalanı REFERANS_KANIT_DENETIMI.md sabit denetimine dayanır.")
     return online_results
 

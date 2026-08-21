@@ -44,6 +44,11 @@ API = "https://api.github.com"
 # Kaynak: verify_delivery.py K6 denetimindeki düzeltmeler. Yeni bir denetim
 # düzeltmesi yapıldığında buraya tek satır eklenir (denetlenebilir geçmiş).
 CHANGELOG = [
+    ("2026-08-21",
+     "V5t: Della Rocca 2010 'PSR' artık CrossRef DIŞI Handle System API'den "
+     "doğrulanır — makalenin kendi DC.identifier'ı bir Handle'dır "
+     "(hdl.handle.net/2027/spo.3521354.0010.007), DOI yok; kaynak sayısı "
+     "değişmedi (61/61 PASS)."),
     ("2026-08-19",
      "V5n: Norton 1981 ve Popkin 1951 DOI'leri CrossRef'e eklendi — kapsam-dışı "
      "kalan son 2 dergi makalesi artık çevrimiçi doğrulanır "

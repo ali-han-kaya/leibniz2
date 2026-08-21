@@ -214,6 +214,72 @@ class TestCoverageGap(unittest.TestCase):
         self.assertEqual(dr["title"], "PSR")
         self.assertIn("Della Rocca", dr.get("markers", []))
 
+    def test_della_rocca_handle_field(self):
+        # V5t: Della Rocca 2010'ın kendi DC.identifier'ı bir HANDLE'dır
+        # (hdl.handle.net/2027/spo.3521354.0010.007), CrossRef DOI değil.
+        # handle alanı + handle_needle yanlışlıkla düşerse test FAIL.
+        dr = [r for r in vd.REFERENCE_URL if r["key"] == "Della Rocca 2010"][0]
+        self.assertEqual(dr.get("handle"), "2027/spo.3521354.0010.007")
+        self.assertIn("quod.lib.umich.edu/p/phimp", dr.get("handle_needle", ""))
+
+    def test_handle_check_pass(self):
+        # Handle System API 200 + responseCode 1 + URL değeri → PASS (ağsız).
+        ref = {"key": "Della Rocca 2010",
+               "handle": "2027/spo.3521354.0010.007",
+               "handle_needle": "quod.lib.umich.edu/p/phimp"}
+        payload = {"responseCode": 1, "handle": "2027/spo.3521354.0010.007",
+                   "values": [{"index": 1, "type": "URL",
+                                "data": {"format": "string",
+                                          "value": "https://quod.lib.umich.edu/"
+                                                   "p/phimp/3521354.0010.007/1"}}]}
+        with mock.patch.object(vd, "_http_json", return_value=payload):
+            v, d = vd.handle_check(ref)
+        self.assertEqual(v, "PASS")
+        self.assertIn("quod.lib.umich.edu", d)
+
+    def test_handle_check_404(self):
+        # Kayıt yok (404) → MISMATCH (fail-closed; DOI 404 davranışıyla aynı).
+        ref = {"key": "X", "handle": "2027/spo.nope"}
+        with mock.patch.object(vd, "_http_json",
+                               side_effect=urllib.error.HTTPError(
+                                   "u", 404, "Not Found", None, None)):
+            v, d = vd.handle_check(ref)
+        self.assertEqual(v, "MISMATCH")
+
+    def test_handle_check_response_code(self):
+        # responseCode != 1 → MISMATCH.
+        ref = {"key": "X", "handle": "2027/spo.x"}
+        payload = {"responseCode": 100, "values": []}
+        with mock.patch.object(vd, "_http_json", return_value=payload):
+            v, d = vd.handle_check(ref)
+        self.assertEqual(v, "MISMATCH")
+
+    def test_handle_check_no_url_value(self):
+        # responseCode 1 ama URL değeri yok → MISMATCH.
+        ref = {"key": "X", "handle": "2027/spo.x"}
+        payload = {"responseCode": 1, "values": [{"type": "HS_ADMIN"}]}
+        with mock.patch.object(vd, "_http_json", return_value=payload):
+            v, d = vd.handle_check(ref)
+        self.assertEqual(v, "MISMATCH")
+
+    def test_handle_check_needle_mismatch(self):
+        # URL değeri var ama handle_needle içermiyor → MISMATCH.
+        ref = {"key": "X", "handle": "2027/spo.x",
+               "handle_needle": "quod.lib.umich.edu/p/phimp"}
+        payload = {"responseCode": 1, "values": [
+            {"type": "URL", "data": {"value": "https://example.com/other"}}]}
+        with mock.patch.object(vd, "_http_json", return_value=payload):
+            v, d = vd.handle_check(ref)
+        self.assertEqual(v, "MISMATCH")
+
+    def test_handle_check_network_error(self):
+        # Ağ hatası → UNVERIFIED (yanlış PASS yok).
+        ref = {"key": "X", "handle": "2027/spo.x"}
+        with mock.patch.object(vd, "_http_json",
+                               side_effect=urllib.error.URLError("ağ")):
+            v, d = vd.handle_check(ref)
+        self.assertEqual(v, "UNVERIFIED")
+
     def test_ia_ident_check_pass(self):
         # ia_ids metadata'sı title+creator eşleşiyorsa PASS (ağsız).
         ref = {"key": "Sextus 1562 Estienne",

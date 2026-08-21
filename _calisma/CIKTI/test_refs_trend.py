@@ -88,6 +88,17 @@ class TestChangelog(unittest.TestCase):
         # En yeni üstte: V5n (2026-08-19), Hicks/Hume (2026-08-18)'den önce.
         self.assertLess(joined.index("V5n"), joined.index("Hicks 1925"))
 
+    def test_changelog_has_v5t_handle(self):
+        """V5t: Della Rocca 2010 Handle System doğrulaması changelog'da olmalı."""
+        lines = rt.changelog_lines()
+        self.assertTrue(lines)
+        joined = "\n".join(lines)
+        self.assertIn("V5t", joined)
+        self.assertIn("Della Rocca 2010", joined)
+        self.assertIn("Handle", joined)
+        # En yeni üstte: V5t (2026-08-21), V5n (2026-08-19)'den önce.
+        self.assertLess(joined.index("V5t"), joined.index("V5n"))
+
     def test_changelog_empty_when_no_entries(self):
         saved = rt.CHANGELOG
         try:
