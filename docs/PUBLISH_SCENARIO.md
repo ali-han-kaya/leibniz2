@@ -108,6 +108,8 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 | 2026-08-21 | feat | (ci) precheck job'ına status_checks --gh --json sidecar'ı ekle | `d6b58a6` |
 | 2026-08-21 | feat | (preview) /guide.html rotası + mirror senkronu | `d184c3c` |
 | 2026-08-21 | feat | render_screens PNG uretimini mock HTML ile dogrula | `0a4f32b` |
+| 2026-08-21 | feat | canli CI denetimini audit_live_ci_sync.py'ye cevir (doc↔GitHub senkron, fail-closed) | `799409c` |
+| 2026-08-21 | fix | audit kendini karsilastirmasin — CI yanlis-pozitif duzeltildi (16 job / 21 artifact doc'a islendi) | `1499b93` |
 | 2026-08-21 | feat | canli CI denetimini audit_live_ci_sync.py'ye cevir | `799409c` |
 
 ---
@@ -638,6 +640,13 @@ kaynaklar `refs-online`'da advisory olarak izlenir (kapıyı kırmaz). K12 (plis
 job'ında koşar (Linux runner'larında SKIP). Aynı şekilde K17 (mirror sync)
 `--full`'a dahil değildir — ayrı `mirror-check` macOS job'ında fail-closed koşar
 (sync sonrası GÜNCEL olmalı; repo ↔ mirror drift'i P1 → job FAIL).
+
+**Denetim bulgusu (2026-08-21, `audit_live_ci_sync.py`):** "11 job / 17 artifact"
+beklentisi güncel pipeline ile uyuşmuyor — canlı run **17 job / 22 artifact**
+üretiyor (16 kapı + `audit-live-ci` meta-denetçi; denetim kendini hariç tutunca
+16/21, doc ile birebir). 11/17 rakamları eski pipeline durumuna aittir;
+denetim script'i doc↔GitHub senkronunu her push'ta fail-closed doğrular
+(drift → exit 1, advisory `audit-live-ci` job'ı + `audit-live-ci` artifact'ı).
 
 ---
 
