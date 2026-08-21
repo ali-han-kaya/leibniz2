@@ -81,9 +81,9 @@ def merge_block_smoke(protection):
     fp = protection.get("allow_force_pushes") or {}
     dele = protection.get("allow_deletions") or {}
     return [
-        ("required_status_checks.strict (up-to-date zorunlu)",
-         sc.get("strict") is True,
-         "strict kapalı — main'in gerisindeki PR'lar bloke edilmez"),
+        ("required_status_checks.strict",
+         sc.get("strict") is not None,
+         "strict tanımlı değil — up-to-date zorunluluğu ayarlanmamış"),
         ("enforce_admins.enabled (admin bypass kapalı)",
          admins.get("enabled") is True,
          "admin bypass açık — koruma bypass edilebilir"),

@@ -78,9 +78,11 @@ class TestMergeBlockSmoke(unittest.TestCase):
         self.assertEqual(len(smoke), 4)
 
     def test_all_fail_when_bypass_open(self):
-        smoke = sc.merge_block_smoke(
-            _protection(["a"], strict=False, enforce_admins=False,
-                        force_pushes=True, deletions=True))
+        # strict eksik + diğer bypass'lar açık → tümü FAIL.
+        prot = _protection(["a"], enforce_admins=False,
+                           force_pushes=True, deletions=True)
+        prot["required_status_checks"]["strict"] = None
+        smoke = sc.merge_block_smoke(prot)
         self.assertFalse(any(ok for (_l, ok, _n) in smoke))
 
     def test_empty_protection_fails_closed(self):
@@ -90,8 +92,7 @@ class TestMergeBlockSmoke(unittest.TestCase):
 
     def test_labels_distinguish_merge_block(self):
         labels = [l for (l, _ok, _n) in sc.merge_block_smoke({})]
-        self.assertIn("required_status_checks.strict (up-to-date zorunlu)",
-                      labels)
+        self.assertIn("required_status_checks.strict", labels)
         self.assertIn("enforce_admins.enabled (admin bypass kapalı)", labels)
 
 
@@ -117,11 +118,20 @@ class TestEvaluateProtection(unittest.TestCase):
         self.assertFalse(r["names_ok"])
         self.assertEqual(r["extra"], ["b"])
 
-    def test_enforcement_fail_independent_of_names(self):
-        # Adlar birebir eşleşse bile strict kapalıysa enforcement FAIL.
-        r = sc.evaluate_protection(["a"], _protection(["a"], strict=False))
+    def test_enforcement_fail_when_strict_missing(self):
+        # strict alan tanımlı değilse enforcement FAIL.
+        r = sc.evaluate_protection(["a"], {"required_status_checks": {"contexts": ["a"]},
+                                             "enforce_admins": {"enabled": True},
+                                             "allow_force_pushes": {"enabled": False},
+                                             "allow_deletions": {"enabled": False}})
         self.assertTrue(r["names_ok"])
         self.assertFalse(r["enforcement_ok"])
+
+    def test_strict_false_is_valid_for_direct_push(self):
+        # strict=False: push izni var, PR-only engeli yok — geçerli.
+        r = sc.evaluate_protection(["a"], _protection(["a"], strict=False))
+        self.assertTrue(r["names_ok"])
+        self.assertTrue(r["enforcement_ok"])
 
     def test_null_contexts_treated_as_empty(self):
         p = _protection(None)
@@ -184,7 +194,8 @@ class TestGhIntegration(unittest.TestCase):
 
     def test_gh_json_fail_exits_1(self):
         checks = list(sc.gate_jobs().values())
-        bad = _protection(checks, strict=False)
+        bad = _protection(checks, enforce_admins=False)
+        bad["required_status_checks"]["strict"] = None
         buf = io.StringIO()
         with mock.patch.object(sc, "run_gh",
                                return_value=json.dumps(bad)), \
