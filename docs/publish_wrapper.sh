@@ -197,8 +197,10 @@ if [ "$CI_SIMULATE" = "1" ]; then
     warn "--with-stage4 --ci-simulate birlikte kullanılamaz (remote gerekli)"
   fi
 
+  local sim_owner
+  sim_owner="$(gh api user -q .login 2>/dev/null || echo 'OWNER-UNKNOWN')"
   step "SONUÇ (CI-SIMULATE)"
-  log "Repo:        https://github.com/$OWNER/$REPO_NAME  (CI-SIMULATE — push yok)"
+  log "Repo:        https://github.com/$sim_owner/$REPO_NAME  (CI-SIMULATE — push yok)"
   log "Sim dizini:  $REPO_ROOT/$SIM_DIR"
   log "Log dosyası: $LOG"
   log "SONUÇ: CI-SIMULATE ✓ — yerel doğrulama tamamlandı, push yapılmadı"
