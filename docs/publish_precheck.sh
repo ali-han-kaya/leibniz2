@@ -234,6 +234,7 @@ fi
 if [ "$ALLOW_REMOTE" = "1" ] && command -v gh >/dev/null 2>&1; then
   GH_JSON="$(mktemp)"
   "$PY" _calisma/CIKTI/status_checks.py --gh --json >"$GH_JSON" 2>/dev/null
+  SC_GH_RC=$?
   # JSON'u tek geçişte shell değişkenlerine ayrıştır (eval + heredoc).
   GH_VERDICT="ERROR"; GH_NAMES_OK="false"; GH_ENFORCEMENT_OK="false"
   GH_MISSING=""; GH_EXTRA=""; GH_SMOKE_FAIL=""
@@ -250,30 +251,36 @@ smoke_fail = "; ".join(s["label"] for s in d.get("smoke", []) if not s.get("ok")
 print("GH_SMOKE_FAIL='%s'" % esc(smoke_fail))
 PYEOF
 )"
-  case "$GH_VERDICT" in
-    PASS)
-      pass "branch protection: check adları birebir eşleşiyor (workflow ↔ GitHub)"
-      pass "merge engeli: strict/enforce_admins/force-push/deletions etkin"
-      ;;
-    FAIL)
-      if [ "$GH_NAMES_OK" = "true" ]; then
+  # Fail-closed: ERROR (rc≠0 VEYA JSON ayrıştırılamadı) → FAIL. Smoke
+  # çalıştırılamıyorsa "denetlenemedi" PASS sayılmaz — AŞAMA 0 kapısıdır.
+  if [ "$GH_VERDICT" = "ERROR" ]; then
+    fail "status_checks --gh smoke çalıştırılamadı (rc=$SC_GH_RC) — JSON ayrıştırılamadı veya repo/gh API hatası; manuel: $PY _calisma/CIKTI/status_checks.py --gh --json"
+  else
+    case "$GH_VERDICT" in
+      PASS)
         pass "branch protection: check adları birebir eşleşiyor (workflow ↔ GitHub)"
-      else
-        fail "branch protection: check adları uyumsuz — eksik: $GH_MISSING; fazla: $GH_EXTRA"
-      fi
-      if [ "$GH_ENFORCEMENT_OK" = "true" ]; then
         pass "merge engeli: strict/enforce_admins/force-push/deletions etkin"
-      else
-        fail "merge engeli etkin değil — eksik: $GH_SMOKE_FAIL"
-      fi
-      ;;
-    NOT_SET_UP)
-      warn "branch protection kurulu değil — AŞAMA 1 (b) web UI'da kur (gh api 404)"
-      ;;
-    *)
-      info "branch protection durumu: $GH_VERDICT"
-      ;;
-  esac
+        ;;
+      FAIL)
+        if [ "$GH_NAMES_OK" = "true" ]; then
+          pass "branch protection: check adları birebir eşleşiyor (workflow ↔ GitHub)"
+        else
+          fail "branch protection: check adları uyumsuz — eksik: $GH_MISSING; fazla: $GH_EXTRA"
+        fi
+        if [ "$GH_ENFORCEMENT_OK" = "true" ]; then
+          pass "merge engeli: strict/enforce_admins/force-push/deletions etkin"
+        else
+          fail "merge engeli etkin değil — eksik: $GH_SMOKE_FAIL"
+        fi
+        ;;
+      NOT_SET_UP)
+        warn "branch protection kurulu değil — AŞAMA 1 (b) web UI'da kur (gh api 404)"
+        ;;
+      *)
+        fail "branch protection durumu bilinmiyor: $GH_VERDICT (rc=$SC_GH_RC)"
+        ;;
+    esac
+  fi
   rm -f "$GH_JSON"
 else
   info "branch protection GitHub doğrulaması atlandı (--allow-remote + gh gerekli)"
