@@ -480,6 +480,39 @@ function renderRefsTrend(rows) {
     parts.push(`<line x1="${PL}" y1="${gy}" x2="${plotRight}" y2="${gy}" stroke="#21262d" stroke-width="1"/>`);
     parts.push(`<text x="${PL-6}" y="${gy+4}" fill="#8b949e" font-size="10" text-anchor="end">${g}</text>`);
   }
+  // by_source yığılmış alan (stacked area) — kaynak kırılımı; yığının tepesi
+  // verified'a eşit olmalı (toplam = refs_verified). crossref/sep/
+  // openlibrary/archive/perseus + kalanlar "diğer" olarak toplanır.
+  const SRC_ORDER = ["crossref", "sep", "openlibrary", "archive", "perseus"];
+  const SRC_COLORS = {
+    crossref: "#58a6ff", sep: "#a371f7", openlibrary: "#d29922",
+    archive: "#3fb950", perseus: "#f778ba", diğer: "#8b949e",
+  };
+  const bySrc = have.map(r => {
+    const bs = r.refs_by_source || {};
+    const m = {};
+    let other = 0;
+    for (const k of Object.keys(bs)) {
+      const v = Number(bs[k]) || 0;
+      if (SRC_ORDER.includes(k)) m[k] = (m[k] || 0) + v;
+      else other += v;
+    }
+    if (other > 0) m["diğer"] = other;
+    return m;
+  });
+  const activeSrc = SRC_ORDER.filter(s => bySrc.some(m => (m[s] || 0) > 0));
+  if (bySrc.some(m => (m["diğer"] || 0) > 0)) activeSrc.push("diğer");
+  const base = new Array(n).fill(0);
+  const areaPts = (vals) => vals.map((v,i) => `${x(i)},${y(v)}`).join(" ");
+  activeSrc.forEach(s => {
+    const top = have.map((_, i) => base[i] + (bySrc[i][s] || 0));
+    const color = SRC_COLORS[s] || "#8b949e";
+    // çokgen: üst kenar ileri + alt kenar (eski base) geri — yığılmış alan.
+    const pts = areaPts(top) + " " +
+      [...top].reverse().map((_, i) => `${x(n-1-i)},${y(base[n-1-i])}`).join(" ");
+    parts.push(`<polygon fill="${color}" fill-opacity="0.30" stroke="none" points="${pts}"/>`);
+    for (let i = 0; i < n; i++) base[i] = top[i];
+  });
   // total (mavi, kesikli) — çevrimiçi denetlenebilir girdi sayısı
   parts.push(`<polyline fill="none" stroke="#58a6ff" stroke-width="2" stroke-dasharray="4 3" points="` +
     have.map((r,i) => `${x(i)},${y(r.refs_total)}`).join(" ") + `"/>`);
@@ -507,10 +540,15 @@ function renderRefsTrend(rows) {
   svg.innerHTML = parts.join("");
   const last = have[n-1];
   const pct = last.refs_total > 0 ? Math.round(100 * last.refs_verified / last.refs_total) : 0;
-  legend.textContent = "Yeşil = verified · Mavi (kesikli) = total · Kırmızı = mismatch · Son: " +
+  // by_source seri lejantı (renkli ■ çipler) — yalnızca aktif kaynaklar.
+  const chips = activeSrc
+    .map(s => `<span style="color:${SRC_COLORS[s] || "#8b949e"}">■ ${s}</span>`)
+    .join(" ");
+  legend.innerHTML = "Yeşil = verified · Mavi (kesikli) = total · Kırmızı = mismatch · Son: " +
     `${last.refs_verified}/${last.refs_total} (${pct}%) · ` +
     (have[0].ts ? new Date(have[0].ts).toLocaleString() : "?") +
-    " → " + (last.ts ? new Date(last.ts).toLocaleString() : "?") + ` · ${n} run`;
+    " → " + (last.ts ? new Date(last.ts).toLocaleString() : "?") + ` · ${n} run` +
+    (chips ? " · " + chips : "");
   $("refs-trend-count").textContent = `(${n} run)`;
 }
 
