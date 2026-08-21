@@ -1420,7 +1420,8 @@ def run_reference_audit(tex_text, add, quiet=False):
         say(f"  [{tag}] {src_label:<10} {ref['key']:<30} -> {detail[:80]}")
         online_results.append({"key": ref["key"], "source": src,
                                "verdict": v, "detail": detail,
-                               "query": _archive_query(ref)})
+                               "query": _archive_query(ref),
+                               "ht_ids_tried": len(ref.get("ht_ids") or [])})
         if v == "MISMATCH":
             add("P1", "K6-REF", "K6 referans",
                 f"{ref['key']} {src_label} uyuşmuyor: {detail}")
@@ -3783,6 +3784,17 @@ def main():
         for r in online_refs:
             by_source[r["source"]] = by_source.get(r["source"], 0) + 1
             by_verdict[r["verdict"]] = by_verdict.get(r["verdict"], 0) + 1
+        # ht_ids identifier sayacı: archive kaynaklarının her biri kaç
+        # identifier denedi (HathiTrust/LoC/OL/GB zincirinde toplam deneme)
+        ht_ids_summary = {}
+        for r in online_refs:
+            tried = r.get("ht_ids_tried", 0)
+            if tried > 0:
+                s = r["source"]
+                if s not in ht_ids_summary:
+                    ht_ids_summary[s] = {"refs": 0, "total_ids": 0}
+                ht_ids_summary[s]["refs"] += 1
+                ht_ids_summary[s]["total_ids"] += tried
         refs_online_report = {
             "tool": "verify_delivery.py K6 referans denetimi "
                     "(CrossRef/SEP/OpenLibrary)",
@@ -3793,6 +3805,7 @@ def main():
             "mismatch": by_verdict.get("MISMATCH", 0),
             "by_source": by_source,
             "by_verdict": by_verdict,
+            "ht_ids_summary": ht_ids_summary,
             "results": online_refs,
         }
         if args.refs_out:
