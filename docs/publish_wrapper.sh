@@ -48,12 +48,14 @@ SUMMARY_MD="$LOG_DIR/PUBLISH_DRY_RUN_SUMMARY.md"
 WITH_STAGE4=0
 DRY_RUN=0
 DRY_RUN_SUMMARY=0
+CI_SIMULATE=0
 for a in "$@"; do
   case "$a" in
-    --with-stage4) WITH_STAGE4=1 ;;
-    --dry-run)     DRY_RUN=1 ;;
+    --with-stage4)    WITH_STAGE4=1 ;;
+    --dry-run)        DRY_RUN=1 ;;
     --dry-run-summary) DRY_RUN=1; DRY_RUN_SUMMARY=1 ;;
-    *) echo "Bilinmeyen bayrak: $a (geçerli: --with-stage4, --dry-run, --dry-run-summary)" >&2; exit 2 ;;
+    --ci-simulate)    CI_SIMULATE=1 ;;
+    *) echo "Bilinmeyen bayrak: $a (geçerli: --with-stage4, --dry-run, --dry-run-summary, --ci-simulate)" >&2; exit 2 ;;
   esac
 done
 
@@ -150,6 +152,57 @@ else
   if ! bash docs/publish_precheck.sh $PRECHECK_ARGS; then
     fail "AŞAMA 0 kapıları geçilemedi — log: $LOG"
   fi
+fi
+
+# ── CI-SIMULATE modu: AŞAMA 1-3 yerine yerel simülasyon ──────────────────
+# precheck + status_checks + simulate_verify_job.sh koşar;
+# push/repo-create CI izleme ATLANIR. Aşağıdaki AŞAMA 1-3 blokları bu modda
+# çalıştırılmaz.
+if [ "$CI_SIMULATE" = "1" ]; then
+  step "AŞAMA 1-3 (CI-SIMULATE) — yerel CI doğrulaması"
+
+  # status_checks.py — workflow job adlarını listele (GitHub eşleşmesi atlanır).
+  if [ -x _calisma/.venv_z3/bin/python ]; then
+    SC_PY=_calisma/.venv_z3/bin/python
+  else
+    SC_PY=python3
+  fi
+  log "status_checks.py — beklenen required check adları:"
+  "$SC_PY" _calisma/CIKTI/status_checks.py | sed 's/^/    /' || warn "status_checks.py çalışmadı"
+
+  # simulate_verify_job.sh — CI job zincirini yerelde compose-style koş.
+  # Bu, --full (K1-K14) + pre-commit + sha256 + config bundle + simulate'dır.
+  log "simulate_verify_job.sh — yerel CI simülasyonu başlıyor..."
+  SIM_DIR="_calisma/CIKTI/sim/verify_job"
+  rm -rf "$SIM_DIR"
+  if bash _calisma/CIKTI/simulate_verify_job.sh; then
+    log "CI-SIMULATE: PASS ✓ — tüm kapılar yeşil (yerel)"
+    # Sonuç dosyalarını göster.
+    if [ -f "$SIM_DIR/summary.md" ]; then
+      log "Özet (summary.md — ilk 20 satır):"
+      head -20 "$SIM_DIR/summary.md" | sed 's/^/    /'
+    fi
+    if [ -f "$SIM_DIR/verify_report.txt" ]; then
+      log "verify_report.txt sonucu:"
+      tail -5 "$SIM_DIR/verify_report.txt" | sed 's/^/    /'
+    fi
+  else
+    CI_EXIT=$?
+    fail "CI-SIMULATE: FAIL (exit $CI_EXIT) — simülasyon kapılarından biri başarısız"
+  fi
+
+  # AŞAMA 4 (opsiyonel) — branch protection smoke testi bu modda çalışmaz
+  # (remote gerekli).
+  if [ "$WITH_STAGE4" = "1" ]; then
+    warn "--with-stage4 --ci-simulate birlikte kullanılamaz (remote gerekli)"
+  fi
+
+  step "SONUÇ (CI-SIMULATE)"
+  log "Repo:        https://github.com/$OWNER/$REPO_NAME  (CI-SIMULATE — push yok)"
+  log "Sim dizini:  $REPO_ROOT/$SIM_DIR"
+  log "Log dosyası: $LOG"
+  log "SONUÇ: CI-SIMULATE ✓ — yerel doğrulama tamamlandı, push yapılmadı"
+  exit 0
 fi
 
 # gh kullanıcısı AŞAMA 1/2 için gerekli (precheck içinde doğrulandı).
