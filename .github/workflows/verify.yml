@@ -1000,6 +1000,17 @@ jobs:
           name: python3-shell
           path: all_artifacts/python3-shell/
 
+      # plist-check advisory bir artifact'tır; yoksa manifest plist-check'siz
+      # üretilir — continue-on-error ile build bloke edilmez. Prefixed indirme
+      # sayesinde gen_repro_manifest.py'nin PLIST CHECK bölümü
+      # plist-check/ önekini yakalar + ayrı hash'ler (SHA-256 ile sabitlenir).
+      - name: Download plist-check artifact (plist-check/ prefix)
+        continue-on-error: true
+        uses: actions/download-artifact@v7
+        with:
+          name: plist-check
+          path: all_artifacts/plist-check/
+
       # ─── 2) manifest.txt üret (gen_repro_manifest.py — tek kaynak) ─────────
       - name: Generate reproducibility manifest
         shell: bash

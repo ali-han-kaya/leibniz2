@@ -195,6 +195,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-21 | refactor | persist sidecar testlerini test_preview_server.py'ye tasi | `f1aab1d` |
 | 2026-08-21 | feat | start_preview.sh — rebuild + start + health tek komut | `cfa9139` |
 | 2026-08-22 | feat | update_preview.sh --status alt komutu | `aacad00` |
+| 2026-08-22 | feat | K18 launchctl durum katmani | `efcb8bb` |
 
 ### Regresyon notları
 

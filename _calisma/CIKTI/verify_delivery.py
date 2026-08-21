@@ -2560,6 +2560,64 @@ def verify_manifest_digest(manifest_path, add, check_id="K10-MANIFEST",
                   else ("python3_shell_combined_sha256: FAIL — "
                         + "; ".join(ps_rows[:5])))
 
+    # ---- plist_check.combined_sha256: YENİDEN hesapla + doğrula ----------
+    # update_preview.sh --plist-check çıktısı (plist-check/ önekli
+    # plist_check_report.txt + plist_report.json) "plist_check" objesine
+    # yazılır: {files: {rel: sha256}, combined_sha256}. K10 burada onu
+    # plist_check.files'tan yeniden hesaplar; kayıtlı değerle uyuşmazsa P1.
+    pc_ok = True
+    pc_rows = []
+    pc = m.get("plist_check")
+    if pc is not None and not isinstance(pc, dict):
+        pc_ok = False
+        pc_rows.append("plist_check: dict değil")
+        add("P1", check_id, check_label, "plist_check alanı dict değil")
+    elif isinstance(pc, dict):
+        pc_files = pc.get("files")
+        stored_combined = pc.get("combined_sha256")
+        if not isinstance(pc_files, dict):
+            pc_ok = False
+            pc_rows.append("plist_check.files: dict değil")
+            add("P1", check_id, check_label, "plist_check.files dict değil")
+            pc_files = {}
+        else:
+            for rel, h in sorted(pc_files.items()):
+                if rel not in files:
+                    pc_ok = False
+                    pc_rows.append(f"{rel} (files'ta yok)")
+                    add("P1", check_id, check_label,
+                        f"plist_check.files'taki dosya files'ta yok: {rel}")
+                elif files[rel] != h:
+                    pc_ok = False
+                    pc_rows.append(f"{rel} (hash farklı)")
+                    add("P1", check_id, check_label,
+                        f"plist_check.files hash'i files ile uyuşmuyor: {rel}",
+                        f"plist_check={h[:16]}… files={files[rel][:16]}…")
+        if isinstance(pc_files, dict):
+            if pc_files and not stored_combined:
+                pc_ok = False
+                pc_rows.append("combined_sha256 eksik")
+                add("P1", check_id, check_label,
+                    "plist_check.combined_sha256 eksik "
+                    "(plist_check.files dolu)")
+            elif stored_combined is not None:
+                recalc = _summary_combined_sha256(pc_files)
+                if stored_combined != recalc:
+                    pc_ok = False
+                    pc_rows.append("combined_sha256 uyuşmazlığı")
+                    add("P1", check_id, check_label,
+                        "plist_check.combined_sha256 uyuşmazlığı",
+                        f"yeniden {recalc[:16]}… ≠ kayıtlı {stored_combined[:16]}…")
+    elif any(rel.startswith("plist-check/") for rel in files):
+        pc_ok = False
+        pc_rows.append("plist_check objesi eksik")
+        add("P1", check_id, check_label,
+            "plist_check objesi eksik (files'ta plist-check dosyaları var)")
+
+    pc_detail = ("plist_check_combined_sha256: PASS" if pc_ok
+                 else ("plist_check_combined_sha256: FAIL — "
+                       + "; ".join(pc_rows[:5])))
+
     # ---- manifest.sha256 ↔ manifest.json: sidecar eşleşmesi (fail-closed) ----
     # Ortak helper (K10 + K13 tek kaynak). Sidecar manifest dosyasının KENDİ
     # hash'ini sabitler: manifest.json içeriği değişirse (ör. JSON'a boşluk
@@ -2570,11 +2628,12 @@ def verify_manifest_digest(manifest_path, add, check_id="K10-MANIFEST",
 
     detail = (f"{n_ok} OK / {n_bad} uyuşmazlık / {n_missing} eksik "
               f"({len(files)} dosya); {cfg_detail}; {ov_detail}; "
-              f"{ln_detail}; {sm_detail}; {ps_detail}; {sc_detail}")
+              f"{ln_detail}; {sm_detail}; {ps_detail}; {pc_detail}; "
+              f"{sc_detail}")
     if bad_rows:
         detail += " | " + "; ".join(bad_rows[:5])
     return (n_bad == 0 and n_missing == 0 and cfg_ok and ov_ok and ln_ok
-            and sm_ok and ps_ok and sc_ok), detail
+            and sm_ok and ps_ok and pc_ok and sc_ok), detail
 
 
 def check_repro_manifest_self_consistency(add):

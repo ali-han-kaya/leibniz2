@@ -69,6 +69,7 @@ ARTIFACT_JOBS = {
     "precheck-report": "precheck",
     "action-runtimes": "action-runtimes",
     "python3-shell": "verify",
+    "plist-check": "plist-check",
     "reproducibility": "reproducibility",
 }
 
@@ -408,6 +409,34 @@ def main() -> None:
                      "=" * 72]
         lines += ps_block
 
+    # ── PLIST CHECK bölümü: plist-check/ önekli dosyalar (CONFIG gibi) ──────
+    # update_preview.sh --plist-check çıktısı (plist_check_report.txt)
+    # + K12 sidecar (plist_report.json) ayrıca işaretlenir;
+    # combined_sha256 tek hash ile özetler.
+    plist_check_hashes = {rel: h for rel, h in file_hashes.items()
+                          if rel.startswith("plist-check/")}
+    plist_check_combined = None
+    if plist_check_hashes:
+        sorted_rel = sorted(plist_check_hashes)
+        plist_check_combined = hashlib.sha256(
+            "".join(f"{rel}\0{plist_check_hashes[rel]}\n"
+                     for rel in sorted_rel).encode()
+        ).hexdigest()
+        pc_block = [
+            "",
+            "=" * 72,
+            "PLIST CHECK ARTIFACT (ayrı bölüm)",
+            "=" * 72,
+            f"{'FILE':<55} {'SHA-256'}",
+            "-" * 72,
+        ]
+        pc_block += [f"{rel:<55} {plist_check_hashes[rel]}"
+                     for rel in sorted_rel]
+        pc_block += ["-" * 72,
+                     f"plist_check_combined_sha256: {plist_check_combined}",
+                     "=" * 72]
+        lines += pc_block
+
     # ── PROVENANCE bölümü: artifact → üreten job (denetim izi) ──────────────
     # Her artifact hangi job'da üretildi — tek bakışta kaynak. Prefixed
     # indirilenler (config/, precommit-logs/) bundle'da kendi adı altındadır;
@@ -510,6 +539,11 @@ def main() -> None:
         manifest_json["python3_shell"] = {
             "files": dict(sorted(python3_shell_hashes.items())),
             "combined_sha256": python3_shell_combined,
+        }
+    if plist_check_hashes:
+        manifest_json["plist_check"] = {
+            "files": dict(sorted(plist_check_hashes.items())),
+            "combined_sha256": plist_check_combined,
         }
 
     out_dir = pathlib.Path(args.out_dir)
