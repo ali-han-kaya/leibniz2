@@ -911,6 +911,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path in ("/", "/index.html", "/preview.html"):
             self.serve_preview()
+        elif self.path == "/guide.html":
+            self.serve_guide()
         elif self.path == "/api/latest":
             self.serve_latest()
         elif self.path == "/api/run":
@@ -1073,6 +1075,23 @@ class Handler(BaseHTTPRequestHandler):
 
     def serve_preview(self):
         with open(os.path.join(PREVIEW_DIR, "preview.html"), encoding="utf-8") as f:
+            html = f.read()
+        self._send(200, html, content_type="text/html; charset=utf-8")
+
+    def serve_guide(self):
+        """Branch protection görsel kılavuzu (guide.html).
+
+        Kaynak: docs/branch-protection-guide/guide.html — self-contained
+        (harici resim yok, tamamı HTML/CSS mockup). PREVIEW_DIR'a
+        sync_verify_mirror.sh (PREVIEW_FILES) ile senkronlanır; eksikse
+        404 (dashboard'ı etkilemez).
+        """
+        path = os.path.join(PREVIEW_DIR, "guide.html")
+        if not os.path.isfile(path):
+            self._send(404, "404 — guide.html mirror'da yok "
+                             "(bash _calisma/CIKTI/sync_verify_mirror.sh)")
+            return
+        with open(path, encoding="utf-8") as f:
             html = f.read()
         self._send(200, html, content_type="text/html; charset=utf-8")
 

@@ -83,6 +83,13 @@ PREVIEW_FILES=(
   "_daemonize.py|_daemonize.py"
 )
 
+# Branch protection görsel kılavuzu (adım 2, preview mirror): kaynak repo
+# köküne göre (docs/), dest PREVIEW_MIRROR'a. self-contained HTML — sunucu
+# /guide.html rotasında PREVIEW_DIR/guide.html'den servis eder.
+GUIDE_FILES=(
+  "docs/branch-protection-guide/guide.html|guide.html"
+)
+
 say() { printf '%s\n' "$*"; }
 err() { printf 'HATA: %s\n' "$*" >&2; }
 
@@ -114,6 +121,13 @@ validate_sources() {
       rc=1
     fi
   done < <(printf '%s\n' "${PREVIEW_FILES[@]}")
+  while IFS='|' read -r src dst; do
+    [ -n "$src" ] || continue
+    if [ ! -f "$ROOT/$src" ]; then
+      err "kaynak yok: $ROOT/$src (guide)"
+      rc=1
+    fi
+  done < <(printf '%s\n' "${GUIDE_FILES[@]}")
   return "$rc"
 }
 
@@ -164,6 +178,13 @@ run_sync() {
     [ "$st" = "GÜNCELLENDİ" ] && changed=$((changed + 1))
     say "$st: preview/$dst"
   done < <(printf '%s\n' "${PREVIEW_FILES[@]}")
+  while IFS='|' read -r src dst; do
+    [ -n "$src" ] || continue
+    total=$((total + 1))
+    st="$(sync_one "$ROOT/$src" "$PREVIEW_MIRROR/$dst" "$mode")"
+    [ "$st" = "GÜNCELLENDİ" ] && changed=$((changed + 1))
+    say "$st: preview/$dst (guide)"
+  done < <(printf '%s\n' "${GUIDE_FILES[@]}")
   say "ÖZET: $total dosya, $changed güncellendi · git $(git_short)"
 }
 
@@ -197,6 +218,15 @@ run_check() {
       stale=1
     fi
   done < <(printf '%s\n' "${PREVIEW_FILES[@]}")
+  while IFS='|' read -r src dst; do
+    [ -n "$src" ] || continue
+    if same_file "$ROOT/$src" "$PREVIEW_MIRROR/$dst"; then
+      say "GÜNCEL: preview/$dst (guide)"
+    else
+      say "BAYAT/EKSİK: preview/$dst (guide)"
+      stale=1
+    fi
+  done < <(printf '%s\n' "${GUIDE_FILES[@]}")
   return "$stale"
 }
 
@@ -220,6 +250,10 @@ run_list() {
     [ -n "$src" ] || continue
     say "$CIKTI/$src -> $PREVIEW_MIRROR/$dst"
   done < <(printf '%s\n' "${PREVIEW_FILES[@]}")
+  while IFS='|' read -r src dst; do
+    [ -n "$src" ] || continue
+    say "$ROOT/$src -> $PREVIEW_MIRROR/$dst (guide)"
+  done < <(printf '%s\n' "${GUIDE_FILES[@]}")
 }
 
 usage() {

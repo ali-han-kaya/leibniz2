@@ -214,6 +214,25 @@ class TestMirrorFileCoverage(unittest.TestCase):
         self.assertIn("preview_server.py|preview_server.py", text)
         self.assertIn("_daemonize.py|_daemonize.py", text)
 
+    def test_guide_files_listed_and_synced(self):
+        # GUIDE_FILES (adım 2) branch protection kılavuzunu preview mirror'a
+        # taşır — sunucu /guide.html rotasında oradan servis eder.
+        with open(SYNC_MIRROR, encoding="utf-8") as f:
+            text = f.read()
+        self.assertIn("docs/branch-protection-guide/guide.html|guide.html",
+                      text)
+        with tempfile.TemporaryDirectory(prefix="mirror-guide-") as work:
+            env = sync_env(work)
+            syn = run(env, "bash", SYNC_MIRROR)
+            self.assertEqual(syn.returncode, 0, syn.stderr)
+            guide = os.path.join(env["PREVIEW_MIRROR"], "guide.html")
+            self.assertTrue(os.path.isfile(guide), guide)
+            # Drift: kaynak değişirse --check BAYAT döner (K17 fail-closed).
+            src = os.path.join(HERE, "..", "..",
+                               "docs", "branch-protection-guide",
+                               "guide.html")
+            self.assertTrue(os.path.isfile(src), src)
+
     def test_preview_mirror_synced_in_single_command(self):
         # Adım 2+4 tek komut: sync, preview mirror'ı da kurar; --check onu
         # da denetler. PREVIEW_MIRROR fake'e yönlendirilir (gerçek cache'e

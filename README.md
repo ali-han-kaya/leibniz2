@@ -171,6 +171,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-21 | docs | changelog — ce0f633 satırını işle | `245a0ac` |
 | 2026-08-21 | fix | (ci) precheck'e administration:read — smoke CI'da koşsun | `8d10118` |
 | 2026-08-21 | fix | status_checks --gh 404 ile yetki hatasını ayır (UNREADABLE) | `3226656` |
+| 2026-08-21 | feat | (ci) precheck job'ına status_checks --gh --json sidecar'ı ekle | `d6b58a6` |
 
 ### Regresyon notları
 
