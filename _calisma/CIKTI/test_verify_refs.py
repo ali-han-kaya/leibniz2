@@ -466,5 +466,66 @@ class TestOpenLibraryFallback(unittest.TestCase):
         self.assertEqual(v, "UNVERIFIED")
 
 
+class TestLocCheck(unittest.TestCase):
+    """V5w: Library of Congress katalog kanıtı (lccn bazlı, HT'siz)."""
+
+    def _call(self, ref, payload):
+        with mock.patch.object(vd, "_http_json", return_value=payload):
+            return vd.loc_check(ref)
+
+    def _item(self, title, date="2012"):
+        return {"item": {"title": title, "date": date}}
+
+    def test_pass_via_lccn(self):
+        # LoC item API: lccn → kayıt sayfası; title_needle eşleşirse PASS.
+        ref = {"key": "Fine 2012", "title_needle": "metaphysical grounding",
+               "ht_ids": ["lccn:2012014618", "isbn:1107022894"]}
+        v, d = self._call(ref, self._item(
+            "Metaphysical grounding : understanding the structure of reality"))
+        self.assertEqual(v, "PASS")
+        self.assertIn("LoC lccn:2012014618", d)
+        self.assertIn("Metaphysical", d)
+
+    def test_pass_accent_insensitive(self):
+        # "Lagrée" başlığındaki aksanlar _fold ile normalize edilir.
+        ref = {"key": "Lagree 1994", "title_needle": "lipse",
+               "ht_ids": ["lccn:95174106"]}
+        v, d = self._call(ref, self._item(
+            "Juste Lipse et la restauration du stoïcisme : étude "
+            "et traduction des traités stoïciens", "1994"))
+        self.assertEqual(v, "PASS")
+        self.assertIn("1994", d)
+
+    def test_mismatch_when_record_differs(self):
+        ref = {"key": "Schmitt 1972", "title_needle": "cicero scepticus",
+               "ht_ids": ["lccn:73155022"]}
+        v, d = self._call(ref, self._item("Something entirely different"))
+        self.assertEqual(v, "MISMATCH")
+        self.assertIn("başlık eşleşmedi", d)
+
+    def test_unverified_without_lccn(self):
+        ref = {"key": "X", "title_needle": "z",
+               "ht_ids": ["oclc:999", "isbn:123"]}
+        v, d = self._call(ref, {})
+        self.assertEqual(v, "UNVERIFIED")
+        self.assertIn("lccn yok", d)
+
+    def test_unverified_when_no_record(self):
+        ref = {"key": "X", "title_needle": "z", "ht_ids": ["lccn:99999999"]}
+        v, d = self._call(ref, {"item": {}})
+        self.assertEqual(v, "UNVERIFIED")
+        self.assertIn("kayıt yok", d)
+
+    def test_http_error_unverified(self):
+        ref = {"key": "X", "title_needle": "z", "ht_ids": ["lccn:1"]}
+        with mock.patch.object(
+                vd, "_http_json",
+                side_effect=urllib.error.HTTPError(
+                    "url", 404, "Not Found", None, None)):
+            v, d = vd.loc_check(ref)
+        self.assertEqual(v, "UNVERIFIED")
+        self.assertIn("LoC HTTP 404", d)
+
+
 if __name__ == "__main__":
     unittest.main()

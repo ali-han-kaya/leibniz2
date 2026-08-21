@@ -45,6 +45,11 @@ API = "https://api.github.com"
 # düzeltmesi yapıldığında buraya tek satır eklenir (denetlenebilir geçmiş).
 CHANGELOG = [
     ("2026-08-21",
+     "V5w: Lagrée/Millican/Schmitt/Fine kitapları HathiTrust'sız katalog "
+     "kanıtıyla — Library of Congress lccn kayıtları PASS (loc_check; zincir "
+     "IA → HT → LoC → OL → GB). by_source'ta yeni `loc` kaynağı; kapsam "
+     "değişmedi (61/61 PASS)."),
+    ("2026-08-21",
      "V5v: refs-trend denetimi tekrarlanabilir script oldu — "
      "audit_refs_trend.py, refs-trend.json satırlarını kaynak refs-online "
      "artifact'larıyla karşılaştırır (sahte satır / sayı / by_source drift'i "

@@ -2,13 +2,13 @@
 # -*- coding: utf-8 -*-
 """ia_ol_fallback_evidence.py — 5 IA kapsam-dışı kaynağın fallback kanıtı.
 
-V5o/V5p/V5s kaydını TEK KOMUTLA yeniden üretir: Internet Archive'de
+V5o/V5p/V5s/V5w kaydını TEK KOMUTLA yeniden üretir: Internet Archive'de
 indekslenmeyen 5 kaynağın (Fine 2012, Lagrée 1994, Millican 2002,
 Schmitt 1972, Xunzi/Knoblock) gerçek API yanıtıyla nasıl PASS olduğunu
 gösterir. verify_delivery.py'nin CI'da BİREBİR kullandığı zinciri koşar
-(`_archive_with_fallback`): IA → HathiTrust → OpenLibrary → Google Books.
-Çıktı, REFERANS_KANIT_DENETIMI §5.3'teki kanıt tablosunun tek komutluk
-yeniden üretimidir.
+(`_archive_with_fallback`): IA → HathiTrust → LoC → OpenLibrary →
+Google Books. Çıktı, REFERANS_KANIT_DENETIMI §5.3'teki kanıt tablosunun
+tek komutluk yeniden üretimidir.
 
 Kullanım:
   python3 ia_ol_fallback_evidence.py            # CANLI: gerçek API yanıtları
@@ -34,10 +34,11 @@ import verify_delivery as vd  # noqa: E402
 IA_OUT_OF_SCOPE = ["Fine 2012", "Lagree 1994", "Millican 2002",
                    "Schmitt 1972", "Xunzi Knoblock"]
 
-# V5s durumu: Xunzi → HathiTrust (lccn:87033578 ile gerçek katalog kaydı),
-# diğer 4 → OpenLibrary fallback (telifli kitaplar HT'de yok).
+# V5s/V5w durumu: Xunzi → HathiTrust (lccn:87033578 ile gerçek katalog
+# kaydı), diğer 4 → Library of Congress (lccn bazlı katalog kanıtı — HT'de
+# kaydı olmayan telifli/modern kitaplar LoC'de birebir bulunur).
 HT_SOURCE = "Xunzi Knoblock"
-OL_SOURCES = ["Fine 2012", "Lagree 1994", "Millican 2002", "Schmitt 1972"]
+LOC_SOURCES = ["Fine 2012", "Lagree 1994", "Millican 2002", "Schmitt 1972"]
 
 # ── Offline (mock) modu ────────────────────────────────────────────────────
 # REFERANS_KANIT_DENETIMI §5.3'teki belgelenmiş CANLI yanıtlarla birebir
@@ -51,6 +52,26 @@ MOCK_HT = {
             }
         },
         "items": [],
+    },
+}
+
+MOCK_LOC = {
+    "2012014618": {
+        "item": {"title": "Metaphysical grounding : understanding the "
+                           "structure of reality", "date": "2012"},
+    },
+    "95174106": {
+        "item": {"title": "Juste Lipse et la restauration du stoïcisme : "
+                           "étude et traduction des traités stoïciens",
+                  "date": "1994"},
+    },
+    "2002020030": {
+        "item": {"title": "Reading Hume on human understanding : essays on "
+                           "the first Enquiry", "date": "2002"},
+    },
+    "73155022": {
+        "item": {"title": "Cicero Scepticus : a study of the influence of "
+                           "the Academica in the Renaissance", "date": "1972"},
     },
 }
 
@@ -97,6 +118,11 @@ def _mock_router(url):
         if ident in MOCK_HT:
             return {ident: MOCK_HT[ident]}
         return {ident: {"records": {}, "items": []}}
+    if "loc.gov/item/" in url and "fo=json" in url:
+        lccn = url.split("/item/", 1)[1].split("/", 1)[0]
+        if lccn in MOCK_LOC:
+            return MOCK_LOC[lccn]
+        return {"item": {}}
     if "openlibrary.org/search.json" in url:
         q = urllib.parse.parse_qs(
             urllib.parse.urlparse(url).query).get("q", [""])[0].lower()
@@ -113,8 +139,8 @@ def collect_evidence(keys=None, offline=False):
     """5 kaynağın fallback kanıtını toplar.
 
     verify_delivery.py'nin CI'daki zincirini (_archive_with_fallback) koşar:
-    IA → HathiTrust → OpenLibrary → Google Books; kaynak ve gerçek API yanıtı
-    özetiyle döner. offline=True → deterministik mock (test/denetim).
+    IA → HathiTrust → LoC → OpenLibrary → Google Books; kaynak ve gerçek API
+    yanıtı özetiyle döner. offline=True → deterministik mock (test/denetim).
     Döndürür: [{key, verdict, source, detail}, ...]
     """
     if keys is None:
@@ -185,7 +211,7 @@ def main():
     else:
         mode = "MOCK (deterministik, ağsız)" if args.offline else "CANLI API"
         print("# IA kapsam-dışı 5 kaynak — fallback kanıtı")
-        print(f"- **Mod:** {mode} — zincir: IA → HathiTrust → OpenLibrary → Google Books")
+        print(f"- **Mod:** {mode} — zincir: IA → HathiTrust → LoC → OpenLibrary → Google Books")
         print(f"- **Kaynak:** verify_delivery.py `_archive_with_fallback` "
               "(CI ile birebir)")
         print()

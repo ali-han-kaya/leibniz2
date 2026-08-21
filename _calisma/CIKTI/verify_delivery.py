@@ -1172,6 +1172,41 @@ def hathitrust_check(ref):
     return "UNVERIFIED", "HathiTrust: verilen identifier'larda kayıt yok"
 
 
+def loc_check(ref):
+    """Library of Congress item API ile kitap doğrulaması — katalog kanıtı.
+
+    ref['ht_ids'] içindeki `lccn:` identifier'ları doğrudan LoC kayıt
+    sayfasına çözer (https://www.loc.gov/item/{lccn}/?fo=json): LoC, HT
+    kataloğundan BAĞIMSIZ bir ulusal katalogdur — HathiTrust'ta kaydı
+    olmayan telifli/modern kitaplar (Vrin/OUP/Nijhoff/CUP) LoC'de LCCN ile
+    birebir bulunabilir. Title eşleşmesi aksan-duyarsızdır (_fold).
+    Döndürür (PASS | MISMATCH | UNVERIFIED, açıklama)."""
+    ht_ids = ref.get("ht_ids") or []
+    lccns = [i.split(":", 1)[1] for i in ht_ids
+             if i.startswith("lccn:") and ":" in i]
+    if not lccns:
+        return "UNVERIFIED", "LoC: ht_ids'te lccn yok"
+    title_n = _fold(ref["title_needle"])
+    for lccn in lccns:
+        url = f"https://www.loc.gov/item/{lccn}/?fo=json"
+        try:
+            data = _http_json(url)
+        except urllib.error.HTTPError as e:
+            return "UNVERIFIED", f"LoC HTTP {e.code}"
+        except Exception as e:
+            return "UNVERIFIED", f"LoC ağ hatası: {e}"
+        item = data.get("item") or {}
+        t = str(item.get("title") or "")
+        if title_n in _fold(t):
+            return "PASS", (f"LoC lccn:{lccn}: "
+                            f"'{t[:55]}' ({item.get('date') or '?'})")
+        if t:
+            return "MISMATCH", (f"LoC lccn:{lccn}: kayıt var ama "
+                                f"'{ref['title_needle']}' başlık eşleşmedi "
+                                f"('{t[:50]}')")
+    return "UNVERIFIED", "LoC: verilen lccn'lerde kayıt yok/okunamadı"
+
+
 def openlibrary_fallback_check(ref):
     """Open Library search.json ile kitap doğrulaması — arşiv fallback.
 
@@ -1223,13 +1258,14 @@ def _archive_fallback(ref):
     """Internet Archive UNVERIFIED kalınca ek kaynakları dene.
 
     HathiTrust (identifier bazlı — V5p: oclc/lccn ile gerçek katalog kaydı)
+    + Library of Congress (lccn bazlı ulusal katalog — V5w: HT'de kaydı
+    olmayan telifli/modern kitaplar için HT'siz katalog kanıtı)
     + Open Library (title+creator, aksan-duyarsız) + Google Books (key
-    isteğe bağlı) denenir; ilk PASS kazanır. HathiTrust, OpenLibrary'den
-    ÖNCE denenir: HT kaydı başlıkla birebir katalog kanıtıdır, OL arama
-    eşleşmesinden daha güçlüdür; HT'de kayıt yoksa hızlıca UNVERIFIED
-    döner (0 kayıt) ve OL fallback'i devreye girer. Hepsi başarısızsa
-    birleşik denetim iziyle UNVERIFIED döner (kaynak 'archive' kalır —
-    by_source'ı şişirmez).
+    isteğe bağlı) denenir; ilk PASS kazanır. HathiTrust önce denenir: HT
+    kaydı başlıkla birebir katalog kanıtıdır; kayıt yoksa LoC devreye girer
+    (aynı tür katalog kanıtı, bağımsız katalog). Hepsi başarısızsa birleşik
+    denetim iziyle UNVERIFIED döner (kaynak 'archive' kalır — by_source'ı
+    şişirmez).
     Döndürür (verdict, detail, source)."""
     attempts = []
     if ref.get("ht_ids"):
@@ -1237,6 +1273,11 @@ def _archive_fallback(ref):
         attempts.append(hd[:70])
         if hv == "PASS":
             return hv, hd, "hathitrust"
+        # HT'de kayıt yoksa LoC katalog kanıtı dene (lccn bazlı).
+        lv, ld = loc_check(ref)
+        attempts.append(ld[:70])
+        if lv == "PASS":
+            return lv, ld, "loc"
     ov, od = openlibrary_fallback_check(ref)
     attempts.append(od[:70])
     if ov == "PASS":

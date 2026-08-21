@@ -111,6 +111,17 @@ class TestChangelog(unittest.TestCase):
         # En yeni üstte: V5t (2026-08-21), V5n (2026-08-19)'den önce.
         self.assertLess(joined.index("V5t"), joined.index("V5n"))
 
+    def test_changelog_has_v5w_loc(self):
+        """V5w: LoC katalog kanıtı changelog'da olmalı (en yeni üstte)."""
+        lines = rt.changelog_lines()
+        self.assertTrue(lines)
+        joined = "\n".join(lines)
+        self.assertIn("V5w", joined)
+        self.assertIn("Library of Congress", joined)
+        self.assertIn("loc", joined)
+        # En yeni üstte: V5w (2026-08-21), V5v'den önce.
+        self.assertLess(joined.index("V5w"), joined.index("V5v"))
+
     def test_changelog_empty_when_no_entries(self):
         saved = rt.CHANGELOG
         try:
