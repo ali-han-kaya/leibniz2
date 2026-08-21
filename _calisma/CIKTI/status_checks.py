@@ -197,10 +197,12 @@ def main(argv=None):
         if args.json:
             print(json.dumps(gh_result, indent=2, ensure_ascii=False))
         else:
-            print(f"UYARI: branch protection kurulu değil/erişilemedi — {e}")
-            print("  (publish öncesi normaldir; AŞAMA 1 (b) web UI'dan kurulur — "
-                  "yukarıdaki listeyi yapıştır)")
-        return
+            print(f"HATA: branch protection kurulu değil — {e}", file=sys.stderr)
+            print("  --gh modu fail-closed: protection kurulu değilken exit 1.",
+                  file=sys.stderr)
+            print(f"\nUYARI: branch protection kurulu değil/erişilemedi — {e}")
+            print("  Kurulum: gh api -X PUT repos/.../branches/main/protection")
+        sys.exit(1)
 
     try:
         protection = json.loads(raw)

@@ -172,12 +172,14 @@ class TestGhIntegration(unittest.TestCase):
                 sc.main(["--gh", "--repo", "owner/name"])
         self.assertEqual(cm.exception.code, 1)
 
-    def test_no_protection_warns_exit_0(self):
-        # run_gh RuntimeError → "branch protection kurulu değil" → return (0).
+    def test_no_protection_exits_1(self):
+        # run_gh RuntimeError → "branch protection kurulu değil" → exit 1 (fail-closed).
         with mock.patch.object(sc, "run_gh",
-                               side_effect=RuntimeError("Branch not protected")):
-            rc = sc.main(["--gh", "--repo", "owner/name"])
-        self.assertIsNone(rc)
+                               side_effect=RuntimeError("Branch not protected")), \
+                mock.patch.object(sys, "stderr", new=io.StringIO()):
+            with self.assertRaises(SystemExit) as cm:
+                sc.main(["--gh", "--repo", "owner/name"])
+        self.assertEqual(cm.exception.code, 1)
 
     def test_gh_json_pass(self):
         checks = list(sc.gate_jobs().values())
@@ -207,15 +209,28 @@ class TestGhIntegration(unittest.TestCase):
         self.assertEqual(d["verdict"], "FAIL")
         self.assertFalse(d["enforcement_ok"])
 
-    def test_gh_json_not_set_up(self):
+    def test_gh_json_not_set_up_exits_1(self):
+        # Protection kurulu değilken --gh exit 1 (fail-closed).
         buf = io.StringIO()
         with mock.patch.object(sc, "run_gh",
                                side_effect=RuntimeError("Branch not protected")), \
                 mock.patch.object(sys, "stdout", new=buf):
-            rc = sc.main(["--gh", "--repo", "owner/name", "--json"])
-        self.assertIsNone(rc)
+            with self.assertRaises(SystemExit) as cm:
+                sc.main(["--gh", "--repo", "owner/name", "--json"])
+        self.assertEqual(cm.exception.code, 1)
         d = json.loads(buf.getvalue())
         self.assertEqual(d["verdict"], "NOT_SET_UP")
+
+    def test_gh_text_not_set_up_exits_1(self):
+        # Text modunda da protection kurulu değilken exit 1.
+        buf = io.StringIO()
+        with mock.patch.object(sc, "run_gh",
+                               side_effect=RuntimeError("Branch not protected")), \
+                mock.patch.object(sys, "stdout", new=buf), \
+                mock.patch.object(sys, "stderr", new=io.StringIO()):
+            with self.assertRaises(SystemExit) as cm:
+                sc.main(["--gh", "--repo", "owner/name"])
+        self.assertEqual(cm.exception.code, 1)
 
 
 if __name__ == "__main__":
