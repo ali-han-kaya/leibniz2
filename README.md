@@ -146,6 +146,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-21 | ci | `status_checks.py --gh` fail-closed (protection yoksa exit 1) | `df92ada` |
 | 2026-08-21 | ci | `simulate_verify_job.sh` — `GITHUB_STEP_SUMMARY` + env-snapshot validation | `2282925` |
 | 2026-08-21 | ci | precheck-report → reproducibility manifest (SHA-256) | `694b367` |
+| 2026-08-21 | docs | add repo-level changelog + regression notes to README | `b07f5f4` |
 
 ### Regresyon notları
 

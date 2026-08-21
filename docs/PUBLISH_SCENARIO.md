@@ -69,6 +69,16 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 | 2026-08-21 | AŞAMA 1 (b) | Branch protection GH API ile kuruldu: 8 required check, `enforce_admins=true`, `strict=false`, `allow_force_pushes=false` | `dc9ab4f` |
 | 2026-08-21 | AŞAMA 1 (b) | Job tablosu 3 kategoride yeniden yapılandırıldı: push-required (8), push-advisory (2), PR-only (4); status_checks.py `GATE_EXCLUDE` güncellendi | `df92ada` |
 | 2026-08-21 | AŞAMA 3 | `status_checks.py --gh` fail-closed: protection kurulu değilken exit 1 | `df92ada` |
+| 2026-08-21 | docs | add repo-level changelog + regression notes to README | `b07f5f4` |
+| 2026-08-21 | feat | (ci) add precheck-report to reproducibility manifest | `694b367` |
+| 2026-08-21 | docs | add §8 publish wrapper idempotency verification | `5d9b6c6` |
+| 2026-08-21 | fix | (ci) remove local keyword outside function | `965182d` |
+| 2026-08-21 | fix | (ci) use local var in ci-simulate OWNER | `994d359` |
+| 2026-08-21 | feat | (ci) ci-simulate mode + doc integrity audit | `a309b23` |
+| 2026-08-21 | docs | add §7 to PRE_PUSH_DENETIM_RAPORU + skip report from path check | `4e58931` |
+| 2026-08-21 | docs | fix stale job/check counts in PUBLISH_SCENARIO (13→14, 10→8) | `8878847` |
+| 2026-08-21 | feat | add check-absolute-paths pre-commit hook | `8116715` |
+| 2026-08-21 | docs | clarify 8 required checks vs push-running jobs in PUBLISH_SCENARIO | `b393ddf` |
 
 ---
 

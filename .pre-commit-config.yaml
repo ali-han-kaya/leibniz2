@@ -39,6 +39,10 @@
 #   10) commit-msg-style      : başlık denetimi (.gitmessage kuralları) — noise
 #                               commit'leri (wip/smoke/test marker/şablon) reddeder.
 #                               commit-msg stage'inde; CI --all-files'ta ÇALIŞMAZ.
+#   11) check-changelog-sync  : README.md ve docs/PUBLISH_SCENARIO.md'deki
+#                               changelog tablolarını git log ile karşılaştırır
+#                               (drift = commit bloke). Mevcut insan özetleri
+#                               korunur; yalnızca yeni commit'ler raporlanır.
 # Herhangi bir P0/P1 bulgusu commit'i bloke eder (sıfır-dışı exit).
 #
 # Not: update-config TEK yazan hook'tur (config'i stage eder). Diğer kapılar
@@ -53,6 +57,7 @@
 #   pre-commit run check-repro-manifest
 #   pre-commit run verify-delivery-repro-manifest
 #   pre-commit run verify-delivery-github-scripts
+#   pre-commit run check-changelog-sync
 #
 # update-config hariç hook'lar read-only'dir: dosya değiştirmez, yalnızca
 # doğrular (fail-closed). update-config, config'i paket içeriğiyle senkron eder.
@@ -252,6 +257,21 @@ repos:
         pass_filenames: false
         always_run: true
         stages: [pre-commit]
+
+      - id: check-changelog-sync
+        name: Changelog sync (git log ↔ docs)
+        description: >-
+          gen_changelog.py --check: README.md ve docs/PUBLISH_SCENARIO.md'deki
+          changelog tablolarını git log ile karşılaştırır. Tablodaki en yeni
+          commit'ten daha yeni commit'ler varsa (drift) commit'i bloke eder.
+          Mevcut insan özetleri korunur; yalnızca yeni commit'ler raporlanır.
+          --update ile senkronize et: python3 _calisma/CIKTI/gen_changelog.py --update
+        entry: python3 _calisma/CIKTI/gen_changelog.py --check
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+        verbose: true
 
       - id: commit-msg-style
         name: Commit message style (noise prevention)

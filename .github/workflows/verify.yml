@@ -119,6 +119,9 @@ jobs:
       #     config şema kapısı exit 0/1/2 (jsonschema yoksa dürüstçe SKIP).
       #   test_consolidate_summary.py — summary fallback: GITHUB_STEP_SUMMARY
       #     dosyasına yazma + stdout fallback.
+      #   test_gen_changelog.py  — conventional-commit ayrıştırma + missing/
+      #     stale detection + check/update modları (README ↔ PUBLISH_SCENARIO ↔
+      #     git log senkronu).
       - name: Install jsonschema for unit tests
         if: always()
         shell: bash
