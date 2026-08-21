@@ -177,6 +177,7 @@ LAYER_LABELS = {
     "K15": "History sidecar",
     "K16": "GScripts self-test",
     "K17": "Mirror sync",
+    "K18": "Launchctl durum",
 }
 
 # K0-K7 çekirdek katmanlar: --full olsun olmasın her run'da koşar.
@@ -194,6 +195,7 @@ _OPTIONAL_LAYERS = {
     "K15": lambda a: bool(a.check_history),
     "K16": lambda a: a.check_github_scripts,
     "K17": lambda a: a.check_mirror,
+    "K18": lambda a: a.check_launchd,
 }
 
 
@@ -2854,6 +2856,122 @@ def check_mirror_sync(add):
     return False, detail, rc, txt
 
 
+def check_launchd_status(add):
+    """K18: launchctl list + plutil lint + HTTP 200 doğrulaması.
+
+    macOS'a özgü: launchd GUI agent'larının preview sunucusu durumunu
+    üç eksende denetler:
+      1. launchctl list — label yüklü mü, PID canlı mı?
+      2. plutil lint — kurulu plist dosyası geçerli mi?
+      3. HTTP GET /api/latest — sunucu yanıt veriyor mu (200)?
+    Her üçü de P1 ile işaretlenir (fail-closed). Döndürür (ok, detail,
+    profiles), profiles [{label, loaded, pid, alive, plist_valid, http}].
+    """
+    profiles_info = []
+    all_ok = True
+
+    # Bilinen label'ları kontrol et
+    # Birincil: yüklü olmalı, canlı olmalı, HTTP 200 dönmeli (P1).
+    # Legacy: kasıtlı olarak kaldırılmıştır — yalnızcaplist válidosa
+    # ve yüklüyse denetlenir; yüklü değilse sessizce atlanır.
+    primary = "com.freebuff.preview-leibniz2"
+    legacy  = "com.freebuff.preview-server"
+    plist_dir = os.path.expanduser("~/Library/LaunchAgents")
+    check_labels = [(primary, True), (legacy, False)]  # (label, required)
+
+    # launchctl list çıktısını tek seferde çek
+    launchctl_lines = []
+    try:
+        r = subprocess.run(["launchctl", "list"],
+                           capture_output=True, text=True, timeout=10)
+        launchctl_lines = r.stdout.splitlines()
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+    for label, required in check_labels:
+        info = {"label": label, "loaded": False, "pid": None,
+                "alive": False, "plist_valid": False, "http": None,
+                "role": "birincil" if label == primary else "legacy"}
+
+        # 1) launchctl list
+        for line in launchctl_lines:
+            parts = line.split()
+            if len(parts) >= 3 and parts[2] == label:
+                info["loaded"] = True
+                try:
+                    info["pid"] = int(parts[0])
+                except (ValueError, IndexError):
+                    info["pid"] = None
+                break
+
+        # PID canlı mı?
+        if info["pid"] is not None:
+            try:
+                os.kill(info["pid"], 0)
+                info["alive"] = True
+            except OSError:
+                info["alive"] = False
+
+        # 2) plutil lint
+        plist_path = os.path.join(plist_dir, f"{label}.plist")
+        if os.path.isfile(plist_path):
+            try:
+                r = subprocess.run(["plutil", "-lint", plist_path],
+                                   capture_output=True, text=True, timeout=10)
+                info["plist_valid"] = r.returncode == 0
+            except (OSError, subprocess.TimeoutExpired):
+                info["plist_valid"] = False
+
+        # 3) HTTP 200
+        if info["loaded"] and info["alive"]:
+            try:
+                r = subprocess.run(
+                    ["curl", "-sf", "-o", "/dev/null", "-w", "%{http_code}",
+                     "--max-time", "5",
+                     "http://127.0.0.1:8000/api/latest"],
+                    capture_output=True, text=True, timeout=10)
+                info["http"] = int(r.stdout.strip()) if r.stdout.strip().isdigit() else None
+            except (OSError, subprocess.TimeoutExpired):
+                info["http"] = None
+
+        profiles_info.append(info)
+
+        # Bulguları kaydet
+        checks = []
+        if required:
+            # Birincil: yüklü olmalı
+            if not info["loaded"]:
+                checks.append(("launchctl list", f"{label} yüklü değil"))
+            elif not info["alive"]:
+                checks.append(("süreç canlı", f"PID {info['pid']} artık canlı değil"))
+            if os.path.isfile(plist_path) and not info["plist_valid"]:
+                checks.append(("plutil lint", f"{plist_path} geçersiz"))
+            if info["loaded"] and info["alive"] and info["http"] != 200:
+                checks.append(("HTTP 200", f"yanıt: {info['http']}"))
+        else:
+            # Legacy: yüklüyse canlı mı + plutil geçerli mi; yüklü değilse sessiz
+            if info["loaded"]:
+                if not info["alive"]:
+                    checks.append(("süreç canlı", f"PID {info['pid']} artık canlı değil"))
+                if os.path.isfile(plist_path) and not info["plist_valid"]:
+                    checks.append(("plutil lint", f"{plist_path} geçersiz"))
+
+        for check_name, issue in checks:
+            add("P1", f"K18-LAUNCHD-{label.split('.')[-1].upper()}",
+                f"K18 launchd ({label})", f"{check_name}: {issue}",
+                plist_path)
+            all_ok = False
+
+    detail_parts = []
+    for info in profiles_info:
+        status = "PASS" if (info["loaded"] and info["alive"] and
+                            info["plist_valid"] and info["http"] == 200) else "FAIL"
+        detail_parts.append(f"{info['label']}: {status}")
+    detail = "; ".join(detail_parts)
+
+    return all_ok, detail, profiles_info
+
+
 def _run_quiet(cmd, timeout=10):
     """Kısa bir komutu çalıştır, ilk satırı döndür (yoksa/hata → None)."""
     try:
@@ -3043,6 +3161,9 @@ def main():
                     help="K17: sync_verify_mirror.sh --check ham çıktısını "
                          "K17 raporuyla birlikte ayrı bir sidecar JSON'a yaz "
                          "(CI artifact + run summary için)")
+    ap.add_argument("--check-launchd", action="store_true",
+                    help="K18: launchctl list + plutil lint + HTTP 200 "
+                         "doğrulaması (macOS'a özgü, --full'a dahil değil)")
     ap.add_argument("--full", action="store_true",
                     help="Tüm katmanları tek komutla koş: --check-references + "
                          "--symbolic-proof + --lean-proof + --check-lineage + "
@@ -3701,9 +3822,31 @@ def main():
                 if not args.json:
                     print(f"[K17] mirror sidecar'ı yazıldı: {args.mirror_out} "
                           f"(exit={mrc})")
-            except OSError as e:
-                add("P1", "MIRROR-OUT", "Mirror sidecar",
+            except OSError as e:                    add("P1", "MIRROR-OUT", "Mirror sidecar",
                     f"yazılamadı: {args.mirror_out}", str(e))
+
+    # ---- K18: launchctl list + plutil lint + HTTP 200 (--check-launchd) ----
+    # macOS'a özgü: preview sunucusunun operasyonel durumunu üç eksende denetler.
+    # launchctl list (yüklü/PID), plutil lint (plist biçimsel doğrulama),
+    # HTTP 200 (sunucu yanıt veriyor mu). --full'a dahil DEĞİLDİR (macOS'a
+    # özgü); --check-launchd ile koşulur.
+    launchd_report = None
+    if args.check_launchd:
+        lok, ldetail, lprofiles = check_launchd_status(add)
+        launchd_report = {"layer": "K18", "ok": lok, "detail": ldetail,
+                          "profiles": lprofiles}
+        if not args.json:
+            print(f"[K18] launchd durum: "
+                  f"{'PASS' if lok else 'FAIL'} — {ldetail}")
+            for p in lprofiles:
+                status = "PASS" if (p["loaded"] and p["alive"] and
+                                    p["plist_valid"] and p["http"] == 200) else "FAIL"
+                pid_str = str(p["pid"]) if p["pid"] else "-"
+                http_str = str(p["http"]) if p["http"] else "-"
+                print(f"    [{status}] {p['label']}: "
+                      f"yük={p['loaded']} pid={pid_str} "
+                      f"canlı={p['alive']} plutil={p['plist_valid']} "
+                      f"HTTP={http_str}")
 
     # ---- Bütçe kalkanı: iki yöntem yan yana ----
     # (a) Evrensel: token ≈ bytes/4      (v3_verify.py H4, bağımsız referans)
@@ -3856,6 +3999,7 @@ def main():
         "lineage": lineage_report,
         "plist": plist_report,
         "mirror": mirror_report,
+        "launchd": launchd_report,
         "cleanup": cleanup_report,
         "history_sidecar": history_sidecar_report,
         # Per-katman PASS/FAIL/SKIP — dashboard'un "K1-K7" rozeti bunu
