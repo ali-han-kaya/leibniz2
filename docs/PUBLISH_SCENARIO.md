@@ -21,7 +21,7 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 > | AŞAMA 3 — CI doğrulama | 🔄 **aktif** — her push'ta tekrarlanır (incremental) |
 > | AŞAMA 4 — koruma kanıtı | ⏸️ opsiyonel (1 (b) sonrası) |
 >
-> Job tablosu (AŞAMA 3), `.github/workflows/verify.yml`'deki **14 job**'u 3 kategoride
+> Job tablosu (AŞAMA 3), `.github/workflows/verify.yml`'deki **16 job**'u 3 kategoride
 > sunar: push'ta çalışan 8 **required** + 2 **advisory** + 3 **PR-only**.
 > Branch protection yalnızca required job'ları bloke eder.
 > Güncel listeyi üret: `python3 _calisma/CIKTI/status_checks.py --json`.
@@ -113,6 +113,7 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 | 2026-08-21 | AŞAMA 1 (b) | Canlı doğrulama: `status_checks.py --gh` → **SONUÇ: PASS — 8 check + merge engeli birebir** (`names_ok=true`, `enforcement_ok=true`, `missing/extra=[]`; smoke: strict/enforce_admins/force-push/deletions hepsi `ok=true`). Not: "9 check" beklentisi doc'taki bayat changelog iddialarından — gerçek kurulum 8 required check (`dc9ab4f`) | (çalışma ağacı) |
 | 2026-08-21 | feat | canli CI denetimini audit_live_ci_sync.py'ye cevir | `799409c` |
 | 2026-08-21 | docs | denetim bulgusunu changelog + REFERANS_KANIT_DENETIMI'ne isle | `031ed0f` |
+| 2026-08-21 | docs | status_checks --gh canli dogrulamasini senaryoya isle | `7012f96` |
 
 ---
 
@@ -223,26 +224,30 @@ cd ~/Desktop/leibniz2
 # 1) AŞAMA 0 kapıları (fail-closed: herhangi bir FAIL push'u durdurur)
 bash docs/publish_precheck.sh --allow-remote
 
-# 2) Push (kapılar yeşilse)
+# 2) Push (kapılar yeşilse) — dikkat: enforce_admins=true iken doğrudan push
+#    ADMIN dahil bloke edilir. Wrapper --incremental bu dansı otomatik yapar
+#    (geçici kapat → push → geri aç). Manuel push'ta önce kapatıp sonra geri açın.
 git push origin main
 
-# 3) CI'ı izle (14 job — K1-K14 + action-runtimes + budget + plist-check + label-gate-p1 + ...)
+# 3) CI'ı izle (16 job — 8 required + 4 advisory + 3 PR-only + 1 manifest;
+#    aşağıdaki AŞAMA 3 job tablosu)
 RUN_ID=$(gh run list --limit 1 --json databaseId -q '.[0].databaseId')
 gh run watch $RUN_ID --exit-status
 
-# 4) Son durum + artifact'lar (19 adet beklenir)
+# 4) Son durum + artifact'lar (21 adet — doc listesi; canlı run'da 22,
+#    audit-live-ci meta-denetçinin kendi artifact'ı dahil)
 gh run view $RUN_ID --json jobs --jq '.jobs[] | "\(.name)\t\(.conclusion)"'
 gh api "repos/ali-han-kaya/leibniz2/actions/runs/$RUN_ID/artifacts" \
   --jq '.artifacts[].name' | sort
 ```
 
-> **Tek komut karşılığı:** `bash docs/publish_wrapper.sh` — repo zaten yayında
-> olduğundan **idempotent**: precheck → push → CI izle; repo/remote adımları
-> atlanır. Önce `--dry-run` ile önizle.
->
-> **AŞAMA 1 (b) tamamlandıysa** 4. adıma ek olarak:
-> `python3 _calisma/CIKTI/status_checks.py --gh` → `SONUÇ: PASS` (8 check +
-> merge engeli smoke) — koruma/check eşleşmesini canlı doğrular.
+> **Tek komut karşılığı:** `bash docs/publish_wrapper.sh --incremental` — repo
+> zaten yayında olduğundan **idempotent**: precheck → push (enforce_admins
+> geçici kapatma dahil) → CI izle → job durumları + `status_checks.py --gh`
+> (8 check + merge engeli smoke). Repo oluşturma/remote ekleme atlanır; push
+> yoksa HEAD için mevcut run izlenir. Önce risksiz önizle:
+> `bash docs/publish_wrapper.sh --incremental --dry-run`
+> (log: `logs/publish_*.log`; `--dry-run-summary` ile komut akışı markdown'ı).
 
 Her adımın ayrıntısı aşağıdaki AŞAMA bölümlerindedir; bu döngü onların günlük
 kullanım karşılığıdır.
@@ -576,7 +581,8 @@ gh run list --limit 3 --json databaseId,status,conclusion,name
 RUN_ID=$(gh run list --limit 1 --json databaseId -q '.[0].databaseId')
 gh run watch $RUN_ID --exit-status
 
-# (c) Artifact'ları kontrol et (19 adet olmalı — liste aşağıda)
+# (c) Artifact'ları kontrol et (21 adet olmalı — liste aşağıda; canlı run'da
+#     22, audit-live-ci meta-denetçinin kendi artifact'ı dahil)
 gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_bytes) B)"'
 ```
 

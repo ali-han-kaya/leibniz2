@@ -19,6 +19,12 @@
 #                                             # smoke). Repo oluşturma/push/CI
 #                                             # izleme ÇALIŞTIRILMAZ. --dry-run ile
 #                                             # birleşince önizleme modunda koşar.
+#   ./docs/publish_wrapper.sh --incremental   # INCREMENTAL PUSH döngüsü (repo
+#                                             # zaten canlı): precheck → push →
+#                                             # CI izle → durum + status_checks
+#                                             # --gh. Repo oluşturma/remote ekleme
+#                                             # atlanır; enforce_admins push için
+#                                             # geçici kapatılıp sonra geri açılır.
 #
 # DRY-RUN: her kalıcı komut "[DRY-RUN] çalıştırılacak: ..." olarak basılır;
 # AŞAMA 0 precheck --skip-smoke --allow-remote ile koşar (fail olsa bile akış
@@ -33,6 +39,10 @@
 #   - AŞAMA 1: repo oluşturma/varolma sonrası status_checks.py otomatik koşar
 #     (required check adları workflow'dan türetilir + --gh ile GitHub eşleşmesi).
 #   - AŞAMA 3: push yoksa HEAD için MEVCUT run'ı izler (yeni run yoksa atlar).
+#   - --incremental: yukarıdaki INCREMENTAL PUSH döngüsünün TEK KOMUT hali —
+#     precheck → push → CI izle → durum + status_checks --gh; repo oluşturma /
+#     remote ekleme atlanır (repo canlı olmalı); enforce_admins geçici kapatılıp
+#     push sonrası geri açılır (manüel dansın otomatik karşılığı).
 #
 # GÜVENLİK:
 #   - AŞAMA 0 kapıları (repo temiz, gh auth, remote yok, branch main) başarısız
@@ -56,6 +66,7 @@ DRY_RUN=0
 DRY_RUN_SUMMARY=0
 CI_SIMULATE=0
 VERIFY_CHECKS=0
+INCREMENTAL=0
 for a in "$@"; do
   case "$a" in
     --with-stage4)    WITH_STAGE4=1 ;;
@@ -63,7 +74,8 @@ for a in "$@"; do
     --dry-run-summary) DRY_RUN=1; DRY_RUN_SUMMARY=1 ;;
     --ci-simulate)    CI_SIMULATE=1 ;;
     --verify-checks)  VERIFY_CHECKS=1 ;;
-    *) echo "Bilinmeyen bayrak: $a (geçerli: --with-stage4, --dry-run, --dry-run-summary, --ci-simulate, --verify-checks)" >&2; exit 2 ;;
+    --incremental)    INCREMENTAL=1 ;;
+    *) echo "Bilinmeyen bayrak: $a (geçerli: --with-stage4, --dry-run, --dry-run-summary, --ci-simulate, --verify-checks, --incremental)" >&2; exit 2 ;;
   esac
 done
 
@@ -134,6 +146,77 @@ verify_checks() {
   log "branch protection (manuel, push sonrası):"
   log "    https://github.com/$OWNER/$REPO_NAME/settings/branches"
   log "sonrasında doğrulama (tekrar):    python3 _calisma/CIKTI/status_checks.py --gh"
+}
+
+# ── enforce_admins dansı — doğrudan main push'u (admin) bloke edilmemeli ──
+# enforce_admins=true iken GitHub, korumalı branch'e doğrudan push'u ADMIN dahil
+# bloke eder. INCREMENTAL döngünün "push" adımı bu yüzden geçici kapatma → push
+# → geri açma gerektirir. GET → modify → PUT: mevcut ayarlar korunur, yalnızca
+# enforce_admins değişir. Koruma yoksa (ilk publish) 404 → dokunulmaz.
+enforce_is_on() {
+  # Koruma varsa ve enforce_admins=true ise 0 döner; yoksa/yanlışsa 1.
+  gh api "repos/$OWNER/$REPO_NAME/branches/main/protection" \
+    --jq '.enforce_admins.enabled' 2>/dev/null | grep -qx true || return 1
+}
+
+toggle_enforce() { # $1: "true"|"false" — mevcut koruma ayarlarını koruyarak tek alanı değiştirir
+  local want="$1" tmp
+  tmp="/tmp/pw_prot_$(date +%s%N).json"
+  gh api "repos/$OWNER/$REPO_NAME/branches/main/protection" > "$tmp" || return 1
+  local py="${SC_PY:-python3}"
+  "$py" - "$want" "$tmp" <<'PY' || { rm -f "$tmp"; return 1; }
+import json, os, subprocess, sys
+
+def _bool(x):
+    """GET yanıtı {enabled: bool} veya düz bool olabilir — PUT bool ister."""
+    return bool(x.get("enabled")) if isinstance(x, dict) else bool(x)
+
+want, tmp = sys.argv[1], sys.argv[2]
+p = json.load(open(tmp))
+
+# GET şeması ≠ PUT şeması: required_status_checks GET'te checks[]+contexts_url
+# döner; PUT yalnızca strict + contexts (string listesi) kabul eder.
+rsc = p.get("required_status_checks")
+if rsc is None:
+    rsc_body = None
+else:
+    ctx = [c.get("context") if isinstance(c, dict) else c
+           for c in (rsc.get("contexts") or [])]
+    rsc_body = {"strict": bool(rsc.get("strict", False)), "contexts": ctx}
+
+rpr = p.get("required_pull_request_reviews")
+if isinstance(rpr, dict):
+    dr = rpr.get("dismissal_restrictions") or {}
+    rpr_body = {
+        "dismiss_stale_reviews": bool(rpr.get("dismiss_stale_reviews", False)),
+        "require_code_owner_reviews": bool(rpr.get("require_code_owner_reviews", False)),
+        "required_approving_review_count": int(rpr.get("required_approving_review_count", 1)),
+        "dismissal_restrictions": {
+            "users": [u.get("login") for u in (dr.get("users") or [])],
+            "teams": [t.get("slug") for t in (dr.get("teams") or [])],
+        } if dr else {},
+    }
+else:
+    rpr_body = None
+
+body = {
+    "required_status_checks": rsc_body,
+    "enforce_admins": want == "true",
+    "required_pull_request_reviews": rpr_body,
+    "restrictions": p.get("restrictions"),
+    "allow_force_pushes": _bool(p.get("allow_force_pushes")),
+    "allow_deletions": _bool(p.get("allow_deletions")),
+}
+repo = os.environ.get("PW_REPO", "") or (p.get("url", "").split("/repos/")[1].split("/branches")[0] if "/repos/" in p.get("url", "") else "")
+r = subprocess.run(["gh", "api", "--method", "PUT",
+                    f"repos/{repo}/branches/main/protection",
+                    "--input", "-"],
+                   input=json.dumps(body), capture_output=True, text=True)
+if r.returncode != 0:
+    sys.stderr.write(r.stderr)
+    sys.exit(1)
+PY
+  rm -f "$tmp"
 }
 
 # --dry-run-summary: dry-run komut akışını TEK markdown dosyasında özetle.
@@ -295,22 +378,31 @@ step "AŞAMA 1 — GitHub repo oluştur (interaktif değil, idempotent)"
 
 # gh repo create: isim + --public verildiğinde prompt sormaz (non-interactive).
 # İdempotent: repo zaten varsa oluşturma atlanır (re-run / repo zaten yayında).
-if gh repo view "$OWNER/$REPO_NAME" >/dev/null 2>&1; then
-  log "repo zaten mevcut: $OWNER/$REPO_NAME (idempotent — oluşturulmuyor)"
+# --incremental: repo canlı sayılır — oluşturma hiç denenmez (doc INCREMENTAL
+# döngüsü AŞAMA 1'i içermez; doğrulama AŞAMA 4'te yapılır).
+if [ "$INCREMENTAL" = "1" ]; then
+  log "repo oluşturma atlandı (--incremental — repo zaten canlı)"
 else
-  run gh repo create "$REPO_NAME" \
-    --description "$DESCRIPTION" \
-    --public \
-    --disable-issues=false \
-    --disable-wiki=true \
-    --disable-projects=true \
-    --add-readme=false
-  done_msg "repo oluşturuldu: $OWNER/$REPO_NAME ✓"
+  if gh repo view "$OWNER/$REPO_NAME" >/dev/null 2>&1; then
+    log "repo zaten mevcut: $OWNER/$REPO_NAME (idempotent — oluşturulmuyor)"
+  else
+    run gh repo create "$REPO_NAME" \
+      --description "$DESCRIPTION" \
+      --public \
+      --disable-issues=false \
+      --disable-wiki=true \
+      --disable-projects=true \
+      --add-readme=false
+    done_msg "repo oluşturuldu: $OWNER/$REPO_NAME ✓"
+  fi
 fi
 
 # ── AŞAMA 1 doğrulaması — status_checks.py + --gh (tek fonksiyon; ayrıca
 # --verify-checks modunda da çağrılır). Tek kaynak: workflow job `name:`'leri.
-verify_checks
+# --incremental: AŞAMA 4'te (CI sonrası) koşar — doc INCREMENTAL adım 4 ile aynı.
+if [ "$INCREMENTAL" != "1" ]; then
+  verify_checks
+fi
 
 # ─────────────────────────────────────────────────────────────────────────────
 step "AŞAMA 2 — Remote ekle + push (idempotent)"
@@ -320,6 +412,10 @@ run gh repo set-default "$REPO_NAME" || true
 # Remote: origin YOKSA ekle; VARSA repo adı eşleşiyorsa dokunma (idempotent),
 # eşleşmiyorsa set-url ile düzelt. SSH/HTTPS farkı geçerli sayılır (ikisi de ok).
 REMOTE_URL="$(git remote get-url origin 2>/dev/null || true)"
+# --incremental: origin ZORUNLU (repo canlı) — yoksa akışı durdur.
+if [ "$INCREMENTAL" = "1" ] && [ -z "$REMOTE_URL" ]; then
+  fail "--incremental origin remote gerektirir (repo zaten GitHub'da olmalı; ilk publish için normal akış kullan)"
+fi
 if [ -n "$REMOTE_URL" ]; then
   case "$REMOTE_URL" in
     *"$OWNER/$REPO_NAME"*)
@@ -341,7 +437,25 @@ PUSHED=0
 if git rev-parse --verify origin/main >/dev/null 2>&1; then
   AHEAD="$(git rev-list --count origin/main..main 2>/dev/null || echo 0)"
   if [ "$AHEAD" -gt 0 ]; then
+    # enforce_admins=true ise doğrudan push (admin) bloke edilir — geçici
+    # kapat, push et, GERİ AÇ (her koşulda — push başarısız olsa bile).
+    TOGGLED=0
+    if [ "$DRY_RUN" != "1" ] && enforce_is_on; then
+      log "enforce_admins=true — push için geçici kapatılıyor (sonra geri açılır)"
+      if toggle_enforce false; then TOGGLED=1; else warn "enforce_admins kapatılamadı — push denenecek"; fi
+    fi
+    set +e
     run git push -u origin main
+    PUSH_EXIT=$?
+    set -e
+    if [ "$TOGGLED" = "1" ]; then
+      if toggle_enforce true; then
+        log "enforce_admins geri açıldı ✓"
+      else
+        fail "enforce_admins GERİ AÇILAMADI — manuel düzelt: gh api --method PUT .../branches/main/protection (enforce_admins=true)"
+      fi
+    fi
+    [ "$PUSH_EXIT" -eq 0 ] || fail "push başarısız (exit $PUSH_EXIT)"
     PUSHED=1
   else
     log "push gerekmiyor — origin/main ile eşit (idempotent)"
@@ -407,6 +521,44 @@ else
     gh run view "$RUN_ID" --json artifacts \
       --jq '.artifacts[] | "    \(.name) (\(.size_in_bytes) B)"' 2>/dev/null || true
   fi
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# INCREMENTAL mod — AŞAMA 4: durum + doğrulama (doc INCREMENTAL PUSH adım 4).
+# CI sonrası: job durumları + status_checks --gh (8 check + merge engeli smoke).
+# Repo oluşturma/remote ekleme atlandığından burası akışın kapanış doğrulamasıdır.
+if [ "$INCREMENTAL" = "1" ]; then
+  step "AŞAMA 4 (INCREMENTAL) — durum + doğrulama"
+
+  if [ -n "$RUN_ID" ]; then
+    log "Job durumları (canlı):"
+    gh run view "$RUN_ID" --json jobs \
+      --jq '.jobs[] | "    \(.name)\t\(.conclusion)"' 2>/dev/null || true
+  else
+    log "RUN_ID yok (push yok + HEAD için run yok) — job durumu atlandı"
+  fi
+
+  # AŞAMA 1 (b): branch protection eşleşmesi (8 check + merge engeli smoke).
+  verify_checks
+
+  step "SONUÇ (INCREMENTAL)"
+  log "Repo:        https://github.com/$OWNER/$REPO_NAME"
+  log "CI run:      ${RUN_ID:-yok}"
+  log "Log dosyası: $LOG"
+  if [ "$DRY_RUN" = "1" ]; then
+    if [ "$DRY_RUN_SUMMARY" = "1" ]; then
+      gen_dryrun_summary "$LOG" "$SUMMARY_MD"
+      log "Dry-run özeti: $SUMMARY_MD"
+    fi
+    log "SONUÇ: INCREMENTAL ✓ (dry-run — yalnızca önizleme)"
+    exit 0
+  fi
+  if [ "${CONCL:-unknown}" = "success" ] || [ "${CONCL:-unknown}" = "no-run" ]; then
+    log "SONUÇ: PASS ✓ — precheck → push → CI izle → doğrulama tamamlandı"
+  else
+    log "SONUÇ: CI conclusion '$CONCL' — raporları incele (fail-closed kapı bir bulgu yakalamış olabilir)"
+  fi
+  exit 0
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -53,6 +53,7 @@ ANCHORS = [
     ("precheck tek komut",
      ["bash docs/publish_precheck.sh", "--allow-remote", "--skip-smoke"]),
     ("CI izleme", ["gh run watch", "--exit-status"]),
+    ("incremental push modu", ["--incremental"]),
     ("koruma test branch'i", ["test/protection-check"]),
     ("PR oluşturma", ["gh pr create --base main --head test/protection-check"]),
     ("PR merge", ["gh pr merge --squash"]),
