@@ -135,6 +135,13 @@ jobs:
         run: |
           set -o pipefail
           python3 -m unittest discover -s _calisma/CIKTI -p "test_*.py" -v 2>&1 | tee unit_tests.log
+          # docs/branch-protection-guide/test_render_screens.py: render_screens.py
+          # mock HTML'den PNG üretimini doğrular. Playwright CI runner'da kurulu
+          # değilse testler SKIP (fail değil) — kuruluysa gerçekten koşar
+          # (venv: _calisma/.venv_z3/bin/python …). Dokümantasyon üretim aracı
+          # kapısıdır, teslim kapısı değil.
+          python3 -m unittest discover -s docs/branch-protection-guide \
+            -p "test_render_screens.py" -v 2>&1 | tee -a unit_tests.log
 
       # Birim test çıktısı ayrı 'unit-tests' artifact'ına yazılır. Kapı
       # fail-closed'dur (test düşerse job kırılır); if: always() sayesinde

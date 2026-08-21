@@ -105,6 +105,7 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 | 2026-08-21 | fix | (ci) precheck'e administration:read — smoke CI'da koşsun | `8d10118` |
 | 2026-08-21 | fix | status_checks --gh 404 ile yetki hatasını ayır (UNREADABLE) | `3226656` |
 | 2026-08-21 | feat | (ci) precheck job'ına status_checks --gh --json sidecar'ı ekle | `d6b58a6` |
+| 2026-08-21 | feat | (preview) /guide.html rotası + mirror senkronu | `d184c3c` |
 
 ---
 

@@ -13,6 +13,7 @@ Kullanım:
 Yeniden üretilebilir: kaynak guide.html değişince scripti tekrar koş — PNG'ler
 aynı boyutlarda yeniden yazılır (deterministik).
 """
+import argparse
 import pathlib
 
 from playwright.sync_api import sync_playwright
@@ -33,19 +34,29 @@ SCREENS = [
 ]
 
 
-def main() -> int:
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--guide", default=str(GUIDE),
+                    help="kaynak HTML (varsayılan: guide.html — test mock geçer)")
+    ap.add_argument("--out-dir", default=str(HERE),
+                    help="PNG çıktı dizini (varsayılan: script dizini — test tmp kullanır)")
+    args = ap.parse_args(argv)
+    guide = pathlib.Path(args.guide)
+    out_dir = pathlib.Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page(viewport={"width": 1280, "height": 900},
                                 device_scale_factor=2)
-        page.goto(GUIDE.as_uri())
+        page.goto(guide.resolve().as_uri())
         page.wait_for_timeout(400)
         for elem_id, out_name in SCREENS:
             loc = page.locator(f"#{elem_id}")
             if loc.count() == 0:
                 print(f"UYARI: #{elem_id} bulunamadı — atlandı")
                 continue
-            dest = HERE / out_name
+            dest = out_dir / out_name
             loc.screenshot(path=str(dest))
             print(f"yazıldı: {dest.name}")
         browser.close()
