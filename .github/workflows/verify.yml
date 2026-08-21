@@ -1430,6 +1430,13 @@ jobs:
   precheck:
     name: Publish precheck (AŞAMA 0, advisory)
     runs-on: ubuntu-latest
+    # Branch protection OKUMAK için administration: read gerekli (top-level
+    # contents: read yeterli değil — GITHUB_TOKEN 404 döner ve status_checks
+    # --gh smoke'u "protection kurulu değil" UYARIsına düşer). Yalnızca
+    # okuma — yazma/admin yetkisi verilmez.
+    permissions:
+      contents: read
+      administration: read
     steps:
       - name: Checkout (full history — noise-commit + status denetimi için)
         uses: actions/checkout@v7
