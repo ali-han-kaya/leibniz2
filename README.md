@@ -187,6 +187,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-21 | feat | audit_refs_trend.py (trend satırları ↔ kaynak artifact denetimi) | `c6ff4e1` |
 | 2026-08-21 | feat | Lagree/Millican/Schmitt/Fine icin LoC katalog kaniti (V5w) | `7bc8363` |
 | 2026-08-21 | docs | refs-trend changelog'una V5p satiri (OCLC/LCCN + Xunzi HT) | `3548341` |
+| 2026-08-21 | docs | V5q changelog satırı + §2 tablo doğrulaması | `db61c80` |
 
 ### Regresyon notları
 
