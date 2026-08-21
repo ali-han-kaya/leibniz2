@@ -327,5 +327,56 @@ class TestParsePlistCheckOutput(unittest.TestCase):
         self.assertEqual(profiles[0]["label"], "x")
 
 
+SUMMARY_SCRIPT = os.path.join(HERE, "summary_plist_table.py")
+
+
+class TestSummaryPlistTable(unittest.TestCase):
+    """summary_plist_table.py markdown tablo üretimi."""
+
+    def _run(self, json_str):
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json",
+                                         delete=False) as f:
+            f.write(json_str)
+            f.flush()
+            out = subprocess.run(
+                [sys.executable, SUMMARY_SCRIPT, f.name],
+                capture_output=True, text=True, timeout=30)
+        os.unlink(f.name)
+        return out.stdout
+
+    def test_valid_profiles(self):
+        data = json.dumps({
+            "ok": True, "exit": 0, "detail": "GÜNCEL (2/2)",
+            "profiles": [
+                {"label": "com.freebuff.preview-leibniz2",
+                 "status": "GÜNCEL", "path": "/Users/r/.../a.plist"},
+                {"label": "com.freebuff.preview-server",
+                 "status": "GÜNCEL", "path": "/Users/r/.../b.plist"},
+            ]})
+        out = self._run(data)
+        self.assertIn("✅ **K12**", out)
+        self.assertIn("| com.freebuff.preview-leibniz2 | ✅ GÜNCEL |", out)
+        self.assertIn("| com.freebuff.preview-server | ✅ GÜNCEL |", out)
+        self.assertIn("| Profil | Durum | Yol |", out)
+
+    def test_bayat_profile(self):
+        data = json.dumps({
+            "ok": False, "exit": 1, "detail": "BAYAT (1/2)",
+            "profiles": [
+                {"label": "a", "status": "BAYAT", "path": "/x"},
+                {"label": "b", "status": "GÜNCEL", "path": "/y"},
+            ]})
+        out = self._run(data)
+        self.assertIn("❌ **K12**", out)
+        self.assertIn("| a | ❌ BAYAT |", out)
+        self.assertIn("| b | ✅ GÜNCEL |", out)
+
+    def test_missing_file(self):
+        out = subprocess.run(
+            [sys.executable, SUMMARY_SCRIPT, "/nonexistent.json"],
+            capture_output=True, text=True, timeout=30)
+        self.assertIn("plist_report.json yok", out.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()
