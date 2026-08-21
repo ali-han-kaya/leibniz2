@@ -499,6 +499,46 @@ class TestManifestSections(unittest.TestCase):
         self.assertNotIn("config", m)
         self.assertIn("a.txt", m["files"])
 
+    # ── ACTION RUNTIMES bölümü ───────────────────────────────────────────
+    def test_action_runtimes_section(self):
+        # action_runtimes.json (action-runtimes job'ı) isimle tanınır — merge-
+        # multiple köke düzleştirdiği için önek yoktur; ayrı bölümde işaretlenir
+        # + tek-hash combined_sha256 özetlenir.
+        (self.artifacts / "action_runtimes.json").write_text(
+            '{"target": ".github/workflows/verify.yml", "summary": {"pass": 6}}',
+            encoding="utf-8")
+        m = self._gen()
+        txt = (self.out / "manifest.txt").read_text(encoding="utf-8")
+        self.assertIn("ACTION RUNTIMES ARTIFACT (ayrı bölüm)", txt)
+        self.assertIn("action_runtimes_combined_sha256", txt)
+        ar = m["action_runtimes"]
+        self.assertIn("action_runtimes.json", ar["files"])
+        self.assertRegex(ar["combined_sha256"], r"^[0-9a-f]{64}$")
+
+    def test_action_runtimes_combined_recomputes_deterministically(self):
+        (self.artifacts / "action_runtimes.json").write_text(
+            '{"target": ".github/workflows/verify.yml", "summary": {"pass": 6}}',
+            encoding="utf-8")
+        m = self._gen()
+        ar = m["action_runtimes"]["files"]
+        expected = hashlib.sha256(
+            "".join(f"{rel}\0{ar[rel]}\n" for rel in sorted(ar)).encode()
+        ).hexdigest()
+        self.assertEqual(m["action_runtimes"]["combined_sha256"], expected)
+
+    def test_action_runtimes_artifact_job_provenance(self):
+        (self.artifacts / "action_runtimes.json").write_text(
+            '{"summary": {"pass": 6}}', encoding="utf-8")
+        m = self._gen()
+        jobs = m["provenance"]["artifact_jobs"]
+        self.assertEqual(jobs["action-runtimes"], "action-runtimes")
+        txt = (self.out / "manifest.txt").read_text(encoding="utf-8")
+        self.assertIn("prefixed (1 dosya)", txt)  # action_runtimes.json tek dosya
+
+    def test_no_action_runtimes_section_when_absent(self):
+        m = self._gen()
+        self.assertNotIn("action_runtimes", m)
+
 
 class TestManifestSha256Sidecar(unittest.TestCase):
     """manifest.sha256 — canonical sha256sum biçimi + determinizm + duyarlılık.

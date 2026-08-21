@@ -11,6 +11,7 @@ simülasyon / doğrulama) çalışır → CI ile yerel arasında drift olmaz.
   manifest.json   — makine-okur: tool/generated/run/sha/ref/files{rel: sha256}
                     + config{files, combined_sha256}
                     + refs_trend{files, combined_sha256}
+                    + action_runtimes{files, combined_sha256}
   manifest.sha256 — manifest.json'un kendi SHA-256'sı (sha256sum formatı;
                     kurcalanma / yeniden üretim farkı tek hash ile denetlenir)
   + tüm artifact'ların kopyası (bundle)
@@ -65,6 +66,7 @@ ARTIFACT_JOBS = {
     "config-drift": "config-drift",
     "repack-verify": "repack-verify",
     "precheck-report": "precheck",
+    "action-runtimes": "action-runtimes",
     "reproducibility": "reproducibility",
 }
 
@@ -86,6 +88,13 @@ CONFIG_BASENAMES = frozenset({
 # Run summary sidecar dosyalarının bilinen ADLARI (basename).
 # consolidate_summary.py tarafından üretilen/run summary tarafından okunan
 # sidecar dosyaları merge-multiple ile köke düzleşebilir; isimle tanınır.
+# Action runtime raporu (action-runtimes job'ı): check_action_runtimes.py
+# çıktısı — tek dosya, merge-multiple ile köke düzleşir; isimle tanınır.
+ACTION_RUNTIMES_BASENAMES = frozenset({
+    "action_runtimes.json",
+})
+
+
 SUMMARY_BASENAMES = frozenset({
     "klayers.json",
     "lineage_findings.json",
@@ -97,6 +106,16 @@ SUMMARY_BASENAMES = frozenset({
 def _is_summary_rel(rel: str) -> bool:
     """Bir rel yolunun run summary sidecar dosyası olup olmadığını isimle tanı."""
     return os.path.basename(rel) in SUMMARY_BASENAMES
+
+
+def _is_action_runtimes_rel(rel: str) -> bool:
+    """Bir rel yolunun action runtime raporu olup olmadığını isimle tanı.
+
+    action-runtimes job'ı tek dosya üretir (action_runtimes.json);
+    merge-multiple köke düzleştirdiği için önek yoktur — basename ile tanınır
+    (config/SUMMARY desenlerinin aynısı).
+    """
+    return os.path.basename(rel) in ACTION_RUNTIMES_BASENAMES
 
 
 def _is_config_rel(rel: str) -> bool:
@@ -327,6 +346,34 @@ def main() -> None:
                      "=" * 72]
         lines += pr_block
 
+    # ── ACTION RUNTIMES bölümü: action_runtimes.json (isimle tanınır) ─────
+    # action-runtimes job'ının çıktısı (check_action_runtimes.py →
+    # action_runtimes.json) ayrıca işaretlenir; combined_sha256 tek hash ile
+    # özetler (config.combined_sha256 ile aynı deterministik yöntem). Böylece
+    # node24/native action sürüm denetiminin raporu da denetim zincirinde.
+    action_runtimes_hashes = {rel: h for rel, h in file_hashes.items()
+                              if _is_action_runtimes_rel(rel)}
+    action_runtimes_combined = None
+    if action_runtimes_hashes:
+        sorted_rel = sorted(action_runtimes_hashes)
+        action_runtimes_combined = hashlib.sha256(
+            "".join(f"{rel}\0{action_runtimes_hashes[rel]}\n"
+                     for rel in sorted_rel).encode()
+        ).hexdigest()
+        ar_block = [
+            "",
+            "=" * 72,
+            "ACTION RUNTIMES ARTIFACT (ayrı bölüm)",
+            "=" * 72,
+            f"{'FILE':<55} {'SHA-256'}",
+            "-" * 72,
+        ]
+        ar_block += [f"{rel:<55} {action_runtimes_hashes[rel]}" for rel in sorted_rel]
+        ar_block += ["-" * 72,
+                     f"action_runtimes_combined_sha256: {action_runtimes_combined}",
+                     "=" * 72]
+        lines += ar_block
+
     # ── PROVENANCE bölümü: artifact → üreten job (denetim izi) ──────────────
     # Her artifact hangi job'da üretildi — tek bakışta kaynak. Prefixed
     # indirilenler (config/, precommit-logs/) bundle'da kendi adı altındadır;
@@ -351,6 +398,10 @@ def main() -> None:
                 "budget_verify.json": "budget-verify",
             }
             top = _SUMMARY_ARTIFACT_MAP.get(bn, "klayers")
+        # Action runtime raporu isimle tanınır: merge-multiple ile köke
+        # düzleşen action_runtimes.json "action-runtimes" artifact'ına bağlanır.
+        if top not in artifact_jobs and _is_action_runtimes_rel(rel):
+            top = "action-runtimes"
         if top in artifact_jobs:
             present.setdefault(top, []).append(rel)
     prov_block = [
@@ -366,7 +417,8 @@ def main() -> None:
         files = present.get(art)
         if files:
             note = f"prefixed ({len(files)} dosya)"
-        elif art in ("config", "precommit-logs", "refs-trend", "precheck-report"):
+        elif art in ("config", "precommit-logs", "refs-trend", "precheck-report",
+                     "action-runtimes"):
             note = "YOK (indirilmedi)"
         else:
             note = "merge (köke düzleştirildi)"
@@ -414,6 +466,11 @@ def main() -> None:
         manifest_json["precheck_report"] = {
             "files": dict(sorted(precheck_hashes.items())),
             "combined_sha256": precheck_combined,
+        }
+    if action_runtimes_hashes:
+        manifest_json["action_runtimes"] = {
+            "files": dict(sorted(action_runtimes_hashes.items())),
+            "combined_sha256": action_runtimes_combined,
         }
 
     out_dir = pathlib.Path(args.out_dir)
