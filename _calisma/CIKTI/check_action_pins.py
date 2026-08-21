@@ -19,9 +19,15 @@ Kurallar (fail-closed):
 Kullanım:
   python3 check_action_pins.py                 # denetle (exit 0/1)
   python3 check_action_pins.py --update        # mevcut major'ları pin dosyasına yaz
+  python3 check_action_pins.py --bump          # WARN (upgrade) pin'lerini otomatik yükselt
   python3 check_action_pins.py --json          # makine-okur JSON
 
 Exit: 0 = pin'ler karşılandı; 1 = FAIL var (downgrade/pin'siz); 2 = kullanım hatası.
+
+--bump: yalnızca WARN durumlarını (workflow major > pin) yükseltir — mevcut
+pin'leri aynen korur, yeni action EKLEMEZ (o iş --update'te), asla DÜŞÜRMEZ.
+Fail-closed: FAIL varsa (downgrade / bozuk ref / pin'siz) hiçbir şey yazmaz
+ve exit 1 döner — bir düzeltme yanlışlıkla maskelenmesin.
 """
 import argparse
 import json
@@ -150,6 +156,9 @@ def main(argv=None):
                     help=f"pin dosyası (varsayılan: {DEFAULT_PINS})")
     ap.add_argument("--update", action="store_true",
                     help="mevcut major'ları pin dosyasına yaz")
+    ap.add_argument("--bump", action="store_true",
+                    help="WARN (upgrade) pin'lerini otomatik yükselt "
+                         "(mevcut pin'leri korur, yeni action eklemez, asla düşürmez)")
     ap.add_argument("--json", action="store_true",
                     help="makine-okur JSON çıktısı")
     args = ap.parse_args(argv)
@@ -182,6 +191,38 @@ def main(argv=None):
         return 2
 
     findings = check(wf, pins)
+
+    if args.bump:
+        fails = [f for f in findings if f["verdict"] == "FAIL"]
+        if fails:
+            print("bump: HAYIR — önce FAIL'leri çöz (downgrade/pin'siz/bozuk ref), "
+                  "bump bir düzeltmeyi maskelenemez:", file=sys.stderr)
+            for f in fails:
+                print(f"  [FAIL] {f['action']}: {f['note']}", file=sys.stderr)
+            return 1
+        # Yalnızca WARN'ları (workflow major > pin) yükselt — mevcut pin'leri
+        # korur, yeni action eklemez, asla düşürmez.
+        bumps = {f["action"]: f["major"]
+                 for f in findings if f["verdict"] == "WARN" and f["major"]}
+        if not bumps:
+            print("bump: yükseltilecek pin yok (WARN yok) — pin dosyası değişmedi")
+            return 0
+        new_pins = dict(pins)
+        for action, major in sorted(bumps.items()):
+            owner_repo, _ref, _m = split_action(action)
+            new_pins[owner_repo] = major
+        try:
+            with open(args.pins, "w", encoding="utf-8") as f:
+                json.dump(new_pins, f, indent=2, ensure_ascii=False, sort_keys=True)
+                f.write("\n")
+        except OSError as e:
+            print(f"HATA: pin dosyası yazılamadı ({args.pins}): {e}", file=sys.stderr)
+            return 2
+        print(f"bump: {len(bumps)} pin yükseltildi → {args.pins}")
+        for action in sorted(bumps):
+            owner_repo, _ref, _m = split_action(action)
+            print(f"  {owner_repo}: v{pins[owner_repo]} → v{bumps[action]}")
+        return 0
     fails = [f for f in findings if f["verdict"] == "FAIL"]
     warns = [f for f in findings if f["verdict"] == "WARN"]
 

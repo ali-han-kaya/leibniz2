@@ -147,6 +147,96 @@ class TestCollectPins(unittest.TestCase):
             self.assertEqual(data, {"actions/checkout": 7})
 
 
+class TestBump(unittest.TestCase):
+    """--bump: WARN (upgrade) pin'lerini otomatik yükseltir — fail-closed."""
+
+    def _setup(self, d, pins, *uses):
+        pins_path = pathlib.Path(d) / "pins.json"
+        pins_path.write_text(json.dumps(pins), encoding="utf-8")
+        wf_path = pathlib.Path(d) / "wf.yml"
+        wf_path.write_text(_wf(*uses), encoding="utf-8")
+        return pins_path, wf_path
+
+    def test_bump_upgrades_warn_pins_keeps_others(self):
+        with tempfile.TemporaryDirectory() as d:
+            pins_path, wf_path = self._setup(
+                d, {"actions/checkout": 7, "actions/setup-python": 6},
+                "actions/checkout@v8",      # WARN → v8'e yükseltilmeli
+                "actions/setup-python@v6")  # PASS → korunmalı
+            rc = cap.main(["--workflow", str(wf_path),
+                           "--pins", str(pins_path), "--bump"])
+            self.assertEqual(rc, 0)
+            data = json.loads(pins_path.read_text(encoding="utf-8"))
+            self.assertEqual(data["actions/checkout"], 8)       # yükseltildi
+            self.assertEqual(data["actions/setup-python"], 6)   # korundu
+
+    def test_bump_no_warns_does_not_touch_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            pins_path, wf_path = self._setup(
+                d, {"actions/checkout": 7},
+                "actions/checkout@v7")  # PASS — WARN yok
+            before = pins_path.read_text(encoding="utf-8")
+            rc = cap.main(["--workflow", str(wf_path),
+                           "--pins", str(pins_path), "--bump"])
+            self.assertEqual(rc, 0)
+            self.assertEqual(pins_path.read_text(encoding="utf-8"), before)
+
+    def test_bump_fail_closed_on_downgrade(self):
+        # FAIL varken bump hiçbir şey yazmamalı — düzeltme maskelenemez.
+        with tempfile.TemporaryDirectory() as d:
+            pins_path, wf_path = self._setup(
+                d, {"actions/checkout": 7, "actions/setup-python": 6},
+                "actions/checkout@v6",      # FAIL (downgrade)
+                "actions/setup-python@v7")  # WARN — yazılmamalı
+            before = pins_path.read_text(encoding="utf-8")
+            rc, out = run_main(["--workflow", str(wf_path),
+                                "--pins", str(pins_path), "--bump"])
+            self.assertEqual(rc, 1)
+            self.assertEqual(pins_path.read_text(encoding="utf-8"), before)
+            self.assertIn("HAYIR", out)
+
+    def test_bump_never_adds_new_actions(self):
+        # --bump yeni action EKLEMEZ (o iş --update'te); pin'siz action
+        # FAIL üretir ve bump'ı bloke eder.
+        with tempfile.TemporaryDirectory() as d:
+            pins_path, wf_path = self._setup(
+                d, {"actions/checkout": 7},
+                "actions/checkout@v8",
+                "actions/cache@v5")  # pin'siz → FAIL
+            before = pins_path.read_text(encoding="utf-8")
+            rc = cap.main(["--workflow", str(wf_path),
+                           "--pins", str(pins_path), "--bump"])
+            self.assertEqual(rc, 1)
+            data = json.loads(before)
+            self.assertNotIn("actions/cache", data)
+
+    def test_bump_then_check_passes(self):
+        # bump sonrası yeniden check → tümü PASS (WARN'lar kapandı).
+        with tempfile.TemporaryDirectory() as d:
+            pins_path, wf_path = self._setup(
+                d, {"actions/checkout": 7},
+                "actions/checkout@v8")
+            rc = cap.main(["--workflow", str(wf_path),
+                           "--pins", str(pins_path), "--bump"])
+            self.assertEqual(rc, 0)
+            rc = cap.main(["--workflow", str(wf_path),
+                           "--pins", str(pins_path)])
+            self.assertEqual(rc, 0)
+            rows = cap.check(_wf("actions/checkout@v8"),
+                             json.loads(pins_path.read_text(encoding="utf-8")))
+            self.assertEqual(rows[0]["verdict"], "PASS")
+
+
+def run_main(argv):
+    """cap.main'i stdout+stderr'ı yakalayarak çalıştırır → (rc, çıktı)."""
+    import io
+    from contextlib import redirect_stdout, redirect_stderr
+    buf = io.StringIO()
+    with redirect_stdout(buf), redirect_stderr(buf):
+        rc = cap.main(argv)
+    return rc, buf.getvalue()
+
+
 class TestMain(unittest.TestCase):
     def test_main_fail_on_downgrade(self):
         with tempfile.TemporaryDirectory() as d:
