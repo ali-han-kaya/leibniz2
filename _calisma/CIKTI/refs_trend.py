@@ -56,6 +56,11 @@ CHANGELOG = [
      "/ bayat trend → exit 1; advisory audit-refs-trend job'ı). Canlı "
      "denetim 83/83 satır birebir PASS."),
     ("2026-08-21",
+     "V5q: kapsam boşluğu kapatıldı — 4 Sextus edisyonu (1562 Estienne, "
+     "1569 Hervet, 1621 Chouet) IA'da `ia_ids` ile birebir identifier "
+     "doğrulamasıyla, Della Rocca 2010 arşivlenmiş Wayback URL ile "
+     "doğrulanır; 61/64 canlı kapsam."),
+    ("2026-08-21",
      "V5t: Della Rocca 2010 'PSR' artık CrossRef DIŞI Handle System API'den "
      "doğrulanır — makalenin kendi DC.identifier'ı bir Handle'dır "
      "(hdl.handle.net/2027/spo.3521354.0010.007), DOI yok; kaynak sayısı "

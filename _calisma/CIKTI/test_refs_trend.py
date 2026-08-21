@@ -122,6 +122,17 @@ class TestChangelog(unittest.TestCase):
         # En yeni üstte: V5w (2026-08-21), V5v'den önce.
         self.assertLess(joined.index("V5w"), joined.index("V5v"))
 
+    def test_changelog_has_v5q_sextus_della(self):
+        """V5q: Sextus ia_ids + Della Rocca Wayback doğrulaması changelog'da olmalı."""
+        lines = rt.changelog_lines()
+        self.assertTrue(lines)
+        joined = "\n".join(lines)
+        self.assertIn("V5q", joined)
+        self.assertIn("ia_ids", joined)
+        self.assertIn("Wayback", joined)
+        # V5q (2026-08-21) V5t'den önce (Wayback → Handle geçişi)
+        self.assertLess(joined.index("V5q"), joined.index("V5t"))
+
     def test_changelog_has_v5p_oclc_lccn(self):
         """V5p: OL'den OCLC/LCCN çekimi + Xunzi HT kaydı changelog'da olmalı."""
         lines = rt.changelog_lines()
