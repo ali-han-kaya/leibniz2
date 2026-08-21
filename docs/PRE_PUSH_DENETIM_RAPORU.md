@@ -13,8 +13,8 @@ hatalar bir daha `gh run watch` sırasında sürpriz olmasın.
   (Kullanıcı istemindeki "28 commit" gerçek bekleyen kümenin alt kümesiydi — 68'in
   tamamı push edildi.)
 - **Push edilen toplam:** 68 bekleyen commit + 3 düzeltme commit'i = **71 commit**.
-- **Son durum:** `origin/main` == `HEAD` == `da6cb21`, working tree temiz,
-  son run **`32243532153` → ✓ success**, `##[error]` yok, ANNOTATIONS boş.
+- **Son durum:** `origin/main` == `HEAD` == `965182d`, working tree temiz,
+  son run **`32435636927` → ✓ success** (12/12 job), `--ci-simulate` PASS (§8).
 
 | Deneme | Run | Sonuç | Bulunan hata |
 |---|---|---|---|
@@ -22,6 +22,10 @@ hatalar bir daha `gh run watch` sırasında sürpriz olmasın.
 | 2. push (`d57a60c`) | `32241821709` | failure (unit test exit 1) | #2 env snapshot (`GITHUB_STEP_SUMMARY`) |
 | 3. push (`5d10771`) | `32242938612` | success ama advisory pre-commit FAIL | #3 dash/bash uyumsuzluğu |
 | 4. push (`da6cb21`) | `32243532153` | **success, tamamen yeşil** | — |
+| 5. push (`a309b23`–`965182d`) | `32435636927` | success (12/12 job) | §8: ci-simulate OWNER unbound + local fix |
+
+**§8 Not:** `publish_wrapper.sh --ci-simulate` ile yerelde CI pipeline birebir
+koşuldu, tüm kapılar yeşil (§8.3).
 
 ---
 
@@ -255,4 +259,62 @@ status_checks.py --gh → PASS (8 check birebir eşleşiyor)
 geri kuruluyor (`gh api -X DELETE` → push → `gh api -X PUT`). Bu, `strict: false`
 olsa bile GitHub'ın "checks must pass on HEAD" koşulunu tetiklemesinden kaynaklanıyor.
 `strict: true`'ya geçildiğinde bu döngü PR-based workflow ile değiştirilmeli.
+
+---
+
+## 8. Publish Wrapper İdempotentlik Doğrulaması (§8 Supplement)
+
+**Tarih:** 2026-08-21  
+**Commit aralığı:** `a309b23` → `965182d` (3 commit)  
+**Amaç:** `publish_wrapper.sh`'in `--ci-simulate` modu ile yerelde CI pipeline'ın
+birebir aynısını koşarak, remote interaction olmadan tüm kapıların yeşil olduğunu
+doğrulamak.
+
+### 8.1 Eklenen Özellik
+
+| Özellik | Detay |
+|---|---|
+| Mod | `--ci-simulate` — push/repo-create olmadan idempotent dal |
+| Aşamalar | AŞAMA 0 precheck → `verify_delivery.py --full` → statik raporlar → branch protection doğrulama |
+| Çıktı dizini | `_calisma/CIKTI/sim/verify_job/` (verify_report.txt, summary.md, config/, logs/) |
+| Hata yönetimi | AŞAMA 0 FAIL → çıkış; OWNER unbound → `sim_owner` düzeltildi; `local` outside function → kaldırıldı |
+
+### 8.2 Düzeltmeler (CI-SIMULATE keşfi)
+
+| # | Hata | Kök Neden | Düzeltme | Commit |
+|---|---|---|---|---|
+| 1 | `OWNER: unbound variable` | ci-simulate path'i `OWNER`'ı set etmeden SONUÇ bloğuna ulaşıyordu | `sim_owner` ile gh auth'dan çekildi | `994d359` |
+| 2 | `local: can only be used in a function` | SONUÇ bloğu fonksiyon dışında `local` kullanıyordu | `local` keyword'ü kaldırıldı | `965182d` |
+
+### 8.3 İdempotentlik Kanıtı
+
+```
+$ bash docs/publish_wrapper.sh --ci-simulate
+
+  AŞAMA 0 precheck:         16 kapı → PASS
+  verify_delivery.py --full: K1-K9 + Z3 + Lean → PASS
+  Statik raporlar:          pre-commit findings → PASS
+  Branch protection:        8 check eşleşme → PASS
+  CONFIG snapshot:          schema + drift → PASS
+  Config diff (advisory):    PASS
+
+SONUÇ: CI-SIMULATE ✓ — yerel doğrulama tamamlandı, push yapılmadı
+```
+
+**İdempotentlik:** Aynı komut art arda çalıştırıldığında her seferinde PASS döner;
+dosya sistemi state'i (config/, logs/, sim/) bir sonraki koşuda overwritten olur.
+
+### 8.4 Yeşil kanıt
+
+| Kaynak | Sonuç |
+|---|---|
+| `--ci-simulate` yerel koşu | ✓ PASS (tüm fail-closed adımlar yeşil) |
+| CI run `32435636927` (push sonrası) | ✓ 12/12 job success, 2 advisory PASS, 2 PR-only skipped |
+| `status_checks.py --gh` | ✓ PASS (8/8 check + enforce_admins) |
+| pre-commit (14 hook) | ✓ Tümü Passed |
+| publish_wrapper.sh (dry-run) | ✓ Komut akışı doküman ile senkron |
+
+---
+
+*Bu bölüm `docs/PUBLISH_SCENARIO.md` §INCREMENTAL PUSH ile senkrondur.*
 
