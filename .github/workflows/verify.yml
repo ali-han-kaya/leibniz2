@@ -932,6 +932,17 @@ jobs:
           name: refs-trend
           path: all_artifacts/refs-trend/
 
+      # precheck-report advisory bir job'dur; artifact'ı yoksa manifest
+      # precheck'siz üretilir — continue-on-error ile build bloke edilmez.
+      # Prefixed indirme sayesinde gen_repro_manifest.py'nin PRECHECK REPORT
+      # bölümü precheck-report/ önekini yakalar + ayrı hash'ler.
+      - name: Download precheck-report artifact (precheck-report/ prefix)
+        continue-on-error: true
+        uses: actions/download-artifact@v7
+        with:
+          name: precheck-report
+          path: all_artifacts/precheck-report/
+
       # ─── 2) manifest.txt üret (gen_repro_manifest.py — tek kaynak) ─────────
       - name: Generate reproducibility manifest
         shell: bash

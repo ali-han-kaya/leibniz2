@@ -64,6 +64,7 @@ ARTIFACT_JOBS = {
     "reports": "reports",
     "config-drift": "config-drift",
     "repack-verify": "repack-verify",
+    "precheck-report": "precheck",
     "reproducibility": "reproducibility",
 }
 
@@ -299,6 +300,33 @@ def main() -> None:
                      "=" * 72]
         lines += sm_block
 
+    # ── PRECHECK REPORT bölümü: precheck-report/ önekli dosyalar (CONFIG gibi) ─
+    # publish_precheck.sh AŞAMA 0 kapılarının çıktı raporu ayrıca işaretlenir;
+    # combined_sha256 tek hash ile özetler (config.combined_sha256 ile aynı
+    # deterministik yöntem). Böylece precheck advisory bulguları da
+    # denetim zincirinde (precheck→hash→manifest→bundle).
+    precheck_hashes = {rel: h for rel, h in file_hashes.items()
+                       if rel.startswith("precheck-report/")}
+    precheck_combined = None
+    if precheck_hashes:
+        sorted_rel = sorted(precheck_hashes)
+        precheck_combined = hashlib.sha256(
+            "".join(f"{rel}\0{precheck_hashes[rel]}\n" for rel in sorted_rel).encode()
+        ).hexdigest()
+        pr_block = [
+            "",
+            "=" * 72,
+            "PRECHECK REPORT ARTIFACT (ayrı bölüm)",
+            "=" * 72,
+            f"{'FILE':<55} {'SHA-256'}",
+            "-" * 72,
+        ]
+        pr_block += [f"{rel:<55} {precheck_hashes[rel]}" for rel in sorted_rel]
+        pr_block += ["-" * 72,
+                     f"precheck_combined_sha256: {precheck_combined}",
+                     "=" * 72]
+        lines += pr_block
+
     # ── PROVENANCE bölümü: artifact → üreten job (denetim izi) ──────────────
     # Her artifact hangi job'da üretildi — tek bakışta kaynak. Prefixed
     # indirilenler (config/, precommit-logs/) bundle'da kendi adı altındadır;
@@ -338,7 +366,7 @@ def main() -> None:
         files = present.get(art)
         if files:
             note = f"prefixed ({len(files)} dosya)"
-        elif art in ("config", "precommit-logs", "refs-trend"):
+        elif art in ("config", "precommit-logs", "refs-trend", "precheck-report"):
             note = "YOK (indirilmedi)"
         else:
             note = "merge (köke düzleştirildi)"
@@ -381,6 +409,11 @@ def main() -> None:
         manifest_json["summary"] = {
             "files": dict(sorted(summary_hashes.items())),
             "combined_sha256": summary_combined,
+        }
+    if precheck_hashes:
+        manifest_json["precheck_report"] = {
+            "files": dict(sorted(precheck_hashes.items())),
+            "combined_sha256": precheck_combined,
         }
 
     out_dir = pathlib.Path(args.out_dir)

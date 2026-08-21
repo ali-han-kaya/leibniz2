@@ -238,6 +238,56 @@ class TestProvenance(unittest.TestCase):
         m = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         self.assertNotIn("summary", m)
 
+    def test_precheck_report_section(self):
+        # precheck-report/ dosyaları CONFIG gibi ayrı bölümde işaretlenir
+        # + tek-hash combined_sha256 özetlenir.
+        (self.artifacts / "precheck-report").mkdir(parents=True)
+        (self.artifacts / "precheck-report" / "precheck_report.txt").write_text(
+            "SONUC: PASS\n", encoding="utf-8")
+        self._gen()
+        txt = (self.out / "manifest.txt").read_text(encoding="utf-8")
+        self.assertIn("PRECHECK REPORT ARTIFACT (ayrı bölüm)", txt)
+        self.assertIn("precheck_combined_sha256", txt)
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        pr = m["precheck_report"]
+        self.assertIn(
+            "precheck-report/precheck_report.txt", pr["files"])
+        self.assertTrue(len(pr["combined_sha256"]) == 64)
+
+    def test_precheck_combined_recomputes_deterministically(self):
+        (self.artifacts / "precheck-report").mkdir(parents=True)
+        (self.artifacts / "precheck-report" / "precheck_report.txt").write_text(
+            "SONUC: PASS\n", encoding="utf-8")
+        self._gen()
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        pr = m["precheck_report"]["files"]
+        expected = hashlib.sha256(
+            "".join(f"{rel}\0{pr[rel]}\n" for rel in sorted(pr)).encode()
+        ).hexdigest()
+        self.assertEqual(m["precheck_report"]["combined_sha256"], expected)
+        self.assertRegex(m["precheck_report"]["combined_sha256"], r"^[0-9a-f]{64}$")
+
+    def test_precheck_artifact_job_provenance(self):
+        (self.artifacts / "precheck-report").mkdir(parents=True)
+        (self.artifacts / "precheck-report" / "precheck_report.txt").write_text(
+            "SONUC: PASS\n", encoding="utf-8")
+        self._gen()
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        jobs = m["provenance"]["artifact_jobs"]
+        self.assertEqual(jobs["precheck-report"], "precheck")
+        txt = (self.out / "manifest.txt").read_text(encoding="utf-8")
+        self.assertIn("prefixed (1 dosya)", txt)  # precheck-report tek dosya
+
+    def test_no_precheck_section_when_absent(self):
+        bare = self.root / "bare"
+        bare.mkdir(parents=True)
+        (bare / "a.txt").write_text("x", encoding="utf-8")
+        out = self.root / "bare-out"
+        r = _run_gen(str(bare), str(out))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        m = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        self.assertNotIn("precheck_report", m)
+
     def test_env_override_artifact_jobs(self):
         env = dict(os.environ)
         env["REPRO_ARTIFACT_JOBS"] = '{"precommit-logs": "custom-job"}'
@@ -260,7 +310,7 @@ class TestWorkflowPatternCoverage(unittest.TestCase):
     olmalı — yoksa o artifact manifest'e girmeden sessizce düşer (ör. bugün
     budget-verify/lineage-findings/klayers eksikti).
     """
-    EXCLUDED = {"config", "precommit-logs", "refs-trend", "reproducibility"}
+    EXCLUDED = {"config", "precommit-logs", "refs-trend", "precheck-report", "reproducibility"}
 
     def _workflow_merge_pattern(self):
         wf = CIKTI.parent.parent / ".github" / "workflows" / "verify.yml"
