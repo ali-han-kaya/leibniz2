@@ -102,6 +102,7 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 | 2026-08-21 | docs | AŞAMA 1 (b) adım 9'a merge-engeli smoke notu ekle | `f632f20` |
 | 2026-08-21 | fix | precheck (e) — status_checks --gh smoke'u fail-closed kapı yap | `ce0f633` |
 | 2026-08-21 | docs | changelog — ce0f633 satırını işle | `245a0ac` |
+| 2026-08-21 | fix | (ci) precheck'e administration:read — smoke CI'da koşsun | `8d10118` |
 
 ---
 

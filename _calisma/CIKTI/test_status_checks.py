@@ -212,10 +212,12 @@ class TestGhIntegration(unittest.TestCase):
         self.assertFalse(d["enforcement_ok"])
 
     def test_gh_json_not_set_up_exits_1(self):
-        # Protection kurulu değilken --gh exit 1 (fail-closed).
+        # Protection kurulu değilken (gh api 404) --gh exit 1 (fail-closed)
+        # ve verdict NOT_SET_UP kalır.
         buf = io.StringIO()
         with mock.patch.object(sc, "run_gh",
-                               side_effect=RuntimeError("Branch not protected")), \
+                               side_effect=RuntimeError(
+                                   "HTTP 404: Not Found — branch not protected")), \
                 mock.patch.object(sys, "stdout", new=buf):
             with self.assertRaises(SystemExit) as cm:
                 sc.main(["--gh", "--repo", "owner/name", "--json"])
@@ -223,11 +225,28 @@ class TestGhIntegration(unittest.TestCase):
         d = json.loads(buf.getvalue())
         self.assertEqual(d["verdict"], "NOT_SET_UP")
 
+    def test_gh_json_unreadable_not_set_up_same_verdict_exit(self):
+        # 404 içermeyen hata (403 yetki yok / ağ) da fail-closed exit 1;
+        # verdict UNREADABLE — "kurulu değil" ile karıştırılmaz.
+        buf = io.StringIO()
+        with mock.patch.object(sc, "run_gh",
+                               side_effect=RuntimeError(
+                                   "HTTP 403: Resource not accessible by "
+                                   "integration")), \
+                mock.patch.object(sys, "stdout", new=buf):
+            with self.assertRaises(SystemExit) as cm:
+                sc.main(["--gh", "--repo", "owner/name", "--json"])
+        self.assertEqual(cm.exception.code, 1)
+        d = json.loads(buf.getvalue())
+        self.assertEqual(d["verdict"], "UNREADABLE")
+        self.assertNotEqual(d["verdict"], "NOT_SET_UP")
+
     def test_gh_text_not_set_up_exits_1(self):
         # Text modunda da protection kurulu değilken exit 1.
         buf = io.StringIO()
         with mock.patch.object(sc, "run_gh",
-                               side_effect=RuntimeError("Branch not protected")), \
+                               side_effect=RuntimeError(
+                                   "HTTP 404: Not Found — branch not protected")), \
                 mock.patch.object(sys, "stdout", new=buf), \
                 mock.patch.object(sys, "stderr", new=io.StringIO()):
             with self.assertRaises(SystemExit) as cm:

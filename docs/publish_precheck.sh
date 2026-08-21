@@ -276,6 +276,9 @@ PYEOF
       NOT_SET_UP)
         warn "branch protection kurulu değil — AŞAMA 1 (b) web UI'da kur (gh api 404)"
         ;;
+      UNREADABLE)
+        warn "branch protection okunamadı (yetki/ağ) — GITHUB_TOKEN'da admin scope'u yok; gerçek doğrulama yerelde gh auth ile yapılır (rc=$SC_GH_RC)"
+        ;;
       *)
         fail "branch protection durumu bilinmiyor: $GH_VERDICT (rc=$SC_GH_RC)"
         ;;

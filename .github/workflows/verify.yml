@@ -1430,13 +1430,12 @@ jobs:
   precheck:
     name: Publish precheck (AŞAMA 0, advisory)
     runs-on: ubuntu-latest
-    # Branch protection OKUMAK için administration: read gerekli (top-level
-    # contents: read yeterli değil — GITHUB_TOKEN 404 döner ve status_checks
-    # --gh smoke'u "protection kurulu değil" UYARIsına düşer). Yalnızca
-    # okuma — yazma/admin yetkisi verilmez.
-    permissions:
-      contents: read
-      administration: read
+    # NOT: GITHUB_TOKEN branch protection OKUYAMAZ — GitHub'ın "Administration"
+    # scope'u Actions permissions bloğunda geçersizdir; eklenirse workflow
+    # parse hatasıyla 0 job üretir. Bu yüzden CI'da status_checks --gh smoke'u
+    # "protection okunamadı" UYARISına düşer (advisory — gerçek doğrulama
+    # yerelde gh auth ile yapılır). Geçerli scope'lar: actions/checks/
+    # contents/pull-requests/statuses (actionlint doğrular).
     steps:
       - name: Checkout (full history — noise-commit + status denetimi için)
         uses: actions/checkout@v7

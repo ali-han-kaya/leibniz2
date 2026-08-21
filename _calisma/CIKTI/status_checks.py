@@ -194,15 +194,24 @@ def main(argv=None):
     try:
         raw = run_gh(["gh", "api", f"repos/{repo}/branches/main/protection"])
     except RuntimeError as e:
-        gh_result["warning"] = str(e)
-        gh_result["verdict"] = "NOT_SET_UP"
+        # 404 = koruma GERÇEKTEN kurulu değil (NOT_SET_UP). Diğer hatalar
+        # (403 yetki yok, ağ) koruma olabilir ama okunamadı — UYARI aynı
+        # kalır ama mesaj ayırt edilir: "erişilemedi" ≠ "kurulu değil".
+        # GITHUB_TOKEN'da administration scope'u olmadığından CI'da 403/404
+        # oluşur; gerçek doğrulama yerelde gh auth ile yapılır (fail-closed
+        # exit 1 — yanlış-PASS vermez).
+        err = str(e)
+        is_404 = "404" in err or "Not Found" in err
+        gh_result["warning"] = err
+        gh_result["verdict"] = "NOT_SET_UP" if is_404 else "UNREADABLE"
         if args.json:
             print(json.dumps(gh_result, indent=2, ensure_ascii=False))
         else:
-            print(f"HATA: branch protection kurulu değil — {e}", file=sys.stderr)
-            print("  --gh modu fail-closed: protection kurulu değilken exit 1.",
+            label = "kurulu değil" if is_404 else "erişilemedi (yetki/ağ)"
+            print(f"HATA: branch protection {label} — {e}", file=sys.stderr)
+            print("  --gh modu fail-closed: doğrulanamıyorsa exit 1.",
                   file=sys.stderr)
-            print(f"\nUYARI: branch protection kurulu değil/erişilemedi — {e}")
+            print(f"\nUYARI: branch protection {label} — {e}")
             print("  Kurulum: gh api -X PUT repos/.../branches/main/protection")
         sys.exit(1)
 
