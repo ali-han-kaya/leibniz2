@@ -1644,13 +1644,16 @@ jobs:
 
       # Mirror'ı CI'da kur: RUNNER_TEMP altına senkron et (gerçek TCC
       # cache'ine dokunmaz). Kaynak dosyalardan biri eksikse sync exit 2
-      # → job fail (fail-closed, validate_sources kapısı).
-      - name: Sync verify mirror (RUNNER_TEMP)
+      # → job fail (fail-closed, validate_sources kapısı). Adım 2+4 tek
+      # komutta: PREVIEW_MIRROR da RUNNER_TEMP'e yönlendirilir.
+      - name: Sync preview + verify mirror (RUNNER_TEMP, adım 2+4)
         id: sync
         run: |
           set -euo pipefail
+          export PREVIEW_MIRROR="$RUNNER_TEMP/preview-mirror"
           export MIRROR_DIR="$RUNNER_TEMP/verify-mirror"
           export LEAN_MIRROR_DIR="$RUNNER_TEMP/lean-mirror"
+          echo "PREVIEW_MIRROR=$PREVIEW_MIRROR" >> "$GITHUB_ENV"
           echo "MIRROR_DIR=$MIRROR_DIR" >> "$GITHUB_ENV"
           echo "LEAN_MIRROR_DIR=$LEAN_MIRROR_DIR" >> "$GITHUB_ENV"
           bash _calisma/CIKTI/sync_verify_mirror.sh --force

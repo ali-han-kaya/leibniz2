@@ -28,12 +28,13 @@
 # agent'ı repo dizinini TCC nedeniyle okuyamaz). Şablon yoksa script yerleşik
 # varsayılanı yazar (tek kaynak = script; Caches kopyası operasyonel).
 #
-# BÖLÜM 3 — verify mirror senkronu (sync_verify_mirror.sh'e delege eder)
+# BÖLÜM 3 — preview + verify mirror senkronu (sync_verify_mirror.sh'e delege)
 # verify_delivery.py --full koşusu launchd GUI agent rotasında repo yerine
-# TCC-safe mirror'dan (--dir) çalışır; mirror, CIKTI runtime dosyalarının ve
-# Lean ispatının kopyasıdır. --mirror bunu TEK KOMUTLA senkron eder (run.md
-# adım 4'ün yerine geçer); --mirror-check bayatlığı denetler (fail-closed:
-# 0 güncel / 1 bayat / 2 hata).
+# TCC-safe mirror'dan (--dir) çalışır; mirror, preview çalıştırıcısının
+# (preview_server.py + _daemonize.py, run.md adım 2), CIKTI runtime
+# dosyalarının ve Lean ispatının (adım 4) kopyasıdır. --mirror bunların
+# İKİSİNİ TEK KOMUTLA senkron eder (adım 2+4); --mirror-check bayatlığı
+# denetler (fail-closed: 0 güncel / 1 bayat / 2 hata).
 #
 # Kullanım:
 #   update_preview.sh                      # HTML build (kaynak değişmediyse atla)

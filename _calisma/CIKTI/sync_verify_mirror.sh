@@ -1,19 +1,18 @@
 #!/usr/bin/env bash
 # =============================================================================
-# sync_verify_mirror.sh — repo → TCC-safe verify mirror TEK KOMUT senkronu.
+# sync_verify_mirror.sh — repo → TCC-safe mirror TEK KOMUT senkronu.
 #
-# Neden: preview_server.py launchd GUI agent rotasında çalışırken
-# verify_delivery.py'yi repo dizininden değil, TCC-safe mirror'dan koşar:
-#   ~/Library/Caches/com.freebuff/verify   (--dir)
-#   ~/Library/Caches/com.freebuff/lean_reduct  (K9: ../lean_reduct/…)
+# Neden: preview_server.py launchd GUI agent rotasında çalışırken repo
+# dizinini TCC nedeniyle okuyamaz; tüm runtime TCC-safe mirror'da tutulur.
+# Bu script, run.md "How to reproduce the artifacts" ADIM 2 (preview mirror:
+# preview_server.py + _daemonize.py) ve ADIM 4 (verify mirror: CIKTI runtime
+# dosyaları + Lean ispatı) işlerini TEK KOMUTTA birleştirir:
+#   ~/Library/Caches/com.freebuff/preview      (adım 2 — sunucu çalıştırıcı)
+#   ~/Library/Caches/com.freebuff/verify       (adım 4 — verify_delivery --dir)
+#   ~/Library/Caches/com.freebuff/lean_reduct  (adım 4 — K9: ../lean_reduct/…)
 # launchd GUI agent'ı /Users/.../Desktop altını TCC nedeniyle okuyamaz;
-# mirror bunu aşar. Bu script, CIKTI runtime dosyalarını ve Lean ispatını
-# mirror'a taşır — idempotent (yalnızca değişen dosya kopyalanır) ve
+# mirror bunu aşar. İdempotent (yalnızca değişen dosya kopyalanır) ve
 # fail-closed (eksik kaynak → exit 2, hiçbir şey kopyalanmaz).
-#
-# Kapsam = run.md "How to reproduce the artifacts" adım 4 (verify mirror).
-# preview_server.py (adım 2) ve venv_z3 (adım 3) tek-seferlik ayrı işlerdir;
-# bu script YALNIZCA verify mirror'ını yönetir.
 #
 # Kullanım:
 #   sync_verify_mirror.sh             # senkron (değişeni kopyala, raporla)
@@ -23,9 +22,11 @@
 #   sync_verify_mirror.sh --help
 #
 # Ortam değişkenleri (override):
-#   MIRROR_DIR       verify mirror dizini
+#   PREVIEW_MIRROR   preview mirror dizini (adım 2)
+#                    (varsayılan: ~/Library/Caches/com.freebuff/preview)
+#   MIRROR_DIR       verify mirror dizini (adım 4)
 #                    (varsayılan: ~/Library/Caches/com.freebuff/verify)
-#   LEAN_MIRROR_DIR  Lean mirror dizini (K9)
+#   LEAN_MIRROR_DIR  Lean mirror dizini (K9, adım 4)
 #                    (varsayılan: ~/Library/Caches/com.freebuff/lean_reduct)
 #   ROOT             repo kökü (varsayılan: script'in ../../)
 # =============================================================================
@@ -36,6 +37,7 @@ ROOT="${ROOT:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 CIKTI="$ROOT/_calisma/CIKTI"
 LEAN_SRC="$ROOT/_calisma/lean_reduct"
 
+PREVIEW_MIRROR="${PREVIEW_MIRROR:-$HOME/Library/Caches/com.freebuff/preview}"
 MIRROR_DIR="${MIRROR_DIR:-$HOME/Library/Caches/com.freebuff/verify}"
 LEAN_MIRROR_DIR="${LEAN_MIRROR_DIR:-$HOME/Library/Caches/com.freebuff/lean_reduct}"
 
@@ -73,6 +75,14 @@ LEAN_FILES=(
   "ReductInvariance.lean|ReductInvariance.lean"
 )
 
+# Preview mirror dosyaları (adım 2): kaynak CIKTI'ya, dest PREVIEW_MIRROR'a
+# göre. preview_server.py launchd GUI agent'ının çalıştırıcısıdır;
+# _daemonize.py daemon modda kullanılır.
+PREVIEW_FILES=(
+  "preview_server.py|preview_server.py"
+  "_daemonize.py|_daemonize.py"
+)
+
 say() { printf '%s\n' "$*"; }
 err() { printf 'HATA: %s\n' "$*" >&2; }
 
@@ -97,6 +107,13 @@ validate_sources() {
       rc=1
     fi
   done < <(printf '%s\n' "${LEAN_FILES[@]}")
+  while IFS='|' read -r src dst; do
+    [ -n "$src" ] || continue
+    if [ ! -f "$CIKTI/$src" ]; then
+      err "kaynak yok: $CIKTI/$src (preview)"
+      rc=1
+    fi
+  done < <(printf '%s\n' "${PREVIEW_FILES[@]}")
   return "$rc"
 }
 
@@ -140,6 +157,13 @@ run_sync() {
     [ "$st" = "GÜNCELLENDİ" ] && changed=$((changed + 1))
     say "$st: lean_reduct/$dst"
   done < <(printf '%s\n' "${LEAN_FILES[@]}")
+  while IFS='|' read -r src dst; do
+    [ -n "$src" ] || continue
+    total=$((total + 1))
+    st="$(sync_one "$CIKTI/$src" "$PREVIEW_MIRROR/$dst" "$mode")"
+    [ "$st" = "GÜNCELLENDİ" ] && changed=$((changed + 1))
+    say "$st: preview/$dst"
+  done < <(printf '%s\n' "${PREVIEW_FILES[@]}")
   say "ÖZET: $total dosya, $changed güncellendi · git $(git_short)"
 }
 
@@ -164,11 +188,21 @@ run_check() {
       stale=1
     fi
   done < <(printf '%s\n' "${LEAN_FILES[@]}")
+  while IFS='|' read -r src dst; do
+    [ -n "$src" ] || continue
+    if same_file "$CIKTI/$src" "$PREVIEW_MIRROR/$dst"; then
+      say "GÜNCEL: preview/$dst"
+    else
+      say "BAYAT/EKSİK: preview/$dst"
+      stale=1
+    fi
+  done < <(printf '%s\n' "${PREVIEW_FILES[@]}")
   return "$stale"
 }
 
 run_list() {
   local src dst
+  say "PREVIEW_MIRROR  = $PREVIEW_MIRROR"
   say "MIRROR_DIR      = $MIRROR_DIR"
   say "LEAN_MIRROR_DIR = $LEAN_MIRROR_DIR"
   say "CIKTI           = $CIKTI"
@@ -182,6 +216,10 @@ run_list() {
     [ -n "$src" ] || continue
     say "$LEAN_SRC/$src -> $LEAN_MIRROR_DIR/$dst"
   done < <(printf '%s\n' "${LEAN_FILES[@]}")
+  while IFS='|' read -r src dst; do
+    [ -n "$src" ] || continue
+    say "$CIKTI/$src -> $PREVIEW_MIRROR/$dst"
+  done < <(printf '%s\n' "${PREVIEW_FILES[@]}")
 }
 
 usage() {
@@ -201,7 +239,7 @@ main() {
       ;;
     --check)
       validate_sources || exit 2
-      mkdir -p "$MIRROR_DIR" "$LEAN_MIRROR_DIR"
+      mkdir -p "$PREVIEW_MIRROR" "$MIRROR_DIR" "$LEAN_MIRROR_DIR"
       if run_check; then
         say "SONUÇ: mirror güncel · git $(git_short)"
         exit 0
@@ -212,13 +250,13 @@ main() {
       ;;
     --force)
       validate_sources || exit 2
-      mkdir -p "$MIRROR_DIR" "$LEAN_MIRROR_DIR"
+      mkdir -p "$PREVIEW_MIRROR" "$MIRROR_DIR" "$LEAN_MIRROR_DIR"
       run_sync force
       exit 0
       ;;
     sync)
       validate_sources || exit 2
-      mkdir -p "$MIRROR_DIR" "$LEAN_MIRROR_DIR"
+      mkdir -p "$PREVIEW_MIRROR" "$MIRROR_DIR" "$LEAN_MIRROR_DIR"
       run_sync sync
       exit 0
       ;;

@@ -10,8 +10,9 @@
 #
 #   1. Repo venv        _calisma/.venv_z3          (z3 + pre-commit + yaml + jsonschema)
 #   2. Mirror venv      ~/Library/Caches/com.freebuff/venv_z3  (TCC-safe, aynı paketler)
-#   3. Preview mirror   ~/Library/Caches/com.freebuff/preview/ (preview_server.py + _daemonize.py)
-#   4. Verify mirror    ~/Library/Caches/com.freebuff/verify + lean_reduct (sync_verify_mirror.sh)
+#   3+4. Preview+verify mirror  sync_verify_mirror.sh — TEK KOMUT:
+#        ~/Library/Caches/com.freebuff/preview/   (preview_server.py + _daemonize.py, adım 2)
+#        ~/Library/Caches/com.freebuff/verify + lean_reduct (adım 4)
 #   5. HTML + plist     update_preview.sh --bootstrap (HTML build + LaunchAgent plist'leri)
 #
 # Her adım fail-closed'dur: kaynak yok / venv kurulamaz / kopya başarısız →
@@ -91,27 +92,6 @@ create_venv() {
   say "venv hazır: $dir"
 }
 
-# preview mirror dosyasını senkron et (preview_server.py + _daemonize.py).
-sync_preview_files() {
-  local rc=0 src
-  mkdir -p "$PREVIEW_MIRROR"
-  for f in preview_server.py _daemonize.py; do
-    src="$CIKTI/$f"
-    if [ ! -f "$src" ]; then
-      err "kaynak yok: $src"
-      rc=1
-      continue
-    fi
-    if cmp -s "$src" "$PREVIEW_MIRROR/$f"; then
-      say "GÜNCEL: preview/$f"
-    else
-      cp "$src" "$PREVIEW_MIRROR/$f"
-      say "GÜNCELLENDİ: preview/$f"
-    fi
-  done
-  return "$rc"
-}
-
 # --check: beş artefaktın tamamı hazır mı? (0 evet / 1 eksik / 2 hata)
 check_all() {
   local rc=0 missing=0
@@ -132,26 +112,17 @@ check_all() {
     missing=1
   fi
 
-  # 3. Preview mirror dosyaları
-  for f in preview_server.py _daemonize.py; do
-    if cmp -s "$CIKTI/$f" "$PREVIEW_MIRROR/$f"; then
-      say "OK: preview/$f"
-    else
-      err "preview/$f eksik/bayat (fresh_clone_setup.sh çalıştırın)"
-      missing=1
-    fi
-  done
-
-  # 4. Verify mirror (sync_verify_mirror.sh --check — 0 güncel/1 bayat/2 hata)
+  # 3+4. Preview + verify mirror (sync_verify_mirror.sh --check — adım 2+4
+  #      tek komutta: 0 güncel/1 bayat/2 hata; PREVIEW_MIRROR dahil).
   if [ -x "$SCRIPT_DIR/sync_verify_mirror.sh" ]; then
     if "$SCRIPT_DIR/sync_verify_mirror.sh" --check >/dev/null 2>&1; then
-      say "OK: verify mirror (repo ↔ mirror birebir)"
+      say "OK: preview + verify mirror (repo ↔ mirror birebir)"
     else
-      err "verify mirror bayat/eksik (fresh_clone_setup.sh çalıştırın)"
+      err "preview/verify mirror bayat/eksik (fresh_clone_setup.sh çalıştırın)"
       missing=1
     fi
   else
-    err "sync_verify_mirror.sh yok — verify mirror denetlenemedi"
+    err "sync_verify_mirror.sh yok — preview/verify mirror denetlenemedi"
     missing=1
   fi
 
@@ -206,16 +177,13 @@ setup_all() {
     create_venv "$MIRROR_VENV" || return $?
   fi
 
-  say "=== 3/5: Preview mirror dosyaları ==="
-  sync_preview_files || return $?
-
-  say "=== 4/5: Verify mirror (sync_verify_mirror.sh) ==="
+  say "=== 3+4/5: Preview + verify mirror (sync_verify_mirror.sh — adım 2+4) ==="
   "$SCRIPT_DIR/sync_verify_mirror.sh" || return $?
 
   say "=== 5/5: HTML build + LaunchAgent plist'leri (--bootstrap) ==="
   "$SCRIPT_DIR/update_preview.sh" --bootstrap || return $?
 
-  say "FRESH-CLONE KURULUM: tamam — 5/5 artefakt hazır"
+  say "FRESH-CLONE KURULUM: tamam — 5/5 artefakt hazır (adım 2+4 tek komutta)"
   say "           sonraki adım: update_preview.sh --start (launchctl bootstrap) " \
        "veya fresh_clone_setup.sh --check"
 }

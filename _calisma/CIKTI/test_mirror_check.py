@@ -44,9 +44,16 @@ def make_mirror(work):
 
 
 def sync_env(work):
-    """sync_verify_mirror.sh'i fake mirror'a yönlendiren env sözlüğü."""
+    """sync_verify_mirror.sh'i fake mirror'a yönlendiren env sözlüğü.
+
+    PREVIEW_MIRROR da fake'e yönlendirilir — aksi halde senkron gerçek
+    ~/Library/Caches/com.freebuff/preview'a dokunur (adım 2+4 tek komutta).
+    """
     mirror_dir, lean_mirror_dir = make_mirror(work)
-    return {"MIRROR_DIR": mirror_dir, "LEAN_MIRROR_DIR": lean_mirror_dir}
+    preview_mirror = os.path.join(work, "preview-mirror")
+    return {"PREVIEW_MIRROR": preview_mirror,
+            "MIRROR_DIR": mirror_dir,
+            "LEAN_MIRROR_DIR": lean_mirror_dir}
 
 
 class TestSyncMirrorCheckExitCodes(unittest.TestCase):
@@ -198,6 +205,34 @@ class TestMirrorFileCoverage(unittest.TestCase):
             text = f.read()
         # LEAN_FILES ReductInvariance.lean'ı içermeli (K9 launchd rotası).
         self.assertIn("ReductInvariance.lean", text)
+
+    def test_preview_files_listed(self):
+        with open(SYNC_MIRROR, encoding="utf-8") as f:
+            text = f.read()
+        # PREVIEW_FILES (adım 2) preview_server.py + _daemonize.py içermeli
+        # — adım 2+4 tek komutta senkron edilir (launchd çalıştırıcısı).
+        self.assertIn("preview_server.py|preview_server.py", text)
+        self.assertIn("_daemonize.py|_daemonize.py", text)
+
+    def test_preview_mirror_synced_in_single_command(self):
+        # Adım 2+4 tek komut: sync, preview mirror'ı da kurar; --check onu
+        # da denetler. PREVIEW_MIRROR fake'e yönlendirilir (gerçek cache'e
+        # dokunmaz).
+        with tempfile.TemporaryDirectory(prefix="mirror-k17-") as work:
+            env = sync_env(work)
+            syn = run(env, "bash", SYNC_MIRROR)
+            self.assertEqual(syn.returncode, 0, syn.stderr)
+            preview_server = os.path.join(env["PREVIEW_MIRROR"],
+                                          "preview_server.py")
+            self.assertTrue(os.path.isfile(preview_server), preview_server)
+            self.assertTrue(os.path.isfile(
+                os.path.join(env["PREVIEW_MIRROR"], "_daemonize.py")))
+            # --check: preview dosyası bozulursa BAYAT (exit 1) → K17 fail.
+            with open(preview_server, "a", encoding="utf-8") as f:
+                f.write("\n# drift\n")
+            chk = run(env, "bash", SYNC_MIRROR, "--check")
+            self.assertEqual(chk.returncode, 1, chk.stdout + chk.stderr)
+            self.assertIn("BAYAT/EKSİK: preview/preview_server.py", chk.stdout)
 
 
 class TestMirrorOutSidecar(unittest.TestCase):

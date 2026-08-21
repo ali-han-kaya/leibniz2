@@ -166,7 +166,9 @@ class TestFreshCloneSetupFailClosed(unittest.TestCase):
             r = run(home, "bash", FRESH_SETUP, "--check", extra_env=env)
             self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
             self.assertIn("EKSİK", r.stdout)
-            self.assertIn("preview/preview_server.py eksik/bayat", r.stderr)
+            # Adım 2+4 tek komutta: sync_verify_mirror.sh --check preview
+            # dosyasındaki drift'i yakalar (BAYAT/EKSİK).
+            self.assertIn("preview/verify mirror bayat/eksik", r.stderr)
 
 
 if __name__ == "__main__":
