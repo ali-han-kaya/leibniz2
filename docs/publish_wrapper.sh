@@ -13,6 +13,12 @@
 #   ./docs/publish_wrapper.sh --dry-run-summary
 #                           # = --dry-run + komut akışını tek markdown dosyasına
 #                           #   özetle (logs/PUBLISH_DRY_RUN_SUMMARY.md)
+#   ./docs/publish_wrapper.sh --verify-checks # YALNIZCA AŞAMA 1 doğrulaması:
+#                                             # status_checks.py + --gh (workflow
+#                                             # ↔ GitHub eşleşmesi + merge engeli
+#                                             # smoke). Repo oluşturma/push/CI
+#                                             # izleme ÇALIŞTIRILMAZ. --dry-run ile
+#                                             # birleşince önizleme modunda koşar.
 #
 # DRY-RUN: her kalıcı komut "[DRY-RUN] çalıştırılacak: ..." olarak basılır;
 # AŞAMA 0 precheck --skip-smoke --allow-remote ile koşar (fail olsa bile akış
@@ -49,13 +55,15 @@ WITH_STAGE4=0
 DRY_RUN=0
 DRY_RUN_SUMMARY=0
 CI_SIMULATE=0
+VERIFY_CHECKS=0
 for a in "$@"; do
   case "$a" in
     --with-stage4)    WITH_STAGE4=1 ;;
     --dry-run)        DRY_RUN=1 ;;
     --dry-run-summary) DRY_RUN=1; DRY_RUN_SUMMARY=1 ;;
     --ci-simulate)    CI_SIMULATE=1 ;;
-    *) echo "Bilinmeyen bayrak: $a (geçerli: --with-stage4, --dry-run, --dry-run-summary, --ci-simulate)" >&2; exit 2 ;;
+    --verify-checks)  VERIFY_CHECKS=1 ;;
+    *) echo "Bilinmeyen bayrak: $a (geçerli: --with-stage4, --dry-run, --dry-run-summary, --ci-simulate, --verify-checks)" >&2; exit 2 ;;
   esac
 done
 
@@ -80,6 +88,53 @@ run() {
 
 # DRY-RUN dışında tamamlanma mesajı basar (önizlemede yalnızca run() yeter).
 done_msg() { [ "$DRY_RUN" = "1" ] || log "$*"; }
+
+# ── AŞAMA 1 doğrulaması — status_checks.py (workflow ↔ GitHub eşleşmesi) ──
+# TEK KAYNAK: workflow job `name:`'leri. Hem normal akış (AŞAMA 1) hem de
+# bağımsız --verify-checks modu bu fonksiyonu çağırır (tek tanım, drift yok).
+# Branch protection henüz kurulu değilse --gh UYARI basar (web UI'dan kurulur)
+# — bu bir hata değil, "kapı henüz yok" demektir. Gerçek drift (eksik/fazla
+# check) FAIL eder (fail-closed).
+verify_checks() {
+  # gh kullanıcısı (repo linki için) — precheck içinde doğrulanmıştır.
+  OWNER="$(gh api user -q .login 2>/dev/null || true)"
+
+  # status_checks.py — beklenen required check adları.
+  if [ -x _calisma/.venv_z3/bin/python ]; then
+    SC_PY=_calisma/.venv_z3/bin/python
+  else
+    SC_PY=python3
+  fi
+
+  log "status_checks.py — beklenen required check adları:"
+  if ! "$SC_PY" _calisma/CIKTI/status_checks.py | sed 's/^/    /'; then
+    fail "status_checks.py çalışmadı — workflow job adları ayrıştırılamadı"
+  fi
+
+  log "status_checks.py --gh — GitHub eşleşmesi:"
+  set +e
+  SC_GH_OUT="$("$SC_PY" _calisma/CIKTI/status_checks.py --gh 2>&1)"
+  SC_GH_EXIT=$?
+  set -e
+  echo "$SC_GH_OUT" | sed 's/^/    /'
+  if [ "$SC_GH_EXIT" -eq 0 ]; then
+    if echo "$SC_GH_OUT" | grep -q "SONUÇ: PASS"; then
+      log "branch protection birebir eşleşiyor ✓ (workflow ↔ GitHub)"
+    else
+      log "branch protection henüz kurulu değil — AŞAMA 1 (b) web UI'da kur (beklenen)"
+    fi
+  elif [ "$DRY_RUN" = "1" ]; then
+    warn "status_checks.py --gh dry-run'da GitHub'a ulaşamadı (repo yeni oluşturulacak?) — önizleme devam"
+  else
+    fail "status_checks.py --gh FAIL (exit $SC_GH_EXIT) — eksik/fazla check; listeyi workflow'la eşitle"
+  fi
+
+  # Branch protection web UI üzerinden (manuel). Linki logla + hatırlat:
+  # ilk push'tan SONRA kurmak daha pratiktir (enforce-admins ilk push'u bloke edebilir).
+  log "branch protection (manuel, push sonrası):"
+  log "    https://github.com/$OWNER/$REPO_NAME/settings/branches"
+  log "sonrasında doğrulama (tekrar):    python3 _calisma/CIKTI/status_checks.py --gh"
+}
 
 # --dry-run-summary: dry-run komut akışını TEK markdown dosyasında özetle.
 # AŞAMA başlıkları + [DRY-RUN] komut önizlemeleri yapılandırılmış liste olur;
@@ -125,6 +180,32 @@ else
   log "publish_wrapper.sh başladı"
 fi
 log "repo_root: $REPO_ROOT · repo_name: $REPO_NAME · log: $LOG"
+
+# ── VERIFY-CHECKS modu: yalnızca AŞAMA 1 doğrulaması ───────────────────────
+# status_checks.py + --gh (workflow ↔ GitHub eşleşmesi + merge engeli smoke).
+# Repo oluşturma / push / CI izleme ÇALIŞTIRILMAZ — bağımsız, hızlı bir kapı.
+# AŞAMA 0 precheck (temiz tree + smoke) bu modda çalışmaz: doğrulama salt
+# okunur (GitHub API sorgusu) ve temiz tree gerektirmez — geliştirme
+# ortamında dahi çağrılabilir. gh auth yine de zorunludur (precheck içinde
+# doğrulanmış olması gerekmez — burada kendisi denetler).
+# --with-stage4 ile birleşimi anlamsızdır (stage4 zaten push gerektirir).
+if [ "$VERIFY_CHECKS" = "1" ]; then
+  if ! command -v gh >/dev/null 2>&1 || ! gh auth status >/dev/null 2>&1; then
+    fail "--verify-checks gh CLI + auth gerektirir (gh auth status)"
+  fi
+  OWNER="$(gh api user -q .login 2>/dev/null || true)"
+  step "AŞAMA 1 (VERIFY-CHECKS) — required check doğrulaması"
+  verify_checks
+  step "SONUÇ (VERIFY-CHECKS)"
+  log "Repo:        https://github.com/$OWNER/$REPO_NAME"
+  log "Log dosyası: $LOG"
+  if [ "$DRY_RUN" = "1" ]; then
+    log "SONUÇ: VERIFY-CHECKS ✓ (dry-run — yalnızca önizleme)"
+  else
+    log "SONUÇ: VERIFY-CHECKS ✓ — required check adları workflow ile birebir eşleşiyor"
+  fi
+  exit 0
+fi
 
 # ─────────────────────────────────────────────────────────────────────────────
 step "AŞAMA 0 — Ön-kontrol (publish_precheck.sh — tek komut)"
@@ -227,45 +308,9 @@ else
   done_msg "repo oluşturuldu: $OWNER/$REPO_NAME ✓"
 fi
 
-# ── status_checks.py — required check adlarını workflow'dan türet ve (repo
-# oluşturulduysa) GitHub ile karşılaştır. TEK KAYNAK: workflow job `name:`'leri.
-# Branch protection henüz kurulu değilse --gh UYARI basar (web UI'dan kurulur)
-# — bu bir hata değil, "kapı henüz yok" demektir. Gerçek drift (eksik/fazla
-# check) FAIL eder (fail-closed).
-if [ -x _calisma/.venv_z3/bin/python ]; then
-  SC_PY=_calisma/.venv_z3/bin/python
-else
-  SC_PY=python3
-fi
-
-log "status_checks.py — beklenen required check adları:"
-if ! "$SC_PY" _calisma/CIKTI/status_checks.py | sed 's/^/    /'; then
-  fail "status_checks.py çalışmadı — workflow job adları ayrıştırılamadı"
-fi
-
-log "status_checks.py --gh — GitHub eşleşmesi:"
-set +e
-SC_GH_OUT="$("$SC_PY" _calisma/CIKTI/status_checks.py --gh 2>&1)"
-SC_GH_EXIT=$?
-set -e
-echo "$SC_GH_OUT" | sed 's/^/    /'
-if [ "$SC_GH_EXIT" -eq 0 ]; then
-  if echo "$SC_GH_OUT" | grep -q "SONUÇ: PASS"; then
-    log "branch protection birebir eşleşiyor ✓ (workflow ↔ GitHub)"
-  else
-    log "branch protection henüz kurulu değil — AŞAMA 1 (b) web UI'da kur (beklenen)"
-  fi
-elif [ "$DRY_RUN" = "1" ]; then
-  warn "status_checks.py --gh dry-run'da GitHub'a ulaşamadı (repo yeni oluşturulacak?) — önizleme devam"
-else
-  fail "status_checks.py --gh FAIL (exit $SC_GH_EXIT) — eksik/fazla check; listeyi workflow'la eşitle"
-fi
-
-# Branch protection artık web UI üzerinden (manuel). Linki logla + hatırlat:
-# ilk push'tan SONRA kurmak daha pratiktir (enforce-admins ilk push'u bloke edebilir).
-log "branch protection (manuel, push sonrası):"
-log "    https://github.com/$OWNER/$REPO_NAME/settings/branches"
-log "sonrasında doğrulama (tekrar):    python3 _calisma/CIKTI/status_checks.py --gh"
+# ── AŞAMA 1 doğrulaması — status_checks.py + --gh (tek fonksiyon; ayrıca
+# --verify-checks modunda da çağrılır). Tek kaynak: workflow job `name:`'leri.
+verify_checks
 
 # ─────────────────────────────────────────────────────────────────────────────
 step "AŞAMA 2 — Remote ekle + push (idempotent)"

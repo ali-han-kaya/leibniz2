@@ -80,6 +80,7 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 | 2026-08-21 | feat | add check-absolute-paths pre-commit hook | `8116715` |
 | 2026-08-21 | docs | clarify 8 required checks vs push-running jobs in PUBLISH_SCENARIO | `b393ddf` |
 | 2026-08-21 | feat | (ci) git log'dan otomatik changelog üret (gen_changelog.py) | `4286b4a` |
+| 2026-08-21 | fix | (ci) changelog hook'u auto-sync yap (update-config deseni) | `5d5daf2` |
 
 ---
 
@@ -166,6 +167,7 @@ Aşağıdaki manuel aşamaların **birebir aynısını tek komutla, interaktif o
 | `bash docs/publish_wrapper.sh --dry-run` | **Prova:** hiçbir komut çalışmaz; her kalıcı komut `[DRY-RUN] çalıştırılacak: ...` olarak önizlenir (exit 0) |
 | `bash docs/publish_wrapper.sh --dry-run --with-stage4` | AŞAMA 0-4'ün tam önizlemesi |
 | `bash docs/publish_wrapper.sh --dry-run-summary` | **Prova + özet:** dry-run komut akışını tek markdown dosyasına yazar (`logs/PUBLISH_DRY_RUN_SUMMARY.md`) |
+| `bash docs/publish_wrapper.sh --verify-checks` | **Yalnızca AŞAMA 1 doğrulaması:** `status_checks.py` + `--gh` (workflow ↔ GitHub eşleşmesi + merge engeli smoke). Repo oluşturma/push/CI izleme ÇALIŞMAZ; temiz tree gerektirmez (salt okunur) — `--dry-run` ile birleşince önizleme modunda koşar |
 | `bash docs/publish_wrapper.sh` (repo zaten yayında) | **İdempotent:** repo/remote varsa atlanır; bekleyen commit yoksa push atlanır; HEAD için mevcut CI run'ı izlenir |
 
 - **Log:** `logs/publish_<timestamp>.log` — hem terminale hem dosyaya yazılır.
