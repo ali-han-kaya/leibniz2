@@ -197,6 +197,8 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-22 | feat | update_preview.sh --status alt komutu | `aacad00` |
 | 2026-08-22 | feat | K18 launchctl durum katmani | `efcb8bb` |
 | 2026-08-22 | feat | plist-check artifact'ini reproducibility manifest'e dahil et | `ecba674` |
+| 2026-08-22 | docs | changelog auto-sync — plist-check manifest entry | `62216d9` |
+| 2026-08-22 | ci | plist-check run summary'de profiles sidecar tablosu | `e9f6acf` |
 
 ### Regresyon notları
 

@@ -1734,9 +1734,8 @@ jobs:
             echo ""
             echo "- drift gate: exit \`${{ steps.drift.outputs.rc }}\`"
             echo "- K12 --check-plist: exit \`${{ steps.k12.outputs.rc }}\`"
-            echo '```'
-            cat plist_check_report.txt 2>/dev/null || echo '(rapor yok)'
-            echo '```'
+            echo ""
+            python3 _calisma/CIKTI/summary_plist_table.py plist_report.json
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload plist check report + sidecar JSON
