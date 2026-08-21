@@ -192,6 +192,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-21 | feat | refs-online VERSION JSON'a ht_ids_summary ekle | `efdd45a` |
 | 2026-08-21 | docs | bilinen CI olayları kaydı (KNOWN_INCIDENTS.md) | `cf82c25` |
 | 2026-08-21 | docs | PUBLISH_SCENARIO canli durum tablosu guncelle | `9f2516e` |
+| 2026-08-21 | refactor | persist sidecar testlerini test_preview_server.py'ye tasi | `f1aab1d` |
 
 ### Regresyon notları
 
