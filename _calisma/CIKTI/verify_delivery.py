@@ -75,7 +75,8 @@ Doğrulama zinciri (Katman 0..14):
                Internet Archive / Perseus çevrimiçi denetimi
   K7  Hijyen   secret/anahtar + artefakt taraması
   K8  İspat    Z3 sembolik ispat (--symbolic-proof; z3-solver gerektirir)
-  K9  Lean     Lean 4 reduct-invariance tümevarımsal kanıt (--lean-proof; lean gerektirir)
+  K9  Lean     Lean 4 reduct-invariance tümevarımsal kanıt + 8 teoremli Sınır
+               İspatı çekirdeği lake build --wfail (--lean-proof; lean+lake gerektirir)
   K10 Manifest gen_repro_manifest.py çıktısı manifest.json'daki her dosyanın
                SHA-256'sını gerçek dosyayla karşılaştır + config.combined_sha256'ı
                config.files'tan YENİDEN hesaplayıp doğrula + effective_config.json'
@@ -146,6 +147,10 @@ PDF_METADATA_SIDECAR = "ingiliz_empirizmi_v3.pdf.metadata.sha256"
 PDF_RAW_SIDECAR = "ingiliz_empirizmi_v3.pdf.sha256"
 SYMBOLIC_PROOF_SCRIPT = "symbolic_proof_z3.py"
 LEAN_PROOF_SCRIPT = "../lean_reduct/ReductInvariance.lean"
+# K9 ek kapısı: 8 teoremli Sınır İspatı çekirdeği (Content.lean) lake projesi.
+# lake build --wfail, lean-toolchain v4.14.0 ile fail-closed derlenir.
+LEAN_REDUCT_DIR = "../lean_reduct"
+LEAN_TOOLCHAIN = "leanprover/lean4:v4.14.0"
 SCRIPTS = [
     ("core_formal_model_check.py", "test_output.txt"),
     ("encoding_sensitivity_check.py", "encoding_sensitivity_output.txt"),
@@ -168,7 +173,7 @@ LAYER_LABELS = {
     "K6": "İçerik (PDF + referans)",
     "K7": "Hijyen (secret/artefakt)",
     "K8": "Z3 sembolik ispat",
-    "K9": "Lean reduct-invariance",
+    "K9": "Lean reduct-invariance + 8 teorem çekirdek",
     "K10": "Manifest digest",
     "K11": "Config drift",
     "K12": "Plist şablon",
@@ -1648,6 +1653,21 @@ def compute_type_bytes(ic_root):
     return type_bytes, total_bytes
 
 
+def find_tool(tool):
+    """tool'u PATH'ten, /opt/homebrew/bin'den veya ~/.elan/bin'den bulur.
+
+    Elan shim'leri (~/.elan/bin/lake, ~/.elan/bin/lean) toolchain'i proje
+    dizinindeki lean-toolchain'e göre seçer; yoksa olduğu gibi döner
+    (subprocess FileNotFoundError → çağıran fail-closed yakalar).
+    """
+    for candidate in [tool,
+                      f"/opt/homebrew/bin/{tool}",
+                      os.path.expanduser(f"~/.elan/bin/{tool}")]:
+        if os.path.isfile(candidate):
+            return candidate
+    return tool
+
+
 def run_lean_proof(lean_path, lean_file):
     """K9: Lean 4 reduct-invariance (tümevarımsal kanıt). Döndürür (ok: bool, detail: str)."""
     lean_dir = os.path.dirname(lean_file)
@@ -1664,6 +1684,49 @@ def run_lean_proof(lean_path, lean_file):
     tail = [l.strip() for l in out.splitlines() if l.strip()][-3:]
     detail = " | ".join(tail) if tail else f"exit={r.returncode}"
     return False, f"Lean derleme hatası: {detail}"
+
+
+def run_lake_build(lake_path, project_dir):
+    """K9 ek kapısı: 8 teoremli Sınır İspatı çekirdeğini lake ile derler.
+
+    Fail-closed: (a) lean-toolchain v4.14.0 olmalı (uyuşmaz/yok → FAIL),
+    (b) `lake clean` ve (c) `lake build --wfail` başarılı olmalı. Elan shim
+    toolchain'i proje dizininden okur — yanlış sürüm derleme yerine kapıda
+    yakalanır. Döndürür (ok: bool, detail: str).
+    """
+    tc = os.path.join(project_dir, "lean-toolchain")
+    if not os.path.isfile(tc):
+        return False, f"lean-toolchain yok: {tc}"
+    got = open(tc, encoding="utf-8").read().strip()
+    if got != LEAN_TOOLCHAIN:
+        return False, (f"lean-toolchain uyuşmaz: {got} "
+                       f"(beklenen {LEAN_TOOLCHAIN})")
+    try:
+        clean = subprocess.run([lake_path, "clean"], capture_output=True,
+                               text=True, timeout=120, cwd=project_dir)
+    except FileNotFoundError:
+        return False, f"lake bulunamadı: {lake_path}"
+    except subprocess.TimeoutExpired:
+        return False, "lake clean zaman aşımı (>120s)"
+    if clean.returncode != 0:
+        tail = [l.strip() for l in (clean.stdout or "").splitlines()
+                if l.strip()][-3:]
+        detail = " | ".join(tail) if tail else f"exit={clean.returncode}"
+        return False, f"lake clean hatası: {detail}"
+    try:
+        r = subprocess.run([lake_path, "build", "--wfail"],
+                           capture_output=True, text=True, timeout=600,
+                           cwd=project_dir)
+    except FileNotFoundError:
+        return False, f"lake bulunamadı: {lake_path}"
+    except subprocess.TimeoutExpired:
+        return False, "lake build zaman aşımı (>600s — toolchain indirme dahil)"
+    out = (r.stdout or "") + (r.stderr or "")
+    if r.returncode == 0:
+        return True, "lake build --wfail: 8 teorem PASS (v4.14.0)"
+    tail = [l.strip() for l in out.splitlines() if l.strip()][-3:]
+    detail = " | ".join(tail) if tail else f"exit={r.returncode}"
+    return False, f"lake build hatası: {detail}"
 
 
 _HASH_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -3803,22 +3866,41 @@ def main():
 
     lean_ok = None
     lean_detail = None
-    # ---- K9: Lean 4 reduct-invariance (tümevarımsal kanıt, isteğe bağlı) ----
+    # ---- K9: Lean 4 reduct-invariance + 8 teorem çekirdek (isteğe bağlı) ----
     if args.lean_proof:
         lp = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                           LEAN_PROOF_SCRIPT)
-        # lean'i PATH'ten, /opt/homebrew/bin'den veya ~/.elan/bin'den bul
-        lean_cmd = "lean"
-        for candidate in ["lean",
-                          "/opt/homebrew/bin/lean",
-                          os.path.expanduser("~/.elan/bin/lean")]:
-            if os.path.isfile(candidate):
-                lean_cmd = candidate
-                break
+        # lean + lake'i PATH'ten, /opt/homebrew/bin'den veya ~/.elan/bin'den bul
+        lean_cmd = find_tool("lean")
         if not os.path.isfile(lp):
             add("P0", "K9-LEAN", "K9 Lean ispatı", f"{LEAN_PROOF_SCRIPT} yok", lp)
         else:
             ok, detail = run_lean_proof(lean_cmd, lp)
+            # ── K9 ek kapısı: 8 teoremli Sınır İspatı çekirdeği ──
+            # lake build --wfail, lean-toolchain v4.14.0 (fail-closed).
+            # --full / --lean-proof ile otomatik koşar; lake yoksa P0.
+            reduct_dir = os.path.join(
+                os.path.dirname(os.path.abspath(__file__)), LEAN_REDUCT_DIR)
+            lakefile = os.path.join(reduct_dir, "lakefile.toml")
+            if os.path.isfile(lakefile):
+                lake_cmd = find_tool("lake")
+                lake_ok, lake_detail = run_lake_build(lake_cmd, reduct_dir)
+                lake_line = (f"[K9] Lean reduct (8 teorem, lake build --wfail): "
+                             f"{'PASS' if lake_ok else 'FAIL'} — {lake_detail}")
+                if args.json:
+                    print(lake_line, file=sys.stderr)
+                else:
+                    print(lake_line)
+                if not lake_ok:
+                    add("P0", "K9-LAKE", "K9 Lean çekirdeği", lake_detail)
+            else:
+                lake_ok, lake_detail = False, f"lake projesi yok: {reduct_dir}"
+                add("P0", "K9-LAKE", "K9 Lean çekirdeği", lake_detail)
+            # K9 genel: İKİ kapı da geçmeli (fail-closed) — dashboard rozeti
+            # ve history lean_ok bu birleşimi taşır.
+            ok = ok and lake_ok
+            if lake_detail:
+                detail = f"{detail} · {lake_detail}"
             lean_ok = ok
             lean_detail = detail
             k9_line = f"[K9] Lean 4 reduct-invariance: {'PASS' if ok else 'FAIL'} — {detail}"

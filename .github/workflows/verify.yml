@@ -249,11 +249,14 @@ jobs:
 
       # K9: Lean 4 reduct-invariance (elan + stable toolchain).
       # NOT: `--default-toolchain none` + lean-toolchain dosyası yok = lean
-      # çalışmaz; bu yüzden stable toolchain açıkça kurulur.
+      # çalışmaz; bu yüzden stable toolchain açıkça kurulur. v4.14.0 da
+      # açıkça kurulur — 8 teoremli Sınır İspatı çekirdeğinin lake build
+      # kapısı lean-toolchain'deki sürümü (fail-closed) kullanır.
       - name: Install Lean 4 (K9)
         run: |
           curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain leanprover/lean4:stable
           echo "$HOME/.elan/bin" >> $GITHUB_PATH
+          elan toolchain install leanprover/lean4:v4.14.0
 
       # `pipefail` + `tee`: çıktı hem log'a hem dosyaya yazılır, ama exit kodu
       # python'dan gelir (boru, fail-closed kapıyı gizleyemez).
