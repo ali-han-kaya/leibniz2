@@ -3220,6 +3220,25 @@ def parse_plist_check_output(txt):
     return profiles
 
 
+def parse_plist_out_of_scope(txt):
+    """--plist-check çıktısındaki kapsam-dışı INFO satırlarını ayrıştır.
+
+    update_preview.sh, LaunchAgents'teki yönetilmeyen plist dosyalarını
+    "INFO: kapsam dışı (yönetilmiyor): <yol>" satırıyla raporlar (exit
+    kodunu ETKİLEMEZ — kapsam yalnızca yönetilen profillerdir; bu liste
+    denetim izine girer). Döner: [<yol>, ...] (sıralı).
+    """
+    out = []
+    if not txt:
+        return out
+    marker = "INFO: kapsam dışı (yönetilmiyor): "
+    for line in txt.splitlines():
+        line = line.strip()
+        if line.startswith(marker):
+            out.append(line[len(marker):].strip())
+    return out
+
+
 def main():
     t0 = time.time()  # run duvar saati (history.jsonl duration_s için)
     ap = argparse.ArgumentParser()
@@ -3917,15 +3936,21 @@ def main():
                     detail = f"beklenmedik exit kodu {rc}"
                     add("P1", "K12-PLIST", "K12 plist",
                         f"beklenmedik exit kodu {rc}", txt)
+            out_of_scope = []
+            if rc is not None:
+                out_of_scope = parse_plist_out_of_scope(txt)
             plist_report = {"layer": "K12", "ok": rc == 0,
                             "exit": rc, "detail": detail,
-                            "output": txt, "profiles": profiles}
+                            "output": txt, "profiles": profiles,
+                            "out_of_scope": out_of_scope}
             if not args.json:
                 print(f"[K12] plist şablon: "
                       f"{'PASS' if rc == 0 else 'FAIL'} (exit={rc}) — "
                       f"{len(profiles)} profil")
                 for p in profiles:
                     print(f"    [{p['status']}] {p['label']}")
+                for o in out_of_scope:
+                    print(f"    [INFO] kapsam dışı (yönetilmiyor): {o}")
         # Sidecar: update_preview.sh --plist-check ham çıktısı + K12 raporu.
         if args.plist_out:
             try:

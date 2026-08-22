@@ -31,7 +31,10 @@ VERIFY_DELIVERY = os.path.join(HERE, "verify_delivery.py")
 GOLDEN_DIR = os.path.join(HERE, "plist-golden")
 
 sys.path.insert(0, HERE)
-from verify_delivery import parse_plist_check_output  # noqa: E402
+from verify_delivery import (  # noqa: E402
+    parse_plist_check_output,
+    parse_plist_out_of_scope,
+)
 
 
 def run(home, *args):
@@ -198,10 +201,14 @@ class TestOutOfScopeExtraFile(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="plist-gate-") as home:
             self._setup_with_extra(home)
             chk = run(home, "bash", UPDATE_PREVIEW, "--plist-check", home)
-            # Kapsam-dışı dosya yönetilen profilleri etkilemez → exit 0 GÜNCEL.
+            # Kapsam-dışı dosya yönetilen profilleri ETKİLEMEZ → exit 0 GÜNCEL,
+            # ama denetim izinde INFO satırı olarak görünür (bilgi amaçlı).
             self.assertEqual(chk.returncode, 0, chk.stdout + chk.stderr)
             self.assertIn("GÜNCEL", chk.stdout)
-            self.assertNotIn("out-of-scope", chk.stdout)
+            self.assertIn("INFO: kapsam dışı (yönetilmiyor)", chk.stdout)
+            self.assertIn("com.example.out-of-scope.plist", chk.stdout)
+            # Fazlalık yönetilen profilleri BAYAT'a düşürmez.
+            self.assertNotIn("BAYAT", chk.stdout)
 
     def test_k12_layer_passes_with_out_of_scope_extra_file(self):
         with tempfile.TemporaryDirectory(prefix="plist-gate-") as home:
@@ -215,13 +222,18 @@ class TestOutOfScopeExtraFile(unittest.TestCase):
                 d = json.load(f)
             self.assertTrue(d["ok"])
             self.assertEqual(d["exit"], 0)
-            # Rapor yalnızca yönetilen iki profili içerir — ekstra dosya girmez.
+            # Rapor yalnızca yönetilen iki profili içerir; ekstra dosya
+            # PROFILLERE girmez ama out_of_scope listesinde (denetim izi) görünür.
             labels = [p["label"] for p in d["profiles"]]
             self.assertEqual(labels,
                              ["com.freebuff.preview-leibniz2",
                               "com.freebuff.preview-server"])
             self.assertTrue(all(p["status"] == "GÜNCEL" for p in d["profiles"]))
-            self.assertNotIn("out-of-scope", json.dumps(d))
+            self.assertEqual(len(d["out_of_scope"]), 1)
+            self.assertTrue(any("out-of-scope" in o for o in d["out_of_scope"]),
+                            d["out_of_scope"])
+            # Ham çıktıda INFO satırı duruyor (denetim izi).
+            self.assertIn("INFO: kapsam dışı", d["output"])
 
 
 class TestBootstrapAll(unittest.TestCase):
@@ -321,6 +333,36 @@ class TestParsePlistCheckOutput(unittest.TestCase):
         profiles = parse_plist_check_output(txt)
         self.assertEqual(len(profiles), 1)
         self.assertEqual(profiles[0]["label"], "x")
+
+
+class TestParseOutOfScope(unittest.TestCase):
+    """parse_plist_out_of_scope: INFO satırlarından kapsam-dışı dosya listesi."""
+
+    def test_parses_info_lines(self):
+        txt = (
+            "GÜNCEL: /h/Library/LaunchAgents/"
+            "com.freebuff.preview-leibniz2.plist  (ok)\n"
+            "INFO: kapsam dışı (yönetilmiyor): /h/Library/LaunchAgents/"
+            "com.example.out-of-scope.plist\n"
+            "INFO: kapsam dışı (yönetilmiyor): /h/Library/LaunchAgents/"
+            "com.freebuff.legacy.plist\n"
+            "INFO: 2 kapsam dışı dosya yok sayıldı (yalnızca yönetilen "
+            "profiller denetlenir)\n"
+        )
+        out = parse_plist_out_of_scope(txt)
+        self.assertEqual(len(out), 2)
+        self.assertTrue(any("out-of-scope" in o for o in out), out)
+        self.assertTrue(any("legacy" in o for o in out), out)
+
+    def test_empty_or_no_info(self):
+        self.assertEqual(parse_plist_out_of_scope(""), [])
+        self.assertEqual(parse_plist_out_of_scope("GÜNCEL: /x.plist\n"), [])
+
+    def test_only_path_after_marker(self):
+        txt = ("INFO: kapsam dışı (yönetilmiyor): "
+               "/Users/r/Library/LaunchAgents/a.plist\n")
+        self.assertEqual(parse_plist_out_of_scope(txt),
+                         ["/Users/r/Library/LaunchAgents/a.plist"])
 
 
 SUMMARY_SCRIPT = os.path.join(HERE, "summary_plist_table.py")

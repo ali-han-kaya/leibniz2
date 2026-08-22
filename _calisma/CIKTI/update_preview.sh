@@ -311,6 +311,35 @@ plist_check() {
       rc=1
     fi
   done < <(plist_profiles)
+
+  # Kapsam-dışı fazla dosyalar — BİLGİ amaçlı (INFO): denetimin kapsamı
+  # YALNIZCA yönetilen profillerdir; LaunchAgents'teki yönetilmeyen plist'ler
+  # (ör. başka bir uygulamanın agent'ı ya da kaldırılmış eski bir profil)
+  # exit kodunu ETKİLEMEZ ama denetim izinde görünür. Böylece fazlalık
+  # sessizce kaybolmaz; --plist-check çıktısı bunu raporlar.
+  local la managed n_extra
+  la="$home/Library/LaunchAgents"
+  n_extra=0
+  if [ -d "$la" ]; then
+    managed=""
+    while IFS='|' read -r label _; do
+      managed="$managed $label"
+    done < <(plist_profiles)
+    local f base lbl
+    for f in "$la"/*.plist; do
+      [ -e "$f" ] || continue
+      base="$(basename "$f")"
+      lbl="${base%.plist}"
+      case " $managed " in
+        *" $lbl "*) ;;  # yönetilen profil — yukarıda denetlendi
+        *) say "INFO: kapsam dışı (yönetilmiyor): $f"
+           n_extra=$((n_extra + 1)) ;;
+      esac
+    done
+    if [ "$n_extra" -gt 0 ]; then
+      say "INFO: $n_extra kapsam dışı dosya yok sayıldı (yalnızca yönetilen profiller denetlenir)"
+    fi
+  fi
   if [ "$missing" -ne 0 ]; then exit 2; fi
   if [ "$rc" -ne 0 ]; then exit 1; fi
   exit 0
