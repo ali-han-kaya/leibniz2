@@ -114,6 +114,7 @@
       <div class="card"><div class="label">PDF pages / refs</div><div class="value" id="m-pdf">— / —</div><div class="sub">33 / 64 expected</div></div>
       <div class="card"><div class="label">PDF metadata-stripped</div><div class="value" id="m-meta" style="font-size:11px">—</div><div class="sub" id="m-meta-sub">qpdf</div></div>
     </div>
+    <div id="findings-panel" style="margin-top:8px"></div>
   </section>
 
   <section>
@@ -1014,6 +1015,27 @@ function applySnapshot(d) {
       k15El.innerHTML = `<span style="color:var(--ok)">🔒</span> K15 sidecar: <code style="font-size:10px;color:#666">${h.substring(0, 16)}…</code>`;
     } else {
       k15El.innerHTML = "<span style='color:var(--muted)'>⏳ K15 sidecar bekleniyor…</span>";
+    }
+  }
+
+  // Findings panel: P0/P1 bulgu satırları
+  const fpEl = $("findings-panel");
+  if (fpEl) {
+    const findings = d.findings || [];
+    if (findings.length === 0) {
+      fpEl.innerHTML = "";
+    } else {
+      const p0s = findings.filter(f => f.priority === "P0");
+      const p1s = findings.filter(f => f.priority === "P1");
+      let html = "<div style=\"font-size:12px;padding:4px 0\">";
+      if (p0s.length) {
+        html += p0s.map(f => `<div style=\"color:var(--err);margin:2px 0\">🔴 <b>P0</b> <span style=\"color:#999\">${f.id || f.label || ''}</span> ${f.message || ''}</div>`).join("");
+      }
+      if (p1s.length) {
+        html += p1s.map(f => `<div style=\"color:var(--warn);margin:2px 0\">🟡 <b>P1</b> <span style=\"color:#999\">${f.id || f.label || ''}</span> ${f.message || ''}</div>`).join("");
+      }
+      html += "</div>";
+      fpEl.innerHTML = html;
     }
   }
 
