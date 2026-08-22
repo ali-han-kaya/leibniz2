@@ -14,8 +14,8 @@
 #
 # BÖLÜM 2 — LaunchAgent plist'leri (Homebrew-style, tek komut)
 # İKİ plist üretilir (tek --plist komutuyla): com.freebuff.preview-leibniz2
-# (birincil; KeepAlive=true, interval 30) ve com.freebuff.preview-server
-# (legacy; KeepAlive=false, interval 60). Yalnızca birincil canlı tutulur
+# (birincil; KeepAlive=SuccessfulExit=false, interval 30) — crash'te restart,
+# temiz çıkışta dur. Legacy: KeepAlive=false, interval 60. Yalnızca birincil canlı tutulur
 # (--start varsayılanı leibniz2); legacy launchd'den kaldırılmıştır —
 # --remove-legacy bootout + kurulu plist/şablon/log temizliği yapar. Kurulu
 # tam yollar korunur:
@@ -162,7 +162,11 @@ plist_default_template() {
     <string>{{INTERVAL}}</string>
   </array>
   <key>RunAtLoad</key><true/>
-  <key>KeepAlive</key>{{KEEPALIVE}}
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
   <key>StandardOutPath</key>
   <string>{{HOME}}/Library/Logs/com.freebuff/{{LOGNAME}}.log</string>
   <key>StandardErrorPath</key>
@@ -204,7 +208,6 @@ plist_render() {
       -e "s|{{LOGNAME}}|${logname}|g" \
       -e "s|{{PORT}}|${port}|g" \
       -e "s|{{INTERVAL}}|${interval}|g" \
-      -e "s|{{KEEPALIVE}}|<${keepalive}/>|g" \
       "$(plist_tmpl_for "$label")"
 }
 

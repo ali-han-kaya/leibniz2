@@ -41,11 +41,19 @@ if $REBUILD; then
 fi
 
 # --- 2) Mevcut sunucuyu durdur (varsa) ---
+# launchctl bootout ile temiz durdur: KeepAlive SuccessfulExit=false
+# olduğu için temiz çıkışta launchd yeniden başlatmaz.
 OLD_PID=$(lsof -i :"$PORT" -t 2>/dev/null | head -1 || true)
 if [ -n "$OLD_PID" ]; then
     say "Mevcut sunucu durduruluyor (pid $OLD_PID)..."
-    kill "$OLD_PID" 2>/dev/null || true
+    launchctl bootout gui/$(id -u) "/Users/$USER/Library/LaunchAgents/$LABEL.plist" 2>/dev/null || true
     sleep 1
+    # Eğer hâlâ ayakta ise zorla öldür
+    if kill -0 "$OLD_PID" 2>/dev/null; then
+        say "PID hâlâ ayakta, zorla öldürülüyor..."
+        kill -9 "$OLD_PID" 2>/dev/null || true
+        sleep 1
+    fi
 fi
 
 # --- 3) launchd ile başlat ---
