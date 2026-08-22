@@ -437,6 +437,34 @@ def main() -> None:
                      "=" * 72]
         lines += pc_block
 
+    # ── UNIT TESTS bölümü: unit_tests.log (test çıktıları) ──────────────────
+    # verify job'undaki unittest discover çıktısı (unit_tests.log) ayrıca
+    # işaretlenir; combined_sha256 tek hash ile özetler. Böylece test
+    # suite'inin hangi versiyonunun koşulduğu denetim zincirinde sabitlenir.
+    unit_test_hashes = {rel: h for rel, h in file_hashes.items()
+                        if rel == "unit_tests.log" or rel.startswith("unit-tests/")}
+    unit_test_combined = None
+    if unit_test_hashes:
+        sorted_rel = sorted(unit_test_hashes)
+        unit_test_combined = hashlib.sha256(
+            "".join(f"{rel}\0{unit_test_hashes[rel]}\n"
+                     for rel in sorted_rel).encode()
+        ).hexdigest()
+        ut_block = [
+            "",
+            "=" * 72,
+            "UNIT TESTS ARTIFACT (ayrı bölüm)",
+            "=" * 72,
+            f"{'FILE':<55} {'SHA-256'}",
+            "-" * 72,
+        ]
+        ut_block += [f"{rel:<55} {unit_test_hashes[rel]}"
+                     for rel in sorted_rel]
+        ut_block += ["-" * 72,
+                     f"unit_tests_combined_sha256: {unit_test_combined}",
+                     "=" * 72]
+        lines += ut_block
+
     # ── PROVENANCE bölümü: artifact → üreten job (denetim izi) ──────────────
     # Her artifact hangi job'da üretildi — tek bakışta kaynak.
     #
@@ -565,6 +593,11 @@ def main() -> None:
         manifest_json["plist_check"] = {
             "files": dict(sorted(plist_check_hashes.items())),
             "combined_sha256": plist_check_combined,
+        }
+    if unit_test_hashes:
+        manifest_json["unit_tests"] = {
+            "files": dict(sorted(unit_test_hashes.items())),
+            "combined_sha256": unit_test_combined,
         }
 
     out_dir = pathlib.Path(args.out_dir)

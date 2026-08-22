@@ -210,6 +210,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-22 | feat | (refs-trend) add duration/budget threshold warning layer (#15) | `86b4edc` |
 | 2026-08-22 | feat | (dashboard) add color legend to live run stream section (#16) | `eaef526` |
 | 2026-08-22 | feat | (dashboard) add findings panel showing P0/P1 detail rows (#17) | `f413d97` |
+| 2026-08-22 | ci | add colorizeLine rules regression test + pre-commit hook (#18) | `f481ea5` |
 
 ### Regresyon notları
 
