@@ -1793,25 +1793,51 @@ jobs:
           set +e
           python3 _calisma/CIKTI/daemon_http_test.py \
             --out daemon_http_report.json \
+            --history-out daemon_history.jsonl \
             2>&1 | tee daemon_http_report.txt
           rc=${PIPESTATUS[0]}
           set -e
           echo "rc=$rc" >> "$GITHUB_OUTPUT"
           echo "daemon-http exit: $rc"
 
-      - name: Write daemon HTTP check to run summary
+      # K15: history.jsonl ↔ .sha256 sidecar bütünlüğü (advisory)
+      # Daemon test'i tempdir'de history.jsonl üretir; --history-out ile
+      # dışarı kopyalandı. Sidecar yoksa veya hash uyuşmazsa rapor yazılır.
+      - name: K15 history sidecar check (advisory)
+        id: k15
+        if: always()
+        continue-on-error: true
+        run: |
+          set +e
+          if [ ! -f daemon_history.jsonl ]; then
+            echo "k15_rc=skipped" >> "$GITHUB_OUTPUT"
+            echo "K15: history.jsonl yok (daemon test üretmedi)"
+            exit 0
+          fi
+          python3 _calisma/CIKTI/verify_delivery.py \
+            --check-history daemon_history.jsonl \
+            2>&1 | tee k15_report.txt
+          rc=${PIPESTATUS[0]}
+          set -e
+          echo "k15_rc=$rc" >> "$GITHUB_OUTPUT"
+          echo "K15 exit: $rc"
+
+      - name: Write daemon HTTP + K15 to run summary
         if: always()
         run: |
           {
-            echo "## Daemon mode HTTP 200 (advisory)"
+            echo "## Daemon mode HTTP 200 + K15 sidecar (advisory)"
             echo ""
             echo "- daemon-http test: exit \`${{ steps.daemon.outputs.rc }}\`"
+            echo "- K15 history sidecar: exit \`${{ steps.k15.outputs.k15_rc }}\`"
             echo '```'
             cat daemon_http_report.txt 2>/dev/null || echo '(rapor yok)'
+            echo '---'
+            cat k15_report.txt 2>/dev/null || echo '(K15 rapor yok)'
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload daemon HTTP report
+      - name: Upload daemon HTTP + K15 report
         if: always()
         uses: actions/upload-artifact@v6
         with:
@@ -1819,6 +1845,9 @@ jobs:
           path: |
             daemon_http_report.txt
             daemon_http_report.json
+            daemon_history.jsonl
+            daemon_history.jsonl.sha256
+            k15_report.txt
           if-no-files-found: ignore
           retention-days: 30
 

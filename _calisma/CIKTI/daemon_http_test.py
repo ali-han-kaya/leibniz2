@@ -121,6 +121,9 @@ def main():
     ap.add_argument("--start-timeout", type=float, default=START_TIMEOUT,
                     help="sunucu ayağa kalkana kadar beklenecek saniye")
     ap.add_argument("--out", default="daemon_http_report.json")
+    ap.add_argument("--history-out", default=None,
+                    help="history.jsonl + .sha256 sidecar'ı bu yola kopyala "
+                         "(K15 sidecar doğrulaması için)")
     args = ap.parse_args()
 
     if not os.path.isfile(args.server):
@@ -131,7 +134,7 @@ def main():
         return 2
 
     report = {"server": args.server, "ok": False, "port": args.port,
-              "endpoints": {}, "error": None}
+              "endpoints": {}, "error": None, "history_out": args.history_out}
 
     with tempfile.TemporaryDirectory(prefix="daemon-http-") as tmp:
         verify_dir = args.dir or os.path.join(tmp, "verify")
@@ -185,6 +188,18 @@ def main():
                     proc.kill()
                 except Exception:
                     pass
+            # K15: history.jsonl + sidecar'ı tempdir'den dışarı kopyala
+            # (tempdir temizlenmeden ÖNCE).
+            hist_src = os.path.join(preview_dir, "history.jsonl")
+            hist_sha_src = hist_src + ".sha256"
+            if args.history_out and os.path.isfile(hist_src):
+                hdir = os.path.dirname(args.history_out)
+                if hdir:
+                    os.makedirs(hdir, exist_ok=True)
+                shutil.copy2(hist_src, args.history_out)
+                if os.path.isfile(hist_sha_src):
+                    shutil.copy2(hist_sha_src, args.history_out + ".sha256")
+                report["history_out"] = args.history_out
 
     _write_report(args.out, report)
     if report["ok"]:

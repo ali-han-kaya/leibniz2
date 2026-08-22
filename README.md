@@ -203,6 +203,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-22 | other | _calisma/CIKTI: run_summary_refs_trend.py CLI tutarlılık testleri | `ff1e9c1` |
 | 2026-08-22 | ci | add pattern drift summary to reproducibility job run summary (#9) | `328f8fc` |
 | 2026-08-22 | fix | (repro) PROVENANCE section labels merged vs prefixed vs absent (#10) | `5b78b18` |
+| 2026-08-22 | ci | add check-pattern-consistency pre-commit hook (#11) | `0440d82` |
 
 ### Regresyon notları
 
