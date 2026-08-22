@@ -143,12 +143,10 @@ class TestPlistOutSidecar(unittest.TestCase):
             self.assertEqual(d["exit"], 0)
             self.assertIn("GÜNCEL", d["detail"])
             self.assertIn("GÜNCEL", d["output"])
-            # Çok-profilli yönetim: birincil leibniz2 + preview-server ikisi
-            # de rapora girmeli (K11 --plist iki profili tek komutta denetler).
+            # Tek profilli yönetim: yalnızca birincil leibniz2 raporda.
             labels = [p["label"] for p in d["profiles"]]
             self.assertEqual(labels,
-                             ["com.freebuff.preview-leibniz2",
-                              "com.freebuff.preview-server"])
+                             ["com.freebuff.preview-leibniz2"])
             for p in d["profiles"]:
                 self.assertEqual(p["status"], "GÜNCEL")
                 self.assertTrue(p["path"].endswith(p["label"] + ".plist"))
@@ -215,10 +213,9 @@ class TestOutOfScopeExtraFile(unittest.TestCase):
                 d = json.load(f)
             self.assertTrue(d["ok"])
             self.assertEqual(d["exit"], 0)
-            # Rapor yalnızca yönetilen profilleri içerir — ekstra dosya girmez.
+            # Rapor yalnızca yönetilen profili içerir — ekstra dosya girmez.
             labels = [p["label"] for p in d["profiles"]]
-            self.assertEqual(labels, ["com.freebuff.preview-leibniz2",
-                                      "com.freebuff.preview-server"])
+            self.assertEqual(labels, ["com.freebuff.preview-leibniz2"])
             self.assertTrue(all(p["status"] == "GÜNCEL" for p in d["profiles"]))
             self.assertNotIn("out-of-scope", json.dumps(d))
 
@@ -286,32 +283,26 @@ class TestBootstrapAll(unittest.TestCase):
 class TestParsePlistCheckOutput(unittest.TestCase):
     """parse_plist_check_output: çok-profilli çıktıyı profil bazında ayrıştırır."""
 
-    def test_two_profiles_all_guncel(self):
+    def test_single_profile_all_guncel(self):
         txt = (
             "GÜNCEL: /h/Library/LaunchAgents/com.freebuff.preview-leibniz2.plist"
             "  (şablonla aynı, plutil geçerli)\n"
-            "GÜNCEL: /h/Library/LaunchAgents/com.freebuff.preview-server.plist"
-            "  (şablonla aynı, plutil geçerli)\n"
         )
         profiles = parse_plist_check_output(txt)
-        self.assertEqual(len(profiles), 2)
+        self.assertEqual(len(profiles), 1)
         self.assertEqual([p["label"] for p in profiles],
-                         ["com.freebuff.preview-leibniz2",
-                          "com.freebuff.preview-server"])
+                         ["com.freebuff.preview-leibniz2"])
         self.assertTrue(all(p["status"] == "GÜNCEL" for p in profiles))
 
-    def test_mixed_status(self):
+    def test_single_profile_bayat(self):
         txt = (
             "BAYAT/GEÇERSİZ: /h/Library/LaunchAgents/com.freebuff.preview-leibniz2.plist"
             " şablondan farklı\n"
-            "GÜNCEL: /h/Library/LaunchAgents/com.freebuff.preview-server.plist"
-            "  (şablonla aynı, plutil geçerli)\n"
         )
         profiles = parse_plist_check_output(txt)
-        self.assertEqual(len(profiles), 2)
-        by_label = {p["label"]: p["status"] for p in profiles}
-        self.assertEqual(by_label["com.freebuff.preview-leibniz2"], "BAYAT")
-        self.assertEqual(by_label["com.freebuff.preview-server"], "GÜNCEL")
+        self.assertEqual(len(profiles), 1)
+        self.assertEqual(profiles[0]["label"], "com.freebuff.preview-leibniz2")
+        self.assertEqual(profiles[0]["status"], "BAYAT")
 
     def test_sablon_yok_line(self):
         txt = ("şablon yok: /h/Library/Caches/com.freebuff/preview-template/"
@@ -347,30 +338,25 @@ class TestSummaryPlistTable(unittest.TestCase):
 
     def test_valid_profiles(self):
         data = json.dumps({
-            "ok": True, "exit": 0, "detail": "GÜNCEL (2/2)",
+            "ok": True, "exit": 0, "detail": "GÜNCEL (1/1)",
             "profiles": [
                 {"label": "com.freebuff.preview-leibniz2",
                  "status": "GÜNCEL", "path": "/Users/r/.../a.plist"},
-                {"label": "com.freebuff.preview-server",
-                 "status": "GÜNCEL", "path": "/Users/r/.../b.plist"},
             ]})
         out = self._run(data)
         self.assertIn("✅ **K12**", out)
         self.assertIn("| com.freebuff.preview-leibniz2 | ✅ GÜNCEL |", out)
-        self.assertIn("| com.freebuff.preview-server | ✅ GÜNCEL |", out)
         self.assertIn("| Profil | Durum | Yol |", out)
 
     def test_bayat_profile(self):
         data = json.dumps({
-            "ok": False, "exit": 1, "detail": "BAYAT (1/2)",
+            "ok": False, "exit": 1, "detail": "BAYAT",
             "profiles": [
                 {"label": "a", "status": "BAYAT", "path": "/x"},
-                {"label": "b", "status": "GÜNCEL", "path": "/y"},
             ]})
         out = self._run(data)
         self.assertIn("❌ **K12**", out)
         self.assertIn("| a | ❌ BAYAT |", out)
-        self.assertIn("| b | ✅ GÜNCEL |", out)
 
     def test_missing_file(self):
         out = subprocess.run(
