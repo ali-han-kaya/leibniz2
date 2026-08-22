@@ -155,6 +155,17 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      # ─── Unit test düşenleri PR yorumuna taşı ──────────────────────────
+      # unit_tests.log'daki FAIL/ERROR satırlarını ayrıştırıp PR'a yorum
+      # olarak düşer. Advisory: job'u patlatmaz; düşen test varsa visible.
+      - name: Parse + comment unit test failures
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const script = require('./_calisma/CIKTI/github_scripts/unit_test_failure_comment.js');
+            await eval(script)({ github, context });
+
       # ─── Label gate sözleşme denetimi (advisory) ────────────────────────
       # label_gate.js / label_gate_p1.js ile verify.yml label-gate job'ları
       # arasındaki tutarlılığı doğrular: doğru etiket adı, listLabelsOnIssue

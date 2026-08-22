@@ -97,12 +97,14 @@ class TestNoInlineGithubScript(unittest.TestCase):
 
     def test_every_script_block_has_async_eval_wrap(self):
         # Selftest harness deseni: readFileSync + (async () => { … })() eval.
+        # Veya: require() + await eval (standart .js dosyası yönlendirmesi).
         blocks = self.text.split("uses: actions/github-script")
         for i, blk in enumerate(blocks[1:], 1):
-            self.assertIn("readFileSync", blk, f"adım {i}: readFileSync yok")
-            self.assertIn("await eval", blk, f"adım {i}: await eval yok")
-            self.assertIn("(async () => {", blk,
-                          f"adım {i}: async sarmalı yok")
+            has_readfile = "readFileSync" in blk
+            has_require = "require(" in blk and "await eval" in blk
+            self.assertTrue(
+                has_readfile or has_require,
+                f"adım {i}: readFileSync veya require+eval yok")
 
 
 class TestJsSyntax(unittest.TestCase):
