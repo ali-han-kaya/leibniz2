@@ -273,6 +273,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-22 | feat | (dashboard) budget limit from effective config, not hardcoded 30 | `4dc133d` |
 | 2026-08-22 | feat | (dashboard) red BÜTÇE AŞIMI banner above trend panel | `0ab782c` |
 | 2026-08-22 | feat | (dashboard) tooltip budget line shows limit under/over status | `8e455c2` |
+| 2026-08-22 | docs | (readme) add _calisma/lean_reduct boundary-proof section | `5b1b90d` |
 
 ### Regresyon notları
 
