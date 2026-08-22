@@ -216,6 +216,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-22 | fix | (ci) extract unit-test-failure comment to .js file | `28e0789` |
 | 2026-08-22 | fix | (ci) accept require+eval pattern in github-script test | `d5a26cd` |
 | 2026-08-22 | ci | unit test failure PR comment (#20) | `167443a` |
+| 2026-08-22 | feat | (dashboard) live findings panel from stream P0/P1 lines (#21) | `9f0a532` |
 
 ### Regresyon notları
 
