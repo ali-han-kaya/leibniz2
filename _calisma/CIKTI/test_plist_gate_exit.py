@@ -143,10 +143,12 @@ class TestPlistOutSidecar(unittest.TestCase):
             self.assertEqual(d["exit"], 0)
             self.assertIn("GÜNCEL", d["detail"])
             self.assertIn("GÜNCEL", d["output"])
-            # Tek profilli yönetim: yalnızca birincil leibniz2 raporda.
+            # İki profilli yönetim: birincil leibniz2 + yedek preview-server
+            # ikisi de PLIST_PROFILES'te — rapora GİRDİ SIRASIYLA girer.
             labels = [p["label"] for p in d["profiles"]]
             self.assertEqual(labels,
-                             ["com.freebuff.preview-leibniz2"])
+                             ["com.freebuff.preview-leibniz2",
+                              "com.freebuff.preview-server"])
             for p in d["profiles"]:
                 self.assertEqual(p["status"], "GÜNCEL")
                 self.assertTrue(p["path"].endswith(p["label"] + ".plist"))
@@ -213,9 +215,11 @@ class TestOutOfScopeExtraFile(unittest.TestCase):
                 d = json.load(f)
             self.assertTrue(d["ok"])
             self.assertEqual(d["exit"], 0)
-            # Rapor yalnızca yönetilen profili içerir — ekstra dosya girmez.
+            # Rapor yalnızca yönetilen iki profili içerir — ekstra dosya girmez.
             labels = [p["label"] for p in d["profiles"]]
-            self.assertEqual(labels, ["com.freebuff.preview-leibniz2"])
+            self.assertEqual(labels,
+                             ["com.freebuff.preview-leibniz2",
+                              "com.freebuff.preview-server"])
             self.assertTrue(all(p["status"] == "GÜNCEL" for p in d["profiles"]))
             self.assertNotIn("out-of-scope", json.dumps(d))
 
@@ -338,14 +342,17 @@ class TestSummaryPlistTable(unittest.TestCase):
 
     def test_valid_profiles(self):
         data = json.dumps({
-            "ok": True, "exit": 0, "detail": "GÜNCEL (1/1)",
+            "ok": True, "exit": 0, "detail": "GÜNCEL (2/2)",
             "profiles": [
                 {"label": "com.freebuff.preview-leibniz2",
                  "status": "GÜNCEL", "path": "/Users/r/.../a.plist"},
+                {"label": "com.freebuff.preview-server",
+                 "status": "GÜNCEL", "path": "/Users/r/.../b.plist"},
             ]})
         out = self._run(data)
         self.assertIn("✅ **K12**", out)
         self.assertIn("| com.freebuff.preview-leibniz2 | ✅ GÜNCEL |", out)
+        self.assertIn("| com.freebuff.preview-server | ✅ GÜNCEL |", out)
         self.assertIn("| Profil | Durum | Yol |", out)
 
     def test_bayat_profile(self):

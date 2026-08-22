@@ -236,6 +236,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-22 | fix | (verify) harden K13 repro-manifest self-test with negative scenarios | `ed0427d` |
 | 2026-08-22 | test | (refs-trend) section unit tests for parse/stats/duration-budget | `d89964b` |
 | 2026-08-22 | test | (repro) cross-validate config.combined_sha256 with K10 gate | `ff029ae` |
+| 2026-08-22 | feat | (precommit) unstaged-deps pre-check for check-repro-manifest hook | `3995fc9` |
 
 ### Regresyon notları
 
