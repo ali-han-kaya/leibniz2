@@ -189,6 +189,7 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 | 2026-08-22 | feat | (precommit) check-unit-tests hook for 5 new gate test files | `d77aca7` |
 | 2026-08-22 | test | (summary) row-level content checks for lineage + K-layer sections | `cafab86` |
 | 2026-08-22 | docs | (M0) K16/K14 mirror-launchd PATH fixes katman raporu | `4ac1787` |
+| 2026-08-22 | feat | (smoke) dashboard PASS'ini tek komutla yeniden üreten smoke testi | `00ecfd3` |
 
 ---
 
@@ -847,6 +848,15 @@ gh repo edit --enable-squash-merge --enable-rebase-merge \
 - `manifest-comment` ve tek "PR doğrulama durumu" yorumu (bütçe + pre-commit
   P0/P1) yalnızca `pull_request` olayında çalışır; push'ta üretilmez.
 - Branch protection `strict:true` — fork'tan PR'lerde CI çalışmayabilir; bu beklenen davranış.
+- **launchd ortamı (yerel canlı dashboard):** GUI agent minimal PATH ile çalışır
+  (`/usr/bin:/bin:/usr/sbin:/sbin`) — Homebrew araçları (node/pdfinfo/qpdf/
+  lean/lake) PATH'te DEĞİLDİR; K16/K6 fallback'leri (`/opt/homebrew/bin`,
+  `~/.elan/bin`) bu yüzden zorunludur. Ayrıca mirror senkronu TAM Lean lake
+  projesini kopyalamalıdır: yalnızca `ReductInvariance.lean` senkronlanırsa
+  K9-LAKE P0 üretir (repo rotası yeşil olsa bile mirror rotası FAIL olur —
+  canlı dashboard bunu yaşadı; `LEAN_FILES`'a lake projesi eklendi). Bu rotayı
+  tek komutla doğrulamak için: `bash _calisma/CIKTI/dashboard_smoke.sh`
+  (mirror senkron + minimal PATH'te `--full` + verdict PASS kontrolü).
 
 ---
 
