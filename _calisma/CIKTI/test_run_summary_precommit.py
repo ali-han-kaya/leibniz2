@@ -162,7 +162,10 @@ class TestSchemaValidation(unittest.TestCase):
 
     def test_schema_rejects_missing_required_fields(self):
         """Eksik zorunlu alanlar schema hatası üretmeli."""
-        import jsonschema
+        try:
+            import jsonschema
+        except ImportError:
+            self.skipTest("jsonschema kurulu değil (CI'da pip install edilir)")
         schema = pc._load_schema()
         if schema is None:
             self.skipTest("schema dosyası yok")
@@ -176,7 +179,10 @@ class TestSchemaValidation(unittest.TestCase):
 
     def test_schema_rejects_bad_hook_status(self):
         """Geçersiz hook status alanı schema hatası üretmeli."""
-        import jsonschema
+        try:
+            import jsonschema
+        except ImportError:
+            self.skipTest("jsonschema kurulu değil (CI'da pip install edilir)")
         schema = pc._load_schema()
         if schema is None:
             self.skipTest("schema dosyası yok")

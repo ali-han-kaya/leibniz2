@@ -52,8 +52,8 @@ class TestGateJobs(unittest.TestCase):
         gates = sc.gate_jobs()
         self.assertNotIn("manifest-comment", gates)
         self.assertNotIn("precheck", gates)
-        self.assertNotIn("label-gate", gates)       # PR-only
-        self.assertNotIn("label-gate-p1", gates)    # PR-only
+        self.assertIn("label-gate", gates)           # BİLEREK required (P0 gate)
+        self.assertNotIn("label-gate-p1", gates)     # PR-only (opsiyonel)
         self.assertNotIn("commit-msg-gate", gates)   # PR-only
         self.assertNotIn("plist-check", gates)       # macOS-advisory
         self.assertNotIn("mirror-check", gates)      # macOS fail-closed (advisory)
@@ -65,11 +65,76 @@ class TestGateJobs(unittest.TestCase):
                          "Action runtime check (node24)")
 
     def test_count_matches_workflow_minus_excludes(self):
-        # 17 job − 9 hariç = 8 required aday (tek kaynak: workflow).
-        # Hariç: manifest-comment, precheck, label-gate, label-gate-p1,
-        #        commit-msg-gate, plist-check, mirror-check, daemon-http,
-        #        audit-live-ci, audit-refs-trend
-        self.assertEqual(len(sc.gate_jobs()), 8)
+        # 18 job − 9 hariç = 9 required aday (tek kaynak: workflow).
+        # Hariç: manifest-comment, precheck, label-gate-p1, commit-msg-gate,
+        #        plist-check, mirror-check, daemon-http, audit-live-ci,
+        #        audit-refs-trend
+        self.assertEqual(len(sc.gate_jobs()), 9)
+
+
+@unittest.skipUnless(HAVE_YAML, "PyYAML gerekli")
+class TestAdvisoryContract(unittest.TestCase):
+    """Advisory kontratı: plist-check ve tüm exclude'lar required DEĞİL."""
+
+    def test_real_workflow_passes(self):
+        c = sc.advisory_contract()
+        self.assertTrue(c["ok"], c["issues"])
+        self.assertTrue(c["plist_check"]["ok"])
+        self.assertEqual(c["plist_check"]["name"],
+                         "Plist drift check (macOS, advisory)")
+        self.assertFalse(c["plist_check"]["required"])
+        self.assertIn("Plist drift check (macOS, advisory)", c["advisory"])
+        # Fark = tüm adlar − required adlar; her exclude job advisory'de.
+        self.assertEqual(len(c["advisory"]), len(sc.GATE_EXCLUDE))
+        for jid in sc.GATE_EXCLUDE:
+            self.assertNotIn(c["all_jobs"][jid], c["required"])
+
+    def test_plist_check_required_fails(self):
+        # GATE_EXCLUDE'dan plist-check düşerse (required'a girer) kontrat FAIL.
+        with mock.patch.object(sc, "GATE_EXCLUDE",
+                               sc.GATE_EXCLUDE - {"plist-check"}):
+            c = sc.advisory_contract()
+        self.assertFalse(c["ok"])
+        self.assertFalse(c["plist_check"]["ok"])
+        self.assertTrue(c["plist_check"]["required"])
+        self.assertTrue(any("plist-check" in i for i in c["issues"]))
+
+    def test_stale_exclude_fails(self):
+        # Exclude edilen job workflow'dan silinirse bayat exclude → FAIL.
+        data = {"jobs": {
+            "verify": {"name": "Delivery verification — K1-K14 (single entry point)"}}}
+        c = sc.advisory_contract(data)
+        self.assertFalse(c["ok"])
+        self.assertTrue(any("yok" in i for i in c["issues"]))
+        self.assertFalse(c["plist_check"]["ok"])
+
+    def test_name_collision_fails(self):
+        # Required job, exclude edilen job'la AYNI ada sahipse → çakışma FAIL.
+        data = {"jobs": {
+            "plist-check": {"name": "Plist drift check (macOS, advisory)"},
+            "other": {"name": "Plist drift check (macOS, advisory)"},
+        }}
+        c = sc.advisory_contract(data)
+        self.assertFalse(c["ok"])
+        self.assertTrue(any("çakışma" in i for i in c["issues"]))
+        self.assertTrue(c["plist_check"]["required"])
+
+    def test_main_exits_1_when_contract_broken(self):
+        # main() fail-closed: kontrat ihlalinde JSON modunda da exit 1.
+        with mock.patch.object(sc, "advisory_contract") as m:
+            m.return_value = {
+                "ok": False,
+                "all_jobs": {"plist-check": "Plist drift check (macOS, advisory)"},
+                "required": ["Plist drift check (macOS, advisory)"],
+                "advisory": [],
+                "plist_check": {"job_id": "plist-check",
+                                 "name": "Plist drift check (macOS, advisory)",
+                                 "required": True, "ok": False},
+                "issues": ["'plist-check' required sette — advisory olmalı"],
+            }
+            with self.assertRaises(SystemExit) as cm:
+                sc.main(["--json"])
+        self.assertEqual(cm.exception.code, 1)
 
 
 @unittest.skipUnless(HAVE_YAML, "PyYAML gerekli")

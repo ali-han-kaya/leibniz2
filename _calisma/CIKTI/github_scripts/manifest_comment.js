@@ -28,20 +28,24 @@
   // CLI override uyarısı — budget artifact'ındaki cli_overrides_version.json
   // (reproducibility bundle'a merge olur). override varsa yoruma uyarı satırı
   // eklenir; dosya yoksa (advisory) sessizce atlanır.
+  // pr_status_comment.js ile aynı desen:
+  //   - K10 FAIL + override → tek blok: override, K10 başarısızlığının olası nedeni
+  //   - K10 PASS + override → ayrı advisory satır: "CLI override aktif"
+  // Display format: config_drift_comment.js ile senkron (JSON.stringify; sayılar
+  //   ve string'ler için tutarlı).
   const cliPath = 'reproducibility/cli_overrides_version.json';
-  let cliLines = [];
+  let cliOverrideRows = [];
+  let hasCliOverride = false;
   if (fs.existsSync(cliPath)) {
     try {
       const cli = JSON.parse(fs.readFileSync(cliPath, 'utf8'));
       if (cli.warning && Array.isArray(cli.overrides) && cli.overrides.length) {
-        cliLines = [
-          '⚠️ **CLI override TESPİT EDİLDİ** — bütçe kalkanı dosya config',
-          'değeriyle DEĞİL CLI değeriyle koştu (tekrarlanabilirlik sapması):',
-          '',
-          ...cli.overrides.map(o =>
-            `- \`${o.key}\`: ${JSON.stringify(o.file_value)} → ` +
-            `${JSON.stringify(o.effective)} (CLI verildi)`),
-        ];
+        hasCliOverride = true;
+        // config_drift_comment.js + pr_status_comment.js ile AYNI format:
+        // JSON.stringify sayı/string tutarlılığı için.
+        cliOverrideRows = cli.overrides.map(o =>
+          `- \`${o.key}\`: ${JSON.stringify(o.file_value)} → ` +
+          `${JSON.stringify(o.effective)} (CLI verildi)`);
       }
     } catch (e) {
       console.log(`cli_overrides_version.json okunamadı: ${e.message}`);
@@ -49,6 +53,30 @@
   }
 
   const code = '```text\n' + manifest + '\n```';
+
+  // K10 FAIL + override = tek blok (override K10 başarısızlığının olası
+  // nedeni olabilir — pr_status_comment.js'in bütçe aşımı + CLI override
+  // birleşik bloğuyla aynı desen). K10 PASS + override = ayrı advisory.
+  let extraLines = [];
+  if (k10 !== 'PASS' && hasCliOverride) {
+    extraLines = [
+      '',
+      '### ⚠️ K10 manifest digest başarısız — CLI override olası neden',
+      '',
+      'Bütçe kalkanı dosya config değeriyle DEĞİL CLI değeriyle koştu',
+      '(tekrarlanabilirlik sapması, K10 manifest uyuşmazlığının olası nedeni):',
+      '',
+      ...cliOverrideRows,
+    ];
+  } else if (hasCliOverride) {
+    extraLines = [
+      '',
+      '### 🔧 CLI override aktif (tekrarlanabilirlik sapması)',
+      '',
+      ...cliOverrideRows,
+    ];
+  }
+
   const body = [
     '## 📦 Reproducibility manifest (SHA-256)',
     '',
@@ -57,8 +85,7 @@
     'Bu run için üretilen tüm artifact dosyalarının bütünlük özeti:',
     '',
     code,
-    '',
-    ...(cliLines.length ? [...cliLines, ''] : []),
+    ...extraLines,
     meta.github_run_id
       ? `> Run: [${meta.github_run_id}](${context.payload.repository.html_url}/actions/runs/${meta.github_run_id})`
       : '',

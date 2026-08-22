@@ -24,7 +24,7 @@ DOC = """\
 | # | Kategori | Job | Beklenen sonuç |
 |---|---|---|---|
 | | **A — Required** | | |
-| 1 | A | Delivery verification — K1-K9 (single entry point) | ✅ K0-K7 tek komutta |
+| 1 | A | Delivery verification — K1-K14 (single entry point) | ✅ K0-K7 tek komutta |
 | 2 | A | Action runtime check (node24) | ✅ node24 |
 | | **B — Advisory** | | |
 | 3 | B | Daemon mode HTTP 200 (advisory) | ✅ daemon smoke |
@@ -43,7 +43,7 @@ class TestParseDocJobs(unittest.TestCase):
         jobs = als.parse_doc_jobs(DOC)
         self.assertEqual(
             jobs,
-            [("A", "Delivery verification — K1-K9 (single entry point)"),
+            [("A", "Delivery verification — K1-K14 (single entry point)"),
              ("A", "Action runtime check (node24)"),
              ("B", "Daemon mode HTTP 200 (advisory)"),
              ("C", "Commit-msg gate")])

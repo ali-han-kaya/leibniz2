@@ -2,7 +2,7 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>Label</key><string>com.freebuff.preview-leibniz2</string>
+  <key>Label</key><string>com.freebuff.preview-server</string>
   <key>ProgramArguments</key>
   <array>
     <string>/usr/bin/python3</string>
@@ -14,7 +14,7 @@
     <string>--port</string>
     <string>8000</string>
     <string>--interval</string>
-    <string>30</string>
+    <string>60</string>
   </array>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key>
@@ -23,8 +23,8 @@
     <false/>
   </dict>
   <key>StandardOutPath</key>
-  <string>/Users/ci/Library/Logs/com.freebuff/preview-leibniz2.log</string>
+  <string>/Users/ci/Library/Logs/com.freebuff/preview-server.log</string>
   <key>StandardErrorPath</key>
-  <string>/Users/ci/Library/Logs/com.freebuff/preview-leibniz2.log</string>
+  <string>/Users/ci/Library/Logs/com.freebuff/preview-server.log</string>
 </dict>
 </plist>

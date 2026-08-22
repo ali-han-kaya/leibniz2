@@ -296,5 +296,142 @@ class TestDashboardOnlyAndSkip(unittest.TestCase):
         self.assertLess(dashboard_pos, detail_pos)
 
 
+class TestSectionContentValidation(unittest.TestCase):
+    """Soy hattı + K katmanları bölümlerinin SATIR BAZLI içerik doğrulaması.
+
+    Sıra + başlık dışında gerçek satırlar denetlenir: nesil tablosu
+    (gen/note/hash-kırpma/ikon), FAIL bulgu mermileri (priority/check/
+    issue/evidence), SKIP ve eksik katman satırları, footer notları.
+    """
+
+    def setUp(self):
+        self._saved = os.environ.pop("GITHUB_STEP_SUMMARY", None)
+
+    def tearDown(self):
+        if self._saved is not None:
+            os.environ["GITHUB_STEP_SUMMARY"] = self._saved
+
+    def _sidecars(self, d):
+        d = pathlib.Path(d)
+        (d / "logs").mkdir(parents=True, exist_ok=True)
+        (d / "logs" / "PRECOMMIT_RAPORU.json").write_text(
+            json.dumps({"verdict": "PASS", "hooks": [], "findings": [],
+                        "counts": {"p0": 0, "p1": 0}}), encoding="utf-8")
+        (d / "k0_findings.json").write_text(
+            json.dumps({"count": 0, "findings": []}), encoding="utf-8")
+        (d / "budget_verify.json").write_text(
+            json.dumps({"limit": 30.0, "estimated_usd": 1.08,
+                        "verdict": "OK"}), encoding="utf-8")
+        (d / "lineage_findings.json").write_text(json.dumps({
+            "ok": True, "count": 3, "generations": [
+                {"gen": "g1", "note": "V5m", "hash": "a" * 64,
+                 "commit": "abc123",
+                 "status": "PASS (canlı dosya ile aynı)"},
+                {"gen": "g2", "note": "pre-git kaynak",
+                 "hash": "b" * 64, "commit": None,
+                 "status": "UNVERIFIED (iCloud)"},
+                {"gen": "g3", "note": "bozuk", "hash": "c" * 64,
+                 "commit": None, "status": "FAIL — hash uyuşmaz"},
+            ]}), encoding="utf-8")
+        (d / "klayers.json").write_text(json.dumps({
+            "verdict": "FAIL", "counts": {"P0": 1, "P1": 1},
+            "layers": {
+                "K1": {"label": "Dış zip sidecar", "status": "PASS",
+                        "ran": True, "findings": []},
+                "K2": {"label": "Klasör checksum", "status": "FAIL",
+                        "ran": True, "findings": [
+                            {"priority": "P0", "check": "K2-HASH",
+                             "issue": "checksum uyuşmaz",
+                             "evidence": "a1b2"},
+                            {"priority": "P1", "check": "K2-SIDECAR",
+                             "issue": "sidecar yok", "evidence": ""}]},
+                "K3": {"label": "İç zip sidecar", "status": "SKIP",
+                        "ran": False, "findings": []},
+            }}), encoding="utf-8")
+        return {
+            "precommit": d / "logs" / "PRECOMMIT_RAPORU.json",
+            "k0": d / "k0_findings.json",
+            "budget": d / "budget_verify.json",
+            "lineage": d / "lineage_findings.json",
+            "klayers": d / "klayers.json",
+        }
+
+    def _run(self, paths):
+        buf = io.StringIO()
+        argv = []
+        for key, p in paths.items():
+            argv += [f"--{key}", str(p)]
+        with contextlib.redirect_stdout(buf):
+            code = cs.main(argv)
+        return code, buf.getvalue()
+
+    def test_lineage_rows_content(self):
+        """Nesil tablosu satırları: gen/note/hash-16 kırpma + durum ikonu."""
+        with tempfile.TemporaryDirectory() as d:
+            code, out = self._run(self._sidecars(d))
+        self.assertEqual(code, 0)
+        self.assertIn("## ✅ Soy hattı (zip_lineage.json): 3 nesil doğrulandı", out)
+        self.assertIn("| NESİL | NOTE | HASH | DURUM |", out)
+        # Satır bazlı: hash 16 karaktere kırpılır, ikon duruma göre.
+        self.assertIn("| g1 | V5m | `aaaaaaaaaaaaaaaa…` | ✅ PASS (canlı dosya ile aynı) |", out)
+        self.assertIn("| g2 | pre-git kaynak | `bbbbbbbbbbbbbbbb…` | ℹ️ UNVERIFIED (iCloud) |", out)
+        self.assertIn("| g3 | bozuk | `cccccccccccccccc…` | 🔴 FAIL — hash uyuşmaz |", out)
+        # Kırpılmamış hash asla satırda görünmemeli (64 char).
+        self.assertNotIn("a" * 17, out)
+        # Footer: PASS dalı.
+        self.assertIn(
+            "> Fail-closed: tüm commit'li nesiller `git show` ile, "
+            "`current` nesil canlı dosya ile doğrulandı.", out)
+
+    def test_lineage_fail_state_rows(self):
+        """ok=False: başlık 🔴 + FAIL footer, tablo yine satır satır."""
+        with tempfile.TemporaryDirectory() as d:
+            paths = self._sidecars(d)
+            data = json.loads(pathlib.Path(paths["lineage"]).read_text(
+                encoding="utf-8"))
+            data["ok"] = False
+            pathlib.Path(paths["lineage"]).write_text(
+                json.dumps(data), encoding="utf-8")
+            code, out = self._run(paths)
+        self.assertEqual(code, 0)
+        self.assertIn("## 🔴 Soy hattı (zip_lineage.json): doğrulama başarısız (3 nesil)", out)
+        self.assertIn("| g1 | V5m | `aaaaaaaaaaaaaaaa…` | ✅ PASS (canlı dosya ile aynı) |", out)
+        self.assertIn(
+            "> Fail-closed: P0/P1 bulgusu olarak işaretlendi; "
+            "kanonik hash/soy hattı sapması var.", out)
+
+    def test_klayers_pass_fail_skip_missing_rows(self):
+        """K katmanları: PASS/FAIL(+bulgu mermileri)/SKIP/eksik satırları."""
+        with tempfile.TemporaryDirectory() as d:
+            code, out = self._run(self._sidecars(d))
+        self.assertEqual(code, 0)
+        self.assertIn("## ✅ K1 Dış zip sidecar: PASS", out)
+        self.assertIn("## 🔴 K2 Klasör checksum: 2 bulgu", out)
+        # FAIL bulguları satır bazlı: priority + check + issue (+ evidence).
+        self.assertIn("- [P0] K2-HASH: checksum uyuşmaz (a1b2)", out)
+        # P1 bulgusunda evidence boş — tam satır eşleşmesi (a1b2) içermediğini kanıtlar.
+        self.assertIn("- [P1] K2-SIDECAR: sidecar yok", out)
+        self.assertNotIn("- [P1] K2-SIDECAR: sidecar yok (a1b2)", out)
+        # SKIP satırı (label ile) ve eksik katman satırı (labelsiz).
+        self.assertIn("## ⏭️ K3 İç zip sidecar: bu job'da koşmadı (N/A)", out)
+        self.assertIn("## ⏭️ K4: sidecar'da yok", out)
+        self.assertIn("## ⏭️ K17: sidecar'da yok", out)
+
+    def test_klayers_rows_in_render_order(self):
+        """K katmanı başlıkları RENDER_LAYERS sırasıyla görünmeli (satır bazlı)."""
+        with tempfile.TemporaryDirectory() as d:
+            code, out = self._run(self._sidecars(d))
+        self.assertEqual(code, 0)
+        import run_summary_klayers as _kl
+        last = -1
+        for key in _kl.RENDER_LAYERS:
+            marker = f"## ✅ {key} " if key in ("K1",) else \
+                (f"## 🔴 {key} " if key == "K2" else
+                 (f"## ⏭️ {key} " if key == "K3" else f"## ⏭️ {key}:"))
+            pos = out.index(marker)
+            self.assertGreater(pos, last, f"katman sırası bozuk: {key}")
+            last = pos
+
+
 if __name__ == "__main__":
     unittest.main()
