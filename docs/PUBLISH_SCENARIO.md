@@ -16,13 +16,13 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 > |---|---|
 > | AŞAMA 0 — ön-kontrol | ✅ araç hazır — her push öncesi koşulur |
 > | AŞAMA 1 (a) — repo oluşturma | ✅ **UYGULANDI** (2026-08-18, `gh repo create leibniz2 --public`) |
-> | AŞAMA 1 (b) — branch protection | ✅ **UYGULANDI** — GH API ile 8 required check, `enforce_admins=true`, `allow_force_pushes=false` |
+> | AŞAMA 1 (b) — branch protection | ✅ **UYGULANDI** — GH API ile 9 required check, `enforce_admins=true`, `allow_force_pushes=false` |
 > | AŞAMA 2 — remote + ilk push | ✅ **UYGULANDI** (2026-08-18) |
 > | AŞAMA 3 — CI doğrulama | 🔄 **aktif** — her push'ta tekrarlanır (incremental) |
 > | AŞAMA 4 — koruma kanıtı | ⏸️ opsiyonel (1 (b) sonrası) |
 >
-> Job tablosu (AŞAMA 3), `.github/workflows/verify.yml`'deki **16 job**'u 3 kategoride
-> sunar: push'ta çalışan 8 **required** + 2 **advisory** + 3 **PR-only**.
+> Job tablosu (AŞAMA 3), `.github/workflows/verify.yml`'deki **18 job**'u 4 kategoride
+> sunar: 9 **required** (8 push + P0 label gate) + 6 **advisory** + 2 **PR-only** + 1 **manifest**.
 > Branch protection yalnızca required job'ları bloke eder.
 > Güncel listeyi üret: `python3 _calisma/CIKTI/status_checks.py --json`.
 
@@ -111,6 +111,7 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 | 2026-08-21 | feat | canli CI denetimini audit_live_ci_sync.py'ye cevir (doc↔GitHub senkron, fail-closed) | `799409c` |
 | 2026-08-21 | fix | audit kendini karsilastirmasin — CI yanlis-pozitif duzeltildi (16 job / 21 artifact doc'a islendi) | `1499b93` |
 | 2026-08-21 | AŞAMA 1 (b) | Canlı doğrulama: `status_checks.py --gh` → **SONUÇ: PASS — 8 check + merge engeli birebir** (`names_ok=true`, `enforcement_ok=true`, `missing/extra=[]`; smoke: strict/enforce_admins/force-push/deletions hepsi `ok=true`). Not: "9 check" beklentisi doc'taki bayat changelog iddialarından — gerçek kurulum 8 required check (`dc9ab4f`) | (çalışma ağacı) |
+| 2026-08-22 | AŞAMA 1 (b) | Job adı `K1-K9` → `K1-K14`; `Pre-commit P0 label gate` required listeye eklendi → **9 required check** tek kaynaktan (`status_checks.py` GATE_EXCLUDE'dan çıkarıldı; guide'daki 9'lu listeyle gerçek kurulum hizalandı). Branch protection 9 adla yeniden PUT edildi | (çalışma ağacı) |
 | 2026-08-21 | feat | canli CI denetimini audit_live_ci_sync.py'ye cevir | `799409c` |
 | 2026-08-21 | docs | denetim bulgusunu changelog + REFERANS_KANIT_DENETIMI'ne isle | `031ed0f` |
 | 2026-08-21 | docs | status_checks --gh canli dogrulamasini senaryoya isle | `7012f96` |
@@ -175,6 +176,7 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 | 2026-08-22 | feat | (precommit) unstaged-deps pre-check for check-repro-manifest hook | `3995fc9` |
 | 2026-08-22 | fix | (plist) restore two-profile management, sync tests to reality | `0d29fd8` |
 | 2026-08-22 | feat | (plist) K12 out-of-scope INFO line in audit trail | `e78d906` |
+| 2026-08-22 | test | (plist) real end-to-end extra-file scenario for check_plist_drift | `bebc0cf` |
 
 ---
 
@@ -290,7 +292,7 @@ bash docs/publish_precheck.sh --allow-remote
 #    (geçici kapat → push → geri aç). Manuel push'ta önce kapatıp sonra geri açın.
 git push origin main
 
-# 3) CI'ı izle (16 job — 8 required + 4 advisory + 3 PR-only + 1 manifest;
+# 3) CI'ı izle (18 job — 9 required + 6 advisory + 2 PR-only + 1 manifest;
 #    aşağıdaki AŞAMA 3 job tablosu)
 RUN_ID=$(gh run list --limit 1 --json databaseId -q '.[0].databaseId')
 gh run watch $RUN_ID --exit-status
@@ -305,7 +307,7 @@ gh api "repos/ali-han-kaya/leibniz2/actions/runs/$RUN_ID/artifacts" \
 > **Tek komut karşılığı:** `bash docs/publish_wrapper.sh --incremental` — repo
 > zaten yayında olduğundan **idempotent**: precheck → push (enforce_admins
 > geçici kapatma dahil) → CI izle → job durumları + `status_checks.py --gh`
-> (8 check + merge engeli smoke). Repo oluşturma/remote ekleme atlanır; push
+> (9 check + merge engeli smoke). Repo oluşturma/remote ekleme atlanır; push
 > yoksa HEAD için mevcut run izlenir. Önce risksiz önizle:
 > `bash docs/publish_wrapper.sh --incremental --dry-run`
 > (log: `logs/publish_*.log`; `--dry-run-summary` ile komut akışı markdown'ı).
@@ -431,25 +433,26 @@ open "https://github.com/ali-han-kaya/leibniz2/settings/branches"
 #     Web UI'da (adım adım → aşağıdaki "Branch protection — web UI adım adım"):
 #       "Add branch protection rule" → Branch name pattern: `main`
 #       ✓ Require status checks to pass before merging
-#         → 8 check (adlar = workflow job `name:` alanları — tek kaynaktan al):
+#         → 9 check (adlar = workflow job `name:` alanları — tek kaynaktan al):
 #             python3 _calisma/CIKTI/status_checks.py
-#           Delivery verification — K1-K9 (single entry point)
+#           Delivery verification — K1-K14 (single entry point)
 #           Action runtime check (node24)
 #           Budget shield (aggregated)
+#           Pre-commit P0 label gate
 #           Static markdown reports (incl. pre-commit findings)
 #           Reproducibility bundle
 #           Config drift check (gen_config + diff-on-drift)
 #           Repack determinism + verify (sidecar sync)
 #           Online verification trend (refs-online across runs)
-#         (PR-only job'lar: label-gate, label-gate-p1, commit-msg-gate, manifest-comment
-#          — push'ta çalışmaz, required check DEĞİL)
+#         (PR-only ama required DEĞİL: label-gate-p1, commit-msg-gate, manifest-comment
+#          — push'ta çalışmaz; Pre-commit P0 label gate BİLEREK required'dır)
 #           → ✓ "Require branches to be up to date before merging" (strict)
 #       ✓ Do not allow bypassing the above settings   (enforce_admins)
 #       ✓ Disallow force pushes
 #       ✓ Disallow deletions
 ```
 
-### Branch protection — web UI adım adım (8 required check)
+### Branch protection — web UI adım adım (9 required check)
 
 > 📷 **Görsel kılavuz:** her adımın ekran görüntüsü
 > [`docs/branch-protection-guide/`](branch-protection-guide/) altında (8
@@ -478,22 +481,24 @@ open "https://github.com/ali-han-kaya/leibniz2/settings/branches"
    - **Ön koşul:** check'lerin arama listesinde görünmesi için o branch'te CI'ın
      **en az bir kez koşmuş** olması gerekir. Yeni/boş repoda kural kuruyorsan önce
      bir push ya da PR ile workflow'u tetikle, yeşil run'ı bekle, sonra bu adıma dön.
-   -   Arama kutusuna şu **8 adı** tek tek yazıp seç (birebir, `—` karakteri dahil):
-     1. `Delivery verification — K1-K9 (single entry point)`
+   -   Arama kutusuna şu **9 adı** tek tek yazıp seç (birebir, `—` karakteri dahil):
+     1. `Delivery verification — K1-K14 (single entry point)`
      2. `Action runtime check (node24)`
      3. `Budget shield (aggregated)`
-     4. `Static markdown reports (incl. pre-commit findings)`
-     5. `Reproducibility bundle`
-     6. `Config drift check (gen_config + diff-on-drift)`
-     7. `Repack determinism + verify (sidecar sync)`
-     8. `Online verification trend (refs-online across runs)`
-     > **Not:** PR-only job'lar (label-gate, label-gate-p1, commit-msg-gate) ve
-     > advisory job'lar (precheck, plist-check) required check'ten hariç tutuldu —
-     > push'ta çalışmadıkları için required yapılırsa main branch kilitlenir.
+     4. `Pre-commit P0 label gate`
+     5. `Static markdown reports (incl. pre-commit findings)`
+     6. `Reproducibility bundle`
+     7. `Config drift check (gen_config + diff-on-drift)`
+     8. `Repack determinism + verify (sidecar sync)`
+     9. `Online verification trend (refs-online across runs)`
+     > **Not:** PR-only job'lar (label-gate-p1, commit-msg-gate) ve advisory job'lar
+     > (precheck, plist-check) required check'ten hariç tutuldu — push'ta
+     > çalışmadıkları için required yapılırsa main branch kilitlenir.
      > `manifest-comment` job'ı yalnızca PR'da koşar — required check DEĞİL; ekleme.
      > `Pre-commit P0 label gate` yalnızca PR'da koşar ama BİLEREK required
      > check'tir: precommit-p0 etiketi varken FAIL verip merge'i bloke eder
-     > (aşağıdaki "P0 label gate" bölümüne bak).
+     > (aşağıdaki "P0 label gate" bölümüne bak). Push'ta "skipped" olur — branch
+     > protection skipped durumunu geçerli kabul ettiğinden push yolu etkilenmez.
      > `Pre-commit P1 label gate (optional)` aynı desende opsiyonel bir gatedir:
      > branch protection'a eklenirse P1 bulguları merge'i bloke eder; eklenmezse
      > sadece bilgilendirme rozeti olarak kalır.
@@ -511,7 +516,7 @@ open "https://github.com/ali-han-kaya/leibniz2/settings/branches"
 9. **Doğrula (otomatik):** koruma kurulduktan sonra:
    ```bash
    python3 _calisma/CIKTI/status_checks.py --gh
-   # SONUÇ: PASS — 8 check birebir eşleşiyor (workflow ↔ GitHub)
+   # SONUÇ: PASS — 9 check birebir eşleşiyor (workflow ↔ GitHub)
    ```
    Eksik/fazla check → exit 1 (fail-closed): listeyi `status_checks.py` çıktısıyla
    eşitle veya workflow'u güncelle.
@@ -561,8 +566,8 @@ etikete göre yanlış geçmez/bloke etmez.
 **Doğrula (yerel, git gerektirmez):**
 ```bash
 python3 _calisma/CIKTI/status_checks.py
-# → listede "Pre-commit P0 label gate" ve "Pre-commit P1 label gate (optional)"
-#   (toplam 8 check)
+# → listede "Pre-commit P0 label gate" var (required); "Pre-commit P1 label gate
+#   (optional)" YOK (opsiyonel — required değil). (toplam 9 check)
 ```
 
 **Davranış tablosu (P0 — zorunlu):**
@@ -651,32 +656,34 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 --exit-status` + artifact listesi; sonuç `SONUÇ: PASS/FAIL` olarak loglanır
 (dry-run'da yalnızca önizlenir).
 
-**Job kategorileri (18 job = 8 required + 6 advisory + 3 PR-only + 1 manifest):**
+**Job kategorileri (18 job = 9 required + 6 advisory + 2 PR-only + 1 manifest):**
 
 > **Kural:** Branch protection **yalnızca A kategorisindeki** job'ları required check olarak
 > kabul eder. B (advisory) job'ları push'ta çalışır ama required değildir;
 > C (PR-only) job'ları push'ta hiç çalışmaz.
+> **İstisna:** `Pre-commit P0 label gate` C gibi PR-only'dir ama **BİLEREK required**
+> check'tir (precommit-p0 etiketi merge'i bloke eder) — A'da listelenir.
 
 | # | Kategori | Job | Son run (32527379342) |
 |---|---|---|---|
-| | **A — Required (push'ta çalışır, merge bloke)** | | |
-| 1 | A | Delivery verification — K1-K9 (single entry point) | ✅ success (4m21s) — K0-K7 + K8 (Z3) + K9 (Lean) + K11 + K13 + K14 tek komutta (`--full`); pre-commit advisory bölüm |
+| | **A — Required (merge bloke; push'ta çalışan 8 + PR-only P0 gate)** | | |
+| 1 | A | Delivery verification — K1-K14 (single entry point) | ✅ success (4m21s) — K0-K7 + K8 (Z3) + K9 (Lean) + K11 + K13 + K14 tek komutta (`--full`); pre-commit advisory bölüm |
 | 2 | A | Action runtime check (node24) | ✅ success (9s) — her `uses:` action'ın `runs.using=node24` olduğu doğrulanır |
 | 3 | A | Budget shield (aggregated) | ✅ success (7s) — limit içinde (sidecar birleştirildi) |
-| 4 | A | Static markdown reports (incl. pre-commit findings) | ✅ success (6s) — bundle yüklendi |
-| 5 | A | Reproducibility bundle | ✅ success (10s) — manifest.txt + SHA-256 — K10 `--verify-manifest` + `manifest.sha256` |
-| 6 | A | Config drift check (gen_config + diff-on-drift) | ✅ success (24s) — config uyumlu; drift PR yorumu olarak düşer |
-| 7 | A | Repack determinism + verify (sidecar sync) | ✅ success (26s) — repack byte-identical, base verify PASS |
-| 8 | A | Online verification trend (refs-online across runs) | ✅ success (50s) — trend tablosu üretildi (91 satır, son: 61/61 hathitrust=1) |
+| 4 | A | Pre-commit P0 label gate | — PR'da koşar; precommit-p0 etiketi varsa FAIL → merge bloke |
+| 5 | A | Static markdown reports (incl. pre-commit findings) | ✅ success (6s) — bundle yüklendi |
+| 6 | A | Reproducibility bundle | ✅ success (10s) — manifest.txt + SHA-256 — K10 `--verify-manifest` + `manifest.sha256` |
+| 7 | A | Config drift check (gen_config + diff-on-drift) | ✅ success (24s) — config uyumlu; drift PR yorumu olarak düşer |
+| 8 | A | Repack determinism + verify (sidecar sync) | ✅ success (26s) — repack byte-identical, base verify PASS |
+| 9 | A | Online verification trend (refs-online across runs) | ✅ success (50s) — trend tablosu üretildi (91 satır, son: 61/61 hathitrust=1) |
 | | **B — Advisory (push'ta çalışır, required değil)** | | |
-| 9 | B | Publish precheck (AŞAMA 0, advisory) | ✅ success (9s) — AŞAMA 0 kapıları otomatik denetlenir |
-| 10 | B | Plist drift check (macOS, advisory) | ✅ success (11s) — K12, macOS-runner'lı |
-| 11 | B | Mirror sync check (macOS, fail-closed) | ✅ success (12s) — K17, sync sonrası GÜNCEL |
-| 12 | B | Daemon mode HTTP 200 (advisory) | ✅ success (45s) — üç endpoint'te 200 |
-| 13 | B | Refs-trend audit (advisory) | ✅ success (56s) — trend satırları kaynak artifact'larla birebir |
-| 14 | B | Live CI doc↔GitHub sync audit (advisory) | ✅ success (8s) — doc 24 artifact = canlı 24 artifact, PASS |
+| 10 | B | Publish precheck (AŞAMA 0, advisory) | ✅ success (9s) — AŞAMA 0 kapıları otomatik denetlenir |
+| 11 | B | Plist drift check (macOS, advisory) | ✅ success (11s) — K12, macOS-runner'lı |
+| 12 | B | Mirror sync check (macOS, fail-closed) | ✅ success (12s) — K17, sync sonrası GÜNCEL |
+| 13 | B | Daemon mode HTTP 200 (advisory) | ✅ success (45s) — üç endpoint'te 200 |
+| 14 | B | Refs-trend audit (advisory) | ✅ success (56s) — trend satırları kaynak artifact'larla birebir |
+| 15 | B | Live CI doc↔GitHub sync audit (advisory) | ✅ success (8s) — doc 24 artifact = canlı 24 artifact, PASS |
 | | **C — PR-only (push'ta çalışmaz, PR'da çalışır)** | | |
-| 15 | C | Pre-commit P0 label gate | — skipped (push'ta çalışmaz) |
 | 16 | C | Pre-commit P1 label gate (optional) | — skipped (push'ta çalışmaz) |
 | 17 | C | Commit-msg gate | — skipped (push'ta çalışmaz) |
 | | **D — PR-only (yorum/etiket düşürme)** | | |
@@ -740,7 +747,7 @@ git push origin test/protection-check  # ← feature branch: geçer
 # Şimdi main'e PR aç:
 gh pr create --base main --head test/protection-check --title "docs: protection smoke"
 # Merge denenir. CI artık YEŞİL olduğundan reddedilme nedeni "FAIL check" değil:
-# required check'ler (8 kapı) TAMAMLANMADAN veya branch main'in gerisindeyken
+# required check'ler (9 kapı) TAMAMLANMADAN veya branch main'in gerisindeyken
 # (strict) merge REDDEDİLMELİ.
 gh pr merge --squash
 git checkout main

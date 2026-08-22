@@ -47,15 +47,17 @@ WORKFLOW = ".github/workflows/verify.yml"
 GATE_EXCLUDE = {
     "manifest-comment",    # PR-only: yorum düşürme
     "precheck",             # AŞAMA 0 advisory
-    "label-gate",           # PR-only: P0 etiket blokajı
-    "label-gate-p1",        # PR-only: P1 etiket opsiyonel blokaj
-    "commit-msg-gate",      # PR-only: commit-msg ihlal blokajı
+    "label-gate-p1",        # PR-only: P1 etiket opsiyonel blokaj (required DEĞİL)
+    "commit-msg-gate",      # PR-only: commit-msg ihlal blokajı (required DEĞİL)
     "plist-check",          # macOS-advisory: push'ta çalışmaz
     "mirror-check",         # macOS: sync sonrası K17 fail-closed (advisory)
     "daemon-http",          # advisory: daemon-modu HTTP 200 smoke (advisory)
     "audit-live-ci",        # advisory: doc↔GitHub senkron denetimi
     "audit-refs-trend",     # advisory: refs-trend satırları ↔ kaynak denetimi
 }
+# Not: "label-gate" (Pre-commit P0 label gate) BİLEREK required check'tir —
+# precommit-p0 etiketi varken FAIL verip merge'i bloke eder; bu yüzden
+# GATE_EXCLUDE'da DEĞİL (guide.html'deki 9'lu listede de var).
 
 
 def gate_jobs():

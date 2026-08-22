@@ -239,6 +239,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-22 | feat | (precommit) unstaged-deps pre-check for check-repro-manifest hook | `3995fc9` |
 | 2026-08-22 | fix | (plist) restore two-profile management, sync tests to reality | `0d29fd8` |
 | 2026-08-22 | feat | (plist) K12 out-of-scope INFO line in audit trail | `e78d906` |
+| 2026-08-22 | test | (plist) real end-to-end extra-file scenario for check_plist_drift | `bebc0cf` |
 
 ### Regresyon notları
 

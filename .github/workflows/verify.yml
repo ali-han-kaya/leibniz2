@@ -55,7 +55,7 @@ permissions:
 
 jobs:
   verify:
-    name: Delivery verification — K1-K9 (single entry point)
+    name: Delivery verification — K1-K14 (single entry point)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -261,7 +261,7 @@ jobs:
       # --budget-out: bütçe sonucunu ayrı JSON'a yazar (budget job'u tüketir).
       # --refs-out: çevrimiçi referans denetim sonuçlarını VERSION JSON olarak
       # yazar (her run'da kaç referansın çevrimiçi doğrulandığını izlemek için).
-      - name: Run full verification (K1-K9, single entry point)
+      - name: Run full verification (K1-K14, single entry point)
         shell: bash
         run: |
           set -o pipefail
@@ -535,7 +535,7 @@ jobs:
           sha256sum history.jsonl 2>/dev/null > history.jsonl.sha256 || true
 
       # `if: always()` — kapı FAIL olsa bile rapor (neden başarısız olduğu)
-      # artifact olarak yüklenir. Tek rapor, tüm K1-K9 katmanlarını içerir.
+      # artifact olarak yüklenir. Tek rapor, tüm K1-K14 katmanlarını içerir.
       # Hangi config'in kullanıldığını denetlenebilir kılar: ham config,
       # şeması ve verify_delivery.py'nin çözümlediği etkin değerler.
       - name: Bundle config snapshot
