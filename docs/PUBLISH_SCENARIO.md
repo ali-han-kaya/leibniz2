@@ -211,6 +211,8 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 | 2026-08-22 | fix | config-drift override-only cift baslik engellendi | `337a8d1` |
 | 2026-08-22 | other | verify: budget bar compute — budget_scan.js (pure) + 67 Node tests | `049e9a0` |
 | 2026-08-22 | other | dash: budget sparkline — son N run'in butce mini grafigi | `c003151` |
+| 2026-08-22 | other | dash: budget bar limit cizgisi + yuzde etiketi | `d85213a` |
+| 2026-08-22 | other | verify: config artefact merge pattern'e dahil — config/ oneki yok | `e68a3c3` |
 
 ---
 

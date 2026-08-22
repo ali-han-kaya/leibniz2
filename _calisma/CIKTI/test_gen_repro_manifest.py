@@ -418,7 +418,7 @@ class TestWorkflowPatternCoverage(unittest.TestCase):
     olmalı — yoksa o artifact manifest'e girmeden sessizce düşer (ör. bugün
     budget-verify/lineage-findings/klayers eksikti).
     """
-    EXCLUDED = {"config", "precommit-logs", "refs-trend", "override-trend",
+    EXCLUDED = {"precommit-logs", "refs-trend", "override-trend",
                 "precheck-report", "python3-shell", "plist-check",
                 "reproducibility"}
 
@@ -1036,7 +1036,7 @@ class TestCheckPatternConsistency(unittest.TestCase):
         wf = (pathlib.Path(cpc.DEFAULT_WORKFLOW).read_text(encoding="utf-8"))
         # budget-verify'ı pattern'den çıkar
         wf = wf.replace(
-            "'{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,k0-findings,budget-verify,lineage-findings,klayers,unit-tests,action-runtimes}'",
+            "'{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,config,k0-findings,budget-verify,lineage-findings,klayers,unit-tests,action-runtimes}'",
             "'{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,k0-findings,lineage-findings,klayers,unit-tests,action-runtimes}'",
         )
         errors, _ = self._run_check(wf)
@@ -1048,7 +1048,7 @@ class TestCheckPatternConsistency(unittest.TestCase):
         wf = (pathlib.Path(cpc.DEFAULT_WORKFLOW).read_text(encoding="utf-8"))
         # Fazla bir artifact ekle
         wf = wf.replace(
-            "'{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,k0-findings,budget-verify,lineage-findings,klayers,unit-tests,action-runtimes}'",
+            "'{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,config,k0-findings,budget-verify,lineage-findings,klayers,unit-tests,action-runtimes}'",
             "'{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,k0-findings,budget-verify,lineage-findings,klayers,unit-tests,action-runtimes,fake-artifact}'",
         )
         errors, _ = self._run_check(wf)
@@ -1059,7 +1059,7 @@ class TestCheckPatternConsistency(unittest.TestCase):
         import check_pattern_consistency as cpc
         wf = (pathlib.Path(cpc.DEFAULT_WORKFLOW).read_text(encoding="utf-8"))
         wf = wf.replace(
-            "'{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,k0-findings,budget-verify,lineage-findings,klayers,unit-tests,action-runtimes}'",
+            "'{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,config,k0-findings,budget-verify,lineage-findings,klayers,unit-tests,action-runtimes}'",
             "'{verify-report,budget,reports}'",
         )
         errors, _ = self._run_check(wf)

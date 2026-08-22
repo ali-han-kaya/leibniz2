@@ -24,7 +24,7 @@ import gen_repro_manifest as gm
 
 # merge-multiple ile indirilmeyenler (prefix ile ayrı indirilir veya çıkış artifact'ı)
 EXCLUDED = frozenset({
-    "config", "precommit-logs", "refs-trend", "override-trend",
+    "precommit-logs", "refs-trend", "override-trend",
     "precheck-report", "python3-shell", "plist-check",
     "reproducibility",
 })
