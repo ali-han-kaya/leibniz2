@@ -438,10 +438,27 @@ def main() -> None:
         lines += pc_block
 
     # ── PROVENANCE bölümü: artifact → üreten job (denetim izi) ──────────────
-    # Her artifact hangi job'da üretildi — tek bakışta kaynak. Prefixed
-    # indirilenler (config/, precommit-logs/) bundle'da kendi adı altındadır;
-    # merge ile indirilenler köke düzleştiği için yalnızca eşleme üzerinden
-    # işaretlenir (dosya bazlı değil, artifact bazlı).
+    # Her artifact hangi job'da üretildi — tek bakışta kaynak.
+    #
+    # Üç indirme modu var:
+    #   prefixed  — download-artifact name=X, path=all_artifacts/X/
+    #               (config, precommit-logs, refs-trend, precheck-report,
+    #                python3-shell, plist-check)
+    #   merged    — merge-multiple: true + pattern ile indirildi,
+    #               dosyalar all_artifacts/ köküne düzleşti
+    #  .none      — hiç indirilmedi (reproducibility çıkış artifact'ı)
+    PREFIXED = frozenset({
+        "config", "precommit-logs", "refs-trend", "precheck-report",
+        "python3-shell", "plist-check",
+    })
+    MERGED = frozenset({
+        "verify-report", "budget", "budget-verify", "reports",
+        "refs-online", "run-history", "config-drift", "repack-verify",
+        "k0-findings", "lineage-findings", "klayers", "unit-tests",
+        "action-runtimes",
+    })
+    # Reed dosyaları artifact'a eşle (isim eşleme: merge ile köke düzleşen
+    # dosyalar da doğru artifact'a bağlansın)
     present = {}
     for rel in file_hashes:
         top = rel.split("/", 1)[0]
@@ -450,8 +467,7 @@ def main() -> None:
         if top not in artifact_jobs and _is_config_rel(rel):
             top = "config"
         # Summary sidecar dosyaları isimle tanınır: merge-multiple ile
-        # köke düzleşen klayers.json, lineage_findings.json vb. "klayers"
-        # artifact'ına bağlanır.
+        # köke düzleşen klayers.json, lineage_findings.json vb.
         if top not in artifact_jobs and _is_summary_rel(rel):
             bn = os.path.basename(rel)
             _SUMMARY_ARTIFACT_MAP = {
@@ -461,8 +477,7 @@ def main() -> None:
                 "budget_verify.json": "budget-verify",
             }
             top = _SUMMARY_ARTIFACT_MAP.get(bn, "klayers")
-        # Action runtime raporu isimle tanınır: merge-multiple ile köke
-        # düzleşen action_runtimes.json "action-runtimes" artifact'ına bağlanır.
+        # Action runtime raporu isimle tanınır.
         if top not in artifact_jobs and _is_action_runtimes_rel(rel):
             top = "action-runtimes"
         if top in artifact_jobs:
@@ -479,12 +494,18 @@ def main() -> None:
         job = artifact_jobs[art]
         files = present.get(art)
         if files:
-            note = f"prefixed ({len(files)} dosya)"
-        elif art in ("config", "precommit-logs", "refs-trend", "precheck-report",
-                     "action-runtimes", "python3-shell"):
-            note = "YOK (indirilmedi)"
+            if art in PREFIXED:
+                note = f"prefixed ({len(files)} dosya)"
+            elif art in MERGED:
+                note = f"köke düzleştirildi ({len(files)} dosya)"
+            else:
+                note = f"{len(files)} dosya"
+        elif art in PREFIXED:
+            note = "YOK (indirilmedi — prefix subdir)"
+        elif art in MERGED:
+            note = "YOK (merge pattern'de ama dosya tanınamadı)"
         else:
-            note = "merge (köke düzleştirildi)"
+            note = "çıkış artifact'ı (indirilmez)"
         prov_block.append(f"{art:<20} {job:<22} {note}")
     prov_block.append("=" * 72)
     lines += prov_block
