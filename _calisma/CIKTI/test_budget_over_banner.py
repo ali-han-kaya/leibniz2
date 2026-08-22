@@ -102,5 +102,33 @@ class TestBudgetOverBannerLogic(unittest.TestCase):
             r"if \(trendCache\.length\) renderTrend\(trendCache\);")
 
 
+class TestTrendTooltipBudgetNote(unittest.TestCase):
+    """showTrendTip bütçe satırı: limit altı/üstü durumu (dinamik BUDGET_LIMIT)."""
+
+    def setUp(self):
+        self.html = PREVIEW_HTML.read_text(encoding="utf-8")
+
+    def test_budget_limit_note_function_exists(self):
+        m = re.search(r"function budgetLimitNote\(v\)\s*\{.*?\n\}", self.html, re.S)
+        self.assertIsNotNone(m, "budgetLimitNote bulunamadı")
+        body = m.group(0)
+        self.assertIn('" (limit " + lim + " altında)"', body)
+        self.assertIn('" (limit " + lim + " üstünde — AŞIM)"', body)
+        self.assertIn("BUDGET_LIMIT", body)
+
+    def test_tooltip_budget_line_uses_note(self):
+        # Tooltip bütçe satırı fmtTrendBudget + budgetLimitNote birleşimi.
+        self.assertRegex(
+            self.html,
+            r"\"budget  : \" \+ fmtTrendBudget\(r\.budget_usd\) \+ budgetLimitNote\(r\.budget_usd\)")
+
+    def test_tooltip_uses_dynamic_limit_not_hardcoded(self):
+        # Tooltip'te hardcoded 30 yok — fmtLimit(BUDGET_LIMIT) kullanılır.
+        note = re.search(r"function budgetLimitNote\(v\)\s*\{.*?\n\}",
+                         self.html, re.S).group(0)
+        self.assertIn("fmtLimit(BUDGET_LIMIT)", note)
+        self.assertNotRegex(note, r"30\.0")
+
+
 if __name__ == "__main__":
     unittest.main()

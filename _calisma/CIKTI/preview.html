@@ -511,6 +511,14 @@ function fmtTrendBudget(v) {
   if (v == null || !isFinite(v)) return "—";
   return "$" + v.toFixed(2);
 }
+// Tooltip bütçe satırına limit altı/üstü durumu: "(limit $30 altında)"
+// veya "(limit $30 üstünde — AŞIM)". Limit dinamik (BUDGET_LIMIT —
+// config'ten); bütçe veya limit yoksa boş döner.
+function budgetLimitNote(v) {
+  if (v == null || !isFinite(v) || BUDGET_LIMIT == null || !isFinite(BUDGET_LIMIT)) return "";
+  const lim = "$" + fmtLimit(BUDGET_LIMIT);
+  return v > BUDGET_LIMIT ? " (limit " + lim + " üstünde — AŞIM)" : " (limit " + lim + " altında)";
+}
 function showTrendTip(i, ev) {
   const r = trendCache[i];
   if (!r) return;
@@ -521,7 +529,7 @@ function showTrendTip(i, ev) {
     ts + "\n" +
     "verdict : " + verdict + "\n" +
     "duration: " + fmtTrendDur(r.duration_s) + "\n" +
-    "budget  : " + fmtTrendBudget(r.budget_usd) + "\n" +
+    "budget  : " + fmtTrendBudget(r.budget_usd) + budgetLimitNote(r.budget_usd) + "\n" +
     "z3      : " + (r.z3_passed != null ? r.z3_passed + "/" + (r.z3_total != null ? r.z3_total : "?") +
       ((r.z3_failed || 0) > 0 ? " (" + r.z3_failed + " FAIL)" : "") : "—");
   tip.style.display = "block";
