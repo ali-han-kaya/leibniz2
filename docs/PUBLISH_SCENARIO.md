@@ -149,6 +149,7 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 | 2026-08-22 | ci | add colorizeLine rules regression test + pre-commit hook (#18) | `f481ea5` |
 | 2026-08-22 | feat | (repro) add UNIT TESTS artifact section to manifest (#19) | `cb7b06d` |
 | 2026-08-22 | ci | parse unit test failures and post as PR comment | `d3284b7` |
+| 2026-08-22 | fix | (ci) extract unit-test-failure comment to .js file | `28e0789` |
 
 ---
 
