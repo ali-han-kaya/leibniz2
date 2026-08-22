@@ -277,6 +277,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-22 | docs | (lean) add V5s note to K9 report for 8-theorem boundary core | `9b81196` |
 | 2026-08-22 | feat | (verify) K9 lake build --wfail gate for 8-theorem boundary core | `d359b35` |
 | 2026-08-22 | feat | (precommit) check-unit-tests hook for 5 new gate test files | `d77aca7` |
+| 2026-08-22 | test | (summary) row-level content checks for lineage + K-layer sections | `cafab86` |
 
 ### Regresyon notları
 

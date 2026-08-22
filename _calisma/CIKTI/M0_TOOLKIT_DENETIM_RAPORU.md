@@ -121,6 +121,7 @@ K8 + K9 + soy hattı + K11 + K13 + K14; K10 ve K12 ayrıca çağrılır.
 | K12 | LaunchAgent plist şablonu (`--check-plist`) | PASS (yerel macOS; Linux CI'da koşmaz) |
 | K13 | gen_repro_manifest.py self-testi (`--check-repro-manifest`) — mock üretimde manifest.sha256 ↔ manifest.json eşleşmesi de denetlenir (K10 ile ortak helper) | PASS |
 | K14 | Cleanup kaydı: M0 §10 silme/taşıma kayıtları (`--check-cleanup`) | PASS |
+| K16 | github-scripts self-test (`--check-github-scripts`) — 15 senaryoda mock girdi + çıktı eşleşmesi; node fallback'i launchd PATH'ine dayanıklı | PASS |
 | K17 | Mirror sync: `sync_verify_mirror.sh --check` (0=GÜNCEL, 1=BAYAT, 2=hata; `--check-mirror`) | PASS (yerel macOS; Linux CI'da koşmaz) |
 
 **K14 bulguları (yeni katman — commit `[K14]`):** `cleanup_log.json` (M0 §10
@@ -137,6 +138,23 @@ Canlı doğrulama:
 | Kanonik dış zip + iç zip (§10.3) | PASS (hash birebir) |
 
 K14, `--full` zincirine dahildir; `--check-cleanup` ile tek başına da koşar.
+
+**K16/K14 katman raporu — mirror/launchd PATH düzeltmeleri (commit'ler
+`e1abea6`, `c57bb90`, `d184c3c`, `fb69a40`):** launchd GUI agent'i minimal
+PATH ile (`/usr/bin:/bin:…`) çalıştığından Homebrew araçlarına PATH üzerinden
+ulaşılamaz. Dört düzeltme bu sınıf sorunu kapatır; hepsi gerçek koşumda
+doğrulanmıştır (tahmin yok):
+
+| Düzeltme | Katman | Davranış |
+|---|---|---|
+| **node fallback** | K16 (github-scripts battery) | `node` önce `shutil.which`, bulunamazsa bilinen konumlar: `/opt/homebrew/bin/node`, `/usr/local/bin/node`, `/home/linuxbrew/.linuxbrew/bin/node` (hepsi yoksa P0 — fail-closed). `verify_delivery.py` K16 ve `github_scripts_battery.py` aynı deseni paylaşır |
+| **pdfinfo fallback** | K6 (`pdf_pages`) | aynı desen: `/opt/homebrew/bin/pdfinfo`, `/usr/local/bin/pdfinfo`; hiçbiri yoksa `None` → PDF sayfa kontrolü atlanır (FAIL değil — isteğe bağlı katman). qpdf determinizm fallback'iyle aynı aile |
+| **mirror sync kapsamı** | K17 (`sync_verify_mirror.sh`) | `PREVIEW_FILES` (preview_server.py + _daemonize.py) ve `GUIDE_FILES` (guide.html) eklendi — launchd rotası her zaman mirror'daki güncel kodu çalıştırır; `github_scripts/*.js` 9/9 FILES listesinde (biri eksikse K16 P0/FAIL — `e1abea6` bunu canlı run'da yakalamıştı) |
+| **K14 `_resolve_canon`** | K14 (cleanup) | `--dir` repo kökü veya CIKTI subdir iken önce tam yol (`dir + rel`), bulunamazsa basename fallback — çift önek (double-prefix) hatasını önler, flat mirror desteği korunur (`fb69a40`) |
+
+K16, `--full` zincirine dahildir; `--check-github-scripts` ile tek başına da
+koşar. K17 ile birlikte launchd/mirror rotasının (K14 cleanup + K16 battery +
+K17 mirror) tamamı yerel macOS'ta fail-closed doğrulanır.
 
 **K10 bulguları (yeni katman — commit `7e28f2c`):** `verify_delivery.py
 --verify-manifest reproducibility/manifest.json`, `gen_repro_manifest.py`
