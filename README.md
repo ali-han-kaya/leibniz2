@@ -243,6 +243,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-22 | feat | (protection) K1-K14 job rename + 9 required check sync | `d3de002` |
 | 2026-08-22 | feat | (protection) advisory contract — all jobs vs required diff check | `9195b63` |
 | 2026-08-22 | test | (repro) doc artifact list vs ARTIFACT_JOBS sync | `bccc815` |
+| 2026-08-22 | feat | (dashboard) budget limit from effective config, not hardcoded 30 | `4dc133d` |
 
 ### Regresyon notları
 
