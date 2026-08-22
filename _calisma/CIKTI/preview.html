@@ -96,6 +96,7 @@
     <h2>Verification chain</h2>
     <div id="status-board" style="font-size:15px;font-weight:600;padding:6px 0;letter-spacing:0.3px;color:#555">⏳ bekleniyor…</div>
     <div id="precommit-hooks" style="font-size:12px;color:#888;padding:2px 0 6px 0"></div>
+    <div id="k15-sidecar" style="font-size:11px;color:#999;padding:0 0 4px 0"></div>
     <div class="badges" id="badges">
       <span class="badge unknown">K1-K7: ?</span>
       <span class="badge unknown">K8 Z3: ?</span>
@@ -928,6 +929,17 @@ function applySnapshot(d) {
     }).join("");
   } else if (hooksEl) {
     hooksEl.innerHTML = "<span style='color:var(--muted)'>⏳ hook verisi bekleniyor…</span>";
+  }
+
+  // K15 history sidecar: history.jsonl.sha256 hash'i (persist_history atomik yazar)
+  const k15El = $("k15-sidecar");
+  if (k15El) {
+    if (d.history_sidecar_sha256) {
+      const h = d.history_sidecar_sha256;
+      k15El.innerHTML = `<span style="color:var(--ok)">🔒</span> K15 sidecar: <code style="font-size:10px;color:#666">${h.substring(0, 16)}…</code>`;
+    } else {
+      k15El.innerHTML = "<span style='color:var(--muted)'>⏳ K15 sidecar bekleniyor…</span>";
+    }
   }
 
   // Verdict badge + value

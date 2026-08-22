@@ -106,6 +106,15 @@ class PersistHistoryTests(unittest.TestCase):
         sidecar = pathlib.Path(self._path + ".sha256")
         self.assertEqual(sidecar.read_text(encoding="utf-8").split()[0], want)
 
+    def test_persist_sets_latest_sidecar_sha256(self):
+        """persist_history LATEST['history_sidecar_sha256'] güncellemeli."""
+        ps.persist_history(_rec("2026-01-01T00:00:00Z"))
+        digest = ps.LATEST["history_sidecar_sha256"]
+        self.assertIsNotNone(digest)
+        self.assertEqual(len(digest), 64)  # SHA-256 hex
+        content = pathlib.Path(self._path).read_text(encoding="utf-8")
+        self.assertEqual(digest, hashlib.sha256(content.encode("utf-8")).hexdigest())
+
 
 class DeadlockTests(unittest.TestCase):
     """persist/load, LOCK tutulurken çağrıldığında asılmamalı.
