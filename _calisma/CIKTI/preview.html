@@ -121,6 +121,13 @@
   </section>
 
   <section>
+    <h2>CLI override <span class="ts" id="cov-ts"></span></h2>
+    <div class="card" style="padding:12px" id="cov-body">
+      <div class="muted">veri bekleniyor…</div>
+    </div>
+  </section>
+
+  <section>
     <h2>P0 / P1 trend — son 100 run <span class="ts" id="trend-count"></span></h2>
     <div id="budget-over-banner" class="err" role="alert"
          style="display:none;margin:6px 0 2px;padding:6px 10px;border-radius:6px;font-size:12px;font-weight:700"></div>
@@ -1029,6 +1036,46 @@ function renderConfigDiff(cd, ts) {
   bodyEl.innerHTML = h;
 }
 
+// ---- CLI override panel (son run'un override durumu) ----
+function renderCliOverride(data) {
+  const bodyEl = $("cov-body"), tsEl = $("cov-ts");
+  if (!bodyEl) return;
+  const cov = data && data.cli_overrides;
+  const ts = data && data.ts;
+  if (tsEl) tsEl.textContent = ts ? fmtTs(ts) : "";
+  if (cov == null) {
+    bodyEl.innerHTML = '<div class="muted">veri bekleniyor…</div>';
+    return;
+  }
+  // cov: { budget: {override, file_value, effective}, ... }
+  const items = Object.entries(cov).filter(
+    ([, v]) => v && typeof v === "object");
+  if (!items.length) {
+    bodyEl.innerHTML = '<span class="badge ok">CLI override YOK</span> ' +
+      '<span class="muted">bütçe kalkanı dosya config değerleriyle koştu</span>';
+    return;
+  }
+  const overrides = items.filter(([, v]) => v.override);
+  if (!overrides.length) {
+    // keys var ama override=false (cli_given ama değer aynı)
+    bodyEl.innerHTML = '<span class="badge ok">CLI override YOK</span> ' +
+      '<span class="muted">' + items.length + ' anahtar CLI verildi ama dosya değeriyle aynı</span>';
+    return;
+  }
+  let h = '<span class="badge warn">CLI override VAR ('
+    + overrides.length + ')</span>';
+  h += '<table style="margin-top:8px"><thead><tr><th>Anahtar</th>' +
+    '<th>Dosya değeri</th><th>CLI değeri</th></tr></thead><tbody>';
+  for (const [key, v] of overrides) {
+    h += '<tr><td><code>' + escapeHTML(key) + '</code></td>' +
+      '<td><code>' + escapeHTML(fmtVal(v.file_value)) + '</code></td>' +
+      '<td><code style="color:var(--warn)">' +
+      escapeHTML(fmtVal(v.effective)) + '</code></td></tr>';
+  }
+  h += '</tbody></table>';
+  bodyEl.innerHTML = h;
+}
+
 // ---- Hook env sürümleri (zaman serisi: python/z3/lean/…) ----
 const HOOK_TOOLS = ["python", "z3", "lean", "pre_commit", "pdfinfo", "qpdf"];
 const HOOK_LABELS = { python: "Python", z3: "Z3", lean: "Lean",
@@ -1281,6 +1328,7 @@ function applySnapshot(d) {
   loadTrend();
   renderRefsOnline(d);
   renderConfigDiff(d.config_diff, d.ts);
+  renderCliOverride(d);
 
   if (d.stdout_short) {
     const refItems = [];
@@ -1338,6 +1386,7 @@ function initLoad() {
     if (d.refs_online) renderRefsOnline(d.refs_online);
     if (d.budget) renderBudget(d.budget);
     if (d.config_diff) renderConfigDiff(d.config_diff, d.ts);
+    renderCliOverride(d);
     setLive(d.verdict === "PASS" ? "ok" : "warn");
   }).catch(() => {});
   loadRunHistory();
@@ -1361,6 +1410,7 @@ function connect() {
         if (full.refs_online) renderRefsOnline(full.refs_online);
         if (full.budget) renderBudget(full.budget);
         if (full.config_diff) renderConfigDiff(full.config_diff, full.ts);
+        renderCliOverride(full);
       });
     } catch(err) { console.error("snapshot parse", err); }
   });
@@ -1376,6 +1426,7 @@ function connect() {
         if (full.refs_online) renderRefsOnline(full.refs_online);
         if (full.budget) renderBudget(full.budget);
         if (full.config_diff) renderConfigDiff(full.config_diff, full.ts);
+        renderCliOverride(full);
       });
     } catch(err) { console.error("update parse", err); }
   });
