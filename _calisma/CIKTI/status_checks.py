@@ -59,6 +59,7 @@ GATE_EXCLUDE = {
     "daemon-http",          # advisory: daemon-modu HTTP 200 smoke (advisory)
     "audit-live-ci",        # advisory: doc↔GitHub senkron denetimi
     "audit-refs-trend",     # advisory: refs-trend satırları ↔ kaynak denetimi
+    "override-trend",       # advisory: CLI override zaman serisi
 }
 # Not: "label-gate" (Pre-commit P0 label gate) BİLEREK required check'tir —
 # precommit-p0 etiketi varken FAIL verip merge'i bloke eder; bu yüzden

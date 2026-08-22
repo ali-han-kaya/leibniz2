@@ -60,6 +60,7 @@ ARTIFACT_JOBS = {
     "unit-tests": "verify",
     "refs-online": "verify",
     "refs-trend": "refs-trend",
+    "override-trend": "override-trend",
     "run-history": "verify",
     "precommit-logs": "verify",
     "budget": "budget",
@@ -287,6 +288,34 @@ def main() -> None:
                      f"refs_trend_combined_sha256: {refs_trend_combined}",
                      "=" * 72]
         lines += rt_block
+
+    # ── OVERRIDE TREND bölümü: override-trend/ önekli dosyalar (CONFIG gibi) ─
+    # override_trend.py'nin çıktısı (override-trend.md + override-trend.json)
+    # ayrıca işaretlenir; combined_sha256 tek hash ile özetler. Böylece CLI
+    # override'larının zaman serisi de denetim zincirinde.
+    override_trend_hashes = {rel: h for rel, h in file_hashes.items()
+                             if rel.startswith("override-trend/")}
+    override_trend_combined = None
+    if override_trend_hashes:
+        sorted_rel = sorted(override_trend_hashes)
+        override_trend_combined = hashlib.sha256(
+            "".join(f"{rel}\0{override_trend_hashes[rel]}\n"
+                     for rel in sorted_rel).encode()
+        ).hexdigest()
+        ot_block = [
+            "",
+            "=" * 72,
+            "OVERRIDE TREND ARTIFACT (ayrı bölüm)",
+            "=" * 72,
+            f"{'FILE':<55} {'SHA-256'}",
+            "-" * 72,
+        ]
+        ot_block += [f"{rel:<55} {override_trend_hashes[rel]}"
+                     for rel in sorted_rel]
+        ot_block += ["-" * 72,
+                     f"override_trend_combined_sha256: {override_trend_combined}",
+                     "=" * 72]
+        lines += ot_block
 
     # ── LINEAGE bölümü: lineage-findings/ önekli dosyalar (CONFIG gibi) ──
     # zip_lineage.json sidecar'ı ve --check-lineage çıktısı ayrıca
@@ -554,8 +583,8 @@ def main() -> None:
     #               dosyalar all_artifacts/ köküne düzleşti
     #  .none      — hiç indirilmedi (reproducibility çıkış artifact'ı)
     PREFIXED = frozenset({
-        "config", "precommit-logs", "refs-trend", "precheck-report",
-        "python3-shell", "plist-check",
+        "config", "precommit-logs", "refs-trend", "override-trend",
+        "precheck-report", "python3-shell", "plist-check",
     })
     MERGED = frozenset({
         "verify-report", "budget", "budget-verify", "reports",
@@ -641,6 +670,11 @@ def main() -> None:
         manifest_json["refs_trend"] = {
             "files": dict(sorted(refs_trend_hashes.items())),
             "combined_sha256": refs_trend_combined,
+        }
+    if override_trend_hashes:
+        manifest_json["override_trend"] = {
+            "files": dict(sorted(override_trend_hashes.items())),
+            "combined_sha256": override_trend_combined,
         }
     if lineage_hashes:
         manifest_json["lineage"] = {

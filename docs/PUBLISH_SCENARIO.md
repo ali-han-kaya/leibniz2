@@ -197,6 +197,7 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 | 2026-08-22 | fix | (scripts) unify manifest + config-drift override display format | `d29d766` |
 | 2026-08-22 | feat | (cross-check) cross-validate index.json vs VERSION JSON override | `66e573a` |
 | 2026-08-22 | ci | manifest'te OVERRIDES bolumu — cli_overrides_version.json | `93fce5b` |
+| 2026-08-22 | ci | K16 negatif kontrol — override'sizken yorumda uyari YOK | `b0071f3` |
 
 ---
 
@@ -709,7 +710,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 | | **D — PR-only (yorum/etiket düşürme)** | | |
 | 18 | D | Manifest PR comment | — skipped (PR'da çalışır) |
 
-**Artifact listesi (24):**
+**Artifact listesi (25):**
 - `unit-tests` (CIKTI birim test logu — `test_*.py` glob'u)
 - `verify-report` (tek log: K1-K14 + pre-commit bölümü + .sha256)
 - `action-runtimes` (her action'ın runs.using denetimi JSON — node24 kapısı)
@@ -727,6 +728,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 - `config-drift` (gen_config + diff-on-drift bulguları)
 - `repack-verify` (repack sonrası base verify raporu)
 - `refs-trend` (run'lar arası çevrimiçi referans zaman serisi)
+- `override-trend` (run'lar arası CLI override warning=true zaman serisi)
 - `precheck-report` (AŞAMA 0 ön-kontrol logu — advisory, her push'ta)
 - `plist-check` (K12 raporu + --plist-check sidecar JSON — macOS advisory job)
 - `mirror-check` (K17 raporu + --check-mirror sidecar JSON — macOS fail-closed job)

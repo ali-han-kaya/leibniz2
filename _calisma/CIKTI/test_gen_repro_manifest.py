@@ -418,8 +418,9 @@ class TestWorkflowPatternCoverage(unittest.TestCase):
     olmalı — yoksa o artifact manifest'e girmeden sessizce düşer (ör. bugün
     budget-verify/lineage-findings/klayers eksikti).
     """
-    EXCLUDED = {"config", "precommit-logs", "refs-trend", "precheck-report",
-                "python3-shell", "plist-check", "reproducibility"}
+    EXCLUDED = {"config", "precommit-logs", "refs-trend", "override-trend",
+                "precheck-report", "python3-shell", "plist-check",
+                "reproducibility"}
 
     def _workflow_merge_pattern(self):
         wf = CIKTI.parent.parent / ".github" / "workflows" / "verify.yml"

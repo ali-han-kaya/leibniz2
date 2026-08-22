@@ -992,7 +992,7 @@ jobs:
   reproducibility:
     name: Reproducibility bundle
     runs-on: ubuntu-latest
-    needs: [verify, budget, reports, config-drift, repack-verify, refs-trend, action-runtimes]
+    needs: [verify, budget, reports, config-drift, repack-verify, refs-trend, override-trend, action-runtimes]
     if: always()
     steps:
       - name: Checkout
@@ -1043,6 +1043,17 @@ jobs:
         with:
           name: refs-trend
           path: all_artifacts/refs-trend/
+
+      # override-trend advisory bir job'dur; artifact'ı yoksa (tablo
+      # üretilemedi) manifest override-trend'siz üretilir —
+      # continue-on-error ile build bloke edilmez. Prefixed indirme
+      # sayesinde override-trend/ önekini yakalar + ayrı hash'ler.
+      - name: Download override-trend artifact (override-trend/ prefix)
+        continue-on-error: true
+        uses: actions/download-artifact@v7
+        with:
+          name: override-trend
+          path: all_artifacts/override-trend/
 
       # precheck-report advisory bir job'dur; artifact'ı yoksa manifest
       # precheck'siz üretilir — continue-on-error ile build bloke edilmez.
@@ -1606,6 +1617,49 @@ jobs:
         with:
           name: audit-refs-trend
           path: audit_refs_trend.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # ──────────────────────────────────────────────────────────────────────
+  # OVERRIDE TREND — CLI override'larını run'lar arası toplar (refs-trend deseni).
+  # override_trend.py, budget artifact'larındaki cli_overrides_version.json
+  # sidecar'larını toplar ve `warning=true` run'larının zaman serisini üretir.
+  # continue-on-error: ADVISORY — build'i bloke etmez.
+  override-trend:
+    name: CLI override trend (warning=true time series)
+    runs-on: ubuntu-latest
+    # budget job'ından sonra koşar (cli_overrides_version.json orada üretilir).
+    needs: [budget]
+    if: always()
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Build override trend table
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          python3 _calisma/CIKTI/override_trend.py \
+            --repo "$GITHUB_REPOSITORY" \
+            --out-dir override-trend \
+            --max-artifacts 50
+
+      - name: Upload override trend
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: override-trend
+          path: override-trend/
           if-no-files-found: ignore
           retention-days: 30
 
