@@ -174,6 +174,7 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 | 2026-08-22 | test | (repro) cross-validate config.combined_sha256 with K10 gate | `ff029ae` |
 | 2026-08-22 | feat | (precommit) unstaged-deps pre-check for check-repro-manifest hook | `3995fc9` |
 | 2026-08-22 | fix | (plist) restore two-profile management, sync tests to reality | `0d29fd8` |
+| 2026-08-22 | feat | (plist) K12 out-of-scope INFO line in audit trail | `e78d906` |
 
 ---
 

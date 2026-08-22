@@ -15,14 +15,16 @@ DOKUNMAZ, bu yüzden Linux CI'da da çalışır):
        1 = drift  (render golden'dan farklı)
        2 = hata   (script/golden yok, render başarısız)
 """
+import contextlib
+import io
 import json
 import os
 import plistlib
+import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
-import shutil
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 UPDATE_PREVIEW = os.path.join(HERE, "update_preview.sh")
@@ -120,6 +122,47 @@ class TestCheckPlistDriftExitCodes(unittest.TestCase):
                     "--golden-dir", GOLDEN_DIR)
             self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
             self.assertIn("update_preview.sh yok", r.stdout)
+
+    def test_exit_1_fazla_profil_after_render(self):
+        """Gerçek uçtan uca fazla-dosya senaryosu.
+
+        update_preview.sh --plist-force (GERÇEK render) çalıştıktan SONRA
+        render-home'a golden'da olmayan bir plist bırakılır → main()
+        check()'i gerçek golden'larla koşup 'fazla profil' drift'ini
+        yakalamalı: exit 1 + '[DRIFT] ... golden'da olmayan fazla profil'.
+        """
+        import check_plist_drift as cpd
+        from unittest import mock
+        render_home = tempfile.mkdtemp(prefix="plist-extra-")
+        real_render = cpd.run_render
+
+        def render_then_extra(script, home):
+            rc, out = real_render(script, home)  # gerçek render (2 profil)
+            la = os.path.join(home, "Library", "LaunchAgents")
+            os.makedirs(la, exist_ok=True)
+            with open(os.path.join(la, "com.example.extra.plist"), "w",
+                      encoding="utf-8") as f:
+                f.write(SAMPLE_PLIST)
+            return rc, out
+
+        buf = io.StringIO()
+        try:
+            with mock.patch.object(cpd, "run_render",
+                                   side_effect=render_then_extra), \
+                    contextlib.redirect_stdout(buf):
+                rc = cpd.main(["--render-home", render_home,
+                               "--golden-dir", GOLDEN_DIR])
+        finally:
+            shutil.rmtree(render_home, ignore_errors=True)
+        self.assertEqual(rc, 1, buf.getvalue())
+        self.assertIn("com.example.extra.plist", buf.getvalue())
+        self.assertIn("fazla profil", buf.getvalue())
+        self.assertIn("DRIFT TESPİT EDİLDİ", buf.getvalue())
+        # Yönetilen iki profil yine de PASS (fazlalık onları bozmaz).
+        self.assertIn("[PASS] com.freebuff.preview-leibniz2.plist",
+                      buf.getvalue())
+        self.assertIn("[PASS] com.freebuff.preview-server.plist",
+                      buf.getvalue())
 
 
 class TestPlistOutSidecar(unittest.TestCase):
