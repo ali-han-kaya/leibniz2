@@ -30,6 +30,33 @@ python3 _calisma/CIKTI/verify_delivery.py --dir _calisma/CIKTI --symbolic-proof
 Exit kodu: `0` = PASS, `1` = FAIL (fail-closed), `2` = ortam hatası.
 Çevrimiçi referans denetimi: `--check-references` (CrossRef/SEP).
 
+## _calisma/lean_reduct — Sınır İspatı Çekirdeği (illüstratif, Mathlib-free)
+
+Bu modül Stoa/Hume formalizasyonu **DEĞİLDİR**. İspatlanan: 4 forget
+haritasının injective olmadığı (temsil kaybı teoremi — varlık teoremi
+değil). `World = actual` bilinçli en fakir modeldir: kaybın model
+zenginliğinden değil, unutma haritasının kendisinden geldiğini göstermek
+için.
+
+| # | Teorem | Ne ispatlar | Yöntem |
+|---|--------|-------------|--------|
+| 1 | `historical_pair_collapses_under_forgetTopic` | tam unutma iki içeriği özdeşleştirir | rfl |
+| 2-4 | `historical_pair_survives_forget{Access,Justification,Source}` | tek eksen unutması ayrımı silmez | cases |
+| 5-8 | `forget{Access,Justification,Source,Topic}_not_injective` | 4 haritanın hiçbiri injective değil | cases+congrArg |
+
+Mathlib bağımlılığı yoktur (`Injective` yerel tanımlı). `kataleptic-` /
+`customary-` etiketli tanımlar illüstratif kod etiketleridir, tarihsel
+formalizasyon değildir; ispatlanmayan şey ispatlandı denmez (fail-closed).
+
+```bash
+cd _calisma/lean_reduct
+lake clean && lake build --wfail   # <5s, toolchain leanprover/lean4:v4.14.0
+```
+
+CI'da K9 kapısı (`verify` job'ı, `--full` içinde) aynı derlemeyi
+fail-closed koşar; Z3 <-> Lean eşleşmesi `MAP.md`'de sabitlenmiştir
+(diverge olmaması için korunur).
+
 ## Reproducibility manifest — config artifact bölümü
 
 `gen_repro_manifest.py` (CI `reproducibility` job'ı) artifact'ları hash'leyip
@@ -245,6 +272,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-22 | test | (repro) doc artifact list vs ARTIFACT_JOBS sync | `bccc815` |
 | 2026-08-22 | feat | (dashboard) budget limit from effective config, not hardcoded 30 | `4dc133d` |
 | 2026-08-22 | feat | (dashboard) red BÜTÇE AŞIMI banner above trend panel | `0ab782c` |
+| 2026-08-22 | feat | (dashboard) tooltip budget line shows limit under/over status | `8e455c2` |
 
 ### Regresyon notları
 
