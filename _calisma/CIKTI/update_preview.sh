@@ -79,7 +79,6 @@ PLIST_TMPL_DIR="$HOME/Library/Caches/com.freebuff/preview-template"
 # Yalnızca birincil canlı tutulur; legacy launchd'den kaldırılmıştır.
 PLIST_PROFILES=(
   "com.freebuff.preview-leibniz2|preview-leibniz2|8000|30|true"
-  "com.freebuff.preview-server|preview-server|8000|60|false"
 )
 
 say() { printf '%s\n' "$*"; }
