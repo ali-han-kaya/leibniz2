@@ -1875,12 +1875,19 @@ def check_cleanup(cleanup_path, add, repo_root=None, dir_arg=None):
         return os.path.join(repo_root, rel)
 
     def _resolve_canon(rel):
-        # Canonical kopyalar --dir'e göre çözülür: repo'da CIKTI/ (basename
-        # zaten _calisma/CIKTI/<zip> kaydının son bileşeni), mirror'da
-        # ~/Library/Caches/com.freebuff/verify/. dir_arg verilmezse eski
-        # davranış korunur: repo_root + rel (test çağrıları).
+        # Canonical kopyalar --dir'e göre çözülür:
+        #   1. dir_arg = mirror root  (~/Library/Caches/.../verify/) → basename
+        #   2. dir_arg = repo root    (. veya /Users/…/leibniz2) → tam yol
+        #   3. dir_arg = CIKTI subdir (_calisma/CIKTI) → basename (zaten orada)
+        # dir_arg verilmezse eski davranış: repo_root + rel (test çağrıları).
         if dir_arg:
-            return os.path.join(dir_arg, os.path.basename(rel))
+            abspath = os.path.abspath(dir_arg)
+            # Repo root mu? (rel yolunu tamamen barındırıyor)
+            full_candidate = os.path.join(abspath, rel)
+            if os.path.isfile(full_candidate):
+                return full_candidate
+            # Flat mirror / CIKTI subdir: dosya root'ta (basename)
+            return os.path.join(abspath, os.path.basename(rel))
         return os.path.join(repo_root, rel)
 
     rows = []
