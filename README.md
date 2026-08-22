@@ -294,6 +294,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-22 | ci | layers slot in LATEST + SSE snapshot plumbing tests | `6a4d2af` |
 | 2026-08-22 | docs | M0 raporuna V5t notu — K-layer panel (K0-K17 individual badges) | `425bfff` |
 | 2026-08-22 | docs | V5y — Fine 2012 OCLC + HT 0 kayit notu | `b44a102` |
+| 2026-08-22 | other | verify: HT API format unit tests — data[ident].records locked | `3361b4c` |
 
 ### Regresyon notları
 

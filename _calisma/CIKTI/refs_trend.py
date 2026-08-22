@@ -44,6 +44,15 @@ API = "https://api.github.com"
 # Kaynak: verify_delivery.py K6 denetimindeki düzeltmeler. Yeni bir denetim
 # düzeltmesi yapıldığında buraya tek satır eklenir (denetlenebilir geçmiş).
 CHANGELOG = [
+    ("2026-08-22",
+     "Kapsam: 61/61 — 64 referansın 61'i çevrimiçi kaynaktan doğrulanır "
+     "(CrossRef/SEP/OpenLibrary/Internet Archive/Handle/LoC/Perseus), 3'ü "
+     "bibliyografik belgedir (modern kitaplar: IA'da tarama yok, HT'de katalog "
+     "yok, OL'de kayıtlı). Erken dönem '54/54' sayısı artık geçersizdir — "
+     "V5 düzeltme zinciri boyunca kapsam 54→56 (CrossRef dergileri) → 61 "
+     "(Sextus IA birebir + Della Rocca Handle) olarak genişledi; '54' sayısı "
+     "yalnızca CrossRef+SEP+OL+IA temel zincirinin sonucuydu, LoC/Handle/ia_ids "
+     "fallback'leri eklenmeden önceki durumu yansıtır."),
     ("2026-08-21",
      "V5w: Lagrée/Millican/Schmitt/Fine kitapları HathiTrust'sız katalog "
      "kanıtıyla — Library of Congress lccn kayıtları PASS (loc_check; zincir "
@@ -453,6 +462,30 @@ def main():
             f"{rows[0]['verified']}/{rows[0]['total_online']} doğrulanan",
             "",
         ]
+        # Kapsam açıklaması: sayılar nereden gelir, "54" neden artık geçersiz
+        latest_v = latest["verified"]
+        latest_t = latest["total_online"]
+        if latest_v is not None and latest_t is not None:
+            lines += [
+                f"### Kapsam",
+                "",
+                f"**{latest_v}/{latest_t}** — 64 referansın {latest_v}'i "
+                "çevrimiçi kaynaktan doğrulanır (CrossRef, SEP, "
+                "OpenLibrary, Internet Archive, Handle System, "
+                "Library of Congress, Perseus). Kalan 3 referans "
+                "bibliyografik belgedir — modern telifli kitaplar, "
+                "çevrimiçi indekslenmez.",
+                "",
+                "**'54' sayısı neden artık geçersiz?** Erken dönem "
+                "denetim yalnızca CrossRef+SEP+OL+IA temel zincirini "
+                "kullanıyordu; LoC (ulusal katalog), Handle System "
+                "(CrossRef dışı kalıcı tanımlayıcı), `ia_ids` "
+                "(IA birebir identifier) ve HathiTrust fallback'leri "
+                "henüz eklenmemişti. V5n zinciriyle kapsam "
+                "54→56→61→61/61 olarak genişledi. '54' erken bir "
+                "anlık görüntüdür, güncel denetim kapsamını yansıtmaz.",
+                "",
+            ]
 
     # ── Duration / Budget trendi (run-history) ───────────────────────────
     if history_rows:
