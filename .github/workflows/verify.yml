@@ -1025,6 +1025,15 @@ jobs:
             --artifacts-dir all_artifacts \
             --out-dir reproducibility
 
+      # ─── 2b) Pattern drift summary ───────────────────────────────────
+      # merge pattern'i ARTIFACT_JOBS ile karşılaştırıp DRIFT'i run summary'de
+      # görünür yapar. Eksik/fazla artifact varsa summary'ye tablo yazar.
+      # Advisory: job'u patlatmaz (drift'i CI'da_VISIBLE yapmak yeterli).
+      - name: Write pattern drift to run summary
+        shell: bash
+        run: |
+          python3 _calisma/CIKTI/summary_pattern_drift.py
+
       # ─── 3) Tek artifact olarak yükle ───────────────────────────────────
       # K10 kapısından ÖNCE yüklenir: K10 FAIL olsa bile bundle yüklenir,
       # böylece manifest-comment job'ı rozetini (PASS/FAIL) gösterebilir.
