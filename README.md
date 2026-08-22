@@ -295,6 +295,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-22 | docs | M0 raporuna V5t notu — K-layer panel (K0-K17 individual badges) | `425bfff` |
 | 2026-08-22 | docs | V5y — Fine 2012 OCLC + HT 0 kayit notu | `b44a102` |
 | 2026-08-22 | other | verify: HT API format unit tests — data[ident].records locked | `3361b4c` |
+| 2026-08-22 | other | verify: refs-trend kapsam satiri — 61/61 + 54 gecersiz | `8ef125a` |
 
 ### Regresyon notları
 

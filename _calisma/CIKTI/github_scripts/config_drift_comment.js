@@ -43,33 +43,43 @@
   const diffFindings = (diffrc !== '0' && fs.existsSync('diffdrift_stderr.txt'))
     ? fs.readFileSync('diffdrift_stderr.txt', 'utf8').trim() : '';
 
-  // cli_overrides tutarlılık denetimi (config-drift job'ının CLI overrides
-  // adımı): effective_config.json'daki CLI override sapması drift raporunda
-  // AYRI bir satır olarak görünür. Advisory — yorumu patlatmaz.
+  // cli_overrides tutarlılık denetimi — TEK KAYNAK: summary.txt
+  // (VERSION JSON sidecar'ı da aynı kaynaktan türer — çift okuma drift'i
+  // önlenir). summary.txt'deki 'cli_overrides=' satırı WARNING ise detay
+  // cli_overrides_version.json'dan okunur (satır yalnızca karar verir).
+  const summaryPath = 'config-drift/summary.txt';
   const overridePath = 'config-drift/cli_overrides_version.json';
   let overrideLine = '';
-  if (fs.existsSync(overridePath)) {
-    try {
-      const cov = JSON.parse(fs.readFileSync(overridePath, 'utf8'));
-      if (cov.warning) {
-        // manifest_comment.js + pr_status_comment.js ile AYNI format:
-        // JSON.stringify sayı/string tutarlılığı için.
-        const rows = (cov.overrides || [])
-          .map(o => '- `' + o.key + '`: ' + JSON.stringify(o.file_value) + ' → ' +
-                    JSON.stringify(o.effective) + ' (CLI verildi)')
-          .join('\n');
-        overrideLine = [
-          '### 🔧 CLI override tespit edildi (tekrarlanabilirlik sapması)',
-          '',
-          'Bütçe kalkanı dosya config değeriyle DEĞİL CLI değeriyle koştu:',
-          '',
-          rows || '- _(override listesi boş)_',
-        ].join('\n');
+  if (fs.existsSync(summaryPath)) {
+    const summary = fs.readFileSync(summaryPath, 'utf8');
+    const ovMatch = summary.match(/^cli_overrides=(.+)$/m);
+    if (ovMatch) {
+      const ovStatus = ovMatch[1].trim();
+      // Format: "WARNING 1 (override_count=1)" ya da "OK 0 (override_count=0)"
+      // ya da "N/A (denetim yok)"
+      if (ovStatus.startsWith('WARNING') && fs.existsSync(overridePath)) {
+        try {
+          const cov = JSON.parse(fs.readFileSync(overridePath, 'utf8'));
+          const rows = (cov.overrides || [])
+            .map(o => '- `' + o.key + '`: ' + JSON.stringify(o.file_value) + ' → ' +
+                      JSON.stringify(o.effective) + ' (CLI verildi)')
+            .join('\n');
+          overrideLine = [
+            '### 🔧 CLI override tespit edildi (tekrarlanabilirlik sapması)',
+            '',
+            'Bütçe kalkanı dosya config değeriyle DEĞİL CLI değeriyle koştu',
+            `(kaynak: summary.txt → ${ovStatus}):`,
+            '',
+            rows || '- _(override listesi boş)_',
+          ].join('\n');
+        } catch (e) {
+          overrideLine = `### 🔧 CLI override: ${ovStatus} (JSON okunamadı: ${e.message})`;
+        }
+      } else if (ovStatus.startsWith('OK')) {
+        overrideLine = 'CLI override: yok (config değerleriyle tutarlı ✓, summary.txt → OK)';
       } else {
-        overrideLine = 'CLI override: yok (config değerleriyle tutarlı ✓)';
+        overrideLine = `CLI override: ${ovStatus} (summary.txt → denetim kararı)`;
       }
-    } catch (e) {
-      console.log('cli_overrides_version.json okunamadı (atlanıyor): ' + e.message);
     }
   }
 

@@ -1015,11 +1015,14 @@ SCENARIOS = [
 
     # ── config_drift_comment.js ─────────────────────────────────────────────
     (
-        "config_drift: exit 1 + bulgular + yeni yorum",
+        "config_drift: exit 1 + bulgular + yeni yorum (override OK)",
         "config_drift_comment.js",
         {
             "drift_rc.txt": "1",
             "drift_stderr.txt": "expected_pages: config 33, paket 34",
+            "config-drift/summary.txt": (
+                "config-drift exit=1 (gen_config=1, diff-on-drift=0) verdict=FAIL\n"
+                "cli_overrides=OK 0 (override_count=0)\n"),
             "config-drift/cli_overrides_version.json": json.dumps({
                 "tool": "check_cli_overrides.py", "warning": False,
                 "override_count": 0, "overrides": [],
@@ -1032,12 +1035,13 @@ SCENARIOS = [
             "body_contains": {"issues.createComment": [
                 "Config drift tespit edildi", "exit `1`",
                 "expected_pages: config 33, paket 34",
-                "CLI override: yok (config değerleriyle tutarlı ✓)",
+                "CLI override: yok (config değerleriyle tutarlı",
+                "summary.txt → OK",
                 "gen_config.py", MARKER_DRIFT]},
         },
     ),
     (
-        "config_drift: mevcut yorum güncelle",
+        "config_drift: mevcut yorum güncelle (summary.txt'siz — override atlanır)",
         "config_drift_comment.js",
         {
             "drift_rc.txt": "2",
@@ -1051,14 +1055,20 @@ SCENARIOS = [
             "target_ids": {"issues.updateComment": [999]},
             "body_contains": {"issues.updateComment": [
                 "exit `2`", MARKER_DRIFT]},
+            "body_not_contains": {"issues.updateComment": [
+                "CLI override tespit edildi",
+                "CLI override: yok"]},
         },
     ),
     (
-        "config_drift: CLI override warning + drift ayrı satırlar",
+        "config_drift: CLI override WARNING + drift (summary.txt tek kaynak)",
         "config_drift_comment.js",
         {
             "drift_rc.txt": "1",
             "drift_stderr.txt": "expected_pages: config 33, paket 34",
+            "config-drift/summary.txt": (
+                "config-drift exit=1 (gen_config=1, diff-on-drift=0) verdict=FAIL\n"
+                "cli_overrides=WARNING 1 (override_count=1)\n"),
             "config-drift/cli_overrides_version.json": json.dumps({
                 "tool": "check_cli_overrides.py", "warning": True,
                 "override_count": 1,
@@ -1074,6 +1084,7 @@ SCENARIOS = [
             "body_contains": {"issues.createComment": [
                 "Config drift tespit edildi", "exit `1`",
                 "CLI override tespit edildi (tekrarlanabilirlik sapması)",
+                "summary.txt → WARNING 1",
                 "`budget`: 30 → 25 (CLI verildi)",
                 MARKER_DRIFT]},
         },
