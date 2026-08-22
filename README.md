@@ -211,6 +211,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-22 | feat | (dashboard) add color legend to live run stream section (#16) | `eaef526` |
 | 2026-08-22 | feat | (dashboard) add findings panel showing P0/P1 detail rows (#17) | `f413d97` |
 | 2026-08-22 | ci | add colorizeLine rules regression test + pre-commit hook (#18) | `f481ea5` |
+| 2026-08-22 | feat | (repro) add UNIT TESTS artifact section to manifest (#19) | `cb7b06d` |
 
 ### Regresyon notları
 
