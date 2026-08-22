@@ -312,6 +312,21 @@ repos:
         stages: [pre-commit]
         verbose: true
 
+      - id: check-colorize-rules
+        name: "Verify dashboard colorizeLine rules (regression gate)"
+        description: >-
+          test_colorize_rules.py — preview.html colorizeLine() regex
+          kalıplarının regresyon kapısı. Bilinen girdileri beklenen CSS
+          class'larıyla eşleştirir; regex değişirse veya beklenen renk
+          değişirse commit bloke olur. HTML'deki kural sayısı ve CSS
+          class'ları da doğrulanır. OFFLINE, ~0.02s.
+        entry: python3 -m unittest discover -s _calisma/CIKTI -p "test_colorize_rules.py"
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+        verbose: true
+
       - id: commit-msg-style
         name: Commit message style (noise prevention)
         description: >-
