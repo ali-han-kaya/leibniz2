@@ -50,10 +50,8 @@ const { data: EXISTING_COMMENTS } = await github.rest.issues.listComments({
   repo: context.repo.repo,
   per_page: 100,
 });
-const mBody = fs.readFileSync('__SCRIPTS_DIR__/manifest_comment.js', 'utf8');
-await eval(`(async () => {\n${mBody}\n})()`);
-const cBody = fs.readFileSync('__SCRIPTS_DIR__/config_diff_comment.js', 'utf8');
-await eval(`(async () => {\n${cBody}\n})()`);
+const body = fs.readFileSync('__SCRIPTS_DIR__/tum_sapmalar_comment.js', 'utf8');
+await eval(`(async () => {\n${body}\n})()`);
 '''
 
 
@@ -865,52 +863,153 @@ SCENARIOS = [
          "console_any": ["atlanıyor"]},
     ),
 
-    # ── Birleşik adım (verify.yml: manifest + config-diff TEK github-script) ──
-    # İki script aynı kapsamda koşar; yorum listesi BİR KEZ çekilip her ikisine
-    # EXISTING_COMMENTS olarak verilir → issues.listComments TAM 1 çağrı (tek
-    # başına koşumda 2 çağrı olurdu — birleştirmenin API kazancı burada kanıtlanır).
-    # Wrapper, workflow adımının birebir aynısıdır; saparsa bu senaryolar FAIL.
+    # ── tum_sapmalar_comment.js (verify.yml birleşik adım) ──
+    # Üç bölümü TEK yorumda birleştirir: manifest + CLI override + config diff.
+    # COMBINED_WRAPPER_TMPL birebir verify.yml adımıdır.
     (
-        "combined: manifest update + config-diff create (paylaşılan liste, 1 listComments)",
+        "tum_sapmalar: manifest + config diff + CLI override → tek yorum",
         {"inline": COMBINED_WRAPPER_TMPL},
         {
             "reproducibility/manifest.txt": "github_run_id: 42\n"
                                              "github_sha: abc\n",
+            "k10_verdict.txt": "PASS",
             "reproducibility/config/config-diff.json": json.dumps({
                 "differences": [{"field": "budget_usd", "raw": 30,
                                  "effective": 25, "reason": "cli_override"}]}),
+            "reproducibility/cli_overrides_version.json": json.dumps({
+                "warning": True, "overrides": [
+                    {"key": "budget", "file_value": 30.0, "effective": 25.0}]}),
         },
         None, [],
-        [{"id": 777, "body": "eski " + MARKER_MANIFEST}],
+        [{"id": 999, "body": "eski " + MARKER_MANIFEST}],
         {
             "ok": True, "set_failed": False,
             "call_counts": {"issues.listComments": 1,
-                            "issues.updateComment": 1,
-                            "issues.createComment": 1},
-            "target_ids": {"issues.updateComment": [777]},
-            "body_contains": {"issues.updateComment": [MARKER_MANIFEST],
-                              "issues.createComment": [MARKER_CFGDIFF,
-                                                       "Config diff"]},
+                            "issues.createComment": 1,
+                            "issues.deleteComment": 1},
+            "target_ids": {"issues.deleteComment": [999]},
+            "body_contains": {"issues.createComment": [
+                "Tüm Sapmalar",
+                "Reproducibility manifest", "K10 manifest digest: PASS",
+                "CLI override aktif", "`budget`", "30", "25",
+                "Config diff", "budget_usd", "cli_override",
+                "<!-- stoic-hume-v5-tum-sapmalar -->"]},
+            "console_any": ["Eski marker yorumu kaldırıldı"],
         },
     ),
     (
-        "combined: manifest create + config-diff delete (fark yok, bayat yorum)",
+        "tum_sapmalar: sadece manifest (override yok, diff yok) → yine yorum",
         {"inline": COMBINED_WRAPPER_TMPL},
         {
-            "reproducibility/manifest.txt": "github_run_id: 42\n",
-            "reproducibility/config/config-diff.json":
-                json.dumps({"differences": []}),
+            "reproducibility/manifest.txt": "github_run_id: 99\n",
+            "k10_verdict.txt": "PASS",
         },
-        None, [],
-        [{"id": 888, "body": "bayat " + MARKER_CFGDIFF}],
+        None, [], [],
         {
             "ok": True, "set_failed": False,
             "call_counts": {"issues.listComments": 1,
-                            "issues.deleteComment": 1,
                             "issues.createComment": 1},
-            "target_ids": {"issues.deleteComment": [888]},
-            "body_contains": {"issues.createComment": [MARKER_MANIFEST]},
-            "console_any": ["bayat yorum kaldırıldı"],
+            "body_contains": {"issues.createComment": [
+                "Tüm Sapmalar",
+                "Reproducibility manifest", "K10 manifest digest: PASS",
+                "<!-- stoic-hume-v5-tum-sapmalar -->"]},
+            "body_not_contains": {"issues.createComment": [
+                "CLI override", "Config diff"]},
+        },
+    ),
+    (
+        "tum_sapmalar: K10 FAIL + override → tek blok (olası neden)",
+        {"inline": COMBINED_WRAPPER_TMPL},
+        {
+            "reproducibility/manifest.txt": "github_run_id: 111\n",
+            "k10_verdict.txt": "FAIL",
+            "reproducibility/cli_overrides_version.json": json.dumps({
+                "warning": True, "overrides": [
+                    {"key": "budget", "file_value": 30.0, "effective": 25.0}]}),
+        },
+        None, [], [],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.listComments": 1,
+                            "issues.createComment": 1},
+            "body_contains": {"issues.createComment": [
+                "Tüm Sapmalar",
+                "K10 manifest digest: FAIL",
+                "K10 FAIL + CLI override", "olası neden",
+                "`budget`", "30", "25",
+                "<!-- stoic-hume-v5-tum-sapmalar -->"]},
+        },
+    ),
+    (
+        "tum_sapmalar: override ve diff iki kaynaktan da okunur (index + version)",
+        {"inline": COMBINED_WRAPPER_TMPL},
+        {
+            "reproducibility/manifest.txt": "github_run_id: 222\n",
+            "k10_verdict.txt": "PASS",
+            "reproducibility/config/config-diff.json": json.dumps({
+                "differences": [{"field": "expected_pages", "raw": 33,
+                                 "effective": 34, "reason": "paket yeniden üretildi"}]}),
+            "reproducibility/cli_overrides_version.json": json.dumps({
+                "warning": True, "overrides": [
+                    {"key": "budget", "file_value": 30.0, "effective": 25.0}]}),
+            "budget/index.json": json.dumps({
+                "runs": [], "method": "weighted",
+                "cli_overrides": {
+                    "warning": True,
+                    "overrides": [
+                        {"key": "budget", "file_value": 30.0, "effective": 25.0},
+                        {"key": "method", "file_value": "weighted",
+                         "effective": "both"}]}}),
+        },
+        None, [], [],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.listComments": 1,
+                            "issues.createComment": 1},
+            "body_contains": {"issues.createComment": [
+                "Tüm Sapmalar",
+                "K10 manifest digest: PASS",
+                "CLI override aktif", "`budget`", "`method`",
+                "Config diff", "expected_pages", "33", "34",
+                "<!-- stoic-hume-v5-tum-sapmalar -->"]},
+        },
+    ),
+    (
+        "tum_sapmalar: override dosyası var ama override'sız (warning=false)",
+        {"inline": COMBINED_WRAPPER_TMPL},
+        {
+            "reproducibility/manifest.txt": "github_run_id: 333\n",
+            "k10_verdict.txt": "PASS",
+            "reproducibility/cli_overrides_version.json": json.dumps({
+                "warning": False, "override_count": 0, "overrides": []}),
+        },
+        None, [], [],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.listComments": 1,
+                            "issues.createComment": 1},
+            "body_contains": {"issues.createComment": [
+                "Tüm Sapmalar",
+                "K10 manifest digest: PASS",
+                "<!-- stoic-hume-v5-tum-sapmalar -->"]},
+            "body_not_contains": {"issues.createComment": [
+                "CLI override", "olası neden", "tekrarlanabilirlik sapması"]},
+        },
+    ),
+    (
+        "tum_sapmalar: hiçbir şey yok → tüm bayat yorumları temizle (state-sync)",
+        {"inline": COMBINED_WRAPPER_TMPL},
+        {},  # ne manifest ne diff ne override
+        None, [],
+        [{"id": 500, "body": "bayat " + MARKER_MANIFEST},
+         {"id": 501, "body": "bayat " + MARKER_CFGDIFF}],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.listComments": 1,
+                            "issues.deleteComment": 2,
+                            "issues.createComment": 0},
+            "delete_comments": [500, 501],
+            "console_any": ["Tüm sapmalar temiz"],
         },
     ),
 
