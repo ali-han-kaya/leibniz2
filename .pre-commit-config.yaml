@@ -216,6 +216,20 @@ repos:
         stages: [pre-commit]
         verbose: true
 
+      - id: check-pattern-consistency
+        name: "Verify merge pattern ↔ ARTIFACT_JOBS consistency"
+        description: >-
+          check_pattern_consistency.py: verify.yml'deki merge-multiple
+          pattern'ini ARTIFACT_JOBS ile karşılaştırır. Eksik/fazla artifact
+          varsa commit bloke edilir. Drift: birisi pattern'den artifact
+          çıkarırsa veya yeni artifact ekleyip pattern'i güncellemezse.
+        entry: python3 _calisma/CIKTI/check_pattern_consistency.py
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
       - id: verify-delivery-github-scripts
         name: "Verify github-scripts self-test (K16, fail-closed)"
         description: >-
