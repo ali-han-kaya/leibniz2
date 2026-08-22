@@ -212,6 +212,13 @@ def check_run_warnings(r, dur_warn=DURATION_WARN_S, bud_warn=BUDGET_WARN_USD):
     if isinstance(bud, (int, float)) and bud > bud_warn:
         bw = True
         msgs.append(f"bütçe ${bud:.2f} > eşik ${bud_warn:.0f}")
+    # K8 Z3: failed varsa uyarı
+    z3p = r.get("z3_passed")
+    z3t = r.get("z3_total")
+    if isinstance(z3p, (int, float)) and isinstance(z3t, (int, float)):
+        z3f = z3t - z3p
+        if z3f > 0:
+            msgs.append(f"Z3 FAIL {int(z3f)}/{int(z3t)}")
     return {
         "duration_warn": dw,
         "budget_warn": bw,
@@ -343,6 +350,8 @@ def main():
             "verdict": rec.get("verdict"),
             "p0": rec.get("p0"),
             "p1": rec.get("p1"),
+            "z3_passed": rec.get("z3_passed"),
+            "z3_total": rec.get("z3_total"),
         }
         _w = check_run_warnings(_row)
         _row["duration_warn"] = _w["duration_warn"]
@@ -409,8 +418,8 @@ def main():
             "",
             f"- **Kaynak:** `run-history` artifact'ları (son {len(history_rows)} run)",
             "",
-            "| # | Tarih (UTC) | Run ID | Duration (s) | Budget (USD) | Verdict |",
-            "|---|---|---|---|---|---|",
+            "| # | Tarih (UTC) | Run ID | Duration (s) | Budget (USD) | Z3 | Verdict |",
+            "|---|---|---|---|---|---|---|",
         ]
         for i, r in enumerate(history_rows, 1):
             dur = (f"{r['duration_s']:.1f}"
@@ -429,9 +438,12 @@ def main():
             if w["budget_warn"]:
                 flags.append("💰")
             flag_str = " ".join(flags)
+            z3 = (f"{r['z3_passed']}/{r['z3_total']}"
+                   if isinstance(r.get("z3_passed"), (int, float))
+                   else "—")
             lines.append(
                 f"| {i} | {short_date(r['date'])} | {r['run_id'] or '-'} | "
-                f"{dur} | {bud} | {r['verdict'] or '-'} {flag_str} |"
+                f"{dur} | {bud} | {z3} | {r['verdict'] or '-'} {flag_str} |"
             )
         lines += [""]
 

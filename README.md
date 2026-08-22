@@ -228,6 +228,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-22 | fix | (refs) correct Fine 2012 identifiers (wrong LCCN/ISBN) | `398a148` |
 | 2026-08-22 | feat | (dashboard) add z3_passed/z3_total to run-history API | `a05aad3` |
 | 2026-08-22 | feat | (dashboard) add K9 Lean to run-history API and trend graph | `ce861e8` |
+| 2026-08-22 | feat | (verify) add lean_ok/lean_detail to history.jsonl record | `e28c83f` |
 
 ### Regresyon notları
 
