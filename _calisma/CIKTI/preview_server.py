@@ -102,6 +102,7 @@ LATEST = {
     "lineage_count": None,       # skaler trend alanı (int/None)
     "status_board": None,        # tek satır durum panosu (5 ikon: Pre-commit · K0 · Bütçe · Soy hattı · K katmanları)
     "precommit_hooks": None,     # [{name, status}] — pre-commit hook sonuçları (Passed/Failed)
+    "history_sidecar_sha256": None,  # history.jsonl.sha256 sidecar hash'i (K15)
 }
 LOCK = threading.Lock()
 SSE_CLIENTS = []      # bağlı /api/run client listesi (snapshot broadcast)
@@ -118,7 +119,7 @@ HISTORY_KEYS = ("ts", "verdict", "p0", "p1", "duration_s", "budget_usd",
                 "exit_code", "refs_verified", "refs_total", "refs_mismatch",
                 "refs_by_source", "hook_env", "z3_passed", "z3_failed",
                 "z3_total", "lean_ok", "lean_detail", "cli_override_count",
-                "lineage_ok", "lineage_count")
+                "lineage_ok", "lineage_count", "history_sidecar_sha256")
 
 
 def snapshot_dict():
@@ -219,6 +220,8 @@ def persist_history(rec):
         with open(stmp, "w", encoding="utf-8") as f:
             f.write(f"{digest}  history.jsonl\n")
         os.replace(stmp, sidecar)  # atomik: yarı yazılmış sidecar asla okunmaz
+        # LATEST'a sidecar hash'ini yaz (dashboard /api/latest-visible).
+        LATEST["history_sidecar_sha256"] = digest
     except OSError as e:
         sys.stderr.write(f"[history] yazılamadı: {e}\n")
         sys.stderr.flush()
