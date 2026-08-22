@@ -62,7 +62,7 @@ Yalnızca Python 3 standart kütüphanesi kullanır (hashlib, zipfile, subproces
 tempfile; --check-references için ayrıca urllib). Harici `unzip`/`shasum`/`diff`
 GEREKMEZ. pdfinfo varsa PDF sayfa kontrolü eklenir, yoksa atlanır (FAIL değil).
 
-Doğrulama zinciri (Katman 0..14):
+Doğrulama zinciri (Katman 0..19):
   K0  Bayat    CIKTI dışında kalan HER zip taraması (recursive; P1)
   K1  Dış zip  SHA-256 sidecar (kurcalanma)
   K2  Klasör   KLASOR_CHECKSUMLARI.sha256 (tüm dosyalar)
@@ -112,6 +112,13 @@ Doğrulama zinciri (Katman 0..14):
                (mirror ~/Library/Caches/com.freebuff/verify, launchd GUI
                agent rotası) — --full'a dahil değil, açıkça --check-mirror ile
                koşulur.
+  K18 Launchctl launchctl list + plutil lint + HTTP 200 (--check-launchd;
+               macOS'a özgü, --full'a dahil değil)
+  K19 Coq      Coq reduct-invariance: 8 teoremli Content.v çekirdeği coqtop
+               -compile ile fail-closed derlenir + coq-version sürüm uyumu +
+               admit/Admitted/Axiom/Parameter taraması (--coq-proof; coqtop
+               gerektirir, --full'a dahil değil — coqtop kurulu olmayan
+               ortamlarda FAIL üretmemek için açıkça koşulur)
 """
 import argparse
 import concurrent.futures
@@ -151,6 +158,12 @@ LEAN_PROOF_SCRIPT = "../lean_reduct/ReductInvariance.lean"
 # lake build --wfail, lean-toolchain v4.14.0 ile fail-closed derlenir.
 LEAN_REDUCT_DIR = "../lean_reduct"
 LEAN_TOOLCHAIN = "leanprover/lean4:v4.14.0"
+# K19: Coq reduct-invariance (Content.v) — coqtop -compile fail-closed.
+# coq-version dosyası (coq_reduct/) tek kaynaktır; COQ_VERSION ile çift
+# doğrulanır (test_lean_lake.py'deki LEAN_TOOLCHAIN deseniyle aynı).
+COQ_PROOF_SCRIPT = "../coq_reduct/Content.v"
+COQ_REDUCT_DIR = "../coq_reduct"
+COQ_VERSION = "8.18"
 SCRIPTS = [
     ("core_formal_model_check.py", "test_output.txt"),
     ("encoding_sensitivity_check.py", "encoding_sensitivity_output.txt"),
@@ -183,6 +196,7 @@ LAYER_LABELS = {
     "K16": "GScripts self-test",
     "K17": "Mirror sync",
     "K18": "Launchctl durum",
+    "K19": "Coq reduct-invariance (8 teorem)",
 }
 
 # K0-K7 çekirdek katmanlar: --full olsun olmasın her run'da koşar.
@@ -201,6 +215,7 @@ _OPTIONAL_LAYERS = {
     "K16": lambda a: a.check_github_scripts,
     "K17": lambda a: a.check_mirror,
     "K18": lambda a: a.check_launchd,
+    "K19": lambda a: a.coq_proof,
 }
 
 
@@ -1727,6 +1742,71 @@ def run_lake_build(lake_path, project_dir):
     tail = [l.strip() for l in out.splitlines() if l.strip()][-3:]
     detail = " | ".join(tail) if tail else f"exit={r.returncode}"
     return False, f"lake build hatası: {detail}"
+
+
+def run_coq_proof(coqtop_path, coq_file, version_file=None):
+    """K19: Coq reduct-invariance (Content.v) fail-closed derler.
+
+    Üç kapı: (a) coq-version dosyasındaki sürüm ile coqtop --version
+    major.minor uyuşmalı (yanlış sürüm derleme yerine kapıda yakalanır),
+    (b) .v'de admit/Admitted/top-level Axiom/Parameter taraması temiz olmalı
+    (proof gap yok), (c) coqtop -compile başarılı olmalı (fail-closed;
+    .vo geçici dizine yazılır, repo kirlenmez). coqtop yok → P0.
+    Döndürür (ok: bool, detail: str).
+    """
+    # (a) Sürüm uyumu — coq-version dosyası tek kaynak.
+    if version_file is None:
+        version_file = os.path.join(os.path.dirname(coq_file), "coq-version")
+    if not os.path.isfile(version_file):
+        return False, f"coq-version yok: {version_file}"
+    with open(version_file, encoding="utf-8") as vf:
+        expected = vf.read().strip()
+    if expected != COQ_VERSION:
+        return False, (f"coq-version uyuşmaz: {expected} "
+                       f"(beklenen {COQ_VERSION})")
+    # (b) Proof-gap taraması (admit/Admitted/Axiom/Parameter → P0).
+    try:
+        with open(coq_file, encoding="utf-8") as cf:
+            src = cf.read()
+    except OSError as e:
+        return False, f"{coq_file} okunamadı: {e}"
+    bad = re.findall(r"\b(?:admit|Admitted)\b", src)
+    for pat in [r"^\s*Axiom\b", r"^\s*Parameter\b"]:
+        bad += re.findall(pat, src, re.MULTILINE)
+    if bad:
+        return False, f"proof gap tespit edildi: {sorted(set(bad))}"
+    # (c) coqtop --version (major.minor uyumu).
+    try:
+        r = subprocess.run([coqtop_path, "--version"], capture_output=True,
+                           text=True, timeout=30)
+    except FileNotFoundError:
+        return False, f"coqtop bulunamadı: {coqtop_path}"
+    except subprocess.TimeoutExpired:
+        return False, "coqtop --version zaman aşımı (>30s)"
+    m = re.search(r"version (\d+)\.(\d+)",
+                  (r.stdout or "") + (r.stderr or ""))
+    if not m:
+        return False, ("coqtop --version ayrıştırılamadı: "
+                       f"{(r.stdout or r.stderr or '').strip()[:80]}")
+    got = f"{m.group(1)}.{m.group(2)}"
+    if got != expected:
+        return False, f"coqtop sürüm uyuşmaz: {got} (beklenen {expected})"
+    # (d) coqtop -compile — .vo geçici dizine yazılır, repo kirlenmez.
+    try:
+        with tempfile.TemporaryDirectory() as td:
+            r = subprocess.run([coqtop_path, "-compile", coq_file],
+                               capture_output=True, text=True, timeout=300,
+                               cwd=td)
+    except FileNotFoundError:
+        return False, f"coqtop bulunamadı: {coqtop_path}"
+    except subprocess.TimeoutExpired:
+        return False, "coqtop -compile zaman aşımı (>300s)"
+    out = (r.stdout or "") + (r.stderr or "")
+    if r.returncode == 0:
+        return True, "coqtop -compile: 8 teorem PASS (Content.v)"
+    tail = [l.strip() for l in out.splitlines() if l.strip()][-3:]
+    detail = " | ".join(tail) if tail else f"exit={r.returncode}"
+    return False, f"coqtop derleme hatası: {detail}"
 
 
 _HASH_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -3362,6 +3442,10 @@ def main():
                     help="K8: Z3 sembolik ispat (symbolic_proof_z3.py; z3-solver gerektirir)")
     ap.add_argument("--lean-proof", action="store_true",
                     help="K9: Lean 4 reduct-invariance (ReductInvariance.lean; lean gerektirir)")
+    ap.add_argument("--coq-proof", action="store_true",
+                    help="K19: Coq reduct-invariance (Content.v; coqtop -compile "
+                         "fail-closed + coq-version sürüm uyumu + admit/axiom "
+                         "taraması; coqtop gerektirir, --full'a dahil değil)")
     ap.add_argument("--verify-manifest", default=None, metavar="PATH",
                     help="K10: gen_repro_manifest.py çıktısı manifest.json'u oku; "
                          "her dosyanın SHA-256'sını gerçek dosyayla karşılaştır "
@@ -3913,6 +3997,30 @@ def main():
                 print(k9_line, file=sys.stderr)
             if not ok:
                 add("P0", "K9-LEAN", "K9 Lean ispatı", detail)
+
+    # ---- K19: Coq reduct-invariance (--coq-proof, isteğe bağlı) ----
+    # Content.v çekirdeğini coqtop -compile ile fail-closed derler. coqtop
+    # kurulu olmayan ortamlarda --full'ı kırmamak için --full'a DAHİL
+    # DEĞİLDİR; --coq-proof ile açıkça koşulur (K12/K15/K17 deseni).
+    coq_ok = None
+    coq_detail = None
+    if args.coq_proof:
+        cq = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                          COQ_PROOF_SCRIPT)
+        coqtop_cmd = find_tool("coqtop")
+        if not os.path.isfile(cq):
+            coq_ok, coq_detail = False, f"{COQ_PROOF_SCRIPT} yok"
+            add("P0", "K19-COQ", "K19 Coq ispatı", coq_detail, cq)
+        else:
+            coq_ok, coq_detail = run_coq_proof(coqtop_cmd, cq)
+            k19_line = (f"[K19] Coq reduct-invariance: "
+                        f"{'PASS' if coq_ok else 'FAIL'} — {coq_detail}")
+            if args.json:
+                print(k19_line, file=sys.stderr)
+            else:
+                print(k19_line)
+            if not coq_ok:
+                add("P0", "K19-COQ", "K19 Coq ispatı", coq_detail)
 
     # ---- K10: reproducibility manifest digest (--verify-manifest) ----
     # gen_repro_manifest.py çıktısı manifest.json'daki her dosyanın SHA-256'sı
