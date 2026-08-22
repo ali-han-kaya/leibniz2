@@ -159,6 +159,7 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 | 2026-08-22 | feat | (dashboard) add refs/PDF info to replay summary line (#25) | `e19f7b7` |
 | 2026-08-22 | test | (colorize) add replay summary coloring unit tests (#26) | `093bd32` |
 | 2026-08-22 | feat | (repro) add RUN LOGS section to reproducibility manifest (#27) | `5a5d391` |
+| 2026-08-22 | feat | (dashboard) add compact run history list (#28) | `a3111c4` |
 
 ---
 

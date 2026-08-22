@@ -479,6 +479,57 @@ def main():
             ]
             lines += [""]
 
+    # ── UNVERIFIED zaman serisi ──────────────────────────────────────────
+    unv_latest = unv_max = unv_zero_runs = 0
+    stale_runs = set()
+    if rows:
+        unv_series = [(r["date"], r["unverified"]) for r in rows]
+        unv_latest = unv_series[-1][1] if unv_series else 0
+        unv_max = max(u for _, u in unv_series) if unv_series else 0
+        unv_zero_runs = sum(1 for _, u in unv_series if u == 0)
+        lines += [
+            "## UNVERIFIED Zaman Serisi",
+            "",
+            f"- **Son durum:** {unv_latest} doğrulanamayan referans",
+            f"- **Maksimum:** {unv_max} (tüm run'larda)",
+            f"- **Sıfır olan run sayısı:** {unv_zero_runs}/{len(rows)}",
+            "",
+        ]
+        # Son 5 run'daki trend
+        recent = unv_series[-5:] if len(unv_series) >= 5 else unv_series
+        if len(recent) > 1:
+            trend = "↓ azalıyor" if recent[-1][1] < recent[0][1] else (
+                "↑ artıyor" if recent[-1][1] > recent[0][1] else "→ sabit")
+            lines.append(f"- **Trend (son {len(recent)} run):** {trend}"
+                         f" ({recent[0][1]} → {recent[-1][1]})")
+            lines += [""]
+
+    # ── Bayat artifact uyarısı ───────────────────────────────────────────
+    # refs-online artifact'ları son N run'da güncellenmemişse uyarı.
+    if rows and history_rows:
+        refs_ids = {r["run_id"] for r in rows if r.get("run_id")}
+        hist_ids = {h["run_id"] for h in history_rows if h.get("run_id")}
+        # Son 3 run'da refs-online artifact'ı olmayanlar
+        last_3_hist = history_rows[-3:] if len(history_rows) >= 3 else history_rows
+        last_3_ids = {h["run_id"] for h in last_3_hist if h.get("run_id")}
+        stale_runs = last_3_ids - refs_ids
+        if stale_runs:
+            lines += [
+                "## ⚠️ Bayat refs-online Artifact Uyarısı",
+                "",
+                f"Son {len(last_3_hist)} run'da refs-online artifact'ı bulunmayan"
+                f" run'lar: {', '.join(str(i) for i in sorted(stale_runs))}",
+                "Bu run'larda çevrimiçi referans doğrulaması çalışmamış olabilir.",
+                "",
+            ]
+        else:
+            lines += [
+                "## ✅ refs-online Artifact Durumu",
+                "",
+                f"Son {len(last_3_hist)} run'da tüm run'larda refs-online artifact'ı mevcut.",
+                "",
+            ]
+
     # Changelog: denetim düzeltmelerinin kısa kaydı (kaynak: CHANGELOG).
     lines += changelog_lines()
 
@@ -496,6 +547,14 @@ def main():
         },
         "warnings": summarize_warnings(history_rows) if history_rows else None,
     }
+    unverified_series = {
+        "latest": unv_latest if rows else 0,
+        "max": unv_max if rows else 0,
+        "zero_runs": unv_zero_runs if rows else 0,
+        "total_runs": len(rows),
+        "stale_artifact_runs": sorted(stale_runs) if (rows and history_rows and stale_runs) else [],
+    } if rows else None
+
     summary = {
         "generated": generated,
         "repo": args.repo,
@@ -506,6 +565,7 @@ def main():
             "total_online": sum(r["total_online"] for r in rows),
         } if rows else {"verified": 0, "total_online": 0},
         "duration_budget": duration_budget,
+        "unverified_series": unverified_series,
     }
     with open(os.path.join(args.out_dir, "refs-trend.json"), "w",
               encoding="utf-8") as f:
