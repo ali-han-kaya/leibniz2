@@ -234,6 +234,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-22 | fix | (tests) green local suite — jsonschema skip, Fine 2012 OL source | `54e7377` |
 | 2026-08-22 | ci | (verify) K13 repro-manifest as separate advisory step + sidecar | `f9dcb1c` |
 | 2026-08-22 | fix | (verify) harden K13 repro-manifest self-test with negative scenarios | `ed0427d` |
+| 2026-08-22 | test | (refs-trend) section unit tests for parse/stats/duration-budget | `d89964b` |
 
 ### Regresyon notları
 
