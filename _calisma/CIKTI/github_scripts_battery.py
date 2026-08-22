@@ -192,6 +192,31 @@ SCENARIOS = [
         },
     ),
     (
+        "pr_status: bütçe aşımı var + eski format (cli_overrides YOK) → çökmez",
+        "pr_status_comment.js",
+        {
+            "budget/index.json": json.dumps({
+                "failures": [{"source": "verify", "estimated_usd": 35.0,
+                              "limit": 30, "tokens_est": 10000000}],
+                "method": "weighted"}),
+            # cli_overrides alanı yok (eski format veya check_cli_overrides
+            # koşmadı → budget/index.json'da bu anahtar olmayabilir).
+            "precommit_findings/PRECOMMIT_RAPORU.json": json.dumps({
+                "findings": [], "counts": {"hooks": 9, "passed": 9}}),
+        },
+        None, [], [],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.createComment": 1},
+            "body_contains": {"issues.createComment": [
+                "Bütçe: limit aşıldı", "+$5.00 aşım", MARKER_STATUS]},
+            # override yok → override/drift uyarısı OLMAMALI
+            "body_not_contains": {"issues.createComment": [
+                "CLI override", "tekrarlanabilirlik sapması"]},
+            "add_labels": [], "remove_labels": [],
+        },
+    ),
+    (
         "pr_status: CLI override var ama aşım yok → bilgilendirme",
         "pr_status_comment.js",
         {
