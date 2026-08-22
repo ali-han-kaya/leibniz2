@@ -151,6 +151,11 @@
   </section>
 
   <section>
+    <h2>Run history <span class="ts" id="run-history-count"></span></h2>
+    <div id="run-history" style="max-height:240px;overflow-y:auto;font-size:12px;line-height:1.6"></div>
+  </section>
+
+  <section>
     <h2>Live stdout (verify_delivery.py --full)</h2>
     <div class="ts" style="margin-top:6px">
       Renk: <span style="color:var(--ok)">■ yeşil = K8/SAT/PASS</span> ·
@@ -1227,6 +1232,27 @@ function applyStdout(text) {
   el.scrollTop = el.scrollHeight;
 }
 
+function loadRunHistory() {
+  fetch("/api/run-history?_t=" + Date.now()).then(r => r.json()).then(rows => {
+    const el = $("run-history");
+    if (!rows.length) { el.innerHTML = "<span class=\"muted\">henüz run yok</span>"; return; }
+    const cnt = $("run-history-count");
+    if (cnt) cnt.textContent = "(" + rows.length + ")";
+    const lines = rows.slice().reverse().map(r => {
+      const sv = r.verdict || "?";
+      const cls = sv === "PASS" ? "ok" : (sv === "FAIL" || sv === "ERROR" ? "err" : "warn");
+      const t = r.ts && r.ts.indexOf("T") >= 0 ? r.ts.split("T")[1].slice(0, 8) : "?";
+      const dur = r.duration_s != null ? r.duration_s.toFixed(0) + "s" : "—";
+      const bud = r.budget_usd != null ? "$" + r.budget_usd.toFixed(2) : "—";
+      const refs = r.refs_verified != null ? r.refs_verified + "/" + r.refs_total : "?/?";
+      const pg = r.pdf_pages != null ? r.pdf_pages : "?";
+      return `<span class=\"muted\">${t}</span> <span class=\"${cls}\">${sv}</span> ` +
+        `<span class=\"muted\">P0=${r.p0||0} P1=${r.p1||0} refs=${refs} ${pg}p ${bud} ${dur}</span>`;
+    });
+    el.innerHTML = lines.join("\n");
+  }).catch(() => {});
+}
+
 function initLoad() {
   fetch("/api/latest?_t=" + Date.now()).then(r => r.json()).then(d => {
     applySnapshot(d);
@@ -1236,6 +1262,7 @@ function initLoad() {
     if (d.config_diff) renderConfigDiff(d.config_diff, d.ts);
     setLive(d.verdict === "PASS" ? "ok" : "warn");
   }).catch(() => {});
+  loadRunHistory();
 }
 
 function connect() {
