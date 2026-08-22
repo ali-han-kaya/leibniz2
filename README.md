@@ -209,6 +209,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-22 | feat | (dashboard) overlay duration/budget trend from refs-trend.json (#14) | `121a987` |
 | 2026-08-22 | feat | (refs-trend) add duration/budget threshold warning layer (#15) | `86b4edc` |
 | 2026-08-22 | feat | (dashboard) add color legend to live run stream section (#16) | `eaef526` |
+| 2026-08-22 | feat | (dashboard) add findings panel showing P0/P1 detail rows (#17) | `f413d97` |
 
 ### Regresyon notları
 
