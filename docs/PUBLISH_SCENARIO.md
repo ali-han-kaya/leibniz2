@@ -195,6 +195,7 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 | 2026-08-22 | feat | (skills) verify-chain — K0-K17 fail-closed zincir skill'i | `67226f3` |
 | 2026-08-22 | feat | coq_reduct modülü + K19 coqtop fail-closed kapısı | `86203ae` |
 | 2026-08-22 | fix | (scripts) unify manifest + config-drift override display format | `d29d766` |
+| 2026-08-22 | feat | (cross-check) cross-validate index.json vs VERSION JSON override | `66e573a` |
 
 ---
 

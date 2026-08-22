@@ -340,6 +340,62 @@ class TestProvenance(unittest.TestCase):
         m = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         self.assertNotIn("python3_shell", m)
 
+    # ── OVERRIDES section tests ──────────────────────────────────────
+    def test_overrides_section(self):
+        # cli_overrides_version.json (isimle tanınır — CONFIG gibi)
+        # ayrı bölümde işaretlenir + tek-hash combined_sha256.
+        (self.artifacts / "budget").mkdir(parents=True)
+        (self.artifacts / "budget" / "cli_overrides_version.json").write_text(
+            json.dumps({"override_count": 1, "warning": True,
+                        "overrides": [{"key": "budget", "file_value": 30.0,
+                                       "effective": 25}]}),
+            encoding="utf-8")
+        self._gen()
+        txt = (self.out / "manifest.txt").read_text(encoding="utf-8")
+        self.assertIn("OVERRIDES ARTIFACT (ayrı bölüm)", txt)
+        self.assertIn("overrides_combined_sha256", txt)
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        ov = m["overrides"]
+        self.assertIn("budget/cli_overrides_version.json", ov["files"])
+        self.assertEqual(len(ov["combined_sha256"]), 64)
+
+    def test_overrides_combined_recomputes_deterministically(self):
+        (self.artifacts / "budget").mkdir(parents=True)
+        (self.artifacts / "budget" / "cli_overrides_version.json").write_text(
+            json.dumps({"override_count": 0, "warning": False,
+                        "overrides": []}),
+            encoding="utf-8")
+        self._gen()
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        ov = m["overrides"]["files"]
+        expected = hashlib.sha256(
+            "".join(f"{rel}\0{ov[rel]}\n" for rel in sorted(ov)).encode()
+        ).hexdigest()
+        self.assertEqual(m["overrides"]["combined_sha256"], expected)
+        self.assertRegex(m["overrides"]["combined_sha256"], r"^[0-9a-f]{64}$")
+
+    def test_overrides_basename_recognition_flat(self):
+        # merge-multiple köke düzleştirdiğinde alt dizin öneki kaybolur;
+        # basename ile tanınır (CONFIG deseni).
+        (self.artifacts / "cli_overrides_version.json").write_text(
+            json.dumps({"override_count": 0, "warning": False}),
+            encoding="utf-8")
+        self._gen()
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        ov = m["overrides"]
+        self.assertIn("cli_overrides_version.json", ov["files"])
+        self.assertEqual(len(ov["combined_sha256"]), 64)
+
+    def test_no_overrides_section_when_absent(self):
+        bare = self.root / "bare"
+        bare.mkdir(parents=True)
+        (bare / "a.txt").write_text("x", encoding="utf-8")
+        out = self.root / "bare-out"
+        r = _run_gen(str(bare), str(out))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        m = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        self.assertNotIn("overrides", m)
+
     def test_env_override_artifact_jobs(self):
         env = dict(os.environ)
         env["REPRO_ARTIFACT_JOBS"] = '{"precommit-logs": "custom-job"}'
