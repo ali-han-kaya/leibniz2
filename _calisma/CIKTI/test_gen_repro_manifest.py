@@ -184,7 +184,7 @@ class TestProvenance(unittest.TestCase):
         jobs = m["provenance"]["artifact_jobs"]
         self.assertEqual(jobs["lineage-findings"], "verify")
         txt = (self.out / "manifest.txt").read_text(encoding="utf-8")
-        self.assertIn("prefixed (1 dosya)", txt)  # lineage-findings tek dosya
+        self.assertIn("köke düzleştirildi (1 dosya)", txt)  # lineage-findings merge ile köke düzleşti
 
     def test_no_lineage_section_when_absent(self):
         # lineage-findings/ hiç yoksa manifest.json'da 'lineage' anahtarı
@@ -604,7 +604,7 @@ class TestManifestSections(unittest.TestCase):
         jobs = m["provenance"]["artifact_jobs"]
         self.assertEqual(jobs["action-runtimes"], "action-runtimes")
         txt = (self.out / "manifest.txt").read_text(encoding="utf-8")
-        self.assertIn("prefixed (1 dosya)", txt)  # action_runtimes.json tek dosya
+        self.assertIn("köke düzleştirildi (1 dosya)", txt)  # action_runtimes merge ile köke düzleşti
 
     def test_no_action_runtimes_section_when_absent(self):
         m = self._gen()

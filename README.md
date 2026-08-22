@@ -201,6 +201,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-22 | ci | plist-check run summary'de profiles sidecar tablosu | `e9f6acf` |
 | 2026-08-22 | ci | plist-check run summary'de profiles sidecar tablosu | `deda5de` |
 | 2026-08-22 | other | _calisma/CIKTI: run_summary_refs_trend.py CLI tutarlılık testleri | `ff1e9c1` |
+| 2026-08-22 | ci | add pattern drift summary to reproducibility job run summary (#9) | `328f8fc` |
 
 ### Regresyon notları
 
