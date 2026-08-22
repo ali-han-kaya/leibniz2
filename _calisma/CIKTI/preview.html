@@ -577,6 +577,70 @@ function renderRefsTrend(rows) {
   $("refs-trend-count").textContent = `(${n} run)`;
 }
 
+// ---- refs-trend duration/bought overlay (refs-trend.json'dan bağımsız trend) ----
+function renderRefsTrendDurationBudget(rows) {
+  // refs-trend grafiğine sağ eksen olarak duration_s + budget_usd ekler.
+  // rows: [{date, duration_s, budget_usd, verdict, ...}]
+  const svg = $("refs-trend");
+  if (!svg || !rows.length) return;
+  const durs = rows.map(r => r.duration_s).filter(v => v != null && isFinite(v));
+  const buds = rows.map(r => r.budget_usd).filter(v => v != null && isFinite(v));
+  if (!durs.length && !buds.length) return;
+  const maxDur = durs.length ? Math.max(...durs, 1) : 1;
+  const maxBud = buds.length ? Math.max(...buds, 0.01) : 1;
+  // SVG viewBox ile aynı koordinat sistemi (1160x240, PL=44, PR=110)
+  const W = 1160, H = 240, PL = 44, PR = 110, PT = 12, PB = 32;
+  const iw = W - PL - PR, ih = H - PT - PB;
+  const plotRight = PL + iw;
+  // duration (mavi, kesikli) + budget (mor) eksenleri
+  const durAxisX = plotRight + 26;
+  const budAxisX = plotRight + 68;
+  const parts = [];
+  if (durs.length) {
+    parts.push(`<line x1="${durAxisX}" y1="${PT}" x2="${durAxisX}" y2="${PT+ih}" stroke="#58a6ff" stroke-width="1" opacity="0.5"/>`);
+    parts.push(`<text x="${durAxisX+6}" y="${PT+4}" fill="#58a6ff" font-size="9">${maxDur.toFixed(0)}s</text>`);
+    parts.push(`<text x="${durAxisX+6}" y="${PT+ih+2}" fill="#58a6ff" font-size="9">0s</text>`);
+  }
+  if (buds.length) {
+    parts.push(`<line x1="${budAxisX}" y1="${PT}" x2="${budAxisX}" y2="${PT+ih}" stroke="#bc8cff" stroke-width="1" opacity="0.5"/>`);
+    parts.push(`<text x="${budAxisX+6}" y="${PT+4}" fill="#bc8cff" font-size="9">$${maxBud.toFixed(2)}</text>`);
+    parts.push(`<text x="${budAxisX+6}" y="${PT+ih+2}" fill="#bc8cff" font-size="9">$0</text>`);
+  }
+  // timestamp ekseninde hizala: refs-trend rows[] ile duration_budget rows[]
+  // farklı uzunlukta olabilir; her birini kendi ekseninde bağımsız çiz.
+  const n = rows.length;
+  const x = (i) => PL + (n === 1 ? iw / 2 : iw * i / (n - 1));
+  const yD = (v) => (v == null || !isFinite(v)) ? null : PT + ih - (ih * v / maxDur);
+  const yB = (v) => (v == null || !isFinite(v)) ? null : PT + ih - (ih * v / maxBud);
+  if (durs.length) {
+    const pts = rows.map((r,i) => { const y = yD(r.duration_s); return y == null ? null : `${x(i)},${y}`; }).filter(Boolean);
+    if (pts.length) parts.push(`<polyline fill="none" stroke="#58a6ff" stroke-width="2" stroke-dasharray="4 3" points="${pts.join(" ")}"/>`);
+  }
+  if (buds.length) {
+    const pts = rows.map((r,i) => { const y = yB(r.budget_usd); return y == null ? null : `${x(i)},${y}`; }).filter(Boolean);
+    if (pts.length) parts.push(`<polyline fill="none" stroke="#bc8cff" stroke-width="2" points="${pts.join(" ")}"/>`);
+  }
+  // budget limit referans çizgisi ($30)
+  if (buds.length) {
+    const limitY = yB(30.0);
+    const offScale = limitY < PT;
+    const ly = offScale ? PT + 3 : limitY;
+    parts.push(`<line x1="${PL}" y1="${ly}" x2="${plotRight}" y2="${ly}" stroke="#ffa657" stroke-width="1" stroke-dasharray="6 4" opacity="0.6"/>`);
+  }
+  // varsa SVG içine ekle (mevcut graphic'in ÜZERİNE bindir)
+  if (parts.length) {
+    svg.insertAdjacentHTML("beforeend", parts.join(""));
+    // legend'a duration/budget notu ekle
+    const legend = $("refs-trend-legend");
+    if (legend) {
+      const extra = [];
+      if (durs.length) extra.push(`Mavi (kesikli) = duration_s (max ${maxDur.toFixed(0)}s)`);
+      if (buds.length) extra.push(`Mor = budget_usd (max $${maxBud.toFixed(2)})`);
+      if (extra.length) legend.textContent += " · " + extra.join(" · ");
+    }
+  }
+}
+
 let runStreamES = null;
 // ---- Bütçe ilerleme çubuğu (stream'deki [BÜTÇE] satırlarından) ----
 let budgetState = null;   // {est, limit} — son bilinen bütçe kalkanı değeri
@@ -737,6 +801,11 @@ function loadTrend() {
   }).catch(err => {
     $("trend-legend").textContent = "trend yüklenemedi: " + err;
   });
+  // refs-trend.json'dan duration/budget trend'ini çek (CI history'den bağımsız)
+  fetch("/api/refs-trend").then(r => r.json()).then(data => {
+    const dbRows = (data.duration_budget && data.duration_budget.rows) || [];
+    if (dbRows.length) renderRefsTrendDurationBudget(dbRows);
+  }).catch(() => {});
 }
 
 // ---- Budget breakdown (ratios + type_bytes) ----

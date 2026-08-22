@@ -112,7 +112,8 @@ VERIFY_DIR = None               # main()'de set edilir; /api/run-now handler'ı 
 HISTORY_PATH = None             # main()'de set edilir; JSONL trend dosyası
 HISTORY_MAX = 100               # disk'te tutulacak en son run sayısı
 RUNS_DIR = None                 # main()'de set edilir; run logları (stdout+stderr) dizini
-RUN_LOG_MAX = 20                # disk'te tutulacak + replay edilecek en son run sayısı
+RUN_LOG_MAX = 20                 # disk'te tutulacak + replay edilecek en son run sayısı
+REFS_TREND_PATH = None           # main()'de set edilir; refs-trend.json yolu
 
 HISTORY_KEYS = ("ts", "verdict", "p0", "p1", "duration_s", "budget_usd",
                 "pdf_pages", "ref_count", "raw_sha256", "stripped_sha256",
@@ -926,6 +927,8 @@ class Handler(BaseHTTPRequestHandler):
             self.serve_run_stream()
         elif self.path == "/api/history":
             self.serve_history()
+        elif self.path == "/api/refs-trend":
+            self.serve_refs_trend()
         elif self.path == "/api/health":
             self._send(200, "ok")
         else:
@@ -1022,6 +1025,21 @@ class Handler(BaseHTTPRequestHandler):
         data = load_history()
         self._send(200, json.dumps(data, ensure_ascii=False, indent=2),
                    content_type="application/json; charset=utf-8")
+
+    def serve_refs_trend(self):
+        """refs-trend.json'u olduğu gibi döndür (duration/budget trend'i için)."""
+        if not REFS_TREND_PATH or not os.path.isfile(REFS_TREND_PATH):
+            self._send(200, json.dumps({"rows": [], "duration_budget": {"rows": []}}),
+                       content_type="application/json; charset=utf-8")
+            return
+        try:
+            with open(REFS_TREND_PATH, encoding="utf-8") as f:
+                data = json.load(f)
+            self._send(200, json.dumps(data, ensure_ascii=False, indent=2),
+                       content_type="application/json; charset=utf-8")
+        except Exception as e:
+            self._send(500, json.dumps({"error": str(e)}),
+                       content_type="application/json; charset=utf-8")
 
     def trigger_run_now(self):
         """Manuel tetikleme: interval beklemeden hemen verify koşar.
@@ -1175,7 +1193,7 @@ def redirect_stdio_to_devnull():
 
 
 def main():
-    global PREVIEW_DIR, VERIFY_DIR, HISTORY_PATH, RUNS_DIR, RUN_LOG_MAX
+    global PREVIEW_DIR, VERIFY_DIR, HISTORY_PATH, RUNS_DIR, RUN_LOG_MAX, REFS_TREND_PATH
     # Daemon modunda: yeni process group + session oluştur (tamamen detach).
     # Bu, parent shell exit ettiğinde SIGHUP/SIGTERM almamızı engeller.
     if os.environ.get("PREVIEW_DAEMON") == "1":
@@ -1205,6 +1223,11 @@ def main():
     HISTORY_PATH = os.path.join(args.preview_dir, "history.jsonl")
     RUNS_DIR = os.path.join(args.preview_dir, "runs")
     RUN_LOG_MAX = args.replay_runs
+    # refs-trend.json: CI artifact'ından veya yerel dizinden okunur
+    _rt_candidate = os.path.join(ROOT, "refs-trend", "refs-trend.json")
+    if not os.path.isfile(_rt_candidate):
+        _rt_candidate = os.path.join(args.preview_dir, "refs-trend.json")
+    REFS_TREND_PATH = _rt_candidate if os.path.isfile(_rt_candidate) else None
 
     if not os.path.isfile(os.path.join(PREVIEW_DIR, "preview.html")):
         print(f"UYARI: {PREVIEW_DIR}/preview.html bulunamadı; "
