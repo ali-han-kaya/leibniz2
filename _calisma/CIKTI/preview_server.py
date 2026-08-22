@@ -1185,6 +1185,7 @@ class Handler(BaseHTTPRequestHandler):
             # (snapshot_dict() çağrılmaz: LOCK zaten tutuluyor, reentrant değil)
             snapshot = json.dumps({k: LATEST[k] for k in HISTORY_KEYS} |
                                   {"cli_overrides": LATEST["cli_overrides"]} |
+                                  {"layers": LATEST["layers"]} |
                                   {"lineage_summary": LATEST["lineage_summary"]} |
                                   {"status_board": LATEST["status_board"]} |
                                   {"precommit_hooks": LATEST["precommit_hooks"]})

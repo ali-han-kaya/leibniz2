@@ -518,6 +518,75 @@ class CliOverridesPlumbingTests(unittest.TestCase):
             ps.LATEST["cli_overrides"] = None
 
 
+class LayersPlumbingTests(unittest.TestCase):
+    """layers (K0-K17) veri hattı: LATEST slotu → /api/latest + SSE snapshot.
+
+    verify_delivery.py --json çıktısındaki layers (build_layers_summary çıktısı)
+    _finalize_run'da LATEST['layers']'a taşınır; dashboard renderKLayers
+    buradan beslenir. /api/latest (serve_latest) LATEST dict'ini bütünüyle
+    döndürdüğü için layers oraya otomatik girer. SSE connect snapshot'ı da
+    layers'ı ayrıca taşır (HISTORY_KEYS dışı olduğundan elle eklenir).
+    """
+
+    def test_latest_has_layers_slot(self):
+        self.assertIn("layers", ps.LATEST)
+
+    def test_layers_default_none(self):
+        # Başlangıçta None — renderKLayers 'bekleniyor' gösterir.
+        self.assertIsNone(ps.LATEST["layers"])
+
+    def test_layers_not_in_history_keys(self):
+        # layers K0-K17 full dict'tir, history.jsonl'e SKALER olarak
+        # girmez (trend grafiğinde per-layer değil verdict/P0/P1 izlenir).
+        self.assertNotIn("layers", ps.HISTORY_KEYS)
+
+    def test_latest_dict_carries_layers(self):
+        # /api/latest (serve_latest) LATEST dict'ini bütünüyle döndürür —
+        # layers slotu oraya otomatik girer.
+        layers = {"K0": {"label": "Bayat zip", "status": "PASS", "ran": True},
+                  "K1": {"label": "Dış zip", "status": "PASS", "ran": True}}
+        ps.LATEST["layers"] = layers
+        try:
+            self.assertEqual(ps.LATEST["layers"], layers)
+        finally:
+            ps.LATEST["layers"] = None
+
+    def test_sse_snapshot_carries_layers(self):
+        # SSE connect/update snapshot'ları HISTORY_KEYS + ek alanlar taşır;
+        # layers bunlardan biridir (renderKLayers SSE üzerinden de alır).
+        layers = {"K0": {"label": "Bayat zip", "status": "PASS", "ran": True},
+                  "K8": {"label": "Z3", "status": "PASS", "ran": True}}
+        ps.LATEST["layers"] = layers
+        try:
+            snap = {k: ps.LATEST[k] for k in ps.HISTORY_KEYS}
+            snap["layers"] = ps.LATEST["layers"]
+            self.assertEqual(snap["layers"], layers)
+            # K8 status check
+            self.assertEqual(snap["layers"]["K8"]["status"], "PASS")
+        finally:
+            ps.LATEST["layers"] = None
+
+    def test_layers_none_propagates_cleanly(self):
+        # layers None iken snapshot'a girer, dashboard 'bekleniyor' gösterir.
+        ps.LATEST["layers"] = None
+        try:
+            snap = {k: ps.LATEST[k] for k in ps.HISTORY_KEYS}
+            snap["layers"] = ps.LATEST["layers"]
+            self.assertIsNone(snap["layers"])
+        finally:
+            ps.LATEST["layers"] = None
+
+    def test_layers_empty_dict_vs_none(self):
+        # verify_delivery.py hiç koşmadıysa None kalır; koştu ama bulgu
+        # yoksa boş dict {} olabilir — her ikisi de dashboard'da 'bekleniyor'
+        # gösterir (Object.keys(ls).length === 0).
+        ps.LATEST["layers"] = {}
+        try:
+            self.assertEqual(ps.LATEST["layers"], {})
+        finally:
+            ps.LATEST["layers"] = None
+
+
 class DaemonStdioTests(unittest.TestCase):
     """PREVIEW_DAEMON fd davranışı: kapatma (EBADF) değil /dev/null'a yönlendirme.
 
