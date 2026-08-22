@@ -465,6 +465,36 @@ def main() -> None:
                      "=" * 72]
         lines += ut_block
 
+    # ── RUN LOGS bölümü: run-*.json + history.jsonl (denetim zaman serisi) ──
+    # preview_server.py RUNS_DIR'deki run-*.json dosyaları VEYA CI'daki
+    # run-history artifact'ındaki history.jsonl + .sha256 tarafindan
+    # uretilir. combined_sha256 ile sabitlenir.
+    run_log_hashes = {rel: h for rel, h in file_hashes.items()
+                      if rel.startswith("runs/run-") or rel == "history.jsonl"
+                      or rel == "history.jsonl.sha256"
+                      or rel.startswith("run-history/")}
+    run_log_combined = None
+    if run_log_hashes:
+        sorted_rel = sorted(run_log_hashes)
+        run_log_combined = hashlib.sha256(
+            "".join(f"{rel}\0{run_log_hashes[rel]}\n"
+                     for rel in sorted_rel).encode()
+        ).hexdigest()
+        rl_block = [
+            "",
+            "=" * 72,
+            "RUN LOGS ARTIFACT (ayrı bölüm)",
+            "=" * 72,
+            f"{'FILE':<55} {'SHA-256'}",
+            "-" * 72,
+        ]
+        rl_block += [f"{rel:<55} {run_log_hashes[rel]}"
+                     for rel in sorted_rel]
+        rl_block += ["-" * 72,
+                     f"run_logs_combined_sha256: {run_log_combined}",
+                     "=" * 72]
+        lines += rl_block
+
     # ── PROVENANCE bölümü: artifact → üreten job (denetim izi) ──────────────
     # Her artifact hangi job'da üretildi — tek bakışta kaynak.
     #
@@ -598,6 +628,11 @@ def main() -> None:
         manifest_json["unit_tests"] = {
             "files": dict(sorted(unit_test_hashes.items())),
             "combined_sha256": unit_test_combined,
+        }
+    if run_log_hashes:
+        manifest_json["run_logs"] = {
+            "files": dict(sorted(run_log_hashes.items())),
+            "combined_sha256": run_log_combined,
         }
 
     out_dir = pathlib.Path(args.out_dir)
