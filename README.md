@@ -280,6 +280,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-22 | test | (summary) row-level content checks for lineage + K-layer sections | `cafab86` |
 | 2026-08-22 | docs | (M0) K16/K14 mirror-launchd PATH fixes katman raporu | `4ac1787` |
 | 2026-08-22 | feat | (smoke) dashboard PASS'ini tek komutla yeniden üreten smoke testi | `00ecfd3` |
+| 2026-08-22 | docs | (scenario) launchd minimal PATH + mirror sync sınır notu | `836c52b` |
 
 ### Regresyon notları
 
