@@ -360,7 +360,8 @@ def _broadcast_run_end(rec):
 
 
 def build_replay_events(ts, verdict, stdout, stderr, p0=None, p1=None,
-                        budget_usd=None, duration_s=None, first=False):
+                        budget_usd=None, duration_s=None, first=False,
+                        refs_verified=None, refs_total=None, pdf_pages=None):
     """Son tamamlanmış run'un satırlarını SSE event listesi olarak üret.
 
     Dönüş: [(event_adı, data_json), ...] — replay-start, ardından stderr
@@ -380,7 +381,9 @@ def build_replay_events(ts, verdict, stdout, stderr, p0=None, p1=None,
     events = [("replay-start", json.dumps(
         {"stream": "replay-start", "ts": ts, "verdict": verdict,
          "p0": p0, "p1": p1, "budget_usd": budget_usd,
-         "duration_s": duration_s, "first": first},
+         "duration_s": duration_s, "first": first,
+         "refs_verified": refs_verified, "refs_total": refs_total,
+         "pdf_pages": pdf_pages},
         ensure_ascii=False))]
     for tag, text in (("stderr", stderr), ("stdout", stdout)):
         if not text:
@@ -408,7 +411,10 @@ def build_replay_events_multi(records):
         run_ev = build_replay_events(
             rec.get("ts"), rec.get("verdict"), rec.get("stdout", ""),
             rec.get("stderr", ""), rec.get("p0"), rec.get("p1"),
-            rec.get("budget_usd"), rec.get("duration_s"), first=(i == 0))
+            rec.get("budget_usd"), rec.get("duration_s"), first=(i == 0),
+            refs_verified=rec.get("refs_verified"),
+            refs_total=rec.get("refs_total"),
+            pdf_pages=rec.get("pdf_pages"))
         if i == n - 1 and run_ev:
             # son run'un replay-end'ine last=true işaretle
             last_name, last_data = run_ev[-1]
@@ -946,7 +952,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, "404 not found")
 
     def _replay_last_run(self, ts, verdict, stdout, stderr, p0=None, p1=None,
-                         budget_usd=None, duration_s=None):
+                         budget_usd=None, duration_s=None,
+                         refs_verified=None, refs_total=None, pdf_pages=None):
         """Son tamamlanmış run'un satırlarını canlı akıştan ÖNCE gönder.
 
         replay-start/end event'leri sınırı işaretler; her satır `replay: true`
@@ -954,7 +961,10 @@ class Handler(BaseHTTPRequestHandler):
         replay-start event'i son run'un özetini de taşır (verdict/P0/P1/bütçe).
         """
         events = build_replay_events(ts, verdict, stdout, stderr,
-                                     p0, p1, budget_usd, duration_s)
+                                     p0, p1, budget_usd, duration_s,
+                                     refs_verified=refs_verified,
+                                     refs_total=refs_total,
+                                     pdf_pages=pdf_pages)
         if not events:
             return
         buf = "".join(f"event: {ev}\ndata: {data}\n\n" for ev, data in events)

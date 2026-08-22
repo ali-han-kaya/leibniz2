@@ -796,13 +796,17 @@ function connectStream() {
     const p1 = sum && sum.p1 != null ? sum.p1 : 0;
     const bud = sum && sum.budget_usd != null ? "$" + sum.budget_usd.toFixed(2) : "—";
     const dur = sum && sum.duration_s != null ? " · " + sum.duration_s + "s" : "";
+    const refV = sum && sum.refs_verified != null ? sum.refs_verified : null;
+    const refT = sum && sum.refs_total != null ? sum.refs_total : null;
+    const refs = refV != null && refT != null ? " · refs " + refV + "/" + refT : "";
+    const pg = sum && sum.pdf_pages != null ? " · " + sum.pdf_pages + " sayfa" : "";
     const tlabel = sum && sum.ts && sum.ts.indexOf("T") >= 0
       ? sum.ts.split("T")[1].slice(0, 8) : "";
     const label = tlabel ? "geçmiş run " + tlabel : "geçmiş run";
     streamLines.push(
       '<span class="muted">── ' + label + ' ── </span>' +
       '<span class="' + scls + '">' + sv + '</span>' +
-      '<span class="muted"> · P0=' + p0 + ' · P1=' + p1 + ' · bütçe ' + bud + dur + '</span>');
+      '<span class="muted"> · P0=' + p0 + ' · P1=' + p1 + refs + pg + ' · bütçe ' + bud + dur + '</span>');
     el.innerHTML = streamLines.join("\n");
     el.scrollTop = el.scrollHeight;
   });
