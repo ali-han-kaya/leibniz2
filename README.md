@@ -242,6 +242,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-22 | test | (plist) real end-to-end extra-file scenario for check_plist_drift | `bebc0cf` |
 | 2026-08-22 | feat | (protection) K1-K14 job rename + 9 required check sync | `d3de002` |
 | 2026-08-22 | feat | (protection) advisory contract — all jobs vs required diff check | `9195b63` |
+| 2026-08-22 | test | (repro) doc artifact list vs ARTIFACT_JOBS sync | `bccc815` |
 
 ### Regresyon notları
 

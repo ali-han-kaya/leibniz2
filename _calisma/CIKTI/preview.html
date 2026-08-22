@@ -111,7 +111,7 @@
       <div class="card"><div class="label">Verdict</div><div class="value" id="m-verdict">—</div><div class="sub" id="m-ts">no run yet</div></div>
       <div class="card"><div class="label">P0 / P1 findings</div><div class="value" id="m-p0p1">— / —</div><div class="sub">fail-closed gate</div></div>
       <div class="card"><div class="label">Run duration</div><div class="value" id="m-dur">—</div><div class="sub">verify_delivery.py --full</div></div>
-      <div class="card"><div class="label">Budget (universal)</div><div class="value" id="m-budget">—</div><div class="sub" id="m-budget-sub">limit $30</div></div>
+      <div class="card"><div class="label">Budget (universal)</div><div class="value" id="m-budget">—</div><div class="sub" id="m-budget-sub">limit —</div></div>
       <div class="card"><div class="label">Budget ratios</div><div class="value" id="m-br" style="font-size:12px">—</div><div class="sub">bytes/token · text/pdf/archive/binary</div></div>
       <div class="card"><div class="label">Type bytes</div><div class="value" id="m-tb" style="font-size:12px">—</div><div class="sub" id="m-tb-sub">iç zip kırılımı</div></div>
       <div class="card"><div class="label">PDF pages / refs</div><div class="value" id="m-pdf">— / —</div><div class="sub">33 / 64 expected</div></div>
@@ -249,12 +249,22 @@ let evtSource = null;
 let lastTs = 0;
 let reconnectDelay = 1000;
 const MAX_RECONNECT_DELAY = 30000;
+// Bütçe limiti ($) — TEK KAYNAK: /api/latest `budget.limit` (etkin config
+// budget_usd aynası). Snapshot gelince applySnapshot senkronlar; stream'deki
+// [BÜTÇE] satırı da günceller. 30.0 yalnızca snapshot ÖNCESİ fallback'tir.
+let BUDGET_LIMIT = 30.0;
 
 function fmtBytes(b) {
   if (b == null) return "—";
   if (b > 1048576) return (b/1048576).toFixed(2) + " MB";
   return Math.round(b/1024) + " KB";
 }
+// Bütçe limiti gösterimi: tam sayıysa "30", değilse 2 ondalık ("27.50").
+function fmtLimit(v) {
+  if (v == null || !isFinite(v)) return "—";
+  return (v % 1 === 0) ? String(v) : v.toFixed(2);
+}
+
 function fmtTs(iso) {
   if (!iso) return "no run yet";
   try {
@@ -368,17 +378,18 @@ function renderTrend(rows) {
   if (budPts.length) {
     parts.push(`<polyline fill="none" stroke="#bc8cff" stroke-width="2" points="${budPts.join(" ")}"/>`);
   }
-  // Bütçe limiti referans çizgisi ($30) — verify_delivery.config.json
-  // budget_usd aynası. Bütçe eksenindeki gerçek konumunda çizilir; gözlenen
-  // bütçe limitin çok altındaysa (0..maxBud ölçeği) üst kenara kıstırılıp
-  // "↑" ile işaretlenir — altı güvenli bölge (yeşil), üstü aşım (kırmızı kare).
-  const BUDGET_LIMIT = 30.0;
+  // Bütçe limiti referans çizgisi — /api/latest `budget.limit`'ten gelen
+  // BUDGET_LIMIT (etkin config budget_usd aynası; snapshot yoksa 30.0
+  // fallback). Bütçe eksenindeki gerçek konumunda çizilir; gözlenen bütçe
+  // limitin çok altındaysa (0..maxBud ölçeği) üst kenara kıstırılıp "↑" ile
+  // işaretlenir — altı güvenli bölge (yeşil), üstü aşım (kırmızı kare).
   if (buds.length) {
     const rawLimitY = yB(BUDGET_LIMIT);
     const offScale = rawLimitY < PT;          // limit ölçeğin üstünde kaldı
     const limitY = offScale ? PT + 3 : rawLimitY;
+    const limitLbl = "limit $" + fmtLimit(BUDGET_LIMIT);
     parts.push(`<line x1="${PL}" y1="${limitY}" x2="${plotRight}" y2="${limitY}" stroke="#ffa657" stroke-width="1.5" stroke-dasharray="6 4"/>`);
-    parts.push(`<text x="${budAxisX + 6}" y="${limitY - 3}" fill="#ffa657" font-size="9">${offScale ? "limit $30 ↑" : "limit $30"}</text>`);
+    parts.push(`<text x="${budAxisX + 6}" y="${limitY - 3}" fill="#ffa657" font-size="9">${offScale ? limitLbl + " ↑" : limitLbl}</text>`);
     // Aşım işaretleri: limiti geçen bütçe noktaları kırmızı kare (üstü = aşım)
     rows.forEach((r, i) => {
       if (r.budget_usd != null && r.budget_usd > BUDGET_LIMIT) {
@@ -452,7 +463,7 @@ function renderTrend(rows) {
   legend.textContent = "Kırmızı = P0 · Sarı = P1 · Yeşil nokta = PASS · Mavi (kesikli) = duration_s · Mor = budget_usd · " +
     "Yeşil çizgi = Z3 PASS · Kırmızı (noktalı) = Z3 FAIL · " +
     "Yeşil daire = Lean PASS · Kırmızı kare = Lean FAIL · gri × = koşulmadı · " +
-    "Turuncu (kesikli) = bütçe limiti $30 — altı güvenli, üstü (kırmızı kare) aşım · " +
+    "Turuncu (kesikli) = bütçe limiti $" + fmtLimit(BUDGET_LIMIT) + " (config'ten) — altı güvenli, üstü (kırmızı kare) aşım · " +
     "aralık: " + (rows[0].ts ? new Date(rows[0].ts).toLocaleString() : "?") +
     " → " + (rows[n-1].ts ? new Date(rows[n-1].ts).toLocaleString() : "?") +
     ` · ${n} run`;
@@ -666,9 +677,9 @@ function renderRefsTrendDurationBudget(rows) {
     const pts = rows.map((r,i) => { const y = yB(r.budget_usd); return y == null ? null : `${x(i)},${y}`; }).filter(Boolean);
     if (pts.length) parts.push(`<polyline fill="none" stroke="#bc8cff" stroke-width="2" points="${pts.join(" ")}"/>`);
   }
-  // budget limit referans çizgisi ($30)
+  // budget limit referans çizgisi (BUDGET_LIMIT — /api/latest budget.limit)
   if (buds.length) {
-    const limitY = yB(30.0);
+    const limitY = yB(BUDGET_LIMIT);
     const offScale = limitY < PT;
     const ly = offScale ? PT + 3 : limitY;
     parts.push(`<line x1="${PL}" y1="${ly}" x2="${plotRight}" y2="${ly}" stroke="#ffa657" stroke-width="1" stroke-dasharray="6 4" opacity="0.6"/>`);
@@ -712,10 +723,13 @@ function updateBudgetBar() {
 }
 
 // "[BÜTÇE] ~175990 token → $1.08 (limit $30.0, …)" → {est:1.08, limit:30}
+// Stream satırındaki limit etkin config'ten geldiği için BUDGET_LIMIT'i de
+// senkronlar — config değişince grafik çizgisi canlı akışta otomatik uyar.
 function scanBudget(line) {
   const m = line.match(/\[BÜTÇE\][^→]*→\s*\$([0-9.]+)\s*\(limit\s*\$([0-9.]+)/);
   if (m) {
     budgetState = { est: parseFloat(m[1]), limit: parseFloat(m[2]) };
+    BUDGET_LIMIT = parseFloat(m[2]);
     updateBudgetBar();
   }
 }
@@ -1045,6 +1059,15 @@ function fmtVal(v) {
 }
 
 function applySnapshot(d) {
+  // Bütçe limiti TEK KAYNAK: /api/latest `budget.limit` (etkin config
+  // budget_usd aynası). Config değişince grafik referans çizgisi + kart
+  // otomatik uyum sağlar; snapshot yoksa 30.0 fallback kalır.
+  if (d.budget && d.budget.limit > 0 && d.budget.limit !== BUDGET_LIMIT) {
+    BUDGET_LIMIT = d.budget.limit;
+    // Trend grafiği cache'liyse yeni limitle yeniden çiz (config değişikliği)
+    if (trendCache.length) renderTrend(trendCache);
+  }
+
   // Status board: CI consolidate_summary.py ile aynı 5 ikonlu tek satır
   if (d.status_board) {
     $("status-board").textContent = d.status_board;
@@ -1116,10 +1139,12 @@ function applySnapshot(d) {
   // Duration
   $("m-dur").textContent = d.duration_s != null ? d.duration_s + " s" : "—";
 
-  // Budget
+  // Budget — limit /api/latest `budget.limit`'ten (applySnapshot başında senkronlanır)
   $("m-budget").textContent = d.budget_usd != null ? "$" + d.budget_usd.toFixed(2) : "—";
-  $("m-budget-sub").textContent = (d.budget_usd != null && d.budget_usd < 30)
-    ? "✓ under $30 limit" : (d.budget_usd != null ? "⚠ over $30" : "limit $30");
+  const limTxt = "$" + fmtLimit(BUDGET_LIMIT);
+  $("m-budget-sub").textContent = (d.budget_usd != null && d.budget_usd < BUDGET_LIMIT)
+    ? "✓ under " + limTxt + " limit"
+    : (d.budget_usd != null ? "⚠ over " + limTxt : "limit " + limTxt);
 
   // PDF + refs
   $("m-pdf").textContent = (d.pdf_pages || "—") + " / " + (d.ref_count || "—");

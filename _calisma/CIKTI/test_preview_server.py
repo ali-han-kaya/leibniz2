@@ -757,6 +757,26 @@ class StatusBoardTests(unittest.TestCase):
         self.assertIn("Pre-commit 🔴", board)
         self.assertIn("K0 ✅", board)
 
+    def test_budget_limit_from_effective_config(self):
+        """Bütçe ikonu limiti LATEST.budget.limit'ten okumalı (hardcoded 30 DEĞİL).
+
+        budget.limit=5.0 iken budget_usd=4.0 → ✅ (altında) ve budget_usd=8.0
+        → 🔴 (üstünde). Eski hardcoded 30 olsaydı 8.0 da ✅ derdi — fail-closed
+        kanıtı: config limiti 30'dan küçükken aşım DOĞRU tespit edilmeli.
+        """
+        import preview_server as ps
+        with ps.LOCK:
+            ps.LATEST.update({
+                "layers": {"K1": {"status": "PASS"}, "K8": {"status": "PASS"}},
+                "p0": 0, "p1": 0, "lineage_ok": True,
+                "budget": {"limit": 5.0, "estimated_usd": 1.0},
+            })
+            ps.LATEST["budget_usd"] = 4.0
+        self.assertIn("Bütçe ✅", ps._compute_status_board())
+        with ps.LOCK:
+            ps.LATEST["budget_usd"] = 8.0
+        self.assertIn("Bütçe 🔴", ps._compute_status_board())
+
     def test_no_data(self):
         """Veri yoksa (layers=None, p0=None, p1=None, budget=None, lineage=None) tümü ⚠️ olmalı."""
         import preview_server as ps

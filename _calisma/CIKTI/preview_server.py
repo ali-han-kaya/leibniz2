@@ -161,8 +161,9 @@ def _compute_status_board():
     p1 = LATEST.get("p1")
     k0_ok = (p0 == 0 and p1 == 0) if p0 is not None else None
 
-    # 3. Bütçe: $30 limit altında → PASS
-    budget_ok = (budget is not None and budget < 30) if budget is not None else None
+    # 3. Bütçe: etkin config budget.limit altında → PASS (limit yoksa 30.0)
+    blimit = (LATEST.get("budget") or {}).get("limit") or 30.0
+    budget_ok = (budget is not None and budget < blimit) if budget is not None else None
 
     # 4. Soy hattı: lineage_summary.ok → PASS
     lin_ok = LATEST.get("lineage_ok")
