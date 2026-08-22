@@ -2,6 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Stoic-Hume V5 — Live CI Dashboard</title>
 <style>
   :root { --bg:#0e1116; --fg:#e6edf3; --muted:#8b949e; --accent:#58a6ff;
@@ -239,6 +242,8 @@
 const $ = (id) => document.getElementById(id);
 let evtSource = null;
 let lastTs = 0;
+let reconnectDelay = 1000;
+const MAX_RECONNECT_DELAY = 30000;
 
 function fmtBytes(b) {
   if (b == null) return "—";
@@ -1218,6 +1223,17 @@ function applyStdout(text) {
   el.scrollTop = el.scrollHeight;
 }
 
+function initLoad() {
+  fetch("/api/latest?_t=" + Date.now()).then(r => r.json()).then(d => {
+    applySnapshot(d);
+    if (d.stdout_short) applyStdout(d.stdout_short);
+    if (d.refs_online) renderRefsOnline(d.refs_online);
+    if (d.budget) renderBudget(d.budget);
+    if (d.config_diff) renderConfigDiff(d.config_diff, d.ts);
+    setLive(d.verdict === "PASS" ? "ok" : "warn");
+  }).catch(() => {});
+}
+
 function connect() {
   if (evtSource) evtSource.close();
   setLive("connecting");
@@ -1228,6 +1244,7 @@ function connect() {
       applySnapshot(d);
       setLive("ok");
       lastTs = Date.now();
+      reconnectDelay = 1000; // reset backoff on success
       // snapshot sonrası stdout_short varsa onu da yükle
       fetch("/api/latest").then(r => r.json()).then(full => {
         if (full.stdout_short) applyStdout(full.stdout_short);
@@ -1255,8 +1272,9 @@ function connect() {
   });
   evtSource.onerror = () => {
     setLive("err");
-    // 3 saniye sonra yeniden bağlan
-    setTimeout(connect, 3000);
+    // Exponential backoff: 1s → 2s → 4s → ... → 30s max
+    setTimeout(connect, reconnectDelay);
+    reconnectDelay = Math.min(reconnectDelay * 2, MAX_RECONNECT_DELAY);
   };
 }
 
@@ -1269,6 +1287,7 @@ setInterval(() => {
 
 loadTrend();
 connectStream();
+initLoad();
 connect();
 </script>
 </body>
