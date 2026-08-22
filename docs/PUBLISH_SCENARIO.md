@@ -166,6 +166,7 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 | 2026-08-22 | feat | (dashboard) add K9 Lean to run-history API and trend graph | `ce861e8` |
 | 2026-08-22 | feat | (verify) add lean_ok/lean_detail to history.jsonl record | `e28c83f` |
 | 2026-08-22 | feat | (refs-trend) add z3_passed/z3_total to duration_budget section | `8d669ea` |
+| 2026-08-22 | fix | (plist) KeepAlive SuccessfulExit=false to prevent restart race | `aae9b0f` |
 
 ---
 

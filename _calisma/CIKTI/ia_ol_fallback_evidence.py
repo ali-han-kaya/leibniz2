@@ -35,10 +35,14 @@ IA_OUT_OF_SCOPE = ["Fine 2012", "Lagree 1994", "Millican 2002",
                    "Schmitt 1972", "Xunzi Knoblock"]
 
 # V5s/V5w durumu: Xunzi → HathiTrust (lccn:87033578 ile gerçek katalog
-# kaydı), diğer 4 → Library of Congress (lccn bazlı katalog kanıtı — HT'de
-# kaydı olmayan telifli/modern kitaplar LoC'de birebir bulunur).
+# kaydı), Fine 2012 → OpenLibrary (isbn:9781107460287 — V5r'de yanlış
+# lccn:2012014618 kaldırıldı; o LCCN Correia'nın tek yazarlı 'Grounding and
+# explanation' kitabına işaret ediyordu, derleme bölümüne değil), diğer 3 →
+# Library of Congress (lccn bazlı katalog kanıtı — HT'de kaydı olmayan
+# telifli/modern kitaplar LoC'de birebir bulunur).
 HT_SOURCE = "Xunzi Knoblock"
-LOC_SOURCES = ["Fine 2012", "Lagree 1994", "Millican 2002", "Schmitt 1972"]
+LOC_SOURCES = ["Lagree 1994", "Millican 2002", "Schmitt 1972"]
+OL_SOURCES = ["Fine 2012"]
 
 # ── Offline (mock) modu ────────────────────────────────────────────────────
 # REFERANS_KANIT_DENETIMI §5.3'teki belgelenmiş CANLI yanıtlarla birebir
@@ -56,10 +60,6 @@ MOCK_HT = {
 }
 
 MOCK_LOC = {
-    "2012014618": {
-        "item": {"title": "Metaphysical grounding : understanding the "
-                           "structure of reality", "date": "2012"},
-    },
     "95174106": {
         "item": {"title": "Juste Lipse et la restauration du stoïcisme : "
                            "étude et traduction des traités stoïciens",
