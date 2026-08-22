@@ -348,22 +348,24 @@ repos:
       - id: check-unit-tests
         name: "Unit tests for new gates (dashboard/lean/doc-sync)"
         description: >-
-          Son eklenen beş birim test dosyasını her commit'te koşar
+          Son eklenen birim test dosyalarını her commit'te koşar
           (fail-closed — herhangi bir başarısızlık commit'i bloke eder):
           test_budget_over_banner.py (BÜTÇE AŞIMI şeridi + tooltip limit
           notu), test_doc_artifact_sync.py (PUBLISH_SCENARIO artifact
           listesi ↔ ARTIFACT_JOBS senkronu), test_lean_lake.py (K9 lake
           build --wfail kapısı), test_preview_server.py (durum panosu/
-          SSE/history — dinamik bütçe limiti dahil) ve test_status_checks.py
-          (advisory kontratı + 9 required check). OFFLINE, stdlib unittest —
+          SSE/history — dinamik bütçe limiti dahil), test_status_checks.py
+          (advisory kontratı + 9 required check) ve test_dashboard_smoke.py
+          (dashboard_smoke.sh sözleşmesi: minimal PATH'te --full, verdict
+          PASS/FAIL exit kodları, rapor yazımı). OFFLINE, stdlib unittest —
           ek bağımlılık yok; PyYAML/jsonschema yoksa ilgili sınıflar dürüstçe
           SKIP edilir (CI tam suite'i yine de koşar). ~3s.
         entry: >-
           bash -c 'PY=python3; [ -x _calisma/.venv_z3/bin/python ] &&
           PY=_calisma/.venv_z3/bin/python; for t in test_budget_over_banner
           test_doc_artifact_sync test_lean_lake test_preview_server
-          test_status_checks; do "$PY" -m unittest discover -s
-          _calisma/CIKTI -p "$t.py" || exit 1; done'
+          test_status_checks test_dashboard_smoke; do "$PY" -m unittest
+          discover -s _calisma/CIKTI -p "$t.py" || exit 1; done'
         language: system
         pass_filenames: false
         always_run: true
