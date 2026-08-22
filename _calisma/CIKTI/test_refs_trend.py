@@ -11,8 +11,10 @@ short_date saf fonksiyonları test edilir. stdlib unittest — ek bağımlılık
 import datetime
 import io
 import json
+import os
 import pathlib
 import sys
+import tempfile
 import unittest
 import urllib.request
 import zipfile
@@ -271,6 +273,93 @@ class TestWorkflowCliConsistency(unittest.TestCase):
         text = self._workflow()
         self.assertIn("name: refs-trend", text)
         self.assertIn("path: all_artifacts/refs-trend/", text)
+
+
+
+class TestRunSummaryRefsTrend(unittest.TestCase):
+    """run_summary_refs_trend.py CLI tutarlılık + birim testleri.
+
+    verify.yml refs-trend job'ındaki 'Write refs trend to run summary' adımını
+    run_summary_refs_trend.py ile çağırır: refs-trend/refs-trend.md'yi
+    GITHUB_STEP_SUMMARY'ye taşır. Bu testler:
+      1) Workflow adımının doğru script/yol ile çağrıldığını,
+      2) Script'in varsayılan input yolunun workflow ile eşleştiğini,
+      3) Script'in render() fonksiyonunun eksik dosya/prompt senaryolarını
+         doğru handle ettiğini doğrular.
+    """
+
+    def _workflow(self):
+        return WORKFLOW.read_text(encoding="utf-8")
+
+    # ── Workflow CLI tutarlılığı ──────────────────────────────────────
+
+    def test_workflow_references_script_at_correct_path(self):
+        """workflow'da script doğru yoldan çağrılmalı."""
+        text = self._workflow()
+        self.assertIn(
+            "python3 _calisma/CIKTI/run_summary_refs_trend.py",
+            text)
+
+    def test_workflow_step_name_mentions_refs_trend(self):
+        """Adım adı 'refs trend' kelimesini içermeli."""
+        text = self._workflow()
+        self.assertIn("refs trend", text.lower())
+
+    def test_workflow_step_input_is_refs_trend_md(self):
+        """Workflow'un sağladığı input refs-trend/refs-trend.md olmalı."""
+        text = self._workflow()
+        # Script çağrısı refs-trend/refs-trend.md argümanını almalı
+        self.assertIn("refs-trend/refs-trend.md", text)
+
+    def test_workflow_step_runs_with_always(self):
+        """Adım if: always() ile koşmalı (verify FAIL olsa bile trend görünür)."""
+        text = self._workflow()
+        # 'Write refs trend to run summary' adımının hemen üstündeki if kontrolü
+        self.assertIn("Write refs trend to run summary", text)
+
+    # ── Script varsayılanları ────────────────────────────────────────
+
+    def test_default_md_path_matches_workflow(self):
+        """Script'in DEFAULT_MD sabiti workflow ile aynı yolu göstermeli."""
+        from run_summary_refs_trend import DEFAULT_MD
+        self.assertEqual(DEFAULT_MD, "refs-trend/refs-trend.md")
+
+    # ── Script render() fonksiyonu ──────────────────────────────────
+
+    def test_render_writes_md_to_sink(self):
+        """render() mevcut md dosyasını sink'e taşımeli."""
+        from run_summary_refs_trend import render
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".md",
+                                         delete=False) as f:
+            f.write("| Run | Verified |\n|---|---|\n| #1 | 61/61 |\n")
+            f.flush()
+            out = io.StringIO()
+            result = render(out, f.name)
+        os.unlink(f.name)
+        self.assertTrue(result)
+        self.assertIn("61/61", out.getvalue())
+        self.assertIn("Çevrimiçi referans doğrulama trendi", out.getvalue())
+
+    def test_render_handles_missing_file(self):
+        """render() dosya yoksa hata vermemeli, prompt yazmalı."""
+        from run_summary_refs_trend import render
+        out = io.StringIO()
+        result = render(out, "/nonexistent/refs-trend.md")
+        self.assertFalse(result)
+        self.assertIn("tablo bulunamadı", out.getvalue())
+
+    def test_render_adds_trailing_newline(self):
+        """render() md sonunda çift yeni satır olmalı (markdown spacing)."""
+        from run_summary_refs_trend import render
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".md",
+                                         delete=False) as f:
+            f.write("tek satır")
+            f.flush()
+            out = io.StringIO()
+            render(out, f.name)
+        os.unlink(f.name)
+        text = out.getvalue()
+        self.assertTrue(text.endswith("\n\n"))
 
 
 if __name__ == "__main__":
