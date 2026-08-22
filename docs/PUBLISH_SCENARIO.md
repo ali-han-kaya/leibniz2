@@ -136,6 +136,7 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 | 2026-08-22 | docs | changelog auto-sync — plist-check manifest entry | `62216d9` |
 | 2026-08-22 | ci | plist-check run summary'de profiles sidecar tablosu | `e9f6acf` |
 | 2026-08-22 | ci | plist-check run summary'de profiles sidecar tablosu | `deda5de` |
+| 2026-08-22 | other | _calisma/CIKTI: run_summary_refs_trend.py CLI tutarlılık testleri | `ff1e9c1` |
 
 ---
 
