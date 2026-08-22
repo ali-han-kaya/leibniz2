@@ -206,6 +206,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-22 | ci | add check-pattern-consistency pre-commit hook (#11) | `0440d82` |
 | 2026-08-22 | ci | add K15 history sidecar check to daemon advisory job (#12) | `84ee113` |
 | 2026-08-22 | feat | (dashboard) show K15 history sidecar SHA-256 in /api/latest (#13) | `dab8ecd` |
+| 2026-08-22 | feat | (dashboard) overlay duration/budget trend from refs-trend.json (#14) | `121a987` |
 
 ### Regresyon notları
 

@@ -188,6 +188,66 @@ def stats(vals):
     }
 
 
+# ── Eşik değerleri (süre/bütçe ihlali uyarıları) ────────────────────────
+DURATION_WARN_S = 300.0    # 5 dakika üzeri süre uyarısı
+BUDGET_WARN_USD = 30.0     # $30 bütçe limiti uyarısı (verify_delivery.config)
+
+
+def check_run_warnings(r, dur_warn=DURATION_WARN_S, bud_warn=BUDGET_WARN_USD):
+    """Tek bir run için duration/budget eşik uyarılarını döndür.
+
+    Döndürülen dict:
+        {"duration_warn": bool, "budget_warn": bool,
+         "duration_val": float|None, "budget_val": float|None,
+         "messages": [str]}
+    """
+    dur = r.get("duration_s")
+    bud = r.get("budget_usd")
+    msgs = []
+    dw = False
+    bw = False
+    if isinstance(dur, (int, float)) and dur > dur_warn:
+        dw = True
+        msgs.append(f"süre {dur:.1f}s > eşik {dur_warn:.0f}s")
+    if isinstance(bud, (int, float)) and bud > bud_warn:
+        bw = True
+        msgs.append(f"bütçe ${bud:.2f} > eşik ${bud_warn:.0f}")
+    return {
+        "duration_warn": dw,
+        "budget_warn": bw,
+        "duration_val": dur if isinstance(dur, (int, float)) else None,
+        "budget_val": bud if isinstance(bud, (int, float)) else None,
+        "messages": msgs,
+    }
+
+
+def summarize_warnings(history_rows, dur_warn=DURATION_WARN_S, bud_warn=BUDGET_WARN_USD):
+    """Tüm run'lar için uyarı özetini döndür.
+
+    Döndürülen dict:
+        {"duration_violations": int, "budget_violations": int,
+         "total_runs": int, "violations": [{run_idx, date, messages}]}
+    """
+    violations = []
+    for i, r in enumerate(history_rows):
+        w = check_run_warnings(r, dur_warn, bud_warn)
+        if w["messages"]:
+            violations.append({
+                "run_idx": i + 1,
+                "date": r.get("date", ""),
+                "run_id": r.get("run_id"),
+                "messages": w["messages"],
+            })
+    return {
+        "duration_violations": sum(1 for v in violations
+                                    for m in v["messages"] if "süre" in m),
+        "budget_violations": sum(1 for v in violations
+                                  for m in v["messages"] if "bütçe" in m),
+        "total_runs": len(history_rows),
+        "violations": violations,
+    }
+
+
 def short_date(iso):
     try:
         dt = datetime.datetime.fromisoformat(iso.replace("Z", "+00:00"))
@@ -275,7 +335,7 @@ def main():
             print(f"  (atlandı: run-history artifact {aid} "
                   f"({a.get('created_at')}) — {e})", file=sys.stderr)
             continue
-        history_rows.append({
+        _row = {
             "date": rec.get("ts", a.get("created_at", "")),
             "run_id": (a.get("workflow_run") or {}).get("id"),
             "duration_s": rec.get("duration_s"),
@@ -283,7 +343,11 @@ def main():
             "verdict": rec.get("verdict"),
             "p0": rec.get("p0"),
             "p1": rec.get("p1"),
-        })
+        }
+        _w = check_run_warnings(_row)
+        _row["duration_warn"] = _w["duration_warn"]
+        _row["budget_warn"] = _w["budget_warn"]
+        history_rows.append(_row)
     history_rows.sort(key=lambda r: r["date"])
 
     # ── Markdown tablo ───────────────────────────────────────────────────
@@ -357,9 +421,17 @@ def main():
                    if isinstance(r["budget_usd"], (int, float))
                    else (r["budget_usd"]
                          if r["budget_usd"] is not None else "—"))
+            # Uyarı bayrakları
+            w = check_run_warnings(r)
+            flags = []
+            if w["duration_warn"]:
+                flags.append("⏰")
+            if w["budget_warn"]:
+                flags.append("💰")
+            flag_str = " ".join(flags)
             lines.append(
                 f"| {i} | {short_date(r['date'])} | {r['run_id'] or '-'} | "
-                f"{dur} | {bud} | {r['verdict'] or '-'} |"
+                f"{dur} | {bud} | {r['verdict'] or '-'} {flag_str} |"
             )
         lines += [""]
 
@@ -380,6 +452,33 @@ def main():
             "",
         ]
 
+        # ── Eşik uyarıları özeti ────────────────────────────────────────
+        vw = summarize_warnings(history_rows)
+        if vw["violations"]:
+            lines += [
+                "### ⚠️ Eşik ihlalleri",
+                "",
+                f"- **Süre eşiği:** {DURATION_WARN_S:.0f}s üzeri {vw['duration_violations']} run",
+                f"- **Bütçe eşiği:** ${BUDGET_WARN_USD:.0f} üzeri {vw['budget_violations']} run",
+                "",
+                "| # | Tarih | Run ID | Uyarılar |",
+                "|---|---|---|---|",
+            ]
+            for v in vw["violations"]:
+                msgs = "; ".join(v["messages"])
+                lines.append(
+                    f"| {v['run_idx']} | {short_date(v['date'])} | "
+                    f"{v['run_id'] or '-'} | {msgs} |"
+                )
+            lines += [""]
+        else:
+            lines += [
+                "### ✅ Eşik uyarıları",
+                "",
+                f"Son {len(history_rows)} run'da süre/bütçe eşiği ihlali yok.",
+            ]
+            lines += [""]
+
     # Changelog: denetim düzeltmelerinin kısa kaydı (kaynak: CHANGELOG).
     lines += changelog_lines()
 
@@ -395,6 +494,7 @@ def main():
             "duration_s": stats([r["duration_s"] for r in history_rows]),
             "budget_usd": stats([r["budget_usd"] for r in history_rows]),
         },
+        "warnings": summarize_warnings(history_rows) if history_rows else None,
     }
     summary = {
         "generated": generated,
