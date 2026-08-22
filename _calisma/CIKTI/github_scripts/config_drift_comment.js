@@ -112,6 +112,11 @@
 
   // overrideWarnActive zaten yukarıda belirlendi (summary.txt'den).
   // Yalnızca override varsa → başlık drift değil override odaklı olur.
+  //
+  // overrideLine her zaman tam bloktur (başlık + açıklama + row'lar).
+  // Drift VARSA: overrideLine alt bölüm olarak sections'tan sonra eklenir.
+  // Drift YOKSA: overrideLine başlığı ATLANIR (titleLine zaten verir),
+  //   yalnızca açıklama + row listesi gösterilir — çift başlık önlenir.
   const hasDrift = sections.length > 0;
   const titleLine = hasDrift
     ? '## ⚠️ Config drift tespit edildi'
@@ -119,24 +124,27 @@
   const explainLine = hasDrift
     ? 'Config ile paket içeriği arasında fark bulundu (kapılar: ' +
         'gen_config.py --dry-run + diff-on-drift):'
-    : 'Bütçe kalkanı dosya config değeriyle DEĞİL CLI değeriyle koştu' +
-        ' — config-denetim kapıları temiz ama override kaydedildi:';
+    : null;  // override-only: açıklama overrideLine'dan gelir
+
+  // overrideLine'dan başlıksız gövdeyi çıkar (override-only durum için)
+  let overrideBodyOnly = overrideLine;
+  if (overrideLine.includes('\n')) {
+    overrideBodyOnly = overrideLine.substring(overrideLine.indexOf('\n') + 1).trim();
+  }
 
   const body = [
     titleLine,
     '',
     explainLine,
-    '',
     ...sections,
-    (hasDrift ? '' : ''),  // override-only: drift bölümü yok, boşluk da yok
-    overrideLine,
+    hasDrift ? overrideLine : overrideBodyOnly,
     '',
     hasDrift
       ? "Düzeltme: `python3 _calisma/CIKTI/gen_config.py` çalıştırıp config'i paket içeriğinden yeniden üret."
       : "Düzeltme: CLI override'ı kaldırıp dosya config'i ile koş (ya da override'ı bilinçliyse config dosyasına işle).",
     '',
     MARKER,
-  ].filter(line => line !== null).join('\n').trim();
+  ].filter(line => line !== null && line !== '').join('\n').trim();
 
   if (found) {
     await github.rest.issues.updateComment({

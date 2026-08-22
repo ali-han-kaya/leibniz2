@@ -297,6 +297,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-22 | other | verify: HT API format unit tests — data[ident].records locked | `3361b4c` |
 | 2026-08-22 | other | verify: refs-trend kapsam satiri — 61/61 + 54 gecersiz | `8ef125a` |
 | 2026-08-22 | fix | config-drift override tek kaynak — summary.txt satiri | `5e837f7` |
+| 2026-08-22 | other | verify: cli_overrides warning → fail-closed config-drift gate | `e590e70` |
 
 ### Regresyon notları
 
