@@ -299,6 +299,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-22 | fix | config-drift override tek kaynak — summary.txt satiri | `5e837f7` |
 | 2026-08-22 | other | verify: cli_overrides warning → fail-closed config-drift gate | `e590e70` |
 | 2026-08-22 | fix | config-drift override-only cift baslik engellendi | `337a8d1` |
+| 2026-08-22 | other | verify: budget bar compute — budget_scan.js (pure) + 67 Node tests | `049e9a0` |
 
 ### Regresyon notları
 

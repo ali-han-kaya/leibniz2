@@ -151,6 +151,9 @@
       <span class="z3label">Bütçe</span>
       <div class="z3bar"><div id="budget-fill" class="z3fill"></div></div>
       <span id="budget-count" class="z3count">—</span>
+      <canvas id="budget-spark" width="180" height="20"
+              style="width:180px;height:20px;border-radius:3px;background:#21262d;border:1px solid var(--border);vertical-align:middle"
+              title="Son run'ların bütçe değerleri (yeşil=limit altı, kırmızı=aşım, turuncu kesikli=limit)"></canvas>
     </div>
     <pre id="runstream" class="runstream">—</pre>
     <div class="ts" style="margin-top:4px;font-size:11px">
@@ -370,6 +373,14 @@ function renderTrend(rows) {
     return;
   }
   trendCache = rows;
+  // Bütçe sparkline'ı başlat: henüz canlı akıştan beslenmediyse
+  // (ilk yükleme), trend verisindeki son run'lardan doldur.
+  if (budgetHistory.length === 0) {
+    budgetHistory = rows
+      .filter(r => r.budget_usd != null && isFinite(r.budget_usd))
+      .map(r => ({ est: r.budget_usd, limit: BUDGET_LIMIT }));
+    renderBudgetSparkline();
+  }
   const W = 1160, H = 240, PL = 44, PR = 212, PT = 12, PB = 32;
   const iw = W - PL - PR, ih = H - PT - PB;
   const plotRight = PL + iw;
@@ -749,6 +760,7 @@ function renderRefsTrendDurationBudget(rows) {
 let runStreamES = null;
 // ---- Bütçe ilerleme çubuğu (stream'deki [BÜTÇE] satırlarından) ----
 let budgetState = null;   // {est, limit} — son bilinen bütçe kalkanı değeri
+let budgetHistory = [];   // [{est, limit}] — son N run'ın bütçe değerleri (sparkline)
 
 function updateBudgetBar() {
   const bar = $("budget-fill"), cnt = $("budget-count");
@@ -770,6 +782,56 @@ function updateBudgetBar() {
     + (over ? " · AŞIM" : "");
 }
 
+// Bütçe sparkline (canvas): son N run'ın bütçe değerlerini mini grafik olarak çizer.
+// Yeşil = limit altı, kırmızı = aşım, turuncu kesikli = limit çizgisi.
+function renderBudgetSparkline() {
+  const cv = $("budget-spark");
+  if (!cv) return;
+  const ctx = cv.getContext("2d");
+  const W = cv.width, H = cv.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const MAX_BARS = 30;
+  const hist = budgetHistory.slice(-MAX_BARS);
+  if (hist.length < 1) {
+    ctx.fillStyle = "#8b949e";
+    ctx.font = "9px monospace";
+    ctx.fillText("—", 4, 14);
+    return;
+  }
+
+  const M = Math.max(...hist.map(h => h.est), 0.01);
+  // limit: her kayıtta aynı limit varsa onu kullan, yoksa $30 varsay
+  const limits = hist.filter(h => h.limit != null && isFinite(h.limit));
+  const limit = limits.length ? limits[limits.length - 1].limit : 30.0;
+  const yMax = Math.max(M, limit) * 1.15;  // %15 boşluk
+
+  const bw = 2;  // bar genişliği
+  const gap = Math.floor((W - 8) / MAX_BARS);  // bar aralığı
+  const padL = 2, padT = 1, padB = 2;
+  const h = H - padT - padB;
+
+  // limit çizgisi (turuncu, kesikli/yatay)
+  const limitY = padT + h - (h * limit / yMax);
+  ctx.strokeStyle = "#d29922";
+  ctx.lineWidth = 1;
+  ctx.setLineDash([3, 2]);
+  ctx.beginPath();
+  ctx.moveTo(0, limitY);
+  ctx.lineTo(W, limitY);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  for (let i = 0; i < hist.length; i++) {
+    const x = padL + i * gap;
+    const barH = Math.max(1, h * hist[i].est / yMax);
+    const y = padT + h - barH;
+    const over = hist[i].est > (hist[i].limit || limit);
+    ctx.fillStyle = over ? "#f85149" : "#3fb950";
+    ctx.fillRect(x, y, bw, barH);
+  }
+}
+
 // "[BÜTÇE] ~175990 token → $1.08 (limit $30.0, …)" → {est:1.08, limit:30}
 // Stream satırındaki limit etkin config'ten geldiği için BUDGET_LIMIT'i de
 // senkronlar — config değişince grafik çizgisi canlı akışta otomatik uyar.
@@ -778,7 +840,15 @@ function scanBudget(line) {
   if (m) {
     budgetState = { est: parseFloat(m[1]), limit: parseFloat(m[2]) };
     BUDGET_LIMIT = parseFloat(m[2]);
+    // Sparkline: her yeni run başında önceki est/limit'i history'e push'la
+    // (scanBudget her run'un ilk [BÜTÇE] satırında bir kere çağrılır)
+    if (budgetHistory.length === 0 ||
+        budgetHistory[budgetHistory.length - 1].est !== budgetState.est) {
+      budgetHistory.push({ ...budgetState });
+      if (budgetHistory.length > 60) budgetHistory = budgetHistory.slice(-60);
+    }
     updateBudgetBar();
+    renderBudgetSparkline();
     updateBudgetOverBanner();  // canlı aşım varsa şerit anında görünsün
   }
 }
@@ -1263,6 +1333,16 @@ function applySnapshot(d) {
 
   // Duration
   $("m-dur").textContent = d.duration_s != null ? d.duration_s + " s" : "—";
+
+  // Bütçe sparkline: snapshot'ta budgetState varsa history'e ekle
+  if (d.budget_usd != null && d.budget_limit != null) {
+    if (budgetHistory.length === 0 ||
+        budgetHistory[budgetHistory.length - 1].est !== d.budget_usd) {
+      budgetHistory.push({ est: d.budget_usd, limit: d.budget_limit });
+      if (budgetHistory.length > 60) budgetHistory = budgetHistory.slice(-60);
+    }
+    renderBudgetSparkline();
+  }
 
   // Budget — limit /api/latest `budget.limit`'ten (applySnapshot başında senkronlanır)
   $("m-budget").textContent = d.budget_usd != null ? "$" + d.budget_usd.toFixed(2) : "—";
