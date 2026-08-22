@@ -11,5 +11,14 @@
   },
   "expected_pages": 33,
   "expected_refs": 64,
-  "expected_manifest": 21
+  "expected_manifest": 21,
+  "config_artifact_basenames": [
+    "action_pins.json",
+    "config-diff.json",
+    "config-diff.txt",
+    "config.sha256",
+    "effective_config.json",
+    "verify_delivery.config.json",
+    "verify_delivery.config.schema.json"
+  ]
 }

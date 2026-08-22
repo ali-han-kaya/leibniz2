@@ -214,6 +214,7 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 | 2026-08-22 | other | dash: budget bar limit cizgisi + yuzde etiketi | `d85213a` |
 | 2026-08-22 | other | verify: config artefact merge pattern'e dahil — config/ oneki yok | `e68a3c3` |
 | 2026-08-22 | other | verify: config artefact merge pattern'e dahil — config/ oneki yok | `a44b4f1` |
+| 2026-08-22 | ci | config snapshot ↔ CONFIG_BASENAMES sync gate | `9636a7c` |
 
 ---
 

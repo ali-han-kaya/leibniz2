@@ -2510,6 +2510,49 @@ def verify_manifest_digest(manifest_path, add, check_id="K10-MANIFEST",
         add("P1", check_id, check_label,
             "config objesi eksik (files'ta config dosyaları var)")
 
+    # ---- config_artifact_basenames ↔ gerçek basenames (fail-closed) ----
+    # verify_delivery.config.json'daki config_artifact_basenames listesi,
+    # gen_repro_manifest.py CONFIG_BASENAMES ile aynı olmalıdır — tek
+    # kaynak garantisi. Burada bundle'daki gerçek config dosyalarının
+    # basename'lerini config_artifact_basenames ile karşılaştırırız:
+    # config dosyası eklendi/çıkarıldı ama liste güncellenmediyse P1.
+    bn_ok = True
+    bn_rows = []
+    vdcj = files.get("verify_delivery.config.json") or files.get(
+        "config/verify_delivery.config.json")
+    if vdcj and isinstance(cfg_files, dict):
+        vdcj_path = os.path.join(base, "verify_delivery.config.json")
+        if not os.path.isfile(vdcj_path):
+            vdcj_path = os.path.join(base, "config", "verify_delivery.config.json")
+        if os.path.isfile(vdcj_path):
+            try:
+                with open(vdcj_path, encoding="utf-8") as f:
+                    vdcj_data = json.load(f)
+                expected_list = vdcj_data.get("config_artifact_basenames")
+                if isinstance(expected_list, list) and expected_list:
+                    actual_set = frozenset(os.path.basename(r) for r in cfg_files)
+                    expected_set = frozenset(expected_list)
+                    if actual_set != expected_set:
+                        bn_ok = False
+                        extra = sorted(actual_set - expected_set)
+                        missing = sorted(expected_set - actual_set)
+                        if extra:
+                            bn_rows.append(f"ekstra: {extra}")
+                        if missing:
+                            bn_rows.append(f"eksik: {missing}")
+                        add("P1", check_id, check_label,
+                            f"config_artifact_basenames drift: "
+                            f"beklenen {len(expected_list)}, gerçek {len(actual_set)}",
+                            f"beklenen={sorted(expected_set)} gerçek={sorted(actual_set)}")
+            except (OSError, ValueError) as e:
+                bn_ok = False
+                bn_rows.append(f"okuma hatası: {e}")
+                add("P1", check_id, check_label,
+                    f"config_artifact_basenames denetimi yapılamadı: {e}")
+
+    bn_detail = ("config_basenames: PASS" if bn_ok
+                 else ("config_basenames: FAIL — " + "; ".join(bn_rows[:3])))
+
     # ---- cli_overrides ↔ config bundle (config.combined_sha256 ile sabitlenir) ----
     # effective_config.json'un cli_overrides kaydı, dosya config'iyle
     # (verify_delivery.config.json) aynı config sürümünü yansıtmalıdır. İkisi
@@ -2776,12 +2819,12 @@ def verify_manifest_digest(manifest_path, add, check_id="K10-MANIFEST",
                  else ("manifest.sha256: FAIL — " + "; ".join(sc_rows[:3])))
 
     detail = (f"{n_ok} OK / {n_bad} uyuşmazlık / {n_missing} eksik "
-              f"({len(files)} dosya); {cfg_detail}; {ov_detail}; "
+              f"({len(files)} dosya); {cfg_detail}; {bn_detail}; {ov_detail}; "
               f"{ln_detail}; {sm_detail}; {ps_detail}; {pc_detail}; "
               f"{sc_detail}")
     if bad_rows:
         detail += " | " + "; ".join(bad_rows[:5])
-    return (n_bad == 0 and n_missing == 0 and cfg_ok and ov_ok and ln_ok
+    return (n_bad == 0 and n_missing == 0 and cfg_ok and bn_ok and ov_ok and ln_ok
             and sm_ok and ps_ok and pc_ok and sc_ok), detail
 
 

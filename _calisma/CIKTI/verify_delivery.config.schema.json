@@ -10,7 +10,8 @@
     "budget_ratios",
     "expected_pages",
     "expected_refs",
-    "expected_manifest"
+    "expected_manifest",
+    "config_artifact_basenames"
   ],
   "properties": {
     "_doc": {
@@ -57,6 +58,13 @@
       "type": "integer",
       "minimum": 1,
       "description": "Expected MANIFEST.txt file count (K4)."
+    },
+    "config_artifact_basenames": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Expected basenames in the config artifact (single source of truth — must match gen_repro_manifest.py CONFIG_BASENAMES; drift = fail-closed P0)."
     }
   },
   "additionalProperties": true
