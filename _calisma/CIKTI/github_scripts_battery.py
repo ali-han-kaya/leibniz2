@@ -1117,6 +1117,43 @@ SCENARIOS = [
             "console_any": ["yorum yok"],
         },
     ),
+    # Fail-closed gate: cli_overrides WARNING, gen_config+diff clean (0/0).
+    # Yorum SİLİNMEZ (state-sync overrideWarnActive ile korunur) — yeni yorum
+    # override-only başlıkla oluşturulur. Bu, gate'in exit 1 yaptığı ama
+    # drift_rc/diffdrift_rc 0 olan durumdur (override tek başına kapıyı aşar).
+    (
+        "config_drift: override-only gate — diff temiz, override WARNING",
+        "config_drift_comment.js",
+        {
+            "drift_rc.txt": "0",
+            "diffdrift_rc.txt": "0",
+            "config-drift/summary.txt": (
+                "config-drift exit=0 (gen_config=0, diff-on-drift=0) verdict=PASS\n"
+                "cli_overrides=WARNING 1 (override_count=1)\n"),
+            "config-drift/cli_overrides_version.json": json.dumps({
+                "tool": "check_cli_overrides.py", "warning": True,
+                "override_count": 1,
+                "overrides": [{"key": "budget", "file_value": 30,
+                               "effective": 25}],
+                "config_read": True,
+                "summary": "CLI override VAR"}),
+        },
+        None, [], [],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.createComment": 1},
+            "body_contains": {"issues.createComment": [
+                "CLI override tespit edildi (tekrarlanabilirlik sapması)",
+                "summary.txt → WARNING 1",
+                "`budget`: 30 → 25 (CLI verildi)",
+                "dosya config değeriyle DEĞİL",
+                MARKER_DRIFT]},
+            "body_not_contains": {"issues.createComment": [
+                "Config drift tespit edildi",
+                "gen_config.py",
+            ]},
+        },
+    ),
     (
         "config_drift: drift_rc.txt yok → atlanır (REST çağrısı yok)",
         "config_drift_comment.js",

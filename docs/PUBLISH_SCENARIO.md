@@ -206,6 +206,7 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 | 2026-08-22 | docs | V5y — Fine 2012 OCLC + HT 0 kayit notu | `b44a102` |
 | 2026-08-22 | other | verify: HT API format unit tests — data[ident].records locked | `3361b4c` |
 | 2026-08-22 | other | verify: refs-trend kapsam satiri — 61/61 + 54 gecersiz | `8ef125a` |
+| 2026-08-22 | fix | config-drift override tek kaynak — summary.txt satiri | `5e837f7` |
 
 ---
 

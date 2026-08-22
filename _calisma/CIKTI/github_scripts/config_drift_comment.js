@@ -19,11 +19,21 @@
   });
   const found = existing.data.find(c => c.body && c.body.includes(MARKER));
 
+  // cli_overrides tek kaynak kontrolü — summary.txt'den okunur (VERSION JSON
+  // ile aynı karar, çift okuma drift'i yok). drift_rc + diffdrift_rc 0 olsa
+  // bile override varsa state-sync silme yapmaz.
+  const summaryPath = 'config-drift/summary.txt';
+  let overrideWarnActive = false;
+  if (fs.existsSync(summaryPath)) {
+    const summary = fs.readFileSync(summaryPath, 'utf8');
+    overrideWarnActive = /^cli_overrides=WARNING/m.test(summary);
+  }
+
   // State-sync (config_diff_comment.js ile aynı desen): drift ÇÖZÜLDÜYSE
-  // (HER İKİ kapı da exit 0 — gen_config + diff-on-drift) bayat uyarı
-  // yorumunu KALDIR — önceki run'ın "Config drift tespit edildi" uyarısı
-  // çözülen drift'te yanıltıcı kalmasın. Yorum yoksa sessizce geç.
-  if (rc === '0' && diffrc === '0') {
+  // (HER İKİ kapı da exit 0 — gen_config + diff-on-drift) VE override yoksa
+  // bayat uyarı yorumunu KALDIR — önceki run'ın "Config drift tespit edildi"
+  // uyarısı çözülen drift'te yanıltıcı kalmasın. Yorum yoksa sessizce geç.
+  if (rc === '0' && diffrc === '0' && !overrideWarnActive) {
     if (found) {
       await github.rest.issues.deleteComment({
         comment_id: found.id,
@@ -47,7 +57,7 @@
   // (VERSION JSON sidecar'ı da aynı kaynaktan türer — çift okuma drift'i
   // önlenir). summary.txt'deki 'cli_overrides=' satırı WARNING ise detay
   // cli_overrides_version.json'dan okunur (satır yalnızca karar verir).
-  const summaryPath = 'config-drift/summary.txt';
+  // not: summaryPath zaten yukarıda tanımlandı (overrideWarnActive için).
   const overridePath = 'config-drift/cli_overrides_version.json';
   let overrideLine = '';
   if (fs.existsSync(summaryPath)) {
@@ -100,20 +110,33 @@
       diffFindings ? '```text\n' + diffFindings + '\n```' : '_bulgu boş_');
   }
 
+  // overrideWarnActive zaten yukarıda belirlendi (summary.txt'den).
+  // Yalnızca override varsa → başlık drift değil override odaklı olur.
+  const hasDrift = sections.length > 0;
+  const titleLine = hasDrift
+    ? '## ⚠️ Config drift tespit edildi'
+    : '## 🔧 CLI override tespit edildi (tekrarlanabilirlik sapması)';
+  const explainLine = hasDrift
+    ? 'Config ile paket içeriği arasında fark bulundu (kapılar: ' +
+        'gen_config.py --dry-run + diff-on-drift):'
+    : 'Bütçe kalkanı dosya config değeriyle DEĞİL CLI değeriyle koştu' +
+        ' — config-denetim kapıları temiz ama override kaydedildi:';
+
   const body = [
-    '## ⚠️ Config drift tespit edildi',
+    titleLine,
     '',
-    'Config ile paket içeriği arasında fark bulundu (kapılar: ' +
-      'gen_config.py --dry-run + diff-on-drift):',
+    explainLine,
     '',
     ...sections,
-    '',
+    (hasDrift ? '' : ''),  // override-only: drift bölümü yok, boşluk da yok
     overrideLine,
     '',
-    "Düzeltme: `python3 _calisma/CIKTI/gen_config.py` çalıştırıp config'i paket içeriğinden yeniden üret.",
+    hasDrift
+      ? "Düzeltme: `python3 _calisma/CIKTI/gen_config.py` çalıştırıp config'i paket içeriğinden yeniden üret."
+      : "Düzeltme: CLI override'ı kaldırıp dosya config'i ile koş (ya da override'ı bilinçliyse config dosyasına işle).",
     '',
     MARKER,
-  ].join('\n').trim();
+  ].filter(line => line !== null).join('\n').trim();
 
   if (found) {
     await github.rest.issues.updateComment({

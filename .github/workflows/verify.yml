@@ -1360,6 +1360,9 @@ jobs:
 
       # Fail-closed kapı (yorumdan SONRA): drift exit koduyla çık.
       # Job fail-closed kalır; yorum adımı yalnızca bilgilendirme ekler.
+      # cli_overrides warning=true da kapıya dahildir: override aktifken
+      # config dosya değerleriyle tutarlılık DENETLENEMEZ — tekrarlanabilirlik
+      # sapması fail-closed bloklanır (exit 1).
       - name: Config drift fail-closed gate
         if: always()
         shell: bash
@@ -1369,6 +1372,14 @@ jobs:
           final=0
           [ "$rc" != "0" ] && final=$rc
           [ "$diffrc" != "0" ] && final=$diffrc
+          # cli_overrides: tekrarlanabilirlik sapması → kapıyı AŞAR
+          if [ -f config-drift/cli_overrides_version.json ]; then
+            ov_warn=$(python3 -c "import json;d=json.load(open('config-drift/cli_overrides_version.json'));print('1' if d.get('warning') else '0')" 2>/dev/null || echo 0)
+            if [ "$ov_warn" = "1" ]; then
+              echo "🔧 CLI override WARNING → tekrarlanabilirlik sapması (fail-closed)"
+              final=1
+            fi
+          fi
           echo "Config drift final exit code: $final (gen_config=$rc, diff-on-drift=$diffrc)"
           exit "$final"
 
@@ -1390,11 +1401,17 @@ jobs:
           verdict=PASS; [ "$final" != "0" ] && verdict=FAIL
           printf 'config-drift exit=%s (gen_config=%s, diff-on-drift=%s) verdict=%s\n' \
             "$final" "$rc" "$diffrc" "$verdict" > config-drift/summary.txt
-          # cli_overrides tutarlılık denetimi — ayrı satır (VERSION JSON'da
-          # warning/override_count; dosya yoksa N/A). Advisory; kapıyı etkilemez.
+          # cli_overrides tutarlılık denetimi — fail-closed kapıya DAHİL.
+          # warning=true ise override aktif demektir; tekrarlanabilirlik sapması
+          # olarak gate'i aşar. summary.txt'ye 'cli_overrides=' satırı yazılır.
           if [ -f config-drift/cli_overrides_version.json ]; then
             cov=$(python3 -c "import json;d=json.load(open('config-drift/cli_overrides_version.json'));print('WARNING' if d.get('warning') else 'OK', d.get('override_count',0))" 2>/dev/null)
             printf 'cli_overrides=%s (override_count=%s)\n' $cov >> config-drift/summary.txt
+            # Gate'e etki: warning=true → verdict FAIL (final zaten gate'te 1 olur)
+            ov_warn=$(python3 -c "import json;d=json.load(open('config-drift/cli_overrides_version.json'));print('1' if d.get('warning') else '0')" 2>/dev/null || echo 0)
+            if [ "$ov_warn" = "1" ] && [ "$verdict" = "PASS" ]; then
+              echo "Overridden by cli_overrides WARNING — verdict → FAIL" >> config-drift/summary.txt
+            fi
           else
             printf 'cli_overrides=N/A (denetim yok)\n' >> config-drift/summary.txt
           fi
