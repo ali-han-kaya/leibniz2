@@ -34,7 +34,8 @@ function computeBudgetStatus(est, limit) {
   const over = est > limit;
   const barClass = over ? 'z3fill err' : 'z3fill budget';
   const cntClass = over ? 'z3count' : 'z3count ok';
-  const text = '$' + est.toFixed(2) + ' / $' + limit.toFixed(2) + (over ? ' · AŞIM' : '');
+  const text = '$' + est.toFixed(2) + ' / $' + limit.toFixed(2)
+    + ' (' + pct + '%)' + (over ? ' · AŞIM' : '');
   return { pct, over, barClass, cntClass, text };
 }
 

@@ -149,7 +149,10 @@
     </div>
     <div class="z3row">
       <span class="z3label">Bütçe</span>
-      <div class="z3bar"><div id="budget-fill" class="z3fill"></div></div>
+      <div class="z3bar" style="position:relative">
+        <div id="budget-fill" class="z3fill"></div>
+        <div id="budget-limit-line" style="display:none;position:absolute;top:0;width:2px;height:100%;background:#d29922;left:100%" title="Limit: $30"></div>
+      </div>
       <span id="budget-count" class="z3count">—</span>
       <canvas id="budget-spark" width="180" height="20"
               style="width:180px;height:20px;border-radius:3px;background:#21262d;border:1px solid var(--border);vertical-align:middle"
@@ -764,12 +767,14 @@ let budgetHistory = [];   // [{est, limit}] — son N run'ın bütçe değerleri
 
 function updateBudgetBar() {
   const bar = $("budget-fill"), cnt = $("budget-count");
+  const limitLine = $("budget-limit-line");
   if (!bar || !cnt) return;
   if (!budgetState || !budgetState.limit || !budgetState.est) {
     bar.style.width = "0%";
     bar.className = "z3fill budget";
     cnt.className = "z3count";
     cnt.textContent = "—";
+    if (limitLine) limitLine.style.display = "none";
     return;
   }
   const { est, limit } = budgetState;
@@ -779,7 +784,14 @@ function updateBudgetBar() {
   bar.className = over ? "z3fill err" : "z3fill budget";
   cnt.className = over ? "z3count" : "z3count ok";
   cnt.textContent = "$" + est.toFixed(2) + " / $" + limit.toFixed(2)
-    + (over ? " · AŞIM" : "");
+    + " (" + pct + "%)" + (over ? " · AŞIM" : "");
+  // Limit çizgisi: bar'ın %100'üne turuncu dikey işaret (over: kırmızı)
+  if (limitLine) {
+    limitLine.style.display = "block";
+    limitLine.style.left = "100%";
+    limitLine.style.background = over ? "#f85149" : "#d29922";
+    limitLine.title = "Limit: $" + fmtLimit(limit) + (over ? " (AŞIM!)" : "");
+  }
 }
 
 // Bütçe sparkline (canvas): son N run'ın bütçe değerlerini mini grafik olarak çizer.

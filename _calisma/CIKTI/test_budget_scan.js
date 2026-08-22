@@ -82,7 +82,7 @@ assertEq(s1.pct, 4, 'status normal: pct=4%');
 assertEq(s1.over, false, 'status normal: over=false');
 assertEq(s1.barClass, 'z3fill budget', 'status normal: barClass');
 assertEq(s1.cntClass, 'z3count ok', 'status normal: cntClass ok');
-assertEq(s1.text, '$1.08 / $30.00', 'status normal: text');
+assertEq(s1.text, '$1.08 / $30.00 (4%)', 'status normal: text with pct');
 
 // Aşım
 const s2 = computeBudgetStatus(35.50, 25.0);
