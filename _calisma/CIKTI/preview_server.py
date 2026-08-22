@@ -103,6 +103,7 @@ LATEST = {
     "status_board": None,        # tek satır durum panosu (5 ikon: Pre-commit · K0 · Bütçe · Soy hattı · K katmanları)
     "precommit_hooks": None,     # [{name, status}] — pre-commit hook sonuçları (Passed/Failed)
     "history_sidecar_sha256": None,  # history.jsonl.sha256 sidecar hash'i (K15)
+    "findings": [],                # verify_output'dan çıkan [{id,priority,label,message,detail}]
 }
 LOCK = threading.Lock()
 SSE_CLIENTS = []      # bağlı /api/run client listesi (snapshot broadcast)
@@ -120,7 +121,8 @@ HISTORY_KEYS = ("ts", "verdict", "p0", "p1", "duration_s", "budget_usd",
                 "exit_code", "refs_verified", "refs_total", "refs_mismatch",
                 "refs_by_source", "hook_env", "z3_passed", "z3_failed",
                 "z3_total", "lean_ok", "lean_detail", "cli_override_count",
-                "lineage_ok", "lineage_count", "history_sidecar_sha256")
+                "lineage_ok", "lineage_count", "history_sidecar_sha256",
+                "findings")
 
 
 def snapshot_dict():
@@ -821,6 +823,9 @@ def _finalize_run(stdout, stderr, rc, duration, data, verify_dir=None):
             "lineage_count": (lineage_summary or {}).get("count"),
             # Pre-commit hook durumları (stderr'den ayrıştırıldı)
             "precommit_hooks": precommit_hooks,
+            # P0/P1 bulgu satırları (verify --json findings[])
+            "findings": [f for f in (data.get("findings") or [])
+                          if f.get("priority") in ("P0", "P1")],
         })
         # Extract pages + refs from stdout for richer dashboard
         for line in stdout.splitlines():
