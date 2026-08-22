@@ -201,6 +201,7 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 | 2026-08-22 | ci | override-trend — CLI override zaman serisi (refs-trend deseni) | `950cbbc` |
 | 2026-08-22 | other | dash: CLI override panel'i — son run'un override durumu | `6f2797d` |
 | 2026-08-22 | other | dash: K-layer panel — tum rozetler d.layers tek kaynak | `27542eb` |
+| 2026-08-22 | ci | layers slot in LATEST + SSE snapshot plumbing tests | `6a4d2af` |
 
 ---
 

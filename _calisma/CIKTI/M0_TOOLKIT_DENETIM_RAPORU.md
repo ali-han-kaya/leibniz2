@@ -185,6 +185,15 @@ sidecar'ı eklenince MANIFEST 19 girdiye, V5m'de `qpdf_determinism_experiment.py
 + `qpdf_determinism_output.txt` eklenince 21 girdiye çıktı. §6/§7/§9 güncel
 sayıyı (21/21) taşır.
 
+**V5t dashboard K-layer paneli:** `K1-K7: PASS` tek aggregate rozeti kaldırıldı;
+yerine `d.layers`'tan türetilen K0-K17 kompakt panel geldi. Her katman
+PASS/FAIL/SKIP bireysel badge olarak gösterilir (✓/✗/·), K8/K9 tooltip'i
+z3_passed/lean_ok ile zenginleştirilir. Tek kaynak: `verify_delivery.py
+--json` → `build_layers_summary` → `preview_server` LATEST →
+`renderKLayers(ls, ...)`. 7 birim test (`LayersPlumbingTests`) `/api/latest`
+ve SSE snapshot veri hattını sabitler — layers yoksa eski 'bekleniyor'
+davranışına düşer.
+
 ---
 
 ## 7. GEÇERLİLİK KANITLARI (kapsam)
