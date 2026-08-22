@@ -19,10 +19,15 @@ Kullanım:
   python3 _calisma/CIKTI/status_checks.py --json           # makine-okur çıktı
   python3 _calisma/CIKTI/status_checks.py --gh --json      # doğrulama (names+smoke) JSON
 
+Advisory kontratı (her modda koşar): tüm job adları ↔ required set farkı
+raporlanır — plist-check (macOS advisory) required sette DEĞİLSE, exclude
+bayat kaldıysa veya isim çakışması varsa exit 1 (fail-closed).
+
 Çıkış kodları:
   0 — liste üretildi; veya --gh'de birebir eşleşme; veya koruma kurulu değil
       (publish öncesi normal — UYARI basılır, bloke etmez).
-  1 — --gh'de eksik/fazla check VEYA merge engeli smoke FAIL (fail-closed).
+  1 — advisory kontratı ihlali VEYA --gh'de eksik/fazla check VEYA merge
+      engeli smoke FAIL (fail-closed).
   2 — çalışma hatası (PyYAML yok, repo belirlenemedi).
 
 Not: CI'da değil yerel/publish aracıdır — branch protection okumak admin
@@ -66,6 +71,91 @@ def gate_jobs():
         data = yaml.safe_load(f)
     jobs = data["jobs"]
     return {jid: j["name"] for jid, j in jobs.items() if jid not in GATE_EXCLUDE}
+
+
+def all_jobs(data=None):
+    """workflow'daki TÜM job id → name eşlemesi (required + advisory + PR-only).
+
+    data verilirse mock/parçalı workflow üzerinde çalışır (testler için);
+    verilmezse WORKFLOW dosyasını okur.
+    """
+    if data is None:
+        with open(WORKFLOW, encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+    jobs = data.get("jobs") or {}
+    return {jid: (j.get("name") if isinstance(j, dict) else str(j))
+            for jid, j in jobs.items()}
+
+
+def advisory_contract(data=None):
+    """Advisory kontratı: tüm job adları ↔ required set farkını denetler.
+
+    Fail-closed invariantlar:
+      1. GATE_EXCLUDE'daki her job id workflow'da VAR olmalı (bayat exclude
+         = o kapı sessizce düşmüş demektir).
+      2. Exclude edilen hiçbir job adı required sette OLAMAZ (isim çakışması
+         = required olmaması gereken bir job kapıya girmiş).
+      3. plist-check (macOS advisory) özel olarak required DEĞİL olmalı.
+
+    Döndürür: {ok, all_jobs, required, advisory, plist_check, issues}.
+    advisory = tüm adlar − required adlar (advisory/PR-only farkı).
+    """
+    if data is None:
+        with open(WORKFLOW, encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+    allj = all_jobs(data)
+    req_names = {nm for jid, nm in allj.items() if jid not in GATE_EXCLUDE}
+    issues = []
+    for jid in sorted(GATE_EXCLUDE):
+        nm = allj.get(jid)
+        if nm is None:
+            issues.append(f"GATE_EXCLUDE '{jid}' workflow'da yok (bayat exclude)")
+        elif nm in req_names:
+            issues.append(
+                f"'{jid}' ({nm}) exclude edilmiş ama required sette "
+                "(isim çakışması)")
+    pc_name = allj.get("plist-check")
+    plist = {
+        "job_id": "plist-check",
+        "name": pc_name,
+        "required": pc_name in req_names if pc_name else False,
+        "ok": pc_name is not None and pc_name not in req_names,
+    }
+    if pc_name is None:
+        issues.append(
+            "'plist-check' job'ı workflow'da yok (advisory denetimi kayıp)")
+    elif pc_name in req_names:
+        issues.append(
+            f"'plist-check' required sette — advisory olmalı: {pc_name}")
+    return {
+        "ok": not issues and plist["ok"],
+        "all_jobs": allj,
+        "required": sorted(req_names),
+        "advisory": sorted(set(allj.values()) - req_names),
+        "plist_check": plist,
+        "issues": issues,
+    }
+
+
+def format_contract(contract):
+    """Advisory kontratı bölümünü insan-okur metne çevirir."""
+    lines = ["\n── Advisory kontratı (tüm job'lar ↔ required farkı) ──"]
+    pc = contract["plist_check"]
+    if pc["ok"]:
+        lines.append(f"  [PASS] plist-check: \"{pc['name']}\" advisory — "
+                     "required sette DEĞİL")
+    else:
+        lines.append(f"  [FAIL] plist-check advisory olmalı: {pc}")
+    lines.append(
+        f"  Tüm adlar ({len(contract['all_jobs'])}) − required "
+        f"({len(contract['required'])}) = advisory/PR-only "
+        f"({len(contract['advisory'])}):")
+    for nm in contract["advisory"]:
+        lines.append(f"    • {nm}")
+    for issue in contract["issues"]:
+        lines.append(f"  [FAIL] {issue}")
+    lines.append(f"  Durum: {'PASS' if contract['ok'] else 'FAIL'}")
+    return "\n".join(lines)
 
 
 def run_gh(args):
@@ -139,12 +229,28 @@ def main(argv=None):
 
     gates = gate_jobs()
     expected = list(gates.values())
+    contract = advisory_contract()
     payload = {
         "workflow": WORKFLOW,
         "gate_jobs": list(gates.keys()),
         "excluded": sorted(GATE_EXCLUDE),
         "checks": expected,
+        "all_jobs": contract["all_jobs"],
+        "advisory": contract["advisory"],
+        "advisory_contract": {
+            k: v for k, v in contract.items() if k != "all_jobs"},
     }
+
+    if not contract["ok"]:
+        # Fail-closed: advisory kontratı ihlali (örn. plist-check required'a
+        # girmiş, bayat exclude, isim çakışması) — TÜM modlarda exit 1.
+        if args.json:
+            out = dict(payload)
+            out.update({"verdict": "FAIL", "issues": contract["issues"]})
+            print(json.dumps(out, indent=2, ensure_ascii=False))
+        else:
+            print(format_contract(contract))
+        sys.exit(1)
 
     if args.json and not args.gh:
         print(json.dumps(payload, indent=2, ensure_ascii=False))
@@ -156,6 +262,7 @@ def main(argv=None):
               f"hariç: {', '.join(sorted(GATE_EXCLUDE))})")
         for i, n in enumerate(expected, 1):
             print(f"  {i:2d}. {n}")
+        print(format_contract(contract))
 
     if not args.gh:
         print("\nGitHub ile doğrulamak için: --gh (branch protection kuruluysa)")

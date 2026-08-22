@@ -240,6 +240,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-22 | fix | (plist) restore two-profile management, sync tests to reality | `0d29fd8` |
 | 2026-08-22 | feat | (plist) K12 out-of-scope INFO line in audit trail | `e78d906` |
 | 2026-08-22 | test | (plist) real end-to-end extra-file scenario for check_plist_drift | `bebc0cf` |
+| 2026-08-22 | feat | (protection) K1-K14 job rename + 9 required check sync | `d3de002` |
 
 ### Regresyon notları
 
