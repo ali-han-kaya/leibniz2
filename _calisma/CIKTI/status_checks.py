@@ -60,6 +60,7 @@ GATE_EXCLUDE = {
     "audit-live-ci",        # advisory: doc↔GitHub senkron denetimi
     "audit-refs-trend",     # advisory: refs-trend satırları ↔ kaynak denetimi
     "override-trend",       # advisory: CLI override zaman serisi
+    "config-sync",           # advisory: config snapshot ↔ CONFIG_BASENAMES
 }
 # Not: "label-gate" (Pre-commit P0 label gate) BİLEREK required check'tir —
 # precommit-p0 etiketi varken FAIL verip merge'i bloke eder; bu yüzden

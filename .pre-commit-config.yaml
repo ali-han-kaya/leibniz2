@@ -4,7 +4,7 @@
 #   pip install pre-commit
 #   pre-commit install
 #
-# Bu noktadan sonra her `git commit` sırasında dokuz kapı çalışır:
+# Bu noktadan sonra her `git commit` sırasında on beş kapı çalışır:
 #   0) update-config          : config'i paket içeriğinden senkron et (gen_config.py)
 #                               — repack sayıları değiştirdiyse verify_delivery.config.json'u
 #                               otomatik günceller ve stage eder; değişmediyse dokunmaz.
@@ -189,6 +189,23 @@ repos:
           biçimselleştirilmesi. Tümevarımsal kanıt derlenerek doğrulanır.
           lean (elan) gerektirir; PATH'te veya ~/.elan/bin'de aranır.
         entry: sh _calisma/CIKTI/verify_lean.sh
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
+      - id: check-config-sync
+        name: "Verify workflow config snapshot ↔ CONFIG_BASENAMES sync"
+        description: >-
+          check_config_sync.py: verify.yml "Bundle config snapshot"
+          adımında kopyalanan/üretilen her config dosyasının
+          gen_repro_manifest.py CONFIG_BASENAMES set'inde tanımlı
+          olduğunu doğrular. Drift: yeni dosya eklenir ama
+          CONFIG_BASENAMES güncellenmezse → config manifest'ten düşer →
+          K10 göremez → sessiz kapsam kaybı. Fail-closed — commit
+          bloke edilir. OFFLINE, stdlib-only, ~0.02s.
+        entry: python3 _calisma/CIKTI/check_config_sync.py
         language: system
         always_run: true
         pass_filenames: false
@@ -382,7 +399,7 @@ repos:
           PY=_calisma/.venv_z3/bin/python; for t in test_budget_over_banner
           test_doc_artifact_sync test_lean_lake test_preview_server
           test_status_checks test_dashboard_smoke test_coq_lake
-          test_override_trend; do "$PY" -m
+          test_override_trend test_check_config_sync; do "$PY" -m
           unittest discover -s _calisma/CIKTI -p "$t.py" || exit 1; done'
         language: system
         pass_filenames: false
