@@ -940,6 +940,8 @@ class Handler(BaseHTTPRequestHandler):
             self.serve_history()
         elif self.path == "/api/refs-trend":
             self.serve_refs_trend()
+        elif self.path == "/api/run-history":
+            self.serve_run_history()
         elif self.path == "/api/health":
             self._send(200, "ok")
         else:
@@ -1055,6 +1057,25 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:
             self._send(500, json.dumps({"error": str(e)}),
                        content_type="application/json; charset=utf-8")
+
+    def serve_run_history(self):
+        """Son N run'ın özetini stdout/stderr olmadan döndür (dashboard run history listesi)."""
+        records = load_run_logs(15)  # son 15 run
+        summaries = []
+        for r in records:
+            summaries.append({
+                "ts": r.get("ts"),
+                "verdict": r.get("verdict"),
+                "p0": r.get("p0"),
+                "p1": r.get("p1"),
+                "budget_usd": r.get("budget_usd"),
+                "duration_s": r.get("duration_s"),
+                "refs_verified": r.get("refs_verified"),
+                "refs_total": r.get("refs_total"),
+                "pdf_pages": r.get("pdf_pages"),
+            })
+        self._send(200, json.dumps(summaries, ensure_ascii=False),
+                   content_type="application/json; charset=utf-8")
 
     def trigger_run_now(self):
         """Manuel tetikleme: interval beklemeden hemen verify koşar.
