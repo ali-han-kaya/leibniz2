@@ -231,6 +231,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-22 | feat | (verify) add lean_ok/lean_detail to history.jsonl record | `e28c83f` |
 | 2026-08-22 | feat | (refs-trend) add z3_passed/z3_total to duration_budget section | `8d669ea` |
 | 2026-08-22 | fix | (plist) KeepAlive SuccessfulExit=false to prevent restart race | `aae9b0f` |
+| 2026-08-22 | fix | (tests) green local suite — jsonschema skip, Fine 2012 OL source | `54e7377` |
 
 ### Regresyon notları
 

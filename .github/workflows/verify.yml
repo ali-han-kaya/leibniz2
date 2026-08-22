@@ -306,6 +306,58 @@ jobs:
           cat logs/precommit.log
           exit $status
 
+      # ─── K13 REPRO-MANIFEST (ADVISORY, ayrı step) ───────────────────────
+      # verify-delivery-repro-manifest hook'u (K13) — yukarıdaki ortak
+      # `pre-commit run --all-files` içinde zaten koşar; BURADA ayrıca TEK
+      # BAŞINA koşulup sonucu logs/k13_repro_manifest.log + makine-okunur
+      # logs/k13_repro_manifest.json sidecar'ına yazılır (precommit-logs
+      # artifact'ı logs/ dizinini bütünüyle yükler → K13 sonucu artifact'a
+      # girer). Komut, yereldeki hook entry'si ile BİREBİR aynıdır.
+      - name: Run verify-delivery-repro-manifest (K13, separate)
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: |
+          mkdir -p logs
+          if python3 _calisma/CIKTI/verify_delivery.py --dir _calisma/CIKTI \
+             --check-repro-manifest > logs/k13_repro_manifest.log 2>&1; then
+            status=0
+          else
+            status=$?
+          fi
+          echo "$status" > logs/k13_repro_manifest.exit
+          if [ "$status" -eq 0 ]; then ok="true"; res="PASS"; else ok="false"; res="FAIL"; fi
+          python3 - "$ok" "$status" "$res" <<'PYEOF'
+          import json, sys
+          ok, status, res = sys.argv[1], int(sys.argv[2]), sys.argv[3]
+          detail = ""
+          try:
+              with open("logs/k13_repro_manifest.log", encoding="utf-8") as f:
+                  for line in f:
+                      if line.startswith("[K13]"):
+                          detail = line.strip()
+          except OSError:
+              pass
+          with open("logs/k13_repro_manifest.json", "w", encoding="utf-8") as f:
+              json.dump({
+                  "layer": "K13",
+                  "ok": ok == "true",
+                  "exit": status,
+                  "detail": detail or f"K13 repro manifest: {res}",
+                  "log": "k13_repro_manifest.log",
+              }, f, ensure_ascii=False, indent=2)
+          PYEOF
+          {
+            echo ""
+            echo "════════════════════════════════════════════════════════"
+            echo "K13 REPRO-MANIFEST (ADVISORY, ayrı step)"
+            echo "exit code: $status"
+            echo "════════════════════════════════════════════════════════"
+            cat logs/k13_repro_manifest.log
+          } >> verify_report.txt
+          cat logs/k13_repro_manifest.log
+          exit $status
+
       # ─── COMMIT-MSG (ADVISORY) — commit geçmişi kural denetimi ──────────
       # commit_msg_hook.sh yerelde `git commit`'i BLOKE eder; CI'da zaten push
       # edilmiş commit'leri denetleyip ihlalleri logs/commit_msg_findings.json'a
