@@ -72,8 +72,18 @@ FILES=(
 )
 
 # Lean dosyaları: kaynak LEAN_SRC'ye, dest LEAN_MIRROR_DIR'a göre.
+# K9 iki kapılıdır: (1) ReductInvariance.lean meta-teoremi, (2) 8 teoremli
+# Sınır İspatı çekirdeği — lake build --wfail (lean-toolchain v4.14.0).
+# Bu yüzden lake projesinin TÜM kaynak dosyaları mirror'a gider; yalnızca
+# ReductInvariance.lean senkronlanırsa mirror rotasında K9-LAKE P0 üretir
+# (canlı dashboard FAIL — dashboard_smoke.sh bunu yakalamıştı).
 LEAN_FILES=(
   "ReductInvariance.lean|ReductInvariance.lean"
+  "lean-toolchain|lean-toolchain"
+  "lakefile.toml|lakefile.toml"
+  "Leibniz2Reduct.lean|Leibniz2Reduct.lean"
+  "Leibniz2Reduct/Content.lean|Leibniz2Reduct/Content.lean"
+  "Content.lean|Content.lean"
 )
 
 # Preview mirror dosyaları (adım 2): kaynak CIKTI'ya, dest PREVIEW_MIRROR'a

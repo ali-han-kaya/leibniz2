@@ -60,6 +60,7 @@ ARTIFACT_JOBS = {
     "unit-tests": "verify",
     "refs-online": "verify",
     "refs-trend": "refs-trend",
+    "override-trend": "override-trend",
     "run-history": "verify",
     "precommit-logs": "verify",
     "budget": "budget",
@@ -110,6 +111,25 @@ SUMMARY_BASENAMES = frozenset({
 def _is_summary_rel(rel: str) -> bool:
     """Bir rel yolunun run summary sidecar dosyası olup olmadığını isimle tanı."""
     return os.path.basename(rel) in SUMMARY_BASENAMES
+
+
+# CLI override sürüm sidecar'ının bilinen ADI (basename).
+# check_cli_overrides.py --version-out ile üretilir; budget veya config-drift
+# artifact'ından merge-multiple ile köke düzleşir — önek yoktur, basename ile
+# tanınır (CONFIG/SUMMARY desenlerinin aynısı).
+OVERRIDES_BASENAMES = frozenset({
+    "cli_overrides_version.json",
+})
+
+
+def _is_overrides_rel(rel: str) -> bool:
+    """Bir rel yolunun CLI override sidecar dosyası olup olmadığını isimle tanı.
+
+    cli_overrides_version.json farklı işler tarafından (budget, config-drift)
+    farklı alt dizinlerde üretilir; merge-multiple köke düzleştirdiğinde
+    tek bir kopya kalır. Basename ile tanınır.
+    """
+    return os.path.basename(rel) in OVERRIDES_BASENAMES
 
 
 def _is_action_runtimes_rel(rel: str) -> bool:
@@ -268,6 +288,34 @@ def main() -> None:
                      f"refs_trend_combined_sha256: {refs_trend_combined}",
                      "=" * 72]
         lines += rt_block
+
+    # ── OVERRIDE TREND bölümü: override-trend/ önekli dosyalar (CONFIG gibi) ─
+    # override_trend.py'nin çıktısı (override-trend.md + override-trend.json)
+    # ayrıca işaretlenir; combined_sha256 tek hash ile özetler. Böylece CLI
+    # override'larının zaman serisi de denetim zincirinde.
+    override_trend_hashes = {rel: h for rel, h in file_hashes.items()
+                             if rel.startswith("override-trend/")}
+    override_trend_combined = None
+    if override_trend_hashes:
+        sorted_rel = sorted(override_trend_hashes)
+        override_trend_combined = hashlib.sha256(
+            "".join(f"{rel}\0{override_trend_hashes[rel]}\n"
+                     for rel in sorted_rel).encode()
+        ).hexdigest()
+        ot_block = [
+            "",
+            "=" * 72,
+            "OVERRIDE TREND ARTIFACT (ayrı bölüm)",
+            "=" * 72,
+            f"{'FILE':<55} {'SHA-256'}",
+            "-" * 72,
+        ]
+        ot_block += [f"{rel:<55} {override_trend_hashes[rel]}"
+                     for rel in sorted_rel]
+        ot_block += ["-" * 72,
+                     f"override_trend_combined_sha256: {override_trend_combined}",
+                     "=" * 72]
+        lines += ot_block
 
     # ── LINEAGE bölümü: lineage-findings/ önekli dosyalar (CONFIG gibi) ──
     # zip_lineage.json sidecar'ı ve --check-lineage çıktısı ayrıca
@@ -437,6 +485,35 @@ def main() -> None:
                      "=" * 72]
         lines += pc_block
 
+    # ── OVERRIDES bölümü: cli_overrides_version.json (CLI override kaydı) ──
+    # check_cli_overrides.py --version-out çıktısı; CONFIG gibi ayrıca
+    # işaretlenir. combined_sha256 tek hash ile özetler (config.combined_sha256
+    # ile aynı deterministik yöntem). Böylece CLI override'ları da denetim
+    # zincirinde (override → hash → manifest → bundle).
+    overrides_hashes = {rel: h for rel, h in file_hashes.items()
+                        if _is_overrides_rel(rel)}
+    overrides_combined = None
+    if overrides_hashes:
+        sorted_rel = sorted(overrides_hashes)
+        overrides_combined = hashlib.sha256(
+            "".join(f"{rel}\0{overrides_hashes[rel]}\n"
+                     for rel in sorted_rel).encode()
+        ).hexdigest()
+        ov_block = [
+            "",
+            "=" * 72,
+            "OVERRIDES ARTIFACT (ayrı bölüm)",
+            "=" * 72,
+            f"{'FILE':<55} {'SHA-256'}",
+            "-" * 72,
+        ]
+        ov_block += [f"{rel:<55} {overrides_hashes[rel]}"
+                     for rel in sorted_rel]
+        ov_block += ["-" * 72,
+                     f"overrides_combined_sha256: {overrides_combined}",
+                     "=" * 72]
+        lines += ov_block
+
     # ── UNIT TESTS bölümü: unit_tests.log (test çıktıları) ──────────────────
     # verify job'undaki unittest discover çıktısı (unit_tests.log) ayrıca
     # işaretlenir; combined_sha256 tek hash ile özetler. Böylece test
@@ -506,8 +583,8 @@ def main() -> None:
     #               dosyalar all_artifacts/ köküne düzleşti
     #  .none      — hiç indirilmedi (reproducibility çıkış artifact'ı)
     PREFIXED = frozenset({
-        "config", "precommit-logs", "refs-trend", "precheck-report",
-        "python3-shell", "plist-check",
+        "config", "precommit-logs", "refs-trend", "override-trend",
+        "precheck-report", "python3-shell", "plist-check",
     })
     MERGED = frozenset({
         "verify-report", "budget", "budget-verify", "reports",
@@ -594,6 +671,11 @@ def main() -> None:
             "files": dict(sorted(refs_trend_hashes.items())),
             "combined_sha256": refs_trend_combined,
         }
+    if override_trend_hashes:
+        manifest_json["override_trend"] = {
+            "files": dict(sorted(override_trend_hashes.items())),
+            "combined_sha256": override_trend_combined,
+        }
     if lineage_hashes:
         manifest_json["lineage"] = {
             "files": dict(sorted(lineage_hashes.items())),
@@ -623,6 +705,11 @@ def main() -> None:
         manifest_json["plist_check"] = {
             "files": dict(sorted(plist_check_hashes.items())),
             "combined_sha256": plist_check_combined,
+        }
+    if overrides_hashes:
+        manifest_json["overrides"] = {
+            "files": dict(sorted(overrides_hashes.items())),
+            "combined_sha256": overrides_combined,
         }
     if unit_test_hashes:
         manifest_json["unit_tests"] = {

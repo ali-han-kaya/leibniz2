@@ -55,7 +55,7 @@ permissions:
 
 jobs:
   verify:
-    name: Delivery verification — K1-K9 (single entry point)
+    name: Delivery verification — K1-K14 (single entry point)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -249,11 +249,14 @@ jobs:
 
       # K9: Lean 4 reduct-invariance (elan + stable toolchain).
       # NOT: `--default-toolchain none` + lean-toolchain dosyası yok = lean
-      # çalışmaz; bu yüzden stable toolchain açıkça kurulur.
+      # çalışmaz; bu yüzden stable toolchain açıkça kurulur. v4.14.0 da
+      # açıkça kurulur — 8 teoremli Sınır İspatı çekirdeğinin lake build
+      # kapısı lean-toolchain'deki sürümü (fail-closed) kullanır.
       - name: Install Lean 4 (K9)
         run: |
           curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain leanprover/lean4:stable
           echo "$HOME/.elan/bin" >> $GITHUB_PATH
+          elan toolchain install leanprover/lean4:v4.14.0
 
       # `pipefail` + `tee`: çıktı hem log'a hem dosyaya yazılır, ama exit kodu
       # python'dan gelir (boru, fail-closed kapıyı gizleyemez).
@@ -261,7 +264,7 @@ jobs:
       # --budget-out: bütçe sonucunu ayrı JSON'a yazar (budget job'u tüketir).
       # --refs-out: çevrimiçi referans denetim sonuçlarını VERSION JSON olarak
       # yazar (her run'da kaç referansın çevrimiçi doğrulandığını izlemek için).
-      - name: Run full verification (K1-K9, single entry point)
+      - name: Run full verification (K1-K14, single entry point)
         shell: bash
         run: |
           set -o pipefail
@@ -304,6 +307,58 @@ jobs:
             cat logs/precommit.log
           } >> verify_report.txt
           cat logs/precommit.log
+          exit $status
+
+      # ─── K13 REPRO-MANIFEST (ADVISORY, ayrı step) ───────────────────────
+      # verify-delivery-repro-manifest hook'u (K13) — yukarıdaki ortak
+      # `pre-commit run --all-files` içinde zaten koşar; BURADA ayrıca TEK
+      # BAŞINA koşulup sonucu logs/k13_repro_manifest.log + makine-okunur
+      # logs/k13_repro_manifest.json sidecar'ına yazılır (precommit-logs
+      # artifact'ı logs/ dizinini bütünüyle yükler → K13 sonucu artifact'a
+      # girer). Komut, yereldeki hook entry'si ile BİREBİR aynıdır.
+      - name: Run verify-delivery-repro-manifest (K13, separate)
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: |
+          mkdir -p logs
+          if python3 _calisma/CIKTI/verify_delivery.py --dir _calisma/CIKTI \
+             --check-repro-manifest > logs/k13_repro_manifest.log 2>&1; then
+            status=0
+          else
+            status=$?
+          fi
+          echo "$status" > logs/k13_repro_manifest.exit
+          if [ "$status" -eq 0 ]; then ok="true"; res="PASS"; else ok="false"; res="FAIL"; fi
+          python3 - "$ok" "$status" "$res" <<'PYEOF'
+          import json, sys
+          ok, status, res = sys.argv[1], int(sys.argv[2]), sys.argv[3]
+          detail = ""
+          try:
+              with open("logs/k13_repro_manifest.log", encoding="utf-8") as f:
+                  for line in f:
+                      if line.startswith("[K13]"):
+                          detail = line.strip()
+          except OSError:
+              pass
+          with open("logs/k13_repro_manifest.json", "w", encoding="utf-8") as f:
+              json.dump({
+                  "layer": "K13",
+                  "ok": ok == "true",
+                  "exit": status,
+                  "detail": detail or f"K13 repro manifest: {res}",
+                  "log": "k13_repro_manifest.log",
+              }, f, ensure_ascii=False, indent=2)
+          PYEOF
+          {
+            echo ""
+            echo "════════════════════════════════════════════════════════"
+            echo "K13 REPRO-MANIFEST (ADVISORY, ayrı step)"
+            echo "exit code: $status"
+            echo "════════════════════════════════════════════════════════"
+            cat logs/k13_repro_manifest.log
+          } >> verify_report.txt
+          cat logs/k13_repro_manifest.log
           exit $status
 
       # ─── COMMIT-MSG (ADVISORY) — commit geçmişi kural denetimi ──────────
@@ -483,7 +538,7 @@ jobs:
           sha256sum history.jsonl 2>/dev/null > history.jsonl.sha256 || true
 
       # `if: always()` — kapı FAIL olsa bile rapor (neden başarısız olduğu)
-      # artifact olarak yüklenir. Tek rapor, tüm K1-K9 katmanlarını içerir.
+      # artifact olarak yüklenir. Tek rapor, tüm K1-K14 katmanlarını içerir.
       # Hangi config'in kullanıldığını denetlenebilir kılar: ham config,
       # şeması ve verify_delivery.py'nin çözümlediği etkin değerler.
       - name: Bundle config snapshot
@@ -937,7 +992,7 @@ jobs:
   reproducibility:
     name: Reproducibility bundle
     runs-on: ubuntu-latest
-    needs: [verify, budget, reports, config-drift, repack-verify, refs-trend, action-runtimes]
+    needs: [verify, budget, reports, config-drift, repack-verify, refs-trend, override-trend, action-runtimes]
     if: always()
     steps:
       - name: Checkout
@@ -964,13 +1019,7 @@ jobs:
         with:
           path: all_artifacts/
           merge-multiple: true
-          pattern: '{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,k0-findings,budget-verify,lineage-findings,klayers,unit-tests,action-runtimes}'
-
-      - name: Download config artifact (config/ prefix)
-        uses: actions/download-artifact@v7
-        with:
-          name: config
-          path: all_artifacts/config/
+          pattern: '{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,config,k0-findings,budget-verify,lineage-findings,klayers,unit-tests,action-runtimes}'
 
       - name: Download precommit-logs artifact (precommit-logs/ prefix)
         uses: actions/download-artifact@v7
@@ -988,6 +1037,17 @@ jobs:
         with:
           name: refs-trend
           path: all_artifacts/refs-trend/
+
+      # override-trend advisory bir job'dur; artifact'ı yoksa (tablo
+      # üretilemedi) manifest override-trend'siz üretilir —
+      # continue-on-error ile build bloke edilmez. Prefixed indirme
+      # sayesinde override-trend/ önekini yakalar + ayrı hash'ler.
+      - name: Download override-trend artifact (override-trend/ prefix)
+        continue-on-error: true
+        uses: actions/download-artifact@v7
+        with:
+          name: override-trend
+          path: all_artifacts/override-trend/
 
       # precheck-report advisory bir job'dur; artifact'ı yoksa manifest
       # precheck'siz üretilir — continue-on-error ile build bloke edilmez.
@@ -1294,6 +1354,9 @@ jobs:
 
       # Fail-closed kapı (yorumdan SONRA): drift exit koduyla çık.
       # Job fail-closed kalır; yorum adımı yalnızca bilgilendirme ekler.
+      # cli_overrides warning=true da kapıya dahildir: override aktifken
+      # config dosya değerleriyle tutarlılık DENETLENEMEZ — tekrarlanabilirlik
+      # sapması fail-closed bloklanır (exit 1).
       - name: Config drift fail-closed gate
         if: always()
         shell: bash
@@ -1303,6 +1366,14 @@ jobs:
           final=0
           [ "$rc" != "0" ] && final=$rc
           [ "$diffrc" != "0" ] && final=$diffrc
+          # cli_overrides: tekrarlanabilirlik sapması → kapıyı AŞAR
+          if [ -f config-drift/cli_overrides_version.json ]; then
+            ov_warn=$(python3 -c "import json;d=json.load(open('config-drift/cli_overrides_version.json'));print('1' if d.get('warning') else '0')" 2>/dev/null || echo 0)
+            if [ "$ov_warn" = "1" ]; then
+              echo "🔧 CLI override WARNING → tekrarlanabilirlik sapması (fail-closed)"
+              final=1
+            fi
+          fi
           echo "Config drift final exit code: $final (gen_config=$rc, diff-on-drift=$diffrc)"
           exit "$final"
 
@@ -1324,11 +1395,17 @@ jobs:
           verdict=PASS; [ "$final" != "0" ] && verdict=FAIL
           printf 'config-drift exit=%s (gen_config=%s, diff-on-drift=%s) verdict=%s\n' \
             "$final" "$rc" "$diffrc" "$verdict" > config-drift/summary.txt
-          # cli_overrides tutarlılık denetimi — ayrı satır (VERSION JSON'da
-          # warning/override_count; dosya yoksa N/A). Advisory; kapıyı etkilemez.
+          # cli_overrides tutarlılık denetimi — fail-closed kapıya DAHİL.
+          # warning=true ise override aktif demektir; tekrarlanabilirlik sapması
+          # olarak gate'i aşar. summary.txt'ye 'cli_overrides=' satırı yazılır.
           if [ -f config-drift/cli_overrides_version.json ]; then
             cov=$(python3 -c "import json;d=json.load(open('config-drift/cli_overrides_version.json'));print('WARNING' if d.get('warning') else 'OK', d.get('override_count',0))" 2>/dev/null)
             printf 'cli_overrides=%s (override_count=%s)\n' $cov >> config-drift/summary.txt
+            # Gate'e etki: warning=true → verdict FAIL (final zaten gate'te 1 olur)
+            ov_warn=$(python3 -c "import json;d=json.load(open('config-drift/cli_overrides_version.json'));print('1' if d.get('warning') else '0')" 2>/dev/null || echo 0)
+            if [ "$ov_warn" = "1" ] && [ "$verdict" = "PASS" ]; then
+              echo "Overridden by cli_overrides WARNING — verdict → FAIL" >> config-drift/summary.txt
+            fi
           else
             printf 'cli_overrides=N/A (denetim yok)\n' >> config-drift/summary.txt
           fi
@@ -1340,6 +1417,32 @@ jobs:
           name: config-drift
           path: config-drift/
           if-no-files-found: error
+
+  # ──────────────────────────────────────────────────────────────────────
+  # CONFIG ↔ CONFIG_BASENAMES SENKRON DENETİMİ
+  #
+  # verify.yml "Bundle config snapshot" adımında kopyalanan/üretilen her
+  # config dosyasının gen_repro_manifest.py CONFIG_BASENAMES set'inde
+  # tanımlı olduğunu doğrular. Drift: yeni config dosyası eklenir ama
+  # CONFIG_BASENAMES güncellenmezse → config manifest'ten düşer → K10
+  # manifest denetimi görmez → sessiz kapsam kaybı. Advisory
+  # (continue-on-error) — bloke etmez; uyarı raporu olarak yayınlar.
+  # stdout: PASS/FAIL + drift listesi.
+  # ──────────────────────────────────────────────────────────────────────
+  config-sync:
+    name: Config snapshot ↔ CONFIG_BASENAMES sync check
+    runs-on: ubuntu-latest
+    needs: [verify]
+    continue-on-error: true  # advisory — bloke etmez
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Check config sync
+        run: |
+          set -euo pipefail
+          python3 _calisma/CIKTI/check_config_sync.py
 
   # ──────────────────────────────────────────────────────────────────────
   # REPACK → VERIFY (SIDECAR SYNC)
@@ -1551,6 +1654,49 @@ jobs:
         with:
           name: audit-refs-trend
           path: audit_refs_trend.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # ──────────────────────────────────────────────────────────────────────
+  # OVERRIDE TREND — CLI override'larını run'lar arası toplar (refs-trend deseni).
+  # override_trend.py, budget artifact'larındaki cli_overrides_version.json
+  # sidecar'larını toplar ve `warning=true` run'larının zaman serisini üretir.
+  # continue-on-error: ADVISORY — build'i bloke etmez.
+  override-trend:
+    name: CLI override trend (warning=true time series)
+    runs-on: ubuntu-latest
+    # budget job'ından sonra koşar (cli_overrides_version.json orada üretilir).
+    needs: [budget]
+    if: always()
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Build override trend table
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          python3 _calisma/CIKTI/override_trend.py \
+            --repo "$GITHUB_REPOSITORY" \
+            --out-dir override-trend \
+            --max-artifacts 50
+
+      - name: Upload override trend
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: override-trend
+          path: override-trend/
           if-no-files-found: ignore
           retention-days: 30
 

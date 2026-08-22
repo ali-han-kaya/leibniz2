@@ -4,7 +4,7 @@
 #   pip install pre-commit
 #   pre-commit install
 #
-# Bu noktadan sonra her `git commit` sırasında dokuz kapı çalışır:
+# Bu noktadan sonra her `git commit` sırasında on beş kapı çalışır:
 #   0) update-config          : config'i paket içeriğinden senkron et (gen_config.py)
 #                               — repack sayıları değiştirdiyse verify_delivery.config.json'u
 #                               otomatik günceller ve stage eder; değişmediyse dokunmaz.
@@ -48,6 +48,14 @@
 #                               regresyon kapısı — gen_dryrun_summary
 #                               fonksiyonunu gerçek kaynaktan ayıklayıp örnek
 #                               logla koşar; markdown üretilemiyorsa bloke.
+#   13) check-unit-tests       : yeni eklenen beş birim test dosyasını her
+#                               commit'te koşar — test_budget_over_banner
+#                               (BÜTÇE AŞIMI şeridi + tooltip limit notu),
+#                               test_doc_artifact_sync (artifact listesi ↔
+#                               ARTIFACT_JOBS), test_lean_lake (K9 lake build),
+#                               test_preview_server (durum panosu/SSE/history),
+#                               test_status_checks (advisory kontratı + 9
+#                               required check). Biri kırılırsa commit bloke.
 # Herhangi bir P0/P1 bulgusu commit'i bloke eder (sıfır-dışı exit).
 #
 # Not: update-config TEK yazan hook'tur (config'i stage eder). Diğer kapılar
@@ -64,6 +72,7 @@
 #   pre-commit run verify-delivery-github-scripts
 #   pre-commit run check-dryrun-summary
 #   pre-commit run check-changelog-sync
+#   pre-commit run check-unit-tests
 #
 # update-config hariç hook'lar read-only'dir: dosya değiştirmez, yalnızca
 # doğrular (fail-closed). update-config, config'i paket içeriğiyle senkron eder.
@@ -186,6 +195,23 @@ repos:
         stages: [pre-commit]
         verbose: true
 
+      - id: check-config-sync
+        name: "Verify workflow config snapshot ↔ CONFIG_BASENAMES sync"
+        description: >-
+          check_config_sync.py: verify.yml "Bundle config snapshot"
+          adımında kopyalanan/üretilen her config dosyasının
+          gen_repro_manifest.py CONFIG_BASENAMES set'inde tanımlı
+          olduğunu doğrular. Drift: yeni dosya eklenir ama
+          CONFIG_BASENAMES güncellenmezse → config manifest'ten düşer →
+          K10 göremez → sessiz kapsam kaybı. Fail-closed — commit
+          bloke edilir. OFFLINE, stdlib-only, ~0.02s.
+        entry: python3 _calisma/CIKTI/check_config_sync.py
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
       - id: check-plist-drift
         name: "Plist gate unit tests (exit 0/1/2)"
         description: >-
@@ -208,8 +234,13 @@ repos:
           provenance bölümü (artifact → job) doğru üretilir ve verify.yml'deki
           reproducibility merge pattern'i ARTIFACT_JOBS'ı EKSİKSİZ kapsar.
           Bir artifact pattern'den düşerse (manifest'e girmeden kaybolursa)
-          commit bloke edilir. stdlib unittest + subprocess.
-        entry: python3 -m unittest discover -s _calisma/CIKTI -p "test_gen_repro_manifest.py"
+          commit bloke edilir. ÖN-KONTROL: bağımlılık dosyalarının
+          (verify.yml, gen_repro_manifest.py, test_gen_repro_manifest.py)
+          stage edilmemiş/untracked değişiklikleri varsa NET uyarı basar
+          (hook çalışma ağacını test eder, commit stage'leneni alır —
+          advisory uyarı, testler yine de koşar). stdlib unittest +
+          subprocess + git status.
+        entry: python3 _calisma/CIKTI/check_repro_manifest_hook.py
         language: system
         always_run: true
         pass_filenames: false
@@ -255,7 +286,11 @@ repos:
           üretilen manifest.json'daki her SHA-256'yı gerçek dosyayla yeniden
           hash'leyerek karşılaştırır. Eksik kayıt / yanlış hash / üretilemeyen
           manifest → P0/P1 → commit bloke edilir (reproducibility zinciri
-          her commit'te doğrulanır). stdlib-only, OFFLINE, saniyeler sürer.
+          her commit'te doğrulanır). SERTLEŞTİRME: negatif senaryolar — eksik
+          bundle dosyası (kilitlenme yerine temiz 'bundle dosyası yok'
+          problemi), bozuk SHA-256 ve config/ alt dizin dosyasının config
+          objesinden düşmesi — her commit'te yakalanmalıdır; yakalanmayan
+          senaryo P0 (fail-closed ihlali). stdlib-only, OFFLINE, saniyeler sürer.
           (Not: repro-manifest katmanı verify_delivery.py'de K13'tür; K12
           plist kapısıdır — o, check-plist-drift hook'unca kapsanır.)
         entry: python3 _calisma/CIKTI/verify_delivery.py --dir _calisma/CIKTI --check-repro-manifest
@@ -321,6 +356,51 @@ repos:
           değişirse commit bloke olur. HTML'deki kural sayısı ve CSS
           class'ları da doğrulanır. OFFLINE, ~0.02s.
         entry: python3 -m unittest discover -s _calisma/CIKTI -p "test_colorize_rules.py"
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+        verbose: true
+
+      - id: check-budget-scan
+        name: "Verify budget bar compute (parse/status/note, Node)"
+        description: >-
+          test_budget_scan.js — preview.html budget scan/bar logic'inin
+          saf JS modül (budget_scan.js) üzerinden 67 testli Node suite'i.
+          parseBudgetLine / computeBudgetStatus / budgetLimitNote
+          fonksiyonlarını normal, aşım, sıfır/geçersiz ve parse edge-case
+          senaryolarında doğrular. ~0.15s.
+        entry: node _calisma/CIKTI/test_budget_scan.js
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+        verbose: true
+
+      - id: check-unit-tests
+        name: "Unit tests for new gates (dashboard/lean/doc-sync)"
+        description: >-
+          Son eklenen birim test dosyalarını her commit'te koşar
+          (fail-closed — herhangi bir başarısızlık commit'i bloke eder):
+          test_budget_over_banner.py (BÜTÇE AŞIMI şeridi + tooltip limit
+          notu), test_doc_artifact_sync.py (PUBLISH_SCENARIO artifact
+          listesi ↔ ARTIFACT_JOBS senkronu), test_lean_lake.py (K9 lake
+          build --wfail kapısı), test_preview_server.py (durum panosu/
+          SSE/history — dinamik bütçe limiti dahil), test_status_checks.py
+          (advisory kontratı + 9 required check), test_dashboard_smoke.py
+          (dashboard_smoke.sh sözleşmesi: minimal PATH'te --full, verdict
+          PASS/FAIL exit kodları, rapor yazımı) ve test_coq_lake.py (K19
+          coqtop kapısı: sürüm uyumu + proof-gap taraması + -compile).
+          OFFLINE, stdlib unittest — ek bağımlılık yok; PyYAML/jsonschema
+          yoksa ilgili sınıflar dürüstçe SKIP edilir (CI tam suite'i yine de
+          koşar). ~3s.
+        entry: >-
+          bash -c 'PY=python3; [ -x _calisma/.venv_z3/bin/python ] &&
+          PY=_calisma/.venv_z3/bin/python; for t in test_budget_over_banner
+          test_doc_artifact_sync test_lean_lake test_preview_server
+          test_status_checks test_dashboard_smoke test_coq_lake
+          test_override_trend test_check_config_sync; do "$PY" -m
+          unittest discover -s _calisma/CIKTI -p "$t.py" || exit 1; done'
         language: system
         pass_filenames: false
         always_run: true

@@ -161,8 +161,9 @@ def _compute_status_board():
     p1 = LATEST.get("p1")
     k0_ok = (p0 == 0 and p1 == 0) if p0 is not None else None
 
-    # 3. Bütçe: $30 limit altında → PASS
-    budget_ok = (budget is not None and budget < 30) if budget is not None else None
+    # 3. Bütçe: etkin config budget.limit altında → PASS (limit yoksa 30.0)
+    blimit = (LATEST.get("budget") or {}).get("limit") or 30.0
+    budget_ok = (budget is not None and budget < blimit) if budget is not None else None
 
     # 4. Soy hattı: lineage_summary.ok → PASS
     lin_ok = LATEST.get("lineage_ok")
@@ -1073,6 +1074,10 @@ class Handler(BaseHTTPRequestHandler):
                 "refs_verified": r.get("refs_verified"),
                 "refs_total": r.get("refs_total"),
                 "pdf_pages": r.get("pdf_pages"),
+                "z3_passed": r.get("z3_passed"),
+                "z3_total": r.get("z3_total"),
+                "lean_ok": r.get("lean_ok"),
+                "lean_detail": r.get("lean_detail"),
             })
         self._send(200, json.dumps(summaries, ensure_ascii=False),
                    content_type="application/json; charset=utf-8")
@@ -1180,6 +1185,7 @@ class Handler(BaseHTTPRequestHandler):
             # (snapshot_dict() çağrılmaz: LOCK zaten tutuluyor, reentrant değil)
             snapshot = json.dumps({k: LATEST[k] for k in HISTORY_KEYS} |
                                   {"cli_overrides": LATEST["cli_overrides"]} |
+                                  {"layers": LATEST["layers"]} |
                                   {"lineage_summary": LATEST["lineage_summary"]} |
                                   {"status_board": LATEST["status_board"]} |
                                   {"precommit_hooks": LATEST["precommit_hooks"]})

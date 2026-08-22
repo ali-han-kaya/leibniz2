@@ -62,7 +62,7 @@ Yalnızca Python 3 standart kütüphanesi kullanır (hashlib, zipfile, subproces
 tempfile; --check-references için ayrıca urllib). Harici `unzip`/`shasum`/`diff`
 GEREKMEZ. pdfinfo varsa PDF sayfa kontrolü eklenir, yoksa atlanır (FAIL değil).
 
-Doğrulama zinciri (Katman 0..14):
+Doğrulama zinciri (Katman 0..19):
   K0  Bayat    CIKTI dışında kalan HER zip taraması (recursive; P1)
   K1  Dış zip  SHA-256 sidecar (kurcalanma)
   K2  Klasör   KLASOR_CHECKSUMLARI.sha256 (tüm dosyalar)
@@ -75,7 +75,8 @@ Doğrulama zinciri (Katman 0..14):
                Internet Archive / Perseus çevrimiçi denetimi
   K7  Hijyen   secret/anahtar + artefakt taraması
   K8  İspat    Z3 sembolik ispat (--symbolic-proof; z3-solver gerektirir)
-  K9  Lean     Lean 4 reduct-invariance tümevarımsal kanıt (--lean-proof; lean gerektirir)
+  K9  Lean     Lean 4 reduct-invariance tümevarımsal kanıt + 8 teoremli Sınır
+               İspatı çekirdeği lake build --wfail (--lean-proof; lean+lake gerektirir)
   K10 Manifest gen_repro_manifest.py çıktısı manifest.json'daki her dosyanın
                SHA-256'sını gerçek dosyayla karşılaştır + config.combined_sha256'ı
                config.files'tan YENİDEN hesaplayıp doğrula + effective_config.json'
@@ -111,6 +112,13 @@ Doğrulama zinciri (Katman 0..14):
                (mirror ~/Library/Caches/com.freebuff/verify, launchd GUI
                agent rotası) — --full'a dahil değil, açıkça --check-mirror ile
                koşulur.
+  K18 Launchctl launchctl list + plutil lint + HTTP 200 (--check-launchd;
+               macOS'a özgü, --full'a dahil değil)
+  K19 Coq      Coq reduct-invariance: 8 teoremli Content.v çekirdeği coqtop
+               -compile ile fail-closed derlenir + coq-version sürüm uyumu +
+               admit/Admitted/Axiom/Parameter taraması (--coq-proof; coqtop
+               gerektirir, --full'a dahil değil — coqtop kurulu olmayan
+               ortamlarda FAIL üretmemek için açıkça koşulur)
 """
 import argparse
 import concurrent.futures
@@ -146,6 +154,16 @@ PDF_METADATA_SIDECAR = "ingiliz_empirizmi_v3.pdf.metadata.sha256"
 PDF_RAW_SIDECAR = "ingiliz_empirizmi_v3.pdf.sha256"
 SYMBOLIC_PROOF_SCRIPT = "symbolic_proof_z3.py"
 LEAN_PROOF_SCRIPT = "../lean_reduct/ReductInvariance.lean"
+# K9 ek kapısı: 8 teoremli Sınır İspatı çekirdeği (Content.lean) lake projesi.
+# lake build --wfail, lean-toolchain v4.14.0 ile fail-closed derlenir.
+LEAN_REDUCT_DIR = "../lean_reduct"
+LEAN_TOOLCHAIN = "leanprover/lean4:v4.14.0"
+# K19: Coq reduct-invariance (Content.v) — coqtop -compile fail-closed.
+# coq-version dosyası (coq_reduct/) tek kaynaktır; COQ_VERSION ile çift
+# doğrulanır (test_lean_lake.py'deki LEAN_TOOLCHAIN deseniyle aynı).
+COQ_PROOF_SCRIPT = "../coq_reduct/Content.v"
+COQ_REDUCT_DIR = "../coq_reduct"
+COQ_VERSION = "8.18"
 SCRIPTS = [
     ("core_formal_model_check.py", "test_output.txt"),
     ("encoding_sensitivity_check.py", "encoding_sensitivity_output.txt"),
@@ -168,7 +186,7 @@ LAYER_LABELS = {
     "K6": "İçerik (PDF + referans)",
     "K7": "Hijyen (secret/artefakt)",
     "K8": "Z3 sembolik ispat",
-    "K9": "Lean reduct-invariance",
+    "K9": "Lean reduct-invariance + 8 teorem çekirdek",
     "K10": "Manifest digest",
     "K11": "Config drift",
     "K12": "Plist şablon",
@@ -178,6 +196,7 @@ LAYER_LABELS = {
     "K16": "GScripts self-test",
     "K17": "Mirror sync",
     "K18": "Launchctl durum",
+    "K19": "Coq reduct-invariance (8 teorem)",
 }
 
 # K0-K7 çekirdek katmanlar: --full olsun olmasın her run'da koşar.
@@ -196,6 +215,7 @@ _OPTIONAL_LAYERS = {
     "K16": lambda a: a.check_github_scripts,
     "K17": lambda a: a.check_mirror,
     "K18": lambda a: a.check_launchd,
+    "K19": lambda a: a.coq_proof,
 }
 
 
@@ -433,8 +453,7 @@ REFERENCE_ARCHIVE = [
     # (Fine 2012014618 + Schmitt 73155022 dahil) — OL fallback'te kalırlar.
     {"key": "Fine 2012", "query": "Metaphysical Grounding Correia Schnieder",
      "title_needle": "metaphysical grounding", "creator_needle": "correia",
-     "ht_ids": ["oclc:793497146", "lccn:2012014618",
-                 "isbn:1107022894", "isbn:9781107460287"],
+     "ht_ids": ["isbn:9781107460287"],
      "tex_needle": "Fine, K. (2012)"},
     {"key": "Frede 1983", "query": "Skeptical Tradition Burnyeat",
      "title_needle": "skeptical tradition",
@@ -1649,6 +1668,21 @@ def compute_type_bytes(ic_root):
     return type_bytes, total_bytes
 
 
+def find_tool(tool):
+    """tool'u PATH'ten, /opt/homebrew/bin'den veya ~/.elan/bin'den bulur.
+
+    Elan shim'leri (~/.elan/bin/lake, ~/.elan/bin/lean) toolchain'i proje
+    dizinindeki lean-toolchain'e göre seçer; yoksa olduğu gibi döner
+    (subprocess FileNotFoundError → çağıran fail-closed yakalar).
+    """
+    for candidate in [tool,
+                      f"/opt/homebrew/bin/{tool}",
+                      os.path.expanduser(f"~/.elan/bin/{tool}")]:
+        if os.path.isfile(candidate):
+            return candidate
+    return tool
+
+
 def run_lean_proof(lean_path, lean_file):
     """K9: Lean 4 reduct-invariance (tümevarımsal kanıt). Döndürür (ok: bool, detail: str)."""
     lean_dir = os.path.dirname(lean_file)
@@ -1665,6 +1699,114 @@ def run_lean_proof(lean_path, lean_file):
     tail = [l.strip() for l in out.splitlines() if l.strip()][-3:]
     detail = " | ".join(tail) if tail else f"exit={r.returncode}"
     return False, f"Lean derleme hatası: {detail}"
+
+
+def run_lake_build(lake_path, project_dir):
+    """K9 ek kapısı: 8 teoremli Sınır İspatı çekirdeğini lake ile derler.
+
+    Fail-closed: (a) lean-toolchain v4.14.0 olmalı (uyuşmaz/yok → FAIL),
+    (b) `lake clean` ve (c) `lake build --wfail` başarılı olmalı. Elan shim
+    toolchain'i proje dizininden okur — yanlış sürüm derleme yerine kapıda
+    yakalanır. Döndürür (ok: bool, detail: str).
+    """
+    tc = os.path.join(project_dir, "lean-toolchain")
+    if not os.path.isfile(tc):
+        return False, f"lean-toolchain yok: {tc}"
+    got = open(tc, encoding="utf-8").read().strip()
+    if got != LEAN_TOOLCHAIN:
+        return False, (f"lean-toolchain uyuşmaz: {got} "
+                       f"(beklenen {LEAN_TOOLCHAIN})")
+    try:
+        clean = subprocess.run([lake_path, "clean"], capture_output=True,
+                               text=True, timeout=120, cwd=project_dir)
+    except FileNotFoundError:
+        return False, f"lake bulunamadı: {lake_path}"
+    except subprocess.TimeoutExpired:
+        return False, "lake clean zaman aşımı (>120s)"
+    if clean.returncode != 0:
+        tail = [l.strip() for l in (clean.stdout or "").splitlines()
+                if l.strip()][-3:]
+        detail = " | ".join(tail) if tail else f"exit={clean.returncode}"
+        return False, f"lake clean hatası: {detail}"
+    try:
+        r = subprocess.run([lake_path, "build", "--wfail"],
+                           capture_output=True, text=True, timeout=600,
+                           cwd=project_dir)
+    except FileNotFoundError:
+        return False, f"lake bulunamadı: {lake_path}"
+    except subprocess.TimeoutExpired:
+        return False, "lake build zaman aşımı (>600s — toolchain indirme dahil)"
+    out = (r.stdout or "") + (r.stderr or "")
+    if r.returncode == 0:
+        return True, "lake build --wfail: 8 teorem PASS (v4.14.0)"
+    tail = [l.strip() for l in out.splitlines() if l.strip()][-3:]
+    detail = " | ".join(tail) if tail else f"exit={r.returncode}"
+    return False, f"lake build hatası: {detail}"
+
+
+def run_coq_proof(coqtop_path, coq_file, version_file=None):
+    """K19: Coq reduct-invariance (Content.v) fail-closed derler.
+
+    Üç kapı: (a) coq-version dosyasındaki sürüm ile coqtop --version
+    major.minor uyuşmalı (yanlış sürüm derleme yerine kapıda yakalanır),
+    (b) .v'de admit/Admitted/top-level Axiom/Parameter taraması temiz olmalı
+    (proof gap yok), (c) coqtop -compile başarılı olmalı (fail-closed;
+    .vo geçici dizine yazılır, repo kirlenmez). coqtop yok → P0.
+    Döndürür (ok: bool, detail: str).
+    """
+    # (a) Sürüm uyumu — coq-version dosyası tek kaynak.
+    if version_file is None:
+        version_file = os.path.join(os.path.dirname(coq_file), "coq-version")
+    if not os.path.isfile(version_file):
+        return False, f"coq-version yok: {version_file}"
+    with open(version_file, encoding="utf-8") as vf:
+        expected = vf.read().strip()
+    if expected != COQ_VERSION:
+        return False, (f"coq-version uyuşmaz: {expected} "
+                       f"(beklenen {COQ_VERSION})")
+    # (b) Proof-gap taraması (admit/Admitted/Axiom/Parameter → P0).
+    try:
+        with open(coq_file, encoding="utf-8") as cf:
+            src = cf.read()
+    except OSError as e:
+        return False, f"{coq_file} okunamadı: {e}"
+    bad = re.findall(r"\b(?:admit|Admitted)\b", src)
+    for pat in [r"^\s*Axiom\b", r"^\s*Parameter\b"]:
+        bad += re.findall(pat, src, re.MULTILINE)
+    if bad:
+        return False, f"proof gap tespit edildi: {sorted(set(bad))}"
+    # (c) coqtop --version (major.minor uyumu).
+    try:
+        r = subprocess.run([coqtop_path, "--version"], capture_output=True,
+                           text=True, timeout=30)
+    except FileNotFoundError:
+        return False, f"coqtop bulunamadı: {coqtop_path}"
+    except subprocess.TimeoutExpired:
+        return False, "coqtop --version zaman aşımı (>30s)"
+    m = re.search(r"version (\d+)\.(\d+)",
+                  (r.stdout or "") + (r.stderr or ""))
+    if not m:
+        return False, ("coqtop --version ayrıştırılamadı: "
+                       f"{(r.stdout or r.stderr or '').strip()[:80]}")
+    got = f"{m.group(1)}.{m.group(2)}"
+    if got != expected:
+        return False, f"coqtop sürüm uyuşmaz: {got} (beklenen {expected})"
+    # (d) coqtop -compile — .vo geçici dizine yazılır, repo kirlenmez.
+    try:
+        with tempfile.TemporaryDirectory() as td:
+            r = subprocess.run([coqtop_path, "-compile", coq_file],
+                               capture_output=True, text=True, timeout=300,
+                               cwd=td)
+    except FileNotFoundError:
+        return False, f"coqtop bulunamadı: {coqtop_path}"
+    except subprocess.TimeoutExpired:
+        return False, "coqtop -compile zaman aşımı (>300s)"
+    out = (r.stdout or "") + (r.stderr or "")
+    if r.returncode == 0:
+        return True, "coqtop -compile: 8 teorem PASS (Content.v)"
+    tail = [l.strip() for l in out.splitlines() if l.strip()][-3:]
+    detail = " | ".join(tail) if tail else f"exit={r.returncode}"
+    return False, f"coqtop derleme hatası: {detail}"
 
 
 _HASH_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -2368,6 +2510,49 @@ def verify_manifest_digest(manifest_path, add, check_id="K10-MANIFEST",
         add("P1", check_id, check_label,
             "config objesi eksik (files'ta config dosyaları var)")
 
+    # ---- config_artifact_basenames ↔ gerçek basenames (fail-closed) ----
+    # verify_delivery.config.json'daki config_artifact_basenames listesi,
+    # gen_repro_manifest.py CONFIG_BASENAMES ile aynı olmalıdır — tek
+    # kaynak garantisi. Burada bundle'daki gerçek config dosyalarının
+    # basename'lerini config_artifact_basenames ile karşılaştırırız:
+    # config dosyası eklendi/çıkarıldı ama liste güncellenmediyse P1.
+    bn_ok = True
+    bn_rows = []
+    vdcj = files.get("verify_delivery.config.json") or files.get(
+        "config/verify_delivery.config.json")
+    if vdcj and isinstance(cfg_files, dict):
+        vdcj_path = os.path.join(base, "verify_delivery.config.json")
+        if not os.path.isfile(vdcj_path):
+            vdcj_path = os.path.join(base, "config", "verify_delivery.config.json")
+        if os.path.isfile(vdcj_path):
+            try:
+                with open(vdcj_path, encoding="utf-8") as f:
+                    vdcj_data = json.load(f)
+                expected_list = vdcj_data.get("config_artifact_basenames")
+                if isinstance(expected_list, list) and expected_list:
+                    actual_set = frozenset(os.path.basename(r) for r in cfg_files)
+                    expected_set = frozenset(expected_list)
+                    if actual_set != expected_set:
+                        bn_ok = False
+                        extra = sorted(actual_set - expected_set)
+                        missing = sorted(expected_set - actual_set)
+                        if extra:
+                            bn_rows.append(f"ekstra: {extra}")
+                        if missing:
+                            bn_rows.append(f"eksik: {missing}")
+                        add("P1", check_id, check_label,
+                            f"config_artifact_basenames drift: "
+                            f"beklenen {len(expected_list)}, gerçek {len(actual_set)}",
+                            f"beklenen={sorted(expected_set)} gerçek={sorted(actual_set)}")
+            except (OSError, ValueError) as e:
+                bn_ok = False
+                bn_rows.append(f"okuma hatası: {e}")
+                add("P1", check_id, check_label,
+                    f"config_artifact_basenames denetimi yapılamadı: {e}")
+
+    bn_detail = ("config_basenames: PASS" if bn_ok
+                 else ("config_basenames: FAIL — " + "; ".join(bn_rows[:3])))
+
     # ---- cli_overrides ↔ config bundle (config.combined_sha256 ile sabitlenir) ----
     # effective_config.json'un cli_overrides kaydı, dosya config'iyle
     # (verify_delivery.config.json) aynı config sürümünü yansıtmalıdır. İkisi
@@ -2634,13 +2819,193 @@ def verify_manifest_digest(manifest_path, add, check_id="K10-MANIFEST",
                  else ("manifest.sha256: FAIL — " + "; ".join(sc_rows[:3])))
 
     detail = (f"{n_ok} OK / {n_bad} uyuşmazlık / {n_missing} eksik "
-              f"({len(files)} dosya); {cfg_detail}; {ov_detail}; "
+              f"({len(files)} dosya); {cfg_detail}; {bn_detail}; {ov_detail}; "
               f"{ln_detail}; {sm_detail}; {ps_detail}; {pc_detail}; "
               f"{sc_detail}")
     if bad_rows:
         detail += " | " + "; ".join(bad_rows[:5])
-    return (n_bad == 0 and n_missing == 0 and cfg_ok and ov_ok and ln_ok
+    return (n_bad == 0 and n_missing == 0 and cfg_ok and bn_ok and ov_ok and ln_ok
             and sm_ok and ps_ok and pc_ok and sc_ok), detail
+
+
+# K13 mock artifact set — happy path ve negatif senaryolar ORTAK seti kullanır.
+_K13_MOCK = {
+    "a.txt": b"hello A\n",
+    "sub/b.bin": b"\x00\x01\x02\x03",
+    "config/cfg.json": b'{"k": 1}',
+    # config/ ALT DİZİN senaryosu: config/ önekli HER DERİNLİKTEKİ dosya
+    # config olarak tanınmalı (önek eşleşmesi; kök-düzleşme basename ile).
+    "config/deep/extra.json": b'{"deep": true}',
+    # merge-multiple düzleştirmesi senaryosu: config dosyası KÖKTE
+    # (config/ öneki yok) — isimle tanınmalı (CONFIG_BASENAMES).
+    "effective_config.json": b'{"effective": true}',
+    "config-diff.json": b'{"diffs": []}',
+    # lineage-findings: soy hattı sidecar dosyası (LINEAGE bölümü)
+    "lineage-findings/zip_lineage.json": b'{"generations": []}',
+    # summary sidecar: run summary girdileri (SUMMARY bölümü)
+    "klayers.json": b'{"layers": {}}',
+}
+
+_WANT_CFG = {"config/cfg.json", "config/deep/extra.json",
+              "effective_config.json", "config-diff.json"}
+_WANT_LINEAGE = {"lineage-findings/zip_lineage.json"}
+_WANT_SUMMARY = {"klayers.json"}
+
+
+def _k13_write_mock(tmp):
+    """Mock artifact'ları tmp/artifacts altına yazar; (art, out) döndürür."""
+    art = os.path.join(tmp, "artifacts")
+    out = os.path.join(tmp, "out")
+    for rel, data in _K13_MOCK.items():
+        fp = os.path.join(art, rel)
+        os.makedirs(os.path.dirname(fp), exist_ok=True)
+        with open(fp, "wb") as f:
+            f.write(data)
+    return art, out
+
+
+def _k13_produce(script, art, out):
+    """gen_repro_manifest.py'yi koşar; (returncode, stdout, stderr)."""
+    env = dict(os.environ)
+    env.update({
+        "GITHUB_RUN_ID": "local-selftest",
+        "GITHUB_SHA": "mock-sha",
+        "GITHUB_REF": "refs/heads/local-selftest",
+    })
+    r = subprocess.run(
+        [sys.executable, script, "--artifacts-dir", art, "--out-dir", out],
+        capture_output=True, text=True, env=env, timeout=60)
+    return r.returncode, r.stdout, r.stderr
+
+
+def _k13_verify_manifest(m, out):
+    """manifest.json + bundle tutarlılığını denetler; (ok, problems).
+
+    add() ÇAĞIRMAZ — K13 happy path ve negatif senaryolar (kurcalama
+    tespiti) ORTAK buradan geçer. Eksik bundle dosyası kilitlenme yerine
+    'bundle dosyası yok' problemi olarak raporlanır (temiz fail-closed).
+    """
+    problems = []
+    files = m.get("files")
+    if not isinstance(files, dict) or not files:
+        return False, ["manifest 'files' yok/boş"]
+
+    expected = set(_K13_MOCK)
+    got = set(files)
+    if got != expected:
+        problems.append("manifest kapsamı mock'larla uyuşmuyor "
+                        f"(eksik={sorted(expected - got)}, "
+                        f"fazla={sorted(got - expected)})")
+
+    for rel in sorted(expected):
+        fp = os.path.join(out, rel)
+        if not os.path.isfile(fp):
+            problems.append(f"bundle dosyası yok: {rel}")
+            continue
+        with open(fp, "rb") as ff:
+            actual = hashlib.sha256(ff.read()).hexdigest()
+        mhash = files.get(rel)
+        if mhash != actual:
+            problems.append(
+                f"SHA-256 uyuşmazlığı: {rel} "
+                f"(manifest {str(mhash)[:16]}… gerçek {actual[:16]}…)")
+
+    cfg = m.get("config")
+    cfg_ok = isinstance(cfg, dict) and isinstance(cfg.get("files"), dict)
+    cfg_rel = set(cfg["files"]) if cfg_ok else set()
+    missing_cfg = sorted(_WANT_CFG - cfg_rel)
+    if not cfg_ok or missing_cfg:
+        problems.append("config objesi kök-düzleşmiş/config-alt dizin "
+                        f"dosyalarını kapsamıyor (eksik={missing_cfg})")
+    elif cfg["combined_sha256"] != _config_combined_sha256(cfg["files"]):
+        problems.append("config.combined_sha256 yeniden hesap uyuşmuyor")
+
+    ln = m.get("lineage")
+    ln_ok = isinstance(ln, dict) and isinstance(ln.get("files"), dict)
+    ln_rel = set(ln["files"]) if ln_ok else set()
+    missing_ln = sorted(_WANT_LINEAGE - ln_rel)
+    if not ln_ok or missing_ln:
+        problems.append("lineage objesi lineage-findings dosyalarını "
+                        f"kapsamıyor (eksik={missing_ln})")
+    elif ln["combined_sha256"] != hashlib.sha256(
+            "".join(f"{rel}\0{ln['files'][rel]}\n"
+                     for rel in sorted(ln['files'])).encode()
+    ).hexdigest():
+        problems.append("lineage.combined_sha256 yeniden hesap uyuşmuyor")
+
+    sm = m.get("summary")
+    sm_ok = isinstance(sm, dict) and isinstance(sm.get("files"), dict)
+    sm_rel = set(sm["files"]) if sm_ok else set()
+    missing_sm = sorted(_WANT_SUMMARY - sm_rel)
+    if not sm_ok or missing_sm:
+        problems.append("summary objesi run summary sidecarlarını "
+                        f"kapsamıyor (eksik={missing_sm})")
+    elif sm["combined_sha256"] != hashlib.sha256(
+            "".join(f"{rel}\0{sm['files'][rel]}\n"
+                     for rel in sorted(sm['files'])).encode()
+    ).hexdigest():
+        problems.append("summary.combined_sha256 yeniden hesap uyuşmuyor")
+
+    return (not problems), problems
+
+
+def _k13_negative_scenarios(add, script):
+    """Fail-closed davranışını 3 kurcalama senaryosuyla sertleştirir.
+
+    Her senaryo üreticiyi temiz bir tmp'de koşar, ardından bundle/manifest'i
+    kurcalar ve _k13_verify_manifest'in problemi YAKALADIĞINI doğrular:
+      S1 eksik-dosya  : bundle'dan bir dosya silinir — kilitlenme DEĞİL,
+                        temiz 'bundle dosyası yok' problemi beklenir
+      S2 bozuk-hash   : manifest.json'daki bir SHA-256 değiştirilir
+      S3 config-alt   : config/ alt dizin dosyası config objesinden çıkarılır
+    Yakalanmayan senaryo → P0 (fail-closed ihlali). Döndürür {ad: durum}.
+    """
+    def tamper_missing_file(m, out):
+        fp = os.path.join(out, "sub/b.bin")
+        if os.path.isfile(fp):
+            os.remove(fp)
+
+    def tamper_bad_hash(m, out):
+        h = m["files"]["a.txt"]
+        m["files"]["a.txt"] = ("0" if h[0] != "0" else "1") + h[1:]
+        with open(os.path.join(out, "manifest.json"), "w",
+                  encoding="utf-8") as mf:
+            json.dump(m, mf)
+
+    def tamper_config_subdir(m, out):
+        cfg = m.get("config")
+        if isinstance(cfg, dict) and isinstance(cfg.get("files"), dict):
+            cfg["files"].pop("config/deep/extra.json", None)
+            with open(os.path.join(out, "manifest.json"), "w",
+                      encoding="utf-8") as mf:
+                json.dump(m, mf)
+
+    def run_scenario(name, tamper):
+        tmp = tempfile.mkdtemp(prefix="repro_sc_")
+        try:
+            art, out = _k13_write_mock(tmp)
+            rc, so, se = _k13_produce(script, art, out)
+            if rc != 0:
+                return f"ÜRETİCİ HATASI (exit={rc}): {(se or so)[:200]}"
+            mpath = os.path.join(out, "manifest.json")
+            with open(mpath, encoding="utf-8") as mf:
+                m = json.load(mf)
+            tamper(m, out)
+            ok, problems = _k13_verify_manifest(m, out)
+            if ok:
+                add("P0", "K13-REPRO", "K13 repro manifest",
+                    f"negatif senaryo yakalanmadı: {name}")
+                return "YAKALANMADI"
+            return "PASS"
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    results = {}
+    for name, tamper in (("eksik-dosya", tamper_missing_file),
+                         ("bozuk-hash", tamper_bad_hash),
+                         ("config-alt-dizin", tamper_config_subdir)):
+        results[name] = run_scenario(name, tamper)
+    return results
 
 
 def check_repro_manifest_self_consistency(add):
@@ -2648,13 +3013,20 @@ def check_repro_manifest_self_consistency(add):
     tutarlılığını denetler (fail-closed).
 
     Reproducibility manifest üreticisinin self-testi: bilinen içerikli mock
-    dosyalar (alt dizin + config/ dahil) üretilir, gen_repro_manifest.py
-    bunlardan manifest.json üretir, üretilen her SHA-256 gerçek dosyayla
-    yeniden hash'lenerek karşılaştırılır. Ayrıca manifest.sha256 ↔
-    manifest.json eşleşmesi (varlık + biçim + dosya adı + hash) K10 ile ORTAK
-    helper (_check_manifest_sidecar) üzerinden fail-closed denetlenir —
-    üretici sidecar'ı üretmez/bozuk üretirse P1. Üretici bug'ı/drift'i
-    (eksik kayıt, yanlış hash, üretilemeyen manifest) P0/P1 ile patlar.
+    dosyalar (alt dizin + config/ alt dizini + köke düzleşmiş config dahil)
+    üretilir, gen_repro_manifest.py bunlardan manifest.json üretir, üretilen
+    her SHA-256 gerçek dosyayla yeniden hash'lenerek karşılaştırılır. Ayrıca
+    manifest.sha256 ↔ manifest.json eşleşmesi (varlık + biçim + dosya adı +
+    hash) K10 ile ORTAK helper (_check_manifest_sidecar) üzerinden fail-closed
+    denetlenir — üretici sidecar'ı üretmez/bozuk üretirse P1. Üretici
+    bug'ı/drift'i (eksik kayıt, yanlış hash, üretilemeyen manifest) P0/P1 ile
+    patlar.
+
+    SERTLEŞTİRME — negatif senaryolar: happy path sağlamken denetim 3
+    kurcalama senaryosunda (eksik bundle dosyası, bozuk SHA-256, config/ alt
+    dizin dosyasının config objesinden düşmesi) problemi YAKALAMALIDIR;
+    yakalanmayan senaryo → P0 (fail-closed ihlali). Eksik dosya kilitlenme
+    yerine temiz 'bundle dosyası yok' problemi olarak raporlanır.
     Döndürür (ok: bool, detail: str).
     """
     script = os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -2664,48 +3036,20 @@ def check_repro_manifest_self_consistency(add):
             "gen_repro_manifest.py yok", script)
         return False, f"{script} yok"
 
-    mock = {
-        "a.txt": b"hello A\n",
-        "sub/b.bin": b"\x00\x01\x02\x03",
-        "config/cfg.json": b'{"k": 1}',
-        # merge-multiple düzleştirmesi senaryosu: config dosyası KÖKTE
-        # (config/ öneki yok) — isimle tanınmalı (CONFIG_BASENAMES).
-        "effective_config.json": b'{"effective": true}',
-        "config-diff.json": b'{"diffs": []}',
-        # lineage-findings: soy hattı sidecar dosyası (LINEAGE bölümü)
-        "lineage-findings/zip_lineage.json": b'{"generations": []}',
-        # summary sidecar: run summary girdileri (SUMMARY bölümü)
-        "klayers.json": b'{"layers": {}}',
-    }
     tmp = tempfile.mkdtemp(prefix="repro_manifest_")
     try:
-        art = os.path.join(tmp, "artifacts")
-        out = os.path.join(tmp, "out")
-        for rel, data in mock.items():
-            fp = os.path.join(art, rel)
-            os.makedirs(os.path.dirname(fp), exist_ok=True)
-            with open(fp, "wb") as f:
-                f.write(data)
-        env = dict(os.environ)
-        env.update({
-            "GITHUB_RUN_ID": "local-selftest",
-            "GITHUB_SHA": "mock-sha",
-            "GITHUB_REF": "refs/heads/local-selftest",
-        })
+        art, out = _k13_write_mock(tmp)
         try:
-            r = subprocess.run(
-                [sys.executable, script, "--artifacts-dir", art,
-                 "--out-dir", out],
-                capture_output=True, text=True, env=env, timeout=60)
+            rc, so, se = _k13_produce(script, art, out)
         except (OSError, subprocess.TimeoutExpired) as e:
             add("P0", "K13-REPRO", "K13 repro manifest",
                 f"gen_repro_manifest.py çalıştırılamadı: {e}")
             return False, f"üretici çalıştırılamadı: {e}"
-        if r.returncode != 0:
-            detail = (r.stderr or r.stdout or "").strip()[:300]
+        if rc != 0:
+            detail = (se or so or "").strip()[:300]
             add("P0", "K13-REPRO", "K13 repro manifest",
-                f"gen_repro_manifest.py exit={r.returncode}", detail)
-            return False, f"üretici başarısız (exit={r.returncode}): {detail}"
+                f"gen_repro_manifest.py exit={rc}", detail)
+            return False, f"üretici başarısız (exit={rc}): {detail}"
 
         mpath = os.path.join(out, "manifest.json")
         if not os.path.isfile(mpath):
@@ -2719,34 +3063,15 @@ def check_repro_manifest_self_consistency(add):
             add("P0", "K13-REPRO", "K13 repro manifest",
                 f"manifest.json okunamadı: {e}", mpath)
             return False, f"manifest okunamadı: {e}"
-        files = m.get("files")
-        if not isinstance(files, dict) or not files:
-            add("P0", "K13-REPRO", "K13 repro manifest",
-                "manifest 'files' yok/boş")
-            return False, "manifest 'files' yok/boş"
 
-        # Tamlık: her mock dosya manifest'te olmalı, fazla/eksik kayıt olmamalı.
-        expected = set(mock)
-        got = set(files)
-        if got != expected:
-            missing = sorted(expected - got)
-            extra = sorted(got - expected)
-            add("P1", "K13-REPRO", "K13 repro manifest",
-                f"manifest kapsamı mock'larla uyuşmuyor "
-                f"(eksik={missing}, fazla={extra})")
-            return False, f"kapsam uyuşmuyor: eksik={missing} fazla={extra}"
-
-        # Hash tutarlılığı: manifest'teki her SHA-256 bundle kopyasıyla aynı mı?
-        n_bad = 0
-        for rel in sorted(expected):
-            fp = os.path.join(out, rel)  # bundle kökü = out/ (üretici kopyalar)
-            with open(fp, "rb") as ff:
-                actual = hashlib.sha256(ff.read()).hexdigest()
-            if actual != files[rel]:
-                n_bad += 1
-                add("P1", "K13-REPRO", "K13 repro manifest",
-                    f"SHA-256 uyuşmazlığı: {rel}",
-                    f"beklenen {files[rel][:16]}… gerçek {actual[:16]}…")
+        ok, problems = _k13_verify_manifest(m, out)
+        n_bad = sum(1 for p in problems if p.startswith("SHA-256 uyuşmazlığı"))
+        for p in problems:
+            add("P1", "K13-REPRO", "K13 repro manifest", p)
+        expected = set(_K13_MOCK)
+        cfg_rel = set((m.get("config") or {}).get("files") or {})
+        ln_rel = set((m.get("lineage") or {}).get("files") or {})
+        sm_rel = set((m.get("summary") or {}).get("files") or {})
 
         # manifest.sha256 ↔ manifest.json: sidecar varlığı + hash eşleşmesi.
         # K10 ile ORTAK helper (_check_manifest_sidecar) — üretici sidecar'ı
@@ -2757,68 +3082,23 @@ def check_repro_manifest_self_consistency(add):
         sc_detail = ("manifest.sha256: PASS" if sc_ok
                      else ("manifest.sha256: FAIL — " + "; ".join(sc_rows[:3])))
 
-        # config objesi: hem config/ önekli hem KÖKE düzleşmiş (merge-multiple)
-        # config dosyaları isimle tanınmalı — config/ öneki varsayımı yok.
-        cfg = m.get("config")
-        cfg_ok = isinstance(cfg, dict) and isinstance(cfg.get("files"), dict)
-        cfg_rel = set(cfg["files"]) if cfg_ok else set()
-        want_cfg = {"config/cfg.json", "effective_config.json",
-                    "config-diff.json"}
-        missing_cfg = sorted(want_cfg - cfg_rel)
-        if not cfg_ok or missing_cfg:
-            add("P1", "K13-REPRO", "K13 repro manifest",
-                "config objesi kök-düzleşmiş dosyaları kapsamıyor",
-                f"eksik={missing_cfg}")
-            return False, f"config kapsamı eksik: {missing_cfg}"
-        if cfg["combined_sha256"] != _config_combined_sha256(cfg["files"]):
-            add("P1", "K13-REPRO", "K13 repro manifest",
-                "config.combined_sha256 yeniden hesap uyuşmuyor")
-            return False, "config.combined_sha256 uyuşmuyor"
-
-        # lineage objesi: lineage-findings/ dosyaları tanınmalı.
-        ln = m.get("lineage")
-        ln_ok = isinstance(ln, dict) and isinstance(ln.get("files"), dict)
-        ln_rel = set(ln["files"]) if ln_ok else set()
-        want_ln = {"lineage-findings/zip_lineage.json"}
-        missing_ln = sorted(want_ln - ln_rel)
-        if not ln_ok or missing_ln:
-            add("P1", "K13-REPRO", "K13 repro manifest",
-                "lineage objesi lineage-findings dosyalarını kapsamıyor",
-                f"eksik={missing_ln}")
-            return False, f"lineage kapsamı eksik: {missing_ln}"
-        if ln["combined_sha256"] != hashlib.sha256(
-                "".join(f"{rel}\0{ln['files'][rel]}\n"
-                         for rel in sorted(ln['files'])).encode()
-        ).hexdigest():
-            add("P1", "K13-REPRO", "K13 repro manifest",
-                "lineage.combined_sha256 yeniden hesap uyuşmuyor")
-            return False, "lineage.combined_sha256 uyuşmuyor"
-
-        # summary objesi: run summary sidecar dosyaları tanınmalı.
-        sm = m.get("summary")
-        sm_ok = isinstance(sm, dict) and isinstance(sm.get("files"), dict)
-        sm_rel = set(sm["files"]) if sm_ok else set()
-        want_sm = {"klayers.json"}
-        missing_sm = sorted(want_sm - sm_rel)
-        if not sm_ok or missing_sm:
-            add("P1", "K13-REPRO", "K13 repro manifest",
-                "summary objesi run summary sidecarlarını kapsamıyor",
-                f"eksik={missing_sm}")
-            return False, f"summary kapsamı eksik: {missing_sm}"
-        if sm["combined_sha256"] != hashlib.sha256(
-                "".join(f"{rel}\0{sm['files'][rel]}\n"
-                         for rel in sorted(sm['files'])).encode()
-        ).hexdigest():
-            add("P1", "K13-REPRO", "K13 repro manifest",
-                "summary.combined_sha256 yeniden hesap uyuşmuyor")
-            return False, "summary.combined_sha256 uyuşmuyor"
-
-        ok = n_bad == 0 and sc_ok
         detail = (f"{len(expected) - n_bad} OK / {n_bad} uyuşmazlık "
                   f"({len(expected)} mock dosya); config {len(cfg_rel)} dosya; "
                   f"lineage {len(ln_rel)} dosya; summary {len(sm_rel)} dosya; "
                   f"{sc_detail}")
-        return ok, detail
+        if problems:
+            return False, f"{len(problems)} tutarsızlık — {problems[0]}"
+        if not sc_ok:
+            return False, detail
+
+        # Fail-closed sertleştirme: happy path SAĞLAMKEN denetimin 3 kurcalama
+        # senaryosunu (eksik dosya, bozuk hash, config/ alt dizin) yakaladığını
+        # doğrula. Yakalanmayan senaryo → P0 (fail-closed ihlali).
+        scen = _k13_negative_scenarios(add, script)
+        scen_str = ", ".join(f"{k} {v}" for k, v in scen.items())
+        if any(v != "PASS" for v in scen.values()):
+            return False, f"negatif senaryo: {scen_str}"
+        return True, f"{detail}; senaryolar: {scen_str}"
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -3126,6 +3406,25 @@ def parse_plist_check_output(txt):
     return profiles
 
 
+def parse_plist_out_of_scope(txt):
+    """--plist-check çıktısındaki kapsam-dışı INFO satırlarını ayrıştır.
+
+    update_preview.sh, LaunchAgents'teki yönetilmeyen plist dosyalarını
+    "INFO: kapsam dışı (yönetilmiyor): <yol>" satırıyla raporlar (exit
+    kodunu ETKİLEMEZ — kapsam yalnızca yönetilen profillerdir; bu liste
+    denetim izine girer). Döner: [<yol>, ...] (sıralı).
+    """
+    out = []
+    if not txt:
+        return out
+    marker = "INFO: kapsam dışı (yönetilmiyor): "
+    for line in txt.splitlines():
+        line = line.strip()
+        if line.startswith(marker):
+            out.append(line[len(marker):].strip())
+    return out
+
+
 def main():
     t0 = time.time()  # run duvar saati (history.jsonl duration_s için)
     ap = argparse.ArgumentParser()
@@ -3186,6 +3485,10 @@ def main():
                     help="K8: Z3 sembolik ispat (symbolic_proof_z3.py; z3-solver gerektirir)")
     ap.add_argument("--lean-proof", action="store_true",
                     help="K9: Lean 4 reduct-invariance (ReductInvariance.lean; lean gerektirir)")
+    ap.add_argument("--coq-proof", action="store_true",
+                    help="K19: Coq reduct-invariance (Content.v; coqtop -compile "
+                         "fail-closed + coq-version sürüm uyumu + admit/axiom "
+                         "taraması; coqtop gerektirir, --full'a dahil değil)")
     ap.add_argument("--verify-manifest", default=None, metavar="PATH",
                     help="K10: gen_repro_manifest.py çıktısı manifest.json'u oku; "
                          "her dosyanın SHA-256'sını gerçek dosyayla karşılaştır "
@@ -3688,22 +3991,45 @@ def main():
             if not ok:
                 add("P0", "K8-Z3", "K8 sembolik ispat", detail)
 
-    # ---- K9: Lean 4 reduct-invariance (tümevarımsal kanıt, isteğe bağlı) ----
+    lean_ok = None
+    lean_detail = None
+    # ---- K9: Lean 4 reduct-invariance + 8 teorem çekirdek (isteğe bağlı) ----
     if args.lean_proof:
         lp = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                           LEAN_PROOF_SCRIPT)
-        # lean'i PATH'ten, /opt/homebrew/bin'den veya ~/.elan/bin'den bul
-        lean_cmd = "lean"
-        for candidate in ["lean",
-                          "/opt/homebrew/bin/lean",
-                          os.path.expanduser("~/.elan/bin/lean")]:
-            if os.path.isfile(candidate):
-                lean_cmd = candidate
-                break
+        # lean + lake'i PATH'ten, /opt/homebrew/bin'den veya ~/.elan/bin'den bul
+        lean_cmd = find_tool("lean")
         if not os.path.isfile(lp):
             add("P0", "K9-LEAN", "K9 Lean ispatı", f"{LEAN_PROOF_SCRIPT} yok", lp)
         else:
             ok, detail = run_lean_proof(lean_cmd, lp)
+            # ── K9 ek kapısı: 8 teoremli Sınır İspatı çekirdeği ──
+            # lake build --wfail, lean-toolchain v4.14.0 (fail-closed).
+            # --full / --lean-proof ile otomatik koşar; lake yoksa P0.
+            reduct_dir = os.path.join(
+                os.path.dirname(os.path.abspath(__file__)), LEAN_REDUCT_DIR)
+            lakefile = os.path.join(reduct_dir, "lakefile.toml")
+            if os.path.isfile(lakefile):
+                lake_cmd = find_tool("lake")
+                lake_ok, lake_detail = run_lake_build(lake_cmd, reduct_dir)
+                lake_line = (f"[K9] Lean reduct (8 teorem, lake build --wfail): "
+                             f"{'PASS' if lake_ok else 'FAIL'} — {lake_detail}")
+                if args.json:
+                    print(lake_line, file=sys.stderr)
+                else:
+                    print(lake_line)
+                if not lake_ok:
+                    add("P0", "K9-LAKE", "K9 Lean çekirdeği", lake_detail)
+            else:
+                lake_ok, lake_detail = False, f"lake projesi yok: {reduct_dir}"
+                add("P0", "K9-LAKE", "K9 Lean çekirdeği", lake_detail)
+            # K9 genel: İKİ kapı da geçmeli (fail-closed) — dashboard rozeti
+            # ve history lean_ok bu birleşimi taşır.
+            ok = ok and lake_ok
+            if lake_detail:
+                detail = f"{detail} · {lake_detail}"
+            lean_ok = ok
+            lean_detail = detail
             k9_line = f"[K9] Lean 4 reduct-invariance: {'PASS' if ok else 'FAIL'} — {detail}"
             if not args.json:
                 print(k9_line)
@@ -3714,6 +4040,30 @@ def main():
                 print(k9_line, file=sys.stderr)
             if not ok:
                 add("P0", "K9-LEAN", "K9 Lean ispatı", detail)
+
+    # ---- K19: Coq reduct-invariance (--coq-proof, isteğe bağlı) ----
+    # Content.v çekirdeğini coqtop -compile ile fail-closed derler. coqtop
+    # kurulu olmayan ortamlarda --full'ı kırmamak için --full'a DAHİL
+    # DEĞİLDİR; --coq-proof ile açıkça koşulur (K12/K15/K17 deseni).
+    coq_ok = None
+    coq_detail = None
+    if args.coq_proof:
+        cq = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                          COQ_PROOF_SCRIPT)
+        coqtop_cmd = find_tool("coqtop")
+        if not os.path.isfile(cq):
+            coq_ok, coq_detail = False, f"{COQ_PROOF_SCRIPT} yok"
+            add("P0", "K19-COQ", "K19 Coq ispatı", coq_detail, cq)
+        else:
+            coq_ok, coq_detail = run_coq_proof(coqtop_cmd, cq)
+            k19_line = (f"[K19] Coq reduct-invariance: "
+                        f"{'PASS' if coq_ok else 'FAIL'} — {coq_detail}")
+            if args.json:
+                print(k19_line, file=sys.stderr)
+            else:
+                print(k19_line)
+            if not coq_ok:
+                add("P0", "K19-COQ", "K19 Coq ispatı", coq_detail)
 
     # ---- K10: reproducibility manifest digest (--verify-manifest) ----
     # gen_repro_manifest.py çıktısı manifest.json'daki her dosyanın SHA-256'sı
@@ -3819,15 +4169,21 @@ def main():
                     detail = f"beklenmedik exit kodu {rc}"
                     add("P1", "K12-PLIST", "K12 plist",
                         f"beklenmedik exit kodu {rc}", txt)
+            out_of_scope = []
+            if rc is not None:
+                out_of_scope = parse_plist_out_of_scope(txt)
             plist_report = {"layer": "K12", "ok": rc == 0,
                             "exit": rc, "detail": detail,
-                            "output": txt, "profiles": profiles}
+                            "output": txt, "profiles": profiles,
+                            "out_of_scope": out_of_scope}
             if not args.json:
                 print(f"[K12] plist şablon: "
                       f"{'PASS' if rc == 0 else 'FAIL'} (exit={rc}) — "
                       f"{len(profiles)} profil")
                 for p in profiles:
                     print(f"    [{p['status']}] {p['label']}")
+                for o in out_of_scope:
+                    print(f"    [INFO] kapsam dışı (yönetilmiyor): {o}")
         # Sidecar: update_preview.sh --plist-check ham çıktısı + K12 raporu.
         if args.plist_out:
             try:
@@ -4178,6 +4534,9 @@ def main():
             "z3_failed": z3_failed,
             "z3_total": (z3_passed + z3_failed
                          if z3_passed is not None else None),
+            # K9 Lean: --lean-proof koşulduysa PASS/FAIL (trend için)
+            "lean_ok": lean_ok,
+            "lean_detail": lean_detail,
         }
         try:
             with open(args.history_out, "a", encoding="utf-8") as hf:

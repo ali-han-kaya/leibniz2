@@ -46,7 +46,7 @@ SELF_JOB = "Live CI doc↔GitHub sync audit (advisory)"
 SELF_ARTIFACT = "audit-live-ci"
 
 # ── Doc parse ────────────────────────────────────────────────────────────
-# Job tablosu satırları: "| 1 | A | Delivery verification — K1-K9 (...) | ✅ ... |"
+# Job tablosu satırları: "| 1 | A | Delivery verification — K1-K14 (...) | ✅ ... |"
 _JOB_ROW_RE = re.compile(
     r"^\|\s*\d+\s*\|\s*([A-D])\s*\|\s*(.+?)\s*\|")
 # Artifact satırları: "- `unit-tests` (...)" veya "- `budget-verify` + `budget` (...)"

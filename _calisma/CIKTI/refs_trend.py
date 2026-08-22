@@ -44,6 +44,15 @@ API = "https://api.github.com"
 # Kaynak: verify_delivery.py K6 denetimindeki düzeltmeler. Yeni bir denetim
 # düzeltmesi yapıldığında buraya tek satır eklenir (denetlenebilir geçmiş).
 CHANGELOG = [
+    ("2026-08-22",
+     "Kapsam: 61/61 — 64 referansın 61'i çevrimiçi kaynaktan doğrulanır "
+     "(CrossRef/SEP/OpenLibrary/Internet Archive/Handle/LoC/Perseus), 3'ü "
+     "bibliyografik belgedir (modern kitaplar: IA'da tarama yok, HT'de katalog "
+     "yok, OL'de kayıtlı). Erken dönem '54/54' sayısı artık geçersizdir — "
+     "V5 düzeltme zinciri boyunca kapsam 54→56 (CrossRef dergileri) → 61 "
+     "(Sextus IA birebir + Della Rocca Handle) olarak genişledi; '54' sayısı "
+     "yalnızca CrossRef+SEP+OL+IA temel zincirinin sonucuydu, LoC/Handle/ia_ids "
+     "fallback'leri eklenmeden önceki durumu yansıtır."),
     ("2026-08-21",
      "V5w: Lagrée/Millican/Schmitt/Fine kitapları HathiTrust'sız katalog "
      "kanıtıyla — Library of Congress lccn kayıtları PASS (loc_check; zincir "
@@ -212,6 +221,13 @@ def check_run_warnings(r, dur_warn=DURATION_WARN_S, bud_warn=BUDGET_WARN_USD):
     if isinstance(bud, (int, float)) and bud > bud_warn:
         bw = True
         msgs.append(f"bütçe ${bud:.2f} > eşik ${bud_warn:.0f}")
+    # K8 Z3: failed varsa uyarı
+    z3p = r.get("z3_passed")
+    z3t = r.get("z3_total")
+    if isinstance(z3p, (int, float)) and isinstance(z3t, (int, float)):
+        z3f = z3t - z3p
+        if z3f > 0:
+            msgs.append(f"Z3 FAIL {int(z3f)}/{int(z3t)}")
     return {
         "duration_warn": dw,
         "budget_warn": bw,
@@ -245,6 +261,49 @@ def summarize_warnings(history_rows, dur_warn=DURATION_WARN_S, bud_warn=BUDGET_W
                                   for m in v["messages"] if "bütçe" in m),
         "total_runs": len(history_rows),
         "violations": violations,
+    }
+
+
+def build_duration_budget(history_rows):
+    """history_rows'tan duration_budget JSON bölümünü üretir (fail-closed).
+
+    Her run'a duration/budget eşik bayraklarını işler (check_run_warnings),
+    summary stats'ını hesaplar ve eşik ihlali özetini ekler. main() ve birim
+    testleri ORTAK kullanır — bölümün JSON sözleşmesi tek kaynaktır:
+        {run_count,
+         rows[{date, run_id, duration_s, budget_usd, verdict, p0, p1,
+               z3_passed, z3_total, duration_warn, budget_warn}],
+         summary{duration_s{count,min,max,avg}, budget_usd{...}},
+         warnings{duration_violations, budget_violations, total_runs,
+                  violations[{run_idx, date, run_id, messages}]} | None}
+    Sayısal olmayan duration/budget değerleri stats'a katılmaz (markdown'da
+    '—' gösterilir), run_count yine de tüm run'ları sayar; boş girdi
+    warnings=None üretir (bölüm yok anlamında).
+    """
+    rows = []
+    for r in history_rows:
+        w = check_run_warnings(r)
+        rows.append({
+            "date": r.get("date", ""),
+            "run_id": r.get("run_id"),
+            "duration_s": r.get("duration_s"),
+            "budget_usd": r.get("budget_usd"),
+            "verdict": r.get("verdict"),
+            "p0": r.get("p0"),
+            "p1": r.get("p1"),
+            "z3_passed": r.get("z3_passed"),
+            "z3_total": r.get("z3_total"),
+            "duration_warn": w["duration_warn"],
+            "budget_warn": w["budget_warn"],
+        })
+    return {
+        "run_count": len(rows),
+        "rows": rows,
+        "summary": {
+            "duration_s": stats([r["duration_s"] for r in rows]),
+            "budget_usd": stats([r["budget_usd"] for r in rows]),
+        },
+        "warnings": summarize_warnings(rows) if rows else None,
     }
 
 
@@ -343,6 +402,8 @@ def main():
             "verdict": rec.get("verdict"),
             "p0": rec.get("p0"),
             "p1": rec.get("p1"),
+            "z3_passed": rec.get("z3_passed"),
+            "z3_total": rec.get("z3_total"),
         }
         _w = check_run_warnings(_row)
         _row["duration_warn"] = _w["duration_warn"]
@@ -401,6 +462,30 @@ def main():
             f"{rows[0]['verified']}/{rows[0]['total_online']} doğrulanan",
             "",
         ]
+        # Kapsam açıklaması: sayılar nereden gelir, "54" neden artık geçersiz
+        latest_v = latest["verified"]
+        latest_t = latest["total_online"]
+        if latest_v is not None and latest_t is not None:
+            lines += [
+                f"### Kapsam",
+                "",
+                f"**{latest_v}/{latest_t}** — 64 referansın {latest_v}'i "
+                "çevrimiçi kaynaktan doğrulanır (CrossRef, SEP, "
+                "OpenLibrary, Internet Archive, Handle System, "
+                "Library of Congress, Perseus). Kalan 3 referans "
+                "bibliyografik belgedir — modern telifli kitaplar, "
+                "çevrimiçi indekslenmez.",
+                "",
+                "**'54' sayısı neden artık geçersiz?** Erken dönem "
+                "denetim yalnızca CrossRef+SEP+OL+IA temel zincirini "
+                "kullanıyordu; LoC (ulusal katalog), Handle System "
+                "(CrossRef dışı kalıcı tanımlayıcı), `ia_ids` "
+                "(IA birebir identifier) ve HathiTrust fallback'leri "
+                "henüz eklenmemişti. V5n zinciriyle kapsam "
+                "54→56→61→61/61 olarak genişledi. '54' erken bir "
+                "anlık görüntüdür, güncel denetim kapsamını yansıtmaz.",
+                "",
+            ]
 
     # ── Duration / Budget trendi (run-history) ───────────────────────────
     if history_rows:
@@ -409,8 +494,8 @@ def main():
             "",
             f"- **Kaynak:** `run-history` artifact'ları (son {len(history_rows)} run)",
             "",
-            "| # | Tarih (UTC) | Run ID | Duration (s) | Budget (USD) | Verdict |",
-            "|---|---|---|---|---|---|",
+            "| # | Tarih (UTC) | Run ID | Duration (s) | Budget (USD) | Z3 | Verdict |",
+            "|---|---|---|---|---|---|---|",
         ]
         for i, r in enumerate(history_rows, 1):
             dur = (f"{r['duration_s']:.1f}"
@@ -429,9 +514,12 @@ def main():
             if w["budget_warn"]:
                 flags.append("💰")
             flag_str = " ".join(flags)
+            z3 = (f"{r['z3_passed']}/{r['z3_total']}"
+                   if isinstance(r.get("z3_passed"), (int, float))
+                   else "—")
             lines.append(
                 f"| {i} | {short_date(r['date'])} | {r['run_id'] or '-'} | "
-                f"{dur} | {bud} | {r['verdict'] or '-'} {flag_str} |"
+                f"{dur} | {bud} | {z3} | {r['verdict'] or '-'} {flag_str} |"
             )
         lines += [""]
 
@@ -538,15 +626,7 @@ def main():
         f.write("\n".join(lines))
     print("\n".join(lines))
 
-    duration_budget = {
-        "run_count": len(history_rows),
-        "rows": history_rows,
-        "summary": {
-            "duration_s": stats([r["duration_s"] for r in history_rows]),
-            "budget_usd": stats([r["budget_usd"] for r in history_rows]),
-        },
-        "warnings": summarize_warnings(history_rows) if history_rows else None,
-    }
+    duration_budget = build_duration_budget(history_rows)
     unverified_series = {
         "latest": unv_latest if rows else 0,
         "max": unv_max if rows else 0,
