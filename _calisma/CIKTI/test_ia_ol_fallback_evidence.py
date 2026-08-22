@@ -5,8 +5,9 @@
 5 IA kapsam-dışı kaynağın fallback kanıtını AĞSIZ ve deterministik doğrular:
 ia_ol_fallback_evidence.collect_evidence(offline=True) mock router'ıyla
 verify_delivery._archive_with_fallback zincirini (IA → HT → LoC → OL → GB)
-koşar; beklenen V5w durumu — Xunzi → hathitrust, diğer 4 → loc (LoC katalog
-kaydı), TÜMÜ PASS — bozulursa test FAIL (fail-closed). Ayrıca kaynak
+koşar; beklenen V5w durumu — Xunzi → hathitrust, Fine 2012 → openlibrary
+(isbn:9781107460287; V5r'de yanlış lccn kaldırıldı), diğer 3 → loc (LoC
+katalog kaydı), TÜMÜ PASS — bozulursa test FAIL (fail-closed). Ayrıca kaynak
 anahtarları/ht_ids varlığını ve offline determinizmi kapılar. stdlib unittest
 — ek bağımlılık yok.
 """
@@ -31,20 +32,28 @@ class TestOfflineEvidence(unittest.TestCase):
                              f"{r['key']} offline'ta PASS olmalı: {r['detail']}")
 
     def test_sources_match_v5w(self):
-        """V5w: Xunzi → hathitrust; Fine/Lagrée/Millican/Schmitt → loc (LoC)."""
+        """V5w: Xunzi → hathitrust; Fine → openlibrary (isbn);
+        Lagrée/Millican/Schmitt → loc (LoC)."""
         results = {r["key"]: r for r in ev.collect_evidence(offline=True)}
         for key in ev.LOC_SOURCES:
             self.assertEqual(results[key]["source"], "loc",
                              f"{key} LoC katalog kaynağı olmalı")
+        for key in ev.OL_SOURCES:
+            self.assertEqual(results[key]["source"], "openlibrary",
+                             f"{key} OpenLibrary kaynağı olmalı")
         self.assertEqual(results[ev.HT_SOURCE]["source"], "hathitrust",
                          "Xunzi HT katalog kaydıyla eşleşmeli")
 
     def test_evidence_shows_fallback_chain(self):
-        """Detay zinciri belgelemeli: IA kapsam dışı + HT kayıt yok + LoC yanıtı."""
+        """Detay zinciri belgelemeli: IA kapsam dışı + HT kayıt yok +
+        LoC/OL yanıtı (Fine isbn bazlı OL'ye düşer)."""
         results = {r["key"]: r for r in ev.collect_evidence(offline=True)}
         for key in ev.LOC_SOURCES:
             self.assertIn("Internet Archive", results[key]["detail"])
             self.assertIn("LoC", results[key]["detail"])
+        for key in ev.OL_SOURCES:
+            self.assertIn("Internet Archive", results[key]["detail"])
+            self.assertIn("OpenLibrary", results[key]["detail"])
         x = results[ev.HT_SOURCE]
         self.assertIn("HathiTrust", x["detail"])
         self.assertIn("Xunzi", x["detail"])

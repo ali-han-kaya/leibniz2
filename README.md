@@ -30,6 +30,33 @@ python3 _calisma/CIKTI/verify_delivery.py --dir _calisma/CIKTI --symbolic-proof
 Exit kodu: `0` = PASS, `1` = FAIL (fail-closed), `2` = ortam hatası.
 Çevrimiçi referans denetimi: `--check-references` (CrossRef/SEP).
 
+## _calisma/lean_reduct — Sınır İspatı Çekirdeği (illüstratif, Mathlib-free)
+
+Bu modül Stoa/Hume formalizasyonu **DEĞİLDİR**. İspatlanan: 4 forget
+haritasının injective olmadığı (temsil kaybı teoremi — varlık teoremi
+değil). `World = actual` bilinçli en fakir modeldir: kaybın model
+zenginliğinden değil, unutma haritasının kendisinden geldiğini göstermek
+için.
+
+| # | Teorem | Ne ispatlar | Yöntem |
+|---|--------|-------------|--------|
+| 1 | `historical_pair_collapses_under_forgetTopic` | tam unutma iki içeriği özdeşleştirir | rfl |
+| 2-4 | `historical_pair_survives_forget{Access,Justification,Source}` | tek eksen unutması ayrımı silmez | cases |
+| 5-8 | `forget{Access,Justification,Source,Topic}_not_injective` | 4 haritanın hiçbiri injective değil | cases+congrArg |
+
+Mathlib bağımlılığı yoktur (`Injective` yerel tanımlı). `kataleptic-` /
+`customary-` etiketli tanımlar illüstratif kod etiketleridir, tarihsel
+formalizasyon değildir; ispatlanmayan şey ispatlandı denmez (fail-closed).
+
+```bash
+cd _calisma/lean_reduct
+lake clean && lake build --wfail   # <5s, toolchain leanprover/lean4:v4.14.0
+```
+
+CI'da K9 kapısı (`verify` job'ı, `--full` içinde) aynı derlemeyi
+fail-closed koşar; Z3 <-> Lean eşleşmesi `MAP.md`'de sabitlenmiştir
+(diverge olmaması için korunur).
+
 ## Reproducibility manifest — config artifact bölümü
 
 `gen_repro_manifest.py` (CI `reproducibility` job'ı) artifact'ları hash'leyip
@@ -224,6 +251,56 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-22 | test | (colorize) add replay summary coloring unit tests (#26) | `093bd32` |
 | 2026-08-22 | feat | (repro) add RUN LOGS section to reproducibility manifest (#27) | `5a5d391` |
 | 2026-08-22 | feat | (dashboard) add compact run history list (#28) | `a3111c4` |
+| 2026-08-22 | feat | (refs-trend) unverified series + stale artifact warning (#29) | `f5d9c32` |
+| 2026-08-22 | fix | (refs) correct Fine 2012 identifiers (wrong LCCN/ISBN) | `398a148` |
+| 2026-08-22 | feat | (dashboard) add z3_passed/z3_total to run-history API | `a05aad3` |
+| 2026-08-22 | feat | (dashboard) add K9 Lean to run-history API and trend graph | `ce861e8` |
+| 2026-08-22 | feat | (verify) add lean_ok/lean_detail to history.jsonl record | `e28c83f` |
+| 2026-08-22 | feat | (refs-trend) add z3_passed/z3_total to duration_budget section | `8d669ea` |
+| 2026-08-22 | fix | (plist) KeepAlive SuccessfulExit=false to prevent restart race | `aae9b0f` |
+| 2026-08-22 | fix | (tests) green local suite — jsonschema skip, Fine 2012 OL source | `54e7377` |
+| 2026-08-22 | ci | (verify) K13 repro-manifest as separate advisory step + sidecar | `f9dcb1c` |
+| 2026-08-22 | fix | (verify) harden K13 repro-manifest self-test with negative scenarios | `ed0427d` |
+| 2026-08-22 | test | (refs-trend) section unit tests for parse/stats/duration-budget | `d89964b` |
+| 2026-08-22 | test | (repro) cross-validate config.combined_sha256 with K10 gate | `ff029ae` |
+| 2026-08-22 | feat | (precommit) unstaged-deps pre-check for check-repro-manifest hook | `3995fc9` |
+| 2026-08-22 | fix | (plist) restore two-profile management, sync tests to reality | `0d29fd8` |
+| 2026-08-22 | feat | (plist) K12 out-of-scope INFO line in audit trail | `e78d906` |
+| 2026-08-22 | test | (plist) real end-to-end extra-file scenario for check_plist_drift | `bebc0cf` |
+| 2026-08-22 | feat | (protection) K1-K14 job rename + 9 required check sync | `d3de002` |
+| 2026-08-22 | feat | (protection) advisory contract — all jobs vs required diff check | `9195b63` |
+| 2026-08-22 | test | (repro) doc artifact list vs ARTIFACT_JOBS sync | `bccc815` |
+| 2026-08-22 | feat | (dashboard) budget limit from effective config, not hardcoded 30 | `4dc133d` |
+| 2026-08-22 | feat | (dashboard) red BÜTÇE AŞIMI banner above trend panel | `0ab782c` |
+| 2026-08-22 | feat | (dashboard) tooltip budget line shows limit under/over status | `8e455c2` |
+| 2026-08-22 | docs | (readme) add _calisma/lean_reduct boundary-proof section | `5b1b90d` |
+| 2026-08-22 | docs | (lean) add V5s note to K9 report for 8-theorem boundary core | `9b81196` |
+| 2026-08-22 | feat | (verify) K9 lake build --wfail gate for 8-theorem boundary core | `d359b35` |
+| 2026-08-22 | feat | (precommit) check-unit-tests hook for 5 new gate test files | `d77aca7` |
+| 2026-08-22 | test | (summary) row-level content checks for lineage + K-layer sections | `cafab86` |
+| 2026-08-22 | docs | (M0) K16/K14 mirror-launchd PATH fixes katman raporu | `4ac1787` |
+| 2026-08-22 | feat | (smoke) dashboard PASS'ini tek komutla yeniden üreten smoke testi | `00ecfd3` |
+| 2026-08-22 | docs | (scenario) launchd minimal PATH + mirror sync sınır notu | `836c52b` |
+| 2026-08-22 | feat | (skills) reproducible-pdf-build installable skill | `5557a48` |
+| 2026-08-22 | feat | (skills) verify-chain — K0-K17 fail-closed zincir skill'i | `67226f3` |
+| 2026-08-22 | feat | coq_reduct modülü + K19 coqtop fail-closed kapısı | `86203ae` |
+| 2026-08-22 | fix | (scripts) unify manifest + config-drift override display format | `d29d766` |
+| 2026-08-22 | feat | (cross-check) cross-validate index.json vs VERSION JSON override | `66e573a` |
+| 2026-08-22 | ci | manifest'te OVERRIDES bolumu — cli_overrides_version.json | `93fce5b` |
+| 2026-08-22 | ci | K16 negatif kontrol — override'sizken yorumda uyari YOK | `b0071f3` |
+| 2026-08-22 | ci | override-trend — CLI override zaman serisi (refs-trend deseni) | `950cbbc` |
+| 2026-08-22 | other | dash: CLI override panel'i — son run'un override durumu | `6f2797d` |
+| 2026-08-22 | other | dash: K-layer panel — tum rozetler d.layers tek kaynak | `27542eb` |
+| 2026-08-22 | ci | layers slot in LATEST + SSE snapshot plumbing tests | `6a4d2af` |
+| 2026-08-22 | docs | M0 raporuna V5t notu — K-layer panel (K0-K17 individual badges) | `425bfff` |
+| 2026-08-22 | docs | V5y — Fine 2012 OCLC + HT 0 kayit notu | `b44a102` |
+| 2026-08-22 | other | verify: HT API format unit tests — data[ident].records locked | `3361b4c` |
+| 2026-08-22 | other | verify: refs-trend kapsam satiri — 61/61 + 54 gecersiz | `8ef125a` |
+| 2026-08-22 | fix | config-drift override tek kaynak — summary.txt satiri | `5e837f7` |
+| 2026-08-22 | other | verify: cli_overrides warning → fail-closed config-drift gate | `e590e70` |
+| 2026-08-22 | fix | config-drift override-only cift baslik engellendi | `337a8d1` |
+| 2026-08-22 | other | verify: budget bar compute — budget_scan.js (pure) + 67 Node tests | `049e9a0` |
+| 2026-08-22 | other | dash: budget sparkline — son N run'in butce mini grafigi | `c003151` |
 
 ### Regresyon notları
 

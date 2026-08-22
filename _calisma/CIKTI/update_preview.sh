@@ -14,10 +14,13 @@
 #
 # BÖLÜM 2 — LaunchAgent plist'leri (Homebrew-style, tek komut)
 # İKİ plist üretilir (tek --plist komutuyla): com.freebuff.preview-leibniz2
-# (birincil; KeepAlive=true, interval 30) ve com.freebuff.preview-server
-# (legacy; KeepAlive=false, interval 60). Yalnızca birincil canlı tutulur
-# (--start varsayılanı leibniz2); legacy launchd'den kaldırılmıştır —
-# --remove-legacy bootout + kurulu plist/şablon/log temizliği yapar. Kurulu
+# (birincil; KeepAlive=SuccessfulExit=false, interval 30) — crash'te restart,
+# temiz çıkışta dur; com.freebuff.preview-server (yedek profil; interval 60,
+# keepalive=false — yalnızca elle --start ile başlatılır). İkisi de
+# PLIST_PROFILES'te YÖNETİLİR: --plist-force üretir, --plist-check denetler,
+# check_plist_drift golden'larla sabitler. --start varsayılanı birincil
+# leibniz2'dir. --remove-legacy bootout + kurulu plist/şablon/log temizliği
+# yapar (yedek profili launchd'den söker; PLIST_PROFILES'tan kaldırmaz). Kurulu
 # tam yollar korunur:
 #   ~/Library/LaunchAgents/<label>.plist
 # İçerikleri şablon olarak TCC-safe dizinde tutulur:
@@ -76,9 +79,11 @@ PLIST_TMPL_DIR="$HOME/Library/Caches/com.freebuff/preview-template"
 # preview_server.py'yi aynı TCC-safe mirror --dir'iyle başlatır (launchd GUI
 # agent'ı repo dizinini TCC nedeniyle okuyamaz); şablonda {{HOME}}/.../verify
 # sabittir. Farklar yalnızca label/logname/interval/keepalive'dir.
-# Yalnızca birincil canlı tutulur; legacy launchd'den kaldırılmıştır.
+# İKİ PROFİL de yönetilir: birincil leibniz2 (keepalive=true, interval 30) +
+# yedek preview-server (keepalive=false, interval 60 — elle --start ile).
 PLIST_PROFILES=(
   "com.freebuff.preview-leibniz2|preview-leibniz2|8000|30|true"
+  "com.freebuff.preview-server|preview-server|8000|60|false"
 )
 
 say() { printf '%s\n' "$*"; }
@@ -162,7 +167,11 @@ plist_default_template() {
     <string>{{INTERVAL}}</string>
   </array>
   <key>RunAtLoad</key><true/>
-  <key>KeepAlive</key>{{KEEPALIVE}}
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
   <key>StandardOutPath</key>
   <string>{{HOME}}/Library/Logs/com.freebuff/{{LOGNAME}}.log</string>
   <key>StandardErrorPath</key>
@@ -204,7 +213,6 @@ plist_render() {
       -e "s|{{LOGNAME}}|${logname}|g" \
       -e "s|{{PORT}}|${port}|g" \
       -e "s|{{INTERVAL}}|${interval}|g" \
-      -e "s|{{KEEPALIVE}}|<${keepalive}/>|g" \
       "$(plist_tmpl_for "$label")"
 }
 
@@ -303,6 +311,35 @@ plist_check() {
       rc=1
     fi
   done < <(plist_profiles)
+
+  # Kapsam-dışı fazla dosyalar — BİLGİ amaçlı (INFO): denetimin kapsamı
+  # YALNIZCA yönetilen profillerdir; LaunchAgents'teki yönetilmeyen plist'ler
+  # (ör. başka bir uygulamanın agent'ı ya da kaldırılmış eski bir profil)
+  # exit kodunu ETKİLEMEZ ama denetim izinde görünür. Böylece fazlalık
+  # sessizce kaybolmaz; --plist-check çıktısı bunu raporlar.
+  local la managed n_extra
+  la="$home/Library/LaunchAgents"
+  n_extra=0
+  if [ -d "$la" ]; then
+    managed=""
+    while IFS='|' read -r label _; do
+      managed="$managed $label"
+    done < <(plist_profiles)
+    local f base lbl
+    for f in "$la"/*.plist; do
+      [ -e "$f" ] || continue
+      base="$(basename "$f")"
+      lbl="${base%.plist}"
+      case " $managed " in
+        *" $lbl "*) ;;  # yönetilen profil — yukarıda denetlendi
+        *) say "INFO: kapsam dışı (yönetilmiyor): $f"
+           n_extra=$((n_extra + 1)) ;;
+      esac
+    done
+    if [ "$n_extra" -gt 0 ]; then
+      say "INFO: $n_extra kapsam dışı dosya yok sayıldı (yalnızca yönetilen profiller denetlenir)"
+    fi
+  fi
   if [ "$missing" -ne 0 ]; then exit 2; fi
   if [ "$rc" -ne 0 ]; then exit 1; fi
   exit 0

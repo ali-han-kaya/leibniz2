@@ -39,6 +39,12 @@ def _validate_schema(data):
         return  # schema yoksa sessizce geç
     try:
         import jsonschema
+    except ImportError:
+        # jsonschema yoksa dürüstçe SKIP (CI'da pip install edilir; yerelde
+        # opsiyonel). ImportError'ı aşağıdaki except'e düşürüp UnboundLocalError
+        # üretmek yerine burada sessizce dön — schema kapısı CI'da fail-closed.
+        return
+    try:
         jsonschema.validate(data, schema)
     except jsonschema.ValidationError as e:
         raise ValueError(f"PRECOMMIT_RAPORU.json şema hatası: {e.message} "

@@ -101,17 +101,19 @@
     <div id="precommit-hooks" style="font-size:12px;color:#888;padding:2px 0 6px 0"></div>
     <div id="k15-sidecar" style="font-size:11px;color:#999;padding:0 0 4px 0"></div>
     <div class="badges" id="badges">
-      <span class="badge unknown">K1-K7: ?</span>
       <span class="badge unknown">K8 Z3: ?</span>
       <span class="badge unknown">K9 Lean: ?</span>
       <span class="badge unknown">Beth 1953: ?</span>
       <span class="badge unknown">refs: ?</span>
     </div>
+    <div id="klayers-panel" style="display:flex;flex-wrap:wrap;gap:4px;margin:4px 0 8px 0;font-size:11px">
+      <span class="muted">K-layers: bekleniyor…</span>
+    </div>
     <div class="grid" id="metrics">
       <div class="card"><div class="label">Verdict</div><div class="value" id="m-verdict">—</div><div class="sub" id="m-ts">no run yet</div></div>
       <div class="card"><div class="label">P0 / P1 findings</div><div class="value" id="m-p0p1">— / —</div><div class="sub">fail-closed gate</div></div>
       <div class="card"><div class="label">Run duration</div><div class="value" id="m-dur">—</div><div class="sub">verify_delivery.py --full</div></div>
-      <div class="card"><div class="label">Budget (universal)</div><div class="value" id="m-budget">—</div><div class="sub" id="m-budget-sub">limit $30</div></div>
+      <div class="card"><div class="label">Budget (universal)</div><div class="value" id="m-budget">—</div><div class="sub" id="m-budget-sub">limit —</div></div>
       <div class="card"><div class="label">Budget ratios</div><div class="value" id="m-br" style="font-size:12px">—</div><div class="sub">bytes/token · text/pdf/archive/binary</div></div>
       <div class="card"><div class="label">Type bytes</div><div class="value" id="m-tb" style="font-size:12px">—</div><div class="sub" id="m-tb-sub">iç zip kırılımı</div></div>
       <div class="card"><div class="label">PDF pages / refs</div><div class="value" id="m-pdf">— / —</div><div class="sub">33 / 64 expected</div></div>
@@ -121,7 +123,16 @@
   </section>
 
   <section>
+    <h2>CLI override <span class="ts" id="cov-ts"></span></h2>
+    <div class="card" style="padding:12px" id="cov-body">
+      <div class="muted">veri bekleniyor…</div>
+    </div>
+  </section>
+
+  <section>
     <h2>P0 / P1 trend — son 100 run <span class="ts" id="trend-count"></span></h2>
+    <div id="budget-over-banner" class="err" role="alert"
+         style="display:none;margin:6px 0 2px;padding:6px 10px;border-radius:6px;font-size:12px;font-weight:700"></div>
     <div class="card" style="padding:10px">
       <svg id="trend" viewBox="0 0 1160 240" width="100%" height="240" role="img"
            aria-label="P0/P1 + duration + budget zaman serisi grafiği"></svg>
@@ -138,8 +149,14 @@
     </div>
     <div class="z3row">
       <span class="z3label">Bütçe</span>
-      <div class="z3bar"><div id="budget-fill" class="z3fill"></div></div>
+      <div class="z3bar" style="position:relative">
+        <div id="budget-fill" class="z3fill"></div>
+        <div id="budget-limit-line" style="display:none;position:absolute;top:0;width:2px;height:100%;background:#d29922;left:100%" title="Limit: $30"></div>
+      </div>
       <span id="budget-count" class="z3count">—</span>
+      <canvas id="budget-spark" width="180" height="20"
+              style="width:180px;height:20px;border-radius:3px;background:#21262d;border:1px solid var(--border);vertical-align:middle"
+              title="Son run'ların bütçe değerleri (yeşil=limit altı, kırmızı=aşım, turuncu kesikli=limit)"></canvas>
     </div>
     <pre id="runstream" class="runstream">—</pre>
     <div class="ts" style="margin-top:4px;font-size:11px">
@@ -231,7 +248,7 @@
       <tbody>
         <tr><td>GitHub Actions</td><td><code>.github/workflows/verify.yml</code></td><td>4 job (verify · symbolic · lean · reports)</td></tr>
         <tr><td>Pre-commit hook</td><td><code>.pre-commit-config.yaml</code></td><td>3 hook (verify-delivery · verify-delivery-symbolic · verify-delivery-lean)</td></tr>
-        <tr><td>Single-command gate</td><td><code>verify_delivery.py --full</code></td><td>K1-K9 + CrossRef/SEP + bütçe</td></tr>
+        <tr><td>Single-command gate</td><td><code>verify_delivery.py --full</code></td><td>K1-K14 + CrossRef/SEP + bütçe</td></tr>
       </tbody>
     </table>
   </section>
@@ -249,12 +266,22 @@ let evtSource = null;
 let lastTs = 0;
 let reconnectDelay = 1000;
 const MAX_RECONNECT_DELAY = 30000;
+// Bütçe limiti ($) — TEK KAYNAK: /api/latest `budget.limit` (etkin config
+// budget_usd aynası). Snapshot gelince applySnapshot senkronlar; stream'deki
+// [BÜTÇE] satırı da günceller. 30.0 yalnızca snapshot ÖNCESİ fallback'tir.
+let BUDGET_LIMIT = 30.0;
 
 function fmtBytes(b) {
   if (b == null) return "—";
   if (b > 1048576) return (b/1048576).toFixed(2) + " MB";
   return Math.round(b/1024) + " KB";
 }
+// Bütçe limiti gösterimi: tam sayıysa "30", değilse 2 ondalık ("27.50").
+function fmtLimit(v) {
+  if (v == null || !isFinite(v)) return "—";
+  return (v % 1 === 0) ? String(v) : v.toFixed(2);
+}
+
 function fmtTs(iso) {
   if (!iso) return "no run yet";
   try {
@@ -312,15 +339,51 @@ function escapeHTML(s) {
 // ---- P0/P1 trend (son 100 run) ----
 let trendCache = [];
 
+// BÜTÇE AŞIMI şeridi: trend geçmişinde budget_usd > BUDGET_LIMIT olan run
+// varsa (veya canlı akış son bütçesi limiti aştıysa) trend panelinin
+// üstünde kırmızı uyarı gösterir; aşım yoksa gizli kalır.
+function updateBudgetOverBanner() {
+  const el = $("budget-over-banner");
+  if (!el) return;
+  const rows = trendCache || [];
+  const over = rows.filter(r => r.budget_usd != null && r.budget_usd > BUDGET_LIMIT);
+  const liveOver = budgetState && budgetState.est != null && budgetState.limit
+    && budgetState.est > budgetState.limit;
+  if (!over.length && !liveOver) {
+    el.style.display = "none";
+    return;
+  }
+  const bits = [];
+  if (over.length) {
+    const worst = over.reduce((a, b) => (a.budget_usd > b.budget_usd ? a : b));
+    const t = worst.ts ? new Date(worst.ts).toLocaleString() : "?";
+    bits.push(`${over.length} run limiti aştı · en yüksek $${worst.budget_usd.toFixed(2)} @ ${t}`);
+  }
+  if (liveOver) {
+    bits.push(`CANLI $${budgetState.est.toFixed(2)} > limit $${fmtLimit(budgetState.limit)}`);
+  }
+  el.style.display = "block";
+  el.textContent = "🔴 BÜTÇE AŞIMI — " + bits.join(" · ");
+}
+
 function renderTrend(rows) {
   const svg = $("trend");
   const legend = $("trend-legend");
   if (!rows || rows.length === 0) {
     svg.innerHTML = "";
     legend.textContent = "henüz veri yok — ilk run bekleniyor";
+    updateBudgetOverBanner();
     return;
   }
   trendCache = rows;
+  // Bütçe sparkline'ı başlat: henüz canlı akıştan beslenmediyse
+  // (ilk yükleme), trend verisindeki son run'lardan doldur.
+  if (budgetHistory.length === 0) {
+    budgetHistory = rows
+      .filter(r => r.budget_usd != null && isFinite(r.budget_usd))
+      .map(r => ({ est: r.budget_usd, limit: BUDGET_LIMIT }));
+    renderBudgetSparkline();
+  }
   const W = 1160, H = 240, PL = 44, PR = 212, PT = 12, PB = 32;
   const iw = W - PL - PR, ih = H - PT - PB;
   const plotRight = PL + iw;
@@ -368,17 +431,18 @@ function renderTrend(rows) {
   if (budPts.length) {
     parts.push(`<polyline fill="none" stroke="#bc8cff" stroke-width="2" points="${budPts.join(" ")}"/>`);
   }
-  // Bütçe limiti referans çizgisi ($30) — verify_delivery.config.json
-  // budget_usd aynası. Bütçe eksenindeki gerçek konumunda çizilir; gözlenen
-  // bütçe limitin çok altındaysa (0..maxBud ölçeği) üst kenara kıstırılıp
-  // "↑" ile işaretlenir — altı güvenli bölge (yeşil), üstü aşım (kırmızı kare).
-  const BUDGET_LIMIT = 30.0;
+  // Bütçe limiti referans çizgisi — /api/latest `budget.limit`'ten gelen
+  // BUDGET_LIMIT (etkin config budget_usd aynası; snapshot yoksa 30.0
+  // fallback). Bütçe eksenindeki gerçek konumunda çizilir; gözlenen bütçe
+  // limitin çok altındaysa (0..maxBud ölçeği) üst kenara kıstırılıp "↑" ile
+  // işaretlenir — altı güvenli bölge (yeşil), üstü aşım (kırmızı kare).
   if (buds.length) {
     const rawLimitY = yB(BUDGET_LIMIT);
     const offScale = rawLimitY < PT;          // limit ölçeğin üstünde kaldı
     const limitY = offScale ? PT + 3 : rawLimitY;
+    const limitLbl = "limit $" + fmtLimit(BUDGET_LIMIT);
     parts.push(`<line x1="${PL}" y1="${limitY}" x2="${plotRight}" y2="${limitY}" stroke="#ffa657" stroke-width="1.5" stroke-dasharray="6 4"/>`);
-    parts.push(`<text x="${budAxisX + 6}" y="${limitY - 3}" fill="#ffa657" font-size="9">${offScale ? "limit $30 ↑" : "limit $30"}</text>`);
+    parts.push(`<text x="${budAxisX + 6}" y="${limitY - 3}" fill="#ffa657" font-size="9">${offScale ? limitLbl + " ↑" : limitLbl}</text>`);
     // Aşım işaretleri: limiti geçen bütçe noktaları kırmızı kare (üstü = aşım)
     rows.forEach((r, i) => {
       if (r.budget_usd != null && r.budget_usd > BUDGET_LIMIT) {
@@ -398,6 +462,18 @@ function renderTrend(rows) {
   if (zFailPts.length) {
     parts.push(`<polyline fill="none" stroke="#f85149" stroke-width="2" stroke-dasharray="3 3" points="${zFailPts.join(" ")}"/>`);
   }
+  // K9 Lean noktaları: yeşil daire=PASS, kırmızı kare=FAIL, gri=x=koşulmadı
+  rows.forEach((r, i) => {
+    const cx = x(i);
+    const ly = PT + 6; // üst kenar
+    if (r.lean_ok === true) {
+      parts.push(`<circle cx="${cx}" cy="${ly}" r="3" fill="#3fb950" opacity="0.7"/>`);
+    } else if (r.lean_ok === false) {
+      parts.push(`<rect x="${cx-3}" y="${ly-3}" width="6" height="6" fill="#f85149" opacity="0.7"/>`);
+    } else {
+      parts.push(`<text x="${cx}" y="${ly+3}" fill="#8b949e" font-size="8" text-anchor="middle">×</text>`);
+    }
+  });
   // sağ eksenler: duration (iç) + budget (orta) + Z3 (dış)
   const durAxisX = plotRight + 26;
   const zAxisX = plotRight + 150;
@@ -439,11 +515,13 @@ function renderTrend(rows) {
   svg.innerHTML = parts.join("");
   legend.textContent = "Kırmızı = P0 · Sarı = P1 · Yeşil nokta = PASS · Mavi (kesikli) = duration_s · Mor = budget_usd · " +
     "Yeşil çizgi = Z3 PASS · Kırmızı (noktalı) = Z3 FAIL · " +
-    "Turuncu (kesikli) = bütçe limiti $30 — altı güvenli, üstü (kırmızı kare) aşım · " +
+    "Yeşil daire = Lean PASS · Kırmızı kare = Lean FAIL · gri × = koşulmadı · " +
+    "Turuncu (kesikli) = bütçe limiti $" + fmtLimit(BUDGET_LIMIT) + " (config'ten) — altı güvenli, üstü (kırmızı kare) aşım · " +
     "aralık: " + (rows[0].ts ? new Date(rows[0].ts).toLocaleString() : "?") +
     " → " + (rows[n-1].ts ? new Date(rows[n-1].ts).toLocaleString() : "?") +
     ` · ${n} run`;
   $("trend-count").textContent = `(${n} run)`;
+  updateBudgetOverBanner();
 }
 
 // ---- trend hover tooltip ----
@@ -456,6 +534,14 @@ function fmtTrendBudget(v) {
   if (v == null || !isFinite(v)) return "—";
   return "$" + v.toFixed(2);
 }
+// Tooltip bütçe satırına limit altı/üstü durumu: "(limit $30 altında)"
+// veya "(limit $30 üstünde — AŞIM)". Limit dinamik (BUDGET_LIMIT —
+// config'ten); bütçe veya limit yoksa boş döner.
+function budgetLimitNote(v) {
+  if (v == null || !isFinite(v) || BUDGET_LIMIT == null || !isFinite(BUDGET_LIMIT)) return "";
+  const lim = "$" + fmtLimit(BUDGET_LIMIT);
+  return v > BUDGET_LIMIT ? " (limit " + lim + " üstünde — AŞIM)" : " (limit " + lim + " altında)";
+}
 function showTrendTip(i, ev) {
   const r = trendCache[i];
   if (!r) return;
@@ -466,7 +552,7 @@ function showTrendTip(i, ev) {
     ts + "\n" +
     "verdict : " + verdict + "\n" +
     "duration: " + fmtTrendDur(r.duration_s) + "\n" +
-    "budget  : " + fmtTrendBudget(r.budget_usd) + "\n" +
+    "budget  : " + fmtTrendBudget(r.budget_usd) + budgetLimitNote(r.budget_usd) + "\n" +
     "z3      : " + (r.z3_passed != null ? r.z3_passed + "/" + (r.z3_total != null ? r.z3_total : "?") +
       ((r.z3_failed || 0) > 0 ? " (" + r.z3_failed + " FAIL)" : "") : "—");
   tip.style.display = "block";
@@ -653,9 +739,9 @@ function renderRefsTrendDurationBudget(rows) {
     const pts = rows.map((r,i) => { const y = yB(r.budget_usd); return y == null ? null : `${x(i)},${y}`; }).filter(Boolean);
     if (pts.length) parts.push(`<polyline fill="none" stroke="#bc8cff" stroke-width="2" points="${pts.join(" ")}"/>`);
   }
-  // budget limit referans çizgisi ($30)
+  // budget limit referans çizgisi (BUDGET_LIMIT — /api/latest budget.limit)
   if (buds.length) {
-    const limitY = yB(30.0);
+    const limitY = yB(BUDGET_LIMIT);
     const offScale = limitY < PT;
     const ly = offScale ? PT + 3 : limitY;
     parts.push(`<line x1="${PL}" y1="${ly}" x2="${plotRight}" y2="${ly}" stroke="#ffa657" stroke-width="1" stroke-dasharray="6 4" opacity="0.6"/>`);
@@ -677,15 +763,18 @@ function renderRefsTrendDurationBudget(rows) {
 let runStreamES = null;
 // ---- Bütçe ilerleme çubuğu (stream'deki [BÜTÇE] satırlarından) ----
 let budgetState = null;   // {est, limit} — son bilinen bütçe kalkanı değeri
+let budgetHistory = [];   // [{est, limit}] — son N run'ın bütçe değerleri (sparkline)
 
 function updateBudgetBar() {
   const bar = $("budget-fill"), cnt = $("budget-count");
+  const limitLine = $("budget-limit-line");
   if (!bar || !cnt) return;
   if (!budgetState || !budgetState.limit || !budgetState.est) {
     bar.style.width = "0%";
     bar.className = "z3fill budget";
     cnt.className = "z3count";
     cnt.textContent = "—";
+    if (limitLine) limitLine.style.display = "none";
     return;
   }
   const { est, limit } = budgetState;
@@ -695,15 +784,84 @@ function updateBudgetBar() {
   bar.className = over ? "z3fill err" : "z3fill budget";
   cnt.className = over ? "z3count" : "z3count ok";
   cnt.textContent = "$" + est.toFixed(2) + " / $" + limit.toFixed(2)
-    + (over ? " · AŞIM" : "");
+    + " (" + pct + "%)" + (over ? " · AŞIM" : "");
+  // Limit çizgisi: bar'ın %100'üne turuncu dikey işaret (over: kırmızı)
+  if (limitLine) {
+    limitLine.style.display = "block";
+    limitLine.style.left = "100%";
+    limitLine.style.background = over ? "#f85149" : "#d29922";
+    limitLine.title = "Limit: $" + fmtLimit(limit) + (over ? " (AŞIM!)" : "");
+  }
+}
+
+// Bütçe sparkline (canvas): son N run'ın bütçe değerlerini mini grafik olarak çizer.
+// Yeşil = limit altı, kırmızı = aşım, turuncu kesikli = limit çizgisi.
+function renderBudgetSparkline() {
+  const cv = $("budget-spark");
+  if (!cv) return;
+  const ctx = cv.getContext("2d");
+  const W = cv.width, H = cv.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const MAX_BARS = 30;
+  const hist = budgetHistory.slice(-MAX_BARS);
+  if (hist.length < 1) {
+    ctx.fillStyle = "#8b949e";
+    ctx.font = "9px monospace";
+    ctx.fillText("—", 4, 14);
+    return;
+  }
+
+  const M = Math.max(...hist.map(h => h.est), 0.01);
+  // limit: her kayıtta aynı limit varsa onu kullan, yoksa $30 varsay
+  const limits = hist.filter(h => h.limit != null && isFinite(h.limit));
+  const limit = limits.length ? limits[limits.length - 1].limit : 30.0;
+  const yMax = Math.max(M, limit) * 1.15;  // %15 boşluk
+
+  const bw = 2;  // bar genişliği
+  const gap = Math.floor((W - 8) / MAX_BARS);  // bar aralığı
+  const padL = 2, padT = 1, padB = 2;
+  const h = H - padT - padB;
+
+  // limit çizgisi (turuncu, kesikli/yatay)
+  const limitY = padT + h - (h * limit / yMax);
+  ctx.strokeStyle = "#d29922";
+  ctx.lineWidth = 1;
+  ctx.setLineDash([3, 2]);
+  ctx.beginPath();
+  ctx.moveTo(0, limitY);
+  ctx.lineTo(W, limitY);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  for (let i = 0; i < hist.length; i++) {
+    const x = padL + i * gap;
+    const barH = Math.max(1, h * hist[i].est / yMax);
+    const y = padT + h - barH;
+    const over = hist[i].est > (hist[i].limit || limit);
+    ctx.fillStyle = over ? "#f85149" : "#3fb950";
+    ctx.fillRect(x, y, bw, barH);
+  }
 }
 
 // "[BÜTÇE] ~175990 token → $1.08 (limit $30.0, …)" → {est:1.08, limit:30}
+// Stream satırındaki limit etkin config'ten geldiği için BUDGET_LIMIT'i de
+// senkronlar — config değişince grafik çizgisi canlı akışta otomatik uyar.
 function scanBudget(line) {
   const m = line.match(/\[BÜTÇE\][^→]*→\s*\$([0-9.]+)\s*\(limit\s*\$([0-9.]+)/);
   if (m) {
     budgetState = { est: parseFloat(m[1]), limit: parseFloat(m[2]) };
+    BUDGET_LIMIT = parseFloat(m[2]);
+    // Sparkline: her yeni run başında önceki est/limit'i history'e push'la
+    // (scanBudget her run'un ilk [BÜTÇE] satırında bir kere çağrılır)
+    if (budgetHistory.length === 0 ||
+        budgetHistory[budgetHistory.length - 1].est !== budgetState.est) {
+      budgetHistory.push({ ...budgetState });
+      if (budgetHistory.length > 60) budgetHistory = budgetHistory.slice(-60);
+    }
     updateBudgetBar();
+    renderBudgetSparkline();
+    updateBudgetOverBanner();  // canlı aşım varsa şerit anında görünsün
   }
 }
 
@@ -962,6 +1120,82 @@ function renderConfigDiff(cd, ts) {
   bodyEl.innerHTML = h;
 }
 
+// ---- CLI override panel (son run'un override durumu) ----
+function renderCliOverride(data) {
+  const bodyEl = $("cov-body"), tsEl = $("cov-ts");
+  if (!bodyEl) return;
+  const cov = data && data.cli_overrides;
+  const ts = data && data.ts;
+  if (tsEl) tsEl.textContent = ts ? fmtTs(ts) : "";
+  if (cov == null) {
+    bodyEl.innerHTML = '<div class="muted">veri bekleniyor…</div>';
+    return;
+  }
+  // cov: { budget: {override, file_value, effective}, ... }
+  const items = Object.entries(cov).filter(
+    ([, v]) => v && typeof v === "object");
+  if (!items.length) {
+    bodyEl.innerHTML = '<span class="badge ok">CLI override YOK</span> ' +
+      '<span class="muted">bütçe kalkanı dosya config değerleriyle koştu</span>';
+    return;
+  }
+  const overrides = items.filter(([, v]) => v.override);
+  if (!overrides.length) {
+    // keys var ama override=false (cli_given ama değer aynı)
+    bodyEl.innerHTML = '<span class="badge ok">CLI override YOK</span> ' +
+      '<span class="muted">' + items.length + ' anahtar CLI verildi ama dosya değeriyle aynı</span>';
+    return;
+  }
+  let h = '<span class="badge warn">CLI override VAR ('
+    + overrides.length + ')</span>';
+  h += '<table style="margin-top:8px"><thead><tr><th>Anahtar</th>' +
+    '<th>Dosya değeri</th><th>CLI değeri</th></tr></thead><tbody>';
+  for (const [key, v] of overrides) {
+    h += '<tr><td><code>' + escapeHTML(key) + '</code></td>' +
+      '<td><code>' + escapeHTML(fmtVal(v.file_value)) + '</code></td>' +
+      '<td><code style="color:var(--warn)">' +
+      escapeHTML(fmtVal(v.effective)) + '</code></td></tr>';
+  }
+  h += '</tbody></table>';
+  bodyEl.innerHTML = h;
+}
+
+// ---- K-layers panel (tek kaynak: d.layers → K0-K17) ----
+// K8/K9 enriched by z3_passed/lean_ok detail; others purely from layers.
+const K_ALL = ["K0","K1","K2","K3","K4","K5","K6","K7","K8","K9",
+               "K10","K11","K12","K13","K14","K16","K17"];
+
+function _cls(st) { return st === "PASS" ? "ok" : st === "FAIL" ? "err" : "warn"; }
+function _ico(st) { return st === "PASS" ? "✓" : st === "FAIL" ? "✗" : "·"; }
+
+function renderKLayers(ls, z3p, z3t, z3f, leanOk, leanDetail) {
+  const panel = $("klayers-panel");
+  if (!panel) return;
+  if (!ls || Object.keys(ls).length === 0) {
+    panel.innerHTML = '<span class="muted">K-layers: bekleniyor…</span>';
+    return;
+  }
+  let html = '';
+  for (const k of K_ALL) {
+    const l = ls[k];
+    if (!l) continue;
+    let st = l.status;
+    let title = l.label || '';
+    if (k === "K8" && z3p != null) {
+      const tot = z3t != null ? z3t : 12;
+      const failed = z3f || 0;
+      title += " (" + z3p + "/" + tot + (failed > 0 ? " FAIL:" + failed : "") + ")";
+    }
+    if (k === "K9") {
+      if (leanOk === true) title += " PASS";
+      else if (leanOk === false) title += " FAIL" + (leanDetail ? " — " + leanDetail : "");
+    }
+    html += '<span class="badge ' + _cls(st) + '" title="' + title + '">'
+      + _ico(st) + ' ' + k + '</span>';
+  }
+  panel.innerHTML = html || '<span class="muted">K-layers: veri yok</span>';
+}
+
 // ---- Hook env sürümleri (zaman serisi: python/z3/lean/…) ----
 const HOOK_TOOLS = ["python", "z3", "lean", "pre_commit", "pdfinfo", "qpdf"];
 const HOOK_LABELS = { python: "Python", z3: "Z3", lean: "Lean",
@@ -1032,6 +1266,15 @@ function fmtVal(v) {
 }
 
 function applySnapshot(d) {
+  // Bütçe limiti TEK KAYNAK: /api/latest `budget.limit` (etkin config
+  // budget_usd aynası). Config değişince grafik referans çizgisi + kart
+  // otomatik uyum sağlar; snapshot yoksa 30.0 fallback kalır.
+  if (d.budget && d.budget.limit > 0 && d.budget.limit !== BUDGET_LIMIT) {
+    BUDGET_LIMIT = d.budget.limit;
+    // Trend grafiği cache'liyse yeni limitle yeniden çiz (config değişikliği)
+    if (trendCache.length) renderTrend(trendCache);
+  }
+
   // Status board: CI consolidate_summary.py ile aynı 5 ikonlu tek satır
   if (d.status_board) {
     $("status-board").textContent = d.status_board;
@@ -1103,10 +1346,22 @@ function applySnapshot(d) {
   // Duration
   $("m-dur").textContent = d.duration_s != null ? d.duration_s + " s" : "—";
 
-  // Budget
+  // Bütçe sparkline: snapshot'ta budgetState varsa history'e ekle
+  if (d.budget_usd != null && d.budget_limit != null) {
+    if (budgetHistory.length === 0 ||
+        budgetHistory[budgetHistory.length - 1].est !== d.budget_usd) {
+      budgetHistory.push({ est: d.budget_usd, limit: d.budget_limit });
+      if (budgetHistory.length > 60) budgetHistory = budgetHistory.slice(-60);
+    }
+    renderBudgetSparkline();
+  }
+
+  // Budget — limit /api/latest `budget.limit`'ten (applySnapshot başında senkronlanır)
   $("m-budget").textContent = d.budget_usd != null ? "$" + d.budget_usd.toFixed(2) : "—";
-  $("m-budget-sub").textContent = (d.budget_usd != null && d.budget_usd < 30)
-    ? "✓ under $30 limit" : (d.budget_usd != null ? "⚠ over $30" : "limit $30");
+  const limTxt = "$" + fmtLimit(BUDGET_LIMIT);
+  $("m-budget-sub").textContent = (d.budget_usd != null && d.budget_usd < BUDGET_LIMIT)
+    ? "✓ under " + limTxt + " limit"
+    : (d.budget_usd != null ? "⚠ over " + limTxt : "limit " + limTxt);
 
   // PDF + refs
   $("m-pdf").textContent = (d.pdf_pages || "—") + " / " + (d.ref_count || "—");
@@ -1127,17 +1382,10 @@ function applySnapshot(d) {
     s.textContent = text;
     badges.appendChild(s);
   };
-  // K1-K7 rozeti — genel verdict DEĞİL, JSON'daki per-katman durumundan
-  // (d.layers). Sunucu bu veriyi verify_delivery.py --json çıktısındaki
-  // "layers" alanından taşır; yoksa eski davranışa düş (genel verdict).
+  // K-layer panel — tek kaynak: d.layers (K0-K17)
+  // K8/K9 enriched by z3_passed/lean_ok from server.
   const ls = d.layers || {};
-  const core = ["K1", "K2", "K3", "K4", "K5", "K6", "K7"];
-  const coreSt = core.map(k => (ls[k] || {}).status);
-  const k17 = coreSt.some(s => s === "FAIL") ? "FAIL" :
-              (coreSt.length && coreSt.every(s => s === "PASS") ? "PASS" :
-               (coreSt.some(s => s === "SKIP") ? "SKIP" : "?"));
-  addBadge(k17 === "PASS" ? "ok" : k17 === "FAIL" ? "err" : "warn",
-           "K1-K7: " + k17);
+  renderKLayers(ls, d.z3_passed, d.z3_total, d.z3_failed, d.lean_ok, d.lean_detail);
   // K8 Z3 rozeti — son run'ın GERÇEK sonucundan (sunucu stderr'deki
   // [PASS]/[FAIL] P1-5 özet tablosunu sayar; veri yoksa '?' gösterir).
   if (d.z3_passed != null) {
@@ -1203,6 +1451,7 @@ function applySnapshot(d) {
   loadTrend();
   renderRefsOnline(d);
   renderConfigDiff(d.config_diff, d.ts);
+  renderCliOverride(d);
 
   if (d.stdout_short) {
     const refItems = [];
@@ -1260,6 +1509,7 @@ function initLoad() {
     if (d.refs_online) renderRefsOnline(d.refs_online);
     if (d.budget) renderBudget(d.budget);
     if (d.config_diff) renderConfigDiff(d.config_diff, d.ts);
+    renderCliOverride(d);
     setLive(d.verdict === "PASS" ? "ok" : "warn");
   }).catch(() => {});
   loadRunHistory();
@@ -1283,6 +1533,7 @@ function connect() {
         if (full.refs_online) renderRefsOnline(full.refs_online);
         if (full.budget) renderBudget(full.budget);
         if (full.config_diff) renderConfigDiff(full.config_diff, full.ts);
+        renderCliOverride(full);
       });
     } catch(err) { console.error("snapshot parse", err); }
   });
@@ -1298,6 +1549,7 @@ function connect() {
         if (full.refs_online) renderRefsOnline(full.refs_online);
         if (full.budget) renderBudget(full.budget);
         if (full.config_diff) renderConfigDiff(full.config_diff, full.ts);
+        renderCliOverride(full);
       });
     } catch(err) { console.error("update parse", err); }
   });

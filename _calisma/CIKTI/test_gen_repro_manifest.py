@@ -340,6 +340,62 @@ class TestProvenance(unittest.TestCase):
         m = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         self.assertNotIn("python3_shell", m)
 
+    # ── OVERRIDES section tests ──────────────────────────────────────
+    def test_overrides_section(self):
+        # cli_overrides_version.json (isimle tanınır — CONFIG gibi)
+        # ayrı bölümde işaretlenir + tek-hash combined_sha256.
+        (self.artifacts / "budget").mkdir(parents=True)
+        (self.artifacts / "budget" / "cli_overrides_version.json").write_text(
+            json.dumps({"override_count": 1, "warning": True,
+                        "overrides": [{"key": "budget", "file_value": 30.0,
+                                       "effective": 25}]}),
+            encoding="utf-8")
+        self._gen()
+        txt = (self.out / "manifest.txt").read_text(encoding="utf-8")
+        self.assertIn("OVERRIDES ARTIFACT (ayrı bölüm)", txt)
+        self.assertIn("overrides_combined_sha256", txt)
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        ov = m["overrides"]
+        self.assertIn("budget/cli_overrides_version.json", ov["files"])
+        self.assertEqual(len(ov["combined_sha256"]), 64)
+
+    def test_overrides_combined_recomputes_deterministically(self):
+        (self.artifacts / "budget").mkdir(parents=True)
+        (self.artifacts / "budget" / "cli_overrides_version.json").write_text(
+            json.dumps({"override_count": 0, "warning": False,
+                        "overrides": []}),
+            encoding="utf-8")
+        self._gen()
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        ov = m["overrides"]["files"]
+        expected = hashlib.sha256(
+            "".join(f"{rel}\0{ov[rel]}\n" for rel in sorted(ov)).encode()
+        ).hexdigest()
+        self.assertEqual(m["overrides"]["combined_sha256"], expected)
+        self.assertRegex(m["overrides"]["combined_sha256"], r"^[0-9a-f]{64}$")
+
+    def test_overrides_basename_recognition_flat(self):
+        # merge-multiple köke düzleştirdiğinde alt dizin öneki kaybolur;
+        # basename ile tanınır (CONFIG deseni).
+        (self.artifacts / "cli_overrides_version.json").write_text(
+            json.dumps({"override_count": 0, "warning": False}),
+            encoding="utf-8")
+        self._gen()
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        ov = m["overrides"]
+        self.assertIn("cli_overrides_version.json", ov["files"])
+        self.assertEqual(len(ov["combined_sha256"]), 64)
+
+    def test_no_overrides_section_when_absent(self):
+        bare = self.root / "bare"
+        bare.mkdir(parents=True)
+        (bare / "a.txt").write_text("x", encoding="utf-8")
+        out = self.root / "bare-out"
+        r = _run_gen(str(bare), str(out))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        m = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        self.assertNotIn("overrides", m)
+
     def test_env_override_artifact_jobs(self):
         env = dict(os.environ)
         env["REPRO_ARTIFACT_JOBS"] = '{"precommit-logs": "custom-job"}'
@@ -362,8 +418,9 @@ class TestWorkflowPatternCoverage(unittest.TestCase):
     olmalı — yoksa o artifact manifest'e girmeden sessizce düşer (ör. bugün
     budget-verify/lineage-findings/klayers eksikti).
     """
-    EXCLUDED = {"config", "precommit-logs", "refs-trend", "precheck-report",
-                "python3-shell", "plist-check", "reproducibility"}
+    EXCLUDED = {"config", "precommit-logs", "refs-trend", "override-trend",
+                "precheck-report", "python3-shell", "plist-check",
+                "reproducibility"}
 
     def _workflow_merge_pattern(self):
         wf = CIKTI.parent.parent / ".github" / "workflows" / "verify.yml"
@@ -422,10 +479,28 @@ class TestManifestSections(unittest.TestCase):
         (self.artifacts / "sub" / "nested.json").write_text(
             '{"n": 1}', encoding="utf-8")
         (self.artifacts / "config").mkdir(parents=True)
+        # Gerçekçi config çifti: effective_config.json cli_overrides kaydı
+        # dosya config'iyle (verify_delivery.config.json) tutarlı — K10'un
+        # cli_overrides kapısı da üretilen manifest'i PASS etmeli (çapraz
+        # doğrulama testleri bu çifte bağlıdır).
         (self.artifacts / "config" / "verify_delivery.config.json").write_text(
-            '{"budget_usd": 30.0}', encoding="utf-8")
+            '{"budget_usd": 30.0, "budget_method": "both"}',
+            encoding="utf-8")
         (self.artifacts / "config" / "effective_config.json").write_text(
-            '{"effective": true}', encoding="utf-8")
+            json.dumps({
+                "budget_usd": 30.0,
+                "budget_method": "both",
+                "cli_overrides": {
+                    "budget": {"cli_given": False, "cli_value": None,
+                                "file_value": 30.0, "effective": 30.0,
+                                "override": False},
+                    "budget_method": {"cli_given": False, "cli_value": None,
+                                       "file_value": "both",
+                                       "effective": "both",
+                                       "override": False},
+                },
+            }),
+            encoding="utf-8")
         (self.artifacts / "binary.bin").write_bytes(b"\x00\x01\x02\xff")
         self.out = self.root / "reproducibility"
 
@@ -515,14 +590,62 @@ class TestManifestSections(unittest.TestCase):
         self.assertEqual(m["config"]["combined_sha256"], expected)
         self.assertRegex(m["config"]["combined_sha256"], r"^[0-9a-f]{64}$")
 
-    def test_config_combined_recomputes_deterministically(self):
+    def test_config_combined_cross_validates_with_k10(self):
+        """K10 çapraz doğrulama: AYNI config.files girdisinden üç formül de
+        birebir aynı hash'i üretmeli — test formülü, K10
+        (verify_delivery._config_combined_sha256) ve üreticinin kayıtlı
+        config.combined_sha256. Biri saparsa çapraz doğrulama sessizce
+        kayar (üretici drift'i / implementasyon ayrışması) → fail-closed."""
+        import verify_delivery as vd
         m = self._gen()
         cfg = m["config"]["files"]
-        expected = hashlib.sha256(
+        test_formula = hashlib.sha256(
             "".join(f"{rel}\0{cfg[rel]}\n" for rel in sorted(cfg)).encode()
         ).hexdigest()
-        self.assertEqual(m["config"]["combined_sha256"], expected)
-        self.assertRegex(m["config"]["combined_sha256"], r"^[0-9a-f]{64}$")
+        k10 = vd._config_combined_sha256(cfg)
+        stored = m["config"]["combined_sha256"]
+        self.assertEqual(test_formula, k10,
+                         "test formülü ↔ K10 formülü sapması (aynı girdi)")
+        self.assertEqual(k10, stored,
+                         "K10 formülü ↔ üretici kaydı sapması (aynı girdi)")
+
+    def test_k10_gate_passes_on_produced_manifest(self):
+        """Uçtan uca K10 çapraz doğrulama: üreticinin manifest'ini
+        verify_manifest_digest (--verify-manifest çekirdeği) TAMAMEN PASS
+        etmeli — config.combined_sha256 yeniden hesabı + cli_overrides dahil."""
+        import verify_delivery as vd
+        self._gen()
+        findings = []
+        ok, detail = vd.verify_manifest_digest(
+            str(self.out / "manifest.json"),
+            lambda pri, cid, cl, issue="", ev="":
+                findings.append((pri, cid, issue)))
+        self.assertTrue(ok, detail)
+        self.assertIn("config.combined_sha256: PASS", detail)
+        self.assertIn("cli_overrides: PASS", detail)
+        self.assertEqual(findings, [], f"K10 bulgu üretti: {findings}")
+
+    def test_k10_detects_config_combined_tamper(self):
+        """Fail-closed çapraz: manifest'teki config.combined_sha256
+        kurcalanınca K10 aynı formülle YENİDEN hesaplayıp uyuşmazlığı
+        yakalamalı (kayıtlı değer güvenilir değil — yeniden hesap tek kanıt)."""
+        import verify_delivery as vd
+        m = self._gen()
+        stored = m["config"]["combined_sha256"]
+        m["config"]["combined_sha256"] = (
+            "0" if stored[0] != "0" else "1") + stored[1:]
+        (self.out / "manifest.json").write_text(
+            json.dumps(m, ensure_ascii=False), encoding="utf-8")
+        findings = []
+        ok, detail = vd.verify_manifest_digest(
+            str(self.out / "manifest.json"),
+            lambda pri, cid, cl, issue="", ev="":
+                findings.append((pri, cid, issue)))
+        self.assertFalse(ok)
+        self.assertIn("config.combined_sha256: FAIL", detail)
+        self.assertTrue(
+            any(i == "config.combined_sha256 uyuşmazlığı"
+                for _, _, i in findings), findings)
 
     def test_config_combined_is_stable_across_runs(self):
         first = self._gen()["config"]["combined_sha256"]
