@@ -261,6 +261,22 @@ function setLive(state) {
 }
 
 // Tek satırı vurgula: kırmızı (hata/P0 bulgu) > mor (bütçe/BÜTÇE kalkanı) > sarı (P1 bulgu + CLI override) > yeşil (K8/Z3 SAT-UNSAT + PASS) > gri (ayraç/K-header).
+function renderLiveFindings() {
+  const fpEl = $("findings-panel");
+  if (!fpEl || !liveFindings.length) return;
+  const p0s = liveFindings.filter(f => f.type === "P0");
+  const p1s = liveFindings.filter(f => f.type === "P1");
+  let html = "<div style=\"font-size:12px;padding:4px 0\">";
+  if (p0s.length) {
+    html += p0s.map(f => `<div style=\"color:var(--err);margin:2px 0\">🔴 <b>P0</b> ${escapeHTML(f.line)}</div>`).join("");
+  }
+  if (p1s.length) {
+    html += p1s.map(f => `<div style=\"color:var(--warn);margin:2px 0\">🟡 <b>P1</b> ${escapeHTML(f.line)}</div>`).join("");
+  }
+  html += `</div><div class=\"ts\" style=\"font-size:10px;color:#999\">canlı akıştan ${liveFindings.length} bulgu</div>`;
+  fpEl.innerHTML = html;
+}
+
 function colorizeLine(line) {
   if (/^\[P0\]|^\[FAIL\]|^SONUÇ: FAIL|FAIL \(P0=|^Error|Exception|^Traceback|^HATA/.test(line))
     return '<span class="err">' + escapeHTML(line) + '</span>';
@@ -722,6 +738,7 @@ function scanZ3(line) {
 }
 
 let streamLines = [];  // renklendirilmiş HTML satırları (son STREAM_MAX)
+let liveFindings = []; // canlı akıştan toplanan P0/P1 satırları [{type, line}]
 const STREAM_MAX = 600;  // son N run replay edilirken yeterli bağlam kalsın
 function connectStream() {
   const el = $("runstream"), st = $("stream-state");
@@ -739,6 +756,16 @@ function connectStream() {
     if (streamLines.length > STREAM_MAX) streamLines = streamLines.slice(-STREAM_MAX);
     el.innerHTML = streamLines.join("\n");
     el.scrollTop = el.scrollHeight;
+    // P0/P1 satırlarını canlı findings paneline ekle
+    if (/^\[P0\]/.test(line) || /\[FAIL\]/.test(line) || /SONUÇ: FAIL/.test(line)) {
+      liveFindings.push({type: "P0", line: line});
+      renderLiveFindings();
+    } else if (/^\[P1\]/.test(line) || /\[CLI override\]/.test(line)) {
+      liveFindings.push({type: "P1", line: line});
+      renderLiveFindings();
+    } else if (/^SONUÇ: PASS|^SONUÇ: TÜMÜ PASS|^Verdict: PASS/.test(line)) {
+      // PASS satırı geldiyse findings panelini temizle (yeni run)
+    }
   };
   runStreamES.addEventListener("replay-start", (e) => {
     let sum = null;
@@ -748,6 +775,8 @@ function connectStream() {
       // replay + canlı satırlar çift görünmesin; K8 sayacını ve bütçe
       // çubuğunu sıfırla (replay son run'u baştan sayar).
       streamLines = [];
+      liveFindings = [];
+      renderLiveFindings();
       z3Seen.clear(); z3Passed.clear(); z3Failed.clear();
       updateZ3Bar();
       budgetState = null;
@@ -1018,13 +1047,16 @@ function applySnapshot(d) {
     }
   }
 
-  // Findings panel: P0/P1 bulgu satırları
+  // Findings panel: P0/P1 bulgu satırları (snapshot veya canlı akış)
   const fpEl = $("findings-panel");
   if (fpEl) {
     const findings = d.findings || [];
-    if (findings.length === 0) {
+    // Canlı akışta liveFindings varsa onu kullan (daha taze)
+    if (liveFindings.length > 0 && findings.length === 0) {
+      renderLiveFindings();
+    } else if (findings.length === 0 && liveFindings.length === 0) {
       fpEl.innerHTML = "";
-    } else {
+    } else if (findings.length > 0) {
       const p0s = findings.filter(f => f.priority === "P0");
       const p1s = findings.filter(f => f.priority === "P1");
       let html = "<div style=\"font-size:12px;padding:4px 0\">";
