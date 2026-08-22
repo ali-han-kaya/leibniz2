@@ -215,6 +215,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-22 | ci | parse unit test failures and post as PR comment | `d3284b7` |
 | 2026-08-22 | fix | (ci) extract unit-test-failure comment to .js file | `28e0789` |
 | 2026-08-22 | fix | (ci) accept require+eval pattern in github-script test | `d5a26cd` |
+| 2026-08-22 | ci | unit test failure PR comment (#20) | `167443a` |
 
 ### Regresyon notları
 
