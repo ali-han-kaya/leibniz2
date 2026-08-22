@@ -433,8 +433,7 @@ REFERENCE_ARCHIVE = [
     # (Fine 2012014618 + Schmitt 73155022 dahil) — OL fallback'te kalırlar.
     {"key": "Fine 2012", "query": "Metaphysical Grounding Correia Schnieder",
      "title_needle": "metaphysical grounding", "creator_needle": "correia",
-     "ht_ids": ["oclc:793497146", "lccn:2012014618",
-                 "isbn:1107022894", "isbn:9781107460287"],
+     "ht_ids": ["isbn:9781107460287"],
      "tex_needle": "Fine, K. (2012)"},
     {"key": "Frede 1983", "query": "Skeptical Tradition Burnyeat",
      "title_needle": "skeptical tradition",
