@@ -208,6 +208,7 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 | 2026-08-22 | other | verify: refs-trend kapsam satiri — 61/61 + 54 gecersiz | `8ef125a` |
 | 2026-08-22 | fix | config-drift override tek kaynak — summary.txt satiri | `5e837f7` |
 | 2026-08-22 | other | verify: cli_overrides warning → fail-closed config-drift gate | `e590e70` |
+| 2026-08-22 | fix | config-drift override-only cift baslik engellendi | `337a8d1` |
 
 ---
 

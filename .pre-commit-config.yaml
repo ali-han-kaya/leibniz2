@@ -345,6 +345,21 @@ repos:
         stages: [pre-commit]
         verbose: true
 
+      - id: check-budget-scan
+        name: "Verify budget bar compute (parse/status/note, Node)"
+        description: >-
+          test_budget_scan.js — preview.html budget scan/bar logic'inin
+          saf JS modül (budget_scan.js) üzerinden 67 testli Node suite'i.
+          parseBudgetLine / computeBudgetStatus / budgetLimitNote
+          fonksiyonlarını normal, aşım, sıfır/geçersiz ve parse edge-case
+          senaryolarında doğrular. ~0.15s.
+        entry: node _calisma/CIKTI/test_budget_scan.js
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+        verbose: true
+
       - id: check-unit-tests
         name: "Unit tests for new gates (dashboard/lean/doc-sync)"
         description: >-
