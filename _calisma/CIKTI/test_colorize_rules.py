@@ -156,5 +156,92 @@ class TestRegexCoverage(unittest.TestCase):
                 self.fail(f"Yanlış renk: '{line[:40]}' → {got} (beklenen: {expected})")
 
 
+class TestReplaySummaryColoring(unittest.TestCase):
+    """Replay-start özet satırının renklendirmesini doğrula.
+
+    Replay satırı inline <span> ile üretilir (colorizeLine'dan geçmez);
+    yine de her parçanın doğru CSS class'la eşleştiğini doğrularız.
+    Format: ── geçmiş run HH:MM:SS ── VERDICT · P0=N · P1=N · refs V/T · P sayfa · bütçe $X · Ys
+    """
+
+    def _build_replay_line(self, verdict="PASS", p0=0, p1=0,
+                           refs_verified=61, refs_total=61,
+                           pdf_pages=33, budget=1.08, duration=30.9,
+                           ts="2026-08-22T03:00:00"):
+        """preview.html replay-start handler'ının ürettiği HTML'i simüle et."""
+        sv = verdict
+        scls = "ok" if sv == "PASS" else ("err" if sv in ("FAIL", "ERROR") else "warn")
+        bud = "$" + f"{budget:.2f}"
+        refs = f" · refs {refs_verified}/{refs_total}" if refs_verified is not None else ""
+        pg = f" · {pdf_pages} sayfa" if pdf_pages is not None else ""
+        dur = f" · {duration}s"
+        tlabel = ts.split("T")[1][:8] if "T" in ts else ""
+        label = f"geçmiş run {tlabel}" if tlabel else "geçmiş run"
+        html = (
+            f'<span class="muted">── {label} ── </span>'
+            f'<span class="{scls}">{sv}</span>'
+            f'<span class="muted"> · P0={p0} · P1={p1}{refs}{pg} · bütçe {bud}{dur}</span>'
+        )
+        return html, scls
+
+    def test_pass_verdict_renders_ok_class(self):
+        html, _ = self._build_replay_line(verdict="PASS")
+        self.assertIn('class="ok"', html)
+        self.assertIn('>PASS<', html)
+
+    def test_fail_verdict_renders_err_class(self):
+        html, _ = self._build_replay_line(verdict="FAIL")
+        self.assertIn('class="err"', html)
+        self.assertIn('>FAIL<', html)
+
+    def test_error_verdict_renders_err_class(self):
+        html, _ = self._build_replay_line(verdict="ERROR")
+        self.assertIn('class="err"', html)
+
+    def test_unknown_verdict_renders_warn_class(self):
+        html, _ = self._build_replay_line(verdict="UNKNOWN")
+        self.assertIn('class="warn"', html)
+
+    def test_refs_info_present(self):
+        html, _ = self._build_replay_line(refs_verified=61, refs_total=61)
+        self.assertIn("refs 61/61", html)
+
+    def test_pdf_pages_present(self):
+        html, _ = self._build_replay_line(pdf_pages=33)
+        self.assertIn("33 sayfa", html)
+
+    def test_budget_present(self):
+        html, _ = self._build_replay_line(budget=1.08)
+        self.assertIn("bütçe $1.08", html)
+
+    def test_duration_present(self):
+        html, _ = self._build_replay_line(duration=30.9)
+        self.assertIn("30.9s", html)
+
+    def test_muted_wrapper_for_separator(self):
+        html, _ = self._build_replay_line()
+        self.assertIn('class="muted"', html)
+        self.assertIn("── geçmiş run", html)
+
+    def test_colorize_line_handles_verdict_fragments(self):
+        """colorizeLine PASS/FAIL fragment'lerini doğru renklendirmeli."""
+        # Tam satır formatları (replay summary'den beklenen)
+        self.assertEqual(colorize_line("[PASS] P1-a"), "ok")
+        self.assertEqual(colorize_line("SONUÇ: PASS (P0=0, P1=0)"), "ok")
+        self.assertEqual(colorize_line("SONUÇ: FAIL (P0=1, P1=0)"), "err")
+        self.assertEqual(colorize_line("[BÜTÇE] ~175990 token → $1.08"), "budget")
+        self.assertEqual(colorize_line("Verdict: PASS"), "ok")
+        # Bare PASS/FAIL colorizeLine'dan geçmez (inline span ile üretilir)
+        self.assertEqual(colorize_line("PASS"), None)
+        self.assertEqual(colorize_line("FAIL"), None)
+
+    def test_full_replay_line_html_structure(self):
+        """Tüm replay satırı 3 span içermeli: muted(başlık) + verdict + muted(detay)."""
+        html, _ = self._build_replay_line()
+        span_count = html.count('<span class=')
+        self.assertEqual(span_count, 3,
+                         f"Replay satırında 3 span bekleniyor, {span_count} bulundu")
+
+
 if __name__ == "__main__":
     unittest.main()

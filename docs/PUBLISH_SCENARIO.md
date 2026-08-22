@@ -156,6 +156,7 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 | 2026-08-22 | fix | (dashboard) add startup resilience to preview tab (#22) | `2bb8fb1` |
 | 2026-08-22 | other | revert(plist): remove legacy preview-server profile, keep single-profile (#23) | `71106f8` |
 | 2026-08-22 | fix | (verify) K14 _resolve_canon path under --dir repo root (#24) | `fb69a40` |
+| 2026-08-22 | feat | (dashboard) add refs/PDF info to replay summary line (#25) | `e19f7b7` |
 
 ---
 
