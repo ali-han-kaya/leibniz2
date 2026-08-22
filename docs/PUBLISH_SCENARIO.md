@@ -163,6 +163,7 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 | 2026-08-22 | feat | (refs-trend) unverified series + stale artifact warning (#29) | `f5d9c32` |
 | 2026-08-22 | fix | (refs) correct Fine 2012 identifiers (wrong LCCN/ISBN) | `398a148` |
 | 2026-08-22 | feat | (dashboard) add z3_passed/z3_total to run-history API | `a05aad3` |
+| 2026-08-22 | feat | (dashboard) add K9 Lean to run-history API and trend graph | `ce861e8` |
 
 ---
 
