@@ -2642,18 +2642,205 @@ def verify_manifest_digest(manifest_path, add, check_id="K10-MANIFEST",
             and sm_ok and ps_ok and pc_ok and sc_ok), detail
 
 
+# K13 mock artifact set — happy path ve negatif senaryolar ORTAK seti kullanır.
+_K13_MOCK = {
+    "a.txt": b"hello A\n",
+    "sub/b.bin": b"\x00\x01\x02\x03",
+    "config/cfg.json": b'{"k": 1}',
+    # config/ ALT DİZİN senaryosu: config/ önekli HER DERİNLİKTEKİ dosya
+    # config olarak tanınmalı (önek eşleşmesi; kök-düzleşme basename ile).
+    "config/deep/extra.json": b'{"deep": true}',
+    # merge-multiple düzleştirmesi senaryosu: config dosyası KÖKTE
+    # (config/ öneki yok) — isimle tanınmalı (CONFIG_BASENAMES).
+    "effective_config.json": b'{"effective": true}',
+    "config-diff.json": b'{"diffs": []}',
+    # lineage-findings: soy hattı sidecar dosyası (LINEAGE bölümü)
+    "lineage-findings/zip_lineage.json": b'{"generations": []}',
+    # summary sidecar: run summary girdileri (SUMMARY bölümü)
+    "klayers.json": b'{"layers": {}}',
+}
+
+_WANT_CFG = {"config/cfg.json", "config/deep/extra.json",
+              "effective_config.json", "config-diff.json"}
+_WANT_LINEAGE = {"lineage-findings/zip_lineage.json"}
+_WANT_SUMMARY = {"klayers.json"}
+
+
+def _k13_write_mock(tmp):
+    """Mock artifact'ları tmp/artifacts altına yazar; (art, out) döndürür."""
+    art = os.path.join(tmp, "artifacts")
+    out = os.path.join(tmp, "out")
+    for rel, data in _K13_MOCK.items():
+        fp = os.path.join(art, rel)
+        os.makedirs(os.path.dirname(fp), exist_ok=True)
+        with open(fp, "wb") as f:
+            f.write(data)
+    return art, out
+
+
+def _k13_produce(script, art, out):
+    """gen_repro_manifest.py'yi koşar; (returncode, stdout, stderr)."""
+    env = dict(os.environ)
+    env.update({
+        "GITHUB_RUN_ID": "local-selftest",
+        "GITHUB_SHA": "mock-sha",
+        "GITHUB_REF": "refs/heads/local-selftest",
+    })
+    r = subprocess.run(
+        [sys.executable, script, "--artifacts-dir", art, "--out-dir", out],
+        capture_output=True, text=True, env=env, timeout=60)
+    return r.returncode, r.stdout, r.stderr
+
+
+def _k13_verify_manifest(m, out):
+    """manifest.json + bundle tutarlılığını denetler; (ok, problems).
+
+    add() ÇAĞIRMAZ — K13 happy path ve negatif senaryolar (kurcalama
+    tespiti) ORTAK buradan geçer. Eksik bundle dosyası kilitlenme yerine
+    'bundle dosyası yok' problemi olarak raporlanır (temiz fail-closed).
+    """
+    problems = []
+    files = m.get("files")
+    if not isinstance(files, dict) or not files:
+        return False, ["manifest 'files' yok/boş"]
+
+    expected = set(_K13_MOCK)
+    got = set(files)
+    if got != expected:
+        problems.append("manifest kapsamı mock'larla uyuşmuyor "
+                        f"(eksik={sorted(expected - got)}, "
+                        f"fazla={sorted(got - expected)})")
+
+    for rel in sorted(expected):
+        fp = os.path.join(out, rel)
+        if not os.path.isfile(fp):
+            problems.append(f"bundle dosyası yok: {rel}")
+            continue
+        with open(fp, "rb") as ff:
+            actual = hashlib.sha256(ff.read()).hexdigest()
+        mhash = files.get(rel)
+        if mhash != actual:
+            problems.append(
+                f"SHA-256 uyuşmazlığı: {rel} "
+                f"(manifest {str(mhash)[:16]}… gerçek {actual[:16]}…)")
+
+    cfg = m.get("config")
+    cfg_ok = isinstance(cfg, dict) and isinstance(cfg.get("files"), dict)
+    cfg_rel = set(cfg["files"]) if cfg_ok else set()
+    missing_cfg = sorted(_WANT_CFG - cfg_rel)
+    if not cfg_ok or missing_cfg:
+        problems.append("config objesi kök-düzleşmiş/config-alt dizin "
+                        f"dosyalarını kapsamıyor (eksik={missing_cfg})")
+    elif cfg["combined_sha256"] != _config_combined_sha256(cfg["files"]):
+        problems.append("config.combined_sha256 yeniden hesap uyuşmuyor")
+
+    ln = m.get("lineage")
+    ln_ok = isinstance(ln, dict) and isinstance(ln.get("files"), dict)
+    ln_rel = set(ln["files"]) if ln_ok else set()
+    missing_ln = sorted(_WANT_LINEAGE - ln_rel)
+    if not ln_ok or missing_ln:
+        problems.append("lineage objesi lineage-findings dosyalarını "
+                        f"kapsamıyor (eksik={missing_ln})")
+    elif ln["combined_sha256"] != hashlib.sha256(
+            "".join(f"{rel}\0{ln['files'][rel]}\n"
+                     for rel in sorted(ln['files'])).encode()
+    ).hexdigest():
+        problems.append("lineage.combined_sha256 yeniden hesap uyuşmuyor")
+
+    sm = m.get("summary")
+    sm_ok = isinstance(sm, dict) and isinstance(sm.get("files"), dict)
+    sm_rel = set(sm["files"]) if sm_ok else set()
+    missing_sm = sorted(_WANT_SUMMARY - sm_rel)
+    if not sm_ok or missing_sm:
+        problems.append("summary objesi run summary sidecarlarını "
+                        f"kapsamıyor (eksik={missing_sm})")
+    elif sm["combined_sha256"] != hashlib.sha256(
+            "".join(f"{rel}\0{sm['files'][rel]}\n"
+                     for rel in sorted(sm['files'])).encode()
+    ).hexdigest():
+        problems.append("summary.combined_sha256 yeniden hesap uyuşmuyor")
+
+    return (not problems), problems
+
+
+def _k13_negative_scenarios(add, script):
+    """Fail-closed davranışını 3 kurcalama senaryosuyla sertleştirir.
+
+    Her senaryo üreticiyi temiz bir tmp'de koşar, ardından bundle/manifest'i
+    kurcalar ve _k13_verify_manifest'in problemi YAKALADIĞINI doğrular:
+      S1 eksik-dosya  : bundle'dan bir dosya silinir — kilitlenme DEĞİL,
+                        temiz 'bundle dosyası yok' problemi beklenir
+      S2 bozuk-hash   : manifest.json'daki bir SHA-256 değiştirilir
+      S3 config-alt   : config/ alt dizin dosyası config objesinden çıkarılır
+    Yakalanmayan senaryo → P0 (fail-closed ihlali). Döndürür {ad: durum}.
+    """
+    def tamper_missing_file(m, out):
+        fp = os.path.join(out, "sub/b.bin")
+        if os.path.isfile(fp):
+            os.remove(fp)
+
+    def tamper_bad_hash(m, out):
+        h = m["files"]["a.txt"]
+        m["files"]["a.txt"] = ("0" if h[0] != "0" else "1") + h[1:]
+        with open(os.path.join(out, "manifest.json"), "w",
+                  encoding="utf-8") as mf:
+            json.dump(m, mf)
+
+    def tamper_config_subdir(m, out):
+        cfg = m.get("config")
+        if isinstance(cfg, dict) and isinstance(cfg.get("files"), dict):
+            cfg["files"].pop("config/deep/extra.json", None)
+            with open(os.path.join(out, "manifest.json"), "w",
+                      encoding="utf-8") as mf:
+                json.dump(m, mf)
+
+    def run_scenario(name, tamper):
+        tmp = tempfile.mkdtemp(prefix="repro_sc_")
+        try:
+            art, out = _k13_write_mock(tmp)
+            rc, so, se = _k13_produce(script, art, out)
+            if rc != 0:
+                return f"ÜRETİCİ HATASI (exit={rc}): {(se or so)[:200]}"
+            mpath = os.path.join(out, "manifest.json")
+            with open(mpath, encoding="utf-8") as mf:
+                m = json.load(mf)
+            tamper(m, out)
+            ok, problems = _k13_verify_manifest(m, out)
+            if ok:
+                add("P0", "K13-REPRO", "K13 repro manifest",
+                    f"negatif senaryo yakalanmadı: {name}")
+                return "YAKALANMADI"
+            return "PASS"
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    results = {}
+    for name, tamper in (("eksik-dosya", tamper_missing_file),
+                         ("bozuk-hash", tamper_bad_hash),
+                         ("config-alt-dizin", tamper_config_subdir)):
+        results[name] = run_scenario(name, tamper)
+    return results
+
+
 def check_repro_manifest_self_consistency(add):
     """K13: gen_repro_manifest.py'yi mock artifact'larla koşup manifest
     tutarlılığını denetler (fail-closed).
 
     Reproducibility manifest üreticisinin self-testi: bilinen içerikli mock
-    dosyalar (alt dizin + config/ dahil) üretilir, gen_repro_manifest.py
-    bunlardan manifest.json üretir, üretilen her SHA-256 gerçek dosyayla
-    yeniden hash'lenerek karşılaştırılır. Ayrıca manifest.sha256 ↔
-    manifest.json eşleşmesi (varlık + biçim + dosya adı + hash) K10 ile ORTAK
-    helper (_check_manifest_sidecar) üzerinden fail-closed denetlenir —
-    üretici sidecar'ı üretmez/bozuk üretirse P1. Üretici bug'ı/drift'i
-    (eksik kayıt, yanlış hash, üretilemeyen manifest) P0/P1 ile patlar.
+    dosyalar (alt dizin + config/ alt dizini + köke düzleşmiş config dahil)
+    üretilir, gen_repro_manifest.py bunlardan manifest.json üretir, üretilen
+    her SHA-256 gerçek dosyayla yeniden hash'lenerek karşılaştırılır. Ayrıca
+    manifest.sha256 ↔ manifest.json eşleşmesi (varlık + biçim + dosya adı +
+    hash) K10 ile ORTAK helper (_check_manifest_sidecar) üzerinden fail-closed
+    denetlenir — üretici sidecar'ı üretmez/bozuk üretirse P1. Üretici
+    bug'ı/drift'i (eksik kayıt, yanlış hash, üretilemeyen manifest) P0/P1 ile
+    patlar.
+
+    SERTLEŞTİRME — negatif senaryolar: happy path sağlamken denetim 3
+    kurcalama senaryosunda (eksik bundle dosyası, bozuk SHA-256, config/ alt
+    dizin dosyasının config objesinden düşmesi) problemi YAKALAMALIDIR;
+    yakalanmayan senaryo → P0 (fail-closed ihlali). Eksik dosya kilitlenme
+    yerine temiz 'bundle dosyası yok' problemi olarak raporlanır.
     Döndürür (ok: bool, detail: str).
     """
     script = os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -2663,48 +2850,20 @@ def check_repro_manifest_self_consistency(add):
             "gen_repro_manifest.py yok", script)
         return False, f"{script} yok"
 
-    mock = {
-        "a.txt": b"hello A\n",
-        "sub/b.bin": b"\x00\x01\x02\x03",
-        "config/cfg.json": b'{"k": 1}',
-        # merge-multiple düzleştirmesi senaryosu: config dosyası KÖKTE
-        # (config/ öneki yok) — isimle tanınmalı (CONFIG_BASENAMES).
-        "effective_config.json": b'{"effective": true}',
-        "config-diff.json": b'{"diffs": []}',
-        # lineage-findings: soy hattı sidecar dosyası (LINEAGE bölümü)
-        "lineage-findings/zip_lineage.json": b'{"generations": []}',
-        # summary sidecar: run summary girdileri (SUMMARY bölümü)
-        "klayers.json": b'{"layers": {}}',
-    }
     tmp = tempfile.mkdtemp(prefix="repro_manifest_")
     try:
-        art = os.path.join(tmp, "artifacts")
-        out = os.path.join(tmp, "out")
-        for rel, data in mock.items():
-            fp = os.path.join(art, rel)
-            os.makedirs(os.path.dirname(fp), exist_ok=True)
-            with open(fp, "wb") as f:
-                f.write(data)
-        env = dict(os.environ)
-        env.update({
-            "GITHUB_RUN_ID": "local-selftest",
-            "GITHUB_SHA": "mock-sha",
-            "GITHUB_REF": "refs/heads/local-selftest",
-        })
+        art, out = _k13_write_mock(tmp)
         try:
-            r = subprocess.run(
-                [sys.executable, script, "--artifacts-dir", art,
-                 "--out-dir", out],
-                capture_output=True, text=True, env=env, timeout=60)
+            rc, so, se = _k13_produce(script, art, out)
         except (OSError, subprocess.TimeoutExpired) as e:
             add("P0", "K13-REPRO", "K13 repro manifest",
                 f"gen_repro_manifest.py çalıştırılamadı: {e}")
             return False, f"üretici çalıştırılamadı: {e}"
-        if r.returncode != 0:
-            detail = (r.stderr or r.stdout or "").strip()[:300]
+        if rc != 0:
+            detail = (se or so or "").strip()[:300]
             add("P0", "K13-REPRO", "K13 repro manifest",
-                f"gen_repro_manifest.py exit={r.returncode}", detail)
-            return False, f"üretici başarısız (exit={r.returncode}): {detail}"
+                f"gen_repro_manifest.py exit={rc}", detail)
+            return False, f"üretici başarısız (exit={rc}): {detail}"
 
         mpath = os.path.join(out, "manifest.json")
         if not os.path.isfile(mpath):
@@ -2718,34 +2877,15 @@ def check_repro_manifest_self_consistency(add):
             add("P0", "K13-REPRO", "K13 repro manifest",
                 f"manifest.json okunamadı: {e}", mpath)
             return False, f"manifest okunamadı: {e}"
-        files = m.get("files")
-        if not isinstance(files, dict) or not files:
-            add("P0", "K13-REPRO", "K13 repro manifest",
-                "manifest 'files' yok/boş")
-            return False, "manifest 'files' yok/boş"
 
-        # Tamlık: her mock dosya manifest'te olmalı, fazla/eksik kayıt olmamalı.
-        expected = set(mock)
-        got = set(files)
-        if got != expected:
-            missing = sorted(expected - got)
-            extra = sorted(got - expected)
-            add("P1", "K13-REPRO", "K13 repro manifest",
-                f"manifest kapsamı mock'larla uyuşmuyor "
-                f"(eksik={missing}, fazla={extra})")
-            return False, f"kapsam uyuşmuyor: eksik={missing} fazla={extra}"
-
-        # Hash tutarlılığı: manifest'teki her SHA-256 bundle kopyasıyla aynı mı?
-        n_bad = 0
-        for rel in sorted(expected):
-            fp = os.path.join(out, rel)  # bundle kökü = out/ (üretici kopyalar)
-            with open(fp, "rb") as ff:
-                actual = hashlib.sha256(ff.read()).hexdigest()
-            if actual != files[rel]:
-                n_bad += 1
-                add("P1", "K13-REPRO", "K13 repro manifest",
-                    f"SHA-256 uyuşmazlığı: {rel}",
-                    f"beklenen {files[rel][:16]}… gerçek {actual[:16]}…")
+        ok, problems = _k13_verify_manifest(m, out)
+        n_bad = sum(1 for p in problems if p.startswith("SHA-256 uyuşmazlığı"))
+        for p in problems:
+            add("P1", "K13-REPRO", "K13 repro manifest", p)
+        expected = set(_K13_MOCK)
+        cfg_rel = set((m.get("config") or {}).get("files") or {})
+        ln_rel = set((m.get("lineage") or {}).get("files") or {})
+        sm_rel = set((m.get("summary") or {}).get("files") or {})
 
         # manifest.sha256 ↔ manifest.json: sidecar varlığı + hash eşleşmesi.
         # K10 ile ORTAK helper (_check_manifest_sidecar) — üretici sidecar'ı
@@ -2756,68 +2896,23 @@ def check_repro_manifest_self_consistency(add):
         sc_detail = ("manifest.sha256: PASS" if sc_ok
                      else ("manifest.sha256: FAIL — " + "; ".join(sc_rows[:3])))
 
-        # config objesi: hem config/ önekli hem KÖKE düzleşmiş (merge-multiple)
-        # config dosyaları isimle tanınmalı — config/ öneki varsayımı yok.
-        cfg = m.get("config")
-        cfg_ok = isinstance(cfg, dict) and isinstance(cfg.get("files"), dict)
-        cfg_rel = set(cfg["files"]) if cfg_ok else set()
-        want_cfg = {"config/cfg.json", "effective_config.json",
-                    "config-diff.json"}
-        missing_cfg = sorted(want_cfg - cfg_rel)
-        if not cfg_ok or missing_cfg:
-            add("P1", "K13-REPRO", "K13 repro manifest",
-                "config objesi kök-düzleşmiş dosyaları kapsamıyor",
-                f"eksik={missing_cfg}")
-            return False, f"config kapsamı eksik: {missing_cfg}"
-        if cfg["combined_sha256"] != _config_combined_sha256(cfg["files"]):
-            add("P1", "K13-REPRO", "K13 repro manifest",
-                "config.combined_sha256 yeniden hesap uyuşmuyor")
-            return False, "config.combined_sha256 uyuşmuyor"
-
-        # lineage objesi: lineage-findings/ dosyaları tanınmalı.
-        ln = m.get("lineage")
-        ln_ok = isinstance(ln, dict) and isinstance(ln.get("files"), dict)
-        ln_rel = set(ln["files"]) if ln_ok else set()
-        want_ln = {"lineage-findings/zip_lineage.json"}
-        missing_ln = sorted(want_ln - ln_rel)
-        if not ln_ok or missing_ln:
-            add("P1", "K13-REPRO", "K13 repro manifest",
-                "lineage objesi lineage-findings dosyalarını kapsamıyor",
-                f"eksik={missing_ln}")
-            return False, f"lineage kapsamı eksik: {missing_ln}"
-        if ln["combined_sha256"] != hashlib.sha256(
-                "".join(f"{rel}\0{ln['files'][rel]}\n"
-                         for rel in sorted(ln['files'])).encode()
-        ).hexdigest():
-            add("P1", "K13-REPRO", "K13 repro manifest",
-                "lineage.combined_sha256 yeniden hesap uyuşmuyor")
-            return False, "lineage.combined_sha256 uyuşmuyor"
-
-        # summary objesi: run summary sidecar dosyaları tanınmalı.
-        sm = m.get("summary")
-        sm_ok = isinstance(sm, dict) and isinstance(sm.get("files"), dict)
-        sm_rel = set(sm["files"]) if sm_ok else set()
-        want_sm = {"klayers.json"}
-        missing_sm = sorted(want_sm - sm_rel)
-        if not sm_ok or missing_sm:
-            add("P1", "K13-REPRO", "K13 repro manifest",
-                "summary objesi run summary sidecarlarını kapsamıyor",
-                f"eksik={missing_sm}")
-            return False, f"summary kapsamı eksik: {missing_sm}"
-        if sm["combined_sha256"] != hashlib.sha256(
-                "".join(f"{rel}\0{sm['files'][rel]}\n"
-                         for rel in sorted(sm['files'])).encode()
-        ).hexdigest():
-            add("P1", "K13-REPRO", "K13 repro manifest",
-                "summary.combined_sha256 yeniden hesap uyuşmuyor")
-            return False, "summary.combined_sha256 uyuşmuyor"
-
-        ok = n_bad == 0 and sc_ok
         detail = (f"{len(expected) - n_bad} OK / {n_bad} uyuşmazlık "
                   f"({len(expected)} mock dosya); config {len(cfg_rel)} dosya; "
                   f"lineage {len(ln_rel)} dosya; summary {len(sm_rel)} dosya; "
                   f"{sc_detail}")
-        return ok, detail
+        if problems:
+            return False, f"{len(problems)} tutarsızlık — {problems[0]}"
+        if not sc_ok:
+            return False, detail
+
+        # Fail-closed sertleştirme: happy path SAĞLAMKEN denetimin 3 kurcalama
+        # senaryosunu (eksik dosya, bozuk hash, config/ alt dizin) yakaladığını
+        # doğrula. Yakalanmayan senaryo → P0 (fail-closed ihlali).
+        scen = _k13_negative_scenarios(add, script)
+        scen_str = ", ".join(f"{k} {v}" for k, v in scen.items())
+        if any(v != "PASS" for v in scen.values()):
+            return False, f"negatif senaryo: {scen_str}"
+        return True, f"{detail}; senaryolar: {scen_str}"
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

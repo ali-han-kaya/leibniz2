@@ -255,7 +255,11 @@ repos:
           üretilen manifest.json'daki her SHA-256'yı gerçek dosyayla yeniden
           hash'leyerek karşılaştırır. Eksik kayıt / yanlış hash / üretilemeyen
           manifest → P0/P1 → commit bloke edilir (reproducibility zinciri
-          her commit'te doğrulanır). stdlib-only, OFFLINE, saniyeler sürer.
+          her commit'te doğrulanır). SERTLEŞTİRME: negatif senaryolar — eksik
+          bundle dosyası (kilitlenme yerine temiz 'bundle dosyası yok'
+          problemi), bozuk SHA-256 ve config/ alt dizin dosyasının config
+          objesinden düşmesi — her commit'te yakalanmalıdır; yakalanmayan
+          senaryo P0 (fail-closed ihlali). stdlib-only, OFFLINE, saniyeler sürer.
           (Not: repro-manifest katmanı verify_delivery.py'de K13'tür; K12
           plist kapısıdır — o, check-plist-drift hook'unca kapsanır.)
         entry: python3 _calisma/CIKTI/verify_delivery.py --dir _calisma/CIKTI --check-repro-manifest

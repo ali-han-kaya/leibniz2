@@ -206,7 +206,12 @@ class TestSidecarFail(unittest.TestCase):
 
 
 class TestK13SelfTest(unittest.TestCase):
-    """K13 repro self-testi artık sidecar'ı da denetliyor (K10 ile ortak)."""
+    """K13 repro self-testi artık sidecar'ı da denetliyor (K10 ile ortak).
+
+    Sertleştirme: negatif senaryolar (eksik dosya, bozuk hash, config/ alt
+    dizin) fail-closed yakalanmalı; eksik dosya kilitlenme yerine temiz
+    'bundle dosyası yok' problemi üretmeli.
+    """
 
     def test_self_test_includes_sidecar_pass(self):
         collector = _Collector()
@@ -214,6 +219,77 @@ class TestK13SelfTest(unittest.TestCase):
         self.assertTrue(ok, detail)
         self.assertIn("manifest.sha256: PASS", detail)
         self.assertEqual(collector.findings, [])
+
+    def test_self_test_reports_negative_scenarios(self):
+        """Happy path sağlamken 3 kurcalama senaryosu da yakalanmalı."""
+        collector = _Collector()
+        ok, detail = vd.check_repro_manifest_self_consistency(collector)
+        self.assertTrue(ok, detail)
+        self.assertIn("senaryolar: eksik-dosya PASS, bozuk-hash PASS, "
+                      "config-alt-dizin PASS", detail)
+        self.assertEqual(collector.findings, [])
+
+    def _produce_once(self):
+        """Mock artifact'ları üretip manifest'i yükler; (tmp, out, m) döner."""
+        d = tempfile.mkdtemp(prefix="k13_sc_")
+        art, out = vd._k13_write_mock(d)
+        script = os.path.join(HERE, "gen_repro_manifest.py")
+        rc, so, se = vd._k13_produce(script, art, out)
+        self.assertEqual(rc, 0, so + se)
+        with open(os.path.join(out, "manifest.json"), encoding="utf-8") as mf:
+            m = json.load(mf)
+        return d, out, m
+
+    def test_verify_detects_missing_bundle_file(self):
+        """Eksik dosya: kilitlenme DEĞİL, 'bundle dosyası yok' problemi."""
+        d, out, m = self._produce_once()
+        try:
+            os.remove(os.path.join(out, "sub/b.bin"))
+            ok, problems = vd._k13_verify_manifest(m, out)
+        finally:
+            import shutil
+            shutil.rmtree(d, ignore_errors=True)
+        self.assertFalse(ok)
+        self.assertIn("bundle dosyası yok: sub/b.bin", problems)
+
+    def test_verify_detects_bad_hash(self):
+        """Bozuk hash: manifest'teki SHA-256 gerçek dosyayla uyuşmazsa yakalanır."""
+        d, out, m = self._produce_once()
+        try:
+            h = m["files"]["a.txt"]
+            m["files"]["a.txt"] = ("0" if h[0] != "0" else "1") + h[1:]
+            ok, problems = vd._k13_verify_manifest(m, out)
+        finally:
+            import shutil
+            shutil.rmtree(d, ignore_errors=True)
+        self.assertFalse(ok)
+        self.assertTrue(any(p.startswith("SHA-256 uyuşmazlığı: a.txt")
+                            for p in problems), problems)
+
+    def test_verify_detects_config_subdir_removal(self):
+        """config/ alt dizin dosyası config objesinden düşerse yakalanır."""
+        d, out, m = self._produce_once()
+        try:
+            m["config"]["files"].pop("config/deep/extra.json")
+            ok, problems = vd._k13_verify_manifest(m, out)
+        finally:
+            import shutil
+            shutil.rmtree(d, ignore_errors=True)
+        self.assertFalse(ok)
+        self.assertTrue(any("config objesi" in p for p in problems), problems)
+
+    def test_missing_bundle_file_does_not_crash(self):
+        """Sertleştirme regresyonu: eksik dosya FileNotFoundError ile
+        patlamamalı — problems listesine temiz girmeli."""
+        d, out, m = self._produce_once()
+        try:
+            os.remove(os.path.join(out, "a.txt"))
+            ok, problems = vd._k13_verify_manifest(m, out)
+        finally:
+            import shutil
+            shutil.rmtree(d, ignore_errors=True)
+        self.assertFalse(ok)
+        self.assertIn("bundle dosyası yok: a.txt", problems)
 
     def test_self_test_fails_on_sidecar_mismatch(self):
         # Üretici yanlış sidecar yazarsa K13 fail-closed patlamalı:
