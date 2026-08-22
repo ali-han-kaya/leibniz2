@@ -283,6 +283,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-22 | docs | (scenario) launchd minimal PATH + mirror sync sınır notu | `836c52b` |
 | 2026-08-22 | feat | (skills) reproducible-pdf-build installable skill | `5557a48` |
 | 2026-08-22 | feat | (skills) verify-chain — K0-K17 fail-closed zincir skill'i | `67226f3` |
+| 2026-08-22 | feat | coq_reduct modülü + K19 coqtop fail-closed kapısı | `86203ae` |
 
 ### Regresyon notları
 

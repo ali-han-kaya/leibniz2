@@ -52,8 +52,11 @@
     try {
       const cov = JSON.parse(fs.readFileSync(overridePath, 'utf8'));
       if (cov.warning) {
+        // manifest_comment.js + pr_status_comment.js ile AYNI format:
+        // JSON.stringify sayı/string tutarlılığı için.
         const rows = (cov.overrides || [])
-          .map(o => '- `' + o.key + '`: ' + o.file_value + ' → ' + o.effective + ' (CLI verildi)')
+          .map(o => '- `' + o.key + '`: ' + JSON.stringify(o.file_value) + ' → ' +
+                    JSON.stringify(o.effective) + ' (CLI verildi)')
           .join('\n');
         overrideLine = [
           '### 🔧 CLI override tespit edildi (tekrarlanabilirlik sapması)',

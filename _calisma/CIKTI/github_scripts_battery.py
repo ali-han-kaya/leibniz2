@@ -705,7 +705,7 @@ SCENARIOS = [
         },
     ),
     (
-        "manifest_comment: CLI override uyarısı yoruma girer",
+        "manifest_comment: K10 PASS + CLI override → ayrı advisory",
         "manifest_comment.js",
         {
             "reproducibility/manifest.txt": "github_run_id: 999\n",
@@ -715,17 +715,40 @@ SCENARIOS = [
                 "override_count": 1,
                 "overrides": [{"key": "budget", "file_value": 30.0,
                                "effective": 25.0}],
-                "summary": "CLI override TESPİT EDİLDİ (1 parametre)"}),
+                "summary": "CLI override VAR (tekrarlanabilirlik sapması)"}),
         },
         None, [], [],
         {
             "ok": True, "set_failed": False,
             "call_counts": {"issues.createComment": 1},
             "body_contains": {"issues.createComment": [
-                "CLI override TESPİT EDİLDİ", "`budget`", "30 → 25",
+                "CLI override aktif", "`budget`", "30", "25",
                 "tekrarlanabilirlik sapması", MARKER_MANIFEST]},
-            # override dosyası YOKSA yorumda uyarı bölümü olmamalı (negatif
-            # kontrol ayrı senaryoda; burada yalnızca pozitif kanıt).
+        },
+    ),
+    (
+        "manifest_comment: K10 FAIL + CLI override → tek blok (olası neden)",
+        "manifest_comment.js",
+        {
+            "reproducibility/manifest.txt": "github_run_id: 111\n",
+            "k10_verdict.txt": "FAIL",
+            "reproducibility/cli_overrides_version.json": json.dumps({
+                "tool": "check_cli_overrides.py", "warning": True,
+                "override_count": 1,
+                "overrides": [{"key": "budget", "file_value": 30.0,
+                               "effective": 25.0}],
+                "summary": "CLI override VAR (tekrarlanabilirlik sapması)"}),
+        },
+        None, [], [],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.createComment": 1},
+            "body_contains": {"issues.createComment": [
+                "K10 manifest digest: FAIL",
+                "K10 manifest digest başarısız",
+                "CLI override olası neden",
+                "olası nedeni", "`budget`", "30", "25",
+                "tekrarlanabilirlik sapması", MARKER_MANIFEST]},
         },
     ),
     (
