@@ -101,11 +101,13 @@
     <div id="precommit-hooks" style="font-size:12px;color:#888;padding:2px 0 6px 0"></div>
     <div id="k15-sidecar" style="font-size:11px;color:#999;padding:0 0 4px 0"></div>
     <div class="badges" id="badges">
-      <span class="badge unknown">K1-K7: ?</span>
       <span class="badge unknown">K8 Z3: ?</span>
       <span class="badge unknown">K9 Lean: ?</span>
       <span class="badge unknown">Beth 1953: ?</span>
       <span class="badge unknown">refs: ?</span>
+    </div>
+    <div id="klayers-panel" style="display:flex;flex-wrap:wrap;gap:4px;margin:4px 0 8px 0;font-size:11px">
+      <span class="muted">K-layers: bekleniyor…</span>
     </div>
     <div class="grid" id="metrics">
       <div class="card"><div class="label">Verdict</div><div class="value" id="m-verdict">—</div><div class="sub" id="m-ts">no run yet</div></div>
@@ -1076,6 +1078,42 @@ function renderCliOverride(data) {
   bodyEl.innerHTML = h;
 }
 
+// ---- K-layers panel (tek kaynak: d.layers → K0-K17) ----
+// K8/K9 enriched by z3_passed/lean_ok detail; others purely from layers.
+const K_ALL = ["K0","K1","K2","K3","K4","K5","K6","K7","K8","K9",
+               "K10","K11","K12","K13","K14","K16","K17"];
+
+function _cls(st) { return st === "PASS" ? "ok" : st === "FAIL" ? "err" : "warn"; }
+function _ico(st) { return st === "PASS" ? "✓" : st === "FAIL" ? "✗" : "·"; }
+
+function renderKLayers(ls, z3p, z3t, z3f, leanOk, leanDetail) {
+  const panel = $("klayers-panel");
+  if (!panel) return;
+  if (!ls || Object.keys(ls).length === 0) {
+    panel.innerHTML = '<span class="muted">K-layers: bekleniyor…</span>';
+    return;
+  }
+  let html = '';
+  for (const k of K_ALL) {
+    const l = ls[k];
+    if (!l) continue;
+    let st = l.status;
+    let title = l.label || '';
+    if (k === "K8" && z3p != null) {
+      const tot = z3t != null ? z3t : 12;
+      const failed = z3f || 0;
+      title += " (" + z3p + "/" + tot + (failed > 0 ? " FAIL:" + failed : "") + ")";
+    }
+    if (k === "K9") {
+      if (leanOk === true) title += " PASS";
+      else if (leanOk === false) title += " FAIL" + (leanDetail ? " — " + leanDetail : "");
+    }
+    html += '<span class="badge ' + _cls(st) + '" title="' + title + '">'
+      + _ico(st) + ' ' + k + '</span>';
+  }
+  panel.innerHTML = html || '<span class="muted">K-layers: veri yok</span>';
+}
+
 // ---- Hook env sürümleri (zaman serisi: python/z3/lean/…) ----
 const HOOK_TOOLS = ["python", "z3", "lean", "pre_commit", "pdfinfo", "qpdf"];
 const HOOK_LABELS = { python: "Python", z3: "Z3", lean: "Lean",
@@ -1252,17 +1290,10 @@ function applySnapshot(d) {
     s.textContent = text;
     badges.appendChild(s);
   };
-  // K1-K7 rozeti — genel verdict DEĞİL, JSON'daki per-katman durumundan
-  // (d.layers). Sunucu bu veriyi verify_delivery.py --json çıktısındaki
-  // "layers" alanından taşır; yoksa eski davranışa düş (genel verdict).
+  // K-layer panel — tek kaynak: d.layers (K0-K17)
+  // K8/K9 enriched by z3_passed/lean_ok from server.
   const ls = d.layers || {};
-  const core = ["K1", "K2", "K3", "K4", "K5", "K6", "K7"];
-  const coreSt = core.map(k => (ls[k] || {}).status);
-  const k17 = coreSt.some(s => s === "FAIL") ? "FAIL" :
-              (coreSt.length && coreSt.every(s => s === "PASS") ? "PASS" :
-               (coreSt.some(s => s === "SKIP") ? "SKIP" : "?"));
-  addBadge(k17 === "PASS" ? "ok" : k17 === "FAIL" ? "err" : "warn",
-           "K1-K7: " + k17);
+  renderKLayers(ls, d.z3_passed, d.z3_total, d.z3_failed, d.lean_ok, d.lean_detail);
   // K8 Z3 rozeti — son run'ın GERÇEK sonucundan (sunucu stderr'deki
   // [PASS]/[FAIL] P1-5 özet tablosunu sayar; veri yoksa '?' gösterir).
   if (d.z3_passed != null) {

@@ -289,6 +289,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-22 | ci | manifest'te OVERRIDES bolumu — cli_overrides_version.json | `93fce5b` |
 | 2026-08-22 | ci | K16 negatif kontrol — override'sizken yorumda uyari YOK | `b0071f3` |
 | 2026-08-22 | ci | override-trend — CLI override zaman serisi (refs-trend deseni) | `950cbbc` |
+| 2026-08-22 | other | dash: CLI override panel'i — son run'un override durumu | `6f2797d` |
 
 ### Regresyon notları
 
