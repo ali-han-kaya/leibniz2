@@ -433,8 +433,7 @@ REFERENCE_ARCHIVE = [
     # (Fine 2012014618 + Schmitt 73155022 dahil) — OL fallback'te kalırlar.
     {"key": "Fine 2012", "query": "Metaphysical Grounding Correia Schnieder",
      "title_needle": "metaphysical grounding", "creator_needle": "correia",
-     "ht_ids": ["oclc:793497146", "lccn:2012014618",
-                 "isbn:1107022894", "isbn:9781107460287"],
+     "ht_ids": ["isbn:9781107460287"],
      "tex_needle": "Fine, K. (2012)"},
     {"key": "Frede 1983", "query": "Skeptical Tradition Burnyeat",
      "title_needle": "skeptical tradition",
@@ -3688,6 +3687,8 @@ def main():
             if not ok:
                 add("P0", "K8-Z3", "K8 sembolik ispat", detail)
 
+    lean_ok = None
+    lean_detail = None
     # ---- K9: Lean 4 reduct-invariance (tümevarımsal kanıt, isteğe bağlı) ----
     if args.lean_proof:
         lp = os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -3704,6 +3705,8 @@ def main():
             add("P0", "K9-LEAN", "K9 Lean ispatı", f"{LEAN_PROOF_SCRIPT} yok", lp)
         else:
             ok, detail = run_lean_proof(lean_cmd, lp)
+            lean_ok = ok
+            lean_detail = detail
             k9_line = f"[K9] Lean 4 reduct-invariance: {'PASS' if ok else 'FAIL'} — {detail}"
             if not args.json:
                 print(k9_line)
@@ -4178,6 +4181,9 @@ def main():
             "z3_failed": z3_failed,
             "z3_total": (z3_passed + z3_failed
                          if z3_passed is not None else None),
+            # K9 Lean: --lean-proof koşulduysa PASS/FAIL (trend için)
+            "lean_ok": lean_ok,
+            "lean_detail": lean_detail,
         }
         try:
             with open(args.history_out, "a", encoding="utf-8") as hf:
