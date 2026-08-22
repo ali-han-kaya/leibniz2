@@ -233,6 +233,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-22 | fix | (plist) KeepAlive SuccessfulExit=false to prevent restart race | `aae9b0f` |
 | 2026-08-22 | fix | (tests) green local suite — jsonschema skip, Fine 2012 OL source | `54e7377` |
 | 2026-08-22 | ci | (verify) K13 repro-manifest as separate advisory step + sidecar | `f9dcb1c` |
+| 2026-08-22 | fix | (verify) harden K13 repro-manifest self-test with negative scenarios | `ed0427d` |
 
 ### Regresyon notları
 

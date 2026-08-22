@@ -255,6 +255,49 @@ def summarize_warnings(history_rows, dur_warn=DURATION_WARN_S, bud_warn=BUDGET_W
     }
 
 
+def build_duration_budget(history_rows):
+    """history_rows'tan duration_budget JSON bölümünü üretir (fail-closed).
+
+    Her run'a duration/budget eşik bayraklarını işler (check_run_warnings),
+    summary stats'ını hesaplar ve eşik ihlali özetini ekler. main() ve birim
+    testleri ORTAK kullanır — bölümün JSON sözleşmesi tek kaynaktır:
+        {run_count,
+         rows[{date, run_id, duration_s, budget_usd, verdict, p0, p1,
+               z3_passed, z3_total, duration_warn, budget_warn}],
+         summary{duration_s{count,min,max,avg}, budget_usd{...}},
+         warnings{duration_violations, budget_violations, total_runs,
+                  violations[{run_idx, date, run_id, messages}]} | None}
+    Sayısal olmayan duration/budget değerleri stats'a katılmaz (markdown'da
+    '—' gösterilir), run_count yine de tüm run'ları sayar; boş girdi
+    warnings=None üretir (bölüm yok anlamında).
+    """
+    rows = []
+    for r in history_rows:
+        w = check_run_warnings(r)
+        rows.append({
+            "date": r.get("date", ""),
+            "run_id": r.get("run_id"),
+            "duration_s": r.get("duration_s"),
+            "budget_usd": r.get("budget_usd"),
+            "verdict": r.get("verdict"),
+            "p0": r.get("p0"),
+            "p1": r.get("p1"),
+            "z3_passed": r.get("z3_passed"),
+            "z3_total": r.get("z3_total"),
+            "duration_warn": w["duration_warn"],
+            "budget_warn": w["budget_warn"],
+        })
+    return {
+        "run_count": len(rows),
+        "rows": rows,
+        "summary": {
+            "duration_s": stats([r["duration_s"] for r in rows]),
+            "budget_usd": stats([r["budget_usd"] for r in rows]),
+        },
+        "warnings": summarize_warnings(rows) if rows else None,
+    }
+
+
 def short_date(iso):
     try:
         dt = datetime.datetime.fromisoformat(iso.replace("Z", "+00:00"))
@@ -550,15 +593,7 @@ def main():
         f.write("\n".join(lines))
     print("\n".join(lines))
 
-    duration_budget = {
-        "run_count": len(history_rows),
-        "rows": history_rows,
-        "summary": {
-            "duration_s": stats([r["duration_s"] for r in history_rows]),
-            "budget_usd": stats([r["budget_usd"] for r in history_rows]),
-        },
-        "warnings": summarize_warnings(history_rows) if history_rows else None,
-    }
+    duration_budget = build_duration_budget(history_rows)
     unverified_series = {
         "latest": unv_latest if rows else 0,
         "max": unv_max if rows else 0,

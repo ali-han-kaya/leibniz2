@@ -206,6 +206,24 @@ class TestParseHistoryRecord(unittest.TestCase):
         with self.assertRaises(ValueError):
             rt.parse_history_record(buf.getvalue())
 
+    def test_last_record_wins_across_many(self):
+        """Çok kayıtlı dosyada SON kayıt döner (en güncel)."""
+        rec = rt.parse_history_record(self._zip_jsonl([
+            {"ts": "a"},
+            {"ts": "b"},
+            {"ts": "c", "duration_s": 9.5, "budget_usd": 1.08},
+        ]))
+        self.assertEqual(rec["ts"], "c")
+        self.assertEqual(rec["duration_s"], 9.5)
+
+    def test_corrupt_json_line_raises(self):
+        """Fail-closed: bozuk satır sessizce atlanmamalı — hata fırlatılmalı."""
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as z:
+            z.writestr("history.jsonl", '{"ts": "a"}\n{bozuk json}\n')
+        with self.assertRaises(ValueError):
+            rt.parse_history_record(buf.getvalue())
+
 
 class TestStats(unittest.TestCase):
     def test_basic(self):
@@ -222,6 +240,182 @@ class TestStats(unittest.TestCase):
     def test_empty(self):
         self.assertEqual(rt.stats([]),
                          {"count": 0, "min": None, "max": None, "avg": None})
+
+    def test_rounds_to_two_decimals(self):
+        s = rt.stats([1.333, 2.666])
+        self.assertEqual(s, {"count": 2, "min": 1.33, "max": 2.67, "avg": 2.0})
+
+
+class TestCheckRunWarnings(unittest.TestCase):
+    """duration/budget eşikleri + Z3 FAIL uyarıları (fail-closed)."""
+
+    def test_no_warnings_under_threshold(self):
+        w = rt.check_run_warnings(
+            {"duration_s": 30.0, "budget_usd": 1.08,
+             "z3_passed": 12, "z3_total": 12})
+        self.assertFalse(w["duration_warn"])
+        self.assertFalse(w["budget_warn"])
+        self.assertEqual(w["messages"], [])
+        self.assertEqual(w["duration_val"], 30.0)
+        self.assertEqual(w["budget_val"], 1.08)
+
+    def test_duration_over_threshold_warns(self):
+        w = rt.check_run_warnings({"duration_s": 400.0, "budget_usd": 1.0})
+        self.assertTrue(w["duration_warn"])
+        self.assertIn("süre 400.0s > eşik 300s", w["messages"])
+
+    def test_budget_over_threshold_warns(self):
+        w = rt.check_run_warnings({"duration_s": 10.0, "budget_usd": 31.0})
+        self.assertTrue(w["budget_warn"])
+        self.assertIn("bütçe $31.00 > eşik $30", w["messages"])
+
+    def test_both_warn(self):
+        w = rt.check_run_warnings({"duration_s": 301.0, "budget_usd": 30.01})
+        self.assertTrue(w["duration_warn"] and w["budget_warn"])
+        self.assertEqual(len(w["messages"]), 2)
+
+    def test_exact_threshold_no_warn(self):
+        """Eşiğe EŞİT değer uyarı değil (sıkı >)."""
+        w = rt.check_run_warnings({"duration_s": 300.0, "budget_usd": 30.0})
+        self.assertFalse(w["duration_warn"])
+        self.assertFalse(w["budget_warn"])
+        self.assertEqual(w["messages"], [])
+
+    def test_non_numeric_ignored(self):
+        w = rt.check_run_warnings(
+            {"duration_s": None, "budget_usd": "yok", "z3_passed": None})
+        self.assertFalse(w["duration_warn"])
+        self.assertFalse(w["budget_warn"])
+        self.assertIsNone(w["duration_val"])
+        self.assertIsNone(w["budget_val"])
+        self.assertEqual(w["messages"], [])
+
+    def test_z3_fail_warns(self):
+        w = rt.check_run_warnings({"z3_passed": 11, "z3_total": 12})
+        self.assertIn("Z3 FAIL 1/12", w["messages"])
+
+    def test_z3_all_pass_no_message(self):
+        w = rt.check_run_warnings({"z3_passed": 12, "z3_total": 12})
+        self.assertEqual(w["messages"], [])
+
+    def test_missing_z3_no_message(self):
+        w = rt.check_run_warnings({})
+        self.assertEqual(w["messages"], [])
+
+
+class TestSummarizeWarnings(unittest.TestCase):
+    """Tüm run'lar üzerinde eşik ihlali özeti (fail-closed)."""
+
+    def test_empty(self):
+        s = rt.summarize_warnings([])
+        self.assertEqual(s["duration_violations"], 0)
+        self.assertEqual(s["budget_violations"], 0)
+        self.assertEqual(s["total_runs"], 0)
+        self.assertEqual(s["violations"], [])
+
+    def test_no_violations(self):
+        rows = [{"date": "a", "run_id": 1, "duration_s": 30.0,
+                 "budget_usd": 1.0},
+                {"date": "b", "run_id": 2, "duration_s": 60.0,
+                 "budget_usd": 2.0}]
+        s = rt.summarize_warnings(rows)
+        self.assertEqual(s["duration_violations"], 0)
+        self.assertEqual(s["budget_violations"], 0)
+        self.assertEqual(s["total_runs"], 2)
+        self.assertEqual(s["violations"], [])
+
+    def test_counts_duration_and_budget(self):
+        rows = [{"date": "a", "run_id": 1, "duration_s": 400.0,
+                 "budget_usd": 1.0},
+                {"date": "b", "run_id": 2, "duration_s": 10.0,
+                 "budget_usd": 40.0}]
+        s = rt.summarize_warnings(rows)
+        self.assertEqual(s["duration_violations"], 1)
+        self.assertEqual(s["budget_violations"], 1)
+        self.assertEqual(len(s["violations"]), 2)
+        v = s["violations"][0]
+        self.assertEqual(v["run_idx"], 1)
+        self.assertEqual(v["date"], "a")
+        self.assertEqual(v["run_id"], 1)
+        self.assertTrue(any("süre" in m for m in v["messages"]))
+
+    def test_z3_fail_in_violations_not_counts(self):
+        rows = [{"date": "a", "run_id": 7, "z3_passed": 10,
+                 "z3_total": 12}]
+        s = rt.summarize_warnings(rows)
+        self.assertEqual(s["duration_violations"], 0)
+        self.assertEqual(s["budget_violations"], 0)
+        self.assertEqual(len(s["violations"]), 1)
+        self.assertIn("Z3 FAIL 2/12", s["violations"][0]["messages"])
+        self.assertEqual(s["violations"][0]["run_id"], 7)
+
+
+class TestDurationBudgetSummary(unittest.TestCase):
+    """duration_budget JSON bölümü sözleşmesi (fail-closed)."""
+
+    def test_structure_with_valid_rows(self):
+        db = rt.build_duration_budget([
+            {"date": "a", "run_id": 1, "duration_s": 30.0,
+             "budget_usd": 1.08, "verdict": "PASS",
+             "z3_passed": 12, "z3_total": 12},
+        ])
+        self.assertEqual(db["run_count"], 1)
+        row = db["rows"][0]
+        self.assertEqual(row["date"], "a")
+        self.assertEqual(row["run_id"], 1)
+        self.assertEqual(row["duration_s"], 30.0)
+        self.assertEqual(row["budget_usd"], 1.08)
+        self.assertEqual(row["verdict"], "PASS")
+        self.assertEqual(row["z3_passed"], 12)
+        self.assertFalse(row["duration_warn"])
+        self.assertFalse(row["budget_warn"])
+        self.assertEqual(db["summary"]["duration_s"]["count"], 1)
+        self.assertEqual(db["summary"]["budget_usd"]["max"], 1.08)
+        self.assertIsNotNone(db["warnings"])
+        self.assertEqual(db["warnings"]["total_runs"], 1)
+
+    def test_violations_flagged_in_rows_and_warnings(self):
+        db = rt.build_duration_budget([
+            {"date": "a", "run_id": 1, "duration_s": 500.0,
+             "budget_usd": 35.0},
+        ])
+        row = db["rows"][0]
+        self.assertTrue(row["duration_warn"])
+        self.assertTrue(row["budget_warn"])
+        self.assertEqual(db["warnings"]["duration_violations"], 1)
+        self.assertEqual(db["warnings"]["budget_violations"], 1)
+        self.assertEqual(len(db["warnings"]["violations"]), 1)
+
+    def test_empty_fail_closed(self):
+        db = rt.build_duration_budget([])
+        self.assertEqual(db["run_count"], 0)
+        self.assertEqual(db["rows"], [])
+        self.assertIsNone(db["warnings"])
+        self.assertEqual(db["summary"]["duration_s"]["count"], 0)
+        self.assertIsNone(db["summary"]["duration_s"]["min"])
+
+    def test_non_numeric_values_do_not_crash(self):
+        """Fail-closed: eksik/sayısal olmayan değerler stats'ı bozmaz,
+        run sayısı korunur, uyarı üretilmez."""
+        db = rt.build_duration_budget([
+            {"date": "a", "run_id": 1, "duration_s": None,
+             "budget_usd": "x"},
+            {"date": "b", "run_id": 2, "duration_s": 30.0,
+             "budget_usd": 1.0},
+        ])
+        self.assertEqual(db["run_count"], 2)
+        self.assertEqual(db["summary"]["duration_s"]["count"], 1)
+        self.assertEqual(db["summary"]["duration_s"]["min"], 30.0)
+        self.assertEqual(db["warnings"]["total_runs"], 2)
+        self.assertEqual(db["warnings"]["violations"], [])
+
+    def test_z3_fail_surfaces_in_warnings(self):
+        db = rt.build_duration_budget([
+            {"date": "a", "run_id": 9, "z3_passed": 0, "z3_total": 12},
+        ])
+        self.assertEqual(len(db["warnings"]["violations"]), 1)
+        self.assertIn("Z3 FAIL 12/12",
+                      db["warnings"]["violations"][0]["messages"])
 
 
 class TestFetchArtifactsByName(unittest.TestCase):
