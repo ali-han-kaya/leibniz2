@@ -886,5 +886,66 @@ class TestFlattenedConfigMerge(unittest.TestCase):
         self.assertNotIn("config", m)
 
 
+
+class TestCheckPatternConsistency(unittest.TestCase):
+    """check_pattern_consistency.py bağımsız betiğinin testleri."""
+
+    def _run_check(self, workflow_content=None):
+        """Geçici workflow ile check_pattern_consistency.check() çalıştır."""
+        import check_pattern_consistency as cpc
+        tmp = pathlib.Path("/tmp") / f"test_pattern_{os.getpid()}"
+        tmp.mkdir(exist_ok=True)
+        if workflow_content is not None:
+            wf = tmp / "verify.yml"
+            wf.write_text(workflow_content, encoding="utf-8")
+        else:
+            # Varsayılan: gerçek workflow
+            wf = pathlib.Path(cpc.DEFAULT_WORKFLOW)
+        return cpc.check(str(wf)), tmp
+
+    def test_consistent_pattern_passes(self):
+        import check_pattern_consistency as cpc
+        errors, tmp = self._run_check()
+        self.assertEqual(errors, [])
+
+    def test_missing_artifact_detected(self):
+        import check_pattern_consistency as cpc
+        wf = (pathlib.Path(cpc.DEFAULT_WORKFLOW).read_text(encoding="utf-8"))
+        # budget-verify'ı pattern'den çıkar
+        wf = wf.replace(
+            "'{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,k0-findings,budget-verify,lineage-findings,klayers,unit-tests,action-runtimes}'",
+            "'{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,k0-findings,lineage-findings,klayers,unit-tests,action-runtimes}'",
+        )
+        errors, _ = self._run_check(wf)
+        self.assertTrue(any("budget-verify" in e for e in errors))
+        self.assertTrue(any("Eksik" in e for e in errors))
+
+    def test_extra_artifact_detected(self):
+        import check_pattern_consistency as cpc
+        wf = (pathlib.Path(cpc.DEFAULT_WORKFLOW).read_text(encoding="utf-8"))
+        # Fazla bir artifact ekle
+        wf = wf.replace(
+            "'{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,k0-findings,budget-verify,lineage-findings,klayers,unit-tests,action-runtimes}'",
+            "'{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,k0-findings,budget-verify,lineage-findings,klayers,unit-tests,action-runtimes,fake-artifact}'",
+        )
+        errors, _ = self._run_check(wf)
+        self.assertTrue(any("fake-artifact" in e for e in errors))
+        self.assertTrue(any("Fazla" in e for e in errors))
+
+    def test_missing_pattern_not_found(self):
+        import check_pattern_consistency as cpc
+        wf = (pathlib.Path(cpc.DEFAULT_WORKFLOW).read_text(encoding="utf-8"))
+        wf = wf.replace(
+            "'{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,k0-findings,budget-verify,lineage-findings,klayers,unit-tests,action-runtimes}'",
+            "'{verify-report,budget,reports}'",
+        )
+        errors, _ = self._run_check(wf)
+        self.assertTrue(len(errors) > 0)
+
+    def test_no_pattern_returns_error(self):
+        errors, _ = self._run_check("jobs:\n  foo:\n    runs-on: ubuntu-latest\n")
+        self.assertTrue(any("bulunamadı" in e for e in errors))
+
+
 if __name__ == "__main__":
     unittest.main()
