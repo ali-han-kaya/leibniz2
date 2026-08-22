@@ -1073,6 +1073,10 @@ class Handler(BaseHTTPRequestHandler):
                 "refs_verified": r.get("refs_verified"),
                 "refs_total": r.get("refs_total"),
                 "pdf_pages": r.get("pdf_pages"),
+                "z3_passed": r.get("z3_passed"),
+                "z3_total": r.get("z3_total"),
+                "lean_ok": r.get("lean_ok"),
+                "lean_detail": r.get("lean_detail"),
             })
         self._send(200, json.dumps(summaries, ensure_ascii=False),
                    content_type="application/json; charset=utf-8")

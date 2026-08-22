@@ -378,7 +378,7 @@ class TestHathiTrustIdentifiers(unittest.TestCase):
             "Xunzi Knoblock": ["lccn:87033578", "oclc:17265207"],
             # V5r: edisyon kayıtlarındaki lccn değerleri de eklendi (HT'de 0
             # kayıt ama doğru identifier — HT ileride alırsa eşleşir)
-            "Fine 2012": ["lccn:2012014618", "isbn:1107022894"],
+            "Fine 2012": ["isbn:9781107460287"],
         }
         for key, ids in expect.items():
             self.assertIn(key, by_key, f"{key} arşiv listesinde yok")

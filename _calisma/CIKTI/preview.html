@@ -398,6 +398,18 @@ function renderTrend(rows) {
   if (zFailPts.length) {
     parts.push(`<polyline fill="none" stroke="#f85149" stroke-width="2" stroke-dasharray="3 3" points="${zFailPts.join(" ")}"/>`);
   }
+  // K9 Lean noktaları: yeşil daire=PASS, kırmızı kare=FAIL, gri=x=koşulmadı
+  rows.forEach((r, i) => {
+    const cx = x(i);
+    const ly = PT + 6; // üst kenar
+    if (r.lean_ok === true) {
+      parts.push(`<circle cx="${cx}" cy="${ly}" r="3" fill="#3fb950" opacity="0.7"/>`);
+    } else if (r.lean_ok === false) {
+      parts.push(`<rect x="${cx-3}" y="${ly-3}" width="6" height="6" fill="#f85149" opacity="0.7"/>`);
+    } else {
+      parts.push(`<text x="${cx}" y="${ly+3}" fill="#8b949e" font-size="8" text-anchor="middle">×</text>`);
+    }
+  });
   // sağ eksenler: duration (iç) + budget (orta) + Z3 (dış)
   const durAxisX = plotRight + 26;
   const zAxisX = plotRight + 150;
@@ -439,6 +451,7 @@ function renderTrend(rows) {
   svg.innerHTML = parts.join("");
   legend.textContent = "Kırmızı = P0 · Sarı = P1 · Yeşil nokta = PASS · Mavi (kesikli) = duration_s · Mor = budget_usd · " +
     "Yeşil çizgi = Z3 PASS · Kırmızı (noktalı) = Z3 FAIL · " +
+    "Yeşil daire = Lean PASS · Kırmızı kare = Lean FAIL · gri × = koşulmadı · " +
     "Turuncu (kesikli) = bütçe limiti $30 — altı güvenli, üstü (kırmızı kare) aşım · " +
     "aralık: " + (rows[0].ts ? new Date(rows[0].ts).toLocaleString() : "?") +
     " → " + (rows[n-1].ts ? new Date(rows[n-1].ts).toLocaleString() : "?") +
