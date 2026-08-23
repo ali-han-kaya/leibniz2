@@ -212,13 +212,31 @@ class TestVerifyDeliveryK17(unittest.TestCase):
             self.assertTrue(any(f["check"] == "K17-MIRROR" for f in findings))
 
 
+def _mirror_section(text, name):
+    """sync_verify_mirror.sh'te `<name>=(...)` bloğunun gövdesini döndür."""
+    m = re.search(r"%s=\(\n(.*?)\n\)" % re.escape(name), text, re.S)
+    return m.group(1) if m else ""
+
+
+def _listed_sources(section):
+    """Bir bölümdeki kaynak|dest satırlarının kaynak kısmı (set)."""
+    out = set()
+    for ln in section.splitlines():
+        ln = ln.strip().strip('"')
+        if "|" in ln:
+            out.add(ln.split("|", 1)[0])
+    return out
+
+
 class TestMirrorFileCoverage(unittest.TestCase):
     """Mirror FILES listesi repo'daki tüm runtime dosyalarını kapsar.
 
     Regresyon: launchd rotasında K16 battery github_scripts/*.js'i mirror'dan
     koşar; eksik bir script (ör. label_gate_p1.js) K16'yı P0/FAIL'e düşürürdü
-    (gerçek bir canlı hataydı). Bu test, repo'daki her github_script'in mirror
-    FILES listesinde olduğunu fail-closed doğrular.
+    (gerçek bir canlı hataydı). Bu test, github_scripts DIŞINDAKİ runtime
+    dosyalarını da fail-closed denetler: teslim zip'leri (+ .sha256), core
+    runtime/config dosyaları ve K9 lean projesinin tüm kaynakları — her biri
+    kendi bölümünde (FILES / LEAN_FILES) listelenmiş olmalı.
     """
 
     def test_all_github_scripts_in_mirror_files(self):
@@ -233,6 +251,59 @@ class TestMirrorFileCoverage(unittest.TestCase):
         missing = repo_scripts - listed
         self.assertEqual(missing, set(),
                          f"mirror FILES listesinde eksik script'ler: {missing}")
+
+    def test_all_zips_in_mirror_files(self):
+        # Teslim zip'leri + .sha256 sidecar'ları: repo'ya yeni bir zip girerse
+        # FILES'a da eklenmeli (yoksa mirror'da eksik → reproducibility kırılır).
+        with open(SYNC_MIRROR, encoding="utf-8") as f:
+            text = f.read()
+        listed = _listed_sources(_mirror_section(text, "FILES"))
+        repo_zips = {n for n in os.listdir(HERE)
+                     if n.endswith(".zip") or n.endswith(".zip.sha256")}
+        missing = repo_zips - listed
+        self.assertEqual(missing, set(),
+                         f"FILES listesinde eksik zip: {missing}")
+
+    def test_runtime_config_files_listed(self):
+        # Core runtime dosyaları (script'ler + config'ler): mirror'da eksikse
+        # launchd rotası K1-K18'i çalıştıramaz → her biri FILES'ta olmalı.
+        with open(SYNC_MIRROR, encoding="utf-8") as f:
+            text = f.read()
+        listed = _listed_sources(_mirror_section(text, "FILES"))
+        required = [
+            "verify_delivery.py", "verify_delivery.config.json",
+            "verify_delivery.config.schema.json", "symbolic_proof_z3.py",
+            "verify_lean.sh", "zip_lineage.json", "gen_repro_manifest.py",
+            "gen_config.py", "cleanup_log.json", "github_scripts_battery.py",
+            "github_scripts_selftest.js", "daemon_http_test.py",
+            "preview.html",
+        ]
+        missing = [n for n in required if n not in listed]
+        self.assertEqual(missing, [],
+                         f"FILES listesinde eksik runtime dosyası: {missing}")
+
+    def test_all_lean_sources_in_mirror_files(self):
+        # K9 lake projesi: repo'daki her kaynak (.lean + lean-toolchain +
+        # lakefile.toml) LEAN_FILES'te olmalı — eksik kaynak mirror rotasında
+        # K9-LAKE P0 üretir (yalnızca ReductInvariance.lean'ın senkronlanması
+        # canlı dashboard'ı FAIL'e düşürmüştü). .lake build dizini ve
+        # lake-manifest.json kaynak değildir, sayılmaz.
+        lean_src = os.path.abspath(os.path.join(HERE, "..", "lean_reduct"))
+        self.assertTrue(os.path.isdir(lean_src), "lean_reduct yok: %s" % lean_src)
+        repo = set()
+        for root, dirs, files in os.walk(lean_src):
+            dirs[:] = [d for d in dirs if d != ".lake"]
+            for fn in files:
+                rel = os.path.relpath(os.path.join(root, fn), lean_src)
+                if rel.endswith(".lean") or rel in ("lean-toolchain",
+                                                     "lakefile.toml"):
+                    repo.add(rel)
+        with open(SYNC_MIRROR, encoding="utf-8") as f:
+            text = f.read()
+        listed = _listed_sources(_mirror_section(text, "LEAN_FILES"))
+        missing = repo - listed
+        self.assertEqual(missing, set(),
+                         f"LEAN_FILES'te eksik lean kaynağı: {missing}")
 
     def test_lean_mirror_files_listed(self):
         with open(SYNC_MIRROR, encoding="utf-8") as f:
