@@ -2889,6 +2889,67 @@ def verify_manifest_digest(manifest_path, add, check_id="K10-MANIFEST",
                   else ("overrides_combined_sha256: FAIL — "
                         + "; ".join(ovr_rows[:5])))
 
+    # ---- precheck_report.combined_sha256: YENİDEN hesapla + doğrula ----
+    # gen_repro_manifest.py publish_precheck.sh AŞAMA 0 kapılarının çıktı
+    # raporunu (precheck-report/ önekli precheck_report.txt vb.) ayrıca
+    # "precheck_report" objesine yazar: {files: {rel: sha256},
+    # combined_sha256}. combined, diğer bölümlerle aynı deterministik formül
+    # (sıralı "{rel}\0{hash}\n" birleşiminin SHA-256'sı). K10 burada onu
+    # precheck_report.files'tan yeniden hesaplar; kayıtlı değerle uyuşmazsa
+    # P1 — precheck advisory bulguları denetim zincirinde sabitlenir.
+    pr_ok = True
+    pr_rows = []
+    prc = m.get("precheck_report")
+    if prc is not None and not isinstance(prc, dict):
+        pr_ok = False
+        pr_rows.append("precheck_report: dict değil")
+        add("P1", check_id, check_label, "precheck_report alanı dict değil")
+    elif isinstance(prc, dict):
+        pr_files = prc.get("files")
+        stored_combined = prc.get("combined_sha256")
+        if not isinstance(pr_files, dict):
+            pr_ok = False
+            pr_rows.append("precheck_report.files: dict değil")
+            add("P1", check_id, check_label, "precheck_report.files dict değil")
+            pr_files = {}
+        else:
+            for rel, h in sorted(pr_files.items()):
+                if rel not in files:
+                    pr_ok = False
+                    pr_rows.append(f"{rel} (files'ta yok)")
+                    add("P1", check_id, check_label,
+                        f"precheck_report.files'taki dosya files'ta yok: {rel}")
+                elif files[rel] != h:
+                    pr_ok = False
+                    pr_rows.append(f"{rel} (hash farklı)")
+                    add("P1", check_id, check_label,
+                        f"precheck_report.files hash'i files ile uyuşmuyor: {rel}",
+                        f"precheck_report={h[:16]}… files={files[rel][:16]}…")
+        if isinstance(pr_files, dict):
+            if pr_files and not stored_combined:
+                pr_ok = False
+                pr_rows.append("combined_sha256 eksik")
+                add("P1", check_id, check_label,
+                    "precheck_report.combined_sha256 eksik "
+                    "(precheck_report.files dolu)")
+            elif stored_combined is not None:
+                recalc = _summary_combined_sha256(pr_files)
+                if stored_combined != recalc:
+                    pr_ok = False
+                    pr_rows.append("combined_sha256 uyuşmazlığı")
+                    add("P1", check_id, check_label,
+                        "precheck_report.combined_sha256 uyuşmazlığı",
+                        f"yeniden {recalc[:16]}… ≠ kayıtlı {stored_combined[:16]}…")
+    elif any(rel.startswith("precheck-report/") for rel in files):
+        pr_ok = False
+        pr_rows.append("precheck_report objesi eksik")
+        add("P1", check_id, check_label,
+            "precheck_report objesi eksik (files'ta precheck-report dosyaları var)")
+
+    pr_detail = ("precheck_report_combined_sha256: PASS" if pr_ok
+                 else ("precheck_report_combined_sha256: FAIL — "
+                       + "; ".join(pr_rows[:5])))
+
     # ---- manifest.sha256 ↔ manifest.json: sidecar eşleşmesi (fail-closed) ----
     # Ortak helper (K10 + K13 tek kaynak). Sidecar manifest dosyasının KENDİ
     # hash'ini sabitler: manifest.json içeriği değişirse (ör. JSON'a boşluk
@@ -2900,11 +2961,11 @@ def verify_manifest_digest(manifest_path, add, check_id="K10-MANIFEST",
     detail = (f"{n_ok} OK / {n_bad} uyuşmazlık / {n_missing} eksik "
               f"({len(files)} dosya); {cfg_detail}; {bn_detail}; {ov_detail}; "
               f"{ln_detail}; {sm_detail}; {ps_detail}; {pc_detail}; "
-              f"{ovr_detail}; {sc_detail}")
+              f"{ovr_detail}; {pr_detail}; {sc_detail}")
     if bad_rows:
         detail += " | " + "; ".join(bad_rows[:5])
     return (n_bad == 0 and n_missing == 0 and cfg_ok and bn_ok and ov_ok and ln_ok
-            and sm_ok and ps_ok and pc_ok and ovr_ok and sc_ok), detail
+            and sm_ok and ps_ok and pc_ok and ovr_ok and pr_ok and sc_ok), detail
 
 
 # K13 mock artifact set — happy path ve negatif senaryolar ORTAK seti kullanır.
@@ -2923,12 +2984,15 @@ _K13_MOCK = {
     "lineage-findings/zip_lineage.json": b'{"generations": []}',
     # summary sidecar: run summary girdileri (SUMMARY bölümü)
     "klayers.json": b'{"layers": {}}',
+    # precheck-report: AŞAMA 0 kapılarının çıktı raporu (PRECHECK bölümü)
+    "precheck-report/precheck_report.txt": b'ADIM SONUCU: PASS\n',
 }
 
 _WANT_CFG = {"config/cfg.json", "config/deep/extra.json",
               "effective_config.json", "config-diff.json"}
 _WANT_LINEAGE = {"lineage-findings/zip_lineage.json"}
 _WANT_SUMMARY = {"klayers.json"}
+_WANT_PRECHECK = {"precheck-report/precheck_report.txt"}
 
 
 def _k13_write_mock(tmp):
@@ -3024,6 +3088,16 @@ def _k13_verify_manifest(m, out):
                      for rel in sorted(sm['files'])).encode()
     ).hexdigest():
         problems.append("summary.combined_sha256 yeniden hesap uyuşmuyor")
+
+    prc = m.get("precheck_report")
+    prc_ok = isinstance(prc, dict) and isinstance(prc.get("files"), dict)
+    prc_rel = set(prc["files"]) if prc_ok else set()
+    missing_prc = sorted(_WANT_PRECHECK - prc_rel)
+    if not prc_ok or missing_prc:
+        problems.append("precheck_report objesi precheck-report dosyalarını "
+                        f"kapsamıyor (eksik={missing_prc})")
+    elif prc["combined_sha256"] != _summary_combined_sha256(prc["files"]):
+        problems.append("precheck_report.combined_sha256 yeniden hesap uyuşmuyor")
 
     return (not problems), problems
 

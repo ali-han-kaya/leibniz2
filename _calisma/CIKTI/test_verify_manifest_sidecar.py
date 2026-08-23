@@ -543,5 +543,109 @@ class TestOverridesSection(unittest.TestCase):
             for f in findings))
 
 
+def _with_precheck_section(d, mpath, tamper_combined=None):
+    """manifest'e PRECHECK REPORT bölümü ekler (files + combined_sha256).
+
+    gen_repro_manifest.py'nin PRECHECK REPORT bölümüyle birebir aynı formül:
+    sorted '{rel}\0{hash}\n' birleşiminin SHA-256'sı. tamper_combined
+    verilirse kayıtlı combined'ı bozar (K10 kurcalamayı yakalamalı).
+    """
+    with open(mpath, encoding="utf-8") as mf:
+        m = json.load(mf)
+    rel = "precheck-report/precheck_report.txt"
+    pr_files = {rel: m["files"][rel]}
+    combined = hashlib.sha256(
+        "".join(f"{r}\0{pr_files[r]}\n" for r in sorted(pr_files)).encode()
+    ).hexdigest()
+    m["precheck_report"] = {
+        "files": pr_files,
+        "combined_sha256": (tamper_combined if tamper_combined else combined),
+    }
+    with open(mpath, "w", encoding="utf-8") as f:
+        json.dump(m, f)
+    real = hashlib.sha256(open(mpath, "rb").read()).hexdigest()
+    with open(os.path.join(d, "manifest.sha256"), "w",
+              encoding="utf-8") as f:
+        f.write(f"{real}  manifest.json\n")
+    return mpath
+
+
+class TestPrecheckReportSection(unittest.TestCase):
+    """K0O: precheck_report.combined_sha256 yeniden hesaplanıp doğrulanır;
+    kurcalama → P1 (fail-closed). publish_precheck.sh AŞAMA 0 çıktısı
+    manifest'te sabitlenir."""
+
+    def test_pass_with_valid_precheck_section(self):
+        files = {"a.txt": b"hello\n",
+                 "precheck-report/precheck_report.txt": b"ADIM SONUCU: PASS\n"}
+        d, mpath = _build_bundle(files=files)
+        try:
+            _with_precheck_section(d, mpath)
+            ok, detail, findings = _run(d, mpath)
+        finally:
+            import shutil
+            shutil.rmtree(d, ignore_errors=True)
+        self.assertTrue(ok, detail)
+        self.assertIn("precheck_report_combined_sha256: PASS", detail)
+        self.assertEqual(findings, [])
+
+    def test_tampered_combined_is_p1(self):
+        files = {"a.txt": b"hello\n",
+                 "precheck-report/precheck_report.txt": b"ADIM SONUCU: PASS\n"}
+        d, mpath = _build_bundle(files=files)
+        try:
+            _with_precheck_section(d, mpath, tamper_combined="0" * 64)
+            ok, detail, findings = _run(d, mpath)
+        finally:
+            import shutil
+            shutil.rmtree(d, ignore_errors=True)
+        self.assertFalse(ok)
+        self.assertIn("precheck_report_combined_sha256: FAIL", detail)
+        self.assertTrue(any(
+            f[1] == "K10-MANIFEST" and "precheck_report" in f[2]
+            for f in findings))
+
+    def test_section_hash_mismatch_with_files_is_p1(self):
+        # precheck_report.files'taki hash, files'taki gerçek hash'ten farklı → P1.
+        files = {"a.txt": b"hello\n",
+                 "precheck-report/precheck_report.txt": b"ADIM SONUCU: FAIL\n"}
+        d, mpath = _build_bundle(files=files)
+        try:
+            _with_precheck_section(d, mpath)
+            with open(mpath, encoding="utf-8") as mf:
+                m = json.load(mf)
+            m["precheck_report"]["files"]["precheck-report/precheck_report.txt"] = "0" * 64
+            with open(mpath, "w", encoding="utf-8") as f:
+                json.dump(m, f)
+            real = hashlib.sha256(open(mpath, "rb").read()).hexdigest()
+            with open(os.path.join(d, "manifest.sha256"), "w",
+                      encoding="utf-8") as f:
+                f.write(f"{real}  manifest.json\n")
+            ok, detail, findings = _run(d, mpath)
+        finally:
+            import shutil
+            shutil.rmtree(d, ignore_errors=True)
+        self.assertFalse(ok)
+        self.assertIn("(hash farklı)", detail)
+        self.assertIn("precheck_report_combined_sha256: FAIL", detail)
+
+    def test_missing_section_with_files_is_p1(self):
+        # files'ta precheck-report/ dosyası var ama manifest'te precheck_report
+        # objesi yok → üretici drift'i K10 tarafından yakalanmalı.
+        files = {"a.txt": b"hello\n",
+                 "precheck-report/precheck_report.txt": b"ADIM SONUCU: PASS\n"}
+        d, mpath = _build_bundle(files=files)
+        try:
+            ok, detail, findings = _run(d, mpath)
+        finally:
+            import shutil
+            shutil.rmtree(d, ignore_errors=True)
+        self.assertFalse(ok)
+        self.assertIn("precheck_report objesi eksik", detail)
+        self.assertTrue(any(
+            f[1] == "K10-MANIFEST" and "precheck_report" in f[2]
+            for f in findings))
+
+
 if __name__ == "__main__":
     unittest.main()
