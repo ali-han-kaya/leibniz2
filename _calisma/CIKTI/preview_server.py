@@ -89,7 +89,8 @@ LATEST = {
     "refs_by_source": None,
     "config_diff": None,        # son run'un raw↔effective config diff özeti (dashboard)
     "cli_overrides": None,       # son run'un config.cli_overrides'ı (override=true → 'Budget override' rozeti)
-    "cli_override_count": 0,     # skaler: override=true anahtar sayısı (trend'e temiz; tam dict sadece SSE'de)
+    "cli_override_count": 0,     # skaler: override=true anahtar sayısı (trend'e düzenli; tam dict sadece SSE'de)
+    "override_report": None,     # son run'un OVERRIDE_RAPORU (PRECOMMIT_RAPORU deseni; logs/ yanına yazılır)
     "hook_env": None,           # hook env sürümleri (zaman serisi; python/z3/lean/…)
     "z3_passed": None,          # K8 Z3: stderr'deki [PASS] P1-5 sayısı (son run)
     "z3_failed": None,          # K8 Z3: stderr'deki [FAIL] P1-5 sayısı
@@ -595,6 +596,68 @@ def _parse_lean_result(stderr):
     return ok, detail
 
 
+_OVERRIDE_LINE_RE = re.compile(r"^\s*\[CLI override\]\s*")
+
+
+def collect_override_report(stderr, stdout, cli_overrides, ts, verdict, rc):
+    """[CLI override] satırlarını ve yapısal cli_overrides kayıtlarını tek rapora topla.
+
+    PRECOMMIT_RAPORU deseni: override run'ı (--budget/--budget-method) verify
+    stderr'ine '[CLI override] <k>: <file> → <eff> (CLI verildi)' satırları
+    düşürür (verify_delivery.py --json stderr relay'i). Bu fonksiyon ham
+    satırları + JSON config.cli_overrides kayıtlarını birleştirip makine-okur
+    OVERRIDE_RAPORU sözlüğü üretir; _finalize_run bunu
+    verify_dir/logs/OVERRIDE_RAPORU.json olarak yazar (PRECOMMIT_RAPORU.json
+    ile aynı dizin) — override run'ları ayrı denetim izi + artifact sağlar.
+    """
+    lines = []
+    for ln in (stderr or "").splitlines() + (stdout or "").splitlines():
+        if _OVERRIDE_LINE_RE.match(ln):
+            lines.append(ln.strip())
+    ov = cli_overrides if isinstance(cli_overrides, dict) else {}
+    overrides = []
+    for key, rec in ov.items():
+        if isinstance(rec, dict) and rec.get("override"):
+            overrides.append({
+                "key": key,
+                "file_value": rec.get("file_value"),
+                "effective": rec.get("effective"),
+                "line": ("[CLI override] %s: %r → %r (CLI verildi)"
+                          % (key, rec.get("file_value"), rec.get("effective"))),
+            })
+    return {
+        "generated_at": ts,
+        "ts": ts,
+        "verdict": verdict,
+        "exit_code": rc,
+        "role": "override-run",
+        "override_count": len(overrides),
+        "overrides": overrides,
+        "lines": lines,
+    }
+
+
+def _write_override_report(verify_dir, report):
+    """verify_dir/logs/OVERRIDE_RAPORU.json — atomik yaz (PRECOMMIT_RAPORU yolu).
+
+    PRECOMMIT_RAPORU.json ile aynı dizine (logs/) yazar; CI daemon-http job'ı
+    bu dosyayı override-raporu artifact'ına taşır.
+    """
+    if not verify_dir:
+        return
+    try:
+        logs_dir = os.path.join(verify_dir, "logs")
+        os.makedirs(logs_dir, exist_ok=True)
+        path = os.path.join(logs_dir, "OVERRIDE_RAPORU.json")
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(report, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, path)  # atomik: yarı yazılmış rapor asla okunmaz
+    except OSError as e:
+        sys.stderr.write(f"[override] OVERRIDE_RAPORU.json yazılamadı: {e}\n")
+        sys.stderr.flush()
+
+
 _HOOK_RE = re.compile(r"^(.+?)\.{4,}(Passed|Failed)\s*$", re.M)
 
 
@@ -847,6 +910,18 @@ def _finalize_run(stdout, stderr, rc, duration, data, verify_dir=None):
                         pass
         # Durum panosu: 5 ikonlu tek satır (CI consolidate_summary.py ile tutarlı)
         LATEST["status_board"] = _compute_status_board()
+
+    # Override raporu: [CLI override] satırları + yapısal cli_overrides →
+    # logs/OVERRIDE_RAPORU.json (PRECOMMIT_RAPORU deseni; override run'ları
+    # için ayrı denetim izi). Her run'da yazılır — override yoksa boş rapor
+    # da denetim kanıtıdır ('override yok').
+    with LOCK:
+        ov_report = collect_override_report(
+            stderr, stdout, LATEST.get("cli_overrides") or {},
+            LATEST["ts"], LATEST["verdict"], rc)
+        LATEST["override_report"] = ov_report
+    if verify_dir:
+        _write_override_report(verify_dir, ov_report)
 
     # Arka planda pre-commit hook'larını yenile (verify bitti, şimdi hook'dan
     # sonuçları da dashboard'a getir —较重 ~10-30s, async;

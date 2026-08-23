@@ -49,6 +49,84 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ENDPOINTS = ("/preview.html", "/api/latest", "/api/history")
 START_TIMEOUT = 60   # daemon ayağa kalkana kadar
 POLL_STEP = 1.0
+INITIAL_RUN_WAIT = 240  # verify_loop'un ilk (override'sız) run'ı bitene kadar
+OVERRIDE_RUN_WAIT = 300  # override run'ının rapor üretmesi için bekleme
+
+
+def _latest_json(port):
+    """/api/latest özetini döndür; hatada None."""
+    try:
+        with urllib.request.urlopen(
+                f"http://127.0.0.1:{port}/api/latest", timeout=5) as r:
+            return json.loads(r.read().decode("utf-8"))
+    except Exception:
+        return None
+
+
+def trigger_override_run(port, verify_dir,
+                         wait_initial=INITIAL_RUN_WAIT,
+                         wait_override=OVERRIDE_RUN_WAIT):
+    """Budget override'lı bir run tetikleyip OVERRIDE_RAPORU.json üretimini bekle.
+
+    run-now, verify_loop ile VERIFY_BUSY'yi paylaşır: loop'un ilk run'ı
+    devam ederken tetiklenirse 409 döner. Bu yüzden önce /api/latest'te
+    exit_code görünene dek beklenir (ilk run bitti), sonra
+    /api/run-now?budget=1&budget_method=universal çağrılır ve LATEST ts
+    değişene + yeni exit_code set edilene dek beklenir (override run bitti).
+    Rapor, override run'unun _finalize_run'ı tarafından yazılır.
+
+    Döndürür: (ok, detail). ok=False → advisory (artifact yok, CI adımı raporlar).
+    """
+    base = f"http://127.0.0.1:{port}"
+    # 1) İlk run bitsin (BUSY çakışması / bayat ts karışıklığı olmasın).
+    before = None
+    deadline = time.monotonic() + wait_initial
+    while time.monotonic() < deadline:
+        before = _latest_json(port)
+        if before and before.get("exit_code") is not None:
+            break
+        time.sleep(2)
+    else:
+        return False, "ilk run bitmedi (exit_code hiç görünmedi)"
+    # 2) Override run'ı tetikle (--budget 1 + method universal).
+    try:
+        with urllib.request.urlopen(
+                base + "/api/run-now?budget=1&budget_method=universal",
+                timeout=10) as resp:
+            body = json.loads(resp.read().decode("utf-8"))
+    except Exception as e:
+        return False, f"run-now tetiklenemedi: {e}"
+    if body.get("status") != "started":
+        return False, f"run-now beklenmedik yanıt: {body}"
+    # 3) LATEST ts değişip yeni run bitene kadar bekle (exit_code set).
+    ts0 = before.get("ts")
+    done = False
+    deadline = time.monotonic() + wait_override
+    while time.monotonic() < deadline:
+        cur = _latest_json(port)
+        if cur and cur.get("ts") != ts0 and cur.get("exit_code") is not None:
+            done = True
+            break
+        time.sleep(3)
+    if not done:
+        return False, "override run bitmedi (ts değişmedi / zaman aşımı)"
+    # 4) Rapor dosyası: _finalize_run broadcast'ten ÖNCE yazar → hazır olmalı.
+    path = os.path.join(verify_dir, "logs", "OVERRIDE_RAPORU.json")
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        if os.path.isfile(path):
+            try:
+                with open(path, encoding="utf-8") as f:
+                    rpt = json.load(f)
+            except (OSError, ValueError):
+                time.sleep(0.5)
+                continue
+            n = rpt.get("override_count", 0)
+            ok = n >= 1 or bool(rpt.get("lines"))
+            return ok, (f"override_count={n}, lines={len(rpt.get('lines') or [])}, "
+                        f"verdict={rpt.get('verdict')}")
+        time.sleep(0.5)
+    return False, "OVERRIDE_RAPORU.json üretilmedi"
 
 # Daemon modda verify_loop'un gerçek --full koşusunu uzun tut (test boyunca
 # tek tur yeter; interval saniye cinsinden).
@@ -124,6 +202,10 @@ def main():
     ap.add_argument("--history-out", default=None,
                     help="history.jsonl + .sha256 sidecar'ı bu yola kopyala "
                          "(K15 sidecar doğrulaması için)")
+    ap.add_argument("--override-out", default=None,
+                    help="override run'ı tetikleyip logs/OVERRIDE_RAPORU.json'u "
+                         "bu yola kopyala (PRECOMMIT_RAPORU deseni sidecar — "
+                         "override-raporu artifact'ı; yoksa advisory not düşülür)")
     args = ap.parse_args()
 
     if not os.path.isfile(args.server):
@@ -134,7 +216,8 @@ def main():
         return 2
 
     report = {"server": args.server, "ok": False, "port": args.port,
-              "endpoints": {}, "error": None, "history_out": args.history_out}
+              "endpoints": {}, "error": None, "history_out": args.history_out,
+              "override_run": None}
 
     with tempfile.TemporaryDirectory(prefix="daemon-http-") as tmp:
         verify_dir = args.dir or os.path.join(tmp, "verify")
@@ -178,6 +261,21 @@ def main():
                 report["error"] = (
                     f"endpoint'ler: {statuses} | daemon_alive={alive}")
                 print(f"FAIL: {report['error']}", file=sys.stderr)
+            # Override run: [CLI override] satırları ayrı rapora gider
+            # (PRECOMMIT_RAPORU deseni). Yalnızca --override-out verilirse
+            # tetiklenir (CI); HTTP smoke sonucunu DEĞİŞTİRMEZ (advisory).
+            if args.override_out and alive:
+                ov_ok, ov_detail = trigger_override_run(port, verify_dir)
+                report["override_run"] = {
+                    "ok": ov_ok, "detail": ov_detail,
+                    "out": args.override_out}
+                print(f"override run: {'OK' if ov_ok else 'FAIL'} — {ov_detail}")
+                ov_src = os.path.join(verify_dir, "logs", "OVERRIDE_RAPORU.json")
+                if os.path.isfile(ov_src):
+                    odir = os.path.dirname(args.override_out)
+                    if odir:
+                        os.makedirs(odir, exist_ok=True)
+                    shutil.copy2(ov_src, args.override_out)
         finally:
             # Düzgün kapat (daemon modda SIGTERM handler'ı vardır).
             try:

@@ -1951,6 +1951,7 @@ jobs:
           python3 _calisma/CIKTI/daemon_http_test.py \
             --out daemon_http_report.json \
             --history-out daemon_history.jsonl \
+            --override-out override_report.json \
             2>&1 | tee daemon_http_report.txt
           rc=${PIPESTATUS[0]}
           set -e
@@ -1979,22 +1980,60 @@ jobs:
           echo "k15_rc=$rc" >> "$GITHUB_OUTPUT"
           echo "K15 exit: $rc"
 
-      - name: Write daemon HTTP + K15 to run summary
+      # OVERRIDE RAPORU (PRECOMMIT_RAPORU deseni): override run'ının
+      # [CLI override] satırları preview_server tarafından
+      # logs/OVERRIDE_RAPORU.json'a yazılır; daemon testi --override-out ile
+      # dışarı kopyalar. Bu adım raporun varlığını + alan sözleşmesini
+      # fail-closed doğrular (advisory: yoksa job yine de yeşil, run summary
+      # not düşer).
+      - name: Validate override run report (OVERRIDE_RAPORU)
+        id: ovr
+        if: always()
+        continue-on-error: true
+        run: |
+          set +e
+          if [ ! -f override_report.json ]; then
+            echo "ovr_rc=missing" >> "$GITHUB_OUTPUT"
+            echo "OVERRIDE_RAPORU: yok (override run üretim zaman aşımı)"
+            exit 0
+          fi
+          python3 - <<'PYEOF' 2>&1 | tee ovr_report.txt
+          import json
+          d = json.load(open('override_report.json', encoding='utf-8'))
+          need = ['generated_at', 'ts', 'verdict', 'exit_code', 'role',
+                  'override_count', 'overrides', 'lines']
+          missing = [k for k in need if k not in d]
+          if missing or d.get('role') != 'override-run' \
+             or not isinstance(d.get('override_count'), int):
+              print('OVERRIDE_RAPORU: FAIL — eksik/geçersiz alan: ' + str(missing))
+              raise SystemExit(1)
+          print('OVERRIDE_RAPORU: PASS — override_count=%d, lines=%d, verdict=%s' % (
+              d['override_count'], len(d['lines'] or []), d.get('verdict')))
+          PYEOF
+          rc=${PIPESTATUS[0]}
+          set -e
+          echo "ovr_rc=$rc" >> "$GITHUB_OUTPUT"
+          echo "OVERRIDE_RAPORU exit: $rc"
+
+      - name: Write daemon HTTP + K15 + override to run summary
         if: always()
         run: |
           {
-            echo "## Daemon mode HTTP 200 + K15 sidecar (advisory)"
+            echo "## Daemon mode HTTP 200 + K15 sidecar + OVERRIDE_RAPORU (advisory)"
             echo ""
             echo "- daemon-http test: exit \`${{ steps.daemon.outputs.rc }}\`"
             echo "- K15 history sidecar: exit \`${{ steps.k15.outputs.k15_rc }}\`"
+            echo "- OVERRIDE_RAPORU: exit \`${{ steps.ovr.outputs.ovr_rc }}\`"
             echo '```'
             cat daemon_http_report.txt 2>/dev/null || echo '(rapor yok)'
             echo '---'
             cat k15_report.txt 2>/dev/null || echo '(K15 rapor yok)'
+            echo '---'
+            cat ovr_report.txt 2>/dev/null || echo '(OVERRIDE_RAPORU rapor yok)'
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload daemon HTTP + K15 report
+      - name: Upload daemon HTTP + K15 + override report
         if: always()
         uses: actions/upload-artifact@v6
         with:
@@ -2005,6 +2044,7 @@ jobs:
             daemon_history.jsonl
             daemon_history.jsonl.sha256
             k15_report.txt
+            override_report.json
           if-no-files-found: ignore
           retention-days: 30
 

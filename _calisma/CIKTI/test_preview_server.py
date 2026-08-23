@@ -940,5 +940,105 @@ class StatusBoardTests(unittest.TestCase):
             ps.SSE_CLIENTS.clear()
 
 
+class OverrideReportTests(unittest.TestCase):
+    """OVERRIDE_RAPORU: [CLI override] satırları → logs/OVERRIDE_RAPORU.json.
+
+    PRECOMMIT_RAPORU deseni: override run'ının (--budget/--budget-method)
+    [CLI override] satırları + yapısal cli_overrides kayıtları ayrı bir
+    makine-okur sidecar'a yazılır (verify_dir/logs/OVERRIDE_RAPORU.json) —
+    denetim izi + CI daemon-http artifact'ı için.
+    """
+
+    def test_collect_override_lines_and_struct(self):
+        """Ham satırlar + yapısal kayıtlar tek raporda birleşir."""
+        import preview_server as ps
+        stderr = (
+            "  [CLI override] budget: 30.0 → 25.0 (CLI verildi)\n"
+            "  [CLI override] budget_method: 'both' → 'weighted' (CLI verildi)\n"
+        )
+        ov = {
+            "budget": {"override": True, "file_value": 30.0, "effective": 25.0},
+            "budget_method": {"override": True, "file_value": "both",
+                               "effective": "weighted"},
+        }
+        rpt = ps.collect_override_report(stderr, "normal stdout satırı\n", ov,
+                                         "2026-08-23T00:00:00Z", "FAIL", 1)
+        self.assertEqual(rpt["role"], "override-run")
+        self.assertEqual(rpt["override_count"], 2)
+        self.assertEqual(len(rpt["lines"]), 2)
+        self.assertEqual(rpt["overrides"][0]["key"], "budget")
+        self.assertEqual(rpt["overrides"][0]["effective"], 25.0)
+        self.assertEqual(rpt["overrides"][1]["key"], "budget_method")
+        self.assertEqual(rpt["verdict"], "FAIL")
+        self.assertEqual(rpt["exit_code"], 1)
+        # stdout'taki sıradan satırlar lines'a GİRMEMELİ
+        self.assertTrue(all("normal" not in ln for ln in rpt["lines"]))
+
+    def test_collect_empty_when_no_override(self):
+        """Override yoksa boş rapor (override_count=0, lines=[]) — yine de rapor."""
+        import preview_server as ps
+        rpt = ps.collect_override_report("satır\n", "satır2\n", None,
+                                         "TS", "PASS", 0)
+        self.assertEqual(rpt["override_count"], 0)
+        self.assertEqual(rpt["lines"], [])
+        self.assertEqual(rpt["overrides"], [])
+
+    def test_finalize_writes_override_report_sidecar(self):
+        """_finalize_run verify_dir/logs/OVERRIDE_RAPORU.json yazar."""
+        import preview_server as ps
+        orig = ps._refresh_precommit_hooks_bg
+        ps._refresh_precommit_hooks_bg = lambda *a, **k: None  # noqa: E731
+        try:
+            with tempfile.TemporaryDirectory(prefix="ovr-rpt-") as d:
+                stdout = json.dumps({
+                    "verdict": "FAIL", "counts": {"P0": 0, "P1": 1},
+                    "config": {"cli_overrides": {
+                        "budget": {"override": True, "file_value": 30.0,
+                                   "effective": 25.0},
+                    }}},
+                    ensure_ascii=False)
+                stderr = "  [CLI override] budget: 30.0 → 25.0 (CLI verildi)\n"
+                ps._finalize_run(stdout, stderr, 1, 1.0, data=None,
+                                 verify_dir=d)
+                path = os.path.join(d, "logs", "OVERRIDE_RAPORU.json")
+                self.assertTrue(os.path.isfile(path))
+                with open(path, encoding="utf-8") as f:
+                    rpt = json.load(f)
+                self.assertEqual(rpt["role"], "override-run")
+                self.assertEqual(rpt["override_count"], 1)
+                self.assertEqual(rpt["exit_code"], 1)
+                self.assertEqual(rpt["verdict"], "FAIL")
+                self.assertEqual(len(rpt["lines"]), 1)
+                self.assertIn("budget", rpt["lines"][0])
+                # LATEST slotu da dolmalı (dashboard /api/latest görünürlüğü)
+                with ps.LOCK:
+                    self.assertIsNotNone(ps.LATEST.get("override_report"))
+                    self.assertEqual(
+                        ps.LATEST["override_report"]["override_count"], 1)
+        finally:
+            ps._refresh_precommit_hooks_bg = orig
+
+    def test_finalize_plain_run_writes_empty_report(self):
+        """Override'sız run da rapor yazar (override_count=0) — 'yok' kanıtı."""
+        import preview_server as ps
+        orig = ps._refresh_precommit_hooks_bg
+        ps._refresh_precommit_hooks_bg = lambda *a, **k: None  # noqa: E731
+        try:
+            with tempfile.TemporaryDirectory(prefix="ovr-rpt-") as d:
+                stdout = json.dumps({"verdict": "PASS",
+                                     "counts": {"P0": 0, "P1": 0}},
+                                    ensure_ascii=False)
+                ps._finalize_run(stdout, "", 0, 1.0, data=None, verify_dir=d)
+                path = os.path.join(d, "logs", "OVERRIDE_RAPORU.json")
+                self.assertTrue(os.path.isfile(path))
+                with open(path, encoding="utf-8") as f:
+                    rpt = json.load(f)
+                self.assertEqual(rpt["override_count"], 0)
+                self.assertEqual(rpt["lines"], [])
+                self.assertEqual(rpt["verdict"], "PASS")
+        finally:
+            ps._refresh_precommit_hooks_bg = orig
+
+
 if __name__ == "__main__":
     unittest.main()
