@@ -344,6 +344,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-23 | refactor | (changelog) tek kaynak — README changelog, PUBLISH işaretçi | [`cad671b`](https://github.com/ali-han-kaya/leibniz2/commit/cad671b) |
 | 2026-08-23 | docs | README'ye CI/pre-commit/license rozetleri + LICENSE | [`0879c1c`](https://github.com/ali-han-kaya/leibniz2/commit/0879c1c) |
 | 2026-08-23 | feat | (scripts) --bootstrap'a opsiyonel --start (launchctl aynı komutta) | [`e594ff0`](https://github.com/ali-han-kaya/leibniz2/commit/e594ff0) |
+| 2026-08-23 | feat | (ci) mirror-check job'una bootstrap smoke adımı | [`20b93b6`](https://github.com/ali-han-kaya/leibniz2/commit/20b93b6) |
 
 ### Regresyon notları
 

@@ -171,10 +171,11 @@ class TestVerifyDeliveryK17(unittest.TestCase):
                 add = lambda prio, cid, label, issue, evidence="": findings.append(
                     {"priority": prio, "check": cid, "issue": issue,
                      "evidence": evidence})
-                ok, detail, rc, txt = vd.check_mirror_sync(add)
+                ok, detail, rc, txt, meta = vd.check_mirror_sync(add)
             self.assertFalse(ok)
             self.assertEqual(rc, None)
             self.assertIn("sync_verify_mirror.sh yok", detail)
+            self.assertFalse(meta["auto_synced"])
             self.assertTrue(any(f["check"] == "K17-MIRROR" for f in findings))
 
 
@@ -252,6 +253,142 @@ class TestMirrorFileCoverage(unittest.TestCase):
             chk = run(env, "bash", SYNC_MIRROR, "--check")
             self.assertEqual(chk.returncode, 1, chk.stdout + chk.stderr)
             self.assertIn("BAYAT/EKSİK: preview/preview_server.py", chk.stdout)
+
+
+class TestMirrorAutoSync(unittest.TestCase):
+    """--mirror-auto-sync: BAYAT → otomatik sync + sidecar'da iz."""
+
+    def test_auto_sync_fixes_bayat_and_marks_sidecar(self):
+        """Uçtan uca: drift → --check-mirror --mirror-auto-sync → GÜNCEL,
+        sidecar auto_synced=True + before/after exit izi."""
+        with tempfile.TemporaryDirectory(prefix="mirror-k17-") as work:
+            env = sync_env(work)
+            syn = run(env, "bash", SYNC_MIRROR)
+            self.assertEqual(syn.returncode, 0, syn.stderr)
+            mirror_dir, _ = make_mirror(work)
+            target = os.path.join(mirror_dir, "verify_delivery.py")
+            with open(target, "a", encoding="utf-8") as f:
+                f.write("\n# mirror drift\n")
+            out = os.path.join(work, "mirror_report.json")
+            r = run(env, sys.executable, VERIFY_DELIVERY, "--check-mirror",
+                    "--mirror-auto-sync", "--mirror-out", out)
+            # Otomatik sync drift'i giderdi → exit 0 (P1 yok).
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertIn("[K17] mirror sync: PASS", r.stdout)
+            self.assertIn("AUTO-SYNC", r.stdout)
+            with open(out, encoding="utf-8") as f:
+                d = json.load(f)
+            self.assertTrue(d["ok"])
+            self.assertEqual(d["exit"], 0)
+            self.assertTrue(d["auto_synced"])
+            self.assertEqual(d["before_exit"], 1)
+            self.assertEqual(d["after_exit"], 0)
+            self.assertEqual(d["sync_rc"], 0)
+
+    def test_auto_sync_sync_failure_p1(self):
+        """Otomatik sync BAŞARISIZ (exit≠0) → P1 fail-closed + iz."""
+        sys.path.insert(0, HERE)
+        import verify_delivery as vd  # noqa: E402
+
+        # --check → 1 (BAYAT), sync → 2 (hata), ikinci --check yok.
+        class R:
+            def __init__(self, rc, out):
+                self.returncode = rc
+                self.stdout = out
+                self.stderr = ""
+
+        seq = [R(1, "BAYAT: x"), R(2, "sync hata")]
+        calls = []
+
+        def fake_run(cmd, **kw):
+            calls.append(cmd)
+            return seq.pop(0)
+
+        findings = []
+        add = lambda prio, cid, label, issue, evidence="": findings.append(
+            {"priority": prio, "check": cid, "issue": issue,
+             "evidence": evidence})
+        with mock.patch.object(vd.subprocess, "run", side_effect=fake_run):
+            ok, detail, rc, txt, meta = vd.check_mirror_sync(add, auto_sync=True)
+        self.assertFalse(ok)
+        self.assertIn("otomatik sync BAŞARISIZ", detail)
+        self.assertTrue(meta["auto_synced"])
+        self.assertEqual(meta["before_exit"], 1)
+        self.assertEqual(meta["sync_rc"], 2)
+        self.assertEqual(meta["after_exit"], None)
+        self.assertTrue(any("otomatik sync başarısız" in f["issue"]
+                            for f in findings))
+        # Sıra: --check, sync (ikinci --check yok).
+        self.assertTrue("--check" in calls[0])
+        self.assertNotIn("--check", calls[1])
+
+    def test_auto_sync_still_bayat_after_sync_p1(self):
+        """Sync başarılı ama yeniden --check hâlâ BAYAT → P1 + after_exit=1."""
+        sys.path.insert(0, HERE)
+        import verify_delivery as vd  # noqa: E402
+
+        class R:
+            def __init__(self, rc, out):
+                self.returncode = rc
+                self.stdout = out
+                self.stderr = ""
+
+        # --check → 1, sync → 0, ikinci --check → 1.
+        seq = [R(1, "BAYAT: x"), R(0, "ÖZET: sync"), R(1, "BAYAT: x")]
+        calls = []
+
+        def fake_run(cmd, **kw):
+            calls.append(cmd)
+            return seq.pop(0)
+
+        findings = []
+        add = lambda prio, cid, label, issue, evidence="": findings.append(
+            {"priority": prio, "check": cid, "issue": issue,
+             "evidence": evidence})
+        with mock.patch.object(vd.subprocess, "run", side_effect=fake_run):
+            ok, detail, rc, txt, meta = vd.check_mirror_sync(add, auto_sync=True)
+        self.assertFalse(ok)
+        self.assertIn("hâlâ bayat", detail)
+        self.assertTrue(meta["auto_synced"])
+        self.assertEqual(meta["before_exit"], 1)
+        self.assertEqual(meta["after_exit"], 1)
+        self.assertEqual(meta["sync_rc"], 0)
+        self.assertTrue(any("hâlâ bayat" in f["issue"] for f in findings))
+
+    def test_flag_without_check_mirror_exits_2(self):
+        """--mirror-auto-sync tek başına → exit 2 (fail-closed)."""
+        with tempfile.TemporaryDirectory(prefix="mirror-k17-") as work:
+            env = sync_env(work)
+            r = run(env, sys.executable, VERIFY_DELIVERY, "--mirror-auto-sync")
+            self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+            self.assertIn("HATA", r.stderr)
+
+    def test_no_auto_sync_keeps_bayat_p1(self):
+        """Bayraksız koşumda BAYAT → P1 (auto_sync izi yok)."""
+        sys.path.insert(0, HERE)
+        import verify_delivery as vd  # noqa: E402
+
+        class R:
+            def __init__(self, rc, out):
+                self.returncode = rc
+                self.stdout = out
+                self.stderr = ""
+
+        seq = [R(1, "BAYAT: x")]
+
+        def fake_run(cmd, **kw):
+            return seq.pop(0)
+
+        findings = []
+        add = lambda prio, cid, label, issue, evidence="": findings.append(
+            {"priority": prio, "check": cid, "issue": issue,
+             "evidence": evidence})
+        with mock.patch.object(vd.subprocess, "run", side_effect=fake_run):
+            ok, detail, rc, txt, meta = vd.check_mirror_sync(add, auto_sync=False)
+        self.assertFalse(ok)
+        self.assertFalse(meta["auto_synced"])
+        self.assertIsNone(meta["after_exit"])
+        self.assertEqual(meta["before_exit"], 1)
 
 
 class TestMirrorOutSidecar(unittest.TestCase):

@@ -3323,7 +3323,7 @@ def check_github_scripts_self_test(add):
     return True, summary or f"battery exit=0"
 
 
-def check_mirror_sync(add):
+def check_mirror_sync(add, auto_sync=False):
     """K17: sync_verify_mirror.sh --check exit kodunu denetle (fail-closed).
 
     sync_verify_mirror.sh --check sözleşmesi:
@@ -3333,15 +3333,26 @@ def check_mirror_sync(add):
     BAYAT (1) ve hata (2) → P1 (fail-closed). Script yoksa P1. macOS'a
     özgü bir katmandır (mirror ~/Library/Caches/com.freebuff/verify) —
     --full'a bilerek dahil DEĞİLDİR, açıkça --check-mirror ile koşulur
-    (K12 plist deseniyle aynı). Döndürür (ok: bool, detail: str, rc: int,
-    txt: str).
+    (K12 plist deseniyle aynı).
+
+    auto_sync=True (--mirror-auto-sync): BAYAT (1) bulunursa mirror'ı
+    otomatik senkron eder (sync_verify_mirror.sh — varsayılan sync modu),
+    sonra yeniden --check yapar. Senkron başarılı + GÜNCEL → PASS; ancak
+    otomatik-senkron İZLENİR (drift gizlenmez): dönüşün 5. elemanındaki
+    meta = {auto_synced, before_exit, after_exit, sync_rc, sync_output}
+    ile sidecar'da işaretlenir. Senkron başarısız veya sync sonrası hâlâ
+    BAYAT → P1 (fail-closed).
+
+    Döndürür (ok: bool, detail: str, rc: int, txt: str, meta: dict).
     """
     here = os.path.dirname(os.path.abspath(__file__))
     script = os.path.join(here, "sync_verify_mirror.sh")
+    empty_meta = {"auto_synced": False, "before_exit": None,
+                  "after_exit": None, "sync_rc": None, "sync_output": None}
     if not os.path.isfile(script):
         add("P1", "K17-MIRROR", "K17 mirror sync",
             "sync_verify_mirror.sh yok", script)
-        return False, "sync_verify_mirror.sh yok", None, ""
+        return False, "sync_verify_mirror.sh yok", None, "", empty_meta
     try:
         r = subprocess.run(["bash", script, "--check"],
                            capture_output=True, text=True, timeout=120)
@@ -3349,24 +3360,67 @@ def check_mirror_sync(add):
     except (OSError, subprocess.TimeoutExpired) as e:
         add("P1", "K17-MIRROR", "K17 mirror sync",
             f"çalıştırılamadı: {e}", script)
-        return False, f"çalıştırılamadı: {e}", None, ""
+        return False, f"çalıştırılamadı: {e}", None, "", empty_meta
     if rc == 0:
+        meta = dict(empty_meta, before_exit=rc)
         detail = "GÜNCEL — repo ↔ mirror birebir (sync_verify_mirror.sh --check)"
-        return True, detail, rc, txt
+        return True, detail, rc, txt, meta
     if rc == 1:
-        detail = "BAYAT — mirror repo'dan farklı (sync_verify_mirror.sh çalıştırın)"
+        if not auto_sync:
+            detail = "BAYAT — mirror repo'dan farklı (sync_verify_mirror.sh çalıştırın)"
+            add("P1", "K17-MIRROR", "K17 mirror sync",
+                "mirror bayat (repo ↔ mirror drift)", txt)
+            return False, detail, rc, txt, dict(empty_meta, before_exit=rc)
+        # --mirror-auto-sync: BAYAT → otomatik sync et, sonra yeniden denetle.
+        try:
+            s = subprocess.run(["bash", script],
+                               capture_output=True, text=True, timeout=300)
+            sync_rc, sync_txt = s.returncode, (s.stdout + s.stderr).strip()
+        except (OSError, subprocess.TimeoutExpired) as e:
+            add("P1", "K17-MIRROR", "K17 mirror sync",
+                f"otomatik sync çalıştırılamadı: {e}", script)
+            return False, f"otomatik sync çalıştırılamadı: {e}", 1, txt, dict(
+                empty_meta, auto_synced=True, before_exit=rc, sync_rc=None,
+                sync_output=str(e))
+        if sync_rc != 0:
+            detail = (f"BAYAT → otomatik sync BAŞARISIZ (exit {sync_rc}) — "
+                      "mirror hâlâ bayat")
+            add("P1", "K17-MIRROR", "K17 mirror sync",
+                "otomatik sync başarısız — mirror hâlâ bayat", sync_txt)
+            return False, detail, 1, txt, dict(
+                empty_meta, auto_synced=True, before_exit=rc,
+                sync_rc=sync_rc, sync_output=sync_txt)
+        # Sync başarılı → yeniden --check.
+        try:
+            r2 = subprocess.run(["bash", script, "--check"],
+                                capture_output=True, text=True, timeout=120)
+            rc2, txt2 = r2.returncode, (r2.stdout + r2.stderr).strip()
+        except (OSError, subprocess.TimeoutExpired) as e:
+            add("P1", "K17-MIRROR", "K17 mirror sync",
+                f"sync sonrası yeniden denetleme çalıştırılamadı: {e}", script)
+            return False, f"sync sonrası denetleme çalıştırılamadı: {e}", 1, txt, dict(
+                empty_meta, auto_synced=True, before_exit=rc,
+                sync_rc=sync_rc, sync_output=sync_txt)
+        meta = dict(empty_meta, auto_synced=True, before_exit=rc,
+                    after_exit=rc2, sync_rc=sync_rc, sync_output=sync_txt)
+        if rc2 == 0:
+            detail = ("BAYAT → otomatik sync edildi → GÜNCEL "
+                      "(--mirror-auto-sync; drift izi sidecar'da)")
+            return True, detail, rc2, txt2, meta
+        detail = (f"BAYAT → otomatik sync yapıldı ama hâlâ bayat "
+                  f"(exit {rc2}) — kaynak/mirror tutarsız")
         add("P1", "K17-MIRROR", "K17 mirror sync",
-            "mirror bayat (repo ↔ mirror drift)", txt)
-        return False, detail, rc, txt
+            "otomatik sync sonrası mirror hâlâ bayat", txt2)
+        return False, detail, rc2, txt2, meta
     if rc == 2:
         detail = "hata — kaynak yok / kullanım hatası (sync_verify_mirror.sh --check)"
         add("P1", "K17-MIRROR", "K17 mirror sync",
             f"sync_verify_mirror.sh --check exit 2 (hata)", txt)
-        return False, detail, rc, txt
+        return False, detail, rc, txt, dict(empty_meta, before_exit=rc)
     detail = f"beklenmedik exit kodu {rc}"
     add("P1", "K17-MIRROR", "K17 mirror sync",
         f"beklenmedik exit kodu {rc}", txt)
-    return False, detail, rc, txt
+    return False, detail, rc, txt, dict(empty_meta, before_exit=rc)
 
 
 def check_launchd_status(add):
@@ -3697,6 +3751,11 @@ def main():
                     help="K17: sync_verify_mirror.sh --check ham çıktısını "
                          "K17 raporuyla birlikte ayrı bir sidecar JSON'a yaz "
                          "(CI artifact + run summary için)")
+    ap.add_argument("--mirror-auto-sync", action="store_true",
+                    help="K17: --check-mirror BAYAT bulursa mirror'ı otomatik "
+                         "sync edip yeniden denetler; senkron izi sidecar'da "
+                         "auto_synced/before_exit/after_exit/sync_rc ile "
+                         "işaretlenir (yalnızca --check-mirror ile)")
     ap.add_argument("--check-launchd", action="store_true",
                     help="K18: launchctl list + plutil lint + HTTP 200 "
                          "doğrulaması (macOS'a özgü, --full'a dahil değil)")
@@ -3706,6 +3765,11 @@ def main():
                          "--check-config-drift + --check-repro-manifest + "
                          "--check-cleanup + --check-github-scripts")
     args = ap.parse_args()
+    # --mirror-auto-sync yalnızca --check-mirror ile anlamlıdır (fail-closed).
+    if args.mirror_auto_sync and not args.check_mirror:
+        print("HATA: --mirror-auto-sync yalnızca --check-mirror ile kullanılabilir",
+              file=sys.stderr)
+        sys.exit(2)
     # --full, tüm isteğe bağlı katmanları aktifleştirir
     if args.full:
         args.check_references = True
@@ -4397,12 +4461,24 @@ def main():
     # açıkça --check-mirror ile koşulur (K12 plist deseniyle aynı).
     mirror_report = None
     if args.check_mirror:
-        mok, mdetail, mrc, mtxt = check_mirror_sync(add)
+        mok, mdetail, mrc, mtxt, mmeta = check_mirror_sync(
+            add, auto_sync=args.mirror_auto_sync)
         mirror_report = {"layer": "K17", "ok": mok, "exit": mrc,
                          "detail": mdetail, "output": mtxt}
+        # Opsiyonel --mirror-auto-sync izi: sidecar'da drift'in otomatik
+        # senkronla giderildiği görünür kalır (gizlenmez).
+        if mmeta.get("auto_synced"):
+            mirror_report["auto_synced"] = True
+            mirror_report["before_exit"] = mmeta.get("before_exit")
+            mirror_report["after_exit"] = mmeta.get("after_exit")
+            mirror_report["sync_rc"] = mmeta.get("sync_rc")
+            mirror_report["sync_output"] = mmeta.get("sync_output")
         if not args.json:
+            auto_note = " [AUTO-SYNC: bayat → sync edildi]" if mmeta.get(
+                "auto_synced") else ""
             print(f"[K17] mirror sync: "
-                  f"{'PASS' if mok else 'FAIL'} (exit={mrc}) — {mdetail}")
+                  f"{'PASS' if mok else 'FAIL'} (exit={mrc}) — "
+                  f"{mdetail}{auto_note}")
         # Sidecar: sync_verify_mirror.sh --check ham çıktısı + K17 raporu.
         if args.mirror_out:
             try:
