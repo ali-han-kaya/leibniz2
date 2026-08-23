@@ -784,8 +784,13 @@ def _fold(s):
 # Per-request timeout (s): tek bir yavaş/yanıt vermeyen endpoint tüm run'ı
 # asmasın (Perseus'un eski 60s'si ve fallback zincirleri toplamı şişiriyordu).
 REFERENCE_HTTP_TIMEOUT = 15
-# Geçici hatalarda (429/5xx/ağ/timeout) toplam deneme sayısı (ilk dahil).
-REFERENCE_HTTP_RETRIES = 2
+# Geçici hatalarda (429/5xx/ağ/timeout/SSL handshake) toplam deneme sayısı
+# (ilk dahil). 3: Internet Archive archive.org SSL handshake timeout'ları
+# (socket.timeout/SSLError — geçici) 2 denemede bazen kalıcı görünüp flaky
+# UNVERIFIED üretiyordu; üçüncü deneme CI'da bunları sıfırlamayı hedefler.
+# Bütçe/paralel havuz (260 s, 4 işçi) bu başlıkla ~90-140 sn kalır — yalnızca
+# hata yollarında ek deneme (başarı ilk denemede döner).
+REFERENCE_HTTP_RETRIES = 3
 # Referans denetiminin toplam süre bütçesi (s). Aşılırsa kalan kaynaklar
 # UNVERIFIED işaretlenir (dürüst atlama — yanlış PASS yok); böylece --full
 # 300 sn sınırını aşmaz. Polite sleep'ler + ağ bu bütçeyle ~<240 sn kalır.

@@ -71,6 +71,29 @@ class TestHttpGet(unittest.TestCase):
         self.assertEqual(len(calls), 1)  # 404 fail-fast — retry yok
         m.assert_not_called()
 
+    def test_default_retries_is_three(self):
+        # IA SSL handshake timeout'larına karşı varsayılan deneme sayısı 3
+        # (archive_check → _http_json(url) varsayılan retries'ı kullanır).
+        self.assertEqual(vd.REFERENCE_HTTP_RETRIES, 3)
+
+    def test_default_retries_gives_three_attempts_on_transient(self):
+        # Varsayılan (retries argümansız) geçici hatalarda 3 deneme yapar —
+        # IA'nın archive.org SSL handshake yolunun CI'da 3. denemede geçtiği
+        # davranışı sabitler (flaky UNVERIFIED sıfırlama hedefi).
+        calls = []
+
+        def urlopen(req, timeout):
+            calls.append(timeout)
+            raise urllib.error.URLError("geçici SSL handshake")
+
+        with mock.patch.object(vd.urllib.request, "urlopen",
+                               side_effect=urlopen), \
+                mock.patch.object(vd.time, "sleep") as m:
+            with self.assertRaises(urllib.error.URLError):
+                vd._http_get("http://x", timeout=15)
+        self.assertEqual(len(calls), 3)  # ilk + 2 retry
+        m.assert_has_calls([mock.call(1.0), mock.call(2.0)])
+
 
 class TestAuditBudget(unittest.TestCase):
     def test_budget_exceeded_skips_network(self):
