@@ -44,6 +44,38 @@ class TestDaemonHttpEndToEnd(unittest.TestCase):
             self.assertEqual(d["endpoints"]["/api/history"], 200)
             self.assertIsNone(d["error"])
 
+    def test_sse_endpoints_200_and_event_seen(self):
+        # Canlı akış endpoint'leri (/api/run + /api/run-stream): HTTP 200 +
+        # ilk event üretmeli (akış canlı — bağlantı test tarafından kapatılır).
+        with tempfile.TemporaryDirectory(prefix="daemon-http-") as tmp:
+            out = os.path.join(tmp, "report.json")
+            r = run("--out", out)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            with open(out, encoding="utf-8") as f:
+                d = json.load(f)
+            self.assertIn("/api/run", d["sse_endpoints"])
+            self.assertIn("/api/run-stream", d["sse_endpoints"])
+            for ep in ("/api/run", "/api/run-stream"):
+                self.assertEqual(d["sse_endpoints"][ep]["status"], 200,
+                                 ep)
+                self.assertTrue(d["sse_endpoints"][ep]["event_seen"], ep)
+
+    def test_run_now_accepted(self):
+        # /api/run-now: 200+started veya busy-guard 409+already_running —
+        # ikisi de geçerli (endpoint canlı ve doğru yanıt veriyor).
+        with tempfile.TemporaryDirectory(prefix="daemon-http-") as tmp:
+            out = os.path.join(tmp, "report.json")
+            r = run("--out", out)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            with open(out, encoding="utf-8") as f:
+                d = json.load(f)
+            rn = d["run_now"]
+            self.assertIn(rn["status"], (200, 409))
+            if rn["status"] == 200:
+                self.assertEqual(rn["body"].get("status"), "started")
+            elif rn["status"] == 409:
+                self.assertEqual(rn["body"].get("status"), "already_running")
+
     def test_report_has_server_and_port(self):
         with tempfile.TemporaryDirectory(prefix="daemon-http-") as tmp:
             out = os.path.join(tmp, "report.json")

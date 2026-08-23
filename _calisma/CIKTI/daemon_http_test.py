@@ -11,11 +11,15 @@ uçtan uca doğrular:
      --preview-dir (preview.html kopyası) ile.
   2. Sunucu ayağa kalkana dek /preview.html, /api/latest, /api/history'yi
      poll et; üçü de HTTP 200 dönmeli.
-  3. Sunucuyu düzgünce kapat; raporu --out JSON'a yaz.
+  3. Çoklu istek kapsamı: canlı akış endpoint'leri (/api/run +
+     /api/run-stream — SSE) HTTP 200 + ilk event üretmeli (akış canlı;
+     bağlantı test tarafından kapatılır) ve /api/run-now manuel tetiklemeyi
+     kabul etmeli (200+started veya busy-guard 409+already_running).
+  4. Sunucuyu düzgünce kapat; raporu --out JSON'a yaz.
 
-Sözleşme: exit 0 = üç endpoint de 200 (daemon modu sağlıklı); exit 1 =
-zaman aşımı/yanıt yok/200 değil; exit 2 = kullanım hatası. Her adım
-fail-closed'dur.
+Sözleşme: exit 0 = üç endpoint + SSE akışları + run-now hepsi geçerli
+(daemon modu sağlıklı); exit 1 = zaman aşımı/yanıt yok/200 değil; exit 2 =
+kullanım hatası. Her adım fail-closed'dur.
 
 CI bağlamı: advisory job (continue-on-error) — build'i bloke etmez, rapor
 artifact + run summary'de denetlenir. Kullanım:
@@ -47,10 +51,15 @@ import urllib.request
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 ENDPOINTS = ("/preview.html", "/api/latest", "/api/history")
+# Canlı akış endpoint'leri: SSE bağlantısı açık kalır (stream) — HTTP 200
+# + ilk event'in gelmesi (snapshot/info veya keepalive) akışın canlı
+# olduğunu kanıtlar; bağlantı test tarafından kapatılır.
+SSE_ENDPOINTS = ("/api/run", "/api/run-stream")
 START_TIMEOUT = 60   # daemon ayağa kalkana kadar
 POLL_STEP = 1.0
 INITIAL_RUN_WAIT = 240  # verify_loop'un ilk (override'sız) run'ı bitene kadar
 OVERRIDE_RUN_WAIT = 300  # override run'ının rapor üretmesi için bekleme
+SSE_PROBE_TIMEOUT = 5   # SSE bağlantısında ilk event bekleme süresi
 
 
 def _latest_json(port):
@@ -149,6 +158,76 @@ def http_status(url, timeout=5):
         return None
 
 
+def sse_probe(port, path, timeout=SSE_PROBE_TIMEOUT):
+    """SSE endpoint'ini canlı akış olarak doğrula: HTTP 200 + ilk event.
+
+    SSE bağlantısı açık kalır (stream) ve ilk event küçük olabilir
+    (ör. /api/run-stream info ~100 B) — urllib read(512) bu durumda 512
+    byte dolana dek bloke olur. Bu yüzden ham soket kullanılır: status
+    satırı + başlıklar + ilk chunk (event veya keepalive) soket zaman
+    aşımıyla okunur, bağlantı test tarafından kapatılır. Döndürür
+    (status, first_chunk_text). status None = bağlantı kurulamadı.
+    """
+    try:
+        s = socket.create_connection(("127.0.0.1", port), timeout=timeout)
+        s.settimeout(timeout)
+        s.sendall(f"GET {path} HTTP/1.1\r\nHost: 127.0.0.1\r\n"
+                  f"Connection: close\r\n\r\n".encode())
+        # Status satırı + başlıkları oku (\r\n\r\n'e kadar).
+        buf = b""
+        while b"\r\n\r\n" not in buf:
+            chunk = s.recv(4096)
+            if not chunk:
+                break
+            buf += chunk
+        head, _, body = buf.partition(b"\r\n\r\n")
+        status_line = head.split(b"\r\n", 1)[0].decode("utf-8", "replace")
+        try:
+            status = int(status_line.split()[1])
+        except (IndexError, ValueError):
+            status = None
+        # İlk event'i bekle: mevcut body yeterli değilse bir recv daha (kısa).
+        if not body.strip():
+            try:
+                body += s.recv(4096)
+            except socket.timeout:
+                pass
+        s.close()
+        return status, body.decode("utf-8", errors="replace")
+    except (OSError, socket.timeout):
+        try:
+            s.close()
+        except Exception:
+            pass
+        return None, ""
+
+
+def run_now_probe(port, timeout=10):
+    """/api/run-now'u tetikle: manuel run isteği kabul ediliyor mu?
+
+    Döndürür (status, body_dict). 200 + status=started → manuel tetikleme
+    çalıştı; 409 + already_running → bir verify zaten koşuyor (loop'un ilk
+    run'ı — busy-guard doğru çalışıyor, geçerli yanıt). Başka durum → FAIL.
+    """
+    try:
+        with urllib.request.urlopen(
+                f"http://127.0.0.1:{port}/api/run-now", timeout=timeout) as r:
+            status = r.status
+            try:
+                body = json.loads(r.read().decode("utf-8"))
+            except (ValueError, OSError):
+                body = {}
+            return status, body
+    except urllib.error.HTTPError as e:
+        try:
+            body = json.loads(e.read().decode("utf-8"))
+        except (ValueError, OSError):
+            body = {}
+        return e.code, body
+    except (urllib.error.URLError, OSError):
+        return None, {}
+
+
 def make_stub_dir(src_dir, dst_dir):
     """Server açılış kontrollerini geçirecek asgari paket dizinini kurar.
 
@@ -216,7 +295,8 @@ def main():
         return 2
 
     report = {"server": args.server, "ok": False, "port": args.port,
-              "endpoints": {}, "error": None, "history_out": args.history_out,
+              "endpoints": {}, "sse_endpoints": {}, "run_now": None,
+              "error": None, "history_out": args.history_out,
               "override_run": None}
 
     with tempfile.TemporaryDirectory(prefix="daemon-http-") as tmp:
@@ -252,6 +332,22 @@ def main():
             report["endpoints"] = statuses
             report["ok"] = ok and all(
                 statuses.get(ep) == 200 for ep in ENDPOINTS)
+            # Canlı akış endpoint'leri (SSE): HTTP 200 + ilk event gelmeli
+            # (akışın canlı olduğunu kanıtlar; bağlantı test tarafından
+            # kapatılır — stream sonsuz açık kalmaz).
+            for ep in SSE_ENDPOINTS:
+                st, first = sse_probe(port, ep)
+                report["sse_endpoints"][ep] = {
+                    "status": st, "event_seen": bool(first.strip())}
+                if st != 200 or not first.strip():
+                    report["ok"] = False
+            # /api/run-now: manuel tetikleme kabul ediliyor mu? 200+started
+            # veya 409+already_running (busy-guard, loop'un ilk run'ı) ikisi
+            # de geçerli — endpoint canlı ve doğru yanıt veriyor.
+            rn_status, rn_body = run_now_probe(port)
+            report["run_now"] = {"status": rn_status, "body": rn_body}
+            if rn_status not in (200, 409):
+                report["ok"] = False
             # Daemon süreci hâlâ ayakta mı? (setsid + stdio yönlendirmesi
             # sonrası canlı kalmalı — EBADF düzeltmesinin özü.)
             alive = proc.poll() is None
@@ -259,7 +355,9 @@ def main():
             report["ok"] = report["ok"] and alive
             if not report["ok"]:
                 report["error"] = (
-                    f"endpoint'ler: {statuses} | daemon_alive={alive}")
+                    f"endpoint'ler: {statuses} | sse: "
+                    f"{report['sse_endpoints']} | run-now: "
+                    f"{rn_status} | daemon_alive={alive}")
                 print(f"FAIL: {report['error']}", file=sys.stderr)
             # Override run: [CLI override] satırları ayrı rapora gider
             # (PRECOMMIT_RAPORU deseni). Yalnızca --override-out verilirse
@@ -301,7 +399,8 @@ def main():
 
     _write_report(args.out, report)
     if report["ok"]:
-        print("PASS: üç endpoint de HTTP 200, daemon canlı "
+        print("PASS: üç endpoint + canlı akış (SSE) + run-now HTTP 200, "
+              "daemon canlı "
               f"(port {port}) — rapor: {args.out}")
         return 0
     return 1
