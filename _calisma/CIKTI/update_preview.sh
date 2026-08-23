@@ -57,6 +57,7 @@
 #   update_preview.sh --mirror-check       # mirror güncel mi? (0 güncel/1 bayat/2 hata)
 #   update_preview.sh --mirror-force       # mirror'ı koşulsuz yeniden kopyala
 #   update_preview.sh --bootstrap [HOME]   # mirror + HTML + plist TEK ADIMDA (fail-closed)
+#   update_preview.sh --bootstrap --start [HOME]  # aynı komutta launchctl bootstrap de (4/4)
 #   update_preview.sh --help
 #
 # Ortam değişkenleri (override):
@@ -514,15 +515,19 @@ plist_watch() {
 }
 
 # ============================================================================
-# BÖLÜM 4 — tek komut bootstrap (--bootstrap): mirror + HTML + plist
+# BÖLÜM 4 — tek komut bootstrap (--bootstrap): mirror + HTML + plist (+ --start)
 # ============================================================================
 # preview sunucusunu TCC-safe rotadan ayağa kaldırmak için gereken ÜÇ
 # artefaktı tek adımda kurar: (1) verify mirror senkronu (sync_verify_mirror.sh
 # — launchd GUI agent'ının --dir'i), (2) HTML dashboard build'i (TCC-safe
 # kopya), (3) LaunchAgent plist'leri (şablondan üretim). Her adım
 # fail-closed'dur: kaynak yok / senkron hatası / geçersiz plist → hata ile
-# durur (exit ≠ 0). launchctl bootstrap'i AYRI yapılır (--start) — bu mod
-# yalnızca artefaktları kurar; --start ile daemon ayağa kaldırılır.
+# durur (exit ≠ 0).
+#
+# Opsiyonel `--start` bayrağı: üç artefakt kurulduktan SONRA aynı komutta
+# launchctl bootstrap'i de çalıştırır (4. adım — plist_start, varsayılan
+# birincil label). Bayraksız koşum yalnızca artefaktları kurar ve sonraki
+# adımı hatırlatır (eski davranış korunur).
 
 # ============================================================================
 # BÖLÜM 3b — durum göstergesi (--status)
@@ -603,8 +608,15 @@ plist_status() {
 }
 
 bootstrap_all() {
-  local home
-  home="$(plist_home "${1:-}")"
+  # Argümanlar: [HOME] ve opsiyonel --start bayrağı (sıra önemsiz).
+  local home="" start_flag=0 a
+  for a in "$@"; do
+    case "$a" in
+      --start) start_flag=1 ;;
+      *) [ -z "$home" ] && home="$a" ;;
+    esac
+  done
+  home="$(plist_home "${home:-}")"
 
   say "=== BOOTSTRAP 1/3: verify mirror senkronu ==="
   "$SCRIPT_DIR/sync_verify_mirror.sh" || return $?
@@ -616,8 +628,16 @@ bootstrap_all() {
   say "=== BOOTSTRAP 3/3: LaunchAgent plist üretimi ==="
   plist_do "$home" || return $?
 
-  say "BOOTSTRAP: tamam — mirror senkron, HTML build, plist'ler hazır"
-  say "           sonraki adım: update_preview.sh --start (launchctl bootstrap)"
+  if [ "$start_flag" = "1" ]; then
+    # Opsiyonel --start: üç artefakt kurulduktan SONRA aynı komutta daemon'u
+    # ayağa kaldır (launchctl bootstrap — plist_start, varsayılan birincil).
+    say "=== BOOTSTRAP 4/4: launchctl bootstrap (--start) ==="
+    plist_start || return $?
+    say "BOOTSTRAP: tamam — mirror + HTML + plist + launchctl bootstrap TEK KOMUTTA"
+  else
+    say "BOOTSTRAP: tamam — mirror senkron, HTML build, plist'ler hazır"
+    say "           sonraki adım: update_preview.sh --start (launchctl bootstrap)"
+  fi
 }
 
 usage() {
@@ -699,7 +719,7 @@ case "${1:-build}" in
     "$SCRIPT_DIR/sync_verify_mirror.sh" --check
     ;;
   --bootstrap)
-    bootstrap_all "${2:-}"
+    bootstrap_all "${@:2}"
     ;;
   build)
     [ -f "$SRC" ] || { err "kaynak yok: $SRC"; exit 2; }

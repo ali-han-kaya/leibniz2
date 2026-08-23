@@ -338,6 +338,60 @@ class TestBootstrapAll(unittest.TestCase):
             self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
             self.assertIn("kaynak yok", r.stderr)
 
+    def test_bootstrap_with_start_invokes_launchctl(self):
+        """--bootstrap --start: üç artefakt + launchctl bootstrap AYNI KOMUTTA.
+
+        Linux CI'da gerçek launchctl yok — PATH'e çağrılarını loglayıp exit 0
+        dönen bir fake shim konur. Sonuç: --start bayrağı plist_start'ı
+        tetikler (shim logunda `bootstrap .../com.freebuff.preview-leibniz2`
+        görünür), üç artefakt kurulur, komut exit 0 döner.
+        """
+        with tempfile.TemporaryDirectory(prefix="plist-gate-") as home, \
+             tempfile.TemporaryDirectory(prefix="launchctl-shim-") as bindir:
+            log = os.path.join(bindir, "launchctl.log")
+            shim = os.path.join(bindir, "launchctl")
+            with open(shim, "w") as f:
+                f.write("#!/bin/bash\n")
+                f.write(f'echo "$@" >> "{log}"\n')
+                f.write("exit 0\n")
+            os.chmod(shim, 0o755)
+            env = {"PATH": bindir + os.pathsep + os.environ.get("PATH", "")}
+            r = run_env(home, env, "bash", UPDATE_PREVIEW,
+                        "--bootstrap", "--start", home)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertIn("BOOTSTRAP 4/4", r.stdout)
+            self.assertIn("TEK KOMUTTA", r.stdout)
+            # launchctl bootstrap gerçekten çağrıldı (birincil label).
+            self.assertTrue(os.path.isfile(log), "launchctl hiç çağrılmadı")
+            with open(log) as f:
+                calls = f.read()
+            self.assertIn("bootstrap", calls)
+            self.assertIn("com.freebuff.preview-leibniz2", calls)
+            # Üç artefakt kuruldu.
+            arts = self._artifacts(home)
+            for name, p in arts.items():
+                self.assertTrue(os.path.isfile(p), f"{name} üretilmedi: {p}")
+
+    def test_bootstrap_without_start_skips_launchctl(self):
+        """Bayraksız --bootstrap: launchctl ÇAĞRILMAZ, yalnızca artefaktlar."""
+        with tempfile.TemporaryDirectory(prefix="plist-gate-") as home, \
+             tempfile.TemporaryDirectory(prefix="launchctl-shim-") as bindir:
+            log = os.path.join(bindir, "launchctl.log")
+            shim = os.path.join(bindir, "launchctl")
+            with open(shim, "w") as f:
+                f.write("#!/bin/bash\n")
+                f.write(f'echo "$@" >> "{log}"\n')
+                f.write("exit 0\n")
+            os.chmod(shim, 0o755)
+            env = {"PATH": bindir + os.pathsep + os.environ.get("PATH", "")}
+            r = run_env(home, env, "bash", UPDATE_PREVIEW,
+                        "--bootstrap", home)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertNotIn("BOOTSTRAP 4/4", r.stdout)
+            self.assertIn("sonraki adım: update_preview.sh --start", r.stdout)
+            self.assertFalse(os.path.isfile(log),
+                             "bayraksız koşumda launchctl çağrılmamalı")
+
 
 class TestParsePlistCheckOutput(unittest.TestCase):
     """parse_plist_check_output: çok-profilli çıktıyı profil bazında ayrıştırır."""

@@ -342,6 +342,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-23 | feat | (changelog) --link modu ekle | [`f31049a`](https://github.com/ali-han-kaya/leibniz2/commit/f31049a) |
 | 2026-08-23 | docs | (changelog) tabloları f31049a'ya senkronla | [`798052b`](https://github.com/ali-han-kaya/leibniz2/commit/798052b) |
 | 2026-08-23 | refactor | (changelog) tek kaynak — README changelog, PUBLISH işaretçi | [`cad671b`](https://github.com/ali-han-kaya/leibniz2/commit/cad671b) |
+| 2026-08-23 | docs | README'ye CI/pre-commit/license rozetleri + LICENSE | [`0879c1c`](https://github.com/ali-han-kaya/leibniz2/commit/0879c1c) |
 
 ### Regresyon notları
 
