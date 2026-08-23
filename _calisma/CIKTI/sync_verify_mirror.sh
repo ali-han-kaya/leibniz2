@@ -97,6 +97,7 @@ LEAN_FILES=(
 PREVIEW_FILES=(
   "preview_server.py|preview_server.py"
   "_daemonize.py|_daemonize.py"
+  "preview_prestart.py|preview_prestart.py"
 )
 
 # Branch protection görsel kılavuzu (adım 2, preview mirror): kaynak repo

@@ -353,6 +353,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-23 | other | manifest: daemon-http artifact'ını pattern'e ekle, SHA-256 sabitle | [`d8451a4`](https://github.com/ali-han-kaya/leibniz2/commit/d8451a4) |
 | 2026-08-23 | other | K18: daemon smoke --full'a fail-closed bağla, K20 renumber | [`d58d5e3`](https://github.com/ali-han-kaya/leibniz2/commit/d58d5e3) |
 | 2026-08-23 | other | K18 daemon smoke: SSE + run-now endpoint'leri de 200 ile doğrula | [`8430f99`](https://github.com/ali-han-kaya/leibniz2/commit/8430f99) |
+| 2026-08-23 | other | fresh_clone_setup: --check'e daemon rotası denetimi ekle (K18 smoke) | [`a8cdf74`](https://github.com/ali-han-kaya/leibniz2/commit/a8cdf74) |
 
 ### Regresyon notları
 

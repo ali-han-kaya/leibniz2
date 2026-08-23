@@ -156,7 +156,20 @@ plist_default_template() {
   <key>Label</key><string>{{LABEL}}</string>
   <key>ProgramArguments</key>
   <array>
+    <!-- PreStart kontrolü: preview_prestart.py mirror bayatlığını sunucudan
+         ÖNCE denetler (eksik/bozuk/drift → sunucu hiç başlamaz, exit 1).
+         PASS'te ayraç sonrası sunucu komutunu exec eder (PID korunur). -->
     <string>/usr/bin/python3</string>
+    <string>{{HOME}}/Library/Caches/com.freebuff/preview/preview_prestart.py</string>
+    <string>--preview-dir</string>
+    <string>{{HOME}}/Library/Caches/com.freebuff/preview</string>
+    <string>--verify-dir</string>
+    <string>{{HOME}}/Library/Caches/com.freebuff/verify</string>
+    <string>--label</string>
+    <string>{{LABEL}}</string>
+    <string>--log</string>
+    <string>{{HOME}}/Library/Logs/com.freebuff/prestart-{{LOGNAME}}.log</string>
+    <string>--</string>
     <string>{{HOME}}/Library/Caches/com.freebuff/preview/preview_server.py</string>
     <string>--dir</string>
     <string>{{HOME}}/Library/Caches/com.freebuff/verify</string>
