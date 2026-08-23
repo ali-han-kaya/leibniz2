@@ -7,10 +7,13 @@ Kapsam:
   - non-conventional prefix ayrıştırma (V5h:, Add ..., Basic ...)
   - find_missing_commits: yalnızca tablodaki en yeni tarihten sonraki commit'ler
   - find_stale_hashes: tabloda olup git log'da olmayan hash'ler
-  - format_readme_row / format_pub_row: tablo satırı üretimi
+  - format_readme_row: tablo satırı üretimi
+  - TEK KAYNAK: PUBLISH changelog tablosu kaldırıldı — legacy tablo →
+    README işaretçisi (publish_changelog_rows / enforce_publish_pointer)
   - --print / --check / --update modları
 """
 
+import contextlib
 import os
 import sys
 import tempfile
@@ -190,14 +193,11 @@ class TestFormatRow(unittest.TestCase):
         self.assertIn("(ci) add X", row)
         self.assertIn("`abc1234`", row)
 
-    def test_pub_row_format(self):
-        ci = gc.CommitInfo("def5678", "def5678full", "2026-08-20",
-                           "fix: bug Y", "fix", "bug Y")
-        row = gc.format_pub_row(ci)
-        self.assertIn("2026-08-20", row)
-        self.assertIn("fix", row)
-        self.assertIn("bug Y", row)
-        self.assertIn("`def5678`", row)
+    def test_readme_row_format_linked(self):
+        ci = gc.CommitInfo("abc1234", "abc1234full", "2026-08-21",
+                           "feat: X", "feat", "X")
+        row = gc.format_readme_row(ci, "https://github.com/o/r")
+        self.assertIn("[`abc1234`](https://github.com/o/r/commit/abc1234)", row)
 
 
 class TestTagRegexFilter(unittest.TestCase):
@@ -530,25 +530,6 @@ class TestLinkMode(unittest.TestCase):
                 self.BASE, "cat")
         self.assertEqual((converted, total), (0, 1))
 
-    def test_link_pub_rows_uses_section_group(self):
-        content = textwrap.dedent("""\
-            ## Değişiklik Geçmişi
-
-            | Tarih | Bölüm | Değişiklik | Commit |
-            |---|---|---|---|
-            | 2026-08-20 | AŞAMA 0 | precheck | `def5678` |
-            """)
-        with tempfile.TemporaryDirectory() as td:
-            pub = Path(td, "PUBLISH.md")
-            pub.write_text(content)
-            converted, total = gc.link_file_changelog(
-                pub, "## Değişiklik Geçmişi", gc._PUB_ROW_RE,
-                self.BASE, "section")
-            out = pub.read_text()
-        self.assertEqual((converted, total), (1, 1))
-        self.assertIn("[`def5678`](https://github.com/o/r/commit/def5678)", out)
-        self.assertIn("| AŞAMA 0 |", out)
-
     def test_rows_linked_detects_linked_table(self):
         hdr = "## Değişiklik Geçmişi\n"
         linked = hdr + "| 2026-08-21 | feat | X | [`aaa1111`](https://github.com/o/r/commit/aaa1111) |\n"
@@ -632,7 +613,8 @@ class TestMainLinkMode(unittest.TestCase):
             | 2026-08-20 | AŞAMA 0 | precheck | `bbb2222` |
             """))
 
-    def test_link_converts_both_files(self):
+    def test_link_converts_readme_only(self):
+        """TEK KAYNAK: --link yalnızca README tablosunu bağlar; PUBLISH'e dokunmaz."""
         import io
         buf = io.StringIO()
         with patch.object(sys, "argv", ["gen_changelog.py", "--link",
@@ -643,8 +625,10 @@ class TestMainLinkMode(unittest.TestCase):
             gc.main()
         self.assertIn("[`aaa1111`](https://github.com/o/r/commit/aaa1111)",
                       self.readme.read_text())
-        self.assertIn("[`bbb2222`](https://github.com/o/r/commit/bbb2222)",
-                      self.pub.read_text())
+        # PUBLISH changelog'u ayrı kaynak değil — satırları işlenmez
+        self.assertIn("`bbb2222`", self.pub.read_text())
+        self.assertNotIn("[`bbb2222`](https://github.com/o/r/commit/bbb2222)",
+                         self.pub.read_text())
         self.assertIn("1/1 satır bağlandı", buf.getvalue())
 
     def test_link_idempotent_second_run(self):
@@ -661,6 +645,7 @@ class TestMainLinkMode(unittest.TestCase):
         self.assertIn("0/1 satır bağlandı", buf2.getvalue())
 
     def test_link_without_base_url_exits_2(self):
+
         import io
         err = io.StringIO()
         with patch.object(gc, "derive_base_url", return_value=None), \
@@ -672,6 +657,154 @@ class TestMainLinkMode(unittest.TestCase):
             gc.main()
         self.assertEqual(cm.exception.code, 2)
         self.assertIn("base URL", err.getvalue())
+
+
+class TestSingleSourcePublish(unittest.TestCase):
+    """TEK KAYNAK: PUBLISH changelog tablosu kaldırılır → README işaretçisi."""
+
+    README_OK = textwrap.dedent("""\
+        # Test
+
+        ## Değişiklik Geçmişi
+
+        | Tarih | Kategori | Değişiklik | Commit |
+        |---|---|---|---|
+        | 2026-08-21 | feat | X | `aaa1111` |
+        """)
+
+    def _pub_with_legacy_table(self):
+        return textwrap.dedent("""\
+            # Senaryo
+
+            ## Değişiklik Geçmişi
+
+            > Her satır, ilgili commit ile denetlenebilir.
+
+            | Tarih | Bölüm | Değişiklik | Commit |
+            |---|---|---|---|
+            | 2026-08-21 | AŞAMA 0 | precheck added | `aaa1111` |
+            | 2026-08-20 | Rollback | squash kaydı | `bbb2222` |
+
+            ## Başka Bölüm
+
+            İçerik...
+            """)
+
+    def test_publish_changelog_rows_detects_legacy(self):
+        with tempfile.TemporaryDirectory() as td:
+            pub = Path(td, "PUBLISH.md")
+            pub.write_text(self._pub_with_legacy_table())
+            rows = gc.publish_changelog_rows(pub)
+        self.assertEqual(len(rows), 2)
+
+    def test_publish_changelog_rows_empty_when_pointer(self):
+        with tempfile.TemporaryDirectory() as td:
+            pub = Path(td, "PUBLISH.md")
+            pub.write_text("## Değişiklik Geçmişi\n\n" + gc.PUBLISH_POINTER + "\n")
+            self.assertEqual(gc.publish_changelog_rows(pub), [])
+
+    def test_enforce_pointer_replaces_legacy_table(self):
+        """Legacy tablo → işaretçi; sonraki bölüm korunur."""
+        with tempfile.TemporaryDirectory() as td:
+            pub = Path(td, "PUBLISH.md")
+            pub.write_text(self._pub_with_legacy_table())
+            changed = gc.enforce_publish_pointer(pub)
+            out = pub.read_text()
+        self.assertTrue(changed)
+        self.assertIn(gc.PUBLISH_POINTER, out)
+        self.assertNotIn("| 2026-08-21 | AŞAMA 0 |", out)
+        self.assertNotIn("Rollback", out)
+        self.assertIn("## Başka Bölüm", out)  # sonraki bölüm korundu
+
+    def test_enforce_pointer_idempotent(self):
+        with tempfile.TemporaryDirectory() as td:
+            pub = Path(td, "PUBLISH.md")
+            pub.write_text(self._pub_with_legacy_table())
+            gc.enforce_publish_pointer(pub)
+            # İkinci koşu: satır yok → değişiklik yapmaz
+            changed2 = gc.enforce_publish_pointer(pub)
+            self.assertFalse(changed2)
+
+    def test_enforce_pointer_noop_without_section(self):
+        with tempfile.TemporaryDirectory() as td:
+            pub = Path(td, "PUBLISH.md")
+            pub.write_text("## Başka Bölüm\nİçerik...\n")
+            self.assertFalse(gc.enforce_publish_pointer(pub))
+
+    def test_check_flags_legacy_publish_table(self):
+        """main --check: PUBLISH legacy tablo → exit 1 (çift kaynak)."""
+        import io
+        commits = [gc.CommitInfo("aaa1111", "a", "2026-08-21", "feat: X",
+                                 "feat", "X")]
+        with tempfile.TemporaryDirectory() as td:
+            readme = Path(td, "README.md")
+            readme.write_text(self.README_OK)
+            pub = Path(td, "PUBLISH.md")
+            pub.write_text(self._pub_with_legacy_table())
+            err = io.StringIO()
+            with patch.object(gc, "get_git_log", return_value=commits), \
+                 patch.object(sys, "argv", ["gen_changelog.py", "--check",
+                                            "--readme", str(readme),
+                                            "--publish", str(pub)]), \
+                 contextlib.redirect_stdout(err), \
+                 self.assertRaises(SystemExit) as cm:
+                gc.main()
+        self.assertEqual(cm.exception.code, 1)
+        self.assertIn("legacy changelog", err.getvalue())
+
+    def test_check_passes_when_publish_is_pointer(self):
+        """main --check: PUBLISH işaretçiyse → PASS (tek kaynak)."""
+        import io
+        commits = [gc.CommitInfo("aaa1111", "a", "2026-08-21", "feat: X",
+                                 "feat", "X")]
+        with tempfile.TemporaryDirectory() as td:
+            readme = Path(td, "README.md")
+            readme.write_text(self.README_OK)
+            pub = Path(td, "PUBLISH.md")
+            pub.write_text("## Değişiklik Geçmişi\n\n" + gc.PUBLISH_POINTER + "\n")
+            out = io.StringIO()
+            with patch.object(gc, "get_git_log", return_value=commits), \
+                 patch.object(sys, "argv", ["gen_changelog.py", "--check",
+                                            "--readme", str(readme),
+                                            "--publish", str(pub)]), \
+                 contextlib.redirect_stdout(out), \
+                 self.assertRaises(SystemExit) as cm:
+                gc.main()
+        self.assertEqual(cm.exception.code, 0)
+        self.assertIn("TÜMÜ PASS", out.getvalue())
+
+    def test_update_converts_legacy_publish_to_pointer(self):
+        """main --update: README'yi günceller + PUBLISH legacy tabloyu işaretçiye çevirir."""
+        import io
+        commits = [gc.CommitInfo("aaa1111", "a", "2026-08-21", "feat: X",
+                                 "feat", "X")]
+        with tempfile.TemporaryDirectory() as td:
+            readme = Path(td, "README.md")
+            readme.write_text(textwrap.dedent("""\
+                # Test
+
+                ## Değişiklik Geçmişi
+
+                | Tarih | Kategori | Değişiklik | Commit |
+                |---|---|---|---|
+                """))
+            pub = Path(td, "PUBLISH.md")
+            pub.write_text(self._pub_with_legacy_table())
+            out = io.StringIO()
+            with patch.object(gc, "get_git_log", return_value=commits), \
+                 patch.object(sys, "argv", ["gen_changelog.py", "--update",
+                                            "--readme", str(readme),
+                                            "--publish", str(pub)]), \
+                 contextlib.redirect_stdout(out):
+                gc.main()
+            readme_out = readme.read_text()
+            pub_out = pub.read_text()
+        # README: aaa1111 satırı eklendi
+        self.assertIn("`aaa1111`", readme_out)
+        # PUBLISH: legacy tablo işaretçiye çevrildi
+        self.assertIn(gc.PUBLISH_POINTER, pub_out)
+        self.assertNotIn("Rollback", pub_out)
+        self.assertIn("legacy changelog tablosu kaldırıldı", out.getvalue())
 
 
 class TestMainTagRegex(unittest.TestCase):
@@ -764,18 +897,6 @@ class TestRegexPatterns(unittest.TestCase):
         self.assertEqual(m.group("hash"), "abc1234")
         self.assertEqual(m.group("desc"), "add X")
 
-    def test_pub_row_re_matches(self):
-        line = "| 2026-08-21 | AŞAMA 0 | precheck added | `def5678` |"
-        m = gc._PUB_ROW_RE.match(line)
-        self.assertIsNotNone(m)
-        self.assertEqual(m.group("section"), "AŞAMA 0")
-
-    def test_pub_row_re_matches_linked(self):
-        line = "| 2026-08-21 | AŞAMA 0 | precheck added | [`def5678`](https://github.com/o/r/commit/def5678) |"
-        m = gc._PUB_ROW_RE.match(line)
-        self.assertIsNotNone(m)
-        self.assertEqual(m.group("section"), "AŞAMA 0")
-        self.assertEqual(m.group("hash"), "def5678")
 
     def test_readme_row_re_does_not_match_regresyon(self):
         line = "| R1 | 2026-08-19 | CI 0s | YAML | satır | `d57a60c` |"

@@ -1,14 +1,22 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""gen_changelog.py — git log'dan changelog tablosu üret + docs ile senkronize et.
+"""gen_changelog.py — git log'dan changelog tablosu üret (TEK KAYNAK: README.md).
 
 Conventional-commit mesajlarını ayrıştırır (feat/fix/ci/docs/refs/publish/history/
 teslim/ispat/test/chore/refactor/perf), her commit için tablo satırı üretir ve
-README.md ile docs/PUBLISH_SCENARIO.md'deki changelog bölümlerini günceller.
+README.md'deki changelog bölümünü günceller.
+
+Tek kaynak kuralı: changelog YALNIZCA README.md'dedir. docs/PUBLISH_SCENARIO.md
+AYRI bir changelog tutmaz — eski "Bölüm" tablosu (çift kaynak) kaldırılmıştır;
+PUBLISH'te yalnızca README'ye işaret eden tek satırlık not kalır. --update,
+PUBLISH'te legacy tablo görürse onu otomatik işaretçiye çevirir; --check ise
+legacy tabloyu DRIFT olarak raporlar (tek kaynak sözleşmesi fail-closed).
 
 Modlar:
-  --update   mevcut tabloyu yeni commit'lerle genişletir (kaymış satır yoksa)
-  --check    docs'taki tablo ↔ git log arasındaki kaymayı raporlar (exit 1 = drift)
+  --update   README tablosunu yeni commit'lerle genişletir + PUBLISH legacy
+             tablosunu işaretçiye çevirir (kaymış satır yoksa)
+  --check    README tablosu ↔ git log kaymasını raporlar; PUBLISH legacy
+             tablosu varsa drift (exit 1)
   --print    tabloyu stdout'a basar (dosyaya yazmaz)
   --link     tablodaki commit hash'lerini GitHub commit URL'lerine bağlar
              (in-place; satırlar [`hash`](URL) formuna çevrilir, idempotent)
@@ -270,13 +278,9 @@ def get_git_log(limit: int | None = None) -> list[CommitInfo]:
 # README tablo satırı: | Tarih | Kategori | Değişiklik | Commit |
 # Commit hücresi bağlı ([`hash`](URL)) veya bağsız (`hash`) olabilir — --link
 # tabloyu bağlı forma çevirir, --check/--update her ikisini de okur.
+# TEK KAYNAK: yalnızca README changelog tablosu; PUBLISH legacy tablosu yok.
 _README_ROW_RE = re.compile(
     r"^\|\s*(?P<date>\d{4}-\d{2}-\d{2})\s*\|\s*(?P<cat>[^|]+?)\s*\|\s*(?P<desc>[^|]+?)\s*\|\s*(?:\[)?`(?P<hash>[0-9a-f]{7,40})`(?:\]\([^)]*\))?\s*\|$"
-)
-
-# PUBLISH_SCENARIO tablo satırı: | Tarih | Bölüm | Değişiklik | Commit |
-_PUB_ROW_RE = re.compile(
-    r"^\|\s*(?P<date>\d{4}-\d{2}-\d{2})\s*\|\s*(?P<section>[^|]+?)\s*\|\s*(?P<desc>[^|]+?)\s*\|\s*(?:\[)?`(?P<hash>[0-9a-f]{7,40})`(?:\]\([^)]*\))?\s*\|$"
 )
 
 # Regresyon satırı (README): | ID | Tarih | ... | Commit |
@@ -367,14 +371,68 @@ def format_readme_row(ci: CommitInfo, base_url: str | None = None) -> str:
     return f"| {ci.date} | {ci.category} | {desc} | {cell} |"
 
 
-def format_pub_row(ci: CommitInfo, base_url: str | None = None) -> str:
-    """PUBLISH_SCENARIO changelog tablosu için satır üret (base_url verilirse bağlı)."""
-    desc = ci.description
-    if len(desc) > 80:
-        desc = desc[:77] + "..."
-    section = ci.category  # PUBLISH_SCENARIO'da "Bölüm" sütunu = kategori
-    cell = link_cell(ci.short_hash, base_url) if base_url else f"`{ci.short_hash}`"
-    return f"| {ci.date} | {section} | {desc} | {cell} |"
+# ─── PUBLISH_SCENARIO tek-kaynak işaretçisi ───────────────────────────
+
+# PUBLISH'te changelog YOKTUR — yalnızca README'ye işaret eden not kalır.
+PUBLISH_POINTER = (
+    "> Tek kaynak: README.md → **Değişiklik Geçmişi** bölümü. "
+    "Changelog tablosu git log'dan `gen_changelog.py --update` ile otomatik "
+    "üretilir; bu senaryo belgesi ayrı changelog tutmaz "
+    "(eski Bölüm-bazlı satırlar git geçmişinden geri alınabilir)."
+)
+
+
+def publish_changelog_rows(pub_path: Path) -> list[str]:
+    """PUBLISH_SCENARIO changelog bölümünde hâlâ legacy tablo satırı var mı?
+
+    Tek-kaynak sözleşmesi: PUBLISH'te changelog tablosu OLMAMALI (yalnızca
+    işaretçi). Kalan tablo satırları = çift kaynak → --check drift raporlar.
+    """
+    content = pub_path.read_text(encoding="utf-8")
+    lines = content.splitlines()
+    in_t = False
+    rows = []
+    for line in lines:
+        if "## Değişiklik Geçmişi" in line:
+            in_t = True
+            continue
+        if in_t:
+            if line.strip().startswith("#"):
+                break
+            if _README_ROW_RE.match(line):
+                rows.append(line)
+    return rows
+
+
+def enforce_publish_pointer(pub_path: Path) -> bool:
+    """PUBLISH'teki legacy changelog tablosunu tek-kaynak işaretçisiyle değiştir.
+
+    Bölümde tablo satırı varsa bölüm içeriğini PUBLISH_POINTER ile değiştirir
+    (idempotent — ikinci çalıştırmada satır kalmadığı için dokunmaz).
+    Bölüm yoksa da dokunmaz.
+
+    Returns: bu çağrıda değişiklik yapıldı mı?
+    """
+    content = pub_path.read_text(encoding="utf-8")
+    lines = content.splitlines()
+    start = None
+    for i, line in enumerate(lines):
+        if "## Değişiklik Geçmişi" in line:
+            start = i
+            break
+    if start is None:
+        return False
+    end = len(lines)
+    for i in range(start + 1, len(lines)):
+        if lines[i].strip().startswith("## "):
+            end = i
+            break
+    body = lines[start + 1:end]
+    if not any(_README_ROW_RE.match(l) for l in body):
+        return False
+    new_lines = lines[:start + 1] + [PUBLISH_POINTER] + lines[end:]
+    pub_path.write_text("\n".join(new_lines).rstrip() + "\n", encoding="utf-8")
+    return True
 
 
 # ─── ana mantık ────────────────────────────────────────────────────────
@@ -571,20 +629,18 @@ def main():
                   "(git remote get-url origin yok veya github.com değil)",
                   file=sys.stderr)
             sys.exit(2)
-        for path, header, row_re, cat_group in [
-            (readme_path, "## Değişiklik Geçmişi", _README_ROW_RE, "cat"),
-            (pub_path, "## Değişiklik Geçmişi", _PUB_ROW_RE, "section"),
-        ]:
-            if not path.exists():
-                print(f"HATA: {path} bulunamadı", file=sys.stderr)
-                sys.exit(2)
-            converted, total = link_file_changelog(
-                path, header, row_re, base, cat_group)
-            print(f"{path.name}: {converted}/{total} satır bağlandı → {base}")
-            if converted:
-                for line in path.read_text(encoding="utf-8").splitlines():
-                    if row_re.match(line) and "](" in line:
-                        print(f"  + {line.strip()}")
+        # TEK KAYNAK: --link yalnızca README changelog tablosunu bağlar;
+        # PUBLISH changelog tutmaz (işaretçi), legacy satırları işlenmez.
+        if not readme_path.exists():
+            print(f"HATA: {readme_path} bulunamadı", file=sys.stderr)
+            sys.exit(2)
+        converted, total = link_file_changelog(
+            readme_path, "## Değişiklik Geçmişi", _README_ROW_RE, base, "cat")
+        print(f"{readme_path.name}: {converted}/{total} satır bağlandı → {base}")
+        if converted:
+            for line in readme_path.read_text(encoding="utf-8").splitlines():
+                if _README_ROW_RE.match(line) and "](" in line:
+                    print(f"  + {line.strip()}")
         return
 
     # git log al
@@ -617,9 +673,9 @@ def main():
         readme_missing, readme_stale = check_file_changelog(
             readme_path, "## Değişiklik Geçmişi", _README_ROW_RE, filtered,
             all_commits=git_commits)
-        pub_missing, pub_stale = check_file_changelog(
-            pub_path, "## Değişiklik Geçmişi", _PUB_ROW_RE, filtered,
-            all_commits=git_commits)
+
+        # TEK KAYNAK sözleşmesi: PUBLISH'te legacy changelog tablosu OLMAMALI.
+        pub_rows = publish_changelog_rows(pub_path)
 
         drift = False
 
@@ -639,20 +695,10 @@ def main():
                 print(f"  ... ve {len(readme_stale) - 10} daha")
             drift = True
 
-        if pub_missing:
-            print(f"PUBLISH_SCENARIO.md: {len(pub_missing)} commit tabloda yok:")
-            for h in pub_missing[:10]:
-                print(f"  + {h}")
-            if len(pub_missing) > 10:
-                print(f"  ... ve {len(pub_missing) - 10} daha")
-            drift = True
-
-        if pub_stale:
-            print(f"PUBLISH_SCENARIO.md: {len(pub_stale)} stale hash (git log'da yok):")
-            for h in sorted(pub_stale)[:10]:
-                print(f"  - {h}")
-            if len(pub_stale) > 10:
-                print(f"  ... ve {len(pub_stale) - 10} daha")
+        if pub_rows:
+            print(f"PUBLISH_SCENARIO.md: {len(pub_rows)} legacy changelog satırı "
+                  "hâlâ mevcut (çift kaynak) — --update tek kaynağa indirir "
+                  "(işaretçi bırakır)")
             drift = True
 
         if drift:
@@ -666,7 +712,7 @@ def main():
         print("=== Changelog senkronizasyonu ===\n")
 
         base = (args.base_url or derive_base_url() or "").rstrip("/") or None
-        # README.md
+        # README.md — TEK KAYNAK changelog
         print("README.md:")
         r_added, r_stale = update_file_changelog(
             readme_path, "## Değişiklik Geçmişi", _README_ROW_RE,
@@ -683,22 +729,14 @@ def main():
             for h in r_stale:
                 print(f"    ? {h}")
 
-        # PUBLISH_SCENARIO.md
+        # PUBLISH_SCENARIO.md — legacy changelog varsa işaretçiye çevir
+        # (tek kaynak: README). Bölüm tablosu yoksa/işaretçiyse dokunmaz.
         print("\ndocs/PUBLISH_SCENARIO.md:")
-        p_added, p_stale = update_file_changelog(
-            pub_path, "## Değişiklik Geçmişi", _PUB_ROW_RE,
-            format_pub_row, filtered, all_commits=git_commits,
-            base_url=base)
-        if p_added:
-            print(f"  + {len(p_added)} yeni satır eklendi:")
-            for h in p_added:
-                print(f"    + {h}")
+        if enforce_publish_pointer(pub_path):
+            print("  legacy changelog tablosu kaldırıldı → işaretçi bırakıldı "
+                  "(tek kaynak: README.md)")
         else:
-            print("  (yeni commit yok)")
-        if p_stale:
-            print(f"  ⚠ {len(p_stale)} stale hash (silinmedi — manuel kontrol gerek):")
-            for h in p_stale:
-                print(f"    ? {h}")
+            print("  (changelog yok / zaten işaretçi — tek kaynak README.md)")
 
         print("\nTamam.")
 
