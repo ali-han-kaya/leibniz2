@@ -11,6 +11,14 @@ Modlar:
   --check    docs'taki tablo ↔ git log arasındaki kaymayı raporlar (exit 1 = drift)
   --print    tabloyu stdout'a basar (dosyaya yazmaz)
 
+Filtreleme:
+  --tag-regex REGEX   yalnızca kategori'si regex'e uyan commit'leri işler
+                      (case-insensitive). feat/fix/refs gibi yalnızca belirli
+                      kategorileri changelog'a almak için: --tag-regex 'feat|fix|refs'
+                      Stale tespiti filtreden ETKİLENMEZ (tablodaki diğer
+                      kategoriler yanlışlıkla stale raporlanmaz); yalnızca
+                      eksik-commit tespiti ve --print filtreye tabidir.
+
 Mantık:
   - Mevcut tablolardaki commit hash'leri korunur (insan özeti taşıyan satırlar)
   - git log'da olup tabloda olmayan commit'ler (descending) tabloya eklenir
@@ -23,6 +31,8 @@ Kullanım:
   python3 _calisma/CIKTI/gen_changelog.py --check
   python3 _calisma/CIKTI/gen_changelog.py --print
   python3 _calisma/CIKTI/gen_changelog.py --print --limit 10
+  python3 _calisma/CIKTI/gen_changelog.py --print --tag-regex 'feat|fix|refs'
+  python3 _calisma/CIKTI/gen_changelog.py --update --tag-regex 'feat|fix|refs'
 """
 
 from __future__ import annotations
@@ -119,6 +129,20 @@ def parse_commit(subject: str) -> tuple[str, str]:
 
     # fallback: bütün subject'i açıklama olarak kullan, kategori "other"
     return "other", subject
+
+
+def filter_commits(commits: list[CommitInfo], pattern: str | None) -> list[CommitInfo]:
+    """Kategori'si regex'e uyan commit'leri döndür (case-insensitive).
+
+    pattern None/boş → tüm commit'ler (filtre yok). Geçersiz regex → ValueError.
+    """
+    if not pattern:
+        return list(commits)
+    try:
+        rx = re.compile(pattern, re.IGNORECASE)
+    except re.error as e:
+        raise ValueError(f"geçersiz --tag-regex '{pattern}': {e}") from e
+    return [ci for ci in commits if rx.search(ci.category)]
 
 
 def get_git_log(limit: int | None = None) -> list[CommitInfo]:
@@ -301,6 +325,7 @@ def update_file_changelog(
     format_fn,
     git_commits: list[CommitInfo],
     next_section_header: str | None = None,
+    all_commits: list[CommitInfo] | None = None,
 ) -> tuple[list[str], list[str]]:
     """Dosyadaki changelog tablosunu güncelle.
 
@@ -323,9 +348,11 @@ def update_file_changelog(
     # Mevcut hash'leri çıkar
     existing_hashes = extract_hashes_from_table(content, row_re, section_header)
 
-    # Eksik commit'leri bul
+    # Eksik commit'leri bul (git_commits filtreli olabilir — --tag-regex)
     missing = find_missing_commits(git_commits, existing_hashes)
-    stale = find_stale_hashes(git_commits, existing_hashes)
+    # Stale tespiti FİLTRELENMEMIŞ tam listeyle yapılır: tablodaki diğer
+    # kategoriler (--tag-regex kapsamı dışı) yanlışlıkla stale raporlanmaz
+    stale = find_stale_hashes(all_commits or git_commits, existing_hashes)
 
     # Tablo satırlarını bul (start+1..end arası, satır sonu ile)
     # Mevcut tabloyu koru, yeni satırları ekle
@@ -375,12 +402,14 @@ def check_file_changelog(
     section_header: str,
     row_re: re.Pattern,
     git_commits: list[CommitInfo],
+    all_commits: list[CommitInfo] | None = None,
 ) -> tuple[list[str], list[str]]:
     """Dosyadaki changelog ile git log arasındaki drift'i raporla."""
     content = filepath.read_text(encoding="utf-8")
     existing_hashes = extract_hashes_from_table(content, row_re, section_header)
+    # git_commits filtreli (--tag-regex) olabilir; stale her zaman tam listeden
     missing = find_missing_commits(git_commits, existing_hashes)
-    stale = find_stale_hashes(git_commits, existing_hashes)
+    stale = find_stale_hashes(all_commits or git_commits, existing_hashes)
     return [ci.short_hash for ci in missing], list(stale)
 
 
@@ -409,6 +438,10 @@ def main():
                       help="Tabloyu stdout'a bas (dosyaya yazmaz)")
     ap.add_argument("--limit", type=int, default=None,
                     help="Son N commit (varsayılan: tümü)")
+    ap.add_argument("--tag-regex", default=None,
+                    help="Yalnızca kategori'si regex'e uyan commit'leri işle "
+                         "(case-insensitive; örn. 'feat|fix|refs'). Stale tespiti "
+                         "filtreden etkilenmez.")
     ap.add_argument("--readme", default="README.md",
                     help="README dosya yolu (varsayılan: README.md)")
     ap.add_argument("--publish", default="docs/PUBLISH_SCENARIO.md",
@@ -421,8 +454,16 @@ def main():
         print("HATA: git log boş", file=sys.stderr)
         sys.exit(2)
 
+    # Kategori filtresi (yalnızca eksik-commit tespiti ve --print için;
+    # stale tespiti tam listeden yapılır)
+    try:
+        filtered = filter_commits(git_commits, args.tag_regex)
+    except ValueError as e:
+        print(f"HATA: {e}", file=sys.stderr)
+        sys.exit(2)
+
     if args.print:
-        print_table(git_commits, format_readme_row, args.limit)
+        print_table(filtered, format_readme_row, args.limit)
         return
 
     readme_path = Path(args.readme)
@@ -436,11 +477,13 @@ def main():
         sys.exit(2)
 
     if args.check:
-        # Drift kontrolü
+        # Drift kontrolü — missing filtreliden (--tag-regex), stale tam listeden
         readme_missing, readme_stale = check_file_changelog(
-            readme_path, "## Değişiklik Geçmişi", _README_ROW_RE, git_commits)
+            readme_path, "## Değişiklik Geçmişi", _README_ROW_RE, filtered,
+            all_commits=git_commits)
         pub_missing, pub_stale = check_file_changelog(
-            pub_path, "## Değişiklik Geçmişi", _PUB_ROW_RE, git_commits)
+            pub_path, "## Değişiklik Geçmişi", _PUB_ROW_RE, filtered,
+            all_commits=git_commits)
 
         drift = False
 
@@ -490,7 +533,7 @@ def main():
         print("README.md:")
         r_added, r_stale = update_file_changelog(
             readme_path, "## Değişiklik Geçmişi", _README_ROW_RE,
-            format_readme_row, git_commits)
+            format_readme_row, filtered, all_commits=git_commits)
         if r_added:
             print(f"  + {len(r_added)} yeni satır eklendi:")
             for h in r_added:
@@ -506,7 +549,7 @@ def main():
         print("\ndocs/PUBLISH_SCENARIO.md:")
         p_added, p_stale = update_file_changelog(
             pub_path, "## Değişiklik Geçmişi", _PUB_ROW_RE,
-            format_pub_row, git_commits)
+            format_pub_row, filtered, all_commits=git_commits)
         if p_added:
             print(f"  + {len(p_added)} yeni satır eklendi:")
             for h in p_added:

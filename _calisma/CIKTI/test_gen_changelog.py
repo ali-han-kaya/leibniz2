@@ -200,6 +200,102 @@ class TestFormatRow(unittest.TestCase):
         self.assertIn("`def5678`", row)
 
 
+class TestTagRegexFilter(unittest.TestCase):
+    """filter_commits: --tag-regex kategori filtreleme."""
+
+    def _ci(self, short, subject="feat: test"):
+        cat, desc = gc.parse_commit(subject)
+        return gc.CommitInfo(short, short + "full", "2026-08-21", subject, cat, desc)
+
+    def test_none_returns_all(self):
+        commits = [self._ci("aaa1111", "feat: A"),
+                   self._ci("bbb2222", "docs: B")]
+        out = gc.filter_commits(commits, None)
+        self.assertEqual(len(out), 2)
+
+    def test_empty_returns_all(self):
+        commits = [self._ci("aaa1111", "feat: A")]
+        out = gc.filter_commits(commits, "")
+        self.assertEqual(len(out), 1)
+
+    def test_feat_fix_refs_filter(self):
+        """Yalnızca feat/fix/refs kategorileri kalır; docs/test/chore elenir."""
+        commits = [
+            self._ci("aaa1111", "feat: A"),
+            self._ci("bbb2222", "fix: B"),
+            self._ci("ccc3333", "refs: C"),
+            self._ci("ddd4444", "docs: D"),
+            self._ci("eee5555", "test: E"),
+            self._ci("fff6666", "chore: F"),
+        ]
+        out = gc.filter_commits(commits, "feat|fix|refs")
+        cats = [ci.category for ci in out]
+        self.assertEqual(cats, ["feat", "fix", "refs"])
+
+    def test_case_insensitive(self):
+        commits = [self._ci("aaa1111", "FIX: A"),
+                   self._ci("bbb2222", "docs: B")]
+        out = gc.filter_commits(commits, "FIX")
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0].short_hash, "aaa1111")
+
+    def test_scope_category(self):
+        """Kategori filtresi scope'lu commit'leri de yakalar (kategori 'feat')."""
+        commits = [self._ci("aaa1111", "feat(ci): A"),
+                   self._ci("bbb2222", "docs: B")]
+        out = gc.filter_commits(commits, "feat")
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0].short_hash, "aaa1111")
+
+    def test_invalid_regex_raises(self):
+        commits = [self._ci("aaa1111", "feat: A")]
+        with self.assertRaises(ValueError):
+            gc.filter_commits(commits, "(feat|fix")
+
+    def test_v_prefix_maps_to_teslim_not_feat(self):
+        """V5h: prefix'leri 'teslim' kategorisine eşlenir — 'feat' filtreye girmez."""
+        commits = [self._ci("aaa1111", "V5h: fix Beth refs")]
+        out = gc.filter_commits(commits, "feat")
+        self.assertEqual(out, [])
+        out2 = gc.filter_commits(commits, "teslim")
+        self.assertEqual(len(out2), 1)
+
+    def test_missing_uses_filter_but_stale_does_not(self):
+        """check_file_changelog: missing filtreli, stale tam listeden.
+
+        Tabloda yalnızca bbb2222 (fix) var. Filtre 'feat|fix|refs':
+          - aaa1111 (feat, yeni) → missing
+          - ddd4444 (docs, tabloda değil) → missing DEĞİL (filtre dışı)
+          - eee5555 (test, tabloda, git log'da yok) → stale (filtre dışı ama raporlanır)
+        """
+        commits = [
+            gc.CommitInfo("aaa1111", "a", "2026-08-22", "feat: A", "feat", "A"),
+            gc.CommitInfo("bbb2222", "b", "2026-08-21", "fix: B", "fix", "B"),
+            gc.CommitInfo("ccc3333", "c", "2026-08-20", "refs: C", "refs", "C"),
+        ]
+        content = textwrap.dedent("""\
+            # Test
+
+            ## Değişiklik Geçmişi
+
+            | Tarih | Kategori | Değişiklik | Commit |
+            |---|---|---|---|
+            | 2026-08-21 | fix | B | `bbb2222` |
+            | 2026-08-19 | test | E | `eee5555` |
+            """)
+        with tempfile.TemporaryDirectory() as td:
+            readme = Path(td, "README.md")
+            readme.write_text(content)
+            filtered = gc.filter_commits(commits, "feat|fix|refs")
+            missing, stale = gc.check_file_changelog(
+                readme, "## Değişiklik Geçmişi", gc._README_ROW_RE, filtered,
+                all_commits=commits)
+        # missing: aaa1111 (feat) — ccc3333 (refs, eski, tabloda yok) DEĞİL
+        self.assertEqual(missing, ["aaa1111"])
+        # stale: eee5555 (test — filtre dışı ama tam listeden raporlanır)
+        self.assertEqual(stale, ["eee5555"])
+
+
 class TestCheckMode(unittest.TestCase):
     """--check modu: README ve PUBLISH_SCENARIO drift tespiti."""
 
@@ -343,6 +439,77 @@ class TestUpdateMode(unittest.TestCase):
             self.readme, "## Değişiklik Geçmişi", gc._README_ROW_RE,
             gc.format_readme_row, commits)
         self.assertEqual(added, [])
+
+
+class TestMainTagRegex(unittest.TestCase):
+    """main() --tag-regex: --print ve --update davranışı."""
+
+    def _commits(self):
+        return [
+            gc.CommitInfo("aaa1111", "a", "2026-08-22", "feat: A", "feat", "A"),
+            gc.CommitInfo("bbb2222", "b", "2026-08-21", "docs: B", "docs", "B"),
+            gc.CommitInfo("ccc3333", "c", "2026-08-20", "refs: C", "refs", "C"),
+        ]
+
+    def test_print_filters_by_tag_regex(self):
+        """--print --tag-regex 'feat|refs' → docs satırı çıktıda yok."""
+        import contextlib
+        import io
+        buf = io.StringIO()
+        with patch.object(gc, "get_git_log", return_value=self._commits()), \
+             patch.object(sys, "argv", ["gen_changelog.py", "--print",
+                                        "--tag-regex", "feat|refs"]), \
+             contextlib.redirect_stdout(buf):
+            gc.main()
+        out = buf.getvalue()
+        self.assertIn("`aaa1111`", out)
+        self.assertIn("`ccc3333`", out)
+        self.assertNotIn("`bbb2222`", out)
+
+    def test_invalid_regex_exits_2(self):
+        import contextlib
+        import io
+        err = io.StringIO()
+        with patch.object(gc, "get_git_log", return_value=self._commits()), \
+             patch.object(sys, "argv", ["gen_changelog.py", "--print",
+                                        "--tag-regex", "(feat|fix"]), \
+             contextlib.redirect_stderr(err), \
+             self.assertRaises(SystemExit) as cm:
+            gc.main()
+        self.assertEqual(cm.exception.code, 2)
+        self.assertIn("HATA", err.getvalue())
+
+    def test_update_skips_non_matching_new_commits(self):
+        """--update --tag-regex 'feat|refs': docs commit'i tabloya eklenmez.
+
+        Tablo refs (ccc3333, eşleşen çapa) + docs (bbb2222) içerir.
+        Filtreli listede çapa ccc3333 → aaa1111 (feat, daha yeni) eklenir;
+        docs commit'i (filtre dışı) eklenmez, stale de raporlanmaz.
+        """
+        readme_content = textwrap.dedent("""\
+            # Test
+
+            ## Değişiklik Geçmişi
+
+            | Tarih | Kategori | Değişiklik | Commit |
+            |---|---|---|---|
+            | 2026-08-21 | docs | B | `bbb2222` |
+            | 2026-08-20 | refs | C | `ccc3333` |
+            """)
+        with tempfile.TemporaryDirectory() as td:
+            readme = Path(td, "README.md")
+            readme.write_text(readme_content)
+            filtered = gc.filter_commits(self._commits(), "feat|refs")
+            added, stale = gc.update_file_changelog(
+                readme, "## Değişiklik Geçmişi", gc._README_ROW_RE,
+                gc.format_readme_row, filtered, all_commits=self._commits())
+            content = readme.read_text()
+        # Yalnızca feat (aaa1111) eklendi; refs çapa olarak tabloda zaten var
+        self.assertEqual(added, ["aaa1111"])
+        self.assertIn("`aaa1111`", content)
+        self.assertIn("`ccc3333`", content)
+        self.assertIn("`bbb2222`", content)
+        self.assertEqual(stale, [])
 
 
 class TestRegexPatterns(unittest.TestCase):
