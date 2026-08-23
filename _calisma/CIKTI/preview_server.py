@@ -171,8 +171,9 @@ def _compute_status_board():
     # 4. Soy hattı: lineage_summary.ok → PASS
     lin_ok = LATEST.get("lineage_ok")
 
-    # 5. K katmanları: K8-K17 (K8 Z3, K9 Lean, K10-K17)
-    ext = ["K8", "K9", "K10", "K11", "K12", "K13", "K14", "K16", "K17"]
+    # 5. K katmanları: K8-K20 (K8 Z3, K9 Lean, K10-K20)
+    ext = ["K8", "K9", "K10", "K11", "K12", "K13", "K14", "K16",
+           "K17", "K18", "K20"]
     ext_statuses = [(ls.get(k) or {}).get("status") for k in ext]
     if any(s == "FAIL" for s in ext_statuses):
         kl_ok = False

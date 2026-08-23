@@ -164,7 +164,8 @@ class TestToolkitTolerant(unittest.TestCase):
             check_config_drift=False, check_plist=False,
             check_repro_manifest=False, check_cleanup=False,
             check_history=None, check_github_scripts=False,
-            check_mirror=False, check_launchd=False, coq_proof=False)
+            check_mirror=False, check_daemon=False, check_launchd=False,
+            coq_proof=False)
         findings = [{"id": "K0-TOOLKIT", "priority": "INFO",
                      "check": "K0-TOOLKIT", "issue": "toolkit", "evidence": ""}]
         layers = vd.build_layers_summary(args, findings)

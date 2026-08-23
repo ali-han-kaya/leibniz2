@@ -350,6 +350,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-23 | other | manifest: mirror-check'i download pattern'e ekle, K17 SHA-256 sabitle | [`165f28d`](https://github.com/ali-han-kaya/leibniz2/commit/165f28d) |
 | 2026-08-23 | other | pattern-drift: mirror-check'i EXCLUDED'a ekle (prefixed indirme) | [`41776fa`](https://github.com/ali-han-kaya/leibniz2/commit/41776fa) |
 | 2026-08-23 | other | dashboard: mirror sync paneli (K17 + BAYAT listesi), TCC SKIP | [`e6a570e`](https://github.com/ali-han-kaya/leibniz2/commit/e6a570e) |
+| 2026-08-23 | other | manifest: daemon-http artifact'ını pattern'e ekle, SHA-256 sabitle | [`d8451a4`](https://github.com/ali-han-kaya/leibniz2/commit/d8451a4) |
 
 ### Regresyon notları
 

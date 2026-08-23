@@ -113,13 +113,16 @@ Doğrulama zinciri (Katman 0..19):
                doğrulanır (Linux'ta da mirror kurulur; sync izi sidecar'da
                auto_synced ile işaretlenir); ayrıca açıkça --check-mirror ile
                koşulur.
-  K18 Launchctl launchctl list + plutil lint + HTTP 200 (--check-launchd;
-               macOS'a özgü, --full'a dahil değil)
+  K18 Daemon    daemon_http_test.py end-to-end daemon smoke (--check-daemon;
+               --full'a DAHİLDİR, fail-closed: preview_server daemon modda
+               başlar + üç endpoint HTTP 200 + daemon canlı olmalı)
   K19 Coq      Coq reduct-invariance: 8 teoremli Content.v çekirdeği coqtop
                -compile ile fail-closed derlenir + coq-version sürüm uyumu +
                admit/Admitted/Axiom/Parameter taraması (--coq-proof; coqtop
                gerektirir, --full'a dahil değil — coqtop kurulu olmayan
                ortamlarda FAIL üretmemek için açıkça koşulur)
+  K20 Launchctl launchctl list + plutil lint + HTTP 200 (--check-launchd;
+               macOS'a özgü, --full'a dahil değil)
 """
 import argparse
 import concurrent.futures
@@ -196,8 +199,9 @@ LAYER_LABELS = {
     "K15": "History sidecar",
     "K16": "GScripts self-test",
     "K17": "Mirror sync",
-    "K18": "Launchctl durum",
+    "K18": "Daemon HTTP smoke",
     "K19": "Coq reduct-invariance (8 teorem)",
+    "K20": "Launchctl durum",
 }
 
 # K0-K7 çekirdek katmanlar: --full olsun olmasın her run'da koşar.
@@ -215,8 +219,9 @@ _OPTIONAL_LAYERS = {
     "K15": lambda a: bool(a.check_history),
     "K16": lambda a: a.check_github_scripts,
     "K17": lambda a: a.check_mirror,
-    "K18": lambda a: a.check_launchd,
+    "K18": lambda a: a.check_daemon,
     "K19": lambda a: a.coq_proof,
+    "K20": lambda a: a.check_launchd,
 }
 
 
@@ -3448,8 +3453,74 @@ def check_mirror_sync(add, auto_sync=False):
     return False, detail, rc, txt, dict(empty_meta, before_exit=rc)
 
 
+def check_daemon_smoke(add, out_path=None):
+    """K18: daemon_http_test.py end-to-end daemon smoke (fail-closed).
+
+    preview_server.py'yi daemon modda (PREVIEW_DAEMON=1 → setsid + stdio
+    /dev/null'a yönlendirme) gerçek süreçte başlatır ve /preview.html +
+    /api/latest + /api/history üçünün de HTTP 200 döndüğünü + sürecin canlı
+    kaldığını doğrular. --full'a DAHİLDİR (CI daemon-http job'ının aynısı
+    — advisory job yerine fail-closed kapı olarak).
+
+    Sözleşme (daemon_http_test.py): exit 0 = üç endpoint 200 + daemon canlı;
+    exit 1 = zaman aşımı/yanıt yok/200 değil; exit 2 = kullanım hatası.
+    Rapor --out JSON'a yazılır (ok/endpoints/daemon_alive/error); exit ≠ 0
+    veya rapor ok=False → P1 (fail-closed).
+
+    Döndürür (ok: bool, detail: str, report: dict|None).
+
+    İç içe koşum koruması: daemon smoke, preview_server'ı başlatır ve o
+    sunucunun verify_loop'u --full --json koşar — bu da K18'i tetikler
+    (sonsuz özyineleme). PREVIEW_DAEMON=1 (daemon test'in çocuğa verdiği
+    env) set iken bu fonksiyon PASS-durumlu SKIP döner: gerçek smoke yalnızca
+    dış çağrıda koşar.
+    """
+    if os.environ.get("PREVIEW_DAEMON") == "1":
+        return True, ("daemon smoke iç içe koşumda atlandı "
+                      "(PREVIEW_DAEMON=1 — dış smoke zaten koşuyor)"), None
+    here = os.path.dirname(os.path.abspath(__file__))
+    script = os.path.join(here, "daemon_http_test.py")
+    if not os.path.isfile(script):
+        add("P1", "K18-DAEMON", "K18 daemon smoke",
+            "daemon_http_test.py yok", script)
+        return False, "daemon_http_test.py yok", None
+    tmp = tempfile.mkdtemp(prefix="k18-daemon-")
+    report_path = out_path or os.path.join(tmp, "daemon_http_report.json")
+    try:
+        r = subprocess.run(
+            [sys.executable, script, "--out", report_path,
+             "--server", os.path.join(here, "preview_server.py"),
+             "--preview-src", os.path.join(here, "preview.html")],
+            capture_output=True, text=True, timeout=240)
+        txt = (r.stdout + r.stderr).strip()
+    except (OSError, subprocess.TimeoutExpired) as e:
+        add("P1", "K18-DAEMON", "K18 daemon smoke",
+            f"çalıştırılamadı: {e}", script)
+        return False, f"daemon smoke çalıştırılamadı: {e}", None
+    report = None
+    if os.path.isfile(report_path):
+        try:
+            with open(report_path, encoding="utf-8") as rf:
+                report = json.load(rf)
+        except (OSError, ValueError):
+            report = None
+    ok = (r.returncode == 0 and bool(report and report.get("ok")))
+    if ok:
+        return True, (f"daemon smoke PASS (exit 0) — üç endpoint 200, "
+                      f"daemon canlı: {report.get('daemon_alive')}"), report
+    detail = f"daemon smoke FAIL (exit {r.returncode})"
+    if report and report.get("error"):
+        detail += f" — {report['error']}"
+    if report:
+        ep = report.get("endpoints") or {}
+        detail += f" — endpoint'ler: {ep}"
+    add("P1", "K18-DAEMON", "K18 daemon smoke",
+        "daemon modu HTTP smoke başarısız (fail-closed)", txt)
+    return False, detail, report
+
+
 def check_launchd_status(add):
-    """K18: launchctl list + plutil lint + HTTP 200 doğrulaması.
+    """K20: launchctl list + plutil lint + HTTP 200 doğrulaması.
 
     macOS'a özgü: launchd GUI agent'larının preview sunucusu durumunu
     üç eksende denetler:
@@ -3549,8 +3620,8 @@ def check_launchd_status(add):
                     checks.append(("plutil lint", f"{plist_path} geçersiz"))
 
         for check_name, issue in checks:
-            add("P1", f"K18-LAUNCHD-{label.split('.')[-1].upper()}",
-                f"K18 launchd ({label})", f"{check_name}: {issue}",
+            add("P1", f"K20-LAUNCHD-{label.split('.')[-1].upper()}",
+                f"K20 launchd ({label})", f"{check_name}: {issue}",
                 plist_path)
             all_ok = False
 
@@ -3691,6 +3762,7 @@ def apply_full_flags(args):
     args.check_github_scripts = True
     args.check_mirror = True
     args.mirror_auto_sync = True
+    args.check_daemon = True
     return args
 
 
@@ -3804,15 +3876,24 @@ def main():
                          "sync edip yeniden denetler; senkron izi sidecar'da "
                          "auto_synced/before_exit/after_exit/sync_rc ile "
                          "işaretlenir (yalnızca --check-mirror ile)")
+    ap.add_argument("--check-daemon", action="store_true",
+                    help="K18: daemon_http_test.py end-to-end daemon smoke — "
+                         "preview_server daemon modda başlar + üç endpoint "
+                         "HTTP 200 + daemon canlı olmalı (--full'a DAHİLDİR, "
+                         "fail-closed)")
+    ap.add_argument("--daemon-out", default=None,
+                    help="K18: daemon smoke raporunu ayrı bir sidecar JSON'a "
+                         "yaz (CI artifact için; --check-daemon ile)")
     ap.add_argument("--check-launchd", action="store_true",
-                    help="K18: launchctl list + plutil lint + HTTP 200 "
+                    help="K20: launchctl list + plutil lint + HTTP 200 "
                          "doğrulaması (macOS'a özgü, --full'a dahil değil)")
     ap.add_argument("--full", action="store_true",
                     help="Tüm katmanları tek komutla koş: --check-references + "
                          "--symbolic-proof + --lean-proof + --check-lineage + "
                          "--check-config-drift + --check-repro-manifest + "
                          "--check-cleanup + --check-github-scripts + "
-                         "--check-mirror (mirror boşsa otomatik sync edilir)")
+                         "--check-mirror (mirror boşsa otomatik sync edilir) "
+                         "+ --check-daemon (daemon smoke fail-closed)")
     args = ap.parse_args()
     args = apply_full_flags(args)
     # --mirror-auto-sync yalnızca --check-mirror ile anlamlıdır (fail-closed).
@@ -4537,7 +4618,22 @@ def main():
             except OSError as e:                    add("P1", "MIRROR-OUT", "Mirror sidecar",
                     f"yazılamadı: {args.mirror_out}", str(e))
 
-    # ---- K18: launchctl list + plutil lint + HTTP 200 (--check-launchd) ----
+    # ---- K18: daemon HTTP smoke (--check-daemon, --full'a DAHİL) ----
+    # daemon_http_test.py: preview_server'ı daemon modda (PREVIEW_DAEMON=1)
+    # gerçek süreçte başlatır, üç endpoint'in de HTTP 200 döndüğünü + sürecin
+    # canlı kaldığını doğrular. --full, bu kapıyı aktifleştirir (CI
+    # daemon-http job'ının aynısı — advisory yerine fail-closed). Exit ≠ 0
+    # veya rapor ok=False → P1. Rapor --daemon-out sidecar'a yazılabilir.
+    daemon_report = None
+    if args.check_daemon:
+        dok, ddetail, dreport = check_daemon_smoke(add, out_path=args.daemon_out)
+        daemon_report = {"layer": "K18", "ok": dok, "detail": ddetail,
+                         "report": dreport}
+        if not args.json:
+            print(f"[K18] daemon smoke: "
+                  f"{'PASS' if dok else 'FAIL'} — {ddetail}")
+
+    # ---- K20: launchctl list + plutil lint + HTTP 200 (--check-launchd) ----
     # macOS'a özgü: preview sunucusunun operasyonel durumunu üç eksende denetler.
     # launchctl list (yüklü/PID), plutil lint (plist biçimsel doğrulama),
     # HTTP 200 (sunucu yanıt veriyor mu). --full'a dahil DEĞİLDİR (macOS'a
@@ -4545,10 +4641,10 @@ def main():
     launchd_report = None
     if args.check_launchd:
         lok, ldetail, lprofiles = check_launchd_status(add)
-        launchd_report = {"layer": "K18", "ok": lok, "detail": ldetail,
+        launchd_report = {"layer": "K20", "ok": lok, "detail": ldetail,
                           "profiles": lprofiles}
         if not args.json:
-            print(f"[K18] launchd durum: "
+            print(f"[K20] launchd durum: "
                   f"{'PASS' if lok else 'FAIL'} — {ldetail}")
             for p in lprofiles:
                 status = "PASS" if (p["loaded"] and p["alive"] and
@@ -4711,6 +4807,7 @@ def main():
         "lineage": lineage_report,
         "plist": plist_report,
         "mirror": mirror_report,
+        "daemon": daemon_report,
         "launchd": launchd_report,
         "cleanup": cleanup_report,
         "history_sidecar": history_sidecar_report,
