@@ -352,6 +352,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-23 | other | dashboard: mirror sync paneli (K17 + BAYAT listesi), TCC SKIP | [`e6a570e`](https://github.com/ali-han-kaya/leibniz2/commit/e6a570e) |
 | 2026-08-23 | other | manifest: daemon-http artifact'ını pattern'e ekle, SHA-256 sabitle | [`d8451a4`](https://github.com/ali-han-kaya/leibniz2/commit/d8451a4) |
 | 2026-08-23 | other | K18: daemon smoke --full'a fail-closed bağla, K20 renumber | [`d58d5e3`](https://github.com/ali-han-kaya/leibniz2/commit/d58d5e3) |
+| 2026-08-23 | other | K18 daemon smoke: SSE + run-now endpoint'leri de 200 ile doğrula | [`8430f99`](https://github.com/ali-han-kaya/leibniz2/commit/8430f99) |
 
 ### Regresyon notları
 

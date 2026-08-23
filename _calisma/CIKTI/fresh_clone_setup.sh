@@ -17,7 +17,9 @@
 #
 # Her adım fail-closed'dur: kaynak yok / venv kurulamaz / kopya başarısız →
 # hata ile durur (exit ≠ 0). --check modu beş artefaktın da GÜNCEL olduğunu
-# denetler (0 hazır / 1 eksik/bayat / 2 hata) — K17/K12 kapılarının ön-koşulu.
+# ve daemon HTTP rotasının çalıştığını denetler (daemon_http_test.py — mirror
+# kopyasıyla SSE/run-now dahil HTTP smoke; 0 hazır / 1 eksik/bayat / 2 hata)
+# — K17/K18/K12 kapılarının ön-koşulu.
 #
 # Kullanım:
 #   fresh_clone_setup.sh             # beş artefaktı kur (yoksa) / senkron et (bayatsa)
@@ -44,6 +46,9 @@ CIKTI="$ROOT/_calisma/CIKTI"
 REPO_VENV="${REPO_VENV:-$ROOT/_calisma/.venv_z3}"
 MIRROR_VENV="${MIRROR_VENV:-$HOME/Library/Caches/com.freebuff/venv_z3}"
 PREVIEW_MIRROR="${PREVIEW_MIRROR:-$HOME/Library/Caches/com.freebuff/preview}"
+# Verify mirror (sync_verify_mirror.sh ile aynı varsayılan — daemon rotası
+# daemon_http_test.py'nin MIRROR kopyasıyla doğrulanır).
+MIRROR_DIR="${MIRROR_DIR:-$HOME/Library/Caches/com.freebuff/verify}"
 
 # Mirror venv'e kurulacak paketler (repo venv ile aynı çekirdek küme).
 # pre-commit de hook'lar için mirror'da gereklidir (launchd GUI agent rotası).
@@ -124,39 +129,66 @@ check_all() {
   else
     err "sync_verify_mirror.sh yok — preview/verify mirror denetlenemedi"
     missing=1
-  fi
-
-  # 5. HTML + plist (update_preview.sh --check + --plist-check)
-  if [ -x "$SCRIPT_DIR/update_preview.sh" ]; then
-    if "$SCRIPT_DIR/update_preview.sh" --check >/dev/null 2>&1; then
-      say "OK: HTML build (güncel)"
+  fi    # 5. HTML + plist (update_preview.sh --check + --plist-check)
+    if [ -x "$SCRIPT_DIR/update_preview.sh" ]; then
+      if "$SCRIPT_DIR/update_preview.sh" --check >/dev/null 2>&1; then
+        say "OK: HTML build (güncel)"
+      else
+        err "HTML build bayat/eksik (fresh_clone_setup.sh çalıştırın)"
+        missing=1
+      fi
+      # --plist-check: 0 hepsi güncel / 1 bayat / 2 şablon yok
+      local prc=0
+      "$SCRIPT_DIR/update_preview.sh" --plist-check >/dev/null 2>&1 || prc=$?
+      if [ "$prc" -eq 0 ]; then
+        say "OK: LaunchAgent plist'leri (güncel)"
+      elif [ "$prc" -eq 2 ]; then
+        err "plist şablonu yok (fresh_clone_setup.sh --bootstrap çalıştırın)"
+        missing=1
+      else
+        err "LaunchAgent plist'leri bayat (fresh_clone_setup.sh çalıştırın)"
+        missing=1
+      fi
     else
-      err "HTML build bayat/eksik (fresh_clone_setup.sh çalıştırın)"
+      err "update_preview.sh yok — HTML/plist denetlenemedi"
       missing=1
     fi
-    # --plist-check: 0 hepsi güncel / 1 bayat / 2 şablon yok
-    local prc=0
-    "$SCRIPT_DIR/update_preview.sh" --plist-check >/dev/null 2>&1 || prc=$?
-    if [ "$prc" -eq 0 ]; then
-      say "OK: LaunchAgent plist'leri (güncel)"
-    elif [ "$prc" -eq 2 ]; then
-      err "plist şablonu yok (fresh_clone_setup.sh --bootstrap çalıştırın)"
-      missing=1
+
+    # 6. Daemon HTTP rotası (daemon_http_test.py — MIRROR kopyasıyla koşulur:
+    #    launchd GUI agent'ının TCC-safe runtime'ı birebir doğrulanır; repo
+    #    kopyası değil, mirror kopyası. Boş portta geçici daemon kurulur ve
+    #    SSE/run-now dahil HTTP smoke'u exit 0 vermeli.)
+    if [ -f "$MIRROR_DIR/daemon_http_test.py" ]; then
+      local dpy=""
+      if [ -x "$REPO_VENV/bin/python3" ]; then
+        dpy="$REPO_VENV/bin/python3"
+      elif [ -x "$MIRROR_VENV/bin/python3" ]; then
+        dpy="$MIRROR_VENV/bin/python3"
+      elif command -v python3 >/dev/null 2>&1; then
+        dpy="$(command -v python3)"
+      fi
+      local dreport
+      dreport="$(mktemp)" || dreport="/tmp/fc_setup_daemon_report.json"
+      if [ -n "$dpy" ] && (cd "$MIRROR_DIR" && \
+          "$dpy" daemon_http_test.py --out "$dreport" \
+            --start-timeout 30 >/dev/null 2>&1); then
+        say "OK: daemon HTTP rotası (daemon_http_test.py — mirror kopyası)"
+      else
+        err "daemon HTTP rotası başarısız (mirror kopyası daemon_http_test.py)"
+        missing=1
+      fi
+      rm -f "$dreport"
     else
-      err "LaunchAgent plist'leri bayat (fresh_clone_setup.sh çalıştırın)"
+      err "daemon_http_test.py mirror'da yok — daemon rotası denetlenemedi"
       missing=1
     fi
-  else
-    err "update_preview.sh yok — HTML/plist denetlenemedi"
-    missing=1
-  fi
 
-  if [ "$missing" -ne 0 ]; then
-    say "SONUÇ: EKSİK — 5 artefaktın tamamı hazır değil (exit 1)"
-    return 1
-  fi
-  say "SONUÇ: TAMAM — beş artefaktın tamamı hazır (exit 0)"
-  return 0
+    if [ "$missing" -ne 0 ]; then
+      say "SONUÇ: EKSİK — 5 artefakt + daemon rotası hazır değil (exit 1)"
+      return 1
+    fi
+    say "SONUÇ: TAMAM — beş artefakt + daemon rotası hazır (exit 0)"
+    return 0
 }
 
 # Tüm kurulum: 5 adım (fail-closed).

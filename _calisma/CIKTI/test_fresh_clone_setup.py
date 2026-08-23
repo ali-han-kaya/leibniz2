@@ -10,6 +10,9 @@ Linux CI'da da çalışır):
   3) Preview mirror   PREVIEW_MIRROR (preview_server.py + _daemonize.py)
   4) Verify mirror    MIRROR_DIR  (sync_verify_mirror.sh — varsayılan $HOME yolu)
   5) HTML + plist     update_preview.sh --bootstrap (varsayılan $HOME yolları)
+  6) Daemon rotası    daemon_http_test.py MIRROR kopyasıyla HTTP smoke
+                     (SSE/run-now dahil; test'te fake venv → vâkıf değil, trivially
+                     exit 0 — gerçek kurulumda gerçek daemon smoke'u koşar)
 
 Sözleşme: --check → 0 = TAMAM / 1 = EKSİK-bayat / 2 = hata (bilinmeyen mod).
 setup modu fail-closed: her adımda hata → exit ≠ 0.
@@ -169,6 +172,23 @@ class TestFreshCloneSetupFailClosed(unittest.TestCase):
             # Adım 2+4 tek komutta: sync_verify_mirror.sh --check preview
             # dosyasındaki drift'i yakalar (BAYAT/EKSİK).
             self.assertIn("preview/verify mirror bayat/eksik", r.stderr)
+
+    def test_check_reports_missing_daemon_test_fail_closed(self):
+        # Daemon rotası kapsamda: mirror'daki daemon_http_test.py silinirse
+        # --check exit 1 + "daemon" hatası (fail-closed).
+        with tempfile.TemporaryDirectory(prefix="fc-setup-") as home:
+            env = env_overrides(home)
+            fake_venv(env["REPO_VENV"])
+            fake_venv(env["MIRROR_VENV"])
+            r = run(home, "bash", FRESH_SETUP, extra_env=env)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            dtest = os.path.join(home, "Library", "Caches", "com.freebuff",
+                                 "verify", "daemon_http_test.py")
+            self.assertTrue(os.path.exists(dtest), "daemon_http_test.py mirror'da olmalı")
+            os.remove(dtest)
+            r = run(home, "bash", FRESH_SETUP, "--check", extra_env=env)
+            self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+            self.assertIn("daemon", r.stderr.lower())
 
 
 if __name__ == "__main__":
