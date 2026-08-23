@@ -2349,6 +2349,23 @@ jobs:
           echo "rc=$rc" >> "$GITHUB_OUTPUT"
           echo "K17 --check-mirror exit: $rc"
 
+      # MIRROR KAPSAM DENETİMİ — sync_verify_mirror.sh --list çıktısını repo
+      # dosya kümesiyle karşılaştırır (mirror eksikliği regresyonu fail-closed):
+      # repo'ya runtime dosyası eklenip FILES/LEAN_FILES listelerine işlenmezse
+      # launchd rotası o dosyayı hiç göremez → K9/K16/K17/K18 kırılır. İleri
+      # (beklenen dosya listede yok) ve ters (bayat/beklenmeyen girdi) denetimi.
+      - name: Mirror coverage (--list ↔ repo file set)
+        id: cov
+        run: |
+          set -uo pipefail
+          set +e
+          python3 _calisma/CIKTI/check_mirror_coverage.py \
+            2>&1 | tee -a mirror_check_report.txt
+          rc=${PIPESTATUS[0]}
+          set -e
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          exit "$rc"
+
       - name: Write mirror check to run summary
         if: always()
         run: |
@@ -2357,6 +2374,7 @@ jobs:
             echo ""
             echo "- Bootstrap smoke (--bootstrap): exit \`${{ steps.bs.outputs.rc }}\`"
             echo "- K17 --check-mirror: exit \`${{ steps.k17.outputs.rc }}\`"
+            echo "- Mirror coverage (--list ↔ repo): exit \`${{ steps.cov.outputs.rc }}\`"
             echo '```'
             cat mirror_check_report.txt 2>/dev/null || echo '(rapor yok)'
             echo '```'
