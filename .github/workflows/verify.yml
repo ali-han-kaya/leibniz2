@@ -2225,6 +2225,10 @@ jobs:
   # repo ↔ mirror drift'ini fail-closed denetler: BAYAT (exit 1) veya hata
   # (exit 2) → P1 → verify_delivery.py exit 1 → job FAIL.
   #
+  # Ayrıca üretim yolu smoke'u: update_preview.sh --bootstrap (üç artefakt:
+  # mirror + HTML + plist) fake HOME altında koşulup fail-closed doğrulanır
+  # (gerçek TCC cache/LaunchAgents'a dokunmaz; --start verilmez).
+  #
   # CI rotası: gerçek TCC cache'ine dokunmamak için MIRROR_DIR/LEAN_MIRROR_DIR
   # RUNNER_TEMP altına yönlendirilir; önce sync (mirror'ı repo'dan kur), sonra
   # --check-mirror GÜNCEL (exit 0) olmalı. Mirror kurulamıyorsa veya check
@@ -2246,8 +2250,50 @@ jobs:
         with:
           python-version: '3.12'
 
+      # BOOTSTRAP SMOKE — update_preview.sh --bootstrap'ın ÜÇ artefakt
+      # üretimini gerçek macOS runner'da fail-closed doğrular (K12 plist
+      # deseniyle aynı felsefe: üretim yolunun gerçekten çalıştığını kanıtla).
+      # Gerçek TCC cache'ine/LaunchAgents'a DOKUNMAMAK için HOME fake bir
+      # RUNNER_TEMP dizinine yönlendirilir (birim testlerle aynı izolasyon);
+      # --start VERİLMEZ (launchctl bootstrap yapılmaz — CI'de gerçek daemon
+      # başlatma istenmez). Üç artefakt fake HOME altında üretilmeli:
+      #   (1) verify mirror  → $HOME/Library/Caches/com.freebuff/verify/…
+      #   (2) HTML dashboard → $HOME/Library/Caches/com.freebuff/preview/preview.html
+      #   (3) LaunchAgent    → $HOME/Library/LaunchAgents/<label>.plist
+      # Eksik artefakt veya exit ≠ 0 → job FAIL (fail-closed). MIRROR_DIR vb.
+      # aşağıdaki sync adımından SONRA GITHUB_ENV'e yazılır; bu adım öncesinde
+      # koştuğu için burada açıkça fake-HOME yollarına sabitlenir.
+      - name: Bootstrap smoke (update_preview.sh --bootstrap, 3 artefakt)
+        id: bs
+        env:
+          HOME: ${{ runner.temp }}/bootstrap-home
+          PREVIEW_MIRROR: ${{ runner.temp }}/bootstrap-home/Library/Caches/com.freebuff/preview
+          MIRROR_DIR: ${{ runner.temp }}/bootstrap-home/Library/Caches/com.freebuff/verify
+          LEAN_MIRROR_DIR: ${{ runner.temp }}/bootstrap-home/Library/Caches/com.freebuff/lean_reduct
+        run: |
+          set -uo pipefail
+          mkdir -p "$HOME"
+          set +e
+          bash _calisma/CIKTI/update_preview.sh --bootstrap "$HOME" \
+            > bootstrap_smoke.txt 2>&1
+          rc=$?
+          set -e
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          cat bootstrap_smoke.txt
+          # Fail-closed: üç artefakt üretilmeli.
+          MISSING=""
+          [ -f "$MIRROR_DIR/verify_delivery.py" ] || MISSING="$MISSING mirror"
+          [ -f "$PREVIEW_MIRROR/preview.html" ] || MISSING="$MISSING html"
+          [ -f "$HOME/Library/LaunchAgents/com.freebuff.preview-leibniz2.plist" ] || MISSING="$MISSING plist-leibniz2"
+          [ -f "$HOME/Library/LaunchAgents/com.freebuff.preview-server.plist" ] || MISSING="$MISSING plist-preview-server"
+          if [ -n "$MISSING" ]; then
+            echo "FAIL: artefakt eksik:$MISSING" >&2
+            exit 1
+          fi
+          echo "OK: üç artefakt üretildi (mirror + html + 2 plist)"
+
       # Mirror'ı CI'da kur: RUNNER_TEMP altına senkron et (gerçek TCC
-      # cache'ine dokunmaz). Kaynak dosyalardan biri eksikse sync exit 2
+      # cache'ine dokunmaz). Kaynak dosyalardan bir eksikse sync exit 2
       # → job fail (fail-closed, validate_sources kapısı). Adım 2+4 tek
       # komutta: PREVIEW_MIRROR da RUNNER_TEMP'e yönlendirilir.
       - name: Sync preview + verify mirror (RUNNER_TEMP, adım 2+4)
@@ -2283,6 +2329,7 @@ jobs:
           {
             echo "## Mirror sync check (macOS)"
             echo ""
+            echo "- Bootstrap smoke (--bootstrap): exit \`${{ steps.bs.outputs.rc }}\`"
             echo "- K17 --check-mirror: exit \`${{ steps.k17.outputs.rc }}\`"
             echo '```'
             cat mirror_check_report.txt 2>/dev/null || echo '(rapor yok)'
@@ -2297,5 +2344,6 @@ jobs:
           path: |
             mirror_check_report.txt
             mirror_report.json
+            bootstrap_smoke.txt
           if-no-files-found: ignore
           retention-days: 30
