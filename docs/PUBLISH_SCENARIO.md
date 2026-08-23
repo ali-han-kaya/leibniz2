@@ -223,6 +223,7 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 | 2026-08-23 | ci | ci-simulate job'unda elan PATH'ini inline export et | `a80daa0` |
 | 2026-08-23 | ci | tum_sapmalar_comment.js'i repo'ya al (K16 battery CI'da ENOENT) | `246b0e4` |
 | 2026-08-23 | ci | pre-existing test kirilmalarini kapat (mirror + battery desen) | `4eeb0a5` |
+| 2026-08-23 | ci | verify job Install Lean adimina da inline PATH export ekle | `8b0d6c1` |
 
 ---
 
@@ -357,8 +358,23 @@ bash docs/publish_wrapper.sh --ci-simulate --dry-run-summary
     simulate_verify_job.sh — yerel CI simülasyonu başlıyor…
 CI-SIMULATE: PASS ✓ — tüm kapılar yeşil (yerel)
 Özet (summary.md — ilk 20 satır): …
+Rapor: ~/Desktop/leibniz2/.freebuff/sim/ci_simulate_report.md
 SONUÇ: CI-SIMULATE ✓ — yerel doğrulama tamamlandı, push yapılmadı
 ```
+
+**Çıktı dosyaları (hepsi `.freebuff/` altında — gitignore'lu):**
+
+| Dosya | İçerik |
+|---|---|
+| `.freebuff/sim/ci_simulate_report.md` | Markdown rapor: status_checks adları + simulate çıktısı + GITHUB_STEP_SUMMARY — denetim izi |
+| `.freebuff/sim/verify_job/` | `simulate_verify_job.sh` çıktı dizini (verify_report.txt, summary.md, PRECOMMIT_RAPORU.md, sidecar'lar) |
+| `logs/publish_*.log` | Wrapper terminal log'u |
+
+**CI karşılığı:** Bu modun tamamı GitHub Actions'ta **`ci-simulate` advisory job'ı**
+olarak her push'ta da koşar (`status_checks.py` + `simulate_verify_job.sh`;
+aşağıdaki B kategorisi job tablosunda #16). Yereldeki `--ci-simulate` ile birebir
+aynı komutlar — CI'ın kendisi yerel simülasyonun hâlâ yeşil olduğunu doğrular
+(run summary: `CI-SIMULATE: status_checks exit X, simulate_verify_job exit Y`).
 
 **Sınırlar (bilinçli):**
 
@@ -367,7 +383,7 @@ SONUÇ: CI-SIMULATE ✓ — yerel doğrulama tamamlandı, push yapılmadı
 - Yayın testinin ta kendisi değildir: runner ortamı (macOS/Ubuntu) ve
   GitHub Actions sürücüsü yerelde simüle edilir; GitHub'a karşı hiçbir
   adım (koruma kurma, push, CI run) çalışmaz.
-- `simulate_verify_job.sh` çıktısı `_calisma/CIKTI/sim/verify_job/` altında
+- `simulate_verify_job.sh` çıktısı `.freebuff/sim/verify_job/` altında
   birikir — bir sonraki koşuda `rm -rf` ile temizlenir (her koşu baştan).
 
 ---
