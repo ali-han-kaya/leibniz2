@@ -205,6 +205,19 @@ elif [ "$FAILED" -ne 0 ] || [ -n "$(git status --porcelain)" ]; then
   warn "smoke testi atlandı (önceki FAIL veya kirli tree)"
 else
   SMOKE_BEFORE="$(git rev-parse HEAD)"
+  # Chicken-and-egg: changelog tabloları TASARIM gereği HEAD'in bir commit
+  # gerisindedir (bir commit'in satırı ancak SONRAKİ commit'te eklenir). Bu
+  # yüzden smoke commit'i pre-commit sırasında changelog hook'unun --update
+  # ile tabloları değiştirip stage etmesine yol açar; o mutasyon reset ile
+  # atılır ama smoke'u hermetic olmayan kılar (hook'lar arası etkileşim +
+  # pre-commit'in "files were modified by this hook" riski). Smoke'u yeşil ve
+  # temiz koşmak için tabloları ÖNCE senkronla: smoke commit'inde changelog
+  # hook'u drift bulmaz → dokunmaz.
+  if bash _calisma/CIKTI/update_changelog_hook.sh >/dev/null 2>&1; then
+    info "changelog tabloları smoke öncesi senkronlandı (update_changelog_hook.sh)"
+  else
+    warn "update_changelog_hook.sh ön-senkronu başarısız — smoke yine de deneniyor"
+  fi
   if git commit --allow-empty -m "docs: pre-commit smoke test" >/dev/null 2>&1; then
     git reset --hard "$SMOKE_BEFORE" >/dev/null 2>&1
     if [ "$(git rev-parse HEAD)" = "$SMOKE_BEFORE" ]; then
@@ -213,6 +226,9 @@ else
       fail "smoke sonrası HEAD geri alınamadı"
     fi
   else
+    # Smoke başarısız — tree smoke öncesi temizdi; staged/mutasyona uğramış
+    # changelog senkronunu da geri al (temiz bırak).
+    git reset --hard "$SMOKE_BEFORE" >/dev/null 2>&1
     fail "pre-commit smoke FAIL — kapı kırmızı; önce yeşile çevir"
   fi
 fi
