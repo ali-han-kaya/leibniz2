@@ -3,7 +3,7 @@
 # dashboard_smoke.sh — canlı dashboard PASS'ini TEK KOMUTTA tekrarlanabilir kılar.
 #
 # launchd GUI agent rotasının (preview_server.py --dir <verify-mirror>) birebir
-# yerel karşılığı — run.md "How to reproduce the artifacts" adım 2+4:
+# yerel karşılığı — fresh_clone_setup.sh 3+4. adımının minimal karşılığı:
 #
 #   1. sync_verify_mirror.sh ile TCC-safe mirror'ı repo ile senkronla (K17
 #      ön-koşulu: mirror bayatsa dashboard zaten FAIL üretir).

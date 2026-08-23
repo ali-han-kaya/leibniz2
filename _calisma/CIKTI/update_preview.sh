@@ -34,7 +34,7 @@
 # BÖLÜM 3 — preview + verify mirror senkronu (sync_verify_mirror.sh'e delege)
 # verify_delivery.py --full koşusu launchd GUI agent rotasında repo yerine
 # TCC-safe mirror'dan (--dir) çalışır; mirror, preview çalıştırıcısının
-# (preview_server.py + _daemonize.py, run.md adım 2), CIKTI runtime
+# (preview_server.py + _daemonize.py, fresh_clone_setup.sh 3+4. adım), CIKTI runtime
 # dosyalarının ve Lean ispatının (adım 4) kopyasıdır. --mirror bunların
 # İKİSİNİ TEK KOMUTLA senkron eder (adım 2+4); --mirror-check bayatlığı
 # denetler (fail-closed: 0 güncel / 1 bayat / 2 hata).

@@ -6,7 +6,7 @@
 # Neden: preview_server.py launchd GUI agent rotasında çalışırken repo dizinini
 # TCC nedeniyle OKUYAMAZ; tüm runtime TCC-safe mirror'da (~/Library/Caches/
 # com.freebuff/) tutulur. Bu script, ayrı ayrı elle yapılan beş işi tek komuta
-# toplar (run.md "How to reproduce the artifacts" adımları 1-4 + plist):
+# toplar (run.md "How to reproduce the artifacts" — tek komut):
 #
 #   1. Repo venv        _calisma/.venv_z3          (z3 + pre-commit + yaml + jsonschema)
 #   2. Mirror venv      ~/Library/Caches/com.freebuff/venv_z3  (TCC-safe, aynı paketler)

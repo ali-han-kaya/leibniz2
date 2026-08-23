@@ -4,9 +4,9 @@
 #
 # Neden: preview_server.py launchd GUI agent rotasında çalışırken repo
 # dizinini TCC nedeniyle okuyamaz; tüm runtime TCC-safe mirror'da tutulur.
-# Bu script, run.md "How to reproduce the artifacts" ADIM 2 (preview mirror:
-# preview_server.py + _daemonize.py) ve ADIM 4 (verify mirror: CIKTI runtime
-# dosyaları + Lean ispatı) işlerini TEK KOMUTTA birleştirir:
+# Bu script, fresh_clone_setup.sh'in 3+4. adımını yerine getirir
+# (preview mirror: preview_server.py + _daemonize.py ve verify mirror:
+# CIKTI runtime dosyaları + Lean ispatı — tek komutta):
 #   ~/Library/Caches/com.freebuff/preview      (adım 2 — sunucu çalıştırıcı)
 #   ~/Library/Caches/com.freebuff/verify       (adım 4 — verify_delivery --dir)
 #   ~/Library/Caches/com.freebuff/lean_reduct  (adım 4 — K9: ../lean_reduct/…)
