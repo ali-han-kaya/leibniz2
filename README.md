@@ -359,6 +359,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-23 | other | test_mirror: K17 kapsamına preview runtime dosyalarını kat (uçtan uca) | [`a0110c2`](https://github.com/ali-han-kaya/leibniz2/commit/a0110c2) |
 | 2026-08-23 | other | preview_server: restart'ta önbelleklenmiş son run'ı yükle (UNKNOWN yok) | [`306c203`](https://github.com/ali-han-kaya/leibniz2/commit/306c203) |
 | 2026-08-23 | other | test_mirror: kapsamı runtime dosyalarına genişlet (zip/config/lean) | [`b2e86b5`](https://github.com/ali-han-kaya/leibniz2/commit/b2e86b5) |
+| 2026-08-23 | ci | mirror kapsam denetimi (--list ↔ repo dosya kümesi) ekle | [`7e15d44`](https://github.com/ali-han-kaya/leibniz2/commit/7e15d44) |
 
 ### Regresyon notları
 

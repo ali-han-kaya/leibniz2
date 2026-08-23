@@ -24,7 +24,8 @@
 #
 # Kullanım:
 #   fresh_clone_setup.sh             # beş artefaktı kur (yoksa) / senkron et (bayatsa)
-#   fresh_clone_setup.sh --check     # hepsi hazır mı? (0 evet / 1 eksik / 2 hata)
+#   fresh_clone_setup.sh --check      # hepsi hazır mı? (0 evet / 1 eksik / 2 hata)
+#   fresh_clone_setup.sh --check-ci   # CI runner: daemon + mirror venv atla
 #   fresh_clone_setup.sh --force-venv# venv'leri her zaman yeniden kur (pip install --upgrade)
 #   fresh_clone_setup.sh --help
 #
@@ -248,6 +249,73 @@ PYEOF
     return 0
 }
 
+# --check-ci: CI runner'da beş artefaktın üretilebilirliğini denetler.
+# Mirror venv (CI'da prod'dan farklı yolda), daemon HTTP smoke (canlı sunucu
+# gerekli) ve agent-mirror karşılaştırması (launchd yok) atlanır.
+#   1. Repo venv
+#   3+4. Preview + verify mirror (sync --check)
+#   5. HTML + plist (update_preview.sh --check + --plist-check)
+check_all_ci() {
+  local missing=0
+
+  # 1. Repo venv
+  if venv_ok "$REPO_VENV"; then
+    say "OK: repo venv ($REPO_VENV)"
+  else
+    err "repo venv eksik/bozuk: $REPO_VENV"
+    missing=1
+  fi
+
+  # 3+4. Preview + verify mirror
+  if [ -x "$SCRIPT_DIR/sync_verify_mirror.sh" ]; then
+    local sync_out sync_rc=0
+    sync_out="$("$SCRIPT_DIR/sync_verify_mirror.sh" --check 2>&1)" || sync_rc=$?
+    if [ "$sync_rc" -eq 0 ]; then
+      say "OK: preview + verify mirror (repo ↔ mirror birebir)"
+    else
+      err "preview/verify mirror bayat/eksik:"
+      printf '%s\n' "$sync_out" \
+        | grep -E 'BAYAT/EKSİK' \
+        | while IFS= read -r b; do err "  $b"; done
+      missing=1
+    fi
+  else
+    err "sync_verify_mirror.sh yok"
+    missing=1
+  fi
+
+  # 5. HTML + plist
+  if [ -x "$SCRIPT_DIR/update_preview.sh" ]; then
+    if "$SCRIPT_DIR/update_preview.sh" --check >/dev/null 2>&1; then
+      say "OK: HTML build (güncel)"
+    else
+      err "HTML build bayat/eksik"
+      missing=1
+    fi
+    local prc=0
+    "$SCRIPT_DIR/update_preview.sh" --plist-check >/dev/null 2>&1 || prc=$?
+    if [ "$prc" -eq 0 ]; then
+      say "OK: LaunchAgent plist'leri (güncel)"
+    elif [ "$prc" -eq 2 ]; then
+      err "plist şablonu yok"
+      missing=1
+    else
+      err "LaunchAgent plist'leri bayat"
+      missing=1
+    fi
+  else
+    err "update_preview.sh yok — HTML/plist denetlenemedi"
+    missing=1
+  fi
+
+  if [ "$missing" -ne 0 ]; then
+    say "SONUÇ: EKSİK — artefakt kurulumu doğrulanamadı (exit 1)"
+    return 1
+  fi
+  say "SONUÇ: TAMAM — beş artefakt kurulumu hazır (exit 0)"
+  return 0
+}
+
 # Tüm kurulum: 5 adım (fail-closed).
 setup_all() {
   local force_venv="${1:-0}"
@@ -290,6 +358,9 @@ main() {
       ;;
     --check)
       check_all
+      ;;
+    --check-ci)
+      check_all_ci
       ;;
     --force-venv)
       force_venv=1

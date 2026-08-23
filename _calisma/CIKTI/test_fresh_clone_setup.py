@@ -199,6 +199,65 @@ class TestFreshCloneSetupAgentMirror(unittest.TestCase):
             self.assertIn("OTHER-preview", r.stderr)
 
 
+class TestFreshCloneSetupCheckCI(unittest.TestCase):
+    """--check-ci: CI runner'da beş artefaktı doğrula (daemon + mirror venv atla)."""
+
+    def test_check_ci_exit_1_when_nothing_built(self):
+        with tempfile.TemporaryDirectory(prefix="fc-setup-") as home:
+            r = run(home, "bash", FRESH_SETUP, "--check-ci",
+                    extra_env=env_overrides(home))
+            self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+            self.assertIn("EKSİK", r.stdout)
+
+    def test_check_ci_exit_0_after_sync(self):
+        """mirror sync + repo venv + HTML/plist → --check-ci exit 0 (daemon atlanır)."""
+        with tempfile.TemporaryDirectory(prefix="fc-setup-") as home:
+            env = env_overrides(home)
+            fake_venv(env["REPO_VENV"])
+            # MIRROR_VENV'yi oluşturma (CI'da farklı yolda, --check-ci atlar).
+            r = run(home, "bash", FRESH_SETUP, extra_env=env)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            r = run(home, "bash", FRESH_SETUP, "--check-ci", extra_env=env)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertIn("TAMAM", r.stdout)
+            # Daemon rotası --check-ci'de çalıştırılmaz.
+            self.assertNotIn("daemon", r.stdout.lower())
+
+    def test_check_ci_skips_daemon_http_smoke(self):
+        """--check-ci mirror sync --check çalıştırır (daemon dosyası dahil)
+        ama daemon HTTP smoke (boş portta sunucu başlatma) çalıştırMAZ.
+        Mirror'dan daemon_http_test.py silinince sync --check bayat yakalar."""
+        with tempfile.TemporaryDirectory(prefix="fc-setup-") as home:
+            env = env_overrides(home)
+            fake_venv(env["REPO_VENV"])
+            r = run(home, "bash", FRESH_SETUP, extra_env=env)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            # --check-ci daemon smoke (step 6) çalıştırmasaydı,
+            # mirror sync hala dosya bütünlüğünü doğrulardı:
+            # daemon_http_test.py silinince sync --check EKSİK yakalar.
+            dtest = os.path.join(home, "Library", "Caches", "com.freebuff",
+                                 "verify", "daemon_http_test.py")
+            if os.path.exists(dtest):
+                os.remove(dtest)
+            r = run(home, "bash", FRESH_SETUP, "--check-ci", extra_env=env)
+            self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+            self.assertIn("daemon_http_test.py", r.stdout + r.stderr)
+
+    def test_check_ci_fails_on_mirror_drift(self):
+        """mirror bayatsa --check-ci yine exit 1."""
+        with tempfile.TemporaryDirectory(prefix="fc-setup-") as home:
+            env = env_overrides(home)
+            fake_venv(env["REPO_VENV"])
+            r = run(home, "bash", FRESH_SETUP, extra_env=env)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            pv = os.path.join(home, "Library", "Caches", "com.freebuff",
+                              "preview", "preview_server.py")
+            with open(pv, "a", encoding="utf-8") as f:
+                f.write("\n# drift\n")
+            r = run(home, "bash", FRESH_SETUP, "--check-ci", extra_env=env)
+            self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+
+
 class TestFreshCloneSetupFailClosed(unittest.TestCase):
     """Eksik ön-koşul → hata ile dur (fail-closed, exit ≠ 0)."""
 

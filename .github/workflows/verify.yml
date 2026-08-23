@@ -2334,6 +2334,23 @@ jobs:
           echo "LEAN_MIRROR_DIR=$LEAN_MIRROR_DIR" >> "$GITHUB_ENV"
           bash _calisma/CIKTI/sync_verify_mirror.sh --force
 
+      # FRESH-CLONE --check-ci: beş artefaktın kurulumunu tek denetimde
+      # doğrular (repo venv + mirror sync + HTML + plist). Daemon HTTP
+      # smoke ve mirror venv CI'da atlanır; agent-mirror karşılaştırması
+      # launchd olmadığı için BİLGİ notu düşer. Advisory (job durumunu
+      # etkilemez, run summary'de exit kodu gösterilir).
+      - name: Fresh-clone setup check (--check-ci, advisory)
+        id: fcs
+        run: |
+          set -uo pipefail
+          set +e
+          bash _calisma/CIKTI/fresh_clone_setup.sh --check-ci \
+            2>&1 | tee fresh_clone_check_report.txt
+          rc=$?
+          set -e
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          echo "fresh_clone --check-ci exit: $rc"
+
       # K17 kapısı: sync sonrası mirror GÜNCEL (exit 0) olmalı. BAYAT/hata
       # → P1 → exit 1 → fail-closed. --mirror-out: ham çıktı + K17 raporu
       # tek sidecar JSON'a yazılır (mirror_report.json) — artifact'ta
@@ -2373,6 +2390,7 @@ jobs:
             echo "## Mirror sync check (macOS)"
             echo ""
             echo "- Bootstrap smoke (--bootstrap): exit \`${{ steps.bs.outputs.rc }}\`"
+            echo "- Fresh-clone setup (--check-ci): exit \`${{ steps.fcs.outputs.rc }}\`"
             echo "- K17 --check-mirror: exit \`${{ steps.k17.outputs.rc }}\`"
             echo "- Mirror coverage (--list ↔ repo): exit \`${{ steps.cov.outputs.rc }}\`"
             echo '```'
@@ -2389,5 +2407,6 @@ jobs:
             mirror_check_report.txt
             mirror_report.json
             bootstrap_smoke.txt
+            fresh_clone_check_report.txt
           if-no-files-found: ignore
           retention-days: 30
