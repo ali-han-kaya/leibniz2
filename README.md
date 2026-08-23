@@ -1,5 +1,9 @@
 # Stoic-Hume V5 — Teslim ve Doğrulama Deposu
 
+[![CI status](https://github.com/ali-han-kaya/leibniz2/actions/workflows/verify.yml/badge.svg)](https://github.com/ali-han-kaya/leibniz2/actions/workflows/verify.yml)
+[![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://pre-commit.com)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 Bu repo, *What an Extensional First-Order Formalization Leaves
 Underdetermined: Stoic Katalepsis and Humean Custom* (V5, 2026-08-17)
 teslimini ve onu doğrulayan fail-closed araç zincirini içerir.
@@ -337,6 +341,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-23 | feat | (ci) changelog drift advisory job | [`5aba283`](https://github.com/ali-han-kaya/leibniz2/commit/5aba283) |
 | 2026-08-23 | feat | (changelog) --link modu ekle | [`f31049a`](https://github.com/ali-han-kaya/leibniz2/commit/f31049a) |
 | 2026-08-23 | docs | (changelog) tabloları f31049a'ya senkronla | [`798052b`](https://github.com/ali-han-kaya/leibniz2/commit/798052b) |
+| 2026-08-23 | refactor | (changelog) tek kaynak — README changelog, PUBLISH işaretçi | [`cad671b`](https://github.com/ali-han-kaya/leibniz2/commit/cad671b) |
 
 ### Regresyon notları
 
