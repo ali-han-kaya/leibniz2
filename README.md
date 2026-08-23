@@ -331,6 +331,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-23 | test | (scripts) update_changelog_hook birim kapısı (drift/stage/hata) | `d210be3` |
 | 2026-08-23 | feat | (scripts) branch protection tek-komut kurulum | `7b78e0f` |
 | 2026-08-23 | docs | V5z — bugünkü canlı 61/61 doğrulaması (2026-08-23) | `35d9221` |
+| 2026-08-23 | fix | (verify) refs HTTP retry 2→3 (IA SSL handshake flaky UNVERIFIED) | `8a0220e` |
 
 ### Regresyon notları
 

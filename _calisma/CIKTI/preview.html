@@ -205,7 +205,8 @@
   </section>
 
   <section>
-    <h2>Reference verification trend <span class="ts" id="refs-trend-count"></span></h2>
+    <h2>Reference verification trend <span class="ts" id="refs-trend-count"></span>
+      <span class="badge unknown" id="refs-trend-badge">tam kapsam: veri yok</span></h2>
     <div class="card" style="padding:10px">
       <svg id="refs-trend" viewBox="0 0 1160 240" width="100%" height="240" role="img"
            aria-label="verified/total zaman serisi grafiği"></svg>
@@ -573,6 +574,23 @@ function positionTip(ev) {
 }
 
 // ---- Reference verification trend (verified/total zaman serisi) ----
+// "Tam kapsam" rozeti mantığı (saf — test_refs_trend_badge.py ile senkron).
+// rows: [{refs_verified, refs_total}] (sıralı, en yeni sonda). Döner
+// {cls: "ok"|"warn"|"unknown", text}. Son run full (verified===total) ise
+// yeşil rozet + kesintisiz full run serisi; değilse amber; veri yoksa gri.
+function refsTrendBadge(rows) {
+  const have = (rows || []).filter(r => r.refs_verified != null && r.refs_total != null);
+  if (!have.length) return { cls: "unknown", text: "tam kapsam: veri yok" };
+  const last = have[have.length - 1];
+  const full = (r) => r.refs_verified === r.refs_total;
+  let streak = 0;
+  for (let i = have.length - 1; i >= 0 && full(have[i]); i--) streak++;
+  if (full(last)) {
+    return { cls: "ok", text: "✓ TAM KAPSAM " + last.refs_verified + "/" + last.refs_total +
+      (streak > 1 ? " · " + streak + " run" : "") };
+  }
+  return { cls: "warn", text: "kapsam eksik " + last.refs_verified + "/" + last.refs_total };
+}
 let refsTrendCache = [];
 function showRefsTrendTip(i, ev) {
   const r = refsTrendCache[i];
@@ -599,6 +617,9 @@ function renderRefsTrend(rows) {
     svg.innerHTML = "";
     legend.textContent = "çevrimiçi referans verisi yok — bu run'larda --check-references veri üretmedi";
     $("refs-trend-count").textContent = "";
+    const b0 = refsTrendBadge([]);
+    const bEl0 = $("refs-trend-badge");
+    if (bEl0) { bEl0.className = "badge " + b0.cls; bEl0.textContent = b0.text; }
     return;
   }
   const W = 1160, H = 240, PL = 44, PR = 110, PT = 12, PB = 32;
@@ -694,6 +715,10 @@ function renderRefsTrend(rows) {
     " → " + (last.ts ? new Date(last.ts).toLocaleString() : "?") + ` · ${n} run` +
     (chips ? " · " + chips : "");
   $("refs-trend-count").textContent = `(${n} run)`;
+  // "Tam kapsam" rozeti — bugünkü 61/61 serisini yeşil rozetle vurgula.
+  const b = refsTrendBadge(have);
+  const bEl = $("refs-trend-badge");
+  if (bEl) { bEl.className = "badge " + b.cls; bEl.textContent = b.text; }
 }
 
 // ---- refs-trend duration/bought overlay (refs-trend.json'dan bağımsız trend) ----

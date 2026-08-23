@@ -400,7 +400,8 @@ repos:
           test_doc_artifact_sync test_lean_lake test_preview_server
           test_status_checks test_dashboard_smoke test_coq_lake
           test_override_trend test_check_config_sync test_verify_checks
-          test_update_changelog_hook test_setup_branch_protection; do
+          test_update_changelog_hook test_setup_branch_protection
+          test_refs_trend_badge; do
           "$PY" -m unittest discover -s _calisma/CIKTI -p "$t.py" ||
           exit 1; done'
         language: system
