@@ -189,6 +189,10 @@ step_consolidate_summary() {
 # summary.md oluştu mu, boş mu, yazılabilir mi — CI'da GITHUB_STEP_SUMMARY
 # dosyası GitHub tarafından otomatik create edilir; yerelde biz oluşturduk,
 # ama write hatası, encoding sorunu veya empty summary yakalanmalı.
+# Readonly assertion: GITHUB_STEP_SUMMARY'ya yazamıyorsak (dosya chmod a-w /
+# dizin yazılamaz / read-only filesystem) CONSolidate/summary_sink stdout'a
+# düşer ve hata sessizce yutulur — bu, write'ın GERÇEKTEN okunabildiğini ve
+# yeniden yazılabildiğini doğrular (fail-closed).
 step_validate_summary() {
   cd "$SIM_DIR"
   local summary="$SIM_DIR/summary.md"
@@ -200,6 +204,19 @@ step_validate_summary() {
     echo "❌ HATA: summary.md boş — dashboard header veya detail sections yazmadı"
     errors=$((errors + 1))
   else
+    # Readonly assertion: dosyayı geçici içerikle ekleyerek APPEND derecesini
+    # denetle (GitHub Actions da summary'ye > ile değil >> ile APPEND eder).
+    if [ ! -w "$summary" ]; then
+      echo "❌ HATA: summary.md yazılabilir değil — GITHUB_STEP_SUMMARY readonly"
+      errors=$((errors + 1))
+    elif ! (set -C; echo "# proj-readonly-assert" >> "$summary") 2>/dev/null; then
+      echo "❌ HATA: summary.md'ye APPEND yapılamadı — dosya/dizin read-only"
+      errors=$((errors + 1))
+    else
+      # Test satırını geri al (iz bırakmadan) — içerik değişmemiş olmalı.
+      tail -1 "$summary" | grep -q '# proj-readonly-assert' && sed -i.bak '$d' "$summary" && rm -f "$summary.bak"
+      echo "✅ summary.md: yazılabilir (APPEND OK)"
+    fi
     local lines=$(wc -l < "$summary")
     local bytes=$(wc -c < "$summary" | tr -d ' ')
     echo "✅ summary.md: $lines satır, $bytes bayt"
@@ -209,7 +226,7 @@ step_validate_summary() {
     else
       echo "⚠️  Dashboard header summary.md içinde bulunamadı (eksik olabilir)"
     fi
-    # Detail sections var mı? (en az bir section header)
+    # Detail sections var mı? (en az bir section-header)  # detail başlığı
     if grep -qE '^## ' "$summary"; then
       local sections=$(grep -cE '^## ' "$summary")
       echo "✅ Detail sections: $sections bölüm"
