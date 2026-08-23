@@ -252,10 +252,14 @@ jobs:
       # çalışmaz; bu yüzden stable toolchain açıkça kurulur. v4.14.0 da
       # açıkça kurulur — 8 teoremli Sınır İspatı çekirdeğinin lake build
       # kapısı lean-toolchain'deki sürümü (fail-closed) kullanır.
+      # NOT 2: `echo "$HOME/.elan/bin" >> $GITHUB_PATH` yalnızca SONRAKİ
+      # adıma uygulanır; `elan toolchain install` aynı adımda koştuğu için
+      # inline export gerekir (yoksa exit 127 → sonraki adımlar skip).
       - name: Install Lean 4 (K9)
         run: |
           curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain leanprover/lean4:stable
           echo "$HOME/.elan/bin" >> $GITHUB_PATH
+          export PATH="$HOME/.elan/bin:$PATH"
           elan toolchain install leanprover/lean4:v4.14.0
 
       # `pipefail` + `tee`: çıktı hem log'a hem dosyaya yazılır, ama exit kodu

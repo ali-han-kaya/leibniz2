@@ -222,6 +222,7 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 | 2026-08-23 | ci | CI-SIMULATE'i advisory job olarak her push'a ekle | `f95df4a` |
 | 2026-08-23 | ci | ci-simulate job'unda elan PATH'ini inline export et | `a80daa0` |
 | 2026-08-23 | ci | tum_sapmalar_comment.js'i repo'ya al (K16 battery CI'da ENOENT) | `246b0e4` |
+| 2026-08-23 | ci | pre-existing test kirilmalarini kapat (mirror + battery desen) | `4eeb0a5` |
 
 ---
 
