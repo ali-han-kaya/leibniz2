@@ -397,6 +397,61 @@ class TestProvenance(unittest.TestCase):
         m = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         self.assertNotIn("mirror_check", m)
 
+    # ── DAEMON HTTP section tests ────────────────────────────────────
+    def test_daemon_http_section(self):
+        # daemon-http/ dosyaları (daemon_http_test.py raporu + K15 sidecar
+        # + override report) CONFIG gibi ayrı bölümde işaretlenir +
+        # tek-hash combined_sha256 özetlenir.
+        (self.artifacts / "daemon-http").mkdir(parents=True)
+        (self.artifacts / "daemon-http" / "daemon_http_report.json").write_text(
+            json.dumps({"ok": True, "endpoints": {"/api/latest": 200},
+                        "daemon_alive": True}) + "\n", encoding="utf-8")
+        (self.artifacts / "daemon-http" / "daemon_http_report.txt").write_text(
+            "daemon-http exit: 0\n", encoding="utf-8")
+        self._gen()
+        txt = (self.out / "manifest.txt").read_text(encoding="utf-8")
+        self.assertIn("DAEMON HTTP ARTIFACT (ayrı bölüm)", txt)
+        self.assertIn("daemon_http_combined_sha256", txt)
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        dh = m["daemon_http"]
+        self.assertIn("daemon-http/daemon_http_report.json", dh["files"])
+        self.assertIn("daemon-http/daemon_http_report.txt", dh["files"])
+        self.assertTrue(len(dh["combined_sha256"]) == 64)
+
+    def test_daemon_http_combined_recomputes_deterministically(self):
+        (self.artifacts / "daemon-http").mkdir(parents=True)
+        (self.artifacts / "daemon-http" / "daemon_http_report.json").write_text(
+            json.dumps({"ok": True}) + "\n", encoding="utf-8")
+        self._gen()
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        dh = m["daemon_http"]["files"]
+        expected = hashlib.sha256(
+            "".join(f"{rel}\0{dh[rel]}\n" for rel in sorted(dh)).encode()
+        ).hexdigest()
+        self.assertEqual(m["daemon_http"]["combined_sha256"], expected)
+        self.assertRegex(m["daemon_http"]["combined_sha256"], r"^[0-9a-f]{64}$")
+
+    def test_daemon_http_artifact_job_provenance(self):
+        (self.artifacts / "daemon-http").mkdir(parents=True)
+        (self.artifacts / "daemon-http" / "daemon_http_report.json").write_text(
+            "{}", encoding="utf-8")
+        self._gen()
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        jobs = m["provenance"]["artifact_jobs"]
+        self.assertEqual(jobs["daemon-http"], "daemon-http")
+        txt = (self.out / "manifest.txt").read_text(encoding="utf-8")
+        self.assertIn("prefixed (1 dosya)", txt)  # daemon-http tek dosya
+
+    def test_no_daemon_http_section_when_absent(self):
+        bare = self.root / "bare"
+        bare.mkdir(parents=True)
+        (bare / "a.txt").write_text("x", encoding="utf-8")
+        out = self.root / "bare-out"
+        r = _run_gen(str(bare), str(out))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        m = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        self.assertNotIn("daemon_http", m)
+
     # ── OVERRIDES section tests ──────────────────────────────────────
     def test_overrides_section(self):
         # cli_overrides_version.json (isimle tanınır — CONFIG gibi)
@@ -477,7 +532,7 @@ class TestWorkflowPatternCoverage(unittest.TestCase):
     """
     EXCLUDED = {"precommit-logs", "refs-trend", "override-trend",
                 "precheck-report", "python3-shell", "plist-check",
-                "mirror-check", "reproducibility"}
+                "mirror-check", "daemon-http", "reproducibility"}
 
     def _workflow_merge_pattern(self):
         wf = CIKTI.parent.parent / ".github" / "workflows" / "verify.yml"

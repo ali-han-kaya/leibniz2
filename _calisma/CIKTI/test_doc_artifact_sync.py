@@ -11,10 +11,9 @@ Invariantlar (fail-closed):
   1. ARTIFACT_JOBS'taki HER artifact doc listesinde VAR olmalı — manifest
      kapsamındaki bir artifact belgelenmezse denetim izi eksik kalır.
   2. Doc'taki fazlalıklar (ARTIFACT_JOBS'da olmayanlar) TAM OLARAK
-     {daemon-http, ci-simulate, audit-refs-trend,
-     audit-live-ci, changelog-drift} olmalı — reproducibility job'ı bu
-     advisory artifact'ları indirmez; başka bir fazlalık =
-     doc/ARTIFACT_JOBS drift'i.
+     {ci-simulate, audit-refs-trend, audit-live-ci, changelog-drift} olmalı
+     — reproducibility job'ı bu advisory artifact'ları indirmez; başka bir
+     fazlalık = doc/ARTIFACT_JOBS drift'i.
   3. "Artifact listesi (N)" başlığındaki N sayısı ayrıştırılan ad
      sayısıyla birebir olmalı (bayat sayı = liste güncellenmemiş).
 
@@ -38,7 +37,6 @@ import gen_repro_manifest as gen_manifest  # noqa: E402
 # job'ların çıktıları). ARTIFACT_JOBS'a girmemeleri BİLEREK — merge pattern'e
 # girmezler, manifest'e girmezler; doc'ta görünmeleri doğrudur.
 DOC_ONLY_ADVISORY = frozenset({
-    "daemon-http",      # advisory smoke — job output
     "ci-simulate",      # advisory yerel CI simülasyonu — job output
     "audit-refs-trend", # advisory denetim — job output
     "audit-live-ci",    # advisory meta-denetçi — job output

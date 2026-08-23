@@ -72,6 +72,7 @@ ARTIFACT_JOBS = {
     "python3-shell": "verify",
     "plist-check": "plist-check",
     "mirror-check": "mirror-check",
+    "daemon-http": "daemon-http",
     "reproducibility": "reproducibility",
 }
 
@@ -517,6 +518,37 @@ def main() -> None:
                      "=" * 72]
         lines += mc_block
 
+    # ── DAEMON HTTP bölümü: daemon-http/ önekli dosyalar (CONFIG gibi) ───────
+    # daemon_http_test.py çıktısı (daemon_http_report.txt/.json) + K15
+    # sidecar (daemon_history.jsonl + .sha256) + k15_report.txt +
+    # override_report.json ayrıca işaretlenir; combined_sha256 tek hash ile
+    # özetler. Böylece daemon-modu HTTP 200 denetiminin raporu da SHA-256
+    # ile sabitlenmiş denetim zincirinde (daemon-http → hash → manifest →
+    # bundle).
+    daemon_http_hashes = {rel: h for rel, h in file_hashes.items()
+                          if rel.startswith("daemon-http/")}
+    daemon_http_combined = None
+    if daemon_http_hashes:
+        sorted_rel = sorted(daemon_http_hashes)
+        daemon_http_combined = hashlib.sha256(
+            "".join(f"{rel}\0{daemon_http_hashes[rel]}\n"
+                     for rel in sorted_rel).encode()
+        ).hexdigest()
+        dh_block = [
+            "",
+            "=" * 72,
+            "DAEMON HTTP ARTIFACT (ayrı bölüm)",
+            "=" * 72,
+            f"{'FILE':<55} {'SHA-256'}",
+            "-" * 72,
+        ]
+        dh_block += [f"{rel:<55} {daemon_http_hashes[rel]}"
+                     for rel in sorted_rel]
+        dh_block += ["-" * 72,
+                     f"daemon_http_combined_sha256: {daemon_http_combined}",
+                     "=" * 72]
+        lines += dh_block
+
     # ── OVERRIDES bölümü: cli_overrides_version.json (CLI override kaydı) ──
     # check_cli_overrides.py --version-out çıktısı; CONFIG gibi ayrıca
     # işaretlenir. combined_sha256 tek hash ile özetler (config.combined_sha256
@@ -610,13 +642,14 @@ def main() -> None:
     # Üç indirme modu var:
     #   prefixed  — download-artifact name=X, path=all_artifacts/X/
     #               (config, precommit-logs, refs-trend, precheck-report,
-    #                python3-shell, plist-check, mirror-check)
+    #                python3-shell, plist-check, mirror-check, daemon-http)
     #   merged    — merge-multiple: true + pattern ile indirildi,
     #               dosyalar all_artifacts/ köküne düzleşti
     #  .none      — hiç indirilmedi (reproducibility çıkış artifact'ı)
     PREFIXED = frozenset({
         "config", "precommit-logs", "refs-trend", "override-trend",
         "precheck-report", "python3-shell", "plist-check", "mirror-check",
+        "daemon-http",
     })
     MERGED = frozenset({
         "verify-report", "budget", "budget-verify", "reports",
@@ -742,6 +775,11 @@ def main() -> None:
         manifest_json["mirror_check"] = {
             "files": dict(sorted(mirror_check_hashes.items())),
             "combined_sha256": mirror_check_combined,
+        }
+    if daemon_http_hashes:
+        manifest_json["daemon_http"] = {
+            "files": dict(sorted(daemon_http_hashes.items())),
+            "combined_sha256": daemon_http_combined,
         }
     if overrides_hashes:
         manifest_json["overrides"] = {

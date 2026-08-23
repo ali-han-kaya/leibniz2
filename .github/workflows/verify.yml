@@ -1099,6 +1099,19 @@ jobs:
           name: mirror-check
           path: all_artifacts/mirror-check/
 
+      # daemon-http macOS advisory job'ın artifact'ıdır (daemon_http_test.py
+      # raporu + K15 sidecar + override report). macOS job'ı Linux-only push
+      # senaryolarında çalışmayabilir veya artifact beklenmeyebilir —
+      # continue-on-error ile build bloke edilmez; varsa prefixed indirme
+      # sayesinde gen_repro_manifest.py'nin DAEMON HTTP bölümü
+      # daemon-http/ önekini yakalar + ayrı hash'ler (SHA-256 ile sabitlenir).
+      - name: Download daemon-http artifact (daemon-http/ prefix)
+        continue-on-error: true
+        uses: actions/download-artifact@v7
+        with:
+          name: daemon-http
+          path: all_artifacts/daemon-http/
+
       # ─── 2) manifest.txt üret (gen_repro_manifest.py — tek kaynak) ─────────
       - name: Generate reproducibility manifest
         shell: bash
