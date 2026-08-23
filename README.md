@@ -309,6 +309,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-23 | ci | override run [CLI override] satirlarini OVERRIDE_RAPORU.json'a tasi | `fa9b7a4` |
 | 2026-08-23 | docs | PRE_PUSH_DENETIM_RAPORU e §9 CI run trend tablosu ekle | `8e71025` |
 | 2026-08-23 | ci | ci-simulate raporu .freebuff/sim'a; ci_stats.py scripti | `4e44c26` |
+| 2026-08-23 | ci | CI-SIMULATE'i advisory job olarak her push'a ekle | `f95df4a` |
 
 ### Regresyon notları
 
