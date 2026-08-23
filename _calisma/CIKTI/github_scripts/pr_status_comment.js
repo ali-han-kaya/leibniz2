@@ -4,6 +4,8 @@
   const K0_PATH = 'k0_findings.json';
   const LINEAGE_PATH = 'lineage_findings.json';
   const KLAYERS_PATH = 'klayers.json';
+  const K10_VERDICT_PATH = 'k10_verdict.txt';
+  const REPRO_MANIFEST_PATH = 'reproducibility/manifest.json';
   const MARKER = '<!-- stoic-hume-v5-pr-status -->';
 
   const budget = fs.existsSync(BUDGET_PATH)
@@ -21,6 +23,9 @@
   const klayers = fs.existsSync(KLAYERS_PATH)
     ? JSON.parse(fs.readFileSync(KLAYERS_PATH, 'utf8'))
     : null;
+  const hasReproManifest = fs.existsSync(REPRO_MANIFEST_PATH);
+  const k10Verdict = fs.existsSync(K10_VERDICT_PATH)
+    ? fs.readFileSync(K10_VERDICT_PATH, 'utf8').trim() : null;
 
   // ── Bütçe bölümü ──
   const budgetLines = [];
@@ -190,6 +195,26 @@
     kLayerBadge = '⚠️ **K katmanları: sidecar bulunamadı**';
   }
 
+  // ── Reproducibility manifest bölümü (K10 digest + bundle varlığı) ──
+  // k10_verdict.txt (reproducibility job'ının K10 manifest.sha256 doğrulama
+  // sonucu: PASS/FAIL) + reproducibility/manifest.json varlığı. K10 PASS iken
+  // manifest bundle'ı SHA-256 ile doğrulanmıştır; FAIL ise bütünlük ihlali.
+  const reproLines = [];
+  let reproBadge;
+  if (!hasReproManifest || !k10Verdict) {
+    reproBadge = '⚠️ **Reproducibility manifest: denetim çalışmadı**';
+  } else if (k10Verdict === 'PASS') {
+    reproBadge = '✅ **Reproducibility manifest: PASS**';
+    reproLines.push('- manifest.json + manifest.sha256 bundle bütünlüğü K10 ile doğrulandı');
+  } else if (k10Verdict === 'FAIL') {
+    reproBadge = '❌ **Reproducibility manifest: FAIL**';
+    reproLines.push("- K10 manifest digest FAIL — bundle hash'i doğrulanamadı");
+  } else {
+    reproBadge = `⚠️ **Reproducibility manifest: ${k10Verdict}**`;
+    reproLines.push('- k10_verdict.txt beklenmeyen değer taşıyor');
+
+  }
+
   // ── Etiket senkronu (precommit-p0 / precommit-p1) ──
   const LABELS = [
     { label: 'precommit-p0', has: p0.length > 0 },
@@ -237,10 +262,12 @@
     }
   }
   const hasCommitMsgViolations = cm && (cm.violations || []).length > 0;
+  const hasReproFindings = !hasReproManifest || !k10Verdict
+    || k10Verdict !== 'PASS';
   const hasMissingSidecars = !budget || !pc || !k0 || !lineage || !klayers;
   const hasAnyFindings = hasBudgetOverflow || hasP0P1 || hasK0Findings
     || hasLineageFail || hasKlayersFail || hasMissingSidecars || hasCliOverride
-    || hasCommitMsgViolations;
+    || hasCommitMsgViolations || hasReproFindings;
 
   const { data: comments } = await github.rest.issues.listComments({
     issue_number: context.issue.number,
@@ -313,6 +340,10 @@
     '### 📦 K katmanları',
     kLayerBadge,
     ...kLayerLines,
+    '',
+    '### 📦 Reproducibility manifest',
+    reproBadge,
+    ...reproLines,
     '',
     `> Detay: [run #${context.runId}](${runUrl})`,
     '',

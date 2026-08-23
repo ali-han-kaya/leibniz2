@@ -96,6 +96,8 @@ SCENARIOS = [
             "klayers.json": json.dumps({"layers": {
                 "K1": {"status": "PASS", "label": "manifest"},
                 "K8": {"status": "PASS", "label": "Z3"}}}),
+            "k10_verdict.txt": "PASS",
+            "reproducibility/manifest.json": "{}",
         },
         None, [], [],
         {
@@ -124,6 +126,8 @@ SCENARIOS = [
             "klayers.json": json.dumps({"layers": {
                 "K1": {"status": "PASS", "label": "manifest"},
                 "K8": {"status": "PASS", "label": "Z3"}}}),
+            "k10_verdict.txt": "PASS",
+            "reproducibility/manifest.json": "{}",
         },
         None, [],
         [{"id": 400, "body": "eski uyarı " + MARKER_STATUS}],
@@ -132,6 +136,39 @@ SCENARIOS = [
             "call_counts": {"issues.listComments": 1},
             "delete_comments": [400],
             "console_any": ["Bulgular çözüldü — bayat yorum kaldırıldı"],
+            "add_labels": [], "remove_labels": [],
+        },
+    ),
+    (
+        "pr_status: repro-manifest FAIL → ❌ bölümü + yorum kalır",
+        "pr_status_comment.js",
+        {
+            "budget/index.json": json.dumps({
+                "runs": [{"source": "verify", "estimated_usd": 1.2,
+                          "limit": 30, "tokens_est": 400000}],
+                "method": "weighted"}),
+            "precommit_findings/PRECOMMIT_RAPORU.json": json.dumps({
+                "findings": [], "counts": {"hooks": 9, "passed": 9}}),
+            "k0_findings.json": json.dumps({"count": 0, "findings": []}),
+            "lineage_findings.json": json.dumps({
+                "ok": True,
+                "generations": [
+                    {"gen": 1, "note": "ilk", "hash": "aabbccdd00112233", "status": "PASS"}
+                ]}),
+            "klayers.json": json.dumps({"layers": {
+                "K1": {"status": "PASS", "label": "manifest"},
+                "K10": {"status": "PASS", "label": "Manifest"},
+                "K8": {"status": "PASS", "label": "Z3"}}}),
+            "k10_verdict.txt": "FAIL",
+            "reproducibility/manifest.json": "{}",
+        },
+        None, [], [],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.createComment": 1},
+            "body_contains": {"issues.createComment": [
+                "Reproducibility manifest", "FAIL",
+                "manifest digest FAIL", MARKER_STATUS]},
             "add_labels": [], "remove_labels": [],
         },
     ),
@@ -343,6 +380,8 @@ SCENARIOS = [
             "k0_findings.json": json.dumps({"count": 0, "findings": []}),
             "lineage_findings.json": json.dumps({"ok": True, "generations": []}),
             "klayers.json": json.dumps({"layers": {"K1": {"status": "PASS"}}}),
+            "k10_verdict.txt": "PASS",
+            "reproducibility/manifest.json": "{}",
         },
         None, [],
         [{"id": 300, "body": "eski uyarı " + MARKER_STATUS}],
@@ -367,6 +406,8 @@ SCENARIOS = [
             "k0_findings.json": json.dumps({"count": 0, "findings": []}),
             "lineage_findings.json": json.dumps({"ok": True, "generations": []}),
             "klayers.json": json.dumps({"layers": {"K1": {"status": "PASS"}}}),
+            "k10_verdict.txt": "PASS",
+            "reproducibility/manifest.json": "{}",
         },
         None, [], [],
         {
@@ -399,6 +440,8 @@ SCENARIOS = [
             "k0_findings.json": json.dumps({"count": 0, "findings": []}),
             "lineage_findings.json": json.dumps({"ok": True, "generations": []}),
             "klayers.json": json.dumps({"layers": {"K1": {"status": "PASS"}}}),
+            "k10_verdict.txt": "PASS",
+            "reproducibility/manifest.json": "{}",
         },
         None, [], [],
         {
@@ -427,6 +470,8 @@ SCENARIOS = [
             "k0_findings.json": json.dumps({"count": 0, "findings": []}),
             "lineage_findings.json": json.dumps({"ok": True, "generations": []}),
             "klayers.json": json.dumps({"layers": {"K1": {"status": "PASS"}}}),
+            "k10_verdict.txt": "PASS",
+            "reproducibility/manifest.json": "{}",
         },
         None, [], [],
         {
@@ -449,6 +494,8 @@ SCENARIOS = [
             "k0_findings.json": json.dumps({"count": 0, "findings": []}),
             "lineage_findings.json": json.dumps({"ok": True, "generations": []}),
             "klayers.json": json.dumps({"layers": {"K1": {"status": "PASS"}}}),
+            "k10_verdict.txt": "PASS",
+            "reproducibility/manifest.json": "{}",
         },
         None, [], [],
         {
