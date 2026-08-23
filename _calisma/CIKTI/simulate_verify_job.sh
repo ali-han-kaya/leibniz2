@@ -233,6 +233,32 @@ step_validate_summary() {
     else
       echo "⚠️  Detail section başlığı bulunamadı (boş olabilir)"
     fi
+    # GitHub Actions summary format uygunluğu — reserved `## Annotations`.
+    # GitHub Actions job summary'sinde `## Annotations` bölümünü runner
+    # OTOMATIK ekler (workflow-komut annotation'ları için); kullanıcı içeriği
+    # bu başlıkla bitiyorsa runner'ın bölümüyle çakışabilir. Bu bölüm GİZLİYSE
+    # (içerikte BİLEREK yazılmışsa) ardından geçerli bir Markdown tablosu
+    # (başlık `| Icon | Annotation |` + `| --- |` ayırıcı) yoksa fail-closed.
+    if grep -q '^## Annotations' "$summary"; then
+      # Başlıktan sonraki ilk 2 satır: tablo başlığı + ayırıcı (--= gpr başlığı
+      # hesaba katmaz; -A 2 başlık satırından SONRAKİ 2 satırı verir, ilk satır
+      # başlığın kendisi olur → tail -2 onu atar).
+      local after=$(grep -A 3 '^## Annotations' "$summary" | tail -2)
+      if ! echo "$after" | grep -q '^|.*|.*|$' || ! echo "$after" | grep -q '| *--- *|'; then
+        echo "❌ HATA: summary.md'de reserved '## Annotations' bölümü bozuk — "
+        echo "   GitHub runner bu başlığı otomatik ekler; içerikte bilgi için "
+        echo "   (| Icon | Annotation | + | --- |) tablosu olmalı veya başlık kaldırılmalı"
+        errors=$((errors + 1))
+      else
+        echo "✅ '## Annotations' bölümü tablo formatına uygun (bilinçli içerik)"
+      fi
+    fi
+    # `::` workflow komutları summary içeriğinde RENDER bozar (runner bunları
+    # stdout'da import eder; summary dosyasında da görünmez/atlanır) — fail-closed.
+    if grep -qE '^::(error|warning|notice|debug)::' "$summary"; then
+      echo "❌ HATA: summary içinde workflow-komut satırı (::error:: vb.) — summary'de gizlenir"
+      errors=$((errors + 1))
+    fi
   fi
   return $errors
 }
