@@ -36,216 +36,217 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 | Tarih | Bölüm | Değişiklik | Commit |
 |---|---|---|---|
 | 2026-08-23 | AŞAMA 1 (b) | Required check 9→12: `GATE_EXCLUDE`'dan çıkarıldı — `Commit-msg gate` (PR-only ama required, label-gate deseni), `Config snapshot ↔ CONFIG_BASENAMES sync check` (job-level continue-on-error kaldırıldı), `CI-SIMULATE (advisory)` (step continue-on-error kaldırıldı + FAIL'de exit 1); web UI bölümü 12 adlı listeye güncellendi; job tablosu 21 satıra yeniden düzenlendi (12 A + 7 B + 1 C + 1 D) | (bu commit) |
-| 2026-08-17 | (ilk oluşturma) | 4 aşamalı publish runbook + rollback bölümü | `a3544d8` |
-| 2026-08-17 | Rollback | test-marker squash kaydı eklendi | `0fab281` |
-| 2026-08-17 | AŞAMA 1 (b) | Branch protection: gh api yerine hazır web UI tarayıcı linki | `0a8afd8` |
-| 2026-08-18 | AŞAMA 0 | commit-msg kuralı + history temizliği referansı (`HISTORY_CLEANUP.md`) | `b44b802` |
-| 2026-08-18 | AŞAMA 3 / ÖZET | CI bölümleri güncel pipeline'a göre yenilendi (job tablosu, artifact listesi) | `0eedef1` |
-| 2026-08-18 | AŞAMA 0 | Ön-kontrol tek komutluk `publish_precheck.sh`'e taşındı | `511fb22` |
-| 2026-08-18 | AŞAMA 1/4, ÖZET | Kalan bayat kısımlar düzeltildi | `686671f` |
-| 2026-08-18 | AŞAMA 1 | Status check adları workflow'dan türeyen `status_checks.py` eklendi (tek kaynak) | `b4f0f6c` |
-| 2026-08-18 | TEK KOMUT | Wrapper'a `--dry-run` önizleme modu eklendi | `748bdea` |
-| 2026-08-18 | TEK KOMUT | Wrapper kullanım bölümü + doc-script senkronu | `58fc563` |
-| 2026-08-18 | AŞAMA 1 (b) | Branch protection — adım adım web UI yönergesi eklendi | `7cfa262` |
-| 2026-08-18 | (tümü) | Gerçek repo URL'si + canlı job adlarıyla güncellendi ("Durum" notu) | `80334d0` |
-| 2026-08-19 | AŞAMA 0 | Yerel pre-commit tam-yeşil notu eklendi | `8067da5` |
-| 2026-08-19 | AŞAMA 0.5 | `ci_repack_test.sh` fresh-clone repack simülasyonu eklendi | `3d18ad0` |
-| 2026-08-19 | AŞAMA 1 | Pre-commit etiketleri P0+P1 (`precommit-p0`/`precommit-p1`) olarak güncellendi | `3b87f5b` |
-| 2026-08-19 | AŞAMA 1 | Budget + pre-commit PR durumu tek yorumda birleşti (notlar güncellendi) | `5935162` |
-| 2026-08-19 | AŞAMA 1 | `Pre-commit P0 label gate` 8. required check olarak eklendi; check listesi 8'e çıktı | `feaa3dd` |
-| 2026-08-19 | AŞAMA 0 (a2) | Tek komut `setup_commit_hooks.sh` kurulum referansı eklendi | `e6cbdca` |
-| 2026-08-19 | AŞAMA 0/2 | Mutlak yollar `~/Desktop/leibniz2` yapıldı (taşınabilirlik) | `5d53ccc` |
-| 2026-08-19 | AŞAMA 3 / yeni job | `Publish precheck (AŞAMA 0, advisory)` job'ı eklendi — her push'ta AŞAMA 0 kapıları otomatik denetlenir; job tablosu 10, artifact listesi 12 | `e373dd6` |
-| 2026-08-19 | TEK KOMUT | publish_wrapper AŞAMA 0-3 idempotent yapıldı (repo zaten yayındaysa no-op re-run) | `6abf365` |
-| 2026-08-19 | AŞAMA 1 | publish_wrapper'a status_checks.py otomatik doğrulaması bağlandı (repo oluşturma sonrası) | `5f614cf` |
-| 2026-08-19 | TEK KOMUT | publish_wrapper'a `--dry-run-summary` bayrağı eklendi (komut akışını tek markdown'da özetler) | `c21b8e9` |
+| 2026-08-17 | (ilk oluşturma) | 4 aşamalı publish runbook + rollback bölümü | [`a3544d8`](https://github.com/ali-han-kaya/leibniz2/commit/a3544d8) |
+| 2026-08-17 | Rollback | test-marker squash kaydı eklendi | [`0fab281`](https://github.com/ali-han-kaya/leibniz2/commit/0fab281) |
+| 2026-08-17 | AŞAMA 1 (b) | Branch protection: gh api yerine hazır web UI tarayıcı linki | [`0a8afd8`](https://github.com/ali-han-kaya/leibniz2/commit/0a8afd8) |
+| 2026-08-18 | AŞAMA 0 | commit-msg kuralı + history temizliği referansı (`HISTORY_CLEANUP.md`) | [`b44b802`](https://github.com/ali-han-kaya/leibniz2/commit/b44b802) |
+| 2026-08-18 | AŞAMA 3 / ÖZET | CI bölümleri güncel pipeline'a göre yenilendi (job tablosu, artifact listesi) | [`0eedef1`](https://github.com/ali-han-kaya/leibniz2/commit/0eedef1) |
+| 2026-08-18 | AŞAMA 0 | Ön-kontrol tek komutluk `publish_precheck.sh`'e taşındı | [`511fb22`](https://github.com/ali-han-kaya/leibniz2/commit/511fb22) |
+| 2026-08-18 | AŞAMA 1/4, ÖZET | Kalan bayat kısımlar düzeltildi | [`686671f`](https://github.com/ali-han-kaya/leibniz2/commit/686671f) |
+| 2026-08-18 | AŞAMA 1 | Status check adları workflow'dan türeyen `status_checks.py` eklendi (tek kaynak) | [`b4f0f6c`](https://github.com/ali-han-kaya/leibniz2/commit/b4f0f6c) |
+| 2026-08-18 | TEK KOMUT | Wrapper'a `--dry-run` önizleme modu eklendi | [`748bdea`](https://github.com/ali-han-kaya/leibniz2/commit/748bdea) |
+| 2026-08-18 | TEK KOMUT | Wrapper kullanım bölümü + doc-script senkronu | [`58fc563`](https://github.com/ali-han-kaya/leibniz2/commit/58fc563) |
+| 2026-08-18 | AŞAMA 1 (b) | Branch protection — adım adım web UI yönergesi eklendi | [`7cfa262`](https://github.com/ali-han-kaya/leibniz2/commit/7cfa262) |
+| 2026-08-18 | (tümü) | Gerçek repo URL'si + canlı job adlarıyla güncellendi ("Durum" notu) | [`80334d0`](https://github.com/ali-han-kaya/leibniz2/commit/80334d0) |
+| 2026-08-19 | AŞAMA 0 | Yerel pre-commit tam-yeşil notu eklendi | [`8067da5`](https://github.com/ali-han-kaya/leibniz2/commit/8067da5) |
+| 2026-08-19 | AŞAMA 0.5 | `ci_repack_test.sh` fresh-clone repack simülasyonu eklendi | [`3d18ad0`](https://github.com/ali-han-kaya/leibniz2/commit/3d18ad0) |
+| 2026-08-19 | AŞAMA 1 | Pre-commit etiketleri P0+P1 (`precommit-p0`/`precommit-p1`) olarak güncellendi | [`3b87f5b`](https://github.com/ali-han-kaya/leibniz2/commit/3b87f5b) |
+| 2026-08-19 | AŞAMA 1 | Budget + pre-commit PR durumu tek yorumda birleşti (notlar güncellendi) | [`5935162`](https://github.com/ali-han-kaya/leibniz2/commit/5935162) |
+| 2026-08-19 | AŞAMA 1 | `Pre-commit P0 label gate` 8. required check olarak eklendi; check listesi 8'e çıktı | [`feaa3dd`](https://github.com/ali-han-kaya/leibniz2/commit/feaa3dd) |
+| 2026-08-19 | AŞAMA 0 (a2) | Tek komut `setup_commit_hooks.sh` kurulum referansı eklendi | [`e6cbdca`](https://github.com/ali-han-kaya/leibniz2/commit/e6cbdca) |
+| 2026-08-19 | AŞAMA 0/2 | Mutlak yollar `~/Desktop/leibniz2` yapıldı (taşınabilirlik) | [`5d53ccc`](https://github.com/ali-han-kaya/leibniz2/commit/5d53ccc) |
+| 2026-08-19 | AŞAMA 3 / yeni job | `Publish precheck (AŞAMA 0, advisory)` job'ı eklendi — her push'ta AŞAMA 0 kapıları otomatik denetlenir; job tablosu 10, artifact listesi 12 | [`e373dd6`](https://github.com/ali-han-kaya/leibniz2/commit/e373dd6) |
+| 2026-08-19 | TEK KOMUT | publish_wrapper AŞAMA 0-3 idempotent yapıldı (repo zaten yayındaysa no-op re-run) | [`6abf365`](https://github.com/ali-han-kaya/leibniz2/commit/6abf365) |
+| 2026-08-19 | AŞAMA 1 | publish_wrapper'a status_checks.py otomatik doğrulaması bağlandı (repo oluşturma sonrası) | [`5f614cf`](https://github.com/ali-han-kaya/leibniz2/commit/5f614cf) |
+| 2026-08-19 | TEK KOMUT | publish_wrapper'a `--dry-run-summary` bayrağı eklendi (komut akışını tek markdown'da özetler) | [`c21b8e9`](https://github.com/ali-han-kaya/leibniz2/commit/c21b8e9) |
 | 2026-08-20 | AŞAMA 3 | K12 (plist) katman listesine eklendi; job tablosu 12'ye, artifact listesi 19'a güncellendi (plist-check job + unit-tests/plist-check artifact'ları) | (çalışma ağacı — commit yok) |
 | 2026-08-20 | AŞAMA 3 | Job tablosu `scriptPath` referanslarıyla senkronlandı: 5 github-script bloğu `github_scripts/*.js`'e çıkarıldı (pr_status_comment/label_gate/manifest_comment/config_diff_comment/config_drift_comment), inline `script:` yok; label-gate'e checkout eklendi; drift kapısı `test_github_scripts.py` (5 test) | (çalışma ağacı — commit yok) |
 | 2026-08-20 | AŞAMA 1/3 | `Pre-commit P1 label gate (optional)` eklendi: `label_gate_p1.js` + `label-gate-p1` job'u + `test_label_gate_contracts.py` (19 test, CI advisory); required check listesi 9→10; job tablosu 13 | (çalışma ağacı — commit yok) |
-| 2026-08-19 | (tümü) | Repo canlı duruma göre yeniden yazıldı: AŞAMA 1-2 `UYGULANDI` işaretlendi, ana akış `INCREMENTAL PUSH` günlük döngüsü oldu (AŞAMA 1 (b) BEKLEMEDE) | `e708e45` |
-| 2026-08-19 | AŞAMA 1/3 | Node 24 yükseltmesi işlendi: `action-runtimes` job'ı + `check-action-pins` pre-commit kapısı (job 11, required check 9, pre-commit 6) | `1f84ba4` |
+| 2026-08-19 | (tümü) | Repo canlı duruma göre yeniden yazıldı: AŞAMA 1-2 `UYGULANDI` işaretlendi, ana akış `INCREMENTAL PUSH` günlük döngüsü oldu (AŞAMA 1 (b) BEKLEMEDE) | [`e708e45`](https://github.com/ali-han-kaya/leibniz2/commit/e708e45) |
+| 2026-08-19 | AŞAMA 1/3 | Node 24 yükseltmesi işlendi: `action-runtimes` job'ı + `check-action-pins` pre-commit kapısı (job 11, required check 9, pre-commit 6) | [`1f84ba4`](https://github.com/ali-han-kaya/leibniz2/commit/1f84ba4) |
 | 2026-08-21 | AŞAMA 3 | commit-msg blokaj kanıtı: `gen_commit_msg_evidence.py` (28 test senaryosu) + `COMMIT_MSG_BLOCK_EVIDENCE.md` CI'da periyodik üretilir; `setup_commit_hooks.sh --check-only` CI advisory adımı eklendi | (çalışma ağacı — commit yok) |
-| 2026-08-21 | AŞAMA 3 | label sync/validate Octokit düzeltmesi: `listLabels` → `listLabelsForRepo` (selftest mock + battery expectations güncellendi) | `309a14f` |
-| 2026-08-21 | AŞAMA 3 | simulate_verify_job.sh: GITHUB_STEP_SUMMARY + env-snapshot validation + iki aşamalı summary (dashboard-only → skip-dashboard) | `2282925` |
-| 2026-08-21 | AŞAMA 3 | shellcheck lint: `shellcheck_hooks.sh` (sh: verify_lean + commit_msg; bash: update_config) + `lint_actionlint.sh` (RC≤2 advisory) + pre-commit + CI adımı | `ae55009` |
-| 2026-08-21 | AŞAMA 1 (b) | Branch protection GH API ile kuruldu: 8 required check, `enforce_admins=true`, `strict=false`, `allow_force_pushes=false` | `dc9ab4f` |
-| 2026-08-21 | AŞAMA 1 (b) | Job tablosu 3 kategoride yeniden yapılandırıldı: push-required (8), push-advisory (2), PR-only (4); status_checks.py `GATE_EXCLUDE` güncellendi | `df92ada` |
-| 2026-08-21 | AŞAMA 3 | `status_checks.py --gh` fail-closed: protection kurulu değilken exit 1 | `df92ada` |
-| 2026-08-21 | docs | add repo-level changelog + regression notes to README | `b07f5f4` |
+| 2026-08-21 | AŞAMA 3 | label sync/validate Octokit düzeltmesi: `listLabels` → `listLabelsForRepo` (selftest mock + battery expectations güncellendi) | [`309a14f`](https://github.com/ali-han-kaya/leibniz2/commit/309a14f) |
+| 2026-08-21 | AŞAMA 3 | simulate_verify_job.sh: GITHUB_STEP_SUMMARY + env-snapshot validation + iki aşamalı summary (dashboard-only → skip-dashboard) | [`2282925`](https://github.com/ali-han-kaya/leibniz2/commit/2282925) |
+| 2026-08-21 | AŞAMA 3 | shellcheck lint: `shellcheck_hooks.sh` (sh: verify_lean + commit_msg; bash: update_config) + `lint_actionlint.sh` (RC≤2 advisory) + pre-commit + CI adımı | [`ae55009`](https://github.com/ali-han-kaya/leibniz2/commit/ae55009) |
+| 2026-08-21 | AŞAMA 1 (b) | Branch protection GH API ile kuruldu: 8 required check, `enforce_admins=true`, `strict=false`, `allow_force_pushes=false` | [`dc9ab4f`](https://github.com/ali-han-kaya/leibniz2/commit/dc9ab4f) |
+| 2026-08-21 | AŞAMA 1 (b) | Job tablosu 3 kategoride yeniden yapılandırıldı: push-required (8), push-advisory (2), PR-only (4); status_checks.py `GATE_EXCLUDE` güncellendi | [`df92ada`](https://github.com/ali-han-kaya/leibniz2/commit/df92ada) |
+| 2026-08-21 | AŞAMA 3 | `status_checks.py --gh` fail-closed: protection kurulu değilken exit 1 | [`df92ada`](https://github.com/ali-han-kaya/leibniz2/commit/df92ada) |
+| 2026-08-21 | docs | add repo-level changelog + regression notes to README | [`b07f5f4`](https://github.com/ali-han-kaya/leibniz2/commit/b07f5f4) |
 | 2026-08-21 | AŞAMA 1 (b) | Adım 9 (Doğrula) notuna merge-engeli smoke açıklaması eklendi (`enforce_admins`/force-push/deletions — `--gh --json` `smoke[]`) | (çalışma ağacı) |
 | 2026-08-21 | AŞAMA 3 | `audit_live_ci_sync.py` — canlı CI denetimi tekrarlanabilir script: doc Job tablosu + Artifact listesi ↔ canlı run (fail-closed; advisory `audit-live-ci` job'ı); daemon-http job/artifact'ı doc'a eklendi (16 job / 21 artifact) | (çalışma ağacı) |
-| 2026-08-21 | feat | (ci) add precheck-report to reproducibility manifest | `694b367` |
-| 2026-08-21 | docs | add §8 publish wrapper idempotency verification | `5d9b6c6` |
-| 2026-08-21 | fix | (ci) remove local keyword outside function | `965182d` |
-| 2026-08-21 | fix | (ci) use local var in ci-simulate OWNER | `994d359` |
-| 2026-08-21 | feat | (ci) ci-simulate mode + doc integrity audit | `a309b23` |
-| 2026-08-21 | docs | add §7 to PRE_PUSH_DENETIM_RAPORU + skip report from path check | `4e58931` |
-| 2026-08-21 | docs | fix stale job/check counts in PUBLISH_SCENARIO (13→14, 10→8) | `8878847` |
-| 2026-08-21 | feat | add check-absolute-paths pre-commit hook | `8116715` |
-| 2026-08-21 | docs | clarify 8 required checks vs push-running jobs in PUBLISH_SCENARIO | `b393ddf` |
-| 2026-08-21 | feat | (ci) git log'dan otomatik changelog üret (gen_changelog.py) | `4286b4a` |
-| 2026-08-21 | fix | (ci) changelog hook'u auto-sync yap (update-config deseni) | `5d5daf2` |
-| 2026-08-21 | feat | (publish) --verify-checks bağımsız AŞAMA 1 doğrulama modu | `e15d0f4` |
-| 2026-08-21 | docs | §9 oturum 3 denetim kaydı | `c6a221c` |
-| 2026-08-21 | feat | (ci) --dry-run-summary regresyon kapısı (test_dryrun_summary.py) | `b5327e5` |
-| 2026-08-21 | refs | V5n satırını refs-trend changelog'una işle (54→56) | `4216895` |
-| 2026-08-21 | refs | Della Rocca 2010'ı Handle System API ile doğrula (V5t) | `a124e66` |
-| 2026-08-21 | feat | (ci) K17 mirror sync kapısı (sync_verify_mirror.sh --check) | `7c3ab53` |
-| 2026-08-21 | feat | (preview) update_preview.sh --bootstrap tek adım modu | `169a6c8` |
-| 2026-08-21 | feat | fresh_clone_setup.sh — tek komutta TCC-safe ortam kurulumu | `ee772b6` |
-| 2026-08-21 | feat | fresh_clone_setup.sh — tek komutta TCC-safe ortam kurulumu | `a09f1a2` |
-| 2026-08-21 | fix | (ci) mirror'a eksik github_scripts'i ekle (K16 launchd rotası) | `e1abea6` |
-| 2026-08-21 | feat | (ci) daemon-modu HTTP 200 testini advisory job olarak ekle | `be60442` |
-| 2026-08-21 | feat | (ci) preview mirror'ı sync_verify_mirror.sh'e kat (adım 2+4) | `c57bb90` |
-| 2026-08-21 | feat | (preview) refs trend grafiğine by_source yığılmış alan serisi | `4c41069` |
-| 2026-08-21 | feat | (preview) refs trend noktalarına hover tooltip ekle | `78a3076` |
-| 2026-08-21 | feat | (ci) action_runtimes.json'u repro manifest'ine kat (SHA-256) | `683333d` |
-| 2026-08-21 | feat | (ci) action_pins.json'u manifest CONFIG bölümüne kat (SHA-256) | `800d76e` |
-| 2026-08-21 | feat | --bump modu (WARN pin'lerini otomatik yükselt) | `e6abee6` |
-| 2026-08-21 | docs | AŞAMA 1 (b) adım 9'a merge-engeli smoke notu ekle | `f632f20` |
-| 2026-08-21 | fix | precheck (e) — status_checks --gh smoke'u fail-closed kapı yap | `ce0f633` |
-| 2026-08-21 | docs | changelog — ce0f633 satırını işle | `245a0ac` |
-| 2026-08-21 | fix | (ci) precheck'e administration:read — smoke CI'da koşsun | `8d10118` |
-| 2026-08-21 | fix | status_checks --gh 404 ile yetki hatasını ayır (UNREADABLE) | `3226656` |
-| 2026-08-21 | feat | (ci) precheck job'ına status_checks --gh --json sidecar'ı ekle | `d6b58a6` |
-| 2026-08-21 | feat | (preview) /guide.html rotası + mirror senkronu | `d184c3c` |
-| 2026-08-21 | feat | render_screens PNG uretimini mock HTML ile dogrula | `0a4f32b` |
-| 2026-08-21 | feat | canli CI denetimini audit_live_ci_sync.py'ye cevir (doc↔GitHub senkron, fail-closed) | `799409c` |
-| 2026-08-21 | fix | audit kendini karsilastirmasin — CI yanlis-pozitif duzeltildi (16 job / 21 artifact doc'a islendi) | `1499b93` |
+| 2026-08-21 | feat | (ci) add precheck-report to reproducibility manifest | [`694b367`](https://github.com/ali-han-kaya/leibniz2/commit/694b367) |
+| 2026-08-21 | docs | add §8 publish wrapper idempotency verification | [`5d9b6c6`](https://github.com/ali-han-kaya/leibniz2/commit/5d9b6c6) |
+| 2026-08-21 | fix | (ci) remove local keyword outside function | [`965182d`](https://github.com/ali-han-kaya/leibniz2/commit/965182d) |
+| 2026-08-21 | fix | (ci) use local var in ci-simulate OWNER | [`994d359`](https://github.com/ali-han-kaya/leibniz2/commit/994d359) |
+| 2026-08-21 | feat | (ci) ci-simulate mode + doc integrity audit | [`a309b23`](https://github.com/ali-han-kaya/leibniz2/commit/a309b23) |
+| 2026-08-21 | docs | add §7 to PRE_PUSH_DENETIM_RAPORU + skip report from path check | [`4e58931`](https://github.com/ali-han-kaya/leibniz2/commit/4e58931) |
+| 2026-08-21 | docs | fix stale job/check counts in PUBLISH_SCENARIO (13→14, 10→8) | [`8878847`](https://github.com/ali-han-kaya/leibniz2/commit/8878847) |
+| 2026-08-21 | feat | add check-absolute-paths pre-commit hook | [`8116715`](https://github.com/ali-han-kaya/leibniz2/commit/8116715) |
+| 2026-08-21 | docs | clarify 8 required checks vs push-running jobs in PUBLISH_SCENARIO | [`b393ddf`](https://github.com/ali-han-kaya/leibniz2/commit/b393ddf) |
+| 2026-08-21 | feat | (ci) git log'dan otomatik changelog üret (gen_changelog.py) | [`4286b4a`](https://github.com/ali-han-kaya/leibniz2/commit/4286b4a) |
+| 2026-08-21 | fix | (ci) changelog hook'u auto-sync yap (update-config deseni) | [`5d5daf2`](https://github.com/ali-han-kaya/leibniz2/commit/5d5daf2) |
+| 2026-08-21 | feat | (publish) --verify-checks bağımsız AŞAMA 1 doğrulama modu | [`e15d0f4`](https://github.com/ali-han-kaya/leibniz2/commit/e15d0f4) |
+| 2026-08-21 | docs | §9 oturum 3 denetim kaydı | [`c6a221c`](https://github.com/ali-han-kaya/leibniz2/commit/c6a221c) |
+| 2026-08-21 | feat | (ci) --dry-run-summary regresyon kapısı (test_dryrun_summary.py) | [`b5327e5`](https://github.com/ali-han-kaya/leibniz2/commit/b5327e5) |
+| 2026-08-21 | refs | V5n satırını refs-trend changelog'una işle (54→56) | [`4216895`](https://github.com/ali-han-kaya/leibniz2/commit/4216895) |
+| 2026-08-21 | refs | Della Rocca 2010'ı Handle System API ile doğrula (V5t) | [`a124e66`](https://github.com/ali-han-kaya/leibniz2/commit/a124e66) |
+| 2026-08-21 | feat | (ci) K17 mirror sync kapısı (sync_verify_mirror.sh --check) | [`7c3ab53`](https://github.com/ali-han-kaya/leibniz2/commit/7c3ab53) |
+| 2026-08-21 | feat | (preview) update_preview.sh --bootstrap tek adım modu | [`169a6c8`](https://github.com/ali-han-kaya/leibniz2/commit/169a6c8) |
+| 2026-08-21 | feat | fresh_clone_setup.sh — tek komutta TCC-safe ortam kurulumu | [`ee772b6`](https://github.com/ali-han-kaya/leibniz2/commit/ee772b6) |
+| 2026-08-21 | feat | fresh_clone_setup.sh — tek komutta TCC-safe ortam kurulumu | [`a09f1a2`](https://github.com/ali-han-kaya/leibniz2/commit/a09f1a2) |
+| 2026-08-21 | fix | (ci) mirror'a eksik github_scripts'i ekle (K16 launchd rotası) | [`e1abea6`](https://github.com/ali-han-kaya/leibniz2/commit/e1abea6) |
+| 2026-08-21 | feat | (ci) daemon-modu HTTP 200 testini advisory job olarak ekle | [`be60442`](https://github.com/ali-han-kaya/leibniz2/commit/be60442) |
+| 2026-08-21 | feat | (ci) preview mirror'ı sync_verify_mirror.sh'e kat (adım 2+4) | [`c57bb90`](https://github.com/ali-han-kaya/leibniz2/commit/c57bb90) |
+| 2026-08-21 | feat | (preview) refs trend grafiğine by_source yığılmış alan serisi | [`4c41069`](https://github.com/ali-han-kaya/leibniz2/commit/4c41069) |
+| 2026-08-21 | feat | (preview) refs trend noktalarına hover tooltip ekle | [`78a3076`](https://github.com/ali-han-kaya/leibniz2/commit/78a3076) |
+| 2026-08-21 | feat | (ci) action_runtimes.json'u repro manifest'ine kat (SHA-256) | [`683333d`](https://github.com/ali-han-kaya/leibniz2/commit/683333d) |
+| 2026-08-21 | feat | (ci) action_pins.json'u manifest CONFIG bölümüne kat (SHA-256) | [`800d76e`](https://github.com/ali-han-kaya/leibniz2/commit/800d76e) |
+| 2026-08-21 | feat | --bump modu (WARN pin'lerini otomatik yükselt) | [`e6abee6`](https://github.com/ali-han-kaya/leibniz2/commit/e6abee6) |
+| 2026-08-21 | docs | AŞAMA 1 (b) adım 9'a merge-engeli smoke notu ekle | [`f632f20`](https://github.com/ali-han-kaya/leibniz2/commit/f632f20) |
+| 2026-08-21 | fix | precheck (e) — status_checks --gh smoke'u fail-closed kapı yap | [`ce0f633`](https://github.com/ali-han-kaya/leibniz2/commit/ce0f633) |
+| 2026-08-21 | docs | changelog — ce0f633 satırını işle | [`245a0ac`](https://github.com/ali-han-kaya/leibniz2/commit/245a0ac) |
+| 2026-08-21 | fix | (ci) precheck'e administration:read — smoke CI'da koşsun | [`8d10118`](https://github.com/ali-han-kaya/leibniz2/commit/8d10118) |
+| 2026-08-21 | fix | status_checks --gh 404 ile yetki hatasını ayır (UNREADABLE) | [`3226656`](https://github.com/ali-han-kaya/leibniz2/commit/3226656) |
+| 2026-08-21 | feat | (ci) precheck job'ına status_checks --gh --json sidecar'ı ekle | [`d6b58a6`](https://github.com/ali-han-kaya/leibniz2/commit/d6b58a6) |
+| 2026-08-21 | feat | (preview) /guide.html rotası + mirror senkronu | [`d184c3c`](https://github.com/ali-han-kaya/leibniz2/commit/d184c3c) |
+| 2026-08-21 | feat | render_screens PNG uretimini mock HTML ile dogrula | [`0a4f32b`](https://github.com/ali-han-kaya/leibniz2/commit/0a4f32b) |
+| 2026-08-21 | feat | canli CI denetimini audit_live_ci_sync.py'ye cevir (doc↔GitHub senkron, fail-closed) | [`799409c`](https://github.com/ali-han-kaya/leibniz2/commit/799409c) |
+| 2026-08-21 | fix | audit kendini karsilastirmasin — CI yanlis-pozitif duzeltildi (16 job / 21 artifact doc'a islendi) | [`1499b93`](https://github.com/ali-han-kaya/leibniz2/commit/1499b93) |
 | 2026-08-21 | AŞAMA 1 (b) | Canlı doğrulama: `status_checks.py --gh` → **SONUÇ: PASS — 8 check + merge engeli birebir** (`names_ok=true`, `enforcement_ok=true`, `missing/extra=[]`; smoke: strict/enforce_admins/force-push/deletions hepsi `ok=true`). Not: "9 check" beklentisi doc'taki bayat changelog iddialarından — gerçek kurulum 8 required check (`dc9ab4f`) | (çalışma ağacı) |
 | 2026-08-22 | AŞAMA 1 (b) | Job adı `K1-K9` → `K1-K14`; `Pre-commit P0 label gate` required listeye eklendi → **9 required check** tek kaynaktan (`status_checks.py` GATE_EXCLUDE'dan çıkarıldı; guide'daki 9'lu listeyle gerçek kurulum hizalandı). Branch protection 9 adla yeniden PUT edildi | (çalışma ağacı) |
-| 2026-08-21 | feat | canli CI denetimini audit_live_ci_sync.py'ye cevir | `799409c` |
-| 2026-08-21 | docs | denetim bulgusunu changelog + REFERANS_KANIT_DENETIMI'ne isle | `031ed0f` |
-| 2026-08-21 | docs | status_checks --gh canli dogrulamasini senaryoya isle | `7012f96` |
-| 2026-08-21 | feat | publish_wrapper --incremental (INCREMENTAL push tek komut) | `1bbd2e5` |
-| 2026-08-21 | docs | refs-trend changelog'una V5o satırı (11 UNVERIFIED → 56/56) | `bed5f67` |
-| 2026-08-21 | feat | ia_ol_fallback_evidence.py (5 IA kaynağın kanıtı) | `a8fadb0` |
-| 2026-08-21 | feat | python3-shell denetimini manifest'e SHA-256 ile sabitle | `1f9706f` |
-| 2026-08-21 | docs | PUBLISH_SCENARIO artifact listesine python3-shell eklendi | `845206a` |
-| 2026-08-21 | refactor | check_python3_shell çoklu workflow denetimi | `1491551` |
-| 2026-08-21 | feat | audit_refs_trend.py (trend satırları ↔ kaynak artifact denetimi) | `c6ff4e1` |
-| 2026-08-21 | feat | Lagree/Millican/Schmitt/Fine icin LoC katalog kaniti (V5w) | `7bc8363` |
-| 2026-08-21 | docs | refs-trend changelog'una V5p satiri (OCLC/LCCN + Xunzi HT) | `3548341` |
-| 2026-08-21 | docs | V5q changelog satırı + §2 tablo doğrulaması | `db61c80` |
-| 2026-08-21 | docs | HathiTrust katalog yol haritası (4 telifli kitap) | `fa43551` |
-| 2026-08-21 | feat | refs-online VERSION JSON'a ht_ids_summary ekle | `efdd45a` |
-| 2026-08-21 | docs | bilinen CI olayları kaydı (KNOWN_INCIDENTS.md) | `cf82c25` |
-| 2026-08-21 | docs | PUBLISH_SCENARIO canli durum tablosu guncelle | `9f2516e` |
-| 2026-08-21 | refactor | persist sidecar testlerini test_preview_server.py'ye tasi | `f1aab1d` |
-| 2026-08-21 | feat | start_preview.sh — rebuild + start + health tek komut | `cfa9139` |
-| 2026-08-22 | feat | update_preview.sh --status alt komutu | `aacad00` |
-| 2026-08-22 | feat | K18 launchctl durum katmani | `efcb8bb` |
-| 2026-08-22 | feat | plist-check artifact'ini reproducibility manifest'e dahil et | `ecba674` |
-| 2026-08-22 | docs | changelog auto-sync — plist-check manifest entry | `62216d9` |
-| 2026-08-22 | ci | plist-check run summary'de profiles sidecar tablosu | `e9f6acf` |
-| 2026-08-22 | ci | plist-check run summary'de profiles sidecar tablosu | `deda5de` |
-| 2026-08-22 | other | _calisma/CIKTI: run_summary_refs_trend.py CLI tutarlılık testleri | `ff1e9c1` |
-| 2026-08-22 | ci | add pattern drift summary to reproducibility job run summary (#9) | `328f8fc` |
-| 2026-08-22 | fix | (repro) PROVENANCE section labels merged vs prefixed vs absent (#10) | `5b78b18` |
-| 2026-08-22 | ci | add check-pattern-consistency pre-commit hook (#11) | `0440d82` |
-| 2026-08-22 | ci | add K15 history sidecar check to daemon advisory job (#12) | `84ee113` |
-| 2026-08-22 | feat | (dashboard) show K15 history sidecar SHA-256 in /api/latest (#13) | `dab8ecd` |
-| 2026-08-22 | feat | (dashboard) overlay duration/budget trend from refs-trend.json (#14) | `121a987` |
-| 2026-08-22 | feat | (refs-trend) add duration/budget threshold warning layer (#15) | `86b4edc` |
-| 2026-08-22 | feat | (dashboard) add color legend to live run stream section (#16) | `eaef526` |
-| 2026-08-22 | feat | (dashboard) add findings panel showing P0/P1 detail rows (#17) | `f413d97` |
-| 2026-08-22 | ci | add colorizeLine rules regression test + pre-commit hook (#18) | `f481ea5` |
-| 2026-08-22 | feat | (repro) add UNIT TESTS artifact section to manifest (#19) | `cb7b06d` |
-| 2026-08-22 | ci | parse unit test failures and post as PR comment | `d3284b7` |
-| 2026-08-22 | fix | (ci) extract unit-test-failure comment to .js file | `28e0789` |
-| 2026-08-22 | fix | (ci) accept require+eval pattern in github-script test | `d5a26cd` |
-| 2026-08-22 | ci | unit test failure PR comment (#20) | `167443a` |
-| 2026-08-22 | feat | (dashboard) live findings panel from stream P0/P1 lines (#21) | `9f0a532` |
-| 2026-08-22 | fix | (dashboard) add startup resilience to preview tab (#22) | `2bb8fb1` |
-| 2026-08-22 | other | revert(plist): remove legacy preview-server profile, keep single-profile (#23) | `71106f8` |
-| 2026-08-22 | fix | (verify) K14 _resolve_canon path under --dir repo root (#24) | `fb69a40` |
-| 2026-08-22 | feat | (dashboard) add refs/PDF info to replay summary line (#25) | `e19f7b7` |
-| 2026-08-22 | test | (colorize) add replay summary coloring unit tests (#26) | `093bd32` |
-| 2026-08-22 | feat | (repro) add RUN LOGS section to reproducibility manifest (#27) | `5a5d391` |
-| 2026-08-22 | feat | (dashboard) add compact run history list (#28) | `a3111c4` |
-| 2026-08-22 | feat | (refs-trend) unverified series + stale artifact warning (#29) | `f5d9c32` |
-| 2026-08-22 | fix | (refs) correct Fine 2012 identifiers (wrong LCCN/ISBN) | `398a148` |
-| 2026-08-22 | feat | (dashboard) add z3_passed/z3_total to run-history API | `a05aad3` |
-| 2026-08-22 | feat | (dashboard) add K9 Lean to run-history API and trend graph | `ce861e8` |
-| 2026-08-22 | feat | (verify) add lean_ok/lean_detail to history.jsonl record | `e28c83f` |
-| 2026-08-22 | feat | (refs-trend) add z3_passed/z3_total to duration_budget section | `8d669ea` |
-| 2026-08-22 | fix | (plist) KeepAlive SuccessfulExit=false to prevent restart race | `aae9b0f` |
-| 2026-08-22 | fix | (tests) green local suite — jsonschema skip, Fine 2012 OL source | `54e7377` |
-| 2026-08-22 | ci | (verify) K13 repro-manifest as separate advisory step + sidecar | `f9dcb1c` |
-| 2026-08-22 | fix | (verify) harden K13 repro-manifest self-test with negative scenarios | `ed0427d` |
-| 2026-08-22 | test | (refs-trend) section unit tests for parse/stats/duration-budget | `d89964b` |
-| 2026-08-22 | test | (repro) cross-validate config.combined_sha256 with K10 gate | `ff029ae` |
-| 2026-08-22 | feat | (precommit) unstaged-deps pre-check for check-repro-manifest hook | `3995fc9` |
-| 2026-08-22 | fix | (plist) restore two-profile management, sync tests to reality | `0d29fd8` |
-| 2026-08-22 | feat | (plist) K12 out-of-scope INFO line in audit trail | `e78d906` |
-| 2026-08-22 | test | (plist) real end-to-end extra-file scenario for check_plist_drift | `bebc0cf` |
-| 2026-08-22 | feat | (protection) K1-K14 job rename + 9 required check sync | `d3de002` |
-| 2026-08-22 | feat | (protection) advisory contract — all jobs vs required diff check | `9195b63` |
-| 2026-08-22 | test | (repro) doc artifact list vs ARTIFACT_JOBS sync | `bccc815` |
-| 2026-08-22 | feat | (dashboard) budget limit from effective config, not hardcoded 30 | `4dc133d` |
-| 2026-08-22 | feat | (dashboard) red BÜTÇE AŞIMI banner above trend panel | `0ab782c` |
-| 2026-08-22 | feat | (dashboard) tooltip budget line shows limit under/over status | `8e455c2` |
-| 2026-08-22 | docs | (readme) add _calisma/lean_reduct boundary-proof section | `5b1b90d` |
-| 2026-08-22 | docs | (lean) add V5s note to K9 report for 8-theorem boundary core | `9b81196` |
-| 2026-08-22 | feat | (verify) K9 lake build --wfail gate for 8-theorem boundary core | `d359b35` |
-| 2026-08-22 | feat | (precommit) check-unit-tests hook for 5 new gate test files | `d77aca7` |
-| 2026-08-22 | test | (summary) row-level content checks for lineage + K-layer sections | `cafab86` |
-| 2026-08-22 | docs | (M0) K16/K14 mirror-launchd PATH fixes katman raporu | `4ac1787` |
-| 2026-08-22 | feat | (smoke) dashboard PASS'ini tek komutla yeniden üreten smoke testi | `00ecfd3` |
-| 2026-08-22 | docs | (scenario) launchd minimal PATH + mirror sync sınır notu | `836c52b` |
-| 2026-08-22 | feat | (skills) reproducible-pdf-build installable skill | `5557a48` |
-| 2026-08-22 | feat | (skills) verify-chain — K0-K17 fail-closed zincir skill'i | `67226f3` |
-| 2026-08-22 | feat | coq_reduct modülü + K19 coqtop fail-closed kapısı | `86203ae` |
-| 2026-08-22 | fix | (scripts) unify manifest + config-drift override display format | `d29d766` |
-| 2026-08-22 | feat | (cross-check) cross-validate index.json vs VERSION JSON override | `66e573a` |
-| 2026-08-22 | ci | manifest'te OVERRIDES bolumu — cli_overrides_version.json | `93fce5b` |
-| 2026-08-22 | ci | K16 negatif kontrol — override'sizken yorumda uyari YOK | `b0071f3` |
-| 2026-08-22 | ci | override-trend — CLI override zaman serisi (refs-trend deseni) | `950cbbc` |
-| 2026-08-22 | other | dash: CLI override panel'i — son run'un override durumu | `6f2797d` |
-| 2026-08-22 | other | dash: K-layer panel — tum rozetler d.layers tek kaynak | `27542eb` |
-| 2026-08-22 | ci | layers slot in LATEST + SSE snapshot plumbing tests | `6a4d2af` |
-| 2026-08-22 | docs | M0 raporuna V5t notu — K-layer panel (K0-K17 individual badges) | `425bfff` |
-| 2026-08-22 | docs | V5y — Fine 2012 OCLC + HT 0 kayit notu | `b44a102` |
-| 2026-08-22 | other | verify: HT API format unit tests — data[ident].records locked | `3361b4c` |
-| 2026-08-22 | other | verify: refs-trend kapsam satiri — 61/61 + 54 gecersiz | `8ef125a` |
-| 2026-08-22 | fix | config-drift override tek kaynak — summary.txt satiri | `5e837f7` |
-| 2026-08-22 | other | verify: cli_overrides warning → fail-closed config-drift gate | `e590e70` |
-| 2026-08-22 | fix | config-drift override-only cift baslik engellendi | `337a8d1` |
-| 2026-08-22 | other | verify: budget bar compute — budget_scan.js (pure) + 67 Node tests | `049e9a0` |
-| 2026-08-22 | other | dash: budget sparkline — son N run'in butce mini grafigi | `c003151` |
-| 2026-08-22 | other | dash: budget bar limit cizgisi + yuzde etiketi | `d85213a` |
-| 2026-08-22 | other | verify: config artefact merge pattern'e dahil — config/ oneki yok | `e68a3c3` |
-| 2026-08-22 | other | verify: config artefact merge pattern'e dahil — config/ oneki yok | `a44b4f1` |
-| 2026-08-22 | ci | config snapshot ↔ CONFIG_BASENAMES sync gate | `9636a7c` |
-| 2026-08-22 | ci | add config_artifact_basenames to schema, K10 fail-closed drift check | `d7ca27a` |
-| 2026-08-23 | ci | override run [CLI override] satirlarini OVERRIDE_RAPORU.json'a tasi | `fa9b7a4` |
-| 2026-08-23 | docs | PRE_PUSH_DENETIM_RAPORU e §9 CI run trend tablosu ekle | `8e71025` |
-| 2026-08-23 | ci | ci-simulate raporu .freebuff/sim'a; ci_stats.py scripti | `4e44c26` |
-| 2026-08-23 | ci | CI-SIMULATE'i advisory job olarak her push'a ekle | `f95df4a` |
-| 2026-08-23 | ci | ci-simulate job'unda elan PATH'ini inline export et | `a80daa0` |
-| 2026-08-23 | ci | tum_sapmalar_comment.js'i repo'ya al (K16 battery CI'da ENOENT) | `246b0e4` |
-| 2026-08-23 | ci | pre-existing test kirilmalarini kapat (mirror + battery desen) | `4eeb0a5` |
-| 2026-08-23 | ci | verify job Install Lean adimina da inline PATH export ekle | `8b0d6c1` |
-| 2026-08-23 | docs | PUBLISH_SCENARIO CI-SIMULATE bolumunu guncel yollarla senkronla | `fb025a1` |
-| 2026-08-23 | ci | simulate_verify_job summary.md'ye readonly assertion ekle | `5bf2037` |
-| 2026-08-23 | ci | summary Annotations format uyumluluk kontrolu | `ea40214` |
-| 2026-08-23 | feat | (protection) required check 9→12 (commit-msg, config-sync, ci-sim) | `54e4d4c` |
-| 2026-08-23 | fix | (verify) K10 overrides.combined_sha256 yeniden hesaplama + P1 | `49b8114` |
-| 2026-08-23 | fix | (scripts) config_diff yok-sa da bayat yorumu sil (state-sync) | `914a221` |
-| 2026-08-23 | feat | (scripts) PR status'a repro-manifest PASS/FAIL bölümü ekle | `dbb1bd2` |
-| 2026-08-23 | fix | (verify) K10 precheck_report.combined_sha256 yeniden hesapla | `45c546b` |
-| 2026-08-23 | docs | PRE_PUSH §8.5 — K10 precheck_report doğrulaması kaydı | `5e85593` |
-| 2026-08-23 | fix | (verify) K10 absent precheck — hayalet bölüme P1, yoksa PASS | `469bd7d` |
-| 2026-08-23 | feat | (scripts) precheck --verify-checks + verify_checks birim testi | `6cb70a1` |
-| 2026-08-23 | feat | (scripts) verify-checks JSON sidecar + CI advisory adımı | `71dbecc` |
-| 2026-08-23 | fix | (scripts) precheck smoke öncesi changelog senkronu (chicken-and-egg) | `0bc915f` |
-| 2026-08-23 | docs | changelog — precheck smoke senkronu satırı (0bc915f) | `76b0a55` |
-| 2026-08-23 | test | (scripts) update_changelog_hook birim kapısı (drift/stage/hata) | `d210be3` |
-| 2026-08-23 | feat | (scripts) branch protection tek-komut kurulum | `7b78e0f` |
-| 2026-08-23 | docs | V5z — bugünkü canlı 61/61 doğrulaması (2026-08-23) | `35d9221` |
-| 2026-08-23 | fix | (verify) refs HTTP retry 2→3 (IA SSL handshake flaky UNVERIFIED) | `8a0220e` |
-| 2026-08-23 | feat | (dashboard) refs-trend tam kapsam rozeti (bugünkü 61/61) | `b1353e6` |
-| 2026-08-23 | feat | (changelog) gen_changelog.py'ye --tag-regex kategori filtreleme | `b86401f` |
+| 2026-08-21 | feat | canli CI denetimini audit_live_ci_sync.py'ye cevir | [`799409c`](https://github.com/ali-han-kaya/leibniz2/commit/799409c) |
+| 2026-08-21 | docs | denetim bulgusunu changelog + REFERANS_KANIT_DENETIMI'ne isle | [`031ed0f`](https://github.com/ali-han-kaya/leibniz2/commit/031ed0f) |
+| 2026-08-21 | docs | status_checks --gh canli dogrulamasini senaryoya isle | [`7012f96`](https://github.com/ali-han-kaya/leibniz2/commit/7012f96) |
+| 2026-08-21 | feat | publish_wrapper --incremental (INCREMENTAL push tek komut) | [`1bbd2e5`](https://github.com/ali-han-kaya/leibniz2/commit/1bbd2e5) |
+| 2026-08-21 | docs | refs-trend changelog'una V5o satırı (11 UNVERIFIED → 56/56) | [`bed5f67`](https://github.com/ali-han-kaya/leibniz2/commit/bed5f67) |
+| 2026-08-21 | feat | ia_ol_fallback_evidence.py (5 IA kaynağın kanıtı) | [`a8fadb0`](https://github.com/ali-han-kaya/leibniz2/commit/a8fadb0) |
+| 2026-08-21 | feat | python3-shell denetimini manifest'e SHA-256 ile sabitle | [`1f9706f`](https://github.com/ali-han-kaya/leibniz2/commit/1f9706f) |
+| 2026-08-21 | docs | PUBLISH_SCENARIO artifact listesine python3-shell eklendi | [`845206a`](https://github.com/ali-han-kaya/leibniz2/commit/845206a) |
+| 2026-08-21 | refactor | check_python3_shell çoklu workflow denetimi | [`1491551`](https://github.com/ali-han-kaya/leibniz2/commit/1491551) |
+| 2026-08-21 | feat | audit_refs_trend.py (trend satırları ↔ kaynak artifact denetimi) | [`c6ff4e1`](https://github.com/ali-han-kaya/leibniz2/commit/c6ff4e1) |
+| 2026-08-21 | feat | Lagree/Millican/Schmitt/Fine icin LoC katalog kaniti (V5w) | [`7bc8363`](https://github.com/ali-han-kaya/leibniz2/commit/7bc8363) |
+| 2026-08-21 | docs | refs-trend changelog'una V5p satiri (OCLC/LCCN + Xunzi HT) | [`3548341`](https://github.com/ali-han-kaya/leibniz2/commit/3548341) |
+| 2026-08-21 | docs | V5q changelog satırı + §2 tablo doğrulaması | [`db61c80`](https://github.com/ali-han-kaya/leibniz2/commit/db61c80) |
+| 2026-08-21 | docs | HathiTrust katalog yol haritası (4 telifli kitap) | [`fa43551`](https://github.com/ali-han-kaya/leibniz2/commit/fa43551) |
+| 2026-08-21 | feat | refs-online VERSION JSON'a ht_ids_summary ekle | [`efdd45a`](https://github.com/ali-han-kaya/leibniz2/commit/efdd45a) |
+| 2026-08-21 | docs | bilinen CI olayları kaydı (KNOWN_INCIDENTS.md) | [`cf82c25`](https://github.com/ali-han-kaya/leibniz2/commit/cf82c25) |
+| 2026-08-21 | docs | PUBLISH_SCENARIO canli durum tablosu guncelle | [`9f2516e`](https://github.com/ali-han-kaya/leibniz2/commit/9f2516e) |
+| 2026-08-21 | refactor | persist sidecar testlerini test_preview_server.py'ye tasi | [`f1aab1d`](https://github.com/ali-han-kaya/leibniz2/commit/f1aab1d) |
+| 2026-08-21 | feat | start_preview.sh — rebuild + start + health tek komut | [`cfa9139`](https://github.com/ali-han-kaya/leibniz2/commit/cfa9139) |
+| 2026-08-22 | feat | update_preview.sh --status alt komutu | [`aacad00`](https://github.com/ali-han-kaya/leibniz2/commit/aacad00) |
+| 2026-08-22 | feat | K18 launchctl durum katmani | [`efcb8bb`](https://github.com/ali-han-kaya/leibniz2/commit/efcb8bb) |
+| 2026-08-22 | feat | plist-check artifact'ini reproducibility manifest'e dahil et | [`ecba674`](https://github.com/ali-han-kaya/leibniz2/commit/ecba674) |
+| 2026-08-22 | docs | changelog auto-sync — plist-check manifest entry | [`62216d9`](https://github.com/ali-han-kaya/leibniz2/commit/62216d9) |
+| 2026-08-22 | ci | plist-check run summary'de profiles sidecar tablosu | [`e9f6acf`](https://github.com/ali-han-kaya/leibniz2/commit/e9f6acf) |
+| 2026-08-22 | ci | plist-check run summary'de profiles sidecar tablosu | [`deda5de`](https://github.com/ali-han-kaya/leibniz2/commit/deda5de) |
+| 2026-08-22 | other | _calisma/CIKTI: run_summary_refs_trend.py CLI tutarlılık testleri | [`ff1e9c1`](https://github.com/ali-han-kaya/leibniz2/commit/ff1e9c1) |
+| 2026-08-22 | ci | add pattern drift summary to reproducibility job run summary (#9) | [`328f8fc`](https://github.com/ali-han-kaya/leibniz2/commit/328f8fc) |
+| 2026-08-22 | fix | (repro) PROVENANCE section labels merged vs prefixed vs absent (#10) | [`5b78b18`](https://github.com/ali-han-kaya/leibniz2/commit/5b78b18) |
+| 2026-08-22 | ci | add check-pattern-consistency pre-commit hook (#11) | [`0440d82`](https://github.com/ali-han-kaya/leibniz2/commit/0440d82) |
+| 2026-08-22 | ci | add K15 history sidecar check to daemon advisory job (#12) | [`84ee113`](https://github.com/ali-han-kaya/leibniz2/commit/84ee113) |
+| 2026-08-22 | feat | (dashboard) show K15 history sidecar SHA-256 in /api/latest (#13) | [`dab8ecd`](https://github.com/ali-han-kaya/leibniz2/commit/dab8ecd) |
+| 2026-08-22 | feat | (dashboard) overlay duration/budget trend from refs-trend.json (#14) | [`121a987`](https://github.com/ali-han-kaya/leibniz2/commit/121a987) |
+| 2026-08-22 | feat | (refs-trend) add duration/budget threshold warning layer (#15) | [`86b4edc`](https://github.com/ali-han-kaya/leibniz2/commit/86b4edc) |
+| 2026-08-22 | feat | (dashboard) add color legend to live run stream section (#16) | [`eaef526`](https://github.com/ali-han-kaya/leibniz2/commit/eaef526) |
+| 2026-08-22 | feat | (dashboard) add findings panel showing P0/P1 detail rows (#17) | [`f413d97`](https://github.com/ali-han-kaya/leibniz2/commit/f413d97) |
+| 2026-08-22 | ci | add colorizeLine rules regression test + pre-commit hook (#18) | [`f481ea5`](https://github.com/ali-han-kaya/leibniz2/commit/f481ea5) |
+| 2026-08-22 | feat | (repro) add UNIT TESTS artifact section to manifest (#19) | [`cb7b06d`](https://github.com/ali-han-kaya/leibniz2/commit/cb7b06d) |
+| 2026-08-22 | ci | parse unit test failures and post as PR comment | [`d3284b7`](https://github.com/ali-han-kaya/leibniz2/commit/d3284b7) |
+| 2026-08-22 | fix | (ci) extract unit-test-failure comment to .js file | [`28e0789`](https://github.com/ali-han-kaya/leibniz2/commit/28e0789) |
+| 2026-08-22 | fix | (ci) accept require+eval pattern in github-script test | [`d5a26cd`](https://github.com/ali-han-kaya/leibniz2/commit/d5a26cd) |
+| 2026-08-22 | ci | unit test failure PR comment (#20) | [`167443a`](https://github.com/ali-han-kaya/leibniz2/commit/167443a) |
+| 2026-08-22 | feat | (dashboard) live findings panel from stream P0/P1 lines (#21) | [`9f0a532`](https://github.com/ali-han-kaya/leibniz2/commit/9f0a532) |
+| 2026-08-22 | fix | (dashboard) add startup resilience to preview tab (#22) | [`2bb8fb1`](https://github.com/ali-han-kaya/leibniz2/commit/2bb8fb1) |
+| 2026-08-22 | other | revert(plist): remove legacy preview-server profile, keep single-profile (#23) | [`71106f8`](https://github.com/ali-han-kaya/leibniz2/commit/71106f8) |
+| 2026-08-22 | fix | (verify) K14 _resolve_canon path under --dir repo root (#24) | [`fb69a40`](https://github.com/ali-han-kaya/leibniz2/commit/fb69a40) |
+| 2026-08-22 | feat | (dashboard) add refs/PDF info to replay summary line (#25) | [`e19f7b7`](https://github.com/ali-han-kaya/leibniz2/commit/e19f7b7) |
+| 2026-08-22 | test | (colorize) add replay summary coloring unit tests (#26) | [`093bd32`](https://github.com/ali-han-kaya/leibniz2/commit/093bd32) |
+| 2026-08-22 | feat | (repro) add RUN LOGS section to reproducibility manifest (#27) | [`5a5d391`](https://github.com/ali-han-kaya/leibniz2/commit/5a5d391) |
+| 2026-08-22 | feat | (dashboard) add compact run history list (#28) | [`a3111c4`](https://github.com/ali-han-kaya/leibniz2/commit/a3111c4) |
+| 2026-08-22 | feat | (refs-trend) unverified series + stale artifact warning (#29) | [`f5d9c32`](https://github.com/ali-han-kaya/leibniz2/commit/f5d9c32) |
+| 2026-08-22 | fix | (refs) correct Fine 2012 identifiers (wrong LCCN/ISBN) | [`398a148`](https://github.com/ali-han-kaya/leibniz2/commit/398a148) |
+| 2026-08-22 | feat | (dashboard) add z3_passed/z3_total to run-history API | [`a05aad3`](https://github.com/ali-han-kaya/leibniz2/commit/a05aad3) |
+| 2026-08-22 | feat | (dashboard) add K9 Lean to run-history API and trend graph | [`ce861e8`](https://github.com/ali-han-kaya/leibniz2/commit/ce861e8) |
+| 2026-08-22 | feat | (verify) add lean_ok/lean_detail to history.jsonl record | [`e28c83f`](https://github.com/ali-han-kaya/leibniz2/commit/e28c83f) |
+| 2026-08-22 | feat | (refs-trend) add z3_passed/z3_total to duration_budget section | [`8d669ea`](https://github.com/ali-han-kaya/leibniz2/commit/8d669ea) |
+| 2026-08-22 | fix | (plist) KeepAlive SuccessfulExit=false to prevent restart race | [`aae9b0f`](https://github.com/ali-han-kaya/leibniz2/commit/aae9b0f) |
+| 2026-08-22 | fix | (tests) green local suite — jsonschema skip, Fine 2012 OL source | [`54e7377`](https://github.com/ali-han-kaya/leibniz2/commit/54e7377) |
+| 2026-08-22 | ci | (verify) K13 repro-manifest as separate advisory step + sidecar | [`f9dcb1c`](https://github.com/ali-han-kaya/leibniz2/commit/f9dcb1c) |
+| 2026-08-22 | fix | (verify) harden K13 repro-manifest self-test with negative scenarios | [`ed0427d`](https://github.com/ali-han-kaya/leibniz2/commit/ed0427d) |
+| 2026-08-22 | test | (refs-trend) section unit tests for parse/stats/duration-budget | [`d89964b`](https://github.com/ali-han-kaya/leibniz2/commit/d89964b) |
+| 2026-08-22 | test | (repro) cross-validate config.combined_sha256 with K10 gate | [`ff029ae`](https://github.com/ali-han-kaya/leibniz2/commit/ff029ae) |
+| 2026-08-22 | feat | (precommit) unstaged-deps pre-check for check-repro-manifest hook | [`3995fc9`](https://github.com/ali-han-kaya/leibniz2/commit/3995fc9) |
+| 2026-08-22 | fix | (plist) restore two-profile management, sync tests to reality | [`0d29fd8`](https://github.com/ali-han-kaya/leibniz2/commit/0d29fd8) |
+| 2026-08-22 | feat | (plist) K12 out-of-scope INFO line in audit trail | [`e78d906`](https://github.com/ali-han-kaya/leibniz2/commit/e78d906) |
+| 2026-08-22 | test | (plist) real end-to-end extra-file scenario for check_plist_drift | [`bebc0cf`](https://github.com/ali-han-kaya/leibniz2/commit/bebc0cf) |
+| 2026-08-22 | feat | (protection) K1-K14 job rename + 9 required check sync | [`d3de002`](https://github.com/ali-han-kaya/leibniz2/commit/d3de002) |
+| 2026-08-22 | feat | (protection) advisory contract — all jobs vs required diff check | [`9195b63`](https://github.com/ali-han-kaya/leibniz2/commit/9195b63) |
+| 2026-08-22 | test | (repro) doc artifact list vs ARTIFACT_JOBS sync | [`bccc815`](https://github.com/ali-han-kaya/leibniz2/commit/bccc815) |
+| 2026-08-22 | feat | (dashboard) budget limit from effective config, not hardcoded 30 | [`4dc133d`](https://github.com/ali-han-kaya/leibniz2/commit/4dc133d) |
+| 2026-08-22 | feat | (dashboard) red BÜTÇE AŞIMI banner above trend panel | [`0ab782c`](https://github.com/ali-han-kaya/leibniz2/commit/0ab782c) |
+| 2026-08-22 | feat | (dashboard) tooltip budget line shows limit under/over status | [`8e455c2`](https://github.com/ali-han-kaya/leibniz2/commit/8e455c2) |
+| 2026-08-22 | docs | (readme) add _calisma/lean_reduct boundary-proof section | [`5b1b90d`](https://github.com/ali-han-kaya/leibniz2/commit/5b1b90d) |
+| 2026-08-22 | docs | (lean) add V5s note to K9 report for 8-theorem boundary core | [`9b81196`](https://github.com/ali-han-kaya/leibniz2/commit/9b81196) |
+| 2026-08-22 | feat | (verify) K9 lake build --wfail gate for 8-theorem boundary core | [`d359b35`](https://github.com/ali-han-kaya/leibniz2/commit/d359b35) |
+| 2026-08-22 | feat | (precommit) check-unit-tests hook for 5 new gate test files | [`d77aca7`](https://github.com/ali-han-kaya/leibniz2/commit/d77aca7) |
+| 2026-08-22 | test | (summary) row-level content checks for lineage + K-layer sections | [`cafab86`](https://github.com/ali-han-kaya/leibniz2/commit/cafab86) |
+| 2026-08-22 | docs | (M0) K16/K14 mirror-launchd PATH fixes katman raporu | [`4ac1787`](https://github.com/ali-han-kaya/leibniz2/commit/4ac1787) |
+| 2026-08-22 | feat | (smoke) dashboard PASS'ini tek komutla yeniden üreten smoke testi | [`00ecfd3`](https://github.com/ali-han-kaya/leibniz2/commit/00ecfd3) |
+| 2026-08-22 | docs | (scenario) launchd minimal PATH + mirror sync sınır notu | [`836c52b`](https://github.com/ali-han-kaya/leibniz2/commit/836c52b) |
+| 2026-08-22 | feat | (skills) reproducible-pdf-build installable skill | [`5557a48`](https://github.com/ali-han-kaya/leibniz2/commit/5557a48) |
+| 2026-08-22 | feat | (skills) verify-chain — K0-K17 fail-closed zincir skill'i | [`67226f3`](https://github.com/ali-han-kaya/leibniz2/commit/67226f3) |
+| 2026-08-22 | feat | coq_reduct modülü + K19 coqtop fail-closed kapısı | [`86203ae`](https://github.com/ali-han-kaya/leibniz2/commit/86203ae) |
+| 2026-08-22 | fix | (scripts) unify manifest + config-drift override display format | [`d29d766`](https://github.com/ali-han-kaya/leibniz2/commit/d29d766) |
+| 2026-08-22 | feat | (cross-check) cross-validate index.json vs VERSION JSON override | [`66e573a`](https://github.com/ali-han-kaya/leibniz2/commit/66e573a) |
+| 2026-08-22 | ci | manifest'te OVERRIDES bolumu — cli_overrides_version.json | [`93fce5b`](https://github.com/ali-han-kaya/leibniz2/commit/93fce5b) |
+| 2026-08-22 | ci | K16 negatif kontrol — override'sizken yorumda uyari YOK | [`b0071f3`](https://github.com/ali-han-kaya/leibniz2/commit/b0071f3) |
+| 2026-08-22 | ci | override-trend — CLI override zaman serisi (refs-trend deseni) | [`950cbbc`](https://github.com/ali-han-kaya/leibniz2/commit/950cbbc) |
+| 2026-08-22 | other | dash: CLI override panel'i — son run'un override durumu | [`6f2797d`](https://github.com/ali-han-kaya/leibniz2/commit/6f2797d) |
+| 2026-08-22 | other | dash: K-layer panel — tum rozetler d.layers tek kaynak | [`27542eb`](https://github.com/ali-han-kaya/leibniz2/commit/27542eb) |
+| 2026-08-22 | ci | layers slot in LATEST + SSE snapshot plumbing tests | [`6a4d2af`](https://github.com/ali-han-kaya/leibniz2/commit/6a4d2af) |
+| 2026-08-22 | docs | M0 raporuna V5t notu — K-layer panel (K0-K17 individual badges) | [`425bfff`](https://github.com/ali-han-kaya/leibniz2/commit/425bfff) |
+| 2026-08-22 | docs | V5y — Fine 2012 OCLC + HT 0 kayit notu | [`b44a102`](https://github.com/ali-han-kaya/leibniz2/commit/b44a102) |
+| 2026-08-22 | other | verify: HT API format unit tests — data[ident].records locked | [`3361b4c`](https://github.com/ali-han-kaya/leibniz2/commit/3361b4c) |
+| 2026-08-22 | other | verify: refs-trend kapsam satiri — 61/61 + 54 gecersiz | [`8ef125a`](https://github.com/ali-han-kaya/leibniz2/commit/8ef125a) |
+| 2026-08-22 | fix | config-drift override tek kaynak — summary.txt satiri | [`5e837f7`](https://github.com/ali-han-kaya/leibniz2/commit/5e837f7) |
+| 2026-08-22 | other | verify: cli_overrides warning → fail-closed config-drift gate | [`e590e70`](https://github.com/ali-han-kaya/leibniz2/commit/e590e70) |
+| 2026-08-22 | fix | config-drift override-only cift baslik engellendi | [`337a8d1`](https://github.com/ali-han-kaya/leibniz2/commit/337a8d1) |
+| 2026-08-22 | other | verify: budget bar compute — budget_scan.js (pure) + 67 Node tests | [`049e9a0`](https://github.com/ali-han-kaya/leibniz2/commit/049e9a0) |
+| 2026-08-22 | other | dash: budget sparkline — son N run'in butce mini grafigi | [`c003151`](https://github.com/ali-han-kaya/leibniz2/commit/c003151) |
+| 2026-08-22 | other | dash: budget bar limit cizgisi + yuzde etiketi | [`d85213a`](https://github.com/ali-han-kaya/leibniz2/commit/d85213a) |
+| 2026-08-22 | other | verify: config artefact merge pattern'e dahil — config/ oneki yok | [`e68a3c3`](https://github.com/ali-han-kaya/leibniz2/commit/e68a3c3) |
+| 2026-08-22 | other | verify: config artefact merge pattern'e dahil — config/ oneki yok | [`a44b4f1`](https://github.com/ali-han-kaya/leibniz2/commit/a44b4f1) |
+| 2026-08-22 | ci | config snapshot ↔ CONFIG_BASENAMES sync gate | [`9636a7c`](https://github.com/ali-han-kaya/leibniz2/commit/9636a7c) |
+| 2026-08-22 | ci | add config_artifact_basenames to schema, K10 fail-closed drift check | [`d7ca27a`](https://github.com/ali-han-kaya/leibniz2/commit/d7ca27a) |
+| 2026-08-23 | ci | override run [CLI override] satirlarini OVERRIDE_RAPORU.json'a tasi | [`fa9b7a4`](https://github.com/ali-han-kaya/leibniz2/commit/fa9b7a4) |
+| 2026-08-23 | docs | PRE_PUSH_DENETIM_RAPORU e §9 CI run trend tablosu ekle | [`8e71025`](https://github.com/ali-han-kaya/leibniz2/commit/8e71025) |
+| 2026-08-23 | ci | ci-simulate raporu .freebuff/sim'a; ci_stats.py scripti | [`4e44c26`](https://github.com/ali-han-kaya/leibniz2/commit/4e44c26) |
+| 2026-08-23 | ci | CI-SIMULATE'i advisory job olarak her push'a ekle | [`f95df4a`](https://github.com/ali-han-kaya/leibniz2/commit/f95df4a) |
+| 2026-08-23 | ci | ci-simulate job'unda elan PATH'ini inline export et | [`a80daa0`](https://github.com/ali-han-kaya/leibniz2/commit/a80daa0) |
+| 2026-08-23 | ci | tum_sapmalar_comment.js'i repo'ya al (K16 battery CI'da ENOENT) | [`246b0e4`](https://github.com/ali-han-kaya/leibniz2/commit/246b0e4) |
+| 2026-08-23 | ci | pre-existing test kirilmalarini kapat (mirror + battery desen) | [`4eeb0a5`](https://github.com/ali-han-kaya/leibniz2/commit/4eeb0a5) |
+| 2026-08-23 | ci | verify job Install Lean adimina da inline PATH export ekle | [`8b0d6c1`](https://github.com/ali-han-kaya/leibniz2/commit/8b0d6c1) |
+| 2026-08-23 | docs | PUBLISH_SCENARIO CI-SIMULATE bolumunu guncel yollarla senkronla | [`fb025a1`](https://github.com/ali-han-kaya/leibniz2/commit/fb025a1) |
+| 2026-08-23 | ci | simulate_verify_job summary.md'ye readonly assertion ekle | [`5bf2037`](https://github.com/ali-han-kaya/leibniz2/commit/5bf2037) |
+| 2026-08-23 | ci | summary Annotations format uyumluluk kontrolu | [`ea40214`](https://github.com/ali-han-kaya/leibniz2/commit/ea40214) |
+| 2026-08-23 | feat | (protection) required check 9→12 (commit-msg, config-sync, ci-sim) | [`54e4d4c`](https://github.com/ali-han-kaya/leibniz2/commit/54e4d4c) |
+| 2026-08-23 | fix | (verify) K10 overrides.combined_sha256 yeniden hesaplama + P1 | [`49b8114`](https://github.com/ali-han-kaya/leibniz2/commit/49b8114) |
+| 2026-08-23 | fix | (scripts) config_diff yok-sa da bayat yorumu sil (state-sync) | [`914a221`](https://github.com/ali-han-kaya/leibniz2/commit/914a221) |
+| 2026-08-23 | feat | (scripts) PR status'a repro-manifest PASS/FAIL bölümü ekle | [`dbb1bd2`](https://github.com/ali-han-kaya/leibniz2/commit/dbb1bd2) |
+| 2026-08-23 | fix | (verify) K10 precheck_report.combined_sha256 yeniden hesapla | [`45c546b`](https://github.com/ali-han-kaya/leibniz2/commit/45c546b) |
+| 2026-08-23 | docs | PRE_PUSH §8.5 — K10 precheck_report doğrulaması kaydı | [`5e85593`](https://github.com/ali-han-kaya/leibniz2/commit/5e85593) |
+| 2026-08-23 | fix | (verify) K10 absent precheck — hayalet bölüme P1, yoksa PASS | [`469bd7d`](https://github.com/ali-han-kaya/leibniz2/commit/469bd7d) |
+| 2026-08-23 | feat | (scripts) precheck --verify-checks + verify_checks birim testi | [`6cb70a1`](https://github.com/ali-han-kaya/leibniz2/commit/6cb70a1) |
+| 2026-08-23 | feat | (scripts) verify-checks JSON sidecar + CI advisory adımı | [`71dbecc`](https://github.com/ali-han-kaya/leibniz2/commit/71dbecc) |
+| 2026-08-23 | fix | (scripts) precheck smoke öncesi changelog senkronu (chicken-and-egg) | [`0bc915f`](https://github.com/ali-han-kaya/leibniz2/commit/0bc915f) |
+| 2026-08-23 | docs | changelog — precheck smoke senkronu satırı (0bc915f) | [`76b0a55`](https://github.com/ali-han-kaya/leibniz2/commit/76b0a55) |
+| 2026-08-23 | test | (scripts) update_changelog_hook birim kapısı (drift/stage/hata) | [`d210be3`](https://github.com/ali-han-kaya/leibniz2/commit/d210be3) |
+| 2026-08-23 | feat | (scripts) branch protection tek-komut kurulum | [`7b78e0f`](https://github.com/ali-han-kaya/leibniz2/commit/7b78e0f) |
+| 2026-08-23 | docs | V5z — bugünkü canlı 61/61 doğrulaması (2026-08-23) | [`35d9221`](https://github.com/ali-han-kaya/leibniz2/commit/35d9221) |
+| 2026-08-23 | fix | (verify) refs HTTP retry 2→3 (IA SSL handshake flaky UNVERIFIED) | [`8a0220e`](https://github.com/ali-han-kaya/leibniz2/commit/8a0220e) |
+| 2026-08-23 | feat | (dashboard) refs-trend tam kapsam rozeti (bugünkü 61/61) | [`b1353e6`](https://github.com/ali-han-kaya/leibniz2/commit/b1353e6) |
+| 2026-08-23 | feat | (changelog) gen_changelog.py'ye --tag-regex kategori filtreleme | [`b86401f`](https://github.com/ali-han-kaya/leibniz2/commit/b86401f) |
+| 2026-08-23 | feat | (ci) changelog drift advisory job | [`5aba283`](https://github.com/ali-han-kaya/leibniz2/commit/5aba283) |
 
 ---
 

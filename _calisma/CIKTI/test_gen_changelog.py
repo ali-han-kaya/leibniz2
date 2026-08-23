@@ -441,6 +441,239 @@ class TestUpdateMode(unittest.TestCase):
         self.assertEqual(added, [])
 
 
+class TestRemoteUrl(unittest.TestCase):
+    """parse_remote_url: git remote → GitHub base URL."""
+
+    def test_ssh_scp_format(self):
+        self.assertEqual(gc.parse_remote_url("git@github.com:o/r.git"),
+                         "https://github.com/o/r")
+
+    def test_https_format(self):
+        self.assertEqual(gc.parse_remote_url("https://github.com/o/r.git"),
+                         "https://github.com/o/r")
+        self.assertEqual(gc.parse_remote_url("https://github.com/o/r"),
+                         "https://github.com/o/r")
+
+    def test_ssh_url_format(self):
+        self.assertEqual(gc.parse_remote_url("ssh://git@github.com/o/r.git"),
+                         "https://github.com/o/r")
+
+    def test_non_github_remote_returns_none(self):
+        self.assertIsNone(gc.parse_remote_url("git@gitlab.com:x/y.git"))
+
+    def test_derive_base_url_mocked(self):
+        with patch.object(gc, "_run_git",
+                          return_value="git@github.com:o/r.git") as m:
+            self.assertEqual(gc.derive_base_url(), "https://github.com/o/r")
+            m.assert_called_with(["remote", "get-url", "origin"])
+
+    def test_derive_base_url_none_on_missing_remote(self):
+        from subprocess import CalledProcessError
+        with patch.object(gc, "_run_git",
+                          side_effect=CalledProcessError(128, "git")):
+            self.assertIsNone(gc.derive_base_url())
+
+
+class TestLinkMode(unittest.TestCase):
+    """link_cell / link_file_changelog / rows_linked."""
+
+    BASE = "https://github.com/o/r"
+
+    def test_link_cell_format(self):
+        self.assertEqual(gc.link_cell("abc1234", self.BASE),
+                         "[`abc1234`](https://github.com/o/r/commit/abc1234)")
+
+    def test_link_file_converts_readme_rows(self):
+        content = textwrap.dedent("""\
+            # Test
+
+            ## Değişiklik Geçmişi
+
+            | Tarih | Kategori | Değişiklik | Commit |
+            |---|---|---|---|
+            | 2026-08-21 | feat | X | `aaa1111` |
+            | 2026-08-20 | fix | Y | `bbb2222` |
+
+            ### Regresyon notları
+
+            | ID | Tarih | Kırılma |
+            |---|---|---|
+            | R1 | 2026-08-19 | YAML |
+            """)
+        with tempfile.TemporaryDirectory() as td:
+            readme = Path(td, "README.md")
+            readme.write_text(content)
+            converted, total = gc.link_file_changelog(
+                readme, "## Değişiklik Geçmişi", gc._README_ROW_RE,
+                self.BASE, "cat")
+            out = readme.read_text()
+        self.assertEqual((converted, total), (2, 2))
+        self.assertIn("[`aaa1111`](https://github.com/o/r/commit/aaa1111)", out)
+        self.assertIn("[`bbb2222`](https://github.com/o/r/commit/bbb2222)", out)
+        # Başlık, ayraç ve regresyon satırları korunur
+        self.assertIn("| Tarih | Kategori | Değişiklik | Commit |", out)
+        self.assertIn("| R1 |", out)
+
+    def test_link_is_idempotent(self):
+        content = textwrap.dedent("""\
+            ## Değişiklik Geçmişi
+
+            | Tarih | Kategori | Değişiklik | Commit |
+            |---|---|---|---|
+            | 2026-08-21 | feat | X | [`aaa1111`](https://github.com/o/r/commit/aaa1111) |
+            """)
+        with tempfile.TemporaryDirectory() as td:
+            readme = Path(td, "README.md")
+            readme.write_text(content)
+            converted, total = gc.link_file_changelog(
+                readme, "## Değişiklik Geçmişi", gc._README_ROW_RE,
+                self.BASE, "cat")
+        self.assertEqual((converted, total), (0, 1))
+
+    def test_link_pub_rows_uses_section_group(self):
+        content = textwrap.dedent("""\
+            ## Değişiklik Geçmişi
+
+            | Tarih | Bölüm | Değişiklik | Commit |
+            |---|---|---|---|
+            | 2026-08-20 | AŞAMA 0 | precheck | `def5678` |
+            """)
+        with tempfile.TemporaryDirectory() as td:
+            pub = Path(td, "PUBLISH.md")
+            pub.write_text(content)
+            converted, total = gc.link_file_changelog(
+                pub, "## Değişiklik Geçmişi", gc._PUB_ROW_RE,
+                self.BASE, "section")
+            out = pub.read_text()
+        self.assertEqual((converted, total), (1, 1))
+        self.assertIn("[`def5678`](https://github.com/o/r/commit/def5678)", out)
+        self.assertIn("| AŞAMA 0 |", out)
+
+    def test_rows_linked_detects_linked_table(self):
+        hdr = "## Değişiklik Geçmişi\n"
+        linked = hdr + "| 2026-08-21 | feat | X | [`aaa1111`](https://github.com/o/r/commit/aaa1111) |\n"
+        self.assertTrue(gc.rows_linked(linked, gc._README_ROW_RE,
+                                       "## Değişiklik Geçmişi"))
+        unlinked = hdr + "| 2026-08-21 | feat | X | `aaa1111` |\n"
+        self.assertFalse(gc.rows_linked(unlinked, gc._README_ROW_RE,
+                                        "## Değişiklik Geçmişi"))
+
+    def test_check_still_passes_on_linked_table(self):
+        """Bağlı tablo --check'te missing/stale üretmemeli (regex uyumluluğu)."""
+        commits = [
+            gc.CommitInfo("aaa1111", "a", "2026-08-21", "feat: X", "feat", "X"),
+        ]
+        content = textwrap.dedent("""\
+            ## Değişiklik Geçmişi
+
+            | Tarih | Kategori | Değişiklik | Commit |
+            |---|---|---|---|
+            | 2026-08-21 | feat | X | [`aaa1111`](https://github.com/o/r/commit/aaa1111) |
+            """)
+        with tempfile.TemporaryDirectory() as td:
+            readme = Path(td, "README.md")
+            readme.write_text(content)
+            missing, stale = gc.check_file_changelog(
+                readme, "## Değişiklik Geçmişi", gc._README_ROW_RE, commits)
+        self.assertEqual(missing, [])
+        self.assertEqual(stale, [])
+
+    def test_update_matches_linked_style(self):
+        """Bağlı tabloya --update yeni satırı da bağlı ekler (format uyumu)."""
+        commits = [
+            gc.CommitInfo("aaa1111", "a", "2026-08-22", "feat: Z", "feat", "Z"),
+            gc.CommitInfo("bbb2222", "b", "2026-08-21", "fix: Y", "fix", "Y"),
+        ]
+        content = textwrap.dedent("""\
+            ## Değişiklik Geçmişi
+
+            | Tarih | Kategori | Değişiklik | Commit |
+            |---|---|---|---|
+            | 2026-08-21 | fix | Y | [`bbb2222`](https://github.com/o/r/commit/bbb2222) |
+            """)
+        with tempfile.TemporaryDirectory() as td:
+            readme = Path(td, "README.md")
+            readme.write_text(content)
+            added, stale = gc.update_file_changelog(
+                readme, "## Değişiklik Geçmişi", gc._README_ROW_RE,
+                gc.format_readme_row, commits, base_url=self.BASE)
+            out = readme.read_text()
+        self.assertEqual(added, ["aaa1111"])
+        self.assertIn("[`aaa1111`](https://github.com/o/r/commit/aaa1111)", out)
+        self.assertIn("[`bbb2222`](https://github.com/o/r/commit/bbb2222)", out)
+        self.assertEqual(stale, [])
+
+
+class TestMainLinkMode(unittest.TestCase):
+    """main() --link: in-place dönüşüm + stdout; base URL zorunluluğu."""
+
+    def setUp(self):
+        import contextlib
+        self.contextlib = contextlib
+        self.tmpdir = tempfile.mkdtemp()
+        self.readme = Path(self.tmpdir, "README.md")
+        self.pub = Path(self.tmpdir, "PUBLISH.md")
+        self.readme.write_text(textwrap.dedent("""\
+            # Test
+
+            ## Değişiklik Geçmişi
+
+            | Tarih | Kategori | Değişiklik | Commit |
+            |---|---|---|---|
+            | 2026-08-21 | feat | X | `aaa1111` |
+            """))
+        self.pub.write_text(textwrap.dedent("""\
+            # Test
+
+            ## Değişiklik Geçmişi
+
+            | Tarih | Bölüm | Değişiklik | Commit |
+            |---|---|---|---|
+            | 2026-08-20 | AŞAMA 0 | precheck | `bbb2222` |
+            """))
+
+    def test_link_converts_both_files(self):
+        import io
+        buf = io.StringIO()
+        with patch.object(sys, "argv", ["gen_changelog.py", "--link",
+                                        "--base-url", "https://github.com/o/r",
+                                        "--readme", str(self.readme),
+                                        "--publish", str(self.pub)]), \
+             self.contextlib.redirect_stdout(buf):
+            gc.main()
+        self.assertIn("[`aaa1111`](https://github.com/o/r/commit/aaa1111)",
+                      self.readme.read_text())
+        self.assertIn("[`bbb2222`](https://github.com/o/r/commit/bbb2222)",
+                      self.pub.read_text())
+        self.assertIn("1/1 satır bağlandı", buf.getvalue())
+
+    def test_link_idempotent_second_run(self):
+        import io
+        buf = io.StringIO()
+        argv = ["gen_changelog.py", "--link",
+                "--base-url", "https://github.com/o/r",
+                "--readme", str(self.readme), "--publish", str(self.pub)]
+        with patch.object(sys, "argv", argv), self.contextlib.redirect_stdout(buf):
+            gc.main()
+        buf2 = io.StringIO()
+        with patch.object(sys, "argv", argv), self.contextlib.redirect_stdout(buf2):
+            gc.main()
+        self.assertIn("0/1 satır bağlandı", buf2.getvalue())
+
+    def test_link_without_base_url_exits_2(self):
+        import io
+        err = io.StringIO()
+        with patch.object(gc, "derive_base_url", return_value=None), \
+             patch.object(sys, "argv", ["gen_changelog.py", "--link",
+                                        "--readme", str(self.readme),
+                                        "--publish", str(self.pub)]), \
+             self.contextlib.redirect_stderr(err), \
+             self.assertRaises(SystemExit) as cm:
+            gc.main()
+        self.assertEqual(cm.exception.code, 2)
+        self.assertIn("base URL", err.getvalue())
+
+
 class TestMainTagRegex(unittest.TestCase):
     """main() --tag-regex: --print ve --update davranışı."""
 
@@ -524,11 +757,25 @@ class TestRegexPatterns(unittest.TestCase):
         self.assertEqual(m.group("desc"), "add X")
         self.assertEqual(m.group("hash"), "abc1234")
 
+    def test_readme_row_re_matches_linked(self):
+        line = "| 2026-08-21 | feat | add X | [`abc1234`](https://github.com/o/r/commit/abc1234) |"
+        m = gc._README_ROW_RE.match(line)
+        self.assertIsNotNone(m)
+        self.assertEqual(m.group("hash"), "abc1234")
+        self.assertEqual(m.group("desc"), "add X")
+
     def test_pub_row_re_matches(self):
         line = "| 2026-08-21 | AŞAMA 0 | precheck added | `def5678` |"
         m = gc._PUB_ROW_RE.match(line)
         self.assertIsNotNone(m)
         self.assertEqual(m.group("section"), "AŞAMA 0")
+
+    def test_pub_row_re_matches_linked(self):
+        line = "| 2026-08-21 | AŞAMA 0 | precheck added | [`def5678`](https://github.com/o/r/commit/def5678) |"
+        m = gc._PUB_ROW_RE.match(line)
+        self.assertIsNotNone(m)
+        self.assertEqual(m.group("section"), "AŞAMA 0")
+        self.assertEqual(m.group("hash"), "def5678")
 
     def test_readme_row_re_does_not_match_regresyon(self):
         line = "| R1 | 2026-08-19 | CI 0s | YAML | satır | `d57a60c` |"

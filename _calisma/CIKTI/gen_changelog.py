@@ -10,6 +10,14 @@ Modlar:
   --update   mevcut tabloyu yeni commit'lerle genişletir (kaymış satır yoksa)
   --check    docs'taki tablo ↔ git log arasındaki kaymayı raporlar (exit 1 = drift)
   --print    tabloyu stdout'a basar (dosyaya yazmaz)
+  --link     tablodaki commit hash'lerini GitHub commit URL'lerine bağlar
+             (in-place; satırlar [`hash`](URL) formuna çevrilir, idempotent)
+
+--link / --update URL üssü:
+  Base URL varsayılan olarak `git remote get-url origin`'den türetilir
+  (github.com formatları: git@github.com:owner/repo, https://..., ssh://...);
+  --base-url ile elle verilebilir. --update, tablo zaten bağlıysa YENİ
+  satırları da bağlı üretir (karışık format olmaz).
 
 Filtreleme:
   --tag-regex REGEX   yalnızca kategori'si regex'e uyan commit'leri işler
@@ -33,6 +41,8 @@ Kullanım:
   python3 _calisma/CIKTI/gen_changelog.py --print --limit 10
   python3 _calisma/CIKTI/gen_changelog.py --print --tag-regex 'feat|fix|refs'
   python3 _calisma/CIKTI/gen_changelog.py --update --tag-regex 'feat|fix|refs'
+  python3 _calisma/CIKTI/gen_changelog.py --link
+  python3 _calisma/CIKTI/gen_changelog.py --link --base-url https://github.com/owner/repo
 """
 
 from __future__ import annotations
@@ -145,6 +155,94 @@ def filter_commits(commits: list[CommitInfo], pattern: str | None) -> list[Commi
     return [ci for ci in commits if rx.search(ci.category)]
 
 
+# GitHub remote URL formatları: git@github.com:o/r.git | https://github.com/o/r(.git) | ssh://git@github.com/o/r
+_REMOTE_RE = re.compile(r"(?:github\.com[/:])([^/:]+)/([^/\s]+?)(?:\.git)?$")
+
+
+def parse_remote_url(url: str) -> str | None:
+    """Git remote URL'sinden GitHub base URL türet (https://github.com/owner/repo).
+
+    github.com dışı bir remote (gitlab vb.) → None (bağlanamaz).
+    """
+    m = _REMOTE_RE.search(url)
+    if not m:
+        return None
+    return f"https://github.com/{m.group(1)}/{m.group(2)}"
+
+
+def derive_base_url() -> str | None:
+    """origin remote'undan GitHub base URL türet; remote yoksa None."""
+    try:
+        url = _run_git(["remote", "get-url", "origin"])
+    except subprocess.CalledProcessError:
+        return None
+    return parse_remote_url(url)
+
+
+def link_cell(hash_: str, base_url: str) -> str:
+    """Commit hücresi: bağlı form [`hash`](base/commit/hash)."""
+    return f"[`{hash_}`]({base_url}/commit/{hash_})"
+
+
+def rows_linked(content: str, row_re: re.Pattern, section_header: str) -> bool:
+    """Tablodaki satırlardan EN AZ biri bağlı formdaysa True (format uyumu)."""
+    lines = content.splitlines()
+    in_table = False
+    for line in lines:
+        if section_header in line:
+            in_table = True
+            continue
+        if in_table:
+            if line.strip().startswith("#"):
+                break
+            if row_re.match(line) and "](" in line:
+                return True
+    return False
+
+
+def link_file_changelog(
+    filepath: Path,
+    section_header: str,
+    row_re: re.Pattern,
+    base_url: str,
+    cat_group: str,
+) -> tuple[int, int]:
+    """Tablodaki commit hash'lerini GitHub commit URL'lerine bağla (in-place).
+
+    Yalnızca row_re ile eşleşen satırlar yeniden yazılır; eşleşmeyenler
+    (başlık, ayraç, regresyon satırları vb.) aynen korunur. Zaten bağlı
+    satırlar aynı formda üretildiği için değişmez (idempotent).
+
+    Returns: (converted, total) — converted: bu çağrıda değişen satır sayısı.
+    """
+    content = filepath.read_text(encoding="utf-8")
+    lines = content.splitlines()
+    in_table = False
+    converted = 0
+    total = 0
+    for i, line in enumerate(lines):
+        if section_header in line:
+            in_table = True
+            continue
+        if in_table and line.strip().startswith("#"):
+            in_table = False
+        if in_table:
+            m = row_re.match(line)
+            if m:
+                total += 1
+                cat = m.group(cat_group)
+                desc = m.group("desc")
+                h = m.group("hash")
+                new = (f"| {m.group('date')} | {cat} | {desc} | "
+                       f"{link_cell(h, base_url)} |")
+                if new != line.strip():
+                    converted += 1
+                    lines[i] = new
+    if converted:
+        filepath.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return converted, total
+
+
 def get_git_log(limit: int | None = None) -> list[CommitInfo]:
     """git log'dan commit listesi al (yeniden eskiye)."""
     fmt = "%H|%h|%aI|%s"
@@ -170,13 +268,15 @@ def get_git_log(limit: int | None = None) -> list[CommitInfo]:
 # ─── tablo ayrıştırma/üretme ───────────────────────────────────────────
 
 # README tablo satırı: | Tarih | Kategori | Değişiklik | Commit |
+# Commit hücresi bağlı ([`hash`](URL)) veya bağsız (`hash`) olabilir — --link
+# tabloyu bağlı forma çevirir, --check/--update her ikisini de okur.
 _README_ROW_RE = re.compile(
-    r"^\|\s*(?P<date>\d{4}-\d{2}-\d{2})\s*\|\s*(?P<cat>[^|]+?)\s*\|\s*(?P<desc>[^|]+?)\s*\|\s*`(?P<hash>[0-9a-f]{7,40})`\s*\|$"
+    r"^\|\s*(?P<date>\d{4}-\d{2}-\d{2})\s*\|\s*(?P<cat>[^|]+?)\s*\|\s*(?P<desc>[^|]+?)\s*\|\s*(?:\[)?`(?P<hash>[0-9a-f]{7,40})`(?:\]\([^)]*\))?\s*\|$"
 )
 
 # PUBLISH_SCENARIO tablo satırı: | Tarih | Bölüm | Değişiklik | Commit |
 _PUB_ROW_RE = re.compile(
-    r"^\|\s*(?P<date>\d{4}-\d{2}-\d{2})\s*\|\s*(?P<section>[^|]+?)\s*\|\s*(?P<desc>[^|]+?)\s*\|\s*`(?P<hash>[0-9a-f]{7,40})`\s*\|$"
+    r"^\|\s*(?P<date>\d{4}-\d{2}-\d{2})\s*\|\s*(?P<section>[^|]+?)\s*\|\s*(?P<desc>[^|]+?)\s*\|\s*(?:\[)?`(?P<hash>[0-9a-f]{7,40})`(?:\]\([^)]*\))?\s*\|$"
 )
 
 # Regresyon satırı (README): | ID | Tarih | ... | Commit |
@@ -257,22 +357,24 @@ def extract_hashes_from_table(content: str, row_re: re.Pattern, section_header: 
 
 # ─── yeni satır üretme ─────────────────────────────────────────────────
 
-def format_readme_row(ci: CommitInfo) -> str:
-    """README changelog tablosu için satır üret."""
+def format_readme_row(ci: CommitInfo, base_url: str | None = None) -> str:
+    """README changelog tablosu için satır üret (base_url verilirse bağlı)."""
     desc = ci.description
     # uzun açıklamaları kısalt
     if len(desc) > 80:
         desc = desc[:77] + "..."
-    return f"| {ci.date} | {ci.category} | {desc} | `{ci.short_hash}` |"
+    cell = link_cell(ci.short_hash, base_url) if base_url else f"`{ci.short_hash}`"
+    return f"| {ci.date} | {ci.category} | {desc} | {cell} |"
 
 
-def format_pub_row(ci: CommitInfo) -> str:
-    """PUBLISH_SCENARIO changelog tablosu için satır üret."""
+def format_pub_row(ci: CommitInfo, base_url: str | None = None) -> str:
+    """PUBLISH_SCENARIO changelog tablosu için satır üret (base_url verilirse bağlı)."""
     desc = ci.description
     if len(desc) > 80:
         desc = desc[:77] + "..."
     section = ci.category  # PUBLISH_SCENARIO'da "Bölüm" sütunu = kategori
-    return f"| {ci.date} | {section} | {desc} | `{ci.short_hash}` |"
+    cell = link_cell(ci.short_hash, base_url) if base_url else f"`{ci.short_hash}`"
+    return f"| {ci.date} | {section} | {desc} | {cell} |"
 
 
 # ─── ana mantık ────────────────────────────────────────────────────────
@@ -326,6 +428,7 @@ def update_file_changelog(
     git_commits: list[CommitInfo],
     next_section_header: str | None = None,
     all_commits: list[CommitInfo] | None = None,
+    base_url: str | None = None,
 ) -> tuple[list[str], list[str]]:
     """Dosyadaki changelog tablosunu güncelle.
 
@@ -383,8 +486,11 @@ def update_file_changelog(
         print(f"  SKIP: tablo bulunamadı ({filepath.name})")
         return [], []
 
-    # Yeni satırları üret (yeniden eskiye sıralı — git log zaten descending)
-    new_rows = [format_fn(ci) for ci in missing]
+    # Yeni satırları üret (yeniden eskiye sıralı — git log zaten descending).
+    # Tablo bağlıysa ve base_url varsa yeni satırlar da bağlı üretilir
+    # (karışık format olmaz).
+    linked = rows_linked(content, row_re, section_header) if base_url else False
+    new_rows = [format_fn(ci, base_url if linked else None) for ci in missing]
 
     if not new_rows:
         return [], list(stale)
@@ -436,8 +542,14 @@ def main():
                       help="docs ↔ git log arasındaki drift'i raporla (exit 1 = drift)")
     mode.add_argument("--print", action="store_true",
                       help="Tabloyu stdout'a bas (dosyaya yazmaz)")
+    mode.add_argument("--link", action="store_true",
+                      help="Tablodaki commit hash'lerini GitHub commit URL'lerine "
+                           "bağla (in-place + stdout; git log gerekmez)")
     ap.add_argument("--limit", type=int, default=None,
                     help="Son N commit (varsayılan: tümü)")
+    ap.add_argument("--base-url", default=None,
+                    help="GitHub repo base URL (örn. https://github.com/owner/repo). "
+                         "Varsayılan: git remote get-url origin'den türetilir")
     ap.add_argument("--tag-regex", default=None,
                     help="Yalnızca kategori'si regex'e uyan commit'leri işle "
                          "(case-insensitive; örn. 'feat|fix|refs'). Stale tespiti "
@@ -447,6 +559,33 @@ def main():
     ap.add_argument("--publish", default="docs/PUBLISH_SCENARIO.md",
                     help="PUBLISH_SCENARIO dosya yolu")
     args = ap.parse_args()
+
+    readme_path = Path(args.readme)
+    pub_path = Path(args.publish)
+
+    if args.link:
+        # --link: git log GEREKMEZ — mevcut tablo satırlarını bağlı forma çevir.
+        base = (args.base_url or derive_base_url() or "").rstrip("/")
+        if not base:
+            print("HATA: GitHub base URL türetilemedi — --base-url verin "
+                  "(git remote get-url origin yok veya github.com değil)",
+                  file=sys.stderr)
+            sys.exit(2)
+        for path, header, row_re, cat_group in [
+            (readme_path, "## Değişiklik Geçmişi", _README_ROW_RE, "cat"),
+            (pub_path, "## Değişiklik Geçmişi", _PUB_ROW_RE, "section"),
+        ]:
+            if not path.exists():
+                print(f"HATA: {path} bulunamadı", file=sys.stderr)
+                sys.exit(2)
+            converted, total = link_file_changelog(
+                path, header, row_re, base, cat_group)
+            print(f"{path.name}: {converted}/{total} satır bağlandı → {base}")
+            if converted:
+                for line in path.read_text(encoding="utf-8").splitlines():
+                    if row_re.match(line) and "](" in line:
+                        print(f"  + {line.strip()}")
+        return
 
     # git log al
     git_commits = get_git_log(args.limit)
@@ -465,9 +604,6 @@ def main():
     if args.print:
         print_table(filtered, format_readme_row, args.limit)
         return
-
-    readme_path = Path(args.readme)
-    pub_path = Path(args.publish)
 
     if not readme_path.exists():
         print(f"HATA: {readme_path} bulunamadı", file=sys.stderr)
@@ -529,11 +665,13 @@ def main():
     if args.update:
         print("=== Changelog senkronizasyonu ===\n")
 
+        base = (args.base_url or derive_base_url() or "").rstrip("/") or None
         # README.md
         print("README.md:")
         r_added, r_stale = update_file_changelog(
             readme_path, "## Değişiklik Geçmişi", _README_ROW_RE,
-            format_readme_row, filtered, all_commits=git_commits)
+            format_readme_row, filtered, all_commits=git_commits,
+            base_url=base)
         if r_added:
             print(f"  + {len(r_added)} yeni satır eklendi:")
             for h in r_added:
@@ -549,7 +687,8 @@ def main():
         print("\ndocs/PUBLISH_SCENARIO.md:")
         p_added, p_stale = update_file_changelog(
             pub_path, "## Değişiklik Geçmişi", _PUB_ROW_RE,
-            format_pub_row, filtered, all_commits=git_commits)
+            format_pub_row, filtered, all_commits=git_commits,
+            base_url=base)
         if p_added:
             print(f"  + {len(p_added)} yeni satır eklendi:")
             for h in p_added:
