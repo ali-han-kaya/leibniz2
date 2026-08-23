@@ -23,7 +23,7 @@ import gen_repro_manifest as gm
 # EXCLUDED: prefix ile indirilenler + çıktı (merge pattern'e girmez)
 EXCLUDED = {
     "precommit-logs", "refs-trend", "override-trend", "precheck-report",
-    "python3-shell", "plist-check", "reproducibility",
+    "python3-shell", "plist-check", "mirror-check", "reproducibility",
 }
 
 
