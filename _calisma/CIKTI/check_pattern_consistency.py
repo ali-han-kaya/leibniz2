@@ -26,7 +26,7 @@ import gen_repro_manifest as gm
 EXCLUDED = frozenset({
     "precommit-logs", "refs-trend", "override-trend",
     "precheck-report", "python3-shell", "plist-check",
-    "reproducibility",
+    "mirror-check", "reproducibility",
 })
 
 

@@ -71,6 +71,7 @@ ARTIFACT_JOBS = {
     "action-runtimes": "action-runtimes",
     "python3-shell": "verify",
     "plist-check": "plist-check",
+    "mirror-check": "mirror-check",
     "reproducibility": "reproducibility",
 }
 
@@ -485,6 +486,37 @@ def main() -> None:
                      "=" * 72]
         lines += pc_block
 
+    # ── MIRROR CHECK bölümü: mirror-check/ önekli dosyalar (CONFIG gibi) ─────
+    # sync_verify_mirror.sh --check/K17 çıktısı (mirror_check_report.txt)
+    # + --mirror-out sidecar (mirror_report.json) + bootstrap smoke
+    # (bootstrap_smoke.txt) ayrıca işaretlenir; combined_sha256 tek hash ile
+    # özetler. Böylece repo ↔ mirror drift denetiminin (K17) raporu da
+    # SHA-256 ile sabitlenmiş denetim zincirinde (mirror-check → hash →
+    # manifest → bundle).
+    mirror_check_hashes = {rel: h for rel, h in file_hashes.items()
+                           if rel.startswith("mirror-check/")}
+    mirror_check_combined = None
+    if mirror_check_hashes:
+        sorted_rel = sorted(mirror_check_hashes)
+        mirror_check_combined = hashlib.sha256(
+            "".join(f"{rel}\0{mirror_check_hashes[rel]}\n"
+                     for rel in sorted_rel).encode()
+        ).hexdigest()
+        mc_block = [
+            "",
+            "=" * 72,
+            "MIRROR CHECK ARTIFACT (ayrı bölüm)",
+            "=" * 72,
+            f"{'FILE':<55} {'SHA-256'}",
+            "-" * 72,
+        ]
+        mc_block += [f"{rel:<55} {mirror_check_hashes[rel]}"
+                     for rel in sorted_rel]
+        mc_block += ["-" * 72,
+                     f"mirror_check_combined_sha256: {mirror_check_combined}",
+                     "=" * 72]
+        lines += mc_block
+
     # ── OVERRIDES bölümü: cli_overrides_version.json (CLI override kaydı) ──
     # check_cli_overrides.py --version-out çıktısı; CONFIG gibi ayrıca
     # işaretlenir. combined_sha256 tek hash ile özetler (config.combined_sha256
@@ -578,13 +610,13 @@ def main() -> None:
     # Üç indirme modu var:
     #   prefixed  — download-artifact name=X, path=all_artifacts/X/
     #               (config, precommit-logs, refs-trend, precheck-report,
-    #                python3-shell, plist-check)
+    #                python3-shell, plist-check, mirror-check)
     #   merged    — merge-multiple: true + pattern ile indirildi,
     #               dosyalar all_artifacts/ köküne düzleşti
     #  .none      — hiç indirilmedi (reproducibility çıkış artifact'ı)
     PREFIXED = frozenset({
         "config", "precommit-logs", "refs-trend", "override-trend",
-        "precheck-report", "python3-shell", "plist-check",
+        "precheck-report", "python3-shell", "plist-check", "mirror-check",
     })
     MERGED = frozenset({
         "verify-report", "budget", "budget-verify", "reports",
@@ -705,6 +737,11 @@ def main() -> None:
         manifest_json["plist_check"] = {
             "files": dict(sorted(plist_check_hashes.items())),
             "combined_sha256": plist_check_combined,
+        }
+    if mirror_check_hashes:
+        manifest_json["mirror_check"] = {
+            "files": dict(sorted(mirror_check_hashes.items())),
+            "combined_sha256": mirror_check_combined,
         }
     if overrides_hashes:
         manifest_json["overrides"] = {

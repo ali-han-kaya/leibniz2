@@ -340,6 +340,63 @@ class TestProvenance(unittest.TestCase):
         m = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         self.assertNotIn("python3_shell", m)
 
+    # ── MIRROR CHECK section tests ───────────────────────────────────
+    def test_mirror_check_section(self):
+        # mirror-check/ dosyaları (K17 raporu + --mirror-out sidecar +
+        # bootstrap smoke) CONFIG gibi ayrı bölümde işaretlenir +
+        # tek-hash combined_sha256 özetlenir.
+        (self.artifacts / "mirror-check").mkdir(parents=True)
+        (self.artifacts / "mirror-check" / "mirror_check_report.txt").write_text(
+            "[K17] mirror sync: PASS\n", encoding="utf-8")
+        (self.artifacts / "mirror-check" / "mirror_report.json").write_text(
+            json.dumps({"tool": "verify_delivery.py --check-mirror",
+                        "exit": 0, "auto_synced": True}) + "\n",
+            encoding="utf-8")
+        self._gen()
+        txt = (self.out / "manifest.txt").read_text(encoding="utf-8")
+        self.assertIn("MIRROR CHECK ARTIFACT (ayrı bölüm)", txt)
+        self.assertIn("mirror_check_combined_sha256", txt)
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        mc = m["mirror_check"]
+        self.assertIn("mirror-check/mirror_check_report.txt", mc["files"])
+        self.assertIn("mirror-check/mirror_report.json", mc["files"])
+        self.assertTrue(len(mc["combined_sha256"]) == 64)
+
+    def test_mirror_check_combined_recomputes_deterministically(self):
+        (self.artifacts / "mirror-check").mkdir(parents=True)
+        (self.artifacts / "mirror-check" / "mirror_report.json").write_text(
+            json.dumps({"exit": 0, "auto_synced": False}) + "\n",
+            encoding="utf-8")
+        self._gen()
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        mc = m["mirror_check"]["files"]
+        expected = hashlib.sha256(
+            "".join(f"{rel}\0{mc[rel]}\n" for rel in sorted(mc)).encode()
+        ).hexdigest()
+        self.assertEqual(m["mirror_check"]["combined_sha256"], expected)
+        self.assertRegex(m["mirror_check"]["combined_sha256"], r"^[0-9a-f]{64}$")
+
+    def test_mirror_check_artifact_job_provenance(self):
+        (self.artifacts / "mirror-check").mkdir(parents=True)
+        (self.artifacts / "mirror-check" / "mirror_report.json").write_text(
+            "{}", encoding="utf-8")
+        self._gen()
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        jobs = m["provenance"]["artifact_jobs"]
+        self.assertEqual(jobs["mirror-check"], "mirror-check")
+        txt = (self.out / "manifest.txt").read_text(encoding="utf-8")
+        self.assertIn("prefixed (1 dosya)", txt)  # mirror-check tek dosya
+
+    def test_no_mirror_check_section_when_absent(self):
+        bare = self.root / "bare"
+        bare.mkdir(parents=True)
+        (bare / "a.txt").write_text("x", encoding="utf-8")
+        out = self.root / "bare-out"
+        r = _run_gen(str(bare), str(out))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        m = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        self.assertNotIn("mirror_check", m)
+
     # ── OVERRIDES section tests ──────────────────────────────────────
     def test_overrides_section(self):
         # cli_overrides_version.json (isimle tanınır — CONFIG gibi)
@@ -420,7 +477,7 @@ class TestWorkflowPatternCoverage(unittest.TestCase):
     """
     EXCLUDED = {"precommit-logs", "refs-trend", "override-trend",
                 "precheck-report", "python3-shell", "plist-check",
-                "reproducibility"}
+                "mirror-check", "reproducibility"}
 
     def _workflow_merge_pattern(self):
         wf = CIKTI.parent.parent / ".github" / "workflows" / "verify.yml"

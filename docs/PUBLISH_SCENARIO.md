@@ -634,7 +634,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 - `override-trend` (run'lar arası CLI override warning=true zaman serisi)
 - `precheck-report` (AŞAMA 0 ön-kontrol logu — advisory, her push'ta)
 - `plist-check` (K12 raporu + --plist-check sidecar JSON — macOS advisory job)
-- `mirror-check` (K17 raporu + --check-mirror sidecar JSON — macOS fail-closed job)
+- `mirror-check` (K17 raporu + --check-mirror sidecar JSON + bootstrap smoke — macOS fail-closed job; prefixed indirilir, manifest'te `mirror_check_combined_sha256` ile SHA-256 sabitlenir)
 - `daemon-http` (daemon-modu HTTP 200 test raporu + JSON — advisory smoke)
 - `ci-simulate` (yerel CI simülasyonu: status_checks.txt + simulate.log + verify_report.txt + summary.md — advisory)
 - `audit-refs-trend` (refs-trend satırları ↔ kaynak artifact denetimi JSON — advisory)

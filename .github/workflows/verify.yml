@@ -1086,6 +1086,19 @@ jobs:
           name: plist-check
           path: all_artifacts/plist-check/
 
+      # mirror-check macOS fail-closed job'ın artifact'ıdır (K17 raporu +
+      # --mirror-out sidecar + bootstrap smoke). macOS job'ı Linux-only push
+      # senaryolarında çalışmayabilir veya artifact beklenmeyebilir —
+      # continue-on-error ile build bloke edilmez; varsa prefixed indirme
+      # sayesinde gen_repro_manifest.py'nin MIRROR CHECK bölümü
+      # mirror-check/ önekini yakalar + ayrı hash'ler (SHA-256 ile sabitlenir).
+      - name: Download mirror-check artifact (mirror-check/ prefix)
+        continue-on-error: true
+        uses: actions/download-artifact@v7
+        with:
+          name: mirror-check
+          path: all_artifacts/mirror-check/
+
       # ─── 2) manifest.txt üret (gen_repro_manifest.py — tek kaynak) ─────────
       - name: Generate reproducibility manifest
         shell: bash
