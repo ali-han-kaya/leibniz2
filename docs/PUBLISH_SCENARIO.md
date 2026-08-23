@@ -216,6 +216,7 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 | 2026-08-22 | other | verify: config artefact merge pattern'e dahil — config/ oneki yok | `a44b4f1` |
 | 2026-08-22 | ci | config snapshot ↔ CONFIG_BASENAMES sync gate | `9636a7c` |
 | 2026-08-22 | ci | add config_artifact_basenames to schema, K10 fail-closed drift check | `d7ca27a` |
+| 2026-08-23 | ci | override run [CLI override] satirlarini OVERRIDE_RAPORU.json'a tasi | `fa9b7a4` |
 
 ---
 

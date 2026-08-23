@@ -319,7 +319,35 @@ dosya sistemi state'i (config/, logs/, sim/) bir sonraki koşuda overwritten olu
 
 ---
 
-## 9. Oturum 3 — Precheck Manifest + Changelog Otomasyonu + Verify-Checks (2026-08-21)
+## 9. CI Run Trend Tablosu (son 10 run)
+
+Canlı kaynak: `gh run list --limit 10` + `gh run view <id> --json jobs`.
+Tablo, pipeline'ın son durumunun tek bakışta görülebilir özetidir — her
+push'ta güncel tutulur (job sayısı ve süre, workflow değişikliklerinin
+davranışsal doğrulamasıdır).
+
+| # | Run ID | Tarih (UTC) | Branch | Durum | Süre | Job | Özet |
+|---|---|---|---|---|---|---|---|
+| 1 | [32629981648](https://github.com/ali-han-kaya/leibniz2/actions/runs/32629981648) | 2026-08-23 09:04 | `test/config-merge-no-prefix` | 🔄 in_progress | — | 4+ | override-raporu commit'i (`fa9b7a4`) |
+| 2 | 32587225657 | 2026-08-22 17:16 | `test/config-merge-no-prefix` | 🔴 failure | 3m | 20 | K10 PASS kanıtı (test) |
+| 3 | 32587223476 | 2026-08-22 17:16 | `test/config-merge-no-prefix` | 🔴 failure | 3m | 20 | config_artifact_basenames (schema+K10) |
+| 4 | 32586349525 | 2026-08-22 16:58 | `test/config-merge-no-prefix` | 🔴 failure | 3m | 20 | K10 PASS kanıtı (test) |
+| 5 | 32586347103 | 2026-08-22 16:58 | `test/config-merge-no-prefix` | 🔴 failure | 4m | 20 | config snapshot ↔ CONFIG_BASENAMES gate |
+| 6 | 32585095449 | 2026-08-22 16:34 | `test/config-merge-no-prefix` | 🔴 failure | 4m | 19 | K10 PASS kanıtı (test) |
+| 7 | 32585093135 | 2026-08-22 16:34 | `test/config-merge-no-prefix` | 🔴 failure | 4m | 19 | config artefact merge pattern'e dahil |
+| 8 | 32584747658 | 2026-08-22 16:27 | `test/config-merge-no-prefix` | 🔴 failure | 3m | 19 | K10 PASS kanıtı (test) |
+| 9 | 32584724439 | 2026-08-22 16:26 | `test/config-merge-no-prefix` | 🔴 failure | 3m | 19 | config artefact merge pattern'e dahil |
+| 10 | 32583861760 | 2026-08-22 16:09 | `merge/config-fixes-to-main` | 🔴 failure | 2m | 19 | config fixes + budget bar + K-layer panel |
+
+**Kırılım analizi (özet):** Son 9 tamamlanan run'ın tümü 🔴 — tek ortak kök neden
+**pre-existing** verify job başarısızlıkları (`test_combined_scenario_shares_comment_list`
+ERROR + `test_mirror_check` FAIL). Bu iki hata config-merge zincirinden önce de
+duruyordu; config/öneksiz merge, `config.combined_sha256: PASS` ile doğrulandı
+(run 32585095449). Job sayısı 19→20, süre 3-4m civarında stabil — pipeline
+değişiklikleri davranışsal olarak izlenebilir. #1 (in_progress) yeni
+OVERRIDE_RAPORU commit'i; yeşil dönüşü bu tablo §4 zinciriyle doğrulanır.
+
+## 10. Oturum 3 — Precheck Manifest + Changelog Otomasyonu + Verify-Checks (2026-08-21)
 
 > Bu bölüm, §8'in (`965182d`) ardından bugün yapılan **6 commit**'in tam
 > kaydıdır. Tema: (1) precheck job raporunun reproducibility manifest'ine
