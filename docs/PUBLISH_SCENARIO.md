@@ -21,9 +21,9 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 > | AŞAMA 3 — CI doğrulama | 🔄 **aktif** — her push'ta tekrarlanır (incremental) |
 > | AŞAMA 4 — koruma kanıtı | ⏸️ opsiyonel (1 (b) sonrası) |
 >
-> Job tablosu (AŞAMA 3), `.github/workflows/verify.yml`'deki **21 job**'u 4 kategoride
+> Job tablosu (AŞAMA 3), `.github/workflows/verify.yml`'deki **22 job**'u 4 kategoride
 > sunar: 12 **required** (9 push + P0 label gate + commit-msg gate + config-sync +
-> ci-simulate) + 7 **advisory** + 1 **PR-only** (P1 label gate) + 1 **manifest** (PR-only).
+> ci-simulate) + 8 **advisory** + 1 **PR-only** (P1 label gate) + 1 **manifest** (PR-only).
 > Branch protection yalnızca required job'ları bloke eder.
 > Güncel listeyi üret: `python3 _calisma/CIKTI/status_checks.py --json`.
 
@@ -245,6 +245,7 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 | 2026-08-23 | docs | V5z — bugünkü canlı 61/61 doğrulaması (2026-08-23) | `35d9221` |
 | 2026-08-23 | fix | (verify) refs HTTP retry 2→3 (IA SSL handshake flaky UNVERIFIED) | `8a0220e` |
 | 2026-08-23 | feat | (dashboard) refs-trend tam kapsam rozeti (bugünkü 61/61) | `b1353e6` |
+| 2026-08-23 | feat | (changelog) gen_changelog.py'ye --tag-regex kategori filtreleme | `b86401f` |
 
 ---
 
@@ -424,12 +425,12 @@ bash docs/publish_precheck.sh --allow-remote
 #    (geçici kapat → push → geri aç). Manuel push'ta önce kapatıp sonra geri açın.
 git push origin main
 
-# 3) CI'ı izle (21 job — 12 required + 7 advisory + 2 PR-only;
+# 3) CI'ı izle (22 job — 12 required + 8 advisory + 2 PR-only;
 #    aşağıdaki AŞAMA 3 job tablosu)
 RUN_ID=$(gh run list --limit 1 --json databaseId -q '.[0].databaseId')
 gh run watch $RUN_ID --exit-status
 
-# 4) Son durum + artifact'lar (22 adet — doc listesi; canlı run'da 23,
+# 4) Son durum + artifact'lar (27 adet — doc listesi; canlı run'da 28,
 #    audit-live-ci meta-denetçinin kendi artifact'ı dahil)
 gh run view $RUN_ID --json jobs --jq '.jobs[] | "\(.name)\t\(.conclusion)"'
 gh api "repos/ali-han-kaya/leibniz2/actions/runs/$RUN_ID/artifacts" \
@@ -793,7 +794,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 --exit-status` + artifact listesi; sonuç `SONUÇ: PASS/FAIL` olarak loglanır
 (dry-run'da yalnızca önizlenir).
 
-**Job kategorileri (21 job = 12 required + 7 advisory + 2 PR-only):**
+**Job kategorileri (22 job = 12 required + 8 advisory + 2 PR-only):**
 
 > **Kural:** Branch protection **yalnızca A kategorisindeki** job'ları required check olarak
 > kabul eder. B (advisory) job'ları push'ta çalışır ama required değildir;
@@ -816,7 +817,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 | 10 | A | Commit-msg gate | — PR'da koşar; commit-msg ihlali varsa FAIL → merge bloke (2026-08-23) |
 | 11 | A | Config snapshot ↔ CONFIG_BASENAMES sync check | — üçlü senkron (2026-08-23) |
 | 12 | A | CI-SIMULATE (advisory) | — simülasyon replay kapısı: status_checks + simulate_verify_job (2026-08-23) |
-| | **B — Advisory (7; push'ta çalışır, required değil)** | | |
+| | **B — Advisory (8; push'ta çalışır, required değil)** | | |
 | 13 | B | Publish precheck (AŞAMA 0, advisory) | ✅ success (9s) — AŞAMA 0 kapıları otomatik denetlenir |
 | 14 | B | Plist drift check (macOS, advisory) | ✅ success (11s) — K12, macOS-runner'lı |
 | 15 | B | Mirror sync check (macOS, fail-closed) | ✅ success (12s) — K17, sync sonrası GÜNCEL |
@@ -824,12 +825,13 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 | 17 | B | Refs-trend audit (advisory) | ✅ success (56s) — trend satırları kaynak artifact'larla birebir |
 | 18 | B | Live CI doc↔GitHub sync audit (advisory) | ✅ success (8s) — doc 24 artifact = canlı 24 artifact, PASS |
 | 19 | B | CLI override trend (warning=true time series) | ✅ — run'lar arası override zaman serisi |
+| 20 | B | Changelog drift check (advisory) | — gen_changelog --check drift bulguları run summary'de (2026-08-23) |
 | | **C — PR-only (push'ta çalışmaz, PR'da çalışır)** | | |
-| 20 | C | Pre-commit P1 label gate (optional) | — skipped (push'ta çalışmaz) |
+| 21 | C | Pre-commit P1 label gate (optional) | — skipped (push'ta çalışmaz) |
 | | **D — PR-only (yorum/etiket düşürme)** | | |
-| 21 | D | Manifest PR comment | — skipped (PR'da çalışır) |
+| 22 | D | Manifest PR comment | — skipped (PR'da çalışır) |
 
-**Artifact listesi (26):**
+**Artifact listesi (27):**
 - `unit-tests` (CIKTI birim test logu — `test_*.py` glob'u)
 - `verify-report` (tek log: K1-K14 + pre-commit bölümü + .sha256)
 - `action-runtimes` (her action'ın runs.using denetimi JSON — node24 kapısı)
@@ -855,6 +857,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 - `ci-simulate` (yerel CI simülasyonu: status_checks.txt + simulate.log + verify_report.txt + summary.md — advisory)
 - `audit-refs-trend` (refs-trend satırları ↔ kaynak artifact denetimi JSON — advisory)
 - `audit-live-ci` (doc↔GitHub senkron denetimi JSON — advisory; doc artifact listesi ↔ canlı run)
+- `changelog-drift` (gen_changelog --check drift logu + rc — advisory, run summary'ye yazılır)
 
 **Not:** Kapı artık `verify_delivery.py --full`'dur (K1-K14, fail-closed) ve yeşildir —
 Beth 1953 / Fosl 1998 gibi referans düzeltmeleri V5h'te yapıldı; Kalan çevrimdışı

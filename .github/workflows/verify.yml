@@ -2171,6 +2171,54 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
+  # CHANGELOG DRIFT CHECK (advisory) — gen_changelog.py --check'i CI'da koşar
+  # ve drift bulgularını run summary'ye yazar. Advisory: changelog tabloları
+  # (README/PUBLISH_SCENARIO) tasarım gereği HEAD'in bir commit gerisinde
+  # kalabilir (bir commit'in satırı sonraki commit'te eklenir) — bu yüzden
+  # drift BLOKE ETMEZ, her push'ta görünür kılınır (continue-on-error).
+  # GATE_EXCLUDE'da — required check sayısı 12'de sabit kalır.
+  changelog-drift:
+    name: Changelog drift check (advisory)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout (full history — git log hash'leri için)
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Run gen_changelog --check (advisory)
+        continue-on-error: true
+        shell: bash
+        run: |
+          mkdir -p .freebuff
+          set +e
+          python3 _calisma/CIKTI/gen_changelog.py --check \
+            > .freebuff/changelog_drift.txt 2>&1
+          echo "$?" > .freebuff/changelog_drift.rc
+          set -e
+          echo "exit=$(cat .freebuff/changelog_drift.rc)"
+          cat .freebuff/changelog_drift.txt
+
+      - name: Write drift findings to run summary
+        if: always()
+        shell: bash
+        run: |
+          python3 _calisma/CIKTI/run_summary_changelog.py \
+            .freebuff/changelog_drift.txt .freebuff/changelog_drift.rc
+
+      - name: Upload changelog drift log
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: changelog-drift
+          path: |
+            .freebuff/changelog_drift.txt
+            .freebuff/changelog_drift.rc
+          if-no-files-found: ignore
+          retention-days: 30
+
   # MIRROR SYNC CHECK (macOS, fail-closed) — sync_verify_mirror.sh --check
   # (K17). launchd GUI agent'ı TCC nedeniyle Desktop altını okuyamaz;
   # verify mirror'ı (~/Library/Caches/com.freebuff/verify) bunu aşar. K17,

@@ -333,6 +333,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-23 | docs | V5z — bugünkü canlı 61/61 doğrulaması (2026-08-23) | `35d9221` |
 | 2026-08-23 | fix | (verify) refs HTTP retry 2→3 (IA SSL handshake flaky UNVERIFIED) | `8a0220e` |
 | 2026-08-23 | feat | (dashboard) refs-trend tam kapsam rozeti (bugünkü 61/61) | `b1353e6` |
+| 2026-08-23 | feat | (changelog) gen_changelog.py'ye --tag-regex kategori filtreleme | `b86401f` |
 
 ### Regresyon notları
 

@@ -61,16 +61,17 @@ class TestGateJobs(unittest.TestCase):
         self.assertIn("ci-simulate", gates)          # required: tam replay kapısı
         self.assertIn("config-sync", gates)          # required: üçlü senkron kapısı
         self.assertNotIn("audit-refs-trend", gates)  # advisory denetim
+        self.assertNotIn("changelog-drift", gates)   # advisory: changelog drift
         # Node 24 yükseltmesiyle eklenen job required aday olmalı.
         self.assertIn("action-runtimes", gates)
         self.assertEqual(gates["action-runtimes"],
                          "Action runtime check (node24)")
 
     def test_count_matches_workflow_minus_excludes(self):
-        # 21 job − 9 hariç = 12 required aday (tek kaynak: workflow).
+        # 22 job − 10 hariç = 12 required aday (tek kaynak: workflow).
         # Hariç: manifest-comment, precheck, label-gate-p1, plist-check,
         #        mirror-check, daemon-http, audit-live-ci, audit-refs-trend,
-        #        override-trend
+        #        override-trend, changelog-drift
         self.assertEqual(len(sc.gate_jobs()), 12)
 
 
