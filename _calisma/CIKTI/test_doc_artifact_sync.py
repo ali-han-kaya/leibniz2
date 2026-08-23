@@ -39,6 +39,7 @@ import gen_repro_manifest as gen_manifest  # noqa: E402
 DOC_ONLY_ADVISORY = frozenset({
     "mirror-check",     # macOS fail-closed (K17) — job output
     "daemon-http",      # advisory smoke — job output
+    "ci-simulate",      # advisory yerel CI simülasyonu — job output
     "audit-refs-trend", # advisory denetim — job output
     "audit-live-ci",    # advisory meta-denetçi — job output
 })

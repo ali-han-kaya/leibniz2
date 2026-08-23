@@ -2048,6 +2048,90 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
+  # ──────────────────────────────────────────────────────────────────────
+  # CI-SIMULATE (advisory) — publish_wrapper.sh --ci-simulate'ın CI karşılığı.
+  #
+  # Her push'ta yerel simülasyon da koşar: status_checks.py (beklenen
+  # required check adları) + simulate_verify_job.sh (verify job akışının
+  # yerel compose-style replay'i: --full K1-K14 + pre-commit + sha256 +
+  # config bundle + GITHUB_STEP_SUMMARY — `verify` job'ının birebir
+  # yerel karşılığı). Böylece CI'ın kendisi de yerel simülasyonun hâlâ
+  # yeşil olduğunu her push'ta doğrular (wrapper'ın iddiası CI'da da
+  # test edilir). continue-on-error: ADVISORY — build'i bloke etmez;
+  # rapor ci-simulate artifact + run summary'de denetlenir. Required
+  # değildir (GATE_EXCLUDE'da ci-simulate).
+  # ──────────────────────────────────────────────────────────────────────
+  ci-simulate:
+    name: CI-SIMULATE (advisory)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      # simulate_verify_job.sh bağımlılıkları — verify job'ının kurulum
+      # adımlarıyla aynı (tekrarlanabilirlik: sim ile gerçek CI aynı env).
+      - name: Install deps (pre-commit + PyYAML + jsonschema + Z3)
+        run: pip install pre-commit pyyaml jsonschema z3-solver==5.1.0.0
+
+      - name: Install pdfinfo (poppler-utils) + qpdf (K6-DETERM)
+        run: bash _calisma/CIKTI/apt_install.sh poppler-utils qpdf
+
+      # K9 (Lean) --full'ün parçası — gerçek verify job'ıyla aynı kurulum.
+      - name: Install Lean 4 (K9)
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain leanprover/lean4:stable
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+          elan toolchain install leanprover/lean4:v4.14.0
+
+      - name: Run CI-SIMULATE (status_checks + simulate_verify_job)
+        id: sim
+        continue-on-error: true
+        run: |
+          set +e
+          mkdir -p .freebuff/sim
+          python3 _calisma/CIKTI/status_checks.py > .freebuff/sim/status_checks.txt 2>&1
+          sc_rc=$?
+          bash _calisma/CIKTI/simulate_verify_job.sh > .freebuff/sim/simulate.log 2>&1
+          sim_rc=$?
+          set -e
+          echo "sc_rc=$sc_rc" >> "$GITHUB_OUTPUT"
+          echo "sim_rc=$sim_rc" >> "$GITHUB_OUTPUT"
+          echo "CI-SIMULATE: status_checks exit $sc_rc, simulate_verify_job exit $sim_rc"
+
+      - name: Write CI-SIMULATE to run summary
+        if: always()
+        run: |
+          {
+            echo "## CI-SIMULATE (yerel simülasyon — advisory)"
+            echo ""
+            echo "- status_checks.py: exit \`${{ steps.sim.outputs.sc_rc }}\`"
+            echo "- simulate_verify_job.sh: exit \`${{ steps.sim.outputs.sim_rc }}\`"
+            echo '```'
+            cat .freebuff/sim/simulate.log 2>/dev/null | tail -40 || echo '(simülasyon logu yok)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload CI-SIMULATE report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: ci-simulate
+          path: |
+            .freebuff/sim/status_checks.txt
+            .freebuff/sim/simulate.log
+            .freebuff/sim/verify_job/verify_report.txt
+            .freebuff/sim/verify_job/summary.md
+            .freebuff/sim/verify_job/logs/PRECOMMIT_RAPORU.md
+          if-no-files-found: ignore
+          retention-days: 30
+
   # MIRROR SYNC CHECK (macOS, fail-closed) — sync_verify_mirror.sh --check
   # (K17). launchd GUI agent'ı TCC nedeniyle Desktop altını okuyamaz;
   # verify mirror'ı (~/Library/Caches/com.freebuff/verify) bunu aşar. K17,

@@ -57,6 +57,7 @@ GATE_EXCLUDE = {
     "plist-check",          # macOS-advisory: push'ta çalışmaz
     "mirror-check",         # macOS: sync sonrası K17 fail-closed (advisory)
     "daemon-http",          # advisory: daemon-modu HTTP 200 smoke (advisory)
+    "ci-simulate",          # advisory: yerel CI simülasyonu (CI-SIMULATE)
     "audit-live-ci",        # advisory: doc↔GitHub senkron denetimi
     "audit-refs-trend",     # advisory: refs-trend satırları ↔ kaynak denetimi
     "override-trend",       # advisory: CLI override zaman serisi

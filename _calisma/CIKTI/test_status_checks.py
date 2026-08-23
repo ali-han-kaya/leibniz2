@@ -58,6 +58,7 @@ class TestGateJobs(unittest.TestCase):
         self.assertNotIn("plist-check", gates)       # macOS-advisory
         self.assertNotIn("mirror-check", gates)      # macOS fail-closed (advisory)
         self.assertNotIn("daemon-http", gates)       # advisory smoke
+        self.assertNotIn("ci-simulate", gates)       # advisory: yerel CI simülasyonu
         self.assertNotIn("audit-refs-trend", gates)  # advisory denetim
         # Node 24 yükseltmesiyle eklenen job required aday olmalı.
         self.assertIn("action-runtimes", gates)
@@ -65,10 +66,10 @@ class TestGateJobs(unittest.TestCase):
                          "Action runtime check (node24)")
 
     def test_count_matches_workflow_minus_excludes(self):
-        # 18 job − 9 hariç = 9 required aday (tek kaynak: workflow).
+        # 21 job − 12 hariç = 9 required aday (tek kaynak: workflow).
         # Hariç: manifest-comment, precheck, label-gate-p1, commit-msg-gate,
-        #        plist-check, mirror-check, daemon-http, audit-live-ci,
-        #        audit-refs-trend
+        #        plist-check, mirror-check, daemon-http, ci-simulate,
+        #        audit-live-ci, audit-refs-trend, override-trend, config-sync
         self.assertEqual(len(sc.gate_jobs()), 9)
 
 

@@ -21,7 +21,7 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 > | AŞAMA 3 — CI doğrulama | 🔄 **aktif** — her push'ta tekrarlanır (incremental) |
 > | AŞAMA 4 — koruma kanıtı | ⏸️ opsiyonel (1 (b) sonrası) |
 >
-> Job tablosu (AŞAMA 3), `.github/workflows/verify.yml`'deki **18 job**'u 4 kategoride
+> Job tablosu (AŞAMA 3), `.github/workflows/verify.yml`'deki **19 job**'u 4 kategoride
 > sunar: 9 **required** (8 push + P0 label gate) + 6 **advisory** + 2 **PR-only** + 1 **manifest**.
 > Branch protection yalnızca required job'ları bloke eder.
 > Güncel listeyi üret: `python3 _calisma/CIKTI/status_checks.py --json`.
@@ -218,6 +218,7 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 | 2026-08-22 | ci | add config_artifact_basenames to schema, K10 fail-closed drift check | `d7ca27a` |
 | 2026-08-23 | ci | override run [CLI override] satirlarini OVERRIDE_RAPORU.json'a tasi | `fa9b7a4` |
 | 2026-08-23 | docs | PRE_PUSH_DENETIM_RAPORU e §9 CI run trend tablosu ekle | `8e71025` |
+| 2026-08-23 | ci | ci-simulate raporu .freebuff/sim'a; ci_stats.py scripti | `4e44c26` |
 
 ---
 
@@ -382,7 +383,7 @@ bash docs/publish_precheck.sh --allow-remote
 #    (geçici kapat → push → geri aç). Manuel push'ta önce kapatıp sonra geri açın.
 git push origin main
 
-# 3) CI'ı izle (18 job — 9 required + 6 advisory + 2 PR-only + 1 manifest;
+# 3) CI'ı izle (19 job — 9 required + 7 advisory + 2 PR-only + 1 manifest;
 #    aşağıdaki AŞAMA 3 job tablosu)
 RUN_ID=$(gh run list --limit 1 --json databaseId -q '.[0].databaseId')
 gh run watch $RUN_ID --exit-status
@@ -746,7 +747,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 --exit-status` + artifact listesi; sonuç `SONUÇ: PASS/FAIL` olarak loglanır
 (dry-run'da yalnızca önizlenir).
 
-**Job kategorileri (18 job = 9 required + 6 advisory + 2 PR-only + 1 manifest):**
+**Job kategorileri (19 job = 9 required + 7 advisory + 2 PR-only + 1 manifest):**
 
 > **Kural:** Branch protection **yalnızca A kategorisindeki** job'ları required check olarak
 > kabul eder. B (advisory) job'ları push'ta çalışır ama required değildir;
@@ -773,13 +774,14 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 | 13 | B | Daemon mode HTTP 200 (advisory) | ✅ success (45s) — üç endpoint'te 200 |
 | 14 | B | Refs-trend audit (advisory) | ✅ success (56s) — trend satırları kaynak artifact'larla birebir |
 | 15 | B | Live CI doc↔GitHub sync audit (advisory) | ✅ success (8s) — doc 24 artifact = canlı 24 artifact, PASS |
+| 16 | B | CI-SIMULATE (advisory) | — yerel simülasyon: `status_checks.py` + `simulate_verify_job.sh` (verify job akışının yerelde compose-style replay'i) — push'ta koşar, required değil |
 | | **C — PR-only (push'ta çalışmaz, PR'da çalışır)** | | |
-| 16 | C | Pre-commit P1 label gate (optional) | — skipped (push'ta çalışmaz) |
-| 17 | C | Commit-msg gate | — skipped (push'ta çalışmaz) |
+| 17 | C | Pre-commit P1 label gate (optional) | — skipped (push'ta çalışmaz) |
+| 18 | C | Commit-msg gate | — skipped (push'ta çalışmaz) |
 | | **D — PR-only (yorum/etiket düşürme)** | | |
-| 18 | D | Manifest PR comment | — skipped (PR'da çalışır) |
+| 19 | D | Manifest PR comment | — skipped (PR'da çalışır) |
 
-**Artifact listesi (25):**
+**Artifact listesi (26):**
 - `unit-tests` (CIKTI birim test logu — `test_*.py` glob'u)
 - `verify-report` (tek log: K1-K14 + pre-commit bölümü + .sha256)
 - `action-runtimes` (her action'ın runs.using denetimi JSON — node24 kapısı)
@@ -802,6 +804,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 - `plist-check` (K12 raporu + --plist-check sidecar JSON — macOS advisory job)
 - `mirror-check` (K17 raporu + --check-mirror sidecar JSON — macOS fail-closed job)
 - `daemon-http` (daemon-modu HTTP 200 test raporu + JSON — advisory smoke)
+- `ci-simulate` (yerel CI simülasyonu: status_checks.txt + simulate.log + verify_report.txt + summary.md — advisory)
 - `audit-refs-trend` (refs-trend satırları ↔ kaynak artifact denetimi JSON — advisory)
 - `audit-live-ci` (doc↔GitHub senkron denetimi JSON — advisory; doc artifact listesi ↔ canlı run)
 
