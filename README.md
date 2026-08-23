@@ -356,6 +356,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-23 | other | fresh_clone_setup: --check'e daemon rotası denetimi ekle (K18 smoke) | [`a8cdf74`](https://github.com/ali-han-kaya/leibniz2/commit/a8cdf74) |
 | 2026-08-23 | other | update_preview: plist'e PreStart kontrolü ekle (preview_prestart.py) | [`5c71a39`](https://github.com/ali-han-kaya/leibniz2/commit/5c71a39) |
 | 2026-08-23 | other | fresh_clone_setup: agent mirror'ıyla karşılaştır, bayatlığı raporla | [`8c1a68a`](https://github.com/ali-han-kaya/leibniz2/commit/8c1a68a) |
+| 2026-08-23 | other | test_mirror: K17 kapsamına preview runtime dosyalarını kat (uçtan uca) | [`a0110c2`](https://github.com/ali-han-kaya/leibniz2/commit/a0110c2) |
 
 ### Regresyon notları
 

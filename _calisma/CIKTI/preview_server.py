@@ -107,6 +107,7 @@ LATEST = {
     "precommit_hooks": None,     # [{name, status}] — pre-commit hook sonuçları (Passed/Failed)
     "history_sidecar_sha256": None,  # history.jsonl.sha256 sidecar hash'i (K15)
     "findings": [],                # verify_output'dan çıkan [{id,priority,label,message,detail}]
+    "cached": False,               # True = LATEST disk'teki önbelleklenmiş son run'dan yüklendi
 }
 LOCK = threading.Lock()
 SSE_CLIENTS = []      # bağlı /api/run client listesi (snapshot broadcast)
@@ -233,6 +234,37 @@ def persist_history(rec):
     except OSError as e:
         sys.stderr.write(f"[history] yazılamadı: {e}\n")
         sys.stderr.flush()
+
+
+def load_cached_latest():
+    """Restart sonrası ilk verify döngüsü tamamlanana dek /api/latest'in
+    UNKNOWN göstermemesini sağlar: disk'teki en son run kaydını LATEST'e
+    geri yükler. Öncelik runs/run-*.json (stdout/stderr dahil TAM kayıt),
+    yoksa history.jsonl özeti kullanılır; kayıt yoksa LATEST UNKNOWN kalır
+    (dönüş False). Geri yüklenen alanlar yalnızca LATEST şemasında olanlardır
+    (rec zaten LATEST alanlarından üretildi).
+
+    Çağıran LOCK'u tutmalıdır: fonksiyon LATEST'e yazar ama kendi kilidini
+    ALMAZ — persist_history deseni (re-entrant olmayan threading.Lock; run
+    tamamlanınca ilk verify LATEST'i taze veriyle ezerek cached bayrağını
+    kaldırır).
+    """
+    rec = None
+    if RUNS_DIR and os.path.isdir(RUNS_DIR):
+        logs = load_run_logs(limit=1)
+        if logs:
+            rec = logs[-1]
+    if rec is None:
+        hist = load_history()
+        if hist:
+            rec = hist[-1]
+    if not rec or not rec.get("ts"):
+        return False
+    for k, v in rec.items():
+        if k in LATEST and k != "cached":
+            LATEST[k] = v
+    LATEST["cached"] = True
+    return True
 
 
 def load_history():
@@ -845,6 +877,7 @@ def _finalize_run(stdout, stderr, rc, duration, data, verify_dir=None):
         LATEST.update({
             "ts": datetime.now(timezone.utc).isoformat(),
             "verdict": data.get("verdict", "FAIL" if rc else "PASS"),
+            "cached": False,  # taze run — önbellek bayrağı kalkar
             "stdout": stdout,
             "stderr": stderr,
             "exit_code": rc,
@@ -1372,6 +1405,19 @@ def main():
         sys.exit(143)
     signal.signal(signal.SIGTERM, _sig)
     signal.signal(signal.SIGINT, _sig)
+
+    # Restart sonrası ilk verify bitene dek /api/latest UNKNOWN göstermesin:
+    # önbelleklenmiş son run durumunu (runs/ veya history.jsonl) yükle.
+    with LOCK:
+        if load_cached_latest():
+            sys.stderr.write(
+                "[main] önbelleklenmiş son run yüklendi: "
+                f"verdict={LATEST['verdict']} ts={LATEST['ts']}\n")
+        else:
+            sys.stderr.write(
+                "[main] önbellek yok — /api/latest ilk verify bitene dek "
+                "UNKNOWN\n")
+        sys.stderr.flush()
 
     # Arka plan thread: periyodik verify çalıştırma
     t = threading.Thread(target=verify_loop, args=(args.dir, args.interval),

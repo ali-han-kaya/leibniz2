@@ -35,6 +35,86 @@ def _rec(ts, verdict="PASS", **kw):
     return rec
 
 
+class CachedLatestTests(unittest.TestCase):
+    """Restart sonrası önbelleklenmiş son run'un yüklenmesi (UNKNOWN gösterme).
+
+    load_cached_latest(): runs/run-*.json (stdout/stderr dahil TAM kayıt) →
+    yoksa history.jsonl özeti → LATEST'e geri yüklenir; kayıt yoksa LATEST
+    UNKNOWN kalır (False). LOCK altında çağrıldığında asılmamalı (kendi
+    kilidini almaz — re-entrant olmayan threading.Lock regresyonu).
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self._old_runs, self._old_path = ps.RUNS_DIR, ps.HISTORY_PATH
+        self._old_latest = dict(ps.LATEST)
+        ps.RUNS_DIR = os.path.join(self._tmp.name, "runs")
+        ps.HISTORY_PATH = os.path.join(self._tmp.name, "history.jsonl")
+        # Asgari LATEST şeması (loader'ın kopyalayacağı alanlar).
+        ps.LATEST = {"ts": None, "verdict": "UNKNOWN", "stdout": "",
+                     "stderr": "", "p0": 0, "p1": 0, "cached": False}
+
+    def tearDown(self):
+        ps.RUNS_DIR, ps.HISTORY_PATH = self._old_runs, self._old_path
+        ps.LATEST = self._old_latest
+        self._tmp.cleanup()
+
+    def _write_run_log(self, rec):
+        os.makedirs(ps.RUNS_DIR, exist_ok=True)
+        safe = rec["ts"].replace(":", "").replace("+", "").replace(".", "")
+        with open(os.path.join(ps.RUNS_DIR, "run-%s.json" % safe), "w",
+                  encoding="utf-8") as f:
+            json.dump(rec, f)
+
+    def test_restores_from_run_log_with_stdout(self):
+        self._write_run_log({"ts": "2026-08-23T12:00:00Z",
+                             "verdict": "PASS", "p0": 0, "p1": 2,
+                             "stdout": "SONUÇ: PASS\nPDF: 33 sayfa | References: 64",
+                             "stderr": "K8 Z3: [PASS]"})
+        ok = ps.load_cached_latest()
+        self.assertTrue(ok)
+        self.assertEqual(ps.LATEST["verdict"], "PASS")
+        self.assertEqual(ps.LATEST["p1"], 2)
+        self.assertIn("SONUÇ: PASS", ps.LATEST["stdout"])
+        self.assertIn("K8 Z3", ps.LATEST["stderr"])
+        self.assertTrue(ps.LATEST["cached"])
+
+    def test_falls_back_to_history_when_no_run_log(self):
+        with open(ps.HISTORY_PATH, "w", encoding="utf-8") as f:
+            f.write(json.dumps({"ts": "2026-08-23T09:00:00Z",
+                                "verdict": "FAIL", "p0": 1, "p1": 3},
+                               ensure_ascii=False) + "\n")
+        ok = ps.load_cached_latest()
+        self.assertTrue(ok)
+        self.assertEqual(ps.LATEST["verdict"], "FAIL")
+        self.assertEqual(ps.LATEST["p0"], 1)
+        self.assertTrue(ps.LATEST["cached"])
+
+    def test_no_cache_keeps_unknown(self):
+        ok = ps.load_cached_latest()
+        self.assertFalse(ok)
+        self.assertEqual(ps.LATEST["verdict"], "UNKNOWN")
+        self.assertFalse(ps.LATEST["cached"])
+
+    def test_corrupt_run_log_ignored(self):
+        os.makedirs(ps.RUNS_DIR, exist_ok=True)
+        with open(os.path.join(ps.RUNS_DIR, "run-corrupt.json"), "w",
+                  encoding="utf-8") as f:
+            f.write("{not json")
+        ok = ps.load_cached_latest()
+        self.assertFalse(ok)  # bozuk log atlanır, history de boş → UNKNOWN
+        self.assertEqual(ps.LATEST["verdict"], "UNKNOWN")
+
+    def test_safe_under_lock(self):
+        # LOCK tutulurken çağrılırsa asılmamalı (kendi kilidini ALMAZ).
+        self._write_run_log({"ts": "2026-08-23T12:00:00Z",
+                             "verdict": "PASS", "p0": 0, "p1": 0})
+        with ps.LOCK:
+            ok = ps.load_cached_latest()
+        self.assertTrue(ok)
+        self.assertEqual(ps.LATEST["verdict"], "PASS")
+
+
 class PersistHistoryTests(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
