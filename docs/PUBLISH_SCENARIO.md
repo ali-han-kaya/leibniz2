@@ -241,6 +241,7 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 | 2026-08-23 | fix | (scripts) precheck smoke öncesi changelog senkronu (chicken-and-egg) | `0bc915f` |
 | 2026-08-23 | docs | changelog — precheck smoke senkronu satırı (0bc915f) | `76b0a55` |
 | 2026-08-23 | test | (scripts) update_changelog_hook birim kapısı (drift/stage/hata) | `d210be3` |
+| 2026-08-23 | feat | (scripts) branch protection tek-komut kurulum | `7b78e0f` |
 
 ---
 
