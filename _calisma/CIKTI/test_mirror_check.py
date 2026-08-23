@@ -391,6 +391,58 @@ class TestMirrorAutoSync(unittest.TestCase):
         self.assertEqual(meta["before_exit"], 1)
 
 
+class TestK17InFullChain(unittest.TestCase):
+    """--full, K17'yi mirror-kurulum semantiğiyle aktifleştirir."""
+
+    def test_full_enables_k17_with_auto_sync(self):
+        sys.path.insert(0, HERE)
+        import verify_delivery as vd  # noqa: E402
+        import types
+        args = types.SimpleNamespace(
+            full=True, check_references=False, symbolic_proof=False,
+            lean_proof=False, check_lineage=False, check_repro_manifest=False,
+            check_config_drift=False, check_cleanup=False,
+            check_github_scripts=False, check_mirror=False,
+            mirror_auto_sync=False)
+        out = vd.apply_full_flags(args)
+        self.assertTrue(out.check_mirror)
+        self.assertTrue(out.mirror_auto_sync)
+        self.assertTrue(out.check_github_scripts)
+
+    def test_without_full_keeps_flags(self):
+        sys.path.insert(0, HERE)
+        import verify_delivery as vd  # noqa: E402
+        import types
+        args = types.SimpleNamespace(full=False, check_mirror=False,
+                                     mirror_auto_sync=False)
+        out = vd.apply_full_flags(args)
+        self.assertFalse(out.check_mirror)
+        self.assertFalse(out.mirror_auto_sync)
+
+    def test_full_auto_sync_no_validation_error(self):
+        """--full, check_mirror + mirror_auto_sync'i BİRLİKTE açar — doğrulama
+        (auto_sync yalnızca check_mirror ile) exit 2 vermez."""
+        sys.path.insert(0, HERE)
+        import verify_delivery as vd  # noqa: E402
+        import types
+        args = types.SimpleNamespace(full=True, check_mirror=False,
+                                     mirror_auto_sync=False)
+        out = vd.apply_full_flags(args)
+        # --full sonrası her ikisi de açık → geçerli kombinasyon.
+        self.assertTrue(out.check_mirror and out.mirror_auto_sync)
+
+    def test_auto_sync_without_check_mirror_exits_2_after_full_block(self):
+        """--full olmadan --mirror-auto-sync → exit 2 (fail-closed, --full
+        bloğu sonrası doğrulama)."""
+        sys.path.insert(0, HERE)
+        import verify_delivery as vd  # noqa: E402
+        with tempfile.TemporaryDirectory(prefix="mirror-k17-") as work:
+            env = sync_env(work)
+            r = run(env, sys.executable, VERIFY_DELIVERY, "--mirror-auto-sync")
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+        self.assertIn("HATA", r.stderr)
+
+
 class TestMirrorOutSidecar(unittest.TestCase):
     """--mirror-out: --check-mirror ham çıktısı + K17 raporu tek JSON'da."""
 

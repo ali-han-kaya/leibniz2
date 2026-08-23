@@ -108,9 +108,10 @@ Doğrulama zinciri (Katman 0..19):
                (fail-closed, --check-github-scripts, --full'a dahil).
   K17 Mirror   sync_verify_mirror.sh --check exit kodu: 0=GÜNCEL,
                1=BAYAT (repo ↔ TCC-safe mirror drift), 2=hata (kaynak yok /
-               kullanım hatası). BAYAT/hata → P1 (fail-closed). macOS'a özgü
-               (mirror ~/Library/Caches/com.freebuff/verify, launchd GUI
-               agent rotası) — --full'a dahil değil, açıkça --check-mirror ile
+               kullanım hatası). BAYAT/hata → P1 (fail-closed). --full'a
+               DAHİLDİR: mirror boş/eksikse otomatik sync edilip GÜNCEL
+               doğrulanır (Linux'ta da mirror kurulur; sync izi sidecar'da
+               auto_synced ile işaretlenir); ayrıca açıkça --check-mirror ile
                koşulur.
   K18 Launchctl launchctl list + plutil lint + HTTP 200 (--check-launchd;
                macOS'a özgü, --full'a dahil değil)
@@ -3332,8 +3333,9 @@ def check_mirror_sync(add, auto_sync=False):
       2 = hata     (kaynak dosyalardan biri yok, kullanım hatası)
     BAYAT (1) ve hata (2) → P1 (fail-closed). Script yoksa P1. macOS'a
     özgü bir katmandır (mirror ~/Library/Caches/com.freebuff/verify) —
-    --full'a bilerek dahil DEĞİLDİR, açıkça --check-mirror ile koşulur
-    (K12 plist deseniyle aynı).
+    --full'a DAHİLDİR: --full, check_mirror + mirror_auto_sync'i birlikte
+    aktifleştirir (mirror boşsa otomatik kurulur — Linux'ta da çalışır);
+    ayrıca açıkça --check-mirror [--mirror-auto-sync] ile de koşulur.
 
     auto_sync=True (--mirror-auto-sync): BAYAT (1) bulunursa mirror'ı
     otomatik senkron eder (sync_verify_mirror.sh — varsayılan sync modu),
@@ -3646,6 +3648,29 @@ def parse_plist_out_of_scope(txt):
     return out
 
 
+def apply_full_flags(args):
+    """--full, tüm isteğe bağlı katmanları aktifleştirir.
+
+    K17 (--check-mirror) artık --full zincirine DAHİLDİR ve mirror boş/eksikse
+    otomatik sync edilip GÜNCEL doğrulanır (--mirror-auto-sync): Linux'ta da
+    mirror kurulur (varsayılan $HOME/Library/Caches/com.freebuff/verify),
+    macOS'ta bayat mirror kendini onarır; senkron izi sidecar'da kalır.
+    """
+    if not getattr(args, "full", False):
+        return args
+    args.check_references = True
+    args.symbolic_proof = True
+    args.lean_proof = True
+    args.check_lineage = True
+    args.check_repro_manifest = True
+    args.check_config_drift = True
+    args.check_cleanup = True
+    args.check_github_scripts = True
+    args.check_mirror = True
+    args.mirror_auto_sync = True
+    return args
+
+
 def main():
     t0 = time.time()  # run duvar saati (history.jsonl duration_s için)
     ap = argparse.ArgumentParser()
@@ -3745,8 +3770,8 @@ def main():
                          "fail-closed P0/P1 (--full'a dahil)")
     ap.add_argument("--check-mirror", action="store_true",
                     help="K17: sync_verify_mirror.sh --check exit kodunu denetle "
-                         "(0=GÜNCEL, 1=BAYAT, 2=hata; macOS'a özgü mirror, "
-                         "--full'a dahil değil)")
+                         "(0=GÜNCEL, 1=BAYAT, 2=hata; --full'a dahildir — "
+                         "mirror boşsa otomatik sync edilir)")
     ap.add_argument("--mirror-out", default=None,
                     help="K17: sync_verify_mirror.sh --check ham çıktısını "
                          "K17 raporuyla birlikte ayrı bir sidecar JSON'a yaz "
@@ -3763,23 +3788,15 @@ def main():
                     help="Tüm katmanları tek komutla koş: --check-references + "
                          "--symbolic-proof + --lean-proof + --check-lineage + "
                          "--check-config-drift + --check-repro-manifest + "
-                         "--check-cleanup + --check-github-scripts")
+                         "--check-cleanup + --check-github-scripts + "
+                         "--check-mirror (mirror boşsa otomatik sync edilir)")
     args = ap.parse_args()
+    args = apply_full_flags(args)
     # --mirror-auto-sync yalnızca --check-mirror ile anlamlıdır (fail-closed).
     if args.mirror_auto_sync and not args.check_mirror:
         print("HATA: --mirror-auto-sync yalnızca --check-mirror ile kullanılabilir",
               file=sys.stderr)
         sys.exit(2)
-    # --full, tüm isteğe bağlı katmanları aktifleştirir
-    if args.full:
-        args.check_references = True
-        args.symbolic_proof = True
-        args.lean_proof = True
-        args.check_lineage = True
-        args.check_repro_manifest = True
-        args.check_config_drift = True
-        args.check_cleanup = True
-        args.check_github_scripts = True
 
     # ---- Konfig yükleme (CLI bayrakları config'ten öncelikli) ----
     # Fail-closed: geçersiz JSON veya şema ihlali artık sessizce varsayılana
@@ -4456,9 +4473,9 @@ def main():
     # sync_verify_mirror.sh --check exit kodu: 0=GÜNCEL, 1=BAYAT, 2=hata.
     # Mirror, launchd GUI agent'ının TCC-safe yoldan verify_delivery.py'yi
     # koştuğu operasyonel artefakttır; repo ile drift → P1 (fail-closed).
-    # macOS'a özgüdür (mirror ~/Library/Caches/com.freebuff/verify) — Linux
-    # CI'da mirror yok (exit 1) olacağından --full'a bilerek dahil DEĞİLDİR;
-    # açıkça --check-mirror ile koşulur (K12 plist deseniyle aynı).
+    # --full'a DAHİLDİR: --full, mirror_auto_sync'i de aktifleştirir — mirror
+    # boş/eksikse (Linux CI dahil) otomatik sync edilip GÜNCEL doğrulanır;
+    # sync izi sidecar'da auto_synced ile işaretlenir (drift gizlenmez).
     mirror_report = None
     if args.check_mirror:
         mok, mdetail, mrc, mtxt, mmeta = check_mirror_sync(
