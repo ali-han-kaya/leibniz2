@@ -327,6 +327,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-23 | feat | (scripts) precheck --verify-checks + verify_checks birim testi | `6cb70a1` |
 | 2026-08-23 | feat | (scripts) verify-checks JSON sidecar + CI advisory adımı | `71dbecc` |
 | 2026-08-23 | fix | (scripts) precheck smoke öncesi changelog senkronu (chicken-and-egg) | `0bc915f` |
+| 2026-08-23 | docs | changelog — precheck smoke senkronu satırı (0bc915f) | `76b0a55` |
 
 ### Regresyon notları
 
