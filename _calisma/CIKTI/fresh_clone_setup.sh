@@ -16,10 +16,11 @@
 #   5. HTML + plist     update_preview.sh --bootstrap (HTML build + LaunchAgent plist'leri)
 #
 # Her adım fail-closed'dur: kaynak yok / venv kurulamaz / kopya başarısız →
-# hata ile durur (exit ≠ 0). --check modu beş artefaktın da GÜNCEL olduğunu
-# ve daemon HTTP rotasının çalıştığını denetler (daemon_http_test.py — mirror
-# kopyasıyla SSE/run-now dahil HTTP smoke; 0 hazır / 1 eksik/bayat / 2 hata)
-# — K17/K18/K12 kapılarının ön-koşulu.
+# hata ile durur (exit ≠ 0). --check modu beş artefaktın da GÜNCEL olduğunu,
+# daemon HTTP rotasının çalıştığını ve launchd agent'ın kullandığı mirror'ın
+# --check ile aynı olduğunu denetler (plist'teki gerçek --preview-dir/--dir;
+# daemon_http_test.py mirror kopyasıyla SSE/run-now dahil HTTP smoke;
+# 0 hazır / 1 eksik-bayat-drift / 2 hata) — K17/K18/K12 kapılarının ön-koşulu.
 #
 # Kullanım:
 #   fresh_clone_setup.sh             # beş artefaktı kur (yoksa) / senkron et (bayatsa)
@@ -119,16 +120,72 @@ check_all() {
 
   # 3+4. Preview + verify mirror (sync_verify_mirror.sh --check — adım 2+4
   #      tek komutta: 0 güncel/1 bayat/2 hata; PREVIEW_MIRROR dahil).
+  #      BAYAT/EKSİK dosya listesi kullanıcıya komut satırında raporlanır.
   if [ -x "$SCRIPT_DIR/sync_verify_mirror.sh" ]; then
-    if "$SCRIPT_DIR/sync_verify_mirror.sh" --check >/dev/null 2>&1; then
+    local sync_out sync_rc=0
+    sync_out="$("$SCRIPT_DIR/sync_verify_mirror.sh" --check 2>&1)" || sync_rc=$?
+    if [ "$sync_rc" -eq 0 ]; then
       say "OK: preview + verify mirror (repo ↔ mirror birebir)"
     else
-      err "preview/verify mirror bayat/eksik (fresh_clone_setup.sh çalıştırın)"
+      err "preview/verify mirror bayat/eksik — bayat dosyalar:"
+      printf '%s\n' "$sync_out" \
+        | grep -E 'BAYAT/EKSİK' \
+        | while IFS= read -r b; do err "  $b"; done
+      err "  (fresh_clone_setup.sh çalıştırın)"
       missing=1
     fi
   else
     err "sync_verify_mirror.sh yok — preview/verify mirror denetlenemedi"
     missing=1
+  fi
+
+  # 3b. launchd agent'ın kullandığı mirror ile karşılaştır: plist'in
+  #      ProgramArguments'undaki ('--' sonrası sunucu komutu) gerçek
+  #      --preview-dir/--dir yolları, --check'in denetlediği PREVIEW_MIRROR/
+  #      MIRROR_DIR ile aynı mı? Fark varsa --check anlamsızlaşır → DRIFT
+  #      (fail-closed). Agent kurulu değilse BİLGİ (eksik sayılmaz).
+  local ag_plist="$HOME/Library/LaunchAgents/com.freebuff.preview-leibniz2.plist"
+  if [ -f "$ag_plist" ] && command -v python3 >/dev/null 2>&1; then
+    local ag_dirs ag_preview ag_verify
+    ag_dirs="$(python3 - "$ag_plist" 2>/dev/null <<'PYEOF'
+import plistlib, sys
+with open(sys.argv[1], "rb") as f:
+    d = plistlib.load(f)
+args = d.get("ProgramArguments", []) or []
+# Sunucu komutu '--' ayracı sonrası (prestart wrapper); yoksa tümünü tara.
+try:
+    idx = args.index("--")
+    server = args[idx + 1:]
+except ValueError:
+    server = args
+def val(flag):
+    try:
+        return server[server.index(flag) + 1]
+    except (ValueError, IndexError):
+        return ""
+print("PREVIEW_DIR=%s" % val("--preview-dir"))
+print("VERIFY_DIR=%s" % val("--dir"))
+PYEOF
+)"
+    ag_preview="$(printf '%s\n' "$ag_dirs" | sed -n 's/^PREVIEW_DIR=//p')"
+    ag_verify="$(printf '%s\n' "$ag_dirs" | sed -n 's/^VERIFY_DIR=//p')"
+    if [ -z "$ag_preview" ] || [ -z "$ag_verify" ]; then
+      err "agent plist'i okunamadı ($ag_plist) — mirror karşılaştırması yapılamadı"
+      missing=1
+    elif [ "$ag_preview" != "$PREVIEW_MIRROR" ] || [ "$ag_verify" != "$MIRROR_DIR" ]; then
+      err "DRIFT: launchd agent --check'in denetlediğinden FARKLI mirror kullanıyor:"
+      err "  agent:   preview=$ag_preview verify=$ag_verify"
+      err "  --check: preview=$PREVIEW_MIRROR verify=$MIRROR_DIR"
+      err "  (update_preview.sh --start / fresh_clone_setup.sh çalıştırın)"
+      missing=1
+    else
+      say "OK: launchd agent mirror'ı --check ile aynı (preview+verify)"
+    fi
+  elif [ -f "$ag_plist" ]; then
+    err "python3 yok — agent plist karşılaştırması yapılamadı"
+    missing=1
+  else
+    say "BİLGİ: launchd agent kurulu değil (plist yok) — mirror karşılaştırması atlandı"
   fi    # 5. HTML + plist (update_preview.sh --check + --plist-check)
     if [ -x "$SCRIPT_DIR/update_preview.sh" ]; then
       if "$SCRIPT_DIR/update_preview.sh" --check >/dev/null 2>&1; then
@@ -184,10 +241,10 @@ check_all() {
     fi
 
     if [ "$missing" -ne 0 ]; then
-      say "SONUÇ: EKSİK — 5 artefakt + daemon rotası hazır değil (exit 1)"
+      say "SONUÇ: EKSİK — 5 artefakt + daemon rotası + agent mirror uyumu hazır değil (exit 1)"
       return 1
     fi
-    say "SONUÇ: TAMAM — beş artefakt + daemon rotası hazır (exit 0)"
+    say "SONUÇ: TAMAM — beş artefakt + daemon rotası + agent mirror uyumu hazır (exit 0)"
     return 0
 }
 

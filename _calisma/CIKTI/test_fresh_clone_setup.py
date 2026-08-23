@@ -140,6 +140,65 @@ class TestFreshCloneSetupArtifacts(unittest.TestCase):
             self.assertEqual(r3.returncode, 0, r3.stdout + r3.stderr)
 
 
+class TestFreshCloneSetupAgentMirror(unittest.TestCase):
+    """launchd agent'ın plist'teki mirror yolları --check ile karşılaştırılır."""
+
+    def _build(self, home):
+        env = env_overrides(home)
+        fake_venv(env["REPO_VENV"])
+        fake_venv(env["MIRROR_VENV"])
+        r = run(home, "bash", FRESH_SETUP, extra_env=env)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        return env
+
+    def _plist_path(self, home):
+        return os.path.join(home, "Library", "LaunchAgents",
+                            "com.freebuff.preview-leibniz2.plist")
+
+    def test_agent_mirror_matches_check_after_setup(self):
+        with tempfile.TemporaryDirectory(prefix="fc-setup-") as home:
+            self._build(home)
+            r = run(home, "bash", FRESH_SETUP, "--check",
+                    extra_env=env_overrides(home))
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertIn("launchd agent mirror'ı --check ile aynı", r.stdout)
+
+    def test_agent_plist_missing_is_informational(self):
+        # Plist yoksa (agent kurulu değil) BİLGİ notu; EKSİK sayılmaz —
+        # ancak venv'ler de yoksa --check yine exit 1 (fail-closed).
+        with tempfile.TemporaryDirectory(prefix="fc-setup-") as home:
+            env = env_overrides(home)
+            fake_venv(env["REPO_VENV"])
+            fake_venv(env["MIRROR_VENV"])
+            # Mirrors + plist'siz ortam: sync mirror'ı kurar ama plist yok.
+            r = run(home, "bash", FRESH_SETUP, extra_env=env)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            os.remove(self._plist_path(home))
+            r = run(home, "bash", FRESH_SETUP, "--check", extra_env=env)
+            self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+            self.assertIn("launchd agent kurulu değil", r.stdout)
+
+    def test_agent_plist_mirror_drift_fail_closed(self):
+        # Plist'teki --preview-dir farklı bir yola işaret ederse → DRIFT (exit 1).
+        with tempfile.TemporaryDirectory(prefix="fc-setup-") as home:
+            self._build(home)
+            plist = self._plist_path(home)
+            with open(plist, "rb") as f:
+                import plistlib
+                d = plistlib.load(f)
+            args = d["ProgramArguments"]
+            idx = args.index("--")
+            i = args.index("--preview-dir", idx)
+            args[i + 1] = os.path.join(home, "OTHER-preview")
+            with open(plist, "wb") as f:
+                plistlib.dump(d, f)
+            r = run(home, "bash", FRESH_SETUP, "--check",
+                    extra_env=env_overrides(home))
+            self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+            self.assertIn("DRIFT", r.stderr)
+            self.assertIn("OTHER-preview", r.stderr)
+
+
 class TestFreshCloneSetupFailClosed(unittest.TestCase):
     """Eksik ön-koşul → hata ile dur (fail-closed, exit ≠ 0)."""
 
@@ -169,9 +228,9 @@ class TestFreshCloneSetupFailClosed(unittest.TestCase):
             r = run(home, "bash", FRESH_SETUP, "--check", extra_env=env)
             self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
             self.assertIn("EKSİK", r.stdout)
-            # Adım 2+4 tek komutta: sync_verify_mirror.sh --check preview
-            # dosyasındaki drift'i yakalar (BAYAT/EKSİK).
+            # Bayat dosya listesi komut satırında raporlanmalı (dosya adıyla).
             self.assertIn("preview/verify mirror bayat/eksik", r.stderr)
+            self.assertIn("preview_server.py", r.stderr)
 
     def test_check_reports_missing_daemon_test_fail_closed(self):
         # Daemon rotası kapsamda: mirror'daki daemon_http_test.py silinirse
