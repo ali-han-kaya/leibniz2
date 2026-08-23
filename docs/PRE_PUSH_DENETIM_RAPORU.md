@@ -317,6 +317,34 @@ dosya sistemi state'i (config/, logs/, sim/) bir sonraki koşuda overwritten olu
 | pre-commit (14 hook) | ✓ Tümü Passed |
 | publish_wrapper.sh (dry-run) | ✓ Komut akışı doküman ile senkron |
 
+### 8.5 Precheck raporunun K10 manifest denetimine dahil edilmesi (`45c546b`)
+
+§9.2'de (`694b367`) precheck-report artifact'ı manifest'e **üretici tarafında**
+dahil edilmişti (`precheck_report.files` + `combined_sha256`); bu bölüm o
+zincirin **denetçi tarafındaki** eksik halkasını kapatır — K10
+`--verify-manifest` artık `precheck_report.combined_sha256` alanını da
+fail-closed doğrular:
+
+| Doğrulama | Detay |
+|---|---|
+| `precheck_report.files` ↔ `files` | Bölümdeki her hash, ana manifest hash'iyle aynı olmalı; uyuşmazlık → P1 |
+| `combined_sha256` yeniden hesaplama | Sıralı `{rel}\0{hash}\n` birleşiminin SHA-256'sı; kayıtlı değerle uyuşmazsa → P1 |
+| `combined_sha256` eksikliği | `files` dolu ama alan yok → P1 |
+| Bölüm yokluğu | files'ta `precheck-report/` dosyası var ama `precheck_report` objesi yok → P1 (üretici drift'i) |
+| Özet + return | `precheck_report_combined_sha256: PASS/FAIL` + `pr_ok` return koşulunda |
+
+**K13 self-test sertleştirmesi:** `_K13_MOCK`'a `precheck-report/precheck_report.txt`
+eklendi; `_WANT_PRECHECK` + `_k13_verify_manifest` precheck bölümünü kapsam
+ve combined açısından doğrular — self-test happy path artık precheck bölümünü
+de üretip denetler.
+
+| Kaynak | Sonuç |
+|---|---|
+| `test_verify_manifest_sidecar.py` (4 yeni test) | ✓ PASS (geçerli bölüm / bozuk combined / hash uyuşmazlığı / eksik bölüm) |
+| Tam suite | ✓ 964/964 OK |
+| pre-commit | ✓ Yeşil |
+| Commit | ✓ `45c546b` push edildi |
+
 ---
 
 ## 9. CI Run Trend Tablosu (son 10 run)
