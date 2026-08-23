@@ -243,10 +243,12 @@ class TestMirrorFileCoverage(unittest.TestCase):
     def test_preview_files_listed(self):
         with open(SYNC_MIRROR, encoding="utf-8") as f:
             text = f.read()
-        # PREVIEW_FILES (adım 2) preview_server.py + _daemonize.py içermeli
-        # — adım 2+4 tek komutta senkron edilir (launchd çalıştırıcısı).
+        # PREVIEW_FILES (adım 2) preview_server.py + _daemonize.py + prestart
+        # içermeli — adım 2+4 tek komutta senkron edilir (launchd çalıştırıcısı
+        # + PreStart kontrolü; eksik runtime dosyası K17 BAYAT'a düşer).
         self.assertIn("preview_server.py|preview_server.py", text)
         self.assertIn("_daemonize.py|_daemonize.py", text)
+        self.assertIn("preview_prestart.py|preview_prestart.py", text)
 
     def test_guide_files_listed_and_synced(self):
         # GUIDE_FILES (adım 2) branch protection kılavuzunu preview mirror'a
@@ -286,6 +288,37 @@ class TestMirrorFileCoverage(unittest.TestCase):
             chk = run(env, "bash", SYNC_MIRROR, "--check")
             self.assertEqual(chk.returncode, 1, chk.stdout + chk.stderr)
             self.assertIn("BAYAT/EKSİK: preview/preview_server.py", chk.stdout)
+
+    def test_k17_layer_catches_preview_runtime_drift(self):
+        """K17 kapsamı (mirror-bayatlık düzeltmesi): preview_server.py +
+        _daemonize.py bayatlığı yalnızca FILES listesinde değil, K17
+        KATMANINDAN da yakalanır — sync --check BAYAT → verify_delivery.py
+        --check-mirror exit 1 + P1 + stale_files'a preview/ önekiyle girer
+        (dashboard mirror paneli bu listeden BAYAT dosyaları gösterir)."""
+        with tempfile.TemporaryDirectory(prefix="mirror-k17-") as work:
+            env = sync_env(work)
+            syn = run(env, "bash", SYNC_MIRROR)
+            self.assertEqual(syn.returncode, 0, syn.stderr)
+            preview_mirror = env["PREVIEW_MIRROR"]
+            for name in ("preview_server.py", "_daemonize.py"):
+                p = os.path.join(preview_mirror, name)
+                self.assertTrue(os.path.isfile(p),
+                                "%s mirror'da olmalı" % name)
+                with open(p, "a", encoding="utf-8") as f:
+                    f.write("\n# drift\n")
+            out = os.path.join(work, "mirror_report.json")
+            r = run(env, sys.executable, VERIFY_DELIVERY, "--check-mirror",
+                    "--mirror-out", out)
+            # Her iki runtime dosyası da BAYAT → P1 (fail-closed).
+            self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+            self.assertIn("[P1] K17 mirror sync", r.stdout)
+            with open(out, encoding="utf-8") as f:
+                d = json.load(f)
+            self.assertFalse(d["ok"])
+            self.assertEqual(d["exit"], 1)
+            stale = d.get("stale_files", [])
+            self.assertIn("preview/preview_server.py", stale)
+            self.assertIn("preview/_daemonize.py", stale)
 
 
 class TestMirrorAutoSync(unittest.TestCase):
