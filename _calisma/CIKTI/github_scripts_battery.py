@@ -855,12 +855,24 @@ SCENARIOS = [
         },
     ),
     (
-        "config_diff: config-diff.json yok → atlanır (REST çağrısı yok)",
+        "config_diff: config-diff.json yok + yorum yok → temizlik sessiz",
         "config_diff_comment.js",
         {}, None, [], [],
         {"ok": True, "set_failed": False,
-         "call_counts": {"issues.listComments": 0},
-         "console_any": ["atlanıyor"]},
+         "call_counts": {"issues.deleteComment": 0,
+                         "issues.createComment": 0},
+         "console_any": ["config-diff.json yok — yorum yok"]},
+    ),
+    (
+        "config_diff: config-diff.json yok + bayat yorum varsa SİLİNİR",
+        "config_diff_comment.js",
+        {}, None, [],
+        [{"id": 888, "body": "bayat " + MARKER_CFGDIFF}],
+        {"ok": True, "set_failed": False,
+         "call_counts": {"issues.deleteComment": 1,
+                         "issues.createComment": 0},
+         "target_ids": {"issues.deleteComment": [888]},
+         "console_any": ["bayat yorum kaldırıldı"]},
     ),
 
     # ── tum_sapmalar_comment.js (verify.yml birleşik adım) ──

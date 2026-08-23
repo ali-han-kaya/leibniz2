@@ -230,6 +230,7 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 | 2026-08-23 | ci | simulate_verify_job summary.md'ye readonly assertion ekle | `5bf2037` |
 | 2026-08-23 | ci | summary Annotations format uyumluluk kontrolu | `ea40214` |
 | 2026-08-23 | feat | (protection) required check 9→12 (commit-msg, config-sync, ci-sim) | `54e4d4c` |
+| 2026-08-23 | fix | (verify) K10 overrides.combined_sha256 yeniden hesaplama + P1 | `49b8114` |
 
 ---
 
