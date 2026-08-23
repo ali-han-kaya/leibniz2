@@ -217,6 +217,7 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 | 2026-08-22 | ci | config snapshot ↔ CONFIG_BASENAMES sync gate | `9636a7c` |
 | 2026-08-22 | ci | add config_artifact_basenames to schema, K10 fail-closed drift check | `d7ca27a` |
 | 2026-08-23 | ci | override run [CLI override] satirlarini OVERRIDE_RAPORU.json'a tasi | `fa9b7a4` |
+| 2026-08-23 | docs | PRE_PUSH_DENETIM_RAPORU e §9 CI run trend tablosu ekle | `8e71025` |
 
 ---
 
@@ -304,6 +305,7 @@ Aşağıdaki manuel aşamaların **birebir aynısını tek komutla, interaktif o
 | `bash docs/publish_wrapper.sh --dry-run --with-stage4` | AŞAMA 0-4'ün tam önizlemesi |
 | `bash docs/publish_wrapper.sh --dry-run-summary` | **Prova + özet:** dry-run komut akışını tek markdown dosyasına yazar (`logs/PUBLISH_DRY_RUN_SUMMARY.md`) |
 | `bash docs/publish_wrapper.sh --verify-checks` | **Yalnızca AŞAMA 1 doğrulaması:** `status_checks.py` + `--gh` (workflow ↔ GitHub eşleşmesi + merge engeli smoke). Repo oluşturma/push/CI izleme ÇALIŞMAZ; temiz tree gerektirmez (salt okunur) — `--dry-run` ile birleşince önizleme modunda koşar |
+| `bash docs/publish_wrapper.sh --ci-simulate` | **Yerel CI simülasyonu:** push/repo-create/CI izleme ATLANIR; `status_checks.py` + `simulate_verify_job.sh` (--full K1-K14 + pre-commit + sha256 + config bundle) yerelde koşulur — ayrıntı aşağıda |
 | `bash docs/publish_wrapper.sh` (repo zaten yayında) | **İdempotent:** repo/remote varsa atlanır; bekleyen commit yoksa push atlanır; HEAD için mevcut CI run'ı izlenir |
 
 - **Log:** `logs/publish_<timestamp>.log` — hem terminale hem dosyaya yazılır.
@@ -314,6 +316,54 @@ Aşağıdaki manuel aşamaların **birebir aynısını tek komutla, interaktif o
 - **Senkron:** wrapper, bu belgedeki manuel komutları birebir uygular (repo
   create bayrakları, marker yolu vb. aynıdır); fark oluşursa bu belgeyi ve
   wrapper'ı birlikte güncelle.
+
+---
+
+## CI-SIMULATE — yerel CI doğrulaması (push'suz prova)
+
+`--ci-simulate`, AŞAMA 1-3'ün GitHub tarafını **hiç çalıştırmadan** CI
+kapılarının yerelde aynen koşulduğunu doğrular: precheck → `status_checks.py`
+(beklenen required check adları) → `simulate_verify_job.sh` (--full K1-K14 +
+pre-commit + sha256 sidecar + config bundle + GITHUB_STEP_SUMMARY).
+
+**Kimin için:** repo yayındayken CI'ı tetiklemeden (kotasız, beklemesiz)
+kapıların hâlâ yeşil olduğunu teyit etmek; veya repo henüz yokken yayın
+öncesi son doğrulama.
+
+```bash
+cd ~/Desktop/leibniz2
+
+# Kapalı prova — hiçbir push/repo-değişikliği yok
+bash docs/publish_wrapper.sh --ci-simulate
+
+# Daha gürültüsüz: yalnızca status_checks + simulasyon sonucunu logla
+bash docs/publish_wrapper.sh --ci-simulate --dry-run-summary
+```
+
+**Çıktı (canlı örnek):**
+
+```text
+── AŞAMA 1-3 (CI-SIMULATE) — yerel CI doğrulaması ──
+    status_checks.py — beklenen required check adları:
+      Delivery verification — K1-K14 (single entry point)
+      Action runtime check (node24)
+      Budget shield (aggregated)
+      …
+    simulate_verify_job.sh — yerel CI simülasyonu başlıyor…
+CI-SIMULATE: PASS ✓ — tüm kapılar yeşil (yerel)
+Özet (summary.md — ilk 20 satır): …
+SONUÇ: CI-SIMULATE ✓ — yerel doğrulama tamamlandı, push yapılmadı
+```
+
+**Sınırlar (bilinçli):**
+
+- `--with-stage4` (branch protection smoke) remote gerektirdiğinden bu modda
+  uyarı verir ve atlanır (`warn --with-stage4 --ci-simulate birlikte kullanılamaz`).
+- Yayın testinin ta kendisi değildir: runner ortamı (macOS/Ubuntu) ve
+  GitHub Actions sürücüsü yerelde simüle edilir; GitHub'a karşı hiçbir
+  adım (koruma kurma, push, CI run) çalışmaz.
+- `simulate_verify_job.sh` çıktısı `_calisma/CIKTI/sim/verify_job/` altında
+  birikir — bir sonraki koşuda `rm -rf` ile temizlenir (her koşu baştan).
 
 ---
 

@@ -307,6 +307,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-22 | ci | config snapshot ↔ CONFIG_BASENAMES sync gate | `9636a7c` |
 | 2026-08-22 | ci | add config_artifact_basenames to schema, K10 fail-closed drift check | `d7ca27a` |
 | 2026-08-23 | ci | override run [CLI override] satirlarini OVERRIDE_RAPORU.json'a tasi | `fa9b7a4` |
+| 2026-08-23 | docs | PRE_PUSH_DENETIM_RAPORU e §9 CI run trend tablosu ekle | `8e71025` |
 
 ### Regresyon notları
 

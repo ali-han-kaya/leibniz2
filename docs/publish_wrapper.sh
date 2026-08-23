@@ -337,7 +337,7 @@ if [ "$CI_SIMULATE" = "1" ]; then
   # simulate_verify_job.sh — CI job zincirini yerelde compose-style koş.
   # Bu, --full (K1-K14) + pre-commit + sha256 + config bundle + simulate'dır.
   log "simulate_verify_job.sh — yerel CI simülasyonu başlıyor..."
-  SIM_DIR="_calisma/CIKTI/sim/verify_job"
+  SIM_DIR="$REPO_ROOT/.freebuff/sim/verify_job"
   rm -rf "$SIM_DIR"
   if bash _calisma/CIKTI/simulate_verify_job.sh; then
     log "CI-SIMULATE: PASS ✓ — tüm kapılar yeşil (yerel)"
@@ -361,12 +361,41 @@ if [ "$CI_SIMULATE" = "1" ]; then
     warn "--with-stage4 --ci-simulate birlikte kullanılamaz (remote gerekli)"
   fi
 
-  sim_owner="$(gh api user -q .login 2>/dev/null || echo 'OWNER-UNKNOWN')"
+  sim_owner="$(git config user.name 2>/dev/null || echo 'OWNER-UNKNOWN')"
   step "SONUÇ (CI-SIMULATE)"
-  log "Repo:        https://github.com/$sim_owner/$REPO_NAME  (CI-SIMULATE — push yok)"
-  log "Sim dizini:  $REPO_ROOT/$SIM_DIR"
-  log "Log dosyası: $LOG"
-  log "SONUÇ: CI-SIMULATE ✓ — yerel doğrulama tamamlandı, push yapılmadı"
+  # Markdown rapor — .freebuff/sim/ altına (denetim izi, tek bakışta özet).
+  SIM_MD="$REPO_ROOT/.freebuff/sim/ci_simulate_report.md"
+  mkdir -p "$(dirname "$SIM_MD")"
+  {
+    echo "# CI-SIMULATE Raporu — $(date -u '+%Y-%m-%d %H:%M UTC')"
+    echo ""
+    echo "- Repo: https://github.com/$sim_owner/$REPO_NAME  (push yok)"
+    echo "- Sim dizini: $REPO_ROOT/$SIM_DIR"
+    echo "- Log: $LOG"
+    echo ""
+    echo "## status_checks.py — beklenen required check adları"
+    echo '```'
+    "$SC_PY" _calisma/CIKTI/status_checks.py 2>&1 | sed 's/^/    /'
+    echo '```'
+    echo ""
+    echo "## simulate_verify_job.sh çıktısı"
+    echo '```'
+    if [ -f "$SIM_DIR/verify_report.txt" ]; then
+      tail -30 "$SIM_DIR/verify_report.txt"
+    else
+      echo '(verify_report.txt yok)'
+    fi
+    echo '```'
+    echo ""
+    if [ -f "$SIM_DIR/summary.md" ]; then
+      echo "## GITHUB_STEP_SUMMARY (simulate_verify_job.sh)"
+      echo '```'
+      cat "$SIM_DIR/summary.md"
+      echo '```'
+    fi
+  } > "$SIM_MD"
+  log "Rapor: $SIM_MD"
+  log "SONUÇ: CI-SIMULATE ✓ — yerel doğrulama tamamlandı, push yapılmadı (rapor: $SIM_MD)"
   exit 0
 fi
 
