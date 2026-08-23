@@ -101,6 +101,8 @@ LATEST = {
     "lineage_summary": None,    # soy hattı özeti: {ok, count, current_note, current_hash_prefix}
     "lineage_ok": None,          # skaler trend alanı (True/False/None)
     "lineage_count": None,       # skaler trend alanı (int/None)
+    "mirror_sync": None,          # K17 mirror raporu: {ok, exit, detail, stale_files, auto_synced, …}
+    "mirror_stale": [],           # K17 BAYAT/EKSİK dosya listesi (dashboard paneli için skaler)
     "status_board": None,        # tek satır durum panosu (5 ikon: Pre-commit · K0 · Bütçe · Soy hattı · K katmanları)
     "precommit_hooks": None,     # [{name, status}] — pre-commit hook sonuçları (Passed/Failed)
     "history_sidecar_sha256": None,  # history.jsonl.sha256 sidecar hash'i (K15)
@@ -891,6 +893,12 @@ def _finalize_run(stdout, stderr, rc, duration, data, verify_dir=None):
             # skaler trend alanları (history.jsonl trend grafiği için)
             "lineage_ok": (lineage_summary or {}).get("ok"),
             "lineage_count": (lineage_summary or {}).get("count"),
+            # K17 mirror sync: tam rapor (/api/latest) + BAYAT dosya listesi
+            # (dashboard mirror paneli; exit kodu + bayat dosyalar tek yerde)
+            "mirror_sync": data.get("mirror"),
+            "mirror_stale": [ln.split("BAYAT/EKSİK:", 1)[1].strip()
+                             for ln in ((data.get("mirror") or {}).get("output") or "").splitlines()
+                             if "BAYAT/EKSİK:" in ln],
             # Pre-commit hook durumları (stderr'den ayrıştırıldı)
             "precommit_hooks": precommit_hooks,
             # P0/P1 bulgu satırları (verify --json findings[])

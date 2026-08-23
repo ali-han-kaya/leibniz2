@@ -120,6 +120,8 @@ class TestVerifyDeliveryK17(unittest.TestCase):
             self.assertEqual(d["layer"], "K17")
             self.assertTrue(d["ok"])
             self.assertEqual(d["exit"], 0)
+            # GÜNCEL → bayat dosya listesi boş (dashboard paneli verisi).
+            self.assertEqual(d.get("stale_files"), [])
 
     def test_k17_bayat_p1_fail_closed(self):
         with tempfile.TemporaryDirectory(prefix="mirror-k17-") as work:
@@ -141,6 +143,9 @@ class TestVerifyDeliveryK17(unittest.TestCase):
             self.assertFalse(d["ok"])
             self.assertEqual(d["exit"], 1)
             self.assertIn("BAYAT", d["detail"])
+            # BAYAT → bayat dosya listesi bozulan dosyayı içermeli (dashboard
+            # paneli bu listeden BAYAT/EKSİK dosyaları gösterir).
+            self.assertIn("verify_delivery.py", d.get("stale_files", []))
 
     def test_k17_kaynak_yok_p1(self):
         with tempfile.TemporaryDirectory(prefix="mirror-k17-") as work:
@@ -152,6 +157,33 @@ class TestVerifyDeliveryK17(unittest.TestCase):
             self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
             self.assertIn("[P1] K17 mirror sync", r.stdout)
 
+    def test_k17_tcc_route_skips_not_fail(self):
+        # TCC rotası: launchd GUI agent ~/Desktop'ı okuyamaz — bash exit 126
+        # + "Operation not permitted". K17 sahte FAIL üretmemeli: SKIP notu
+        # (ok=True, exit=None, bulgu yok) — verdict etkilenmez.
+        sys.path.insert(0, HERE)
+        import verify_delivery as vd  # noqa: E402
+        with tempfile.TemporaryDirectory(prefix="mirror-k17-") as work:
+            env = sync_env(work)
+            fake = mock.Mock()
+            fake.returncode = 126
+            fake.stdout = ""
+            fake.stderr = ("bash: /Users/alikaya/Desktop/leibniz2/_calisma/"
+                           "CIKTI/sync_verify_mirror.sh: Operation not "
+                           "permitted\n")
+            with mock.patch.object(vd.subprocess, "run", return_value=fake):
+                findings = []
+                add = lambda prio, cid, label, issue, evidence="": findings.append(
+                    {"priority": prio, "check": cid, "issue": issue,
+                     "evidence": evidence})
+                ok, detail, rc, txt, meta = vd.check_mirror_sync(add)
+            self.assertTrue(ok)          # SKIP — FAIL değil
+            self.assertIsNone(rc)
+            self.assertIn("TCC rotası", detail)
+            self.assertIn("Operation not permitted", txt)
+            # Bulgu ÜRETİLMEMELİ (P1 yok → K17 PASS, verdict etkilenmez).
+            self.assertEqual(findings, [])
+
     def test_k17_script_yok_p1(self):
         # check_mirror_sync, script yolunu __file__'a göre sabit hesaplar;
         # os.path.isfile'i patch'leyerek script-yok dalını uyarırız.
@@ -160,11 +192,12 @@ class TestVerifyDeliveryK17(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="mirror-k17-") as work:
             env = sync_env(work)
             script = os.path.join(HERE, "sync_verify_mirror.sh")
+            real_isfile = os.path.isfile  # patch'ten önce yakala (recursion yok)
 
             def fake_isfile(p):
                 if p == script:
                     return False
-                return os.path.isfile(p)
+                return real_isfile(p)
 
             with mock.patch.object(vd.os.path, "isfile", side_effect=fake_isfile):
                 findings = []

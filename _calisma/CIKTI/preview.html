@@ -130,6 +130,13 @@
   </section>
 
   <section>
+    <h2>Mirror sync (K17) <span class="ts" id="mirror-ts"></span></h2>
+    <div class="card" style="padding:12px" id="mirror-body">
+      <div class="muted">veri bekleniyor…</div>
+    </div>
+  </section>
+
+  <section>
     <h2>P0 / P1 trend — son 100 run <span class="ts" id="trend-count"></span></h2>
     <div id="budget-over-banner" class="err" role="alert"
          style="display:none;margin:6px 0 2px;padding:6px 10px;border-radius:6px;font-size:12px;font-weight:700"></div>
@@ -1185,6 +1192,50 @@ function renderCliOverride(data) {
   bodyEl.innerHTML = h;
 }
 
+// ---- Mirror sync panel (K17) — son run'un mirror durumu ----
+// Kaynak: /api/latest `mirror_sync` (verify --json 'mirror' raporu).
+// Gösterir: K17 exit kodu + GÜNCEL/BAYAT rozeti + BAYAT/EKSİK dosya listesi
+// (sync_verify_mirror.sh --check çıktısındaki satırlardan).
+function renderMirrorSync(data) {
+  const bodyEl = $("mirror-body"), tsEl = $("mirror-ts");
+  if (!bodyEl) return;
+  const m = data && data.mirror_sync;
+  const ts = data && data.ts;
+  if (tsEl) tsEl.textContent = ts ? fmtTs(ts) : "";
+  if (m == null) {
+    bodyEl.innerHTML = '<span class="muted">K17 mirror check bu run\u0027da koşmadı (--check-mirror gerekli)</span>';
+    return;
+  }
+  const exit = m.exit;
+  const ok = m.ok === true;
+  const stale = (m.stale_files || []).slice();
+  const auto = m.auto_synced === true;
+  // TCC rotası (exit null + ok): launchd agent ~/Desktop'ı okuyamadığı için
+  // K17 denetimi atlandı — sahte GÜNCEL gösterme, açık "denetlenemedi" rozeti.
+  const skipTcc = ok && exit == null;
+  const badgeCls = skipTcc ? "warn" : (ok ? "ok" : "err");
+  const badgeTxt = skipTcc
+    ? "denetlenemedi (TCC)"
+    : (ok ? (auto ? "GÜNCEL (otomatik sync)" : "GÜNCEL")
+          : (exit === 1 ? "BAYAT" : "hata"));
+  let h = '<span class="badge ' + badgeCls + '">' + badgeTxt + '</span> ' +
+    '<span class="muted">K17 exit=' + (exit != null ? exit : "—") +
+    (auto ? ' · auto_synced ✓ (before=' + m.before_exit + ')' : '') + '</span>';
+  h += '<div style="margin-top:6px;font-size:12px">' +
+    escapeHTML(m.detail || "") + '</div>';
+  if (stale.length) {
+    h += '<div style="margin-top:8px;font-size:12px;font-weight:600;color:var(--warn)">' +
+      'BAYAT/EKSİK dosyalar (' + stale.length + '):</div>' +
+      '<ul style="margin:4px 0 0 0;padding-left:18px;font-size:12px;color:var(--warn)">' +
+      stale.map(f => '<li><code>' + escapeHTML(f) + '</code></li>').join("") +
+      '</ul>';
+  } else if (ok) {
+    h += '<div style="margin-top:6px;font-size:12px;color:var(--ok)">' +
+      '✓ repo ↔ mirror birebir — bayat dosya yok</div>';
+  }
+  bodyEl.innerHTML = h;
+}
+
 // ---- K-layers panel (tek kaynak: d.layers → K0-K17) ----
 // K8/K9 enriched by z3_passed/lean_ok detail; others purely from layers.
 const K_ALL = ["K0","K1","K2","K3","K4","K5","K6","K7","K8","K9",
@@ -1535,6 +1586,7 @@ function initLoad() {
     if (d.budget) renderBudget(d.budget);
     if (d.config_diff) renderConfigDiff(d.config_diff, d.ts);
     renderCliOverride(d);
+    renderMirrorSync(d);
     setLive(d.verdict === "PASS" ? "ok" : "warn");
   }).catch(() => {});
   loadRunHistory();
@@ -1559,6 +1611,7 @@ function connect() {
         if (full.budget) renderBudget(full.budget);
         if (full.config_diff) renderConfigDiff(full.config_diff, full.ts);
         renderCliOverride(full);
+        renderMirrorSync(full);
       });
     } catch(err) { console.error("snapshot parse", err); }
   });
@@ -1575,6 +1628,7 @@ function connect() {
         if (full.budget) renderBudget(full.budget);
         if (full.config_diff) renderConfigDiff(full.config_diff, full.ts);
         renderCliOverride(full);
+        renderMirrorSync(full);
       });
     } catch(err) { console.error("update parse", err); }
   });

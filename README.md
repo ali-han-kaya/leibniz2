@@ -348,6 +348,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-23 | feat | (verify) K17 --mirror-auto-sync — bayat mirror'ı otomatik senkronla | [`c307b47`](https://github.com/ali-han-kaya/leibniz2/commit/c307b47) |
 | 2026-08-23 | feat | (verify) K17 --full zincirine dahil — mirror boşsa otomatik kur | [`6a74938`](https://github.com/ali-han-kaya/leibniz2/commit/6a74938) |
 | 2026-08-23 | other | manifest: mirror-check'i download pattern'e ekle, K17 SHA-256 sabitle | [`165f28d`](https://github.com/ali-han-kaya/leibniz2/commit/165f28d) |
+| 2026-08-23 | other | pattern-drift: mirror-check'i EXCLUDED'a ekle (prefixed indirme) | [`41776fa`](https://github.com/ali-han-kaya/leibniz2/commit/41776fa) |
 
 ### Regresyon notları
 

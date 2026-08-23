@@ -3348,7 +3348,19 @@ def check_mirror_sync(add, auto_sync=False):
     Döndürür (ok: bool, detail: str, rc: int, txt: str, meta: dict).
     """
     here = os.path.dirname(os.path.abspath(__file__))
-    script = os.path.join(here, "sync_verify_mirror.sh")
+    # Script öncelikle verify_delivery.py'nin yanında aranır (repo checkout /
+    # CI rotası). Mirror rotasında (launchd GUI agent / preview server
+    # ~/Library/Caches/.../verify altından koşar) sync_verify_mirror.sh
+    # mirror'a BİLEREK kopyalanmaz (mirror'ı yöneten araçtır, içinde olmaz).
+    # Bu durumda repo kopyasına düşülür: script ROOT'u kendi konumundan
+    # türettiği için ($SCRIPT_DIR/../..) repo kopyası kaynakları doğru çözer.
+    candidates = [os.path.join(here, "sync_verify_mirror.sh")]
+    for base in (os.path.expanduser("~/Desktop/leibniz2"),
+                 os.path.join(os.getcwd(), "_calisma")):
+        candidates.append(os.path.join(base, "_calisma", "CIKTI",
+                                       "sync_verify_mirror.sh"))
+    script = next((c for c in candidates if os.path.isfile(c)),
+                  candidates[0])
     empty_meta = {"auto_synced": False, "before_exit": None,
                   "after_exit": None, "sync_rc": None, "sync_output": None}
     if not os.path.isfile(script):
@@ -3363,6 +3375,17 @@ def check_mirror_sync(add, auto_sync=False):
         add("P1", "K17-MIRROR", "K17 mirror sync",
             f"çalıştırılamadı: {e}", script)
         return False, f"çalıştırılamadı: {e}", None, "", empty_meta
+    # TCC rotası: launchd GUI agent'ı ~/Desktop'ı OKUYAMAZ (Operation not
+    # permitted) — mirror'ın var olma nedeni budur. Bu durumda repo ↔ mirror
+    # drift denetimi imkânsızdır; K17 sahte FAIL üretmemeli: SKIP notu döner
+    # (bulgu yok → verdict etkilenmez). Gerçek denetim CI mirror-check job'ı
+    # ve kullanıcı oturumu --full'ında koşar (dashboard paneli oradan veri
+    # alır).
+    if rc not in (0, 1, 2) and "Operation not permitted" in txt:
+        detail = ("TCC rotası: launchd agent ~/Desktop'ı okuyamıyor — "
+                  "K17 repo↔mirror denetimi bu bağlamda imkânsız (SKIP; "
+                  "gerçek denetim CI mirror-check / kullanıcı --full)")
+        return True, detail, None, txt, dict(empty_meta, before_exit=rc)
     if rc == 0:
         meta = dict(empty_meta, before_exit=rc)
         detail = "GÜNCEL — repo ↔ mirror birebir (sync_verify_mirror.sh --check)"
@@ -4480,8 +4503,15 @@ def main():
     if args.check_mirror:
         mok, mdetail, mrc, mtxt, mmeta = check_mirror_sync(
             add, auto_sync=args.mirror_auto_sync)
+        # BAYAT dosya listesi: sync_verify_mirror.sh --check çıktısındaki
+        # "BAYAT/EKSİK: <path>" satırlarından makine-okunur liste (dashboard
+        # mirror paneli + sidecar için; boş = GÜNCEL).
+        stale_files = [ln.split("BAYAT/EKSİK:", 1)[1].strip()
+                       for ln in (mtxt or "").splitlines()
+                       if "BAYAT/EKSİK:" in ln]
         mirror_report = {"layer": "K17", "ok": mok, "exit": mrc,
-                         "detail": mdetail, "output": mtxt}
+                         "detail": mdetail, "output": mtxt,
+                         "stale_files": stale_files}
         # Opsiyonel --mirror-auto-sync izi: sidecar'da drift'in otomatik
         # senkronla giderildiği görünür kalır (gizlenmez).
         if mmeta.get("auto_synced"):
