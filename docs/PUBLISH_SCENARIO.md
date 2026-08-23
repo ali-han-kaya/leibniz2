@@ -238,6 +238,7 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 | 2026-08-23 | fix | (verify) K10 absent precheck — hayalet bölüme P1, yoksa PASS | `469bd7d` |
 | 2026-08-23 | feat | (scripts) precheck --verify-checks + verify_checks birim testi | `6cb70a1` |
 | 2026-08-23 | feat | (scripts) verify-checks JSON sidecar + CI advisory adımı | `71dbecc` |
+| 2026-08-23 | fix | (scripts) precheck smoke öncesi changelog senkronu (chicken-and-egg) | `0bc915f` |
 
 ---
 
