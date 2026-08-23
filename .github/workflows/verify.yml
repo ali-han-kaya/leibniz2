@@ -1819,6 +1819,30 @@ jobs:
             cat .freebuff/status_checks_gh.err
           fi
 
+      # publish_precheck.sh --verify-checks — status_checks.py + --gh'nin TEK
+      # KAYNAK kapısı (verify_checks.sh; wrapper --verify-checks ile aynı
+      # fonksiyon). Makine-okur JSON sidecar'ı .freebuff/verify_checks.json'a
+      # yazar (verdict: PASS|WARN|FAIL + --gh --json detayı). Advisory —
+      # GITHUB_TOKEN admin scope'u olmadığından CI'da genelde WARN/UNREADABLE
+      # döner (o da gerçek durumu belgeler; bloke etmez).
+      - name: Run verify-checks gate (--verify-checks + JSON sidecar)
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          mkdir -p .freebuff
+          bash docs/publish_precheck.sh --verify-checks \
+            --verify-checks-out .freebuff/verify_checks.json 2>&1 | tee .freebuff/verify_checks.txt
+          echo "--- sidecar özeti ---"
+          if [ -f .freebuff/verify_checks.json ]; then
+            python3 -c 'import json; d=json.load(open(".freebuff/verify_checks.json")); print("verdict:", d.get("verdict"), "| rc:", d.get("rc"), "| note:", d.get("note"))'
+          else
+            echo "sidecar üretilemedi"
+          fi
+
       - name: Upload precheck report
         if: always()
         uses: actions/upload-artifact@v6
@@ -1828,6 +1852,8 @@ jobs:
             .freebuff/precheck_report.txt
             .freebuff/status_checks_gh.json
             .freebuff/status_checks_gh.err
+            .freebuff/verify_checks.json
+            .freebuff/verify_checks.txt
           if-no-files-found: ignore
           retention-days: 30
 

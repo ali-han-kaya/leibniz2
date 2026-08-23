@@ -19,6 +19,9 @@
 #                                             # smoke). Repo oluşturma/push/CI
 #                                             # izleme ÇALIŞTIRILMAZ. --dry-run ile
 #                                             # birleşince önizleme modunda koşar.
+#                                             # Sonuç JSON sidecar'ına yazılır
+#                                             # (logs/verify_checks.json; --verify-
+#                                             # checks-out FILE ile değiştirilir).
 #   ./docs/publish_wrapper.sh --incremental   # INCREMENTAL PUSH döngüsü (repo
 #                                             # zaten canlı): precheck → push →
 #                                             # CI izle → durum + status_checks
@@ -66,16 +69,20 @@ DRY_RUN=0
 DRY_RUN_SUMMARY=0
 CI_SIMULATE=0
 VERIFY_CHECKS=0
+VERIFY_CHECKS_OUT=""
 INCREMENTAL=0
-for a in "$@"; do
-  case "$a" in
-    --with-stage4)    WITH_STAGE4=1 ;;
-    --dry-run)        DRY_RUN=1 ;;
-    --dry-run-summary) DRY_RUN=1; DRY_RUN_SUMMARY=1 ;;
-    --ci-simulate)    CI_SIMULATE=1 ;;
-    --verify-checks)  VERIFY_CHECKS=1 ;;
-    --incremental)    INCREMENTAL=1 ;;
-    *) echo "Bilinmeyen bayrak: $a (geçerli: --with-stage4, --dry-run, --dry-run-summary, --ci-simulate, --verify-checks, --incremental)" >&2; exit 2 ;;
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --with-stage4)     WITH_STAGE4=1; shift ;;
+    --dry-run)         DRY_RUN=1; shift ;;
+    --dry-run-summary) DRY_RUN=1; DRY_RUN_SUMMARY=1; shift ;;
+    --ci-simulate)     CI_SIMULATE=1; shift ;;
+    --verify-checks)   VERIFY_CHECKS=1; shift ;;
+    --verify-checks-out)
+        [ $# -ge 2 ] || { echo "--verify-checks-out FILE gerekli" >&2; exit 2; }
+        VERIFY_CHECKS_OUT="$2"; shift 2 ;;
+    --incremental)     INCREMENTAL=1; shift ;;
+    *) echo "Bilinmeyen bayrak: $1 (geçerli: --with-stage4, --dry-run, --dry-run-summary, --ci-simulate, --verify-checks, --verify-checks-out FILE, --incremental)" >&2; exit 2 ;;
   esac
 done
 
@@ -245,6 +252,9 @@ if [ "$VERIFY_CHECKS" = "1" ]; then
     fail "--verify-checks gh CLI + auth gerektirir (gh auth status)"
   fi
   OWNER="$(gh api user -q .login 2>/dev/null || true)"
+  # Makine-okur JSON sidecar (verdict/rc + --gh --json detayı). Varsayılan
+  # gitignore'lu logs/verify_checks.json — her koşulda denetim izinde kalır.
+  VERIFY_CHECKS_OUT="${VERIFY_CHECKS_OUT:-logs/verify_checks.json}"
   step "AŞAMA 1 (VERIFY-CHECKS) — required check doğrulaması"
   verify_checks
   step "SONUÇ (VERIFY-CHECKS)"

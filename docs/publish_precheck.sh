@@ -12,6 +12,10 @@
 #                                                 # (status_checks.py + --gh; tek kaynak
 #                                                 # _calisma/CIKTI/verify_checks.sh). Diğer
 #                                                 # kapılar çalışmaz, salt okunur, hızlı.
+#   bash docs/publish_precheck.sh --verify-checks \
+#     --verify-checks-out .freebuff/verify_checks.json
+#                                                 # makine-okur JSON sidecar yolu
+#                                                 # (varsayılan .freebuff/verify_checks.json)
 #
 #   Not: çıktıyı repo içine yazacaksan gitignore'lu bir yola yönlendir
 #        (ör. tee .freebuff/precheck_report.txt) — yoksa tree-temiz kontrolü FAIL olur.
@@ -31,13 +35,17 @@ ALLOW_REMOTE=0
 SKIP_SMOKE=0
 CI_MODE=0
 VERIFY_CHECKS=0
-for a in "$@"; do
-  case "$a" in
-    --allow-remote) ALLOW_REMOTE=1 ;;
-    --skip-smoke)   SKIP_SMOKE=1 ;;
-    --ci)           CI_MODE=1 ;;
-    --verify-checks) VERIFY_CHECKS=1 ;;
-    *) echo "Bilinmeyen bayrak: $a (geçerli: --allow-remote, --skip-smoke, --ci, --verify-checks)" >&2; exit 2 ;;
+VERIFY_CHECKS_OUT=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --allow-remote)  ALLOW_REMOTE=1; shift ;;
+    --skip-smoke)    SKIP_SMOKE=1; shift ;;
+    --ci)            CI_MODE=1; shift ;;
+    --verify-checks) VERIFY_CHECKS=1; shift ;;
+    --verify-checks-out)
+        [ $# -ge 2 ] || { echo "--verify-checks-out FILE gerekli" >&2; exit 2; }
+        VERIFY_CHECKS_OUT="$2"; shift 2 ;;
+    *) echo "Bilinmeyen bayrak: $1 (geçerli: --allow-remote, --skip-smoke, --ci, --verify-checks, --verify-checks-out FILE)" >&2; exit 2 ;;
   esac
 done
 
@@ -60,16 +68,22 @@ fi
 if [ "$VERIFY_CHECKS" = "1" ]; then
   # precheck log() tanımlamaz — library'ye precheck [INFO] biçiminde log ver.
   log() { info "$*"; }
+  # Makine-okur JSON sidecar: --verify-checks-out verilmediyse gitignore'lu
+  # .freebuff/verify_checks.json'a yaz (CI artifact yolu; çıktı her koşulda
+  # denetim izinde kalır).
+  VERIFY_CHECKS_OUT="${VERIFY_CHECKS_OUT:-.freebuff/verify_checks.json}"
   # shellcheck source=/dev/null
   source _calisma/CIKTI/verify_checks.sh
   echo "════════════ AŞAMA 1 — VERIFY-CHECKS (required check doğrulaması) ════════════"
   if verify_checks; then
     echo ""
     echo "SONUÇ: PASS ✓ — required check adları workflow ile birebir eşleşiyor"
+    echo "Sidecar: $VERIFY_CHECKS_OUT"
     exit 0
   else
     echo ""
     echo "SONUÇ: FAIL ✗ — yukarıdaki [FAIL] satırlarını düzelt, tekrar çalıştır"
+    echo "Sidecar: $VERIFY_CHECKS_OUT"
     exit 1
   fi
 fi
