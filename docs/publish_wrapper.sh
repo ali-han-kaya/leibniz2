@@ -101,52 +101,20 @@ run() {
 # DRY-RUN dışında tamamlanma mesajı basar (önizlemede yalnızca run() yeter).
 done_msg() { [ "$DRY_RUN" = "1" ] || log "$*"; }
 
-# ── AŞAMA 1 doğrulaması — status_checks.py (workflow ↔ GitHub eşleşmesi) ──
+# ── AŞAMA 1 doğrulaması — status_checks.py --gh (workflow ↔ GitHub eşleşmesi) ──
 # TEK KAYNAK: workflow job `name:`'leri. Hem normal akış (AŞAMA 1) hem de
 # bağımsız --verify-checks modu bu fonksiyonu çağırır (tek tanım, drift yok).
 # Branch protection henüz kurulu değilse --gh UYARI basar (web UI'dan kurulur)
 # — bu bir hata değil, "kapı henüz yok" demektir. Gerçek drift (eksik/fazla
 # check) FAIL eder (fail-closed).
-verify_checks() {
-  # gh kullanıcısı (repo linki için) — precheck içinde doğrulanmıştır.
-  OWNER="$(gh api user -q .login 2>/dev/null || true)"
-
-  # status_checks.py — beklenen required check adları.
-  if [ -x _calisma/.venv_z3/bin/python ]; then
-    SC_PY=_calisma/.venv_z3/bin/python
-  else
-    SC_PY=python3
-  fi
-
-  log "status_checks.py — beklenen required check adları:"
-  if ! "$SC_PY" _calisma/CIKTI/status_checks.py | sed 's/^/    /'; then
-    fail "status_checks.py çalışmadı — workflow job adları ayrıştırılamadı"
-  fi
-
-  log "status_checks.py --gh — GitHub eşleşmesi:"
-  set +e
-  SC_GH_OUT="$("$SC_PY" _calisma/CIKTI/status_checks.py --gh 2>&1)"
-  SC_GH_EXIT=$?
-  set -e
-  echo "$SC_GH_OUT" | sed 's/^/    /'
-  if [ "$SC_GH_EXIT" -eq 0 ]; then
-    if echo "$SC_GH_OUT" | grep -q "SONUÇ: PASS"; then
-      log "branch protection birebir eşleşiyor ✓ (workflow ↔ GitHub)"
-    else
-      log "branch protection henüz kurulu değil — AŞAMA 1 (b) web UI'da kur (beklenen)"
-    fi
-  elif [ "$DRY_RUN" = "1" ]; then
-    warn "status_checks.py --gh dry-run'da GitHub'a ulaşamadı (repo yeni oluşturulacak?) — önizleme devam"
-  else
-    fail "status_checks.py --gh FAIL (exit $SC_GH_EXIT) — eksik/fazla check; listeyi workflow'la eşitle"
-  fi
-
-  # Branch protection web UI üzerinden (manuel). Linki logla + hatırlat:
-  # ilk push'tan SONRA kurmak daha pratiktir (enforce-admins ilk push'u bloke edebilir).
-  log "branch protection (manuel, push sonrası):"
-  log "    https://github.com/$OWNER/$REPO_NAME/settings/branches"
-  log "sonrasında doğrulama (tekrar):    python3 _calisma/CIKTI/status_checks.py --gh"
-}
+# verify_checks() TEK KAYNAK: _calisma/CIKTI/verify_checks.sh — precheck
+# --verify-checks ile AYNI fonksiyon (iki giriş noktası arasında drift yok).
+# log/warn/fail/DRY_RUN/REPO_NAME bu scriptte tanımlıdır; library eksikse
+# yerel fallback kurar (test/sourcing güvenliği). Branch protection kurulu
+# değilse UYARI basar ("kapı henüz yok" — hata değil); gerçek drift
+# (eksik/fazla check) fail-closed FAIL eder.
+# shellcheck source=/dev/null
+source _calisma/CIKTI/verify_checks.sh
 
 # ── enforce_admins dansı — doğrudan main push'u (admin) bloke edilmemeli ──
 # enforce_admins=true iken GitHub, korumalı branch'e doğrudan push'u ADMIN dahil

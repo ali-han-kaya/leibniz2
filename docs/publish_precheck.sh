@@ -7,6 +7,11 @@
 #   bash docs/publish_precheck.sh --allow-remote  # repo zaten GitHub'da (incremental push öncesi)
 #   bash docs/publish_precheck.sh --skip-smoke    # smoke testi atla (commit oluşturmaz)
 #   bash docs/publish_precheck.sh --ci            # CI advisory job: yerel-only kontrolleri INFO yapar
+#   bash docs/publish_precheck.sh --verify-checks # YALNIZCA AŞAMA 1 doğrulaması:
+#                                                 # wrapper --verify-checks ile AYNI kapı
+#                                                 # (status_checks.py + --gh; tek kaynak
+#                                                 # _calisma/CIKTI/verify_checks.sh). Diğer
+#                                                 # kapılar çalışmaz, salt okunur, hızlı.
 #
 #   Not: çıktıyı repo içine yazacaksan gitignore'lu bir yola yönlendir
 #        (ör. tee .freebuff/precheck_report.txt) — yoksa tree-temiz kontrolü FAIL olur.
@@ -25,12 +30,14 @@ info() { printf '  [INFO] %s\n' "$*"; }
 ALLOW_REMOTE=0
 SKIP_SMOKE=0
 CI_MODE=0
+VERIFY_CHECKS=0
 for a in "$@"; do
   case "$a" in
     --allow-remote) ALLOW_REMOTE=1 ;;
     --skip-smoke)   SKIP_SMOKE=1 ;;
     --ci)           CI_MODE=1 ;;
-    *) echo "Bilinmeyen bayrak: $a (geçerli: --allow-remote, --skip-smoke, --ci)" >&2; exit 2 ;;
+    --verify-checks) VERIFY_CHECKS=1 ;;
+    *) echo "Bilinmeyen bayrak: $a (geçerli: --allow-remote, --skip-smoke, --ci, --verify-checks)" >&2; exit 2 ;;
   esac
 done
 
@@ -42,6 +49,29 @@ if [ -x _calisma/.venv_z3/bin/python ]; then
   PY=_calisma/.venv_z3/bin/python
 else
   PY=python3
+fi
+
+# ── VERIFY-CHECKS modu: wrapper --verify-checks ile AYNI kapı (tek kaynak) ──
+# Yalnızca AŞAMA 1 doğrulaması: status_checks.py + --gh (workflow ↔ GitHub
+# eşleşmesi + merge engeli smoke). Repo/tree/hook kapıları ÇALIŞTIRILMAZ —
+# bağımsız, salt okunur bir kapıdır (geliştirme ortamında dahi çağrılabilir).
+# Gerçek drift (eksik/fazla check) → FAIL (fail-closed); koruma kurulu
+# değilse UYARI (publish öncesi normal).
+if [ "$VERIFY_CHECKS" = "1" ]; then
+  # precheck log() tanımlamaz — library'ye precheck [INFO] biçiminde log ver.
+  log() { info "$*"; }
+  # shellcheck source=/dev/null
+  source _calisma/CIKTI/verify_checks.sh
+  echo "════════════ AŞAMA 1 — VERIFY-CHECKS (required check doğrulaması) ════════════"
+  if verify_checks; then
+    echo ""
+    echo "SONUÇ: PASS ✓ — required check adları workflow ile birebir eşleşiyor"
+    exit 0
+  else
+    echo ""
+    echo "SONUÇ: FAIL ✗ — yukarıdaki [FAIL] satırlarını düzelt, tekrar çalıştır"
+    exit 1
+  fi
 fi
 
 echo "════════════ AŞAMA 0 — Publish ön-kontrolü ════════════"

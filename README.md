@@ -323,6 +323,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-23 | feat | (scripts) PR status'a repro-manifest PASS/FAIL bölümü ekle | `dbb1bd2` |
 | 2026-08-23 | fix | (verify) K10 precheck_report.combined_sha256 yeniden hesapla | `45c546b` |
 | 2026-08-23 | docs | PRE_PUSH §8.5 — K10 precheck_report doğrulaması kaydı | `5e85593` |
+| 2026-08-23 | fix | (verify) K10 absent precheck — hayalet bölüme P1, yoksa PASS | `469bd7d` |
 
 ### Regresyon notları
 
