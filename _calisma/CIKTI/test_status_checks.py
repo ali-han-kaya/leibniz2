@@ -48,17 +48,18 @@ def _protection(contexts=None, strict=True, enforce_admins=True,
 
 @unittest.skipUnless(HAVE_YAML, "PyYAML gerekli")
 class TestGateJobs(unittest.TestCase):
-    def test_excludes_pr_only_and_advisory(self):
+    def test_excludes_gates_and_advisory(self):
         gates = sc.gate_jobs()
         self.assertNotIn("manifest-comment", gates)
         self.assertNotIn("precheck", gates)
         self.assertIn("label-gate", gates)           # BİLEREK required (P0 gate)
         self.assertNotIn("label-gate-p1", gates)     # PR-only (opsiyonel)
-        self.assertNotIn("commit-msg-gate", gates)   # PR-only
+        self.assertIn("commit-msg-gate", gates)      # PR-only ama required (2026-08-23)
         self.assertNotIn("plist-check", gates)       # macOS-advisory
         self.assertNotIn("mirror-check", gates)      # macOS fail-closed (advisory)
         self.assertNotIn("daemon-http", gates)       # advisory smoke
-        self.assertNotIn("ci-simulate", gates)       # advisory: yerel CI simülasyonu
+        self.assertIn("ci-simulate", gates)          # required: tam replay kapısı
+        self.assertIn("config-sync", gates)          # required: üçlü senkron kapısı
         self.assertNotIn("audit-refs-trend", gates)  # advisory denetim
         # Node 24 yükseltmesiyle eklenen job required aday olmalı.
         self.assertIn("action-runtimes", gates)
@@ -66,11 +67,11 @@ class TestGateJobs(unittest.TestCase):
                          "Action runtime check (node24)")
 
     def test_count_matches_workflow_minus_excludes(self):
-        # 21 job − 12 hariç = 9 required aday (tek kaynak: workflow).
-        # Hariç: manifest-comment, precheck, label-gate-p1, commit-msg-gate,
-        #        plist-check, mirror-check, daemon-http, ci-simulate,
-        #        audit-live-ci, audit-refs-trend, override-trend, config-sync
-        self.assertEqual(len(sc.gate_jobs()), 9)
+        # 21 job − 9 hariç = 12 required aday (tek kaynak: workflow).
+        # Hariç: manifest-comment, precheck, label-gate-p1, plist-check,
+        #        mirror-check, daemon-http, audit-live-ci, audit-refs-trend,
+        #        override-trend
+        self.assertEqual(len(sc.gate_jobs()), 12)
 
 
 @unittest.skipUnless(HAVE_YAML, "PyYAML gerekli")
@@ -221,7 +222,7 @@ class TestGhIntegration(unittest.TestCase):
             return sc.main(["--gh", "--repo", "owner/name"])
 
     def test_full_pass_returns_none(self):
-        # Beklenen 9 ad + tam enforcement → exit 0 (return None, SystemExit yok).
+        # Beklenen 12 ad + tam enforcement → exit 0 (return None, SystemExit yok).
         checks = list(sc.gate_jobs().values())
         rc = self._run_main(_protection(checks))
         self.assertIsNone(rc)

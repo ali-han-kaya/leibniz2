@@ -48,24 +48,27 @@ except ImportError:  # pragma: no cover
     sys.exit(2)
 
 WORKFLOW = ".github/workflows/verify.yml"
-# Required check OLMAYAN job'lar: PR-only/advisory (yanlış kapı olmasın).
+# Required check OLMAYAN job'lar: PR-only/advisory (banner kapı olmasın).
 GATE_EXCLUDE = {
     "manifest-comment",    # PR-only: yorum düşürme
     "precheck",             # AŞAMA 0 advisory
     "label-gate-p1",        # PR-only: P1 etiket opsiyonel blokaj (required DEĞİL)
-    "commit-msg-gate",      # PR-only: commit-msg ihlal blokajı (required DEĞİL)
     "plist-check",          # macOS-advisory: push'ta çalışmaz
     "mirror-check",         # macOS: sync sonrası K17 fail-closed (advisory)
     "daemon-http",          # advisory: daemon-modu HTTP 200 smoke (advisory)
-    "ci-simulate",          # advisory: yerel CI simülasyonu (CI-SIMULATE)
     "audit-live-ci",        # advisory: doc↔GitHub senkron denetimi
     "audit-refs-trend",     # advisory: refs-trend satırları ↔ kaynak denetimi
     "override-trend",       # advisory: CLI override zaman serisi
-    "config-sync",           # advisory: config snapshot ↔ CONFIG_BASENAMES
 }
 # Not: "label-gate" (Pre-commit P0 label gate) BİLEREK required check'tir —
 # precommit-p0 etiketi varken FAIL verip merge'i bloke eder; bu yüzden
-# GATE_EXCLUDE'da DEĞİL (guide.html'deki 9'lu listede de var).
+# GATE_EXCLUDE'da DEĞİL. 12'li required liste (2026-08-23): 9 eski gate +
+# commit-msg-gate (commit-msg ihlal blokajı — PR-only ama required),
+# config-sync (config snapshot ↔ CONFIG_BASENAMES üçlü senkron),
+# ci-simulate (yerel CI simülasyonu — full K1-K14 replay).
+# commit-msg-gate (commit-msg ihlal blokajı — PR-only ama required),
+# config-sync (config snapshot ↔ CONFIG_BASENAMES üçlü senkron),
+# ci-simulate (yerel CI simülasyonu — full K1-K14 replay).
 
 
 def gate_jobs():

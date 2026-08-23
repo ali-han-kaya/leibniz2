@@ -316,6 +316,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-23 | ci | verify job Install Lean adimina da inline PATH export ekle | `8b0d6c1` |
 | 2026-08-23 | docs | PUBLISH_SCENARIO CI-SIMULATE bolumunu guncel yollarla senkronla | `fb025a1` |
 | 2026-08-23 | ci | simulate_verify_job summary.md'ye readonly assertion ekle | `5bf2037` |
+| 2026-08-23 | ci | summary Annotations format uyumluluk kontrolu | `ea40214` |
 
 ### Regresyon notları
 
