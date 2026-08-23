@@ -2926,7 +2926,16 @@ def verify_manifest_digest(manifest_path, add, check_id="K10-MANIFEST",
                         f"precheck_report.files hash'i files ile uyuşmuyor: {rel}",
                         f"precheck_report={h[:16]}… files={files[rel][:16]}…")
         if isinstance(pr_files, dict):
-            if pr_files and not stored_combined:
+            # Bölüm objesi var ama files boş → manifest'te precheck_report
+            # anahtarı var, bundle'da karşılığı YOK — üretici drift'i (absent
+            # durumda anahtar hiç yazılmamalı). Fail-closed: P1.
+            if not pr_files and stored_combined is not None:
+                pr_ok = False
+                pr_rows.append("bölüm boş ama combined var")
+                add("P1", check_id, check_label,
+                    "precheck_report bölümü boş (dosya yok ama anahtar/"
+                    "combined var) — absent durumda anahtar OLMAMALI")
+            elif pr_files and not stored_combined:
                 pr_ok = False
                 pr_rows.append("combined_sha256 eksik")
                 add("P1", check_id, check_label,
@@ -2939,7 +2948,7 @@ def verify_manifest_digest(manifest_path, add, check_id="K10-MANIFEST",
                     pr_rows.append("combined_sha256 uyuşmazlığı")
                     add("P1", check_id, check_label,
                         "precheck_report.combined_sha256 uyuşmazlığı",
-                        f"yeniden {recalc[:16]}… ≠ kayıtlı {stored_combined[:16]}…")
+                        f"yeniden {recalc[:16]} - kayıtlı {stored_combined[:16]}…")
     elif any(rel.startswith("precheck-report/") for rel in files):
         pr_ok = False
         pr_rows.append("precheck_report objesi eksik")
