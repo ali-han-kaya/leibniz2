@@ -2191,6 +2191,19 @@ _SUMMARY_BASENAMES = frozenset({
 })
 
 
+# CLI override sürüm sidecar'ının bilinen ADI (basename). gen_repro_manifest.py
+# OVERRIDES_BASENAMES ile aynı içerikte olmalıdır — tek kaynak garantisi için
+# K10 bu dosyayı isimle tanır (merge-multiple köke düzleştirince önek yok).
+_OVERRIDES_BASENAMES = frozenset({
+    "cli_overrides_version.json",
+})
+
+
+def _is_overrides_rel(rel):
+    """Bir rel yolunun CLI override sidecar dosyası olup olmadığını isimle tanı."""
+    return os.path.basename(rel) in _OVERRIDES_BASENAMES
+
+
 def _is_summary_rel(rel):
     """Bir rel yolunun run summary sidecar dosyası olup olmadığını isimle tanı."""
     return os.path.basename(rel) in _SUMMARY_BASENAMES
@@ -2810,6 +2823,72 @@ def verify_manifest_digest(manifest_path, add, check_id="K10-MANIFEST",
                  else ("plist_check_combined_sha256: FAIL — "
                        + "; ".join(pc_rows[:5])))
 
+    # ---- overrides.combined_sha256: YENİDEN hesapla + doğrula (fail-closed) ----
+    # gen_repro_manifest.py cli_overrides_version.json'u (check_cli_overrides.py
+    # --version-out çıktısı) ayrıca "overrides" objesine yazar:
+    # {files: {rel: sha256}, combined_sha256}. combined, çevrimsel olmayan
+    # (dollar-sign içermeyen) dosya hash'lerinin sıralı "{rel}\0{hash}\n"
+    # birleşiminin SHA-256'sıdır — config/lineage/summary bölümleriyle aynı
+    # deterministik formül. K10 burada onu overrides.files'tan yeniden
+    # hesaplar; kayıtlı değerle uyuşmazsa P1. Böylece CLI override kaydının
+    # manifest'teki hash'i doğrulanır (config'teki cli_overrides alanının
+    # kontrolünün yanında ikinci, dosya-hash tabanlı kapt).
+    ovr_ok = True
+    ovr_rows = []
+    ovr = m.get("overrides")
+    if ovr is not None and not isinstance(ovr, dict):
+        ovr_ok = False
+        ovr_rows.append("overrides: dict değil")
+        add("P1", check_id, check_label, "overrides alanı dict değil")
+    elif isinstance(ovr, dict):
+        ovr_files = ovr.get("files")
+        stored_combined = ovr.get("combined_sha256")
+        if not isinstance(ovr_files, dict):
+            ovr_ok = False
+            ovr_rows.append("overrides.files: dict değil")
+            add("P1", check_id, check_label, "overrides.files dict değil")
+            ovr_files = {}
+        else:
+            for rel, h in sorted(ovr_files.items()):
+                if rel not in files:
+                    ovr_ok = False
+                    ovr_rows.append(f"{rel} (files'ta yok)")
+                    add("P1", check_id, check_label,
+                        f"overrides.files'taki dosya files'ta yok: {rel}")
+                elif files[rel] != h:
+                    ovr_ok = False
+                    ovr_rows.append(f"{rel} (hash farklı)")
+                    add("P1", check_id, check_label,
+                        f"overrides.files hash'i files ile uyuşmuyor: {rel}",
+                        f"overrides={h[:16]}… files={files[rel][:16]}…")
+        if isinstance(ovr_files, dict):
+            if ovr_files and not stored_combined:
+                ovr_ok = False
+                ovr_rows.append("combined_sha256 eksik")
+                add("P1", check_id, check_label,
+                    "overrides.combined_sha256 eksik (overrides.files dolu)")
+            elif stored_combined is not None:
+                recalc = _summary_combined_sha256(ovr_files)
+                if stored_combined != recalc:
+                    ovr_ok = False
+                    ovr_rows.append("combined_sha256 uyuşmazlığı")
+                    add("P1", check_id, check_label,
+                        "overrides.combined_sha256 uyuşmazlığı",
+                        f"yeniden hesaplanan {recalc[:16]}… ≠ "
+                        f"kayıtlı {stored_combined[:16]}…")
+    elif any(_is_overrides_rel(rel) for rel in files):
+        # overrides objesi yok ama files'ta cli_overrides_version.json var →
+        # üretici drift'i (gen_repro_manifest.py override dosyası varsa
+        # objeyi her zaman yazar).
+        ovr_ok = False
+        ovr_rows.append("overrides objesi eksik")
+        add("P1", check_id, check_label,
+            "overrides objesi eksik (files'ta cli_overrides_version.json var)")
+
+    ovr_detail = ("overrides_combined_sha256: PASS" if ovr_ok
+                  else ("overrides_combined_sha256: FAIL — "
+                        + "; ".join(ovr_rows[:5])))
+
     # ---- manifest.sha256 ↔ manifest.json: sidecar eşleşmesi (fail-closed) ----
     # Ortak helper (K10 + K13 tek kaynak). Sidecar manifest dosyasının KENDİ
     # hash'ini sabitler: manifest.json içeriği değişirse (ör. JSON'a boşluk
@@ -2821,11 +2900,11 @@ def verify_manifest_digest(manifest_path, add, check_id="K10-MANIFEST",
     detail = (f"{n_ok} OK / {n_bad} uyuşmazlık / {n_missing} eksik "
               f"({len(files)} dosya); {cfg_detail}; {bn_detail}; {ov_detail}; "
               f"{ln_detail}; {sm_detail}; {ps_detail}; {pc_detail}; "
-              f"{sc_detail}")
+              f"{ovr_detail}; {sc_detail}")
     if bad_rows:
         detail += " | " + "; ".join(bad_rows[:5])
     return (n_bad == 0 and n_missing == 0 and cfg_ok and bn_ok and ov_ok and ln_ok
-            and sm_ok and ps_ok and pc_ok and sc_ok), detail
+            and sm_ok and ps_ok and pc_ok and ovr_ok and sc_ok), detail
 
 
 # K13 mock artifact set — happy path ve negatif senaryolar ORTAK seti kullanır.
