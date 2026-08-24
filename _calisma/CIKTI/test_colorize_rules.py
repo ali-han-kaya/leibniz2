@@ -384,5 +384,42 @@ class TestRefsTrendBySourceStacked(unittest.TestCase):
         self.assertIn("r.refs_by_source || {}", self._html)
 
 
+class TestRunHistoryLeanIndicator(unittest.TestCase):
+    """loadRunHistory içindeki K9 Lean renkli gösterge (●/·)."""
+
+    @classmethod
+    def setUpClass(cls):
+        with open(PREVIEW_HTML, encoding="utf-8") as f:
+            cls._html = f.read()
+
+    def test_lean_pass_shows_green_dot(self):
+        """lean_ok === true → yeşil ● (color:var(--ok))."""
+        self.assertIn('r.lean_ok === true', self._html)
+        self.assertIn("Lean PASS", self._html)
+        self.assertIn('color:var(--ok)', self._html)
+
+    def test_lean_fail_shows_red_dot(self):
+        """lean_ok === false → kırmızı ● (color:var(--err))."""
+        self.assertIn('r.lean_ok === false', self._html)
+        self.assertIn("Lean FAIL", self._html)
+        self.assertIn('color:var(--err)', self._html)
+
+    def test_lean_not_run_shows_gray_dot(self):
+        """lean_ok ne true ne false → gri · (muted)."""
+        self.assertIn('Lean: koşulmadı', self._html)
+        self.assertIn('class="muted"', self._html)
+
+    def test_lean_detail_in_fail_title(self):
+        """FAIL durumunda lean_detail tooltip'e eklenir."""
+        self.assertIn('r.lean_detail', self._html)
+
+    def test_lean_dot_appended_after_budget(self):
+        """Lean göstergesi bütçe ve duration'dan sonra eklenir."""
+        # lean değişkeni tanımı let lean = "";
+        self.assertIn('let lean = ""', self._html)
+        # dönüş satırında ${lean} var
+        self.assertIn('${lean}', self._html)
+
+
 if __name__ == "__main__":
     unittest.main()

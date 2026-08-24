@@ -1639,8 +1639,19 @@ function loadRunHistory() {
       const bud = r.budget_usd != null ? "$" + r.budget_usd.toFixed(2) : "—";
       const refs = r.refs_verified != null ? r.refs_verified + "/" + r.refs_total : "?/?";
       const pg = r.pdf_pages != null ? r.pdf_pages : "?";
+      // K9 Lean renkli gösterge: PASS=● yeşil, FAIL=● kırmızı, koşulmadı=gri tire
+      let lean = "";
+      if (r.lean_ok === true) {
+        lean = `<span style="color:var(--ok)" title="Lean PASS">●</span>`;
+      } else if (r.lean_ok === false) {
+        const ld = r.lean_detail ? " — " + r.lean_detail : "";
+        lean = `<span style="color:var(--err)" title="Lean FAIL${ld}">●</span>`;
+      } else {
+        lean = `<span class="muted" title="Lean: koşulmadı">·</span>`;
+      }
       return `<span class=\"muted\">${t}</span> <span class=\"${cls}\">${sv}</span> ` +
-        `<span class=\"muted\">P0=${r.p0||0} P1=${r.p1||0} refs=${refs} ${pg}p ${bud} ${dur}</span>`;
+        `<span class=\"muted\">P0=${r.p0||0} P1=${r.p1||0} refs=${refs} ${pg}p ${bud} ${dur}</span>` +
+        ` ${lean}`;
     });
     el.innerHTML = lines.join("\n");
   }).catch(() => {});
