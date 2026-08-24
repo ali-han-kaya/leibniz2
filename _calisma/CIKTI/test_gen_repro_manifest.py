@@ -571,6 +571,100 @@ class TestProvenance(unittest.TestCase):
             m["provenance"]["artifact_jobs"]["precommit-logs"], "custom-job")
 
 
+class TestPython3ShellArtifactJobsOverride(unittest.TestCase):
+    """REPRO_ARTIFACT_JOBS env override'ı python3-shell'i de kapsamalı.
+
+    python3-shell, ARTIFACT_JOBS'da tanımlı bir artifact'tır (job: verify).
+    Bu sınıf, _load_artifact_jobs()'un override mekanizmasının
+    python3-shell'i de doğru şekilde geçersiz kılabileceğini ve koruyabildğini
+    doğrular — yeni bir artifact eklendiğinde override zincirinden sessizce
+    düşmesi engellenir.
+    """
+
+    def test_python3_shell_in_default_artifact_jobs(self):
+        # Temel kapsam: python3-shell ARTIFACT_JOBS'ta tanımlı olmalı.
+        self.assertIn("python3-shell", gen_manifest.ARTIFACT_JOBS)
+        self.assertEqual(
+            gen_manifest.ARTIFACT_JOBS["python3-shell"], "verify")
+
+    def test_override_replaces_python3_shell_job(self):
+        # REPRO_ARTIFACT_JOBS python3-shell'in job'unu geçersiz kılmalı.
+        env = dict(os.environ)
+        env["REPRO_ARTIFACT_JOBS"] = (
+            '{"python3-shell": "custom-shell-job"}')
+        old = os.environ.get("REPRO_ARTIFACT_JOBS")
+        os.environ["REPRO_ARTIFACT_JOBS"] = env["REPRO_ARTIFACT_JOBS"]
+        try:
+            jobs = gen_manifest._load_artifact_jobs()
+        finally:
+            if old is None:
+                os.environ.pop("REPRO_ARTIFACT_JOBS", None)
+            else:
+                os.environ["REPRO_ARTIFACT_JOBS"] = old
+        self.assertEqual(jobs["python3-shell"], "custom-shell-job")
+        # Override yalnızca python3-shell'i değiştirir; diğerleri korunur.
+        self.assertEqual(jobs["verify-report"], "verify")
+
+    def test_override_preserves_python3_shell_when_not_overridden(self):
+        # Override başka bir artifact'ı değiştirirken python3-shell
+        # varsayılan değerinde korunmalı.
+        env = dict(os.environ)
+        env["REPRO_ARTIFACT_JOBS"] = (
+            '{"budget-verify": "custom-budget-job"}')
+        old = os.environ.get("REPRO_ARTIFACT_JOBS")
+        os.environ["REPRO_ARTIFACT_JOBS"] = env["REPRO_ARTIFACT_JOBS"]
+        try:
+            jobs = gen_manifest._load_artifact_jobs()
+        finally:
+            if old is None:
+                os.environ.pop("REPRO_ARTIFACT_JOBS", None)
+            else:
+                os.environ["REPRO_ARTIFACT_JOBS"] = old
+        self.assertEqual(jobs["budget-verify"], "custom-budget-job")
+        # python3-shell etkilenmedi:
+        self.assertEqual(jobs["python3-shell"], "verify")
+
+    def test_override_with_invalid_json_falls_back_to_default(self):
+        # Bozuk JSON → override uygulanmaz, python3-shell varsayılanında.
+        old = os.environ.get("REPRO_ARTIFACT_JOBS")
+        os.environ["REPRO_ARTIFACT_JOBS"] = '{invalid json'
+        try:
+            jobs = gen_manifest._load_artifact_jobs()
+        finally:
+            if old is None:
+                os.environ.pop("REPRO_ARTIFACT_JOBS", None)
+            else:
+                os.environ["REPRO_ARTIFACT_JOBS"] = old
+        self.assertEqual(jobs["python3-shell"], "verify")
+
+    def test_override_python3_shell_in_provenance_output(self):
+        # Uçtan uca: gen_repro_manifest.py --artifacts-dir ile üretilen
+        # manifest'in provenance.artifact_jobs'unda python3-shell override
+        # değerini yansıtmalı.
+        tmp = tempfile.mkdtemp(prefix="gm_ps_override_")
+        art = pathlib.Path(tmp) / "artifacts"
+        out = pathlib.Path(tmp) / "out"
+        (art / "python3-shell").mkdir(parents=True)
+        (art / "python3-shell" / "python3_shell_findings.json").write_text(
+            '{"v": 1}', encoding="utf-8")
+        env = dict(os.environ)
+        env["REPRO_ARTIFACT_JOBS"] = (
+            '{"python3-shell": "shell-audit-job"}')
+        r = subprocess.run(
+            ["python3", str(GEN), "--artifacts-dir", str(art),
+             "--out-dir", str(out)],
+            capture_output=True, text=True, env=env,
+        )
+        self.assertEqual(r.returncode, 0, r.stderr)
+        m = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(
+            m["provenance"]["artifact_jobs"]["python3-shell"],
+            "shell-audit-job")
+        # python3_shell bölümü üretilmiş olmalı (dosya var):
+        self.assertIn("python3_shell", m)
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 class TestWorkflowPatternCoverage(unittest.TestCase):
     """reproducibility merge pattern'i ARTIFACT_JOBS'ı eksiksiz kapsamalı.
 
