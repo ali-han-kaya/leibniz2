@@ -179,6 +179,26 @@ Rules that keep the chain honest:
 | INFO finding does not block | By design (advisory) | Verify the layer returns P0/P1 for real integrity breaks |
 | K10 digest mismatch after adding artifact | Manifest not regenerated | Run `gen_repro_manifest.py`; K10 re-verifies |
 
+## Stash-aware hooks
+
+`check-repro-manifest` (`language: system`, `pass_filenames: false`) runs
+against the **working tree**; `git commit` takes the **staged** content.
+When dependency files (`verify.yml`, `gen_repro_manifest.py`,
+`test_gen_repro_manifest.py`) have unstaged or untracked changes, the hook
+may test a **different version** than the one being committed.
+
+The pre-check (`check_repro_manifest_hook.py`) detects this mismatch via
+`git status --porcelain` and emits an **advisory warning**:
+
+- `M ` (staged only) → clean, no warning
+- ` M` (unstaged) → warning: "hook tests working tree, commit takes staged"
+- `??` (untracked) → warning: file won't be in the commit at all
+- `MM` (staged + unstaged) → warning: both versions differ
+
+This is **advisory** — the test gate still runs and its exit code determines
+whether the commit is blocked. The warning is a signal to `git add` the
+dependency files before committing to ensure test→commit consistency.
+
 ## References
 
 - Field implementation (leibniz2): `verify_delivery.py` (single entry point +

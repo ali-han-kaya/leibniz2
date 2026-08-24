@@ -435,6 +435,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-24 | feat | (pattern) --fix flag for auto-adding missing artifacts to pattern | [`b4fd760`](https://github.com/ali-han-kaya/leibniz2/commit/b4fd760) |
 | 2026-08-24 | test | (smoke) 22-hook unified smoke test (all hooks, 40s, fail-closed) | [`19efc37`](https://github.com/ali-han-kaya/leibniz2/commit/19efc37) |
 | 2026-08-24 | ci | (pattern-drift) advisory job for merge pattern vs ARTIFACT_JOBS drift | [`80a6ebe`](https://github.com/ali-han-kaya/leibniz2/commit/80a6ebe) |
+| 2026-08-24 | feat | (dashboard) pattern drift paneli — /api/latest + live preview | [`65fd87b`](https://github.com/ali-han-kaya/leibniz2/commit/65fd87b) |
 
 ### Regresyon notları
 
