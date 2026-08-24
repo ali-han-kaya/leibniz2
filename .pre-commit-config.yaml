@@ -220,7 +220,7 @@ repos:
           (0=GÜNCEL/PASS, 1=BAYAT/drift, 2=şablon yok/hata). Fake HOME
           altında koşar — gerçek LaunchAgents/Caches'a dokunmaz, plistlib
           fallback'i sayesinde Linux CI'da da çalışır.
-        entry: python3 -m unittest discover -s _calisma/CIKTI -p "test_plist_gate_exit.py"
+        entry: bash -c 'python3 -m unittest discover -s _calisma/CIKTI -p test_plist_gate_exit.py && python3 -m unittest discover -s _calisma/CIKTI -p test_gen_plist_golden.py'
         language: system
         always_run: true
         pass_filenames: false
