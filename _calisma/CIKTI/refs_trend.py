@@ -504,14 +504,17 @@ def main():
                 "bibliyografik belgedir — modern telifli kitaplar, "
                 "çevrimiçi indekslenmez.",
                 "",
-                "**'54' sayısı neden artık geçersiz?** Erken dönem "
-                "denetim yalnızca CrossRef+SEP+OL+IA temel zincirini "
-                "kullanıyordu; LoC (ulusal katalog), Handle System "
-                "(CrossRef dışı kalıcı tanımlayıcı), `ia_ids` "
-                "(IA birebir identifier) ve HathiTrust fallback'leri "
-                "henüz eklenmemişti. V5n zinciriyle kapsam "
-                "54→56→61→61/61 olarak genişledi. '54' erken bir "
-                "anlık görüntüdür, güncel denetim kapsamını yansıtmaz.",
+                "**Kapsam geçiş dipnotu (54/49 → 56/26 → 61/61):** "
+                "Erken dönem 54/49 (CrossRef+SEP+OL+IA temel zincir), "
+                "V5n ile 56/56'ya (Norton/Popkin CrossRef + paralel koşu) "
+                "yükseldi — bu 56/56 **yerel doğrulama**ydı (CI repo'da "
+                "doğrudan koşulmuştu, GitHub artifact'ına yansımadı). "
+                "Trend yalnızca gerçek `refs-online` artifact'larından "
+                "beslenir; 56/56 satırı trend tablosunda görünmez. "
+                "V5q/V5t/V5w zinciriyle kapsam 61/61'e ulaştı (Sextus ia_ids "
+                "+ Della Rocca Handle + LoC lccn katalog kanıtı). '54' "
+                "erken bir anlık görüntüdür, güncel denetim kapsamını "
+                "yansıtmaz.",
                 "",
             ]
 

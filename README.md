@@ -372,6 +372,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-24 | other | audit: changelog siralama denetimi ekle (exit 1 on drift) | [`5cd79e1`](https://github.com/ali-han-kaya/leibniz2/commit/5cd79e1) |
 | 2026-08-24 | other | verify: worldcat_check ekle — OCLC'yi WorldCat kataloguna cozer | [`97f7a25`](https://github.com/ali-han-kaya/leibniz2/commit/97f7a25) |
 | 2026-08-24 | other | ia_ol_fallback: kanit tablosuna tiklanabilir LoC URL'leri ekle | [`0259025`](https://github.com/ali-han-kaya/leibniz2/commit/0259025) |
+| 2026-08-24 | docs | V5s/V5r OL fallback notlarini V5w isaretiyle guncelle | [`e5fcf40`](https://github.com/ali-han-kaya/leibniz2/commit/e5fcf40) |
 
 ### Regresyon notları
 
