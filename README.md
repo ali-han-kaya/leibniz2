@@ -407,6 +407,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-24 | other | dashboard: add refs_by_source summary cards with colored left borders | [`6a0e67b`](https://github.com/ali-han-kaya/leibniz2/commit/6a0e67b) |
 | 2026-08-24 | other | dashboard: unify by_source colors + tooltip breakdown + legend counts | [`379c31d`](https://github.com/ali-han-kaya/leibniz2/commit/379c31d) |
 | 2026-08-24 | other | dashboard: enhance ro-sources table with colored rows and bar charts | [`cb86c5f`](https://github.com/ali-han-kaya/leibniz2/commit/cb86c5f) |
+| 2026-08-24 | other | dashboard: show Lean PASS/FAIL colored dot in run history list | [`1c215a2`](https://github.com/ali-han-kaya/leibniz2/commit/1c215a2) |
 
 ### Regresyon notları
 

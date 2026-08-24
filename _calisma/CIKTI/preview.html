@@ -396,7 +396,7 @@ function renderTrend(rows) {
       .map(r => ({ est: r.budget_usd, limit: BUDGET_LIMIT }));
     renderBudgetSparkline();
   }
-  const W = 1160, H = 240, PL = 44, PR = 212, PT = 12, PB = 32;
+  const W = 1160, H = 240, PL = 44, PR = 248, PT = 12, PB = 32;
   const iw = W - PL - PR, ih = H - PT - PB;
   const plotRight = PL + iw;
   const n = rows.length;
@@ -474,21 +474,31 @@ function renderTrend(rows) {
   if (zFailPts.length) {
     parts.push(`<polyline fill="none" stroke="#f85149" stroke-width="2" stroke-dasharray="3 3" points="${zFailPts.join(" ")}"/>`);
   }
-  // K9 Lean noktaları: yeşil daire=PASS, kırmızı kare=FAIL, gri=x=koşulmadı
+  // K9 Lean PASS oranı (%) — beşinci eksen: lean_ok true → 100, false → 0, null → skip
+  const leans = rows.map(r => r.lean_ok === true ? 100 : r.lean_ok === false ? 0 : null);
+  const leanVals = leans.filter(v => v != null && isFinite(v));
+  const hasLean = leanVals.length > 0;
+  const maxLean = hasLean ? 100 : 1;
+  const yL = (v) => (v == null || !isFinite(v)) ? null : PT + ih - (ih * v / maxLean);
+  const leanPts = rows.map((r,i) => { const y = yL(leans[i]); return y == null ? null : `${x(i)},${y}`; }).filter(Boolean);
+  if (leanPts.length) {
+    parts.push(`<polyline fill="none" stroke="#e055d2" stroke-width="2.5" stroke-dasharray="5 2" points="${leanPts.join(" ")}"/>`);
+  }
+  // Lean PASS/FAIL noktaları (çizgi üstünde): yeşil daire=PASS, kırmızı kare=FAIL
   rows.forEach((r, i) => {
     const cx = x(i);
-    const ly = PT + 6; // üst kenar
+    const ly = yL(leans[i]);
+    if (ly == null) return;
     if (r.lean_ok === true) {
-      parts.push(`<circle cx="${cx}" cy="${ly}" r="3" fill="#3fb950" opacity="0.7"/>`);
+      parts.push(`<circle cx="${cx}" cy="${ly}" r="3" fill="#3fb950"/>`);
     } else if (r.lean_ok === false) {
-      parts.push(`<rect x="${cx-3}" y="${ly-3}" width="6" height="6" fill="#f85149" opacity="0.7"/>`);
-    } else {
-      parts.push(`<text x="${cx}" y="${ly+3}" fill="#8b949e" font-size="8" text-anchor="middle">×</text>`);
+      parts.push(`<rect x="${cx-3}" y="${ly-3}" width="6" height="6" fill="#f85149"/>`);
     }
   });
-  // sağ eksenler: duration (iç) + budget (orta) + Z3 (dış)
+  // sağ eksenler: duration (iç) + budget (orta) + Z3 (dış) + Lean (en dış)
   const durAxisX = plotRight + 26;
   const zAxisX = plotRight + 150;
+  const leanAxisX = plotRight + 192;
   if (durs.length) {
     parts.push(`<line x1="${durAxisX}" y1="${PT}" x2="${durAxisX}" y2="${PT+ih}" stroke="#58a6ff" stroke-width="1" opacity="0.5"/>`);
     parts.push(`<text x="${durAxisX+6}" y="${PT+4}" fill="#58a6ff" font-size="9">${maxDur.toFixed(0)}s</text>`);
@@ -503,6 +513,11 @@ function renderTrend(rows) {
     parts.push(`<line x1="${zAxisX}" y1="${PT}" x2="${zAxisX}" y2="${PT+ih}" stroke="#3fb950" stroke-width="1" opacity="0.5"/>`);
     parts.push(`<text x="${zAxisX+6}" y="${PT+4}" fill="#3fb950" font-size="9">${maxZ} PASS</text>`);
     parts.push(`<text x="${zAxisX+6}" y="${PT+ih+2}" fill="#3fb950" font-size="9">0</text>`);
+  }
+  if (hasLean) {
+    parts.push(`<line x1="${leanAxisX}" y1="${PT}" x2="${leanAxisX}" y2="${PT+ih}" stroke="#e055d2" stroke-width="1" opacity="0.5"/>`);
+    parts.push(`<text x="${leanAxisX+6}" y="${PT+4}" fill="#e055d2" font-size="9">100%</text>`);
+    parts.push(`<text x="${leanAxisX+6}" y="${PT+ih+2}" fill="#e055d2" font-size="9">0%</text>`);
   }
   // noktalar (verdict rengi)
   rows.forEach((r, i) => {
@@ -525,12 +540,14 @@ function renderTrend(rows) {
     parts.push(`<text x="${x(i)}" y="${H-12}" fill="#8b949e" font-size="10" text-anchor="middle">${lbl}</text>`);
   });
   svg.innerHTML = parts.join("");
+  const last = rows[n-1];
+  const leanPct = last.lean_ok === true ? "100%" : (last.lean_ok === false ? "0%" : "?");
   legend.textContent = "Kırmızı = P0 · Sarı = P1 · Yeşil nokta = PASS · Mavi (kesikli) = duration_s · Mor = budget_usd · " +
     "Yeşil çizgi = Z3 PASS · Kırmızı (noktalı) = Z3 FAIL · " +
-    "Yeşil daire = Lean PASS · Kırmızı kare = Lean FAIL · gri × = koşulmadı · " +
+    "Pembe (kesikli) = Lean PASS oranı (son: " + leanPct + ") · " +
     "Turuncu (kesikli) = bütçe limiti $" + fmtLimit(BUDGET_LIMIT) + " (config'ten) — altı güvenli, üstü (kırmızı kare) aşım · " +
     "aralık: " + (rows[0].ts ? new Date(rows[0].ts).toLocaleString() : "?") +
-    " → " + (rows[n-1].ts ? new Date(rows[n-1].ts).toLocaleString() : "?") +
+    " → " + (last.ts ? new Date(last.ts).toLocaleString() : "?") +
     ` · ${n} run`;
   $("trend-count").textContent = `(${n} run)`;
   updateBudgetOverBanner();
@@ -560,13 +577,17 @@ function showTrendTip(i, ev) {
   const verdict = (r.p0 || 0) > 0 ? "FAIL (P0)" : ((r.p1 || 0) > 0 ? "WARN (P1)" : "PASS");
   const ts = r.ts ? new Date(r.ts).toLocaleString() : "?";
   const tip = $("tip");
+  let leanLine = "lean    : —";
+  if (r.lean_ok === true) leanLine = "lean    : PASS (100%)";
+  else if (r.lean_ok === false) leanLine = "lean    : FAIL (0%)" + (r.lean_detail ? " — " + r.lean_detail : "");
   tip.textContent =
     ts + "\n" +
     "verdict : " + verdict + "\n" +
     "duration: " + fmtTrendDur(r.duration_s) + "\n" +
     "budget  : " + fmtTrendBudget(r.budget_usd) + budgetLimitNote(r.budget_usd) + "\n" +
     "z3      : " + (r.z3_passed != null ? r.z3_passed + "/" + (r.z3_total != null ? r.z3_total : "?") +
-      ((r.z3_failed || 0) > 0 ? " (" + r.z3_failed + " FAIL)" : "") : "—");
+      ((r.z3_failed || 0) > 0 ? " (" + r.z3_failed + " FAIL)" : "") : "—") + "\n" +
+    leanLine;
   tip.style.display = "block";
   positionTip(ev);
 }

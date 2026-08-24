@@ -421,5 +421,53 @@ class TestRunHistoryLeanIndicator(unittest.TestCase):
         self.assertIn('${lean}', self._html)
 
 
+class TestTrendLeanAxis(unittest.TestCase):
+    """renderTrend içindeki K9 Lean PASS oranı % ekseni."""
+
+    @classmethod
+    def setUpClass(cls):
+        with open(PREVIEW_HTML, encoding="utf-8") as f:
+            cls._html = f.read()
+
+    def test_lean_pass_rate_line_exists(self):
+        """Pembe kesikli çizgi Lean % eksenini çizer."""
+        self.assertIn("#e055d2", self._html)
+        self.assertIn('stroke-dasharray="5 2"', self._html)
+        self.assertIn("${leanPts.join", self._html)
+
+    def test_lean_axis_labels_exist(self):
+        """Lean ekseni 100% ve 0% etiketlerini gösterir."""
+        self.assertIn(">100%<", self._html)
+        self.assertIn(">0%<", self._html)
+        self.assertIn("leanAxisX", self._html)
+
+    def test_lean_numeric_computation(self):
+        """lean_ok true → 100, false → 0, null → skip."""
+        self.assertIn("r.lean_ok === true ? 100", self._html)
+        self.assertIn("r.lean_ok === false ? 0", self._html)
+        self.assertIn("hasLean = leanVals.length > 0", self._html)
+
+    def test_lean_pass_fail_points_on_line(self):
+        """PASS/FAIL noktaları çizgi üstünde (yL ile hizalı)."""
+        self.assertIn("const ly = yL(leans[i])", self._html)
+        self.assertIn('r="3" fill="#3fb950"', self._html)
+
+    def test_lean_tooltip_shows_pass_rate(self):
+        """Trend tooltip'inde lean satırı: PASS (100%) / FAIL (0%)."""
+        self.assertIn("lean    : PASS (100%)", self._html)
+        self.assertIn("lean    : FAIL (0%)", self._html)
+        self.assertIn("leanLine", self._html)
+
+    def test_legend_shows_lean_pink_dashed(self):
+        """Lejant: Pembe (kesikli) = Lean PASS oranı."""
+        self.assertIn("Pembe (kesikli) = Lean PASS oranı", self._html)
+        self.assertIn("leanPct", self._html)
+
+    def test_pr_widened_for_5th_axis(self):
+        """PR 248 ile 5 eksene yer açıldı (212 → 248)."""
+        self.assertIn("PR = 248", self._html)
+        self.assertNotIn("PR = 212", self._html)
+
+
 if __name__ == "__main__":
     unittest.main()
