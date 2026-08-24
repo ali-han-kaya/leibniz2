@@ -932,6 +932,34 @@ def sep_check(ref):
     return "PASS", f"200 OK, '{ref['title']}' mevcut"
 
 
+def _ol_retry(fn, ref, label="openlibrary"):
+    """openlibrary_check/fallback_check için dış retry kalkanı.
+
+    _http_get zaten 429/5xx retry'ı yapıyor; bu katman geçici zaman aşımları
+    ve ağ bağlantı kesilmeleri için EKSTRadan bir deneme daha yapar:
+    - UNVERIFIED + ağ/timeout/5xx ipucu → 3s bekle + tekrar dene
+    - PASS/MISMATCH/429/0 sonuç → olduğu gibi geçir (kalıcı durum)
+    """
+    verdict, detail = fn(ref)
+    if verdict != "UNVERIFIED":
+        return verdict, detail
+    # Kalıcı UNVERIFIED sinyalleri: retry yapma.
+    dl = detail.lower()
+    if "429" in dl or "0 sonuç" in dl or "kapsam dışı" in dl:
+        return verdict, detail
+    # Geçici ağ/timeout sinyalleri: bir kez daha dene.
+    _TRANSIENT_HINTS = ("zaman aşımı", "timeout", "timed out", "connection reset",
+                        "connection refused", "eof", "network", "bağlantı",
+                        " ağ hatası", "http 5", "http 429")
+    if not any(h in dl for h in _TRANSIENT_HINTS):
+        return verdict, detail
+    time.sleep(3)
+    retry_v, retry_d = fn(ref)
+    if retry_v == "PASS":
+        return "PASS", f"{retry_d} (retry sonrası)"
+    return retry_v, retry_d
+
+
 def openlibrary_check(ref):
     """OpenLibrary search.json ile kitap doğrulaması (auth gerektirmez).
     Birden çok sonuç arasından ilk title+author+yayıncı+yıl eşleşmesini arar.
@@ -1310,7 +1338,7 @@ def _archive_fallback(ref):
         attempts.append(ld[:70])
         if lv == "PASS":
             return lv, ld, "loc"
-    ov, od = openlibrary_fallback_check(ref)
+    ov, od = _ol_retry(openlibrary_fallback_check, ref)
     attempts.append(od[:70])
     if ov == "PASS":
         return ov, od, "openlibrary"
@@ -1375,7 +1403,8 @@ def run_reference_audit(tex_text, add, quiet=False):
     for ref in REFERENCE_SEP:
         tasks.append((ref, sep_check, "sep"))
     for ref in REFERENCE_OPENLIBRARY:
-        tasks.append((ref, openlibrary_check, "openlibrary"))
+        tasks.append((ref, lambda r: _ol_retry(openlibrary_check, r),
+                      "openlibrary"))
     for ref in REFERENCE_ARCHIVE:
         tasks.append((ref, _archive_with_fallback, "archive"))
     for ref in REFERENCE_URL:

@@ -364,6 +364,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-24 | docs | run.md 'How to reproduce' bölümünü fresh_clone_setup.sh'e taşı | [`10d9ad7`](https://github.com/ali-han-kaya/leibniz2/commit/10d9ad7) |
 | 2026-08-24 | other | mirror: fresh_clone/update_preview/test'i FILES'e ekle (43 dosya) | [`d09efc7`](https://github.com/ali-han-kaya/leibniz2/commit/d09efc7) |
 | 2026-08-24 | ci | ci_fresh_clone_test.sh fresh clone simülasyonu ekle | [`ac8555c`](https://github.com/ali-han-kaya/leibniz2/commit/ac8555c) |
+| 2026-08-24 | other | refs-online: archive_group özeti ekle (archive+loc+hathitrust=25) | [`564d6ac`](https://github.com/ali-han-kaya/leibniz2/commit/564d6ac) |
 
 ### Regresyon notları
 
