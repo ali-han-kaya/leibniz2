@@ -268,16 +268,22 @@ class ReplayEventsTests(unittest.TestCase):
         self.assertEqual(last["ts"], "t")
 
     def test_replay_start_carries_summary_fields(self):
-        # Son run'un özet alanları (verdict/P0/P1/bütçe/süre) replay-start
-        # event'inde taşınmalı ki client geçmiş run sınırında özet satırını
+        # Son run'un özet alanları (verdict/P0/P1/bütçe/süre +
+        # refs_verified/refs_total/pdf_pages) replay-start event'inde
+        # taşınmalı ki client geçmiş run sınırında zengin özet satırını
         # render edebilsin.
         ev = ps.build_replay_events("t", "FAIL", "o", "e", p0=2, p1=1,
-                                    budget_usd=1.08, duration_s=30.5)
+                                    budget_usd=1.08, duration_s=30.5,
+                                    refs_verified=61, refs_total=64,
+                                    pdf_pages=33)
         first = json.loads(ev[0][1])
         self.assertEqual(first["p0"], 2)
         self.assertEqual(first["p1"], 1)
         self.assertEqual(first["budget_usd"], 1.08)
         self.assertEqual(first["duration_s"], 30.5)
+        self.assertEqual(first["refs_verified"], 61)
+        self.assertEqual(first["refs_total"], 64)
+        self.assertEqual(first["pdf_pages"], 33)
 
     def test_build_replay_events_multi_marks_first_and_last(self):
         recs = [
@@ -1118,6 +1124,76 @@ class OverrideReportTests(unittest.TestCase):
                 self.assertEqual(rpt["verdict"], "PASS")
         finally:
             ps._refresh_precommit_hooks_bg = orig
+
+
+class TestReplayRefsAndPages(unittest.TestCase):
+    """build_replay_events: refs_verified/refs_total/pdf_pages alanları."""
+
+    def test_replay_start_includes_refs_fields(self):
+        """replay-start event'i refs_verified ve refs_total taşır."""
+        ev = ps.build_replay_events("t", "PASS", "o", "e",
+                                    refs_verified=58, refs_total=61)
+        first = json.loads(ev[0][1])
+        self.assertEqual(first["refs_verified"], 58)
+        self.assertEqual(first["refs_total"], 61)
+
+    def test_replay_start_includes_pdf_pages(self):
+        """replay-start event'i pdf_pages taşır."""
+        ev = ps.build_replay_events("t", "PASS", "o", "e", pdf_pages=33)
+        first = json.loads(ev[0][1])
+        self.assertEqual(first["pdf_pages"], 33)
+
+    def test_refs_fields_null_by_default(self):
+        """refs_verified/refs_total belirtilmezse JSON'da null gelir."""
+        ev = ps.build_replay_events("t", "PASS", "o", "e")
+        first = json.loads(ev[0][1])
+        self.assertIsNone(first.get("refs_verified"))
+        self.assertIsNone(first.get("refs_total"))
+        self.assertIsNone(first.get("pdf_pages"))
+
+    def test_multi_pass_refs_and_pages_through(self):
+        """build_replay_events_multi her run'un refs/pages değerleri ayrı taşır."""
+        recs = [
+            {"ts": "t1", "verdict": "PASS", "stdout": "a", "stderr": "",
+             "refs_verified": 54, "refs_total": 54, "pdf_pages": 33},
+            {"ts": "t2", "verdict": "PASS", "stdout": "b", "stderr": "",
+             "refs_verified": 61, "refs_total": 61, "pdf_pages": 33},
+        ]
+        ev = ps.build_replay_events_multi(recs)
+        # ilk run'un replay-start'i
+        first = json.loads(ev[0][1])
+        self.assertEqual(first["refs_verified"], 54)
+        self.assertEqual(first["refs_total"], 54)
+        self.assertEqual(first["pdf_pages"], 33)
+        # ikinci run'un replay-start'ini bul (3. event = replay-end'ten sonra)
+        # replay-start (0), stdout (1), replay-end (2), replay-start (3)
+        second = json.loads(ev[3][1])
+        self.assertEqual(second["refs_verified"], 61)
+        self.assertEqual(second["refs_total"], 61)
+        self.assertEqual(second["pdf_pages"], 33)
+
+    def test_partial_refs_only_verified(self):
+        """Yalnızca refs_verified verilirse total null kalır."""
+        ev = ps.build_replay_events("t", "PASS", "o", "e", refs_verified=50)
+        first = json.loads(ev[0][1])
+        self.assertEqual(first["refs_verified"], 50)
+        self.assertIsNone(first["refs_total"])
+
+    def test_partial_refs_only_total(self):
+        """Yalnızca refs_total verilirse verified null kalır."""
+        ev = ps.build_replay_events("t", "PASS", "o", "e", refs_total=64)
+        first = json.loads(ev[0][1])
+        self.assertIsNone(first["refs_verified"])
+        self.assertEqual(first["refs_total"], 64)
+
+    def test_zero_valued_fields_pass_through(self):
+        """Sıfır değerli alanlar null yerine 0 taşınır."""
+        ev = ps.build_replay_events("t", "PASS", "o", "e",
+                                    refs_verified=0, refs_total=0, pdf_pages=0)
+        first = json.loads(ev[0][1])
+        self.assertEqual(first["refs_verified"], 0)
+        self.assertEqual(first["refs_total"], 0)
+        self.assertEqual(first["pdf_pages"], 0)
 
 
 if __name__ == "__main__":
