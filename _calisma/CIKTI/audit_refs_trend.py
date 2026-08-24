@@ -155,6 +155,52 @@ def audit(trend, source_reports):
     }
 
 
+def check_changelog_order():
+    """CHANGELOG listesinin tarih/sıra doğruluğunu denetler.
+
+    Sıralama: en yeni üstte (reverse chron). Her satır bir (date, note)
+    tuple'ıdır; date YYYY-MM-DD formatında olmalı, önceki satırla karşılaştırılarak
+    geriye doğru sıralı olmalı. Eşit tarihli satırlar kabul edilir (aynı günde
+    birden çok not). Bozuk sıralama → [CHLOG-ORDER] findings.
+    """
+    findings = []
+    changelog = getattr(rt, "CHANGELOG", None)
+    if not changelog:
+        return findings  # changelog boş → kontrol yok
+
+    prev_date = None
+    for i, entry in enumerate(changelog):
+        if not isinstance(entry, (list, tuple)) or len(entry) < 2:
+            findings.append({
+                "kind": "changelog_format",
+                "index": i,
+                "detail": f"CHANGELOG[{i}]: tuple/list bekleniyor, {type(entry).__name__} alındı",
+            })
+            continue
+        date_str, note = entry[0], entry[1]
+        # Tarih formatı kontrolü: YYYY-MM-DD (10 karakter, - ile ayrışmış)
+        if (not isinstance(date_str, str) or len(date_str) < 10
+                or date_str[4] != "-" or date_str[7] != "-"):
+            findings.append({
+                "kind": "changelog_date",
+                "index": i,
+                "detail": f"CHANGELOG[{i}]: tarih geçersiz ({date_str!r})",
+            })
+            continue
+        # Sıra kontrolü: onceki tarih >= mevcut tarih (reverse chron)
+        if prev_date is not None and date_str > prev_date:
+            findings.append({
+                "kind": "changelog_order",
+                "index": i,
+                "trend": prev_date,
+                "source": date_str,
+                "detail": (f"CHANGELOG sırası bozuk: [{i-1}]={prev_date} > "
+                           f"[{i}]={date_str} (yeni üstte olmalı)"),
+            })
+        prev_date = date_str
+    return findings
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -206,6 +252,13 @@ def main(argv=None):
 
     result = audit(trend, source_reports)
 
+    # Changelog sıralama denetimi (kaynak API gerekmez; CHANGELOG sabitinden).
+    chlog_findings = check_changelog_order()
+    result["findings"] += chlog_findings
+    if chlog_findings:
+        result["ok"] = False
+        result["verdict"] = "FAIL"
+
     if args.json:
         print(json.dumps({
             "verdict": result["verdict"],
@@ -239,6 +292,8 @@ def main(argv=None):
             elif f["kind"] == "by_source":
                 print(f"  [FAIL] {f['detail']} "
                       f"(trend={f['trend']}, kaynak={f['source']})")
+            elif f["kind"] in ("changelog_order", "changelog_date", "changelog_format"):
+                print(f"  [FAIL] {f['detail']}")
         print(f"\nSONUÇ: {result['verdict']} — "
               f"{'trend kaynakla birebir tutarlı' if result['ok'] else 'DRIFT: yukarıdaki [FAIL] satırları'}")
 

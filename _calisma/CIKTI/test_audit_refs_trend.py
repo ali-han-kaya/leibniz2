@@ -11,6 +11,7 @@ stdlib unittest — ek bağımlılık yok.
 """
 import io
 import json
+import os
 import pathlib
 import sys
 import tempfile
@@ -21,6 +22,7 @@ CIKTI = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(CIKTI))
 
 import audit_refs_trend as art  # noqa: E402
+import refs_trend as rt  # noqa: E402
 
 
 DEFAULT_BY_SOURCE = {"openlibrary": 26, "crossref": 6}
@@ -278,6 +280,88 @@ def _zip_blob(payload):
         z.writestr("references_online.json",
                    json.dumps(payload, ensure_ascii=False))
     return buf.getvalue()
+
+
+class TestCheckChangelogOrder(unittest.TestCase):
+    """check_changelog_order — CHANGELOG sıralama denetimi."""
+
+    def _call(self, changelog):
+        saved = getattr(rt, "CHANGELOG", None)
+        try:
+            rt.CHANGELOG = changelog
+            return art.check_changelog_order()
+        finally:
+            rt.CHANGELOG = saved
+
+    def test_correct_order_no_findings(self):
+        # En yeni üstte (reverse chron) → findings boş.
+        cl = [
+            ("2026-08-24", "V5aa: retry"),
+            ("2026-08-22", "V5z: PASS"),
+            ("2026-08-21", "V5w: LoC"),
+            ("2026-08-19", "V5n: CrossRef"),
+        ]
+        self.assertEqual(self._call(cl), [])
+
+    def test_same_date_allowed(self):
+        # Aynı tarihli satırlar kabul edilir.
+        cl = [
+            ("2026-08-21", "V5w: LoC"),
+            ("2026-08-21", "V5t: Handle"),
+            ("2026-08-19", "V5n: CrossRef"),
+        ]
+        self.assertEqual(self._call(cl), [])
+
+    def test_wrong_order_detected(self):
+        # Sıra ters (eski üstte) → changelog_order finding.
+        cl = [
+            ("2026-08-19", "V5n: CrossRef"),
+            ("2026-08-21", "V5w: LoC"),
+        ]
+        findings = self._call(cl)
+        self.assertTrue(any(f["kind"] == "changelog_order" for f in findings))
+
+    def test_invalid_date_format(self):
+        # Tarih formatı geçersiz → changelog_date finding.
+        cl = [
+            ("not-a-date", "bir not"),
+        ]
+        findings = self._call(cl)
+        self.assertTrue(any(f["kind"] == "changelog_date" for f in findings))
+
+    def test_invalid_entry_format(self):
+        # Entry tuple değil → changelog_format finding.
+        cl = ["sadece string"]
+        findings = self._call(cl)
+        self.assertTrue(any(f["kind"] == "changelog_format" for f in findings))
+
+    def test_empty_changelog(self):
+        # Boş CHANGELOG → findings yok.
+        self.assertEqual(self._call([]), [])
+
+    def test_main_returns_1_on_changelog_drift(self):
+        # main() changelog sırası bozuksa exit 1 (API mock'lu).
+        saved = getattr(rt, "CHANGELOG", None)
+        orig_fetch = rt.fetch_refs_online_artifacts
+        try:
+            rt.CHANGELOG = [
+                ("2026-08-19", "eski"),
+                ("2026-08-24", "yeni"),
+            ]
+            rt.fetch_refs_online_artifacts = lambda *a, **k: []
+            import tempfile
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".json",
+                                            delete=False) as f:
+                json.dump({"rows": []}, f)
+                tmp = f.name
+            try:
+                rc = art.main(["--repo", "o/r", "--trend-json", tmp])
+                self.assertEqual(rc, 1)
+            finally:
+                os.unlink(tmp)
+        finally:
+            rt.CHANGELOG = saved
+            rt.fetch_refs_online_artifacts = orig_fetch
 
 
 if __name__ == "__main__":
