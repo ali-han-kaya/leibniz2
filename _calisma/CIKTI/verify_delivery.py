@@ -5012,6 +5012,14 @@ def main():
         print(f"\nSONUÇ: {verdict}  (P0={p0}, P1={p1})")
         if pages is not None or refs is not None:
             print(f"PDF: {pages} sayfa | References: {refs}")
+        if refs_online_report:
+            v = refs_online_report["verified"]
+            t = refs_online_report["total_online"]
+            u = refs_online_report["unverified"]
+            m = refs_online_report["mismatch"]
+            verdict_tag = "PASS" if (u == 0 and m == 0) else "FAIL"
+            print(f"[K6] referans denetimi: {v}/{t} {verdict_tag}"
+                  + (f" (unverified={u}, mismatch={m})" if u or m else ""))
         if pdf_meta_report and pdf_meta_report.get("stripped"):
             print(f"PDF hash: raw={pdf_meta_report['raw'][:16]}… "
                   f"metadata-stripped={pdf_meta_report['stripped'][:16]}…")

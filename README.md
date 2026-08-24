@@ -394,6 +394,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-24 | other | verify: ia_ol_fallback_evidence'i K6'ya bagla, ayri bolum goster | [`1ef0e2d`](https://github.com/ali-han-kaya/leibniz2/commit/1ef0e2d) |
 | 2026-08-24 | docs | refs-trend'de 56/56 milestone + REFERANS §5.3 referansi | [`f2ed319`](https://github.com/ali-han-kaya/leibniz2/commit/f2ed319) |
 | 2026-08-24 | other | verify: refs-online UNVERIFIED gecis ozet tablosu (54/49→56/26→61/61) | [`683d071`](https://github.com/ali-han-kaya/leibniz2/commit/683d071) |
+| 2026-08-24 | other | verify: CHANGELOG siralama determinizm testi ekle | [`c53fcda`](https://github.com/ali-han-kaya/leibniz2/commit/c53fcda) |
 
 ### Regresyon notları
 
