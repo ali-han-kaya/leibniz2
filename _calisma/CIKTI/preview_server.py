@@ -1288,8 +1288,18 @@ class Handler(BaseHTTPRequestHandler):
                    content_type="application/json; charset=utf-8")
 
     def serve_preview(self):
-        with open(os.path.join(PREVIEW_DIR, "preview.html"), encoding="utf-8") as f:
+        preview_path = os.path.join(PREVIEW_DIR, "preview.html")
+        with open(preview_path, encoding="utf-8") as f:
             html = f.read()
+        try:
+            mtime = os.path.getmtime(preview_path)
+            ts = str(int(mtime))
+        except OSError:
+            ts = "0"
+        html = html.replace(
+            "<script>",
+            f"<script>window.BUILD_TS={ts};",
+            1)
         self._send(200, html, content_type="text/html; charset=utf-8")
 
     def serve_sw(self):

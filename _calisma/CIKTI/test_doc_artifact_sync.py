@@ -37,9 +37,10 @@ import gen_repro_manifest as gen_manifest  # noqa: E402
 # job'ların çıktıları). ARTIFACT_JOBS'a girmemeleri BİLEREK — merge pattern'e
 # girmezler, manifest'e girmezler; doc'ta görünmeleri doğrudur.
 DOC_ONLY_ADVISORY = frozenset({
-    "ci-simulate",      # advisory yerel CI simülasyonu — job output
-    "audit-live-ci",    # advisory meta-denetçi — job output
-    "changelog-drift",  # advisory: gen_changelog --check drift logu — job output
+    "ci-simulate",           # advisory yerel CI simülasyonu — job output
+    "audit-live-ci",         # advisory meta-denetçi — job output
+    "changelog-drift",       # advisory: gen_changelog --check drift logu — job output
+    "preview-reload-smoke",  # advisory: preview reload smoke testi — job output
 })
 
 DOC = pathlib.Path("docs/PUBLISH_SCENARIO.md")

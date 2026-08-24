@@ -1034,7 +1034,7 @@ const STREAM_MAX = 600;  // son N run replay edilirken yeterli bağlam kalsın
 function connectStream() {
   const el = $("runstream"), st = $("stream-state");
   if (runStreamES) runStreamES.close();
-  runStreamES = new EventSource("/api/run-stream");
+  runStreamES = new EventSource("/api/run-stream?v=" + (window.BUILD_TS||Date.now()));
   runStreamES.addEventListener("info", (e) => {
     try { const d = JSON.parse(e.data); st.textContent = "bağlı"; } catch(_) {}
   });
@@ -1795,7 +1795,7 @@ function initLoad() {
 function connect() {
   if (evtSource) evtSource.close();
   setLive("connecting");
-  evtSource = new EventSource("/api/run");
+  evtSource = new EventSource("/api/run?v=" + (window.BUILD_TS||Date.now()));
   evtSource.addEventListener("snapshot", (e) => {
     try {
       const d = JSON.parse(e.data);
@@ -1804,7 +1804,7 @@ function connect() {
       lastTs = Date.now();
       reconnectDelay = 1000; // reset backoff on success
       // snapshot sonrası stdout_short varsa onu da yükle
-      fetch("/api/latest").then(r => r.json()).then(full => {
+      fetch("/api/latest?v=" + (window.BUILD_TS||Date.now())).then(r => r.json()).then(full => {
         if (full.stdout_short) applyStdout(full.stdout_short);
         if (full.stderr_short && full.exit_code !== 0) applyStdout(full.stderr_short);
         if (full.refs_online) renderRefsOnline(full.refs_online);
@@ -1824,7 +1824,7 @@ function connect() {
       setLive("ok");
       lastTs = Date.now();
       // güncellenmiş son çıktıyı da çek
-      fetch("/api/latest").then(r => r.json()).then(full => {
+      fetch("/api/latest?v=" + (window.BUILD_TS||Date.now())).then(r => r.json()).then(full => {
         if (full.stdout_short) applyStdout(full.stdout_short);
         if (full.refs_online) renderRefsOnline(full.refs_online);
         if (full.budget) renderBudget(full.budget);

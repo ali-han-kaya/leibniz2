@@ -423,6 +423,8 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-24 | other | K14: _resolve_canon path birim testleri (mirror, subdir, repo-root) | [`a51ce2a`](https://github.com/ali-han-kaya/leibniz2/commit/a51ce2a) |
 | 2026-08-24 | other | PRE_PUSH_DENETIM_RAPORU.md: §13 PR #22/#23/#24 ekle | [`29222db`](https://github.com/ali-han-kaya/leibniz2/commit/29222db) |
 | 2026-08-24 | other | plist: gen_plist_golden.py + birim testleri (golden drift kapisi) | [`2723569`](https://github.com/ali-han-kaya/leibniz2/commit/2723569) |
+| 2026-08-24 | other | dashboard: service worker ile Freebuff webview cache bypass | [`4392e3e`](https://github.com/ali-han-kaya/leibniz2/commit/4392e3e) |
+| 2026-08-24 | other | dashboard: BUILD_TS dinamik timestamp ile Electron cache bypass | [`82f27b6`](https://github.com/ali-han-kaya/leibniz2/commit/82f27b6) |
 
 ### Regresyon notları
 

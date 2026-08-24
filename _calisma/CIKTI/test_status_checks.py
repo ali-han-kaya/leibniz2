@@ -72,7 +72,7 @@ class TestGateJobs(unittest.TestCase):
         # Hariç: manifest-comment, precheck, label-gate-p1, plist-check,
         #        mirror-check, daemon-http, audit-live-ci, audit-refs-trend,
         #        override-trend, changelog-drift
-        self.assertEqual(len(sc.gate_jobs()), 12)
+        self.assertEqual(len(sc.gate_jobs()), 13)
 
 
 @unittest.skipUnless(HAVE_YAML, "PyYAML gerekli")

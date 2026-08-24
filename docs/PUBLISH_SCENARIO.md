@@ -613,7 +613,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 | | **D — PR-only (yorum/etiket düşürme)** | | |
 | 22 | D | Manifest PR comment | — skipped (PR'da çalışır) |
 
-**Artifact listesi (27):**
+**Artifact listesi (28):**
 - `unit-tests` (CIKTI birim test logu — `test_*.py` glob'u)
 - `verify-report` (tek log: K1-K14 + pre-commit bölümü + .sha256)
 - `action-runtimes` (her action'ın runs.using denetimi JSON — node24 kapısı)
@@ -640,6 +640,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 - `audit-refs-trend` (refs-trend satırları ↔ kaynak artifact denetimi JSON — advisory)
 - `audit-live-ci` (doc↔GitHub senkron denetimi JSON — advisory; doc artifact listesi ↔ canlı run)
 - `changelog-drift` (gen_changelog --check drift logu + rc — advisory, run summary'ye yazılır)
+- `preview-reload-smoke` (preview sunucu restart + endpoint smoke testi — advisory, macOS)
 
 **Not:** Kapı artık `verify_delivery.py --full`'dur (K1-K14, fail-closed) ve yeşildir —
 Beth 1953 / Fosl 1998 gibi referans düzeltmeleri V5h'te yapıldı; Kalan çevrimdışı

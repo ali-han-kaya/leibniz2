@@ -2128,6 +2128,85 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
+  # ════════════════════════════════════════════════════════════════════
+  # PREVIEW RELOAD SMOKE (advisory) — Freebuff preview tab restart + data
+  #
+  # Preview sunucusunu restart eder (update_preview.sh --start, HTML
+  # mirror rebuild + launchd bootstrap), ayağa kalkmayı bekler ve
+  # tüm endpoint'lerin veri-dolu olduğunu doğrular:
+  #   /preview.html → 200 + window.BUILD_TS
+  #   /api/latest  → valid JSON + exit_code + layers
+  #   /api/history → valid JSON + ≥1 kayit
+  #   /api/run     → SSE stream + snapshot event
+  #   /api/run-stream → SSE stream + ilk event
+  #   /api/run-history → valid JSON list
+  #
+  # macOS-only: launchd + update_preview.sh macOS'a özgüdür.
+  # advisory: FAIL olsa da build'i bloke etmez; rapor artifact'ta.
+  # ════════════════════════════════════════════════════════════════════
+  preview-reload-smoke:
+    name: Preview reload smoke (advisory, macOS)
+    runs-on: macos-latest
+    needs: [verify]
+    if: always()
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Rebuild mirror + restart daemon
+        id: restart
+        run: |
+          set +e
+          bash _calisma/CIKTI/update_preview.sh --start 2>&1 | head -20
+          rc=$?
+          set -e
+          echo "restart_rc=$rc" >> "$GITHUB_OUTPUT"
+
+      - name: Run preview reload smoke
+        id: smoke
+        continue-on-error: true
+        run: |
+          set +e
+          python3 _calisma/CIKTI/test_preview_reload_smoke.py \
+            --no-restart \
+            --port 8000 \
+            --out preview_reload_report.json \
+            2>&1 | tee preview_reload_report.txt
+          rc=$?
+          set -e
+          echo "smoke_rc=$rc" >> "$GITHUB_OUTPUT"
+
+      - name: Write preview reload to run summary
+        if: always()
+        run: |
+          {
+            echo "## Preview reload smoke (advisory)"
+            echo ""
+            echo "- restart: exit \`${{ steps.restart.outputs.restart_rc }}\`"
+            echo "- smoke test: exit \`${{ steps.smoke.outputs.smoke_rc }}\`"
+            echo '```'
+            cat preview_reload_report.txt 2>/dev/null || echo '(rapor yok)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload preview reload report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: preview-reload-smoke
+          path: |
+            preview_reload_report.txt
+            preview_reload_report.json
+          if-no-files-found: ignore
+          retention-days: 30
+
   # ──────────────────────────────────────────────────────────────────────
   # CI-SIMULATE (advisory) — publish_wrapper.sh --ci-simulate'ın CI karşılığı.
   #
