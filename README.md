@@ -425,6 +425,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-24 | other | plist: gen_plist_golden.py + birim testleri (golden drift kapisi) | [`2723569`](https://github.com/ali-han-kaya/leibniz2/commit/2723569) |
 | 2026-08-24 | other | dashboard: service worker ile Freebuff webview cache bypass | [`4392e3e`](https://github.com/ali-han-kaya/leibniz2/commit/4392e3e) |
 | 2026-08-24 | other | dashboard: BUILD_TS dinamik timestamp ile Electron cache bypass | [`82f27b6`](https://github.com/ali-han-kaya/leibniz2/commit/82f27b6) |
+| 2026-08-24 | other | dashboard: BUILD_TS dinamik timestamp ile Electron cache bypass | [`412ed49`](https://github.com/ali-han-kaya/leibniz2/commit/412ed49) |
 
 ### Regresyon notları
 
