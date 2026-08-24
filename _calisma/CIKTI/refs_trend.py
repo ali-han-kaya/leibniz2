@@ -330,11 +330,28 @@ def changelog_lines():
     """CHANGELOG kaydını markdown satırlarına çevirir (boş liste = changelog yok).
 
     Tek kaynak: CHANGELOG sabiti. Denetim düzeltmelerinin kısa, denetlenebilir
-    geçmişini refs-trend.md'nin altına ekler (en yeni üstte).
+    geçmişini refs-trend.md'nin altına ekler (en yeni üstte). V5p–V5w arası
+    özet tablosu kapsamları ve by_source değişimlerini gösterir.
     """
     if not CHANGELOG:
         return []
     out = ["## Changelog", ""]
+
+    # V5p–V5w özet tablosu: kapsam + by_source değişim zinciri.
+    out.append("### Kapsam & by_source değişim tablosu (V5p–V5w)")
+    out.append("")
+    out.append("| Versiyon | Tarih | Kapsam | by_source değişimi | Not |")
+    out.append("|---|---|---|---|---|")
+    out.append("| V5n | 08-19 | 54→56 | crossref +2 (Norton/Popkin) | CrossRef dergileri eklendi |")
+    out.append("| V5o | 08-19 | 56/56 | — (aynı dağılım) | Paralel koşu, rate-limit düzeltmesi |")
+    out.append("| V5p | 08-19 | 56/56 | Xunzi: `lccn:87033578` → HT PASS | OCLC/LCCN ht_ids'e eklendi |")
+    out.append("| V5q | 08-21 | 56→61 | archive +4 (Sextus ia_ids) +1 (Della Rocca Wayback) | Kapsam boşluğu kapatıldı |")
+    out.append("| V5r | 08-21 | 61/61 | — (aynı dağılım) | OL oclc YOK; Xunzi hariç hepsi OL fallback |")
+    out.append("| V5t | 08-21 | 61/61 | handle +1 (Della Rocca → Handle System) | CrossRef dışı kalıcı tanımlayıcı |")
+    out.append("| V5v | 08-21 | 61/61 | — (denetim altyapısı) | audit_refs_trend.py eklendi |")
+    out.append("| V5w | 08-21 | 61/61 | loc +3 (Lagrée/Millican/Schmitt), openlibrary −3 | LoC lccn katalog kanıtı |")
+    out.append("")
+
     for date, note in CHANGELOG:
         out.append(f"- **{date}:** {note}")
     out.append("")

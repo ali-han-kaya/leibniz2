@@ -69,6 +69,11 @@ class TestParseReport(unittest.TestCase):
 
 
 class TestChangelog(unittest.TestCase):
+    @staticmethod
+    def _bullets(lines):
+        """Sadece '- **YYYY-MM-DD:** ...' satırlarını birleştir (tablo hariç)."""
+        return "\n".join(l for l in lines if l.startswith("- **"))
+
     def test_changelog_has_hicks_hume(self):
         lines = rt.changelog_lines()
         self.assertTrue(lines)
@@ -88,7 +93,8 @@ class TestChangelog(unittest.TestCase):
         self.assertIn("Popkin 1951", joined)
         self.assertIn("54→56", joined)
         # En yeni üstte: V5n (2026-08-19), Hicks/Hume (2026-08-18)'den önce.
-        self.assertLess(joined.index("V5n"), joined.index("Hicks 1925"))
+        bullets = self._bullets(lines)
+        self.assertLess(bullets.index("V5n"), bullets.index("Hicks 1925"))
 
     def test_changelog_has_v5o(self):
         """V5o: 11 UNVERIFIED → 56/56 tam kapsam changelog'da olmalı."""
@@ -100,7 +106,8 @@ class TestChangelog(unittest.TestCase):
         self.assertIn("REFERENCE_POOL_SIZE", joined)
         # En yeni üstte: V5o (2026-08-19), V5n (2026-08-19)'den önce (aynı gün,
         # V5n'den sonraki değişiklik).
-        self.assertLess(joined.index("V5o"), joined.index("V5n"))
+        bullets = self._bullets(lines)
+        self.assertLess(bullets.index("V5o"), bullets.index("V5n"))
 
     def test_changelog_has_v5t_handle(self):
         """V5t: Della Rocca 2010 Handle System doğrulaması changelog'da olmalı."""
@@ -111,7 +118,8 @@ class TestChangelog(unittest.TestCase):
         self.assertIn("Della Rocca 2010", joined)
         self.assertIn("Handle", joined)
         # En yeni üstte: V5t (2026-08-21), V5n (2026-08-19)'den önce.
-        self.assertLess(joined.index("V5t"), joined.index("V5n"))
+        bullets = self._bullets(lines)
+        self.assertLess(bullets.index("V5t"), bullets.index("V5n"))
 
     def test_changelog_has_v5w_loc(self):
         """V5w: LoC katalog kanıtı changelog'da olmalı (en yeni üstte)."""
@@ -122,7 +130,8 @@ class TestChangelog(unittest.TestCase):
         self.assertIn("Library of Congress", joined)
         self.assertIn("loc", joined)
         # En yeni üstte: V5w (2026-08-21), V5v'den önce.
-        self.assertLess(joined.index("V5w"), joined.index("V5v"))
+        bullets = self._bullets(lines)
+        self.assertLess(bullets.index("V5w"), bullets.index("V5v"))
 
     def test_changelog_has_v5q_sextus_della(self):
         """V5q: Sextus ia_ids + Della Rocca Wayback doğrulaması changelog'da olmalı."""
@@ -133,7 +142,8 @@ class TestChangelog(unittest.TestCase):
         self.assertIn("ia_ids", joined)
         self.assertIn("Wayback", joined)
         # V5q (2026-08-21) V5t'den önce (Wayback → Handle geçişi)
-        self.assertLess(joined.index("V5q"), joined.index("V5t"))
+        bullets = self._bullets(lines)
+        self.assertLess(bullets.index("V5q"), bullets.index("V5t"))
 
     def test_changelog_has_v5r_oclc_matrix(self):
         """V5r: OL edisyon oclc YOK + HT identifier matrisi changelog'da olmalı."""
@@ -144,7 +154,8 @@ class TestChangelog(unittest.TestCase):
         self.assertIn("oclc", joined)
         self.assertIn("Xunzi", joined)
         # V5r (2026-08-21) V5q'dan hemen önce (matris → kapsam kapatma)
-        self.assertLess(joined.index("V5r"), joined.index("V5q"))
+        bullets = self._bullets(lines)
+        self.assertLess(bullets.index("V5r"), bullets.index("V5q"))
 
     def test_changelog_has_v5aa_ol_retry(self):
         """V5aa: OL timeout retry changelog'da olmalı (en yeni üstte)."""
@@ -154,7 +165,20 @@ class TestChangelog(unittest.TestCase):
         self.assertIn("V5aa", joined)
         self.assertIn("retry", joined)
         # En yeni üstte: V5aa (2026-08-24), V5z'den önce.
-        self.assertLess(joined.index("V5aa"), joined.index("V5z"))
+        bullets = self._bullets(lines)
+        self.assertLess(bullets.index("V5aa"), bullets.index("V5z"))
+
+    def test_changelog_summary_table_v5p_to_v5w(self):
+        """V5p–V5w özet tablosu changelog'da olmalı."""
+        lines = rt.changelog_lines()
+        self.assertTrue(lines)
+        joined = "\n".join(lines)
+        self.assertIn("Kapsam & by_source", joined)
+        self.assertIn("| V5p |", joined)
+        self.assertIn("| V5w |", joined)
+        self.assertIn("| V5n |", joined)
+        self.assertIn("54→56", joined)
+        self.assertIn("loc +3", joined)
 
     def test_changelog_has_v5p_oclc_lccn(self):
         """V5p: OL'den OCLC/LCCN çekimi + Xunzi HT kaydı changelog'da olmalı."""
@@ -167,7 +191,8 @@ class TestChangelog(unittest.TestCase):
         self.assertIn("Xunzi", joined)
         # Sıralama: V5p (08-19, V5o'dan sonra) → V5o → V5n (aynı gün).
         self.assertLess(joined.index("V5p"), joined.index("V5o"))
-        self.assertLess(joined.index("V5o"), joined.index("V5n"))
+        bullets = self._bullets(lines)
+        self.assertLess(bullets.index("V5o"), bullets.index("V5n"))
 
     def test_changelog_empty_when_no_entries(self):
         saved = rt.CHANGELOG
