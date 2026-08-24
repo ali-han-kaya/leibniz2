@@ -432,6 +432,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-24 | test | (manifest) daemon-http section tests cover history.jsonl + .sha256 | [`ef70504`](https://github.com/ali-han-kaya/leibniz2/commit/ef70504) |
 | 2026-08-24 | test | (coverage) unified aggregator (71 files, 1463 tests, 11 hooks) | [`d007548`](https://github.com/ali-han-kaya/leibniz2/commit/d007548) |
 | 2026-08-24 | ci | (K15) history sidecar fail-closed P1 (continue-on-error kaldirildi) | [`c377973`](https://github.com/ali-han-kaya/leibniz2/commit/c377973) |
+| 2026-08-24 | feat | (pattern) --fix flag for auto-adding missing artifacts to pattern | [`b4fd760`](https://github.com/ali-han-kaya/leibniz2/commit/b4fd760) |
 
 ### Regresyon notları
 

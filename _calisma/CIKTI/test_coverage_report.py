@@ -371,6 +371,7 @@ def main(argv=None):
         "test_coverage_report.py",      # meta: kendi kendini test edemez
         "test_test_coverage_report.py",  # meta: kendini test eder, ayrıca check-unit-tests'te
         "test_preview_reload_smoke.py",  # standalone smoke script, def test_ yok
+        "test_all_hooks_smoke.py",       # standalone smoke: tum hook'lari kosar
         "test_budget_scan.js",          # JS-only, ayrı Node hook'unda
     })
     if args.check:

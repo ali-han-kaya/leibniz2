@@ -77,9 +77,10 @@ class TestDetectGaps(unittest.TestCase):
         cls.hmap = tcr.build_hook_map(tcr.HOOK_COVERAGE, cls.files)
 
     def test_exempt_files_not_flagged_as_zero_tests(self):
-        """coverage_report.py ve preview_reload_smoke.py exempt — --check FAIL etmez."""
+        """Standalone smoke script'leri exempt — --check FAIL etmez."""
         gaps = tcr.detect_gaps(self.files, self.hmap)
-        exempt = {"test_coverage_report.py", "test_preview_reload_smoke.py"}
+        exempt = {"test_coverage_report.py", "test_preview_reload_smoke.py",
+                  "test_all_hooks_smoke.py"}
         actual_uncovered = set(gaps["not_covered_by_any_hook"]) - exempt
         self.assertEqual(actual_uncovered, set(),
                          f"Unexpected uncovered: {actual_uncovered}")
