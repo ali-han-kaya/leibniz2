@@ -331,6 +331,14 @@ function fmtTs(iso) {
     return d.toLocaleTimeString() + " (" + iso.split("T")[1].slice(0,5) + " UTC)";
   } catch(e) { return iso; }
 }
+// Süre formatı: 65 → "1m05s", 3600 → "1h00m", 3 → "3s"
+function fmtDuration(s) {
+  if (s == null || !isFinite(s)) return "—";
+  const sec = Math.round(s);
+  if (sec < 60) return sec + "s";
+  if (sec < 3600) return Math.floor(sec / 60) + "m" + String(sec % 60).padStart(2, "0") + "s";
+  return Math.floor(sec / 3600) + "h" + String(Math.floor((sec % 3600) / 60)).padStart(2, "0") + "m";
+}
 function setLive(state) {
   const dot = $("live-dot"), txt = $("live-status");
   if (state === "ok") { dot.className = "live-dot connected"; txt.textContent = "live"; }
@@ -1063,7 +1071,8 @@ function connectStream() {
     const p0 = sum && sum.p0 != null ? sum.p0 : 0;
     const p1 = sum && sum.p1 != null ? sum.p1 : 0;
     const bud = sum && sum.budget_usd != null ? "$" + sum.budget_usd.toFixed(2) : "—";
-    const dur = sum && sum.duration_s != null ? " · " + sum.duration_s + "s" : "";
+    const dur = sum && sum.duration_s != null
+      ? " · " + fmtDuration(sum.duration_s) : "";
     const refV = sum && sum.refs_verified != null ? sum.refs_verified : null;
     const refT = sum && sum.refs_total != null ? sum.refs_total : null;
     const refs = refV != null && refT != null ? " · refs " + refV + "/" + refT : "";

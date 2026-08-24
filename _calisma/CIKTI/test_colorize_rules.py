@@ -672,5 +672,46 @@ class TestRunHistoryFilter(unittest.TestCase):
         self.assertIn('filtreyle eşleşen run yok', self._html)
 
 
+class TestFmtDuration(unittest.TestCase):
+    """fmtDuration: süreyi okunabilir formata çevirir (3s, 1m30s, 1h00m)."""
+
+    @classmethod
+    def setUpClass(cls):
+        with open("_calisma/CIKTI/preview.html", encoding="utf-8") as f:
+            cls._html = f.read()
+
+    def test_fmt_duration_function_exists(self):
+        """function fmtDuration(s) tanımlı."""
+        self.assertIn("function fmtDuration(s)", self._html)
+
+    def test_seconds_below_60_format(self):
+        """<60s: "3s", "59s"."""
+        self.assertIn("sec < 60", self._html)
+        self.assertIn('return sec + "s"', self._html)
+
+    def test_minutes_format(self):
+        """60-3599s: padStart mSSs → "1m05s"."""
+        self.assertIn("padStart(2,", self._html)
+        self.assertIn("Math.floor(sec / 60)", self._html)
+        self.assertIn('"m"', self._html)
+
+    def test_hours_format(self):
+        """>=3600s: "1h00m"."""
+        self.assertIn("Math.floor(sec / 3600)", self._html)
+        self.assertIn('"h"', self._html)
+
+    def test_null_returns_dash(self):
+        """null/NaN → "—"."""
+        self.assertIn('return "\u2014"', self._html)
+
+    def test_replay_line_uses_fmt_duration(self):
+        """Replay özet satırı: " · " + fmtDuration(...)"""
+        self.assertIn("fmtDuration(sum.duration_s)", self._html)
+
+    def test_replay_line_no_longer_uses_plain_s(self):
+        """Eski " + sum.duration_s + "s" deseni KALKMALI."""
+        self.assertNotIn('sum.duration_s + "s"', self._html)
+
+
 if __name__ == "__main__":
     unittest.main()
