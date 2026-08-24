@@ -431,6 +431,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-24 | feat | K15 history check --full zincirinde (auto-discover history.jsonl) | [`ba2ae59`](https://github.com/ali-han-kaya/leibniz2/commit/ba2ae59) |
 | 2026-08-24 | test | (manifest) daemon-http section tests cover history.jsonl + .sha256 | [`ef70504`](https://github.com/ali-han-kaya/leibniz2/commit/ef70504) |
 | 2026-08-24 | test | (coverage) unified aggregator (71 files, 1463 tests, 11 hooks) | [`d007548`](https://github.com/ali-han-kaya/leibniz2/commit/d007548) |
+| 2026-08-24 | ci | (K15) history sidecar fail-closed P1 (continue-on-error kaldirildi) | [`c377973`](https://github.com/ali-han-kaya/leibniz2/commit/c377973) |
 
 ### Regresyon notları
 

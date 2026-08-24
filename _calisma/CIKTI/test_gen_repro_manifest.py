@@ -1361,6 +1361,63 @@ class TestCheckPatternConsistency(unittest.TestCase):
         errors, _ = self._run_check("jobs:\n  foo:\n    runs-on: ubuntu-latest\n")
         self.assertTrue(any("bulunamadı" in e for e in errors))
 
+    def test_fix_adds_missing_artifact(self):
+        """--fix eksik artifact'ı pattern'e ekler, sıralı yazar."""
+        import check_pattern_consistency as cpc
+        wf = (pathlib.Path(cpc.DEFAULT_WORKFLOW).read_text(encoding="utf-8"))
+        wf = wf.replace(
+            "'{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,config,k0-findings,budget-verify,lineage-findings,klayers,unit-tests,action-runtimes}'",
+            "'{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,k0-findings,lineage-findings,klayers,unit-tests,action-runtimes}'",
+        )
+        tmp = pathlib.Path("/tmp") / f"test_fix_{os.getpid()}"
+        tmp.mkdir(exist_ok=True)
+        wf_path = tmp / "verify.yml"
+        wf_path.write_text(wf, encoding="utf-8")
+
+        added, errors = cpc.fix(str(wf_path))
+        self.assertEqual(errors, [])
+        self.assertIn("budget-verify", added)
+        self.assertIn("config", added)  # hem budget-verify hem config eksikti
+
+        # Fix sonrası check PASS vermeli
+        check_errors = cpc.check(str(wf_path))
+        self.assertEqual(check_errors, [])
+
+        # Dosyada yeni pattern sıralı (deterministic)
+        new_text = wf_path.read_text(encoding="utf-8")
+        self.assertIn("budget-verify", new_text)
+        self.assertIn("config", new_text)
+        # Sıralı olduğunu doğrula: action-runtimes b'dan önce gelir
+        self.assertIn("action-runtimes,budget", new_text)
+
+    def test_fix_idempotent_no_change(self):
+        """--fix zaten güncel pattern'de değişiklik yapmaz."""
+        import check_pattern_consistency as cpc
+        wf = (pathlib.Path(cpc.DEFAULT_WORKFLOW).read_text(encoding="utf-8"))
+        tmp = pathlib.Path("/tmp") / f"test_fix_idem_{os.getpid()}"
+        tmp.mkdir(exist_ok=True)
+        wf_path = tmp / "verify.yml"
+        wf_path.write_text(wf, encoding="utf-8")
+        mtime_before = wf_path.stat().st_mtime
+
+        added, errors = cpc.fix(str(wf_path))
+        self.assertEqual(errors, [])
+        self.assertEqual(added, set())  # hiçbir şey eklenmedi
+        # Dosya değişmedi (idempotent)
+        self.assertEqual(wf_path.stat().st_mtime, mtime_before)
+
+    def test_fix_no_pattern_returns_error(self):
+        """Pattern yoksa fix hata döner."""
+        import check_pattern_consistency as cpc
+        tmp = pathlib.Path("/tmp") / f"test_fix_nopat_{os.getpid()}"
+        tmp.mkdir(exist_ok=True)
+        wf_path = tmp / "verify.yml"
+        wf_path.write_text("jobs:\n  foo:\n    runs-on: ubuntu-latest\n",
+                           encoding="utf-8")
+        added, errors = cpc.fix(str(wf_path))
+        self.assertEqual(added, set())
+        self.assertTrue(any("bulunamadı" in e for e in errors))
+
 
 if __name__ == "__main__":
     unittest.main()
