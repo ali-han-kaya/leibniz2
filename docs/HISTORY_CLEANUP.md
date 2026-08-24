@@ -199,20 +199,35 @@ aynı adımda etkili olmaması nedeniyle bazen binary bulunamaz.
 **Mevcut azaltma:** Advisory kapı (`continue-on-error: true`). Job FAIL
 etmez, yalnızca log'da görünür. Bir sonraki run'da genellikle düzelir.
 
-### 7.5 Branch protection main push engeli (beklenen davranış)
+### 7.5 Branch protection required check sayısı (9→6, Ağustos 2026)
 
-**Belirti:** `git push origin main` → `GH006: Protected branch update failed
-— 9 of 9 required status checks are expected`.
+**Güncel durum (2026-08-24): 6 required check.** 3 flaky kapı kaldırıldı:
 
-**Kök neden:** Bu bir hata değil, **beklenen koruma davranışıdır**. Web UI
-veya `gh api` ile kurulan branch protection, push'ta tüm required check'lerin
-yeşil olmasını zorunlu kılar. Doğrudan `main`'e push denenirse reddedilir.
+| Kaldırılan | Sebep |
+|---|---|
+| Online verification trend (refs-online across runs) | OL geçici timeout → UNVERIFIED spike (V5aa) |
+| Reproducibility bundle | lineage_findings.json cascade bağımlı (§7.1) |
+| Static markdown reports (incl. pre-commit findings) | Aynı cascade bağımlılık |
 
-**Doğru akış:** PR aç → CI koşsun → tüm check'ler yeşil → `gh pr merge`.
+**Kalan 6 (stabil):**
+1. Action runtime check (node24)
+2. Budget shield (aggregated)
+3. Config drift check (gen_config + diff-on-drift)
+4. Repack determinism + verify (sidecar sync)
+5. Delivery verification — K1-K14 (single entry point)
+6. Pre-commit P0 label gate
 
-**İstisna:** Admin bypass (`gh pr merge --admin`) ile koruma atlanabilir,
-ancak `enforce_admins: true` ise bu da çalışmaz — önce toggle gerekir
-(`publish_wrapper.sh`'deki `toggle_enforce` dansı).
+**Not:** `status_checks.py --gh` hâlâ 12-check workflow listesiyle
+karşılaştırır; "GitHub'da yok" uyarıları bilinçli eksiltmedir. Ci-simulate,
+commit-msg-gate, config-sync de hiç eklenmemişti — drift yok.
+
+**Belirti (beklenen davranış):** `git push origin main` →
+`GH006: Protected branch update failed — 6 of 6 required status checks
+are expected`.
+
+**Doğru akış:** PR aç → CI koşsun → 6 check yeşil → `gh pr merge`.
+Admin bypass: `gh pr merge --admin` ile koruma atlanabilir, ancak
+`enforce_admins: true` ise önce toggle gerekir (`toggle_enforce` dansı).
 
 ---
 
