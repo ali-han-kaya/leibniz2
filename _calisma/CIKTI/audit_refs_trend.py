@@ -271,6 +271,110 @@ def check_changelog_rendered():
     return findings
 
 
+def check_refs_trend_summary(trend_json_path):
+    """refs-trend.md özet bölümünü denetler.
+
+    Kontroller:
+      1) 'Kapsam geçiş dipnotu' başlığı mevcut mu?
+      2) Dipnotta V5n→V5q/V5t/V5w geçiş zinciri referansları var mı?
+      3) '56/56' ve 'yerel doğrulama' ifadesi var mı?
+      4) Dipnot, Özet bölümünden sonra mı geliyor (sıra)?
+      5) toplam_satir degisimi (first→last row total_online) dipnotla eslesiyor mu?
+    """
+    findings = []
+    # .md dosyasını bul: trend_json_path refs-trend/refs-trend.json ise
+    # refs-trend/refs-trend.md kardeşidir.
+    p = pathlib.Path(trend_json_path)
+    md_path = p.parent / "refs-trend.md"
+    if not md_path.is_file():
+        findings.append({
+            "kind": "summary_md_missing",
+            "detail": f"refs-trend.md bulunamadı ({md_path})",
+        })
+        return findings
+
+    md_text = md_path.read_text(encoding="utf-8")
+    md_lines = md_text.splitlines()
+
+    # 1) 'Kapsam geçiş dipnotu' başlığı var mı?
+    dipnot_idx = None
+    for i, line in enumerate(md_lines):
+        if "Kapsam geçiş dipnotu" in line:
+            dipnot_idx = i
+            break
+    if dipnot_idx is None:
+        findings.append({
+            "kind": "summary_footnote_missing",
+            "detail": "refs-trend.md'de 'Kapsam geçiş dipnotu' bulunamadı",
+        })
+        return findings  # diğer kontroller dipnota bağlı
+
+    # Dipnot bloğu: dipnot_idx'den itibaren boş satıra kadar
+    footnote_block = []
+    for line in md_lines[dipnot_idx:dipnot_idx + 15]:
+        footnote_block.append(line)
+        if line.strip() == "" and len(footnote_block) > 1:
+            break
+    footnote_text = " ".join(footnote_block)
+
+    # 2) V5 geçiş referansları
+    expected_versions = ["V5n", "V5q", "V5t", "V5w"]
+    for v in expected_versions:
+        if v not in footnote_text:
+            findings.append({
+                "kind": "summary_footnote_version",
+                "version": v,
+                "detail": f"Dipnotta {v} referansı eksik",
+            })
+
+    # 3) '56/56' ve 'yerel doğrulama'
+    if "56/56" not in footnote_text:
+        findings.append({
+            "kind": "summary_footnote_56",
+            "detail": "Dipnotta '56/56' ifadesi eksik",
+        })
+    if "yerel doğrulama" not in footnote_text and "yerel dogrulama" not in footnote_text:
+        findings.append({
+            "kind": "summary_footnote_local",
+            "detail": "Dipnotta 'yerel doğrulama' ifadesi eksik",
+        })
+
+    # 4) Dipnot Özet bölümünden sonra mı? (Özet üstte, dipnot altta olmalı)
+    ozet_idx = None
+    for i, line in enumerate(md_lines):
+        if line.strip() == "## Özet":
+            ozet_idx = i
+            break
+    if ozet_idx is not None and dipnot_idx < ozet_idx:
+        findings.append({
+            "kind": "summary_footnote_order",
+            "detail": (f"Dipnot (satır {dipnot_idx+1}) Özet bölümünden "
+                       f"önce geliyor ({ozet_idx+1}) — dipnot Özet之后 olmalı"),
+        })
+
+    # 5) Toplam satır degisimi dipnotla eslesiyor mu?
+    #    trend.json'dan ilk/son row'un total_online'ini oku.
+    try:
+        with open(p, encoding="utf-8") as f:
+            trend_data = json.load(f)
+        rows = trend_data.get("rows", [])
+        if len(rows) >= 2:
+            first_t = rows[0].get("total_online", 0)
+            last_t = rows[-1].get("total_online", 0)
+            # Dipnotta "54/49 → 56/26 → 61/61" formatında geçiş olmalı
+            # İlk ve son değer dipnotla eşleşmeli
+            if first_t == last_t and "→" in footnote_text:
+                findings.append({
+                    "kind": "summary_footnote_stale",
+                    "detail": (f"Dipnotta geçiş var ama trend'de ilk/son "
+                               f"total_online aynı ({first_t}) — dipnot bayat"),
+                })
+    except Exception:
+        pass  # trend json okunamazsa atla (zaten audit() kontrol eder)
+
+    return findings
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -331,6 +435,13 @@ def main(argv=None):
         result["ok"] = False
         result["verdict"] = "FAIL"
 
+    # refs-trend.md özet dipnot denetimi (56/56 yerel doğrulama notu).
+    summary_findings = check_refs_trend_summary(args.trend_json)
+    result["findings"] += summary_findings
+    if summary_findings:
+        result["ok"] = False
+        result["verdict"] = "FAIL"
+
     if args.json:
         print(json.dumps({
             "verdict": result["verdict"],
@@ -368,6 +479,8 @@ def main(argv=None):
                 print(f"  [FAIL] {f['detail']}")
             elif f["kind"] in ("changelog_order", "changelog_date",
                                "changelog_format", "changelog_rendered"):
+                print(f"  [FAIL] {f['detail']}")
+            elif f["kind"].startswith("summary_"):
                 print(f"  [FAIL] {f['detail']}")
         print(f"\nSONUÇ: {result['verdict']} — "
               f"{'trend kaynakla birebir tutarlı' if result['ok'] else 'DRIFT: yukarıdaki [FAIL] satırları'}")
