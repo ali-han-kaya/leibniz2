@@ -304,6 +304,15 @@
 
 <script>
 "use strict";
+// Service worker: Freebuff Electron webview'de cache'i bypass et.
+// skipWaiting + clients.claim ile yeni sürüm sayfa yeniden yüklenmeden
+// devralir; fetch handler'ı tüm isteklere no-cache zorlar. API endpoint'leri
+// (/api/*) network-first, cache'e dokunmaz.
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js', { scope: '/' })
+    .then((reg) => console.log('sw registered:', reg.scope))
+    .catch(() => {});  // sw.js yoksa sessizce devam (non-Electron ortam/CI)
+}
 const $ = (id) => document.getElementById(id);
 let evtSource = null;
 let lastTs = 0;

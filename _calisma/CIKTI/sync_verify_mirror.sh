@@ -59,6 +59,7 @@ FILES=(
   "preview_server.py|preview_server.py"
   "_daemonize.py|_daemonize.py"
   "preview.html|preview.html"
+  "sw.js|sw.js"
   "fresh_clone_setup.sh|fresh_clone_setup.sh"
   "test_fresh_clone_setup.py|test_fresh_clone_setup.py"
   "update_preview.sh|update_preview.sh"

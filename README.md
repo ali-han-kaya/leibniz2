@@ -422,6 +422,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-24 | other | dashboard: animated Lean FAIL warning (fail-pulse + alert bubble) | [`240e5ad`](https://github.com/ali-han-kaya/leibniz2/commit/240e5ad) |
 | 2026-08-24 | other | K14: _resolve_canon path birim testleri (mirror, subdir, repo-root) | [`a51ce2a`](https://github.com/ali-han-kaya/leibniz2/commit/a51ce2a) |
 | 2026-08-24 | other | PRE_PUSH_DENETIM_RAPORU.md: §13 PR #22/#23/#24 ekle | [`29222db`](https://github.com/ali-han-kaya/leibniz2/commit/29222db) |
+| 2026-08-24 | other | plist: gen_plist_golden.py + birim testleri (golden drift kapisi) | [`2723569`](https://github.com/ali-han-kaya/leibniz2/commit/2723569) |
 
 ### Regresyon notları
 

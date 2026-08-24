@@ -745,5 +745,50 @@ class TestMetricsCards(unittest.TestCase):
         self.assertIn('$("m-refs").textContent = d.ref_count', self._html)
 
 
+
+class TestServiceWorkerRegistration(unittest.TestCase):
+    """preview.html'deki service worker registration bloğunun regresyon kapısı.
+
+    Electron webview cache bypass'ı için sw.js /sw.js route'una kaydolur.
+    skipWaiting + clients.claim + fetch-no-cache zincirini kapsar.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls._html = (SCRIPT_DIR / "preview.html").read_text(encoding="utf-8")
+        cls._sw = None
+        sw_path = SCRIPT_DIR / "sw.js"
+        if sw_path.is_file():
+            cls._sw = sw_path.read_text(encoding="utf-8")
+
+    def test_sw_registration_code_present(self):
+        """navigator.serviceWorker.register('/sw.js') cagrisi mevcut."""
+        self.assertIn("navigator.serviceWorker.register('/sw.js'", self._html)
+        self.assertIn("scope: '/'", self._html)
+
+    def test_skip_waiting_and_claim_in_sw_js(self):
+        """sw.js'te skipWaiting + clients.claim her ikisi de mevcut."""
+        self.assertIsNotNone(self._sw, "sw.js bulunamadi")
+        self.assertIn("self.skipWaiting()", self._sw)
+        self.assertIn("self.clients.claim()", self._sw)
+
+    def test_fetch_no_cache_in_sw_js(self):
+        """sw.js fetch handler'i no-cache zorlar."""
+        self.assertIsNotNone(self._sw, "sw.js bulunamadi")
+        self.assertIn("cache: 'no-cache'", self._sw)
+
+    def test_api_endpoints_bypass_cache_in_sw_js(self):
+        """sw.js /api/* endpoint'leri icin network-first, cache atlanir."""
+        self.assertIsNotNone(self._sw, "sw.js bulunamadi")
+        self.assertIn("/api/", self._sw)
+
+    def test_silent_fallback_on_no_sw_support(self):
+        """.catch(() => {}) — sw destegi olmayan ortamlarda sessiz."""
+        self.assertIn(".catch(() => {})", self._html)
+
+    def test_sw_registration_wrapped_in_feature_detect(self):
+        """'serviceWorker' in navigator kontrolu var."""
+        self.assertIn("'serviceWorker' in navigator", self._html)
+
 if __name__ == "__main__":
     unittest.main()

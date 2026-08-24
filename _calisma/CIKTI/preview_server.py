@@ -1043,7 +1043,9 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(out)
 
     def do_GET(self):
-        if self.path in ("/", "/index.html", "/preview.html"):
+        if self.path == "/sw.js":
+            self.serve_sw()
+        elif self.path in ("/", "/index.html", "/preview.html"):
             self.serve_preview()
         elif self.path == "/guide.html":
             self.serve_guide()
@@ -1289,6 +1291,22 @@ class Handler(BaseHTTPRequestHandler):
         with open(os.path.join(PREVIEW_DIR, "preview.html"), encoding="utf-8") as f:
             html = f.read()
         self._send(200, html, content_type="text/html; charset=utf-8")
+
+    def serve_sw(self):
+        """Service worker — Freebuff Electron webview cache bypass.
+
+        sw.js bu script'in yaninda durur; ilk istekte okunup memory'de
+        tutulur (tek dosya, degismez). Content-Type: application/javascript
+        ile MIME uyumlulugu saglanir.
+        """
+        here = os.path.dirname(os.path.abspath(__file__))
+        sw_path = os.path.join(here, "sw.js")
+        if not os.path.isfile(sw_path):
+            self._send(404, "404 — sw.js not found")
+            return
+        with open(sw_path, encoding="utf-8") as f:
+            js = f.read()
+        self._send(200, js, content_type="application/javascript; charset=utf-8")
 
     def serve_guide(self):
         """Branch protection görsel kılavuzu (guide.html).
