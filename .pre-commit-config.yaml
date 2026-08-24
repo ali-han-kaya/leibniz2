@@ -4,7 +4,7 @@
 #   pip install pre-commit
 #   pre-commit install
 #
-# Bu noktadan sonra her `git commit` sırasında on beş kapı çalışır:
+# Bu noktadan sonra her `git commit` sırasında on altı kapı çalışır:
 #   0) update-config          : config'i paket içeriğinden senkron et (gen_config.py)
 #                               — repack sayıları değiştirdiyse verify_delivery.config.json'u
 #                               otomatik günceller ve stage eder; değişmediyse dokunmaz.
@@ -56,6 +56,10 @@
 #                               test_preview_server (durum panosu/SSE/history),
 #                               test_status_checks (advisory kontratı + 9
 #                               required check). Biri kırılırsa commit bloke.
+#   14) check-coverage-report  : test_coverage_report.py --check ile tüm
+#                               test dosyalarının en az bir hook'ta
+#                               tanımlandığını doğrular; yeni test dosyası
+#                               eklenir ama HOOK_COVERAGE güncellenmezse bloke.
 # Herhangi bir P0/P1 bulgusu commit'i bloke eder (sıfır-dışı exit).
 #
 # Not: update-config TEK yazan hook'tur (config'i stage eder). Diğer kapılar
@@ -377,6 +381,24 @@ repos:
         stages: [pre-commit]
         verbose: true
 
+      - id: check-coverage-report
+        name: "Verify unified test coverage report (regression gate)"
+        description: >-
+          test_coverage_report.py --check: tüm test_*.py dosyalarının en
+          az bir pre-commit hook tarafından kapsandığını doğrular. Yeni bir
+          test dosyası eklenir ama HOOK_COVERAGE güncellenmezse → commit
+          bloke. Kapsam raporunu --md ile markdown olarak da üretebilir.
+          OFFLINE, stdlib-only, ~0.1s.
+        entry: >-
+          bash -c 'PY=python3; [ -x _calisma/.venv_z3/bin/python ] &&
+          PY=_calisma/.venv_z3/bin/python; "$PY"
+          _calisma/CIKTI/test_coverage_report.py --check'
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+        verbose: true
+
       - id: check-unit-tests
         name: "Unit tests for new gates (dashboard/lean/doc-sync)"
         description: >-
@@ -398,13 +420,14 @@ repos:
           koşar). ~3s.
         entry: >-
           bash -c 'PY=python3; [ -x _calisma/.venv_z3/bin/python ] &&
-          PY=_calisma/.venv_z3/bin/python; for t in test_budget_over_banner
+          PY=_calisma/.venv_z3/bin/python;          for t in test_budget_over_banner
           test_doc_artifact_sync test_lean_lake test_preview_server
           test_status_checks test_dashboard_smoke test_coq_lake
           test_override_trend test_check_config_sync test_verify_checks
           test_update_changelog_hook test_setup_branch_protection
           test_refs_trend_badge test_run_summary_changelog
-          test_readme_badges test_audit_live_ci_sync; do
+          test_readme_badges test_audit_live_ci_sync
+          test_test_coverage_report; do
           "$PY" -m unittest discover -s _calisma/CIKTI -p "$t.py" ||
           exit 1; done'
         language: system

@@ -55,7 +55,7 @@ permissions:
 
 jobs:
   verify:
-    name: Delivery verification — K1-K14 (single entry point)
+    name: Delivery verification — K1-K19 (single entry point)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -288,7 +288,7 @@ jobs:
       # --budget-out: bütçe sonucunu ayrı JSON'a yazar (budget job'u tüketir).
       # --refs-out: çevrimiçi referans denetim sonuçlarını VERSION JSON olarak
       # yazar (her run'da kaç referansın çevrimiçi doğrulandığını izlemek için).
-      - name: Run full verification (K1-K14, single entry point)
+      - name: Run full verification (K1-K19, single entry point)
         if: always()
         shell: bash
         run: |

@@ -99,8 +99,9 @@ Doğrulama zinciri (Katman 0..19):
                hash'ler birebir (P0). --check-cleanup, --full'a dahil.
   K15 History  preview_server.py'nin history.jsonl ↔ history.jsonl.sha256
                sidecar bütünlüğü (persist_history çıktısı); eksik/geçersiz/
-               uyuşmazlık → P1. --check-history PATH; --full'a dahil değil
-               (history.jsonl repo dışı TCC-safe mirror'da, yerel makineye özgü).
+               uyuşmazlık → P1. --check-history [PATH]; --full'a DAHİL:
+               CI'da ./history.jsonl otomatik keşfedilir, dosya yoksa
+               atlanır (henüz run kaydı oluşmamış).
   K16 GScripts github_scripts/*.js self-testi: 15 senaryoda MOCK girdi
                (fixture + mock REST yanıtları) ile gerçek Node'da çalıştırıp
                ÇIKTI eşleşmesini denetler (hangi çağrı/body/comment_id/setFailed).
@@ -3900,6 +3901,9 @@ def apply_full_flags(args):
     args.check_mirror = True
     args.mirror_auto_sync = True
     args.check_daemon = True
+    if not getattr(args, "check_history", None):
+        # Açık PATH verilmemişse auto-discover modunda aç
+        args.check_history = True
     return args
 
 
@@ -3990,10 +3994,12 @@ def main():
     ap.add_argument("--check-cleanup", action="store_true",
                     help="K14: cleanup_log.json (M0 §10 CLEANUP LOG) silme/taşıma "
                          "kayıtlarını dosya sistemiyle doğrula (fail-closed)")
-    ap.add_argument("--check-history", default=None, metavar="PATH",
+    ap.add_argument("--check-history", default=None, nargs="?", const=True,
+                    metavar="PATH",
                     help="K15: history.jsonl ↔ history.jsonl.sha256 sidecar "
                          "bütünlüğünü doğrula (preview_server.py persist_history "
-                         "çıktısı; uyuşmazlık P1). Yerel varsayılan: "
+                         "çıktısı; uyuşmazlık P1). Yolu belirtilmezse otomatik "
+                         "keşfeder: ./history.jsonl, --dir altı, veya "
                          "~/Library/Caches/com.freebuff/preview/history.jsonl")
     ap.add_argument("--check-github-scripts", action="store_true",
                     help="K16: github_scripts/*.js self-testi — 15 senaryoda "
@@ -4266,16 +4272,42 @@ def main():
     # ---- K15: history.jsonl ↔ .sha256 sidecar bütünlüğü ----
     # preview_server.py persist_history() her run kaydında history.jsonl'in
     # yanına sha256sum formatında .sha256 sidecar'ı yazar. Bu katman sidecar'ı
-    # yeniden hesaplar (fail-closed P1). history.jsonl repo DIŞI TCC-safe
-    # mirror'da yaşadığı için --full'a dahil DEĞİLDİR (açık --check-history).
+    # yeniden hesaplar (fail-closed P1). --full ile otomatik keşif: sırasıyla
+    #   ./history.jsonl (CI working dir),
+    #   {--dir}/history.jsonl,
+    #   ~/Library/Caches/com.freebuff/preview/history.jsonl (macOS daemon).
+    # Açık PATH verilirse doğrudan kullanılır. Dosya hiçbir yerde yoksa atlanır
+    # (henüz run yok = SKIP).
     history_sidecar_report = None
     if args.check_history:
-        hok, hdetail = check_history_sidecar(args.check_history, add)
-        history_sidecar_report = {"ok": hok, "detail": hdetail,
-                                  "path": args.check_history}
-        if not args.json:
-            print(f"[K15] history sidecar: "
-                  f"{'PASS' if hok else 'FAIL'} — {hdetail}")
+        hpath = None
+        if isinstance(args.check_history, str) and args.check_history is not True:
+            # Açık PATH verilmiş — doğrudan kullan.
+            hpath = args.check_history
+        else:
+            # Otomatik keşif: sırayla dene.
+            candidates = [
+                "history.jsonl",
+                os.path.join(args.dir, "history.jsonl"),
+                os.path.expanduser(
+                    "~/Library/Caches/com.freebuff/preview/history.jsonl"),
+            ]
+            for c in candidates:
+                if os.path.isfile(c):
+                    hpath = c
+                    break
+        if hpath:
+            hok, hdetail = check_history_sidecar(hpath, add)
+            history_sidecar_report = {"ok": hok, "detail": hdetail,
+                                      "path": hpath}
+            if not args.json:
+                print(f"[K15] history sidecar: "
+                      f"{'PASS' if hok else 'FAIL'} — {hdetail}")
+        else:
+            # Dosya yok — henüz run kaydı oluşmamış, sessizce atla.
+            if not args.json:
+                print(f"[K15] history sidecar: aranacak dosya bulunamadı "
+                      f"(candidates: {candidates!r}) — atlandı")
 
     tmp = tempfile.mkdtemp(prefix="verify_delivery_")
     pages = refs = pdf_meta_report = None

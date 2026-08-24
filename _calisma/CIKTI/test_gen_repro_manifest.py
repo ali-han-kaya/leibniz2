@@ -400,31 +400,67 @@ class TestProvenance(unittest.TestCase):
     # ── DAEMON HTTP section tests ────────────────────────────────────
     def test_daemon_http_section(self):
         # daemon-http/ dosyaları (daemon_http_test.py raporu + K15 sidecar
-        # + override report) CONFIG gibi ayrı bölümde işaretlenir +
-        # tek-hash combined_sha256 özetlenir.
+        # daemon_history.jsonl/.sha256 + k15_report.txt + override_report.json)
+        # CONFIG gibi ayrı bölümde işaretlenir + tek-hash combined_sha256 özetlenir.
         (self.artifacts / "daemon-http").mkdir(parents=True)
         (self.artifacts / "daemon-http" / "daemon_http_report.json").write_text(
             json.dumps({"ok": True, "endpoints": {"/api/latest": 200},
                         "daemon_alive": True}) + "\n", encoding="utf-8")
         (self.artifacts / "daemon-http" / "daemon_http_report.txt").write_text(
             "daemon-http exit: 0\n", encoding="utf-8")
+        # K15 sidecar: daemon_history.jsonl + .sha256
+        (self.artifacts / "daemon-http" / "daemon_history.jsonl").write_text(
+            '{"ts":"2026-08-20T12:00:00Z","verdict":"PASS"}\n', encoding="utf-8")
+        digest = hashlib.sha256(
+            (self.artifacts / "daemon-http" / "daemon_history.jsonl").read_bytes()
+        ).hexdigest()
+        (self.artifacts / "daemon-http" / "daemon_history.jsonl.sha256").write_text(
+            f"{digest}  daemon_history.jsonl\n", encoding="utf-8")
+        # K15 raporu
+        (self.artifacts / "daemon-http" / "k15_report.txt").write_text(
+            "[K15] history sidecar: PASS\n", encoding="utf-8")
+        # Override raporu
+        (self.artifacts / "daemon-http" / "override_report.json").write_text(
+            json.dumps({"generated_at": "2026-08-20T12:00:00Z",
+                        "verdict": "PASS", "role": "override-run",
+                        "override_count": 0, "overrides": {}, "lines": []})
+            + "\n", encoding="utf-8")
         self._gen()
         txt = (self.out / "manifest.txt").read_text(encoding="utf-8")
         self.assertIn("DAEMON HTTP ARTIFACT (ayrı bölüm)", txt)
         self.assertIn("daemon_http_combined_sha256", txt)
         m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
         dh = m["daemon_http"]
-        self.assertIn("daemon-http/daemon_http_report.json", dh["files"])
-        self.assertIn("daemon-http/daemon_http_report.txt", dh["files"])
+        # All 6 files should be in the manifest
+        expected_files = [
+            "daemon-http/daemon_http_report.json",
+            "daemon-http/daemon_http_report.txt",
+            "daemon-http/daemon_history.jsonl",
+            "daemon-http/daemon_history.jsonl.sha256",
+            "daemon-http/k15_report.txt",
+            "daemon-http/override_report.json",
+        ]
+        for ef in expected_files:
+            self.assertIn(ef, dh["files"], f"{ef} manifest'te olmalı")
         self.assertTrue(len(dh["combined_sha256"]) == 64)
+        # combined_sha256 deterministik olmalı
+        expected_combined = hashlib.sha256(
+            "".join(f"{rel}\0{dh['files'][rel]}\n" for rel in sorted(dh["files"]))
+            .encode()
+        ).hexdigest()
+        self.assertEqual(dh["combined_sha256"], expected_combined)
 
     def test_daemon_http_combined_recomputes_deterministically(self):
         (self.artifacts / "daemon-http").mkdir(parents=True)
         (self.artifacts / "daemon-http" / "daemon_http_report.json").write_text(
             json.dumps({"ok": True}) + "\n", encoding="utf-8")
+        (self.artifacts / "daemon-http" / "daemon_history.jsonl").write_text(
+            '{"ts":"x"}\n', encoding="utf-8")
         self._gen()
         m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
         dh = m["daemon_http"]["files"]
+        # History sidecar daemon-http artifact'ında olmalı
+        self.assertIn("daemon-http/daemon_history.jsonl", dh)
         expected = hashlib.sha256(
             "".join(f"{rel}\0{dh[rel]}\n" for rel in sorted(dh)).encode()
         ).hexdigest()
