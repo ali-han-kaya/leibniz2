@@ -605,5 +605,72 @@ class TestRunHistoryClickToLoad(unittest.TestCase):
         self.assertIn("replace(/\"/g", self._html)
 
 
+class TestRunHistoryFilter(unittest.TestCase):
+    """Run history PASS/FAIL/P0 filtresi."""
+
+    @classmethod
+    def setUpClass(cls):
+        with open("_calisma/CIKTI/preview.html", encoding="utf-8") as f:
+            cls._html = f.read()
+
+    def test_filter_buttons_exist(self):
+        """4 filtre butonu: all, PASS, FAIL, P0."""
+        self.assertIn('data-f="all"', self._html)
+        self.assertIn('data-f="PASS"', self._html)
+        self.assertIn('data-f="FAIL"', self._html)
+        self.assertIn('data-f="P0"', self._html)
+
+    def test_filter_bar_exists(self):
+        """rh-filter div'i var."""
+        self.assertIn('class="rh-filter"', self._html)
+        self.assertIn('onclick="setRhFilter', self._html)
+
+    def test_filter_var_declared(self):
+        """let rhFilter = "all" değişkeni tanımlı."""
+        # Search for the declaration near the top of JS
+        self.assertIn('let rhFilter = "all"', self._html)
+
+    def test_set_rh_filter_function_exists(self):
+        """function setRhFilter(f) tanımlı."""
+        self.assertIn('function setRhFilter(f)', self._html)
+
+    def test_pass_filter_logic(self):
+        """PASS filtresi: verdict === "PASS" && p0 === 0."""
+        self.assertIn('r.verdict === "PASS"', self._html)
+        self.assertIn('(r.p0||0) === 0', self._html)
+
+    def test_fail_filter_logic(self):
+        """FAIL filtresi: verdict === "FAIL" || "ERROR"."""
+        self.assertIn('r.verdict === "FAIL"', self._html)
+
+    def test_p0_filter_logic(self):
+        """P0 filtresi: (r.p0||0) > 0."""
+        self.assertIn('(r.p0||0) > 0', self._html)
+
+    def test_filter_count_suffix(self):
+        """Filtreli sayı: "(3 / 15)" gösterilir."""
+        self.assertIn('fSuffix', self._html)
+        self.assertIn('" / " + rows.length', self._html)
+
+    def test_filter_active_toggle(self):
+        """setRhFilter butonlara .active toggle eder."""
+        self.assertIn('classList.toggle("active"', self._html)
+        self.assertIn('b.dataset.f === f', self._html)
+
+    def test_filter_css_button_styles(self):
+        """Filtre buton CSS: .rh-filter button.active[data-f="PASS"]."""
+        self.assertIn('.rh-filter button.active[data-f="PASS"]', self._html)
+        self.assertIn('.rh-filter button.active[data-f="FAIL"]', self._html)
+        self.assertIn('.rh-filter button.active[data-f="P0"]', self._html)
+
+    def test_init_sets_filter_all(self):
+        """Sayfa yüklenince setRhFilter("all") çağrılır."""
+        self.assertIn('setRhFilter("all")', self._html)
+
+    def test_empty_filter_message(self):
+        """Filtreyle eşleşen run yoksa mesaj gösterilir."""
+        self.assertIn('filtreyle eşleşen run yok', self._html)
+
+
 if __name__ == "__main__":
     unittest.main()

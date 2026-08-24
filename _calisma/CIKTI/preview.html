@@ -67,6 +67,14 @@
             transition:background 0.15s; }
   .rh-row:hover { background:rgba(88,166,255,.1); }
   .rh-row:active { background:rgba(88,166,255,.2); }
+  .rh-filter { display:flex; gap:4px; align-items:center; margin-bottom:4px; }
+  .rh-filter button { background:#21262d; color:var(--muted); border:1px solid var(--border);
+    padding:2px 8px; border-radius:4px; cursor:pointer; font-size:11px; font-weight:600; }
+  .rh-filter button.active { color:#fff; border-color:var(--accent); background:rgba(88,166,255,.15); }
+  .rh-filter button.active[data-f="all"] { border-color:var(--muted); }
+  .rh-filter button.active[data-f="PASS"] { border-color:var(--ok); color:var(--ok); background:rgba(63,185,80,.15); }
+  .rh-filter button.active[data-f="FAIL"] { border-color:var(--err); color:var(--err); background:rgba(248,81,73,.15); }
+  .rh-filter button.active[data-f="P0"] { border-color:var(--err); color:var(--err); background:rgba(248,81,73,.1); }
   pre .err { color:var(--err); }
   pre .ok  { color:var(--ok); }
   pre .muted { color:var(--muted); }
@@ -195,6 +203,12 @@
 
   <section>
     <h2>Run history <span class="ts" id="run-history-count"></span></h2>
+    <div class="rh-filter">
+      <button data-f="all" onclick="setRhFilter('all')">all</button>
+      <button data-f="PASS" onclick="setRhFilter('PASS')">PASS</button>
+      <button data-f="FAIL" onclick="setRhFilter('FAIL')">FAIL</button>
+      <button data-f="P0" onclick="setRhFilter('P0')">P0</button>
+    </div>
     <div id="run-history" style="max-height:240px;overflow-y:auto;font-size:12px;line-height:1.6"></div>
   </section>
 
@@ -1672,13 +1686,38 @@ function applyStdout(text) {
   el.scrollTop = el.scrollHeight;
 }
 
+let rhFilter = "all";  // all | PASS | FAIL | P0
+
+function setRhFilter(f) {
+  rhFilter = f;
+  // Buton stilleri
+  document.querySelectorAll(".rh-filter button").forEach(b => {
+    b.classList.toggle("active", b.dataset.f === f);
+  });
+  loadRunHistory();
+}
+
 function loadRunHistory() {
   fetch("/api/run-history?_t=" + Date.now()).then(r => r.json()).then(rows => {
     const el = $("run-history");
     if (!rows.length) { el.innerHTML = "<span class=\"muted\">henüz run yok</span>"; return; }
     const cnt = $("run-history-count");
-    if (cnt) cnt.textContent = "(" + rows.length + ")";
-    const lines = rows.slice().reverse().map(r => {
+    // Filtreleme: all → hepsi, PASS → verdict=ok, FAIL → fail/error, P0 → p0>0
+    let filtered = rows;
+    if (rhFilter === "PASS") {
+      filtered = rows.filter(r => r.verdict === "PASS" && (r.p0||0) === 0);
+    } else if (rhFilter === "FAIL") {
+      filtered = rows.filter(r => r.verdict === "FAIL" || r.verdict === "ERROR");
+    } else if (rhFilter === "P0") {
+      filtered = rows.filter(r => (r.p0||0) > 0);
+    }
+    const fSuffix = rhFilter !== "all" ? " / " + rows.length : "";
+    if (cnt) cnt.textContent = "(" + filtered.length + fSuffix + ")";
+    if (!filtered.length) {
+      el.innerHTML = "<span class=\"muted\">filtreyle eşleşen run yok</span>";
+      return;
+    }
+    const lines = filtered.slice().reverse().map(r => {
       const sv = r.verdict || "?";
       const cls = sv === "PASS" ? "ok" : (sv === "FAIL" || sv === "ERROR" ? "err" : "warn");
       const t = r.ts && r.ts.indexOf("T") >= 0 ? r.ts.split("T")[1].slice(0, 8) : "?";
@@ -1794,6 +1833,8 @@ setInterval(() => {
 
 loadTrend();
 connectStream();
+// Run history filtresini başlat (all varsayılan)
+setRhFilter("all");
 initLoad();
 connect();
 </script>
