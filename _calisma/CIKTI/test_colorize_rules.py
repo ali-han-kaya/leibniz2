@@ -469,5 +469,53 @@ class TestTrendLeanAxis(unittest.TestCase):
         self.assertNotIn("PR = 212", self._html)
 
 
+class TestLeanFailPulse(unittest.TestCase):
+    """Lean FAIL olduğunda animasyonlu uyarıcı (fail-pulse + lean-alert)."""
+
+    @classmethod
+    def setUpClass(cls):
+        with open("_calisma/CIKTI/preview.html", encoding="utf-8") as f:
+            cls._html = f.read()
+
+    def test_fail_pulse_class_defined_in_css(self):
+        """.badge.fail-pulse iki animasyonu bağlar: failShake + failGlow."""
+        self.assertIn("badge.fail-pulse", self._html)
+        self.assertIn("failShake", self._html)
+        self.assertIn("failGlow", self._html)
+
+    def test_fail_shake_keyframe_exists(self):
+        """@keyframes failShake: yatay titreşim."""
+        self.assertIn("@keyframes failShake", self._html)
+        self.assertIn("translateX", self._html)
+
+    def test_fail_glow_keyframe_exists(self):
+        """@keyframes failGlow: kırmızı glow pulse."""
+        self.assertIn("@keyframes failGlow", self._html)
+        self.assertIn("box-shadow:0 0 18px", self._html)
+
+    def test_lean_alert_element_exists(self):
+        """#lean-alert elementi status board altında mevcut (hidden)."""
+        self.assertIn('id="lean-alert"', self._html)
+        self.assertIn('lean-alert hidden', self._html)
+        self.assertIn('K9 Lean: FAIL', self._html)
+
+    def test_fail_pulse_added_to_k9_badge(self):
+        """renderKLayers: K9 + leanOk===false → badge class'a fail-pulse eklenir."""
+        self.assertIn('kcls += " fail-pulse"', self._html)
+        self.assertIn('k === "K9" && leanOk === false', self._html)
+
+    def test_lean_alert_shown_hidden_in_updatelatest(self):
+        """updateLatest: lean_ok===true → hidden, ===false → visible + detail."""
+        self.assertIn('la.classList.add("hidden")', self._html)
+        self.assertIn('la.classList.remove("hidden")', self._html)
+        self.assertIn('ispat zinciri kırık', self._html)
+
+    def test_lean_alert_uses_err_color(self):
+        """.lean-alert kırmızı tema: color:var(--err), border:var(--err)."""
+        self.assertIn(".lean-alert {", self._html)
+        self.assertIn("color:var(--err)", self._html)
+        self.assertIn("border:1px solid var(--err)", self._html)
+
+
 if __name__ == "__main__":
     unittest.main()
