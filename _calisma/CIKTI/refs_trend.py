@@ -94,7 +94,10 @@ CHANGELOG = [
      "Denetim REFERENCE_POOL_SIZE=4 havuzda PARALEL koşar — sıralı koşudaki "
      "rate-limit (OpenLibrary ~8 sn/çağrı) bütçe-skip'e düşürüp UNVERIFIED "
      "bırakıyordu; bütçe 260 sn'ye çıkarıldı. Canlı doğrulama: 56/56 PASS, "
-     "94 sn (crossref 6, sep 5, openlibrary 27, archive 16, perseus 2)."),
+     "94 sn (crossref 6, sep 5, openlibrary 27, archive 16, perseus 2). "
+     "NOT: bu 56/56 **yerel doğrulama**dır (trend tablosunda görünmez); "
+     "deterministik kanıtı REFERANS_KANIT_DENETIMI.md §5.3'te "
+     "`ia_ol_fallback_evidence.py --offline` ile belgelenmiştir."),
     ("2026-08-19",
      "V5n: Norton 1981 ve Popkin 1951 DOI'leri CrossRef'e eklendi — kapsam-dışı "
      "kalan son 2 dergi makalesi artık çevrimiçi doğrulanır "
@@ -525,6 +528,8 @@ def main():
             f"{verified_all / len(rows):.1f}",
             f"- **İlk run:** {short_date(rows[0]['date'])} — "
             f"{rows[0]['verified']}/{rows[0]['total_online']} doğrulanan",
+            f"- **Milestone:** 56/56 (V5o, yerel doğrulama — "
+            "[REFERANS §5.3](REFERANS_KANIT_DENETIMI.md))",
             "",
         ]
         # Kapsam açıklaması: sayılar nereden gelir, "54" neden artık geçersiz
@@ -545,13 +550,23 @@ def main():
                 "Erken dönem 54/49 (CrossRef+SEP+OL+IA temel zincir), "
                 "V5n ile 56/56'ya (Norton/Popkin CrossRef + paralel koşu) "
                 "yükseldi — bu 56/56 **yerel doğrulama**ydı (CI repo'da "
-                "doğrudan koşulmuştu, GitHub artifact'ına yansımadı). "
-                "Trend yalnızca gerçek `refs-online` artifact'larından "
-                "beslenir; 56/56 satırı trend tablosunda görünmez. "
-                "V5q/V5t/V5w zinciriyle kapsam 61/61'e ulaştı (Sextus ia_ids "
-                "+ Della Rocca Handle + LoC lccn katalog kanıtı). '54' "
-                "erken bir anlık görüntüdür, güncel denetim kapsamını "
-                "yansıtmaz.",
+                "doğrudan koşulmuştu, GitHub artifact'ına yansımadı; "
+                "kanıtı REFERANS_KANIT_DENETIMI.md §5.3'te belgelenmiştir: "
+                "`ia_ol_fallback_evidence.py --offline` deterministik "
+                "mock kanıt). Trend yalnızca gerçek `refs-online` "
+                "artifact'larından beslenir; 56/56 satırı trend tablosunda "
+                "görünmez. V5q/V5t/V5w zinciriyle kapsam 61/61'e ulaştı "
+                "(Sextus ia_ids + Della Rocca Handle + LoC lccn katalog "
+                "kanıtı). '54' erken bir anlık görüntüdür, güncel denetim "
+                "kapsamını yansıtmaz.",
+                "",
+                "> 🏁 **Milestone 56/56 (yerel):** V5o — tam çevrimiçi kapsam "
+                "(Norton/Popkin CrossRef + paralel koşu, 11 UNVERIFIED "
+                "kapatıldı). Bu sonuç GitHub artifact'ına yansımadığı için "
+                "trend tablosunda görünmez; deterministik kanıtı "
+                "[REFERANS_KANIT_DENETIMI.md §5.3](REFERANS_KANIT_DENETIMI.md) "
+                "(`ia_ol_fallback_evidence.py --offline`) ile yeniden "
+                "üretilebilir.",
                 "",
             ]
 

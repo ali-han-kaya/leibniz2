@@ -391,6 +391,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-24 | other | audit: python3-shell artifact varligini sabit kap yaptim | [`5388d77`](https://github.com/ali-han-kaya/leibniz2/commit/5388d77) |
 | 2026-08-24 | other | verify: K13'e python3-shell mock + üretici-hatasi senaryosu ekle | [`a42512f`](https://github.com/ali-han-kaya/leibniz2/commit/a42512f) |
 | 2026-08-24 | other | verify: REPRO_ARTIFACT_JOBS override python3-shell kapsamini dogrula | [`beebcdf`](https://github.com/ali-han-kaya/leibniz2/commit/beebcdf) |
+| 2026-08-24 | other | verify: ia_ol_fallback_evidence'i K6'ya bagla, ayri bolum goster | [`1ef0e2d`](https://github.com/ali-han-kaya/leibniz2/commit/1ef0e2d) |
 
 ### Regresyon notları
 
