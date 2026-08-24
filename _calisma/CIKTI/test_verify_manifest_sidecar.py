@@ -209,8 +209,8 @@ class TestK13SelfTest(unittest.TestCase):
     """K13 repro self-testi artık sidecar'ı da denetliyor (K10 ile ortak).
 
     Sertleştirme: negatif senaryolar (eksik dosya, bozuk hash, config/ alt
-    dizin) fail-closed yakalanmalı; eksik dosya kilitlenme yerine temiz
-    'bundle dosyası yok' problemi üretmeli.
+    dizin, python3-shell bölüm eksik) fail-closed yakalanmalı; eksik dosya
+    kilitlenme yerine temiz 'bundle dosyası yok' problemi üretmeli.
     """
 
     def test_self_test_includes_sidecar_pass(self):
@@ -226,7 +226,7 @@ class TestK13SelfTest(unittest.TestCase):
         ok, detail = vd.check_repro_manifest_self_consistency(collector)
         self.assertTrue(ok, detail)
         self.assertIn("senaryolar: eksik-dosya PASS, bozuk-hash PASS, "
-                      "config-alt-dizin PASS", detail)
+                      "config-alt-dizin PASS, python3-shell-eksik PASS", detail)
         self.assertEqual(collector.findings, [])
 
     def _produce_once(self):
@@ -277,6 +277,33 @@ class TestK13SelfTest(unittest.TestCase):
             shutil.rmtree(d, ignore_errors=True)
         self.assertFalse(ok)
         self.assertTrue(any("config objesi" in p for p in problems), problems)
+
+    def test_verify_detects_python3_shell_section_missing(self):
+        """Üretici hatası: python3-shell/ dosyası bundle'da var ama manifest'te
+        python3_shell bölümü hiç yok → yakalanmalı (P1, fail-closed)."""
+        d, out, m = self._produce_once()
+        try:
+            m.pop("python3_shell", None)
+            ok, problems = vd._k13_verify_manifest(m, out)
+        finally:
+            import shutil
+            shutil.rmtree(d, ignore_errors=True)
+        self.assertFalse(ok)
+        self.assertTrue(any("python3_shell objesi" in p for p in problems),
+                        problems)
+
+    def test_verify_detects_python3_shell_bad_combined(self):
+        """python3_shell.combined_sha256 bozuksa yakalanmalı."""
+        d, out, m = self._produce_once()
+        try:
+            m["python3_shell"]["combined_sha256"] = "0" * 64
+            ok, problems = vd._k13_verify_manifest(m, out)
+        finally:
+            import shutil
+            shutil.rmtree(d, ignore_errors=True)
+        self.assertFalse(ok)
+        self.assertTrue(any("python3_shell.combined_sha256" in p
+                            for p in problems), problems)
 
     def test_missing_bundle_file_does_not_crash(self):
         """Sertleştirme regresyonu: eksik dosya FileNotFoundError ile

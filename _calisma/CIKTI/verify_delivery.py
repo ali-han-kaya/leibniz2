@@ -3081,6 +3081,9 @@ _K13_MOCK = {
     "klayers.json": b'{"layers": {}}',
     # precheck-report: AŞAMA 0 kapılarının çıktı raporu (PRECHECK bölümü)
     "precheck-report/precheck_report.txt": b'ADIM SONUCU: PASS\n',
+    # python3-shell: check_python3_shell.py --json çıktısı (PYTHON3 SHELL
+    # bölümü). Üretici bu önekli dosyayı python3_shell objesine almalı.
+    "python3-shell/python3_shell_findings.json": b'{"exit_code": 0, "verdict": "PASS", "checks": []}\n',
 }
 
 _WANT_CFG = {"config/cfg.json", "config/deep/extra.json",
@@ -3088,6 +3091,7 @@ _WANT_CFG = {"config/cfg.json", "config/deep/extra.json",
 _WANT_LINEAGE = {"lineage-findings/zip_lineage.json"}
 _WANT_SUMMARY = {"klayers.json"}
 _WANT_PRECHECK = {"precheck-report/precheck_report.txt"}
+_WANT_PYTHON3_SHELL = {"python3-shell/python3_shell_findings.json"}
 
 
 def _k13_write_mock(tmp):
@@ -3194,6 +3198,20 @@ def _k13_verify_manifest(m, out):
     elif prc["combined_sha256"] != _summary_combined_sha256(prc["files"]):
         problems.append("precheck_report.combined_sha256 yeniden hesap uyuşmuyor")
 
+    # python3_shell bölümü: python3-shell/ önekli dosyalar (check_python3_shell
+    # --json çıktısı). Üretici bunları python3_shell objesine almalı; eksik
+    # veya combined_sha256 uyuşmazlığı → P1 (fail-closed). K10 ile ORTAK
+    # formül: sorted '{rel}\0{hash}\n' birleşiminin SHA-256'sı.
+    psh = m.get("python3_shell")
+    psh_ok = isinstance(psh, dict) and isinstance(psh.get("files"), dict)
+    psh_rel = set(psh["files"]) if psh_ok else set()
+    missing_psh = sorted(_WANT_PYTHON3_SHELL - psh_rel)
+    if not psh_ok or missing_psh:
+        problems.append("python3_shell objesi python3-shell dosyalarını "
+                        f"kapsamıyor (eksik={missing_psh})")
+    elif psh["combined_sha256"] != _summary_combined_sha256(psh["files"]):
+        problems.append("python3_shell.combined_sha256 yeniden hesap uyuşmuyor")
+
     return (not problems), problems
 
 
@@ -3206,6 +3224,9 @@ def _k13_negative_scenarios(add, script):
                         temiz 'bundle dosyası yok' problemi beklenir
       S2 bozuk-hash   : manifest.json'daki bir SHA-256 değiştirilir
       S3 config-alt   : config/ alt dizin dosyası config objesinden çıkarılır
+      S4 python3-shell-eksik: üretici python3_shell bölümünü manifest'ten
+                        düşürür (üretici hatası: dosya bundle'da var ama
+                        bölüm objeye alınmamış) → P1
     Yakalanmayan senaryo → P0 (fail-closed ihlali). Döndürür {ad: durum}.
     """
     def tamper_missing_file(m, out):
@@ -3227,6 +3248,15 @@ def _k13_negative_scenarios(add, script):
             with open(os.path.join(out, "manifest.json"), "w",
                       encoding="utf-8") as mf:
                 json.dump(m, mf)
+
+    def tamper_python3_shell_missing(m, out):
+        # Üretici hatası: python3-shell/ dosyaları bundle'da var ama
+        # manifest'te python3_shell bölümü hiç üretilmemiş (drift).
+        # K13 bunu 'python3_shell objesi … kapsamıyor' diye yakalamalı.
+        m.pop("python3_shell", None)
+        with open(os.path.join(out, "manifest.json"), "w",
+                  encoding="utf-8") as mf:
+            json.dump(m, mf)
 
     def run_scenario(name, tamper):
         tmp = tempfile.mkdtemp(prefix="repro_sc_")
@@ -3251,7 +3281,8 @@ def _k13_negative_scenarios(add, script):
     results = {}
     for name, tamper in (("eksik-dosya", tamper_missing_file),
                          ("bozuk-hash", tamper_bad_hash),
-                         ("config-alt-dizin", tamper_config_subdir)):
+                         ("config-alt-dizin", tamper_config_subdir),
+                         ("python3-shell-eksik", tamper_python3_shell_missing)):
         results[name] = run_scenario(name, tamper)
     return results
 
@@ -3339,9 +3370,10 @@ def check_repro_manifest_self_consistency(add):
         if not sc_ok:
             return False, detail
 
-        # Fail-closed sertleştirme: happy path SAĞLAMKEN denetimin 3 kurcalama
-        # senaryosunu (eksik dosya, bozuk hash, config/ alt dizin) yakaladığını
-        # doğrula. Yakalanmayan senaryo → P0 (fail-closed ihlali).
+        # Fail-closed sertleştirme: happy path SAĞLAMKEN denetimin 4 kurcalama
+        # senaryosunu (eksik dosya, bozuk hash, config/ alt dizin,
+        # python3-shell bölüm eksik) yakaladığını doğrula. Yakalanmayan
+        # senaryo → P0 (fail-closed ihlali).
         scen = _k13_negative_scenarios(add, script)
         scen_str = ", ".join(f"{k} {v}" for k, v in scen.items())
         if any(v != "PASS" for v in scen.values()):

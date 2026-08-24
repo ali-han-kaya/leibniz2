@@ -388,6 +388,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-24 | docs | PRE_PUSH_DENETIM_RAPORU'na python3-shell artifact drift'ini isle | [`e0aaeb4`](https://github.com/ali-han-kaya/leibniz2/commit/e0aaeb4) |
 | 2026-08-24 | other | audit: artifact-doc drift e2e kapisi + self-exclusion fix | [`0c43da7`](https://github.com/ali-han-kaya/leibniz2/commit/0c43da7) |
 | 2026-08-24 | other | precommit: hook kimliklerini (hook id) PRECOMMIT_RAPORU'na isle | [`71bb362`](https://github.com/ali-han-kaya/leibniz2/commit/71bb362) |
+| 2026-08-24 | other | audit: python3-shell artifact varligini sabit kap yaptim | [`5388d77`](https://github.com/ali-han-kaya/leibniz2/commit/5388d77) |
 
 ### Regresyon notları
 
