@@ -429,6 +429,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-24 | ci | pip + pre-commit cache to verify and ci-simulate jobs | [`7192014`](https://github.com/ali-han-kaya/leibniz2/commit/7192014) |
 | 2026-08-24 | ci | pip + pre-commit cache to verify and ci-simulate jobs | [`aac0aa8`](https://github.com/ali-han-kaya/leibniz2/commit/aac0aa8) |
 | 2026-08-24 | feat | K15 history check --full zincirinde (auto-discover history.jsonl) | [`ba2ae59`](https://github.com/ali-han-kaya/leibniz2/commit/ba2ae59) |
+| 2026-08-24 | test | (manifest) daemon-http section tests cover history.jsonl + .sha256 | [`ef70504`](https://github.com/ali-han-kaya/leibniz2/commit/ef70504) |
 
 ### Regresyon notları
 
