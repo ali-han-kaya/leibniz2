@@ -803,7 +803,7 @@ REFERENCE_HTTP_RETRIES = 3
 REFERENCE_AUDIT_BUDGET_S = 260
 # Çevrimiçi denetim paralel havuz boyutu: tek bir yavaş endpoint (örn. rate-
 # limit edilen OpenLibrary ~8 sn/çağrı) tüm bütçeyi bitirip kalan kaynakları
-# UNVERIFIED bırakmasın. 4 işçi, 56 kaynağın tamamını ~90-140 sn'de bitirir.
+# UNVERIFIED bırakmasın. 4 işçi, 61 kaynağın tamamını ~90-140 sn'de bitirir.
 REFERENCE_POOL_SIZE = 4
 
 _USER_AGENT = ("verify_delivery.py (Stoic-Hume V5 CI; "
