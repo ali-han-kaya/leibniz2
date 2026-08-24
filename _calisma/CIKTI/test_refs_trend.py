@@ -748,5 +748,74 @@ class TestChangelogHasAllVersions(unittest.TestCase):
             self.assertIn(v, all_notes, f"{v} CHANGELOG'da eksik")
 
 
+class TestCoverageTransitionSummary(unittest.TestCase):
+    """build_coverage_transition_summary: UNVERIFIED>0 → 0 geçiş zinciri."""
+
+    def test_two_stage_transition(self):
+        rows = [
+            {"date": "2026-08-18", "run_id": 1, "total_online": 54,
+             "verified": 49, "unverified": 5, "by_source": {}},
+            {"date": "2026-08-19", "run_id": 2, "total_online": 56,
+             "verified": 56, "unverified": 0, "by_source": {}},
+        ]
+        lines = rt.build_coverage_transition_summary(rows)
+        joined = "\n".join(lines)
+        self.assertIn("Geçiş zinciri", joined)
+        self.assertIn("54/49", joined)
+        self.assertIn("56/56", joined)
+
+    def test_three_stage_transition(self):
+        rows = [
+            {"date": "2026-08-18", "run_id": 1, "total_online": 54,
+             "verified": 49, "unverified": 5, "by_source": {}},
+            {"date": "2026-08-19", "run_id": 2, "total_online": 56,
+             "verified": 30, "unverified": 26, "by_source": {}},
+            {"date": "2026-08-20", "run_id": 3, "total_online": 56,
+             "verified": 56, "unverified": 0, "by_source": {}},
+            {"date": "2026-08-21", "run_id": 4, "total_online": 61,
+             "verified": 61, "unverified": 0, "by_source": {}},
+        ]
+        lines = rt.build_coverage_transition_summary(rows)
+        joined = "\n".join(lines)
+        # Zincir: 54/49 → 56/56 → 61/61 (56'daki 26 UNVERIFIED sıfırlandı)
+        self.assertIn("54/49", joined)
+        self.assertIn("56/56", joined)
+        self.assertIn("61/61", joined)
+        self.assertIn("3 aşama", joined)
+        self.assertIn("4 artifact", joined)
+
+    def test_single_stage_no_transition(self):
+        rows = [
+            {"date": "2026-08-18", "run_id": 1, "total_online": 61,
+             "verified": 61, "unverified": 0, "by_source": {}},
+            {"date": "2026-08-19", "run_id": 2, "total_online": 61,
+             "verified": 61, "unverified": 0, "by_source": {}},
+        ]
+        lines = rt.build_coverage_transition_summary(rows)
+        joined = "\n".join(lines)
+        self.assertIn("61/61", joined)
+        self.assertIn("1 aşama", joined)
+
+    def test_unverified_never_reaches_zero(self):
+        # Erken aşama: total_online değişiyor ama UNVERIFIED hep > 0
+        rows = [
+            {"date": "2026-08-18", "run_id": 1, "total_online": 49,
+             "verified": 49, "unverified": 5, "by_source": {}},
+            {"date": "2026-08-19", "run_id": 2, "total_online": 54,
+             "verified": 49, "unverified": 5, "by_source": {}},
+        ]
+        lines = rt.build_coverage_transition_summary(rows)
+        joined = "\n".join(lines)
+        self.assertIn("2 aşama", joined)
+
+    def test_empty_rows_returns_empty(self):
+        self.assertEqual(rt.build_coverage_transition_summary([]), [])
+
+    def test_single_row_returns_empty(self):
+        rows = [{"date": "x", "run_id": 1, "total_online": 61,
+                 "verified": 61, "unverified": 0, "by_source": {}}]
+        self.assertEqual(rt.build_coverage_transition_summary(rows), [])
+
+
 if __name__ == "__main__":
     unittest.main()

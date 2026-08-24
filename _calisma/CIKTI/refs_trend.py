@@ -395,6 +395,93 @@ def changelog_lines():
     return out
 
 
+def build_coverage_transition_summary(rows):
+    """Rows'tan UNVERIFIED > 0 → 0 geçiş özet tablosu üretir.
+
+    Tüm refs-online artifact'larını tarar, total_online değişimlerini ve
+    her aşamada UNVERIFIED sayısının sıfıra düştüğü ilk run'ı bulur.
+    Kompakt tek satırlı özet: 54/49 → 56/26 → 61/61 geçiş zinciri.
+
+    Döndürür: markdown satır listesi veya boş liste.
+    """
+    if len(rows) < 2:
+        return []
+
+    # Her unique total_online değeri için ilk ve son UNVERIFIED durumu
+    by_total = {}
+    for r in rows:
+        t = r.get("total_online", 0)
+        u = r.get("unverified", 0)
+        if t not in by_total:
+            by_total[t] = {"first_unverified": u, "last_unverified": u,
+                           "first_date": r.get("date", ""),
+                           "first_run": r.get("run_id"),
+                           "last_date": r.get("date", ""),
+                           "last_run": r.get("run_id")}
+        else:
+            by_total[t]["last_unverified"] = u
+            by_total[t]["last_date"] = r.get("date", "")
+            by_total[t]["last_run"] = r.get("run_id")
+
+    # total_online değerine göre sırala
+    sorted_totals = sorted(by_total.keys())
+
+    # Geçiş zinciri: her aşamada UNVERIFIED'ın sıfıra ilk düştüğü anı bul
+    out = []
+    out.append("### UNVERIFIED → 0 geçiş özeti")
+    out.append("")
+    out.append("| Aşama | total_online | İlk UNVERIFIED | UNVERIFIED=0 ilk run | Tarih |")
+    out.append("|---|---|---|---|---|")
+
+    for t in sorted_totals:
+        info = by_total[t]
+        first_u = info["first_unverified"]
+        last_u = info["last_unverified"]
+
+        # Bu total_online değerinde UNVERIFIED'ın sıfıra düştüğü ilk satırı bul
+        zero_run = None
+        zero_date = None
+        for r in rows:
+            if r.get("total_online") == t and r.get("unverified", 0) == 0:
+                zero_run = r.get("run_id")
+                zero_date = r.get("date", "")
+                break
+
+        if zero_run:
+            # Tam kapsam: UNVERIFIED=0'a ulaşıldı
+            line = (f"| **{t}/{t}** | {t} | {first_u} | "
+                    f"`{zero_run}` | {short_date(zero_date)} |")
+        else:
+            # UNVERIFIED hala > 0 (erken aşama veya kısmi)
+            line = (f"| {t} | {t} | {first_u} | "
+                    f"(son: {last_u}) `{info['last_run']}` | "
+                    f"{short_date(info['last_date'])} |")
+        out.append(line)
+
+    out.append("")
+
+    # Geçiş zinciri tek satır özet
+    transitions = []
+    for t in sorted_totals:
+        info = by_total[t]
+        # Bu total_online değerinde sıfır UNVERIFIED'a ulaşıldı mı?
+        zero_reached = any(
+            r.get("total_online") == t and r.get("unverified", 0) == 0
+            for r in rows)
+        if zero_reached:
+            transitions.append(f"{t}/{t}")
+        else:
+            last_u = info["last_unverified"]
+            transitions.append(f"{t}/{t - last_u}")
+
+    chain = " → ".join(transitions)
+    out.append(f"**Geçiş zinciri:** {chain}")
+    out.append("")
+    out.append(f"_{len(sorted_totals)} aşama, {len(rows)} artifact taranmıştır._")
+    out.append("")
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -569,6 +656,11 @@ def main():
                 "üretilebilir.",
                 "",
             ]
+
+        # ── Coverage transition summary (UNVERIFIED>0 → 0 geçiş zinciri) ──
+        transition_lines = build_coverage_transition_summary(rows)
+        if transition_lines:
+            lines += transition_lines
 
     # ── Duration / Budget trendi (run-history) ───────────────────────────
     if history_rows:
