@@ -399,5 +399,63 @@ class TestCheckChangelogOrder(unittest.TestCase):
             rt.fetch_refs_online_artifacts = orig_fetch
 
 
+class TestCheckChangelogRendered(unittest.TestCase):
+    """check_changelog_rendered — CHANGELOG'ın render edildiğini doğrula."""
+
+    def _call(self, changelog, rendered_lines=None):
+        saved = getattr(rt, "CHANGELOG", None)
+        saved_fn = getattr(rt, "changelog_lines", None)
+        try:
+            rt.CHANGELOG = changelog
+            if rendered_lines is not None:
+                rt.changelog_lines = lambda: rendered_lines
+            return art.check_changelog_rendered()
+        finally:
+            rt.CHANGELOG = saved
+            if saved_fn is not None:
+                rt.changelog_lines = saved_fn
+
+    def test_rendered_keyword_found(self):
+        cl = [("2026-08-19", "V5o: 56/56 tam kapsam")]
+        rendered = ["## Changelog", "", "- **2026-08-19:** V5o: 56/56 tam kapsam"]
+        self.assertEqual(self._call(cl, rendered), [])
+
+    def test_missing_keyword_detected(self):
+        # CHANGELOG'da V5o var ama rendered'da yok → finding.
+        cl = [("2026-08-19", "V5o: 56/56 tam kapsam")]
+        rendered = ["## Changelog", "", "- **2026-08-19:** V5w: LoC"]
+        findings = self._call(cl, rendered)
+        self.assertTrue(any(f["kind"] == "changelog_rendered" for f in findings))
+        self.assertEqual(findings[0]["keyword"], "V5o")
+
+    def test_empty_rendered_detected(self):
+        cl = [("2026-08-19", "V5o: test")]
+        findings = self._call(cl, [])
+        self.assertTrue(any(f["kind"] == "changelog_rendered" for f in findings))
+
+    def test_skip_short_keywords(self):
+        # Çok kısa/kırpılmış anahtar kelimeler atlanır.
+        cl = [("2026-08-19", "ab")]
+        self.assertEqual(self._call(cl, ["something"]), [])
+
+    def test_multiple_entries_all_rendered(self):
+        cl = [
+            ("2026-08-21", "V5w: LoC katalog kanıtı"),
+            ("2026-08-19", "V5o: 56/56 tam kapsam"),
+        ]
+        rendered = [
+            "## Changelog", "",
+            "- **2026-08-21:** V5w: LoC katalog kanıtı",
+            "- **2026-08-19:** V5o: 56/56 tam kapsam",
+        ]
+        self.assertEqual(self._call(cl, rendered), [])
+
+    def test_live_changelog_all_rendered(self):
+        """Gerçek CHANGELOG'un tüm satırları render edilmeli (canlı doğrulama)."""
+        findings = art.check_changelog_rendered()
+        self.assertEqual(findings, [],
+                         f"Bulunamayan: {[f['detail'] for f in findings]}")
+
+
 if __name__ == "__main__":
     unittest.main()

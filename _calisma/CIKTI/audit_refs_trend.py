@@ -217,6 +217,60 @@ def check_changelog_order():
     return findings
 
 
+def check_changelog_rendered():
+    """CHANGELOG'daki her satırın changelog_lines() çıktısında görünüp
+    görünmediğini doğrular.
+
+    Her CHANGELOG girdisi bir (date, note) tuple'ıdır; not içindeki ilk
+    anahtar kelime (örn. 'V5o', 'V5w', 'Kapsam') rendered_satırlarda
+    aranır. Bulunamazsa → [CHLOG-RENDERED] finding.
+    """
+    findings = []
+    changelog = getattr(rt, "CHANGELOG", None)
+    if not changelog:
+        return findings
+    rendered = "\n".join(rt.changelog_lines())
+    if not rendered:
+        findings.append({
+            "kind": "changelog_rendered",
+            "detail": "changelog_lines() boş çıktı üretti",
+        })
+        return findings
+    # Her CHANGELOG notundaki anahtar kelimeyi rendered'da ara.
+    # İlk kelime (tarih değil) genellikle versiyon/kapsam etiketidir.
+    _SKIP_PREFIXES = ("2026-", "2025-", "Kapsam:")
+    for i, entry in enumerate(changelog):
+        if not isinstance(entry, (list, tuple)) or len(entry) < 2:
+            continue
+        note = entry[1]
+        if not isinstance(note, str) or not note.strip():
+            continue
+        # Notun ilk anlamlı kelimesini bul (tarih/boşluk/çift nokta hariç).
+        words = note.split()
+        keyword = None
+        for w in words:
+            if len(w) < 3 or w.startswith(_SKIP_PREFIXES):
+                continue
+            # Noktalama temizle
+            for _p in ('"', "'", ',', ';', ':', '.', '(', ')'):
+                w = w.strip(_p)
+            keyword = w
+            if keyword and len(keyword) >= 3:
+                break
+        if not keyword:
+            continue
+        if keyword not in rendered:
+            findings.append({
+                "kind": "changelog_rendered",
+                "index": i,
+                "keyword": keyword,
+                "note": note[:80],
+                "detail": (f"CHANGELOG[{i}] '{keyword}' rendered çıktıda "
+                           f"bulunamadı ({note[:50]}...)"),
+            })
+    return findings
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -268,10 +322,12 @@ def main(argv=None):
 
     result = audit(trend, source_reports)
 
-    # Changelog sıralama denetimi (kaynak API gerekmez; CHANGELOG sabitinden).
+    # Changelog sıralama + render denetimi (kaynak API gerekmez).
     chlog_findings = check_changelog_order()
-    result["findings"] += chlog_findings
-    if chlog_findings:
+    chlog_rendered = check_changelog_rendered()
+    all_chlog = chlog_findings + chlog_rendered
+    result["findings"] += all_chlog
+    if all_chlog:
         result["ok"] = False
         result["verdict"] = "FAIL"
 
@@ -310,7 +366,8 @@ def main(argv=None):
                       f"(trend={f['trend']}, kaynak={f['source']})")
             elif f["kind"] == "by_source_missing":
                 print(f"  [FAIL] {f['detail']}")
-            elif f["kind"] in ("changelog_order", "changelog_date", "changelog_format"):
+            elif f["kind"] in ("changelog_order", "changelog_date",
+                               "changelog_format", "changelog_rendered"):
                 print(f"  [FAIL] {f['detail']}")
         print(f"\nSONUÇ: {result['verdict']} — "
               f"{'trend kaynakla birebir tutarlı' if result['ok'] else 'DRIFT: yukarıdaki [FAIL] satırları'}")
