@@ -409,6 +409,17 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-24 | other | dashboard: enhance ro-sources table with colored rows and bar charts | [`cb86c5f`](https://github.com/ali-han-kaya/leibniz2/commit/cb86c5f) |
 | 2026-08-24 | other | dashboard: show Lean PASS/FAIL colored dot in run history list | [`1c215a2`](https://github.com/ali-han-kaya/leibniz2/commit/1c215a2) |
 | 2026-08-24 | other | dashboard: add Lean PASS rate % axis to trend graph (5th axis) | [`8bdfa74`](https://github.com/ali-han-kaya/leibniz2/commit/8bdfa74) |
+| 2026-08-24 | test | build_replay_events refs_verified/refs_total/pdf_pages coverage | [`d5c7cba`](https://github.com/ali-han-kaya/leibniz2/commit/d5c7cba) |
+| 2026-08-24 | test | fix colorize_rules count=4 (setRhFilter + initLoad + SSE) | [`b6fa617`](https://github.com/ali-han-kaya/leibniz2/commit/b6fa617) |
+| 2026-08-24 | other | dashboard: split PDF pages and refs into separate metrics cards | [`c69351c`](https://github.com/ali-han-kaya/leibniz2/commit/c69351c) |
+| 2026-08-24 | other | dashboard: fmtDuration for replay summary line (1m30s format) | [`b3b5da8`](https://github.com/ali-han-kaya/leibniz2/commit/b3b5da8) |
+| 2026-08-24 | other | dashboard: run history PASS/FAIL/P0 filter buttons | [`04cfd19`](https://github.com/ali-han-kaya/leibniz2/commit/04cfd19) |
+| 2026-08-24 | other | dashboard: click run-history row to load stdout | [`24b9905`](https://github.com/ali-han-kaya/leibniz2/commit/24b9905) |
+| 2026-08-24 | other | dashboard: auto-refresh run history on SSE snapshot/update | [`376fade`](https://github.com/ali-han-kaya/leibniz2/commit/376fade) |
+| 2026-08-24 | docs | HISTORY_CLEANUP §7.5'i 9→6 required check olarak guncelle | [`5c42d4e`](https://github.com/ali-han-kaya/leibniz2/commit/5c42d4e) |
+| 2026-08-24 | docs | HISTORY_CLEANUP'a pre-existing CI hatalarini §7 olarak ekle | [`7a354dc`](https://github.com/ali-han-kaya/leibniz2/commit/7a354dc) |
+| 2026-08-24 | ci | add if:always() to full-verification step, lineage warn | [`0524f6a`](https://github.com/ali-han-kaya/leibniz2/commit/0524f6a) |
+| 2026-08-24 | other | dashboard: animated Lean FAIL warning (fail-pulse + alert bubble) | [`240e5ad`](https://github.com/ali-han-kaya/leibniz2/commit/240e5ad) |
 
 ### Regresyon notları
 
