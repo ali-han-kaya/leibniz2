@@ -369,6 +369,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-24 | docs | REFERANS_KANIT'e V5aa notu — CI OL timeout + retry belgelendi | [`da94017`](https://github.com/ali-han-kaya/leibniz2/commit/da94017) |
 | 2026-08-24 | other | refs-trend: V5r + V5aa changelog satırları ve sıralama testi ekle | [`3c83bb2`](https://github.com/ali-han-kaya/leibniz2/commit/3c83bb2) |
 | 2026-08-24 | other | refs-trend: V5p-V5w kapsam & by_source özet tablosu ekle | [`bc55056`](https://github.com/ali-han-kaya/leibniz2/commit/bc55056) |
+| 2026-08-24 | other | audit: changelog siralama denetimi ekle (exit 1 on drift) | [`5cd79e1`](https://github.com/ali-han-kaya/leibniz2/commit/5cd79e1) |
 
 ### Regresyon notları
 

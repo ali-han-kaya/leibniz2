@@ -1314,18 +1314,59 @@ def openlibrary_fallback_check(ref):
                         f"'{str(top)[:60]}'")
 
 
+def worldcat_check(ref):
+    """OCLC numarasını WorldCat kataloguna çöz — katalog kanıtı.
+
+    ref['ht_ids'] içindeki `oclc:` identifier'larını Open Library'nin
+    OCLC endpoint'i (`/oclc/{oclc}.json`) üzerinden WorldCat kataloguna
+    çözer: OL, WorldCat OCLC indeksini kendi veritabanında tutar; auth
+    gerektirmez. Başlık eşleşmesi aksan-duyarsızdır (_fold).
+    Döndürür (PASS | MISMATCH | UNVERIFIED, açıklama).
+    """
+    ht_ids = ref.get("ht_ids") or []
+    oclcs = [i.split(":", 1)[1] for i in ht_ids
+             if i.startswith("oclc:") and ":" in i]
+    if not oclcs:
+        return "UNVERIFIED", "WorldCat: ht_ids'te oclc yok"
+    title_n = _fold(ref["title_needle"])
+    for oclc in oclcs:
+        url = f"https://openlibrary.org/oclc/{oclc}.json"
+        try:
+            data = _http_json(url)
+        except urllib.error.HTTPError as e:
+            if e.code in (404, 301, 302):
+                continue  # Bu OCLC OL'de yok — diğerini dene
+            return "UNVERIFIED", f"WorldCat OL HTTP {e.code}"
+        except Exception as e:
+            return "UNVERIFIED", f"WorldCat OL ağ hatası: {e}"
+        t = data.get("title") or ""
+        if t and title_n in _fold(t):
+            authors = ", ".join(data.get("authors", [{}])[0].get("name", "")
+                                for a in (data.get("authors") or []) if a.get("name"))
+            year = data.get("first_publish_year") or data.get("publish_date") or ""
+            return "PASS", (f"WorldCat oclc:{oclc}: "
+                            f"'{t[:55]}' ({year}, {authors[:30]})")
+        if t:
+            return "MISMATCH", (f"WorldCat oclc:{oclc}: kayıt var ama "
+                                f"'{ref['title_needle']}' başlık eşleşmedi "
+                                f"('{t[:50]}')")
+    return "UNVERIFIED", "WorldCat: verilen oclc'lerde kayıt yok/okunamadı"
+
+
 def _archive_fallback(ref):
     """Internet Archive UNVERIFIED kalınca ek kaynakları dene.
 
     HathiTrust (identifier bazlı — V5p: oclc/lccn ile gerçek katalog kaydı)
     + Library of Congress (lccn bazlı ulusal katalog — V5w: HT'de kaydı
     olmayan telifli/modern kitaplar için HT'siz katalog kanıtı)
+    + WorldCat (oclc bazlıuluslararası katalog — V5ab: OCLC numaralarını
+    WorldCat Classify API ile çözüp katalog kanıtı üretir)
     + Open Library (title+creator, aksan-duyarsız) + Google Books (key
     isteğe bağlı) denenir; ilk PASS kazanır. HathiTrust önce denenir: HT
     kaydı başlıkla birebir katalog kanıtıdır; kayıt yoksa LoC devreye girer
-    (aynı tür katalog kanıtı, bağımsız katalog). Hepsi başarısızsa birleşik
-    denetim iziyle UNVERIFIED döner (kaynak 'archive' kalır — by_source'ı
-    şişirmez).
+    (aynı tür katalog kanıtı, bağımsız katalog); WorldCat OCLC'leri ulusal
+    kataloglar ötesinde uluslararası doğrulama sağlar. Hepsi başarısızsa
+    birleşik denetim iziyle UNVERIFIED döner.
     Döndürür (verdict, detail, source)."""
     attempts = []
     if ref.get("ht_ids"):
@@ -1338,6 +1379,11 @@ def _archive_fallback(ref):
         attempts.append(ld[:70])
         if lv == "PASS":
             return lv, ld, "loc"
+        # WorldCat: OCLC numaralarınıuluslararası katalogda doğrula.
+        wv, wd = worldcat_check(ref)
+        attempts.append(wd[:70])
+        if wv == "PASS":
+            return wv, wd, "worldcat"
     ov, od = _ol_retry(openlibrary_fallback_check, ref)
     attempts.append(od[:70])
     if ov == "PASS":
@@ -1475,7 +1521,7 @@ def run_reference_audit(tex_text, add, quiet=False):
     # 4b) Internet Archive: kitap/edişyon doğrulaması (çevrimiçi, --check-references)
     for ref, v, detail, src in results_for("archive"):
         src_label = {"archive": "Internet Archive", "hathitrust": "HathiTrust",
-                     "google_books": "Google Books",
+                     "google_books": "Google Books", "worldcat": "WorldCat",
                      "openlibrary": "OpenLibrary"}.get(src, src)
         tag = {"PASS": "OK  ", "MISMATCH": "FAIL", "UNVERIFIED": "SKIP"}[v]
         say(f"  [{tag}] {src_label:<10} {ref['key']:<30} -> {detail[:80]}")
@@ -4778,7 +4824,7 @@ def main():
         # archive+loc+hathitrust toplamı: arşiv/kütüphane kanıtlarının
         # tek özet rakamı (by_source'taki bireysel kaynaklar korunur).
         archive_group = sum(by_source.get(s, 0)
-                           for s in ("archive", "loc", "hathitrust"))
+                           for s in ("archive", "loc", "hathitrust", "worldcat"))
         refs_online_report = {
             "tool": "verify_delivery.py K6 referans denetimi "
                     "(CrossRef/SEP/OpenLibrary)",
