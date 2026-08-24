@@ -1108,7 +1108,14 @@ function renderRefsOnline(d) {
     return;
   }
   const max = Math.max(...rows.map(k => bySource[k]));
-  let html = '<table><thead><tr><th>Source</th><th>Count</th><th style="width:55%">Share</th></tr></thead><tbody>';
+  const archiveGroup = d.archive_group;
+  let html = '';
+  if (archiveGroup != null && archiveGroup > 0) {
+    html += `<div style="margin-bottom:6px;font-size:0.85em;color:var(--accent)">` +
+      `📚 Archive group: <b>${archiveGroup}</b>` +
+      ` <span class="ts">(archive + loc + hathitrust)</span></div>`;
+  }
+  html += '<table><thead><tr><th>Source</th><th>Count</th><th style="width:55%">Share</th></tr></thead><tbody>';
   for (const k of rows) {
     const c = bySource[k];
     const w = max > 0 ? Math.round(100 * c / max) : 0;

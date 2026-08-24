@@ -4746,6 +4746,10 @@ def main():
                     ht_ids_summary[s] = {"refs": 0, "total_ids": 0}
                 ht_ids_summary[s]["refs"] += 1
                 ht_ids_summary[s]["total_ids"] += tried
+        # archive+loc+hathitrust toplamı: arşiv/kütüphane kanıtlarının
+        # tek özet rakamı (by_source'taki bireysel kaynaklar korunur).
+        archive_group = sum(by_source.get(s, 0)
+                           for s in ("archive", "loc", "hathitrust"))
         refs_online_report = {
             "tool": "verify_delivery.py K6 referans denetimi "
                     "(CrossRef/SEP/OpenLibrary)",
@@ -4756,6 +4760,7 @@ def main():
             "mismatch": by_verdict.get("MISMATCH", 0),
             "by_source": by_source,
             "by_verdict": by_verdict,
+            "archive_group": archive_group,
             "ht_ids_summary": ht_ids_summary,
             "results": online_refs,
         }
