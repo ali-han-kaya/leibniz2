@@ -376,6 +376,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-24 | other | refs-trend: kapsam gecis dipnotu ekle (54/49 56/26 61/61) | [`26bb80c`](https://github.com/ali-han-kaya/leibniz2/commit/26bb80c) |
 | 2026-08-24 | docs | V5w canli run dogrulamasi ekle (hathitrust=1, 61/61 PASS) | [`bdf0699`](https://github.com/ali-han-kaya/leibniz2/commit/bdf0699) |
 | 2026-08-24 | other | audit: by_source dagilim denetimi ekle (hathitrust/archive/perseus) | [`6310c0a`](https://github.com/ali-han-kaya/leibniz2/commit/6310c0a) |
+| 2026-08-24 | other | audit: changelog rendered denetimi ekle (CHANGELOG keyword eslesme) | [`a4220df`](https://github.com/ali-han-kaya/leibniz2/commit/a4220df) |
 
 ### Regresyon notları
 

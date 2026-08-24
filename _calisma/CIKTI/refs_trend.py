@@ -326,6 +326,39 @@ def short_date(iso):
         return (iso or "")[:16]
 
 
+def _coverage_change_note(row, prev_row, changelog=None):
+    """total_online değiştiğinde ilgili V5 notunu döndür.
+
+    Değişim yoksa boş string; ilk satırsa boş string.
+    CHANGELOG, [(date_str, note_str), ...] formatında ters kronolojik.
+    """
+    if prev_row is None:
+        return ""
+    cur_total = row.get("total_online", 0)
+    prev_total = prev_row.get("total_online", 0)
+    if cur_total == prev_total:
+        return ""
+    # Kapsam değişim yönü
+    diff = cur_total - prev_total
+    arrow = "↑" if diff > 0 else "↓"
+    # Tarihe en yakın CHANGELOG entry'sini bul
+    if changelog is None:
+        changelog = CHANGELOG
+    row_date = (row.get("date") or "")[:10]  # YYYY-MM-DD
+    best_note = None
+    for date_str, note in changelog:
+        if date_str <= row_date:
+            # V5xxx notunu ara
+            if note and ("Kapsam" in note or "kapsam" in note
+                         or "56→" in note or "61" in note
+                         or "→56" in note or "→61" in note):
+                best_note = note[:60]
+                break
+    if best_note:
+        return f"{arrow} {prev_total}→{cur_total} ({best_note})"
+    return f"{arrow} {prev_total}→{cur_total}"
+
+
 def changelog_lines():
     """CHANGELOG kaydını markdown satırlarına çevirir (boş liste = changelog yok).
 
@@ -460,16 +493,18 @@ def main():
     else:
         lines += [
             "| # | Tarih (UTC) | Run ID | Toplam | Doğrulanan | "
-            "Doğrulanamayan | Uyumsuz | Kaynak dağılımı |",
-            "|---|---|---|---|---|---|---|---|",
+            "Doğrulanamayan | Uyumsuz | Kaynak dağılımı | Kapsam Notu |",
+            "|---|---|---|---|---|---|---|---|---|",
         ]
         for i, r in enumerate(rows, 1):
             src = ", ".join(f"{k}={v}" for k, v in
                             sorted(r["by_source"].items()))
+            prev = rows[i - 2] if i >= 2 else None
+            note = _coverage_change_note(r, prev)
             lines.append(
                 f"| {i} | {short_date(r['date'])} | {r['run_id'] or '-'} | "
                 f"{r['total_online']} | {r['verified']} | {r['unverified']} | "
-                f"{r['mismatch']} | {src} |"
+                f"{r['mismatch']} | {src} | {note} |"
             )
         lines += [""]
 

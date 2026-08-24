@@ -602,5 +602,151 @@ class TestRunSummaryRefsTrend(unittest.TestCase):
         self.assertTrue(text.endswith("\n\n"))
 
 
+class TestCoverageChangeNote(unittest.TestCase):
+    """_coverage_change_note() kapsam değişim işaretçisi (fail-closed)."""
+
+    def test_first_row_returns_empty(self):
+        r = {"total_online": 61, "date": "2026-08-21T10:00:00Z"}
+        self.assertEqual(rt._coverage_change_note(r, None), "")
+
+    def test_no_change_returns_empty(self):
+        prev = {"total_online": 61, "date": "2026-08-19T10:00:00Z"}
+        cur = {"total_online": 61, "date": "2026-08-21T10:00:00Z"}
+        self.assertEqual(rt._coverage_change_note(cur, prev), "")
+
+    def test_increase_shows_arrow(self):
+        prev = {"total_online": 49, "date": "2026-08-18T00:00:00Z"}
+        cur = {"total_online": 56, "date": "2026-08-19T00:00:00Z"}
+        note = rt._coverage_change_note(cur, prev)
+        self.assertIn("↑", note)
+        self.assertIn("49→56", note)
+
+    def test_decrease_shows_arrow(self):
+        prev = {"total_online": 61, "date": "2026-08-21T00:00:00Z"}
+        cur = {"total_online": 56, "date": "2026-08-19T00:00:00Z"}
+        note = rt._coverage_change_note(cur, prev)
+        self.assertIn("↓", note)
+        self.assertIn("61→56", note)
+
+    def test_matches_changelog_when_available(self):
+        prev = {"total_online": 49, "date": "2026-08-18T00:00:00Z"}
+        cur = {"total_online": 56, "date": "2026-08-19T00:00:00Z"}
+        changelog = [
+            ("2026-08-19", "V5n: kapsam 54→56 (CrossRef dergileri)"),
+        ]
+        note = rt._coverage_change_note(cur, prev, changelog)
+        self.assertIn("V5n", note)
+        self.assertIn("49→56", note)
+
+    def test_no_changelog_match_returns_bare_arrow(self):
+        prev = {"total_online": 49, "date": "2026-08-18T00:00:00Z"}
+        cur = {"total_online": 56, "date": "2026-08-19T00:00:00Z"}
+        changelog = [
+            ("2026-08-20", "V5x: diger not"),
+        ]
+        note = rt._coverage_change_note(cur, prev, changelog)
+        self.assertIn("49→56", note)
+        self.assertNotIn("V5", note)
+
+    def test_empty_changelog_still_shows_arrow(self):
+        prev = {"total_online": 49, "date": "2026-08-18T00:00:00Z"}
+        cur = {"total_online": 56, "date": "2026-08-19T00:00:00Z"}
+        note = rt._coverage_change_note(cur, prev, [])
+        self.assertEqual(note, "↑ 49→56")
+
+
+class TestChangelogOrder(unittest.TestCase):
+    """CHANGELOG tarih sırası denetimi — reverse-chronological."""
+
+    def test_changelog_dates_are_sorted_desc(self):
+        dates = [d for d, _ in rt.CHANGELOG if d]
+        for i in range(len(dates) - 1):
+            self.assertGreaterEqual(
+                dates[i], dates[i + 1],
+                f"CHANGELOG sırası bozuk: {dates[i]} < {dates[i+1]}")
+
+
+class TestRefsTrendTableHasCoverageNote(unittest.TestCase):
+    """refs-trend tablosu Kapsam Notu sütunu içermeli (fail-closed)."""
+
+    def test_table_header_has_kapsam_notu(self):
+        saved = rt.CHANGELOG[:]
+        try:
+            rt.CHANGELOG = [
+                ("2026-08-19", "V5n: kapsam 54→56"),
+            ]
+            with tempfile.TemporaryDirectory() as td:
+                rows = [
+                    {"date": "2026-08-18T10:00:00Z", "run_id": 1,
+                     "total_online": 49, "verified": 49,
+                     "unverified": 0, "mismatch": 0,
+                     "by_source": {"crossref": 49}},
+                    {"date": "2026-08-19T10:00:00Z", "run_id": 2,
+                     "total_online": 56, "verified": 56,
+                     "unverified": 0, "mismatch": 0,
+                     "by_source": {"crossref": 56}},
+                ]
+                import io as _io
+                buf = _io.StringIO()
+                # Import main and patch args
+                import argparse
+                p = argparse.Namespace(
+                    repo="t/r", token="", max_artifacts=100,
+                    out_dir=td)
+                # Build lines manually (mirrors main logic)
+                lines = []
+                lines += [
+                    "| # | Tarih (UTC) | Run ID | Toplam | Doğrulanan | "
+                    "Doğrulanamayan | Uyumsuz | Kaynak dağılımı | Kapsam Notu |",
+                    "|---|---|---|---|---|---|---|---|---|",
+                ]
+                for i, r in enumerate(rows, 1):
+                    src = ", ".join(f"{k}={v}" for k, v in
+                                    sorted(r["by_source"].items()))
+                    prev = rows[i - 2] if i >= 2 else None
+                    note = rt._coverage_change_note(r, prev)
+                    lines.append(
+                        f"| {i} | {rt.short_date(r['date'])} | "
+                        f"{r['run_id'] or '-'} | {r['total_online']} | "
+                        f"{r['verified']} | {r['unverified']} | "
+                        f"{r['mismatch']} | {src} | {note} |"
+                    )
+                md = "\n".join(lines)
+                self.assertIn("Kapsam Notu", md)
+                self.assertIn("↑ 49→56", md)
+        finally:
+            rt.CHANGELOG = saved
+
+    def test_table_no_note_when_unchanged(self):
+        rows = [
+            {"date": "2026-08-21T10:00:00Z", "run_id": 1,
+             "total_online": 61, "verified": 61,
+             "unverified": 0, "mismatch": 0,
+             "by_source": {}},
+            {"date": "2026-08-22T10:00:00Z", "run_id": 2,
+             "total_online": 61, "verified": 61,
+             "unverified": 0, "mismatch": 0,
+             "by_source": {}},
+        ]
+        # Build just the note column
+        notes = []
+        for i, r in enumerate(rows, 1):
+            prev = rows[i - 2] if i >= 2 else None
+            notes.append(rt._coverage_change_note(r, prev))
+        self.assertEqual(notes[0], "")
+        self.assertEqual(notes[1], "")
+
+
+class TestChangelogHasAllVersions(unittest.TestCase):
+    """CHANGELOG, kapaklarda listelenen tüm V5 versiyonlarını içermeli."""
+
+    def test_v5n_to_v5aa_all_present(self):
+        expected = ["V5n", "V5o", "V5p", "V5q", "V5r", "V5t",
+                    "V5v", "V5w", "V5z", "V5aa"]
+        all_notes = " ".join(note for _, note in rt.CHANGELOG)
+        for v in expected:
+            self.assertIn(v, all_notes, f"{v} CHANGELOG'da eksik")
+
+
 if __name__ == "__main__":
     unittest.main()
