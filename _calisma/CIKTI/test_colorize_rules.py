@@ -517,5 +517,47 @@ class TestLeanFailPulse(unittest.TestCase):
         self.assertIn("border:1px solid var(--err)", self._html)
 
 
+class TestRunHistoryAutoRefresh(unittest.TestCase):
+    """Run history SSE snapshot/update event'lerinde otomatik yenilenir."""
+
+    @classmethod
+    def setUpClass(cls):
+        with open("_calisma/CIKTI/preview.html", encoding="utf-8") as f:
+            cls._html = f.read()
+
+    def test_load_run_history_called_on_init(self):
+        """initLoad sonunda loadRunHistory() çağrısı var."""
+        self.assertIn('loadRunHistory();', self._html)
+        # initLoad içinde loadRunHistory çağrısı (init sonrası)
+        init_pos = self._html.index('function initLoad()')
+        snippet = self._html[init_pos:]
+        self.assertIn('loadRunHistory();', snippet)
+
+    def test_snapshot_handler_calls_load_run_history(self):
+        """SSE snapshot event handler'ı loadRunHistory() çağırır."""
+        # "Run history'yi de güncelle (yeni run snapshot'ı gelince)" yorumu
+        self.assertIn('snapshot', self._html.lower())
+        snap_pos = self._html.index('addEventListener("snapshot"')
+        # loadRunHistory snapshot handler bloğu içinde
+        snap_block = self._html[snap_pos:snap_pos + 1200]
+        self.assertIn('loadRunHistory();', snap_block)
+
+    def test_update_handler_calls_load_run_history(self):
+        """SSE update event handler'ı da loadRunHistory() çağırır."""
+        self.assertIn('addEventListener("update"', self._html)
+        update_pos = self._html.index('addEventListener("update"')
+        update_block = self._html[update_pos:update_pos + 1200]
+        self.assertIn('loadRunHistory();', update_block)
+
+    def test_count_is_three_calls(self):
+        """loadRunHistory tam 3 yerde çağrılır: init, snapshot, update."""
+        count = self._html.count('loadRunHistory();')
+        self.assertEqual(count, 3, f"Beklenen 3 çağrı, bulunan: {count}")
+
+    def test_snapshot_comment_exists(self):
+        """'Run history'yi de güncelle' yorumu snapshot handler'da var."""
+        self.assertIn("Run history'yi de güncelle", self._html)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1735,6 +1735,8 @@ function connect() {
         renderCliOverride(full);
         renderMirrorSync(full);
       });
+      // Run history'yi de güncelle (yeni run snapshot'ı gelince)
+      loadRunHistory();
     } catch(err) { console.error("snapshot parse", err); }
   });
   evtSource.addEventListener("update", (e) => {
@@ -1752,6 +1754,8 @@ function connect() {
         renderCliOverride(full);
         renderMirrorSync(full);
       });
+      // Run history'yi de güncelle (yeni run update'i gelince)
+      loadRunHistory();
     } catch(err) { console.error("update parse", err); }
   });
   evtSource.onerror = () => {
