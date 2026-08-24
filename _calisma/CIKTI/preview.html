@@ -63,6 +63,10 @@
   pre { background:#161b22; border:1px solid var(--border); border-radius:6px;
         padding:12px; overflow:auto; font-size:11px; line-height:1.4;
         max-height:420px; margin:0; white-space:pre-wrap; }
+  .rh-row { cursor:pointer; padding:1px 4px; border-radius:3px;
+            transition:background 0.15s; }
+  .rh-row:hover { background:rgba(88,166,255,.1); }
+  .rh-row:active { background:rgba(88,166,255,.2); }
   pre .err { color:var(--err); }
   pre .ok  { color:var(--ok); }
   pre .muted { color:var(--muted); }
@@ -1692,12 +1696,27 @@ function loadRunHistory() {
       } else {
         lean = `<span class="muted" title="Lean: koşulmadı">·</span>`;
       }
-      return `<span class=\"muted\">${t}</span> <span class=\"${cls}\">${sv}</span> ` +
+      const text = `<span class=\"muted\">${t}</span> <span class=\"${cls}\">${sv}</span> ` +
         `<span class=\"muted\">P0=${r.p0||0} P1=${r.p1||0} refs=${refs} ${pg}p ${bud} ${dur}</span>` +
         ` ${lean}`;
+      const tsAttr = r.ts ? r.ts.replace(/'/g, "\'").replace(/"/g, "&quot;") : "";
+      return `<div class="rh-row" data-ts="${tsAttr}" onclick="loadRunStdout('${tsAttr}')" ` +
+        `title="Tıklayınca bu run'un stdout'u yüklenir">${text}</div>`;
     });
     el.innerHTML = lines.join("\n");
   }).catch(() => {});
+}
+
+function loadRunStdout(ts) {
+  if (!ts) return;
+  const el = $("stdout");
+  if (el) el.textContent = "Yükleniyor…";
+  fetch("/api/run-stdout?ts=" + encodeURIComponent(ts)).then(r => r.json()).then(d => {
+    if (d.stdout != null) applyStdout(d.stdout + (d.stderr ? "\n--- STDERR ---\n" + d.stderr : ""));
+    else if (d.error) applyStdout("Hata: " + d.error);
+  }).catch(err => {
+    if (el) el.textContent = "Yüklenemedi: " + err;
+  });
 }
 
 function initLoad() {

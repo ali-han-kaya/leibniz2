@@ -559,5 +559,51 @@ class TestRunHistoryAutoRefresh(unittest.TestCase):
         self.assertIn("Run history'yi de güncelle", self._html)
 
 
+class TestRunHistoryClickToLoad(unittest.TestCase):
+    """Run history satırına tıklanınca o run'un stdout'u yüklenir."""
+
+    @classmethod
+    def setUpClass(cls):
+        with open("_calisma/CIKTI/preview.html", encoding="utf-8") as f:
+            cls._html = f.read()
+
+    def test_rh_row_css_class_exists(self):
+        """.rh-row stili: cursor:pointer + hover highlight."""
+        self.assertIn(".rh-row", self._html)
+        self.assertIn("cursor:pointer", self._html)
+        self.assertIn(".rh-row:hover", self._html)
+
+    def test_rows_have_data_ts_attr(self):
+        """Her satır <div class="rh-row" data-ts="..." ile sarılır."""
+        self.assertIn('class="rh-row"', self._html)
+        self.assertIn('data-ts=', self._html)
+
+    def test_rows_have_onclick_handler(self):
+        """onclick="loadRunStdout('...')" çağrısı var."""
+        self.assertIn('onclick="loadRunStdout', self._html)
+    def test_load_run_stdout_function_exists(self):
+        """loadRunStdout(ts) fonksiyonu tanımlı."""
+        self.assertIn("function loadRunStdout(ts)", self._html)
+
+    def test_fetch_calls_run_stdout_endpoint(self):
+        """fetch("/api/run-stdout?ts=" + encodeURIComponent(ts))"""
+        self.assertIn("/api/run-stdout?ts=", self._html)
+        self.assertIn("encodeURIComponent(ts)", self._html)
+
+    def test_on_click_stdout_applied(self):
+        """Yanıt geldiğinde applyStdout çağrılır."""
+        self.assertIn("applyStdout(d.stdout", self._html)
+
+    def test_error_fallback_in_stdout_box(self):
+        """Yüklenemedi hatası stdout box'a yazılır."""
+        self.assertIn("Yüklenemedi:", self._html)
+        self.assertIn("Yükleniyor", self._html)
+
+    def test_escaped_quotes_in_ts_attr(self):
+        """data-ts attribute'unda tırnak escape edilir."""
+        self.assertIn("replace(/'/g", self._html)
+        self.assertIn("replace(/\"/g", self._html)
+
+
 if __name__ == "__main__":
     unittest.main()

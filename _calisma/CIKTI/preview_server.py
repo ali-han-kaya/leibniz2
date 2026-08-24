@@ -1061,6 +1061,8 @@ class Handler(BaseHTTPRequestHandler):
             self.serve_refs_trend()
         elif self.path == "/api/run-history":
             self.serve_run_history()
+        elif self.path.startswith("/api/run-stdout"):
+            self.serve_run_stdout()
         elif self.path == "/api/health":
             self._send(200, "ok")
         else:
@@ -1200,7 +1202,37 @@ class Handler(BaseHTTPRequestHandler):
         self._send(200, json.dumps(summaries, ensure_ascii=False),
                    content_type="application/json; charset=utf-8")
 
-    def trigger_run_now(self):
+    def serve_run_stdout(self):
+        """Belirli bir run'un tam stdout'unu döndür (run history satırı tıklanınca).
+
+        Query: ?ts=ISO-timestamp (run-<safe>.json dosya adından çözülür).
+        Cevap: {ts, stdout, stderr}. Run bulunamazsa 404.
+        """
+        parsed = urllib.parse.urlparse(self.path)
+        qs = urllib.parse.parse_qs(parsed.query)
+        ts = qs.get("ts", [None])[0]
+        if not ts:
+            self._send(400, json.dumps({"error": "?ts= gerekli"}),
+                       content_type="application/json; charset=utf-8")
+            return
+        safe = ts.replace(":", "").replace("+", "").replace(".", "")
+        path = os.path.join(RUNS_DIR, f"run-{safe}.json") if RUNS_DIR else None
+        if not path or not os.path.isfile(path):
+            self._send(404, json.dumps({"error": "run bulunamadı: " + ts}),
+                       content_type="application/json; charset=utf-8")
+            return
+        try:
+            with open(path, encoding="utf-8") as f:
+                rec = json.load(f)
+            self._send(200, json.dumps({
+                "ts": rec.get("ts"),
+                "stdout": rec.get("stdout", ""),
+                "stderr": rec.get("stderr", ""),
+            }, ensure_ascii=False),
+                       content_type="application/json; charset=utf-8")
+        except (OSError, json.JSONDecodeError) as e:
+            self._send(500, json.dumps({"error": str(e)}),
+                       content_type="application/json; charset=utf-8")
         """Manuel tetikleme: interval beklemeden hemen verify koşar.
 
         Arka plan thread'inde çalışır, istek anında döner; sonuç hazır
