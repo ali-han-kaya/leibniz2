@@ -71,28 +71,39 @@ jobs:
           python-version: '3.12'
 
       # ─── ACTIONLINT — workflow YAML yapışıklığını fail-closed yakala ──
-      # actionlint, .github/workflows/*..yml'ı statik olarak denetler:
+      # actionlint, TÜM .github/workflows/*.yml'ı (glob) statik olarak
+      # denetler — yeni workflow dosyaları kapıya otomatik girer:
       #   - YAML syntax hataları (yapışık satır, indentation)
       #   - Expression syntax hataları (${{ }})
       #   - Action input/ref hataları (uses:_wrong_version)
       #   - Job dependency hataları (needs: olmayan job)
       #   - Secret/env erişim hataları
-      # Hata varsa exit 1 → job fail → push/pipeline durur.
-      - name: Lint workflow with actionlint
+      # RC: 0 = temiz; 1/2 = hata ya da yalnızca shellcheck info/hint
+      # (advisory — build'i durdurmaz; fail-closed kapı pre-commit'te
+      # lint_actionlint.sh'tir); >2 = actionlint iç hatası → job fail.
+      - name: Lint all workflows with actionlint
         if: always()
         shell: bash
         run: |
           ACTIONLINT_VERSION=1.7.7
           curl -sL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" -o /tmp/actionlint.tar.gz
           tar xzf /tmp/actionlint.tar.gz -C /tmp actionlint
-          # actionlint exit 2 = warnings/hints (shellcheck info), exit 1 = errors
-          # YAML yapışıklığı / syntax hataları exit 1 verir; shellcheck
-          # bilgi notları exit 2 — bunlar fail-closed DEĞİL advisory.
-          ACT_RC=0; /tmp/actionlint --color .github/workflows/verify.yml 2>&1 || ACT_RC=$?
-          if [ "$ACT_RC" -eq 0 ]; then
-            echo "actionlint: PASS"
+          # Tüm workflow dosyaları — tek kaynak glob (.github/workflows/*.yml),
+          # check_python3_shell.py deseni: yeni dosya kapıya otomatik girer.
+          MAX_RC=0
+          for WF in .github/workflows/*.yml; do
+            WF_RC=0
+            /tmp/actionlint --color "$WF" 2>&1 || WF_RC=$?
+            if [ "$WF_RC" -gt "$MAX_RC" ]; then MAX_RC=$WF_RC; fi
+            echo "actionlint: $WF → RC=$WF_RC"
+          done
+          if [ "$MAX_RC" -eq 0 ]; then
+            echo "actionlint: PASS — tüm workflow'lar temiz"
+          elif [ "$MAX_RC" -le 2 ]; then
+            echo "actionlint: INFO — RC=$MAX_RC (shellcheck hints/errors, advisory)"
           else
-            echo "actionlint: INFO — exited $ACT_RC (shellcheck hints, advisory)"
+            echo "actionlint: FAIL (RC=$MAX_RC)"
+            exit 1
           fi
 
       - name: Lint shell hooks (shellcheck, POSIX/bash)

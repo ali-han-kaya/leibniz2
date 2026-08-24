@@ -6,8 +6,10 @@
 #   1 = hata (YAML syntax, job dependency, expression)
 #   2 = yalnızca shellcheck info/hint (advisory)
 #
-# Pre-commit'te exit 2'yi PASS olarak kabul et (advisory).
-# CI'daki advisory step ile birebir aynı davranış.
+# TÜM .github/workflows/*.yml'ı (glob) denetler — yeni workflow dosyaları
+# kapıya otomatik girer (verify.yml CI adımıyla aynı tek kaynak glob).
+# Pre-commit'te RC≤2 PASS (advisory), RC>2 FAIL. CI'daki advisory step ile
+# birebir aynı davranış.
 
 set -euo pipefail
 
@@ -20,10 +22,15 @@ if [ ! -x "$AL" ]; then
 fi
 
 RC=0
-"$AL" --color .github/workflows/verify.yml 2>&1 || RC=$?
+for WF in .github/workflows/*.yml; do
+  WF_RC=0
+  "$AL" --color "$WF" 2>&1 || WF_RC=$?
+  if [ "$WF_RC" -gt "$RC" ]; then RC=$WF_RC; fi
+  echo "actionlint: $WF → RC=$WF_RC"
+done
 
 if [ "$RC" -eq 0 ]; then
-  echo "actionlint: PASS"
+  echo "actionlint: PASS — tüm workflow'lar temiz"
   exit 0
 elif [ "$RC" -le 2 ]; then
   echo "actionlint: PASS (RC=$RC, shellcheck info/hints only — advisory)"
