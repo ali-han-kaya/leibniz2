@@ -452,6 +452,55 @@ class TestProvenance(unittest.TestCase):
         m = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         self.assertNotIn("daemon_http", m)
 
+    # ── AUDIT REFS-TREND section tests ──────────────────────────────
+    def test_audit_refs_trend_section(self):
+        # audit-refs-trend/ dosyaları ayrıca bölümde işaretlenir.
+        (self.artifacts / "audit-refs-trend").mkdir(parents=True)
+        (self.artifacts / "audit-refs-trend" / "audit_refs_trend.json").write_text(
+            json.dumps({"verdict": "PASS"}), encoding="utf-8")
+        self._gen()
+        txt = (self.out / "manifest.txt").read_text(encoding="utf-8")
+        self.assertIn("AUDIT REFS-TREND ARTIFACT (ayrı bölüm)", txt)
+        self.assertIn("audit_refs_trend_combined_sha256", txt)
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        art = m["audit_refs_trend"]
+        self.assertIn("audit-refs-trend/audit_refs_trend.json", art["files"])
+        self.assertTrue(len(art["combined_sha256"]) == 64)
+
+    def test_audit_refs_trend_combined_recomputes_deterministically(self):
+        (self.artifacts / "audit-refs-trend").mkdir(parents=True)
+        (self.artifacts / "audit-refs-trend" / "audit_refs_trend.json").write_text(
+            json.dumps({"verdict": "PASS"}), encoding="utf-8")
+        self._gen()
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        art = m["audit_refs_trend"]["files"]
+        expected = hashlib.sha256(
+            "".join(f"{rel}\0{art[rel]}\n" for rel in sorted(art)).encode()
+        ).hexdigest()
+        self.assertEqual(m["audit_refs_trend"]["combined_sha256"], expected)
+        self.assertRegex(m["audit_refs_trend"]["combined_sha256"], r"^[0-9a-f]{64}$")
+
+    def test_audit_refs_trend_artifact_job_provenance(self):
+        (self.artifacts / "audit-refs-trend").mkdir(parents=True)
+        (self.artifacts / "audit-refs-trend" / "audit_refs_trend.json").write_text(
+            "{}", encoding="utf-8")
+        self._gen()
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        jobs = m["provenance"]["artifact_jobs"]
+        self.assertEqual(jobs["audit-refs-trend"], "audit-refs-trend")
+        txt = (self.out / "manifest.txt").read_text(encoding="utf-8")
+        self.assertIn("prefixed (1 dosya)", txt)
+
+    def test_no_audit_refs_trend_section_when_absent(self):
+        bare = self.root / "bare"
+        bare.mkdir(parents=True)
+        (bare / "a.txt").write_text("x", encoding="utf-8")
+        out = self.root / "bare-out"
+        r = _run_gen(str(bare), str(out))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        m = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        self.assertNotIn("audit_refs_trend", m)
+
     # ── OVERRIDES section tests ──────────────────────────────────────
     def test_overrides_section(self):
         # cli_overrides_version.json (isimle tanınır — CONFIG gibi)
@@ -532,7 +581,8 @@ class TestWorkflowPatternCoverage(unittest.TestCase):
     """
     EXCLUDED = {"precommit-logs", "refs-trend", "override-trend",
                 "precheck-report", "python3-shell", "plist-check",
-                "mirror-check", "daemon-http", "reproducibility"}
+                "mirror-check", "daemon-http", "audit-refs-trend",
+                "reproducibility"}
 
     def _workflow_merge_pattern(self):
         wf = CIKTI.parent.parent / ".github" / "workflows" / "verify.yml"

@@ -38,7 +38,6 @@ import gen_repro_manifest as gen_manifest  # noqa: E402
 # girmezler, manifest'e girmezler; doc'ta görünmeleri doğrudur.
 DOC_ONLY_ADVISORY = frozenset({
     "ci-simulate",      # advisory yerel CI simülasyonu — job output
-    "audit-refs-trend", # advisory denetim — job output
     "audit-live-ci",    # advisory meta-denetçi — job output
     "changelog-drift",  # advisory: gen_changelog --check drift logu — job output
 })

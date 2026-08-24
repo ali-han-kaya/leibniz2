@@ -378,6 +378,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-24 | other | audit: by_source dagilim denetimi ekle (hathitrust/archive/perseus) | [`6310c0a`](https://github.com/ali-han-kaya/leibniz2/commit/6310c0a) |
 | 2026-08-24 | other | audit: changelog rendered denetimi ekle (CHANGELOG keyword eslesme) | [`a4220df`](https://github.com/ali-han-kaya/leibniz2/commit/a4220df) |
 | 2026-08-24 | other | refs-trend: kapsam degisim isaretcisi ekle (V5 notu satir bazli) | [`8ef2c8d`](https://github.com/ali-han-kaya/leibniz2/commit/8ef2c8d) |
+| 2026-08-24 | other | audit: refs-trend.md ozet dipnot denetimi ekle (56/56 yerel dogrulama) | [`5561365`](https://github.com/ali-han-kaya/leibniz2/commit/5561365) |
 
 ### Regresyon notları
 

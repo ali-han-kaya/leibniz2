@@ -1042,6 +1042,17 @@ jobs:
           name: refs-trend
           path: all_artifacts/refs-trend/
 
+      # audit-refs-trend advisory bir job'dur; artifact'ı yoksa manifest
+      # audit-refs-trend'siz üretilir — continue-on-error ile build bloke
+      # edilmez. Prefixed indirme sayesinde gen_repro_manifest.py'nin
+      # AUDIT REFS-TREND bölümü audit-refs-trend/ önekini yakalar + hash'ler.
+      - name: Download audit-refs-trend artifact (audit-refs-trend/ prefix)
+        continue-on-error: true
+        uses: actions/download-artifact@v7
+        with:
+          name: audit-refs-trend
+          path: all_artifacts/audit-refs-trend/
+
       # override-trend advisory bir job'dur; artifact'ı yoksa (tablo
       # üretilemedi) manifest override-trend'siz üretilir —
       # continue-on-error ile build bloke edilmez. Prefixed indirme

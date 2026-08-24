@@ -73,6 +73,7 @@ ARTIFACT_JOBS = {
     "plist-check": "plist-check",
     "mirror-check": "mirror-check",
     "daemon-http": "daemon-http",
+    "audit-refs-trend": "audit-refs-trend",
     "reproducibility": "reproducibility",
 }
 
@@ -318,6 +319,34 @@ def main() -> None:
                      f"override_trend_combined_sha256: {override_trend_combined}",
                      "=" * 72]
         lines += ot_block
+
+    # ── AUDIT REFS-TREND bölümü: audit-refs-trend/ önekli dosyalar ──
+    # audit_refs_trend.py'nin çıktısı (audit_refs_trend.json) ayrıca
+    # işaretlenir; combined_sha256 tek hash ile özetler. Böylece
+    # refs-trend denetim raporu da reproducibility zincirinde.
+    audit_rt_hashes = {rel: h for rel, h in file_hashes.items()
+                        if rel.startswith("audit-refs-trend/")}
+    audit_rt_combined = None
+    if audit_rt_hashes:
+        sorted_rel = sorted(audit_rt_hashes)
+        audit_rt_combined = hashlib.sha256(
+            "".join(f"{rel}\0{audit_rt_hashes[rel]}\n"
+                     for rel in sorted_rel).encode()
+        ).hexdigest()
+        art_block = [
+            "",
+            "=" * 72,
+            "AUDIT REFS-TREND ARTIFACT (ayrı bölüm)",
+            "=" * 72,
+            f"{'FILE':<55} {'SHA-256'}",
+            "-" * 72,
+        ]
+        art_block += [f"{rel:<55} {audit_rt_hashes[rel]}"
+                      for rel in sorted_rel]
+        art_block += ["-" * 72,
+                      f"audit_refs_trend_combined_sha256: {audit_rt_combined}",
+                      "=" * 72]
+        lines += art_block
 
     # ── LINEAGE bölümü: lineage-findings/ önekli dosyalar (CONFIG gibi) ──
     # zip_lineage.json sidecar'ı ve --check-lineage çıktısı ayrıca
@@ -780,6 +809,11 @@ def main() -> None:
         manifest_json["daemon_http"] = {
             "files": dict(sorted(daemon_http_hashes.items())),
             "combined_sha256": daemon_http_combined,
+        }
+    if audit_rt_hashes:
+        manifest_json["audit_refs_trend"] = {
+            "files": dict(sorted(audit_rt_hashes.items())),
+            "combined_sha256": audit_rt_combined,
         }
     if overrides_hashes:
         manifest_json["overrides"] = {
