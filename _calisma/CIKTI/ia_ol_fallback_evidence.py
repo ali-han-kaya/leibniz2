@@ -135,13 +135,23 @@ def _mock_router(url):
     return {}
 
 
+def _loc_url_from_ht_ids(ref):
+    """ref['ht_ids'] içinden lccn: identifier'ı ile LoC kayıt URL'i üretir."""
+    for ident in (ref.get("ht_ids") or []):
+        if ident.startswith("lccn:") and ":" in ident:
+            lccn = ident.split(":", 1)[1]
+            return f"https://lccn.loc.gov/{lccn}", lccn
+    return None, None
+
+
 def collect_evidence(keys=None, offline=False):
     """5 kaynağın fallback kanıtını toplar.
 
     verify_delivery.py'nin CI'daki zincirini (_archive_with_fallback) koşar:
-    IA → HathiTrust → LoC → OpenLibrary → Google Books; kaynak ve gerçek API
-    yanıtı özetiyle döner. offline=True → deterministik mock (test/denetim).
-    Döndürür: [{key, verdict, source, detail}, ...]
+    IA → HathiTrust → LoC → WorldCat → OpenLibrary → Google Books; kaynak
+    ve gerçek API yanıtı özetiyle döner. offline=True → deterministik mock.
+    Her sonuca loc_url (LoC kayıt bağlantısı) eklenir.
+    Döndürür: [{key, verdict, source, detail, loc_url, lccn}, ...]
     """
     if keys is None:
         keys = IA_OUT_OF_SCOPE
@@ -159,9 +169,10 @@ def collect_evidence(keys=None, offline=False):
         for key in keys:
             ref = by_key[key]
             v, detail, source = vd._archive_with_fallback(ref)
+            loc_url, lccn = _loc_url_from_ht_ids(ref)
             results.append({
                 "key": key, "verdict": v, "source": source,
-                "detail": detail,
+                "detail": detail, "loc_url": loc_url, "lccn": lccn,
             })
     finally:
         if patcher is not None:
@@ -170,12 +181,16 @@ def collect_evidence(keys=None, offline=False):
 
 
 def render_table(results):
-    lines = ["| Kaynak | Sonuç | Kaynak | Gerçek API yanıtı |",
-             "|---|---|---|---|"]
+    lines = ["| Kaynak | Sonuç | Kaynak | LoC | Gerçek API yanıtı |",
+             "|---|---|---|---|---|"]
     for r in results:
+        loc_cell = "—"
+        if r.get("loc_url"):
+            lccn = r.get("lccn", "")
+            loc_cell = f"[{lccn}]({r['loc_url']})"
         lines.append(
             f"| {r['key']} | {r['verdict']} | {r['source']} | "
-            f"{r['detail'][:110]} |")
+            f"{loc_cell} | {r['detail'][:100]} |")
     lines.append("")
     return "\n".join(lines)
 
