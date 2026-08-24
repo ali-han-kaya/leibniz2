@@ -14,8 +14,11 @@ Karşılaştırılan iki eksen:
      canlıda doc'ta olmayan artifact varsa drift.
 
 Fail-closed: herhangi bir eksik/fazla → exit 1 (JSON'da verdict: FAIL).
-PR-only job'lar push run'ında `skipped` görünür ama YİNE de run job listesinde
-yer alır — o yüzden isim eşleşmesi event'ten bağımsız çalışır.
+Ayrıca `REQUIRED_ARTIFACTS` (sabitlenmiş artifact'ler) doc'ta VE canlıda
+mevcut olmalı — `python3-shell` her run'da beklenir (varlık/yokluk kapısı).
+
+PR-only job'lar push run'ında `skipped` görünür ama YİNE de job listesinde
+yer alır — bu yüzden isim eşleşmesi event'ten bağımsız çalışır.
 
 Kullanım:
   python3 _calisma/CIKTI/audit_live_ci_sync.py                 # son run (main)
@@ -47,6 +50,30 @@ DEFAULT_DOC = REPO_ROOT / "docs" / "PUBLISH_SCENARIO.md"
 # testiyle yakalandı).
 SELF_JOB = "Live CI doc↔GitHub sync audit (advisory)"
 SELF_ARTIFACT = "audit-live-ci"
+
+# SABİTLENMIŞ (pinned) artifact'ler — genel küme karşılaştırmasından BAĞIMSIZ
+# olarak her run'da doc'ta VE canlıda var olmalı (fail-closed). Yeni eklenen
+# kritik artifact'leri buraya ekleyin; küme karşılaştırması yalnızca "doc bayat"
+# yakalar, bu liste ise "artifact düşürüldü / doc'tan çıkarıldı"yı da net
+# bulgu olarak raporlar.
+REQUIRED_ARTIFACTS = ["python3-shell"]
+
+
+def check_required_presence(doc_artifacts, live_artifacts):
+    """Sabitlenmiş artifact'lerin varlığını iki yanda da denetler.
+
+    Döndürür: [(artifact, taraf)] — tarafta yoksa kayıt (taraf: 'doc' | 'live').
+    Boş liste = hepsi her iki yanda da mevcut.
+    """
+    doc = set(doc_artifacts)
+    liv = set(live_artifacts)
+    missing = []
+    for art in REQUIRED_ARTIFACTS:
+        if art not in doc:
+            missing.append((art, "doc"))
+        if art not in liv:
+            missing.append((art, "live"))
+    return missing
 
 # ── Doc parse ────────────────────────────────────────────────────────────
 # Job tablosu satırları: "| 1 | A | Delivery verification — K1-K14 (...) | ✅ ... |"
@@ -246,7 +273,11 @@ def main(argv=None):
     doc_job_names = [n for (_cat, n) in doc_jobs]
     job_cmp = compare(doc_job_names, live_jobs, "jobs")
     art_cmp = compare(doc_artifacts, live_artifacts, "artifacts")
-    ok = job_cmp["ok"] and art_cmp["ok"]
+
+    # Sabitlenmiş artifact varlığı (doc + live) — fail-closed kapı.
+    req_missing = check_required_presence(doc_artifacts, live_artifacts)
+
+    ok = job_cmp["ok"] and art_cmp["ok"] and not req_missing
     verdict = "PASS" if ok else "FAIL"
 
     if args.json:
@@ -266,6 +297,11 @@ def main(argv=None):
                 "live": sorted(live_artifacts),
                 "missing": art_cmp["missing"],
                 "extra": art_cmp["extra"],
+                "required_presence": {
+                    "ok": not req_missing,
+                    "missing": [f"{art} ({side})" for art, side in req_missing],
+                    "artifacts": REQUIRED_ARTIFACTS,
+                },
             },
         }, indent=2, ensure_ascii=False))
     else:
@@ -285,9 +321,11 @@ def main(argv=None):
             print(f"  [FAIL] doc'ta var, canlıda YOK: {n}")
         for n in art_cmp["extra"]:
             print(f"  [FAIL] canlıda var, doc'ta YOK: {n}")
-        if not art_cmp["missing"] and not art_cmp["extra"]:
+        for art, side in req_missing:
+            print(f"  [FAIL] sabit artifact '{art}' {side} tarafında YOK")
+        if not art_cmp["missing"] and not art_cmp["extra"] and not req_missing:
             print("  birebir eşleşiyor")
-        print(f"\nSONUÇ: {verdict} — {'doc ↔ GitHub senkron' if ok else 'DRIFT: doc bayat (yukarıdaki [FAIL] satırları)'}")
+        print(f"\nSONUÇ: {verdict} — {'doc ↔ GitHub senkron' if ok else 'DRIFT: doc bayat veya sabit artifact eksik (yukarıdaki [FAIL] satırları)'}")
 
     return 0 if ok else 1
 

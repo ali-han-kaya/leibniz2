@@ -625,7 +625,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 - `refs-online` (çevrimiçi referans denetimi VERSION JSON — `ht_ids_summary` dahil)
 - `run-history` (history.jsonl — run zaman serisi)
 - `precommit-logs` (ham log + PRECOMMIT_RAPORU.md/.json + cache/env özeti)
-- `python3-shell` (check_python3_shell.py --json denetimi — SHA-256 ile manifest'te sabitlenir)
+- `python3-shell` (check_python3_shell.py --json denetimi — SHA-256 ile manifest'te sabitlenir; **sabit (pinned)** artifact: `audit-live-ci` her run'da doc'ta VE canlıda varlığını fail-closed denetler)
 - `reports` (statik markdown raporları)
 - `reproducibility` (tüm artifact'ların SHA-256 manifest'i)
 - `config-drift` (gen_config + diff-on-drift bulguları)

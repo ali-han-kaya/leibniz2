@@ -207,10 +207,14 @@ class TestE2EArtifactDocSync(unittest.TestCase):
         self.assertFalse(cmp["ok"])
         self.assertEqual(cmp["extra"], ["yarin-yeni-artifact"])
 
-    def _run_main(self, doc_text, live_artifacts):
+    def _run_main(self, doc_text, live_artifacts, required=True):
         doc_jobs = [n for (_c, n) in als.parse_doc_jobs(doc_text)]
         live_jobs = list(dict.fromkeys(doc_jobs + [als.SELF_JOB]))
         live = list(dict.fromkeys(live_artifacts + [als.SELF_ARTIFACT]))
+        if not required:
+            # REQUIRED_ARTIFACTS'ı geçici boşalt (yalnızca bu çağrı için).
+            self._saved_req = als.REQUIRED_ARTIFACTS
+            als.REQUIRED_ARTIFACTS = []
         with tempfile.TemporaryDirectory() as td:
             doc = pathlib.Path(td) / "PUBLISH_SCENARIO.md"
             doc.write_text(doc_text, encoding="utf-8")
@@ -239,6 +243,42 @@ class TestE2EArtifactDocSync(unittest.TestCase):
         self.assertEqual(d["verdict"], "FAIL")
         self.assertEqual(d["artifacts"]["extra"], ["python3-shell"])
 
+    def test_main_required_presence_live_missing_exit_1(self):
+        """python3-shell canlıda YOKSA (doc'ta olsa bile) FAIL + net bulgu."""
+        live = [a for a in self._live() if a != "python3-shell"]
+        rc, d = self._run_main(self.doc_text, live)
+        self.assertEqual(rc, 1)
+        self.assertEqual(d["verdict"], "FAIL")
+        self.assertEqual(d["artifacts"]["required_presence"]["ok"], False)
+        self.assertIn("python3-shell (live)",
+                      d["artifacts"]["required_presence"]["missing"])
+
+    def test_main_required_presence_all_ok(self):
+        rc, d = self._run_main(self.doc_text, self._live())
+        self.assertEqual(rc, 0)
+        self.assertEqual(d["artifacts"]["required_presence"]["ok"], True)
+        self.assertEqual(d["artifacts"]["required_presence"]["missing"], [])
+
+
+class TestCheckRequiredPresence(unittest.TestCase):
+    def test_all_present_passes(self):
+        self.assertEqual(als.check_required_presence(
+            ["python3-shell", "a"], ["python3-shell", "a"]), [])
+
+    def test_missing_in_doc(self):
+        self.assertEqual(als.check_required_presence(
+            ["a"], ["python3-shell", "a"]),
+            [("python3-shell", "doc")])
+
+    def test_missing_in_live(self):
+        self.assertEqual(als.check_required_presence(
+            ["python3-shell", "a"], ["a"]),
+            [("python3-shell", "live")])
+
+    def test_missing_in_both(self):
+        self.assertEqual(als.check_required_presence(["a"], ["a"]),
+                         [("python3-shell", "doc"), ("python3-shell", "live")])
+
 
 class TestMainFailClosed(unittest.TestCase):
     def setUp(self):
@@ -250,20 +290,27 @@ class TestMainFailClosed(unittest.TestCase):
 
     def test_main_pass_exit_0(self):
         buf = io.StringIO()
-        with mock.patch.object(als, "parse_doc_jobs",
-                               return_value=[("A", "Job A")]), \
-                mock.patch.object(als, "parse_doc_artifacts",
-                                  return_value=["art1"]), \
-                mock.patch.object(als, "get_repo", return_value="o/r"), \
-                mock.patch.object(als, "get_latest_run",
-                                  return_value={"databaseId": 1,
-                                                "headSha": "abc"}), \
-                mock.patch.object(als, "get_run_jobs",
-                                  return_value=["Job A"]), \
-                mock.patch.object(als, "get_run_artifacts",
-                                  return_value=["art1"]), \
-                mock.patch.object(sys, "stdout", new=buf):
-            rc = als.main(["--doc", str(self.tmp), "--json"])
+        # Küçük fixture'da python3-shell yok — required denetimi bu testte
+        # devre dışı (maruz kalan davranış başka e2e testlerinde kapsanır).
+        saved = als.REQUIRED_ARTIFACTS
+        als.REQUIRED_ARTIFACTS = []
+        try:
+            with mock.patch.object(als, "parse_doc_jobs",
+                                   return_value=[("A", "Job A")]), \
+                    mock.patch.object(als, "parse_doc_artifacts",
+                                      return_value=["art1"]), \
+                    mock.patch.object(als, "get_repo", return_value="o/r"), \
+                    mock.patch.object(als, "get_latest_run",
+                                      return_value={"databaseId": 1,
+                                                    "headSha": "abc"}), \
+                    mock.patch.object(als, "get_run_jobs",
+                                      return_value=["Job A"]), \
+                    mock.patch.object(als, "get_run_artifacts",
+                                      return_value=["art1"]), \
+                    mock.patch.object(sys, "stdout", new=buf):
+                rc = als.main(["--doc", str(self.tmp), "--json"])
+        finally:
+            als.REQUIRED_ARTIFACTS = saved
         self.assertEqual(rc, 0)
         self.assertEqual(json.loads(buf.getvalue())["verdict"], "PASS")
 
