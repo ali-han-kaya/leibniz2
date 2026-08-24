@@ -143,7 +143,8 @@
       <div class="card"><div class="label">Budget (universal)</div><div class="value" id="m-budget">—</div><div class="sub" id="m-budget-sub">limit —</div></div>
       <div class="card"><div class="label">Budget ratios</div><div class="value" id="m-br" style="font-size:12px">—</div><div class="sub">bytes/token · text/pdf/archive/binary</div></div>
       <div class="card"><div class="label">Type bytes</div><div class="value" id="m-tb" style="font-size:12px">—</div><div class="sub" id="m-tb-sub">iç zip kırılımı</div></div>
-      <div class="card"><div class="label">PDF pages / refs</div><div class="value" id="m-pdf">— / —</div><div class="sub">33 / 64 expected</div></div>
+      <div class="card"><div class="label">PDF pages</div><div class="value" id="m-pages">—</div><div class="sub">expected 33</div></div>
+      <div class="card"><div class="label">Reference count</div><div class="value" id="m-refs">—</div><div class="sub">64 expected</div></div>
       <div class="card"><div class="label">PDF metadata-stripped</div><div class="value" id="m-meta" style="font-size:11px">—</div><div class="sub" id="m-meta-sub">qpdf</div></div>
     </div>
     <div id="findings-panel" style="margin-top:8px"></div>
@@ -1569,8 +1570,9 @@ function applySnapshot(d) {
     ? "✓ under " + limTxt + " limit"
     : (d.budget_usd != null ? "⚠ over " + limTxt : "limit " + limTxt);
 
-  // PDF + refs
-  $("m-pdf").textContent = (d.pdf_pages || "—") + " / " + (d.ref_count || "—");
+  // PDF pages + refs (ayrı kartlar)
+  $("m-pages").textContent = d.pdf_pages || "—";
+  $("m-refs").textContent = d.ref_count || "—";
 
   // Metadata-stripped
   if (d.stripped_sha256) {

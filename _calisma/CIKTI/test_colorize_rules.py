@@ -713,5 +713,37 @@ class TestFmtDuration(unittest.TestCase):
         self.assertNotIn('sum.duration_s + "s"', self._html)
 
 
+class TestMetricsCards(unittest.TestCase):
+    """Metrics kartlarının varlığı ve ayrıklığı (pages / refs split)."""
+
+    @classmethod
+    def setUpClass(cls):
+        with open("_calisma/CIKTI/preview.html", encoding="utf-8") as f:
+            cls._html = f.read()
+
+    def test_pdf_pages_has_own_card(self):
+        """PDF sayfa sayısı ayrı kart: id="m-pages"."""
+        self.assertIn('id="m-pages"', self._html)
+        self.assertIn("PDF pages", self._html)
+
+    def test_reference_count_has_own_card(self):
+        """Referans sayısı ayrı kart: id="m-refs"."""
+        self.assertIn('id="m-refs"', self._html)
+        self.assertIn("Reference count", self._html)
+
+    def test_old_combined_card_removed(self):
+        """Eski birleşik kart (m-pdf) KALMADI."""
+        self.assertNotIn('id="m-pdf"', self._html)
+        self.assertNotIn("PDF pages / refs", self._html)
+
+    def test_pages_setter_independent(self):
+        """m-pages yalnızca pdf_pages alır (ref_count ile birleşik DEĞİL)."""
+        self.assertIn('$("m-pages").textContent = d.pdf_pages', self._html)
+
+    def test_refs_setter_independent(self):
+        """m-refs yalnızca ref_count alır."""
+        self.assertIn('$("m-refs").textContent = d.ref_count', self._html)
+
+
 if __name__ == "__main__":
     unittest.main()
