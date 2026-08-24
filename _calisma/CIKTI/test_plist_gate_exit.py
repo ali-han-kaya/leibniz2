@@ -393,10 +393,40 @@ class TestBootstrapAll(unittest.TestCase):
                              "bayraksız koşumda launchctl çağrılmamalı")
 
 
-class TestParsePlistCheckOutput(unittest.TestCase):
-    """parse_plist_check_output: çok-profilli çıktıyı profil bazında ayrıştırır."""
+class TestParsePlistCheckOutputLegacyCompat(unittest.TestCase):
+    """Legacy uyumluluk: parse_plist_check_output profil bazında ayrıştırma.
+
+    Eski iki-profilli (birincil + legacy preview-server) dönemde bu fonksiyon
+    çoklu profil çıktısını ayrıştırırdı. Artık yalnızca tek profil (leibniz2)
+    yönetiliyor; testler tek profil üzerinden geriye dönük uyumluluğu korur.
+
+    "test_" öneki taşımayan "_two_profiles_guncel" yardımcısı, iki profilli
+    geçmiş senaryoyu mock'layarak fonksiyonun çoklu profil girişini hâlâ
+    doğru ayrıştırabildiğini kanıtlar (tarihsel doğrulama).
+    """
+
+    def _two_profiles_guncel(self):
+        """Yardımcı: iki-profilli (legacy) çıktıyı hâlâ ayrıştırabilir mi?
+
+        Test olarak değil, tarihsel doğrulama amacıyla korunur. Eski iki-profilli
+        dönemde `--plist-check` iki satır üretirdi; parse_plist_check_output
+        her ikisini de profil listesine eklemeli.
+        """
+        txt = (
+            "GÜNCEL: /h/Library/LaunchAgents/com.freebuff.preview-leibniz2.plist"
+            "  (şablonla aynı, plutil geçerli)\n"
+            "GÜNCEL: /h/Library/LaunchAgents/com.freebuff.preview-server.plist"
+            "  (şablonla aynı, plutil geçerli)\n"
+        )
+        profiles = parse_plist_check_output(txt)
+        self.assertEqual(len(profiles), 2)
+        self.assertEqual([p["label"] for p in profiles],
+                         ["com.freebuff.preview-leibniz2",
+                          "com.freebuff.preview-server"])
+        self.assertTrue(all(p["status"] == "GÜNCEL" for p in profiles))
 
     def test_single_profile_all_guncel(self):
+        """Tek profil GÜNCEL — mevcut canlı senaryo."""
         txt = (
             "GÜNCEL: /h/Library/LaunchAgents/com.freebuff.preview-leibniz2.plist"
             "  (şablonla aynı, plutil geçerli)\n"
@@ -408,6 +438,7 @@ class TestParsePlistCheckOutput(unittest.TestCase):
         self.assertTrue(all(p["status"] == "GÜNCEL" for p in profiles))
 
     def test_single_profile_bayat(self):
+        """Tek profil BAYAT — legacy sonrası tek profil senaryosu."""
         txt = (
             "BAYAT/GEÇERSİZ: /h/Library/LaunchAgents/com.freebuff.preview-leibniz2.plist"
             " şablondan farklı\n"
@@ -418,6 +449,7 @@ class TestParsePlistCheckOutput(unittest.TestCase):
         self.assertEqual(profiles[0]["status"], "BAYAT")
 
     def test_sablon_yok_line(self):
+        """ŞABLON_YOK — ilk kurulum senaryosu (tek profil)."""
         txt = ("şablon yok: /h/Library/Caches/com.freebuff/preview-template/"
                "com.freebuff.preview-leibniz2.plist.tmpl (önce --plist çalıştır)\n")
         profiles = parse_plist_check_output(txt)
@@ -426,6 +458,7 @@ class TestParsePlistCheckOutput(unittest.TestCase):
         self.assertEqual(profiles[0]["status"], "ŞABLON_YOK")
 
     def test_unrecognized_lines_skipped(self):
+        """Tanınmayan satırlar atlanır — gürbüz ayrıştırma."""
         txt = "bazı özet satırı\nGÜNCEL: /h/x.plist  (ok)\nboş satır sonrası\n"
         profiles = parse_plist_check_output(txt)
         self.assertEqual(len(profiles), 1)
@@ -466,7 +499,7 @@ SUMMARY_SCRIPT = os.path.join(HERE, "summary_plist_table.py")
 
 
 class TestSummaryPlistTable(unittest.TestCase):
-    """summary_plist_table.py markdown tablo üretimi."""
+    """summary_plist_table.py markdown tablo üretimi — tek profil (legacy sonrası)."""
 
     def _run(self, json_str):
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json",
@@ -479,7 +512,25 @@ class TestSummaryPlistTable(unittest.TestCase):
         os.unlink(f.name)
         return out.stdout
 
-    def test_valid_profiles(self):
+    def test_valid_single_profile(self):
+        """Tek profil GÜNCEL — legacy preview-server kaldırıldıktan sonraki canlı senaryo."""
+        data = json.dumps({
+            "ok": True, "exit": 0, "detail": "GÜNCEL (1/1)",
+            "profiles": [
+                {"label": "com.freebuff.preview-leibniz2",
+                 "status": "GÜNCEL", "path": "/Users/r/.../a.plist"},
+            ]})
+        out = self._run(data)
+        self.assertIn("✅ **K12**", out)
+        self.assertIn("| com.freebuff.preview-leibniz2 | ✅ GÜNCEL |", out)
+        self.assertIn("| Profil | Durum | Yol |", out)
+
+    def test_legacy_two_profiles_still_render(self):
+        """İki profil (legacy dönem) hâlâ render edilir — geriye dönük uyumluluk.
+
+        parse_plist_check_output iki profili de ayrıştırabilir;
+        summary_plist_table.py hepsini tabloya basar.
+        """
         data = json.dumps({
             "ok": True, "exit": 0, "detail": "GÜNCEL (2/2)",
             "profiles": [
