@@ -399,6 +399,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-24 | other | verify: fallback bolumu total_online'i 66'ya sismesin (61 kal) | [`cee1c4a`](https://github.com/ali-han-kaya/leibniz2/commit/cee1c4a) |
 | 2026-08-24 | docs | bayat 56/56 referanslarini guncel 61 ile senkronla | [`3d53d03`](https://github.com/ali-han-kaya/leibniz2/commit/3d53d03) |
 | 2026-08-24 | other | verify: publish_wrapper --incremental'i 4 adimli doc dongusuyle kapila | [`bf6a1d2`](https://github.com/ali-han-kaya/leibniz2/commit/bf6a1d2) |
+| 2026-08-24 | other | verify: enforce_is_on 404 ilk publish guvenli atlama smoke kapisi | [`c10f478`](https://github.com/ali-han-kaya/leibniz2/commit/c10f478) |
 
 ### Regresyon notları
 

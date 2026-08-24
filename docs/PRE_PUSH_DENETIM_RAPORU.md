@@ -24,6 +24,8 @@ hatalar bir daha `gh run watch` sırasında sürpriz olmasın.
 | 3. push (`5d10771`) | `32242938612` | success ama advisory pre-commit FAIL | #3 dash/bash uyumsuzluğu |
 | 4. push (`da6cb21`) | `32243532153` | **success, tamamen yeşil** | — |
 | 5. push (`a309b23`–`965182d`) | `32435636927` | success (12/12 job) | §8: ci-simulate OWNER unbound + local fix |
+| 6. push (`e0aaeb4`–`5388d77`) | `32724860213` | success (22 job) | §11: python3-shell artifact drift doc'a işlendi |
+| 7. push (`bf6a1d2`–`c10f478`) | `32747316028` | success (22 job) | §12: --incremental doc-sync + enforce_is_on 404 dansı |
 
 **§8 Not:** `publish_wrapper.sh --ci-simulate` ile yerelde CI pipeline birebir
 koşuldu, tüm kapılar yeşil (§8.3).
@@ -508,6 +510,88 @@ otomatik güncellemez.
 PUBLISH_SCENARIO artifact listesini ve `gen_repro_manifest.py ARTIFACT_JOBS`
 set'ini **aynı commit'te** güncellemeli; aksi halde `audit-refs-trend`
 benzeri meta-denetçiler bir sonraki run'da fazla/eksik artifact'ı bildirir.
+
+---
+
+## 12. `publish_wrapper.sh --incremental` doc-sync + `enforce_is_on` 404 dansı (2026-08-24, Oturum 4 devam)
+
+### 12.1 `--incremental` komut akışının 4 adımla doc-wrapper senkronu
+
+**Bulgu (altyapı):** `docs/PUBLISH_SCENARIO.md` "INCREMENTAL PUSH — günlük döngü
+(repo canlı, 4 komut)" bölümündeki 4 adım (precheck → push → CI izle → durum)
+ile `docs/publish_wrapper.sh --incremental`'in gerçekleştirdiği akış arasında
+**kapsam boşluğu** vardı: CI run listeleme (`gh run list`), job durumu
+(`gh run view --json jobs`), ve artifact listesi (`--json artifacts`) çapaları
+`check_doc_wrapper_sync.py` ANCHORS listesinde yoktu — yani bu kritik komutlar
+iki kaynakta da var olmasına rağmen otomatik drift denetimi dışındaydı.
+
+**Ekleme:**
+
+| Commit | Değişiklik |
+|---|---|
+| `bf6a1d2` | `test_incremental_doc_sync.py`: 14 test (doc↔wrapper çapa + sıra + dry-run); `check_doc_wrapper_sync.py` ANCHORS: +3 çapa grubu (RUN_ID, job durumu, artifact) |
+
+**Yeni kapı (14 test, 3 sınıf):**
+
+| Sınıf | Test sayısı | Ne doğrular |
+|---|---|---|
+| `TestIncrementalDocSync` | 5 | 4 adımın komut parçaları her iki kaynakta da mevcut; `--incremental` bayrağı tanımlı; repo oluşturma atlanır; origin zorunlu |
+| `TestIncrementalStepOrder` | 4 | precheck → push → CI watch → job durumu sırası (wrapper kaynağında statik) |
+| `TestDryRunFlowAnchors` | 5 | `[DRY-RUN]` komut önizleme formatı; precheck/CI watch/artifact çapaları wrapper'da mevcut; `run()` fonksiyonu dry-run'da komut log'lar |
+
+**Kanıt:**
+
+| Kanıt | Durum |
+|---|---|
+| `check_doc_wrapper_sync.py` 16 çapa grubu PASS | ✓ doc ↔ wrapper senkron |
+| `test_incremental_doc_sync.py` 14/14 test OK | ✓ 4 adımlı sıra birebir |
+| PUBLISH_SCENARIO.md INCREMENTAL bölümü | ✓ "bash docs/publish_wrapper.sh --incremental" komut bloku |
+
+### 12.2 `enforce_is_on` 404 güvenli atlama (ilk publish dansı)
+
+**Bulgu (davranış):** `publish_wrapper.sh` içindeki `enforce_is_on()` bash
+fonksiyonu, branch protection'ın `enforce_admins` durumunu `gh api` ile
+sorgular. **İlk publish'te koruma henüz kurulu değilse `gh api` 404 döner** —
+fonksiyonun `grep -qx true || return 1` zinciri bunu güvenle `exit 1` (false)
+olarak yorumlar; push dansı (geçici kapatma → push → geri açma) ATLANIR.
+Bu davranış yoruma dayanıyordu (`"404 → dokunulmaz"`), birim testi yoktu.
+
+**Ekleme:**
+
+| Commit | Değişiklik |
+|---|---|
+| `c10f478` | `test_enforce_is_on.py`: 12 test (mock `gh` ile 4 çıkış dalı + wrapper kaynak statik sıralama) |
+
+**Yeni kapı (12 test, 2 sınıf):**
+
+| Sınıf | Test sayısı | Ne doğrular |
+|---|---|---|
+| `TestEnforceIsOn` | 4 | mock `gh`: 404 → exit 1 (güvenli false); `enforce_admins=true` → exit 0; `enforce_admins=false` → exit 1; stderr yok/boş → exit 1 |
+| `TestEnforceIsOnSourcePresence` | 8 | fonksiyon tanımı; push akış sırası (`enforce_is_on` → toggle false → push → toggle true); DRY_RUN atlaması; toggle false fail = uyarı (push denenir); toggle true fail = fatal (manuel düzelt) |
+
+**Not:** `PASS`, `WARN`, ve `FAIL` sınıflandırması, `verify_checks.sh`'
+daki `verify_checks()` fonksiyonunun 4 çıkış dalına (PASS / koruma yok UYARI /
+erişilemedi UYARI / gerçek drift FAIL) birebir paraleldir — iki fonksiyon da
+`gh api` ↔ `|| return` kalıbıyla koruma durumunu fail-closed okur.
+
+**Kanıt:**
+
+| Kanıt | Durum |
+|---|---|
+| `test_enforce_is_on.py` 12/12 test OK | ✓ mock gh ile 3 senaryo + wrapper sırası |
+| wrapper kaynağında `404 → dokunulmaz` notu mevcut | ✓ |
+| push akışı `enforce_is_on` → `toggle_enforce false` → push → `toggle_enforce true` sırası | ✓ |
+| toggle false fail → `push denenecek` (uyarı, fatal değil) | ✓ |
+| toggle true fail → `manuel düzelt` (fatal) | ✓ |
+
+### 12.3 Tam test paketi durumu
+
+| Metrik | Önce (§11) | Sonra (§12) |
+|---|---|---|
+| Test sayısı | 1210 | 1268 |
+| Test dosyası | ~24 | 26 |
+| Pre-commit hook | 20 | 20 |
+| Son CI run | `32724860213` success | `32747316028` success |
 
 ---
 
