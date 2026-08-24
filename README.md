@@ -386,6 +386,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-24 | ci | test-smoke.yml ile glob modu smoke test'i ekle | [`c95f762`](https://github.com/ali-han-kaya/leibniz2/commit/c95f762) |
 | 2026-08-24 | ci | actionlint'i tum .github/workflows/*.yml dosyalarina genelle | [`a1119d5`](https://github.com/ali-han-kaya/leibniz2/commit/a1119d5) |
 | 2026-08-24 | docs | PRE_PUSH_DENETIM_RAPORU'na python3-shell artifact drift'ini isle | [`e0aaeb4`](https://github.com/ali-han-kaya/leibniz2/commit/e0aaeb4) |
+| 2026-08-24 | other | audit: artifact-doc drift e2e kapisi + self-exclusion fix | [`0c43da7`](https://github.com/ali-han-kaya/leibniz2/commit/0c43da7) |
 
 ### Regresyon notları
 

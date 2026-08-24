@@ -44,6 +44,16 @@ Verify Stoic-Hume V5 delivery (fail-closed)..............................Failed
 [P1] MANIFEST MD5 uyuşmazlığı: dosya X
 """
 
+# check-python3-shell özel senaryosu: display adı makine kimliğinden farklı.
+LOG_PY3 = """\
+Block shell commands under shell: python3 {0}............................Passed
+- hook id: check-python3-shell
+- duration: 0.05s
+
+/home/runner/work/leibniz2/leibniz2/.github/workflows/test-smoke.yml: PASS — 0 FAIL / 0 python3-shell adım / 1 toplam adım
+SONUÇ: PASS — 0 FAIL / 0 python3-shell adım / 168 toplam adım (2 workflow)
+"""
+
 
 class TestBuildData(unittest.TestCase):
     def test_pass_hooks(self):
@@ -82,6 +92,42 @@ class TestBuildData(unittest.TestCase):
                       "expected_pages 33 != 34", out)
         # hook id / duration satırları çıktıdan filtrelenir.
         self.assertFalse(any(s.startswith("- hook id") for s in out))
+
+    def test_check_python3_shell_id_captured(self):
+        """check-python3-shell Passed satırı, hook kimliğiyle rapora işlenir.
+
+        Display adı 'Block shell commands under shell: python3 {0}'; makine
+        kimliği (precommit-logs artifact'ındaki `- hook id:` satırı)
+        'check-python3-shell' — JSON hook kaydında ikisi de var olmalı.
+        """
+        data = gpr.build_data(LOG_PY3, 0)
+        self.assertEqual(len(data["hooks"]), 1)
+        h = data["hooks"][0]
+        self.assertEqual(
+            h["name"], "Block shell commands under shell: python3 {0}")
+        self.assertEqual(h["id"], "check-python3-shell")
+        self.assertEqual(h["status"], "Passed")
+
+    def test_all_hooks_carry_ids(self):
+        data = gpr.build_data(LOG_PASS, 0)
+        expected = {
+            "Sync config from package content (gen_config.py)": "update-config",
+            "Verify Stoic-Hume V5 delivery (fail-closed)": "verify-delivery",
+            "Verify formal core symbolically (Z3, fail-closed)": "verify-delivery-symbolic",
+            "Verify Lean 4 reduct-invariance (fail-closed)": "verify-delivery-lean",
+        }
+        got = {h["name"]: h["id"] for h in data["hooks"]}
+        self.assertEqual(got, expected)
+
+    def test_hook_without_attribute_block_has_none_id(self):
+        data = gpr.build_data("Some hook name....Passed\n", 0)
+        self.assertEqual(len(data["hooks"]), 1)
+        self.assertIsNone(data["hooks"][0]["id"])
+
+    def test_render_markdown_contains_id_column(self):
+        md = gpr.render_markdown(gpr.build_data(LOG_PY3, 0))
+        self.assertIn("| Hook | ID | Durum |", md)
+        self.assertIn("| `check-python3-shell` | Passed |", md)
 
 
 class TestMain(unittest.TestCase):
