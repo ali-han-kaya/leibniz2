@@ -779,9 +779,9 @@ class TestFallbackEvidenceSection(unittest.TestCase):
     kaynağın fallback kanıtını ayrı bölüm olarak gösterir.
 
     collect_evidence mock'lanarak ağsız/deterministik doğrulanır:
-    - 5 sonuç döner, hepsi fallback_section=True işaretli
-    - online_results'e eklenir (VERSION JSON'a dahil)
-    - source 'fallback_' öneki taşır (gerçek OpenLibrary ile karışmaz)
+    - Fallback bölümü GÖRÜNTÜ amaçlıdır — online_results sayısına ekleme
+      yapılmaz (5 kaynak zaten REFERENCE_ARCHIVE'de ana döngüde denetlenir)
+    - total_online 61'de kalır (66'ya şişmez — regresyon kapısı)
     - FAIL/MISMATCH varsa P1 eklenir (fail-closed)
     - istisna atarsa bölüm atlanır (SKIP), çökme yok
     """
@@ -815,26 +815,23 @@ class TestFallbackEvidenceSection(unittest.TestCase):
                 tex, lambda *a, **k: findings.append(a), quiet=True)
         return results, findings
 
-    def test_fallback_section_appended_to_online_results(self):
+    def test_fallback_section_does_not_inflate_total(self):
+        # Regresyon kapısı: fallback bölümü online_results'a ekleme yapmaz.
+        # 5 kaynak zaten REFERENCE_ARCHIVE'de olduğundan total 61'de kalmalı.
         fb = [self._fb_result("Fine 2012", "PASS", "openlibrary"),
               self._fb_result("Lagree 1994", "PASS", "loc"),
               self._fb_result("Millican 2002", "PASS", "loc"),
               self._fb_result("Schmitt 1972", "PASS", "loc"),
               self._fb_result("Xunzi Knoblock", "PASS", "hathitrust")]
         results, findings = self._run_audit(fb)
-        # 61 ana + 5 fallback = 66
-        self.assertEqual(len(results), 66)
+        # 61 ana sonuç, fallback eklemesi YOK (66'ya şişmez)
+        self.assertEqual(len(results), 61)
+        # fallback_section işaretli satır YOK
         fb_rows = [r for r in results if r.get("fallback_section")]
-        self.assertEqual(len(fb_rows), 5)
-        # fallback_section=True işaretli
-        self.assertTrue(all(r["fallback_section"] for r in fb_rows))
-        # source 'fallback_' öneki taşır
-        self.assertTrue(all(r["source"].startswith("fallback_")
-                            for r in fb_rows))
-        # loc_url + lccn aktarıldı
-        for r in fb_rows:
-            self.assertEqual(r["loc_url"], "https://lccn.loc.gov/123")
-            self.assertEqual(r["lccn"], "123")
+        self.assertEqual(len(fb_rows), 0)
+        # source 'fallback_' öneki YOK (by_source'u şişirmez)
+        self.assertFalse(any(r["source"].startswith("fallback_")
+                             for r in results))
         # tümü PASS → P1 yok
         self.assertEqual(findings, [])
 
@@ -842,9 +839,8 @@ class TestFallbackEvidenceSection(unittest.TestCase):
         fb = [self._fb_result("Fine 2012", "MISMATCH", "openlibrary",
                              "title eşleşmedi")]
         results, findings = self._run_audit(fb)
-        fb_rows = [r for r in results if r.get("fallback_section")]
-        self.assertEqual(len(fb_rows), 1)
-        self.assertEqual(fb_rows[0]["verdict"], "MISMATCH")
+        # total 61'de kalır (fallback eklemesi yok)
+        self.assertEqual(len(results), 61)
         # MISMATCH → P1 eklenir (fail-closed) — fallback bulgusu ara
         self.assertTrue(any("Fine 2012" in str(f) and "fallback" in str(f).lower()
                             for f in findings),
@@ -852,8 +848,6 @@ class TestFallbackEvidenceSection(unittest.TestCase):
 
     def test_fallback_section_empty_when_no_evidence(self):
         results, findings = self._run_audit([])
-        fb_rows = [r for r in results if r.get("fallback_section")]
-        self.assertEqual(len(fb_rows), 0)
         self.assertEqual(len(results), 61)
         # Tüm ana sonuçlar PASS, tex_needle'lar mevcut → P1 yok
         self.assertEqual(findings, [])
@@ -881,8 +875,6 @@ class TestFallbackEvidenceSection(unittest.TestCase):
                 tex, lambda *a, **k: None, quiet=True)
         # 61 ana sonuç, fallback yok (exception → SKIP)
         self.assertEqual(len(results), 61)
-        fb_rows = [r for r in results if r.get("fallback_section")]
-        self.assertEqual(len(fb_rows), 0)
 
 
 if __name__ == "__main__":
