@@ -382,6 +382,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-24 | other | manifest: audit-refs-trend'i reproducibility'ye dahil et (SHA-256) | [`5fe39c0`](https://github.com/ali-han-kaya/leibniz2/commit/5fe39c0) |
 | 2026-08-24 | fix | summary_pattern_drift EXCLUDED'a audit-refs-trend ekle | [`2878923`](https://github.com/ali-han-kaya/leibniz2/commit/2878923) |
 | 2026-08-24 | history | audit_refs_trend alanini history.jsonl'e ekle | [`fa2e6de`](https://github.com/ali-han-kaya/leibniz2/commit/fa2e6de) |
+| 2026-08-24 | other | audit: --offline mod ekle (yerel dizinden tekrarlanabilir kosu) | [`d714000`](https://github.com/ali-han-kaya/leibniz2/commit/d714000) |
 
 ### Regresyon notları
 

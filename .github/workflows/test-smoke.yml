@@ -1,0 +1,14 @@
+# test-smoke.yml — check_python3_shell.py glob modu için minimal workflow.
+# Bu dosya CI'da bir job çalıştırmaz; yalnızca check_python3_shell.py'nin
+# glob modunun (.github/workflows/*.yml) yeni dosyaları otomatik yakaladığını
+# doğrulamak için vardır. Herhangi bir step eklemeyin — empty workflow yeterli.
+name: test-smoke
+on: [push]
+
+jobs:
+  noop:
+    name: smoke-noop
+    runs-on: ubuntu-latest
+    steps:
+      - name: No-op
+        run: echo "smoke test"

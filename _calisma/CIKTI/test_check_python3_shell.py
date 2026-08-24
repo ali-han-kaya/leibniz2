@@ -269,6 +269,50 @@ class TestMultiWorkflow(unittest.TestCase):
         rc = cps.main([])
         self.assertEqual(rc, 0)
 
+    def test_glob_catches_new_workflow_files(self):
+        """Yeni workflow dosyası glob'a otomatik girmeli (smoke test)."""
+        wf_dir = pathlib.Path(CIKTI).parent.parent / ".github" / "workflows"
+        paths = cps.resolve_workflows([])
+        # test-smoke.yml artık varsa glob'da görünmeli
+        smoke = wf_dir / "test-smoke.yml"
+        if smoke.is_file():
+            self.assertIn(str(smoke), paths,
+                          f"test-smoke.yml glob'da görünmeli ama yok: {paths}")
+        else:
+            self.skipTest("test-smoke.yml henüz oluşmadı")
+
+    def test_test_smoke_workflow_has_no_python3_shell(self):
+        """test-smoke.yml'de FAIL bulgusu olmamalı (smoke noop)."""
+        smoke = (pathlib.Path(CIKTI).parent.parent
+                 / ".github" / "workflows" / "test-smoke.yml")
+        if not smoke.is_file():
+            self.skipTest("test-smoke.yml henüz oluşmadı")
+        text = smoke.read_text(encoding="utf-8")
+        findings = cps.audit(text)
+        fails = [f for f in findings if f["verdict"] == "FAIL"]
+        self.assertEqual(fails, [],
+                         f"test-smoke.yml'de FAIL bulgusu: {fails}")
+
+    def test_test_smoke_workflow_audit_file(self):
+        """test-smoke.yml audit_file() ile PASS dönmeli."""
+        smoke = (pathlib.Path(CIKTI).parent.parent
+                 / ".github" / "workflows" / "test-smoke.yml")
+        if not smoke.is_file():
+            self.skipTest("test-smoke.yml henüz oluşmadı")
+        report = cps.audit_file(str(smoke))
+        self.assertIsNotNone(report)
+        self.assertEqual(report["verdict"], "PASS")
+        self.assertEqual(report["fail"], 0)
+        # python3-shell adımı olmamalı (smoke noop)
+        self.assertEqual(report["python3_shell_steps"], 0)
+
+    def test_new_workflow_did_not_break_main(self):
+        """Yeni workflow eklenince --workflow'suz main() hâlâ PASS."""
+        # Yeni dosya dahil tüm workflow'ları denetle
+        rc = cps.main([])
+        self.assertEqual(rc, 0,
+                         "test-smoke.yml eklenince glob modu kırıldı")
+
 
 if __name__ == "__main__":
     unittest.main()
