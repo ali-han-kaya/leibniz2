@@ -384,6 +384,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-24 | history | audit_refs_trend alanini history.jsonl'e ekle | [`fa2e6de`](https://github.com/ali-han-kaya/leibniz2/commit/fa2e6de) |
 | 2026-08-24 | other | audit: --offline mod ekle (yerel dizinden tekrarlanabilir kosu) | [`d714000`](https://github.com/ali-han-kaya/leibniz2/commit/d714000) |
 | 2026-08-24 | ci | test-smoke.yml ile glob modu smoke test'i ekle | [`c95f762`](https://github.com/ali-han-kaya/leibniz2/commit/c95f762) |
+| 2026-08-24 | ci | actionlint'i tum .github/workflows/*.yml dosyalarina genelle | [`a1119d5`](https://github.com/ali-han-kaya/leibniz2/commit/a1119d5) |
 
 ### Regresyon notları
 

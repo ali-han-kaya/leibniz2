@@ -465,3 +465,49 @@ fonksiyonuna çıkarıldı; hem normal akış (AŞAMA 1) hem de bağımsız
 
 *Bu bölüm `docs/PUBLISH_SCENARIO.md` §INCREMENTAL PUSH ile senkrondur.*
 
+---
+
+## 11. Oturum 4 — python3-shell Artifact Doc Drift'i (2026-08-21)
+
+> Doc-artifact senkronizasyonunun `audit_live_ci_sync.py` ile **yakalanan** ve
+> `845206a` ile **kapatılan** tek bulgusu. Kırılmaya yol açmadı (advisory),
+> ancak iki belgenin ortak desenini doğruladı: workflow'a yeni artifact
+> ekleyen commit, PUBLISH_SCENARIO artifact listesini o an
+otomatik güncellemez.
+
+### 11.1 Bulgu (belirti + kök neden)
+
+- **Belirti:** `audit_live_ci_sync.py` (advisory `audit-live-ci` job'ı) son
+  run'da doc listesinde **olmayan** bir artifact tespit etti:
+  `extra: ['python3-shell']`. Doc listesi **21** artifact gösteriyordu;
+  canlı run **22** üretiyordu.
+- **Kök neden:** `1f9706f` (`feat: python3-shell denetimini manifest'e
+  SHA-256 ile sabitle`) workflow'a yeni `python3-shell` artifact'ı ekledi;
+  `docs/PUBLISH_SCENARIO.md` artifact listesi bu commit'te güncellenmedi.
+- **Etki:** `audit-live-ci` advisory olduğundan run **yeşil kaldı** —
+  fail-closed değildi ama drift kayıt altına alındı (run summary'de fazla
+  artifact satırı).
+
+### 11.2 Düzeltme
+
+| Commit | Değişiklik |
+|---|---|
+| `1f9706f` | python3-shell artifact'ı manifest'e eklendi (bulgu kaynağı) |
+| `845206a` | PUBLISH_SCENARIO artifact listesi **21 → 22**; INCREMENTAL adım 4 ve AŞAMA 3 (c) sayıları güncellendi; denetim bulgusu notu tazelendi |
+
+### 11.3 Kanıt ve önleme
+
+| Kanıt | Durum |
+|---|---|
+| `audit_live_ci_sync.py` — `845206a` sonrası run'da `extra: []` | ✓ drift kapandı |
+| pre-commit (14 hook) | ✓ Tümü Passed |
+| PUBLISH_SCENARIO artifact listesi (`845206a` anı) | ✓ 21 → 22 (canlı run'da 23 — meta-denetçi artifact'ı dahil) |
+| PUBLISH_SCENARIO artifact listesi (güncel) | 27 — sonraki artifact eklemeleriyle büyüdü, `audit-refs-trend` + `audit-live-ci` senkronu yeşil |
+
+**Önleme (desen):** yeni artifact ekleyen her workflow değişikliği,
+PUBLISH_SCENARIO artifact listesini ve `gen_repro_manifest.py ARTIFACT_JOBS`
+set'ini **aynı commit'te** güncellemeli; aksi halde `audit-refs-trend`
+benzeri meta-denetçiler bir sonraki run'da fazla/eksik artifact'ı bildirir.
+
+---
+
