@@ -73,3 +73,58 @@ yerel diskteki denetim izidir.
 - `0fab281` "Update publish scenario: record test-marker squash" — temizliğin
   ilk belgelemesi (PUBLISH_SCENARIO rollback bölümü).
 - Bu belge (`docs/HISTORY_CLEANUP.md`) — tam kayıt + önleme kuralları.
+
+---
+
+## 6. Preview-server legacy.label temizliği (--remove-legacy)
+
+**Durum (2026-08-24):** `update_preview.sh` önceden **iki launchd profil**
+üretiyordu:
+
+| Profil | Label | Role | KeepAlive |
+|---|---|---|---|
+| Birincil | `com.freebuff.preview-leibniz2` | İstek karşılama (HTTP 8000) | `true` |
+| **Legacy** | `com.freebuff.preview-server` | Yedek (`SuccessfulExit: false` → restart yok) | `false` |
+
+İki-profilli tasarım, preview tab'ının detach/meşgul olma sorunuyla mücadele
+için bir yedek daemon stratejisiydi. Ancak yarış koşullarına yol açtı:
+
+- **Port yarışı:** İki profil de port 8000'de dinler → `launchctl bootout`
+  (legacy) + `launchctl bootstrap` (birincil) sırasında `Address already in
+  use` hatası
+- **Restart döngüsü:** `KeepAlive: false` olan legacy `exit 0`'da durur,
+  `KeepAlive: true` olan birincil crash'te restart eder; asimetrik davranış
+  tanıyı zorlaştırır
+- **plist-golden tutarsızlığı:** Golden dizini iki profil tutuyordu ama
+  testler tek profili (leibniz2) mock'luyordu → `TestPlistOutSidecar` hatası
+
+### Temizlik adımları
+
+1. **`update_preview.sh`**: `PLIST_PROFILES`'ten legacy profil çıkarıldı;
+   yalnızca `com.freebuff.preview-leibniz2` orada kaldı.
+2. **`--remove-legacy` komutu** eklendi: var olan legacy profilini launchd'den
+   söker + plist/şablon/log dosyalarını siler.
+3. **`plist-golden/`**: `com.freebuff.preview-server.plist` golden dosyası
+   tanıklık için korundu (silinmedi) — `--remove-legacy` komutunun neyi
+   hedeflediğini belgeler.
+4. **`test_plist_gate_exit.py`**: iki-profilli beklentiden tek-profilli
+   gerçeğe güncellendi.
+
+### Bellek (kaynak referansları)
+
+| Konum | Ne |
+|---|---|
+| `_calisma/CIKTI/update_preview.sh` satır 462-501 | `LEGACY_LABEL`, `plist_remove_legacy()` tanımı |
+| `_calisma/CIKTI/update_preview.sh` satır 595 | `--status` çıktısında legacy label referansı |
+| `_calisma/CIKTI/plist-golden/com.freebuff.preview-server.plist` | Golden kopyası (tanıklık) |
+| `_calisma/CIKTI/plist-golden/com.freebuff.preview-leibniz2.plist` | Güncel tek profil golden'ı |
+| `_calisma/CIKTI/test_plist_gate_exit.py` `TestPlistOutSidecar` | Birim test (tek profil) |
+| `_calisma/CIKTI/check_plist_drift.py` | Drift denetimi (K12) |
+
+### Neden temizlik kaydına girdi
+
+Bu bir "bug fix" değil, **mimari sadeleştirme**: iki-profilli tasarımın
+çözmeye çalıştığı preview-server tab detach sorunu, launchd `KeepAlive` +
+`start_preview.sh` bootout→bootstrap akışıyla kökten çözüldü; legacy yedek
+profile artık ihtiyaç kalmadı. Temizlik; kod, test, golden ve dokümantasyon
+dahil tam bir iz bırakılarak yapıldı.
