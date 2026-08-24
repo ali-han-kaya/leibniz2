@@ -2047,18 +2047,18 @@ jobs:
           echo "rc=$rc" >> "$GITHUB_OUTPUT"
           echo "daemon-http exit: $rc"
 
-      # K15: history.jsonl ↔ .sha256 sidecar bütünlüğü (advisory)
+      # K15: history.jsonl ↔ .sha256 sidecar bütünlüğü (fail-closed P1)
       # Daemon test'i tempdir'de history.jsonl üretir; --history-out ile
-      # dışarı kopyalandı. Sidecar yoksa veya hash uyuşmazsa rapor yazılır.
-      - name: K15 history sidecar check (advisory)
+      # dışarı kopyalandı. Sidecar yoksa veya hash uyuşmazsa P1 → exit 1.
+      # skip: daemon test'i history.jsonl üretmediyse (henüz run yok).
+      - name: K15 history sidecar check (fail-closed P1)
         id: k15
         if: always()
-        continue-on-error: true
         run: |
           set +e
           if [ ! -f daemon_history.jsonl ]; then
             echo "k15_rc=skipped" >> "$GITHUB_OUTPUT"
-            echo "K15: history.jsonl yok (daemon test üretmedi)"
+            echo "K15: history.jsonl yok (daemon test üretmedi) — atlandı"
             exit 0
           fi
           python3 _calisma/CIKTI/verify_delivery.py \
@@ -2068,6 +2068,10 @@ jobs:
           set -e
           echo "k15_rc=$rc" >> "$GITHUB_OUTPUT"
           echo "K15 exit: $rc"
+          if [ "$rc" -ne 0 ]; then
+            echo "K15: FAIL — history sidecar uyuşmazlığı (P1, fail-closed)"
+          fi
+          exit $rc
 
       # OVERRIDE RAPORU (PRECOMMIT_RAPORU deseni): override run'ının
       # [CLI override] satırları preview_server tarafından
@@ -2108,7 +2112,7 @@ jobs:
         if: always()
         run: |
           {
-            echo "## Daemon mode HTTP 200 + K15 sidecar + OVERRIDE_RAPORU (advisory)"
+            echo "## Daemon mode HTTP 200 + K15 sidecar (fail-closed P1) + OVERRIDE_RAPORU (advisory)"
             echo ""
             echo "- daemon-http test: exit \`${{ steps.daemon.outputs.rc }}\`"
             echo "- K15 history sidecar: exit \`${{ steps.k15.outputs.k15_rc }}\`"
