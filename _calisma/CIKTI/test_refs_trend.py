@@ -666,6 +666,68 @@ class TestChangelogOrder(unittest.TestCase):
                 f"CHANGELOG sırası bozuk: {dates[i]} < {dates[i+1]}")
 
 
+class TestChangelogDeterministicOrder(unittest.TestCase):
+    """CHANGELOG sıralaması deterministik: tarih (azalan) + ekleme sırası.
+
+    CHANGELOG listesi tek kaynaktır; changelog_lines() ve
+    _coverage_change_note() onu liste sırasıyla iter eder. Bu nedenle
+    listenin KENDİSİ hem tarihe göre azalan hem de aynı tarihli girdilerde
+    ekleme sırasında olmalıdır. Stable-sort (tarih desc) orijinal listeyi
+    birebir üretmeli — yanlış konuma eklenen ya da aynı tarihi bölen bir
+    girdi stable-sort sonrası farklı liste üretir ve bu test FAIL eder.
+    """
+
+    def test_dates_are_iso_yyyy_mm_dd(self):
+        # Tarih dizeleri ISO olmalı — string karşılaştırması yalnızca
+        # sıfır dolgulu YYYY-MM-DD formatında sözlük sırası = kronolojik sıra
+        # garantisini verir.
+        import re
+        iso = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+        for date, _note in rt.CHANGELOG:
+            self.assertTrue(iso.match(date),
+                            f"CHANGELOG tarihi ISO değil: {date!r}")
+
+    def test_stable_sort_reproduces_exact_list(self):
+        # Tarihe göre azalan stable-sort, orijinal listeyi BİREBİR üretmeli.
+        # Bu hem tarih sırasını hem de aynı tarihli girdilerin ekleme
+        # sırasının korunduğunu (determinizm) tek kontrolle doğrular.
+        stable_sorted = sorted(
+            rt.CHANGELOG, key=lambda entry: entry[0], reverse=True)
+        self.assertEqual(
+            stable_sorted, rt.CHANGELOG,
+            "CHANGELOG stable-sort sonrası değişiyor — "
+            "bir girdi yanlış yere eklenmiş ya da aynı tarih bölünmüş")
+
+    def test_same_date_entries_are_contiguous(self):
+        # Aynı tarihli girdiler tek ardışık blok halinde olmalı (bir tarih
+        # listede bölünmemeli).
+        seen = []
+        for date, _note in rt.CHANGELOG:
+            if seen and seen[-1] == date:
+                continue
+            self.assertNotIn(
+                date, seen,
+                f"CHANGELOG tarihi bölünmüş: {date} birden çok blokta")
+            seen.append(date)
+
+    def test_changelog_lines_is_deterministic(self):
+        # changelog_lines() saf fonksiyon olmalı — aynı girdi, aynı çıktı.
+        # (zaman/rastgelelik yok; liste sırası tek kaynak)
+        first = rt.changelog_lines()
+        second = rt.changelog_lines()
+        self.assertEqual(first, second,
+                         "changelog_lines() deterministik değil")
+
+    def test_changelog_non_empty_and_ordered_by_import(self):
+        # CHANGELOG boş olmamalı; her girdi (date, note) ikilisi olmalı.
+        self.assertTrue(rt.CHANGELOG, "CHANGELOG boş")
+        for entry in rt.CHANGELOG:
+            self.assertIsInstance(entry, tuple)
+            self.assertEqual(len(entry), 2, f"CHANGELOG girdisi (date,note) ikilisi değil: {entry!r}")
+            self.assertIsInstance(entry[0], str)
+            self.assertIsInstance(entry[1], str)
+
+
 class TestRefsTrendTableHasCoverageNote(unittest.TestCase):
     """refs-trend tablosu Kapsam Notu sütunu içermeli (fail-closed)."""
 
