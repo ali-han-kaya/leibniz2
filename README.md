@@ -366,6 +366,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-24 | ci | ci_fresh_clone_test.sh fresh clone simülasyonu ekle | [`ac8555c`](https://github.com/ali-han-kaya/leibniz2/commit/ac8555c) |
 | 2026-08-24 | other | refs-online: archive_group özeti ekle (archive+loc+hathitrust=25) | [`564d6ac`](https://github.com/ali-han-kaya/leibniz2/commit/564d6ac) |
 | 2026-08-24 | other | verify: OL timeout UNVERIFIED için outer retry ekle | [`958d5ba`](https://github.com/ali-han-kaya/leibniz2/commit/958d5ba) |
+| 2026-08-24 | docs | REFERANS_KANIT'e V5aa notu — CI OL timeout + retry belgelendi | [`da94017`](https://github.com/ali-han-kaya/leibniz2/commit/da94017) |
 
 ### Regresyon notları
 

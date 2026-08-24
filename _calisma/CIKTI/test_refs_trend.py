@@ -135,6 +135,27 @@ class TestChangelog(unittest.TestCase):
         # V5q (2026-08-21) V5t'den önce (Wayback → Handle geçişi)
         self.assertLess(joined.index("V5q"), joined.index("V5t"))
 
+    def test_changelog_has_v5r_oclc_matrix(self):
+        """V5r: OL edisyon oclc YOK + HT identifier matrisi changelog'da olmalı."""
+        lines = rt.changelog_lines()
+        self.assertTrue(lines)
+        joined = "\n".join(lines)
+        self.assertIn("V5r", joined)
+        self.assertIn("oclc", joined)
+        self.assertIn("Xunzi", joined)
+        # V5r (2026-08-21) V5q'dan hemen önce (matris → kapsam kapatma)
+        self.assertLess(joined.index("V5r"), joined.index("V5q"))
+
+    def test_changelog_has_v5aa_ol_retry(self):
+        """V5aa: OL timeout retry changelog'da olmalı (en yeni üstte)."""
+        lines = rt.changelog_lines()
+        self.assertTrue(lines)
+        joined = "\n".join(lines)
+        self.assertIn("V5aa", joined)
+        self.assertIn("retry", joined)
+        # En yeni üstte: V5aa (2026-08-24), V5z'den önce.
+        self.assertLess(joined.index("V5aa"), joined.index("V5z"))
+
     def test_changelog_has_v5p_oclc_lccn(self):
         """V5p: OL'den OCLC/LCCN çekimi + Xunzi HT kaydı changelog'da olmalı."""
         lines = rt.changelog_lines()

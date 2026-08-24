@@ -64,6 +64,17 @@ CHANGELOG = [
      "artifact'larıyla karşılaştırır (sahte satır / sayı / by_source drift'i "
      "/ bayat trend → exit 1; advisory audit-refs-trend job'ı). Canlı "
      "denetim 83/83 satır birebir PASS."),
+    ("2026-08-24",
+     "V5aa: CI'da geçici OL timeout'ları belgelendi (58/61 push + 61/61 "
+     "workflow_dispatch); `_ol_retry` outer retry eklendi — zaman aşımı/" 
+     "connection reset/5xx geçici UNVERIFIED'lar 3s bekleyip tekrar denenir."),
+    ("2026-08-22",
+     "V5z: canlı CI 61/61 PASS, UNVERIFIED=0 — tüm kanıt zincirleri "
+     "birlikte doğrulandı (LoC 3 + Handle 1 + HT 1 + OL fallback Fine)."),
+    ("2026-08-21",
+     "V5r: OL edisyon kayıtlarında oclc YOK — tam identifier matrisi HT'ye "
+     "denendi (lccn + oclc + isbn), yalnızca Xunzi (`lccn:87033578`) eşleşir; "
+     "4 modern telifli kitap HT kataloğunda yok, OL fallback PASS ile kalır."),
     ("2026-08-21",
      "V5q: kapsam boşluğu kapatıldı — 4 Sextus edisyonu (1562 Estienne, "
      "1569 Hervet, 1621 Chouet) IA'da `ia_ids` ile birebir identifier "
