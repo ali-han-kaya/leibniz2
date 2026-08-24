@@ -107,6 +107,8 @@ LATEST = {
     "precommit_hooks": None,     # [{name, status}] — pre-commit hook sonuçları (Passed/Failed)
     "history_sidecar_sha256": None,  # history.jsonl.sha256 sidecar hash'i (K15)
     "findings": [],                # verify_output'dan çıkan [{id,priority,label,message,detail}]
+    "pattern_drift": None,       # merge pattern drift durumu: PASS/DRIFT (dashboard)
+    "pattern_drift_detail": None, # drift detayı: eksik/fazla artifact listesi
     "audit_refs_trend": None,   # refs-trend audit sonucu: PASS/FAIL/advisory (history.jsonl trend)
     "cached": False,               # True = LATEST disk'teki önbelleklenmiş son run'dan yüklendi
 }
@@ -127,7 +129,7 @@ HISTORY_KEYS = ("ts", "verdict", "p0", "p1", "duration_s", "budget_usd",
                 "refs_by_source", "hook_env", "z3_passed", "z3_failed",
                 "z3_total", "lean_ok", "lean_detail", "cli_override_count",
                 "lineage_ok", "lineage_count", "history_sidecar_sha256",
-                "findings", "audit_refs_trend")
+                "findings", "audit_refs_trend", "pattern_drift", "pattern_drift_detail")
 
 
 def snapshot_dict():
@@ -819,6 +821,21 @@ def _finalize_run(stdout, stderr, rc, duration, data, verify_dir=None):
         except (json.JSONDecodeError, ValueError):
             pass
 
+    # Pattern drift: merge pattern ↔ ARTIFACT_JOBS tutarlılığı
+    pattern_drift_result = None
+    pattern_drift_detail = ""
+    try:
+        import check_pattern_consistency as _cpc
+        _errors = _cpc.check()
+        if _errors:
+            pattern_drift_result = "DRIFT"
+            pattern_drift_detail = "; ".join(_errors)
+        else:
+            pattern_drift_result = "PASS"
+            pattern_drift_detail = ""
+    except Exception:
+        pass  # drift check başarısızsa sessizce atla
+
     # config diff: raw (verify_delivery.config.json) vs effective (data['config'])
     raw_cfg = {}
     if verify_dir:
@@ -939,6 +956,9 @@ def _finalize_run(stdout, stderr, rc, duration, data, verify_dir=None):
             # P0/P1 bulgu satırları (verify --json findings[])
             "findings": [f for f in (data.get("findings") or [])
                           if f.get("priority") in ("P0", "P1")],
+            # Pattern drift: merge pattern ↔ ARTIFACT_JOBS tutarlılığı (dashboard)
+            "pattern_drift": pattern_drift_result,
+            "pattern_drift_detail": pattern_drift_detail,
         })
         # Extract pages + refs from stdout for richer dashboard
         for line in stdout.splitlines():

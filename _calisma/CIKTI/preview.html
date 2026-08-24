@@ -165,6 +165,13 @@
   </section>
 
   <section>
+    <h2>Pattern drift <span class="ts" id="pattern-drift-ts"></span></h2>
+    <div class="card" style="padding:12px" id="pattern-drift-body">
+      <div class="muted">veri bekleniyor…</div>
+    </div>
+  </section>
+
+  <section>
     <h2>P0 / P1 trend — son 100 run <span class="ts" id="trend-count"></span></h2>
     <div id="budget-over-banner" class="err" role="alert"
          style="display:none;margin:6px 0 2px;padding:6px 10px;border-radius:6px;font-size:12px;font-weight:700"></div>
@@ -1374,6 +1381,29 @@ function renderMirrorSync(data) {
   bodyEl.innerHTML = h;
 }
 
+// ---- Pattern drift panel — merge pattern ↔ ARTIFACT_JOBS tutarlılığı ----
+// Kaynak: /api/latest `pattern_drift` (PASS/DRIFT) + `pattern_drift_detail`.
+function renderPatternDrift(data) {
+  const bodyEl = $("pattern-drift-body"), tsEl = $("pattern-drift-ts");
+  if (!bodyEl) return;
+  const ts = data && data.ts;
+  if (tsEl) tsEl.textContent = ts ? fmtTs(ts) : "";
+  const drift = data && data.pattern_drift;
+  const detail = data && data.pattern_drift_detail;
+  if (drift == null) {
+    bodyEl.innerHTML = '<span class="muted">pattern drift kontrolü bu run\u0027da çalışmadı</span>';
+    return;
+  }
+  if (drift === "PASS") {
+    bodyEl.innerHTML = '<span class="badge ok">PASS</span> ' +
+      '<span style="margin-left:8px;font-size:13px">merge pattern ↔ ARTIFACT_JOBS tutarlı — eksik/fazla artifact yok</span>';
+  } else {
+    bodyEl.innerHTML = '<span class="badge err">DRIFT</span> ' +
+      '<span style="margin-left:8px;font-size:13px;font-weight:600;color:var(--err)">pattern tutarsızlığı tespit edildi</span>' +
+      '<div style="margin-top:8px;font-size:12px;color:var(--warn)">' + escapeHTML(detail || "") + '</div>';
+  }
+}
+
 // ---- K-layers panel (tek kaynak: d.layers → K0-K17) ----
 // K8/K9 enriched by z3_passed/lean_ok detail; others purely from layers.
 const K_ALL = ["K0","K1","K2","K3","K4","K5","K6","K7","K8","K9",
@@ -1787,6 +1817,7 @@ function initLoad() {
     if (d.config_diff) renderConfigDiff(d.config_diff, d.ts);
     renderCliOverride(d);
     renderMirrorSync(d);
+    renderPatternDrift(d);
     setLive(d.verdict === "PASS" ? "ok" : "warn");
   }).catch(() => {});
   loadRunHistory();
@@ -1812,6 +1843,7 @@ function connect() {
         if (full.config_diff) renderConfigDiff(full.config_diff, full.ts);
         renderCliOverride(full);
         renderMirrorSync(full);
+        renderPatternDrift(full);
       });
       // Run history'yi de güncelle (yeni run snapshot'ı gelince)
       loadRunHistory();
@@ -1831,6 +1863,7 @@ function connect() {
         if (full.config_diff) renderConfigDiff(full.config_diff, full.ts);
         renderCliOverride(full);
         renderMirrorSync(full);
+        renderPatternDrift(full);
       });
       // Run history'yi de güncelle (yeni run update'i gelince)
       loadRunHistory();
