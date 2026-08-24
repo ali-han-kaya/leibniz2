@@ -26,6 +26,7 @@ hatalar bir daha `gh run watch` sırasında sürpriz olmasın.
 | 5. push (`a309b23`–`965182d`) | `32435636927` | success (12/12 job) | §8: ci-simulate OWNER unbound + local fix |
 | 6. push (`e0aaeb4`–`5388d77`) | `32724860213` | success (22 job) | §11: python3-shell artifact drift doc'a işlendi |
 | 7. push (`bf6a1d2`–`c10f478`) | `32747316028` | success (22 job) | §12: --incremental doc-sync + enforce_is_on 404 dansı |
+| 8. push (PR #22/#23/#24 merge) | — | success (main'de PASS) | §13: preview startup resilience + single-profile revert + K14 path fix |
 
 **§8 Not:** `publish_wrapper.sh --ci-simulate` ile yerelde CI pipeline birebir
 koşuldu, tüm kapılar yeşil (§8.3).
@@ -592,6 +593,110 @@ erişilemedi UYARI / gerçek drift FAIL) birebir paraleldir — iki fonksiyon da
 | Test dosyası | ~24 | 26 |
 | Pre-commit hook | 20 | 20 |
 | Son CI run | `32724860213` success | `32747316028` success |
+
+---
+
+## 13. PR #22 / #23 / #24 — Preview startup resilience + single-profile revert + K14 path fix
+
+2026-08-22'de merge edilen üç birleşik PR — her biri aynı gün doğan ve
+birbirini tamamlayan düzeltmeler:
+
+| PR | Başlık | Commit |
+|---|---|---|
+| [#22](https://github.com/ali-han-kaya/leibniz2/pull/22) | fix(dashboard): startup resilience for preview tab | `2bb8fb1` |
+| [#23](https://github.com/ali-han-kaya/leibniz2/pull/23) | revert(plist): remove legacy preview-server, single-profile | `71106f8` |
+| [#24](https://github.com/ali-han-kaya/leibniz2/pull/24) | fix(verify): K14 _resolve_canon path under --dir repo root | `fb69a40` |
+
+### 13.1 PR #22 — Preview tab startup resilience
+
+**Belirti:** Preview tab'ı her reload'da `webContents` kaybediyordu; Freebuff
+register/unregister döngüsünde sunucu PID değişince `register_preview` `webContents
+is not attached` hatası veriyordu.
+
+**Kök neden:** Launchd `KeepAlive` + `SuccessfulExit: false` ayarı, sunucu
+exit 0 ile temiz kapansa bile yeniden başlatıyordu. `launchctl bootout` + sleep +
+`launchctl bootstrap` arasındaki yarış penceresinde port çakışması oluyordu.
+
+**Düzeltme:** `start_preview.sh`'e 5 adımlı güvenli restart akışı eklendi:
+1. HTML rebuild (`--force`)
+2. `launchctl bootout gui/$UID/$LABEL.plist` — temiz durdur
+3. `sleep 1` + `kill -0` check — grace period
+4. `launchctl bootstrap` — yeni yükle
+5. `sleep` + `curl` health check — hazır olana kadar bekle
+
+Ayrıca `update_preview.sh --start` ve `--stop` alt komutları belgelendi.
+`.freebuff/run.md`'deki bayat inline Perl/setsid başlatma blokları `--start`
+komutuna yönlendirildi.
+
+**Commit:** `2bb8fb1` — `fix(dashboard): add startup resilience to preview tab (#22)`
+
+### 13.2 PR #23 — Single-profile revert (legacy preview-server temizliği)
+
+**Belirti:** İki profil (`com.freebuff.preview-leibniz2` birincil +
+`com.freebuff.preview-server` legacy) aynı port 8000'de yarışıyordu. `--status`
+çıktısında legacy profil "Yüklü: hayır" görünüyor ama plist varlığı denetim
+karmaşası yaratıyordu.
+
+**Kök neden:** `check_plist_drift.py` ve `update_preview.sh` iki profili
+tanıyordu — biri aktif (launchd), diğeri pasif (plist dosyası var ama yüklü
+değil). Testler (`test_two_profiles_all_guncel`) iki profilli çıktıyı
+doğruluyordu.
+
+**Düzeltme:**
+- `update_preview.sh --start` artık yalnızca birincil profili (`leibniz2`)
+  yönetiyor; `--stop` ve `--status` legacy'yi "Kapsam dışı" olarak raporluyor.
+- `check_plist_drift.py`: `--remove-legacy` bayrağı eklendi; legacy profil
+  plist dosyasını siler ve golden set'ten çıkarır.
+- `test_plist_gate_exit.py`: `TestTwoProfilesAllGuncel` →
+  `TestParsePlistCheckOutputLegacyCompat` olarak yeniden adlandırıldı;
+  `test_two_profiles_guncel` helper testten `_two_profiles_guncel` docstring'li
+  yardımcıya dönüştü.
+- Golden dosyalar (plist-golden/) tek profil (`leibniz2`) referansına
+güncellendi.
+
+**Commit:** `71106f8` — `revert(plist): remove legacy preview-server profile, keep single-profile (#23)`
+
+### 13.3 PR #24 — K14 _resolve_canon path fix
+
+**Belirti:** `verify_delivery.py --check-cleanup --dir <mirror>` komutu,
+mirror'daki kanonik dosyaları bulamıyordu. `_resolve_canon`, `dir_arg` repo
+kökü olduğunda `dir_arg + rel` full path üretiyordu — mirror'da bu yol yok.
+CIKTI subdir (`--dir _calisma/CIKTI`) durumunda çift önek (`CIKTI/_calisma/CIKTI/…`)
+oluşuyordu.
+
+**Kök neden:** `_resolve_canon` yalnızca tek bir strateji uyguluyordu:
+`os.path.join(dir_arg, rel)`. Mirror flat dizin (basename) ve subdir (basename)
+senaryolarında `os.path.join` yanlış yol üretiyordu.
+
+**Düzeltme:** `_resolve_canon` üç aşamalı çözümleme:
+1. `dir_arg + rel` tam yolunu dene (repo root senaryosu)
+2. Bulunamazsa `dir_arg + basename(rel)` dene (mirror / subdir senaryosu)
+3. `dir_arg` yoksa `repo_root + rel` (eski davranış)
+
+Bu düzeltme `fb69a40` commit'i ile geldi; birim testleri daha sonra
+`a51ce2a` commit'inde `TestResolveCanon` sınıfıyla 4 senaryolu olarak
+genimletildi (mirror, subdir, repo-root, None).
+
+**Commit:** `fb69a40` — `fix(verify): K14 _resolve_canon path under --dir repo root (#24)`
+
+### 13.4 Kanıt
+
+| Kanıt | Durum |
+|---|---|
+| `update_preview.sh --status` → tek profil `leibniz2` aktif, `preview-server` kapsam dışı | ✓ |
+| `check_plist_drift.py --remove-legacy` → legacy plist silindi, golden PASS | ✓ |
+| `test_plist_gate_exit.py` 39 test OK (legacy compat dahil) | ✓ |
+| `test_cleanup.py` 13 test OK (4 `TestResolveCanon` dahil) | ✓ |
+| Preview tab launchd restart → `webContents` stabil | ✓ |
+| `start_preview.sh` → 5 adımlı bootout + bootstrap + health check | ✓ |
+
+### 13.5 Tam test paketi durumu (güncel)
+
+| Metrik | Değer |
+|---|---|
+| Test sayısı | 1357 |
+| Pre-commit hook | 20/20 PASS |
+| Daemon-only failures | 4 (pre-existing, preview sunucusu gerekli) |
 
 ---
 
