@@ -37,7 +37,7 @@ RUNTIME_REQUIRED = (
     "fresh_clone_setup.sh", "test_fresh_clone_setup.py", "update_preview.sh",
 )
 # Preview mirror runtime'ı (PREVIEW_FILES — launchd çalıştırıcısı + PreStart).
-PREVIEW_RUNTIME = ("preview_server.py", "_daemonize.py", "preview_prestart.py")
+PREVIEW_RUNTIME = ("preview_server.py", "_daemonize.py", "preview_prestart.py", "sw.js")
 # Branch protection kılavuzu (GUIDE_FILES — /guide.html rotası).
 GUIDE_REL = "docs/branch-protection-guide/guide.html"
 

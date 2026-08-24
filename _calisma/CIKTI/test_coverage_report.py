@@ -33,7 +33,10 @@ import textwrap
 from collections import defaultdict
 from datetime import datetime, timezone
 
-import yaml
+try:
+    import yaml
+except ImportError:
+    yaml = None  # CI'da pyyaml kurulu olmayabilir; --check modu skip eder
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 TEST_DIR = REPO_ROOT / "_calisma" / "CIKTI"
@@ -187,7 +190,7 @@ def build_ci_job_map(ci_coverage, all_test_files):
 def discover_hook_entries():
     """.pre-commit-config.yaml'dan hook id → ad listesini okur."""
     pc_path = REPO_ROOT / ".pre-commit-config.yaml"
-    if not pc_path.exists():
+    if not pc_path.exists() or yaml is None:
         return {}
     pc = yaml.safe_load(pc_path.read_text())
     entries = {}

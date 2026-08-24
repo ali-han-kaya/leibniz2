@@ -438,6 +438,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-24 | feat | (dashboard) pattern drift paneli — /api/latest + live preview | [`65fd87b`](https://github.com/ali-han-kaya/leibniz2/commit/65fd87b) |
 | 2026-08-24 | docs | stash-aware hook behavior for check-repro-manifest | [`3566f57`](https://github.com/ali-han-kaya/leibniz2/commit/3566f57) |
 | 2026-08-24 | docs | block evidence for action-pins, plist-drift, verify-delivery | [`e8d93d2`](https://github.com/ali-han-kaya/leibniz2/commit/e8d93d2) |
+| 2026-08-24 | fix | (hooks) pattern drift error shows line number + artifact name | [`62f1a72`](https://github.com/ali-han-kaya/leibniz2/commit/62f1a72) |
 
 ### Regresyon notları
 
