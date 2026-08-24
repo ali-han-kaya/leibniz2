@@ -40,6 +40,7 @@ DOC_ONLY_ADVISORY = frozenset({
     "ci-simulate",           # advisory yerel CI simülasyonu — job output
     "audit-live-ci",         # advisory meta-denetçi — job output
     "changelog-drift",       # advisory: gen_changelog --check drift logu — job output
+    "pattern-drift",          # advisory: merge pattern ↔ ARTIFACT_JOBS — job output
     "preview-reload-smoke",  # advisory: preview reload smoke testi — job output
 })
 

@@ -2378,6 +2378,65 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
+  # ════════════════════════════════════════════════════════════════════
+  # PATTERN DRIFT CHECK (advisory) — merge pattern ↔ ARTIFACT_JOBS
+  #
+  # check_pattern_consistency.py ile verify.yml merge-multiple
+  # pattern'indeki artifact listesini gen_repro_manifest.py
+  # ARTIFACT_JOBS'ıyla karşılaştırır. Eksik/fazla/duplike → DRIFT.
+  # Advisory: build'i bloke etmez; bulgular run summary'de görünür,
+  # pattern-drift artifact'ına yazılır. Pre-commit'te fail-closed
+  # olduğu için CI'da advisory (çift güvenlik ağı).
+  # ════════════════════════════════════════════════════════════════════
+  pattern-drift:
+    name: Merge pattern drift check (advisory)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Check merge pattern consistency
+        id: check
+        continue-on-error: true
+        run: |
+          set +e
+          python3 _calisma/CIKTI/check_pattern_consistency.py \
+            2>&1 | tee pattern_drift.txt
+          rc=${PIPESTATUS[0]}
+          set -e
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          echo "pattern-drift exit: $rc"
+
+      - name: Write pattern drift to run summary
+        if: always()
+        run: |
+          if [ -f pattern_drift.txt ]; then
+            {
+              echo "## Merge pattern drift check (advisory)"
+              echo ""
+              echo "- exit: \`${{ steps.check.outputs.rc }}\`"
+              echo '```'
+              cat pattern_drift.txt
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload pattern drift report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: pattern-drift
+          path: pattern_drift.txt
+          if-no-files-found: ignore
+          retention-days: 30
+
   # MIRROR SYNC CHECK (macOS, fail-closed) — sync_verify_mirror.sh --check
   # (K17). launchd GUI agent'ı TCC nedeniyle Desktop altını okuyamaz;
   # verify mirror'ı (~/Library/Caches/com.freebuff/verify) bunu aşar. K17,

@@ -60,6 +60,7 @@ GATE_EXCLUDE = {
     "audit-refs-trend",     # advisory: refs-trend satırları ↔ kaynak denetimi
     "override-trend",       # advisory: CLI override zaman serisi
     "changelog-drift",      # advisory: gen_changelog --check drift bulguları
+    "pattern-drift",         # advisory: merge pattern ↔ ARTIFACT_JOBS drift
 }
 # Not: "label-gate" (Pre-commit P0 label gate) BİLEREK required check'tir —
 # precommit-p0 etiketi varken FAIL verip merge'i bloke eder; bu yüzden
@@ -67,7 +68,7 @@ GATE_EXCLUDE = {
 # commit-msg-gate (commit-msg ihlal blokajı — PR-only ama required),
 # config-sync (config snapshot ↔ CONFIG_BASENAMES üçlü senkron),
 # ci-simulate (yerel CI simülasyonu — full K1-K14 replay).
-# 22 job − 10 hariç = 12 required (changelog-drift advisory eklendi).
+# 23 job − 11 hariç = 13 required (pattern-drift advisory eklendi).
 
 
 def gate_jobs():
