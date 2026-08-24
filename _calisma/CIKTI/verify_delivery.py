@@ -1579,6 +1579,43 @@ def run_reference_audit(tex_text, add, quiet=False):
         f"[OpenLibrary + HathiTrust + Google Books fallback] + "
         f"URL/Handle {len(REFERENCE_URL)} + Perseus {len(REFERENCE_PERSEUS)}); "
         f"kalanı REFERANS_KANIT_DENETIMI.md sabit denetimine dayanır.")
+
+    # 6) IA kapsam-dışı 5 kaynağın fallback kanıtı (ayrı bölüm)
+    # ia_ol_fallback_evidence.py'nin collect_evidence() fonksiyonunu
+    # çağırır — IA'da indekslenmeyen 5 kaynağın (Fine 2012, Lagrée 1994,
+    # Millican 2002, Schmitt 1972, Xunzi Knoblock) _archive_with_fallback
+    # zinciriyle (IA → HathiTrust → LoC → OpenLibrary → Google Books)
+    # nasıl PASS olduğunu ayrı bölüm olarak gösterir. online_refs'e de
+    # eklenir → VERSION JSON'a dahil edilir.
+    try:
+        import ia_ol_fallback_evidence as _iafb
+        fb_results = _iafb.collect_evidence()
+        say("\n  --- IA kapsam-dışı 5 kaynak — fallback kanıtı (ayrı bölüm) ---")
+        for r in fb_results:
+            tag = {"PASS": "OK  ", "MISMATCH": "FAIL",
+                   "UNVERIFIED": "SKIP"}.get(r["verdict"], "?   ")
+            loc_cell = ""
+            if r.get("loc_url") and r.get("lccn"):
+                loc_cell = f" (LoC: {r['lccn']})"
+            say(f"  [{tag}] {r['source']:<12} {r['key']:<30} -> {r['detail'][:60]}{loc_cell}")
+            online_results.append({
+                "key": r["key"],
+                "source": "fallback_" + r["source"],
+                "verdict": r["verdict"],
+                "detail": r["detail"],
+                "loc_url": r.get("loc_url"),
+                "lccn": r.get("lccn"),
+                "fallback_section": True,
+            })
+            if r["verdict"] != "PASS":
+                add("P1", "K6-REF", "K6 referans",
+                    f"{r['key']} fallback kanıtı: {r['verdict']} ({r['detail'][:80]})")
+        fb_pass = sum(1 for r in fb_results if r["verdict"] == "PASS")
+        say(f"  Fallback: {fb_pass}/{len(fb_results)} kaynak çevrimiçi doğrulandı "
+            f"(IA → HathiTrust → LoC → OpenLibrary → Google Books zinciri)")
+    except Exception as e:
+        say(f"  [SKIP] IA fallback kanıt bölümü atlandı: {e}")
+
     return online_results
 
 

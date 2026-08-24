@@ -99,8 +99,12 @@ class TestAuditBudget(unittest.TestCase):
     def test_budget_exceeded_skips_network(self):
         # Bütçe 0 → tüm ağ kontrolleri UNVERIFIED atlanır; hiçbir check çağrılmaz
         # (yanlış PASS yok). Polite sleep'ler de mock'lanır (test hızı için).
+        # collect_evidence (fallback bölüm) de mock'lanır — ağ çağrısı yok.
         with mock.patch.object(vd, "REFERENCE_AUDIT_BUDGET_S", 0), \
-                mock.patch.object(vd.time, "sleep"):
+                mock.patch.object(vd.time, "sleep"), \
+                mock.patch(
+                    "ia_ol_fallback_evidence.collect_evidence",
+                    return_value=[]):
             for fn in ("crossref_check", "sep_check", "openlibrary_check",
                        "archive_check", "perseus_check",
                        "openlibrary_fallback_check", "hathitrust_check",
@@ -114,10 +118,12 @@ class TestAuditBudget(unittest.TestCase):
                     "", lambda *a, **k: None, quiet=True)
             finally:
                 mock.patch.stopall()
-        self.assertEqual(len(results), 61)  # V5q: +4 Sextus (IA) +1 Della Rocca (URL)
-        self.assertTrue(all(r["verdict"] == "UNVERIFIED" for r in results))
+        # 61 ana sonuç + 0 fallback (collect_evidence mock → [])
+        main_results = [r for r in results if not r.get("fallback_section")]
+        self.assertEqual(len(main_results), 61)  # V5q: +4 Sextus (IA) +1 Della Rocca (URL)
+        self.assertTrue(all(r["verdict"] == "UNVERIFIED" for r in main_results))
         self.assertTrue(all("bütçesi aşıldı" in r["detail"]
-                           for r in results))
+                           for r in main_results))
 
 
 class TestParallelAudit(unittest.TestCase):
@@ -136,7 +142,10 @@ class TestParallelAudit(unittest.TestCase):
                 mock.patch.object(vd, "_archive_with_fallback",
                                   side_effect=archive_side), \
                 mock.patch.object(vd, "perseus_check",
-                                  return_value=("PASS", "x")):
+                                  return_value=("PASS", "x")), \
+                mock.patch(
+                    "ia_ol_fallback_evidence.collect_evidence",
+                    return_value=[]):
             return vd.run_reference_audit(
                 "", lambda *a, **k: None, quiet=True)
 
@@ -195,7 +204,10 @@ class TestParallelAudit(unittest.TestCase):
                 mock.patch.object(vd, "_archive_with_fallback",
                                   side_effect=lambda r: ("PASS", "x", "archive")), \
                 mock.patch.object(vd, "perseus_check",
-                                  return_value=("PASS", "x")):
+                                  return_value=("PASS", "x")), \
+                mock.patch(
+                    "ia_ol_fallback_evidence.collect_evidence",
+                    return_value=[]):
             t0 = time.time()
             results = vd.run_reference_audit(
                 "", lambda *a, **k: None, quiet=True)
@@ -760,6 +772,117 @@ class TestLocCheck(unittest.TestCase):
             v, d = vd.loc_check(ref)
         self.assertEqual(v, "UNVERIFIED")
         self.assertIn("LoC HTTP 404", d)
+
+
+class TestFallbackEvidenceSection(unittest.TestCase):
+    """run_reference_audit'ın fallback bölüm doğrulaması — --full'da 5
+    kaynağın fallback kanıtını ayrı bölüm olarak gösterir.
+
+    collect_evidence mock'lanarak ağsız/deterministik doğrulanır:
+    - 5 sonuç döner, hepsi fallback_section=True işaretli
+    - online_results'e eklenir (VERSION JSON'a dahil)
+    - source 'fallback_' öneki taşır (gerçek OpenLibrary ile karışmaz)
+    - FAIL/MISMATCH varsa P1 eklenir (fail-closed)
+    - istisna atarsa bölüm atlanır (SKIP), çökme yok
+    """
+
+    def _fb_result(self, key, verdict, source, detail="ok"):
+        return {"key": key, "verdict": verdict, "source": source,
+                "detail": detail, "loc_url": "https://lccn.loc.gov/123",
+                "lccn": "123"}
+
+    def _run_audit(self, fb_results):
+        # Tüm tex_needle'ları içeren sahte metin üret — 1. adımda P1 oluşmasın.
+        tex = " ".join(r["tex_needle"] for r in
+                       vd.REFERENCE_CROSSREF + vd.REFERENCE_SEP
+                       + vd.REFERENCE_URL)
+        findings = []
+        with mock.patch.object(vd, "REFERENCE_POOL_SIZE", 1), \
+                mock.patch.object(vd, "crossref_check",
+                                  return_value=("PASS", "x")), \
+                mock.patch.object(vd, "sep_check",
+                                  return_value=("PASS", "x")), \
+                mock.patch.object(vd, "openlibrary_check",
+                                  return_value=("PASS", "x")), \
+                mock.patch.object(vd, "_archive_with_fallback",
+                                  side_effect=lambda r: ("PASS", "x", "archive")), \
+                mock.patch.object(vd, "perseus_check",
+                                  return_value=("PASS", "x")), \
+                mock.patch(
+                    "ia_ol_fallback_evidence.collect_evidence",
+                    return_value=fb_results):
+            results = vd.run_reference_audit(
+                tex, lambda *a, **k: findings.append(a), quiet=True)
+        return results, findings
+
+    def test_fallback_section_appended_to_online_results(self):
+        fb = [self._fb_result("Fine 2012", "PASS", "openlibrary"),
+              self._fb_result("Lagree 1994", "PASS", "loc"),
+              self._fb_result("Millican 2002", "PASS", "loc"),
+              self._fb_result("Schmitt 1972", "PASS", "loc"),
+              self._fb_result("Xunzi Knoblock", "PASS", "hathitrust")]
+        results, findings = self._run_audit(fb)
+        # 61 ana + 5 fallback = 66
+        self.assertEqual(len(results), 66)
+        fb_rows = [r for r in results if r.get("fallback_section")]
+        self.assertEqual(len(fb_rows), 5)
+        # fallback_section=True işaretli
+        self.assertTrue(all(r["fallback_section"] for r in fb_rows))
+        # source 'fallback_' öneki taşır
+        self.assertTrue(all(r["source"].startswith("fallback_")
+                            for r in fb_rows))
+        # loc_url + lccn aktarıldı
+        for r in fb_rows:
+            self.assertEqual(r["loc_url"], "https://lccn.loc.gov/123")
+            self.assertEqual(r["lccn"], "123")
+        # tümü PASS → P1 yok
+        self.assertEqual(findings, [])
+
+    def test_fallback_section_fail_adds_p1(self):
+        fb = [self._fb_result("Fine 2012", "MISMATCH", "openlibrary",
+                             "title eşleşmedi")]
+        results, findings = self._run_audit(fb)
+        fb_rows = [r for r in results if r.get("fallback_section")]
+        self.assertEqual(len(fb_rows), 1)
+        self.assertEqual(fb_rows[0]["verdict"], "MISMATCH")
+        # MISMATCH → P1 eklenir (fail-closed) — fallback bulgusu ara
+        self.assertTrue(any("Fine 2012" in str(f) and "fallback" in str(f).lower()
+                            for f in findings),
+                        f"Fine 2012 fallback P1 bulunamadı: {findings}")
+
+    def test_fallback_section_empty_when_no_evidence(self):
+        results, findings = self._run_audit([])
+        fb_rows = [r for r in results if r.get("fallback_section")]
+        self.assertEqual(len(fb_rows), 0)
+        self.assertEqual(len(results), 61)
+        # Tüm ana sonuçlar PASS, tex_needle'lar mevcut → P1 yok
+        self.assertEqual(findings, [])
+
+    def test_fallback_section_skips_on_exception(self):
+        # collect_evidence exception atarsa bölüm atlanır (SKIP), çökme yok.
+        tex = " ".join(r["tex_needle"] for r in
+                       vd.REFERENCE_CROSSREF + vd.REFERENCE_SEP
+                       + vd.REFERENCE_URL)
+        with mock.patch.object(vd, "REFERENCE_POOL_SIZE", 1), \
+                mock.patch.object(vd, "crossref_check",
+                                  return_value=("PASS", "x")), \
+                mock.patch.object(vd, "sep_check",
+                                  return_value=("PASS", "x")), \
+                mock.patch.object(vd, "openlibrary_check",
+                                  return_value=("PASS", "x")), \
+                mock.patch.object(vd, "_archive_with_fallback",
+                                  side_effect=lambda r: ("PASS", "x", "archive")), \
+                mock.patch.object(vd, "perseus_check",
+                                  return_value=("PASS", "x")), \
+                mock.patch(
+                    "ia_ol_fallback_evidence.collect_evidence",
+                    side_effect=RuntimeError("ağ hatası")):
+            results = vd.run_reference_audit(
+                tex, lambda *a, **k: None, quiet=True)
+        # 61 ana sonuç, fallback yok (exception → SKIP)
+        self.assertEqual(len(results), 61)
+        fb_rows = [r for r in results if r.get("fallback_section")]
+        self.assertEqual(len(fb_rows), 0)
 
 
 if __name__ == "__main__":
