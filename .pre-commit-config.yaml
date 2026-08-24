@@ -404,7 +404,7 @@ repos:
           test_override_trend test_check_config_sync test_verify_checks
           test_update_changelog_hook test_setup_branch_protection
           test_refs_trend_badge test_run_summary_changelog
-          test_readme_badges; do
+          test_readme_badges test_audit_live_ci_sync; do
           "$PY" -m unittest discover -s _calisma/CIKTI -p "$t.py" ||
           exit 1; done'
         language: system

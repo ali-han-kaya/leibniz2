@@ -38,10 +38,13 @@ HERE = pathlib.Path(__file__).resolve().parent
 REPO_ROOT = HERE.parents[1]
 DEFAULT_DOC = REPO_ROOT / "docs" / "PUBLISH_SCENARIO.md"
 
-# Bu job'ın KENDİ adı/artifact'ı karşılaştırmadan hariç tutulur — meta-denetçi
-# olarak run'ın içinde koşar; kendi artifact'ı denetim ADIMINDAN SONRA yüklenir
-# (her run'da "fazla job/eksik artifact" yanlış-pozitif üretir). Doc tablosu
-# bu job'ı içermez (advisory meta-araçtır, teslim pipeline'ı değil).
+# Bu job'ın KENDİ adı/artifact'ı karşıdırmadan hariç tutulur — meta-denetçi
+# olarak run'ın içinde koşar; artifact'ı denetim ADIMINDAN SONRA yüklenir.
+# Doc kendi job'ını/artifact'ını LİSTEYEBİLİR (job tablosu + artifact listesi
+# güncel hâlde içerir) — bu yüzden dışlama İKİ TARAFTA da uygulanır: canlı ve
+# doc tarafından çıkarılıp KALAN kümeler karşılaştırılır. Tek taraflı dışlama
+# "missing: <kendi adı>" ile her run'da yanlış FAIL üretir (2026-08-24, e2e
+# testiyle yakalandı).
 SELF_JOB = "Live CI doc↔GitHub sync audit (advisory)"
 SELF_ARTIFACT = "audit-live-ci"
 
@@ -51,6 +54,28 @@ _JOB_ROW_RE = re.compile(
     r"^\|\s*\d+\s*\|\s*([A-D])\s*\|\s*(.+?)\s*\|")
 # Artifact satırları: "- `unit-tests` (...)" veya "- `budget-verify` + `budget` (...)"
 _ARTIFACT_BULLET_RE = re.compile(r"^\s*-\s*(.+)$")
+
+# upload-artifact bloğu: `uses:` → `with:` → `name:` (yalnızca yatay boşluk;
+# \s* değil — `with:` ile `name:` arasına başka anahtar giremez).
+_UPLOAD_ARTIFACT_RE = re.compile(
+    r"^[ \t]*uses:[ \t]*actions/upload-artifact@\S+[ \t]*\n"
+    r"[ \t]*with:[ \t]*\n"
+    r"[ \t]*name:[ \t]*(\S+)[ \t]*$",
+    re.M)
+
+
+def extract_workflow_upload_names(wf_text):
+    """Workflow metnindeki TÜM `actions/upload-artifact` `name:` değerlerini
+    çıkarır (sıralı, tekil). Bu, canlı run'ın artifact kümesinin OFFLINE
+    eşdeğeridir: `--doc` karşılaştırmasında canlı tarafı temsil eder ve
+    yeni eklenen artifact'ları otomatik yakalar (python3-shell drift
+    regression'ı — `845206a`)."""
+    names = []
+    for m in _UPLOAD_ARTIFACT_RE.finditer(wf_text):
+        n = m.group(1).strip()
+        if n and n not in names:
+            names.append(n)
+    return names
 
 
 def parse_doc_jobs(doc_text):
@@ -159,7 +184,10 @@ def compare(expected, live, label):
 
 
 def exclude_self(live_jobs, live_artifacts):
-    """Denetçi job'ının kendi adını/artifact'ını canlı listeden çıkarır."""
+    """Denetçinin kendi job/artifact adını listeden çıkarır.
+
+    Dönüş değeri (temizlenmiş jobs, temizlenmiş artifacts) — çağıran doc
+    tarafına da aynı dışlamayı uygulamalıdır (bkz. main)."""
     return ([n for n in live_jobs if n != SELF_JOB],
             [n for n in live_artifacts if n != SELF_ARTIFACT])
 
@@ -208,10 +236,14 @@ def main(argv=None):
         print(f"HATA: canlı veri çekilemedi ({e})", file=sys.stderr)
         return 2
 
-    # Meta-denetçi kendini karşılaştırmaz (bkz. SELF_JOB/SELF_ARTIFACT).
+    # Meta-deneteyi kendini iki taraftan da çıkarır (bkz. SELF_JOB/SELF_ARTIFACT)
+    # — doc kendi satırını/listesini içerse bile denetim "kalan gerçek küme"yi
+    # karşılaştırmalı; aksi halde her run'da kendini missing olarak raporlar.
     live_jobs, live_artifacts = exclude_self(live_jobs, live_artifacts)
+    doc_jobs = [(c, n) for (c, n) in doc_jobs if n != SELF_JOB]
+    doc_artifacts = [n for n in doc_artifacts if n != SELF_ARTIFACT]
 
-    doc_job_names = [name for (_cat, name) in doc_jobs]
+    doc_job_names = [n for (_cat, n) in doc_jobs]
     job_cmp = compare(doc_job_names, live_jobs, "jobs")
     art_cmp = compare(doc_artifacts, live_artifacts, "artifacts")
     ok = job_cmp["ok"] and art_cmp["ok"]
