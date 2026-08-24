@@ -301,5 +301,62 @@ class TestRefsBySourceCards(unittest.TestCase):
                            "ro-source-cards, ro-metrics'ten sonra olmalı")
 
 
+class TestRefsTrendBySourceStacked(unittest.TestCase):
+    """renderRefsTrend içindeki by_source yığılmış alan + tooltip + lejant."""
+
+    @classmethod
+    def setUpClass(cls):
+        with open(PREVIEW_HTML, encoding="utf-8") as f:
+            cls._html = f.read()
+
+    def test_src_colors_match_source_cards(self):
+        """SRC_COLORS (trend) ile colors (source cards) aynı paleti kullanır."""
+        # crossref mavi, sep yeşil, openlibrary mor, archive amber, perseus kırmızı
+        for src, expected in (("crossref", "#58a6ff"), ("sep", "#3fb950"),
+                               ("openlibrary", "#bc8cff"), ("archive", "#d29922"),
+                               ("perseus", "#f85149")):
+            # Her iki yerde de aynı renk tanımı olmalı
+            self.assertIn(f'{src}: "{expected}"', self._html,
+                          f"SRC_COLORS/colors'ta {src} rengi {expected} olmalı")
+
+    def test_src_names_defined_in_trend(self):
+        """SRC_NAMES map'i renderRefsTrend'de tanımlı."""
+        self.assertIn("const SRC_NAMES =", self._html)
+        for k in ("crossref", "openlibrary", "sep", "archive", "perseus"):
+            self.assertIn(k + ":", self._html,
+                          f"SRC_NAMES map'te '{k}' eksik")
+
+    def test_tooltip_shows_by_source(self):
+        """showRefsTrendTip hover tooltip'i by_source kırılımını gösterir."""
+        self.assertIn("── by_source ──", self._html)
+        self.assertIn("refs_by_source", self._html)
+        self.assertIn("srcKeys.sort", self._html)
+
+    def test_legend_shows_per_source_counts(self):
+        """Lejant: son run'un her kaynak için ayrı ayrı sayısını gösterir."""
+        self.assertIn("SRC_NAMES[s]||s", self._html)
+        self.assertIn("lastSrc", self._html)
+
+    def test_src_colors_include_all_types(self):
+        """SRC_COLORS tüm source tiplerini kapsar."""
+        for k in ("crossref", "sep", "openlibrary", "archive",
+                  "perseus", "hathitrust", "diğer"):
+            self.assertIn(k + ":", self._html,
+                          f"SRC_COLORS'ta '{k}' eksik")
+
+    def test_src_order_consistent(self):
+        """SRC_ORDER listesi tutarlı — Perseus son sırada."""
+        self.assertIn('"crossref", "sep", "openlibrary", "archive", "perseus"', self._html)
+
+    def test_stacked_area_polygons_present(self):
+        """Yığılmış alan polygon'ları HTML'de üretiliyor."""
+        self.assertIn("fill-opacity", self._html)
+        self.assertIn('stroke="none"', self._html)
+
+    def test_by_src_computation_falls_back_to_empty(self):
+        """refs_by_source yoksa bySrc boş map üretir."""
+        self.assertIn("r.refs_by_source || {}", self._html)
+
+
 if __name__ == "__main__":
     unittest.main()

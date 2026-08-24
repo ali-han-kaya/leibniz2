@@ -610,12 +610,24 @@ function showRefsTrendTip(i, ev) {
                 : ((r.p1 || 0) > 0 ? "WARN (P1)" : "PASS"));
   const ts = r.ts ? new Date(r.ts).toLocaleString() : "?";
   const tip = $("tip");
-  tip.textContent =
-    ts + "\n" +
+  let lines = [
+    ts,
     "refs    : " + (r.refs_verified != null ? r.refs_verified : "?") + " / " +
-      (r.refs_total != null ? r.refs_total : "?") + "\n" +
-    "verdict : " + verdict + "\n" +
-    "mismatch: " + (r.refs_mismatch || 0);
+      (r.refs_total != null ? r.refs_total : "?"),
+    "verdict : " + verdict,
+    "mismatch: " + (r.refs_mismatch || 0),
+  ];
+  // by_source kırılımı — kaynak bazında hangi kaynaktan kaç doğrulama
+  const bs = r.refs_by_source || {};
+  const srcKeys = Object.keys(bs).filter(k => (bs[k] || 0) > 0);
+  if (srcKeys.length > 0) {
+    lines.push("── by_source ──");
+    srcKeys.sort((a,b) => (bs[b]||0) - (bs[a]||0)).forEach(k => {
+      const nm = SRC_NAMES[k] || k;
+      lines.push("  " + nm + ": " + (bs[k] || 0));
+    });
+  }
+  tip.textContent = lines.join("\n");
   tip.style.display = "block";
   positionTip(ev);
 }
@@ -654,9 +666,14 @@ function renderRefsTrend(rows) {
   // verified'a eşit olmalı (toplam = refs_verified). crossref/sep/
   // openlibrary/archive/perseus + kalanlar "diğer" olarak toplanır.
   const SRC_ORDER = ["crossref", "sep", "openlibrary", "archive", "perseus"];
+  const SRC_NAMES = { crossref: "CrossRef", openlibrary: "OpenLibrary", sep: "SEP",
+                      archive: "Internet Archive", internetarchive: "Internet Archive",
+                      perseus: "Perseus", hathitrust: "HathiTrust", url: "URL" };
   const SRC_COLORS = {
-    crossref: "#58a6ff", sep: "#a371f7", openlibrary: "#d29922",
-    archive: "#3fb950", perseus: "#f778ba", diğer: "#8b949e",
+    crossref: "#58a6ff", sep: "#3fb950", openlibrary: "#bc8cff",
+    archive: "#d29922", internetarchive: "#d29922",
+    perseus: "#f85149", hathitrust: "#79c0ff",
+    diğer: "#8b949e", url: "#8b949e",
   };
   const bySrc = have.map(r => {
     const bs = r.refs_by_source || {};
@@ -716,15 +733,16 @@ function renderRefsTrend(rows) {
   svg.innerHTML = parts.join("");
   const last = have[n-1];
   const pct = last.refs_total > 0 ? Math.round(100 * last.refs_verified / last.refs_total) : 0;
-  // by_source seri lejantı (renkli ■ çipler) — yalnızca aktif kaynaklar.
-  const chips = activeSrc
-    .map(s => `<span style="color:${SRC_COLORS[s] || "#8b949e"}">■ ${s}</span>`)
-    .join(" ");
+  // by_source seri lejantı (renkli ■ çipler, son run sayıları ile)
+  const lastSrc = activeSrc.map(s => {
+    const c = bySrc[n-1][s] || 0;
+    return `<span style="color:${SRC_COLORS[s]||"#8b949e"}">■ ${SRC_NAMES[s]||s}:${c}</span>`;
+  }).join(" ");
   legend.innerHTML = "Yeşil = verified · Mavi (kesikli) = total · Kırmızı = mismatch · Son: " +
     `${last.refs_verified}/${last.refs_total} (${pct}%) · ` +
     (have[0].ts ? new Date(have[0].ts).toLocaleString() : "?") +
     " → " + (last.ts ? new Date(last.ts).toLocaleString() : "?") + ` · ${n} run` +
-    (chips ? " · " + chips : "");
+    (lastSrc ? " · " + lastSrc : "");
   $("refs-trend-count").textContent = `(${n} run)`;
   // "Tam kapsam" rozeti — bugünkü 61/61 serisini yeşil rozetle vurgula.
   const b = refsTrendBadge(have);
@@ -1119,7 +1137,7 @@ function renderRefsOnline(d) {
                      archive: "#d29922", internetarchive: "#d29922", perseus: "#f85149",
                      hathitrust: "#79c0ff", url: "#8b949e", handle: "#8b949e",
                      fallback_openlibrary: "#bc8cff", fallback_loc: "#79c0ff",
-                     fallback_hathitrust: "#79c0ff" };
+                     fallback_hathitrust: "#79c0ff", "diğer": "#8b949e" };
     const icons = { crossref: "\ud83d\udd17", openlibrary: "\ud83d\udcda", sep: "\ud83d\udcd6",
                     archive: "\ud83c\udfdb\ufe0f", internetarchive: "\ud83c\udfdb\ufe0f",
                     perseus: "\ud83c\udfdb\ufe0f", hathitrust: "\ud83d\udcd8",
