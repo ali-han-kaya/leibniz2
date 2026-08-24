@@ -32,16 +32,17 @@ EXCLUDED = frozenset({
 
 
 def _read_merge_pattern(workflow_path: str):
-    """verify.yml'den merge-multiple pattern'ini oku (brace format)."""
+    """verify.yml'den merge-multiple pattern'ini oku (brace format).
+
+    Döndürür: (items: set, line_no: int) — line_no pattern'in bulunduğu satır.
+    """
     with open(workflow_path, encoding="utf-8") as f:
-        text = f.read()
-    m = re.search(
-        r"merge-multiple:\s*true\s*\n\s*pattern:\s*'\{([^}]+)\}'\s*\n",
-        text,
-    )
-    if not m:
-        return None
-    return {s.strip() for s in m.group(1).split(",")}
+        lines = f.readlines()
+    for i, line in enumerate(lines, 1):
+        m = re.search(r"pattern:\s*'\{([^}]+)\}'", line)
+        if m:
+            return {s.strip() for s in m.group(1).split(",")}, i
+    return None, 0
 
 
 def check(workflow_path: str = None):
@@ -50,7 +51,7 @@ def check(workflow_path: str = None):
     if not os.path.isfile(wf):
         return [f"Workflow dosyası bulunamadı: {wf}"]
 
-    pattern = _read_merge_pattern(wf)
+    pattern, line_no = _read_merge_pattern(wf)
     if pattern is None:
         return ["verify.yml'de brace merge pattern bulunamadı"]
 
@@ -61,9 +62,9 @@ def check(workflow_path: str = None):
     extra = pattern - expected
 
     if missing:
-        errors.append(f"Eksik (pattern'de yok ama ARTIFACT_JOBS'da var): {', '.join(sorted(missing))}")
+        errors.append(f"Eksik (satır {line_no}): pattern'de yok ama ARTIFACT_JOBS'da var: {', '.join(sorted(missing))}")
     if extra:
-        errors.append(f"Fazla (pattern'da var ama ARTIFACT_JOBS'da yok): {', '.join(sorted(extra))}")
+        errors.append(f"Fazla (satır {line_no}): pattern'da var ama ARTIFACT_JOBS'da yok: {', '.join(sorted(extra))}")
 
     # Duplike kontrolü
     with open(wf, encoding="utf-8") as f:

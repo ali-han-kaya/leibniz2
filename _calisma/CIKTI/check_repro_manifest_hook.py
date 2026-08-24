@@ -79,6 +79,18 @@ def main():
     r = subprocess.run(
         [sys.executable, "-m", "unittest", "discover",
          "-s", str(CIKTI), "-p", "test_gen_repro_manifest.py"])
+    # Test başarısızsasatır numarası dahil detaylı çıktı üret
+    if r.returncode != 0:
+        print("\n─── check-repro-manifest HATA DETAYI ───", file=sys.stderr)
+        # pattern一致性 test'inden satır numarası al
+        try:
+            import check_pattern_consistency as cpc
+            errors = cpc.check()
+            if errors:
+                for e in errors:
+                    print(f"  ✗ {e}", file=sys.stderr)
+        except Exception:
+            pass
     return r.returncode
 
 
