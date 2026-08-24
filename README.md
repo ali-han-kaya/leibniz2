@@ -362,6 +362,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-23 | ci | mirror kapsam denetimi (--list ↔ repo dosya kümesi) ekle | [`7e15d44`](https://github.com/ali-han-kaya/leibniz2/commit/7e15d44) |
 | 2026-08-24 | ci | fresh_clone_setup --check-ci advisory job ekle | [`3590d09`](https://github.com/ali-han-kaya/leibniz2/commit/3590d09) |
 | 2026-08-24 | docs | run.md 'How to reproduce' bölümünü fresh_clone_setup.sh'e taşı | [`10d9ad7`](https://github.com/ali-han-kaya/leibniz2/commit/10d9ad7) |
+| 2026-08-24 | other | mirror: fresh_clone/update_preview/test'i FILES'e ekle (43 dosya) | [`d09efc7`](https://github.com/ali-han-kaya/leibniz2/commit/d09efc7) |
 
 ### Regresyon notları
 
