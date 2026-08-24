@@ -384,6 +384,13 @@ def main(argv=None):
     ap.add_argument("--max-artifacts", type=int, default=100,
                     help="kaynak olarak işlenecek refs-online artifact sayısı "
                          "(trend üretimiyle aynı pencere; varsayılan 100)")
+    ap.add_argument("--offline", action="store_true",
+                    help="Kaynak artifact'ları GitHub API'den değil, "
+                         "--artifacts-dir altından oku (çevrimdışı tekrarlanabilir)")
+    ap.add_argument("--artifacts-dir", default=None,
+                    help="--offline modunda kaynak dizin (alt dizinlerinde "
+                         "refs-online/ klasörü beklenir; varsayılan: trend-json "
+                         "yanındaki all_artifacts)")
     ap.add_argument("--json", action="store_true", help="makine-okur JSON")
     args = ap.parse_args(argv)
 
@@ -393,32 +400,91 @@ def main(argv=None):
         print(f"HATA: {e}", file=sys.stderr)
         return 2
 
-    token = os.environ.get("GITHUB_TOKEN", "")
-    try:
-        artifacts = rt.fetch_refs_online_artifacts(args.repo, token,
-                                                   args.max_artifacts)
-    except Exception as e:
-        print(f"HATA: refs-online artifact listelenemedi — {e}", file=sys.stderr)
-        return 2
-
     # Kaynak raporları topla: {run_id_str: references_online.json}.
-    # Aynı run_id'den birden çok artifact varsa (nadir) sonuncusu kullanılır.
     source_reports = {}
     parse_errors = []
-    for a in artifacts:
-        aid = a["id"]
-        rid = (a.get("workflow_run") or {}).get("id")
-        if rid is None:
-            continue  # run_id'siz kaynak karşılaştırılamaz — atlanır
-        try:
-            blob = rt.api_get(
-                f"/repos/{args.repo}/actions/artifacts/{aid}/zip",
-                token, binary=True)
+
+    if args.offline:
+        # ── OFFLINE mod: yerel dizinden refs-online zip'lerini oku ────────
+        # Beklenen yapı: artifacts_dir/refs-online/refs-online-{id}.zip
+        # veya artifacts_dir/altında tek-level zip dosyaları.
+        art_dir = pathlib.Path(args.artifacts_dir)
+        if not art_dir.is_dir():
+            # varsayılan: trend-json'un iki üstündeki all_artifacts/
+            art_dir = (pathlib.Path(args.trend_json).resolve().parent
+                       .parent.parent / "all_artifacts")
+        if not art_dir.is_dir():
+            print(f"HATA: --offline artifacts dizini bulunamadı ({art_dir})",
+                  file=sys.stderr)
+            return 2
+
+        # refs-online dizinini veya zip dosyalarını ara
+        ref_dirs = [art_dir / "refs-online"]
+        if not ref_dirs[0].is_dir():
+            ref_dirs = []
+            # root level zip'leri de dene
+            for zf in art_dir.rglob("*.zip"):
+                ref_dirs.append(zf)
+
+        import re as _re
+        def _extract_run_id(zf):
+            """Zip dosya adından run_id çıkar (refs-online-{id}.zip)."""
+            m = _re.search(r"(\d+)\.zip$", zf.name)
+            return m.group(1) if m else None
+
+        def _load_zip(zf):
+            """Zip'ten report + run_id döndür."""
+            blob = zf.read_bytes()
             rep = rt.parse_report(blob)
+            rid = _extract_run_id(zf)
+            if rid is not None:
+                return rid, rep
+            return None, rep
+
+        if ref_dirs and ref_dirs[0].is_dir():
+            # refs-online/ altındaki zip dosyaları
+            for zf in sorted(ref_dirs[0].glob("*.zip")):
+                try:
+                    rid, rep = _load_zip(zf)
+                    if rid is not None:
+                        source_reports[rid] = rep
+                except Exception as e:
+                    parse_errors.append(f"{zf.name}: {e}")
+        else:
+            # Root-level zip'leri dene
+            for zf in sorted(art_dir.glob("*.zip")):
+                try:
+                    rid, rep = _load_zip(zf)
+                    if rid is not None:
+                        source_reports[rid] = rep
+                except Exception as e:
+                    parse_errors.append(f"{zf.name}: {e}")
+
+        print(f"  [offline] {len(source_reports)} kaynak rapor yüklendi "
+              f"({art_dir})", file=sys.stderr)
+    else:
+        # ── ONLINE mod: GitHub API'den indir ─────────────────────────────
+        try:
+            artifacts = rt.fetch_refs_online_artifacts(args.repo, os.environ.get("GITHUB_TOKEN", ""),
+                                                       args.max_artifacts)
         except Exception as e:
-            parse_errors.append(f"artifact {aid}: {e}")
-            continue
-        source_reports[str(rid)] = rep
+            print(f"HATA: refs-online artifact listelenemedi — {e}", file=sys.stderr)
+            return 2
+
+        for a in artifacts:
+            aid = a["id"]
+            rid = (a.get("workflow_run") or {}).get("id")
+            if rid is None:
+                continue
+            try:
+                blob = rt.api_get(
+                    f"/repos/{args.repo}/actions/artifacts/{aid}/zip",
+                    os.environ.get("GITHUB_TOKEN", ""), binary=True)
+                rep = rt.parse_report(blob)
+            except Exception as e:
+                parse_errors.append(f"artifact {aid}: {e}")
+                continue
+            source_reports[str(rid)] = rep
 
     if parse_errors:
         print(f"  (kaynak parse hataları: {'; '.join(parse_errors)})",
