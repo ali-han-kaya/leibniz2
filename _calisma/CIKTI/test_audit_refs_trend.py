@@ -25,7 +25,8 @@ import audit_refs_trend as art  # noqa: E402
 import refs_trend as rt  # noqa: E402
 
 
-DEFAULT_BY_SOURCE = {"openlibrary": 26, "crossref": 6}
+DEFAULT_BY_SOURCE = {"openlibrary": 22, "crossref": 6, "sep": 5,
+                    "archive": 20, "hathitrust": 1, "perseus": 2, "handle": 1}
 
 
 def _source(verified=61, total=61, unverified=0, mismatch=0,
@@ -160,6 +161,40 @@ class TestAudit(unittest.TestCase):
         r = art.audit({"rows": []}, {"111": _source()})
         self.assertEqual(r["verdict"], "FAIL")
         self.assertEqual(r["extra_sources"], ["111"])
+
+    def test_by_source_missing_hathitrust_fails(self):
+        # hathitrust kaybı → by_source_missing finding.
+        bs = {"crossref": 6, "sep": 5, "openlibrary": 22,
+              "archive": 20, "perseus": 2}  # hathitrust yok
+        trend = {"rows": [_row("111", by_source=bs)]}
+        src = {"111": _source(by_source=bs)}
+        r = art.audit(trend, src)
+        self.assertFalse(r["ok"])
+        bsm = [f for f in r["findings"] if f["kind"] == "by_source_missing"]
+        self.assertEqual(len(bsm), 1)
+        self.assertIn("hathitrust", bsm[0]["missing"])
+
+    def test_by_source_all_expected_present_pass(self):
+        # hathitrust + archive + perseus mevcut → by_source_missing yok.
+        bs = {"crossref": 6, "sep": 5, "openlibrary": 22,
+              "archive": 20, "hathitrust": 1, "perseus": 2, "handle": 1}
+        trend = {"rows": [_row("111", by_source=bs)]}
+        src = {"111": _source(by_source=bs)}
+        r = art.audit(trend, src)
+        bsm = [f for f in r["findings"] if f["kind"] == "by_source_missing"]
+        self.assertEqual(bsm, [])
+
+    def test_by_source_multiple_missing(self):
+        # Birden fazla kaynak eksik → hepsi listede.
+        bs = {"crossref": 6, "openlibrary": 22}  # archive+hathitrust+perseus yok
+        trend = {"rows": [_row("111", by_source=bs)]}
+        src = {"111": _source(by_source=bs)}
+        r = art.audit(trend, src)
+        bsm = [f for f in r["findings"] if f["kind"] == "by_source_missing"]
+        self.assertEqual(len(bsm), 1)
+        self.assertIn("archive", bsm[0]["missing"])
+        self.assertIn("hathitrust", bsm[0]["missing"])
+        self.assertIn("perseus", bsm[0]["missing"])
 
 
 class TestLoadTrend(unittest.TestCase):

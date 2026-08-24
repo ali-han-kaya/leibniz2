@@ -374,6 +374,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-24 | other | ia_ol_fallback: kanit tablosuna tiklanabilir LoC URL'leri ekle | [`0259025`](https://github.com/ali-han-kaya/leibniz2/commit/0259025) |
 | 2026-08-24 | docs | V5s/V5r OL fallback notlarini V5w isaretiyle guncelle | [`e5fcf40`](https://github.com/ali-han-kaya/leibniz2/commit/e5fcf40) |
 | 2026-08-24 | other | refs-trend: kapsam gecis dipnotu ekle (54/49 56/26 61/61) | [`26bb80c`](https://github.com/ali-han-kaya/leibniz2/commit/26bb80c) |
+| 2026-08-24 | docs | V5w canli run dogrulamasi ekle (hathitrust=1, 61/61 PASS) | [`bdf0699`](https://github.com/ali-han-kaya/leibniz2/commit/bdf0699) |
 
 ### Regresyon notları
 

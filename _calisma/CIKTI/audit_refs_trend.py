@@ -127,7 +127,23 @@ def audit(trend, source_reports):
             })
             continue
         covered_keys.add(key[1])
-        findings += compare_row(row, src)
+        findings += compare_row(row, src)# by_source dağılım denetimi: hathitrust/archive/perseus her run'da var mı?
+    # Bu kaynaklar V5s/V5q/V5w sonrası sabit olmalı; eksiklik bayat
+    # artifact veya kaynak drift'i anlamına gelir.
+    EXPECTED_SOURCES = {"hathitrust", "archive", "perseus"}
+    for row in trend.get("rows", []):
+        bs = _norm_by_source(row.get("by_source"))
+        missing_src = EXPECTED_SOURCES - set(bs.keys())
+        if missing_src:
+            findings.append({
+                "kind": "by_source_missing",
+                "row_key": _row_key(row)[1],
+                "missing": sorted(missing_src),
+                "by_source": bs,
+                "detail": (f"by_source'ta beklenen kaynak(lar) yok: "
+                           f"{', '.join(sorted(missing_src))} "
+                           f"(run_key={_row_key(row)[1]})"),
+            })
 
     # Kapsam: kaynak artifact'ların run_id'leri trendde var mı? (yoksa trend
     # bayat — o run'ın satırı üretilmemiş). run_id'siz kaynak atlanır.
@@ -292,6 +308,8 @@ def main(argv=None):
             elif f["kind"] == "by_source":
                 print(f"  [FAIL] {f['detail']} "
                       f"(trend={f['trend']}, kaynak={f['source']})")
+            elif f["kind"] == "by_source_missing":
+                print(f"  [FAIL] {f['detail']}")
             elif f["kind"] in ("changelog_order", "changelog_date", "changelog_format"):
                 print(f"  [FAIL] {f['detail']}")
         print(f"\nSONUÇ: {result['verdict']} — "
