@@ -244,7 +244,7 @@ class TestReplaySummaryColoring(unittest.TestCase):
 
 
 class TestRefsBySourceCards(unittest.TestCase):
-    """renderRefsOnline içindeki kaynak özet kartları (ro-source-cards)."""
+    """renderRefsOnline içindeki kaynak özet kartları (ro-source-cards) + tablo."""
 
     @classmethod
     def setUpClass(cls):
@@ -261,25 +261,26 @@ class TestRefsBySourceCards(unittest.TestCase):
         self.assertIn('source-card .label', self._html)
         self.assertIn('source-card .value', self._html)
 
-    def test_names_map_complete(self):
-        """Tüm kaynak tipleri için names eşlemesi var."""
-        for k in ("crossref", "openlibrary", "sep", "archive", "perseus"):
-            self.assertIn(k, self._html,
-                          f"names map'te '{k}' eksik")
-
-    def test_colors_map_has_all_source_types(self):
-        """colors map'te tüm source tipleri renk tanımına sahip."""
+    def test_src_names_map_complete(self):
+        """Tüm kaynak tipleri için srcNames eşlemesi var."""
         for k in ("crossref", "openlibrary", "sep", "archive", "perseus",
                   "hathitrust", "url"):
-            self.assertIn(k, self._html,
-                          f"colors map'te '{k}' eksik")
+            self.assertIn(k + ":", self._html,
+                          f"srcNames map'te '{k}' eksik")
 
-    def test_icons_map_has_all_source_types(self):
-        """icons map'te tüm source tipleri ikon tanımına sahip."""
+    def test_src_colors_map_has_all_source_types(self):
+        """srcColors map'te tüm source tipleri renk tanımına sahip."""
         for k in ("crossref", "openlibrary", "sep", "archive", "perseus",
                   "hathitrust", "url"):
-            self.assertIn(k, self._html,
-                          f"icons map'te '{k}' eksik")
+            self.assertIn(k + ":", self._html,
+                          f"srcColors map'te '{k}' eksik")
+
+    def test_src_icons_map_has_all_source_types(self):
+        """srcIcons map'te tüm source tipleri ikon tanımına sahip."""
+        for k in ("crossref", "openlibrary", "sep", "archive", "perseus",
+                  "hathitrust", "url"):
+            self.assertIn(k + ":", self._html,
+                          f"srcIcons map'te '{k}' eksik")
 
     def test_source_card_html_structure(self):
         """Kart HTML'i: card source-card + border-left + label + value."""
@@ -300,6 +301,33 @@ class TestRefsBySourceCards(unittest.TestCase):
         self.assertGreater(idx_cards, idx_metrics,
                            "ro-source-cards, ro-metrics'ten sonra olmalı")
 
+    def test_table_uses_src_colors(self):
+        """Tablo satırları srcColors'dan renk alır (border-left + bar)."""
+        self.assertIn("srcColors[k] || \"var(--accent)\"", self._html)
+
+    def test_table_bar_is_colored(self):
+        """Yatay çubuk grafiği src renk ile doldurulur (background: + clr)."""
+        self.assertIn("background:' + clr", self._html)
+        self.assertIn('height:14px', self._html)  # thicker bars
+
+    def test_table_rows_have_colored_left_border(self):
+        """Her tablo satırı border-left:3px solid <renk>."""
+        self.assertIn("border-left:3px solid ' + clr", self._html)
+
+    def test_table_has_columns_cnt_pct_bar(self):
+        """Tablo: Source, Cnt, %, Bar sütunları."""
+        self.assertIn("Cnt</th>", self._html)
+        self.assertIn("Bar</th>", self._html)
+
+    def test_shared_maps_for_cards_and_table(self):
+        """srcColors/srcNames/srcIcons tek yerde tanımlı (cards+table paylaşır)."""
+        self.assertIn("const srcColors = {", self._html)
+        self.assertIn("const srcNames = {", self._html)
+        self.assertIn("const srcIcons = {", self._html)
+        # Old separate names/colors/icons maps should be gone
+        self.assertNotIn("const colors = { crossref:", self._html)
+        self.assertNotIn("const icons = { crossref:", self._html)
+
 
 class TestRefsTrendBySourceStacked(unittest.TestCase):
     """renderRefsTrend içindeki by_source yığılmış alan + tooltip + lejant."""
@@ -310,14 +338,12 @@ class TestRefsTrendBySourceStacked(unittest.TestCase):
             cls._html = f.read()
 
     def test_src_colors_match_source_cards(self):
-        """SRC_COLORS (trend) ile colors (source cards) aynı paleti kullanır."""
-        # crossref mavi, sep yeşil, openlibrary mor, archive amber, perseus kırmızı
+        """SRC_COLORS (trend) ile srcColors (cards+table) aynı paleti kullanır."""
         for src, expected in (("crossref", "#58a6ff"), ("sep", "#3fb950"),
                                ("openlibrary", "#bc8cff"), ("archive", "#d29922"),
                                ("perseus", "#f85149")):
-            # Her iki yerde de aynı renk tanımı olmalı
             self.assertIn(f'{src}: "{expected}"', self._html,
-                          f"SRC_COLORS/colors'ta {src} rengi {expected} olmalı")
+                          f"SRC_COLORS/srcColors'ta {src} rengi {expected} olmalı")
 
     def test_src_names_defined_in_trend(self):
         """SRC_NAMES map'i renderRefsTrend'de tanımlı."""

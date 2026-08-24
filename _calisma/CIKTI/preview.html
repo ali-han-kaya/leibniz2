@@ -1120,42 +1120,47 @@ function renderRefsOnline(d) {
   $("ro-cov").className = "value " + (pct === 100 ? "ok" : "warn");
   if (tsEl) tsEl.textContent = fmtTs(ts);
 
-  const names = { crossref: "CrossRef", openlibrary: "OpenLibrary", sep: "SEP",
-                  archive: "Internet Archive", internetarchive: "Internet Archive",
-                  perseus: "Perseus" };
+  // ---- Shared source maps (source cards + table'da kullanılır) ----
+  const srcColors = { crossref: "#58a6ff", openlibrary: "#bc8cff", sep: "#3fb950",
+                      archive: "#d29922", internetarchive: "#d29922", perseus: "#f85149",
+                      hathitrust: "#79c0ff", url: "#8b949e", handle: "#8b949e",
+                      fallback_openlibrary: "#bc8cff", fallback_loc: "#79c0ff",
+                      fallback_hathitrust: "#79c0ff", "diğer": "#8b949e" };
+  const srcNames = { crossref: "CrossRef", openlibrary: "OpenLibrary", sep: "SEP",
+                     archive: "Internet Archive", internetarchive: "Internet Archive",
+                     perseus: "Perseus", hathitrust: "HathiTrust", url: "URL",
+                     handle: "Handle" };
+  const srcIcons = { crossref: "\ud83d\udd17", openlibrary: "\ud83d\udcda", sep: "\ud83d\udcd6",
+                     archive: "\ud83c\udfdb\ufe0f", internetarchive: "\ud83c\udfdb\ufe0f",
+                     perseus: "\ud83c\udfdb\ufe0f", hathitrust: "\ud83d\udcd8",
+                     url: "\ud83c\udf10", handle: "\ud83d\udcce" };
   const order = ["crossref", "openlibrary", "sep", "archive", "internetarchive", "perseus"];
   const rows = order.filter(k => bySource && bySource[k] != null);
   if (!rows.length) {
     sourcesEl.innerHTML = '<div class="muted">kaynak kırılımı yok (by_source boş)</div>';
+    // Hide cards too
+    const scEl = $("ro-source-cards");
+    if (scEl) scEl.innerHTML = '';
     return;
   }
   const max = Math.max(...rows.map(k => bySource[k]));
-  // Source summary cards (colored by source type)
+
+  // ---- Source summary cards (colored left border) ----
   const scEl = $("ro-source-cards");
-  if (scEl && rows.length > 0) {
-    const colors = { crossref: "#58a6ff", openlibrary: "#bc8cff", sep: "#3fb950",
-                     archive: "#d29922", internetarchive: "#d29922", perseus: "#f85149",
-                     hathitrust: "#79c0ff", url: "#8b949e", handle: "#8b949e",
-                     fallback_openlibrary: "#bc8cff", fallback_loc: "#79c0ff",
-                     fallback_hathitrust: "#79c0ff", "diğer": "#8b949e" };
-    const icons = { crossref: "\ud83d\udd17", openlibrary: "\ud83d\udcda", sep: "\ud83d\udcd6",
-                    archive: "\ud83c\udfdb\ufe0f", internetarchive: "\ud83c\udfdb\ufe0f",
-                    perseus: "\ud83c\udfdb\ufe0f", hathitrust: "\ud83d\udcd8",
-                    url: "\ud83c\udf10", handle: "\ud83d\udcce" };
+  if (scEl) {
     let cardsHtml = '';
     for (const k of rows) {
       const c = bySource[k];
-      const clr = colors[k] || "var(--accent)";
-      const icon = icons[k] || "";
+      const clr = srcColors[k] || "var(--accent)";
+      const icon = srcIcons[k] || "";
       cardsHtml += '<div class="card source-card" style="border-left:3px solid ' + clr + '">' +
-        '<div class="label">' + icon + ' ' + (names[k] || k) + '</div>' +
+        '<div class="label">' + icon + ' ' + (srcNames[k] || k) + '</div>' +
         '<div class="value">' + c + '</div></div>';
     }
     scEl.innerHTML = cardsHtml;
-  } else if (scEl) {
-    scEl.innerHTML = '';
   }
 
+  // ---- Colored table (renk kodlu satırlar + yatay çubuk grafiği) ----
   const archiveGroup = d.archive_group;
   let html = '';
   if (archiveGroup != null && archiveGroup > 0) {
@@ -1163,15 +1168,23 @@ function renderRefsOnline(d) {
       `📚 Archive group: <b>${archiveGroup}</b>` +
       ` <span class="ts">(archive + loc + hathitrust)</span></div>`;
   }
-  html += '<table><thead><tr><th>Source</th><th>Count</th><th style="width:55%">Share</th></tr></thead><tbody>';
+  html += '<table style="border-collapse:collapse;width:100%">' +
+    '<thead><tr><th style="width:24%">Source</th><th style="width:10%">Cnt</th>' +
+    '<th style="width:8%">%</th><th>Bar</th></tr></thead><tbody>';
   for (const k of rows) {
     const c = bySource[k];
     const w = max > 0 ? Math.round(100 * c / max) : 0;
-    html += `<tr><td>${names[k] || k}</td><td>${c}</td><td>` +
-      `<div style="display:flex;align-items:center;gap:8px">` +
-      `<div style="flex:1;height:10px;background:#21262d;border-radius:5px;overflow:hidden">` +
-      `<div style="width:${w}%;height:100%;background:var(--accent)"></div></div>` +
-      `<span class="ts">${w}%</span></div></td></tr>`;
+    const clr = srcColors[k] || "var(--accent)";
+    const icon = srcIcons[k] || "";
+    const nm = srcNames[k] || k;
+    html += '<tr style="border-left:3px solid ' + clr + '">' +
+      '<td style="padding-left:12px">' + icon + ' <b>' + nm + '</b></td>' +
+      '<td style="font-family:monospace;font-weight:600">' + c + '</td>' +
+      '<td style="font-family:monospace" class="ts">' + w + '%</td>' +
+      '<td style="padding:4px 10px 4px 16px">' +
+        '<div style="height:14px;background:#21262d;border-radius:7px;overflow:hidden">' +
+          '<div style="width:' + w + '%;height:100%;background:' + clr +
+            ';border-radius:7px;transition:width 0.4s"></div></div></td></tr>';
   }
   html += '</tbody></table>';
   sourcesEl.innerHTML = html;

@@ -405,6 +405,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-24 | other | .freebuff/run.md: redirect stale inline startup to --start command | [`b1c2b63`](https://github.com/ali-han-kaya/leibniz2/commit/b1c2b63) |
 | 2026-08-24 | other | plist: rename multi-profile tests to legacy compat class | [`80e1311`](https://github.com/ali-han-kaya/leibniz2/commit/80e1311) |
 | 2026-08-24 | other | dashboard: add refs_by_source summary cards with colored left borders | [`6a0e67b`](https://github.com/ali-han-kaya/leibniz2/commit/6a0e67b) |
+| 2026-08-24 | other | dashboard: unify by_source colors + tooltip breakdown + legend counts | [`379c31d`](https://github.com/ali-han-kaya/leibniz2/commit/379c31d) |
 
 ### Regresyon notları
 
