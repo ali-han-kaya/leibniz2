@@ -24,7 +24,7 @@ import gen_repro_manifest as gm
 EXCLUDED = {
     "precommit-logs", "refs-trend", "override-trend", "precheck-report",
     "python3-shell", "plist-check", "mirror-check", "daemon-http",
-    "reproducibility",
+    "audit-refs-trend", "reproducibility",
 }
 
 
