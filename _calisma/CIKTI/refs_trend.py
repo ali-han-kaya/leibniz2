@@ -306,6 +306,7 @@ def build_duration_budget(history_rows):
             "z3_total": r.get("z3_total"),
             "duration_warn": w["duration_warn"],
             "budget_warn": w["budget_warn"],
+            "audit_refs_trend": r.get("audit_refs_trend"),
         })
     return {
         "run_count": len(rows),
@@ -465,6 +466,7 @@ def main():
             "p1": rec.get("p1"),
             "z3_passed": rec.get("z3_passed"),
             "z3_total": rec.get("z3_total"),
+            "audit_refs_trend": rec.get("audit_refs_trend"),
         }
         _w = check_run_warnings(_row)
         _row["duration_warn"] = _w["duration_warn"]
@@ -560,8 +562,8 @@ def main():
             "",
             f"- **Kaynak:** `run-history` artifact'ları (son {len(history_rows)} run)",
             "",
-            "| # | Tarih (UTC) | Run ID | Duration (s) | Budget (USD) | Z3 | Verdict |",
-            "|---|---|---|---|---|---|---|",
+            "| # | Tarih (UTC) | Run ID | Duration (s) | Budget (USD) | Z3 | Verdict | Audit |",
+            "|---|---|---|---|---|---|---|---|",
         ]
         for i, r in enumerate(history_rows, 1):
             dur = (f"{r['duration_s']:.1f}"
@@ -583,9 +585,16 @@ def main():
             z3 = (f"{r['z3_passed']}/{r['z3_total']}"
                    if isinstance(r.get("z3_passed"), (int, float))
                    else "—")
+            # Audit sütunu: PASS/FAIL/advisory (None = audit henüz koşulmadı)
+            audit = r.get("audit_refs_trend")
+            if audit is not None:
+                audit_str = "✅" if str(audit).upper() == "PASS" else (
+                    "🔴" if str(audit).upper() == "FAIL" else f"{audit}")
+            else:
+                audit_str = "—"
             lines.append(
                 f"| {i} | {short_date(r['date'])} | {r['run_id'] or '-'} | "
-                f"{dur} | {bud} | {z3} | {r['verdict'] or '-'} {flag_str} |"
+                f"{dur} | {bud} | {z3} | {r['verdict'] or '-'} {flag_str} | {audit_str} |"
             )
         lines += [""]
 

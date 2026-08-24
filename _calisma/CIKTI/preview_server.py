@@ -107,6 +107,7 @@ LATEST = {
     "precommit_hooks": None,     # [{name, status}] — pre-commit hook sonuçları (Passed/Failed)
     "history_sidecar_sha256": None,  # history.jsonl.sha256 sidecar hash'i (K15)
     "findings": [],                # verify_output'dan çıkan [{id,priority,label,message,detail}]
+    "audit_refs_trend": None,   # refs-trend audit sonucu: PASS/FAIL/advisory (history.jsonl trend)
     "cached": False,               # True = LATEST disk'teki önbelleklenmiş son run'dan yüklendi
 }
 LOCK = threading.Lock()
@@ -126,7 +127,7 @@ HISTORY_KEYS = ("ts", "verdict", "p0", "p1", "duration_s", "budget_usd",
                 "refs_by_source", "hook_env", "z3_passed", "z3_failed",
                 "z3_total", "lean_ok", "lean_detail", "cli_override_count",
                 "lineage_ok", "lineage_count", "history_sidecar_sha256",
-                "findings")
+                "findings", "audit_refs_trend")
 
 
 def snapshot_dict():

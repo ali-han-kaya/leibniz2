@@ -5004,6 +5004,9 @@ def main():
             # K9 Lean: --lean-proof koşulduysa PASS/FAIL (trend için)
             "lean_ok": lean_ok,
             "lean_detail": lean_detail,
+            # refs-trend audit sonucu (CI'da audit-refs-trend job'undan;
+            # yerel run'larda None — audit job asidecar'a yazar)
+            "audit_refs_trend": None,
         }
         try:
             with open(args.history_out, "a", encoding="utf-8") as hf:

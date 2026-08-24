@@ -380,6 +380,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-24 | other | refs-trend: kapsam degisim isaretcisi ekle (V5 notu satir bazli) | [`8ef2c8d`](https://github.com/ali-han-kaya/leibniz2/commit/8ef2c8d) |
 | 2026-08-24 | other | audit: refs-trend.md ozet dipnot denetimi ekle (56/56 yerel dogrulama) | [`5561365`](https://github.com/ali-han-kaya/leibniz2/commit/5561365) |
 | 2026-08-24 | other | manifest: audit-refs-trend'i reproducibility'ye dahil et (SHA-256) | [`5fe39c0`](https://github.com/ali-han-kaya/leibniz2/commit/5fe39c0) |
+| 2026-08-24 | fix | summary_pattern_drift EXCLUDED'a audit-refs-trend ekle | [`2878923`](https://github.com/ali-han-kaya/leibniz2/commit/2878923) |
 
 ### Regresyon notları
 
