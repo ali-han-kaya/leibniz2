@@ -243,5 +243,63 @@ class TestReplaySummaryColoring(unittest.TestCase):
                          f"Replay satırında 3 span bekleniyor, {span_count} bulundu")
 
 
+class TestRefsBySourceCards(unittest.TestCase):
+    """renderRefsOnline içindeki kaynak özet kartları (ro-source-cards)."""
+
+    @classmethod
+    def setUpClass(cls):
+        with open(PREVIEW_HTML, encoding="utf-8") as f:
+            cls._html = f.read()
+
+    def test_source_cards_div_exists(self):
+        """ro-source-cards div'i HTML'de tanımlı."""
+        self.assertIn('id="ro-source-cards"', self._html)
+
+    def test_source_card_css_defined(self):
+        """source-card CSS sınıfı tanımlı."""
+        self.assertIn('.source-card {', self._html)
+        self.assertIn('source-card .label', self._html)
+        self.assertIn('source-card .value', self._html)
+
+    def test_names_map_complete(self):
+        """Tüm kaynak tipleri için names eşlemesi var."""
+        for k in ("crossref", "openlibrary", "sep", "archive", "perseus"):
+            self.assertIn(k, self._html,
+                          f"names map'te '{k}' eksik")
+
+    def test_colors_map_has_all_source_types(self):
+        """colors map'te tüm source tipleri renk tanımına sahip."""
+        for k in ("crossref", "openlibrary", "sep", "archive", "perseus",
+                  "hathitrust", "url"):
+            self.assertIn(k, self._html,
+                          f"colors map'te '{k}' eksik")
+
+    def test_icons_map_has_all_source_types(self):
+        """icons map'te tüm source tipleri ikon tanımına sahip."""
+        for k in ("crossref", "openlibrary", "sep", "archive", "perseus",
+                  "hathitrust", "url"):
+            self.assertIn(k, self._html,
+                          f"icons map'te '{k}' eksik")
+
+    def test_source_card_html_structure(self):
+        """Kart HTML'i: card source-card + border-left + label + value."""
+        self.assertIn('class="card source-card"', self._html)
+        self.assertIn('border-left:3px solid', self._html)
+
+    def test_colors_are_valid_hex(self):
+        """Tüm renkler geçerli hex formatında."""
+        import re
+        hex_colors = re.findall(r'"(#[0-9a-fA-F]{6})"', self._html)
+        self.assertGreater(len(hex_colors), 6,
+                           f"En az 7 hex rengi bekleniyor, {len(hex_colors)} bulundu")
+
+    def test_source_card_grid_after_metrics(self):
+        """ro-source-cards grid'i, ro-metrics grid'inden sonra gelir."""
+        idx_metrics = self._html.find('id="ro-metrics"')
+        idx_cards = self._html.find('id="ro-source-cards"')
+        self.assertGreater(idx_cards, idx_metrics,
+                           "ro-source-cards, ro-metrics'ten sonra olmalı")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -41,6 +41,9 @@
   .card .label { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:0.05em; }
   .card .value { font-size:18px; font-weight:600; font-family:"SF Mono",monospace; margin-top:4px; }
   .card .sub { color:var(--muted); font-size:11px; margin-top:4px; }
+  .source-card { padding:10px 12px; min-width:100px; }
+  .source-card .label { margin-bottom:2px; }
+  .source-card .value { font-size:15px; }
   table { width:100%; border-collapse:collapse; font-size:13px; }
   th, td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--border); }
   th { color:var(--muted); font-weight:600; background:#161b22; }
@@ -206,6 +209,7 @@
       <div class="card"><div class="label">Mismatch</div><div class="value" id="ro-mis">—</div><div class="sub">yanlış eşleşme (P1)</div></div>
       <div class="card"><div class="label">Coverage</div><div class="value" id="ro-cov">—</div><div class="sub">verified / total yüzdesi</div></div>
     </div>
+    <div class="grid" id="ro-source-cards"></div>
     <div class="card" style="padding:12px" id="ro-sources">
       <div class="muted">veri bekleniyor…</div>
     </div>
@@ -1108,6 +1112,32 @@ function renderRefsOnline(d) {
     return;
   }
   const max = Math.max(...rows.map(k => bySource[k]));
+  // Source summary cards (colored by source type)
+  const scEl = $("ro-source-cards");
+  if (scEl && rows.length > 0) {
+    const colors = { crossref: "#58a6ff", openlibrary: "#bc8cff", sep: "#3fb950",
+                     archive: "#d29922", internetarchive: "#d29922", perseus: "#f85149",
+                     hathitrust: "#79c0ff", url: "#8b949e", handle: "#8b949e",
+                     fallback_openlibrary: "#bc8cff", fallback_loc: "#79c0ff",
+                     fallback_hathitrust: "#79c0ff" };
+    const icons = { crossref: "\ud83d\udd17", openlibrary: "\ud83d\udcda", sep: "\ud83d\udcd6",
+                    archive: "\ud83c\udfdb\ufe0f", internetarchive: "\ud83c\udfdb\ufe0f",
+                    perseus: "\ud83c\udfdb\ufe0f", hathitrust: "\ud83d\udcd8",
+                    url: "\ud83c\udf10", handle: "\ud83d\udcce" };
+    let cardsHtml = '';
+    for (const k of rows) {
+      const c = bySource[k];
+      const clr = colors[k] || "var(--accent)";
+      const icon = icons[k] || "";
+      cardsHtml += '<div class="card source-card" style="border-left:3px solid ' + clr + '">' +
+        '<div class="label">' + icon + ' ' + (names[k] || k) + '</div>' +
+        '<div class="value">' + c + '</div></div>';
+    }
+    scEl.innerHTML = cardsHtml;
+  } else if (scEl) {
+    scEl.innerHTML = '';
+  }
+
   const archiveGroup = d.archive_group;
   let html = '';
   if (archiveGroup != null && archiveGroup > 0) {

@@ -403,6 +403,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-24 | docs | §12 --incremental doc-sync + enforce_is_on 404 dansi | [`7696024`](https://github.com/ali-han-kaya/leibniz2/commit/7696024) |
 | 2026-08-24 | docs | HISTORY_CLEANUP'a preview-server legacy.label temizligini isle | [`fc7e7da`](https://github.com/ali-han-kaya/leibniz2/commit/fc7e7da) |
 | 2026-08-24 | other | .freebuff/run.md: redirect stale inline startup to --start command | [`b1c2b63`](https://github.com/ali-han-kaya/leibniz2/commit/b1c2b63) |
+| 2026-08-24 | other | plist: rename multi-profile tests to legacy compat class | [`80e1311`](https://github.com/ali-han-kaya/leibniz2/commit/80e1311) |
 
 ### Regresyon notları
 
