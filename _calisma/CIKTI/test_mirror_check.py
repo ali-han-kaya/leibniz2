@@ -277,6 +277,8 @@ class TestMirrorFileCoverage(unittest.TestCase):
             "gen_config.py", "cleanup_log.json", "github_scripts_battery.py",
             "github_scripts_selftest.js", "daemon_http_test.py",
             "preview.html",
+            "fresh_clone_setup.sh", "test_fresh_clone_setup.py",
+            "update_preview.sh",
         ]
         missing = [n for n in required if n not in listed]
         self.assertEqual(missing, [],

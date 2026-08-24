@@ -34,6 +34,7 @@ RUNTIME_REQUIRED = (
     "verify_lean.sh", "zip_lineage.json", "gen_repro_manifest.py",
     "gen_config.py", "cleanup_log.json", "github_scripts_battery.py",
     "github_scripts_selftest.js", "daemon_http_test.py", "preview.html",
+    "fresh_clone_setup.sh", "test_fresh_clone_setup.py", "update_preview.sh",
 )
 # Preview mirror runtime'ı (PREVIEW_FILES — launchd çalıştırıcısı + PreStart).
 PREVIEW_RUNTIME = ("preview_server.py", "_daemonize.py", "preview_prestart.py")
