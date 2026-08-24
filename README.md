@@ -401,6 +401,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-24 | other | verify: publish_wrapper --incremental'i 4 adimli doc dongusuyle kapila | [`bf6a1d2`](https://github.com/ali-han-kaya/leibniz2/commit/bf6a1d2) |
 | 2026-08-24 | other | verify: enforce_is_on 404 ilk publish guvenli atlama smoke kapisi | [`c10f478`](https://github.com/ali-han-kaya/leibniz2/commit/c10f478) |
 | 2026-08-24 | docs | §12 --incremental doc-sync + enforce_is_on 404 dansi | [`7696024`](https://github.com/ali-han-kaya/leibniz2/commit/7696024) |
+| 2026-08-24 | docs | HISTORY_CLEANUP'a preview-server legacy.label temizligini isle | [`fc7e7da`](https://github.com/ali-han-kaya/leibniz2/commit/fc7e7da) |
 
 ### Regresyon notları
 
