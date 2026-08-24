@@ -550,9 +550,9 @@ class TestRunHistoryAutoRefresh(unittest.TestCase):
         self.assertIn('loadRunHistory();', update_block)
 
     def test_count_is_three_calls(self):
-        """loadRunHistory tam 3 yerde çağrılır: init, snapshot, update."""
+        """loadRunHistory tam 4 yerde çağrılır: init, setRhFilter, snapshot, update."""
         count = self._html.count('loadRunHistory();')
-        self.assertEqual(count, 3, f"Beklenen 3 çağrı, bulunan: {count}")
+        self.assertEqual(count, 4, f"Beklenen 4 çağrı, bulunan: {count}")
 
     def test_snapshot_comment_exists(self):
         """'Run history'yi de güncelle' yorumu snapshot handler'da var."""
