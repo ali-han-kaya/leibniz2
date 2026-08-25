@@ -453,6 +453,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-25 | docs | (lean) K9 CI elan kurulumunu §6.3'e not et | [`b5f5d16`](https://github.com/ali-han-kaya/leibniz2/commit/b5f5d16) |
 | 2026-08-25 | feat | (k9) lean yokken lake alt-kapisini atlayan --lean-only | [`830da22`](https://github.com/ali-han-kaya/leibniz2/commit/830da22) |
 | 2026-08-25 | feat | (k9) §6.3 lake kanıtını canlı üreten check-lake-evidence hook'u | [`5dc1767`](https://github.com/ali-han-kaya/leibniz2/commit/5dc1767) |
+| 2026-08-25 | feat | (dashboard) trend tooltip'lerini birleştir, budget rengi | [`4dce134`](https://github.com/ali-han-kaya/leibniz2/commit/4dce134) |
 
 ### Regresyon notları
 

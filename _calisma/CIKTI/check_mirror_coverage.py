@@ -35,6 +35,11 @@ RUNTIME_REQUIRED = (
     "gen_config.py", "cleanup_log.json", "github_scripts_battery.py",
     "github_scripts_selftest.js", "daemon_http_test.py", "preview.html",
     "fresh_clone_setup.sh", "test_fresh_clone_setup.py", "update_preview.sh",
+    # check-unit-tests auto-sync zinciri (d1ed10c) + lake-evidence hook'u
+    # (5dc1767) — mirror'da launchd/pre-commit rotasıyla koşar.
+    "check_unit_tests.list", "check_unit_tests_hook.sh",
+    "sync_check_unit_tests.py", "lake_evidence_hook.sh",
+    "test_lake_evidence_smoke.py",
 )
 # Preview mirror runtime'ı (PREVIEW_FILES — launchd çalıştırıcısı + PreStart).
 PREVIEW_RUNTIME = ("preview_server.py", "_daemonize.py", "preview_prestart.py", "sw.js")
