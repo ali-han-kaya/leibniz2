@@ -103,6 +103,8 @@
          font-size:12px; line-height:1.5; color:var(--fg);
          box-shadow:0 8px 24px rgba(0,0,0,.5); max-width:300px;
          white-space:pre; display:none; }
+  .tip .tt-over { color:var(--err); font-weight:600; }
+  .tip .tt-under { color:var(--ok); }
   a { color:var(--accent); text-decoration:none; }
   a:hover { text-decoration:underline; }
   button { background:var(--accent); color:#fff; border:0; padding:6px 14px;
@@ -626,20 +628,38 @@ function budgetLimitNote(v) {
   const lim = "$" + fmtLimit(BUDGET_LIMIT);
   return v > BUDGET_LIMIT ? " (limit " + lim + " üstünde — AŞIM)" : " (limit " + lim + " altında)";
 }
+// Tooltip bütçe satırı rengi: aşım kırmızı (tt-over), limit altı yeşil
+// (tt-under), veri/limit yoksa renksiz.
+function budgetTipColor(v) {
+  if (v == null || !isFinite(v) || BUDGET_LIMIT == null || !isFinite(BUDGET_LIMIT)) return "";
+  return v > BUDGET_LIMIT ? "tt-over" : "tt-under";
+}
+// Ortak trend tooltip gövdesi — iki trend grafiği (P0/P1 + refs) aynı
+// formatı kullanır: ts → duration → budget (renkli limit durumu). Verdict
+// her grafik kendi kaynağından ekler (P0/P1: p0/p1; refs: r.verdict).
+function trendTipHeader(r) {
+  const ts = r.ts ? new Date(r.ts).toLocaleString() : "?";
+  return [
+    ts,
+    "duration: " + fmtTrendDur(r.duration_s),
+    "<span class=\"" + budgetTipColor(r.budget_usd) + "\">budget  : " +
+      fmtTrendBudget(r.budget_usd) + budgetLimitNote(r.budget_usd) + "</span>",
+  ];
+}
 function showTrendTip(i, ev) {
   const r = trendCache[i];
   if (!r) return;
   const verdict = (r.p0 || 0) > 0 ? "FAIL (P0)" : ((r.p1 || 0) > 0 ? "WARN (P1)" : "PASS");
-  const ts = r.ts ? new Date(r.ts).toLocaleString() : "?";
   const tip = $("tip");
   let leanLine = "lean    : —";
   if (r.lean_ok === true) leanLine = "lean    : PASS (100%)";
-  else if (r.lean_ok === false) leanLine = "lean    : FAIL (0%)" + (r.lean_detail ? " — " + r.lean_detail : "");
-  tip.textContent =
-    ts + "\n" +
+  else if (r.lean_ok === false) leanLine = "lean    : FAIL (0%)" + (r.lean_detail ? " — " + escapeHTML(r.lean_detail) : "");
+  const head = trendTipHeader(r);
+  tip.innerHTML =
+    head[0] + "\n" +
     "verdict : " + verdict + "\n" +
-    "duration: " + fmtTrendDur(r.duration_s) + "\n" +
-    "budget  : " + fmtTrendBudget(r.budget_usd) + budgetLimitNote(r.budget_usd) + "\n" +
+    head[1] + "\n" +
+    head[2] + "\n" +
     "z3      : " + (r.z3_passed != null ? r.z3_passed + "/" + (r.z3_total != null ? r.z3_total : "?") +
       ((r.z3_failed || 0) > 0 ? " (" + r.z3_failed + " FAIL)" : "") : "—") + "\n" +
     leanLine;
@@ -679,18 +699,26 @@ function refsTrendBadge(rows) {
   return { cls: "warn", text: "kapsam eksik " + last.refs_verified + "/" + last.refs_total };
 }
 let refsTrendCache = [];
+// by_source kırılımı tooltip'te de gösterildiğinden SRC_NAMES modül
+// kapsamında olmalı (renderRefsTrend içindeki SRC_ORDER/SRC_COLORS ile
+// karışmaz — onlar yalnızca çizimde kullanılır).
+const SRC_NAMES = { crossref: "CrossRef", openlibrary: "OpenLibrary", sep: "SEP",
+                    archive: "Internet Archive", internetarchive: "Internet Archive",
+                    perseus: "Perseus", hathitrust: "HathiTrust", url: "URL" };
 function showRefsTrendTip(i, ev) {
   const r = refsTrendCache[i];
   if (!r) return;
   const verdict = r.verdict || ((r.p0 || 0) > 0 ? "FAIL (P0)"
                 : ((r.p1 || 0) > 0 ? "WARN (P1)" : "PASS"));
-  const ts = r.ts ? new Date(r.ts).toLocaleString() : "?";
   const tip = $("tip");
+  const head = trendTipHeader(r);  // ortak format: ts → duration → budget (renkli)
   let lines = [
-    ts,
+    head[0],
+    "verdict : " + verdict,
+    head[1],
+    head[2],
     "refs    : " + (r.refs_verified != null ? r.refs_verified : "?") + " / " +
       (r.refs_total != null ? r.refs_total : "?"),
-    "verdict : " + verdict,
     "mismatch: " + (r.refs_mismatch || 0),
   ];
   // by_source kırılımı — kaynak bazında hangi kaynaktan kaç doğrulama
@@ -703,7 +731,7 @@ function showRefsTrendTip(i, ev) {
       lines.push("  " + nm + ": " + (bs[k] || 0));
     });
   }
-  tip.textContent = lines.join("\n");
+  tip.innerHTML = lines.join("\n");
   tip.style.display = "block";
   positionTip(ev);
 }
@@ -742,9 +770,6 @@ function renderRefsTrend(rows) {
   // verified'a eşit olmalı (toplam = refs_verified). crossref/sep/
   // openlibrary/archive/perseus + kalanlar "diğer" olarak toplanır.
   const SRC_ORDER = ["crossref", "sep", "openlibrary", "archive", "perseus"];
-  const SRC_NAMES = { crossref: "CrossRef", openlibrary: "OpenLibrary", sep: "SEP",
-                      archive: "Internet Archive", internetarchive: "Internet Archive",
-                      perseus: "Perseus", hathitrust: "HathiTrust", url: "URL" };
   const SRC_COLORS = {
     crossref: "#58a6ff", sep: "#3fb950", openlibrary: "#bc8cff",
     archive: "#d29922", internetarchive: "#d29922",

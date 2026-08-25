@@ -117,10 +117,42 @@ class TestTrendTooltipBudgetNote(unittest.TestCase):
         self.assertIn("BUDGET_LIMIT", body)
 
     def test_tooltip_budget_line_uses_note(self):
-        # Tooltip bütçe satırı fmtTrendBudget + budgetLimitNote birleşimi.
-        self.assertRegex(
-            self.html,
-            r"\"budget  : \" \+ fmtTrendBudget\(r\.budget_usd\) \+ budgetLimitNote\(r\.budget_usd\)")
+        # Ortak trendTipHeader bütçe satırı fmtTrendBudget + budgetLimitNote
+        # birleşimi ve renk sınıfı budgetTipColor'dan gelir.
+        m = re.search(r"function trendTipHeader\(r\)\s*\{.*?\n\}",
+                      self.html, re.S)
+        self.assertIsNotNone(m, "trendTipHeader bulunamadı")
+        body = m.group(0)
+        self.assertIn("fmtTrendBudget(r.budget_usd)", body)
+        self.assertIn("budgetLimitNote(r.budget_usd)", body)
+        self.assertIn("budgetTipColor(r.budget_usd)", body)
+        self.assertIn(r'class=\"', body)
+
+    def test_budget_tip_color_over_under(self):
+        # budgetTipColor: aşım tt-over (kırmızı), altında tt-under (yeşil),
+        # veri/limit yoksa boş — okunabilirlik rengi tek kaynaktan.
+        m = re.search(r"function budgetTipColor\(v\)\s*\{.*?\n\}",
+                      self.html, re.S)
+        self.assertIsNotNone(m, "budgetTipColor bulunamadı")
+        body = m.group(0)
+        self.assertIn('return ""', body)
+        self.assertIn('> BUDGET_LIMIT ? "tt-over" : "tt-under"', body)
+        # Renk sınıfları CSS'te tanımlı (kırmızı aşım / yeşil altında).
+        self.assertIn(".tip .tt-over", self.html)
+        self.assertIn(".tip .tt-under", self.html)
+        self.assertIn("var(--err)", self.html)
+        self.assertIn("var(--ok)", self.html)
+
+    def test_both_tooltips_share_header_and_innerhtml(self):
+        # İki trend grafiği (P0/P1 + refs) aynı trendTipHeader formatını
+        # kullanır (tanım + 2 çağrı) ve renkli satırlar için innerHTML'e
+        # geçer — textContent ile düz metin çıktısı kalmadı.
+        self.assertEqual(self.html.count("const head = trendTipHeader(r);"),
+                         2, "her iki tooltip de ortak başlığı çağırmalı")
+        self.assertIn("function trendTipHeader(r)", self.html)
+        self.assertIn("tip.innerHTML =", self.html)
+        self.assertNotIn("tip.textContent = lines.join", self.html)
+        self.assertNotIn("tip.textContent =", self.html)
 
     def test_tooltip_uses_dynamic_limit_not_hardcoded(self):
         # Tooltip'te hardcoded 30 yok — fmtLimit(BUDGET_LIMIT) kullanılır.

@@ -452,6 +452,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-25 | feat | (gates) check-unit-tests listesini manifest ile otomatik senkronla | [`d1ed10c`](https://github.com/ali-han-kaya/leibniz2/commit/d1ed10c) |
 | 2026-08-25 | docs | (lean) K9 CI elan kurulumunu §6.3'e not et | [`b5f5d16`](https://github.com/ali-han-kaya/leibniz2/commit/b5f5d16) |
 | 2026-08-25 | feat | (k9) lean yokken lake alt-kapisini atlayan --lean-only | [`830da22`](https://github.com/ali-han-kaya/leibniz2/commit/830da22) |
+| 2026-08-25 | feat | (k9) §6.3 lake kanıtını canlı üreten check-lake-evidence hook'u | [`5dc1767`](https://github.com/ali-han-kaya/leibniz2/commit/5dc1767) |
 
 ### Regresyon notları
 

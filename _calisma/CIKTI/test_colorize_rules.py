@@ -358,6 +358,21 @@ class TestRefsTrendBySourceStacked(unittest.TestCase):
         self.assertIn("refs_by_source", self._html)
         self.assertIn("srcKeys.sort", self._html)
 
+    def test_refs_tooltip_shares_budget_line(self):
+        """refs tooltip'i de P0/P1 ile aynı trendTipHeader formatını kullanır:
+        ts → verdict → duration → budget (renkli limit durumu)."""
+        self.assertEqual(self._html.count("const head = trendTipHeader(r);"),
+                         2, "iki tooltip de ortak başlığı çağırmalı")
+        # budget satırı ortak başlıktan (head[2]) gelir + renk sınıfları CSS'te.
+        self.assertIn("head[2],", self._html)
+        self.assertIn("budgetTipColor", self._html)
+        self.assertIn("budgetLimitNote", self._html)
+        self.assertIn(".tip .tt-over", self._html)
+        self.assertIn(".tip .tt-under", self._html)
+        # refs'e özgü satırlar korunur.
+        self.assertIn("refs    : ", self._html)
+        self.assertIn("mismatch: ", self._html)
+
     def test_legend_shows_per_source_counts(self):
         """Lejant: son run'un her kaynak için ayrı ayrı sayısını gösterir."""
         self.assertIn("SRC_NAMES[s]||s", self._html)
