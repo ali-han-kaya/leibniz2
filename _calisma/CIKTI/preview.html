@@ -176,7 +176,11 @@
   <section>
     <h2>P0 / P1 trend — son 100 run <span class="ts" id="trend-count"></span></h2>
     <div id="budget-over-banner" class="err" role="alert"
-         style="display:none;margin:6px 0 2px;padding:6px 10px;border-radius:6px;font-size:12px;font-weight:700"></div>
+         style="display:none;margin:6px 0 2px;padding:6px 10px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer"
+         onclick="toggleBudgetOverDetail()" title="Aşım yapan run'ları göster/gizle">
+      <span id="budget-over-summary"></span><span class="ts" id="budget-over-caret" style="margin-left:6px">▸</span>
+      <div id="budget-over-detail" style="display:none;margin-top:6px;font-weight:400;font-family:'SF Mono',monospace;font-size:11px;line-height:1.6;white-space:pre"></div>
+    </div>
     <div class="card" style="padding:10px">
       <svg id="trend" viewBox="0 0 1160 240" width="100%" height="240" role="img"
            aria-label="P0/P1 + duration + budget zaman serisi grafiği"></svg>
@@ -410,7 +414,28 @@ let trendCache = [];
 
 // BÜTÇE AŞIMI şeridi: trend geçmişinde budget_usd > BUDGET_LIMIT olan run
 // varsa (veya canlı akış son bütçesi limiti aştıysa) trend panelinin
-// üstünde kırmızı uyarı gösterir; aşım yoksa gizli kalır.
+// üstünde kırmızı uyarı gösterir; aşım yoksa gizli kalır. Şeride tıklanınca
+// aşım yapan run'ların listesi açılır (genişletilebilir detay).
+let budgetOverRuns = [];
+function budgetOverDetailRows(over) {
+  // ts · $budget (limit $X üstünde) — en yeni üstte; 30 ile sınırlı.
+  const rows = over.slice().reverse();
+  const cap = 30;
+  const shown = rows.slice(0, cap).map(r => {
+    const t = r.ts ? new Date(r.ts).toLocaleString() : "?";
+    const amt = r.budget_usd != null ? "$" + r.budget_usd.toFixed(2) : "$?";
+    return escapeHTML(t) + " · " + amt + " (limit $" + fmtLimit(BUDGET_LIMIT) + " üstünde)";
+  });
+  if (rows.length > cap) shown.push("… +" + (rows.length - cap) + " run daha");
+  return shown.join("\n");
+}
+function toggleBudgetOverDetail() {
+  const det = $("budget-over-detail"), caret = $("budget-over-caret");
+  if (!det) return;
+  const open = det.style.display !== "none";
+  det.style.display = open ? "none" : "block";
+  if (caret) caret.textContent = open ? "▸" : "▾";
+}
 function updateBudgetOverBanner() {
   const el = $("budget-over-banner");
   if (!el) return;
@@ -420,6 +445,7 @@ function updateBudgetOverBanner() {
     && budgetState.est > budgetState.limit;
   if (!over.length && !liveOver) {
     el.style.display = "none";
+    budgetOverRuns = [];
     return;
   }
   const bits = [];
@@ -432,7 +458,20 @@ function updateBudgetOverBanner() {
     bits.push(`CANLI $${budgetState.est.toFixed(2)} > limit $${fmtLimit(budgetState.limit)}`);
   }
   el.style.display = "block";
-  el.textContent = "🔴 BÜTÇE AŞIMI — " + bits.join(" · ");
+  budgetOverRuns = over;
+  const sum = $("budget-over-summary");
+  if (sum) sum.textContent = "🔴 BÜTÇE AŞIMI — " + bits.join(" · ");
+  const det = $("budget-over-detail");
+  if (det) {
+    det.style.display = "none";  // her güncellemede kapalı başla
+    const liveLine = liveOver
+      ? "CANLI $" + budgetState.est.toFixed(2) + " > limit $" + fmtLimit(budgetState.limit)
+      : "";
+    det.innerHTML = budgetOverDetailRows(over) +
+      (over.length && liveLine ? "\n" : "") + escapeHTML(liveLine);
+  }
+  const caret = $("budget-over-caret");
+  if (caret) caret.textContent = "▸";
 }
 
 function renderTrend(rows) {

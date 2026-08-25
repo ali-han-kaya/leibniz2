@@ -454,6 +454,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-25 | feat | (k9) lean yokken lake alt-kapisini atlayan --lean-only | [`830da22`](https://github.com/ali-han-kaya/leibniz2/commit/830da22) |
 | 2026-08-25 | feat | (k9) §6.3 lake kanıtını canlı üreten check-lake-evidence hook'u | [`5dc1767`](https://github.com/ali-han-kaya/leibniz2/commit/5dc1767) |
 | 2026-08-25 | feat | (dashboard) trend tooltip'lerini birleştir, budget rengi | [`4dce134`](https://github.com/ali-han-kaya/leibniz2/commit/4dce134) |
+| 2026-08-25 | fix | (ci) mirror kapsamına auto-sync + lake-evidence dosyaları | [`31dea00`](https://github.com/ali-han-kaya/leibniz2/commit/31dea00) |
 
 ### Regresyon notları
 

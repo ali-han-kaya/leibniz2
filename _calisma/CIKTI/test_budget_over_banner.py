@@ -52,6 +52,35 @@ class TestBudgetOverBannerElement(unittest.TestCase):
         self.assertIsNotNone(m)
         self.assertIn("display:none", m.group(1).replace(" ", ""))
 
+    def test_banner_clickable_expandable(self):
+        # Şerit tıklanabilir; özet + caret + gizli detay bölümü içerir.
+        self.assertIn("onclick=\"toggleBudgetOverDetail()\"", self.html)
+        self.assertIn("cursor:pointer", self.html)
+        self.assertIn('id="budget-over-summary"', self.html)
+        self.assertIn('id="budget-over-caret"', self.html)
+        m = re.search(r'<div id="budget-over-detail" style="([^"]*)"',
+                      self.html)
+        self.assertIsNotNone(m, "budget-over-detail bölümü yok")
+        self.assertIn("display:none", m.group(1).replace(" ", ""))
+        self.assertIn("white-space:pre", m.group(1).replace(" ", ""))
+
+    def test_detail_toggle_and_rows_helpers(self):
+        # budgetOverDetailRows: en yeni üstte, escapeHTML, 30 kapak.
+        m = re.search(r"function budgetOverDetailRows\(over\)\s*\{.*?\n\}",
+                      self.html, re.S)
+        self.assertIsNotNone(m, "budgetOverDetailRows bulunamadı")
+        body = m.group(0)
+        self.assertIn("over.slice().reverse()", body)
+        self.assertIn("escapeHTML(t)", body)
+        self.assertIn("const cap = 30;", body)
+        # toggle: display none/block + caret ▸/▾.
+        t = re.search(r"function toggleBudgetOverDetail\(\)\s*\{.*?\n\}",
+                      self.html, re.S)
+        self.assertIsNotNone(t, "toggleBudgetOverDetail bulunamadı")
+        tbody = t.group(0)
+        self.assertIn("det.style.display = open ? \"none\" : \"block\"", tbody)
+        self.assertIn("caret.textContent = open ? \"▸\" : \"▾\"", tbody)
+
 
 class TestBudgetOverBannerLogic(unittest.TestCase):
     """updateBudgetOverBanner() fonksiyon sözleşmesi."""
@@ -89,6 +118,19 @@ class TestBudgetOverBannerLogic(unittest.TestCase):
     def test_live_overage_branch(self):
         self.assertIn("budgetState.est > budgetState.limit", self.body)
         self.assertIn("CANLI $", self.body)
+
+    def test_summary_uses_span_not_banner_textcontent(self):
+        # Özet artık şeridin kendisine değil içindeki span'e yazılır
+        # (banner'da çocuk elementler var — textContent onları silerdi).
+        self.assertIn("sum.textContent = \"🔴 BÜTÇE AŞIMI — \"", self.body)
+        self.assertNotIn("el.textContent", self.body)
+        self.assertIn("budget-over-summary", self.body)
+
+    def test_detail_built_and_collapsed_each_update(self):
+        # Detay her güncellemede yeniden yazılır ve kapalı başlar.
+        self.assertIn("det.innerHTML = budgetOverDetailRows(over)", self.body)
+        self.assertIn("det.style.display = \"none\";", self.body)
+        self.assertIn("budgetOverRuns = over;", self.body)
 
     def test_call_sites(self):
         # renderTrend sonunda + scanBudget'te + applySnapshot limit değişimi.
