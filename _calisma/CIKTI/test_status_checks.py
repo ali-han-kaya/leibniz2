@@ -68,11 +68,47 @@ class TestGateJobs(unittest.TestCase):
                          "Action runtime check (node24)")
 
     def test_count_matches_workflow_minus_excludes(self):
-        # 22 job − 10 hariç = 12 required aday (tek kaynak: workflow).
+        # 24 job − 11 hariç = 13 required aday (tek kaynak: workflow).
         # Hariç: manifest-comment, precheck, label-gate-p1, plist-check,
         #        mirror-check, daemon-http, audit-live-ci, audit-refs-trend,
-        #        override-trend, changelog-drift
+        #        override-trend, changelog-drift, pattern-drift
         self.assertEqual(len(sc.gate_jobs()), 13)
+
+    def test_gate_jobs_exact_set_includes_label_gate(self):
+        """gate_jobs() tam id kümesini birebir sabitler (fail-closed).
+
+        Workflow'a yeni bir gate job eklenir/çıkarılır/rename edilirse bu
+        test BİLİNÇLİ olarak kırılır — branch protection required setiyle
+        senkron kararı insana bırakılır (yanlış-PASS yok). label-gate
+        BİLEREK bu kümededir: P0 label kapısı required'dır.
+
+        NOT: Kapsam 9 değil 13'tür — 9, workflow'un daha az gate job'a
+        sahip olduğu eski dönemin sayısıydı; label-gate, commit-msg-gate,
+        reports, reproducibility, config-sync, refs-trend, ci-simulate,
+        action-runtimes, preview-reload-smoke eklenerek büyüdü.
+        """
+        self.assertEqual(
+            set(sc.gate_jobs()),
+            {
+                "verify",
+                "action-runtimes",
+                "budget",
+                "label-gate",
+                "commit-msg-gate",
+                "reports",
+                "reproducibility",
+                "config-drift",
+                "config-sync",
+                "repack-verify",
+                "refs-trend",
+                "preview-reload-smoke",
+                "ci-simulate",
+            },
+        )
+        # label-gate P0 kapısı required aday olmalı (özel vurgu).
+        self.assertIn("label-gate", sc.gate_jobs())
+        self.assertEqual(sc.gate_jobs()["label-gate"],
+                         "Pre-commit P0 label gate")
 
 
 @unittest.skipUnless(HAVE_YAML, "PyYAML gerekli")
