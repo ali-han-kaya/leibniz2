@@ -21,9 +21,9 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 > | AŞAMA 3 — CI doğrulama | 🔄 **aktif** — her push'ta tekrarlanır (incremental) |
 > | AŞAMA 4 — koruma kanıtı | ⏸️ opsiyonel (1 (b) sonrası) |
 >
-> Job tablosu (AŞAMA 3), `.github/workflows/verify.yml`'deki **22 job**'u 4 kategoride
+> Job tablosu (AŞAMA 3), `.github/workflows/verify.yml`'deki **24 job**'u 4 kategoride
 > sunar: 12 **required** (9 push + P0 label gate + commit-msg gate + config-sync +
-> ci-simulate) + 8 **advisory** + 1 **PR-only** (P1 label gate) + 1 **manifest** (PR-only).
+> ci-simulate) + 10 **advisory** + 1 **PR-only** (P1 label gate) + 1 **manifest** (PR-only).
 > Branch protection yalnızca required job'ları bloke eder.
 > Güncel listeyi üret: `python3 _calisma/CIKTI/status_checks.py --json`.
 
@@ -155,7 +155,7 @@ bash docs/publish_wrapper.sh --ci-simulate --dry-run-summary
 ```text
 ── AŞAMA 1-3 (CI-SIMULATE) — yerel CI doğrulaması ──
     status_checks.py — beklenen required check adları:
-      Delivery verification — K1-K14 (single entry point)
+      Delivery verification — K1-K19 (single entry point)
       Action runtime check (node24)
       Budget shield (aggregated)
       …
@@ -207,7 +207,7 @@ bash docs/publish_precheck.sh --allow-remote
 #    (geçici kapat → push → geri aç). Manuel push'ta önce kapatıp sonra geri açın.
 git push origin main
 
-# 3) CI'ı izle (22 job — 12 required + 8 advisory + 2 PR-only;
+# 3) CI'ı izle (24 job — 12 required + 10 advisory + 2 PR-only;
 #    aşağıdaki AŞAMA 3 job tablosu)
 RUN_ID=$(gh run list --limit 1 --json databaseId -q '.[0].databaseId')
 gh run watch $RUN_ID --exit-status
@@ -349,8 +349,7 @@ open "https://github.com/ali-han-kaya/leibniz2/settings/branches"
 #       "Add branch protection rule" → Branch name pattern: `main`
 #       ✓ Require status checks to pass before merging
 #         → 9 check (adlar = workflow job `name:` alanları — tek kaynaktan al):
-#             python3 _calisma/CIKTI/status_checks.py
-#           Delivery verification — K1-K14 (single entry point)
+#             python3 _calisma/CIKTI/status_checks.py           # Delivery verification — K1-K19 (single entry point)
 #           Action runtime check (node24)
 #           Budget shield (aggregated)
 #           Pre-commit P0 label gate
@@ -397,7 +396,7 @@ open "https://github.com/ali-han-kaya/leibniz2/settings/branches"
      **en az bir kez koşmuş** olması gerekir. Yeni/boş repoda kural kuruyorsan önce
      bir push ya da PR ile workflow'u tetikle, yeşil run'ı bekle, sonra bu adıma dön.
    -   Arama kutusuna şu **12 adı** tek tek yazıp seç (birebir, `—` karakteri dahil):
-     1. `Delivery verification — K1-K14 (single entry point)`
+     1. `Delivery verification — K1-K19 (single entry point)`
      2. `Action runtime check (node24)`
      3. `Budget shield (aggregated)`
      4. `Pre-commit P0 label gate`
@@ -576,7 +575,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 --exit-status` + artifact listesi; sonuç `SONUÇ: PASS/FAIL` olarak loglanır
 (dry-run'da yalnızca önizlenir).
 
-**Job kategorileri (22 job = 12 required + 8 advisory + 2 PR-only):**
+**Job kategorileri (24 job = 12 required + 10 advisory + 2 PR-only):**
 
 > **Kural:** Branch protection **yalnızca A kategorisindeki** job'ları required check olarak
 > kabul eder. B (advisory) job'ları push'ta çalışır ama required değildir;
@@ -587,7 +586,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 | # | Kategori | Job | Son durum |
 |---|---|---|---|
 | | **A — Required (12; merge bloke)** | | |
-| 1 | A | Delivery verification — K1-K14 (single entry point) | ✅ success (4m21s) — K0-K7 + K8 (Z3) + K9 (Lean) + K11 + K13 + K14 tek komutta (`--full`); pre-commit advisory bölüm |
+| 1 | A | Delivery verification — K1-K19 (single entry point) | ✅ success (4m21s) — K0-K7 + K8 (Z3) + K9 (Lean) + K11 + K13 + K14 + K15 + K16 + K17 + K18 + K19 tek komutta (`--full`); pre-commit advisory bölüm |
 | 2 | A | Action runtime check (node24) | ✅ success (9s) — her `uses:` action'ın `runs.using=node24` olduğu doğrulanır |
 | 3 | A | Budget shield (aggregated) | ✅ success (7s) — limit içinde (sidecar birleştirildi) |
 | 4 | A | Pre-commit P0 label gate | — PR'da koşar; precommit-p0 etiketi varsa FAIL → merge bloke |
@@ -599,7 +598,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 | 10 | A | Commit-msg gate | — PR'da koşar; commit-msg ihlali varsa FAIL → merge bloke (2026-08-23) |
 | 11 | A | Config snapshot ↔ CONFIG_BASENAMES sync check | — üçlü senkron (2026-08-23) |
 | 12 | A | CI-SIMULATE (advisory) | — simülasyon replay kapısı: status_checks + simulate_verify_job (2026-08-23) |
-| | **B — Advisory (8; push'ta çalışır, required değil)** | | |
+| | **B — Advisory (10; push'ta çalışır, required değil)** | | |
 | 13 | B | Publish precheck (AŞAMA 0, advisory) | ✅ success (9s) — AŞAMA 0 kapıları otomatik denetlenir |
 | 14 | B | Plist drift check (macOS, advisory) | ✅ success (11s) — K12, macOS-runner'lı |
 | 15 | B | Mirror sync check (macOS, fail-closed) | ✅ success (12s) — K17, sync sonrası GÜNCEL |
@@ -608,10 +607,12 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 | 18 | B | Live CI doc↔GitHub sync audit (advisory) | ✅ success (8s) — doc 24 artifact = canlı 24 artifact, PASS |
 | 19 | B | CLI override trend (warning=true time series) | ✅ — run'lar arası override zaman serisi |
 | 20 | B | Changelog drift check (advisory) | — gen_changelog --check drift bulguları run summary'de (2026-08-23) |
+| 21 | B | Merge pattern drift check (advisory) | — merge pattern ↔ ARTIFACT_JOBS tutarlılığı (advisory, run summary) |
+| 22 | B | Preview reload smoke (advisory, macOS) | — preview restart + endpoint smoke (advisory) |
 | | **C — PR-only (push'ta çalışmaz, PR'da çalışır)** | | |
-| 21 | C | Pre-commit P1 label gate (optional) | — skipped (push'ta çalışmaz) |
+| 23 | C | Pre-commit P1 label gate (optional) | — skipped (push'ta çalışmaz) |
 | | **D — PR-only (yorum/etiket düşürme)** | | |
-| 22 | D | Manifest PR comment | — skipped (PR'da çalışır) |
+| 24 | D | Manifest PR comment | — skipped (PR'da çalışır) |
 
 **Artifact listesi (29):**
 - `unit-tests` (CIKTI birim test logu — `test_*.py` glob'u)

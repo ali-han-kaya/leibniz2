@@ -68,6 +68,7 @@ HOOK_COVERAGE = {
         "test_status_checks.py",
         "test_audit_live_ci_sync.py",
         "test_doc_artifact_sync.py",
+        "test_doc_job_sync.py",
         "test_incremental_doc_sync.py",
         "test_check_doc_wrapper_sync.py",
         "test_run_summary_refs_trend.py",

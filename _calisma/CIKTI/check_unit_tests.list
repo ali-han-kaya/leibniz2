@@ -19,6 +19,7 @@ test_coverage_report.py
 test_dashboard_smoke.py
 test_diff_config_artifacts.py
 test_doc_artifact_sync.py
+test_doc_job_sync.py
 test_enforce_is_on.py
 test_gen_commit_msg_evidence.py
 test_gen_precommit_report.py

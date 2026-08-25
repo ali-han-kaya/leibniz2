@@ -458,6 +458,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-25 | feat | (dashboard) BÜTÇE AŞIMI şeridine genişletilebilir run listesi | [`c5d2958`](https://github.com/ali-han-kaya/leibniz2/commit/c5d2958) |
 | 2026-08-25 | feat | (dashboard) run history'de aşım rozeti + query-string rota fix'i | [`29e6bd0`](https://github.com/ali-han-kaya/leibniz2/commit/29e6bd0) |
 | 2026-08-25 | feat | (dashboard) tooltip'te per-run limit + config satırı, run-now geri | [`fe60b04`](https://github.com/ali-han-kaya/leibniz2/commit/fe60b04) |
+| 2026-08-25 | feat | (dashboard) trend'de per-run limit değişimini step olarak çiz | [`89efa02`](https://github.com/ali-han-kaya/leibniz2/commit/89efa02) |
 
 ### Regresyon notları
 
