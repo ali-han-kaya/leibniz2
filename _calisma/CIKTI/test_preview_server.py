@@ -1196,5 +1196,41 @@ class TestReplayRefsAndPages(unittest.TestCase):
         self.assertEqual(first["pdf_pages"], 0)
 
 
+class TestRouteQueryParams(unittest.TestCase):
+    """do_GET rota eşleşmesi query string'den bağımsızdır (_route).
+
+    Client cache-buster olarak query param ekler (/api/run-history?_t=…,
+    /api/run?v=…) — `self.path` tam eşleşmesi bunları 404'e düşürürdü;
+    _route() urlparse ile yolu arındırır. launchd rotasında canlı akış +
+    run history'nin açılması bu sözleşmeye bağlı.
+    """
+
+    def test_run_history_with_cache_buster(self):
+        self.assertEqual(ps._route("/api/run-history?_t=1787692102715"),
+                         "run_history")
+        self.assertEqual(ps._route("/api/run-history"), "run_history")
+
+    def test_sse_with_version_param(self):
+        self.assertEqual(ps._route("/api/run?v=1787692088565"), "sse")
+        self.assertEqual(ps._route("/api/run"), "sse")
+
+    def test_run_now_with_budget_query(self):
+        self.assertEqual(ps._route("/api/run-now?budget=25&budget_method=weighted"),
+                         "run_now")
+
+    def test_run_stdout_with_ts_query(self):
+        self.assertEqual(ps._route("/api/run-stdout?ts=2026-08-25T21:06:07"),
+                         "run_stdout")
+
+    def test_preview_with_query_ignored(self):
+        self.assertEqual(ps._route("/preview.html?v=123"), "preview")
+        self.assertEqual(ps._route("/"), "preview")
+
+    def test_unknown_paths_are_none(self):
+        self.assertIsNone(ps._route("/api/unknown"))
+        self.assertIsNone(ps._route("/api/unknown?x=1"))
+        self.assertIsNone(ps._route("/favicon.ico"))
+
+
 if __name__ == "__main__":
     unittest.main()

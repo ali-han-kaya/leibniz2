@@ -424,6 +424,25 @@ class TestRunHistoryLeanIndicator(unittest.TestCase):
         self.assertIn('Lean: koşulmadı', self._html)
         self.assertIn('class="muted"', self._html)
 
+    def test_over_budget_badge_computed_against_dynamic_limit(self):
+        """Aşım rozeti BUDGET_LIMIT'e karşı hesaplanır (hardcoded değil)."""
+        self.assertIn("r.budget_usd > BUDGET_LIMIT", self._html)
+        self.assertIn("isFinite(BUDGET_LIMIT)", self._html)
+        self.assertIn("fmtLimit(BUDGET_LIMIT)", self._html)
+
+    def test_over_budget_badge_red_span(self):
+        """Aşım run'ları kırmızı 'AŞIM' rozetiyle işaretlenir."""
+        self.assertIn('class="rh-over"', self._html)
+        self.assertIn(">AŞIM</span>", self._html)
+        self.assertIn("BÜTÇE AŞIMI: $", self._html)
+        self.assertIn(".rh-over", self._html)
+        self.assertIn("background:var(--err)", self._html)
+
+    def test_over_badge_appended_after_lean(self):
+        """Rozet satır sonuna (lean göstergesinden sonra) eklenir."""
+        self.assertIn("${lean}${overBadge}", self._html)
+        self.assertIn("const overBadge = over", self._html)
+
     def test_lean_detail_in_fail_title(self):
         """FAIL durumunda lean_detail tooltip'e eklenir."""
         self.assertIn('r.lean_detail', self._html)

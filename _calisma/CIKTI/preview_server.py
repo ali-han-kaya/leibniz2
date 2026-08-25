@@ -1036,6 +1036,42 @@ def verify_loop(verify_dir, interval):
         time.sleep(interval)
 
 
+def _route(path):
+    """İstek yolunu query string'den arındırıp do_GET rotasını döndürür.
+
+    Client cache-buster olarak query param ekler (`/api/run-history?_t=…`,
+    `/api/run?v=…`) — `self.path` tam eşleşmesi bunları 404'e düşürürdü.
+    Saf fonksiyon (test_preview_server.py TestRouteQueryParams ile sabitli).
+    Bilinmeyen yol → None (404).
+    """
+    p = urllib.parse.urlparse(path).path
+    if p == "/sw.js":
+        return "sw"
+    if p in ("/", "/index.html", "/preview.html"):
+        return "preview"
+    if p == "/guide.html":
+        return "guide"
+    if p == "/api/latest":
+        return "latest"
+    if p == "/api/run":
+        return "sse"
+    if p.startswith("/api/run-now"):
+        return "run_now"
+    if p == "/api/run-stream":
+        return "run_stream"
+    if p == "/api/history":
+        return "history"
+    if p == "/api/refs-trend":
+        return "refs_trend"
+    if p == "/api/run-history":
+        return "run_history"
+    if p.startswith("/api/run-stdout"):
+        return "run_stdout"
+    if p == "/api/health":
+        return "health"
+    return None
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         # Sunucu loglarını kendi dosyamıza yönlendir (stderr'i kirletmesin).
@@ -1063,29 +1099,32 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(out)
 
     def do_GET(self):
-        if self.path == "/sw.js":
+        # Query string'li istekler (cache-buster ?_t= / ?v=) da aynı rotaya
+        # düşer — bkz. _route().
+        route = _route(self.path)
+        if route == "sw":
             self.serve_sw()
-        elif self.path in ("/", "/index.html", "/preview.html"):
+        elif route == "preview":
             self.serve_preview()
-        elif self.path == "/guide.html":
+        elif route == "guide":
             self.serve_guide()
-        elif self.path == "/api/latest":
+        elif route == "latest":
             self.serve_latest()
-        elif self.path == "/api/run":
+        elif route == "sse":
             self.serve_sse()
-        elif self.path.startswith("/api/run-now"):
+        elif route == "run_now":
             self.trigger_run_now()
-        elif self.path == "/api/run-stream":
+        elif route == "run_stream":
             self.serve_run_stream()
-        elif self.path == "/api/history":
+        elif route == "history":
             self.serve_history()
-        elif self.path == "/api/refs-trend":
+        elif route == "refs_trend":
             self.serve_refs_trend()
-        elif self.path == "/api/run-history":
+        elif route == "run_history":
             self.serve_run_history()
-        elif self.path.startswith("/api/run-stdout"):
+        elif route == "run_stdout":
             self.serve_run_stdout()
-        elif self.path == "/api/health":
+        elif route == "health":
             self._send(200, "ok")
         else:
             self._send(404, "404 not found")

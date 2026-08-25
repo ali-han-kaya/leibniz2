@@ -63,6 +63,9 @@
   pre { background:#161b22; border:1px solid var(--border); border-radius:6px;
         padding:12px; overflow:auto; font-size:11px; line-height:1.4;
         max-height:420px; margin:0; white-space:pre-wrap; }
+  .rh-over { display:inline-block; padding:0 6px; border-radius:8px;
+             background:var(--err); color:#fff; font-size:10px; font-weight:700;
+             border:1px solid var(--err); margin-left:6px; }
   .rh-row { cursor:pointer; padding:1px 4px; border-radius:3px;
             transition:background 0.15s; }
   .rh-row:hover { background:rgba(88,166,255,.1); }
@@ -1849,9 +1852,16 @@ function loadRunHistory() {
       } else {
         lean = `<span class="muted" title="Lean: koşulmadı">·</span>`;
       }
+      // Bütçe aşımı: run budget_usd > BUDGET_LIMIT ise kırmızı AŞIM rozeti
+      // (şerit + trend ile aynı kural — tek kaynak BUDGET_LIMIT).
+      const over = r.budget_usd != null && BUDGET_LIMIT != null
+        && isFinite(BUDGET_LIMIT) && r.budget_usd > BUDGET_LIMIT;
+      const overBadge = over
+        ? `<span class="rh-over" title="BÜTÇE AŞIMI: $${r.budget_usd.toFixed(2)} > limit $${fmtLimit(BUDGET_LIMIT)}">AŞIM</span>`
+        : "";
       const text = `<span class=\"muted\">${t}</span> <span class=\"${cls}\">${sv}</span> ` +
         `<span class=\"muted\">P0=${r.p0||0} P1=${r.p1||0} refs=${refs} ${pg}p ${bud} ${dur}</span>` +
-        ` ${lean}`;
+        ` ${lean}${overBadge}`;
       const tsAttr = r.ts ? r.ts.replace(/'/g, "\'").replace(/"/g, "&quot;") : "";
       return `<div class="rh-row" data-ts="${tsAttr}" onclick="loadRunStdout('${tsAttr}')" ` +
         `title="Tıklayınca bu run'un stdout'u yüklenir">${text}</div>`;
