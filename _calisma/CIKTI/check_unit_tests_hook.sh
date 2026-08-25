@@ -39,6 +39,12 @@ while IFS= read -r t; do
   [ -z "$t" ] && continue
   case "$t" in \#*) continue ;; esac
   total=$((total + 1))
+  # Manifest girişleri `.py` uzantılıdır; pattern'e bir kez daha `.py`
+  # eklemek `test_X.py.py` üretir → 0 test eşleşir. Python 3.12+ boş
+  # discovery'de exit 5 döndürdüğünden hook CI'da 49/49 BAŞARISIZ olur;
+  # 3.9-3.11'de ise 0 testle "PASS" diye sessizce hiçbir şey koşmazdı.
+  # Uzantıyı sıyırıp canonical `-p "$t.py"` pattern'ini kullanıyoruz.
+  t="${t%.py}"
   if ! "$PY" -m unittest discover -s _calisma/CIKTI -p "$t.py" >/dev/null 2>&1; then
     echo "FAILED: $t" >&2
     fails=$((fails + 1))

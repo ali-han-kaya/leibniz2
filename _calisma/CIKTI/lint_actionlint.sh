@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 # lint_actionlint.sh — actionlint wrapper (pre-commit hook).
 #
 # actionlint返回值:

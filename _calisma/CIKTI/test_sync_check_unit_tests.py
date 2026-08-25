@@ -118,6 +118,31 @@ class TestRepoConsistency(unittest.TestCase):
                 f"Manifest'te olan dosya diskte yok: {name}",
             )
 
+    def test_hook_pattern_matches_real_test_for_every_entry(self):
+        """check_unit_tests_hook.sh pattern'i her giriş için en az 1 dosya bulmalı.
+
+        Regresyon kapısı: hook `-p "$t.py"` kullanır (t = manifest girişi,
+        `.py` sıyrılır). Eski hata: manifest girişi zaten `.py`'liyken bir kez
+        daha `.py` ekleniyordu → `test_X.py.py` → 0 eşleşme. Python 3.9-3.11'de
+        boş discovery exit 0 döndüğü için hook SESSİZCE hiç test koşmadan
+        "PASS" diyordu; Python 3.12+ ise boş discovery'de exit 5 döndürür
+        (gh-136442) → CI'da 49/49 BAŞARISIZ. Bu test pattern'in her manifest
+        girişi için gerçek bir test dosyasıyla eşleştiğini sabitler.
+        """
+        import fnmatch
+
+        names = s.read_manifest()
+        self.assertTrue(names, "manifest boş — hook hiçbir şey koşmaz")
+        files = [f for f in os.listdir(s.CIKTI) if f.endswith(".py")]
+        for name in names:
+            base = name[:-3] if name.endswith(".py") else name
+            pattern = base + ".py"
+            self.assertTrue(
+                any(fnmatch.fnmatchcase(f, pattern) for f in files),
+                f"Hook pattern '{pattern}' hiçbir test dosyasıyla eşleşmiyor "
+                f"(çift uzantı/yanlış giriş) — kaynak: {name}",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

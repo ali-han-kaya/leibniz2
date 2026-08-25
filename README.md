@@ -460,6 +460,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-25 | feat | (dashboard) tooltip'te per-run limit + config satırı, run-now geri | [`fe60b04`](https://github.com/ali-han-kaya/leibniz2/commit/fe60b04) |
 | 2026-08-25 | feat | (dashboard) trend'de per-run limit değişimini step olarak çiz | [`89efa02`](https://github.com/ali-han-kaya/leibniz2/commit/89efa02) |
 | 2026-08-26 | chore | PUBLISH_SCENARIO job tablosu ↔ verify.yml job name senkronu | [`0a5cc09`](https://github.com/ali-han-kaya/leibniz2/commit/0a5cc09) |
+| 2026-08-26 | chore | test_doc_artifact_sync'i ayrı pre-commit kapısı olarak bağla | [`ebb2d50`](https://github.com/ali-han-kaya/leibniz2/commit/ebb2d50) |
 
 ### Regresyon notları
 
