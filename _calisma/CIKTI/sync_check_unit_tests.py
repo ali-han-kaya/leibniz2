@@ -51,6 +51,7 @@ EXCLUDE = {
     # launchctl / daemon / canlı servis gerektirenler — CI job'larında koşar
     "test_plist_gate_exit.py",        # launchctl + fake HOME (check-plist-drift)
     "test_check_plist_drift.py",      # launchctl (check-plist-drift)
+    "test_doc_artifact_sync.py",      # kendi gate'i: check-doc-artifact-sync hook'u
     "test_gen_plist_golden.py",       # plist golden üretir (check-plist-drift)
     "test_daemon_http.py",            # canlı daemon sunucusu (daemon-http job)
     "test_preview_reload_smoke.py",   # canlı preview (preview-reload-smoke job)

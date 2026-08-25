@@ -131,6 +131,10 @@ HOOKS = [
     ("check-lake-evidence", "Reproduce LEAN_ISPAT_RAPORU §6.3", 0, 0,
      [r"Passed"], [], 120),
 
+    # 24) check-doc-artifact-sync: PUBLISH_SCENARIO artifact list ↔ ARTIFACT_JOBS
+    ("check-doc-artifact-sync", "Verify PUBLISH_SCENARIO artifact list", 0, 0,
+     [r"Passed"], [], 30),
+
     # 21) check-unit-tests: birim testleri (1026+ test)
     # rc=1 onaylanir: test_status_checks.py gh api testleri yerel ortamda
     # (gh auth yoksa) FAIL uretir — pre-existing, hook'un kendisi saglam.

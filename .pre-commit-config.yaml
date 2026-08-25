@@ -4,7 +4,7 @@
 #   pip install pre-commit
 #   pre-commit install
 #
-# Bu noktadan sonra her `git commit` sırasında on altı kapı çalışır:
+# Bu noktadan sonra her `git commit` sırasında aşağıdaki kapılar çalışır:
 #   0) update-config          : config'i paket içeriğinden senkron et (gen_config.py)
 #                               — repack sayıları değiştirdiyse verify_delivery.config.json'u
 #                               otomatik günceller ve stage eder; değişmediyse dokunmaz.
@@ -59,6 +59,11 @@
 #                               test dosyalarının en az bir hook'ta
 #                               tanımlandığını doğrular; yeni test dosyası
 #                               eklenir ama HOOK_COVERAGE güncellenmezse bloke.
+#   15) check-doc-artifact-sync: test_doc_artifact_sync.py —
+#                               docs/PUBLISH_SCENARIO.md "Artifact listesi (N):"
+#                               ↔ gen_repro_manifest.ARTIFACT_JOBS çapraz
+#                               doğrulaması (fail-closed; kardeşi
+#                               test_doc_job_sync.py check-unit-tests'te koşar).
 # Herhangi bir P0/P1 bulgusu commit'i bloke eder (sıfır-dışı exit).
 #
 # Not: update-config TEK yazan hook'tur (config'i stage eder). Diğer kapılar
@@ -243,6 +248,23 @@ repos:
           eklenmez (veya tersi) → sessiz kapsam kaybı → commit bloke edilir.
           OFFLINE, stdlib-only, ~0.05s.
         entry: python3 _calisma/CIKTI/check_refs_table_sync.py
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
+      - id: check-doc-artifact-sync
+        name: "Verify PUBLISH_SCENARIO artifact list ↔ ARTIFACT_JOBS sync"
+        description: >-
+          test_doc_artifact_sync.py — docs/PUBLISH_SCENARIO.md "Artifact
+          listesi (N):" bölümünü gen_repro_manifest.ARTIFACT_JOBS ile çapraz
+          doğrular (fail-closed, test_doc_artifact_sync deseni): manifest
+          kapsamındaki her artifact doc'ta VAR olmalı, doc fazlalıkları tam
+          olarak bilinen advisory seti olmalı, başlık sayısı ↔ liste birebir.
+          Drift (artifact eklenir/çıkarılır ama doc güncellenmez) sessiz
+          kapsam kaybı → commit bloke edilir. OFFLINE, stdlib-only, ~0.02s.
+        entry: python3 -m unittest _calisma.CIKTI.test_doc_artifact_sync
         language: system
         always_run: true
         pass_filenames: false
