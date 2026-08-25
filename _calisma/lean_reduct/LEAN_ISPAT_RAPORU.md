@@ -144,5 +144,11 @@ $ echo $?
 - Mathlib bağımlılığı yoktur; `Injective` yerel tanımlıdır
 - CI'da K9 kapısı (`verify` job'ı `--full` içinde) aynı derlemeyi fail-closed
   koşar; shim kopyası `Content.lean` (kök) ile birebir aynıdır (8/8 teorem)
+- CI K9 adımı elan'ı **açıkça** kurar: `elan-init.sh -y --default-toolchain
+  leanprover/lean4:stable` + `elan toolchain install leanprover/lean4:v4.14.0`
+  (verify.yml). `--default-toolchain none` + `lean-toolchain` dosyası olmadan
+  lean çalışmaz ve `$GITHUB_PATH` yalnızca sonraki adıma uygulandığından PATH
+  export'u aynı adımda inline yapılır; kapı lean-toolchain'deki sürümü
+  (fail-closed) kullanır — yerel derlemeyle aynı v4.14.0
 - Qpdf byte-non-determinizm sınırı (V5l/V5m) bu çekirdeği de etkilemez —
   ispat makine-kontrollüdür, derleme çıktısı yeniden üretilebilirdir

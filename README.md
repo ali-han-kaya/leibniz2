@@ -449,6 +449,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-25 | fix | (k18) guard uses VD_SKIP_K18 env, not generic CI | [`ad30a4b`](https://github.com/ali-han-kaya/leibniz2/commit/ad30a4b) |
 | 2026-08-25 | fix | (ci) set VD_SKIP_K18 in CI-SIMULATE job too | [`ca22460`](https://github.com/ali-han-kaya/leibniz2/commit/ca22460) |
 | 2026-08-25 | ci | run check-unit-tests hook separately, log to precommit-logs | [`e9772cc`](https://github.com/ali-han-kaya/leibniz2/commit/e9772cc) |
+| 2026-08-25 | feat | (gates) check-unit-tests listesini manifest ile otomatik senkronla | [`d1ed10c`](https://github.com/ali-han-kaya/leibniz2/commit/d1ed10c) |
 
 ### Regresyon notları
 
