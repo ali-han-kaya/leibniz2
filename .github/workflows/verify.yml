@@ -2291,6 +2291,12 @@ jobs:
 
       - name: Run CI-SIMULATE (status_checks + simulate_verify_job)
         id: sim
+        env:
+          # simulate_verify_job.sh, verify job'unun --full replay'ini koşar;
+          # K18 daemon smoke Linux runner'da zaman aşımına uğrar (advisory
+          # daemon-http job'ı macOS'te koşar). verify job'ındaki "Run full
+          # verification" adımıyla aynı guard.
+          VD_SKIP_K18: "1"
         run: |
           set +e
           mkdir -p .freebuff/sim

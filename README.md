@@ -446,6 +446,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-25 | docs | (refs) V5q evidence table for Sextus ia_ids + Della Rocca | [`b1e47dc`](https://github.com/ali-han-kaya/leibniz2/commit/b1e47dc) |
 | 2026-08-25 | test | (consolidate) line-based content checks for pre-commit + K0 | [`a67aacc`](https://github.com/ali-han-kaya/leibniz2/commit/a67aacc) |
 | 2026-08-25 | test | (consolidate) file-sink (GITHUB_STEP_SUMMARY) line-based checks | [`ad370d6`](https://github.com/ali-han-kaya/leibniz2/commit/ad370d6) |
+| 2026-08-25 | fix | (k18) guard uses VD_SKIP_K18 env, not generic CI | [`ad30a4b`](https://github.com/ali-han-kaya/leibniz2/commit/ad30a4b) |
 
 ### Regresyon notları
 
