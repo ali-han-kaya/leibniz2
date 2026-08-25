@@ -505,9 +505,16 @@ function renderTrend(rows) {
   const maxP = Math.max(1, ...rows.map(r => Math.max(r.p0||0, r.p1||0)));
   const durs = rows.map(r => r.duration_s).filter(v => v != null && isFinite(v));
   const buds = rows.map(r => r.budget_usd).filter(v => v != null && isFinite(v));
+  const lims = rows.map(r => r.budget_limit).filter(v => v != null && isFinite(v));
+  // Limit DEĞİŞTİYSE (config geçmişi) bütçe ekseni limitleri de kapsar —
+  // basamak (step) çizgisi değişimi görünür yapsın; sabit limitse eksen
+  // gözlenen bütçeye göre kalır (limit yine üst kenara kıstırılır).
+  const limsVary = lims.length > 1 && Math.min(...lims) !== Math.max(...lims);
   const ztots = rows.map(r => r.z3_total).filter(v => v != null && isFinite(v));
   const maxDur = durs.length ? Math.max(...durs, 1) : 1;
-  const maxBud = buds.length ? Math.max(...buds, 0.01) : 1;
+  const maxBud = buds.length
+    ? Math.max(...buds, 0.01, ...(limsVary ? lims : []))
+    : (limsVary ? Math.max(...lims, 0.01) : 1);
   const maxZ = ztots.length ? Math.max(...ztots, 1) : 1;
 
   const x = (i) => PL + (n === 1 ? iw / 2 : iw * i / (n - 1));
@@ -541,6 +548,27 @@ function renderTrend(rows) {
   const budPts = rows.map((r,i) => { const y = yB(r.budget_usd); return y == null ? null : `${x(i)},${y}`; }).filter(Boolean);
   if (budPts.length) {
     parts.push(`<polyline fill="none" stroke="#bc8cff" stroke-width="2" points="${budPts.join(" ")}"/>`);
+  }
+  // Per-run bütçe limiti — zaman serisi (step, turuncu düz): config limiti
+  // run'lar arasında DEĞİŞTİYSE basamak görünür (eksen limitleri kapsar).
+  // Sabit limitse step çizilmez — güncel referans çizgisi (kesikli) zaten
+  // o değeri gösterir; eski run'larda budget_limit yoksa o aralık atlanır.
+  if (limsVary) {
+    const stepPts = [];
+    for (let i = 0; i < rows.length; i++) {
+      const lv = rows[i].budget_limit;
+      if (lv == null || !isFinite(lv)) continue;
+      const yv = yB(lv);
+      if (yv == null) continue;
+      stepPts.push(`${x(i)},${yv}`);
+      if (i + 1 < rows.length) {
+        const nv = rows[i + 1].budget_limit;
+        if (nv != null && isFinite(nv)) stepPts.push(`${x(i + 1)},${yv}`);
+      }
+    }
+    if (stepPts.length) {
+      parts.push(`<polyline fill="none" stroke="#ffa657" stroke-width="2" points="${stepPts.join(" ")}"/>`);
+    }
   }
   // Bütçe limiti referans çizgisi — /api/latest `budget.limit`'ten gelen
   // BUDGET_LIMIT (etkin config budget_usd aynası; snapshot yoksa 30.0
@@ -644,8 +672,9 @@ function renderTrend(rows) {
   legend.textContent = "Kırmızı = P0 · Sarı = P1 · Yeşil nokta = PASS · Mavi (kesikli) = duration_s · Mor = budget_usd · " +
     "Yeşil çizgi = Z3 PASS · Kırmızı (noktalı) = Z3 FAIL · " +
     "Pembe (kesikli) = Lean PASS oranı (son: " + leanPct + ") · " +
-    "Turuncu (kesikli) = bütçe limiti $" + fmtLimit(BUDGET_LIMIT) + " (config'ten) — altı güvenli, üstü (kırmızı kare) aşım · " +
-    "aralık: " + (rows[0].ts ? new Date(rows[0].ts).toLocaleString() : "?") +
+    "Turuncu (kesikli) = güncel limit $" + fmtLimit(BUDGET_LIMIT) + " (config'ten) — altı güvenli, üstü (kırmızı kare) aşım" +
+    (limsVary ? " · Turuncu (düz) = per-run limit (config değişimi)" : "") +
+    " · aralık: " + (rows[0].ts ? new Date(rows[0].ts).toLocaleString() : "?") +
     " → " + (last.ts ? new Date(last.ts).toLocaleString() : "?") +
     ` · ${n} run`;
   $("trend-count").textContent = `(${n} run)`;

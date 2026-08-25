@@ -394,6 +394,40 @@ class TestRefsTrendBySourceStacked(unittest.TestCase):
         self.assertIn("fill-opacity", self._html)
         self.assertIn('stroke="none"', self._html)
 
+
+class TestTrendBudgetLimitSeries(unittest.TestCase):
+    """renderTrend per-run budget_limit zaman serisi (config değişimi)."""
+
+    @classmethod
+    def setUpClass(cls):
+        with open(PREVIEW_HTML, encoding="utf-8") as f:
+            cls._html = f.read()
+
+    def test_limit_series_reads_budget_limit_field(self):
+        # lims, run kayıtlarındaki budget_limit'ten beslenir (history.jsonl).
+        self.assertIn("r.budget_limit", self._html)
+        self.assertIn("isFinite(v)", self._html)
+
+    def test_axis_scales_to_limits_when_varying(self):
+        # Limit değiştiyse bütçe ekseni limitleri de kapsar (step görünür).
+        self.assertIn("limsVary", self._html)
+        self.assertIn("Math.min(...lims) !== Math.max(...lims)", self._html)
+        self.assertIn("Math.max(...buds, 0.01, ...(limsVary ? lims : []))",
+                      self._html)
+
+    def test_step_polyline_drawn_only_when_varying(self):
+        # Sabit limitse step çizilmez (referans çizgisi yeter); değişimde
+        # turuncu düz polyline + yatay basamak segmentleri üretilir.
+        self.assertIn("if (limsVary)", self._html)
+        self.assertIn('stroke="#ffa657" stroke-width="2"', self._html)
+        self.assertIn("stepPts.push(`${x(i + 1)},${yv}`)", self._html)
+
+    def test_legend_mentions_per_run_limit_when_varying(self):
+        # Lejant: güncel limit (kesikli) + değişim varsa per-run (düz).
+        self.assertIn("güncel limit $", self._html)
+        self.assertIn("per-run limit (config değişimi)", self._html)
+        self.assertIn("limsVary ? \" · Turuncu (düz)", self._html)
+
     def test_by_src_computation_falls_back_to_empty(self):
         """refs_by_source yoksa bySrc boş map üretir."""
         self.assertIn("r.refs_by_source || {}", self._html)
