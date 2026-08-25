@@ -456,6 +456,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-25 | feat | (dashboard) trend tooltip'lerini birleştir, budget rengi | [`4dce134`](https://github.com/ali-han-kaya/leibniz2/commit/4dce134) |
 | 2026-08-25 | fix | (ci) mirror kapsamına auto-sync + lake-evidence dosyaları | [`31dea00`](https://github.com/ali-han-kaya/leibniz2/commit/31dea00) |
 | 2026-08-25 | feat | (dashboard) BÜTÇE AŞIMI şeridine genişletilebilir run listesi | [`c5d2958`](https://github.com/ali-han-kaya/leibniz2/commit/c5d2958) |
+| 2026-08-25 | feat | (dashboard) run history'de aşım rozeti + query-string rota fix'i | [`29e6bd0`](https://github.com/ali-han-kaya/leibniz2/commit/29e6bd0) |
 
 ### Regresyon notları
 

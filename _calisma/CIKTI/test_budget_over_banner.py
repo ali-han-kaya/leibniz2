@@ -151,39 +151,73 @@ class TestTrendTooltipBudgetNote(unittest.TestCase):
         self.html = PREVIEW_HTML.read_text(encoding="utf-8")
 
     def test_budget_limit_note_function_exists(self):
-        m = re.search(r"function budgetLimitNote\(v\)\s*\{.*?\n\}", self.html, re.S)
+        m = re.search(r"function budgetLimitNote\(v, lim\)\s*\{.*?\n\}",
+                      self.html, re.S)
         self.assertIsNotNone(m, "budgetLimitNote bulunamadı")
         body = m.group(0)
-        self.assertIn('" (limit " + lim + " altında)"', body)
-        self.assertIn('" (limit " + lim + " üstünde — AŞIM)"', body)
+        self.assertIn('" (limit " + limTxt + " altında)"', body)
+        self.assertIn('" (limit " + limTxt + " üstünde — AŞIM)"', body)
         self.assertIn("BUDGET_LIMIT", body)
+        self.assertIn("lim : BUDGET_LIMIT", body)
 
     def test_tooltip_budget_line_uses_note(self):
         # Ortak trendTipHeader bütçe satırı fmtTrendBudget + budgetLimitNote
-        # birleşimi ve renk sınıfı budgetTipColor'dan gelir.
+        # birleşimi, renk sınıfı budgetTipColor'dan gelir — her ikisi de
+        # run'un kendi limitini alır (budgetLimitNote(r.budget_usd, lim)).
         m = re.search(r"function trendTipHeader\(r\)\s*\{.*?\n\}",
                       self.html, re.S)
         self.assertIsNotNone(m, "trendTipHeader bulunamadı")
         body = m.group(0)
         self.assertIn("fmtTrendBudget(r.budget_usd)", body)
-        self.assertIn("budgetLimitNote(r.budget_usd)", body)
-        self.assertIn("budgetTipColor(r.budget_usd)", body)
+        self.assertIn("budgetLimitNote(r.budget_usd, lim)", body)
+        self.assertIn("budgetTipColor(r.budget_usd, lim)", body)
+        self.assertIn("runBudgetLimit(r)", body)
         self.assertIn(r'class=\"', body)
 
     def test_budget_tip_color_over_under(self):
         # budgetTipColor: aşım tt-over (kırmızı), altında tt-under (yeşil),
-        # veri/limit yoksa boş — okunabilirlik rengi tek kaynaktan.
-        m = re.search(r"function budgetTipColor\(v\)\s*\{.*?\n\}",
+        # veri/limit yoksa boş — lim verilmezse global BUDGET_LIMIT'e düşer.
+        m = re.search(r"function budgetTipColor\(v, lim\)\s*\{.*?\n\}",
                       self.html, re.S)
         self.assertIsNotNone(m, "budgetTipColor bulunamadı")
         body = m.group(0)
         self.assertIn('return ""', body)
-        self.assertIn('> BUDGET_LIMIT ? "tt-over" : "tt-under"', body)
+        self.assertIn("lim : BUDGET_LIMIT", body)
+        self.assertIn('> l ? "tt-over" : "tt-under"', body)
         # Renk sınıfları CSS'te tanımlı (kırmızı aşım / yeşil altında).
         self.assertIn(".tip .tt-over", self.html)
         self.assertIn(".tip .tt-under", self.html)
         self.assertIn("var(--err)", self.html)
         self.assertIn("var(--ok)", self.html)
+
+    def test_tooltip_uses_dynamic_limit_not_hardcoded(self):
+        # Tooltip'te hardcoded 30 yok — fmtLimit(l) kullanılır; l ya run'un
+        # kendi limiti (lim) ya da BUDGET_LIMIT fallback'idir.
+        note = re.search(r"function budgetLimitNote\(v, lim\)\s*\{.*?\n\}",
+                         self.html, re.S).group(0)
+        self.assertIn("fmtLimit(l)", note)
+        self.assertIn("lim : BUDGET_LIMIT", note)
+        self.assertNotRegex(note, r"30\.0")
+
+    def test_run_budget_limit_falls_back_to_global(self):
+        # runBudgetLimit: run'un budget_limit'i varsa onu, yoksa global
+        # BUDGET_LIMIT'i döndürür (eski run'lar — geriye dönük uyumluluk).
+        m = re.search(r"function runBudgetLimit\(r\)\s*\{.*?\n\}",
+                      self.html, re.S)
+        self.assertIsNotNone(m, "runBudgetLimit bulunamadı")
+        body = m.group(0)
+        self.assertIn("r.budget_limit != null && isFinite(r.budget_limit)", body)
+        self.assertIn("return BUDGET_LIMIT;", body)
+
+    def test_tooltip_config_line_shows_limit_and_method(self):
+        # trendTipHeader config satırı: run'un limiti + yöntem + CLI override.
+        m = re.search(r"function trendTipHeader\(r\)\s*\{.*?\n\}",
+                      self.html, re.S)
+        body = m.group(0)
+        self.assertIn('"config  : "', body)
+        self.assertIn("\"limit $\" + fmtLimit(lim)", body)
+        self.assertIn("\"yöntem \" + r.budget_method", body)
+        self.assertIn("\"CLI override\"", body)
 
     def test_both_tooltips_share_header_and_innerhtml(self):
         # İki trend grafiği (P0/P1 + refs) aynı trendTipHeader formatını
@@ -197,10 +231,12 @@ class TestTrendTooltipBudgetNote(unittest.TestCase):
         self.assertNotIn("tip.textContent =", self.html)
 
     def test_tooltip_uses_dynamic_limit_not_hardcoded(self):
-        # Tooltip'te hardcoded 30 yok — fmtLimit(BUDGET_LIMIT) kullanılır.
-        note = re.search(r"function budgetLimitNote\(v\)\s*\{.*?\n\}",
+        # Tooltip'te hardcoded 30 yok — fmtLimit(l) kullanılır; l ya run'un
+        # kendi limiti (lim) ya da BUDGET_LIMIT fallback'idir.
+        note = re.search(r"function budgetLimitNote\(v, lim\)\s*\{.*?\n\}",
                          self.html, re.S).group(0)
-        self.assertIn("fmtLimit(BUDGET_LIMIT)", note)
+        self.assertIn("fmtLimit(l)", note)
+        self.assertIn("lim : BUDGET_LIMIT", note)
         self.assertNotRegex(note, r"30\.0")
 
 

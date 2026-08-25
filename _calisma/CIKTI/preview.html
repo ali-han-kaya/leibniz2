@@ -663,29 +663,44 @@ function fmtTrendBudget(v) {
   return "$" + v.toFixed(2);
 }
 // Tooltip bütçe satırına limit altı/üstü durumu: "(limit $30 altında)"
-// veya "(limit $30 üstünde — AŞIM)". Limit dinamik (BUDGET_LIMIT —
-// config'ten); bütçe veya limit yoksa boş döner.
-function budgetLimitNote(v) {
-  if (v == null || !isFinite(v) || BUDGET_LIMIT == null || !isFinite(BUDGET_LIMIT)) return "";
-  const lim = "$" + fmtLimit(BUDGET_LIMIT);
-  return v > BUDGET_LIMIT ? " (limit " + lim + " üstünde — AŞIM)" : " (limit " + lim + " altında)";
+// veya "(limit $30 üstünde — AŞIM)". lim verilmezse global BUDGET_LIMIT
+// (dinamik config aynası); bütçe veya limit yoksa boş döner.
+function budgetLimitNote(v, lim) {
+  const l = (lim != null && isFinite(lim)) ? lim : BUDGET_LIMIT;
+  if (v == null || !isFinite(v) || l == null || !isFinite(l)) return "";
+  const limTxt = "$" + fmtLimit(l);
+  return v > l ? " (limit " + limTxt + " üstünde — AŞIM)" : " (limit " + limTxt + " altında)";
 }
 // Tooltip bütçe satırı rengi: aşım kırmızı (tt-over), limit altı yeşil
-// (tt-under), veri/limit yoksa renksiz.
-function budgetTipColor(v) {
-  if (v == null || !isFinite(v) || BUDGET_LIMIT == null || !isFinite(BUDGET_LIMIT)) return "";
-  return v > BUDGET_LIMIT ? "tt-over" : "tt-under";
+// (tt-under), veri/limit yoksa renksiz. lim verilmezse global BUDGET_LIMIT.
+function budgetTipColor(v, lim) {
+  const l = (lim != null && isFinite(lim)) ? lim : BUDGET_LIMIT;
+  if (v == null || !isFinite(v) || l == null || !isFinite(l)) return "";
+  return v > l ? "tt-over" : "tt-under";
+}
+// Run'un KULLANDIĞI bütçe limiti: history satırında budget_limit varsa o
+// (o run hangi config'le koştuysa), yoksa global BUDGET_LIMIT (eski run'lar).
+function runBudgetLimit(r) {
+  if (r.budget_limit != null && isFinite(r.budget_limit)) return r.budget_limit;
+  return BUDGET_LIMIT;
 }
 // Ortak trend tooltip gövdesi — iki trend grafiği (P0/P1 + refs) aynı
-// formatı kullanır: ts → duration → budget (renkli limit durumu). Verdict
-// her grafik kendi kaynağından ekler (P0/P1: p0/p1; refs: r.verdict).
+// formatı kullanır: ts → duration → budget (renkli limit durumu) → config
+// (hangi limit/yöntemle koştu). Verdict her grafik kendi kaynağından ekler
+// (P0/P1: p0/p1; refs: r.verdict).
 function trendTipHeader(r) {
   const ts = r.ts ? new Date(r.ts).toLocaleString() : "?";
+  const lim = runBudgetLimit(r);
+  const cfgBits = [];
+  if (lim != null && isFinite(lim)) cfgBits.push("limit $" + fmtLimit(lim));
+  if (r.budget_method) cfgBits.push("yöntem " + r.budget_method);
+  if ((r.cli_override_count || 0) > 0) cfgBits.push("CLI override");
   return [
     ts,
     "duration: " + fmtTrendDur(r.duration_s),
-    "<span class=\"" + budgetTipColor(r.budget_usd) + "\">budget  : " +
-      fmtTrendBudget(r.budget_usd) + budgetLimitNote(r.budget_usd) + "</span>",
+    "<span class=\"" + budgetTipColor(r.budget_usd, lim) + "\">budget  : " +
+      fmtTrendBudget(r.budget_usd) + budgetLimitNote(r.budget_usd, lim) + "</span>",
+    "config  : " + (cfgBits.length ? cfgBits.join(" · ") : "—"),
   ];
 }
 function showTrendTip(i, ev) {
@@ -702,6 +717,7 @@ function showTrendTip(i, ev) {
     "verdict : " + verdict + "\n" +
     head[1] + "\n" +
     head[2] + "\n" +
+    head[3] + "\n" +
     "z3      : " + (r.z3_passed != null ? r.z3_passed + "/" + (r.z3_total != null ? r.z3_total : "?") +
       ((r.z3_failed || 0) > 0 ? " (" + r.z3_failed + " FAIL)" : "") : "—") + "\n" +
     leanLine;
@@ -753,12 +769,13 @@ function showRefsTrendTip(i, ev) {
   const verdict = r.verdict || ((r.p0 || 0) > 0 ? "FAIL (P0)"
                 : ((r.p1 || 0) > 0 ? "WARN (P1)" : "PASS"));
   const tip = $("tip");
-  const head = trendTipHeader(r);  // ortak format: ts → duration → budget (renkli)
+  const head = trendTipHeader(r);  // ortak format: ts → duration → budget → config
   let lines = [
     head[0],
     "verdict : " + verdict,
     head[1],
     head[2],
+    head[3],
     "refs    : " + (r.refs_verified != null ? r.refs_verified : "?") + " / " +
       (r.refs_total != null ? r.refs_total : "?"),
     "mismatch: " + (r.refs_mismatch || 0),

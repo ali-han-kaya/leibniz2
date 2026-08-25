@@ -77,6 +77,8 @@ LATEST = {
     "p0": 0,
     "p1": 0,
     "budget_usd": None,
+    "budget_limit": None,       # run'un kullandığı bütçe limiti (effective config)
+    "budget_method": None,      # run'un kullandığı bütçe yöntemi (effective config)
     "budget": None,           # tam bütçe raporu (comparison.ratios + by_type)
     "pdf_pages": None,
     "ref_count": None,
@@ -124,6 +126,7 @@ RUN_LOG_MAX = 20                 # disk'te tutulacak + replay edilecek en son ru
 REFS_TREND_PATH = None           # main()'de set edilir; refs-trend.json yolu
 
 HISTORY_KEYS = ("ts", "verdict", "p0", "p1", "duration_s", "budget_usd",
+                "budget_limit", "budget_method",
                 "pdf_pages", "ref_count", "raw_sha256", "stripped_sha256",
                 "exit_code", "refs_verified", "refs_total", "refs_mismatch",
                 "refs_by_source", "hook_env", "z3_passed", "z3_failed",
@@ -903,6 +906,11 @@ def _finalize_run(stdout, stderr, rc, duration, data, verify_dir=None):
             "p0": data.get("counts", {}).get("P0", 0),
             "p1": data.get("counts", {}).get("P1", 0),
             "budget_usd": (data.get("budget") or {}).get("estimated_usd"),
+            # Run'un KULLANDIĞI bütçe limiti + yöntem (effective config) —
+            # trend tooltip'i hangi config'le koştuğunu gösterebilsin. Eski
+            # run'larda yok (config'ten türetildiği run'a özeldir).
+            "budget_limit": (data.get("config") or {}).get("budget_usd"),
+            "budget_method": (data.get("config") or {}).get("budget_method"),
             # Tam bütçe raporu: comparison.ratios (budget_ratios) + by_type
             # (type_bytes) kırılımı — dashboard kartı için.
             "budget": data.get("budget"),
@@ -1135,6 +1143,31 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self._send(404, "404 not found")
 
+    def trigger_run_now(self):
+        """Manuel tetikleme: interval beklemeden hemen verify koşar.
+
+        Arka plan thread'inde çalışır, istek anında döner; sonuç hazır
+        olunca run_verify içindeki broadcast ile SSE client'larına düşer.
+        Zaten bir verify koşuyorsa 409 döner (çakışma yok). 24b9905'te
+        yanlışlıkla silinmişti (serve_run_stdout ile yer değiştirdi) —
+        geri yüklendi.
+        """
+        ts = datetime.now(timezone.utc).isoformat()
+        if not VERIFY_BUSY.acquire(blocking=False):
+            self._send(409,
+                       json.dumps({"status": "already_running", "ts": ts,
+                                   "note": "bir verify zaten koşuyor"}),
+                       content_type="application/json; charset=utf-8")
+            return
+        VERIFY_BUSY.release()  # thread acquire etsin; kilit tutma
+        t = threading.Thread(target=run_verify, args=(VERIFY_DIR,),
+                             daemon=True, name="run-now")
+        t.start()
+        self._send(200,
+                   json.dumps({"status": "started", "ts": ts,
+                               "note": "verify başladı; sonuç /api/run (SSE) ile anında yayınlanacak"}),
+                   content_type="application/json; charset=utf-8")
+
     def _replay_last_run(self, ts, verdict, stdout, stderr, p0=None, p1=None,
                          budget_usd=None, duration_s=None,
                          refs_verified=None, refs_total=None, pdf_pages=None):
@@ -1251,6 +1284,8 @@ class Handler(BaseHTTPRequestHandler):
                 "p0": r.get("p0"),
                 "p1": r.get("p1"),
                 "budget_usd": r.get("budget_usd"),
+                "budget_limit": r.get("budget_limit"),
+                "budget_method": r.get("budget_method"),
                 "duration_s": r.get("duration_s"),
                 "refs_verified": r.get("refs_verified"),
                 "refs_total": r.get("refs_total"),

@@ -554,6 +554,33 @@ class HookEnvPlumbingTests(unittest.TestCase):
         self.assertEqual(snap["hook_env"], {"z3": "5.1.0"})
 
 
+class BudgetLimitPlumbingTests(unittest.TestCase):
+    """Per-run budget_limit/budget_method veri hattı (trend tooltip config satırı)."""
+
+    def test_history_keys_include_budget_limit_and_method(self):
+        # history/run-log kayıtlarına run'un kullandığı limit + yöntem girmeli
+        # (tooltip 'hangi config'le koştu' satırı bunlardan beslenir).
+        self.assertIn("budget_limit", ps.HISTORY_KEYS)
+        self.assertIn("budget_method", ps.HISTORY_KEYS)
+
+    def test_latest_has_budget_limit_and_method_slots(self):
+        self.assertIn("budget_limit", ps.LATEST)
+        self.assertIn("budget_method", ps.LATEST)
+        self.assertIsNone(ps.LATEST["budget_limit"])
+        self.assertIsNone(ps.LATEST["budget_method"])
+
+    def test_snapshot_dict_carries_budget_limit_and_method(self):
+        ps.LATEST["budget_limit"] = 25.0
+        ps.LATEST["budget_method"] = "weighted"
+        try:
+            snap = ps.snapshot_dict()
+        finally:
+            ps.LATEST["budget_limit"] = None
+            ps.LATEST["budget_method"] = None
+        self.assertEqual(snap["budget_limit"], 25.0)
+        self.assertEqual(snap["budget_method"], "weighted")
+
+
 class CliOverridesPlumbingTests(unittest.TestCase):
     """cli_overrides veri hattı: LATEST slotu — override akış satırı beklemeden görünür.
 
@@ -1230,6 +1257,16 @@ class TestRouteQueryParams(unittest.TestCase):
         self.assertIsNone(ps._route("/api/unknown"))
         self.assertIsNone(ps._route("/api/unknown?x=1"))
         self.assertIsNone(ps._route("/favicon.ico"))
+
+    def test_trigger_run_now_method_exists(self):
+        # 24b9905'te yanlışlıkla silinmişti; /api/run-now AttributeError ile
+        # patlardı. Geri yüklendi — tekrar silinmesini önle (regresyon kapısı).
+        self.assertTrue(callable(getattr(ps.Handler, "trigger_run_now", None)),
+                        "Handler.trigger_run_now tanımlı olmalı")
+        # 409 busy-guard ve 200 started yanıtları do_GET/do_POST rotasından
+        # erişilebilir (route testi query-string'li haliyle).
+        self.assertEqual(ps._route("/api/run-now?budget=25"), "run_now")
+        self.assertEqual(ps._route("/api/run-now"), "run_now")
 
 
 if __name__ == "__main__":
