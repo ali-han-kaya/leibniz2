@@ -24,22 +24,25 @@ import gen_repro_manifest as gm
 
 # merge-multiple ile indirilmeyenler (prefix ile ayrı indirilir veya çıkış artifact'ı)
 EXCLUDED = frozenset({
-    "config", "precommit-logs", "refs-trend", "precheck-report",
-    "python3-shell", "plist-check", "reproducibility",
+    "precommit-logs", "refs-trend", "override-trend",
+    "precheck-report", "python3-shell", "plist-check",
+    "mirror-check", "daemon-http", "audit-refs-trend",
+    "reproducibility",
 })
 
 
 def _read_merge_pattern(workflow_path: str):
-    """verify.yml'den merge-multiple pattern'ini oku (brace format)."""
+    """verify.yml'den merge-multiple pattern'ini oku (brace format).
+
+    Döndürür: (items: set, line_no: int) — line_no pattern'in bulunduğu satır.
+    """
     with open(workflow_path, encoding="utf-8") as f:
-        text = f.read()
-    m = re.search(
-        r"merge-multiple:\s*true\s*\n\s*pattern:\s*'\{([^}]+)\}'\s*\n",
-        text,
-    )
-    if not m:
-        return None
-    return {s.strip() for s in m.group(1).split(",")}
+        lines = f.readlines()
+    for i, line in enumerate(lines, 1):
+        m = re.search(r"pattern:\s*'\{([^}]+)\}'", line)
+        if m:
+            return {s.strip() for s in m.group(1).split(",")}, i
+    return None, 0
 
 
 def check(workflow_path: str = None):
@@ -48,7 +51,7 @@ def check(workflow_path: str = None):
     if not os.path.isfile(wf):
         return [f"Workflow dosyası bulunamadı: {wf}"]
 
-    pattern = _read_merge_pattern(wf)
+    pattern, line_no = _read_merge_pattern(wf)
     if pattern is None:
         return ["verify.yml'de brace merge pattern bulunamadı"]
 
@@ -59,12 +62,11 @@ def check(workflow_path: str = None):
     extra = pattern - expected
 
     if missing:
-        errors.append(f"Eksik (pattern'de yok ama ARTIFACT_JOBS'da var): {', '.join(sorted(missing))}")
+        errors.append(f"Eksik (satır {line_no}): pattern'de yok ama ARTIFACT_JOBS'da var: {', '.join(sorted(missing))}")
     if extra:
-        errors.append(f"Fazla (pattern'da var ama ARTIFACT_JOBS'da yok): {', '.join(sorted(extra))}")
+        errors.append(f"Fazla (satır {line_no}): pattern'da var ama ARTIFACT_JOBS'da yok: {', '.join(sorted(extra))}")
 
     # Duplike kontrolü
-    raw = ""
     with open(wf, encoding="utf-8") as f:
         text = f.read()
     m = re.search(r"pattern:\s*'\{([^}]+)\}'\s*\n", text)
@@ -77,11 +79,88 @@ def check(workflow_path: str = None):
     return errors
 
 
+def fix(workflow_path: str = None):
+    """Eksik artifact'ları pattern'e otomatik ekle (sıralı, deterministic).
+
+    Döndürür (added: set, errors: list). added boş ama errors boşsa → zaten güncel.
+    Dosya yalnızca DEĞİŞİKLİK VARSA yazılır (idempotent).
+    """
+    wf = workflow_path or DEFAULT_WORKFLOW
+    if not os.path.isfile(wf):
+        return set(), [f"Workflow dosyası bulunamadı: {wf}"]
+
+    with open(wf, encoding="utf-8") as f:
+        text = f.read()
+
+    # Hedef pattern'i bul: merge-multiple + pattern ile aynı satır
+    # (birden fazla merge-multiple olabilir — brace pattern'in olduğu doğru satır)
+    pat_re = re.compile(
+        r"(merge-multiple:\s*true\s*\n\s*pattern:\s*)'\{([^}]+)\}'"
+        r"(\s*\n)"
+    )
+    m = pat_re.search(text)
+    if not m:
+        return set(), ["verify.yml'de merge-multiple brace pattern bulunamadı"]
+
+    prefix, current_str, suffix = m.group(1), m.group(2), m.group(3)
+    current_items = [s.strip() for s in current_str.split(",")]
+    current_set = set(current_items)
+
+    expected = set(gm.ARTIFACT_JOBS) - EXCLUDED
+    missing = expected - current_set
+    extra = current_set - expected
+
+    if not missing and not extra:
+        return set(), []  # zaten güncel
+
+    # Yeni sıralı liste: mevcut + eksik - fazla (deterministic sorted)
+    new_items = sorted(current_set | missing - extra)
+    # Duplike temizliği: sıralanmış listede zaten sorun olmaz ama emin olalım
+    seen = set()
+    deduped = []
+    for x in new_items:
+        if x not in seen:
+            seen.add(x)
+            deduped.append(x)
+
+    new_pattern = prefix + "'{" + ",".join(deduped) + "}'" + suffix
+    text = pat_re.sub(new_pattern, text, count=1)
+
+    with open(wf, "w", encoding="utf-8") as f:
+        f.write(text)
+
+    return missing, []
+
+
 def main():
     import argparse
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--workflow", default=None, help="Workflow dosya yolu")
+    ap.add_argument("--fix", action="store_true",
+                    help="Eksik artifact'ları pattern'e otomatik ekle "
+                         "(sıralı, idempotent)")
     args = ap.parse_args()
+
+    if args.fix:
+        added, errors = fix(args.workflow)
+        if errors:
+            print("HATA:")
+            for e in errors:
+                print(f"  ✗ {e}")
+            return 1
+        if not added:
+            print("✓ pattern zaten güncel — değişiklik yok")
+            return 0
+        print(f"✓ pattern güncellendi — eklenen: {', '.join(sorted(added))}")
+        # Fix sonrası tutarlılığı doğrula
+        verify_errors = check(args.workflow)
+        if verify_errors:
+            print("UYARI: fix sonrası hâlâ tutarsızlık var:")
+            for e in verify_errors:
+                print(f"  ✗ {e}")
+            return 1
+        print("✓ fix sonrası doğrulama: PASS")
+        return 0
 
     errors = check(args.workflow)
     if errors:
@@ -90,6 +169,7 @@ def main():
             print(f"  ✗ {e}")
         print("\nDüzeltme: verify.yml merge-multiple pattern'ini ARTIFACT_JOBS ile senkronlayın.")
         print("  Eksik artifact'ı pattern'e ekleyin veya ARTIFACT_JOBS'dan çıkarın.")
+        print("  VEYA: --fix ile otomatik düzeltin.")
         return 1
 
     print("✓ merge pattern ↔ ARTIFACT_JOBS tutarlı")

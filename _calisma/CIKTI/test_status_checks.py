@@ -48,28 +48,96 @@ def _protection(contexts=None, strict=True, enforce_admins=True,
 
 @unittest.skipUnless(HAVE_YAML, "PyYAML gerekli")
 class TestGateJobs(unittest.TestCase):
-    def test_excludes_pr_only_and_advisory(self):
+    def test_excludes_gates_and_advisory(self):
         gates = sc.gate_jobs()
         self.assertNotIn("manifest-comment", gates)
         self.assertNotIn("precheck", gates)
-        self.assertNotIn("label-gate", gates)       # PR-only
-        self.assertNotIn("label-gate-p1", gates)    # PR-only
-        self.assertNotIn("commit-msg-gate", gates)   # PR-only
+        self.assertIn("label-gate", gates)           # BİLEREK required (P0 gate)
+        self.assertNotIn("label-gate-p1", gates)     # PR-only (opsiyonel)
+        self.assertIn("commit-msg-gate", gates)      # PR-only ama required (2026-08-23)
         self.assertNotIn("plist-check", gates)       # macOS-advisory
         self.assertNotIn("mirror-check", gates)      # macOS fail-closed (advisory)
         self.assertNotIn("daemon-http", gates)       # advisory smoke
+        self.assertIn("ci-simulate", gates)          # required: tam replay kapısı
+        self.assertIn("config-sync", gates)          # required: üçlü senkron kapısı
         self.assertNotIn("audit-refs-trend", gates)  # advisory denetim
+        self.assertNotIn("changelog-drift", gates)   # advisory: changelog drift
         # Node 24 yükseltmesiyle eklenen job required aday olmalı.
         self.assertIn("action-runtimes", gates)
         self.assertEqual(gates["action-runtimes"],
                          "Action runtime check (node24)")
 
     def test_count_matches_workflow_minus_excludes(self):
-        # 17 job − 9 hariç = 8 required aday (tek kaynak: workflow).
-        # Hariç: manifest-comment, precheck, label-gate, label-gate-p1,
-        #        commit-msg-gate, plist-check, mirror-check, daemon-http,
-        #        audit-live-ci, audit-refs-trend
-        self.assertEqual(len(sc.gate_jobs()), 8)
+        # 22 job − 10 hariç = 12 required aday (tek kaynak: workflow).
+        # Hariç: manifest-comment, precheck, label-gate-p1, plist-check,
+        #        mirror-check, daemon-http, audit-live-ci, audit-refs-trend,
+        #        override-trend, changelog-drift
+        self.assertEqual(len(sc.gate_jobs()), 13)
+
+
+@unittest.skipUnless(HAVE_YAML, "PyYAML gerekli")
+class TestAdvisoryContract(unittest.TestCase):
+    """Advisory kontratı: plist-check ve tüm exclude'lar required DEĞİL."""
+
+    def test_real_workflow_passes(self):
+        c = sc.advisory_contract()
+        self.assertTrue(c["ok"], c["issues"])
+        self.assertTrue(c["plist_check"]["ok"])
+        self.assertEqual(c["plist_check"]["name"],
+                         "Plist drift check (macOS, advisory)")
+        self.assertFalse(c["plist_check"]["required"])
+        self.assertIn("Plist drift check (macOS, advisory)", c["advisory"])
+        # Fark = tüm adlar − required adlar; her exclude job advisory'de.
+        self.assertEqual(len(c["advisory"]), len(sc.GATE_EXCLUDE))
+        for jid in sc.GATE_EXCLUDE:
+            self.assertNotIn(c["all_jobs"][jid], c["required"])
+
+    def test_plist_check_required_fails(self):
+        # GATE_EXCLUDE'dan plist-check düşerse (required'a girer) kontrat FAIL.
+        with mock.patch.object(sc, "GATE_EXCLUDE",
+                               sc.GATE_EXCLUDE - {"plist-check"}):
+            c = sc.advisory_contract()
+        self.assertFalse(c["ok"])
+        self.assertFalse(c["plist_check"]["ok"])
+        self.assertTrue(c["plist_check"]["required"])
+        self.assertTrue(any("plist-check" in i for i in c["issues"]))
+
+    def test_stale_exclude_fails(self):
+        # Exclude edilen job workflow'dan silinirse bayat exclude → FAIL.
+        data = {"jobs": {
+            "verify": {"name": "Delivery verification — K1-K14 (single entry point)"}}}
+        c = sc.advisory_contract(data)
+        self.assertFalse(c["ok"])
+        self.assertTrue(any("yok" in i for i in c["issues"]))
+        self.assertFalse(c["plist_check"]["ok"])
+
+    def test_name_collision_fails(self):
+        # Required job, exclude edilen job'la AYNI ada sahipse → çakışma FAIL.
+        data = {"jobs": {
+            "plist-check": {"name": "Plist drift check (macOS, advisory)"},
+            "other": {"name": "Plist drift check (macOS, advisory)"},
+        }}
+        c = sc.advisory_contract(data)
+        self.assertFalse(c["ok"])
+        self.assertTrue(any("çakışma" in i for i in c["issues"]))
+        self.assertTrue(c["plist_check"]["required"])
+
+    def test_main_exits_1_when_contract_broken(self):
+        # main() fail-closed: kontrat ihlalinde JSON modunda da exit 1.
+        with mock.patch.object(sc, "advisory_contract") as m:
+            m.return_value = {
+                "ok": False,
+                "all_jobs": {"plist-check": "Plist drift check (macOS, advisory)"},
+                "required": ["Plist drift check (macOS, advisory)"],
+                "advisory": [],
+                "plist_check": {"job_id": "plist-check",
+                                 "name": "Plist drift check (macOS, advisory)",
+                                 "required": True, "ok": False},
+                "issues": ["'plist-check' required sette — advisory olmalı"],
+            }
+            with self.assertRaises(SystemExit) as cm:
+                sc.main(["--json"])
+        self.assertEqual(cm.exception.code, 1)
 
 
 @unittest.skipUnless(HAVE_YAML, "PyYAML gerekli")
@@ -155,7 +223,7 @@ class TestGhIntegration(unittest.TestCase):
             return sc.main(["--gh", "--repo", "owner/name"])
 
     def test_full_pass_returns_none(self):
-        # Beklenen 9 ad + tam enforcement → exit 0 (return None, SystemExit yok).
+        # Beklenen 12 ad + tam enforcement → exit 0 (return None, SystemExit yok).
         checks = list(sc.gate_jobs().values())
         rc = self._run_main(_protection(checks))
         self.assertIsNone(rc)
@@ -197,6 +265,12 @@ class TestGhIntegration(unittest.TestCase):
         self.assertEqual(d["verdict"], "PASS")
         self.assertTrue(d["names_ok"])
         self.assertTrue(d["enforcement_ok"])
+        # Advisory kontratı OFFLINE hesaplanır ve --gh --json çıktısında da
+        # taşınır — precheck job'ı advisory_contract.ok'ı buradan denetler.
+        ac = d.get("advisory_contract") or {}
+        self.assertIs(ac.get("ok"), True)
+        self.assertIn("plist_check", ac)
+        self.assertIs(ac["plist_check"]["ok"], True)
 
     def test_gh_json_fail_exits_1(self):
         checks = list(sc.gate_jobs().values())
@@ -212,6 +286,27 @@ class TestGhIntegration(unittest.TestCase):
         d = json.loads(buf.getvalue())
         self.assertEqual(d["verdict"], "FAIL")
         self.assertFalse(d["enforcement_ok"])
+        # FAIL yolunda da advisory_contract JSON'da mevcut olmalı (kapı okuyabilmeli).
+        self.assertIn("advisory_contract", d)
+        self.assertIs(d["advisory_contract"]["ok"], True)  # offline kontrat bozulmamış
+
+    def test_gh_json_unreadable_still_carries_advisory_contract(self):
+        # UNREADABLE (403 yetki yok) yolunda script exit 1 eder ama JSON'da
+        # advisory_contract.ok OFFLINE olarak hesaplanıp taşınmalı — CI'daki
+        # precheck adımı GitHub'a erişemese de kontratı denetleyebilsin.
+        buf = io.StringIO()
+        with mock.patch.object(sc, "run_gh",
+                               side_effect=RuntimeError(
+                                   "HTTP 403: Resource not accessible by "
+                                   "integration")), \
+                mock.patch.object(sys, "stdout", new=buf):
+            with self.assertRaises(SystemExit) as cm:
+                sc.main(["--gh", "--repo", "owner/name", "--json"])
+        self.assertEqual(cm.exception.code, 1)
+        d = json.loads(buf.getvalue())
+        self.assertEqual(d["verdict"], "UNREADABLE")
+        ac = d.get("advisory_contract") or {}
+        self.assertIs(ac.get("ok"), True, "offline kontrat UNREADABLE'da da okunabilmeli")
 
     def test_gh_json_not_set_up_exits_1(self):
         # Protection kurulu değilken (gh api 404) --gh exit 1 (fail-closed)

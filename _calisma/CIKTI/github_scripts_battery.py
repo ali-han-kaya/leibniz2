@@ -50,10 +50,8 @@ const { data: EXISTING_COMMENTS } = await github.rest.issues.listComments({
   repo: context.repo.repo,
   per_page: 100,
 });
-const mBody = fs.readFileSync('__SCRIPTS_DIR__/manifest_comment.js', 'utf8');
-await eval(`(async () => {\n${mBody}\n})()`);
-const cBody = fs.readFileSync('__SCRIPTS_DIR__/config_diff_comment.js', 'utf8');
-await eval(`(async () => {\n${cBody}\n})()`);
+const body = fs.readFileSync('__SCRIPTS_DIR__/tum_sapmalar_comment.js', 'utf8');
+await eval(`(async () => {\n${body}\n})()`);
 '''
 
 
@@ -98,6 +96,8 @@ SCENARIOS = [
             "klayers.json": json.dumps({"layers": {
                 "K1": {"status": "PASS", "label": "manifest"},
                 "K8": {"status": "PASS", "label": "Z3"}}}),
+            "k10_verdict.txt": "PASS",
+            "reproducibility/manifest.json": "{}",
         },
         None, [], [],
         {
@@ -126,6 +126,8 @@ SCENARIOS = [
             "klayers.json": json.dumps({"layers": {
                 "K1": {"status": "PASS", "label": "manifest"},
                 "K8": {"status": "PASS", "label": "Z3"}}}),
+            "k10_verdict.txt": "PASS",
+            "reproducibility/manifest.json": "{}",
         },
         None, [],
         [{"id": 400, "body": "eski uyarı " + MARKER_STATUS}],
@@ -134,6 +136,39 @@ SCENARIOS = [
             "call_counts": {"issues.listComments": 1},
             "delete_comments": [400],
             "console_any": ["Bulgular çözüldü — bayat yorum kaldırıldı"],
+            "add_labels": [], "remove_labels": [],
+        },
+    ),
+    (
+        "pr_status: repro-manifest FAIL → ❌ bölümü + yorum kalır",
+        "pr_status_comment.js",
+        {
+            "budget/index.json": json.dumps({
+                "runs": [{"source": "verify", "estimated_usd": 1.2,
+                          "limit": 30, "tokens_est": 400000}],
+                "method": "weighted"}),
+            "precommit_findings/PRECOMMIT_RAPORU.json": json.dumps({
+                "findings": [], "counts": {"hooks": 9, "passed": 9}}),
+            "k0_findings.json": json.dumps({"count": 0, "findings": []}),
+            "lineage_findings.json": json.dumps({
+                "ok": True,
+                "generations": [
+                    {"gen": 1, "note": "ilk", "hash": "aabbccdd00112233", "status": "PASS"}
+                ]}),
+            "klayers.json": json.dumps({"layers": {
+                "K1": {"status": "PASS", "label": "manifest"},
+                "K10": {"status": "PASS", "label": "Manifest"},
+                "K8": {"status": "PASS", "label": "Z3"}}}),
+            "k10_verdict.txt": "FAIL",
+            "reproducibility/manifest.json": "{}",
+        },
+        None, [], [],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.createComment": 1},
+            "body_contains": {"issues.createComment": [
+                "Reproducibility manifest", "FAIL",
+                "manifest digest FAIL", MARKER_STATUS]},
             "add_labels": [], "remove_labels": [],
         },
     ),
@@ -188,6 +223,31 @@ SCENARIOS = [
                 "Bütçe: limit aşıldı", "+$5.00 aşım",
                 "CLI override tespit edildi", "`budget`", "30 → 25",
                 "aşımın olası nedeni", MARKER_STATUS]},
+            "add_labels": [], "remove_labels": [],
+        },
+    ),
+    (
+        "pr_status: bütçe aşımı var + eski format (cli_overrides YOK) → çökmez",
+        "pr_status_comment.js",
+        {
+            "budget/index.json": json.dumps({
+                "failures": [{"source": "verify", "estimated_usd": 35.0,
+                              "limit": 30, "tokens_est": 10000000}],
+                "method": "weighted"}),
+            # cli_overrides alanı yok (eski format veya check_cli_overrides
+            # koşmadı → budget/index.json'da bu anahtar olmayabilir).
+            "precommit_findings/PRECOMMIT_RAPORU.json": json.dumps({
+                "findings": [], "counts": {"hooks": 9, "passed": 9}}),
+        },
+        None, [], [],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.createComment": 1},
+            "body_contains": {"issues.createComment": [
+                "Bütçe: limit aşıldı", "+$5.00 aşım", MARKER_STATUS]},
+            # override yok → override/drift uyarısı OLMAMALI
+            "body_not_contains": {"issues.createComment": [
+                "CLI override", "tekrarlanabilirlik sapması"]},
             "add_labels": [], "remove_labels": [],
         },
     ),
@@ -320,6 +380,8 @@ SCENARIOS = [
             "k0_findings.json": json.dumps({"count": 0, "findings": []}),
             "lineage_findings.json": json.dumps({"ok": True, "generations": []}),
             "klayers.json": json.dumps({"layers": {"K1": {"status": "PASS"}}}),
+            "k10_verdict.txt": "PASS",
+            "reproducibility/manifest.json": "{}",
         },
         None, [],
         [{"id": 300, "body": "eski uyarı " + MARKER_STATUS}],
@@ -344,6 +406,8 @@ SCENARIOS = [
             "k0_findings.json": json.dumps({"count": 0, "findings": []}),
             "lineage_findings.json": json.dumps({"ok": True, "generations": []}),
             "klayers.json": json.dumps({"layers": {"K1": {"status": "PASS"}}}),
+            "k10_verdict.txt": "PASS",
+            "reproducibility/manifest.json": "{}",
         },
         None, [], [],
         {
@@ -376,6 +440,8 @@ SCENARIOS = [
             "k0_findings.json": json.dumps({"count": 0, "findings": []}),
             "lineage_findings.json": json.dumps({"ok": True, "generations": []}),
             "klayers.json": json.dumps({"layers": {"K1": {"status": "PASS"}}}),
+            "k10_verdict.txt": "PASS",
+            "reproducibility/manifest.json": "{}",
         },
         None, [], [],
         {
@@ -404,6 +470,8 @@ SCENARIOS = [
             "k0_findings.json": json.dumps({"count": 0, "findings": []}),
             "lineage_findings.json": json.dumps({"ok": True, "generations": []}),
             "klayers.json": json.dumps({"layers": {"K1": {"status": "PASS"}}}),
+            "k10_verdict.txt": "PASS",
+            "reproducibility/manifest.json": "{}",
         },
         None, [], [],
         {
@@ -426,6 +494,8 @@ SCENARIOS = [
             "k0_findings.json": json.dumps({"count": 0, "findings": []}),
             "lineage_findings.json": json.dumps({"ok": True, "generations": []}),
             "klayers.json": json.dumps({"layers": {"K1": {"status": "PASS"}}}),
+            "k10_verdict.txt": "PASS",
+            "reproducibility/manifest.json": "{}",
         },
         None, [], [],
         {
@@ -705,7 +775,7 @@ SCENARIOS = [
         },
     ),
     (
-        "manifest_comment: CLI override uyarısı yoruma girer",
+        "manifest_comment: K10 PASS + CLI override → ayrı advisory",
         "manifest_comment.js",
         {
             "reproducibility/manifest.txt": "github_run_id: 999\n",
@@ -715,17 +785,40 @@ SCENARIOS = [
                 "override_count": 1,
                 "overrides": [{"key": "budget", "file_value": 30.0,
                                "effective": 25.0}],
-                "summary": "CLI override TESPİT EDİLDİ (1 parametre)"}),
+                "summary": "CLI override VAR (tekrarlanabilirlik sapması)"}),
         },
         None, [], [],
         {
             "ok": True, "set_failed": False,
             "call_counts": {"issues.createComment": 1},
             "body_contains": {"issues.createComment": [
-                "CLI override TESPİT EDİLDİ", "`budget`", "30 → 25",
+                "CLI override aktif", "`budget`", "30", "25",
                 "tekrarlanabilirlik sapması", MARKER_MANIFEST]},
-            # override dosyası YOKSA yorumda uyarı bölümü olmamalı (negatif
-            # kontrol ayrı senaryoda; burada yalnızca pozitif kanıt).
+        },
+    ),
+    (
+        "manifest_comment: K10 FAIL + CLI override → tek blok (olası neden)",
+        "manifest_comment.js",
+        {
+            "reproducibility/manifest.txt": "github_run_id: 111\n",
+            "k10_verdict.txt": "FAIL",
+            "reproducibility/cli_overrides_version.json": json.dumps({
+                "tool": "check_cli_overrides.py", "warning": True,
+                "override_count": 1,
+                "overrides": [{"key": "budget", "file_value": 30.0,
+                               "effective": 25.0}],
+                "summary": "CLI override VAR (tekrarlanabilirlik sapması)"}),
+        },
+        None, [], [],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.createComment": 1},
+            "body_contains": {"issues.createComment": [
+                "K10 manifest digest: FAIL",
+                "K10 manifest digest başarısız",
+                "CLI override olası neden",
+                "olası nedeni", "`budget`", "30", "25",
+                "tekrarlanabilirlik sapması", MARKER_MANIFEST]},
         },
     ),
     (
@@ -809,70 +902,186 @@ SCENARIOS = [
         },
     ),
     (
-        "config_diff: config-diff.json yok → atlanır (REST çağrısı yok)",
+        "config_diff: config-diff.json yok + yorum yok → temizlik sessiz",
         "config_diff_comment.js",
         {}, None, [], [],
         {"ok": True, "set_failed": False,
-         "call_counts": {"issues.listComments": 0},
-         "console_any": ["atlanıyor"]},
+         "call_counts": {"issues.deleteComment": 0,
+                         "issues.createComment": 0},
+         "console_any": ["config-diff.json yok — yorum yok"]},
+    ),
+    (
+        "config_diff: config-diff.json yok + bayat yorum varsa SİLİNİR",
+        "config_diff_comment.js",
+        {}, None, [],
+        [{"id": 888, "body": "bayat " + MARKER_CFGDIFF}],
+        {"ok": True, "set_failed": False,
+         "call_counts": {"issues.deleteComment": 1,
+                         "issues.createComment": 0},
+         "target_ids": {"issues.deleteComment": [888]},
+         "console_any": ["bayat yorum kaldırıldı"]},
     ),
 
-    # ── Birleşik adım (verify.yml: manifest + config-diff TEK github-script) ──
-    # İki script aynı kapsamda koşar; yorum listesi BİR KEZ çekilip her ikisine
-    # EXISTING_COMMENTS olarak verilir → issues.listComments TAM 1 çağrı (tek
-    # başına koşumda 2 çağrı olurdu — birleştirmenin API kazancı burada kanıtlanır).
-    # Wrapper, workflow adımının birebir aynısıdır; saparsa bu senaryolar FAIL.
+    # ── tum_sapmalar_comment.js (verify.yml birleşik adım) ──
+    # Üç bölümü TEK yorumda birleştirir: manifest + CLI override + config diff.
+    # COMBINED_WRAPPER_TMPL birebir verify.yml adımıdır.
     (
-        "combined: manifest update + config-diff create (paylaşılan liste, 1 listComments)",
+        "tum_sapmalar: manifest + config diff + CLI override → tek yorum",
         {"inline": COMBINED_WRAPPER_TMPL},
         {
             "reproducibility/manifest.txt": "github_run_id: 42\n"
                                              "github_sha: abc\n",
+            "k10_verdict.txt": "PASS",
             "reproducibility/config/config-diff.json": json.dumps({
                 "differences": [{"field": "budget_usd", "raw": 30,
                                  "effective": 25, "reason": "cli_override"}]}),
+            "reproducibility/cli_overrides_version.json": json.dumps({
+                "warning": True, "overrides": [
+                    {"key": "budget", "file_value": 30.0, "effective": 25.0}]}),
         },
         None, [],
-        [{"id": 777, "body": "eski " + MARKER_MANIFEST}],
+        [{"id": 999, "body": "eski " + MARKER_MANIFEST}],
         {
             "ok": True, "set_failed": False,
             "call_counts": {"issues.listComments": 1,
-                            "issues.updateComment": 1,
-                            "issues.createComment": 1},
-            "target_ids": {"issues.updateComment": [777]},
-            "body_contains": {"issues.updateComment": [MARKER_MANIFEST],
-                              "issues.createComment": [MARKER_CFGDIFF,
-                                                       "Config diff"]},
+                            "issues.createComment": 1,
+                            "issues.deleteComment": 1},
+            "target_ids": {"issues.deleteComment": [999]},
+            "body_contains": {"issues.createComment": [
+                "Tüm Sapmalar",
+                "Reproducibility manifest", "K10 manifest digest: PASS",
+                "CLI override aktif", "`budget`", "30", "25",
+                "Config diff", "budget_usd", "cli_override",
+                "<!-- stoic-hume-v5-tum-sapmalar -->"]},
+            "console_any": ["Eski marker yorumu kaldırıldı"],
         },
     ),
     (
-        "combined: manifest create + config-diff delete (fark yok, bayat yorum)",
+        "tum_sapmalar: sadece manifest (override yok, diff yok) → yine yorum",
         {"inline": COMBINED_WRAPPER_TMPL},
         {
-            "reproducibility/manifest.txt": "github_run_id: 42\n",
-            "reproducibility/config/config-diff.json":
-                json.dumps({"differences": []}),
+            "reproducibility/manifest.txt": "github_run_id: 99\n",
+            "k10_verdict.txt": "PASS",
         },
-        None, [],
-        [{"id": 888, "body": "bayat " + MARKER_CFGDIFF}],
+        None, [], [],
         {
             "ok": True, "set_failed": False,
             "call_counts": {"issues.listComments": 1,
-                            "issues.deleteComment": 1,
                             "issues.createComment": 1},
-            "target_ids": {"issues.deleteComment": [888]},
-            "body_contains": {"issues.createComment": [MARKER_MANIFEST]},
-            "console_any": ["bayat yorum kaldırıldı"],
+            "body_contains": {"issues.createComment": [
+                "Tüm Sapmalar",
+                "Reproducibility manifest", "K10 manifest digest: PASS",
+                "<!-- stoic-hume-v5-tum-sapmalar -->"]},
+            "body_not_contains": {"issues.createComment": [
+                "CLI override", "Config diff"]},
+        },
+    ),
+    (
+        "tum_sapmalar: K10 FAIL + override → tek blok (olası neden)",
+        {"inline": COMBINED_WRAPPER_TMPL},
+        {
+            "reproducibility/manifest.txt": "github_run_id: 111\n",
+            "k10_verdict.txt": "FAIL",
+            "reproducibility/cli_overrides_version.json": json.dumps({
+                "warning": True, "overrides": [
+                    {"key": "budget", "file_value": 30.0, "effective": 25.0}]}),
+        },
+        None, [], [],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.listComments": 1,
+                            "issues.createComment": 1},
+            "body_contains": {"issues.createComment": [
+                "Tüm Sapmalar",
+                "K10 manifest digest: FAIL",
+                "K10 FAIL + CLI override", "olası neden",
+                "`budget`", "30", "25",
+                "<!-- stoic-hume-v5-tum-sapmalar -->"]},
+        },
+    ),
+    (
+        "tum_sapmalar: override ve diff iki kaynaktan da okunur (index + version)",
+        {"inline": COMBINED_WRAPPER_TMPL},
+        {
+            "reproducibility/manifest.txt": "github_run_id: 222\n",
+            "k10_verdict.txt": "PASS",
+            "reproducibility/config/config-diff.json": json.dumps({
+                "differences": [{"field": "expected_pages", "raw": 33,
+                                 "effective": 34, "reason": "paket yeniden üretildi"}]}),
+            "reproducibility/cli_overrides_version.json": json.dumps({
+                "warning": True, "overrides": [
+                    {"key": "budget", "file_value": 30.0, "effective": 25.0}]}),
+            "budget/index.json": json.dumps({
+                "runs": [], "method": "weighted",
+                "cli_overrides": {
+                    "warning": True,
+                    "overrides": [
+                        {"key": "budget", "file_value": 30.0, "effective": 25.0},
+                        {"key": "method", "file_value": "weighted",
+                         "effective": "both"}]}}),
+        },
+        None, [], [],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.listComments": 1,
+                            "issues.createComment": 1},
+            "body_contains": {"issues.createComment": [
+                "Tüm Sapmalar",
+                "K10 manifest digest: PASS",
+                "CLI override aktif", "`budget`", "`method`",
+                "Config diff", "expected_pages", "33", "34",
+                "<!-- stoic-hume-v5-tum-sapmalar -->"]},
+        },
+    ),
+    (
+        "tum_sapmalar: override dosyası var ama override'sız (warning=false)",
+        {"inline": COMBINED_WRAPPER_TMPL},
+        {
+            "reproducibility/manifest.txt": "github_run_id: 333\n",
+            "k10_verdict.txt": "PASS",
+            "reproducibility/cli_overrides_version.json": json.dumps({
+                "warning": False, "override_count": 0, "overrides": []}),
+        },
+        None, [], [],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.listComments": 1,
+                            "issues.createComment": 1},
+            "body_contains": {"issues.createComment": [
+                "Tüm Sapmalar",
+                "K10 manifest digest: PASS",
+                "<!-- stoic-hume-v5-tum-sapmalar -->"]},
+            "body_not_contains": {"issues.createComment": [
+                "CLI override", "olası neden", "tekrarlanabilirlik sapması"]},
+        },
+    ),
+    (
+        "tum_sapmalar: hiçbir şey yok → tüm bayat yorumları temizle (state-sync)",
+        {"inline": COMBINED_WRAPPER_TMPL},
+        {},  # ne manifest ne diff ne override
+        None, [],
+        [{"id": 500, "body": "bayat " + MARKER_MANIFEST},
+         {"id": 501, "body": "bayat " + MARKER_CFGDIFF}],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.listComments": 1,
+                            "issues.deleteComment": 2,
+                            "issues.createComment": 0},
+            "delete_comments": [500, 501],
+            "console_any": ["Tüm sapmalar temiz"],
         },
     ),
 
     # ── config_drift_comment.js ─────────────────────────────────────────────
     (
-        "config_drift: exit 1 + bulgular + yeni yorum",
+        "config_drift: exit 1 + bulgular + yeni yorum (override OK)",
         "config_drift_comment.js",
         {
             "drift_rc.txt": "1",
             "drift_stderr.txt": "expected_pages: config 33, paket 34",
+            "config-drift/summary.txt": (
+                "config-drift exit=1 (gen_config=1, diff-on-drift=0) verdict=FAIL\n"
+                "cli_overrides=OK 0 (override_count=0)\n"),
             "config-drift/cli_overrides_version.json": json.dumps({
                 "tool": "check_cli_overrides.py", "warning": False,
                 "override_count": 0, "overrides": [],
@@ -885,12 +1094,13 @@ SCENARIOS = [
             "body_contains": {"issues.createComment": [
                 "Config drift tespit edildi", "exit `1`",
                 "expected_pages: config 33, paket 34",
-                "CLI override: yok (config değerleriyle tutarlı ✓)",
+                "CLI override: yok (config değerleriyle tutarlı",
+                "summary.txt → OK",
                 "gen_config.py", MARKER_DRIFT]},
         },
     ),
     (
-        "config_drift: mevcut yorum güncelle",
+        "config_drift: mevcut yorum güncelle (summary.txt'siz — override atlanır)",
         "config_drift_comment.js",
         {
             "drift_rc.txt": "2",
@@ -904,14 +1114,20 @@ SCENARIOS = [
             "target_ids": {"issues.updateComment": [999]},
             "body_contains": {"issues.updateComment": [
                 "exit `2`", MARKER_DRIFT]},
+            "body_not_contains": {"issues.updateComment": [
+                "CLI override tespit edildi",
+                "CLI override: yok"]},
         },
     ),
     (
-        "config_drift: CLI override warning + drift ayrı satırlar",
+        "config_drift: CLI override WARNING + drift (summary.txt tek kaynak)",
         "config_drift_comment.js",
         {
             "drift_rc.txt": "1",
             "drift_stderr.txt": "expected_pages: config 33, paket 34",
+            "config-drift/summary.txt": (
+                "config-drift exit=1 (gen_config=1, diff-on-drift=0) verdict=FAIL\n"
+                "cli_overrides=WARNING 1 (override_count=1)\n"),
             "config-drift/cli_overrides_version.json": json.dumps({
                 "tool": "check_cli_overrides.py", "warning": True,
                 "override_count": 1,
@@ -927,6 +1143,7 @@ SCENARIOS = [
             "body_contains": {"issues.createComment": [
                 "Config drift tespit edildi", "exit `1`",
                 "CLI override tespit edildi (tekrarlanabilirlik sapması)",
+                "summary.txt → WARNING 1",
                 "`budget`: 30 → 25 (CLI verildi)",
                 MARKER_DRIFT]},
         },
@@ -957,6 +1174,43 @@ SCENARIOS = [
             "call_counts": {"issues.deleteComment": 0,
                             "issues.createComment": 0},
             "console_any": ["yorum yok"],
+        },
+    ),
+    # Fail-closed gate: cli_overrides WARNING, gen_config+diff clean (0/0).
+    # Yorum SİLİNMEZ (state-sync overrideWarnActive ile korunur) — yeni yorum
+    # override-only başlıkla oluşturulur. Bu, gate'in exit 1 yaptığı ama
+    # drift_rc/diffdrift_rc 0 olan durumdur (override tek başına kapıyı aşar).
+    (
+        "config_drift: override-only gate — diff temiz, override WARNING",
+        "config_drift_comment.js",
+        {
+            "drift_rc.txt": "0",
+            "diffdrift_rc.txt": "0",
+            "config-drift/summary.txt": (
+                "config-drift exit=0 (gen_config=0, diff-on-drift=0) verdict=PASS\n"
+                "cli_overrides=WARNING 1 (override_count=1)\n"),
+            "config-drift/cli_overrides_version.json": json.dumps({
+                "tool": "check_cli_overrides.py", "warning": True,
+                "override_count": 1,
+                "overrides": [{"key": "budget", "file_value": 30,
+                               "effective": 25}],
+                "config_read": True,
+                "summary": "CLI override VAR"}),
+        },
+        None, [], [],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.createComment": 1},
+            "body_contains": {"issues.createComment": [
+                "CLI override tespit edildi (tekrarlanabilirlik sapması)",
+                "summary.txt → WARNING 1",
+                "`budget`: 30 → 25 (CLI verildi)",
+                "dosya config değeriyle DEĞİL",
+                MARKER_DRIFT]},
+            "body_not_contains": {"issues.createComment": [
+                "Config drift tespit edildi",
+                "gen_config.py",
+            ]},
         },
     ),
     (

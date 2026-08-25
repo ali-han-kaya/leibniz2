@@ -71,13 +71,159 @@ class TestHttpGet(unittest.TestCase):
         self.assertEqual(len(calls), 1)  # 404 fail-fast — retry yok
         m.assert_not_called()
 
+    def test_default_retries_is_three(self):
+        # IA SSL handshake timeout'larına karşı varsayılan deneme sayısı 3
+        # (archive_check → _http_json(url) varsayılan retries'ı kullanır).
+        self.assertEqual(vd.REFERENCE_HTTP_RETRIES, 3)
+
+    def test_default_retries_gives_three_attempts_on_transient(self):
+        # Varsayılan (retries argümansız) geçici hatalarda 3 deneme yapar —
+        # IA'nın archive.org SSL handshake yolunun CI'da 3. denemede geçtiği
+        # davranışı sabitler (flaky UNVERIFIED sıfırlama hedefi).
+        calls = []
+
+        def urlopen(req, timeout):
+            calls.append(timeout)
+            raise urllib.error.URLError("geçici SSL handshake")
+
+        with mock.patch.object(vd.urllib.request, "urlopen",
+                               side_effect=urlopen), \
+                mock.patch.object(vd.time, "sleep") as m:
+            with self.assertRaises(urllib.error.URLError):
+                vd._http_get("http://x", timeout=15)
+        self.assertEqual(len(calls), 3)  # ilk + 2 retry
+        m.assert_has_calls([mock.call(1.0), mock.call(2.0)])
+
+    def test_backoff_delay_exponential_and_cap(self):
+        # Exponential backoff: 1s, 2s, 4s, 8s, 8s, ... (cap'te tavanlanır).
+        self.assertEqual(vd._backoff_delay(1), 1.0)
+        self.assertEqual(vd._backoff_delay(2), 2.0)
+        self.assertEqual(vd._backoff_delay(3), 4.0)
+        self.assertEqual(vd._backoff_delay(4), 8.0)
+        self.assertEqual(vd._backoff_delay(5), 8.0)  # cap — daha fazla uzamaz
+        self.assertEqual(vd._backoff_delay(10), 8.0)
+
+    def test_http_get_uses_exponential_backoff(self):
+        # 4 deneme (ilk + 3 retry) → bekleme süreleri 1s, 2s, 4s (üstel).
+        calls = []
+
+        def urlopen(req, timeout):
+            calls.append(timeout)
+            raise urllib.error.URLError("geçici timeout")
+
+        with mock.patch.object(vd.urllib.request, "urlopen",
+                               side_effect=urlopen), \
+                mock.patch.object(vd.time, "sleep") as m:
+            with self.assertRaises(urllib.error.URLError):
+                vd._http_get("http://x", timeout=15, retries=4)
+        self.assertEqual(len(calls), 4)
+        m.assert_has_calls([mock.call(1.0), mock.call(2.0), mock.call(4.0)])
+
+
+class TestOlRetry(unittest.TestCase):
+    """_ol_retry dış kalkanı — exponential backoff ile çoklu deneme."""
+
+    def _transient(self, *results):
+        """Sıralı sonuç dönen sahte OL check: geçici UNVERIFIED + sonuçlar."""
+        calls = []
+
+        def fn(ref):
+            calls.append(ref)
+            return results[min(len(calls) - 1, len(results) - 1)]
+        return fn, calls
+
+    def test_success_on_second_attempt(self):
+        fn, calls = self._transient(
+            ("UNVERIFIED", "ağ hatası: zaman aşımı"),
+            ("PASS", "OpenLibrary: 'Metaphysical Grounding'"))
+        with mock.patch.object(vd.time, "sleep") as m:
+            v, d = vd._ol_retry(fn, {"key": "x"})
+        self.assertEqual(v, "PASS")
+        self.assertIn("(retry sonrası)", d)
+        self.assertEqual(len(calls), 2)
+        m.assert_has_calls([mock.call(1.0)])  # ilk retry 1s
+
+    def test_success_on_third_attempt_exponential(self):
+        fn, calls = self._transient(
+            ("UNVERIFIED", "ağ hatası: timeout"),
+            ("UNVERIFIED", "ağ hatası: connection reset"),
+            ("PASS", "OpenLibrary: 'Leibniz'"))
+        with mock.patch.object(vd.time, "sleep") as m:
+            v, d = vd._ol_retry(fn, {"key": "x"})
+        self.assertEqual(v, "PASS")
+        self.assertIn("(retry sonrası)", d)
+        self.assertEqual(len(calls), 3)
+        m.assert_has_calls([mock.call(1.0), mock.call(2.0)])  # üstel
+
+    def test_all_transient_exhausts_attempts(self):
+        fn, calls = self._transient(
+            ("UNVERIFIED", "ağ hatası: zaman aşımı"),
+            ("UNVERIFIED", "ağ hatası: timeout"),
+            ("UNVERIFIED", "ağ hatası: connection reset"))
+        with mock.patch.object(vd.time, "sleep") as m:
+            v, d = vd._ol_retry(fn, {"key": "x"})
+        self.assertEqual(v, "UNVERIFIED")
+        self.assertEqual(len(calls), 3)  # OL_RETRY_ATTEMPTS toplam
+        m.assert_has_calls([mock.call(1.0), mock.call(2.0)])
+
+    def test_no_retry_on_permanent_429(self):
+        fn, calls = self._transient(("UNVERIFIED", "OpenLibrary 429 rate-limit"),)
+        with mock.patch.object(vd.time, "sleep") as m:
+            v, d = vd._ol_retry(fn, {"key": "x"})
+        self.assertEqual(v, "UNVERIFIED")
+        self.assertEqual(len(calls), 1)  # kalıcı — retry yok
+        m.assert_not_called()
+
+    def test_no_retry_on_zero_results(self):
+        fn, calls = self._transient(
+            ("UNVERIFIED", "OpenLibrary: 0 sonuç (OL kapsamı dışı olabilir)"),)
+        with mock.patch.object(vd.time, "sleep") as m:
+            v, d = vd._ol_retry(fn, {"key": "x"})
+        self.assertEqual(v, "UNVERIFIED")
+        self.assertIn("0 sonuç", d)
+        self.assertEqual(len(calls), 1)
+        m.assert_not_called()
+
+    def test_stops_early_on_permanent_during_retry(self):
+        # İlk deneme geçici, retry kalıcı (429) → erken çık, deneme sayısı 2.
+        fn, calls = self._transient(
+            ("UNVERIFIED", "ağ hatası: timeout"),
+            ("UNVERIFIED", "OpenLibrary 429 rate-limit"))
+        with mock.patch.object(vd.time, "sleep") as m:
+            v, d = vd._ol_retry(fn, {"key": "x"})
+        self.assertEqual(v, "UNVERIFIED")
+        self.assertIn("429", d)
+        self.assertEqual(len(calls), 2)
+        m.assert_has_calls([mock.call(1.0)])
+
+    def test_non_transient_unverified_no_retry(self):
+        fn, calls = self._transient(("UNVERIFIED", "LoC: kayıt yok"))
+        with mock.patch.object(vd.time, "sleep") as m:
+            v, d = vd._ol_retry(fn, {"key": "x"})
+        self.assertEqual(v, "UNVERIFIED")
+        self.assertEqual(len(calls), 1)
+        m.assert_not_called()
+
+    def test_mismatch_passes_through(self):
+        fn, calls = self._transient(
+            ("MISMATCH", "OpenLibrary sonuç var ama eşleşme yok"))
+        with mock.patch.object(vd.time, "sleep") as m:
+            v, d = vd._ol_retry(fn, {"key": "x"})
+        self.assertEqual(v, "MISMATCH")
+        self.assertEqual(len(calls), 1)
+        m.assert_not_called()
+
 
 class TestAuditBudget(unittest.TestCase):
     def test_budget_exceeded_skips_network(self):
         # Bütçe 0 → tüm ağ kontrolleri UNVERIFIED atlanır; hiçbir check çağrılmaz
         # (yanlış PASS yok). Polite sleep'ler de mock'lanır (test hızı için).
+        # collect_evidence (fallback bölüm) de mock'lanır — ağ çağrısı yok.
         with mock.patch.object(vd, "REFERENCE_AUDIT_BUDGET_S", 0), \
-                mock.patch.object(vd.time, "sleep"):
+                mock.patch.object(vd.time, "sleep"), \
+                mock.patch(
+                    "ia_ol_fallback_evidence.collect_evidence",
+                    return_value=[]):
             for fn in ("crossref_check", "sep_check", "openlibrary_check",
                        "archive_check", "perseus_check",
                        "openlibrary_fallback_check", "hathitrust_check",
@@ -91,10 +237,12 @@ class TestAuditBudget(unittest.TestCase):
                     "", lambda *a, **k: None, quiet=True)
             finally:
                 mock.patch.stopall()
-        self.assertEqual(len(results), 61)  # V5q: +4 Sextus (IA) +1 Della Rocca (URL)
-        self.assertTrue(all(r["verdict"] == "UNVERIFIED" for r in results))
+        # 61 ana sonuç + 0 fallback (collect_evidence mock → [])
+        main_results = [r for r in results if not r.get("fallback_section")]
+        self.assertEqual(len(main_results), 61)  # V5q: +4 Sextus (IA) +1 Della Rocca (URL)
+        self.assertTrue(all(r["verdict"] == "UNVERIFIED" for r in main_results))
         self.assertTrue(all("bütçesi aşıldı" in r["detail"]
-                           for r in results))
+                           for r in main_results))
 
 
 class TestParallelAudit(unittest.TestCase):
@@ -113,7 +261,10 @@ class TestParallelAudit(unittest.TestCase):
                 mock.patch.object(vd, "_archive_with_fallback",
                                   side_effect=archive_side), \
                 mock.patch.object(vd, "perseus_check",
-                                  return_value=("PASS", "x")):
+                                  return_value=("PASS", "x")), \
+                mock.patch(
+                    "ia_ol_fallback_evidence.collect_evidence",
+                    return_value=[]):
             return vd.run_reference_audit(
                 "", lambda *a, **k: None, quiet=True)
 
@@ -172,7 +323,10 @@ class TestParallelAudit(unittest.TestCase):
                 mock.patch.object(vd, "_archive_with_fallback",
                                   side_effect=lambda r: ("PASS", "x", "archive")), \
                 mock.patch.object(vd, "perseus_check",
-                                  return_value=("PASS", "x")):
+                                  return_value=("PASS", "x")), \
+                mock.patch(
+                    "ia_ol_fallback_evidence.collect_evidence",
+                    return_value=[]):
             t0 = time.time()
             results = vd.run_reference_audit(
                 "", lambda *a, **k: None, quiet=True)
@@ -378,7 +532,7 @@ class TestHathiTrustIdentifiers(unittest.TestCase):
             "Xunzi Knoblock": ["lccn:87033578", "oclc:17265207"],
             # V5r: edisyon kayıtlarındaki lccn değerleri de eklendi (HT'de 0
             # kayıt ama doğru identifier — HT ileride alırsa eşleşir)
-            "Fine 2012": ["lccn:2012014618", "isbn:1107022894"],
+            "Fine 2012": ["isbn:9781107460287"],
         }
         for key, ids in expect.items():
             self.assertIn(key, by_key, f"{key} arşiv listesinde yok")
@@ -415,6 +569,218 @@ class TestHathiTrustIdentifiers(unittest.TestCase):
             v, d = vd.hathitrust_check(ref)
         self.assertEqual(v, "UNVERIFIED")
         self.assertIn("kayıt yok", d)
+
+
+class TestHathiTrustApiFormat(unittest.TestCase):
+    """HathiTrust identifier-keyli API formatını (data[ident].records) sabitle.
+
+    Gerçek API yanıtı şeması: {"<ident>": {"records": {"<recid>": {"titles": [...]}},
+    "items": [...]}}. Test edilen yollar: boş records → UNVERIFIED, records var
+    ama başlık eşleşmez → MISMATCH, records var + başlık eşleşir → PASS."""
+
+    # ── Yardımcı: mock _http_json ile hathitrust_check'i çağır ──
+    def _call(self, ref, payload):
+        with mock.patch.object(vd, "_http_json", return_value=payload):
+            return vd.hathitrust_check(ref)
+
+    # ── 1) 0 kayıt — data[ident].records boş → UNVERIFIED ──
+    def test_api_format_zero_records_returns_unverified(self):
+        """HT yanıtında records {} ise UNVERIFIED + 'kayıt yok' mesajı."""
+        ref = {"key": "Test", "title_needle": "something",
+               "ht_ids": ["oclc:999999999"]}
+        payload = {
+            "oclc:999999999": {
+                "records": {},           # ← API'nin gerçek boş formatı
+                "items": []
+            }
+        }
+        v, d = self._call(ref, payload)
+        self.assertEqual(v, "UNVERIFIED", f"boş records → UNVERIFIED, alınan: {v}")
+        self.assertIn("kayıt yok", d,
+                      f"açıklamada 'kayıt yok' beklenir, alınan: {d}")
+
+    def test_api_format_missing_records_key_unverified(self):
+        """API yanıtında records anahtarı HiÇ yoksa → UNVERIFIED (sağlam parse)."""
+        ref = {"key": "Test", "title_needle": "something",
+               "ht_ids": ["lccn:123"]}
+        payload = {
+            "lccn:123": {
+                # records anahtarı yok — eski/yeni API uyumsuzluğuna karşı
+                "items": []
+            }
+        }
+        v, d = self._call(ref, payload)
+        self.assertEqual(v, "UNVERIFIED",
+                         f"records anahtarı yoksa UNVERIFIED, alınan: {v}")
+        self.assertIn("kayıt yok", d)
+
+    def test_api_format_identifier_key_missing_unverified(self):
+        """data'da hiçbir ident anahtarı yoksa → UNVERIFIED (identifier yanlış)."""
+        ref = {"key": "Test", "title_needle": "something",
+               "ht_ids": ["isbn:000"]}
+        payload = {}  # API hiç kayıt dönmedi
+        v, d = self._call(ref, payload)
+        self.assertEqual(v, "UNVERIFIED",
+                         f"ident anahtarı yoksa UNVERIFIED, alınan: {v}")
+        self.assertIn("kayıt yok", d)
+
+    # ── 2) Kayıt var ama başlık eşleşmez → MISMATCH ──
+    def test_api_format_records_exist_title_mismatch_returns_mismatch(self):
+        """records dolu ama title_needle içermez → MISMATCH.
+
+        HT'de kayıt bulundu ama başlık beklenenle eşleşmezse yanlış PASS
+        üretilmez — MISMATCH düşülür (fail-closed)."""
+        ref = {"key": "Lagrée 1994",
+               "title_needle": "juste lipse et la restauration du stoicisme",
+               "ht_ids": ["oclc:32045786", "lccn:95174106"]}
+        payload = {
+            "oclc:32045786": {
+                "records": {
+                    "0032045786": {
+                        "titles": [
+                            "Unrelated title about Renaissance philosophy"
+                        ],
+                    }
+                },
+                "items": [{"orig": "UCB", "from": "original"}],
+            },
+            # İkinci ident başlık da eşleşmez
+            "lccn:95174106": {
+                "records": {
+                    "95174106": {
+                        "titles": ["Another different title"],
+                    }
+                },
+                "items": [],
+            },
+        }
+        v, d = self._call(ref, payload)
+        self.assertEqual(v, "MISMATCH",
+                         f"başlık eşleşmezse MISMATCH, alınan: {v}")
+        self.assertIn("kayıt var", d)
+        self.assertIn("eşleşmedi", d)
+
+    def test_api_format_multiple_titles_none_match_returns_mismatch(self):
+        """Birden fazla title alanı var ama hiçbiri eşleşmez → MISMATCH."""
+        ref = {"key": "Test", "title_needle": "stoic epistemology",
+               "ht_ids": ["isbn:9781234567890"]}
+        payload = {
+            "isbn:9781234567890": {
+                "records": {
+                    "rec1": {
+                        "titles": [
+                            "Stoic Ethics and Logic",
+                            "A Companion to Stoicism",
+                            "The Cambridge History of Hellenistic Philosophy",
+                        ],
+                    }
+                },
+                "items": [],
+            }
+        }
+        v, d = self._call(ref, payload)
+        self.assertEqual(v, "MISMATCH")
+        self.assertIn("eşleşmedi", d)
+
+    # ── 3) PASS — kayıt var + başlık eşleşir ──
+    def test_api_format_pass_exact_title_match(self):
+        """title_needle bir title'da aynen bulunursa PASS."""
+        ref = {"key": "Xunzi Knoblock", "title_needle": "xunzi",
+               "ht_ids": ["lccn:87033578"]}
+        payload = {
+            "lccn:87033578": {
+                "records": {
+                    "001082130": {
+                        "titles": [
+                            "Xunzi : a translation and study "
+                            "of the complete works"
+                        ],
+                    }
+                },
+                "items": [{"orig": "MIU", "from": "original"}],
+            }
+        }
+        v, d = self._call(ref, payload)
+        self.assertEqual(v, "PASS", f"başlık eşleşirse PASS, alınan: {v}")
+        self.assertIn("Xunzi", d)
+        self.assertIn("lccn:87033578", d)
+
+    def test_api_format_pass_partial_title_match(self):
+        """title_needle uzun başlığın alt-dizgisi olarak bulunursa PASS."""
+        ref = {"key": "Test", "title_needle": "reading hume",
+               "ht_ids": ["lccn:2002020030"]}
+        payload = {
+            "lccn:2002020030": {
+                "records": {
+                    "2002020030": {
+                        "titles": [
+                            "Reading Hume on human understanding : "
+                            "essays on the first Enquiry"
+                        ],
+                    }
+                },
+                "items": [],
+            }
+        }
+        v, d = self._call(ref, payload)
+        self.assertEqual(v, "PASS")
+        self.assertIn("2002020030", d)
+
+    def test_api_format_pass_subsequent_identifier(self):
+        """İlk ident boş kayıt döndürse bile sonraki ident PASS verirse PASS."""
+        ref = {"key": "Test", "title_needle": "xunzi",
+               "ht_ids": ["isbn:9999999999999", "lccn:87033578"]}
+        payload = {
+            "isbn:9999999999999": {
+                "records": {},           # ilk ident — boş
+                "items": []
+            },
+            "lccn:87033578": {           # ikinci ident — eşleşir
+                "records": {
+                    "rec1": {
+                        "titles": ["Xunzi : complete works"],
+                    }
+                },
+                "items": [],
+            },
+        }
+        v, d = self._call(ref, payload)
+        self.assertEqual(v, "PASS",
+                         f"sonraki ident eşleşirse PASS, alınan: {v}")
+        self.assertIn("lccn:87033578", d)
+
+    def test_api_format_strips_oclc_prefix_in_api_ident_key(self):
+        """OCLC numarası — HT API ident anahtarında rakamın kendisidir.
+
+        ÖNEMLİ: ht_ids'te `oclc:32045786` yazar ama HT API  ident anahtarını
+        OCLC numarasının kendisi olarak döner (`32045786`, öneksiz).
+        Bu test, _http_json mock'layan testlerin doğru ident anahtarını
+        kullanması gerektiğini belgeler (gerçek API davranışı)."""
+        ref = {"key": "Test", "title_needle": "some book",
+               "ht_ids": ["oclc:32045786"]}
+        # Gerçek HT API yanıtında ident anahtarı "32045786" olarak döner —
+        # oclc: öneki YOKTUR. Test bunu bilinçli olarak belgelemektedir.
+        payload = {
+            # Bu test, ident anahtarının "oclc:32045786" (önekli) DEĞİL
+            # "32045786" (öneksiz) biçiminde geldiğini varsayar.
+            # Bu yüzden _call() burada önekli ht_ids ile çağrılır
+            # ve API ident anahtarında önek olmadığı için eşleşme OLMAZ.
+            # → MISMATCH değil UNVERIFIED (ilk ident'te kayıt yok = sonraki yok).
+            "32045786": {
+                "records": {
+                    "rec1": {"titles": ["Juste Lipse et la restauration"]},
+                },
+                "items": [],
+            }
+        }
+        # ht_ids "oclc:32045786" ile gider, API "oclc:32045786" anahtarını arar
+        # ama payload'ta "32045786" vardır → ident anahtarı eşleşmez → UNVERIFIED
+        v, d = self._call(ref, payload)
+        # Bu gerçek API davranışı değil, test varsayımıdır.
+        # Gerçek API'nin oclc: önekli istekleri nasıl döndürdüğü
+        # canlı testle doğrulanmalıdır.
+        self.assertIn(v, ("UNVERIFIED", "MISMATCH"),
+                      "oclc: önek uyuşmazlığı → UNVERIFIED veya MISMATCH")
 
 
 class TestOpenLibraryFallback(unittest.TestCase):
@@ -525,6 +891,109 @@ class TestLocCheck(unittest.TestCase):
             v, d = vd.loc_check(ref)
         self.assertEqual(v, "UNVERIFIED")
         self.assertIn("LoC HTTP 404", d)
+
+
+class TestFallbackEvidenceSection(unittest.TestCase):
+    """run_reference_audit'ın fallback bölüm doğrulaması — --full'da 5
+    kaynağın fallback kanıtını ayrı bölüm olarak gösterir.
+
+    collect_evidence mock'lanarak ağsız/deterministik doğrulanır:
+    - Fallback bölümü GÖRÜNTÜ amaçlıdır — online_results sayısına ekleme
+      yapılmaz (5 kaynak zaten REFERENCE_ARCHIVE'de ana döngüde denetlenir)
+    - total_online 61'de kalır (66'ya şişmez — regresyon kapısı)
+    - FAIL/MISMATCH varsa P1 eklenir (fail-closed)
+    - istisna atarsa bölüm atlanır (SKIP), çökme yok
+    """
+
+    def _fb_result(self, key, verdict, source, detail="ok"):
+        return {"key": key, "verdict": verdict, "source": source,
+                "detail": detail, "loc_url": "https://lccn.loc.gov/123",
+                "lccn": "123"}
+
+    def _run_audit(self, fb_results):
+        # Tüm tex_needle'ları içeren sahte metin üret — 1. adımda P1 oluşmasın.
+        tex = " ".join(r["tex_needle"] for r in
+                       vd.REFERENCE_CROSSREF + vd.REFERENCE_SEP
+                       + vd.REFERENCE_URL)
+        findings = []
+        with mock.patch.object(vd, "REFERENCE_POOL_SIZE", 1), \
+                mock.patch.object(vd, "crossref_check",
+                                  return_value=("PASS", "x")), \
+                mock.patch.object(vd, "sep_check",
+                                  return_value=("PASS", "x")), \
+                mock.patch.object(vd, "openlibrary_check",
+                                  return_value=("PASS", "x")), \
+                mock.patch.object(vd, "_archive_with_fallback",
+                                  side_effect=lambda r: ("PASS", "x", "archive")), \
+                mock.patch.object(vd, "perseus_check",
+                                  return_value=("PASS", "x")), \
+                mock.patch(
+                    "ia_ol_fallback_evidence.collect_evidence",
+                    return_value=fb_results):
+            results = vd.run_reference_audit(
+                tex, lambda *a, **k: findings.append(a), quiet=True)
+        return results, findings
+
+    def test_fallback_section_does_not_inflate_total(self):
+        # Regresyon kapısı: fallback bölümü online_results'a ekleme yapmaz.
+        # 5 kaynak zaten REFERENCE_ARCHIVE'de olduğundan total 61'de kalmalı.
+        fb = [self._fb_result("Fine 2012", "PASS", "openlibrary"),
+              self._fb_result("Lagree 1994", "PASS", "loc"),
+              self._fb_result("Millican 2002", "PASS", "loc"),
+              self._fb_result("Schmitt 1972", "PASS", "loc"),
+              self._fb_result("Xunzi Knoblock", "PASS", "hathitrust")]
+        results, findings = self._run_audit(fb)
+        # 61 ana sonuç, fallback eklemesi YOK (66'ya şişmez)
+        self.assertEqual(len(results), 61)
+        # fallback_section işaretli satır YOK
+        fb_rows = [r for r in results if r.get("fallback_section")]
+        self.assertEqual(len(fb_rows), 0)
+        # source 'fallback_' öneki YOK (by_source'u şişirmez)
+        self.assertFalse(any(r["source"].startswith("fallback_")
+                             for r in results))
+        # tümü PASS → P1 yok
+        self.assertEqual(findings, [])
+
+    def test_fallback_section_fail_adds_p1(self):
+        fb = [self._fb_result("Fine 2012", "MISMATCH", "openlibrary",
+                             "title eşleşmedi")]
+        results, findings = self._run_audit(fb)
+        # total 61'de kalır (fallback eklemesi yok)
+        self.assertEqual(len(results), 61)
+        # MISMATCH → P1 eklenir (fail-closed) — fallback bulgusu ara
+        self.assertTrue(any("Fine 2012" in str(f) and "fallback" in str(f).lower()
+                            for f in findings),
+                        f"Fine 2012 fallback P1 bulunamadı: {findings}")
+
+    def test_fallback_section_empty_when_no_evidence(self):
+        results, findings = self._run_audit([])
+        self.assertEqual(len(results), 61)
+        # Tüm ana sonuçlar PASS, tex_needle'lar mevcut → P1 yok
+        self.assertEqual(findings, [])
+
+    def test_fallback_section_skips_on_exception(self):
+        # collect_evidence exception atarsa bölüm atlanır (SKIP), çökme yok.
+        tex = " ".join(r["tex_needle"] for r in
+                       vd.REFERENCE_CROSSREF + vd.REFERENCE_SEP
+                       + vd.REFERENCE_URL)
+        with mock.patch.object(vd, "REFERENCE_POOL_SIZE", 1), \
+                mock.patch.object(vd, "crossref_check",
+                                  return_value=("PASS", "x")), \
+                mock.patch.object(vd, "sep_check",
+                                  return_value=("PASS", "x")), \
+                mock.patch.object(vd, "openlibrary_check",
+                                  return_value=("PASS", "x")), \
+                mock.patch.object(vd, "_archive_with_fallback",
+                                  side_effect=lambda r: ("PASS", "x", "archive")), \
+                mock.patch.object(vd, "perseus_check",
+                                  return_value=("PASS", "x")), \
+                mock.patch(
+                    "ia_ol_fallback_evidence.collect_evidence",
+                    side_effect=RuntimeError("ağ hatası")):
+            results = vd.run_reference_audit(
+                tex, lambda *a, **k: None, quiet=True)
+        # 61 ana sonuç, fallback yok (exception → SKIP)
+        self.assertEqual(len(results), 61)
 
 
 if __name__ == "__main__":

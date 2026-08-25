@@ -9,10 +9,12 @@ Girdi : logs/precommit.log   (pre-commit run --all-files çıktısı)
         logs/precommit.exit  (exit kodu)
         logs/commit_msg_findings.json  (check_commit_messages.py sidecar'ı —
                                         varsa "Commit-msg (CI advisory)" bölümü)
-Çıktı : logs/PRECOMMIT_RAPORU.md  (hook sonuçları + P0/P1 bulguları + commit-msg
+Çıktı : logs/PRECOMMIT_RAPORU.md  (hook sonuçları — display adı + `- hook id:`
+                                     kimliğiyle + P0/P1 bulguları + commit-msg
                                      + ham log notu)
         logs/PRECOMMIT_RAPORU.json (aynı içeriğin makine-okunur hali: hook
-                                     durumları Passed/Failed + bulgular + sayımlar)
+                                     durumları {name, id, status} + bulgular
+                                     + sayımlar)
         → her ikisi de `logs/` altında olduğundan precommit-logs artifact'ına
           otomatik girer ve reproducibility manifest'inde SHA-256 ile sabitlenir.
 
@@ -25,17 +27,30 @@ import pathlib
 import re
 
 STATUS_RE = re.compile(r"^(.*?)\.{4,}(Passed|Failed)\s*$", re.M)
+# Hook durum satırını izleyen öznitelik bloğu: "- hook id: check-python3-shell"
+_HOOK_ID_RE = re.compile(r"^-\s*hook\s+id:\s*(\S+)\s*$", re.M)
 
 
 def parse_hooks(log_text):
     """pre-commit verbose çıktısından hook sonuçlarını ayrıştır.
 
-    Her hook satırı 'Hook adı.....Passed|Failed' biçimindedir.
+    Her hook satırı 'Hook adı……………Passed|Failed' biçimindedir; Durum
+    satırını izleyen öznitelik bloğundaki `- hook id:` değeri de kaydedilir
+    (örn. display adı 'Block shell commands under shell: python3 {0}' iken
+    id 'check-python3-shell' — makine-okur kimlik, dashboard/tools için).
+    id bulunamazsa None (geriye uyumlu).
     """
-    return [
-        {"name": m.group(1).strip(), "status": m.group(2)}
-        for m in STATUS_RE.finditer(log_text)
-    ]
+    hooks = []
+    for m in STATUS_RE.finditer(log_text):
+        nxt = STATUS_RE.search(log_text, m.end())
+        seg = log_text[m.end():nxt.start() if nxt else len(log_text)]
+        idm = _HOOK_ID_RE.search(seg)
+        hooks.append({
+            "name": m.group(1).strip(),
+            "id": idm.group(1) if idm else None,
+            "status": m.group(2),
+        })
+    return hooks
 
 
 def parse_update_config(log_text):
@@ -149,14 +164,15 @@ def render_markdown(data):
         "",
         "## Hook sonuçları",
         "",
-        "| Hook | Durum |",
-        "|---|---|",
+        "| Hook | ID | Durum |",
+        "|---|---|---|",
     ]
     if hooks:
         for h in hooks:
-            lines.append(f"| {h['name']} | {h['status']} |")
+            hid = h.get("id") or "—"
+            lines.append(f"| {h['name']} | `{hid}` | {h['status']} |")
     else:
-        lines.append("| (hook sonucu ayrıştırılamadı) | — |")
+        lines.append("| (hook sonucu ayrıştırılamadı) | — | — |")
 
     # update-config'e özel bölüm: PASS/FAIL + kendi çıktısı (denetim izi).
     lines += ["", "## update-config (config senkronu)", ""]

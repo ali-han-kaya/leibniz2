@@ -22,7 +22,18 @@
               transition: background-color 0.4s, box-shadow 0.4s; }
   .live-dot.connected { background:var(--ok); animation: pulse 1.6s infinite; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  @keyframes failShake { 0%,100%{transform:translateX(0)} 15%{transform:translateX(-3px)}
+    30%{transform:translateX(3px)} 45%{transform:translateX(-2px)}
+    60%{transform:translateX(2px)} 75%{transform:translateX(-1px)} }
+  @keyframes failGlow { 0%,100%{box-shadow:0 0 6px var(--err);border-color:var(--err)}
+    50%{box-shadow:0 0 18px var(--err);border-color:var(--err)} }
   .live-dot.warn { background:var(--warn); }
+  .badge.fail-pulse { animation: failShake 0.5s ease-in-out 3, failGlow 2s ease-in-out infinite; }
+  .lean-alert { display:inline-flex; align-items:center; gap:6px; padding:4px 10px;
+    border-radius:6px; font-size:12px; font-weight:600; color:var(--err);
+    background:rgba(248,81,73,.12); border:1px solid var(--err);
+    animation: failGlow 2s ease-in-out infinite; }
+  .lean-alert.hidden { display:none; }
   main { padding:20px 28px; max-width:1080px; margin:0 auto; }
   section { margin-bottom:24px; }
   h2 { font-size:14px; border-bottom:1px solid var(--border); padding-bottom:4px;
@@ -41,6 +52,9 @@
   .card .label { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:0.05em; }
   .card .value { font-size:18px; font-weight:600; font-family:"SF Mono",monospace; margin-top:4px; }
   .card .sub { color:var(--muted); font-size:11px; margin-top:4px; }
+  .source-card { padding:10px 12px; min-width:100px; }
+  .source-card .label { margin-bottom:2px; }
+  .source-card .value { font-size:15px; }
   table { width:100%; border-collapse:collapse; font-size:13px; }
   th, td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--border); }
   th { color:var(--muted); font-weight:600; background:#161b22; }
@@ -49,6 +63,21 @@
   pre { background:#161b22; border:1px solid var(--border); border-radius:6px;
         padding:12px; overflow:auto; font-size:11px; line-height:1.4;
         max-height:420px; margin:0; white-space:pre-wrap; }
+  .rh-over { display:inline-block; padding:0 6px; border-radius:8px;
+             background:var(--err); color:#fff; font-size:10px; font-weight:700;
+             border:1px solid var(--err); margin-left:6px; }
+  .rh-row { cursor:pointer; padding:1px 4px; border-radius:3px;
+            transition:background 0.15s; }
+  .rh-row:hover { background:rgba(88,166,255,.1); }
+  .rh-row:active { background:rgba(88,166,255,.2); }
+  .rh-filter { display:flex; gap:4px; align-items:center; margin-bottom:4px; }
+  .rh-filter button { background:#21262d; color:var(--muted); border:1px solid var(--border);
+    padding:2px 8px; border-radius:4px; cursor:pointer; font-size:11px; font-weight:600; }
+  .rh-filter button.active { color:#fff; border-color:var(--accent); background:rgba(88,166,255,.15); }
+  .rh-filter button.active[data-f="all"] { border-color:var(--muted); }
+  .rh-filter button.active[data-f="PASS"] { border-color:var(--ok); color:var(--ok); background:rgba(63,185,80,.15); }
+  .rh-filter button.active[data-f="FAIL"] { border-color:var(--err); color:var(--err); background:rgba(248,81,73,.15); }
+  .rh-filter button.active[data-f="P0"] { border-color:var(--err); color:var(--err); background:rgba(248,81,73,.1); }
   pre .err { color:var(--err); }
   pre .ok  { color:var(--ok); }
   pre .muted { color:var(--muted); }
@@ -77,6 +106,8 @@
          font-size:12px; line-height:1.5; color:var(--fg);
          box-shadow:0 8px 24px rgba(0,0,0,.5); max-width:300px;
          white-space:pre; display:none; }
+  .tip .tt-over { color:var(--err); font-weight:600; }
+  .tip .tt-under { color:var(--ok); }
   a { color:var(--accent); text-decoration:none; }
   a:hover { text-decoration:underline; }
   button { background:var(--accent); color:#fff; border:0; padding:6px 14px;
@@ -101,27 +132,58 @@
     <div id="precommit-hooks" style="font-size:12px;color:#888;padding:2px 0 6px 0"></div>
     <div id="k15-sidecar" style="font-size:11px;color:#999;padding:0 0 4px 0"></div>
     <div class="badges" id="badges">
-      <span class="badge unknown">K1-K7: ?</span>
       <span class="badge unknown">K8 Z3: ?</span>
       <span class="badge unknown">K9 Lean: ?</span>
       <span class="badge unknown">Beth 1953: ?</span>
       <span class="badge unknown">refs: ?</span>
     </div>
+    <div id="lean-alert-container" style="padding:2px 0 4px 0"><span id="lean-alert" class="lean-alert hidden">⚠ K9 Lean: FAIL — ispat zinciri kırık</span></div>
+    <div id="klayers-panel" style="display:flex;flex-wrap:wrap;gap:4px;margin:4px 0 8px 0;font-size:11px">
+      <span class="muted">K-layers: bekleniyor…</span>
+    </div>
     <div class="grid" id="metrics">
       <div class="card"><div class="label">Verdict</div><div class="value" id="m-verdict">—</div><div class="sub" id="m-ts">no run yet</div></div>
       <div class="card"><div class="label">P0 / P1 findings</div><div class="value" id="m-p0p1">— / —</div><div class="sub">fail-closed gate</div></div>
       <div class="card"><div class="label">Run duration</div><div class="value" id="m-dur">—</div><div class="sub">verify_delivery.py --full</div></div>
-      <div class="card"><div class="label">Budget (universal)</div><div class="value" id="m-budget">—</div><div class="sub" id="m-budget-sub">limit $30</div></div>
+      <div class="card"><div class="label">Budget (universal)</div><div class="value" id="m-budget">—</div><div class="sub" id="m-budget-sub">limit —</div></div>
       <div class="card"><div class="label">Budget ratios</div><div class="value" id="m-br" style="font-size:12px">—</div><div class="sub">bytes/token · text/pdf/archive/binary</div></div>
       <div class="card"><div class="label">Type bytes</div><div class="value" id="m-tb" style="font-size:12px">—</div><div class="sub" id="m-tb-sub">iç zip kırılımı</div></div>
-      <div class="card"><div class="label">PDF pages / refs</div><div class="value" id="m-pdf">— / —</div><div class="sub">33 / 64 expected</div></div>
+      <div class="card"><div class="label">PDF pages</div><div class="value" id="m-pages">—</div><div class="sub">expected 33</div></div>
+      <div class="card"><div class="label">Reference count</div><div class="value" id="m-refs">—</div><div class="sub">64 expected</div></div>
       <div class="card"><div class="label">PDF metadata-stripped</div><div class="value" id="m-meta" style="font-size:11px">—</div><div class="sub" id="m-meta-sub">qpdf</div></div>
     </div>
     <div id="findings-panel" style="margin-top:8px"></div>
   </section>
 
   <section>
+    <h2>CLI override <span class="ts" id="cov-ts"></span></h2>
+    <div class="card" style="padding:12px" id="cov-body">
+      <div class="muted">veri bekleniyor…</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Mirror sync (K17) <span class="ts" id="mirror-ts"></span></h2>
+    <div class="card" style="padding:12px" id="mirror-body">
+      <div class="muted">veri bekleniyor…</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Pattern drift <span class="ts" id="pattern-drift-ts"></span></h2>
+    <div class="card" style="padding:12px" id="pattern-drift-body">
+      <div class="muted">veri bekleniyor…</div>
+    </div>
+  </section>
+
+  <section>
     <h2>P0 / P1 trend — son 100 run <span class="ts" id="trend-count"></span></h2>
+    <div id="budget-over-banner" class="err" role="alert"
+         style="display:none;margin:6px 0 2px;padding:6px 10px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer"
+         onclick="toggleBudgetOverDetail()" title="Aşım yapan run'ları göster/gizle">
+      <span id="budget-over-summary"></span><span class="ts" id="budget-over-caret" style="margin-left:6px">▸</span>
+      <div id="budget-over-detail" style="display:none;margin-top:6px;font-weight:400;font-family:'SF Mono',monospace;font-size:11px;line-height:1.6;white-space:pre"></div>
+    </div>
     <div class="card" style="padding:10px">
       <svg id="trend" viewBox="0 0 1160 240" width="100%" height="240" role="img"
            aria-label="P0/P1 + duration + budget zaman serisi grafiği"></svg>
@@ -138,8 +200,14 @@
     </div>
     <div class="z3row">
       <span class="z3label">Bütçe</span>
-      <div class="z3bar"><div id="budget-fill" class="z3fill"></div></div>
+      <div class="z3bar" style="position:relative">
+        <div id="budget-fill" class="z3fill"></div>
+        <div id="budget-limit-line" style="display:none;position:absolute;top:0;width:2px;height:100%;background:#d29922;left:100%" title="Limit: $30"></div>
+      </div>
       <span id="budget-count" class="z3count">—</span>
+      <canvas id="budget-spark" width="180" height="20"
+              style="width:180px;height:20px;border-radius:3px;background:#21262d;border:1px solid var(--border);vertical-align:middle"
+              title="Son run'ların bütçe değerleri (yeşil=limit altı, kırmızı=aşım, turuncu kesikli=limit)"></canvas>
     </div>
     <pre id="runstream" class="runstream">—</pre>
     <div class="ts" style="margin-top:4px;font-size:11px">
@@ -152,6 +220,12 @@
 
   <section>
     <h2>Run history <span class="ts" id="run-history-count"></span></h2>
+    <div class="rh-filter">
+      <button data-f="all" onclick="setRhFilter('all')">all</button>
+      <button data-f="PASS" onclick="setRhFilter('PASS')">PASS</button>
+      <button data-f="FAIL" onclick="setRhFilter('FAIL')">FAIL</button>
+      <button data-f="P0" onclick="setRhFilter('P0')">P0</button>
+    </div>
     <div id="run-history" style="max-height:240px;overflow-y:auto;font-size:12px;line-height:1.6"></div>
   </section>
 
@@ -182,13 +256,15 @@
       <div class="card"><div class="label">Mismatch</div><div class="value" id="ro-mis">—</div><div class="sub">yanlış eşleşme (P1)</div></div>
       <div class="card"><div class="label">Coverage</div><div class="value" id="ro-cov">—</div><div class="sub">verified / total yüzdesi</div></div>
     </div>
+    <div class="grid" id="ro-source-cards"></div>
     <div class="card" style="padding:12px" id="ro-sources">
       <div class="muted">veri bekleniyor…</div>
     </div>
   </section>
 
   <section>
-    <h2>Reference verification trend <span class="ts" id="refs-trend-count"></span></h2>
+    <h2>Reference verification trend <span class="ts" id="refs-trend-count"></span>
+      <span class="badge unknown" id="refs-trend-badge">tam kapsam: veri yok</span></h2>
     <div class="card" style="padding:10px">
       <svg id="refs-trend" viewBox="0 0 1160 240" width="100%" height="240" role="img"
            aria-label="verified/total zaman serisi grafiği"></svg>
@@ -231,7 +307,7 @@
       <tbody>
         <tr><td>GitHub Actions</td><td><code>.github/workflows/verify.yml</code></td><td>4 job (verify · symbolic · lean · reports)</td></tr>
         <tr><td>Pre-commit hook</td><td><code>.pre-commit-config.yaml</code></td><td>3 hook (verify-delivery · verify-delivery-symbolic · verify-delivery-lean)</td></tr>
-        <tr><td>Single-command gate</td><td><code>verify_delivery.py --full</code></td><td>K1-K9 + CrossRef/SEP + bütçe</td></tr>
+        <tr><td>Single-command gate</td><td><code>verify_delivery.py --full</code></td><td>K1-K14 + CrossRef/SEP + bütçe</td></tr>
       </tbody>
     </table>
   </section>
@@ -244,23 +320,50 @@
 
 <script>
 "use strict";
+// Service worker: Freebuff Electron webview'de cache'i bypass et.
+// skipWaiting + clients.claim ile yeni sürüm sayfa yeniden yüklenmeden
+// devralir; fetch handler'ı tüm isteklere no-cache zorlar. API endpoint'leri
+// (/api/*) network-first, cache'e dokunmaz.
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js', { scope: '/' })
+    .then((reg) => console.log('sw registered:', reg.scope))
+    .catch(() => {});  // sw.js yoksa sessizce devam (non-Electron ortam/CI)
+}
 const $ = (id) => document.getElementById(id);
 let evtSource = null;
 let lastTs = 0;
 let reconnectDelay = 1000;
 const MAX_RECONNECT_DELAY = 30000;
+// Bütçe limiti ($) — TEK KAYNAK: /api/latest `budget.limit` (etkin config
+// budget_usd aynası). Snapshot gelince applySnapshot senkronlar; stream'deki
+// [BÜTÇE] satırı da günceller. 30.0 yalnızca snapshot ÖNCESİ fallback'tir.
+let BUDGET_LIMIT = 30.0;
 
 function fmtBytes(b) {
   if (b == null) return "—";
   if (b > 1048576) return (b/1048576).toFixed(2) + " MB";
   return Math.round(b/1024) + " KB";
 }
+// Bütçe limiti gösterimi: tam sayıysa "30", değilse 2 ondalık ("27.50").
+function fmtLimit(v) {
+  if (v == null || !isFinite(v)) return "—";
+  return (v % 1 === 0) ? String(v) : v.toFixed(2);
+}
+
 function fmtTs(iso) {
   if (!iso) return "no run yet";
   try {
     const d = new Date(iso);
     return d.toLocaleTimeString() + " (" + iso.split("T")[1].slice(0,5) + " UTC)";
   } catch(e) { return iso; }
+}
+// Süre formatı: 65 → "1m05s", 3600 → "1h00m", 3 → "3s"
+function fmtDuration(s) {
+  if (s == null || !isFinite(s)) return "—";
+  const sec = Math.round(s);
+  if (sec < 60) return sec + "s";
+  if (sec < 3600) return Math.floor(sec / 60) + "m" + String(sec % 60).padStart(2, "0") + "s";
+  return Math.floor(sec / 3600) + "h" + String(Math.floor((sec % 3600) / 60)).padStart(2, "0") + "m";
 }
 function setLive(state) {
   const dot = $("live-dot"), txt = $("live-status");
@@ -312,16 +415,87 @@ function escapeHTML(s) {
 // ---- P0/P1 trend (son 100 run) ----
 let trendCache = [];
 
+// BÜTÇE AŞIMI şeridi: trend geçmişinde budget_usd > BUDGET_LIMIT olan run
+// varsa (veya canlı akış son bütçesi limiti aştıysa) trend panelinin
+// üstünde kırmızı uyarı gösterir; aşım yoksa gizli kalır. Şeride tıklanınca
+// aşım yapan run'ların listesi açılır (genişletilebilir detay).
+let budgetOverRuns = [];
+function budgetOverDetailRows(over) {
+  // ts · $budget (limit $X üstünde) — en yeni üstte; 30 ile sınırlı.
+  const rows = over.slice().reverse();
+  const cap = 30;
+  const shown = rows.slice(0, cap).map(r => {
+    const t = r.ts ? new Date(r.ts).toLocaleString() : "?";
+    const amt = r.budget_usd != null ? "$" + r.budget_usd.toFixed(2) : "$?";
+    return escapeHTML(t) + " · " + amt + " (limit $" + fmtLimit(BUDGET_LIMIT) + " üstünde)";
+  });
+  if (rows.length > cap) shown.push("… +" + (rows.length - cap) + " run daha");
+  return shown.join("\n");
+}
+function toggleBudgetOverDetail() {
+  const det = $("budget-over-detail"), caret = $("budget-over-caret");
+  if (!det) return;
+  const open = det.style.display !== "none";
+  det.style.display = open ? "none" : "block";
+  if (caret) caret.textContent = open ? "▸" : "▾";
+}
+function updateBudgetOverBanner() {
+  const el = $("budget-over-banner");
+  if (!el) return;
+  const rows = trendCache || [];
+  const over = rows.filter(r => r.budget_usd != null && r.budget_usd > BUDGET_LIMIT);
+  const liveOver = budgetState && budgetState.est != null && budgetState.limit
+    && budgetState.est > budgetState.limit;
+  if (!over.length && !liveOver) {
+    el.style.display = "none";
+    budgetOverRuns = [];
+    return;
+  }
+  const bits = [];
+  if (over.length) {
+    const worst = over.reduce((a, b) => (a.budget_usd > b.budget_usd ? a : b));
+    const t = worst.ts ? new Date(worst.ts).toLocaleString() : "?";
+    bits.push(`${over.length} run limiti aştı · en yüksek $${worst.budget_usd.toFixed(2)} @ ${t}`);
+  }
+  if (liveOver) {
+    bits.push(`CANLI $${budgetState.est.toFixed(2)} > limit $${fmtLimit(budgetState.limit)}`);
+  }
+  el.style.display = "block";
+  budgetOverRuns = over;
+  const sum = $("budget-over-summary");
+  if (sum) sum.textContent = "🔴 BÜTÇE AŞIMI — " + bits.join(" · ");
+  const det = $("budget-over-detail");
+  if (det) {
+    det.style.display = "none";  // her güncellemede kapalı başla
+    const liveLine = liveOver
+      ? "CANLI $" + budgetState.est.toFixed(2) + " > limit $" + fmtLimit(budgetState.limit)
+      : "";
+    det.innerHTML = budgetOverDetailRows(over) +
+      (over.length && liveLine ? "\n" : "") + escapeHTML(liveLine);
+  }
+  const caret = $("budget-over-caret");
+  if (caret) caret.textContent = "▸";
+}
+
 function renderTrend(rows) {
   const svg = $("trend");
   const legend = $("trend-legend");
   if (!rows || rows.length === 0) {
     svg.innerHTML = "";
     legend.textContent = "henüz veri yok — ilk run bekleniyor";
+    updateBudgetOverBanner();
     return;
   }
   trendCache = rows;
-  const W = 1160, H = 240, PL = 44, PR = 212, PT = 12, PB = 32;
+  // Bütçe sparkline'ı başlat: henüz canlı akıştan beslenmediyse
+  // (ilk yükleme), trend verisindeki son run'lardan doldur.
+  if (budgetHistory.length === 0) {
+    budgetHistory = rows
+      .filter(r => r.budget_usd != null && isFinite(r.budget_usd))
+      .map(r => ({ est: r.budget_usd, limit: BUDGET_LIMIT }));
+    renderBudgetSparkline();
+  }
+  const W = 1160, H = 240, PL = 44, PR = 248, PT = 12, PB = 32;
   const iw = W - PL - PR, ih = H - PT - PB;
   const plotRight = PL + iw;
   const n = rows.length;
@@ -331,9 +505,16 @@ function renderTrend(rows) {
   const maxP = Math.max(1, ...rows.map(r => Math.max(r.p0||0, r.p1||0)));
   const durs = rows.map(r => r.duration_s).filter(v => v != null && isFinite(v));
   const buds = rows.map(r => r.budget_usd).filter(v => v != null && isFinite(v));
+  const lims = rows.map(r => r.budget_limit).filter(v => v != null && isFinite(v));
+  // Limit DEĞİŞTİYSE (config geçmişi) bütçe ekseni limitleri de kapsar —
+  // basamak (step) çizgisi değişimi görünür yapsın; sabit limitse eksen
+  // gözlenen bütçeye göre kalır (limit yine üst kenara kıstırılır).
+  const limsVary = lims.length > 1 && Math.min(...lims) !== Math.max(...lims);
   const ztots = rows.map(r => r.z3_total).filter(v => v != null && isFinite(v));
   const maxDur = durs.length ? Math.max(...durs, 1) : 1;
-  const maxBud = buds.length ? Math.max(...buds, 0.01) : 1;
+  const maxBud = buds.length
+    ? Math.max(...buds, 0.01, ...(limsVary ? lims : []))
+    : (limsVary ? Math.max(...lims, 0.01) : 1);
   const maxZ = ztots.length ? Math.max(...ztots, 1) : 1;
 
   const x = (i) => PL + (n === 1 ? iw / 2 : iw * i / (n - 1));
@@ -368,17 +549,39 @@ function renderTrend(rows) {
   if (budPts.length) {
     parts.push(`<polyline fill="none" stroke="#bc8cff" stroke-width="2" points="${budPts.join(" ")}"/>`);
   }
-  // Bütçe limiti referans çizgisi ($30) — verify_delivery.config.json
-  // budget_usd aynası. Bütçe eksenindeki gerçek konumunda çizilir; gözlenen
-  // bütçe limitin çok altındaysa (0..maxBud ölçeği) üst kenara kıstırılıp
-  // "↑" ile işaretlenir — altı güvenli bölge (yeşil), üstü aşım (kırmızı kare).
-  const BUDGET_LIMIT = 30.0;
+  // Per-run bütçe limiti — zaman serisi (step, turuncu düz): config limiti
+  // run'lar arasında DEĞİŞTİYSE basamak görünür (eksen limitleri kapsar).
+  // Sabit limitse step çizilmez — güncel referans çizgisi (kesikli) zaten
+  // o değeri gösterir; eski run'larda budget_limit yoksa o aralık atlanır.
+  if (limsVary) {
+    const stepPts = [];
+    for (let i = 0; i < rows.length; i++) {
+      const lv = rows[i].budget_limit;
+      if (lv == null || !isFinite(lv)) continue;
+      const yv = yB(lv);
+      if (yv == null) continue;
+      stepPts.push(`${x(i)},${yv}`);
+      if (i + 1 < rows.length) {
+        const nv = rows[i + 1].budget_limit;
+        if (nv != null && isFinite(nv)) stepPts.push(`${x(i + 1)},${yv}`);
+      }
+    }
+    if (stepPts.length) {
+      parts.push(`<polyline fill="none" stroke="#ffa657" stroke-width="2" points="${stepPts.join(" ")}"/>`);
+    }
+  }
+  // Bütçe limiti referans çizgisi — /api/latest `budget.limit`'ten gelen
+  // BUDGET_LIMIT (etkin config budget_usd aynası; snapshot yoksa 30.0
+  // fallback). Bütçe eksenindeki gerçek konumunda çizilir; gözlenen bütçe
+  // limitin çok altındaysa (0..maxBud ölçeği) üst kenara kıstırılıp "↑" ile
+  // işaretlenir — altı güvenli bölge (yeşil), üstü aşım (kırmızı kare).
   if (buds.length) {
     const rawLimitY = yB(BUDGET_LIMIT);
     const offScale = rawLimitY < PT;          // limit ölçeğin üstünde kaldı
     const limitY = offScale ? PT + 3 : rawLimitY;
+    const limitLbl = "limit $" + fmtLimit(BUDGET_LIMIT);
     parts.push(`<line x1="${PL}" y1="${limitY}" x2="${plotRight}" y2="${limitY}" stroke="#ffa657" stroke-width="1.5" stroke-dasharray="6 4"/>`);
-    parts.push(`<text x="${budAxisX + 6}" y="${limitY - 3}" fill="#ffa657" font-size="9">${offScale ? "limit $30 ↑" : "limit $30"}</text>`);
+    parts.push(`<text x="${budAxisX + 6}" y="${limitY - 3}" fill="#ffa657" font-size="9">${offScale ? limitLbl + " ↑" : limitLbl}</text>`);
     // Aşım işaretleri: limiti geçen bütçe noktaları kırmızı kare (üstü = aşım)
     rows.forEach((r, i) => {
       if (r.budget_usd != null && r.budget_usd > BUDGET_LIMIT) {
@@ -398,9 +601,31 @@ function renderTrend(rows) {
   if (zFailPts.length) {
     parts.push(`<polyline fill="none" stroke="#f85149" stroke-width="2" stroke-dasharray="3 3" points="${zFailPts.join(" ")}"/>`);
   }
-  // sağ eksenler: duration (iç) + budget (orta) + Z3 (dış)
+  // K9 Lean PASS oranı (%) — beşinci eksen: lean_ok true → 100, false → 0, null → skip
+  const leans = rows.map(r => r.lean_ok === true ? 100 : r.lean_ok === false ? 0 : null);
+  const leanVals = leans.filter(v => v != null && isFinite(v));
+  const hasLean = leanVals.length > 0;
+  const maxLean = hasLean ? 100 : 1;
+  const yL = (v) => (v == null || !isFinite(v)) ? null : PT + ih - (ih * v / maxLean);
+  const leanPts = rows.map((r,i) => { const y = yL(leans[i]); return y == null ? null : `${x(i)},${y}`; }).filter(Boolean);
+  if (leanPts.length) {
+    parts.push(`<polyline fill="none" stroke="#e055d2" stroke-width="2.5" stroke-dasharray="5 2" points="${leanPts.join(" ")}"/>`);
+  }
+  // Lean PASS/FAIL noktaları (çizgi üstünde): yeşil daire=PASS, kırmızı kare=FAIL
+  rows.forEach((r, i) => {
+    const cx = x(i);
+    const ly = yL(leans[i]);
+    if (ly == null) return;
+    if (r.lean_ok === true) {
+      parts.push(`<circle cx="${cx}" cy="${ly}" r="3" fill="#3fb950"/>`);
+    } else if (r.lean_ok === false) {
+      parts.push(`<rect x="${cx-3}" y="${ly-3}" width="6" height="6" fill="#f85149"/>`);
+    }
+  });
+  // sağ eksenler: duration (iç) + budget (orta) + Z3 (dış) + Lean (en dış)
   const durAxisX = plotRight + 26;
   const zAxisX = plotRight + 150;
+  const leanAxisX = plotRight + 192;
   if (durs.length) {
     parts.push(`<line x1="${durAxisX}" y1="${PT}" x2="${durAxisX}" y2="${PT+ih}" stroke="#58a6ff" stroke-width="1" opacity="0.5"/>`);
     parts.push(`<text x="${durAxisX+6}" y="${PT+4}" fill="#58a6ff" font-size="9">${maxDur.toFixed(0)}s</text>`);
@@ -415,6 +640,11 @@ function renderTrend(rows) {
     parts.push(`<line x1="${zAxisX}" y1="${PT}" x2="${zAxisX}" y2="${PT+ih}" stroke="#3fb950" stroke-width="1" opacity="0.5"/>`);
     parts.push(`<text x="${zAxisX+6}" y="${PT+4}" fill="#3fb950" font-size="9">${maxZ} PASS</text>`);
     parts.push(`<text x="${zAxisX+6}" y="${PT+ih+2}" fill="#3fb950" font-size="9">0</text>`);
+  }
+  if (hasLean) {
+    parts.push(`<line x1="${leanAxisX}" y1="${PT}" x2="${leanAxisX}" y2="${PT+ih}" stroke="#e055d2" stroke-width="1" opacity="0.5"/>`);
+    parts.push(`<text x="${leanAxisX+6}" y="${PT+4}" fill="#e055d2" font-size="9">100%</text>`);
+    parts.push(`<text x="${leanAxisX+6}" y="${PT+ih+2}" fill="#e055d2" font-size="9">0%</text>`);
   }
   // noktalar (verdict rengi)
   rows.forEach((r, i) => {
@@ -437,13 +667,18 @@ function renderTrend(rows) {
     parts.push(`<text x="${x(i)}" y="${H-12}" fill="#8b949e" font-size="10" text-anchor="middle">${lbl}</text>`);
   });
   svg.innerHTML = parts.join("");
+  const last = rows[n-1];
+  const leanPct = last.lean_ok === true ? "100%" : (last.lean_ok === false ? "0%" : "?");
   legend.textContent = "Kırmızı = P0 · Sarı = P1 · Yeşil nokta = PASS · Mavi (kesikli) = duration_s · Mor = budget_usd · " +
     "Yeşil çizgi = Z3 PASS · Kırmızı (noktalı) = Z3 FAIL · " +
-    "Turuncu (kesikli) = bütçe limiti $30 — altı güvenli, üstü (kırmızı kare) aşım · " +
-    "aralık: " + (rows[0].ts ? new Date(rows[0].ts).toLocaleString() : "?") +
-    " → " + (rows[n-1].ts ? new Date(rows[n-1].ts).toLocaleString() : "?") +
+    "Pembe (kesikli) = Lean PASS oranı (son: " + leanPct + ") · " +
+    "Turuncu (kesikli) = güncel limit $" + fmtLimit(BUDGET_LIMIT) + " (config'ten) — altı güvenli, üstü (kırmızı kare) aşım" +
+    (limsVary ? " · Turuncu (düz) = per-run limit (config değişimi)" : "") +
+    " · aralık: " + (rows[0].ts ? new Date(rows[0].ts).toLocaleString() : "?") +
+    " → " + (last.ts ? new Date(last.ts).toLocaleString() : "?") +
     ` · ${n} run`;
   $("trend-count").textContent = `(${n} run)`;
+  updateBudgetOverBanner();
 }
 
 // ---- trend hover tooltip ----
@@ -456,19 +691,65 @@ function fmtTrendBudget(v) {
   if (v == null || !isFinite(v)) return "—";
   return "$" + v.toFixed(2);
 }
+// Tooltip bütçe satırına limit altı/üstü durumu: "(limit $30 altında)"
+// veya "(limit $30 üstünde — AŞIM)". lim verilmezse global BUDGET_LIMIT
+// (dinamik config aynası); bütçe veya limit yoksa boş döner.
+function budgetLimitNote(v, lim) {
+  const l = (lim != null && isFinite(lim)) ? lim : BUDGET_LIMIT;
+  if (v == null || !isFinite(v) || l == null || !isFinite(l)) return "";
+  const limTxt = "$" + fmtLimit(l);
+  return v > l ? " (limit " + limTxt + " üstünde — AŞIM)" : " (limit " + limTxt + " altında)";
+}
+// Tooltip bütçe satırı rengi: aşım kırmızı (tt-over), limit altı yeşil
+// (tt-under), veri/limit yoksa renksiz. lim verilmezse global BUDGET_LIMIT.
+function budgetTipColor(v, lim) {
+  const l = (lim != null && isFinite(lim)) ? lim : BUDGET_LIMIT;
+  if (v == null || !isFinite(v) || l == null || !isFinite(l)) return "";
+  return v > l ? "tt-over" : "tt-under";
+}
+// Run'un KULLANDIĞI bütçe limiti: history satırında budget_limit varsa o
+// (o run hangi config'le koştuysa), yoksa global BUDGET_LIMIT (eski run'lar).
+function runBudgetLimit(r) {
+  if (r.budget_limit != null && isFinite(r.budget_limit)) return r.budget_limit;
+  return BUDGET_LIMIT;
+}
+// Ortak trend tooltip gövdesi — iki trend grafiği (P0/P1 + refs) aynı
+// formatı kullanır: ts → duration → budget (renkli limit durumu) → config
+// (hangi limit/yöntemle koştu). Verdict her grafik kendi kaynağından ekler
+// (P0/P1: p0/p1; refs: r.verdict).
+function trendTipHeader(r) {
+  const ts = r.ts ? new Date(r.ts).toLocaleString() : "?";
+  const lim = runBudgetLimit(r);
+  const cfgBits = [];
+  if (lim != null && isFinite(lim)) cfgBits.push("limit $" + fmtLimit(lim));
+  if (r.budget_method) cfgBits.push("yöntem " + r.budget_method);
+  if ((r.cli_override_count || 0) > 0) cfgBits.push("CLI override");
+  return [
+    ts,
+    "duration: " + fmtTrendDur(r.duration_s),
+    "<span class=\"" + budgetTipColor(r.budget_usd, lim) + "\">budget  : " +
+      fmtTrendBudget(r.budget_usd) + budgetLimitNote(r.budget_usd, lim) + "</span>",
+    "config  : " + (cfgBits.length ? cfgBits.join(" · ") : "—"),
+  ];
+}
 function showTrendTip(i, ev) {
   const r = trendCache[i];
   if (!r) return;
   const verdict = (r.p0 || 0) > 0 ? "FAIL (P0)" : ((r.p1 || 0) > 0 ? "WARN (P1)" : "PASS");
-  const ts = r.ts ? new Date(r.ts).toLocaleString() : "?";
   const tip = $("tip");
-  tip.textContent =
-    ts + "\n" +
+  let leanLine = "lean    : —";
+  if (r.lean_ok === true) leanLine = "lean    : PASS (100%)";
+  else if (r.lean_ok === false) leanLine = "lean    : FAIL (0%)" + (r.lean_detail ? " — " + escapeHTML(r.lean_detail) : "");
+  const head = trendTipHeader(r);
+  tip.innerHTML =
+    head[0] + "\n" +
     "verdict : " + verdict + "\n" +
-    "duration: " + fmtTrendDur(r.duration_s) + "\n" +
-    "budget  : " + fmtTrendBudget(r.budget_usd) + "\n" +
+    head[1] + "\n" +
+    head[2] + "\n" +
+    head[3] + "\n" +
     "z3      : " + (r.z3_passed != null ? r.z3_passed + "/" + (r.z3_total != null ? r.z3_total : "?") +
-      ((r.z3_failed || 0) > 0 ? " (" + r.z3_failed + " FAIL)" : "") : "—");
+      ((r.z3_failed || 0) > 0 ? " (" + r.z3_failed + " FAIL)" : "") : "—") + "\n" +
+    leanLine;
   tip.style.display = "block";
   positionTip(ev);
 }
@@ -487,20 +768,58 @@ function positionTip(ev) {
 }
 
 // ---- Reference verification trend (verified/total zaman serisi) ----
+// "Tam kapsam" rozeti mantığı (saf — test_refs_trend_badge.py ile senkron).
+// rows: [{refs_verified, refs_total}] (sıralı, en yeni sonda). Döner
+// {cls: "ok"|"warn"|"unknown", text}. Son run full (verified===total) ise
+// yeşil rozet + kesintisiz full run serisi; değilse amber; veri yoksa gri.
+function refsTrendBadge(rows) {
+  const have = (rows || []).filter(r => r.refs_verified != null && r.refs_total != null);
+  if (!have.length) return { cls: "unknown", text: "tam kapsam: veri yok" };
+  const last = have[have.length - 1];
+  const full = (r) => r.refs_verified === r.refs_total;
+  let streak = 0;
+  for (let i = have.length - 1; i >= 0 && full(have[i]); i--) streak++;
+  if (full(last)) {
+    return { cls: "ok", text: "✓ TAM KAPSAM " + last.refs_verified + "/" + last.refs_total +
+      (streak > 1 ? " · " + streak + " run" : "") };
+  }
+  return { cls: "warn", text: "kapsam eksik " + last.refs_verified + "/" + last.refs_total };
+}
 let refsTrendCache = [];
+// by_source kırılımı tooltip'te de gösterildiğinden SRC_NAMES modül
+// kapsamında olmalı (renderRefsTrend içindeki SRC_ORDER/SRC_COLORS ile
+// karışmaz — onlar yalnızca çizimde kullanılır).
+const SRC_NAMES = { crossref: "CrossRef", openlibrary: "OpenLibrary", sep: "SEP",
+                    archive: "Internet Archive", internetarchive: "Internet Archive",
+                    perseus: "Perseus", hathitrust: "HathiTrust", url: "URL" };
 function showRefsTrendTip(i, ev) {
   const r = refsTrendCache[i];
   if (!r) return;
   const verdict = r.verdict || ((r.p0 || 0) > 0 ? "FAIL (P0)"
                 : ((r.p1 || 0) > 0 ? "WARN (P1)" : "PASS"));
-  const ts = r.ts ? new Date(r.ts).toLocaleString() : "?";
   const tip = $("tip");
-  tip.textContent =
-    ts + "\n" +
+  const head = trendTipHeader(r);  // ortak format: ts → duration → budget → config
+  let lines = [
+    head[0],
+    "verdict : " + verdict,
+    head[1],
+    head[2],
+    head[3],
     "refs    : " + (r.refs_verified != null ? r.refs_verified : "?") + " / " +
-      (r.refs_total != null ? r.refs_total : "?") + "\n" +
-    "verdict : " + verdict + "\n" +
-    "mismatch: " + (r.refs_mismatch || 0);
+      (r.refs_total != null ? r.refs_total : "?"),
+    "mismatch: " + (r.refs_mismatch || 0),
+  ];
+  // by_source kırılımı — kaynak bazında hangi kaynaktan kaç doğrulama
+  const bs = r.refs_by_source || {};
+  const srcKeys = Object.keys(bs).filter(k => (bs[k] || 0) > 0);
+  if (srcKeys.length > 0) {
+    lines.push("── by_source ──");
+    srcKeys.sort((a,b) => (bs[b]||0) - (bs[a]||0)).forEach(k => {
+      const nm = SRC_NAMES[k] || k;
+      lines.push("  " + nm + ": " + (bs[k] || 0));
+    });
+  }
+  tip.innerHTML = lines.join("\n");
   tip.style.display = "block";
   positionTip(ev);
 }
@@ -513,6 +832,9 @@ function renderRefsTrend(rows) {
     svg.innerHTML = "";
     legend.textContent = "çevrimiçi referans verisi yok — bu run'larda --check-references veri üretmedi";
     $("refs-trend-count").textContent = "";
+    const b0 = refsTrendBadge([]);
+    const bEl0 = $("refs-trend-badge");
+    if (bEl0) { bEl0.className = "badge " + b0.cls; bEl0.textContent = b0.text; }
     return;
   }
   const W = 1160, H = 240, PL = 44, PR = 110, PT = 12, PB = 32;
@@ -537,8 +859,10 @@ function renderRefsTrend(rows) {
   // openlibrary/archive/perseus + kalanlar "diğer" olarak toplanır.
   const SRC_ORDER = ["crossref", "sep", "openlibrary", "archive", "perseus"];
   const SRC_COLORS = {
-    crossref: "#58a6ff", sep: "#a371f7", openlibrary: "#d29922",
-    archive: "#3fb950", perseus: "#f778ba", diğer: "#8b949e",
+    crossref: "#58a6ff", sep: "#3fb950", openlibrary: "#bc8cff",
+    archive: "#d29922", internetarchive: "#d29922",
+    perseus: "#f85149", hathitrust: "#79c0ff",
+    diğer: "#8b949e", url: "#8b949e",
   };
   const bySrc = have.map(r => {
     const bs = r.refs_by_source || {};
@@ -598,16 +922,21 @@ function renderRefsTrend(rows) {
   svg.innerHTML = parts.join("");
   const last = have[n-1];
   const pct = last.refs_total > 0 ? Math.round(100 * last.refs_verified / last.refs_total) : 0;
-  // by_source seri lejantı (renkli ■ çipler) — yalnızca aktif kaynaklar.
-  const chips = activeSrc
-    .map(s => `<span style="color:${SRC_COLORS[s] || "#8b949e"}">■ ${s}</span>`)
-    .join(" ");
+  // by_source seri lejantı (renkli ■ çipler, son run sayıları ile)
+  const lastSrc = activeSrc.map(s => {
+    const c = bySrc[n-1][s] || 0;
+    return `<span style="color:${SRC_COLORS[s]||"#8b949e"}">■ ${SRC_NAMES[s]||s}:${c}</span>`;
+  }).join(" ");
   legend.innerHTML = "Yeşil = verified · Mavi (kesikli) = total · Kırmızı = mismatch · Son: " +
     `${last.refs_verified}/${last.refs_total} (${pct}%) · ` +
     (have[0].ts ? new Date(have[0].ts).toLocaleString() : "?") +
     " → " + (last.ts ? new Date(last.ts).toLocaleString() : "?") + ` · ${n} run` +
-    (chips ? " · " + chips : "");
+    (lastSrc ? " · " + lastSrc : "");
   $("refs-trend-count").textContent = `(${n} run)`;
+  // "Tam kapsam" rozeti — bugünkü 61/61 serisini yeşil rozetle vurgula.
+  const b = refsTrendBadge(have);
+  const bEl = $("refs-trend-badge");
+  if (bEl) { bEl.className = "badge " + b.cls; bEl.textContent = b.text; }
 }
 
 // ---- refs-trend duration/bought overlay (refs-trend.json'dan bağımsız trend) ----
@@ -653,9 +982,9 @@ function renderRefsTrendDurationBudget(rows) {
     const pts = rows.map((r,i) => { const y = yB(r.budget_usd); return y == null ? null : `${x(i)},${y}`; }).filter(Boolean);
     if (pts.length) parts.push(`<polyline fill="none" stroke="#bc8cff" stroke-width="2" points="${pts.join(" ")}"/>`);
   }
-  // budget limit referans çizgisi ($30)
+  // budget limit referans çizgisi (BUDGET_LIMIT — /api/latest budget.limit)
   if (buds.length) {
-    const limitY = yB(30.0);
+    const limitY = yB(BUDGET_LIMIT);
     const offScale = limitY < PT;
     const ly = offScale ? PT + 3 : limitY;
     parts.push(`<line x1="${PL}" y1="${ly}" x2="${plotRight}" y2="${ly}" stroke="#ffa657" stroke-width="1" stroke-dasharray="6 4" opacity="0.6"/>`);
@@ -677,15 +1006,18 @@ function renderRefsTrendDurationBudget(rows) {
 let runStreamES = null;
 // ---- Bütçe ilerleme çubuğu (stream'deki [BÜTÇE] satırlarından) ----
 let budgetState = null;   // {est, limit} — son bilinen bütçe kalkanı değeri
+let budgetHistory = [];   // [{est, limit}] — son N run'ın bütçe değerleri (sparkline)
 
 function updateBudgetBar() {
   const bar = $("budget-fill"), cnt = $("budget-count");
+  const limitLine = $("budget-limit-line");
   if (!bar || !cnt) return;
   if (!budgetState || !budgetState.limit || !budgetState.est) {
     bar.style.width = "0%";
     bar.className = "z3fill budget";
     cnt.className = "z3count";
     cnt.textContent = "—";
+    if (limitLine) limitLine.style.display = "none";
     return;
   }
   const { est, limit } = budgetState;
@@ -695,15 +1027,84 @@ function updateBudgetBar() {
   bar.className = over ? "z3fill err" : "z3fill budget";
   cnt.className = over ? "z3count" : "z3count ok";
   cnt.textContent = "$" + est.toFixed(2) + " / $" + limit.toFixed(2)
-    + (over ? " · AŞIM" : "");
+    + " (" + pct + "%)" + (over ? " · AŞIM" : "");
+  // Limit çizgisi: bar'ın %100'üne turuncu dikey işaret (over: kırmızı)
+  if (limitLine) {
+    limitLine.style.display = "block";
+    limitLine.style.left = "100%";
+    limitLine.style.background = over ? "#f85149" : "#d29922";
+    limitLine.title = "Limit: $" + fmtLimit(limit) + (over ? " (AŞIM!)" : "");
+  }
+}
+
+// Bütçe sparkline (canvas): son N run'ın bütçe değerlerini mini grafik olarak çizer.
+// Yeşil = limit altı, kırmızı = aşım, turuncu kesikli = limit çizgisi.
+function renderBudgetSparkline() {
+  const cv = $("budget-spark");
+  if (!cv) return;
+  const ctx = cv.getContext("2d");
+  const W = cv.width, H = cv.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const MAX_BARS = 30;
+  const hist = budgetHistory.slice(-MAX_BARS);
+  if (hist.length < 1) {
+    ctx.fillStyle = "#8b949e";
+    ctx.font = "9px monospace";
+    ctx.fillText("—", 4, 14);
+    return;
+  }
+
+  const M = Math.max(...hist.map(h => h.est), 0.01);
+  // limit: her kayıtta aynı limit varsa onu kullan, yoksa $30 varsay
+  const limits = hist.filter(h => h.limit != null && isFinite(h.limit));
+  const limit = limits.length ? limits[limits.length - 1].limit : 30.0;
+  const yMax = Math.max(M, limit) * 1.15;  // %15 boşluk
+
+  const bw = 2;  // bar genişliği
+  const gap = Math.floor((W - 8) / MAX_BARS);  // bar aralığı
+  const padL = 2, padT = 1, padB = 2;
+  const h = H - padT - padB;
+
+  // limit çizgisi (turuncu, kesikli/yatay)
+  const limitY = padT + h - (h * limit / yMax);
+  ctx.strokeStyle = "#d29922";
+  ctx.lineWidth = 1;
+  ctx.setLineDash([3, 2]);
+  ctx.beginPath();
+  ctx.moveTo(0, limitY);
+  ctx.lineTo(W, limitY);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  for (let i = 0; i < hist.length; i++) {
+    const x = padL + i * gap;
+    const barH = Math.max(1, h * hist[i].est / yMax);
+    const y = padT + h - barH;
+    const over = hist[i].est > (hist[i].limit || limit);
+    ctx.fillStyle = over ? "#f85149" : "#3fb950";
+    ctx.fillRect(x, y, bw, barH);
+  }
 }
 
 // "[BÜTÇE] ~175990 token → $1.08 (limit $30.0, …)" → {est:1.08, limit:30}
+// Stream satırındaki limit etkin config'ten geldiği için BUDGET_LIMIT'i de
+// senkronlar — config değişince grafik çizgisi canlı akışta otomatik uyar.
 function scanBudget(line) {
   const m = line.match(/\[BÜTÇE\][^→]*→\s*\$([0-9.]+)\s*\(limit\s*\$([0-9.]+)/);
   if (m) {
     budgetState = { est: parseFloat(m[1]), limit: parseFloat(m[2]) };
+    BUDGET_LIMIT = parseFloat(m[2]);
+    // Sparkline: her yeni run başında önceki est/limit'i history'e push'la
+    // (scanBudget her run'un ilk [BÜTÇE] satırında bir kere çağrılır)
+    if (budgetHistory.length === 0 ||
+        budgetHistory[budgetHistory.length - 1].est !== budgetState.est) {
+      budgetHistory.push({ ...budgetState });
+      if (budgetHistory.length > 60) budgetHistory = budgetHistory.slice(-60);
+    }
     updateBudgetBar();
+    renderBudgetSparkline();
+    updateBudgetOverBanner();  // canlı aşım varsa şerit anında görünsün
   }
 }
 
@@ -753,7 +1154,7 @@ const STREAM_MAX = 600;  // son N run replay edilirken yeterli bağlam kalsın
 function connectStream() {
   const el = $("runstream"), st = $("stream-state");
   if (runStreamES) runStreamES.close();
-  runStreamES = new EventSource("/api/run-stream");
+  runStreamES = new EventSource("/api/run-stream?v=" + (window.BUILD_TS||Date.now()));
   runStreamES.addEventListener("info", (e) => {
     try { const d = JSON.parse(e.data); st.textContent = "bağlı"; } catch(_) {}
   });
@@ -800,7 +1201,8 @@ function connectStream() {
     const p0 = sum && sum.p0 != null ? sum.p0 : 0;
     const p1 = sum && sum.p1 != null ? sum.p1 : 0;
     const bud = sum && sum.budget_usd != null ? "$" + sum.budget_usd.toFixed(2) : "—";
-    const dur = sum && sum.duration_s != null ? " · " + sum.duration_s + "s" : "";
+    const dur = sum && sum.duration_s != null
+      ? " · " + fmtDuration(sum.duration_s) : "";
     const refV = sum && sum.refs_verified != null ? sum.refs_verified : null;
     const refT = sum && sum.refs_total != null ? sum.refs_total : null;
     const refs = refV != null && refT != null ? " · refs " + refV + "/" + refT : "";
@@ -908,25 +1310,71 @@ function renderRefsOnline(d) {
   $("ro-cov").className = "value " + (pct === 100 ? "ok" : "warn");
   if (tsEl) tsEl.textContent = fmtTs(ts);
 
-  const names = { crossref: "CrossRef", openlibrary: "OpenLibrary", sep: "SEP",
-                  archive: "Internet Archive", internetarchive: "Internet Archive",
-                  perseus: "Perseus" };
+  // ---- Shared source maps (source cards + table'da kullanılır) ----
+  const srcColors = { crossref: "#58a6ff", openlibrary: "#bc8cff", sep: "#3fb950",
+                      archive: "#d29922", internetarchive: "#d29922", perseus: "#f85149",
+                      hathitrust: "#79c0ff", url: "#8b949e", handle: "#8b949e",
+                      fallback_openlibrary: "#bc8cff", fallback_loc: "#79c0ff",
+                      fallback_hathitrust: "#79c0ff", "diğer": "#8b949e" };
+  const srcNames = { crossref: "CrossRef", openlibrary: "OpenLibrary", sep: "SEP",
+                     archive: "Internet Archive", internetarchive: "Internet Archive",
+                     perseus: "Perseus", hathitrust: "HathiTrust", url: "URL",
+                     handle: "Handle" };
+  const srcIcons = { crossref: "\ud83d\udd17", openlibrary: "\ud83d\udcda", sep: "\ud83d\udcd6",
+                     archive: "\ud83c\udfdb\ufe0f", internetarchive: "\ud83c\udfdb\ufe0f",
+                     perseus: "\ud83c\udfdb\ufe0f", hathitrust: "\ud83d\udcd8",
+                     url: "\ud83c\udf10", handle: "\ud83d\udcce" };
   const order = ["crossref", "openlibrary", "sep", "archive", "internetarchive", "perseus"];
   const rows = order.filter(k => bySource && bySource[k] != null);
   if (!rows.length) {
     sourcesEl.innerHTML = '<div class="muted">kaynak kırılımı yok (by_source boş)</div>';
+    // Hide cards too
+    const scEl = $("ro-source-cards");
+    if (scEl) scEl.innerHTML = '';
     return;
   }
   const max = Math.max(...rows.map(k => bySource[k]));
-  let html = '<table><thead><tr><th>Source</th><th>Count</th><th style="width:55%">Share</th></tr></thead><tbody>';
+
+  // ---- Source summary cards (colored left border) ----
+  const scEl = $("ro-source-cards");
+  if (scEl) {
+    let cardsHtml = '';
+    for (const k of rows) {
+      const c = bySource[k];
+      const clr = srcColors[k] || "var(--accent)";
+      const icon = srcIcons[k] || "";
+      cardsHtml += '<div class="card source-card" style="border-left:3px solid ' + clr + '">' +
+        '<div class="label">' + icon + ' ' + (srcNames[k] || k) + '</div>' +
+        '<div class="value">' + c + '</div></div>';
+    }
+    scEl.innerHTML = cardsHtml;
+  }
+
+  // ---- Colored table (renk kodlu satırlar + yatay çubuk grafiği) ----
+  const archiveGroup = d.archive_group;
+  let html = '';
+  if (archiveGroup != null && archiveGroup > 0) {
+    html += `<div style="margin-bottom:6px;font-size:0.85em;color:var(--accent)">` +
+      `📚 Archive group: <b>${archiveGroup}</b>` +
+      ` <span class="ts">(archive + loc + hathitrust)</span></div>`;
+  }
+  html += '<table style="border-collapse:collapse;width:100%">' +
+    '<thead><tr><th style="width:24%">Source</th><th style="width:10%">Cnt</th>' +
+    '<th style="width:8%">%</th><th>Bar</th></tr></thead><tbody>';
   for (const k of rows) {
     const c = bySource[k];
     const w = max > 0 ? Math.round(100 * c / max) : 0;
-    html += `<tr><td>${names[k] || k}</td><td>${c}</td><td>` +
-      `<div style="display:flex;align-items:center;gap:8px">` +
-      `<div style="flex:1;height:10px;background:#21262d;border-radius:5px;overflow:hidden">` +
-      `<div style="width:${w}%;height:100%;background:var(--accent)"></div></div>` +
-      `<span class="ts">${w}%</span></div></td></tr>`;
+    const clr = srcColors[k] || "var(--accent)";
+    const icon = srcIcons[k] || "";
+    const nm = srcNames[k] || k;
+    html += '<tr style="border-left:3px solid ' + clr + '">' +
+      '<td style="padding-left:12px">' + icon + ' <b>' + nm + '</b></td>' +
+      '<td style="font-family:monospace;font-weight:600">' + c + '</td>' +
+      '<td style="font-family:monospace" class="ts">' + w + '%</td>' +
+      '<td style="padding:4px 10px 4px 16px">' +
+        '<div style="height:14px;background:#21262d;border-radius:7px;overflow:hidden">' +
+          '<div style="width:' + w + '%;height:100%;background:' + clr +
+            ';border-radius:7px;transition:width 0.4s"></div></div></td></tr>';
   }
   html += '</tbody></table>';
   sourcesEl.innerHTML = html;
@@ -960,6 +1408,151 @@ function renderConfigDiff(cd, ts) {
   }
   h += '</tbody></table>';
   bodyEl.innerHTML = h;
+}
+
+// ---- CLI override panel (son run'un override durumu) ----
+function renderCliOverride(data) {
+  const bodyEl = $("cov-body"), tsEl = $("cov-ts");
+  if (!bodyEl) return;
+  const cov = data && data.cli_overrides;
+  const ts = data && data.ts;
+  if (tsEl) tsEl.textContent = ts ? fmtTs(ts) : "";
+  if (cov == null) {
+    bodyEl.innerHTML = '<div class="muted">veri bekleniyor…</div>';
+    return;
+  }
+  // cov: { budget: {override, file_value, effective}, ... }
+  const items = Object.entries(cov).filter(
+    ([, v]) => v && typeof v === "object");
+  if (!items.length) {
+    bodyEl.innerHTML = '<span class="badge ok">CLI override YOK</span> ' +
+      '<span class="muted">bütçe kalkanı dosya config değerleriyle koştu</span>';
+    return;
+  }
+  const overrides = items.filter(([, v]) => v.override);
+  if (!overrides.length) {
+    // keys var ama override=false (cli_given ama değer aynı)
+    bodyEl.innerHTML = '<span class="badge ok">CLI override YOK</span> ' +
+      '<span class="muted">' + items.length + ' anahtar CLI verildi ama dosya değeriyle aynı</span>';
+    return;
+  }
+  let h = '<span class="badge warn">CLI override VAR ('
+    + overrides.length + ')</span>';
+  h += '<table style="margin-top:8px"><thead><tr><th>Anahtar</th>' +
+    '<th>Dosya değeri</th><th>CLI değeri</th></tr></thead><tbody>';
+  for (const [key, v] of overrides) {
+    h += '<tr><td><code>' + escapeHTML(key) + '</code></td>' +
+      '<td><code>' + escapeHTML(fmtVal(v.file_value)) + '</code></td>' +
+      '<td><code style="color:var(--warn)">' +
+      escapeHTML(fmtVal(v.effective)) + '</code></td></tr>';
+  }
+  h += '</tbody></table>';
+  bodyEl.innerHTML = h;
+}
+
+// ---- Mirror sync panel (K17) — son run'un mirror durumu ----
+// Kaynak: /api/latest `mirror_sync` (verify --json 'mirror' raporu).
+// Gösterir: K17 exit kodu + GÜNCEL/BAYAT rozeti + BAYAT/EKSİK dosya listesi
+// (sync_verify_mirror.sh --check çıktısındaki satırlardan).
+function renderMirrorSync(data) {
+  const bodyEl = $("mirror-body"), tsEl = $("mirror-ts");
+  if (!bodyEl) return;
+  const m = data && data.mirror_sync;
+  const ts = data && data.ts;
+  if (tsEl) tsEl.textContent = ts ? fmtTs(ts) : "";
+  if (m == null) {
+    bodyEl.innerHTML = '<span class="muted">K17 mirror check bu run\u0027da koşmadı (--check-mirror gerekli)</span>';
+    return;
+  }
+  const exit = m.exit;
+  const ok = m.ok === true;
+  const stale = (m.stale_files || []).slice();
+  const auto = m.auto_synced === true;
+  // TCC rotası (exit null + ok): launchd agent ~/Desktop'ı okuyamadığı için
+  // K17 denetimi atlandı — sahte GÜNCEL gösterme, açık "denetlenemedi" rozeti.
+  const skipTcc = ok && exit == null;
+  const badgeCls = skipTcc ? "warn" : (ok ? "ok" : "err");
+  const badgeTxt = skipTcc
+    ? "denetlenemedi (TCC)"
+    : (ok ? (auto ? "GÜNCEL (otomatik sync)" : "GÜNCEL")
+          : (exit === 1 ? "BAYAT" : "hata"));
+  let h = '<span class="badge ' + badgeCls + '">' + badgeTxt + '</span> ' +
+    '<span class="muted">K17 exit=' + (exit != null ? exit : "—") +
+    (auto ? ' · auto_synced ✓ (before=' + m.before_exit + ')' : '') + '</span>';
+  h += '<div style="margin-top:6px;font-size:12px">' +
+    escapeHTML(m.detail || "") + '</div>';
+  if (stale.length) {
+    h += '<div style="margin-top:8px;font-size:12px;font-weight:600;color:var(--warn)">' +
+      'BAYAT/EKSİK dosyalar (' + stale.length + '):</div>' +
+      '<ul style="margin:4px 0 0 0;padding-left:18px;font-size:12px;color:var(--warn)">' +
+      stale.map(f => '<li><code>' + escapeHTML(f) + '</code></li>').join("") +
+      '</ul>';
+  } else if (ok) {
+    h += '<div style="margin-top:6px;font-size:12px;color:var(--ok)">' +
+      '✓ repo ↔ mirror birebir — bayat dosya yok</div>';
+  }
+  bodyEl.innerHTML = h;
+}
+
+// ---- Pattern drift panel — merge pattern ↔ ARTIFACT_JOBS tutarlılığı ----
+// Kaynak: /api/latest `pattern_drift` (PASS/DRIFT) + `pattern_drift_detail`.
+function renderPatternDrift(data) {
+  const bodyEl = $("pattern-drift-body"), tsEl = $("pattern-drift-ts");
+  if (!bodyEl) return;
+  const ts = data && data.ts;
+  if (tsEl) tsEl.textContent = ts ? fmtTs(ts) : "";
+  const drift = data && data.pattern_drift;
+  const detail = data && data.pattern_drift_detail;
+  if (drift == null) {
+    bodyEl.innerHTML = '<span class="muted">pattern drift kontrolü bu run\u0027da çalışmadı</span>';
+    return;
+  }
+  if (drift === "PASS") {
+    bodyEl.innerHTML = '<span class="badge ok">PASS</span> ' +
+      '<span style="margin-left:8px;font-size:13px">merge pattern ↔ ARTIFACT_JOBS tutarlı — eksik/fazla artifact yok</span>';
+  } else {
+    bodyEl.innerHTML = '<span class="badge err">DRIFT</span> ' +
+      '<span style="margin-left:8px;font-size:13px;font-weight:600;color:var(--err)">pattern tutarsızlığı tespit edildi</span>' +
+      '<div style="margin-top:8px;font-size:12px;color:var(--warn)">' + escapeHTML(detail || "") + '</div>';
+  }
+}
+
+// ---- K-layers panel (tek kaynak: d.layers → K0-K17) ----
+// K8/K9 enriched by z3_passed/lean_ok detail; others purely from layers.
+const K_ALL = ["K0","K1","K2","K3","K4","K5","K6","K7","K8","K9",
+               "K10","K11","K12","K13","K14","K16","K17","K18","K20"];
+
+function _cls(st) { return st === "PASS" ? "ok" : st === "FAIL" ? "err" : "warn"; }
+function _ico(st) { return st === "PASS" ? "✓" : st === "FAIL" ? "✗" : "·"; }
+
+function renderKLayers(ls, z3p, z3t, z3f, leanOk, leanDetail) {
+  const panel = $("klayers-panel");
+  if (!panel) return;
+  if (!ls || Object.keys(ls).length === 0) {
+    panel.innerHTML = '<span class="muted">K-layers: bekleniyor…</span>';
+    return;
+  }
+  let html = '';
+  for (const k of K_ALL) {
+    const l = ls[k];
+    if (!l) continue;
+    let st = l.status;
+    let title = l.label || '';
+    if (k === "K8" && z3p != null) {
+      const tot = z3t != null ? z3t : 12;
+      const failed = z3f || 0;
+      title += " (" + z3p + "/" + tot + (failed > 0 ? " FAIL:" + failed : "") + ")";
+    }
+    if (k === "K9") {
+      if (leanOk === true) title += " PASS";
+      else if (leanOk === false) title += " FAIL" + (leanDetail ? " — " + leanDetail : "");
+    }
+    let kcls = _cls(st);
+    if (k === "K9" && leanOk === false) kcls += " fail-pulse";
+    html += '<span class="badge ' + kcls + '" title="' + title + '">'
+      + _ico(st) + ' ' + k + '</span>';
+  }
+  panel.innerHTML = html || '<span class="muted">K-layers: veri yok</span>';
 }
 
 // ---- Hook env sürümleri (zaman serisi: python/z3/lean/…) ----
@@ -1032,6 +1625,15 @@ function fmtVal(v) {
 }
 
 function applySnapshot(d) {
+  // Bütçe limiti TEK KAYNAK: /api/latest `budget.limit` (etkin config
+  // budget_usd aynası). Config değişince grafik referans çizgisi + kart
+  // otomatik uyum sağlar; snapshot yoksa 30.0 fallback kalır.
+  if (d.budget && d.budget.limit > 0 && d.budget.limit !== BUDGET_LIMIT) {
+    BUDGET_LIMIT = d.budget.limit;
+    // Trend grafiği cache'liyse yeni limitle yeniden çiz (config değişikliği)
+    if (trendCache.length) renderTrend(trendCache);
+  }
+
   // Status board: CI consolidate_summary.py ile aynı 5 ikonlu tek satır
   if (d.status_board) {
     $("status-board").textContent = d.status_board;
@@ -1103,13 +1705,26 @@ function applySnapshot(d) {
   // Duration
   $("m-dur").textContent = d.duration_s != null ? d.duration_s + " s" : "—";
 
-  // Budget
-  $("m-budget").textContent = d.budget_usd != null ? "$" + d.budget_usd.toFixed(2) : "—";
-  $("m-budget-sub").textContent = (d.budget_usd != null && d.budget_usd < 30)
-    ? "✓ under $30 limit" : (d.budget_usd != null ? "⚠ over $30" : "limit $30");
+  // Bütçe sparkline: snapshot'ta budgetState varsa history'e ekle
+  if (d.budget_usd != null && d.budget_limit != null) {
+    if (budgetHistory.length === 0 ||
+        budgetHistory[budgetHistory.length - 1].est !== d.budget_usd) {
+      budgetHistory.push({ est: d.budget_usd, limit: d.budget_limit });
+      if (budgetHistory.length > 60) budgetHistory = budgetHistory.slice(-60);
+    }
+    renderBudgetSparkline();
+  }
 
-  // PDF + refs
-  $("m-pdf").textContent = (d.pdf_pages || "—") + " / " + (d.ref_count || "—");
+  // Budget — limit /api/latest `budget.limit`'ten (applySnapshot başında senkronlanır)
+  $("m-budget").textContent = d.budget_usd != null ? "$" + d.budget_usd.toFixed(2) : "—";
+  const limTxt = "$" + fmtLimit(BUDGET_LIMIT);
+  $("m-budget-sub").textContent = (d.budget_usd != null && d.budget_usd < BUDGET_LIMIT)
+    ? "✓ under " + limTxt + " limit"
+    : (d.budget_usd != null ? "⚠ over " + limTxt : "limit " + limTxt);
+
+  // PDF pages + refs (ayrı kartlar)
+  $("m-pages").textContent = d.pdf_pages || "—";
+  $("m-refs").textContent = d.ref_count || "—";
 
   // Metadata-stripped
   if (d.stripped_sha256) {
@@ -1127,17 +1742,10 @@ function applySnapshot(d) {
     s.textContent = text;
     badges.appendChild(s);
   };
-  // K1-K7 rozeti — genel verdict DEĞİL, JSON'daki per-katman durumundan
-  // (d.layers). Sunucu bu veriyi verify_delivery.py --json çıktısındaki
-  // "layers" alanından taşır; yoksa eski davranışa düş (genel verdict).
+  // K-layer panel — tek kaynak: d.layers (K0-K17)
+  // K8/K9 enriched by z3_passed/lean_ok from server.
   const ls = d.layers || {};
-  const core = ["K1", "K2", "K3", "K4", "K5", "K6", "K7"];
-  const coreSt = core.map(k => (ls[k] || {}).status);
-  const k17 = coreSt.some(s => s === "FAIL") ? "FAIL" :
-              (coreSt.length && coreSt.every(s => s === "PASS") ? "PASS" :
-               (coreSt.some(s => s === "SKIP") ? "SKIP" : "?"));
-  addBadge(k17 === "PASS" ? "ok" : k17 === "FAIL" ? "err" : "warn",
-           "K1-K7: " + k17);
+  renderKLayers(ls, d.z3_passed, d.z3_total, d.z3_failed, d.lean_ok, d.lean_detail);
   // K8 Z3 rozeti — son run'ın GERÇEK sonucundan (sunucu stderr'deki
   // [PASS]/[FAIL] P1-5 özet tablosunu sayar; veri yoksa '?' gösterir).
   if (d.z3_passed != null) {
@@ -1152,13 +1760,21 @@ function applySnapshot(d) {
   // K9 Lean rozeti — son run'ın GERÇEK sonucundan (sunucu stderr'deki
   // '[K9] Lean 4 reduct-invariance: PASS/FAIL — detail' satırını ayrıştırır;
   // K9 satırı yoksa '?' gösterir — koşulmamış run'ları FAIL gibi göstermez).
+  // Lean FAIL animasyonlu uyarıcı (badge + status board altında alert)
+  const la = $("lean-alert");
   if (d.lean_ok === true) {
     addBadge("ok", "K9 Lean: PASS (son çalıştırma)");
+    if (la) la.classList.add("hidden");
   } else if (d.lean_ok === false) {
     addBadge("err", "K9 Lean: FAIL" +
       (d.lean_detail ? " — " + d.lean_detail : "") + " (son çalıştırma)");
+    if (la) {
+      la.classList.remove("hidden");
+      la.textContent = "⚠ K9 Lean: FAIL — " + (d.lean_detail || "ispat zinciri kırık");
+    }
   } else {
     addBadge("warn", "K9 Lean: ? (koşulmadı)");
+    if (la) la.classList.add("hidden");
   }
   addBadge(p1 === 0 ? "ok" : "warn", "Beth 1953: " + (p1 === 0 ? "düzeltildi" : p1 + " P1"));
   // Soy hattı rozeti — son run'ın lineage_summary durumundan (sunucu
@@ -1203,6 +1819,7 @@ function applySnapshot(d) {
   loadTrend();
   renderRefsOnline(d);
   renderConfigDiff(d.config_diff, d.ts);
+  renderCliOverride(d);
 
   if (d.stdout_short) {
     const refItems = [];
@@ -1232,13 +1849,38 @@ function applyStdout(text) {
   el.scrollTop = el.scrollHeight;
 }
 
+let rhFilter = "all";  // all | PASS | FAIL | P0
+
+function setRhFilter(f) {
+  rhFilter = f;
+  // Buton stilleri
+  document.querySelectorAll(".rh-filter button").forEach(b => {
+    b.classList.toggle("active", b.dataset.f === f);
+  });
+  loadRunHistory();
+}
+
 function loadRunHistory() {
   fetch("/api/run-history?_t=" + Date.now()).then(r => r.json()).then(rows => {
     const el = $("run-history");
     if (!rows.length) { el.innerHTML = "<span class=\"muted\">henüz run yok</span>"; return; }
     const cnt = $("run-history-count");
-    if (cnt) cnt.textContent = "(" + rows.length + ")";
-    const lines = rows.slice().reverse().map(r => {
+    // Filtreleme: all → hepsi, PASS → verdict=ok, FAIL → fail/error, P0 → p0>0
+    let filtered = rows;
+    if (rhFilter === "PASS") {
+      filtered = rows.filter(r => r.verdict === "PASS" && (r.p0||0) === 0);
+    } else if (rhFilter === "FAIL") {
+      filtered = rows.filter(r => r.verdict === "FAIL" || r.verdict === "ERROR");
+    } else if (rhFilter === "P0") {
+      filtered = rows.filter(r => (r.p0||0) > 0);
+    }
+    const fSuffix = rhFilter !== "all" ? " / " + rows.length : "";
+    if (cnt) cnt.textContent = "(" + filtered.length + fSuffix + ")";
+    if (!filtered.length) {
+      el.innerHTML = "<span class=\"muted\">filtreyle eşleşen run yok</span>";
+      return;
+    }
+    const lines = filtered.slice().reverse().map(r => {
       const sv = r.verdict || "?";
       const cls = sv === "PASS" ? "ok" : (sv === "FAIL" || sv === "ERROR" ? "err" : "warn");
       const t = r.ts && r.ts.indexOf("T") >= 0 ? r.ts.split("T")[1].slice(0, 8) : "?";
@@ -1246,11 +1888,44 @@ function loadRunHistory() {
       const bud = r.budget_usd != null ? "$" + r.budget_usd.toFixed(2) : "—";
       const refs = r.refs_verified != null ? r.refs_verified + "/" + r.refs_total : "?/?";
       const pg = r.pdf_pages != null ? r.pdf_pages : "?";
-      return `<span class=\"muted\">${t}</span> <span class=\"${cls}\">${sv}</span> ` +
-        `<span class=\"muted\">P0=${r.p0||0} P1=${r.p1||0} refs=${refs} ${pg}p ${bud} ${dur}</span>`;
+      // K9 Lean renkli gösterge: PASS=● yeşil, FAIL=● kırmızı, koşulmadı=gri tire
+      let lean = "";
+      if (r.lean_ok === true) {
+        lean = `<span style="color:var(--ok)" title="Lean PASS">●</span>`;
+      } else if (r.lean_ok === false) {
+        const ld = r.lean_detail ? " — " + r.lean_detail : "";
+        lean = `<span style="color:var(--err)" title="Lean FAIL${ld}">●</span>`;
+      } else {
+        lean = `<span class="muted" title="Lean: koşulmadı">·</span>`;
+      }
+      // Bütçe aşımı: run budget_usd > BUDGET_LIMIT ise kırmızı AŞIM rozeti
+      // (şerit + trend ile aynı kural — tek kaynak BUDGET_LIMIT).
+      const over = r.budget_usd != null && BUDGET_LIMIT != null
+        && isFinite(BUDGET_LIMIT) && r.budget_usd > BUDGET_LIMIT;
+      const overBadge = over
+        ? `<span class="rh-over" title="BÜTÇE AŞIMI: $${r.budget_usd.toFixed(2)} > limit $${fmtLimit(BUDGET_LIMIT)}">AŞIM</span>`
+        : "";
+      const text = `<span class=\"muted\">${t}</span> <span class=\"${cls}\">${sv}</span> ` +
+        `<span class=\"muted\">P0=${r.p0||0} P1=${r.p1||0} refs=${refs} ${pg}p ${bud} ${dur}</span>` +
+        ` ${lean}${overBadge}`;
+      const tsAttr = r.ts ? r.ts.replace(/'/g, "\'").replace(/"/g, "&quot;") : "";
+      return `<div class="rh-row" data-ts="${tsAttr}" onclick="loadRunStdout('${tsAttr}')" ` +
+        `title="Tıklayınca bu run'un stdout'u yüklenir">${text}</div>`;
     });
     el.innerHTML = lines.join("\n");
   }).catch(() => {});
+}
+
+function loadRunStdout(ts) {
+  if (!ts) return;
+  const el = $("stdout");
+  if (el) el.textContent = "Yükleniyor…";
+  fetch("/api/run-stdout?ts=" + encodeURIComponent(ts)).then(r => r.json()).then(d => {
+    if (d.stdout != null) applyStdout(d.stdout + (d.stderr ? "\n--- STDERR ---\n" + d.stderr : ""));
+    else if (d.error) applyStdout("Hata: " + d.error);
+  }).catch(err => {
+    if (el) el.textContent = "Yüklenemedi: " + err;
+  });
 }
 
 function initLoad() {
@@ -1260,6 +1935,9 @@ function initLoad() {
     if (d.refs_online) renderRefsOnline(d.refs_online);
     if (d.budget) renderBudget(d.budget);
     if (d.config_diff) renderConfigDiff(d.config_diff, d.ts);
+    renderCliOverride(d);
+    renderMirrorSync(d);
+    renderPatternDrift(d);
     setLive(d.verdict === "PASS" ? "ok" : "warn");
   }).catch(() => {});
   loadRunHistory();
@@ -1268,7 +1946,7 @@ function initLoad() {
 function connect() {
   if (evtSource) evtSource.close();
   setLive("connecting");
-  evtSource = new EventSource("/api/run");
+  evtSource = new EventSource("/api/run?v=" + (window.BUILD_TS||Date.now()));
   evtSource.addEventListener("snapshot", (e) => {
     try {
       const d = JSON.parse(e.data);
@@ -1277,13 +1955,18 @@ function connect() {
       lastTs = Date.now();
       reconnectDelay = 1000; // reset backoff on success
       // snapshot sonrası stdout_short varsa onu da yükle
-      fetch("/api/latest").then(r => r.json()).then(full => {
+      fetch("/api/latest?v=" + (window.BUILD_TS||Date.now())).then(r => r.json()).then(full => {
         if (full.stdout_short) applyStdout(full.stdout_short);
         if (full.stderr_short && full.exit_code !== 0) applyStdout(full.stderr_short);
         if (full.refs_online) renderRefsOnline(full.refs_online);
         if (full.budget) renderBudget(full.budget);
         if (full.config_diff) renderConfigDiff(full.config_diff, full.ts);
+        renderCliOverride(full);
+        renderMirrorSync(full);
+        renderPatternDrift(full);
       });
+      // Run history'yi de güncelle (yeni run snapshot'ı gelince)
+      loadRunHistory();
     } catch(err) { console.error("snapshot parse", err); }
   });
   evtSource.addEventListener("update", (e) => {
@@ -1293,12 +1976,17 @@ function connect() {
       setLive("ok");
       lastTs = Date.now();
       // güncellenmiş son çıktıyı da çek
-      fetch("/api/latest").then(r => r.json()).then(full => {
+      fetch("/api/latest?v=" + (window.BUILD_TS||Date.now())).then(r => r.json()).then(full => {
         if (full.stdout_short) applyStdout(full.stdout_short);
         if (full.refs_online) renderRefsOnline(full.refs_online);
         if (full.budget) renderBudget(full.budget);
         if (full.config_diff) renderConfigDiff(full.config_diff, full.ts);
+        renderCliOverride(full);
+        renderMirrorSync(full);
+        renderPatternDrift(full);
       });
+      // Run history'yi de güncelle (yeni run update'i gelince)
+      loadRunHistory();
     } catch(err) { console.error("update parse", err); }
   });
   evtSource.onerror = () => {
@@ -1318,6 +2006,8 @@ setInterval(() => {
 
 loadTrend();
 connectStream();
+// Run history filtresini başlat (all varsayılan)
+setRhFilter("all");
 initLoad();
 connect();
 </script>

@@ -15,14 +15,16 @@ DOKUNMAZ, bu yüzden Linux CI'da da çalışır):
        1 = drift  (render golden'dan farklı)
        2 = hata   (script/golden yok, render başarısız)
 """
+import contextlib
+import io
 import json
 import os
 import plistlib
+import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
-import shutil
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 UPDATE_PREVIEW = os.path.join(HERE, "update_preview.sh")
@@ -31,7 +33,10 @@ VERIFY_DELIVERY = os.path.join(HERE, "verify_delivery.py")
 GOLDEN_DIR = os.path.join(HERE, "plist-golden")
 
 sys.path.insert(0, HERE)
-from verify_delivery import parse_plist_check_output  # noqa: E402
+from verify_delivery import (  # noqa: E402
+    parse_plist_check_output,
+    parse_plist_out_of_scope,
+)
 
 
 def run(home, *args):
@@ -118,6 +123,47 @@ class TestCheckPlistDriftExitCodes(unittest.TestCase):
             self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
             self.assertIn("update_preview.sh yok", r.stdout)
 
+    def test_exit_1_fazla_profil_after_render(self):
+        """Gerçek uçtan uca fazla-dosya senaryosu.
+
+        update_preview.sh --plist-force (GERÇEK render) çalıştıktan SONRA
+        render-home'a golden'da olmayan bir plist bırakılır → main()
+        check()'i gerçek golden'larla koşup 'fazla profil' drift'ini
+        yakalamalı: exit 1 + '[DRIFT] ... golden'da olmayan fazla profil'.
+        """
+        import check_plist_drift as cpd
+        from unittest import mock
+        render_home = tempfile.mkdtemp(prefix="plist-extra-")
+        real_render = cpd.run_render
+
+        def render_then_extra(script, home):
+            rc, out = real_render(script, home)  # gerçek render (2 profil)
+            la = os.path.join(home, "Library", "LaunchAgents")
+            os.makedirs(la, exist_ok=True)
+            with open(os.path.join(la, "com.example.extra.plist"), "w",
+                      encoding="utf-8") as f:
+                f.write(SAMPLE_PLIST)
+            return rc, out
+
+        buf = io.StringIO()
+        try:
+            with mock.patch.object(cpd, "run_render",
+                                   side_effect=render_then_extra), \
+                    contextlib.redirect_stdout(buf):
+                rc = cpd.main(["--render-home", render_home,
+                               "--golden-dir", GOLDEN_DIR])
+        finally:
+            shutil.rmtree(render_home, ignore_errors=True)
+        self.assertEqual(rc, 1, buf.getvalue())
+        self.assertIn("com.example.extra.plist", buf.getvalue())
+        self.assertIn("fazla profil", buf.getvalue())
+        self.assertIn("DRIFT TESPİT EDİLDİ", buf.getvalue())
+        # Yönetilen iki profil yine de PASS (fazlalık onları bozmaz).
+        self.assertIn("[PASS] com.freebuff.preview-leibniz2.plist",
+                      buf.getvalue())
+        self.assertIn("[PASS] com.freebuff.preview-server.plist",
+                      buf.getvalue())
+
 
 class TestPlistOutSidecar(unittest.TestCase):
     """--plist-out: --plist-check ham çıktısı + K12 raporu tek sidecar JSON'da."""
@@ -143,10 +189,12 @@ class TestPlistOutSidecar(unittest.TestCase):
             self.assertEqual(d["exit"], 0)
             self.assertIn("GÜNCEL", d["detail"])
             self.assertIn("GÜNCEL", d["output"])
-            # Tek profilli yönetim: yalnızca birincil leibniz2 raporda.
+            # İki profilli yönetim: birincil leibniz2 + yedek preview-server
+            # ikisi de PLIST_PROFILES'te — rapora GİRDİ SIRASIYLA girer.
             labels = [p["label"] for p in d["profiles"]]
             self.assertEqual(labels,
-                             ["com.freebuff.preview-leibniz2"])
+                             ["com.freebuff.preview-leibniz2",
+                              "com.freebuff.preview-server"])
             for p in d["profiles"]:
                 self.assertEqual(p["status"], "GÜNCEL")
                 self.assertTrue(p["path"].endswith(p["label"] + ".plist"))
@@ -196,10 +244,14 @@ class TestOutOfScopeExtraFile(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="plist-gate-") as home:
             self._setup_with_extra(home)
             chk = run(home, "bash", UPDATE_PREVIEW, "--plist-check", home)
-            # Kapsam-dışı dosya yönetilen profilleri etkilemez → exit 0 GÜNCEL.
+            # Kapsam-dışı dosya yönetilen profilleri ETKİLEMEZ → exit 0 GÜNCEL,
+            # ama denetim izinde INFO satırı olarak görünür (bilgi amaçlı).
             self.assertEqual(chk.returncode, 0, chk.stdout + chk.stderr)
             self.assertIn("GÜNCEL", chk.stdout)
-            self.assertNotIn("out-of-scope", chk.stdout)
+            self.assertIn("INFO: kapsam dışı (yönetilmiyor)", chk.stdout)
+            self.assertIn("com.example.out-of-scope.plist", chk.stdout)
+            # Fazlalık yönetilen profilleri BAYAT'a düşürmez.
+            self.assertNotIn("BAYAT", chk.stdout)
 
     def test_k12_layer_passes_with_out_of_scope_extra_file(self):
         with tempfile.TemporaryDirectory(prefix="plist-gate-") as home:
@@ -213,11 +265,18 @@ class TestOutOfScopeExtraFile(unittest.TestCase):
                 d = json.load(f)
             self.assertTrue(d["ok"])
             self.assertEqual(d["exit"], 0)
-            # Rapor yalnızca yönetilen profili içerir — ekstra dosya girmez.
+            # Rapor yalnızca yönetilen iki profili içerir; ekstra dosya
+            # PROFILLERE girmez ama out_of_scope listesinde (denetim izi) görünür.
             labels = [p["label"] for p in d["profiles"]]
-            self.assertEqual(labels, ["com.freebuff.preview-leibniz2"])
+            self.assertEqual(labels,
+                             ["com.freebuff.preview-leibniz2",
+                              "com.freebuff.preview-server"])
             self.assertTrue(all(p["status"] == "GÜNCEL" for p in d["profiles"]))
-            self.assertNotIn("out-of-scope", json.dumps(d))
+            self.assertEqual(len(d["out_of_scope"]), 1)
+            self.assertTrue(any("out-of-scope" in o for o in d["out_of_scope"]),
+                            d["out_of_scope"])
+            # Ham çıktıda INFO satırı duruyor (denetim izi).
+            self.assertIn("INFO: kapsam dışı", d["output"])
 
 
 class TestBootstrapAll(unittest.TestCase):
@@ -279,11 +338,95 @@ class TestBootstrapAll(unittest.TestCase):
             self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
             self.assertIn("kaynak yok", r.stderr)
 
+    def test_bootstrap_with_start_invokes_launchctl(self):
+        """--bootstrap --start: üç artefakt + launchctl bootstrap AYNI KOMUTTA.
 
-class TestParsePlistCheckOutput(unittest.TestCase):
-    """parse_plist_check_output: çok-profilli çıktıyı profil bazında ayrıştırır."""
+        Linux CI'da gerçek launchctl yok — PATH'e çağrılarını loglayıp exit 0
+        dönen bir fake shim konur. Sonuç: --start bayrağı plist_start'ı
+        tetikler (shim logunda `bootstrap .../com.freebuff.preview-leibniz2`
+        görünür), üç artefakt kurulur, komut exit 0 döner.
+        """
+        with tempfile.TemporaryDirectory(prefix="plist-gate-") as home, \
+             tempfile.TemporaryDirectory(prefix="launchctl-shim-") as bindir:
+            log = os.path.join(bindir, "launchctl.log")
+            shim = os.path.join(bindir, "launchctl")
+            with open(shim, "w") as f:
+                f.write("#!/bin/bash\n")
+                f.write(f'echo "$@" >> "{log}"\n')
+                f.write("exit 0\n")
+            os.chmod(shim, 0o755)
+            env = {"PATH": bindir + os.pathsep + os.environ.get("PATH", "")}
+            r = run_env(home, env, "bash", UPDATE_PREVIEW,
+                        "--bootstrap", "--start", home)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertIn("BOOTSTRAP 4/4", r.stdout)
+            self.assertIn("TEK KOMUTTA", r.stdout)
+            # launchctl bootstrap gerçekten çağrıldı (birincil label).
+            self.assertTrue(os.path.isfile(log), "launchctl hiç çağrılmadı")
+            with open(log) as f:
+                calls = f.read()
+            self.assertIn("bootstrap", calls)
+            self.assertIn("com.freebuff.preview-leibniz2", calls)
+            # Üç artefakt kuruldu.
+            arts = self._artifacts(home)
+            for name, p in arts.items():
+                self.assertTrue(os.path.isfile(p), f"{name} üretilmedi: {p}")
+
+    def test_bootstrap_without_start_skips_launchctl(self):
+        """Bayraksız --bootstrap: launchctl ÇAĞRILMAZ, yalnızca artefaktlar."""
+        with tempfile.TemporaryDirectory(prefix="plist-gate-") as home, \
+             tempfile.TemporaryDirectory(prefix="launchctl-shim-") as bindir:
+            log = os.path.join(bindir, "launchctl.log")
+            shim = os.path.join(bindir, "launchctl")
+            with open(shim, "w") as f:
+                f.write("#!/bin/bash\n")
+                f.write(f'echo "$@" >> "{log}"\n')
+                f.write("exit 0\n")
+            os.chmod(shim, 0o755)
+            env = {"PATH": bindir + os.pathsep + os.environ.get("PATH", "")}
+            r = run_env(home, env, "bash", UPDATE_PREVIEW,
+                        "--bootstrap", home)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertNotIn("BOOTSTRAP 4/4", r.stdout)
+            self.assertIn("sonraki adım: update_preview.sh --start", r.stdout)
+            self.assertFalse(os.path.isfile(log),
+                             "bayraksız koşumda launchctl çağrılmamalı")
+
+
+class TestParsePlistCheckOutputLegacyCompat(unittest.TestCase):
+    """Legacy uyumluluk: parse_plist_check_output profil bazında ayrıştırma.
+
+    Eski iki-profilli (birincil + legacy preview-server) dönemde bu fonksiyon
+    çoklu profil çıktısını ayrıştırırdı. Artık yalnızca tek profil (leibniz2)
+    yönetiliyor; testler tek profil üzerinden geriye dönük uyumluluğu korur.
+
+    "test_" öneki taşımayan "_two_profiles_guncel" yardımcısı, iki profilli
+    geçmiş senaryoyu mock'layarak fonksiyonun çoklu profil girişini hâlâ
+    doğru ayrıştırabildiğini kanıtlar (tarihsel doğrulama).
+    """
+
+    def _two_profiles_guncel(self):
+        """Yardımcı: iki-profilli (legacy) çıktıyı hâlâ ayrıştırabilir mi?
+
+        Test olarak değil, tarihsel doğrulama amacıyla korunur. Eski iki-profilli
+        dönemde `--plist-check` iki satır üretirdi; parse_plist_check_output
+        her ikisini de profil listesine eklemeli.
+        """
+        txt = (
+            "GÜNCEL: /h/Library/LaunchAgents/com.freebuff.preview-leibniz2.plist"
+            "  (şablonla aynı, plutil geçerli)\n"
+            "GÜNCEL: /h/Library/LaunchAgents/com.freebuff.preview-server.plist"
+            "  (şablonla aynı, plutil geçerli)\n"
+        )
+        profiles = parse_plist_check_output(txt)
+        self.assertEqual(len(profiles), 2)
+        self.assertEqual([p["label"] for p in profiles],
+                         ["com.freebuff.preview-leibniz2",
+                          "com.freebuff.preview-server"])
+        self.assertTrue(all(p["status"] == "GÜNCEL" for p in profiles))
 
     def test_single_profile_all_guncel(self):
+        """Tek profil GÜNCEL — mevcut canlı senaryo."""
         txt = (
             "GÜNCEL: /h/Library/LaunchAgents/com.freebuff.preview-leibniz2.plist"
             "  (şablonla aynı, plutil geçerli)\n"
@@ -295,6 +438,7 @@ class TestParsePlistCheckOutput(unittest.TestCase):
         self.assertTrue(all(p["status"] == "GÜNCEL" for p in profiles))
 
     def test_single_profile_bayat(self):
+        """Tek profil BAYAT — legacy sonrası tek profil senaryosu."""
         txt = (
             "BAYAT/GEÇERSİZ: /h/Library/LaunchAgents/com.freebuff.preview-leibniz2.plist"
             " şablondan farklı\n"
@@ -305,6 +449,7 @@ class TestParsePlistCheckOutput(unittest.TestCase):
         self.assertEqual(profiles[0]["status"], "BAYAT")
 
     def test_sablon_yok_line(self):
+        """ŞABLON_YOK — ilk kurulum senaryosu (tek profil)."""
         txt = ("şablon yok: /h/Library/Caches/com.freebuff/preview-template/"
                "com.freebuff.preview-leibniz2.plist.tmpl (önce --plist çalıştır)\n")
         profiles = parse_plist_check_output(txt)
@@ -313,17 +458,48 @@ class TestParsePlistCheckOutput(unittest.TestCase):
         self.assertEqual(profiles[0]["status"], "ŞABLON_YOK")
 
     def test_unrecognized_lines_skipped(self):
+        """Tanınmayan satırlar atlanır — gürbüz ayrıştırma."""
         txt = "bazı özet satırı\nGÜNCEL: /h/x.plist  (ok)\nboş satır sonrası\n"
         profiles = parse_plist_check_output(txt)
         self.assertEqual(len(profiles), 1)
         self.assertEqual(profiles[0]["label"], "x")
 
 
+class TestParseOutOfScope(unittest.TestCase):
+    """parse_plist_out_of_scope: INFO satırlarından kapsam-dışı dosya listesi."""
+
+    def test_parses_info_lines(self):
+        txt = (
+            "GÜNCEL: /h/Library/LaunchAgents/"
+            "com.freebuff.preview-leibniz2.plist  (ok)\n"
+            "INFO: kapsam dışı (yönetilmiyor): /h/Library/LaunchAgents/"
+            "com.example.out-of-scope.plist\n"
+            "INFO: kapsam dışı (yönetilmiyor): /h/Library/LaunchAgents/"
+            "com.freebuff.legacy.plist\n"
+            "INFO: 2 kapsam dışı dosya yok sayıldı (yalnızca yönetilen "
+            "profiller denetlenir)\n"
+        )
+        out = parse_plist_out_of_scope(txt)
+        self.assertEqual(len(out), 2)
+        self.assertTrue(any("out-of-scope" in o for o in out), out)
+        self.assertTrue(any("legacy" in o for o in out), out)
+
+    def test_empty_or_no_info(self):
+        self.assertEqual(parse_plist_out_of_scope(""), [])
+        self.assertEqual(parse_plist_out_of_scope("GÜNCEL: /x.plist\n"), [])
+
+    def test_only_path_after_marker(self):
+        txt = ("INFO: kapsam dışı (yönetilmiyor): "
+               "/Users/r/Library/LaunchAgents/a.plist\n")
+        self.assertEqual(parse_plist_out_of_scope(txt),
+                         ["/Users/r/Library/LaunchAgents/a.plist"])
+
+
 SUMMARY_SCRIPT = os.path.join(HERE, "summary_plist_table.py")
 
 
 class TestSummaryPlistTable(unittest.TestCase):
-    """summary_plist_table.py markdown tablo üretimi."""
+    """summary_plist_table.py markdown tablo üretimi — tek profil (legacy sonrası)."""
 
     def _run(self, json_str):
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json",
@@ -336,7 +512,8 @@ class TestSummaryPlistTable(unittest.TestCase):
         os.unlink(f.name)
         return out.stdout
 
-    def test_valid_profiles(self):
+    def test_valid_single_profile(self):
+        """Tek profil GÜNCEL — legacy preview-server kaldırıldıktan sonraki canlı senaryo."""
         data = json.dumps({
             "ok": True, "exit": 0, "detail": "GÜNCEL (1/1)",
             "profiles": [
@@ -346,6 +523,26 @@ class TestSummaryPlistTable(unittest.TestCase):
         out = self._run(data)
         self.assertIn("✅ **K12**", out)
         self.assertIn("| com.freebuff.preview-leibniz2 | ✅ GÜNCEL |", out)
+        self.assertIn("| Profil | Durum | Yol |", out)
+
+    def test_legacy_two_profiles_still_render(self):
+        """İki profil (legacy dönem) hâlâ render edilir — geriye dönük uyumluluk.
+
+        parse_plist_check_output iki profili de ayrıştırabilir;
+        summary_plist_table.py hepsini tabloya basar.
+        """
+        data = json.dumps({
+            "ok": True, "exit": 0, "detail": "GÜNCEL (2/2)",
+            "profiles": [
+                {"label": "com.freebuff.preview-leibniz2",
+                 "status": "GÜNCEL", "path": "/Users/r/.../a.plist"},
+                {"label": "com.freebuff.preview-server",
+                 "status": "GÜNCEL", "path": "/Users/r/.../b.plist"},
+            ]})
+        out = self._run(data)
+        self.assertIn("✅ **K12**", out)
+        self.assertIn("| com.freebuff.preview-leibniz2 | ✅ GÜNCEL |", out)
+        self.assertIn("| com.freebuff.preview-server | ✅ GÜNCEL |", out)
         self.assertIn("| Profil | Durum | Yol |", out)
 
     def test_bayat_profile(self):

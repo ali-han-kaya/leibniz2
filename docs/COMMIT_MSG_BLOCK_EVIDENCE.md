@@ -60,12 +60,76 @@ commit-msg:   kural: bkz. .gitmessage (git config commit.template .gitmessage)
 
 ---
 
+## TEST 3 — check-action-pins (action version downgrade)
+
+```bash
+# .github/workflows/verify.yml'de actions/checkout@v7'yi @v6'ya düşür
+sed -i '' 's/actions\/checkout@v7/actions\/checkout@v6/' .github/workflows/verify.yml
+pre-commit run check-action-pins --all-files
+# → exit 1 (commit BLOKE edildi)
+```
+
+### Sonuç çıktısı
+
+```
+  [FAIL] actions/checkout@v6          downgrade: v6 < pin v7
+  [OK  ] actions/setup-python@v6      v6 == pin
+  [OK  ] actions/cache@v5             v5 == pin
+  [OK  ] actions/upload-artifact@v6   v6 == pin
+  [OK  ] actions/github-script@v8     v8 == pin
+  [OK  ] actions/download-artifact@v7 v7 == pin
+
+SONUÇ: FAIL — 5 PASS, 1 FAIL, 0 WARN, 0 SKIP
+Downgrade/pin'siz action commit'i bloke eder.
+```
+
+---
+
+## TEST 4 — check-plist-drift (golden dosyası değişikliği)
+
+```bash
+# plist-golden/com.freebuff.preview-leibniz2.plist'e bozuk içerik ekle
+echo "BAD_CONTENT" >> _calisma/CIKTI/plist-golden/com.freebuff.preview-leibniz2.plist
+pre-commit run check-plist-drift --all-files
+# → exit 1 (commit BLOKE edildi)
+```
+
+### Sonuç çıktısı
+
+```
+Ran 39 tests in 5.928s
+FAILED (failures=2)
+```
+
+---
+
+## TEST 5 — verify-delivery (config schema ihlali)
+
+```bash
+# verify_delivery.config.json'dan zorunlu alanı çıkar
+echo '{"budget_usd": 30}' > _calisma/CIKTI/verify_delivery.config.json
+pre-commit run verify-delivery --all-files
+# → exit 1 (commit BLOKE edildi)
+```
+
+### Sonuç çıktısı
+
+```
+HATA: konfig şema doğrulaması başarısız:
+  - eksik anahtar: budget_method
+  - eksik anahtar: budget_ratios
+  - eksik anahtar: expected_pages
+  - eksik anahtar: expected_refs
+```
+
+---
+
 ## Sonuç
 
-- Her iki kötü başlık da `commit-msg-style` hook'u tarafından **fail-closed**
-  reddedildi; hiçbir commit oluşmadı (`git log` başlangıçla aynı).
-- `commit-msg` hook'u, pre-commit stage'inin **dört kapısı başarıyla geçtikten
-  sonra** devreye girer — yani kapı izole değil, tam zincirin parçasıdır.
+- Her kötü girdi ilgili hook tarafından **fail-closed** reddedildi; hiçbir
+  commit oluşmadı (`git log` başlangıçla aynı).
+- `commit-msg` hook'u, pre-commit stage'inin kapıları başarıyla geçtikten
+  sonra devreye girer — yani kapı izole değil, tam zincirin parçasıdır.
 - Geçerli başlıkla commit zaten sürekli doğrulanıyor: bu repodaki her commit
   `update-config, verify-delivery, Z3, Lean, commit-msg` **5/5 Passed** çıktısı
   verir (ör. `e6cbdca` kurulum commit'i).

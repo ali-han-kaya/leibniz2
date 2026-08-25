@@ -40,7 +40,12 @@
           "name": {
             "type": "string",
             "minLength": 1,
-            "description": "Hook adı (ör. 'Verify Stoic-Hume V5 delivery')"
+            "description": "Hook display adı (ör. 'Verify Stoic-Hume V5 delivery')"
+          },
+          "id": {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "description": "Hook kimliği (`- hook id:` satırı; ör. 'check-python3-shell'); durum satırını izleyen öznitelik bloğundan çıkarılır, blok yoksa null."
           },
           "status": {
             "type": "string",

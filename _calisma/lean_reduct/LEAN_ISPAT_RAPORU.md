@@ -87,3 +87,68 @@ Kurulum: `elan` + `leanprover/lean4:stable` (v4.33.0), Homebrew `elan-init`
 tectonic/qpdf byte-non-determinizminin PDF/zip tekrarlanabilirliğine getirdiği
 bilinen sınır (MANIFEST V5k/V5l; `qpdf_determinism_experiment.py` ile yeniden
 üretilebilir) bu teoremin doğruluğunu etkilemez.
+
+---
+
+## 6. İkinci çekirdek — Sınır İspatı (illüstratif, 8 teorem)
+
+**Sürüm notu (V5s, 2026-08-22):** bu raporun ana konusu `ReductInvariance.lean`
+(meta-teorem, yapısal tümevarım) iken, repoda **ikinci** bir Lean çekirdeği
+daha vardır: `_calisma/lean_reduct/Content.lean` (`Leibniz2Reduct`, 8 teorem).
+Yukarıdaki §2-§5'in aksine bu çekirdek **illüstratiftir** — Stoa/Hume
+formalizasyonu DEĞİLDİR; gösterdiği şey, bazı epistemik ayrımların ekstansiyonel
+hedef dile giden unutma haritası altında ayırt ediciliğini kaybedebildiğidir
+(temsil kaybı teoremi, varlık teoremi değil). `World = actual` bilinçli en fakir
+modeldir: kaybın model zenginliğinden değil haritanın kendisinden geldiğini
+göstermek için. `kataleptic-`/`customary-` tanımları kod etiketidir, tarihsel
+yorum değildir.
+
+### 6.1 İspatlanan 8 teorem
+
+| # | Teorem | Ne ispatlar | Yöntem |
+|---|--------|-------------|--------|
+| 1 | `historical_pair_collapses_under_forgetTopic` | tam unutma iki içeriği özdeşleştirir | rfl |
+| 2 | `historical_pair_survives_forgetAccess` | tek eksen unutması ayrımı silmez | cases |
+| 3 | `historical_pair_survives_forgetJustification` | aynı | cases |
+| 4 | `historical_pair_survives_forgetSource` | aynı | cases |
+| 5 | `forgetAccess_not_injective` | access haritası injective değil | cases+congrArg |
+| 6 | `forgetJustification_not_injective` | justification haritası injective değil | cases+congrArg |
+| 7 | `forgetSource_not_injective` | source haritası injective değil | cases+congrArg |
+| 8 | `forgetTopic_not_injective` | tam unutma injective değil | cases+congrArg |
+
+### 6.2 Z3 ↔ Lean eşleşmesi (MAP.md sözleşmesi)
+
+| Z3 (`symbolic_proof_z3.py`) | Lean (`Content.lean`) |
+|---|---|
+| `forget_all` | `forgetTopic` (tam unutma) |
+| `forget_access` | `forgetAccess` |
+| `forget_justification` | `forgetJustification` |
+| `forget_source` | `forgetSource` |
+
+İnvariant: 8 teoremin Z3'teki karşı-örneği ile Lean'deki rfl/cases ispatı **aynı
+çökmeyi** gösterir. Eşleşme `MAP.md`'de sabitlenmiştir; diverge olmaması için
+korunmalıdır.
+
+### 6.3 lake build kanıtı
+
+```text
+$ cd _calisma/lean_reduct && lake clean && lake build --wfail
+✔ [2/4] Built Leibniz2Reduct.Content
+✔ [3/4] Built Leibniz2Reduct
+Build completed successfully.      # exit 0
+$ echo $?
+0
+```
+
+- Araç: leanprover/lean4:v4.14.0 (`lean-toolchain`), süre ~1.1s (<5s beklenen)
+- Mathlib bağımlılığı yoktur; `Injective` yerel tanımlıdır
+- CI'da K9 kapısı (`verify` job'ı `--full` içinde) aynı derlemeyi fail-closed
+  koşar; shim kopyası `Content.lean` (kök) ile birebir aynıdır (8/8 teorem)
+- CI K9 adımı elan'ı **açıkça** kurar: `elan-init.sh -y --default-toolchain
+  leanprover/lean4:stable` + `elan toolchain install leanprover/lean4:v4.14.0`
+  (verify.yml). `--default-toolchain none` + `lean-toolchain` dosyası olmadan
+  lean çalışmaz ve `$GITHUB_PATH` yalnızca sonraki adıma uygulandığından PATH
+  export'u aynı adımda inline yapılır; kapı lean-toolchain'deki sürümü
+  (fail-closed) kullanır — yerel derlemeyle aynı v4.14.0
+- Qpdf byte-non-determinizm sınırı (V5l/V5m) bu çekirdeği de etkilemez —
+  ispat makine-kontrollüdür, derleme çıktısı yeniden üretilebilirdir

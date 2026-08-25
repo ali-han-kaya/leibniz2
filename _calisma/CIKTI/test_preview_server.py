@@ -35,6 +35,86 @@ def _rec(ts, verdict="PASS", **kw):
     return rec
 
 
+class CachedLatestTests(unittest.TestCase):
+    """Restart sonrası önbelleklenmiş son run'un yüklenmesi (UNKNOWN gösterme).
+
+    load_cached_latest(): runs/run-*.json (stdout/stderr dahil TAM kayıt) →
+    yoksa history.jsonl özeti → LATEST'e geri yüklenir; kayıt yoksa LATEST
+    UNKNOWN kalır (False). LOCK altında çağrıldığında asılmamalı (kendi
+    kilidini almaz — re-entrant olmayan threading.Lock regresyonu).
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self._old_runs, self._old_path = ps.RUNS_DIR, ps.HISTORY_PATH
+        self._old_latest = dict(ps.LATEST)
+        ps.RUNS_DIR = os.path.join(self._tmp.name, "runs")
+        ps.HISTORY_PATH = os.path.join(self._tmp.name, "history.jsonl")
+        # Asgari LATEST şeması (loader'ın kopyalayacağı alanlar).
+        ps.LATEST = {"ts": None, "verdict": "UNKNOWN", "stdout": "",
+                     "stderr": "", "p0": 0, "p1": 0, "cached": False}
+
+    def tearDown(self):
+        ps.RUNS_DIR, ps.HISTORY_PATH = self._old_runs, self._old_path
+        ps.LATEST = self._old_latest
+        self._tmp.cleanup()
+
+    def _write_run_log(self, rec):
+        os.makedirs(ps.RUNS_DIR, exist_ok=True)
+        safe = rec["ts"].replace(":", "").replace("+", "").replace(".", "")
+        with open(os.path.join(ps.RUNS_DIR, "run-%s.json" % safe), "w",
+                  encoding="utf-8") as f:
+            json.dump(rec, f)
+
+    def test_restores_from_run_log_with_stdout(self):
+        self._write_run_log({"ts": "2026-08-23T12:00:00Z",
+                             "verdict": "PASS", "p0": 0, "p1": 2,
+                             "stdout": "SONUÇ: PASS\nPDF: 33 sayfa | References: 64",
+                             "stderr": "K8 Z3: [PASS]"})
+        ok = ps.load_cached_latest()
+        self.assertTrue(ok)
+        self.assertEqual(ps.LATEST["verdict"], "PASS")
+        self.assertEqual(ps.LATEST["p1"], 2)
+        self.assertIn("SONUÇ: PASS", ps.LATEST["stdout"])
+        self.assertIn("K8 Z3", ps.LATEST["stderr"])
+        self.assertTrue(ps.LATEST["cached"])
+
+    def test_falls_back_to_history_when_no_run_log(self):
+        with open(ps.HISTORY_PATH, "w", encoding="utf-8") as f:
+            f.write(json.dumps({"ts": "2026-08-23T09:00:00Z",
+                                "verdict": "FAIL", "p0": 1, "p1": 3},
+                               ensure_ascii=False) + "\n")
+        ok = ps.load_cached_latest()
+        self.assertTrue(ok)
+        self.assertEqual(ps.LATEST["verdict"], "FAIL")
+        self.assertEqual(ps.LATEST["p0"], 1)
+        self.assertTrue(ps.LATEST["cached"])
+
+    def test_no_cache_keeps_unknown(self):
+        ok = ps.load_cached_latest()
+        self.assertFalse(ok)
+        self.assertEqual(ps.LATEST["verdict"], "UNKNOWN")
+        self.assertFalse(ps.LATEST["cached"])
+
+    def test_corrupt_run_log_ignored(self):
+        os.makedirs(ps.RUNS_DIR, exist_ok=True)
+        with open(os.path.join(ps.RUNS_DIR, "run-corrupt.json"), "w",
+                  encoding="utf-8") as f:
+            f.write("{not json")
+        ok = ps.load_cached_latest()
+        self.assertFalse(ok)  # bozuk log atlanır, history de boş → UNKNOWN
+        self.assertEqual(ps.LATEST["verdict"], "UNKNOWN")
+
+    def test_safe_under_lock(self):
+        # LOCK tutulurken çağrılırsa asılmamalı (kendi kilidini ALMAZ).
+        self._write_run_log({"ts": "2026-08-23T12:00:00Z",
+                             "verdict": "PASS", "p0": 0, "p1": 0})
+        with ps.LOCK:
+            ok = ps.load_cached_latest()
+        self.assertTrue(ok)
+        self.assertEqual(ps.LATEST["verdict"], "PASS")
+
+
 class PersistHistoryTests(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
@@ -188,16 +268,22 @@ class ReplayEventsTests(unittest.TestCase):
         self.assertEqual(last["ts"], "t")
 
     def test_replay_start_carries_summary_fields(self):
-        # Son run'un özet alanları (verdict/P0/P1/bütçe/süre) replay-start
-        # event'inde taşınmalı ki client geçmiş run sınırında özet satırını
+        # Son run'un özet alanları (verdict/P0/P1/bütçe/süre +
+        # refs_verified/refs_total/pdf_pages) replay-start event'inde
+        # taşınmalı ki client geçmiş run sınırında zengin özet satırını
         # render edebilsin.
         ev = ps.build_replay_events("t", "FAIL", "o", "e", p0=2, p1=1,
-                                    budget_usd=1.08, duration_s=30.5)
+                                    budget_usd=1.08, duration_s=30.5,
+                                    refs_verified=61, refs_total=64,
+                                    pdf_pages=33)
         first = json.loads(ev[0][1])
         self.assertEqual(first["p0"], 2)
         self.assertEqual(first["p1"], 1)
         self.assertEqual(first["budget_usd"], 1.08)
         self.assertEqual(first["duration_s"], 30.5)
+        self.assertEqual(first["refs_verified"], 61)
+        self.assertEqual(first["refs_total"], 64)
+        self.assertEqual(first["pdf_pages"], 33)
 
     def test_build_replay_events_multi_marks_first_and_last(self):
         recs = [
@@ -468,6 +554,33 @@ class HookEnvPlumbingTests(unittest.TestCase):
         self.assertEqual(snap["hook_env"], {"z3": "5.1.0"})
 
 
+class BudgetLimitPlumbingTests(unittest.TestCase):
+    """Per-run budget_limit/budget_method veri hattı (trend tooltip config satırı)."""
+
+    def test_history_keys_include_budget_limit_and_method(self):
+        # history/run-log kayıtlarına run'un kullandığı limit + yöntem girmeli
+        # (tooltip 'hangi config'le koştu' satırı bunlardan beslenir).
+        self.assertIn("budget_limit", ps.HISTORY_KEYS)
+        self.assertIn("budget_method", ps.HISTORY_KEYS)
+
+    def test_latest_has_budget_limit_and_method_slots(self):
+        self.assertIn("budget_limit", ps.LATEST)
+        self.assertIn("budget_method", ps.LATEST)
+        self.assertIsNone(ps.LATEST["budget_limit"])
+        self.assertIsNone(ps.LATEST["budget_method"])
+
+    def test_snapshot_dict_carries_budget_limit_and_method(self):
+        ps.LATEST["budget_limit"] = 25.0
+        ps.LATEST["budget_method"] = "weighted"
+        try:
+            snap = ps.snapshot_dict()
+        finally:
+            ps.LATEST["budget_limit"] = None
+            ps.LATEST["budget_method"] = None
+        self.assertEqual(snap["budget_limit"], 25.0)
+        self.assertEqual(snap["budget_method"], "weighted")
+
+
 class CliOverridesPlumbingTests(unittest.TestCase):
     """cli_overrides veri hattı: LATEST slotu — override akış satırı beklemeden görünür.
 
@@ -516,6 +629,75 @@ class CliOverridesPlumbingTests(unittest.TestCase):
             self.assertIn("cli_override_count", snap)
         finally:
             ps.LATEST["cli_overrides"] = None
+
+
+class LayersPlumbingTests(unittest.TestCase):
+    """layers (K0-K17) veri hattı: LATEST slotu → /api/latest + SSE snapshot.
+
+    verify_delivery.py --json çıktısındaki layers (build_layers_summary çıktısı)
+    _finalize_run'da LATEST['layers']'a taşınır; dashboard renderKLayers
+    buradan beslenir. /api/latest (serve_latest) LATEST dict'ini bütünüyle
+    döndürdüğü için layers oraya otomatik girer. SSE connect snapshot'ı da
+    layers'ı ayrıca taşır (HISTORY_KEYS dışı olduğundan elle eklenir).
+    """
+
+    def test_latest_has_layers_slot(self):
+        self.assertIn("layers", ps.LATEST)
+
+    def test_layers_default_none(self):
+        # Başlangıçta None — renderKLayers 'bekleniyor' gösterir.
+        self.assertIsNone(ps.LATEST["layers"])
+
+    def test_layers_not_in_history_keys(self):
+        # layers K0-K17 full dict'tir, history.jsonl'e SKALER olarak
+        # girmez (trend grafiğinde per-layer değil verdict/P0/P1 izlenir).
+        self.assertNotIn("layers", ps.HISTORY_KEYS)
+
+    def test_latest_dict_carries_layers(self):
+        # /api/latest (serve_latest) LATEST dict'ini bütünüyle döndürür —
+        # layers slotu oraya otomatik girer.
+        layers = {"K0": {"label": "Bayat zip", "status": "PASS", "ran": True},
+                  "K1": {"label": "Dış zip", "status": "PASS", "ran": True}}
+        ps.LATEST["layers"] = layers
+        try:
+            self.assertEqual(ps.LATEST["layers"], layers)
+        finally:
+            ps.LATEST["layers"] = None
+
+    def test_sse_snapshot_carries_layers(self):
+        # SSE connect/update snapshot'ları HISTORY_KEYS + ek alanlar taşır;
+        # layers bunlardan biridir (renderKLayers SSE üzerinden de alır).
+        layers = {"K0": {"label": "Bayat zip", "status": "PASS", "ran": True},
+                  "K8": {"label": "Z3", "status": "PASS", "ran": True}}
+        ps.LATEST["layers"] = layers
+        try:
+            snap = {k: ps.LATEST[k] for k in ps.HISTORY_KEYS}
+            snap["layers"] = ps.LATEST["layers"]
+            self.assertEqual(snap["layers"], layers)
+            # K8 status check
+            self.assertEqual(snap["layers"]["K8"]["status"], "PASS")
+        finally:
+            ps.LATEST["layers"] = None
+
+    def test_layers_none_propagates_cleanly(self):
+        # layers None iken snapshot'a girer, dashboard 'bekleniyor' gösterir.
+        ps.LATEST["layers"] = None
+        try:
+            snap = {k: ps.LATEST[k] for k in ps.HISTORY_KEYS}
+            snap["layers"] = ps.LATEST["layers"]
+            self.assertIsNone(snap["layers"])
+        finally:
+            ps.LATEST["layers"] = None
+
+    def test_layers_empty_dict_vs_none(self):
+        # verify_delivery.py hiç koşmadıysa None kalır; koştu ama bulgu
+        # yoksa boş dict {} olabilir — her ikisi de dashboard'da 'bekleniyor'
+        # gösterir (Object.keys(ls).length === 0).
+        ps.LATEST["layers"] = {}
+        try:
+            self.assertEqual(ps.LATEST["layers"], {})
+        finally:
+            ps.LATEST["layers"] = None
 
 
 class DaemonStdioTests(unittest.TestCase):
@@ -757,6 +939,26 @@ class StatusBoardTests(unittest.TestCase):
         self.assertIn("Pre-commit 🔴", board)
         self.assertIn("K0 ✅", board)
 
+    def test_budget_limit_from_effective_config(self):
+        """Bütçe ikonu limiti LATEST.budget.limit'ten okumalı (hardcoded 30 DEĞİL).
+
+        budget.limit=5.0 iken budget_usd=4.0 → ✅ (altında) ve budget_usd=8.0
+        → 🔴 (üstünde). Eski hardcoded 30 olsaydı 8.0 da ✅ derdi — fail-closed
+        kanıtı: config limiti 30'dan küçükken aşım DOĞRU tespit edilmeli.
+        """
+        import preview_server as ps
+        with ps.LOCK:
+            ps.LATEST.update({
+                "layers": {"K1": {"status": "PASS"}, "K8": {"status": "PASS"}},
+                "p0": 0, "p1": 0, "lineage_ok": True,
+                "budget": {"limit": 5.0, "estimated_usd": 1.0},
+            })
+            ps.LATEST["budget_usd"] = 4.0
+        self.assertIn("Bütçe ✅", ps._compute_status_board())
+        with ps.LOCK:
+            ps.LATEST["budget_usd"] = 8.0
+        self.assertIn("Bütçe 🔴", ps._compute_status_board())
+
     def test_no_data(self):
         """Veri yoksa (layers=None, p0=None, p1=None, budget=None, lineage=None) tümü ⚠️ olmalı."""
         import preview_server as ps
@@ -849,6 +1051,222 @@ class StatusBoardTests(unittest.TestCase):
             self.assertEqual(len(snap["precommit_hooks"]), 1)
         finally:
             ps.SSE_CLIENTS.clear()
+
+
+class OverrideReportTests(unittest.TestCase):
+    """OVERRIDE_RAPORU: [CLI override] satırları → logs/OVERRIDE_RAPORU.json.
+
+    PRECOMMIT_RAPORU deseni: override run'ının (--budget/--budget-method)
+    [CLI override] satırları + yapısal cli_overrides kayıtları ayrı bir
+    makine-okur sidecar'a yazılır (verify_dir/logs/OVERRIDE_RAPORU.json) —
+    denetim izi + CI daemon-http artifact'ı için.
+    """
+
+    def test_collect_override_lines_and_struct(self):
+        """Ham satırlar + yapısal kayıtlar tek raporda birleşir."""
+        import preview_server as ps
+        stderr = (
+            "  [CLI override] budget: 30.0 → 25.0 (CLI verildi)\n"
+            "  [CLI override] budget_method: 'both' → 'weighted' (CLI verildi)\n"
+        )
+        ov = {
+            "budget": {"override": True, "file_value": 30.0, "effective": 25.0},
+            "budget_method": {"override": True, "file_value": "both",
+                               "effective": "weighted"},
+        }
+        rpt = ps.collect_override_report(stderr, "normal stdout satırı\n", ov,
+                                         "2026-08-23T00:00:00Z", "FAIL", 1)
+        self.assertEqual(rpt["role"], "override-run")
+        self.assertEqual(rpt["override_count"], 2)
+        self.assertEqual(len(rpt["lines"]), 2)
+        self.assertEqual(rpt["overrides"][0]["key"], "budget")
+        self.assertEqual(rpt["overrides"][0]["effective"], 25.0)
+        self.assertEqual(rpt["overrides"][1]["key"], "budget_method")
+        self.assertEqual(rpt["verdict"], "FAIL")
+        self.assertEqual(rpt["exit_code"], 1)
+        # stdout'taki sıradan satırlar lines'a GİRMEMELİ
+        self.assertTrue(all("normal" not in ln for ln in rpt["lines"]))
+
+    def test_collect_empty_when_no_override(self):
+        """Override yoksa boş rapor (override_count=0, lines=[]) — yine de rapor."""
+        import preview_server as ps
+        rpt = ps.collect_override_report("satır\n", "satır2\n", None,
+                                         "TS", "PASS", 0)
+        self.assertEqual(rpt["override_count"], 0)
+        self.assertEqual(rpt["lines"], [])
+        self.assertEqual(rpt["overrides"], [])
+
+    def test_finalize_writes_override_report_sidecar(self):
+        """_finalize_run verify_dir/logs/OVERRIDE_RAPORU.json yazar."""
+        import preview_server as ps
+        orig = ps._refresh_precommit_hooks_bg
+        ps._refresh_precommit_hooks_bg = lambda *a, **k: None  # noqa: E731
+        try:
+            with tempfile.TemporaryDirectory(prefix="ovr-rpt-") as d:
+                stdout = json.dumps({
+                    "verdict": "FAIL", "counts": {"P0": 0, "P1": 1},
+                    "config": {"cli_overrides": {
+                        "budget": {"override": True, "file_value": 30.0,
+                                   "effective": 25.0},
+                    }}},
+                    ensure_ascii=False)
+                stderr = "  [CLI override] budget: 30.0 → 25.0 (CLI verildi)\n"
+                ps._finalize_run(stdout, stderr, 1, 1.0, data=None,
+                                 verify_dir=d)
+                path = os.path.join(d, "logs", "OVERRIDE_RAPORU.json")
+                self.assertTrue(os.path.isfile(path))
+                with open(path, encoding="utf-8") as f:
+                    rpt = json.load(f)
+                self.assertEqual(rpt["role"], "override-run")
+                self.assertEqual(rpt["override_count"], 1)
+                self.assertEqual(rpt["exit_code"], 1)
+                self.assertEqual(rpt["verdict"], "FAIL")
+                self.assertEqual(len(rpt["lines"]), 1)
+                self.assertIn("budget", rpt["lines"][0])
+                # LATEST slotu da dolmalı (dashboard /api/latest görünürlüğü)
+                with ps.LOCK:
+                    self.assertIsNotNone(ps.LATEST.get("override_report"))
+                    self.assertEqual(
+                        ps.LATEST["override_report"]["override_count"], 1)
+        finally:
+            ps._refresh_precommit_hooks_bg = orig
+
+    def test_finalize_plain_run_writes_empty_report(self):
+        """Override'sız run da rapor yazar (override_count=0) — 'yok' kanıtı."""
+        import preview_server as ps
+        orig = ps._refresh_precommit_hooks_bg
+        ps._refresh_precommit_hooks_bg = lambda *a, **k: None  # noqa: E731
+        try:
+            with tempfile.TemporaryDirectory(prefix="ovr-rpt-") as d:
+                stdout = json.dumps({"verdict": "PASS",
+                                     "counts": {"P0": 0, "P1": 0}},
+                                    ensure_ascii=False)
+                ps._finalize_run(stdout, "", 0, 1.0, data=None, verify_dir=d)
+                path = os.path.join(d, "logs", "OVERRIDE_RAPORU.json")
+                self.assertTrue(os.path.isfile(path))
+                with open(path, encoding="utf-8") as f:
+                    rpt = json.load(f)
+                self.assertEqual(rpt["override_count"], 0)
+                self.assertEqual(rpt["lines"], [])
+                self.assertEqual(rpt["verdict"], "PASS")
+        finally:
+            ps._refresh_precommit_hooks_bg = orig
+
+
+class TestReplayRefsAndPages(unittest.TestCase):
+    """build_replay_events: refs_verified/refs_total/pdf_pages alanları."""
+
+    def test_replay_start_includes_refs_fields(self):
+        """replay-start event'i refs_verified ve refs_total taşır."""
+        ev = ps.build_replay_events("t", "PASS", "o", "e",
+                                    refs_verified=58, refs_total=61)
+        first = json.loads(ev[0][1])
+        self.assertEqual(first["refs_verified"], 58)
+        self.assertEqual(first["refs_total"], 61)
+
+    def test_replay_start_includes_pdf_pages(self):
+        """replay-start event'i pdf_pages taşır."""
+        ev = ps.build_replay_events("t", "PASS", "o", "e", pdf_pages=33)
+        first = json.loads(ev[0][1])
+        self.assertEqual(first["pdf_pages"], 33)
+
+    def test_refs_fields_null_by_default(self):
+        """refs_verified/refs_total belirtilmezse JSON'da null gelir."""
+        ev = ps.build_replay_events("t", "PASS", "o", "e")
+        first = json.loads(ev[0][1])
+        self.assertIsNone(first.get("refs_verified"))
+        self.assertIsNone(first.get("refs_total"))
+        self.assertIsNone(first.get("pdf_pages"))
+
+    def test_multi_pass_refs_and_pages_through(self):
+        """build_replay_events_multi her run'un refs/pages değerleri ayrı taşır."""
+        recs = [
+            {"ts": "t1", "verdict": "PASS", "stdout": "a", "stderr": "",
+             "refs_verified": 54, "refs_total": 54, "pdf_pages": 33},
+            {"ts": "t2", "verdict": "PASS", "stdout": "b", "stderr": "",
+             "refs_verified": 61, "refs_total": 61, "pdf_pages": 33},
+        ]
+        ev = ps.build_replay_events_multi(recs)
+        # ilk run'un replay-start'i
+        first = json.loads(ev[0][1])
+        self.assertEqual(first["refs_verified"], 54)
+        self.assertEqual(first["refs_total"], 54)
+        self.assertEqual(first["pdf_pages"], 33)
+        # ikinci run'un replay-start'ini bul (3. event = replay-end'ten sonra)
+        # replay-start (0), stdout (1), replay-end (2), replay-start (3)
+        second = json.loads(ev[3][1])
+        self.assertEqual(second["refs_verified"], 61)
+        self.assertEqual(second["refs_total"], 61)
+        self.assertEqual(second["pdf_pages"], 33)
+
+    def test_partial_refs_only_verified(self):
+        """Yalnızca refs_verified verilirse total null kalır."""
+        ev = ps.build_replay_events("t", "PASS", "o", "e", refs_verified=50)
+        first = json.loads(ev[0][1])
+        self.assertEqual(first["refs_verified"], 50)
+        self.assertIsNone(first["refs_total"])
+
+    def test_partial_refs_only_total(self):
+        """Yalnızca refs_total verilirse verified null kalır."""
+        ev = ps.build_replay_events("t", "PASS", "o", "e", refs_total=64)
+        first = json.loads(ev[0][1])
+        self.assertIsNone(first["refs_verified"])
+        self.assertEqual(first["refs_total"], 64)
+
+    def test_zero_valued_fields_pass_through(self):
+        """Sıfır değerli alanlar null yerine 0 taşınır."""
+        ev = ps.build_replay_events("t", "PASS", "o", "e",
+                                    refs_verified=0, refs_total=0, pdf_pages=0)
+        first = json.loads(ev[0][1])
+        self.assertEqual(first["refs_verified"], 0)
+        self.assertEqual(first["refs_total"], 0)
+        self.assertEqual(first["pdf_pages"], 0)
+
+
+class TestRouteQueryParams(unittest.TestCase):
+    """do_GET rota eşleşmesi query string'den bağımsızdır (_route).
+
+    Client cache-buster olarak query param ekler (/api/run-history?_t=…,
+    /api/run?v=…) — `self.path` tam eşleşmesi bunları 404'e düşürürdü;
+    _route() urlparse ile yolu arındırır. launchd rotasında canlı akış +
+    run history'nin açılması bu sözleşmeye bağlı.
+    """
+
+    def test_run_history_with_cache_buster(self):
+        self.assertEqual(ps._route("/api/run-history?_t=1787692102715"),
+                         "run_history")
+        self.assertEqual(ps._route("/api/run-history"), "run_history")
+
+    def test_sse_with_version_param(self):
+        self.assertEqual(ps._route("/api/run?v=1787692088565"), "sse")
+        self.assertEqual(ps._route("/api/run"), "sse")
+
+    def test_run_now_with_budget_query(self):
+        self.assertEqual(ps._route("/api/run-now?budget=25&budget_method=weighted"),
+                         "run_now")
+
+    def test_run_stdout_with_ts_query(self):
+        self.assertEqual(ps._route("/api/run-stdout?ts=2026-08-25T21:06:07"),
+                         "run_stdout")
+
+    def test_preview_with_query_ignored(self):
+        self.assertEqual(ps._route("/preview.html?v=123"), "preview")
+        self.assertEqual(ps._route("/"), "preview")
+
+    def test_unknown_paths_are_none(self):
+        self.assertIsNone(ps._route("/api/unknown"))
+        self.assertIsNone(ps._route("/api/unknown?x=1"))
+        self.assertIsNone(ps._route("/favicon.ico"))
+
+    def test_trigger_run_now_method_exists(self):
+        # 24b9905'te yanlışlıkla silinmişti; /api/run-now AttributeError ile
+        # patlardı. Geri yüklendi — tekrar silinmesini önle (regresyon kapısı).
+        self.assertTrue(callable(getattr(ps.Handler, "trigger_run_now", None)),
+                        "Handler.trigger_run_now tanımlı olmalı")
+        # 409 busy-guard ve 200 started yanıtları do_GET/do_POST rotasından
+        # erişilebilir (route testi query-string'li haliyle).
+        self.assertEqual(ps._route("/api/run-now?budget=25"), "run_now")
+        self.assertEqual(ps._route("/api/run-now"), "run_now")
 
 
 if __name__ == "__main__":

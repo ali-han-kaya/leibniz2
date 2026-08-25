@@ -55,7 +55,7 @@ permissions:
 
 jobs:
   verify:
-    name: Delivery verification — K1-K9 (single entry point)
+    name: Delivery verification — K1-K19 (single entry point)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -70,29 +70,49 @@ jobs:
         with:
           python-version: '3.12'
 
+      # ─── PIP CACHE — pip install süresini düşür ──────────────────────
+      - name: Cache pip packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/pip
+          key: pip|${{ runner.os }}|${{ hashFiles('.github/workflows/verify.yml') }}
+          restore-keys: |
+            pip|${{ runner.os }}|
+
       # ─── ACTIONLINT — workflow YAML yapışıklığını fail-closed yakala ──
-      # actionlint, .github/workflows/*..yml'ı statik olarak denetler:
+      # actionlint, TÜM .github/workflows/*.yml'ı (glob) statik olarak
+      # denetler — yeni workflow dosyaları kapıya otomatik girer:
       #   - YAML syntax hataları (yapışık satır, indentation)
       #   - Expression syntax hataları (${{ }})
       #   - Action input/ref hataları (uses:_wrong_version)
       #   - Job dependency hataları (needs: olmayan job)
       #   - Secret/env erişim hataları
-      # Hata varsa exit 1 → job fail → push/pipeline durur.
-      - name: Lint workflow with actionlint
+      # RC: 0 = temiz; 1/2 = hata ya da yalnızca shellcheck info/hint
+      # (advisory — build'i durdurmaz; fail-closed kapı pre-commit'te
+      # lint_actionlint.sh'tir); >2 = actionlint iç hatası → job fail.
+      - name: Lint all workflows with actionlint
         if: always()
         shell: bash
         run: |
           ACTIONLINT_VERSION=1.7.7
           curl -sL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" -o /tmp/actionlint.tar.gz
           tar xzf /tmp/actionlint.tar.gz -C /tmp actionlint
-          # actionlint exit 2 = warnings/hints (shellcheck info), exit 1 = errors
-          # YAML yapışıklığı / syntax hataları exit 1 verir; shellcheck
-          # bilgi notları exit 2 — bunlar fail-closed DEĞİL advisory.
-          ACT_RC=0; /tmp/actionlint --color .github/workflows/verify.yml 2>&1 || ACT_RC=$?
-          if [ "$ACT_RC" -eq 0 ]; then
-            echo "actionlint: PASS"
+          # Tüm workflow dosyaları — tek kaynak glob (.github/workflows/*.yml),
+          # check_python3_shell.py deseni: yeni dosya kapıya otomatik girer.
+          MAX_RC=0
+          for WF in .github/workflows/*.yml; do
+            WF_RC=0
+            /tmp/actionlint --color "$WF" 2>&1 || WF_RC=$?
+            if [ "$WF_RC" -gt "$MAX_RC" ]; then MAX_RC=$WF_RC; fi
+            echo "actionlint: $WF → RC=$WF_RC"
+          done
+          if [ "$MAX_RC" -eq 0 ]; then
+            echo "actionlint: PASS — tüm workflow'lar temiz"
+          elif [ "$MAX_RC" -le 2 ]; then
+            echo "actionlint: INFO — RC=$MAX_RC (shellcheck hints/errors, advisory)"
           else
-            echo "actionlint: INFO — exited $ACT_RC (shellcheck hints, advisory)"
+            echo "actionlint: FAIL (RC=$MAX_RC)"
+            exit 1
           fi
 
       - name: Lint shell hooks (shellcheck, POSIX/bash)
@@ -249,11 +269,18 @@ jobs:
 
       # K9: Lean 4 reduct-invariance (elan + stable toolchain).
       # NOT: `--default-toolchain none` + lean-toolchain dosyası yok = lean
-      # çalışmaz; bu yüzden stable toolchain açıkça kurulur.
+      # çalışmaz; bu yüzden stable toolchain açıkça kurulur. v4.14.0 da
+      # açıkça kurulur — 8 teoremli Sınır İspatı çekirdeğinin lake build
+      # kapısı lean-toolchain'deki sürümü (fail-closed) kullanır.
+      # NOT 2: `echo "$HOME/.elan/bin" >> $GITHUB_PATH` yalnızca SONRAKİ
+      # adıma uygulanır; `elan toolchain install` aynı adımda koştuğu için
+      # inline export gerekir (yoksa exit 127 → sonraki adımlar skip).
       - name: Install Lean 4 (K9)
         run: |
           curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain leanprover/lean4:stable
           echo "$HOME/.elan/bin" >> $GITHUB_PATH
+          export PATH="$HOME/.elan/bin:$PATH"
+          elan toolchain install leanprover/lean4:v4.14.0
 
       # `pipefail` + `tee`: çıktı hem log'a hem dosyaya yazılır, ama exit kodu
       # python'dan gelir (boru, fail-closed kapıyı gizleyemez).
@@ -261,8 +288,15 @@ jobs:
       # --budget-out: bütçe sonucunu ayrı JSON'a yazar (budget job'u tüketir).
       # --refs-out: çevrimiçi referans denetim sonuçlarını VERSION JSON olarak
       # yazar (her run'da kaç referansın çevrimiçi doğrulandığını izlemek için).
-      - name: Run full verification (K1-K9, single entry point)
+      - name: Run full verification (K1-K19, single entry point)
+        if: always()
         shell: bash
+        env:
+          # K18 daemon smoke Linux runner'da port/setsid zaman aşımına uğrar;
+          # advisory daemon-http job'ı macOS'te koşar. YALNIZCA bu adımda set
+          # edilir — birim test adımında (CI=true olsa bile) K18 fail-closed
+          # davranışı gerçekten test edilir (test_k18_daemon.py).
+          VD_SKIP_K18: "1"
         run: |
           set -o pipefail
           python3 _calisma/CIKTI/verify_delivery.py --dir _calisma/CIKTI --full \
@@ -304,6 +338,88 @@ jobs:
             cat logs/precommit.log
           } >> verify_report.txt
           cat logs/precommit.log
+          exit $status
+
+      # ─── K13 REPRO-MANIFEST (ADVISORY, ayrı step) ───────────────────────
+      # verify-delivery-repro-manifest hook'u (K13) — yukarıdaki ortak
+      # `pre-commit run --all-files` içinde zaten koşar; BURADA ayrıca TEK
+      # BAŞINA koşulup sonucu logs/k13_repro_manifest.log + makine-okunur
+      # logs/k13_repro_manifest.json sidecar'ına yazılır (precommit-logs
+      # artifact'ı logs/ dizinini bütünüyle yükler → K13 sonucu artifact'a
+      # girer). Komut, yereldeki hook entry'si ile BİREBİR aynıdır.
+      - name: Run verify-delivery-repro-manifest (K13, separate)
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: |
+          mkdir -p logs
+          if python3 _calisma/CIKTI/verify_delivery.py --dir _calisma/CIKTI \
+             --check-repro-manifest > logs/k13_repro_manifest.log 2>&1; then
+            status=0
+          else
+            status=$?
+          fi
+          echo "$status" > logs/k13_repro_manifest.exit
+          if [ "$status" -eq 0 ]; then ok="true"; res="PASS"; else ok="false"; res="FAIL"; fi
+          python3 - "$ok" "$status" "$res" <<'PYEOF'
+          import json, sys
+          ok, status, res = sys.argv[1], int(sys.argv[2]), sys.argv[3]
+          detail = ""
+          try:
+              with open("logs/k13_repro_manifest.log", encoding="utf-8") as f:
+                  for line in f:
+                      if line.startswith("[K13]"):
+                          detail = line.strip()
+          except OSError:
+              pass
+          with open("logs/k13_repro_manifest.json", "w", encoding="utf-8") as f:
+              json.dump({
+                  "layer": "K13",
+                  "ok": ok == "true",
+                  "exit": status,
+                  "detail": detail or f"K13 repro manifest: {res}",
+                  "log": "k13_repro_manifest.log",
+              }, f, ensure_ascii=False, indent=2)
+          PYEOF
+          {
+            echo ""
+            echo "════════════════════════════════════════════════════════"
+            echo "K13 REPRO-MANIFEST (ADVISORY, ayrı step)"
+            echo "exit code: $status"
+            echo "════════════════════════════════════════════════════════"
+            cat logs/k13_repro_manifest.log
+          } >> verify_report.txt
+          cat logs/k13_repro_manifest.log
+          exit $status
+
+      # ─── CHECK-UNIT-TESTS (ADVISORY, ayrı step) ─────────────────────────
+      # check-unit-tests hook'u — yukarıdaki ortak `pre-commit run
+      # --all-files` içinde zaten koşar; BURADA ayrıca TEK BAŞINA koşulup
+      # sonucu logs/check_unit_tests.log + logs/check_unit_tests.exit
+      # dosyalarına yazılır (precommit-logs artifact'ı logs/ dizinini
+      # bütünüyle yükler → çıktı artifact'a girer). Komut, yereldeki hook
+      # entry'si (test listesi + venv fallback dahil) ile BİREBİR aynıdır;
+      # gate rolü yukarıdaki fail-closed birim test adımındadır — bu adım
+      # yalnızca hook'un kendisinin CI'da da sağlam koştuğunu kanıtlar.
+      - name: Run check-unit-tests hook (separate)
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: |
+          mkdir -p logs
+          pre-commit run check-unit-tests --all-files --show-diff-on-failure \
+            --color=never > logs/check_unit_tests.log 2>&1
+          status=$?
+          echo "$status" > logs/check_unit_tests.exit
+          {
+            echo ""
+            echo "════════════════════════════════════════════════════════"
+            echo "CHECK-UNIT-TESTS (ADVISORY, ayrı step)"
+            echo "exit code: $status"
+            echo "════════════════════════════════════════════════════════"
+            cat logs/check_unit_tests.log
+          } >> verify_report.txt
+          cat logs/check_unit_tests.log
           exit $status
 
       # ─── COMMIT-MSG (ADVISORY) — commit geçmişi kural denetimi ──────────
@@ -483,7 +599,7 @@ jobs:
           sha256sum history.jsonl 2>/dev/null > history.jsonl.sha256 || true
 
       # `if: always()` — kapı FAIL olsa bile rapor (neden başarısız olduğu)
-      # artifact olarak yüklenir. Tek rapor, tüm K1-K9 katmanlarını içerir.
+      # artifact olarak yüklenir. Tek rapor, tüm K1-K14 katmanlarını içerir.
       # Hangi config'in kullanıldığını denetlenebilir kılar: ham config,
       # şeması ve verify_delivery.py'nin çözümlediği etkin değerler.
       - name: Bundle config snapshot
@@ -536,7 +652,7 @@ jobs:
           name: lineage-findings
           path: lineage_findings.json
           retention-days: 30
-          if-no-files-found: error
+          if-no-files-found: warn
 
       - name: Upload K layers sidecar
         if: always()
@@ -937,7 +1053,7 @@ jobs:
   reproducibility:
     name: Reproducibility bundle
     runs-on: ubuntu-latest
-    needs: [verify, budget, reports, config-drift, repack-verify, refs-trend, action-runtimes]
+    needs: [verify, budget, reports, config-drift, repack-verify, refs-trend, override-trend, action-runtimes]
     if: always()
     steps:
       - name: Checkout
@@ -964,13 +1080,7 @@ jobs:
         with:
           path: all_artifacts/
           merge-multiple: true
-          pattern: '{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,k0-findings,budget-verify,lineage-findings,klayers,unit-tests,action-runtimes}'
-
-      - name: Download config artifact (config/ prefix)
-        uses: actions/download-artifact@v7
-        with:
-          name: config
-          path: all_artifacts/config/
+          pattern: '{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,config,k0-findings,budget-verify,lineage-findings,klayers,unit-tests,action-runtimes}'
 
       - name: Download precommit-logs artifact (precommit-logs/ prefix)
         uses: actions/download-artifact@v7
@@ -988,6 +1098,28 @@ jobs:
         with:
           name: refs-trend
           path: all_artifacts/refs-trend/
+
+      # audit-refs-trend advisory bir job'dur; artifact'ı yoksa manifest
+      # audit-refs-trend'siz üretilir — continue-on-error ile build bloke
+      # edilmez. Prefixed indirme sayesinde gen_repro_manifest.py'nin
+      # AUDIT REFS-TREND bölümü audit-refs-trend/ önekini yakalar + hash'ler.
+      - name: Download audit-refs-trend artifact (audit-refs-trend/ prefix)
+        continue-on-error: true
+        uses: actions/download-artifact@v7
+        with:
+          name: audit-refs-trend
+          path: all_artifacts/audit-refs-trend/
+
+      # override-trend advisory bir job'dur; artifact'ı yoksa (tablo
+      # üretilemedi) manifest override-trend'siz üretilir —
+      # continue-on-error ile build bloke edilmez. Prefixed indirme
+      # sayesinde override-trend/ önekini yakalar + ayrı hash'ler.
+      - name: Download override-trend artifact (override-trend/ prefix)
+        continue-on-error: true
+        uses: actions/download-artifact@v7
+        with:
+          name: override-trend
+          path: all_artifacts/override-trend/
 
       # precheck-report advisory bir job'dur; artifact'ı yoksa manifest
       # precheck'siz üretilir — continue-on-error ile build bloke edilmez.
@@ -1021,6 +1153,32 @@ jobs:
         with:
           name: plist-check
           path: all_artifacts/plist-check/
+
+      # mirror-check macOS fail-closed job'ın artifact'ıdır (K17 raporu +
+      # --mirror-out sidecar + bootstrap smoke). macOS job'ı Linux-only push
+      # senaryolarında çalışmayabilir veya artifact beklenmeyebilir —
+      # continue-on-error ile build bloke edilmez; varsa prefixed indirme
+      # sayesinde gen_repro_manifest.py'nin MIRROR CHECK bölümü
+      # mirror-check/ önekini yakalar + ayrı hash'ler (SHA-256 ile sabitlenir).
+      - name: Download mirror-check artifact (mirror-check/ prefix)
+        continue-on-error: true
+        uses: actions/download-artifact@v7
+        with:
+          name: mirror-check
+          path: all_artifacts/mirror-check/
+
+      # daemon-http macOS advisory job'ın artifact'ıdır (daemon_http_test.py
+      # raporu + K15 sidecar + override report). macOS job'ı Linux-only push
+      # senaryolarında çalışmayabilir veya artifact beklenmeyebilir —
+      # continue-on-error ile build bloke edilmez; varsa prefixed indirme
+      # sayesinde gen_repro_manifest.py'nin DAEMON HTTP bölümü
+      # daemon-http/ önekini yakalar + ayrı hash'ler (SHA-256 ile sabitlenir).
+      - name: Download daemon-http artifact (daemon-http/ prefix)
+        continue-on-error: true
+        uses: actions/download-artifact@v7
+        with:
+          name: daemon-http
+          path: all_artifacts/daemon-http/
 
       # ─── 2) manifest.txt üret (gen_repro_manifest.py — tek kaynak) ─────────
       - name: Generate reproducibility manifest
@@ -1294,6 +1452,9 @@ jobs:
 
       # Fail-closed kapı (yorumdan SONRA): drift exit koduyla çık.
       # Job fail-closed kalır; yorum adımı yalnızca bilgilendirme ekler.
+      # cli_overrides warning=true da kapıya dahildir: override aktifken
+      # config dosya değerleriyle tutarlılık DENETLENEMEZ — tekrarlanabilirlik
+      # sapması fail-closed bloklanır (exit 1).
       - name: Config drift fail-closed gate
         if: always()
         shell: bash
@@ -1303,6 +1464,14 @@ jobs:
           final=0
           [ "$rc" != "0" ] && final=$rc
           [ "$diffrc" != "0" ] && final=$diffrc
+          # cli_overrides: tekrarlanabilirlik sapması → kapıyı AŞAR
+          if [ -f config-drift/cli_overrides_version.json ]; then
+            ov_warn=$(python3 -c "import json;d=json.load(open('config-drift/cli_overrides_version.json'));print('1' if d.get('warning') else '0')" 2>/dev/null || echo 0)
+            if [ "$ov_warn" = "1" ]; then
+              echo "🔧 CLI override WARNING → tekrarlanabilirlik sapması (fail-closed)"
+              final=1
+            fi
+          fi
           echo "Config drift final exit code: $final (gen_config=$rc, diff-on-drift=$diffrc)"
           exit "$final"
 
@@ -1324,11 +1493,17 @@ jobs:
           verdict=PASS; [ "$final" != "0" ] && verdict=FAIL
           printf 'config-drift exit=%s (gen_config=%s, diff-on-drift=%s) verdict=%s\n' \
             "$final" "$rc" "$diffrc" "$verdict" > config-drift/summary.txt
-          # cli_overrides tutarlılık denetimi — ayrı satır (VERSION JSON'da
-          # warning/override_count; dosya yoksa N/A). Advisory; kapıyı etkilemez.
+          # cli_overrides tutarlılık denetimi — fail-closed kapıya DAHİL.
+          # warning=true ise override aktif demektir; tekrarlanabilirlik sapması
+          # olarak gate'i aşar. summary.txt'ye 'cli_overrides=' satırı yazılır.
           if [ -f config-drift/cli_overrides_version.json ]; then
             cov=$(python3 -c "import json;d=json.load(open('config-drift/cli_overrides_version.json'));print('WARNING' if d.get('warning') else 'OK', d.get('override_count',0))" 2>/dev/null)
             printf 'cli_overrides=%s (override_count=%s)\n' $cov >> config-drift/summary.txt
+            # Gate'e etki: warning=true → verdict FAIL (final zaten gate'te 1 olur)
+            ov_warn=$(python3 -c "import json;d=json.load(open('config-drift/cli_overrides_version.json'));print('1' if d.get('warning') else '0')" 2>/dev/null || echo 0)
+            if [ "$ov_warn" = "1" ] && [ "$verdict" = "PASS" ]; then
+              echo "Overridden by cli_overrides WARNING — verdict → FAIL" >> config-drift/summary.txt
+            fi
           else
             printf 'cli_overrides=N/A (denetim yok)\n' >> config-drift/summary.txt
           fi
@@ -1340,6 +1515,33 @@ jobs:
           name: config-drift
           path: config-drift/
           if-no-files-found: error
+
+  # ──────────────────────────────────────────────────────────────────────
+  # CONFIG ↔ CONFIG_BASENAMES SENKRON DENETİMİ
+  #
+  # verify.yml "Bundle config snapshot" adımında kopyalanan/üretilen her
+  # config dosyasının gen_repro_manifest.py CONFIG_BASENAMES set'inde
+  # tanımlı olduğunu doğrular. Drift: yeni config dosyası eklenir ama
+  # CONFIG_BASENAMES güncellenmezse → config manifest'ten düşer → K10
+  # manifest denetimi görmez → sessiz kapsam kaybı. Advisory
+  # (continue-on-error) — bloke etmez; uyarı raporu olarak yayınlar.
+  # stdout: PASS/FAIL + drift listesi.
+  # ──────────────────────────────────────────────────────────────────────
+  config-sync:
+    name: Config snapshot ↔ CONFIG_BASENAMES sync check
+    runs-on: ubuntu-latest
+    needs: [verify]
+    # REQUIRED check (2026-08-23): config snapshot ↔ CONFIG_BASENAMES ↔
+    # schema üçlü senkronu merge kapısı oldu — drift'te job FAIL, PR bloke.
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Check config sync
+        run: |
+          set -euo pipefail
+          python3 _calisma/CIKTI/check_config_sync.py
 
   # ──────────────────────────────────────────────────────────────────────
   # REPACK → VERIFY (SIDECAR SYNC)
@@ -1555,6 +1757,49 @@ jobs:
           retention-days: 30
 
   # ──────────────────────────────────────────────────────────────────────
+  # OVERRIDE TREND — CLI override'larını run'lar arası toplar (refs-trend deseni).
+  # override_trend.py, budget artifact'larındaki cli_overrides_version.json
+  # sidecar'larını toplar ve `warning=true` run'larının zaman serisini üretir.
+  # continue-on-error: ADVISORY — build'i bloke etmez.
+  override-trend:
+    name: CLI override trend (warning=true time series)
+    runs-on: ubuntu-latest
+    # budget job'ından sonra koşar (cli_overrides_version.json orada üretilir).
+    needs: [budget]
+    if: always()
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Build override trend table
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          python3 _calisma/CIKTI/override_trend.py \
+            --repo "$GITHUB_REPOSITORY" \
+            --out-dir override-trend \
+            --max-artifacts 50
+
+      - name: Upload override trend
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: override-trend
+          path: override-trend/
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # ──────────────────────────────────────────────────────────────────────
   # PRE-PUSH DENETİMİ (advisory) — AŞAMA 0 kapıları her push'ta otomatik.
   # publish_precheck.sh, docs/PUBLISH_SCENARIO.md AŞAMA 0 ön-kontrolünün tek
   # komutluk karşılığıdır. CI'da --ci modunda koşar: yerel-only kontroller
@@ -1668,6 +1913,108 @@ jobs:
             cat .freebuff/status_checks_gh.err
           fi
 
+      # ─── ADVISORY KONTRAT KAPISI ──────────────────────────────────────
+      # status_checks.py --gh --json çıktısındaki advisory_contract.ok
+      # alanını denetler. advisory_contract OFFLINE hesaplanır (workflow
+      # YAML'ından) — GitHub erişilemese bile (UNREADABLE/NOT_SET_UP) JSON'da
+      # taşınır, dolayısıyla bu kapı CI'da da gerçekten çalışır:
+      #   ok=True  → tüm job adları ↔ required farkı tutarlı (plist-check
+      #              advisory, exclude'lar bayat değil, isim çakışması yok)
+      #   ok=False → ihlal (bayat exclude / plist-check required'a girmiş /
+      #              isim çakışması) → kontrat FAIL olarak raporlanır.
+      # Fail-closed: ihlalde exit 1 (advisory job olduğundan build'i bloke
+      # etmez ama precheck-report artifact'ında görünür).
+      - name: Advisory contract gate (--gh --json → advisory_contract.ok)
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set +e
+          python3 _calisma/CIKTI/status_checks.py --gh --json \
+            > .freebuff/advisory_contract.json 2> .freebuff/advisory_contract.err
+          SC_RC=$?
+          set -e
+          echo "status_checks --gh rc=$SC_RC"
+          if [ ! -s .freebuff/advisory_contract.json ]; then
+            echo "ADVISORY CONTRACT: FAIL (JSON üretilemedi) — stderr:"
+            cat .freebuff/advisory_contract.err
+            exit 1
+          fi
+          python3 - <<'PYEOF'
+          import json, sys
+          d = json.load(open(".freebuff/advisory_contract.json"))
+          ac = d.get("advisory_contract") or {}
+          ok = ac.get("ok")
+          verdict = d.get("verdict")
+          if ok is True:
+              print(f"ADVISORY CONTRACT: PASS — advisory={len(ac.get('advisory', []))}, "
+                    f"required={len(ac.get('required', []))}, "
+                    f"plist-check ok={ac.get('plist_check', {}).get('ok')}")
+              print(f"  (gh verdict: {verdict})")
+              sys.exit(0)
+          print("ADVISORY CONTRACT: FAIL")
+          for i in ac.get("issues", []):
+              print(f"  [FAIL] {i}")
+          print(f"  plist_check: {ac.get('plist_check')}")
+          print(f"  (gh verdict: {verdict})")
+          sys.exit(1)
+          PYEOF
+
+      # ─── STATUS CHECKS --json (OFFLINE, SHA-256 sabitlemesi için) ────────
+      # status_checks.py --json (--gh'siz) OFFLINE ve deterministiktir:
+      # yalnızca workflow YAML'ından gate/advisory kontratı hesaplar — GitHub
+      # erişimi gerekmez, her run'da aynı üretilir. Çıktı
+      # .freebuff/status_checks.json'a yazılır; reproducibility manifest'i
+      # bu dosyayı STATUS CHECKS bölümünde SHA-256 ile sabitler (advisory
+      # kontratı sonucu denetim zincirine girer).
+      - name: Run status_checks --json (offline, SHA-256 sabitleme)
+        continue-on-error: true
+        shell: bash
+        run: |
+          mkdir -p .freebuff
+          python3 _calisma/CIKTI/status_checks.py --json \
+            > .freebuff/status_checks.json 2> .freebuff/status_checks.err || true
+          echo "status_checks.json boyut: $(wc -c < .freebuff/status_checks.json) bayt"
+          if [ -s .freebuff/status_checks.json ]; then
+            python3 - <<'PYEOF'
+            import json
+            d = json.load(open(".freebuff/status_checks.json"))
+            ac = d.get("advisory_contract") or {}
+            print("advisory_contract.ok:", ac.get("ok"),
+                  "| required:", len(ac.get("required", [])),
+                  "| advisory:", len(ac.get("advisory", [])))
+            PYEOF
+          else
+            echo "status_checks --json çıktı üretmedi — stderr:"
+            cat .freebuff/status_checks.err
+          fi
+
+      # publish_precheck.sh --verify-checks — status_checks.py + --gh'nin TEK
+      # KAYNAK kapısı (verify_checks.sh; wrapper --verify-checks ile aynı
+      # fonksiyon). Makine-okur JSON sidecar'ı .freebuff/verify_checks.json'a
+      # yazar (verdict: PASS|WARN|FAIL + --gh --json detayı). Advisory —
+      # GITHUB_TOKEN admin scope'u olmadığından CI'da genelde WARN/UNREADABLE
+      # döner (o da gerçek durumu belgeler; bloke etmez).
+      - name: Run verify-checks gate (--verify-checks + JSON sidecar)
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          mkdir -p .freebuff
+          bash docs/publish_precheck.sh --verify-checks \
+            --verify-checks-out .freebuff/verify_checks.json 2>&1 | tee .freebuff/verify_checks.txt
+          echo "--- sidecar özeti ---"
+          if [ -f .freebuff/verify_checks.json ]; then
+            python3 -c 'import json; d=json.load(open(".freebuff/verify_checks.json")); print("verdict:", d.get("verdict"), "| rc:", d.get("rc"), "| note:", d.get("note"))'
+          else
+            echo "sidecar üretilemedi"
+          fi
+
       - name: Upload precheck report
         if: always()
         uses: actions/upload-artifact@v6
@@ -1677,6 +2024,12 @@ jobs:
             .freebuff/precheck_report.txt
             .freebuff/status_checks_gh.json
             .freebuff/status_checks_gh.err
+            .freebuff/advisory_contract.json
+            .freebuff/advisory_contract.err
+            .freebuff/status_checks.json
+            .freebuff/status_checks.err
+            .freebuff/verify_checks.json
+            .freebuff/verify_checks.txt
           if-no-files-found: ignore
           retention-days: 30
 
@@ -1805,24 +2158,25 @@ jobs:
           python3 _calisma/CIKTI/daemon_http_test.py \
             --out daemon_http_report.json \
             --history-out daemon_history.jsonl \
+            --override-out override_report.json \
             2>&1 | tee daemon_http_report.txt
           rc=${PIPESTATUS[0]}
           set -e
           echo "rc=$rc" >> "$GITHUB_OUTPUT"
           echo "daemon-http exit: $rc"
 
-      # K15: history.jsonl ↔ .sha256 sidecar bütünlüğü (advisory)
+      # K15: history.jsonl ↔ .sha256 sidecar bütünlüğü (fail-closed P1)
       # Daemon test'i tempdir'de history.jsonl üretir; --history-out ile
-      # dışarı kopyalandı. Sidecar yoksa veya hash uyuşmazsa rapor yazılır.
-      - name: K15 history sidecar check (advisory)
+      # dışarı kopyalandı. Sidecar yoksa veya hash uyuşmazsa P1 → exit 1.
+      # skip: daemon test'i history.jsonl üretmediyse (henüz run yok).
+      - name: K15 history sidecar check (fail-closed P1)
         id: k15
         if: always()
-        continue-on-error: true
         run: |
           set +e
           if [ ! -f daemon_history.jsonl ]; then
             echo "k15_rc=skipped" >> "$GITHUB_OUTPUT"
-            echo "K15: history.jsonl yok (daemon test üretmedi)"
+            echo "K15: history.jsonl yok (daemon test üretmedi) — atlandı"
             exit 0
           fi
           python3 _calisma/CIKTI/verify_delivery.py \
@@ -1832,23 +2186,65 @@ jobs:
           set -e
           echo "k15_rc=$rc" >> "$GITHUB_OUTPUT"
           echo "K15 exit: $rc"
+          if [ "$rc" -ne 0 ]; then
+            echo "K15: FAIL — history sidecar uyuşmazlığı (P1, fail-closed)"
+          fi
+          exit $rc
 
-      - name: Write daemon HTTP + K15 to run summary
+      # OVERRIDE RAPORU (PRECOMMIT_RAPORU deseni): override run'ının
+      # [CLI override] satırları preview_server tarafından
+      # logs/OVERRIDE_RAPORU.json'a yazılır; daemon testi --override-out ile
+      # dışarı kopyalar. Bu adım raporun varlığını + alan sözleşmesini
+      # fail-closed doğrular (advisory: yoksa job yine de yeşil, run summary
+      # not düşer).
+      - name: Validate override run report (OVERRIDE_RAPORU)
+        id: ovr
+        if: always()
+        continue-on-error: true
+        run: |
+          set +e
+          if [ ! -f override_report.json ]; then
+            echo "ovr_rc=missing" >> "$GITHUB_OUTPUT"
+            echo "OVERRIDE_RAPORU: yok (override run üretim zaman aşımı)"
+            exit 0
+          fi
+          python3 - <<'PYEOF' 2>&1 | tee ovr_report.txt
+          import json
+          d = json.load(open('override_report.json', encoding='utf-8'))
+          need = ['generated_at', 'ts', 'verdict', 'exit_code', 'role',
+                  'override_count', 'overrides', 'lines']
+          missing = [k for k in need if k not in d]
+          if missing or d.get('role') != 'override-run' \
+             or not isinstance(d.get('override_count'), int):
+              print('OVERRIDE_RAPORU: FAIL — eksik/geçersiz alan: ' + str(missing))
+              raise SystemExit(1)
+          print('OVERRIDE_RAPORU: PASS — override_count=%d, lines=%d, verdict=%s' % (
+              d['override_count'], len(d['lines'] or []), d.get('verdict')))
+          PYEOF
+          rc=${PIPESTATUS[0]}
+          set -e
+          echo "ovr_rc=$rc" >> "$GITHUB_OUTPUT"
+          echo "OVERRIDE_RAPORU exit: $rc"
+
+      - name: Write daemon HTTP + K15 + override to run summary
         if: always()
         run: |
           {
-            echo "## Daemon mode HTTP 200 + K15 sidecar (advisory)"
+            echo "## Daemon mode HTTP 200 + K15 sidecar (fail-closed P1) + OVERRIDE_RAPORU (advisory)"
             echo ""
             echo "- daemon-http test: exit \`${{ steps.daemon.outputs.rc }}\`"
             echo "- K15 history sidecar: exit \`${{ steps.k15.outputs.k15_rc }}\`"
+            echo "- OVERRIDE_RAPORU: exit \`${{ steps.ovr.outputs.ovr_rc }}\`"
             echo '```'
             cat daemon_http_report.txt 2>/dev/null || echo '(rapor yok)'
             echo '---'
             cat k15_report.txt 2>/dev/null || echo '(K15 rapor yok)'
+            echo '---'
+            cat ovr_report.txt 2>/dev/null || echo '(OVERRIDE_RAPORU rapor yok)'
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload daemon HTTP + K15 report
+      - name: Upload daemon HTTP + K15 + override report
         if: always()
         uses: actions/upload-artifact@v6
         with:
@@ -1859,6 +2255,309 @@ jobs:
             daemon_history.jsonl
             daemon_history.jsonl.sha256
             k15_report.txt
+            override_report.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # ════════════════════════════════════════════════════════════════════
+  # PREVIEW RELOAD SMOKE (advisory) — Freebuff preview tab restart + data
+  #
+  # Preview sunucusunu restart eder (update_preview.sh --start, HTML
+  # mirror rebuild + launchd bootstrap), ayağa kalkmayı bekler ve
+  # tüm endpoint'lerin veri-dolu olduğunu doğrular:
+  #   /preview.html → 200 + window.BUILD_TS
+  #   /api/latest  → valid JSON + exit_code + layers
+  #   /api/history → valid JSON + ≥1 kayit
+  #   /api/run     → SSE stream + snapshot event
+  #   /api/run-stream → SSE stream + ilk event
+  #   /api/run-history → valid JSON list
+  #
+  # macOS-only: launchd + update_preview.sh macOS'a özgüdür.
+  # advisory: FAIL olsa da build'i bloke etmez; rapor artifact'ta.
+  # ════════════════════════════════════════════════════════════════════
+  preview-reload-smoke:
+    name: Preview reload smoke (advisory, macOS)
+    runs-on: macos-latest
+    needs: [verify]
+    if: always()
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Rebuild mirror + restart daemon
+        id: restart
+        run: |
+          set +e
+          bash _calisma/CIKTI/update_preview.sh --start 2>&1 | head -20
+          rc=$?
+          set -e
+          echo "restart_rc=$rc" >> "$GITHUB_OUTPUT"
+
+      - name: Run preview reload smoke
+        id: smoke
+        continue-on-error: true
+        run: |
+          set +e
+          python3 _calisma/CIKTI/test_preview_reload_smoke.py \
+            --no-restart \
+            --port 8000 \
+            --out preview_reload_report.json \
+            2>&1 | tee preview_reload_report.txt
+          rc=$?
+          set -e
+          echo "smoke_rc=$rc" >> "$GITHUB_OUTPUT"
+
+      - name: Write preview reload to run summary
+        if: always()
+        run: |
+          {
+            echo "## Preview reload smoke (advisory)"
+            echo ""
+            echo "- restart: exit \`${{ steps.restart.outputs.restart_rc }}\`"
+            echo "- smoke test: exit \`${{ steps.smoke.outputs.smoke_rc }}\`"
+            echo '```'
+            cat preview_reload_report.txt 2>/dev/null || echo '(rapor yok)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload preview reload report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: preview-reload-smoke
+          path: |
+            preview_reload_report.txt
+            preview_reload_report.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # ──────────────────────────────────────────────────────────────────────
+  # CI-SIMULATE (advisory) — publish_wrapper.sh --ci-simulate'ın CI karşılığı.
+  #
+  # Her push'ta yerel simülasyon da koşar: status_checks.py (beklenen
+  # required check adları) + simulate_verify_job.sh (verify job akışının
+  # yerel compose-style replay'i: --full K1-K14 + pre-commit + sha256 +
+  # config bundle + GITHUB_STEP_SUMMARY — `verify` job'ının birebir
+  # yerel karşılığı). Böylece CI'ın kendisi de yerel simülasyonun hâlâ
+  # yeşil olduğunu her push'ta doğrular (wrapper'ın iddiası CI'da da
+  # test edilir). REQUIRED check (2026-08-23): simülasyon FAIL olursa
+  # JOB FAIL → merge bloke (tam replay kapısı).
+  # ──────────────────────────────────────────────────────────────────────
+  ci-simulate:
+    name: CI-SIMULATE (advisory)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      # ─── PIP CACHE — pip install süresini düşür ──────────────────────
+      - name: Cache pip packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/pip
+          key: pip|${{ runner.os }}|${{ hashFiles('.github/workflows/verify.yml') }}
+          restore-keys: |
+            pip|${{ runner.os }}|
+
+      # ─── PRE-COMMIT CACHE — ~/.cache/pre-commit (z3-solver vb.) ─────
+      - name: Cache pre-commit hook environments
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit|${{ runner.os }}|${{ hashFiles('.pre-commit-config.yaml') }}
+          restore-keys: |
+            pre-commit|${{ runner.os }}|
+
+      # simulate_verify_job.sh bağımlılıkları — verify job'ının kurulum
+      # adımlarıyla aynı (tekrarlanabilirlik: sim ile gerçek CI aynı env).
+      - name: Install deps (pre-commit + PyYAML + jsonschema + Z3)
+        run: pip install pre-commit pyyaml jsonschema z3-solver==5.1.0.0
+
+      - name: Install pdfinfo (poppler-utils) + qpdf (K6-DETERM)
+        run: bash _calisma/CIKTI/apt_install.sh poppler-utils qpdf
+
+      # K9 (Lean) --full'ün parçası — gerçek verify job'ıyla aynı kurulum.
+      # NOT: `echo "$HOME/.elan/bin" >> $GITHUB_PATH` yalnızca SONRAKİ adıma
+      # uygulanır; `elan toolchain install` aynı adımda koştuğu için inline
+      # export gerekir (yoksa: exit 127 command not found).
+      - name: Install Lean 4 (K9)
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain leanprover/lean4:stable
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+          export PATH="$HOME/.elan/bin:$PATH"
+          elan toolchain install leanprover/lean4:v4.14.0
+
+      - name: Run CI-SIMULATE (status_checks + simulate_verify_job)
+        id: sim
+        env:
+          # simulate_verify_job.sh, verify job'unun --full replay'ini koşar;
+          # K18 daemon smoke Linux runner'da zaman aşımına uğrar (advisory
+          # daemon-http job'ı macOS'te koşar). verify job'ındaki "Run full
+          # verification" adımıyla aynı guard.
+          VD_SKIP_K18: "1"
+        run: |
+          set +e
+          mkdir -p .freebuff/sim
+          python3 _calisma/CIKTI/status_checks.py > .freebuff/sim/status_checks.txt 2>&1
+          sc_rc=$?
+          bash _calisma/CIKTI/simulate_verify_job.sh > .freebuff/sim/simulate.log 2>&1
+          sim_rc=$?
+          set -e
+          echo "sc_rc=$sc_rc" >> "$GITHUB_OUTPUT"
+          echo "sim_rc=$sim_rc" >> "$GITHUB_OUTPUT"
+          echo "CI-SIMULATE: status_checks exit $sc_rc, simulate_verify_job exit $sim_rc"
+          # Required check (2026-08-23): simülasyon FAIL olursa JOB da FAIL
+          # (continue-on-error kaldırıldı) — tam replay kapısı merge'i bloke eder.
+          if [ "$sc_rc" -ne 0 ] || [ "$sim_rc" -ne 0 ]; then
+            echo "CI-SIMULATE FAIL: status_checks=$sc_rc simulate_verify_job=$sim_rc" >&2
+            exit 1
+          fi
+
+      - name: Write CI-SIMULATE to run summary
+        if: always()
+        run: |
+          {
+            echo "## CI-SIMULATE (yerel simülasyon — advisory)"
+            echo ""
+            echo "- status_checks.py: exit \`${{ steps.sim.outputs.sc_rc }}\`"
+            echo "- simulate_verify_job.sh: exit \`${{ steps.sim.outputs.sim_rc }}\`"
+            echo '```'
+            cat .freebuff/sim/simulate.log 2>/dev/null | tail -40 || echo '(simülasyon logu yok)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload CI-SIMULATE report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: ci-simulate
+          path: |
+            .freebuff/sim/status_checks.txt
+            .freebuff/sim/simulate.log
+            .freebuff/sim/verify_job/verify_report.txt
+            .freebuff/sim/verify_job/summary.md
+            .freebuff/sim/verify_job/logs/PRECOMMIT_RAPORU.md
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # CHANGELOG DRIFT CHECK (advisory) — gen_changelog.py --check'i CI'da koşar
+  # ve drift bulgularını run summary'ye yazar. Advisory: changelog tabloları
+  # (README/PUBLISH_SCENARIO) tasarım gereği HEAD'in bir commit gerisinde
+  # kalabilir (bir commit'in satırı sonraki commit'te eklenir) — bu yüzden
+  # drift BLOKE ETMEZ, her push'ta görünür kılınır (continue-on-error).
+  # GATE_EXCLUDE'da — required check sayısı 12'de sabit kalır.
+  changelog-drift:
+    name: Changelog drift check (advisory)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout (full history — git log hash'leri için)
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Run gen_changelog --check (advisory)
+        continue-on-error: true
+        shell: bash
+        run: |
+          mkdir -p .freebuff
+          set +e
+          python3 _calisma/CIKTI/gen_changelog.py --check \
+            > .freebuff/changelog_drift.txt 2>&1
+          echo "$?" > .freebuff/changelog_drift.rc
+          set -e
+          echo "exit=$(cat .freebuff/changelog_drift.rc)"
+          cat .freebuff/changelog_drift.txt
+
+      - name: Write drift findings to run summary
+        if: always()
+        shell: bash
+        run: |
+          python3 _calisma/CIKTI/run_summary_changelog.py \
+            .freebuff/changelog_drift.txt .freebuff/changelog_drift.rc
+
+      - name: Upload changelog drift log
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: changelog-drift
+          path: |
+            .freebuff/changelog_drift.txt
+            .freebuff/changelog_drift.rc
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # ════════════════════════════════════════════════════════════════════
+  # PATTERN DRIFT CHECK (advisory) — merge pattern ↔ ARTIFACT_JOBS
+  #
+  # check_pattern_consistency.py ile verify.yml merge-multiple
+  # pattern'indeki artifact listesini gen_repro_manifest.py
+  # ARTIFACT_JOBS'ıyla karşılaştırır. Eksik/fazla/duplike → DRIFT.
+  # Advisory: build'i bloke etmez; bulgular run summary'de görünür,
+  # pattern-drift artifact'ına yazılır. Pre-commit'te fail-closed
+  # olduğu için CI'da advisory (çift güvenlik ağı).
+  # ════════════════════════════════════════════════════════════════════
+  pattern-drift:
+    name: Merge pattern drift check (advisory)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Check merge pattern consistency
+        id: check
+        continue-on-error: true
+        run: |
+          set +e
+          python3 _calisma/CIKTI/check_pattern_consistency.py \
+            2>&1 | tee pattern_drift.txt
+          rc=${PIPESTATUS[0]}
+          set -e
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          echo "pattern-drift exit: $rc"
+
+      - name: Write pattern drift to run summary
+        if: always()
+        run: |
+          if [ -f pattern_drift.txt ]; then
+            {
+              echo "## Merge pattern drift check (advisory)"
+              echo ""
+              echo "- exit: \`${{ steps.check.outputs.rc }}\`"
+              echo '```'
+              cat pattern_drift.txt
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload pattern drift report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: pattern-drift
+          path: pattern_drift.txt
           if-no-files-found: ignore
           retention-days: 30
 
@@ -1867,6 +2566,10 @@ jobs:
   # verify mirror'ı (~/Library/Caches/com.freebuff/verify) bunu aşar. K17,
   # repo ↔ mirror drift'ini fail-closed denetler: BAYAT (exit 1) veya hata
   # (exit 2) → P1 → verify_delivery.py exit 1 → job FAIL.
+  #
+  # Ayrıca üretim yolu smoke'u: update_preview.sh --bootstrap (üç artefakt:
+  # mirror + HTML + plist) fake HOME altında koşulup fail-closed doğrulanır
+  # (gerçek TCC cache/LaunchAgents'a dokunmaz; --start verilmez).
   #
   # CI rotası: gerçek TCC cache'ine dokunmamak için MIRROR_DIR/LEAN_MIRROR_DIR
   # RUNNER_TEMP altına yönlendirilir; önce sync (mirror'ı repo'dan kur), sonra
@@ -1889,8 +2592,50 @@ jobs:
         with:
           python-version: '3.12'
 
+      # BOOTSTRAP SMOKE — update_preview.sh --bootstrap'ın ÜÇ artefakt
+      # üretimini gerçek macOS runner'da fail-closed doğrular (K12 plist
+      # deseniyle aynı felsefe: üretim yolunun gerçekten çalıştığını kanıtla).
+      # Gerçek TCC cache'ine/LaunchAgents'a DOKUNMAMAK için HOME fake bir
+      # RUNNER_TEMP dizinine yönlendirilir (birim testlerle aynı izolasyon);
+      # --start VERİLMEZ (launchctl bootstrap yapılmaz — CI'de gerçek daemon
+      # başlatma istenmez). Üç artefakt fake HOME altında üretilmeli:
+      #   (1) verify mirror  → $HOME/Library/Caches/com.freebuff/verify/…
+      #   (2) HTML dashboard → $HOME/Library/Caches/com.freebuff/preview/preview.html
+      #   (3) LaunchAgent    → $HOME/Library/LaunchAgents/<label>.plist
+      # Eksik artefakt veya exit ≠ 0 → job FAIL (fail-closed). MIRROR_DIR vb.
+      # aşağıdaki sync adımından SONRA GITHUB_ENV'e yazılır; bu adım öncesinde
+      # koştuğu için burada açıkça fake-HOME yollarına sabitlenir.
+      - name: Bootstrap smoke (update_preview.sh --bootstrap, 3 artefakt)
+        id: bs
+        env:
+          HOME: ${{ runner.temp }}/bootstrap-home
+          PREVIEW_MIRROR: ${{ runner.temp }}/bootstrap-home/Library/Caches/com.freebuff/preview
+          MIRROR_DIR: ${{ runner.temp }}/bootstrap-home/Library/Caches/com.freebuff/verify
+          LEAN_MIRROR_DIR: ${{ runner.temp }}/bootstrap-home/Library/Caches/com.freebuff/lean_reduct
+        run: |
+          set -uo pipefail
+          mkdir -p "$HOME"
+          set +e
+          bash _calisma/CIKTI/update_preview.sh --bootstrap "$HOME" \
+            > bootstrap_smoke.txt 2>&1
+          rc=$?
+          set -e
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          cat bootstrap_smoke.txt
+          # Fail-closed: üç artefakt üretilmeli.
+          MISSING=""
+          [ -f "$MIRROR_DIR/verify_delivery.py" ] || MISSING="$MISSING mirror"
+          [ -f "$PREVIEW_MIRROR/preview.html" ] || MISSING="$MISSING html"
+          [ -f "$HOME/Library/LaunchAgents/com.freebuff.preview-leibniz2.plist" ] || MISSING="$MISSING plist-leibniz2"
+          [ -f "$HOME/Library/LaunchAgents/com.freebuff.preview-server.plist" ] || MISSING="$MISSING plist-preview-server"
+          if [ -n "$MISSING" ]; then
+            echo "FAIL: artefakt eksik:$MISSING" >&2
+            exit 1
+          fi
+          echo "OK: üç artefakt üretildi (mirror + html + 2 plist)"
+
       # Mirror'ı CI'da kur: RUNNER_TEMP altına senkron et (gerçek TCC
-      # cache'ine dokunmaz). Kaynak dosyalardan biri eksikse sync exit 2
+      # cache'ine dokunmaz). Kaynak dosyalardan bir eksikse sync exit 2
       # → job fail (fail-closed, validate_sources kapısı). Adım 2+4 tek
       # komutta: PREVIEW_MIRROR da RUNNER_TEMP'e yönlendirilir.
       - name: Sync preview + verify mirror (RUNNER_TEMP, adım 2+4)
@@ -1904,6 +2649,23 @@ jobs:
           echo "MIRROR_DIR=$MIRROR_DIR" >> "$GITHUB_ENV"
           echo "LEAN_MIRROR_DIR=$LEAN_MIRROR_DIR" >> "$GITHUB_ENV"
           bash _calisma/CIKTI/sync_verify_mirror.sh --force
+
+      # FRESH-CLONE --check-ci: beş artefaktın kurulumunu tek denetimde
+      # doğrular (repo venv + mirror sync + HTML + plist). Daemon HTTP
+      # smoke ve mirror venv CI'da atlanır; agent-mirror karşılaştırması
+      # launchd olmadığı için BİLGİ notu düşer. Advisory (job durumunu
+      # etkilemez, run summary'de exit kodu gösterilir).
+      - name: Fresh-clone setup check (--check-ci, advisory)
+        id: fcs
+        run: |
+          set -uo pipefail
+          set +e
+          bash _calisma/CIKTI/fresh_clone_setup.sh --check-ci \
+            2>&1 | tee fresh_clone_check_report.txt
+          rc=$?
+          set -e
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          echo "fresh_clone --check-ci exit: $rc"
 
       # K17 kapısı: sync sonrası mirror GÜNCEL (exit 0) olmalı. BAYAT/hata
       # → P1 → exit 1 → fail-closed. --mirror-out: ham çıktı + K17 raporu
@@ -1920,13 +2682,33 @@ jobs:
           echo "rc=$rc" >> "$GITHUB_OUTPUT"
           echo "K17 --check-mirror exit: $rc"
 
+      # MIRROR KAPSAM DENETİMİ — sync_verify_mirror.sh --list çıktısını repo
+      # dosya kümesiyle karşılaştırır (mirror eksikliği regresyonu fail-closed):
+      # repo'ya runtime dosyası eklenip FILES/LEAN_FILES listelerine işlenmezse
+      # launchd rotası o dosyayı hiç göremez → K9/K16/K17/K18 kırılır. İleri
+      # (beklenen dosya listede yok) ve ters (bayat/beklenmeyen girdi) denetimi.
+      - name: Mirror coverage (--list ↔ repo file set)
+        id: cov
+        run: |
+          set -uo pipefail
+          set +e
+          python3 _calisma/CIKTI/check_mirror_coverage.py \
+            2>&1 | tee -a mirror_check_report.txt
+          rc=${PIPESTATUS[0]}
+          set -e
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          exit "$rc"
+
       - name: Write mirror check to run summary
         if: always()
         run: |
           {
             echo "## Mirror sync check (macOS)"
             echo ""
+            echo "- Bootstrap smoke (--bootstrap): exit \`${{ steps.bs.outputs.rc }}\`"
+            echo "- Fresh-clone setup (--check-ci): exit \`${{ steps.fcs.outputs.rc }}\`"
             echo "- K17 --check-mirror: exit \`${{ steps.k17.outputs.rc }}\`"
+            echo "- Mirror coverage (--list ↔ repo): exit \`${{ steps.cov.outputs.rc }}\`"
             echo '```'
             cat mirror_check_report.txt 2>/dev/null || echo '(rapor yok)'
             echo '```'
@@ -1940,5 +2722,7 @@ jobs:
           path: |
             mirror_check_report.txt
             mirror_report.json
+            bootstrap_smoke.txt
+            fresh_clone_check_report.txt
           if-no-files-found: ignore
           retention-days: 30

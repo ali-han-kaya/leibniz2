@@ -206,7 +206,12 @@ class TestSidecarFail(unittest.TestCase):
 
 
 class TestK13SelfTest(unittest.TestCase):
-    """K13 repro self-testi artık sidecar'ı da denetliyor (K10 ile ortak)."""
+    """K13 repro self-testi artık sidecar'ı da denetliyor (K10 ile ortak).
+
+    Sertleştirme: negatif senaryolar (eksik dosya, bozuk hash, config/ alt
+    dizin, python3-shell bölüm eksik) fail-closed yakalanmalı; eksik dosya
+    kilitlenme yerine temiz 'bundle dosyası yok' problemi üretmeli.
+    """
 
     def test_self_test_includes_sidecar_pass(self):
         collector = _Collector()
@@ -214,6 +219,104 @@ class TestK13SelfTest(unittest.TestCase):
         self.assertTrue(ok, detail)
         self.assertIn("manifest.sha256: PASS", detail)
         self.assertEqual(collector.findings, [])
+
+    def test_self_test_reports_negative_scenarios(self):
+        """Happy path sağlamken 3 kurcalama senaryosu da yakalanmalı."""
+        collector = _Collector()
+        ok, detail = vd.check_repro_manifest_self_consistency(collector)
+        self.assertTrue(ok, detail)
+        self.assertIn("senaryolar: eksik-dosya PASS, bozuk-hash PASS, "
+                      "config-alt-dizin PASS, python3-shell-eksik PASS", detail)
+        self.assertEqual(collector.findings, [])
+
+    def _produce_once(self):
+        """Mock artifact'ları üretip manifest'i yükler; (tmp, out, m) döner."""
+        d = tempfile.mkdtemp(prefix="k13_sc_")
+        art, out = vd._k13_write_mock(d)
+        script = os.path.join(HERE, "gen_repro_manifest.py")
+        rc, so, se = vd._k13_produce(script, art, out)
+        self.assertEqual(rc, 0, so + se)
+        with open(os.path.join(out, "manifest.json"), encoding="utf-8") as mf:
+            m = json.load(mf)
+        return d, out, m
+
+    def test_verify_detects_missing_bundle_file(self):
+        """Eksik dosya: kilitlenme DEĞİL, 'bundle dosyası yok' problemi."""
+        d, out, m = self._produce_once()
+        try:
+            os.remove(os.path.join(out, "sub/b.bin"))
+            ok, problems = vd._k13_verify_manifest(m, out)
+        finally:
+            import shutil
+            shutil.rmtree(d, ignore_errors=True)
+        self.assertFalse(ok)
+        self.assertIn("bundle dosyası yok: sub/b.bin", problems)
+
+    def test_verify_detects_bad_hash(self):
+        """Bozuk hash: manifest'teki SHA-256 gerçek dosyayla uyuşmazsa yakalanır."""
+        d, out, m = self._produce_once()
+        try:
+            h = m["files"]["a.txt"]
+            m["files"]["a.txt"] = ("0" if h[0] != "0" else "1") + h[1:]
+            ok, problems = vd._k13_verify_manifest(m, out)
+        finally:
+            import shutil
+            shutil.rmtree(d, ignore_errors=True)
+        self.assertFalse(ok)
+        self.assertTrue(any(p.startswith("SHA-256 uyuşmazlığı: a.txt")
+                            for p in problems), problems)
+
+    def test_verify_detects_config_subdir_removal(self):
+        """config/ alt dizin dosyası config objesinden düşerse yakalanır."""
+        d, out, m = self._produce_once()
+        try:
+            m["config"]["files"].pop("config/deep/extra.json")
+            ok, problems = vd._k13_verify_manifest(m, out)
+        finally:
+            import shutil
+            shutil.rmtree(d, ignore_errors=True)
+        self.assertFalse(ok)
+        self.assertTrue(any("config objesi" in p for p in problems), problems)
+
+    def test_verify_detects_python3_shell_section_missing(self):
+        """Üretici hatası: python3-shell/ dosyası bundle'da var ama manifest'te
+        python3_shell bölümü hiç yok → yakalanmalı (P1, fail-closed)."""
+        d, out, m = self._produce_once()
+        try:
+            m.pop("python3_shell", None)
+            ok, problems = vd._k13_verify_manifest(m, out)
+        finally:
+            import shutil
+            shutil.rmtree(d, ignore_errors=True)
+        self.assertFalse(ok)
+        self.assertTrue(any("python3_shell objesi" in p for p in problems),
+                        problems)
+
+    def test_verify_detects_python3_shell_bad_combined(self):
+        """python3_shell.combined_sha256 bozuksa yakalanmalı."""
+        d, out, m = self._produce_once()
+        try:
+            m["python3_shell"]["combined_sha256"] = "0" * 64
+            ok, problems = vd._k13_verify_manifest(m, out)
+        finally:
+            import shutil
+            shutil.rmtree(d, ignore_errors=True)
+        self.assertFalse(ok)
+        self.assertTrue(any("python3_shell.combined_sha256" in p
+                            for p in problems), problems)
+
+    def test_missing_bundle_file_does_not_crash(self):
+        """Sertleştirme regresyonu: eksik dosya FileNotFoundError ile
+        patlamamalı — problems listesine temiz girmeli."""
+        d, out, m = self._produce_once()
+        try:
+            os.remove(os.path.join(out, "a.txt"))
+            ok, problems = vd._k13_verify_manifest(m, out)
+        finally:
+            import shutil
+            shutil.rmtree(d, ignore_errors=True)
+        self.assertFalse(ok)
+        self.assertIn("bundle dosyası yok: a.txt", problems)
 
     def test_self_test_fails_on_sidecar_mismatch(self):
         # Üretici yanlış sidecar yazarsa K13 fail-closed patlamalı:
@@ -358,6 +461,258 @@ class TestPython3ShellSection(unittest.TestCase):
         self.assertIn("python3_shell objesi eksik", detail)
         self.assertTrue(any(
             f[1] == "K10-MANIFEST" and "python3_shell" in f[2]
+            for f in findings))
+
+
+def _with_overrides_section(d, mpath, tamper_combined=None):
+    """manifest'e OVERRIDES bölümü ekler (files + combined_sha256).
+
+    gen_repro_manifest.py'nin OVERRIDES bölümüyle birebir aynı formül:
+    sorted '{rel}\0{hash}\n' birleşiminin SHA-256'sı. tamper_combined
+    verilirse kayıtlı combined'ı bozar (K10 kurcalamayı yakalamalı).
+    """
+    with open(mpath, encoding="utf-8") as mf:
+        m = json.load(mf)
+    rel = "cli_overrides_version.json"
+    ov_files = {rel: m["files"][rel]}
+    combined = hashlib.sha256(
+        "".join(f"{r}\0{ov_files[r]}\n" for r in sorted(ov_files)).encode()
+    ).hexdigest()
+    m["overrides"] = {
+        "files": ov_files,
+        "combined_sha256": (tamper_combined if tamper_combined else combined),
+    }
+    with open(mpath, "w", encoding="utf-8") as f:
+        json.dump(m, f)
+    # Sidecar'ı manifest'in yeni haline göre yeniden hesapla (K10'un diğer
+    # bölüm denetimlerini gölgelememek için).
+    real = hashlib.sha256(open(mpath, "rb").read()).hexdigest()
+    with open(os.path.join(d, "manifest.sha256"), "w",
+              encoding="utf-8") as f:
+        f.write(f"{real}  manifest.json\n")
+    return mpath
+
+
+class TestOverridesSection(unittest.TestCase):
+    """K10: OVERRIDES bölümünün combined_sha256'sı yeniden hesaplanıp
+    doğrulanır; kurcalama → P1 (fail-closed). cli_overrides_version.json'un
+    hash'i (dollar-sign içermeyen 64-hex SHA-256) manifest'te sabitlenir."""
+
+    def test_pass_with_valid_overrides_section(self):
+        files = {"a.txt": b"hello\n",
+                 "cli_overrides_version.json": b'{"warning": false}\n'}
+        d, mpath = _build_bundle(files=files)
+        try:
+            _with_overrides_section(d, mpath)
+            ok, detail, findings = _run(d, mpath)
+        finally:
+            import shutil
+            shutil.rmtree(d, ignore_errors=True)
+        self.assertTrue(ok, detail)
+        self.assertIn("overrides_combined_sha256: PASS", detail)
+        self.assertEqual(findings, [])
+
+    def test_tampered_combined_is_p1(self):
+        files = {"a.txt": b"hello\n",
+                 "cli_overrides_version.json": b'{"warning": false}\n'}
+        d, mpath = _build_bundle(files=files)
+        try:
+            _with_overrides_section(d, mpath, tamper_combined="0" * 64)
+            ok, detail, findings = _run(d, mpath)
+        finally:
+            import shutil
+            shutil.rmtree(d, ignore_errors=True)
+        self.assertFalse(ok)
+        self.assertIn("overrides_combined_sha256: FAIL", detail)
+        self.assertTrue(any(
+            f[1] == "K10-MANIFEST" and "overrides" in f[2]
+            for f in findings))
+
+    def test_section_hash_mismatch_with_files_is_p1(self):
+        # overrides.files'taki hash, files'taki gerçek hash'ten farklı → P1.
+        files = {"a.txt": b"hello\n",
+                 "cli_overrides_version.json": b'{"warning": true}\n'}
+        d, mpath = _build_bundle(files=files)
+        try:
+            _with_overrides_section(d, mpath)
+            with open(mpath, encoding="utf-8") as mf:
+                m = json.load(mf)
+            m["overrides"]["files"]["cli_overrides_version.json"] = "0" * 64
+            with open(mpath, "w", encoding="utf-8") as f:
+                json.dump(m, f)
+            real = hashlib.sha256(open(mpath, "rb").read()).hexdigest()
+            with open(os.path.join(d, "manifest.sha256"), "w",
+                      encoding="utf-8") as f:
+                f.write(f"{real}  manifest.json\n")
+            ok, detail, findings = _run(d, mpath)
+        finally:
+            import shutil
+            shutil.rmtree(d, ignore_errors=True)
+        self.assertFalse(ok)
+        self.assertIn("(hash farklı)", detail)
+        self.assertIn("overrides_combined_sha256: FAIL", detail)
+
+    def test_missing_section_with_files_is_p1(self):
+        # files'ta cli_overrides_version.json var ama manifest'te overrides
+        # objesi yok → üretici drift'i K10 tarafından yakalanmalı.
+        files = {"a.txt": b"hello\n",
+                 "cli_overrides_version.json": b'{"warning": false}\n'}
+        d, mpath = _build_bundle(files=files)
+        try:
+            ok, detail, findings = _run(d, mpath)
+        finally:
+            import shutil
+            shutil.rmtree(d, ignore_errors=True)
+        self.assertFalse(ok)
+        self.assertIn("overrides objesi eksik", detail)
+        self.assertTrue(any(
+            f[1] == "K10-MANIFEST" and "overrides" in f[2]
+            for f in findings))
+
+
+def _with_precheck_section(d, mpath, tamper_combined=None):
+    """manifest'e PRECHECK REPORT bölümü ekler (files + combined_sha256).
+
+    gen_repro_manifest.py'nin PRECHECK REPORT bölümüyle birebir aynı formül:
+    sorted '{rel}\0{hash}\n' birleşiminin SHA-256'sı. tamper_combined
+    verilirse kayıtlı combined'ı bozar (K10 kurcalamayı yakalamalı).
+    """
+    with open(mpath, encoding="utf-8") as mf:
+        m = json.load(mf)
+    rel = "precheck-report/precheck_report.txt"
+    pr_files = {rel: m["files"][rel]}
+    combined = hashlib.sha256(
+        "".join(f"{r}\0{pr_files[r]}\n" for r in sorted(pr_files)).encode()
+    ).hexdigest()
+    m["precheck_report"] = {
+        "files": pr_files,
+        "combined_sha256": (tamper_combined if tamper_combined else combined),
+    }
+    with open(mpath, "w", encoding="utf-8") as f:
+        json.dump(m, f)
+    real = hashlib.sha256(open(mpath, "rb").read()).hexdigest()
+    with open(os.path.join(d, "manifest.sha256"), "w",
+              encoding="utf-8") as f:
+        f.write(f"{real}  manifest.json\n")
+    return mpath
+
+
+class TestPrecheckReportSection(unittest.TestCase):
+    """K0O: precheck_report.combined_sha256 yeniden hesaplanıp doğrulanır;
+    kurcalama → P1 (fail-closed). publish_precheck.sh AŞAMA 0 çıktısı
+    manifest'te sabitlenir."""
+
+    def test_pass_with_valid_precheck_section(self):
+        files = {"a.txt": b"hello\n",
+                 "precheck-report/precheck_report.txt": b"ADIM SONUCU: PASS\n"}
+        d, mpath = _build_bundle(files=files)
+        try:
+            _with_precheck_section(d, mpath)
+            ok, detail, findings = _run(d, mpath)
+        finally:
+            import shutil
+            shutil.rmtree(d, ignore_errors=True)
+        self.assertTrue(ok, detail)
+        self.assertIn("precheck_report_combined_sha256: PASS", detail)
+        self.assertEqual(findings, [])
+
+    def test_tampered_combined_is_p1(self):
+        files = {"a.txt": b"hello\n",
+                 "precheck-report/precheck_report.txt": b"ADIM SONUCU: PASS\n"}
+        d, mpath = _build_bundle(files=files)
+        try:
+            _with_precheck_section(d, mpath, tamper_combined="0" * 64)
+            ok, detail, findings = _run(d, mpath)
+        finally:
+            import shutil
+            shutil.rmtree(d, ignore_errors=True)
+        self.assertFalse(ok)
+        self.assertIn("precheck_report_combined_sha256: FAIL", detail)
+        self.assertTrue(any(
+            f[1] == "K10-MANIFEST" and "precheck_report" in f[2]
+            for f in findings))
+
+    def test_section_hash_mismatch_with_files_is_p1(self):
+        # precheck_report.files'taki hash, files'taki gerçek hash'ten farklı → P1.
+        files = {"a.txt": b"hello\n",
+                 "precheck-report/precheck_report.txt": b"ADIM SONUCU: FAIL\n"}
+        d, mpath = _build_bundle(files=files)
+        try:
+            _with_precheck_section(d, mpath)
+            with open(mpath, encoding="utf-8") as mf:
+                m = json.load(mf)
+            m["precheck_report"]["files"]["precheck-report/precheck_report.txt"] = "0" * 64
+            with open(mpath, "w", encoding="utf-8") as f:
+                json.dump(m, f)
+            real = hashlib.sha256(open(mpath, "rb").read()).hexdigest()
+            with open(os.path.join(d, "manifest.sha256"), "w",
+                      encoding="utf-8") as f:
+                f.write(f"{real}  manifest.json\n")
+            ok, detail, findings = _run(d, mpath)
+        finally:
+            import shutil
+            shutil.rmtree(d, ignore_errors=True)
+        self.assertFalse(ok)
+        self.assertIn("(hash farklı)", detail)
+        self.assertIn("precheck_report_combined_sha256: FAIL", detail)
+
+    def test_missing_section_with_files_is_p1(self):
+        # files'ta precheck dosyası var ama manifest'te precheck_report
+        # objesi yok → üretici drift'i K10 tarafından yakalanmalı.
+        files = {"a.txt": b"hello\n",
+                 "precheck-report/precheck_report.txt": b"ADIM SONUCU: PASS\n"}
+        d, mpath = _build_bundle(files=files)
+        try:
+            ok, detail, findings = _run(d, mpath)
+        finally:
+            import shutil
+            shutil.rmtree(d, ignore_errors=True)
+        self.assertFalse(ok)
+        self.assertIn("precheck_report objesi eksik", detail)
+        self.assertTrue(any(
+            f[1] == "K10-MANIFEST" and "precheck_report" in f[2]
+            for f in findings))
+
+    def test_absent_precheck_bundle_passes_k10(self):
+        # precheck-report artifact'ı hiç üretilmedi (advisory — macOS'te
+        # push'ta çalışmayabilir): manifest'te precheck_report anahtarı da
+        # OLMAMALI. Bundlesız + anahtarsız → K10 PASS (sorun değil).
+        files = {"a.txt": b"hello\n"}
+        d, mpath = _build_bundle(files=files)
+        try:
+            ok, detail, findings = _run(d, mpath)
+        finally:
+            import shutil
+            shutil.rmtree(d, ignore_errors=True)
+        self.assertTrue(ok, detail)
+        self.assertIn("precheck_report_combined_sha256: PASS", detail)
+        self.assertEqual(findings, [])
+
+    def test_phantom_empty_section_is_p1(self):
+        # Absent durumda manifest'te precheck_report anahtarı OLMAMALI.
+        # Üretici drift: anahtar var ama files boş (bundle'da dosya yok) →
+        # K10 P1 vermeli (fail-closed).
+        files = {"a.txt": b"hello\n"}
+        d, mpath = _build_bundle(files=files)
+        try:
+            with open(mpath, encoding="utf-8") as mf:
+                m = json.load(mf)
+            m["precheck_report"] = {"files": {},
+                                    "combined_sha256": "0" * 64}
+            with open(mpath, "w", encoding="utf-8") as f:
+                json.dump(m, f)
+            real = hashlib.sha256(open(mpath, "rb").read()).hexdigest()
+            with open(os.path.join(d, "manifest.sha256"), "w",
+                      encoding="utf-8") as f:
+                f.write(f"{real}  manifest.json\n")
+            ok, detail, findings = _run(d, mpath)
+        finally:
+            import shutil
+            shutil.rmtree(d, ignore_errors=True)
+        self.assertFalse(ok)
+        self.assertIn("precheck_report_combined_sha256: FAIL", detail)
+        self.assertTrue(any(
+            f[1] == "K10-MANIFEST" and "precheck_report" in f[2]
             for f in findings))
 
 

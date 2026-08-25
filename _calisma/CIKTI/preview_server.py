@@ -77,6 +77,8 @@ LATEST = {
     "p0": 0,
     "p1": 0,
     "budget_usd": None,
+    "budget_limit": None,       # run'un kullandığı bütçe limiti (effective config)
+    "budget_method": None,      # run'un kullandığı bütçe yöntemi (effective config)
     "budget": None,           # tam bütçe raporu (comparison.ratios + by_type)
     "pdf_pages": None,
     "ref_count": None,
@@ -89,7 +91,8 @@ LATEST = {
     "refs_by_source": None,
     "config_diff": None,        # son run'un raw↔effective config diff özeti (dashboard)
     "cli_overrides": None,       # son run'un config.cli_overrides'ı (override=true → 'Budget override' rozeti)
-    "cli_override_count": 0,     # skaler: override=true anahtar sayısı (trend'e temiz; tam dict sadece SSE'de)
+    "cli_override_count": 0,     # skaler: override=true anahtar sayısı (trend'e düzenli; tam dict sadece SSE'de)
+    "override_report": None,     # son run'un OVERRIDE_RAPORU (PRECOMMIT_RAPORU deseni; logs/ yanına yazılır)
     "hook_env": None,           # hook env sürümleri (zaman serisi; python/z3/lean/…)
     "z3_passed": None,          # K8 Z3: stderr'deki [PASS] P1-5 sayısı (son run)
     "z3_failed": None,          # K8 Z3: stderr'deki [FAIL] P1-5 sayısı
@@ -100,10 +103,16 @@ LATEST = {
     "lineage_summary": None,    # soy hattı özeti: {ok, count, current_note, current_hash_prefix}
     "lineage_ok": None,          # skaler trend alanı (True/False/None)
     "lineage_count": None,       # skaler trend alanı (int/None)
+    "mirror_sync": None,          # K17 mirror raporu: {ok, exit, detail, stale_files, auto_synced, …}
+    "mirror_stale": [],           # K17 BAYAT/EKSİK dosya listesi (dashboard paneli için skaler)
     "status_board": None,        # tek satır durum panosu (5 ikon: Pre-commit · K0 · Bütçe · Soy hattı · K katmanları)
     "precommit_hooks": None,     # [{name, status}] — pre-commit hook sonuçları (Passed/Failed)
     "history_sidecar_sha256": None,  # history.jsonl.sha256 sidecar hash'i (K15)
     "findings": [],                # verify_output'dan çıkan [{id,priority,label,message,detail}]
+    "pattern_drift": None,       # merge pattern drift durumu: PASS/DRIFT (dashboard)
+    "pattern_drift_detail": None, # drift detayı: eksik/fazla artifact listesi
+    "audit_refs_trend": None,   # refs-trend audit sonucu: PASS/FAIL/advisory (history.jsonl trend)
+    "cached": False,               # True = LATEST disk'teki önbelleklenmiş son run'dan yüklendi
 }
 LOCK = threading.Lock()
 SSE_CLIENTS = []      # bağlı /api/run client listesi (snapshot broadcast)
@@ -117,12 +126,13 @@ RUN_LOG_MAX = 20                 # disk'te tutulacak + replay edilecek en son ru
 REFS_TREND_PATH = None           # main()'de set edilir; refs-trend.json yolu
 
 HISTORY_KEYS = ("ts", "verdict", "p0", "p1", "duration_s", "budget_usd",
+                "budget_limit", "budget_method",
                 "pdf_pages", "ref_count", "raw_sha256", "stripped_sha256",
                 "exit_code", "refs_verified", "refs_total", "refs_mismatch",
                 "refs_by_source", "hook_env", "z3_passed", "z3_failed",
                 "z3_total", "lean_ok", "lean_detail", "cli_override_count",
                 "lineage_ok", "lineage_count", "history_sidecar_sha256",
-                "findings")
+                "findings", "audit_refs_trend", "pattern_drift", "pattern_drift_detail")
 
 
 def snapshot_dict():
@@ -161,14 +171,16 @@ def _compute_status_board():
     p1 = LATEST.get("p1")
     k0_ok = (p0 == 0 and p1 == 0) if p0 is not None else None
 
-    # 3. Bütçe: $30 limit altında → PASS
-    budget_ok = (budget is not None and budget < 30) if budget is not None else None
+    # 3. Bütçe: etkin config budget.limit altında → PASS (limit yoksa 30.0)
+    blimit = (LATEST.get("budget") or {}).get("limit") or 30.0
+    budget_ok = (budget is not None and budget < blimit) if budget is not None else None
 
     # 4. Soy hattı: lineage_summary.ok → PASS
     lin_ok = LATEST.get("lineage_ok")
 
-    # 5. K katmanları: K8-K17 (K8 Z3, K9 Lean, K10-K17)
-    ext = ["K8", "K9", "K10", "K11", "K12", "K13", "K14", "K16", "K17"]
+    # 5. K katmanları: K8-K20 (K8 Z3, K9 Lean, K10-K20)
+    ext = ["K8", "K9", "K10", "K11", "K12", "K13", "K14", "K16",
+           "K17", "K18", "K20"]
     ext_statuses = [(ls.get(k) or {}).get("status") for k in ext]
     if any(s == "FAIL" for s in ext_statuses):
         kl_ok = False
@@ -228,6 +240,37 @@ def persist_history(rec):
     except OSError as e:
         sys.stderr.write(f"[history] yazılamadı: {e}\n")
         sys.stderr.flush()
+
+
+def load_cached_latest():
+    """Restart sonrası ilk verify döngüsü tamamlanana dek /api/latest'in
+    UNKNOWN göstermemesini sağlar: disk'teki en son run kaydını LATEST'e
+    geri yükler. Öncelik runs/run-*.json (stdout/stderr dahil TAM kayıt),
+    yoksa history.jsonl özeti kullanılır; kayıt yoksa LATEST UNKNOWN kalır
+    (dönüş False). Geri yüklenen alanlar yalnızca LATEST şemasında olanlardır
+    (rec zaten LATEST alanlarından üretildi).
+
+    Çağıran LOCK'u tutmalıdır: fonksiyon LATEST'e yazar ama kendi kilidini
+    ALMAZ — persist_history deseni (re-entrant olmayan threading.Lock; run
+    tamamlanınca ilk verify LATEST'i taze veriyle ezerek cached bayrağını
+    kaldırır).
+    """
+    rec = None
+    if RUNS_DIR and os.path.isdir(RUNS_DIR):
+        logs = load_run_logs(limit=1)
+        if logs:
+            rec = logs[-1]
+    if rec is None:
+        hist = load_history()
+        if hist:
+            rec = hist[-1]
+    if not rec or not rec.get("ts"):
+        return False
+    for k, v in rec.items():
+        if k in LATEST and k != "cached":
+            LATEST[k] = v
+    LATEST["cached"] = True
+    return True
 
 
 def load_history():
@@ -594,6 +637,68 @@ def _parse_lean_result(stderr):
     return ok, detail
 
 
+_OVERRIDE_LINE_RE = re.compile(r"^\s*\[CLI override\]\s*")
+
+
+def collect_override_report(stderr, stdout, cli_overrides, ts, verdict, rc):
+    """[CLI override] satırlarını ve yapısal cli_overrides kayıtlarını tek rapora topla.
+
+    PRECOMMIT_RAPORU deseni: override run'ı (--budget/--budget-method) verify
+    stderr'ine '[CLI override] <k>: <file> → <eff> (CLI verildi)' satırları
+    düşürür (verify_delivery.py --json stderr relay'i). Bu fonksiyon ham
+    satırları + JSON config.cli_overrides kayıtlarını birleştirip makine-okur
+    OVERRIDE_RAPORU sözlüğü üretir; _finalize_run bunu
+    verify_dir/logs/OVERRIDE_RAPORU.json olarak yazar (PRECOMMIT_RAPORU.json
+    ile aynı dizin) — override run'ları ayrı denetim izi + artifact sağlar.
+    """
+    lines = []
+    for ln in (stderr or "").splitlines() + (stdout or "").splitlines():
+        if _OVERRIDE_LINE_RE.match(ln):
+            lines.append(ln.strip())
+    ov = cli_overrides if isinstance(cli_overrides, dict) else {}
+    overrides = []
+    for key, rec in ov.items():
+        if isinstance(rec, dict) and rec.get("override"):
+            overrides.append({
+                "key": key,
+                "file_value": rec.get("file_value"),
+                "effective": rec.get("effective"),
+                "line": ("[CLI override] %s: %r → %r (CLI verildi)"
+                          % (key, rec.get("file_value"), rec.get("effective"))),
+            })
+    return {
+        "generated_at": ts,
+        "ts": ts,
+        "verdict": verdict,
+        "exit_code": rc,
+        "role": "override-run",
+        "override_count": len(overrides),
+        "overrides": overrides,
+        "lines": lines,
+    }
+
+
+def _write_override_report(verify_dir, report):
+    """verify_dir/logs/OVERRIDE_RAPORU.json — atomik yaz (PRECOMMIT_RAPORU yolu).
+
+    PRECOMMIT_RAPORU.json ile aynı dizine (logs/) yazar; CI daemon-http job'ı
+    bu dosyayı override-raporu artifact'ına taşır.
+    """
+    if not verify_dir:
+        return
+    try:
+        logs_dir = os.path.join(verify_dir, "logs")
+        os.makedirs(logs_dir, exist_ok=True)
+        path = os.path.join(logs_dir, "OVERRIDE_RAPORU.json")
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(report, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, path)  # atomik: yarı yazılmış rapor asla okunmaz
+    except OSError as e:
+        sys.stderr.write(f"[override] OVERRIDE_RAPORU.json yazılamadı: {e}\n")
+        sys.stderr.flush()
+
+
 _HOOK_RE = re.compile(r"^(.+?)\.{4,}(Passed|Failed)\s*$", re.M)
 
 
@@ -719,6 +824,21 @@ def _finalize_run(stdout, stderr, rc, duration, data, verify_dir=None):
         except (json.JSONDecodeError, ValueError):
             pass
 
+    # Pattern drift: merge pattern ↔ ARTIFACT_JOBS tutarlılığı
+    pattern_drift_result = None
+    pattern_drift_detail = ""
+    try:
+        import check_pattern_consistency as _cpc
+        _errors = _cpc.check()
+        if _errors:
+            pattern_drift_result = "DRIFT"
+            pattern_drift_detail = "; ".join(_errors)
+        else:
+            pattern_drift_result = "PASS"
+            pattern_drift_detail = ""
+    except Exception:
+        pass  # drift check başarısızsa sessizce atla
+
     # config diff: raw (verify_delivery.config.json) vs effective (data['config'])
     raw_cfg = {}
     if verify_dir:
@@ -778,6 +898,7 @@ def _finalize_run(stdout, stderr, rc, duration, data, verify_dir=None):
         LATEST.update({
             "ts": datetime.now(timezone.utc).isoformat(),
             "verdict": data.get("verdict", "FAIL" if rc else "PASS"),
+            "cached": False,  # taze run — önbellek bayrağı kalkar
             "stdout": stdout,
             "stderr": stderr,
             "exit_code": rc,
@@ -785,6 +906,11 @@ def _finalize_run(stdout, stderr, rc, duration, data, verify_dir=None):
             "p0": data.get("counts", {}).get("P0", 0),
             "p1": data.get("counts", {}).get("P1", 0),
             "budget_usd": (data.get("budget") or {}).get("estimated_usd"),
+            # Run'un KULLANDIĞI bütçe limiti + yöntem (effective config) —
+            # trend tooltip'i hangi config'le koştuğunu gösterebilsin. Eski
+            # run'larda yok (config'ten türetildiği run'a özeldir).
+            "budget_limit": (data.get("config") or {}).get("budget_usd"),
+            "budget_method": (data.get("config") or {}).get("budget_method"),
             # Tam bütçe raporu: comparison.ratios (budget_ratios) + by_type
             # (type_bytes) kırılımı — dashboard kartı için.
             "budget": data.get("budget"),
@@ -827,11 +953,20 @@ def _finalize_run(stdout, stderr, rc, duration, data, verify_dir=None):
             # skaler trend alanları (history.jsonl trend grafiği için)
             "lineage_ok": (lineage_summary or {}).get("ok"),
             "lineage_count": (lineage_summary or {}).get("count"),
+            # K17 mirror sync: tam rapor (/api/latest) + BAYAT dosya listesi
+            # (dashboard mirror paneli; exit kodu + bayat dosyalar tek yerde)
+            "mirror_sync": data.get("mirror"),
+            "mirror_stale": [ln.split("BAYAT/EKSİK:", 1)[1].strip()
+                             for ln in ((data.get("mirror") or {}).get("output") or "").splitlines()
+                             if "BAYAT/EKSİK:" in ln],
             # Pre-commit hook durumları (stderr'den ayrıştırıldı)
             "precommit_hooks": precommit_hooks,
             # P0/P1 bulgu satırları (verify --json findings[])
             "findings": [f for f in (data.get("findings") or [])
                           if f.get("priority") in ("P0", "P1")],
+            # Pattern drift: merge pattern ↔ ARTIFACT_JOBS tutarlılığı (dashboard)
+            "pattern_drift": pattern_drift_result,
+            "pattern_drift_detail": pattern_drift_detail,
         })
         # Extract pages + refs from stdout for richer dashboard
         for line in stdout.splitlines():
@@ -846,6 +981,18 @@ def _finalize_run(stdout, stderr, rc, duration, data, verify_dir=None):
                         pass
         # Durum panosu: 5 ikonlu tek satır (CI consolidate_summary.py ile tutarlı)
         LATEST["status_board"] = _compute_status_board()
+
+    # Override raporu: [CLI override] satırları + yapısal cli_overrides →
+    # logs/OVERRIDE_RAPORU.json (PRECOMMIT_RAPORU deseni; override run'ları
+    # için ayrı denetim izi). Her run'da yazılır — override yoksa boş rapor
+    # da denetim kanıtıdır ('override yok').
+    with LOCK:
+        ov_report = collect_override_report(
+            stderr, stdout, LATEST.get("cli_overrides") or {},
+            LATEST["ts"], LATEST["verdict"], rc)
+        LATEST["override_report"] = ov_report
+    if verify_dir:
+        _write_override_report(verify_dir, ov_report)
 
     # Arka planda pre-commit hook'larını yenile (verify bitti, şimdi hook'dan
     # sonuçları da dashboard'a getir —较重 ~10-30s, async;
@@ -897,6 +1044,42 @@ def verify_loop(verify_dir, interval):
         time.sleep(interval)
 
 
+def _route(path):
+    """İstek yolunu query string'den arındırıp do_GET rotasını döndürür.
+
+    Client cache-buster olarak query param ekler (`/api/run-history?_t=…`,
+    `/api/run?v=…`) — `self.path` tam eşleşmesi bunları 404'e düşürürdü.
+    Saf fonksiyon (test_preview_server.py TestRouteQueryParams ile sabitli).
+    Bilinmeyen yol → None (404).
+    """
+    p = urllib.parse.urlparse(path).path
+    if p == "/sw.js":
+        return "sw"
+    if p in ("/", "/index.html", "/preview.html"):
+        return "preview"
+    if p == "/guide.html":
+        return "guide"
+    if p == "/api/latest":
+        return "latest"
+    if p == "/api/run":
+        return "sse"
+    if p.startswith("/api/run-now"):
+        return "run_now"
+    if p == "/api/run-stream":
+        return "run_stream"
+    if p == "/api/history":
+        return "history"
+    if p == "/api/refs-trend":
+        return "refs_trend"
+    if p == "/api/run-history":
+        return "run_history"
+    if p.startswith("/api/run-stdout"):
+        return "run_stdout"
+    if p == "/api/health":
+        return "health"
+    return None
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         # Sunucu loglarını kendi dosyamıza yönlendir (stderr'i kirletmesin).
@@ -924,25 +1107,32 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(out)
 
     def do_GET(self):
-        if self.path in ("/", "/index.html", "/preview.html"):
+        # Query string'li istekler (cache-buster ?_t= / ?v=) da aynı rotaya
+        # düşer — bkz. _route().
+        route = _route(self.path)
+        if route == "sw":
+            self.serve_sw()
+        elif route == "preview":
             self.serve_preview()
-        elif self.path == "/guide.html":
+        elif route == "guide":
             self.serve_guide()
-        elif self.path == "/api/latest":
+        elif route == "latest":
             self.serve_latest()
-        elif self.path == "/api/run":
+        elif route == "sse":
             self.serve_sse()
-        elif self.path.startswith("/api/run-now"):
+        elif route == "run_now":
             self.trigger_run_now()
-        elif self.path == "/api/run-stream":
+        elif route == "run_stream":
             self.serve_run_stream()
-        elif self.path == "/api/history":
+        elif route == "history":
             self.serve_history()
-        elif self.path == "/api/refs-trend":
+        elif route == "refs_trend":
             self.serve_refs_trend()
-        elif self.path == "/api/run-history":
+        elif route == "run_history":
             self.serve_run_history()
-        elif self.path == "/api/health":
+        elif route == "run_stdout":
+            self.serve_run_stdout()
+        elif route == "health":
             self._send(200, "ok")
         else:
             self._send(404, "404 not found")
@@ -952,6 +1142,31 @@ class Handler(BaseHTTPRequestHandler):
             self.trigger_run_now()
         else:
             self._send(404, "404 not found")
+
+    def trigger_run_now(self):
+        """Manuel tetikleme: interval beklemeden hemen verify koşar.
+
+        Arka plan thread'inde çalışır, istek anında döner; sonuç hazır
+        olunca run_verify içindeki broadcast ile SSE client'larına düşer.
+        Zaten bir verify koşuyorsa 409 döner (çakışma yok). 24b9905'te
+        yanlışlıkla silinmişti (serve_run_stdout ile yer değiştirdi) —
+        geri yüklendi.
+        """
+        ts = datetime.now(timezone.utc).isoformat()
+        if not VERIFY_BUSY.acquire(blocking=False):
+            self._send(409,
+                       json.dumps({"status": "already_running", "ts": ts,
+                                   "note": "bir verify zaten koşuyor"}),
+                       content_type="application/json; charset=utf-8")
+            return
+        VERIFY_BUSY.release()  # thread acquire etsin; kilit tutma
+        t = threading.Thread(target=run_verify, args=(VERIFY_DIR,),
+                             daemon=True, name="run-now")
+        t.start()
+        self._send(200,
+                   json.dumps({"status": "started", "ts": ts,
+                               "note": "verify başladı; sonuç /api/run (SSE) ile anında yayınlanacak"}),
+                   content_type="application/json; charset=utf-8")
 
     def _replay_last_run(self, ts, verdict, stdout, stderr, p0=None, p1=None,
                          budget_usd=None, duration_s=None,
@@ -1069,15 +1284,51 @@ class Handler(BaseHTTPRequestHandler):
                 "p0": r.get("p0"),
                 "p1": r.get("p1"),
                 "budget_usd": r.get("budget_usd"),
+                "budget_limit": r.get("budget_limit"),
+                "budget_method": r.get("budget_method"),
                 "duration_s": r.get("duration_s"),
                 "refs_verified": r.get("refs_verified"),
                 "refs_total": r.get("refs_total"),
                 "pdf_pages": r.get("pdf_pages"),
+                "z3_passed": r.get("z3_passed"),
+                "z3_total": r.get("z3_total"),
+                "lean_ok": r.get("lean_ok"),
+                "lean_detail": r.get("lean_detail"),
             })
         self._send(200, json.dumps(summaries, ensure_ascii=False),
                    content_type="application/json; charset=utf-8")
 
-    def trigger_run_now(self):
+    def serve_run_stdout(self):
+        """Belirli bir run'un tam stdout'unu döndür (run history satırı tıklanınca).
+
+        Query: ?ts=ISO-timestamp (run-<safe>.json dosya adından çözülür).
+        Cevap: {ts, stdout, stderr}. Run bulunamazsa 404.
+        """
+        parsed = urllib.parse.urlparse(self.path)
+        qs = urllib.parse.parse_qs(parsed.query)
+        ts = qs.get("ts", [None])[0]
+        if not ts:
+            self._send(400, json.dumps({"error": "?ts= gerekli"}),
+                       content_type="application/json; charset=utf-8")
+            return
+        safe = ts.replace(":", "").replace("+", "").replace(".", "")
+        path = os.path.join(RUNS_DIR, f"run-{safe}.json") if RUNS_DIR else None
+        if not path or not os.path.isfile(path):
+            self._send(404, json.dumps({"error": "run bulunamadı: " + ts}),
+                       content_type="application/json; charset=utf-8")
+            return
+        try:
+            with open(path, encoding="utf-8") as f:
+                rec = json.load(f)
+            self._send(200, json.dumps({
+                "ts": rec.get("ts"),
+                "stdout": rec.get("stdout", ""),
+                "stderr": rec.get("stderr", ""),
+            }, ensure_ascii=False),
+                       content_type="application/json; charset=utf-8")
+        except (OSError, json.JSONDecodeError) as e:
+            self._send(500, json.dumps({"error": str(e)}),
+                       content_type="application/json; charset=utf-8")
         """Manuel tetikleme: interval beklemeden hemen verify koşar.
 
         Arka plan thread'inde çalışır, istek anında döner; sonuç hazır
@@ -1131,9 +1382,35 @@ class Handler(BaseHTTPRequestHandler):
                    content_type="application/json; charset=utf-8")
 
     def serve_preview(self):
-        with open(os.path.join(PREVIEW_DIR, "preview.html"), encoding="utf-8") as f:
+        preview_path = os.path.join(PREVIEW_DIR, "preview.html")
+        with open(preview_path, encoding="utf-8") as f:
             html = f.read()
+        try:
+            mtime = os.path.getmtime(preview_path)
+            ts = str(int(mtime))
+        except OSError:
+            ts = "0"
+        html = html.replace(
+            "<script>",
+            f"<script>window.BUILD_TS={ts};",
+            1)
         self._send(200, html, content_type="text/html; charset=utf-8")
+
+    def serve_sw(self):
+        """Service worker — Freebuff Electron webview cache bypass.
+
+        sw.js bu script'in yaninda durur; ilk istekte okunup memory'de
+        tutulur (tek dosya, degismez). Content-Type: application/javascript
+        ile MIME uyumlulugu saglanir.
+        """
+        here = os.path.dirname(os.path.abspath(__file__))
+        sw_path = os.path.join(here, "sw.js")
+        if not os.path.isfile(sw_path):
+            self._send(404, "404 — sw.js not found")
+            return
+        with open(sw_path, encoding="utf-8") as f:
+            js = f.read()
+        self._send(200, js, content_type="application/javascript; charset=utf-8")
 
     def serve_guide(self):
         """Branch protection görsel kılavuzu (guide.html).
@@ -1180,6 +1457,7 @@ class Handler(BaseHTTPRequestHandler):
             # (snapshot_dict() çağrılmaz: LOCK zaten tutuluyor, reentrant değil)
             snapshot = json.dumps({k: LATEST[k] for k in HISTORY_KEYS} |
                                   {"cli_overrides": LATEST["cli_overrides"]} |
+                                  {"layers": LATEST["layers"]} |
                                   {"lineage_summary": LATEST["lineage_summary"]} |
                                   {"status_board": LATEST["status_board"]} |
                                   {"precommit_hooks": LATEST["precommit_hooks"]})
@@ -1282,6 +1560,19 @@ def main():
         sys.exit(143)
     signal.signal(signal.SIGTERM, _sig)
     signal.signal(signal.SIGINT, _sig)
+
+    # Restart sonrası ilk verify bitene dek /api/latest UNKNOWN göstermesin:
+    # önbelleklenmiş son run durumunu (runs/ veya history.jsonl) yükle.
+    with LOCK:
+        if load_cached_latest():
+            sys.stderr.write(
+                "[main] önbelleklenmiş son run yüklendi: "
+                f"verdict={LATEST['verdict']} ts={LATEST['ts']}\n")
+        else:
+            sys.stderr.write(
+                "[main] önbellek yok — /api/latest ilk verify bitene dek "
+                "UNKNOWN\n")
+        sys.stderr.flush()
 
     # Arka plan thread: periyodik verify çalıştırma
     t = threading.Thread(target=verify_loop, args=(args.dir, args.interval),

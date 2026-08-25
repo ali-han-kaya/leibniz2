@@ -340,6 +340,314 @@ class TestProvenance(unittest.TestCase):
         m = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         self.assertNotIn("python3_shell", m)
 
+    # ── MIRROR CHECK section tests ───────────────────────────────────
+    def test_mirror_check_section(self):
+        # mirror-check/ dosyaları (K17 raporu + --mirror-out sidecar +
+        # bootstrap smoke) CONFIG gibi ayrı bölümde işaretlenir +
+        # tek-hash combined_sha256 özetlenir.
+        (self.artifacts / "mirror-check").mkdir(parents=True)
+        (self.artifacts / "mirror-check" / "mirror_check_report.txt").write_text(
+            "[K17] mirror sync: PASS\n", encoding="utf-8")
+        (self.artifacts / "mirror-check" / "mirror_report.json").write_text(
+            json.dumps({"tool": "verify_delivery.py --check-mirror",
+                        "exit": 0, "auto_synced": True}) + "\n",
+            encoding="utf-8")
+        self._gen()
+        txt = (self.out / "manifest.txt").read_text(encoding="utf-8")
+        self.assertIn("MIRROR CHECK ARTIFACT (ayrı bölüm)", txt)
+        self.assertIn("mirror_check_combined_sha256", txt)
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        mc = m["mirror_check"]
+        self.assertIn("mirror-check/mirror_check_report.txt", mc["files"])
+        self.assertIn("mirror-check/mirror_report.json", mc["files"])
+        self.assertTrue(len(mc["combined_sha256"]) == 64)
+
+    def test_mirror_check_combined_recomputes_deterministically(self):
+        (self.artifacts / "mirror-check").mkdir(parents=True)
+        (self.artifacts / "mirror-check" / "mirror_report.json").write_text(
+            json.dumps({"exit": 0, "auto_synced": False}) + "\n",
+            encoding="utf-8")
+        self._gen()
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        mc = m["mirror_check"]["files"]
+        expected = hashlib.sha256(
+            "".join(f"{rel}\0{mc[rel]}\n" for rel in sorted(mc)).encode()
+        ).hexdigest()
+        self.assertEqual(m["mirror_check"]["combined_sha256"], expected)
+        self.assertRegex(m["mirror_check"]["combined_sha256"], r"^[0-9a-f]{64}$")
+
+    def test_mirror_check_artifact_job_provenance(self):
+        (self.artifacts / "mirror-check").mkdir(parents=True)
+        (self.artifacts / "mirror-check" / "mirror_report.json").write_text(
+            "{}", encoding="utf-8")
+        self._gen()
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        jobs = m["provenance"]["artifact_jobs"]
+        self.assertEqual(jobs["mirror-check"], "mirror-check")
+        txt = (self.out / "manifest.txt").read_text(encoding="utf-8")
+        self.assertIn("prefixed (1 dosya)", txt)  # mirror-check tek dosya
+
+    def test_no_mirror_check_section_when_absent(self):
+        bare = self.root / "bare"
+        bare.mkdir(parents=True)
+        (bare / "a.txt").write_text("x", encoding="utf-8")
+        out = self.root / "bare-out"
+        r = _run_gen(str(bare), str(out))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        m = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        self.assertNotIn("mirror_check", m)
+
+    # ── DAEMON HTTP section tests ────────────────────────────────────
+    def test_daemon_http_section(self):
+        # daemon-http/ dosyaları (daemon_http_test.py raporu + K15 sidecar
+        # daemon_history.jsonl/.sha256 + k15_report.txt + override_report.json)
+        # CONFIG gibi ayrı bölümde işaretlenir + tek-hash combined_sha256 özetlenir.
+        (self.artifacts / "daemon-http").mkdir(parents=True)
+        (self.artifacts / "daemon-http" / "daemon_http_report.json").write_text(
+            json.dumps({"ok": True, "endpoints": {"/api/latest": 200},
+                        "daemon_alive": True}) + "\n", encoding="utf-8")
+        (self.artifacts / "daemon-http" / "daemon_http_report.txt").write_text(
+            "daemon-http exit: 0\n", encoding="utf-8")
+        # K15 sidecar: daemon_history.jsonl + .sha256
+        (self.artifacts / "daemon-http" / "daemon_history.jsonl").write_text(
+            '{"ts":"2026-08-20T12:00:00Z","verdict":"PASS"}\n', encoding="utf-8")
+        digest = hashlib.sha256(
+            (self.artifacts / "daemon-http" / "daemon_history.jsonl").read_bytes()
+        ).hexdigest()
+        (self.artifacts / "daemon-http" / "daemon_history.jsonl.sha256").write_text(
+            f"{digest}  daemon_history.jsonl\n", encoding="utf-8")
+        # K15 raporu
+        (self.artifacts / "daemon-http" / "k15_report.txt").write_text(
+            "[K15] history sidecar: PASS\n", encoding="utf-8")
+        # Override raporu
+        (self.artifacts / "daemon-http" / "override_report.json").write_text(
+            json.dumps({"generated_at": "2026-08-20T12:00:00Z",
+                        "verdict": "PASS", "role": "override-run",
+                        "override_count": 0, "overrides": {}, "lines": []})
+            + "\n", encoding="utf-8")
+        self._gen()
+        txt = (self.out / "manifest.txt").read_text(encoding="utf-8")
+        self.assertIn("DAEMON HTTP ARTIFACT (ayrı bölüm)", txt)
+        self.assertIn("daemon_http_combined_sha256", txt)
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        dh = m["daemon_http"]
+        # All 6 files should be in the manifest
+        expected_files = [
+            "daemon-http/daemon_http_report.json",
+            "daemon-http/daemon_http_report.txt",
+            "daemon-http/daemon_history.jsonl",
+            "daemon-http/daemon_history.jsonl.sha256",
+            "daemon-http/k15_report.txt",
+            "daemon-http/override_report.json",
+        ]
+        for ef in expected_files:
+            self.assertIn(ef, dh["files"], f"{ef} manifest'te olmalı")
+        self.assertTrue(len(dh["combined_sha256"]) == 64)
+        # combined_sha256 deterministik olmalı
+        expected_combined = hashlib.sha256(
+            "".join(f"{rel}\0{dh['files'][rel]}\n" for rel in sorted(dh["files"]))
+            .encode()
+        ).hexdigest()
+        self.assertEqual(dh["combined_sha256"], expected_combined)
+
+    def test_daemon_http_combined_recomputes_deterministically(self):
+        (self.artifacts / "daemon-http").mkdir(parents=True)
+        (self.artifacts / "daemon-http" / "daemon_http_report.json").write_text(
+            json.dumps({"ok": True}) + "\n", encoding="utf-8")
+        (self.artifacts / "daemon-http" / "daemon_history.jsonl").write_text(
+            '{"ts":"x"}\n', encoding="utf-8")
+        self._gen()
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        dh = m["daemon_http"]["files"]
+        # History sidecar daemon-http artifact'ında olmalı
+        self.assertIn("daemon-http/daemon_history.jsonl", dh)
+        expected = hashlib.sha256(
+            "".join(f"{rel}\0{dh[rel]}\n" for rel in sorted(dh)).encode()
+        ).hexdigest()
+        self.assertEqual(m["daemon_http"]["combined_sha256"], expected)
+        self.assertRegex(m["daemon_http"]["combined_sha256"], r"^[0-9a-f]{64}$")
+
+    def test_daemon_http_artifact_job_provenance(self):
+        (self.artifacts / "daemon-http").mkdir(parents=True)
+        (self.artifacts / "daemon-http" / "daemon_http_report.json").write_text(
+            "{}", encoding="utf-8")
+        self._gen()
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        jobs = m["provenance"]["artifact_jobs"]
+        self.assertEqual(jobs["daemon-http"], "daemon-http")
+        txt = (self.out / "manifest.txt").read_text(encoding="utf-8")
+        self.assertIn("prefixed (1 dosya)", txt)  # daemon-http tek dosya
+
+    def test_no_daemon_http_section_when_absent(self):
+        bare = self.root / "bare"
+        bare.mkdir(parents=True)
+        (bare / "a.txt").write_text("x", encoding="utf-8")
+        out = self.root / "bare-out"
+        r = _run_gen(str(bare), str(out))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        m = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        self.assertNotIn("daemon_http", m)
+
+    # ── AUDIT REFS-TREND section tests ──────────────────────────────
+    def test_audit_refs_trend_section(self):
+        # audit-refs-trend/ dosyaları ayrıca bölümde işaretlenir.
+        (self.artifacts / "audit-refs-trend").mkdir(parents=True)
+        (self.artifacts / "audit-refs-trend" / "audit_refs_trend.json").write_text(
+            json.dumps({"verdict": "PASS"}), encoding="utf-8")
+        self._gen()
+        txt = (self.out / "manifest.txt").read_text(encoding="utf-8")
+        self.assertIn("AUDIT REFS-TREND ARTIFACT (ayrı bölüm)", txt)
+        self.assertIn("audit_refs_trend_combined_sha256", txt)
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        art = m["audit_refs_trend"]
+        self.assertIn("audit-refs-trend/audit_refs_trend.json", art["files"])
+        self.assertTrue(len(art["combined_sha256"]) == 64)
+
+    def test_audit_refs_trend_combined_recomputes_deterministically(self):
+        (self.artifacts / "audit-refs-trend").mkdir(parents=True)
+        (self.artifacts / "audit-refs-trend" / "audit_refs_trend.json").write_text(
+            json.dumps({"verdict": "PASS"}), encoding="utf-8")
+        self._gen()
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        art = m["audit_refs_trend"]["files"]
+        expected = hashlib.sha256(
+            "".join(f"{rel}\0{art[rel]}\n" for rel in sorted(art)).encode()
+        ).hexdigest()
+        self.assertEqual(m["audit_refs_trend"]["combined_sha256"], expected)
+        self.assertRegex(m["audit_refs_trend"]["combined_sha256"], r"^[0-9a-f]{64}$")
+
+    def test_audit_refs_trend_artifact_job_provenance(self):
+        (self.artifacts / "audit-refs-trend").mkdir(parents=True)
+        (self.artifacts / "audit-refs-trend" / "audit_refs_trend.json").write_text(
+            "{}", encoding="utf-8")
+        self._gen()
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        jobs = m["provenance"]["artifact_jobs"]
+        self.assertEqual(jobs["audit-refs-trend"], "audit-refs-trend")
+        txt = (self.out / "manifest.txt").read_text(encoding="utf-8")
+        self.assertIn("prefixed (1 dosya)", txt)
+
+    def test_no_audit_refs_trend_section_when_absent(self):
+        bare = self.root / "bare"
+        bare.mkdir(parents=True)
+        (bare / "a.txt").write_text("x", encoding="utf-8")
+        out = self.root / "bare-out"
+        r = _run_gen(str(bare), str(out))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        m = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        self.assertNotIn("audit_refs_trend", m)
+
+    # ── OVERRIDES section tests ──────────────────────────────────────
+    def test_overrides_section(self):
+        # cli_overrides_version.json (isimle tanınır — CONFIG gibi)
+        # ayrı bölümde işaretlenir + tek-hash combined_sha256.
+        (self.artifacts / "budget").mkdir(parents=True)
+        (self.artifacts / "budget" / "cli_overrides_version.json").write_text(
+            json.dumps({"override_count": 1, "warning": True,
+                        "overrides": [{"key": "budget", "file_value": 30.0,
+                                       "effective": 25}]}),
+            encoding="utf-8")
+        self._gen()
+        txt = (self.out / "manifest.txt").read_text(encoding="utf-8")
+        self.assertIn("OVERRIDES ARTIFACT (ayrı bölüm)", txt)
+        self.assertIn("overrides_combined_sha256", txt)
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        ov = m["overrides"]
+        self.assertIn("budget/cli_overrides_version.json", ov["files"])
+        self.assertEqual(len(ov["combined_sha256"]), 64)
+
+    def test_overrides_combined_recomputes_deterministically(self):
+        (self.artifacts / "budget").mkdir(parents=True)
+        (self.artifacts / "budget" / "cli_overrides_version.json").write_text(
+            json.dumps({"override_count": 0, "warning": False,
+                        "overrides": []}),
+            encoding="utf-8")
+        self._gen()
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        ov = m["overrides"]["files"]
+        expected = hashlib.sha256(
+            "".join(f"{rel}\0{ov[rel]}\n" for rel in sorted(ov)).encode()
+        ).hexdigest()
+        self.assertEqual(m["overrides"]["combined_sha256"], expected)
+        self.assertRegex(m["overrides"]["combined_sha256"], r"^[0-9a-f]{64}$")
+
+    def test_overrides_basename_recognition_flat(self):
+        # merge-multiple köke düzleştirdiğinde alt dizin öneki kaybolur;
+        # basename ile tanınır (CONFIG deseni).
+        (self.artifacts / "cli_overrides_version.json").write_text(
+            json.dumps({"override_count": 0, "warning": False}),
+            encoding="utf-8")
+        self._gen()
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        ov = m["overrides"]
+        self.assertIn("cli_overrides_version.json", ov["files"])
+        self.assertEqual(len(ov["combined_sha256"]), 64)
+
+    def test_no_overrides_section_when_absent(self):
+        bare = self.root / "bare"
+        bare.mkdir(parents=True)
+        (bare / "a.txt").write_text("x", encoding="utf-8")
+        out = self.root / "bare-out"
+        r = _run_gen(str(bare), str(out))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        m = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        self.assertNotIn("overrides", m)
+
+    # ── STATUS CHECKS section tests (advisory kontratı SHA-256 sabitlemesi) ─
+    def test_status_checks_section_prefixed(self):
+        # precheck-report/ önekli status_checks.json — ayrı bölümde işaretlenir
+        # + tek-hash combined_sha256 (OVERRIDES deseni).
+        (self.artifacts / "precheck-report").mkdir(parents=True)
+        (self.artifacts / "precheck-report" / "status_checks.json").write_text(
+            json.dumps({"advisory_contract": {"ok": True, "required": ["a"],
+                                                "advisory": ["b"]}}),
+            encoding="utf-8")
+        self._gen()
+        txt = (self.out / "manifest.txt").read_text(encoding="utf-8")
+        self.assertIn("STATUS CHECKS ARTIFACT (ayrı bölüm — advisory kontratı)", txt)
+        self.assertIn("status_checks_combined_sha256", txt)
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        sc = m["status_checks"]
+        self.assertIn("precheck-report/status_checks.json", sc["files"])
+        self.assertEqual(len(sc["combined_sha256"]), 64)
+        self.assertRegex(sc["combined_sha256"], r"^[0-9a-f]{64}$")
+
+    def test_status_checks_combined_recomputes_deterministically(self):
+        (self.artifacts / "precheck-report").mkdir(parents=True)
+        (self.artifacts / "precheck-report" / "status_checks.json").write_text(
+            json.dumps({"advisory_contract": {"ok": False, "issues": ["x"]}}),
+            encoding="utf-8")
+        self._gen()
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        sc = m["status_checks"]["files"]
+        expected = hashlib.sha256(
+            "".join(f"{rel}\0{sc[rel]}\n" for rel in sorted(sc)).encode()
+        ).hexdigest()
+        self.assertEqual(m["status_checks"]["combined_sha256"], expected)
+
+    def test_status_checks_basename_recognition_flat(self):
+        # merge-multiple köke düzleştirdiğinde precheck-report/ öneki kaybolur;
+        # basename ile tanınır (CONFIG/OVERRIDES deseni) + provenance precheck'e
+        # bağlanır.
+        (self.artifacts / "status_checks.json").write_text(
+            json.dumps({"advisory_contract": {"ok": True}}), encoding="utf-8")
+        self._gen()
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        sc = m["status_checks"]
+        self.assertIn("status_checks.json", sc["files"])
+        prov = m["provenance"]["artifact_jobs"]
+        self.assertIn("precheck-report", prov)  # ARTIFACT_JOBS girişi duruyor
+
+    def test_no_status_checks_section_when_absent(self):
+        bare = self.root / "bare"
+        bare.mkdir(parents=True)
+        (bare / "a.txt").write_text("x", encoding="utf-8")
+        out = self.root / "bare-out"
+        r = _run_gen(str(bare), str(out))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        m = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        self.assertNotIn("status_checks", m)
+
     def test_env_override_artifact_jobs(self):
         env = dict(os.environ)
         env["REPRO_ARTIFACT_JOBS"] = '{"precommit-logs": "custom-job"}'
@@ -354,6 +662,100 @@ class TestProvenance(unittest.TestCase):
             m["provenance"]["artifact_jobs"]["precommit-logs"], "custom-job")
 
 
+class TestPython3ShellArtifactJobsOverride(unittest.TestCase):
+    """REPRO_ARTIFACT_JOBS env override'ı python3-shell'i de kapsamalı.
+
+    python3-shell, ARTIFACT_JOBS'da tanımlı bir artifact'tır (job: verify).
+    Bu sınıf, _load_artifact_jobs()'un override mekanizmasının
+    python3-shell'i de doğru şekilde geçersiz kılabileceğini ve koruyabildğini
+    doğrular — yeni bir artifact eklendiğinde override zincirinden sessizce
+    düşmesi engellenir.
+    """
+
+    def test_python3_shell_in_default_artifact_jobs(self):
+        # Temel kapsam: python3-shell ARTIFACT_JOBS'ta tanımlı olmalı.
+        self.assertIn("python3-shell", gen_manifest.ARTIFACT_JOBS)
+        self.assertEqual(
+            gen_manifest.ARTIFACT_JOBS["python3-shell"], "verify")
+
+    def test_override_replaces_python3_shell_job(self):
+        # REPRO_ARTIFACT_JOBS python3-shell'in job'unu geçersiz kılmalı.
+        env = dict(os.environ)
+        env["REPRO_ARTIFACT_JOBS"] = (
+            '{"python3-shell": "custom-shell-job"}')
+        old = os.environ.get("REPRO_ARTIFACT_JOBS")
+        os.environ["REPRO_ARTIFACT_JOBS"] = env["REPRO_ARTIFACT_JOBS"]
+        try:
+            jobs = gen_manifest._load_artifact_jobs()
+        finally:
+            if old is None:
+                os.environ.pop("REPRO_ARTIFACT_JOBS", None)
+            else:
+                os.environ["REPRO_ARTIFACT_JOBS"] = old
+        self.assertEqual(jobs["python3-shell"], "custom-shell-job")
+        # Override yalnızca python3-shell'i değiştirir; diğerleri korunur.
+        self.assertEqual(jobs["verify-report"], "verify")
+
+    def test_override_preserves_python3_shell_when_not_overridden(self):
+        # Override başka bir artifact'ı değiştirirken python3-shell
+        # varsayılan değerinde korunmalı.
+        env = dict(os.environ)
+        env["REPRO_ARTIFACT_JOBS"] = (
+            '{"budget-verify": "custom-budget-job"}')
+        old = os.environ.get("REPRO_ARTIFACT_JOBS")
+        os.environ["REPRO_ARTIFACT_JOBS"] = env["REPRO_ARTIFACT_JOBS"]
+        try:
+            jobs = gen_manifest._load_artifact_jobs()
+        finally:
+            if old is None:
+                os.environ.pop("REPRO_ARTIFACT_JOBS", None)
+            else:
+                os.environ["REPRO_ARTIFACT_JOBS"] = old
+        self.assertEqual(jobs["budget-verify"], "custom-budget-job")
+        # python3-shell etkilenmedi:
+        self.assertEqual(jobs["python3-shell"], "verify")
+
+    def test_override_with_invalid_json_falls_back_to_default(self):
+        # Bozuk JSON → override uygulanmaz, python3-shell varsayılanında.
+        old = os.environ.get("REPRO_ARTIFACT_JOBS")
+        os.environ["REPRO_ARTIFACT_JOBS"] = '{invalid json'
+        try:
+            jobs = gen_manifest._load_artifact_jobs()
+        finally:
+            if old is None:
+                os.environ.pop("REPRO_ARTIFACT_JOBS", None)
+            else:
+                os.environ["REPRO_ARTIFACT_JOBS"] = old
+        self.assertEqual(jobs["python3-shell"], "verify")
+
+    def test_override_python3_shell_in_provenance_output(self):
+        # Uçtan uca: gen_repro_manifest.py --artifacts-dir ile üretilen
+        # manifest'in provenance.artifact_jobs'unda python3-shell override
+        # değerini yansıtmalı.
+        tmp = tempfile.mkdtemp(prefix="gm_ps_override_")
+        art = pathlib.Path(tmp) / "artifacts"
+        out = pathlib.Path(tmp) / "out"
+        (art / "python3-shell").mkdir(parents=True)
+        (art / "python3-shell" / "python3_shell_findings.json").write_text(
+            '{"v": 1}', encoding="utf-8")
+        env = dict(os.environ)
+        env["REPRO_ARTIFACT_JOBS"] = (
+            '{"python3-shell": "shell-audit-job"}')
+        r = subprocess.run(
+            ["python3", str(GEN), "--artifacts-dir", str(art),
+             "--out-dir", str(out)],
+            capture_output=True, text=True, env=env,
+        )
+        self.assertEqual(r.returncode, 0, r.stderr)
+        m = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(
+            m["provenance"]["artifact_jobs"]["python3-shell"],
+            "shell-audit-job")
+        # python3_shell bölümü üretilmiş olmalı (dosya var):
+        self.assertIn("python3_shell", m)
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 class TestWorkflowPatternCoverage(unittest.TestCase):
     """reproducibility merge pattern'i ARTIFACT_JOBS'ı eksiksiz kapsamalı.
 
@@ -362,8 +764,10 @@ class TestWorkflowPatternCoverage(unittest.TestCase):
     olmalı — yoksa o artifact manifest'e girmeden sessizce düşer (ör. bugün
     budget-verify/lineage-findings/klayers eksikti).
     """
-    EXCLUDED = {"config", "precommit-logs", "refs-trend", "precheck-report",
-                "python3-shell", "plist-check", "reproducibility"}
+    EXCLUDED = {"precommit-logs", "refs-trend", "override-trend",
+                "precheck-report", "python3-shell", "plist-check",
+                "mirror-check", "daemon-http", "audit-refs-trend",
+                "reproducibility"}
 
     def _workflow_merge_pattern(self):
         wf = CIKTI.parent.parent / ".github" / "workflows" / "verify.yml"
@@ -422,10 +826,28 @@ class TestManifestSections(unittest.TestCase):
         (self.artifacts / "sub" / "nested.json").write_text(
             '{"n": 1}', encoding="utf-8")
         (self.artifacts / "config").mkdir(parents=True)
+        # Gerçekçi config çifti: effective_config.json cli_overrides kaydı
+        # dosya config'iyle (verify_delivery.config.json) tutarlı — K10'un
+        # cli_overrides kapısı da üretilen manifest'i PASS etmeli (çapraz
+        # doğrulama testleri bu çifte bağlıdır).
         (self.artifacts / "config" / "verify_delivery.config.json").write_text(
-            '{"budget_usd": 30.0}', encoding="utf-8")
+            '{"budget_usd": 30.0, "budget_method": "both"}',
+            encoding="utf-8")
         (self.artifacts / "config" / "effective_config.json").write_text(
-            '{"effective": true}', encoding="utf-8")
+            json.dumps({
+                "budget_usd": 30.0,
+                "budget_method": "both",
+                "cli_overrides": {
+                    "budget": {"cli_given": False, "cli_value": None,
+                                "file_value": 30.0, "effective": 30.0,
+                                "override": False},
+                    "budget_method": {"cli_given": False, "cli_value": None,
+                                       "file_value": "both",
+                                       "effective": "both",
+                                       "override": False},
+                },
+            }),
+            encoding="utf-8")
         (self.artifacts / "binary.bin").write_bytes(b"\x00\x01\x02\xff")
         self.out = self.root / "reproducibility"
 
@@ -515,14 +937,62 @@ class TestManifestSections(unittest.TestCase):
         self.assertEqual(m["config"]["combined_sha256"], expected)
         self.assertRegex(m["config"]["combined_sha256"], r"^[0-9a-f]{64}$")
 
-    def test_config_combined_recomputes_deterministically(self):
+    def test_config_combined_cross_validates_with_k10(self):
+        """K10 çapraz doğrulama: AYNI config.files girdisinden üç formül de
+        birebir aynı hash'i üretmeli — test formülü, K10
+        (verify_delivery._config_combined_sha256) ve üreticinin kayıtlı
+        config.combined_sha256. Biri saparsa çapraz doğrulama sessizce
+        kayar (üretici drift'i / implementasyon ayrışması) → fail-closed."""
+        import verify_delivery as vd
         m = self._gen()
         cfg = m["config"]["files"]
-        expected = hashlib.sha256(
+        test_formula = hashlib.sha256(
             "".join(f"{rel}\0{cfg[rel]}\n" for rel in sorted(cfg)).encode()
         ).hexdigest()
-        self.assertEqual(m["config"]["combined_sha256"], expected)
-        self.assertRegex(m["config"]["combined_sha256"], r"^[0-9a-f]{64}$")
+        k10 = vd._config_combined_sha256(cfg)
+        stored = m["config"]["combined_sha256"]
+        self.assertEqual(test_formula, k10,
+                         "test formülü ↔ K10 formülü sapması (aynı girdi)")
+        self.assertEqual(k10, stored,
+                         "K10 formülü ↔ üretici kaydı sapması (aynı girdi)")
+
+    def test_k10_gate_passes_on_produced_manifest(self):
+        """Uçtan uca K10 çapraz doğrulama: üreticinin manifest'ini
+        verify_manifest_digest (--verify-manifest çekirdeği) TAMAMEN PASS
+        etmeli — config.combined_sha256 yeniden hesabı + cli_overrides dahil."""
+        import verify_delivery as vd
+        self._gen()
+        findings = []
+        ok, detail = vd.verify_manifest_digest(
+            str(self.out / "manifest.json"),
+            lambda pri, cid, cl, issue="", ev="":
+                findings.append((pri, cid, issue)))
+        self.assertTrue(ok, detail)
+        self.assertIn("config.combined_sha256: PASS", detail)
+        self.assertIn("cli_overrides: PASS", detail)
+        self.assertEqual(findings, [], f"K10 bulgu üretti: {findings}")
+
+    def test_k10_detects_config_combined_tamper(self):
+        """Fail-closed çapraz: manifest'teki config.combined_sha256
+        kurcalanınca K10 aynı formülle YENİDEN hesaplayıp uyuşmazlığı
+        yakalamalı (kayıtlı değer güvenilir değil — yeniden hesap tek kanıt)."""
+        import verify_delivery as vd
+        m = self._gen()
+        stored = m["config"]["combined_sha256"]
+        m["config"]["combined_sha256"] = (
+            "0" if stored[0] != "0" else "1") + stored[1:]
+        (self.out / "manifest.json").write_text(
+            json.dumps(m, ensure_ascii=False), encoding="utf-8")
+        findings = []
+        ok, detail = vd.verify_manifest_digest(
+            str(self.out / "manifest.json"),
+            lambda pri, cid, cl, issue="", ev="":
+                findings.append((pri, cid, issue)))
+        self.assertFalse(ok)
+        self.assertIn("config.combined_sha256: FAIL", detail)
+        self.assertTrue(
+            any(i == "config.combined_sha256 uyuşmazlığı"
+                for _, _, i in findings), findings)
 
     def test_config_combined_is_stable_across_runs(self):
         first = self._gen()["config"]["combined_sha256"]
@@ -913,7 +1383,7 @@ class TestCheckPatternConsistency(unittest.TestCase):
         wf = (pathlib.Path(cpc.DEFAULT_WORKFLOW).read_text(encoding="utf-8"))
         # budget-verify'ı pattern'den çıkar
         wf = wf.replace(
-            "'{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,k0-findings,budget-verify,lineage-findings,klayers,unit-tests,action-runtimes}'",
+            "'{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,config,k0-findings,budget-verify,lineage-findings,klayers,unit-tests,action-runtimes}'",
             "'{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,k0-findings,lineage-findings,klayers,unit-tests,action-runtimes}'",
         )
         errors, _ = self._run_check(wf)
@@ -925,7 +1395,7 @@ class TestCheckPatternConsistency(unittest.TestCase):
         wf = (pathlib.Path(cpc.DEFAULT_WORKFLOW).read_text(encoding="utf-8"))
         # Fazla bir artifact ekle
         wf = wf.replace(
-            "'{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,k0-findings,budget-verify,lineage-findings,klayers,unit-tests,action-runtimes}'",
+            "'{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,config,k0-findings,budget-verify,lineage-findings,klayers,unit-tests,action-runtimes}'",
             "'{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,k0-findings,budget-verify,lineage-findings,klayers,unit-tests,action-runtimes,fake-artifact}'",
         )
         errors, _ = self._run_check(wf)
@@ -936,7 +1406,7 @@ class TestCheckPatternConsistency(unittest.TestCase):
         import check_pattern_consistency as cpc
         wf = (pathlib.Path(cpc.DEFAULT_WORKFLOW).read_text(encoding="utf-8"))
         wf = wf.replace(
-            "'{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,k0-findings,budget-verify,lineage-findings,klayers,unit-tests,action-runtimes}'",
+            "'{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,config,k0-findings,budget-verify,lineage-findings,klayers,unit-tests,action-runtimes}'",
             "'{verify-report,budget,reports}'",
         )
         errors, _ = self._run_check(wf)
@@ -944,6 +1414,63 @@ class TestCheckPatternConsistency(unittest.TestCase):
 
     def test_no_pattern_returns_error(self):
         errors, _ = self._run_check("jobs:\n  foo:\n    runs-on: ubuntu-latest\n")
+        self.assertTrue(any("bulunamadı" in e for e in errors))
+
+    def test_fix_adds_missing_artifact(self):
+        """--fix eksik artifact'ı pattern'e ekler, sıralı yazar."""
+        import check_pattern_consistency as cpc
+        wf = (pathlib.Path(cpc.DEFAULT_WORKFLOW).read_text(encoding="utf-8"))
+        wf = wf.replace(
+            "'{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,config,k0-findings,budget-verify,lineage-findings,klayers,unit-tests,action-runtimes}'",
+            "'{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,k0-findings,lineage-findings,klayers,unit-tests,action-runtimes}'",
+        )
+        tmp = pathlib.Path("/tmp") / f"test_fix_{os.getpid()}"
+        tmp.mkdir(exist_ok=True)
+        wf_path = tmp / "verify.yml"
+        wf_path.write_text(wf, encoding="utf-8")
+
+        added, errors = cpc.fix(str(wf_path))
+        self.assertEqual(errors, [])
+        self.assertIn("budget-verify", added)
+        self.assertIn("config", added)  # hem budget-verify hem config eksikti
+
+        # Fix sonrası check PASS vermeli
+        check_errors = cpc.check(str(wf_path))
+        self.assertEqual(check_errors, [])
+
+        # Dosyada yeni pattern sıralı (deterministic)
+        new_text = wf_path.read_text(encoding="utf-8")
+        self.assertIn("budget-verify", new_text)
+        self.assertIn("config", new_text)
+        # Sıralı olduğunu doğrula: action-runtimes b'dan önce gelir
+        self.assertIn("action-runtimes,budget", new_text)
+
+    def test_fix_idempotent_no_change(self):
+        """--fix zaten güncel pattern'de değişiklik yapmaz."""
+        import check_pattern_consistency as cpc
+        wf = (pathlib.Path(cpc.DEFAULT_WORKFLOW).read_text(encoding="utf-8"))
+        tmp = pathlib.Path("/tmp") / f"test_fix_idem_{os.getpid()}"
+        tmp.mkdir(exist_ok=True)
+        wf_path = tmp / "verify.yml"
+        wf_path.write_text(wf, encoding="utf-8")
+        mtime_before = wf_path.stat().st_mtime
+
+        added, errors = cpc.fix(str(wf_path))
+        self.assertEqual(errors, [])
+        self.assertEqual(added, set())  # hiçbir şey eklenmedi
+        # Dosya değişmedi (idempotent)
+        self.assertEqual(wf_path.stat().st_mtime, mtime_before)
+
+    def test_fix_no_pattern_returns_error(self):
+        """Pattern yoksa fix hata döner."""
+        import check_pattern_consistency as cpc
+        tmp = pathlib.Path("/tmp") / f"test_fix_nopat_{os.getpid()}"
+        tmp.mkdir(exist_ok=True)
+        wf_path = tmp / "verify.yml"
+        wf_path.write_text("jobs:\n  foo:\n    runs-on: ubuntu-latest\n",
+                           encoding="utf-8")
+        added, errors = cpc.fix(str(wf_path))
+        self.assertEqual(added, set())
         self.assertTrue(any("bulunamadı" in e for e in errors))
 
 

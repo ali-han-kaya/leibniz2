@@ -11,6 +11,7 @@ stdlib unittest — ek bağımlılık yok.
 """
 import io
 import json
+import os
 import pathlib
 import sys
 import tempfile
@@ -21,9 +22,11 @@ CIKTI = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(CIKTI))
 
 import audit_refs_trend as art  # noqa: E402
+import refs_trend as rt  # noqa: E402
 
 
-DEFAULT_BY_SOURCE = {"openlibrary": 26, "crossref": 6}
+DEFAULT_BY_SOURCE = {"openlibrary": 22, "crossref": 6, "sep": 5,
+                    "archive": 20, "hathitrust": 1, "perseus": 2, "handle": 1}
 
 
 def _source(verified=61, total=61, unverified=0, mismatch=0,
@@ -159,6 +162,40 @@ class TestAudit(unittest.TestCase):
         self.assertEqual(r["verdict"], "FAIL")
         self.assertEqual(r["extra_sources"], ["111"])
 
+    def test_by_source_missing_hathitrust_fails(self):
+        # hathitrust kaybı → by_source_missing finding.
+        bs = {"crossref": 6, "sep": 5, "openlibrary": 22,
+              "archive": 20, "perseus": 2}  # hathitrust yok
+        trend = {"rows": [_row("111", by_source=bs)]}
+        src = {"111": _source(by_source=bs)}
+        r = art.audit(trend, src)
+        self.assertFalse(r["ok"])
+        bsm = [f for f in r["findings"] if f["kind"] == "by_source_missing"]
+        self.assertEqual(len(bsm), 1)
+        self.assertIn("hathitrust", bsm[0]["missing"])
+
+    def test_by_source_all_expected_present_pass(self):
+        # hathitrust + archive + perseus mevcut → by_source_missing yok.
+        bs = {"crossref": 6, "sep": 5, "openlibrary": 22,
+              "archive": 20, "hathitrust": 1, "perseus": 2, "handle": 1}
+        trend = {"rows": [_row("111", by_source=bs)]}
+        src = {"111": _source(by_source=bs)}
+        r = art.audit(trend, src)
+        bsm = [f for f in r["findings"] if f["kind"] == "by_source_missing"]
+        self.assertEqual(bsm, [])
+
+    def test_by_source_multiple_missing(self):
+        # Birden fazla kaynak eksik → hepsi listede.
+        bs = {"crossref": 6, "openlibrary": 22}  # archive+hathitrust+perseus yok
+        trend = {"rows": [_row("111", by_source=bs)]}
+        src = {"111": _source(by_source=bs)}
+        r = art.audit(trend, src)
+        bsm = [f for f in r["findings"] if f["kind"] == "by_source_missing"]
+        self.assertEqual(len(bsm), 1)
+        self.assertIn("archive", bsm[0]["missing"])
+        self.assertIn("hathitrust", bsm[0]["missing"])
+        self.assertIn("perseus", bsm[0]["missing"])
+
 
 class TestLoadTrend(unittest.TestCase):
     def test_missing_file_raises(self):
@@ -191,13 +228,24 @@ class TestLoadTrend(unittest.TestCase):
 class TestMain(unittest.TestCase):
     """main() çıkış kodları: mock'lu API ile (canlı ağ yok)."""
 
+    # Dipnot metni: main() summary check'i geçmek için.
+    _FOOTNOTE = (
+        "**Kapsam geçiş dipnotu (54/49 → 56/26 → 61/61):** "
+        "V5n ile 56/56'ya yükseldi — bu 56/56 **yerel doğrulama**ydı. "
+        "V5q/V5t/V5w zinciriyle kapsam 61/61'e ulaştı."
+    )
+
     def _run_main(self, trend_rows, source_reports, json_out=False):
-        """trend.json'i geçici dosyaya yazar, API'yi mock'lar, main() koşar."""
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".json",
-                                         delete=False) as tf:
-            json.dump({"rows": trend_rows}, tf)
-            trend_path = tf.name
-        try:
+        """trend.json + refs-trend.md'yi temp dizine yazar, main() koşar."""
+        with tempfile.TemporaryDirectory() as td:
+            tp = pathlib.Path(td) / "refs-trend.json"
+            with open(tp, "w") as tf:
+                json.dump({"rows": trend_rows}, tf)
+            # check_refs_trend_summary refs-trend.md bekler
+            mp = pathlib.Path(td) / "refs-trend.md"
+            mp.write_text(
+                f"## Özet\n\n{self._FOOTNOTE}\n\n", encoding="utf-8")
+
             artifacts = []
             for rid in source_reports:
                 artifacts.append({
@@ -222,11 +270,9 @@ class TestMain(unittest.TestCase):
                     mock.patch.object(art.rt, "api_get", side_effect=fake_api), \
                     mock.patch.object(sys, "stdout", new=io.StringIO()):
                 rc = art.main(["--repo", "owner/name",
-                               "--trend-json", trend_path] +
+                               "--trend-json", str(tp)] +
                               (["--json"] if json_out else []))
             return rc
-        finally:
-            pathlib.Path(trend_path).unlink()
 
     def test_pass_returns_0(self):
         rc = self._run_main([_row("111")], {"111": _source()})
@@ -248,11 +294,13 @@ class TestMain(unittest.TestCase):
 
     def test_json_output_has_verdict(self):
         buf = io.StringIO()
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".json",
-                                         delete=False) as tf:
-            json.dump({"rows": [_row("111")]}, tf)
-            trend_path = tf.name
-        try:
+        with tempfile.TemporaryDirectory() as td:
+            tp = pathlib.Path(td) / "refs-trend.json"
+            with open(tp, "w") as f:
+                json.dump({"rows": [_row("111")]}, f)
+            mp = pathlib.Path(td) / "refs-trend.md"
+            mp.write_text(
+                f"## Özet\n\n{self._FOOTNOTE}\n\n", encoding="utf-8")
             artifacts = [{"id": 1, "workflow_run": {"id": "111"},
                           "created_at": "2026-08-20T10:00:00Z"}]
             with mock.patch.object(art.rt, "fetch_refs_online_artifacts",
@@ -261,13 +309,11 @@ class TestMain(unittest.TestCase):
                                       return_value=_zip_blob(_source())), \
                     mock.patch.object(sys, "stdout", new=buf):
                 rc = art.main(["--repo", "owner/name",
-                               "--trend-json", trend_path, "--json"])
+                               "--trend-json", str(tp), "--json"])
             self.assertEqual(rc, 0)
             d = json.loads(buf.getvalue())
             self.assertEqual(d["verdict"], "PASS")
             self.assertEqual(d["rows_checked"], 1)
-        finally:
-            pathlib.Path(trend_path).unlink()
 
 
 def _zip_blob(payload):
@@ -278,6 +324,530 @@ def _zip_blob(payload):
         z.writestr("references_online.json",
                    json.dumps(payload, ensure_ascii=False))
     return buf.getvalue()
+
+
+class TestCheckChangelogOrder(unittest.TestCase):
+    """check_changelog_order — CHANGELOG sıralama denetimi."""
+
+    def _call(self, changelog):
+        saved = getattr(rt, "CHANGELOG", None)
+        try:
+            rt.CHANGELOG = changelog
+            return art.check_changelog_order()
+        finally:
+            rt.CHANGELOG = saved
+
+    def test_correct_order_no_findings(self):
+        # En yeni üstte (reverse chron) → findings boş.
+        cl = [
+            ("2026-08-24", "V5aa: retry"),
+            ("2026-08-22", "V5z: PASS"),
+            ("2026-08-21", "V5w: LoC"),
+            ("2026-08-19", "V5n: CrossRef"),
+        ]
+        self.assertEqual(self._call(cl), [])
+
+    def test_same_date_allowed(self):
+        # Aynı tarihli satırlar kabul edilir.
+        cl = [
+            ("2026-08-21", "V5w: LoC"),
+            ("2026-08-21", "V5t: Handle"),
+            ("2026-08-19", "V5n: CrossRef"),
+        ]
+        self.assertEqual(self._call(cl), [])
+
+    def test_wrong_order_detected(self):
+        # Sıra ters (eski üstte) → changelog_order finding.
+        cl = [
+            ("2026-08-19", "V5n: CrossRef"),
+            ("2026-08-21", "V5w: LoC"),
+        ]
+        findings = self._call(cl)
+        self.assertTrue(any(f["kind"] == "changelog_order" for f in findings))
+
+    def test_invalid_date_format(self):
+        # Tarih formatı geçersiz → changelog_date finding.
+        cl = [
+            ("not-a-date", "bir not"),
+        ]
+        findings = self._call(cl)
+        self.assertTrue(any(f["kind"] == "changelog_date" for f in findings))
+
+    def test_invalid_entry_format(self):
+        # Entry tuple değil → changelog_format finding.
+        cl = ["sadece string"]
+        findings = self._call(cl)
+        self.assertTrue(any(f["kind"] == "changelog_format" for f in findings))
+
+    def test_empty_changelog(self):
+        # Boş CHANGELOG → findings yok.
+        self.assertEqual(self._call([]), [])
+
+    def test_main_returns_1_on_changelog_drift(self):
+        # main() changelog sırası bozuksa exit 1 (API mock'lu).
+        saved = getattr(rt, "CHANGELOG", None)
+        orig_fetch = rt.fetch_refs_online_artifacts
+        try:
+            rt.CHANGELOG = [
+                ("2026-08-19", "eski"),
+                ("2026-08-24", "yeni"),
+            ]
+            rt.fetch_refs_online_artifacts = lambda *a, **k: []
+            import tempfile
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".json",
+                                            delete=False) as f:
+                json.dump({"rows": []}, f)
+                tmp = f.name
+            try:
+                rc = art.main(["--repo", "o/r", "--trend-json", tmp])
+                self.assertEqual(rc, 1)
+            finally:
+                os.unlink(tmp)
+        finally:
+            rt.CHANGELOG = saved
+            rt.fetch_refs_online_artifacts = orig_fetch
+
+
+class TestCheckChangelogRendered(unittest.TestCase):
+    """check_changelog_rendered — CHANGELOG'ın render edildiğini doğrula."""
+
+    def _call(self, changelog, rendered_lines=None):
+        saved = getattr(rt, "CHANGELOG", None)
+        saved_fn = getattr(rt, "changelog_lines", None)
+        try:
+            rt.CHANGELOG = changelog
+            if rendered_lines is not None:
+                rt.changelog_lines = lambda: rendered_lines
+            return art.check_changelog_rendered()
+        finally:
+            rt.CHANGELOG = saved
+            if saved_fn is not None:
+                rt.changelog_lines = saved_fn
+
+    def test_rendered_keyword_found(self):
+        cl = [("2026-08-19", "V5o: 56/56 tam kapsam")]
+        rendered = ["## Changelog", "", "- **2026-08-19:** V5o: 56/56 tam kapsam"]
+        self.assertEqual(self._call(cl, rendered), [])
+
+    def test_missing_keyword_detected(self):
+        # CHANGELOG'da V5o var ama rendered'da yok → finding.
+        cl = [("2026-08-19", "V5o: 56/56 tam kapsam")]
+        rendered = ["## Changelog", "", "- **2026-08-19:** V5w: LoC"]
+        findings = self._call(cl, rendered)
+        self.assertTrue(any(f["kind"] == "changelog_rendered" for f in findings))
+        self.assertEqual(findings[0]["keyword"], "V5o")
+
+    def test_empty_rendered_detected(self):
+        cl = [("2026-08-19", "V5o: test")]
+        findings = self._call(cl, [])
+        self.assertTrue(any(f["kind"] == "changelog_rendered" for f in findings))
+
+    def test_skip_short_keywords(self):
+        # Çok kısa/kırpılmış anahtar kelimeler atlanır.
+        cl = [("2026-08-19", "ab")]
+        self.assertEqual(self._call(cl, ["something"]), [])
+
+    def test_multiple_entries_all_rendered(self):
+        cl = [
+            ("2026-08-21", "V5w: LoC katalog kanıtı"),
+            ("2026-08-19", "V5o: 56/56 tam kapsam"),
+        ]
+        rendered = [
+            "## Changelog", "",
+            "- **2026-08-21:** V5w: LoC katalog kanıtı",
+            "- **2026-08-19:** V5o: 56/56 tam kapsam",
+        ]
+        self.assertEqual(self._call(cl, rendered), [])
+
+    def test_live_changelog_all_rendered(self):
+        """Gerçek CHANGELOG'un tüm satırları render edilmeli (canlı doğrulama)."""
+        findings = art.check_changelog_rendered()
+        self.assertEqual(findings, [],
+                         f"Bulunamayan: {[f['detail'] for f in findings]}")
+
+
+class TestCheckRefsTrendSummary(unittest.TestCase):
+    """refs-trend.md özet dipnot denetimi (56/56 yerel doğrulama notu)."""
+
+    def _call(self, trend_json_text, md_text):
+        """Geçici dosyalar oluşturup check_refs_trend_summary çalıştırır."""
+        with tempfile.TemporaryDirectory() as td:
+            jp = pathlib.Path(td, "refs-trend.json")
+            jp.write_text(trend_json_text, encoding="utf-8")
+            mp = pathlib.Path(td, "refs-trend.md")
+            mp.write_text(md_text, encoding="utf-8")
+            return art.check_refs_trend_summary(str(jp))
+
+    def test_pass_with_correct_footnote(self):
+        trend = json.dumps({"rows": [
+            {"total_online": 49, "date": "2026-08-18T00:00:00Z"},
+            {"total_online": 61, "date": "2026-08-21T00:00:00Z"},
+        ]})
+        md = (
+            "# Çevrimiçi Referans Doğrulama Trendi\n"
+            "\n"
+            "## Özet\n"
+            "\n"
+            "- **Run sayısı:** 2\n"
+            "\n"
+            "**Kapsam geçiş dipnotu (54/49 → 56/26 → 61/61):** "
+            "V5n ile 56/56'ya yükseldi — bu 56/56 **yerel doğrulama**ydı. "
+            "V5q/V5t/V5w zinciriyle kapsam 61/61'e ulaştı.\n"
+            "\n"
+        )
+        findings = self._call(trend, md)
+        self.assertEqual(findings, [])
+
+    def test_md_missing(self):
+        with tempfile.TemporaryDirectory() as td:
+            jp = pathlib.Path(td, "refs-trend.json")
+            jp.write_text(json.dumps({"rows": []}))
+            findings = art.check_refs_trend_summary(str(jp))
+        self.assertTrue(any(f["kind"] == "summary_md_missing" for f in findings))
+
+    def test_footnote_missing(self):
+        trend = json.dumps({"rows": [{"total_online": 61}]})
+        md = "# Başlık\n\n## Özet\n\nMetin.\n\n"
+        findings = self._call(trend, md)
+        self.assertTrue(any(f["kind"] == "summary_footnote_missing"
+                           for f in findings))
+
+    def test_version_missing(self):
+        trend = json.dumps({"rows": [{"total_online": 61}]})
+        md = (
+            "## Özet\n\n"
+            "**Kapsam geçiş dipnotu (54/49 → 61/61):** "
+            "Yalnızca V5w var, digerleri eksik.\n\n"
+        )
+        findings = self._call(trend, md)
+        version_findings = [f for f in findings
+                           if f["kind"] == "summary_footnote_version"]
+        self.assertTrue(version_findings, "summary_footnote_version bulunamadı")
+        versions = [f["version"] for f in version_findings]
+        self.assertIn("V5n", versions)
+
+    def test_56_56_missing(self):
+        trend = json.dumps({"rows": [{"total_online": 61}]})
+        md = (
+            "## Özet\n\n"
+            "**Kapsam geçiş dipnotu:** "
+            "V5n ile 54/49'dan 61/61'e ulaştı.\n\n"
+        )
+        findings = self._call(trend, md)
+        self.assertTrue(any(f["kind"] == "summary_footnote_56"
+                           for f in findings))
+
+    def test_local_validation_missing(self):
+        trend = json.dumps({"rows": [{"total_online": 61}]})
+        md = (
+            "## Özet\n\n"
+            "**Kapsam geçiş dipnotu:** 56/56 tam kapsam elde edildi.\n\n"
+        )
+        findings = self._call(trend, md)
+        self.assertTrue(any(f["kind"] == "summary_footnote_local"
+                           for f in findings))
+
+    def test_footnote_before_summary_warns(self):
+        trend = json.dumps({"rows": [{"total_online": 61}]})
+        md = (
+            "## Kapsam geçiş dipnotu\n"
+            "V5q/V5w ile 61/61. 56/56 yerel doğrulama.\n\n"
+            "## Özet\n\n"
+            "Metin.\n\n"
+        )
+        findings = self._call(trend, md)
+        self.assertTrue(any(f["kind"] == "summary_footnote_order"
+                           for f in findings))
+
+    def test_stale_footnote_detected(self):
+        """Trend'de değişim yok ama dipnot geçiş gösteriyor → bayat."""
+        trend = json.dumps({"rows": [
+            {"total_online": 61, "date": "a"},
+            {"total_online": 61, "date": "b"},
+        ]})
+        md = (
+            "## Özet\n\n"
+            "**Kapsam geçiş dipnotu (54/49 → 61/61):** "
+            "56/56 yerel doğrulama.\n\n"
+        )
+        findings = self._call(trend, md)
+        self.assertTrue(any(f["kind"] == "summary_footnote_stale"
+                           for f in findings))
+
+    def test_live_md_passes(self):
+        """Gerçek refs-trend.md dipnotu denetimi geçmeli."""
+        # trend.json'ı bul
+        candidates = [
+            CIKTI / "refs-trend" / "refs-trend.json",
+            CIKTI.parent.parent / "refs-trend" / "refs-trend.json",
+        ]
+        for jp in candidates:
+            if jp.is_file():
+                findings = art.check_refs_trend_summary(str(jp))
+                self.assertEqual(
+                    findings, [],
+                    f"Canlı dipnot denetimi başarısız: "
+                    f"{[f['detail'] for f in findings]}")
+                return
+        self.skipTest("refs-trend.json bulunamadı (CI'da üretilir)")
+
+
+class TestChangelogOrder(unittest.TestCase):
+    """CHANGELOG tarih sırası denetimi."""
+
+    def test_live_changelog_sorted(self):
+        findings = art.check_changelog_order()
+        self.assertEqual(findings, [],
+                         f"Sıra hatası: {[f['detail'] for f in findings]}")
+
+    def test_detects_reversed_order(self):
+        saved = rt.CHANGELOG[:]
+        try:
+            rt.CHANGELOG = [
+                ("2026-08-19", "eski not"),
+                ("2026-08-21", "yeni not"),  # eski tarih üstte
+            ]
+            findings = art.check_changelog_order()
+            self.assertTrue(any(f["kind"] == "changelog_order"
+                               for f in findings))
+        finally:
+            rt.CHANGELOG = saved
+
+    def test_equal_dates_accepted(self):
+        saved = rt.CHANGELOG[:]
+        try:
+            rt.CHANGELOG = [
+                ("2026-08-21", "not A"),
+                ("2026-08-21", "not B"),
+            ]
+            findings = art.check_changelog_order()
+            self.assertEqual(findings, [])
+        finally:
+            rt.CHANGELOG = saved
+
+    def test_invalid_date_format(self):
+        saved = rt.CHANGELOG[:]
+        try:
+            rt.CHANGELOG = [("not-a-date", "test")]
+            findings = art.check_changelog_order()
+            self.assertTrue(any(f["kind"] == "changelog_date"
+                               for f in findings))
+        finally:
+            rt.CHANGELOG = saved
+
+    def test_bad_tuple_format(self):
+        saved = rt.CHANGELOG[:]
+        try:
+            rt.CHANGELOG = [("2026-08-19",)]  # tek elemanlı
+            findings = art.check_changelog_order()
+            self.assertTrue(any(f["kind"] == "changelog_format"
+                               for f in findings))
+        finally:
+            rt.CHANGELOG = saved
+
+
+class TestOfflineMode(unittest.TestCase):
+    """--offline mod: yerel dizinden kaynak okuma (API gerekmez)."""
+
+    def _zip_blob(self, report):
+        """report dict'ini references_online.json zip'ine çevirir."""
+        import zipfile as zf
+        buf = io.BytesIO()
+        with zf.ZipFile(buf, "w") as z:
+            z.writestr("references_online.json",
+                       json.dumps(report, ensure_ascii=False))
+        return buf.getvalue()
+
+    def test_offline_loads_from_dir(self):
+        """--offline modunda yerel dizindeki zip'lerden kaynak yükler."""
+        with tempfile.TemporaryDirectory() as td:
+            art_dir = pathlib.Path(td) / "all_artifacts"
+            ref_dir = art_dir / "refs-online"
+            ref_dir.mkdir(parents=True)
+            # 111 run_id'li zip oluştur
+            _src = {"crossref": 50, "sep": 5, "openlibrary": 3,
+                    "archive": 2, "hathitrust": 1, "perseus": 0}
+            report = {"verified": 61, "total_online": 61, "unverified": 0,
+                      "mismatch": 0, "by_source": _src}
+            blob = self._zip_blob(report)
+            (ref_dir / "refs-online-111.zip").write_bytes(blob)
+
+            tp = pathlib.Path(td) / "refs-trend.json"
+            tp.write_text(json.dumps({"rows": [
+                {"run_id": 111, "date": "a", "total_online": 61,
+                 "verified": 61, "unverified": 0, "mismatch": 0,
+                 "by_source": dict(_src)},
+            ]}), encoding="utf-8")
+            (pathlib.Path(td) / "refs-trend.md").write_text(
+                "## Özet\n\nKapsam geçiş dipnotu (54/49 → 56/26 → 61/61): "
+                "V5n ile 56/56'ya yükseldi — bu 56/56 yerel doğrulama. "
+                "V5q/V5t/V5w ile 61/61.\n\n", encoding="utf-8")
+
+            buf = io.StringIO()
+            with mock.patch.object(sys, "stdout", new=buf):
+                rc = art.main(["--repo", "o/r",
+                               "--trend-json", str(tp),
+                               "--offline",
+                               "--artifacts-dir", str(art_dir)])
+            self.assertEqual(rc, 0, buf.getvalue())
+            self.assertIn("PASS", buf.getvalue())
+            self.assertIn("kaynakla birebir", buf.getvalue())
+
+    def test_offline_missing_dir_returns_2(self):
+        """--offline modunda dizin yoksa exit 2."""
+        with tempfile.TemporaryDirectory() as td:
+            tp = pathlib.Path(td) / "refs-trend.json"
+            tp.write_text(json.dumps({"rows": []}))
+            buf = io.StringIO()
+            with mock.patch.object(sys, "stderr", new=buf):
+                rc = art.main(["--repo", "o/r",
+                               "--trend-json", str(tp),
+                               "--offline",
+                               "--artifacts-dir", "/nonexistent"])
+            self.assertEqual(rc, 2)
+
+    def test_offline_empty_dir_passes_no_rows(self):
+        """--offline modunda boş dizin + boş trend = PASS."""
+        with tempfile.TemporaryDirectory() as td:
+            art_dir = pathlib.Path(td) / "all_artifacts"
+            art_dir.mkdir()
+            tp = pathlib.Path(td) / "refs-trend.json"
+            tp.write_text(json.dumps({"rows": []}))
+            (pathlib.Path(td) / "refs-trend.md").write_text(
+                "## Özet\n\nKapsam geçiş dipnotu (54/49 → 61/61) "
+                "V5n V5q V5t V5w. 56/56 yerel doğrulama.\n\n",
+                encoding="utf-8")
+            buf = io.StringIO()
+            with mock.patch.object(sys, "stdout", new=buf):
+                rc = art.main(["--repo", "o/r",
+                               "--trend-json", str(tp),
+                               "--offline",
+                               "--artifacts-dir", str(art_dir)])
+            self.assertEqual(rc, 0, buf.getvalue())
+
+    def test_offline_drift_detected(self):
+        """--offline modunda sayismatch = FAIL."""
+        with tempfile.TemporaryDirectory() as td:
+            art_dir = pathlib.Path(td) / "all_artifacts"
+            ref_dir = art_dir / "refs-online"
+            ref_dir.mkdir(parents=True)
+            report = {"verified": 49, "total_online": 54, "unverified": 0,
+                      "mismatch": 0, "by_source": {"crossref": 49}}
+            blob = self._zip_blob(report)
+            (ref_dir / "refs-online-111.zip").write_bytes(blob)
+
+            tp = pathlib.Path(td) / "refs-trend.json"
+            tp.write_text(json.dumps({"rows": [
+                {"run_id": 111, "date": "a", "total_online": 61,
+                 "verified": 61, "unverified": 0, "mismatch": 0,
+                 "by_source": {"crossref": 61}},
+            ]}), encoding="utf-8")
+            (pathlib.Path(td) / "refs-trend.md").write_text(
+                "## Özet\n\nKapsam geçiş dipnotu V5n. 56/56 yerel doğrulama.\n\n",
+                encoding="utf-8")
+
+            buf = io.StringIO()
+            with mock.patch.object(sys, "stdout", new=buf):
+                rc = art.main(["--repo", "o/r",
+                               "--trend-json", str(tp),
+                               "--offline",
+                               "--artifacts-dir", str(art_dir)])
+            self.assertEqual(rc, 1)  # drift = FAIL
+
+    def test_offline_json_output(self):
+        """--offline + --json = makine-okur çıktı."""
+        _src = {"crossref": 50, "sep": 5, "openlibrary": 3,
+                "archive": 2, "hathitrust": 1, "perseus": 0}
+        saved = rt.CHANGELOG[:]
+        try:
+            rt.CHANGELOG = [("2026-08-24", "V5aa: test")]
+            with tempfile.TemporaryDirectory() as td:
+                art_dir = pathlib.Path(td) / "all_artifacts"
+                ref_dir = art_dir / "refs-online"
+                ref_dir.mkdir(parents=True)
+                report = {"verified": 61, "total_online": 61, "unverified": 0,
+                          "mismatch": 0, "by_source": dict(_src)}
+                blob = self._zip_blob(report)
+                (ref_dir / "refs-online-111.zip").write_bytes(blob)
+
+                tp = pathlib.Path(td) / "refs-trend.json"
+                tp.write_text(json.dumps({"rows": [
+                    {"run_id": 111, "date": "a", "total_online": 61,
+                     "verified": 61, "unverified": 0, "mismatch": 0,
+                     "by_source": dict(_src)},
+                ]}), encoding="utf-8")
+                (pathlib.Path(td) / "refs-trend.md").write_text(
+                    "## Özet\n\nKapsam geçiş dipnotu (54/49 → 61/61) "
+                    "V5n V5q V5t V5w. 56/56 yerel doğrulama.\n\n",
+                    encoding="utf-8")
+
+                buf = io.StringIO()
+                with mock.patch.object(sys, "stdout", new=buf):
+                    rc = art.main(["--repo", "o/r",
+                                   "--trend-json", str(tp),
+                                   "--json",
+                                   "--offline",
+                                   "--artifacts-dir", str(art_dir)])
+                self.assertEqual(rc, 0, buf.getvalue())
+                d = json.loads(buf.getvalue())
+                self.assertEqual(d["verdict"], "PASS")
+                self.assertEqual(d["rows_checked"], 1)
+        finally:
+            rt.CHANGELOG = saved
+
+
+class TestChangelogOrder(unittest.TestCase):
+    """CHANGELOG tarih sırası denetimi."""
+
+    def test_live_changelog_sorted(self):
+        findings = art.check_changelog_order()
+        self.assertEqual(findings, [],
+                         f"Sıra hatası: {[f['detail'] for f in findings]}")
+
+    def test_detects_reversed_order(self):
+        saved = rt.CHANGELOG[:]
+        try:
+            rt.CHANGELOG = [
+                ("2026-08-19", "eski not"),
+                ("2026-08-21", "yeni not"),  # eski tarih üstte
+            ]
+            findings = art.check_changelog_order()
+            self.assertTrue(any(f["kind"] == "changelog_order"
+                               for f in findings))
+        finally:
+            rt.CHANGELOG = saved
+
+    def test_equal_dates_accepted(self):
+        saved = rt.CHANGELOG[:]
+        try:
+            rt.CHANGELOG = [
+                ("2026-08-21", "not A"),
+                ("2026-08-21", "not B"),
+            ]
+            findings = art.check_changelog_order()
+            self.assertEqual(findings, [])
+        finally:
+            rt.CHANGELOG = saved
+
+    def test_invalid_date_format(self):
+        saved = rt.CHANGELOG[:]
+        try:
+            rt.CHANGELOG = [("not-a-date", "test")]
+            findings = art.check_changelog_order()
+            self.assertTrue(any(f["kind"] == "changelog_date"
+                               for f in findings))
+        finally:
+            rt.CHANGELOG = saved
+
+    def test_bad_tuple_format(self):
+        saved = rt.CHANGELOG[:]
+        try:
+            rt.CHANGELOG = [("2026-08-19",)]  # tek elemanlı
+            findings = art.check_changelog_order()
+            self.assertTrue(any(f["kind"] == "changelog_format"
+                               for f in findings))
+        finally:
+            rt.CHANGELOG = saved
 
 
 if __name__ == "__main__":

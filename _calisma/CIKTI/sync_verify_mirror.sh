@@ -4,9 +4,9 @@
 #
 # Neden: preview_server.py launchd GUI agent rotasında çalışırken repo
 # dizinini TCC nedeniyle okuyamaz; tüm runtime TCC-safe mirror'da tutulur.
-# Bu script, run.md "How to reproduce the artifacts" ADIM 2 (preview mirror:
-# preview_server.py + _daemonize.py) ve ADIM 4 (verify mirror: CIKTI runtime
-# dosyaları + Lean ispatı) işlerini TEK KOMUTTA birleştirir:
+# Bu script, fresh_clone_setup.sh'in 3+4. adımını yerine getirir
+# (preview mirror: preview_server.py + _daemonize.py ve verify mirror:
+# CIKTI runtime dosyaları + Lean ispatı — tek komutta):
 #   ~/Library/Caches/com.freebuff/preview      (adım 2 — sunucu çalıştırıcı)
 #   ~/Library/Caches/com.freebuff/verify       (adım 4 — verify_delivery --dir)
 #   ~/Library/Caches/com.freebuff/lean_reduct  (adım 4 — K9: ../lean_reduct/…)
@@ -55,6 +55,19 @@ FILES=(
   "cleanup_log.json|cleanup_log.json"
   "github_scripts_battery.py|github_scripts_battery.py"
   "github_scripts_selftest.js|github_scripts_selftest.js"
+  "daemon_http_test.py|daemon_http_test.py"
+  "preview_server.py|preview_server.py"
+  "_daemonize.py|_daemonize.py"
+  "preview.html|preview.html"
+  "sw.js|sw.js"
+  "fresh_clone_setup.sh|fresh_clone_setup.sh"
+  "test_fresh_clone_setup.py|test_fresh_clone_setup.py"
+  "update_preview.sh|update_preview.sh"
+  "sync_check_unit_tests.py|sync_check_unit_tests.py"
+  "check_unit_tests.list|check_unit_tests.list"
+  "check_unit_tests_hook.sh|check_unit_tests_hook.sh"
+  "test_lake_evidence_smoke.py|test_lake_evidence_smoke.py"
+  "lake_evidence_hook.sh|lake_evidence_hook.sh"
   "github_scripts/config_diff_comment.js|github_scripts/config_diff_comment.js"
   "github_scripts/config_drift_comment.js|github_scripts/config_drift_comment.js"
   "github_scripts/label_gate.js|github_scripts/label_gate.js"
@@ -65,6 +78,7 @@ FILES=(
   "github_scripts/manifest_comment.js|github_scripts/manifest_comment.js"
   "github_scripts/unit_test_failure_comment.js|github_scripts/unit_test_failure_comment.js"
   "github_scripts/pr_status_comment.js|github_scripts/pr_status_comment.js"
+  "github_scripts/tum_sapmalar_comment.js|github_scripts/tum_sapmalar_comment.js"
   "TESLIM_KLASOR_V5_2026-08-17.zip|TESLIM_KLASOR_V5_2026-08-17.zip"
   "TESLIM_KLASOR_V5_2026-08-17.zip.sha256|TESLIM_KLASOR_V5_2026-08-17.zip.sha256"
   "TESLIM_V5_FINAL_2026-08-17.zip|TESLIM_V5_FINAL_2026-08-17.zip"
@@ -72,8 +86,18 @@ FILES=(
 )
 
 # Lean dosyaları: kaynak LEAN_SRC'ye, dest LEAN_MIRROR_DIR'a göre.
+# K9 iki kapılıdır: (1) ReductInvariance.lean meta-teoremi, (2) 8 teoremli
+# Sınır İspatı çekirdeği — lake build --wfail (lean-toolchain v4.14.0).
+# Bu yüzden lake projesinin TÜM kaynak dosyaları mirror'a gider; yalnızca
+# ReductInvariance.lean senkronlanırsa mirror rotasında K9-LAKE P0 üretir
+# (canlı dashboard FAIL — dashboard_smoke.sh bunu yakalamıştı).
 LEAN_FILES=(
   "ReductInvariance.lean|ReductInvariance.lean"
+  "lean-toolchain|lean-toolchain"
+  "lakefile.toml|lakefile.toml"
+  "Leibniz2Reduct.lean|Leibniz2Reduct.lean"
+  "Leibniz2Reduct/Content.lean|Leibniz2Reduct/Content.lean"
+  "Content.lean|Content.lean"
 )
 
 # Preview mirror dosyaları (adım 2): kaynak CIKTI'ya, dest PREVIEW_MIRROR'a
@@ -82,6 +106,7 @@ LEAN_FILES=(
 PREVIEW_FILES=(
   "preview_server.py|preview_server.py"
   "_daemonize.py|_daemonize.py"
+  "preview_prestart.py|preview_prestart.py"
 )
 
 # Branch protection görsel kılavuzu (adım 2, preview mirror): kaynak repo

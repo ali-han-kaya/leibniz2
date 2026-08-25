@@ -215,7 +215,7 @@
           <div class="expand">
             <input class="search" placeholder="Search by check name">
             <div class="check-list">
-              <div class="chk checked"><input type="checkbox" checked><span>Delivery verification — K1-K9 (single entry point)</span></div>
+              <div class="chk checked"><input type="checkbox" checked><span>Delivery verification — K1-K14 (single entry point)</span></div>
               <div class="chk checked"><input type="checkbox" checked><span>Action runtime check (node24)</span></div>
               <div class="chk checked"><input type="checkbox" checked><span>Budget shield (aggregated)</span></div>
               <div class="chk checked"><input type="checkbox" checked><span>Pre-commit P0 label gate</span></div>
@@ -224,6 +224,9 @@
               <div class="chk checked"><input type="checkbox" checked><span>Config drift check (gen_config + diff-on-drift)</span></div>
               <div class="chk checked"><input type="checkbox" checked><span>Repack determinism + verify (sidecar sync)</span></div>
               <div class="chk checked"><input type="checkbox" checked><span>Online verification trend (refs-online across runs)</span></div>
+              <div class="chk checked"><input type="checkbox" checked><span>Commit-msg gate</span></div>
+              <div class="chk checked"><input type="checkbox" checked><span>Config snapshot ↔ CONFIG_BASENAMES sync check</span></div>
+              <div class="chk checked"><input type="checkbox" checked><span>CI-SIMULATE (advisory)</span></div>
             </div>
             <div class="erow" style="margin-top:10px"><input type="checkbox" checked><span><b>Require branches to be up to date before merging</b> <span style="color:#656d76">(strict)</span></span></div>
           </div>
@@ -344,12 +347,12 @@
   <div class="term">
     <div><span class="prompt">$</span> python3 _calisma/CIKTI/status_checks.py --gh</div>
     <div class="dim">Beklenen status check adları (9) — kaynak: .github/workflows/verify.yml</div>
-    <div class="dim">&nbsp;&nbsp;1. Delivery verification — K1-K9 (single entry point)</div>
+    <div class="dim">&nbsp;&nbsp;1. Delivery verification — K1-K14 (single entry point)</div>
     <div class="dim">&nbsp;&nbsp;2. Action runtime check (node24)</div>
     <div class="dim">&nbsp;&nbsp;… (9 kapı)</div>
     <div>GitHub karşılaştırması: ali-han-kaya/leibniz2 (branch: main)</div>
     <div>&nbsp;&nbsp;[PASS] Action runtime check (node24)</div>
-    <div>&nbsp;&nbsp;[PASS] Delivery verification — K1-K9 (single entry point)</div>
+    <div>&nbsp;&nbsp;[PASS] Delivery verification — K1-K14 (single entry point)</div>
     <div>&nbsp;&nbsp;[PASS] … (9/9)</div>
     <div>── PR-merge engeli smoke (koruma ayarları) ──</div>
     <div>&nbsp;&nbsp;[PASS] required_status_checks.strict (up-to-date zorunlu)</div>

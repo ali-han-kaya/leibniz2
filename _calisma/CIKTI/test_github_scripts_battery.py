@@ -167,13 +167,13 @@ class TestCallRecords(unittest.TestCase):
 
     @unittest.skipUnless(HAVE_NODE, "node kurulu değil")
     def test_combined_scenario_shares_comment_list(self):
-        # Birleşik adım: manifest + config-diff TEK github-script kapsamında;
-        # yorum listesi BİR KEZ çekilir (issues.listComments == 1). İki ayrı
-        # adım olsaydı her script kendi listComments'ini çağırırdı (2 çağrı).
+        # Birleşik adım: manifest + config-diff + CLI override TEK github-script
+        # (tum_sapmalar_comment.js) kapsamında; yorum listesi BİR KEZ çekilir
+        # (issues.listComments == 1). Bayat manifest-marker yorumu SİLİNİR
+        # (deleteComment), tüm sapmalar tek yeni yorumda toplanır.
         name, script, fixtures, ctx, labels, comments, expect = \
             _find_scenario(
-                "combined: manifest update + config-diff create "
-                "(paylaşılan liste, 1 listComments)")
+                "tum_sapmalar: manifest + config diff + CLI override → tek yorum")
         self.assertIsInstance(script, dict, "wrapper senaryosu olmalı")
         with tempfile.TemporaryDirectory() as tmp:
             for rel, data in fixtures.items():
@@ -194,15 +194,16 @@ class TestCallRecords(unittest.TestCase):
         self.assertTrue(rec["ok"], rec["error"])
         fns = [c["fn"] for c in rec["calls"]]
         self.assertEqual(fns.count("issues.listComments"), 1,
-                         "iki script paylaşılan listeyi kullanmalı (tek çağrı)")
-        self.assertEqual(fns.count("issues.updateComment"), 1)
+                         "tek script paylaşılan listeyi kullanmalı (tek çağrı)")
+        self.assertEqual(fns.count("issues.deleteComment"), 1,
+                         "bayat marker yorumu silinmeli (state-sync)")
         self.assertEqual(fns.count("issues.createComment"), 1)
-        upd = next(c for c in rec["calls"]
-                   if c["fn"] == "issues.updateComment")
-        self.assertIn(battery.MARKER_MANIFEST, upd["args"]["body"])
         cr = next(c for c in rec["calls"]
                   if c["fn"] == "issues.createComment")
-        self.assertIn(battery.MARKER_CFGDIFF, cr["args"]["body"])
+        self.assertIn("Tüm Sapmalar", cr["args"]["body"])
+        self.assertIn("stoic-hume-v5-tum-sapmalar", cr["args"]["body"])
+        self.assertIn("CLI override aktif", cr["args"]["body"])
+        self.assertIn("Config diff", cr["args"]["body"])
 
 
 class TestMatcher(unittest.TestCase):

@@ -167,5 +167,104 @@ class TestVersionOut(unittest.TestCase):
         self.assertFalse(ver["config_read"])
 
 
+class TestCrossCheck(unittest.TestCase):
+    """cross_check(): iki kaynağın (index.json + VERSION JSON) tutarlılığı."""
+
+    def _idx(self, warning, overrides):
+        return json.dumps({
+            "runs": [{"source": "verify", "estimated_usd": 1.0,
+                      "limit": 30, "tokens_est": 330000}],
+            "method": "weighted",
+            "cli_overrides": {"warning": warning, "overrides": overrides,
+                              "raw": {}},
+        })
+
+    def _ver(self, warning, overrides):
+        return json.dumps({
+            "tool": "check_cli_overrides.py", "warning": warning,
+            "override_count": len(overrides), "overrides": overrides,
+            "config_read": True,
+            "summary": "CLI override VAR" if overrides else "CLI override YOK"})
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.idx = os.path.join(self.tmp.name, "index.json")
+        self.ver = os.path.join(self.tmp.name, "version.json")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _check(self, idx, vjson):
+        if idx is not None:
+            with open(self.idx, "w") as f:
+                f.write(idx)
+        if vjson is not None:
+            with open(self.ver, "w") as f:
+                f.write(vjson)
+        ip = self.idx if (idx is not None and os.path.isfile(self.idx)) else "/nonexistent/index.json"
+        return co.cross_check(ip, self.ver)
+
+    def test_both_empty_consistent(self):
+        ok, detail, problems = self._check(
+            self._idx(False, []), self._ver(False, []))
+        self.assertTrue(ok, detail)
+        self.assertEqual([], problems)
+
+    def test_both_with_override_consistent(self):
+        ov = [{"key": "budget", "file_value": 30.0, "effective": 25.0}]
+        ok, detail, problems = self._check(
+            self._idx(True, ov), self._ver(True, ov))
+        self.assertTrue(ok, detail)
+        self.assertEqual([], problems)
+
+    def test_warning_flag_mismatch(self):
+        ok, detail, problems = self._check(
+            self._idx(True, []), self._ver(False, []))
+        self.assertFalse(ok)
+        self.assertTrue(any("warning" in p for p in problems))
+
+    def test_override_count_mismatch(self):
+        ov = [{"key": "budget", "file_value": 30.0, "effective": 25.0}]
+        ok, detail, problems = self._check(
+            self._idx(True, ov), self._ver(True, []))
+        self.assertFalse(ok)
+        self.assertTrue(any("sayısı" in p for p in problems))
+
+    def test_value_mismatch(self):
+        idx_ov = [{"key": "budget", "file_value": 30.0, "effective": 25.0}]
+        ver_ov = [{"key": "budget", "file_value": 30.0, "effective": 20.0}]
+        ok, detail, problems = self._check(
+            self._idx(True, idx_ov), self._ver(True, ver_ov))
+        self.assertFalse(ok)
+        self.assertTrue(any("uyuşmaz" in p for p in problems))
+
+    def test_key_only_in_index(self):
+        idx_ov = [{"key": "budget", "file_value": 30.0, "effective": 25.0},
+                  {"key": "method", "file_value": "weighted",
+                   "effective": "both"}]
+        ver_ov = [{"key": "budget", "file_value": 30.0, "effective": 25.0}]
+        ok, detail, problems = self._check(
+            self._idx(True, idx_ov), self._ver(True, ver_ov))
+        self.assertFalse(ok)
+        self.assertTrue(any("index'te var, version'da yok" in p
+                           for p in problems))
+
+    def test_index_missing(self):
+        # index dosyası hiç oluşturulmadı — sadece version yaz.
+        ok, detail, problems = self._check(
+            None, self._ver(False, []))
+        self.assertFalse(ok)
+        self.assertIn("index.json bulunamadı", detail)
+
+    def test_index_missing_but_version_has_overrides(self):
+        ov = [{"key": "budget", "file_value": 30.0, "effective": 25.0}]
+        # index yok, sadece version var
+        ok, detail, problems = self._check(
+            None, self._ver(True, ov))
+        self.assertFalse(ok)
+        # version'da override varken index yok → veri kaybı şüphesi
+        self.assertTrue(any("veri kaybı" in p for p in problems))
+
+
 if __name__ == "__main__":
     unittest.main()

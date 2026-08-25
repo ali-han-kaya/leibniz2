@@ -44,6 +44,27 @@ API = "https://api.github.com"
 # Kaynak: verify_delivery.py K6 denetimindeki düzeltmeler. Yeni bir denetim
 # düzeltmesi yapıldığında buraya tek satır eklenir (denetlenebilir geçmiş).
 CHANGELOG = [
+    ("2026-08-24",
+     "V5ab: OL geçici timeout'larına exponential backoff — `_http_get` "
+     "per-request retry'i 1s/2s/4s/8s üstel bekleme (cap 8s) kullanır; "
+     "`_ol_retry` tek 3s'lik deneme yerine OL_RETRY_ATTEMPTS=3 toplam "
+     "denemeyle üstel backoff yapar (fail-closed: tükenirse UNVERIFIED kalır)."),
+    ("2026-08-24",
+     "V5aa: CI'da geçici OL timeout'ları belgelendi (58/61 push + 61/61 "
+     "workflow_dispatch); `_ol_retry` outer retry eklendi — zaman aşımı/" 
+     "connection reset/5xx geçici UNVERIFIED'lar tekrar denenir."),
+    ("2026-08-22",
+     "V5z: canlı CI 61/61 PASS, UNVERIFIED=0 — tüm kanıt zincirleri "
+     "birlikte doğrulandı (LoC 3 + Handle 1 + HT 1 + OL fallback Fine)."),
+    ("2026-08-22",
+     "Kapsam: 61/61 — 64 referansın 61'i çevrimiçi kaynaktan doğrulanır "
+     "(CrossRef/SEP/OpenLibrary/Internet Archive/Handle/LoC/Perseus), 3'ü "
+     "bibliyografik belgedir (modern kitaplar: IA'da tarama yok, HT'de katalog "
+     "yok, OL'de kayıtlı). Erken dönem '54/54' sayısı artık geçersizdir — "
+     "V5 düzeltme zinciri boyunca kapsam 54→56 (CrossRef dergileri) → 61 "
+     "(Sextus IA birebir + Della Rocca Handle) olarak genişledi; '54' sayısı "
+     "yalnızca CrossRef+SEP+OL+IA temel zincirinin sonucuydu, LoC/Handle/ia_ids "
+     "fallback'leri eklenmeden önceki durumu yansıtır."),
     ("2026-08-21",
      "V5w: Lagrée/Millican/Schmitt/Fine kitapları HathiTrust'sız katalog "
      "kanıtıyla — Library of Congress lccn kayıtları PASS (loc_check; zincir "
@@ -55,6 +76,10 @@ CHANGELOG = [
      "artifact'larıyla karşılaştırır (sahte satır / sayı / by_source drift'i "
      "/ bayat trend → exit 1; advisory audit-refs-trend job'ı). Canlı "
      "denetim 83/83 satır birebir PASS."),
+    ("2026-08-21",
+     "V5r: OL edisyon kayıtlarında oclc YOK — tam identifier matrisi HT'ye "
+     "denendi (lccn + oclc + isbn), yalnızca Xunzi (`lccn:87033578`) eşleşir; "
+     "4 modern telifli kitap HT kataloğunda yok, OL fallback PASS ile kalır."),
     ("2026-08-21",
      "V5q: kapsam boşluğu kapatıldı — 4 Sextus edisyonu (1562 Estienne, "
      "1569 Hervet, 1621 Chouet) IA'da `ia_ids` ile birebir identifier "
@@ -74,7 +99,10 @@ CHANGELOG = [
      "Denetim REFERENCE_POOL_SIZE=4 havuzda PARALEL koşar — sıralı koşudaki "
      "rate-limit (OpenLibrary ~8 sn/çağrı) bütçe-skip'e düşürüp UNVERIFIED "
      "bırakıyordu; bütçe 260 sn'ye çıkarıldı. Canlı doğrulama: 56/56 PASS, "
-     "94 sn (crossref 6, sep 5, openlibrary 27, archive 16, perseus 2)."),
+     "94 sn (crossref 6, sep 5, openlibrary 27, archive 16, perseus 2). "
+     "NOT: bu 56/56 **yerel doğrulama**dır (trend tablosunda görünmez); "
+     "deterministik kanıtı REFERANS_KANIT_DENETIMI.md §5.3'te "
+     "`ia_ol_fallback_evidence.py --offline` ile belgelenmiştir."),
     ("2026-08-19",
      "V5n: Norton 1981 ve Popkin 1951 DOI'leri CrossRef'e eklendi — kapsam-dışı "
      "kalan son 2 dergi makalesi artık çevrimiçi doğrulanır "
@@ -212,6 +240,13 @@ def check_run_warnings(r, dur_warn=DURATION_WARN_S, bud_warn=BUDGET_WARN_USD):
     if isinstance(bud, (int, float)) and bud > bud_warn:
         bw = True
         msgs.append(f"bütçe ${bud:.2f} > eşik ${bud_warn:.0f}")
+    # K8 Z3: failed varsa uyarı
+    z3p = r.get("z3_passed")
+    z3t = r.get("z3_total")
+    if isinstance(z3p, (int, float)) and isinstance(z3t, (int, float)):
+        z3f = z3t - z3p
+        if z3f > 0:
+            msgs.append(f"Z3 FAIL {int(z3f)}/{int(z3t)}")
     return {
         "duration_warn": dw,
         "budget_warn": bw,
@@ -248,6 +283,50 @@ def summarize_warnings(history_rows, dur_warn=DURATION_WARN_S, bud_warn=BUDGET_W
     }
 
 
+def build_duration_budget(history_rows):
+    """history_rows'tan duration_budget JSON bölümünü üretir (fail-closed).
+
+    Her run'a duration/budget eşik bayraklarını işler (check_run_warnings),
+    summary stats'ını hesaplar ve eşik ihlali özetini ekler. main() ve birim
+    testleri ORTAK kullanır — bölümün JSON sözleşmesi tek kaynaktır:
+        {run_count,
+         rows[{date, run_id, duration_s, budget_usd, verdict, p0, p1,
+               z3_passed, z3_total, duration_warn, budget_warn}],
+         summary{duration_s{count,min,max,avg}, budget_usd{...}},
+         warnings{duration_violations, budget_violations, total_runs,
+                  violations[{run_idx, date, run_id, messages}]} | None}
+    Sayısal olmayan duration/budget değerleri stats'a katılmaz (markdown'da
+    '—' gösterilir), run_count yine de tüm run'ları sayar; boş girdi
+    warnings=None üretir (bölüm yok anlamında).
+    """
+    rows = []
+    for r in history_rows:
+        w = check_run_warnings(r)
+        rows.append({
+            "date": r.get("date", ""),
+            "run_id": r.get("run_id"),
+            "duration_s": r.get("duration_s"),
+            "budget_usd": r.get("budget_usd"),
+            "verdict": r.get("verdict"),
+            "p0": r.get("p0"),
+            "p1": r.get("p1"),
+            "z3_passed": r.get("z3_passed"),
+            "z3_total": r.get("z3_total"),
+            "duration_warn": w["duration_warn"],
+            "budget_warn": w["budget_warn"],
+            "audit_refs_trend": r.get("audit_refs_trend"),
+        })
+    return {
+        "run_count": len(rows),
+        "rows": rows,
+        "summary": {
+            "duration_s": stats([r["duration_s"] for r in rows]),
+            "budget_usd": stats([r["budget_usd"] for r in rows]),
+        },
+        "warnings": summarize_warnings(rows) if rows else None,
+    }
+
+
 def short_date(iso):
     try:
         dt = datetime.datetime.fromisoformat(iso.replace("Z", "+00:00"))
@@ -256,17 +335,154 @@ def short_date(iso):
         return (iso or "")[:16]
 
 
+def _coverage_change_note(row, prev_row, changelog=None):
+    """total_online değiştiğinde ilgili V5 notunu döndür.
+
+    Değişim yoksa boş string; ilk satırsa boş string.
+    CHANGELOG, [(date_str, note_str), ...] formatında ters kronolojik.
+    """
+    if prev_row is None:
+        return ""
+    cur_total = row.get("total_online", 0)
+    prev_total = prev_row.get("total_online", 0)
+    if cur_total == prev_total:
+        return ""
+    # Kapsam değişim yönü
+    diff = cur_total - prev_total
+    arrow = "↑" if diff > 0 else "↓"
+    # Tarihe en yakın CHANGELOG entry'sini bul
+    if changelog is None:
+        changelog = CHANGELOG
+    row_date = (row.get("date") or "")[:10]  # YYYY-MM-DD
+    best_note = None
+    for date_str, note in changelog:
+        if date_str <= row_date:
+            # V5xxx notunu ara
+            if note and ("Kapsam" in note or "kapsam" in note
+                         or "56→" in note or "61" in note
+                         or "→56" in note or "→61" in note):
+                best_note = note[:60]
+                break
+    if best_note:
+        return f"{arrow} {prev_total}→{cur_total} ({best_note})"
+    return f"{arrow} {prev_total}→{cur_total}"
+
+
 def changelog_lines():
     """CHANGELOG kaydını markdown satırlarına çevirir (boş liste = changelog yok).
 
     Tek kaynak: CHANGELOG sabiti. Denetim düzeltmelerinin kısa, denetlenebilir
-    geçmişini refs-trend.md'nin altına ekler (en yeni üstte).
+    geçmişini refs-trend.md'nin altına ekler (en yeni üstte). V5p–V5w arası
+    özet tablosu kapsamları ve by_source değişimlerini gösterir.
     """
     if not CHANGELOG:
         return []
     out = ["## Changelog", ""]
+
+    # V5p–V5w özet tablosu: kapsam + by_source değişim zinciri.
+    out.append("### Kapsam & by_source değişim tablosu (V5p–V5w)")
+    out.append("")
+    out.append("| Versiyon | Tarih | Kapsam | by_source değişimi | Not |")
+    out.append("|---|---|---|---|---|")
+    out.append("| V5n | 08-19 | 54→56 | crossref +2 (Norton/Popkin) | CrossRef dergileri eklendi |")
+    out.append("| V5o | 08-19 | 56/26 | — (aynı dağılım) | Paralel koşu, rate-limit düzeltmesi; 56/56 yalnızca yerel |")
+    out.append("| V5p | 08-19 | 56/26 | Xunzi: `lccn:87033578` → HT PASS | OCLC/LCCN ht_ids'e eklendi |")
+    out.append("| V5q | 08-21 | 56→61 | archive +4 (Sextus ia_ids) +1 (Della Rocca Wayback) | Kapsam boşluğu kapatıldı |")
+    out.append("| V5r | 08-21 | 61/61 | — (aynı dağılım) | OL oclc YOK; Xunzi hariç hepsi OL fallback |")
+    out.append("| V5t | 08-21 | 61/61 | handle +1 (Della Rocca → Handle System) | CrossRef dışı kalıcı tanımlayıcı |")
+    out.append("| V5v | 08-21 | 61/61 | — (denetim altyapısı) | audit_refs_trend.py eklendi |")
+    out.append("| V5w | 08-21 | 61/61 | loc +3 (Lagrée/Millican/Schmitt), openlibrary −3 | LoC lccn katalog kanıtı |")
+    out.append("")
+
     for date, note in CHANGELOG:
         out.append(f"- **{date}:** {note}")
+    out.append("")
+    return out
+
+
+def build_coverage_transition_summary(rows):
+    """Rows'tan UNVERIFIED > 0 → 0 geçiş özet tablosu üretir.
+
+    Tüm refs-online artifact'larını tarar, total_online değişimlerini ve
+    her aşamada UNVERIFIED sayısının sıfıra düştüğü ilk run'ı bulur.
+    Kompakt tek satırlı özet: 54/49 → 56/26 → 61/61 geçiş zinciri.
+
+    Döndürür: markdown satır listesi veya boş liste.
+    """
+    if len(rows) < 2:
+        return []
+
+    # Her unique total_online değeri için ilk ve son UNVERIFIED durumu
+    by_total = {}
+    for r in rows:
+        t = r.get("total_online", 0)
+        u = r.get("unverified", 0)
+        if t not in by_total:
+            by_total[t] = {"first_unverified": u, "last_unverified": u,
+                           "first_date": r.get("date", ""),
+                           "first_run": r.get("run_id"),
+                           "last_date": r.get("date", ""),
+                           "last_run": r.get("run_id")}
+        else:
+            by_total[t]["last_unverified"] = u
+            by_total[t]["last_date"] = r.get("date", "")
+            by_total[t]["last_run"] = r.get("run_id")
+
+    # total_online değerine göre sırala
+    sorted_totals = sorted(by_total.keys())
+
+    # Geçiş zinciri: her aşamada UNVERIFIED'ın sıfıra ilk düştüğü anı bul
+    out = []
+    out.append("### UNVERIFIED → 0 geçiş özeti")
+    out.append("")
+    out.append("| Aşama | total_online | İlk UNVERIFIED | UNVERIFIED=0 ilk run | Tarih |")
+    out.append("|---|---|---|---|---|")
+
+    for t in sorted_totals:
+        info = by_total[t]
+        first_u = info["first_unverified"]
+        last_u = info["last_unverified"]
+
+        # Bu total_online değerinde UNVERIFIED'ın sıfıra düştüğü ilk satırı bul
+        zero_run = None
+        zero_date = None
+        for r in rows:
+            if r.get("total_online") == t and r.get("unverified", 0) == 0:
+                zero_run = r.get("run_id")
+                zero_date = r.get("date", "")
+                break
+
+        if zero_run:
+            # Tam kapsam: UNVERIFIED=0'a ulaşıldı
+            line = (f"| **{t}/{t}** | {t} | {first_u} | "
+                    f"`{zero_run}` | {short_date(zero_date)} |")
+        else:
+            # UNVERIFIED hala > 0 (erken aşama veya kısmi)
+            line = (f"| {t} | {t} | {first_u} | "
+                    f"(son: {last_u}) `{info['last_run']}` | "
+                    f"{short_date(info['last_date'])} |")
+        out.append(line)
+
+    out.append("")
+
+    # Geçiş zinciri tek satır özet
+    transitions = []
+    for t in sorted_totals:
+        info = by_total[t]
+        # Bu total_online değerinde sıfır UNVERIFIED'a ulaşıldı mı?
+        zero_reached = any(
+            r.get("total_online") == t and r.get("unverified", 0) == 0
+            for r in rows)
+        if zero_reached:
+            transitions.append(f"{t}/{t}")
+        else:
+            last_u = info["last_unverified"]
+            transitions.append(f"{t}/{t - last_u}")
+
+    chain = " → ".join(transitions)
+    out.append(f"**Geçiş zinciri:** {chain}")
+    out.append("")
+    out.append(f"_{len(sorted_totals)} aşama, {len(rows)} artifact taranmıştır._")
     out.append("")
     return out
 
@@ -343,6 +559,9 @@ def main():
             "verdict": rec.get("verdict"),
             "p0": rec.get("p0"),
             "p1": rec.get("p1"),
+            "z3_passed": rec.get("z3_passed"),
+            "z3_total": rec.get("z3_total"),
+            "audit_refs_trend": rec.get("audit_refs_trend"),
         }
         _w = check_run_warnings(_row)
         _row["duration_warn"] = _w["duration_warn"]
@@ -371,16 +590,18 @@ def main():
     else:
         lines += [
             "| # | Tarih (UTC) | Run ID | Toplam | Doğrulanan | "
-            "Doğrulanamayan | Uyumsuz | Kaynak dağılımı |",
-            "|---|---|---|---|---|---|---|---|",
+            "Doğrulanamayan | Uyumsuz | Kaynak dağılımı | Kapsam Notu |",
+            "|---|---|---|---|---|---|---|---|---|",
         ]
         for i, r in enumerate(rows, 1):
             src = ", ".join(f"{k}={v}" for k, v in
                             sorted(r["by_source"].items()))
+            prev = rows[i - 2] if i >= 2 else None
+            note = _coverage_change_note(r, prev)
             lines.append(
                 f"| {i} | {short_date(r['date'])} | {r['run_id'] or '-'} | "
                 f"{r['total_online']} | {r['verified']} | {r['unverified']} | "
-                f"{r['mismatch']} | {src} |"
+                f"{r['mismatch']} | {src} | {note} |"
             )
         lines += [""]
 
@@ -399,8 +620,52 @@ def main():
             f"{verified_all / len(rows):.1f}",
             f"- **İlk run:** {short_date(rows[0]['date'])} — "
             f"{rows[0]['verified']}/{rows[0]['total_online']} doğrulanan",
+            f"- **Milestone:** 56/56 (V5o, yerel doğrulama — "
+            "[REFERANS §5.3](REFERANS_KANIT_DENETIMI.md))",
             "",
         ]
+        # Kapsam açıklaması: sayılar nereden gelir, "54" neden artık geçersiz
+        latest_v = latest["verified"]
+        latest_t = latest["total_online"]
+        if latest_v is not None and latest_t is not None:
+            lines += [
+                f"### Kapsam",
+                "",
+                f"**{latest_v}/{latest_t}** — 64 referansın {latest_v}'i "
+                "çevrimiçi kaynaktan doğrulanır (CrossRef, SEP, "
+                "OpenLibrary, Internet Archive, Handle System, "
+                "Library of Congress, Perseus). Kalan 3 referans "
+                "bibliyografik belgedir — modern telifli kitaplar, "
+                "çevrimiçi indekslenmez.",
+                "",
+                "**Kapsam geçiş dipnotu (54/49 → 56/26 → 61/61):** "
+                "Erken dönem 54/49 (CrossRef+SEP+OL+IA temel zincir), "
+                "V5n ile 56/56'ya (Norton/Popkin CrossRef + paralel koşu) "
+                "yükseldi — bu 56/56 **yerel doğrulama**ydı (CI repo'da "
+                "doğrudan koşulmuştu, GitHub artifact'ına yansımadı; "
+                "kanıtı REFERANS_KANIT_DENETIMI.md §5.3'te belgelenmiştir: "
+                "`ia_ol_fallback_evidence.py --offline` deterministik "
+                "mock kanıt). Trend yalnızca gerçek `refs-online` "
+                "artifact'larından beslenir; 56/56 satırı trend tablosunda "
+                "görünmez. V5q/V5t/V5w zinciriyle kapsam 61/61'e ulaştı "
+                "(Sextus ia_ids + Della Rocca Handle + LoC lccn katalog "
+                "kanıtı). '54' erken bir anlık görüntüdür, güncel denetim "
+                "kapsamını yansıtmaz.",
+                "",
+                "> 🏁 **Milestone 56/56 (yerel):** V5o — tam çevrimiçi kapsam "
+                "(Norton/Popkin CrossRef + paralel koşu, 11 UNVERIFIED "
+                "kapatıldı). Bu sonuç GitHub artifact'ına yansımadığı için "
+                "trend tablosunda görünmez; deterministik kanıtı "
+                "[REFERANS_KANIT_DENETIMI.md §5.3](REFERANS_KANIT_DENETIMI.md) "
+                "(`ia_ol_fallback_evidence.py --offline`) ile yeniden "
+                "üretilebilir.",
+                "",
+            ]
+
+        # ── Coverage transition summary (UNVERIFIED>0 → 0 geçiş zinciri) ──
+        transition_lines = build_coverage_transition_summary(rows)
+        if transition_lines:
+            lines += transition_lines
 
     # ── Duration / Budget trendi (run-history) ───────────────────────────
     if history_rows:
@@ -409,8 +674,8 @@ def main():
             "",
             f"- **Kaynak:** `run-history` artifact'ları (son {len(history_rows)} run)",
             "",
-            "| # | Tarih (UTC) | Run ID | Duration (s) | Budget (USD) | Verdict |",
-            "|---|---|---|---|---|---|",
+            "| # | Tarih (UTC) | Run ID | Duration (s) | Budget (USD) | Z3 | Verdict | Audit |",
+            "|---|---|---|---|---|---|---|---|",
         ]
         for i, r in enumerate(history_rows, 1):
             dur = (f"{r['duration_s']:.1f}"
@@ -429,9 +694,19 @@ def main():
             if w["budget_warn"]:
                 flags.append("💰")
             flag_str = " ".join(flags)
+            z3 = (f"{r['z3_passed']}/{r['z3_total']}"
+                   if isinstance(r.get("z3_passed"), (int, float))
+                   else "—")
+            # Audit sütunu: PASS/FAIL/advisory (None = audit henüz koşulmadı)
+            audit = r.get("audit_refs_trend")
+            if audit is not None:
+                audit_str = "✅" if str(audit).upper() == "PASS" else (
+                    "🔴" if str(audit).upper() == "FAIL" else f"{audit}")
+            else:
+                audit_str = "—"
             lines.append(
                 f"| {i} | {short_date(r['date'])} | {r['run_id'] or '-'} | "
-                f"{dur} | {bud} | {r['verdict'] or '-'} {flag_str} |"
+                f"{dur} | {bud} | {z3} | {r['verdict'] or '-'} {flag_str} | {audit_str} |"
             )
         lines += [""]
 
@@ -538,15 +813,7 @@ def main():
         f.write("\n".join(lines))
     print("\n".join(lines))
 
-    duration_budget = {
-        "run_count": len(history_rows),
-        "rows": history_rows,
-        "summary": {
-            "duration_s": stats([r["duration_s"] for r in history_rows]),
-            "budget_usd": stats([r["budget_usd"] for r in history_rows]),
-        },
-        "warnings": summarize_warnings(history_rows) if history_rows else None,
-    }
+    duration_budget = build_duration_budget(history_rows)
     unverified_series = {
         "latest": unv_latest if rows else 0,
         "max": unv_max if rows else 0,

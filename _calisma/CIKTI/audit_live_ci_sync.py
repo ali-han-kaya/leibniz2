@@ -14,8 +14,11 @@ Karşılaştırılan iki eksen:
      canlıda doc'ta olmayan artifact varsa drift.
 
 Fail-closed: herhangi bir eksik/fazla → exit 1 (JSON'da verdict: FAIL).
-PR-only job'lar push run'ında `skipped` görünür ama YİNE de run job listesinde
-yer alır — o yüzden isim eşleşmesi event'ten bağımsız çalışır.
+Ayrıca `REQUIRED_ARTIFACTS` (sabitlenmiş artifact'ler) doc'ta VE canlıda
+mevcut olmalı — `python3-shell` her run'da beklenir (varlık/yokluk kapısı).
+
+PR-only job'lar push run'ında `skipped` görünür ama YİNE de job listesinde
+yer alır — bu yüzden isim eşleşmesi event'ten bağımsız çalışır.
 
 Kullanım:
   python3 _calisma/CIKTI/audit_live_ci_sync.py                 # son run (main)
@@ -38,19 +41,68 @@ HERE = pathlib.Path(__file__).resolve().parent
 REPO_ROOT = HERE.parents[1]
 DEFAULT_DOC = REPO_ROOT / "docs" / "PUBLISH_SCENARIO.md"
 
-# Bu job'ın KENDİ adı/artifact'ı karşılaştırmadan hariç tutulur — meta-denetçi
-# olarak run'ın içinde koşar; kendi artifact'ı denetim ADIMINDAN SONRA yüklenir
-# (her run'da "fazla job/eksik artifact" yanlış-pozitif üretir). Doc tablosu
-# bu job'ı içermez (advisory meta-araçtır, teslim pipeline'ı değil).
+# Bu job'ın KENDİ adı/artifact'ı karşıdırmadan hariç tutulur — meta-denetçi
+# olarak run'ın içinde koşar; artifact'ı denetim ADIMINDAN SONRA yüklenir.
+# Doc kendi job'ını/artifact'ını LİSTEYEBİLİR (job tablosu + artifact listesi
+# güncel hâlde içerir) — bu yüzden dışlama İKİ TARAFTA da uygulanır: canlı ve
+# doc tarafından çıkarılıp KALAN kümeler karşılaştırılır. Tek taraflı dışlama
+# "missing: <kendi adı>" ile her run'da yanlış FAIL üretir (2026-08-24, e2e
+# testiyle yakalandı).
 SELF_JOB = "Live CI doc↔GitHub sync audit (advisory)"
 SELF_ARTIFACT = "audit-live-ci"
 
+# SABİTLENMIŞ (pinned) artifact'ler — genel küme karşılaştırmasından BAĞIMSIZ
+# olarak her run'da doc'ta VE canlıda var olmalı (fail-closed). Yeni eklenen
+# kritik artifact'leri buraya ekleyin; küme karşılaştırması yalnızca "doc bayat"
+# yakalar, bu liste ise "artifact düşürüldü / doc'tan çıkarıldı"yı da net
+# bulgu olarak raporlar.
+REQUIRED_ARTIFACTS = ["python3-shell"]
+
+
+def check_required_presence(doc_artifacts, live_artifacts):
+    """Sabitlenmiş artifact'lerin varlığını iki yanda da denetler.
+
+    Döndürür: [(artifact, taraf)] — tarafta yoksa kayıt (taraf: 'doc' | 'live').
+    Boş liste = hepsi her iki yanda da mevcut.
+    """
+    doc = set(doc_artifacts)
+    liv = set(live_artifacts)
+    missing = []
+    for art in REQUIRED_ARTIFACTS:
+        if art not in doc:
+            missing.append((art, "doc"))
+        if art not in liv:
+            missing.append((art, "live"))
+    return missing
+
 # ── Doc parse ────────────────────────────────────────────────────────────
-# Job tablosu satırları: "| 1 | A | Delivery verification — K1-K9 (...) | ✅ ... |"
+# Job tablosu satırları: "| 1 | A | Delivery verification — K1-K14 (...) | ✅ ... |"
 _JOB_ROW_RE = re.compile(
     r"^\|\s*\d+\s*\|\s*([A-D])\s*\|\s*(.+?)\s*\|")
 # Artifact satırları: "- `unit-tests` (...)" veya "- `budget-verify` + `budget` (...)"
 _ARTIFACT_BULLET_RE = re.compile(r"^\s*-\s*(.+)$")
+
+# upload-artifact bloğu: `uses:` → `with:` → `name:` (yalnızca yatay boşluk;
+# \s* değil — `with:` ile `name:` arasına başka anahtar giremez).
+_UPLOAD_ARTIFACT_RE = re.compile(
+    r"^[ \t]*uses:[ \t]*actions/upload-artifact@\S+[ \t]*\n"
+    r"[ \t]*with:[ \t]*\n"
+    r"[ \t]*name:[ \t]*(\S+)[ \t]*$",
+    re.M)
+
+
+def extract_workflow_upload_names(wf_text):
+    """Workflow metnindeki TÜM `actions/upload-artifact` `name:` değerlerini
+    çıkarır (sıralı, tekil). Bu, canlı run'ın artifact kümesinin OFFLINE
+    eşdeğeridir: `--doc` karşılaştırmasında canlı tarafı temsil eder ve
+    yeni eklenen artifact'ları otomatik yakalar (python3-shell drift
+    regression'ı — `845206a`)."""
+    names = []
+    for m in _UPLOAD_ARTIFACT_RE.finditer(wf_text):
+        n = m.group(1).strip()
+        if n and n not in names:
+            names.append(n)
+    return names
 
 
 def parse_doc_jobs(doc_text):
@@ -159,7 +211,10 @@ def compare(expected, live, label):
 
 
 def exclude_self(live_jobs, live_artifacts):
-    """Denetçi job'ının kendi adını/artifact'ını canlı listeden çıkarır."""
+    """Denetçinin kendi job/artifact adını listeden çıkarır.
+
+    Dönüş değeri (temizlenmiş jobs, temizlenmiş artifacts) — çağıran doc
+    tarafına da aynı dışlamayı uygulamalıdır (bkz. main)."""
     return ([n for n in live_jobs if n != SELF_JOB],
             [n for n in live_artifacts if n != SELF_ARTIFACT])
 
@@ -208,13 +263,21 @@ def main(argv=None):
         print(f"HATA: canlı veri çekilemedi ({e})", file=sys.stderr)
         return 2
 
-    # Meta-denetçi kendini karşılaştırmaz (bkz. SELF_JOB/SELF_ARTIFACT).
+    # Meta-deneteyi kendini iki taraftan da çıkarır (bkz. SELF_JOB/SELF_ARTIFACT)
+    # — doc kendi satırını/listesini içerse bile denetim "kalan gerçek küme"yi
+    # karşılaştırmalı; aksi halde her run'da kendini missing olarak raporlar.
     live_jobs, live_artifacts = exclude_self(live_jobs, live_artifacts)
+    doc_jobs = [(c, n) for (c, n) in doc_jobs if n != SELF_JOB]
+    doc_artifacts = [n for n in doc_artifacts if n != SELF_ARTIFACT]
 
-    doc_job_names = [name for (_cat, name) in doc_jobs]
+    doc_job_names = [n for (_cat, n) in doc_jobs]
     job_cmp = compare(doc_job_names, live_jobs, "jobs")
     art_cmp = compare(doc_artifacts, live_artifacts, "artifacts")
-    ok = job_cmp["ok"] and art_cmp["ok"]
+
+    # Sabitlenmiş artifact varlığı (doc + live) — fail-closed kapı.
+    req_missing = check_required_presence(doc_artifacts, live_artifacts)
+
+    ok = job_cmp["ok"] and art_cmp["ok"] and not req_missing
     verdict = "PASS" if ok else "FAIL"
 
     if args.json:
@@ -234,6 +297,11 @@ def main(argv=None):
                 "live": sorted(live_artifacts),
                 "missing": art_cmp["missing"],
                 "extra": art_cmp["extra"],
+                "required_presence": {
+                    "ok": not req_missing,
+                    "missing": [f"{art} ({side})" for art, side in req_missing],
+                    "artifacts": REQUIRED_ARTIFACTS,
+                },
             },
         }, indent=2, ensure_ascii=False))
     else:
@@ -253,9 +321,11 @@ def main(argv=None):
             print(f"  [FAIL] doc'ta var, canlıda YOK: {n}")
         for n in art_cmp["extra"]:
             print(f"  [FAIL] canlıda var, doc'ta YOK: {n}")
-        if not art_cmp["missing"] and not art_cmp["extra"]:
+        for art, side in req_missing:
+            print(f"  [FAIL] sabit artifact '{art}' {side} tarafında YOK")
+        if not art_cmp["missing"] and not art_cmp["extra"] and not req_missing:
             print("  birebir eşleşiyor")
-        print(f"\nSONUÇ: {verdict} — {'doc ↔ GitHub senkron' if ok else 'DRIFT: doc bayat (yukarıdaki [FAIL] satırları)'}")
+        print(f"\nSONUÇ: {verdict} — {'doc ↔ GitHub senkron' if ok else 'DRIFT: doc bayat veya sabit artifact eksik (yukarıdaki [FAIL] satırları)'}")
 
     return 0 if ok else 1
 

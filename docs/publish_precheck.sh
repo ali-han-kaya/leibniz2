@@ -7,6 +7,15 @@
 #   bash docs/publish_precheck.sh --allow-remote  # repo zaten GitHub'da (incremental push öncesi)
 #   bash docs/publish_precheck.sh --skip-smoke    # smoke testi atla (commit oluşturmaz)
 #   bash docs/publish_precheck.sh --ci            # CI advisory job: yerel-only kontrolleri INFO yapar
+#   bash docs/publish_precheck.sh --verify-checks # YALNIZCA AŞAMA 1 doğrulaması:
+#                                                 # wrapper --verify-checks ile AYNI kapı
+#                                                 # (status_checks.py + --gh; tek kaynak
+#                                                 # _calisma/CIKTI/verify_checks.sh). Diğer
+#                                                 # kapılar çalışmaz, salt okunur, hızlı.
+#   bash docs/publish_precheck.sh --verify-checks \
+#     --verify-checks-out .freebuff/verify_checks.json
+#                                                 # makine-okur JSON sidecar yolu
+#                                                 # (varsayılan .freebuff/verify_checks.json)
 #
 #   Not: çıktıyı repo içine yazacaksan gitignore'lu bir yola yönlendir
 #        (ör. tee .freebuff/precheck_report.txt) — yoksa tree-temiz kontrolü FAIL olur.
@@ -25,12 +34,18 @@ info() { printf '  [INFO] %s\n' "$*"; }
 ALLOW_REMOTE=0
 SKIP_SMOKE=0
 CI_MODE=0
-for a in "$@"; do
-  case "$a" in
-    --allow-remote) ALLOW_REMOTE=1 ;;
-    --skip-smoke)   SKIP_SMOKE=1 ;;
-    --ci)           CI_MODE=1 ;;
-    *) echo "Bilinmeyen bayrak: $a (geçerli: --allow-remote, --skip-smoke, --ci)" >&2; exit 2 ;;
+VERIFY_CHECKS=0
+VERIFY_CHECKS_OUT=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --allow-remote)  ALLOW_REMOTE=1; shift ;;
+    --skip-smoke)    SKIP_SMOKE=1; shift ;;
+    --ci)            CI_MODE=1; shift ;;
+    --verify-checks) VERIFY_CHECKS=1; shift ;;
+    --verify-checks-out)
+        [ $# -ge 2 ] || { echo "--verify-checks-out FILE gerekli" >&2; exit 2; }
+        VERIFY_CHECKS_OUT="$2"; shift 2 ;;
+    *) echo "Bilinmeyen bayrak: $1 (geçerli: --allow-remote, --skip-smoke, --ci, --verify-checks, --verify-checks-out FILE)" >&2; exit 2 ;;
   esac
 done
 
@@ -42,6 +57,35 @@ if [ -x _calisma/.venv_z3/bin/python ]; then
   PY=_calisma/.venv_z3/bin/python
 else
   PY=python3
+fi
+
+# ── VERIFY-CHECKS modu: wrapper --verify-checks ile AYNI kapı (tek kaynak) ──
+# Yalnızca AŞAMA 1 doğrulaması: status_checks.py + --gh (workflow ↔ GitHub
+# eşleşmesi + merge engeli smoke). Repo/tree/hook kapıları ÇALIŞTIRILMAZ —
+# bağımsız, salt okunur bir kapıdır (geliştirme ortamında dahi çağrılabilir).
+# Gerçek drift (eksik/fazla check) → FAIL (fail-closed); koruma kurulu
+# değilse UYARI (publish öncesi normal).
+if [ "$VERIFY_CHECKS" = "1" ]; then
+  # precheck log() tanımlamaz — library'ye precheck [INFO] biçiminde log ver.
+  log() { info "$*"; }
+  # Makine-okur JSON sidecar: --verify-checks-out verilmediyse gitignore'lu
+  # .freebuff/verify_checks.json'a yaz (CI artifact yolu; çıktı her koşulda
+  # denetim izinde kalır).
+  VERIFY_CHECKS_OUT="${VERIFY_CHECKS_OUT:-.freebuff/verify_checks.json}"
+  # shellcheck source=/dev/null
+  source _calisma/CIKTI/verify_checks.sh
+  echo "════════════ AŞAMA 1 — VERIFY-CHECKS (required check doğrulaması) ════════════"
+  if verify_checks; then
+    echo ""
+    echo "SONUÇ: PASS ✓ — required check adları workflow ile birebir eşleşiyor"
+    echo "Sidecar: $VERIFY_CHECKS_OUT"
+    exit 0
+  else
+    echo ""
+    echo "SONUÇ: FAIL ✗ — yukarıdaki [FAIL] satırlarını düzelt, tekrar çalıştır"
+    echo "Sidecar: $VERIFY_CHECKS_OUT"
+    exit 1
+  fi
 fi
 
 echo "════════════ AŞAMA 0 — Publish ön-kontrolü ════════════"
@@ -161,6 +205,19 @@ elif [ "$FAILED" -ne 0 ] || [ -n "$(git status --porcelain)" ]; then
   warn "smoke testi atlandı (önceki FAIL veya kirli tree)"
 else
   SMOKE_BEFORE="$(git rev-parse HEAD)"
+  # Chicken-and-egg: changelog tabloları TASARIM gereği HEAD'in bir commit
+  # gerisindedir (bir commit'in satırı ancak SONRAKİ commit'te eklenir). Bu
+  # yüzden smoke commit'i pre-commit sırasında changelog hook'unun --update
+  # ile tabloları değiştirip stage etmesine yol açar; o mutasyon reset ile
+  # atılır ama smoke'u hermetic olmayan kılar (hook'lar arası etkileşim +
+  # pre-commit'in "files were modified by this hook" riski). Smoke'u yeşil ve
+  # temiz koşmak için tabloları ÖNCE senkronla: smoke commit'inde changelog
+  # hook'u drift bulmaz → dokunmaz.
+  if bash _calisma/CIKTI/update_changelog_hook.sh >/dev/null 2>&1; then
+    info "changelog tabloları smoke öncesi senkronlandı (update_changelog_hook.sh)"
+  else
+    warn "update_changelog_hook.sh ön-senkronu başarısız — smoke yine de deneniyor"
+  fi
   if git commit --allow-empty -m "docs: pre-commit smoke test" >/dev/null 2>&1; then
     git reset --hard "$SMOKE_BEFORE" >/dev/null 2>&1
     if [ "$(git rev-parse HEAD)" = "$SMOKE_BEFORE" ]; then
@@ -169,6 +226,9 @@ else
       fail "smoke sonrası HEAD geri alınamadı"
     fi
   else
+    # Smoke başarısız — tree smoke öncesi temizdi; staged/mutasyona uğramış
+    # changelog senkronunu da geri al (temiz bırak).
+    git reset --hard "$SMOKE_BEFORE" >/dev/null 2>&1
     fail "pre-commit smoke FAIL — kapı kırmızı; önce yeşile çevir"
   fi
 fi

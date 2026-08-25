@@ -11,34 +11,45 @@
     });
     return data;
   };
-
-  if (!fs.existsSync(path)) {
-    console.log('config-diff.json yok — yorum atlanıyor');
-    return;
-  }
-  const diff = JSON.parse(fs.readFileSync(path, 'utf8'));
-  const diffs = diff.differences || [];
-  // Yorum listesi: CI'da birleştirilmiş adım (manifest + config-diff) listeyi
+  // Yorum listesi: CI'de birleştirilmiş adım (manifest + config-diff) listeyi
   // BİR KEZ çekip EXISTING_COMMENTS olarak verir (API çağrısı 2'den 1'e iner);
   // tek başına koşulursa kendi listComments çağrısına düşer — iki yol aynı
   // create/update/delete davranışını üretir.
-  const existing = (typeof EXISTING_COMMENTS !== 'undefined' && EXISTING_COMMENTS)
-    ? EXISTING_COMMENTS
-    : await listComments();
-  const found = existing.find(c => c.body && c.body.includes(MARKER));
+  const getExisting = async () => {
+    if (typeof EXISTING_COMMENTS !== 'undefined' && EXISTING_COMMENTS)
+      return EXISTING_COMMENTS;
+    return await listComments();
+  };
 
-  if (diffs.length === 0) {
-    // Fark yok: önceki run'ın bayat uyarısını kaldır (yanıltıcı kalmasın).
+  // State-sync temizliği (config_drift_comment.js / tum_sapmalar_comment.js
+  // ile aynı desen): bulgu YOKSA marker'lı bayat yorumu kaldır — önceki
+  // run'ın uyarısı çözülen/işlenmeyen durumda yanıltıcı kalmasın.
+  const cleanupStale = async (why) => {
+    const existing = await getExisting();
+    const found = existing.find(c => c.body && c.body.includes(MARKER));
     if (found) {
       await github.rest.issues.deleteComment({
         comment_id: found.id,
         owner: context.repo.owner,
         repo: context.repo.repo,
       });
-      console.log('config-diff fark yok — bayat yorum kaldırıldı');
+      console.log(`${why} — bayat yorum kaldırıldı`);
     } else {
-      console.log('config-diff fark yok — yorum yok');
+      console.log(`${why} — yorum yok`);
     }
+  };
+
+  if (!fs.existsSync(path)) {
+    // config-diff.json yok — bu run'da bulgu üretilmedi; dosya yokluğu da
+    // "bulgu yok" sayılır (state-sync: bayat yorumu temizle).
+    await cleanupStale('config-diff.json yok');
+    return;
+  }
+  const diff = JSON.parse(fs.readFileSync(path, 'utf8'));
+  const diffs = diff.differences || [];
+
+  if (diffs.length === 0) {
+    await cleanupStale('config-diff fark yok');
     return;
   }
 
@@ -58,6 +69,8 @@
     MARKER,
   ].join('\n').trim();
 
+  const existing2 = await getExisting();
+  const found = existing2.find(c => c.body && c.body.includes(MARKER));
   if (found) {
     await github.rest.issues.updateComment({
       comment_id: found.id,

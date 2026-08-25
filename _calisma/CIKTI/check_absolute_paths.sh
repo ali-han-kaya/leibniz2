@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 # check_absolute_paths.sh — commit öncesi mutlak yolları yakala.
 #
 # yakalanan kalıplar:

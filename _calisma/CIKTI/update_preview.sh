@@ -14,10 +14,13 @@
 #
 # BÖLÜM 2 — LaunchAgent plist'leri (Homebrew-style, tek komut)
 # İKİ plist üretilir (tek --plist komutuyla): com.freebuff.preview-leibniz2
-# (birincil; KeepAlive=true, interval 30) ve com.freebuff.preview-server
-# (legacy; KeepAlive=false, interval 60). Yalnızca birincil canlı tutulur
-# (--start varsayılanı leibniz2); legacy launchd'den kaldırılmıştır —
-# --remove-legacy bootout + kurulu plist/şablon/log temizliği yapar. Kurulu
+# (birincil; KeepAlive=SuccessfulExit=false, interval 30) — crash'te restart,
+# temiz çıkışta dur; com.freebuff.preview-server (yedek profil; interval 60,
+# keepalive=false — yalnızca elle --start ile başlatılır). İkisi de
+# PLIST_PROFILES'te YÖNETİLİR: --plist-force üretir, --plist-check denetler,
+# check_plist_drift golden'larla sabitler. --start varsayılanı birincil
+# leibniz2'dir. --remove-legacy bootout + kurulu plist/şablon/log temizliği
+# yapar (yedek profili launchd'den söker; PLIST_PROFILES'tan kaldırmaz). Kurulu
 # tam yollar korunur:
 #   ~/Library/LaunchAgents/<label>.plist
 # İçerikleri şablon olarak TCC-safe dizinde tutulur:
@@ -31,7 +34,7 @@
 # BÖLÜM 3 — preview + verify mirror senkronu (sync_verify_mirror.sh'e delege)
 # verify_delivery.py --full koşusu launchd GUI agent rotasında repo yerine
 # TCC-safe mirror'dan (--dir) çalışır; mirror, preview çalıştırıcısının
-# (preview_server.py + _daemonize.py, run.md adım 2), CIKTI runtime
+# (preview_server.py + _daemonize.py, fresh_clone_setup.sh 3+4. adım), CIKTI runtime
 # dosyalarının ve Lean ispatının (adım 4) kopyasıdır. --mirror bunların
 # İKİSİNİ TEK KOMUTLA senkron eder (adım 2+4); --mirror-check bayatlığı
 # denetler (fail-closed: 0 güncel / 1 bayat / 2 hata).
@@ -54,6 +57,7 @@
 #   update_preview.sh --mirror-check       # mirror güncel mi? (0 güncel/1 bayat/2 hata)
 #   update_preview.sh --mirror-force       # mirror'ı koşulsuz yeniden kopyala
 #   update_preview.sh --bootstrap [HOME]   # mirror + HTML + plist TEK ADIMDA (fail-closed)
+#   update_preview.sh --bootstrap --start [HOME]  # aynı komutta launchctl bootstrap de (4/4)
 #   update_preview.sh --help
 #
 # Ortam değişkenleri (override):
@@ -76,9 +80,11 @@ PLIST_TMPL_DIR="$HOME/Library/Caches/com.freebuff/preview-template"
 # preview_server.py'yi aynı TCC-safe mirror --dir'iyle başlatır (launchd GUI
 # agent'ı repo dizinini TCC nedeniyle okuyamaz); şablonda {{HOME}}/.../verify
 # sabittir. Farklar yalnızca label/logname/interval/keepalive'dir.
-# Yalnızca birincil canlı tutulur; legacy launchd'den kaldırılmıştır.
+# İKİ PROFİL de yönetilir: birincil leibniz2 (keepalive=true, interval 30) +
+# yedek preview-server (keepalive=false, interval 60 — elle --start ile).
 PLIST_PROFILES=(
   "com.freebuff.preview-leibniz2|preview-leibniz2|8000|30|true"
+  "com.freebuff.preview-server|preview-server|8000|60|false"
 )
 
 say() { printf '%s\n' "$*"; }
@@ -150,7 +156,20 @@ plist_default_template() {
   <key>Label</key><string>{{LABEL}}</string>
   <key>ProgramArguments</key>
   <array>
+    <!-- PreStart kontrolü: preview_prestart.py mirror bayatlığını sunucudan
+         ÖNCE denetler (eksik/bozuk/drift → sunucu hiç başlamaz, exit 1).
+         PASS'te ayraç sonrası sunucu komutunu exec eder (PID korunur). -->
     <string>/usr/bin/python3</string>
+    <string>{{HOME}}/Library/Caches/com.freebuff/preview/preview_prestart.py</string>
+    <string>--preview-dir</string>
+    <string>{{HOME}}/Library/Caches/com.freebuff/preview</string>
+    <string>--verify-dir</string>
+    <string>{{HOME}}/Library/Caches/com.freebuff/verify</string>
+    <string>--label</string>
+    <string>{{LABEL}}</string>
+    <string>--log</string>
+    <string>{{HOME}}/Library/Logs/com.freebuff/prestart-{{LOGNAME}}.log</string>
+    <string>--</string>
     <string>{{HOME}}/Library/Caches/com.freebuff/preview/preview_server.py</string>
     <string>--dir</string>
     <string>{{HOME}}/Library/Caches/com.freebuff/verify</string>
@@ -162,7 +181,11 @@ plist_default_template() {
     <string>{{INTERVAL}}</string>
   </array>
   <key>RunAtLoad</key><true/>
-  <key>KeepAlive</key>{{KEEPALIVE}}
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
   <key>StandardOutPath</key>
   <string>{{HOME}}/Library/Logs/com.freebuff/{{LOGNAME}}.log</string>
   <key>StandardErrorPath</key>
@@ -204,7 +227,6 @@ plist_render() {
       -e "s|{{LOGNAME}}|${logname}|g" \
       -e "s|{{PORT}}|${port}|g" \
       -e "s|{{INTERVAL}}|${interval}|g" \
-      -e "s|{{KEEPALIVE}}|<${keepalive}/>|g" \
       "$(plist_tmpl_for "$label")"
 }
 
@@ -303,6 +325,35 @@ plist_check() {
       rc=1
     fi
   done < <(plist_profiles)
+
+  # Kapsam-dışı fazla dosyalar — BİLGİ amaçlı (INFO): denetimin kapsamı
+  # YALNIZCA yönetilen profillerdir; LaunchAgents'teki yönetilmeyen plist'ler
+  # (ör. başka bir uygulamanın agent'ı ya da kaldırılmış eski bir profil)
+  # exit kodunu ETKİLEMEZ ama denetim izinde görünür. Böylece fazlalık
+  # sessizce kaybolmaz; --plist-check çıktısı bunu raporlar.
+  local la managed n_extra
+  la="$home/Library/LaunchAgents"
+  n_extra=0
+  if [ -d "$la" ]; then
+    managed=""
+    while IFS='|' read -r label _; do
+      managed="$managed $label"
+    done < <(plist_profiles)
+    local f base lbl
+    for f in "$la"/*.plist; do
+      [ -e "$f" ] || continue
+      base="$(basename "$f")"
+      lbl="${base%.plist}"
+      case " $managed " in
+        *" $lbl "*) ;;  # yönetilen profil — yukarıda denetlendi
+        *) say "INFO: kapsam dışı (yönetilmiyor): $f"
+           n_extra=$((n_extra + 1)) ;;
+      esac
+    done
+    if [ "$n_extra" -gt 0 ]; then
+      say "INFO: $n_extra kapsam dışı dosya yok sayıldı (yalnızca yönetilen profiller denetlenir)"
+    fi
+  fi
   if [ "$missing" -ne 0 ]; then exit 2; fi
   if [ "$rc" -ne 0 ]; then exit 1; fi
   exit 0
@@ -420,9 +471,11 @@ plist_remove_legacy() {
   tmpl="$(plist_tmpl_for "$LEGACY_LABEL")"
   log="$HOME/Library/Logs/com.freebuff/$LEGACY_LOGNAME.log"
 
-  # 1) launchd'den sök (yüklüyse).
+  # 1) launchd'den sök (yüklüyse). Bootout service-target formunda (label)
+  # yapılır — path formu, agent farklı bir yoldan yüklenmişse (örn. eski
+  # HOME) başarısız olur ve fail-closed gate'i yanlış HATA'ya düşürür.
   if plist_is_loaded "$LEGACY_LABEL"; then
-    launchctl bootout "$(launchctl_domain)" "$dst" 2>/dev/null \
+    launchctl bootout "$(launchctl_domain)/$LEGACY_LABEL" 2>/dev/null \
       && say "BOOTOUT: $LEGACY_LABEL" \
       || err "bootout başarısız: $LEGACY_LABEL ($dst)"
   else
@@ -477,15 +530,19 @@ plist_watch() {
 }
 
 # ============================================================================
-# BÖLÜM 4 — tek komut bootstrap (--bootstrap): mirror + HTML + plist
+# BÖLÜM 4 — tek komut bootstrap (--bootstrap): mirror + HTML + plist (+ --start)
 # ============================================================================
 # preview sunucusunu TCC-safe rotadan ayağa kaldırmak için gereken ÜÇ
 # artefaktı tek adımda kurar: (1) verify mirror senkronu (sync_verify_mirror.sh
 # — launchd GUI agent'ının --dir'i), (2) HTML dashboard build'i (TCC-safe
 # kopya), (3) LaunchAgent plist'leri (şablondan üretim). Her adım
 # fail-closed'dur: kaynak yok / senkron hatası / geçersiz plist → hata ile
-# durur (exit ≠ 0). launchctl bootstrap'i AYRI yapılır (--start) — bu mod
-# yalnızca artefaktları kurar; --start ile daemon ayağa kaldırılır.
+# durur (exit ≠ 0).
+#
+# Opsiyonel `--start` bayrağı: üç artefakt kurulduktan SONRA aynı komutta
+# launchctl bootstrap'i de çalıştırır (4. adım — plist_start, varsayılan
+# birincil label). Bayraksız koşum yalnızca artefaktları kurar ve sonraki
+# adımı hatırlatır (eski davranış korunur).
 
 # ============================================================================
 # BÖLÜM 3b — durum göstergesi (--status)
@@ -566,8 +623,15 @@ plist_status() {
 }
 
 bootstrap_all() {
-  local home
-  home="$(plist_home "${1:-}")"
+  # Argümanlar: [HOME] ve opsiyonel --start bayrağı (sıra önemsiz).
+  local home="" start_flag=0 a
+  for a in "$@"; do
+    case "$a" in
+      --start) start_flag=1 ;;
+      *) [ -z "$home" ] && home="$a" ;;
+    esac
+  done
+  home="$(plist_home "${home:-}")"
 
   say "=== BOOTSTRAP 1/3: verify mirror senkronu ==="
   "$SCRIPT_DIR/sync_verify_mirror.sh" || return $?
@@ -579,8 +643,16 @@ bootstrap_all() {
   say "=== BOOTSTRAP 3/3: LaunchAgent plist üretimi ==="
   plist_do "$home" || return $?
 
-  say "BOOTSTRAP: tamam — mirror senkron, HTML build, plist'ler hazır"
-  say "           sonraki adım: update_preview.sh --start (launchctl bootstrap)"
+  if [ "$start_flag" = "1" ]; then
+    # Opsiyonel --start: üç artefakt kurulduktan SONRA aynı komutta daemon'u
+    # ayağa kaldır (launchctl bootstrap — plist_start, varsayılan birincil).
+    say "=== BOOTSTRAP 4/4: launchctl bootstrap (--start) ==="
+    plist_start || return $?
+    say "BOOTSTRAP: tamam — mirror + HTML + plist + launchctl bootstrap TEK KOMUTTA"
+  else
+    say "BOOTSTRAP: tamam — mirror senkron, HTML build, plist'ler hazır"
+    say "           sonraki adım: update_preview.sh --start (launchctl bootstrap)"
+  fi
 }
 
 usage() {
@@ -662,7 +734,7 @@ case "${1:-build}" in
     "$SCRIPT_DIR/sync_verify_mirror.sh" --check
     ;;
   --bootstrap)
-    bootstrap_all "${2:-}"
+    bootstrap_all "${@:2}"
     ;;
   build)
     [ -f "$SRC" ] || { err "kaynak yok: $SRC"; exit 2; }
