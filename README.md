@@ -462,6 +462,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-26 | chore | PUBLISH_SCENARIO job tablosu ↔ verify.yml job name senkronu | [`0a5cc09`](https://github.com/ali-han-kaya/leibniz2/commit/0a5cc09) |
 | 2026-08-26 | chore | test_doc_artifact_sync'i ayrı pre-commit kapısı olarak bağla | [`ebb2d50`](https://github.com/ali-han-kaya/leibniz2/commit/ebb2d50) |
 | 2026-08-26 | fix | check-unit-tests hook'u gerçekten test koşsun (çift uzantı bug'ı) | [`c73e937`](https://github.com/ali-han-kaya/leibniz2/commit/c73e937) |
+| 2026-08-26 | fix | test_coverage_report'a gerçek test ekle (3.12 boş-discovery exit 5) | [`96a6c4b`](https://github.com/ali-han-kaya/leibniz2/commit/96a6c4b) |
 
 ### Regresyon notları
 

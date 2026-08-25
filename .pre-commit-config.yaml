@@ -153,7 +153,7 @@ repos:
           /home/<kullanıcı>/ mutlak yollarını yakalar (/Users/ci ve
           /home/linuxbrew hariç — kanonik portable yollar). .freebuff/
           ve _calisma/TOOLKIT/ atlanır. OFFLINE, stdlib-only.
-        entry: sh _calisma/CIKTI/check_absolute_paths.sh
+        entry: bash _calisma/CIKTI/check_absolute_paths.sh
         language: system
         always_run: true
         pass_filenames: true
@@ -168,7 +168,7 @@ repos:
           sorunlarını fail-closed olarak commit öncesi bloke eder.
           actionlint binary'si yoksa indirir (ilk koşumda ~2s, sonraki
           koşumlarda cached). OFFLINE, ~1s.
-        entry: sh _calisma/CIKTI/lint_actionlint.sh
+        entry: bash _calisma/CIKTI/lint_actionlint.sh
         language: system
         always_run: true
         pass_filenames: false
