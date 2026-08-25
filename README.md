@@ -443,6 +443,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-25 | fix | (tests) skip daemon HTTP E2E tests in CI (port unavailable) | [`d6e83ff`](https://github.com/ali-han-kaya/leibniz2/commit/d6e83ff) |
 | 2026-08-25 | fix | (refs) exponential backoff for OL retries + CI daemon smoke guard | [`6aebe4d`](https://github.com/ali-han-kaya/leibniz2/commit/6aebe4d) |
 | 2026-08-25 | feat | (hooks) check-refs-table-sync — §2 table ↔ code lists fail-closed | [`59fbb6e`](https://github.com/ali-han-kaya/leibniz2/commit/59fbb6e) |
+| 2026-08-25 | docs | (refs) V5q evidence table for Sextus ia_ids + Della Rocca | [`b1e47dc`](https://github.com/ali-han-kaya/leibniz2/commit/b1e47dc) |
 
 ### Regresyon notları
 

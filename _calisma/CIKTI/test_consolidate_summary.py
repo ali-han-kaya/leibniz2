@@ -433,5 +433,165 @@ class TestSectionContentValidation(unittest.TestCase):
             last = pos
 
 
+class TestPrecommitAndK0Content(unittest.TestCase):
+    """Pre-commit + K0 bölümlerinin SATIR BAZLI içerik doğrulaması.
+
+    Sıra + başlık dışında gerçek satırlar denetlenir: hook durum satırları
+    (Passed → :white_check_mark:, Failed → :x:, tek `> Hook'lar:` satırında),
+    bulgu mermileri (priority + message), K0 bayat-zip bulgu satırları
+    (rel + sha256-16 kırpma), fail-closed/clean footer'lar ve eksik sidecar
+    advisory notları.
+    """
+
+    def setUp(self):
+        self._saved = os.environ.pop("GITHUB_STEP_SUMMARY", None)
+
+    def tearDown(self):
+        if self._saved is not None:
+            os.environ["GITHUB_STEP_SUMMARY"] = self._saved
+
+    def _sidecars(self, d, precommit=None, k0=None):
+        d = pathlib.Path(d)
+        (d / "logs").mkdir(parents=True, exist_ok=True)
+        # Varsayılan pre-commit: PASS, hook1 Passed + hook2 Failed (karışık).
+        default_pre = {
+            "generated_at": "2026-08-20T12:00:00Z", "exit_code": 0,
+            "verdict": "PASS", "role": "advisory",
+            "hooks": [{"name": "hook1", "status": "Passed"},
+                       {"name": "hook2", "status": "Failed"}],
+            "findings": [],
+            "counts": {"hooks": 5, "passed": 4, "failed": 1,
+                       "p0": 0, "p1": 0},
+        }
+        pre = precommit if precommit is not None else default_pre
+        (d / "logs" / "PRECOMMIT_RAPORU.json").write_text(
+            json.dumps(pre), encoding="utf-8")
+        # Varsayılan K0: 2 bayat zip bulgusu.
+        default_k0 = {"count": 2, "findings": [
+            {"rel": "dış/ESKI_V4.zip", "sha256": "a" * 64},
+            {"rel": "dış/BAYAT.zip", "sha256": "b" * 64},
+        ]}
+        k = k0 if k0 is not None else default_k0
+        (d / "k0_findings.json").write_text(json.dumps(k), encoding="utf-8")
+        (d / "budget_verify.json").write_text(
+            json.dumps({"limit": 30.0, "estimated_usd": 1.08,
+                        "verdict": "OK"}), encoding="utf-8")
+        (d / "lineage_findings.json").write_text(json.dumps({
+            "ok": True, "count": 0, "generations": []}), encoding="utf-8")
+        (d / "klayers.json").write_text(json.dumps({
+            "verdict": "PASS", "counts": {"P0": 0, "P1": 0},
+            "layers": {}}), encoding="utf-8")
+        return {
+            "precommit": d / "logs" / "PRECOMMIT_RAPORU.json",
+            "k0": d / "k0_findings.json",
+            "budget": d / "budget_verify.json",
+            "lineage": d / "lineage_findings.json",
+            "klayers": d / "klayers.json",
+        }
+
+    def _run(self, paths):
+        buf = io.StringIO()
+        argv = []
+        for key, p in paths.items():
+            argv += [f"--{key}", str(p)]
+        with contextlib.redirect_stdout(buf):
+            code = cs.main(argv)
+        return code, buf.getvalue()
+
+    def test_precommit_pass_hooks_rows(self):
+        """PASS: hook durumları tek satırda, Passed→✓ Failed→✗ (satır bazlı)."""
+        with tempfile.TemporaryDirectory() as d:
+            code, out = self._run(self._sidecars(d))
+        self.assertEqual(code, 0)
+        self.assertIn("## ✅ Pre-commit: bulgu yok (tüm hook'lar geçti)", out)
+        self.assertIn("> Sonuç: PASS", out)
+        # Karışık durum: hook1 ✓, hook2 ✗ — tek `> Hook'lar:` satırında.
+        self.assertIn("> Hook'lar: `hook1` :white_check_mark: | `hook2` :x:", out)
+        # Hata durumu yanlış ikonla görünmemeli (hook1 ✗, hook2 ✓ olmamalı).
+        self.assertNotIn("`hook1` :x:", out)
+        self.assertNotIn("`hook2` :white_check_mark:", out)
+
+    def test_precommit_fail_findings_rows(self):
+        """FAIL: bulgu mermileri priority+message, advisory footer, Sonuç: FAIL."""
+        pre = {
+            "generated_at": "2026-08-20T12:00:00Z", "exit_code": 1,
+            "verdict": "FAIL", "role": "advisory",
+            "hooks": [{"name": "hook1", "status": "Passed"}],
+            "findings": [{"priority": "P1", "message": "check-python3-shell bulgu"},
+                          {"priority": "P0", "message": "check-plist-drift başarısız"}],
+            "counts": {"hooks": 5, "passed": 4, "failed": 1,
+                       "p0": 1, "p1": 1},
+        }
+        with tempfile.TemporaryDirectory() as d:
+            code, out = self._run(self._sidecars(d, precommit=pre))
+        self.assertEqual(code, 0)
+        self.assertIn("## 🔴 Pre-commit bulguları: 2 bulgu", out)
+        # Satır bazlı: `- **PRI**: message` — priority bold + mesaj.
+        self.assertIn("- **P1**: check-python3-shell bulgu", out)
+        self.assertIn("- **P0**: check-plist-drift başarısız", out)
+        self.assertIn("> Sonuç: FAIL", out)
+        # Advisory footer.
+        self.assertIn("> Advisory — build'i bloke etmez; denetim içindir. "
+                      "Detay: `precommit-logs` artifact'ındaki PRECOMMIT_RAPORU.md.", out)
+
+    def test_precommit_missing_sidecar(self):
+        """Sidecar yoksa advisory 'rapor bulunamadı' notu (satır bazlı)."""
+        with tempfile.TemporaryDirectory() as d:
+            paths = self._sidecars(d)
+            paths["precommit"].unlink()
+            code, out = self._run(paths)
+        self.assertEqual(code, 0)
+        self.assertIn("## 🔍 Pre-commit: rapor bulunamadı", out)
+        self.assertIn("> `logs/PRECOMMIT_RAPORU.json` üretilmedi "
+                      "(pre-commit kurulumu başarısız?).", out)
+
+    def test_k0_clean_rows(self):
+        """K0 temiz: başlık + 'CIKTI dışında zip bulunamadı' notu."""
+        k0 = {"count": 0, "findings": []}
+        with tempfile.TemporaryDirectory() as d:
+            code, out = self._run(self._sidecars(d, k0=k0))
+        self.assertEqual(code, 0)
+        self.assertIn("## ✅ K0 bayat zip: temiz (bulgu yok)", out)
+        self.assertIn("> CIKTI dışında zip bulunamadı.", out)
+        # Bulgu satırı olmamalı.
+        self.assertNotIn("- `", out)
+
+    def test_k0_findings_rows(self):
+        """K0 bayat: bulgu satırları rel + sha256-16 kırpma + fail-closed footer."""
+        with tempfile.TemporaryDirectory() as d:
+            code, out = self._run(self._sidecars(d))
+        self.assertEqual(code, 0)
+        self.assertIn("## 🔴 K0 bayat zip: 2 bulgu", out)
+        # Satır bazlı: `rel`  (`sha256[0:16]…`) — iki boşluk ayraç.
+        self.assertIn("- `dış/ESKI_V4.zip`  (`aaaaaaaaaaaaaaaa…`)", out)
+        self.assertIn("- `dış/BAYAT.zip`  (`bbbbbbbbbbbbbbbb…`)", out)
+        # Kırpılmamış hash (17+ char) satırda görünmemeli.
+        self.assertNotIn("a" * 17, out)
+        # Fail-closed footer.
+        self.assertIn("> Fail-closed: P1 bulgusu olarak işaretlendi. "
+                      "Kanonik kopya yalnızca `_calisma/CIKTI/` altında "
+                      "olmalıdır.", out)
+
+    def test_k0_missing_sidecar(self):
+        """K0 sidecar yoksa advisory 'sidecar bulunamadı' notu."""
+        with tempfile.TemporaryDirectory() as d:
+            paths = self._sidecars(d)
+            paths["k0"].unlink()
+            code, out = self._run(paths)
+        self.assertEqual(code, 0)
+        self.assertIn("## 🔍 K0 bayat zip: sidecar bulunamadı", out)
+        self.assertIn("> `verify_delivery.py` `--k0-out` üretmedi "
+                      "(verify job'u çalışmadı?).", out)
+
+    def test_precommit_before_k0_in_output(self):
+        """Pre-commit bölümü K0'dan önce (render sırası, satır bazlı)."""
+        with tempfile.TemporaryDirectory() as d:
+            code, out = self._run(self._sidecars(d))
+        self.assertEqual(code, 0)
+        p = out.index("## ✅ Pre-commit:")
+        k = out.index("## 🔴 K0 bayat zip:")
+        self.assertLess(p, k)
+
+
 if __name__ == "__main__":
     unittest.main()
