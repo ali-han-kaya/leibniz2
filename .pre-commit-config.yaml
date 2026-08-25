@@ -48,14 +48,13 @@
 #                               regresyon kapısı — gen_dryrun_summary
 #                               fonksiyonunu gerçek kaynaktan ayıklayıp örnek
 #                               logla koşar; markdown üretilemiyorsa bloke.
-#   13) check-unit-tests       : yeni eklenen beş birim test dosyasını her
-#                               commit'te koşar — test_budget_over_banner
-#                               (BÜTÇE AŞIMI şeridi + tooltip limit notu),
-#                               test_doc_artifact_sync (artifact listesi ↔
-#                               ARTIFACT_JOBS), test_lean_lake (K9 lake build),
-#                               test_preview_server (durum panosu/SSE/history),
-#                               test_status_checks (advisory kontratı + 9
-#                               required check). Biri kırılırsa commit bloke.
+#   13) check-unit-tests    : birim test kapısı — test listesi ARTIK
+#                               manifest'ten (check_unit_tests.list) otomatik
+#                               okunur; sync_check_unit_tests.py her commit'te
+#                               _calisma/CIKTI/test_*.py'yi tarayıp yeni test
+#                               dosyalarını listeye EKLER (elle liste bakımı
+#                               yok; ortam-bağımlı testler EXCLUDE ile çıkar).
+#                               Biri kırılırsa commit bloke.
 #   14) check-coverage-report  : test_coverage_report.py --check ile tüm
 #                               test dosyalarının en az bir hook'ta
 #                               tanımlandığını doğrular; yeni test dosyası
@@ -416,36 +415,17 @@ repos:
         verbose: true
 
       - id: check-unit-tests
-        name: "Unit tests for new gates (dashboard/lean/doc-sync)"
+        name: "Unit tests for new gates (auto-synced list)"
         description: >-
-          Son eklenen birim test dosyalarını her commit'te koşar
-          (fail-closed — herhangi bir başarısızlık commit'i bloke eder):
-          test_budget_over_banner.py (BÜTÇE AŞIMI şeridi + tooltip limit
-          notu), test_doc_artifact_sync.py (PUBLISH_SCENARIO artifact
-          listesi ↔ ARTIFACT_JOBS senkronu), test_lean_lake.py (K9 lake
-          build --wfail kapısı), test_preview_server.py (durum panosu/
-          SSE/history — dinamik bütçe limiti dahil), test_status_checks.py
-          (advisory kontratı + 9 required check), test_dashboard_smoke.py
-          (dashboard_smoke.sh sözleşmesi: minimal PATH'te --full, verdict
-          PASS/FAIL exit kodları, rapor yazımı), test_coq_lake.py (K19
-          coqtop kapısı: sürüm uyumu + proof-gap taraması + -compile) ve
-          test_run_summary_changelog.py (changelog-drift advisory job'ının
-          run summary bölümü: SENKRON/DRIFT/HATA/MISSING + summary fallback).
-          OFFLINE, stdlib unittest — ek bağımlılık yok; PyYAML/jsonschema
-          yoksa ilgili sınıflar dürüstçe SKIP edilir (CI tam suite'i yine de
-          koşar). ~3s.
-        entry: >-
-          bash -c 'PY=python3; [ -x _calisma/.venv_z3/bin/python ] &&
-          PY=_calisma/.venv_z3/bin/python;          for t in test_budget_over_banner
-          test_doc_artifact_sync test_lean_lake test_preview_server
-          test_status_checks test_dashboard_smoke test_coq_lake
-          test_override_trend test_check_config_sync test_verify_checks
-          test_update_changelog_hook test_setup_branch_protection
-          test_refs_trend_badge test_run_summary_changelog
-          test_readme_badges test_audit_live_ci_sync
-          test_test_coverage_report; do
-          "$PY" -m unittest discover -s _calisma/CIKTI -p "$t.py" ||
-          exit 1; done'
+          _calisma/CIKTI/test_*.py kümesini tarar (sync_check_unit_tests.py),
+          manifest'i (check_unit_tests.list) senkron eder, ardından listedeki
+          HER test dosyasını koşar (fail-closed — herhangi bir başarısızlık
+          commit'i bloke eder). Yeni test dosyası eklediğinizde listeye
+          OTOMATİK eklenir; ortam-bağımlı testler (launchctl/daemon/canlı
+          sunucu/ağ EXCLUDE setiyle çıkarılır ve CI job'larında ayrı koşulur).
+          Liste bakımı elle yok — tek kaynak disk'teki test dosyaları.
+          PyYAML/jsonschema bağımlılığı yok; ~2-3s (48 dosya, 2s ölçüldü).
+        entry: bash _calisma/CIKTI/check_unit_tests_hook.sh
         language: system
         pass_filenames: false
         always_run: true

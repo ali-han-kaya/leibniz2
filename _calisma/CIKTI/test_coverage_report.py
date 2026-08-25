@@ -121,6 +121,7 @@ HOOK_COVERAGE = {
         "test_verify_manifest_overrides.py",
         "test_coverage_report.py",
         "test_test_coverage_report.py",
+        "test_sync_check_unit_tests.py",
     ],
 }
 
