@@ -440,6 +440,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-24 | docs | block evidence for action-pins, plist-drift, verify-delivery | [`e8d93d2`](https://github.com/ali-han-kaya/leibniz2/commit/e8d93d2) |
 | 2026-08-24 | fix | (hooks) pattern drift error shows line number + artifact name | [`62f1a72`](https://github.com/ali-han-kaya/leibniz2/commit/62f1a72) |
 | 2026-08-25 | fix | (mirror) sw.js in PREVIEW_RUNTIME + lazy yaml import for CI | [`43e80a9`](https://github.com/ali-han-kaya/leibniz2/commit/43e80a9) |
+| 2026-08-25 | fix | (tests) skip daemon HTTP E2E tests in CI (port unavailable) | [`d6e83ff`](https://github.com/ali-han-kaya/leibniz2/commit/d6e83ff) |
 
 ### Regresyon notları
 

@@ -471,9 +471,11 @@ plist_remove_legacy() {
   tmpl="$(plist_tmpl_for "$LEGACY_LABEL")"
   log="$HOME/Library/Logs/com.freebuff/$LEGACY_LOGNAME.log"
 
-  # 1) launchd'den sök (yüklüyse).
+  # 1) launchd'den sök (yüklüyse). Bootout service-target formunda (label)
+  # yapılır — path formu, agent farklı bir yoldan yüklenmişse (örn. eski
+  # HOME) başarısız olur ve fail-closed gate'i yanlış HATA'ya düşürür.
   if plist_is_loaded "$LEGACY_LABEL"; then
-    launchctl bootout "$(launchctl_domain)" "$dst" 2>/dev/null \
+    launchctl bootout "$(launchctl_domain)/$LEGACY_LABEL" 2>/dev/null \
       && say "BOOTOUT: $LEGACY_LABEL" \
       || err "bootout başarısız: $LEGACY_LABEL ($dst)"
   else

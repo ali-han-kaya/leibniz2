@@ -94,6 +94,125 @@ class TestHttpGet(unittest.TestCase):
         self.assertEqual(len(calls), 3)  # ilk + 2 retry
         m.assert_has_calls([mock.call(1.0), mock.call(2.0)])
 
+    def test_backoff_delay_exponential_and_cap(self):
+        # Exponential backoff: 1s, 2s, 4s, 8s, 8s, ... (cap'te tavanlanır).
+        self.assertEqual(vd._backoff_delay(1), 1.0)
+        self.assertEqual(vd._backoff_delay(2), 2.0)
+        self.assertEqual(vd._backoff_delay(3), 4.0)
+        self.assertEqual(vd._backoff_delay(4), 8.0)
+        self.assertEqual(vd._backoff_delay(5), 8.0)  # cap — daha fazla uzamaz
+        self.assertEqual(vd._backoff_delay(10), 8.0)
+
+    def test_http_get_uses_exponential_backoff(self):
+        # 4 deneme (ilk + 3 retry) → bekleme süreleri 1s, 2s, 4s (üstel).
+        calls = []
+
+        def urlopen(req, timeout):
+            calls.append(timeout)
+            raise urllib.error.URLError("geçici timeout")
+
+        with mock.patch.object(vd.urllib.request, "urlopen",
+                               side_effect=urlopen), \
+                mock.patch.object(vd.time, "sleep") as m:
+            with self.assertRaises(urllib.error.URLError):
+                vd._http_get("http://x", timeout=15, retries=4)
+        self.assertEqual(len(calls), 4)
+        m.assert_has_calls([mock.call(1.0), mock.call(2.0), mock.call(4.0)])
+
+
+class TestOlRetry(unittest.TestCase):
+    """_ol_retry dış kalkanı — exponential backoff ile çoklu deneme."""
+
+    def _transient(self, *results):
+        """Sıralı sonuç dönen sahte OL check: geçici UNVERIFIED + sonuçlar."""
+        calls = []
+
+        def fn(ref):
+            calls.append(ref)
+            return results[min(len(calls) - 1, len(results) - 1)]
+        return fn, calls
+
+    def test_success_on_second_attempt(self):
+        fn, calls = self._transient(
+            ("UNVERIFIED", "ağ hatası: zaman aşımı"),
+            ("PASS", "OpenLibrary: 'Metaphysical Grounding'"))
+        with mock.patch.object(vd.time, "sleep") as m:
+            v, d = vd._ol_retry(fn, {"key": "x"})
+        self.assertEqual(v, "PASS")
+        self.assertIn("(retry sonrası)", d)
+        self.assertEqual(len(calls), 2)
+        m.assert_has_calls([mock.call(1.0)])  # ilk retry 1s
+
+    def test_success_on_third_attempt_exponential(self):
+        fn, calls = self._transient(
+            ("UNVERIFIED", "ağ hatası: timeout"),
+            ("UNVERIFIED", "ağ hatası: connection reset"),
+            ("PASS", "OpenLibrary: 'Leibniz'"))
+        with mock.patch.object(vd.time, "sleep") as m:
+            v, d = vd._ol_retry(fn, {"key": "x"})
+        self.assertEqual(v, "PASS")
+        self.assertIn("(retry sonrası)", d)
+        self.assertEqual(len(calls), 3)
+        m.assert_has_calls([mock.call(1.0), mock.call(2.0)])  # üstel
+
+    def test_all_transient_exhausts_attempts(self):
+        fn, calls = self._transient(
+            ("UNVERIFIED", "ağ hatası: zaman aşımı"),
+            ("UNVERIFIED", "ağ hatası: timeout"),
+            ("UNVERIFIED", "ağ hatası: connection reset"))
+        with mock.patch.object(vd.time, "sleep") as m:
+            v, d = vd._ol_retry(fn, {"key": "x"})
+        self.assertEqual(v, "UNVERIFIED")
+        self.assertEqual(len(calls), 3)  # OL_RETRY_ATTEMPTS toplam
+        m.assert_has_calls([mock.call(1.0), mock.call(2.0)])
+
+    def test_no_retry_on_permanent_429(self):
+        fn, calls = self._transient(("UNVERIFIED", "OpenLibrary 429 rate-limit"),)
+        with mock.patch.object(vd.time, "sleep") as m:
+            v, d = vd._ol_retry(fn, {"key": "x"})
+        self.assertEqual(v, "UNVERIFIED")
+        self.assertEqual(len(calls), 1)  # kalıcı — retry yok
+        m.assert_not_called()
+
+    def test_no_retry_on_zero_results(self):
+        fn, calls = self._transient(
+            ("UNVERIFIED", "OpenLibrary: 0 sonuç (OL kapsamı dışı olabilir)"),)
+        with mock.patch.object(vd.time, "sleep") as m:
+            v, d = vd._ol_retry(fn, {"key": "x"})
+        self.assertEqual(v, "UNVERIFIED")
+        self.assertIn("0 sonuç", d)
+        self.assertEqual(len(calls), 1)
+        m.assert_not_called()
+
+    def test_stops_early_on_permanent_during_retry(self):
+        # İlk deneme geçici, retry kalıcı (429) → erken çık, deneme sayısı 2.
+        fn, calls = self._transient(
+            ("UNVERIFIED", "ağ hatası: timeout"),
+            ("UNVERIFIED", "OpenLibrary 429 rate-limit"))
+        with mock.patch.object(vd.time, "sleep") as m:
+            v, d = vd._ol_retry(fn, {"key": "x"})
+        self.assertEqual(v, "UNVERIFIED")
+        self.assertIn("429", d)
+        self.assertEqual(len(calls), 2)
+        m.assert_has_calls([mock.call(1.0)])
+
+    def test_non_transient_unverified_no_retry(self):
+        fn, calls = self._transient(("UNVERIFIED", "LoC: kayıt yok"))
+        with mock.patch.object(vd.time, "sleep") as m:
+            v, d = vd._ol_retry(fn, {"key": "x"})
+        self.assertEqual(v, "UNVERIFIED")
+        self.assertEqual(len(calls), 1)
+        m.assert_not_called()
+
+    def test_mismatch_passes_through(self):
+        fn, calls = self._transient(
+            ("MISMATCH", "OpenLibrary sonuç var ama eşleşme yok"))
+        with mock.patch.object(vd.time, "sleep") as m:
+            v, d = vd._ol_retry(fn, {"key": "x"})
+        self.assertEqual(v, "MISMATCH")
+        self.assertEqual(len(calls), 1)
+        m.assert_not_called()
+
 
 class TestAuditBudget(unittest.TestCase):
     def test_budget_exceeded_skips_network(self):

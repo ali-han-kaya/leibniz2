@@ -168,6 +168,15 @@ class TestChangelog(unittest.TestCase):
         bullets = self._bullets(lines)
         self.assertLess(bullets.index("V5aa"), bullets.index("V5z"))
 
+    def test_changelog_has_v5ab_exponential_backoff(self):
+        """V5ab: exponential backoff changelog'da olmalı (V5aa'dan önce)."""
+        lines = rt.changelog_lines()
+        joined = "\n".join(lines)
+        self.assertIn("V5ab", joined)
+        self.assertIn("exponential backoff", joined)
+        bullets = self._bullets(lines)
+        self.assertLess(bullets.index("V5ab"), bullets.index("V5aa"))
+
     def test_changelog_summary_table_v5p_to_v5w(self):
         """V5p–V5w özet tablosu changelog'da olmalı."""
         lines = rt.changelog_lines()

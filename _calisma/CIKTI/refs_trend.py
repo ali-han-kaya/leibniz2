@@ -45,9 +45,14 @@ API = "https://api.github.com"
 # düzeltmesi yapıldığında buraya tek satır eklenir (denetlenebilir geçmiş).
 CHANGELOG = [
     ("2026-08-24",
+     "V5ab: OL geçici timeout'larına exponential backoff — `_http_get` "
+     "per-request retry'i 1s/2s/4s/8s üstel bekleme (cap 8s) kullanır; "
+     "`_ol_retry` tek 3s'lik deneme yerine OL_RETRY_ATTEMPTS=3 toplam "
+     "denemeyle üstel backoff yapar (fail-closed: tükenirse UNVERIFIED kalır)."),
+    ("2026-08-24",
      "V5aa: CI'da geçici OL timeout'ları belgelendi (58/61 push + 61/61 "
      "workflow_dispatch); `_ol_retry` outer retry eklendi — zaman aşımı/" 
-     "connection reset/5xx geçici UNVERIFIED'lar 3s bekleyip tekrar denenir."),
+     "connection reset/5xx geçici UNVERIFIED'lar tekrar denenir."),
     ("2026-08-22",
      "V5z: canlı CI 61/61 PASS, UNVERIFIED=0 — tüm kanıt zincirleri "
      "birlikte doğrulandı (LoC 3 + Handle 1 + HT 1 + OL fallback Fine)."),
