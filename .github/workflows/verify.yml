@@ -392,6 +392,36 @@ jobs:
           cat logs/k13_repro_manifest.log
           exit $status
 
+      # ─── CHECK-UNIT-TESTS (ADVISORY, ayrı step) ─────────────────────────
+      # check-unit-tests hook'u — yukarıdaki ortak `pre-commit run
+      # --all-files` içinde zaten koşar; BURADA ayrıca TEK BAŞINA koşulup
+      # sonucu logs/check_unit_tests.log + logs/check_unit_tests.exit
+      # dosyalarına yazılır (precommit-logs artifact'ı logs/ dizinini
+      # bütünüyle yükler → çıktı artifact'a girer). Komut, yereldeki hook
+      # entry'si (test listesi + venv fallback dahil) ile BİREBİR aynıdır;
+      # gate rolü yukarıdaki fail-closed birim test adımındadır — bu adım
+      # yalnızca hook'un kendisinin CI'da da sağlam koştuğunu kanıtlar.
+      - name: Run check-unit-tests hook (separate)
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: |
+          mkdir -p logs
+          pre-commit run check-unit-tests --all-files --show-diff-on-failure \
+            --color=never > logs/check_unit_tests.log 2>&1
+          status=$?
+          echo "$status" > logs/check_unit_tests.exit
+          {
+            echo ""
+            echo "════════════════════════════════════════════════════════"
+            echo "CHECK-UNIT-TESTS (ADVISORY, ayrı step)"
+            echo "exit code: $status"
+            echo "════════════════════════════════════════════════════════"
+            cat logs/check_unit_tests.log
+          } >> verify_report.txt
+          cat logs/check_unit_tests.log
+          exit $status
+
       # ─── COMMIT-MSG (ADVISORY) — commit geçmişi kural denetimi ──────────
       # commit_msg_hook.sh yerelde `git commit`'i BLOKE eder; CI'da zaten push
       # edilmiş commit'leri denetleyip ihlalleri logs/commit_msg_findings.json'a
