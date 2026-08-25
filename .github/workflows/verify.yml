@@ -1913,6 +1913,55 @@ jobs:
             cat .freebuff/status_checks_gh.err
           fi
 
+      # ─── ADVISORY KONTRAT KAPISI ──────────────────────────────────────
+      # status_checks.py --gh --json çıktısındaki advisory_contract.ok
+      # alanını denetler. advisory_contract OFFLINE hesaplanır (workflow
+      # YAML'ından) — GitHub erişilemese bile (UNREADABLE/NOT_SET_UP) JSON'da
+      # taşınır, dolayısıyla bu kapı CI'da da gerçekten çalışır:
+      #   ok=True  → tüm job adları ↔ required farkı tutarlı (plist-check
+      #              advisory, exclude'lar bayat değil, isim çakışması yok)
+      #   ok=False → ihlal (bayat exclude / plist-check required'a girmiş /
+      #              isim çakışması) → kontrat FAIL olarak raporlanır.
+      # Fail-closed: ihlalde exit 1 (advisory job olduğundan build'i bloke
+      # etmez ama precheck-report artifact'ında görünür).
+      - name: Advisory contract gate (--gh --json → advisory_contract.ok)
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set +e
+          python3 _calisma/CIKTI/status_checks.py --gh --json \
+            > .freebuff/advisory_contract.json 2> .freebuff/advisory_contract.err
+          SC_RC=$?
+          set -e
+          echo "status_checks --gh rc=$SC_RC"
+          if [ ! -s .freebuff/advisory_contract.json ]; then
+            echo "ADVISORY CONTRACT: FAIL (JSON üretilemedi) — stderr:"
+            cat .freebuff/advisory_contract.err
+            exit 1
+          fi
+          python3 - <<'PYEOF'
+          import json, sys
+          d = json.load(open(".freebuff/advisory_contract.json"))
+          ac = d.get("advisory_contract") or {}
+          ok = ac.get("ok")
+          verdict = d.get("verdict")
+          if ok is True:
+              print(f"ADVISORY CONTRACT: PASS — advisory={len(ac.get('advisory', []))}, "
+                    f"required={len(ac.get('required', []))}, "
+                    f"plist-check ok={ac.get('plist_check', {}).get('ok')}")
+              print(f"  (gh verdict: {verdict})")
+              sys.exit(0)
+          print("ADVISORY CONTRACT: FAIL")
+          for i in ac.get("issues", []):
+              print(f"  [FAIL] {i}")
+          print(f"  plist_check: {ac.get('plist_check')}")
+          print(f"  (gh verdict: {verdict})")
+          sys.exit(1)
+          PYEOF
+
       # publish_precheck.sh --verify-checks — status_checks.py + --gh'nin TEK
       # KAYNAK kapısı (verify_checks.sh; wrapper --verify-checks ile aynı
       # fonksiyon). Makine-okur JSON sidecar'ı .freebuff/verify_checks.json'a
@@ -1946,6 +1995,8 @@ jobs:
             .freebuff/precheck_report.txt
             .freebuff/status_checks_gh.json
             .freebuff/status_checks_gh.err
+            .freebuff/advisory_contract.json
+            .freebuff/advisory_contract.err
             .freebuff/verify_checks.json
             .freebuff/verify_checks.txt
           if-no-files-found: ignore

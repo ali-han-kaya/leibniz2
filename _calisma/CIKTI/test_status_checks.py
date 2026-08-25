@@ -265,6 +265,12 @@ class TestGhIntegration(unittest.TestCase):
         self.assertEqual(d["verdict"], "PASS")
         self.assertTrue(d["names_ok"])
         self.assertTrue(d["enforcement_ok"])
+        # Advisory kontratı OFFLINE hesaplanır ve --gh --json çıktısında da
+        # taşınır — precheck job'ı advisory_contract.ok'ı buradan denetler.
+        ac = d.get("advisory_contract") or {}
+        self.assertIs(ac.get("ok"), True)
+        self.assertIn("plist_check", ac)
+        self.assertIs(ac["plist_check"]["ok"], True)
 
     def test_gh_json_fail_exits_1(self):
         checks = list(sc.gate_jobs().values())
@@ -280,6 +286,27 @@ class TestGhIntegration(unittest.TestCase):
         d = json.loads(buf.getvalue())
         self.assertEqual(d["verdict"], "FAIL")
         self.assertFalse(d["enforcement_ok"])
+        # FAIL yolunda da advisory_contract JSON'da mevcut olmalı (kapı okuyabilmeli).
+        self.assertIn("advisory_contract", d)
+        self.assertIs(d["advisory_contract"]["ok"], True)  # offline kontrat bozulmamış
+
+    def test_gh_json_unreadable_still_carries_advisory_contract(self):
+        # UNREADABLE (403 yetki yok) yolunda script exit 1 eder ama JSON'da
+        # advisory_contract.ok OFFLINE olarak hesaplanıp taşınmalı — CI'daki
+        # precheck adımı GitHub'a erişemese de kontratı denetleyebilsin.
+        buf = io.StringIO()
+        with mock.patch.object(sc, "run_gh",
+                               side_effect=RuntimeError(
+                                   "HTTP 403: Resource not accessible by "
+                                   "integration")), \
+                mock.patch.object(sys, "stdout", new=buf):
+            with self.assertRaises(SystemExit) as cm:
+                sc.main(["--gh", "--repo", "owner/name", "--json"])
+        self.assertEqual(cm.exception.code, 1)
+        d = json.loads(buf.getvalue())
+        self.assertEqual(d["verdict"], "UNREADABLE")
+        ac = d.get("advisory_contract") or {}
+        self.assertIs(ac.get("ok"), True, "offline kontrat UNREADABLE'da da okunabilmeli")
 
     def test_gh_json_not_set_up_exits_1(self):
         # Protection kurulu değilken (gh api 404) --gh exit 1 (fail-closed)

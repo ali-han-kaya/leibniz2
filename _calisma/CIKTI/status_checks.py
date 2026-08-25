@@ -303,6 +303,11 @@ def main(argv=None):
         "smoke": [],
         "verdict": "ERROR",
         "warning": None,
+        # Advisory kontratı OFFLINE hesaplanır (workflow YAML'ından) —
+        # GitHub erişilemese bile (UNREADABLE/NOT_SET_UP) JSON'da taşınır;
+        # precheck job'ı `advisory_contract.ok` alanını ayrıca denetler.
+        "advisory_contract": {
+            k: v for k, v in contract.items() if k != "all_jobs"},
     }
 
     if not args.json:
