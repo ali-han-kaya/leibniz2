@@ -1856,14 +1856,31 @@ def run_lean_proof(lean_path, lean_file):
     return False, f"Lean derleme hatası: {detail}"
 
 
-def run_lake_build(lake_path, project_dir):
+def _lean_compiler_available():
+    """Lean derleyicisinin gerçekten kurulu olduğunu doğrular.
+
+    find_tool("lean") eşleşme bulamazsa bare adı döndürür; PATH'i de
+    shutil.which ile teyit eder. Yalnızca --lean-only SKIP kararında
+    kullanılır — varsayılan fail-closed yol bu yardımcıya uğramaz.
+    """
+    cmd = find_tool("lean")
+    return os.path.isfile(cmd) or shutil.which(cmd) is not None
+
+
+def run_lake_build(lake_path, project_dir, lean_only=False):
     """K9 ek kapısı: 8 teoremli Sınır İspatı çekirdeğini lake ile derler.
 
     Fail-closed: (a) lean-toolchain v4.14.0 olmalı (uyuşmaz/yok → FAIL),
     (b) `lake clean` ve (c) `lake build --wfail` başarılı olmalı. Elan shim
     toolchain'i proje dizininden okur — yanlış sürüm derleme yerine kapıda
-    yakalanır. Döndürür (ok: bool, detail: str).
+    yakalanır. Döndürür (ok, detail); ok ÜÇ durumlu: True=PASS,
+    False=FAIL, None=SKIP (yalnızca lean_only=True ve lean derleyicisi
+    hiç kurulu değilken — --lean-only ortamı lake alt-kapısını atlatabilir;
+    lean varsa veya bayrak yoksa davranış eskisi gibi fail-closed'tur).
     """
+    if lean_only and not _lean_compiler_available():
+        return None, ("SKIP — lean derleyicisi yok (--lean-only): "
+                      "lake build alt-kapısı atlandı")
     tc = os.path.join(project_dir, "lean-toolchain")
     if not os.path.isfile(tc):
         return False, f"lean-toolchain yok: {tc}"
@@ -4014,6 +4031,12 @@ def main():
                     help="K8: Z3 sembolik ispat (symbolic_proof_z3.py; z3-solver gerektirir)")
     ap.add_argument("--lean-proof", action="store_true",
                     help="K9: Lean 4 reduct-invariance (ReductInvariance.lean; lean gerektirir)")
+    ap.add_argument("--lean-only", action="store_true",
+                    help="K9 lake alt-kapısı için yumuşak mod: lean derleyicisi\n"
+                         "hiç kurulu değilse lake build adımı SKIP olarak raporlanır\n"
+                         "(P0 düşürülmez). Lean kuruluysa kapı aynen fail-closed koşar;\n"
+                         "lean ispatının kendisi (--lean-proof) her durumda\n"
+                         "fail-closed kalır — bu bayrak yalnızca lake alt-adımını etkiler.")
     ap.add_argument("--coq-proof", action="store_true",
                     help="K19: Coq reduct-invariance (Content.v; coqtop -compile "
                          "fail-closed + coq-version sürüm uyumu + admit/axiom "
@@ -4579,21 +4602,26 @@ def main():
             lakefile = os.path.join(reduct_dir, "lakefile.toml")
             if os.path.isfile(lakefile):
                 lake_cmd = find_tool("lake")
-                lake_ok, lake_detail = run_lake_build(lake_cmd, reduct_dir)
+                lake_ok, lake_detail = run_lake_build(
+                    lake_cmd, reduct_dir,
+                    lean_only=getattr(args, "lean_only", False))
+                lake_state = ("SKIP" if lake_ok is None
+                              else ("PASS" if lake_ok else "FAIL"))
                 lake_line = (f"[K9] Lean reduct (8 teorem, lake build --wfail): "
-                             f"{'PASS' if lake_ok else 'FAIL'} — {lake_detail}")
+                             f"{lake_state} — {lake_detail}")
                 if args.json:
                     print(lake_line, file=sys.stderr)
                 else:
                     print(lake_line)
-                if not lake_ok:
+                if lake_ok is False:
                     add("P0", "K9-LAKE", "K9 Lean çekirdeği", lake_detail)
             else:
                 lake_ok, lake_detail = False, f"lake projesi yok: {reduct_dir}"
                 add("P0", "K9-LAKE", "K9 Lean çekirdeği", lake_detail)
             # K9 genel: İKİ kapı da geçmeli (fail-closed) — dashboard rozeti
-            # ve history lean_ok bu birleşimi taşır.
-            ok = ok and lake_ok
+            # ve history lean_ok bu birleşimi taşır. SKIP (None) nötrdür:
+            # yalnızca --lean-only + lean-derleyicisi-yok ortamında oluşur.
+            ok = ok and (lake_ok is not False)
             if lake_detail:
                 detail = f"{detail} · {lake_detail}"
             lean_ok = ok
