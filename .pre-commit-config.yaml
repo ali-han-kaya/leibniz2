@@ -216,6 +216,22 @@ repos:
         stages: [pre-commit]
         verbose: true
 
+      - id: check-refs-table-sync
+        name: "Verify REFERANS §2 table ↔ code lists (fail-closed)"
+        description: >-
+          check_refs_table_sync.py: REFERANS_KANIT_DENETIMI.md §2'deki 64
+          satırlık ana tabloyu verify_delivery.py REFERENCE_* listelerinin
+          key'leriyle birebir karşılaştırır (çapa + 10 açık override, çift
+          yönlü bijection). Drift: koda referans eklenir ama tabloya satır
+          eklenmez (veya tersi) → sessiz kapsam kaybı → commit bloke edilir.
+          OFFLINE, stdlib-only, ~0.05s.
+        entry: python3 _calisma/CIKTI/check_refs_table_sync.py
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
       - id: check-plist-drift
         name: "Plist gate unit tests (exit 0/1/2)"
         description: >-

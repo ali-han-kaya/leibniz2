@@ -59,6 +59,7 @@ HOOK_COVERAGE = {
     "verify-delivery-github-scripts": ["test_github_scripts_battery.py"],
     "check-pattern-consistency": ["test_gen_repro_manifest.py"],
     "check-config-sync":       ["test_check_config_sync.py"],
+    "check-refs-table-sync":   ["test_check_refs_table_sync.py"],
     "check-changelog-sync":    ["test_update_changelog_hook.py", "test_gen_changelog.py"],
     "check-unit-tests": [
         "test_verify_refs.py",

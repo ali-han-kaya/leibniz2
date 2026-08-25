@@ -78,7 +78,11 @@ HOOKS = [
     ("check-config-sync", "Verify workflow config snapshot <-> CONFIG_BASENAMES sync", 0, 0,
      [r"SONUÇ: PASS"], [], 10),
 
-    # 10) check-plist-drift: plist golden karsilastirmasi (46 test)
+    # 10) check-refs-table-sync: REFERANS §2 table <-> code lists
+    ("check-refs-table-sync", "Verify REFERANS §2 table <-> code lists", 0, 0,
+     [r"PASS — tablo-kod birebir senkron"], [], 10),
+
+    # 11) check-plist-drift: plist golden karsilastirmasi (46 test)
     ("check-plist-drift", "Plist gate unit tests", 0, 0,
      [r"Passed"], [], 30),
 
