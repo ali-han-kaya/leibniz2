@@ -135,6 +135,26 @@ def _is_overrides_rel(rel: str) -> bool:
     return os.path.basename(rel) in OVERRIDES_BASENAMES
 
 
+# status_checks.py --json çıktısının bilinen ADI (basename).
+# precheck job'ı status_checks.py --json'ı .freebuff/status_checks.json'a
+# yazar; precheck-report artifact'ına girer ve merge-multiple köke
+# düzleştiğinde önek kaybolur — basename ile tanınır (CONFIG/OVERRIDES
+# desenlerinin aynısı). İçeriği advisory kontratı sonucunu (advisory_contract
+# objesi) taşır; SHA-256 ile denetim zincirinde sabitlenir.
+STATUS_CHECKS_BASENAMES = frozenset({
+    "status_checks.json",
+})
+
+
+def _is_status_checks_rel(rel: str) -> bool:
+    """Bir rel yolunun status_checks.py --json çıktısı olup olmadığını isimle tanı.
+
+    precheck-report/ önekli VEYA merge-multiple ile köke düzleşmiş tek kopya
+    olabilir — her iki durumda basename ile tanınır.
+    """
+    return os.path.basename(rel) in STATUS_CHECKS_BASENAMES
+
+
 def _is_action_runtimes_rel(rel: str) -> bool:
     """Bir rel yolunun action runtime raporu olup olmadığını isimle tanı.
 
@@ -607,6 +627,37 @@ def main() -> None:
                      "=" * 72]
         lines += ov_block
 
+    # ── STATUS CHECKS bölümü: status_checks.json (advisory kontratı) ────────
+    # precheck job'ındaki status_checks.py --json çıktısı (advisory kontratı
+    # sonucunu içerir: ok/required/advisory/plist_check/issues) ayrıca
+    # işaretlenir; combined_sha256 tek hash ile özetler (config.combined_sha256
+    # ile aynı deterministik yöntem). Böylece advisory kontratı sonucu denetim
+    # zincirinde (status_checks.json → hash → manifest → bundle) SHA-256 ile
+    # sabitlenir.
+    status_checks_hashes = {rel: h for rel, h in file_hashes.items()
+                            if _is_status_checks_rel(rel)}
+    status_checks_combined = None
+    if status_checks_hashes:
+        sorted_rel = sorted(status_checks_hashes)
+        status_checks_combined = hashlib.sha256(
+            "".join(f"{rel}\0{status_checks_hashes[rel]}\n"
+                     for rel in sorted_rel).encode()
+        ).hexdigest()
+        sc_block = [
+            "",
+            "=" * 72,
+            "STATUS CHECKS ARTIFACT (ayrı bölüm — advisory kontratı)",
+            "=" * 72,
+            f"{'FILE':<55} {'SHA-256'}",
+            "-" * 72,
+        ]
+        sc_block += [f"{rel:<55} {status_checks_hashes[rel]}"
+                     for rel in sorted_rel]
+        sc_block += ["-" * 72,
+                     f"status_checks_combined_sha256: {status_checks_combined}",
+                     "=" * 72]
+        lines += sc_block
+
     # ── UNIT TESTS bölümü: unit_tests.log (test çıktıları) ──────────────────
     # verify job'undaki unittest discover çıktısı (unit_tests.log) ayrıca
     # işaretlenir; combined_sha256 tek hash ile özetler. Böylece test
@@ -709,6 +760,10 @@ def main() -> None:
         # Action runtime raporu isimle tanınır.
         if top not in artifact_jobs and _is_action_runtimes_rel(rel):
             top = "action-runtimes"
+        # status_checks.py --json çıktısı isimle tanınır (merge-multiple
+        # precheck-report'u köke düzleştirirse önek kaybolur → precheck'e bağlanır).
+        if top not in artifact_jobs and _is_status_checks_rel(rel):
+            top = "precheck"
         if top in artifact_jobs:
             present.setdefault(top, []).append(rel)
     prov_block = [
@@ -819,6 +874,11 @@ def main() -> None:
         manifest_json["overrides"] = {
             "files": dict(sorted(overrides_hashes.items())),
             "combined_sha256": overrides_combined,
+        }
+    if status_checks_hashes:
+        manifest_json["status_checks"] = {
+            "files": dict(sorted(status_checks_hashes.items())),
+            "combined_sha256": status_checks_combined,
         }
     if unit_test_hashes:
         manifest_json["unit_tests"] = {

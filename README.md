@@ -464,6 +464,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-26 | fix | check-unit-tests hook'u gerçekten test koşsun (çift uzantı bug'ı) | [`c73e937`](https://github.com/ali-han-kaya/leibniz2/commit/c73e937) |
 | 2026-08-26 | fix | test_coverage_report'a gerçek test ekle (3.12 boş-discovery exit 5) | [`96a6c4b`](https://github.com/ali-han-kaya/leibniz2/commit/96a6c4b) |
 | 2026-08-26 | fix | check-absolute-paths + actionlint entry'lerini sh→bash yap | [`374c9d4`](https://github.com/ali-han-kaya/leibniz2/commit/374c9d4) |
+| 2026-08-26 | feat | advisory kontrat kapısını precheck job'ına bağla | [`8ce9766`](https://github.com/ali-han-kaya/leibniz2/commit/8ce9766) |
 
 ### Regresyon notları
 

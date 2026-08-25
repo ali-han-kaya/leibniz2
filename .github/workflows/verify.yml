@@ -1962,6 +1962,35 @@ jobs:
           sys.exit(1)
           PYEOF
 
+      # ─── STATUS CHECKS --json (OFFLINE, SHA-256 sabitlemesi için) ────────
+      # status_checks.py --json (--gh'siz) OFFLINE ve deterministiktir:
+      # yalnızca workflow YAML'ından gate/advisory kontratı hesaplar — GitHub
+      # erişimi gerekmez, her run'da aynı üretilir. Çıktı
+      # .freebuff/status_checks.json'a yazılır; reproducibility manifest'i
+      # bu dosyayı STATUS CHECKS bölümünde SHA-256 ile sabitler (advisory
+      # kontratı sonucu denetim zincirine girer).
+      - name: Run status_checks --json (offline, SHA-256 sabitleme)
+        continue-on-error: true
+        shell: bash
+        run: |
+          mkdir -p .freebuff
+          python3 _calisma/CIKTI/status_checks.py --json \
+            > .freebuff/status_checks.json 2> .freebuff/status_checks.err || true
+          echo "status_checks.json boyut: $(wc -c < .freebuff/status_checks.json) bayt"
+          if [ -s .freebuff/status_checks.json ]; then
+            python3 - <<'PYEOF'
+            import json
+            d = json.load(open(".freebuff/status_checks.json"))
+            ac = d.get("advisory_contract") or {}
+            print("advisory_contract.ok:", ac.get("ok"),
+                  "| required:", len(ac.get("required", [])),
+                  "| advisory:", len(ac.get("advisory", [])))
+            PYEOF
+          else
+            echo "status_checks --json çıktı üretmedi — stderr:"
+            cat .freebuff/status_checks.err
+          fi
+
       # publish_precheck.sh --verify-checks — status_checks.py + --gh'nin TEK
       # KAYNAK kapısı (verify_checks.sh; wrapper --verify-checks ile aynı
       # fonksiyon). Makine-okur JSON sidecar'ı .freebuff/verify_checks.json'a
@@ -1997,6 +2026,8 @@ jobs:
             .freebuff/status_checks_gh.err
             .freebuff/advisory_contract.json
             .freebuff/advisory_contract.err
+            .freebuff/status_checks.json
+            .freebuff/status_checks.err
             .freebuff/verify_checks.json
             .freebuff/verify_checks.txt
           if-no-files-found: ignore

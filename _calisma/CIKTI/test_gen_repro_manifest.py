@@ -593,6 +593,61 @@ class TestProvenance(unittest.TestCase):
         m = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         self.assertNotIn("overrides", m)
 
+    # ── STATUS CHECKS section tests (advisory kontratı SHA-256 sabitlemesi) ─
+    def test_status_checks_section_prefixed(self):
+        # precheck-report/ önekli status_checks.json — ayrı bölümde işaretlenir
+        # + tek-hash combined_sha256 (OVERRIDES deseni).
+        (self.artifacts / "precheck-report").mkdir(parents=True)
+        (self.artifacts / "precheck-report" / "status_checks.json").write_text(
+            json.dumps({"advisory_contract": {"ok": True, "required": ["a"],
+                                                "advisory": ["b"]}}),
+            encoding="utf-8")
+        self._gen()
+        txt = (self.out / "manifest.txt").read_text(encoding="utf-8")
+        self.assertIn("STATUS CHECKS ARTIFACT (ayrı bölüm — advisory kontratı)", txt)
+        self.assertIn("status_checks_combined_sha256", txt)
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        sc = m["status_checks"]
+        self.assertIn("precheck-report/status_checks.json", sc["files"])
+        self.assertEqual(len(sc["combined_sha256"]), 64)
+        self.assertRegex(sc["combined_sha256"], r"^[0-9a-f]{64}$")
+
+    def test_status_checks_combined_recomputes_deterministically(self):
+        (self.artifacts / "precheck-report").mkdir(parents=True)
+        (self.artifacts / "precheck-report" / "status_checks.json").write_text(
+            json.dumps({"advisory_contract": {"ok": False, "issues": ["x"]}}),
+            encoding="utf-8")
+        self._gen()
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        sc = m["status_checks"]["files"]
+        expected = hashlib.sha256(
+            "".join(f"{rel}\0{sc[rel]}\n" for rel in sorted(sc)).encode()
+        ).hexdigest()
+        self.assertEqual(m["status_checks"]["combined_sha256"], expected)
+
+    def test_status_checks_basename_recognition_flat(self):
+        # merge-multiple köke düzleştirdiğinde precheck-report/ öneki kaybolur;
+        # basename ile tanınır (CONFIG/OVERRIDES deseni) + provenance precheck'e
+        # bağlanır.
+        (self.artifacts / "status_checks.json").write_text(
+            json.dumps({"advisory_contract": {"ok": True}}), encoding="utf-8")
+        self._gen()
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        sc = m["status_checks"]
+        self.assertIn("status_checks.json", sc["files"])
+        prov = m["provenance"]["artifact_jobs"]
+        self.assertIn("precheck-report", prov)  # ARTIFACT_JOBS girişi duruyor
+
+    def test_no_status_checks_section_when_absent(self):
+        bare = self.root / "bare"
+        bare.mkdir(parents=True)
+        (bare / "a.txt").write_text("x", encoding="utf-8")
+        out = self.root / "bare-out"
+        r = _run_gen(str(bare), str(out))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        m = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        self.assertNotIn("status_checks", m)
+
     def test_env_override_artifact_jobs(self):
         env = dict(os.environ)
         env["REPRO_ARTIFACT_JOBS"] = '{"precommit-logs": "custom-job"}'
