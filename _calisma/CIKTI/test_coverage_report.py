@@ -30,6 +30,7 @@ import re
 import subprocess
 import sys
 import textwrap
+import unittest
 from collections import defaultdict
 from datetime import datetime, timezone
 
@@ -396,5 +397,33 @@ def main(argv=None):
     return 0
 
 
+class TestCoverageReportSmoke(unittest.TestCase):
+    """test_coverage_report.py'yi unittest discover altında da gerçek bir test yapar.
+
+    Bu dosyada daha önce hiç `def test_*` yoktu — `discover -p "test_*.py"`
+    kombine koşusunda zararsız bir modüldü, ama check-unit-tests hook'u her
+    dosyayı AYRI koştuğunda Python 3.12+ boş discovery'de exit 5 döndürür
+    (gh-136442) → CI'da "1/49 BAŞARISIZ". En az bir gerçek test eklemek
+    hem kapıyı yeşil yapar hem de --check modunun gerçek repo üzerinde
+    çalıştığını doğrular.
+    """
+
+    def test_check_passes_on_real_repo(self):
+        rc = main(["--check"])
+        self.assertEqual(rc, 0, "test_coverage_report.py --check gerçek repoda 0 dönmeli")
+
+    def test_main_accepts_md_flag(self):
+        # --md çıktısı üretebilmeli (check-coverage-report hook'unun kardeş modu).
+        rc = main(["--md", "/tmp/coverage_smoke_report.md"])
+        self.assertEqual(rc, 0)
+        self.assertTrue(os.path.exists("/tmp/coverage_smoke_report.md"))
+        with open("/tmp/coverage_smoke_report.md", encoding="utf-8") as f:
+            self.assertIn("## Summary", f.read())
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    # Script modu (pre-commit hook: `test_coverage_report.py --check` vb.) → main().
+    # Test modu (unittest discover / check-unit-tests) → unittest.main().
+    if any(a in ("--check", "--md", "--json", "--ci") for a in sys.argv[1:]):
+        sys.exit(main())
+    unittest.main()
