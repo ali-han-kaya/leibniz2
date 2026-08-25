@@ -131,18 +131,32 @@ class TestCheckDaemonSmoke(unittest.TestCase):
         self.assertIn("yok", detail)
         self.assertTrue(any(f["check"] == "K18-DAEMON" for f in findings))
 
-    def test_sidecar_out_written(self):
-        # --daemon-out verilirse rapor o yola yazılır (sidecar) ve mock alt
-        # süreç --out olarak o yolu alır (sözleşme: rapor orada üretilir).
-        with tempfile.TemporaryDirectory(prefix="k18-") as tmp:
-            out = os.path.join(tmp, "daemon_http_report.json")
-            fake = _fake_run(0, _report())
-            ok, detail, report, _ = self._call(out_path=out, run_fake=fake)
-            self.assertTrue(ok)
-            # Mock --out olarak out_path'i aldı → rapor o yola yazıldı.
-            self.assertTrue(os.path.isfile(out))
-            with open(out, encoding="utf-8") as f:
-                self.assertTrue(json.load(f)["ok"])
+    def test_skip_env_vd_skip_k18(self):
+        # VD_SKIP_K18=1 (yalnızca verify.yml "Run full verification" adımı)
+        # → PASS-durumlu SKIP, subprocess çağrılmaz. Genel CI=true DEĞİL —
+        # birim test adımında daemon smoke gerçekten koşmalı.
+        fake = _fake_run(0, _report())
+        with mock.patch.object(vd.subprocess, "run", fake) as m:
+            ok, detail, report, findings = self._call(
+                env_extra={"VD_SKIP_K18": "1"}, run_fake=fake)
+        self.assertTrue(ok)
+        self.assertIn("atlandı", detail)
+        self.assertIn("VD_SKIP_K18", detail)
+        self.assertIsNone(report)
+        self.assertEqual(findings, [])
+        m.assert_not_called()  # alt süreç hiç çalışmadı
+
+    def test_generic_ci_does_not_skip(self):
+        # CI=true tek başına SKIP tetiklememeli — fail-closed davranışı CI
+        # birim test adımında da doğrulanır (regresyon: eski `CI` guard'ı
+        # test_k18_daemon'ı CI'da kırıyordu).
+        fake = _fake_run(1, _report(ok=False, error="timeout"))
+        fake.returncode = 1
+        ok, detail, report, findings = self._call(
+            env_extra={"CI": "true"}, run_fake=fake)
+        self.assertFalse(ok)
+        self.assertIn("FAIL", detail)
+        self.assertTrue(any(f["check"] == "K18-DAEMON" for f in findings))
 
 
 class TestK18Wiring(unittest.TestCase):

@@ -291,6 +291,12 @@ jobs:
       - name: Run full verification (K1-K19, single entry point)
         if: always()
         shell: bash
+        env:
+          # K18 daemon smoke Linux runner'da port/setsid zaman aşımına uğrar;
+          # advisory daemon-http job'ı macOS'te koşar. YALNIZCA bu adımda set
+          # edilir — birim test adımında (CI=true olsa bile) K18 fail-closed
+          # davranışı gerçekten test edilir (test_k18_daemon.py).
+          VD_SKIP_K18: "1"
         run: |
           set -o pipefail
           python3 _calisma/CIKTI/verify_delivery.py --dir _calisma/CIKTI --full \

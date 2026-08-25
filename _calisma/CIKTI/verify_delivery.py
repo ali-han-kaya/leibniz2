@@ -3654,13 +3654,15 @@ def check_daemon_smoke(add, out_path=None):
     if os.environ.get("PREVIEW_DAEMON") == "1":
         return True, ("daemon smoke iç içe koşumda atlandı "
                       "(PREVIEW_DAEMON=1 — dış smoke zaten koşuyor)"), None
-    # CI ortamında daemon smoke atlanır: GitHub Actions Linux runner'larında
-    # preview_server.py başlatma ve run-now tetikleme zaman aşımına uğrar
-    # (port binding, setsid, vs.). Advisory daemon-http job'ı zaten macOS'te
-    # bu testi koşuyor.
-    if os.environ.get("CI") == "true":
-        return True, ("daemon smoke CI'da atlandı (advisory daemon-http job'ı "
-                      "macOS'ta koşuyor)"), None
+    # Linux CI runner'larında daemon smoke atlanır: preview_server.py
+    # başlatma + run-now tetikleme port binding/setsid zaman aşımına uğrar.
+    # Advisory daemon-http job'ı zaten macOS'te bu testi koşuyor. Genel
+    # `CI` yerine YALNIZCA verify.yml "Run full verification" adımının
+    # koyduğu özel env kullanılır — birim test adımında (CI=true olsa bile)
+    # daemon smoke gerçekten koşar ve fail-closed davranışı doğrulanır.
+    if os.environ.get("VD_SKIP_K18") == "1":
+        return True, ("daemon smoke CI'da atlandı (VD_SKIP_K18=1 — advisory "
+                      "daemon-http job'ı macOS'ta koşuyor)"), None
     here = os.path.dirname(os.path.abspath(__file__))
     script = os.path.join(here, "daemon_http_test.py")
     if not os.path.isfile(script):
