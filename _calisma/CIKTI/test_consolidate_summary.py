@@ -593,5 +593,173 @@ class TestPrecommitAndK0Content(unittest.TestCase):
         self.assertLess(p, k)
 
 
+class TestFileSink(unittest.TestCase):
+    """GITHUB_STEP_SUMMARY dosya sink'i — dosyaya yazılmış haliyle satır bazlı.
+
+    stdout testleri çıktıyı doğrular; bu sınıf aynı içeriğin GITHUB_STEP_SUMMARY
+    env'i işaret ettiği dosyaya (append) yazıldığını denetler. Kapsam:
+    - Dosya içeriği, stdout çıktısıyla birebir aynı (satır bazlı)
+    - Append modu: ikinci çalıştırma dosyayı ezmeden EKLER
+    - `--dashboard-only` / `--skip-dashboard` modları dosya sink'te de çalışır
+    - Dosya sink'te de tüm bölümler sırayla görünür
+    """
+
+    def setUp(self):
+        self._saved = os.environ.get("GITHUB_STEP_SUMMARY")
+
+    def tearDown(self):
+        if self._saved is not None:
+            os.environ["GITHUB_STEP_SUMMARY"] = self._saved
+        else:
+            os.environ.pop("GITHUB_STEP_SUMMARY", None)
+
+    def _run_file(self, paths, summary_file):
+        """GITHUB_STEP_SUMMARY=summary_file ile main() koş; dosya içeriğini döndür."""
+        os.environ["GITHUB_STEP_SUMMARY"] = str(summary_file)
+        buf = io.StringIO()
+        argv = []
+        for key, p in paths.items():
+            argv += [f"--{key}", str(p)]
+        with contextlib.redirect_stdout(buf):
+            code = cs.main(argv)
+        content = summary_file.read_text(encoding="utf-8")
+        return code, content
+
+    def _run_stdout(self, paths):
+        """Aynı sidecar'larla stdout sink'i koş (karşılaştırma için)."""
+        os.environ.pop("GITHUB_STEP_SUMMARY", None)
+        buf = io.StringIO()
+        argv = []
+        for key, p in paths.items():
+            argv += [f"--{key}", str(p)]
+        with contextlib.redirect_stdout(buf):
+            code = cs.main(argv)
+        return code, buf.getvalue()
+
+    def _sidecars(self, d):
+        """Karışık durum: pre-commit PASS (hook1 ✓ + hook2 ✗) + K0 2 bayat zip."""
+        d = pathlib.Path(d)
+        (d / "logs").mkdir(parents=True, exist_ok=True)
+        (d / "logs" / "PRECOMMIT_RAPORU.json").write_text(
+            json.dumps({"generated_at": "2026-08-20T12:00:00Z",
+                        "exit_code": 0, "verdict": "PASS", "role": "advisory",
+                        "hooks": [{"name": "hook1", "status": "Passed"},
+                                   {"name": "hook2", "status": "Failed"}],
+                        "findings": [],
+                        "counts": {"hooks": 5, "passed": 4, "failed": 1,
+                                   "p0": 0, "p1": 0}}), encoding="utf-8")
+        (d / "k0_findings.json").write_text(
+            json.dumps({"count": 2, "findings": [
+                {"rel": "dış/ESKI_V4.zip", "sha256": "a" * 64},
+                {"rel": "dış/BAYAT.zip", "sha256": "b" * 64},
+            ]}), encoding="utf-8")
+        (d / "budget_verify.json").write_text(
+            json.dumps({"limit": 30.0, "estimated_usd": 1.08,
+                        "verdict": "OK"}), encoding="utf-8")
+        (d / "lineage_findings.json").write_text(json.dumps({
+            "ok": True, "count": 0, "generations": []}), encoding="utf-8")
+        (d / "klayers.json").write_text(json.dumps({
+            "verdict": "PASS", "counts": {"P0": 0, "P1": 0},
+            "layers": {}}), encoding="utf-8")
+        return {
+            "precommit": d / "logs" / "PRECOMMIT_RAPORU.json",
+            "k0": d / "k0_findings.json",
+            "budget": d / "budget_verify.json",
+            "lineage": d / "lineage_findings.json",
+            "klayers": d / "klayers.json",
+        }
+
+    def test_file_sink_matches_stdout(self):
+        """Dosya içeriği stdout çıktısıyla birebir aynı (satır bazlı)."""
+        with tempfile.TemporaryDirectory() as d:
+            paths = self._sidecars(d)
+            summary_file = pathlib.Path(d) / "summary.md"
+            code_f, file_content = self._run_file(paths, summary_file)
+            code_s, stdout_content = self._run_stdout(paths)
+        self.assertEqual(code_f, code_s)
+        # stdout'a ayrıca "Consolidated summary written (full)" print edilir
+        # (dosyaya yazılmaz) — karşılaştırmadan önce o satırı çıkar.
+        stdout_body = stdout_content.rsplit(
+            "\nConsolidated summary written (full)\n", 1)[0]
+        # Sink son bölümü "\n\n" ile bitirir; print ekstra "\n" ekler —
+        # sondaki yeni satırları eşitle (içerik birebir aynı olmalı).
+        self.assertEqual(file_content.rstrip("\n"), stdout_body.rstrip("\n"))
+        # Satır bazlı: kritik satırlar dosyada da var.
+        self.assertIn("## 📊 Durum panosu: Pre-commit ✅ · K0 🔴 · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅\n",
+                      file_content)
+        self.assertIn("> Hook'lar: `hook1` :white_check_mark: | `hook2` :x:\n",
+                      file_content)
+        self.assertIn("- `dış/ESKI_V4.zip`  (`aaaaaaaaaaaaaaaa…`)\n",
+                      file_content)
+
+    def test_file_sink_append_mode(self):
+        """İkinci çalıştırma dosyayı ezmez — içeriğe EKLER (append)."""
+        with tempfile.TemporaryDirectory() as d:
+            paths = self._sidecars(d)
+            summary_file = pathlib.Path(d) / "summary.md"
+            code1, c1 = self._run_file(paths, summary_file)
+            code2, c2 = self._run_file(paths, summary_file)
+        self.assertEqual(code1, 0)
+        self.assertEqual(code2, 0)
+        # Append: ikinci içerik birincinin iki katı (dashboard + 5 bölüm × 2).
+        self.assertTrue(c2.startswith(c1))
+        self.assertEqual(c2.count("## 📊 Durum panosu:"), 2)
+        self.assertEqual(c2.count("## ✅ Pre-commit:"), 2)
+        self.assertEqual(c2.count("## 🔴 K0 bayat zip:"), 2)
+
+    def test_file_sink_dashboard_only(self):
+        """--dashboard-only: dosyaya yalnızca durum panosu yazılır."""
+        with tempfile.TemporaryDirectory() as d:
+            paths = self._sidecars(d)
+            summary_file = pathlib.Path(d) / "summary.md"
+            os.environ["GITHUB_STEP_SUMMARY"] = str(summary_file)
+            buf = io.StringIO()
+            argv = ["--dashboard-only"]
+            for key, p in paths.items():
+                argv += [f"--{key}", str(p)]
+            with contextlib.redirect_stdout(buf):
+                code = cs.main(argv)
+            content = summary_file.read_text(encoding="utf-8")
+        self.assertEqual(code, 0)
+        self.assertIn("## 📊 Durum panosu:", content)
+        self.assertNotIn("## ✅ Pre-commit:", content)
+        self.assertNotIn("## 🔴 K0 bayat zip:", content)
+
+    def test_file_sink_skip_dashboard(self):
+        """--skip-dashboard: dosyaya panosuz yalnızca bölümler yazılır."""
+        with tempfile.TemporaryDirectory() as d:
+            paths = self._sidecars(d)
+            summary_file = pathlib.Path(d) / "summary.md"
+            os.environ["GITHUB_STEP_SUMMARY"] = str(summary_file)
+            buf = io.StringIO()
+            argv = ["--skip-dashboard"]
+            for key, p in paths.items():
+                argv += [f"--{key}", str(p)]
+            with contextlib.redirect_stdout(buf):
+                code = cs.main(argv)
+            content = summary_file.read_text(encoding="utf-8")
+        self.assertEqual(code, 0)
+        self.assertNotIn("## 📊 Durum panosu:", content)
+        self.assertIn("## ✅ Pre-commit:", content)
+        self.assertIn("## 🔴 K0 bayat zip:", content)
+
+    def test_file_sink_sections_in_order(self):
+        """Dosyada bölümler SECTIONS sırasıyla görünür (satır bazlı)."""
+        with tempfile.TemporaryDirectory() as d:
+            paths = self._sidecars(d)
+            summary_file = pathlib.Path(d) / "summary.md"
+            code, content = self._run_file(paths, summary_file)
+        self.assertEqual(code, 0)
+        markers = ["## 📊 Durum panosu:", "## ✅ Pre-commit:",
+                   "## 🔴 K0 bayat zip:", "## ✅ Bütçe kalkanı:",
+                   "## ✅ Soy hattı", "## ⏭️ K1: sidecar'da yok"]
+        last = -1
+        for m in markers:
+            self.assertIn(m, content)
+            pos = content.index(m)
+            self.assertGreater(pos, last, f"dosya sırası bozuk: {m}")
+            last = pos
+
+
 if __name__ == "__main__":
     unittest.main()
