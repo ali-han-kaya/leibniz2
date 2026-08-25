@@ -160,6 +160,16 @@ Denetim başlangıçta CrossRef + SEP + "bağımsız web araması" idi. `verify_
 
 Toplam **61 canlı girdi**; kalan 3 girdi (64 − 61 — Beth 1953, Fosl 1998, Popkin 1952) §2 tablosuna ve sabit denetim notlarına dayanır (üçü de V5h/V5j'de DÜZELTİLDİ kaydıdır). **V5q:** 64 referansın tamamı artık bir listede — kapsam boşluğu 5'ti (Della Rocca 2010 + 4 Sextus edisyonu) ve kapatıldı: Sextus 1562 Estienne (`bub_gb_ddgo3O27ItcC`), 1569 Hervet (`bub_gb_RyhI9DhB82sC`/`nHEaGbVSZMcC`), 1621 Chouet (`bub_gb_-Yio5nIT2m0C`), Loeb/Bury (title+creator sorgusu) IA'da birebir identifier doğrulamasıyla; Della Rocca 2010 "PSR" (Philosophers' Imprint 10(7)) PI sitesi bot-korumalı ve CrossRef DOI'si kayıtlı değilken Wayback'te arşivlenmiş kopyasından doğrulanır (içerikte 'Della Rocca' + 'PSR'). **V5n:** Norton 1981 (`10.1016/0191-6599(81)90026-7`) ve Popkin 1951 (`10.2307/2216311`) DOI'leri CrossRef'ten doğrulandı — kapsam-dışı kalan son 2 dergi makalesi artık çevrimiçi doğrulanır (kapsam-dışı 10 → 8). Sonuçlar her CI run'ında `refs-online` VERSION JSON + `refs-trend` zaman serisinde izlenir. İki dürüst sınır: Google Books anahtarsız **429** (kota) döndürür — tam denetim `GBOOKS_API_KEY` ister; HathiTrust ISBN yerine **OCLC** indeksler — ISBN'li `ht_ids` çoğu modern telifli kitapta kayıt bulamaz. Her ikisi de yanlış PASS üretmez, `UNVERIFIED` izi bırakır.
 
+**V5q kanıtı (2026-08-19): Sextus edisyonları IA `ia_ids` ile, Della Rocca 2010 Wayback ile.**
+
+| Kaynak | Yöntem | Kanıt (identifier/URL) | Sonuç |
+|---|---|---|---|
+| Sextus 1562 Estienne | IA birebir `ia_ids` identifier | `bub_gb_ddgo3O27ItcC` + 'pyrrhoniarum hypotyposeon' × 'sextus' | PASS |
+| Sextus 1569 Hervet | IA birebir `ia_ids` identifier | `bub_gb_RyhI9DhB82sC` / `bub_gb_nHEaGbVSZMcC` + 'adversus mathematicos' × 'sextus' | PASS |
+| Sextus 1621 Chouet | IA birebir `ia_ids` identifier | `bub_gb_-Yio5nIT2m0C` + 'sozomena' × 'sextus' | PASS |
+| Sextus Loeb Bury | IA title+creator sorgusu | 'sextus empiricus' × 'bury' (Adversus Mathematicos VII) | PASS |
+| Della Rocca 2010 "PSR" | Wayback arşivlenmiş URL (HTTP 200 + içerik) | `web.archive.org/web/20210221211420id_/https://quod.lib.umich.edu/p/phimp/3521354.0010.007/--psr` — içerikte 'Della Rocca' + 'PSR' | PASS |
+
 **V5o (2026-08-19): 11 UNVERIFIED kaynak kapatıldı → 56/56 canlı.** `refs-trend`'de 43/54 (11 UNVERIFIED) görünen dönemdeki kaynakların tümü artık gerçek API yanıtıyla doğrulanır: 6 OpenLibrary girdisi (Hansen 1983/1992, Hicks 1925, Hunt 1998, Lipsius 1584, Long & Sedley 1987) o dönemde ağ zaman aşımına düşmüştü — sorgu değil geçici ağ hatası; 5 Internet Archive girdisi (Fine 2012, Lagrée 1994, Millican 2002, Schmitt 1972, Xunzi/Knoblock) IA'da indekslenmez, OpenLibrary fallback'i ile PASS olur (aşağıdaki canlı kanıt). Kök neden: denetim 200 sn bütçeyle **sıralı** koşuyordu ve rate-limit edilen OpenLibrary (~8 sn/çağrı) bütçeyi bitirip kalan kaynakları budget-skip'e düşürüyordu. V5o: kontroller `REFERENCE_POOL_SIZE=4` havuzda paralel koşar (`concurrent.futures`, ex.map sırayı korur; her işçi çağrıdan önce bütçeyi denetler — yanlış PASS yok); bütçe 260 sn'ye çıkarıldı. Canlı doğrulama (2026-08-19, varsayılan bütçeyle): **56/56 PASS, 94 sn** — crossref 6, sep 5, openlibrary 27 (22 doğrudan + 5 IA-fallback), archive 16, perseus 2.
 
 V5o kanıtı — hedefli canlı sorgu sonuçları (11 kaynağın her biri):
