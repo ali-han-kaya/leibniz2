@@ -66,6 +66,8 @@ FILES=(
   "sync_check_unit_tests.py|sync_check_unit_tests.py"
   "check_unit_tests.list|check_unit_tests.list"
   "check_unit_tests_hook.sh|check_unit_tests_hook.sh"
+  "test_lake_evidence_smoke.py|test_lake_evidence_smoke.py"
+  "lake_evidence_hook.sh|lake_evidence_hook.sh"
   "github_scripts/config_diff_comment.js|github_scripts/config_diff_comment.js"
   "github_scripts/config_drift_comment.js|github_scripts/config_drift_comment.js"
   "github_scripts/label_gate.js|github_scripts/label_gate.js"

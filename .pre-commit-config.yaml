@@ -198,6 +198,24 @@ repos:
         stages: [pre-commit]
         verbose: true
 
+      - id: check-lake-evidence
+        name: "Reproduce LEAN_ISPAT_RAPORU §6.3 lake build evidence (smoke)"
+        description: >-
+          test_lake_evidence_smoke.py — raporun §6.3 "lake build kanıtı"
+          bölümündeki çıktıyı HER COMMITTE gerçekten yeniden üretir:
+          lake clean && lake build --wfail (fail-closed; exit != 0 veya
+          beklenen derleme işareti yoksa commit bloke edilir). Rapor
+          format kapısı: kanonik komut satırı + başarı transcript'i +
+          v4.14.0 aracı satırı §6.3'te bulunmalıdır. lean/lake kurulu
+          değilse testler SKIP eder (kapı yalnızca aracın var olduğu
+          ortamda iddia üretir). ~1-5s.
+        entry: sh _calisma/CIKTI/lake_evidence_hook.sh
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
       - id: check-config-sync
         name: "Verify workflow config snapshot ↔ CONFIG_BASENAMES sync"
         description: >-

@@ -59,6 +59,7 @@ EXCLUDE = {
     "test_fresh_clone_setup.py",      # kurulum betiği — yavaş/CI advisory
     "test_check_history.py",          # daemon history sidecar (CI daemon job)
     "test_preview_prestart.py",       # preview prestart — daemon zinciri (CI)
+    "test_lake_evidence_smoke.py",    # lake/lean gerektirir (check-lake-evidence hook'u)
 
     # ağ gerektiren referans doğrulama (refs-online CI job)
     "test_verify_refs.py",

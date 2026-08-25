@@ -126,6 +126,11 @@ HOOKS = [
     ("check-coverage-report", "Verify unified test coverage report", 0, 0,
      [r"Passed"], [], 10),
 
+    # 23) check-lake-evidence: §6.3 kanıt canlı üretim (lake varsa gerçek
+    # build, yoksa SKIP — her iki durumda da rc=0).
+    ("check-lake-evidence", "Reproduce LEAN_ISPAT_RAPORU §6.3", 0, 0,
+     [r"Passed"], [], 120),
+
     # 21) check-unit-tests: birim testleri (1026+ test)
     # rc=1 onaylanir: test_status_checks.py gh api testleri yerel ortamda
     # (gh auth yoksa) FAIL uretir — pre-existing, hook'un kendisi saglam.
