@@ -240,7 +240,10 @@ class TestMain(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             tp = pathlib.Path(td) / "refs-trend.json"
             with open(tp, "w") as tf:
-                json.dump({"rows": trend_rows}, tf)
+                # duration_budget: üreticinin kendisi (sözleşme denetimi PASS).
+                json.dump({"rows": trend_rows,
+                           "duration_budget": rt.build_duration_budget(
+                               trend_rows)}, tf)
             # check_refs_trend_summary refs-trend.md bekler
             mp = pathlib.Path(td) / "refs-trend.md"
             mp.write_text(
@@ -297,7 +300,10 @@ class TestMain(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             tp = pathlib.Path(td) / "refs-trend.json"
             with open(tp, "w") as f:
-                json.dump({"rows": [_row("111")]}, f)
+                rows111 = [_row("111")]
+                json.dump({"rows": rows111,
+                           "duration_budget": rt.build_duration_budget(
+                               rows111)}, f)
             mp = pathlib.Path(td) / "refs-trend.md"
             mp.write_text(
                 f"## Özet\n\n{self._FOOTNOTE}\n\n", encoding="utf-8")
@@ -324,6 +330,84 @@ def _zip_blob(payload):
         z.writestr("references_online.json",
                    json.dumps(payload, ensure_ascii=False))
     return buf.getvalue()
+
+
+class TestCheckDurationBudgetContract(unittest.TestCase):
+    """duration_budget JSON sözleşmesi (DB-STRUCT + DB-CONSIST)."""
+
+    def _db(self, rows=None):
+        """Geçerli duration_budget — üreticinin kendisi (tek kaynak)."""
+        rows = rows if rows is not None else [
+            {"date": "a", "run_id": 1, "duration_s": 30.0,
+             "budget_usd": 1.08, "verdict": "PASS",
+             "z3_passed": 12, "z3_total": 12},
+        ]
+        return rt.build_duration_budget(rows)
+
+    def test_valid_contract_no_findings(self):
+        db = self._db()
+        self.assertEqual(art.check_duration_budget_contract(
+            {"rows": [], "duration_budget": db}), [])
+
+    def test_missing_when_rows_present_fails(self):
+        f = art.check_duration_budget_contract(
+            {"rows": [{"date": "a"}]})
+        self.assertEqual(len(f), 1)
+        self.assertIn("[DB-STRUCT] duration_budget yok", f[0]["detail"])
+
+    def test_missing_when_no_rows_is_ok(self):
+        self.assertEqual(art.check_duration_budget_contract({"rows": []}), [])
+        self.assertEqual(art.check_duration_budget_contract({}), [])
+
+    def test_run_count_mismatch_detected(self):
+        db = self._db()
+        db["run_count"] = 99
+        f = art.check_duration_budget_contract(
+            {"rows": [], "duration_budget": db})
+        self.assertIn("[DB-CONSIST] run_count 99 ≠ len(rows) 1", f[0]["detail"])
+
+    def test_missing_row_key_detected(self):
+        db = self._db()
+        del db["rows"][0]["budget_usd"]  # üretici bir alanı yazmadı
+        f = art.check_duration_budget_contract(
+            {"rows": [], "duration_budget": db})
+        self.assertTrue(any("[DB-STRUCT] rows[0] eksik alan(lar)" in x["detail"]
+                            for x in f), f)
+
+    def test_non_bool_warn_flag_detected(self):
+        db = self._db()
+        db["rows"][0]["duration_warn"] = "evet"
+        f = art.check_duration_budget_contract(
+            {"rows": [], "duration_budget": db})
+        self.assertTrue(any("rows[0].duration_warn bool değil" in x["detail"]
+                            for x in f), f)
+
+    def test_warnings_drift_detected(self):
+        db = self._db()
+        db["warnings"] = {"duration_violations": 0, "budget_violations": 0,
+                          "total_runs": 0, "violations": []}
+        f = art.check_duration_budget_contract(
+            {"rows": [], "duration_budget": db})
+        self.assertTrue(any("[DB-CONSIST] warnings" in x["detail"]
+                            for x in f), f)
+
+    def test_non_dict_db_fails(self):
+        f = art.check_duration_budget_contract(
+            {"rows": [], "duration_budget": [1, 2]})
+        self.assertIn("dict değil", f[0]["detail"])
+
+    def test_bad_summary_stats_detected(self):
+        db = self._db()
+        db["summary"]["duration_s"] = {"count": 1}  # min/max/avg yok
+        f = art.check_duration_budget_contract(
+            {"rows": [], "duration_budget": db})
+        self.assertTrue(any("summary.duration_s stats sözleşmesi bozuk"
+                            in x["detail"] for x in f), f)
+
+    def test_empty_rows_contract(self):
+        db = rt.build_duration_budget([])  # warnings=None
+        self.assertEqual(art.check_duration_budget_contract(
+            {"rows": [], "duration_budget": db}), [])
 
 
 class TestCheckChangelogOrder(unittest.TestCase):
@@ -673,11 +757,13 @@ class TestOfflineMode(unittest.TestCase):
             (ref_dir / "refs-online-111.zip").write_bytes(blob)
 
             tp = pathlib.Path(td) / "refs-trend.json"
-            tp.write_text(json.dumps({"rows": [
-                {"run_id": 111, "date": "a", "total_online": 61,
-                 "verified": 61, "unverified": 0, "mismatch": 0,
-                 "by_source": dict(_src)},
-            ]}), encoding="utf-8")
+            offline_rows = [{"run_id": 111, "date": "a", "total_online": 61,
+                             "verified": 61, "unverified": 0, "mismatch": 0,
+                             "by_source": dict(_src)}]
+            tp.write_text(json.dumps({"rows": offline_rows,
+                                      "duration_budget": rt.build_duration_budget(
+                                          offline_rows)}),
+                          encoding="utf-8")
             (pathlib.Path(td) / "refs-trend.md").write_text(
                 "## Özet\n\nKapsam geçiş dipnotu (54/49 → 56/26 → 61/61): "
                 "V5n ile 56/56'ya yükseldi — bu 56/56 yerel doğrulama. "
@@ -771,11 +857,13 @@ class TestOfflineMode(unittest.TestCase):
                 (ref_dir / "refs-online-111.zip").write_bytes(blob)
 
                 tp = pathlib.Path(td) / "refs-trend.json"
-                tp.write_text(json.dumps({"rows": [
-                    {"run_id": 111, "date": "a", "total_online": 61,
-                     "verified": 61, "unverified": 0, "mismatch": 0,
-                     "by_source": dict(_src)},
-                ]}), encoding="utf-8")
+                off_rows = [{"run_id": 111, "date": "a", "total_online": 61,
+                             "verified": 61, "unverified": 0, "mismatch": 0,
+                             "by_source": dict(_src)}]
+                tp.write_text(json.dumps({"rows": off_rows,
+                                          "duration_budget": rt.build_duration_budget(
+                                              off_rows)}),
+                              encoding="utf-8")
                 (pathlib.Path(td) / "refs-trend.md").write_text(
                     "## Özet\n\nKapsam geçiş dipnotu (54/49 → 61/61) "
                     "V5n V5q V5t V5w. 56/56 yerel doğrulama.\n\n",

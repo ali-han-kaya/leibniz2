@@ -171,6 +171,126 @@ def audit(trend, source_reports):
     }
 
 
+def check_duration_budget_contract(trend):
+    """duration_budget JSON bölümünün sözleşmesini doğrular.
+
+    refs_trend.py main()'i her run'da duration_budget'ı build_duration_budget
+    ile üretir (saf fonksiyon — sözleşmenin TEK kaynağı). Bu denetim:
+      DB-STRUCT  — run_count/rows/summary/warnings anahtar ve tip sözleşmesi
+                   (build_duration_budget docstring'deki JSON şeması),
+      DB-CONSIST — run_count == len(rows), warnings == kayıtlı rows'tan
+                   yeniden üretilen özet (summary/warnings üretici drift'i).
+    Kayıtlı rows, build_duration_budget'ın girdisi olan history kayıtlarının
+    kendisi olduğundan yeniden üretim deterministiktir ve birebir eşleşmeli.
+
+    duration_budget yoksa: trend'te rows da yoksa bölümün yokluğu doğaldır
+    (boş run → None); rows VARSA eksiklik FAIL'dir (main() her zaman yazar).
+    Döndürür: [finding dict] — boşsa sözleşme birebir uyumlu.
+    """
+    findings = []
+    rows = trend.get("rows", [])
+    db = trend.get("duration_budget")
+    if db is None:
+        if rows:
+            findings.append({
+                "kind": "duration_budget",
+                "detail": "[DB-STRUCT] duration_budget yok (rows dolu — "
+                           "main() her zaman yazar; üretici drift'i)",
+            })
+        return findings
+    if not isinstance(db, dict):
+        findings.append({
+            "kind": "duration_budget",
+            "detail": (f"[DB-STRUCT] duration_budget dict değil: "
+                       f"{type(db).__name__}"),
+        })
+        return findings
+
+    # ── DB-STRUCT: anahtar + tip sözleşmesi ───────────────────────────────
+    req = {"run_count", "rows", "summary", "warnings"}
+    missing = req - set(db.keys())
+    if missing:
+        findings.append({
+            "kind": "duration_budget",
+            "detail": (f"[DB-STRUCT] eksik anahtar(lar): "
+                       f"{', '.join(sorted(missing))}"),
+        })
+    if not isinstance(db.get("run_count"), int):
+        findings.append({
+            "kind": "duration_budget",
+            "detail": (f"[DB-STRUCT] run_count int değil: "
+                       f"{db.get('run_count')!r}"),
+        })
+    db_rows = db.get("rows")
+    if not isinstance(db_rows, list):
+        findings.append({
+            "kind": "duration_budget",
+            "detail": f"[DB-STRUCT] rows list değil: {type(db_rows).__name__}",
+        })
+    else:
+        row_keys = {"date", "run_id", "duration_s", "budget_usd", "verdict",
+                    "p0", "p1", "z3_passed", "z3_total", "duration_warn",
+                    "budget_warn"}
+        for i, r in enumerate(db_rows):
+            if not isinstance(r, dict):
+                findings.append({
+                    "kind": "duration_budget",
+                    "detail": (f"[DB-STRUCT] rows[{i}] dict değil: "
+                               f"{type(r).__name__}"),
+                })
+                continue
+            rk_missing = row_keys - set(r.keys())
+            if rk_missing:
+                findings.append({
+                    "kind": "duration_budget",
+                    "detail": (f"[DB-STRUCT] rows[{i}] eksik alan(lar): "
+                               f"{', '.join(sorted(rk_missing))}"),
+                })
+            for b in ("duration_warn", "budget_warn"):
+                if not isinstance(r.get(b), bool):
+                    findings.append({
+                        "kind": "duration_budget",
+                        "detail": (f"[DB-STRUCT] rows[{i}].{b} bool değil: "
+                                   f"{r.get(b)!r}"),
+                    })
+    sm = db.get("summary")
+    if not isinstance(sm, dict):
+        findings.append({
+            "kind": "duration_budget",
+            "detail": (f"[DB-STRUCT] summary dict değil: "
+                       f"{type(sm).__name__}"),
+        })
+    else:
+        for key in ("duration_s", "budget_usd"):
+            st = sm.get(key)
+            if not isinstance(st, dict) or not {"count", "min", "max", "avg"} \
+                    <= set(st.keys()):
+                findings.append({
+                    "kind": "duration_budget",
+                    "detail": (f"[DB-STRUCT] summary.{key} stats sözleşmesi "
+                               f"bozuk: {st!r}"),
+                })
+
+    # ── DB-CONSIST: üretici drift'i — kayıtlı rows'tan YENİDEN üret ve karşılaştır
+    # build_duration_budget deterministiktir: aynı rows → aynı bölüm.
+    # warnings boş rows'ta None, dolu rows'ta dict üretir; run_count len(rows).
+    if isinstance(db_rows, list):
+        if db.get("run_count") != len(db_rows):
+            findings.append({
+                "kind": "duration_budget",
+                "detail": (f"[DB-CONSIST] run_count {db.get('run_count')} ≠ "
+                           f"len(rows) {len(db_rows)}"),
+            })
+        rebuilt = rt.build_duration_budget(db_rows)
+        if db.get("warnings") != rebuilt.get("warnings"):
+            findings.append({
+                "kind": "duration_budget",
+                "detail": (f"[DB-CONSIST] warnings kayıtlı ≠ yeniden üretim "
+                           f"(üretici drift'i): {db.get('warnings')!r}"),
+            })
+    return findings
+
+
 def check_changelog_order():
     """CHANGELOG listesinin tarih/sıra doğruluğunu denetler.
 
@@ -508,6 +628,13 @@ def main(argv=None):
         result["ok"] = False
         result["verdict"] = "FAIL"
 
+    # duration_budget JSON sözleşmesi (build_duration_budget tek kaynak).
+    db_findings = check_duration_budget_contract(trend)
+    result["findings"] += db_findings
+    if db_findings:
+        result["ok"] = False
+        result["verdict"] = "FAIL"
+
     if args.json:
         print(json.dumps({
             "verdict": result["verdict"],
@@ -547,6 +674,8 @@ def main(argv=None):
                                "changelog_format", "changelog_rendered"):
                 print(f"  [FAIL] {f['detail']}")
             elif f["kind"].startswith("summary_"):
+                print(f"  [FAIL] {f['detail']}")
+            elif f["kind"] == "duration_budget":
                 print(f"  [FAIL] {f['detail']}")
         print(f"\nSONUÇ: {result['verdict']} — "
               f"{'trend kaynakla birebir tutarlı' if result['ok'] else 'DRIFT: yukarıdaki [FAIL] satırları'}")

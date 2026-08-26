@@ -327,6 +327,97 @@ def build_duration_budget(history_rows):
     }
 
 
+def build_unverified_series(rows):
+    """rows'tan UNVERIFIED zaman serisi bölümünü üretir (fail-closed, saf).
+
+    main() ve birim testleri ORTAK kullanır — bölümün JSON sözleşmesi tek
+    kaynaktır:
+        {latest, max, zero_runs, total_runs,
+         trend: None | {direction: 'azalıyor'|'artıyor'|'sabit',
+                        window, first, last},
+         lines: [str]}   # markdown satırları (bölüm başlığı dahil)
+    Boş rows → None (bölüm yok anlamında; main() bunu unverified_series
+    olarak JSON'a yazmaz). lines, main()'in refs-trend.md'ye yazdığıyla
+    birebir aynıdır — testler satır içeriğini sabitler.
+    """
+    if not rows:
+        return None
+    series = [(r["date"], r["unverified"]) for r in rows]
+    latest = series[-1][1] if series else 0
+    maximum = max(u for _, u in series) if series else 0
+    zero_runs = sum(1 for _, u in series if u == 0)
+    trend = None
+    lines = [
+        "## UNVERIFIED Zaman Serisi",
+        "",
+        f"- **Son durum:** {latest} doğrulanamayan referans",
+        f"- **Maksimum:** {maximum} (tüm run'larda)",
+        f"- **Sıfır olan run sayısı:** {zero_runs}/{len(rows)}",
+        "",
+    ]
+    recent = series[-5:] if len(series) >= 5 else series
+    if len(recent) > 1:
+        direction = ("↓ azalıyor" if recent[-1][1] < recent[0][1]
+                     else ("↑ artıyor" if recent[-1][1] > recent[0][1]
+                           else "→ sabit"))
+        trend = {"direction": direction, "window": len(recent),
+                 "first": recent[0][1], "last": recent[-1][1]}
+        lines.append(f"- **Trend (son {len(recent)} run):** {direction}"
+                     f" ({recent[0][1]} → {recent[-1][1]})")
+        lines += [""]
+    return {
+        "latest": latest,
+        "max": maximum,
+        "zero_runs": zero_runs,
+        "total_runs": len(rows),
+        "trend": trend,
+        "lines": lines,
+    }
+
+
+def detect_stale_artifacts(rows, history_rows, window=3):
+    """Son N run'da refs-online artifact'ı olmayan run'ları bulur (saf).
+
+    refs_ids = refs-online artifact'ından üretilen run'lar; history_rows'un
+    son `window` run'ından bu kümede olmayanlar BAYAT sayılır (o run'larda
+    çevrimiçi referans doğrulaması çalışmamış olabilir). Döndürür:
+        {stale_runs: [run_id], lines: [str], ok: bool}
+    - boş rows/history_rows → stale_runs [], lines [] (bölüm yok).
+    - bayat yok → ok True, "✅ ... mevcut" satırları.
+    - bayat var → ok False, "⚠️ ..." satırları (run_id'ler sıralı).
+    lines, main()'in refs-trend.md'ye yazdığıyla birebir aynıdır.
+    """
+    if not rows or not history_rows:
+        return {"stale_runs": [], "lines": [], "ok": True}
+    refs_ids = {r["run_id"] for r in rows if r.get("run_id")}
+    last_n = history_rows[-window:] if len(history_rows) >= window else history_rows
+    last_n_ids = {h["run_id"] for h in last_n if h.get("run_id")}
+    stale = sorted(last_n_ids - refs_ids)
+    if stale:
+        return {
+            "stale_runs": stale,
+            "ok": False,
+            "lines": [
+                "## ⚠️ Bayat refs-online Artifact Uyarısı",
+                "",
+                f"Son {len(last_n)} run'da refs-online artifact'ı bulunmayan"
+                f" run'lar: {', '.join(str(i) for i in stale)}",
+                "Bu run'larda çevrimiçi referans doğrulaması çalışmamış olabilir.",
+                "",
+            ],
+        }
+    return {
+        "stale_runs": [],
+        "ok": True,
+        "lines": [
+            "## ✅ refs-online Artifact Durumu",
+            "",
+            f"Son {len(last_n)} run'da tüm run'larda refs-online artifact'ı mevcut.",
+            "",
+        ],
+    }
+
+
 def short_date(iso):
     try:
         dt = datetime.datetime.fromisoformat(iso.replace("Z", "+00:00"))
@@ -754,56 +845,21 @@ def main():
             ]
             lines += [""]
 
-    # ── UNVERIFIED zaman serisi ──────────────────────────────────────────
-    unv_latest = unv_max = unv_zero_runs = 0
-    stale_runs = set()
-    if rows:
-        unv_series = [(r["date"], r["unverified"]) for r in rows]
-        unv_latest = unv_series[-1][1] if unv_series else 0
-        unv_max = max(u for _, u in unv_series) if unv_series else 0
-        unv_zero_runs = sum(1 for _, u in unv_series if u == 0)
-        lines += [
-            "## UNVERIFIED Zaman Serisi",
-            "",
-            f"- **Son durum:** {unv_latest} doğrulanamayan referans",
-            f"- **Maksimum:** {unv_max} (tüm run'larda)",
-            f"- **Sıfır olan run sayısı:** {unv_zero_runs}/{len(rows)}",
-            "",
-        ]
-        # Son 5 run'daki trend
-        recent = unv_series[-5:] if len(unv_series) >= 5 else unv_series
-        if len(recent) > 1:
-            trend = "↓ azalıyor" if recent[-1][1] < recent[0][1] else (
-                "↑ artıyor" if recent[-1][1] > recent[0][1] else "→ sabit")
-            lines.append(f"- **Trend (son {len(recent)} run):** {trend}"
-                         f" ({recent[0][1]} → {recent[-1][1]})")
-            lines += [""]
+    # ── UNVERIFIED zaman serisi (saf fonksiyon: build_unverified_series) ──
+    unv = build_unverified_series(rows)
+    if unv:
+        lines += unv["lines"]
+        unv_latest = unv["latest"]
+        unv_max = unv["max"]
+        unv_zero_runs = unv["zero_runs"]
+    else:
+        unv_latest = unv_max = unv_zero_runs = 0
 
-    # ── Bayat artifact uyarısı ───────────────────────────────────────────
+    # ── Bayat artifact uyarısı (saf fonksiyon: detect_stale_artifacts) ──
     # refs-online artifact'ları son N run'da güncellenmemişse uyarı.
-    if rows and history_rows:
-        refs_ids = {r["run_id"] for r in rows if r.get("run_id")}
-        hist_ids = {h["run_id"] for h in history_rows if h.get("run_id")}
-        # Son 3 run'da refs-online artifact'ı olmayanlar
-        last_3_hist = history_rows[-3:] if len(history_rows) >= 3 else history_rows
-        last_3_ids = {h["run_id"] for h in last_3_hist if h.get("run_id")}
-        stale_runs = last_3_ids - refs_ids
-        if stale_runs:
-            lines += [
-                "## ⚠️ Bayat refs-online Artifact Uyarısı",
-                "",
-                f"Son {len(last_3_hist)} run'da refs-online artifact'ı bulunmayan"
-                f" run'lar: {', '.join(str(i) for i in sorted(stale_runs))}",
-                "Bu run'larda çevrimiçi referans doğrulaması çalışmamış olabilir.",
-                "",
-            ]
-        else:
-            lines += [
-                "## ✅ refs-online Artifact Durumu",
-                "",
-                f"Son {len(last_3_hist)} run'da tüm run'larda refs-online artifact'ı mevcut.",
-                "",
-            ]
+    stale = detect_stale_artifacts(rows, history_rows)
+    lines += stale["lines"]
+    stale_runs = stale["stale_runs"]
 
     # Changelog: denetim düzeltmelerinin kısa kaydı (kaynak: CHANGELOG).
     lines += changelog_lines()

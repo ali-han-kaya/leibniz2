@@ -475,6 +475,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-26 | chore | gate_jobs tam küme testi + status checks run summary tablosu | [`ebfeebd`](https://github.com/ali-han-kaya/leibniz2/commit/ebfeebd) |
 | 2026-08-26 | test | config merge-pattern (prefixsiz) — K10 PASS kanıtı + advisory kontrat kapıları | [`da87429`](https://github.com/ali-han-kaya/leibniz2/commit/da87429) |
 | 2026-08-26 | feat | (verify) K10 çift tespit + K12/K13 negatif senaryo kapıları | [`8a6fa98`](https://github.com/ali-han-kaya/leibniz2/commit/8a6fa98) |
+| 2026-08-26 | feat | (verify) K10 çift tespit + K12/K13 negatif senaryo kapıları | [`7fa4997`](https://github.com/ali-han-kaya/leibniz2/commit/7fa4997) |
 
 ### Regresyon notları
 

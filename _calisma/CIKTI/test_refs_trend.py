@@ -212,6 +212,108 @@ class TestChangelog(unittest.TestCase):
             rt.CHANGELOG = saved
 
 
+class TestUnverifiedSeries(unittest.TestCase):
+    """build_unverified_series — UNVERIFIED zaman serisi bölümü (saf, fail-closed)."""
+
+    def _rows(self, values):
+        return [{"date": f"d{i}", "unverified": u}
+                for i, u in enumerate(values)]
+
+    def test_structure_with_valid_rows(self):
+        s = rt.build_unverified_series(self._rows([2, 1, 0]))
+        self.assertEqual(s["latest"], 0)
+        self.assertEqual(s["max"], 2)
+        self.assertEqual(s["zero_runs"], 1)
+        self.assertEqual(s["total_runs"], 3)
+        self.assertIsNotNone(s["trend"])
+        self.assertEqual(s["trend"]["direction"], "↓ azalıyor")
+        self.assertEqual(s["trend"]["first"], 2)
+        self.assertEqual(s["trend"]["last"], 0)
+        joined = "\n".join(s["lines"])
+        self.assertIn("## UNVERIFIED Zaman Serisi", joined)
+        self.assertIn("- **Son durum:** 0 doğrulanamayan referans", joined)
+        self.assertIn("- **Maksimum:** 2 (tüm run'larda)", joined)
+        self.assertIn("- **Sıfır olan run sayısı:** 1/3", joined)
+        self.assertIn("- **Trend (son 3 run):** ↓ azalıyor (2 → 0)", joined)
+
+    def test_empty_returns_none(self):
+        self.assertIsNone(rt.build_unverified_series([]))
+
+    def test_rising_trend(self):
+        s = rt.build_unverified_series(self._rows([0, 1, 5]))
+        self.assertEqual(s["trend"]["direction"], "↑ artıyor")
+        self.assertEqual(s["latest"], 5)
+        self.assertEqual(s["max"], 5)
+        self.assertEqual(s["zero_runs"], 1)
+
+    def test_flat_trend(self):
+        s = rt.build_unverified_series(self._rows([3, 3, 3]))
+        self.assertEqual(s["trend"]["direction"], "→ sabit")
+        self.assertEqual(s["trend"]["last"], 3)
+
+    def test_trend_window_caps_at_five(self):
+        s = rt.build_unverified_series(self._rows([9, 9, 9, 9, 1, 1, 1]))
+        self.assertEqual(s["trend"]["window"], 5)
+        self.assertEqual(s["trend"]["first"], 9)
+        self.assertEqual(s["trend"]["last"], 1)
+
+    def test_single_row_no_trend(self):
+        s = rt.build_unverified_series(self._rows([0]))
+        self.assertIsNone(s["trend"])
+        self.assertEqual(s["total_runs"], 1)
+        self.assertEqual(s["zero_runs"], 1)
+
+
+class TestStaleArtifacts(unittest.TestCase):
+    """detect_stale_artifacts — bayat refs-online artifact uyarısı (saf)."""
+
+    def test_no_stale_when_all_recent_runs_have_refs(self):
+        # Son 3 history run'ı (2, 3, 4) refs-online'da da var → bayat yok.
+        rows = [{"run_id": 1}, {"run_id": 2}, {"run_id": 3}, {"run_id": 4}]
+        history = [{"run_id": 1}, {"run_id": 2}, {"run_id": 3}, {"run_id": 4}]
+        s = rt.detect_stale_artifacts(rows, history)
+        self.assertEqual(s["stale_runs"], [])
+        self.assertTrue(s["ok"])
+        joined = "\n".join(s["lines"])
+        self.assertIn("## ✅ refs-online Artifact Durumu", joined)
+        self.assertIn("tüm run'larda refs-online artifact'ı mevcut", joined)
+
+    def test_stale_runs_flagged(self):
+        # Son 3 history run'ı: 2, 3, 4 — refs-online bunların HİÇBİRİNİ
+        # üretmemiş (refs yalnızca 1). Üçü de bayat.
+        rows = [{"run_id": 1}]
+        history = [{"run_id": 1}, {"run_id": 2}, {"run_id": 3}, {"run_id": 4}]
+        s = rt.detect_stale_artifacts(rows, history, window=3)
+        self.assertEqual(s["stale_runs"], [2, 3, 4])
+        self.assertFalse(s["ok"])
+        joined = "\n".join(s["lines"])
+        self.assertIn("## ⚠️ Bayat refs-online Artifact Uyarısı", joined)
+        self.assertIn("run'lar: 2, 3, 4", joined)
+
+    def test_stale_sorted_and_multiple(self):
+        rows = [{"run_id": 5}]
+        history = [{"run_id": 3}, {"run_id": 4}, {"run_id": 5}]
+        s = rt.detect_stale_artifacts(rows, history, window=3)
+        self.assertEqual(s["stale_runs"], [3, 4])
+        self.assertIn("run'lar: 3, 4", "\n".join(s["lines"]))
+
+    def test_empty_inputs(self):
+        self.assertEqual(rt.detect_stale_artifacts([], []),
+                         {"stale_runs": [], "lines": [], "ok": True})
+        self.assertEqual(rt.detect_stale_artifacts([], [{"run_id": 1}]),
+                         {"stale_runs": [], "lines": [], "ok": True})
+
+    def test_custom_window(self):
+        rows = [{"run_id": 1}, {"run_id": 2}]
+        history = [{"run_id": 1}, {"run_id": 2}, {"run_id": 3}]
+        # window=2: son iki run (2, 3) — 3 refs'te yok → bayat.
+        s = rt.detect_stale_artifacts(rows, history, window=2)
+        self.assertEqual(s["stale_runs"], [3])
+        # window=3: son üç run (1, 2, 3) — 3 yine bayat.
+        s2 = rt.detect_stale_artifacts(rows, history, window=3)
+        self.assertEqual(s2["stale_runs"], [3])
+
+
 class TestShortDate(unittest.TestCase):
     def test_iso_z(self):
         self.assertEqual(rt.short_date("2026-08-19T12:08:38Z"),
