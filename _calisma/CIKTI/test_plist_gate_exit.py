@@ -169,6 +169,120 @@ class TestCheckPlistDriftExitCodes(unittest.TestCase):
         self.assertIn("[PASS] com.freebuff.preview-server.plist",
                       buf.getvalue())
 
+    def test_remove_extra_cleans_and_passes(self):
+        """--remove-extra: fazla plist'i otomatik temizleyip PASS'e döner (e2e).
+
+        Gerçek render sonrası render-home'a golden'da olmayan bir plist
+        bırakılır; --remove-extra ile main() fazlalığı SİLİP denetimi yeniden
+        koşar → exit 0 + TÜMÜ PASS. Fazla dosya diskten gerçekten kalkar;
+        yönetilen iki profil PASS kalır.
+        """
+        import check_plist_drift as cpd
+        from unittest import mock
+        render_home = tempfile.mkdtemp(prefix="plist-rmextra-")
+        real_render = cpd.run_render
+        extra_path = os.path.join(render_home, "Library", "LaunchAgents",
+                                  "com.example.extra.plist")
+
+        def render_then_extra(script, home):
+            rc, out = real_render(script, home)  # gerçek render (2 profil)
+            la = os.path.join(home, "Library", "LaunchAgents")
+            os.makedirs(la, exist_ok=True)
+            with open(os.path.join(la, "com.example.extra.plist"), "w",
+                      encoding="utf-8") as f:
+                f.write(SAMPLE_PLIST)
+            return rc, out
+
+        buf = io.StringIO()
+        try:
+            with mock.patch.object(cpd, "run_render",
+                                   side_effect=render_then_extra), \
+                    contextlib.redirect_stdout(buf):
+                rc = cpd.main(["--render-home", render_home,
+                               "--golden-dir", GOLDEN_DIR, "--remove-extra"])
+            # Temizlik sonrası exit 0 — drift kalmadı.
+            self.assertEqual(rc, 0, buf.getvalue())
+            # Fazla dosya diskten GERÇEKTEN silindi.
+            self.assertFalse(os.path.exists(extra_path),
+                             "fazla plist --remove-extra ile silinmedi")
+            self.assertIn("[TEMİZLENDİ] com.example.extra.plist", buf.getvalue())
+            self.assertIn("SONUÇ: TÜMÜ PASS", buf.getvalue())
+            # Yönetilen iki profil PASS.
+            self.assertIn("[PASS] com.freebuff.preview-leibniz2.plist",
+                          buf.getvalue())
+            self.assertIn("[PASS] com.freebuff.preview-server.plist",
+                          buf.getvalue())
+            # P0 bulgusu temizlendi — rapor has_p0=False taşımalı.
+            self.assertNotIn("P0=1", buf.getvalue())
+        finally:
+            shutil.rmtree(render_home, ignore_errors=True)
+
+    def test_remove_extra_json_reports_removed(self):
+        """--remove-extra --json: removed_extra listesi + ok=True sidecar'da."""
+        import check_plist_drift as cpd
+        from unittest import mock
+        render_home = tempfile.mkdtemp(prefix="plist-rmjson-")
+        real_render = cpd.run_render
+
+        def render_then_extra(script, home):
+            rc, out = real_render(script, home)
+            la = os.path.join(home, "Library", "LaunchAgents")
+            os.makedirs(la, exist_ok=True)
+            with open(os.path.join(la, "com.example.extra.plist"), "w",
+                      encoding="utf-8") as f:
+                f.write(SAMPLE_PLIST)
+            return rc, out
+
+        buf = io.StringIO()
+        try:
+            with mock.patch.object(cpd, "run_render",
+                                   side_effect=render_then_extra), \
+                    contextlib.redirect_stdout(buf):
+                rc = cpd.main(["--json", "--render-home", render_home,
+                               "--golden-dir", GOLDEN_DIR, "--remove-extra"])
+            self.assertEqual(rc, 0, buf.getvalue())
+            d = json.loads(buf.getvalue().strip().splitlines()[-1])
+            self.assertTrue(d["ok"])
+            self.assertFalse(d["drift"])
+            self.assertFalse(d["has_p0"])
+            self.assertTrue(d["remove_extra"])
+            self.assertEqual(d["removed_extra"], ["com.example.extra.plist"])
+            self.assertEqual(d["remove_failed"], [])
+        finally:
+            shutil.rmtree(render_home, ignore_errors=True)
+
+    def test_remove_extra_without_flag_keeps_file(self):
+        """--remove-extra VERİLMEDİĞİNDE fazla plist DURUR ve exit 1 kalır."""
+        import check_plist_drift as cpd
+        from unittest import mock
+        render_home = tempfile.mkdtemp(prefix="plist-keepextra-")
+        real_render = cpd.run_render
+        extra_path = os.path.join(render_home, "Library", "LaunchAgents",
+                                  "com.example.extra.plist")
+
+        def render_then_extra(script, home):
+            rc, out = real_render(script, home)
+            la = os.path.join(home, "Library", "LaunchAgents")
+            os.makedirs(la, exist_ok=True)
+            with open(os.path.join(la, "com.example.extra.plist"), "w",
+                      encoding="utf-8") as f:
+                f.write(SAMPLE_PLIST)
+            return rc, out
+
+        buf = io.StringIO()
+        try:
+            with mock.patch.object(cpd, "run_render",
+                                   side_effect=render_then_extra), \
+                    contextlib.redirect_stdout(buf):
+                rc = cpd.main(["--render-home", render_home,
+                               "--golden-dir", GOLDEN_DIR])
+            self.assertEqual(rc, 1, buf.getvalue())
+            self.assertTrue(os.path.exists(extra_path),
+                            "bayrak yokken fazla plist silinmemeli")
+            self.assertNotIn("TEMİZLENDİ", buf.getvalue())
+        finally:
+            shutil.rmtree(render_home, ignore_errors=True)
+
 
 class TestPlistOutSidecar(unittest.TestCase):
     """--plist-out: --plist-check ham çıktısı + K12 raporu tek sidecar JSON'da."""
