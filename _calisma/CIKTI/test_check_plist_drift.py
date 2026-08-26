@@ -84,6 +84,8 @@ class TestCheck(unittest.TestCase):
         self.assertFalse(error)
         self.assertTrue(drift)
         self.assertEqual(results[0]["verdict"], "DRIFT")
+        # İçerik farkı = diğer golden drift'i → P1 (advisory).
+        self.assertEqual(results[0]["priority"], "P1")
 
     def test_drift_on_missing_rendered(self):
         gd, rd = make_tree(
@@ -97,6 +99,8 @@ class TestCheck(unittest.TestCase):
         self.assertTrue(drift)
         missing = [r for r in results if r["label"] == "com.freebuff.preview-server.plist"]
         self.assertEqual(missing[0]["verdict"], "DRIFT")
+        # Eksik profil = diğer golden drift'i → P1 (advisory).
+        self.assertEqual(missing[0]["priority"], "P1")
 
     def test_drift_on_extra_rendered(self):
         gd, rd = make_tree(
@@ -110,6 +114,12 @@ class TestCheck(unittest.TestCase):
         self.assertTrue(drift)
         extra = [r for r in results if r["label"] == "com.freebuff.preview-extra.plist"]
         self.assertEqual(extra[0]["verdict"], "DRIFT")
+        # Fazla-profil drift'i P0 (fail-closed): golden seti şablonla senkron değil.
+        self.assertEqual(extra[0]["priority"], "P0")
+        # Yönetilen profil aynı kaldığı için PASS + priority None.
+        ok = [r for r in results if r["verdict"] == "PASS"]
+        self.assertTrue(ok)
+        self.assertIsNone(ok[0]["priority"])
 
     def test_drift_on_invalid_plist(self):
         gd, rd = make_tree(
@@ -127,6 +137,10 @@ class TestCheck(unittest.TestCase):
         # (burada render geçersiz → DRIFT); içerik farkı da ayrıca yakalanır.
         self.assertFalse(error)
         self.assertTrue(drift)
+        # Yapısal geçersizlik de P1 (advisory) — yalnızca fazla-profil P0'dır.
+        invalids = [r for r in results if r["verdict"] == "DRIFT"]
+        self.assertTrue(invalids)
+        self.assertTrue(all(r["priority"] == "P1" for r in invalids))
 
     def test_error_on_empty_golden(self):
         gd, rd = make_tree(self.root, {}, {})

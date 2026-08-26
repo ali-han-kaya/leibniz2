@@ -78,6 +78,7 @@ HOOK_COVERAGE = {
         "test_run_summary_k0.py",
         "test_run_summary_klayers.py",
         "test_run_summary_lineage.py",
+        "test_lineage_sidecar_guarantee.py",
         "test_run_summary_precommit.py",
         "test_consolidate_summary.py",
         "test_consolidate_budget.py",

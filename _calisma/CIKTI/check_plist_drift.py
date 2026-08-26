@@ -17,9 +17,19 @@ Exit kodu:
   1 = drift (bayat/golden'dan farklı/geçersiz/eksik/fazla)
   2 = hata (script yok, render başarısız, golden dizini yok)
 
-Kullanım:
+Drift önceliği (results[].priority + has_p0/has_p1):
+  P0 = fail-closed: fazla-profil (golden'da olmayan render edilmiş profil) —
+       golden seti şablonla senkron değil, build'i BLOKE eder.
+  P1 = advisory: diğer drift'ler (eksik/bayat/yapısal geçersiz).Kullanım:
   check_plist_drift.py [--script PATH] [--golden-dir DIR]
-                       [--canonical-home PATH] [--render-home DIR] [--json]
+                       [--canonical-home PATH] [--render-home DIR]
+                       [--remove-extra] [--json]
+
+--remove-extra: fazla-profil drift'ini OTOMATİK TEMİZLER — golden'da
+olmayan render edilmiş plist dosyalarını silip denetimi yeniden koşar.
+Yalnızca fazla-profil (P0) kaynaklı drift varsa temizlik sonrası exit 0
+döner; diğer drift türleri (eksik/bayat/geçersiz) kaldıysa yine exit 1.
+Silinen dosyalar çıktıda [TEMİZLENDİ], JSON'da removed_extra listesinde.
 """
 import argparse
 import json
@@ -59,9 +69,17 @@ def check(render_home, golden_dir, canonical_home):
     """Render edilmiş plist'leri golden ile karşılaştır.
 
     Döner: (results, drift, error)
-      results = [ {label, verdict, detail} ... ]  (sıralı, deterministik)
+      results = [ {label, verdict, priority, detail} ... ]  (sıralı, deterministik)
       drift   = True ise en az bir profil golden'dan farklı
       error   = True ise denetim koşulamadı (exit 2)
+
+    priority öncelik sınıfıdır:
+      P0 — fail-closed: fazla-profil drift'i (golden'da olmayan render edilmiş
+           profil). Golden seti şablonla senkron DEĞİL demektir — şablon yeni
+           bir profil üretiyor ama commit'li golden'ı yok. Sessiz kapsam
+           kaybını önlemek için build'i BLOKE eder.
+      P1 — advisory: diğer drift'ler (eksik/bayat/yapısal geçersiz).
+      None — PASS.
     """
     results = []
     drift = False
@@ -88,7 +106,7 @@ def check(render_home, golden_dir, canonical_home):
         rpath = rendered_files.get(name)
         if rpath is None:
             drift = True
-            results.append({"label": name, "verdict": "DRIFT",
+            results.append({"label": name, "verdict": "DRIFT", "priority": "P1",
                             "detail": "render edilmedi (eksik)"})
             continue
 
@@ -99,23 +117,26 @@ def check(render_home, golden_dir, canonical_home):
 
         if rendered != golden:
             drift = True
-            results.append({"label": name, "verdict": "DRIFT",
+            results.append({"label": name, "verdict": "DRIFT", "priority": "P1",
                             "detail": "şablondan üretilen içerik golden'dan farklı"})
             continue
 
         if not plist_is_valid(rpath):
             drift = True
-            results.append({"label": name, "verdict": "DRIFT",
+            results.append({"label": name, "verdict": "DRIFT", "priority": "P1",
                             "detail": "yapısal geçersiz (plutil/plistlib)"})
             continue
 
-        results.append({"label": name, "verdict": "PASS", "detail": "golden ile birebir + geçerli"})
+        results.append({"label": name, "verdict": "PASS", "priority": None,
+                        "detail": "golden ile birebir + geçerli"})
 
     # Golden'da olmayan fazladan render edilmiş plist var mı? (beklenmedik profil)
+    # Fazla-profil drift'i P0 (fail-closed): golden seti şablonla senkron değil.
+    # Diğer drift'ler (eksik/bayat/geçersiz) P1 (advisory) kalır.
     for name in rendered_files:
         if name not in golden_files:
             drift = True
-            results.append({"label": name, "verdict": "DRIFT",
+            results.append({"label": name, "verdict": "DRIFT", "priority": "P0",
                             "detail": "golden'da olmayan fazla profil"})
 
     return results, drift, error
@@ -140,6 +161,10 @@ def main(argv=None):
                     help="golden'da kullanılan kanonik HOME (vars. /Users/ci)")
     ap.add_argument("--render-home", default=None,
                     help="render hedef HOME (vars. geçici dizin; test için sabitlenebilir)")
+    ap.add_argument("--remove-extra", action="store_true",
+                    help="fazla-profil drift'ini otomatik temizle: golden'da "
+                         "olmayan render edilmiş plist dosyalarını silip "
+                         "denetimi yeniden koşar (P0 bulgusu giderilir)")
     ap.add_argument("--json", action="store_true", help="JSON çıktı")
     args = ap.parse_args(argv)
 
@@ -190,16 +215,53 @@ def main(argv=None):
                 print(json.dumps(report, ensure_ascii=False))
             return 2
 
+        # ── --remove-extra: fazla-profil otomatik temizleme ──────────────────
+        # Golden'da olmayan render edilmiş plist'ler (P0 bulguları) SİLİNİR ve
+        # denetim yeniden koşulur. Yalnızca fazla-profil kaynaklı drift
+        # varsa temizlik sonrası exit 0; diğer drift türleri kaldıysa yine
+        # exit 1. Silinemeyen dosya raporlanır ve drift KALIR (fail-closed).
+        removed_extra = []
+        remove_failed = []
+        extras = [r for r in results if r.get("priority") == "P0"]
+        if args.remove_extra and extras:
+            la_dir = os.path.join(render_home, "Library", "LaunchAgents")
+            for r in extras:
+                try:
+                    os.remove(os.path.join(la_dir, r["label"]))
+                    removed_extra.append(r["label"])
+                except OSError as e:
+                    remove_failed.append(f"{r['label']}: {e}")
+            if removed_extra:
+                results, drift, error = check(render_home, args.golden_dir,
+                                              args.canonical_home)
+
+        # Fazla-profil drift'i P0 (fail-closed); diğer drift'ler P1 (advisory).
+        has_p0 = any(r.get("priority") == "P0" for r in results)
+        has_p1 = any(r.get("priority") == "P1" for r in results)
         report = {"ok": not drift, "drift": drift,
                   "canonical_home": args.canonical_home,
+                  "has_p0": has_p0, "has_p1": has_p1,
+                  "remove_extra": args.remove_extra,
+                  "removed_extra": removed_extra,
+                  "remove_failed": remove_failed,
                   "results": results}
         if args.json:
             print(json.dumps(report, ensure_ascii=False))
         else:
+            for lbl in removed_extra:
+                print(f"[TEMİZLENDİ] {lbl} — fazla plist silindi (--remove-extra)")
+            for fail in remove_failed:
+                print(f"[HATA] silinemedi: {fail} — drift kalır")
             for r in results:
-                mark = "PASS" if r["verdict"] == "PASS" else "DRIFT"
+                if r["verdict"] == "PASS":
+                    mark = "PASS"
+                else:
+                    mark = r.get("priority") or "DRIFT"
                 print(f"[{mark}] {r['label']} — {r['detail']}")
-            print(f"SONUÇ: {'TÜMÜ PASS' if not drift else 'DRIFT TESPİT EDİLDİ'}")
+            if drift:
+                print(f"SONUÇ: DRIFT TESPİT EDİLDİ (P0={int(has_p0)}, P1={int(has_p1)})")
+            else:
+                print("SONUÇ: TÜMÜ PASS")
         return 1 if drift else 0
     finally:
         if own_tmp:

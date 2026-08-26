@@ -88,7 +88,9 @@ Doğrulama zinciri (Katman 0..19):
                config'le karşılaştırılır; fark → P1 (fail-closed,
                --check-config-drift, --full'a dahil)
   K12 Plist    LaunchAgent plist şablonu: update_preview.sh --plist-check
-               exit kodu (0=GÜNCEL, 1=BAYAT, 2=şablon yok) — drift → P1
+               exit kodu (0=GÜNCEL, 1=BAYAT, 2=şablon yok) — drift → P1;
+               ayrıca check_plist_drift.py golden denetimi: fazla-profil
+               (golden'da olmayan render edilmiş profil) → P0 FAIL-CLOSED
                (--check-plist; macOS'a özgü, --full'a dahil değil)
   K13 Repro    gen_repro_manifest.py self-testi: mock artifact'lardan manifest
                üretip kapsam + SHA-256 tutarlılığını denetler (fail-closed;
@@ -2064,6 +2066,29 @@ def validate_lineage_schema(lineage, add, check_id="K17-LINEAGE",
     return len(errors) == 0, errors
 
 
+def write_lineage_sidecar(path, report):
+    """Soy hattı sidecar'ını HER ZAMAN yaz (koşullu yazım cascade kaynağıydı).
+
+    §7.1 kök neden: lineage_findings.json yalnızca --check-lineage koşulduğunda
+    yazılıyordu; check koşmadıysa/script yarıda kaldıysa dosya eksik kalıyor,
+    upload + reports/reproducibility job'larına cascade FAIL bulaşıyordu.
+    Bu helper, report None olsa bile (check koşmadı) dürüst bir
+    {"ok": false, "detail": "check_lineage koşulmadı", ...} kaydı yazar —
+    yanlış PASS yok, dosya eksikliği yok.
+
+    Döndürür: (ok: bool, detail: str) — ok=False yalnızca dosya yazılamadıysa.
+    """
+    try:
+        if report is None:
+            report = {"ok": False, "detail": "check_lineage koşulmadı",
+                      "count": 0, "generations": []}
+        with open(path, "w", encoding="utf-8") as lof:
+            json.dump(report, lof, indent=2, ensure_ascii=False)
+        return True, f"{path} ({len(report.get('generations', []))} nesil)"
+    except OSError as e:
+        return False, f"yazılamadı: {path}: {e}"
+
+
 def check_zip_lineage(zip_path, lineage_path, add):
     """Soy hattı: zip_lineage.json'daki her nesli tek kaynaktan doğrula.
 
@@ -3944,6 +3969,31 @@ def parse_plist_out_of_scope(txt):
     return out
 
 
+def fold_plist_golden_findings(golden_report, add):
+    """check_plist_drift.py --json raporundaki P0/P1 bulgularını findings'e işler.
+
+    Fazla-profil drift'i (golden'da olmayan render edilmiş profil) P0
+    FAIL-CLOSED'dır — golden seti şablonla senkron değil, sessiz kapsam
+    kaybını önlemek için build'i bloke eder. Diğer golden drift'leri
+    (eksik/bayat/yapısal geçersiz) P1 advisory kalır. PASS bulguları
+    findings'e girmez.
+
+    add(priority, id, check, message, detail) imzalı callback kullanır
+    (verify_delivery'nin iç `add`'i). Döner: has_p0 (fail-closed sinyali).
+    """
+    has_p0 = False
+    for gres in (golden_report or {}).get("results", []):
+        if gres.get("priority") == "P0":
+            has_p0 = True
+            add("P0", "K12-PLIST-EXTRA", "K12 plist (golden)",
+                "fazla profil: golden'da olmayan render edilmiş profil — "
+                + gres.get("label", "?"), gres.get("detail", ""))
+        elif gres.get("priority") == "P1":
+            add("P1", "K12-PLIST-GOLDEN", "K12 plist (golden)",
+                gres.get("detail", "golden drift"), gres.get("label", "?"))
+    return has_p0
+
+
 def apply_full_flags(args):
     """--full, tüm isteğe bağlı katmanları aktifleştirir.
 
@@ -4317,16 +4367,18 @@ def main():
                           "generations": lineage_records}
         if not args.json:
             print(f"\n{lineage_detail}")
-        if args.lineage_out:
-            try:
-                with open(args.lineage_out, "w", encoding="utf-8") as lof:
-                    json.dump(lineage_report, lof, indent=2, ensure_ascii=False)
-                if not args.json:
-                    print(f"[LINEAGE] soy hattı sidecar'ı yazıldı: "
-                          f"{args.lineage_out} ({len(lineage_records)} nesil)")
-            except OSError as e:
-                add("P1", "LINEAGE-OUT", "Soy hattı sidecar",
-                    f"yazılamadı: {args.lineage_out}", str(e))
+    # --lineage-out HER ZAMAN yazılır (--check-lineage koşulmadıysa bile):
+    # CI'da "Run full verification" adımı fail olsa da sidecar'ın varlığı
+    # GARANTİDİR — lineage-findings upload'u asla eksik dosyayla karşılaşmaz
+    # (§7.1 cascade kök nedeni: sidecar koşullu yazılıyordu). check koşmadıysa
+    # dürüst bir "atlanmadı/koşmadı" kaydı yazılır — yanlış PASS yok.
+    if args.lineage_out:
+        wok, wdetail = write_lineage_sidecar(args.lineage_out, lineage_report)
+        if wok:
+            if not args.json:
+                print(f"[LINE] soy hattı sidecar'ı yazıldı: {wdetail}")
+        else:
+            add("P1", "LINEAGE-OUT", "Soy hattı sidecar", wdetail)
 
     # ---- K14: Cleanup kaydı (M0 §10 silme/taşıma) ----
     cleanup_report = None
@@ -4768,10 +4820,34 @@ def main():
             out_of_scope = []
             if rc is not None:
                 out_of_scope = parse_plist_out_of_scope(txt)
-            plist_report = {"layer": "K12", "ok": rc == 0,
+
+            # ── Golden denetim (check_plist_drift.py) — P0/P1 entegrasyonu ──
+            # Şablon → render → golden karşılaştırması (runtime --plist-check
+            # ile aynı şablondan ama golden kümesine karşı). Fazla-profil
+            # drift'i (golden'da olmayan render edilmiş profil) P0
+            # FAIL-CLOSED'dır — golden seti şablonla senkron değil; diğer
+            # golden drift'leri (eksik/bayat/geçersiz) P1 advisory kalır.
+            # Best-effort: check_plist_drift.py yoksa/çalışmazsa (ör. golden
+            # dizini yok) sessizce atlanır — runtime denetimi zaten koştu.
+            golden_report = None
+            cpd = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               "check_plist_drift.py")
+            if os.path.isfile(cpd):
+                try:
+                    gr = subprocess.run([sys.executable, cpd, "--json"],
+                                        capture_output=True, text=True,
+                                        timeout=120)
+                    if gr.returncode in (0, 1):
+                        golden_report = json.loads(gr.stdout)
+                except (OSError, subprocess.TimeoutExpired, ValueError):
+                    golden_report = None
+            # P0/P1 bulgularını findings'e işle; P0 (fazla-profil) fail-closed.
+            has_p0 = fold_plist_golden_findings(golden_report, add)
+            plist_report = {"layer": "K12", "ok": rc == 0 and not has_p0,
                             "exit": rc, "detail": detail,
                             "output": txt, "profiles": profiles,
-                            "out_of_scope": out_of_scope}
+                            "out_of_scope": out_of_scope,
+                            "golden": golden_report}
             if not args.json:
                 print(f"[K12] plist şablon: "
                       f"{'PASS' if rc == 0 else 'FAIL'} (exit={rc}) — "
@@ -4780,6 +4856,14 @@ def main():
                     print(f"    [{p['status']}] {p['label']}")
                 for o in out_of_scope:
                     print(f"    [INFO] kapsam dışı (yönetilmiyor): {o}")
+                if golden_report:
+                    gp0 = sum(1 for r in golden_report.get("results", [])
+                              if r.get("priority") == "P0")
+                    gp1 = sum(1 for r in golden_report.get("results", [])
+                              if r.get("priority") == "P1")
+                    if gp0 or gp1:
+                        print(f"    [K12] golden denetim: P0={gp0}, P1={gp1} "
+                              f"({'FAIL-CLOSED (P0 var)' if gp0 else 'advisory'})")
         # Sidecar: update_preview.sh --plist-check ham çıktısı + K12 raporu.
         if args.plist_out:
             try:

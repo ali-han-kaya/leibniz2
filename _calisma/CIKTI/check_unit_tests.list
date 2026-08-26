@@ -27,6 +27,7 @@ test_incremental_doc_sync.py
 test_label_gate_contracts.py
 test_lean_lake.py
 test_lineage_schema.py
+test_lineage_sidecar_guarantee.py
 test_mirror_check.py
 test_mirror_panel.py
 test_override_trend.py

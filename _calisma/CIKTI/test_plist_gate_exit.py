@@ -34,6 +34,7 @@ GOLDEN_DIR = os.path.join(HERE, "plist-golden")
 
 sys.path.insert(0, HERE)
 from verify_delivery import (  # noqa: E402
+    fold_plist_golden_findings,
     parse_plist_check_output,
     parse_plist_out_of_scope,
 )
@@ -158,11 +159,129 @@ class TestCheckPlistDriftExitCodes(unittest.TestCase):
         self.assertIn("com.example.extra.plist", buf.getvalue())
         self.assertIn("fazla profil", buf.getvalue())
         self.assertIn("DRIFT TESPİT EDİLDİ", buf.getvalue())
+        # Fazla-profil drift'i P0 (fail-closed) olarak işaretlenir — advisory
+        # P1 değil. Yönetilen iki profil PASS (fazlalık onları bozmaz).
+        self.assertIn("[P0] com.example.extra.plist", buf.getvalue())
+        self.assertIn("P0=1", buf.getvalue())
         # Yönetilen iki profil yine de PASS (fazlalık onları bozmaz).
         self.assertIn("[PASS] com.freebuff.preview-leibniz2.plist",
                       buf.getvalue())
         self.assertIn("[PASS] com.freebuff.preview-server.plist",
                       buf.getvalue())
+
+    def test_remove_extra_cleans_and_passes(self):
+        """--remove-extra: fazla plist'i otomatik temizleyip PASS'e döner (e2e).
+
+        Gerçek render sonrası render-home'a golden'da olmayan bir plist
+        bırakılır; --remove-extra ile main() fazlalığı SİLİP denetimi yeniden
+        koşar → exit 0 + TÜMÜ PASS. Fazla dosya diskten gerçekten kalkar;
+        yönetilen iki profil PASS kalır.
+        """
+        import check_plist_drift as cpd
+        from unittest import mock
+        render_home = tempfile.mkdtemp(prefix="plist-rmextra-")
+        real_render = cpd.run_render
+        extra_path = os.path.join(render_home, "Library", "LaunchAgents",
+                                  "com.example.extra.plist")
+
+        def render_then_extra(script, home):
+            rc, out = real_render(script, home)  # gerçek render (2 profil)
+            la = os.path.join(home, "Library", "LaunchAgents")
+            os.makedirs(la, exist_ok=True)
+            with open(os.path.join(la, "com.example.extra.plist"), "w",
+                      encoding="utf-8") as f:
+                f.write(SAMPLE_PLIST)
+            return rc, out
+
+        buf = io.StringIO()
+        try:
+            with mock.patch.object(cpd, "run_render",
+                                   side_effect=render_then_extra), \
+                    contextlib.redirect_stdout(buf):
+                rc = cpd.main(["--render-home", render_home,
+                               "--golden-dir", GOLDEN_DIR, "--remove-extra"])
+            # Temizlik sonrası exit 0 — drift kalmadı.
+            self.assertEqual(rc, 0, buf.getvalue())
+            # Fazla dosya diskten GERÇEKTEN silindi.
+            self.assertFalse(os.path.exists(extra_path),
+                             "fazla plist --remove-extra ile silinmedi")
+            self.assertIn("[TEMİZLENDİ] com.example.extra.plist", buf.getvalue())
+            self.assertIn("SONUÇ: TÜMÜ PASS", buf.getvalue())
+            # Yönetilen iki profil PASS.
+            self.assertIn("[PASS] com.freebuff.preview-leibniz2.plist",
+                          buf.getvalue())
+            self.assertIn("[PASS] com.freebuff.preview-server.plist",
+                          buf.getvalue())
+            # P0 bulgusu temizlendi — rapor has_p0=False taşımalı.
+            self.assertNotIn("P0=1", buf.getvalue())
+        finally:
+            shutil.rmtree(render_home, ignore_errors=True)
+
+    def test_remove_extra_json_reports_removed(self):
+        """--remove-extra --json: removed_extra listesi + ok=True sidecar'da."""
+        import check_plist_drift as cpd
+        from unittest import mock
+        render_home = tempfile.mkdtemp(prefix="plist-rmjson-")
+        real_render = cpd.run_render
+
+        def render_then_extra(script, home):
+            rc, out = real_render(script, home)
+            la = os.path.join(home, "Library", "LaunchAgents")
+            os.makedirs(la, exist_ok=True)
+            with open(os.path.join(la, "com.example.extra.plist"), "w",
+                      encoding="utf-8") as f:
+                f.write(SAMPLE_PLIST)
+            return rc, out
+
+        buf = io.StringIO()
+        try:
+            with mock.patch.object(cpd, "run_render",
+                                   side_effect=render_then_extra), \
+                    contextlib.redirect_stdout(buf):
+                rc = cpd.main(["--json", "--render-home", render_home,
+                               "--golden-dir", GOLDEN_DIR, "--remove-extra"])
+            self.assertEqual(rc, 0, buf.getvalue())
+            d = json.loads(buf.getvalue().strip().splitlines()[-1])
+            self.assertTrue(d["ok"])
+            self.assertFalse(d["drift"])
+            self.assertFalse(d["has_p0"])
+            self.assertTrue(d["remove_extra"])
+            self.assertEqual(d["removed_extra"], ["com.example.extra.plist"])
+            self.assertEqual(d["remove_failed"], [])
+        finally:
+            shutil.rmtree(render_home, ignore_errors=True)
+
+    def test_remove_extra_without_flag_keeps_file(self):
+        """--remove-extra VERİLMEDİĞİNDE fazla plist DURUR ve exit 1 kalır."""
+        import check_plist_drift as cpd
+        from unittest import mock
+        render_home = tempfile.mkdtemp(prefix="plist-keepextra-")
+        real_render = cpd.run_render
+        extra_path = os.path.join(render_home, "Library", "LaunchAgents",
+                                  "com.example.extra.plist")
+
+        def render_then_extra(script, home):
+            rc, out = real_render(script, home)
+            la = os.path.join(home, "Library", "LaunchAgents")
+            os.makedirs(la, exist_ok=True)
+            with open(os.path.join(la, "com.example.extra.plist"), "w",
+                      encoding="utf-8") as f:
+                f.write(SAMPLE_PLIST)
+            return rc, out
+
+        buf = io.StringIO()
+        try:
+            with mock.patch.object(cpd, "run_render",
+                                   side_effect=render_then_extra), \
+                    contextlib.redirect_stdout(buf):
+                rc = cpd.main(["--render-home", render_home,
+                               "--golden-dir", GOLDEN_DIR])
+            self.assertEqual(rc, 1, buf.getvalue())
+            self.assertTrue(os.path.exists(extra_path),
+                            "bayrak yokken fazla plist silinmemeli")
+            self.assertNotIn("TEMİZLENDİ", buf.getvalue())
+        finally:
+            shutil.rmtree(render_home, ignore_errors=True)
 
 
 class TestPlistOutSidecar(unittest.TestCase):
@@ -277,6 +396,61 @@ class TestOutOfScopeExtraFile(unittest.TestCase):
                             d["out_of_scope"])
             # Ham çıktıda INFO satırı duruyor (denetim izi).
             self.assertIn("INFO: kapsam dışı", d["output"])
+
+
+class TestK12GoldenFoldPriorities(unittest.TestCase):
+    """K12 golden denetim katlama öncelikleri (fail-closed P0 / advisory P1).
+
+    fold_plist_golden_findings: check_plist_drift.py --json raporunu K12
+    findings'ine işler. Fazla-profil drift'i (golden'da olmayan render
+    edilmiş profil) P0 FAIL-CLOSED olmalı; diğer golden drift'leri P1
+    advisory kalır; PASS findings'e girmez; has_p0 sinyali döner.
+    """
+
+    def _add(self, findings):
+        def add(priority, fid, check, message, detail):
+            findings.append({"priority": priority, "id": fid,
+                             "check": check, "message": message,
+                             "detail": detail})
+        return add
+
+    def test_extra_profile_is_p0_fail_closed(self):
+        findings = []
+        report = {"has_p0": True, "has_p1": False, "results": [
+            {"label": "com.example.extra.plist", "verdict": "DRIFT",
+             "priority": "P0", "detail": "golden'da olmayan fazla profil"},
+            {"label": "com.freebuff.preview-leibniz2.plist", "verdict": "PASS",
+             "priority": None,
+             "detail": "golden ile birebir + geçerli"},
+        ]}
+        has_p0 = fold_plist_golden_findings(report, self._add(findings))
+        self.assertTrue(has_p0, "fazla-profil has_p0=True dönmeli (fail-closed)")
+        p0s = [f for f in findings if f["priority"] == "P0"]
+        self.assertEqual(len(p0s), 1)
+        self.assertEqual(p0s[0]["id"], "K12-PLIST-EXTRA")
+        self.assertIn("fazla profil", p0s[0]["message"])
+        self.assertIn("com.example.extra.plist", p0s[0]["message"])
+        # PASS bulgusu findings'e GİRMEZ.
+        self.assertEqual(len(findings), 1)
+
+    def test_other_golden_drift_is_p1_advisory(self):
+        findings = []
+        report = {"has_p0": False, "has_p1": True, "results": [
+            {"label": "com.freebuff.preview-leibniz2.plist", "verdict": "DRIFT",
+             "priority": "P1", "detail": "render edilmedi (eksik)"},
+        ]}
+        has_p0 = fold_plist_golden_findings(report, self._add(findings))
+        self.assertFalse(has_p0, "P1-only has_p0=False dönmeli (advisory)")
+        p1s = [f for f in findings if f["priority"] == "P1"]
+        self.assertEqual(len(p1s), 1)
+        self.assertEqual(p1s[0]["id"], "K12-PLIST-GOLDEN")
+        self.assertEqual(p1s[0]["priority"], "P1")
+
+    def test_empty_report_folds_nothing(self):
+        findings = []
+        self.assertFalse(fold_plist_golden_findings(None, self._add(findings)))
+        self.assertFalse(fold_plist_golden_findings({}, self._add(findings)))
+        self.assertEqual(findings, [])
 
 
 class TestBootstrapAll(unittest.TestCase):
