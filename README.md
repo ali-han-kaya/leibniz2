@@ -465,6 +465,9 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-26 | fix | test_coverage_report'a gerçek test ekle (3.12 boş-discovery exit 5) | [`96a6c4b`](https://github.com/ali-han-kaya/leibniz2/commit/96a6c4b) |
 | 2026-08-26 | fix | check-absolute-paths + actionlint entry'lerini sh→bash yap | [`374c9d4`](https://github.com/ali-han-kaya/leibniz2/commit/374c9d4) |
 | 2026-08-26 | feat | advisory kontrat kapısını precheck job'ına bağla | [`8ce9766`](https://github.com/ali-han-kaya/leibniz2/commit/8ce9766) |
+| 2026-08-26 | feat | status_checks --json'u manifest'e STATUS CHECKS bölümü olarak işle | [`3358c11`](https://github.com/ali-han-kaya/leibniz2/commit/3358c11) |
+| 2026-08-26 | chore | gate_jobs() tam 13'lük id kümesini sabitle (label-gate dahil) | [`68c9b85`](https://github.com/ali-han-kaya/leibniz2/commit/68c9b85) |
+| 2026-08-26 | feat | status_checks --gh --json'u run summary'ye tablo olarak yaz | [`b8d35e2`](https://github.com/ali-han-kaya/leibniz2/commit/b8d35e2) |
 
 ### Regresyon notları
 

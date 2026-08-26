@@ -1913,6 +1913,64 @@ jobs:
             cat .freebuff/status_checks_gh.err
           fi
 
+      # ─── RUN SUMMARY: status_checks --gh --json → check tablosu ────────
+      # status_checks_gh.json'daki checks/configured/missing/extra
+      # alanlarından markdown tablo üretip GITHUB_STEP_SUMMARY'ye yazar.
+      #   configured  → ✅ PASS (GitHub'da var)
+      #   missing     → ❌ FAIL (workflow'da var, GitHub'da yok)
+      #   hiçbiri     → ⚠️ doğrulanamadı (UNREADABLE/NOT_SET_UP — CI token'ı
+      #                 admin scope'u taşımaz; yerelde gh auth ile PASS/FAIL
+      #                 gerçek durumu gösterir)
+      #   extra       → tablo altına ek satır (GitHub'da var, beklenen yok)
+      # Satır sayısı JSON'daki checks listesine bağlıdır (şu an 13 — kapsam
+      # değişirse otomatik uyum sağlar, hardcoded yok).
+      - name: Write status checks table to run summary
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PYEOF'
+          import json, os
+
+          p = ".freebuff/status_checks_gh.json"
+          if not os.path.exists(p):
+              print("status_checks_gh.json yok — tablo atlandı")
+              raise SystemExit(0)
+          d = json.load(open(p))
+          verdict = d.get("verdict", "?")
+          checks = d.get("checks") or []
+          configured = set(d.get("configured") or [])
+          missing = set(d.get("missing") or [])
+          extra = d.get("extra") or []
+          warn = d.get("warning") or ""
+
+          lines = ["", "## Status Checks (workflow ↔ GitHub)"]
+          lines.append(
+              f"**Verdict:** `{verdict}` — {len(checks)} beklenen check")
+          if warn:
+              lines.append("")
+              lines.append(f"**Not:** {warn}")
+          lines.append("")
+          lines.append("| # | Check | Durum |")
+          lines.append("|---|---|---|")
+          for i, c in enumerate(checks, 1):
+              if c in missing:
+                  status = "❌ FAIL — GitHub'da yok"
+              elif c in configured:
+                  status = "✅ PASS"
+              else:
+                  status = "⚠️ doğrulanamadı"
+              lines.append(f"| {i} | {c} | {status} |")
+          for c in extra:
+              lines.append(f"| — | {c} | ➕ FAZLA — beklenen listede yok |")
+          lines.append("")
+
+          summary = os.environ.get("GITHUB_STEP_SUMMARY")
+          if summary:
+              with open(summary, "a", encoding="utf-8") as f:
+                  f.write("\n".join(lines))
+          print("\n".join(lines))
+          PYEOF
+
       # ─── ADVISORY KONTRAT KAPISI ──────────────────────────────────────
       # status_checks.py --gh --json çıktısındaki advisory_contract.ok
       # alanını denetler. advisory_contract OFFLINE hesaplanır (workflow
