@@ -37,6 +37,7 @@ test_preview_server.py
 test_readme_badges.py
 test_refs_trend.py
 test_refs_trend_badge.py
+test_render_z3_slides.py
 test_repack_verify.py
 test_run_summary_budget.py
 test_run_summary_changelog.py

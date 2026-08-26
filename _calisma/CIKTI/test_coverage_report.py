@@ -58,6 +58,7 @@ HOOK_COVERAGE = {
     "check-budget-scan":       ["test_budget_scan.js"],
     "verify-delivery-repro-manifest": ["test_verify_manifest_sidecar.py"],
     "verify-delivery-github-scripts": ["test_github_scripts_battery.py"],
+    "verify-delivery-sde":       ["test_check_sde_determinism.py"],
     "check-pattern-consistency": ["test_gen_repro_manifest.py"],
     "check-config-sync":       ["test_check_config_sync.py"],
     "check-lake-evidence":     ["test_lake_evidence_smoke.py"],
@@ -121,6 +122,7 @@ HOOK_COVERAGE = {
         "test_coq_lake.py",
         "test_daemon_http.py",
         "test_k18_daemon.py",
+        "test_launchd_minimal_path.py",
         "test_ia_ol_fallback_evidence.py",
         "test_github_scripts.py",
         "test_check_plist_drift.py",
@@ -128,6 +130,16 @@ HOOK_COVERAGE = {
         "test_coverage_report.py",
         "test_test_coverage_report.py",
         "test_sync_check_unit_tests.py",
+        "test_check_lean_axioms.py",
+        "test_classify_lean_error.py",
+        "test_check_lean_statements.py",
+        "test_check_sde_determinism.py",
+        "test_skill_layer_sync.py",
+        "test_gen_k_layer.py",
+        "test_reproducible_pdf_skill.py",
+        "test_render_z3_slides.py",
+        "test_check_hook_env_matrix.py",
+        "test_ci_failure_pattern.py",
     ],
 }
 
@@ -141,6 +153,7 @@ CI_JOB_COVERAGE = {
     "preview-reload-smoke": ["test_preview_reload_smoke.py"],
     "daemon-http": ["test_daemon_http.py"],
     "plist-check": ["test_plist_gate_exit.py", "test_gen_plist_golden.py"],
+    "coq-proof": ["test_coq_lake.py"],
     "ci-simulate": ["ALL"],
 }
 

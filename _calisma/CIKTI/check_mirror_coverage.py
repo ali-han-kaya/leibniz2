@@ -40,6 +40,7 @@ RUNTIME_REQUIRED = (
     "check_unit_tests.list", "check_unit_tests_hook.sh",
     "sync_check_unit_tests.py", "lake_evidence_hook.sh",
     "test_lake_evidence_smoke.py",
+    "render_z3_slides.py", "test_render_z3_slides.py",
 )
 # Preview mirror runtime'ı (PREVIEW_FILES — launchd çalıştırıcısı + PreStart).
 PREVIEW_RUNTIME = ("preview_server.py", "_daemonize.py", "preview_prestart.py", "sw.js")

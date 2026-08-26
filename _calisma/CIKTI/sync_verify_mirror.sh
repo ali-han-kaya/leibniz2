@@ -83,6 +83,8 @@ FILES=(
   "TESLIM_KLASOR_V5_2026-08-17.zip.sha256|TESLIM_KLASOR_V5_2026-08-17.zip.sha256"
   "TESLIM_V5_FINAL_2026-08-17.zip|TESLIM_V5_FINAL_2026-08-17.zip"
   "TESLIM_V5_FINAL_2026-08-17.zip.sha256|TESLIM_V5_FINAL_2026-08-17.zip.sha256"
+  "render_z3_slides.py|render_z3_slides.py"
+  "test_render_z3_slides.py|test_render_z3_slides.py"
 )
 
 # Lean dosyaları: kaynak LEAN_SRC'ye, dest LEAN_MIRROR_DIR'a göre.
