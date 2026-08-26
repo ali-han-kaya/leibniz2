@@ -470,6 +470,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-26 | feat | status_checks --gh --json'u run summary'ye tablo olarak yaz | [`b8d35e2`](https://github.com/ali-han-kaya/leibniz2/commit/b8d35e2) |
 | 2026-08-26 | feat | (k12) fazla-profil golden drift'ini P1→P0 fail-closed yap | [`bf506c0`](https://github.com/ali-han-kaya/leibniz2/commit/bf506c0) |
 | 2026-08-26 | feat | (plist) check_plist_drift'e --remove-extra bayrağı | [`8750b8a`](https://github.com/ali-han-kaya/leibniz2/commit/8750b8a) |
+| 2026-08-26 | fix | lineage sidecar anti-cascade kök çözümü (§7.1) | [`15ca934`](https://github.com/ali-han-kaya/leibniz2/commit/15ca934) |
 
 ### Regresyon notları
 
