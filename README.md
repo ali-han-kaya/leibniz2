@@ -476,6 +476,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-26 | test | config merge-pattern (prefixsiz) — K10 PASS kanıtı + advisory kontrat kapıları | [`da87429`](https://github.com/ali-han-kaya/leibniz2/commit/da87429) |
 | 2026-08-26 | feat | (verify) K10 çift tespit + K12/K13 negatif senaryo kapıları | [`8a6fa98`](https://github.com/ali-han-kaya/leibniz2/commit/8a6fa98) |
 | 2026-08-26 | feat | (verify) K10 çift tespit + K12/K13 negatif senaryo kapıları | [`7fa4997`](https://github.com/ali-han-kaya/leibniz2/commit/7fa4997) |
+| 2026-08-26 | refactor | (refs-trend) UNVERIFIED/bayat-artifact saf fonksiyonlar | [`35897ac`](https://github.com/ali-han-kaya/leibniz2/commit/35897ac) |
 
 ### Regresyon notları
 

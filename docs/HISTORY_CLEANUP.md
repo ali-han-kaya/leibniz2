@@ -114,12 +114,19 @@ için bir yedek daemon stratejisiydi. Ancak yarış koşullarına yol açtı:
 
 | Konum | Ne |
 |---|---|
-| `_calisma/CIKTI/update_preview.sh` satır 462-501 | `LEGACY_LABEL`, `plist_remove_legacy()` tanımı |
-| `_calisma/CIKTI/update_preview.sh` satır 595 | `--status` çıktısında legacy label referansı |
 | `_calisma/CIKTI/plist-golden/com.freebuff.preview-server.plist` | Golden kopyası (tanıklık) |
 | `_calisma/CIKTI/plist-golden/com.freebuff.preview-leibniz2.plist` | Güncel tek profil golden'ı |
 | `_calisma/CIKTI/test_plist_gate_exit.py` `TestPlistOutSidecar` | Birim test (tek profil) |
 | `_calisma/CIKTI/check_plist_drift.py` | Drift denetimi (K12) |
+
+**Güncelleme (2026-08-26):** `--remove-legacy` komutu **kaldırıldı** —
+gerçek makinedeki legacy plist artık `PLIST_PROFILES` içinde yönetilen bir
+profildir (`--plist-force` üretir, `--plist-check` denetler). Bir kerelik
+taşıma amacıyla eklenen `plist_remove_legacy()` + `LEGACY_LABEL`/
+`LEGACY_LOGNAME` değişkenleri ve `TestRemoveLegacy` test sınıfı (5 test)
+repo'dan çıkarıldı; `--status` çıktısındaki ayrı "legacy (PLIST_PROFILES
+dışı)" bloğu da silindi (legacy artık ana döngüde yönetilen profil olarak
+görünür).
 
 ### Neden temizlik kaydına girdi
 

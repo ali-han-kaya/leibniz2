@@ -51,17 +51,20 @@ TCC nedeniyle launchd GUI agent'ı repo dizinini **okuyamaz** — tüm runtime
 `--check-ci` modu daemon smoke'u (canlı sunucu gerektirir) ve mirror venv'i
 (CI'da farklı yolda) atlar; yalnızca 5 artefaktın kurulumunu doğrular.
 
-## LaunchAgent plist — Homebrew-style, per-profile şablon (TEK plist)
+## LaunchAgent plist — Homebrew-style, per-profile şablon (2 profil: birincil + yedek)
 
-`update_preview.sh --plist` TEK komutla plist'i yönetir:
+`update_preview.sh --plist` TEK komutla plist'leri yönetir:
 
 | Profil | KeepAlive | interval | Amaç |
 |---|---|---|---|
 | `com.freebuff.preview-leibniz2` | true | 30 | birincil (durable, auto-restart) |
+| `com.freebuff.preview-server` | false | 60 | yedek (failover; aynı 8000 portu — birincil durursa elle `--start preview-server`) |
 
-Legacy `com.freebuff.preview-server` profili kaldırıldı; `--remove-legacy`
-bir kerelik taşımayı yapar (launchd'den bootout + kurulu plist/şablon/log
-silme) — yalnızca birincil leibniz2 canlı kalır.
+İki profil de `PLIST_PROFILES`'te yönetilir: `--plist-force` üretir,
+`--plist-check` denetler, check_plist_drift golden'larla sabitler. İkisi de
+aynı 8000 portunu paylaştığı için aynı anda canlı OLAMAZ; yedek yalnızca
+birincil durduğunda devreye girer. `--status` bu iki profili "birincil" /
+"yedek" rolleriyle gösterir.
 
 Kurulu tam yollar korunur: `~/Library/LaunchAgents/<label>.plist`. İçerikleri
 şablondan üretilir: `~/Library/Caches/com.freebuff/preview-template/<label>.plist.tmpl`.
@@ -81,7 +84,6 @@ _calisma/CIKTI/update_preview.sh --plist-force [HOME]  # plist'i her zaman yenid
 _calisma/CIKTI/update_preview.sh --plist-reset         # şablonu yerleşik varsayılandan geri yaz
 _calisma/CIKTI/update_preview.sh --start [LABEL]       # plist'i üret + launchctl bootstrap (vars. birincil)
 _calisma/CIKTI/update_preview.sh --stop [LABEL|all]    # launchctl bootout
-_calisma/CIKTI/update_preview.sh --remove-legacy [HOME] # legacy preview-server'ı kaldır (bootout + sil)
 ```
 
 Çıktı `plutil -lint` (yoksa plistlib) ile doğrulanır; geçersiz çıktı yazılmaz.

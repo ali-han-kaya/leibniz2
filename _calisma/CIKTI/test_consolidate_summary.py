@@ -67,12 +67,21 @@ class TestConsolidateSummary(unittest.TestCase):
         (d / "klayers.json").write_text(
             json.dumps({"verdict": "PASS", "counts": {"P0": 0, "P1": 0},
                         "layers": layers}), encoding="utf-8")
+        # K13 ayrı-step sidecar (advisory; ok=true → PASS).
+        (d / "logs" / "k13_repro_manifest.json").write_text(
+            json.dumps({"layer": "K13", "ok": True, "exit": 0,
+                        "detail": "[K13] repro manifest: PASS — senaryolar: "
+                                   "eksik-dosya PASS, bozuk-hash PASS",
+                        "scenarios": [{"name": "eksik-dosya", "status": "PASS"},
+                                       {"name": "bozuk-hash", "status": "PASS"}]}),
+            encoding="utf-8")
         return {
             "precommit": d / "logs" / "PRECOMMIT_RAPORU.json",
             "k0": d / "k0_findings.json",
             "budget": d / "budget_verify.json",
             "lineage": d / "lineage_findings.json",
             "klayers": d / "klayers.json",
+            "k13": d / "logs" / "k13_repro_manifest.json",
         }
 
     def test_all_sections_in_order(self):
@@ -80,16 +89,17 @@ class TestConsolidateSummary(unittest.TestCase):
             paths = self._sidecars(d)
             code, out = self._run(paths)
         self.assertEqual(code, 0)
-        # Durum panosu en üstte, tek satırda, beş ✅ ile.
+        # Durum panosu en üstte, tek satırda, altı ✅ ile (K13 ayrı-step dahil).
         self.assertTrue(
-            out.startswith("## 📊 Durum panosu: Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅\n"),
-            repr(out[:120]))
+            out.startswith("## 📊 Durum panosu: Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅ · K13 ayrı-step ✅\n"),
+            repr(out[:160]))
         headers = [
             "## ✅ Pre-commit: bulgu yok",
             "## ✅ K0 bayat zip: temiz",
             "## ✅ Bütçe kalkanı: limit içinde",
             "## ✅ Soy hattı (zip_lineage.json): 1 nesil doğrulandı",
             "## ✅ K1 X: PASS",
+            "## ✅ K13 repro-manifest: PASS",
         ]
         last = -1
         for h in headers:
@@ -97,6 +107,9 @@ class TestConsolidateSummary(unittest.TestCase):
             pos = out.index(h)
             self.assertGreater(pos, last, f"sıra bozuk: {h}")
             last = pos
+        # K13 bölümü negatif senaryo tablosunu da içerir.
+        self.assertIn("Negatif senaryolar:", out)
+        self.assertIn("`eksik-dosya` :white_check_mark:", out)
 
     def test_missing_sidecars_advisory(self):
         with tempfile.TemporaryDirectory() as d:
@@ -108,8 +121,8 @@ class TestConsolidateSummary(unittest.TestCase):
         self.assertEqual(code, 0)
         # Panoda eksik sidecar ⚠️ olarak görünür (tek satır korunur).
         self.assertTrue(out.startswith(
-            "## 📊 Durum panosu: Pre-commit ⚠️ · K0 ⚠️ · Bütçe ⚠️ · Soy hattı ⚠️ · K katmanları ⚠️\n"),
-            repr(out[:120]))
+            "## 📊 Durum panosu: Pre-commit ⚠️ · K0 ⚠️ · Bütçe ⚠️ · Soy hattı ⚠️ · K katmanları ⚠️ · K13 ayrı-step ⚠️\n"),
+            repr(out[:160]))
         self.assertIn("Pre-commit: rapor bulunamadı", out)
         self.assertIn("K0 bayat zip: sidecar bulunamadı", out)
         self.assertIn("Bütçe kalkanı: sidecar bulunamadı", out)
@@ -138,8 +151,8 @@ class TestConsolidateSummary(unittest.TestCase):
             self.assertNotIn("Durum panosu", buf.getvalue())
             file_txt = summary_file.read_text(encoding="utf-8")
             self.assertTrue(file_txt.startswith(
-                "## 📊 Durum panosu: Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅\n"),
-                repr(file_txt[:120]))
+                "## 📊 Durum panosu: Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅ · K13 ayrı-step ✅\n"),
+                repr(file_txt[:160]))
             for h in ("## ✅ Pre-commit: bulgu yok",
                       "## ✅ K0 bayat zip: temiz",
                       "## ✅ Bütçe kalkanı: limit içinde"):
@@ -187,6 +200,66 @@ class TestConsolidateSummary(unittest.TestCase):
         self.assertIn("Bütçe 🔴", out)
         self.assertIn("Soy hattı ✅", out)
         self.assertIn("K katmanları ✅", out)
+
+
+class TestRunSummaryK13(unittest.TestCase):
+    """run_summary_k13 — K13 ayrı-step sidecar'ından durum + render."""
+
+    def _write(self, d, ok=True, scenarios=None, exit_code=0):
+        d = pathlib.Path(d)
+        (d / "logs").mkdir(parents=True, exist_ok=True)
+        (d / "logs" / "k13_repro_manifest.json").write_text(
+            json.dumps({"layer": "K13", "ok": ok, "exit": exit_code,
+                        "detail": "[K13] repro manifest: "
+                                   + ("PASS" if ok else "FAIL"),
+                        "scenarios": scenarios or []}),
+            encoding="utf-8")
+        return d / "logs" / "k13_repro_manifest.json"
+
+    def test_status_pass_fail_missing(self):
+        import run_summary_k13 as rk13
+        with tempfile.TemporaryDirectory() as d:
+            p = self._write(d, ok=True)
+            self.assertEqual(rk13.status(str(p)), "PASS")
+            p = self._write(d, ok=False, exit_code=1)
+            self.assertEqual(rk13.status(str(p)), "FAIL")
+            self.assertEqual(rk13.status(str(d) + "/yok.json"), "MISSING")
+
+    def test_render_pass_with_scenarios(self):
+        import run_summary_k13 as rk13
+        with tempfile.TemporaryDirectory() as d:
+            p = self._write(d, ok=True, scenarios=[
+                {"name": "eksik-dosya", "status": "PASS"},
+                {"name": "bozuk-hash", "status": "PASS"}])
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rk13.render(sys.stdout, str(p))
+            out = buf.getvalue()
+            self.assertIn("## ✅ K13 repro-manifest: PASS", out)
+            self.assertIn("exit=0", out)
+            self.assertIn("Negatif senaryolar:", out)
+            self.assertIn("`eksik-dosya` :white_check_mark:", out)
+            self.assertIn("`bozuk-hash` :white_check_mark:", out)
+
+    def test_render_fail_marks_scenario_fail(self):
+        import run_summary_k13 as rk13
+        with tempfile.TemporaryDirectory() as d:
+            p = self._write(d, ok=False, exit_code=1, scenarios=[
+                {"name": "eksik-dosya", "status": "YAKALANMADI"}])
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rk13.render(sys.stdout, str(p))
+            out = buf.getvalue()
+            self.assertIn("## 🔴 K13 repro-manifest: FAIL", out)
+            self.assertIn("`eksik-dosya` :x:", out)
+
+    def test_render_missing_advisory(self):
+        import run_summary_k13 as rk13
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rk13.render(sys.stdout, "/yok/k13_repro_manifest.json")
+        self.assertIn("## ⚠️ K13 repro-manifest: sidecar bulunamadı",
+                      buf.getvalue())
 
 
 class TestDashboardOnlyAndSkip(unittest.TestCase):
@@ -685,7 +758,7 @@ class TestFileSink(unittest.TestCase):
         # sondaki yeni satırları eşitle (içerik birebir aynı olmalı).
         self.assertEqual(file_content.rstrip("\n"), stdout_body.rstrip("\n"))
         # Satır bazlı: kritik satırlar dosyada da var.
-        self.assertIn("## 📊 Durum panosu: Pre-commit ✅ · K0 🔴 · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅\n",
+        self.assertIn("## 📊 Durum panosu: Pre-commit ✅ · K0 🔴 · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅ · K13 ayrı-step ⚠️\n",
                       file_content)
         self.assertIn("> Hook'lar: `hook1` :white_check_mark: | `hook2` :x:\n",
                       file_content)
