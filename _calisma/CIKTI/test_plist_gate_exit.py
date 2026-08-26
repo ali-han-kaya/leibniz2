@@ -34,6 +34,7 @@ GOLDEN_DIR = os.path.join(HERE, "plist-golden")
 
 sys.path.insert(0, HERE)
 from verify_delivery import (  # noqa: E402
+    fold_plist_golden_findings,
     parse_plist_check_output,
     parse_plist_out_of_scope,
 )
@@ -158,6 +159,10 @@ class TestCheckPlistDriftExitCodes(unittest.TestCase):
         self.assertIn("com.example.extra.plist", buf.getvalue())
         self.assertIn("fazla profil", buf.getvalue())
         self.assertIn("DRIFT TESPİT EDİLDİ", buf.getvalue())
+        # Fazla-profil drift'i P0 (fail-closed) olarak işaretlenir — advisory
+        # P1 değil. Yönetilen iki profil PASS (fazlalık onları bozmaz).
+        self.assertIn("[P0] com.example.extra.plist", buf.getvalue())
+        self.assertIn("P0=1", buf.getvalue())
         # Yönetilen iki profil yine de PASS (fazlalık onları bozmaz).
         self.assertIn("[PASS] com.freebuff.preview-leibniz2.plist",
                       buf.getvalue())
@@ -277,6 +282,61 @@ class TestOutOfScopeExtraFile(unittest.TestCase):
                             d["out_of_scope"])
             # Ham çıktıda INFO satırı duruyor (denetim izi).
             self.assertIn("INFO: kapsam dışı", d["output"])
+
+
+class TestK12GoldenFoldPriorities(unittest.TestCase):
+    """K12 golden denetim katlama öncelikleri (fail-closed P0 / advisory P1).
+
+    fold_plist_golden_findings: check_plist_drift.py --json raporunu K12
+    findings'ine işler. Fazla-profil drift'i (golden'da olmayan render
+    edilmiş profil) P0 FAIL-CLOSED olmalı; diğer golden drift'leri P1
+    advisory kalır; PASS findings'e girmez; has_p0 sinyali döner.
+    """
+
+    def _add(self, findings):
+        def add(priority, fid, check, message, detail):
+            findings.append({"priority": priority, "id": fid,
+                             "check": check, "message": message,
+                             "detail": detail})
+        return add
+
+    def test_extra_profile_is_p0_fail_closed(self):
+        findings = []
+        report = {"has_p0": True, "has_p1": False, "results": [
+            {"label": "com.example.extra.plist", "verdict": "DRIFT",
+             "priority": "P0", "detail": "golden'da olmayan fazla profil"},
+            {"label": "com.freebuff.preview-leibniz2.plist", "verdict": "PASS",
+             "priority": None,
+             "detail": "golden ile birebir + geçerli"},
+        ]}
+        has_p0 = fold_plist_golden_findings(report, self._add(findings))
+        self.assertTrue(has_p0, "fazla-profil has_p0=True dönmeli (fail-closed)")
+        p0s = [f for f in findings if f["priority"] == "P0"]
+        self.assertEqual(len(p0s), 1)
+        self.assertEqual(p0s[0]["id"], "K12-PLIST-EXTRA")
+        self.assertIn("fazla profil", p0s[0]["message"])
+        self.assertIn("com.example.extra.plist", p0s[0]["message"])
+        # PASS bulgusu findings'e GİRMEZ.
+        self.assertEqual(len(findings), 1)
+
+    def test_other_golden_drift_is_p1_advisory(self):
+        findings = []
+        report = {"has_p0": False, "has_p1": True, "results": [
+            {"label": "com.freebuff.preview-leibniz2.plist", "verdict": "DRIFT",
+             "priority": "P1", "detail": "render edilmedi (eksik)"},
+        ]}
+        has_p0 = fold_plist_golden_findings(report, self._add(findings))
+        self.assertFalse(has_p0, "P1-only has_p0=False dönmeli (advisory)")
+        p1s = [f for f in findings if f["priority"] == "P1"]
+        self.assertEqual(len(p1s), 1)
+        self.assertEqual(p1s[0]["id"], "K12-PLIST-GOLDEN")
+        self.assertEqual(p1s[0]["priority"], "P1")
+
+    def test_empty_report_folds_nothing(self):
+        findings = []
+        self.assertFalse(fold_plist_golden_findings(None, self._add(findings)))
+        self.assertFalse(fold_plist_golden_findings({}, self._add(findings)))
+        self.assertEqual(findings, [])
 
 
 class TestBootstrapAll(unittest.TestCase):
