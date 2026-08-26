@@ -3398,9 +3398,15 @@ def _k13_negative_scenarios(add, script):
     return results
 
 
-def check_repro_manifest_self_consistency(add):
+def check_repro_manifest_self_consistency(add, print_scenarios=False):
     """K13: gen_repro_manifest.py'yi mock artifact'larla koşup manifest
     tutarlılığını denetler (fail-closed).
+
+    print_scenarios=True ise negatif senaryo sonuçları ayrı makine-okunur
+    satır basılır: '[K13-SCENARIO] eksik-dosya PASS, ...' (CI sidecar'ı bu
+    satırı ayrıştırıp k13_repro_manifest.json'da scenarios alanına yazar;
+    senaryoların KENDİLERİ ayrı kanıt olarak görünür, detail içindeki örtük
+    kopyaya ek olarak).
 
     Reproducibility manifest üreticisinin self-testi: bilinen içerikli mock
     dosyalar (alt dizin + config/ alt dizini + köke düzleşmiş config dahil)
@@ -3489,6 +3495,8 @@ def check_repro_manifest_self_consistency(add):
         scen_str = ", ".join(f"{k} {v}" for k, v in scen.items())
         if any(v != "PASS" for v in scen.values()):
             return False, f"negatif senaryo: {scen_str}"
+        if print_scenarios:
+            print("[K13-SCENARIO] " + scen_str)
         return True, f"{detail}; senaryolar: {scen_str}"
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
@@ -3781,7 +3789,7 @@ def check_launchd_status(add):
     for label, required in check_labels:
         info = {"label": label, "loaded": False, "pid": None,
                 "alive": False, "plist_valid": False, "http": None,
-                "role": "birincil" if label == primary else "legacy"}
+                "role": "birincil" if label == primary else "yedek"}
 
         # 1) launchctl list
         for line in launchctl_lines:
@@ -3967,6 +3975,79 @@ def parse_plist_out_of_scope(txt):
         if line.startswith(marker):
             out.append(line[len(marker):].strip())
     return out
+
+
+def _k12_negative_scenarios(add, upd_script, drift_script):
+    """K12 kapısının negatif kurcalama senaryoları (K13 deseni, fail-closed).
+
+    Happy path (şablon → --plist-force → GÜNCEL) sağlamken kapının 2
+    kurcalama senaryosunda problemi YAKALADIĞINI doğrular:
+      S1 bozuk-plist  : kurulu plist yapısal olarak bozulur (XML kırılır) →
+                        --plist-check BAYAT/GEÇERSİZ (exit 1) üretmeli.
+      S2 eksik-golden : golden dizini BOŞ → check_plist_drift exit 2
+                        ('denetim koşulamadı (golden yok)') üretmeli.
+    Tümü offline'dır (fake HOME + geçici golden — gerçek LaunchAgents/Caches'a
+    DOKUNMAZ; plutil yoksa python plistlib fallback'i devreye girer, Linux'ta
+    da koşar). Yakalanmayan senaryo → P0 (fail-closed ihlali).
+    Döndürür: {ad: durum} — PASS = problem yakalandı.
+    """
+    def run_scenario(name, fn):
+        tmp = tempfile.mkdtemp(prefix="k12_sc_")
+        try:
+            home = os.path.join(tmp, "home")
+            os.makedirs(home, exist_ok=True)
+            # Happy path: şablon → kurulu plist üret (GÜNCEL olmalı).
+            r = subprocess.run(["bash", upd_script, "--plist-force", home],
+                               capture_output=True, text=True, timeout=120)
+            if r.returncode != 0:
+                return f"KURULUM HATASI (exit={r.returncode}): " \
+                       f"{(r.stderr or r.stdout or '')[:200]}"
+            return fn(tmp, home)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def broken_plist(tmp, home):
+        # Kurulu plist'i boz: XML kapanışını kır (plist_validate → fail).
+        la = os.path.join(home, "Library", "LaunchAgents")
+        plist_path = None
+        for name in sorted(os.listdir(la)):
+            if name.endswith(".plist"):
+                plist_path = os.path.join(la, name)
+                break
+        if plist_path is None:
+            return "KURULUM SONUCU plist yok"
+        with open(plist_path, encoding="utf-8") as f:
+            content = f.read()
+        with open(plist_path, "w", encoding="utf-8") as f:
+            f.write(content.replace("</plist>", "").replace("</dict>", "")[:80])
+        chk = subprocess.run(["bash", upd_script, "--plist-check", home],
+                             capture_output=True, text=True, timeout=120)
+        txt = (chk.stdout + chk.stderr).strip()
+        profiles = parse_plist_check_output(txt)
+        # BAYAT/GEÇERSİZ (exit 1) yakalanmalı; sessiz GÜNCEL (exit 0) ihlal.
+        if chk.returncode == 1 and any(p["status"] == "BAYAT"
+                                       for p in profiles):
+            return "PASS"
+        add("P0", "K12-PLIST-NEG", "K12 plist (negatif senaryo)",
+            f"bozuk plist yakalanmadı: exit={chk.returncode}", txt[:200])
+        return "YAKALANMADI"
+
+    def missing_golden(tmp, home):
+        # Boş golden dizini → check_plist_drift exit 2 (golden yok).
+        empty_golden = os.path.join(tmp, "golden-empty")
+        os.makedirs(empty_golden, exist_ok=True)
+        gr = subprocess.run([sys.executable, drift_script, "--json",
+                             "--golden-dir", empty_golden],
+                            capture_output=True, text=True, timeout=120)
+        if gr.returncode == 2 and "golden" in (gr.stdout + gr.stderr).lower():
+            return "PASS"
+        add("P0", "K12-PLIST-NEG", "K12 plist (negatif senaryo)",
+            "eksik golden yakalanmadı: exit={}".format(gr.returncode),
+            (gr.stdout + gr.stderr)[:200])
+        return "YAKALANMADI"
+
+    return {"bozuk-plist": run_scenario("bozuk-plist", broken_plist),
+            "eksik-golden": run_scenario("eksik-golden", missing_golden)}
 
 
 def fold_plist_golden_findings(golden_report, add):
@@ -4843,11 +4924,19 @@ def main():
                     golden_report = None
             # P0/P1 bulgularını findings'e işle; P0 (fazla-profil) fail-closed.
             has_p0 = fold_plist_golden_findings(golden_report, add)
+            # Fail-closed sertleştirme: kapı SAĞLAMKEN 2 kurcalama senaryosunu
+            # (bozuk plist, eksik golden) yakaladığını doğrula — yakalanmayan
+            # senaryo → P0 (fail-closed ihlali). Offline: fake HOME + geçici
+            # golden (K13 negatif senaryolarıyla aynı desen).
+            k12_scen = _k12_negative_scenarios(add, upd, cpd)
+            if any(v != "PASS" for v in k12_scen.values()):
+                has_p0 = True  # yakalanmayan senaryo → fail-closed (ok=False)
             plist_report = {"layer": "K12", "ok": rc == 0 and not has_p0,
                             "exit": rc, "detail": detail,
                             "output": txt, "profiles": profiles,
                             "out_of_scope": out_of_scope,
-                            "golden": golden_report}
+                            "golden": golden_report,
+                            "scenarios": k12_scen}
             if not args.json:
                 print(f"[K12] plist şablon: "
                       f"{'PASS' if rc == 0 else 'FAIL'} (exit={rc}) — "
@@ -4882,7 +4971,8 @@ def main():
     # Üreticideki bir drift/bug paketin reproducibility zincirini bozar → P0/P1.
     repro_manifest_report = None
     if args.check_repro_manifest:
-        repro_ok, repro_detail = check_repro_manifest_self_consistency(add)
+        repro_ok, repro_detail = check_repro_manifest_self_consistency(
+            add, print_scenarios=not args.json)
         repro_manifest_report = {"ok": repro_ok, "detail": repro_detail}
         if not args.json:
             print(f"[K13] repro manifest: "

@@ -22,3 +22,13 @@ for p in d.get("profiles", []):
     status = p.get("status", "-")
     path_val = p.get("path", "-")
     print(f"| {label} | {icon} {status} | `{path_val}` |")
+
+# Kapsam-dışı dosyalar (denetim izi): K12 kapısını ETKİLEMEZ — yalnızca
+# INFO satırı olarak tablonun altında raporlanır (yönetilmeyen plist'ler).
+oos = d.get("out_of_scope") or []
+if oos:
+    print()
+    print(f"> ℹ️ **INFO** — kapsam dışı (yönetilmiyor, kapıyı etkilemez): "
+          f"{len(oos)} dosya")
+    for o in oos:
+        print(f"> - `{o}`")

@@ -471,6 +471,10 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-26 | feat | (k12) fazla-profil golden drift'ini P1→P0 fail-closed yap | [`bf506c0`](https://github.com/ali-han-kaya/leibniz2/commit/bf506c0) |
 | 2026-08-26 | feat | (plist) check_plist_drift'e --remove-extra bayrağı | [`8750b8a`](https://github.com/ali-han-kaya/leibniz2/commit/8750b8a) |
 | 2026-08-26 | fix | lineage sidecar anti-cascade kök çözümü (§7.1) | [`15ca934`](https://github.com/ali-han-kaya/leibniz2/commit/15ca934) |
+| 2026-08-26 | fix | (ci) lineage sidecar anti-cascade + plist --remove-extra (#39) | [`75bc326`](https://github.com/ali-han-kaya/leibniz2/commit/75bc326) |
+| 2026-08-26 | chore | gate_jobs tam küme testi + status checks run summary tablosu | [`ebfeebd`](https://github.com/ali-han-kaya/leibniz2/commit/ebfeebd) |
+| 2026-08-26 | test | config merge-pattern (prefixsiz) — K10 PASS kanıtı + advisory kontrat kapıları | [`da87429`](https://github.com/ali-han-kaya/leibniz2/commit/da87429) |
+| 2026-08-26 | feat | (verify) K10 çift tespit + K12/K13 negatif senaryo kapıları | [`8a6fa98`](https://github.com/ali-han-kaya/leibniz2/commit/8a6fa98) |
 
 ### Regresyon notları
 

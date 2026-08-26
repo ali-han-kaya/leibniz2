@@ -115,6 +115,39 @@ class TestProvenance(unittest.TestCase):
             "precommit-logs/PRECOMMIT_CACHE.md", pc["files"])
         self.assertTrue(len(pc["combined_sha256"]) == 64)
 
+    def test_k13_sidecar_pinned_in_precommit_logs(self):
+        """k13_repro_manifest.json sidecar'ı reproducibility manifest'inin
+        PRECOMMIT LOGS bölümünde SHA-256 ile sabitlenir.
+
+        CI'da k13_repro_manifest.json logs/ altında üretilir → precommit-logs
+        artifact'ı → all_artifacts/precommit-logs/ önekiyle iner → bu bölümde
+        dosya olarak görünür + hash'i gerçek dosyayla birebir. Scenarios
+        alanı (K13 negatif senaryo sonuçları) böylece manifest'te zaman serisi
+        boyunca denetlenebilir kanıt olur."""
+        sc = self.artifacts / "precommit-logs" / "k13_repro_manifest.json"
+        sc.write_text(json.dumps({
+            "layer": "K13", "ok": True, "exit": 0,
+            "detail": "[K13] repro manifest: PASS",
+            "scenarios": [{"name": "eksik-dosya", "status": "PASS"},
+                           {"name": "bozuk-hash", "status": "PASS"}],
+        }) + "\n", encoding="utf-8")
+        self._gen()
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        pc = m["precommit_logs"]
+        rel = "precommit-logs/k13_repro_manifest.json"
+        self.assertIn(rel, pc["files"], "K13 sidecar precommit_logs'ta olmalı")
+        # Hash gerçek dosyayla birebir (SHA-256 ile sabitlenmiş).
+        h = hashlib.sha256(sc.read_bytes()).hexdigest()
+        self.assertEqual(pc["files"][rel], h)
+        # manifest.txt'te de satırı görünür.
+        txt = (self.out / "manifest.txt").read_text(encoding="utf-8")
+        self.assertIn(rel, txt)
+        # combined_sha256 bu dosyayı da kapsar (deterministik yeniden hesap).
+        expected = hashlib.sha256(
+            "".join(f"{r}\0{pc['files'][r]}\n" for r in sorted(pc["files"])).encode()
+        ).hexdigest()
+        self.assertEqual(pc["combined_sha256"], expected)
+
     def test_refs_trend_section(self):
         # refs-trend/ dosyaları (refs_trend.py çıktısı) CONFIG gibi ayrı
         # bölümde işaretlenir + tek-hash combined_sha256 özetlenir.
@@ -972,6 +1005,85 @@ class TestManifestSections(unittest.TestCase):
         self.assertIn("cli_overrides: PASS", detail)
         self.assertEqual(findings, [], f"K10 bulgu üretti: {findings}")
 
+    def _sections_manifest(self):
+        """Beş combined_sha256 bölümünün de (lineage, summary, precheck_report,
+        python3_shell, plist_check) üretildiği bir manifest hazırlar."""
+        (self.artifacts / "lineage-findings").mkdir(parents=True)
+        (self.artifacts / "lineage-findings" / "zip_lineage.json").write_text(
+            '{"generations": []}', encoding="utf-8")
+        (self.artifacts / "klayers.json").write_text(
+            '{"layers": {}}', encoding="utf-8")
+        (self.artifacts / "precheck-report").mkdir(parents=True)
+        (self.artifacts / "precheck-report" / "precheck_report.txt").write_text(
+            "SONUC: PASS\n", encoding="utf-8")
+        (self.artifacts / "python3-shell").mkdir(parents=True)
+        (self.artifacts / "python3-shell" / "python3_shell_findings.json").write_text(
+            '{"exit_code": 0, "verdict": "PASS"}', encoding="utf-8")
+        (self.artifacts / "plist-check").mkdir(parents=True)
+        (self.artifacts / "plist-check" / "plist_check_report.txt").write_text(
+            "GÜNCEL\n", encoding="utf-8")
+        self._gen()
+        return json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+
+    def _tamper_section_dual_detect(self, section, fail_detail):
+        """Bir bölümün combined_sha256'sını kurcalayıp ÇİFT TESPİTİ doğrular:
+
+        (1) K10 o bölümün combined'ını files'tan YENİDEN hesaplayıp kayıtlı
+            değerle uyuşmazlığı yakalar (bölüm bulgusu);
+        (2) aynı kurcalama manifest.json'u da değiştirdiği için manifest.sha256
+            sidecar'ı (manifest.json'un KENDİ hash'ini sabitler) artık eşleşmez
+            (sidecar bulgusu) — iki sapma AYRI bulgu olarak raporlanır.
+        """
+        import verify_delivery as vd
+        m = self._sections_manifest()
+        stored = m[section]["combined_sha256"]
+        m[section]["combined_sha256"] = (
+            "0" if stored[0] != "0" else "1") + stored[1:]
+        (self.out / "manifest.json").write_text(
+            json.dumps(m, ensure_ascii=False), encoding="utf-8")
+        findings = []
+        ok, detail = vd.verify_manifest_digest(
+            str(self.out / "manifest.json"),
+            lambda pri, cid, cl, issue="", ev="":
+                findings.append((pri, cid, issue)))
+        self.assertFalse(ok)
+        # (1) bölüm combined uyuşmazlığı — ayrı bulgu
+        self.assertIn(fail_detail, detail)
+        sec_issues = [i for _, _, i in findings
+                      if i == f"{section}.combined_sha256 uyuşmazlığı"]
+        self.assertEqual(len(sec_issues), 1,
+                         f"{section} uyuşmazlığı tek bulgu olmalı: {findings}")
+        # (2) manifest.sha256 sidecar uyuşmazlığı — ayrı bulgu
+        self.assertIn("manifest.sha256: FAIL", detail)
+        sc_issues = [i for _, _, i in findings
+                     if i == "manifest.sha256 manifest.json ile uyuşmuyor"]
+        self.assertEqual(len(sc_issues), 1,
+                         f"sidecar uyuşmazlığı tek bulgu olmalı: {findings}")
+        # İki bulgu da P1 ve aynı K10 kapısında toplanır.
+        self.assertTrue(
+            all(pri == "P1" and cid == "K10-MANIFEST"
+                for pri, cid, _ in findings), findings)
+
+    def test_k10_detects_lineage_combined_tamper_dual(self):
+        self._tamper_section_dual_detect(
+            "lineage", "lineage_combined_sha256: FAIL")
+
+    def test_k10_detects_summary_combined_tamper_dual(self):
+        self._tamper_section_dual_detect(
+            "summary", "summary_combined_sha256: FAIL")
+
+    def test_k10_detects_precheck_report_combined_tamper_dual(self):
+        self._tamper_section_dual_detect(
+            "precheck_report", "precheck_report_combined_sha256: FAIL")
+
+    def test_k10_detects_python3_shell_combined_tamper_dual(self):
+        self._tamper_section_dual_detect(
+            "python3_shell", "python3_shell_combined_sha256: FAIL")
+
+    def test_k10_detects_plist_check_combined_tamper_dual(self):
+        self._tamper_section_dual_detect(
+            "plist_check", "plist_check_combined_sha256: FAIL")
+
     def test_k10_detects_config_combined_tamper(self):
         """Fail-closed çapraz: manifest'teki config.combined_sha256
         kurcalanınca K10 aynı formülle YENİDEN hesaplayıp uyuşmazlığı
@@ -993,6 +1105,19 @@ class TestManifestSections(unittest.TestCase):
         self.assertTrue(
             any(i == "config.combined_sha256 uyuşmazlığı"
                 for _, _, i in findings), findings)
+        # ÇİFT TESPİT: config.combined_sha256'yı kurcalamak manifest.json'u da
+        # değiştirir → manifest.sha256 sidecar'ı (manifest.json'un KENDİ
+        # hash'ini sabitler) artık eşleşmez. İki sapma AYRI bulgu olarak
+        # raporlanmalı — biri config yeniden-hesabı, biri sidecar uyuşmazlığı.
+        self.assertIn("manifest.sha256: FAIL", detail)
+        sidecar_issues = [i for _, _, i in findings
+                          if i == "manifest.sha256 manifest.json ile uyuşmuyor"]
+        self.assertEqual(len(sidecar_issues), 1,
+                         f"sidecar uyuşmazlığı tek bulgu olmalı: {findings}")
+        # İki bulgu da P1 ve aynı K10 kapısında toplanır.
+        self.assertTrue(
+            any(pri == "P1" and cid == "K10-MANIFEST"
+                for pri, cid, _ in findings), findings)
 
     def test_config_combined_is_stable_across_runs(self):
         first = self._gen()["config"]["combined_sha256"]

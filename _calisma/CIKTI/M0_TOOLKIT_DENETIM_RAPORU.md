@@ -119,7 +119,7 @@ K8 + K9 + soy hattı + K11 + K13 + K14; K10 ve K12 ayrıca çağrılır.
 | K10 | reproducibility manifest digest (`--verify-manifest`) | PASS (aşağıda) |
 | K11 | config drift (`gen_config.py --dry-run`; `--check-config-drift`) | PASS |
 | K12 | LaunchAgent plist şablonu (`--check-plist`) | PASS (yerel macOS; Linux CI'da koşmaz) |
-| K13 | gen_repro_manifest.py self-testi (`--check-repro-manifest`) — mock üretimde manifest.sha256 ↔ manifest.json eşleşmesi de denetlenir (K10 ile ortak helper) | PASS |
+| K13 | gen_repro_manifest.py self-testi (`--check-repro-manifest`) — mock üretimde manifest.sha256 ↔ manifest.json eşleşmesi de denetlenir (K10 ile ortak helper). **Negatif senaryo kapsamı (4):** eksik-dosya (bundle'dan silinen dosya → kilitlenme yerine temiz 'bundle dosyası yok'), bozuk-hash (manifest'teki SHA-256 kurcalama), config-alt-dizin (config/ alt dizin dosyası config objesinden düşme), python3-shell-eksik (üretici python3_shell bölümünü manifest'ten düşürme); yakalanmayan senaryo → P0 (fail-closed ihlali). Sonuçlar sidecar'a yazılır: `[K13-SCENARIO]` log satırı → k13_repro_manifest.json `scenarios` alanı (4 senaryonun PASS/YAKALANMADI durumu) | PASS |
 | K14 | Cleanup kaydı: M0 §10 silme/taşıma kayıtları (`--check-cleanup`) | PASS |
 | K16 | github-scripts self-test (`--check-github-scripts`) — 15 senaryoda mock girdi + çıktı eşleşmesi; node fallback'i launchd PATH'ine dayanıklı | PASS |
 | K17 | Mirror sync: `sync_verify_mirror.sh --check` (0=GÜNCEL, 1=BAYAT, 2=hata; `--check-mirror`) | PASS (yerel macOS; Linux CI'da koşmaz) |

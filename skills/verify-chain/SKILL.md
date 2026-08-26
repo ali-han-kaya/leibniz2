@@ -181,23 +181,38 @@ Rules that keep the chain honest:
 
 ## Stash-aware hooks
 
-`check-repro-manifest` (`language: system`, `pass_filenames: false`) runs
-against the **working tree**; `git commit` takes the **staged** content.
-When dependency files (`verify.yml`, `gen_repro_manifest.py`,
-`test_gen_repro_manifest.py`) have unstaged or untracked changes, the hook
-may test a **different version** than the one being committed.
+`check-repro-manifest`, `check-pattern-consistency` and `verify-delivery`
+(`language: system`, `pass_filenames: false`) run against the **working tree**;
+`git commit` takes the **staged** content. When their dependency files have
+unstaged or untracked changes, the hook may test a **different version** than
+the one being committed.
 
-The pre-check (`check_repro_manifest_hook.py`) detects this mismatch via
-`git status --porcelain` and emits an **advisory warning**:
+Each hook's pre-check (shared `hook_unstaged_deps.py` + per-hook wrapper)
+detects this mismatch via `git status --porcelain` and emits an **advisory
+warning**:
 
 - `M ` (staged only) → clean, no warning
 - ` M` (unstaged) → warning: "hook tests working tree, commit takes staged"
 - `??` (untracked) → warning: file won't be in the commit at all
 - `MM` (staged + unstaged) → warning: both versions differ
 
-This is **advisory** — the test gate still runs and its exit code determines
-whether the commit is blocked. The warning is a signal to `git add` the
-dependency files before committing to ensure test→commit consistency.
+| Hook | Wrapper | Dependency files |
+|---|---|---|
+| `check-repro-manifest` | `check_repro_manifest_hook.py` | `verify.yml`, `gen_repro_manifest.py`, `test_gen_repro_manifest.py` |
+| `check-pattern-consistency` | `check_pattern_consistency_hook.py` | `verify.yml`, `check_pattern_consistency.py`, `gen_repro_manifest.py` |
+| `verify-delivery` | `verify_delivery_hook.py` | `verify_delivery.py`, `verify_delivery.config.json` + şema, TESLIM zipleri + `.sha256` |
+
+The pre-check has two modes:
+
+- **advisory** (no flag): prints the warning, then the test gate still runs
+  and its exit code decides the block — the warning is a signal to `git add`.
+- **`--strict`** (fail-closed): unstaged/untracked dependencies **block the
+  commit** with exit 2 before the gate runs — the hook cannot test the same
+  content that gets committed. All three hooks run with `--strict` in
+  `.pre-commit-config.yaml`.
+
+The warning is a signal to `git add` the dependency files before committing
+to ensure test→commit consistency.
 
 ## References
 

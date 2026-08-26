@@ -19,9 +19,7 @@
 # keepalive=false — yalnızca elle --start ile başlatılır). İkisi de
 # PLIST_PROFILES'te YÖNETİLİR: --plist-force üretir, --plist-check denetler,
 # check_plist_drift golden'larla sabitler. --start varsayılanı birincil
-# leibniz2'dir. --remove-legacy bootout + kurulu plist/şablon/log temizliği
-# yapar (yedek profili launchd'den söker; PLIST_PROFILES'tan kaldırmaz). Kurulu
-# tam yollar korunur:
+# leibniz2'dir. Kurulu tam yollar korunur:
 #   ~/Library/LaunchAgents/<label>.plist
 # İçerikleri şablon olarak TCC-safe dizinde tutulur:
 #   ~/Library/Caches/com.freebuff/preview-template/<label>.plist.tmpl
@@ -51,7 +49,6 @@
 #   update_preview.sh --plist-reset        # şablonları yerleşik varsayılandan geri yaz
 #   update_preview.sh --start [LABEL]       # plist'i üret + launchctl bootstrap (vars. birincil)
 #   update_preview.sh --stop [LABEL|all]    # launchctl bootout
-#   update_preview.sh --remove-legacy [HOME] # legacy preview-server'ı launchd'den sök + temizle
 #   update_preview.sh --status              # her label için yüklü/PID/exit/HTTP durumu
 #   update_preview.sh --mirror             # verify mirror'ı senkron et (sync_verify_mirror.sh)
 #   update_preview.sh --mirror-check       # mirror güncel mi? (0 güncel/1 bayat/2 hata)
@@ -454,50 +451,6 @@ plist_stop() {
   plist_stop_one "$label"
 }
 
-# ============================================================================
-# BÖLÜM 2c — legacy profil temizliği (--remove-legacy)
-# ============================================================================
-
-# Legacy profil PLIST_PROFILES'te TANIMLI kalır (üretilebilir) ama launchd'den
-# kaldırılmıştır — yalnızca birincil leibniz2 canlıdır. --remove-legacy bir
-# kerelik taşımayı yapar: bootout + kurulu plist/şablon/log silme.
-LEGACY_LABEL="com.freebuff.preview-server"
-LEGACY_LOGNAME="preview-server"
-
-plist_remove_legacy() {
-  local home dst tmpl log
-  home="$(plist_home "${1:-}")"
-  dst="$(plist_dst_for "$home" "$LEGACY_LABEL")"
-  tmpl="$(plist_tmpl_for "$LEGACY_LABEL")"
-  log="$HOME/Library/Logs/com.freebuff/$LEGACY_LOGNAME.log"
-
-  # 1) launchd'den sök (yüklüyse). Bootout service-target formunda (label)
-  # yapılır — path formu, agent farklı bir yoldan yüklenmişse (örn. eski
-  # HOME) başarısız olur ve fail-closed gate'i yanlış HATA'ya düşürür.
-  if plist_is_loaded "$LEGACY_LABEL"; then
-    launchctl bootout "$(launchctl_domain)/$LEGACY_LABEL" 2>/dev/null \
-      && say "BOOTOUT: $LEGACY_LABEL" \
-      || err "bootout başarısız: $LEGACY_LABEL ($dst)"
-  else
-    say "BOOTOUT: $LEGACY_LABEL zaten yüklü değil"
-  fi
-
-  # 2) Kurulu plist + şablon + log dosyalarını sil (idempotent).
-  [ -f "$dst" ] && { rm -f "$dst"; say "SİLİNDİ: $dst"; }
-  [ -f "$tmpl" ] && { rm -f "$tmpl"; say "SİLİNDİ: $tmpl"; }
-  [ -f "$log" ] && { rm -f "$log"; say "SİLİNDİ: $log"; }
-
-  # 3) Birincil profilin canlılığını BİLDİR (dokunma — --start yönetir).
-  local prim primdst
-  prim="$(plist_primary_label)"
-  primdst="$(plist_dst_for "$home" "$prim")"
-  if plist_is_loaded "$prim"; then
-    say "CANLI: $prim (birincil — korundu)"
-  else
-    say "UYARI: $prim yüklü değil — \`--start\` ile başlatabilirsin"
-  fi
-}
-
 # Tüm şablonların birleşik SHA-256'sı (--plist-watch değişim algısı için).
 plist_templates_hash() {
   { while IFS='|' read -r label _; do
@@ -588,26 +541,10 @@ plist_status() {
     if [ "$label" = "$prim" ]; then
       say "    Rol:      birincil"
     else
-      say "    Rol:      legacy"
+      say "    Rol:      yedek"
     fi
     say ""
   done < <(plist_profiles)
-
-  # Legacy label (PLIST_PROFILES dışı)
-  local ll="$LEGACY_LABEL"
-  if [ -n "$ll" ]; then
-    local lloaded lpid lhttp
-    if plist_is_loaded "$ll"; then lloaded="evet"; else lloaded="hayır"; fi
-    lpid=$(launchctl list 2>/dev/null | awk -v l="$ll" '$3 == l {print $1}')
-    [ -z "$lpid" ] && lpid="-"
-    lhttp="-"
-    if [ "$lloaded" = "evet" ]; then
-      lhttp=$(curl -sf -o /dev/null -w '%{http_code}' "http://127.0.0.1:8000/api/latest" 2>/dev/null || echo "DOWN")
-    fi
-    say "  [$ll] (legacy)"
-    say "    Yüklü: $lloaded  PID: $lpid  HTTP: $lhttp"
-    say ""
-  fi
 
   # Özet
   local any_loaded=false
@@ -619,6 +556,10 @@ plist_status() {
   else
     say "  [WARN] Hicbir sunucu yuklu degil — --start ile baslatilabilir"
   fi
+  # İki profil aynı 8000 portunu paylaşır — yalnızca biri aynı anda canlı
+  # olabilir; yedek, birincil durursa devreye girer (failover).
+  say "  [Not] preview-server yedektir: aynı 8000 portunu paylaştığı için birincil"
+  say "        canlıyken yüklü olsa bile dinleyemez; failover için elle --start."
   say ""
 }
 
@@ -717,9 +658,6 @@ case "${1:-build}" in
     ;;
   --stop)
     plist_stop "${2:-}"
-    ;;
-  --remove-legacy)
-    plist_remove_legacy "${2:-}"
     ;;
   --status)
     plist_status

@@ -88,6 +88,8 @@ HOOK_COVERAGE = {
         "test_refs_trend_badge.py",
         "test_audit_refs_trend.py",
         "test_check_repro_manifest_hook.py",
+        "test_check_hook_unstaged_deps.py",
+        "test_extract_unstaged_deps.py",
         "test_mirror_check.py",
         "test_mirror_panel.py",
         "test_check_mirror_coverage.py",

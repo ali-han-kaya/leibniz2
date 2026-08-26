@@ -8,6 +8,7 @@ test_check_action_runtimes.py
 test_check_cli_overrides.py
 test_check_commit_messages.py
 test_check_doc_wrapper_sync.py
+test_check_hook_unstaged_deps.py
 test_check_mirror_coverage.py
 test_check_python3_shell.py
 test_check_repro_manifest_hook.py
@@ -20,6 +21,7 @@ test_dashboard_smoke.py
 test_diff_config_artifacts.py
 test_doc_job_sync.py
 test_enforce_is_on.py
+test_extract_unstaged_deps.py
 test_gen_commit_msg_evidence.py
 test_gen_precommit_report.py
 test_github_scripts.py

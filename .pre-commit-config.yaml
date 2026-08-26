@@ -106,8 +106,12 @@ repos:
         description: >-
           MANIFEST MD5 (18/18) + KLASOR_CHECKSUMLARI + iç zip sidecar +
           3 script byte-for-byte + PDF 33 sayfa + 64 referans. Bulgu varsa
-          commit bloke edilir.
-        entry: python3 _calisma/CIKTI/verify_delivery.py --dir _calisma/CIKTI
+          commit bloke edilir. ÖN-KONTROL (--strict): bağımlılık dosyalarının
+          (verify_delivery.py, verify_delivery.config.json + şema, TESLIM
+          zipleri + .sha256) stage edilmemiş/untracked değişiklikleri varsa
+          hook BLOKE edilir (fail-closed — stage edilen sürümle aynı içerik
+          test edilemez; `git add <dosya>` ile stage'leyin).
+        entry: python3 _calisma/CIKTI/verify_delivery_hook.py --strict
         language: system
         always_run: true
         pass_filenames: false
@@ -293,13 +297,13 @@ repos:
           provenance bölümü (artifact → job) doğru üretilir ve verify.yml'deki
           reproducibility merge pattern'i ARTIFACT_JOBS'ı EKSİKSİZ kapsar.
           Bir artifact pattern'den düşerse (manifest'e girmeden kaybolursa)
-          commit bloke edilir. ÖN-KONTROL: bağımlılık dosyalarının
+          commit bloke edilir. ÖN-KONTROL (--strict): bağımlılık dosyalarının
           (verify.yml, gen_repro_manifest.py, test_gen_repro_manifest.py)
-          stage edilmemiş/untracked değişiklikleri varsa NET uyarı basar
-          (hook çalışma ağacını test eder, commit stage'leneni alır —
-          advisory uyarı, testler yine de koşar). stdlib unittest +
+          stage edilmemiş/untracked değişiklikleri varsa hook BLOKE edilir
+          (fail-closed — stage edilen sürümle aynı içerik test edilemez;
+          `git add <dosya>` ile stage'leyin). stdlib unittest +
           subprocess + git status.
-        entry: python3 _calisma/CIKTI/check_repro_manifest_hook.py
+        entry: python3 _calisma/CIKTI/check_repro_manifest_hook.py --strict
         language: system
         always_run: true
         pass_filenames: false
@@ -313,7 +317,12 @@ repos:
           pattern'ini ARTIFACT_JOBS ile karşılaştırır. Eksik/fazla artifact
           varsa commit bloke edilir. Drift: birisi pattern'den artifact
           çıkarırsa veya yeni artifact ekleyip pattern'i güncellemezse.
-        entry: python3 _calisma/CIKTI/check_pattern_consistency.py
+          ÖN-KONTROL (--strict): bağımlılık dosyalarının (verify.yml,
+          check_pattern_consistency.py, gen_repro_manifest.py) stage
+          edilmemiş/untracked değişiklikleri varsa hook BLOKE edilir
+          (fail-closed — stage edilen sürümle aynı içerik test edilemez;
+          `git add <dosya>` ile stage'leyin).
+        entry: python3 _calisma/CIKTI/check_pattern_consistency_hook.py --strict
         language: system
         always_run: true
         pass_filenames: false

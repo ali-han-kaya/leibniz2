@@ -34,6 +34,7 @@ GOLDEN_DIR = os.path.join(HERE, "plist-golden")
 
 sys.path.insert(0, HERE)
 from verify_delivery import (  # noqa: E402
+    _k12_negative_scenarios,
     fold_plist_golden_findings,
     parse_plist_check_output,
     parse_plist_out_of_scope,
@@ -398,6 +399,34 @@ class TestOutOfScopeExtraFile(unittest.TestCase):
             self.assertIn("INFO: kapsam dışı", d["output"])
 
 
+class TestK12NegativeScenarios(unittest.TestCase):
+    """K12 kapısının negatif kurcalama senaryoları (K13 deseni, fail-closed).
+
+    _k12_negative_scenarios: happy path (şablon → --plist-force → GÜNCEL)
+    sağlamken kapının 2 kurcalama senaryosunda problemi YAKALADIĞINI
+    doğrular. Offline: fake HOME + geçici golden — gerçek LaunchAgents/
+    Caches'a dokunmaz; plutil yoksa python plistlib fallback'i devreye girer
+    (Linux CI'da da koşar).
+    """
+
+    def _run(self):
+        findings = []
+
+        def add(priority, fid, check, message, detail):
+            findings.append({"priority": priority, "id": fid,
+                             "check": check, "message": message,
+                             "detail": detail})
+
+        return _k12_negative_scenarios(add, UPDATE_PREVIEW, CHECK_DRIFT), findings
+
+    def test_both_scenarios_caught(self):
+        scen, findings = self._run()
+        self.assertEqual(scen["bozuk-plist"], "PASS", scen)
+        self.assertEqual(scen["eksik-golden"], "PASS", scen)
+        # Yakalanmayan senaryo yok → P0 bulgusu OLMAMALI.
+        self.assertEqual(findings, [])
+
+
 class TestK12GoldenFoldPriorities(unittest.TestCase):
     """K12 golden denetim katlama öncelikleri (fail-closed P0 / advisory P1).
 
@@ -735,6 +764,33 @@ class TestSummaryPlistTable(unittest.TestCase):
             capture_output=True, text=True, timeout=30)
         self.assertIn("plist_report.json yok", out.stdout)
 
+    def test_out_of_scope_info_line(self):
+        """K12 tablosunun altında kapsam-dışı INFO satırı render edilir."""
+        data = json.dumps({
+            "ok": True, "exit": 0, "detail": "GÜNCEL (1/1)",
+            "profiles": [
+                {"label": "com.freebuff.preview-leibniz2",
+                 "status": "GÜNCEL", "path": "/Users/r/.../a.plist"},],
+            "out_of_scope": ["/Users/r/Library/LaunchAgents/other.plist",
+                              "/Users/r/Library/LaunchAgents/legacy.plist"],
+        })
+        out = self._run(data)
+        self.assertIn("| com.freebuff.preview-leibniz2 | ✅ GÜNCEL |", out)
+        # INFO satırı: tablodan SONRA gelir, kapıyı etkilemez.
+        self.assertIn("ℹ️ **INFO** — kapsam dışı", out)
+        self.assertIn("2 dosya", out)
+        self.assertIn("other.plist", out)
+        self.assertIn("legacy.plist", out)
+        # Profil tablosu INFO'dan ÖNCE olmalı (sıra: tablo → INFO).
+        self.assertLess(out.index("| Profil | Durum | Yol |"),
+                        out.index("kapsam dışı"))
+
+    def test_no_out_of_scope_no_info(self):
+        data = json.dumps({"ok": True, "exit": 0, "detail": "GÜNCEL (1/1)",
+                           "profiles": [], "out_of_scope": []})
+        out = self._run(data)
+        self.assertNotIn("kapsam dışı", out)
+
 
 
 # ============================================================================
@@ -886,83 +942,85 @@ class TestSingleProfileCheck(unittest.TestCase):
         shutil.rmtree(render)
 
 
-# ============================================================================
-# --remove-legacy tests
-# ============================================================================
+class TestPlistStatus(unittest.TestCase):
+    """update_preview.sh --status çıktısı — 2 profilli yönetim.
 
-class TestRemoveLegacy(unittest.TestCase):
-    """update_preview.sh --remove-legacy davranış testleri."""
+    PLIST_PROFILES'te iki profil yönetilir: birincil leibniz2 (Rol:
+    birincil) + yedek preview-server (Rol: yedek). Her ikisi de aynı 8000
+    portunu paylaşır — bu yüzden çıktı, yedeğin failover rolünü açıkça
+    belirten bir [Not] satırı içermeli ve yedeğe "legacy" dememeli.
 
-    def _run(self, *args, home=None):
-        env = dict(os.environ)
-        if home:
-            env["HOME"] = home
-        return subprocess.run(
-            ["bash", UPDATE_PREVIEW] + list(args),
-            env=env, capture_output=True, text=True, timeout=30)
+    Gerçek launchctl/curl'e dokunmamak için PATH'e shim konur:
+      - launchctl list → birincil yüklü (PID), yedek yüklü değil
+      - curl → HTTP 200
+    """
 
-    def test_remove_legacy_deletes_plist(self):
-        """Legacy plist dosyası silinmeli."""
-        with tempfile.TemporaryDirectory(prefix="legacy-") as home:
-            la = os.path.join(home, "Library", "LaunchAgents")
-            os.makedirs(la, exist_ok=True)
-            legacy = os.path.join(la, "com.freebuff.preview-server.plist")
-            with open(legacy, "w") as f:
-                f.write(SAMPLE_PLIST)
-            self.assertTrue(os.path.exists(legacy))
-            r = self._run("--remove-legacy", home)
-            # bootout may fail on CI (no launchd), but file removal is idempotent
-            self.assertFalse(os.path.exists(legacy),
-                             "Legacy plist should be deleted")
+    def _shims(self, loaded_pid):
+        """(bindir, env) döner — launchctl + curl shim'leri PATH'te.
 
-    def test_remove_legacy_idempotent(self):
-        """İki kez çalıştırılmalı — hata vermemeli."""
-        with tempfile.TemporaryDirectory(prefix="legacy-idem-") as home:
-            la = os.path.join(home, "Library", "LaunchAgents")
-            os.makedirs(la, exist_ok=True)
-            r1 = self._run("--remove-legacy", home)
-            r2 = self._run("--remove-legacy", home)
-            # İkincisi de hata vermemeli (zaten silinmiş)
-            self.assertNotIn("HATA", r2.stdout + r2.stderr)
+        loaded_pid: birincil için görünecek PID; None → hiçbir label yüklü
+        değilmiş gibi davran (launchctl list boş).
+        """
+        bindir = tempfile.mkdtemp(prefix="status-shim-")
+        launchctl = os.path.join(bindir, "launchctl")
+        with open(launchctl, "w") as f:
+            f.write("#!/bin/bash\n")
+            f.write('if [ \"$1\" = \"list\" ]; then\n')
+            f.write('  echo \"PID   Status  Label\"\n')
+            if loaded_pid is not None:
+                f.write(f'  echo \"{loaded_pid}  0  com.freebuff.preview-leibniz2\"\n')
+            f.write('  exit 0\n')
+            f.write('fi\n')
+            f.write('exit 0\n')
+        os.chmod(launchctl, 0o755)
+        curl = os.path.join(bindir, "curl")
+        with open(curl, "w") as f:
+            f.write("#!/bin/bash\n")
+            f.write('echo "200"\n')
+            f.write('exit 0\n')
+        os.chmod(curl, 0o755)
+        env = {"PATH": bindir + os.pathsep + os.environ.get("PATH", "")}
+        return bindir, env
 
-    def test_remove_legacy_preserves_primary(self):
-        """Birincil profil korunmalı."""
-        with tempfile.TemporaryDirectory(prefix="legacy-prim-") as home:
-            la = os.path.join(home, "Library", "LaunchAgents")
-            os.makedirs(la, exist_ok=True)
-            legacy = os.path.join(la, "com.freebuff.preview-server.plist")
-            primary = os.path.join(la, "com.freebuff.preview-leibniz2.plist")
-            with open(legacy, "w") as f:
-                f.write(SAMPLE_PLIST)
-            with open(primary, "w") as f:
-                f.write(SAMPLE_PLIST)
-            r = self._run("--remove-legacy", home)
-            self.assertFalse(os.path.exists(legacy))
-            self.assertTrue(os.path.exists(primary),
-                            "Primary plist should be preserved")
+    def test_status_two_profiles_with_roles_and_note(self):
+        """Birincil yüklü + yedek yüklü değil → roller + failover notu."""
+        with tempfile.TemporaryDirectory(prefix="plist-gate-") as home:
+            bindir, env = self._shims(os.getpid())
+            r = run_env(home, env, "bash", UPDATE_PREVIEW, "--status")
+            shutil.rmtree(bindir, ignore_errors=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            out = r.stdout
+            # Her iki yönetilen profil listelenir.
+            self.assertIn("com.freebuff.preview-leibniz2", out)
+            self.assertIn("com.freebuff.preview-server", out)
+            # Roller: birincil + yedek (legacy DEĞİL).
+            self.assertIn("Rol:      birincil", out)
+            self.assertIn("Rol:      yedek", out)
+            self.assertNotIn("Rol:      legacy", out)
+            # Yükleme durumu: birincil evet, yedek hayır.
+            self.assertIn("Yüklü:    evet", out)
+            self.assertIn("Yüklü:    hayır", out)
+            # HTTP: birincil 200 (curl shim), yedek "-" (yüklü değil).
+            self.assertIn("HTTP:     200", out)
+            self.assertIn("HTTP:     -", out)
+            # Failover notu: aynı port paylaşımı + elle --start.
+            self.assertIn("[Not] preview-server yedektir", out)
+            self.assertIn("failover", out)
 
-    def test_remove_legacy_no_legacy_files(self):
-        """Legacy dosya yoksa bile çalışmalı."""
-        with tempfile.TemporaryDirectory(prefix="legacy-none-") as home:
-            r = self._run("--remove-legacy", home)
-            self.assertNotIn("HATA", r.stdout + r.stderr)
+    def test_status_both_unloaded_warns(self):
+        """Hiçbiri yüklü değil → WARN + roller yine doğru."""
+        with tempfile.TemporaryDirectory(prefix="plist-gate-") as home:
+            bindir, env = self._shims(None)  # hiçbir label yüklü değil
+            r = run_env(home, env, "bash", UPDATE_PREVIEW, "--status")
+            shutil.rmtree(bindir, ignore_errors=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            out = r.stdout
+            self.assertIn("[WARN] Hicbir sunucu yuklu degil", out)
+            self.assertIn("Rol:      birincil", out)
+            self.assertIn("Rol:      yedek", out)
+            self.assertNotIn("Rol:      legacy", out)
+            self.assertIn("[Not] preview-server yedektir", out)
 
-    def test_remove_legacy_reports_primary_status(self):
-        """Birincil profil durumu raporda görünmeli."""
-        with tempfile.TemporaryDirectory(prefix="legacy-report-") as home:
-            la = os.path.join(home, "Library", "LaunchAgents")
-            os.makedirs(la, exist_ok=True)
-            r = self._run("--remove-legacy", home)
-            out = r.stdout + r.stderr
-            # Should mention either primary is loaded or warning about --start
-            self.assertTrue(
-                "birincil" in out.lower() or "leibniz2" in out.lower() or
-                "UYARI" in out or "CANLI" in out,
-                f"Expected primary profile status in output: {out}")
-
-
-if __name__ == "__main__":
-    unittest.main()
 
 if __name__ == "__main__":
     unittest.main()

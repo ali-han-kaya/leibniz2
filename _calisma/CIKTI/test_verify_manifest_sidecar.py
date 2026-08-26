@@ -20,12 +20,14 @@ Kapsanan durumlar:
 stdlib unittest; ek bağımlılık yok — CI `test_*.py` deseniyle otomatik koşar.
 """
 import hashlib
+import io
 import json
 import os
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -228,6 +230,32 @@ class TestK13SelfTest(unittest.TestCase):
         self.assertIn("senaryolar: eksik-dosya PASS, bozuk-hash PASS, "
                       "config-alt-dizin PASS, python3-shell-eksik PASS", detail)
         self.assertEqual(collector.findings, [])
+
+    def test_print_scenarios_emits_sidecar_line(self):
+        """print_scenarios=True: negatif senaryo sonuçları ayrı makine-okunur
+        '[K13-SCENARIO]' satırına yazılır — CI sidecar'ı bu satırı ayrıştırıp
+        k13_repro_manifest.json'daki scenarios alanına taşır (detail içindeki
+        örtük kopyaya ek olarak AÇIK kanıt; çift koşu YOK — satır, zaten
+        koşulmuş senaryo sonuçlarından basılır)."""
+        buf = io.StringIO()
+        collector = _Collector()
+        with mock.patch.object(sys, "stdout", new=buf):
+            ok, detail = vd.check_repro_manifest_self_consistency(
+                collector, print_scenarios=True)
+        self.assertTrue(ok, detail)
+        out = buf.getvalue()
+        self.assertIn("[K13-SCENARIO] eksik-dosya PASS, bozuk-hash PASS, "
+                      "config-alt-dizin PASS, python3-shell-eksik PASS", out)
+        # Senaryolar yalnızca BİR kez koşuldu (detail'teki kopya + satır).
+        self.assertEqual(out.count("eksik-dosya PASS"), 1)
+
+    def test_no_scenario_line_without_flag(self):
+        buf = io.StringIO()
+        collector = _Collector()
+        with mock.patch.object(sys, "stdout", new=buf):
+            ok, _ = vd.check_repro_manifest_self_consistency(collector)
+        self.assertTrue(ok)
+        self.assertNotIn("[K13-SCENARIO]", buf.getvalue())
 
     def _produce_once(self):
         """Mock artifact'ları üretip manifest'i yükler; (tmp, out, m) döner."""

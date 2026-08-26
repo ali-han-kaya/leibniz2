@@ -28,6 +28,9 @@ import sys
 
 CIKTI = pathlib.Path(__file__).resolve().parent
 
+sys.path.insert(0, str(CIKTI))
+import hook_unstaged_deps as hud  # noqa: E402
+
 # Hook'un test ettiği ve commit'in içeriğini belirleyen bağımlılıklar.
 DEPS = [
     ".github/workflows/verify.yml",               # merge pattern / ARTIFACT_JOBS
@@ -36,45 +39,19 @@ DEPS = [
 ]
 
 
-def unstaged_deps():
-    """Bağımlılık dosyalarının stage durumunu döndürür: {rel: durum}.
-
-    git status --porcelain çıktısındaki XY kodundan:
-      - '??'            → untracked (hiç stage edilmemiş — commit'e girmez)
-      - Y sütununda 'M' → iş ağacında değişiklik (unstaged veya MM)
-      - yalnızca 'M '   → SADECE stage edilmiş → temiz (uyarı yok)
-    """
-    r = subprocess.run(
-        ["git", "status", "--porcelain", "--", *DEPS],
-        capture_output=True, text=True)
-    dirty = {}
-    for line in r.stdout.splitlines():
-        line = line.rstrip("\n")
-        if len(line) < 2:
-            continue
-        code, rel = line[:2], line[3:].strip()
-        if code.startswith("??"):
-            dirty[rel] = "untracked (stage edilmemiş — commit'e girmez)"
-        elif len(code) == 2 and code[1] == "M":
-            dirty[rel] = ("unstaged değişiklik" if code[0] == " "
-                          else "staged + unstaged (çift durum)")
-    return dirty
+# Geriye dönük uyumluluk: testler hook.unstaged_deps() çağırır.
+unstaged_deps = lambda: hud.unstaged_deps(DEPS)  # noqa: E731
 
 
-def main():
+def main(argv=None):
+    argv = sys.argv[1:] if argv is None else argv
+    strict = "--strict" in argv
     dirty = unstaged_deps()
     if dirty:
-        print("⚠️  check-repro-manifest ÖN-KONTROL: bağımlılık dosyası "
-              "STAGE EDİLMEMİŞ", file=sys.stderr)
-        for rel, st in sorted(dirty.items()):
-            print(f"    • {rel}  ({st})", file=sys.stderr)
-        print("  Hook testleri ÇALIŞMA AĞACINI koşar; `git commit` "
-              "stage'lenen içeriği alır.", file=sys.stderr)
-        print("  Bu dosyalarda farklı sürüm test edilip farklı sürüm "
-              "commit edilebilir.", file=sys.stderr)
-        print("  Stage'lemek için: git add <dosya> "
-              "(uyarı advisory — testler yine de koşar)",
-              file=sys.stderr)
+        if strict:
+            # Fail-closed: stage edilen sürümle aynı içerik test edilemez.
+            return hud.block_strict("check-repro-manifest", dirty)
+        hud.print_warning("check-repro-manifest", dirty)
     # Asıl kapı: önceki hook entry'siyle birebir aynı komut.
     r = subprocess.run(
         [sys.executable, "-m", "unittest", "discover",

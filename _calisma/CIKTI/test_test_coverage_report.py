@@ -56,6 +56,27 @@ class TestHookMap(unittest.TestCase):
         self.assertIn("check-repro-manifest", self.hmap)
         self.assertEqual(len(self.hmap["check-repro-manifest"]["test_files"]), 1)
 
+    def test_check_repro_manifest_covers_k10_cross_validation(self):
+        """K10 çapraz doğrulama testleri (config/lineage/summary/precheck_report/
+        python3_shell/plist_check combined_sha256 + manifest.sha256 çift tespiti)
+        check-repro-manifest hook'unun kapısında koşmalı — coverage map, hook'un
+        kapsadığı test dosyasının (test_gen_repro_manifest.py) içinde bu testlerin
+        VAR olduğunu kanıtlamalı."""
+        files = self.hmap["check-repro-manifest"]["test_files"]
+        self.assertEqual(files, ["test_gen_repro_manifest.py"])
+        src = pathlib.Path(__file__).resolve().parent / "test_gen_repro_manifest.py"
+        text = src.read_text(encoding="utf-8")
+        for name in (
+            "test_k10_detects_config_combined_tamper",
+            "test_k10_detects_lineage_combined_tamper_dual",
+            "test_k10_detects_summary_combined_tamper_dual",
+            "test_k10_detects_precheck_report_combined_tamper_dual",
+            "test_k10_detects_python3_shell_combined_tamper_dual",
+            "test_k10_detects_plist_check_combined_tamper_dual",
+        ):
+            self.assertIn(f"def {name}(", text,
+                          f"K10 çapraz testi hook kapsamında değil: {name}")
+
 
 class TestCiJobMap(unittest.TestCase):
     @classmethod

@@ -125,6 +125,38 @@ class TestMain(unittest.TestCase):
         self.assertIn("unittest", unittest_cmd)
         self.assertIn("test_gen_repro_manifest.py", unittest_cmd)
 
+    def test_strict_blocks_on_dirty(self):
+        """--strict + kirli deps → exit 2, unittest KOŞMAZ."""
+        calls = []
+
+        def fake_run(cmd, **kw):
+            calls.append(cmd)
+            return mock.Mock(returncode=0)
+        with mock.patch.object(hook, "unstaged_deps", return_value={
+                ".github/workflows/verify.yml": "unstaged değişiklik"}), \
+                mock.patch.object(subprocess, "run", side_effect=fake_run):
+            buf = io.StringIO()
+            with contextlib.redirect_stderr(buf):
+                rc = hook.main(["--strict"])
+        self.assertEqual(rc, 2)
+        err = buf.getvalue()
+        self.assertIn("--strict", err)
+        self.assertIn("HOOK BLOKE", err)
+        self.assertEqual(calls, [], "strict blokta unittest çalışmamalı")
+
+    def test_strict_clean_passes(self):
+        """--strict + temiz deps → unittest koşar, exit 0."""
+        calls = []
+
+        def fake_run(cmd, **kw):
+            calls.append(cmd)
+            return mock.Mock(returncode=0)
+        with mock.patch.object(hook, "unstaged_deps", return_value={}), \
+                mock.patch.object(subprocess, "run", side_effect=fake_run):
+            rc = hook.main(["--strict"])
+        self.assertEqual(rc, 0)
+        self.assertEqual(len(calls), 1, "unittest bir kez koşmalı")
+
 
 if __name__ == "__main__":
     unittest.main()

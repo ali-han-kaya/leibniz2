@@ -361,6 +361,25 @@ jobs:
           cat logs/precommit.log
           exit $status
 
+      # ─── UNSTAGED-DEPS UYARI ÇIKARIMI (ADVISORY) ────────────────────────
+      # pre-commit log'undaki unstaged-deps ön-kontrol bloklarını (advisory
+      # ⚠️ veya strict ⛔ marker'ları) ayrıştırıp logs/unstaged_deps_findings.json
+      # + .txt sidecar'larına yazar. logs/ dizini precommit-logs artifact'ı
+      # olarak bütünüyle yüklenir → bulgular artifact'ta görünür ve
+      # reproducibility manifest'inde SHA-256 ile sabitlenir. Advisory:
+      # build'i bloke etmez (if: always() + continue-on-error). Temiz
+      # checkout'ta bulgu yok — yine de makine-okunur "yok" kanıtı üretilir.
+      - name: Extract unstaged-deps findings (advisory)
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: |
+          python3 _calisma/CIKTI/extract_unstaged_deps.py \
+            --log logs/precommit.log \
+            --out-json logs/unstaged_deps_findings.json \
+            --out-txt logs/unstaged_deps_findings.txt
+          echo "unstaged-deps çıkarımı tamam — logs/unstaged_deps_findings.json"
+
       # ─── K13 REPRO-MANIFEST (ADVISORY, ayrı step) ───────────────────────
       # verify-delivery-repro-manifest hook'u (K13) — yukarıdaki ortak
       # `pre-commit run --all-files` içinde zaten koşar; BURADA ayrıca TEK
@@ -386,11 +405,18 @@ jobs:
           import json, sys
           ok, status, res = sys.argv[1], int(sys.argv[2]), sys.argv[3]
           detail = ""
+          scenarios = []
           try:
               with open("logs/k13_repro_manifest.log", encoding="utf-8") as f:
                   for line in f:
                       if line.startswith("[K13]"):
                           detail = line.strip()
+                      elif line.startswith("[K13-SCENARIO]"):
+                          # "ad PASS, ad2 YAKALANMADI" → [{name, status}]
+                          for part in line[len("[K13-SCENARIO]"):].split(","):
+                              name, _, st = part.strip().partition(" ")
+                              if name and st:
+                                  scenarios.append({"name": name, "status": st})
           except OSError:
               pass
           with open("logs/k13_repro_manifest.json", "w", encoding="utf-8") as f:
@@ -399,6 +425,7 @@ jobs:
                   "ok": ok == "true",
                   "exit": status,
                   "detail": detail or f"K13 repro manifest: {res}",
+                  "scenarios": scenarios,
                   "log": "k13_repro_manifest.log",
               }, f, ensure_ascii=False, indent=2)
           PYEOF
