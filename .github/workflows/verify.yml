@@ -311,6 +311,27 @@ jobs:
           #  --lineage-out ayrı artifact + run summary için sidecar yazar;
           #  --klayers-out K1-K14 PASS/FAIL/SKIP özetini run summary'ye taşır)
 
+      # ─── SIDECAR GARANTİSİ (§7.1 kök neden) ─────────────────────────────
+      # "Run full verification" adımı fail olsa da (P0/P1 → exit≠0) veya
+      # script beklenmedik şekilde yarıda kalsa da bu dört sidecar'ın
+      # VARLIĞI garantilenir: eksikse dürüst bir "üretilemedi" kaydı yazılır
+      # (yanlış PASS yok — ok:false). Böylece aşağıdaki upload adımları
+      # (k0-findings/klayers if-no-files-found: error dahil) ASLA eksik
+      # dosyayla karşılaşmaz; reports/reproducibility job'larına cascade
+      # FAIL bulaşmaz. verify_delivery.py tarafı --lineage-out'u artık
+      # koşulsuz yazar; bu adım diğer üç sidecarı da kapsar.
+      - name: Guarantee summary sidecars exist (anti-cascade)
+        if: always()
+        shell: bash
+        run: |
+          set -uo pipefail
+          for f in k0_findings.json lineage_findings.json klayers.json budget_verify.json; do
+            if [ ! -f "$f" ]; then
+              printf '{"ok": false, "error": "verify run üretmedi (anti-cascade placeholder)", "placeholder": true}\n' > "$f"
+              echo "[SIDECAR] placeholder yazıldı: $f"
+            fi
+          done
+
       # ─── PRECOMMIT (ADVISORY) — aynı job içinde, tek log ────────────────
       # pre-commit hook'ları (verify-delivery / symbolic / lean) commit
       # öncesi kapının birebir aynısıdır. --full'den SONRA AYNI job içinde

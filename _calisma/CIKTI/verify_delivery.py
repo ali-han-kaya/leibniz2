@@ -2066,6 +2066,29 @@ def validate_lineage_schema(lineage, add, check_id="K17-LINEAGE",
     return len(errors) == 0, errors
 
 
+def write_lineage_sidecar(path, report):
+    """Soy hattı sidecar'ını HER ZAMAN yaz (koşullu yazım cascade kaynağıydı).
+
+    §7.1 kök neden: lineage_findings.json yalnızca --check-lineage koşulduğunda
+    yazılıyordu; check koşmadıysa/script yarıda kaldıysa dosya eksik kalıyor,
+    upload + reports/reproducibility job'larına cascade FAIL bulaşıyordu.
+    Bu helper, report None olsa bile (check koşmadı) dürüst bir
+    {"ok": false, "detail": "check_lineage koşulmadı", ...} kaydı yazar —
+    yanlış PASS yok, dosya eksikliği yok.
+
+    Döndürür: (ok: bool, detail: str) — ok=False yalnızca dosya yazılamadıysa.
+    """
+    try:
+        if report is None:
+            report = {"ok": False, "detail": "check_lineage koşulmadı",
+                      "count": 0, "generations": []}
+        with open(path, "w", encoding="utf-8") as lof:
+            json.dump(report, lof, indent=2, ensure_ascii=False)
+        return True, f"{path} ({len(report.get('generations', []))} nesil)"
+    except OSError as e:
+        return False, f"yazılamadı: {path}: {e}"
+
+
 def check_zip_lineage(zip_path, lineage_path, add):
     """Soy hattı: zip_lineage.json'daki her nesli tek kaynaktan doğrula.
 
@@ -4344,16 +4367,18 @@ def main():
                           "generations": lineage_records}
         if not args.json:
             print(f"\n{lineage_detail}")
-        if args.lineage_out:
-            try:
-                with open(args.lineage_out, "w", encoding="utf-8") as lof:
-                    json.dump(lineage_report, lof, indent=2, ensure_ascii=False)
-                if not args.json:
-                    print(f"[LINEAGE] soy hattı sidecar'ı yazıldı: "
-                          f"{args.lineage_out} ({len(lineage_records)} nesil)")
-            except OSError as e:
-                add("P1", "LINEAGE-OUT", "Soy hattı sidecar",
-                    f"yazılamadı: {args.lineage_out}", str(e))
+    # --lineage-out HER ZAMAN yazılır (--check-lineage koşulmadıysa bile):
+    # CI'da "Run full verification" adımı fail olsa da sidecar'ın varlığı
+    # GARANTİDİR — lineage-findings upload'u asla eksik dosyayla karşılaşmaz
+    # (§7.1 cascade kök nedeni: sidecar koşullu yazılıyordu). check koşmadıysa
+    # dürüst bir "atlanmadı/koşmadı" kaydı yazılır — yanlış PASS yok.
+    if args.lineage_out:
+        wok, wdetail = write_lineage_sidecar(args.lineage_out, lineage_report)
+        if wok:
+            if not args.json:
+                print(f"[LINE] soy hattı sidecar'ı yazıldı: {wdetail}")
+        else:
+            add("P1", "LINEAGE-OUT", "Soy hattı sidecar", wdetail)
 
     # ---- K14: Cleanup kaydı (M0 §10 silme/taşıma) ----
     cleanup_report = None

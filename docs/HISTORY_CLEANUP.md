@@ -149,12 +149,24 @@ job'un kalan adımları skip edilir, `verify_delivery.py --full` hiç çalışma
 sidecar'lar yazılmaz. Alt job'lar (`if: always()` ile koşan) eksik dosyalarla
 karşılaşır.
 
-**Çözüm:** `0524f6a`: "Run full verification" adımına `if: always()`
-eklendi; lineage-findings upload `if-no-files-found: error` → `warn`.
+**Çözüm (1. katman, `0524f6a`):** "Run full verification" adımına
+`if: always()` eklendi; lineage-findings upload `if-no-files-found: error`
+→ `warn`.
 
-**Ne zaman görülür:** Yeni bir test regresyonu olduğunda birim testler fail
-olur; full verification buna rağmen koşar (sidecar üretir). Yine de birim
-test hatası giderilene kadar job FAIL kalır — ama cascade önlenir.
+**Kök çözüm (2. katman):** `verify_delivery.py` artık `--lineage-out`
+sidecar'ını **HER ZAMAN** yazar — `--check-lineage` koşulmadıysa dürüst
+`{"ok": false, "detail": "check_lineage koşulmadı"}` kaydı (yanlış PASS
+yok, eksik dosya yok). Ayrıca verify.yml'deki "Guarantee summary sidecars
+exist (anti-cascade)" adımı `k0_findings.json` / `klayers.json` /
+`budget_verify.json` için de placeholder üretir — upload adımları
+(`if-no-files-found: error` dahil) ASLA eksik dosyayla karşılaşmaz,
+reports/reproducibility job'larına cascade bulaşmaz. Regresyon kapısı:
+`test_lineage_sidecar_guarantee.py`.
+
+**Ne zaman görülür:** Artık görülmez — sidecar varlığı garantilidir.
+Yeni bir test regresyonu olduğunda birim testler fail olur; full
+verification buna rağmen koşar ve sidecar'ları üretir. Yine de birim test
+hatası giderilene kadar job FAIL kalır — ama cascade önlenir.
 
 ### 7.2 OpenLibrary geçici timeout UNVERIFIED spike'ları (V5aa)
 
@@ -235,7 +247,7 @@ Admin bypass: `gh pr merge --admin` ile koruma atlanabilir, ancak
 
 | Belirti | Hata mı? | Ne yapmalı |
 |---|---|---|
-| lineage_findings.json eksik + cascade FAIL | ✅ hata (düzeltildi: `0524f6a`) | `if: always()` var mı kontrol et |
+| lineage_findings.json eksik + cascade FAIL | ✅ kökten düzeltildi (`0524f6a` + anti-cascade garantisi) | sidecar garantisi + placeholder adımı yerinde mi |
 | refs-online 58/61 UNVERIFIED | ⚠️ flaky (V5aa) | `workflow_dispatch` ile taze run |
 | test_combined_scenario_shares_comment_list FAIL | ⚠️ flaky (CI-only) | Yerelde yeşilse güven, yeniden push |
 | pre-commit exit 127 | ⚠️ advisory (atlanır) | Görmezden gel, bir sonraki run'da düzelir |
