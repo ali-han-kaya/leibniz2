@@ -524,6 +524,19 @@ repos:
         stages: [pre-commit]
         verbose: true
 
+      - id: check-reproducible-pdf-skill
+        name: "Verify reproducible-pdf-build skill contract"
+        description: >-
+          test_reproducible_pdf_skill.py'yi check-unit-tests'ten bağımsız
+          çalıştırır; SKILL.md'nin sidecar reuse, qpdf fallback ve SDE
+          sözleşmesi bozulursa commit fail-closed bloke edilir.
+        entry: python3 -m unittest _calisma.CIKTI.test_reproducible_pdf_skill
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
       - id: check-z3-slide-sync
         name: "Verify reproducible Z3 slide PNGs"
         description: >-

@@ -190,7 +190,7 @@ LAYER_LABELS = {
     "K3": "İç zip sidecar",
     "K4": "Manifest 19/19",
     "K5": "Script byte-for-byte",
-    "K6": "İçerik (PDF + referans)",
+    "K6": "İçerik (PDF + referans + skill reuse)",
     "K7": "Hijyen (secret/artefakt)",
     "K8": "Z3 sembolik ispat",
     "K9": "Lean reduct-invariance + 8 teorem çekirdek",
@@ -205,6 +205,7 @@ LAYER_LABELS = {
     "K18": "Daemon HTTP smoke",
     "K19": "Coq reduct-invariance (8 teorem)",
     "K20": "Launchctl durum",
+    "K21": "SDE determinism guard",
 }
 
 # K0-K7 çekirdek katmanlar: --full olsun olmasın her run'da koşar.
@@ -225,6 +226,7 @@ _OPTIONAL_LAYERS = {
     "K18": lambda a: a.check_daemon,
     "K19": lambda a: a.coq_proof,
     "K20": lambda a: a.check_launchd,
+    "K21": lambda a: a.check_sde,
 }
 
 
@@ -1678,6 +1680,30 @@ def pdf_pages(pdf_path):
     return None
 
 
+def check_pdf_skill_reuse(add):
+    """K6-DETERM: enforce the reproducible-pdf skill reuse contract."""
+    helper = os.path.join(os.path.dirname(__file__), "reproducible_pdf_skill.py")
+    if not os.path.isfile(helper):
+        detail = f"reproducible_pdf_skill.py yok: {helper}"
+        add("P1", "K6-DETERM-REUSE", "K6 build determinism", detail, helper)
+        return False, detail
+    try:
+        result = subprocess.run(
+            [sys.executable, os.path.join(os.path.dirname(__file__),
+                                          "check_reproducible_pdf_skill.py")],
+            capture_output=True, text=True, timeout=60,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        detail = f"skill reuse denetimi çalıştırılamadı: {exc}"
+        add("P1", "K6-DETERM-REUSE", "K6 build determinism", detail, helper)
+        return False, detail
+    detail = (result.stdout or result.stderr).strip() or f"exit={result.returncode}"
+    if result.returncode != 0:
+        add("P1", "K6-DETERM-REUSE", "K6 build determinism", detail, helper)
+        return False, detail
+    return True, detail
+
+
 def qpdf_check_determinism(pdf_path):
     """PDF'in metadata-stripped SHA-256 hash'ini hesapla (build determinism ölçümü).
     qpdf --remove-metadata ile volatile alanlar (/Info, /ID, /CreationDate) temizlenir.
@@ -1916,6 +1942,40 @@ def run_lake_build(lake_path, project_dir, lean_only=False):
     tail = [l.strip() for l in out.splitlines() if l.strip()][-3:]
     detail = " | ".join(tail) if tail else f"exit={r.returncode}"
     return False, f"lake build hatası: {detail}"
+
+
+def _sde_experiment_paths():
+    root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "sde_experiment"))
+    return os.path.join(root, "sde_determinism_experiment.py"), os.path.join(root, "sde_determinism_output.txt")
+
+
+def check_sde_frozen_record(add):
+    """K21: frozen SDE experiment must satisfy the skill protocol."""
+    experiment, record = _sde_experiment_paths()
+    if not os.path.isfile(experiment) or not os.path.isfile(record):
+        detail = f"SDE deney/ donmuş kayıt yok: {record}"
+        add("P1", "K21-SDE-RECORD", "K21 SDE determinism", detail, record)
+        return False, detail
+    try:
+        with open(experiment, encoding="utf-8") as stream:
+            source = stream.read()
+        with open(record, encoding="utf-8") as stream:
+            frozen = stream.read()
+    except OSError as exc:
+        detail = f"SDE kaydı okunamadı: {exc}"
+        add("P1", "K21-SDE-RECORD", "K21 SDE determinism", detail, record)
+        return False, detail
+    required = ("FROZEN_RECORD", "SOURCE_DATE_EPOCH", "--rerun",
+                "DETERMINISTIC", "NON-DETERMINISTIC")
+    missing = [token for token in required if token not in source or token not in frozen]
+    if "PENDING" in frozen:
+        missing.append("frozen measurement (PENDING yok)")
+    if missing:
+        detail = "frozen SDE kaydı skill protokolünü karşılamıyor: " + ", ".join(missing)
+        add("P1", "K21-SDE-RECORD", "K21 SDE determinism", detail, record)
+        return False, detail
+    detail = "frozen SDE kaydı PASS — skill Step 1/2 protokolü ve SDE verdictleri doğrulandı"
+    return True, detail
 
 
 def run_coq_proof(coqtop_path, coq_file, version_file=None):
@@ -4096,6 +4156,7 @@ def apply_full_flags(args):
     args.check_mirror = True
     args.mirror_auto_sync = True
     args.check_daemon = True
+    args.check_sde = True
     if not getattr(args, "check_history", None):
         # Açık PATH verilmemişse auto-discover modunda aç
         args.check_history = True
@@ -4228,7 +4289,11 @@ def main():
     ap.add_argument("--daemon-out", default=None,
                     help="K18: daemon smoke raporunu ayrı bir sidecar JSON'a "
                          "yaz (CI artifact için; --check-daemon ile)")
-    ap.add_argument("--check-launchd", action="store_true",
+    ap.add_argument("--check-sde", action="store_true",
+                    help="K21: sde_determinism_experiment.py donmuş kaydını ve "
+                         "skill protokolünü fail-closed doğrula")
+    ap.add_argument("--check-launchd",
+ action="store_true",
                     help="K20: launchctl list + plutil lint + HTTP 200 "
                          "doğrulaması (macOS'a özgü, --full'a dahil değil)")
     ap.add_argument("--full", action="store_true",
@@ -4636,8 +4701,11 @@ def main():
         pdf_meta_report = None
         if pdf and os.path.isfile(pdf):
             raw_h, stripped_h = qpdf_check_determinism(pdf)
+            skill_reuse_ok, skill_reuse_detail = check_pdf_skill_reuse(add)
             pdf_meta_report = {"raw": raw_h, "stripped": stripped_h,
-                               "strict": getattr(args, "strict_determinism", False)}
+                               "strict": getattr(args, "strict_determinism", False),
+                               "skill_reuse": {"ok": skill_reuse_ok,
+                                               "detail": skill_reuse_detail}}
             if stripped_h:
                 sidecar_path = os.path.join(pkg, PDF_METADATA_SIDECAR)
                 if os.path.isfile(sidecar_path):
@@ -4774,6 +4842,13 @@ def main():
     # Content.v çekirdeğini coqtop -compile ile fail-closed derler. coqtop
     # kurulu olmayan ortamlarda --full'ı kırmamak için --full'a DAHİL
     # DEĞİLDİR; --coq-proof ile açıkça koşulur (K12/K15/K17 deseni).
+    sde_ok = None
+    sde_detail = None
+    if args.check_sde:
+        sde_ok, sde_detail = check_sde_frozen_record(add)
+        print(f"[K21] SDE determinism: {'PASS' if sde_ok else 'FAIL'} — {sde_detail}",
+              file=(sys.stderr if args.json else sys.stdout))
+
     coq_ok = None
     coq_detail = None
     if args.coq_proof:
@@ -5221,6 +5296,8 @@ def main():
         "config": effective_config,
         "budget": budget_report,
         "pdf_hash": pdf_meta_report,
+        "pdf_skill_reuse": ({"ok": skill_reuse_ok, "detail": skill_reuse_detail}
+                             if 'skill_reuse_ok' in locals() else None),
         "references_online": refs_online_report,
         "hook_env": hook_env,
         "manifest_digest": manifest_digest_report,
@@ -5232,6 +5309,7 @@ def main():
         "mirror": mirror_report,
         "daemon": daemon_report,
         "launchd": launchd_report,
+        "sde_determinism": {"ok": sde_ok, "detail": sde_detail} if args.check_sde else None,
         "cleanup": cleanup_report,
         "history_sidecar": history_sidecar_report,
         # Per-katman PASS/FAIL/SKIP — dashboard'un "K1-K7" rozeti bunu

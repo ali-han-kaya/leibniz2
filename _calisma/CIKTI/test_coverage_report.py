@@ -67,6 +67,7 @@ HOOK_COVERAGE = {
     "check-refs-table-sync":   ["test_check_refs_table_sync.py"],
     "check-doc-artifact-sync": ["test_doc_artifact_sync.py"],
     "check-skills-index":       ["test_skills_index.py", "test_readme_skills.py"],
+    "check-reproducible-pdf-skill": ["test_reproducible_pdf_skill.py"],
     "check-changelog-sync":    ["test_update_changelog_hook.py", "test_gen_changelog.py"],
     "check-unit-tests": [
         "test_verify_refs.py",
