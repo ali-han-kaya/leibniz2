@@ -21,6 +21,18 @@ teslimini ve onu doğrulayan fail-closed araç zincirini içerir.
 | `_calisma/repack_delivery.py` · `sync_docs.py` | Zincir yeniden üretimi ve belge senkronu yardımcıları |
 | `.pre-commit-config.yaml` | Commit öncesi fail-closed kapı |
 
+## Skills
+
+Kurulabilir Agent Skill'leri `skills/` altında tutulur. Bu tablo, her skill'in
+kanonik yönergesini gösterir; `check-skills-index` kapısı dizin ile tabloyu
+çift yönlü senkron tutar.
+
+| Skill | Açıklama |
+|---|---|
+| `skills/verify-chain/SKILL.md` | K0–K17 fail-closed teslim doğrulama zinciri |
+| `skills/reproducible-pdf-build/SKILL.md` | PDF determinism, SHA-256 sidecar ve SDE akışı |
+
+
 ## Doğrulama (tek komut)
 
 ```bash
@@ -477,6 +489,8 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-26 | feat | (verify) K10 çift tespit + K12/K13 negatif senaryo kapıları | [`8a6fa98`](https://github.com/ali-han-kaya/leibniz2/commit/8a6fa98) |
 | 2026-08-26 | feat | (verify) K10 çift tespit + K12/K13 negatif senaryo kapıları | [`7fa4997`](https://github.com/ali-han-kaya/leibniz2/commit/7fa4997) |
 | 2026-08-26 | refactor | (refs-trend) UNVERIFIED/bayat-artifact saf fonksiyonlar | [`35897ac`](https://github.com/ali-han-kaya/leibniz2/commit/35897ac) |
+| 2026-08-26 | feat | (summary) durum panosuna K13 ayrı-step satırı + plist docs tazeleme | [`2f927fc`](https://github.com/ali-han-kaya/leibniz2/commit/2f927fc) |
+| 2026-08-26 | feat | (render) Z3 teorem slayt üretici + sync testi (12/12 OK) | [`7333a55`](https://github.com/ali-han-kaya/leibniz2/commit/7333a55) |
 
 ### Regresyon notları
 

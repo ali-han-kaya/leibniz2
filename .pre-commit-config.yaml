@@ -33,9 +33,11 @@
 #                               gerçek dosyayla karşılaştırır (fail-closed). Üreticideki
 #                               drift/bug her commit'te yakalanır. stdlib-only, OFFLINE.
 #   9) verify-delivery-github-scripts: K16 KATMANI — github_scripts/*.js
-#                               self-testi: 15 senaryoda MOCK girdi + çıktı
-#                               eşleşmesi (github_scripts_battery.py + node
-#                               harness). Script davranışı değişirse bloke.
+#                               self-testi: MOCK girdi + çıktı eşleşmesi
+#                               senaryoları + scriptPath injection audit
+#                               (github_scripts_battery.py + node harness;
+#                               audit statik YAML, node gerektirmez). Script
+#                               davranışı değişirse bloke.
 #   10) commit-msg-style      : başlık denetimi (.gitmessage kuralları) — noise
 #                               commit'leri (wip/smoke/test marker/şablon) reddeder.
 #                               commit-msg stage'inde; CI --all-files'ta ÇALIŞMAZ.
@@ -64,6 +66,12 @@
 #                               ↔ gen_repro_manifest.ARTIFACT_JOBS çapraz
 #                               doğrulaması (fail-closed; kardeşi
 #                               test_doc_job_sync.py check-unit-tests'te koşar).
+#   16) check-mirror-coverage : check_mirror_coverage.py — sync_verify_mirror.sh
+#                               --list ↔ repo runtime kümesi (FILES/LEAN_FILES/
+#                               COQ_FILES/PREVIEW_FILES/GUIDE_FILES) çapraz
+#                               doğrulaması (fail-closed): yeni runtime dosyası
+#                               mirror listesine işlenmezse commit bloke (K17
+#                               sözleşmesi — CI/launchd rotasıyla aynı kapı).
 # Herhangi bir P0/P1 bulgusu commit'i bloke eder (sıfır-dışı exit).
 #
 # Not: update-config TEK yazan hook'tur (config'i stage eder). Diğer kapılar
@@ -81,6 +89,7 @@
 #   pre-commit run check-dryrun-summary
 #   pre-commit run check-changelog-sync
 #   pre-commit run check-unit-tests
+#   pre-commit run check-mirror-coverage
 #
 # update-config hariç hook'lar read-only'dir: dosya değiştirmez, yalnızca
 # doğrular (fail-closed). update-config, config'i paket içeriğiyle senkron eder.
@@ -126,7 +135,7 @@ repos:
           bloke eder. Yeni action da pin gerektirir (--update ile ekle).
           Lokal + OFFLINE (ağ/PyYAML yok) — ağ bağımlısı node24 runtime
           denetimi (check_action_runtimes.py) CI'da ayrı koşar.
-        entry: python3 _calisma/CIKTI/check_action_pins.py --workflow .github/workflows/verify.yml
+        entry: python3 _calisma/CIKTI/check_action_pins.py --workflow .github/workflows
         language: system
         always_run: true
         pass_filenames: false
@@ -207,6 +216,20 @@ repos:
         stages: [pre-commit]
         verbose: true
 
+      - id: check-orchestration-stdin
+        name: "Require closed stdin for opencode orchestration"
+        description: >-
+          coordinator_loop.py ve orchestrate_k_dag.py içindeki tüm
+          subprocess.run çağrılarının stdin=subprocess.DEVNULL kullandığını
+          statik olarak doğrular; stdin açık kalırsa opencode#11891 tipi hang
+          riski nedeniyle commit'i fail-closed bloke eder.
+        entry: python3 _calisma/CIKTI/check_orchestration_stdin.py
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
       - id: check-lake-evidence
         name: "Reproduce LEAN_ISPAT_RAPORU §6.3 lake build evidence (smoke)"
         description: >-
@@ -219,6 +242,20 @@ repos:
           değilse testler SKIP eder (kapı yalnızca aracın var olduğu
           ortamda iddia üretir). ~1-5s.
         entry: sh _calisma/CIKTI/lake_evidence_hook.sh
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
+      - id: check-status-check-names
+        name: "Reject stale branch-protection K1-K14 check names"
+        description: >-
+          status_checks.py --gh --json çıktısında eski K1-K14 required check
+          adlarını tespit eder; K1-K19 kanonik adıyla yeniden adlandırılmamış
+          branch protection drift'i fail-closed bloke edilir. GitHub erişimi
+          yoksa kapı UNREADABLE sonucunu gizlemez.
+        entry: python3 _calisma/CIKTI/status_checks.py --gh --json
         language: system
         always_run: true
         pass_filenames: false
@@ -242,6 +279,19 @@ repos:
         stages: [pre-commit]
         verbose: true
 
+      - id: check-fallback-evidence
+        name: "Verify REFERANS §5.3 fallback evidence (5/5 PASS)"
+        description: >-
+          ia_ol_fallback_evidence.py --offline ile REFERANS_KANIT_DENETIMI
+          §5.3'teki beş fallback kaynağını ağsız ve deterministik biçimde
+          yeniden üretir. Sonuç 5/5 PASS değilse commit fail-closed bloke edilir.
+        entry: sh _calisma/CIKTI/check_fallback_evidence_hook.sh
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
       - id: check-refs-table-sync
         name: "Verify REFERANS §2 table ↔ code lists (fail-closed)"
         description: >-
@@ -252,6 +302,32 @@ repos:
           eklenmez (veya tersi) → sessiz kapsam kaybı → commit bloke edilir.
           OFFLINE, stdlib-only, ~0.05s.
         entry: python3 _calisma/CIKTI/check_refs_table_sync.py
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
+      - id: check-skills-index
+        name: "Verify README skills index ↔ skills/"
+        description: >-
+          skills/*/SKILL.md dosyalarının her biri README Skills tablosunda
+          bulunmalı; README'deki bayat skill satırları da fail-closed yakalanır.
+        entry: python3 _calisma/CIKTI/check_skills_index.py
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
+      - id: check-workflow-artifact-docs
+        name: "Verify upload-artifact ↔ PUBLISH_SCENARIO ↔ ARTIFACT_JOBS"
+        description: >-
+          verify.yml'deki her upload-artifact adımı aynı commit'te
+          PUBLISH_SCENARIO artifact listesinde ve ARTIFACT_JOBS'ta bulunmalı;
+          yeni artifact eklenir ama dokümantasyon veya manifest kapsamı
+          güncellenmezse commit fail-closed bloke edilir.
+        entry: python3 _calisma/CIKTI/check_workflow_artifact_docs.py
         language: system
         always_run: true
         pass_filenames: false
@@ -275,6 +351,38 @@ repos:
         stages: [pre-commit]
         verbose: true
 
+      - id: check-doc-job-sync
+        name: "Verify PUBLISH_SCENARIO job table ↔ workflow job names sync"
+        description: >-
+          test_doc_job_sync.py ile PUBLISH_SCENARIO job tablosundaki adların
+          verify.yml ve test-smoke.yml job name alanlarıyla birebir eşleşmesini
+          fail-closed doğrular. Yeni veya yeniden adlandırılmış job doc'a
+          işlenmezse commit bloke edilir.
+        entry: python3 -m unittest _calisma.CIKTI.test_doc_job_sync
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
+      - id: check-mirror-coverage
+        name: "Mirror coverage check (sync --list ↔ repo runtime)"
+        description: >-
+          check_mirror_coverage.py — sync_verify_mirror.sh --list kapsamını
+          repo runtime dosya kümesiyle karşılaştırır (fail-closed, CI K17 ile
+          aynı sözleşme). İleri: mirror'da eksik runtime dosyası (FILES/
+          LEAN_FILES/COQ_FILES/PREVIEW_FILES/GUIDE_FILES'e eklenmemiş) →
+          exit 1. Ters: listede repo'da olmayan bayat girdi veya beklenen
+          kümede olmayan girdi → exit 1. Yeni runtime dosyası eklenip mirror
+          listesi güncellenmezse launchd rotası K9/K16/K17/K18/K19 kırılır;
+          bu hook o regresyonu commit öncesi yakalar. OFFLINE, stdlib-only.
+        entry: python3 _calisma/CIKTI/check_mirror_coverage.py
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
       - id: check-plist-drift
         name: "Plist gate unit tests (exit 0/1/2)"
         description: >-
@@ -283,7 +391,7 @@ repos:
           (0=GÜNCEL/PASS, 1=BAYAT/drift, 2=şablon yok/hata). Fake HOME
           altında koşar — gerçek LaunchAgents/Caches'a dokunmaz, plistlib
           fallback'i sayesinde Linux CI'da da çalışır.
-        entry: bash -c 'python3 -m unittest discover -s _calisma/CIKTI -p test_plist_gate_exit.py && python3 -m unittest discover -s _calisma/CIKTI -p test_gen_plist_golden.py'
+        entry: python3 _calisma/CIKTI/check_plist_drift_hook.py
         language: system
         always_run: true
         pass_filenames: false
@@ -333,13 +441,44 @@ repos:
         name: "Verify github-scripts self-test (K16, fail-closed)"
         description: >-
           verify_delivery.py --check-github-scripts (K16 katmanı):
-          github_scripts_battery.py 15 senaryoda çıkarılmış github-script'leri
-          MOCK girdiyle gerçek Node'da çalıştırır ve çıktı eşleşmesini denetler
-          (REST çağrısı, yorum body'si, comment_id, setFailed). Script'lerin
-          davranışı değişirse (refactor/çıkarım hatası) P0/P1 → commit bloke
-          edilir. node gerektirir (dev makinesinde mevcut); node yoksa kapı
+          github_scripts_battery.py senaryo setinde (mock REST + çıktı
+          eşleşmesi) çıkarılmış github-script'leri MOCK girdiyle gerçek Node'da
+          çalıştırır ve çıktı eşleşmesini denetler (REST çağrısı, yorum
+          body'si, comment_id, setFailed). Ayrıca scriptPath injection audit'i:
+          .github/workflows/*.yml'de `scriptPath:` anahtarı (github-script@v8
+          yalnızca 'script' input'unu destekler) fail-closed yakalanır — statik
+          YAML denetimi, node gerektirmez. Script'lerin davranışı değişirse
+          (refactor/çıkarım hatası) P0/P1 → commit bloke edilir. node gerektirir
+          (dev makinesinde mevcut); node yoksa kapı
           P0 verir. OFFLINE, ~2s.
-        entry: python3 _calisma/CIKTI/verify_delivery.py --dir _calisma/CIKTI --check-github-scripts
+        entry: python3 _calisma/CIKTI/verify_delivery_hook.py --strict --check-github-scripts
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
+      - id: check-repro-manifest-e2e
+        name: "Verify repro-manifest override E2E"
+        description: >-
+          REPRO_ARTIFACT_JOBS override'inin gerçek manifest üretiminde
+          provenance ve hash kapsamına girdiğini ayrı, fail-closed bir kapıda
+          doğrular.
+        entry: python3 _calisma/CIKTI/check_repro_manifest_e2e_hook.py
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
+      - id: check-repro-artifact-sections-e2e
+        name: "Verify audit-refs-trend + daemon-http manifest E2E"
+        description: >-
+          Reproduce-job akışında audit-refs-trend ve daemon-http bölümlerinin
+          manifest'e SHA-256 ile girdiğini ve K10 --verify-manifest kapısının
+          geçerli bundle'ı kabul edip combined hash kurcalamasını reddettiğini
+          uçtan uca doğrular.
+        entry: python3 _calisma/CIKTI/check_repro_artifact_sections_e2e_hook.py
         language: system
         always_run: true
         pass_filenames: false
@@ -361,7 +500,70 @@ repos:
           senaryo P0 (fail-closed ihlali). stdlib-only, OFFLINE, saniyeler sürer.
           (Not: repro-manifest katmanı verify_delivery.py'de K13'tür; K12
           plist kapısıdır — o, check-plist-drift hook'unca kapsanır.)
-        entry: python3 _calisma/CIKTI/verify_delivery.py --dir _calisma/CIKTI --check-repro-manifest
+        entry: python3 _calisma/CIKTI/check_repro_manifest_hook.py --strict
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
+      - id: verify-delivery-sde
+        name: "Verify SDE determinism guard (K21, fail-closed)"
+        description: >-
+          verify_delivery.py --check-sde (K21 katmanı): SOURCE_DATE_EPOCH
+          determinism guard'ının self-testi — aynı SDE + aynı girdiler →
+          birebir aynı zip SHA-256; SDE değişince hash değişmeli (SDE
+          etkili); girdi sırası değişimi algılanmalı. Bu üçü ihlal edilirse
+          P0 → commit bloke edilir (tekrarlanabilir üretim sözleşmesi her
+          commit'te doğrulanır). stdlib-only (zipfile/hashlib/time), OFFLINE,
+          saniyeler sürer; --full'a dahildir.
+        entry: python3 _calisma/CIKTI/verify_delivery.py --dir _calisma/CIKTI --check-sde
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
+      - id: check-z3-slide-sync
+        name: "Verify reproducible Z3 slide PNGs"
+        description: >-
+          render_z3_slides.py'yi aynı girdilerle iki kez çalıştırır ve 12 PNG'nin
+          SHA-256 değerlerini birebir karşılaştırır; fark varsa commit bloke olur.
+          TeX/PDF→PNG araçları eksikse test açıkça SKIP eder.
+        entry: python3 -m unittest _calisma.CIKTI.test_z3_slide_reproducibility
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
+      - id: texlive-repro-documented
+        name: "Verify documented tectonic/TeXLive reproducibility smoke"
+        description: >-
+          REPRODUCIBILITY.md'de belgelenen tectonic ve TeXLive+SDE akışını
+          gerçek kaynak üzerinden koşar; üretilen PDF hash'lerini raporda
+          doğrular. Araçlar eksikse mevcut texlive-determinism sözleşmesiyle
+          SKIP eder.
+        entry: python3 -m unittest _calisma.CIKTI.test_texlive_repro_documented
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
+      - id: texlive-determinism
+        name: "Verify TeXLive+SDE PDF determinism (tectonic→TeXLive göç kanıtı)"
+        description: >-
+          texlive_determinism_test.sh — ingiliz_empirizmi_v3.tex üzerinde
+          ÖNCE (tectonic, tek derleme) / SONRA (TeXLive + SOURCE_DATE_EPOCH,
+          2 bağımsız derleme) hash karşılaştırması. SONRA'nın iki run'ı
+          byte-farklıysa deney exit 1 → commit bloke (fail-closed: göç
+          determinism getirmedi). Rapor .freebuff/sim/ altına yazılır.
+          tectonic + TeXLive pdflatex kurulu DEĞİLSE SKIP (exit 0) — kapı
+          yalnızca araçların var olduğu ortamda iddia üretir
+          (check-lake-evidence deseni); K21 --check-sde her ortamda koşar.
+          ~10-30s (yalnızca araçlar kuruluysa; yoksa saniyeler).
+        entry: bash _calisma/CIKTI/texlive_determinism_hook.sh
         language: system
         always_run: true
         pass_filenames: false
@@ -392,6 +594,19 @@ repos:
           yapar, kapı hiç kırılmaz. Mevcut insan özetleri korunur; yalnızca
           yeni commit'ler eklenir.
         entry: bash _calisma/CIKTI/update_changelog_hook.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+        verbose: true
+
+      - id: check-full-publish-doc-sync
+        name: "Verify full publish AŞAMA 0-4 doc sync"
+        description: >-
+          İlk publish akışının AŞAMA 0-4 komutlarını docs/PUBLISH_SCENARIO.md
+          ve publish_wrapper.sh arasında çapraz doğrular; repo oluşturma,
+          push, CI izleme ve opsiyonel protection smoke drift'i commit'i bloke eder.
+        entry: python3 -m unittest _calisma.CIKTI.test_full_publish_doc_sync
         language: system
         pass_filenames: false
         always_run: true
@@ -431,14 +646,15 @@ repos:
         verbose: true
 
       - id: check-budget-scan
-        name: "Verify budget bar compute (parse/status/note, Node)"
+        name: "Verify dashboard scan modules (budget + Z3 bar, Node)"
         description: >-
-          test_budget_scan.js — preview.html budget scan/bar logic'inin
-          saf JS modül (budget_scan.js) üzerinden 67 testli Node suite'i.
-          parseBudgetLine / computeBudgetStatus / budgetLimitNote
-          fonksiyonlarını normal, aşım, sıfır/geçersiz ve parse edge-case
-          senaryolarında doğrular. ~0.15s.
-        entry: node _calisma/CIKTI/test_budget_scan.js
+          Dashboard bar hesaplamalarının saf JS modülleri (DOM'suz) Node ile
+          test edilir: test_budget_scan.js (budget_scan.js — parseBudgetLine /
+          computeBudgetStatus / budgetLimitNote; normal, aşım, sıfır/geçersiz,
+          parse edge-case) + test_z3_scan.js (z3_scan.js — parseZ3Line /
+          computeZ3Status; reset/summary/control ayrıştırma + bar durumu).
+          ~0.3s.
+        entry: node _calisma/CIKTI/test_budget_scan.js && node _calisma/CIKTI/test_z3_scan.js
         language: system
         pass_filenames: false
         always_run: true
@@ -463,6 +679,19 @@ repos:
         stages: [pre-commit]
         verbose: true
 
+      - id: extract-unstaged-deps
+        name: "Extract unstaged dependency findings from hook output"
+        description: >-
+          Pre-commit'in gerçek hook çıktısını doğrudan stdin'den ayrıştırır;
+          logs/precommit.log gibi sonradan üretilen bir dosyaya bağlı değildir.
+          Uyarıları makine-okur sidecar'a yazar ve advisory olarak geçer.
+        entry: sh -c 'mkdir -p logs; python3 _calisma/CIKTI/extract_unstaged_deps.py --out-json logs/unstaged_deps_findings.json'
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
       - id: check-unit-tests
         name: "Unit tests for new gates (auto-synced list)"
         description: >-
@@ -475,6 +704,21 @@ repos:
           Liste bakımı elle yok — tek kaynak disk'teki test dosyaları.
           PyYAML/jsonschema bağımlılığı yok; ~2-3s (48 dosya, 2s ölçüldü).
         entry: bash _calisma/CIKTI/check_unit_tests_hook.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+        verbose: true
+
+      - id: audit-octokit-names
+        name: "Octokit metod adı denetimi (fail-closed)"
+        description: >-
+          github_scripts/*.js dosyalarındaki Octokit REST API çağrılarını
+          tarar; izin verilen metod adları ↔ resmi rota eşlemesiyle
+          eşleşmeyen çağrıları yakalar (fail-closed). pre-commit + CI'da
+          çalışır. Yeni Octokit metodu eklerken ALLOWED_METHODS listesini
+          güncellemeyi unutmayın.
+        entry: _calisma/.venv_z3/bin/python _calisma/CIKTI/audit_octokit_names.py
         language: system
         pass_filenames: false
         always_run: true
