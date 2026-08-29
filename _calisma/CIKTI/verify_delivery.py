@@ -606,11 +606,12 @@ SKIP_SECRET_EXT = {".pdf", ".zip", ".png", ".jpg", ".svg"}
 # CI'da ayrıca bağımsız olarak doğrular. Buradaki stdlib doğrulaması her
 # ortamda (pre-commit, yerel) fail-closed davranış sağlar.
 CONFIG_SCHEMA = {
-    "required": ["budget_usd", "budget_method", "budget_ratios",
+    "required": ["budget_usd", "budget_method", "duration_pct_warn", "budget_ratios",
                  "expected_pages", "expected_refs", "expected_manifest"],
     "types": {
         "budget_usd": (int, float),
         "budget_method": str,
+        "duration_pct_warn": (int, float),
         "budget_ratios": dict,
         "expected_pages": int,
         "expected_refs": int,
@@ -643,6 +644,12 @@ def validate_config(cfg):
     if "budget_usd" in cfg and isinstance(cfg["budget_usd"], (int, float)):
         if cfg["budget_usd"] <= 0:
             errors.append("budget_usd: 0'dan büyük olmalı")
+
+    # duration_pct_warn: pozitif yüzde
+    if ("duration_pct_warn" in cfg
+            and isinstance(cfg["duration_pct_warn"], (int, float))
+            and cfg["duration_pct_warn"] <= 0):
+        errors.append("duration_pct_warn: 0'dan büyük olmalı")
 
     # budget_method: enum
     if ("budget_method" in cfg
@@ -1947,6 +1954,40 @@ def run_lake_build(lake_path, project_dir, lean_only=False):
 def _sde_experiment_paths():
     root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "sde_experiment"))
     return os.path.join(root, "sde_determinism_experiment.py"), os.path.join(root, "sde_determinism_output.txt")
+
+
+def _sde_zip(entries, out_zip, sde):
+    """Write a ZIP whose timestamps are controlled solely by SDE."""
+    stamp = time.gmtime(sde)[:6]
+    with zipfile.ZipFile(out_zip, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for rel, data in entries:
+            info = zipfile.ZipInfo(rel.decode("utf-8"), date_time=stamp)
+            info.compress_type = zipfile.ZIP_DEFLATED
+            archive.writestr(info, data)
+
+
+def check_sde_determinism(add):
+    """K21 self-test: verify deterministic output and effective SDE input."""
+    entries = [(b"a.txt", b"hello\\n"), (b"sub/b.txt", b"world\\n")]
+    sde = 1700000000
+    with tempfile.TemporaryDirectory(prefix="k21-") as td:
+        same_a = os.path.join(td, "same-a.zip")
+        same_b = os.path.join(td, "same-b.zip")
+        changed = os.path.join(td, "changed.zip")
+        _sde_zip(entries, same_a, sde)
+        _sde_zip(entries, same_b, sde)
+        _sde_zip(entries, changed, sde + 3600)
+        same_hash = sha256_file(same_a) == sha256_file(same_b)
+        sde_effective = sha256_file(same_a) != sha256_file(changed)
+    if not same_hash:
+        detail = "SDE determinizmi bozuk: aynı SDE → farklı hash (fail-closed)"
+        add("P0", "K21-SDE", "K21 SDE determinism", detail, "_sde_zip")
+        return False, detail
+    if not sde_effective:
+        detail = "SDE etkisiz: farklı SDE → aynı hash (fail-closed)"
+        add("P0", "K21-SDE", "K21 SDE determinism", detail, "_sde_zip")
+        return False, detail
+    return True, "aynı SDE → aynı hash; SDE etkili"
 
 
 def check_sde_frozen_record(add):
@@ -4211,6 +4252,9 @@ def main():
                     help="Bütçe tahmin yöntemi: universal (bytes/4), "
                          "weighted (tip bazlı ağırlık), both (en kötümser). "
                          "Varsayılan: verify_delivery.config.json → budget_method")
+    ap.add_argument("--duration-pct-warn", type=float, default=None,
+                    help="Göreli süre uyarı eşiği (yüzde; config'teki "
+                         "duration_pct_warn değerini geçersiz kılar)")
     ap.add_argument("--config", default=None,
                     help="Konfig dosyası yolu (varsayılan: verify_delivery.py ile aynı dizindeki "
                          "verify_delivery.config.json)")
@@ -4347,6 +4391,11 @@ def main():
     file_budget_method = cfg.get("budget_method", "both")
     cli_gave_budget = args.budget is not None
     cli_gave_method = args.budget_method is not None
+    cli_gave_duration_pct = args.duration_pct_warn is not None
+
+    file_duration_pct_warn = cfg.get("duration_pct_warn", 10.0)
+    if args.duration_pct_warn is None:
+        args.duration_pct_warn = file_duration_pct_warn
 
     if args.budget is None:
         args.budget = file_budget_usd
@@ -4379,6 +4428,7 @@ def main():
         "source": "file" if cfg_loaded else "defaults",
         "budget_usd": args.budget,
         "budget_method": args.budget_method,
+        "duration_pct_warn": args.duration_pct_warn,
         "budget_ratios": cfg.get("budget_ratios") or DEFAULT_BUDGET_RATIOS,
         "expected_pages": cfg.get("expected_pages", EXPECTED_PAGES),
         "expected_refs": cfg.get("expected_refs", EXPECTED_REFS),
@@ -4390,6 +4440,10 @@ def main():
             "budget_method": _override_rec(
                 cli_gave_method, args.budget_method if cli_gave_method else None,
                 file_budget_method, args.budget_method),
+            "duration_pct_warn": _override_rec(
+                cli_gave_duration_pct,
+                args.duration_pct_warn if cli_gave_duration_pct else None,
+                file_duration_pct_warn, args.duration_pct_warn),
         },
     }
     # ---- Etkin config şema doğrulaması (fail-closed) ----
@@ -4401,6 +4455,7 @@ def main():
     eff_schema_check = {
         "budget_usd": effective_config["budget_usd"],
         "budget_method": effective_config["budget_method"],
+        "duration_pct_warn": effective_config["duration_pct_warn"],
         "budget_ratios": effective_config["budget_ratios"],
         "expected_pages": effective_config["expected_pages"],
         "expected_refs": effective_config["expected_refs"],

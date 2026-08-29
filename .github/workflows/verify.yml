@@ -268,9 +268,15 @@ jobs:
       - name: Install Z3 (K8)
         run: pip install z3-solver==5.1.0.0
 
-      # K9 lake build moved to the dedicated lake-proof job below. The main
-      # verification job keeps the manifest/config gates independent.
-      # K9: Lean 4 toolchain installation remains in the dedicated job.
+      # K9: Lean 4 reduct-invariance (elan + stable toolchain). --full
+      # --lean-proof'ü içerir; lake-proof job ayrıca bağımsız kapıdır, bu
+      # kurulum main verify job'ının --full koşumunun K9'unu besler.
+      - name: Install Lean 4 (K9)
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain leanprover/lean4:stable
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+          export PATH="$HOME/.elan/bin:$PATH"
+          elan toolchain install leanprover/lean4:v4.14.0
       #
       # `pipefail` + `tee`: çıktı hem log'a hem dosyaya yazılır, ama exit kodu
       # python'dan gelir (boru, fail-closed kapıyı gizleyemez).

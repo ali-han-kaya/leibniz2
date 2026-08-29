@@ -19,6 +19,7 @@ import sys
 import tempfile
 import pathlib
 import unittest
+import argparse
 from unittest import mock
 
 CIKTI = os.path.dirname(os.path.abspath(__file__))
@@ -39,7 +40,6 @@ def _run_check(add=None):
 
 class TestDeterminism(unittest.TestCase):
     def test_same_sde_same_hash(self):
-        import tempfile
         with tempfile.TemporaryDirectory(prefix="k21-") as td:
             z1 = os.path.join(td, "z1.zip")
             z2 = os.path.join(td, "z2.zip")
@@ -49,7 +49,6 @@ class TestDeterminism(unittest.TestCase):
                              "aynı SDE iki üretim aynı hash üretmeli")
 
     def test_sde_change_changes_hash(self):
-        import tempfile
         with tempfile.TemporaryDirectory(prefix="k21-") as td:
             z1 = os.path.join(td, "z1.zip")
             z3 = os.path.join(td, "z3.zip")
@@ -59,7 +58,6 @@ class TestDeterminism(unittest.TestCase):
                                 "farklı SDE farklı hash üretmeli (SDE etkili)")
 
     def test_order_change_changes_hash(self):
-        import tempfile
         with tempfile.TemporaryDirectory(prefix="k21-") as td:
             z1 = os.path.join(td, "z1.zip")
             z4 = os.path.join(td, "z4.zip")
@@ -70,12 +68,35 @@ class TestDeterminism(unittest.TestCase):
 
 
 class TestFrozenRecord(unittest.TestCase):
+    def _write_pending_record(self, td):
+        """PENDING içeren sahte deney + kayıt (fail-closed senaryosu)."""
+        root = pathlib.Path(td)
+        experiment = root / "sde_determinism_experiment.py"
+        record = root / "sde_determinism_output.txt"
+        experiment.write_text("FROZEN_RECORD SOURCE_DATE_EPOCH --rerun DETERMINISTIC NON-DETERMINISTIC")
+        record.write_text("FROZEN_RECORD SOURCE_DATE_EPOCH --rerun DETERMINISTIC "
+                          "NON-DETERMINISTIC PENDING\n")
+        return str(experiment), str(record)
+
     def test_frozen_record_is_checked_by_k21(self):
+        """Fail-closed kanıtı: PENDING kayıt REDDEDİLMELİ (P1 + K21-SDE-RECORD)."""
+        with tempfile.TemporaryDirectory(prefix="k21-record-") as td:
+            paths = self._write_pending_record(td)
+            findings = []
+            with mock.patch.object(vd, "_sde_experiment_paths",
+                                   return_value=paths):
+                ok, detail = vd.check_sde_frozen_record(
+                    lambda *a: findings.append(a))
+            self.assertFalse(ok)
+            self.assertIn("PENDING", detail)
+            self.assertTrue(any(item[1] == "K21-SDE-RECORD" for item in findings))
+
+    def test_committed_record_passes(self):
+        """Commit'li donmuş kayıt protokolü karşılamalı (kapı girdisi PASS)."""
         findings = []
         ok, detail = vd.check_sde_frozen_record(lambda *a: findings.append(a))
-        self.assertFalse(ok)
-        self.assertIn("PENDING", detail)
-        self.assertTrue(any(item[1] == "K21-SDE-RECORD" for item in findings))
+        self.assertTrue(ok, detail)
+        self.assertEqual(findings, [])
 
     def test_frozen_record_contract_passes_without_pending(self):
         with tempfile.TemporaryDirectory(prefix="k21-record-") as td:
@@ -136,21 +157,9 @@ class TestCheckSde(unittest.TestCase):
         self.assertIn("SDE etkisiz", detail)
         self.assertTrue(any(f[1] == "K21-SDE" for f in findings))
 
-    def test_deterministic_across_runs(self):
-        # Aynı girdi → iki ayrı koşum aynı hash üretmeli (self-test tekrarı).
-        import tempfile
-        hashes = []
-        for _ in range(2):
-            with tempfile.TemporaryDirectory(prefix="k21-") as td:
-                z = os.path.join(td, "z.zip")
-                vd._sde_zip(ENTRIES, z, SDE)
-                hashes.append(_sha256(z))
-        self.assertEqual(hashes[0], hashes[1])
-
 
 def _full_ns(**kw):
     """build_layers_summary için tüm getter alanlarını taşıyan namespace."""
-    import argparse
     ns = argparse.Namespace(
         symbolic_proof=False, lean_proof=False, verify_manifest=None,
         check_config_drift=False, check_plist=False, check_repro_manifest=False,
@@ -167,14 +176,12 @@ class TestK21Wiring(unittest.TestCase):
         self.assertEqual(vd.LAYER_LABELS["K21"], "SDE determinism guard")
 
     def test_optional_getter(self):
-        import argparse
         ns = argparse.Namespace(check_sde=True)
         self.assertTrue(vd._OPTIONAL_LAYERS["K21"](ns))
         ns.check_sde = False
         self.assertFalse(vd._OPTIONAL_LAYERS["K21"](ns))
 
     def test_full_enables_k21(self):
-        import argparse
         ns = argparse.Namespace(
             full=True, check_references=False, symbolic_proof=False,
             lean_proof=False, check_lineage=False, check_repro_manifest=False,

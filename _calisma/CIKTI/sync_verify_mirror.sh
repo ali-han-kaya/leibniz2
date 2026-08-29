@@ -18,6 +18,7 @@
 #   sync_verify_mirror.sh             # senkron (değişeni kopyala, raporla)
 #   sync_verify_mirror.sh --force     # hepsini koşulsuz kopyala
 #   sync_verify_mirror.sh --check     # mirror güncel mi? (0 güncel/1 bayat/2 hata)
+#   sync_verify_mirror.sh --check-coverage # kaynak listesi ↔ repo kapsamı (0/1/2)
 #   sync_verify_mirror.sh --list      # dosya eşlemesini bas (denetim için)
 #   sync_verify_mirror.sh --help
 #
@@ -79,12 +80,29 @@ FILES=(
   "github_scripts/unit_test_failure_comment.js|github_scripts/unit_test_failure_comment.js"
   "github_scripts/pr_status_comment.js|github_scripts/pr_status_comment.js"
   "github_scripts/tum_sapmalar_comment.js|github_scripts/tum_sapmalar_comment.js"
+  "github_scripts/advisory_contract_comment.js|github_scripts/advisory_contract_comment.js"
+  "github_scripts/label_e2e_harness.js|github_scripts/label_e2e_harness.js"
   "TESLIM_KLASOR_V5_2026-08-17.zip|TESLIM_KLASOR_V5_2026-08-17.zip"
   "TESLIM_KLASOR_V5_2026-08-17.zip.sha256|TESLIM_KLASOR_V5_2026-08-17.zip.sha256"
   "TESLIM_V5_FINAL_2026-08-17.zip|TESLIM_V5_FINAL_2026-08-17.zip"
   "TESLIM_V5_FINAL_2026-08-17.zip.sha256|TESLIM_V5_FINAL_2026-08-17.zip.sha256"
   "render_z3_slides.py|render_z3_slides.py"
   "test_render_z3_slides.py|test_render_z3_slides.py"
+  "test_launchd_minimal_path.py|test_launchd_minimal_path.py"
+  # Z3 slayt galerisi: üretilmiş PNG'ler de preview mirror'da birebir
+  # bulunmalı; eksik/ekstra görsel mirror kapsam kapısını kırar.
+  "../slides_z3/P1-a.png|slides_z3/P1-a.png"
+  "../slides_z3/P1-b.png|slides_z3/P1-b.png"
+  "../slides_z3/P2.png|slides_z3/P2.png"
+  "../slides_z3/P3-a.png|slides_z3/P3-a.png"
+  "../slides_z3/P3-b.png|slides_z3/P3-b.png"
+  "../slides_z3/P4-a.png|slides_z3/P4-a.png"
+  "../slides_z3/P4-b.png|slides_z3/P4-b.png"
+  "../slides_z3/P4-c.png|slides_z3/P4-c.png"
+  "../slides_z3/P4-d.png|slides_z3/P4-d.png"
+  "../slides_z3/P4-e.png|slides_z3/P4-e.png"
+  "../slides_z3/P5-note.png|slides_z3/P5-note.png"
+  "../slides_z3/P5.png|slides_z3/P5.png"
 )
 
 # Lean dosyaları: kaynak LEAN_SRC'ye, dest LEAN_MIRROR_DIR'a göre.
@@ -116,6 +134,11 @@ PREVIEW_FILES=(
 # /guide.html rotasında PREVIEW_DIR/guide.html'den servis eder.
 GUIDE_FILES=(
   "docs/branch-protection-guide/guide.html|guide.html"
+  # Hook env sürüm matrisi — dashboard env-drift paneli (preview_server, ROOT
+  # yanındaki HOOK_ENV_MATRIX.md'yi okur). TCC mirror'da repoyu okuyamaz;
+  # launchd rotasında panelin doğru karşılaştırması için kopya buraya drop
+  # edilir (tek kaynak repo docs/HOOK_ENV_MATRIX.md).
+  "docs/HOOK_ENV_MATRIX.md|HOOK_ENV_MATRIX.md"
 )
 
 say() { printf '%s\n' "$*"; }
@@ -298,6 +321,10 @@ main() {
     --list)
       run_list
       exit 0
+      ;;
+    --check-coverage)
+      python3 "$CIKTI/check_mirror_coverage.py" --sync-script "$0"
+      exit $?
       ;;
     --check)
       validate_sources || exit 2

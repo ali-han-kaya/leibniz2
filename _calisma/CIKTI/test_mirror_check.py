@@ -248,6 +248,7 @@ class TestMirrorFileCoverage(unittest.TestCase):
         scripts_dir = os.path.join(HERE, "github_scripts")
         repo_scripts = {f"github_scripts/{n}" for n in os.listdir(scripts_dir)
                         if n.endswith(".js")}
+        repo_scripts |= {f"github_scripts/{n}" for n in ("advisory_contract_comment.js", "label_e2e_harness.js")}
         missing = repo_scripts - listed
         self.assertEqual(missing, set(),
                          f"mirror FILES listesinde eksik script'ler: {missing}")
@@ -265,8 +266,7 @@ class TestMirrorFileCoverage(unittest.TestCase):
                          f"FILES listesinde eksik zip: {missing}")
 
     def test_runtime_config_files_listed(self):
-        # Core runtime dosyaları (script'ler + config'ler): mirror'da eksikse
-        # launchd rotası K1-K18'i çalıştıramaz → her biri FILES'ta olmalı.
+        # Core runtime dosyaları mirror'da eksikse launchd rotası çalışamaz.
         with open(SYNC_MIRROR, encoding="utf-8") as f:
             text = f.read()
         listed = _listed_sources(_mirror_section(text, "FILES"))
@@ -278,7 +278,7 @@ class TestMirrorFileCoverage(unittest.TestCase):
             "github_scripts_selftest.js", "daemon_http_test.py",
             "preview.html",
             "fresh_clone_setup.sh", "test_fresh_clone_setup.py",
-            "update_preview.sh",
+            "update_preview.sh", "test_launchd_minimal_path.py",
         ]
         missing = [n for n in required if n not in listed]
         self.assertEqual(missing, [],
@@ -307,6 +307,19 @@ class TestMirrorFileCoverage(unittest.TestCase):
         self.assertEqual(missing, set(),
                          f"LEAN_FILES'te eksik lean kaynağı: {missing}")
 
+    def test_all_z3_slide_pngs_in_mirror_files(self):
+        """Üretilen 12 Z3 slayt PNG'si FILES listesinde olmalı."""
+        with open(SYNC_MIRROR, encoding="utf-8") as f:
+            text = f.read()
+        listed = _listed_sources(_mirror_section(text, "FILES"))
+        slide_dir = os.path.join(HERE, "..", "slides_z3")
+        expected = {os.path.join("../slides_z3", n)
+                    for n in os.listdir(slide_dir)
+                    if n.endswith(".png")}
+        self.assertEqual(len(expected), 12, "12 Z3 slaytı bekleniyor")
+        self.assertEqual(expected - listed, set(),
+                         f"FILES listesinde eksik Z3 slaytları: {expected - listed}")
+
     def test_lean_mirror_files_listed(self):
         with open(SYNC_MIRROR, encoding="utf-8") as f:
             text = f.read()
@@ -316,9 +329,7 @@ class TestMirrorFileCoverage(unittest.TestCase):
     def test_preview_files_listed(self):
         with open(SYNC_MIRROR, encoding="utf-8") as f:
             text = f.read()
-        # PREVIEW_FILES (adım 2) preview_server.py + _daemonize.py + prestart
-        # içermeli — adım 2+4 tek komutta senkron edilir (launchd çalıştırıcısı
-        # + PreStart kontrolü; eksik runtime dosyası K17 BAYAT'a düşer).
+        # Preview çalıştırıcısı ve prestart mirror'a dahil olmalı.
         self.assertIn("preview_server.py|preview_server.py", text)
         self.assertIn("_daemonize.py|_daemonize.py", text)
         self.assertIn("preview_prestart.py|preview_prestart.py", text)
