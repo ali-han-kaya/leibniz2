@@ -22,25 +22,35 @@ import check_mirror_coverage as cmc
 
 
 def fake_repo(root):
-    """Fake repo: beklenen kümeyi (runtime + zip + lean + guide) kurar."""
+    """Fake repo: beklenen runtime, zip, Lean ve guide kümesini kurar."""
     cikti = os.path.join(root, "_calisma", "CIKTI")
     lean = os.path.join(root, "_calisma", "lean_reduct")
     os.makedirs(os.path.join(cikti, "github_scripts"), exist_ok=True)
+    os.makedirs(os.path.join(cikti, "slides_z3"), exist_ok=True)
     os.makedirs(os.path.join(lean, "Leibniz2Reduct"), exist_ok=True)
     for n in cmc.RUNTIME_REQUIRED + cmc.PREVIEW_RUNTIME:
-        with open(os.path.join(cikti, n), "w", encoding="utf-8") as f:
+        with open(os.path.join(cikti, n.replace('../', '')), "w", encoding="utf-8") as f:
             f.write("x\n")
     for n in ("a.js", "b.js"):
         with open(os.path.join(cikti, "github_scripts", n), "w",
                   encoding="utf-8") as f:
             f.write("x\n")
     for n in ("TESLIM_A.zip", "TESLIM_A.zip.sha256"):
-        with open(os.path.join(cikti, n), "w", encoding="utf-8") as f:
+        with open(os.path.join(cikti, n.replace('../', '')), "w", encoding="utf-8") as f:
             f.write("x\n")
     guide = os.path.join(root, "docs", "branch-protection-guide")
     os.makedirs(guide, exist_ok=True)
     with open(os.path.join(guide, "guide.html"), "w", encoding="utf-8") as f:
         f.write("x\n")
+    with open(os.path.join(root, "docs", "HOOK_ENV_MATRIX.md"), "w", encoding="utf-8") as f:
+        f.write("x\n")
+    for n in cmc.RUNTIME_REQUIRED:
+        if n.startswith("../slides_z3/"):
+            path = os.path.join(root, "_calisma", "slides_z3", n[len("../slides_z3/"):])
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write("x\n")
+
     for n in ("ReductInvariance.lean", "lean-toolchain", "lakefile.toml",
               "Leibniz2Reduct/Content.lean"):
         with open(os.path.join(lean, n), "w", encoding="utf-8") as f:
