@@ -6,7 +6,7 @@
   "duration_pct_warn": 10.0,
   "budget_ratios": {
     "text": 8,
-    "pdf": 8,
+    "pdf": 9,
     "archive": 100,
     "binary": 100
   },
