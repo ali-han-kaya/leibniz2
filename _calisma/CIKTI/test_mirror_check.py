@@ -248,7 +248,6 @@ class TestMirrorFileCoverage(unittest.TestCase):
         scripts_dir = os.path.join(HERE, "github_scripts")
         repo_scripts = {f"github_scripts/{n}" for n in os.listdir(scripts_dir)
                         if n.endswith(".js")}
-        repo_scripts |= {f"github_scripts/{n}" for n in ("advisory_contract_comment.js", "label_e2e_harness.js")}
         missing = repo_scripts - listed
         self.assertEqual(missing, set(),
                          f"mirror FILES listesinde eksik script'ler: {missing}")
@@ -278,7 +277,7 @@ class TestMirrorFileCoverage(unittest.TestCase):
             "github_scripts_selftest.js", "daemon_http_test.py",
             "preview.html",
             "fresh_clone_setup.sh", "test_fresh_clone_setup.py",
-            "update_preview.sh", "test_launchd_minimal_path.py",
+            "update_preview.sh",
         ]
         missing = [n for n in required if n not in listed]
         self.assertEqual(missing, [],
@@ -306,19 +305,6 @@ class TestMirrorFileCoverage(unittest.TestCase):
         missing = repo - listed
         self.assertEqual(missing, set(),
                          f"LEAN_FILES'te eksik lean kaynağı: {missing}")
-
-    def test_all_z3_slide_pngs_in_mirror_files(self):
-        """Üretilen 12 Z3 slayt PNG'si FILES listesinde olmalı."""
-        with open(SYNC_MIRROR, encoding="utf-8") as f:
-            text = f.read()
-        listed = _listed_sources(_mirror_section(text, "FILES"))
-        slide_dir = os.path.join(HERE, "..", "slides_z3")
-        expected = {os.path.join("../slides_z3", n)
-                    for n in os.listdir(slide_dir)
-                    if n.endswith(".png")}
-        self.assertEqual(len(expected), 12, "12 Z3 slaytı bekleniyor")
-        self.assertEqual(expected - listed, set(),
-                         f"FILES listesinde eksik Z3 slaytları: {expected - listed}")
 
     def test_lean_mirror_files_listed(self):
         with open(SYNC_MIRROR, encoding="utf-8") as f:

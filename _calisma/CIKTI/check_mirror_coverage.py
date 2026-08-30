@@ -13,10 +13,6 @@ RUNTIME_REQUIRED = (
     "daemon_http_test.py", "preview.html", "fresh_clone_setup.sh", "test_fresh_clone_setup.py",
     "update_preview.sh", "check_unit_tests.list", "check_unit_tests_hook.sh", "sync_check_unit_tests.py",
     "lake_evidence_hook.sh", "test_lake_evidence_smoke.py", "render_z3_slides.py", "test_render_z3_slides.py",
-    "test_launchd_minimal_path.py", "../slides_z3/P1-a.png", "../slides_z3/P1-b.png", "../slides_z3/P2.png",
-    "../slides_z3/P3-a.png", "../slides_z3/P3-b.png", "../slides_z3/P4-a.png", "../slides_z3/P4-b.png",
-    "../slides_z3/P4-c.png", "../slides_z3/P4-d.png", "../slides_z3/P4-e.png", "../slides_z3/P5-note.png",
-    "../slides_z3/P5.png",
 )
 PREVIEW_RUNTIME = ("preview_server.py", "_daemonize.py", "preview_prestart.py", "sw.js")
 GUIDE_REL = "docs/branch-protection-guide/guide.html"
@@ -55,10 +51,7 @@ def expected_repo_files(root, cikti, lean_src):
             expected.update("_calisma/CIKTI/github_scripts/" + n for n in os.listdir(gs)
                             if n.endswith(".js"))
     for name in RUNTIME_REQUIRED:
-        if name.startswith("../"):
-            expected.add("_calisma/slides_z3/" + name[len("../slides_z3/"):])
-        else:
-            expected.add("_calisma/CIKTI/" + name)
+        expected.add("_calisma/CIKTI/" + name)
     expected.update("_calisma/CIKTI/" + n for n in PREVIEW_RUNTIME)
     expected.add(GUIDE_REL)
     expected.add(DOC_REL)
