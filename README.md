@@ -491,6 +491,12 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-26 | refactor | (refs-trend) UNVERIFIED/bayat-artifact saf fonksiyonlar | [`35897ac`](https://github.com/ali-han-kaya/leibniz2/commit/35897ac) |
 | 2026-08-26 | feat | (summary) durum panosuna K13 ayrı-step satırı + plist docs tazeleme | [`2f927fc`](https://github.com/ali-han-kaya/leibniz2/commit/2f927fc) |
 | 2026-08-26 | feat | (render) Z3 teorem slayt üretici + sync testi (12/12 OK) | [`7333a55`](https://github.com/ali-han-kaya/leibniz2/commit/7333a55) |
+| 2026-08-28 | other | Connect PDF skill reuse to K6 determinism gate | [`3648dd7`](https://github.com/ali-han-kaya/leibniz2/commit/3648dd7) |
+| 2026-08-28 | feat | reproducible PDF and skills index gates | [`1e3ad05`](https://github.com/ali-han-kaya/leibniz2/commit/1e3ad05) |
+| 2026-08-30 | feat | (verify) verify_mcp MCP sunucusu + multi-stage Dockerfile + mirror sözleşme t... | [`7680a83`](https://github.com/ali-han-kaya/leibniz2/commit/7680a83) |
+| 2026-08-29 | chore | (verify) teslim zip'lerini güncel kaynaktan repack et | [`f074603`](https://github.com/ali-han-kaya/leibniz2/commit/f074603) |
+| 2026-08-29 | fix | (verify) K21 SDE + skill gate parçaları + CI kapı düzeltmeleri | [`948bcb0`](https://github.com/ali-han-kaya/leibniz2/commit/948bcb0) |
+| 2026-08-29 | fix | (verify) mirror kapsam + artifact sözleşmesi + coverage raporu | [`37f2743`](https://github.com/ali-han-kaya/leibniz2/commit/37f2743) |
 
 ### Regresyon notları
 

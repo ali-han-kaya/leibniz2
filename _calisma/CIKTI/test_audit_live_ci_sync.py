@@ -19,6 +19,7 @@ HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 import audit_live_ci_sync as als  # noqa: E402
+import ci_failure_pattern as cfp  # noqa: E402
 
 DOC = """\
 **Job kategorileri (16 job = 8 required + 4 advisory + 3 PR-only + 1 manifest):**
@@ -230,6 +231,18 @@ class TestE2EArtifactDocSync(unittest.TestCase):
                 rc = als.main(["--doc", str(doc), "--json"])
             d = json.loads(buf.getvalue())
         return rc, d
+
+    def test_combined_report_is_hard_failed_for_deterministic_jobs(self):
+        report = als.build_combined_report({"verdict": "PASS"}, {
+            "categories": {"deterministic": ["verify"], "flaky": [], "config_drift": []}
+        })
+        self.assertEqual(report["verdict"], "FAIL")
+
+    def test_combined_report_keeps_flaky_and_config_drift_advisory(self):
+        report = als.build_combined_report({"verdict": "PASS"}, {
+            "categories": {"deterministic": [], "flaky": ["x"], "config_drift": ["y"]}
+        })
+        self.assertEqual(report["verdict"], "PASS")
 
     def test_main_current_state_pass(self):
         rc, d = self._run_main(self.doc_text, self._live())

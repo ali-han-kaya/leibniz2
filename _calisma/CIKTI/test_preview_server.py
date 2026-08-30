@@ -35,6 +35,20 @@ def _rec(ts, verdict="PASS", **kw):
     return rec
 
 
+def _preview_html():
+    return pathlib.Path(HERE, "preview.html").read_text(encoding="utf-8")
+
+
+class DurationPctWarnTests(unittest.TestCase):
+    def test_snapshot_dict_carries_duration_pct_warn(self):
+        old = ps.LATEST.get("duration_pct_warn")
+        ps.LATEST["duration_pct_warn"] = True
+        try:
+            self.assertTrue(ps.snapshot_dict()["duration_pct_warn"])
+        finally:
+            ps.LATEST["duration_pct_warn"] = old
+
+
 class CachedLatestTests(unittest.TestCase):
     """Restart sonrası önbelleklenmiş son run'un yüklenmesi (UNKNOWN gösterme).
 
@@ -552,6 +566,68 @@ class HookEnvPlumbingTests(unittest.TestCase):
         finally:
             ps.LATEST["hook_env"] = None
         self.assertEqual(snap["hook_env"], {"z3": "5.1.0"})
+
+
+class EnvDriftMatrixTests(unittest.TestCase):
+    """Env drift paneli: LATEST hook_env ↔ HOOK_ENV_MATRIX.md pin karşılaştırması."""
+
+    def test_matrix_doc_is_single_source(self):
+        # Matris doc'u mevcut olmalı ve tool anahtarlarını çözebilmeli.
+        rows = ps._read_hook_env_matrix()
+        self.assertGreaterEqual(len(rows), 5)
+        self.assertIn("python", rows)
+        self.assertIn("lean", rows)
+
+    def test_all_tools_present_is_ok(self):
+        obs = {"python": "3.9.6", "z3": "5.1.0", "lean": "4.33.1",
+               "pre_commit": "4.3.0", "pdfinfo": "26.08.0", "qpdf": "12.4.0"}
+        r = ps.build_hook_env_matrix(obs)
+        self.assertEqual(r["verdict"], "OK")
+        self.assertTrue(all(t["status"] == "ok" for t in r["tools"]))
+
+    def test_missing_tool_flagged(self):
+        # Matriste beklenen ama bu run'da prob edilmemiş araç → DRIFT + missing.
+        obs = {"python": "3.9.6", "z3": "5.1.0", "lean": "4.33.1",
+               "pre_commit": "4.3.0", "pdfinfo": "26.08.0", "qpdf": None}
+        r = ps.build_hook_env_matrix(obs)
+        self.assertEqual(r["verdict"], "DRIFT")
+        by_tool = {t["tool"]: t["status"] for t in r["tools"]}
+        self.assertEqual(by_tool["qpdf"], "missing")
+
+    def test_unlisted_tool_flagged(self):
+        # Koddan prob edilen ama matriste listelenmeyen araç → DRIFT + unlisted.
+        obs = {"python": "3.9.6", "totally_new_tool": "9.9"}
+        r = ps.build_hook_env_matrix(obs)
+        self.assertEqual(r["verdict"], "DRIFT")
+        by_tool = {t["tool"]: t["status"] for t in r["tools"]}
+        self.assertEqual(by_tool["totally_new_tool"], "unlisted")
+
+
+class HookEnvTrendPlumbingTests(unittest.TestCase):
+    """Hook env sürüm trendi (refs-trend deseni, zaman serisi) HTML kablosu."""
+
+    def setUp(self):
+        self.html = _preview_html()
+
+    def test_trend_panel_section_exists(self):
+        # refs-trend deseninde yeni bir SVG paneli olmalı (he-trend).
+        self.assertIn('<svg id="he-trend"', self.html)
+        self.assertIn('id="he-trend-legend"', self.html)
+
+    def test_trend_renderer_present(self):
+        self.assertIn("function renderHookEnvTrend(rows)", self.html)
+        self.assertIn("function showHookEnvTrendTip", self.html)
+        self.assertIn("function envVersionColor", self.html)
+
+    def test_loadTrend_calls_renderer(self):
+        # loadTrend, history rows'tan trendi render etmeli (refs-trend ile aynı
+        # kaynağa beslenir); aksi halde panel hiç doldurulmaz.
+        self.assertIn("renderHookEnvTrend(rows)", self.html)
+
+    def test_hover_hit_area_wired(self):
+        # Hover tooltip'i bant vuruş alanlarına bağlı olmalı.
+        self.assertIn("onmousemove=\"showHookEnvTrendTip(", self.html)
+        self.assertIn("onmouseleave=\"hideTrendTip()", self.html)
 
 
 class BudgetLimitPlumbingTests(unittest.TestCase):
@@ -1267,6 +1343,92 @@ class TestRouteQueryParams(unittest.TestCase):
         # erişilebilir (route testi query-string'li haliyle).
         self.assertEqual(ps._route("/api/run-now?budget=25"), "run_now")
         self.assertEqual(ps._route("/api/run-now"), "run_now")
+
+
+class TestServeHistoryTrendCompact(unittest.TestCase):
+    """serve_history / serve_refs_trend / serve_latest: kompakt JSON
+    sözleşmesi.
+
+    Üç endpoint de SSE döngüsünde her snapshot'ta çekilir; payload'u küçük
+    tutmak (compact dump, indent yok) ölçülen davranıştır — pretty-print
+    payload'u ~%20-30 ve serialize süresini ~2.5x şişirir. Ortak sözleşme
+    _serve'de tek yerde; testler içeriğe odaklanır.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self._old_hist, self._old_rt = ps.HISTORY_PATH, ps.REFS_TREND_PATH
+        ps.HISTORY_PATH = os.path.join(self._tmp.name, "history.jsonl")
+        ps.REFS_TREND_PATH = os.path.join(self._tmp.name, "refs-trend.json")
+
+    def tearDown(self):
+        ps.HISTORY_PATH, ps.REFS_TREND_PATH = self._old_hist, self._old_rt
+        self._tmp.cleanup()
+
+    def _capture(self):
+        class _FakeHandler:
+            def __init__(self):
+                self.sent = None
+
+            def _send(self, status, body,
+                      content_type="text/plain; charset=utf-8",
+                      extra_headers=None):
+                self.sent = (status, body, content_type)
+
+        return _FakeHandler()
+
+    def _serve(self, handler):
+        """Handler'ı çalıştır; ortak compact-JSON sözleşmesini denetle.
+
+        Tüm kompakt JSON handler'ları: 200 + application/json + gövdede
+        literal newline yok. (parsed, body) döner; testler içeriğe odaklanır.
+        """
+        fake = self._capture()
+        handler(fake)
+        status, body, ctype = fake.sent
+        self.assertEqual(status, 200)
+        self.assertIn("application/json", ctype)
+        self.assertNotIn("\n", body)  # literal newline yok (compact)
+        return json.loads(body), body
+
+    def test_serve_history_compact_content(self):
+        with open(ps.HISTORY_PATH, "w", encoding="utf-8") as f:
+            for rec in ({"ts": "2026-08-23T09:00:00Z", "verdict": "PASS",
+                         "p0": 0, "p1": 2},
+                        {"ts": "2026-08-23T10:00:00Z", "verdict": "FAIL",
+                         "p0": 1, "p1": 0}):
+                f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        rows, _ = self._serve(ps.Handler.serve_history)
+        self.assertEqual([r["ts"] for r in rows],
+                         ["2026-08-23T09:00:00Z", "2026-08-23T10:00:00Z"])
+
+    def test_serve_refs_trend_compact_normalized_content(self):
+        # Dosya indent'li yazılır; endpoint kompaktlaştırarak normalize eder
+        # (içerik aynı kalmalı).
+        fixture = {"rows": [{"ts": "2026-08-23", "dur_s": 12.5}],
+                   "duration_budget": {"rows": []}}
+        with open(ps.REFS_TREND_PATH, "w", encoding="utf-8") as f:
+            json.dump(fixture, f, indent=4)
+        served, _ = self._serve(ps.Handler.serve_refs_trend)
+        self.assertEqual(served, fixture)
+
+    def test_serve_refs_trend_missing_returns_fallback(self):
+        served, _ = self._serve(ps.Handler.serve_refs_trend)
+        self.assertEqual(served, {"rows": [], "duration_budget": {"rows": []}})
+
+    def test_serve_latest_compact_content(self):
+        old = ps.LATEST
+        ps.LATEST = {"ts": "2026-08-23T09:00:00Z", "verdict": "PASS",
+                     "p0": 0, "p1": 0,
+                     "stdout": "Satır 1\nSatır 2\nSONUÇ: PASS",
+                     "stderr": "K8 Z3: PASS\n", "hook_env": None,
+                     "cached": False}
+        try:
+            d, _ = self._serve(ps.Handler.serve_latest)
+            self.assertEqual(d["verdict"], "PASS")
+            self.assertIn("Satır 2", d["stdout_short"])
+        finally:
+            ps.LATEST = old
 
 
 if __name__ == "__main__":

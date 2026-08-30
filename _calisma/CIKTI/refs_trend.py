@@ -653,6 +653,8 @@ def main():
             "z3_passed": rec.get("z3_passed"),
             "z3_total": rec.get("z3_total"),
             "audit_refs_trend": rec.get("audit_refs_trend"),
+            "flaky_count": rec.get("flaky_count"),
+            "deterministic_count": rec.get("deterministic_count"),
         }
         _w = check_run_warnings(_row)
         _row["duration_warn"] = _w["duration_warn"]
@@ -765,8 +767,8 @@ def main():
             "",
             f"- **Kaynak:** `run-history` artifact'ları (son {len(history_rows)} run)",
             "",
-            "| # | Tarih (UTC) | Run ID | Duration (s) | Budget (USD) | Z3 | Verdict | Audit |",
-            "|---|---|---|---|---|---|---|---|",
+            "| # | Tarih (UTC) | Run ID | Duration (s) | Budget (USD) | Z3 | Failure pattern | Verdict | Audit |",
+            "|---|---|---|---|---|---|---|---|---|",
         ]
         for i, r in enumerate(history_rows, 1):
             dur = (f"{r['duration_s']:.1f}"
@@ -781,13 +783,14 @@ def main():
             w = check_run_warnings(r)
             flags = []
             if w["duration_warn"]:
-                flags.append("⏰")
+                flags.append("⚠️")
             if w["budget_warn"]:
                 flags.append("💰")
             flag_str = " ".join(flags)
             z3 = (f"{r['z3_passed']}/{r['z3_total']}"
                    if isinstance(r.get("z3_passed"), (int, float))
                    else "—")
+            failure = f"🟡 {r.get('flaky_count', 0)} / 🔴 {r.get('deterministic_count', 0)}"
             # Audit sütunu: PASS/FAIL/advisory (None = audit henüz koşulmadı)
             audit = r.get("audit_refs_trend")
             if audit is not None:
@@ -797,7 +800,7 @@ def main():
                 audit_str = "—"
             lines.append(
                 f"| {i} | {short_date(r['date'])} | {r['run_id'] or '-'} | "
-                f"{dur} | {bud} | {z3} | {r['verdict'] or '-'} {flag_str} | {audit_str} |"
+                f"{dur} | {bud} | {z3} | {failure} | {r['verdict'] or '-'} {flag_str} | {audit_str} |"
             )
         lines += [""]
 

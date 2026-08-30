@@ -61,6 +61,7 @@ GATE_EXCLUDE = {
     "override-trend",       # advisory: CLI override zaman serisi
     "changelog-drift",      # advisory: gen_changelog --check drift bulguları
     "pattern-drift",         # advisory: merge pattern ↔ ARTIFACT_JOBS drift
+    "budget-comment",        # PR-only: bütçe + pre-commit PR yorumu (bütçe kapısı ayrı job)
 }
 # Not: "label-gate" (Pre-commit P0 label gate) BİLEREK required check'tir —
 # precommit-p0 etiketi varken FAIL verip merge'i bloke eder; bu yüzden

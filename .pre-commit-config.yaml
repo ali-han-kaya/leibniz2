@@ -692,6 +692,25 @@ repos:
         stages: [pre-commit]
         verbose: true
 
+      - id: check-hook-env-matrix
+        name: "Verify hook env sürüm matrisi (fail-closed yapısal denetim)"
+        description: >-
+          check_hook_env_matrix.py: docs/HOOK_ENV_MATRIX.md ↔
+          probe_tool_versions() araç kümesini iki yönlü, lean pin'ini
+          LEAN_TOOLCHAIN ile, algılama komutu hücrelerini denetler. Aracı
+          ekler/kaldırırsan veya pin/komut hücresi bozulursa → commit bloke
+          (yapısal drift). Sürüm değişikliği bloke etmez (advisory) — doc
+          güncellenmeli. OFFLINE, stdlib-only.
+        entry: >-
+          bash -c 'PY=python3; [ -x _calisma/.venv_z3/bin/python ] &&
+          PY=_calisma/.venv_z3/bin/python; exec "$PY"
+          _calisma/CIKTI/check_hook_env_matrix.py'
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+        verbose: true
+
       - id: extract-unstaged-deps
         name: "Extract unstaged dependency findings from hook output"
         description: >-

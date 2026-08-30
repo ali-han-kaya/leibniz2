@@ -507,6 +507,26 @@ class TestSummarizeWarnings(unittest.TestCase):
         self.assertEqual(s["violations"][0]["run_id"], 7)
 
 
+class TestFailurePatternTrend(unittest.TestCase):
+    def test_history_failure_counts_are_rendered(self):
+        rows = [{"date": "2026-08-28", "run_id": 1, "duration_s": 1,
+                 "budget_usd": 1, "verdict": "PASS", "z3_passed": 1,
+                 "z3_total": 1, "flaky_count": 2, "deterministic_count": 1,
+                 "audit_refs_trend": None}]
+        source = pathlib.Path(rt.__file__).read_text(encoding="utf-8")
+        self.assertIn('flaky_count": rec.get("flaky_count")', source)
+        self.assertIn('deterministic_count": rec.get("deterministic_count")', source)
+        self.assertEqual(rows[0]["flaky_count"], 2)
+        self.assertEqual(rows[0]["deterministic_count"], 1)
+
+
+class TestDurationTableWarningMarker(unittest.TestCase):
+    def test_duration_warning_uses_visible_warning_marker(self):
+        source = pathlib.Path(rt.__file__).read_text(encoding="utf-8")
+        self.assertIn('flags.append("⚠️")', source)
+        self.assertNotIn('flags.append("⏰")', source)
+
+
 class TestDurationBudgetSummary(unittest.TestCase):
     """duration_budget JSON bölümü sözleşmesi (fail-closed)."""
 
