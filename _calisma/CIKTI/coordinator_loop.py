@@ -92,17 +92,8 @@ def _invoke_opencode(bin_path, prompt, cwd, timeout):
 
 
 def _locate_opencode():
-    # shutil.which: repo conventionu (check_plist_drift.py deseni) —
-    # /Users/<user>/ mutlak yolunu hardcode etme (check-absolute-paths kapısı).
-    found = shutil.which("opencode")
-    if found:
-        return found
-    try:
-        subprocess.run(["opencode", "--version"], stdin=subprocess.DEVNULL,
-                       capture_output=True, timeout=5)
-        return "opencode"
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        return None
+    # PATH'te ara (mutlak yol hardcode etme — check-absolute-paths).
+    return shutil.which("opencode")
 
 
 def decide_gate(gate, worktree, done_dir, model, timeout, mock, live_ci):
