@@ -497,6 +497,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-29 | chore | (verify) teslim zip'lerini güncel kaynaktan repack et | [`f074603`](https://github.com/ali-han-kaya/leibniz2/commit/f074603) |
 | 2026-08-29 | fix | (verify) K21 SDE + skill gate parçaları + CI kapı düzeltmeleri | [`948bcb0`](https://github.com/ali-han-kaya/leibniz2/commit/948bcb0) |
 | 2026-08-29 | fix | (verify) mirror kapsam + artifact sözleşmesi + coverage raporu | [`37f2743`](https://github.com/ali-han-kaya/leibniz2/commit/37f2743) |
+| 2026-08-30 | perf | (preview) kompakt JSON serileştirme (/api/history, /api/refs-trend, /api/latest) | [`ea4a1dc`](https://github.com/ali-han-kaya/leibniz2/commit/ea4a1dc) |
 
 ### Regresyon notları
 

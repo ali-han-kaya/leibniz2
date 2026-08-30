@@ -29,8 +29,9 @@ if HAVE_YAML:
     sys.path.insert(0, str(CIKTI))
     import status_checks as sc  # noqa: E402
 
-    # gate_jobs cwd-göreli WORKFLOW okur — testler repo kökünden koşulur.
-    _WORKFLOW = pathlib.Path(".github/workflows/verify.yml")
+    # gate_jobs WORKFLOW yolunu okur — testler CIKTI'dan da repo kökünden de
+    # koşulabilsin diye mutlak yola çöz (hook CIKTI cwd'sinde koşar).
+    _WORKFLOW = CIKTI.parent.parent / ".github" / "workflows" / "verify.yml"
 
 
 def _protection(contexts=None, strict=True, enforce_admins=True,
