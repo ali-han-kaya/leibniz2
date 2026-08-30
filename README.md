@@ -498,6 +498,8 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-29 | fix | (verify) K21 SDE + skill gate parçaları + CI kapı düzeltmeleri | [`948bcb0`](https://github.com/ali-han-kaya/leibniz2/commit/948bcb0) |
 | 2026-08-29 | fix | (verify) mirror kapsam + artifact sözleşmesi + coverage raporu | [`37f2743`](https://github.com/ali-han-kaya/leibniz2/commit/37f2743) |
 | 2026-08-30 | perf | (preview) kompakt JSON serileştirme (/api/history, /api/refs-trend, /api/latest) | [`ea4a1dc`](https://github.com/ali-han-kaya/leibniz2/commit/ea4a1dc) |
+| 2026-08-30 | refactor | (verify) _locate_opencode dead fallback removal | [`26d7201`](https://github.com/ali-han-kaya/leibniz2/commit/26d7201) |
+| 2026-08-30 | fix | (verify) dependency-closed untracked kaynak + mutlak yol duzeltmeleri | [`835510b`](https://github.com/ali-han-kaya/leibniz2/commit/835510b) |
 
 ### Regresyon notları
 
