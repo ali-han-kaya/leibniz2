@@ -35,6 +35,7 @@ izni gerektirir, GITHUB_TOKEN'da yoktur.
 """
 import argparse
 import json
+import pathlib
 import subprocess
 import sys
 
@@ -47,7 +48,10 @@ except ImportError:  # pragma: no cover
     )
     sys.exit(2)
 
-WORKFLOW = ".github/workflows/verify.yml"
+# verify.yml — scriptin kendi konumundan çöz (cwd'den bağımsız; testler
+# CIKTI'dan da repo kökünden de koşabilsin).
+_REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
+WORKFLOW = str(_REPO_ROOT / ".github" / "workflows" / "verify.yml")
 # Required check OLMAYAN job'lar: PR-only/advisory (banner kapı olmasın).
 GATE_EXCLUDE = {
     "manifest-comment",    # PR-only: yorum düşürme

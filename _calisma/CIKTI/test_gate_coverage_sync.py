@@ -13,10 +13,18 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 CIKTI = ROOT / "_calisma" / "CIKTI"
 sys.path.insert(0, str(CIKTI))
 
-import status_checks as sc  # noqa: E402
+try:
+    import yaml  # noqa: F401
+    HAVE_YAML = True
+except ImportError:
+    HAVE_YAML = False
+
 import test_coverage_report as coverage  # noqa: E402
+if HAVE_YAML:
+    import status_checks as sc  # noqa: E402
 
 
+@unittest.skipUnless(HAVE_YAML, "PyYAML gerekli (status_checks import)")
 class TestGateCoverageSync(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

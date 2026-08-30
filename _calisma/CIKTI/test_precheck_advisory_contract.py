@@ -8,9 +8,17 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
 sys.path.insert(0, str(HERE))
 
-import status_checks  # noqa: E402
+try:
+    import yaml  # noqa: F401
+    HAVE_YAML = True
+except ImportError:
+    HAVE_YAML = False
+
+if HAVE_YAML:
+    import status_checks  # noqa: E402
 
 
+@unittest.skipUnless(HAVE_YAML, "PyYAML gerekli (status_checks import)")
 class TestPrecheckAdvisoryContract(unittest.TestCase):
     def test_real_verify_workflow_contract_is_ok(self):
         """The exact workflow used by CI must satisfy advisory_contract.ok."""

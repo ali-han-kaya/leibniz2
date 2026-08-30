@@ -14,9 +14,18 @@ from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-import status_checks as sc  # noqa: E402
+
+try:
+    import yaml  # noqa: F401
+    HAVE_YAML = True
+except ImportError:
+    HAVE_YAML = False
+
+if HAVE_YAML:
+    import status_checks as sc  # noqa: E402
 
 
+@unittest.skipUnless(HAVE_YAML, "PyYAML gerekli (status_checks import)")
 class TestStatusChecksGhSmoke(unittest.TestCase):
     def _protection(self, contexts):
         return {
