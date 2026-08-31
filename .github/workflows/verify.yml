@@ -961,7 +961,10 @@ jobs:
     name: Budget status PR comment
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    needs: [budget]
+    # pr_status_comment.js reproducibility/manifest.json'u da okur —
+    # artifact'ın job koşmadan önce yüklenmiş olması gerekir (needs
+    # sıralaması).
+    needs: [budget, reproducibility]
     if: always() && github.event_name == 'pull_request'
     permissions:
       contents: read
@@ -987,7 +990,21 @@ jobs:
           name: precommit-logs
           path: precommit_findings/
 
-      - name: PR status — labels + comment (bütçe + pre-commit)
+      # pr_status_comment.js'in K0/lineage/klayers sidecar'ları ve
+      # reproducibility manifest'i için gerekli artifact'lar.
+      - name: Download single-file sidecars (k0/lineage/klayers → kök)
+        uses: actions/download-artifact@v7
+        with:
+          pattern: '{k0-findings,lineage-findings,klayers}'
+          merge-multiple: true
+
+      - name: Download reproducibility bundle
+        uses: actions/download-artifact@v7
+        with:
+          name: reproducibility
+          path: reproducibility/
+
+      - name: PR status — labels + comment (all verification inputs)
         uses: actions/github-script@v8
         with:
           # github-script@v8 scriptPath input'unu DESTEKLEMEZ (yalnızca
@@ -1089,6 +1106,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+      # verify job'unun ürettiği commit-msg sidecar'ını indirmeden gate
+      # yoklaması yapılmamalı.
+      - name: Download commit-msg findings sidecar
+        continue-on-error: true
+        uses: actions/download-artifact@v7
+        with:
+          name: precommit-logs
+          path: logs
       - name: Fail if commit-msg violations exist
         uses: actions/github-script@v8
         with:

@@ -144,6 +144,7 @@ HOOK_COVERAGE = {
         "test_render_z3_slides.py",
         "test_check_hook_env_matrix.py",
         "test_check_workflow_artifact_docs.py",
+        "test_ci_sidecar_wiring.py",
         "test_actionlint_gate.py",
         "test_audit_octokit_names.py",
         "test_check_badge_endpoints.py",

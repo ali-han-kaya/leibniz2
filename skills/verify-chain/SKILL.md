@@ -157,9 +157,29 @@ Rules that keep the chain honest:
 - Action versions are pinned; `check-action-pins` + `action-runtimes` gate
   downgrades and Node 24 runtime.
 
+Two failure modes keep the chain honest only if you audit for them:
+
+- **Fail-open gates**: a "required" job that consumes a sidecar artifact
+  (e.g. the commit-msg gate reading `logs/commit_msg_findings.json`) passes
+  vacuously when the artifact never reaches it — the job log says
+  `... bulunamadı — PASS` while the real findings go unreviewed. Audit each
+  required gate for a `download-artifact` step matching what its producing
+  job uploads; a required check whose input is optional is not a gate.
+- **Required-set pin drift**: `status_checks.gate_jobs()` derives the
+  required-check candidates from the workflow, but tests pin the expected
+  set (`test_status_checks` 12/13). When the workflow gains a non-excluded
+  job (e.g. `lake-proof`, `reports`), the pin and the derivation diverge:
+  the fail-closed `check-unit-tests` hook goes red and every commit needs
+  `--no-verify` until someone decides whether the new job is required or
+  belongs in `GATE_EXCLUDE`. Treat that decision as a policy change, not a
+  test edit, and update the pins together with the exclusion set.
+
 ## Checklist
 
 - [ ] Every P0/P1 finding blocks (exit 1) — no silent PASS
+- [ ] Every required gate receives its sidecar (no fail-open `bulunamadı — PASS`)
+- [ ] Required-set pins (`test_status_checks` 12/13) match `gate_jobs()`
+      derivation, or the drift decision is recorded as policy
 - [ ] New layer: docstring table + LAYER_LABELS + flags + `--full` decision
       updated together
 - [ ] Unit test with tamper-proof (tampered input MUST produce finding)

@@ -26,6 +26,7 @@ test_check_sde_determinism.py
 test_check_unit_tests_timing.py
 test_ci_check_rate.py
 test_ci_failure_pattern.py
+test_ci_sidecar_wiring.py
 test_ci_stats.py
 test_classify_lean_error.py
 test_commit_msg_hook.py
