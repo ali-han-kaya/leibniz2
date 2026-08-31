@@ -500,6 +500,23 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-30 | perf | (preview) kompakt JSON serileştirme (/api/history, /api/refs-trend, /api/latest) | [`ea4a1dc`](https://github.com/ali-han-kaya/leibniz2/commit/ea4a1dc) |
 | 2026-08-30 | refactor | (verify) _locate_opencode dead fallback removal | [`26d7201`](https://github.com/ali-han-kaya/leibniz2/commit/26d7201) |
 | 2026-08-30 | fix | (verify) dependency-closed untracked kaynak + mutlak yol duzeltmeleri | [`835510b`](https://github.com/ali-han-kaya/leibniz2/commit/835510b) |
+| 2026-08-31 | test | (preview) extend handler-capture coverage to serve_latest/run_now/run_stdout ... | [`db5d314`](https://github.com/ali-han-kaya/leibniz2/commit/db5d314) |
+| 2026-08-31 | fix | (preview) remove dead do_GET 404 dup + timing-safe token compare | [`d0071ae`](https://github.com/ali-han-kaya/leibniz2/commit/d0071ae) |
+| 2026-08-31 | fix | (preview) compact dashboard JSON responses | [`4a530f3`](https://github.com/ali-han-kaya/leibniz2/commit/4a530f3) |
+| 2026-08-31 | fix | (verify) wire CI gates to required sidecars | [`3f27b90`](https://github.com/ali-han-kaya/leibniz2/commit/3f27b90) |
+| 2026-08-31 | docs | (verify) inline code review findings and verdict | [`1c723be`](https://github.com/ali-han-kaya/leibniz2/commit/1c723be) |
+| 2026-08-31 | docs | (verify) progress log for review-reception turn | [`5e3211d`](https://github.com/ali-han-kaya/leibniz2/commit/5e3211d) |
+| 2026-08-31 | test | (verify) status_checks yaml-guard + abs WORKFLOW path | [`03bf219`](https://github.com/ali-han-kaya/leibniz2/commit/03bf219) |
+| 2026-08-30 | chore | (verify) thread artifact publish (hooks+tests+docs) | [`5d9a6d2`](https://github.com/ali-han-kaya/leibniz2/commit/5d9a6d2) |
+| 2026-08-30 | refactor | (verify) _locate_opencode dead fallback removal | [`ae515a0`](https://github.com/ali-han-kaya/leibniz2/commit/ae515a0) |
+| 2026-08-30 | fix | (verify) untracked kaynak + mutlak yol duzeltmeleri | [`62ae4a8`](https://github.com/ali-han-kaya/leibniz2/commit/62ae4a8) |
+| 2026-08-30 | perf | (preview) kompakt JSON serileştirme (api endpoints) | [`cf12a59`](https://github.com/ali-han-kaya/leibniz2/commit/cf12a59) |
+| 2026-08-30 | feat | (verify) verify_mcp sunucu + Dockerfile + mirror temizliği | [`df8c5b7`](https://github.com/ali-han-kaya/leibniz2/commit/df8c5b7) |
+| 2026-08-29 | chore | (verify) teslim zip'lerini güncel kaynaktan repack et | [`b69de33`](https://github.com/ali-han-kaya/leibniz2/commit/b69de33) |
+| 2026-08-29 | fix | (verify) K21 SDE + skill gate parçaları + CI kapı düzeltmeleri | [`099ba80`](https://github.com/ali-han-kaya/leibniz2/commit/099ba80) |
+| 2026-08-29 | fix | (verify) mirror kapsam + artifact sözleşmesi + coverage raporu | [`3918eab`](https://github.com/ali-han-kaya/leibniz2/commit/3918eab) |
+| 2026-08-28 | feat | (verify) PDF skill reuse to K6 determinism gate | [`baf652a`](https://github.com/ali-han-kaya/leibniz2/commit/baf652a) |
+| 2026-08-28 | feat | (verify) add reproducible PDF + skills index gates | [`1866ad8`](https://github.com/ali-han-kaya/leibniz2/commit/1866ad8) |
 
 ### Regresyon notları
 

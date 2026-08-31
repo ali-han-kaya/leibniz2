@@ -57,6 +57,7 @@ def api_error(status, message):
 
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.dirname(os.path.dirname(ROOT))
 DEFAULT_PREVIEW_DIR = os.path.expanduser("~/Library/Caches/com.freebuff/preview")
 
 
@@ -1673,8 +1674,9 @@ def main():
     HISTORY_PATH = os.path.join(args.preview_dir, "history.jsonl")
     RUNS_DIR = os.path.join(args.preview_dir, "runs")
     RUN_LOG_MAX = args.replay_runs
-    # refs-trend.json: CI artifact'ından veya yerel dizinden okunur
-    _rt_candidate = os.path.join(ROOT, "refs-trend", "refs-trend.json")
+    # refs-trend.json: CI artifact'ı repo kökünde (refs-trend/refs-trend.json);
+    # yerel kurulumda preview-dir'de de olabilir (nested veya flat).
+    _rt_candidate = os.path.join(REPO_ROOT, "refs-trend", "refs-trend.json")
     if not os.path.isfile(_rt_candidate):
         _rt_candidate = os.path.join(args.preview_dir, "refs-trend", "refs-trend.json")
     if not os.path.isfile(_rt_candidate):

@@ -1492,6 +1492,14 @@ class TestRefsTrendCandidates(unittest.TestCase):
         source = pathlib.Path(ps.__file__).read_text(encoding="utf-8")
         self.assertIn('os.path.join(args.preview_dir, "refs-trend", "refs-trend.json")', source)
 
+    def test_first_candidate_targets_repo_root(self):
+        source = pathlib.Path(ps.__file__).read_text(encoding="utf-8")
+        # CI artifact lives at <repo-root>/refs-trend/refs-trend.json, not
+        # inside _calisma/CIKTI. ROOT = _calisma/CIKTI; REPO_ROOT = ROOT/../..
+        self.assertIn('REPO_ROOT = os.path.dirname(os.path.dirname(ROOT))', source)
+        self.assertIn('os.path.join(REPO_ROOT, "refs-trend", "refs-trend.json")', source)
+        self.assertNotIn('os.path.join(ROOT, "refs-trend", "refs-trend.json")', source)
+
 
 class TestServeHistoryTrendCompact(unittest.TestCase):
     """serve_history / serve_refs_trend / serve_latest: kompakt JSON
