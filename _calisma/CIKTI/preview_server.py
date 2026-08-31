@@ -24,6 +24,7 @@ Tek dosyalık Python HTTP sunucusu (stdlib-only):
 """
 import argparse
 import hashlib
+import hmac
 import json
 import os
 import re
@@ -1247,10 +1248,6 @@ class Handler(BaseHTTPRequestHandler):
             status, payload = api_error(404, "not found")
             self._send(status, json.dumps(payload),
                        content_type="application/json; charset=utf-8")
-        elif route is None and urllib.parse.urlparse(self.path).path.startswith("/api/"):
-            status, payload = api_error(404, "not found")
-            self._send(status, json.dumps(payload),
-                       content_type="application/json; charset=utf-8")
         else:
             self._send(404, "404 not found")
 
@@ -1280,7 +1277,7 @@ class Handler(BaseHTTPRequestHandler):
         if expected:
             authorization = self.headers.get("Authorization", "")
             scheme, _, token = authorization.partition(" ")
-            if scheme != "Bearer" or token != expected:
+            if scheme != "Bearer" or not hmac.compare_digest(token, expected):
                 self._send(401, json.dumps({"error": "unauthorized"}),
                            content_type="application/json; charset=utf-8",
                            extra_headers={"WWW-Authenticate": "Bearer"})
