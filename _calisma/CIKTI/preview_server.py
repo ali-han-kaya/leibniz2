@@ -35,6 +35,26 @@ import urllib.parse
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+REQUEST_TIMEOUT_SECONDS = 30
+ALLOWED_HOSTS = {"127.0.0.1", "localhost", "::1"}
+
+
+def _trusted_request(headers):
+    host = headers.get("Host", "").split(":", 1)[0].lower()
+    if host not in ALLOWED_HOSTS:
+        return "forbidden host"
+    origin = headers.get("Origin")
+    if origin:
+        parsed = urllib.parse.urlparse(origin)
+        if parsed.hostname not in ALLOWED_HOSTS:
+            return "forbidden origin"
+    return None
+
+
+def api_error(status, message):
+    return status, {"error": message}
+
+
 ROOT = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_PREVIEW_DIR = os.path.expanduser("~/Library/Caches/com.freebuff/preview")
 
@@ -447,7 +467,8 @@ def run_verify(verify_dir, budget_usd=None, budget_method=None):
         return False
     try:
         return _run_verify_locked(verify_dir, budget_usd=budget_usd,
-                                  budget_method=budget_method)
+                                  budget_method=budget_method,
+                                  preview_dir=PREVIEW_DIR)
     finally:
         VERIFY_BUSY.release()
 
@@ -546,7 +567,8 @@ def build_replay_events_multi(records):
     return events
 
 
-def _build_verify_cmd(py, verify_dir, budget_usd=None, budget_method=None):
+def _build_verify_cmd(py, verify_dir, budget_usd=None, budget_method=None,
+                      klayers_out=None):
     """verify_delivery.py --full komutunu kur (override parametreleriyle).
 
     Manuel override (/api/run-now?budget=25&budget_method=weighted):
@@ -561,10 +583,13 @@ def _build_verify_cmd(py, verify_dir, budget_usd=None, budget_method=None):
         cmd += ["--budget", str(budget_usd)]
     if budget_method is not None:
         cmd += ["--budget-method", str(budget_method)]
+    if klayers_out is not None:
+        cmd += ["--klayers-out", str(klayers_out)]
     return cmd
 
 
-def _run_verify_locked(verify_dir, budget_usd=None, budget_method=None):
+def _run_verify_locked(verify_dir, budget_usd=None, budget_method=None,
+                       preview_dir=None):
     """verify_delivery.py --full komutunu çalıştır, sonucu LATEST'e yaz + broadcast.
 
     Bu server user shell context'te çalışıyor (bash -c exec argv ...); tüm
@@ -577,8 +602,10 @@ def _run_verify_locked(verify_dir, budget_usd=None, budget_method=None):
     venv python tercih et; yoksa system python fallback.
     """
     py = _find_python(verify_dir)
+    klayers_out = os.path.join(preview_dir or DEFAULT_PREVIEW_DIR, "klayers.json")
     cmd = _build_verify_cmd(py, verify_dir, budget_usd=budget_usd,
-                            budget_method=budget_method)
+                            budget_method=budget_method,
+                            klayers_out=klayers_out)
     t0 = time.monotonic()
     timed_out = False
     try:
@@ -1107,7 +1134,7 @@ def _finalize_run(stdout, stderr, rc, duration, data, verify_dir=None):
     _broadcast_run_end(rec)
 
 
-def verify_loop(verify_dir, interval):
+def verify_loop(verify_dir, interval, stop_event=None):
     """Her interval saniyede bir run_verify çalıştırır (arka plan thread)."""
     import traceback
     sys.stderr.write("[verify_loop] started\n"); sys.stderr.flush()
@@ -1123,7 +1150,7 @@ def verify_loop(verify_dir, interval):
                 LATEST.update({"ts": datetime.now(timezone.utc).isoformat(),
                                "verdict": "ERROR", "stderr": str(e),
                                "exit_code": 1})
-        time.sleep(interval)
+        stop_event.wait(interval)
 
 
 def _route(path):
@@ -1216,6 +1243,14 @@ class Handler(BaseHTTPRequestHandler):
             self.serve_run_stdout()
         elif route == "health":
             self._send(200, "ok")
+        elif route is None and urllib.parse.urlparse(self.path).path.startswith("/api/"):
+            status, payload = api_error(404, "not found")
+            self._send(status, json.dumps(payload),
+                       content_type="application/json; charset=utf-8")
+        elif route is None and urllib.parse.urlparse(self.path).path.startswith("/api/"):
+            status, payload = api_error(404, "not found")
+            self._send(status, json.dumps(payload),
+                       content_type="application/json; charset=utf-8")
         else:
             self._send(404, "404 not found")
 
@@ -1223,7 +1258,9 @@ class Handler(BaseHTTPRequestHandler):
         if self.path.startswith("/api/run-now"):
             self.trigger_run_now()
         else:
-            self._send(404, "404 not found")
+            status, payload = api_error(404, "not found")
+            self._send(status, json.dumps(payload),
+                       content_type="application/json; charset=utf-8")
 
     def trigger_run_now(self):
         """Manuel tetikleme: interval beklemeden hemen verify koşar.
@@ -1234,6 +1271,20 @@ class Handler(BaseHTTPRequestHandler):
         yanlışlıkla silinmişti (serve_run_stdout ile yer değiştirdi) —
         geri yüklendi.
         """
+        request_error = _trusted_request(self.headers)
+        if request_error:
+            self._send(403, json.dumps({"error": request_error}),
+                       content_type="application/json; charset=utf-8")
+            return
+        expected = os.environ.get("PREVIEW_RUN_NOW_TOKEN")
+        if expected:
+            authorization = self.headers.get("Authorization", "")
+            scheme, _, token = authorization.partition(" ")
+            if scheme != "Bearer" or token != expected:
+                self._send(401, json.dumps({"error": "unauthorized"}),
+                           content_type="application/json; charset=utf-8",
+                           extra_headers={"WWW-Authenticate": "Bearer"})
+                return
         ts = datetime.now(timezone.utc).isoformat()
         if not VERIFY_BUSY.acquire(blocking=False):
             self._send(409,
@@ -1347,8 +1398,13 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, json.dumps({"rows": [], "duration_budget": {"rows": []}}),
                        content_type="application/json; charset=utf-8")
             return
-        with open(REFS_TREND_PATH, encoding="utf-8") as f:
-            data = json.load(f)
+        try:
+            with open(REFS_TREND_PATH, encoding="utf-8") as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            self._send(500, json.dumps({"error": "refs trend unavailable"}),
+                       content_type="application/json; charset=utf-8")
+            return
         self._send(200, json.dumps(data, ensure_ascii=False),
                    content_type="application/json; charset=utf-8")
 
@@ -1518,7 +1574,7 @@ class Handler(BaseHTTPRequestHandler):
         snapshot["stderr_short"] = "\n".join(snapshot["stderr"].splitlines()[-20:])
         snapshot.pop("stdout", None)
         snapshot.pop("stderr", None)
-        self._send(200, json.dumps(snapshot),
+        self._send(200, json.dumps(snapshot, separators=(",", ":")),
                    content_type="application/json; charset=utf-8")
 
     def serve_sse(self):
@@ -1623,6 +1679,8 @@ def main():
     # refs-trend.json: CI artifact'ından veya yerel dizinden okunur
     _rt_candidate = os.path.join(ROOT, "refs-trend", "refs-trend.json")
     if not os.path.isfile(_rt_candidate):
+        _rt_candidate = os.path.join(args.preview_dir, "refs-trend", "refs-trend.json")
+    if not os.path.isfile(_rt_candidate):
         _rt_candidate = os.path.join(args.preview_dir, "refs-trend.json")
     REFS_TREND_PATH = _rt_candidate if os.path.isfile(_rt_candidate) else None
 
@@ -1658,7 +1716,9 @@ def main():
         sys.stderr.flush()
 
     # Arka plan thread: periyodik verify çalıştırma
-    t = threading.Thread(target=verify_loop, args=(args.dir, args.interval),
+    stop_event = threading.Event()
+    t = threading.Thread(target=verify_loop,
+                         args=(args.dir, args.interval, stop_event),
                          daemon=True, name="verify-loop")
     t.start()
 
@@ -1672,7 +1732,10 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
+        stop_event.set()
+        t.join(timeout=REQUEST_TIMEOUT_SECONDS)
         srv.shutdown()
+        srv.server_close()
 
 
 if __name__ == "__main__":

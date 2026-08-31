@@ -368,6 +368,14 @@ class ReplayHandlerTests(unittest.TestCase):
         self.assertEqual(self._replay("", "PASS", "o", "e"), "")
 
 
+class RunStdoutPathContractTests(unittest.TestCase):
+    def test_timestamp_path_is_dot_stripped_and_run_prefixed(self):
+        source = pathlib.Path(ps.__file__).read_text(encoding="utf-8")
+        self.assertIn('safe = ts.replace(":", "").replace("+", "").replace(".", "")', source)
+        self.assertIn('f"run-{safe}.json"', source)
+        self.assertNotIn('os.path.join(RUNS_DIR, ts)', source)
+
+
 class RunLogTests(unittest.TestCase):
     """persist_run_log / load_run_logs / _prune_run_logs — son N run replay."""
 
@@ -862,6 +870,11 @@ class BuildVerifyCmdTests(unittest.TestCase):
     def _cmd(self, **kw):
         return ps._build_verify_cmd("/py", "/verify", **kw)
 
+    def test_klayers_output_targets_preview_dir(self):
+        cmd = ps._build_verify_cmd("/py", "/verify", klayers_out="/preview/klayers.json")
+        i = cmd.index("--klayers-out")
+        self.assertEqual(cmd[i + 1], "/preview/klayers.json")
+
     def test_no_override_default_flags(self):
         cmd = self._cmd()
         self.assertIn("--full", cmd)
@@ -1299,7 +1312,25 @@ class TestReplayRefsAndPages(unittest.TestCase):
         self.assertEqual(first["pdf_pages"], 0)
 
 
+class TestHardeningContracts(unittest.TestCase):
+    def test_api_error_envelope_contains_error(self):
+        self.assertEqual(ps.api_error(404, "missing"),
+                         (404, {"error": "missing"}))
+
+    def test_request_timeout_is_configured(self):
+        self.assertEqual(ps.REQUEST_TIMEOUT_SECONDS, 30)
+
+    def test_shutdown_stops_loop_before_server(self):
+        source = pathlib.Path(ps.__file__).read_text(encoding="utf-8")
+        self.assertLess(source.index("stop_event.set()"),
+                        source.index("srv.shutdown()"))
+
+
 class TestRouteQueryParams(unittest.TestCase):
+    def test_docker_compose_publishes_loopback_only(self):
+        compose = pathlib.Path(HERE, "..", "..", "docker-compose.yml").read_text(encoding="utf-8")
+        self.assertIn('"127.0.0.1:8000:8000"', compose)
+
     """do_GET rota eşleşmesi query string'den bağımsızdır (_route).
 
     Client cache-buster olarak query param ekler (/api/run-history?_t=…,
@@ -1334,6 +1365,91 @@ class TestRouteQueryParams(unittest.TestCase):
         self.assertIsNone(ps._route("/api/unknown?x=1"))
         self.assertIsNone(ps._route("/favicon.ico"))
 
+    def test_run_now_rejects_untrusted_host(self):
+        old_token = os.environ.get("PREVIEW_RUN_NOW_TOKEN")
+        try:
+            os.environ["PREVIEW_RUN_NOW_TOKEN"] = "secret-token"
+            handler = object.__new__(ps.Handler)
+            sent = []
+            handler.path = "/api/run-now"
+            handler.headers = {"Authorization": "Bearer secret-token", "Host": "evil.example"}
+            handler._send = lambda status, body, content_type="", extra_headers=None: sent.append((status, body, extra_headers))
+            handler.trigger_run_now()
+            self.assertEqual(sent[0][0], 403)
+            self.assertEqual(json.loads(sent[0][1])["error"], "forbidden host")
+        finally:
+            if old_token is None:
+                os.environ.pop("PREVIEW_RUN_NOW_TOKEN", None)
+            else:
+                os.environ["PREVIEW_RUN_NOW_TOKEN"] = old_token
+
+    def test_run_now_rejects_untrusted_origin(self):
+        old_token = os.environ.get("PREVIEW_RUN_NOW_TOKEN")
+        try:
+            os.environ["PREVIEW_RUN_NOW_TOKEN"] = "secret-token"
+            handler = object.__new__(ps.Handler)
+            sent = []
+            handler.path = "/api/run-now"
+            handler.headers = {"Authorization": "Bearer secret-token", "Host": "127.0.0.1:8000", "Origin": "https://evil.example"}
+            handler._send = lambda status, body, content_type="", extra_headers=None: sent.append((status, body, extra_headers))
+            handler.trigger_run_now()
+            self.assertEqual(sent[0][0], 403)
+            self.assertEqual(json.loads(sent[0][1])["error"], "forbidden origin")
+        finally:
+            if old_token is None:
+                os.environ.pop("PREVIEW_RUN_NOW_TOKEN", None)
+            else:
+                os.environ["PREVIEW_RUN_NOW_TOKEN"] = old_token
+
+    def test_run_now_requires_bearer_token(self):
+        old_token = os.environ.get("PREVIEW_RUN_NOW_TOKEN")
+        old_busy = ps.VERIFY_BUSY
+        try:
+            os.environ["PREVIEW_RUN_NOW_TOKEN"] = "secret-token"
+            ps.VERIFY_BUSY = __import__("threading").Lock()
+            handler = object.__new__(ps.Handler)
+            sent = []
+            handler.path = "/api/run-now"
+            handler._send = lambda status, body, content_type="", extra_headers=None: sent.append((status, body, extra_headers))
+            handler.headers = {"Host": "127.0.0.1:8000"}
+            handler.trigger_run_now()
+            self.assertEqual(sent[0][0], 401)
+            self.assertEqual(json.loads(sent[0][1])["error"], "unauthorized")
+        finally:
+            ps.VERIFY_BUSY = old_busy
+            if old_token is None:
+                os.environ.pop("PREVIEW_RUN_NOW_TOKEN", None)
+            else:
+                os.environ["PREVIEW_RUN_NOW_TOKEN"] = old_token
+
+    def test_run_now_accepts_matching_bearer_token(self):
+        old_token = os.environ.get("PREVIEW_RUN_NOW_TOKEN")
+        old_busy = ps.VERIFY_BUSY
+        old_dir = ps.VERIFY_DIR
+        try:
+            os.environ["PREVIEW_RUN_NOW_TOKEN"] = "secret-token"
+            ps.VERIFY_BUSY = __import__("threading").Lock()
+            ps.VERIFY_DIR = "/tmp"
+            handler = object.__new__(ps.Handler)
+            sent = []
+            handler.path = "/api/run-now"
+            handler._send = lambda status, body, content_type="", extra_headers=None: sent.append((status, body, extra_headers))
+            handler.headers = {"Host": "127.0.0.1:8000", "Authorization": "Bearer secret-token"}
+            original = ps.run_verify
+            ps.run_verify = lambda *args, **kwargs: None
+            try:
+                handler.trigger_run_now()
+            finally:
+                ps.run_verify = original
+            self.assertEqual(sent[0][0], 200)
+        finally:
+            ps.VERIFY_DIR = old_dir
+            ps.VERIFY_BUSY = old_busy
+            if old_token is None:
+                os.environ.pop("PREVIEW_RUN_NOW_TOKEN", None)
+            else:
+                os.environ["PREVIEW_RUN_NOW_TOKEN"] = old_token
+
     def test_trigger_run_now_method_exists(self):
         # 24b9905'te yanlışlıkla silinmişti; /api/run-now AttributeError ile
         # patlardı. Geri yüklendi — tekrar silinmesini önle (regresyon kapısı).
@@ -1343,6 +1459,12 @@ class TestRouteQueryParams(unittest.TestCase):
         # erişilebilir (route testi query-string'li haliyle).
         self.assertEqual(ps._route("/api/run-now?budget=25"), "run_now")
         self.assertEqual(ps._route("/api/run-now"), "run_now")
+
+
+class TestRefsTrendCandidates(unittest.TestCase):
+    def test_main_candidates_include_nested_preview_dir_shape(self):
+        source = pathlib.Path(ps.__file__).read_text(encoding="utf-8")
+        self.assertIn('os.path.join(args.preview_dir, "refs-trend", "refs-trend.json")', source)
 
 
 class TestServeHistoryTrendCompact(unittest.TestCase):
@@ -1415,6 +1537,28 @@ class TestServeHistoryTrendCompact(unittest.TestCase):
     def test_serve_refs_trend_missing_returns_fallback(self):
         served, _ = self._serve(ps.Handler.serve_refs_trend)
         self.assertEqual(served, {"rows": [], "duration_budget": {"rows": []}})
+
+    def test_serve_refs_trend_invalid_json_returns_structured_500(self):
+        with open(ps.REFS_TREND_PATH, "w", encoding="utf-8") as f:
+            f.write("{not json")
+        fake = self._capture()
+        ps.Handler.serve_refs_trend(fake)
+        status, body, content_type = fake.sent
+        self.assertEqual(status, 500)
+        self.assertIn("application/json", content_type)
+        self.assertEqual(json.loads(body), {"error": "refs trend unavailable"})
+
+    def test_serve_latest_is_compact(self):
+        old = ps.LATEST
+        ps.LATEST = {"ts": "2026-08-23T09:00:00Z", "verdict": "PASS",
+                     "p0": 0, "p1": 0, "stdout": "", "stderr": "",
+                     "hook_env": None, "cached": False}
+        try:
+            fake = self._capture()
+            ps.Handler.serve_latest(fake)
+            self.assertNotIn("\n", fake.sent[1])
+        finally:
+            ps.LATEST = old
 
     def test_serve_latest_compact_content(self):
         old = ps.LATEST
