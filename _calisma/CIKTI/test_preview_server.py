@@ -1373,8 +1373,10 @@ class TestRouteQueryParams(unittest.TestCase):
 
     def test_run_now_rejects_untrusted_host(self):
         old_token = os.environ.get("PREVIEW_RUN_NOW_TOKEN")
+        old_busy = ps.VERIFY_BUSY
         try:
             os.environ["PREVIEW_RUN_NOW_TOKEN"] = "secret-token"
+            ps.VERIFY_BUSY = __import__("threading").Lock()
             handler = object.__new__(ps.Handler)
             sent = []
             handler.path = "/api/run-now"
@@ -1384,10 +1386,28 @@ class TestRouteQueryParams(unittest.TestCase):
             self.assertEqual(sent[0][0], 403)
             self.assertEqual(json.loads(sent[0][1])["error"], "forbidden host")
         finally:
+            ps.VERIFY_BUSY = old_busy
             if old_token is None:
                 os.environ.pop("PREVIEW_RUN_NOW_TOKEN", None)
             else:
                 os.environ["PREVIEW_RUN_NOW_TOKEN"] = old_token
+
+    def test_run_now_returns_409_when_busy(self):
+        old_busy = ps.VERIFY_BUSY
+        try:
+            lock = __import__("threading").Lock()
+            lock.acquire()
+            ps.VERIFY_BUSY = lock
+            handler = object.__new__(ps.Handler)
+            sent = []
+            handler.path = "/api/run-now"
+            handler.headers = {"Host": "127.0.0.1:8000"}
+            handler._send = lambda status, body, content_type="", extra_headers=None: sent.append((status, body, extra_headers))
+            handler.trigger_run_now()
+            self.assertEqual(sent[0][0], 409)
+            self.assertEqual(json.loads(sent[0][1])["status"], "already_running")
+        finally:
+            ps.VERIFY_BUSY = old_busy
 
     def test_run_now_rejects_untrusted_origin(self):
         old_token = os.environ.get("PREVIEW_RUN_NOW_TOKEN")
@@ -1579,6 +1599,50 @@ class TestServeHistoryTrendCompact(unittest.TestCase):
             self.assertIn("Satır 2", d["stdout_short"])
         finally:
             ps.LATEST = old
+
+    def test_serve_latest_empty_state(self):
+        old = ps.LATEST
+        ps.LATEST = {"ts": "", "verdict": "INIT",
+                     "p0": 0, "p1": 0, "stdout": "", "stderr": "",
+                     "hook_env": None, "cached": False}
+        try:
+            d, _ = self._serve(ps.Handler.serve_latest)
+            self.assertEqual(d["verdict"], "INIT")
+            self.assertNotIn("stdout", d)
+            self.assertNotIn("stderr", d)
+            self.assertEqual(d["stdout_short"], "")
+        finally:
+            ps.LATEST = old
+
+    def test_serve_run_history_empty_logs(self):
+        old = ps.RUNS_DIR
+        ps.RUNS_DIR = os.path.join(self._tmp.name, "no_runs")
+        try:
+            d, _ = self._serve(ps.Handler.serve_run_history)
+            self.assertEqual(d, [])
+        finally:
+            ps.RUNS_DIR = old
+
+    def test_serve_run_stdout_missing_ts(self):
+        fake = self._capture()
+        fake.path = "/api/run-stdout"
+        ps.Handler.serve_run_stdout(fake)
+        status, body, _ = fake.sent
+        self.assertEqual(status, 400)
+        self.assertIn("error", json.loads(body))
+
+    def test_serve_run_stdout_not_found(self):
+        old = ps.RUNS_DIR
+        ps.RUNS_DIR = os.path.join(self._tmp.name, "no_runs")
+        try:
+            fake = self._capture()
+            fake.path = "/api/run-stdout?ts=2026-01-01T00:00:00Z"
+            ps.Handler.serve_run_stdout(fake)
+            status, body, _ = fake.sent
+            self.assertEqual(status, 404)
+            self.assertIn("error", json.loads(body))
+        finally:
+            ps.RUNS_DIR = old
 
 
 if __name__ == "__main__":
