@@ -1009,6 +1009,30 @@ class TestCoverageTransitionSummary(unittest.TestCase):
                  "verified": 61, "unverified": 0, "by_source": {}}]
         self.assertEqual(rt.build_coverage_transition_summary(rows), [])
 
+class TestAtomicWrite(unittest.TestCase):
+    def test_write_atomic_produces_valid_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "out.json")
+            rt._write_atomic(path, '{"ok": true}')
+            with open(path, encoding="utf-8") as f:
+                self.assertEqual(json.load(f), {"ok": True})
+
+    def test_write_atomic_leaves_no_tmp(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "out.json")
+            rt._write_atomic(path, "data")
+            self.assertFalse(os.path.exists(path + ".tmp"))
+
+    def test_write_atomic_source_uses_os_replace(self):
+        import inspect
+        src = inspect.getsource(rt._write_atomic)
+        self.assertIn("os.replace", src)
+
+    def test_main_writes_json_atomically(self):
+        import inspect
+        src = inspect.getsource(rt.main)
+        self.assertIn("_write_atomic", src)
+
 
 if __name__ == "__main__":
     unittest.main()

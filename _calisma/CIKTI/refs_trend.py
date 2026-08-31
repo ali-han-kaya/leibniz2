@@ -38,6 +38,15 @@ import sys
 import urllib.request
 import zipfile
 
+
+def _write_atomic(path, content):
+    """Write file atomically: tmp + os.replace so readers never see a torn file."""
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(content)
+    os.replace(tmp, path)
+
+
 API = "https://api.github.com"
 
 # refs-trend raporu changelog'u (kısa kayıt; en yeni üstte).
@@ -893,9 +902,8 @@ def main():
         "duration_budget": duration_budget,
         "unverified_series": unverified_series,
     }
-    with open(os.path.join(args.out_dir, "refs-trend.json"), "w",
-              encoding="utf-8") as f:
-        json.dump(summary, f, indent=2, ensure_ascii=False)
+    _write_atomic(os.path.join(args.out_dir, "refs-trend.json"),
+                   json.dumps(summary, indent=2, ensure_ascii=False))
     print(f"[refs-trend] yazıldı: {md_path} "
           f"({len(rows)} refs + {len(history_rows)} history run)")
 
