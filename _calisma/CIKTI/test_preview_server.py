@@ -1331,6 +1331,12 @@ class TestRouteQueryParams(unittest.TestCase):
         compose = pathlib.Path(HERE, "..", "..", "docker-compose.yml").read_text(encoding="utf-8")
         self.assertIn('"127.0.0.1:8000:8000"', compose)
 
+    def test_token_comparison_is_timing_safe(self):
+        source = pathlib.Path(ps.__file__).read_text(encoding="utf-8")
+        self.assertIn('hmac.compare_digest(token, expected)', source)
+        self.assertNotIn('token != expected', source)
+        self.assertNotIn('token == expected', source)
+
     """do_GET rota eşleşmesi query string'den bağımsızdır (_route).
 
     Client cache-buster olarak query param ekler (/api/run-history?_t=…,
