@@ -19,3 +19,10 @@ then ask user which work item to take.
 - Committed fix as `test(verify): status_checks yaml-guard + abs WORKFLOW path` (--no-verify, hook blocked by 25 pre-existing test-file failures).
 - Rewrote all 6 violating subjects via 3 sequential interactive rebases (edit+amend, --no-verify); advisory re-audit: 11 commits, 0 violations; tree identity verified (zero content drift).
 - Force-with-lease push done: remote = local = PR head = c70722c. Next CI run should show the 3 status_checks module ERRORs converted to skips.
+
+## Session 2026-08-31 — requesting-code-review turn (inline review)
+- Orca reviewer (Codex) hit usage cap; released; review run inline per user choice, template code-reviewer.md, range 7333a55..5e3211d.
+- Multi-pass findings: Critical 0; Important 1 (status_checks pin-drift blocks honest commits — policy decision pending: lake-proof/refs-trend/reports/reproducibility required vs GATE_EXCLUDE); Minor 3 (unused _WORKFLOW in test_status_checks.py:34; unused ThreadPoolExecutor import coordinator_loop.py:37; commit-msg sidecar never reaches the required gate job — fail-open).
+- Bulk publish spot checks: no secrets, no absolute local paths in published code (only test fixture text).
+- Validation this turn: test_mirror_check 28 OK; coordinator/orchestrate 19 OK; status_checks family 36 skip-clean; py_compile clean.
+- Verdict recorded: Ready to merge = With fixes (pin-drift resolution is the blocker).
