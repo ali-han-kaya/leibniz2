@@ -1,6 +1,7 @@
 # check-unit-tests koşu listesi — sync_check_unit_tests.py --update ile
 # otomatik üretilir; elle düzenleme gerekmez (pre-commit okur).
 test_actionlint_gate.py
+test_architecture_deepening_deck.py
 test_audit_live_ci_sync.py
 test_audit_octokit_names.py
 test_audit_refs_trend.py
@@ -59,6 +60,7 @@ test_history_sources.py
 test_incremental_doc_sync.py
 test_k13_coverage_sync.py
 test_k9_lean_files_sync.py
+test_k_layer_tokens.py
 test_label_gate_contracts.py
 test_launchd_minimal_path.py
 test_lean_lake.py
@@ -72,6 +74,8 @@ test_mirror_panel.py
 test_orchestrate_k_dag.py
 test_override_trend.py
 test_override_trend_badge.py
+test_pdf_repro_findings_deck.py
+test_pdf_source_freshness.py
 test_plist_check_workflow.py
 test_precheck_advisory_contract.py
 test_preview_findings_panel.py
@@ -106,6 +110,7 @@ test_texlive_determinism_hook.py
 test_texlive_repro_documented.py
 test_update_preview_sync_server.py
 test_validate_config_schema.py
+test_verification_chain_deck.py
 test_verify_checks.py
 test_workflow_timeouts.py
 test_workflow_triggers.py
