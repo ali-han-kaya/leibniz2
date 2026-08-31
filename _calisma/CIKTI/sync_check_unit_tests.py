@@ -82,6 +82,11 @@ EXCLUDE = {
 
     # ağır/kataloglama testleri (manifest/repro) — ayrı job'lar
     "test_repro_manifest_topology.py",
+
+    # Playwright integration smoke test: Chromium needed, ~10s/run, starts
+    # its own preview_server.py. Runs standalone, not in the 10s pre-commit
+    # gate (pre-commit's check-unit-tests budget would blow up).
+    "test_dashboard_playwright_smoke.py",
 }
 
 
