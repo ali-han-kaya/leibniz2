@@ -117,6 +117,19 @@
   .footer { padding:14px 28px; border-top:1px solid var(--border);
             color:var(--muted); font-size:11px; text-align:center; }
 .z3-slides{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}.z3-slide{cursor:zoom-in;background:#161b22;border:1px solid #30363d;padding:8px}.z3-slide img{display:block;width:100%;height:auto}.z3-lightbox{position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.9);display:flex;align-items:center;justify-content:center;gap:20px;padding:24px}.z3-lightbox[hidden]{display:none}.z3-lightbox img{max-width:85vw;max-height:85vh}.z3-lightbox button{font-size:2rem;padding:.25em .5em;cursor:pointer}.z3-lightbox h2{position:absolute;top:12px;left:24px}
+
+/* --- View Transitions: subtle panel fade on SSE snapshot-driven updates --- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+::view-transition-old(snapshot) { animation: vt-fade-out 180ms ease; }
+::view-transition-new(snapshot) { animation: vt-fade-in 180ms ease; }
+@keyframes vt-fade-out { from { opacity:1; } to { opacity:0; } }
+@keyframes vt-fade-in  { from { opacity:0; } to { opacity:1; } }
 </style>
 </head>
 <body>
@@ -140,20 +153,20 @@
 <main>
   <section>
     <h2>Verification chain</h2>
-    <div id="status-board" style="font-size:15px;font-weight:600;padding:6px 0;letter-spacing:0.3px;color:#555">⏳ bekleniyor…</div>
-    <div id="precommit-hooks" style="font-size:12px;color:#888;padding:2px 0 6px 0"></div>
-    <div id="k15-sidecar" style="font-size:11px;color:#999;padding:0 0 4px 0"></div>
-    <div class="badges" id="badges">
+    <div id="status-board" style="font-size:15px;font-weight:600;padding:6px 0;letter-spacing:0.3px;color:#555;view-transition-name:status-board">⏳ bekleniyor…</div>
+    <div id="precommit-hooks" style="font-size:12px;color:#888;padding:2px 0 6px 0;view-transition-name:precommit-hooks"></div>
+    <div id="k15-sidecar" style="font-size:11px;color:#999;padding:0 0 4px 0;view-transition-name:k15-sidecar"></div>
+    <div class="badges" id="badges" style="view-transition-name:badges">
       <span class="badge unknown">K8 Z3: ?</span>
       <span class="badge unknown">K9 Lean: ?</span>
       <span class="badge unknown">Beth 1953: ?</span>
       <span class="badge unknown">refs: ?</span>
     </div>
     <div id="lean-alert-container" style="padding:2px 0 4px 0"><span id="lean-alert" class="lean-alert hidden">⚠ K9 Lean: FAIL — ispat zinciri kırık</span></div>
-    <div id="klayers-panel" style="display:flex;flex-wrap:wrap;gap:4px;margin:4px 0 8px 0;font-size:11px">
+    <div id="klayers-panel" style="display:flex;flex-wrap:wrap;gap:4px;margin:4px 0 8px 0;font-size:11px;view-transition-name:klayers-panel">
       <span class="muted">K-layers: bekleniyor…</span>
     </div>
-    <div class="grid" id="metrics">
+    <div class="grid" id="metrics" style="view-transition-name:metrics-grid">
       <div class="card"><div class="label">Verdict</div><div class="value" id="m-verdict">—</div><div class="sub" id="m-ts">no run yet</div></div>
       <div class="card"><div class="label">P0 / P1 findings</div><div class="value" id="m-p0p1">— / —</div><div class="sub">fail-closed gate</div></div>
       <div class="card"><div class="label">Run duration</div><div class="value" id="m-dur">—</div><div class="sub">verify_delivery.py --full</div><div id="duration-pct-warn" aria-live="polite"></div></div>
@@ -164,7 +177,7 @@
       <div class="card"><div class="label">Reference count</div><div class="value" id="m-refs">—</div><div class="sub">64 expected</div></div>
       <div class="card"><div class="label">PDF metadata-stripped</div><div class="value" id="m-meta" style="font-size:11px">—</div><div class="sub" id="m-meta-sub">qpdf</div></div>
     </div>
-    <div id="findings-panel" style="margin-top:8px"></div>
+    <div id="findings-panel" style="margin-top:8px;view-transition-name:findings-panel"></div>
   </section>
 
   <section>
@@ -358,6 +371,17 @@ if ('serviceWorker' in navigator) {
     .catch(() => {});  // sw.js yoksa sessizce devam (non-Electron ortam/CI)
 }
 const $ = (id) => document.getElementById(id);
+
+// View Transitions API (Chromium 111+, Safari 18+): subtle cross-fade
+// on each SSE snapshot-driven panel refresh. Disabled under
+// prefers-reduced-motion and on browsers without support.
+let useViewTransitions = false;
+if (typeof document.startViewTransition === "function") {
+  const reduceMotion =
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  useViewTransitions = !reduceMotion;
+}
 let evtSource = null;
 let lastTs = 0;
 let reconnectDelay = 1000;
@@ -1806,7 +1830,7 @@ function fmtVal(v) {
   return String(v);
 }
 
-function applySnapshot(d) {
+function applySnapshotInner(d) {
   // Env drift paneli: son run hook_env ↔ matris beklenen pin (ödeme/SSE).
   if (d.hook_env_matrix) renderHookEnvDrift(d.hook_env_matrix);
 
@@ -2031,6 +2055,15 @@ function applySnapshot(d) {
         list.appendChild(li);
       }
     }
+  }
+}
+
+function applySnapshot(d) {
+  if (!d) return;  // no snapshot to apply — SSE/stream only calls with real data
+  if (useViewTransitions) {
+    document.startViewTransition(() => applySnapshotInner(d));
+  } else {
+    applySnapshotInner(d);
   }
 }
 
