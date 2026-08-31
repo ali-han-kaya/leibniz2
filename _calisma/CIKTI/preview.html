@@ -1273,20 +1273,37 @@ function connectStream() {
   runStreamES.onerror = () => { st.textContent = "bağlantı koptu"; };
 }
 
-function loadTrend() {
+let _trendCache = null;       // {rows, dbRows} en son yüklenen trend verisi
+let _trendFetchAt = 0;          // Date.now() of last fetch (0 = never)
+const TREND_CACHE_MS = 30000;   // 30s coarse cadence
+
+function loadTrend(force) {
+  const now = Date.now();
+  if (!force && _trendCache && now - _trendFetchAt < TREND_CACHE_MS) {
+    // cache hâlâ taze — yeniden render et ama tekrar fetch etme
+    const {rows, dbRows} = _trendCache;
+    renderTrend(rows);
+    renderRefsTrend(rows);
+    renderHookEnv(rows);
+    renderHookEnvTrend(rows);
+    if (dbRows && dbRows.length) renderRefsTrendDurationBudget(dbRows);
+    return;
+  }
+  _trendFetchAt = now;
   fetch("/api/history").then(r => r.json()).then(rows => {
     renderTrend(rows);
     renderRefsTrend(rows);
     renderHookEnv(rows);
     renderHookEnvTrend(rows);
+    // refs-trend.json'u duration/budget trend'i için çek (history ile paralel)
+    fetch("/api/refs-trend").then(r => r.json()).then(data => {
+      const dbRows = (data.duration_budget && data.duration_budget.rows) || [];
+      _trendCache = {rows, dbRows};
+      if (dbRows.length) renderRefsTrendDurationBudget(dbRows);
+    }).catch(() => { _trendCache = {rows, dbRows: null}; });
   }).catch(err => {
     $("trend-legend").textContent = "trend yüklenemedi: " + err;
   });
-  // refs-trend.json'dan duration/budget trend'ini çek (CI history'den bağımsız)
-  fetch("/api/refs-trend").then(r => r.json()).then(data => {
-    const dbRows = (data.duration_budget && data.duration_budget.rows) || [];
-    if (dbRows.length) renderRefsTrendDurationBudget(dbRows);
-  }).catch(() => {});
 }
 
 // ---- Budget breakdown (ratios + type_bytes) ----
