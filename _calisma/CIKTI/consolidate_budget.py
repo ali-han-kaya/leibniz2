@@ -13,7 +13,7 @@ import json
 import sys
 
 
-def main() -> None:
+def main() -> int:
     rows = []
     for p in sorted(glob.glob("budget/*.json")):
         try:
@@ -43,7 +43,16 @@ def main() -> None:
     }
     json.dump(summary, open("budget/index.json", "w"), indent=2, ensure_ascii=False)
     print(json.dumps(summary, indent=2, ensure_ascii=False))
+    # Fail-closed: geçerli sidecar YOKSA bütçe kapısı boş değerlendirilmiş
+    # demektir (producer yüklemesi düştü / pattern eşleşmedi / hepsi bozuk).
+    # index.json yine de yazılır (debug için), ama exit 1 — required gate
+    # sessizce PASS etmesin (commit-msg gate sidecar bağlamasıyla aynı desen).
+    if not rows:
+        print("HATA: geçerli budget sidecar yok (budget/*.json boş/bozuk) "
+              "— bütçe kapısı fail-closed", file=sys.stderr)
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
