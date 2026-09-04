@@ -91,6 +91,7 @@ test_reproducible_pdf_skill.py
 test_run_summary_budget.py
 test_run_summary_changelog.py
 test_run_summary_k0.py
+test_run_summary_k13.py
 test_run_summary_klayers.py
 test_run_summary_lineage.py
 test_run_summary_precommit.py
@@ -112,6 +113,7 @@ test_update_preview_sync_server.py
 test_validate_config_schema.py
 test_verification_chain_deck.py
 test_verify_checks.py
+test_verify_k_layers.py
 test_workflow_timeouts.py
 test_workflow_triggers.py
 test_z3_slide_gallery.py
