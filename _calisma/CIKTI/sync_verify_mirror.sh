@@ -180,6 +180,18 @@ sync_one() {
     printf 'GÜNCEL'
     return 0
   fi
+  # Atomik yazım: tmp hedefle AYNI dizinde üretilir, sonra mv (rename) —
+  # eşzamanlı okuyucu (preview sunucusu, K17 --check) asla yarım (torn)
+  # dosya görmez; in-place cp'nin O_TRUNC penceresi kapanır. cp başarısız
+  # olursa tmp temizlenir ve hedef ESKİ içeriğiyle kalır.
+  local tmp
+  tmp="$(mktemp "${dst}.tmp.XXXXXX")"
+  if ! cp "$src" "$tmp"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  mv -f "$tmp" "$dst"
+  printf 'GÜNCELLENDİ'
 }
 
 # Her eşleme için sync_one çalıştır; "(rel)" başına durum basar.
@@ -219,18 +231,6 @@ run_sync() {
 
 # Her eşleme için aynılık denetimi (--check). Bayat dosya → stdout + return 1.
 run_check() {
-  # Atomik yazım: tmp hedefle AYNI dizinde üretilir, sonra mv (rename) —
-  # eşzamanlı okuyucu (preview sunucusu, K17 --check) asla yarım (torn)
-  # dosya görmez; in-place cp'nin O_TRUNC penceresi kapanır. cp başarısız
-  # olursa tmp temizlenir ve hedef ESKİ içeriğiyle kalır.
-  local tmp
-  tmp="$(mktemp "${dst}.tmp.XXXXXX")"
-  if ! cp "$src" "$tmp"; then
-    rm -f "$tmp"
-    return 1
-  fi
-  mv -f "$tmp" "$dst"
-  printf 'GÜNCELLENDİ'
   local src dst stale=0
   while IFS='|' read -r src dst; do
     [ -n "$src" ] || continue
