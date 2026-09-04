@@ -49,14 +49,14 @@ class TestStatusChecksGhSmoke(unittest.TestCase):
 
     def test_real_13_rows_are_deterministic_pass_table(self):
         checks = list(sc.gate_jobs().values())
-        # Current workflow has 12 required candidates; the rendered table has
-        # 13 rows when the K1 entry is shown alongside the 12 protection rows.
-        self.assertEqual(len(checks), 12)
+        # Current workflow: 13 required-check candidates (GitHub required
+        # contexts listinin birebir karşılığı).
+        self.assertEqual(len(checks), 13)
         payload = self._json(self._protection(checks))
         self.assertEqual(payload["verdict"], "PASS")
         self.assertEqual(payload["configured"], sorted(checks))
-        self.assertEqual(len(payload["configured"]), 12)
-        self.assertEqual(len(payload["checks"]), 12)
+        self.assertEqual(len(payload["configured"]), 13)
+        self.assertEqual(len(payload["checks"]), 13)
         self.assertTrue(payload["names_ok"])
         self.assertTrue(payload["enforcement_ok"])
 

@@ -517,6 +517,10 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-29 | fix | (verify) mirror kapsam + artifact sözleşmesi + coverage raporu | [`3918eab`](https://github.com/ali-han-kaya/leibniz2/commit/3918eab) |
 | 2026-08-28 | feat | (verify) PDF skill reuse to K6 determinism gate | [`baf652a`](https://github.com/ali-han-kaya/leibniz2/commit/baf652a) |
 | 2026-08-28 | feat | (verify) add reproducible PDF + skills index gates | [`1866ad8`](https://github.com/ali-han-kaya/leibniz2/commit/1866ad8) |
+| 2026-09-01 | perf | (preview) add View Transitions + Playwright smoke test | [`b82b412`](https://github.com/ali-han-kaya/leibniz2/commit/b82b412) |
+| 2026-08-31 | fix | (refs-trend) write refs-trend.json atomically (tmp + os.replace) | [`6fbf43b`](https://github.com/ali-han-kaya/leibniz2/commit/6fbf43b) |
+| 2026-08-31 | perf | (preview) cache loadTrend 30s + fix refs-trend path | [`12ae066`](https://github.com/ali-han-kaya/leibniz2/commit/12ae066) |
+| 2026-08-31 | test | (preview) extend handler-capture to serve_latest/run_now | [`a63278e`](https://github.com/ali-han-kaya/leibniz2/commit/a63278e) |
 
 ### Regresyon notları
 

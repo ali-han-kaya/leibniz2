@@ -66,6 +66,9 @@ GATE_EXCLUDE = {
     "changelog-drift",      # advisory: gen_changelog --check drift bulguları
     "pattern-drift",         # advisory: merge pattern ↔ ARTIFACT_JOBS drift
     "budget-comment",        # PR-only: bütçe + pre-commit PR yorumu (bütçe kapısı ayrı job)
+    "lake-proof",            # ayrı-step K9 lake build (lean-toolchain v4.14.0);
+                             #   GitHub required kontrollerinde DEĞİL (advisory) —
+                             #   K9, verify job'unun --full içinde de koşar.
 }
 # Not: "label-gate" (Pre-commit P0 label gate) BİLEREK required check'tir —
 # precommit-p0 etiketi varken FAIL verip merge'i bloke eder; bu yüzden
