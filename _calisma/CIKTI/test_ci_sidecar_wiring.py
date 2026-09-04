@@ -25,6 +25,19 @@ EVAL_SCRIPTS = {
     "budget-comment": "pr_status_comment.js",
 }
 
+# pr_status_comment.js'in girdi sabitleri → budget-comment teslim şeması.
+# hedef "IN_JOB": job içinde üretilir (artifact teslimiyle gelmez).
+PR_STATUS_INPUTS = [
+    ("budget/index.json", "budget", "budget/"),
+    ("precommit_findings/PRECOMMIT_RAPORU.json", "precommit-logs",
+     "precommit_findings/"),
+    ("k0_findings.json", "k0-findings", None),
+    ("lineage_findings.json", "lineage-findings", None),
+    ("klayers.json", "klayers", None),
+    ("reproducibility/manifest.json", "reproducibility", "reproducibility/"),
+    ("k10_verdict.txt", None, "IN_JOB"),
+]
+
 
 def _job_section(text, job):
     """Job'un metin bölümü (üst bilgiden sonraki job üst bilgisine)."""
@@ -133,6 +146,32 @@ class TestCiSidecarWiring(unittest.TestCase):
         self.assertRegex(
             section, r"needs:\s*\[[^\]]*\breproducibility\b[^\]]*\]",
             "budget-comment needs'inde reproducibility yok")
+
+    def test_pr_status_comment_inputs_delivered(self):
+        """pr_status_comment.js'in girdi sabitlerinin TAMAMI budget-comment
+        job'una ulaşmalı: her yol ya artifact teslimi ya da job içi üretim
+        (IN_JOB). Eksik girdi → yorum o bölümü 'denetim çalışmadı' olarak
+        gösterir (k10_verdict.txt boşluğu gibi — fail-open yorum)."""
+        with open(os.path.join(HERE, "github_scripts",
+                               "pr_status_comment.js"), encoding="utf-8") as fh:
+            script = fh.read()
+        derived = set(re.findall(r"const\s+\w+_PATH\s*=\s*'([^']+)'", script))
+        table = {p for p, _, _ in PR_STATUS_INPUTS}
+        self.assertEqual(derived, table,
+                         "PR_STATUS_INPUTS tablosu script _PATH sabitlerinden "
+                         "drift'li (tek kaynak bozuldu)")
+        missing = []
+        for path, art, dest in PR_STATUS_INPUTS:
+            if dest == "IN_JOB":
+                section = _job_section(self.text, "budget-comment")
+                if not re.search(r">\s*%s\b" % re.escape(path), section):
+                    missing.append(f"{path}: job içi üretici adımı yok")
+                continue
+            got = self.delivered.get("budget-comment", {}).get(art, "YOK")
+            if got != dest:
+                missing.append(
+                    f"{path}: beklenen {art}→{dest!r}, teslim {got!r}")
+        self.assertFalse(missing, "; ".join(missing))
 
 
 class TestBudgetGateFailClosed(unittest.TestCase):

@@ -1026,6 +1026,25 @@ jobs:
           name: reproducibility
           path: reproducibility/
 
+      # ─── K10: bundle bütünlüğünü koşup PASS/FAIL rozetini yakala ────────
+      # pr_status_comment.js'in 7. girdisi (k10_verdict.txt) job içinde
+      # üretilir — manifest-comment'teki üreticinin aynısı. Fail-closed kapı
+      # reproducibility job'ında; burada yalnızca rozet için koşulur (FAIL
+      # olursa adımı patlatmaz — rozet FAIL gösterir). Bu üretici olmadan
+      # yorum Reproducibility bölümünü hep "denetim çalışmadı" gösterirdi
+      # (fail-open yorum — girdi teslimatı boşluğu).
+      - name: Run K10 bundle integrity check (rozet için)
+        shell: bash
+        run: |
+          python3 _calisma/CIKTI/verify_delivery.py \
+            --dir _calisma/CIKTI \
+            --json \
+            --verify-manifest reproducibility/manifest.json \
+            > k10_result.json 2>/dev/null || true
+          verdict=$(python3 -c "import json;d=json.load(open('k10_result.json'));print(d.get('manifest_digest',{}).get('verdict','FAIL'))" 2>/dev/null || echo "FAIL")
+          echo "$verdict" > k10_verdict.txt
+          echo "K10 manifest digest verdict: $verdict"
+
       - name: PR status — labels + comment (all verification inputs)
         uses: actions/github-script@v8
         with:
