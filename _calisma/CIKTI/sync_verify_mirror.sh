@@ -176,14 +176,9 @@ sync_one() {
   # Alt dizin hedefleri (github_scripts/…): hedef klasör yoksa cp başarısız
   # olur — önce oluştur (exit kodu set -e ile yakalanır).
   mkdir -p "$(dirname "$dst")"
-  if [ "$mode" = "force" ]; then
-    cp "$src" "$dst"
-    printf 'GÜNCELLENDİ'
-  elif same_file "$src" "$dst"; then
+  if [ "$mode" != "force" ] && same_file "$src" "$dst"; then
     printf 'GÜNCEL'
-  else
-    cp "$src" "$dst"
-    printf 'GÜNCELLENDİ'
+    return 0
   fi
 }
 
@@ -224,6 +219,18 @@ run_sync() {
 
 # Her eşleme için aynılık denetimi (--check). Bayat dosya → stdout + return 1.
 run_check() {
+  # Atomik yazım: tmp hedefle AYNI dizinde üretilir, sonra mv (rename) —
+  # eşzamanlı okuyucu (preview sunucusu, K17 --check) asla yarım (torn)
+  # dosya görmez; in-place cp'nin O_TRUNC penceresi kapanır. cp başarısız
+  # olursa tmp temizlenir ve hedef ESKİ içeriğiyle kalır.
+  local tmp
+  tmp="$(mktemp "${dst}.tmp.XXXXXX")"
+  if ! cp "$src" "$tmp"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  mv -f "$tmp" "$dst"
+  printf 'GÜNCELLENDİ'
   local src dst stale=0
   while IFS='|' read -r src dst; do
     [ -n "$src" ] || continue
