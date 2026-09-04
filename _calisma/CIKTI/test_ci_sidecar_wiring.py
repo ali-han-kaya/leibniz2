@@ -10,6 +10,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 WORKFLOW = os.path.join(HERE, "..", "..", ".github", "workflows", "verify.yml")
 
 # (job, artifact, hedef) — hedef None: workspace kökü (path'siz / merge)
+# hedef "IN_JOB": artifact değil, job içinde üretilen dosya (`> dosya` adımı).
 DELIVERIES = [
     ("commit-msg-gate", "precommit-logs", "logs"),
     ("budget-comment", "budget", "budget/"),
@@ -18,11 +19,17 @@ DELIVERIES = [
     ("budget-comment", "lineage-findings", None),
     ("budget-comment", "klayers", None),
     ("budget-comment", "reproducibility", "reproducibility/"),
+    ("budget-comment", "k10_verdict.txt", "IN_JOB"),
+    ("manifest-comment", "reproducibility", "reproducibility/"),
+    ("manifest-comment", "k10_verdict.txt", "IN_JOB"),
 ]
 
 EVAL_SCRIPTS = {
-    "commit-msg-gate": "commit_msg_gate.js",
-    "budget-comment": "pr_status_comment.js",
+    "commit-msg-gate": ("commit_msg_gate.js",),
+    "budget-comment": ("pr_status_comment.js",),
+    # manifest-comment TEK github-script adımında iki script eval eder
+    # (paylaşılan yorum listesi — API çağrısı 2'den 1'e).
+    "manifest-comment": ("manifest_comment.js", "config_diff_comment.js"),
 }
 
 # pr_status_comment.js'in girdi sabitleri → budget-comment teslim şeması.
@@ -111,15 +118,21 @@ class TestCiSidecarWiring(unittest.TestCase):
                 elif "k10_verdict.txt" in joined:
                     input_steps += 1
                 elif ("uses: actions/github-script@v8" in joined
-                      and EVAL_SCRIPTS[job] in joined):
+                      and any(s in joined for s in EVAL_SCRIPTS[job])):
                     cls.pre_eval_steps[job] = input_steps
             cls.delivered[job] = d
             cls.total_input_steps[job] = input_steps
 
     def test_contract_deliveries(self):
-        """Tablodaki her (job, artifact, hedef) teslim edilmeli."""
+        """Tablodaki her (job, artifact, hedef) teslim edilmeli; hedef
+        IN_JOB ise job içinde `> dosya` üretici adımı bulunmalı."""
         missing = []
         for job, art, dest in DELIVERIES:
+            if dest == "IN_JOB":
+                section = _job_section(self.text, job)
+                if not re.search(r">\s*%s\b" % re.escape(art), section):
+                    missing.append(f"{job}/{art}: job içi üretici adımı yok")
+                continue
             got = self.delivered.get(job, {}).get(art, "YOK")
             if got != dest:
                 missing.append(f"{job}/{art}: beklenen {dest!r}, teslim "
@@ -139,13 +152,14 @@ class TestCiSidecarWiring(unittest.TestCase):
                 f"değil ({self.pre_eval_steps[job]}/"
                 f"{self.total_input_steps[job]})")
 
-    def test_budget_comment_needs_reproducibility(self):
-        """reproducibility yüklenmeden job koşmamalı
-        (needs sıralaması)."""
-        section = _job_section(self.text, "budget-comment")
-        self.assertRegex(
-            section, r"needs:\s*\[[^\]]*\breproducibility\b[^\]]*\]",
-            "budget-comment needs'inde reproducibility yok")
+    def test_comment_jobs_needs_reproducibility(self):
+        """reproducibility yüklenmeden yorum job'ları koşmamalı
+        (needs sıralaması — budget-comment ve manifest-comment)."""
+        for job in ("budget-comment", "manifest-comment"):
+            section = _job_section(self.text, job)
+            self.assertRegex(
+                section, r"needs:\s*\[[^\]]*\breproducibility\b[^\]]*\]",
+                f"{job} needs'inde reproducibility yok")
 
     def test_pr_status_comment_inputs_delivered(self):
         """pr_status_comment.js'in girdi sabitlerinin TAMAMI budget-comment
