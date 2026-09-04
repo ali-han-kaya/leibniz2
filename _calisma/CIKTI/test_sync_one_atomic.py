@@ -120,5 +120,51 @@ class SyncOneAtomicTests(unittest.TestCase):
                              "başarısız sync hedefi bozdu")
 
 
+class SyncScriptStructureTests(unittest.TestCase):
+    """BETİK-YAPISI sözleşmesi (146943b kazası sonrası): sync_one'ın kopya
+    yolu fonksiyonun İÇİNDE olmalı ve atomik blok başka fonksiyona
+    sızdırılmamalı. 146943b'de parçalı yama sync_one'ın kopya yolunu sildi
+    ve bloğu run_check'e serpti; local mirror dolu olduğundan testler
+    geçti, fresh-runner'da mirror boş kaldı (fail-closed yakaladı).
+    Yapı testleri bunu kaynak seviyesinde yakalar.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.text = SYNC.read_text(encoding="utf-8")
+
+    def _body(self, name):
+        m = re.search(r"^%s\(\) \{(.*?)^\}" % re.escape(name),
+                      self.text, re.S | re.M)
+        self.assertIsNotNone(m, f"{name}() bulunamadı")
+        return m.group(1)
+
+    def test_sync_one_body_contains_copy_path(self):
+        """sync_one gövdesi kısa devreden SONRA kopya yolunu içermeli:
+        mktemp + cp + mv + GÜNCELLENDİ. (146943b: gövde yalnızca
+        short-circuit içeriyordu — fresh-runner'da hiçbir dosya
+        kopyalanmıyordu.)"""
+        body = self._body("sync_one")
+        for token in ("mktemp", 'cp "$src" "$tmp"', 'mv -f "$tmp" "$dst"',
+                      "GÜNCELLENDİ"):
+            self.assertIn(token, body,
+                          f"sync_one gövdesinde {token!r} yok — kopya yolu "
+                          f"silinmiş olmalı (fresh-runner kırığı)")
+
+    def test_atomic_block_not_spliced_into_other_functions(self):
+        """Atomik yazım bloğu başka fonksiyonlara sızmış olmamalı
+        (146943b: blok run_check'in başına yapışmıştı; run_check local
+        bildirimlerinden ÖNCE mktemp çalıştırıyordu → 'dst: unbound
+        variable' — --check tamamen kırık)."""
+        rc = self._body("run_check")
+        self.assertNotIn("mktemp", rc,
+                         "run_check atomik yazım bloğu içeriyor — sızma")
+        self.assertNotIn("GÜNCELLENDİ", rc)
+        # run_check local bildirimleriyle BAŞLAMALI (ilk statement).
+        first_stmt = rc.strip().splitlines()[0].strip()
+        self.assertTrue(first_stmt.startswith("local "),
+                        f"run_check ilk statement 'local' değil: {first_stmt!r}")
+
+
 if __name__ == "__main__":
     unittest.main()
