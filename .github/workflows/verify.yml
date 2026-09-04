@@ -917,7 +917,14 @@ jobs:
           mkdir -p budget
           cp budget_sidecars/*.json budget/ 2>/dev/null || true
           # Index: bütçe sidecar'larını topla, aşanları failures listesine koy.
-          python3 _calisma/CIKTI/consolidate_budget.py
+          # Fail-closed: consolidate_budget.py geçerli sidecar YOKSA exit 1
+          # verir — required bütçe kapısı boş değerlendirmeyle sessizce
+          # PASS etmesin (commit-msg gate sidecar bağlamasıyla aynı desen).
+          python3 _calisma/CIKTI/consolidate_budget.py || {
+            echo "BUDGET-CONSOLIDATE P0: geçerli bütçe sidecar'ı yok " \
+                 "(budget_sidecars/*.json boş/bozuk) — fail-closed" >&2
+            exit 1
+          }
 
       # effective_config.json'daki cli_overrides.<param>.override==true
       # durumunu bütçe raporu artifact'ına uyarı olarak yaz. Advisory
@@ -939,6 +946,21 @@ jobs:
         shell: bash
         run: |
           python3 _calisma/CIKTI/run_summary_budget.py
+          # İkinci fail-closed denetim: index.json VARSA ama runs boşsa
+          # (sidecarsız özet yazıldıysa) job düşer — özet boş bütçeyle
+          # yazılmış olsa bile. Dosya hiç yoksa consolidate adımı zaten
+          # job'u düşürmüştür; burada yeniden düşürmeye gerek yok.
+          python3 - <<'PYEOF'
+          import json, sys
+          try:
+              idx = json.load(open("budget/index.json"))
+          except Exception:
+              sys.exit(0)
+          if not idx.get("runs"):
+              print("BUDGET P0: bütçe özetinde runs boş — sidecarsız "
+                    "PASS engellendi (fail-closed)", file=sys.stderr)
+              sys.exit(1)
+          PYEOF
 
       - name: Upload budget bundle
         if: always()
@@ -1817,6 +1839,17 @@ jobs:
           python3 _calisma/CIKTI/run_summary_refs_trend.py \
             refs-trend/refs-trend.md
 
+      # Fail-closed kapı: refs-trend GitHub'da REQUIRED — tablosuz PASS
+      # edemez. Build adımı continue-on-error'dur (özet/artifact adımları
+      # koşsun diye); sonuç burada bağlanır (budget kapısı deseni).
+      - name: Refs trend fail-closed gate
+        run: |
+          if [ ! -f refs-trend/refs-trend.md ]; then
+            echo "REFS-TREND P0: refs-trend.md üretilmedi — trend tablosuz" \
+                 "required kapı PASS edemez (fail-closed)" >&2
+            exit 1
+          fi
+
       - name: Upload refs trend
         if: always()
         uses: actions/upload-artifact@v6
@@ -2517,6 +2550,19 @@ jobs:
             cat preview_reload_report.txt 2>/dev/null || echo '(rapor yok)'
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # Fail-closed kapı: job GitHub'da REQUIRED — smoke_rc burada bağlanır
+      # (smoke adımı continue-on-error'dur; özet/artifact adımları koşsun
+      # diye). Bağlanmazsa kapı asla FAIL olamaz — rubber-stamp required
+      # check olur. Girdi yoksa (output boş) da FAIL — fail-closed.
+      - name: Preview reload fail-closed gate
+        run: |
+          rc="${{ steps.smoke.outputs.smoke_rc }}"
+          if [ -z "$rc" ] || [ "$rc" != "0" ]; then
+            echo "PREVIEW-RELOAD P0: smoke_rc=${rc:-YOK} — required kapı" \
+                 "fail-closed" >&2
+            exit 1
+          fi
 
       - name: Upload preview reload report
         if: always()
