@@ -1,5 +1,6 @@
 # Freebuff / yerel araçlar
 .freebuff/
+.worktrees/
 
 # Z3 ispatı için proje-içi sanal ortam (CI'da pip ile kurulur, commit edilmez)
 _calisma/.venv_z3/
