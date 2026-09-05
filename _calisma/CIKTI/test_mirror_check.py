@@ -265,8 +265,7 @@ class TestMirrorFileCoverage(unittest.TestCase):
                          f"FILES listesinde eksik zip: {missing}")
 
     def test_runtime_config_files_listed(self):
-        # Core runtime dosyaları (script'ler + config'ler): mirror'da eksikse
-        # launchd rotası K1-K18'i çalıştıramaz → her biri FILES'ta olmalı.
+        # Core runtime dosyaları mirror'da eksikse launchd rotası çalışamaz.
         with open(SYNC_MIRROR, encoding="utf-8") as f:
             text = f.read()
         listed = _listed_sources(_mirror_section(text, "FILES"))
@@ -316,9 +315,7 @@ class TestMirrorFileCoverage(unittest.TestCase):
     def test_preview_files_listed(self):
         with open(SYNC_MIRROR, encoding="utf-8") as f:
             text = f.read()
-        # PREVIEW_FILES (adım 2) preview_server.py + _daemonize.py + prestart
-        # içermeli — adım 2+4 tek komutta senkron edilir (launchd çalıştırıcısı
-        # + PreStart kontrolü; eksik runtime dosyası K17 BAYAT'a düşer).
+        # Preview çalıştırıcısı ve prestart mirror'a dahil olmalı.
         self.assertIn("preview_server.py|preview_server.py", text)
         self.assertIn("_daemonize.py|_daemonize.py", text)
         self.assertIn("preview_prestart.py|preview_prestart.py", text)

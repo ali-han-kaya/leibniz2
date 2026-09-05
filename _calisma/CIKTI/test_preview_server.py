@@ -35,6 +35,20 @@ def _rec(ts, verdict="PASS", **kw):
     return rec
 
 
+def _preview_html():
+    return pathlib.Path(HERE, "preview.html").read_text(encoding="utf-8")
+
+
+class DurationPctWarnTests(unittest.TestCase):
+    def test_snapshot_dict_carries_duration_pct_warn(self):
+        old = ps.LATEST.get("duration_pct_warn")
+        ps.LATEST["duration_pct_warn"] = True
+        try:
+            self.assertTrue(ps.snapshot_dict()["duration_pct_warn"])
+        finally:
+            ps.LATEST["duration_pct_warn"] = old
+
+
 class CachedLatestTests(unittest.TestCase):
     """Restart sonrası önbelleklenmiş son run'un yüklenmesi (UNKNOWN gösterme).
 
@@ -354,6 +368,14 @@ class ReplayHandlerTests(unittest.TestCase):
         self.assertEqual(self._replay("", "PASS", "o", "e"), "")
 
 
+class RunStdoutPathContractTests(unittest.TestCase):
+    def test_timestamp_path_is_dot_stripped_and_run_prefixed(self):
+        source = pathlib.Path(ps.__file__).read_text(encoding="utf-8")
+        self.assertIn('safe = ts.replace(":", "").replace("+", "").replace(".", "")', source)
+        self.assertIn('f"run-{safe}.json"', source)
+        self.assertNotIn('os.path.join(RUNS_DIR, ts)', source)
+
+
 class RunLogTests(unittest.TestCase):
     """persist_run_log / load_run_logs / _prune_run_logs — son N run replay."""
 
@@ -552,6 +574,68 @@ class HookEnvPlumbingTests(unittest.TestCase):
         finally:
             ps.LATEST["hook_env"] = None
         self.assertEqual(snap["hook_env"], {"z3": "5.1.0"})
+
+
+class EnvDriftMatrixTests(unittest.TestCase):
+    """Env drift paneli: LATEST hook_env ↔ HOOK_ENV_MATRIX.md pin karşılaştırması."""
+
+    def test_matrix_doc_is_single_source(self):
+        # Matris doc'u mevcut olmalı ve tool anahtarlarını çözebilmeli.
+        rows = ps._read_hook_env_matrix()
+        self.assertGreaterEqual(len(rows), 5)
+        self.assertIn("python", rows)
+        self.assertIn("lean", rows)
+
+    def test_all_tools_present_is_ok(self):
+        obs = {"python": "3.9.6", "z3": "5.1.0", "lean": "4.33.1",
+               "pre_commit": "4.3.0", "pdfinfo": "26.08.0", "qpdf": "12.4.0"}
+        r = ps.build_hook_env_matrix(obs)
+        self.assertEqual(r["verdict"], "OK")
+        self.assertTrue(all(t["status"] == "ok" for t in r["tools"]))
+
+    def test_missing_tool_flagged(self):
+        # Matriste beklenen ama bu run'da prob edilmemiş araç → DRIFT + missing.
+        obs = {"python": "3.9.6", "z3": "5.1.0", "lean": "4.33.1",
+               "pre_commit": "4.3.0", "pdfinfo": "26.08.0", "qpdf": None}
+        r = ps.build_hook_env_matrix(obs)
+        self.assertEqual(r["verdict"], "DRIFT")
+        by_tool = {t["tool"]: t["status"] for t in r["tools"]}
+        self.assertEqual(by_tool["qpdf"], "missing")
+
+    def test_unlisted_tool_flagged(self):
+        # Koddan prob edilen ama matriste listelenmeyen araç → DRIFT + unlisted.
+        obs = {"python": "3.9.6", "totally_new_tool": "9.9"}
+        r = ps.build_hook_env_matrix(obs)
+        self.assertEqual(r["verdict"], "DRIFT")
+        by_tool = {t["tool"]: t["status"] for t in r["tools"]}
+        self.assertEqual(by_tool["totally_new_tool"], "unlisted")
+
+
+class HookEnvTrendPlumbingTests(unittest.TestCase):
+    """Hook env sürüm trendi (refs-trend deseni, zaman serisi) HTML kablosu."""
+
+    def setUp(self):
+        self.html = _preview_html()
+
+    def test_trend_panel_section_exists(self):
+        # refs-trend deseninde yeni bir SVG paneli olmalı (he-trend).
+        self.assertIn('<svg id="he-trend"', self.html)
+        self.assertIn('id="he-trend-legend"', self.html)
+
+    def test_trend_renderer_present(self):
+        self.assertIn("function renderHookEnvTrend(rows)", self.html)
+        self.assertIn("function showHookEnvTrendTip", self.html)
+        self.assertIn("function envVersionColor", self.html)
+
+    def test_loadTrend_calls_renderer(self):
+        # loadTrend, history rows'tan trendi render etmeli (refs-trend ile aynı
+        # kaynağa beslenir); aksi halde panel hiç doldurulmaz.
+        self.assertIn("renderHookEnvTrend(rows)", self.html)
+
+    def test_hover_hit_area_wired(self):
+        # Hover tooltip'i bant vuruş alanlarına bağlı olmalı.
+        self.assertIn("onmousemove=\"showHookEnvTrendTip(", self.html)
+        self.assertIn("onmouseleave=\"hideTrendTip()", self.html)
 
 
 class BudgetLimitPlumbingTests(unittest.TestCase):
@@ -785,6 +869,11 @@ class BuildVerifyCmdTests(unittest.TestCase):
 
     def _cmd(self, **kw):
         return ps._build_verify_cmd("/py", "/verify", **kw)
+
+    def test_klayers_output_targets_preview_dir(self):
+        cmd = ps._build_verify_cmd("/py", "/verify", klayers_out="/preview/klayers.json")
+        i = cmd.index("--klayers-out")
+        self.assertEqual(cmd[i + 1], "/preview/klayers.json")
 
     def test_no_override_default_flags(self):
         cmd = self._cmd()
@@ -1223,7 +1312,31 @@ class TestReplayRefsAndPages(unittest.TestCase):
         self.assertEqual(first["pdf_pages"], 0)
 
 
+class TestHardeningContracts(unittest.TestCase):
+    def test_api_error_envelope_contains_error(self):
+        self.assertEqual(ps.api_error(404, "missing"),
+                         (404, {"error": "missing"}))
+
+    def test_request_timeout_is_configured(self):
+        self.assertEqual(ps.REQUEST_TIMEOUT_SECONDS, 30)
+
+    def test_shutdown_stops_loop_before_server(self):
+        source = pathlib.Path(ps.__file__).read_text(encoding="utf-8")
+        self.assertLess(source.index("stop_event.set()"),
+                        source.index("srv.shutdown()"))
+
+
 class TestRouteQueryParams(unittest.TestCase):
+    def test_docker_compose_publishes_loopback_only(self):
+        compose = pathlib.Path(HERE, "..", "..", "docker-compose.yml").read_text(encoding="utf-8")
+        self.assertIn('"127.0.0.1:8000:8000"', compose)
+
+    def test_token_comparison_is_timing_safe(self):
+        source = pathlib.Path(ps.__file__).read_text(encoding="utf-8")
+        self.assertIn('hmac.compare_digest(token, expected)', source)
+        self.assertNotIn('token != expected', source)
+        self.assertNotIn('token == expected', source)
+
     """do_GET rota eşleşmesi query string'den bağımsızdır (_route).
 
     Client cache-buster olarak query param ekler (/api/run-history?_t=…,
@@ -1258,6 +1371,111 @@ class TestRouteQueryParams(unittest.TestCase):
         self.assertIsNone(ps._route("/api/unknown?x=1"))
         self.assertIsNone(ps._route("/favicon.ico"))
 
+    def test_run_now_rejects_untrusted_host(self):
+        old_token = os.environ.get("PREVIEW_RUN_NOW_TOKEN")
+        old_busy = ps.VERIFY_BUSY
+        try:
+            os.environ["PREVIEW_RUN_NOW_TOKEN"] = "secret-token"
+            ps.VERIFY_BUSY = __import__("threading").Lock()
+            handler = object.__new__(ps.Handler)
+            sent = []
+            handler.path = "/api/run-now"
+            handler.headers = {"Authorization": "Bearer secret-token", "Host": "evil.example"}
+            handler._send = lambda status, body, content_type="", extra_headers=None: sent.append((status, body, extra_headers))
+            handler.trigger_run_now()
+            self.assertEqual(sent[0][0], 403)
+            self.assertEqual(json.loads(sent[0][1])["error"], "forbidden host")
+        finally:
+            ps.VERIFY_BUSY = old_busy
+            if old_token is None:
+                os.environ.pop("PREVIEW_RUN_NOW_TOKEN", None)
+            else:
+                os.environ["PREVIEW_RUN_NOW_TOKEN"] = old_token
+
+    def test_run_now_returns_409_when_busy(self):
+        old_busy = ps.VERIFY_BUSY
+        try:
+            lock = __import__("threading").Lock()
+            lock.acquire()
+            ps.VERIFY_BUSY = lock
+            handler = object.__new__(ps.Handler)
+            sent = []
+            handler.path = "/api/run-now"
+            handler.headers = {"Host": "127.0.0.1:8000"}
+            handler._send = lambda status, body, content_type="", extra_headers=None: sent.append((status, body, extra_headers))
+            handler.trigger_run_now()
+            self.assertEqual(sent[0][0], 409)
+            self.assertEqual(json.loads(sent[0][1])["status"], "already_running")
+        finally:
+            ps.VERIFY_BUSY = old_busy
+
+    def test_run_now_rejects_untrusted_origin(self):
+        old_token = os.environ.get("PREVIEW_RUN_NOW_TOKEN")
+        try:
+            os.environ["PREVIEW_RUN_NOW_TOKEN"] = "secret-token"
+            handler = object.__new__(ps.Handler)
+            sent = []
+            handler.path = "/api/run-now"
+            handler.headers = {"Authorization": "Bearer secret-token", "Host": "127.0.0.1:8000", "Origin": "https://evil.example"}
+            handler._send = lambda status, body, content_type="", extra_headers=None: sent.append((status, body, extra_headers))
+            handler.trigger_run_now()
+            self.assertEqual(sent[0][0], 403)
+            self.assertEqual(json.loads(sent[0][1])["error"], "forbidden origin")
+        finally:
+            if old_token is None:
+                os.environ.pop("PREVIEW_RUN_NOW_TOKEN", None)
+            else:
+                os.environ["PREVIEW_RUN_NOW_TOKEN"] = old_token
+
+    def test_run_now_requires_bearer_token(self):
+        old_token = os.environ.get("PREVIEW_RUN_NOW_TOKEN")
+        old_busy = ps.VERIFY_BUSY
+        try:
+            os.environ["PREVIEW_RUN_NOW_TOKEN"] = "secret-token"
+            ps.VERIFY_BUSY = __import__("threading").Lock()
+            handler = object.__new__(ps.Handler)
+            sent = []
+            handler.path = "/api/run-now"
+            handler._send = lambda status, body, content_type="", extra_headers=None: sent.append((status, body, extra_headers))
+            handler.headers = {"Host": "127.0.0.1:8000"}
+            handler.trigger_run_now()
+            self.assertEqual(sent[0][0], 401)
+            self.assertEqual(json.loads(sent[0][1])["error"], "unauthorized")
+        finally:
+            ps.VERIFY_BUSY = old_busy
+            if old_token is None:
+                os.environ.pop("PREVIEW_RUN_NOW_TOKEN", None)
+            else:
+                os.environ["PREVIEW_RUN_NOW_TOKEN"] = old_token
+
+    def test_run_now_accepts_matching_bearer_token(self):
+        old_token = os.environ.get("PREVIEW_RUN_NOW_TOKEN")
+        old_busy = ps.VERIFY_BUSY
+        old_dir = ps.VERIFY_DIR
+        try:
+            os.environ["PREVIEW_RUN_NOW_TOKEN"] = "secret-token"
+            ps.VERIFY_BUSY = __import__("threading").Lock()
+            ps.VERIFY_DIR = "/tmp"
+            handler = object.__new__(ps.Handler)
+            sent = []
+            handler.path = "/api/run-now"
+            handler._send = lambda status, body, content_type="", extra_headers=None: sent.append((status, body, extra_headers))
+            handler.headers = {"Host": "127.0.0.1:8000", "Authorization": "Bearer secret-token"}
+            original = ps.run_verify
+            ps.run_verify = lambda *args, **kwargs: None
+            try:
+                handler.trigger_run_now()
+            finally:
+                ps.run_verify = original
+            self.assertEqual(sent[0][0], 200)
+        finally:
+            ps.VERIFY_DIR = old_dir
+            ps.VERIFY_BUSY = old_busy
+            if old_token is None:
+                os.environ.pop("PREVIEW_RUN_NOW_TOKEN", None)
+            else:
+                os.environ["PREVIEW_RUN_NOW_TOKEN"] = old_token
+
     def test_trigger_run_now_method_exists(self):
         # 24b9905'te yanlışlıkla silinmişti; /api/run-now AttributeError ile
         # patlardı. Geri yüklendi — tekrar silinmesini önle (regresyon kapısı).
@@ -1267,6 +1485,172 @@ class TestRouteQueryParams(unittest.TestCase):
         # erişilebilir (route testi query-string'li haliyle).
         self.assertEqual(ps._route("/api/run-now?budget=25"), "run_now")
         self.assertEqual(ps._route("/api/run-now"), "run_now")
+
+
+class TestRefsTrendCandidates(unittest.TestCase):
+    def test_main_candidates_include_nested_preview_dir_shape(self):
+        source = pathlib.Path(ps.__file__).read_text(encoding="utf-8")
+        self.assertIn('os.path.join(args.preview_dir, "refs-trend", "refs-trend.json")', source)
+
+    def test_first_candidate_targets_repo_root(self):
+        source = pathlib.Path(ps.__file__).read_text(encoding="utf-8")
+        # CI artifact lives at <repo-root>/refs-trend/refs-trend.json, not
+        # inside _calisma/CIKTI. ROOT = _calisma/CIKTI; REPO_ROOT = ROOT/../..
+        self.assertIn('REPO_ROOT = os.path.dirname(os.path.dirname(ROOT))', source)
+        self.assertIn('os.path.join(REPO_ROOT, "refs-trend", "refs-trend.json")', source)
+        self.assertNotIn('os.path.join(ROOT, "refs-trend", "refs-trend.json")', source)
+
+
+class TestServeHistoryTrendCompact(unittest.TestCase):
+    """serve_history / serve_refs_trend / serve_latest: kompakt JSON
+    sözleşmesi.
+
+    Üç endpoint de SSE döngüsünde her snapshot'ta çekilir; payload'u küçük
+    tutmak (compact dump, indent yok) ölçülen davranıştır — pretty-print
+    payload'u ~%20-30 ve serialize süresini ~2.5x şişirir. Ortak sözleşme
+    _serve'de tek yerde; testler içeriğe odaklanır.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self._old_hist, self._old_rt = ps.HISTORY_PATH, ps.REFS_TREND_PATH
+        ps.HISTORY_PATH = os.path.join(self._tmp.name, "history.jsonl")
+        ps.REFS_TREND_PATH = os.path.join(self._tmp.name, "refs-trend.json")
+
+    def tearDown(self):
+        ps.HISTORY_PATH, ps.REFS_TREND_PATH = self._old_hist, self._old_rt
+        self._tmp.cleanup()
+
+    def _capture(self):
+        class _FakeHandler:
+            def __init__(self):
+                self.sent = None
+
+            def _send(self, status, body,
+                      content_type="text/plain; charset=utf-8",
+                      extra_headers=None):
+                self.sent = (status, body, content_type)
+
+        return _FakeHandler()
+
+    def _serve(self, handler):
+        """Handler'ı çalıştır; ortak compact-JSON sözleşmesini denetle.
+
+        Tüm kompakt JSON handler'ları: 200 + application/json + gövdede
+        literal newline yok. (parsed, body) döner; testler içeriğe odaklanır.
+        """
+        fake = self._capture()
+        handler(fake)
+        status, body, ctype = fake.sent
+        self.assertEqual(status, 200)
+        self.assertIn("application/json", ctype)
+        self.assertNotIn("\n", body)  # literal newline yok (compact)
+        return json.loads(body), body
+
+    def test_serve_history_compact_content(self):
+        with open(ps.HISTORY_PATH, "w", encoding="utf-8") as f:
+            for rec in ({"ts": "2026-08-23T09:00:00Z", "verdict": "PASS",
+                         "p0": 0, "p1": 2},
+                        {"ts": "2026-08-23T10:00:00Z", "verdict": "FAIL",
+                         "p0": 1, "p1": 0}):
+                f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        rows, _ = self._serve(ps.Handler.serve_history)
+        self.assertEqual([r["ts"] for r in rows],
+                         ["2026-08-23T09:00:00Z", "2026-08-23T10:00:00Z"])
+
+    def test_serve_refs_trend_compact_normalized_content(self):
+        # Dosya indent'li yazılır; endpoint kompaktlaştırarak normalize eder
+        # (içerik aynı kalmalı).
+        fixture = {"rows": [{"ts": "2026-08-23", "dur_s": 12.5}],
+                   "duration_budget": {"rows": []}}
+        with open(ps.REFS_TREND_PATH, "w", encoding="utf-8") as f:
+            json.dump(fixture, f, indent=4)
+        served, _ = self._serve(ps.Handler.serve_refs_trend)
+        self.assertEqual(served, fixture)
+
+    def test_serve_refs_trend_missing_returns_fallback(self):
+        served, _ = self._serve(ps.Handler.serve_refs_trend)
+        self.assertEqual(served, {"rows": [], "duration_budget": {"rows": []}})
+
+    def test_serve_refs_trend_invalid_json_returns_structured_500(self):
+        with open(ps.REFS_TREND_PATH, "w", encoding="utf-8") as f:
+            f.write("{not json")
+        fake = self._capture()
+        ps.Handler.serve_refs_trend(fake)
+        status, body, content_type = fake.sent
+        self.assertEqual(status, 500)
+        self.assertIn("application/json", content_type)
+        self.assertEqual(json.loads(body), {"error": "refs trend unavailable"})
+
+    def test_serve_latest_is_compact(self):
+        old = ps.LATEST
+        ps.LATEST = {"ts": "2026-08-23T09:00:00Z", "verdict": "PASS",
+                     "p0": 0, "p1": 0, "stdout": "", "stderr": "",
+                     "hook_env": None, "cached": False}
+        try:
+            fake = self._capture()
+            ps.Handler.serve_latest(fake)
+            self.assertNotIn("\n", fake.sent[1])
+        finally:
+            ps.LATEST = old
+
+    def test_serve_latest_compact_content(self):
+        old = ps.LATEST
+        ps.LATEST = {"ts": "2026-08-23T09:00:00Z", "verdict": "PASS",
+                     "p0": 0, "p1": 0,
+                     "stdout": "Satır 1\nSatır 2\nSONUÇ: PASS",
+                     "stderr": "K8 Z3: PASS\n", "hook_env": None,
+                     "cached": False}
+        try:
+            d, _ = self._serve(ps.Handler.serve_latest)
+            self.assertEqual(d["verdict"], "PASS")
+            self.assertIn("Satır 2", d["stdout_short"])
+        finally:
+            ps.LATEST = old
+
+    def test_serve_latest_empty_state(self):
+        old = ps.LATEST
+        ps.LATEST = {"ts": "", "verdict": "INIT",
+                     "p0": 0, "p1": 0, "stdout": "", "stderr": "",
+                     "hook_env": None, "cached": False}
+        try:
+            d, _ = self._serve(ps.Handler.serve_latest)
+            self.assertEqual(d["verdict"], "INIT")
+            self.assertNotIn("stdout", d)
+            self.assertNotIn("stderr", d)
+            self.assertEqual(d["stdout_short"], "")
+        finally:
+            ps.LATEST = old
+
+    def test_serve_run_history_empty_logs(self):
+        old = ps.RUNS_DIR
+        ps.RUNS_DIR = os.path.join(self._tmp.name, "no_runs")
+        try:
+            d, _ = self._serve(ps.Handler.serve_run_history)
+            self.assertEqual(d, [])
+        finally:
+            ps.RUNS_DIR = old
+
+    def test_serve_run_stdout_missing_ts(self):
+        fake = self._capture()
+        fake.path = "/api/run-stdout"
+        ps.Handler.serve_run_stdout(fake)
+        status, body, _ = fake.sent
+        self.assertEqual(status, 400)
+        self.assertIn("error", json.loads(body))
+
+    def test_serve_run_stdout_not_found(self):
+        old = ps.RUNS_DIR
+        ps.RUNS_DIR = os.path.join(self._tmp.name, "no_runs")
+        try:
+            fake = self._capture()
+            fake.path = "/api/run-stdout?ts=2026-01-01T00:00:00Z"
+            ps.Handler.serve_run_stdout(fake)
+            status, body, _ = fake.sent
+            self.assertEqual(status, 404)
+            self.assertIn("error", json.loads(body))
+        finally:
+            ps.RUNS_DIR = old
 
 
 if __name__ == "__main__":

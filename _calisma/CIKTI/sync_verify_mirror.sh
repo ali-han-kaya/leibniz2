@@ -18,6 +18,7 @@
 #   sync_verify_mirror.sh             # senkron (değişeni kopyala, raporla)
 #   sync_verify_mirror.sh --force     # hepsini koşulsuz kopyala
 #   sync_verify_mirror.sh --check     # mirror güncel mi? (0 güncel/1 bayat/2 hata)
+#   sync_verify_mirror.sh --check-coverage # kaynak listesi ↔ repo kapsamı (0/1/2)
 #   sync_verify_mirror.sh --list      # dosya eşlemesini bas (denetim için)
 #   sync_verify_mirror.sh --help
 #
@@ -116,6 +117,11 @@ PREVIEW_FILES=(
 # /guide.html rotasında PREVIEW_DIR/guide.html'den servis eder.
 GUIDE_FILES=(
   "docs/branch-protection-guide/guide.html|guide.html"
+  # Hook env sürüm matrisi — dashboard env-drift paneli (preview_server, ROOT
+  # yanındaki HOOK_ENV_MATRIX.md'yi okur). TCC mirror'da repoyu okuyamaz;
+  # launchd rotasında panelin doğru karşılaştırması için kopya buraya drop
+  # edilir (tek kaynak repo docs/HOOK_ENV_MATRIX.md).
+  "docs/HOOK_ENV_MATRIX.md|HOOK_ENV_MATRIX.md"
 )
 
 say() { printf '%s\n' "$*"; }
@@ -170,15 +176,22 @@ sync_one() {
   # Alt dizin hedefleri (github_scripts/…): hedef klasör yoksa cp başarısız
   # olur — önce oluştur (exit kodu set -e ile yakalanır).
   mkdir -p "$(dirname "$dst")"
-  if [ "$mode" = "force" ]; then
-    cp "$src" "$dst"
-    printf 'GÜNCELLENDİ'
-  elif same_file "$src" "$dst"; then
+  if [ "$mode" != "force" ] && same_file "$src" "$dst"; then
     printf 'GÜNCEL'
-  else
-    cp "$src" "$dst"
-    printf 'GÜNCELLENDİ'
+    return 0
   fi
+  # Atomik yazım: tmp hedefle AYNI dizinde üretilir, sonra mv (rename) —
+  # eşzamanlı okuyucu (preview sunucusu, K17 --check) asla yarım (torn)
+  # dosya görmez; in-place cp'nin O_TRUNC penceresi kapanır. cp başarısız
+  # olursa tmp temizlenir ve hedef ESKİ içeriğiyle kalır.
+  local tmp
+  tmp="$(mktemp "${dst}.tmp.XXXXXX")"
+  if ! cp "$src" "$tmp"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  mv -f "$tmp" "$dst"
+  printf 'GÜNCELLENDİ'
 }
 
 # Her eşleme için sync_one çalıştır; "(rel)" başına durum basar.
@@ -298,6 +311,10 @@ main() {
     --list)
       run_list
       exit 0
+      ;;
+    --check-coverage)
+      python3 "$CIKTI/check_mirror_coverage.py" --sync-script "$0"
+      exit $?
       ;;
     --check)
       validate_sources || exit 2

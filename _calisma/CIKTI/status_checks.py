@@ -35,6 +35,7 @@ izni gerektirir, GITHUB_TOKEN'da yoktur.
 """
 import argparse
 import json
+import pathlib
 import subprocess
 import sys
 
@@ -47,7 +48,10 @@ except ImportError:  # pragma: no cover
     )
     sys.exit(2)
 
-WORKFLOW = ".github/workflows/verify.yml"
+# verify.yml — scriptin kendi konumundan çöz (cwd'den bağımsız; testler
+# CIKTI'dan da repo kökünden de koşabilsin).
+_REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
+WORKFLOW = str(_REPO_ROOT / ".github" / "workflows" / "verify.yml")
 # Required check OLMAYAN job'lar: PR-only/advisory (banner kapı olmasın).
 GATE_EXCLUDE = {
     "manifest-comment",    # PR-only: yorum düşürme
@@ -61,6 +65,10 @@ GATE_EXCLUDE = {
     "override-trend",       # advisory: CLI override zaman serisi
     "changelog-drift",      # advisory: gen_changelog --check drift bulguları
     "pattern-drift",         # advisory: merge pattern ↔ ARTIFACT_JOBS drift
+    "budget-comment",        # PR-only: bütçe + pre-commit PR yorumu (bütçe kapısı ayrı job)
+    "lake-proof",            # ayrı-step K9 lake build (lean-toolchain v4.14.0);
+                             #   GitHub required kontrollerinde DEĞİL (advisory) —
+                             #   K9, verify job'unun --full içinde de koşar.
 }
 # Not: "label-gate" (Pre-commit P0 label gate) BİLEREK required check'tir —
 # precommit-p0 etiketi varken FAIL verip merge'i bloke eder; bu yüzden

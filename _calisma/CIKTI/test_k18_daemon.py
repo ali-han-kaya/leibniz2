@@ -195,7 +195,7 @@ class TestK18Wiring(unittest.TestCase):
             check_repro_manifest=False, check_cleanup=False,
             check_history=None, check_github_scripts=False,
             check_mirror=False, check_daemon=True, check_launchd=False,
-            coq_proof=False)
+            coq_proof=False, check_sde=False)
         findings = [{"id": "K18-DAEMON", "priority": "P1",
                      "check": "K18-DAEMON", "issue": "smoke başarısız",
                      "evidence": ""}]
