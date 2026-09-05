@@ -24,6 +24,7 @@ Tek dosyalık Python HTTP sunucusu (stdlib-only):
 """
 import argparse
 import hashlib
+import hmac
 import json
 import os
 import re
@@ -35,7 +36,28 @@ import urllib.parse
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+REQUEST_TIMEOUT_SECONDS = 30
+ALLOWED_HOSTS = {"127.0.0.1", "localhost", "::1"}
+
+
+def _trusted_request(headers):
+    host = headers.get("Host", "").split(":", 1)[0].lower()
+    if host not in ALLOWED_HOSTS:
+        return "forbidden host"
+    origin = headers.get("Origin")
+    if origin:
+        parsed = urllib.parse.urlparse(origin)
+        if parsed.hostname not in ALLOWED_HOSTS:
+            return "forbidden origin"
+    return None
+
+
+def api_error(status, message):
+    return status, {"error": message}
+
+
 ROOT = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.dirname(os.path.dirname(ROOT))
 DEFAULT_PREVIEW_DIR = os.path.expanduser("~/Library/Caches/com.freebuff/preview")
 
 
@@ -74,6 +96,9 @@ LATEST = {
     "stderr": "",
     "exit_code": None,
     "duration_s": None,
+    "duration_pct_warn": False,
+    "flaky_count": None,
+    "deterministic_count": None,
     "p0": 0,
     "p1": 0,
     "budget_usd": None,
@@ -108,6 +133,7 @@ LATEST = {
     "status_board": None,        # tek satır durum panosu (5 ikon: Pre-commit · K0 · Bütçe · Soy hattı · K katmanları)
     "precommit_hooks": None,     # [{name, status}] — pre-commit hook sonuçları (Passed/Failed)
     "history_sidecar_sha256": None,  # history.jsonl.sha256 sidecar hash'i (K15)
+    "failure_pattern": None,
     "findings": [],                # verify_output'dan çıkan [{id,priority,label,message,detail}]
     "pattern_drift": None,       # merge pattern drift durumu: PASS/DRIFT (dashboard)
     "pattern_drift_detail": None, # drift detayı: eksik/fazla artifact listesi
@@ -124,15 +150,89 @@ HISTORY_MAX = 100               # disk'te tutulacak en son run sayısı
 RUNS_DIR = None                 # main()'de set edilir; run logları (stdout+stderr) dizini
 RUN_LOG_MAX = 20                 # disk'te tutulacak + replay edilecek en son run sayısı
 REFS_TREND_PATH = None           # main()'de set edilir; refs-trend.json yolu
+# Matris doc'u tek kaynaktır. Sunucu TCC-safe mirror'dan koştuğunda (launchd
+# GUI agent'ı repo'yu okuyamaz) doc kopyası preview mirror'a senkronlanır
+# (sync_verify_mirror.sh) ve ROOT'un yanına düşer; yerel dev/test ise repo
+# docs/ yoluna fallback eder.
+HOOK_ENV_MATRIX_DOC = os.path.join(ROOT, "HOOK_ENV_MATRIX.md")
+_HOOK_ENV_MATRIX_REPO = os.path.normpath(os.path.join(ROOT, "..", "..", "docs",
+                                                      "HOOK_ENV_MATRIX.md"))
 
-HISTORY_KEYS = ("ts", "verdict", "p0", "p1", "duration_s", "budget_usd",
+HISTORY_KEYS = ("ts", "verdict", "p0", "p1", "duration_s", "duration_pct_warn", "budget_usd",
                 "budget_limit", "budget_method",
                 "pdf_pages", "ref_count", "raw_sha256", "stripped_sha256",
                 "exit_code", "refs_verified", "refs_total", "refs_mismatch",
                 "refs_by_source", "hook_env", "z3_passed", "z3_failed",
                 "z3_total", "lean_ok", "lean_detail", "cli_override_count",
                 "lineage_ok", "lineage_count", "history_sidecar_sha256",
-                "findings", "audit_refs_trend", "pattern_drift", "pattern_drift_detail")
+                "findings", "audit_refs_trend", "pattern_drift", "pattern_drift_detail",
+                "flaky_count", "deterministic_count")
+
+
+def _read_hook_env_matrix():
+    """HOOK_ENV_MATRIX.md'nin sürüm tablosunu {anahtar: beklenen-pin} döndür.
+
+    Tek kaynak: `check_hook_env_matrix.parse_table` ile aynı 7-hücreli md
+    tablosunu okur (burada bağımlılığı önlemek için hafif bir kopyası).
+    Beklenen pin hücresi (sütun 4), dashboard'un son run'ın gözlenen sürümünü
+    karşılaştırdığı referanstır. Dosya yoksa/boşsa {} döner (advisory).
+    """
+    rows = {}
+    # Önce mirror yerel kopya, yoksa repo docs/ (yerel dev/test) fallback.
+    doc = HOOK_ENV_MATRIX_DOC if os.path.isfile(HOOK_ENV_MATRIX_DOC) \
+        else _HOOK_ENV_MATRIX_REPO
+    if not os.path.isfile(doc):
+        return rows
+    try:
+        with open(doc, encoding="utf-8") as f:
+            text = f.read()
+    except OSError:
+        return rows
+    _row_re = re.compile(
+        r"^\|\s*`([a-z0-9_]+)`\s*\|(.+?)\|\s*$")
+    for line in text.splitlines():
+        if not line.startswith("|"):
+            continue
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        m = _row_re.match(line)
+        # 7 hücre: Anahtar | Araç | K katmanı | Beklenen pin | yerel | CI | komut
+        if m and len(cells) == 7:
+            rows[m.group(1)] = cells[3]
+    return rows
+
+
+def build_hook_env_matrix(observed):
+    """Son run'ın araç sürümlerini matris beklenen pin'leriyle karşılaştır.
+
+    Döner: {"verdict", "tools": [{tool, expected, observed, status}]}.
+    status:
+      - "ok"       → araç gözlenip matriste listeleniyor (sürüm uyumlu kontrolü
+                     yok — birçok pin tanımlayıcıdır, örn. "≥3.9")
+      - "missing"  → matriste var ama bu run'da prob edilmedi (None) — çevresel
+                     drift, amber
+      - "unlisted" → kod bu aracı prob ediyor ama matrise işlenmemiş — doc
+                     drift'i (`check_hook_env_matrix` fail-closed kapıyı zaten
+                     koyar), burada advisory görünür
+    verdict: "DRIFT" herhangi bir missing/unlisted varsa, aksi halde "OK".
+    """
+    expected = _read_hook_env_matrix()
+    observed = observed or {}
+    tools = []
+    drift = False
+    for tool in sorted(set(expected) | set(observed)):
+        exp = expected.get(tool)
+        obs = observed.get(tool)
+        if tool in observed and tool not in expected:
+            status = "unlisted"
+        elif tool in expected and obs is None:
+            status = "missing"
+        else:
+            status = "ok"
+        if status != "ok":
+            drift = True
+        tools.append({"tool": tool, "expected": exp, "observed": obs,
+                      "status": status})
+    return {"verdict": "DRIFT" if drift else "OK", "tools": tools}
 
 
 def snapshot_dict():
@@ -369,7 +469,8 @@ def run_verify(verify_dir, budget_usd=None, budget_method=None):
         return False
     try:
         return _run_verify_locked(verify_dir, budget_usd=budget_usd,
-                                  budget_method=budget_method)
+                                  budget_method=budget_method,
+                                  preview_dir=PREVIEW_DIR)
     finally:
         VERIFY_BUSY.release()
 
@@ -468,7 +569,8 @@ def build_replay_events_multi(records):
     return events
 
 
-def _build_verify_cmd(py, verify_dir, budget_usd=None, budget_method=None):
+def _build_verify_cmd(py, verify_dir, budget_usd=None, budget_method=None,
+                      klayers_out=None):
     """verify_delivery.py --full komutunu kur (override parametreleriyle).
 
     Manuel override (/api/run-now?budget=25&budget_method=weighted):
@@ -483,10 +585,13 @@ def _build_verify_cmd(py, verify_dir, budget_usd=None, budget_method=None):
         cmd += ["--budget", str(budget_usd)]
     if budget_method is not None:
         cmd += ["--budget-method", str(budget_method)]
+    if klayers_out is not None:
+        cmd += ["--klayers-out", str(klayers_out)]
     return cmd
 
 
-def _run_verify_locked(verify_dir, budget_usd=None, budget_method=None):
+def _run_verify_locked(verify_dir, budget_usd=None, budget_method=None,
+                       preview_dir=None):
     """verify_delivery.py --full komutunu çalıştır, sonucu LATEST'e yaz + broadcast.
 
     Bu server user shell context'te çalışıyor (bash -c exec argv ...); tüm
@@ -499,8 +604,10 @@ def _run_verify_locked(verify_dir, budget_usd=None, budget_method=None):
     venv python tercih et; yoksa system python fallback.
     """
     py = _find_python(verify_dir)
+    klayers_out = os.path.join(preview_dir or DEFAULT_PREVIEW_DIR, "klayers.json")
     cmd = _build_verify_cmd(py, verify_dir, budget_usd=budget_usd,
-                            budget_method=budget_method)
+                            budget_method=budget_method,
+                            klayers_out=klayers_out)
     t0 = time.monotonic()
     timed_out = False
     try:
@@ -903,6 +1010,7 @@ def _finalize_run(stdout, stderr, rc, duration, data, verify_dir=None):
             "stderr": stderr,
             "exit_code": rc,
             "duration_s": duration,
+            "duration_pct_warn": bool(data.get("duration_pct_warn", False)),
             "p0": data.get("counts", {}).get("P0", 0),
             "p1": data.get("counts", {}).get("P1", 0),
             "budget_usd": (data.get("budget") or {}).get("estimated_usd"),
@@ -967,6 +1075,9 @@ def _finalize_run(stdout, stderr, rc, duration, data, verify_dir=None):
             # Pattern drift: merge pattern ↔ ARTIFACT_JOBS tutarlılığı (dashboard)
             "pattern_drift": pattern_drift_result,
             "pattern_drift_detail": pattern_drift_detail,
+            "failure_pattern": data.get("failure_pattern"),
+            "flaky_count": (data.get("failure_pattern") or {}).get("flaky_count"),
+            "deterministic_count": (data.get("failure_pattern") or {}).get("deterministic_count"),
         })
         # Extract pages + refs from stdout for richer dashboard
         for line in stdout.splitlines():
@@ -1025,7 +1136,7 @@ def _finalize_run(stdout, stderr, rc, duration, data, verify_dir=None):
     _broadcast_run_end(rec)
 
 
-def verify_loop(verify_dir, interval):
+def verify_loop(verify_dir, interval, stop_event=None):
     """Her interval saniyede bir run_verify çalıştırır (arka plan thread)."""
     import traceback
     sys.stderr.write("[verify_loop] started\n"); sys.stderr.flush()
@@ -1041,7 +1152,7 @@ def verify_loop(verify_dir, interval):
                 LATEST.update({"ts": datetime.now(timezone.utc).isoformat(),
                                "verdict": "ERROR", "stderr": str(e),
                                "exit_code": 1})
-        time.sleep(interval)
+        stop_event.wait(interval)
 
 
 def _route(path):
@@ -1134,6 +1245,10 @@ class Handler(BaseHTTPRequestHandler):
             self.serve_run_stdout()
         elif route == "health":
             self._send(200, "ok")
+        elif route is None and urllib.parse.urlparse(self.path).path.startswith("/api/"):
+            status, payload = api_error(404, "not found")
+            self._send(status, json.dumps(payload),
+                       content_type="application/json; charset=utf-8")
         else:
             self._send(404, "404 not found")
 
@@ -1141,7 +1256,9 @@ class Handler(BaseHTTPRequestHandler):
         if self.path.startswith("/api/run-now"):
             self.trigger_run_now()
         else:
-            self._send(404, "404 not found")
+            status, payload = api_error(404, "not found")
+            self._send(status, json.dumps(payload),
+                       content_type="application/json; charset=utf-8")
 
     def trigger_run_now(self):
         """Manuel tetikleme: interval beklemeden hemen verify koşar.
@@ -1152,6 +1269,20 @@ class Handler(BaseHTTPRequestHandler):
         yanlışlıkla silinmişti (serve_run_stdout ile yer değiştirdi) —
         geri yüklendi.
         """
+        request_error = _trusted_request(self.headers)
+        if request_error:
+            self._send(403, json.dumps({"error": request_error}),
+                       content_type="application/json; charset=utf-8")
+            return
+        expected = os.environ.get("PREVIEW_RUN_NOW_TOKEN")
+        if expected:
+            authorization = self.headers.get("Authorization", "")
+            scheme, _, token = authorization.partition(" ")
+            if scheme != "Bearer" or not hmac.compare_digest(token, expected):
+                self._send(401, json.dumps({"error": "unauthorized"}),
+                           content_type="application/json; charset=utf-8",
+                           extra_headers={"WWW-Authenticate": "Bearer"})
+                return
         ts = datetime.now(timezone.utc).isoformat()
         if not VERIFY_BUSY.acquire(blocking=False):
             self._send(409,
@@ -1255,11 +1386,12 @@ class Handler(BaseHTTPRequestHandler):
     def serve_history(self):
         """JSONL'daki son run'ları JSON array olarak döndür (trend grafiği için)."""
         data = load_history()
-        self._send(200, json.dumps(data, ensure_ascii=False, indent=2),
+        self._send(200, json.dumps(data, ensure_ascii=False),
                    content_type="application/json; charset=utf-8")
 
     def serve_refs_trend(self):
-        """refs-trend.json'u olduğu gibi döndür (duration/budget trend'i için)."""
+        """refs-trend.json'u compact JSON olarak döndür (duration/budget
+        trend'i)."""
         if not REFS_TREND_PATH or not os.path.isfile(REFS_TREND_PATH):
             self._send(200, json.dumps({"rows": [], "duration_budget": {"rows": []}}),
                        content_type="application/json; charset=utf-8")
@@ -1267,11 +1399,12 @@ class Handler(BaseHTTPRequestHandler):
         try:
             with open(REFS_TREND_PATH, encoding="utf-8") as f:
                 data = json.load(f)
-            self._send(200, json.dumps(data, ensure_ascii=False, indent=2),
+        except (json.JSONDecodeError, OSError):
+            self._send(500, json.dumps({"error": "refs trend unavailable"}),
                        content_type="application/json; charset=utf-8")
-        except Exception as e:
-            self._send(500, json.dumps({"error": str(e)}),
-                       content_type="application/json; charset=utf-8")
+            return
+        self._send(200, json.dumps(data, ensure_ascii=False),
+                   content_type="application/json; charset=utf-8")
 
     def serve_run_history(self):
         """Son N run'ın özetini stdout/stderr olmadan döndür (dashboard run history listesi)."""
@@ -1433,11 +1566,13 @@ class Handler(BaseHTTPRequestHandler):
         with LOCK:
             snapshot = dict(LATEST)
         # stdout/stderr uzun olabilir; /api/latest için kırpılmış hali.
+        snapshot["hook_env_matrix"] = build_hook_env_matrix(
+            snapshot.get("hook_env"))
         snapshot["stdout_short"] = "\n".join(snapshot["stdout"].splitlines()[-50:])
         snapshot["stderr_short"] = "\n".join(snapshot["stderr"].splitlines()[-20:])
         snapshot.pop("stdout", None)
         snapshot.pop("stderr", None)
-        self._send(200, json.dumps(snapshot, indent=2),
+        self._send(200, json.dumps(snapshot, separators=(",", ":")),
                    content_type="application/json; charset=utf-8")
 
     def serve_sse(self):
@@ -1460,7 +1595,9 @@ class Handler(BaseHTTPRequestHandler):
                                   {"layers": LATEST["layers"]} |
                                   {"lineage_summary": LATEST["lineage_summary"]} |
                                   {"status_board": LATEST["status_board"]} |
-                                  {"precommit_hooks": LATEST["precommit_hooks"]})
+                                  {"precommit_hooks": LATEST["precommit_hooks"]} |
+                                  {"hook_env_matrix": build_hook_env_matrix(
+                                      LATEST.get("hook_env"))})
         try:
             self.wfile.write(f"event: snapshot\ndata: {snapshot}\n\n".encode())
             self.wfile.flush()
@@ -1537,8 +1674,11 @@ def main():
     HISTORY_PATH = os.path.join(args.preview_dir, "history.jsonl")
     RUNS_DIR = os.path.join(args.preview_dir, "runs")
     RUN_LOG_MAX = args.replay_runs
-    # refs-trend.json: CI artifact'ından veya yerel dizinden okunur
-    _rt_candidate = os.path.join(ROOT, "refs-trend", "refs-trend.json")
+    # refs-trend.json: CI artifact'ı repo kökünde (refs-trend/refs-trend.json);
+    # yerel kurulumda preview-dir'de de olabilir (nested veya flat).
+    _rt_candidate = os.path.join(REPO_ROOT, "refs-trend", "refs-trend.json")
+    if not os.path.isfile(_rt_candidate):
+        _rt_candidate = os.path.join(args.preview_dir, "refs-trend", "refs-trend.json")
     if not os.path.isfile(_rt_candidate):
         _rt_candidate = os.path.join(args.preview_dir, "refs-trend.json")
     REFS_TREND_PATH = _rt_candidate if os.path.isfile(_rt_candidate) else None
@@ -1575,7 +1715,9 @@ def main():
         sys.stderr.flush()
 
     # Arka plan thread: periyodik verify çalıştırma
-    t = threading.Thread(target=verify_loop, args=(args.dir, args.interval),
+    stop_event = threading.Event()
+    t = threading.Thread(target=verify_loop,
+                         args=(args.dir, args.interval, stop_event),
                          daemon=True, name="verify-loop")
     t.start()
 
@@ -1589,7 +1731,10 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
+        stop_event.set()
+        t.join(timeout=REQUEST_TIMEOUT_SECONDS)
         srv.shutdown()
+        srv.server_close()
 
 
 if __name__ == "__main__":

@@ -39,6 +39,8 @@ import os
 import pathlib
 import shutil
 
+CI_JOB_COVERAGE = {}
+
 
 def sha256_file(p: pathlib.Path) -> str:
     return hashlib.sha256(p.read_bytes()).hexdigest()
@@ -74,6 +76,8 @@ ARTIFACT_JOBS = {
     "mirror-check": "mirror-check",
     "daemon-http": "daemon-http",
     "audit-refs-trend": "audit-refs-trend",
+    "changelog-drift": "changelog-drift",
+    "ci-simulate": "ci-simulate",
     "reproducibility": "reproducibility",
 }
 
@@ -143,6 +147,7 @@ def _is_overrides_rel(rel: str) -> bool:
 # objesi) taşır; SHA-256 ile denetim zincirinde sabitlenir.
 STATUS_CHECKS_BASENAMES = frozenset({
     "status_checks.json",
+    "mirror_coverage.json",
 })
 
 
@@ -658,6 +663,23 @@ def main() -> None:
                      "=" * 72]
         lines += sc_block
 
+    # ── MIRROR COVERAGE bölümü: mirror_coverage.json ─────────────────────
+    mirror_coverage_hashes = {rel: h for rel, h in file_hashes.items()
+                              if os.path.basename(rel) == "mirror_coverage.json"}
+    mirror_coverage_combined = None
+    if mirror_coverage_hashes:
+        sorted_rel = sorted(mirror_coverage_hashes)
+        mirror_coverage_combined = hashlib.sha256(
+            "".join(f"{rel}\0{mirror_coverage_hashes[rel]}\n" for rel in sorted_rel).encode()
+        ).hexdigest()
+        lines += ["", "=" * 72,
+                  "MIRROR COVERAGE ARTIFACT (ayrı bölüm)", "=" * 72,
+                  f"{'FILE':<55} SHA-256", "-" * 72]
+        lines += [f"{rel:<55} {mirror_coverage_hashes[rel]}" for rel in sorted_rel]
+        lines += ["-" * 72,
+                  f"mirror_coverage_combined_sha256: {mirror_coverage_combined}",
+                  "=" * 72]
+
     # ── UNIT TESTS bölümü: unit_tests.log (test çıktıları) ──────────────────
     # verify job'undaki unittest discover çıktısı (unit_tests.log) ayrıca
     # işaretlenir; combined_sha256 tek hash ile özetler. Böylece test
@@ -879,6 +901,11 @@ def main() -> None:
         manifest_json["status_checks"] = {
             "files": dict(sorted(status_checks_hashes.items())),
             "combined_sha256": status_checks_combined,
+        }
+    if mirror_coverage_hashes:
+        manifest_json["mirror_coverage"] = {
+            "files": dict(sorted(mirror_coverage_hashes.items())),
+            "combined_sha256": mirror_coverage_combined,
         }
     if unit_test_hashes:
         manifest_json["unit_tests"] = {

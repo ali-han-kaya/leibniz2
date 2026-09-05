@@ -33,6 +33,8 @@ Kullanım:
 import argparse
 import json
 import pathlib
+
+import ci_failure_pattern
 import re
 import subprocess
 import sys
@@ -219,6 +221,18 @@ def exclude_self(live_jobs, live_artifacts):
             [n for n in live_artifacts if n != SELF_ARTIFACT])
 
 
+def build_combined_report(doc_result, failure_result):
+    """Tek artifact için doc/live drift ve CI failure sınıflarını birleştir."""
+    return {
+        "schema": "audit-live-ci/v2",
+        "doc_live_sync": doc_result,
+        "failure_pattern": failure_result,
+        "verdict": ("FAIL" if doc_result.get("verdict") == "FAIL"
+                     or (failure_result and failure_result.get("categories", {}).get("deterministic"))
+                     else "PASS"),
+    }
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -226,6 +240,8 @@ def main(argv=None):
                     help="PUBLISH_SCENARIO.md yolu (varsayılan: docs/)")
     ap.add_argument("--run-id", default=None, help="run ID (varsayılan: son run)")
     ap.add_argument("--json", action="store_true", help="makine-okur JSON")
+    ap.add_argument("--with-failure-pattern", action="store_true",
+                    help="aynı JSON'a son CI run failure sınıflandırmasını ekle")
     args = ap.parse_args(argv)
 
     doc_path = pathlib.Path(args.doc)
@@ -279,55 +295,59 @@ def main(argv=None):
 
     ok = job_cmp["ok"] and art_cmp["ok"] and not req_missing
     verdict = "PASS" if ok else "FAIL"
+    doc_result = {
+        "verdict": verdict,
+        "repo": repo,
+        "run_id": run_id,
+        "doc": str(doc_path),
+        "jobs": {
+            "doc": doc_job_names,
+            "live": sorted(live_jobs),
+            "missing": job_cmp["missing"],
+            "extra": job_cmp["extra"],
+        },
+        "artifacts": {
+            "doc": doc_artifacts,
+            "live": sorted(live_artifacts),
+            "missing": art_cmp["missing"],
+            "extra": art_cmp["extra"],
+            "required_presence": {
+                "ok": not req_missing,
+                "missing": [f"{art} ({side})" for art, side in req_missing],
+                "artifacts": REQUIRED_ARTIFACTS,
+            },
+        },
+    }
+    failure_result = None
+    if args.with_failure_pattern:
+        try:
+            runs = ci_failure_pattern.list_runs(repo, None, ci_failure_pattern.DEFAULT_LIMIT)
+            timeline, jobs = ci_failure_pattern.analyze(runs)
+            failure_result = ci_failure_pattern.summarize(timeline, jobs)
+            failure_result["flaky_count"] = len(failure_result["categories"]["flaky"])
+            failure_result["deterministic_count"] = len(failure_result["categories"]["deterministic"])
+        except (RuntimeError, ValueError, TypeError) as e:
+            failure_result = {"verdict": "ERROR", "error": str(e)}
 
     if args.json:
-        print(json.dumps({
-            "verdict": verdict,
-            "repo": repo,
-            "run_id": run_id,
-            "doc": str(doc_path),
-            "jobs": {
-                "doc": doc_job_names,
-                "live": sorted(live_jobs),
-                "missing": job_cmp["missing"],
-                "extra": job_cmp["extra"],
-            },
-            "artifacts": {
-                "doc": doc_artifacts,
-                "live": sorted(live_artifacts),
-                "missing": art_cmp["missing"],
-                "extra": art_cmp["extra"],
-                "required_presence": {
-                    "ok": not req_missing,
-                    "missing": [f"{art} ({side})" for art, side in req_missing],
-                    "artifacts": REQUIRED_ARTIFACTS,
-                },
-            },
-        }, indent=2, ensure_ascii=False))
-    else:
-        print(f"Canlı CI denetimi — {repo} (run {run_id})")
-        print(f"doc: {doc_path}")
-        print(f"\n── JOB senkronu ──")
-        print(f"  doc: {len(doc_job_names)} job | canlı: {len(live_jobs)} job")
-        for n in job_cmp["missing"]:
-            print(f"  [FAIL] doc'ta var, canlıda YOK: {n}")
-        for n in job_cmp["extra"]:
-            print(f"  [FAIL] canlıda var, doc'ta YOK: {n}")
-        if not job_cmp["missing"] and not job_cmp["extra"]:
-            print("  birebir eşleşiyor")
-        print(f"\n── ARTIFACT senkronu ──")
-        print(f"  doc: {len(doc_artifacts)} artifact | canlı: {len(live_artifacts)} artifact")
-        for n in art_cmp["missing"]:
-            print(f"  [FAIL] doc'ta var, canlıda YOK: {n}")
-        for n in art_cmp["extra"]:
-            print(f"  [FAIL] canlıda var, doc'ta YOK: {n}")
-        for art, side in req_missing:
-            print(f"  [FAIL] sabit artifact '{art}' {side} tarafında YOK")
-        if not art_cmp["missing"] and not art_cmp["extra"] and not req_missing:
-            print("  birebir eşleşiyor")
-        print(f"\nSONUÇ: {verdict} — {'doc ↔ GitHub senkron' if ok else 'DRIFT: doc bayat veya sabit artifact eksik (yukarıdaki [FAIL] satırları)'}")
+        report = (build_combined_report(doc_result, failure_result)
+                  if args.with_failure_pattern else doc_result)
+        print(json.dumps(report,
+            indent=2, ensure_ascii=False))
+        hard_fail = (not ok or
+                     bool(failure_result and failure_result.get("categories", {}).get("deterministic")))
+        return 0 if not hard_fail else 1
 
-    return 0 if ok else 1
+    if args.with_failure_pattern and failure_result:
+        print("\n── FAILURE PATTERN ──")
+        print(json.dumps(failure_result, indent=2, ensure_ascii=False))
+
+    print(f"Canlı CI denetimi — {repo} (run {run_id})")
+    print(f"doc: {doc_path}")
+    print(f"\nSONUÇ: {verdict} — {'doc ↔ GitHub senkron' if ok else 'DRIFT'}")
+    hard_fail = (not ok or
+                 bool(failure_result and failure_result.get("categories", {}).get("deterministic")))
+    return 0 if not hard_fail else 1
 
 
 if __name__ == "__main__":
