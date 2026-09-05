@@ -675,6 +675,40 @@ def validate_config(cfg):
     return errors
 
 
+def _write_atomic(path, data, append=False):
+    """Write a sidecar through a same-directory temporary file and rename.
+
+    ``append=True`` preserves JSONL history semantics by reading the current
+    contents before replacing the file. The destination is never truncated in
+    place, and a failed write leaves the previous sidecar untouched.
+    """
+    directory = os.path.dirname(os.path.abspath(path)) or "."
+    fd, tmp = tempfile.mkstemp(
+        dir=directory, prefix=os.path.basename(path) + ".tmp.")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as output:
+            fd = -1
+            if append:
+                try:
+                    with open(path, encoding="utf-8") as existing:
+                        shutil.copyfileobj(existing, output)
+                except FileNotFoundError:
+                    pass
+            output.write(data)
+        os.replace(tmp, path)
+    except BaseException:
+        if fd != -1:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
 def sha256_file(path):
     h = hashlib.sha256()
     with open(path, "rb") as f:
@@ -5380,11 +5414,12 @@ def main():
     if args.klayers_out:
         try:
             klayers = build_layers_summary(args, findings)
-            with open(args.klayers_out, "w", encoding="utf-8") as kf:
-                json.dump({"verdict": verdict,
-                           "counts": {"P0": p0, "P1": p1},
-                           "layers": klayers},
-                          kf, indent=2, ensure_ascii=False)
+            klayers_payload = json.dumps(
+                {"verdict": verdict,
+                 "counts": {"P0": p0, "P1": p1},
+                 "layers": klayers},
+                indent=2, ensure_ascii=False)
+            _write_atomic(args.klayers_out, klayers_payload)
             if not args.json:
                 print(f"[SUMMARY] K-katman özeti yazıldı: {args.klayers_out} "
                       f"({sum(1 for l in klayers.values() if l['status'] == 'FAIL')} FAIL)")
@@ -5493,8 +5528,8 @@ def main():
             "audit_refs_trend": None,
         }
         try:
-            with open(args.history_out, "a", encoding="utf-8") as hf:
-                hf.write(json.dumps(history_entry, ensure_ascii=False) + "\n")
+            history_payload = json.dumps(history_entry, ensure_ascii=False) + "\n"
+            _write_atomic(args.history_out, history_payload, append=True)
             if not args.json:
                 print(f"[HISTORY] run kaydı yazıldı: {args.history_out}")
         except OSError as e:
