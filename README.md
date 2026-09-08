@@ -521,6 +521,34 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-31 | fix | (refs-trend) write refs-trend.json atomically (tmp + os.replace) | [`6fbf43b`](https://github.com/ali-han-kaya/leibniz2/commit/6fbf43b) |
 | 2026-08-31 | perf | (preview) cache loadTrend 30s + fix refs-trend path | [`12ae066`](https://github.com/ali-han-kaya/leibniz2/commit/12ae066) |
 | 2026-08-31 | test | (preview) extend handler-capture to serve_latest/run_now | [`a63278e`](https://github.com/ali-han-kaya/leibniz2/commit/a63278e) |
+| 2026-09-08 | test | (verify) pin bibliography and review-compilation verification gates | [`4867776`](https://github.com/ali-han-kaya/leibniz2/commit/4867776) |
+| 2026-09-08 | docs | (review) add reproducible review-compilation artifact (53pp) | [`bf78eee`](https://github.com/ali-han-kaya/leibniz2/commit/bf78eee) |
+| 2026-09-08 | refactor | (dashboard) serve slides_z3 natively from PREVIEW_DIR | [`dcb5625`](https://github.com/ali-han-kaya/leibniz2/commit/dcb5625) |
+| 2026-09-09 | test | (verify) harden tooling and gate tests for split verify hardenings | [`e24c87f`](https://github.com/ali-han-kaya/leibniz2/commit/e24c87f) |
+| 2026-09-09 | ci | (verify) add fresh-clone HTTP smoke advisory job | [`2344a28`](https://github.com/ali-han-kaya/leibniz2/commit/2344a28) |
+| 2026-09-09 | ci | (verify) harden ci-simulate tool installs with if: always() | [`2a31aad`](https://github.com/ali-han-kaya/leibniz2/commit/2a31aad) |
+| 2026-09-09 | ci | (verify) make plist extra-profile drift self-healing (fail-closed) | [`c1975d5`](https://github.com/ali-han-kaya/leibniz2/commit/c1975d5) |
+| 2026-09-09 | ci | (verify) gate Lean sorry/axiom check before lake build (K9) | [`10c0dd5`](https://github.com/ali-han-kaya/leibniz2/commit/10c0dd5) |
+| 2026-09-09 | ci | (verify) add K12 plist scenario advisory step (K13 pattern) | [`aecb3b1`](https://github.com/ali-han-kaya/leibniz2/commit/aecb3b1) |
+| 2026-09-09 | ci | (verify) harden install steps with if: always() | [`6862250`](https://github.com/ali-han-kaya/leibniz2/commit/6862250) |
+| 2026-09-08 | fix | (verify) harden K9 lean pipeline and K15-K21 layer docs | [`6b13a14`](https://github.com/ali-han-kaya/leibniz2/commit/6b13a14) |
+| 2026-09-08 | refactor | (dashboard) split preview.html JS into preview.js | [`a719f9e`](https://github.com/ali-han-kaya/leibniz2/commit/a719f9e) |
+| 2026-09-08 | fix | (mcp) expose response_format enum via Literal | [`b62436c`](https://github.com/ali-han-kaya/leibniz2/commit/b62436c) |
+| 2026-09-08 | fix | (mirror) make coverage clone-safe via git ls-files | [`c5066a2`](https://github.com/ali-han-kaya/leibniz2/commit/c5066a2) |
+| 2026-09-08 | fix | (mirror) sync preview.js + run_summary modules via --list | [`42c3286`](https://github.com/ali-han-kaya/leibniz2/commit/42c3286) |
+| 2026-09-06 | fix | (dashboard) add Vite type declarations and dependencies | [`9b9b9a8`](https://github.com/ali-han-kaya/leibniz2/commit/9b9b9a8) |
+| 2026-09-05 | chore | (repo) ignore worktrees and document dashboard runs | [`3519e90`](https://github.com/ali-han-kaya/leibniz2/commit/3519e90) |
+| 2026-09-05 | fix | (verify) write sidecars atomically | [`a7c4318`](https://github.com/ali-han-kaya/leibniz2/commit/a7c4318) |
+| 2026-09-05 | fix | (mirror) restore sync_one copy path lost in 146943b partial staging | [`90b1742`](https://github.com/ali-han-kaya/leibniz2/commit/90b1742) |
+| 2026-09-04 | fix | (mirror) make sync_one atomic with same-dir tmp + mv | [`90df9e6`](https://github.com/ali-han-kaya/leibniz2/commit/90df9e6) |
+| 2026-09-04 | test | (verify) pin manifest-comment in the sidecar wiring contract | [`8ee1e06`](https://github.com/ali-han-kaya/leibniz2/commit/8ee1e06) |
+| 2026-09-04 | fix | (verify) deliver all 7 pr_status_comment.js inputs to budget-comment | [`63908f3`](https://github.com/ali-han-kaya/leibniz2/commit/63908f3) |
+| 2026-09-04 | fix | (verify) bind verdicts of sidecar-consuming required gates | [`87728f1`](https://github.com/ali-han-kaya/leibniz2/commit/87728f1) |
+| 2026-09-04 | fix | (status-checks) mark lake-proof advisory to match required set | [`1fdb631`](https://github.com/ali-han-kaya/leibniz2/commit/1fdb631) |
+| 2026-09-01 | perf | (preview) add View Transitions + Playwright smoke test | [`8514df2`](https://github.com/ali-han-kaya/leibniz2/commit/8514df2) |
+| 2026-08-31 | fix | (refs-trend) write refs-trend.json atomically (tmp + os.replace) | [`bbe7837`](https://github.com/ali-han-kaya/leibniz2/commit/bbe7837) |
+| 2026-08-31 | perf | (preview) cache loadTrend 30s + fix refs-trend path | [`4686936`](https://github.com/ali-han-kaya/leibniz2/commit/4686936) |
+| 2026-09-08 | fix | (preview) compact JSON, auth, Host/Origin, shutdown, klayers | [`35ccc98`](https://github.com/ali-han-kaya/leibniz2/commit/35ccc98) |
 
 ### Regresyon notları
 
