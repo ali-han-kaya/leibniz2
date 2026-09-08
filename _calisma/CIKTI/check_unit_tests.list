@@ -14,6 +14,7 @@ test_check_cli_overrides.py
 test_check_commit_messages.py
 test_check_config_drift_summary.py
 test_check_coq_axioms.py
+test_check_design_tokens.py
 test_check_doc_wrapper_sync.py
 test_check_hook_env_matrix.py
 test_check_hook_unstaged_deps.py
@@ -80,6 +81,7 @@ test_plist_check_workflow.py
 test_precheck_advisory_contract.py
 test_preview_findings_panel.py
 test_preview_server.py
+test_preview_server_atomic.py
 test_readme_badges.py
 test_readme_skills.py
 test_refs_trend.py
@@ -98,7 +100,6 @@ test_run_summary_lineage.py
 test_run_summary_precommit.py
 test_run_summary_refs_trend.py
 test_scan_stale_zips.py
-test_preview_server_atomic.py
 test_sde_texlive_sync.py
 test_setup_branch_protection.py
 test_sidecar_guarantee.py
@@ -117,6 +118,7 @@ test_validate_config_schema.py
 test_verification_chain_deck.py
 test_verify_checks.py
 test_verify_k_layers.py
+test_workflow_install_hardening.py
 test_workflow_timeouts.py
 test_workflow_triggers.py
 test_z3_slide_gallery.py

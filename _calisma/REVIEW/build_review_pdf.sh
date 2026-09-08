@@ -155,6 +155,18 @@ PY
     echo "  $(pdfinfo "$OUT_PDF" 2>/dev/null | grep -E "Pages:|Title:|Author:" | tr '\n' ';' | sed 's/ *; */; /g')"
   fi
   echo "  wrote $OUT_PDF ($(wc -c < "$OUT_PDF" | tr -d ' ') B, $(pdfinfo "$OUT_PDF" 2>/dev/null | awk '/Pages:/{print $2}') pp)"
+
+  # Sidecar: delivery-zip sidecar patterninin aynısı (repack_delivery.write_sidecar genesis).
+  # OUT_PDF'in SHA-256'sını "<sha256>  <basename>\n" formatında yanına yazar —
+  # check_review_freshness bu sidecar'ı byte-for-byte, hash-eşleşmesiyle doğrular.
+  python3 - "$OUT_PDF" << 'PY'
+import hashlib, pathlib, sys
+out = pathlib.Path(sys.argv[1])
+sidecar = out.with_suffix(out.suffix + ".sha256")
+h = hashlib.sha256(out.read_bytes()).hexdigest()
+sidecar.write_text(f"{h}  {out.name}\n", encoding="utf-8")
+print(f"  sidecar: {sidecar.name} ({h[:16]}…)")
+PY
 }
 
 build_pages() {

@@ -71,6 +71,8 @@ EXCLUDE = {
     "test_verify_manifest_sidecar.py",     # verify-delivery-repro-manifest
     "test_verify_manifest_overrides.py",   # verify-delivery-repro-manifest
     "test_check_refs_table_sync.py",       # check-refs-table-sync
+    "test_check_bibliography_sync.py",     # check-bibliography-sync
+    "test_check_review_freshness.py",      # check-review-freshness
     "test_check_config_sync.py",           # check-config-sync
     "test_dryrun_summary.py",              # check-dryrun-summary
     "test_colorize_rules.py",              # check-colorize-rules
