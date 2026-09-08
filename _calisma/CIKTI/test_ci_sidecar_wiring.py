@@ -133,7 +133,8 @@ class TestCiSidecarWiring(unittest.TestCase):
                 if "actions/download-artifact@v7" in joined:
                     d.update(_deliveries(body))
                     input_steps += 1
-                elif "k10_verdict.txt" in joined:
+                elif ("k10_verdict.txt" in joined
+                      or "k10-verdict" in joined):
                     input_steps += 1
                 elif ("uses: actions/github-script@v8" in joined
                       and any(s in joined for s in EVAL_SCRIPTS[job])):
@@ -148,8 +149,11 @@ class TestCiSidecarWiring(unittest.TestCase):
         for job, art, dest in DELIVERIES:
             if dest == "IN_JOB":
                 section = _job_section(self.text, job)
-                if not re.search(r">\s*%s\b" % re.escape(art), section):
-                    missing.append(f"{job}/{art}: job içi üretici adımı yok")
+                has_inline = re.search(r">\s*%s\b" % re.escape(art), section)
+                has_action = "k10-verdict" in section
+                if not (has_inline or has_action):
+                    missing.append(f"{job}/{art}: job içi üretici adımı yok "
+                                   f"(ne > {art} ne de k10-verdict action)")
                 continue
             got = self.delivered.get(job, {}).get(art, "YOK")
             if got != dest:
@@ -207,8 +211,11 @@ class TestCiSidecarWiring(unittest.TestCase):
             for path, art, dest in PR_STATUS_INPUTS:
                 if dest == "IN_JOB":
                     section = _job_section(self.text, job)
-                    if not re.search(r">\s*%s\b" % re.escape(path), section):
-                        missing.append(f"{job}/{path}: job içi üretici adımı yok")
+                    has_inline = re.search(r">\s*%s\b" % re.escape(path), section)
+                    has_action = "k10-verdict" in section
+                    if not (has_inline or has_action):
+                        missing.append(f"{job}/{path}: job içi üretici adımı yok "
+                                       f"(ne > {path} ne de k10-verdict action)")
                     continue
                 got = self.delivered.get(job, {}).get(art, "YOK")
                 if got != dest:
