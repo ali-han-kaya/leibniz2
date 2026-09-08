@@ -230,7 +230,11 @@ jobs:
             const body = fs.readFileSync('_calisma/CIKTI/github_scripts/sync_labels.js', 'utf8');
             await eval(`(async () => {\n${body}\n})()`);
 
+      # if: always() — advisory pre-commit bölümü (if: always) pre-commit
+      # kurulu olmaya bağlı; birim testler düşse bile kurulur, yoksa bölüm
+      # gerçek bulgular yerine "command not found" hayaleti üretir.
       - name: Install pre-commit (advisory pre-commit section)
+        if: always()
         run: pip install pre-commit
 
       # ─── pre-commit hook ortamlarını önbelleğe al ──────────────────────
@@ -261,17 +265,25 @@ jobs:
       # apt-get GitHub Actions runner'larında mirror'a göre takılabilir
       # (azure.archive.ubuntu.com runner'a göre erişilemez — 2026-08-19);
       # apt_install.sh mirror'ı archive.ubuntu.com'a sabitler + retry/timeout.
+      # if: always() — "Run CIKTI unit tests" adımı düşerse GitHub sonraki
+      # adımları atlar; o zaman --full (if: always) araçsız koşar ve eksik
+      # pdfinfo/Z3/Lean "uzak K-katmanı P1"i olarak yüzeye çıkar (phantom env
+      # boşluğu). Kurulumlar koşulsuz çalışır; biri GERÇEKTEN kurulamazsa adım
+      # kendisi job'ı düşürür (loud fail) — K-katmanı P1'i beklemez.
       - name: Install pdfinfo (poppler-utils) + qpdf (K6-DETERM)
+        if: always()
         run: bash _calisma/CIKTI/apt_install.sh poppler-utils qpdf
 
       # K8: Z3 sembolik ispat. Yerel ispatla aynı sürüm (tekrarlanabilirlik).
       - name: Install Z3 (K8)
+        if: always()
         run: pip install z3-solver==5.1.0.0
 
       # K9: Lean 4 reduct-invariance (elan + stable toolchain). --full
       # --lean-proof'ü içerir; lake-proof job ayrıca bağımsız kapıdır, bu
       # kurulum main verify job'ının --full koşumunun K9'unu besler.
       - name: Install Lean 4 (K9)
+        if: always()
         run: |
           curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain leanprover/lean4:stable
           echo "$HOME/.elan/bin" >> $GITHUB_PATH
