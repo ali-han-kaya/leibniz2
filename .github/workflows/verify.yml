@@ -880,6 +880,15 @@ jobs:
           curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain leanprover/lean4:stable
           export PATH="$HOME/.elan/bin:$PATH"
           elan toolchain install leanprover/lean4:v4.14.0
+      - name: Check Lean sorry and axioms (K9)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 _calisma/CIKTI/check_lean_axioms.py \
+            --lean-dir _calisma/lean_reduct --json
+      # `pipefail` + `--json`: çıktı hem log'a hem dosyaya yazılır, ama exit
+      # kodu pipeline'ın ilk hatasını yansıtır (fail-closed).
+
       - name: Build Lean lake proof (8 theorems)
         working-directory: _calisma/lean_reduct
         run: |
