@@ -11,7 +11,7 @@ Tek dosyalık Python HTTP sunucusu (stdlib-only):
                    run bitince `end` event'i + son snapshot gelir. Bağlantı
                    anında son tamamlanmış run'un satırları geriye dönük akıtılır
                    (replay-start/end arasında) — sayfa açılınca kutu boş kalmaz
-  - /api/run-now → manuel tetikleme (GET/POST): interval beklemeden hemen
+  - /api/run-now → manuel tetikleme (POST): interval beklemeden hemen
                    verify_delivery.py --full koşar; sonuç SSE ile anında broadcast
   - /api/latest  → en son çalıştırmanın JSON özeti (P0/P1, SONUÇ, bütçe, vs.)
                    + tam references_online raporu (verified/total, by_source)
@@ -30,6 +30,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import urllib.parse
@@ -124,6 +125,8 @@ LATEST = {
     "z3_total": None,           # K8 Z3: toplam (passed + failed)
     "lean_ok": None,            # K9 Lean: stderr'deki [K9] PASS/FAIL (True/False/None=koşulmadı)
     "lean_detail": None,        # K9 Lean: [K9] satırındaki ayrıntı metni (varsa)
+    "lean_override": None,      # K9 --lean-only override: {requested, ok} (run JSON'undan)
+    "lean_source": None,        # K9 --lean-only kaynağı: "history"/"override"/None
     "layers": None,             # K0-K17 per-katman PASS/FAIL/SKIP (JSON'dan; dashboard "K1-K7" rozeti)
     "lineage_summary": None,    # soy hattı özeti: {ok, count, current_note, current_hash_prefix}
     "lineage_ok": None,          # skaler trend alanı (True/False/None)
@@ -149,7 +152,9 @@ HISTORY_PATH = None             # main()'de set edilir; JSONL trend dosyası
 HISTORY_MAX = 100               # disk'te tutulacak en son run sayısı
 RUNS_DIR = None                 # main()'de set edilir; run logları (stdout+stderr) dizini
 RUN_LOG_MAX = 20                 # disk'te tutulacak + replay edilecek en son run sayısı
+SSE_POLL_TIMEOUT = 15            # SSE q.get(timeout=...) — keepalive periyodu (saniye)
 REFS_TREND_PATH = None           # main()'de set edilir; refs-trend.json yolu
+OVERRIDE_TREND_PATH = None       # main()'de set edilir; override-trend.json yolu
 # Matris doc'u tek kaynaktır. Sunucu TCC-safe mirror'dan koştuğunda (launchd
 # GUI agent'ı repo'yu okuyamaz) doc kopyası preview mirror'a senkronlanır
 # (sync_verify_mirror.sh) ve ROOT'un yanına düşer; yerel dev/test ise repo
@@ -163,10 +168,26 @@ HISTORY_KEYS = ("ts", "verdict", "p0", "p1", "duration_s", "duration_pct_warn", 
                 "pdf_pages", "ref_count", "raw_sha256", "stripped_sha256",
                 "exit_code", "refs_verified", "refs_total", "refs_mismatch",
                 "refs_by_source", "hook_env", "z3_passed", "z3_failed",
-                "z3_total", "lean_ok", "lean_detail", "cli_override_count",
+                "z3_total", "lean_ok", "lean_detail", "lean_override",
+                "lean_source", "cli_override_count",
                 "lineage_ok", "lineage_count", "history_sidecar_sha256",
                 "findings", "audit_refs_trend", "pattern_drift", "pattern_drift_detail",
                 "flaky_count", "deterministic_count")
+
+# This is deliberately narrower than HISTORY_KEYS: /api/history is consumed by
+# the dashboard trend renderers, while the full set remains the on-disk/SSE
+# contract. Keep sensitive/verbose run metadata out of the public trend payload.
+HISTORY_DASHBOARD_KEYS = (
+    "ts", "verdict", "p0", "p1", "duration_s", "budget_usd", "budget_limit",
+    "budget_method", "refs_verified", "refs_total", "refs_mismatch", "refs_by_source",
+    "hook_env", "z3_passed", "z3_failed", "z3_total", "lean_ok", "lean_detail",
+    "cli_override_count",
+)
+
+
+def _project_history_record(record):
+    """Return only fields rendered by the dashboard's history consumers."""
+    return {key: record[key] for key in HISTORY_DASHBOARD_KEYS if key in record}
 
 
 def _read_hook_env_matrix():
@@ -235,10 +256,30 @@ def build_hook_env_matrix(observed):
     return {"verdict": "DRIFT" if drift else "OK", "tools": tools}
 
 
+def _public_snapshot(latest):
+    """LATEST'in SSE ve /api/latest için ortak, sınırlı görünümünü üret.
+
+    Tam stdout/stderr yerine dashboard'un gösterdiği kuyrukları taşır. Türetilen
+    alanlar burada hesaplandığı için SSE tüketicisi her olayda /api/latest'e
+    tekrar başvurmaz.
+    """
+    snapshot = dict(latest)
+    snapshot["hook_env_matrix"] = build_hook_env_matrix(
+        snapshot.get("hook_env"))
+    stdout = snapshot.get("stdout") or ""
+    stderr = snapshot.get("stderr") or ""
+    snapshot["stdout_short"] = "\n".join(stdout.splitlines()[-50:])
+    snapshot["stderr_short"] = "\n".join(stderr.splitlines()[-20:])
+    snapshot.pop("stdout", None)
+    snapshot.pop("stderr", None)
+    return snapshot
+
+
 def snapshot_dict():
-    """LATEST'ten SSE/broadcast/history için ortak snapshot alanlarını al."""
+    """LATEST'ten dashboard/SSE için tam, taşınabilir snapshot üret."""
     with LOCK:
-        return {k: LATEST[k] for k in HISTORY_KEYS}
+        latest = dict(LATEST)
+    return _public_snapshot(latest)
 
 
 # Durum panosu ikonları (CI consolidate_summary.py ile aynı).
@@ -299,6 +340,33 @@ def _compute_status_board():
     return " · ".join(f"{label} {_STATUS_ICONS.get(ok, '❓')}" for label, ok in parts)
 
 
+def _write_atomic(path, data, keep_tmp=False):
+    """Atomik dosya yazımı (sync_verify_mirror.sh sync_one deseninin ikizi):
+    tmp hedef dizininde BENZERSİZ adla üretilir (mkstemp), yazılır, sonra
+    rename edilir — eşzamanlı okuyucu asla yarım (torn) dosya görmez.
+    Yazım başarısız olursa tmp silinir ve hedef ESKİ içeriğiyle kalır.
+    Sabit `<hedef>.tmp` adı yerine unique ad: iki yazıcı çakışırsa yarı-
+    yazılmış içeriği hedefe taşıma yarışı imkânsız olur.
+
+    keep_tmp=True: kullanılan tmp adını döndürür (rename sonrası artık yok;
+    test sözleşmesi — tmp adlarının çağrı başına benzersizliğini pinler).
+    """
+    directory = os.path.dirname(os.path.abspath(path)) or "."
+    fd, tmp = tempfile.mkstemp(dir=directory,
+                               prefix=os.path.basename(path) + ".tmp.")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(data)
+        os.replace(tmp, path)  # atomik: yarı yazılmış dosya asla okunmaz
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+    return tmp if keep_tmp else None
+
+
 def persist_history(rec):
     """Bir run kaydını JSONL dosyasına append et; HISTORY_MAX ile sınırla.
 
@@ -324,17 +392,10 @@ def persist_history(rec):
         if len(lines) > HISTORY_MAX:
             lines = lines[-HISTORY_MAX:]
         content = "\n".join(lines) + "\n"
-        tmp = HISTORY_PATH + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            f.write(content)
-        os.replace(tmp, HISTORY_PATH)  # atomik: yarı yazılmış dosya asla okunmaz
+        _write_atomic(HISTORY_PATH, content)
         # Yanına .sha256 sidecar'ı yaz (K15 doğrulaması + reproducibility).
         digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
-        sidecar = HISTORY_PATH + ".sha256"
-        stmp = sidecar + ".tmp"
-        with open(stmp, "w", encoding="utf-8") as f:
-            f.write(f"{digest}  history.jsonl\n")
-        os.replace(stmp, sidecar)  # atomik: yarı yazılmış sidecar asla okunmaz
+        _write_atomic(HISTORY_PATH + ".sha256", f"{digest}  history.jsonl\n")
         # LATEST'a sidecar hash'ini yaz (dashboard /api/latest-visible).
         LATEST["history_sidecar_sha256"] = digest
     except OSError as e:
@@ -424,10 +485,7 @@ def persist_run_log(rec):
         os.makedirs(RUNS_DIR, exist_ok=True)
         safe = rec["ts"].replace(":", "").replace("+", "").replace(".", "")
         path = os.path.join(RUNS_DIR, f"run-{safe}.json")
-        tmp = path + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(rec, f, ensure_ascii=False)
-        os.replace(tmp, path)  # atomik: yarı yazılmış log asla okunmaz
+        _write_atomic(path, json.dumps(rec, ensure_ascii=False))
         _prune_run_logs()
     except OSError as e:
         sys.stderr.write(f"[runs] yazılamadı: {e}\n")
@@ -797,10 +855,7 @@ def _write_override_report(verify_dir, report):
         logs_dir = os.path.join(verify_dir, "logs")
         os.makedirs(logs_dir, exist_ok=True)
         path = os.path.join(logs_dir, "OVERRIDE_RAPORU.json")
-        tmp = path + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(report, f, ensure_ascii=False, indent=2)
-        os.replace(tmp, path)  # atomik: yarı yazılmış rapor asla okunmaz
+        _write_atomic(path, json.dumps(report, ensure_ascii=False, indent=2))
     except OSError as e:
         sys.stderr.write(f"[override] OVERRIDE_RAPORU.json yazılamadı: {e}\n")
         sys.stderr.flush()
@@ -1056,6 +1111,8 @@ def _finalize_run(stdout, stderr, rc, duration, data, verify_dir=None):
             # K9 Lean: son run'un gerçek sonucu (stderr [K9] satırından)
             "lean_ok": lean_ok,
             "lean_detail": lean_detail,
+            "lean_override": data.get("lean_override"),
+            "lean_source": data.get("lean_source"),
             # Soy hattı özeti: son nesil hash + toplam nesil (dashboard)
             "lineage_summary": lineage_summary,
             # skaler trend alanları (history.jsonl trend grafiği için)
@@ -1125,7 +1182,10 @@ def _finalize_run(stdout, stderr, rc, duration, data, verify_dir=None):
         rec["lineage_summary"] = LATEST["lineage_summary"]
         rec["status_board"] = LATEST["status_board"]
         rec["precommit_hooks"] = LATEST["precommit_hooks"]
-        snapshot = json.dumps(rec)
+        # SSE snapshot'ı /api/latest ile aynı türetilmiş alanları taşır;
+        # stdout/stderr'in tamamı yalnızca run logunda tutulur.
+        snapshot = json.dumps(_public_snapshot(LATEST),
+                              ensure_ascii=False, separators=(",", ":"))
         for q in SSE_CLIENTS:
             try:
                 q.put(snapshot)
@@ -1168,6 +1228,8 @@ def _route(path):
         return "sw"
     if p in ("/", "/index.html", "/preview.html"):
         return "preview"
+    if p == "/preview.js":
+        return "preview_js"
     if p == "/guide.html":
         return "guide"
     if p == "/api/latest":
@@ -1182,6 +1244,8 @@ def _route(path):
         return "history"
     if p == "/api/refs-trend":
         return "refs_trend"
+    if p == "/api/override-trend":
+        return "override_trend"
     if p == "/api/run-history":
         return "run_history"
     if p.startswith("/api/run-stdout"):
@@ -1217,6 +1281,18 @@ class Handler(BaseHTTPRequestHandler):
         out = body.encode("utf-8") if isinstance(body, str) else body
         self.wfile.write(out)
 
+    def _reject_method(self):
+        """State-changing uçlar GET ile tetiklenemez: 405 + Allow: POST.
+
+        /api/run-now bir verify run'ı başlatır; GET üzerinden tetikleme
+        (tarayıcı prefetch, crawler, önbellek katmanı) istenmeyen run'lar
+        açar. Tetikleme sözleşmesi POST'tur; diğer metodlar 405 alır.
+        """
+        status, payload = api_error(405, "method not allowed")
+        self._send(status, json.dumps(payload),
+                   content_type="application/json; charset=utf-8",
+                   extra_headers={"Allow": "POST"})
+
     def do_GET(self):
         # Query string'li istekler (cache-buster ?_t= / ?v=) da aynı rotaya
         # düşer — bkz. _route().
@@ -1227,18 +1303,22 @@ class Handler(BaseHTTPRequestHandler):
             self.serve_preview()
         elif route == "guide":
             self.serve_guide()
+        elif route == "preview_js":
+            self.serve_preview_js()
         elif route == "latest":
             self.serve_latest()
         elif route == "sse":
             self.serve_sse()
         elif route == "run_now":
-            self.trigger_run_now()
+            self._reject_method()
         elif route == "run_stream":
             self.serve_run_stream()
         elif route == "history":
             self.serve_history()
         elif route == "refs_trend":
             self.serve_refs_trend()
+        elif route == "override_trend":
+            self.serve_override_trend()
         elif route == "run_history":
             self.serve_run_history()
         elif route == "run_stdout":
@@ -1368,7 +1448,7 @@ class Handler(BaseHTTPRequestHandler):
             self._replay_runs(replay_records)
             while True:
                 try:
-                    msg = q.get(timeout=15)
+                    msg = q.get(timeout=SSE_POLL_TIMEOUT)
                     self.wfile.write(f"event: {json.loads(msg)['stream']}\ndata: {msg}\n\n".encode())
                     self.wfile.flush()
                 except queue.Empty:
@@ -1384,9 +1464,10 @@ class Handler(BaseHTTPRequestHandler):
                     pass
 
     def serve_history(self):
-        """JSONL'daki son run'ları JSON array olarak döndür (trend grafiği için)."""
-        data = load_history()
-        self._send(200, json.dumps(data, ensure_ascii=False),
+        """Return the dashboard projection of the recent history rows."""
+        data = [_project_history_record(record) for record in load_history()
+                if isinstance(record, dict)]
+        self._send(200, json.dumps(data, ensure_ascii=False, separators=(",", ":")),
                    content_type="application/json; charset=utf-8")
 
     def serve_refs_trend(self):
@@ -1401,6 +1482,23 @@ class Handler(BaseHTTPRequestHandler):
                 data = json.load(f)
         except (json.JSONDecodeError, OSError):
             self._send(500, json.dumps({"error": "refs trend unavailable"}),
+                       content_type="application/json; charset=utf-8")
+            return
+        self._send(200, json.dumps(data, ensure_ascii=False),
+                   content_type="application/json; charset=utf-8")
+
+    def serve_override_trend(self):
+        """override-trend.json'u compact JSON olarak döndür (CLI override
+        zaman serisi — override_trend.py üreticisinin çıktısı)."""
+        if not OVERRIDE_TREND_PATH or not os.path.isfile(OVERRIDE_TREND_PATH):
+            self._send(200, json.dumps({"rows": []}),
+                       content_type="application/json; charset=utf-8")
+            return
+        try:
+            with open(OVERRIDE_TREND_PATH, encoding="utf-8") as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            self._send(500, json.dumps({"error": "override trend unavailable"}),
                        content_type="application/json; charset=utf-8")
             return
         self._send(200, json.dumps(data, ensure_ascii=False),
@@ -1457,64 +1555,22 @@ class Handler(BaseHTTPRequestHandler):
                 "ts": rec.get("ts"),
                 "stdout": rec.get("stdout", ""),
                 "stderr": rec.get("stderr", ""),
-            }, ensure_ascii=False),
+            }, ensure_ascii=False, separators=(",", ":")),
                        content_type="application/json; charset=utf-8")
         except (OSError, json.JSONDecodeError) as e:
             self._send(500, json.dumps({"error": str(e)}),
                        content_type="application/json; charset=utf-8")
-        """Manuel tetikleme: interval beklemeden hemen verify koşar.
-
-        Arka plan thread'inde çalışır, istek anında döner; sonuç hazır
-        olunca run_verify içindeki broadcast ile SSE client'larına düşer.
-        Zaten bir verify koşuyorsa 409 döner (çakışma yok).
-
-        Query parametreleri (GET/POST):
-          budget=25.0        → --budget 25.0 (bütçe limitini CLI ile override et;
-                               CLI override kaydı + sarı vurgu + VERSION JSON)
-          budget_method=X    → --budget-method X (universal|weighted|both)
-        Böylece override senaryosu canlı akışta test edilebilir.
-        """
-        ts = datetime.now(timezone.utc).isoformat()
-        parsed = urllib.parse.urlparse(self.path)
-        qs = urllib.parse.parse_qs(parsed.query)
-
-        budget_usd = None
-        budget_method = None
-        if qs.get("budget"):
-            try:
-                budget_usd = float(qs["budget"][0])
-            except ValueError:
-                budget_usd = None
-        if qs.get("budget_method") and qs["budget_method"][0] in \
-                ("universal", "weighted", "both"):
-            budget_method = qs["budget_method"][0]
-
-        if not VERIFY_BUSY.acquire(blocking=False):
-            self._send(409,
-                       json.dumps({"status": "already_running", "ts": ts,
-                                   "note": "bir verify zaten koşuyor"}),
-                       content_type="application/json; charset=utf-8")
-            return
-        VERIFY_BUSY.release()  # thread acquire etsin; kilit tutma
-        t = threading.Thread(target=run_verify,
-                             args=(VERIFY_DIR,),
-                             kwargs={"budget_usd": budget_usd,
-                                     "budget_method": budget_method},
-                             daemon=True, name="run-now")
-        t.start()
-        note = ("verify başladı; sonuç /api/run (SSE) ile anında yayınlanacak"
-                + (f" (override: budget={budget_usd}"
-                   if budget_usd is not None else "")
-                + (f", method={budget_method}" if budget_method is not None
-                   else "") + (")" if budget_usd is not None else ""))
-        self._send(200,
-                   json.dumps({"status": "started", "ts": ts,
-                               "budget_override": budget_usd,
-                               "budget_method_override": budget_method,
-                               "note": note}),
-                   content_type="application/json; charset=utf-8")
 
     def serve_preview(self):
+        """preview.html + build damgası (window.BUILD_TS).
+
+        JS preview.html'dan ayrılıp preview.js'e taşındı (düzenlenebilirlik +
+        sayfa küçüldü); cache-buster damgası artık her istekte <script
+        data-build-ts> yer tutucusuna enjekte edilir (inline <script>
+        aramaz). Eski bir preview kopyası (henüz senkronize edilmemiş mirror)
+        yer tutucuyu içermiyorsa damga enjekte edilmez — istemci Date.now()
+        fallback'ine düşer (davranış aynı).
+        """
         preview_path = os.path.join(PREVIEW_DIR, "preview.html")
         with open(preview_path, encoding="utf-8") as f:
             html = f.read()
@@ -1524,10 +1580,26 @@ class Handler(BaseHTTPRequestHandler):
         except OSError:
             ts = "0"
         html = html.replace(
-            "<script>",
-            f"<script>window.BUILD_TS={ts};",
+            '<script data-build-ts></script>',
+            f'<script>window.BUILD_TS={ts};</script>',
             1)
         self._send(200, html, content_type="text/html; charset=utf-8")
+
+    def serve_preview_js(self):
+        """preview.js — dashboard JS (preview.html'den ayrılmış dış dosya).
+
+        preview.html ile aynı dizinde (PREVIEW_DIR) durur; mirror'a
+        update_preview.sh/sync_verify_mirror.sh taşır. Kaynak yoksa 404
+        (fail-closed: JS'siz sayfa boş dashboard üretir — sessiz geçme).
+        """
+        path = os.path.join(PREVIEW_DIR, "preview.js")
+        if not os.path.isfile(path):
+            self._send(404, "404 — preview.js mirror'da yok "
+                             "(bash update_preview.sh --force)")
+            return
+        with open(path, encoding="utf-8") as f:
+            js = f.read()
+        self._send(200, js, content_type="application/javascript; charset=utf-8")
 
     def serve_sw(self):
         """Service worker — Freebuff Electron webview cache bypass.
@@ -1563,16 +1635,8 @@ class Handler(BaseHTTPRequestHandler):
         self._send(200, html, content_type="text/html; charset=utf-8")
 
     def serve_latest(self):
-        with LOCK:
-            snapshot = dict(LATEST)
-        # stdout/stderr uzun olabilir; /api/latest için kırpılmış hali.
-        snapshot["hook_env_matrix"] = build_hook_env_matrix(
-            snapshot.get("hook_env"))
-        snapshot["stdout_short"] = "\n".join(snapshot["stdout"].splitlines()[-50:])
-        snapshot["stderr_short"] = "\n".join(snapshot["stderr"].splitlines()[-20:])
-        snapshot.pop("stdout", None)
-        snapshot.pop("stderr", None)
-        self._send(200, json.dumps(snapshot, separators=(",", ":")),
+        self._send(200, json.dumps(snapshot_dict(), ensure_ascii=False,
+                                   separators=(",", ":")),
                    content_type="application/json; charset=utf-8")
 
     def serve_sse(self):
@@ -1588,16 +1652,9 @@ class Handler(BaseHTTPRequestHandler):
         q = queue.Queue(maxsize=64)
         with LOCK:
             SSE_CLIENTS.append(q)
-            # Bağlantı anında mevcut snapshot'ı gönder
-            # (snapshot_dict() çağrılmaz: LOCK zaten tutuluyor, reentrant değil)
-            snapshot = json.dumps({k: LATEST[k] for k in HISTORY_KEYS} |
-                                  {"cli_overrides": LATEST["cli_overrides"]} |
-                                  {"layers": LATEST["layers"]} |
-                                  {"lineage_summary": LATEST["lineage_summary"]} |
-                                  {"status_board": LATEST["status_board"]} |
-                                  {"precommit_hooks": LATEST["precommit_hooks"]} |
-                                  {"hook_env_matrix": build_hook_env_matrix(
-                                      LATEST.get("hook_env"))})
+            # Bağlantı anında /api/latest ile aynı türetilmiş alanları gönder.
+            snapshot = json.dumps(_public_snapshot(LATEST),
+                                  ensure_ascii=False, separators=(",", ":"))
         try:
             self.wfile.write(f"event: snapshot\ndata: {snapshot}\n\n".encode())
             self.wfile.flush()
@@ -1605,7 +1662,7 @@ class Handler(BaseHTTPRequestHandler):
             last_keep = time.monotonic()
             while True:
                 try:
-                    msg = q.get(timeout=15)
+                    msg = q.get(timeout=SSE_POLL_TIMEOUT)
                     self.wfile.write(f"event: update\ndata: {msg}\n\n".encode())
                     self.wfile.flush()
                 except queue.Empty:
@@ -1682,6 +1739,15 @@ def main():
     if not os.path.isfile(_rt_candidate):
         _rt_candidate = os.path.join(args.preview_dir, "refs-trend.json")
     REFS_TREND_PATH = _rt_candidate if os.path.isfile(_rt_candidate) else None
+
+    # override-trend.json: CI artifact'ı (override-trend job'u → repo kökünde
+    # override-trend/override-trend.json); yerelde preview-dir'de de olabilir.
+    _ot_candidate = os.path.join(REPO_ROOT, "override-trend", "override-trend.json")
+    if not os.path.isfile(_ot_candidate):
+        _ot_candidate = os.path.join(args.preview_dir, "override-trend", "override-trend.json")
+    if not os.path.isfile(_ot_candidate):
+        _ot_candidate = os.path.join(args.preview_dir, "override-trend.json")
+    OVERRIDE_TREND_PATH = _ot_candidate if os.path.isfile(_ot_candidate) else None
 
     if not os.path.isfile(os.path.join(PREVIEW_DIR, "preview.html")):
         print(f"UYARI: {PREVIEW_DIR}/preview.html bulunamadı; "

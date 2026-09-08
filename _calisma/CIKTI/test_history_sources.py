@@ -27,7 +27,10 @@ class HistorySourceTests(unittest.TestCase):
             ps.RUNS_DIR, ps.HISTORY_PATH = old_runs, old_path
 
     def test_dashboard_contains_source_badge_contract(self):
-        html = (pathlib.Path(__file__).resolve().parent / "preview.html").read_text()
+        src_dir = pathlib.Path(__file__).resolve().parent
+        # HTML işaretleme (CSS) + dış JS (preview.js) — kod taşınmıştır.
+        html = (src_dir / "preview.html").read_text() + "\n" \
+            + (src_dir / "preview.js").read_text()
         self.assertIn(".source-badge.smoke", html)
         self.assertIn(".source-badge.daemon", html)
         self.assertIn('r.source || "daemon"', html)

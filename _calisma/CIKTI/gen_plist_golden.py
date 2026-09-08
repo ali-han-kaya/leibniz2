@@ -41,10 +41,17 @@ CANONICAL_HOME = "/Users/ci"
 
 
 def run_render(render_home):
-    """update_preview.sh --plist-force <render_home> çalıştır."""
+    """update_preview.sh --plist-force <render_home> çalıştır (hermetik).
+
+    HOME render_home'a sabitlenir: PLIST_TMPL_DIR $HOME'ten türetilir, bu
+    yüzden pin'siz bir render makine-yerel önbellek şablonu okuyabilir
+    (golden'ın commit'li şablondan üretildiği garanti edilmez). Hermetik
+    seed: fresh HOME → yerleşik şablondan taze seed → commit'li tek kaynak.
+    """
+    env = dict(os.environ, HOME=render_home)
     r = subprocess.run(
         ["bash", UPDATE_PREVIEW, "--plist-force", render_home],
-        capture_output=True, text=True, timeout=120)
+        capture_output=True, text=True, timeout=120, env=env)
     return r.returncode, r.stdout + r.stderr
 
 

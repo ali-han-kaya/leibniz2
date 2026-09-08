@@ -18,6 +18,15 @@ import unittest
 
 SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
 PREVIEW_HTML = SCRIPT_DIR / "preview.html"
+# Dashboard JS, preview.html'dan ayrılıp preview.js'e taşındı (Candidate 3).
+# Drift guard'ları "dashboard ön yüz kaynağı"nı (HTML işaretleme + JS) tek
+# metin olarak tarar — fonksiyon/const/string nerede yaşarsa yaşasın yakalanır.
+PREVIEW_JS = SCRIPT_DIR / "preview.js"
+
+
+def _dashboard_src():
+    return (PREVIEW_HTML.read_text(encoding="utf-8") + "\n"
+            + PREVIEW_JS.read_text(encoding="utf-8"))
 
 
 def config_sync_badge(s):
@@ -66,29 +75,29 @@ class TestHtmlSync(unittest.TestCase):
     """preview.html'de panel + rozet fonksiyonu var; JS, Python'la aynı doku."""
 
     def test_js_function_present(self):
-        html = PREVIEW_HTML.read_text(encoding="utf-8")
+        html = _dashboard_src()
         self.assertIn("function configSyncBadge(s)", html)
         self.assertIn("function renderConfigSync(s)", html)
 
     def test_panel_elements_present(self):
-        html = PREVIEW_HTML.read_text(encoding="utf-8")
+        html = _dashboard_src()
         self.assertIn('id="config-sync-badge"', html)
         self.assertIn('id="config-sync-body"', html)
         self.assertIn('id="cs-ts"', html)
 
     def test_apply_snapshot_wired(self):
-        html = PREVIEW_HTML.read_text(encoding="utf-8")
+        html = _dashboard_src()
         self.assertIn("renderConfigSync(d.config_sync)", html)
 
     def test_js_uses_same_text_shapes(self):
-        html = PREVIEW_HTML.read_text(encoding="utf-8")
+        html = _dashboard_src()
         self.assertIn('"Schema Sync: veri yok"', html)
         self.assertIn('"✗ Schema Sync: "', html)
         self.assertIn('"✓ Schema Sync: "', html)
         self.assertIn("s.verified || 0) + \"/\" + (s.total || 0)", html)
 
     def test_badge_class_names_match(self):
-        html = PREVIEW_HTML.read_text(encoding="utf-8")
+        html = _dashboard_src()
         # Rozet cls değerleri CSS'te var olan sınıflar (unknown/err/ok)
         for cls_name in ("badge unknown", "badge err", "badge ok"):
             self.assertIn(cls_name, html)

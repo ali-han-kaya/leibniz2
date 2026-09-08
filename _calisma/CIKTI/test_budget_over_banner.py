@@ -23,6 +23,13 @@ import unittest
 
 SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
 PREVIEW_HTML = SCRIPT_DIR / "preview.html"
+# Dashboard JS, preview.html'dan ayrılıp preview.js'e taşındı (Candidate 3).
+PREVIEW_JS = SCRIPT_DIR / "preview.js"
+
+
+def _dashboard_src():
+    return (PREVIEW_HTML.read_text(encoding="utf-8") + "\n"
+            + PREVIEW_JS.read_text(encoding="utf-8"))
 
 BANNER_ELEMENT_RE = re.compile(
     r'<div id="budget-over-banner" class="err" role="alert"')
@@ -33,7 +40,7 @@ class TestBudgetOverBannerElement(unittest.TestCase):
     """Element ve sözleşmesi."""
 
     def setUp(self):
-        self.html = PREVIEW_HTML.read_text(encoding="utf-8")
+        self.html = _dashboard_src()
 
     def test_banner_element_present_above_trend_card(self):
         # Element trend başlığından SONRA, trend kartından ÖNCE olmalı.
@@ -86,7 +93,7 @@ class TestBudgetOverBannerLogic(unittest.TestCase):
     """updateBudgetOverBanner() fonksiyon sözleşmesi."""
 
     def setUp(self):
-        self.html = PREVIEW_HTML.read_text(encoding="utf-8")
+        self.html = _dashboard_src()
         m = FUNC_RE.search(self.html)
         self.assertIsNotNone(m, "updateBudgetOverBanner bulunamadı")
         # Fonksiyon gövdesi: açılış brace'inden kapanışa (sütun 0'da '}').
@@ -148,7 +155,7 @@ class TestTrendTooltipBudgetNote(unittest.TestCase):
     """showTrendTip bütçe satırı: limit altı/üstü durumu (dinamik BUDGET_LIMIT)."""
 
     def setUp(self):
-        self.html = PREVIEW_HTML.read_text(encoding="utf-8")
+        self.html = _dashboard_src()
 
     def test_budget_limit_note_function_exists(self):
         m = re.search(r"function budgetLimitNote\(v, lim\)\s*\{.*?\n\}",

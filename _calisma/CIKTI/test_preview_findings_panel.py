@@ -27,8 +27,11 @@ class K12FindingsPanelContractTests(unittest.TestCase):
             ps.LATEST = old
 
     def test_dashboard_panel_already_renders_p0_by_id(self):
+        # JS preview.html'dan ayrıldı (preview.js) — ön yüz kaynağı birlikte taranır.
         with open(os.path.join(HERE, "preview.html"), encoding="utf-8") as stream:
             html = stream.read()
+        with open(os.path.join(HERE, "preview.js"), encoding="utf-8") as stream:
+            html += "\n" + stream.read()
         self.assertIn('id="findings-panel"', html)
         self.assertIn('f.id || f.label', html)
         self.assertIn('f.priority === "P0"', html)

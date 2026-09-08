@@ -98,9 +98,12 @@ def trigger_override_run(port, verify_dir,
     else:
         return False, "ilk run bitmedi (exit_code hiç görünmedi)"
     # 2) Override run'ı tetikle (--budget 1 + method universal).
+    # /api/run-now POST-only'dur (GET → 405 + Allow: POST).
     try:
         with urllib.request.urlopen(
-                base + "/api/run-now?budget=1&budget_method=universal",
+                urllib.request.Request(
+                    base + "/api/run-now?budget=1&budget_method=universal",
+                    method="POST"),
                 timeout=10) as resp:
             body = json.loads(resp.read().decode("utf-8"))
     except Exception as e:
@@ -211,7 +214,9 @@ def run_now_probe(port, timeout=10):
     """
     try:
         with urllib.request.urlopen(
-                f"http://127.0.0.1:{port}/api/run-now", timeout=timeout) as r:
+                urllib.request.Request(
+                    f"http://127.0.0.1:{port}/api/run-now", method="POST"),
+                timeout=timeout) as r:
             status = r.status
             try:
                 body = json.loads(r.read().decode("utf-8"))
@@ -304,6 +309,11 @@ def main():
         preview_dir = os.path.join(tmp, "preview")
         os.makedirs(preview_dir, exist_ok=True)
         shutil.copy2(args.preview_src, os.path.join(preview_dir, "preview.html"))
+        # preview.html artık dashboard JS'ini dış dosyadan (preview.js) yüklüyor;
+        # kopyasız /preview.js 404 döner (gerçekçi smoke için aynı dizine taşı).
+        _js = os.path.splitext(args.preview_src)[0] + ".js"
+        if os.path.isfile(_js):
+            shutil.copy2(_js, os.path.join(preview_dir, "preview.js"))
         if not os.path.isfile(os.path.join(verify_dir, "verify_delivery.py")):
             verify_dir = make_stub_dir(HERE, verify_dir)
 

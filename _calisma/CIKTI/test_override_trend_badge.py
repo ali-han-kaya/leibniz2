@@ -19,6 +19,13 @@ import unittest
 
 SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
 PREVIEW_HTML = SCRIPT_DIR / "preview.html"
+# Dashboard JS, preview.html'dan ayrılıp preview.js'e taşındı (Candidate 3).
+PREVIEW_JS = SCRIPT_DIR / "preview.js"
+
+
+def _dashboard_src():
+    return (PREVIEW_HTML.read_text(encoding="utf-8") + "\n"
+            + PREVIEW_JS.read_text(encoding="utf-8"))
 
 
 def override_trend_badge(rows):
@@ -78,7 +85,7 @@ class TestHtmlSync(unittest.TestCase):
     """preview.html'de panel + rozet fonksiyonu var; JS, Python'la aynı doku."""
 
     def test_js_function_present(self):
-        html = PREVIEW_HTML.read_text(encoding="utf-8")
+        html = _dashboard_src()
         self.assertIn("const OVERRIDE_COLOR_RULES", html)
         self.assertIn("OVERRIDE_COLOR_RULES.warning.color", html)
         self.assertIn("OVERRIDE_COLOR_RULES.clean.color", html)
@@ -86,23 +93,23 @@ class TestHtmlSync(unittest.TestCase):
         self.assertIn("function renderOverrideTrend(rows)", html)
 
     def test_panel_elements_present(self):
-        html = PREVIEW_HTML.read_text(encoding="utf-8")
+        html = _dashboard_src()
         self.assertIn('id="ovr-trend-badge"', html)
         self.assertIn('id="ovr-trend"', html)
         self.assertIn('id="ovr-trend-legend"', html)
 
     def test_fetch_endpoint_wired(self):
-        html = PREVIEW_HTML.read_text(encoding="utf-8")
+        html = _dashboard_src()
         self.assertIn('fetch("/api/override-trend")', html)
 
     def test_legend_uses_canonical_rule_labels(self):
-        html = PREVIEW_HTML.read_text(encoding="utf-8")
+        html = _dashboard_src()
         self.assertIn("OVERRIDE_COLOR_RULES.warning.label", html)
         self.assertIn("OVERRIDE_COLOR_RULES.clean.label", html)
 
     def test_js_uses_same_text_shapes(self):
         # Rozet metin kalıpları iki dilde birebir (drift guard).
-        html = PREVIEW_HTML.read_text(encoding="utf-8")
+        html = _dashboard_src()
         for frag in ('"override: veri yok"', 'OVERRIDE_COLOR_RULES.clean.label',
                      '"⚠️ override VAR ("', "typeof r.warning === \"boolean\""):
             self.assertIn(frag, html, f"preview.html'de {frag!r} eksik")

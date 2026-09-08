@@ -13,12 +13,16 @@ stdlib `unittest` kullanır — ek bağımlılık yok. CI'da:
     python3 -m unittest discover -s _calisma/CIKTI -p "test_preview_server.py" -v
 """
 import hashlib
+import io
 import json
 import os
 import pathlib
+import queue
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -37,6 +41,31 @@ def _rec(ts, verdict="PASS", **kw):
 
 def _preview_html():
     return pathlib.Path(HERE, "preview.html").read_text(encoding="utf-8")
+
+
+def _preview_js():
+    """preview.html'dan ayrılmış dış dashboard JS (preview.js)."""
+    return pathlib.Path(HERE, "preview.js").read_text(encoding="utf-8")
+
+
+def _dashboard_src():
+    """Ön yüz kaynağı: HTML işaretleme + dış JS (Candidate 3 sonrası)."""
+    return _preview_html() + "\n" + _preview_js()
+
+
+def _capture_fake():
+    """_send çağrılarını (status, body, content_type) olarak toplayan sahte handler."""
+    class _Fake:
+        def __init__(self):
+            self.sent = []
+            self.headers = {}
+            self.path = "/"
+
+        def _send(self, status, body, content_type="text/plain; charset=utf-8",
+                  extra_headers=None):
+            self.sent.append((status, body, content_type))
+
+    return _Fake()
 
 
 class DurationPctWarnTests(unittest.TestCase):
@@ -615,7 +644,7 @@ class HookEnvTrendPlumbingTests(unittest.TestCase):
     """Hook env sürüm trendi (refs-trend deseni, zaman serisi) HTML kablosu."""
 
     def setUp(self):
-        self.html = _preview_html()
+        self.html = _dashboard_src()
 
     def test_trend_panel_section_exists(self):
         # refs-trend deseninde yeni bir SVG paneli olmalı (he-trend).
@@ -1365,6 +1394,9 @@ class TestRouteQueryParams(unittest.TestCase):
     def test_preview_with_query_ignored(self):
         self.assertEqual(ps._route("/preview.html?v=123"), "preview")
         self.assertEqual(ps._route("/"), "preview")
+        # Candidate 3: dashboard JS dış dosyada — kendi rotasını kullanır.
+        self.assertEqual(ps._route("/preview.js"), "preview_js")
+        self.assertEqual(ps._route("/preview.js?v=123"), "preview_js")
 
     def test_unknown_paths_are_none(self):
         self.assertIsNone(ps._route("/api/unknown"))
@@ -1533,13 +1565,15 @@ class TestServeHistoryTrendCompact(unittest.TestCase):
 
         return _FakeHandler()
 
-    def _serve(self, handler):
+    def _serve(self, handler, path=None):
         """Handler'ı çalıştır; ortak compact-JSON sözleşmesini denetle.
 
         Tüm kompakt JSON handler'ları: 200 + application/json + gövdede
         literal newline yok. (parsed, body) döner; testler içeriğe odaklanır.
         """
         fake = self._capture()
+        if path is not None:
+            fake.path = path
         handler(fake)
         status, body, ctype = fake.sent
         self.assertEqual(status, 200)
@@ -1557,6 +1591,35 @@ class TestServeHistoryTrendCompact(unittest.TestCase):
         rows, _ = self._serve(ps.Handler.serve_history)
         self.assertEqual([r["ts"] for r in rows],
                          ["2026-08-23T09:00:00Z", "2026-08-23T10:00:00Z"])
+
+    def test_serve_history_projects_dashboard_fields_only(self):
+        record = {
+            "ts": "2026-08-23T09:00:00Z", "verdict": "PASS", "p0": 0, "p1": 1,
+            "duration_s": 12.5, "budget_usd": 1.08, "budget_limit": 30.0,
+            "budget_method": "weighted",
+            "refs_verified": 61, "refs_total": 64, "refs_mismatch": 1,
+            "refs_by_source": {"crossref": 40, "sep": 21},
+            "hook_env": {"python": "3.12", "z3": "4.13"},
+            "z3_passed": 12, "z3_failed": 0, "z3_total": 12,
+            "lean_ok": True, "lean_detail": "ok", "cli_override_count": 0,
+            "stdout": "private output", "stderr": "private diagnostics",
+            "raw_sha256": "private hash", "findings": [{"priority": "P0"}],
+            "lineage_ok": True, "ref_count": 64, "source": "daemon",
+        }
+        with open(ps.HISTORY_PATH, "w", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+        rows, _ = self._serve(ps.Handler.serve_history)
+        self.assertEqual(rows, [{
+            "ts": "2026-08-23T09:00:00Z", "verdict": "PASS", "p0": 0, "p1": 1,
+            "duration_s": 12.5, "budget_usd": 1.08, "budget_limit": 30.0,
+            "budget_method": "weighted",
+            "refs_verified": 61, "refs_total": 64, "refs_mismatch": 1,
+            "refs_by_source": {"crossref": 40, "sep": 21},
+            "hook_env": {"python": "3.12", "z3": "4.13"},
+            "z3_passed": 12, "z3_failed": 0, "z3_total": 12,
+            "lean_ok": True, "lean_detail": "ok", "cli_override_count": 0,
+        }])
 
     def test_serve_refs_trend_compact_normalized_content(self):
         # Dosya indent'li yazılır; endpoint kompaktlaştırarak normalize eder
@@ -1651,6 +1714,335 @@ class TestServeHistoryTrendCompact(unittest.TestCase):
             self.assertIn("error", json.loads(body))
         finally:
             ps.RUNS_DIR = old
+
+    def test_serve_run_stdout_happy_path_compact(self):
+        """Geçerli run dosyası: {ts, stdout, stderr} kompakt JSON olarak döner.
+
+        run logundaki ek alanlar (exit_code vb.) yanıta sızmaz; stdout/stderr
+        yeni satırlarına rağmen gövdede literal newline yoktur (compact dump).
+        """
+        ts = "2026-01-02T03:04:05Z"
+        runs = os.path.join(self._tmp.name, "runs")
+        os.makedirs(runs)
+        rec = {"ts": ts, "verdict": "PASS", "exit_code": 0,
+               "stdout": "satır 1\nsatır 2", "stderr": "uyarı\n"}
+        with open(os.path.join(runs, "run-" +
+                               ts.replace(":", "").replace("+", "")
+                               .replace(".", "") + ".json"), "w",
+                  encoding="utf-8") as f:
+            json.dump(rec, f, ensure_ascii=False)
+        old = ps.RUNS_DIR
+        ps.RUNS_DIR = runs
+        try:
+            d, body = self._serve(ps.Handler.serve_run_stdout,
+                                  path="/api/run-stdout?ts=" + ts)
+            self.assertEqual(d, {"ts": ts,
+                                 "stdout": "satır 1\nsatır 2",
+                                 "stderr": "uyarı\n"})
+            # Kompakt ayrıştırıcılar: ", " / ": " boşluklu biçim yok.
+            self.assertNotIn(", ", body)
+            self.assertNotIn(": ", body)
+        finally:
+            ps.RUNS_DIR = old
+
+
+class ExternalScriptContractTests(unittest.TestCase):
+    """Candidate 3: dashboard JS preview.html'dan ayrılıp preview.js'e taşındı.
+
+    Bu sınıf ayrımın sözleşmesini sabitler:
+      1. preview.html artık inline script içermez (yalnızca dış preview.js +
+         boş BUILD_TS yer tutucusu) — kazara geri-inline etme drift'i yakalanır.
+      2. /preview.js sunucu tarafından servis edilir (do_GET rotası).
+      3. serve_preview, BUILD_TS damgasını hâlâ sayfaya enjekte eder (yer
+         tutucu üzerinden) — cache-buster bozulmaz.
+    """
+
+    def test_no_inline_script_blocks_left(self):
+        text = _preview_html()
+        # Inline içerikli <script> bloğu kalmamalı (yalnızca 2 dış/boş etiket).
+        self.assertEqual(text.count("<script"), 2)
+        self.assertNotIn("<script>", text)          # içerikli açılış etiketi yok
+        self.assertIn('<script src="preview.js"></script>', text)
+        self.assertIn('<script data-build-ts></script>', text)
+
+    def test_dashboard_js_is_external_file(self):
+        js = _preview_js()
+        self.assertIn("function colorizeLine(line)", js)
+        self.assertIn("function renderHookEnvTrend(rows)", js)
+        self.assertIn("navigator.serviceWorker.register('/sw.js'", js)
+
+    def _patch_preview_dir(self, value):
+        """PREVIEW_DIR yalnızca main()'de tanımlanır; test için module'a bağla."""
+        old = getattr(ps, "PREVIEW_DIR", None)
+        ps.PREVIEW_DIR = value
+        return old
+
+    def test_serve_preview_js_returns_javascript(self):
+        old_dir = self._patch_preview_dir(HERE)
+        try:
+            fake = _capture_fake()
+            ps.Handler.serve_preview_js(fake)
+            status, body, content_type = fake.sent[0]
+            self.assertEqual(status, 200)
+            self.assertIn("function colorizeLine(line)", body)
+            self.assertIn("application/javascript", content_type)
+        finally:
+            if old_dir is None:
+                del ps.PREVIEW_DIR
+            else:
+                ps.PREVIEW_DIR = old_dir
+
+    def test_serve_preview_js_404_when_missing(self):
+        old_dir = self._patch_preview_dir(
+            os.path.join(tempfile.gettempdir(), "preview-js-yok"))
+        try:
+            fake = _capture_fake()
+            ps.Handler.serve_preview_js(fake)
+            status, body, _ = fake.sent[0]
+            self.assertEqual(status, 404)
+        finally:
+            if old_dir is None:
+                del ps.PREVIEW_DIR
+            else:
+                ps.PREVIEW_DIR = old_dir
+
+    def test_serve_preview_injects_build_ts(self):
+        """serve_preview, <script data-build-ts> yer tutucusuna damga enjekte eder."""
+        old_dir = self._patch_preview_dir(HERE)
+        try:
+            fake = _capture_fake()
+            ps.Handler.serve_preview(fake)
+            status, body, content_type = fake.sent[0]
+            self.assertEqual(status, 200)
+            self.assertIn("text/html", content_type)
+            self.assertIn("window.BUILD_TS=", body)
+            self.assertNotIn("data-build-ts", body)   # yer tutucu enjekte edildi
+            self.assertIn('<script src="preview.js"></script>', body)
+        finally:
+            if old_dir is None:
+                del ps.PREVIEW_DIR
+            else:
+                ps.PREVIEW_DIR = old_dir
+
+
+class SSEHandlerThreadTests(unittest.TestCase):
+    """serve_sse / serve_run_stream: gerçek socket olmadan threaded test.
+
+    Yazılabilir sahte wfile (BytesIO arka uçlu) + gerçek queue.Queue
+    enjeksiyonu ile SSE döngüsü sürülür: handler arka plan thread'inde
+    koşar, test ana thread'de buffer'ı okur, mesajı doğrudan kuyruğa koyar
+    ve döngüden BrokenPipeError ile çıkar (client gitti). Keepalive
+    periyodu SSE_POLL_TIMEOUT ile kısaltılır (15s bekleme testi
+    yavaşlatmasın); kuyruk kayıt/çıkarma SSE_CLIENTS/STREAM_CLIENTS
+    üzerinden gözlemlenir.
+    """
+
+    def setUp(self):
+        self._saved = {}
+        self._patch("SSE_POLL_TIMEOUT", 0.05)
+        self._buf = io.BytesIO()
+        self._buf_lock = threading.Lock()
+        self._broken = threading.Event()
+        self._thread = None
+
+    def tearDown(self):
+        self._broken.set()          # döngüyü bitir (sonraki write patlar)
+        if self._thread:
+            self._thread.join(timeout=5)
+        for name, val in self._saved.items():
+            setattr(ps, name, val)
+
+    def _patch(self, name, value):
+        self._saved.setdefault(name, getattr(ps, name))
+        setattr(ps, name, value)
+
+    def _wfile(self):
+        outer = self
+
+        class _W:
+            def write(self, b):
+                with outer._buf_lock:
+                    if outer._broken.is_set():
+                        raise BrokenPipeError("client gone")
+                    outer._buf.write(b)
+
+            def flush(self):
+                pass
+
+        return _W()
+
+    def _fake_handler(self):
+        outer = self
+
+        class _H:
+            def __init__(self):
+                self.wfile = outer._wfile()
+                self.headers = {}
+                self.status = None
+
+            def send_response(self, code):
+                self.status = code
+
+            def send_header(self, key, value):
+                pass
+
+            def end_headers(self):
+                pass
+
+            def _replay_runs(self, records):
+                # serve_run_stream gerçek Handler metodunu çağırır; sahte
+                # handler'da gerçek implementasyonu bağla (replay formatı
+                # testin parçası).
+                ps.Handler._replay_runs(self, records)
+
+        return _H()
+
+    def _run(self, handler_method):
+        h = self._fake_handler()
+        t = threading.Thread(target=handler_method, args=(h,), daemon=True)
+        t.start()
+        self._thread = t
+        return h
+
+    def _wait_for(self, predicate, timeout=5.0):
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            with self._buf_lock:
+                if predicate(self._buf.getvalue()):
+                    return True
+            time.sleep(0.01)
+        return False
+
+    def _raw(self):
+        with self._buf_lock:
+            return self._buf.getvalue().decode("utf-8")
+
+    def _frames(self):
+        """Buffer'ı SSE frame'lerine ayrıştır: [(event, data), ...].
+
+        Data payload'ları compact JSON olduğundan literal newline yok;
+        '\n\n' bölmesi güvenli. Keepalive yorumu event/data'sız gelir.
+        """
+        frames = []
+        for block in self._raw().split("\n\n"):
+            if not block:
+                continue
+            ev = data = None
+            for line in block.splitlines():
+                if line.startswith("event: "):
+                    ev = line[len("event: "):]
+                elif line.startswith("data: "):
+                    data = line[len("data: "):]
+            frames.append((ev, data))
+        return frames
+
+    def test_sse_sends_initial_snapshot_and_registers_client(self):
+        self._patch("LATEST", {"ts": "2026-09-08T00:00:00Z", "verdict": "PASS",
+                               "p0": 0, "p1": 0, "stdout": "tam çıktı",
+                               "stderr": "", "hook_env": None,
+                               "cached": False})
+        self._run(ps.Handler.serve_sse)
+        self.assertTrue(self._wait_for(
+            lambda b: b"event: snapshot\ndata: " in b))
+        # Bağlantı anında tek client kayıtlı ve gerçek bir Queue.
+        self.assertEqual(len(ps.SSE_CLIENTS), 1)
+        self.assertIsInstance(ps.SSE_CLIENTS[0], queue.Queue)
+        # İlk snapshot: /api/latest ile aynı türetilmiş görünüm — tam stdout
+        # yok, stdout_short var.
+        ev, data = self._frames()[0]
+        self.assertEqual(ev, "snapshot")
+        snap = json.loads(data)
+        self.assertEqual(snap["verdict"], "PASS")
+        self.assertNotIn("stdout", snap)
+        self.assertIn("stdout_short", snap)
+        # Client gitti → döngü BrokenPipeError ile biter, kayıt silinir.
+        self._broken.set()
+        self._thread.join(timeout=5)
+        self.assertEqual(ps.SSE_CLIENTS, [])
+
+    def test_sse_broadcasts_injected_update_then_keepalive(self):
+        self._patch("LATEST", {"ts": "", "verdict": "INIT", "p0": 0, "p1": 0,
+                               "stdout": "", "stderr": "", "hook_env": None,
+                               "cached": False})
+        self._run(ps.Handler.serve_sse)
+        self.assertTrue(self._wait_for(
+            lambda b: b"event: snapshot\ndata: " in b))
+        # Broadcast simülasyonu: mesajı doğrudan kayıtlı kuyruğa koy.
+        ps.SSE_CLIENTS[0].put(json.dumps({"stream": "update",
+                                          "ts": "2026-09-08T00:01:00Z"},
+                                         separators=(",", ":"),
+                                         ensure_ascii=False))
+        self.assertTrue(self._wait_for(
+            lambda b: b"event: update\ndata: " in b))
+        # Kuyruk boşalınca keepalive yorumu gelir (0.05s poll ile hızlı).
+        self.assertTrue(self._wait_for(lambda b: b": keepalive\n\n" in b))
+        raw = self._raw()
+        self.assertLess(raw.index("event: update"), raw.index(": keepalive"))
+        self._broken.set()
+        self._thread.join(timeout=5)
+        self.assertEqual(ps.SSE_CLIENTS, [])
+
+    def test_run_stream_replays_last_run_then_serves_live_lines(self):
+        runs = tempfile.mkdtemp()
+        rec = _rec("2026-09-08T00:00:00Z", verdict="PASS", p0=0, p1=1,
+                   stdout="satır 1\nsatır 2", stderr="uyarı",
+                   budget_usd=1.08, duration_s=12.5)
+        with open(os.path.join(runs, "run-20260908T000000Z.json"), "w",
+                  encoding="utf-8") as f:
+            json.dump(rec, f, ensure_ascii=False)
+        self._patch("RUNS_DIR", runs)
+        self._patch("LATEST", {"ts": "2026-09-08T00:00:00Z", "verdict": "PASS",
+                               "p0": 0, "p1": 1, "stdout": "", "stderr": "",
+                               "hook_env": None, "cached": False})
+        self._run(ps.Handler.serve_run_stream)
+        self.assertTrue(self._wait_for(
+            lambda b: b"event: replay-end" in b))
+        self.assertEqual(len(ps.STREAM_CLIENTS), 1)
+        frames = self._frames()
+        names = [ev for ev, _ in frames]
+        # Sıra: info → replay-start → stderr satırı → stdout satırları →
+        # replay-end (tek run: first=true ve last=true).
+        self.assertEqual(names[0], "info")
+        self.assertEqual(names[1], "replay-start")
+        self.assertIn("replay-end", names)
+        start = json.loads(frames[1][1])
+        self.assertTrue(start["first"])
+        self.assertEqual(start["verdict"], "PASS")
+        # last=true işareti replay-start'ta değil, son run'ın replay-end'inde.
+        end = next(json.loads(d) for ev, d in frames if ev == "replay-end")
+        self.assertTrue(end["last"])
+        # Replay satırları replay:true taşır; stderr stdout'tan önce gelir.
+        lines = [json.loads(d) for ev, d in frames
+                 if ev in ("stderr", "stdout")]
+        self.assertEqual([l["stream"] for l in lines],
+                         ["stderr", "stdout", "stdout"])
+        self.assertTrue(all(l.get("replay") is True for l in lines))
+        # Canlı satır: kayıtlı kuyruğa koy; handler event adını stream
+        # alanından türetir ve replay'siz iletir.
+        ps.STREAM_CLIENTS[0].put(json.dumps(
+            {"stream": "stdout", "line": "canlı satır"},
+            separators=(",", ":"), ensure_ascii=False))
+        self.assertTrue(self._wait_for(
+            lambda b: "canlı satır" in b.decode("utf-8")))
+        live = [json.loads(d) for ev, d in self._frames()
+                if ev == "stdout"][-1]
+        self.assertNotIn("replay", live)
+        self.assertEqual(live["line"], "canlı satır")
+        self._broken.set()
+        self._thread.join(timeout=5)
+        self.assertEqual(ps.STREAM_CLIENTS, [])
+
+    def test_run_stream_keepalive_when_no_traffic(self):
+        self._patch("RUNS_DIR", None)   # replay yok: info + keepalive bekler
+        self._patch("LATEST", {"ts": "", "verdict": "INIT", "p0": 0, "p1": 0,
+                               "stdout": "", "stderr": "", "hook_env": None,
+                               "cached": False})
+        self._run(ps.Handler.serve_run_stream)
+        self.assertTrue(self._wait_for(lambda b: b"event: info" in b))
+        self.assertTrue(self._wait_for(lambda b: b": keepalive\n\n" in b))
+        self._broken.set()
+        self._thread.join(timeout=5)
+        self.assertEqual(ps.STREAM_CLIENTS, [])
 
 
 if __name__ == "__main__":

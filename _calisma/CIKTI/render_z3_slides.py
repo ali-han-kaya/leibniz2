@@ -119,6 +119,42 @@ def pdf_to_png(tool, pdf_path, png_path, dpi):
     return False
 
 
+def strip_png_metadata(png):
+    """ImageMagick PNG çıktısındaki zaman chunk'larını at (byte-determinizm).
+
+    convert/magick her PNG'ye üretim zamanı yazar (tIME + tEXt date:create) —
+    aynı girdi farklı zamanda farklı bayt üretir (test_z3_slide_reproducibility
+    bunu yakalar). Piksel verisi aynıdır; tIME + date:create/modify tEXt
+    chunk'ları atılınca çıktı byte-deterministik olur (qpdf metadata-strip ile
+    aynı felsefe). Diğer chunk'lar (IHDR/IDAT/IEND/…) korunur.
+    """
+    import struct
+    try:
+        data = png.read_bytes()
+    except OSError:
+        return
+    out = bytearray(data[:8])  # PNG imzası
+    i = 8
+    while i < len(data):
+        ln = struct.unpack(">I", data[i:i + 4])[0]
+        typ = data[i + 4:i + 8]
+        chunk = data[i:i + 12 + ln]
+        keep = True
+        if typ == b"tIME":
+            keep = False
+        elif typ == b"tEXt":
+            nul = data.find(b"\x00", i + 8, i + 8 + ln)
+            kw = data[i + 8:nul] if nul != -1 else b""
+            # date:create/modify (convert) + date:timestamp (magick 7):
+            # hepsi üretim zamanı yazar — at.
+            if kw in (b"date:create", b"date:modify", b"date:timestamp"):
+                keep = False
+        if keep:
+            out += chunk
+        i += 12 + ln
+    png.write_bytes(bytes(out))
+
+
 def check_sync():
     """THEOREMS ↔ symbolic_proof_z3.py record() ID'leri (fail-closed)."""
     if not Z3_SRC.is_file():
@@ -201,6 +237,8 @@ def main():
                 print(f"[{tid}] PNG DÖNÜŞÜM HATASI")
                 fail += 1
                 continue
+            # Zaman damgası chunk'larını at — aynı girdi her zaman aynı bayt.
+            strip_png_metadata(png)
         # şeffaf arka plan isteniyorsa pdftoppm/sips çıktısı zaten saydamdır;
         # convert çıktısı beyaz gelir — sips ile saydamlık eklenmez (yalnızca
         # beyaz istenirse olduğu gibi bırakılır).

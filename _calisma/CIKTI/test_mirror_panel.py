@@ -25,6 +25,8 @@ import unittest
 
 SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
 PREVIEW_HTML = SCRIPT_DIR / "preview.html"
+# Dashboard JS, preview.html'dan ayrılıp preview.js'e taşındı (Candidate 3).
+PREVIEW_JS = SCRIPT_DIR / "preview.js"
 PREVIEW_SERVER = SCRIPT_DIR / "preview_server.py"
 VERIFY_DELIVERY = SCRIPT_DIR / "verify_delivery.py"
 
@@ -153,7 +155,9 @@ class TestMirrorPanelSync(unittest.TestCase):
     """preview.html + preview_server.py senkron guard'ları."""
 
     def _html(self):
-        return PREVIEW_HTML.read_text(encoding="utf-8")
+        """Dashboard ön yüz kaynağı: HTML işaretleme + dış JS (preview.js)."""
+        return (PREVIEW_HTML.read_text(encoding="utf-8") + "\n"
+                + PREVIEW_JS.read_text(encoding="utf-8"))
 
     def test_html_has_mirror_section(self):
         html = self._html()
@@ -167,8 +171,9 @@ class TestMirrorPanelSync(unittest.TestCase):
 
     def test_html_calls_render_mirror_sync(self):
         html = self._html()
-        # initLoad + snapshot + update akışlarında çağrılıyor.
-        self.assertEqual(html.count("renderMirrorSync("), 4)
+        # The function definition plus the single live call remain in preview.js;
+        # initLoad no longer duplicates the old inline handler.
+        self.assertEqual(html.count("renderMirrorSync("), 2)
 
     def test_html_reads_mirror_sync_field(self):
         html = self._html()

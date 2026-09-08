@@ -42,7 +42,7 @@ import py_compile
 import sys
 import time
 
-REQUIRED_PREVIEW = ("preview_server.py", "_daemonize.py", "preview.html")
+REQUIRED_PREVIEW = ("preview_server.py", "_daemonize.py", "preview.html", "preview.js")
 REQUIRED_VERIFY = (
     "verify_delivery.py",
     "verify_delivery.config.json",
@@ -148,7 +148,7 @@ def probe(preview_dir, verify_dir, label, tmpl_dir):
     #    gelmek için yalnızca gerçek bayatlığı (saatlerce eski mirror) uyarır.
     if os.path.isfile(tmpl):
         tm_mtime = os.path.getmtime(tmpl)
-        for name in ("preview_server.py", "preview.html"):
+        for name in ("preview_server.py", "preview.html", "preview.js"):
             p = os.path.join(preview_dir, name)
             if (os.path.isfile(p)
                     and tm_mtime - os.path.getmtime(p) > AGE_WARN_SECONDS):

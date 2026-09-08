@@ -20,7 +20,11 @@ import subprocess
 import sys
 import time
 import unittest
-from playwright.sync_api import sync_playwright
+
+try:
+    from playwright.sync_api import sync_playwright
+except ImportError:  # CI runner'da playwright kurulu değilse SKIP (fail değil)
+    sync_playwright = None
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SERVER_SCRIPT = os.path.join(HERE, "preview_server.py")
@@ -43,6 +47,8 @@ def wait_for_port(port, timeout=15):
     return False
 
 
+@unittest.skipIf(sync_playwright is None,
+                 "playwright kurulu değil (pip install playwright + chromium)")
 class DashboardSmokeTest(unittest.TestCase):
     PORT = None
     proc = None

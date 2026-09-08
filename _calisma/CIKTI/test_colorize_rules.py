@@ -19,6 +19,15 @@ import unittest
 
 SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
 PREVIEW_HTML = SCRIPT_DIR / "preview.html"
+# Dashboard JS, preview.html'dan ayrılıp preview.js'e taşındı (Candidate 3).
+# Drift guard'ları ön yüz kaynağını (HTML işaretleme + JS) tek metin olarak
+# tarar — fonksiyon/if bloğu/string artık preview.js'te yaşıyor.
+PREVIEW_JS = SCRIPT_DIR / "preview.js"
+
+
+def _dashboard_src():
+    return (PREVIEW_HTML.read_text(encoding="utf-8") + "\n"
+            + PREVIEW_JS.read_text(encoding="utf-8"))
 
 # ── colorizeLine regex kuralları — preview.html function colorizeLine() ile senkron ──
 # Her kural: (compiled_regex, css_class, description)
@@ -96,12 +105,12 @@ class TestColorizeRulesSync(unittest.TestCase):
                         f"preview.html bulunamadı: {PREVIEW_HTML}")
 
     def test_html_contains_colorize_function(self):
-        text = PREVIEW_HTML.read_text(encoding="utf-8")
+        text = _dashboard_src()
         self.assertIn("function colorizeLine(line)", text)
 
     def test_html_has_all_css_classes(self):
         """preview.html colorizeLine'da beklenen tüm CSS class'ları mevcut mu?"""
-        text = PREVIEW_HTML.read_text(encoding="utf-8")
+        text = _dashboard_src()
         for _, css_class, desc in EXPECTED_RULES:
             self.assertIn(
                 f"class=\"{css_class}\"", text,
@@ -110,7 +119,7 @@ class TestColorizeRulesSync(unittest.TestCase):
 
     def test_html_rules_count_matches(self):
         """HTML'deki colorizeLine if bloğu sayısı kural sayısıyla eşleşmeli."""
-        text = PREVIEW_HTML.read_text(encoding="utf-8")
+        text = _dashboard_src()
         # colorizeLine fonksiyonunu izole et
         m = re.search(r"function colorizeLine\(line\)\s*\{(.*?)\nfunction ", text, re.DOTALL)
         self.assertIsNotNone(m, "colorizeLine fonksiyonu bulunamadı")
@@ -248,8 +257,7 @@ class TestRefsBySourceCards(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        with open(PREVIEW_HTML, encoding="utf-8") as f:
-            cls._html = f.read()
+        cls._html = _dashboard_src()
 
     def test_source_cards_div_exists(self):
         """ro-source-cards div'i HTML'de tanımlı."""
@@ -334,8 +342,7 @@ class TestRefsTrendBySourceStacked(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        with open(PREVIEW_HTML, encoding="utf-8") as f:
-            cls._html = f.read()
+        cls._html = _dashboard_src()
 
     def test_src_colors_match_source_cards(self):
         """SRC_COLORS (trend) ile srcColors (cards+table) aynı paleti kullanır."""
@@ -400,8 +407,7 @@ class TestTrendBudgetLimitSeries(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        with open(PREVIEW_HTML, encoding="utf-8") as f:
-            cls._html = f.read()
+        cls._html = _dashboard_src()
 
     def test_limit_series_reads_budget_limit_field(self):
         # lims, run kayıtlarındaki budget_limit'ten beslenir (history.jsonl).
@@ -438,8 +444,7 @@ class TestRunHistoryLeanIndicator(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        with open(PREVIEW_HTML, encoding="utf-8") as f:
-            cls._html = f.read()
+        cls._html = _dashboard_src()
 
     def test_lean_pass_shows_green_dot(self):
         """lean_ok === true → yeşil ● (color:var(--ok))."""
@@ -494,8 +499,7 @@ class TestTrendLeanAxis(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        with open(PREVIEW_HTML, encoding="utf-8") as f:
-            cls._html = f.read()
+        cls._html = _dashboard_src()
 
     def test_lean_pass_rate_line_exists(self):
         """Pembe kesikli çizgi Lean % eksenini çizer."""
@@ -542,8 +546,7 @@ class TestLeanFailPulse(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        with open("_calisma/CIKTI/preview.html", encoding="utf-8") as f:
-            cls._html = f.read()
+        cls._html = _dashboard_src()
 
     def test_fail_pulse_class_defined_in_css(self):
         """.badge.fail-pulse iki animasyonu bağlar: failShake + failGlow."""
@@ -590,41 +593,72 @@ class TestRunHistoryAutoRefresh(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        with open("_calisma/CIKTI/preview.html", encoding="utf-8") as f:
-            cls._html = f.read()
+        cls._html = _dashboard_src()
 
-    def test_load_run_history_called_on_init(self):
-        """initLoad sonunda loadRunHistory() çağrısı var."""
-        self.assertIn('loadRunHistory();', self._html)
-        # initLoad içinde loadRunHistory çağrısı (init sonrası)
-        init_pos = self._html.index('function initLoad()')
-        snippet = self._html[init_pos:]
-        self.assertIn('loadRunHistory();', snippet)
+    def test_startup_does_not_duplicate_history_fetch(self):
+        """Başlangıçta history filtresi tek history fetch'i başlatır."""
+        self.assertNotIn("function initLoad()", self._html)
+        self.assertEqual(self._html.count('setRhFilter("all");'), 1)
+        self.assertIn("loadRunHistory();", self._html)
 
-    def test_snapshot_handler_calls_load_run_history(self):
-        """SSE snapshot event handler'ı loadRunHistory() çağırır."""
-        # "Run history'yi de güncelle (yeni run snapshot'ı gelince)" yorumu
+    def test_snapshot_handler_uses_cached_history_load(self):
+        """SSE snapshot event handler'ı cache'li history yüklemesini çağırır."""
         self.assertIn('snapshot', self._html.lower())
         snap_pos = self._html.index('addEventListener("snapshot"')
-        # loadRunHistory snapshot handler bloğu içinde
         snap_block = self._html[snap_pos:snap_pos + 1200]
-        self.assertIn('loadRunHistory();', snap_block)
+        self.assertIn("loadRunHistory(true);", snap_block)
 
-    def test_update_handler_calls_load_run_history(self):
-        """SSE update event handler'ı da loadRunHistory() çağırır."""
+    def test_update_handler_uses_cached_history_load(self):
+        """SSE update event handler'ı da cache'li history yüklemesini çağırır."""
         self.assertIn('addEventListener("update"', self._html)
         update_pos = self._html.index('addEventListener("update"')
         update_block = self._html[update_pos:update_pos + 1200]
-        self.assertIn('loadRunHistory();', update_block)
+        self.assertIn("loadRunHistory(true);", update_block)
 
-    def test_count_is_three_calls(self):
-        """loadRunHistory tam 4 yerde çağrılır: init, setRhFilter, snapshot, update."""
-        count = self._html.count('loadRunHistory();')
-        self.assertEqual(count, 4, f"Beklenen 4 çağrı, bulunan: {count}")
+    def test_history_cache_window_and_manual_refresh_contract(self):
+        """SSE refresh 30 saniye cache'lenir; filtre değişimi cache'i bypass eder."""
+        self.assertIn("const RUN_HISTORY_CACHE_MS = 30000;", self._html)
+        self.assertIn("function loadRunHistory(fromSSE = false)", self._html)
+        self.assertIn("if (fromSSE && runHistoryCache !== null", self._html)
+        self.assertIn("loadRunHistory();", self._html)
+        self.assertEqual(self._html.count("loadRunHistory(true);"), 2)
 
     def test_snapshot_comment_exists(self):
         """'Run history'yi de güncelle' yorumu snapshot handler'da var."""
         self.assertIn("Run history'yi de güncelle", self._html)
+
+
+class TestSseSnapshotProjection(unittest.TestCase):
+    """SSE snapshot/update payload'ları dashboard'un latest alanlarını taşımalı."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._js = PREVIEW_JS.read_text(encoding="utf-8")
+
+    def test_latest_refresh_path_is_removed(self):
+        """SSE olayları artık /api/latest'i ikinci kez çekmemeli."""
+        self.assertNotIn("fetchLatestCached", self._js)
+        self.assertNotIn("LATEST_CACHE_MS", self._js)
+        self.assertNotIn("latestDataRequest", self._js)
+        self.assertNotIn("latestDataFetchedAt", self._js)
+
+    def test_sse_handlers_apply_projected_payload_directly(self):
+        """Her iki SSE handler'ı doğrudan snapshot alanlarını işler."""
+        for event_name in ("snapshot", "update"):
+            marker = f'addEventListener("{event_name}"'
+            start = self._js.index(marker)
+            end = self._js.index('addEventListener("', start + len(marker)) \
+                if event_name == "snapshot" else len(self._js)
+            block = self._js[start:end]
+            self.assertIn("applySnapshot(d);", block)
+            self.assertNotIn("fetch(", block)
+            self.assertIn("loadRunHistory(true);", block)
+
+    def test_snapshot_consumer_uses_server_projection(self):
+        self.assertIn("d.stdout_short", self._js)
+        self.assertIn("d.stderr_short", self._js)
+        self.assertIn("d.hook_env_matrix", self._js)
+        self.assertIn("renderHookEnvDrift(d.hook_env_matrix)", self._js)
 
 
 class TestRunHistoryClickToLoad(unittest.TestCase):
@@ -632,8 +666,7 @@ class TestRunHistoryClickToLoad(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        with open("_calisma/CIKTI/preview.html", encoding="utf-8") as f:
-            cls._html = f.read()
+        cls._html = _dashboard_src()
 
     def test_rh_row_css_class_exists(self):
         """.rh-row stili: cursor:pointer + hover highlight."""
@@ -678,8 +711,7 @@ class TestRunHistoryFilter(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        with open("_calisma/CIKTI/preview.html", encoding="utf-8") as f:
-            cls._html = f.read()
+        cls._html = _dashboard_src()
 
     def test_filter_buttons_exist(self):
         """4 filtre butonu: all, PASS, FAIL, P0."""
@@ -745,8 +777,7 @@ class TestFmtDuration(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        with open("_calisma/CIKTI/preview.html", encoding="utf-8") as f:
-            cls._html = f.read()
+        cls._html = _dashboard_src()
 
     def test_fmt_duration_function_exists(self):
         """function fmtDuration(s) tanımlı."""
@@ -786,8 +817,7 @@ class TestMetricsCards(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        with open("_calisma/CIKTI/preview.html", encoding="utf-8") as f:
-            cls._html = f.read()
+        cls._html = _dashboard_src()
 
     def test_pdf_pages_has_own_card(self):
         """PDF sayfa sayısı ayrı kart: id="m-pages"."""
@@ -823,7 +853,7 @@ class TestServiceWorkerRegistration(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls._html = (SCRIPT_DIR / "preview.html").read_text(encoding="utf-8")
+        cls._html = _dashboard_src()
         cls._sw = None
         sw_path = SCRIPT_DIR / "sw.js"
         if sw_path.is_file():
