@@ -10,9 +10,14 @@ RUNTIME_REQUIRED = (
     "verify_delivery.py", "verify_delivery.config.json", "verify_delivery.config.schema.json",
     "symbolic_proof_z3.py", "verify_lean.sh", "zip_lineage.json", "gen_repro_manifest.py",
     "gen_config.py", "cleanup_log.json", "github_scripts_battery.py", "github_scripts_selftest.js",
-    "daemon_http_test.py", "preview.html", "fresh_clone_setup.sh", "test_fresh_clone_setup.py",
+    "daemon_http_test.py", "preview.html", "preview.js", "fresh_clone_setup.sh", "test_fresh_clone_setup.py",
     "update_preview.sh", "check_unit_tests.list", "check_unit_tests_hook.sh", "sync_check_unit_tests.py",
     "lake_evidence_hook.sh", "test_lake_evidence_smoke.py", "render_z3_slides.py", "test_render_z3_slides.py",
+    # Run-summary modülleri + konsolidatör (K13 ayrı-step sidecar özetleri)
+    "run_summary_budget.py", "run_summary_changelog.py", "run_summary_k0.py",
+    "run_summary_k12.py", "run_summary_k13.py", "run_summary_klayers.py",
+    "run_summary_lineage.py", "run_summary_precommit.py", "run_summary_refs_trend.py",
+    "consolidate_summary.py",
 )
 PREVIEW_RUNTIME = ("preview_server.py", "_daemonize.py", "preview_prestart.py", "sw.js")
 GUIDE_REL = "docs/branch-protection-guide/guide.html"

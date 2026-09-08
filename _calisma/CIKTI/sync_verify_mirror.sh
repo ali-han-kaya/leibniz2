@@ -60,6 +60,7 @@ FILES=(
   "preview_server.py|preview_server.py"
   "_daemonize.py|_daemonize.py"
   "preview.html|preview.html"
+  "preview.js|preview.js"
   "sw.js|sw.js"
   "fresh_clone_setup.sh|fresh_clone_setup.sh"
   "test_fresh_clone_setup.py|test_fresh_clone_setup.py"
@@ -80,6 +81,19 @@ FILES=(
   "github_scripts/unit_test_failure_comment.js|github_scripts/unit_test_failure_comment.js"
   "github_scripts/pr_status_comment.js|github_scripts/pr_status_comment.js"
   "github_scripts/tum_sapmalar_comment.js|github_scripts/tum_sapmalar_comment.js"
+  # Run-summary modülleri — K0-K13 ayrı-step sidecar özetleri + konsolidatör.
+  # Dashboard durum-panosu/consolidate_summary.py bunları mirror'da okur;
+  # mirror'da eksik kalırsa launchd rotasında panel boşalır.
+  "run_summary_budget.py|run_summary_budget.py"
+  "run_summary_changelog.py|run_summary_changelog.py"
+  "run_summary_k0.py|run_summary_k0.py"
+  "run_summary_k12.py|run_summary_k12.py"
+  "run_summary_k13.py|run_summary_k13.py"
+  "run_summary_klayers.py|run_summary_klayers.py"
+  "run_summary_lineage.py|run_summary_lineage.py"
+  "run_summary_precommit.py|run_summary_precommit.py"
+  "run_summary_refs_trend.py|run_summary_refs_trend.py"
+  "consolidate_summary.py|consolidate_summary.py"
   "TESLIM_KLASOR_V5_2026-08-17.zip|TESLIM_KLASOR_V5_2026-08-17.zip"
   "TESLIM_KLASOR_V5_2026-08-17.zip.sha256|TESLIM_KLASOR_V5_2026-08-17.zip.sha256"
   "TESLIM_V5_FINAL_2026-08-17.zip|TESLIM_V5_FINAL_2026-08-17.zip"
@@ -94,13 +108,16 @@ FILES=(
 # Bu yüzden lake projesinin TÜM kaynak dosyaları mirror'a gider; yalnızca
 # ReductInvariance.lean senkronlanırsa mirror rotasında K9-LAKE P0 üretir
 # (canlı dashboard FAIL — dashboard_smoke.sh bunu yakalamıştı).
+# Bu blok donmuş çıktıdır — tek kaynak: verify_delivery.lean_project_files()
+# (regenerate: sync_lean_files.py). Build metadata (.lake/, lake-manifest.json)
+# iki tarafta da dışarıda bırakılır.
 LEAN_FILES=(
-  "ReductInvariance.lean|ReductInvariance.lean"
-  "lean-toolchain|lean-toolchain"
-  "lakefile.toml|lakefile.toml"
+  "Content.lean|Content.lean"
   "Leibniz2Reduct.lean|Leibniz2Reduct.lean"
   "Leibniz2Reduct/Content.lean|Leibniz2Reduct/Content.lean"
-  "Content.lean|Content.lean"
+  "ReductInvariance.lean|ReductInvariance.lean"
+  "lakefile.toml|lakefile.toml"
+  "lean-toolchain|lean-toolchain"
 )
 
 # Preview mirror dosyaları (adım 2): kaynak CIKTI'ya, dest PREVIEW_MIRROR'a
@@ -170,6 +187,28 @@ same_file() {
   [ -f "$2" ] && cmp -s "$1" "$2"
 }
 
+# Lake projesinin kaynak dosyaları — verify_delivery.lean_project_files()
+# fonksiyonunun bash ikizi (tek kaynak sözleşmesi). Build metadata (.lake/
+# klasörü, lake-manifest.json) iki tarafta da dışarıda bırakılır.
+lean_project_files() {
+  find "$LEAN_SRC" -type f \
+    ! -path "$LEAN_SRC/.lake/*" \
+    ! -name "lake-manifest.json" -print | sed "s|^$LEAN_SRC/||" | sort
+}
+
+# lean_project_files() çıktısını LEAN_MIRROR_DIR'a senkronlar. run_sync
+# sayaçlarını (SYNC_TOTAL/SYNC_CHANGED) paylaşır.
+sync_lean_files() {
+  local mode="${1:-sync}" rel st
+  while IFS= read -r rel; do
+    [ -n "$rel" ] || continue
+    SYNC_TOTAL=$((SYNC_TOTAL + 1))
+    st="$(sync_one "$LEAN_SRC/$rel" "$LEAN_MIRROR_DIR/$rel" "$mode")"
+    [ "$st" = "GÜNCELLENDİ" ] && SYNC_CHANGED=$((SYNC_CHANGED + 1))
+    say "$st: lean_reduct/$rel"
+  done < <(lean_project_files)
+}
+
 # Tek dosyayı kopyala (yalnızca değiştiyse). Döndürür: "GÜNCEL"/"GÜNCELLENDİ"/"YAZILDI".
 sync_one() {
   local src="$1" dst="$2" mode="${3:-sync}"
@@ -197,36 +236,31 @@ sync_one() {
 # Her eşleme için sync_one çalıştır; "(rel)" başına durum basar.
 run_sync() {
   local mode="${1:-sync}" src dst st
-  local changed=0 total=0
+  SYNC_TOTAL=0
+  SYNC_CHANGED=0
   while IFS='|' read -r src dst; do
     [ -n "$src" ] || continue
-    total=$((total + 1))
+    SYNC_TOTAL=$((SYNC_TOTAL + 1))
     st="$(sync_one "$CIKTI/$src" "$MIRROR_DIR/$dst" "$mode")"
-    [ "$st" = "GÜNCELLENDİ" ] && changed=$((changed + 1))
+    [ "$st" = "GÜNCELLENDİ" ] && SYNC_CHANGED=$((SYNC_CHANGED + 1))
     say "$st: $dst"
   done < <(printf '%s\n' "${FILES[@]}")
+  sync_lean_files "$mode"
   while IFS='|' read -r src dst; do
     [ -n "$src" ] || continue
-    total=$((total + 1))
-    st="$(sync_one "$LEAN_SRC/$src" "$LEAN_MIRROR_DIR/$dst" "$mode")"
-    [ "$st" = "GÜNCELLENDİ" ] && changed=$((changed + 1))
-    say "$st: lean_reduct/$dst"
-  done < <(printf '%s\n' "${LEAN_FILES[@]}")
-  while IFS='|' read -r src dst; do
-    [ -n "$src" ] || continue
-    total=$((total + 1))
+    SYNC_TOTAL=$((SYNC_TOTAL + 1))
     st="$(sync_one "$CIKTI/$src" "$PREVIEW_MIRROR/$dst" "$mode")"
-    [ "$st" = "GÜNCELLENDİ" ] && changed=$((changed + 1))
+    [ "$st" = "GÜNCELLENDİ" ] && SYNC_CHANGED=$((SYNC_CHANGED + 1))
     say "$st: preview/$dst"
   done < <(printf '%s\n' "${PREVIEW_FILES[@]}")
   while IFS='|' read -r src dst; do
     [ -n "$src" ] || continue
-    total=$((total + 1))
+    SYNC_TOTAL=$((SYNC_TOTAL + 1))
     st="$(sync_one "$ROOT/$src" "$PREVIEW_MIRROR/$dst" "$mode")"
-    [ "$st" = "GÜNCELLENDİ" ] && changed=$((changed + 1))
+    [ "$st" = "GÜNCELLENDİ" ] && SYNC_CHANGED=$((SYNC_CHANGED + 1))
     say "$st: preview/$dst (guide)"
   done < <(printf '%s\n' "${GUIDE_FILES[@]}")
-  say "ÖZET: $total dosya, $changed güncellendi · git $(git_short)"
+  say "ÖZET: $SYNC_TOTAL dosya, $SYNC_CHANGED güncellendi · git $(git_short)"
 }
 
 # Her eşleme için aynılık denetimi (--check). Bayat dosya → stdout + return 1.
@@ -314,6 +348,13 @@ main() {
       ;;
     --check-coverage)
       python3 "$CIKTI/check_mirror_coverage.py" --sync-script "$0"
+      exit $?
+      ;;
+    --sync-lean-files)
+      # LEAN_FILES bloğunu lean_reduct'ten yeniden üret (tek kaynak:
+      # verify_delivery.lean_project_files / sync_lean_files.py). Çalışma
+      # mirror'ına dokunmaz — yalnızca betik içi bloğu günceller.
+      python3 "$CIKTI/sync_lean_files.py" --script "$0"
       exit $?
       ;;
     --check)
