@@ -64,10 +64,15 @@ _AXIOMS_NONE_RE = re.compile(r"'([^']+)' does not depend on any axioms")
 # Kelime sınırlı "sorry" (admit/boşluk ispatı). Lean'de `sorry` bir term'dir —
 # yorum/string dışında geçmesi ispat boşluğudur.
 _SORRY_RE = re.compile(r"\bsorry\b")
+# `admit` de ispat boşluğudur (Coq mirası / boşluk ispatı) — sorry ile aynı
+# kind altında raporlanır (test_admit_found sözleşmesi).
+_ADMIT_RE = re.compile(r"\badmit\b")
 # Top-level axiom bildirimi: satır başında yalnızca boşluk, sonra `axiom`.
 # (Lean 4'te `axiom` yalnızca top-level komuttur; `example`/`theorem` gövdesi
 # ayrı satırda `axiom` ile başlayamaz — bu regex gerçek bildirimleri yakalar.)
 _AXIOM_RE = re.compile(r"^\s*axiom\b")
+# Top-level `unsafe` bildirimi (unsafe def/instance) — güvenli olmayan deklarasyon.
+_UNSAFE_RE = re.compile(r"^\s*unsafe\b")
 _STRING_RE = re.compile(r'"[^"\n]*"')
 _LINE_COMMENT_RE = re.compile(r"--")
 
@@ -136,6 +141,8 @@ def scan_lean_dir(lean_dir):
                 continue
             for lineno, ln in enumerate(strip_comments_and_strings(text), 1):
                 m = _SORRY_RE.search(ln)
+                if not m:
+                    m = _ADMIT_RE.search(ln)
                 if m:
                     findings.append({"file": rel, "line": lineno,
                                      "kind": "sorry",
@@ -144,6 +151,11 @@ def scan_lean_dir(lean_dir):
                 if _AXIOM_RE.match(ln):
                     findings.append({"file": rel, "line": lineno,
                                      "kind": "axiom",
+                                     "snippet": ln.strip()[:120]})
+                    continue
+                if _UNSAFE_RE.match(ln):
+                    findings.append({"file": rel, "line": lineno,
+                                     "kind": "unsafe",
                                      "snippet": ln.strip()[:120]})
     return not findings, findings
 

@@ -30,6 +30,32 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 HARNESS = os.path.join(HERE, "github_scripts_selftest.js")
 
+# launchd GUI agent minimal PATH fallback'leri — TEK KAYNAK buradadır;
+# verify_delivery.py bunları import eder (iki kopya arasında drift olamaz).
+NODE_KNOWN_PATHS = ("/opt/homebrew/bin/node", "/usr/local/bin/node",
+                   "/home/linuxbrew/.linuxbrew/bin/node")
+PDFINFO_KNOWN_PATHS = ("/opt/homebrew/bin/pdfinfo", "/usr/local/bin/pdfinfo")
+
+
+def find_launchd_tool(tool, known_paths, path_env=None):
+    """launchd minimal PATH fallback: PATH taraması birincil, bilinen
+    konumlar ikincil (shutil.which davranışı korunur). Adayın basename'i
+    istenen aracın adıyla eşleşmeli; çalıştırılabilir olmalı. Hiçbiri
+    yoksa None (fail-closed — çağıran karar verir).
+    """
+    candidates = []
+    for d in (path_env or os.environ.get("PATH", "")).split(os.pathsep):
+        if d:
+            candidates.append(os.path.join(d, tool))
+    for p in known_paths:
+        candidates.append(p)
+    for cand in candidates:
+        if os.path.basename(cand) != tool:
+            continue
+        if os.path.isfile(cand) and os.access(cand, os.X_OK):
+            return cand
+    return None
+
 MARKER_STATUS = "<!-- stoic-hume-v5-pr-status -->"
 MARKER_MANIFEST = "<!-- stoic-hume-v5-reproducibility-manifest -->"
 MARKER_CFGDIFF = "<!-- stoic-hume-v5-config-diff -->"

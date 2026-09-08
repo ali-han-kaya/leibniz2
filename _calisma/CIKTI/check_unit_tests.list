@@ -88,6 +88,7 @@ test_render_z3_slides.py
 test_repack_verify.py
 test_repro_artifact_sections_e2e.py
 test_reproducible_pdf_skill.py
+test_run_now_post_only.py
 test_run_summary_budget.py
 test_run_summary_changelog.py
 test_run_summary_k0.py
@@ -97,6 +98,7 @@ test_run_summary_lineage.py
 test_run_summary_precommit.py
 test_run_summary_refs_trend.py
 test_scan_stale_zips.py
+test_preview_server_atomic.py
 test_sde_texlive_sync.py
 test_setup_branch_protection.py
 test_sidecar_guarantee.py

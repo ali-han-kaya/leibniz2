@@ -126,6 +126,7 @@ Doğrulama zinciri (Katman 0..19):
                ortamlarda FAIL üretmemek için açıkça koşulur)
   K20 Launchctl launchctl list + plutil lint + HTTP 200 (--check-launchd;
                macOS'a özgü, --full'a dahil değil)
+  K21 SDE       sde_determinism_experiment.py donmuş kayıt + skill protokolü (--check-sde; --full'a DAHİL)
 """
 import argparse
 import concurrent.futures
@@ -147,6 +148,23 @@ import urllib.request
 import zipfile
 from datetime import datetime, timezone
 
+_HERE = os.path.dirname(os.path.abspath(__file__))
+
+# K9 hata sınıflandırıcısı (tek kaynak: classify_lean_error.py) — FAIL
+# detail'lerine `[sınıf]` etiketi ekler; K16 launchd minimal-PATH fallback
+# konumları github_scripts_battery.py'de TEK KAYNAKta yaşar (drift yok).
+import classify_lean_error as _cle  # noqa: E402
+import github_scripts_battery as _battery  # noqa: E402
+import check_lean_axioms as _lean_axioms  # noqa: E402
+import check_lean_statements as _lean_statements  # noqa: E402
+
+_LAUNCHD_NODE_PATHS = _battery.NODE_KNOWN_PATHS
+_LAUNCHD_PDFINFO_PATHS = _battery.PDFINFO_KNOWN_PATHS
+
+def _launchd_find(tool, known_paths, path_env=None):
+    """K16/K6 launchd minimal-PATH fallback (tek kaynak: battery)."""
+    return _battery.find_launchd_tool(tool, known_paths, path_env=path_env)
+
 KLASOR_ZIP = "TESLIM_KLASOR_V5_2026-08-17.zip"
 KLASOR_DIR = "Stoic-Hume-Final-V5_2026-08-17"
 IC_ZIP = "TESLIM_V5_FINAL_2026-08-17.zip"
@@ -164,6 +182,25 @@ LEAN_PROOF_SCRIPT = "../lean_reduct/ReductInvariance.lean"
 # K9 ek kapısı: 8 teoremli Sınır İspatı çekirdeği (Content.lean) lake projesi.
 # lake build --wfail, lean-toolchain v4.14.0 ile fail-closed derlenir.
 LEAN_REDUCT_DIR = "../lean_reduct"
+
+
+def lean_project_files(project_dir):
+    """K9 mirror sözleşmesi: lake projesinin kaynak dosyaları (tek kaynak).
+
+    sync_verify_mirror.sh'teki LEAN_FILES bloğu bu fonksiyonun donmuş
+    çıktısıdır (sync_lean_files.py yeniden üretir). .lake/ yapım
+    artifact'ları ve lake-manifest.json dışarıda bırakılır — build
+    metadata mirror sözleşmesine girmez (iki taraf aynı kuralı uygular).
+    """
+    files = []
+    for dirpath, dirnames, filenames in os.walk(project_dir):
+        dirnames[:] = [d for d in dirnames if d != ".lake"]
+        for fn in filenames:
+            if fn == "lake-manifest.json":
+                continue
+            rel = os.path.relpath(os.path.join(dirpath, fn), project_dir)
+            files.append(rel.replace(os.sep, "/"))
+    return sorted(files)
 LEAN_TOOLCHAIN = "leanprover/lean4:v4.14.0"
 # K19: Coq reduct-invariance (Content.v) — coqtop -compile fail-closed.
 # coq-version dosyası (coq_reduct/) tek kaynaktır; COQ_VERSION ile çift
@@ -226,7 +263,7 @@ _OPTIONAL_LAYERS = {
     "K18": lambda a: a.check_daemon,
     "K19": lambda a: a.coq_proof,
     "K20": lambda a: a.check_launchd,
-    "K21": lambda a: a.check_sde,
+    "K21": lambda a: getattr(a, "check_sde", False),
 }
 
 
@@ -1703,12 +1740,9 @@ def pdf_pages(pdf_path):
     agent PATH'i minimal olduğundan bilinen konumlar da denenir
     (qpdf_check_determinism'deki qpdf fallback deseniyle aynı).
     """
-    pdfinfo = "pdfinfo"
-    for candidate in ("pdfinfo", "/opt/homebrew/bin/pdfinfo",
-                      "/usr/local/bin/pdfinfo"):
-        if os.path.isfile(candidate):
-            pdfinfo = candidate
-            break
+    pdfinfo = _launchd_find("pdfinfo", _LAUNCHD_PDFINFO_PATHS)
+    if pdfinfo is None:
+        return None
     try:
         r = subprocess.run(
             [pdfinfo, pdf_path], capture_output=True, text=True, timeout=30)
@@ -1922,7 +1956,8 @@ def run_lean_proof(lean_path, lean_file):
         return True, "Lean 4 reduct-invariance derlendi ve geçti"
     tail = [l.strip() for l in out.splitlines() if l.strip()][-3:]
     detail = " | ".join(tail) if tail else f"exit={r.returncode}"
-    return False, f"Lean derleme hatası: {detail}"
+    detail = f"Lean derleme hatası: {detail}"
+    return False, _cle.tag_lean_detail(detail)
 
 
 def _lean_compiler_available():
@@ -1982,7 +2017,8 @@ def run_lake_build(lake_path, project_dir, lean_only=False):
         return True, "lake build --wfail: 8 teorem PASS (v4.14.0)"
     tail = [l.strip() for l in out.splitlines() if l.strip()][-3:]
     detail = " | ".join(tail) if tail else f"exit={r.returncode}"
-    return False, f"lake build hatası: {detail}"
+    detail = f"lake build hatası: {detail}"
+    return False, _cle.tag_lean_detail(detail)
 
 
 def _sde_experiment_paths():
@@ -2199,6 +2235,35 @@ def validate_lineage_schema(lineage, add, check_id="K17-LINEAGE",
             f"{current_count} tane current=true nesli var (tam olarak 1 olmalı)")
 
     return len(errors) == 0, errors
+
+
+def _scan_lean_dir(lean_dir):
+    """K9 sorry/axiom ön-kapısı — tek kaynak check_lean_axioms.py."""
+    return _lean_axioms.scan_lean_dir(lean_dir)
+
+
+def _check_statements(lean_file, map_file):
+    """K9 statement-safety kapısı — tek kaynak check_lean_statements.py."""
+    return _lean_statements.check_statements(lean_file, map_file)
+
+
+def write_json_sidecar(path, report, detail="not run"):
+    """JSON sidecar'ı HER ZAMAN yaz; report None ise dürüst placeholder
+    ({"ok": false, "detail": <detail>}) — yanlış PASS yok, dosya eksikliği yok.
+
+    Döndürür: (ok: bool, detail: str) — ok=False yalnızca dosya yazılamadıysa.
+    """
+    try:
+        if report is None:
+            report = {"ok": False, "detail": detail}
+        parent = os.path.dirname(path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(report, f, indent=2, ensure_ascii=False)
+        return True, path
+    except OSError as e:
+        return False, f"yazılamadı: {path}: {e}"
 
 
 def write_lineage_sidecar(path, report):
@@ -3291,6 +3356,63 @@ def verify_manifest_digest(manifest_path, add, check_id="K10-MANIFEST",
                  else ("precheck_report_combined_sha256: FAIL — "
                        + "; ".join(pr_rows[:5])))
 
+    # ---- diğer artifact bölümleri: generic fail-closed denetim --------------
+    # gen_repro_manifest.py her artifact job'ı için {files, combined_sha256}
+    # bölümü yazar (config/lineage/summary/... yukarıda özel denetimli).
+    # Kalan bölümler (audit_refs_trend, daemon_http, unit_tests, ...) burada
+    # tek formülle denetlenir: her rel files'ta + aynı hash; combined_sha256
+    # varsa _summary_combined_sha256 formülüyle YENİDEN hesaplanır. Üretici
+    # yeni bölüm eklediğinde K10 otomatik kapsar (sessiz geçiş yok).
+    _handled_sections = {"config", "lineage", "summary", "python3_shell",
+                         "plist_check", "overrides", "precheck_report"}
+    gen_ok = True
+    gen_rows = []
+    gen_names = []
+    for gen_key, gen_sec in sorted(m.items()):
+        if gen_key in _handled_sections or not isinstance(gen_sec, dict):
+            continue
+        if "files" not in gen_sec and "combined_sha256" not in gen_sec:
+            continue  # bölüm-şeklinde değil (ör. provenance) — atla
+        gen_names.append(gen_key)
+        gen_files = gen_sec.get("files")
+        gen_stored = gen_sec.get("combined_sha256")
+        if not isinstance(gen_files, dict):
+            gen_ok = False
+            gen_rows.append(f"{gen_key}.files: dict değil")
+            add("P1", check_id, check_label, f"{gen_key}.files dict değil")
+            continue
+        for rel, h in sorted(gen_files.items()):
+            if rel not in files:
+                gen_ok = False
+                gen_rows.append(f"{gen_key}: {rel} (files'ta yok)")
+                add("P1", check_id, check_label,
+                    f"{gen_key}.files'taki dosya files'ta yok: {rel}")
+            elif files[rel] != h:
+                gen_ok = False
+                gen_rows.append(f"{gen_key}: {rel} (hash farklı)")
+                add("P1", check_id, check_label,
+                    f"{gen_key}.files hash'i files ile uyuşmuyor: {rel}",
+                    f"{gen_key}={h[:16]}… files={files[rel][:16]}…")
+        if gen_files and not gen_stored:
+            gen_ok = False
+            gen_rows.append(f"{gen_key}: combined_sha256 eksik")
+            add("P1", check_id, check_label,
+                f"{gen_key}.combined_sha256 eksik ({gen_key}.files dolu)")
+        elif gen_stored is not None:
+            recalc = _summary_combined_sha256(gen_files)
+            if gen_stored != recalc:
+                gen_ok = False
+                gen_rows.append(f"{gen_key}: combined_sha256 uyuşmazlığı")
+                add("P1", check_id, check_label,
+                    f"{gen_key}.combined_sha256 uyuşmazlığı",
+                    f"yeniden {recalc[:16]}… ≠ kayıtlı {gen_stored[:16]}…")
+
+    gen_detail = ""
+    if gen_names:
+        gen_detail = ("artifact_sections[" + "+".join(gen_names) + "]: PASS"
+                      if gen_ok else
+                      ("artifact_sections: FAIL — " + "; ".join(gen_rows[:5])))
+
     # ---- manifest.sha256 ↔ manifest.json: sidecar eşleşmesi (fail-closed) ----
     # Ortak helper (K10 + K13 tek kaynak). Sidecar manifest dosyasının KENDİ
     # hash'ini sabitler: manifest.json içeriği değişirse (ör. JSON'a boşluk
@@ -3303,10 +3425,13 @@ def verify_manifest_digest(manifest_path, add, check_id="K10-MANIFEST",
               f"({len(files)} dosya); {cfg_detail}; {bn_detail}; {ov_detail}; "
               f"{ln_detail}; {sm_detail}; {ps_detail}; {pc_detail}; "
               f"{ovr_detail}; {pr_detail}; {sc_detail}")
+    if gen_detail:
+        detail = detail.replace(f"; {sc_detail}", f"; {gen_detail}; {sc_detail}")
     if bad_rows:
         detail += " | " + "; ".join(bad_rows[:5])
     return (n_bad == 0 and n_missing == 0 and cfg_ok and bn_ok and ov_ok and ln_ok
-            and sm_ok and ps_ok and pc_ok and ovr_ok and pr_ok and sc_ok), detail
+            and sm_ok and ps_ok and pc_ok and ovr_ok and pr_ok and gen_ok
+            and sc_ok), detail
 
 
 # K13 mock artifact set — happy path ve negatif senaryolar ORTAK seti kullanır.
@@ -3653,15 +3778,7 @@ def check_github_scripts_self_test(add):
         add("P0", "K16-GSCRIPTS", "K16 github-scripts self-test",
             "github_scripts_battery.py yok", battery)
         return False, f"{battery} yok"
-    node = shutil.which("node")
-    if node is None:
-        # launchd GUI agent PATH'i minimal (/usr/bin:/bin:…) — Homebrew node
-        # bilinen konumlardan aranır (macOS; Linux'ta PATH yeterli olur).
-        for cand in ("/opt/homebrew/bin/node", "/usr/local/bin/node",
-                     "/home/linuxbrew/.linuxbrew/bin/node"):
-            if os.path.isfile(cand) and os.access(cand, os.X_OK):
-                node = cand
-                break
+    node = _launchd_find("node", _LAUNCHD_NODE_PATHS)
     if node is None:
         add("P0", "K16-GSCRIPTS", "K16 github-scripts self-test",
             "node bulunamadı — battery çalıştırılamaz")
@@ -3721,10 +3838,16 @@ def check_mirror_sync(add, auto_sync=False):
     # Bu durumda repo kopyasına düşülür: script ROOT'u kendi konumundan
     # türettiği için ($SCRIPT_DIR/../..) repo kopyası kaynakları doğru çözer.
     candidates = [os.path.join(here, "sync_verify_mirror.sh")]
-    for base in (os.path.expanduser("~/Desktop/leibniz2"),
-                 os.path.join(os.getcwd(), "_calisma")):
-        candidates.append(os.path.join(base, "_calisma", "CIKTI",
-                                       "sync_verify_mirror.sh"))
+    # Repo-checkout fallback'i (~/Desktop/leibniz2) yalnızca mirror rotası
+    # için. K17_REPO_FALLBACK=0 ile kapatılabilir: aksi halde testler ve
+    # standart-dışı checkout konumları makinenin gerçek checkout'una ve
+    # mirror'ına bağlı kalır (portability hatası — 'script yok' sözleşmesi
+    # fallback gerçek script'i bulunca devre dışı kalıyordu).
+    if os.environ.get("K17_REPO_FALLBACK", "1") != "0":
+        for base in (os.path.expanduser("~/Desktop/leibniz2"),
+                     os.path.join(os.getcwd(), "_calisma")):
+            candidates.append(os.path.join(base, "_calisma", "CIKTI",
+                                           "sync_verify_mirror.sh"))
     script = next((c for c in candidates if os.path.isfile(c)),
                   candidates[0])
     empty_meta = {"auto_synced": False, "before_exit": None,
@@ -4236,6 +4359,42 @@ def apply_full_flags(args):
         # Açık PATH verilmemişse auto-discover modunda aç
         args.check_history = True
     return args
+
+
+def check_k0(directory, args, add):
+    """Run K0 stale-zip detection and optionally write its findings sidecar."""
+    parent = os.path.dirname(directory)
+    toolkit_tolerant = getattr(args, "k0_toolkit_tolerant", False)
+    records = scan_stale_zips(
+        parent, skip_dirs=k0_skip_dirs(directory, toolkit_tolerant))
+    findings = []
+    for record in records:
+        rel = record["rel"]
+        issue = f"CIKTI dışında zip bulundu: {rel}"
+        if toolkit_tolerant and is_toolkit_rel(rel):
+            add("INFO", "K0-TOOLKIT", "K0 bayat zip",
+                issue + " (toolkit-tolerant — P1 değil INFO)",
+                f"{record['sha256']}  {os.path.join(parent, rel)}")
+            continue
+        if os.path.dirname(rel) == "":
+            issue += (" — ipucu: kök zip'i `TOOLKIT/` dizinine "
+                      "taşıyabilirsin (K0 atlar; P1 giderilir)")
+        findings.append(record)
+        add("P1", "K0-STALE", "K0 bayat zip", issue,
+            f"{record['sha256']}  {os.path.join(parent, rel)}")
+
+    output = getattr(args, "k0_out", None)
+    if output:
+        try:
+            with open(output, "w", encoding="utf-8") as kf:
+                json.dump({"count": len(findings), "findings": findings},
+                          kf, indent=2, ensure_ascii=False)
+            if not getattr(args, "json", False):
+                print(f"[K0] bulgu sidecar'ı yazıldı: {output} "
+                      f"({len(findings)} bayat zip)")
+        except OSError as e:
+            add("P1", "K0-OUT", "K0 sidecar", f"yazılamadı: {output}", str(e))
+    return records
 
 
 def main():
@@ -5117,6 +5276,13 @@ def main():
                     if gp0 or gp1:
                         print(f"    [K12] golden denetim: P0={gp0}, P1={gp1} "
                               f"({'FAIL-CLOSED (P0 var)' if gp0 else 'advisory'})")
+                # Negatif senaryo sonuçları ayrı makine-okunur satır (K13
+                # deseni): CI sidecar'ı (verify job'daki "Run K12 scenarios"
+                # adımı) bu satırı ayrıştırıp logs/k12_repro_manifest.json
+                # scenarios alanına taşır.
+                scen_str = ", ".join(f"{k} {v}"
+                                      for k, v in sorted(k12_scen.items()))
+                print("[K12-SCENARIO] " + scen_str)
         # Sidecar: update_preview.sh --plist-check ham çıktısı + K12 raporu.
         if args.plist_out:
             try:

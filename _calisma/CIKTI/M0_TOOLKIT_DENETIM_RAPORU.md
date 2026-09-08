@@ -121,8 +121,13 @@ K8 + K9 + soy hattı + K11 + K13 + K14; K10 ve K12 ayrıca çağrılır.
 | K12 | LaunchAgent plist şablonu (`--check-plist`) | PASS (yerel macOS; Linux CI'da koşmaz) |
 | K13 | gen_repro_manifest.py self-testi (`--check-repro-manifest`) — mock üretimde manifest.sha256 ↔ manifest.json eşleşmesi de denetlenir (K10 ile ortak helper). **Negatif senaryo kapsamı (4):** eksik-dosya (bundle'dan silinen dosya → kilitlenme yerine temiz 'bundle dosyası yok'), bozuk-hash (manifest'teki SHA-256 kurcalama), config-alt-dizin (config/ alt dizin dosyası config objesinden düşme), python3-shell-eksik (üretici python3_shell bölümünü manifest'ten düşürme); yakalanmayan senaryo → P0 (fail-closed ihlali). Sonuçlar sidecar'a yazılır: `[K13-SCENARIO]` log satırı → k13_repro_manifest.json `scenarios` alanı (4 senaryonun PASS/YAKALANMADI durumu) | PASS |
 | K14 | Cleanup kaydı: M0 §10 silme/taşıma kayıtları (`--check-cleanup`) | PASS |
+| K15 | History sidecar: history.jsonl ↔ .sha256 bütünlüğü (`--check-history`; --full'a DAHİL) | PASS |
 | K16 | github-scripts self-test (`--check-github-scripts`) — 15 senaryoda mock girdi + çıktı eşleşmesi; node fallback'i launchd PATH'ine dayanıklı | PASS |
 | K17 | Mirror sync: `sync_verify_mirror.sh --check` (0=GÜNCEL, 1=BAYAT, 2=hata; `--check-mirror`) | PASS (yerel macOS; Linux CI'da koşmaz) |
+| K18 | Daemon HTTP smoke: preview_server daemon modda + 3 endpoint HTTP 200 (`--check-daemon`) | PASS |
+| K19 | Coq reduct-invariance: 8 teorem Content.v çekirdeği coqtop -compile (`--coq-proof`) | PASS (coqtop; --full'a dahil değil) |
+| K20 | Launchctl durum: launchctl list + plutil lint + HTTP 200 (`--check-launchd`) | PASS (yerel macOS; Linux CI'da koşmaz) |
+| K21 | SDE determinism guard: SOURCE_DATE_EPOCH ile byte-determinizm (`--check-sde`) | PASS |
 
 **K14 bulguları (yeni katman — commit `[K14]`):** `cleanup_log.json` (M0 §10
 ile aynı kaynak) okunur ve §10'daki her silme/taşıma kaydı dosya sistemiyle

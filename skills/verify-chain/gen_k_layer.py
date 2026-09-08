@@ -45,14 +45,15 @@ OPTIONAL_RE = re.compile(r'"K(\d+)"\s*:\s*lambda')
 # yayılan yapılarda (docstring tablosu, add_argument, çift satırlı print,
 # fonksiyon gövdesi) ilk yarıya enjeksiyon ifadeyi BÖLER (geçmiş hatalar).
 # Her anchor, hedef bloğun SON satırının TAM metnidir.
-ANCHOR_DOCSTRING_LAST = "simülasyonu P0 üretir (fail-closed)."  # K21 docstring son satırı
+ANCHOR_DOCSTRING_LAST = "  K21 SDE       sde_determinism_experiment.py donmuş kayıt + skill protokolü (--check-sde; --full'a DAHİL)"  # K21 docstring son satırı
 ANCHOR_LABELS_LAST = '    "K21": "SDE determinism guard",'
-ANCHOR_OPTIONAL_LAST = '    "K21": lambda a: a.check_sde,'
+ANCHOR_OPTIONAL_LAST = '    "K21": lambda a: getattr(a, "check_sde", False),'
 # --check-sde add_argument çağrısının SON satırı (help metni çok satırlı).
-ANCHOR_ARGPARSE_LAST = '                         "fail-closed (--full\'a DAHİL)")'
+ANCHOR_ARGPARSE_LAST = '                         "skill protokolünü fail-closed doğrula")'
 ANCHOR_FULL_LAST = "args.check_sde = True"
-# K21 main print'i iki satıra yayılır — anchor TAM devam satırı olmalı.
-ANCHOR_MAIN_LAST = "f\"{'PASS' if sok else 'FAIL'} — {sdetail}\")"
+# K21 main print'i iki satıra yayılır (json/stdout ayrımı) — anchor TAM
+# ikinci satır olmalı.
+ANCHOR_MAIN_LAST = "              file=(sys.stderr if args.json else sys.stdout))"
 # check_sde_determinism fonksiyonunun SONU (finally + rmtree ikilisi) —
 # def satırına enjeksiyon gövdeyi böler.
 ANCHOR_CHECK_LAST = "    finally:\n        shutil.rmtree(tmp, ignore_errors=True)"

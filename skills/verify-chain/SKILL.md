@@ -82,13 +82,34 @@ python3 verify_delivery.py --full   # tüm katmanlar: K1-K14 + referans + Z3 + L
 | K12 | LaunchAgent plist template drift (0=GÜNCEL, 1=BAYAT, 2=şablon yok) | `--check-plist` (macOS) | no |
 | K13 | Repro-manifest producer self-test (mock artifacts) | `--check-repro-manifest` | yes |
 | K14 | Cleanup log: delete/move records vs filesystem (resurrect P1, moved-from P1, canonical hash P0) | `--check-cleanup` | yes |
-| K15 | History sidecar integrity (history.jsonl ↔ .sha256) | `--check-history PATH` (local) | no |
+| K15 | History sidecar integrity (history.jsonl ↔ .sha256) | `--check-history PATH` (local) | yes |
 | K16 | GitHub-script self-test: 15 scenarios, mock inputs, real Node, output matching | `--check-github-scripts` (node) | yes |
-| K17 | Mirror sync drift (repo ↔ TCC-safe mirror; 0/1/2 exit contract) | `--check-mirror` (macOS) | no |
+| K17 | Mirror sync drift (repo ↔ TCC-safe mirror; 0/1/2 exit contract) | `--check-mirror` (macOS) | yes |
+| K18 | Daemon HTTP smoke: preview_server daemon mode + three endpoints HTTP 200 (fail-closed) | `--check-daemon` | yes |
+| K19 | Coq reduct-invariance: 8-theorem Content.v core coqtop -compile + coq-version match (fail-closed) | `--coq-proof` | no |
+| K20 | Launchctl status: launchctl list + plutil lint + HTTP 200 | `--check-launchd` (macOS) | no |
+| K21 | SDE determinism guard: frozen record skill protocol + effective-SDE self-test | `--check-sde` | yes |
 
 ## Procedure
 
-### Adding a new K-layer
+### K9 error priority
+
+K9 FAIL detail'leri `classify_lean_error.py` (sınıflandırıcı tek kaynak) ile
+`[<class>]` ön ekiyle etiketlenir; **en düşük numaralı (en köklü) sınıf
+kazanır**. Sıra kodla aynı olmalıdır (syntax > type > unsolved > proof_gap >
+axiom > linter):
+
+| sınıf | priority | anlam |
+|---|---|---|
+| `syntax` | 1 | dosya ayrıştırılamıyor (parser hatası) — en köklü |
+| `type` | 2 | tip hatası (type mismatch, unknown identifier, failed to synthesize) |
+| `unsolved` | 3 | ispat tamamlanmamış (unsolved goals, tactic failed) |
+| `proof_gap` | 4 | Coq `Admitted` ispat boşluğu |
+| `axiom` | 5 | Coq top-level `Axiom` bildirimi |
+| `linter` | 6 | --wfail uyarıları (unused variable, deprecated, sorry) |
+
+Detail formatı: `[<class>] <orijinal detail>` (ör. `[unsolved] lake build
+hatası: unsolved goals`).
 
 1. **Pick the next K number** and update BOTH sources (single-source rule):
    - the module docstring layer table

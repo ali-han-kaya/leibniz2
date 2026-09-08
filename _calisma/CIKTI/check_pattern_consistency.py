@@ -35,13 +35,17 @@ def _read_merge_pattern(workflow_path: str):
     """verify.yml'den merge-multiple pattern'ini oku (brace format).
 
     Döndürür: (items: set, line_no: int) — line_no pattern'in bulunduğu satır.
+
+    Birden fazla brace pattern olabilir (ör. tek-dosya sidecar indirme adımı
+    küçük bir pattern kullanabilir); kanonik pattern — fix() ile aynı tanım —
+    `merge-multiple: true` ile ARDIŞIK olan pattern'dir.
     """
     with open(workflow_path, encoding="utf-8") as f:
-        lines = f.readlines()
-    for i, line in enumerate(lines, 1):
-        m = re.search(r"pattern:\s*'\{([^}]+)\}'", line)
-        if m:
-            return {s.strip() for s in m.group(1).split(",")}, i
+        text = f.read()
+    m = re.search(r"merge-multiple:\s*true\s*\n\s*pattern:\s*'\{([^}]+)\}'", text)
+    if m:
+        line_no = text.count("\n", 0, m.start(1)) + 1
+        return {s.strip() for s in m.group(1).split(",")}, line_no
     return None, 0
 
 
@@ -66,11 +70,10 @@ def check(workflow_path: str = None):
     if extra:
         errors.append(f"Fazla (satır {line_no}): pattern'da var ama ARTIFACT_JOBS'da yok: {', '.join(sorted(extra))}")
 
-    # Duplike kontrolü
+    # Duplike kontrolü — tüm brace pattern'ler taranır (kanonik olsun olmasın)
     with open(wf, encoding="utf-8") as f:
         text = f.read()
-    m = re.search(r"pattern:\s*'\{([^}]+)\}'\s*\n", text)
-    if m:
+    for m in re.finditer(r"pattern:\s*'\{([^}]+)\}'", text):
         items = [s.strip() for s in m.group(1).split(",")]
         dupes = [x for x in items if items.count(x) > 1]
         if dupes:
