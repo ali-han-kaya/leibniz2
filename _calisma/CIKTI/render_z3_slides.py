@@ -21,7 +21,7 @@ symbolic_proof_z3.py'deki record() çağrılarıyla çapraz doğrular
 script drift'i yakalar).
 
 Örnek:
-  python3 _calisma/CIKTI/render_z3_slides.py --out _calisma/slides_z3
+  python3 _calisma/CIKTI/render_z3_slides.py --out _calisma/CIKTI/slides_z3
   python3 _calisma/CIKTI/render_z3_slides.py --check-sync
 """
 import argparse
@@ -187,8 +187,8 @@ def check_sync():
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--out", default=str(HERE.parent / "slides_z3"),
-                    help="PNG çıktı dizini (varsayılan: _calisma/slides_z3)")
+    ap.add_argument("--out", default=str(HERE / "slides_z3"),
+                    help="PNG çıktı dizini (varsayılan: _calisma/CIKTI/slides_z3)")
     ap.add_argument("--dpi", type=int, default=300)
     ap.add_argument("--border", type=int, default=4)
     ap.add_argument("--bg", choices=("transparent", "white"), default="transparent")

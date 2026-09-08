@@ -92,23 +92,10 @@ class DashboardSmokeTest(unittest.TestCase):
             browser = p.chromium.launch(headless=True)
             page = browser.new_page()
             page.route("/sw.js", lambda route: route.fulfill(body=""))
-            # Serve the Z3 slide images (slides_z3/ lives one level up from
-            # CIKTI/; the dashboard references /slides_z3/*.png which the
-            # preview-dir-rooted server cannot resolve). This makes the smoke
-            # test realistic: real assets render, no spurious 404 noise.
-            slide_root = os.path.abspath(
-                os.path.join(HERE, os.pardir, "slides_z3"))
-            def _slide(route):
-                import posixpath
-                url = route.request.url
-                # url = http://127.0.0.1:PORT/slides_z3/P1-a.png
-                path = url.split("/slides_z3/", 1)[-1]  # P1-a.png
-                fp = os.path.join(slide_root, path)
-                if os.path.isfile(fp):
-                    route.fulfill(path=fp)
-                else:
-                    route.fulfill(body="", status=404)
-            page.route("/slides_z3/**", _slide)
+            # slides_z3/ lives inside CIKTI/ (== PREVIEW_DIR); server now
+            # serves /slides_z3/*.png natively via serve_slides — no route
+            # trick needed. Keep a lightweight 404 guard so failures surface
+            # as real failures, not hidden routing shims.
             page.on("console",
                     lambda msg: js_errors.append(msg.text)
                     if msg.type == "error" and

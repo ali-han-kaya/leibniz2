@@ -7,7 +7,7 @@ pipeline'ını belgeler.
 
 Kullanım amacı: `core_section.tex`'teki 12 Z3 teoremini slayt kullanımına
 uygun, sayfadan bağımsız PNG görsellerine dönüştürmek (çalışan uygulama:
-`_calisma/CIKTI/render_z3_slides.py`, çıktı: `_calisma/slides_z3/`).
+`_calisma/CIKTI/render_z3_slides.py`, çıktı: `_calisma/CIKTI/slides_z3/`).
 
 ---
 
@@ -92,9 +92,9 @@ pdftoppm -r 300 -png -singlefile eq.pdf eq
 Tek komutluk üretim (12 teorem):
 
 ```bash
-python3 _calisma/CIKTI/render_z3_slides.py --out _calisma/slides_z3
+python3 _calisma/CIKTI/render_z3_slides.py --out _calisma/CIKTI/slides_z3
 # Araçlar: LaTeX=tectonic, PDF→PNG=pdftoppm (dpi=300, bg=transparent)
-# ÖZET: 12 OK, 0 hata → _calisma/slides_z3
+# ÖZET: 12 OK, 0 hata → _calisma/CIKTI/slides_z3
 ```
 
 ### Neden eşdeğer
@@ -147,7 +147,7 @@ tek Homebrew bağımlılığı (`tectonic poppler`), TeXLive'siz, doğrulanmış
 
 ## 5. Doğrulama kaydı (2026-08-26)
 
-- `render_z3_slides.py` → 12/12 PNG üretildi (`_calisma/slides_z3/`), 300 DPI,
+- `render_z3_slides.py` → 12/12 PNG üretildi (`_calisma/CIKTI/slides_z3/`), 300 DPI,
   şeffaf bg, tight crop (standalone).
 - PNG boyutları 2-10 KB; P1-a örneğinde 3792 opak piksel (içerik doğrulandı).
 - `--check-sync` PASS: THEOREMS tablosu `symbolic_proof_z3.py` record()

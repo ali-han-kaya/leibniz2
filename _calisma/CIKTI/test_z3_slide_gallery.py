@@ -5,7 +5,7 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parent
 HTML = ROOT / "preview.html"
-SLIDES = ROOT.parent / "slides_z3"
+SLIDES = ROOT / "slides_z3"
 EXPECTED = ("P1-a", "P1-b", "P2", "P3-a", "P3-b", "P4-a", "P4-b",
             "P4-c", "P4-d", "P4-e", "P5", "P5-note")
 

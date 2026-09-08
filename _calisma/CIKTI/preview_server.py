@@ -1252,6 +1252,8 @@ def _route(path):
         return "run_stdout"
     if p == "/api/health":
         return "health"
+    if p.startswith("/slides_z3/"):
+        return "slides"
     return None
 
 
@@ -1325,6 +1327,8 @@ class Handler(BaseHTTPRequestHandler):
             self.serve_run_stdout()
         elif route == "health":
             self._send(200, "ok")
+        elif route == "slides":
+            self.serve_slides()
         elif route is None and urllib.parse.urlparse(self.path).path.startswith("/api/"):
             status, payload = api_error(404, "not found")
             self._send(status, json.dumps(payload),
@@ -1584,6 +1588,55 @@ class Handler(BaseHTTPRequestHandler):
             f'<script>window.BUILD_TS={ts};</script>',
             1)
         self._send(200, html, content_type="text/html; charset=utf-8")
+
+    def serve_slides(self):
+        """Z3 slide PNG'leri — PREVIEW_DIR/slides_z3/ altından statik servis.
+
+        Dashboard preview.html'daki galeri `src="/slides_z3/P1-a.png"`
+        biçiminde ister; TCC-safe mirror'da PREVIEW_DIR zaten
+        _calisma/CIKTI (veya mirror kopyası) olduğundan kaynaklar aynı
+        dizinde durur. Yol `slides_z3/` köküne göre çözülür, `/` veya `..`
+        ile kaçış engellenir, uzantı yalnızca `.png` kabul edilir.
+        """
+        path = urllib.parse.urlparse(self.path).path
+        # /slides_z3/P1-a.png → P1-a.png (tek path segment)
+        name = path[len("/slides_z3/"):]
+        if not name or "/" in name or name.startswith("."):
+            self._send(404, "404 not found")
+            return
+        if not name.lower().endswith(".png"):
+            self._send(404, "404 not found")
+            return
+        # runs/stdout sanitizasyonuyla aynı ilke: yalnızca güvenli karakterler
+        if not re.fullmatch(r"[A-Za-z0-9._-]+", name):
+            self._send(404, "404 not found")
+            return
+        full = os.path.join(PREVIEW_DIR, "slides_z3", name)
+        # canonical path hâlâ PREVIEW_DIR/slides_z3 altında mı? (symlink/.. guard)
+        try:
+            real = os.path.realpath(full)
+            base = os.path.realpath(os.path.join(PREVIEW_DIR, "slides_z3"))
+            if os.path.commonpath([real, base]) != base:
+                self._send(404, "404 not found")
+                return
+        except ValueError:
+            self._send(404, "404 not found")
+            return
+        if not os.path.isfile(full):
+            self._send(404, "404 not found")
+            return
+        try:
+            with open(full, "rb") as f:
+                data = f.read()
+        except OSError:
+            self._send(404, "404 not found")
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "image/png")
+        self.send_header("Cache-Control", "public, max-age=86400")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
 
     def serve_preview_js(self):
         """preview.js — dashboard JS (preview.html'den ayrılmış dış dosya).
