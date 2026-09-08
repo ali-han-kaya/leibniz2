@@ -2420,6 +2420,57 @@ jobs:
           echo "rc=$rc" >> "$GITHUB_OUTPUT"
           echo "K12 --check-plist exit: $rc"
 
+      # 3) Fazla-profil drift'i (P0, fail-closed) SELF-HEAL: golden'da
+      #    olmayan render edilmiş profil --remove-extra ile temizlenir ve
+      #    denetim yeniden koşulur (makine-okunur JSON sidecar'a yazılır).
+      #    Self-heal P0'yı GİZLEMEZ: aşağıdaki "Fail plist-check on P0
+      #    finding" adımı JSON'daki has_p0'ı denetler — temizlik başarısızsa
+      #    job yine fail eder.
+      - name: Self-heal extra plist drift (P0)
+        id: selfheal
+        if: always()
+        continue-on-error: true
+        run: |
+          set +e
+          python3 _calisma/CIKTI/check_plist_drift.py --json --remove-extra \
+            2>&1 | tee plist_drift_golden.txt
+          rc=${PIPESTATUS[0]}
+          set -e
+          # JSON tek satır stdout'a düşer (python3 --json) — sidecar'a al.
+          python3 _calisma/CIKTI/check_plist_drift.py --json --remove-extra \
+            > plist_drift_golden.json 2>/dev/null
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          echo "self-heal exit: $rc"
+
+      # 4) P0 sinyali fail-closed: extra-profil temizliği başarısız olduysa
+      #    (silinemeyen dosya / yeniden drift) job KIRILIR — P0 sessizce
+      #    advisory'e düşmez (golden seti şablonla senkron değilse bloke).
+      - name: Fail plist-check on P0 finding
+        if: always()
+        run: |
+          has_p0=$(python3 -c '
+          import json, os, sys
+          try:
+              d = json.load(open("plist_drift_golden.json", encoding="utf-8"))
+          except (OSError, ValueError):
+              print(0); sys.exit(0)
+          print(1 if d.get("has_p0") else 0)')
+          echo "has_p0=$has_p0" >> "$GITHUB_OUTPUT"
+          if [ "$has_p0" = "1" ]; then
+            echo "K12-PLIST-EXTRA P0: plist drift job fail-closed"
+            cat plist_drift_golden.txt 2>/dev/null || true
+            exit 1
+          fi
+          echo "P0 yok — plist drift P1 ise advisory"
+
+      # 5) P1 drift advisory: P0 yokken kalan P1 (bayat/geçersiz plist)
+      #    build'i bloke etmez — yalnızca raporlanır (advisory).
+      - name: Write plist P1 advisory note
+        if: always()
+        continue-on-error: true
+        run: |
+          echo "K12 P1 drift: advisory (P0 yok)"
+
       # Her iki sinyali run summary'ye yaz (durum + çıktı).
       - name: Write plist drift to run summary
         if: always()
