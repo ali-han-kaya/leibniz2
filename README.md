@@ -550,6 +550,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-31 | perf | (preview) cache loadTrend 30s + fix refs-trend path | [`4686936`](https://github.com/ali-han-kaya/leibniz2/commit/4686936) |
 | 2026-09-08 | fix | (preview) compact JSON, auth, Host/Origin, shutdown, klayers | [`35ccc98`](https://github.com/ali-han-kaya/leibniz2/commit/35ccc98) |
 | 2026-09-08 | docs | (changelog) sync changelog for split verify hardenings | [`076c576`](https://github.com/ali-han-kaya/leibniz2/commit/076c576) |
+| 2026-09-09 | ci | (verify) deduplicate K10 bundle verdict into composite action | [`9c2f049`](https://github.com/ali-han-kaya/leibniz2/commit/9c2f049) |
 
 ### Regresyon notları
 
