@@ -2838,6 +2838,112 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
+  # ──────────────────────────────────────────────────────────────────────
+  # FRESH-CLONE HTTP SMOKE (advisory) — temiz clone'dan gerçek server/API
+  # yaşam döngüsü. Kurulum/sync regresyonlarını verify job'undan bağımsız
+  # yakalar: clone → cloned preview_server.py → /api/health + /api/latest.
+  # Advisory: rapor görünür; branch protection required setini değiştirmez.
+  # ──────────────────────────────────────────────────────────────────────
+  fresh-clone-http:
+    name: Fresh-clone HTTP smoke (advisory)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Clone, start server, and curl API endpoints
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$(mktemp -d)"
+          launcher_pid=""
+          server_group_pid=""
+          cleanup() {
+            if [ -n "$server_group_pid" ]; then
+              kill -- "-$server_group_pid" 2>/dev/null || true
+            elif [ -n "$launcher_pid" ]; then
+              kill "$launcher_pid" 2>/dev/null || true
+            fi
+            if [ -n "$launcher_pid" ]; then
+              wait "$launcher_pid" 2>/dev/null || true
+            fi
+            rm -rf "$work"
+          }
+          trap cleanup EXIT
+
+          clone="$work/repo"
+          git clone --no-local --no-checkout "$GITHUB_WORKSPACE" "$clone"
+          git -C "$clone" checkout --detach "$GITHUB_SHA"
+          test "$(git -C "$clone" rev-parse HEAD)" = "$GITHUB_SHA"
+
+          port=18765
+          # setsid gives the server and any verify subprocesses a private
+          # process group; the pid file captures the actual group leader even
+          # if setsid has to fork before exec'ing Python.
+          pid_file="$work/server.pid"
+          setsid python3 - "$clone" "$port" "$pid_file" > "$work/server.log" 2>&1 <<'PYEOF' &
+          import os
+          import sys
+
+          clone, port, pid_file = sys.argv[1:]
+          with open(pid_file, "w", encoding="ascii") as f:
+              f.write(str(os.getpid()))
+          server = os.path.join(clone, "_calisma", "CIKTI", "preview_server.py")
+          preview_dir = os.path.join(clone, "_calisma", "CIKTI")
+          os.execv(sys.executable, [
+              sys.executable, server,
+              "--dir", preview_dir,
+              "--preview-dir", preview_dir,
+              "--bind", "127.0.0.1",
+              "--port", port,
+              "--interval", "3600",
+          ])
+          PYEOF
+          launcher_pid=$!
+          for _ in $(seq 1 10); do
+            if [ -s "$pid_file" ]; then
+              server_group_pid="$(cat "$pid_file")"
+              break
+            fi
+            sleep 0.1
+          done
+          server_group_pid="${server_group_pid:-$launcher_pid}"
+
+          ready=0
+          for _ in $(seq 1 30); do
+            if curl --fail --silent --show-error --max-time 2 \
+                "http://127.0.0.1:$port/api/health" > "$work/health.txt"; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ready" -ne 1 ]; then
+            cat "$work/server.log"
+            echo "Fresh-clone server did not become ready" >&2
+            exit 1
+          fi
+
+          grep -Fx 'ok' "$work/health.txt"
+          curl --fail --silent --show-error --max-time 5 \
+            "http://127.0.0.1:$port/api/latest" > "$work/latest.json"
+          python3 - "$work/latest.json" <<'PYEOF'
+          import json
+          import sys
+
+          with open(sys.argv[1], encoding="utf-8") as f:
+              latest = json.load(f)
+          if not isinstance(latest, dict):
+              raise SystemExit("/api/latest did not return a JSON object")
+          for field in ("verdict", "p0", "p1"):
+              if field not in latest:
+                  raise SystemExit(f"/api/latest missing {field}")
+          print("Fresh-clone HTTP smoke: PASS")
+          PYEOF
+
   # CHANGELOG DRIFT CHECK (advisory) — gen_changelog.py --check'i CI'da koşar
   # ve drift bulgularını run summary'ye yazar. Advisory: changelog tabloları
   # (README/PUBLISH_SCENARIO) tasarım gereği HEAD'in bir commit gerisinde
