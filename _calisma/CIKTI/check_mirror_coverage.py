@@ -46,9 +46,39 @@ def parse_list(out, root, cikti, lean_src):
     return listed
 
 
+def _git_tracked_files(root, prefix):
+    """Return git ls-files output for prefix, or None if not a git checkout or git fails.
+
+    Clone-safe: untracked/generated files (e.g. a stray github_scripts/*.js
+    dropped in a dirty worktree) are NOT returned, so they can never flip the
+    expected set. Fake-repo tests use a temp dir without .git and fall back
+    to the filesystem scan below.
+    """
+    if not os.path.exists(os.path.join(root, ".git")):
+        return None
+    try:
+        r = subprocess.run(["git", "-C", root, "ls-files", "--", prefix],
+                           capture_output=True, text=True, timeout=10)
+        if r.returncode != 0:
+            return None
+        return [ln.strip() for ln in r.stdout.splitlines() if ln.strip()]
+    except Exception:
+        return None
+
+
 def expected_repo_files(root, cikti, lean_src):
     expected = set()
-    if os.path.isdir(cikti):
+    tracked = _git_tracked_files(root, "_calisma/CIKTI")
+    if tracked is not None:
+        for p in tracked:
+            if not p.startswith("_calisma/CIKTI/"):
+                continue
+            rel = p[len("_calisma/CIKTI/"):]
+            if "/" not in rel and (rel.endswith(".zip") or rel.endswith(".zip.sha256")):
+                expected.add(p)
+            elif rel.startswith("github_scripts/") and rel.endswith(".js") and rel.count("/") == 1:
+                expected.add(p)
+    elif os.path.isdir(cikti):
         expected.update("_calisma/CIKTI/" + n for n in os.listdir(cikti)
                         if n.endswith(".zip") or n.endswith(".zip.sha256"))
         gs = os.path.join(cikti, "github_scripts")
