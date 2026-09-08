@@ -1,5 +1,5 @@
   const fs = require('fs');
-  const path = 'reproducibility/config/config-diff.json';
+  const path = 'reproducibility/config-diff.json';
   const MARKER = '<!-- stoic-hume-v5-config-diff -->';
 
   const listComments = async () => {

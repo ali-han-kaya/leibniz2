@@ -107,7 +107,7 @@ const fs = require('fs');
 
   // ── Bölüm 3: Config diff (raw vs effective) ──
   let configDiffBlock = '';
-  const diffPath = 'reproducibility/config/config-diff.json';
+  const diffPath = 'reproducibility/config-diff.json';
   if (fs.existsSync(diffPath)) {
     try {
       const diff = JSON.parse(fs.readFileSync(diffPath, 'utf8'));

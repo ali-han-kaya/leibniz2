@@ -880,7 +880,7 @@ SCENARIOS = [
         "config_diff: fark var + yeni yorum",
         "config_diff_comment.js",
         {
-            "reproducibility/config/config-diff.json": json.dumps({
+            "reproducibility/config-diff.json": json.dumps({
                 "differences": [{
                     "field": "expected_pages", "raw": 33, "effective": 34,
                     "reason": "paket yeniden üretildi"}]}),
@@ -899,7 +899,7 @@ SCENARIOS = [
         "config_diff: mevcut yorum güncelle",
         "config_diff_comment.js",
         {
-            "reproducibility/config/config-diff.json": json.dumps({
+            "reproducibility/config-diff.json": json.dumps({
                 "differences": [{"field": "budget_usd", "raw": 30,
                                  "effective": 35, "reason": "limit artırıldı"}]}),
         },
@@ -915,7 +915,7 @@ SCENARIOS = [
     (
         "config_diff: fark yok + bayat yorum varsa SİLİNİR",
         "config_diff_comment.js",
-        {"reproducibility/config/config-diff.json":
+        {"reproducibility/config-diff.json":
             json.dumps({"differences": []})},
         None, [],
         [{"id": 888, "body": "bayat " + MARKER_CFGDIFF}],
@@ -958,7 +958,7 @@ SCENARIOS = [
             "reproducibility/manifest.txt": "github_run_id: 42\n"
                                              "github_sha: abc\n",
             "k10_verdict.txt": "PASS",
-            "reproducibility/config/config-diff.json": json.dumps({
+            "reproducibility/config-diff.json": json.dumps({
                 "differences": [{"field": "budget_usd", "raw": 30,
                                  "effective": 25, "reason": "cli_override"}]}),
             "reproducibility/cli_overrides_version.json": json.dumps({
@@ -1031,7 +1031,7 @@ SCENARIOS = [
         {
             "reproducibility/manifest.txt": "github_run_id: 222\n",
             "k10_verdict.txt": "PASS",
-            "reproducibility/config/config-diff.json": json.dumps({
+            "reproducibility/config-diff.json": json.dumps({
                 "differences": [{"field": "expected_pages", "raw": 33,
                                  "effective": 34, "reason": "paket yeniden üretildi"}]}),
             "reproducibility/cli_overrides_version.json": json.dumps({

@@ -45,6 +45,19 @@ PR_STATUS_INPUTS = [
     ("k10_verdict.txt", None, "IN_JOB"),
 ]
 
+# manifest_comment.js girdileri → manifest-comment teslim şeması.
+MANIFEST_COMMENT_INPUTS = [
+    ("reproducibility/manifest.txt", "reproducibility", "reproducibility/"),
+    ("reproducibility/cli_overrides_version.json", "reproducibility", "reproducibility/"),
+    ("k10_verdict.txt", None, "IN_JOB"),
+]
+
+# config_diff_comment.js girdileri → manifest-comment teslim şeması
+# (aynı job içinde iki script tek github-script adımında koşar).
+CONFIG_DIFF_INPUTS = [
+    ("reproducibility/config-diff.json", "reproducibility", "reproducibility/"),
+]
+
 
 def _job_section(text, job):
     """Job'un metin bölümü (üst bilgiden sonraki job üst bilgisine)."""
@@ -216,6 +229,84 @@ class TestCiSidecarWiring(unittest.TestCase):
                     if not (has_inline or has_action):
                         missing.append(f"{job}/{path}: job içi üretici adımı yok "
                                        f"(ne > {path} ne de k10-verdict action)")
+                    continue
+                got = self.delivered.get(job, {}).get(art, "YOK")
+                if got != dest:
+                    missing.append(
+                        f"{job}/{path}: beklenen {art}→{dest!r}, teslim {got!r}")
+            self.assertFalse(missing, "; ".join(missing))
+
+    def test_manifest_comment_inputs_delivered(self):
+        """manifest_comment.js girdi sabitlerinin TAMAMI manifest-comment
+        job'ına ulaşmalı — reproducibility bundle + k10_verdict. Repro
+        manifest ve CLI override aynı artifact'tan gelir; k10 IN_JOB.
+        Derived set script'teki tek-kaynak sabitlerden türetilir — tablo
+        drift'li ise test kırar (tek kaynak bozuldu)."""
+        with open(os.path.join(HERE, "github_scripts",
+                               "manifest_comment.js"), encoding="utf-8") as fh:
+            script = fh.read()
+        # manifest_comment.js: const path = 'reproducibility/manifest.txt'
+        # + const cliPath = 'reproducibility/cli_overrides_version.json'
+        # + k10_verdict.txt (k10 Badge)
+        derived = set(re.findall(r"'(reproducibility/[^']+)'", script))
+        if "k10_verdict.txt" in script:
+            derived.add("k10_verdict.txt")
+        table = {p for p, _, _ in MANIFEST_COMMENT_INPUTS}
+        self.assertEqual(derived, table,
+                         "MANIFEST_COMMENT_INPUTS tablosu script sabitlerinden "
+                         "drift'li (tek kaynak bozuldu)")
+        consumers = _script_consumers(self.text, "manifest_comment.js")
+        self.assertEqual(
+            consumers, {"manifest-comment"},
+            "manifest_comment.js'in kayıtsız tüketici job'ları: "
+            f"{sorted(consumers - {'manifest-comment'})} — DELIVERIES/"
+            "EVAL_SCRIPTS'e kaydedilmeli")
+        for job in sorted(consumers):
+            missing = []
+            for path, art, dest in MANIFEST_COMMENT_INPUTS:
+                if dest == "IN_JOB":
+                    section = _job_section(self.text, job)
+                    has_inline = re.search(r">\s*%s\b" % re.escape(path), section)
+                    has_action = "k10-verdict" in section
+                    if not (has_inline or has_action):
+                        missing.append(f"{job}/{path}: job içi üretici adımı yok "
+                                       f"(ne > {path} ne de k10-verdict action)")
+                    continue
+                got = self.delivered.get(job, {}).get(art, "YOK")
+                if got != dest:
+                    missing.append(
+                        f"{job}/{path}: beklenen {art}→{dest!r}, teslim {got!r}")
+            self.assertFalse(missing, "; ".join(missing))
+
+    def test_config_diff_comment_inputs_delivered(self):
+        """config_diff_comment.js girdi sabitinin TAMAMI manifest-comment
+        job'ına ulaşmalı — reproducibility bundle (flat config-diff.json).
+        Nested reproducibility/config/config-diff.json YANLIŞ — bundle'da
+        dosya köke düzleşir (config-diff.json), bu yol fail-closed yakalar."""
+        with open(os.path.join(HERE, "github_scripts",
+                               "config_diff_comment.js"), encoding="utf-8") as fh:
+            script = fh.read()
+        derived = set(re.findall(r"'(reproducibility/[^']+)'", script))
+        table = {p for p, _, _ in CONFIG_DIFF_INPUTS}
+        self.assertEqual(derived, table,
+                         "CONFIG_DIFF_INPUTS tablosu script sabitinden drift'li "
+                         "(tek kaynak bozuldu) — dosya reproducibility/ altında "
+                         "flat (config-diff.json) olmalı, config/ alt dizin değil")
+        consumers = _script_consumers(self.text, "config_diff_comment.js")
+        self.assertEqual(
+            consumers, {"manifest-comment"},
+            "config_diff_comment.js'in kayıtsız tüketici job'ları: "
+            f"{sorted(consumers - {'manifest-comment'})} — DELIVERIES/"
+            "EVAL_SCRIPTS'e kaydedilmeli")
+        for job in sorted(consumers):
+            missing = []
+            for path, art, dest in CONFIG_DIFF_INPUTS:
+                if dest == "IN_JOB":
+                    section = _job_section(self.text, job)
+                    has_inline = re.search(r">\s*%s\b" % re.escape(path), section)
+                    has_action = "k10-verdict" in section
+                    if not (has_inline or has_action):
+                        missing.append(f"{job}/{path}: job içi üretici adımı yok")
                     continue
                 got = self.delivered.get(job, {}).get(art, "YOK")
                 if got != dest:
