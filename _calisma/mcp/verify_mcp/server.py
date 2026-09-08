@@ -26,7 +26,7 @@ import os
 import re
 import sys
 from enum import Enum
-from typing import Annotated, Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Literal, Optional
 
 from mcp.server.fastmcp import FastMCP
 from pydantic import Field
@@ -67,7 +67,7 @@ _SUMMARY_KEYS = (
 
 # Common tool parameters (flat, agent-friendly input schema).
 ResponseFormat = Annotated[
-    str,
+    Literal["markdown", "json"],
     Field(description="Output format: 'markdown' for human-readable, 'json' for machine-readable"),
 ]
 Ts = Annotated[str, Field(description=(
