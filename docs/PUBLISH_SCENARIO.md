@@ -21,9 +21,9 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 > | AŞAMA 3 — CI doğrulama | 🔄 **aktif** — her push'ta tekrarlanır (incremental) |
 > | AŞAMA 4 — koruma kanıtı | ⏸️ opsiyonel (1 (b) sonrası) |
 >
-> Job tablosu (AŞAMA 3), `.github/workflows/verify.yml`'deki **24 job**'u 4 kategoride
-> sunar: 12 **required** (9 push + P0 label gate + commit-msg gate + config-sync +
-> ci-simulate) + 10 **advisory** + 1 **PR-only** (P1 label gate) + 1 **manifest** (PR-only).
+> Job tablosu (AŞAMA 3), `.github/workflows/verify.yml`'deki **27 job**'u 4 kategoride
+> sunar: 12 **required** + 12 **advisory** + 3 **PR-only/manifest** job. Branch protection
+> yalnızca required job'ları bloke eder.
 > Branch protection yalnızca required job'ları bloke eder.
 > Güncel listeyi üret: `python3 _calisma/CIKTI/status_checks.py --json`.
 
@@ -575,7 +575,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 --exit-status` + artifact listesi; sonuç `SONUÇ: PASS/FAIL` olarak loglanır
 (dry-run'da yalnızca önizlenir).
 
-**Job kategorileri (26 job = 12 required + 11 advisory + 3 PR-only):**
+**Job kategorileri (27 job = 12 required + 12 advisory + 3 PR-only):**
 
 > **Kural:** Branch protection **yalnızca A kategorisindeki** job'ları required check olarak
 > kabul eder. B (advisory) job'ları push'ta çalışır ama required değildir;
@@ -610,11 +610,12 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 | 21 | B | Merge pattern drift check (advisory) | — merge pattern ↔ ARTIFACT_JOBS tutarlılığı (advisory, run summary) |
 | 22 | B | Preview reload smoke (advisory, macOS) | — preview restart + endpoint smoke (advisory) |
 | 23 | B | K9 Lake proof (Lean 4.14.0) | ✅ success — ayrı-step lake build --wfail (lean-toolchain v4.14.0); K9 ayrıca verify job'unun `--full` içinde de koşar (required DEĞİL) |
+| 24 | B | Fresh-clone HTTP smoke (advisory) | — temiz clone'dan preview_server.py başlatılır; `/api/health` + `/api/latest` curl ile doğrulanır |
 | | **C — PR-only (push'ta çalışmaz, PR'da çalışır)** | | |
-| 24 | C | Pre-commit P1 label gate (optional) | — skipped (push'ta çalışmaz) |
+| 25 | C | Pre-commit P1 label gate (optional) | — skipped (push'ta çalışmaz) |
 | | **D — PR-only (yorum/etiket düşürme)** | | |
-| 25 | D | Manifest PR comment | — skipped (PR'da çalışır) |
-| 26 | D | Budget status PR comment | — bütçe + pre-commit PR yorumu; job-level PR-only, push'ta tamamen skipped (bütçe kapısı ayrı `budget` job'ında kalır) |
+| 26 | D | Manifest PR comment | — skipped (PR'da çalışır) |
+| 27 | D | Budget status PR comment | — bütçe + pre-commit PR yorumu; job-level PR-only, push'ta tamamen skipped (bütçe kapısı ayrı `budget` job'ında kalır) |
 
 **Artifact listesi (29):**
 - `unit-tests` (CIKTI birim test logu — `test_*.py` glob'u)

@@ -60,6 +60,7 @@ GATE_EXCLUDE = {
     "plist-check",          # macOS-advisory: push'ta çalışmaz
     "mirror-check",         # macOS: sync sonrası K17 fail-closed (advisory)
     "daemon-http",          # advisory: daemon-modu HTTP 200 smoke (advisory)
+    "fresh-clone-http",      # advisory: temiz clone + preview HTTP smoke
     "audit-live-ci",        # advisory: doc↔GitHub senkron denetimi
     "audit-refs-trend",     # advisory: refs-trend satırları ↔ kaynak denetimi
     "override-trend",       # advisory: CLI override zaman serisi
@@ -76,7 +77,19 @@ GATE_EXCLUDE = {
 # commit-msg-gate (commit-msg ihlal blokajı — PR-only ama required),
 # config-sync (config snapshot ↔ CONFIG_BASENAMES üçlü senkron),
 # ci-simulate (yerel CI simülasyonu — full K1-K14 replay).
-# 23 job − 11 hariç = 13 required (pattern-drift advisory eklendi).
+# 27 job − 14 hariç = 13 required (fresh-clone-http dahil advisory).
+#
+# 2026-09-04 denetimi (job-id → karar, kanıt verify.yml + GitHub required set):
+#   reports          REQUIRED kalır — tüketilen precommit-logs artifact'ı
+#                    job içinde indirilir (coe=True), bundle repo-kaynaklı;
+#                    kriter: fail-open değil, tüketim bağlı.
+#   reproducibility  REQUIRED kalır — K10 bütünlük adımı (--verify-manifest)
+#                    set -e altında job'u düşürür (fail-closed uç); manifest
+#                    bundle'ı merge-blok kapıdır.
+#   refs-trend       REQUIRED kalır — koddan türeyen trend tablosu in-jobs
+#                    üretilir (artifact bağımlılığı yok), K6 trend zinciri.
+#   lake-proof       ADVISORY kalır (exclude'da) — ayrı-step K9 lake build;
+#                    K9, verify --full içinde bağımsız koşar (e30f8ea).
 
 
 def gate_jobs():

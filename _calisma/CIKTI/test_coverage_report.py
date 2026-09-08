@@ -65,11 +65,15 @@ HOOK_COVERAGE = {
     "check-config-sync":       ["test_check_config_sync.py"],
     "check-lake-evidence":     ["test_lake_evidence_smoke.py"],
     "check-refs-table-sync":   ["test_check_refs_table_sync.py"],
+    "check-bibliography-sync": ["test_check_bibliography_sync.py"],
+    "check-review-freshness":  ["test_check_review_freshness.py"],
     "check-doc-artifact-sync": ["test_doc_artifact_sync.py"],
     "check-skills-index":       ["test_skills_index.py", "test_readme_skills.py"],
+    "check-design-tokens":      ["test_check_design_tokens.py"],
     "check-reproducible-pdf-skill": ["test_reproducible_pdf_skill.py"],
     "check-changelog-sync":    ["test_update_changelog_hook.py", "test_gen_changelog.py"],
     "check-unit-tests": [
+        "test_workflow_install_hardening.py",
         "test_verify_refs.py",
         "test_verify_checks.py",
         "test_status_checks.py",
@@ -78,6 +82,7 @@ HOOK_COVERAGE = {
         "test_incremental_doc_sync.py",
         "test_check_doc_wrapper_sync.py",
         "test_run_summary_refs_trend.py",
+        "test_run_now_post_only.py",
         "test_run_summary_budget.py",
         "test_run_summary_changelog.py",
         "test_run_summary_k0.py",
@@ -121,6 +126,7 @@ HOOK_COVERAGE = {
         "test_repack_verify.py",
         "test_setup_branch_protection.py",
         "test_preview_server.py",
+        "test_preview_server_atomic.py",
         "test_fresh_clone_setup.py",
         "test_lean_lake.py",
         "test_coq_lake.py",
@@ -190,6 +196,13 @@ HOOK_COVERAGE = {
         "test_workflow_triggers.py",
         "test_z3_slide_gallery.py",
         "test_z3_slide_reproducibility.py",
+        "test_architecture_deepening_deck.py",
+        "test_k_layer_tokens.py",
+        "test_pdf_repro_findings_deck.py",
+        "test_pdf_source_freshness.py",
+        "test_run_summary_k13.py",
+        "test_verification_chain_deck.py",
+        "test_verify_k_layers.py",
         "test_ci_stats.py",
         "test_config_sync_badge.py",
         "test_budget_over_detail.js",
@@ -206,6 +219,7 @@ CI_JOB_COVERAGE = {
         "ALL",
     ],
     "preview-reload-smoke": ["test_preview_reload_smoke.py"],
+    "dashboard-smoke": ["test_dashboard_playwright_smoke.py"],
     "daemon-http": ["test_daemon_http.py"],
     "plist-check": ["test_plist_gate_exit.py", "test_gen_plist_golden.py"],
     "coq-proof": ["test_coq_lake.py"],
@@ -452,6 +466,7 @@ def main(argv=None):
         "test_preview_reload_smoke.py",  # standalone smoke script, def test_ yok
         "test_all_hooks_smoke.py",       # standalone smoke: tum hook'lari kosar
         "test_budget_scan.js",          # JS-only, ayrı Node hook'unda
+        "test_dashboard_playwright_smoke.py",  # standalone Playwright smoke (Chromium ~10s) — CI'da ayrı job
     })
     if args.check:
         gaps = [g for g in report["gaps"]["not_covered_by_any_hook"]

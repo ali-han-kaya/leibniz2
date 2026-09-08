@@ -255,7 +255,12 @@ repos:
           adlarını tespit eder; K1-K19 kanonik adıyla yeniden adlandırılmamış
           branch protection drift'i fail-closed bloke edilir. GitHub erişimi
           yoksa kapı UNREADABLE sonucunu gizlemez.
-        entry: python3 _calisma/CIKTI/status_checks.py --gh --json
+        # venv-guard (686/705 satırlarıyla aynı desen): status_checks.py
+        # PyYAML ister; sistem python3'ünde PyYAML yoksa modül importu
+        # çöker ve kapı sahte-FAIL verir. Repo venv'i (fresh_clone_setup
+        # adım 1: yaml içerir) varsa onunla koş.
+        entry: bash -c 'PY=python3; [ -x _calisma/.venv_z3/bin/python ] &&
+          PY=_calisma/.venv_z3/bin/python; exec "$PY" _calisma/CIKTI/status_checks.py --gh --json'
         language: system
         always_run: true
         pass_filenames: false
@@ -302,6 +307,26 @@ repos:
           eklenmez (veya tersi) → sessiz kapsam kaybı → commit bloke edilir.
           OFFLINE, stdlib-only, ~0.05s.
         entry: python3 _calisma/CIKTI/check_refs_table_sync.py
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
+      - id: check-bibliography-sync
+        name: "Verify tez References ↔ built-PDF sync (fail-closed)"
+        description: >-
+          check_bibliography_sync.py: ingiliz_empirizmi_v3.tex References
+          (64 \\item) ile ingiliz_empirizmi_v3.pdf bibliyografisini
+          pdftotext -layout üzerinden çıkarıp normalize karşılaştırır.
+          Drift: tex'te V5j (Popkin 133-147, Priest tam altbaşlık) varken PDF
+          bayat bırakılırsa veya PDF elle değiştirilirse → entry_mismatch /
+          count_mismatch P0 ile fail-closed bloke edilir. Layout tireleme
+          ("Mathe- maticae"), başharf boşluğu ("T.L." vs "T. L.") ve aksan
+          tolere edilir; gerçek wording drift'i değil. pdftotext yoksa SKIP
+          (K6 ile aynı disiplin) — poppler'ın kurulu olduğu CI/pre-commit'te
+          koşar. OFFLINE, ~1s.
+        entry: python3 _calisma/CIKTI/check_bibliography_sync.py
         language: system
         always_run: true
         pass_filenames: false
@@ -692,6 +717,22 @@ repos:
         stages: [pre-commit]
         verbose: true
 
+      - id: check-review-freshness
+        name: "Verify Review compilation freshness + sidecar (fail-closed)"
+        description: >-
+          check_review_freshness.py: REVIEW PDF (53pp, qpdf --empty --pages)
+          kaynakları (ingiliz 33pp + original 19pp) REVIEW'den daha yeni ise
+          veya REVIEW'in .pdf.sha256 sidecar hash'i eşleşmiyorsa P0 ile
+          fail-closed bloke eder. Sidecar delivery .metadata.sha256 deseniyle
+          aynı ("<sha256>  <name>") — build_review_pdf.sh her merge sonrası
+          sidecar'ı deterministik yeniler. OFFLINE, stdlib-only, ~0.01s.
+        entry: python3 _calisma/CIKTI/check_review_freshness.py
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
       - id: check-hook-env-matrix
         name: "Verify hook env sürüm matrisi (fail-closed yapısal denetim)"
         description: >-
@@ -711,13 +752,28 @@ repos:
         stages: [pre-commit]
         verbose: true
 
+      - id: check-design-tokens
+        name: "Verify dashboard design tokens (fail-closed)"
+        description: >-
+          design-system/scripts/check_tokens.py: preview.html'ın
+          design-system/tokens.css import'u, inline :root drift'i ve
+          tokens.json ↔ tokens.css tutarlılığını (tint dahil) doğrular.
+          Stil değişirse (renk/space/radius) kapı fail-closed bloke eder.
+          OFFLINE, stdlib-only, ~0.05s.
+        entry: python3 design-system/scripts/check_tokens.py
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
       - id: extract-unstaged-deps
         name: "Extract unstaged dependency findings from hook output"
         description: >-
           Pre-commit'in gerçek hook çıktısını doğrudan stdin'den ayrıştırır;
           logs/precommit.log gibi sonradan üretilen bir dosyaya bağlı değildir.
           Uyarıları makine-okur sidecar'a yazar ve advisory olarak geçer.
-        entry: sh -c 'mkdir -p logs; python3 _calisma/CIKTI/extract_unstaged_deps.py --out-json logs/unstaged_deps_findings.json'
+        entry: sh -c 'mkdir -p logs; python3 _calisma/CIKTI/extract_unstaged_deps.py --log logs/precommit.log --out-json logs/unstaged_deps_findings.json'
         language: system
         always_run: true
         pass_filenames: false

@@ -34,6 +34,11 @@ from datetime import datetime
 DEFAULT_LIMIT = 5
 _TS_FMT = "%Y-%m-%dT%H:%M:%SZ"
 
+TABLE_HEADER = "| # | Run ID | Tarih (UTC) | Branch | Durum | Süre | Job | Özet |"
+_TABLE_SEP = "|---|---|---|---|---|---|---|---|"
+_MARK = {"success": "✅ success", "failure": "🔴 failure",
+         "in_progress": "🔄 in_progress"}
+
 
 def run_gh(args):
     """gh alt sürecini çalıştır; hata RuntimeError'a dönüşür."""
@@ -83,8 +88,11 @@ def stats(runs, durations):
     total = len(runs)
     completed = [r for r in runs if r.get("status") == "completed"]
     success = [r for r in completed if r.get("conclusion") == "success"]
-    secs = [d for d in durations.values() if d and d[0] is not None]
-    avg_sec = sum(d[0] for d in secs) / len(secs) if secs else None
+    # Sıfır süreli ve None süreli run'lar ortalamaya KATILMAZ (docstring):
+    # gh henüz job zamanlarını doldurmamışsa ya da 0 sn'lik hızlı run varsa
+    # ortalama bozulmaz. Başarı hesabı sıfır süreli run'ları yine sayar.
+    secs = [d[0] for d in durations.values() if d and d[0] not in (None, 0)]
+    avg_sec = sum(secs) / len(secs) if secs else None
     return {
         "runs_total": total,
         "runs_completed": len(completed),
@@ -94,6 +102,110 @@ def stats(runs, durations):
         "avg_duration_s": avg_sec,
         "avg_duration_min": (avg_sec / 60) if avg_sec is not None else None,
     }
+
+
+def markdown_rows(rows, repo):
+    """§9 tablo satırları: [header, separator, row…]. Linkli Run ID, backtick
+    branch, durum işaretleri, süre/job/title sütunları; title'daki `|` kaçar."""
+    lines = [TABLE_HEADER, _TABLE_SEP]
+    for i, r in enumerate(rows, 1):
+        rid = r.get("id")
+        date = (r.get("createdAt") or "")[:16].replace("T", " ")
+        branch = r.get("branch") or ""
+        status = r.get("status")
+        concl = r.get("conclusion") or ""
+        mark = _MARK.get(status, _MARK.get(concl, concl or status or "?"))
+        title = (r.get("title") or "").replace("|", "\\|")
+        lines.append(
+            f"| {i} | [{rid}](https://github.com/{repo}/actions/runs/{rid}) | "
+            f"{date} | `{branch}` | {mark} | {_fmt_dur(r.get('duration_s'))} | "
+            f"{r.get('jobs')} | {title} |")
+    return lines
+
+
+def stats_line(s):
+    """Success rate + avg duration tek satır özeti (§9 istatistik satırı)."""
+    rate = s["success_rate"]
+    if rate is None:
+        rate_txt = "— (tamamlanan run yok)"
+    else:
+        rate_txt = (f"{rate*100:.0f}% ({s['runs_success']}/{s['runs_completed']} "
+                    f"tamamlanan run)")
+    if s["avg_duration_min"] is None:
+        avg_txt = "— (yeterli tamamlanmış run yok)"
+    else:
+        avg_txt = (f"{s['avg_duration_min']:.1f} dk "
+                   f"({s['avg_duration_s']:.0f} sn)")
+    return (f"**İstatistik (ci_stats.py — otomatik):** {rate_txt} · {avg_txt}")
+
+
+def update_doc_block(doc_path, table, stat):
+    """docs/PRE_PUSH_DENETIM_RAPORU.md §9 bloğunu değiştir.
+
+    Başlık (`## 9. …`) ve bitiş işareti (`**Kırılım analizi`, elle yazılır)
+    arasındaki bölümü değiştirir; sonrası korunur. Fail-closed: başlık ya da
+    bitiş işareti yoksa ValueError + dosya değişmeden kalır.
+    """
+    with open(doc_path, encoding="utf-8") as f:
+        text = f.read()
+    head_start = text.find("## 9.")
+    if head_start == -1:
+        raise ValueError("§9 başlığı yok")
+    marker = "**Kırılım analizi"
+    marker_start = text.find(marker, head_start)
+    if marker_start == -1:
+        raise ValueError("bitiş işareti yok (**Kırılım analizi)")
+    block = text[head_start:marker_start]
+    if TABLE_HEADER not in block:
+        raise ValueError("§9 tablo başlığı yok")
+    # Başlık + açıklama satırlarını koru; ESKİ tablo satırlarını at.
+    intro_end = block.find("| # |")
+    intro = block[:intro_end].rstrip()
+    new_block = (intro + "\n\n" + table + "\n\n" + stat + "\n\n"
+                 + text[marker_start:])
+    with open(doc_path, "w", encoding="utf-8") as f:
+        f.write(new_block)
+
+
+def _fetch_stats(repo, branch, limit):
+    """gh'dan run'ları + süreleri çeker; (runs, rows, durations, s) döner."""
+    runs = list_runs(repo, branch, limit)
+    durations = {}
+    rows = []
+    for r in runs:
+        rid = r.get("databaseId")
+        dur, jobs = run_duration(repo, rid)
+        durations[rid] = (dur, jobs)
+        rows.append({
+            "id": rid,
+            "branch": r.get("headBranch") or "",
+            "createdAt": (r.get("createdAt") or "")[:16],
+            "status": r.get("status"),
+            "conclusion": r.get("conclusion") or ("" if r.get("status") == "in_progress" else "?"),
+            "duration_s": dur,
+            "jobs": jobs,
+            "title": r.get("displayTitle") or "",
+        })
+    return rows, durations, stats(runs, durations)
+
+
+def _print_markdown(rows, repo, s):
+    print("\n".join(markdown_rows(rows, repo)))
+    print("")
+    print(stats_line(s))
+    return 0
+
+
+def _update_doc(doc, repo, branch, limit):
+    """§9 bloğunu canlı veriyle değiştir; 0/1 döner (fail-closed)."""
+    try:
+        rows, _durations, s = _fetch_stats(repo, branch, limit)
+        table = "\n".join(markdown_rows(rows, repo))
+        update_doc_block(doc, table, stats_line(s))
+        return 0
+    except ValueError as e:
+        print(f"HATA: §9 blok güncellenemedi ({e})", file=sys.stderr)
+        return 1
 
 
 def _fmt_dur(secs):
@@ -111,6 +223,10 @@ def main(argv=None):
     ap.add_argument("--branch", default=None,
                     help="branch (varsayılan: mevcut branch adı — gh run list --branch yoksa tümü)")
     ap.add_argument("--json", action="store_true", help="makine-okur JSON")
+    ap.add_argument("--markdown", action="store_true",
+                    help="§9 markdown tablosu + istatistik satırı bas (docs senkronu)")
+    ap.add_argument("--update-doc", metavar="PATH",
+                    help="docs/PRE_PUSH_DENETIM_RAPORU.md §9 bloğunu güncelle")
     args = ap.parse_args(argv)
 
     if args.limit < 1:
@@ -120,7 +236,10 @@ def main(argv=None):
     try:
         repo = get_repo()
         branch = args.branch or "main"
-        runs = list_runs(repo, branch, args.limit)
+        limit = args.limit
+        if args.update_doc and limit == DEFAULT_LIMIT:
+            limit = 10  # §9 sözleşmesi: varsayılan son 10 run
+        runs = list_runs(repo, branch, limit)
     except RuntimeError as e:
         print(f"HATA: canlı veri çekilemedi ({e})", file=sys.stderr)
         return 1
@@ -129,28 +248,11 @@ def main(argv=None):
         print(f"HATA: {repo} ({branch}) üzerinde run bulunamadı", file=sys.stderr)
         return 1
 
-    durations = {}
-    rows = []
-    for r in runs:
-        rid = r.get("databaseId")
-        dur, jobs = run_duration(repo, rid)
-        durations[rid] = (dur, jobs)
-        rows.append({
-            "id": rid,
-            "createdAt": (r.get("createdAt") or "")[:16],
-            "status": r.get("status"),
-            "conclusion": r.get("conclusion") or ("" if r.get("status") == "in_progress" else "?"),
-            "duration_s": dur,
-            "jobs": jobs,
-            "title": r.get("displayTitle") or "",
-        })
-
-    s = stats(runs, durations)
-    if args.json:
-        out = {"repo": repo, "branch": branch, "limit": args.limit,
-               "summary": s, "runs": rows}
-        print(json.dumps(out, indent=2, ensure_ascii=False))
-        return 0
+    rows, durations, s = _fetch_stats(repo, branch, limit)
+    if args.markdown:
+        return _print_markdown(rows, repo, s)
+    if args.update_doc:
+        return _update_doc(args.update_doc, repo, branch, limit)
 
     print(f"CI istatistik — {repo} ({branch}, son {len(rows)} run)")
     print("")

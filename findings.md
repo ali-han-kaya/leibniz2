@@ -1,8 +1,11 @@
 # Findings
 
-## Repo facts (verified 2026-08-30)
+## Repo facts (verified 2026-09-04)
 - Repo: leibniz2, branch `feat/plist-info-line`, public GitHub repo `ali-han-kaya/leibniz2`.
-- PR #42 open; HEAD `26d7201` (clarity pass) after `835510b` (dependency-closed sources).
+- PR #42 open, MERGEABLE; PR head `b82b412`; local branch 1 commit ahead (`e30f8ea`, status-checks
+  lake-proof advisory fix, unpushed).
+- The main checkout's uncommitted repair state (38 modified + ~28 untracked files) is what fixes
+  the battery locally; CI tests the committed `b82b412` tree, which predates most of it.
 - K9 Lean proofs (`_calisma/lean_reduct/`): `lake build --wfail` green, zero `sorry`,
   `#print axioms` → no axioms for reduct_invariance + Content.lean theorems.
 - LaTeX: `ingiliz_empirizmi_v3.tex` (1537 LoC) + `core_section.tex`; no .bib (inline refs,
@@ -10,11 +13,58 @@
 - PDFs: delivery `ingiliz_empirizmi_v3.pdf` (33 pp), `original_manuscript.pdf` (19 pp);
   no Title/Author metadata on delivery PDF.
 
-## CI status on HEAD 26d7201 (gh pr checks 42, 2026-08-30)
-- FAIL (required): `Delivery verification — K1-K19 (single entry point)` ~2m07s
-- FAIL (advisory): `CI-SIMULATE` ~1m37s (two runs), `Live CI doc↔GitHub sync audit` 21s
-- PASS: K9 Lake proof, Budget shield, Budget status PR comment, CLI override trend,
-  Changelog drift check, Action runtime check (node24)
+## CI status on PR head b82b412 (run 33548764812, 2026-09-01T19:18Z; fetched 2026-09-04)
+- FAIL (required): `Delivery verification — K1-K19 (single entry point)` ×2 (runs 33548764812,
+  33548759430) — ~2m; killed by the embedded check-unit-tests battery (see root causes below).
+- FAIL (advisory): `CI-SIMULATE (advisory)` ×2 — simulated `--full` reports `SONUÇ: FAIL (P0=5, P1=0)`.
+- FAIL (advisory): `Live CI doc↔GitHub sync audit` — `audit_live_ci_sync.py` exit 1 (doc↔live job drift).
+- PASS: K9 Lake proof, Repack determinism, Mirror sync, Budget shield, Changelog/Merge-pattern drift,
+  Action runtime (node24), Daemon HTTP, Plist drift, all PR-comment jobs.
+- SKIPPED (needs: on failed verify): Config drift check, Static markdown reports, Config snapshot
+  sync, P1/P0 label gates, Budget/Manifest PR comments.
+
+## Root causes (run 33548764812, head b82b412)
+
+### 1. K1-K19 (required): unit-test battery red on the committed tree
+The job's battery (1669 tests / 123 files) fails on the **same 19-failure baseline** triaged
+locally (see HANDOFF worktree baseline). CI-side evidence (exact FAIL ids in job log):
+- `ci_stats` — committed module lacks `markdown_rows` / `stats_line` / `update_doc_block`
+  (tests were committed ahead of the implementation).
+- `classify_lean_error` — missing wiring symbols; `test_skill_mentions_detail_format` /
+  `test_skill_priority_order_matches_code` expect the `[<class>]` detail format + priority table
+  in `skills/verify-chain/SKILL.md` (skill doc not synced at b82b412).
+- `check_lean_axioms` — `test_verify_delivery_imports_scanner` fails: verify_delivery does not
+  import the axiom scanner; `test_admit_found` / `test_unsafe_declaration_found` fail on scan.
+- `config_sync_badge.test_apply_snapshot_wired` — `preview.html` lacks
+  `renderConfigSync(d.config_sync)` call.
+- `check_bootstrap_start_smoke` — `--no-html` / `--no-mirror` not recognized by `bootstrap_all()`.
+- `check_config_drift_summary.test_main_exit_codes` — fixture's Bundle step produced no
+  `summary.txt` (fail-closed finding expected to surface).
+- Plus: launchd_minimal_path, verify_manifest_sidecar, override_trend, diff_config_artifacts,
+  dashboard_playwright_smoke, render_z3_slides, lake_evidence_smoke, fresh_clone_setup,
+  coverage_report, gen_repro_manifest — all in the same 19-baseline.
+Root cause: **committed HEAD is behind the local repair state**; the fixes exist only as
+uncommitted work (main checkout) + the in-flight handoff worktree fix branch.
+Note: the `check-unit-tests timeout: 10.001s > 10.000s` line in the log is a fixture's printed
+output (check_unit_tests_timing test), not the killing gate.
+
+### 2. CI-SIMULATE (advisory): 5 P0s in simulated --full
+Simulate log (`SONUÇ: FAIL  (P0=5, P1=0)`):
+- `[P0] Soy hattı: current nesil canlı dosya ile uyuşmuyor` — lineage record pins zip hash
+  `918e0545…` but live committed zip is `0df21b5d…` (TESLIM_KLASOR_V5_2026-08-17.zip).
+- `[P0] K14 cleanup: kanonik hash uyuşmuyor` ×2 — same zip pair + TESLIM_V5_FINAL zip
+  (record `81a02448…` ≠ live `b39ea667…`).
+- `[P0] K9 … lake bulunamadı` / `lean bulunamadı` — the CI-SIMULATE job has no lean/lake install
+  steps, yet runs the K9 layer via --full → honest missing-tool P0s.
+Root cause: **frozen lineage/K14 records predate the zip rebuild** (committed records ↔ committed
+zips disagree), and **K9 tool installs are absent in the simulate job**. Related pre-commit
+battery FAILED aggregates inside simulate: failures=2 / failures=6 / failures=3
+(plist golden P1, K10 `audit_refs_trend` digest missing, pattern consistency).
+
+### 3. Live CI doc↔GitHub sync audit (advisory)
+`audit_live_ci_sync.json` (artifact `audit-live-ci`): verdict FAIL — `docs/PUBLISH_SCENARIO.md`
+job table (24 jobs) is missing the live run's `K9 Lake proof (Lean 4.14.0)` job row
+(`in live, not doc: ['K9 Lake proof (Lean 4.14.0)']`). Fix: add the K9 job row to the doc table.
 
 ## Unit-test gate state (check-unit-tests battery, venv python)
 - ~25–26 failures remain after committing untracked sources; categories:

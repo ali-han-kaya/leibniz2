@@ -69,10 +69,11 @@ class TestGateJobs(unittest.TestCase):
                          "Action runtime check (node24)")
 
     def test_count_matches_workflow_minus_excludes(self):
-        # 24 job − 11 hariç = 13 required aday (tek kaynak: workflow).
+        # 27 job − 14 hariç = 13 required aday (tek kaynak: workflow).
         # Hariç: manifest-comment, precheck, label-gate-p1, plist-check,
-        #        mirror-check, daemon-http, audit-live-ci, audit-refs-trend,
-        #        override-trend, changelog-drift, pattern-drift
+        #        mirror-check, daemon-http, fresh-clone-http, audit-live-ci,
+        #        audit-refs-trend, override-trend, changelog-drift, pattern-drift,
+        #        budget-comment, lake-proof
         self.assertEqual(len(sc.gate_jobs()), 13)
 
     def test_gate_jobs_exact_set_includes_label_gate(self):
@@ -110,6 +111,20 @@ class TestGateJobs(unittest.TestCase):
         self.assertIn("label-gate", sc.gate_jobs())
         self.assertEqual(sc.gate_jobs()["label-gate"],
                          "Pre-commit P0 label gate")
+
+    def test_advisory_decision_2026_09_04(self):
+        """2026-09-04 required/advisory denetimi (GitHub required setiyle
+        birebir doğrulandı): reports/reproducibility/refs-trend REQUIRED —
+        hiçbiri fail-open değil (tüketim job içinde bağlı / K10 set -e
+        fail-closed / in-job üretim); lake-proof ADVISORY — ayrı-step K9,
+        verify --full bağımsız koşar.
+        """
+        gates = set(sc.gate_jobs())
+        for jid in ("reports", "reproducibility", "refs-trend"):
+            self.assertIn(jid, gates, f"{jid} required kalmalı")
+        self.assertNotIn("lake-proof", gates,
+                         "lake-proof advisory kalmalı (exclude'da)")
+        self.assertIn("lake-proof", sc.GATE_EXCLUDE)
 
 
 @unittest.skipUnless(HAVE_YAML, "PyYAML gerekli")

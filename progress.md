@@ -9,9 +9,24 @@
   performance audit results, Lean verification results).
 - No code changes this session yet.
 
+## Session 2026-09-04 — CI triage of PR #42 (head b82b412)
+- Recon: PR #42 open, MERGEABLE; PR head `b82b412`, local `e30f8ea` unpushed (1 ahead).
+- Fetched logs for run `33548764812` (latest verify-delivery, head = PR head; cached at
+  /tmp/pr42-k1-k19-run64812.log + /tmp/pr42-ci-sim-artifact) and the Live-doc-sync job
+  (99994102110) + its `audit-live-ci` artifact.
+- Root causes pinned (see findings.md): (1) K1-K19 killed by unit-test battery red on the
+  committed tree — the 19-failure baseline; fixes live only in uncommitted local state + the
+  handoff worktree; (2) CI-SIMULATE 5 P0s = stale lineage/K14 zip-hash records vs committed
+  zips + missing lean/lake installs in the simulate job; (3) doc-sync audit =
+  docs/PUBLISH_SCENARIO.md missing the `K9 Lake proof (Lean 4.14.0)` job row.
+- findings.md updated with the fresh b82b412 evidence; task_plan not reopened (work items live
+  in the handoff agent + doc fix).
+- No code changes this session; findings/progress docs only.
+
 ## Next
-Fetch failing K1-K19 job log from Actions and add root causes to findings.md,
-then ask user which work item to take.
+Add the `K9 Lake proof (Lean 4.14.0)` row to docs/PUBLISH_SCENARIO.md (tiny, unblocks the
+advisory audit), and merge the handoff agent's unit-fixes commit when it reports OK; then
+regenerate lineage/K14 zip records (repack producer) so CI-SIMULATE's P0s clear.
 
 ## Session 2026-08-31 — receiving-code-review turn
 - Verified PR #42 bot feedback: 3 unit-test ERRORs = status_checks import-crash modules (fix implemented earlier, validated); commit-msg advisory = 6 violations, gate passes vacuously (sidecar never reaches gate job — verified in job log).

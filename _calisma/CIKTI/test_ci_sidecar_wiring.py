@@ -75,6 +75,24 @@ def _steps(section):
     return blocks
 
 
+def _script_consumers(text, script_name):
+    """github_scripts/<script_name>'i eval eden job'lar — jobs: bölümündeki
+    TÜM job'lar taranır; kayıtsız tüketici kontratı kırmalı (gelecekteki
+    pull_request/push job'ları dahil)."""
+    jobs_pos = re.search(r"^jobs:\s*$", text, re.M)
+    if jobs_pos is None:
+        return set()
+    scope = text[jobs_pos.end():]
+    consumers = set()
+    for job in set(re.findall(r"^  ([a-zA-Z0-9_-]+):\s*$", scope, re.M)):
+        section = _job_section(text, job)
+        for _name, body in _steps(section):
+            if "github_scripts/%s" % script_name in "\n".join(body):
+                consumers.add(job)
+                break
+    return consumers
+
+
 def _deliveries(body):
     """Download adımının teslim ettiği {artifact: hedef|None} kümesi.
 
@@ -162,10 +180,14 @@ class TestCiSidecarWiring(unittest.TestCase):
                 f"{job} needs'inde reproducibility yok")
 
     def test_pr_status_comment_inputs_delivered(self):
-        """pr_status_comment.js'in girdi sabitlerinin TAMAMI budget-comment
-        job'una ulaşmalı: her yol ya artifact teslimi ya da job içi üretim
-        (IN_JOB). Eksik girdi → yorum o bölümü 'denetim çalışmadı' olarak
-        gösterir (k10_verdict.txt boşluğu gibi — fail-open yorum)."""
+        """pr_status_comment.js'in girdi sabitlerinin TAMAMI, script'i eval
+        eden HER job'a ulaşmalı — bugün tek tüketici budget-comment
+        (pull_request); push'ta yorum job'u tasarım gereği yoktur (PR
+        numarası tanımsız). Gelecekte bir pull_request/push job'u script'i
+        eval ederse: önce EVAL_SCRIPTS'e kaydedilmeli, sonra 7 girdinin
+        tamamı bu testin hedef kontratına göre teslim edilmeli —
+        all_artifacts/ gibi düzleşen indirmeler yanlış yola düşeceği için
+        kontratı kırmalı (fail-open yorum engeli)."""
         with open(os.path.join(HERE, "github_scripts",
                                "pr_status_comment.js"), encoding="utf-8") as fh:
             script = fh.read()
@@ -174,18 +196,25 @@ class TestCiSidecarWiring(unittest.TestCase):
         self.assertEqual(derived, table,
                          "PR_STATUS_INPUTS tablosu script _PATH sabitlerinden "
                          "drift'li (tek kaynak bozuldu)")
-        missing = []
-        for path, art, dest in PR_STATUS_INPUTS:
-            if dest == "IN_JOB":
-                section = _job_section(self.text, "budget-comment")
-                if not re.search(r">\s*%s\b" % re.escape(path), section):
-                    missing.append(f"{path}: job içi üretici adımı yok")
-                continue
-            got = self.delivered.get("budget-comment", {}).get(art, "YOK")
-            if got != dest:
-                missing.append(
-                    f"{path}: beklenen {art}→{dest!r}, teslim {got!r}")
-        self.assertFalse(missing, "; ".join(missing))
+        consumers = _script_consumers(self.text, "pr_status_comment.js")
+        self.assertEqual(
+            consumers, {"budget-comment"},
+            "pr_status_comment.js'in kayıtsız tüketici job'ları: "
+            f"{sorted(consumers - {'budget-comment'})} — DELIVERIES/"
+            "EVAL_SCRIPTS'e kaydedilmeli (hedef yollar bu testte sabit)")
+        for job in sorted(consumers):
+            missing = []
+            for path, art, dest in PR_STATUS_INPUTS:
+                if dest == "IN_JOB":
+                    section = _job_section(self.text, job)
+                    if not re.search(r">\s*%s\b" % re.escape(path), section):
+                        missing.append(f"{job}/{path}: job içi üretici adımı yok")
+                    continue
+                got = self.delivered.get(job, {}).get(art, "YOK")
+                if got != dest:
+                    missing.append(
+                        f"{job}/{path}: beklenen {art}→{dest!r}, teslim {got!r}")
+            self.assertFalse(missing, "; ".join(missing))
 
 
 class TestBudgetGateFailClosed(unittest.TestCase):

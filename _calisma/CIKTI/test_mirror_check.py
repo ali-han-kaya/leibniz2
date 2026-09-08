@@ -185,6 +185,13 @@ class TestVerifyDeliveryK17(unittest.TestCase):
             self.assertEqual(findings, [])
 
     def test_k17_script_yok_p1(self):
+        """Script hiçbir aday konumda yoksa P1 + rc=None (fail-closed).
+
+        Portability: test K17_REPO_FALLBACK=0 ile repo-checkout fallback'ini
+        (~/Desktop/leibniz2) kapatır — aksi halde makinenin gerçek
+        checkout'undaki script bulunur ve 'yok' sözleşmesi standart-dışı
+        checkout konumlarında sessizce devre dışı kalırdı.
+        """
         # check_mirror_sync, script yolunu __file__'a göre sabit hesaplar;
         # os.path.isfile'i patch'leyerek script-yok dalını uyarırız.
         sys.path.insert(0, HERE)
@@ -199,7 +206,8 @@ class TestVerifyDeliveryK17(unittest.TestCase):
                     return False
                 return real_isfile(p)
 
-            with mock.patch.object(vd.os.path, "isfile", side_effect=fake_isfile):
+            with mock.patch.object(vd.os.path, "isfile", side_effect=fake_isfile), \
+                    mock.patch.dict(os.environ, {"K17_REPO_FALLBACK": "0"}):
                 findings = []
                 add = lambda prio, cid, label, issue, evidence="": findings.append(
                     {"priority": prio, "check": cid, "issue": issue,

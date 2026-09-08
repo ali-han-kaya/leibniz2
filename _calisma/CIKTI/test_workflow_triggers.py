@@ -86,6 +86,17 @@ class WorkflowTriggerTests(unittest.TestCase):
         self.assertIn(PUSH_GATE, blk)
         self.assertNotIn(PR_GATE, blk)
 
+    def test_fresh_clone_http_smoke_contract(self):
+        """Temiz clone smoke'u doğru commit'i ve iki HTTP endpoint'ini kullanır."""
+        blk = job_block(self.text, "fresh-clone-http")
+        self.assertIsNotNone(blk, "fresh-clone-http job bulunamadı")
+        self.assertIn("name: Fresh-clone HTTP smoke (advisory)", blk)
+        self.assertIn("git clone --no-local --no-checkout", blk)
+        self.assertIn('git -C "$clone" checkout --detach "$GITHUB_SHA"', blk)
+        self.assertIn("/api/health", blk)
+        self.assertIn("/api/latest", blk)
+        self.assertIn("trap cleanup EXIT", blk)
+
     def test_both_push_and_pull_gates_exist(self):
         # Workflow'da hem PR-only hem push-koşullu kapı mevcut (kural anlamlı).
         self.assertGreaterEqual(len(re.findall(PR_GATE, self.text)), 1)
