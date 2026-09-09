@@ -383,7 +383,11 @@ repos:
           verify.yml ve test-smoke.yml job name alanlarıyla birebir eşleşmesini
           fail-closed doğrular. Yeni veya yeniden adlandırılmış job doc'a
           işlenmezse commit bloke edilir.
-        entry: python3 -m unittest _calisma.CIKTI.test_doc_job_sync
+        # venv-guard (status_checks/coverage ile aynı desen): test_doc_job_sync
+        # PyYAML ister; sistem python3'ünde PyYAML yoksa test SKIP edip kapı
+        # sahte-PASS verir. Repo venv'i varsa onunla koş.
+        entry: bash -c 'PY=python3; [ -x _calisma/.venv_z3/bin/python ] &&
+          PY=_calisma/.venv_z3/bin/python; exec "$PY" -m unittest _calisma.CIKTI.test_doc_job_sync'
         language: system
         always_run: true
         pass_filenames: false
