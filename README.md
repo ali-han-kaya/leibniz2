@@ -554,6 +554,8 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-09 | docs | (changelog) resync after K10 dedup | [`6211d42`](https://github.com/ali-han-kaya/leibniz2/commit/6211d42) |
 | 2026-09-09 | test | (verify) extend derived-input contract to manifest-comment + flat config-diff... | [`b5e74dc`](https://github.com/ali-han-kaya/leibniz2/commit/b5e74dc) |
 | 2026-09-09 | docs | (changelog) update changelog after history rewrite | [`3373956`](https://github.com/ali-han-kaya/leibniz2/commit/3373956) |
+| 2026-09-09 | chore | (ci) trigger CI rerun for 27f5c7f gate verdicts | [`c44df67`](https://github.com/ali-han-kaya/leibniz2/commit/c44df67) |
+| 2026-09-09 | docs | (changelog) resync after wiring flat-path contract fix | [`27f5c7f`](https://github.com/ali-han-kaya/leibniz2/commit/27f5c7f) |
 
 ### Regresyon notları
 
