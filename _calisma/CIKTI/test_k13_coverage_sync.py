@@ -29,7 +29,7 @@ class K13CoverageSyncTests(unittest.TestCase):
             set(modules),
             {line.split('|', 1)[0].strip().strip('"')
              for line in self.mirror.splitlines()
-             if 'run_summary_' in line and '|' in line},
+             if '"run_summary_' in line and '|' in line},
         )
 
     def test_consolidator_and_summary_module_share_k13_contract(self):
