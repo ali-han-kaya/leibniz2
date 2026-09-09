@@ -1064,17 +1064,15 @@ function loadTrend(force) {
     return;
   }
   _trendFetchAt = now;
-  fetch("/api/history").then(r => r.json()).then(rows => {
+  fetch("/api/trend").then(r => r.json()).then(data => {
+    const rows = Array.isArray(data.history) ? data.history : [];
     renderTrend(rows);
     renderRefsTrend(rows);
     renderHookEnv(rows);
     renderHookEnvTrend(rows);
-    // refs-trend.json'u duration/budget trend'i için çek (history ile paralel)
-    fetch("/api/refs-trend").then(r => r.json()).then(data => {
-      const dbRows = (data.duration_budget && data.duration_budget.rows) || [];
-      _trendCache = {rows, dbRows};
-      if (dbRows.length) renderRefsTrendDurationBudget(dbRows);
-    }).catch(() => { _trendCache = {rows, dbRows: null}; });
+    const dbRows = (data.refs_trend && data.refs_trend.duration_budget && data.refs_trend.duration_budget.rows) || [];
+    _trendCache = {rows, dbRows};
+    if (dbRows.length) renderRefsTrendDurationBudget(dbRows);
   }).catch(err => {
     $("trend-legend").textContent = "trend yüklenemedi: " + err;
   });

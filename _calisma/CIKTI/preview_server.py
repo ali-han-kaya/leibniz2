@@ -1244,6 +1244,8 @@ def _route(path):
         return "history"
     if p == "/api/refs-trend":
         return "refs_trend"
+    if p == "/api/trend":
+        return "trend"
     if p == "/api/override-trend":
         return "override_trend"
     if p == "/api/run-history":
@@ -1319,6 +1321,8 @@ class Handler(BaseHTTPRequestHandler):
             self.serve_history()
         elif route == "refs_trend":
             self.serve_refs_trend()
+        elif route == "trend":
+            self.serve_trend()
         elif route == "override_trend":
             self.serve_override_trend()
         elif route == "run_history":
@@ -1489,6 +1493,27 @@ class Handler(BaseHTTPRequestHandler):
                        content_type="application/json; charset=utf-8")
             return
         self._send(200, json.dumps(data, ensure_ascii=False),
+                   content_type="application/json; charset=utf-8")
+
+    def serve_trend(self):
+        """Merged trend: {history, refs_trend} in one round-trip.
+
+        history = dashboard-projected history.jsonl rows (same as /api/history).
+        refs_trend = refs-trend.json payload or {rows: [], duration_budget: {rows: []}} fallback.
+        Errors in refs_trend surface as {error: ...} inside refs_trend field (200 outer).
+        """
+        history = [_project_history_record(record) for record in load_history()
+                   if isinstance(record, dict)]
+        if not REFS_TREND_PATH or not os.path.isfile(REFS_TREND_PATH):
+            refs_trend = {"rows": [], "duration_budget": {"rows": []}}
+        else:
+            try:
+                with open(REFS_TREND_PATH, encoding="utf-8") as f:
+                    refs_trend = json.load(f)
+            except (json.JSONDecodeError, OSError):
+                refs_trend = {"error": "refs trend unavailable"}
+        self._send(200, json.dumps({"history": history, "refs_trend": refs_trend},
+                                   ensure_ascii=False, separators=(",", ":")),
                    content_type="application/json; charset=utf-8")
 
     def serve_override_trend(self):

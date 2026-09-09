@@ -43,6 +43,7 @@ API_CONTRACT = {
     "/api/run-stream": {"GET"},    # SSE — satır akışı
     "/api/history": {"GET"},
     "/api/refs-trend": {"GET"},
+    "/api/trend": {"GET"},         # merged history + refs-trend (one fetch)
     "/api/override-trend": {"GET"},
     "/api/run-history": {"GET"},
     "/api/run-stdout": {"GET"},    # prefix — ?ts= ile
@@ -60,6 +61,7 @@ LIVE_URLS = {
     "/api/run-now": "/api/run-now",
     "/api/history": "/api/history",
     "/api/refs-trend": "/api/refs-trend",
+    "/api/trend": "/api/trend",
     "/api/override-trend": "/api/override-trend",
     "/api/run-history": "/api/run-history",
     "/api/run-stdout": "/api/run-stdout?ts=2024-01-01T00:00:00Z",
@@ -113,6 +115,7 @@ class TestApiMethodContractSource(unittest.TestCase):
                 "/api/run-stream": '"run_stream"',
                 "/api/history": '"history"',
                 "/api/refs-trend": '"refs_trend"',
+                "/api/trend": '"trend"',
                 "/api/override-trend": '"override_trend"',
                 "/api/run-history": '"run_history"',
                 "/api/run-stdout": '"run_stdout"',

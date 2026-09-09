@@ -85,11 +85,12 @@ curl -s http://127.0.0.1:8000/api/latest | python3 -m json.tool
 # Run history (last 15 runs, compact JSON)
 curl -s http://127.0.0.1:8000/api/run-history | python3 -m json.tool
 
-# Trend history (JSONL-backed)
-curl -s http://127.0.0.1:8000/api/history | python3 -m json.tool
+# Unified trend (one fetch: history + refs-trend)
+curl -s http://127.0.0.1:8000/api/trend | python3 -m json.tool
 
-# Refs trend (CI artifact, if present)
-curl -s http://127.0.0.1:8000/api/refs-trend | python3 -m json.tool
+# Legacy split endpoints (still served, prefer /api/trend):
+# curl -s http://127.0.0.1:8000/api/history | python3 -m json.tool
+# curl -s http://127.0.0.1:8000/api/refs-trend | python3 -m json.tool
 
 # Run stdout for a specific run (ts must be url-encoded — it contains +00:00)
 TS=$(curl -s http://127.0.0.1:8000/api/run-history | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['ts'])")
@@ -184,9 +185,10 @@ container path.
 |---|---|---|
 | `/api/health` | GET | `ok` (plain text) |
 | `/api/latest` | GET | Compact JSON: latest verify snapshot (verdict, P0/P1, layers, budget, stdout_short, hook_env_matrix) |
-| `/api/history` | GET | JSON array of trend rows (JSONL-backed) |
+| `/api/trend` | GET | Compact JSON: {history, refs_trend} (one fetch, replaces two) |
+| `/api/history` | GET | JSON array of trend rows (JSONL-backed) — legacy, use /api/trend |
 | `/api/run-history` | GET | JSON array of last 15 run summaries |
-| `/api/refs-trend` | GET | JSON: duration/budget trend (CI artifact) |
+| `/api/refs-trend` | GET | JSON: duration/budget trend (CI artifact) — legacy, use /api/trend |
 | `/api/run-stdout?ts=<timestamp>` | GET | JSON: full stdout+stderr for a specific run |
 | `/api/run` | GET (SSE) | `snapshot` / `update` events (real-time) |
 | `/api/run-stream` | GET (SSE) | `line` / `info` / `end` events (stdout stream) |
