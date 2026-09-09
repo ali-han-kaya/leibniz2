@@ -90,6 +90,12 @@ curl -s http://127.0.0.1:8000/api/history | python3 -m json.tool
 
 # Refs trend (CI artifact, if present)
 curl -s http://127.0.0.1:8000/api/refs-trend | python3 -m json.tool
+
+# Run stdout for a specific run (ts must be url-encoded — it contains +00:00)
+TS=$(curl -s http://127.0.0.1:8000/api/run-history | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['ts'])")
+ENCODED=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "$TS")
+curl -s "http://127.0.0.1:8000/api/run-stdout?ts=$ENCODED" | python3 -m json.tool
+# Bare ?ts=$TS fails: the + in +00:00 becomes a space → "run bulunamadı"
 ```
 
 ## 4. Open the dashboard

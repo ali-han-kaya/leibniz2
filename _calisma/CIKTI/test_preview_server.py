@@ -1525,7 +1525,7 @@ class TestRouteQueryParams(unittest.TestCase):
 class TestRefsTrendCandidates(unittest.TestCase):
     def test_main_candidates_include_nested_preview_dir_shape(self):
         source = pathlib.Path(ps.__file__).read_text(encoding="utf-8")
-        self.assertIn('os.path.join(args.preview_dir, "refs-trend", "refs-trend.json")', source)
+        self.assertIn('os.path.join(PREVIEW_DIR, "refs-trend", "refs-trend.json")', source)
 
     def test_first_candidate_targets_repo_root(self):
         source = pathlib.Path(ps.__file__).read_text(encoding="utf-8")

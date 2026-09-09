@@ -1779,27 +1779,27 @@ def main():
                          "tutulacak son run sayısı")
     args = ap.parse_args()
 
-    PREVIEW_DIR = args.preview_dir
-    VERIFY_DIR = args.dir
-    HISTORY_PATH = os.path.join(args.preview_dir, "history.jsonl")
-    RUNS_DIR = os.path.join(args.preview_dir, "runs")
+    PREVIEW_DIR = os.path.abspath(args.preview_dir)
+    VERIFY_DIR = os.path.abspath(args.dir)
+    HISTORY_PATH = os.path.join(PREVIEW_DIR, "history.jsonl")
+    RUNS_DIR = os.path.join(PREVIEW_DIR, "runs")
     RUN_LOG_MAX = args.replay_runs
     # refs-trend.json: CI artifact'ı repo kökünde (refs-trend/refs-trend.json);
     # yerel kurulumda preview-dir'de de olabilir (nested veya flat).
     _rt_candidate = os.path.join(REPO_ROOT, "refs-trend", "refs-trend.json")
     if not os.path.isfile(_rt_candidate):
-        _rt_candidate = os.path.join(args.preview_dir, "refs-trend", "refs-trend.json")
+        _rt_candidate = os.path.join(PREVIEW_DIR, "refs-trend", "refs-trend.json")
     if not os.path.isfile(_rt_candidate):
-        _rt_candidate = os.path.join(args.preview_dir, "refs-trend.json")
+        _rt_candidate = os.path.join(PREVIEW_DIR, "refs-trend.json")
     REFS_TREND_PATH = _rt_candidate if os.path.isfile(_rt_candidate) else None
 
     # override-trend.json: CI artifact'ı (override-trend job'u → repo kökünde
     # override-trend/override-trend.json); yerelde preview-dir'de de olabilir.
     _ot_candidate = os.path.join(REPO_ROOT, "override-trend", "override-trend.json")
     if not os.path.isfile(_ot_candidate):
-        _ot_candidate = os.path.join(args.preview_dir, "override-trend", "override-trend.json")
+        _ot_candidate = os.path.join(PREVIEW_DIR, "override-trend", "override-trend.json")
     if not os.path.isfile(_ot_candidate):
-        _ot_candidate = os.path.join(args.preview_dir, "override-trend.json")
+        _ot_candidate = os.path.join(PREVIEW_DIR, "override-trend.json")
     OVERRIDE_TREND_PATH = _ot_candidate if os.path.isfile(_ot_candidate) else None
 
     if not os.path.isfile(os.path.join(PREVIEW_DIR, "preview.html")):
@@ -1807,8 +1807,8 @@ def main():
               f"sunucu yine de başlatılıyor ama /preview.html 404 döner",
               file=sys.stderr)
 
-    if not os.path.isfile(os.path.join(args.dir, "verify_delivery.py")):
-        print(f"HATA: {args.dir}/verify_delivery.py yok", file=sys.stderr)
+    if not os.path.isfile(os.path.join(VERIFY_DIR, "verify_delivery.py")):
+        print(f"HATA: {VERIFY_DIR}/verify_delivery.py yok", file=sys.stderr)
         sys.exit(2)
 
     # Sinyal yakalama — neden öldüğümüzü görelim
@@ -1836,13 +1836,13 @@ def main():
     # Arka plan thread: periyodik verify çalıştırma
     stop_event = threading.Event()
     t = threading.Thread(target=verify_loop,
-                         args=(args.dir, args.interval, stop_event),
+                         args=(VERIFY_DIR, args.interval, stop_event),
                          daemon=True, name="verify-loop")
     t.start()
 
     srv = ThreadingHTTPServer((args.bind, args.port), Handler)
     sys.stderr.write(f"[main] preview_server: serving {PREVIEW_DIR} on http://{args.bind}:{args.port}\n")
-    sys.stderr.write(f"[main] preview_server: verify loop interval={args.interval}s, dir={args.dir}\n")
+    sys.stderr.write(f"[main] preview_server: verify loop interval={args.interval}s, dir={VERIFY_DIR}\n")
     sys.stderr.write(f"[main] PID={os.getpid()} PGID={os.getpgrp()}\n")
     sys.stderr.flush()
     try:
