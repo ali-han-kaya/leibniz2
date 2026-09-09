@@ -17,12 +17,20 @@ Kurallar (fail-closed):
   - lokal action (./...)            → SKIP  (markette değil)
 
 Kullanım:
-  python3 check_action_pins.py                 # denetle (exit 0/1)
+  python3 check_action_pins.py                       # .github/workflows/ altındaki tüm YAML (exit 0/1)
+  python3 check_action_pins.py --workflow .github/workflows/verify.yml
+  python3 check_action_pins.py --workflow .github/workflows   # dizin → tüm YAML
   python3 check_action_pins.py --update        # mevcut major'ları pin dosyasına yaz
   python3 check_action_pins.py --bump          # WARN (upgrade) pin'lerini otomatik yükselt
   python3 check_action_pins.py --json          # makine-okur JSON
 
 Exit: 0 = pin'ler karşılandı; 1 = FAIL var (downgrade/pin'siz); 2 = kullanım hatası.
+
+--workflow bir DOSYA veya DİZİN olabilir: dizin verilirse içindeki tüm
+*.yml/*.yaml dosyaları (sıralı) denetlenir; bulgular tek kümede toplanır ve
+herhangi bir dosyada FAIL varsa exit 1 döner. --update/--bump da tüm
+workflow'ların major'larını birleştirir (tek pin dosyası tüm iş akışlarını
+kapsar).
 
 --bump: yalnızca WARN durumlarını (workflow major > pin) yükseltir — mevcut
 pin'leri aynen korur, yeni action EKLEMEZ (o iş --update'te), asla DÜŞÜRMEZ.
@@ -32,11 +40,12 @@ ve exit 1 döner — bir düzeltme yanlışlıkla maskelenmesin.
 import argparse
 import json
 import os
+import pathlib
 import re
 import sys
 import tempfile
 
-DEFAULT_WORKFLOW = ".github/workflows/verify.yml"
+DEFAULT_WORKFLOW = ".github/workflows"
 DEFAULT_PINS = "_calisma/CIKTI/action_pins.json"
 
 # Yalnızca kendi satırında `uses:` anahtarı olan satırlar yakalanır; hem
@@ -45,6 +54,25 @@ DEFAULT_PINS = "_calisma/CIKTI/action_pins.json"
 # yanlış pozitif üretmesin.
 _USES_RE = re.compile(r'^\s*(?:-\s*)?uses:\s*["\']?([^\s"\'#]+)')
 _REF_RE = re.compile(r"^v(\d+)$")
+
+
+def resolve_workflows(path):
+    """--workflow değerini workflow dosya listesine çöz (dosya VEYA dizin).
+
+    Dizin verilirse içindeki tüm `*.yml`/`*.yaml` sıralı listelenir — böylece
+    `.github/workflows/` altına eklenen yeni bir workflow otomatik denetime
+    girer (check_python3_shell.py glob deseni). Dosya verilirse tek elemanlı
+    liste döner. Geçersiz/boş yol → ValueError (main'de exit 2).
+    """
+    p = pathlib.Path(path)
+    if p.is_dir():
+        files = sorted(list(p.glob("*.yml")) + list(p.glob("*.yaml")))
+        if not files:
+            raise ValueError(f"dizinde workflow YAML yok: {path}")
+        return files
+    if p.is_file():
+        return [p]
+    raise ValueError(f"workflow yolu dosya veya dizin değil: {path}")
 
 
 def extract_uses(workflow_text):
@@ -149,15 +177,33 @@ def collect_pins(workflow_text):
     return pins
 
 
+def _read_workflows(workflow_arg):
+    """workflow argümanını (dosya/dizin) dosya-yol→metin sözlüğüne çöz."""
+    try:
+        paths = resolve_workflows(workflow_arg)
+    except ValueError as e:
+        print(f"HATA: workflow çözülemedi ({workflow_arg}): {e}", file=sys.stderr)
+        return None
+    texts = {}
+    for p in paths:
+        try:
+            texts[str(p)] = p.read_text(encoding="utf-8")
+        except OSError as e:
+            print(f"HATA: workflow okunamadı ({p}): {e}", file=sys.stderr)
+            return None
+    return texts
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--workflow", default=DEFAULT_WORKFLOW,
-                    help=f"workflow dosyası (varsayılan: {DEFAULT_WORKFLOW})")
+                    help="workflow dosyası VEYA dizini (varsayılan: "
+                         f"{DEFAULT_WORKFLOW} → içindeki tüm YAML)")
     ap.add_argument("--pins", default=DEFAULT_PINS,
                     help=f"pin dosyası (varsayılan: {DEFAULT_PINS})")
     ap.add_argument("--update", action="store_true",
-                    help="mevcut major'ları pin dosyasına yaz")
+                    help="mevcut major'ları pin dosyasına yaz (tüm workflow'lar birleşir)")
     ap.add_argument("--bump", action="store_true",
                     help="WARN (upgrade) pin'lerini otomatik yükselt "
                          "(mevcut pin'leri korur, yeni action eklemez, asla düşürmez)")
@@ -165,15 +211,14 @@ def main(argv=None):
                     help="makine-okur JSON çıktısı")
     args = ap.parse_args(argv)
 
-    try:
-        with open(args.workflow, encoding="utf-8") as f:
-            wf = f.read()
-    except OSError as e:
-        print(f"HATA: workflow okunamadı ({args.workflow}): {e}", file=sys.stderr)
+    wf_texts = _read_workflows(args.workflow)
+    if wf_texts is None:
         return 2
 
     if args.update:
-        pins = collect_pins(wf)
+        pins = {}
+        for text in wf_texts.values():
+            pins.update(collect_pins(text))
         try:
             _payload = json.dumps(pins, indent=2, ensure_ascii=False, sort_keys=True) + "\n"
             _dir = os.path.dirname(os.path.abspath(args.pins)) or "."
@@ -192,7 +237,7 @@ def main(argv=None):
         except OSError as e:
             print(f"HATA: pin dosyası yazılamadı ({args.pins}): {e}", file=sys.stderr)
             return 2
-        print(f"pin dosyası güncellendi: {args.pins}")
+        print(f"pin dosyası güncellendi: {args.pins} ({len(wf_texts)} workflow)")
         for k in sorted(pins):
             print(f"  {k}: v{pins[k]}")
         return 0
@@ -203,7 +248,12 @@ def main(argv=None):
         print(f"HATA: pin dosyası okunamadı ({args.pins}): {e}", file=sys.stderr)
         return 2
 
-    findings = check(wf, pins)
+    # Her workflow ayrı denetlenir; bulgular workflow etiketiyle tek kümede.
+    findings = []
+    for path, text in wf_texts.items():
+        for f in check(text, pins):
+            f["workflow"] = path
+            findings.append(f)
 
     if args.bump:
         fails = [f for f in findings if f["verdict"] == "FAIL"]
@@ -211,7 +261,8 @@ def main(argv=None):
             print("bump: HAYIR — önce FAIL'leri çöz (downgrade/pin'siz/bozuk ref), "
                   "bump bir düzeltmeyi maskelenemez:", file=sys.stderr)
             for f in fails:
-                print(f"  [FAIL] {f['action']}: {f['note']}", file=sys.stderr)
+                print(f"  [FAIL] {f['action']} ({f['workflow']}): {f['note']}",
+                      file=sys.stderr)
             return 1
         # Yalnızca WARN'ları (workflow major > pin) yükselt — mevcut pin'leri
         # korur, yeni action eklemez, asla düşürmez.
