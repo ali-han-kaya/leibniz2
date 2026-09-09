@@ -29,8 +29,26 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import urllib.request
 import zipfile
+
+
+def _write_atomic(path, content):
+    """Same-dir mkstemp + os.replace — torn-read safe (refs_trend.py ikizi)."""
+    directory = os.path.dirname(os.path.abspath(path)) or "."
+    fd, tmp = tempfile.mkstemp(dir=directory,
+                               prefix=os.path.basename(path) + ".tmp.")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(content)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 API = "https://api.github.com"
 
@@ -264,8 +282,7 @@ def main():
             ]
 
     md_path = os.path.join(args.out_dir, "override-trend.md")
-    with open(md_path, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines))
+    _write_atomic(md_path, "\n".join(lines))
     print("\n".join(lines))
 
     summary = {
@@ -276,9 +293,8 @@ def main():
         "rows": rows,
         "override_counts": stats([r["override_count"] for r in rows]),
     }
-    with open(os.path.join(args.out_dir, "override-trend.json"), "w",
-              encoding="utf-8") as f:
-        json.dump(summary, f, indent=2, ensure_ascii=False)
+    _write_atomic(os.path.join(args.out_dir, "override-trend.json"),
+                   json.dumps(summary, indent=2, ensure_ascii=False))
     print(f"[override-trend] yazıldı: {md_path} "
           f"({len(rows)} run, {summary['warning_run_count']} warning)")
 

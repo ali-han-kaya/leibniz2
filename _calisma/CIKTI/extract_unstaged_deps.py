@@ -31,6 +31,7 @@ import json
 import os
 import re
 import sys
+import tempfile
 
 # Marker'lar hook_unstaged_deps.py ile birebir:
 #   print_warning: "⚠️  {hook} ÖN-KONTROL: bağımlılık dosyası STAGE EDİLMEMİŞ"
@@ -97,23 +98,39 @@ def main(argv=None):
         report = {"found": bool(blocks), "count": len(blocks),
                   "files": files, "hooks": blocks, "log": args.log}
 
+    def _write_atomic(path, content):
+        directory = os.path.dirname(os.path.abspath(path)) or "."
+        fd, tmp = tempfile.mkstemp(dir=directory,
+                                   prefix=os.path.basename(path) + ".tmp.")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(content)
+            os.replace(tmp, path)
+        except BaseException:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
+
     os.makedirs(os.path.dirname(os.path.abspath(args.out_json)),
                 exist_ok=True)
-    with open(args.out_json, "w", encoding="utf-8") as f:
-        json.dump(report, f, ensure_ascii=False, indent=2)
+    _write_atomic(args.out_json,
+                   json.dumps(report, ensure_ascii=False, indent=2))
 
     if args.out_txt:
-        with open(args.out_txt, "w", encoding="utf-8") as f:
-            if not report["found"]:
-                f.write("unstaged-deps uyarısı yok (checkout temiz)\n")
-            else:
-                f.write(f"{report['count']} unstaged-deps uyarısı bulundu:\n\n")
-                for b in report["hooks"]:
-                    mode = "STRICT (--strict)" if b["strict"] else "advisory"
-                    f.write(f"• {b['hook']} [{mode}]\n")
-                    for ff in b["files"]:
-                        f.write(f"    - {ff['rel']}  ({ff['status']})\n")
-                f.write("\n")
+        txt_lines = []
+        if not report["found"]:
+            txt_lines.append("unstaged-deps uyarısı yok (checkout temiz)\n")
+        else:
+            txt_lines.append(f"{report['count']} unstaged-deps uyarısı bulundu:\n\n")
+            for b in report["hooks"]:
+                mode = "STRICT (--strict)" if b["strict"] else "advisory"
+                txt_lines.append(f"• {b['hook']} [{mode}]\n")
+                for ff in b["files"]:
+                    txt_lines.append(f"    - {ff['rel']}  ({ff['status']})\n")
+            txt_lines.append("\n")
+        _write_atomic(args.out_txt, "".join(txt_lines))
     return 0
 
 

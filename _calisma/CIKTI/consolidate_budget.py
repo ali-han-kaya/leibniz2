@@ -10,7 +10,9 @@ Kullanım (CI çalışma dizininden — budget/ altı dolu olmalı):
 """
 import glob
 import json
+import os
 import sys
+import tempfile
 
 
 def main() -> int:
@@ -41,7 +43,21 @@ def main() -> int:
         "any_fail": bool(failures),
         "failures": failures,
     }
-    json.dump(summary, open("budget/index.json", "w"), indent=2, ensure_ascii=False)
+    _payload = json.dumps(summary, indent=2, ensure_ascii=False)
+    _dst = "budget/index.json"
+    _dir = os.path.dirname(os.path.abspath(_dst)) or "."
+    os.makedirs(_dir, exist_ok=True)
+    _fd, _tmp = tempfile.mkstemp(dir=_dir, prefix=os.path.basename(_dst) + ".tmp.")
+    try:
+        with os.fdopen(_fd, "w", encoding="utf-8") as _f:
+            _f.write(_payload)
+        os.replace(_tmp, _dst)
+    except BaseException:
+        try:
+            os.unlink(_tmp)
+        except OSError:
+            pass
+        raise
     print(json.dumps(summary, indent=2, ensure_ascii=False))
     # Fail-closed: geçerli sidecar YOKSA bütçe kapısı boş değerlendirilmiş
     # demektir (producer yüklemesi düştü / pattern eşleşmedi / hepsi bozuk).

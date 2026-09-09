@@ -35,16 +35,32 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import urllib.request
 import zipfile
 
 
 def _write_atomic(path, content):
-    """Write file atomically: tmp + os.replace so readers never see a torn file."""
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        f.write(content)
-    os.replace(tmp, path)
+    """Write file atomically: same-dir mkstemp + os.replace (torn-read safe).
+
+    Unique tmp name (mkstemp) prevents races when two writers target the same
+    file concurrently — fixed `<path>.tmp` would let a half-written file be
+    renamed over the target. On failure the tmp is removed and the previous
+    destination is left untouched.
+    """
+    directory = os.path.dirname(os.path.abspath(path)) or "."
+    fd, tmp = tempfile.mkstemp(dir=directory,
+                               prefix=os.path.basename(path) + ".tmp.")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(content)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 API = "https://api.github.com"
@@ -877,8 +893,7 @@ def main():
     lines += changelog_lines()
 
     md_path = os.path.join(args.out_dir, "refs-trend.md")
-    with open(md_path, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines))
+    _write_atomic(md_path, "\n".join(lines))
     print("\n".join(lines))
 
     duration_budget = build_duration_budget(history_rows)

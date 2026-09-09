@@ -23,8 +23,10 @@ Kullanım (CI çalışma dizininden — logs/ altı hazır olmalı):
 """
 import datetime
 import json
+import os
 import pathlib
 import re
+import tempfile
 
 STATUS_RE = re.compile(r"^(.*?)\.{4,}(Passed|Failed)\s*$", re.M)
 # Hook durum satırını izleyen öznitelik bloğu: "- hook id: check-python3-shell"
@@ -229,13 +231,25 @@ def main() -> None:
 
     data = build_data(log_text, exit_code, load_commit_msg())
 
+    def _write_atomic(path, content):
+        directory = os.path.dirname(os.path.abspath(path)) or "."
+        fd, tmp = tempfile.mkstemp(dir=directory,
+                                   prefix=os.path.basename(path) + ".tmp.")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(content)
+            os.replace(tmp, path)
+        except BaseException:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
+
     pathlib.Path("logs").mkdir(parents=True, exist_ok=True)
-    pathlib.Path("logs/PRECOMMIT_RAPORU.md").write_text(
-        render_markdown(data), encoding="utf-8"
-    )
-    pathlib.Path("logs/PRECOMMIT_RAPORU.json").write_text(
-        json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
+    _write_atomic("logs/PRECOMMIT_RAPORU.md", render_markdown(data))
+    _write_atomic("logs/PRECOMMIT_RAPORU.json",
+                   json.dumps(data, ensure_ascii=False, indent=2) + "\n")
     print(f"PRECOMMIT_RAPORU.md yazıldı: {len(data['hooks'])} hook, "
           f"{len(data['findings'])} bulgu")
     print(f"PRECOMMIT_RAPORU.json yazıldı: {len(data['hooks'])} hook, "

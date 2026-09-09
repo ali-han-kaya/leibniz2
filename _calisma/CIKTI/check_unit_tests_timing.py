@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import time
 
 
@@ -31,9 +32,18 @@ def main(argv=None):
     parent = os.path.dirname(os.path.abspath(args.out))
     if parent:
         os.makedirs(parent, exist_ok=True)
-    with open(args.out, "w", encoding="utf-8") as f:
-        json.dump(report, f, indent=2)
-        f.write("\n")
+    _dir = os.path.dirname(os.path.abspath(args.out)) or "."
+    _fd, _tmp = tempfile.mkstemp(dir=_dir, prefix=os.path.basename(args.out) + ".tmp.")
+    try:
+        with os.fdopen(_fd, "w", encoding="utf-8") as _f:
+            _f.write(json.dumps(report, indent=2) + "\n")
+        os.replace(_tmp, args.out)
+    except BaseException:
+        try:
+            os.unlink(_tmp)
+        except OSError:
+            pass
+        raise
     if report["timeout_exceeded"]:
         print(f"check-unit-tests timeout: {duration:.3f}s > {args.limit:.3f}s")
         return 1

@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Synchronize the canonical artifact-list block in PUBLISH_SCENARIO.md."""
 import argparse
+import os
 import pathlib
 import re
 import sys
+import tempfile
 
 HERE = pathlib.Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
@@ -50,7 +52,18 @@ def main(argv=None):
             return 1
         print(f"PASS: {len(ARTIFACT_JOBS)} artifact ARTIFACT_JOBS ile senkron")
         return 0
-    DOC.write_text(expected, encoding="utf-8")
+    _dir = os.path.dirname(os.path.abspath(str(DOC))) or "."
+    _fd, _tmp = tempfile.mkstemp(dir=_dir, prefix=DOC.name + ".tmp.")
+    try:
+        with os.fdopen(_fd, "w", encoding="utf-8") as _f:
+            _f.write(expected)
+        os.replace(_tmp, str(DOC))
+    except BaseException:
+        try:
+            os.unlink(_tmp)
+        except OSError:
+            pass
+        raise
     print(f"Güncellendi: {len(ARTIFACT_JOBS)} artifact")
     return 0
 

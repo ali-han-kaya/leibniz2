@@ -31,8 +31,10 @@ ve exit 1 döner — bir düzeltme yanlışlıkla maskelenmesin.
 """
 import argparse
 import json
+import os
 import re
 import sys
+import tempfile
 
 DEFAULT_WORKFLOW = ".github/workflows/verify.yml"
 DEFAULT_PINS = "_calisma/CIKTI/action_pins.json"
@@ -173,9 +175,20 @@ def main(argv=None):
     if args.update:
         pins = collect_pins(wf)
         try:
-            with open(args.pins, "w", encoding="utf-8") as f:
-                json.dump(pins, f, indent=2, ensure_ascii=False, sort_keys=True)
-                f.write("\n")
+            _payload = json.dumps(pins, indent=2, ensure_ascii=False, sort_keys=True) + "\n"
+            _dir = os.path.dirname(os.path.abspath(args.pins)) or "."
+            os.makedirs(_dir, exist_ok=True)
+            _fd, _tmp = tempfile.mkstemp(dir=_dir, prefix=os.path.basename(args.pins) + ".tmp.")
+            try:
+                with os.fdopen(_fd, "w", encoding="utf-8") as _f:
+                    _f.write(_payload)
+                os.replace(_tmp, args.pins)
+            except BaseException:
+                try:
+                    os.unlink(_tmp)
+                except OSError:
+                    pass
+                raise
         except OSError as e:
             print(f"HATA: pin dosyası yazılamadı ({args.pins}): {e}", file=sys.stderr)
             return 2
@@ -212,9 +225,20 @@ def main(argv=None):
             owner_repo, _ref, _m = split_action(action)
             new_pins[owner_repo] = major
         try:
-            with open(args.pins, "w", encoding="utf-8") as f:
-                json.dump(new_pins, f, indent=2, ensure_ascii=False, sort_keys=True)
-                f.write("\n")
+            _payload = json.dumps(new_pins, indent=2, ensure_ascii=False, sort_keys=True) + "\n"
+            _dir = os.path.dirname(os.path.abspath(args.pins)) or "."
+            os.makedirs(_dir, exist_ok=True)
+            _fd, _tmp = tempfile.mkstemp(dir=_dir, prefix=os.path.basename(args.pins) + ".tmp.")
+            try:
+                with os.fdopen(_fd, "w", encoding="utf-8") as _f:
+                    _f.write(_payload)
+                os.replace(_tmp, args.pins)
+            except BaseException:
+                try:
+                    os.unlink(_tmp)
+                except OSError:
+                    pass
+                raise
         except OSError as e:
             print(f"HATA: pin dosyası yazılamadı ({args.pins}): {e}", file=sys.stderr)
             return 2

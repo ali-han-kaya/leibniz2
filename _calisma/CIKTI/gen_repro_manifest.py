@@ -38,6 +38,7 @@ import json
 import os
 import pathlib
 import shutil
+import tempfile
 
 CI_JOB_COVERAGE = {}
 
@@ -918,18 +919,33 @@ def main() -> None:
             "combined_sha256": run_log_combined,
         }
 
+    def _write_atomic(path, content):
+        directory = os.path.dirname(os.path.abspath(str(path))) or "."
+        fd, tmp = tempfile.mkstemp(dir=directory,
+                                   prefix=os.path.basename(str(path)) + ".tmp.")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(content)
+            os.replace(tmp, str(path))
+        except BaseException:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
+
     out_dir = pathlib.Path(args.out_dir)
     out_dir.mkdir(exist_ok=True)
-    (out_dir / "manifest.txt").write_text("\n".join(lines), encoding="utf-8")
-    (out_dir / "manifest.json").write_text(
-        json.dumps(manifest_json, indent=2, ensure_ascii=False), encoding="utf-8")
+    _write_atomic(out_dir / "manifest.txt", "\n".join(lines))
+    _write_atomic(out_dir / "manifest.json",
+                  json.dumps(manifest_json, indent=2, ensure_ascii=False))
 
     # manifest.json'un kendi SHA-256'sı — sidecar (sha256sum formatı).
     # manifest.json içeriği değişirse sidecar artık eşleşmez; böylece
     # manifest'in kendisi (dosya hash'lerinin listesi) tek hash ile denetlenir.
     manifest_sha = sha256_file(out_dir / "manifest.json")
-    (out_dir / "manifest.sha256").write_text(
-        f"{manifest_sha}  manifest.json\n", encoding="utf-8")
+    _write_atomic(out_dir / "manifest.sha256",
+                  f"{manifest_sha}  manifest.json\n")
 
     # Artifact'ları bundle'a kopyala (manifest yanında)
     for child in root.iterdir():

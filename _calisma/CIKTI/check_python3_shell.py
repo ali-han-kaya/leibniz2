@@ -43,6 +43,7 @@ import json
 import os
 import re
 import sys
+import tempfile
 
 # GitHub Actions'ın `run:` bloğunda asla geçerli Python olmayan kabuk kalıpları.
 # Python'da `&&`/`||` yoktur, `$` operatörü yoktur, `2>&1` geçersizdir,
@@ -262,8 +263,20 @@ def main(argv=None):
         out = json.dumps(report, ensure_ascii=False, indent=1)
         print(out)
         if args.out:
-            with open(args.out, "w", encoding="utf-8") as f:
-                f.write(out)
+            _dir = os.path.dirname(os.path.abspath(args.out)) or "."
+            os.makedirs(_dir, exist_ok=True)
+            _fd, _tmp = tempfile.mkstemp(dir=_dir,
+                                         prefix=os.path.basename(args.out) + ".tmp.")
+            try:
+                with os.fdopen(_fd, "w", encoding="utf-8") as _f:
+                    _f.write(out)
+                os.replace(_tmp, args.out)
+            except BaseException:
+                try:
+                    os.unlink(_tmp)
+                except OSError:
+                    pass
+                raise
         return 0 if ok_all else 1
 
     for r in file_reports:

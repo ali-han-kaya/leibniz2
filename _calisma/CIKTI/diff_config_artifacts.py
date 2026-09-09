@@ -28,8 +28,10 @@ Kullanım:
 import argparse
 import datetime
 import json
+import os
 import pathlib
 import sys
+import tempfile
 
 
 # effective_config.json'da olup ham config'te olmayan meta alanlar — diff'e
@@ -144,9 +146,24 @@ def main(argv=None) -> int:
     lines.append("=" * 72)
     lines.append("")
 
-    (out_dir / "config-diff.txt").write_text("\n".join(lines), encoding="utf-8")
-    (out_dir / "config-diff.json").write_text(
-        json.dumps(out, indent=2, ensure_ascii=False), encoding="utf-8")
+    def _write_atomic(path, content):
+        directory = os.path.dirname(os.path.abspath(str(path))) or "."
+        fd, tmp = tempfile.mkstemp(dir=directory,
+                                   prefix=os.path.basename(str(path)) + ".tmp.")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(content)
+            os.replace(tmp, str(path))
+        except BaseException:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
+
+    _write_atomic(out_dir / "config-diff.txt", "\n".join(lines))
+    _write_atomic(out_dir / "config-diff.json",
+                  json.dumps(out, indent=2, ensure_ascii=False))
 
     if differences:
         print(f"[CONFIG-DIFF] UYARI: {len(differences)} fark bulundu → "
