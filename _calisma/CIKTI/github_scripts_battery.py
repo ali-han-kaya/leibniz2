@@ -600,13 +600,13 @@ SCENARIOS = [
         },
     ),
     (
-        "commit_msg_gate: sidecar yok → PASS (boş)",
+        "commit_msg_gate: sidecar yok → FAIL (fail-closed)",
         "commit_msg_gate.js",
         {},  # logs/commit_msg_findings.json yok
         None, [], [],
         {
-            "ok": True, "set_failed": False,
-            "console_any": ["commit_msg_findings.json bulunamadı"],
+            "ok": True, "set_failed": True,
+            "console_any": ["commit_msg_findings.json yok"],
         },
     ),
     (
