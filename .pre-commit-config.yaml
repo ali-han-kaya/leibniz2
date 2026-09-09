@@ -737,6 +737,23 @@ repos:
         stages: [pre-commit]
         verbose: true
 
+      - id: check-zip-lineage-drift
+        name: "Verify K14 zip lineage/canonical registry ↔ live zip (fail-closed)"
+        description: >-
+          check_zip_lineage_drift.py: zip_lineage.json'un current nesli ile
+          cleanup_log.json'un canonical hash'lerini canlı TESLIM zip'leriyle
+          karşılaştırır — verify_delivery.py'nin LINEAGE-CUR + K14-CANON-HASH
+          P0 eşikleriyle birebir aynı. Repack/registry drift'i CI'daki
+          CI-SIMULATE P0 sınıfını üretir (b69de33 vakası); bu kapı onu
+          commit anında bloke eder. Canlı dosya yoksa UNVERIFIED (INFO) —
+          CI fresh-clone davranışıyla aynı. OFFLINE, stdlib-only, ~10ms.
+        entry: python3 _calisma/CIKTI/check_zip_lineage_drift.py
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
       - id: check-hook-env-matrix
         name: "Verify hook env sürüm matrisi (fail-closed yapısal denetim)"
         description: >-

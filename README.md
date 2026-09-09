@@ -31,6 +31,7 @@ kanonik yönergesini gösterir; `check-skills-index` kapısı dizin ile tabloyu
 |---|---|
 | `skills/verify-chain/SKILL.md` | K0–K17 fail-closed teslim doğrulama zinciri |
 | `skills/reproducible-pdf-build/SKILL.md` | PDF determinism, SHA-256 sidecar ve SDE akışı |
+| `skills/release-candidate-check/SKILL.md` | verify_mcp MCP sunucusu için release-candidate doğrulaması |
 
 
 ## Doğrulama (tek komut)
@@ -556,6 +557,11 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-09 | docs | (changelog) update changelog after history rewrite | [`3373956`](https://github.com/ali-han-kaya/leibniz2/commit/3373956) |
 | 2026-09-09 | chore | (ci) trigger CI rerun for 27f5c7f gate verdicts | [`c44df67`](https://github.com/ali-han-kaya/leibniz2/commit/c44df67) |
 | 2026-09-09 | docs | (changelog) resync after wiring flat-path contract fix | [`27f5c7f`](https://github.com/ali-han-kaya/leibniz2/commit/27f5c7f) |
+| 2026-09-09 | test | (preview) land POST-only live-HTTP regression for /api/run-now | [`4a90720`](https://github.com/ali-han-kaya/leibniz2/commit/4a90720) |
+| 2026-09-09 | test | (preview) add 8-thread hammer for _write_atomic torn-read guarantee | [`f8db23a`](https://github.com/ali-han-kaya/leibniz2/commit/f8db23a) |
+| 2026-09-09 | test | (preview) add atomic-write contract tests for persist layer | [`14b17b0`](https://github.com/ali-han-kaya/leibniz2/commit/14b17b0) |
+| 2026-09-09 | docs | (changelog) add rows for c44df67 rerun + 27f5c7f resync | [`56998c3`](https://github.com/ali-han-kaya/leibniz2/commit/56998c3) |
+| 2026-09-09 | fix | (pre-commit) venv-guard check-doc-job-sync hook entry + contract test | [`091635c`](https://github.com/ali-han-kaya/leibniz2/commit/091635c) |
 
 ### Regresyon notları
 

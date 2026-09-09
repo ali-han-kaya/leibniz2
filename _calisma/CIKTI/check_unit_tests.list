@@ -1,6 +1,7 @@
 # check-unit-tests koşu listesi — sync_check_unit_tests.py --update ile
 # otomatik üretilir; elle düzenleme gerekmez (pre-commit okur).
 test_actionlint_gate.py
+test_api_method_contract.py
 test_architecture_deepening_deck.py
 test_audit_live_ci_sync.py
 test_audit_octokit_names.py
@@ -26,6 +27,7 @@ test_check_python3_shell.py
 test_check_repro_manifest_hook.py
 test_check_sde_determinism.py
 test_check_unit_tests_timing.py
+test_check_zip_lineage_drift.py
 test_ci_check_rate.py
 test_ci_failure_pattern.py
 test_ci_sidecar_wiring.py

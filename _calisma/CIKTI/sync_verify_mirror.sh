@@ -81,6 +81,7 @@ FILES=(
   "github_scripts/unit_test_failure_comment.js|github_scripts/unit_test_failure_comment.js"
   "github_scripts/pr_status_comment.js|github_scripts/pr_status_comment.js"
   "github_scripts/tum_sapmalar_comment.js|github_scripts/tum_sapmalar_comment.js"
+  "github_scripts/run_summary_status.js|github_scripts/run_summary_status.js"
   # Run-summary modülleri — K0-K13 ayrı-step sidecar özetleri + konsolidatör.
   # Dashboard durum-panosu/consolidate_summary.py bunları mirror'da okur;
   # mirror'da eksik kalırsa launchd rotasında panel boşalır.
