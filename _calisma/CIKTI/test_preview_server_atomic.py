@@ -12,6 +12,7 @@ import os
 import pathlib
 import sys
 import tempfile
+import threading
 import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
@@ -103,6 +104,87 @@ class PersistAtomicityTests(unittest.TestCase):
             self.assertRegex(digest, r"^[0-9a-f]{64}  history\.jsonl\n$")
             data = pathlib.Path(ps.HISTORY_PATH).read_text()
             self.assertIn("2026-01-01T00:00:00Z", data)
+
+
+class ConcurrentWriteStressTests(unittest.TestCase):
+    """8 yazıcı aynı hedefe eşzamanlı yazsa bile dosya hep geçerli JSON kalır.
+
+    os.replace atomik olduğu için okuyucu asla yarı-yazılmış (torn) dosya
+    görmez; sabit .tmp adı veya truncating write olsaydı JSONDecodeError
+    üretirdi. Test hem yazıcı hem okuyucu thread'leriyle hammer eder."""
+
+    def test_eight_writers_never_leave_torn_json(self):
+        with tempfile.TemporaryDirectory() as td:
+            dst = os.path.join(td, "hammer.json")
+            # Başlangıçta geçerli bir dosya olsun ki ilk okuma da anlamlı olsun.
+            pathlib.Path(dst).write_text('{"init": true}', encoding="utf-8")
+            errors = []
+            errors_lock = threading.Lock()
+            barrier = threading.Barrier(8)
+            stop_reader = threading.Event()
+            n_iter = 80  # 8 * 80 = 640 atomik yazım
+
+            def writer(tid):
+                try:
+                    barrier.wait(timeout=5)
+                except threading.BrokenBarrierError:
+                    return
+                for i in range(n_iter):
+                    payload = json.dumps(
+                        {"t": tid, "i": i, "pad": "x" * 256},
+                        ensure_ascii=False,
+                    )
+                    try:
+                        ps._write_atomic(dst, payload)
+                    except Exception as exc:
+                        with errors_lock:
+                            errors.append(exc)
+
+            def reader():
+                while not stop_reader.is_set():
+                    try:
+                        if os.path.isfile(dst):
+                            text = pathlib.Path(dst).read_text(encoding="utf-8")
+                            if text.strip():
+                                obj = json.loads(text)
+                                # Yazılan şemaya uygun olmalı (init veya t/i/pad)
+                                self.assertIsInstance(obj, dict)
+                                if "init" not in obj:
+                                    self.assertIn("t", obj)
+                                    self.assertIn("i", obj)
+                    except Exception as exc:
+                        with errors_lock:
+                            errors.append(exc)
+                    # Yoğun hammer: sleep yok, busy-read torn penceresini kaçırmasın.
+                    # Arada nefes ver ki writer'lar da koşabilsin.
+                    if stop_reader.is_set():
+                        break
+
+            writers = [threading.Thread(target=writer, args=(tid,)) for tid in range(8)]
+            r = threading.Thread(target=reader)
+            r.start()
+            for th in writers:
+                th.start()
+            for th in writers:
+                th.join(timeout=15)
+            stop_reader.set()
+            r.join(timeout=5)
+
+            # Hiçbir thread hata üretmemeli (özellikle JSONDecodeError = torn).
+            self.assertEqual(errors, [], f"eşzamanlı yazım/okuma hatası: {errors[:3]}")
+            for th in writers:
+                self.assertFalse(th.is_alive(), "writer thread takıldı")
+
+            # Final dosya geçerli JSON ve son yazılanlardan biri olmalı.
+            final_text = pathlib.Path(dst).read_text(encoding="utf-8")
+            final_obj = json.loads(final_text)
+            self.assertIn("t", final_obj)
+            self.assertGreaterEqual(final_obj["t"], 0)
+            self.assertLess(final_obj["t"], 8)
+
+            # Hiçbir .tmp kalıntısı kalmamalı (her yazım unique tmp + replace).
+            leftovers = [n for n in os.listdir(td) if n != "hammer.json"]
+            self.assertEqual(leftovers, [], f"tmp kalıntısı: {leftovers}")
 
 
 if __name__ == "__main__":
