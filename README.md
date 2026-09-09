@@ -562,6 +562,11 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-09 | test | (preview) add atomic-write contract tests for persist layer | [`14b17b0`](https://github.com/ali-han-kaya/leibniz2/commit/14b17b0) |
 | 2026-09-09 | docs | (changelog) add rows for c44df67 rerun + 27f5c7f resync | [`56998c3`](https://github.com/ali-han-kaya/leibniz2/commit/56998c3) |
 | 2026-09-09 | fix | (pre-commit) venv-guard check-doc-job-sync hook entry + contract test | [`091635c`](https://github.com/ali-han-kaya/leibniz2/commit/091635c) |
+| 2026-09-09 | fix | (ci) handle workflow directories in check_action_pins | [`c31e1e4`](https://github.com/ali-han-kaya/leibniz2/commit/c31e1e4) |
+| 2026-09-09 | fix | (verify) atomic writes + closure tests for K1-K19 battery | [`fcdd285`](https://github.com/ali-han-kaya/leibniz2/commit/fcdd285) |
+| 2026-09-09 | feat | (preview) merge history+refs-trend into one /api/trend fetch | [`1670dfa`](https://github.com/ali-han-kaya/leibniz2/commit/1670dfa) |
+| 2026-09-09 | fix | (preview) canonicalize preview/verify dirs to absolute paths in main() | [`bf44d32`](https://github.com/ali-han-kaya/leibniz2/commit/bf44d32) |
+| 2026-09-09 | test | add /api/* method contract and fix drift-test registrations | [`a2d1a3b`](https://github.com/ali-han-kaya/leibniz2/commit/a2d1a3b) |
 
 ### Regresyon notları
 
