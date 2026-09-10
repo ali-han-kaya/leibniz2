@@ -589,6 +589,8 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-10 | fix | (ci) guard deck modules for missing PIL and install Pillow | [`b0d36e1`](https://github.com/ali-han-kaya/leibniz2/commit/b0d36e1) |
 | 2026-09-10 | test | (verify) register repo-wide atomic-write guard | [`e115bd8`](https://github.com/ali-han-kaya/leibniz2/commit/e115bd8) |
 | 2026-09-10 | docs | (changelog) resync table through c2adbf4 | [`b1337af`](https://github.com/ali-han-kaya/leibniz2/commit/b1337af) |
+| 2026-09-10 | test | (verify) register atomic-write guard in hook coverage map | [`3b60999`](https://github.com/ali-han-kaya/leibniz2/commit/3b60999) |
+| 2026-09-10 | docs | (changelog) resync table through 3130d9b | [`6272e66`](https://github.com/ali-han-kaya/leibniz2/commit/6272e66) |
 
 ### Regresyon notları
 
