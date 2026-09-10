@@ -780,6 +780,16 @@ gh repo edit --enable-squash-merge --enable-rebase-merge \
 
 ---
 
+## Arşivlenen kod inceleme uçurumları
+
+- rc-review çalışma ağacı (old `/private/tmp/clean-c2adbf4`, `c2adbf4`, kaldırıldı 2026-09-10):
+  - `review_dispatch.md` — inceleme kapsamı + karar şablonu; canlı sürüm halihazırda bu kontrolün `REVIEW_RERUN_BRIEF.md` ve `REVIEW_RERUN_DECISION.md` dosyalarına taşındı.
+  - `findings.md` — 2026-08-31'e kadar olan kök neden notları.
+  - `progress.md` — 2026-08-31'e kadar olan oturum günlüğü.
+  - `task_plan.md` — aktif iş maddeleri.
+  - `COMMIT_MSG_BLOCK_EVIDENCE.md` — yeniden yazım öncesi başlık ihlali deliliği.
+- Bu dosyaları yeniden ihtiyaç duyulursa, çalışma ağacı kaldırıldığı için sadece arşiv ÖZET'i burada tutulur; ham dosyalar kümesinden daha az güvenilir bir yeniden oluşturma yolu yok.
+
 ## ŞEFFAFLIK
 
 - `git push` **iki kez onay gerektirir**: (i) bu senaryoyu çalıştırma kararı (sen), (ii) terminalde push komutunun çalıştırılması (sen).
