@@ -594,6 +594,8 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-10 | docs | (changelog) resync table through hook coverage fix | [`14dd67e`](https://github.com/ali-han-kaya/leibniz2/commit/14dd67e) |
 | 2026-09-10 | ci | (verify) install Lean in ci-simulate job for K9 replay parity | [`287913f`](https://github.com/ali-han-kaya/leibniz2/commit/287913f) |
 | 2026-09-10 | docs | (changelog) resync table through ci-simulate lean install | [`f640f2e`](https://github.com/ali-han-kaya/leibniz2/commit/f640f2e) |
+| 2026-09-10 | test | (verify) meta-guard github_scripts gates against fail-open | [`d9271b5`](https://github.com/ali-han-kaya/leibniz2/commit/d9271b5) |
+| 2026-09-10 | docs | (changelog) resync table through gate meta-guard | [`9b60d7a`](https://github.com/ali-han-kaya/leibniz2/commit/9b60d7a) |
 
 ### Regresyon notları
 
