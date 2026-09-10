@@ -584,6 +584,11 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-09 | chore | (ci) trigger CI rerun for 27f5c7f gate verdicts | [`27989dc`](https://github.com/ali-han-kaya/leibniz2/commit/27989dc) |
 | 2026-09-09 | docs | (changelog) resync after wiring flat-path contract fix | [`4d97c77`](https://github.com/ali-han-kaya/leibniz2/commit/4d97c77) |
 | 2026-09-09 | test | (verify) extend derived-input contract to manifest-comment delivery | [`afb1d71`](https://github.com/ali-han-kaya/leibniz2/commit/afb1d71) |
+| 2026-09-10 | fix | (verify) tolerate fresh-clone mtime skew in review freshness | [`3130d9b`](https://github.com/ali-han-kaya/leibniz2/commit/3130d9b) |
+| 2026-09-10 | test | (verify) mock lean binary in check_lean_axioms tests | [`5cfbecb`](https://github.com/ali-han-kaya/leibniz2/commit/5cfbecb) |
+| 2026-09-10 | fix | (ci) guard deck modules for missing PIL and install Pillow | [`b0d36e1`](https://github.com/ali-han-kaya/leibniz2/commit/b0d36e1) |
+| 2026-09-10 | test | (verify) register repo-wide atomic-write guard | [`e115bd8`](https://github.com/ali-han-kaya/leibniz2/commit/e115bd8) |
+| 2026-09-10 | docs | (changelog) resync table through c2adbf4 | [`b1337af`](https://github.com/ali-han-kaya/leibniz2/commit/b1337af) |
 
 ### Regresyon notları
 
