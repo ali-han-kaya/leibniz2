@@ -17,6 +17,13 @@ import unittest
 
 SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
 PREVIEW_HTML = SCRIPT_DIR / "preview.html"
+# Dashboard JS, preview.html'dan ayrılıp preview.js'e taşındı (Candidate 3).
+PREVIEW_JS = SCRIPT_DIR / "preview.js"
+
+
+def _dashboard_src():
+    return (PREVIEW_HTML.read_text(encoding="utf-8") + "\n"
+            + PREVIEW_JS.read_text(encoding="utf-8"))
 
 
 def refs_trend_badge(rows):
@@ -102,16 +109,16 @@ class TestHtmlSync(unittest.TestCase):
     """preview.html'de fonksiyon + rozet elemanı var; JS, Python'la aynı doku."""
 
     def test_js_function_present(self):
-        html = PREVIEW_HTML.read_text(encoding="utf-8")
+        html = _dashboard_src()
         self.assertIn("function refsTrendBadge(rows)", html)
 
     def test_badge_element_present(self):
-        html = PREVIEW_HTML.read_text(encoding="utf-8")
+        html = _dashboard_src()
         self.assertIn('id="refs-trend-badge"', html)
 
     def test_js_uses_same_text_shapes(self):
         # Rozet metin kalıpları iki dilde birebir (drift guard).
-        html = PREVIEW_HTML.read_text(encoding="utf-8")
+        html = _dashboard_src()
         for frag in ('"✓ TAM KAPSAM "', '"kapsam eksik "',
                      '"tam kapsam: veri yok"', "refs_verified === r.refs_total"):
             self.assertIn(frag, html, f"preview.html'de {frag!r} eksik")

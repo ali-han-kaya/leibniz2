@@ -24,6 +24,7 @@ import sys
 import run_summary_budget as _budget
 import run_summary_k0 as _k0
 import run_summary_k13 as _k13
+import run_summary_k12 as _k12
 import run_summary_klayers as _klayers
 import run_summary_lineage as _lineage
 import run_summary_precommit as _precommit
@@ -37,6 +38,7 @@ DEFAULT_PATHS = {
     "lineage": "lineage_findings.json",
     "klayers": "klayers.json",
     "k13": "logs/k13_repro_manifest.json",
+    "k12": "logs/k12_repro_manifest.json",
 }
 
 # Bölüm → (etiket, render fonksiyonu, durum-panosu fonksiyonu). Sıra, run
@@ -47,6 +49,7 @@ SECTIONS = [
     ("budget", "Bütçe", _budget.render, _budget.status),
     ("lineage", "Soy hattı", _lineage.render, _lineage.status),
     ("klayers", "K katmanları", _klayers.render, _klayers.status),
+    ("k12", "K12 plist", _k12.render, _k12.status),
     ("k13", "K13 ayrı-step", _k13.render, _k13.status),
 ]
 

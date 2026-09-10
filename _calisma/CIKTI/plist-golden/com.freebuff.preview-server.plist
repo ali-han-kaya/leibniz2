@@ -35,6 +35,10 @@
     <key>SuccessfulExit</key>
     <false/>
   </dict>
+  <!-- PreStart fail-closed döndüğünde launchd'nin yeniden başlatma
+       döngüsünü sınırla; otomatik kurtarma yok, operatör müdahalesi gerekir. -->
+  <key>ThrottleInterval</key>
+  <integer>60</integer>
   <key>StandardOutPath</key>
   <string>/Users/ci/Library/Logs/com.freebuff/preview-server.log</string>
   <key>StandardErrorPath</key>

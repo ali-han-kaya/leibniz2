@@ -1,0 +1,41 @@
+{
+  "section": "5.4",
+  "entries": [
+    {
+      "version": "V5q",
+      "key": "Sextus 1562 Estienne",
+      "method": "ia_ids",
+      "identifiers": ["bub_gb_ddgo3O27ItcC"],
+      "verdict": "PASS"
+    },
+    {
+      "version": "V5q",
+      "key": "Sextus 1569 Hervet",
+      "method": "ia_ids",
+      "identifiers": ["bub_gb_RyhI9DhB82sC", "bub_gb_nHEaGbVSZMcC"],
+      "verdict": "PASS"
+    },
+    {
+      "version": "V5q",
+      "key": "Sextus 1621 Chouet",
+      "method": "ia_ids",
+      "identifiers": ["bub_gb_-Yio5nIT2m0C"],
+      "verdict": "PASS"
+    },
+    {
+      "version": "V5q",
+      "key": "Sextus Loeb Bury",
+      "method": "ia_title_creator",
+      "query": "sextus empiricus × bury",
+      "verdict": "PASS"
+    },
+    {
+      "version": "V5q",
+      "key": "Della Rocca 2010 PSR",
+      "method": "wayback",
+      "url": "https://web.archive.org/web/20210221211420id_/https://quod.lib.umich.edu/p/phimp/3521354.0010.007/--psr",
+      "markers": ["Della Rocca", "PSR"],
+      "verdict": "PASS"
+    }
+  ]
+}

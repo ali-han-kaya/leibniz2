@@ -78,11 +78,43 @@ class TestConsolidateBudget(unittest.TestCase):
         index, _ = self._run()
         self.assertEqual([r["source"] for r in index["runs"]], ["ok.json"])
 
-    def test_empty_dir_empty_summary(self):
-        index, _ = self._run()
+    def test_empty_dir_writes_index_and_exits_1(self):
+        """Fail-closed: geçerli sidecar YOKSA index yazılır AMA exit 1 —
+        required bütçe kapısı boş değerlendirmeyle sessizce PASS etmesin
+        (producer yüklemesi düştü/hepsi bozuk senaryosu).
+        """
+        buf = io.StringIO()
+        err = io.StringIO()
+        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(err):
+            rc = cb.main()
+        self.assertEqual(rc, 1)
+        self.assertIn("fail-closed", err.getvalue())
+        with open("budget/index.json", encoding="utf-8") as f:
+            index = json.load(f)
         self.assertEqual(index["runs"], [])
         self.assertFalse(index["any_fail"])
         self.assertIsNone(index["date"])
+
+    def test_valid_sidecar_exits_0(self):
+        """Geçerli sidecar varsa exit 0 (normal PASS yolu)."""
+        _sidecar(self.d / "budget" / "ok.json")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = cb.main()
+        self.assertEqual(rc, 0)
+
+    def test_all_invalid_sidecars_exits_1(self):
+        """Hepsi bozuk JSON → rows boş → exit 1 (skip uyarısı yetmez)."""
+        (self.d / "budget" / "broken.json").write_text("{not json",
+                                                       encoding="utf-8")
+        buf = io.StringIO()
+        err = io.StringIO()
+        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(err):
+            rc = cb.main()
+        self.assertEqual(rc, 1)
+        with open("budget/index.json", encoding="utf-8") as f:
+            index = json.load(f)
+        self.assertEqual(index["runs"], [])
 
 
 if __name__ == "__main__":

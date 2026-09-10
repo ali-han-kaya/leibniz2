@@ -19,6 +19,7 @@ HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 import audit_live_ci_sync as als  # noqa: E402
+import ci_failure_pattern as cfp  # noqa: E402
 
 DOC = """\
 **Job kategorileri (16 job = 8 required + 4 advisory + 3 PR-only + 1 manifest):**
@@ -231,6 +232,37 @@ class TestE2EArtifactDocSync(unittest.TestCase):
             d = json.loads(buf.getvalue())
         return rc, d
 
+    def test_combined_report_is_hard_failed_for_deterministic_jobs(self):
+        report = als.build_combined_report({"verdict": "PASS"}, {
+            "categories": {"deterministic": ["verify"], "flaky": [], "config_drift": []}
+        })
+        self.assertEqual(report["verdict"], "FAIL")
+
+    def test_combined_report_keeps_flaky_and_config_drift_advisory(self):
+        report = als.build_combined_report({"verdict": "PASS"}, {
+            "categories": {"deterministic": [], "flaky": ["x"], "config_drift": ["y"]}
+        })
+        self.assertEqual(report["verdict"], "PASS")
+
+    def test_combined_report_ignores_self_deterministic_to_break_loop(self):
+        """Advisory self-loop kırılmalı: yalnızca SELF_JOB deterministic iken PASS.
+
+        Kendi geçmişi 6/6 FAIL diye advisory her yeşil run'da deterministic
+        olarak sınıflanır; combined verdict SELF dışındaki deterministic
+        YOKSA PASS kalmalı — aksi halde yeşil fix bile bir pencere boyunca
+        hard-FAIL'e kilitlenir.
+        """
+        report = als.build_combined_report({"verdict": "PASS"}, {
+            "categories": {"deterministic": [als.SELF_JOB], "flaky": [], "config_drift": []}
+        })
+        self.assertEqual(report["verdict"], "PASS")
+        # SELF + gerçek deterministic karışıkken FAIL kalmalı
+        report2 = als.build_combined_report({"verdict": "PASS"}, {
+            "categories": {"deterministic": [als.SELF_JOB, "verify"], "flaky": [], "config_drift": []}
+        })
+        self.assertEqual(report2["verdict"], "FAIL")
+        self.assertIn("verify", report2["failure_pattern"]["categories"]["deterministic"])
+
     def test_main_current_state_pass(self):
         rc, d = self._run_main(self.doc_text, self._live())
         self.assertEqual(rc, 0)
@@ -278,6 +310,131 @@ class TestCheckRequiredPresence(unittest.TestCase):
     def test_missing_in_both(self):
         self.assertEqual(als.check_required_presence(["a"], ["a"]),
                          [("python3-shell", "doc"), ("python3-shell", "live")])
+
+
+class TestSkippedUpstreamVsDrift(unittest.TestCase):
+    """Yeni kapı: 'job skipped because upstream failed' ≠ true doc↔live drift.
+
+    Kırmızı verify → `needs: [verify]` downstream job'lar skipped, artifact'ları
+    canlıda yok. Bu advisory audit'i double-punish etmemeli — eksik artifact
+    upstream-skipped olarak sınıflanmalı ve verdict PASS kalmalı.
+    Gerçek drift (producer success iken eksik) hâlâ FAIL olmalı.
+    Test-first: önce kırmızı, sonra yeşil.
+    """
+
+    def test_classify_skipped_upstream_not_drift(self):
+        # reports, config-drift, reproducibility → producer job skipped →
+        # missing upstream_skipped'e gider, true missing boş kalır.
+        doc = ["unit-tests", "reports", "config-drift", "reproducibility", "python3-shell"]
+        live = ["unit-tests", "python3-shell"]
+        conclusions = {
+            "Delivery verification — K1-K19 (single entry point)": "failure",
+            "Static markdown reports (incl. pre-commit findings)": "skipped",
+            "Config drift check (gen_config + diff-on-drift)": "skipped",
+            "Reproducibility bundle": "skipped",
+        }
+        res = als.classify_artifact_drift(doc, live, conclusions)
+        self.assertEqual(res["missing"], [])
+        self.assertCountEqual(res["upstream_skipped"], ["reports", "config-drift", "reproducibility"])
+        self.assertTrue(res["ok"])
+
+    def test_true_drift_still_fails_when_producer_succeeded(self):
+        # Aynı eksik artifact ama producer success → true drift, FAIL.
+        doc = ["unit-tests", "reports"]
+        live = ["unit-tests"]
+        conclusions = {
+            "Delivery verification — K1-K19 (single entry point)": "success",
+            "Static markdown reports (incl. pre-commit findings)": "success",
+        }
+        res = als.classify_artifact_drift(doc, live, conclusions)
+        self.assertEqual(res["missing"], ["reports"])
+        self.assertEqual(res["upstream_skipped"], [])
+        self.assertFalse(res["ok"])
+
+    def test_extra_still_fails_even_with_skipped(self):
+        doc = ["unit-tests"]
+        live = ["unit-tests", "yarin-yeni-artifact"]
+        conclusions = {
+            "Delivery verification — K1-K19 (single entry point)": "failure",
+        }
+        res = als.classify_artifact_drift(doc, live, conclusions)
+        self.assertEqual(res["extra"], ["yarin-yeni-artifact"])
+        self.assertFalse(res["ok"])
+
+    def test_main_does_not_double_punish_red_verify(self):
+        # Uçtan uca: kırmızı verify, downstream skipped → advisory PASS
+        # python3-shell doc'ta olmalı yoksa pinned kapı zaten FAIL (ayrı test).
+        doc_text = (
+            "**Job kategorileri (3 job):**\n"
+            "| 1 | A | Delivery verification — K1-K19 (single entry point) | ✅ |\n"
+            "| 2 | A | Static markdown reports (incl. pre-commit findings) | ✅ |\n"
+            "| 3 | A | Reproducibility bundle | ✅ |\n"
+            "\n**Artifact listesi (4):**\n"
+            "- `reports`\n"
+            "- `reproducibility`\n"
+            "- `unit-tests`\n"
+            "- `python3-shell`\n"
+        )
+        doc_artifacts = als.parse_doc_artifacts(doc_text)
+        live_artifacts = ["unit-tests", "python3-shell"]  # downstream eksik, pinned canlıda var
+        live_jobs = ["Delivery verification — K1-K19 (single entry point)",
+                     "Static markdown reports (incl. pre-commit findings)",
+                     "Reproducibility bundle", als.SELF_JOB]
+        live_with_self = list(dict.fromkeys(live_artifacts + [als.SELF_ARTIFACT]))
+        conclusions = {
+            "Delivery verification — K1-K19 (single entry point)": "failure",
+            "Static markdown reports (incl. pre-commit findings)": "skipped",
+            "Reproducibility bundle": "skipped",
+        }
+        with tempfile.TemporaryDirectory() as td:
+            doc = pathlib.Path(td) / "PUBLISH_SCENARIO.md"
+            doc.write_text(doc_text, encoding="utf-8")
+            buf = io.StringIO()
+            with mock.patch.object(als, "get_repo", return_value="o/r"), \
+                 mock.patch.object(als, "get_latest_run", return_value={"databaseId": 1, "headSha": "abc"}), \
+                 mock.patch.object(als, "get_run_jobs", return_value=live_jobs), \
+                 mock.patch.object(als, "get_run_job_conclusions", return_value=conclusions), \
+                 mock.patch.object(als, "get_run_artifacts", return_value=live_with_self), \
+                 mock.patch.object(sys, "stdout", new=buf):
+                rc = als.main(["--doc", str(doc), "--json"])
+            d = json.loads(buf.getvalue())
+        self.assertEqual(rc, 0, f"advisory should not double-fail on skipped upstream: {d}")
+        self.assertEqual(d["verdict"], "PASS")
+        self.assertEqual(d["artifacts"]["missing"], [])
+        self.assertCountEqual(d["artifacts"]["upstream_skipped"], ["reports", "reproducibility"])
+
+    def test_main_true_drift_still_fails_via_main(self):
+        doc_text = (
+            "**Job kategorileri (2 job):**\n"
+            "| 1 | A | Delivery verification — K1-K19 (single entry point) | ✅ |\n"
+            "| 2 | A | Static markdown reports (incl. pre-commit findings) | ✅ |\n"
+            "\n**Artifact listesi (2):**\n"
+            "- `reports`\n"
+            "- `unit-tests`\n"
+        )
+        live_artifacts = ["unit-tests"]
+        live_jobs = ["Delivery verification — K1-K19 (single entry point)",
+                     "Static markdown reports (incl. pre-commit findings)", als.SELF_JOB]
+        live_with_self = list(dict.fromkeys(live_artifacts + [als.SELF_ARTIFACT]))
+        conclusions = {
+            "Delivery verification — K1-K19 (single entry point)": "success",
+            "Static markdown reports (incl. pre-commit findings)": "success",
+        }
+        with tempfile.TemporaryDirectory() as td:
+            doc = pathlib.Path(td) / "PUBLISH_SCENARIO.md"
+            doc.write_text(doc_text, encoding="utf-8")
+            buf = io.StringIO()
+            with mock.patch.object(als, "get_repo", return_value="o/r"), \
+                 mock.patch.object(als, "get_latest_run", return_value={"databaseId": 1, "headSha": "abc"}), \
+                 mock.patch.object(als, "get_run_jobs", return_value=live_jobs), \
+                 mock.patch.object(als, "get_run_job_conclusions", return_value=conclusions), \
+                 mock.patch.object(als, "get_run_artifacts", return_value=live_with_self), \
+                 mock.patch.object(sys, "stdout", new=buf):
+                rc = als.main(["--doc", str(doc), "--json"])
+            d = json.loads(buf.getvalue())
+        self.assertEqual(rc, 1)
+        self.assertEqual(d["verdict"], "FAIL")
+        self.assertEqual(d["artifacts"]["missing"], ["reports"])
 
 
 class TestMainFailClosed(unittest.TestCase):

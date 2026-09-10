@@ -1,0 +1,58 @@
+/* Shared animated failure indicators for preview.html. */
+@keyframes failShake {
+  0%,100% { transform:translateX(0); }
+  15% { transform:translateX(-3px); }
+  30% { transform:translateX(3px); }
+  45% { transform:translateX(-2px); }
+  60% { transform:translateX(2px); }
+  75% { transform:translateX(-1px); }
+}
+
+@keyframes failGlow {
+  0%,100% { box-shadow:0 0 6px var(--err); border-color:var(--err); }
+  50% { box-shadow:0 0 18px var(--err); border-color:var(--err); }
+}
+
+.badge.fail-pulse {
+  animation:failShake 0.5s ease-in-out 3, failGlow 2s ease-in-out infinite;
+}
+
+/* K9: ilk üç saniyede titreşim üç kez oynar; sonrasında yalnızca glow kalır. */
+.badge.fail-pulse-limited {
+  animation:failShake 0.5s ease-in-out 3, failGlow 2s ease-in-out infinite;
+  animation-delay:0s, 0s;
+  animation-iteration-count:3, infinite;
+}
+/* JS, 3 saniye sonra bu sınıfı değiştirerek yalnızca glow'u bırakır. */
+.badge.fail-pulse-glow-only {
+  animation:failGlow 2s ease-in-out infinite;
+}
+
+/* Pattern drift: belirgin ama sürekli olmayan uyarı; banner'a .pattern-drift-alert
+   sınıfı verildiğinde ilk üç saniye titreşim, sonrasında yalnızca glow sürer. */
+.pattern-drift-alert {
+  animation:failShake 0.5s ease-in-out 3, failGlow 2s ease-in-out infinite;
+}
+.pattern-drift-alert.pattern-drift-glow-only {
+  animation:failGlow 2s ease-in-out infinite;
+}
+
+.lean-alert,
+.z3-alert {
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:4px 10px;
+  border-radius:6px;
+  font-size:12px;
+  font-weight:600;
+  color:var(--err);
+  background:rgba(248,81,73,.12);
+  border:1px solid var(--err);
+  animation:failGlow 2s ease-in-out infinite;
+}
+
+.lean-alert.hidden,
+.z3-alert.hidden {
+  display:none;
+}

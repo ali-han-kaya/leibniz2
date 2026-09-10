@@ -8,6 +8,7 @@ Kullanım:
 CI'da GITHUB_STEP_SUMMARY ortam değişkeni ayarlıysa otomatik kullanılır.
 Sonuç: PASS (tüm artifact'lar kapsamda) veya DRIFT (eksik/fazla artifact).
 """
+import json
 import os
 import re
 import sys
@@ -89,17 +90,25 @@ def main():
     expected = set(gm.ARTIFACT_JOBS) - EXCLUDED
     md = _summary_md(pattern, expected)
 
-    # Summary yaz
-    dest = summary_path or os.environ.get("GITHUB_STEP_SUMMARY")
-    if dest:
-        with open(dest, "a", encoding="utf-8") as f:
-            f.write("\n" + md + "\n")
-        print(f"Summary yazıldı: {dest}")
-    else:
-        print(md)
-
     ok = pattern == expected
-    print(f"Sonuç: {'PASS' if ok else 'DRIFT'}")
+    report = {"verdict": "PASS" if ok else "DRIFT",
+              "missing": sorted(expected - pattern),
+              "extra": sorted(pattern - expected)}
+    if "--json" in sys.argv[1:]:
+        print(json.dumps(report))
+    elif "--json-out" in sys.argv[1:]:
+        index = sys.argv.index("--json-out")
+        with open(sys.argv[index + 1], "w", encoding="utf-8") as f:
+            json.dump(report, f)
+    else:
+        dest = summary_path or os.environ.get("GITHUB_STEP_SUMMARY")
+        if dest:
+            with open(dest, "a", encoding="utf-8") as f:
+                f.write("\n" + md + "\n")
+            print(f"Summary yazıldı: {dest}")
+        else:
+            print(md)
+    print(f"Sonuç: {'PASS' if ok else 'DRIFT'}", file=sys.stderr)
     return 0 if ok else 1
 
 

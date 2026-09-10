@@ -1,0 +1,24 @@
+# VCS / toolchain noise
+.git
+.gitignore
+.lake
+.lake-cache
+
+# Virtualenvs and bytecode (never ship the host's, even if present)
+.venv
+.venv_z3
+**/.venv
+**/__pycache__
+*.pyc
+
+# Node scratch / tooling
+node_modules
+package-lock.json
+
+# Editor / OS
+.DS_Store
+.idea
+.vscode
+
+# Vercel link state (host-specific, not runtime)
+.vercel

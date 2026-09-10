@@ -29,6 +29,7 @@ import argparse
 import json
 import os
 import sys
+import tempfile
 
 
 def collect_overrides(cfg):
@@ -125,9 +126,23 @@ def main(argv=None) -> int:
 
     # 1) İnsan-okur uyarı dosyası (her zaman yazılır — denetim izi tam).
     os.makedirs(args.out_dir, exist_ok=True)
+    def _write_atomic(path, content):
+        directory = os.path.dirname(os.path.abspath(path)) or "."
+        fd, tmp = tempfile.mkstemp(dir=directory,
+                                   prefix=os.path.basename(path) + ".tmp.")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(content)
+            os.replace(tmp, path)
+        except BaseException:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
+
     txt_path = os.path.join(args.out_dir, "cli_overrides_warning.txt")
-    with open(txt_path, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines) + "\n")
+    _write_atomic(txt_path, "\n".join(lines) + "\n")
     print(f"[CLI-OVERRIDE] warning={warning} → {txt_path}")
 
     # 2) budget/index.json'a cli_overrides alanı ekle (varsa).
@@ -147,8 +162,8 @@ def main(argv=None) -> int:
                 "overrides": overrides,
                 "raw": raw,
             }
-            with open(args.index, "w", encoding="utf-8") as f:
-                json.dump(index, f, indent=2, ensure_ascii=False)
+            _write_atomic(args.index,
+                          json.dumps(index, indent=2, ensure_ascii=False))
             print(f"[CLI-OVERRIDE] index.json güncellendi: {args.index}")
 
     # 3) VERSION JSON sidecar (refs-online/run-history deseni) — her run'da
@@ -170,8 +185,8 @@ def main(argv=None) -> int:
                         if overrides else "CLI override YOK",
         }
         try:
-            with open(args.version_out, "w", encoding="utf-8") as f:
-                json.dump(version, f, indent=2, ensure_ascii=False)
+            _write_atomic(args.version_out,
+                          json.dumps(version, indent=2, ensure_ascii=False))
             print(f"[CLI-OVERRIDE] VERSION JSON yazıldı: "
                   f"{args.version_out} (override={len(overrides)})")
         except OSError as e:

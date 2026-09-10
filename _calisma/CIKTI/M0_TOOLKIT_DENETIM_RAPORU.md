@@ -121,8 +121,13 @@ K8 + K9 + soy hattı + K11 + K13 + K14; K10 ve K12 ayrıca çağrılır.
 | K12 | LaunchAgent plist şablonu (`--check-plist`) | PASS (yerel macOS; Linux CI'da koşmaz) |
 | K13 | gen_repro_manifest.py self-testi (`--check-repro-manifest`) — mock üretimde manifest.sha256 ↔ manifest.json eşleşmesi de denetlenir (K10 ile ortak helper). **Negatif senaryo kapsamı (4):** eksik-dosya (bundle'dan silinen dosya → kilitlenme yerine temiz 'bundle dosyası yok'), bozuk-hash (manifest'teki SHA-256 kurcalama), config-alt-dizin (config/ alt dizin dosyası config objesinden düşme), python3-shell-eksik (üretici python3_shell bölümünü manifest'ten düşürme); yakalanmayan senaryo → P0 (fail-closed ihlali). Sonuçlar sidecar'a yazılır: `[K13-SCENARIO]` log satırı → k13_repro_manifest.json `scenarios` alanı (4 senaryonun PASS/YAKALANMADI durumu) | PASS |
 | K14 | Cleanup kaydı: M0 §10 silme/taşıma kayıtları (`--check-cleanup`) | PASS |
+| K15 | History sidecar: history.jsonl ↔ .sha256 bütünlüğü (`--check-history`; --full'a DAHİL) | PASS |
 | K16 | github-scripts self-test (`--check-github-scripts`) — 15 senaryoda mock girdi + çıktı eşleşmesi; node fallback'i launchd PATH'ine dayanıklı | PASS |
 | K17 | Mirror sync: `sync_verify_mirror.sh --check` (0=GÜNCEL, 1=BAYAT, 2=hata; `--check-mirror`) | PASS (yerel macOS; Linux CI'da koşmaz) |
+| K18 | Daemon HTTP smoke: preview_server daemon modda + 3 endpoint HTTP 200 (`--check-daemon`) | PASS |
+| K19 | Coq reduct-invariance: 8 teorem Content.v çekirdeği coqtop -compile (`--coq-proof`) | PASS (coqtop; --full'a dahil değil) |
+| K20 | Launchctl durum: launchctl list + plutil lint + HTTP 200 (`--check-launchd`) | PASS (yerel macOS; Linux CI'da koşmaz) |
+| K21 | SDE determinism guard: SOURCE_DATE_EPOCH ile byte-determinizm (`--check-sde`) | PASS |
 
 **K14 bulguları (yeni katman — commit `[K14]`):** `cleanup_log.json` (M0 §10
 ile aynı kaynak) okunur ve §10'daki her silme/taşıma kaydı dosya sistemiyle
@@ -269,14 +274,14 @@ bec0bb0a…  (deterministik repack, 2492e98)         [git show ile doğrulanır]
 8b390996…  (Popkin 1952 + Priest 2018, fad15f0)   [git show ile doğrulanır]
 34e81dff…  (V5k: tectonic non-determinism, 07793f6) [git show ile doğrulanır]
 58f7d1c6…  (V5l: repack determinizm kanıtı, 6bb9cb6) [git show ile doğrulanır]
-918e0545…  (V5m: qpdf deneyi script + donmuş çıktı, d02cda8) ← GÜNCEL KANONİK (canlı dosya ile doğrulanır)
+0df21b5d…  (V5m + b69de33 repack, d02cda8) ← GÜNCEL KANONİK (canlı dosya ile doğrulanır)
 ```
 
 ### 10.3 Güncel kanonik hash'ler (yanındaki sidecar ile birebir)
 
 ```text
-TESLIM_KLASOR_V5_2026-08-17.zip = 918e054595f798d48843ece59f48582b2b22147edb0cdb06188f0c543b2e13aa
-TESLIM_V5_FINAL_2026-08-17.zip  = 81a0244855cc574562bc18a611c94bf3ffbb0086c3ea32775de9d5f32473c28a
+TESLIM_KLASOR_V5_2026-08-17.zip = 0df21b5d003f67df30efcf710bc85914851567f31c33b427ee1b528c9ad190a5
+TESLIM_V5_FINAL_2026-08-17.zip  = b39ea667e93d79e89291ad27d807c5720d0ff319dd7840d12eab9f27f2a6bf82
 ```
 
 Not: `363a06e3…` değeri §9'da zaten "orijinal" olarak sabitlenmişti; §10 bu

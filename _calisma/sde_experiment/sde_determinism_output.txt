@@ -1,0 +1,27 @@
+FROZEN_RECORD — SOURCE_DATE_EPOCH determinism deneyi (V5s, 2026-08-26)
+==========================================================================
+input tex  : ingiliz_empirizmi_v3.tex (1537 satır, \input{core_section.tex})
+tectonic   : 0.17.0 (/opt/homebrew/bin/tectonic)
+texlive    : bu kayıtta ölçülmedi (TeXLive kurulu değil — SOURCE_DATE_EPOCH
+             göçü ayrı çalışmadır; tectonic tarafı aşağıda donduruldu)
+pages      : 33 (her modda sabit — içerik doğruluğu etkilenmez)
+==========================================================================
+MOD 1 — tectonic (varsayılan), aynı girdi, 3 koşum:
+  run 1  160bceaa9c3dfb8c…   run 2  eec553e555abceda…   run 3  6cd719c4d31605e0…
+  verdict : NON-DETERMINISTIC — drift yalnızca /CreationDate (wall-clock)
+            + /ID (rastgele); gövde byte'ları birebir aynı (diff --text 4 satır)
+
+MOD 2 — tectonic + SOURCE_DATE_EPOCH=1755600000, 5 koşum:
+  167e49c9161912a7  ×5
+  verdict : DETERMINISTIC — /CreationDate SDE epoch'undan (D:20250819104000),
+            /ID sabit; skill'in "tectonic SDE'yi onurlandırmaz" iddiası ÇÜRÜTÜLDÜ
+
+MOD 3 — qpdf --remove-metadata (ayrı araç, aynı girdi), 3 koşum:
+  run 1  ddcc4b8ca8004bfe…   run 2  f5ecbff2561542de…   run 3  cfe43147c525df70…
+  verdict : NON-DETERMINISTIC — V5l bulgusu teyit; sidecar reuse kuralının
+            (raw hash değişmedikçe yeniden üretme) gerekçesi
+==========================================================================
+KAPANIŞ: tectonic+SDE deterministiktir → SOURCE_DATE_EPOCH göçü
+tectonic'i bırakmayı GEREKTİRMEZ (skill Step 5'te aksi iddia ediyordu);
+TeXLive+SDE aynı mekanizmayı daha geniş paket yelpazesinde sunar.
+Kayıt --rerun ile yeniden üretilir: sde_determinism_experiment.py --rerun.

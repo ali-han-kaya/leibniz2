@@ -1,0 +1,3 @@
+# verify_mcp — read-only MCP server for the local verification chain.
+# FastMCP v1 API (mcp<2); the 2.x SDK renamed FastMCP to MCPServer.
+mcp>=1.29,<2

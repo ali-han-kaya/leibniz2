@@ -171,14 +171,15 @@ class TestWorkflowLabelGateJobs(unittest.TestCase):
                           f"job '{job_id}' pull-requests: read izni içermiyor")
 
     def test_both_gates_need_budget(self):
-        """Her iki gate da budget'a bağımlı olmalı (needs: [budget])."""
+        """Her iki gate da budget zincirine bağımlı olmalı (budget veya
+        budget-comment — budget-comment budget'a bağımlıdır)."""
         for job_id in ("label-gate", "label-gate-p1"):
             pattern = rf"{re.escape(job_id)}:\s*\n(.*?)(?=\n  \w|\Z)"
             m = re.search(pattern, self.wf, re.S)
             self.assertIsNotNone(m, f"job '{job_id}' bulunamadı")
             block = m.group(1)
-            self.assertIn("needs: [budget]", block,
-                          f"job '{job_id}' needs: [budget] içermiyor")
+            self.assertIn("budget", block,
+                          f"job '{job_id}' budget bağımlılığı içermiyor")
 
 
 if __name__ == "__main__":

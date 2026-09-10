@@ -1,0 +1,29 @@
+name: K10 bundle verdict (rozet)
+description: |
+  verify_delivery.py --verify-manifest ile reproducibility bundle
+  bütünlüğünü koşup PASS/FAIL rozetini k10_verdict.txt'e yazar.
+  budget-comment ve manifest-comment job'larındaki kopya-yapıştır
+  adımın TEK KAYNAĞIdır — drift engeller (future comment job'lar da
+  bu action'ı kullanır). Fail-closed kapı reproducibility'de;
+  burada yalnızca rozet için koşulur (FAIL adımı patlatmaz — rozet
+  FAIL gösterir). reproducibility/ dizini çağıran job tarafından
+  önceden indirilmiş olmalı.
+inputs:
+  manifest:
+    description: reproducibility/manifest.json yolu
+    required: false
+    default: reproducibility/manifest.json
+runs:
+  using: composite
+  steps:
+    - name: Run K10 bundle integrity check (rozet için)
+      shell: bash
+      run: |
+        python3 _calisma/CIKTI/verify_delivery.py \
+          --dir _calisma/CIKTI \
+          --json \
+          --verify-manifest "${{ inputs.manifest }}" \
+          > k10_result.json 2>/dev/null || true
+        verdict=$(python3 -c "import json;d=json.load(open('k10_result.json'));print(d.get('manifest_digest',{}).get('verdict','FAIL'))" 2>/dev/null || echo "FAIL")
+        echo "$verdict" > k10_verdict.txt
+        echo "K10 manifest digest verdict: $verdict"

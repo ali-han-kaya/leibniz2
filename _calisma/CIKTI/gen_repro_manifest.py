@@ -38,6 +38,9 @@ import json
 import os
 import pathlib
 import shutil
+import tempfile
+
+CI_JOB_COVERAGE = {}
 
 
 def sha256_file(p: pathlib.Path) -> str:
@@ -74,6 +77,8 @@ ARTIFACT_JOBS = {
     "mirror-check": "mirror-check",
     "daemon-http": "daemon-http",
     "audit-refs-trend": "audit-refs-trend",
+    "changelog-drift": "changelog-drift",
+    "ci-simulate": "ci-simulate",
     "reproducibility": "reproducibility",
 }
 
@@ -143,6 +148,7 @@ def _is_overrides_rel(rel: str) -> bool:
 # objesi) taşır; SHA-256 ile denetim zincirinde sabitlenir.
 STATUS_CHECKS_BASENAMES = frozenset({
     "status_checks.json",
+    "mirror_coverage.json",
 })
 
 
@@ -658,6 +664,23 @@ def main() -> None:
                      "=" * 72]
         lines += sc_block
 
+    # ── MIRROR COVERAGE bölümü: mirror_coverage.json ─────────────────────
+    mirror_coverage_hashes = {rel: h for rel, h in file_hashes.items()
+                              if os.path.basename(rel) == "mirror_coverage.json"}
+    mirror_coverage_combined = None
+    if mirror_coverage_hashes:
+        sorted_rel = sorted(mirror_coverage_hashes)
+        mirror_coverage_combined = hashlib.sha256(
+            "".join(f"{rel}\0{mirror_coverage_hashes[rel]}\n" for rel in sorted_rel).encode()
+        ).hexdigest()
+        lines += ["", "=" * 72,
+                  "MIRROR COVERAGE ARTIFACT (ayrı bölüm)", "=" * 72,
+                  f"{'FILE':<55} SHA-256", "-" * 72]
+        lines += [f"{rel:<55} {mirror_coverage_hashes[rel]}" for rel in sorted_rel]
+        lines += ["-" * 72,
+                  f"mirror_coverage_combined_sha256: {mirror_coverage_combined}",
+                  "=" * 72]
+
     # ── UNIT TESTS bölümü: unit_tests.log (test çıktıları) ──────────────────
     # verify job'undaki unittest discover çıktısı (unit_tests.log) ayrıca
     # işaretlenir; combined_sha256 tek hash ile özetler. Böylece test
@@ -880,6 +903,11 @@ def main() -> None:
             "files": dict(sorted(status_checks_hashes.items())),
             "combined_sha256": status_checks_combined,
         }
+    if mirror_coverage_hashes:
+        manifest_json["mirror_coverage"] = {
+            "files": dict(sorted(mirror_coverage_hashes.items())),
+            "combined_sha256": mirror_coverage_combined,
+        }
     if unit_test_hashes:
         manifest_json["unit_tests"] = {
             "files": dict(sorted(unit_test_hashes.items())),
@@ -891,18 +919,33 @@ def main() -> None:
             "combined_sha256": run_log_combined,
         }
 
+    def _write_atomic(path, content):
+        directory = os.path.dirname(os.path.abspath(str(path))) or "."
+        fd, tmp = tempfile.mkstemp(dir=directory,
+                                   prefix=os.path.basename(str(path)) + ".tmp.")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(content)
+            os.replace(tmp, str(path))
+        except BaseException:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
+
     out_dir = pathlib.Path(args.out_dir)
     out_dir.mkdir(exist_ok=True)
-    (out_dir / "manifest.txt").write_text("\n".join(lines), encoding="utf-8")
-    (out_dir / "manifest.json").write_text(
-        json.dumps(manifest_json, indent=2, ensure_ascii=False), encoding="utf-8")
+    _write_atomic(out_dir / "manifest.txt", "\n".join(lines))
+    _write_atomic(out_dir / "manifest.json",
+                  json.dumps(manifest_json, indent=2, ensure_ascii=False))
 
     # manifest.json'un kendi SHA-256'sı — sidecar (sha256sum formatı).
     # manifest.json içeriği değişirse sidecar artık eşleşmez; böylece
     # manifest'in kendisi (dosya hash'lerinin listesi) tek hash ile denetlenir.
     manifest_sha = sha256_file(out_dir / "manifest.json")
-    (out_dir / "manifest.sha256").write_text(
-        f"{manifest_sha}  manifest.json\n", encoding="utf-8")
+    _write_atomic(out_dir / "manifest.sha256",
+                  f"{manifest_sha}  manifest.json\n")
 
     # Artifact'ları bundle'a kopyala (manifest yanında)
     for child in root.iterdir():

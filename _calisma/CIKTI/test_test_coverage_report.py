@@ -101,7 +101,7 @@ class TestDetectGaps(unittest.TestCase):
         """Standalone smoke script'leri exempt — --check FAIL etmez."""
         gaps = tcr.detect_gaps(self.files, self.hmap)
         exempt = {"test_coverage_report.py", "test_preview_reload_smoke.py",
-                  "test_all_hooks_smoke.py"}
+                  "test_all_hooks_smoke.py", "test_dashboard_playwright_smoke.py"}
         actual_uncovered = set(gaps["not_covered_by_any_hook"]) - exempt
         self.assertEqual(actual_uncovered, set(),
                          f"Unexpected uncovered: {actual_uncovered}")

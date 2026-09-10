@@ -235,9 +235,21 @@ def main():
             print("Düzeltme: 'gen_config.py' çalıştırıp config'i güncelle.", file=sys.stderr)
             return 1
     else:
-        with open(out_path, "w", encoding="utf-8") as f:
-            json.dump(cfg, f, indent=2, ensure_ascii=False)
-            f.write("\n")
+        _payload = json.dumps(cfg, indent=2, ensure_ascii=False) + "\n"
+        _dir = os.path.dirname(os.path.abspath(out_path)) or "."
+        os.makedirs(_dir, exist_ok=True)
+        _fd, _tmp = tempfile.mkstemp(dir=_dir,
+                                     prefix=os.path.basename(out_path) + ".tmp.")
+        try:
+            with os.fdopen(_fd, "w", encoding="utf-8") as _f:
+                _f.write(_payload)
+            os.replace(_tmp, out_path)
+        except BaseException:
+            try:
+                os.unlink(_tmp)
+            except OSError:
+                pass
+            raise
         print(f"OK: config güncellendi → {out_path}")
 
     # 5) Özet (önce → sonra)

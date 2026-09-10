@@ -18,7 +18,7 @@ cited in it.
 | `core_formal_model_check.py` | Python script: Proposition 1 (Boolean + bridge + characterization) and Proposition 2 (model pair). |
 | `encoding_sensitivity_check.py` | Python script (V5): encoding-sensitivity test of the Stoic modal clause under `L_0^A` and `L_0^B`. |
 | `gate15_check.py` | Python script (V5): Gate 1.5 model-pair items T2–T5, incl. the structural constraints `Γ` on both `G` extensions. |
-| `REPRODUCIBILITY.md` | This file. |
+| `REPRODUCIBILITY.md` | This file. |\n| `Makefile` | Reproducible tectonic + `SOURCE_DATE_EPOCH` PDF build. |
 | `requirements.txt` | Empty: the scripts depend only on the Python 3 standard library. |
 | `test_output.txt` | Captured output of `core_formal_model_check.py` on Python 3.11 (also verified on 3.10 and 3.12). |
 | `encoding_sensitivity_output.txt` | Captured output of `encoding_sensitivity_check.py` on Python 3.11 (also verified on 3.10 and 3.12). |
@@ -26,6 +26,40 @@ cited in it.
 | `provenance2_supplement.md` | Provenance 2.0 evidence register — 7-column expansion of the manuscript's Provenance Table (ClaimID, §, Literal Claim, Primary Witness, Secondary Support, Evidence Type, Confidence). Optional supplement; not part of the page count. |
 | `ingiliz_empirizmi_v3.tex` | Full manuscript (LaTeX), V5 revision, 33 pp. when compiled. |
 | `ingiliz_empirizmi_v3.pdf` | Full manuscript (PDF), compiled with tectonic (33 pp.). |
+
+## Reproducible PDF build (tectonic + SOURCE_DATE_EPOCH)
+
+The repository-level example `docs/Makefile.tectonic` follows the academic
+Makefile pattern while keeping the build inputs explicit. It derives the
+default epoch from the latest Git commit; set it explicitly when reproducing
+a historical build:
+
+```sh
+make -f docs/Makefile.tectonic pdf
+SOURCE_DATE_EPOCH=1755600000 make -f docs/Makefile.tectonic check
+```
+
+The Makefile writes intermediate files under `.build/tectonic`, copies the
+resulting PDF into this package, and prints its SHA-256. `tectonic` must be
+installed; missing tooling is an environment error for this explicit build
+command, rather than a false reproducibility PASS.
+
+## Reproducible PDF build (tectonic + SOURCE_DATE_EPOCH)
+
+The package `Makefile` follows the academic `md-to-pdf-academic` pattern,
+using tectonic as the PDF engine and making the epoch explicit. The default
+epoch is the latest Git commit timestamp; override it to reproduce a
+historical build:
+
+```sh
+make pdf
+SOURCE_DATE_EPOCH=1755600000 make check
+make clean
+```
+
+Intermediate files are isolated under `.build/tectonic`. The build prints the
+PDF SHA-256; missing tectonic is an environment error (exit 2), not a false
+reproducibility success. The repository-level copy is `docs/Makefile.tectonic`.
 
 ## Reproducing the model checks
 

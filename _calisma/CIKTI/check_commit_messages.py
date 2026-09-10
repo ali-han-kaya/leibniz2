@@ -18,6 +18,7 @@ Kullanım (CI çalışma dizininden; checkout fetch-depth:0 olmalı):
 """
 import argparse
 import json
+import os
 import pathlib
 import subprocess
 import sys
@@ -97,8 +98,20 @@ def main(argv=None):
     data = {"checked": len(shas), "violations": violations}
     out = pathlib.Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n",
-                   encoding="utf-8")
+    payload = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
+    directory = os.path.dirname(os.path.abspath(str(out))) or "."
+    fd, tmp = tempfile.mkstemp(dir=directory,
+                               prefix=os.path.basename(str(out)) + ".tmp.")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(payload)
+        os.replace(tmp, str(out))
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
     print(f"commit-msg denetimi: {len(shas)} commit, {len(violations)} ihlal")
     for v in violations:
         print(f"  [IHLAL] {v['commit']} {v['subject']}")

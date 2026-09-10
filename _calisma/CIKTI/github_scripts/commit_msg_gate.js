@@ -12,7 +12,12 @@
   const FINDINGS_PATH = 'logs/commit_msg_findings.json';
 
   if (!fs.existsSync(FINDINGS_PATH)) {
-    console.log('commit_msg_findings.json bulunamadı — commit-msg gate PASS (sidecar üretilmemiş)');
+    // fail-closed: sidecar yoksa gate sessizce PASS edemez — verify job'unun
+    // ürettiği bulgu akışı kopmuşsa (upload/download hatası, kısmi tetikleme)
+    // kapı FAIL olmalı; 'yok' bilinmemekle aynıdır ve PASS rubber-stamp olur.
+    const errMsg = 'commit_msg_findings.json yok — commit-msg gate FAIL (fail-closed: sidecar üretilmedi/indirilemedi)';
+    console.log(errMsg);
+    core.setFailed(errMsg);
     return;
   }
 

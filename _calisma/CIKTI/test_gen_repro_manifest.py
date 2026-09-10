@@ -627,6 +627,22 @@ class TestProvenance(unittest.TestCase):
         self.assertNotIn("overrides", m)
 
     # ── STATUS CHECKS section tests (advisory kontratı SHA-256 sabitlemesi) ─
+    def test_mirror_coverage_section_is_pinned(self):
+        (self.artifacts / "mirror-check").mkdir(parents=True)
+        report = self.artifacts / "mirror-check" / "mirror_coverage.json"
+        report.write_text(json.dumps({"ok": True, "missing": [], "dead": [],
+                                      "unexpected": []}) + "\n", encoding="utf-8")
+        self._gen()
+        m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        section = m["mirror_coverage"]
+        rel = "mirror-check/mirror_coverage.json"
+        self.assertEqual(section["files"][rel], hashlib.sha256(report.read_bytes()).hexdigest())
+        expected = hashlib.sha256(f"{rel}\0{section['files'][rel]}\n".encode()).hexdigest()
+        self.assertEqual(section["combined_sha256"], expected)
+        txt = (self.out / "manifest.txt").read_text(encoding="utf-8")
+        self.assertIn("MIRROR COVERAGE ARTIFACT (ayrı bölüm)", txt)
+        self.assertIn("mirror_coverage_combined_sha256", txt)
+
     def test_status_checks_section_prefixed(self):
         # precheck-report/ önekli status_checks.json — ayrı bölümde işaretlenir
         # + tek-hash combined_sha256 (OVERRIDES deseni).
@@ -1482,6 +1498,14 @@ class TestFlattenedConfigMerge(unittest.TestCase):
 
 
 
+# verify.yml reproducibility merge pattern'inin güncel hali — pattern
+# testlerinde ortak kaynak (tekrarlanan tam literal yerine).
+CURRENT_MERGE_PATTERN = ("'{verify-report,budget,reports,refs-online,run-history,"
+                          "config-drift,repack-verify,config,k0-findings,budget-verify,"
+                          "lineage-findings,klayers,unit-tests,action-runtimes,"
+                          "changelog-drift,ci-simulate}'")
+
+
 class TestCheckPatternConsistency(unittest.TestCase):
     """check_pattern_consistency.py bağımsız betiğinin testleri."""
 
@@ -1508,7 +1532,7 @@ class TestCheckPatternConsistency(unittest.TestCase):
         wf = (pathlib.Path(cpc.DEFAULT_WORKFLOW).read_text(encoding="utf-8"))
         # budget-verify'ı pattern'den çıkar
         wf = wf.replace(
-            "'{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,config,k0-findings,budget-verify,lineage-findings,klayers,unit-tests,action-runtimes}'",
+            "'{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,config,k0-findings,budget-verify,lineage-findings,klayers,unit-tests,action-runtimes,changelog-drift,ci-simulate}'",
             "'{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,k0-findings,lineage-findings,klayers,unit-tests,action-runtimes}'",
         )
         errors, _ = self._run_check(wf)
@@ -1520,7 +1544,7 @@ class TestCheckPatternConsistency(unittest.TestCase):
         wf = (pathlib.Path(cpc.DEFAULT_WORKFLOW).read_text(encoding="utf-8"))
         # Fazla bir artifact ekle
         wf = wf.replace(
-            "'{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,config,k0-findings,budget-verify,lineage-findings,klayers,unit-tests,action-runtimes}'",
+            CURRENT_MERGE_PATTERN,
             "'{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,k0-findings,budget-verify,lineage-findings,klayers,unit-tests,action-runtimes,fake-artifact}'",
         )
         errors, _ = self._run_check(wf)
@@ -1531,7 +1555,7 @@ class TestCheckPatternConsistency(unittest.TestCase):
         import check_pattern_consistency as cpc
         wf = (pathlib.Path(cpc.DEFAULT_WORKFLOW).read_text(encoding="utf-8"))
         wf = wf.replace(
-            "'{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,config,k0-findings,budget-verify,lineage-findings,klayers,unit-tests,action-runtimes}'",
+            CURRENT_MERGE_PATTERN,
             "'{verify-report,budget,reports}'",
         )
         errors, _ = self._run_check(wf)
@@ -1546,7 +1570,7 @@ class TestCheckPatternConsistency(unittest.TestCase):
         import check_pattern_consistency as cpc
         wf = (pathlib.Path(cpc.DEFAULT_WORKFLOW).read_text(encoding="utf-8"))
         wf = wf.replace(
-            "'{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,config,k0-findings,budget-verify,lineage-findings,klayers,unit-tests,action-runtimes}'",
+            CURRENT_MERGE_PATTERN,
             "'{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,k0-findings,lineage-findings,klayers,unit-tests,action-runtimes}'",
         )
         tmp = pathlib.Path("/tmp") / f"test_fix_{os.getpid()}"

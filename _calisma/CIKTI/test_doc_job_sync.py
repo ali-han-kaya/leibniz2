@@ -159,5 +159,49 @@ class TestDocJobParsing(unittest.TestCase):
         self.assertEqual(len(parse_doc_jobs(doc)), 2)
 
 
+class TestHookVenvGuard(unittest.TestCase):
+    """check-doc-job-sync hook entry'sinin venv-guard sözleşmesi.
+
+    test_doc_job_sync PyYAML ister; sistem python3'ünde PyYAML yoksa
+    TestDocJobSync SKIP eder ve kapı sahte-PASS verir (8 yerine 3 test).
+    .pre-commit-config.yaml'daki entry bu yüzden repo venv'i varsa onunla
+    koşmalı (status_checks/coverage/hook-env-matrix guard deseni). Bu test
+    o sözleşmeyi statik olarak pin'ler — guard geri alınırsa commit bloke.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.root = CIKTI.parent.parent
+        cls.pc = cls.root / ".pre-commit-config.yaml"
+
+    def _hook_entry(self):
+        # Minimal yapısal ayrıştırma: hook bloğunu id satırından dil satırına
+        # kadar kes (PyYAML'sız da çalışır — kapının kendi bağımlılığıyla
+        # aynı stdlib disiplini).
+        text = self.pc.read_text(encoding="utf-8")
+        m = re.search(
+            r"^( *)- id: check-doc-job-sync\n(.*?)(?=^\1- id: |^\1\Z)",
+            text, re.M | re.S)
+        self.assertIsNotNone(m, "check-doc-job-sync hook'u config'te yok")
+        return m.group(2)
+
+    def test_entry_carries_venv_guard(self):
+        entry = self._hook_entry()
+        self.assertIn("_calisma/.venv_z3/bin/python", entry,
+                      "hook entry repo venv'ini seçmeli (PyYAML sahte-PASS "
+                      "guard'ı geri alınmış)")
+        self.assertIn("bash -c", entry,
+                      "guard bash -c sarmalayıcısıyla koşmalı (status_checks "
+                      "deseni: PY=python3; [ -x venv ] && PY=venv)")
+
+    def test_guard_falls_back_to_bare_python3(self):
+        """Venv yoksa bare python3 fallback'i KORUNMALI (venv'siz ortamda
+        kapı hâlâ koşmalı — SKIP dürüst davranış, çökme değil)."""
+        entry = self._hook_entry()
+        self.assertIn("PY=python3", entry)
+        self.assertIn("exec \"$PY\"", entry,
+                      "exec ile sinyal/exit kodu korunmalı")
+
+
 if __name__ == "__main__":
     unittest.main()

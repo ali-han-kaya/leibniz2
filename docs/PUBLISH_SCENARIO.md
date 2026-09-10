@@ -21,9 +21,9 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 > | AŞAMA 3 — CI doğrulama | 🔄 **aktif** — her push'ta tekrarlanır (incremental) |
 > | AŞAMA 4 — koruma kanıtı | ⏸️ opsiyonel (1 (b) sonrası) |
 >
-> Job tablosu (AŞAMA 3), `.github/workflows/verify.yml`'deki **24 job**'u 4 kategoride
-> sunar: 12 **required** (9 push + P0 label gate + commit-msg gate + config-sync +
-> ci-simulate) + 10 **advisory** + 1 **PR-only** (P1 label gate) + 1 **manifest** (PR-only).
+> Job tablosu (AŞAMA 3), `.github/workflows/verify.yml`'deki **27 job**'u 4 kategoride
+> sunar: 12 **required** + 12 **advisory** + 3 **PR-only/manifest** job. Branch protection
+> yalnızca required job'ları bloke eder.
 > Branch protection yalnızca required job'ları bloke eder.
 > Güncel listeyi üret: `python3 _calisma/CIKTI/status_checks.py --json`.
 
@@ -575,7 +575,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 --exit-status` + artifact listesi; sonuç `SONUÇ: PASS/FAIL` olarak loglanır
 (dry-run'da yalnızca önizlenir).
 
-**Job kategorileri (24 job = 12 required + 10 advisory + 2 PR-only):**
+**Job kategorileri (27 job = 12 required + 12 advisory + 3 PR-only):**
 
 > **Kural:** Branch protection **yalnızca A kategorisindeki** job'ları required check olarak
 > kabul eder. B (advisory) job'ları push'ta çalışır ama required değildir;
@@ -598,9 +598,9 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 | 10 | A | Commit-msg gate | — PR'da koşar; commit-msg ihlali varsa FAIL → merge bloke (2026-08-23) |
 | 11 | A | Config snapshot ↔ CONFIG_BASENAMES sync check | — üçlü senkron (2026-08-23) |
 | 12 | A | CI-SIMULATE (advisory) | — simülasyon replay kapısı: status_checks + simulate_verify_job (2026-08-23) |
-| | **B — Advisory (10; push'ta çalışır, required değil)** | | |
+| | **B — Advisory (11; push'ta çalışır, required değil)** | | |
 | 13 | B | Publish precheck (AŞAMA 0, advisory) | ✅ success (9s) — AŞAMA 0 kapıları otomatik denetlenir |
-| 14 | B | Plist drift check (macOS, advisory) | ✅ success (11s) — K12, macOS-runner'lı |
+| 14 | B | Plist drift check (macOS, advisory) | ✅ success (11s) — K12, macOS-runner'lı; negatif smoke: bozuk-plist + eksik-golden yakalanmalı (YAKALANMADI → fail-closed) |
 | 15 | B | Mirror sync check (macOS, fail-closed) | ✅ success (12s) — K17, sync sonrası GÜNCEL |
 | 16 | B | Daemon mode HTTP 200 (advisory) | ✅ success (45s) — üç endpoint'te 200 |
 | 17 | B | Refs-trend audit (advisory) | ✅ success (56s) — trend satırları kaynak artifact'larla birebir |
@@ -609,10 +609,13 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 | 20 | B | Changelog drift check (advisory) | — gen_changelog --check drift bulguları run summary'de (2026-08-23) |
 | 21 | B | Merge pattern drift check (advisory) | — merge pattern ↔ ARTIFACT_JOBS tutarlılığı (advisory, run summary) |
 | 22 | B | Preview reload smoke (advisory, macOS) | — preview restart + endpoint smoke (advisory) |
+| 23 | B | K9 Lake proof (Lean 4.14.0) | ✅ success — ayrı-step lake build --wfail (lean-toolchain v4.14.0); K9 ayrıca verify job'unun `--full` içinde de koşar (required DEĞİL) |
+| 24 | B | Fresh-clone HTTP smoke (advisory) | — temiz clone'dan preview_server.py başlatılır; `/api/health` + `/api/latest` curl ile doğrulanır |
 | | **C — PR-only (push'ta çalışmaz, PR'da çalışır)** | | |
-| 23 | C | Pre-commit P1 label gate (optional) | — skipped (push'ta çalışmaz) |
+| 25 | C | Pre-commit P1 label gate (optional) | — skipped (push'ta çalışmaz) |
 | | **D — PR-only (yorum/etiket düşürme)** | | |
-| 24 | D | Manifest PR comment | — skipped (PR'da çalışır) |
+| 26 | D | Manifest PR comment | — skipped (PR'da çalışır) |
+| 27 | D | Budget status PR comment | — bütçe + pre-commit PR yorumu; job-level PR-only, push'ta tamamen skipped (bütçe kapısı ayrı `budget` job'ında kalır) |
 
 **Artifact listesi (29):**
 - `unit-tests` (CIKTI birim test logu — `test_*.py` glob'u)
@@ -776,6 +779,16 @@ gh repo edit --enable-squash-merge --enable-rebase-merge \
   (mirror senkron + minimal PATH'te `--full` + verdict PASS kontrolü).
 
 ---
+
+## Arşivlenen kod inceleme uçurumları
+
+- rc-review çalışma ağacı (old `/private/tmp/clean-c2adbf4`, `c2adbf4`, kaldırıldı 2026-09-10):
+  - `review_dispatch.md` — inceleme kapsamı + karar şablonu; canlı sürüm halihazırda bu kontrolün `REVIEW_RERUN_BRIEF.md` ve `REVIEW_RERUN_DECISION.md` dosyalarına taşındı.
+  - `findings.md` — 2026-08-31'e kadar olan kök neden notları.
+  - `progress.md` — 2026-08-31'e kadar olan oturum günlüğü.
+  - `task_plan.md` — aktif iş maddeleri.
+  - `COMMIT_MSG_BLOCK_EVIDENCE.md` — yeniden yazım öncesi başlık ihlali deliliği.
+- Bu dosyaları yeniden ihtiyaç duyulursa, çalışma ağacı kaldırıldığı için sadece arşiv ÖZET'i burada tutulur; ham dosyalar kümesinden daha az güvenilir bir yeniden oluşturma yolu yok.
 
 ## ŞEFFAFLIK
 

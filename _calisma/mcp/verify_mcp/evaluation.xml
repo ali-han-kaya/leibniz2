@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  verify_mcp evaluation — 10 read-only QA pairs.
+  Every question is answerable with the server's read-only tools (or its
+  tool schema). Answers are contract-level invariants where possible, so they
+  stay stable as run history accumulates. Q9/Q10 are answered from the live
+  mirror check and the tool schema respectively.
+-->
+<evaluation>
+  <qa_pair>
+    <question>List the MCP tools this server exposes, in alphabetical order. What is the first one?</question>
+    <answer>verify_check_mirror</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>How many tools does the verify_mcp server expose in total?</question>
+    <answer>5</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Every tool on this server is marked with the readOnlyHint annotation. What value does that annotation have for verify_get_run_detail?</question>
+    <answer>true</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>The tools accept a response_format argument. What are the two accepted values for verify_list_run_history?</question>
+    <answer>markdown, json</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>What is the default limit parameter of verify_list_run_history, and what is the maximum value it accepts?</question>
+    <answer>20, 50</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>verify_get_run_detail has a parameter that caps how much captured stdout is returned. What is its default value in characters?</question>
+    <answer>4000</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>The mirror coverage tool reports three problem lists. Which one contains files that appear in the mirror script's list but are NOT part of the expected repo runtime set?</question>
+    <answer>unexpected</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Which single tool returns the full record of one specific run, including the captured stdout, when given a timestamp?</question>
+    <answer>verify_get_run_detail</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Run the mirror coverage check against the repo. Does the report say the coverage is OK (its `ok` field is true)?</question>
+    <answer>true</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>verify_get_run_detail's stdout cap has a minimum and maximum. What is the minimum value in characters?</question>
+    <answer>500</answer>
+  </qa_pair>
+</evaluation>

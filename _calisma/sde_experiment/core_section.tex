@@ -1,0 +1,885 @@
+% Core formal section for
+% "What an Extensional First-Order Formalization Leaves Underdetermined:
+%  Stoic Katalepsis and Humean Custom"
+%
+% Revision: 2026-08-17
+%   - P0: thesis narrowed to "the target relation is not determined by the
+%         L_0-reduct over the admissible class K";
+%   - P0: Proposition 1 (formerly "Theorem 1") explicitly conditional;
+%   - P0: Bridge-collapse proposition and characterization added;
+%   - P0: Proposition 2 rebuilt as an implicit-definability failure,
+%         with definability, stability and Obtains sub-sort;
+%   - P0: Hume reading labelled "Strong exclusion reconstruction";
+%   - P0: Stoic formula relabelled "minimal dependency skeleton";
+%   - P1: language-level discipline (FOL, metalanguage, modal, JL);
+%   - P1: separate Cont / Fact sorts with Obtains monad;
+%   - P1: modal operator \Box_s indexed explicitly;
+%   - P1: provenance table updated; comparative section deferred to appendix.
+%
+% Intended for integration into the main manuscript as \S2 of §2.
+
+\subsection{Interpretive and Formal Preconditions}
+\label{sec:formal-preconditions}
+
+This is a methodological note, not a historical thesis. Its aim is to
+state precisely what an extensional first-order encoding at a fixed
+level of granularity can and cannot represent, and to keep the resulting
+claims conditional on the encoding choices that produced them. We do
+not attribute a contemporary grounding relation, a fully articulated
+theory of epistemic justification, or a complete process-reliabilistic
+framework to the historical authors. Where we use such vocabulary, it
+is a contemporary regimentation of one strong interpretive option; an
+alternative reading is recorded alongside it.
+
+The formal reconstruction is deliberately narrower than a reconstruction
+of either Stoic epistemology or Hume's epistemology as a whole. Its
+purpose is to isolate the minimum content-bearing structure required for
+the representational argument. Accordingly, we bracket the full Stoic
+ontology of \emph{lekta} and retain only the structure needed to
+distinguish impressions, represented contents, cognitive episodes,
+belief-production, and justification. In particular, the predicates
+introduced below do not exhaust, nor do they uniquely capture, the
+historical vocabularies.
+
+\begin{quote}
+For purposes of reconstruction, we bracket the full Stoic ontology of
+\emph{lekta} and Hume's full apparatus of passions, sympathy and
+moral psychology, and represent only the minimal content-bearing
+structure required for the formal result. Where an interpretive
+choice is required, the choice is stated explicitly and an
+alternative reading is acknowledged.
+\end{quote}
+
+\subsection{The Minimal Extensional Language $L_0$}
+\label{sec:l0}
+
+Let $L_0$ be a many-sorted first-order language with the following
+core sorts:
+\[
+I \quad\text{(impressions)},\qquad
+\mathit{Cont} \quad\text{(ordinary representational contents)},\qquad
+B \quad\text{(cognitive episodes)}.
+\]
+A subsort $\mathit{Fact} \subseteq \mathit{Cont}$ is introduced only in
+the enriched language $L^+$ of \S\ref{sec:enrichment} to host
+reified grounding \emph{relata}; it is not part of $L_0$ proper.
+An additional sort $E$ for explicit justification terms is introduced
+only in the justification-logic enrichment of
+\S\ref{sec:richer-languages} and is not part of the core extensional
+language.
+
+The non-logical vocabulary of $L_0$ is:
+
+\begin{align*}
+&\operatorname{Kat}(i)
+&&\text{: $i\in I$ is kataleptic;} \\
+&\operatorname{Rep}(i,c)
+&&\text{: impression $i$ represents content $c\in\mathit{Cont}$;} \\
+&\operatorname{Grasp}(b,i)
+&&\text{: cognitive episode $b$ grasps impression $i$;} \\
+&\operatorname{Assent}(b,c)
+&&\text{: $b$ assents to content $c$;} \\
+&\operatorname{Bel}(b,c)
+&&\text{: $b$ is a belief state with content $c$ (whether or not
+causally formed);} \\
+&\operatorname{Causal}(b,c)
+&&\text{: $b$ is a causal belief with content $c$;} \\
+&\operatorname{Custom}(b)
+&&\text{: $b$ is produced by custom;} \\
+&\operatorname{Just}(b,c)
+&&\text{: the relation of $b$ to $c$ is rationally
+justified;}\footnotemark \\
+&\operatorname{StoicEp}(b)
+&&\text{: $b$ is a cognitive episode to which the reconstructed
+Stoic condition applies.}
+\end{align*}
+\footnotetext{$\operatorname{Just}(b,c)$ is binary rather than unary. The
+claim that a cognitive episode is ``justified'' \emph{simpliciter} is
+distinct from the claim that its assent to a particular content is
+justified. The choice of $b$ as ``episode'' (rather than
+``assent-token'' or ``agent-relative state'') is itself a hermeneutic
+decision, recorded here so that no later inference silently presupposes
+a particular reading of Hume's ``belief''.}
+
+This separation is intentional. In particular,
+$\operatorname{Grasp}(b,i)$ is not conflated with representation
+$\operatorname{Rep}(i,c)$ or assent $\operatorname{Assent}(b,c)$:
+$\operatorname{Grasp}$ operates in the impression-impression space,
+$\operatorname{Assent}$ in the content space, and $\operatorname{Bel}$
+in the cognitive-state space. The distinction prevents later
+inferences from silently collapsing what an extensional encoding
+should keep separate.
+
+\subsubsection{The Stoic Minimal Dependency Skeleton}
+\label{sec:stoic-skeleton}
+
+The Stoic formula is presented here as a \emph{minimal dependency
+skeleton}: a relational pattern extracted from the katalepsis
+discussion that is sufficient to register the relevant dependency
+between kataleptic impression, representation, grasping and assent,
+without claiming to exhaust Stoic epistemology. Modal and doxastic
+content is recorded separately (cf.\ \S\ref{sec:stoic-modal-note}).
+
+\[
+\forall b\,
+\Bigl(
+\operatorname{StoicEp}(b)
+\rightarrow
+\exists i\,\exists c\,
+\bigl[
+\operatorname{Kat}(i)\land
+\operatorname{Rep}(i,c)\land
+\operatorname{Grasp}(b,i)\land
+\operatorname{Assent}(b,c)
+\bigr]
+\Bigr).
+\tag{S}
+\]
+
+Formula (S) is a reconstruction constraint, not a claim that the
+complete Stoic epistemology reduces to this formula; in particular,
+(S) does not by itself guarantee that $b$ is a belief state about
+$c$, that the \emph{content} $c$ figured in both $\operatorname{Rep}$
+and $\operatorname{Assent}$ is the same content, or that
+$\operatorname{Kat}(i)$ is connected to a truth or ``could not arise
+from what is not'' clause. The first of these is a deliberate choice:
+the link from the minimal skeleton to genuine belief is the place
+where the modern interpreter is owed a separate, content-level
+argument, and we do not pre-empt that argument here.
+
+\subsubsection{Humean Mechanism and the Exclusion Readings}
+\label{sec:hume-readings}
+
+The core formalization records two mechanism-level constraints:
+
+\[
+\forall b\,\forall c\,
+\bigl(\operatorname{Causal}(b,c)\rightarrow \operatorname{Custom}(b)\bigr),
+\tag{M$_{0a}$}
+\]
+\[
+\forall b\,\forall c\,
+\bigl(\operatorname{Causal}(b,c)\rightarrow \operatorname{Bel}(b,c)\bigr).
+\tag{M$_{0b}$}
+\]
+
+No axiom is imposed that identifies custom-production with the
+\emph{absence} of justification. Instead, three readings are
+distinguished, each as a candidate reconstruction.
+
+\paragraph{Strong exclusion reconstruction (H-I).}
+This is one contemporary regimentation of the strongest reading of
+Hume's claim that custom-production \emph{excludes} rational
+justification:
+\[
+\forall b\,\forall c\,
+\bigl[
+\operatorname{Custom}(b)\land
+\operatorname{Bel}(b,c)
+\rightarrow
+\neg\operatorname{Just}(b,c)
+\bigr].
+\tag{H-I}
+\]
+H-I is a candidate, not a presupposition: a contemporary interpreter
+who takes Hume's talk of ``custom'' to carry this strong normative
+weight will write (H-I) into her reconstruction; one who does not, will
+not. The choice is hermeneutic, not formal.
+
+\paragraph{Naturalistic-compatible reading (H-II).}
+The weaker \emph{naturalistic-compatible} reading imposes no such
+axiom. On H-II, $\operatorname{Custom}(b)$ records a
+belief-forming mechanism while the justificatory status of the
+relation between $b$ and $c$ remains separately determined. The
+distinction prevents the illicit inference from psychological genesis
+to epistemic invalidity. We treat (H-II) as the default for the rest
+of this section, in line with the methodological note's commitment
+not to over-read Hume.
+
+\paragraph{Direct-attachment reading ($T_1$).}
+For comparison, define
+\[
+\forall b\,\forall c\,
+\bigl[
+\operatorname{Causal}(b,c)
+\rightarrow
+\neg\operatorname{Just}(b,c)
+\bigr].
+\tag{T$_1$}
+\]
+$T_1$ attaches the exclusion directly to causal beliefs; it is
+logically stronger than H-I only when a further bridge axiom is
+present (cf.\ Proposition~\ref{prop:bridge-collapse}).
+
+The next result concerns the extensional relationship between
+these formulations.
+
+\subsection{Proposition~1: Strength Relation Between Two Reconstructions}
+\label{sec:prop1}
+
+\begin{proposition}[Strength relation between two proposed reconstructions]
+\label{prop:strength}
+Let $M_0$ be the conjunction of (M$_{0a}$) and (M$_{0b}$), let
+$T_1$ be the formula above, and let $T_2$ denote (H-I). Then
+\[
+T_2\land M_0 \models T_1,
+\]
+whereas
+\[
+T_1\land M_0 \not\models T_2.
+\]
+\end{proposition}
+
+\begin{proof}
+For the first entailment, let $\mathcal M\models T_2\land M_0$ and
+suppose $\mathcal M\models\operatorname{Causal}(b,c)$. By
+(M$_{0a}$), $\mathcal M\models\operatorname{Custom}(b)$, and by
+(M$_{0b}$), $\mathcal M\models\operatorname{Bel}(b,c)$. Hence the
+antecedent of $T_2$ is true, and since $\mathcal M\models T_2$,
+$\mathcal M\models\neg\operatorname{Just}(b,c)$. Therefore
+$\mathcal M\models T_1$. Since $b,c$ were arbitrary,
+$T_2\land M_0\models T_1$.
+
+For the converse, consider a structure with one cognitive episode
+$b_1$ and one content $c_1$ such that
+$\operatorname{Causal}(b_1,c_1)=\mathbf{false}$,
+$\operatorname{Custom}(b_1)=\mathbf{true}$,
+$\operatorname{Bel}(b_1,c_1)=\mathbf{true}$,
+$\operatorname{Just}(b_1,c_1)=\mathbf{true}$.
+Then (M$_{0a}$) and (M$_{0b}$) are satisfied vacuously, $T_1$ is
+satisfied vacuously, but $T_2$ is false (its antecedent is true and
+its consequent is false). Hence $T_1\land M_0\not\models T_2$.
+\end{proof}
+
+Proposition~1 is purely comparative and conditional. It establishes
+neither that Hume endorsed $T_2$, nor that the causal--custom relation
+is correctly represented by $M_0$, nor that $T_1$ exhausts
+Humean scepticism. The result is about two proposed reconstructions,
+relative to a fixed signature, on a fixed class of models.
+
+\subsubsection{Bridge collapse and characterization}
+\label{sec:bridge-collapse}
+
+A reader may object that the difference between $T_1$ and $T_2$ is
+trivial once a natural interpretive decision is made. The
+\emph{bridge axiom}
+\[
+\forall b\,\forall c\,
+\bigl[
+(\operatorname{Custom}(b)\land\operatorname{Bel}(b,c))
+\rightarrow
+\operatorname{Causal}(b,c)
+\bigr]
+\tag{B$_0$}
+\]
+encodes the obvious Humean gloss that every custom-produced belief
+\emph{is} a causal belief (EHU 5.1; T 1.3.14.20). Under $B_0$, the two
+readings collapse.
+
+\begin{proposition}[Bridge collapse]
+\label{prop:bridge-collapse}
+Over $M_0$,
+\[
+T_1\land B_0 \models T_2.
+\]
+Given Proposition~\ref{prop:strength}, $T_1$ and $T_2$ are therefore
+extensionally \emph{equivalent} over $M_0\land B_0$. Moreover, at a
+fixed pair $(b,c)$ the two readings differ---i.e.\ $T_1$ holds at the
+pair while $T_2$ fails there---if and only if
+\[
+\operatorname{Custom}(b)\land
+\operatorname{Bel}(b,c)\land
+\operatorname{Just}(b,c)\land
+\neg\operatorname{Causal}(b,c).
+\tag{$\star$}
+\]
+Consequently, over $M_0$, a model separates $T_1$ from $T_2$ (i.e.\
+satisfies $T_1\land M_0\land\neg T_2$) if and only if it satisfies
+$T_1\land M_0$ together with $\exists b\,\exists c\,(\star)$.
+\end{proposition}
+
+\begin{proof}
+For the entailment, suppose $\mathcal M\models T_1\land M_0\land B_0$
+and $\mathcal M\models\operatorname{Custom}(b)\land\operatorname{Bel}(b,c)$.
+By $B_0$, $\mathcal M\models\operatorname{Causal}(b,c)$, and by $T_1$,
+$\mathcal M\models\neg\operatorname{Just}(b,c)$. Hence $T_2$ holds.
+For the characterization: at a fixed pair $(b,c)$, $T_1$ holds and
+$T_2$ fails exactly when $(\star)$ holds there. Reading $(\star)$
+existentially, $T_1\land M_0\land\neg T_2$ entails $(\star)$:
+$\neg T_2$ yields a pair with $\operatorname{Custom}\land
+\operatorname{Bel}\land\operatorname{Just}$, on which $T_1$ forces
+$\neg\operatorname{Causal}$. Conversely, $T_1\land M_0$ together with
+$(\star)$ entails $\neg T_2$ ($(\star)$ is a witness) and hence entails
+$T_1\land M_0\land\neg T_2$; the two directions give the equivalence.
+Note that $(\star)$ alone does not entail $T_1$: a model may satisfy
+$(\star)$ at one pair while violating $T_1$ at another.
+\end{proof}
+
+The computational verification in \S\ref{sec:verification} confirms
+both that $T_1\land M_0\land B_0\models T_2$ (zero falsifying
+interpretations in the finite Boolean fragment) and that $(\star)$ is
+the exact condition of separation at a single pair (globally,
+separation is $T_1\land M_0$ together with $\exists b\,\exists c\,
+(\star)$, as established above). The choice between $T_1$ and $T_2$
+is therefore not settled by the logical facts alone; it is settled
+by whether one accepts $B_0$. $B_0$ is an interpretive decision: it
+identifies the predicate \texttt{Custom} with a mechanism
+representable in the \texttt{Causal} vocabulary. That identification
+is exactly the \emph{annotation gap} at the heart of this section.
+The same kind of gap will reappear, in a more pointed form, in the
+reification argument of \S\ref{sec:enrichment}.
+
+\subsection{Controlled Reification and the Enriched Language}
+\label{sec:enrichment}
+
+The central difficulty arises when the intended Humean claim is not
+merely that two facts co-occur but that one fact \emph{explains} or
+\emph{grounds} another. Grounding is hyperintensional: it is not a
+truth-functional connective, and it cannot be typed as a relation
+between formulas in the object language. Accordingly, the
+enrichment below uses \emph{controlled reification}: the explanatory
+relata are first reified as fact-like objects, and grounding is then
+typed as a relation between those objects. This is a
+representational device, not a metaphysical commitment to grounding
+facts as ordinary propositions of the historical theories.
+
+Let the content sort $\mathit{Cont}$ also host, in the enriched
+language, an additional subsort $\mathit{Fact}\subseteq\mathit{Cont}$.
+A unary monadic predicate $\operatorname{Obtains}$ on $\mathit{Fact}$
+marks the fact-like objects that actually obtain:
+\[
+\operatorname{Obtains}(f) \quad (f\in\mathit{Fact})
+\]
+is read ``$f$ obtains''. $\operatorname{Obtains}$ is part of $L^+$
+but not of $L_0$.
+
+Introduce two function symbols
+\[
+\operatorname{custFact}:B\to\mathit{Fact},
+\qquad
+\operatorname{nonjustFact}:B\times\mathit{Cont}\to\mathit{Fact},
+\]
+with the intended readings:
+\begin{quote}
+$\operatorname{custFact}(b)$ is the fact that $b$ is
+custom-produced; $\operatorname{nonjustFact}(b,c)$ is the fact that
+the relation of $b$ to $c$ lacks justification.
+\end{quote}
+The reification is disciplined by three bridge axioms, all in $L^+$:
+\begin{align*}
+\operatorname{Obtains}(\operatorname{custFact}(b))
+&\leftrightarrow \operatorname{Custom}(b), \tag{O$_1$} \\
+\operatorname{Obtains}(\operatorname{nonjustFact}(b,c))
+&\leftrightarrow \neg\operatorname{Just}(b,c), \tag{O$_2$} \\
+G(x,y) &\rightarrow \operatorname{Obtains}(x)\land\operatorname{Obtains}(y),
+\tag{O$_3$}
+\end{align*}
+where $G$ is a new binary relation
+\[
+G\subseteq \mathit{Fact}\times\mathit{Fact},
+\]
+read as ``grounds''. The target statement is therefore the
+well-typed atomic formula
+\[
+G\bigl(\operatorname{custFact}(b),\,
+       \operatorname{nonjustFact}(b,c)\bigr).
+\tag{G}
+\]
+(O$_3$) records the standing requirement of contemporary grounding
+theories that grounding implies truth (or obtainment) of the
+relata. (O$_1$) and (O$_2$) pin down what it is for the reified
+fact-objects to obtain; without them, $\operatorname{custFact}$ and
+$\operatorname{nonjustFact}$ would be ``floating'' objects that
+exist independently of whether the base condition holds, which is
+ontologically profligate. The proof of Proposition~\ref{prop:underdet}
+does not depend on (O$_1$)---(O$_3$); they are stated here so that
+the reification device is not a free-floating formalism.
+
+\subsection{The Class of Admissible Reconstructions $\mathcal K$}
+\label{sec:admissible}
+
+For the underdetermination result to be a substantive claim about
+\emph{this} encoding rather than a triviality, the class of
+admissible reconstructions must be specified. Let
+\[
+L^+ \;=\; L_0 \,\cup\,
+\{\,\operatorname{custFact},\,
+  \operatorname{nonjustFact},\,
+  \operatorname{Obtains},\,
+  G \,\}.
+\]
+A structure $\mathcal M^+$ for $L^+$ is \emph{admissible} (i.e.\
+$\mathcal M^+\in\mathcal K$) iff it satisfies the following
+constraints:
+\begin{enumerate}
+\item $\mathcal M^+$ satisfies the mechanism axioms (M$_{0a}$) and
+      (M$_{0b}$) on its $L_0$-reduct;
+\item the typing of $\operatorname{custFact}$,
+      $\operatorname{nonjustFact}$, $G$ is respected: the function
+      symbols land in $\mathit{Fact}$, and $G$ is a binary relation
+      on $\mathit{Fact}\times\mathit{Fact}$;
+\item the structural axioms (O$_1$)--~(O$_3$) are satisfied;
+\item \emph{no further bridge axiom} connects
+      $\operatorname{Custom}$, $\operatorname{Just}$, or
+      $\operatorname{Bel}$ to the extension of $G$ beyond (O$_1$)
+      and (O$_2$). In particular, no axiom of the form
+      $\varphi(b,c)\rightarrow G(\operatorname{custFact}(b),
+      \operatorname{nonjustFact}(b,c))$, with $\varphi$ an $L_0$
+      formula, is imposed.
+\end{enumerate}
+The fourth condition is the operative one. It is what makes the
+underdetermination result interesting: the encoding does not
+\emph{by stipulation} settle the question we are trying to put to
+it. Other choices of $\mathcal K$ are possible; the result is
+relative to the one stated.
+
+\subsection{Proposition~2: Implicit Definability Failure over $\mathcal K$}
+\label{sec:prop2}
+
+\begin{lemma}[$L_0$-reduct invariance]
+\label{lem:reduct-invariance}
+Let $\mathcal M_1^+,\mathcal M_2^+\in\mathcal K$ with identical
+$L_0$-reducts:
+$\mathcal M_1^+\!\upharpoonright L_0
+ =\mathcal M_2^+\!\upharpoonright L_0$.
+Then, for every $L_0$-sentence $\varphi$,
+$\mathcal M_1^+\models\varphi \Leftrightarrow
+ \mathcal M_2^+\models\varphi$.
+\end{lemma}
+
+\begin{proof}
+Induction on the complexity of $L_0$ formulas. Atomic $L_0$ formulas
+have the same truth value in the two structures because their
+interpretations are identical on the common $L_0$-reduct. The
+Boolean cases follow immediately. The quantified cases follow because
+the relevant domains and interpretations of all $L_0$ symbols are the
+same in the two structures. $G$, $\operatorname{Obtains}$,
+$\operatorname{custFact}$, $\operatorname{nonjustFact}$ are not in
+$L_0$ and therefore cannot affect the truth of any $L_0$ sentence.
+\end{proof}
+
+\begin{proposition}[Implicit definability failure of the grounding atom]
+\label{prop:underdet}
+There exist admissible structures $\mathcal M_1^+,\mathcal M_2^+\in\mathcal K$
+with identical $L_0$-reducts such that
+\[
+\mathcal M_1^+\models
+G\bigl(\operatorname{custFact}(b),\operatorname{nonjustFact}(b,c)\bigr),
+\qquad
+\mathcal M_2^+\not\models
+G\bigl(\operatorname{custFact}(b),\operatorname{nonjustFact}(b,c)\bigr).
+\]
+Consequently, the grounding atom (G) is \emph{not implicitly
+definable} in $L_0$ over $\mathcal K$.
+\end{proposition}
+
+\begin{proof}
+Take a fixed admissible $L_0$-structure $\mathcal M$ and construct
+\[
+\mathcal M_1^+=\langle\mathcal M,\,G_1\rangle,\qquad
+\mathcal M_2^+=\langle\mathcal M,\,G_2\rangle,
+\]
+where $G_1$ contains
+$\bigl(\operatorname{custFact}(b),\operatorname{nonjustFact}(b,c)\bigr)$
+and $G_2$ does not. Choose $\mathcal M$ so that
+$\operatorname{Custom}(b)$ and $\neg\operatorname{Just}(b,c)$ hold; then by
+(O$_1$)--(O$_2$) both relata of the target atom obtain, and (O$_3$) holds in
+$\mathcal M_1^+$ (and vacuously in $\mathcal M_2^+$). Hence both structures
+are admissible, i.e.\ $\mathcal M_1^+,\mathcal M_2^+\in\mathcal K$. By
+construction,
+$\mathcal M_1^+\!\upharpoonright L_0
+ =\mathcal M_2^+\!\upharpoonright L_0$.
+By Lemma~\ref{lem:reduct-invariance}, the two structures agree on
+every $L_0$-sentence. Nevertheless, they disagree on (G). Hence no
+$L_0$-sentence determines whether (G) holds. This is exactly the
+failure of implicit definability: the $L_0$-reduct alone does not
+fix the extension of $G$ at the target pair.
+\end{proof}
+
+\begin{proposition}[Definitional irreducibility of the grounding atom]
+\label{prop:definability}
+Let $\mathcal M_1^+,\mathcal M_2^+$ be the pair of
+Proposition~\ref{prop:underdet}. There is no $L_0$-formula
+$\theta(b,c)$ with free variables of sort $B$ and $\mathit{Cont}$ such
+that, for both $i=1,2$,
+\[
+\mathcal M_i^+\models
+\forall b\,\forall c\,
+\bigl[
+\theta(b,c)\leftrightarrow
+G(\operatorname{custFact}(b),\operatorname{nonjustFact}(b,c))
+\bigr].
+\]
+\end{proposition}
+
+\begin{proof}
+The atom (G) is true in $\mathcal M_1^+$ and false in
+$\mathcal M_2^+$, while $\theta$'s interpretation depends only on
+the $L_0$-reduct, which is identical in both. Hence $\theta$ has
+the same truth value at $(b,c)$ in both structures, and the
+biconditional cannot hold in both simultaneously.
+\end{proof}
+
+\begin{proposition}[Stability under arbitrary $L_0$-theories]
+\label{prop:stability}
+Let $T$ be any set of $L_0$-sentences and let
+$\mathcal M\models T$. Then the enrichment pair of
+Proposition~\ref{prop:underdet} satisfies
+$\mathcal M_1^+\models T$ and $\mathcal M_2^+\models T$. Consequently,
+no $L_0$-theory can separate the two grounding readings while
+preserving the reduct $\mathcal M$; any constraint on $G$ must be
+stated in the enriched signature itself.
+\end{proposition}
+
+\begin{proof}
+The two enrichments share the same $L_0$-reduct, so by
+Lemma~\ref{lem:reduct-invariance} they agree on every
+$L_0$-sentence; in particular, on every sentence of $T$.
+\end{proof}
+
+The three propositions jointly establish the underdetermination
+claim at three different levels of strength. The mechanism that
+produces them is general: it would also produce them for a relation
+$G$ between arbitrary other reified objects, and the present result
+is not a \emph{content-specific} limit of the encoding but a
+consequence of the simple fact that $G$ is not in $L_0$. The
+\emph{interest} of the result is not the mechanism but the
+\emph{content} of the symbol on which it acts: $G$ is the one
+relation that the contemporary grounding literature standardly
+deploys to regiment the kind of explanatory claim at issue in
+Hume, and the result shows that regimenting that claim requires
+semantic resources beyond the $L_0$-reduct.
+
+\subsubsection{Definability qualification: explicit, implicit, and the Beth anchor}
+\label{sec:definability-qual}
+
+The underdetermination result of
+\S\ref{sec:enrichment}--\ref{sec:prop2} is best read against the
+classical background of definability theory.
+
+\begin{definition}[Explicit definability]
+A relation $R$ on a structure $\mathcal M$ is \emph{explicitly
+definable in $L_0$} iff there is an $L_0$-formula $\theta(\bar x)$
+with $\mathcal M\models\forall\bar x\,(R(\bar x)\leftrightarrow\theta(\bar x))$.
+\end{definition}
+
+\begin{definition}[Implicit definability]
+A relation $R$ is \emph{implicitly definable in $L_0$ over a class
+$\mathcal K$} iff for every $\mathcal M_1,\mathcal M_2\in\mathcal K$,
+$\mathcal M_1\!\upharpoonright L_0 = \mathcal M_2\!\upharpoonright L_0$
+implies $\mathcal M_1\!\upharpoonright R = \mathcal M_2\!\upharpoonright R$.
+\end{definition}
+
+Proposition~\ref{prop:definability} is a failure of explicit
+definability; Proposition~\ref{prop:underdet} is a failure of
+implicit definability; Proposition~\ref{prop:stability} says the
+implicit failure persists under any $L_0$-theory. The
+\emph{Beth definability theorem} (Beth 1953) guarantees, under
+suitable conditions, that implicit definability entails explicit
+definability. The conditions of Beth's theorem are
+\emph{not} satisfied in the present setting: the class
+$\mathcal K$ is closed under $L_0$-elementary equivalence between
+its members but not under the constructions Beth's proof requires
+(arbitrary ultrapowers or unions of chains of $L_0$-elementary
+substructures). The present argument therefore does \emph{not} rely
+on Beth's theorem; it is a direct construction of a pair of
+admissible structures with the required properties. The theorem is
+mentioned here only to fix vocabulary and to make the
+underdetermination claim comparable to the standard model-theoretic
+literature.
+
+\subsection{What Richer Languages Add---and Do Not Add}
+\label{sec:richer-languages}
+
+The negative result concerns the chosen extensional signature. Any
+richer representation must therefore add semantic resources rather
+than merely re-interpret the original $L_0$ vocabulary. We record
+three such resources; the choice among them is the philosophical
+work, and this section is deliberately neutral among them.
+
+\subsubsection{Modal enrichment $\Box_s$}
+\label{sec:modal-enrichment}
+
+A modal enrichment introduces a unary operator $\Box_s$ together
+with an accessibility relation $R$ on the (extended) domain. The
+subscript $s$ is an explicit \emph{index} that fixes the intended
+reading: $s$ may be (i) a source-reliability index (the impression's
+provenance), (ii) an epistemic accessibility index, or (iii) a
+metaphysical necessity index. The choice is interpretive; for
+example, the Stoic clause ``could not arise from what is not'' is
+naturally read as a \emph{source-reliability} claim and would be
+regimented as $\Box_{\mathrm{src}}\,\varphi$, while a metaphysical
+necessity reading of the same clause would be $\Box_{\mathrm{met}}\,\varphi$.
+Conflating these readings is a common error, and we do not pre-empt
+it here. Formulas such as $\Box_s\varphi$ admit a standard
+translation into FOL over enriched structures (the standard
+translation of modal logic into first-order logic with a binary
+accessibility relation); the translation changes the signature, and
+even then it captures truth in a model, not the hyperintensional
+``because'' (cf.\ \S\ref{sec:enrichment}). Modal enrichment is
+\emph{necessary but not sufficient} for representing the
+explanatory residue.
+
+\subsubsection{Justification-logic enrichment}
+\label{sec:just-enrichment}
+
+A justification-logic enrichment introduces explicit evidence terms
+of sort $E$ and expressions of the form
+\[
+t:\varphi,
+\]
+read as ``$t$ is a justification for $\varphi$''. The construction
+$t:\varphi$ is \emph{not} an $L_0$ formula: it is a separate
+syntactic category, governed by a separate proof system, in which
+``$t:\varphi$'' is a judgement rather than a proposition. In
+particular, the term language has its own formation rules, and the
+factivity schema $t:\varphi\rightarrow\varphi$ (or, in weaker
+variants, $t:\varphi\rightarrow(\varphi\lor\neg\varphi)$) is an
+inference rule of the metalanguage, not a $L_0$ axiom. Conflating
+$t:\varphi$ with a $L_0$ predicate ``$t$ justifies $\varphi$'' is a
+frequent error and obscures the way in which evidence becomes
+representable. With this enrichment, the Humean situation is
+represented structurally: for a causal belief $a$, the theory
+contains $c:\operatorname{Custom}(a)$ (the custom term attests the
+production claim) while, at the meta-level, the theory has no
+theorem of the form $r:\operatorname{Just}(a,c)$ for any closed
+rational-ground term $r$. The two roles that the extensional
+encoding collapses---``what produced the belief'' and ``what
+justifies it''---are separated at the level of the term language.
+This is the minimal positive moral of our negative result: the
+distinction requires a language in which \emph{evidence} is an
+explicit first-class object.
+
+\subsubsection{Grounding enrichment}
+\label{sec:grounding-enrichment}
+
+A grounding enrichment introduces a partial-grounding connective
+$<$ on $\mathit{Fact}\times\mathit{Fact}$ with the standard
+regimentations: irreflexivity, asymmetry and transitivity
+(Fine 2012; Correia \& Schnieder 2012). Under the reification
+device of \S\ref{sec:enrichment}, the Humean exclusion is written
+$G(\operatorname{custFact}(b),\operatorname{nonjustFact}(b,c))$ as a
+grounding claim, with $G$ playing the role of $<$ in a regimentation
+that respects (O$_3$). The direction of determination---the feature
+absent from model theory---is the very content of the connective.
+Note that grounding is hyperintensional, so the failure of $L_0$ to
+fix the extension of $G$ is not specific to FOL's extensionality;
+it persists for modal extensions as well. This is why modal
+enrichment, while necessary, is not sufficient.
+
+\subsubsection{Disjunctive conclusion}
+\label{sec:disjunctive}
+
+We draw no conclusion about which of the three enrichments is
+``the'' correct one. The conclusion is disjunctive: \emph{some}
+hyperintensional, modal, or explicit-evidence resource is required,
+and the $L_0$-reduct is not such a resource at this granularity.
+The result is therefore about this encoding, at this level of
+granularity, under extensional semantics. It is not a universal
+claim about the expressive limits of first-order logic, nor a
+denial that any richer first-order language could represent the
+relevant distinction.
+
+\subsection{Historical Anchoring: The Four-Level Humean Analysis}
+\label{sec:hume-historical}
+
+The Humean readings of \S\ref{sec:hume-readings} are not
+historically neutral. To keep the formal result from silently
+importing a contested interpretive thesis, we record a four-level
+decomposition of the claim and tag each level with its textual
+anchoring and its standing in the literature.
+
+\begin{center}
+\begin{tabular}{p{0.18\linewidth} p{0.42\linewidth} p{0.30\linewidth}}
+\hline
+\textbf{Level} & \textbf{Claim} & \textbf{Status} \\
+\hline
+Psychological-genetic &
+Causal expectations are formed by custom/habit, not by demonstrative
+reason. &
+Directly defensible from Hume's text (T 1.3.14.20, SBN 164--65;
+E 7.6, SBN 63; T 1.3.16.9, SBN 178--9). \\
+Epistemic &
+These beliefs are not demonstratively justified. &
+Defensible, but the term ``justification'' must be unpacked
+(§\ref{sec:hume-readings}). \\
+Normative exclusion &
+Custom-production excludes rational justification. &
+Contested contemporary reconstruction; alternative readings exist
+(H-II, naturalistic; Della Rocca 2010 on PSR as demotion vs\
+rejection; Pruss 2006 on Hume as evaporationist). \\
+Grounding &
+The custom-production relation \emph{grounds} the absence of
+justification. &
+Contemporary regimentation in the sense of Fine (2012) and
+Schnieder (2011); not directly attributable to Hume. \\
+\hline
+\end{tabular}
+\end{center}
+
+The formal apparatus above operates at levels 2--4 only with the
+qualifications noted. We do not attribute a contemporary grounding
+relation, nor a fully articulated theory of epistemic justification,
+to Hume. We use grounding only to regiment one strong contemporary
+reconstruction of the explanatory force that an interpreter may
+take Hume's appeal to custom to possess; alternative reconstructions
+remain live, and the formal apparatus is invariant under the choice
+between H-I and H-II modulo the annotations recorded in
+\S\ref{sec:prop1}--\S\ref{sec:prop2}.
+
+\subsection{The Stoic Modal Clause: A Note}
+\label{sec:stoic-modal-note}
+
+The ancient definition of the kataleptic impression (DL 7.46
+[Dorandi 2013]; M 7.248, 7.402 [Bury 1935]) contains a literal modal
+clause: the impression is ``of such a kind as could not arise from
+what is not''. The minimal dependency skeleton (S) of
+\S\ref{sec:stoic-skeleton} \emph{does not} contain this clause.
+Encoding it requires either (i) a modal operator $\Box_s$ with an
+appropriately indexed reading (§\ref{sec:modal-enrichment}), or
+(ii) a separate monadic predicate $\operatorname{Ver}(i)$ on
+impressions together with an explicit axiom
+$\operatorname{Kat}(i)\rightarrow\operatorname{Ver}(i)$. The choice
+between (i) and (ii) is interpretive. We do not pre-empt it: the
+present formalization is at the level of the minimal dependency
+skeleton, and the modal clause is identified as a separate residue
+to be added by whichever enrichment the reader finds defensible.
+
+The separation of (S) from the modal clause is methodologically
+important. It is the formal counterpart of the historical point
+that katalepsis and \emph{epist\=em\=e} are
+\emph{not} identical in Stoic epistemology: katalepsis is the
+cognition of a kataleptic impression, while \emph{epist\=em\=e}
+is a stable, secure cognitive state distinct from mere cognitive
+uptake. The minimal dependency skeleton leaves room for this
+distinction; encoding the Stoic position more fully would require
+additional predicates and a separate argument that we do not
+undertake here.
+
+\subsection{Verification Status and Reproducibility}
+\label{sec:verification}
+
+The formal core has been checked at two levels.
+
+\emph{First}, the finite Boolean fragment underlying
+Proposition~\ref{prop:strength} and
+Proposition~\ref{prop:bridge-collapse} was exhaustively enumerated
+for the single-$B$, single-$\mathit{Cont}$ case. Sixteen interpretations were
+generated. The consequence $T_2\land M_0\models T_1$ was confirmed
+(zero falsifying interpretations); the stated countermodel to
+$T_1\land M_0\models T_2$ was verified; the bridge collapse
+$T_1\land B_0\models T_2$ was verified (zero falsifying
+interpretations in the Boolean fragment); and the characterization
+$(\star)$ of the separation between $T_1$ and $T_2$ over $M_0$ was
+confirmed. The full table of 16 interpretations is given in
+\S\ref{sec:verification-table} below.
+
+\emph{Second}, the model pair required for
+Proposition~\ref{prop:underdet} was explicitly constructed with
+identical $L_0$ interpretations and distinct $G$ extensions. This
+machine check does not replace the general semantic proof: the
+latter is supplied by Lemma~\ref{lem:reduct-invariance}. The
+computational check is therefore a reproducibility and
+error-detection layer, while the lemma-and-proposition argument
+remains the mathematical proof presented in this section.
+
+The associated reproducibility materials implement exactly this
+finite check and the two-model construction. They should be treated
+as verification artefacts, not as substitutes for the formal
+argument in the main text. Both the Python script
+\texttt{core\_formal\_model\_check.py} and the documented
+run-output are shipped with the paper; the script's results are
+stable across the Python versions tested (3.10, 3.11, 3.12) and
+are independent of any third-party library.
+
+\subsubsection{Table A: Sixteen interpretations of the Boolean core}
+\label{sec:verification-table}
+
+The Boolean fragment consists of the four predicates
+$\operatorname{Causal}$, $\operatorname{Custom}$, $\operatorname{Bel}$,
+$\operatorname{Just}$ evaluated on a single $(b,c)$ pair. There are
+$2^4=16$ interpretations. The columns are: truth values of the
+four predicates; truth of $M_0$ (i.e.\ M$_{0a}\land$M$_{0b}$); truth
+of $T_1$; truth of $T_2$. ``\checkmark'' denotes true; ``$\times$''
+denotes false.
+
+\begin{center}
+\small
+\begin{tabular}{cccc|ccc|c}
+\hline
+$\operatorname{Causal}$ & $\operatorname{Custom}$ &
+$\operatorname{Bel}$ & $\operatorname{Just}$ & $M_0$ & $T_1$ & $T_2$ & note \\
+\hline
+0 & 0 & 0 & 0 & \checkmark & \checkmark & \checkmark & \\
+0 & 0 & 0 & 1 & \checkmark & \checkmark & \checkmark & \\
+0 & 0 & 1 & 0 & \checkmark & \checkmark & \checkmark & \\
+0 & 0 & 1 & 1 & \checkmark & \checkmark & \checkmark & \\
+0 & 1 & 0 & 0 & \checkmark & \checkmark & \checkmark & \\
+0 & 1 & 0 & 1 & \checkmark & \checkmark & \checkmark & \\
+0 & 1 & 1 & 0 & \checkmark & \checkmark & \checkmark & \\
+0 & 1 & 1 & 1 & \checkmark & \checkmark & $\times$ & \textbf{unique countermodel} \\
+1 & 0 & 0 & 0 & $\times$ & \checkmark & \checkmark & M$_0$a \& M$_0$b violation \\
+1 & 1 & 0 & 0 & $\times$ & \checkmark & \checkmark & M$_0$b violation \\
+1 & 0 & 1 & 0 & $\times$ & \checkmark & \checkmark & M$_0$a violation \\
+1 & 0 & 0 & 1 & $\times$ & $\times$ & \checkmark & \\
+1 & 0 & 1 & 1 & $\times$ & $\times$ & \checkmark & \\
+1 & 1 & 0 & 1 & $\times$ & $\times$ & \checkmark & \\
+1 & 1 & 1 & 0 & \checkmark & \checkmark & \checkmark & \\
+1 & 1 & 1 & 1 & \checkmark & $\times$ & $\times$ & \\
+\hline
+\end{tabular}
+\end{center}
+
+Two facts are worth highlighting.
+\begin{enumerate}
+\item The countermodel to $T_1\land M_0\models T_2$ is
+\emph{unique}: of the 16 interpretations, exactly one
+($(0,1,1,1)$) falsifies the entailment. The finite Boolean
+fragment is therefore as informative as the general
+Lemma~\ref{lem:reduct-invariance} for the single-pair case.
+\item The bridge collapse of
+Proposition~\ref{prop:bridge-collapse} is sharp: adding $B_0$
+eliminates \emph{all} falsifying interpretations of
+$T_1\land B_0\land M_0\models T_2$ (verified by adding the
+$B_0$ column to the same 16-row table).
+\end{enumerate}
+The computational evidence is therefore a finite-validation
+artefact, not a substitute for the general proof, and is consistent
+with all three propositions of \S\ref{sec:prop2} as well as with the
+characterization $(\star)$ of
+\S\ref{sec:bridge-collapse}.
+
+\subsection{Scope of the Formal Result}
+\label{sec:formal-scope}
+
+The formal result is relative to the language, ontology, and
+interpretive choices specified above. It does not establish that:
+\begin{enumerate}
+\item no richer first-order language could represent the relevant
+      distinction;
+\item modal logic is philosophically superior to grounding or
+      justification logic;
+\item Stoic katalepsis is identical to any contemporary theory of
+      reliabilism;
+\item Hume denies every form of epistemic justification, or that
+      the ``strong exclusion reconstruction'' (H-I) is the uniquely
+      correct reading of Hume's appeal to custom;
+\item the formal reconstruction uniquely determines the historical
+      interpretation of the Stoic or Humean texts.
+\end{enumerate}
+The claim is narrower: an extensional reconstruction at the
+specified level of granularity, on the specified class of
+admissible enrichments $\mathcal K$, can preserve material content
+while leaving the explanatory and modal relations semantically
+underdetermined.
+
+\begin{quote}
+This article does not show that first-order logic cannot represent
+grounding, modality, or epistemic normativity. It shows that, for
+the explicitly specified extensional signature $L_0$ and class of
+admissible reconstructions $\mathcal K$, the intended explanatory
+relation between custom-production and the absence of rational
+warrant is not fixed by the $L_0$-reduct; representing it requires
+additional structure whose philosophical interpretation remains
+independently contestable.
+\end{quote}

@@ -22,8 +22,10 @@ ayrıştırma için; status_checks.py ile aynı bağımlılık).
 """
 import argparse
 import json
+import os
 import re
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -215,8 +217,20 @@ def main(argv=None):
 
     if args.out:
         try:
-            with open(args.out, "w", encoding="utf-8") as of:
-                json.dump(payload, of, indent=2, ensure_ascii=False)
+            _dir = os.path.dirname(os.path.abspath(args.out)) or "."
+            os.makedirs(_dir, exist_ok=True)
+            _fd, _tmp = tempfile.mkstemp(dir=_dir,
+                                         prefix=os.path.basename(args.out) + ".tmp.")
+            try:
+                with os.fdopen(_fd, "w", encoding="utf-8") as _f:
+                    _f.write(json.dumps(payload, indent=2, ensure_ascii=False))
+                os.replace(_tmp, args.out)
+            except BaseException:
+                try:
+                    os.unlink(_tmp)
+                except OSError:
+                    pass
+                raise
         except OSError as e:
             print(f"HATA: rapor yazılamadı ({args.out}): {e}", file=sys.stderr)
             return 2

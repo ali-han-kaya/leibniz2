@@ -1,0 +1,51 @@
+/* Dashboard K-layer tokens — Tailwind CSS v4-compatible, build-free.
+ *
+ * Adopt by linking this file before the static page stylesheet. The @theme
+ * aliases expose the same palette to Tailwind v4 utilities when Tailwind is
+ * present; the :root values remain usable by the static page without a build.
+ */
+:root {
+  --k-layer-bg: #0e1116;
+  --k-layer-surface: #161b22;
+  --k-layer-border: #30363d;
+  --k-layer-fg: #e6edf3;
+  --k-layer-muted: #8b949e;
+  --k-layer-accent: #58a6ff;
+  --k-layer-pass: #3fb950;
+  --k-layer-warn: #d29922;
+  --k-layer-fail: #f85149;
+  --k-layer-budget: #bc8cff;
+  --k-layer-info: #58a6ff;
+
+  --k-layer-pass-bg: rgb(63 185 80 / 15%);
+  --k-layer-warn-bg: rgb(210 153 34 / 15%);
+  --k-layer-fail-bg: rgb(248 81 73 / 15%);
+  --k-layer-budget-bg: rgb(188 140 255 / 12%);
+  --k-layer-info-bg: rgb(88 166 255 / 15%);
+}
+
+@theme {
+  --color-k-layer-bg: var(--k-layer-bg);
+  --color-k-layer-surface: var(--k-layer-surface);
+  --color-k-layer-border: var(--k-layer-border);
+  --color-k-layer-fg: var(--k-layer-fg);
+  --color-k-layer-muted: var(--k-layer-muted);
+  --color-k-layer-accent: var(--k-layer-accent);
+  --color-k-layer-pass: var(--k-layer-pass);
+  --color-k-layer-warn: var(--k-layer-warn);
+  --color-k-layer-fail: var(--k-layer-fail);
+  --color-k-layer-budget: var(--k-layer-budget);
+  --color-k-layer-info: var(--k-layer-info);
+  --color-k-layer-pass-bg: var(--k-layer-pass-bg);
+  --color-k-layer-warn-bg: var(--k-layer-warn-bg);
+  --color-k-layer-fail-bg: var(--k-layer-fail-bg);
+  --color-k-layer-budget-bg: var(--k-layer-budget-bg);
+  --color-k-layer-info-bg: var(--k-layer-info-bg);
+}
+
+/* Semantic classes for the no-build static dashboard. */
+.k-layer-pass { color: var(--k-layer-pass); background: var(--k-layer-pass-bg); }
+.k-layer-warn { color: var(--k-layer-warn); background: var(--k-layer-warn-bg); }
+.k-layer-fail { color: var(--k-layer-fail); background: var(--k-layer-fail-bg); }
+.k-layer-budget { color: var(--k-layer-budget); background: var(--k-layer-budget-bg); }
+.k-layer-info { color: var(--k-layer-info); background: var(--k-layer-info-bg); }

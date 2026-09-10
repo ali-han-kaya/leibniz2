@@ -28,18 +28,24 @@ GOLDEN_DIR = os.path.join(HERE, "plist-golden")
 sys.path.insert(0, HERE)
 import preview_prestart as pp  # noqa: E402
 
-PREVIEW_NAMES = ("preview_server.py", "_daemonize.py", "preview.html")
+PREVIEW_NAMES = ("preview_server.py", "_daemonize.py", "preview.html", "preview.js")
 VERIFY_NAMES = ("verify_delivery.py", "verify_delivery.config.json",
                 "daemon_http_test.py")
 
 VALID_PY = "x = 1\n"
 VALID_HTML = "<html><body>preview</body></html>\n"
+VALID_JS = "var x = 1;\n"
 
 
 def build_env(preview_dir, verify_dir):
     """Zorunlu runtime dosyalarını doldur (hepsi geçerli)."""
     for name in PREVIEW_NAMES:
-        content = VALID_PY if name.endswith(".py") else VALID_HTML
+        if name.endswith(".py"):
+            content = VALID_PY
+        elif name.endswith(".js"):
+            content = VALID_JS
+        else:
+            content = VALID_HTML
         with open(os.path.join(preview_dir, name), "w", encoding="utf-8") as f:
             f.write(content)
     for name in VERIFY_NAMES:

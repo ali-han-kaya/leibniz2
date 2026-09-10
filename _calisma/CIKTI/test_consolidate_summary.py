@@ -67,6 +67,16 @@ class TestConsolidateSummary(unittest.TestCase):
         (d / "klayers.json").write_text(
             json.dumps({"verdict": "PASS", "counts": {"P0": 0, "P1": 0},
                         "layers": layers}), encoding="utf-8")
+        # K12 ayrı-step sidecar: negatif senaryo tablosu.
+        (d / "logs" / "k12_repro_manifest.json").write_text(
+            json.dumps({"layer": "K12", "ok": True, "exit": 0,
+                        "scenarios": {"bozuk-plist": "PASS", "eksik-golden": "PASS"}}),
+            encoding="utf-8")
+        # K12 ayrı-step sidecar (negative scenarios).
+        (d / "logs" / "k12_repro_manifest.json").write_text(
+            json.dumps({"layer": "K12", "ok": True, "exit": 0,
+                        "scenarios": {"bozuk-plist": "PASS", "eksik-golden": "PASS"}}),
+            encoding="utf-8")
         # K13 ayrı-step sidecar (advisory; ok=true → PASS).
         (d / "logs" / "k13_repro_manifest.json").write_text(
             json.dumps({"layer": "K13", "ok": True, "exit": 0,
@@ -81,6 +91,7 @@ class TestConsolidateSummary(unittest.TestCase):
             "budget": d / "budget_verify.json",
             "lineage": d / "lineage_findings.json",
             "klayers": d / "klayers.json",
+            "k12": d / "logs" / "k12_repro_manifest.json",
             "k13": d / "logs" / "k13_repro_manifest.json",
         }
 
@@ -91,7 +102,7 @@ class TestConsolidateSummary(unittest.TestCase):
         self.assertEqual(code, 0)
         # Durum panosu en üstte, tek satırda, altı ✅ ile (K13 ayrı-step dahil).
         self.assertTrue(
-            out.startswith("## 📊 Durum panosu: Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅ · K13 ayrı-step ✅\n"),
+            out.startswith("## 📊 Durum panosu: Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅ · K12 plist ✅ · K13 ayrı-step ✅\n"),
             repr(out[:160]))
         headers = [
             "## ✅ Pre-commit: bulgu yok",
@@ -121,7 +132,7 @@ class TestConsolidateSummary(unittest.TestCase):
         self.assertEqual(code, 0)
         # Panoda eksik sidecar ⚠️ olarak görünür (tek satır korunur).
         self.assertTrue(out.startswith(
-            "## 📊 Durum panosu: Pre-commit ⚠️ · K0 ⚠️ · Bütçe ⚠️ · Soy hattı ⚠️ · K katmanları ⚠️ · K13 ayrı-step ⚠️\n"),
+            "## 📊 Durum panosu: Pre-commit ⚠️ · K0 ⚠️ · Bütçe ⚠️ · Soy hattı ⚠️ · K katmanları ⚠️ · K12 plist ⚠️ · K13 ayrı-step ⚠️\n"),
             repr(out[:160]))
         self.assertIn("Pre-commit: rapor bulunamadı", out)
         self.assertIn("K0 bayat zip: sidecar bulunamadı", out)
@@ -151,7 +162,7 @@ class TestConsolidateSummary(unittest.TestCase):
             self.assertNotIn("Durum panosu", buf.getvalue())
             file_txt = summary_file.read_text(encoding="utf-8")
             self.assertTrue(file_txt.startswith(
-                "## 📊 Durum panosu: Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅ · K13 ayrı-step ✅\n"),
+                "## 📊 Durum panosu: Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅ · K12 plist ✅ · K13 ayrı-step ✅\n"),
                 repr(file_txt[:160]))
             for h in ("## ✅ Pre-commit: bulgu yok",
                       "## ✅ K0 bayat zip: temiz",
@@ -758,7 +769,7 @@ class TestFileSink(unittest.TestCase):
         # sondaki yeni satırları eşitle (içerik birebir aynı olmalı).
         self.assertEqual(file_content.rstrip("\n"), stdout_body.rstrip("\n"))
         # Satır bazlı: kritik satırlar dosyada da var.
-        self.assertIn("## 📊 Durum panosu: Pre-commit ✅ · K0 🔴 · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅ · K13 ayrı-step ⚠️\n",
+        self.assertIn("## 📊 Durum panosu: Pre-commit ✅ · K0 🔴 · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅ · K12 plist ⚠️ · K13 ayrı-step ⚠️\n",
                       file_content)
         self.assertIn("> Hook'lar: `hook1` :white_check_mark: | `hook2` :x:\n",
                       file_content)

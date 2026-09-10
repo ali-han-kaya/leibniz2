@@ -35,8 +35,33 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import urllib.request
 import zipfile
+
+
+def _write_atomic(path, content):
+    """Write file atomically: same-dir mkstemp + os.replace (torn-read safe).
+
+    Unique tmp name (mkstemp) prevents races when two writers target the same
+    file concurrently — fixed `<path>.tmp` would let a half-written file be
+    renamed over the target. On failure the tmp is removed and the previous
+    destination is left untouched.
+    """
+    directory = os.path.dirname(os.path.abspath(path)) or "."
+    fd, tmp = tempfile.mkstemp(dir=directory,
+                               prefix=os.path.basename(path) + ".tmp.")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(content)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
 
 API = "https://api.github.com"
 
@@ -653,6 +678,8 @@ def main():
             "z3_passed": rec.get("z3_passed"),
             "z3_total": rec.get("z3_total"),
             "audit_refs_trend": rec.get("audit_refs_trend"),
+            "flaky_count": rec.get("flaky_count"),
+            "deterministic_count": rec.get("deterministic_count"),
         }
         _w = check_run_warnings(_row)
         _row["duration_warn"] = _w["duration_warn"]
@@ -765,8 +792,8 @@ def main():
             "",
             f"- **Kaynak:** `run-history` artifact'ları (son {len(history_rows)} run)",
             "",
-            "| # | Tarih (UTC) | Run ID | Duration (s) | Budget (USD) | Z3 | Verdict | Audit |",
-            "|---|---|---|---|---|---|---|---|",
+            "| # | Tarih (UTC) | Run ID | Duration (s) | Budget (USD) | Z3 | Failure pattern | Verdict | Audit |",
+            "|---|---|---|---|---|---|---|---|---|",
         ]
         for i, r in enumerate(history_rows, 1):
             dur = (f"{r['duration_s']:.1f}"
@@ -781,13 +808,14 @@ def main():
             w = check_run_warnings(r)
             flags = []
             if w["duration_warn"]:
-                flags.append("⏰")
+                flags.append("⚠️")
             if w["budget_warn"]:
                 flags.append("💰")
             flag_str = " ".join(flags)
             z3 = (f"{r['z3_passed']}/{r['z3_total']}"
                    if isinstance(r.get("z3_passed"), (int, float))
                    else "—")
+            failure = f"🟡 {r.get('flaky_count', 0)} / 🔴 {r.get('deterministic_count', 0)}"
             # Audit sütunu: PASS/FAIL/advisory (None = audit henüz koşulmadı)
             audit = r.get("audit_refs_trend")
             if audit is not None:
@@ -797,7 +825,7 @@ def main():
                 audit_str = "—"
             lines.append(
                 f"| {i} | {short_date(r['date'])} | {r['run_id'] or '-'} | "
-                f"{dur} | {bud} | {z3} | {r['verdict'] or '-'} {flag_str} | {audit_str} |"
+                f"{dur} | {bud} | {z3} | {failure} | {r['verdict'] or '-'} {flag_str} | {audit_str} |"
             )
         lines += [""]
 
@@ -865,8 +893,7 @@ def main():
     lines += changelog_lines()
 
     md_path = os.path.join(args.out_dir, "refs-trend.md")
-    with open(md_path, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines))
+    _write_atomic(md_path, "\n".join(lines))
     print("\n".join(lines))
 
     duration_budget = build_duration_budget(history_rows)
@@ -890,9 +917,8 @@ def main():
         "duration_budget": duration_budget,
         "unverified_series": unverified_series,
     }
-    with open(os.path.join(args.out_dir, "refs-trend.json"), "w",
-              encoding="utf-8") as f:
-        json.dump(summary, f, indent=2, ensure_ascii=False)
+    _write_atomic(os.path.join(args.out_dir, "refs-trend.json"),
+                   json.dumps(summary, indent=2, ensure_ascii=False))
     print(f"[refs-trend] yazıldı: {md_path} "
           f"({len(rows)} refs + {len(history_rows)} history run)")
 

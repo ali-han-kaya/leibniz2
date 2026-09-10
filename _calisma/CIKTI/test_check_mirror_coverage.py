@@ -22,7 +22,7 @@ import check_mirror_coverage as cmc
 
 
 def fake_repo(root):
-    """Fake repo: beklenen kümeyi (runtime + zip + lean + guide) kurar."""
+    """Fake repo: beklenen runtime, zip, Lean ve guide kümesini kurar."""
     cikti = os.path.join(root, "_calisma", "CIKTI")
     lean = os.path.join(root, "_calisma", "lean_reduct")
     os.makedirs(os.path.join(cikti, "github_scripts"), exist_ok=True)
@@ -40,6 +40,8 @@ def fake_repo(root):
     guide = os.path.join(root, "docs", "branch-protection-guide")
     os.makedirs(guide, exist_ok=True)
     with open(os.path.join(guide, "guide.html"), "w", encoding="utf-8") as f:
+        f.write("x\n")
+    with open(os.path.join(root, "docs", "HOOK_ENV_MATRIX.md"), "w", encoding="utf-8") as f:
         f.write("x\n")
     for n in ("ReductInvariance.lean", "lean-toolchain", "lakefile.toml",
               "Leibniz2Reduct/Content.lean"):

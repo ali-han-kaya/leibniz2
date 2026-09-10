@@ -53,6 +53,7 @@
 #   update_preview.sh --mirror             # verify mirror'ı senkron et (sync_verify_mirror.sh)
 #   update_preview.sh --mirror-check       # mirror güncel mi? (0 güncel/1 bayat/2 hata)
 #   update_preview.sh --mirror-force       # mirror'ı koşulsuz yeniden kopyala
+#   update_preview.sh --sync-server        # preview_server.py'yi atomik olarak TCC-safe kopyaya taşı
 #   update_preview.sh --bootstrap [HOME]   # mirror + HTML + plist TEK ADIMDA (fail-closed)
 #   update_preview.sh --bootstrap --start [HOME]  # aynı komutta launchctl bootstrap de (4/4)
 #   update_preview.sh --help
@@ -60,6 +61,9 @@
 # Ortam değişkenleri (override):
 #   SRC         kaynak HTML   (varsayılan: <repo>/_calisma/CIKTI/preview.html)
 #   DST         TCC-safe kopya (varsayılan: ~/Library/Caches/com.freebuff/preview/preview.html)
+#   JS_SRC      kaynak JS     (varsayılan: <repo>/_calisma/CIKTI/preview.js)
+#   JS_DST      TCC-safe JS kopyası (varsayılan: <DST dizini>/preview.js)
+#   SERVER_SRC  --sync-server kaynak sunucu (varsayılan: <repo>/_calisma/CIKTI/preview_server.py)
 #   INTERVAL    --watch bekleme süresi (varsayılan: 3)
 #   (plist profilleri script içindeki PLIST_PROFILES dizisindedir:
 #    label|logname|port|interval|keepalive — env ile override edilmez)
@@ -70,6 +74,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 SRC="${SRC:-$ROOT/_calisma/CIKTI/preview.html}"
 DST="${DST:-$HOME/Library/Caches/com.freebuff/preview/preview.html}"
+# Dashboard JS (preview.html'dan ayrılmış dış dosya) — DST ile aynı dizine gider.
+JS_SRC="${JS_SRC:-$ROOT/_calisma/CIKTI/preview.js}"
+JS_DST="${JS_DST:-$(dirname "$DST")/preview.js}"
 INTERVAL="${INTERVAL:-3}"
 
 PLIST_TMPL_DIR="$HOME/Library/Caches/com.freebuff/preview-template"
@@ -133,9 +140,55 @@ PY
     err "build başarısız (python3 gerekli)"
     return 1
   fi
+  # preview.js — html'in <script src="preview.js"> ile referans verdiği JS.
+  # Aynı dizine atomik kopyalanır; eksik kalırsa sunucu /preview.js 404 verir
+  # ve dashboard boş kalır (fail-closed: sessiz geçme). HTML mv'den ÖNCE
+  # kopyalanır: JS başarısızsa HTML taşınmaz (yarım çift bırakma).
+  if [ ! -f "$JS_SRC" ]; then
+    rm -f "$tmp" 2>/dev/null || true
+    err "kaynak yok: $JS_SRC"
+    return 1
+  fi
+  local js_tmp
+  js_tmp="$(mktemp "$JS_DST.tmp.XXXXXX")" || {
+    rm -f "$tmp" 2>/dev/null || true
+    err "geçici dosya (js) oluşturulamadı"; return 1; }
+  if ! cp "$JS_SRC" "$js_tmp"; then
+    rm -f "$js_tmp" "$tmp" 2>/dev/null || true
+    err "preview.js kopyalanamadı"; return 1
+  fi
+  mv "$js_tmp" "$JS_DST"
   mv "$tmp" "$DST"
   say "OK: $DST"
   say "    build ${now} · src $(src_short) · git $(git_short)"
+  say "OK: $JS_DST (kopya)"
+}
+
+# preview.js TCC-safe kopyası kaynakla aynı mı? (0 = evet, 1 = hayır/eksik)
+js_current() {
+  [ -f "$JS_DST" ] || return 1
+  [ "$(shasum -a 256 "$JS_SRC" 2>/dev/null | awk '{print $1}')" = \
+    "$(shasum -a 256 "$JS_DST" 2>/dev/null | awk '{print $1}')" ]
+}
+
+# preview_server.py'yi DST dizinine ATOMİK taşı (tmp + mv — yarım okuma
+# asla servis edilmez; HTML/JS build'iyle aynı desen). Kaynak yoksa hiçbir
+# şey yazılmaz (fail-closed: eksik sunucu sessizce eski kopyayla çalışmaz).
+sync_server() {
+  local src dst_dir dst tmp
+  src="${SERVER_SRC:-$ROOT/_calisma/CIKTI/preview_server.py}"
+  [ -f "$src" ] || { err "kaynak yok: $src (SERVER_SRC)"; exit 2; }
+  dst_dir="$(dirname "$DST")"
+  dst="$dst_dir/preview_server.py"
+  mkdir -p "$dst_dir"
+  tmp="$(mktemp "$dst.tmp.XXXXXX")" || { err "geçici dosya oluşturulamadı"; exit 1; }
+  if ! cp "$src" "$tmp"; then
+    rm -f "$tmp"
+    err "preview_server.py kopyalanamadı"
+    exit 1
+  fi
+  mv "$tmp" "$dst"
+  say "OK: $dst"
 }
 
 # ============================================================================
@@ -144,6 +197,8 @@ PY
 
 # Yerleşik varsayılan şablon (tek kaynak). {{HOME}}/{{LABEL}}/{{LOGNAME}}/
 # {{PORT}}/{{INTERVAL}}/{{KEEPALIVE}} placeholder'ları per-profile render edilir.
+# $1 = profil etiketi: preview-server goldeni, PreStart fail-closed döngüsünü
+# sınırlayan ThrottleInterval bloğu taşır (per-profile seed; golden'la birebir).
 plist_default_template() {
   cat <<'TPL'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -183,6 +238,16 @@ plist_default_template() {
     <key>SuccessfulExit</key>
     <false/>
   </dict>
+TPL
+  if [ "${1:-}" = "com.freebuff.preview-server" ]; then
+    cat <<'TPL'
+  <!-- PreStart fail-closed döndüğünde launchd'nin yeniden başlatma
+       döngüsünü sınırla; otomatik kurtarma yok, operatör müdahalesi gerekir. -->
+  <key>ThrottleInterval</key>
+  <integer>60</integer>
+TPL
+  fi
+  cat <<'TPL'
   <key>StandardOutPath</key>
   <string>{{HOME}}/Library/Logs/com.freebuff/{{LOGNAME}}.log</string>
   <key>StandardErrorPath</key>
@@ -209,7 +274,7 @@ plist_ensure_templates() {
     local tmpl
     tmpl="$(plist_tmpl_for "$label")"
     if [ ! -f "$tmpl" ]; then
-      plist_default_template > "$tmpl"
+      plist_default_template "$label" > "$tmpl"
       say "Şablon yazıldı: $tmpl"
     fi
   done < <(plist_profiles)
@@ -359,7 +424,7 @@ plist_check() {
 plist_reset() {
   mkdir -p "$PLIST_TMPL_DIR"
   while IFS='|' read -r label _; do
-    plist_default_template > "$(plist_tmpl_for "$label")"
+    plist_default_template "$label" > "$(plist_tmpl_for "$label")"
     say "Şablon yerleşik varsayılandan geri yazıldı: $(plist_tmpl_for "$label")"
   done < <(plist_profiles)
 }
@@ -564,22 +629,36 @@ plist_status() {
 }
 
 bootstrap_all() {
-  # Argümanlar: [HOME] ve opsiyonel --start bayrağı (sıra önemsiz).
-  local home="" start_flag=0 a
+  # Argümanlar: [HOME], opsiyonel --start bayrağı ve adım atlama flagleri
+  # (--no-mirror / --no-html — sıra önemsiz). --no-mirror mirror senkronunu,
+  # --no-html HTML build'ini atlar (CI-simüle / yeniden kullanım senaryoları;
+  # ATLANDI ile görünür kalır). Bilinmeyen -flag'ler HOME'a karışmaz.
+  local home="" start_flag=0 no_mirror=0 no_html=0 a
   for a in "$@"; do
     case "$a" in
       --start) start_flag=1 ;;
+      --no-mirror) no_mirror=1 ;;
+      --no-html) no_html=1 ;;
+      --*) : ;;  # diğer flagler HOME positional'ı sayılmaz
       *) [ -z "$home" ] && home="$a" ;;
     esac
   done
   home="$(plist_home "${home:-}")"
 
-  say "=== BOOTSTRAP 1/3: verify mirror senkronu ==="
-  "$SCRIPT_DIR/sync_verify_mirror.sh" || return $?
+  if [ "$no_mirror" = "1" ]; then
+    say "=== BOOTSTRAP 1/3: verify mirror senkronu (ATLANDI — --no-mirror) ==="
+  else
+    say "=== BOOTSTRAP 1/3: verify mirror senkronu ==="
+    "$SCRIPT_DIR/sync_verify_mirror.sh" || return $?
+  fi
 
-  say "=== BOOTSTRAP 2/3: HTML dashboard build'i ==="
-  [ -f "$SRC" ] || { err "kaynak yok: $SRC"; return 2; }
-  build || return $?
+  if [ "$no_html" = "1" ]; then
+    say "=== BOOTSTRAP 2/3: HTML dashboard build'i (ATLANDI — --no-html) ==="
+  else
+    say "=== BOOTSTRAP 2/3: HTML dashboard build'i ==="
+    [ -f "$SRC" ] || { err "kaynak yok: $SRC"; return 2; }
+    build || return $?
+  fi
 
   say "=== BOOTSTRAP 3/3: LaunchAgent plist üretimi ==="
   plist_do "$home" || return $?
@@ -612,8 +691,12 @@ case "${1:-build}" in
       say "DST'de build damgası yok (henüz build edilmemiş): $DST"
       exit 1
     elif [ "$s" = "$d" ]; then
-      say "GÜNCEL: $DST  (src $s)"
-      exit 0
+      if js_current; then
+        say "GÜNCEL: $DST  (src $s)"
+        exit 0
+      fi
+      say "BAYAT: $JS_DST kaynakla aynı değil (preview.js bayat)"
+      exit 1
     else
       say "BAYAT: DST src=$d, SRC src=$s"
       exit 1
@@ -631,7 +714,7 @@ case "${1:-build}" in
     trap 'say "durduruldu."; exit 0' INT TERM
     while true; do
       s="$(src_short)"
-      if [ "$s" != "$last" ] && [ "$s" != "$(dst_src_short)" ]; then
+      if { [ "$s" != "$last" ] && [ "$s" != "$(dst_src_short)" ]; } || ! js_current; then
         build
       fi
       last="$s"
@@ -671,12 +754,15 @@ case "${1:-build}" in
   --mirror-check)
     "$SCRIPT_DIR/sync_verify_mirror.sh" --check
     ;;
+  --sync-server)
+    sync_server
+    ;;
   --bootstrap)
     bootstrap_all "${@:2}"
     ;;
   build)
     [ -f "$SRC" ] || { err "kaynak yok: $SRC"; exit 2; }
-    if [ "$(src_short)" = "$(dst_src_short)" ]; then
+    if [ "$(src_short)" = "$(dst_src_short)" ] && js_current; then
       say "GÜNCEL: $DST zaten aynı kaynaktan build edilmiş (--force ile zorla)."
     else
       build

@@ -1,0 +1,1537 @@
+% =====================================================================
+%  ingiliz_empirizmi_v3.tex
+%  Revised manuscript after INTEGRATION_NOTE (2026-08-17)
+%
+%  The Limits of Formal Methods: Notes on the Formal Representation of
+%  Stoic Katalepsis and Hume's Critique of Causation
+%
+%  Changes vs. v2 (PDF ingiliz_empirizmi_v2.pdf):
+%    - §2 is SUBSTITUTED by the canonical core_section.tex (same folder;
+%      \input below). The old single-sorted language
+%      L = {HCB, CC, J, Kat, Gr, Stoic} is superseded by the many-sorted
+%      L_0 / L^+; the J(x)->¬HCB(x) axiom is removed (H-I is a candidate,
+%      not a default); (Exc1) is derived using M_0a /\ M_0b (Prop. 1).
+%    - Abstract and Özet rewritten in implicit-definability language.
+%    - §3 gains the four-level Humean analysis (table).
+%    - §6 / §7 updated to the narrower claim (L_0, admissible class K).
+%    - §8 Appendix, Provenance Table and References updated.
+%    - V5 (2026-08-17): §2 gains encoding-sensitivity (L0^A / L0^B),
+%      the E0/E1/E2 minimal-enlargement benchmark, and the Gate 1.5
+%      non-triviality check; a new §Objections and Replies (with the
+%      negative-result matrix) is inserted before the Conclusion; an
+%      Open Science Statement is added before the References.
+%    - §1, §4, §5 unchanged in substance (cross-references aligned).
+%
+%  REQUIRES (host preamble): amsthm + proposition/lemma/definition/remark
+%  environments, defined below. Compile with:
+%      pdflatex ingiliz_empirizmi_v3.tex   (run twice for refs)
+% =====================================================================
+\documentclass[11pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage[margin=1in]{geometry}
+\usepackage{array,longtable,booktabs}
+\usepackage[hidelinks,colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+\usepackage{graphicx}
+
+% ---- REQUIRES: theorem-like environments used by core_section.tex ----
+\theoremstyle{plain}
+\newtheorem{proposition}{Proposition}[section]
+\newtheorem{lemma}[proposition]{Lemma}
+\theoremstyle{definition}
+\newtheorem{definition}[proposition]{Definition}
+\theoremstyle{remark}
+\newtheorem{remark}[proposition]{Remark}
+% amsthm already provides theorem, proof.
+
+\title{The Limits of Formal Methods: Notes on the Formal Representation
+of Stoic Katalepsis and Hume's Critique of Causation\\[4pt]
+\large Bi\c{c}imsel Ara\c{c}lar{\i}n S{\i}n{\i}r{\i}: Stoac{\i}
+Katalepsis ile Humecu Nedensellik Ele\c{s}tirisinin Bi\c{c}imsel
+Temsili \"Uzerine Notlar}
+\author{Corresponding author}
+\date{2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This paper is a methodological note, not a historical thesis. It
+examines a narrow question: what can and cannot be represented when
+Stoic katalepsis --- the ``cognition'' (Long \& Sedley 1987, 40) of a
+kataleptic impression --- and Hume's account of causation are encoded
+in first-order logic (FOL)? We formalize the two positions at the
+level of their justification conditions and argue that a purely
+extensional FOL encoding can represent the material content of both
+positions but cannot fix their explanatory and modal residue:
+(i)~Hume's claim that a causal belief is unjustified \emph{because} it
+is produced by custom has the form of an explanatory (grounding)
+claim; we show that the grounding atom
+$G(\mathrm{custFact}(b),\mathrm{nonjustFact}(b,c))$ is \emph{not
+implicitly definable} in the extensional signature $L_0$ over the
+admissible class of reconstructions $\mathcal K$ --- a singular
+encoding limit, not a universal claim about the expressive power of
+first-order logic;
+(ii)~the ancient definition of the kataleptic impression contains a
+literal modal clause --- the impression is ``of such a kind as could
+not arise from what is not'' (Diogenes Laertius 7.46; Sextus
+Empiricus, \emph{Adversus Mathematicos} 7.248, 7.402) --- which any
+FOL encoding must de-modalize. The two residues are not symmetric: the
+Stoic residue is modal and is recovered by adding a modal operator
+$\Box_s$, while the Humean residue is explanatory and requires a
+hyperintensional connective (grounding); the negative result is that
+neither is fixed by the $L_0$-reduct of the extensional encoding. We
+show this by a model-pair argument over $\mathcal K$: two enriched
+structures with identical $L_0$-reducts realize different grounding
+readings, and no first-order theory in the unexpanded signature can
+separate them. We do not claim that formalization ``necessarily''
+fails; we claim only that this encoding, in the explicitly specified
+extensional signature $L_0$ and admissible class $\mathcal K$, at this
+level of granularity, is semantically --- not syntactically ---
+underdetermined with respect to the intended normative reading, and
+that representing the distinction requires additional structure --- a
+justification operator (justification logic: Artemov \& Fitting 2019),
+a grounding connective (Fine 2012), or a modal operator beyond $L_0$.
+We then correct two historiographical errors that frequently accompany
+such formalizations and add documented channels: (i)~the claim that
+Hume rejects the Principle of Sufficient Reason must be qualified
+--- Hume denies that the causal maxim is rationally demonstrable
+(T 1.3.3; SBN 78--82) and denies any ``absolute or metaphysical
+necessity'' in causal connection (T 1.3.14.35; SBN 172);
+(ii)~the transmission of Stoic epistemology to early modern Europe ran
+through documented printed texts --- Sextus Empiricus (Latin
+\emph{Hypotyposes}, tr.\ Henri Estienne, 1562; Latin \emph{Adversus
+Mathematicos}, tr.\ Gentian Hervet, 1569; Greek \emph{Opera}, 1621),
+Diogenes Laertius (Traversari's translation completed 1433; Latin
+\emph{editio princeps} Rome 1472; Venice 1475; Greek \emph{editio
+princeps} Basel 1533), and Cicero's \emph{Academica} (\emph{editio
+princeps} Rome 1471; the fist analogy at \emph{Lucullus} 145 = Long \&
+Sedley 41B), supplemented by the Neostoic reception (Lipsius 1604)
+--- not through a speculative medieval chain. The paper concludes that
+formal tools are useful precisely when their limits are stated, that
+the history of philosophy requires documentary discipline that formal
+notation cannot supply, and that this stance has systematic analogues
+in non-Western traditions of textual and logical rigor (the Buddhist
+\emph{catu\c{s}ko\d{t}i}; the Xunzian theory of the rectification of
+names; the Qing \emph{kaozheng} tradition), which we invoke as
+analogies, not as transmission claims.
+\end{abstract}
+
+\noindent\textbf{Keywords:} Stoicism; katalepsis; phantasia kataleptike;
+Hume; causation; Principle of Sufficient Reason; first-order logic;
+justification logic; grounding; implicit definability; transmission of
+ancient philosophy; catu\c{s}ko\d{t}i; zhengming; kaozheng
+
+\vspace{1em}
+
+\begin{center}\textbf{\"{O}zet}\end{center}
+Bu makale tarihsel bir tez de\u{g}il, \textbf{metodolojik bir nottur}.
+Dar bir soruyu inceliyoruz: Stoac{\i} \emph{katalepsis} (kavray{\i}c{\i}
+izlenimin ``kavranmas{\i}''; Long \& Sedley 1987'nin \c{c}evirisiyle
+``cognition'') ile Hume'un nedensellik a\c{c}{\i}klamas{\i} birinci
+derece mant{\i}kta (FOL) kodland{\i}\u{g}{\i}nda ne temsil edilebilir,
+ne temsil edilemez? \.{I}ki konumu gerek\c{c}elendirme ko\c{s}ullar{\i}
+d\"uzeyinde bi\c{c}imselle\c{s}tiriyor ve tamamen ekstansiyonel bir FOL
+kodlamas{\i}n{\i}n her iki konumun \textbf{maddi i\c{c}eri\u{g}ini}
+temsil edebildi\u{g}ini, ancak \textbf{a\c{c}{\i}klay{\i}c{\i} ve modal
+kal{\i}nt{\i}y{\i}} sabitleyemedi\u{g}ini g\"osteriyoruz:
+(i)~Hume'un ``nedensel inan\c{c}, al{\i}\c{s}kanl{\i}k taraf{\i}ndan
+\"uretildi\u{g}i \emph{i\c{c}in} gerek\c{c}elendirilmemi\c{s}tir''
+iddias{\i} a\c{c}{\i}klay{\i}c{\i} (grounding) bi\c{c}imindedir;
+$G(\mathrm{custFact}(b),\mathrm{nonjustFact}(b,c))$ grounding atomunun
+$L_0$ imzas{\i} ve $\mathcal K$ kabul edilebilir yap{\i} s{\i}n{\i}f{\i}
+\"uzerinde \textbf{"ort\"uk olarak tan{\i}mlanabilir (implicitly
+definable) olmad{\i}\u{g}{\i}n{\i}} g\"osteriyoruz --- birinci derece
+mant{\i}\u{g}{\i}n ifade g\"uc\"u hakk{\i}nda evrensel de\u{g}il, tekil
+bir kodlama s{\i}n{\i}r{\i};
+(ii)~kavray{\i}c{\i} izlenimin antik tan{\i}m{\i} lafz{\i}
+(s\"ozc\"u\u{g}\"u s\"ozc\"u\u{g}\"une, ger\c{c}ek anlamda) bir modal
+kloz i\c{c}erir --- izlenim ``olmayandan do\u{g}amayacak
+t\"urden''dir (Diogenes Laertius 7.46; Sextus Empiricus,
+\emph{Adversus Mathematicos} 7.248, 7.402) --- ve her FOL kodlamas{\i}
+bu klozu de-modalize etmek zorundad{\i}r. \.{I}ki kal{\i}nt{\i}
+simetrik de\u{g}ildir: Stoac{\i} kal{\i}nt{\i} modaldir ve bir modal
+operat\"or ($\Box_s$) eklenerek geri kazan{\i}l{\i}r; Humecu kal{\i}nt{\i}
+a\c{c}{\i}klay{\i}c{\i}d{\i}r ve hiperintansiyonel bir ba\u{g}la\c{c}
+(grounding) gerektirir; olumsuz sonu\c{c}, ikisinin de ekstansiyonel
+kodlaman{\i}n $L_0$-reduktu taraf{\i}ndan sabitlenmemi\c{s} olmas{\i}d{\i}r.
+Bunu $\mathcal K$ \"uzerinde bir model-\c{c}ifti arg\"uman{\i}y la
+g\"osteriyoruz: \"ozde\c{s} $L_0$-reduktlar{\i}na sahip iki geni\c{s}letilmi\c{s}
+yap{\i} farkl{\i} grounding okumalar{\i} ger\c{c}ekle\c{s}tirir ve
+geni\c{s}letilmemi\c{s} $L_0$ imzas{\i}nda hi\c{c}bir birinci derece
+teori bunlar{\i} ay{\i}rt edemez. Formalizasyonun ``zorunlu olarak''
+ba\c{s}ar{\i}s{\i}z oldu\u{g}unu iddia etmiyoruz; yaln{\i}zca bu
+kodlaman{\i}n, a\c{c}{\i}k\c{c}a belirlenmi\c{s} $L_0$ imzas{\i} ve
+$\mathcal K$ yap{\i} s{\i}n{\i}f{\i} alt{\i}nda, bu ayr{\i}nt{\i}
+d\"uzeyinde, ama\c{c}lanan normatif okumaya g\"ore \textbf{semantik
+olarak} (s\"ozdizimsel de\u{g}il) eksik belirlenmi\c{s} oldu\u{g}unu
+ve ayr{\i}m{\i}n temsili i\c{c}in $L_0$ \"otesinde ek yap{\i} --- bir
+gerek\c{c}e operat\"or\"u (gerek\c{c}e mant{\i}\u{g}{\i}: Artemov \&
+Fitting 2019), bir grounding ba\u{g}la\c{c}{\i} (Fine 2012) veya bir
+modal operat\"or --- gerekti\u{g}ini s\"oyl\"uyoruz. Ard{\i}ndan bu
+t\"ur bi\c{c}imselle\c{s}tirmelere s{\i}kl{\i}kla e\c{s}lik eden iki
+tarihsel hatay{\i} d\"uzeltiyor ve belgelenmi\c{s} kanallar{\i}
+ekliyoruz: (i)~Hume'un Yeter Sebep \.{I}lkesi'ni reddetti\u{g}i iddias{\i}
+nitelendirilmelidir --- Hume, nedensel \"ozdeyi\c{s}in rasyonel olarak
+g\"osterilemeyece\u{g}ini (T 1.3.3; SBN 78--82) ve nedensel
+ba\u{g}lant{\i}da hi\c{c}bir ``mutlak ya da metafizik zorunluluk''
+olmad{\i}\u{g}{\i}n{\i} (T 1.3.14.35; SBN 172) s\"oyler;
+(ii)~Stoac{\i} epistemolojinin erken modern Avrupa'ya aktar{\i}m{\i}
+belgelenebilir bas{\i}l{\i} metinler \"uzerinden ger\c{c}ekle\c{s}mi\c{s}tir
+--- Sextus Empiricus (Latince \emph{Hypotyposes}, \c{c}ev. Henri
+Estienne, 1562; Latince \emph{Adversus Mathematicos}, \c{c}ev. Gentian
+Hervet, 1569; Yunanca \emph{Opera}, 1621), Diogenes Laertius
+(Traversari'nin \c{c}evirisi 1433'te tamamland{\i}; Latince \emph{editio
+princeps} Roma 1472; Venedik 1475; Yunanca \emph{editio princeps} Basel
+1533) ve Cicero'nun \emph{Academica}'s{\i} (\emph{editio princeps} Roma
+1471; yumruk benzetmesi \emph{Lucullus} 145 = Long \& Sedley 41B) ile
+Neostoac{\i} al{\i}mlan{\i}\c{s} (Lipsius 1604) --- spek\"ulatif bir
+orta\c{c}a\u{g} zinciri \"uzerinden de\u{g}il. Makale, bi\c{c}imsel
+ara\c{c}lar{\i}n s{\i}n{\i}rlar{\i} belirtildi\u{g}inde yararl{\i}
+oldu\u{g}u, felsefe tarihinin bi\c{c}imsel notasyonun sa\u{g}layamad{\i}\u{g}{\i}
+bir belge disiplini gerektirdi\u{g}i ve bu tutumun Bat{\i} d{\i}\c{s}{\i}
+geleneklerde de sistematik kar\c{s}{\i}l{\i}klar{\i}n{\i}n bulundu\u{g}u
+(Budist \emph{catu\c{s}ko\d{t}i}; Xunzici adlar{\i}n d\"uzeltilmesi
+teorisi; Qing \emph{kaozheng} gelene\u{g}i) sonucuna var{\i}r --- bu
+kar\c{s}{\i}l{\i}klar aktar{\i}m iddias{\i} de\u{g}il, analoji olarak
+an{\i}l{\i}r.
+
+\noindent\textbf{Anahtar Kelimeler:} Stoac{\i}l{\i}k; \emph{katalepsis};
+\emph{phantasia kataleptike}; Hume; nedensellik; Yeter Sebep \.{I}lkesi;
+birinci derece mant{\i}k; gerek\c{c}e mant{\i}\u{g}{\i}; grounding;
+\"ort\"uk tan{\i}mlanabilirlik; antik felsefenin aktar{\i}m{\i};
+catu\c{s}ko\d{t}i; zhengming; kaozheng
+
+\tableofcontents
+
+% =====================================================================
+\section{Introduction: Scope and Limits}
+\label{sec:intro}
+
+The purpose of this note can be summarized in three points.
+
+\begin{enumerate}
+\item To encode the justification conditions of Stoic katalepsis and
+Hume's account of causation at first-order level, and to state
+precisely which distinction this encoding misses --- not the material
+content of the two positions, but their explanatory and modal residue
+(\S\ref{sec:formalization}).
+\item To correct two historiographical errors that frequently accompany
+such formalizations --- the unqualified claim about Hume and the
+Principle of Sufficient Reason (\S\ref{sec:hume-psr}), and the
+speculative reconstruction of the transmission of Stoic epistemology
+(\S\ref{sec:transmission}) --- and to add the documented channels and
+the relevant secondary literature.
+\item To avoid universal claims such as ``formalization necessarily
+fails'' and to state only singular, verifiable limits --- of this
+encoding, at this level of granularity --- together with a statement of
+what a richer logical language would add (\S\ref{sec:richer-languages}).
+\end{enumerate}
+
+A brief comparative note (\S\ref{sec:comparative}) places the theme of
+the limits of formal schemes in a wider context: the theorization of
+such limits is not peculiar to the Western analytic tradition. The note
+ends with an explicit statement of its own limitations
+(\S\ref{sec:limits}) and a provenance table recording the source of
+every substantive claim.
+
+Throughout, we observe the following discipline: no citation is
+included without a locatable primary text or a verifiable secondary
+source; where a claim rests on secondary literature alone, this is
+stated; and no claim of the form ``there is no evidence for $X$'' is
+allowed to function as ``there is evidence that not-$X$'' (see
+\S\ref{sec:limits}).
+
+% =====================================================================
+\section{Formalization: What Can and Cannot Be Encoded}
+\label{sec:formalization}
+
+% --- SUBSTITUTED: the old single-sorted language
+%     L = {HCB, CC, J, Kat, Gr, Stoic} is replaced by the canonical
+%     many-sorted L_0 / L^+ core section. The J(x)->¬HCB(x) axiom is
+%     gone (H-I is a candidate, not a default); (Exc1) is derived with
+%     M_0a /\ M_0b (Proposition 1); the model-pair argument is rebuilt
+%     as an implicit-definability failure over the admissible class K.
+\input{core_section.tex}
+
+\subsection{Stoic Application: Encoding Sensitivity}
+\label{sec:encoding-sensitivity}
+
+The Stoic material admits two levels of formalization, and the
+robustness of the negative result should be tested against both. Let
+$L_0^A$ be the minimal encoding of \S\ref{sec:stoic-skeleton}, which
+registers only the kataleptic predicate $Kat(i)$. Let $L_0^B$ be a
+provenance-sensitive encoding that decomposes the kataleptic condition
+into a veridicality clause, a source-match clause, and a modal
+source-reliability clause:
+\begin{equation}
+Kat(i) \;\longleftrightarrow\; Veridical(i) \wedge SourceMatch(i)
+\wedge \Box_{\mathrm{src}}\,\neg FalseSource(i).
+\label{eq:kat-B}
+\end{equation}
+Formula~\eqref{eq:kat-B} is a formal decomposition adopted for the
+present reconstruction; it is not presented as a historical Stoic
+axiom. The two encodings differ in where the modal content is placed:
+$L_0^A$ leaves the modal clause as an external residue (cf.\
+\S\ref{sec:stoic-modal-note}), whereas $L_0^B$ internalizes it by
+adding modal vocabulary to the signature.
+
+The structural fact that matters is the same in both encodings: the
+modal clause is not a logical consequence of the minimal extensional
+predicates alone. In $L_0^A$ it is not even expressible and is recorded
+as a residue; in $L_0^B$ it is expressible only because
+$\Box_{\mathrm{src}}$ is a new semantic resource beyond the
+extensional base. Under either encoding, the minimal extensional
+reconstruction does not by itself determine the modal content of the
+Stoic definition.
+
+Whether the two encodings yield the \emph{same} underdetermination
+result is a question about the reconstruction, and it was tested
+computationally (script \texttt{encoding\_sensitivity\_check.py} in
+the reproducibility package; frozen output
+\texttt{encoding\_sensitivity\_output.txt}). The test enumerates,
+over the finite Boolean fragment, every base assignment
+$E=(Kat,Veridical,SourceMatch,FalseSource(i))$ and every modal
+resource $(R(i,i),R(i,j),FalseSource(j))$, and asks, for each
+encoding, whether the modal content $M$ is fixed by $E$ alone. The
+outcome is encoding-sensitive in degree, robust in existence:
+
+\begin{itemize}
+\item Under $L_0^A$ the modal content $M$ is undetermined for all
+$16$ base assignments: for every $E$, both $M=0$ and $M=1$ are
+realized by suitable modal resources.
+\item Under $L_0^B$ the modal content is undetermined for $6$ of the
+$10$ admissible base assignments and determined for the remaining
+$4$ --- the kataleptic assignment ($Kat=1$, $Veridical=1$,
+$SourceMatch=1$) and its direct negation ($Kat=0$, $Veridical=1$,
+$SourceMatch=1$) --- where the determination is produced by the
+decomposition axiom itself, i.e.\ by the modal resource written into
+the theory.
+\end{itemize}
+
+The two encodings therefore do not yield the same underdetermination
+result: the strength of the residue is encoding-dependent. This is the
+finding, not a defect: it exhibits the hermeneutic dependence of the
+formalization. The modal clause is a residue under every encoding; the
+only question is whether the residue is left external ($L_0^A$) or
+internalized at the cost of adding modal vocabulary to the theory
+($L_0^B$). Under both encodings the general claim of this paper is
+confirmed: the extensional base alone does not fix the modal content,
+and representing it requires a semantic resource beyond the
+extensional base.
+
+\subsection{Expressive Enrichments: The Minimal-Enlargement Benchmark}
+\label{sec:e0e1e2}
+
+\S\ref{sec:richer-languages} records the three enrichments --- modal,
+justification-logic, and grounding --- that can represent what $L_0$
+leaves underdetermined. The philosophical content of that section is
+sharpened by a minimal-enlargement benchmark, which separates what each
+enrichment \emph{adds to the language} from what it \emph{establishes
+about the represented relation}.
+
+\begin{center}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+ & \emph{Modality} & \emph{Explanatory direction} & \emph{Hyperintensional distinction}\\
+\midrule
+E0: extensional $L_0$ & --- & --- & ---\\
+E1: $L_0 + G$ (primitive $G$) & --- & $\checkmark^{*}$ & limited\\
+E2: $L_0 + G + \Gamma$ & optional & $\checkmark$ & $\checkmark$\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent $^{*}$A primitive relation $G(x,y)$ formally represents a
+binary relation; that it is \emph{grounding} --- and not merely a
+relation bearing that name --- is a further semantic claim that
+requires the theoretical constraints $\Gamma$ of E2.
+
+The benchmark makes explicit the paper's central distinction:
+\textbf{representability is not adequate representation}. E1 makes the
+explanatory relation \emph{nameable}; E2 makes it \emph{characterized}.
+The negative result of \S\ref{sec:prop2} concerns the step from E0 to
+E1 --- the enrichment is not recoverable from $L_0$ alone --- and the
+step from E1 to E2 shows that naming is not yet theorizing: the
+constraints $\Gamma$ (irreflexivity, asymmetry, transitivity), which
+are contested in the grounding literature, are themselves interpretive
+choices rather than consequences of the signature.
+
+\subsection{Gate 1.5: Non-Triviality / Recoverability Check}
+\label{sec:gate15}
+
+The central theorem is exposed to the objection that it merely records
+that a symbol absent from $L_0$ is absent from $L_0$. The
+non-triviality of the result is fixed by the following ten-point check,
+which the formal section must pass in full before any historical claim
+is allowed to rest on it.
+
+\begin{enumerate}
+\item[T1.] $T_G$ is explicitly defined: $L_G$, $T_G$, $\mathrm{Models}(T_G)$.
+\item[T2.] At least two enriched structures $\mathcal M_1^G, \mathcal M_2^G \models T_G$ exist.
+\item[T3.] Same $L_0$-reduct: $\mathcal M_1^G\!\upharpoonright L_0 = \mathcal M_2^G\!\upharpoonright L_0$.
+\item[T4.] Different $G$: $G^{\mathcal M_1} \neq G^{\mathcal M_2}$.
+\item[T5.] Both structures satisfy the grounding-theoretic constraints $\Gamma$.
+\item[T6.] The result is statable independently of the fact that $G \notin L_0$ (non-trivial).
+\item[T7.] The definability application is formally valid: implicit-definability definition; absence of explicit definition.
+\item[T8.] The E1/E2 comparison is complete: representability vs.\ adequacy.
+\item[T9.] The sensitivity test across at least two reasonable encodings ($L_0^A$, $L_0^B$) is performed.
+\item[T10.] Machine verification is separated from proof: computational checks are reproducibility artefacts, not substitutes for the semantic argument.
+\end{enumerate}
+
+The ten items are verified individually; the complete check is
+recorded in Table~\ref{tab:gate15}.
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{@{}lp{3.6cm}p{5.6cm}c@{}}
+\toprule
+\textbf{Item} & \textbf{Requirement} & \textbf{Discharged by} & \textbf{Status}\\
+\midrule
+T1 & $T_G$ explicitly defined: $L_G$, $T_G$, $\mathrm{Models}(T_G)$
+& \S\ref{sec:enrichment}--\S\ref{sec:admissible}: $L^+$, axioms
+(O$_1$)--(O$_3$), admissible class $\mathcal K$
+& $\checkmark$\\
+T2 & Two enriched structures $M_1^G, M_2^G \models T_G$ exist
+& Proposition~\ref{prop:underdet} construction; script
+\texttt{gate15\_check.py}
+& $\checkmark$\\
+T3 & Same $L_0$-reduct: $M_1^G\!\upharpoonright L_0 = M_2^G\!\upharpoonright L_0$
+& By construction in Proposition~\ref{prop:underdet};
+Lemma~\ref{lem:reduct-invariance}; script \texttt{gate15\_check.py}
+& $\checkmark$\\
+T4 & Different $G$: $G^{M_1} \neq G^{M_2}$
+& By construction in Proposition~\ref{prop:underdet}; script
+\texttt{gate15\_check.py}
+& $\checkmark$\\
+T5 & Both structures satisfy the constraints $\Gamma$
+& Remark below (the constructed pair satisfies
+$\Gamma$ in both members); script \texttt{gate15\_check.py}
+& $\checkmark$\\
+T6 & Result statable independently of $G \notin L_0$ (non-trivial)
+& Proposition~\ref{prop:stability} (stability under arbitrary
+$L_0$-theories)
+& $\checkmark$\\
+T7 & Definability application formally valid
+& Definitions~2.7--2.8, Proposition~\ref{prop:definability},
+\S\ref{sec:definability-qual}
+& $\checkmark$\\
+T8 & E1/E2 comparison complete: representability vs.\ adequacy
+& \S\ref{sec:e0e1e2} (minimal-enlargement benchmark)
+& $\checkmark$\\
+T9 & Sensitivity test across $L_0^A$, $L_0^B$ performed
+& \S\ref{sec:encoding-sensitivity}; script
+\texttt{encoding\_sensitivity\_check.py}
+& $\checkmark$\\
+T10 & Machine verification separated from proof
+& \S\ref{sec:verification}: the scripts are reproducibility
+artefacts; the general argument is
+Lemma~\ref{lem:reduct-invariance}
+& $\checkmark$\\
+\bottomrule
+\end{tabular}
+\caption{Gate 1.5 --- non-triviality / recoverability check, 10/10.}
+\label{tab:gate15}
+\end{table}
+
+Items T1, T6, T7, T8 and T10 are discharged by proof or definition
+in the manuscript at the locations cited in the table. Items T2--T5
+are verified computationally by \texttt{gate15\_check.py} (frozen
+output \texttt{gate15\_output.txt} in the reproducibility package),
+which reconstructs the Proposition~\ref{prop:underdet} pair and
+asserts the admissibility axioms (O$_1$)--(O$_3$), the equality of the
+$L_0$-reducts, the difference of the $G$ extensions, and the
+structural constraints $\Gamma$ on both members. Item T9 is
+discharged by \texttt{encoding\_sensitivity\_check.py}: the outcome is
+encoding-sensitive in degree ($L_0^A$: undetermined for all 16 base
+assignments; $L_0^B$: undetermined for 6 of 10 admissible assignments)
+and robust in existence --- under both encodings the extensional base
+alone fails to fix the modal content. The general thesis survives; the
+encoding-dependence of the strength of the residue is recorded as a
+finding (hermeneutic dependence), not concealed.
+
+Two remarks complete the check. First, the model pair of
+Proposition~\ref{prop:underdet} --- $G_1$ containing
+$\langle \mathrm{custFact}(b), \mathrm{nonjustFact}(b,c)\rangle$ and
+$G_2$ empty --- satisfies the standard structural constraints $\Gamma$
+(irreflexivity, asymmetry, transitivity) in both members: neither
+relation contains a reflexive pair, neither contains a pair and its
+converse, and neither contains a non-trivial chain. This is verified
+by \texttt{gate15\_check.py} (item T5). The underdetermination
+therefore does not trade on a pathological choice of $G$, even though
+the admissible class $\mathcal K$ deliberately imposes no structural
+principles on $G$ (condition 4 of \S\ref{sec:admissible}). Second, T10
+is a standing discipline of \S\ref{sec:verification}: the finite
+Boolean enumeration, the model-pair script, and the
+encoding-sensitivity enumeration are reproducibility artefacts, and
+the general arguments are supplied by Lemma~\ref{lem:reduct-invariance}
+and the propositions cited in Table~\ref{tab:gate15}. The section does
+not proceed to historical inference until all ten items are
+discharged.
+
+\subsection{Hyperintensionality: The Four-Layer Claim}
+\label{sec:hi-layers}
+
+The formal section can be read as a single four-layer claim about
+hyperintensionality. The layers are labelled HI1--HI4 to avoid
+confusion with the Humean readings H1--H3 of \S\ref{sec:hume-psr}.
+
+\begin{enumerate}
+\item[HI1.] \emph{Literature.} Grounding and explanation are widely
+treated in the contemporary literature as hyperintensional phenomena
+(SEP ``Metaphysical Grounding''; Fine 2012; Schnieder 2011).
+\item[HI2.] \emph{Formal specification.} The extensional language
+$L_0$ does not contain explanatory dependence as a primitive semantic
+resource (\S\ref{sec:l0}).
+\item[HI3.] \emph{Model-theoretic result.} Holding the $L_0$-reduct
+fixed, the explanatory enrichment can vary: two admissible structures
+with identical $L_0$-reducts realize different grounding readings
+(Proposition~\ref{prop:underdet}).
+\item[HI4.] \emph{Philosophical interpretation.} The extensional
+material profile does not by itself determine the explanatory
+structure of the target interpretation.
+\end{enumerate}
+
+The chain runs Literature $\to$ Formalization $\to$ Theorem $\to$
+Interpretation. The point of separating the layers is to block the
+leap from ``grounding is hyperintensional'' to ``first-order logic
+cannot express grounding'': HI1 is a claim about the literature, HI2
+about a specified signature, HI3 a theorem about that signature, and
+HI4 an interpretation of the theorem. The present result occupies
+layers HI2--HI4; it neither needs nor asserts the unrestricted version
+of HI1 as a theorem about the expressive power of first-order logic.
+This is the formal counterpart of the distinction drawn in
+\S\ref{sec:e0e1e2} between representability and adequate
+representation, and of the modal/grounding distinction
+$\Box(Custom(b) \to \neg Just(b,c)) \neq
+G(\mathrm{custFact}(b), \mathrm{nonjustFact}(b,c))$ of
+\S\ref{sec:richer-languages}.
+
+% =====================================================================
+\section{Hume and the Principle of Sufficient Reason: A Qualification
+Required}
+\label{sec:hume-psr}
+
+A widespread reading says ``Hume rejects the metaphysical PSR'';
+another says ``Hume does not reject the PSR; he merely re-describes the
+question''. Neither is correct on its own. The verifiable facts are
+these.
+
+\begin{enumerate}
+\item[(a)] Hume denies that the causal maxim is rationally demonstrable.
+In Treatise 1.3.3, the maxim ``whatever begins to exist must have a
+cause of existence'' is said to be ``neither intuitively nor
+demonstrably certain'': its contrary is conceivable, and our assent to
+it arises from observation and experience, i.e., from custom (T 1.3.3;
+SBN 78--82). The denial is therefore epistemic: the maxim is not
+rationally grounded.
+\item[(b)] Hume explicitly denies absolute or metaphysical necessity in
+causal connection. T 1.3.14.35: ``there is no absolute nor metaphysical
+necessity, that every beginning of existence shou'd be attended with
+such an object'' (SBN 172).
+\item[(c)] Hume's positive account is psychological. T 1.3.14.20:
+necessity ``is nothing but an internal impression of the mind, or a
+determination to carry our thoughts from one object to another'' (SBN
+164--65). The same thesis is stated in the Enquiry: ``When we look
+about us towards external objects, and consider the operation of
+causes, we are never able, in a single instance, to discover any power
+or necessary connexion'' (E 7.6; SBN 63). And the famous remark that
+``reason is nothing but a wonderful and unintelligible instinct in our
+souls'' (T 1.3.16.9 SBN 178--9) makes the process-based character of
+the account explicit: belief formation is a mechanism, not an
+inference.
+\end{enumerate}
+
+Hence: Hume does not ``refute'' the PSR in its causal form, and he does
+not leave it untouched; he removes it from the level of demonstration
+and relocates it at the level of custom. The reading ``Hume denies the
+PSR'' is false if it means he argued against the principle's content;
+the reading ``Hume never questions it'' is false if it means he
+accepted it as a rational principle. The correct formulation is: the
+causal maxim is, for Hume, a natural psychological regularity
+masquerading as a rational necessity.
+
+\subsection{The four-level Humean analysis}
+\label{sec:hume-four-levels}
+
+The formal treatment of \S\ref{sec:formalization} operates on several
+levels of claim at once. To keep the formal result from silently
+importing a contested interpretive thesis, we record explicitly the
+four-level decomposition on which it relies, tagging each level with
+its textual anchoring and its standing in the literature (see also
+\S\ref{sec:hume-historical} of the formal section).
+
+\begin{center}
+\begin{tabular}{p{0.18\linewidth} p{0.42\linewidth} p{0.32\linewidth}}
+\hline
+\textbf{Level} & \textbf{Claim} & \textbf{Status} \\
+\hline
+Psychological-genetic &
+Causal expectations are formed by custom/habit, not by demonstrative
+reason. &
+Directly defensible from Hume's text (T 1.3.14.20, SBN 164--65;
+E 7.6, SBN 63; T 1.3.16.9, SBN 178--9). \\
+Epistemic &
+These beliefs are not demonstratively justified. &
+Defensible, but the term ``justification'' must be unpacked
+(\S\ref{sec:hume-readings}). \\
+Normative exclusion &
+Custom-production excludes rational justification. &
+Contested contemporary reconstruction; alternative readings exist
+(H-II, naturalistic; Della Rocca 2010 on PSR as demotion vs.\
+rejection; Pruss 2006 on Hume as evaporationist). \\
+Grounding &
+The custom-production relation \emph{grounds} the absence of
+justification. &
+Contemporary regimentation in the sense of Fine (2012) and
+Schnieder (2011); not directly attributable to Hume. \\
+\hline
+\end{tabular}
+\end{center}
+
+We do not attribute a contemporary grounding relation, nor a fully
+articulated theory of epistemic justification, to Hume. We use
+grounding only to regiment one strong contemporary reconstruction of
+the explanatory force that an interpreter may take Hume's appeal to
+custom to possess; alternative reconstructions remain live.
+
+Two further points. First, the term ``Principle of Sufficient Reason''
+(\emph{principium rationis sufficientis}) is Leibnizian
+(\emph{Monadologie} \S32; 1714); Hume never uses it, and
+retro-application requires care. Second, the literature on Hume and the
+causal maxim is substantial: on the maxim itself, see Garrett 1997, 24,
+66--69; on the projectivist reading of causal necessity, Beebee 2006;
+on the Enquiry context, Millican 2002, 27--65. The contemporary revival
+of PSR debates (Della Rocca 2010; Pruss 2006) has made the question of
+what exactly Hume denied once more a live interpretive issue; our claim
+(a)--(c) is deliberately minimal and textually anchored.
+
+% =====================================================================
+\section{The Transmission of Stoic Epistemology to Early Modern Europe:
+A Verifiable Route}
+\label{sec:transmission}
+
+\subsection{Sextus Empiricus}
+
+The kataleptic impression and the criterion debate are documented most
+fully in Sextus Empiricus, \emph{Adversus Mathematicos} VII: the
+criterion discussion at M 7.24--29, the definitional texts at M 7.248
+and 7.402, and the ``clear, evident, striking''
+(\emph{enarges}, \emph{ektypos}, \emph{plektike}) marks at M 7.257--58
+(cf.\ Bury 1935, 7.402--8). The printing history is now well documented
+(Floridi 2002; Popkin 1979, 18): the first Latin translation of the
+\emph{Hypotyposes} was published in 1562 by Henri Estienne (Geneva);
+the Latin \emph{Adversus Mathematicos}, together with a second edition
+of the Estienne translation, was published in 1569 by Gentian Hervet
+(Paris: Martin Juvenis; Antwerp: Plantin). The Greek \emph{editio
+princeps} of Sextus' \emph{Opera} appeared only in 1621 (Geneva:
+Chou\"et). The common claim that ``Hervet translated Sextus in 1562 and
+1569'' therefore conflates Estienne with Hervet and should be
+corrected.
+
+\subsection{Diogenes Laertius}
+
+The main doxographical source for Zeno's and Chrysippus' epistemology
+(the definitions of \emph{phantasia}, \emph{phantasia kataleptike},
+\emph{katalepsis}, \emph{epist\=em\=e} at \emph{Vitae Philosophorum}
+7.46--54; the criterion at 7.54 [Dorandi 2013]; cf.\ Bobzien 2003,
+85--123) reached early modern Europe through Ambrogio Traversari's
+Latin translation, completed in manuscript by 1433; the Latin
+\emph{editio princeps} was printed in Rome 1472 (Georgius Lauer); the
+celebrated Venice 1475 (Nicolaus Jenson) is the second printed edition;
+the Greek \emph{editio princeps} appeared in Basel 1533 (Froben)
+(Dorandi 2013, 15; ISTC id00219000/id00220000).
+
+\subsection{Cicero and the Neostoic Reception}
+
+Cicero's \emph{Academica} is the Latin source for Zeno's fist analogy
+--- open hand: impression; fingers bent: assent; fist: katalepsis; the
+other hand grasping the fist: \emph{epist\=em\=e}, available to the
+sage alone (\emph{Lucullus} 145 [Brittain 2006]; SVF 1.66) --- and for
+the criterion debate in Latin. The \emph{Academica} entered print
+early: \emph{editio princeps} Rome 1471 (Sweynheym \& Pannartz), with
+the Aldine edition of 1523 establishing the standard text (Hunt 1998).
+But the decisive early modern channel for Stoic doctrine as a system
+was Neostoicism: Justus Lipsius published \emph{De Constantia} (Antwerp:
+Plantin, 1584), and in 1604, both the \emph{Manuductio ad Stoicam
+philosophiam} and the \emph{Physiologia Stoicorum} (Antwerp:
+Plantin-Moretus). The reception of Stoic ethics through Lipsius and du
+Vair is well documented (Lagr\'ee 1994; du Vair 1594); what matters for
+this note is that the epistemological transmission --- the katalepsis
+doctrine --- had to proceed through Sextus, Diogenes Laertius and
+Cicero, since the Neostoics' interest was primarily ethical.
+
+\subsection{Hume's Own Access}
+
+For Hume's own acquaintance with these materials, the documented facts
+are these. The catalogue of Hume's library (Norton \& Norton 1996)
+lists Cicero's \emph{Opera} (Paris, 1740--42, 9 vols.); it does not
+list Sextus Empiricus. The 1840 sale catalogue, on which the
+reconstruction rests, shows no Sextus (Fosl 1998). However, the 1840
+catalogue reflects books sold at auction; it is not identical to the
+full library at Hume's death, as books were often given away or sold
+earlier. The absence of Sextus is therefore negative evidence, not a
+proof of Hume's ignorance. But building a ``Hume owned a Sextus''
+narrative on this gap is historiographically irresponsible. The
+standard scholarly account remains: Hume's access to Pyrrhonism ran
+through Bayle, Montaigne and others (Popkin 1952, 65--81; 1951). The
+historiography of ``Hume the Pyrrhonian'' is best grounded in:
+(i)~Hume's direct reading of Cicero; (ii)~his mediated reading of
+Sextus through the French sceptical tradition.
+
+\subsection{The Medieval Question and the Cartesian Comparison}
+
+Linear chains of the form ``Stoicism $\to$ Aristotelian commentators
+$\to$ Scholasticism $\to$ Descartes $\to$ Locke'' are not documented.
+The evidence for discontinuity is strong: only seven Latin Sextus
+manuscripts circulated in the medieval Latin West (Floridi 2002); the
+\emph{Academica} was among the rarer Cicero texts in the Middle Ages,
+with Henry of Ghent the first scholastic explicitly to engage it
+(Schmitt 1972; 1983; SEP ``Medieval Skepticism''); the term
+``scepticus'' entered Latin usage only in the 1430s. Two qualifications
+are required, in the spirit of \S\ref{sec:limits}. First, ``no
+continuous direct transmission of the doctrine of katalepsis'' does not
+mean ``no knowledge of Stoic epistemology at all'': Cicero's
+\emph{comprehensio} and Augustine's \emph{Contra Academicos} provided
+an indirect, contested channel (Nawar 2022, 185--207). Second, the
+relation between Descartes's ``clear and distinct ideas'' and the
+kataleptic impression should be studied as discrete responses to a
+common skeptical problem --- the criterion problem --- rather than as a
+transmission chain; this is the position of the relevant secondary
+literature (Frede 1983; Nawar 2022).
+
+Similarly, Locke's critique of innate principles in Essay I.3 (``No
+Innate Practical Principles'') is directed, in its explicit form, at
+Herbert of Cherbury's \emph{De Veritate} (1624): Herbert is named at
+I.3.15 and discussed through I.3.27 (Nidditch ed. 1975, 77--84); Descartes is not
+the primary target of that chapter. And the very notion of a unified
+``British Empiricism'' is a construction of nineteenth-century
+historiography (Norton 1981). The moral of this section: the history
+of philosophy should be written from the history of printed texts, not
+from speculative chains.
+
+\subsection{Historical-Evidential Method: The Ev0--Ev4 Ladder}
+\label{sec:ev-ladder}
+
+The historical discipline of \S\ref{sec:transmission} can be made
+explicit as an evidence ladder. The labels are Ev0--Ev4 to avoid
+confusion with the expressive-enrichment levels E0/E1/E2 of
+\S\ref{sec:e0e1e2}.
+
+\begin{itemize}
+\item[Ev0] \emph{Bibliographic presence}: the text exists and is
+attested.
+\item[Ev1] \emph{Documented access}: an agent or library can be shown
+to have had the text available.
+\item[Ev2] \emph{Documented citation}: the text is cited or quoted by
+the agent.
+\item[Ev3] \emph{Textual dependence}: the agent's claims require the
+text's specific content.
+\item[Ev4] \emph{Influence}: the text shaped the agent's doctrine.
+\end{itemize}
+
+Rule: Ev$_n \not\Rightarrow$ Ev$_{n+1}$ in general. Two prohibitions
+follow, which the present note observes throughout. First,
+\emph{availability is not influence}: that Sextus was printed in 1562
+does not show that Hume's doctrine was shaped by him. Second,
+\emph{citation is not dependence}: that an author cites a text does
+not show that the cited content is load-bearing for the author's
+argument. The transmission route of \S\ref{sec:transmission}.1--3 is
+established at the level of Ev1--Ev2 (documented access and
+citation); Hume's own acquaintance with Sextus is at most Ev1--Ev2 via
+Bayle and the French sceptical tradition
+(\S\ref{sec:transmission}.4); and the medieval chain is rejected
+because it does not reach Ev1 (\S\ref{sec:transmission}.5). No claim
+of Ev4 is made anywhere in this note.
+
+% =====================================================================
+\section{A Comparative Note: Formal Limits Across Philosophical
+Traditions}
+\label{sec:comparative}
+
+The theme of this note --- that a formal scheme has limits that must be
+stated from within and beyond --- is not peculiar to the Western
+analytic tradition. We record three documented parallels and note two
+further items for completeness. Each is invoked as an analogy only: no
+claim of historical transmission between these traditions and the
+Stoic/Humean material is made or implied (cf.\ \S\ref{sec:limits}).
+
+\begin{enumerate}
+\item[(a)] \textbf{The catu\c{s}ko\d{t}i.} The Buddhist four-cornered
+negation schema --- $P$, $\neg P$, both, neither --- was theorized by
+N\=ag\=arjuna as an exhaustive decomposition of assertoric space, and
+it has been shown that classical two-valued semantics cannot express
+the fourth corner as a distinct position; the schema is naturally
+formalized in paraconsistent logics (Priest 2010, 24--54; 2018). One
+asymmetry must be stated honestly: the catu\c{s}ko\d{t}i is a case of
+expanding a formal scheme --- paraconsistency extends the logic ---
+whereas our \S\ref{sec:formalization} result is a case of a scheme's
+representational limit. The parallel is therefore not in the kind of
+limit but in the practice: the catu\c{s}ko\d{t}i shows that theorizing
+about what a scheme can and cannot say --- including the scheme's own
+boundary --- is a distinguished non-Western philosophical activity.
+Whether N\=ag\=arjuna himself intended the catu\c{s}ko\d{t}i as a
+meta-logical reflection on the limits of assertoric space, or whether
+this is a modern reconstruction (Priest 2018, ch.~1; Tillemans 1999),
+is itself a contested interpretive question. The claim is not that
+Stoic or Humean materials require paraconsistency; whatever
+N\=ag\=arjuna's intentions, the catu\c{s}ko\d{t}i schema itself --- as
+an exhaustive decomposition of assertoric space --- encodes a
+boundary-theorizing practice, and so the question ``what cannot be
+represented here?'' is not a modern Western invention.
+
+\item[(b)] \textbf{The Xunzian rectification of names (zhengming).}
+Xunzi's chapter ``On the Rectification of Names'' (Xunzi 22) addresses
+the criterion problem for language: names are correct if fixed by
+shared sensory experience (the \emph{tianguan}, ``heavenly faculties'',
+common to all humans --- Xunzi 22.5) and by convention (``names have no
+intrinsic appropriateness; they are fixed by agreement'' --- Xunzi
+22.9; Hansen 1992, ch.~9; Hansen 1983). The structural parallel with
+the Stoic criterion debate is striking and has been noted in the
+comparative literature (Ro\v{s}ker, SEP ``Epistemology in Chinese
+Philosophy''; Kjellberg 1996): both theories face the question of what
+fixes the standard by which representations are judged correct. The
+differences are equally instructive. At the level of the kind of
+standard, the Stoic criterion is source-based (the impression's
+provenance) while the Xunzian criterion is intersubjective-conventional.
+But the deeper difference is in the functional position each doctrine
+occupies within its system. The Stoic katalepsis is an epistemological
+doctrine about individual cognitive accuracy: it serves to secure truth
+for a single cognitive agent, and its failure mode is epistemic error.
+The Xunzian zhengming, by contrast, is an ethical-political doctrine
+about the ordering of social life: its purpose is to ensure that
+correct naming yields correct action and social coordination (cf.\
+Xunzi 22.9; the canonical formula ``if names are not correct, language
+will not be in accordance with truth'' is \emph{Analects} 13.3 --- the
+Xunzian claim is a development in the same spirit rather than a verbatim
+citation), and its failure mode is social disorder. The structural
+parallel at the level of ``what fixes the standard?'' thus masks a
+difference in the domain and the end to which the standard is put: the
+analogy should not be read as implying that the two doctrines occupy
+the same functional position in their respective systems. A first-order
+encoding of either faces the same underdetermination problem we isolate
+in \S\ref{sec:prop2}: the criterion's normative force --- in virtue
+of what the standard is the standard --- is not a truth-condition.
+
+\item[(c)] \textbf{Kaozheng and documentary discipline.} The Qing-dynasty
+kaozheng (\emph{kao\-ju}; ``evidential research'') movement ---
+exemplified by Dai Zhen (\emph{Mengzi ziyi shuzheng}, Preface; in
+\emph{Dai Zhen wenji}, Zhonghua Shuju, 1980; cf.\ Elman 1984,
+Introduction and ch.~5; 2nd ed.\ 2001) --- made textual verification,
+philological evidence and the rejection of unfounded commentary the
+methodological core of scholarship. Our \S\ref{sec:transmission} and
+\S\ref{sec:limits} defend precisely this discipline for the history of
+philosophy: the claim that documentary discipline is a method, not an
+ornament, has a systematic analogue in a non-Western tradition that is
+still under-cited in analytic historiography. The parallel is in the
+methodological attitude --- evidence over speculation --- not in the
+object of inquiry, which differs. Again: analogy, not influence.
+\end{enumerate}
+
+We also note, for completeness, the Mohist tradition's treatment of the
+name--reality (\emph{ming}/\emph{shi}) distinction and the argumentation
+chapter ``Lesser Selection'' (\emph{Xiaoqu}) of the \emph{Mozi} (Graham
+1978; 1989), and the White Horse paradox of Gongsun Long, which turns
+on the gap between a predicate's linguistic ontology and its extension
+--- a theme in the vicinity of, though not identical with, the
+model-theoretic underdetermination discussed in \S\ref{sec:prop2}
+(Hansen 1983, ch.~5). Finally, Wang Yangming's doctrine of
+\emph{liangzhi} (``innate knowing''; \emph{Chuanxilu} 2.2; Van Norden,
+SEP ``Wang Yangming'') treats the cognitive standard as an inner,
+quasi-evidential faculty rather than an external impression or
+convention --- structurally closer to the Stoic katalepsis than to the
+Xunzian convention, since both posit a source-based standard rather
+than an intersubjective one, yet differing in that Wang Yangming's
+doctrine is embedded in a moral-spiritual project (the unity of
+knowledge and action) rather than primarily in an epistemological
+criterion debate. [Provenance note: the chapter and passage numbers
+above follow the standard editions cited in the bibliography; where
+translations differ (Watson; Knoblock), we rely on the philological
+consensus reported in Hansen 1992 and the Stanford Encyclopedia entries
+cited. The claim that the Stoic/Xunzian parallel has been noted in the
+comparative literature is supported by Kjellberg 1996
+(Sextus/Zhuangzi/Xunzi on skepticism) and by the SEP entry
+``Epistemology in Chinese Philosophy'' (Ro\v{s}ker); both are cited as
+reporting a parallel, not as establishing a historical connection.]
+
+% =====================================================================
+\section{Objections and Replies}
+\label{sec:objections}
+
+The central result invites a family of objections. They are collected
+here following the format \emph{objection -- concession -- distinction
+-- response}. No reply introduces new machinery; each restates the
+scope fixed in \S\ref{sec:formal-scope} and \S\ref{sec:gate15}.
+
+\medskip
+\textbf{Objection 1 (``$G$ is merely a new predicate'').} Adding a
+primitive $G$ is something any first-order language can do; the result
+therefore shows only that a symbol absent from $L_0$ is absent from
+$L_0$.\\
+\emph{Concession.} Yes: first-order logic can accommodate a primitive
+binary relation $G$.\\
+\emph{Distinction.} That $G$ can be \emph{added} does not show that it
+is \emph{definable from} $L_0$, nor that the resulting predicate has
+the semantic properties characteristic of grounding.\\
+\emph{Response.} The claim concerns recoverability from a specified
+extensional base, not the impossibility of adding vocabulary; the
+non-triviality check of \S\ref{sec:gate15} (item T6) is exactly the
+point on which the objection turns.
+
+\medskip
+\textbf{Objection 2 (``Modal logic reduces to FOL'').} The standard
+translation embeds modal logic in first-order logic; the modal residue
+is therefore not a genuine residue.\\
+\emph{Concession.} The standard translation is a genuine embedding for
+the model-theoretic content of modal logic.\\
+\emph{Distinction.} The standard translation preserves \emph{truth in
+a model}; it does not preserve explanatory direction. In particular,
+$\Box(Custom(b) \to \neg Just(b,c))$ (``it is necessary that \dots'')
+is not the grounding claim $G(\mathrm{custFact}(b),
+\mathrm{nonjustFact}(b,c))$ (``\dots because \dots'').\\
+\emph{Response.} The modal enrichment captures necessity, but not by
+itself the explanatory direction; \S\ref{sec:modal-enrichment} states
+this explicitly.
+
+\medskip
+\textbf{Objection 3 (``Adding $G$ to FOL solves the problem'').} If $G$
+can be added, the problem is solved; the paper's own E1 shows this.\\
+\emph{Concession.} E1 makes the relation nameable.\\
+\emph{Distinction.} Naming is not yet adequacy: a primitive $G$ is not
+a grounding theory. The constraints $\Gamma$ of E2 are required for the
+relation to be characterized as grounding, and $\Gamma$ is itself an
+interpretive choice (\S\ref{sec:e0e1e2}).\\
+\emph{Response.} The minimal-enlargement benchmark (E0/E1/E2) is
+precisely the experiment that separates ``added vocabulary'' from
+``added theory''.
+
+\medskip
+\textbf{Objection 4 (``A primitive grounding relation suffices'').}
+Grounding may simply be taken as primitive; no theory is needed.\\
+\emph{Concession.} A primitive relation can represent a formal
+relation.\\
+\emph{Distinction.} That the primitive relation \emph{is} grounding ---
+and not a merely similar relation --- is a further semantic claim.\\
+\emph{Response.} The present result does not deny the possibility of a
+primitive $G$; it denies that $G$ is determined by the $L_0$-reduct,
+and it records that characterizing $G$ as grounding requires the
+semantic constraints of E2.
+
+\medskip
+\textbf{Objection 5 (``The result is a semantic triviality'').} The
+result states only that a relation absent from the signature is not
+determined by that signature.\\
+\emph{Distinction.} Trivial lexical absence ($G \notin L_0$) is not
+semantic underdetermination ($\mathcal M_1\!\upharpoonright L_0 =
+\mathcal M_2\!\upharpoonright L_0$ while $G^{\mathcal M_1} \neq
+G^{\mathcal M_2}$). The latter is what
+Proposition~\ref{prop:underdet} establishes.\\
+\emph{Response.} The Gate 1.5 check (\S\ref{sec:gate15}, item T6) is
+designed to make this distinction enforceable rather than asserted.
+
+\medskip
+\textbf{Objection 6 (``The Stoic reconstruction is underdetermined'').}
+The Stoic material is encoded one way; a different encoding would give
+a different result, so the conclusion is an artefact of the choice.\\
+\emph{Concession.} The choice of encoding is interpretive and precedes
+the formal argument (\S\ref{sec:limits}).\\
+\emph{Distinction.} The relevant question is whether the negative
+result survives across more than one reasonable encoding.\\
+\emph{Response.} The encoding-sensitivity test of
+\S\ref{sec:encoding-sensitivity} ($L_0^A$ vs.\ $L_0^B$) is the honest
+procedure for answering this; its outcome (robust or sensitive) is
+reported rather than assumed (Gate 1.5, item T9).
+
+\medskip
+\textbf{Objection 7 (``The Hume reconstruction is controversial'').}
+The demotion reading (H2) is not the only interpretation of Hume's
+appeal to custom; the result therefore inherits a contested premise.\\
+\emph{Concession.} H1 (strong denial) and H3 (evaporation) are live
+alternatives in the literature.\\
+\emph{Distinction.} The formal result is invariant under the choice
+between the exclusion readings modulo the annotations of
+\S\ref{sec:hume-readings}; the four-level analysis of
+\S\ref{sec:hume-four-levels} is tagged by textual anchoring and
+standing.\\
+\emph{Response.} H2 is adopted as a methodological interpretation for
+reconstruction, not as a settled historical conclusion
+(\S\ref{sec:hume-psr}).
+
+\subsection{What the Result Does Not Show: A Negative-Result Matrix}
+\label{sec:negative-matrix}
+
+The replies above can be summarized in a matrix that pairs each claim
+with what is \emph{not} shown and what \emph{is} shown. The matrix
+doubles as an editorial guard: any sentence that asserts a ``not
+shown'' claim as a result is a scope violation.
+
+\begin{center}
+\begin{tabular}{@{}p{3.6cm}p{4.0cm}p{4.6cm}@{}}
+\toprule
+\textbf{Claim} & \textbf{What is not shown} & \textbf{What is shown}\\
+\midrule
+FOL fails & Intrinsic impossibility & $L_0$-relative underdetermination\\
+Grounding impossible in FOL & --- & Primitive extension possible\\
+$G$ represents grounding & Not by symbol alone & Requires semantic/theoretical constraints $\Gamma$\\
+Modal logic solves the explanatory problem & --- & Captures necessity, not explanatory direction\\
+Historical reading follows from the formal model & --- & Requires independent documentary evidence (\S\ref{sec:transmission})\\
+Richer language cannot represent the distinction & --- & Representation requires an additional semantic resource\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% =====================================================================
+\section{Conclusion}
+\label{sec:conclusion}
+
+This note has made three contributions.
+
+\begin{enumerate}
+\item \textbf{Technical limit.} A purely extensional first-order
+encoding of the justification conditions of Stoic katalepsis and Humean
+custom can represent the material content of both positions ---
+including the extensionally distinguishable formulations $T_1$ and
+$T_2$ (formerly (Exc1) and (Exc2)) --- but cannot fix their explanatory
+and modal residue: the ``because'' of the Humean exclusion
+(hyperintensional; grounding), the ``could not arise from what is
+not'' of the Stoic definition (modal), and the reliability of
+belief-forming processes. More precisely, the grounding atom
+$G(\mathrm{custFact}(b),\mathrm{nonjustFact}(b,c))$ is \emph{not
+implicitly definable} in the extensional signature $L_0$ over the
+admissible class of reconstructions $\mathcal K$
+(Proposition~\ref{prop:underdet}); the model-pair argument shows the
+limit is semantic: the intended reading is not a structural property of
+$L_0$-models over $\mathcal K$. A justification operator (Artemov \&
+Fitting 2019), a grounding connective (Fine 2012), or a modal operator
+is required. This is a singular encoding limit, not a universal failure
+claim.
+\item \textbf{Interpretive limit.} Hume's relation to the PSR is
+neither simple rejection nor silence: he relocates the causal maxim
+from the demonstrative level to the level of custom (T 1.3.3; SBN
+78--82; T 1.3.14.20; SBN 164--65; T 1.3.14.35; SBN 172). ``Hume never
+questions the PSR'' and ``Hume refutes the PSR'' are both false; the
+accurate formulation is a demotion, not a refutation. A significant
+interpretive counter-thesis --- defended notably by Della Rocca (2010)
+and, in a different register, by Pruss (2006) --- argues that this
+``demotion'' is a polite fiction: by reducing the PSR to a ``natural
+psychological regularity,'' Hume effectively evaporates its normative
+status, rendering the distinction between ``demotion'' and
+``rejection'' functionally moot. We maintain the demotion formulation
+as the more textually anchored reading, since Hume explicitly preserves
+the causal maxim as a psychological principle rather than arguing
+against its content; but the evaporation reading remains a strong
+interpretive alternative, and our claim should be read as a preference
+supported by the textual evidence, not as a settled result.
+\item \textbf{Historical limit.} The transmission of Stoic epistemology
+to early modern Europe runs through documented printed texts: Sextus
+(Latin 1562 Estienne; 1569 Hervet; Greek 1621), Diogenes Laertius
+(Traversari 1433; Latin \emph{editio princeps} Rome 1472; Venice 1475;
+Greek Basel 1533), Cicero's \emph{Academica} (in \emph{Opera omnia},
+Rome 1471 [Sweynheym \& Pannartz]; Aldine edition 1523; the fist
+analogy at \emph{Lucullus} 145 [Brittain 2006]), and the Neostoic
+reception (Lipsius 1604). Speculative medieval chains are not
+documented; indirect medieval knowledge via Cicero and Augustine is.
+Hume's own access ran through Cicero directly and Sextus through Bayle
+(Popkin 1952, 65--81).
+\end{enumerate}
+
+Formal tools are useful precisely when their limits are stated; the
+history of philosophy requires a documentary discipline that formal
+notation cannot supply; and both theses have systematic, independently
+developed analogues in the Buddhist, Xunzian and kaozheng traditions
+(\S\ref{sec:comparative}).
+
+% =====================================================================
+\section{Limits of This Note}
+\label{sec:limits}
+
+In the same spirit, the limits of this note are stated explicitly.
+
+\begin{enumerate}
+\item We make no claim of in-principle inexpressibility for any
+language richer than $L_0$: the negative result is about this
+signature, at this granularity, under extensional semantics, over the
+admissible class $\mathcal K$.
+\item We do not claim that justification logic, grounding, or modal
+logic ``solves'' the philosophical problems; we claim only that they
+make the relevant distinction representable.
+\item The comparative section (\S\ref{sec:comparative}) is analogical;
+none of its claims depends on a historical connection between the
+traditions compared, and none asserts one.
+\item All historical claims rest on the printed-text history summarized
+in \S\ref{sec:transmission}; where the secondary literature is the sole
+support (e.g., the medieval manuscript census), this is stated, and the
+sources are given.
+\item ``No evidence of continuous direct transmission''
+(\S\ref{sec:transmission}.5) is a negative-evidence claim; it is
+recorded as such and is not asserted to be a proof of non-transmission.
+\item Quotations follow the editions listed under ``Citations and
+Editions''; paragraph numbers for Hume follow the Norton \& Norton
+(2000) and Beauchamp (1999) editions, with Selby-Bigge/Nidditch (SBN)
+pagination given in every case.
+\item The formal encoding in \S\ref{sec:l0} is itself an interpretive
+choice. Different readings of the Stoic and Humean sources might yield
+different signatures or axioms; our result is relative to the encoding
+chosen, and the choice of encoding is a hermeneutic decision that
+precedes the formal argument.
+\item The richer frameworks of \S\ref{sec:richer-languages} ---
+grounding, justification logic, process reliabilism --- are invoked as
+contemporary regimentations of the relevant claims; no claim is made
+that Hume or the Stoics held these theories, and their vocabulary is
+applied in a deliberately anachronistic, analytic sense.
+\end{enumerate}
+
+% =====================================================================
+\section{Appendix: Definitions}
+\label{sec:appendix}
+
+\begin{center}
+\begin{longtable}{p{0.20\linewidth} p{0.45\linewidth} p{0.28\linewidth}}
+\hline
+\textbf{Term} & \textbf{Definition} & \textbf{Source} \\
+\hline
+katalepsis &
+Stoic ``cognition'': the grasping of a kataleptic impression; the
+criterion of truth for the Stoics &
+DL 7.46, 7.54 [Dorandi 2013]; translation ``cognition'': Long \&
+Sedley 1987, 40; SEP ``Stoicism'' \S3.7 \\
+\hline
+phantasia kataleptike &
+Kataleptic impression: ``arising from what is, stamped and impressed
+in accordance with what is, of such a kind as could not arise from
+what is not'' &
+DL 7.46 [Dorandi 2013]; M 7.248 [Bury 1935]; 7.402 [Bury 1935] \\
+\hline
+Criterion problem &
+The question what standard fixes which impressions are true; the
+regress of ``criterion of the criterion'' &
+Sextus M 7.24--29; PH I.164--169 (169 = diallelos); M 7.440--446 \\
+\hline
+Assent (sunkatathesis) &
+The Stoic act of approving an impression; the middle stage between
+impression and cognition &
+DL 7.46--54; Cicero, \emph{Acad.} 2.37--39, 2.66--67 \\
+\hline
+katalepsis / episteme &
+The Stoic hierarchy: katalepsis is the assent to a kataleptic
+impression (sunkatathesis kataleptikei phantasiai); episteme is
+secure cognition (katalepsis asphales) &
+M 7.151--152 [Bury 1935]; DL 7.47 [Dorandi 2013] \\
+\hline
+PSR &
+\emph{Principium rationis sufficientis}: Leibnizian term; every fact
+has a sufficient reason &
+Leibniz, \emph{Monadologie} \S32 (1714) \\
+\hline
+FOL &
+First-order logic: extensional, truth-functional model-theoretic
+semantics &
+Standard; \S\ref{sec:l0} \\
+\hline
+$L_0$ &
+The minimal many-sorted extensional language of the formal section:
+sorts $I$ (impressions), $\mathit{Cont}$ (contents), $B$ (cognitive
+episodes); predicates $\operatorname{Kat}$, $\operatorname{Rep}$,
+$\operatorname{Grasp}$, $\operatorname{Assent}$,
+$\operatorname{Bel}$, $\operatorname{Causal}$, $\operatorname{Custom}$,
+$\operatorname{Just}$, $\operatorname{StoicEp}$ &
+\S\ref{sec:l0} \\
+\hline
+$L^+$ &
+The enriched language extending $L_0$ with reified fact-objects
+$\mathit{Fact}\subseteq\mathit{Cont}$, the functions
+$\operatorname{custFact}:B\to\mathit{Fact}$ and
+$\operatorname{nonjustFact}:B\times\mathit{Cont}\to\mathit{Fact}$,
+the grounding relation $G\subseteq\mathit{Fact}\times\mathit{Fact}$,
+and the obtaining monad $\operatorname{Obtains}$ &
+\S\ref{sec:enrichment} \\
+\hline
+$\mathcal K$ &
+The class of admissible reconstructions: $L_0$-structures satisfying
+$M_0$ and the sortal and reification axioms $O_1$--$O_3$, with no
+bridge axiom and no structural principles on $G$& \S\ref{sec:admissible} \\
+\hline
+Grounding &
+Hyperintensional explanatory relation: $\phi < \psi$, ``$\phi$ grounds
+$\psi$''; in this paper regimented on reified fact-objects
+($G \subseteq \mathit{Fact}\times\mathit{Fact}$)& Fine 2012; Correia \& Schnieder 2012; \S\ref{sec:enrichment} \\
+\hline
+Implicit definability &
+A relation $R$ is implicitly definable in $L$ over a class $\mathcal K$
+iff any two admissible structures sharing an $L$-reduct agree on $R$& Beth 1953; \S\ref{sec:definability-qual} \\
+\hline
+Custom &
+Humean habit: determination of the mind to pass from one object to its
+usual attendant &
+T 1.3.14.20; E 5 \\
+\hline
+Minimal dependency skeleton &
+The Stoic reconstruction (S): $\forall b\,(\operatorname{StoicEp}(b)
+\to \exists i\exists c\,[\operatorname{Kat}(i)\land
+\operatorname{Rep}(i,c)\land \operatorname{Grasp}(b,i)\land
+\operatorname{Assent}(b,c)])$; deliberately excludes truth, guarantee
+and the modal clause &
+\S\ref{sec:stoic-skeleton} \\
+\hline
+Four Humean levels &
+Psychological-genetic / epistemic / normative exclusion / grounding;
+see \S\ref{sec:hume-four-levels} &
+\S\ref{sec:hume-four-levels} \\
+\hline
+catu\c{s}ko\d{t}i &
+Buddhist four-cornered negation: $P$, $\neg P$, both, neither &
+Priest 2010 \\
+\hline
+zhengming (\emph{zheng ming}) &
+Xunzian rectification of names: fixing correct usage by sensory
+agreement and convention &
+Xunzi 22.5, 22.9; Hansen 1992 \\
+\hline
+kaozheng (\emph{kao\-ju}) &
+Qing evidential scholarship: philological verification as method &
+Elman 1984, Introduction and ch.~5 \\
+\hline
+\end{longtable}
+\end{center}
+
+\section*{Citations and Editions}
+
+\begin{itemize}
+\item Hume, \emph{Treatise} (T): Norton \& Norton (eds.), Oxford
+University Press, 2000; paragraphs cited as T 1.3.3 etc.;
+Selby-Bigge/Nidditch (SBN) pagination in parentheses.
+\item Hume, \emph{Enquiry} (E): Beauchamp (ed.), Oxford University
+Press, 1999; paragraphs cited as E 7.6 etc.; SBN pagination in
+parentheses.
+\item Sextus Empiricus: Primary source editions: Latin translations
+--- \emph{Hypotyposes}, tr.\ Henri Estienne, 1562;
+\emph{Adversus Mathematicos}, tr.\ Gentian Hervet, 1569; Greek
+\emph{Opera}, Chou\"et, 1621. Modern translation used: Bury (tr.), Loeb Classical
+Library, 1933--49.
+\item Diogenes Laertius: Hicks (tr.), Loeb Classical Library, 1925;
+Dorandi (ed.), Cambridge University Press, 2013.
+\item Cicero, \emph{Academica}: Brittain (tr.), Hackett, 2006;
+\emph{Lucullus} paragraph numbers (Plasberg).
+\item Dai Zhen: \emph{Mengzi ziyi shuzheng} (\emph{Men\-gzi zi\-yi
+shu\-zheng}), in \emph{Dai Zhen wenji} (\emph{Dai Zhen wen\-ji}),
+Beijing: Zhonghua Shuju, 1980.
+\item von Arnim, H. (ed.). \emph{Stoicorum Veterum Fragmenta} (SVF),
+vol.~1. Leipzig: Teubner, 1905.
+\end{itemize}
+
+\section*{Provenance Table}
+
+\begin{center}
+\begin{longtable}{p{0.14\linewidth} p{0.48\linewidth} p{0.32\linewidth}}
+\hline
+\textbf{\S} & \textbf{Claim} & \textbf{Source} \\
+\hline
+Abstract &
+katalepsis = ``cognition'' (Long \& Sedley 1987, 40) &
+Long \& Sedley 1987, 40; cf.\ SEP ``Stoicism'' \S3.7 [P-01] \\
+\hline
+\S\ref{sec:stoic-modal-note} &
+Kataleptic definition with modal clause &
+DL 7.46 [Dorandi 2013]; M 7.248 [Bury 1935]; 7.402 [Bury 1935]
+[P-03] \\
+\hline
+\S\ref{sec:appendix} &
+katalepsis = sunkatathesis kataleptikei phantasiai; episteme =
+katalepsis asphales &
+M 7.151--152 [Bury 1935]; DL 7.47 [Dorandi 2013] [P-03b] \\
+\hline
+\S\ref{sec:prop1} &
+$T_2\land M_0\models T_1$; $T_1\land M_0\not\models T_2$; unique
+countermodel $(0,1,1,1)$ &
+Formal argument; Table A (16 Boolean rows) [P-04] \\
+\hline
+\S\ref{sec:prop1} &
+Bridge collapse: $T_1\land M_0\land B_0\models T_2$ (0 falsifiers) &
+Formal argument; machine-checked [P-04b] \\
+\hline
+\S\ref{sec:enrichment} &
+Grounding hyperintensional; regimented on reified fact-objects &
+Fine 2012; Correia \& Schnieder 2012; Schnieder 2011 [P-05] \\
+\hline
+\S\ref{sec:prop2} &
+Grounding atom not implicitly definable in $L_0$ over $\mathcal K$ &
+Formal argument; Lemma (reduct invariance); Beth 1953 [P-05b] \\
+\hline
+\S\ref{sec:definability-qual} &
+Explicit vs.\ implicit definability; Beth anchor& Beth 1953 [P-05c] \\
+\hline
+\S\ref{sec:richer-languages} &
+Process reliabilism &
+Goldman 1979, 1--23; 1986 [P-05] \\
+\hline
+\S\ref{sec:richer-languages} &
+Justification logic &
+Artemov 2008; Artemov \& Fitting 2019 [P-06] \\
+\hline
+\S\ref{sec:hume-psr} &
+T 1.3.3; SBN 78--82 &
+Hume, T (Norton \& Norton 2000); SBN [P-07] \\
+\hline
+\S\ref{sec:hume-psr} &
+T 1.3.14.20; SBN 164--65 &
+Hume, T [P-07] \\
+\hline
+\S\ref{sec:hume-psr} &
+T 1.3.14.35; SBN 172 &
+Hume, T [P-07] \\
+\hline
+\S\ref{sec:hume-psr} &
+E 7.6; SBN 63 &
+Hume, E (Beauchamp 1999) [P-07] \\
+\hline
+\S\ref{sec:hume-psr} &
+T 1.3.16.9; SBN 178--9 &
+Hume, T [P-07] \\
+\hline
+\S\ref{sec:hume-psr} &
+PSR literature &
+Garrett 1997; Beebee 2006; Millican 2002; Della Rocca 2010; Pruss
+2006 [P-07] \\
+\hline
+\S\ref{sec:transmission}.1 &
+1562 Estienne; 1569 Hervet; Greek 1621 &
+Floridi 2002; Popkin 1979, 18 [P-08] \\
+\hline
+\S\ref{sec:transmission}.1 &
+M 7.24--29; M 7.257--58 &
+Sextus, M (Bury, Loeb) [P-08] \\
+\hline
+\S\ref{sec:transmission}.2 &
+Traversari 1433; Rome 1472; Venice 1475; Basel 1533 &
+Dorandi 2013, 15; ISTC id00219000/id00220000 [P-09] \\
+\hline
+\S\ref{sec:transmission}.3 &
+Fist analogy at \emph{Lucullus} 145 [Brittain 2006] &
+Cicero, \emph{Acad.} (Brittain 2006); SVF 1.66 [P-10] \\
+\hline
+Abstract &
+Fist analogy = Long \& Sedley 41B &
+Long \& Sedley 1987, section 41B (= Cicero, \emph{Lucullus} 145)
+[P-01] \\
+\hline
+\S\ref{sec:transmission}.3 &
+Lipsius 1584; 1604 &
+SEP ``Justus Lipsius''; Lagr\'ee 1994 [P-10] \\
+\hline
+\S\ref{sec:transmission}.4 &
+Hume's library: Cicero yes, Sextus no &
+Norton \& Norton 1996; Fosl 1998 [P-11] \\
+\hline
+\S\ref{sec:transmission}.4 &
+Bayle-mediated access &
+Popkin 1952, 65--81; 1951 [P-11] \\
+\hline
+\S\ref{sec:transmission}.5 &
+Medieval discontinuity; nuances &
+Floridi 2002; Schmitt 1972; SEP ``Medieval Skepticism''; Nawar 2022
+[P-12] \\
+\hline
+\S\ref{sec:transmission}.5 &
+Locke--Herbert I.3.15--27 &
+Locke, \emph{Essay} (Nidditch 1975), 77--84 [P-12] \\
+\hline
+\S\ref{sec:transmission}.5 &
+British Empiricism myth &
+Norton 1981 [P-12] \\
+\hline
+\S\ref{sec:comparative} &
+Catu\c{s}ko\d{t}i formalized &
+Priest 2010; 2018 [P-13] \\
+\hline
+\S\ref{sec:comparative} &
+Xunzi 22.5; 22.9 &
+Xunzi (ctext; Knoblock tr.); Hansen 1992, ch.~9 [P-13] \\
+\hline
+\S\ref{sec:comparative} &
+Kaozheng &
+Elman 1984, Introduction and ch.~5; 2nd ed.\ 2001 [P-13] \\
+\hline
+\S\ref{sec:comparative} &
+Mohist/Gongsun Long &
+Graham 1978; 1989; Hansen 1983, 140--51 [P-13] \\
+\hline
+\S\ref{sec:limits} &
+Limits stated &
+This note [P-15] \\
+\hline
+\end{longtable}
+\end{center}
+
+\noindent SC-ID mapping (CHK-02). Every mandatory SC-ID corresponds to
+at least one section covered by the table: SC-001--004 $\to$
+Abstract/\"{O}zet/Keywords; SC-005 $\to$ \S\ref{sec:intro}; SC-006--012
+$\to$ \S\ref{sec:l0}--\S\ref{sec:richer-languages}; SC-013--014 $\to$
+\S\ref{sec:hume-psr}; SC-015--017 $\to$ \S\ref{sec:transmission};
+SC-018 $\to$ \S\ref{sec:comparative}; SC-019 $\to$ \S\ref{sec:conclusion};
+SC-020--022 $\to$ Provenance/Citations/References; SC-023 $\to$
+Appendix: Definitions; SC-024--030 $\to$ \S\ref{sec:transmission}.4,
+\S\ref{sec:transmission}.5, Appendix, \S\ref{sec:limits} (optional
+items are covered where adopted).
+
+\section*{Open Science Statement}
+
+The initial draft was generated in 2026 with the assistance of an AI
+language model used for formalization and bibliography retrieval. All
+models, ISTC numbers, SBN citations, and Greek transcriptions were
+manually verified against primary sources and critical editions.
+The reproducibility package accompanying this manuscript (the formal
+model-check script, its frozen output, and the manifest) records the
+verification artefacts separately from the mathematical argument.
+The human author is responsible for the final content.
+
+\section*{References}
+
+\begin{itemize}
+\item Artemov, S. (2008). ``The Logic of Justification.'' \emph{Review
+of Symbolic Logic} 1(4): 477--513.
+\item Artemov, S. \& Fitting, M. (2019). \emph{Justification Logic:
+Reasoning with Reasons}. Cambridge University Press.
+\item Beauchamp, T.L. (ed.) (1999). \emph{An Enquiry Concerning Human
+Understanding}, by David Hume. Oxford University Press.
+\item Beebee, H. (2006). \emph{Hume on Causation}. Routledge.
+\item Beth, E.W. (1953). ``On Padoa's Method in the Theory of
+Definition.'' \emph{Indagationes Mathematicae} 15: 330--339
+(also \emph{Proc. Kon. Ned. Akad. Wetensch.} A56: 330--339).
+\item Bobzien, S. (2003). ``Stoic Logic.'' In B.~Inwood (ed.), \emph{The
+Cambridge Companion to the Stoics}, 85--123. Cambridge University
+Press.
+\item Brittain, C. (tr.) (2006). \emph{Cicero: On Academic Scepticism}.
+Hackett.
+\item Bury, R.G. (tr.) (1933--49). \emph{Sextus Empiricus}, 4 vols.
+Loeb Classical Library. (Citations by volume year: ``Bury 1935'' = vol.~II,
+\emph{Against the Logicians}, M 7--8.)
+\item Cicero. \emph{Academica}. Brittain 2006; \emph{Lucullus} 145
+(fist analogy).
+\item Correia, F. \& Schnieder, B. (eds.) (2012). \emph{Metaphysical
+Grounding: Understanding the Structure of Reality}. Cambridge
+University Press.
+\item Della Rocca, M. (2010). ``PSR.'' \emph{Philosophers' Imprint}
+10(7).
+\item Diogenes Laertius. \emph{Vitae Philosophorum} VII. Hicks 1925;
+Dorandi 2013.
+\item Dorandi, T. (ed.) (2013). \emph{Diogenes Laertius: Lives of
+Eminent Philosophers}. Cambridge University Press.
+\item Elman, B.A. (1984). \emph{From Philosophy to Philology:
+Intellectual and Social Aspects of Change in Late Imperial China}.
+Council on East Asian Studies, Harvard University. (2nd expanded ed.,
+UCLA Asian Pacific Monograph Series, 2001.)
+\item Fine, K. (2012). ``Guide to Ground.'' In Correia \& Schnieder
+(eds.), 37--80.
+\item Floridi, L. (2002). \emph{Sextus Empiricus: The Transmission and
+Recovery of Pyrrhonism}. American Classical Studies 46. Oxford
+University Press.
+\item Fosl, P.S. (1998). ``Review of Norton \& Norton, \emph{The David
+Hume Library}.'' \emph{ECSSS Newsletter} 11: 35--36.
+\item Frede, M. (1983). ``Stoics and Skeptics on Clear and Distinct
+Impressions.'' In M.~Burnyeat (ed.), \emph{The Skeptical Tradition},
+65--93. University of California Press.
+\item Garrett, D. (1997). \emph{Cognition and Commitment in Hume's
+Philosophy}. Oxford University Press.
+\item Goldman, A.I. (1979). ``What Is Justified Belief?'' In G.~Pappas
+(ed.), \emph{Justification and Knowledge}, 1--23. D.~Reidel.
+\item Goldman, A.I. (1986). \emph{Epistemology and Cognition}. Harvard
+University Press.
+\item Graham, A.C. (1978). \emph{Later Mohist Logic, Ethics and
+Science}. Chinese University Press, Hong Kong.
+\item Graham, A.C. (1989). \emph{Disputers of the Tao: Philosophical
+Argument in Ancient China}. Open Court.
+\item Hansen, C. (1983). \emph{Language and Logic in Ancient China}.
+University of Michigan Press.
+\item Hansen, C. (1992). \emph{A Daoist Theory of Chinese Thought: A
+Philosophical Interpretation}. Oxford University Press.
+\item Herbert of Cherbury. (1624). \emph{De Veritate}. Paris.
+\item Hicks, R.D. (tr.) (1925). \emph{Diogenes Laertius: Lives of
+Eminent Philosophers}, 2 vols. Loeb Classical Library.
+\item Hume, D. (1739--40). \emph{A Treatise of Human Nature}. Norton \&
+Norton (eds.), Oxford University Press, 2000.
+\item Hume, D. (1748). \emph{An Enquiry Concerning Human Understanding}.
+Beauchamp (ed.), Oxford University Press, 1999.
+\item Hume, D. (1975). \emph{Enquiries}. Selby-Bigge \& Nidditch
+(eds.), 3rd ed. Clarendon Press. (SBN pagination.)
+\item Hunt, T.J. (1998). \emph{A Textual History of Cicero's Academici
+Libri}. Brill.
+\item Kjellberg, P. (1996). ``Sextus Empiricus, Zhuangzi, and Xunzi on
+`Why Be Skeptical?'.'' In P.~Kjellberg \& P.J.~Ivanhoe (eds.),
+\emph{Essays on Skepticism, Relativism, and Ethics in the Zhuangzi}.
+SUNY Press.
+\item Lagr\'ee, J. (1994). \emph{Juste Lipse et la restauration du
+sto\"icisme}. Vrin.
+\item Leibniz, G.W. (1714). \emph{Monadologie} \S32.
+\item Lipsius, J. (1584). \emph{De Constantia}. Antwerp: Plantin.
+\item Lipsius, J. (1604). \emph{Manuductionis ad Stoicam philosophiam
+libri tres}; \emph{Physiologiae Stoicorum libri tres}. Antwerp:
+Plantin-Moretus.
+\item Locke, J. (1689). \emph{An Essay Concerning Human Understanding}
+I.3.15--27. Nidditch (ed.), Clarendon Press, 1975.
+\item Long, A.A. \& Sedley, D.N. (1987). \emph{The Hellenistic
+Philosophers}, vol.~1. Cambridge University Press. Translation
+``cognition'' for katalepsis at section 40; fist analogy at section
+41B.
+\item Millican, P. (2002). ``The Context, Aims, and Structure of Hume's
+First Enquiry.'' In P.~Millican (ed.), \emph{Reading Hume on Human
+Understanding}, 27--65. Clarendon Press.
+\item Nawar, T. (2022). ``Clear and Distinct Perception in the Stoics,
+Augustine, and William of Ockham.'' \emph{Aristotelian Society
+Supplementary Volume} 96(1): 185--207.
+\item Nidditch, P.H. (ed.) (1975). \emph{An Essay Concerning Human
+Understanding}, by John Locke. Clarendon Press.
+\item Norton, D.F. (1981). ``The Myth of `British Empiricism'.''
+\emph{History of European Ideas} 1(4): 331--344.
+\item Norton, D.F. \& Norton, M.J. (eds.) (1996). \emph{The David Hume
+Library}. Edinburgh Bibliographical Society.
+\item Popkin, R.H. (1951). ``David Hume: His Pyrrhonism and His
+Critique of Pyrrhonism.'' \emph{Philosophical Quarterly} 1(5):
+385--407.
+\item Popkin, R.H. (1952). ``David Hume and the Pyrrhonian
+Controversy.'' \emph{Review of Metaphysics} 6(1): 65--81. (Repr.\ in
+\emph{The High Road to Pyrrhonism}, 133--147.)
+\item Popkin, R.H. (1979). \emph{The History of Scepticism from Erasmus
+to Spinoza}. Rev.\ ed. University of California Press.
+\item Priest, G. (2010). ``The Logic of the Catu\c{s}ko\d{t}i.''
+\emph{Comparative Philosophy} 1(2): 24--54.
+\item Priest, G. (2018). \emph{The Fifth Corner of Four: An Essay
+on Buddhist Metaphysics and the Catu\c{s}ko\d{t}i}. Oxford University Press.
+\item Pruss, A.R. (2006). \emph{The Principle of Sufficient Reason: A
+Reassessment}. Cambridge University Press.
+\item Ro\v{s}ker, J. ``Epistemology in Chinese Philosophy.'' Stanford
+Encyclopedia of Philosophy (accessed 2026).
+\item Baltzly, D., Durand, M. \& Shogry, S. (2023). ``Stoicism.''
+Stanford Encyclopedia of Philosophy (accessed 2026).
+\item Bolyard, C. (2009; rev. 2025). ``Medieval Skepticism.'' Stanford
+Encyclopedia of Philosophy (accessed 2026).
+\item Papy, J. (2004; rev. 2019). ``Justus Lipsius.'' Stanford
+Encyclopedia of Philosophy (accessed 2026).
+\item Van Norden, B. ``Wang Yangming.'' Stanford Encyclopedia of
+Philosophy (accessed 2026).
+\item du Vair, G. (1594). \emph{De la constance et consolation \`es
+calamit\'es publiques}. Paris.
+\item Schmitt, C.B. (1972). \emph{Cicero Scepticus: A Study of the
+Influence of the Academica in the Renaissance}. Martinus Nijhoff.
+\item Schmitt, C.B. (1983). ``The Rediscovery of Ancient Skepticism in
+Modern Times.'' In M.~Burnyeat (ed.), \emph{The Skeptical Tradition},
+225--251. University of California Press.
+\item Schnieder, B. (2011). ``A Logic for `Because'.'' \emph{Review of
+Symbolic Logic} 4(3): 445--465. DOI:
+10.1017/S1755020311000104.
+\item Sextus Empiricus. (1562). \emph{Pyrrhoniae Hypotyposes}, tr.\
+Henri Estienne. Geneva.
+\item Sextus Empiricus. (1569). \emph{Adversus Mathematicos}, tr.\
+Gentian Hervet. Paris: Martin Juvenis; Antwerp: Plantin.
+\item Sextus Empiricus. (1621). \emph{Opera}, Greek ed.\ Pierre \&
+Jacques Chou\"et. Geneva.
+\item Sextus Empiricus. \emph{Adversus Mathematicos} VII;
+\emph{Pyrrhoniae Hypotyposes} I. Bury (Loeb).
+\item Tillemans, T.J.F. (1999). \emph{Scripture, Logic, Language:
+Essays on Dharmak\={i}rti and His Tibetan Successors}. Wisdom
+Publications.
+\item Xunzi. \emph{Xunzi} 22, ``On the Rectification of Names''
+(ctext.org; Knoblock tr., Stanford University Press, 1988--94).
+\end{itemize}
+
+\end{document}

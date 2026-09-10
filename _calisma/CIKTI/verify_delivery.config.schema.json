@@ -7,6 +7,7 @@
   "required": [
     "budget_usd",
     "budget_method",
+    "duration_pct_warn",
     "budget_ratios",
     "expected_pages",
     "expected_refs",
@@ -26,6 +27,10 @@
       "type": "number",
       "exclusiveMinimum": 0,
       "description": "Budget ceiling in USD. Estimated production cost must stay at or below this."
+    },
+    "duration_pct_warn": {
+      "type": "number",
+      "exclusiveMinimum": 0
     },
     "budget_method": {
       "type": "string",

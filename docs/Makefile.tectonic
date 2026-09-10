@@ -1,0 +1,34 @@
+# Reproducible PDF build example for this repository.
+# Usage:
+#   make -f docs/Makefile.tectonic pdf
+#   make -f docs/Makefile.tectonic check
+#
+# SOURCE_DATE_EPOCH is explicit so the build does not depend on wall-clock time.
+# Override SOURCE_DATE_EPOCH=... to reproduce a historical commit.
+
+SHELL := /bin/sh
+ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/..)
+PACKAGE := $(ROOT)/_calisma/V5_ICERIK/TESLIM_V5_FINAL_2026-08-17/stoic_hume_package/Stoic_Hume_Formal_Section_2026-08-17
+SOURCE := $(PACKAGE)/ingiliz_empirizmi_v3.tex
+OUTPUT := $(PACKAGE)/ingiliz_empirizmi_v3.pdf
+BUILD_DIR := $(ROOT)/.build/tectonic
+SOURCE_DATE_EPOCH ?= $(shell git -C "$(ROOT)" log -1 --format=%ct 2>/dev/null || printf '0')
+TECTONIC ?= tectonic
+
+.PHONY: all pdf check clean
+
+all: pdf
+
+pdf:
+	@command -v "$(TECTONIC)" >/dev/null 2>&1 || { echo "ERROR: tectonic not found" >&2; exit 2; }
+	@test -f "$(SOURCE)" || { echo "ERROR: TeX source not found: $(SOURCE)" >&2; exit 1; }
+	@mkdir -p "$(BUILD_DIR)"
+	SOURCE_DATE_EPOCH="$(SOURCE_DATE_EPOCH)" "$(TECTONIC)" --keep-logs --outdir "$(BUILD_DIR)" "$(SOURCE)"
+	@cp "$(BUILD_DIR)/$$(basename "$(OUTPUT)")" "$(OUTPUT)"
+	@printf 'built=%s\nsource_date_epoch=%s\n' "$(OUTPUT)" "$(SOURCE_DATE_EPOCH)"
+
+check: pdf
+	@sha256sum "$(OUTPUT)"
+
+clean:
+	rm -rf "$(BUILD_DIR)"

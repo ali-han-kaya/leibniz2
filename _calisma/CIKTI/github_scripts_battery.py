@@ -30,6 +30,32 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 HARNESS = os.path.join(HERE, "github_scripts_selftest.js")
 
+# launchd GUI agent minimal PATH fallback'leri — TEK KAYNAK buradadır;
+# verify_delivery.py bunları import eder (iki kopya arasında drift olamaz).
+NODE_KNOWN_PATHS = ("/opt/homebrew/bin/node", "/usr/local/bin/node",
+                   "/home/linuxbrew/.linuxbrew/bin/node")
+PDFINFO_KNOWN_PATHS = ("/opt/homebrew/bin/pdfinfo", "/usr/local/bin/pdfinfo")
+
+
+def find_launchd_tool(tool, known_paths, path_env=None):
+    """launchd minimal PATH fallback: PATH taraması birincil, bilinen
+    konumlar ikincil (shutil.which davranışı korunur). Adayın basename'i
+    istenen aracın adıyla eşleşmeli; çalıştırılabilir olmalı. Hiçbiri
+    yoksa None (fail-closed — çağıran karar verir).
+    """
+    candidates = []
+    for d in (path_env or os.environ.get("PATH", "")).split(os.pathsep):
+        if d:
+            candidates.append(os.path.join(d, tool))
+    for p in known_paths:
+        candidates.append(p)
+    for cand in candidates:
+        if os.path.basename(cand) != tool:
+            continue
+        if os.path.isfile(cand) and os.access(cand, os.X_OK):
+            return cand
+    return None
+
 MARKER_STATUS = "<!-- stoic-hume-v5-pr-status -->"
 MARKER_MANIFEST = "<!-- stoic-hume-v5-reproducibility-manifest -->"
 MARKER_CFGDIFF = "<!-- stoic-hume-v5-config-diff -->"
@@ -574,13 +600,13 @@ SCENARIOS = [
         },
     ),
     (
-        "commit_msg_gate: sidecar yok → PASS (boş)",
+        "commit_msg_gate: sidecar yok → FAIL (fail-closed)",
         "commit_msg_gate.js",
         {},  # logs/commit_msg_findings.json yok
         None, [], [],
         {
-            "ok": True, "set_failed": False,
-            "console_any": ["commit_msg_findings.json bulunamadı"],
+            "ok": True, "set_failed": True,
+            "console_any": ["commit_msg_findings.json yok"],
         },
     ),
     (
@@ -854,7 +880,7 @@ SCENARIOS = [
         "config_diff: fark var + yeni yorum",
         "config_diff_comment.js",
         {
-            "reproducibility/config/config-diff.json": json.dumps({
+            "reproducibility/config-diff.json": json.dumps({
                 "differences": [{
                     "field": "expected_pages", "raw": 33, "effective": 34,
                     "reason": "paket yeniden üretildi"}]}),
@@ -873,7 +899,7 @@ SCENARIOS = [
         "config_diff: mevcut yorum güncelle",
         "config_diff_comment.js",
         {
-            "reproducibility/config/config-diff.json": json.dumps({
+            "reproducibility/config-diff.json": json.dumps({
                 "differences": [{"field": "budget_usd", "raw": 30,
                                  "effective": 35, "reason": "limit artırıldı"}]}),
         },
@@ -889,7 +915,7 @@ SCENARIOS = [
     (
         "config_diff: fark yok + bayat yorum varsa SİLİNİR",
         "config_diff_comment.js",
-        {"reproducibility/config/config-diff.json":
+        {"reproducibility/config-diff.json":
             json.dumps({"differences": []})},
         None, [],
         [{"id": 888, "body": "bayat " + MARKER_CFGDIFF}],
@@ -932,7 +958,7 @@ SCENARIOS = [
             "reproducibility/manifest.txt": "github_run_id: 42\n"
                                              "github_sha: abc\n",
             "k10_verdict.txt": "PASS",
-            "reproducibility/config/config-diff.json": json.dumps({
+            "reproducibility/config-diff.json": json.dumps({
                 "differences": [{"field": "budget_usd", "raw": 30,
                                  "effective": 25, "reason": "cli_override"}]}),
             "reproducibility/cli_overrides_version.json": json.dumps({
@@ -1005,7 +1031,7 @@ SCENARIOS = [
         {
             "reproducibility/manifest.txt": "github_run_id: 222\n",
             "k10_verdict.txt": "PASS",
-            "reproducibility/config/config-diff.json": json.dumps({
+            "reproducibility/config-diff.json": json.dumps({
                 "differences": [{"field": "expected_pages", "raw": 33,
                                  "effective": 34, "reason": "paket yeniden üretildi"}]}),
             "reproducibility/cli_overrides_version.json": json.dumps({
