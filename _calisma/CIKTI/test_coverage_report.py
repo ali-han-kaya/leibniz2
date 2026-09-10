@@ -471,6 +471,7 @@ def main(argv=None):
         "test_all_hooks_smoke.py",       # standalone smoke: tum hook'lari kosar
         "test_budget_scan.js",          # JS-only, ayrı Node hook'unda
         "test_dashboard_playwright_smoke.py",  # standalone Playwright smoke (Chromium ~10s) — CI'da ayrı job
+        "test_refs_trend_badge_node.js", # standalone JS smoke (Node-only assertion), dokümante bilinçlileşti
     })
     if args.check:
         gaps = [g for g in report["gaps"]["not_covered_by_any_hook"]
@@ -481,7 +482,7 @@ def main(argv=None):
                 print(f"  - {g}", file=sys.stderr)
             print("Add them to HOOK_COVERAGE in test_coverage_report.py or to a hook in .pre-commit-config.yaml", file=sys.stderr)
             return 1
-        print("PASS: all test files covered by at least one pre-commit hook", file=sys.stderr)
+        print("PASS: all non-exempt test files covered by at least one pre-commit hook", file=sys.stderr)
         return 0
 
     return 0

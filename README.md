@@ -597,6 +597,8 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-10 | test | (verify) meta-guard github_scripts gates against fail-open | [`d9271b5`](https://github.com/ali-han-kaya/leibniz2/commit/d9271b5) |
 | 2026-09-10 | docs | (changelog) resync table through gate meta-guard | [`9b60d7a`](https://github.com/ali-han-kaya/leibniz2/commit/9b60d7a) |
 | 2026-09-10 | docs | (changelog) resync table through meta-guard unit | [`f063363`](https://github.com/ali-han-kaya/leibniz2/commit/f063363) |
+| 2026-09-10 | test | (verify) add CI full-discover drift guard + register 15 untracked tests | [`224dcd7`](https://github.com/ali-han-kaya/leibniz2/commit/224dcd7) |
+| 2026-09-10 | docs | archive rc-review worktree brief and resync changelog | [`08d3c25`](https://github.com/ali-han-kaya/leibniz2/commit/08d3c25) |
 
 ### Regresyon notları
 

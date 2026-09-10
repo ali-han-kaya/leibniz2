@@ -293,6 +293,131 @@ class TestCheckRequiredPresence(unittest.TestCase):
                          [("python3-shell", "doc"), ("python3-shell", "live")])
 
 
+class TestSkippedUpstreamVsDrift(unittest.TestCase):
+    """Yeni kapı: 'job skipped because upstream failed' ≠ true doc↔live drift.
+
+    Kırmızı verify → `needs: [verify]` downstream job'lar skipped, artifact'ları
+    canlıda yok. Bu advisory audit'i double-punish etmemeli — eksik artifact
+    upstream-skipped olarak sınıflanmalı ve verdict PASS kalmalı.
+    Gerçek drift (producer success iken eksik) hâlâ FAIL olmalı.
+    Test-first: önce kırmızı, sonra yeşil.
+    """
+
+    def test_classify_skipped_upstream_not_drift(self):
+        # reports, config-drift, reproducibility → producer job skipped →
+        # missing upstream_skipped'e gider, true missing boş kalır.
+        doc = ["unit-tests", "reports", "config-drift", "reproducibility", "python3-shell"]
+        live = ["unit-tests", "python3-shell"]
+        conclusions = {
+            "Delivery verification — K1-K19 (single entry point)": "failure",
+            "Static markdown reports (incl. pre-commit findings)": "skipped",
+            "Config drift check (gen_config + diff-on-drift)": "skipped",
+            "Reproducibility bundle": "skipped",
+        }
+        res = als.classify_artifact_drift(doc, live, conclusions)
+        self.assertEqual(res["missing"], [])
+        self.assertCountEqual(res["upstream_skipped"], ["reports", "config-drift", "reproducibility"])
+        self.assertTrue(res["ok"])
+
+    def test_true_drift_still_fails_when_producer_succeeded(self):
+        # Aynı eksik artifact ama producer success → true drift, FAIL.
+        doc = ["unit-tests", "reports"]
+        live = ["unit-tests"]
+        conclusions = {
+            "Delivery verification — K1-K19 (single entry point)": "success",
+            "Static markdown reports (incl. pre-commit findings)": "success",
+        }
+        res = als.classify_artifact_drift(doc, live, conclusions)
+        self.assertEqual(res["missing"], ["reports"])
+        self.assertEqual(res["upstream_skipped"], [])
+        self.assertFalse(res["ok"])
+
+    def test_extra_still_fails_even_with_skipped(self):
+        doc = ["unit-tests"]
+        live = ["unit-tests", "yarin-yeni-artifact"]
+        conclusions = {
+            "Delivery verification — K1-K19 (single entry point)": "failure",
+        }
+        res = als.classify_artifact_drift(doc, live, conclusions)
+        self.assertEqual(res["extra"], ["yarin-yeni-artifact"])
+        self.assertFalse(res["ok"])
+
+    def test_main_does_not_double_punish_red_verify(self):
+        # Uçtan uca: kırmızı verify, downstream skipped → advisory PASS
+        # python3-shell doc'ta olmalı yoksa pinned kapı zaten FAIL (ayrı test).
+        doc_text = (
+            "**Job kategorileri (3 job):**\n"
+            "| 1 | A | Delivery verification — K1-K19 (single entry point) | ✅ |\n"
+            "| 2 | A | Static markdown reports (incl. pre-commit findings) | ✅ |\n"
+            "| 3 | A | Reproducibility bundle | ✅ |\n"
+            "\n**Artifact listesi (4):**\n"
+            "- `reports`\n"
+            "- `reproducibility`\n"
+            "- `unit-tests`\n"
+            "- `python3-shell`\n"
+        )
+        doc_artifacts = als.parse_doc_artifacts(doc_text)
+        live_artifacts = ["unit-tests", "python3-shell"]  # downstream eksik, pinned canlıda var
+        live_jobs = ["Delivery verification — K1-K19 (single entry point)",
+                     "Static markdown reports (incl. pre-commit findings)",
+                     "Reproducibility bundle", als.SELF_JOB]
+        live_with_self = list(dict.fromkeys(live_artifacts + [als.SELF_ARTIFACT]))
+        conclusions = {
+            "Delivery verification — K1-K19 (single entry point)": "failure",
+            "Static markdown reports (incl. pre-commit findings)": "skipped",
+            "Reproducibility bundle": "skipped",
+        }
+        with tempfile.TemporaryDirectory() as td:
+            doc = pathlib.Path(td) / "PUBLISH_SCENARIO.md"
+            doc.write_text(doc_text, encoding="utf-8")
+            buf = io.StringIO()
+            with mock.patch.object(als, "get_repo", return_value="o/r"), \
+                 mock.patch.object(als, "get_latest_run", return_value={"databaseId": 1, "headSha": "abc"}), \
+                 mock.patch.object(als, "get_run_jobs", return_value=live_jobs), \
+                 mock.patch.object(als, "get_run_job_conclusions", return_value=conclusions), \
+                 mock.patch.object(als, "get_run_artifacts", return_value=live_with_self), \
+                 mock.patch.object(sys, "stdout", new=buf):
+                rc = als.main(["--doc", str(doc), "--json"])
+            d = json.loads(buf.getvalue())
+        self.assertEqual(rc, 0, f"advisory should not double-fail on skipped upstream: {d}")
+        self.assertEqual(d["verdict"], "PASS")
+        self.assertEqual(d["artifacts"]["missing"], [])
+        self.assertCountEqual(d["artifacts"]["upstream_skipped"], ["reports", "reproducibility"])
+
+    def test_main_true_drift_still_fails_via_main(self):
+        doc_text = (
+            "**Job kategorileri (2 job):**\n"
+            "| 1 | A | Delivery verification — K1-K19 (single entry point) | ✅ |\n"
+            "| 2 | A | Static markdown reports (incl. pre-commit findings) | ✅ |\n"
+            "\n**Artifact listesi (2):**\n"
+            "- `reports`\n"
+            "- `unit-tests`\n"
+        )
+        live_artifacts = ["unit-tests"]
+        live_jobs = ["Delivery verification — K1-K19 (single entry point)",
+                     "Static markdown reports (incl. pre-commit findings)", als.SELF_JOB]
+        live_with_self = list(dict.fromkeys(live_artifacts + [als.SELF_ARTIFACT]))
+        conclusions = {
+            "Delivery verification — K1-K19 (single entry point)": "success",
+            "Static markdown reports (incl. pre-commit findings)": "success",
+        }
+        with tempfile.TemporaryDirectory() as td:
+            doc = pathlib.Path(td) / "PUBLISH_SCENARIO.md"
+            doc.write_text(doc_text, encoding="utf-8")
+            buf = io.StringIO()
+            with mock.patch.object(als, "get_repo", return_value="o/r"), \
+                 mock.patch.object(als, "get_latest_run", return_value={"databaseId": 1, "headSha": "abc"}), \
+                 mock.patch.object(als, "get_run_jobs", return_value=live_jobs), \
+                 mock.patch.object(als, "get_run_job_conclusions", return_value=conclusions), \
+                 mock.patch.object(als, "get_run_artifacts", return_value=live_with_self), \
+                 mock.patch.object(sys, "stdout", new=buf):
+                rc = als.main(["--doc", str(doc), "--json"])
+            d = json.loads(buf.getvalue())
+        self.assertEqual(rc, 1)
+        self.assertEqual(d["verdict"], "FAIL")
+        self.assertEqual(d["artifacts"]["missing"], ["reports"])
+
+
 class TestMainFailClosed(unittest.TestCase):
     def setUp(self):
         self.tmp = pathlib.Path(__file__).parent / ".audit_tmp_doc.md"

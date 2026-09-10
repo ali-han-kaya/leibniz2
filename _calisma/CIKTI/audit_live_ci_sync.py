@@ -17,6 +17,13 @@ Fail-closed: herhangi bir eksik/fazla → exit 1 (JSON'da verdict: FAIL).
 Ayrıca `REQUIRED_ARTIFACTS` (sabitlenmiş artifact'ler) doc'ta VE canlıda
 mevcut olmalı — `python3-shell` her run'da beklenir (varlık/yokluk kapısı).
 
+ARTIFACT ayrıcalığı (advisory, upstream-skipped): `needs: [verify]` ile
+verify'e bağlı bir job `skipped` olduğunda (kırmızı verify → downstream
+atlandı) onun artifact'ları canlıda yok diye drift sayılmaz —
+`upstream_skipped` olarak raporlanır ve verdict'i bozmaz. Bu, kırmızı verify
+çift cezalandırmasını (verify + advisory audit) önler. Producer'ı success
+iken eksik artifact hâlâ gerçek drift'tir (FAIL).
+
 PR-only job'lar push run'ında `skipped` görünür ama YİNE de job listesinde
 yer alır — bu yüzden isim eşleşmesi event'ten bağımsız çalışır.
 
@@ -161,6 +168,11 @@ def parse_doc_artifacts(doc_text):
     return artifacts
 
 
+# ── Artifact → producer job (ARTIFACT_JOBS) ─────────────────────────────
+# gen_repro_manifest.ARTIFACT_JOBS: artifact → üreten job id. Workflow
+# job id → job name + conclusion ile birleşince eksik artifact'ın
+# upstream-skipped mi yoksa gerçek drift mi olduğu sınıflanır.
+
 # ── Canlı GitHub ─────────────────────────────────────────────────────────
 def run_gh(args):
     r = subprocess.run(args, capture_output=True, text=True)
@@ -198,6 +210,23 @@ def get_run_artifacts(repo, run_id):
     return [n for n in (line.strip() for line in out.splitlines()) if n]
 
 
+def get_run_job_conclusions(repo, run_id):
+    """Run'daki job ad → conclusion eşlemesi (skipped vs failure ayrımı için).
+
+    `skipped` (needs: yüzünden atlandı) ile `failure` ayrımı, eksik
+    artifact'ın upstream-skipped mi yoksa gerçek drift mi olduğunu
+    sınıflamak için gerekir — kırmızı verify → downstream skipped
+    artifact'ları advisory audit'i double-punish etmemeli.
+    """
+    out = run_gh(["gh", "run", "view", str(run_id), "--repo", repo,
+                  "--json", "jobs", "-q", ".jobs"])
+    try:
+        jobs = json.loads(out or "[]")
+    except json.JSONDecodeError:
+        jobs = []
+    return {j.get("name"): j.get("conclusion") for j in jobs if j.get("name")}
+
+
 # ── Karşılaştırma ────────────────────────────────────────────────────────
 def compare(expected, live, label):
     exp = set(expected)
@@ -209,6 +238,103 @@ def compare(expected, live, label):
         "ok": not missing and not extra,
         "missing": missing,
         "extra": extra,
+    }
+
+
+# ── Artifact drift sınıflaması (skipped upstream vs gerçek drift) ───────────
+_ARTIFACT_PRODUCER_CACHE = None
+
+
+def _workflow_job_names():
+    """verify.yml job id → job name eşlemesi (TEK KAYNAK: workflow)."""
+    wf_path = REPO_ROOT / ".github" / "workflows" / "verify.yml"
+    try:
+        import yaml  # type: ignore
+        data = yaml.safe_load(wf_path.read_text(encoding="utf-8"))
+        jobs = (data or {}).get("jobs") or {}
+        return {jid: (j.get("name") if isinstance(j, dict) else str(j))
+                for jid, j in jobs.items()}
+    except Exception:
+        # Fallback: basit regex (yaml yoksa/offline)
+        text = wf_path.read_text(encoding="utf-8")
+        id_pat = re.compile(r"^  ([a-z0-9-]+):\s*$", re.M)
+        name_pat = re.compile(r"^\s+name:\s*(.+)$", re.M)
+        ids = list(id_pat.finditer(text))
+        out = {}
+        for idx, m in enumerate(ids):
+            jid = m.group(1)
+            seg_start = m.end()
+            seg_end = ids[idx + 1].start() if idx + 1 < len(ids) else len(text)
+            seg = text[seg_start:seg_end]
+            nm = name_pat.search(seg)
+            if nm:
+                out[jid] = nm.group(1).strip().strip('"').strip("'")
+        return out
+
+
+def _artifact_producer_map():
+    """Artifact → üreten job name eşlemesi (ARTIFACT_JOBS + workflow)."""
+    global _ARTIFACT_PRODUCER_CACHE
+    if _ARTIFACT_PRODUCER_CACHE is not None:
+        return _ARTIFACT_PRODUCER_CACHE
+    try:
+        from gen_repro_manifest import ARTIFACT_JOBS as AJ  # noqa: WPS433
+    except Exception:
+        AJ = {}
+    job_names = _workflow_job_names()
+    m = {}
+    for art, jid in AJ.items():
+        name = job_names.get(jid)
+        if name:
+            m[art] = name
+    # ARTIFACT_JOBS'de olmayan ama doc'ta olabilen artifact'lar için
+    # job id == artifact id fallback (örn. pattern-drift, preview-reload-smoke)
+    for art in ["pattern-drift", "preview-reload-smoke", "audit-live-ci",
+                "changelog-drift", "ci-simulate"]:
+        if art not in m and art in job_names:
+            m[art] = job_names[art]
+        elif art not in m:
+            # job id tireli, name ayrı — dene: artifact → job id varsayımı
+            for jid, name in job_names.items():
+                if art == jid or art.replace("-", "_") == jid.replace("-", "_"):
+                    m[art] = name
+                    break
+    _ARTIFACT_PRODUCER_CACHE = m
+    return m
+
+
+def classify_artifact_drift(expected, live, conclusions=None):
+    """Eksik artifact'ları upstream-skipped vs gerçek drift olarak ayırır.
+
+    conclusions: {job name → conclusion} ("skipped", "failure", "success" …).
+    Producer'ı `skipped` olan eksik artifact'lar `upstream_skipped`'e gider
+    ve `ok`'u bozmaz — kırmızı verify → downstream skipped double-punish
+    etmez. Diğer tüm eksik/fazla gerçek drift'tir (fail-closed).
+    """
+    conclusions = conclusions or {}
+    exp = set(expected)
+    liv = set(live)
+    missing_raw = sorted(exp - liv)
+    extra = sorted(liv - exp)
+    producer_map = _artifact_producer_map()
+    missing = []
+    upstream_skipped = []
+    for art in missing_raw:
+        producer = producer_map.get(art)
+        if producer and conclusions.get(producer) == "skipped":
+            upstream_skipped.append(art)
+        else:
+            # Fallback: conclusion bilinmiyor ama artifact zaten biliniyor —
+            # üretici skipped değilse gerçek drift.
+            missing.append(art)
+    upstream_skipped = sorted(upstream_skipped)
+    ok = not missing and not extra
+    return {
+        "label": "artifacts",
+        "ok": ok,
+        "missing": missing,
+        "extra": extra,
+        "upstream_skipped": upstream_skipped,
     }
 
 
@@ -275,6 +401,10 @@ def main(argv=None):
     try:
         live_jobs = get_run_jobs(repo, run_id)
         live_artifacts = get_run_artifacts(repo, run_id)
+        try:
+            conclusions = get_run_job_conclusions(repo, run_id)
+        except RuntimeError:
+            conclusions = {}
     except RuntimeError as e:
         print(f"HATA: canlı veri çekilemedi ({e})", file=sys.stderr)
         return 2
@@ -288,12 +418,29 @@ def main(argv=None):
 
     doc_job_names = [n for (_cat, n) in doc_jobs]
     job_cmp = compare(doc_job_names, live_jobs, "jobs")
-    art_cmp = compare(doc_artifacts, live_artifacts, "artifacts")
+    art_cmp = classify_artifact_drift(doc_artifacts, live_artifacts, conclusions)
 
     # Sabitlenmiş artifact varlığı (doc + live) — fail-closed kapı.
-    req_missing = check_required_presence(doc_artifacts, live_artifacts)
+    # Advisory için upstream-skipped durumu true missing sayılmaz: kırmızı
+    # verify → needs:[verify] artifact'ları skipped → python3-shell canlıda
+    # yoksa bile double-punish olmamalı. Pinned kapı yalnızca producer
+    # skipped değilken eksikse FAIL verir.
+    _req_doc_missing = check_required_presence(doc_artifacts, doc_artifacts)
+    _req_live_raw = check_required_presence(live_artifacts, live_artifacts)
+    # Her pinned için producer conclusion'a bak
+    producer_map = _artifact_producer_map()
+    req_missing = []
+    for art, side in _req_doc_missing:
+        req_missing.append((art, side))
+    for art, side in _req_live_raw:
+        # side her zaman "live" burada (live_raw doc==live)
+        prod = producer_map.get(art)
+        if prod and conclusions.get(prod) == "skipped":
+            continue
+        req_missing.append((art, side))
 
-    ok = job_cmp["ok"] and art_cmp["ok"] and not req_missing
+    art_ok = art_cmp["ok"]
+    ok = job_cmp["ok"] and art_ok and not req_missing
     verdict = "PASS" if ok else "FAIL"
     doc_result = {
         "verdict": verdict,
@@ -311,6 +458,7 @@ def main(argv=None):
             "live": sorted(live_artifacts),
             "missing": art_cmp["missing"],
             "extra": art_cmp["extra"],
+            "upstream_skipped": art_cmp.get("upstream_skipped", []),
             "required_presence": {
                 "ok": not req_missing,
                 "missing": [f"{art} ({side})" for art, side in req_missing],
