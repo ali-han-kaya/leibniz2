@@ -567,6 +567,23 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-09 | feat | (preview) merge history+refs-trend into one /api/trend fetch | [`1670dfa`](https://github.com/ali-han-kaya/leibniz2/commit/1670dfa) |
 | 2026-09-09 | fix | (preview) canonicalize preview/verify dirs to absolute paths in main() | [`bf44d32`](https://github.com/ali-han-kaya/leibniz2/commit/bf44d32) |
 | 2026-09-09 | test | add /api/* method contract and fix drift-test registrations | [`a2d1a3b`](https://github.com/ali-han-kaya/leibniz2/commit/a2d1a3b) |
+| 2026-09-10 | fix | (verify) flip K14 live contract to PASS after resync | [`c2adbf4`](https://github.com/ali-han-kaya/leibniz2/commit/c2adbf4) |
+| 2026-09-09 | docs | update changelog for 94ca88e closure fixes | [`c6fdf97`](https://github.com/ali-han-kaya/leibniz2/commit/c6fdf97) |
+| 2026-09-09 | fix | (ci) make check-unit-tests green in clean checkout | [`d445408`](https://github.com/ali-han-kaya/leibniz2/commit/d445408) |
+| 2026-09-09 | fix | (ci) handle workflow directories in check_action_pins | [`986169a`](https://github.com/ali-han-kaya/leibniz2/commit/986169a) |
+| 2026-09-10 | fix | (ci) fail-closed commit-msg gate + atomic sidecar writes | [`16b9144`](https://github.com/ali-han-kaya/leibniz2/commit/16b9144) |
+| 2026-09-10 | fix | (verify) K14 one-unit — drift gate + registry resync (P0 clear) | [`62772d9`](https://github.com/ali-han-kaya/leibniz2/commit/62772d9) |
+| 2026-09-09 | feat | (preview) merge history+refs-trend into one /api/trend fetch | [`1ac6a9a`](https://github.com/ali-han-kaya/leibniz2/commit/1ac6a9a) |
+| 2026-09-09 | fix | (preview) canonicalize preview/verify dirs to abspath in main() | [`05aeca1`](https://github.com/ali-han-kaya/leibniz2/commit/05aeca1) |
+| 2026-09-09 | test | (verify) add /api/* method contract and fix drift registrations | [`203edab`](https://github.com/ali-han-kaya/leibniz2/commit/203edab) |
+| 2026-09-09 | test | (preview) land POST-only live-HTTP regression for /api/run-now | [`b415a0e`](https://github.com/ali-han-kaya/leibniz2/commit/b415a0e) |
+| 2026-09-09 | test | (preview) add 8-thread hammer for _write_atomic torn-read guarantee | [`a2376df`](https://github.com/ali-han-kaya/leibniz2/commit/a2376df) |
+| 2026-09-09 | test | (preview) add atomic-write contract tests for persist layer | [`aed7169`](https://github.com/ali-han-kaya/leibniz2/commit/aed7169) |
+| 2026-09-09 | docs | (changelog) add rows for c44df67 rerun + 27f5c7f resync | [`f9a5306`](https://github.com/ali-han-kaya/leibniz2/commit/f9a5306) |
+| 2026-09-09 | fix | (pre-commit) venv-guard check-doc-job-sync hook + contract test | [`af945d8`](https://github.com/ali-han-kaya/leibniz2/commit/af945d8) |
+| 2026-09-09 | chore | (ci) trigger CI rerun for 27f5c7f gate verdicts | [`27989dc`](https://github.com/ali-han-kaya/leibniz2/commit/27989dc) |
+| 2026-09-09 | docs | (changelog) resync after wiring flat-path contract fix | [`4d97c77`](https://github.com/ali-han-kaya/leibniz2/commit/4d97c77) |
+| 2026-09-09 | test | (verify) extend derived-input contract to manifest-comment delivery | [`afb1d71`](https://github.com/ali-han-kaya/leibniz2/commit/afb1d71) |
 
 ### Regresyon notları
 
