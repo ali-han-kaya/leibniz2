@@ -120,20 +120,13 @@ class TestMissingRegistries(unittest.TestCase):
 
 
 class TestLiveDriftContract(unittest.TestCase):
-    def test_gate_catches_the_real_k14_drift(self):
-        """Live contract: the real repo currently has stale registry hashes.
-
-        Until the registry resync lands, the gate MUST fail here (exit 1) —
-        this is the regression pin proving the gate catches the exact P0
-        class that broke CI-SIMULATE. Flip this expectation when the resync
-        commit lands.
-        """
+    def test_real_repo_is_in_sync_after_resync(self):
+        """Live contract: after the 9507909 registry resync, the gate must PASS on the real repo."""
         rc = subprocess.run(
             [sys.executable, os.path.join(HERE, "check_zip_lineage_drift.py")],
             capture_output=True, text=True)
-        self.assertEqual(rc.returncode, 1,
-                         f"expected drift to be caught (exit 1), got {rc.returncode}:\n{rc.stderr}")
-        self.assertIn("uyuşmuyor", rc.stderr)
+        self.assertEqual(rc.returncode, 0,
+                         f"expected in-sync PASS (exit 0) after resync, got {rc.returncode}:\n{rc.stderr}")
 
 
 if __name__ == "__main__":
