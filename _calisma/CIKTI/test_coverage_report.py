@@ -84,6 +84,7 @@ HOOK_COVERAGE = {
         "test_check_doc_wrapper_sync.py",
         "test_run_summary_refs_trend.py",
         "test_api_method_contract.py",
+        "test_atomic_write_guard.py",
         "test_run_now_post_only.py",
         "test_run_summary_budget.py",
         "test_run_summary_changelog.py",
