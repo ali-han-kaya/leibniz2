@@ -3,6 +3,7 @@
 test_actionlint_gate.py
 test_api_method_contract.py
 test_architecture_deepening_deck.py
+test_atomic_write_guard.py
 test_audit_live_ci_sync.py
 test_audit_octokit_names.py
 test_audit_refs_trend.py
