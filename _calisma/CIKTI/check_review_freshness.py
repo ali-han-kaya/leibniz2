@@ -41,6 +41,7 @@ import hashlib
 import json
 import os
 import pathlib
+import subprocess
 import sys
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
@@ -55,6 +56,33 @@ DEFAULT_REVIEW = REVIEW_DIR / "Stoic_Hume_Review_Compilation_2026-08-17.pdf"
 DEFAULT_REVISED = PKG_DIR / "ingiliz_empirizmi_v3.pdf"
 DEFAULT_ORIGINAL = PKG_DIR / "original_manuscript.pdf"
 DEFAULT_SIDECAR = DEFAULT_REVIEW.with_suffix(DEFAULT_REVIEW.suffix + ".sha256")
+
+
+_GIT_CT_CACHE: dict[pathlib.Path, int | None] = {}
+
+
+def _git_commit_time_ns(p: pathlib.Path) -> int | None:
+    """Dosyanın son commit (committer) zamanı — saniye→ns; bilinmiyorsa None.
+
+    Fresh-clone checkout mtime'ları keyfî olduğu için mtime kapısı tek başına
+    yanlış-P0 üretebilir (REVIEW daha eski commit'ten gelse de checkout'ta
+    daha yeni görünebilir); git commit zamanı gerçeği temsil eder. Repo dışı /
+    takipsiz dosya / git yok → None (fail-closed mtime kararı geçerli kalır).
+    """
+    try:
+        key = p.resolve()
+        if key in _GIT_CT_CACHE:
+            return _GIT_CT_CACHE[key]
+        r = subprocess.run(
+            ["git", "log", "-1", "--format=%ct", "--", str(key)],
+            cwd=str(key.parent), capture_output=True, text=True, timeout=10,
+        )
+        out = (r.stdout or "").strip()
+        val = int(out) * 1_000_000_000 if out else None
+        _GIT_CT_CACHE[key] = val
+        return val
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
 
 
 def sha256_file(p: pathlib.Path) -> str:
@@ -134,22 +162,36 @@ def check(
         )
 
     # Tazelik — kaynak mtime > REVIEW mtime → bayat (check_pdf_source_freshness genesis)
+    # Fresh-clone istisnası: checkout mtime'ları keyfî olduğundan mtime tersliği
+    # yalnızca git commit zamanları da tersliği doğruluyorsa P0'dır. git bilgisi
+    # yoksa (repo dışı / takipsiz) mtime kararı geçerli kalır (fail-closed).
     try:
         rv_mtime = review.stat().st_mtime_ns
         meta["review_mtime_ns"] = rv_mtime
+        skew_ignored = 0
         for label, p in (("revised", revised), ("original", original)):
             sm = p.stat().st_mtime_ns
             meta[f"{label}_mtime_ns"] = sm
-            if sm > rv_mtime:
-                findings.append(
-                    {
-                        "kind": "stale_source",
-                        "file": label,
-                        "path": str(p),
-                        "priority": "P0",
-                        "detail": f"kaynak {label} REVIEW'den daha yeni (bayat REVIEW): {p.name} > {review.name} — build_review_pdf.sh yeniden koşulmalı",
-                    }
-                )
+            if sm <= rv_mtime:
+                continue
+            src_ct = _git_commit_time_ns(p)
+            rv_ct = _git_commit_time_ns(review)
+            if src_ct is not None and rv_ct is not None and src_ct <= rv_ct:
+                # git REVIEW'in kaynaklardan yeni olduğunu doğruluyor →
+                # mtime tersliği fresh-clone checkout artifact'ı; P0 değil.
+                skew_ignored += 1
+                meta[f"{label}_fresh_clone_skew"] = True
+                continue
+            findings.append(
+                {
+                    "kind": "stale_source",
+                    "file": label,
+                    "path": str(p),
+                    "priority": "P0",
+                    "detail": f"kaynak {label} REVIEW'den daha yeni (bayat REVIEW): {p.name} > {review.name} — build_review_pdf.sh yeniden koşulmalı",
+                }
+            )
+        meta["fresh_clone_skew_ignored"] = skew_ignored
     except OSError as e:
         findings.append({"kind": "stat_error", "priority": "P0", "detail": str(e)})
 

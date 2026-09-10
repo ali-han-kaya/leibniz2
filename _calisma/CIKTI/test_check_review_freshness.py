@@ -89,6 +89,36 @@ class TestRealReview(unittest.TestCase):
         self.assertEqual(len(meta["review_sha256"]), 64)
 
 
+class TestFreshCloneSkew(unittest.TestCase):
+    """Fresh-clone checkout mtime tersliği: git commit zamanı ile çürütülür.
+
+    Gerçek depoda REVIEW, kaynaklardan YENİ commit'li geldiği halde checkout
+    mtime'ları ters görünebilir → eski davranış hatalı P0 üretirdi. git commit
+    zamanları REVIEW'in daha yeni olduğunu doğruladığında P0 bastırılmalı;
+    git bilgisi yoksa mtime kararı fail-closed geçerli kalmalı.
+    """
+
+    def test_mtime_skew_suppressed_when_git_confirms_review_newer(self):
+        with tempfile.TemporaryDirectory() as td:
+            fx = Fixture(pathlib.Path(td))
+            fx.stale_revised()  # mtime: kaynak > REVIEW
+            with mock.patch.object(crf, "_git_commit_time_ns", side_effect=[1, 2]):
+                ok, findings, meta = fx.check()
+            self.assertTrue(ok, findings)
+            self.assertEqual(meta["fresh_clone_skew_ignored"], 1)
+            self.assertFalse(any(f["kind"] == "stale_source" for f in findings))
+
+    def test_mtime_skew_p0_when_no_git_info(self):
+        # git commit zamanı alınamazsa (None) mtime kararı fail-closed kalır.
+        with tempfile.TemporaryDirectory() as td:
+            fx = Fixture(pathlib.Path(td))
+            fx.stale_revised()
+            with mock.patch.object(crf, "_git_commit_time_ns", return_value=None):
+                ok, findings, _ = fx.check()
+            self.assertFalse(ok)
+            self.assertTrue(any(f["kind"] == "stale_source" for f in findings))
+
+
 class TestStaleSources(unittest.TestCase):
     def test_stale_revised_is_p0(self):
         with tempfile.TemporaryDirectory() as td:
