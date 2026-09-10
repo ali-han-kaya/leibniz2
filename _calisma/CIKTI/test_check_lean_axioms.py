@@ -312,7 +312,10 @@ class TestAxiomAnalysis(unittest.TestCase):
             proc.returncode = 0
             proc.stdout = "'t' does not depend on any axioms\n"
             proc.stderr = ""
-            with mock.patch.object(cla.subprocess, "run",
+            # lean hangi makinede değilse orada SKIP değil, mock yolunu koş:
+            # shutil.which mock'u olmadan CI'da (lean yok) SKIP != FAIL olur.
+            with mock.patch.object(cla.shutil, "which", return_value="/fake/lean"), \
+                 mock.patch.object(cla.subprocess, "run",
                                    return_value=proc) as m:
                 state, detail = cla.analyze_axioms(tmp, "lean")
         self.assertEqual(state, "PASS")
@@ -330,8 +333,8 @@ class TestAxiomAnalysis(unittest.TestCase):
             proc.returncode = 0
             proc.stdout = "'t' depends on axioms: [my_axiom]\n"
             proc.stderr = ""
-            with mock.patch.object(cla.subprocess, "run",
-                                   return_value=proc):
+            with mock.patch.object(cla.shutil, "which", return_value="/fake/lean"), \
+                 mock.patch.object(cla.subprocess, "run", return_value=proc):
                 state, detail = cla.analyze_axioms(tmp, "lean")
         self.assertEqual(state, "FAIL")
         self.assertIn("my_axiom", detail)
