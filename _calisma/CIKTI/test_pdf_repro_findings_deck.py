@@ -7,6 +7,7 @@ sys.path.insert(0, str(HERE))
 import pdf_repro_findings_deck as deck
 
 
+@unittest.skipUnless(getattr(deck, "HAS_PIL", False), "PIL kurulu değil — deck üretimi atlandı")
 class PdfReproFindingsDeckTests(unittest.TestCase):
     def test_generates_five_report_slides(self):
         deck.build()

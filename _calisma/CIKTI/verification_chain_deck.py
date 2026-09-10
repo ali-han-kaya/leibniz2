@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """Generate a minimal premium dark-theme K-layer architecture deck."""
 from pathlib import Path
-from PIL import Image, ImageDraw, ImageFont
+
+try:
+    from PIL import Image, ImageDraw, ImageFont
+    HAS_PIL = True
+except ImportError:  # PIL yoksa modül import edilebilir kalır; testler SKIP
+    HAS_PIL = False
 
 OUT = Path(__file__).resolve().parent.parent / "verification_chain_deck"
 W, H = 1600, 900

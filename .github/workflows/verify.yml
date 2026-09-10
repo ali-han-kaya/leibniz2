@@ -151,6 +151,14 @@ jobs:
         shell: bash
         run: pip install jsonschema
 
+      # Deck üreticileri (architecture_deepening_deck vb.) PIL import eder;
+      # kurulu değilse testler artık HAS_PIL ile SKIP eder (Unit A kontratı),
+      # ama kapının gerçek üretim yolunu da doğrulayabilmesi için burada kur:
+      - name: Install Pillow for unit tests
+        if: always()
+        shell: bash
+        run: pip install Pillow
+
       - name: Run CIKTI unit tests (test_*.py)
         shell: bash
         run: |

@@ -7,6 +7,7 @@ sys.path.insert(0, str(HERE))
 import architecture_deepening_deck as deck
 
 
+@unittest.skipUnless(getattr(deck, "HAS_PIL", False), "PIL kurulu değil — deck üretimi atlandı")
 class ArchitectureDeepeningDeckTests(unittest.TestCase):
     def test_generates_five_slides_at_deck_dimensions(self):
         deck.build()

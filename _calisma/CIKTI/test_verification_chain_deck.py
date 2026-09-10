@@ -7,6 +7,7 @@ sys.path.insert(0, str(HERE))
 import verification_chain_deck as deck
 
 
+@unittest.skipUnless(getattr(deck, "HAS_PIL", False), "PIL kurulu değil — deck üretimi atlandı")
 class DeckContractTests(unittest.TestCase):
     def test_deck_generates_five_slides_with_expected_dimensions(self):
         deck.build()
