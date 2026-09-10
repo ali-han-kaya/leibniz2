@@ -244,6 +244,25 @@ class TestE2EArtifactDocSync(unittest.TestCase):
         })
         self.assertEqual(report["verdict"], "PASS")
 
+    def test_combined_report_ignores_self_deterministic_to_break_loop(self):
+        """Advisory self-loop kırılmalı: yalnızca SELF_JOB deterministic iken PASS.
+
+        Kendi geçmişi 6/6 FAIL diye advisory her yeşil run'da deterministic
+        olarak sınıflanır; combined verdict SELF dışındaki deterministic
+        YOKSA PASS kalmalı — aksi halde yeşil fix bile bir pencere boyunca
+        hard-FAIL'e kilitlenir.
+        """
+        report = als.build_combined_report({"verdict": "PASS"}, {
+            "categories": {"deterministic": [als.SELF_JOB], "flaky": [], "config_drift": []}
+        })
+        self.assertEqual(report["verdict"], "PASS")
+        # SELF + gerçek deterministic karışıkken FAIL kalmalı
+        report2 = als.build_combined_report({"verdict": "PASS"}, {
+            "categories": {"deterministic": [als.SELF_JOB, "verify"], "flaky": [], "config_drift": []}
+        })
+        self.assertEqual(report2["verdict"], "FAIL")
+        self.assertIn("verify", report2["failure_pattern"]["categories"]["deterministic"])
+
     def test_main_current_state_pass(self):
         rc, d = self._run_main(self.doc_text, self._live())
         self.assertEqual(rc, 0)

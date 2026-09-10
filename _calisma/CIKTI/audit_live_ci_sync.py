@@ -347,14 +347,35 @@ def exclude_self(live_jobs, live_artifacts):
             [n for n in live_artifacts if n != SELF_ARTIFACT])
 
 
+def _non_self_deterministic(failure_result):
+    """failure_result içindeki SELF_JOB dışındaki deterministic job'lar.
+
+    Advisory kendi geçmişiyle kendini FAIL'e kilitlememeli: 6 kırmızıdan
+    sonra gelen yeşil, combined verdict'te kendi deterministic girişi
+    yüzünden yine FAIL üretir (self-loop). Yalnızca SELF dışındaki
+    deterministic'ler hard-fail sebebi sayılır.
+    """
+    if not failure_result:
+        return []
+    cats = (failure_result.get("categories") or {})
+    dets = cats.get("deterministic") or []
+    return [j for j in dets if j != SELF_JOB]
+
+
 def build_combined_report(doc_result, failure_result):
-    """Tek artifact için doc/live drift ve CI failure sınıflarını birleştir."""
+    """Tek artifact için doc/live drift ve CI failure sınıflarını birleştir.
+
+    Verdict FAIL ancak: doc_result FAIL VEYA SELF dışındaki deterministic
+    job'lar varsa. Advisory'nin kendi deterministic geçmişi (audit-live-ci)
+    combined verdict'i hard-fail'e kilitlemez — aksi halde yeşil fix'ten
+    sonra bile 1'den fazla kırmızı pencere boyunca FAIL sürer.
+    """
+    dets = _non_self_deterministic(failure_result)
     return {
         "schema": "audit-live-ci/v2",
         "doc_live_sync": doc_result,
         "failure_pattern": failure_result,
-        "verdict": ("FAIL" if doc_result.get("verdict") == "FAIL"
-                     or (failure_result and failure_result.get("categories", {}).get("deterministic"))
+        "verdict": ("FAIL" if doc_result.get("verdict") == "FAIL" or dets
                      else "PASS"),
     }
 
@@ -482,8 +503,7 @@ def main(argv=None):
                   if args.with_failure_pattern else doc_result)
         print(json.dumps(report,
             indent=2, ensure_ascii=False))
-        hard_fail = (not ok or
-                     bool(failure_result and failure_result.get("categories", {}).get("deterministic")))
+        hard_fail = (not ok or bool(_non_self_deterministic(failure_result)))
         return 0 if not hard_fail else 1
 
     if args.with_failure_pattern and failure_result:
@@ -493,8 +513,7 @@ def main(argv=None):
     print(f"Canlı CI denetimi — {repo} (run {run_id})")
     print(f"doc: {doc_path}")
     print(f"\nSONUÇ: {verdict} — {'doc ↔ GitHub senkron' if ok else 'DRIFT'}")
-    hard_fail = (not ok or
-                 bool(failure_result and failure_result.get("categories", {}).get("deterministic")))
+    hard_fail = (not ok or bool(_non_self_deterministic(failure_result)))
     return 0 if not hard_fail else 1
 
 
