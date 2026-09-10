@@ -599,6 +599,11 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-10 | docs | (changelog) resync table through meta-guard unit | [`f063363`](https://github.com/ali-han-kaya/leibniz2/commit/f063363) |
 | 2026-09-10 | test | (verify) add CI full-discover drift guard + register 15 untracked tests | [`224dcd7`](https://github.com/ali-han-kaya/leibniz2/commit/224dcd7) |
 | 2026-09-10 | docs | archive rc-review worktree brief and resync changelog | [`08d3c25`](https://github.com/ali-han-kaya/leibniz2/commit/08d3c25) |
+| 2026-09-11 | test | (verify) fail-closed canonical-hash pin for cleanup_log.json | [`e2aaf86`](https://github.com/ali-han-kaya/leibniz2/commit/e2aaf86) |
+| 2026-09-10 | docs | (triage) record 091635c CI failure root causes in findings.md | [`9bcd753`](https://github.com/ali-han-kaya/leibniz2/commit/9bcd753) |
+| 2026-09-10 | fix | (verify) make review freshness gate fresh-clone-safe | [`9544cb4`](https://github.com/ali-han-kaya/leibniz2/commit/9544cb4) |
+| 2026-09-10 | fix | (ci-audit) break advisory self-loop in deterministic gate | [`a345284`](https://github.com/ali-han-kaya/leibniz2/commit/a345284) |
+| 2026-09-10 | test | (verify) add full-discover drift guard + register tests | [`8bac7f8`](https://github.com/ali-han-kaya/leibniz2/commit/8bac7f8) |
 
 ### Regresyon notları
 
