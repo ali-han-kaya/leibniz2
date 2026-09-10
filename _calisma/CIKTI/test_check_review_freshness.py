@@ -90,19 +90,22 @@ class TestRealReview(unittest.TestCase):
 
 
 class TestFreshCloneSkew(unittest.TestCase):
-    """Fresh-clone checkout mtime tersliği: git commit zamanı ile çürütülür.
+    """Fresh-clone checkout mtime tersliği: git commit zamanı / SDE ile çürütülür.
 
     Gerçek depoda REVIEW, kaynaklardan YENİ commit'li geldiği halde checkout
     mtime'ları ters görünebilir → eski davranış hatalı P0 üretirdi. git commit
     zamanları REVIEW'in daha yeni olduğunu doğruladığında P0 bastırılmalı;
     git bilgisi yoksa mtime kararı fail-closed geçerli kalmalı.
+    SDE override varsa REVIEW efektif zamanı SDE'dir.
     """
 
     def test_mtime_skew_suppressed_when_git_confirms_review_newer(self):
         with tempfile.TemporaryDirectory() as td:
             fx = Fixture(pathlib.Path(td))
             fx.stale_revised()  # mtime: kaynak > REVIEW
-            with mock.patch.object(crf, "_git_commit_time_ns", side_effect=[1, 2]):
+            def fake_git(p):
+                return 2 if "Review_Compilation" in str(p) else 1
+            with mock.patch.object(crf, "_git_commit_time_ns", side_effect=fake_git):
                 ok, findings, meta = fx.check()
             self.assertTrue(ok, findings)
             self.assertEqual(meta["fresh_clone_skew_ignored"], 1)
@@ -117,6 +120,61 @@ class TestFreshCloneSkew(unittest.TestCase):
                 ok, findings, _ = fx.check()
             self.assertFalse(ok)
             self.assertTrue(any(f["kind"] == "stale_source" for f in findings))
+
+    def test_sde_override_suppresses_mtime_skew(self):
+        with tempfile.TemporaryDirectory() as td:
+            fx = Fixture(pathlib.Path(td))
+            fx.stale_revised()
+            # SDE = REVIEW'den yeni → REVIEW efektif zamanı SDE, kaynak git eski → skew ignored
+            with mock.patch.object(crf, "_git_commit_time_ns", return_value=1), \
+                 mock.patch.dict(os.environ, {"SOURCE_DATE_EPOCH": "9999999999"}):
+                ok, findings, meta = fx.check()
+            # SDE 9999999999 ns çok yeni → REVIEW efektif > kaynak → skew ignored, no stale
+            self.assertTrue(ok, findings)
+            self.assertFalse(any(f["kind"] == "stale_source" and f.get("source") == "sde" for f in findings))
+
+    def test_sde_override_stale_when_source_newer(self):
+        with tempfile.TemporaryDirectory() as td:
+            fx = Fixture(pathlib.Path(td))
+            fx.stale_revised()
+            # Kaynak git 20B ns, SDE 1B ns → kaynak > REVIEW(SDE) → stale
+            with mock.patch.object(crf, "_git_commit_time_ns", return_value=20_000_000_000), \
+                 mock.patch.dict(os.environ, {"SOURCE_DATE_EPOCH": "1"}):
+                ok, findings, _ = fx.check()
+            self.assertFalse(ok)
+            self.assertTrue(any(f["kind"] == "stale_source" for f in findings))
+
+
+class TestSourceSidecarHash(unittest.TestCase):
+    """Kaynak sidecar hash'leri mtime'dan bağımsız içerik drift'ini yakalar."""
+
+    def test_source_sidecar_mismatch_is_p0_even_when_mtime_ok(self):
+        with tempfile.TemporaryDirectory() as td:
+            fx = Fixture(pathlib.Path(td))
+            # mtime OK (kaynak < REVIEW) ama sidecar eski hash'i pin'liyor → drift
+            # Fixture revised yanına sidecar yaz (ingiliz metadata pattern)
+            stale_hash = "0" * 64
+            (fx.revised.parent / (fx.revised.name + ".metadata.sha256")).write_text(
+                f"{stale_hash}  {fx.revised.name}\n# raw: {stale_hash}  {fx.revised.name}\n", encoding="utf-8")
+            # git REVIEW'i yeni doğrulasa bile hash uyuşmazlık P0 üretmeli
+            def fake_git(p):
+                return 2 if "Review_Compilation" in str(p) else 1
+            with mock.patch.object(crf, "_git_commit_time_ns", side_effect=fake_git):
+                ok, findings, _ = fx.check()
+            self.assertFalse(ok)
+            self.assertTrue(any(f["kind"] == "source_sidecar_mismatch" for f in findings))
+
+    def test_source_sidecar_match_passes_without_git(self):
+        with tempfile.TemporaryDirectory() as td:
+            fx = Fixture(pathlib.Path(td))
+            h = _h(fx.revised)
+            (fx.revised.parent / (fx.revised.name + ".metadata.sha256")).write_text(
+                f"{h}  {fx.revised.name}\n# raw: {h}  {fx.revised.name}\n", encoding="utf-8")
+            # git yok ama hash match → mtime OK ise PASS (hash ek kapı, mtime fallback değil)
+            with mock.patch.object(crf, "_git_commit_time_ns", return_value=None):
+                ok, findings, _ = fx.check()
+            # Fixture mtime OK, hash match → PASS (review sidecar da OK)
+            self.assertTrue(ok, findings)
 
 
 class TestStaleSources(unittest.TestCase):

@@ -5,7 +5,7 @@
 Teslim zincirinin determinizm deseninin REVIEW aynası:
 
   1) Tazelik (freshness): REVIEW PDF (53pp, qpdf --empty --pages birleşimi)
-     kaynak manuskriptlerden daha ESKİ (mtime) olmamalı. İki kaynaktan biri
+     kaynak manuskriptlerden daha ESKİ olmamalı. İki kaynaktan biri
      (ingiliz_empirizmi_v3.pdf 33pp / original_manuscript.pdf 19pp) REVIEW'den
      sonra değiştiyse bayat demektir (önceki teslim hatasının REVIEW karşılığı
      — PDF rebuild edilmeden bırakılırsa silent drift).
@@ -22,13 +22,26 @@ Teslim zincirinin determinizm deseninin REVIEW aynası:
      (bu script minimal ve offline kalır; repro gerçekte CI'da build_review_pdf.sh
      ile test edilir).
 
+Tazelik stratejisi (fresh-clone-safe, zayıflatmadan):
+  - Birincil kapı git commit zamanlarıdır (SOURCE_DATE_EPOCH = git log -1
+    --format=%ct; build_review_pdf.sh aynısını kullanır) ve kaynak sidecar
+    hash'leridir (ingiliz için .pdf.metadata.sha256 içindeki raw hash).
+    Dosya sistemi mtimes'ları fresh clone'da keyfî olduğundan yalnızca
+    git/SDE bilgisi YOKSA fallback olarak kullanılır (fail-closed). Böylece
+    checkout sırası mtime'ları ters gösterse bile yeni bir kaynak commit'i
+    gizlenemez; mtime hilesiyle gizlenen içerik drift'i de sidecar hash
+    karşılaştırmasıyla yakalanır.
+  - SDE env override: SOURCE_DATE_EPOCH ortam değişkeni ayarlıysa REVIEW
+    efektif zamanı olarak kullanılır (tectonic determinism ile aynı).
+
 Kullanım:
   python3 check_review_freshness.py                          # denetle
   python3 check_review_freshness.py --json                   # makine-okur JSON
   python3 check_review_freshness.py --review PATH --rev PATH --orig PATH
 
 Kaynak/sidecar eksik → P0 (fail-closed). Sidecar boş/format hatası → P0.
-Sidecar hash uyuşmazlık → P0. Kaynak mtime > REVIEW mtime → P0. Hepsi PASS → 0.
+Sidecar hash uyuşmazlık → P0. Kaynak SDE/git > REVIEW SDE/git → P0 (bayat).
+Kaynak sidecar hash canlıdan farklı → P0 (bayat). Hepsi PASS → 0.
 
 stdlib-only, OFFLINE. K6-DETERM / check_pdf_source_freshness ile aynı aile;
 K6 tex/PDF sayfa/metnini, bu kapı REVIEW birleşimini pin'ler.
@@ -107,6 +120,58 @@ def _parse_sidecar(sc: pathlib.Path) -> str | None:
     return tok.lower()
 
 
+def _expected_source_hash(p: pathlib.Path) -> str | None:
+    """Kaynak PDF'in sidecar'ından beklenen raw SHA-256'yı döndür; yoksa None.
+
+    ingiliz için sidecar `ingiliz.pdf.metadata.sha256` olup içinde
+    `# raw: <hash>  ingiliz.pdf` satırı raw hash'i taşır — o tercih edilir.
+    Generic `.pdf.sha256` / `<path>.sha256` de desteklenir. Fresh-clone-safe:
+    sidecar commit'li olduğundan canlı hash ile karşılaştırma mtime'dan
+    bağımsız içerik drift'ini yakalar (dirty worktree, clock skew).
+    """
+    # Aday sidecar'lar — en spesifikten genele
+    candidates = [
+        pathlib.Path(str(p) + ".metadata.sha256"),
+        p.with_suffix(p.suffix + ".sha256"),
+        pathlib.Path(str(p) + ".sha256"),
+    ]
+    # Dedup while preserving order
+    seen: set[pathlib.Path] = set()
+    uniq: list[pathlib.Path] = []
+    for c in candidates:
+        if c not in seen:
+            seen.add(c)
+            uniq.append(c)
+    for cand in uniq:
+        if not cand.is_file():
+            continue
+        try:
+            text = cand.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        if not text.strip():
+            continue
+        # Önce p.name'i içeren satırdaki raw hash'i ara (ingiliz metadata case)
+        for line in text.splitlines():
+            low = line.lower()
+            if "raw" in low and p.name in line:
+                for tok in line.replace(":", " ").split():
+                    if len(tok) == 64 and all(c in "0123456789abcdefABCDEF" for c in tok):
+                        return tok.lower()
+        # Sonra p.name'i içeren herhangi bir satırdaki 64-hex token
+        for line in text.splitlines():
+            if p.name in line:
+                for tok in line.split():
+                    if len(tok) == 64 and all(c in "0123456789abcdefABCDEF" for c in tok):
+                        return tok.lower()
+        # Fallback: ilk 64-hex token
+        for line in text.splitlines():
+            for tok in line.split():
+                if len(tok) == 64 and all(c in "0123456789abcdefABCDEF" for c in tok):
+                    return tok.lower()
+    return None
+
+
 def check(
     review: pathlib.Path = DEFAULT_REVIEW,
     revised: pathlib.Path = DEFAULT_REVISED,
@@ -161,36 +226,85 @@ def check(
             }
         )
 
-    # Tazelik — kaynak mtime > REVIEW mtime → bayat (check_pdf_source_freshness genesis)
-    # Fresh-clone istisnası: checkout mtime'ları keyfî olduğundan mtime tersliği
-    # yalnızca git commit zamanları da tersliği doğruluyorsa P0'dır. git bilgisi
-    # yoksa (repo dışı / takipsiz) mtime kararı geçerli kalır (fail-closed).
+    # Tazelik — birincil: git commit zamanları (SOURCE_DATE_EPOCH) + sidecar hash pin
+    # Bare mtime yalnızca git/SDE ve sidecar hash yoksa fallback'tır. Fresh-clone
+    # checkout mtime'ları keyfî olduğundan commit zamanı gizli drift'i yakalar;
+    # sidecar hash dirty-worktree drift'ini mtime'dan bağımsız yakalar. Zayıflatma
+    # yok: eski mtime tabanlı her P0 burada da P0'dır (git veya hash ile ya da
+    # fallback mtime ile).
     try:
         rv_mtime = review.stat().st_mtime_ns
         meta["review_mtime_ns"] = rv_mtime
         skew_ignored = 0
+        # SDE env override — build_review_pdf.sh SDE'yi git log'dan alır, env ile override edilebilir
+        sde_override_ns: int | None = None
+        sde_raw = os.environ.get("SOURCE_DATE_EPOCH", "").strip()
+        if sde_raw.isdigit():
+            try:
+                sde_override_ns = int(sde_raw) * 1_000_000_000
+                meta["source_date_epoch_ns"] = sde_override_ns
+            except ValueError:
+                sde_override_ns = None
         for label, p in (("revised", revised), ("original", original)):
             sm = p.stat().st_mtime_ns
             meta[f"{label}_mtime_ns"] = sm
-            if sm <= rv_mtime:
-                continue
             src_ct = _git_commit_time_ns(p)
-            rv_ct = _git_commit_time_ns(review)
-            if src_ct is not None and rv_ct is not None and src_ct <= rv_ct:
-                # git REVIEW'in kaynaklardan yeni olduğunu doğruluyor →
-                # mtime tersliği fresh-clone checkout artifact'ı; P0 değil.
-                skew_ignored += 1
-                meta[f"{label}_fresh_clone_skew"] = True
-                continue
-            findings.append(
-                {
-                    "kind": "stale_source",
-                    "file": label,
-                    "path": str(p),
-                    "priority": "P0",
-                    "detail": f"kaynak {label} REVIEW'den daha yeni (bayat REVIEW): {p.name} > {review.name} — build_review_pdf.sh yeniden koşulmalı",
-                }
-            )
+            # REVIEW efektif zamanı: SDE override varsa o, yoksa git commit zamanı
+            rv_ct_eff = sde_override_ns if sde_override_ns is not None else _git_commit_time_ns(review)
+            git_decided = False
+            if src_ct is not None and rv_ct_eff is not None:
+                git_decided = True
+                if src_ct > rv_ct_eff:
+                    findings.append(
+                        {
+                            "kind": "stale_source",
+                            "file": label,
+                            "path": str(p),
+                            "priority": "P0",
+                            "detail": f"kaynak {label} REVIEW'den daha yeni (SDE/git bayat): {p.name} > {review.name} — build_review_pdf.sh yeniden koşulmalı",
+                            "source": "sde" if sde_override_ns is not None else "git",
+                        }
+                    )
+                else:
+                    if sm > rv_mtime:
+                        skew_ignored += 1
+                        meta[f"{label}_fresh_clone_skew"] = True
+                # hash pin'i git kararından bağımsız da koş — dirty worktree drift'i için
+            # Sidecar hash pin (ingiliz için .metadata.sha256 raw) — mtime'dan bağımsız
+            expected_src_hash = _expected_source_hash(p)
+            if expected_src_hash is not None:
+                try:
+                    live_src_hash = sha256_file(p)
+                except OSError:
+                    live_src_hash = None
+                if live_src_hash is not None:
+                    meta[f"{label}_live_sha256"] = live_src_hash[:16] + "…"
+                    meta[f"{label}_expected_sha256"] = expected_src_hash[:16] + "…"
+                    if live_src_hash.lower() != expected_src_hash.lower():
+                        findings.append(
+                            {
+                                "kind": "source_sidecar_mismatch",
+                                "file": label,
+                                "path": str(p),
+                                "priority": "P0",
+                                "detail": f"kaynak {label} SHA-256 sidecar uyuşmazlık (bayat REVIEW): {p.name} live {live_src_hash[:16]}… vs sidecar {expected_src_hash[:16]}… — build_review_pdf.sh yeniden koşulmalı",
+                                "actual": live_src_hash,
+                                "expected": expected_src_hash,
+                            }
+                        )
+            # Fallback: ne git/SDE ne de sidecar hash karar veremediyse mtime'a düş
+            if not git_decided and expected_src_hash is None:
+                if sm > rv_mtime:
+                    findings.append(
+                        {
+                            "kind": "stale_source",
+                            "file": label,
+                            "path": str(p),
+                            "priority": "P0",
+                            "detail": f"kaynak {label} REVIEW'den daha yeni (bayat REVIEW): {p.name} > {review.name} — build_review_pdf.sh yeniden koşulmalı",
+                            "source": "mtime",
+                        }
+                    )
         meta["fresh_clone_skew_ignored"] = skew_ignored
     except OSError as e:
         findings.append({"kind": "stat_error", "priority": "P0", "detail": str(e)})
