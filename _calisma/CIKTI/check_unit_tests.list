@@ -51,6 +51,7 @@ test_extract_unstaged_deps.py
 test_fallback_evidence_hook.py
 test_full_publish_doc_sync.py
 test_gate_coverage_sync.py
+test_gate_scripts_meta_guard.py
 test_gen_ci_trend.py
 test_gen_commit_msg_evidence.py
 test_gen_k_layer.py
