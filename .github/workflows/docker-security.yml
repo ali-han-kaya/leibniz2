@@ -29,35 +29,25 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Scan image with Trivy (table summary, advisory)
+      - name: Scan image with Trivy
         # v0.35.0: belgelenmiş güvenli sürüm (2026-03 tag-compromise sonrası
         # akıl sağlığı listesi). Mutable @master asla — pin kapısı da bloke eder.
-        # Tablo adımı exit-code 0: gate FAIL etse bile CVE tablosu log'da
-        # görünür (SARIF-only dönemde bulgular runner log'unda kayboluyordu).
+        # Tek adım: table format + exit-code 1 → bulgu varsa CVE tablosu
+        # log'da GÖRÜNÜR şekilde fail-closed. (SARIF split kaldırıldı: bu
+        # repo'da code scanning yok — upload hedefi yok; ayrıca SARIF adımı
+        # bulgusuz koşuda opak exit-1 hataları üretti. Zorlayıcı kapı
+        # exit-code 1'de yaşıyor, kanıt tabloda.)
         uses: aquasecurity/trivy-action@v0.35.0
         with:
           image-ref: leibniz2/verify-dashboard:${{ github.sha }}
           format: table
           severity: CRITICAL,HIGH
           ignore-unfixed: true
-          exit-code: 0
-
-      - name: Scan image with Trivy (SARIF gate)
-        uses: aquasecurity/trivy-action@v0.35.0
-        with:
-          image-ref: leibniz2/verify-dashboard:${{ github.sha }}
-          format: sarif
-          output: trivy-results.sarif
-          severity: CRITICAL,HIGH
-          ignore-unfixed: true
           exit-code: 1
 
-      - name: Upload Trivy results
-        if: always()
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: trivy-results.sarif
-
+      # SARIF upload kaldırıldı: repo'da code scanning aktif değil ve
+      # tarayıcı artık SARIF üretmiyor (tek-table mimarisi). İkinci bağımsız
+      # tarayıcı olarak Docker Scout kalır.
       - name: Docker Scout CVE scan
         uses: docker/scout-action@v1
         with:
