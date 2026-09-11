@@ -23,12 +23,9 @@ sys.path.insert(0, SCRIPT_DIR)
 import gen_repro_manifest as gm
 
 # merge-multiple ile indirilmeyenler (prefix ile ayrı indirilir veya çıkış artifact'ı)
-EXCLUDED = frozenset({
-    "precommit-logs", "refs-trend", "override-trend",
-    "precheck-report", "python3-shell", "plist-check",
-    "mirror-check", "daemon-http", "audit-refs-trend",
-    "reproducibility",
-})
+# TEK KAYNAK: workflow_contract.MERGE_PATTERN_EXCLUDED — kopya değil, re-export
+# (test_workflow_contract, üretici ↔ fixture drift'ini commit anında yakalar).
+from workflow_contract import MERGE_PATTERN_EXCLUDED as EXCLUDED  # noqa: E402
 
 
 def _read_merge_pattern(workflow_path: str):
