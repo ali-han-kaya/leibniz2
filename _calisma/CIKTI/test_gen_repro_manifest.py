@@ -38,6 +38,7 @@ GEN = CIKTI / "gen_repro_manifest.py"
 sys.path.insert(0, str(CIKTI))
 
 import gen_repro_manifest as gen_manifest  # noqa: E402
+from workflow_contract import MERGE_PATTERN_EXCLUDED  # noqa: E402
 
 
 def _run_gen(artifacts_dir, out_dir):
@@ -813,10 +814,9 @@ class TestWorkflowPatternCoverage(unittest.TestCase):
     olmalı — yoksa o artifact manifest'e girmeden sessizce düşer (ör. bugün
     budget-verify/lineage-findings/klayers eksikti).
     """
-    EXCLUDED = {"precommit-logs", "refs-trend", "override-trend",
-                "precheck-report", "python3-shell", "plist-check",
-                "mirror-check", "daemon-http", "audit-refs-trend",
-                "reproducibility"}
+    # TEK KAYNAK: workflow_contract.MERGE_PATTERN_EXCLUDED (fixture'dan;
+    # kopya değil — test_workflow_contract drift'i yakalar).
+    EXCLUDED = MERGE_PATTERN_EXCLUDED
 
     def _workflow_merge_pattern(self):
         wf = CIKTI.parent.parent / ".github" / "workflows" / "verify.yml"

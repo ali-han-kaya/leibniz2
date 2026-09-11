@@ -122,6 +122,7 @@ test_validate_config_schema.py
 test_verification_chain_deck.py
 test_verify_checks.py
 test_verify_k_layers.py
+test_workflow_contract.py
 test_workflow_install_hardening.py
 test_workflow_timeouts.py
 test_workflow_triggers.py
