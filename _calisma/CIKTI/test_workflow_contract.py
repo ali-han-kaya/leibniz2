@@ -62,8 +62,15 @@ class TestLazyReExports(unittest.TestCase):
         self.assertIs(wc.ARTIFACT_JOBS, grm.ARTIFACT_JOBS)
 
     def test_gate_exclude_is_same_object(self):
-        import status_checks as sc
-        self.assertIs(wc.GATE_EXCLUDE, sc.GATE_EXCLUDE)
+        try:
+            import status_checks as sc  # noqa: E402
+            self.assertIs(wc.GATE_EXCLUDE, sc.GATE_EXCLUDE)
+        except SystemExit as e:
+            # yaml yoksa status_checks import'u exit(2) — CI bare python'da
+            # test suite'in BÜTÜNÜ (errors=1) ölmesin: bu prodült bir
+            # environment hatası, contract hatası değil. Kapı, yaml kurulu
+            # ortamda (venv, pre-commit) başarısız olsun yeter.
+            self.skipTest(f"status_checks import PyYAML yok (bare runner) — exit {e.code}")
 
 
 class TestSetConsistency(unittest.TestCase):
