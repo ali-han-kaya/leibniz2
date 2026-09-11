@@ -604,6 +604,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-10 | fix | (verify) make review freshness gate fresh-clone-safe | [`9544cb4`](https://github.com/ali-han-kaya/leibniz2/commit/9544cb4) |
 | 2026-09-10 | fix | (ci-audit) break advisory self-loop in deterministic gate | [`a345284`](https://github.com/ali-han-kaya/leibniz2/commit/a345284) |
 | 2026-09-10 | test | (verify) add full-discover drift guard + register tests | [`8bac7f8`](https://github.com/ali-han-kaya/leibniz2/commit/8bac7f8) |
+| 2026-09-11 | docs | (changelog) resync table through e2aaf86 canonical-hash pin | [`2a493ec`](https://github.com/ali-han-kaya/leibniz2/commit/2a493ec) |
 
 ### Regresyon notları
 

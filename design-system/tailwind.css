@@ -1,0 +1,245 @@
+/*
+ * design-system/tailwind.css — Tailwind CSS v4 theme bridge for the
+ * dashboard tokens (design-system/tokens.json → tokens.css).
+ *
+ * This file is GENERATED from tokens.css (see scripts/generate_tailwind.py).
+ * Do not edit by hand — run `python3 design-system/scripts/generate_tailwind.py`
+ * after changing tokens.json/tokens.css and commit both files together.
+ *
+ * Usage (Tailwind v4, no tailwind.config.js):
+ *   @import "tailwindcss";
+ *   @import "./design-system/tailwind.css";
+ *
+ * The :root vars are the same values preview.html already consumes (no
+ * extra runtime cost). The @theme block re-exposes them as Tailwind v4
+ * theme variables so utilities like `bg-bg`, `text-fg`, `border-border`,
+ * `rounded-6`, `p-6`, `animate-pulse`, etc. resolve to the dashboard
+ * palette without a tailwind.config.js.
+ *
+ * Legacy aliases (--surface, --surface-raised, --header-*, --code-bg,
+ * --paper) are kept verbatim so existing var(--surface) references work
+ * in both the static dashboard and Tailwind utilities.
+ */
+
+@import "tailwindcss";
+
+:root {
+  /* ── color ── */
+  --bg: #0e1116;
+  --fg: #e6edf3;
+  --muted: #8b949e;
+  --accent: #58a6ff;
+  --ok: #3fb950;
+  --warn: #d29922;
+  --err: #f85149;
+  --border: #30363d;
+  --budget: #bc8cff;
+
+  --surface-1: #161b22;        /* cards, code, pre, th */
+  --surface-2: #21262d;        /* buttons, z3 bar track */
+  --on-accent: #fff;
+
+  /* legacy aliases — preview.html still references these names verbatim */
+  --surface: #161b22;
+  --surface-raised: #21262d;
+  --header-start: #161b22;
+  --header-end: #0e1116;
+  --code-bg: #161b22;
+  --paper: #f4efe5;
+  --paper-ink: #2b2926;
+
+  /* status tints (badge backgrounds) */
+  --tint-ok-bg: rgba(63, 185, 80, .15);
+  --tint-warn-bg: rgba(210, 153, 34, .15);
+  --tint-err-bg: rgba(248, 81, 73, .15);
+  --tint-err-bg-strong: rgba(248, 81, 73, .12);
+  --tint-err-bg-weak: rgba(248, 81, 73, .1);
+  --tint-budget-bg: rgba(188, 140, 255, .12);
+  --tint-accent-bg: rgba(88, 166, 255, .15);
+  --tint-accent-hover: rgba(88, 166, 255, .1);
+  --tint-accent-active: rgba(88, 166, 255, .2);
+  --tint-unknown-bg: rgba(139, 148, 158, .15);
+  --shadow-tip: 0 8px 24px rgba(0, 0, 0, .5);
+  --backdrop-lightbox: rgba(0, 0, 0, .9);
+
+  /* ── font ── */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI",
+               Helvetica, Arial, sans-serif;
+  --font-mono: "SF Mono", Menlo, Consolas, monospace;
+
+  --text-2xs: 10px;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-md: 13px;
+  --text-base: 14px;
+  --text-lg: 18px;
+  --text-xl: 20px;
+
+  --lh-base: 1.5;
+  --lh-tight: 1.4;
+  --ls-caps: 0.05em;
+
+  /* ── space ── */
+  --space-1: 4px;
+  --space-2: 6px;
+  --space-3: 8px;
+  --space-4: 10px;
+  --space-5: 12px;
+  --space-6: 14px;
+  --space-7: 18px;
+  --space-8: 20px;
+  --space-9: 24px;
+  --space-10: 28px;
+
+  /* ── radius ── */
+  --radius-1: 3px;
+  --radius-2: 4px;
+  --radius-3: 5px;
+  --radius-4: 6px;
+  --radius-5: 7px;
+  --radius-6: 8px;
+  --radius-7: 12px;
+  --radius-full: 50%;
+
+  /* ── motion ── */
+  --dur-fade: 180ms;
+  --dur-fast: 0.15s;
+  --dur-mid: 0.3s;
+  --dur-slow: 0.4s;
+  --dur-pulse: 1.6s;
+  --dur-glow: 2s;
+  --dur-shake: 0.5s;
+  --ease: ease;
+  --ease-in-out: ease-in-out;
+
+  /* ── layout ── */
+  --main-max-width: 1080px;
+  --grid-min: 220px;
+  --grid-gap: 14px;
+  --z3-grid-min: 180px;
+  --z3-grid-gap: 12px;
+
+  /* ── composition (semantic) ── */
+  --card-bg: var(--surface-1);
+  --card-border: var(--border);
+  --card-radius: var(--radius-6);
+  --card-padding: var(--space-6);
+  --badge-radius: var(--radius-7);
+  --badge-padding: var(--space-1) var(--space-4);
+  --table-cell-padding: var(--space-2) var(--space-4);
+  --pre-padding: var(--space-5);
+  --button-padding: var(--space-2) var(--space-6);
+}
+
+:root[data-theme="light"] {
+  --bg: #f3efe7;
+  --fg: #292722;
+  --muted: #70695f;
+  --accent: #8b5e2b;
+  --ok: #287a3d;
+  --warn: #996b08;
+  --err: #b42318;
+  --border: #cfc5b5;
+  --budget: #7650a8;
+  --surface: #fffdf8;
+  --surface-raised: #e9e1d3;
+  --header-start: #fffdf8;
+  --header-end: #ede5d8;
+  --code-bg: #e9e1d3;
+  --paper: #fffdf8;
+  --paper-ink: #292722;
+  /* keep surface-1/2 in sync with legacy aliases for token consumers */
+  --surface-1: #fffdf8;
+  --surface-2: #e9e1d3;
+}
+
+@theme {
+  /* ── color ── */
+  --color-accent: var(--accent);
+  --color-backdrop-lightbox: var(--backdrop-lightbox);
+  --color-bg: var(--bg);
+  --color-border: var(--border);
+  --color-budget: var(--budget);
+  --color-code-bg: var(--code-bg);
+  --color-err: var(--err);
+  --color-fg: var(--fg);
+  --color-header-end: var(--header-end);
+  --color-header-start: var(--header-start);
+  --color-muted: var(--muted);
+  --color-ok: var(--ok);
+  --color-on-accent: var(--on-accent);
+  --color-paper-ink: var(--paper-ink);
+  --color-paper: var(--paper);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface: var(--surface);
+  --color-tint-accent-active: var(--tint-accent-active);
+  --color-tint-accent-bg: var(--tint-accent-bg);
+  --color-tint-accent-hover: var(--tint-accent-hover);
+  --color-tint-budget-bg: var(--tint-budget-bg);
+  --color-tint-err-bg-strong: var(--tint-err-bg-strong);
+  --color-tint-err-bg-weak: var(--tint-err-bg-weak);
+  --color-tint-err-bg: var(--tint-err-bg);
+  --color-tint-ok-bg: var(--tint-ok-bg);
+  --color-tint-unknown-bg: var(--tint-unknown-bg);
+  --color-tint-warn-bg: var(--tint-warn-bg);
+  --color-warn: var(--warn);
+  --shadow-tip: var(--shadow-tip);
+  /* ── font ── */
+  --font-mono: var(--font-mono);
+  --font-sans: var(--font-sans);
+  /* ── text ── */
+  --leading-base: var(--lh-base);
+  --leading-tight: var(--lh-tight);
+  --lh-base: var(--lh-base);
+  --lh-tight: var(--lh-tight);
+  --ls-caps: var(--ls-caps);
+  --text-2xs: var(--text-2xs);
+  --text-base: var(--text-base);
+  --text-lg: var(--text-lg);
+  --text-md: var(--text-md);
+  --text-sm: var(--text-sm);
+  --text-xl: var(--text-xl);
+  --text-xs: var(--text-xs);
+  --tracking-caps: var(--ls-caps);
+  /* ── radius ── */
+  --radius-1: var(--radius-1);
+  --radius-2: var(--radius-2);
+  --radius-3: var(--radius-3);
+  --radius-4: var(--radius-4);
+  --radius-5: var(--radius-5);
+  --radius-6: var(--radius-6);
+  --radius-7: var(--radius-7);
+  --radius-full: var(--radius-full);
+  /* ── spacing ── */
+  --spacing-10: var(--space-10);
+  --spacing-1: var(--space-1);
+  --spacing-2: var(--space-2);
+  --spacing-3: var(--space-3);
+  --spacing-4: var(--space-4);
+  --spacing-5: var(--space-5);
+  --spacing-6: var(--space-6);
+  --spacing-7: var(--space-7);
+  --spacing-8: var(--space-8);
+  --spacing-9: var(--space-9);
+  /* ── animate / ease / container ── */
+  --animate-glow: failGlow var(--dur-glow) var(--ease-in-out) infinite;
+  --animate-pulse: pulse var(--dur-pulse) infinite;
+  --animate-shake: failShake var(--dur-shake) var(--ease-in-out) 3;
+  --container-main: var(--main-max-width);
+  --dur-fade: var(--dur-fade);
+  --dur-fast: var(--dur-fast);
+  --dur-glow: var(--dur-glow);
+  --dur-mid: var(--dur-mid);
+  --dur-pulse: var(--dur-pulse);
+  --dur-shake: var(--dur-shake);
+  --dur-slow: var(--dur-slow);
+  --ease-in-out: var(--ease-in-out);
+  --ease: var(--ease);
+  /* ── layout (grid) ── */
+  --grid-gap: var(--grid-gap);
+  --grid-min: var(--grid-min);
+  --z3-grid-gap: var(--z3-grid-gap);
+  --z3-grid-min: var(--z3-grid-min);
+}

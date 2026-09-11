@@ -1406,6 +1406,14 @@ class TestRouteQueryParams(unittest.TestCase):
         self.assertIsNone(ps._route("/api/unknown?x=1"))
         self.assertIsNone(ps._route("/favicon.ico"))
 
+    def test_design_tokens_route(self):
+        # design-system token sheet — tek routes dosyası; fail-closed 404
+        # mirror'da yoksa (bash update_preview.sh --force).
+        self.assertEqual(ps._route("/design-system/tokens.css"), "design_tokens")
+        self.assertEqual(ps._route("/design-system/tokens.css?v=123"), "design_tokens")
+        self.assertIsNone(ps._route("/design-system/other.css"))
+        self.assertIsNone(ps._route("/design-system/"))
+
     def test_run_now_rejects_untrusted_host(self):
         old_token = os.environ.get("PREVIEW_RUN_NOW_TOKEN")
         old_busy = ps.VERIFY_BUSY

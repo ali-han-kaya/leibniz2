@@ -16,6 +16,7 @@ test_check_cli_overrides.py
 test_check_commit_messages.py
 test_check_config_drift_summary.py
 test_check_coq_axioms.py
+test_check_design_tokens.py
 test_check_doc_wrapper_sync.py
 test_check_hook_env_matrix.py
 test_check_hook_unstaged_deps.py
