@@ -29,9 +29,20 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Scan image with Trivy
+      - name: Scan image with Trivy (table summary, advisory)
         # v0.35.0: belgelenmiş güvenli sürüm (2026-03 tag-compromise sonrası
         # akıl sağlığı listesi). Mutable @master asla — pin kapısı da bloke eder.
+        # Tablo adımı exit-code 0: gate FAIL etse bile CVE tablosu log'da
+        # görünür (SARIF-only dönemde bulgular runner log'unda kayboluyordu).
+        uses: aquasecurity/trivy-action@v0.35.0
+        with:
+          image-ref: leibniz2/verify-dashboard:${{ github.sha }}
+          format: table
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: 0
+
+      - name: Scan image with Trivy (SARIF gate)
         uses: aquasecurity/trivy-action@v0.35.0
         with:
           image-ref: leibniz2/verify-dashboard:${{ github.sha }}
