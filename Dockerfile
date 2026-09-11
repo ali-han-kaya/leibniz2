@@ -21,12 +21,18 @@
 #   docker run --rm -p 8000:8000 verify-dashboard
 #   # browser → http://localhost:8000/preview.html
 
-FROM python:3.11-slim AS builder
+# Distro line pinned to bookworm: python:3.11-slim floated to trixie
+# (Debian 13) and its younger package set carries unfixed CRITICAL/HIGH
+# CVEs — the docker-security Trivy gate fails closed on them. Bookworm's
+# package set is the mature, continuously-patched line (upstream rebuilds
+# the tag as security fixes land), keeping the scan green without
+# weakening the gate.
+FROM python:3.11-slim-bookworm AS builder
 
 RUN python -m venv /opt/venv \
     && /opt/venv/bin/pip install --no-cache-dir z3-solver
 
-FROM python:3.11-slim AS runtime
+FROM python:3.11-slim-bookworm AS runtime
 
 # The z3 interpreter for K8 + hook_env: copied from the builder, put on PATH.
 COPY --from=builder /opt/venv /opt/venv
