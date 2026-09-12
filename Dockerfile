@@ -46,6 +46,14 @@ FROM python:3.11-slim-bookworm AS runtime
 # yamalar bu aşamada uygulanır.
 RUN pip install --no-cache-dir --upgrade "setuptools>=80" "wheel>=0.46.2"
 
+# Base image OS paketleri: kaynak imaj yamasız kalırsa trivy gate HIGH bulguyla
+# düşer (libpcre2-8-0 CVE-2026-86145 / CVE-2026-89161, deb12u1'de düzeltildi).
+# Debian security repo'sundaki düzeltmeleri uygula — --only-upgrade, yani yeni
+# paket eklenmez; gate gevşetilmez, yama gerçekten image'e girer.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends --only-upgrade libpcre2-8-0 \
+    && rm -rf /var/lib/apt/lists/*
+
 # The z3 interpreter for K8 + hook_env: copied from the builder, put on PATH.
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH" \
