@@ -40,13 +40,11 @@ import subprocess
 import sys
 
 try:
-    import yaml
-except ImportError:  # pragma: no cover
-    sys.stderr.write(
-        "HATA: PyYAML gerekli — pip install pyyaml "
-        "(veya _calisma/.venv_z3/bin/python kullan)\n"
-    )
-    sys.exit(2)
+    import yaml  # type: ignore[import-not-found]
+    _HAVE_YAML = True
+except ImportError:  # pragma: no cover — stdlib-only runnerlarda yaml yok
+    yaml = None  # type: ignore[assignment]
+    _HAVE_YAML = False
 
 # verify.yml — scriptin kendi konumundan çöz (cwd'den bağımsız; testler
 # CIKTI'dan da repo kökünden de koşabilsin).
@@ -92,8 +90,19 @@ GATE_EXCLUDE = {
 #                    K9, verify --full içinde bağımsız koşar (e30f8ea).
 
 
+def _require_yaml():
+    """PyYAML yoksa import noktasındaki gibi exit 2 — test/CI bare-run toleransı."""
+    if not _HAVE_YAML:
+        sys.stderr.write(
+            "HATA: PyYAML gerekli — pip install pyyaml "
+            "(veya _calisma/.venv_z3/bin/python kullan)\n"
+        )
+        sys.exit(2)
+
+
 def gate_jobs():
     """workflow'daki job id → name eşlemesi (required check adayları)."""
+    _require_yaml()
     with open(WORKFLOW, encoding="utf-8") as f:
         data = yaml.safe_load(f)
     jobs = data["jobs"]
@@ -107,6 +116,7 @@ def all_jobs(data=None):
     verilmezse WORKFLOW dosyasını okur.
     """
     if data is None:
+        _require_yaml()
         with open(WORKFLOW, encoding="utf-8") as f:
             data = yaml.safe_load(f)
     jobs = data.get("jobs") or {}

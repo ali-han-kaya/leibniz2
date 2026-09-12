@@ -21,12 +21,38 @@
 #   docker run --rm -p 8000:8000 verify-dashboard
 #   # browser → http://localhost:8000/preview.html
 
-FROM python:3.11-slim AS builder
+# Distro line pinned to bookworm: python:3.11-slim floated to trixie
+# (Debian 13) and its younger package set carries unfixed CRITICAL/HIGH
+# CVEs — the docker-security Trivy gate fails closed on them. Bookworm's
+# package set is the mature, continuously-patched line (upstream rebuilds
+# the tag as security fixes land), keeping the scan green without
+# weakening the gate.
+FROM python:3.11-slim-bookworm AS builder
 
+# z3-solver: K8 symbolic proof engine (tek üçüncü-parti bağımlılık).
+# setuptools: güvenlik yaması — image'e taşınan pip/pkg_resources zinciri
+# eski setuptools sürümüyle HIGH CVE taşıyordu (trivy docker-security gate);
+# en az yamalı sürüm sabitlenir.
 RUN python -m venv /opt/venv \
+    && /opt/venv/bin/pip install --no-cache-dir --upgrade "setuptools>=80" \
     && /opt/venv/bin/pip install --no-cache-dir z3-solver
 
-FROM python:3.11-slim AS runtime
+FROM python:3.11-slim-bookworm AS runtime
+
+# Base image'in sistem setuptools/wheel'i (pip/pkg_resources zinciri ile)
+# HIGH CVE taşıyordu: CVE-2026-23949 (jaraco.context path traversal,
+# 6.1.0'da fix) + CVE-2026-24049 (wheel privesc, 0.46.2'de fix).
+# Sistem site-packages'ı yamalı sürüme yükselt — gate'in tetiklediği
+# yamalar bu aşamada uygulanır.
+RUN pip install --no-cache-dir --upgrade "setuptools>=80" "wheel>=0.46.2"
+
+# Base image OS paketleri: kaynak imaj yamasız kalırsa trivy gate HIGH bulguyla
+# düşer (libpcre2-8-0 CVE-2026-86145 / CVE-2026-89161, deb12u1'de düzeltildi).
+# Debian security repo'sundaki düzeltmeleri uygula — --only-upgrade, yani yeni
+# paket eklenmez; gate gevşetilmez, yama gerçekten image'e girer.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends --only-upgrade libpcre2-8-0 \
+    && rm -rf /var/lib/apt/lists/*
 
 # The z3 interpreter for K8 + hook_env: copied from the builder, put on PATH.
 COPY --from=builder /opt/venv /opt/venv

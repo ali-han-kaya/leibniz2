@@ -1230,6 +1230,8 @@ def _route(path):
         return "preview"
     if p == "/preview.js":
         return "preview_js"
+    if p == "/design-system/tokens.css":
+        return "design_tokens"
     if p == "/guide.html":
         return "guide"
     if p == "/api/latest":
@@ -1309,6 +1311,8 @@ class Handler(BaseHTTPRequestHandler):
             self.serve_guide()
         elif route == "preview_js":
             self.serve_preview_js()
+        elif route == "design_tokens":
+            self.serve_design_tokens()
         elif route == "latest":
             self.serve_latest()
         elif route == "sse":
@@ -1678,6 +1682,23 @@ class Handler(BaseHTTPRequestHandler):
         with open(path, encoding="utf-8") as f:
             js = f.read()
         self._send(200, js, content_type="application/javascript; charset=utf-8")
+
+    def serve_design_tokens(self):
+        """design-system/tokens.css — dashboard token sheet (tek stil kaynağı).
+
+        Gerçek kaynak: <repo>/design-system/tokens.css (check_tokens.py'in
+        tek-kaynak sözleşmesi). update_preview.sh/sync_verify_mirror.sh bunu
+        mirror PREVIEW_DIR'e design-system-tokens.css adıyla taşır; mirror'da
+        yoksa 404 (fail-closed — tokensız sayfa tarayıcı varsayılanına düşer).
+        """
+        path = os.path.join(PREVIEW_DIR, "design-system-tokens.css")
+        if not os.path.isfile(path):
+            self._send(404, "404 — design-system/tokens.css mirror'da yok "
+                            "(bash update_preview.sh --force)")
+            return
+        with open(path, encoding="utf-8") as f:
+            css = f.read()
+        self._send(200, css, content_type="text/css; charset=utf-8")
 
     def serve_sw(self):
         """Service worker — Freebuff Electron webview cache bypass.

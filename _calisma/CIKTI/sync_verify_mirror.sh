@@ -135,6 +135,11 @@ PREVIEW_FILES=(
 # /guide.html rotasında PREVIEW_DIR/guide.html'den servis eder.
 GUIDE_FILES=(
   "docs/branch-protection-guide/guide.html|guide.html"
+  # design-system token sheet — check_tokens.py tek-kaynak sözleşmesi:
+  # preview.html /design-system/tokens.css import eder; sunucu bu rotayı
+  # PREVIEW_DIR/design-system-tokens.css'ten servis eder (repo'daki tek
+  # kaynak <repo>/design-system/tokens.css).
+  "design-system/tokens.css|design-system-tokens.css"
   # Hook env sürüm matrisi — dashboard env-drift paneli (preview_server, ROOT
   # yanındaki HOOK_ENV_MATRIX.md'yi okur). TCC mirror'da repoyu okuyamaz;
   # launchd rotasında panelin doğru karşılaştırması için kopya buraya drop

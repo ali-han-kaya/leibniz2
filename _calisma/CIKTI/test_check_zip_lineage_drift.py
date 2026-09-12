@@ -129,5 +129,40 @@ class TestLiveDriftContract(unittest.TestCase):
                          f"expected in-sync PASS (exit 0) after resync, got {rc.returncode}:\n{rc.stderr}")
 
 
+class TestCleanupCanonicalLiveFailClosed(unittest.TestCase):
+    """Fail-closed: cleanup_log.json canonical[].hash must equal live zip SHA-256.
+
+    K14 drift was the release blocker (b69de33 repack left stale hashes).
+    check_zip_lineage_drift.py's commit-time gate catches it, but this unit
+    test pins the invariant directly: every canonical entry → live file exists
+    and hash is byte-identical. Missing file or hash drift → hard FAIL (P0
+    semantics), not UNVERIFIED. Uses stdlib only, no network.
+    """
+
+    def test_cleanup_canonical_hashes_match_live_zips(self):
+        repo_root = getattr(gate, "REPO_ROOT", os.path.abspath(os.path.join(HERE, "..", "..")))
+        cleanup_path = os.path.join(repo_root, "_calisma", "CIKTI", "cleanup_log.json")
+        self.assertTrue(os.path.isfile(cleanup_path),
+                        f"cleanup_log.json missing (fail-closed): {cleanup_path}")
+        with open(cleanup_path, encoding="utf-8") as f:
+            data = json.load(f)
+        canonical = data.get("canonical", [])
+        self.assertGreater(len(canonical), 0, "cleanup_log.json canonical list empty (fail-closed)")
+        for rec in canonical:
+            rel = rec.get("path", "")
+            want = rec.get("hash", "")
+            self.assertTrue(rel, f"canonical entry missing path: {rec}")
+            self.assertTrue(want, f"canonical entry missing hash: {rel}")
+            self.assertRegex(want, r"^[0-9a-f]{64}$", f"invalid hash for {rel}: {want!r}")
+            live_path = os.path.join(repo_root, rel)
+            self.assertTrue(os.path.isfile(live_path),
+                            f"canonical live file missing (fail-closed P0): {rel} → {live_path}")
+            got = gate.sha256_file(live_path)
+            self.assertIsNotNone(got, f"sha256 failed for {live_path}")
+            self.assertEqual(got, want,
+                             f"canonical hash mismatch (fail-closed P0): {rel} "
+                             f"want={want} got={got} — run repack_delivery.py + registry resync")
+
+
 if __name__ == "__main__":
     unittest.main()

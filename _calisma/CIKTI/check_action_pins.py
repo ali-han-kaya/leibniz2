@@ -53,7 +53,12 @@ DEFAULT_PINS = "_calisma/CIKTI/action_pins.json"
 # yakalar. Değer boşluk/#/tırnakla sınırlanır ki heredoc içi JS/string'ler
 # yanlış pozitif üretmesin.
 _USES_RE = re.compile(r'^\s*(?:-\s*)?uses:\s*["\']?([^\s"\'#]+)')
-_REF_RE = re.compile(r"^v(\d+)$")
+# Ref biçimi: 'v7' (major) veya semver 'v0.35.0' / 'v3.1' (major = ilk
+# bileşen — pin karşılaştırması major-granularity kalır; minor/patch
+# yükselmeleri downgrade sayılmaz). 4+ bileşenli ref beklenmedik biçimdir
+# (major=None → FAIL, fail-closed). Mutable ref'ler (@main/@master/@latest)
+# yine hiç eşleşmez — 2026 trivy tag-compromise sınıfı asla geçemez.
+_REF_RE = re.compile(r"^v(\d+)(?:\.\d+){0,2}$")
 
 
 def resolve_workflows(path):

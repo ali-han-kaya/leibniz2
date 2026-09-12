@@ -8,21 +8,26 @@
   const REPRO_MANIFEST_PATH = 'reproducibility/manifest.json';
   const MARKER = '<!-- stoic-hume-v5-pr-status -->';
 
-  const budget = fs.existsSync(BUDGET_PATH)
-    ? JSON.parse(fs.readFileSync(BUDGET_PATH, 'utf8'))
-    : null;
-  const pc = fs.existsSync(PC_PATH)
-    ? JSON.parse(fs.readFileSync(PC_PATH, 'utf8'))
-    : null;
-  const k0 = fs.existsSync(K0_PATH)
-    ? JSON.parse(fs.readFileSync(K0_PATH, 'utf8'))
-    : null;
-  const lineage = fs.existsSync(LINEAGE_PATH)
-    ? JSON.parse(fs.readFileSync(LINEAGE_PATH, 'utf8'))
-    : null;
-  const klayers = fs.existsSync(KLAYERS_PATH)
-    ? JSON.parse(fs.readFileSync(KLAYERS_PATH, 'utf8'))
-    : null;
+  let budget = null;
+  if (fs.existsSync(BUDGET_PATH)) {
+    try { budget = JSON.parse(fs.readFileSync(BUDGET_PATH, 'utf8')); } catch (e) { console.log(`budget/index.json okunamadı: ${e.message} — degrade null`); }
+  }
+  let pc = null;
+  if (fs.existsSync(PC_PATH)) {
+    try { pc = JSON.parse(fs.readFileSync(PC_PATH, 'utf8')); } catch (e) { console.log(`precommit_findings/PRECOMMIT_RAPORU.json okunamadı: ${e.message} — degrade null`); }
+  }
+  let k0 = null;
+  if (fs.existsSync(K0_PATH)) {
+    try { k0 = JSON.parse(fs.readFileSync(K0_PATH, 'utf8')); } catch (e) { console.log(`k0_findings.json okunamadı: ${e.message} — degrade null`); }
+  }
+  let lineage = null;
+  if (fs.existsSync(LINEAGE_PATH)) {
+    try { lineage = JSON.parse(fs.readFileSync(LINEAGE_PATH, 'utf8')); } catch (e) { console.log(`lineage_findings.json okunamadı: ${e.message} — degrade null`); }
+  }
+  let klayers = null;
+  if (fs.existsSync(KLAYERS_PATH)) {
+    try { klayers = JSON.parse(fs.readFileSync(KLAYERS_PATH, 'utf8')); } catch (e) { console.log(`klayers.json okunamadı: ${e.message} — degrade null`); }
+  }
   const hasReproManifest = fs.existsSync(REPRO_MANIFEST_PATH);
   const k10Verdict = fs.existsSync(K10_VERDICT_PATH)
     ? fs.readFileSync(K10_VERDICT_PATH, 'utf8').trim() : null;
