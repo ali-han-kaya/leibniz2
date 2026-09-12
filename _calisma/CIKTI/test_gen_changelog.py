@@ -15,10 +15,12 @@ Kapsam:
 
 import contextlib
 import os
+import subprocess
 import sys
 import tempfile
 import textwrap
 import unittest
+from typing import Optional, Set
 from pathlib import Path
 from unittest.mock import patch
 
@@ -902,6 +904,253 @@ class TestRegexPatterns(unittest.TestCase):
         line = "| R1 | 2026-08-19 | CI 0s | YAML | satır | `d57a60c` |"
         m = gc._README_ROW_RE.match(line)
         self.assertIsNone(m)
+
+
+class TestPruneMode(unittest.TestCase):
+    """--prune: stale satırları sil, safe-mode/tag-scope guard, idempotency."""
+
+    def _commits(self):
+        return [
+            gc.CommitInfo("aaa1111", "a", "2026-08-22", "feat: A", "feat", "A"),
+            gc.CommitInfo("bbb2222", "b", "2026-08-21", "fix: B", "fix", "B"),
+        ]
+
+    def test_prune_removes_stale_no_tag_filter(self):
+        """Stale hash (git log'da olmayan) --prune ile silinir, geçerli satır kalır."""
+        content = textwrap.dedent("""\
+            # Test
+
+            ## Değişiklik Geçmişi
+
+            | Tarih | Kategori | Değişiklik | Commit |
+            |---|---|---|---|
+            | 2026-08-22 | feat | A | `aaa1111` |
+            | 2026-08-20 | docs | old | `dead999` |
+            """)
+        with tempfile.TemporaryDirectory() as td:
+            readme = Path(td, "README.md")
+            readme.write_text(content)
+            added, pruned, remaining = gc.prune_file_changelog(
+                readme, "## Değişiklik Geçmişi", gc._README_ROW_RE,
+                gc.format_readme_row, self._commits())
+            out = readme.read_text()
+            self.assertIn("dead999", pruned)
+            self.assertEqual(remaining, [])
+            self.assertEqual(added, [])  # en yeni zaten tabloda, eksik yok
+            self.assertNotIn("dead999", out)
+            self.assertIn("aaa1111", out)
+
+    def test_prune_tag_scope_guard_keeps_outside_category(self):
+        """Safe-mode: --tag-regex yalnız eşleşen kategorideki stale'leri siler."""
+        commits = [
+            gc.CommitInfo("aaa1111", "a", "2026-08-22", "feat: A", "feat", "A"),
+        ]
+        content = textwrap.dedent("""\
+            ## Değişiklik Geçmişi
+
+            | Tarih | Kategori | Değişiklik | Commit |
+            |---|---|---|---|
+            | 2026-08-22 | feat | A | `aaa1111` |
+            | 2026-08-20 | docs | old-docs | `dead111` |
+            | 2026-08-19 | feat | old-feat | `dead222` |
+            """)
+        with tempfile.TemporaryDirectory() as td:
+            readme = Path(td, "README.md")
+            readme.write_text(content)
+            added, pruned, remaining = gc.prune_file_changelog(
+                readme, "## Değişiklik Geçmişi", gc._README_ROW_RE,
+                gc.format_readme_row, commits, tag_regex="feat|fix")
+            out = readme.read_text()
+            # feat stale silindi, docs stale korundu (safe-mode)
+            self.assertIn("dead222", pruned)
+            self.assertIn("dead111", remaining)
+            self.assertNotIn("dead222", out)
+            self.assertIn("dead111", out)
+
+    def test_prune_respects_safe_mode_no_match_no_delete(self):
+        """Tag filtresi hiç stale ile eşleşmezse hiçbir satır silinmez."""
+        commits = [gc.CommitInfo("aaa1111", "a", "2026-08-22", "feat: A", "feat", "A")]
+        content = textwrap.dedent("""\
+            ## Değişiklik Geçmişi
+
+            | Tarih | Kategori | Değişiklik | Commit |
+            |---|---|---|---|
+            | 2026-08-22 | feat | A | `aaa1111` |
+            | 2026-08-20 | docs | old | `dead999` |
+            """)
+        with tempfile.TemporaryDirectory() as td:
+            readme = Path(td, "README.md")
+            readme.write_text(content)
+            added, pruned, remaining = gc.prune_file_changelog(
+                readme, "## Değişiklik Geçmişi", gc._README_ROW_RE,
+                gc.format_readme_row, commits, tag_regex="refs")
+            out = readme.read_text()
+            self.assertEqual(pruned, [])
+            self.assertIn("dead999", remaining)
+            self.assertIn("dead999", out)
+
+    def test_prune_also_adds_missing(self):
+        """--prune stale silerken aynı anda eksik commit'leri de ekler."""
+        commits = [
+            gc.CommitInfo("aaa1111", "a", "2026-08-22", "feat: new", "feat", "new"),
+            gc.CommitInfo("bbb2222", "b", "2026-08-21", "fix: old", "fix", "old"),
+        ]
+        content = textwrap.dedent("""\
+            ## Değişiklik Geçmişi
+
+            | Tarih | Kategori | Değişiklik | Commit |
+            |---|---|---|---|
+            | 2026-08-21 | fix | old | `bbb2222` |
+            | 2026-08-20 | docs | stale | `dead999` |
+            """)
+        with tempfile.TemporaryDirectory() as td:
+            readme = Path(td, "README.md")
+            readme.write_text(content)
+            added, pruned, remaining = gc.prune_file_changelog(
+                readme, "## Değişiklik Geçmişi", gc._README_ROW_RE,
+                gc.format_readme_row, commits)
+            out = readme.read_text()
+        self.assertIn("dead999", pruned)
+        self.assertIn("aaa1111", added)
+        self.assertIn("aaa1111", out)
+        self.assertNotIn("dead999", out)
+
+    def test_prune_idempotent_second_run(self):
+        """İkinci --prune çağrısı 0 değişiklik (idempotent)."""
+        commits = [gc.CommitInfo("aaa1111", "a", "2026-08-22", "feat: A", "feat", "A")]
+        content = textwrap.dedent("""\
+            ## Değişiklik Geçmişi
+
+            | Tarih | Kategori | Değişiklik | Commit |
+            |---|---|---|---|
+            | 2026-08-22 | feat | A | `aaa1111` |
+            | 2026-08-20 | feat | old | `dead999` |
+            """)
+        with tempfile.TemporaryDirectory() as td:
+            readme = Path(td, "README.md")
+            readme.write_text(content)
+            gc.prune_file_changelog(readme, "## Değişiklik Geçmişi",
+                                    gc._README_ROW_RE, gc.format_readme_row, commits)
+            added2, pruned2, remaining2 = gc.prune_file_changelog(
+                readme, "## Değişiklik Geçmişi", gc._README_ROW_RE,
+                gc.format_readme_row, commits)
+        self.assertEqual(pruned2, [])
+        self.assertEqual(added2, [])
+        self.assertEqual(remaining2, [])
+
+    def test_prune_invalid_regex_raises(self):
+        commits = [gc.CommitInfo("aaa1111", "a", "2026-08-22", "feat: A", "feat", "A")]
+        content = textwrap.dedent("""\
+            ## Değişiklik Geçmişi
+
+            | Tarih | Kategori | Değişiklik | Commit |
+            |---|---|---|---|
+            | 2026-08-22 | feat | A | `aaa1111` |
+            | 2026-08-20 | feat | old | `dead999` |
+            """)
+        with tempfile.TemporaryDirectory() as td:
+            readme = Path(td, "README.md")
+            readme.write_text(content)
+            with self.assertRaises(ValueError):
+                gc.prune_file_changelog(readme, "## Değişiklik Geçmişi",
+                                        gc._README_ROW_RE, gc.format_readme_row,
+                                        commits, tag_regex="(feat")
+
+    def test_main_prune_end_to_end(self):
+        """main --prune: README stale silinir, PUBLISH legacy işaretçiye çevrilir."""
+        import io
+        commits = [gc.CommitInfo("aaa1111", "a", "2026-08-22", "feat: A", "feat", "A")]
+        with tempfile.TemporaryDirectory() as td:
+            readme = Path(td, "README.md")
+            pub = Path(td, "PUBLISH.md")
+            readme.write_text(textwrap.dedent("""\
+                # Test
+
+                ## Değişiklik Geçmişi
+
+                | Tarih | Kategori | Değişiklik | Commit |
+                |---|---|---|---|
+                | 2026-08-22 | feat | A | `aaa1111` |
+                | 2026-08-20 | feat | old | `dead999` |
+                """))
+            pub.write_text(textwrap.dedent("""\
+                # Senaryo
+
+                ## Değişiklik Geçmişi
+
+                | Tarih | Bölüm | Değişiklik | Commit |
+                |---|---|---|---|
+                | 2026-08-21 | AŞAMA 0 | precheck | `aaa1111` |
+                """))
+            buf = io.StringIO()
+            with patch.object(gc, "get_git_log", return_value=commits), \
+                 patch.object(sys, "argv", ["gen_changelog.py", "--prune",
+                                            "--readme", str(readme),
+                                            "--publish", str(pub)]), \
+                 contextlib.redirect_stdout(buf):
+                gc.main()
+            out = buf.getvalue()
+            self.assertNotIn("dead999", readme.read_text())
+            self.assertIn(gc.PUBLISH_POINTER, pub.read_text())
+            self.assertIn("prune", out.lower())
+
+
+class TestReadmeChangelogScope(unittest.TestCase):
+    """Regresyon: README changelog tablosundaki HER hash origin/main..HEAD'de
+    çözümlenebilir bir commit'e karşılık gelmeli.
+
+    Rebase/rewrite sonrası tabloda kalan ölü hash'ler (stale) burada fail eder —
+    `gen_changelog.py --prune` ile temizlenir. Bu test prune'un geri dönmesini
+    (yeni rewrite sonrası unutulmasını) engeller.
+    """
+
+    README_SECTION = "## Değişiklik Geçmişi"
+
+    def _reachable_hashes(self) -> Optional[Set[str]]:
+        """origin/main + HEAD'ten erişilebilir commit kısa hash'leri; repo/remote
+        yoksa None (test atlanır — fresh clone / no-origin güvenli).
+
+        Sıkı origin/main..HEAD aralığı YETERLİ DEĞİL: PR merge sonrası tablodaki
+        eski satırlar merge öncesi commit'lere işaret eder; bu commit'ler
+        origin/main üzerinde yaşar ama strict aralıkta DEĞİLDİR. Guard'ın amacı
+        rewrite/revision-silme sonrası ölü hash'leri yakalamak — canlı geçmişe
+        dokunmamak. Bu yüzden iki ucun birleşimi kullanılır.
+        """
+        repo = str(Path(__file__).resolve().parents[2])
+        try:
+            probe = subprocess.run(
+                ["git", "rev-parse", "--verify", "origin/main"],
+                capture_output=True, text=True, check=False, cwd=repo)
+            if probe.returncode != 0:
+                return None
+            log = subprocess.run(
+                ["git", "log", "--format=%h", "origin/main", "HEAD"],
+                capture_output=True, text=True, check=True, cwd=repo)
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            return None
+        return {h.strip()[:7] for h in log.stdout.splitlines() if h.strip()}
+
+    def test_every_readme_changelog_hash_resolves_to_live_commit(self):
+        repo_root = Path(__file__).resolve().parents[2]
+        readme = repo_root / "README.md"
+        if not readme.exists():
+            self.skipTest("README.md bulunamadı (repo kökü değil)")
+        git_hashes = self._reachable_hashes()
+        if git_hashes is None:
+            self.skipTest("origin/main yok veya git erişilemedi — kapsam testi atlandı")
+
+        table_hashes = gc.extract_hashes_from_table(
+            readme.read_text(encoding="utf-8"), gc._README_ROW_RE,
+            self.README_SECTION)
+        self.assertTrue(table_hashes,
+                        "README changelog tablosu boş — bölüm başlığı değişti mi?")
+
+        stale = sorted(table_hashes - git_hashes)
+        self.assertEqual(
+            stale, [],
+            f"README changelog'da {len(stale)} ölü hash var (rewrite/rebase "
+            f"artığı; ilk 10: {stale[:10]}). Temizlik: "
+            f"python3 _calisma/CIKTI/gen_changelog.py --prune")
 
 
 if __name__ == "__main__":
