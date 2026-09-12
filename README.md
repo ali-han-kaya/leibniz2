@@ -615,6 +615,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-11 | refactor | (verify) single-source workflow contract fixture | [`616f5eb`](https://github.com/ali-han-kaya/leibniz2/commit/616f5eb) |
 | 2026-09-11 | ci | (docker) land docker-security workflow with pinned actions | [`38e1a83`](https://github.com/ali-han-kaya/leibniz2/commit/38e1a83) |
 | 2026-09-11 | fix | (design) land token sheet and wire dashboard to single source | [`1a0b32c`](https://github.com/ali-han-kaya/leibniz2/commit/1a0b32c) |
+| 2026-09-12 | fix | (verify) dependency-closed delivery resync and mirror coverage set | [`831b941`](https://github.com/ali-han-kaya/leibniz2/commit/831b941) |
 
 ### Regresyon notları
 

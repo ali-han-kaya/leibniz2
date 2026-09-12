@@ -1,35 +1,8 @@
-# Freebuff / yerel araçlar
-.freebuff/
-.worktrees/
+# Oynatma sırasında değişen yapay ürünler (derlenmeleri tekrar üretebilir)
+_calisma/architecture_deepening_deck/
+_calisma/pdf_repro_findings_deck/
+_calisma/verification_chain_deck/
+docs/ci_simulate/
 
-# Z3 ispatı için proje-içi sanal ortam (CI'da pip ile kurulur, commit edilmez)
-_calisma/.venv_z3/
-
-# Teslim kaynak dizinleri artık git'te (repack fresh clone'da da çalışsın).
-# Yalnızca repack'in YENİDEN ÜRETTİĞİ derived çıktılar ignore edilir:
-#   dış klasör içindeki iç zip + sidecar'ı + KLASOR_CHECKSUMLARI (hepsi
-#   repack_delivery.py tarafından deterministik yeniden üretilir; kanonik
-#   kopyalar CIKTI/'da).
-_calisma/TESLIM/Stoic-Hume-Final-V5_2026-08-17/TESLIM_V5_FINAL_2026-08-17.zip
-_calisma/TESLIM/Stoic-Hume-Final-V5_2026-08-17/TESLIM_V5_FINAL_2026-08-17.zip.sha256
-_calisma/TESLIM/Stoic-Hume-Final-V5_2026-08-17/KLASOR_CHECKSUMLARI.sha256
-_calisma/TOOLKIT/
-
-# Başıboş çalışma kopyaları (kanonik kopyalar CIKTI/'da; toolkit zip'i iCloud'da)
-_calisma/ALI_KOMUT_TOOLKIT_v3.zip
-_calisma/TESLIM_KLASOR_V5_2026-08-17.zip
-
-# Publish/CI yerel logları (kullanıcı adı, run id vs. içerir; commit edilmez)
-logs/
-
-# Python önbellekleri
-__pycache__/
-*.py[cod]
-*.egg-info/
-
-# Lean 4 (lake build çıktıları — tek dosya teslim spec'i `rm -rf .lake` der)
-.lake/
-lake-manifest.json
-
-# macOS
-.DS_Store
+# agent-run temp dirs (refresh-from-unstaged-source false positives)
+.agents/
