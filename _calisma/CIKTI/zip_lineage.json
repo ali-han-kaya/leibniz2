@@ -67,6 +67,18 @@
       "note": "V5m: qpdf determinizm deneyi (script + donmuş çıktı) + b69de33 repack (M0 §10.2 → güncel kanonik)",
       "hash": "0df21b5d003f67df30efcf710bc85914851567f31c33b427ee1b528c9ad190a5",
       "commit": "d02cda8",
+      "current": false
+    },
+    {
+      "note": "V5n: corrected-PDF rebuild (tex↔pdf Popkin/Priest sync) + repack (güncel kanonik)",
+      "hash": "6dac4b64abf09474eb1bc546360bed82ec0ce08583561f01e8763ebbd9a97ed6",
+      "commit": null,
+      "current": false
+    },
+    {
+      "note": "V5o: K5 frozen-record regen (raw 74b2cdbd) + repack Delivery (güncel kanonik)",
+      "hash": "afd6aec0bfa6b8d2162e386503031d8b3644a6fd2b4c9d07173b708bfb56645b",
+      "commit": null,
       "current": true
     }
   ]
