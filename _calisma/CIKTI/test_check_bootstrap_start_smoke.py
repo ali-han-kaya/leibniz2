@@ -364,6 +364,40 @@ class TestBootstrapSkipFlags(unittest.TestCase):
             # plist üretimi hâlâ yapılmalı
             self.assertIn("plist", txt.lower())
 
+    def test_leading_skip_flags_before_bootstrap(self):
+        """--no-* bayrakları --bootstrap'tan ÖNCE de tanınmalı.
+
+        Regresyon: dış `case` yalnızca $1'e bakar, bu yüzden
+        `--no-mirror --no-html --bootstrap ...` çağrısı modu bulamayıp
+        "bilinmeyen mod" ile exit 2 veriyordu (bayraklar sıradan bağımsız
+        ayrıştırıldığı için sıra farkı gözetilmemeli).
+        """
+        import subprocess
+        with tempfile.TemporaryDirectory() as td:
+            shim_dir, lc_log, curl_log = create_full_shim_set(td)
+            fake_home = os.path.join(td, "home")
+            os.makedirs(fake_home, exist_ok=True)
+            env = dict(os.environ)
+            env["HOME"] = fake_home
+            env["LAUNCHCTL_LOG"] = lc_log
+            env["CURL_LOG"] = curl_log
+            env["PATH"] = shim_dir + ":" + env.get("PATH", "")
+            here = os.path.dirname(os.path.abspath(__file__))
+            script = os.path.join(here, "update_preview.sh")
+            if not os.path.isfile(script):
+                self.skipTest("update_preview.sh yok")
+            r = subprocess.run(
+                ["bash", script, "--no-mirror", "--no-html",
+                 "--bootstrap", "--start", fake_home],
+                capture_output=True, text=True, timeout=120, env=env)
+            txt = (r.stdout + r.stderr).strip()
+            self.assertNotIn("bilinmeyen mod", txt)
+            self.assertIn("ATLANDI", txt)
+            self.assertIn("--no-mirror", txt)
+            self.assertIn("--no-html", txt)
+            # plist üretimi hâlâ yapılmalı
+            self.assertIn("plist", txt.lower())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -295,6 +295,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-12 | fix | (verify) pin the V5m lineage generation to its owning commit | [`ba088ad`](https://github.com/ali-han-kaya/leibniz2/commit/ba088ad) |
 | 2026-09-12 | docs | (changelog) resync table through ba088ad | [`cfcaf91`](https://github.com/ali-han-kaya/leibniz2/commit/cfcaf91) |
 | 2026-09-13 | fix | (verify) resolve review-freshness times from the file's own repo | [`16d4e06`](https://github.com/ali-han-kaya/leibniz2/commit/16d4e06) |
+| 2026-09-13 | fix | (docker) keep the host z3 venv out of image builds | [`f70779c`](https://github.com/ali-han-kaya/leibniz2/commit/f70779c) |
 
 ### Regresyon notları
 
