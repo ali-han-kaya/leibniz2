@@ -291,6 +291,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-12 | chore | (repo) ignore generated deck renders and agent temp dirs | [`ed08874`](https://github.com/ali-han-kaya/leibniz2/commit/ed08874) |
 | 2026-09-12 | fix | (verify) dependency-closed delivery resync and mirror coverage set | [`e694216`](https://github.com/ali-han-kaya/leibniz2/commit/e694216) |
 | 2026-09-11 | fix | (verify) status-checks importable on bare runners without PyYAML | [`6b4c021`](https://github.com/ali-han-kaya/leibniz2/commit/6b4c021) |
+| 2026-09-12 | docs | (changelog) resync table after the review and trivy fixes | [`534b468`](https://github.com/ali-han-kaya/leibniz2/commit/534b468) |
 
 ### Regresyon notları
 
