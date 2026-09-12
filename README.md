@@ -271,10 +271,6 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-08-26 | refactor | (refs-trend) UNVERIFIED/bayat-artifact saf fonksiyonlar | [`35897ac`](https://github.com/ali-han-kaya/leibniz2/commit/35897ac) |
 | 2026-08-26 | feat | (summary) durum panosuna K13 ayrı-step satırı + plist docs tazeleme | [`2f927fc`](https://github.com/ali-han-kaya/leibniz2/commit/2f927fc) |
 | 2026-08-26 | feat | (render) Z3 teorem slayt üretici + sync testi (12/12 OK) | [`7333a55`](https://github.com/ali-han-kaya/leibniz2/commit/7333a55) |
-| 2026-09-12 | feat | (changelog) add safe stale-row pruning | [`350932a`](https://github.com/ali-han-kaya/leibniz2/commit/350932a) |
-| 2026-09-12 | chore | (repo) ignore generated deck renders and agent temp dirs | [`9256cd4`](https://github.com/ali-han-kaya/leibniz2/commit/9256cd4) |
-| 2026-09-12 | fix | (verify) dependency-closed delivery resync and mirror coverage set | [`16d2d52`](https://github.com/ali-han-kaya/leibniz2/commit/16d2d52) |
-| 2026-09-11 | fix | (verify) make status-checks importable without PyYAML and skip bare-runner | [`764e342`](https://github.com/ali-han-kaya/leibniz2/commit/764e342) |
 | 2026-09-11 | fix | (docker) drop docker-scout step that requires a paid entitlement | [`43af1fb`](https://github.com/ali-han-kaya/leibniz2/commit/43af1fb) |
 | 2026-09-11 | fix | (docker) single table-mode trivy gate with visible evidence | [`2590023`](https://github.com/ali-han-kaya/leibniz2/commit/2590023) |
 | 2026-09-11 | fix | (docker) patch base-image setuptools and wheel in runtime stage | [`206d218`](https://github.com/ali-han-kaya/leibniz2/commit/206d218) |
@@ -287,7 +283,14 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-11 | docs | (changelog) resync table through e2aaf86 canonical-hash pin | [`d37a45f`](https://github.com/ali-han-kaya/leibniz2/commit/d37a45f) |
 | 2026-09-11 | test | (verify) fail-closed canonical-hash pin for cleanup_log.json | [`9e4c8ea`](https://github.com/ali-han-kaya/leibniz2/commit/9e4c8ea) |
 | 2026-09-10 | feat | (verify) reproducibility gates + verify_mcp + dashboard perf/security hardeni... | [`e6572d1`](https://github.com/ali-han-kaya/leibniz2/commit/e6572d1) |
-| 2026-09-12 | fix | (verify) make advisory comment scripts crash-safe on bad sidecars | [`712c4ee`](https://github.com/ali-han-kaya/leibniz2/commit/712c4ee) |
+| 2026-09-12 | fix | (review) rebuild review compilation after the delivery resync | [`f8a1fa0`](https://github.com/ali-han-kaya/leibniz2/commit/f8a1fa0) |
+| 2026-09-12 | fix | (docker) upgrade base-image libpcre2 for the trivy gate | [`5bf6ebe`](https://github.com/ali-han-kaya/leibniz2/commit/5bf6ebe) |
+| 2026-09-12 | docs | (changelog) resync table and prune stale rows | [`4c483d4`](https://github.com/ali-han-kaya/leibniz2/commit/4c483d4) |
+| 2026-09-12 | fix | (verify) make advisory comment scripts crash-safe on bad sidecars | [`1d8f1ec`](https://github.com/ali-han-kaya/leibniz2/commit/1d8f1ec) |
+| 2026-09-12 | feat | (changelog) add safe stale-row pruning | [`26f6a19`](https://github.com/ali-han-kaya/leibniz2/commit/26f6a19) |
+| 2026-09-12 | chore | (repo) ignore generated deck renders and agent temp dirs | [`ed08874`](https://github.com/ali-han-kaya/leibniz2/commit/ed08874) |
+| 2026-09-12 | fix | (verify) dependency-closed delivery resync and mirror coverage set | [`e694216`](https://github.com/ali-han-kaya/leibniz2/commit/e694216) |
+| 2026-09-11 | fix | (verify) status-checks importable on bare runners without PyYAML | [`6b4c021`](https://github.com/ali-han-kaya/leibniz2/commit/6b4c021) |
 
 ### Regresyon notları
 
