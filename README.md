@@ -605,6 +605,16 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-10 | fix | (ci-audit) break advisory self-loop in deterministic gate | [`a345284`](https://github.com/ali-han-kaya/leibniz2/commit/a345284) |
 | 2026-09-10 | test | (verify) add full-discover drift guard + register tests | [`8bac7f8`](https://github.com/ali-han-kaya/leibniz2/commit/8bac7f8) |
 | 2026-09-11 | docs | (changelog) resync table through e2aaf86 canonical-hash pin | [`2a493ec`](https://github.com/ali-han-kaya/leibniz2/commit/2a493ec) |
+| 2026-09-11 | fix | (verify) make status-checks importable without PyYAML and skip bare-runner | [`b227c2e`](https://github.com/ali-han-kaya/leibniz2/commit/b227c2e) |
+| 2026-09-11 | fix | (docker) drop docker-scout step that requires a paid entitlement | [`d4f095e`](https://github.com/ali-han-kaya/leibniz2/commit/d4f095e) |
+| 2026-09-11 | fix | (docker) single table-mode trivy gate with visible evidence | [`8f6e2a9`](https://github.com/ali-han-kaya/leibniz2/commit/8f6e2a9) |
+| 2026-09-11 | fix | (docker) patch base-image setuptools and wheel in runtime stage | [`f9e088f`](https://github.com/ali-han-kaya/leibniz2/commit/f9e088f) |
+| 2026-09-11 | fix | (docker) upgrade vendored setuptools to patched line | [`f690d3d`](https://github.com/ali-han-kaya/leibniz2/commit/f690d3d) |
+| 2026-09-11 | fix | (docker) bookworm base pin + visible trivy findings table | [`f6734a0`](https://github.com/ali-han-kaya/leibniz2/commit/f6734a0) |
+| 2026-09-11 | fix | (verify) surface advisory coe findings that could die unpublished | [`b129bed`](https://github.com/ali-han-kaya/leibniz2/commit/b129bed) |
+| 2026-09-11 | refactor | (verify) single-source workflow contract fixture | [`616f5eb`](https://github.com/ali-han-kaya/leibniz2/commit/616f5eb) |
+| 2026-09-11 | ci | (docker) land docker-security workflow with pinned actions | [`38e1a83`](https://github.com/ali-han-kaya/leibniz2/commit/38e1a83) |
+| 2026-09-11 | fix | (design) land token sheet and wire dashboard to single source | [`1a0b32c`](https://github.com/ali-han-kaya/leibniz2/commit/1a0b32c) |
 
 ### Regresyon notları
 
