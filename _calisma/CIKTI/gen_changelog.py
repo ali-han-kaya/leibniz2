@@ -51,6 +51,8 @@ Kullanım:
   python3 _calisma/CIKTI/gen_changelog.py --update --tag-regex 'feat|fix|refs'
   python3 _calisma/CIKTI/gen_changelog.py --link
   python3 _calisma/CIKTI/gen_changelog.py --link --base-url https://github.com/owner/repo
+  python3 _calisma/CIKTI/gen_changelog.py --prune          # stale satırları sil + eksik satırları ekle
+  python3 _calisma/CIKTI/gen_changelog.py --prune --tag-regex 'feat|fix'  # yalnız bu kategorilerdeki stale'leri sil
 """
 
 from __future__ import annotations
@@ -577,6 +579,137 @@ def check_file_changelog(
     return [ci.short_hash for ci in missing], list(stale)
 
 
+def prune_file_changelog(
+    filepath: Path,
+    section_header: str,
+    row_re: re.Pattern,
+    format_fn,
+    git_commits: list[CommitInfo],
+    all_commits: list[CommitInfo] | None = None,
+    base_url: str | None = None,
+    tag_regex: str | None = None,
+) -> tuple[list[str], list[str], list[str]]:
+    """Stale satırları sil + eksik commit'leri ekle (in-place).
+
+    tag_regex verildiyse yalnız o regex'e UYAN kategorideki stale satırlar
+    silinir — safe-mode guard (feat|fix scope'unda docs satırları silinmez).
+    Missing her zaman filtreli git_commits'e göre eklenir (scope = new commits).
+
+    Returns: (added, pruned, remaining_stale) — pruned: silinen hash'ler,
+    remaining_stale: tag-filtered scope dışındaki (korunan) stale'ler.
+    """
+    content = filepath.read_text(encoding="utf-8")
+    lines = content.splitlines()
+    range_ = _find_section_range(content, section_header)
+    if range_ is None:
+        print(f"  SKIP: {section_header} bulunamadı ({filepath.name})")
+        return [], [], []
+    start, end = range_
+    existing_hashes = extract_hashes_from_table(content, row_re, section_header)
+    # Stale = tabloda olup git log'da olmayan (tam listeden — filtre etkilemez)
+    stale_all = set(find_stale_hashes(all_commits or git_commits, existing_hashes))
+    if not stale_all:
+        # Hâlâ missing ekle (update ile aynı)
+        missing = find_missing_commits(git_commits, existing_hashes)
+        added = [ci.short_hash for ci in missing]
+        if missing:
+            # missing varsa --prune'de de eklenmeli
+            linked = rows_linked(content, row_re, section_header) if base_url else False
+            new_rows = [format_fn(ci, base_url if linked else None) for ci in missing]
+            # locate table_end and append
+            table_start = None
+            table_end = None
+            for i in range(start + 1, end):
+                if lines[i].strip().startswith("|") and "---" in lines[i]:
+                    table_start = i + 1
+                    break
+            if table_start is not None:
+                table_end = table_start
+                for i in range(table_start, end):
+                    if lines[i].strip().startswith("|"):
+                        table_end = i
+                    elif lines[i].strip() == "":
+                        break
+            if table_start is not None and table_end is not None:
+                updated = lines[:table_end + 1] + new_rows + lines[table_end + 1:]
+                filepath.write_text("\n".join(updated) + "\n", encoding="utf-8")
+        return added, [], []
+    # Safe-mode: hangi stale'leri sil
+    to_prune: set[str]
+    remaining: set[str]
+    if tag_regex:
+        try:
+            rx = re.compile(tag_regex, re.IGNORECASE)
+        except re.error as e:
+            raise ValueError(f"geçersiz --tag-regex '{tag_regex}': {e}") from e
+        # Hash→category from ROW parse (tablodaki kategori)
+        hash_to_cat: dict[str, str] = {}
+        for line in lines:
+            m = row_re.match(line)
+            if m:
+                hash_to_cat[m.group("hash")[:7]] = m.group("cat").strip()
+        to_prune = {h for h in stale_all if h in hash_to_cat and rx.search(hash_to_cat[h])}
+        remaining = stale_all - to_prune
+    else:
+        to_prune = set(stale_all)
+        remaining = set()
+    # Remove rows whose hash in to_prune
+    if to_prune:
+        # rebuild content without those rows (preserve row_re header/separator/other rows)
+        new_lines: list[str] = []
+        pruned_count = 0
+        in_section = False
+        seen_prune = set()
+        for i, line in enumerate(lines):
+            if i == start:
+                in_section = True
+                new_lines.append(line)
+                continue
+            if in_section and i >= end:
+                in_section = False
+            if in_section:
+                m = row_re.match(line)
+                if m and m.group("hash")[:7] in to_prune:
+                    seen_prune.add(m.group("hash")[:7])
+                    continue  # drop stale row
+            new_lines.append(line)
+        content_no_pruned = "\n".join(new_lines) + "\n"
+        filepath.write_text(content_no_pruned, encoding="utf-8")
+        # Re-read after prune to recompute existing for missing-add step
+        content = content_no_pruned
+        lines = content.splitlines()
+        range_ = _find_section_range(content, section_header)
+        if range_ is None:
+            return [], list(to_prune), list(remaining)
+        start, end = range_
+        existing_after = extract_hashes_from_table(content, row_re, section_header)
+    else:
+        existing_after = existing_hashes
+    # Now add missing (filtered scope)
+    missing = find_missing_commits(git_commits, existing_after)
+    added = [ci.short_hash for ci in missing]
+    if missing:
+        linked = rows_linked(content, row_re, section_header) if base_url else False
+        new_rows = [format_fn(ci, base_url if linked else None) for ci in missing]
+        table_start = None
+        table_end = None
+        for i in range(start + 1, end):
+            if lines[i].strip().startswith("|") and "---" in lines[i]:
+                table_start = i + 1
+                break
+        if table_start is not None:
+            table_end = table_start
+            for i in range(table_start, end):
+                if lines[i].strip().startswith("|"):
+                    table_end = i
+                elif lines[i].strip() == "":
+                    break
+        if table_start is not None and table_end is not None:
+            updated = lines[:table_end + 1] + new_rows + lines[table_end + 1:]
+            filepath.write_text("\n".join(updated) + "\n", encoding="utf-8")
+    return added, sorted(to_prune), sorted(remaining)
+
+
 def print_table(git_commits: list[CommitInfo], format_fn, limit: int | None = None):
     """Tabloyu stdout'a bas."""
     commits = git_commits if limit is None else git_commits[:limit]
@@ -603,6 +736,10 @@ def main():
     mode.add_argument("--link", action="store_true",
                       help="Tablodaki commit hash'lerini GitHub commit URL'lerine "
                            "bağla (in-place + stdout; git log gerekmez)")
+    mode.add_argument("--prune", action="store_true",
+                      help="Stale (git log'da olmayan) satırları sil, eksik commit'leri ekle; "
+                           "--tag-regex ile yalnızca o kategorilerdeki stale'leri siler "
+                           "(safe-mode guard: filtre dışındaki stale korunur)")
     ap.add_argument("--limit", type=int, default=None,
                     help="Son N commit (varsayılan: tümü)")
     ap.add_argument("--base-url", default=None,
@@ -739,6 +876,40 @@ def main():
             print("  (changelog yok / zaten işaretçi — tek kaynak README.md)")
 
         print("\nTamam.")
+
+    if args.prune:
+        print("=== Changelog prune (stale sil + eksik ekle) ===\n")
+        base = (args.base_url or derive_base_url() or "").rstrip("/") or None
+        print("README.md:")
+        r_added, r_pruned, r_remaining = prune_file_changelog(
+            readme_path, "## Değişiklik Geçmişi", _README_ROW_RE,
+            format_readme_row, filtered, all_commits=git_commits,
+            base_url=base, tag_regex=args.tag_regex)
+        if r_pruned:
+            print(f"  - {len(r_pruned)} stale satır silindi:")
+            for h in sorted(r_pruned)[:10]:
+                print(f"    - {h}")
+            if len(r_pruned) > 10:
+                print(f"    ... ve {len(r_pruned) - 10} daha")
+        else:
+            print("  (silinecek stale yok)")
+        if r_remaining:
+            print(f"  · {len(r_remaining)} stale korundu (safe-mode/tag-scope dışı):")
+            for h in sorted(r_remaining)[:10]:
+                print(f"    · {h}")
+        if r_added:
+            print(f"  + {len(r_added)} yeni satır eklendi:")
+            for h in r_added:
+                print(f"    + {h}")
+        else:
+            print("  (yeni commit yok)")
+        print("\ndocs/PUBLISH_SCENARIO.md:")
+        if enforce_publish_pointer(pub_path):
+            print("  legacy changelog tablosu kaldırıldı → işaretçi bırakıldı "
+                  "(tek kaynak: README.md)")
+        else:
+            print("  (changelog yok / zaten işaretçi — tek kaynak README.md)")
+        print("\nTamam (prune).")
 
 
 if __name__ == "__main__":
