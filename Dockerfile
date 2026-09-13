@@ -39,6 +39,13 @@ RUN python -m venv /opt/venv \
 
 FROM python:3.11-slim-bookworm AS runtime
 
+# Base image'in sistem setuptools/wheel'i (pip/pkg_resources zinciri ile)
+# HIGH CVE taşıyordu: CVE-2026-23949 (jaraco.context path traversal,
+# 6.1.0'da fix) + CVE-2026-24049 (wheel privesc, 0.46.2'de fix).
+# Sistem site-packages'ı yamalı sürüme yükselt — gate'in tetiklediği
+# yamalar bu aşamada uygulanır.
+RUN pip install --no-cache-dir --upgrade "setuptools>=80" "wheel>=0.46.2"
+
 # The z3 interpreter for K8 + hook_env: copied from the builder, put on PATH.
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH" \
