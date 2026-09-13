@@ -45,14 +45,8 @@ jobs:
           ignore-unfixed: true
           exit-code: 1
 
-      # SARIF upload kaldırıldı: repo'da code scanning aktif değil ve
-      # tarayıcı artık SARIF üretmiyor (tek-table mimarisi). İkinci bağımsız
-      # tarayıcı olarak Docker Scout kalır.
-      - name: Docker Scout CVE scan
-        uses: docker/scout-action@v1
-        with:
-          command: cves
-          image: leibniz2/verify-dashboard:${{ github.sha }}
-          only-fixed: true
-          only-severity: critical,high
-          exit-code: true
+      # Docker Scout kaldırıldı: Scout, Docker entitlemansı gerektirir
+      # ('user githubactions not entitled to use Docker Scout') — bu repoda
+      # kimse yok ve adım hiçbir koşuda geçemezdi. Zorlayıcı CVE taraması
+      # yukarıdaki Trivy gate'te yaşıyor (CRITICAL/HIGH, exit-code 1).
+      # (SARIF upload da kaldırıldı: code scanning hedefi yok.)
