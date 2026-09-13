@@ -6,7 +6,13 @@
     return;
   }
 
-  const defs = JSON.parse(fs.readFileSync(DEFINITIONS_PATH, 'utf8'));
+  let defs;
+  try {
+    defs = JSON.parse(fs.readFileSync(DEFINITIONS_PATH, 'utf8'));
+  } catch (e) {
+    console.log(`label_definitions.json okunamadı: ${e.message} — label sync atlandı`);
+    return;
+  }
   const expected = defs.labels || [];
 
   // Repo'daki mevcut etiketleri çek
