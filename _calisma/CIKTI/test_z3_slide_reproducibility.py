@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import hashlib
+import importlib.util
 import os
 import shutil
 import subprocess
@@ -9,6 +10,20 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "_calisma" / "CIKTI" / "render_z3_slides.py"
+
+
+def _load_render_module():
+    """render_z3_slides.py'yi dosya yolundan yükle.
+
+    __import__("render_z3_slides") yalnızca CWD = _calisma/CIKTI iken
+    çözülür; pre-commit hook'u (entry: python3 -m unittest ...) repo kökünden
+    çalıştırır ve CIKTI sys.path'te DEĞİLDİR → clean checkout'ta
+    ModuleNotFoundError. Path-based import CWD'den bağımsızdır.
+    """
+    spec = importlib.util.spec_from_file_location("render_z3_slides", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 class TestZ3SlideReproducibility(unittest.TestCase):
@@ -31,7 +46,8 @@ class TestZ3SlideReproducibility(unittest.TestCase):
                 return {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
                         for p in sorted(directory.glob("*.png"))}
             left, right = hashes(first), hashes(second)
-            self.assertEqual(set(left), {f"{t[0]}.png" for t in __import__("render_z3_slides").THEOREMS})
+            expected = {f"{t[0]}.png" for t in _load_render_module().THEOREMS}
+            self.assertEqual(set(left), expected)
             self.assertEqual(left, right)
 
 

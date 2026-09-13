@@ -85,13 +85,13 @@ internal_review_report.md                      28664  26196415ef8c4efd9e823a9eb8
 original_manuscript.pdf                       117067  51d3492177253069975306ff1b10b60c
 README.md                                      10944  5d68d9e5c0b6069dbe1c03b33f57389d
 ingiliz_empirizmi_v3.tex                       76478  b7fa5be5aece3f975ec4ec1d89663aee
-ingiliz_empirizmi_v3.pdf                      214755  3ff1262357561b221fc753a74d502be2
+ingiliz_empirizmi_v3.pdf                      214760  81b191b1c57cbd944b46c5ea3fcbc8b7
 encoding_sensitivity_check.py                   5287  013d1e0f2752bc38b68cafdac6b18e22
 encoding_sensitivity_output.txt                 1239  ece0c79b00a5e4a16e5ea65acd5d8d13
 gate15_check.py                                 6023  347db78d2eabc88c1ba4de46fac84368
 gate15_output.txt                                618  10e4c756a176bb511aca7ab17234cade
 provenance2_supplement.md                       8981  09476e318c6ad2147543141ccdf69c99
 qpdf_determinism_experiment.py                  7133  933360e29e348730f0a38c6c755f539c
-qpdf_determinism_output.txt                     1191  eca3cb095ed758847001d4e032a54754
-ingiliz_empirizmi_v3.pdf.metadata.sha256         198  d771b3a49a3008d29cc8193f060a3790
+qpdf_determinism_output.txt                     1191  1a8751f3d2a800c30a5a3384ea8b4dc2
+ingiliz_empirizmi_v3.pdf.metadata.sha256         198  1a80dece8461dfee548af8771549f5b8
 MANIFEST.txt                                       0  (self; excluded — recompute on use)

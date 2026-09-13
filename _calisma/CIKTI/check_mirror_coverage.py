@@ -22,6 +22,12 @@ RUNTIME_REQUIRED = (
 PREVIEW_RUNTIME = ("preview_server.py", "_daemonize.py", "preview_prestart.py", "sw.js")
 GUIDE_REL = "docs/branch-protection-guide/guide.html"
 DOC_REL = "docs/HOOK_ENV_MATRIX.md"
+# design-system token sheet — preview.html /design-system/tokens.css import
+# eder; sync_verify_mirror.sh GUIDE_FILES bloğu bunu PREVIEW_DIR'e
+# design-system-tokens.css olarak mirror'lar. Tek kaynak:
+# <repo>/design-system/tokens.css — kapsam tanımı bunu beklemeli (yoksa
+# fail-closed coverage CI'da "BEKLENMEYEN: design-system/tokens.css" ile kırılır).
+DESIGN_TOKENS_REL = "design-system/tokens.css"
 
 
 def run_list(script):
@@ -90,6 +96,7 @@ def expected_repo_files(root, cikti, lean_src):
     expected.update("_calisma/CIKTI/" + n for n in PREVIEW_RUNTIME)
     expected.add(GUIDE_REL)
     expected.add(DOC_REL)
+    expected.add(DESIGN_TOKENS_REL)
     if os.path.isdir(lean_src):
         for directory, dirs, files in os.walk(lean_src):
             dirs[:] = [d for d in dirs if d != ".lake"]
