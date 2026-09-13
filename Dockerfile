@@ -29,7 +29,12 @@
 # weakening the gate.
 FROM python:3.11-slim-bookworm AS builder
 
+# z3-solver: K8 symbolic proof engine (tek üçüncü-parti bağımlılık).
+# setuptools: güvenlik yaması — image'e taşınan pip/pkg_resources zinciri
+# eski setuptools sürümüyle HIGH CVE taşıyordu (trivy docker-security gate);
+# en az yamalı sürüm sabitlenir.
 RUN python -m venv /opt/venv \
+    && /opt/venv/bin/pip install --no-cache-dir --upgrade "setuptools>=80" \
     && /opt/venv/bin/pip install --no-cache-dir z3-solver
 
 FROM python:3.11-slim-bookworm AS runtime
