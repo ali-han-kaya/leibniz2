@@ -73,6 +73,21 @@ class TestSplitAction(unittest.TestCase):
         self.assertEqual(ref, "main")
         self.assertIsNone(major)
 
+    def test_semver_tag(self):
+        # Semver tag'ler (ör. trivy-action@v0.35.0 — 2026 tag-compromise
+        # sonrası belgelenmiş güvenli sürüm) major'ın ilk bileşenidir.
+        self.assertEqual(cap.split_action("aquasecurity/trivy-action@v0.35.0"),
+                         ("aquasecurity/trivy-action", "v0.35.0", 0))
+
+    def test_semver_two_component(self):
+        self.assertEqual(cap.split_action("x/y@v3.1"), ("x/y", "v3.1", 3))
+
+    def test_semver_four_component_not_matched(self):
+        # 4+ bileşenli ref beklenmedik biçimdir — major=None (fail-closed).
+        _owner, ref, major = cap.split_action("x/y@v1.2.3.4")
+        self.assertEqual(ref, "v1.2.3.4")
+        self.assertIsNone(major)
+
 
 class TestCheck(unittest.TestCase):
     def test_pass_exact_pin(self):
@@ -102,6 +117,26 @@ class TestCheck(unittest.TestCase):
         rows = cap.check(_wf("actions/checkout@main"), PINS)
         self.assertEqual(rows[0]["verdict"], "FAIL")
         self.assertIn("major ayrıştırılamadı", rows[0]["note"])
+
+    def test_semver_tag_exact_pin_pass(self):
+        # trivy-action@v0.35.0, pin major 0 ile birebir PASS olmalı.
+        pins = dict(PINS, **{"aquasecurity/trivy-action": 0})
+        rows = cap.check(_wf("aquasecurity/trivy-action@v0.35.0"), pins)
+        self.assertEqual(rows[0]["verdict"], "PASS")
+
+    def test_semver_minor_bump_not_downgrade(self):
+        # Pin major-granularity: v0.36.0 (minor yükselmesi) pin v0'tan
+        # düşük DEĞİL — downgrade FAIL vermemeli (PASS; minor izlenmez).
+        pins = dict(PINS, **{"aquasecurity/trivy-action": 0})
+        rows = cap.check(_wf("aquasecurity/trivy-action@v0.36.0"), pins)
+        self.assertEqual(rows[0]["verdict"], "PASS")
+
+    def test_mutable_master_ref_still_fails(self):
+        # @master / @main pimli-pinsiz her koşulda FAIL — 2026 trivy
+        # tag-compromise sınıfı mutable ref'ler asla geçmemeli.
+        for ref in ("master", "main", "latest"):
+            rows = cap.check(_wf(f"aquasecurity/trivy-action@{ref}"), PINS)
+            self.assertEqual(rows[0]["verdict"], "FAIL", msg=ref)
 
     def test_scriptpath_usage_fails_closed(self):
         # github-script@v8 scriptPath input'unu desteklemez — kullanımı

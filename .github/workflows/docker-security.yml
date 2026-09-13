@@ -1,0 +1,57 @@
+name: docker-security
+
+on:
+  push:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  image-scan:
+    name: Build and scan Docker image
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          load: true
+          tags: leibniz2/verify-dashboard:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Scan image with Trivy
+        # v0.35.0: belgelenmiş güvenli sürüm (2026-03 tag-compromise sonrası
+        # akıl sağlığı listesi). Mutable @master asla — pin kapısı da bloke eder.
+        uses: aquasecurity/trivy-action@v0.35.0
+        with:
+          image-ref: leibniz2/verify-dashboard:${{ github.sha }}
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: 1
+
+      - name: Upload Trivy results
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif
+
+      - name: Docker Scout CVE scan
+        uses: docker/scout-action@v1
+        with:
+          command: cves
+          image: leibniz2/verify-dashboard:${{ github.sha }}
+          only-fixed: true
+          only-severity: critical,high
+          exit-code: true
