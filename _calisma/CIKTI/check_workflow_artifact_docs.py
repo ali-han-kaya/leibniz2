@@ -11,6 +11,10 @@ DOC = ROOT / "docs/PUBLISH_SCENARIO.md"
 sys.path.insert(0, str(HERE))
 import audit_live_ci_sync as als  # noqa: E402
 import gen_repro_manifest as grm  # noqa: E402
+# TEK KAYNAK: workflow_contract.UPLOAD_EXCEPTIONS — badge/action-pin/meta
+# denetçi artifact'ları ARTIFACT_JOBS kapsamı dışında bilinçli tutulur
+# (kopya değil, re-export; test_workflow_contract drift'i yakalar).
+from workflow_contract import UPLOAD_EXCEPTIONS  # noqa: E402
 
 
 def workflow_artifacts(text):
@@ -36,9 +40,7 @@ def check():
     jobs = set(grm.ARTIFACT_JOBS)
     for name in sorted(set(wf) - set(doc) - {"badge-check"}):
         errors.append(f"workflow upload-artifact '{name}' PUBLISH_SCENARIO listesinde yok")
-    for name in sorted(set(wf) - jobs - {
-            "badge-check", "action-pins", "audit-live-ci",
-            "pattern-drift", "preview-reload-smoke"}):
+    for name in sorted(set(wf) - jobs - UPLOAD_EXCEPTIONS):
         errors.append(f"workflow upload-artifact '{name}' ARTIFACT_JOBS'ta yok")
     for name in sorted(jobs - set(wf) - {"reproducibility"}):
         errors.append(f"ARTIFACT_JOBS '{name}' için verify.yml upload-artifact yok")

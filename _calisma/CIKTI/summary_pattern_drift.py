@@ -22,11 +22,10 @@ sys.path.insert(0, SCRIPT_DIR)
 import gen_repro_manifest as gm
 
 # EXCLUDED: prefix ile indirilenler + çıktı (merge pattern'e girmez)
-EXCLUDED = {
-    "precommit-logs", "refs-trend", "override-trend", "precheck-report",
-    "python3-shell", "plist-check", "mirror-check", "daemon-http",
-    "audit-refs-trend", "reproducibility",
-}
+# TEK KAYNAK: workflow_contract.MERGE_PATTERN_EXCLUDED — burada kopya
+# taşımak yerine fixture'dan alınıyor (test_workflow_contract drift'i
+# commit anında yakalar).
+from workflow_contract import MERGE_PATTERN_EXCLUDED as EXCLUDED  # noqa: E402
 
 
 def _read_pattern():
