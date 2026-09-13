@@ -5,9 +5,15 @@
 .lake-cache
 
 # Virtualenvs and bytecode (never ship the host's, even if present)
+# NOT: bare isimler yalnız context kökünde eşleşir. `_calisma/.venv_z3`
+# (host'un z3 venv'i) bu yüzden imaja sızıyordu ve Trivy gate'ini
+# besliyordu: pillow-11.3.0 + setuptools-58.0.4 dist-info'ları 16+ HIGH
+# CVE ile taranıyordu (CI'da venv olmadığı için görünmüyordu — yerel
+# build ile CI build'i ayrışıyordu). `**/` ile her derinlikte hariç tut.
 .venv
 .venv_z3
 **/.venv
+**/.venv_z3
 **/__pycache__
 *.pyc
 
