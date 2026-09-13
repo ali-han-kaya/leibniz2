@@ -1,0 +1,52 @@
+name: docker-security
+
+on:
+  push:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  image-scan:
+    name: Build and scan Docker image
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          load: true
+          tags: leibniz2/verify-dashboard:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Scan image with Trivy
+        # v0.35.0: belgelenmiş güvenli sürüm (2026-03 tag-compromise sonrası
+        # akıl sağlığı listesi). Mutable @master asla — pin kapısı da bloke eder.
+        # Tek adım: table format + exit-code 1 → bulgu varsa CVE tablosu
+        # log'da GÖRÜNÜR şekilde fail-closed. (SARIF split kaldırıldı: bu
+        # repo'da code scanning yok — upload hedefi yok; ayrıca SARIF adımı
+        # bulgusuz koşuda opak exit-1 hataları üretti. Zorlayıcı kapı
+        # exit-code 1'de yaşıyor, kanıt tabloda.)
+        uses: aquasecurity/trivy-action@v0.35.0
+        with:
+          image-ref: leibniz2/verify-dashboard:${{ github.sha }}
+          format: table
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: 1
+
+      # Docker Scout kaldırıldı: Scout, Docker entitlemansı gerektirir
+      # ('user githubactions not entitled to use Docker Scout') — bu repoda
+      # kimse yok ve adım hiçbir koşuda geçemezdi. Zorlayıcı CVE taraması
+      # yukarıdaki Trivy gate'te yaşıyor (CRITICAL/HIGH, exit-code 1).
+      # (SARIF upload da kaldırıldı: code scanning hedefi yok.)

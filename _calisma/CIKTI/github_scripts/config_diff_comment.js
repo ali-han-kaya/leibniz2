@@ -45,7 +45,14 @@
     await cleanupStale('config-diff.json yok');
     return;
   }
-  const diff = JSON.parse(fs.readFileSync(path, 'utf8'));
+  let diff;
+  try {
+    diff = JSON.parse(fs.readFileSync(path, 'utf8'));
+  } catch (e) {
+    console.log(`config-diff.json okunamadı: ${e.message} — yorum atlanıyor, bayat temizleniyor`);
+    await cleanupStale('config-diff.json bozuk');
+    return;
+  }
   const diffs = diff.differences || [];
 
   if (diffs.length === 0) {

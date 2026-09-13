@@ -594,7 +594,7 @@ jobs:
         shell: bash
         run: |
           python3 _calisma/CIKTI/gen_commit_msg_evidence.py \
-            --out COMMIT_MSG_BLOCK_EVIDENCE.md
+            --out logs/COMMIT_MSG_BLOCK_EVIDENCE.md
 
       - name: Generate pre-commit findings report
         if: always()
@@ -1268,6 +1268,7 @@ jobs:
           wc -l reports/*.md
 
       - name: Upload reports bundle
+        if: always()  # coe içeren job — bulgular coe çökse dahi yayınlansın
         uses: actions/upload-artifact@v6
         with:
           name: reports
@@ -1441,6 +1442,7 @@ jobs:
       # K10 kapısından ÖNCE yüklenir: K10 FAIL olsa bile bundle yüklenir,
       # böylece manifest-comment job'ı rozetini (PASS/FAIL) gösterebilir.
       - name: Upload reproducibility bundle
+        if: always()  # coe içeren job — kısmi bundle dahi yayınlanır
         uses: actions/upload-artifact@v6
         with:
           name: reproducibility

@@ -33,13 +33,9 @@ import audit_live_ci_sync as als  # noqa: E402
 import gen_repro_manifest as gen_manifest  # noqa: E402
 
 # Reproducibility download kapsamı DIŞINDA kalan doc artifact'ları (advisory
-# job'ların çıktıları). ARTIFACT_JOBS'a girmemeleri BİLEREK — merge pattern'e
-# girmezler, manifest'e girmezler; doc'ta görünmeleri doğrudur.
-DOC_ONLY_ADVISORY = frozenset({
-    "audit-live-ci",         # advisory meta-denetçi — job output
-    "pattern-drift",          # advisory: merge pattern ↔ ARTIFACT_JOBS — job output
-    "preview-reload-smoke",  # advisory: preview reload smoke testi — job output
-})
+# job'ların çıktıları). TEK KAYNAK: workflow_contract.DOC_ONLY_ADVISORY —
+# kopya değil, re-export (test_workflow_contract drift'i yakalar).
+from workflow_contract import DOC_ONLY_ADVISORY  # noqa: E402
 
 DOC = pathlib.Path("docs/PUBLISH_SCENARIO.md")
 
