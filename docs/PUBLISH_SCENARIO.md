@@ -30,7 +30,7 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 ---
 
 ## Değişiklik Geçmişi (changelog)
-> Tek kaynak: README.md → **Değişiklik Geçmişi** bölümü. Changelog tablosu git log'dan `gen_changelog.py --update` ile otomatik üretilir; bu senaryo belgesi ayrı changelog tutmaz (eski Bölüm-bazlı satırlar git geçmişinden geri alınabilir).
+> Tek kaynak: README.md → **Değişiklik Geçmişi** bölümü. Changelog tablosu git log'dan `gen_changelog.py --prune` ile otomatik üretilir; bu senaryo belgesi ayrı changelog tutmaz (eski Bölüm-bazlı satırlar git geçmişinden geri alınabilir).
 ## Regresyon Notları — Son 3 CI Kırılması (2026-08-21)
 
 > Bu bölüm, 2026-08-19/21 döneminde yaşanan ve CI'ıRED'e düşüren 3 kök-nedenli kırılmayı,
@@ -795,3 +795,126 @@ gh repo edit --enable-squash-merge --enable-rebase-merge \
 - `git push` **iki kez onay gerektirir**: (i) bu senaryoyu çalıştırma kararı (sen), (ii) terminalde push komutunun çalıştırılması (sen).
 - Repo **public** oluşturulur — kişisel/özel veri yok ama workflow artifact'ları herkes erişebilir. İçerik tamamen akademik makale + matematiksel ispat; gizlilik riski yok.
 - Branch protection **strict** — ilk push'ta CI yeşil olmalı. Eğer yanlışlıkla kırmızı kalırsa, tarayıcıda Settings → Branches → kuralı sil (`.../settings/branches`) ile koruma kaldırılabilir (geçici).
+
+---
+
+## Advisory (`continue-on-error`) bulgu yüzeyleme denetimi — 43 site
+
+> **Bu bölüm nedir:** `verify.yml`'deki **step-level `continue-on-error: true` (coe)**
+> sitelerinin tam denetim tablosu. `continue-on-error` bir adımı kırmızıya boyar ama
+> build'i düşürmez — dolayısıyla bulgunun **yüzeye çıkması** ayrı bir sorumluluktur.
+> Denetim statiktir (workflow metni), tek bir kaynaktan yeniden üretilebilir ve
+> sözleşme testleriyle pinlenir.
+>
+> **Kapsam:** 43 step-level site, 16 job. **Job-level `coe` yoktur** (doğrulandı).
+> Diğer workflow dosyalarında hiç coe yoktur (`docker-security.yml` dahil).
+
+### Yeniden üretim (tek komut)
+
+```bash
+grep -c 'continue-on-error: true' .github/workflows/verify.yml   # → 43
+_calisma/.venv_z3/bin/python -m unittest _calisma.CIKTI.test_advisory_coe_surfacing -v
+```
+
+### İki maskeleme sınıfı (denetimin ölçütü)
+
+| Sınıf | Mekanizma | Durum |
+|---|---|---|
+| **A — yayın yok** | Adımın ürettiği dosya hiçbir `upload-artifact` kapsamında değildir → bulgu runner workspace'te ölür | ✅ **1 gerçek bulgu** bulundu ve kapatıldı (`b129bed`) |
+| **B — `if: always()` eksik** | Aynı job'daki sonraki upload varsayılan `if: success()` taşır → coe dışı bir ara hata upload'ı atlar ve advisory paketi düşer | ✅ **2 upload** düzeltildi (`b129bed`): `reports` + `reproducibility` bundle |
+
+**`b129bed` — `fix(verify): surface advisory coe findings that could die unpublished` (2026-09-11):**
+
+1. **A sınıfı (gerçek maskeleme):** commit-msg block-evidence adımı
+   `COMMIT_MSG_BLOCK_EVIDENCE.md`'i **repo köküne** yazıyordu — hiçbir upload'ın
+   `path:`'i onu kapsamıyordu, 28 mesajlık bloke/izin kanıtı workspace'te ölüyordu.
+   `logs/` altına alındı (tümü `if: always()` olan `precommit-logs` upload'ı kapsar).
+2. **B sınıfı (gelecek riski):** `reports` ve `reproducibility` bundle upload'larına
+   `if: always()` eklendi. Bugün zararsızdı (önlerinde coe dışı adım yoktu) ama tek bir
+   outcome-gated düzenleme ile advisory paketi sessizce düşürebilirdi.
+3. **Zaten fail-closed olan tek tüketici:** commit-msg kapısı — sidecar gelmezse
+   `core.setFailed` ile FAIL verir, sessiz PASS üretemez (aşağıda 16. satır).
+
+### Hüküm sözlüğü
+
+| Hüküm | Anlamı |
+|---|---|
+| `YAYINDA` | Çıktı, aynı job'daki `if: always()` upload ile **artifact'a** girer — bulgu workspace'te ölmez. |
+| `KAPI` | Çıktı bir **required kapı** tarafından tüketilir; kararı coe değil, kapının kendi fail-closed verdict'i verir. |
+| `YORUM` | Bulgu **PR yorumu** olarak yüzeye çıkar (advisory yorum job'u; savunmacı okuma sözleşmeli). |
+| `ADIM` | Dosya çıktısı yoktur; bulgu **adımın ✗ durumu**dur (run UI). Yayınlanacak artifact yok. |
+| `KASITLI` | coe **bilinçli**: tüketici (manifest) girdi gelmese de üretilir; bölüm yokluğu K10'da ayrıca raporlanır. |
+| `KAPATILDI` | Denetimde maskeleme (A sınıfı) bulundu, `b129bed` ile düzeltildi; artık `YAYINDA`. |
+
+### Site tablosu (43/43)
+
+| # | Job | coe adımı | Bulgu çıktısı | Tüketici | Hüküm |
+|---|---|---|---|---|---|
+| 1 | `verify` | Label gate contract check | — (advisory birim test) | — | `ADIM` |
+| 2 | `verify` | Validate label definitions | — | GitHub etiketleri (dry-run) | `ADIM` |
+| 3 | `verify` | Sync label definitions | — | GitHub etiketleri (canlı, push) | `ADIM` |
+| 4 | `verify` | Run pre-commit (all files) | `logs/precommit.log` | `precommit-logs` artifact | `YAYINDA` |
+| 5 | `verify` | Extract unstaged-deps findings | `logs/unstaged_deps_findings.{json,txt}` | `precommit-logs` | `YAYINDA` |
+| 6 | `verify` | verify-delivery-repro-manifest (K13) | `logs/k13_repro_manifest.log` | `precommit-logs` | `YAYINDA` |
+| 7 | `verify` | Run K12 scenarios (K13 deseni) | `logs/k12_repro_manifest.log` | `precommit-logs` | `YAYINDA` |
+| 8 | `verify` | check-unit-tests hook (ayrı) | `logs/check_unit_tests.log` + `.exit` | `precommit-logs` | `YAYINDA` |
+| 9 | `verify` | Check commit messages (advisory) | `logs/commit_msg_findings.json` | **Commit-msg gate** (required) + `precommit-logs` | `KAPI` |
+| 10 | `verify` | Verify hook installation | — | — | `ADIM` |
+| 11 | `verify` | Generate commit-msg block evidence | `logs/COMMIT_MSG_BLOCK_EVIDENCE.md` | `precommit-logs` | `KAPATILDI` |
+| 12 | `verify` | Generate python3-shell findings | `python3_shell_findings.json` | `python3-shell` artifact (K10'da sabit) | `YAYINDA` |
+| 13 | `verify` | Generate config diff (advisory) | `config/config-diff.json` | `config` artifact + reproducibility | `YAYINDA` |
+| 14 | `budget` | Download config snapshot | — | **Budget kapısı** (`consolidate_budget.py`, required) | `KAPI` |
+| 15 | `budget-comment` | Download pre-commit findings | — | `pr_status_comment.js` (PR yorumu) | `YORUM` |
+| 16 | `commit-msg-gate` | Download commit-msg findings sidecar | — | `commit_msg_gate.js` — sidecar yoksa FAIL | `KAPI` |
+| 17 | `reports` | Download pre-commit findings | — | `reports` bundle | `YAYINDA` |
+| 18 | `reproducibility` | Download refs-trend artifact | — | `gen_repro_manifest.py` → manifest.txt | `KASITLI` |
+| 19 | `reproducibility` | Download audit-refs-trend artifact | — | `gen_repro_manifest.py` | `KASITLI` |
+| 20 | `reproducibility` | Download override-trend artifact | — | `gen_repro_manifest.py` | `KASITLI` |
+| 21 | `reproducibility` | Download precheck-report artifact | — | `gen_repro_manifest.py` (precheck bölümü) | `KASITLI` |
+| 22 | `reproducibility` | Download python3-shell artifact | — | `gen_repro_manifest.py` | `KASITLI` |
+| 23 | `reproducibility` | Download plist-check artifact | — | `gen_repro_manifest.py` | `KASITLI` |
+| 24 | `reproducibility` | Download mirror-check artifact | — | `gen_repro_manifest.py` | `KASITLI` |
+| 25 | `reproducibility` | Download daemon-http artifact | — | `gen_repro_manifest.py` | `KASITLI` |
+| 26 | `config-drift` | Download config snapshot | — | `config-drift` artifact + `config_diff_comment.js` | `YAYINDA` |
+| 27 | `refs-trend` | Build refs trend table | `refs-trend/refs-trend.json` | **required** — tablo yoksa kapı exit 1 (verdict-binding) | `KAPI` |
+| 28 | `audit-refs-trend` | Run refs-trend audit | `audit_refs_trend.json` | `audit-refs-trend` artifact | `YAYINDA` |
+| 29 | `override-trend` | Build override trend table | `override-trend/` | `override-trend` artifact | `YAYINDA` |
+| 30 | `precheck` | Run AŞAMA 0 precheck | `.freebuff/precheck_report.txt` | `precheck-report` artifact | `YAYINDA` |
+| 31 | `precheck` | Run status_checks `--gh --json` | `.freebuff/status_checks_gh.json` | `precheck-report` | `YAYINDA` |
+| 32 | `precheck` | Advisory contract gate | `.freebuff/advisory_contract.json` | `precheck-report` | `YAYINDA` |
+| 33 | `precheck` | Run status_checks `--json` (offline) | `.freebuff/status_checks.json` | `precheck-report` (SHA-256 sabit) | `YAYINDA` |
+| 34 | `precheck` | Run verify-checks gate (`--verify-checks`) | `.freebuff/verify_checks.json` | `precheck-report` | `YAYINDA` |
+| 35 | `plist-check` | Check plist drift vs golden | `plist_check_report.txt` | `plist-check` artifact | `YAYINDA` |
+| 36 | `plist-check` | Run K12 `--check-plist` | `plist_report.json` | `plist-check` artifact | `YAYINDA` |
+| 37 | `plist-check` | Self-heal extra plist drift (P0) | `plist_drift_golden.txt` | `plist-check` artifact | `YAYINDA` |
+| 38 | `plist-check` | Write plist P1 advisory note | — (rapor satırı) | `plist-check` raporu | `ADIM` |
+| 39 | `daemon-http` | Run daemon-mode HTTP 200 test | `daemon_http_report.json` + `daemon_history.jsonl` + `override_report.json` | `daemon-http` artifact (K10'da sabit) | `YAYINDA` |
+| 40 | `daemon-http` | Validate override run report | — (`GITHUB_OUTPUT ovr_rc`) | `daemon-http` özeti | `ADIM` |
+| 41 | `preview-reload-smoke` | Run preview reload smoke | `preview_reload_report.json` | **required** — smoke rc'siz/boş çıktıda exit 1 | `KAPI` |
+| 42 | `changelog-drift` | Run `gen_changelog --check` | `.freebuff/changelog_drift.txt` + `.rc` | `changelog-drift` artifact | `YAYINDA` |
+| 43 | `pattern-drift` | Check merge pattern consistency | `pattern_drift.txt` | `pattern-drift` artifact | `YAYINDA` |
+
+### Dağılım
+
+| Hüküm | Site |
+|---|---|
+| `YAYINDA` | 22 |
+| `KASITLI` | 8 |
+| `ADIM` | 6 |
+| `KAPI` | 5 |
+| `YORUM` | 1 |
+| `KAPATILDI` | 1 |
+| **Toplam** | **43** |
+
+### Pinler (aynı sözleşmeyi koruyan testler)
+
+| Kapı | Ne pinler |
+|---|---|
+| `test_advisory_coe_surfacing.py` (4 test) | `reports` + `reproducibility` upload'ları `if: always()`; block-evidence `logs/` altında; **genelleştirilmiş kural:** coe içeren **her** job'da **her** `upload-artifact` adımı `if: always()` taşımalı |
+| `test_ci_sidecar_wiring.py` | `DELIVERIES` tablosu + teslim sırası (indirme, değerlendirmeden önce); `TestRequiredGateVerdictBinding` — `refs-trend` tablo ve `preview-reload-smoke` rc'siz PASS veremez; `TestBudgetGateFailClosed` — boş sidecar'lı bütçe kapısı PASS'e dönemez |
+| `test_gate_scripts_meta_guard.py` | Gate script'lerinde fail-open yol yok; sidecar tüketen gate job'ı **değerlendirmeden önce** indirir; advisory yorum script'leri eksik sidecar'da çökmez (savunmacı okuma) |
+
+**Bakım kuralı:** coe içeren bir job'a yeni `upload-artifact` eklenirse `if: always()`
+zorunludur; yeni bir dosya çıktısı üreten coe adımı, aynı job'daki bir upload'ın
+`path:`'i içinde olmalıdır (yoksa A sınıfı maskeleme geri gelir — `test_advisory_coe_surfacing.py`
+bunu yakalar).
