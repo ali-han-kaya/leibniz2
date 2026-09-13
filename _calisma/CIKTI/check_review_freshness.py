@@ -73,6 +73,16 @@ DEFAULT_SIDECAR = DEFAULT_REVIEW.with_suffix(DEFAULT_REVIEW.suffix + ".sha256")
 
 _GIT_CT_CACHE: dict[pathlib.Path, int | None] = {}
 
+# `git log -- <abs yol>` çağrısını ortamın işaret ettiği depodan bağımsız kılar.
+# pre-commit, hook'ları linked worktree'de GIT_DIR=<ana checkout>/.git ile koşar;
+# o ortamda worktree'deki dosya pathspec'e girmez, çıktı boş döner → None →
+# mtime fallback → keyfî checkout mtime'ı yüzünden sahte stale_source P0. Bu
+# anahtarlar temizlenince git deposunu `cwd` (dosyanın kendi dizini) üzerinden
+# keşfeder — yani dosyanın gerçekten içinde bulunduğu worktree'yi.
+_GIT_ENV_STRIP = frozenset(
+    {"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY", "GIT_COMMON_DIR"}
+)
+
 
 def _git_commit_time_ns(p: pathlib.Path) -> int | None:
     """Dosyanın son commit (committer) zamanı — saniye→ns; bilinmiyorsa None.
@@ -81,6 +91,10 @@ def _git_commit_time_ns(p: pathlib.Path) -> int | None:
     yanlış-P0 üretebilir (REVIEW daha eski commit'ten gelse de checkout'ta
     daha yeni görünebilir); git commit zamanı gerçeği temsil eder. Repo dışı /
     takipsiz dosya / git yok → None (fail-closed mtime kararı geçerli kalır).
+
+    Ortam GIT_DIR/GIT_WORK_TREE ile başka bir checkout'u işaret ediyorsa
+    (pre-commit'in linked worktree'de yaptığı gibi) sorgu dosyanın kendi
+    deposundan çözülür; bkz. _GIT_ENV_STRIP.
     """
     try:
         key = p.resolve()
@@ -89,6 +103,7 @@ def _git_commit_time_ns(p: pathlib.Path) -> int | None:
         r = subprocess.run(
             ["git", "log", "-1", "--format=%ct", "--", str(key)],
             cwd=str(key.parent), capture_output=True, text=True, timeout=10,
+            env={k: v for k, v in os.environ.items() if k not in _GIT_ENV_STRIP},
         )
         out = (r.stdout or "").strip()
         val = int(out) * 1_000_000_000 if out else None

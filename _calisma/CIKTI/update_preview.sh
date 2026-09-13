@@ -679,6 +679,21 @@ usage() {
   awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "${BASH_SOURCE[0]}"
 }
 
+# --bootstrap'tan ÖNCE gelen bayraklar (ör. `--no-mirror --no-html --bootstrap
+# --start`). Dış `case` yalnızca $1'e bakar, bu yüzden skip bayrakları önde
+# geldiğinde mod bulunamaz ve script "bilinmeyen mod" ile exit 2 verirdi.
+# bootstrap_all() bayrakları sıradan bağımsız ayrıştırdığı (aşağıdaki for
+# döngüsü) için --bootstrap herhangi bir konumda varsa doğrudan ona delege
+# ediyoruz; --help/-h yine de kazanır.
+if [ "${1:-}" != "--bootstrap" ] && [ "${1:-}" != "--help" ] && [ "${1:-}" != "-h" ]; then
+  for _bootstrap_probe in "$@"; do
+    if [ "$_bootstrap_probe" = "--bootstrap" ]; then
+      bootstrap_all "$@"
+      exit $?
+    fi
+  done
+fi
+
 case "${1:-build}" in
   --help|-h)
     usage

@@ -17,6 +17,7 @@ import hashlib
 import json
 import os
 import pathlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -31,6 +32,22 @@ import check_review_freshness as crf  # noqa: E402
 
 def _h(p: pathlib.Path) -> str:
     return hashlib.sha256(p.read_bytes()).hexdigest()
+
+
+def _git(cwd: pathlib.Path, *args: str) -> None:
+    """Deterministik git çağrısı — host config'i (imza/kimlik) devre dışı."""
+    subprocess.run(
+        [
+            "git",
+            "-c", "user.email=test@example.invalid",
+            "-c", "user.name=test",
+            "-c", "commit.gpgsign=false",
+            *args,
+        ],
+        cwd=str(cwd),
+        check=True,
+        capture_output=True,
+    )
 
 
 class Fixture:
@@ -143,6 +160,51 @@ class TestFreshCloneSkew(unittest.TestCase):
                 ok, findings, _ = fx.check()
             self.assertFalse(ok)
             self.assertTrue(any(f["kind"] == "stale_source" for f in findings))
+
+
+class TestGitResolutionIgnoresAmbientGitEnv(unittest.TestCase):
+    """`_git_commit_time_ns` dosyanın KENDİ deposundan çözmelidir.
+
+    pre-commit, hook'ları linked worktree'de `GIT_DIR=<ana checkout>/.git` ile
+    koşar (bkz. .git/hooks/pre-commit → pre_commit hook-impl). O ortamda
+    `git log -- <worktree'deki abs yol>` boş döner → None → mtime fallback →
+    fresh-clone checkout mtime'ları keyfî olduğu için SAHTE `stale_source` P0.
+    Kapı ortam değişkenine değil dosyanın deposuna bakmalı; aksi halde
+    `git worktree add` ile yapılan her pre-commit koşusu yanlış-P0 üretir.
+    """
+
+    def setUp(self):
+        crf._GIT_CT_CACHE.clear()
+
+    def tearDown(self):
+        crf._GIT_CT_CACHE.clear()
+
+    def test_commit_time_resolves_while_git_dir_points_elsewhere(self):
+        if shutil.which("git") is None:
+            self.skipTest("git yok")
+        with tempfile.TemporaryDirectory() as td:
+            here = pathlib.Path(td).resolve()
+            repo = here / "file-repo"
+            repo.mkdir()
+            payload = repo / "payload.txt"
+            payload.write_text("x", encoding="utf-8")
+            _git(repo, "init", "-q")
+            _git(repo, "add", "payload.txt")
+            _git(repo, "commit", "-q", "-m", "add payload")
+
+            foreign = here / "foreign"
+            foreign.mkdir()
+            _git(foreign, "init", "-q")
+
+            with mock.patch.dict(os.environ, {"GIT_DIR": str(foreign / ".git")}):
+                got = crf._git_commit_time_ns(payload)
+
+            self.assertIsNotNone(
+                got,
+                "GIT_DIR set diye dosyanın kendi commit zamanı kaybolmamalı "
+                "(kaybolursa mtime fallback sahte stale_source P0 üretir)",
+            )
+            self.assertGreater(got, 0)
 
 
 class TestSourceSidecarHash(unittest.TestCase):
