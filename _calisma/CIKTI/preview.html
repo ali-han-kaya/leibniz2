@@ -6,17 +6,13 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>Stoic-Hume V5 — Live CI Dashboard</title>
+<link rel="stylesheet" href="/design-system/tokens.css?v=1">
 <style>
-  :root { --bg:#0e1116; --fg:#e6edf3; --muted:#8b949e; --accent:#58a6ff;
-          --ok:#3fb950; --warn:#d29922; --err:#f85149; --border:#30363d;
-          --budget:#bc8cff; --surface:#161b22; --surface-raised:#21262d;
-          --header-start:#161b22; --header-end:#0e1116; --code-bg:#161b22;
-          --paper:#f4efe5; --paper-ink:#2b2926; }
-  :root[data-theme="light"] { --bg:#f3efe7; --fg:#292722; --muted:#70695f; --accent:#8b5e2b;
-          --ok:#287a3d; --warn:#996b08; --err:#b42318; --border:#cfc5b5;
-          --budget:#7650a8; --surface:#fffdf8; --surface-raised:#e9e1d3;
-          --header-start:#fffdf8; --header-end:#ede5d8; --code-bg:#e9e1d3;
-          --paper:#fffdf8; --paper-ink:#292722; }
+  /* Token tek kaynağı: design-system/tokens.css — /design-system/tokens.css
+     rotasından servis edilir (PREVIEW_DIR/design-system-tokens.css kopyası;
+     sync_verify_mirror.sh GUIDE_FILES taşır). Inline :root var blokları
+     kaldırıldı — check-design-tokens kapısı iki-kaynak drift'ini bloke eder.
+     Aşağıdaki [data-theme="light"] kuralları yalnızca var TÜKETİR, tanımlamaz. */
   :root[data-theme="light"] body { font-family:Georgia,"Times New Roman",serif; }
   :root[data-theme="light"] header { box-shadow:0 2px 10px rgba(77,57,34,.08); }
   :root[data-theme="light"] .card, :root[data-theme="light"] th, :root[data-theme="light"] code,
