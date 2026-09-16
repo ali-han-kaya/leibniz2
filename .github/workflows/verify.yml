@@ -583,7 +583,11 @@ jobs:
         if: always()
         shell: bash
         run: |
-          bash _calisma/CIKTI/setup_commit_hooks.sh --check-only
+          # Taze checkout'ta hook'lar yoktur — önce KUR, sonra doğrula.
+          # (Yalnızca --check-only koşmak kalıcı FAIL üretiyordu; gerçek CI
+          # 2026-09-16 push'unda yakaladı.) Kurulum modu ayrıca commit.template
+          # ve iki hook stage'inin kurulabildiğini kanıtlar.
+          bash _calisma/CIKTI/setup_commit_hooks.sh
 
       # ─── COMMIT-MSG BLOCK EVIDENCE (advisory) ──────────────────────────
       # commit_msg_hook.sh'i 28 test mesajıyla çalıştırıp hangi başlıkların
@@ -2807,7 +2811,7 @@ jobs:
             echo "- status_checks.py: exit \`${{ steps.sim.outputs.sc_rc }}\`"
             echo "- simulate_verify_job.sh: exit \`${{ steps.sim.outputs.sim_rc }}\`"
             echo '```'
-            cat .freebuff/sim/simulate.log 2>/dev/null | tail -40 || echo '(simülasyon logu yok)'
+            tail -40 .freebuff/sim/simulate.log 2>/dev/null || echo '(simülasyon logu yok)'
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 

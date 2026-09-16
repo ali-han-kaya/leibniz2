@@ -377,6 +377,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-13 | test | (verify) fail-closed canonical-hash pin for cleanup_log.json | [`d3f3b08`](https://github.com/ali-han-kaya/leibniz2/commit/d3f3b08) |
 | 2026-09-16 | fix | (verify) close hidden plist keepalive drift and gate gaps | [`3918a04`](https://github.com/ali-han-kaya/leibniz2/commit/3918a04) |
 | 2026-09-16 | docs | (rc) record candidate 3918a04 clean-copy acceptance | [`7f6158f`](https://github.com/ali-han-kaya/leibniz2/commit/7f6158f) |
+| 2026-09-17 | fix | (verify) SDE leak fix, image CVE patch, determinism gate hardening | [`73e94ce`](https://github.com/ali-han-kaya/leibniz2/commit/73e94ce) |
 
 ### Regresyon notları
 
