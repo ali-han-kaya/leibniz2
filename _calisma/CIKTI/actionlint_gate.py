@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 """Output-sensitive actionlint gate.
 
-Structural actionlint diagnostics fail the gate. Shellcheck info/hints remain
-advisory because actionlint uses exit 1 for both classes in some versions.
+Structural actionlint diagnostics fail the gate. Shellcheck *info/hint/style*
+lines stay advisory. CRITICAL (2026-09-16 audit): actionlint emits shellcheck
+*error*-level findings as "SC1073:error:..." — these are NOT advisory. The old
+regex matched any line containing "SC\\d+" and silently classified fatal
+here-doc/parse errors as advisory (fail-open). Now the severity token is
+parsed: only info|hint|style pass as advisory; error|warning-class shellcheck
+lines are structural.
 """
 import argparse
 import json
@@ -13,7 +18,11 @@ _STRUCTURAL = re.compile(
     r"(?:syntax error|yaml|expression|invalid (?:context|value|key)|"
     r"unknown (?:property|context)|job .* not found|needs:|mapping values|"
     r"duplicate key|unexpected token)", re.I)
-_SHELLCHECK = re.compile(r"\bshellcheck\b|\bSC\d{3,5}\b|\b(info|hint)\b", re.I)
+_SHELLCHECK_LINE = re.compile(r"\bshellcheck\b|\bSC\d{3,5}\b", re.I)
+# severity: ayırıcı ':sev:' biçiminde (SC1073:error:6:13) ya da (severity)
+# etiketi içinde. Yalnızca info/hint/style advisory'dir.
+_SEV_ERROR = re.compile(r"SC\d{3,5}:(error|warning)|\(error\)|\(warning\)", re.I)
+_SEV_INFO = re.compile(r"SC\d{3,5}:(info|hint|style)|\(info\)|\(hint\)|\(style\)|\bhint\b", re.I)
 
 
 def classify(lines):
@@ -21,10 +30,14 @@ def classify(lines):
     for line in lines:
         if not line.strip():
             continue
-        if _STRUCTURAL.search(line) and not _SHELLCHECK.search(line):
+        if _SHELLCHECK_LINE.search(line):
+            # shellcheck kaynaklı: severiteye göre ayrıştır.
+            if _SEV_ERROR.search(line):
+                structural.append(line.rstrip())
+            else:
+                advisory.append(line.rstrip())
+        elif _STRUCTURAL.search(line):
             structural.append(line.rstrip())
-        elif _SHELLCHECK.search(line):
-            advisory.append(line.rstrip())
         else:
             # actionlint diagnostics with file:line:col are structural by
             # default; ordinary progress output is informational.

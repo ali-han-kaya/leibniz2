@@ -399,7 +399,7 @@ async def verify_get_latest(response_format: ResponseFormat = "markdown") -> str
     },
 )
 async def verify_get_layer_status(response_format: ResponseFormat = "markdown") -> str:
-    """Get the per-layer (K0..K22) PASS/FAIL/SKIP breakdown of the latest run.
+    """Get the per-layer (K0..K21) PASS/FAIL/SKIP breakdown of the latest run.
 
     Layers are the verification gates (package integrity, determinism,
     lineage, proofs, mirror sync, …). FAIL layers identify what blocked the

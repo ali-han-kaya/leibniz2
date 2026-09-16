@@ -4120,9 +4120,14 @@ def check_launchd_status(add):
 
     detail_parts = []
     for info in profiles_info:
-        status = "PASS" if (info["loaded"] and info["alive"] and
-                            info["plist_valid"] and info["http"] == 200) else "FAIL"
-        detail_parts.append(f"{info['label']}: {status}")
+        # Yedek rolü: steady-state'te yüklü OLMAMASI normaldir (aynı portu
+        # paylaşan failover profilidir). Yalnızca yüklüyken tam doğrulanır.
+        if info["loaded"]:
+            ok = (info["alive"] and info["plist_valid"] and
+                  info["http"] == 200)
+        else:
+            ok = info["role"] != "birincil"
+        detail_parts.append(f"{info['label']}: {'PASS' if ok else 'FAIL'}")
     detail = "; ".join(detail_parts)
 
     return all_ok, detail, profiles_info
@@ -5395,8 +5400,21 @@ def main():
             print(f"[K20] launchd durum: "
                   f"{'PASS' if lok else 'FAIL'} — {ldetail}")
             for p in lprofiles:
-                status = "PASS" if (p["loaded"] and p["alive"] and
-                                    p["plist_valid"] and p["http"] == 200) else "FAIL"
+                if p.get("role") == "yedek":
+                    # Yedek failover'dır: steady-state'te YÜKLÜ OLMAMALI
+                    # (birincille aynı portu paylaşır). Yüklü değil → normal,
+                    # yüklü + canlı + 200 → aktif failover (PASS), yüklü ama
+                    # ölü → FAIL (elle başlatılmış ve çökmüş).
+                    if not p["loaded"]:
+                        status = "BILGI"
+                    elif p["alive"] and p["plist_valid"] and p["http"] == 200:
+                        status = "PASS"
+                    else:
+                        status = "FAIL"
+                else:
+                    status = "PASS" if (p["loaded"] and p["alive"] and
+                                        p["plist_valid"] and
+                                        p["http"] == 200) else "FAIL"
                 pid_str = str(p["pid"]) if p["pid"] else "-"
                 http_str = str(p["http"]) if p["http"] else "-"
                 print(f"    [{status}] {p['label']}: "

@@ -29,7 +29,12 @@ kanonik yönergesini gösterir; `check-skills-index` kapısı dizin ile tabloyu
 
 | Skill | Açıklama |
 |---|---|
-| `skills/verify-chain/SKILL.md` | K0–K17 fail-closed teslim doğrulama zinciri |
+| `skills/birincil-kayit-dogrulama/SKILL.md` | İddiaları birincil kayıtlardan doğrulama ve OLÇULMEDI/BEYAN ayrımı |
+| `skills/calisma-ahlaki/SKILL.md` | Ölçüm, dürüst raporlama ve uygulanabilir çalışma kuralları |
+| `skills/gorev-brifi/SKILL.md` | Çıktı, kabul testi, güven ve tavan için yedi slotlu brif |
+| `skills/ogrenim-dongusu/SKILL.md` | İç/holdout ayrımıyla düzeltme öğrenim döngüsü |
+| `skills/revizyon-kapisi/SKILL.md` | Sürümlü teslimlerde sekiz yüklemli revizyon kapısı |
+| `skills/verify-chain/SKILL.md` | K0–K21 fail-closed teslim doğrulama zinciri |
 | `skills/reproducible-pdf-build/SKILL.md` | PDF determinism, SHA-256 sidecar ve SDE akışı |
 | `skills/release-candidate-check/SKILL.md` | verify_mcp MCP sunucusu için release-candidate doğrulaması |
 
@@ -348,24 +353,28 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-10 | docs | (changelog) resync table through gate meta-guard | [`9b60d7a`](https://github.com/ali-han-kaya/leibniz2/commit/9b60d7a) |
 | 2026-09-10 | docs | (changelog) resync table through meta-guard unit | [`f063363`](https://github.com/ali-han-kaya/leibniz2/commit/f063363) |
 | 2026-09-10 | docs | archive rc-review worktree brief and resync changelog | [`08d3c25`](https://github.com/ali-han-kaya/leibniz2/commit/08d3c25) |
-| 2026-09-11 | test | (verify) fail-closed canonical-hash pin for cleanup_log.json | [`e2aaf86`](https://github.com/ali-han-kaya/leibniz2/commit/e2aaf86) |
-| 2026-09-10 | docs | (triage) record 091635c CI failure root causes in findings.md | [`9bcd753`](https://github.com/ali-han-kaya/leibniz2/commit/9bcd753) |
 | 2026-09-10 | fix | (verify) make review freshness gate fresh-clone-safe | [`9544cb4`](https://github.com/ali-han-kaya/leibniz2/commit/9544cb4) |
 | 2026-09-10 | fix | (ci-audit) break advisory self-loop in deterministic gate | [`a345284`](https://github.com/ali-han-kaya/leibniz2/commit/a345284) |
 | 2026-09-10 | test | (verify) add full-discover drift guard + register tests | [`8bac7f8`](https://github.com/ali-han-kaya/leibniz2/commit/8bac7f8) |
-| 2026-09-11 | docs | (changelog) resync table through e2aaf86 canonical-hash pin | [`2a493ec`](https://github.com/ali-han-kaya/leibniz2/commit/2a493ec) |
-| 2026-09-11 | fix | (verify) make status-checks importable without PyYAML and skip bare-runner | [`b227c2e`](https://github.com/ali-han-kaya/leibniz2/commit/b227c2e) |
-| 2026-09-11 | fix | (docker) drop docker-scout step that requires a paid entitlement | [`d4f095e`](https://github.com/ali-han-kaya/leibniz2/commit/d4f095e) |
-| 2026-09-11 | fix | (docker) single table-mode trivy gate with visible evidence | [`8f6e2a9`](https://github.com/ali-han-kaya/leibniz2/commit/8f6e2a9) |
-| 2026-09-11 | fix | (docker) patch base-image setuptools and wheel in runtime stage | [`f9e088f`](https://github.com/ali-han-kaya/leibniz2/commit/f9e088f) |
-| 2026-09-11 | fix | (docker) upgrade vendored setuptools to patched line | [`f690d3d`](https://github.com/ali-han-kaya/leibniz2/commit/f690d3d) |
-| 2026-09-11 | fix | (docker) bookworm base pin + visible trivy findings table | [`f6734a0`](https://github.com/ali-han-kaya/leibniz2/commit/f6734a0) |
-| 2026-09-11 | fix | (verify) surface advisory coe findings that could die unpublished | [`b129bed`](https://github.com/ali-han-kaya/leibniz2/commit/b129bed) |
-| 2026-09-11 | refactor | (verify) single-source workflow contract fixture | [`616f5eb`](https://github.com/ali-han-kaya/leibniz2/commit/616f5eb) |
-| 2026-09-11 | ci | (docker) land docker-security workflow with pinned actions | [`38e1a83`](https://github.com/ali-han-kaya/leibniz2/commit/38e1a83) |
-| 2026-09-11 | fix | (design) land token sheet and wire dashboard to single source | [`1a0b32c`](https://github.com/ali-han-kaya/leibniz2/commit/1a0b32c) |
-| 2026-09-12 | fix | (verify) dependency-closed delivery resync and mirror coverage set | [`831b941`](https://github.com/ali-han-kaya/leibniz2/commit/831b941) |
-| 2026-09-12 | chore | (repo) ignore generated deck renders and agent temp dirs | [`963f690`](https://github.com/ali-han-kaya/leibniz2/commit/963f690) |
+| 2026-09-13 | docs | (review) rebuild review compilation from current source (53pp) | [`a1dde38`](https://github.com/ali-han-kaya/leibniz2/commit/a1dde38) |
+| 2026-09-13 | fix | (verify) point V5m lineage row at the b69de33 repack commit | [`3965c31`](https://github.com/ali-han-kaya/leibniz2/commit/3965c31) |
+| 2026-09-13 | docs | (verify) add the 43-site advisory coe audit table | [`ca70b53`](https://github.com/ali-han-kaya/leibniz2/commit/ca70b53) |
+| 2026-09-13 | test | (verify) pin gate sidecar wiring and advisory defensive reads | [`054a047`](https://github.com/ali-han-kaya/leibniz2/commit/054a047) |
+| 2026-09-13 | feat | (changelog) add safe stale-row pruning | [`219baf0`](https://github.com/ali-han-kaya/leibniz2/commit/219baf0) |
+| 2026-09-13 | chore | (repo) ignore generated deck renders and agent temp dirs | [`39da370`](https://github.com/ali-han-kaya/leibniz2/commit/39da370) |
+| 2026-09-13 | fix | (verify) dependency-closed delivery resync and mirror coverage set | [`d69c3c1`](https://github.com/ali-han-kaya/leibniz2/commit/d69c3c1) |
+| 2026-09-13 | fix | (verify) make status-checks importable without PyYAML and skip bare-runner | [`11b7e43`](https://github.com/ali-han-kaya/leibniz2/commit/11b7e43) |
+| 2026-09-13 | fix | (docker) drop docker-scout step that requires a paid entitlement | [`e9dfd28`](https://github.com/ali-han-kaya/leibniz2/commit/e9dfd28) |
+| 2026-09-13 | fix | (docker) single table-mode trivy gate with visible evidence | [`75ec51a`](https://github.com/ali-han-kaya/leibniz2/commit/75ec51a) |
+| 2026-09-13 | fix | (docker) patch base-image setuptools and wheel in runtime stage | [`3ca0bae`](https://github.com/ali-han-kaya/leibniz2/commit/3ca0bae) |
+| 2026-09-13 | fix | (docker) upgrade vendored setuptools to patched line | [`a0d5e35`](https://github.com/ali-han-kaya/leibniz2/commit/a0d5e35) |
+| 2026-09-13 | fix | (docker) bookworm base pin + visible trivy findings table | [`3e427c7`](https://github.com/ali-han-kaya/leibniz2/commit/3e427c7) |
+| 2026-09-13 | fix | (verify) surface advisory coe findings that could die unpublished | [`234ff56`](https://github.com/ali-han-kaya/leibniz2/commit/234ff56) |
+| 2026-09-13 | refactor | (verify) single-source workflow contract fixture | [`0121691`](https://github.com/ali-han-kaya/leibniz2/commit/0121691) |
+| 2026-09-13 | ci | (docker) land docker-security workflow with pinned actions | [`5e45c0d`](https://github.com/ali-han-kaya/leibniz2/commit/5e45c0d) |
+| 2026-09-13 | fix | (design) land token sheet and wire dashboard to single source | [`86f4c9d`](https://github.com/ali-han-kaya/leibniz2/commit/86f4c9d) |
+| 2026-09-13 | docs | (changelog) resync table through e2aaf86 canonical-hash pin | [`24d9848`](https://github.com/ali-han-kaya/leibniz2/commit/24d9848) |
+| 2026-09-13 | test | (verify) fail-closed canonical-hash pin for cleanup_log.json | [`d3f3b08`](https://github.com/ali-han-kaya/leibniz2/commit/d3f3b08) |
 
 ### Regresyon notları
 

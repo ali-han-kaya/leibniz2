@@ -88,9 +88,11 @@ jobs:
       #   - Action input/ref hataları (uses:_wrong_version)
       #   - Job dependency hataları (needs: olmayan job)
       #   - Secret/env erişim hataları
-      # RC: 0 = temiz; 1/2 = hata ya da yalnızca shellcheck info/hint
-      # (advisory — build'i durdurmaz; fail-closed kapı pre-commit'te
-      # lint_actionlint.sh'tir); >2 = actionlint iç hatası → job fail.
+      # RC: 0 = temiz → PASS. RC=1 = lint bulgusu (shellcheck hint/info DAHİL
+      # — ayrı exit kodu yoktur, ölçüldü). RC≥2 = runtime/fatal hata.
+      # Kontrat: RC≠0 → FAIL (fail-closed; "RC=2 advisory" sanılan eski
+      # sözleşme yanlış okumaydı). Hint görülürse ya düzelt ya da -ignore'u
+      # bu adımda VE lint_actionlint.sh'te görünür şekilde kontratla.
       - name: Lint all workflows with actionlint
         if: always()
         shell: bash
@@ -107,14 +109,14 @@ jobs:
             if [ "$WF_RC" -gt "$MAX_RC" ]; then MAX_RC=$WF_RC; fi
             echo "actionlint: $WF → RC=$WF_RC"
           done
-          if [ "$MAX_RC" -eq 0 ]; then
-            echo "actionlint: PASS — tüm workflow'lar temiz"
-          elif [ "$MAX_RC" -le 2 ]; then
-            echo "actionlint: INFO — RC=$MAX_RC (shellcheck hints/errors, advisory)"
-          else
+          # Kontrat lint_actionlint.sh (pre-commit) ile birebir aynı:
+          # RC=0 temiz → PASS; RC≠0 → FAIL. Hint'ler RC=1 üretir (düzelt),
+          # RC≥2 fatal hata (asla advisory değil).
+          if [ "$MAX_RC" -ne 0 ]; then
             echo "actionlint: FAIL (RC=$MAX_RC)"
             exit 1
           fi
+          echo "actionlint: PASS — tüm workflow'lar temiz"
 
       - name: Lint shell hooks (shellcheck, POSIX/bash)
         if: always()
@@ -294,7 +296,7 @@ jobs:
         if: always()
         run: |
           curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain leanprover/lean4:stable
-          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
           export PATH="$HOME/.elan/bin:$PATH"
           elan toolchain install leanprover/lean4:v4.14.0
       #
@@ -577,9 +579,8 @@ jobs:
       # setup_commit_hooks.sh'i CI'da koşarak pre-commit + commit-msg
       # hook'larının kurulabildiğini ve kurulu olduğunu doğrular.
       # Yereldeki publish_precheck.sh (a2) ile aynı ölçütü test eder.
-      - name: Verify hook installation (advisory)
+      - name: Verify hook installation (required)
         if: always()
-        continue-on-error: true
         shell: bash
         run: |
           bash _calisma/CIKTI/setup_commit_hooks.sh --check-only
@@ -588,9 +589,8 @@ jobs:
       # commit_msg_hook.sh'i 28 test mesajıyla çalıştırıp hangi başlıkların
       # bloke/izin olduğunu COMMIT_MSG_BLOCK_EVIDENCE.md olarak raporlar.
       # Hook kuralları değişirse bu dosya da değişir (deterministik kanıt).
-      - name: Generate commit-msg block evidence (advisory)
+      - name: Generate commit-msg block evidence (required)
         if: always()
-        continue-on-error: true
         shell: bash
         run: |
           python3 _calisma/CIKTI/gen_commit_msg_evidence.py \
@@ -669,11 +669,11 @@ jobs:
               du -sh "$HOME/.cache/pre-commit" 2>/dev/null
               echo ""
               echo "env sürümleri (hash dizinleri):"
-              ls -1 "$HOME/.cache/pre-commit" 2>/dev/null | head -20
+              find "$HOME/.cache/pre-commit" -maxdepth 1 -type d ! -path "$HOME/.cache/pre-commit" -printf '%f\n' 2>/dev/null | sort | head -20
               echo ""
               if [ -d "$HOME/.cache/pre-commit/repocache" ]; then
-                echo "repocache:"
-                ls -1 "$HOME/.cache/pre-commit/repocache" 2>/dev/null | head -10
+              echo "repocache:"
+              find "$HOME/.cache/pre-commit/repocache" -maxdepth 1 -type d ! -path "$HOME/.cache/pre-commit/repocache" -printf '%f\n' 2>/dev/null | sort | head -10
               fi
             else
               echo "cache dizini yok: $HOME/.cache/pre-commit"
@@ -1724,7 +1724,8 @@ jobs:
           # olarak gate'i aşar. summary.txt'ye 'cli_overrides=' satırı yazılır.
           if [ -f config-drift/cli_overrides_version.json ]; then
             cov=$(python3 -c "import json;d=json.load(open('config-drift/cli_overrides_version.json'));print('WARNING' if d.get('warning') else 'OK', d.get('override_count',0))" 2>/dev/null)
-            printf 'cli_overrides=%s (override_count=%s)\n' $cov >> config-drift/summary.txt
+            cov_verdict=${cov%% *}; cov_count=${cov##* }
+            printf 'cli_overrides=%s (override_count=%s)\n' "$cov_verdict" "$cov_count" >> config-drift/summary.txt
             # Gate'e etki: warning=true → verdict FAIL (final zaten gate'te 1 olur)
             ov_warn=$(python3 -c "import json;d=json.load(open('config-drift/cli_overrides_version.json'));print('1' if d.get('warning') else '0')" 2>/dev/null || echo 0)
             if [ "$ov_warn" = "1" ] && [ "$verdict" = "PASS" ]; then
@@ -2281,14 +2282,7 @@ jobs:
             > .freebuff/status_checks.json 2> .freebuff/status_checks.err || true
           echo "status_checks.json boyut: $(wc -c < .freebuff/status_checks.json) bayt"
           if [ -s .freebuff/status_checks.json ]; then
-            python3 - <<'PYEOF'
-            import json
-            d = json.load(open(".freebuff/status_checks.json"))
-            ac = d.get("advisory_contract") or {}
-            print("advisory_contract.ok:", ac.get("ok"),
-                  "| required:", len(ac.get("required", [])),
-                  "| advisory:", len(ac.get("advisory", [])))
-            PYEOF
+            python3 -c 'import json; d = json.load(open(".freebuff/status_checks.json")); ac = d.get("advisory_contract") or {}; print("advisory_contract.ok:", ac.get("ok"), "| required:", len(ac.get("required", [])), "| advisory:", len(ac.get("advisory", [])))'
           else
             echo "status_checks --json çıktı üretmedi — stderr:"
             cat .freebuff/status_checks.err
@@ -2545,7 +2539,7 @@ jobs:
           if [ "$rc" -ne 0 ]; then
             echo "K15: FAIL — history sidecar uyuşmazlığı (P1, fail-closed)"
           fi
-          exit $rc
+          exit "$rc"
 
       # OVERRIDE RAPORU (PRECOMMIT_RAPORU deseni): override run'ının
       # [CLI override] satırları preview_server tarafından
@@ -2770,7 +2764,7 @@ jobs:
         if: always()
         run: |
           curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain leanprover/lean4:stable
-          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
           export PATH="$HOME/.elan/bin:$PATH"
           elan toolchain install leanprover/lean4:v4.14.0
 
@@ -3131,9 +3125,11 @@ jobs:
           export PREVIEW_MIRROR="$RUNNER_TEMP/preview-mirror"
           export MIRROR_DIR="$RUNNER_TEMP/verify-mirror"
           export LEAN_MIRROR_DIR="$RUNNER_TEMP/lean-mirror"
-          echo "PREVIEW_MIRROR=$PREVIEW_MIRROR" >> "$GITHUB_ENV"
-          echo "MIRROR_DIR=$MIRROR_DIR" >> "$GITHUB_ENV"
-          echo "LEAN_MIRROR_DIR=$LEAN_MIRROR_DIR" >> "$GITHUB_ENV"
+          {
+            echo "PREVIEW_MIRROR=$PREVIEW_MIRROR"
+            echo "MIRROR_DIR=$MIRROR_DIR"
+            echo "LEAN_MIRROR_DIR=$LEAN_MIRROR_DIR"
+          } >> "$GITHUB_ENV"
           bash _calisma/CIKTI/sync_verify_mirror.sh --force
 
       # FRESH-CLONE --check-ci: beş artefaktın kurulumunu tek denetimde

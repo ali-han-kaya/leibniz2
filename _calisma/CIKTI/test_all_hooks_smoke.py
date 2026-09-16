@@ -99,8 +99,10 @@ HOOKS = [
      [r"SONUÇ: PASS"], [], 30),
 
     # 14) verify-delivery-repro-manifest: K13 self-test
+    # pattern 'Passed': hook çıktısı unittest battery'sidir ("Ran 101 tests… OK");
+    # "SONUÇ: PASS" yalnızca verify_delivery.py ana kapısında üretilir. +10s→30s.
     ("verify-delivery-repro-manifest", "Verify repro-manifest producer", 0, 0,
-     [r"SONUÇ: PASS"], [], 10),
+     [r"Passed"], [], 30),
 
     # 15) shellcheck-hooks: POSIX/bash lint
     ("shellcheck-hooks", "Lint shell hooks (shellcheck)", 0, 0,
@@ -138,8 +140,10 @@ HOOKS = [
     # 21) check-unit-tests: birim testleri (1026+ test)
     # rc=1 onaylanir: test_status_checks.py gh api testleri yerel ortamda
     # (gh auth yoksa) FAIL uretir — pre-existing, hook'un kendisi saglam.
+    # timeout 180s: tam battery yerel makinede ~75-120s (ölçüldü); 60s
+    # TIMEOUT rc=-1 üretip kapıyı yanlış kırmayla raporlardı.
     ("check-unit-tests", "Unit tests for new gates", 0, 1,
-     [r"Passed"], [], 60),
+     [r"Passed"], [], 180),
 
     # 22) commit-msg-style: commit mesaji noise denetimi (ozel — pre-commit run ile calismaz)
     # Bu hook yalnizca git commit sirasinda .git/COMMIT_EDITMSG uzerinde calisir.

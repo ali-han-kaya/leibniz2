@@ -29,12 +29,9 @@
     <string>--interval</string>
     <string>60</string>
   </array>
-  <key>RunAtLoad</key><true/>
-  <key>KeepAlive</key>
-  <dict>
-    <key>SuccessfulExit</key>
-    <false/>
-  </dict>
+  <key>RunAtLoad</key>
+<false/>
+
   <!-- PreStart fail-closed döndüğünde launchd'nin yeniden başlatma
        döngüsünü sınırla; otomatik kurtarma yok, operatör müdahalesi gerekir. -->
   <key>ThrottleInterval</key>

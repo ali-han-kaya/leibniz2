@@ -1,15 +1,19 @@
 #!/usr/bin/env bash
 # lint_actionlint.sh — actionlint wrapper (pre-commit hook).
 #
-# actionlint返回值:
-#   0 = temiz
-#   1 = hata (YAML syntax, job dependency, expression)
-#   2 = yalnızca shellcheck info/hint (advisory)
+# actionlint çıkış kodları (v1.7.7, ölçülerek doğrulandı 2026-09-16):
+#   0 = temiz → PASS
+#   1 = lint bulgusu (shellcheck hint/info DAHİL — ayrı exit kodu yok) → FAIL
+#   2/3 = runtime/fatal hata (dosya okunamadı, şablon hatası) → FAIL
+#
+# NOT: Eski "RC≤2 PASS (shellcheck info advisory)" sözleşmesi yanlış
+# okumaya dayanıyordu — hint'ler RC=1 üretir, RC=2 fatal koddur. Fail-closed
+# doğru kontrat: RC≠0 → FAIL. Hint görürsen ya düzelt ya da -ignore'u
+# görünür şekilde kontrata ekle.
 #
 # TÜM .github/workflows/*.yml'ı (glob) denetler — yeni workflow dosyaları
-# kapıya otomatik girer (verify.yml CI adımıyla aynı tek kaynak glob).
-# Pre-commit'te RC≤2 PASS (advisory), RC>2 FAIL. CI'daki advisory step ile
-# birebir aynı davranış.
+# kapıya otomatik girer (verify.yml CI adımıyla aynı tek kaynak glob ve
+# aynı kontrat).
 
 set -euo pipefail
 
@@ -32,10 +36,9 @@ done
 if [ "$RC" -eq 0 ]; then
   echo "actionlint: PASS — tüm workflow'lar temiz"
   exit 0
-elif [ "$RC" -le 2 ]; then
-  echo "actionlint: PASS (RC=$RC, shellcheck info/hints only — advisory)"
-  exit 0
 else
-  echo "actionlint: FAIL (RC=$RC)"
+  echo "actionlint: FAIL (RC=$RC) — RC=1 lint bulgusu (shellcheck hint dahil),"
+  echo "  RC≥2 runtime/fatal hata. Hint'leri kalıcı geçmek istersen -ignore'u"
+  echo "  bu betikte VE CI adımında görünür şekilde kontratla."
   exit 1
 fi

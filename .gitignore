@@ -4,5 +4,18 @@ _calisma/pdf_repro_findings_deck/
 _calisma/verification_chain_deck/
 docs/ci_simulate/
 
+# Build/runtime artifact'ları — kaynak değil, her koşumda yeniden üretilir
+__pycache__/
+*.pyc
+_calisma/CIKTI/logs/
+_calisma/lean_reduct/.lake/
+_calisma/lean_reduct/lake-manifest.json
+apps/dashboard-shadcn/node_modules/
+apps/dashboard-shadcn/dist/
+apps/dashboard-shadcn/tsconfig.tsbuildinfo
+
+# venv köprüsü: mirror venv'ini repo yolunda görünür kılar (K9/hooks)
+_calisma/.venv_z3
+
 # agent-run temp dirs (refresh-from-unstaged-source false positives)
 .agents/
