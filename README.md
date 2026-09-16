@@ -375,6 +375,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-13 | fix | (design) land token sheet and wire dashboard to single source | [`86f4c9d`](https://github.com/ali-han-kaya/leibniz2/commit/86f4c9d) |
 | 2026-09-13 | docs | (changelog) resync table through e2aaf86 canonical-hash pin | [`24d9848`](https://github.com/ali-han-kaya/leibniz2/commit/24d9848) |
 | 2026-09-13 | test | (verify) fail-closed canonical-hash pin for cleanup_log.json | [`d3f3b08`](https://github.com/ali-han-kaya/leibniz2/commit/d3f3b08) |
+| 2026-09-16 | fix | (verify) close hidden plist keepalive drift and gate gaps | [`3918a04`](https://github.com/ali-han-kaya/leibniz2/commit/3918a04) |
 
 ### Regresyon notları
 

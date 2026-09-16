@@ -17,6 +17,7 @@
 | P0-7 | README changelog'unda canlı git geçmişinde olmayan 15 eski hash (rewrite artığı) | `gen_changelog.py --prune` | test_gen_changelog 72/72 OK |
 | P0-8 | Disk %100 dolu → K13/geçici dizin açamıyor (94 test ERROR) | kullanıcı onayıyla brew download cache temizlendi (~4.2 GB) | batarya tam koşum OK |
 | P0-9 | PLIST_PROFILES `keepalive` alanı ÖLÜ alan: `plist_render` 6. alanı hiç uygulamıyordu (docstring `{{KEEPALIVE}}` vadetmişti ama şablonda yok). Yedek profil `RunAtLoad=true`+`KeepAlive` üretilip login'de otomatik yükleniyor, 8000 portunu tutuyor; birincil leibniz2 `Errno 48: Address already in use` ile crash-loop'ta; K20 birincil için P1 üretiyordu. Ayrıca K20 özeti yedeği de birincil kriteriyle yazdırıyordu | şablonda gerçek `{{KEEPALIVE_RUNATLOAD}}/{{KEEPALIVE_KEEPALIVE}}` placeholder'ları; `plist_render` profili uygular (false → RunAtLoad=false + KeepAlive yok); `--start` keepalive=false profilleri kickstart eder; `preview_prestart.plist_values` KEEPALIVE_* değerlerini kurulu plist'ten türetir (drift kapısı); K20 özeti rol-bazlı (yedek: yüklü değil = BILGI, aktif failover = PASS); golden'lar yeniden üretildi; canlı makine onarıldı (yedek bootout, birincil yeniden başlatıldı, mirror sync) | K20 PASS (birincil PID canlı HTTP 200, yedek BILGI), plist-check/check_plist_drift/K12/K17 RC=0, preview_prestart+plist testleri OK |
+| P0-10 | Temiz kopyada 5 test ERROR: disk yeniden %100 dolu (119 MiB boş) — kök neden `~/.elan/tmp` içindeki 58 GB'lık yarım kalan toolchain kurulum kalıntıları (elan'ın kurulum geçici dizini; toolchain'in kendisi değil, silinmesi güvenli) | `~/.elan/tmp/*` temizlendi → 59 GiB boşaldı (%87 kullanım); pinned v4.14.0 toolchain korundu | temiz kopya bataryası 2228 OK (önceki 5 error tamamen ENOSPC kaynaklıydı) |
 
 ## Skill sadakat denetimi (P1)
 
@@ -44,12 +45,28 @@ kaynağın kopyası istenirse kopya verilir — özet "kaynak" diye etiketlenmez
 | `verify_delivery.py --check-launchd` (K20, bu turda canlı onarıldı) | PASS — birincil PID canlı HTTP 200; yedek BILGI (steady-state'te yüklü değil, kontrat) |
 | fresh_clone_setup.sh --check-ci ×4 | PASS ×4 (ilk koşum sync sonrası tek seferlik bayatlık yarışı, kararlı RC=0) |
 
+## Aday commit + temiz kopya kabulü (2026-09-16)
+
+**Aday SHA: `3918a04`** — `fix(verify): close hidden plist keepalive drift and gate gaps`
+(commit anındaki pre-commit zinciri: tüm hook'lar PASS; verify_delivery PASS,
+Z3 12/12, Lean 8/8 v4.14.0, actionlint RC=0, 129 test dosyası PASS,
+commit-msg ≤72 kuralı dahil).
+
+Temiz kopya (`git clone` → `/tmp/leibniz2-final`, HEAD = `3918a04092279450e743b05f6da4df1ba22f13cd`, ağaç temiz) kabulü:
+
+| Kontrol | Sonuç |
+|---|---|
+| skills-index | PASS (8 skills) |
+| `verify_delivery.py --full` (Z3 dahil) | PASS — K8 12/12, K9 8/8 (lake build --wfail, v4.14.0), refs 61/61 |
+| unittest discover (CIKTI) | 2228 OK (71 SKIP — ortam-koşullu) |
+| `repack_delivery.py --verify` | TÜMÜ PASS (sidecar eşleşti) |
+| actionlint (3 workflow) | RC=0 |
+| MCP testleri | 26/26 OK |
+
 ## Açık borçlar (FINAL kapısı öncesi)
 
-- Temiz checkout (`git clone`/worktree) üzerinden aynı testlerin yeniden
-  koşumu ve gerçek GitHub Actions sonucu — yerel PASS yerine geçmez.
-- Aday commit henüz oluşturulmadı (kullanıcı kararı); SHA-bağlı kabul ondan
-  sonra çalışır. Değişiklikler stage edildi, commit yok.
+- Gerçek GitHub Actions koşumu — push gerektirir, kullanıcı kararı; yerel ve
+  temiz-kopya PASS bunun yerine geçmez.
 - TeXLive + `SOURCE_DATE_EPOCH` determinism hâlâ `ÖLÇÜLMEDİ` (tectonic proxy).
 - PDF raw hash repack sırasında değişti (qpdf sidecar yeniden üretildi) —
   K6-DETERM bilgi düzeyinde izleniyor.
