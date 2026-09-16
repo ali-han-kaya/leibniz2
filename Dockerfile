@@ -46,6 +46,15 @@ FROM python:3.11-slim-bookworm AS runtime
 # yamalar bu aşamada uygulanır.
 RUN pip install --no-cache-dir --upgrade "setuptools>=80" "wheel>=0.46.2"
 
+# Base image'in libpcre2-8-0'ı (10.42-1) iki HIGH CVE taşıyordu — yerel
+# Trivy smoke (CI docker-security gate'i ile aynı parametreler) fail-closed
+# yakaladı: CVE-2026-86145 (OOB write) + CVE-2026-89161 (pcre2_jit_match
+# memory corruption), ikisi de 10.42-1+deb12u1'de yamalı. Aynı targeted
+# yama deseni: yalnız etkilenen paket security deposundan yükseltilir.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends --only-upgrade libpcre2-8-0 \
+    && rm -rf /var/lib/apt/lists/*
+
 # The z3 interpreter for K8 + hook_env: copied from the builder, put on PATH.
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH" \

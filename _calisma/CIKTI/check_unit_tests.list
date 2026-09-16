@@ -117,6 +117,7 @@ test_sync_check_unit_tests.py
 test_sync_one_atomic.py
 test_test_coverage_report.py
 test_texlive_determinism_hook.py
+test_texlive_determinism_id_residual.py
 test_texlive_repro_documented.py
 test_update_preview_sync_server.py
 test_validate_config_schema.py

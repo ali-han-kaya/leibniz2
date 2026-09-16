@@ -44,6 +44,8 @@ kaynağın kopyası istenirse kopya verilir — özet "kaynak" diye etiketlenmez
 | `check-changelog-sync` hook | PASS |
 | `verify_delivery.py --check-launchd` (K20, bu turda canlı onarıldı) | PASS — birincil PID canlı HTTP 200; yedek BILGI (steady-state'te yüklü değil, kontrat) |
 | fresh_clone_setup.sh --check-ci ×4 | PASS ×4 (ilk koşum sync sonrası tek seferlik bayatlık yarışı, kararlı RC=0) |
+| TeXLive+SDE determinism deneyi (`texlive_determinism_hook.sh`) | PASS — SKIP kapatıldı: gerçek pdfTeX 3.141592653-2.6-1.40.29 (TeX Live 2026/Homebrew) + tectonic 0.17.0; iki bağımsız SDE koşumunda tek kalıntı pdfTeX'in rastgele trailer `/ID`'si (64 bayt), `/ID` harici baytlar birebir aynı (kanonik hash `a75c3409…` — oturumlar arası 3 bağımsız ölçümde birebir kararlı). Düzeltme: SDE artık tectonic ayağına da export ediliyor; düzeltme sonrası tectonic PDF'i de bağlamlar arası birebir aynı (`ad8fca69…`) |
+| Docker/Trivy güvenlik iş akışı (gerçek daemon ile yerel smoke) | PASS — colima start (Docker 29.5.2, amd64 emülasyon) → image `--platform linux/amd64` build OK (~100 MB); Trivy 0.74.0 gate'i CI parametreleriyle (CRITICAL,HIGH, ignore-unfixed, exit-code 1) **İLK KOŞUMDA 2 HIGH BULGU YAKALADI** (libpcre2-8-0: CVE-2026-86145 + CVE-2026-89161, bookworm 12.15 tabanı) → Dockerfile targeted `--only-upgrade libpcre2-8-0` yaması → **gate 0 bulgu ile yeşil**. Canlı smoke: compose `running healthy` (HEALTHCHECK HTTP 200, restarts=0) + ayrılmış rastgele port üzerinden host→konteyner `/api/health` HTTP 200 `ok` (host 8000 portu Freebuff önizleme sunucusu tarafından meşgul olduğundan kanıt bağlantı noktası bağımsız portla verildi) |
 
 ## Aday commit + temiz kopya kabulü (2026-09-16)
 
@@ -67,7 +69,18 @@ Temiz kopya (`git clone` → `/tmp/leibniz2-final`, HEAD = `3918a04092279450e743
 
 - Gerçek GitHub Actions koşumu — push gerektirir, kullanıcı kararı; yerel ve
   temiz-kopya PASS bunun yerine geçmez.
-- TeXLive + `SOURCE_DATE_EPOCH` determinism hâlâ `ÖLÇÜLMEDİ` (tectonic proxy).
+- TeXLive + `SOURCE_DATE_EPOCH` determinism ÖLÇÜLDÜ ve PASS: iki bağımsız
+  SDE koşumunda `/ID` harici tüm baytlar birebir aynı (tek kalıntı pdfTeX'in
+  SDE ile bile rastgele ürettiği trailer `/ID`; kanonik /ID-nötrlenmiş hash
+  karşılaştırmasıyla kanıtlandı). Takip denetiminde ek bulgu + düzeltme:
+  deney betiği SDE'yi tectonic ayağına export etmiyordu → tectonic hash'i
+  oturumdan oturuma kayıyordu (`4ad65b9b…` → `6cfc6c0a…`); SDE artık her iki
+  motora da veriliyor ve tectonic çıktısı bağlamlar arası birebir kararlı
+  (`ad8fca69…`). Sızıntı davranışı `test_sde_must_reach_engines_fail_closed`
+  ile fail-closed sabitlendi. qpdf 12.4.0'ın `--static-id` (girdi /ID'sini
+  korur) ve `--remove-metadata` (kendisi nondeterministik) bu kalıntıyı
+  gideremiyor — skill'in donmuş bulgusu tekrar doğrulandı. Kalan karar:
+  tectonic→TeXLive göçü için göç planı (kalıntı /ID kabul raporuyla).
 - PDF raw hash repack sırasında değişti (qpdf sidecar yeniden üretildi) —
   K6-DETERM bilgi düzeyinde izleniyor.
 - `python3 -m unittest discover` sistem python3 ile `--full` koşursa Z3 yok

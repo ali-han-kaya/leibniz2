@@ -196,6 +196,7 @@ HOOK_COVERAGE = {
         "test_status_checks_smoke.py",
         "test_summary_pattern_drift.py",
         "test_texlive_determinism_hook.py",
+        "test_texlive_determinism_id_residual.py",
         "test_trend_tooltip_dom.js",
         "test_update_preview_sync_server.py",
         "test_workflow_timeouts.py",

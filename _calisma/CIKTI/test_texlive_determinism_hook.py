@@ -20,6 +20,7 @@ Gerçek byte-determinism iddiası texlive_determinism_test.sh'in kendisindedir
 stdlib-only, OFFLINE.
 """
 import os
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -39,6 +40,18 @@ def _write_stub(path: Path, body: str) -> Path:
 
 
 class TestTexliveDeterminismHook(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        # İZOLASYON: hook testleri DETERMINISM_OUT'u geçici dizine yönlendirir;
+        # aksi halde betik varsayılan kanıt dosyasını
+        # (docs/ci_simulate/texlive_determinism/…) stub yollarıyla EZER ve
+        # gerçek deneyin kanıdı bozulur (ölçüldü: battery koşusu kanıdı sildi).
+        cls._tmp = tempfile.mkdtemp(prefix="texlive-hook-test-")
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls._tmp, ignore_errors=True)
+
     def _run(self, texlive_bin=None, path=EMPTY_PATH, tectonic_bin=None):
         env = dict(os.environ)
         if texlive_bin is not None:
@@ -46,6 +59,7 @@ class TestTexliveDeterminismHook(unittest.TestCase):
         if tectonic_bin is not None:
             env["TECTONIC_BIN"] = tectonic_bin
         env["PATH"] = path
+        env["DETERMINISM_OUT"] = os.path.join(self._tmp, "report.txt")
         return subprocess.run(["bash", str(HOOK)],
                               capture_output=True, text=True, env=env)
 

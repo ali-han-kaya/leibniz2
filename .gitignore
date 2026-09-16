@@ -19,3 +19,10 @@ _calisma/.venv_z3
 
 # agent-run temp dirs (refresh-from-unstaged-source false positives)
 .agents/
+
+# OS artıkları: macOS Finder meta verisi (her dizinde kendiliğinden oluşur)
+.DS_Store
+
+# Yerel çalışma logları (temiz kopyada üretilir; kanıt raporları docs/ci_simulate/
+# veya git-takipli karşılıklarında yaşar — buradaki kopya kaynak değil)
+logs/
