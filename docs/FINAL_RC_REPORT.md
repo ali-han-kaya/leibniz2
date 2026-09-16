@@ -67,8 +67,18 @@ Temiz kopya (`git clone` → `/tmp/leibniz2-final`, HEAD = `3918a04092279450e743
 
 ## Açık borçlar (FINAL kapısı öncesi)
 
-- Gerçek GitHub Actions koşumu — push gerektirir, kullanıcı kararı; yerel ve
-  temiz-kopya PASS bunun yerine geçmez.
+- ~~Gerçek GitHub Actions koşumu — push gerektirir, kullanıcı kararı~~
+  **KAPANDI (2026-09-16):** `reword-working` dalı push edildi ve gerçek
+  koşumlar izlendi. İlk push (73e94ce) 3 gizli CI borcunu surfaced etti ve
+  gerçek koşum bunları yakaladı: actionlint SC2002 (verify.yml:2803),
+  taze-checkout'ta kalıcı FAIL üreten hook-install adımı (--check-only →
+  kurulum modu) ve zincirleme advisory-audit kırılması. İkinci push
+  (5f72054) ile **tüm workflow'lar yeşil**: test-smoke ✓, docker-security ✓
+  (Trivy 0 bulgu — Clean, debian 12.15), verify-delivery ✓ (run
+  35163054257, 8m9s; 27 job: 22 success + 5 by-design skipped; K1–K19 tek
+  giriş noktası success). Before/after: 2026-09-13 feat/plist-info-line
+  koşumu (34736804915) aynı 2 HIGH CVE ile docker-security'yi kırmıştı —
+  pcre2 yaması CI'da da doğrulandı.
 - TeXLive + `SOURCE_DATE_EPOCH` determinism ÖLÇÜLDÜ ve PASS: iki bağımsız
   SDE koşumunda `/ID` harici tüm baytlar birebir aynı (tek kalıntı pdfTeX'in
   SDE ile bile rastgele ürettiği trailer `/ID`; kanonik /ID-nötrlenmiş hash
