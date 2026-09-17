@@ -391,6 +391,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-17 | ci | (workflows) add docker-security manual dispatch; fix smoke comment | [`1215e5f`](https://github.com/ali-han-kaya/leibniz2/commit/1215e5f) |
 | 2026-09-17 | other | art(canvas): Incidental Proof plate 01 — deterministic TeXLive render | [`ed60036`](https://github.com/ali-han-kaya/leibniz2/commit/ed60036) |
 | 2026-09-17 | docs | (spec) a11y-gate reader-test pass, add reporting surfaces | [`66721a4`](https://github.com/ali-han-kaya/leibniz2/commit/66721a4) |
+| 2026-09-17 | docs | (how-to) local verification guide (Diataxis how-to quadrant) | [`f24ee15`](https://github.com/ali-han-kaya/leibniz2/commit/f24ee15) |
 
 ### Regresyon notları
 
