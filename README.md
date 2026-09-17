@@ -367,7 +367,6 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-13 | fix | (design) land token sheet and wire dashboard to single source | [`86f4c9d`](https://github.com/ali-han-kaya/leibniz2/commit/86f4c9d) |
 | 2026-09-13 | docs | (changelog) resync table through e2aaf86 canonical-hash pin | [`24d9848`](https://github.com/ali-han-kaya/leibniz2/commit/24d9848) |
 | 2026-09-13 | test | (verify) fail-closed canonical-hash pin for cleanup_log.json | [`d3f3b08`](https://github.com/ali-han-kaya/leibniz2/commit/d3f3b08) |
-| 2026-09-17 | docs | (review) rebuild compilation after source resync (d69c3c1) | [`48c2bc9`](https://github.com/ali-han-kaya/leibniz2/commit/48c2bc9) |
 | 2026-09-17 | fix | harden trend+sync gates - fail-closed update, stale guard, cm-super | [`352a615`](https://github.com/ali-han-kaya/leibniz2/commit/352a615) |
 | 2026-09-17 | feat | audit tooling - sync, docker smoke, patch pattern, trend CI | [`73575b1`](https://github.com/ali-han-kaya/leibniz2/commit/73575b1) |
 | 2026-09-17 | docs | (rc) record real CI run evidence; close push-required debt | [`742749a`](https://github.com/ali-han-kaya/leibniz2/commit/742749a) |
@@ -383,6 +382,8 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-13 | chore | (repo) ignore generated deck renders and agent temp dirs | [`8aac3b3`](https://github.com/ali-han-kaya/leibniz2/commit/8aac3b3) |
 | 2026-09-13 | fix | (verify) dependency-closed delivery resync and mirror coverage set | [`5df2a7a`](https://github.com/ali-han-kaya/leibniz2/commit/5df2a7a) |
 | 2026-09-13 | fix | (verify) import status-checks without PyYAML; skip bare-runner | [`7669f2a`](https://github.com/ali-han-kaya/leibniz2/commit/7669f2a) |
+| 2026-09-17 | fix | (verify) tolerate fresh-clone cleanup rm race after PASS | [`8256bcf`](https://github.com/ali-han-kaya/leibniz2/commit/8256bcf) |
+| 2026-09-17 | docs | (review) rebuild compilation after source resync (d69c3c1) | [`f575c87`](https://github.com/ali-han-kaya/leibniz2/commit/f575c87) |
 
 ### Regresyon notları
 
