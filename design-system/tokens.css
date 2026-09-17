@@ -12,6 +12,7 @@
   --bg: #0e1116;
   --fg: #e6edf3;
   --muted: #8b949e;
+  --fg-dimmed: #b6bec7;      /* AA 4.5:1 bg üzerinde — inline #555/#888/#999 yerine (WCAG 1.4.3) */
   --accent: #58a6ff;
   --ok: #3fb950;
   --warn: #d29922;
@@ -121,6 +122,7 @@
   --bg: #f3efe7;
   --fg: #292722;
   --muted: #70695f;
+  --fg-dimmed: #56504a;      /* light: #f3efe7 bg üzerinde AA 4.5:1+ */
   --accent: #8b5e2b;
   --ok: #287a3d;
   --warn: #996b08;

@@ -147,6 +147,8 @@ function toggleBudgetOverDetail() {
   const open = det.style.display !== "none";
   det.style.display = open ? "none" : "block";
   if (caret) caret.textContent = open ? "▸" : "▾";
+  const banner = $("budget-over-banner");
+  if (banner) banner.setAttribute("aria-expanded", String(!open));
 }
 function updateBudgetOverBanner() {
   const el = $("budget-over-banner");
@@ -1617,7 +1619,7 @@ function applySnapshotInner(d) {
   if (k15El) {
     if (d.history_sidecar_sha256) {
       const h = d.history_sidecar_sha256;
-      k15El.innerHTML = `<span style="color:var(--ok)">🔒</span> K15 sidecar: <code style="font-size:10px;color:#666">${h.substring(0, 16)}…</code>`;
+      k15El.innerHTML = `<span style="color:var(--ok)">🔒</span> K15 sidecar: <code style="font-size:10px;color:var(--muted)">${h.substring(0, 16)}…</code>`;
     } else {
       k15El.innerHTML = "<span style='color:var(--muted)'>⏳ K15 sidecar bekleniyor…</span>";
     }
@@ -1908,7 +1910,8 @@ function loadRunHistory(fromSSE = false) {
         `<span class=\"muted\">P0=${r.p0||0} P1=${r.p1||0} refs=${refs} ${pg}p ${bud} ${dur}</span>` +
         ` ${lean}${overBadge}${srcEl}`;
       const tsAttr = r.ts ? r.ts.replace(/'/g, "\'").replace(/"/g, "&quot;") : "";
-      return `<div class="rh-row" data-ts="${tsAttr}" onclick="loadRunStdout('${tsAttr}')" ` +
+      return `<div class="rh-row" role="button" tabindex="0" data-ts="${tsAttr}" onclick="loadRunStdout('${tsAttr}')" ` +
+        `onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();loadRunStdout('${tsAttr}')}" ` +
         `title="Tıklayınca bu run'un stdout'u yüklenir">${text}</div>`;
     });
     el.innerHTML = lines.join("\n");
@@ -1997,6 +2000,22 @@ connect();
   function close() { box.hidden = true; root.querySelector('button')?.focus(); }
   root.querySelectorAll('.z3-slide').forEach((button, i) => {
     button.addEventListener('click', () => open(i));
+  });
+  // Lightbox açıldığında Tab diyalogda kalır (WCAG 2.4.3): odak bir turda
+  // kapat/önceki/sonraki butonları arasında döner, diyalog dışına sızmaz.
+  box.addEventListener('keydown', e => {
+    if (e.key !== 'Tab' || box.hidden) return;
+    const focusables = [document.getElementById('z3-prev'),
+                        document.getElementById('z3-next'),
+                        document.getElementById('z3-close')]
+      .filter(el => el && el.offsetParent !== null);
+    if (!focusables.length) return;
+    const first = focusables[0], last = focusables[focusables.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault(); last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault(); first.focus();
+    }
   });
   document.getElementById('z3-prev').addEventListener('click', () => show(index - 1));
   document.getElementById('z3-next').addEventListener('click', () => show(index + 1));
