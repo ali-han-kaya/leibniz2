@@ -239,6 +239,10 @@ def run_update_hook_coverage(stage=True, discovered=None, path=None, cikti_dir=N
         src = f.read()
     span = _hook_coverage_span(src)
     if span is None:
+        # Hedef bozuksa sessiz başarı yerine dürüst hata; rc'yi update-sonrası
+        # run_check fail-closed yapar.
+        print(f"HATA: HOOK_COVERAGE['check-unit-tests'] bloğu okunamadı: {p} "
+              "— ikinci hedef senkronlanmadı.")
         return False, [], []
     entries = read_hook_coverage(p)
     add, orphan = diff_hook_coverage(
@@ -350,7 +354,8 @@ def main(argv=None):
 
     if args.update or not args.check:
         run_update(stage=not args.no_stage, directory=args.dir, manifest=mf, coverage=cov)
-        return 0
+        # rc=0 yalnız iki hedef de diskle senkronsa; değilse fail-closed rc=1.
+        return run_check(args.dir, mf, cov)
 
     return run_check(args.dir, mf, cov)
 

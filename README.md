@@ -380,6 +380,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-17 | fix | (verify) SDE leak fix, image CVE patch, determinism gate hardening | [`73e94ce`](https://github.com/ali-han-kaya/leibniz2/commit/73e94ce) |
 | 2026-09-17 | other | verify.yml: actionlint SC2002 fix + hook-install CI debt closed | [`5f72054`](https://github.com/ali-han-kaya/leibniz2/commit/5f72054) |
 | 2026-09-17 | docs | (rc) record real CI run evidence; close push-required debt | [`944149f`](https://github.com/ali-han-kaya/leibniz2/commit/944149f) |
+| 2026-09-17 | feat | audit tooling - sync, docker smoke, patch pattern, trend CI | [`6526cc1`](https://github.com/ali-han-kaya/leibniz2/commit/6526cc1) |
 
 ### Regresyon notları
 

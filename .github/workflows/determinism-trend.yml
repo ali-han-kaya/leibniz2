@@ -41,13 +41,14 @@ jobs:
           sudo mv /tmp/tectonic-bin/tectonic /usr/local/bin/tectonic
           tectonic --version
 
-      # TeXLive: pdflatex + geçiş motorları (latex). python3'ü setup-python
-      # sağlar (deneyin canonical_sha'sı ve trend script'i kullanır).
+      # cm-super ŞART: T1 fontenc paketleri yokken mktexpk METAFONT bitmap
+      # üretir — her koşumda dakikalar + bitmap hash sapması (ölçüldü).
+      # python3'ü setup-python sağlar (deney + trend script'i kullanır).
       - name: Install TeXLive
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends texlive-latex-base texlive-latex-recommended
+          sudo apt-get install -y --no-install-recommends texlive-latex-base texlive-latex-recommended cm-super
           pdflatex --version | head -1
 
       # Deney: iki bağımsız SDE koşumu + kanonik (/ID nötr) karşılaştırma.

@@ -24,6 +24,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 CIKTI = Path(__file__).resolve().parent
@@ -131,6 +132,28 @@ class TestUpdateMode(unittest.TestCase):
         # Trend dosyası git-takipli konumda olmalı — versiyonlanma asıl amaç;
         # docs/ci_simulate ignore edilmiş konumda kayıt (asla) versiyonlanmaz.
         self.assertIn("docs/determinism_trend", rdt.TREND)
+
+    def test_stale_evidence_guard(self):
+        # Bayat-kanıt koruması: --update, rapor mtime'ı 48h eskiyse rc=1 ve
+        # KAYIT EKLEMEZ (time-mock ile deterministik; temp trend'e yazar).
+        if not REAL_REPORT.exists():
+            self.skipTest("gerçek deney raporu yok (deney koşulmamış)")
+        mtime = os.stat(REAL_REPORT).st_mtime
+        orig_trend = rdt.TREND
+        with tempfile.TemporaryDirectory() as td:
+            rdt.TREND = os.path.join(td, "trend.jsonl")
+            try:
+                with unittest.mock.patch.object(rdt.time, "time",
+                                                lambda: mtime + 3600):
+                    self.assertEqual(rdt.main(["--update"]), 0)  # taze
+                self.assertEqual(len(rdt._records(rdt.TREND)), 1)
+                with unittest.mock.patch.object(rdt.time, "time",
+                                                lambda: mtime + 72 * 3600):
+                    self.assertEqual(rdt.main(["--update"]), 1)  # bayat
+                # Bayat koşum kayıt EKLEMEMELİ (append yok).
+                self.assertEqual(len(rdt._records(rdt.TREND)), 1)
+            finally:
+                rdt.TREND = orig_trend
 
 
 class TestTrendInvariant(unittest.TestCase):
