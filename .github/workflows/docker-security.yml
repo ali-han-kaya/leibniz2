@@ -2,6 +2,7 @@ name: docker-security
 
 on:
   push:
+  workflow_dispatch: {}  # CVE tazelemesi gibi olaylarda elle tetikleme
 
 permissions:
   contents: read

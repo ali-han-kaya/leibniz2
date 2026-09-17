@@ -387,6 +387,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-17 | docs | (readme) refresh changelog rows after history rewrite | [`619913d`](https://github.com/ali-han-kaya/leibniz2/commit/619913d) |
 | 2026-09-17 | feat | (a11y) keyboard access, landmarks, lang, focus trap | [`a9b5c53`](https://github.com/ali-han-kaya/leibniz2/commit/a9b5c53) |
 | 2026-09-17 | feat | (api) enforce POST-only contract on /api/stop (405+Allow:POST, TDD) | [`e981f1e`](https://github.com/ali-han-kaya/leibniz2/commit/e981f1e) |
+| 2026-09-17 | docs | (spec) add a11y-gate design (browser+axe, threshold gate) | [`a927476`](https://github.com/ali-han-kaya/leibniz2/commit/a927476) |
 
 ### Regresyon notları
 
