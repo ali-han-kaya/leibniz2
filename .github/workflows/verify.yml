@@ -2861,7 +2861,22 @@ jobs:
             if [ -n "$launcher_pid" ]; then
               wait "$launcher_pid" 2>/dev/null || true
             fi
-            rm -rf "$work"
+            # Server may still be flushing logs inside the clone right after
+            # the kill (observed 2026-09-17: rm -rf hit "Directory not empty"
+            # after a fully PASSing smoke). Retry briefly before giving up —
+            # cleanup is best-effort; the smoke result is already recorded.
+            cleaned=0
+            for _ in 1 2 3 4 5; do
+              if rm -rf "$work" 2>/dev/null; then
+                cleaned=1
+                break
+              fi
+              sleep 1
+            done
+            if [ "$cleaned" -ne 1 ]; then
+              echo "warning: cleanup left $work behind (server still flushing)" >&2
+              rm -rf "$work" 2>/dev/null || true
+            fi
           }
           trap cleanup EXIT
 

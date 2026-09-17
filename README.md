@@ -367,21 +367,22 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-13 | fix | (design) land token sheet and wire dashboard to single source | [`86f4c9d`](https://github.com/ali-han-kaya/leibniz2/commit/86f4c9d) |
 | 2026-09-13 | docs | (changelog) resync table through e2aaf86 canonical-hash pin | [`24d9848`](https://github.com/ali-han-kaya/leibniz2/commit/24d9848) |
 | 2026-09-13 | test | (verify) fail-closed canonical-hash pin for cleanup_log.json | [`d3f3b08`](https://github.com/ali-han-kaya/leibniz2/commit/d3f3b08) |
-| 2026-09-17 | fix | harden trend+sync gates - fail-closed update, stale guard, cm-super | [`24c7ee3`](https://github.com/ali-han-kaya/leibniz2/commit/24c7ee3) |
-| 2026-09-17 | feat | audit tooling - sync, docker smoke, patch pattern, trend CI | [`dabb4d6`](https://github.com/ali-han-kaya/leibniz2/commit/dabb4d6) |
-| 2026-09-17 | docs | (rc) record real CI run evidence; close push-required debt | [`c81da09`](https://github.com/ali-han-kaya/leibniz2/commit/c81da09) |
-| 2026-09-17 | other | verify.yml: actionlint SC2002 fix + hook-install CI debt closed | [`eeb1e37`](https://github.com/ali-han-kaya/leibniz2/commit/eeb1e37) |
-| 2026-09-17 | fix | (verify) SDE leak fix, image CVE patch, determinism gate hardening | [`85ff115`](https://github.com/ali-han-kaya/leibniz2/commit/85ff115) |
-| 2026-09-16 | docs | (rc) record candidate 3918a04 clean-copy acceptance | [`8660108`](https://github.com/ali-han-kaya/leibniz2/commit/8660108) |
-| 2026-09-16 | fix | (verify) close hidden plist keepalive drift and gate gaps | [`539f8f0`](https://github.com/ali-han-kaya/leibniz2/commit/539f8f0) |
-| 2026-09-13 | docs | (review) rebuild review compilation from current source (53pp) | [`22a8b3e`](https://github.com/ali-han-kaya/leibniz2/commit/22a8b3e) |
-| 2026-09-13 | fix | (verify) point V5m lineage row at the b69de33 repack commit | [`ae861d8`](https://github.com/ali-han-kaya/leibniz2/commit/ae861d8) |
-| 2026-09-13 | docs | (verify) add the 43-site advisory coe audit table | [`44c99b5`](https://github.com/ali-han-kaya/leibniz2/commit/44c99b5) |
-| 2026-09-13 | test | (verify) pin gate sidecar wiring and advisory defensive reads | [`dea4d17`](https://github.com/ali-han-kaya/leibniz2/commit/dea4d17) |
-| 2026-09-13 | feat | (changelog) add safe stale-row pruning | [`c6d67c0`](https://github.com/ali-han-kaya/leibniz2/commit/c6d67c0) |
-| 2026-09-13 | chore | (repo) ignore generated deck renders and agent temp dirs | [`1546a8c`](https://github.com/ali-han-kaya/leibniz2/commit/1546a8c) |
-| 2026-09-13 | fix | (verify) dependency-closed delivery resync and mirror coverage set | [`ea2b547`](https://github.com/ali-han-kaya/leibniz2/commit/ea2b547) |
-| 2026-09-13 | fix | (verify) make status-checks importable without PyYAML; skip bare-runner | [`110d1dc`](https://github.com/ali-han-kaya/leibniz2/commit/110d1dc) |
+| 2026-09-17 | docs | (review) rebuild compilation after source resync (d69c3c1) | [`48c2bc9`](https://github.com/ali-han-kaya/leibniz2/commit/48c2bc9) |
+| 2026-09-17 | fix | harden trend+sync gates - fail-closed update, stale guard, cm-super | [`352a615`](https://github.com/ali-han-kaya/leibniz2/commit/352a615) |
+| 2026-09-17 | feat | audit tooling - sync, docker smoke, patch pattern, trend CI | [`73575b1`](https://github.com/ali-han-kaya/leibniz2/commit/73575b1) |
+| 2026-09-17 | docs | (rc) record real CI run evidence; close push-required debt | [`742749a`](https://github.com/ali-han-kaya/leibniz2/commit/742749a) |
+| 2026-09-17 | other | verify.yml: actionlint SC2002 fix + hook-install CI debt closed | [`fd72066`](https://github.com/ali-han-kaya/leibniz2/commit/fd72066) |
+| 2026-09-17 | fix | (verify) SDE leak fix, image CVE patch, determinism gate hardening | [`bf8a929`](https://github.com/ali-han-kaya/leibniz2/commit/bf8a929) |
+| 2026-09-16 | docs | (rc) record candidate 3918a04 clean-copy acceptance | [`b2b979c`](https://github.com/ali-han-kaya/leibniz2/commit/b2b979c) |
+| 2026-09-16 | fix | (verify) close hidden plist keepalive drift and gate gaps | [`78a922f`](https://github.com/ali-han-kaya/leibniz2/commit/78a922f) |
+| 2026-09-13 | docs | (review) rebuild review compilation from current source (53pp) | [`f9ac500`](https://github.com/ali-han-kaya/leibniz2/commit/f9ac500) |
+| 2026-09-13 | fix | (verify) point V5m lineage row at the b69de33 repack commit | [`d268f8f`](https://github.com/ali-han-kaya/leibniz2/commit/d268f8f) |
+| 2026-09-13 | docs | (verify) add the 43-site advisory coe audit table | [`c1eb572`](https://github.com/ali-han-kaya/leibniz2/commit/c1eb572) |
+| 2026-09-13 | test | (verify) pin gate sidecar wiring and advisory defensive reads | [`223dbda`](https://github.com/ali-han-kaya/leibniz2/commit/223dbda) |
+| 2026-09-13 | feat | (changelog) add safe stale-row pruning | [`8dc6914`](https://github.com/ali-han-kaya/leibniz2/commit/8dc6914) |
+| 2026-09-13 | chore | (repo) ignore generated deck renders and agent temp dirs | [`8aac3b3`](https://github.com/ali-han-kaya/leibniz2/commit/8aac3b3) |
+| 2026-09-13 | fix | (verify) dependency-closed delivery resync and mirror coverage set | [`5df2a7a`](https://github.com/ali-han-kaya/leibniz2/commit/5df2a7a) |
+| 2026-09-13 | fix | (verify) import status-checks without PyYAML; skip bare-runner | [`7669f2a`](https://github.com/ali-han-kaya/leibniz2/commit/7669f2a) |
 
 ### Regresyon notları
 
