@@ -385,6 +385,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-17 | fix | (verify) tolerate fresh-clone cleanup rm race after PASS | [`8256bcf`](https://github.com/ali-han-kaya/leibniz2/commit/8256bcf) |
 | 2026-09-17 | docs | (review) rebuild compilation after source resync (d69c3c1) | [`f575c87`](https://github.com/ali-han-kaya/leibniz2/commit/f575c87) |
 | 2026-09-17 | docs | (readme) refresh changelog rows after history rewrite | [`619913d`](https://github.com/ali-han-kaya/leibniz2/commit/619913d) |
+| 2026-09-17 | feat | (a11y) keyboard access, landmarks, lang, focus trap | [`a9b5c53`](https://github.com/ali-han-kaya/leibniz2/commit/a9b5c53) |
 | 2026-09-17 | feat | (api) enforce POST-only contract on /api/stop (405+Allow:POST, TDD) | [`e981f1e`](https://github.com/ali-han-kaya/leibniz2/commit/e981f1e) |
 
 ### Regresyon notları
