@@ -221,7 +221,8 @@ HOOK_COVERAGE = {
         "test_texlive_repro_documented.py",
         "test_docker_security_smoke.py",
         "test_dockerfile_security_patching.py",
-        "test_record_determinism_trend.py",],
+        "test_record_determinism_trend.py",
+        "test_stop_post_only.py",],
 }
 
 # verify.yml CI job'ları → kapsadığı test dosyaları

@@ -384,6 +384,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-13 | fix | (verify) import status-checks without PyYAML; skip bare-runner | [`7669f2a`](https://github.com/ali-han-kaya/leibniz2/commit/7669f2a) |
 | 2026-09-17 | fix | (verify) tolerate fresh-clone cleanup rm race after PASS | [`8256bcf`](https://github.com/ali-han-kaya/leibniz2/commit/8256bcf) |
 | 2026-09-17 | docs | (review) rebuild compilation after source resync (d69c3c1) | [`f575c87`](https://github.com/ali-han-kaya/leibniz2/commit/f575c87) |
+| 2026-09-17 | docs | (readme) refresh changelog rows after history rewrite | [`619913d`](https://github.com/ali-han-kaya/leibniz2/commit/619913d) |
 
 ### Regresyon notları
 

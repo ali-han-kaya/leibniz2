@@ -1259,6 +1259,8 @@ def _route(path):
         return "run_stdout"
     if p == "/api/health":
         return "health"
+    if p == "/api/stop":
+        return "stop"
     if p.startswith("/slides_z3/"):
         return "slides"
     return None
@@ -1321,6 +1323,8 @@ class Handler(BaseHTTPRequestHandler):
         elif route == "sse":
             self.serve_sse()
         elif route == "run_now":
+            self._reject_method()
+        elif route == "stop":
             self._reject_method()
         elif route == "run_stream":
             self.serve_run_stream()
