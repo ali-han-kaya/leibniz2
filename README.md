@@ -389,6 +389,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-17 | feat | (api) enforce POST-only contract on /api/stop (405+Allow:POST, TDD) | [`e981f1e`](https://github.com/ali-han-kaya/leibniz2/commit/e981f1e) |
 | 2026-09-17 | docs | (spec) add a11y-gate design (browser+axe, threshold gate) | [`a927476`](https://github.com/ali-han-kaya/leibniz2/commit/a927476) |
 | 2026-09-17 | ci | (workflows) add docker-security manual dispatch; fix smoke comment | [`1215e5f`](https://github.com/ali-han-kaya/leibniz2/commit/1215e5f) |
+| 2026-09-17 | other | art(canvas): Incidental Proof plate 01 — deterministic TeXLive render | [`ed60036`](https://github.com/ali-han-kaya/leibniz2/commit/ed60036) |
 
 ### Regresyon notları
 

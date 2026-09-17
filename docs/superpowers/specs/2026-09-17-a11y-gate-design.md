@@ -1,6 +1,6 @@
 # A11y Gate Design (2026-09-17)
 
-**Status:** Approved design, awaiting implementation
+**Status:** Approved design, reader-tested (2 gaps fixed inline); awaiting implementation
 **Author:** Buffy (Codebuff) with ali-han-kaya
 **Path:** Architectural — new subsystem
 
@@ -41,14 +41,22 @@ Design decisions locked during brainstorming:
 - `_calisma/CIKTI/a11y_gate_config.json` — thresholds and allowlist:
   `blocking: ["critical", "serious"]`, `warn: ["moderate", "minor"]`,
   `incomplete: "report-only"`, allowlist entries require a `reason` field.
+  Allowlist semantics: entries match on axe `rule id` plus an optional
+  `target` selector substring — a rule-level entry silences that rule
+  everywhere; a target-scoped entry silences it only on matching nodes.
+  Every allowlisted violation is still printed in the report marked
+  `allowlisted`, so the table never hides debt silently.
 - CI job (`a11y-gate` in `.github/workflows/verify.yml`): checkout →
   setup-python (existing pattern) → `pip install playwright==X.Y.Z` (exact
   version chosen at implementation time and recorded in the workflow; no
   floating pins) →
   `playwright install --with-deps chromium` (~3 min, cached via
-  `actions/cache`) → start `preview_server.py` using the proven
-  fresh-clone-smoke startup pattern → run `a11y_gate.py` → upload JSON report
-  artifact + job-summary table.
+  `actions/cache`; cache key includes the pinned Playwright version so an
+  upgrade invalidates the browser cache) → start `preview_server.py` using
+  the proven fresh-clone-smoke startup pattern (the job assigns an ephemeral
+  port, waits for `GET /api/health` to return 200 with a bounded poll —
+  30 × 1 s — then passes `--base-url http://127.0.0.1:PORT`) → run
+  `a11y_gate.py` → upload JSON report artifact + job-summary table.
 
 ## Data Flow and Contract
 
@@ -67,9 +75,27 @@ Exit codes: `0` PASS, `1` FAIL (blocking violation or fail-closed condition),
 `2` usage/environment error. Unknown severity in axe results → treated as
 blocking.
 
+## Reporting Surfaces
+
+Every run writes three surfaces, in increasing richness:
+
+1. **stdout** — one-line verdict (`verdict: PASS|FAIL`) plus the violation
+   table (rule, impact, node count); `warn` and `incomplete` rows appear here
+   with their level, never silently dropped.
+2. **`a11y_report.json`** (CI artifact) — full axe result payload, config
+   echo (thresholds + allowlist with reasons), timestamps, and page URL, so a
+   failure can be replayed locally.
+3. **job summary** — a short markdown table of violations and the config
+   echo; `warn`/`incomplete` findings appear here too. There are no PR
+   annotations in scope (see YAGNI).
+
+A `warn` never changes the exit code; it is a reporting level only.
+
 ## Error Handling (fail-closed)
 
-- Server not up in time → **FAIL** (never skip).
+- Server not up in time → **FAIL** (never skip). The readiness wait is
+  bounded (30 × 1 s polls of `/api/health`); a browser crash mid-scan is a
+  FAIL with no retry — transient browser flake must surface, not be masked.
 - axe bundle checksum mismatch → **FAIL**.
 - Playwright/browser failure → **FAIL**.
 - Missing/invalid config → **FAIL** (config-drift gate pattern).
