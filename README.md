@@ -379,6 +379,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-16 | docs | (rc) record candidate 3918a04 clean-copy acceptance | [`7f6158f`](https://github.com/ali-han-kaya/leibniz2/commit/7f6158f) |
 | 2026-09-17 | fix | (verify) SDE leak fix, image CVE patch, determinism gate hardening | [`73e94ce`](https://github.com/ali-han-kaya/leibniz2/commit/73e94ce) |
 | 2026-09-17 | other | verify.yml: actionlint SC2002 fix + hook-install CI debt closed | [`5f72054`](https://github.com/ali-han-kaya/leibniz2/commit/5f72054) |
+| 2026-09-17 | docs | (rc) record real CI run evidence; close push-required debt | [`944149f`](https://github.com/ali-han-kaya/leibniz2/commit/944149f) |
 
 ### Regresyon notları
 

@@ -47,6 +47,8 @@ test_dashboard_k17_exit_sync.py
 test_dashboard_smoke.py
 test_diff_config_artifacts.py
 test_doc_job_sync.py
+test_docker_security_smoke.py
+test_dockerfile_security_patching.py
 test_duration_pct_config.py
 test_enforce_is_on.py
 test_extract_unstaged_deps.py
@@ -89,6 +91,7 @@ test_preview_server.py
 test_preview_server_atomic.py
 test_readme_badges.py
 test_readme_skills.py
+test_record_determinism_trend.py
 test_refs_trend.py
 test_refs_trend_badge.py
 test_render_z3_slides.py

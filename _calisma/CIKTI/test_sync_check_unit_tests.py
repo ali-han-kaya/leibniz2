@@ -11,10 +11,17 @@ eklendiğinde check-unit-tests manifest'inin otomatik senkron davranışı:
   - gerçek repo manifest'i diskteki gerçek setle uyumlu (uyumsuzsa bu test FAIL)
     — yani gelecekte biri manifest'i bozarsa bu test yakalar (regresyon kapısı)
 
+İKİNCİ HEDEF (2026-09-17 boşluğu): test_coverage_report.py'deki
+HOOK_COVERAGE["check-unit-tests"] listesi de senkronlanır. Ölçülen kök
+neden: sync_check_unit_tests.py yalnız manifest'i güncelleyip HOOK_COVERAGE'ı
+unutunca check-coverage-report kapısı "uncovered" FAIL üretti
+(test_texlive_determinism_id_residual.py tam bu boşluktan düştü).
+
 stdlib only, OFFLINE — geçici dizinlerle izole çalışır.
 """
 
 import os
+import re
 import sys
 import tempfile
 import unittest
@@ -97,6 +104,147 @@ class TestManifest(unittest.TestCase):
             self.assertEqual(s.run_check(td.name, mf), 0)
         finally:
             td.cleanup()
+
+
+HOOK_BLOCK_TEMPLATE = '''import pathlib
+HOOK_COVERAGE = {
+    "other-hook": ["test_other.py"],
+    "check-unit-tests": [
+{ENTRIES}    ],
+}
+'''
+
+
+def _write_coverage(path, entries):
+    """Statik-parse formatıyla (drift guard'ın okuduğu) coverage dosyası yazar."""
+    lines = "".join('        "%s",\n' % e for e in entries)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(HOOK_BLOCK_TEMPLATE.replace("{ENTRIES}", lines))
+
+
+class TestHookCoverageSync(unittest.TestCase):
+    """HOOK_COVERAGE['check-unit-tests'] ikinci hedefin davranış kapıları."""
+
+    def _env(self, entries, extra_tests=("test_new.py",), ghost=None):
+        """entries bloğa yazılır; extra_tests + entries(diskte_var) dosya olarak
+        oluşturulur. ghost: YALNIZ blokta olan, diskte OLMAYAN girdi."""
+        td = tempfile.TemporaryDirectory()
+        for e in entries:
+            if e != ghost:
+                open(os.path.join(td.name, e), "w").close()
+        for t in extra_tests:
+            open(os.path.join(td.name, t), "w").close()
+        cov = os.path.join(td.name, "coverage_report.py")
+        _write_coverage(cov, entries)
+        return td, cov
+
+    def test_check_fails_when_new_test_missing_from_hook_coverage(self):
+        """ÖLÇÜLEN BOŞLUK: manifest güncel, HOOK_COVERAGE unutulmuş → exit 1."""
+        td, cov = self._env(["test_a.py", "test_b.py"], ("test_new.py",))
+        try:
+            mf = os.path.join(td.name, "mf.list")
+            s.write_manifest(["test_a.py", "test_b.py", "test_new.py"], mf)
+            rc = s.run_check(td.name, mf, cov)
+            self.assertEqual(rc, 1, "HOOK_COVERAGE boşluğu fail-closed yakalanmalı")
+        finally:
+            td.cleanup()
+
+    def test_update_appends_and_preserves_js_and_exclude_entries(self):
+        """Yeni keşif eklenir; .js ve EXCLUDE'lu mevcut girdiler KORUNUR."""
+        entries = ["test_a.py", "test_budget_scan.js", "test_cleanup.py"]
+        td, cov = self._env(entries, ("test_new.py",))
+        try:
+            s.run_update(stage=False, directory=td.name, manifest=os.path.join(td.name, "mf.list"), coverage=cov)
+            got = s.read_hook_coverage(cov)
+            self.assertIn("test_new.py", got)
+            self.assertIn("test_budget_scan.js", got)  # .js korunur
+            self.assertIn("test_cleanup.py", got)      # EXCLUDE'lu korunur
+        finally:
+            td.cleanup()
+
+    def test_update_removes_orphan_entries(self):
+        """Diskte olmayan girdi bloktan çıkarılır (orphan temizliği)."""
+        entries = ["test_a.py", "test_ghost.py"]
+        td, cov = self._env(entries, ("test_new.py",), ghost="test_ghost.py")
+        try:
+            s.run_update(stage=False, directory=td.name, manifest=os.path.join(td.name, "mf.list"), coverage=cov)
+            got = s.read_hook_coverage(cov)
+            self.assertNotIn("test_ghost.py", got)
+            self.assertIn("test_a.py", got)
+        finally:
+            td.cleanup()
+
+    def test_update_is_idempotent_and_check_green_after(self):
+        td, cov = self._env(["test_a.py"], ("test_new.py",))
+        try:
+            mf = os.path.join(td.name, "mf.list")
+            s.run_update(stage=False, directory=td.name, manifest=mf, coverage=cov)
+            before = s.read_hook_coverage(cov)
+            changed = s.run_update(stage=False, directory=td.name, manifest=mf, coverage=cov)
+            self.assertFalse(changed, "ikinci update değişiklik üretmemeli")
+            self.assertEqual(s.read_hook_coverage(cov), before)
+            self.assertEqual(s.run_check(td.name, mf, cov), 0)
+        finally:
+            td.cleanup()
+
+    def test_missing_block_fails_closed(self):
+        """Bloğu olmayan coverage dosyası → run_check exit 1 (sahte PASS yok)."""
+        td = tempfile.TemporaryDirectory()
+        try:
+            open(os.path.join(td.name, "test_a.py"), "w").close()
+            cov = os.path.join(td.name, "cov.py")
+            with open(cov, "w", encoding="utf-8") as f:
+                f.write("HOOK_COVERAGE = {}\n")
+            mf = os.path.join(td.name, "mf.list")
+            s.write_manifest(["test_a.py"], mf)
+            self.assertEqual(s.run_check(td.name, mf, cov), 1)
+        finally:
+            td.cleanup()
+
+    def test_drift_guard_can_still_parse_regenerated_block(self):
+        """Yeniden yazılan blok, ci_full_discover_drift_guard'ın statik parse'
+       ıyla okunabilir olmalı (format kontratı)."""
+        entries = ["test_a.py", "test_b.py"]
+        td, cov = self._env(entries, ("test_new.py",))
+        try:
+            s.run_update(stage=False, directory=td.name,
+                         manifest=os.path.join(td.name, "mf.list"), coverage=cov)
+            src = open(cov, encoding="utf-8").read()
+            i = src.find('"check-unit-tests":')
+            j = src.find("],", i)
+            self.assertGreater(i, 0)
+            self.assertGreater(j, i)
+            import re as _re
+            found = _re.findall(r'"([^"]+\.py)"', src[i:j + 1])
+            self.assertIn("test_new.py", found)
+            self.assertIn("test_a.py", found)
+        finally:
+            td.cleanup()
+
+    def test_real_repo_hook_coverage_covers_discovery(self):
+        """Gerçek repo regresyon kapısı: keşif, tüm hook listelerinin
+        BİRLEŞİMİ + CHECK_EXEMPT muafiyetiyle kapsanmalı.
+
+        (Tek blokcoverage'ı yanlış invariant olur: bazı dosyalar başka
+        hook'larca kapsanır — örn. test_check_design_tokens.py →
+        check-design-tokens — ve meta dosyalar CHECK_EXEMPT'tedir.)
+        """
+        with open(s.COVERAGE_FILE, encoding="utf-8") as f:
+            src = f.read()
+        i = src.find("HOOK_COVERAGE = {")
+        j = src.find("CI_JOB_COVERAGE")
+        self.assertGreater(i, 0)
+        self.assertGreater(j, i)
+        all_hooks = set(re.findall(r'"([^"]+\.(?:py|js))"', src[i:j]))
+        k = src.find("CHECK_EXEMPT = frozenset({")
+        end = src.find("})", k)
+        exempt = set(re.findall(r'"([^"]+)"', src[k:end])) if k > 0 and end > k else set()
+        missing = [f for f in s.discover()
+                   if f not in all_hooks and f not in exempt]
+        self.assertEqual(
+            missing, [],
+            "check-coverage-report kapsamı boşlukta — "
+            "`python3 _calisma/CIKTI/sync_check_unit_tests.py --update`")
 
 
 class TestRepoConsistency(unittest.TestCase):

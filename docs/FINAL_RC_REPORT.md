@@ -1,5 +1,7 @@
 # Final Release Candidate Report
 
+> Tam kapsam denetiminin katman/borç/risk dökümü: `docs/FULL_SCOPE_AUDIT_2026-09-17.md`
+
 **Tarih:** 2026-09-16 (derin denetim turu güncellemesi)  
 **Dal:** `reword-working`  
 **Durum:** `RC — yerel kapılar yeşil; FINAL için temiz kopya + CI kanıtı bekliyor`
@@ -45,7 +47,7 @@ kaynağın kopyası istenirse kopya verilir — özet "kaynak" diye etiketlenmez
 | `verify_delivery.py --check-launchd` (K20, bu turda canlı onarıldı) | PASS — birincil PID canlı HTTP 200; yedek BILGI (steady-state'te yüklü değil, kontrat) |
 | fresh_clone_setup.sh --check-ci ×4 | PASS ×4 (ilk koşum sync sonrası tek seferlik bayatlık yarışı, kararlı RC=0) |
 | TeXLive+SDE determinism deneyi (`texlive_determinism_hook.sh`) | PASS — SKIP kapatıldı: gerçek pdfTeX 3.141592653-2.6-1.40.29 (TeX Live 2026/Homebrew) + tectonic 0.17.0; iki bağımsız SDE koşumunda tek kalıntı pdfTeX'in rastgele trailer `/ID`'si (64 bayt), `/ID` harici baytlar birebir aynı (kanonik hash `a75c3409…` — oturumlar arası 3 bağımsız ölçümde birebir kararlı). Düzeltme: SDE artık tectonic ayağına da export ediliyor; düzeltme sonrası tectonic PDF'i de bağlamlar arası birebir aynı (`ad8fca69…`) |
-| Docker/Trivy güvenlik iş akışı (gerçek daemon ile yerel smoke) | PASS — colima start (Docker 29.5.2, amd64 emülasyon) → image `--platform linux/amd64` build OK (~100 MB); Trivy 0.74.0 gate'i CI parametreleriyle (CRITICAL,HIGH, ignore-unfixed, exit-code 1) **İLK KOŞUMDA 2 HIGH BULGU YAKALADI** (libpcre2-8-0: CVE-2026-86145 + CVE-2026-89161, bookworm 12.15 tabanı) → Dockerfile targeted `--only-upgrade libpcre2-8-0` yaması → **gate 0 bulgu ile yeşil**. Canlı smoke: compose `running healthy` (HEALTHCHECK HTTP 200, restarts=0) + ayrılmış rastgele port üzerinden host→konteyner `/api/health` HTTP 200 `ok` (host 8000 portu Freebuff önizleme sunucusu tarafından meşgul olduğundan kanıt bağlantı noktası bağımsız portla verildi) |
+| Docker/Trivy güvenlik iş akışı (gerçek daemon ile yerel smoke) | PASS — colima start (Docker 29.5.2, amd64 emülasyon) → image `--platform linux/amd64` build OK (~100 MB); Trivy 0.74.0 gate'i CI parametreleriyle (CRITICAL,HIGH, ignore-unfixed, exit-code 1) **İLK KOŞUMDA 2 HIGH BULGU YAKALADI** (libpcre2-8-0: CVE-2026-86145 + CVE-2026-89161, bookworm 12.15 tabanı) → Dockerfile targeted `--only-upgrade libpcre2-8-0` yaması → **gate 0 bulgu ile yeşil**. Canlı smoke: compose `running healthy` (HEALTHCHECK HTTP 200, restarts=0) + ayrılmış rastgele port üzerinden host→konteyner `/api/health` HTTP 200 `ok` (host 8000 portu Freebuff önizleme sunucusu tarafından meşgul olduğundan kanıt bağlantı noktası bağımsız portla verildi). **2026-09-17 desen genelleştirmesi:** apt yama katmanı `SECURITY_PATCH_PACKAGES` ARG'sine bağlandı (CVE-defteri Dockerfile'da işlenmiş kalıcı kayıt; boş arg → yama yok; `dpkg-query` kanıt satırı yalın paket adıyla — `pkg=sürüm` sözdizimi canlı build'de patladı, sed ile kırpılır), kapalı döngü + katkı sözleşmesi `docs/DOCKER_SECURITY_PATCHING.md`'de dokümante edildi, desen sözleşme testiyle sabitlendi (`test_dockerfile_security_patching.py`, 7 test) ve değiştirilmiş Dockerfile canlı smoke ile yeniden doğrulandı (yama log kanıtı `libpcre2-8-0 10.42-1+deb12u1`, trivy 0 bulgu, health 200/healthy, verdict=PASS) |
 
 ## Aday commit + temiz kopya kabulü (2026-09-16)
 
@@ -90,7 +92,22 @@ Temiz kopya (`git clone` → `/tmp/leibniz2-final`, HEAD = `3918a04092279450e743
   ile fail-closed sabitlendi. qpdf 12.4.0'ın `--static-id` (girdi /ID'sini
   korur) ve `--remove-metadata` (kendisi nondeterministik) bu kalıntıyı
   gideremiyor — skill'in donmuş bulgusu tekrar doğrulandı. Kalan karar:
-  tectonic→TeXLive göçü için göç planı (kalıntı /ID kabul raporuyla).
+  tectonic→TeXLive göçü için göç planı (kalıntı /ID kabul raporuyla)
+  — **YAZILDI:** `docs/TEXLIVE_MIGRATION_PLAN.md` (ölçülmüş çapraz-motor
+  kanıtlarla). **2026-09-17 trend izleme:** deney haftalık CI job'ına
+  bağlandı (`determinism-trend.yml`, repo'nun ilk schedule job'ı — Pazartesi
+  03:17 UTC + workflow_dispatch): pinned tectonic 0.17.0 (release digest
+  doğrulamalı) + TeXLive ile iki bağımsız SDE koşumu →
+  `record_determinism_trend.py --update` versiyonlu
+  `docs/determinism_trend/determinism_trend.jsonl`'a ölçüm ekler
+  (ilk darwin baseline: tectonic `ad8fca69…`, texlive `a75c3409…`);
+  `--check` değişmezleri fail-closed: tazelik (haftalık), kaynak-uzlaşma
+  (aynı platform + değişmemiş kaynak → değişmemiş kanonik hash;
+  ihlal = motor determinizmi sapması), platform kapsamı (darwin+linux);
+  workflow'u push'unun ilk Pazartesi'sinden itibaren koşar. Planın
+  ölçülmüş çapraz-motor eşitlik kanıtı: sayfa 33=33, metin farkı yalnız heceleme/glif eşlemesi;
+  TeXLive 3-geçiş pipeline'ı kanonik `544516b0…` ×2 bağımsız koşum
+  deterministik).
 - PDF raw hash repack sırasında değişti (qpdf sidecar yeniden üretildi) —
   K6-DETERM bilgi düzeyinde izleniyor.
 - `python3 -m unittest discover` sistem python3 ile `--full` koşursa Z3 yok

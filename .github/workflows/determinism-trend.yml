@@ -1,0 +1,106 @@
+name: determinism-trend
+
+on:
+  schedule:
+    # Haftalık: her Pazartesi 03:17 UTC. Repo'nun İLK schedule tetikleyicisi —
+    # tectonic/TeXLive kanonik hash'lerinin oturumlar arası kararlılığını
+    # izleyen trend kaydını sürdürür (record_determinism_trend.py).
+    - cron: "17 3 * * 1"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  record:
+    name: Run determinism experiment and record trend
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      # tectonic: GitHub release'ten sabit sürüm + sha256 digest (tedarik
+      # zinciri pini — 0.17.0 x86_64-unknown-linux-musl; digest release
+      # API'sinden 2026-09-17'de kanıtlandı). Lokal ölçümle aynı motor
+      # sürümü → trend karşılaştırılabilirliği korunur.
+      - name: Install tectonic (pinned, digest-verified)
+        run: |
+          set -euo pipefail
+          TECTONIC_VERSION="0.17.0"
+          TECTONIC_SHA256="8533d07f9ccbd7a65824b9e0459041bca34af1eb33daba48f59215593753a3b7"
+          curl -sL "https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%40${TECTONIC_VERSION}/tectonic-${TECTONIC_VERSION}-x86_64-unknown-linux-musl.tar.gz" -o /tmp/tectonic.tar.gz
+          echo "${TECTONIC_SHA256}  /tmp/tectonic.tar.gz" | sha256sum -c -
+          mkdir -p /tmp/tectonic-bin
+          tar -xzf /tmp/tectonic.tar.gz -C /tmp/tectonic-bin
+          sudo mv /tmp/tectonic-bin/tectonic /usr/local/bin/tectonic
+          tectonic --version
+
+      # TeXLive: pdflatex + geçiş motorları (latex). python3'ü setup-python
+      # sağlar (deneyin canonical_sha'sı ve trend script'i kullanır).
+      - name: Install TeXLive
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends texlive-latex-base texlive-latex-recommended
+          pdflatex --version | head -1
+
+      # Deney: iki bağımsız SDE koşumu + kanonik (/ID nötr) karşılaştırma.
+      # env semantiği: TEXLIVE_BIN = bin DİZİNİ, TECTONIC_BIN = ikili YOL.
+      - name: Run determinism experiment (two independent SDE runs)
+        run: |
+          set -euo pipefail
+          TEXLIVE_BIN="$(dirname "$(command -v pdflatex)")"
+          TECTONIC_BIN="$(command -v tectonic)"
+          TEXLIVE_BIN="$TEXLIVE_BIN" TECTONIC_BIN="$TECTONIC_BIN" \
+            bash _calisma/CIKTI/texlive_determinism_test.sh
+          echo '--- evidence ---'
+          cat docs/ci_simulate/texlive_determinism/texlive_determinism_report.txt
+
+      # Kanıt dosyası gitignore'da (docs/ci_simulate/) — koşum başına üretimi
+      # yansıtır. Trend ise versiyonlu konumdadır (docs/determinism_trend/).
+      - name: Record trend measurement
+        run: |
+          set -euo pipefail
+          python3 _calisma/CIKTI/record_determinism_trend.py --update
+          echo '--- trend tail ---'
+          tail -1 docs/determinism_trend/determinism_trend.jsonl
+
+      # Trend değişmezleri (fail-closed): tazelik + kaynak-uzlaşma (aynı
+      # platform, değişmemiş kaynak → değişmemiş kanonik hash; ihlal = motor
+      # determinizmi sapması → KIRMIZI) + platform kapsamı (darwin+linux).
+      - name: Validate trend invariants
+        run: |
+          set -euo pipefail
+          python3 _calisma/CIKTI/record_determinism_trend.py --check
+
+      # Not: branch protection doğrudan push'u engellerse bu adım GÖRÜNÜR
+      # şekilde kırmızı olur (sessiz kayıp yok) — trend dosyası o hafta elle
+      # eklenir; zafiyet workflow'un kendisinde değil izin modelindedir.
+      - name: Commit trend record
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/determinism_trend/determinism_trend.jsonl
+          if git diff --cached --quiet; then
+            echo "FAIL: --update ekleme yaptı ama stage boş — beklenmedik durum"
+            exit 1
+          fi
+          git commit -m "chore: record weekly determinism trend measurement" -m "TeXLive+SDE experiment (two independent SDE runs) on ubuntu-latest with pinned tectonic 0.17.0 (release digest verified) and TeXLive pdflatex; canonical hashes appended to docs/determinism_trend/determinism_trend.jsonl." -m "Generated with GitHub Actions. Co-Authored-By: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
+          git push
+
+      # Fail-closed tamamlama: yeşil = deney PASS + uzlaşma OK + kayıt
+      # işlendi. Kırmızı = deney fail-closed, uzlaşma ihlali ya da izin
+      # sorunu — trend sapması ilk haftada görünür.
+      - name: Summary
+        if: always()
+        run: |
+          echo "## determinism-trend" >> "$GITHUB_STEP_SUMMARY"
+          tail -1 docs/determinism_trend/determinism_trend.jsonl >> "$GITHUB_STEP_SUMMARY" \
+            || echo "(trend kaydı yok)" >> "$GITHUB_STEP_SUMMARY"

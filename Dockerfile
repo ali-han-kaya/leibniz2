@@ -46,14 +46,48 @@ FROM python:3.11-slim-bookworm AS runtime
 # yamalar bu aşamada uygulanır.
 RUN pip install --no-cache-dir --upgrade "setuptools>=80" "wheel>=0.46.2"
 
-# Base image'in libpcre2-8-0'ı (10.42-1) iki HIGH CVE taşıyordu — yerel
-# Trivy smoke (CI docker-security gate'i ile aynı parametreler) fail-closed
-# yakaladı: CVE-2026-86145 (OOB write) + CVE-2026-89161 (pcre2_jit_match
-# memory corruption), ikisi de 10.42-1+deb12u1'de yamalı. Aynı targeted
-# yama deseni: yalnız etkilenen paket security deposundan yükseltilir.
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends --only-upgrade libpcre2-8-0 \
-    && rm -rf /var/lib/apt/lists/*
+# GENELLEŞTİRİLMİŞ güvenlik-yama katmanı — base-image güncellemelerinin
+# getirdiği CRITICAL/HIGH Trivy bulgularını kapatan tek nokta. Desen:
+#
+#   SECURITY_PATCH_PACKAGES (build-arg, boş varsayılan) — yamalanacak paket
+#     listesi. Bir base-image güncellemesi Trivy gate'ini (docker-security
+#     workflow: CRITICAL,HIGH + ignore-unfixed + exit-code 1) kırdığında,
+#     bulgunun paketi floor sürümüyle buraya EKLENİR:
+#
+#       --build-arg SECURITY_PATCH_PACKAGES="pkg=fixed_version ..."
+#
+#     build'de yama uygulanır; Dockerfile'a işlenen kalıcı kayıt aşağıdaki
+#     CVE-defteridir (her paket için paket, bulan CVE'ler, floor sürüm,
+#     kanıt tarihi). Gate yeşil kalınca da satırlar DURUR: kasıtlı, hızlı
+#     tekrar-tarama + sürüm-için-dokümantasyon. Floor'lar minimumdur —
+#     base image daha yenisini taşıyorsa --only-upgrade asla düşürmez.
+#   Uygulama kuralları (dava uyumlu): yalnız etkilenen paket (tüm-upgrade
+#     değil — taban sürümü değişmez, diff yüzeyi küçük kalır),
+#     --no-install-recommends, apt listeleri temizlenir (katman kalıntısı
+#     yok), kurulan sürümler kanıta yazılır (yama doğrulanabilir).
+#
+# CVE-defteri (artan süre — desen 2026-09-16 pcre2 düzeltmesiyle doğdu):
+#   libpcre2-8-0: CVE-2026-86145 (OOB write) + CVE-2026-89161
+#     (pcre2_jit_match memory corruption) → floor 10.42-1+deb12u1
+#     (kanıt: 2026-09-16, trivy 0.74.0 yerel smoke + CI 35161423659
+#     before/after; 2026-09-17 desenle yeniden doğrulandı). Girdi
+#     SECURITY_PATCH_PACKAGES default'unda yaşar — pasif kayıt, her
+#     build'de taze yama.
+ARG SECURITY_PATCH_PACKAGES="libpcre2-8-0=10.42-1+deb12u1"
+RUN set -eux; \
+    if [ "$(printf '%s' "$SECURITY_PATCH_PACKAGES" | tr -d '[:space:]')" = "" ]; then \
+      echo "SECURITY_PATCH_PACKAGES empty — no targeted apt patch"; \
+    else \
+      apt-get update; \
+      apt-get install -y --no-install-recommends --only-upgrade $SECURITY_PATCH_PACKAGES; \
+      rm -rf /var/lib/apt/lists/*; \
+      dpkg-query -W -f='${Package}\t${Version}\n' \
+        $(printf '%s\n' $SECURITY_PATCH_PACKAGES | sed 's/=.*//'); \
+    fi
+#
+# Desen dokümanı: docs/DOCKER_SECURITY_PATCHING.md (kapalı döngü: gate →
+# bulgu → yama → tarama; iki katman — bu ARG ve pip floor katmanı; katkı
+# sözleşmesi). Yerel kanıt üretimi: _calisma/CIKTI/docker_security_smoke.sh
 
 # The z3 interpreter for K8 + hook_env: copied from the builder, put on PATH.
 COPY --from=builder /opt/venv /opt/venv

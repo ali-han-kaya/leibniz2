@@ -156,7 +156,6 @@ HOOK_COVERAGE = {
         "test_reproducible_pdf_skill.py",
         "test_render_z3_slides.py",
         "test_check_hook_env_matrix.py",
-        "test_check_workflow_artifact_docs.py",
         "test_ci_sidecar_wiring.py",
         "test_actionlint_gate.py",
         "test_audit_octokit_names.py",
@@ -215,7 +214,14 @@ HOOK_COVERAGE = {
         "test_budget_over_detail.js",
         "test_refs_trend_badge_node.js",
         "test_z3_scan.js",
-    ],
+        "test_check_design_tokens.py",
+        "test_check_zip_lineage_drift.py",
+        "test_readme_skills.py",
+        "test_skills_index.py",
+        "test_texlive_repro_documented.py",
+        "test_docker_security_smoke.py",
+        "test_dockerfile_security_patching.py",
+        "test_record_determinism_trend.py",],
 }
 
 # verify.yml CI job'ları → kapsadığı test dosyaları

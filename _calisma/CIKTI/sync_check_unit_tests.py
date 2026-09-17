@@ -12,8 +12,15 @@ Bu script, update-config/update-changelog desenindeki gibi auto-sync yapar:
   - ORTAM-BAĞIMLI testleri (launchctl/daemon/canlı sunucu; EXCLUDE seti)
     dışarıda tutar — bunlar commit'i yavaşlatır/kırabilir, CI'da ayrı job'ları var
   - check_unit_tests.list manifest'ini günceller (yeni ekle, silineni çıkar)
-  - --check: drift varsa exit 1 (fail-closed kapı — pre-commit/CI)
-  - --update: manifest'i senkronlar ve git add ile stage eder (pre-commit kancada)
+  - İKİNCİ HEDEF (2026-09-17 boşluğu): test_coverage_report.py içindeki
+    HOOK_COVERAGE["check-unit-tests"] listesini de senkron eder. Manifest
+    güncelken HOOK_COVERAGE unutulursa check-coverage-report kapısı
+    "uncovered by any hook" FAIL'i üretir (ölçüldü: test_texlive_
+    determinism_id_residual.py tam bu boşluktan düştü). Yeni keşifler bloğun
+    sonuna alfabetik eklenir; mevcut girdiler (.js ve EXCLUDE'lular dahil)
+    korunur; yalnız diskte artık bulunmayan girdiler (orphan) çıkarılır.
+  - --check: HERHANGİ BİRİ drift'liyse exit 1 (fail-closed kapı — pre-commit/CI)
+  - --update: her iki hedefi senkronlar ve değişenleri git add ile stage eder
 
 pre-commit hook entry'si manifest dosyasından okur; böylece TEK KAYNAK diskteki
 gerçek test dosyalarıdır ve yeni test dosyası eklendiğinde hiçbir elle düzenleme
@@ -21,7 +28,7 @@ gerekmez.
 
 Kullanım:
   python3 sync_check_unit_tests.py --check     # drift varsa exit 1
-  python3 sync_check_unit_tests.py --update    # manifest'i senkronla + stage
+  python3 sync_check_unit_tests.py --update    # manifest + HOOK_COVERAGE senkron + stage
   python3 sync_check_unit_tests.py --list      # koşulacak testleri yazdır
 
 stdlib only — PyYAML/yok bağımlılık.
@@ -29,12 +36,14 @@ stdlib only — PyYAML/yok bağımlılık.
 
 import argparse
 import os
+import re
 import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CIKTI = os.path.join(ROOT, "_calisma", "CIKTI")
 MANIFEST = os.path.join(CIKTI, "check_unit_tests.list")
+COVERAGE_FILE = os.path.join(CIKTI, "test_coverage_report.py")
 
 # ────────────────────────────────────────────────────────────────────────────
 # EXCLUDE — pre-commit'te koşulmaması gereken testler (ortam-bağımlı):
@@ -127,8 +136,151 @@ def diff(discovered, manifest):
     return sorted(s - m), sorted(m - s)
 
 
-def run_check(directory=None, manifest=None):
-    """manifest diskle senkron değilse 1 döndür (fail-closed)."""
+# ────────────────────────────────────────────────────────────────────────────
+# HOOK_COVERAGE senkronu — test_coverage_report.py'deki
+# HOOK_COVERAGE["check-unit-tests"] bloğu. ci_full_discover_drift_guard.py
+# bu bloğu statik metin parse ile okur (anahtar → ilk `],`); yeniden yazım
+# bu formatı birebir korur.
+# ────────────────────────────────────────────────────────────────────────────
+
+HOOK_COVERAGE_KEY = '"check-unit-tests":'
+
+
+def _hook_coverage_span(src):
+    """Kaynak metinde bloğun [gövde] span'ını döndürür (None: blok yok)."""
+    i = src.find(HOOK_COVERAGE_KEY)
+    if i < 0:
+        return None
+    b = src.find("[", i)
+    if b < 0:
+        return None
+    e = src.find("],", b)
+    if e < 0:
+        return None
+    return b + 1, e
+
+
+def _entry_indent(body):
+    """Bloktaki ilk girdinin girintisini döndürür (8 boşluk beklenir)."""
+    m = re.search(r'\n(\s*)"', body)
+    return m.group(1) if m else "        "
+
+
+def read_hook_coverage(path=None):
+    """Bloktaki tüm girdileri (py + js) sıra korunarak döndürür."""
+    p = path or COVERAGE_FILE
+    if not os.path.exists(p):
+        return []
+    with open(p, encoding="utf-8") as f:
+        src = f.read()
+    span = _hook_coverage_span(src)
+    if span is None:
+        return []
+    body = src[span[0]:span[1]]
+    return re.findall(r'"([^"]+\.(?:py|js))"', body)
+
+
+def diff_hook_coverage(discovered, entries, cikti_dir=None):
+    """(eklenecekler, silinecek_orphanlar) döndürür.
+
+    Kural: keşfedilen (EXCLUDE'suz) yeni .py testleri blokta YOKSA eklenir;
+    diskte artık bulunmayan girdiler orphan sayılır. Mevcut girdiler —
+    manifest EXCLUDE'unda olsalar bile (ör. .js testleri, CI-job testleri,
+    başka hook'ların dosyaları) — korunur; bu blok coverage-TOPLAMIdır,
+    koşu manifest'ten gelir. Yani 'add' yalnız KEŞİF kümesine bakar; blokta
+    olan ama keşifte olmayan (başka hook'un dosyası) dosyalara dokunmaz.
+    """
+    d = cikti_dir or CIKTI
+    entry_set = set(entries)
+    add = [f for f in discovered if f not in entry_set]
+    orphan = [e for e in entries if not os.path.exists(os.path.join(d, e))]
+    return sorted(add), orphan
+
+
+def _rewrite_hook_coverage(src, entries, add, orphan):
+    span = _hook_coverage_span(src)
+    body = src[span[0]:span[1]]
+    indent = _entry_indent(body)
+    orphan_set = set(orphan)
+    add_set = set(add)
+    kept = [e for e in entries if e not in orphan_set]
+    new_entries = kept + [a for a in sorted(add_set)]
+    new_body = "\n" + "\n".join(indent + '"%s",' % e for e in new_entries)
+    return src[:span[0]] + new_body + src[span[1]:]
+
+
+def run_check_hook_coverage(discovered=None, path=None, cikti_dir=None):
+    """HOOK_COVERAGE drift'inde 1 döndürür (fail-closed), değilse 0."""
+    d = cikti_dir or CIKTI
+    entries = read_hook_coverage(path)
+    if not entries:
+        print("UYARI: HOOK_COVERAGE['check-unit-tests'] bloğu okunamadı — "
+              "check-coverage-report kapısı sahte PASS üretebilir.")
+        return 1
+    add, orphan = diff_hook_coverage(
+        discovered if discovered is not None else discover(), entries, d)
+    if add:
+        print("YENİ keşfedilen test dosyası HOOK_COVERAGE['check-unit-tests'] "
+              "listesinde YOK: " + ", ".join(add))
+    if orphan:
+        print("HOOK_COVERAGE'ta diskte olmayan girdi: " + ", ".join(orphan))
+    if add or orphan:
+        print("Çözüm: `python3 _calisma/CIKTI/sync_check_unit_tests.py --update` "
+              "veya pre-commit hook otomatik günceller.")
+        return 1
+    return 0
+
+
+def run_update_hook_coverage(stage=True, discovered=None, path=None, cikti_dir=None):
+    """Bloğu senkronlar; değiştiyse (changed, added, removed) döndürür."""
+    p = path or COVERAGE_FILE
+    d = cikti_dir or CIKTI
+    with open(p, encoding="utf-8") as f:
+        src = f.read()
+    span = _hook_coverage_span(src)
+    if span is None:
+        return False, [], []
+    entries = read_hook_coverage(p)
+    add, orphan = diff_hook_coverage(
+        discovered if discovered is not None else discover(), entries, d)
+    if not add and not orphan:
+        return False, [], []
+    new_src = _rewrite_hook_coverage(src, entries, add, orphan)
+    with open(p, "w", encoding="utf-8") as f:
+        f.write(new_src)
+    if stage:
+        try:
+            rel = os.path.relpath(p, ROOT)
+            subprocess.run(["git", "add", rel], cwd=ROOT, check=False, capture_output=True)
+        except OSError:
+            pass
+    if add:
+        print("HOOK_COVERAGE check-unit-tests listesi güncellendi — EKLENDİ: "
+              + ", ".join(sorted(add)))
+    if orphan:
+        print("HOOK_COVERAGE check-unit-tests listesi güncellendi — ÇIKARILDI: "
+              + ", ".join(orphan))
+    return True, sorted(add), orphan
+
+
+def _coverage_target(directory, coverage):
+    """HOOK_COVERAGE hedef yolunu döndürür; izole koşumda None.
+
+    KORUMA: --dir ile geçici/izole test dizini verilip --coverage verilmediyse
+    gerçek test_coverage_report.py'ye ASLA dokunulmaz (aksi halde test
+    ortamındaki sahte isimler gerçek coverage haritasına yazılır — ölçüldü:
+    test_a.py/test_b.py kirlenmesi).
+    """
+    if coverage is not None:
+        return coverage
+    if directory is not None:
+        return None  # izole koşum: ikinci hedef devre dışı
+    return COVERAGE_FILE
+
+
+def run_check(directory=None, manifest=None, coverage=None):
+    """manifest VEYA HOOK_COVERAGE drift'liyse 1 döndür (fail-closed)."""
+    rc = 0
     disc = discover(directory)
     mf = manifest or MANIFEST
     missing, stale = diff(disc, read_manifest(mf))
@@ -138,42 +290,58 @@ def run_check(directory=None, manifest=None):
         if stale:
             print(f"Manifest'te artık olmayan dosya: {', '.join(stale)}")
         print("Çözüm: `pre-commit` hook otomatik günceller — dosyayı stage edip yeniden commit et.")
-        return 1
-    return 0
+        rc = 1
+    # İkinci hedef: HOOK_COVERAGE['check-unit-tests'] (coverage rapor kapısı).
+    cov = _coverage_target(directory, coverage)
+    if cov is not None and run_check_hook_coverage(
+            discovered=disc, path=cov, cikti_dir=directory) == 1:
+        rc = 1
+    return rc
 
 
-def run_update(stage=True, directory=None, manifest=None):
-    """manifest'i diskteki gerçek test kümesiyle senkronlar; değiştiyse stage eder."""
+def run_update(stage=True, directory=None, manifest=None, coverage=None):
+    """manifest + HOOK_COVERAGE'ı diskteki gerçek test kümesiyle senkronlar."""
     disc = discover(directory)
+    changed = False
     mf = manifest or MANIFEST
     missing, stale = diff(disc, read_manifest(mf))
-    if not missing and not stale:
-        return False
-    write_manifest(sorted(disc), mf)
-    if stage:
-        try:
-            rel = os.path.relpath(mf, ROOT)
-            subprocess.run(["git", "add", rel], cwd=ROOT, check=False, capture_output=True)
-        except OSError:
-            pass
-    if missing:
-        print(f"check-unit-tests list güncellendi — EKLENDİ: {', '.join(missing)}")
-    if stale:
-        print(f"check-unit-tests list güncellendi — ÇIKARILDI: {', '.join(stale)}")
-    return True
+    if missing or stale:
+        write_manifest(sorted(disc), mf)
+        if stage:
+            try:
+                rel = os.path.relpath(mf, ROOT)
+                subprocess.run(["git", "add", rel], cwd=ROOT, check=False, capture_output=True)
+            except OSError:
+                pass
+        if missing:
+            print(f"check-unit-tests list güncellendi — EKLENDİ: {', '.join(missing)}")
+        if stale:
+            print(f"check-unit-tests list güncellendi — ÇIKARILDI: {', '.join(stale)}")
+        changed = True
+    cov = _coverage_target(directory, coverage)
+    if cov is not None:
+        # Orphan kontrolü keşif diziniyle AYNI dizinde yapılır; aksi halde
+        # izole koşumda geçici isimler gerçek CIKTI'ya göre orphan sanılır.
+        cov_changed, _add, _rem = run_update_hook_coverage(
+            stage=stage, discovered=disc, path=cov, cikti_dir=directory)
+        changed = changed or cov_changed
+    return changed
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description="check-unit-tests liste senkronu")
-    ap.add_argument("--check", action="store_true", help="manifest drift'indeyse exit 1")
-    ap.add_argument("--update", action="store_true", help="manifest'i güncelle + stage (varsayılan)")
+    ap.add_argument("--check", action="store_true", help="manifest/HOOK_COVERAGE drift'indeyse exit 1")
+    ap.add_argument("--update", action="store_true", help="manifest + HOOK_COVERAGE güncelle + stage (varsayılan)")
     ap.add_argument("--no-stage", action="store_true", help="git add yapma (test izolasyonu)")
     ap.add_argument("--list", action="store_true", help="koşulacak testleri listele")
     ap.add_argument("--dir", default=None, help="test dizini (test izolasyonu)")
     ap.add_argument("--manifest", default=None, help="manifest yolu (test izolasyonu)")
+    ap.add_argument("--coverage", default=None,
+                    help="test_coverage_report.py yolu (HOOK_COVERAGE hedefi; test izolasyonu)")
     args = ap.parse_args(argv)
 
     mf = args.manifest or MANIFEST
+    cov = args.coverage or (COVERAGE_FILE if args.dir is None else None)
 
     if args.list:
         for n in discover(args.dir):
@@ -181,10 +349,10 @@ def main(argv=None):
         return 0
 
     if args.update or not args.check:
-        run_update(stage=not args.no_stage, directory=args.dir, manifest=mf)
+        run_update(stage=not args.no_stage, directory=args.dir, manifest=mf, coverage=cov)
         return 0
 
-    return run_check(args.dir, mf)
+    return run_check(args.dir, mf, cov)
 
 
 if __name__ == "__main__":
