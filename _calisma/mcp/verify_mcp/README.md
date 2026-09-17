@@ -110,7 +110,7 @@ available list to retry from.
 Use cases: reading a failing run's output, checking what a layer actually did.
 
 ### `verify_get_layer_status`
-Per-layer (K0..K21) PASS/FAIL/SKIP table. Sources, in order: the latest run
+Per-layer (K0..K22) PASS/FAIL/SKIP table. Sources, in order: the latest run
 record's `layers`, then the `klayers.json` sidecar (`verify_delivery.py
 --klayers-out`) in the preview dir, then the repo root.
 
