@@ -4,9 +4,15 @@
 #
 # texlive_determinism_test.sh'i koşar: ingiliz_empirizmi_v3.tex üzerinde
 # ÖNCE (tectonic, tek derleme) / SONRA (TeXLive + SOURCE_DATE_EPOCH, 2
-# bağımsız derleme) hash karşılaştırması. SONRA'nın iki run'ı byte-farklıysa
-# deney exit 1 döner → commit BLOKE (tectonic→TeXLive göçü determinism
-# getirmedi). Rapor: docs/ci_simulate/texlive_determinism/ (git takipli).
+# bağımsız derleme) hash karşılaştırması. Sonra'nın iki run'ı içerik
+# düzeyinde farklıysa deney exit 1 döner → commit BLOKE. Bilinen istisna:
+# pdfTeX SDE+FORCE_SOURCE_DATE ile bile her koşumda RASTGELE trailer /ID
+# üretir; test betiği kalıntının yalnız /ID olduğunu kanonik (/ID nötrlenmiş
+# hash) karşılaştırmayla KANITLAR ve residual=/ID olarak raporlar — bu
+# durum PASS sayılır, çünkü /ID harici tüm baytlar birebir aynıdır.
+# Rapor: docs/ci_simulate/texlive_determinism/ (gitignore altında, yerel
+# kanıt; git takipli değildir — kanıt her ortamda aynı betikle yeniden
+# üretilir).
 #
 # Araç yoksa SKIP (exit 0) — kapı yalnızca araçların var olduğu ortamda
 # iddia üretir (check-lake-evidence deseni). Hafif K21 self-testi
@@ -24,12 +30,17 @@ TEST="$REPO_ROOT/_calisma/CIKTI/texlive_determinism_test.sh"
 # TeXLive: TEXLIVE_BIN env'i önceliklidir; yoksa yaygın kurulum dizinlerini dene.
 TEXLIVE_BIN="${TEXLIVE_BIN:-}"
 if [ -z "$TEXLIVE_BIN" ]; then
-  for cand in /usr/local/texlive/*/bin/*; do
+  for cand in /usr/local/texlive/*/bin/* /Library/TeX/texbin; do
     if [ -x "$cand/pdflatex" ]; then
       TEXLIVE_BIN="$cand"
       break
     fi
   done
+  # Homebrew formülü (brew install texlive): pdflatex PATH'te, dağıtım dizini
+  # /usr/local/texlive altında DEĞİLDİR — PATH fallback'i keşfi tamamlar.
+  if [ -z "$TEXLIVE_BIN" ] && command -v pdflatex >/dev/null 2>&1; then
+    TEXLIVE_BIN="$(cd "$(dirname "$(command -v pdflatex)")" && pwd)"
+  fi
 fi
 
 if ! command -v tectonic >/dev/null 2>&1 && [ -z "${TECTONIC_BIN:-}" ]; then
@@ -39,7 +50,7 @@ if ! command -v tectonic >/dev/null 2>&1 && [ -z "${TECTONIC_BIN:-}" ]; then
 fi
 if [ -z "$TEXLIVE_BIN" ] || [ ! -x "$TEXLIVE_BIN/pdflatex" ]; then
   echo "SKIP: TeXLive pdflatex bulunamadı (TEXLIVE_BIN=/path/to/texbin verin veya"
-  echo "      /usr/local/texlive kurun) — deney atlandı"
+  echo "      /usr/local/texlive ya da 'brew install texlive' kurun) — deney atlandı"
   exit 0
 fi
 

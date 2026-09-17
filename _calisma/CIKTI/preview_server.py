@@ -13,6 +13,7 @@ Tek dosyalık Python HTTP sunucusu (stdlib-only):
                    (replay-start/end arasında) — sayfa açılınca kutu boş kalmaz
   - /api/run-now → manuel tetikleme (POST): interval beklemeden hemen
                    verify_delivery.py --full koşar; sonuç SSE ile anında broadcast
+  - /api/stop → yerel daemon'ı (POST, localhost-only) kontrollü durdurur
   - /api/latest  → en son çalıştırmanın JSON özeti (P0/P1, SONUÇ, bütçe, vs.)
                    + tam references_online raporu (verified/total, by_source)
 
@@ -39,6 +40,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 REQUEST_TIMEOUT_SECONDS = 30
 ALLOWED_HOSTS = {"127.0.0.1", "localhost", "::1"}
+SERVER = None
+STOP_EVENT = None
 
 
 def _trusted_request(headers):
@@ -1347,10 +1350,29 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if self.path.startswith("/api/run-now"):
             self.trigger_run_now()
+        elif self.path.startswith("/api/stop"):
+            self.stop_server()
         else:
             status, payload = api_error(404, "not found")
             self._send(status, json.dumps(payload),
                        content_type="application/json; charset=utf-8")
+
+    def stop_server(self):
+        """Yerel daemon'ı güvenli biçimde durdurur; GET ile tetiklenemez."""
+        request_error = _trusted_request(self.headers)
+        if request_error:
+            self._send(403, json.dumps({"error": request_error}),
+                       content_type="application/json; charset=utf-8")
+            return
+        if STOP_EVENT is None or SERVER is None:
+            self._send(503, json.dumps({"error": "server not ready"}),
+                       content_type="application/json; charset=utf-8")
+            return
+        STOP_EVENT.set()
+        self._send(202, json.dumps({"status": "stopping"}),
+                   content_type="application/json; charset=utf-8")
+        threading.Thread(target=SERVER.shutdown, daemon=True,
+                         name="preview-stop").start()
 
     def trigger_run_now(self):
         """Manuel tetikleme: interval beklemeden hemen verify koşar.
@@ -1880,13 +1902,16 @@ def main():
         sys.stderr.flush()
 
     # Arka plan thread: periyodik verify çalıştırma
+    global SERVER, STOP_EVENT
     stop_event = threading.Event()
+    STOP_EVENT = stop_event
     t = threading.Thread(target=verify_loop,
                          args=(VERIFY_DIR, args.interval, stop_event),
                          daemon=True, name="verify-loop")
     t.start()
 
     srv = ThreadingHTTPServer((args.bind, args.port), Handler)
+    SERVER = srv
     sys.stderr.write(f"[main] preview_server: serving {PREVIEW_DIR} on http://{args.bind}:{args.port}\n")
     sys.stderr.write(f"[main] preview_server: verify loop interval={args.interval}s, dir={VERIFY_DIR}\n")
     sys.stderr.write(f"[main] PID={os.getpid()} PGID={os.getpgrp()}\n")

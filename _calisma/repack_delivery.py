@@ -25,6 +25,7 @@ import argparse
 import hashlib
 import os
 import re
+import shutil
 import zipfile
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -314,8 +315,8 @@ def main():
                 cached_raw = line.split()[2]
                 break
     qpdf = None
-    for cand in ("qpdf", "/opt/homebrew/bin/qpdf"):
-        if os.path.isfile(cand):
+    for cand in (shutil.which("qpdf"), "/opt/homebrew/bin/qpdf"):
+        if cand and os.path.isfile(cand):
             qpdf = cand
             break
     if qpdf and raw_hash and cached_raw == raw_hash:
@@ -390,4 +391,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

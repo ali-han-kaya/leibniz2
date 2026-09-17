@@ -72,7 +72,7 @@ def installed_plist_path(label):
 
 
 def render_tmpl(tmpl_path, values):
-    """Şablonu {HOME,LABEL,LOGNAME,PORT,INTERVAL} ile doldur (sed eşdeğeri)."""
+    """Şablonu {HOME,LABEL,LOGNAME,PORT,INTERVAL,KEEPALIVE_*} ile doldur."""
     with open(tmpl_path, "r", encoding="utf-8") as f:
         text = f.read()
     for key, val in values.items():
@@ -93,12 +93,30 @@ def plist_values(installed):
             return ""
 
     out = d.get("StandardOutPath") or ""
+    # keepalive profili kurulu plist'in gerçek anahtarlarından türetilir —
+    # update_preview.sh plist_render çıktısıyla birebir aynı biçimde:
+    #   RunAtLoad var → <true/>, yok → <false/>
+    #   KeepAlive sözlüğü var → blok, yok → boş satır
+    runatload = "<true/>" if d.get("RunAtLoad") else "<false/>"
+    ka = d.get("KeepAlive")
+    if ka is None:
+        ka_block = ""
+    else:
+        ka_exit = ("<true/>" if isinstance(ka, dict) and ka.get("SuccessfulExit")
+                   else "<false/>")
+        ka_block = ("  <key>KeepAlive</key>\n"
+                    "  <dict>\n"
+                    "    <key>SuccessfulExit</key>\n"
+                    "    %s\n"
+                    "  </dict>") % ka_exit
     return {
         "HOME": home(),
         "LABEL": d.get("Label", ""),
         "LOGNAME": os.path.basename(out).replace(".log", "") if out else "",
         "PORT": after("--port"),
         "INTERVAL": after("--interval"),
+        "KEEPALIVE_RUNATLOAD": runatload,
+        "KEEPALIVE_KEEPALIVE": ka_block,
     }
 
 

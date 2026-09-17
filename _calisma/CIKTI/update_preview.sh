@@ -16,7 +16,8 @@
 # İKİ plist üretilir (tek --plist komutuyla): com.freebuff.preview-leibniz2
 # (birincil; KeepAlive=SuccessfulExit=false, interval 30) — crash'te restart,
 # temiz çıkışta dur; com.freebuff.preview-server (yedek profil; interval 60,
-# keepalive=false — yalnızca elle --start ile başlatılır). İkisi de
+# keepalive=false → RunAtLoad=false + KeepAlive yok: login'de otomatik
+# YÜKLENMEZ, yalnızca elle --start ile başlatılır). İkisi de
 # PLIST_PROFILES'te YÖNETİLİR: --plist-force üretir, --plist-check denetler,
 # check_plist_drift golden'larla sabitler. --start varsayılanı birincil
 # leibniz2'dir. Kurulu tam yollar korunur:
@@ -232,12 +233,9 @@ plist_default_template() {
     <string>--interval</string>
     <string>{{INTERVAL}}</string>
   </array>
-  <key>RunAtLoad</key><true/>
-  <key>KeepAlive</key>
-  <dict>
-    <key>SuccessfulExit</key>
-    <false/>
-  </dict>
+  <key>RunAtLoad</key>
+{{KEEPALIVE_RUNATLOAD}}
+{{KEEPALIVE_KEEPALIVE}}
 TPL
   if [ "${1:-}" = "com.freebuff.preview-server" ]; then
     cat <<'TPL'
@@ -284,12 +282,29 @@ plist_ensure_templates() {
 # $1=home $2=label $3=logname $4=port $5=interval $6=keepalive(true|false)
 plist_render() {
   local home="$1" label="$2" logname="$3" port="$4" interval="$5" keepalive="$6"
-  sed -e "s|{{HOME}}|${home}|g" \
-      -e "s|{{LABEL}}|${label}|g" \
-      -e "s|{{LOGNAME}}|${logname}|g" \
-      -e "s|{{PORT}}|${port}|g" \
-      -e "s|{{INTERVAL}}|${interval}|g" \
-      "$(plist_tmpl_for "$label")"
+  # keepalive profili ŞABLONA uygulanır (ölü alan değildir):
+  #   true  → RunAtLoad=true + KeepAlive{SuccessfulExit=false}
+  #   false → RunAtLoad=false + KeepAlive bloğu yok (login'de otomatik
+  #           başlamaz; elle --start kickstart ile çalıştırır)
+  local runatload='<false/>' keepalive_block=''
+  if [ "$keepalive" = "true" ]; then
+    runatload='<true/>'
+    keepalive_block='  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>'
+  fi
+  local body
+  body="$(< "$(plist_tmpl_for "$label")")"
+  body="${body//'{{HOME}}'/$home}"
+  body="${body//'{{LABEL}}'/$label}"
+  body="${body//'{{LOGNAME}}'/$logname}"
+  body="${body//'{{PORT}}'/$port}"
+  body="${body//'{{INTERVAL}}'/$interval}"
+  body="${body//'{{KEEPALIVE_RUNATLOAD}}'/$runatload}"
+  body="${body//'{{KEEPALIVE_KEEPALIVE}}'/$keepalive_block}"
+  printf '%s\n' "$body"
 }
 
 # Kurulu plist'in tam yolu (Homebrew-style, per-profile).
@@ -478,6 +493,11 @@ plist_start_one() {
   launchctl bootout "$(launchctl_domain)" "$dst" 2>/dev/null || true
   launchctl bootstrap "$(launchctl_domain)" "$dst" || { err "bootstrap başarısız: $dst"; return 1; }
   launchctl enable "$(launchctl_domain)/$label" 2>/dev/null || true
+  # keepalive=false profiller RunAtLoad=false üretir: bootstrap yükler ama
+  # başlatmaz — elle --start'ta kickstart ile ayağa kaldırılır.
+  if [ "$keepalive" = "false" ]; then
+    launchctl kickstart "$(launchctl_domain)/$label" 2>/dev/null || true
+  fi
   say "START: $label → bootstrap edildi ($dst)"
   say "       yüklü: $(plist_is_loaded "$label" && echo evet || echo hayır)"
 }
