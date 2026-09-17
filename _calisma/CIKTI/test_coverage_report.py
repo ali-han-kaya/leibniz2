@@ -222,7 +222,8 @@ HOOK_COVERAGE = {
         "test_docker_security_smoke.py",
         "test_dockerfile_security_patching.py",
         "test_record_determinism_trend.py",
-        "test_stop_post_only.py",],
+        "test_stop_post_only.py",
+        "test_a11y_gate.py",],
 }
 
 # verify.yml CI job'ları → kapsadığı test dosyaları
@@ -233,6 +234,7 @@ CI_JOB_COVERAGE = {
         "ALL",
     ],
     "preview-reload-smoke": ["test_preview_reload_smoke.py"],
+    "a11y-gate": ["test_a11y_gate.py"],
     "dashboard-smoke": ["test_dashboard_playwright_smoke.py"],
     "daemon-http": ["test_daemon_http.py"],
     "plist-check": ["test_plist_gate_exit.py", "test_gen_plist_golden.py"],

@@ -35,7 +35,8 @@ Design decisions locked during brainstorming:
   - emit `verdict: PASS|FAIL`, a violation table, and a JSON report file
     (CI artifact).
 - `_calisma/CIKTI/vendor/axe.min.js` — vendored axe-core, pinned by version
-  and sha256. A checksum gate (fail-closed file-pin, same convention as the
+  and sha256. Implemented as axe-core **4.10.3** (npm tarball), sha256 pin in
+  the sibling `axe.min.js.sha256` file. A checksum gate (fail-closed file-pin, same convention as the
   repo's pinned-value gates) fails the run if the bundle hash does not match
   the pinned value.
 - `_calisma/CIKTI/a11y_gate_config.json` — thresholds and allowlist:
