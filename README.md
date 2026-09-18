@@ -393,6 +393,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-17 | docs | (spec) a11y-gate reader-test pass, add reporting surfaces | [`66721a4`](https://github.com/ali-han-kaya/leibniz2/commit/66721a4) |
 | 2026-09-17 | docs | (how-to) local verification guide (Diataxis how-to quadrant) | [`f24ee15`](https://github.com/ali-han-kaya/leibniz2/commit/f24ee15) |
 | 2026-09-17 | docs | (docx) Final RC Report as Word deliverable (TOC, header, tables) | [`0116050`](https://github.com/ali-han-kaya/leibniz2/commit/0116050) |
+| 2026-09-17 | feat | (ci) a11y-gate — fail-closed axe-core accessibility gate | [`daeff15`](https://github.com/ali-han-kaya/leibniz2/commit/daeff15) |
 
 ### Regresyon notları
 

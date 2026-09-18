@@ -2984,6 +2984,14 @@ jobs:
 
       - name: Start preview_server (fresh-clone-http pattern)
         run: |
+          # /design-system/tokens.css rotası PREVIEW_DIR icindeki
+          # design-system-tokens.css mirror dosyasindan servis edilir
+          # (preview_server.serve_design_tokens; mirror yoksa fail-closed 404
+          # -> sayfa tarayici varsayilani beyaz zemine duser ve axe color-contrast
+          # yanlis pozitif uretir). Yerel akista bu kopyayi sync_verify_mirror.sh
+          # yapar; CI'da runner calisma alani mirror rolundedir. Tek kaynak:
+          # design-system/tokens.css (check_tokens.py'in korudugu dosya).
+          cp design-system/tokens.css _calisma/CIKTI/design-system-tokens.css
           port=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')
           echo "A11Y_PORT=$port" >> "$GITHUB_ENV"
           work=$RUNNER_TEMP/a11y-server

@@ -28,16 +28,17 @@
   --bg: #0e1116;
   --fg: #e6edf3;
   --muted: #8b949e;
+  --fg-dimmed: #b6bec7;      /* AA 4.5:1 bg üzerinde — inline #555/#888/#999 yerine (WCAG 1.4.3) */
   --accent: #58a6ff;
   --ok: #3fb950;
   --warn: #d29922;
-  --err: #f85149;
+  --err: #ff7b72;              /* on-tint 5.78:1 (eski #f85149 4.35 fail — WCAG 1.4.3) */
   --border: #30363d;
   --budget: #bc8cff;
 
   --surface-1: #161b22;        /* cards, code, pre, th */
   --surface-2: #21262d;        /* buttons, z3 bar track */
-  --on-accent: #fff;
+  --on-accent: #0e1116;        /* accent #58a6ff uzerinde 7.49:1 (beyaz 2.52 fail) */
 
   /* legacy aliases — preview.html still references these names verbatim */
   --surface: #161b22;
@@ -135,6 +136,7 @@
   --bg: #f3efe7;
   --fg: #292722;
   --muted: #70695f;
+  --fg-dimmed: #56504a;      /* light: #f3efe7 bg üzerinde AA 4.5:1+ */
   --accent: #8b5e2b;
   --ok: #287a3d;
   --warn: #996b08;
@@ -151,6 +153,8 @@
   /* keep surface-1/2 in sync with legacy aliases for token consumers */
   --surface-1: #fffdf8;
   --surface-2: #e9e1d3;
+  /* accent #8b5e2b üzerinde 5.53:1 (WCAG 1.4.3 — global button fg) */
+  --on-accent: #fffdf8;
 }
 
 @theme {

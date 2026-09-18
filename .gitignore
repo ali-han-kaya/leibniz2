@@ -26,3 +26,7 @@ _calisma/.venv_z3
 # Yerel çalışma logları (temiz kopyada üretilir; kanıt raporları docs/ci_simulate/
 # veya git-takipli karşılıklarında yaşar — buradaki kopya kaynak değil)
 logs/
+
+# CI/lab koşumlarında üretilen token mirror kopyası (preview_server
+# /design-system/tokens.css rotası; CI a11y-gate her koşumda taze kopyalar)
+_calisma/CIKTI/design-system-tokens.css

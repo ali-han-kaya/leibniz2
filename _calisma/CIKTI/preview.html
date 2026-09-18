@@ -20,6 +20,7 @@
   :root[data-theme="light"] .card, :root[data-theme="light"] th, :root[data-theme="light"] code,
   :root[data-theme="light"] pre, :root[data-theme="light"] .rh-filter button,
   :root[data-theme="light"] .z3bar { background:var(--surface); }
+  :root[data-theme="light"] button { color:var(--on-accent); }
   :root[data-theme="light"] .rh-filter button { color:var(--muted); }
   :root[data-theme="light"] .rh-filter button.active { color:var(--fg); }
   :root[data-theme="light"] .footer { background:var(--surface-raised); }
@@ -134,7 +135,7 @@
   .tip .tt-under { color:var(--ok); }
   a { color:var(--accent); text-decoration:none; }
   a:hover { text-decoration:underline; }
-  button { background:var(--accent); color:#fff; border:0; padding:6px 14px;
+  button { background:var(--accent); color:var(--on-accent); border:0; padding:6px 14px;
            border-radius:6px; cursor:pointer; font-size:12px; font-weight:600; }
   button:hover { opacity:0.85; }
   button:disabled { opacity:0.5; cursor:not-allowed; }
