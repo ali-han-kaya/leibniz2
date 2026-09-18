@@ -188,6 +188,32 @@ function updateBudgetOverBanner() {
   if (caret) caret.textContent = "▸";
 }
 
+// ── Verdict seal (noter mührü) — imza öğesi ──
+// Halkadaki dairesel metin koşumun deterministik PDF hash'idir (süs değil,
+// mühür). Veri tamamen sunucudan gelir; hash yoksa mühür basılmaz
+// (fail-silent — sahte mühür yok). Damga animasyonu CSS'te: hidden→gösterim
+// anında bir kez oynar; prefers-reduced-motion genel bloğu onu nötrler.
+function sealHashFromSnapshot(d) {
+  const snap = d && d.pdf_hash;
+  return (snap && typeof snap.stripped === "string" && snap.stripped) ||
+         (typeof d.stripped_sha256 === "string" && d.stripped_sha256) || "";
+}
+
+function renderVerdictSeal(d) {
+  const seal = $("verdict-seal");
+  if (!seal) return;
+  const hash = sealHashFromSnapshot(d);
+  if (!hash) { seal.hidden = true; return; }
+  const ok = (d.verdict || "").toUpperCase() === "PASS";
+  seal.hidden = false;
+  seal.classList.toggle("seal-pass", ok);
+  seal.classList.toggle("seal-fail", !ok);
+  const tp = seal.querySelector("textPath");
+  if (tp) tp.textContent = "VERIFIED • " + hash.slice(0, 12).toUpperCase() + " •";
+  const stamp = seal.querySelector(".seal-hash");
+  if (stamp) stamp.textContent = hash.slice(0, 6).toUpperCase() + "…";
+}
+
 function renderTrend(rows) {
   const svg = $("trend");
   const legend = $("trend-legend");
@@ -1596,11 +1622,14 @@ function applySnapshotInner(d) {
     if (trendCache.length) renderTrend(trendCache);
   }
 
-  // Status board: CI consolidate_summary.py ile aynı 5 ikonlu tek satır
+  // Status board: CI consolidate_summary.py ile ayni 5 ikonlu tek satir
   if (d.status_board) {
     $("status-board").textContent = d.status_board;
-    $("status-board").style.color = d.status_board.includes("🔴") ? "#c0392b" : "#27ae60";
+    $("status-board").style.color = ""; // renk CSS sinifina devredildi (token tek kaynagi)
+    $("status-board").classList.toggle("board-pass", !d.status_board.includes("\uD83D\uDD34"));
+    $("status-board").classList.toggle("board-fail", d.status_board.includes("\uD83D\uDD34"));
   }
+  renderVerdictSeal(d);
 
   // Pre-commit hooks panel: PRECOMMIT_RAPORU.json'dan okunan hook durumları
   const hooksEl = $("precommit-hooks");

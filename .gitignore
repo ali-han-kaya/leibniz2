@@ -30,3 +30,6 @@ logs/
 # CI/lab koşumlarında üretilen token mirror kopyası (preview_server
 # /design-system/tokens.css rotası; CI a11y-gate her koşumda taze kopyalar)
 _calisma/CIKTI/design-system-tokens.css
+
+# frontend-design demo derlemesi (build_design_preview.py üretir)
+_calisma/CIKTI/design_preview.html

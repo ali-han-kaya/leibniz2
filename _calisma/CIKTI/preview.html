@@ -31,7 +31,8 @@
   header { padding:18px 28px; border-bottom:1px solid var(--border);
            background:linear-gradient(180deg,var(--header-start),var(--header-end));
            display:flex; align-items:center; gap:18px; flex-wrap:wrap; }
-  h1 { margin:0; font-size:20px; flex:1; }
+  h1 { margin:0; font-size:20px; flex:1; font-family:var(--font-verdict);
+    font-weight:600; letter-spacing:.01em; }
   .live-dot { width:10px; height:10px; border-radius:50%; background:var(--err);
               display:inline-block; box-shadow:0 0 8px currentColor;
               transition: background-color 0.4s, box-shadow 0.4s; }
@@ -139,6 +140,34 @@
            border-radius:6px; cursor:pointer; font-size:12px; font-weight:600; }
   button:hover { opacity:0.85; }
   button:disabled { opacity:0.5; cursor:not-allowed; }
+  /* ── Verdict seal (noter mührü) — imza öğesi ──
+     Halkadaki dairesel metin koşumun deterministik PDF hash'idir:
+     süs değil, mühür. Renkler + fontlar tamamen token katmanından. */
+  .seal { width:64px; height:64px; flex:0 0 64px; margin-left:14px;
+    filter:drop-shadow(0 1px 4px rgba(0,0,0,.35)); }
+  .seal svg { width:100%; height:100%; display:block;
+    animation:seal-stamp .5s cubic-bezier(.2,1.6,.4,1) both;
+    transform-origin:50% 50%; }
+  .seal-circle { fill:rgba(88,166,255,.06); stroke:var(--muted); stroke-width:1.2; }
+  .seal-circle-inner { fill:none; stroke:var(--muted); stroke-width:.6; }
+  .seal-ring { font-family:var(--font-mono); font-size:8.6px; font-weight:600;
+    letter-spacing:.14em; fill:var(--muted); }
+  .seal-verdict { font-family:var(--font-verdict); font-size:10.5px; font-weight:700;
+    letter-spacing:.06em; fill:var(--muted); }
+  .seal-hash { font-family:var(--font-mono); font-size:6.5px; font-weight:600;
+    letter-spacing:.12em; fill:var(--fg-dimmed); }
+  .seal-pass .seal-verdict { fill:var(--ok); }
+  .seal-pass .seal-circle { stroke:var(--ok); fill:rgba(63,185,80,.07); }
+  .seal-fail .seal-verdict { fill:var(--err); }
+  .seal-fail .seal-circle { stroke:var(--err); fill:rgba(248,81,73,.08); }
+  @keyframes seal-stamp {
+    0% { transform:scale(1.8) rotate(-8deg); opacity:0; }
+    60% { opacity:1; }
+    100% { transform:scale(1) rotate(0deg); opacity:1; }
+  }
+  @media (max-width:600px) { .seal { width:48px; height:48px; flex-basis:48px; } }
+  #status-board.board-pass { color:var(--ok); }
+  #status-board.board-fail { color:var(--err); }
   .footer { padding:14px 28px; border-top:1px solid var(--border);
             color:var(--muted); font-size:11px; text-align:center; }
   .z3-gallery { position:relative; margin:34px 0 28px; padding:28px 24px 24px; background:#f4efe5; color:#2b2926; border:1px solid #d6cbb9; border-radius:2px; box-shadow:0 16px 40px rgba(0,0,0,.18), inset 0 0 0 8px #ebe3d4; }
@@ -178,6 +207,18 @@
 <body>
 <header>
   <h1>Stoic-Hume V5 — Live CI Dashboard</h1>
+  <div id="verdict-seal" class="seal" hidden aria-hidden="true">
+    <svg viewBox="0 0 100 100">
+      <defs>
+        <path id="seal-arc-top" d="M 50,50 m -38,0 a 38,38 0 1,1 76,0" fill="none"></path>
+      </defs>
+      <circle class="seal-circle" cx="50" cy="50" r="45.5"></circle>
+      <circle class="seal-circle seal-circle-inner" cx="50" cy="50" r="25"></circle>
+      <text class="seal-ring"><textPath href="#seal-arc-top" startOffset="6%">VERIFIED</textPath></text>
+      <text class="seal-verdict" x="50" y="48" text-anchor="middle">VERIFIED</text>
+      <text class="seal-hash" x="50" y="60" text-anchor="middle"></text>
+    </svg>
+  </div>
   <span id="live-dot" class="live-dot"></span>
   <span id="live-status" class="ts">connecting…</span>
   <button id="reconnect">reconnect</button>
