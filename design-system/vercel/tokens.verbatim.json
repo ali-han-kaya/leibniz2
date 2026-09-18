@@ -1,0 +1,49 @@
+{
+  "$comment": "Verbatim extraction from https://vercel.com homepage (computed CSS variables exposed to getComputedStyle, 2026-09-18, light theme). Values are copied verbatim — no remapping, no renaming, no rounding. Partial by nature: Vercel inlines most styling; the homepage surfaces only 19 custom properties. The 'starter' layer (tokens.starter.json) is the unmodified output of npx extract-design-system@0.1.11 (dembrandt).",
+  "source": {
+    "page": "https://vercel.com/",
+    "tool": "npx extract-design-system@0.1.11 (dembrandt 0.7.0, playwright-core 1.63.0, Chrome Headless Shell 153)",
+    "extractedAt": "2026-09-18T07:40:02.722Z",
+    "assets": [],
+    "note": "No static stylesheet URLs were captured by the tool; verbatim values come from the raw.json cssVariables map computed on the live DOM."
+  },
+  "verbatimCssVariables": {
+    "--ship-text": "#ff5b4f",
+    "--geist-console-text-color-default": "#000",
+    "--color-gray-300": "hsla(0, 0%, 90%, 1)",
+    "--color-gray-500": "hsla(0, 0%, 79%, 1)",
+    "--geist-selection-text-color": "hsla(0, 0%, 95%, 1)",
+    "--geist-console-text-color-blue": "#0070f3",
+    "--develop-text": "#0a72ef",
+    "--color-background-100": "hsla(0, 0%, 100%, 1)",
+    "--color-gray-900": "hsla(0, 0%, 30%, 1)",
+    "--color-gray-700": "hsla(0, 0%, 56%, 1)",
+    "--preview-text": "#de1d8d",
+    "--color-gray-alpha-400": "#00000014",
+    "--color-gray-600": "hsla(0, 0%, 66%, 1)",
+    "--ds-focus-color": "hsla(212, 100%, 48%, 1)",
+    "--color-gray-1000": "hsla(0, 0%, 9%, 1)",
+    "--geist-console-text-color-purple": "#7928ca",
+    "--geist-console-text-color-pink": "#eb367f",
+    "--color-gray-800": "hsla(0, 0%, 49%, 1)",
+    "--color-gray-200": "hsla(0, 0%, 92%, 1)"
+  },
+  "paletteByCount": [
+    { "normalized": "#ebebeb", "count": 537, "role": "dominant light gray (borders/dividers)" },
+    { "normalized": "#171717", "count": 301, "role": "primary ink / dark surface" },
+    { "normalized": "#4d4d4d", "count": 186, "role": "secondary ink" },
+    { "normalized": "#8f8f8f", "count": 28, "role": "tertiary ink" },
+    { "normalized": "#ffffff", "count": 22, "role": "white surface" }
+  ],
+  "typography": {
+    "families": ["GeistSans", "Geist Mono"],
+    "headingSample": "64px (4.00rem) / 1.00 / -3.84px, weight 400, \"calt\" 0, \"rlig\", \"ss11\"",
+    "bodySample": "16px / 1.50, weight 400–500",
+    "captionSample": "11–14px, Geist Mono uppercase variants at 12px/1.67"
+  },
+  "spacingScale": ["1px", "2px", "4px", "5px", "6px", "8px", "12px", "16px", "20px", "24px", "32px", "40px", "80px"],
+  "radiusValues": ["4px", "6px (dominant, n=61)", "8px", "12px", "128px (pill)", "3.35544e+07px (rounded-full artifact)"],
+  "shadowPattern": "1px ring rgb(235,235,235) or rgba(0,0,0,0.08) + optional layered elevation (0px 1px 1px / 4px 8px / 16–32px) with rgb(250,250,250) inner ring",
+  "borderPattern": "1px solid rgb(235,235,235) or rgba(0,0,0,0.08)",
+  "breakpoints": ["370", "380", "440", "470", "480", "500", "600", "601", "640", "670", "690", "768", "769", "800", "960", "961", "992", "1024", "1080", "1200", "2300"]
+}

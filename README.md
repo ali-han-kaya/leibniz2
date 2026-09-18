@@ -395,6 +395,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-17 | docs | (docx) Final RC Report as Word deliverable (TOC, header, tables) | [`0116050`](https://github.com/ali-han-kaya/leibniz2/commit/0116050) |
 | 2026-09-17 | feat | (ci) a11y-gate — fail-closed axe-core accessibility gate | [`daeff15`](https://github.com/ali-han-kaya/leibniz2/commit/daeff15) |
 | 2026-09-18 | fix | (a11y) serve token sheet in CI gate, repair dark-theme contrast | [`0b83077`](https://github.com/ali-han-kaya/leibniz2/commit/0b83077) |
+| 2026-09-18 | other | design(dashboard): verdict seal + serif verdict voice | [`e22dfad`](https://github.com/ali-han-kaya/leibniz2/commit/e22dfad) |
 
 ### Regresyon notları
 

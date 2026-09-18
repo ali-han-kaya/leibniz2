@@ -1,0 +1,45 @@
+{
+  "source": {
+    "url": "https://vercel.com/",
+    "extractedAt": "2026-09-18T07:40:02.722Z",
+    "extractor": "dembrandt"
+  },
+  "colors": {
+    "primary": "rgb(255, 255, 255)",
+    "secondary": "rgba(0, 0, 0, 0)",
+    "palette": [
+      "rgb(255, 255, 255)",
+      "rgba(0, 0, 0, 0)"
+    ],
+    "cssVariables": {}
+  },
+  "typography": {
+    "headingFont": "GeistSans",
+    "bodyFont": "GeistSans"
+  },
+  "spacing": {
+    "scale": [
+      "1px",
+      "2px",
+      "4px",
+      "5px",
+      "6px",
+      "8px",
+      "12px",
+      "16px",
+      "20px",
+      "24px",
+      "32px",
+      "40px",
+      "80px",
+      "208px",
+      "276px"
+    ]
+  },
+  "radius": {
+    "scale": []
+  },
+  "shadows": {
+    "scale": []
+  }
+}
