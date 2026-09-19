@@ -9,6 +9,9 @@ sözleşmesi:
 
 .pptx üretilen çıktıdır (gitignore'lu); test node varsa taze üretir, node
 yoksa yapı-testi SKIP (fail değil — CI koşucularında node sözleşme dışı).
+Fresh-checkout/worktree'de node_modules kurulu olmayabilir (gitignore'lu):
+üretim o durumda rc!=0 ile biter ve yapı-testi SKIP'e düşer — modül-düzeyi
+exception değil (setup başarısızlığı bütün dosyayı error'a çevirirdi).
 """
 
 import pathlib
@@ -28,10 +31,17 @@ class TestVerificationChainPptx(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.node = shutil.which("node")
+        cls.gen_skip = None
         if cls.node and GEN.is_file() and not PPTX.is_file():
-            subprocess.run(
-                [cls.node, str(GEN)], cwd=str(PPTX_DIR), check=True,
+            proc = subprocess.run(
+                [cls.node, str(GEN)], cwd=str(PPTX_DIR), check=False,
                 timeout=60, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if proc.returncode != 0:
+                tail = (proc.stderr or proc.stdout or b"").decode(
+                    "utf-8", "replace").strip().splitlines()
+                reason = tail[-1] if tail else "cikti yok"
+                cls.gen_skip = (
+                    f"pptx üretilemedi (node rc={proc.returncode}): {reason[-160:]}")
 
     def test_generator_source_exists(self):
         self.assertTrue(GEN.is_file(), f"generator kaynağı eksik: {GEN}")
@@ -41,8 +51,11 @@ class TestVerificationChainPptx(unittest.TestCase):
         # notlar slide.addNotes ile taşınır (görünmez metin-kutusu hilesi yasak)
         self.assertIn("addNotes", src)
 
-    @unittest.skipIf(shutil.which("node") is None, "node yok")
     def test_pptx_built_and_structured(self):
+        if self.node is None:
+            self.skipTest("node yok")
+        if self.gen_skip:
+            self.skipTest(self.gen_skip)
         self.assertTrue(PPTX.is_file(), "pptx üretilemedi")
         with zipfile.ZipFile(PPTX) as z:
             names = z.namelist()

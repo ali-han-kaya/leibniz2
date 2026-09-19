@@ -313,3 +313,12 @@ pre-commit chain adaptation (47→49 hooks). Key lessons below.
 - Gates caught real residue in NEW files: absolute /Users/... paths in
   _calisma/mcp (server.py, README.md → ~/ rewritten) and prettier-noncompliant
   landing/refs/analysis.json — chain earned its keep on commit day.
+
+### worktree baseline (2026-09-19, work/2026-09-19)
+- Fresh-worktree battery caught a clone-consistency gap the main checkout
+  hid: test_pptx_export crashed at module level (setUpClass check=True)
+  because _calisma/pptx/node_modules is gitignored. Hardened: failed
+  generator run records a skip reason (rc!=0 → SKIP with last stderr
+  line) instead of a module-level error; structural test skips cleanly.
+  Both paths proven live: pre-npm-ci SKIP (1 skipped), post-npm-ci real
+  build (160 kB pptx) + structural OK. Battery 139/139 PASS in worktree.
