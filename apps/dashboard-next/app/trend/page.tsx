@@ -19,6 +19,9 @@ const cellVariants = cva("py-2", {
 
 export default async function TrendPage() {
   const { history } = await getTrend(20);
+  // /api/trend limit'i yok sayar (full-list sözleşmesi) — pencereyi tüketici
+  // kısar: en-yeni 20, en-yeni üstte ("Son 20 Koşum" başlık-sözleşmesi).
+  const rows = history.slice(-20).reverse();
 
   return (
     <section className="rounded-lg border border-border bg-surface p-6">
@@ -41,7 +44,7 @@ export default async function TrendPage() {
             </tr>
           </thead>
           <tbody>
-            {history.map((r, i) => (
+            {rows.map((r, i) => (
               <tr key={i} className="border-b border-surface-raised">
                 <td className="py-2 text-muted">{r.ts ?? "—"}</td>
                 <td

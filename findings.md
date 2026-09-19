@@ -419,3 +419,22 @@ pre-commit chain adaptation (47→49 hooks). Key lessons below.
   has focus-visible replacement, no autoFocus/onPaste/img/svg, hover
   states present, semantic table/dl/time in use.
 - Review-only turn; fixes not applied (offered as follow-up).
+
+### webapp-testing E2E (2026-09-19, work/2026-09-19)
+- Toolkit: skill with_server.py managed BOTH servers (next :4321 via
+  `npm run start -- --port 4321`; live Freebuff preview :8000 reused —
+  real data source, pid untouched).
+- E2E (headless chromium, networkidle): verdict/4-stat parity with
+  /api/latest; soft-nav Link / -> /trend and back keep a window marker
+  (42); zero console errors/pageerrors; screenshots /tmp/dash_*.png.
+- DEFECT caught by E2E and fixed: trend page rendered ALL 100 history
+  rows under a "Son 20 Koşum" heading. Root cause: serve_trend never
+  reads the query string (full-list contract, "same as /api/history"),
+  getTrend(limit=20) only encodes the wish. Fix: consumer-side window
+  history.slice(-20).reverse() — newest 20, newest first.
+  Playwright proof: rows 100 -> 20, first-row ts = newest, last-row
+  20th-newest; tsc + build green.
+- Harness lessons: helper runs commands as-is (flags must be inside
+  the command string: `npm run start -- --port 4321`, port arg alone
+  times out); :8000 is Freebuff's own preview server — reuse, do not
+  kill.
