@@ -405,6 +405,8 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-19 | perf | (dashboard) per-request dedup via React.cache + ternary render | [`b156cb4`](https://github.com/ali-han-kaya/leibniz2/commit/b156cb4) |
 | 2026-09-19 | docs | record zero RN/Expo surface survey findings | [`f0e21fe`](https://github.com/ali-han-kaya/leibniz2/commit/f0e21fe) |
 | 2026-09-19 | feat | (dashboard) client-side navigation via next/link | [`41e1f48`](https://github.com/ali-han-kaya/leibniz2/commit/41e1f48) |
+| 2026-09-19 | docs | verify-chain live audit — fail-closed proven at three points | [`17339eb`](https://github.com/ali-han-kaya/leibniz2/commit/17339eb) |
+| 2026-09-19 | docs | web-design-guidelines review of dashboard-next (12 findings) | [`7b0b02a`](https://github.com/ali-han-kaya/leibniz2/commit/7b0b02a) |
 
 ### Regresyon notları
 

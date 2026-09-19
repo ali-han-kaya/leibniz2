@@ -405,3 +405,17 @@ pre-commit chain adaptation (47→49 hooks). Key lessons below.
      FAIL, rc=1. Probe artifacts removed.
 - Conclusion: the chain fails closed at all three audited points
   (wrong env -> P0, right env -> PASS, tampered input -> FAIL).
+
+### web-design-guidelines review (2026-09-19, work/2026-09-19)
+- Source: vercel-labs/web-interface-guidelines command.md (fetched fresh).
+- Scope: dashboard-next app/ (layout, page, VerdictCard, trend, error,
+  loading) + components/ui/button.tsx. 13 findings, 0 blocker-class:
+  dark-theme gaps (color-scheme, theme-color), animate-pulse without
+  prefers-reduced-motion (loading + Suspense fallback), transition-all
+  in button base, aria-label on role-less div (loading), no h1 on
+  pages, raw ts strings instead of Intl.DateTimeFormat, missing
+  tabular-nums on number columns, missing role=alert on error surface,
+  brand span without translate=no. Anti-patterns clean: outline-none
+  has focus-visible replacement, no autoFocus/onPaste/img/svg, hover
+  states present, semantic table/dl/time in use.
+- Review-only turn; fixes not applied (offered as follow-up).
