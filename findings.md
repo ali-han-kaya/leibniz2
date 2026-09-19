@@ -438,3 +438,17 @@ pre-commit chain adaptation (47→49 hooks). Key lessons below.
   the command string: `npm run start -- --port 4321`, port arg alone
   times out); :8000 is Freebuff's own preview server — reuse, do not
   kill.
+
+### workers-best-practices surface audit (2026-09-19, work/2026-09-19)
+- Zero Cloudflare-Workers surface, five independent proofs:
+  1. wrangler.toml/jsonc/json (root + apps/*): absent.
+  2. package.json inventory (all, node_modules excluded): no
+     cloudflare/wrangler dependency or specifier.
+  3. Import scan (module-specifier discipline, not substring):
+     `@cloudflare/` / `cloudflare:` — 0 hits in app/apps/lib.
+  4. .github/workflows: no workers.dev/pages.dev/cloudflare deploy.
+  5. No worker* entrypoint files, no `new Worker(` usage.
+- Discipline (same as stripe/RN turns): skill's review workflow has no
+  target here — no invented work; zero-surface finding recorded with
+  command evidence. Retrieval step intentionally skipped (no code to
+  review against the fetched rules).
