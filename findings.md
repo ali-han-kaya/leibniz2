@@ -296,3 +296,20 @@ pre-commit chain adaptation (47→49 hooks). Key lessons below.
   InputJsonValue definition (client.d.ts:1462-1490).
 - Gates: tsc strict green, prettier gate green on load.ts, prisma
   validate green, drift-guard suite 8/8, battery 139/139.
+
+### using-git-worktrees tour (2026-09-19)
+- Step-0 detection ran with commands (not eyeballing): normal checkout
+  (GIT_DIR == GIT_COMMON, no superproject); 6 stale /private/tmp worktree
+  records pruned.
+- Decisions (user-confirmed): commit session work BEFORE branching (worktree
+  from HEAD must contain it), then `.worktrees/work/2026-09-19`.
+- Session work committed as 07e22aa (gates+recovery-archive+plan-files, 27
+  files) and d1cbfb2 (apps surfaces+contract tests, 53 files).
+- Commit attempts hit the pre-commit stash window twice: unstaged README
+  delta made the battery run against the staged-only tree (2 test files
+  failed there). Process rule re-proven: zero the unstaged-tracked delta
+  before committing. Second window closed clean ("Restored changes" path
+  OK; residue patch removed after reverse-check).
+- Gates caught real residue in NEW files: absolute /Users/... paths in
+  _calisma/mcp (server.py, README.md → ~/ rewritten) and prettier-noncompliant
+  landing/refs/analysis.json — chain earned its keep on commit day.

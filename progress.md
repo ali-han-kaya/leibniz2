@@ -94,3 +94,10 @@
 - Loader escape hatches removed (as never[] → generated input type;
   json(): unknown → recursive type guard + DbNull decision). Gates green;
   battery 139/139.
+
+## 2026-09-19 (worktree tour)
+- Pruned 6 stale worktree records; .worktrees/ gitignored (line 48).
+- commit 07e22aa: pre-commit chain 47→50 + recovery patches + plan files
+- commit d1cbfb2: apps surfaces (dashboard-next, trend-db, landing, mcp, pptx) + contract tests
+- 2 stash-window retries diagnosed; unstaged-delta rule enforced
+- Next: .worktrees/work/2026-09-19 from HEAD, setup, baseline battery
