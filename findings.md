@@ -452,3 +452,14 @@ pre-commit chain adaptation (47→49 hooks). Key lessons below.
   target here — no invented work; zero-surface finding recorded with
   command evidence. Retrieval step intentionally skipped (no code to
   review against the fetched rules).
+
+### wrangler skill turn (2026-09-19, work/2026-09-19)
+- Skill FIRST-step executed: `wrangler --version` -> command not found;
+  node v22.23.2 / npm 10.9.8 available.
+- Installation intentionally skipped: no wrangler command exists to
+  govern (scripts/CI/doc inventory: 0 calls; zero Workers surface
+  re-verified: no wrangler.toml/jsonc). Installing -D wrangler would
+  be invented work with no consumer — same discipline as the
+  workers-best-practices turn (81a0f82).
+- Skill knowledge stays retrieval-ready if a Worker surface ever
+  lands: init/types/deploy contract is documented in the skill itself.

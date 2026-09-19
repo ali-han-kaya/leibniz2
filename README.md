@@ -409,6 +409,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-19 | docs | web-design-guidelines review of dashboard-next (12 findings) | [`7b0b02a`](https://github.com/ali-han-kaya/leibniz2/commit/7b0b02a) |
 | 2026-09-19 | docs | web-design-guidelines review of dashboard-next (13 findings) | [`5779ab0`](https://github.com/ali-han-kaya/leibniz2/commit/5779ab0) |
 | 2026-09-19 | fix | (dashboard) trend page honors its 20-row contract (E2E-caught) | [`d503a45`](https://github.com/ali-han-kaya/leibniz2/commit/d503a45) |
+| 2026-09-19 | docs | workers-best-practices zero-surface audit | [`81a0f82`](https://github.com/ali-han-kaya/leibniz2/commit/81a0f82) |
 
 ### Regresyon notları
 
