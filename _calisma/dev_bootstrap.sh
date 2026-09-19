@@ -22,11 +22,10 @@ usage() {
   say "  --help      bu yardım"
 }
 
+# check_ = işlev-ölçümü, varlık-değil: venv pin-paritesi, npm unit'leri
+# kendi-sözleşmeleri (library çözümü / kapı-binary'leri) — node_modules
+# yoksa probe doğal-fail eder, ayrıca varlık-kontrolü gerekmez.
 # Yeni araç-kümesi = bir check_ + bir provision_ + UNITS'e bir giriş.
-node_modules_ok() {
-  [ -d "$1/node_modules" ] && [ -f "$1/package.json" ]
-}
-
 check_venv_z3() {
   [ -x "$VENV_PY" ] || return 1
   local frozen pin
@@ -40,12 +39,17 @@ provision_venv_z3() {
   python3 -m venv "$VENV" || die "venv olusturma"
   "$VENV_PY" -m pip install --quiet "${PINS[@]}" || die "venv_z3 pip install"
 }
-check_pptx() { node_modules_ok "$PPTX"; }
+check_pptx() {
+  (cd "$PPTX" && node -e "require.resolve('pptxgenjs')" >/dev/null 2>&1)
+}
 provision_pptx() {
   say "_calisma/pptx: npm ci"
   npm ci --prefix "$PPTX" || die "_calisma/pptx npm ci"
 }
-check_dashboard_next() { node_modules_ok "$DASH"; }
+check_dashboard_next() {
+  [ -x "$DASH/node_modules/.bin/tsc" ] \
+    && [ -x "$DASH/node_modules/.bin/next" ]
+}
 provision_dashboard_next() {
   say "apps/dashboard-next: npm ci"
   npm ci --prefix "$DASH" || die "apps/dashboard-next npm ci"

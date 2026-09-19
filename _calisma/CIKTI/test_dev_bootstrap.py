@@ -23,6 +23,8 @@ VENV = os.path.join(ROOT, "_calisma", ".venv_z3")
 VENV_PY = os.path.join(VENV, "bin", "python")
 
 PINS = ("z3-solver==5.1.0.0", "PyYAML==6.0.3", "pre_commit==4.3.0")
+PPTX_LIB = os.path.join(ROOT, "_calisma", "pptx", "node_modules", "pptxgenjs")
+DASH_TSC = os.path.join(ROOT, "apps", "dashboard-next", "node_modules", ".bin", "tsc")
 
 
 def _run(args, **kw):
@@ -31,22 +33,27 @@ def _run(args, **kw):
 
 class TestCheckContract(unittest.TestCase):
     def test_check_passes_on_provisioned_checkout(self):
-        if not os.path.isdir(VENV):
-            self.skipTest("araç-kümesi eksik — provisioned-ortam testi tam-kurulumda koşar")
         r = _run(["bash", SCRIPT, "--check"])
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
-    def test_check_fail_closed_when_venv_hidden(self):
-        if not os.path.isdir(VENV):
-            self.skipTest("venv_z3 kurulu değil — fail-closed kanıtı tam-kurulumda koşar")
-        hidden = VENV + ".hidden_by_test"
-        try:
-            os.rename(VENV, hidden)
-            r = _run(["bash", SCRIPT, "--check"])
-            self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
-        finally:
-            if os.path.isdir(hidden):
-                os.rename(hidden, VENV)
+    def test_check_fail_closed_on_broken_unit(self):
+        """Kontrat: herhangi bir unit bozulunca --check rc=1 (işlev-ölçümü)."""
+        cases = (
+            ("venv", VENV, VENV + ".hidden_by_test", os.path.isdir(VENV)),
+            ("pptx", PPTX_LIB, PPTX_LIB + ".hidden_by_test", os.path.isdir(PPTX_LIB)),
+            ("dash-tsc", DASH_TSC, DASH_TSC + ".hidden_by_test", os.path.isfile(DASH_TSC)),
+        )
+        for label, target, hidden, present in cases:
+            with self.subTest(unit=label):
+                if not present:
+                    self.skipTest(label + " kurulu değil — tam-kurulumda koşar")
+                os.rename(target, hidden)
+                try:
+                    r = _run(["bash", SCRIPT, "--check"])
+                    self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+                finally:
+                    if os.path.exists(hidden):
+                        os.rename(hidden, target)
 
 
 class TestArgContract(unittest.TestCase):

@@ -429,6 +429,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-19 | docs | dev-bootstrap README quickstart + tur kaydi | [`0d4196e`](https://github.com/ali-han-kaya/leibniz2/commit/0d4196e) |
 | 2026-09-19 | docs | xlsx zero-surface audit | [`11a673b`](https://github.com/ali-han-kaya/leibniz2/commit/11a673b) |
 | 2026-09-19 | fix | (dev) bootstrap pin list as array, shellcheck-clean | [`dd913c8`](https://github.com/ali-han-kaya/leibniz2/commit/dd913c8) |
+| 2026-09-19 | refactor | (dev) bootstrap UNITS table, contract suite, live hint | [`a9717ee`](https://github.com/ali-han-kaya/leibniz2/commit/a9717ee) |
 
 ### Regresyon notları
 
