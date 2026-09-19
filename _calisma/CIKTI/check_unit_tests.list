@@ -26,6 +26,7 @@ test_check_lean_axioms.py
 test_check_lean_statements.py
 test_check_mirror_coverage.py
 test_check_orchestration_stdin.py
+test_check_precommit_orphans.py
 test_check_python3_shell.py
 test_check_repro_manifest_hook.py
 test_check_sde_determinism.py
@@ -86,6 +87,7 @@ test_override_trend_badge.py
 test_pdf_repro_findings_deck.py
 test_pdf_source_freshness.py
 test_plist_check_workflow.py
+test_pptx_export.py
 test_precheck_advisory_contract.py
 test_preview_findings_panel.py
 test_preview_server.py
@@ -110,6 +112,7 @@ test_run_summary_precommit.py
 test_run_summary_refs_trend.py
 test_scan_stale_zips.py
 test_sde_texlive_sync.py
+test_security_headers.py
 test_setup_branch_protection.py
 test_sidecar_guarantee.py
 test_skill_layer_sync.py
@@ -124,6 +127,7 @@ test_test_coverage_report.py
 test_texlive_determinism_hook.py
 test_texlive_determinism_id_residual.py
 test_texlive_repro_documented.py
+test_trend_db_contract.py
 test_update_preview_sync_server.py
 test_validate_config_schema.py
 test_verification_chain_deck.py

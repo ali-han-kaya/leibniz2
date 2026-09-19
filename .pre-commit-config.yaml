@@ -72,6 +72,18 @@
 #                               doğrulaması (fail-closed): yeni runtime dosyası
 #                               mirror listesine işlenmezse commit bloke (K17
 #                               sözleşmesi — CI/launchd rotasıyla aynı kapı).
+#   17) check-prettier-format : stage'li js/ts/tsx/json dosyalarında Prettier
+#                               uyumu (READ-ONLY --check; düzeltme geliştiricide
+#                               --write). prettier bulunamazsa SKIP — ortam-
+#                               bağımlı kapı ortam yoksa bloke etmez.
+#                               (setup-pre-commit zincir-uyarlaması: Husky
+#                               yerine bu zincir; tek hooksPath, bypass yok.)
+#   18) check-dashboard-typecheck: apps/dashboard-next tsc --noEmit kapısı
+#                               (READ-ONLY, emit yok). node_modules/tsconfig
+#                               yoksa SKIP; tip-hatası commit'i bloke eder.
+#   19) check-precommit-orphans : ~/.cache/pre-commit'te 24s+ eski patch-
+#                               kalıntısı (yetim-stash) commit'i bloke eder;
+#                               taze (<24s) kurtarma-penceresinde serbest.
 # Herhangi bir P0/P1 bulgusu commit'i bloke eder (sıfır-dışı exit).
 #
 # Not: update-config TEK yazan hook'tur (config'i stage eder). Diğer kapılar
@@ -90,6 +102,8 @@
 #   pre-commit run check-changelog-sync
 #   pre-commit run check-unit-tests
 #   pre-commit run check-mirror-coverage
+#   pre-commit run check-prettier-format
+#   pre-commit run check-dashboard-typecheck
 #
 # update-config hariç hook'lar read-only'dir: dosya değiştirmez, yalnızca
 # doğrular (fail-closed). update-config, config'i paket içeriğiyle senkron eder.
@@ -409,6 +423,37 @@ repos:
         language: system
         always_run: true
         pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
+      - id: check-prettier-format
+        name: "Prettier format check on staged JS/TS/JSON (fail-closed)"
+        description: >-
+          setup-pre-commit zincir-uyarlaması (Husky yerine): stage'li
+          js/jsx/ts/tsx/json dosyalarında prettier --check. READ-ONLY:
+          yazmaz, fail-closed bloke eder; düzeltme geliştiricide
+          `npx prettier --ignore-unknown --write <dosyalar>`. package-lock.json
+          exclude. Prettier bulunamazsa (apps/dashboard-next/node_modules
+          kurulu değil) SKIP — ortam-bağımlı kapı ortam yoksa bloke etmez.
+          Konfigürasyon: repo-kökü .prettierrc (skill-defaults). OFFLINE.
+        entry: python3 _calisma/CIKTI/check_prettier_format.py
+        language: system
+        files: \.(js|jsx|ts|tsx|json)$
+        exclude: package-lock\.json$
+        stages: [pre-commit]
+        verbose: true
+
+      - id: check-dashboard-typecheck
+        name: "TypeScript typecheck for apps/dashboard-next (tsc --noEmit)"
+        description: >-
+          setup-pre-commit zincir-uyarlaması (Husky yerine): dashboard-next
+          projesinde tsc --noEmit. READ-ONLY: emit yok, dosya yazmaz.
+          node_modules veya tsconfig yoksa SKIP (ortam-bağımlı kapı ortam
+          yoksa bloke etmez); tip-hatası varsa fail-closed bloke eder.
+          Yalnızca dashboard-next dosyaları stage'liyken koşar. OFFLINE.
+        entry: bash _calisma/CIKTI/check_dashboard_typecheck.sh
+        language: system
+        files: ^apps/dashboard-next/.*\.(ts|tsx|js|json)$
         stages: [pre-commit]
         verbose: true
 
@@ -848,4 +893,21 @@ repos:
         # pass_filenames true olmalı (always_run bu geçişi ezer — kullanma).
         pass_filenames: true
         stages: [commit-msg]
+        verbose: true
+
+      - id: check-precommit-orphans
+        name: check-precommit-orphans — pre-commit patch-kalıntısı kapısı (fail-closed)
+        description: >-
+          ~/.cache/pre-commit'te 24s+ eski patch-kalıntısı (yetim-stash)
+          varsa commit'i BLOKE eder. Kök-neden (systematic-debugging turu,
+          2026-09-19): pre-commit patch dosyalarını asla silmez; pencere-içi
+          süreç-ölümü ağacı sessizce revert eder ve delta yalnız patch'te
+          kalır. Taze patch (<24s) kurtarma-penceresi içindedir ve
+          cezalandırılmaz. Test: test_check_precommit_orphans.py (6
+          sözleşme, PRE_COMMIT_HOME-fixture üzerinden).
+        entry: python3 _calisma/CIKTI/check_precommit_orphans.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
         verbose: true

@@ -1023,6 +1023,20 @@ class LineageSummaryTests(unittest.TestCase):
 class StatusBoardTests(unittest.TestCase):
     """status_board: 5 ikonlu tek satır durum panosu (CI consolidate_summary.py ile tutarlı)."""
 
+    def setUp(self):
+        # İzolasyon: testler LATEST.update ile layers/p0/budget yazıyor;
+        # restore etmeyen test, sonraki testlere sızardı (shuffle-audit
+        # kanıtı: LATEST['layers'] sızıntısı). Tam-dict yedek + geri yükleme.
+        import preview_server as ps
+        with ps.LOCK:
+            self._latest_backup = dict(ps.LATEST)
+
+    def tearDown(self):
+        import preview_server as ps
+        with ps.LOCK:
+            ps.LATEST.clear()
+            ps.LATEST.update(self._latest_backup)
+
     def test_all_pass(self):
         """Tüm alanlar PASS ise 5 ✅ üretmeli."""
         import preview_server as ps
@@ -1851,6 +1865,15 @@ class SSEHandlerThreadTests(unittest.TestCase):
     def setUp(self):
         self._saved = {}
         self._patch("SSE_POLL_TIMEOUT", 0.05)
+        # İzolasyon: serve_sse/serve_run_stream klient kaydını modül-listesine
+        # yapar; önceki bir testin gecikmeli/geri-kalmış klientı bu testin
+        # 'len == 1' sözleşmesini kırdırabilir (shuffle-audit: geçici 2 != 1).
+        # Önceki durumu kaydet + boşalt; tearDown birebir geri sarar.
+        with ps.LOCK:
+            self._clients_before = list(ps.SSE_CLIENTS)
+            ps.SSE_CLIENTS[:] = []
+            self._stream_before = list(ps.STREAM_CLIENTS)
+            ps.STREAM_CLIENTS[:] = []
         self._buf = io.BytesIO()
         self._buf_lock = threading.Lock()
         self._broken = threading.Event()
@@ -1859,7 +1882,13 @@ class SSEHandlerThreadTests(unittest.TestCase):
     def tearDown(self):
         self._broken.set()          # döngüyü bitir (sonraki write patlar)
         if self._thread:
-            self._thread.join(timeout=5)
+            self._thread.join(timeout=10)
+        # Kayıt/çıkarma sözleşmesi test içinde assert edilir; burada
+        # kalıntı ne olursa olsun önceki duruma geri sar (sonraki testleri
+        # kirletme).
+        with ps.LOCK:
+            ps.SSE_CLIENTS[:] = self._clients_before
+            ps.STREAM_CLIENTS[:] = self._stream_before
         for name, val in self._saved.items():
             setattr(ps, name, val)
 

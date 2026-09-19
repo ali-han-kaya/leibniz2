@@ -144,7 +144,15 @@
      Halkadaki dairesel metin koşumun deterministik PDF hash'idir:
      süs değil, mühür. Renkler + fontlar tamamen token katmanından. */
   .seal { width:64px; height:64px; flex:0 0 64px; margin-left:14px;
+    /* CLS düzeltmesi (perf turu): seal "hidden" iken UA display:none uyguluyor,
+       snapshot gelince hidden=false 64px kutuyu aniden akışa sokuyordu —
+       header genişleyip MAIN'in tamamı kayıyordu (ölçülen tek-shift CLS +0.2555,
+       mobil 390px @4x CPU). Alanı baştan rezerve et: display yerine visibility,
+       basma animasyonunu hidden iken beklet. */
+    visibility:hidden;
     filter:drop-shadow(0 1px 4px rgba(0,0,0,.35)); }
+  .seal[hidden] { display:block; }
+  .seal[hidden] svg { animation-play-state:paused; }
   .seal svg { width:100%; height:100%; display:block;
     animation:seal-stamp .5s cubic-bezier(.2,1.6,.4,1) both;
     transform-origin:50% 50%; }
@@ -228,18 +236,18 @@
   <section id="z3-slide-gallery" class="z3-gallery" aria-labelledby="z3-gallery-title">
     <h2 id="z3-gallery-title">Z3 slayt galerisi</h2>
     <div id="z3-slides" class="z3-slides">
-      <button type="button" class="z3-slide" aria-label="P1-a slaydını büyüt"><img src="/slides_z3/P1-a.png" alt="P1-a Z3 slaytı" loading="lazy"></button>
-      <button type="button" class="z3-slide" aria-label="P1-b slaydını büyüt"><img src="/slides_z3/P1-b.png" alt="P1-b Z3 slaytı" loading="lazy"></button>
-      <button type="button" class="z3-slide" aria-label="P2 slaydını büyüt"><img src="/slides_z3/P2.png" alt="P2 Z3 slaytı" loading="lazy"></button>
-      <button type="button" class="z3-slide" aria-label="P3-a slaydını büyüt"><img src="/slides_z3/P3-a.png" alt="P3-a Z3 slaytı" loading="lazy"></button>
-      <button type="button" class="z3-slide" aria-label="P3-b slaydını büyüt"><img src="/slides_z3/P3-b.png" alt="P3-b Z3 slaytı" loading="lazy"></button>
-      <button type="button" class="z3-slide" aria-label="P4-a slaydını büyüt"><img src="/slides_z3/P4-a.png" alt="P4-a Z3 slaytı" loading="lazy"></button>
-      <button type="button" class="z3-slide" aria-label="P4-b slaydını büyüt"><img src="/slides_z3/P4-b.png" alt="P4-b Z3 slaytı" loading="lazy"></button>
-      <button type="button" class="z3-slide" aria-label="P4-c slaydını büyüt"><img src="/slides_z3/P4-c.png" alt="P4-c Z3 slaytı" loading="lazy"></button>
-      <button type="button" class="z3-slide" aria-label="P4-d slaydını büyüt"><img src="/slides_z3/P4-d.png" alt="P4-d Z3 slaytı" loading="lazy"></button>
-      <button type="button" class="z3-slide" aria-label="P4-e slaydını büyüt"><img src="/slides_z3/P4-e.png" alt="P4-e Z3 slaytı" loading="lazy"></button>
-      <button type="button" class="z3-slide" aria-label="P5 slaydını büyüt"><img src="/slides_z3/P5.png" alt="P5 Z3 slaytı" loading="lazy"></button>
-      <button type="button" class="z3-slide" aria-label="P5-note slaydını büyüt"><img src="/slides_z3/P5-note.png" alt="P5-note Z3 slaytı" loading="lazy"></button>
+      <button type="button" class="z3-slide" aria-label="P1-a slaydını büyüt"><img src="/slides_z3/P1-a.png" alt="P1-a Z3 slaytı" width="305" height="75" loading="lazy"></button>
+      <button type="button" class="z3-slide" aria-label="P1-b slaydını büyüt"><img src="/slides_z3/P1-b.png" alt="P1-b Z3 slaytı" width="273" height="69" loading="lazy"></button>
+      <button type="button" class="z3-slide" aria-label="P2 slaydını büyüt"><img src="/slides_z3/P2.png" alt="P2 Z3 slaytı" width="367" height="75" loading="lazy"></button>
+      <button type="button" class="z3-slide" aria-label="P3-a slaydını büyüt"><img src="/slides_z3/P3-a.png" alt="P3-a Z3 slaytı" width="311" height="75" loading="lazy"></button>
+      <button type="button" class="z3-slide" aria-label="P3-b slaydını büyüt"><img src="/slides_z3/P3-b.png" alt="P3-b Z3 slaytı" width="311" height="75" loading="lazy"></button>
+      <button type="button" class="z3-slide" aria-label="P4-a slaydını büyüt"><img src="/slides_z3/P4-a.png" alt="P4-a Z3 slaytı" width="416" height="75" loading="lazy"></button>
+      <button type="button" class="z3-slide" aria-label="P4-b slaydını büyüt"><img src="/slides_z3/P4-b.png" alt="P4-b Z3 slaytı" width="416" height="75" loading="lazy"></button>
+      <button type="button" class="z3-slide" aria-label="P4-c slaydını büyüt"><img src="/slides_z3/P4-c.png" alt="P4-c Z3 slaytı" width="171" height="68" loading="lazy"></button>
+      <button type="button" class="z3-slide" aria-label="P4-d slaydını büyüt"><img src="/slides_z3/P4-d.png" alt="P4-d Z3 slaytı" width="700" height="75" loading="lazy"></button>
+      <button type="button" class="z3-slide" aria-label="P4-e slaydını büyüt"><img src="/slides_z3/P4-e.png" alt="P4-e Z3 slaytı" width="190" height="68" loading="lazy"></button>
+      <button type="button" class="z3-slide" aria-label="P5 slaydını büyüt"><img src="/slides_z3/P5.png" alt="P5 Z3 slaytı" width="919" height="75" loading="lazy"></button>
+      <button type="button" class="z3-slide" aria-label="P5-note slaydını büyüt"><img src="/slides_z3/P5-note.png" alt="P5-note Z3 slaytı" width="575" height="75" loading="lazy"></button>
     </div>
   </section>
   <div id="z3-lightbox" class="z3-lightbox" hidden role="dialog" aria-modal="true" aria-labelledby="z3-lightbox-title">

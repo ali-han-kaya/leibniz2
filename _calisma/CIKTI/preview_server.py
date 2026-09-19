@@ -36,10 +36,16 @@ import threading
 import time
 import urllib.parse
 from datetime import datetime, timezone
+import secrets
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 REQUEST_TIMEOUT_SECONDS = 30
 ALLOWED_HOSTS = {"127.0.0.1", "localhost", "::1"}
+
+# CSP nonce — serve_preview'in enjekte ettiği build-damga inline script'i
+# için (süreç başına taze; CSP script-src bunu taşır, 'unsafe-inline'
+# script için gerekmez).
+BUILD_TS_NONCE = secrets.token_urlsafe(16)
 SERVER = None
 STOP_EVENT = None
 
@@ -437,10 +443,42 @@ def load_cached_latest():
     return True
 
 
+# load_history in-process önbelleği: (anahtar, satır-listesi). Tek-adımlı
+# isim-yeniden-ataması GIL altında atomiktir — okuyucu iş-parçacığı ya eski
+# çifti ya yeni çifti görür, karışık çift asla göremez. Satır-dict'leri
+# paylaşıldığından salt-okunur kullanılır (çağrıcılar denetlendi: 199
+# projeksiyon-kopyası, 434 alan-ataması LATEST'e; yerinde mutasyon yok).
+_history_cache = (None, ())
+
+
+def _history_cache_key():
+    """Önbellek anahtarı: (yol, mtime_ns, boyut). Dosya yoksa None."""
+    try:
+        st = os.stat(HISTORY_PATH)
+    except OSError:
+        return None
+    return (HISTORY_PATH, st.st_mtime_ns, st.st_size)
+
+
 def load_history():
-    """Disk'teki JSONL'ı oku, en son HISTORY_MAX kaydı döndür (en yeni önce)."""
+    """Disk'teki JSONL'ı oku, en son HISTORY_MAX kaydı döndür (en yeni önce).
+
+    mtime_ns+boyut anahtarlı in-process önbellek: her /api/history ve
+    /api/trend isteği 270 KB'lık dosyayı yeniden parse etmez; dosya
+    değişmediyse önbellek döner (profil: load_history request-işininin
+    ~%45'iydi — istek başına ~100 json.loads). Doğruluk: persist_history tek
+    yazıcıdır, LOCK altında _write_atomic ile dosyayı yeniden üretir; mtime
+    değişimi önbelleği bayatlatır. Dönen liste kopyasıdır; satır-dict'leri
+    paylaşıldığından çağrıcılar onları MUTATE ETMEMELİ (mevcut çağrıcılar
+    salt-okunur; yeni çağrıcılar da öyle kalmalı).
+    """
+    global _history_cache
     if not HISTORY_PATH or not os.path.isfile(HISTORY_PATH):
         return []
+    key = _history_cache_key()
+    cached_key, cached_rows = _history_cache
+    if key is not None and cached_key == key:
+        return list(cached_rows)
     out = []
     try:
         with open(HISTORY_PATH, encoding="utf-8") as f:
@@ -456,7 +494,10 @@ def load_history():
         sys.stderr.write(f"[history] okunamadı: {e}\n")
         sys.stderr.flush()
         return []
-    return out[-HISTORY_MAX:]
+    out = out[-HISTORY_MAX:]
+    if key is not None:
+        _history_cache = (key, out)
+    return list(out)
 
 
 def _prune_run_logs():
@@ -1267,6 +1308,53 @@ def _route(path):
 
 
 class Handler(BaseHTTPRequestHandler):
+    # Güvenlik başlıkları — her yanıt satırı (statik, API, SSE dahil).
+    #      • X-Content-Type-Options: nosniff — tarayıcı MIME-esnetmesine
+    #        izin vermez; JSON yanıtının text/html olarak yorumlanması
+    #        (saldırgan-kontrol content) XSS vektörünü kapatır.
+    #      • Referrer-Policy: no-referrer — sunucu localhost-tekil; URL
+    #        sızıntısı küçük ama bedava kapatılır.
+    #      • CSP — script-src 'self' + nonce: statik script'ler dışarıdan
+    #        preview.js'ten yüklenir; serve_preview'in enjekte ettiği
+    #        build-damga <script> TEK inline script'tir ve süreç-başı nonce
+    #        ile taşınır (kaynak HTML'de yer tutucu `<script data-build-ts>`
+    #        olduğundan grep sayacı yanlış-negatif vermişti — smoke testi
+    #        enjeksiyonu yakaladı). Inline style'lara izin (48 style= var,
+    #        style-src 'unsafe-inline'); img/data mühür PNG'si için serbest;
+    #        SSE için connect-src 'self'. frame-ancestors 'none' tıklama-
+    #        kaçırma çerçevesini kapatır.
+    # Not: BaseHTTPRequestHandler.end_headers override edildiği için bu
+    #      başlıklar _send, serve_preview ve SSE dahil TÜM yanıt yollarına
+    #      otomatik eklenir — ayrı dokunma gerektirmez.
+    _SECURITY_HEADERS = (
+        ("X-Content-Type-Options", "nosniff"),
+        ("Referrer-Policy", "no-referrer"),
+        ("Content-Security-Policy",
+         f"default-src 'none'; script-src 'self' 'nonce-{BUILD_TS_NONCE}'; "
+         "style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+         "connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; "
+         "form-action 'none'"),
+    )
+
+    def end_headers(self):
+        # Tek-funnel başlık enjeksiyonu: BaseHTTPRequestHandler'ın tüm
+        # yanıt yolları buradan geçer (_send, serve_preview, SSE …).
+        for name, value in self._SECURITY_HEADERS:
+            self.send_header(name, value)
+        super().end_headers()
+
+    def do_HEAD(self):
+        # HEAD = GET'in başlıkları, gövdesiz (route tablosunu yeniden
+        # kullanır; _route None döndürürse 404).
+        route = _route(self.path)
+        if route is None:
+            self._send(404, "404 not found")
+            return
+        # Bilişli kısayol: gövde yazılmaz — tek amaç başlıkları teşhir.
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.end_headers()
+
     def log_message(self, fmt, *args):
         # Sunucu loglarını kendi dosyamıza yönlendir (stderr'i kirletmesin).
         # EBADF'e dayanıklı: daemon modu fds'yi /dev/null'a yönlendirse bile,
@@ -1640,7 +1728,7 @@ class Handler(BaseHTTPRequestHandler):
             ts = "0"
         html = html.replace(
             '<script data-build-ts></script>',
-            f'<script>window.BUILD_TS={ts};</script>',
+            f'<script nonce="{BUILD_TS_NONCE}">window.BUILD_TS={ts};</script>',
             1)
         self._send(200, html, content_type="text/html; charset=utf-8")
 
