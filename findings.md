@@ -479,3 +479,15 @@ pre-commit chain adaptation (47→49 hooks). Key lessons below.
   (use message files).
 - Task 2: README "Fresh checkout bootstrap" quickstart added after
   the "Doğrulama (tek komut)" section.
+
+### xlsx surface audit (2026-09-19, work/2026-09-19)
+- Zero spreadsheet surface, four proofs: (1) xlsx/xlsm/xltx/csv/tsv
+  files in repo: 0 (node_modules excluded; main checkout identical);
+  (2) no openpyxl/pandas/xlsxwriter imports in repo Python (only grep
+  hit is setuptools-vendored more_itertools inside .venv_z3 — not repo
+  code); (3) no csv-module usage in _calisma/CIKTI; (4) no spreadsheet
+  production or consumption anywhere in the pipeline.
+- Skill trigger requires a spreadsheet as PRIMARY input/output; the
+  tabular history.jsonl does not qualify without a user request.
+  No work invented; the xlsx contract (openpyxl formulas + mandatory
+  recalc.py, LibreOffice function limits) stays retrieval-ready.

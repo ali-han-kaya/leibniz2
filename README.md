@@ -426,6 +426,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-19 | docs | wrangler turn — CLI absent, no commands to govern, install skipped | [`98b5acd`](https://github.com/ali-han-kaya/leibniz2/commit/98b5acd) |
 | 2026-09-19 | docs | (superpowers) dev-bootstrap implementation plan (2 tasks, TDD) | [`e286779`](https://github.com/ali-han-kaya/leibniz2/commit/e286779) |
 | 2026-09-19 | feat | (dev) dev_bootstrap.sh — tek komutla yeşil-batarya | [`ef0b6dc`](https://github.com/ali-han-kaya/leibniz2/commit/ef0b6dc) |
+| 2026-09-19 | docs | dev-bootstrap README quickstart + tur kaydi | [`0d4196e`](https://github.com/ali-han-kaya/leibniz2/commit/0d4196e) |
 
 ### Regresyon notları
 
