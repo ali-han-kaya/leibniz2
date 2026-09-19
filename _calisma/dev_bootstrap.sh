@@ -8,8 +8,7 @@ set -eu
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 VENV="$ROOT/_calisma/.venv_z3"
 VENV_PY="$VENV/bin/python"
-# shellcheck disable=SC2086 — pin listesi bilinçli kelime-ayrışmalı
-PINS="z3-solver==5.1.0.0 PyYAML==6.0.3 pre_commit==4.3.0"
+PINS=(z3-solver==5.1.0.0 PyYAML==6.0.3 pre_commit==4.3.0)
 
 say() { printf '%s\n' "$*"; }
 die() { printf 'BOOTSTRAP FAIL: %s\n' "$*" >&2; exit 1; }
@@ -56,10 +55,10 @@ esac
 if venv_ok; then
   say "venv_z3: up to date"
 else
-  say "venv_z3: kuruluyor (pinned: $PINS)"
+  say "venv_z3: kuruluyor (pinned: ${PINS[*]})"
   python3 -m venv "$VENV"
   "$VENV_PY" -m pip install --quiet --upgrade pip
-  "$VENV_PY" -m pip install --quiet $PINS || die "venv_z3 pip install"
+  "$VENV_PY" -m pip install --quiet "${PINS[@]}" || die "venv_z3 pip install"
 fi
 
 if node_modules_ok "$ROOT/_calisma/pptx"; then

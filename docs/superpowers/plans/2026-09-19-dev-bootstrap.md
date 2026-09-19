@@ -219,7 +219,7 @@ say "BOOTSTRAP OK"
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd _calisma/CIKTI && python3 -m unittest test_dev_bootstrap -v`
-Expected: 7 tests — 6 PASS + 0 unexpected SKIP (the hidden-venv test runs because the venv exists; idempotence runs because `--check` is now green). Then `bash _calisma/dev_bootstrap.sh --check` → prints `CHECK OK`, rc=0.
+Expected: 6 tests, all PASS (the hidden-venv test runs because the venv exists; idempotence runs because `--check` is now green). Then `bash _calisma/dev_bootstrap.sh --check` → prints `CHECK OK`, rc=0.
 
 - [ ] **Step 5: Commit**
 
