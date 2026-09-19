@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import "./globals.css";
 import { Geist } from "next/font/google";
 import { cn } from "@/lib/utils";
@@ -32,12 +33,12 @@ export default function RootLayout({
               STOIC-HUME V5
             </span>
             <nav className="ml-auto flex gap-6 font-mono text-xs tracking-[0.12em] text-muted">
-              <a className="transition-colors hover:text-fg" href="/">
+              <Link className="transition-colors hover:text-fg" href="/">
                 ÖZET
-              </a>
-              <a className="transition-colors hover:text-fg" href="/trend">
+              </Link>
+              <Link className="transition-colors hover:text-fg" href="/trend">
                 TREND
-              </a>
+              </Link>
             </nav>
           </div>
         </header>

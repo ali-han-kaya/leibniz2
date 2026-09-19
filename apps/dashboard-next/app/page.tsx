@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import VerdictCard from "./VerdictCard";
+import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -17,12 +18,12 @@ export default function HomePage() {
 
       <p className="text-sm text-muted">
         Trend görünümü:{" "}
-        <a
+        <Link
           className={cn(buttonVariants({ variant: "ghost" }), "text-accent")}
           href="/trend"
         >
           /trend
-        </a>{" "}
+        </Link>{" "}
         · Canlı pano:{" "}
         <a
           className={cn(buttonVariants({ variant: "ghost" }), "text-accent")}

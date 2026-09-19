@@ -365,3 +365,26 @@ pre-commit chain adaptation (47→49 hooks). Key lessons below.
   native-stack) have no applicable target; no work manufactured
   (same discipline as the stripe-token-mirror tour). Web dashboard
   performance already covered by the vercel-react-best-practices tour.
+
+### vercel-react-view-transitions tour (2026-09-19, work/2026-09-19)
+- Availability audit first: ViewTransition exists ONLY in Next 15.5.4's
+  vendored react-experimental channel; the stable compiled/react channel
+  (what App Router actually runs) exports 0 — import would fail the build;
+  transitionTypes prop is Next 16.2+. View-transition PATTERNS therefore
+  deferred until a Next 16 upgrade, documented in the navigation map.
+- Step-1 audit still paid off: all internal links were raw <a> tags
+  (layout nav + page link) — every internal navigation was a full page
+  reload, so view transitions could never trigger in ANY Next version.
+  Converted internal links to next/link (client nav + prefetch);
+  external-origin preview.html link stays <a>.
+- Navigation map recorded: /<->/trend lateral (bare-VT crossfade when on
+  Next 16; directional slides FORBIDDEN — false spatial depth), Suspense
+  reveal + loading.tsx skeleton + persistent-header isolation as the
+  Next-16 checklist. Reduced-motion CSS required at that time.
+- Soft-nav proven live with headless Chromium: window marker survived
+  / -> /trend navigation (before=42 after=42) — client-side routing
+  confirmed, the VT trigger precondition now holds.
+- Harness lesson: Freebuff terminal reaps background children after SYNC
+  commands; register_preview needs a harness-managed process (BACKGROUND
+  process_type not implemented in this build). Probes must start servers
+  inside the same command that exercises them.
