@@ -26,9 +26,9 @@ export default async function VerdictCard() {
         <h2 className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted">
           Son Koşum
         </h2>
-        {latest.ts && (
+        {latest.ts ? (
           <time className="font-mono text-[11px] text-muted">{latest.ts}</time>
-        )}
+        ) : null}
       </div>
 
       <p

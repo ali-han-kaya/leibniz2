@@ -339,3 +339,17 @@ pre-commit chain adaptation (47→49 hooks). Key lessons below.
 - Gates: tsc OK, prettier OK, build OK (28,378 B CSS, 7/7 semantic
   utilities present), live smoke home+trend 200, check-design-tokens OK
   (dashboard-next bridge contract included). tsx hex literals: 0.
+
+### vercel-react-best-practices tour (2026-09-19, work/2026-09-19)
+- 8-category pass over dashboard-next: bundle (direct imports, no barrels),
+  async (single-await pages, existing Suspense boundary), rerender/client
+  (single hookless client component) already clean.
+- Applied server-cache-react: getLatest/getTrend wrapped in React.cache().
+  Rationale: fetch request-memoization does not apply to cache:no-store
+  requests; the wrapper gives per-request dedup for shared seams. Proven
+  live: two VerdictCard consumers on one page + no-store fetches produced
+  exactly 1 upstream /api/latest hit (counting upstream server probe);
+  probe page edit reverted, processes cleaned.
+- Applied rendering-conditional-render: {latest.ts && (...)} -> explicit
+  ternary in VerdictCard.
+- Gates: prettier, tsc, final build all green.

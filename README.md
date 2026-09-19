@@ -401,6 +401,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-19 | feat | (apps) dashboard-next, trend-db, landing, mcp, pptx surfaces | [`d1cbfb2`](https://github.com/ali-han-kaya/leibniz2/commit/d1cbfb2) |
 | 2026-09-19 | docs | (session) plan files through 2026-09-19 worktree tour | [`e9cdcb2`](https://github.com/ali-han-kaya/leibniz2/commit/e9cdcb2) |
 | 2026-09-19 | test | (pptx) survive missing node_modules in fresh checkouts | [`d396b8c`](https://github.com/ali-han-kaya/leibniz2/commit/d396b8c) |
+| 2026-09-19 | refactor | (dashboard) composition pass — cva variants + repo-token bond | [`9ce6e32`](https://github.com/ali-han-kaya/leibniz2/commit/9ce6e32) |
 
 ### Regresyon notları
 

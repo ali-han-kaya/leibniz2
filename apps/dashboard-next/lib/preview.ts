@@ -8,6 +8,8 @@
 // $ prefix in the bundle"). Server Components'te env'e $ önekiyle
 // referans vermediğimiz için değer her istekte runtime'dan okunur.
 
+import { cache } from "react";
+
 export const API_BASE = process.env.PREVIEW_API ?? "http://127.0.0.1:8000";
 
 export type Latest = {
@@ -39,10 +41,14 @@ async function getJson<T>(path: string, revalidate = 0): Promise<T> {
   return (await res.json()) as T;
 }
 
-export function getLatest(): Promise<Latest> {
-  return getJson<Latest>("/api/latest");
-}
+// server-cache-react: istek-basi dedup. fetch memoization no-store isteklerde
+// calismaz (yalniz force-cache/default); cache() bunu kusar — ayni istekte
+// birden fazla kart/bilesen ayni uca tek round-trip ile baglanir.
+export const getLatest = cache(
+  (): Promise<Latest> => getJson<Latest>("/api/latest")
+);
 
-export function getTrend(limit = 20): Promise<{ history: TrendRow[] }> {
-  return getJson<{ history: TrendRow[] }>(`/api/trend?limit=${limit}`);
-}
+export const getTrend = cache(
+  (limit = 20): Promise<{ history: TrendRow[] }> =>
+    getJson<{ history: TrendRow[] }>(`/api/trend?limit=${limit}`)
+);
