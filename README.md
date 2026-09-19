@@ -52,6 +52,19 @@ python3 _calisma/CIKTI/verify_delivery.py --dir _calisma/CIKTI --symbolic-proof
 Exit kodu: `0` = PASS, `1` = FAIL (fail-closed), `2` = ortam hatası.
 Çevrimiçi referans denetimi: `--check-references` (CrossRef/SEP).
 
+## Fresh checkout bootstrap
+
+Yeni bir clone/worktree'de üç araç-kümesi gitignore'ludur ve tek komutla
+kurulur (her adım idempotent — kurulu araca dokunmaz):
+
+```bash
+bash _calisma/dev_bootstrap.sh           # venv_z3 (pinned) + pptx + dashboard-next
+bash _calisma/dev_bootstrap.sh --check   # fail-closed doğrulama (rc=0/1)
+```
+
+Pinler `docs/HOOK_ENV_MATRIX.md` ile tek-kaynaklıdır; `--check` eksik araçta
+rc=1 ile düşer (fail-closed).
+
 ## _calisma/lean_reduct — Sınır İspatı Çekirdeği (illüstratif, Mathlib-free)
 
 Bu modül Stoa/Hume formalizasyonu **DEĞİLDİR**. İspatlanan: 4 forget
@@ -412,6 +425,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-19 | docs | workers-best-practices zero-surface audit | [`81a0f82`](https://github.com/ali-han-kaya/leibniz2/commit/81a0f82) |
 | 2026-09-19 | docs | wrangler turn — CLI absent, no commands to govern, install skipped | [`98b5acd`](https://github.com/ali-han-kaya/leibniz2/commit/98b5acd) |
 | 2026-09-19 | docs | (superpowers) dev-bootstrap implementation plan (2 tasks, TDD) | [`e286779`](https://github.com/ali-han-kaya/leibniz2/commit/e286779) |
+| 2026-09-19 | feat | (dev) dev_bootstrap.sh — tek komutla yeşil-batarya | [`ef0b6dc`](https://github.com/ali-han-kaya/leibniz2/commit/ef0b6dc) |
 
 ### Regresyon notları
 

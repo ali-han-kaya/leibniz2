@@ -463,3 +463,19 @@ pre-commit chain adaptation (47→49 hooks). Key lessons below.
   workers-best-practices turn (81a0f82).
 - Skill knowledge stays retrieval-ready if a Worker surface ever
   lands: init/types/deploy contract is documented in the skill itself.
+
+### writing-plans execution (2026-09-19, work/2026-09-19)
+- Plan docs/superpowers/plans/2026-09-19-dev-bootstrap.md executed
+  subagent-discipline inline (no dispatch tool in this harness; two-
+  stage review replaced by gate evidence per task).
+- Task 1 (ef0b6dc): dev_bootstrap.sh + 6-test contract suite. Red
+  phase right-reason (script absent, unguarded class); green 6/6;
+  hidden-venv fail-closed proof with finally-restore; live --check
+  rc=0. Battery auto-synced to 140 files and HOOK_COVERAGE during the
+  commit (two auto-sync hooks own those lists).
+- Chain lessons recorded: coverage gate ran mid-staging once (race,
+  fail-closed worked as designed); commit-msg title limit 72 chars
+  (enforced); harness mangles apostrophes in heredoc commit messages
+  (use message files).
+- Task 2: README "Fresh checkout bootstrap" quickstart added after
+  the "Doğrulama (tek komut)" section.
