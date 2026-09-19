@@ -25,27 +25,24 @@ export default function RootLayout({
       suppressHydrationWarning
       className={cn("font-sans", geist.variable)}
     >
-      <body className="min-h-screen bg-[#0e1116] text-[#e6edf3] antialiased">
-        <header className="border-b border-[#30363d] px-8 py-4">
+      <body className="min-h-screen bg-bg text-fg antialiased">
+        <header className="border-b border-border px-8 py-4">
           <div className="mx-auto flex max-w-4xl items-baseline gap-6">
             <span className="font-mono text-[13px] font-semibold tracking-[0.14em]">
               STOIC-HUME V5
             </span>
-            <nav className="ml-auto flex gap-6 font-mono text-xs tracking-[0.12em] text-[#8b949e]">
-              <a className="transition-colors hover:text-[#e6edf3]" href="/">
+            <nav className="ml-auto flex gap-6 font-mono text-xs tracking-[0.12em] text-muted">
+              <a className="transition-colors hover:text-fg" href="/">
                 ÖZET
               </a>
-              <a
-                className="transition-colors hover:text-[#e6edf3]"
-                href="/trend"
-              >
+              <a className="transition-colors hover:text-fg" href="/trend">
                 TREND
               </a>
             </nav>
           </div>
         </header>
         <main className="mx-auto max-w-4xl px-8 py-8">{children}</main>
-        <footer className="border-t border-[#30363d] px-8 py-6 text-center font-mono text-[11px] tracking-[0.12em] text-[#8b949e]">
+        <footer className="border-t border-border px-8 py-6 text-center font-mono text-[11px] tracking-[0.12em] text-muted">
           HER KOŞUM, KENDİ DETERMİNİSTİK HASH&apos;İYLE İMZALANIR
         </footer>
       </body>

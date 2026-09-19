@@ -322,3 +322,20 @@ pre-commit chain adaptation (47→49 hooks). Key lessons below.
   line) instead of a module-level error; structural test skips cleanly.
   Both paths proven live: pre-npm-ci SKIP (1 skipped), post-npm-ci real
   build (160 kB pptx) + structural OK. Battery 139/139 PASS in worktree.
+
+### vercel-composition-patterns tour (2026-09-19, work/2026-09-19)
+- Surface: dashboard-next on React 19.2 → react19 rules in scope; inventory
+  clean of forwardRef/boolean-props/render-props. Two real findings applied:
+  1) patterns-explicit-variants: PASS/FAIL verdict and p0>0/p1>0 cell tones
+     moved from boolean ternaries to cva variants (verdictVariants,
+     cellVariants).
+  2) Token bond: every hex literal in app/ (10 distinct, all byte-equal to
+     bridge tokens) replaced with semantic utilities (text-ok/err/warn/
+     accent/muted, bg-surface/surface-raised/bg, border-border,
+     bg-tint-err-bg); shadcn slots --primary/--primary-foreground/
+     --destructive now reference repo tokens (--accent/--on-accent/--err)
+     in :root and .dark — Button variants inherit single-source colors.
+     error.tsx raw button replaced with Button primitive (destructive).
+- Gates: tsc OK, prettier OK, build OK (28,378 B CSS, 7/7 semantic
+  utilities present), live smoke home+trend 200, check-design-tokens OK
+  (dashboard-next bridge contract included). tsx hex literals: 0.

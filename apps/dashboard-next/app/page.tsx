@@ -9,23 +9,23 @@ export default function HomePage() {
       {/* Streaming: verdict kartı kendi Suspense sınırında akar */}
       <Suspense
         fallback={
-          <div className="h-44 animate-pulse rounded-lg border border-[#30363d] bg-[#161b22]" />
+          <div className="h-44 animate-pulse rounded-lg border border-border bg-surface" />
         }
       >
         <VerdictCard />
       </Suspense>
 
-      <p className="text-sm text-[#8b949e]">
+      <p className="text-sm text-muted">
         Trend görünümü:{" "}
         <a
-          className={cn(buttonVariants({ variant: "ghost" }), "text-[#58a6ff]")}
+          className={cn(buttonVariants({ variant: "ghost" }), "text-accent")}
           href="/trend"
         >
           /trend
         </a>{" "}
         · Canlı pano:{" "}
         <a
-          className={cn(buttonVariants({ variant: "ghost" }), "text-[#58a6ff]")}
+          className={cn(buttonVariants({ variant: "ghost" }), "text-accent")}
           href="http://127.0.0.1:8000/preview.html"
         >
           preview.html

@@ -400,6 +400,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-19 | ci | (pre-commit) chain 47→50 — prettier+typecheck+orphan-patch gates | [`07e22aa`](https://github.com/ali-han-kaya/leibniz2/commit/07e22aa) |
 | 2026-09-19 | feat | (apps) dashboard-next, trend-db, landing, mcp, pptx surfaces | [`d1cbfb2`](https://github.com/ali-han-kaya/leibniz2/commit/d1cbfb2) |
 | 2026-09-19 | docs | (session) plan files through 2026-09-19 worktree tour | [`e9cdcb2`](https://github.com/ali-han-kaya/leibniz2/commit/e9cdcb2) |
+| 2026-09-19 | test | (pptx) survive missing node_modules in fresh checkouts | [`d396b8c`](https://github.com/ali-han-kaya/leibniz2/commit/d396b8c) |
 
 ### Regresyon notları
 
