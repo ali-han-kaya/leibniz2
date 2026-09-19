@@ -388,3 +388,20 @@ pre-commit chain adaptation (47→49 hooks). Key lessons below.
   commands; register_preview needs a harness-managed process (BACKGROUND
   process_type not implemented in this build). Probes must start servers
   inside the same command that exercises them.
+
+### verify-chain audit (2026-09-19, work/2026-09-19)
+- Skill-doc (source: leibniz2) inventory is stale: says 19 pre-commit
+  gates; live config has 50 (this session grew 47->50). 12 check_
+  functions, 41 unique K-finding-ids in verify_delivery.py (284 kB).
+- Live audit of the fail-closed contract, fresh runs:
+  1. verify_delivery.py --full with SYSTEM python: rc=1, P0=1
+     "z3-solver kurulu değil" — honest hard failure, no silent skip
+     (K8 gate degrades closed). Matches the skill troubleshooting line
+     "prefer venv python (repo .venv_z3/bin/python)".
+  2. Same command with repo venv: rc=0, PASS (P0=0, P1=0); K8 12/12,
+     K9 8 theorems lake build --wfail, K16 58/58, K6 61/61 online refs.
+  3. Tamper-proof (K15): copied history.jsonl + sidecar to /tmp,
+     flipped last record verdict to TAMPERED -> --check-history returns
+     FAIL, rc=1. Probe artifacts removed.
+- Conclusion: the chain fails closed at all three audited points
+  (wrong env -> P0, right env -> PASS, tampered input -> FAIL).
