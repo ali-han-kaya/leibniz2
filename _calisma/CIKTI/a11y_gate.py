@@ -168,7 +168,10 @@ def playwright_connect(base_url, axe_src):
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         try:
-            page = browser.new_page()
+            # preview_server nonce-CSP'si inline axe injection'ı bloklar —
+            # tarama-connect'i CSP-bypass'lı context'te aç (yalnız kapı-scan'i).
+            context = browser.new_context(bypass_csp=True)
+            page = context.new_page()
             page.goto(page_url, wait_until="load")
             page.add_script_tag(content=axe_src)
             results = page.evaluate("() => axe.run()")

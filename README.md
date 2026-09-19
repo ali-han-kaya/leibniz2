@@ -419,7 +419,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-19 | docs | record zero RN/Expo surface survey findings | [`f0e21fe`](https://github.com/ali-han-kaya/leibniz2/commit/f0e21fe) |
 | 2026-09-19 | feat | (dashboard) client-side navigation via next/link | [`41e1f48`](https://github.com/ali-han-kaya/leibniz2/commit/41e1f48) |
 | 2026-09-19 | docs | verify-chain live audit — fail-closed proven at three points | [`17339eb`](https://github.com/ali-han-kaya/leibniz2/commit/17339eb) |
-| 2026-09-19 | docs | web-design-guidelines review of dashboard-next (12 findings) | [`7b0b02a`](https://github.com/ali-han-kaya/leibniz2/commit/7b0b02a) |
+| 2026-09-19 | docs | web-design-guidelines review of dashboard-next (13 findings) | [`5779ab0`](https://github.com/ali-han-kaya/leibniz2/commit/5779ab0) |
 | 2026-09-19 | docs | web-design-guidelines review of dashboard-next (13 findings) | [`5779ab0`](https://github.com/ali-han-kaya/leibniz2/commit/5779ab0) |
 | 2026-09-19 | fix | (dashboard) trend page honors its 20-row contract (E2E-caught) | [`d503a45`](https://github.com/ali-han-kaya/leibniz2/commit/d503a45) |
 | 2026-09-19 | docs | workers-best-practices zero-surface audit | [`81a0f82`](https://github.com/ali-han-kaya/leibniz2/commit/81a0f82) |
@@ -430,6 +430,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-19 | docs | xlsx zero-surface audit | [`11a673b`](https://github.com/ali-han-kaya/leibniz2/commit/11a673b) |
 | 2026-09-19 | fix | (dev) bootstrap pin list as array, shellcheck-clean | [`dd913c8`](https://github.com/ali-han-kaya/leibniz2/commit/dd913c8) |
 | 2026-09-19 | refactor | (dev) bootstrap UNITS table, contract suite, live hint | [`a9717ee`](https://github.com/ali-han-kaya/leibniz2/commit/a9717ee) |
+| 2026-09-19 | refactor | (dev) table-driven contract suite, function-level checks | [`7c589b4`](https://github.com/ali-han-kaya/leibniz2/commit/7c589b4) |
 
 ### Regresyon notları
 

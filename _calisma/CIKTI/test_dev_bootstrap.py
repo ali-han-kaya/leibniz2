@@ -33,6 +33,8 @@ def _run(args, **kw):
 
 class TestCheckContract(unittest.TestCase):
     def test_check_passes_on_provisioned_checkout(self):
+        if not os.path.isdir(VENV):
+            self.skipTest("araç-kümesi eksik — provisioned-ortam testi tam-kurulumda koşar")
         r = _run(["bash", SCRIPT, "--check"])
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
