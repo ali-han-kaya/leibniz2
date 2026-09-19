@@ -353,3 +353,15 @@ pre-commit chain adaptation (47→49 hooks). Key lessons below.
 - Applied rendering-conditional-render: {latest.ts && (...)} -> explicit
   ternary in VerdictCard.
 - Gates: prettier, tsc, final build all green.
+
+### vercel-react-native-skills survey (2026-09-19)
+- Zero RN/Expo surface, proven: no react-native/expo/@expo imports
+  (module-specifier word-boundary search; an earlier broad substring
+  scan false-positived on "export" in 3 files — lesson: search module
+  specifiers, not substrings), no RN deps in any package.json
+  (inventory: next/react-dom web, vite web, none), no expo/metro/
+  babel config, no ios/android dirs, no capacitor/ionic/tauri/native
+  -script neighbors. Skill rules (FlashList, Reanimated, expo-image,
+  native-stack) have no applicable target; no work manufactured
+  (same discipline as the stripe-token-mirror tour). Web dashboard
+  performance already covered by the vercel-react-best-practices tour.
