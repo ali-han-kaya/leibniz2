@@ -1,0 +1,85 @@
+<!doctype html>
+<!-- comp-1-hero — image-to-code referans kompozisyonu 1/4 (BÖLÜM: HERO)
+     Tasarım dili: dashboard'un token dünyası + verdict seal imzası.
+     Tüm renkler design-system/tokens.css'ten; sıfır uydurma hex. -->
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>COMP 1 — HERO</title>
+<style>@import "../../../design-system/tokens.css";</style>
+<style>
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg);
+         font:17px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; }
+  .page { max-width:1080px; margin:0 auto; padding:0 40px; }
+  nav { display:flex; align-items:baseline; gap:32px; padding:28px 0 0; }
+  .mark { font:600 13px/1 var(--font-mono); letter-spacing:.14em; }
+  nav a { color:var(--muted); font:500 12px/1 var(--font-mono); letter-spacing:.12em;
+          text-decoration:none; margin-left:auto; }
+  nav a + a { margin-left:0; }
+  nav .links { margin-left:auto; display:flex; gap:28px; }
+  .hero { display:grid; grid-template-columns:1fr 300px; gap:64px;
+          align-items:center; padding:96px 0 88px; }
+  h1 { font-family:var(--font-verdict); font-size:58px; line-height:1.12;
+       font-weight:600; letter-spacing:.01em; margin:0 0 24px; }
+  .sub { color:var(--fg-dimmed); font-size:17px; line-height:1.65;
+         max-width:620px; margin:0 0 36px; }
+  .cta-row { display:flex; gap:14px; align-items:center; }
+  .btn { font:600 14px/1 var(--font-sans); padding:14px 26px; border-radius:6px;
+         border:1px solid transparent; cursor:pointer; }
+  .btn-primary { background:var(--accent); color:var(--on-accent); }
+  .btn-ghost { background:transparent; color:var(--fg); border-color:var(--border); }
+  .aside { display:flex; flex-direction:column; align-items:center; gap:20px; }
+  .seal-big { width:132px; height:132px; }
+  .meta { display:grid; gap:8px; justify-items:center; }
+  .meta div { font:600 11px/1 var(--font-mono); letter-spacing:.14em; color:var(--muted); }
+  .meta div b { color:var(--fg); font-weight:600; }
+  .meta .ok { color:var(--ok); }
+  .foot { border-top:1px solid var(--border); padding:20px 0 40px;
+          font:500 11px/1 var(--font-mono); letter-spacing:.12em; color:var(--muted); }
+</style>
+</head>
+<body>
+<div class="page">
+  <nav>
+    <span class="mark">STOIC-HUME V5</span>
+    <span class="links">
+      <a href="#">PANO</a><a href="#">ZİNCİR</a><a href="#">ISPATLAR</a>
+    </span>
+  </nav>
+  <section class="hero">
+    <div>
+      <h1>Doğrulama,<br>teslim anına kadar.</h1>
+      <p class="sub">2307 test, K1–K19 doğrulama katmanı ve Lean/Z3 ispat kanalları —
+        her push'ta tek giriş noktasından koşar, sonuç canlı pano üzerinde
+        kendi hash'iyle imzalanmış bir sertifika olarak yaşar.</p>
+      <div class="cta-row">
+        <button class="btn btn-primary">Canlı panoyu aç</button>
+        <button class="btn btn-ghost">Zinciri incele</button>
+      </div>
+    </div>
+    <div class="aside">
+      <svg class="seal-big" viewBox="0 0 132 132" aria-hidden="true">
+        <circle cx="66" cy="66" r="62" fill="rgba(63,185,80,.07)" stroke="var(--ok)" stroke-width="2"/>
+        <circle cx="66" cy="66" r="47" fill="none" stroke="var(--muted)" stroke-width="1"/>
+        <defs><path id="ring1" d="M 66,66 m -54,0 a 54,54 0 1,1 108,0 a 54,54 0 1,1 -108,0"/></defs>
+        <text font-family="SF Mono,Menlo,monospace" font-size="10.5" font-weight="600"
+              letter-spacing="3.2" fill="var(--muted)">
+          <textPath href="#ring1">VERIFIED • 314578497C9D • RUN 2307/2307 •</textPath>
+        </text>
+        <text x="66" y="63" text-anchor="middle" font-family="Georgia,serif"
+              font-size="15" font-weight="700" letter-spacing="1" fill="var(--ok)">VERIFIED</text>
+        <text x="66" y="82" text-anchor="middle" font-family="SF Mono,Menlo,monospace"
+              font-size="9" font-weight="600" letter-spacing="1.5" fill="var(--fg-dimmed)">314578…</text>
+      </svg>
+      <div class="meta">
+        <div><b class="ok">PASS</b> · SON KOŞUM</div>
+        <div>STRIPPED <b>314578497C9D</b></div>
+        <div>Z3 <b>12/12</b> · AXIOM <b>0</b></div>
+      </div>
+    </div>
+  </section>
+  <div class="foot">HER KOŞUM, KENDİ DETERMİNİSTİK HASH'İYLE İMZALANIR</div>
+</div>
+</body>
+</html>

@@ -1,0 +1,453 @@
+<!doctype html>
+<!-- landing_src.html — Stoic-Hume V5 landing (tek-kaynak sürüm).
+     image-to-code akışı: 4 taze bölüm referansı (refs/comp-*.png) → derin
+     analiz (refs/analysis.json) → bu implementasyon. Tüm renk/spacing
+     design-system/tokens.css'ten; build_landing.py gömerek landing.html
+     üretir ve mührü gerçek git SHA'sıyla imzalar. -->
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stoic-Hume V5 — Teslim ve Doğrulama</title>
+<style>
+/*
+ * design-system/tokens.css — starter token layer extracted from the
+ * dashboard (_calisma/CIKTI/preview.html). Keep in sync with tokens.json.
+ *
+ * Drop `.dashboard` on any container to adopt the token scope, or copy the
+ * :root block into a fresh project. Values are verbatim from preview.html.
+ * Legacy aliases (--surface, --surface-raised, --header-*, --code-bg, --paper)
+ * are kept for the dashboard's existing var() references.
+ */
+:root {
+  /* ── color ── */
+  --bg: #0e1116;
+  --fg: #e6edf3;
+  --muted: #8b949e;
+  --fg-dimmed: #b6bec7;      /* AA 4.5:1 bg üzerinde — inline #555/#888/#999 yerine (WCAG 1.4.3) */
+  --accent: #58a6ff;
+  --ok: #3fb950;
+  --warn: #d29922;
+  --err: #ff7b72;              /* on-tint 5.78:1 (eski #f85149 4.35 fail — WCAG 1.4.3) */
+  --border: #30363d;
+  --budget: #bc8cff;
+
+  --surface-1: #161b22;        /* cards, code, pre, th */
+  --surface-2: #21262d;        /* buttons, z3 bar track */
+  --on-accent: #0e1116;        /* accent #58a6ff uzerinde 7.49:1 (beyaz 2.52 fail) */
+
+  /* legacy aliases — preview.html still references these names verbatim */
+  --surface: #161b22;
+  --surface-raised: #21262d;
+  --header-start: #161b22;
+  --header-end: #0e1116;
+  --code-bg: #161b22;
+  --paper: #f4efe5;
+  --paper-ink: #2b2926;
+
+  /* status tints (badge backgrounds) */
+  --tint-ok-bg: rgba(63, 185, 80, .15);
+  --tint-warn-bg: rgba(210, 153, 34, .15);
+  --tint-err-bg: rgba(248, 81, 73, .15);
+  --tint-err-bg-strong: rgba(248, 81, 73, .12);
+  --tint-err-bg-weak: rgba(248, 81, 73, .1);
+  --tint-budget-bg: rgba(188, 140, 255, .12);
+  --tint-accent-bg: rgba(88, 166, 255, .15);
+  --tint-accent-hover: rgba(88, 166, 255, .1);
+  --tint-accent-active: rgba(88, 166, 255, .2);
+  --tint-unknown-bg: rgba(139, 148, 158, .15);
+  --shadow-tip: 0 8px 24px rgba(0, 0, 0, .5);
+  --backdrop-lightbox: rgba(0, 0, 0, .9);
+
+  /* ── font ── */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI",
+               Helvetica, Arial, sans-serif;
+  --font-mono: "SF Mono", Menlo, Consolas, monospace;
+  --font-verdict: Georgia, "Iowan Old Style", "Times New Roman", serif; /* karar/hüküm sesi — açık-tema kimliğinden */
+
+  --text-2xs: 10px;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-md: 13px;
+  --text-base: 14px;
+  --text-lg: 18px;
+  --text-xl: 20px;
+
+  --lh-base: 1.5;
+  --lh-tight: 1.4;
+  --ls-caps: 0.05em;
+
+  /* ── space ── */
+  --space-1: 4px;
+  --space-2: 6px;
+  --space-3: 8px;
+  --space-4: 10px;
+  --space-5: 12px;
+  --space-6: 14px;
+  --space-7: 18px;
+  --space-8: 20px;
+  --space-9: 24px;
+  --space-10: 28px;
+
+  /* ── radius ── */
+  --radius-1: 3px;
+  --radius-2: 4px;
+  --radius-3: 5px;
+  --radius-4: 6px;
+  --radius-5: 7px;
+  --radius-6: 8px;
+  --radius-7: 12px;
+  --radius-full: 50%;
+
+  /* ── motion ── */
+  --dur-fade: 180ms;
+  --dur-fast: 0.15s;
+  --dur-mid: 0.3s;
+  --dur-slow: 0.4s;
+  --dur-pulse: 1.6s;
+  --dur-glow: 2s;
+  --dur-shake: 0.5s;
+  --ease: ease;
+  --ease-in-out: ease-in-out;
+
+  /* ── layout ── */
+  --main-max-width: 1080px;
+  --grid-min: 220px;
+  --grid-gap: 14px;
+  --z3-grid-min: 180px;
+  --z3-grid-gap: 12px;
+
+  /* ── composition (semantic) ── */
+  --card-bg: var(--surface-1);
+  --card-border: var(--border);
+  --card-radius: var(--radius-6);
+  --card-padding: var(--space-6);
+  --badge-radius: var(--radius-7);
+  --badge-padding: var(--space-1) var(--space-4);
+  --table-cell-padding: var(--space-2) var(--space-4);
+  --pre-padding: var(--space-5);
+  --button-padding: var(--space-2) var(--space-6);
+}
+
+/* Light theme — mirrors preview.html's [data-theme="light"] overrides.
+   Kept here so a single @import provides the complete theme. */
+:root[data-theme="light"] {
+  --bg: #f3efe7;
+  --fg: #292722;
+  --muted: #70695f;
+  --fg-dimmed: #56504a;      /* light: #f3efe7 bg üzerinde AA 4.5:1+ */
+  --accent: #8b5e2b;
+  --ok: #287a3d;
+  --warn: #996b08;
+  --err: #b42318;
+  --border: #cfc5b5;
+  --budget: #7650a8;
+  --surface: #fffdf8;
+  --surface-raised: #e9e1d3;
+  --header-start: #fffdf8;
+  --header-end: #ede5d8;
+  --code-bg: #e9e1d3;
+  --paper: #fffdf8;
+  --paper-ink: #292722;
+  /* keep surface-1/2 in sync with legacy aliases for token consumers */
+  --surface-1: #fffdf8;
+  --surface-2: #e9e1d3;
+  /* accent #8b5e2b üzerinde 5.53:1 (WCAG 1.4.3 — global button fg) */
+  --on-accent: #fffdf8;
+}
+</style>
+<style>
+  /* ═══ temel ═══ */
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--fg);
+         font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; }
+  ::selection { background:var(--accent); color:var(--on-accent); }
+  a:focus-visible, button:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+  .page { max-width:1080px; margin:0 auto; padding:0 40px; }
+  @media (max-width:700px) { .page { padding:0 22px; } }
+
+  /* ═══ nav ═══ */
+  nav { display:flex; align-items:baseline; padding:28px 0 0; }
+  .mark { font:600 13px/1 var(--font-mono); letter-spacing:.14em; }
+  nav .links { margin-left:auto; display:flex; gap:28px; }
+  nav a { color:var(--muted); font:500 12px/1 var(--font-mono); letter-spacing:.12em;
+          text-decoration:none; transition:color .15s ease; }
+  nav a:hover { color:var(--fg); }
+
+  /* ═══ ortak bölüm açılışı (referanslardan ölçülen kalıp) ═══ */
+  .eyebrow { font:600 11px/1 var(--font-mono); letter-spacing:.22em;
+             color:var(--muted); text-transform:uppercase; }
+  h2 { font-family:var(--font-verdict); font-size:40px; line-height:1.15; font-weight:600;
+       margin:14px 0 12px; }
+  .lede { color:var(--fg-dimmed); font-size:16px; max-width:640px; margin:0 0 52px; }
+  section { padding-top:96px; }
+
+  /* ═══ hero (comp-1) ═══ */
+  .hero { display:grid; grid-template-columns:1fr 300px; gap:64px;
+          align-items:center; padding:88px 0 72px; }
+  .hero h1 { font-family:var(--font-verdict); font-size:58px; line-height:1.12;
+             font-weight:600; letter-spacing:.01em; margin:0 0 24px; }
+  .hero .sub { color:var(--fg-dimmed); font-size:17px; line-height:1.65;
+               max-width:620px; margin:0 0 36px; }
+  .cta-row { display:flex; gap:14px; align-items:center; flex-wrap:wrap; }
+  .btn { font:600 14px/1 var(--font-sans); padding:14px 26px; border-radius:6px;
+         border:1px solid transparent; cursor:pointer; text-decoration:none;
+         display:inline-block; transition:opacity .15s ease; }
+  .btn:hover { opacity:.85; }
+  .btn-primary { background:var(--accent); color:var(--on-accent); }
+  .btn-ghost { background:transparent; color:var(--fg); border-color:var(--border); }
+  .aside { display:flex; flex-direction:column; align-items:center; gap:20px; }
+  .seal-big { width:132px; height:132px; filter:drop-shadow(0 1px 4px rgba(0,0,0,.35));
+              animation:seal-stamp .5s cubic-bezier(.2,1.6,.4,1) both; transform-origin:50% 50%; }
+  @keyframes seal-stamp {
+    0% { transform:scale(1.8) rotate(-8deg); opacity:0; }
+    60% { opacity:1; } 100% { transform:scale(1) rotate(0deg); opacity:1; } }
+  .meta { display:grid; gap:8px; justify-items:center; }
+  .meta div { font:600 11px/1 var(--font-mono); letter-spacing:.14em; color:var(--muted); }
+  .meta div b { color:var(--fg); font-weight:600; }
+  .meta .ok { color:var(--ok); }
+  .band-foot { border-top:1px solid var(--border); padding:20px 0 0;
+               font:500 11px/1 var(--font-mono); letter-spacing:.12em; color:var(--muted); }
+
+  /* ═══ zincir (comp-2) — hairline defter ritmi; numaralar K1–K19 gerçeği ═══ */
+  .chain { border-left:1px solid var(--border); margin-left:7px; }
+  .stage { display:grid; grid-template-columns:96px 300px 1fr; gap:32px;
+           padding:30px 0 30px 36px; position:relative; }
+  .stage::before { content:""; position:absolute; left:-4.5px; top:44px; width:8px; height:8px;
+                   border-radius:50%; background:var(--bg); border:1.5px solid var(--muted); }
+  .stage + .stage { border-top:1px solid var(--border); }
+  .stage + .stage::before { top:-4.5px; }
+  .k { font:600 12px/1.5 var(--font-mono); letter-spacing:.08em; color:var(--muted); }
+  .k b { color:var(--fg); font-weight:600; }
+  .stage h3 { font-family:var(--font-verdict); font-size:23px; font-weight:600; margin:0 0 8px; }
+  .stage p { margin:0; color:var(--fg-dimmed); font-size:15px; line-height:1.6; }
+  .chip { display:inline-block; margin-top:12px; font:600 11px/1 var(--font-mono);
+          letter-spacing:.1em; padding:5px 10px; border-radius:12px; border:1px solid; }
+  .chip.ok   { color:var(--ok);     border-color:var(--ok);     background:rgba(63,185,80,.15); }
+  .chip.info { color:var(--accent); border-color:var(--accent); background:rgba(88,166,255,.15); }
+  .chip.bud  { color:var(--budget); border-color:var(--budget); background:rgba(188,140,255,.12); }
+
+  /* ═══ ispat (comp-3) — asimetrik: açık anlatı + arşiv panosu ═══ */
+  .proof { display:grid; grid-template-columns:1fr 420px; gap:56px; align-items:start; }
+  .col-item { padding:26px 0; border-top:1px solid var(--border); }
+  .col-item:first-child { border-top:0; padding-top:0; }
+  .col-item h3 { font-family:var(--font-verdict); font-size:24px; font-weight:600; margin:0 0 10px; }
+  .col-item p { margin:0 0 14px; color:var(--fg-dimmed); font-size:15px; line-height:1.65; }
+  .num { display:block; font:600 11px/1 var(--font-mono); letter-spacing:.18em;
+         color:var(--muted); margin-bottom:10px; }
+  .stat { display:inline-block; margin-right:24px; }
+  .stat b { display:block; font:600 26px/1.1 var(--font-mono); color:var(--fg); }
+  .stat span { display:block; margin-top:4px; font:600 10px/1 var(--font-mono);
+               letter-spacing:.14em; color:var(--muted); }
+  .stat b.ok { color:var(--ok); }
+  .archive { background:#f4efe5; color:#2b2926; border:1px solid #d6cbb9;
+             border-radius:2px; padding:26px 22px 22px;
+             box-shadow:0 16px 40px rgba(0,0,0,.18), inset 0 0 0 8px #ebe3d4; }
+  .archive::before { content:"Z3 / TWELVE PROPOSITIONS"; display:block;
+             color:#8b7355; font:600 10px/1 "SF Mono",Menlo,monospace;
+             letter-spacing:.2em; text-transform:uppercase; margin-bottom:14px; }
+  .plates { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+  .plate { background:#fffdf8; border:1px solid #d6cbb9; padding:8px 8px 20px; margin:0;
+           box-shadow:0 5px 12px rgba(65,48,30,.12); }
+  .plate:nth-child(2n) { transform:rotate(.45deg); }
+  .plate:nth-child(3n) { transform:rotate(-.35deg); }
+  .plate img { display:block; width:100%; height:auto; border:1px solid #e2d7c6; }
+  .plate figcaption { font:600 9px/1.4 "SF Mono",Menlo,monospace; letter-spacing:.12em;
+                      color:#7a6144; margin-top:8px; text-align:center; }
+  .archive-note { margin:18px 0 0; font:italic 400 13px/1.5 Georgia,serif; color:#5c4d3c; }
+
+  /* ═══ cta + footer (comp-4) ═══ */
+  .band { text-align:center; padding:96px 0 0; }
+  .band h2 { margin:18px auto 14px; max-width:640px; }
+  .band .sub { color:var(--fg-dimmed); font-size:16px; max-width:520px; margin:0 auto 34px; }
+  .band .cta-row { justify-content:center; }
+  .band .note { margin-top:22px; font:500 11px/1.6 var(--font-mono); letter-spacing:.1em;
+                color:var(--muted); }
+  footer { border-top:1px solid var(--border); padding:30px 0 44px; margin-top:96px;
+           display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px; }
+  footer .mark { font:600 12px/1 var(--font-mono); letter-spacing:.14em; }
+  footer .links { display:flex; gap:26px; }
+  footer .links a { color:var(--muted); font:500 11px/1 var(--font-mono); letter-spacing:.12em;
+                    text-decoration:none; }
+  footer .links a:hover { color:var(--fg); }
+
+  /* ═══ responsive — referans kompozisyonun ruhu dar ekranda korunur ═══ */
+  @media (max-width:900px) {
+    .hero { grid-template-columns:1fr; gap:44px; padding:56px 0 48px; }
+    .hero h1 { font-size:42px; }
+    .aside { align-items:flex-start; }
+    .stage { grid-template-columns:1fr; gap:10px; padding:24px 0 24px 28px; }
+    .proof { grid-template-columns:1fr; gap:40px; }
+    h2 { font-size:31px; }
+  }
+  @media (max-width:600px) {
+    .seal-big { width:96px; height:96px; }
+    .hero h1 { font-size:34px; }
+    .plates { gap:8px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior:auto; }
+    .seal-big { animation:none; }
+    .btn, nav a { transition:none; }
+  }
+</style>
+</head>
+<body>
+<main>
+<div class="page">
+  <nav aria-label="Ana gezinme">
+    <span class="mark">STOIC-HUME V5</span>
+    <span class="links">
+      <a href="../CIKTI/preview.html">PANO</a>
+      <a href="#chain">ZİNCİR</a>
+      <a href="#proof">ISPATLAR</a>
+    </span>
+  </nav>
+
+  <!-- ═══ BÖLÜM 1 · HERO (comp-1-hero referansından) ═══ -->
+  <section class="hero">
+    <div>
+      <h1>Doğrulama,<br>teslim anına kadar.</h1>
+      <p class="sub">2307 test, K1–K19 doğrulama katmanı ve Lean/Z3 ispat kanalları —
+        her push'ta tek giriş noktasından koşar, sonuç canlı pano üzerinde
+        kendi hash'iyle imzalanmış bir sertifika olarak yaşar.</p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="../CIKTI/preview.html">Canlı panoyu aç</a>
+        <a class="btn btn-ghost" href="#chain">Zinciri incele</a>
+      </div>
+    </div>
+    <div class="aside">
+      <svg class="seal-big" viewBox="0 0 132 132" aria-hidden="true">
+        <circle cx="66" cy="66" r="62" fill="rgba(63,185,80,.07)" stroke="var(--ok)" stroke-width="2"/>
+        <circle cx="66" cy="66" r="47" fill="none" stroke="var(--muted)" stroke-width="1"/>
+        <defs><path id="ring1" d="M 66,66 m -54,0 a 54,54 0 1,1 108,0 a 54,54 0 1,1 -108,0"/></defs>
+        <text font-family="SF Mono,Menlo,monospace" font-size="10.5" font-weight="600"
+              letter-spacing="3.2" fill="var(--muted)">
+          <textPath href="#ring1">VERIFIED • 74B2CDBDB18F •</textPath>
+        </text>
+        <text x="66" y="63" text-anchor="middle" font-family="Georgia,serif"
+              font-size="15" font-weight="700" letter-spacing="1" fill="var(--ok)">VERIFIED</text>
+        <text x="66" y="82" text-anchor="middle" font-family="SF Mono,Menlo,monospace"
+              font-size="9" font-weight="600" letter-spacing="1.5" fill="var(--fg-dimmed)">74B2CD…</text>
+      </svg>
+      <div class="meta">
+        <div><b class="ok">PASS</b> · SON KOŞUM</div>
+        <div>Z3 <b>12/12</b> · AXIOM <b>0</b></div>
+        <div>A11Y <b>BLOCKING 0</b></div>
+      </div>
+    </div>
+  </section>
+  <div class="band-foot">HER KOŞUM, KENDİ DETERMİNİSTİK HASH'İYLE İMZALANIR</div>
+
+  <!-- ═══ BÖLÜM 2 · ZİNCİR (comp-2-chain referansından) ═══ -->
+  <section id="chain">
+    <div class="eyebrow">Doğrulama Zinciri — K1'den K19'a</div>
+    <h2>Dört katman, tek kapı.</h2>
+    <p class="lede">Her push; birim testlerden başlayıp deterministik PDF'lerin hash
+      karşılaştırmasına kadar tek giriş noktasından geçer. Katmanlar bağımsız
+      koşar, ama verdict'i birlikte üretir.</p>
+    <div class="chain">
+      <div class="stage">
+        <div class="k"><b>K1–K4</b><br>TEST</div>
+        <h3>Birim ve sözleşme</h3>
+        <p>2307 test, tek süitte; modül başına dosya disiplini ve sıra-bağımsız
+          koşum. Kapılar kendi kendini test eder — hatta a11y kapısı.</p>
+        <span class="chip ok">2307 TEST · OK</span>
+      </div>
+      <div class="stage">
+        <div class="k"><b>K5–K11</b><br>ISPAT</div>
+        <h3>Lean / Coq / Z3</h3>
+        <p>Deterministik PDF üretimi TeXLive pinli sürümle sabitlenir; Z3 on iki
+          önermeyi denetler, aksiyom sayısı sıfırda kilitlenir.</p>
+        <span class="chip info">Z3 12/12 · AXIOM 0</span>
+      </div>
+      <div class="stage">
+        <div class="k"><b>K12–K16</b><br>TESLİM</div>
+        <h3>Teslim ve bütçe</h3>
+        <p>Teslim artefaktları zip soy ağacıyla doğrulanır; bütçe taraması her
+          koşumun maliyetini limit içinde tutar.</p>
+        <span class="chip bud">BÜTÇE · LİMİT İÇİNDE</span>
+      </div>
+      <div class="stage">
+        <div class="k"><b>K17–K19</b><br>PANO</div>
+        <h3>Canlı pano ve imza</h3>
+        <p>Pano SSE ile canlı akar; son koşumun stripped hash'i verdict mührüne
+          basılır — sertifika, uydurması imkânsız bir veriyle yaşar.</p>
+        <span class="chip ok">SSE CANLI · MÜHÜR BASILDI</span>
+      </div>
+    </div>
+    <div class="band-foot">HER KATMAN BAĞIMSIZ KOŞAR · VERDİCT BİRLİK ÜRETİLİR</div>
+  </section>
+
+  <!-- ═══ BÖLÜM 3 · ISPAT (comp-3-proof referansından) ═══ -->
+  <section id="proof">
+    <div class="eyebrow">İspat ve Kanıt</div>
+    <h2>İddia değil, artefakt.</h2>
+    <p class="lede">Her koşum denetlenebilir çıktı bırakır: ispat plakaları,
+      hash kayıtları ve ci-uzunluğunda açık raporlar. Panoda gördüğünüz her
+      renk, altındaki bir dosyadan okunur.</p>
+    <div class="proof">
+      <div>
+        <div class="col-item">
+          <span class="num">01 · DETERMİNİZM</span>
+          <h3>Aynı girdi, aynı PDF.</h3>
+          <p>Girdi PDF'inin raw SHA-256'sı donmuş kayıtta mühürlenir; normalize
+            edilmiş çıktının hash'i koşumdan koşuma karşılaştırılır. Sapma
+            varsa zincir durur — sessiz kalmaz.</p>
+          <span class="stat"><b>SHA-256</b><span>STRIPPED</span></span>
+          <span class="stat"><b class="ok">0</b><span>AXIOM</span></span>
+        </div>
+        <div class="col-item">
+          <span class="num">02 · A11Y</span>
+          <h3>Fail-closed kapı.</h3>
+          <p>axe-core kapısı raporu artifact olarak arşivler ve engelleyici
+            bulgu varsa koşumu kırar. Panonun kendi koyu teması da bu kapıdan geçti.</p>
+          <span class="stat"><b>AXE-CORE</b><span>ENGELLEYEN 0</span></span>
+        </div>
+        <div class="col-item">
+          <span class="num">03 · KAPSAM</span>
+          <h3>Meta-disiplin.</h3>
+          <p>Kapılar kendi kendini test eder: 80-testlik hedefli tur, token
+            eşleme sözleşmesi ve tip sözlüğü drift kapılarıyla korunur.</p>
+          <span class="stat"><b>80</b><span>META-TEST</span></span>
+        </div>
+      </div>
+      <div class="archive">
+        <div class="plates">
+          <figure class="plate"><img src="assets/P1-a.png" alt="Z3 ispat plakası 1" loading="lazy"><figcaption>PLAKA I</figcaption></figure>
+          <figure class="plate"><img src="assets/P2.png" alt="Z3 ispat plakası 2" loading="lazy"><figcaption>PLAKA II</figcaption></figure>
+          <figure class="plate"><img src="assets/P3-a.png" alt="Z3 ispat plakası 3" loading="lazy"><figcaption>PLAKA III</figcaption></figure>
+        </div>
+        <p class="archive-note">İspat plakaları arşiv panosunda, kendi geometrisiyle yaşar —
+          kesit değil, taze render.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ BÖLÜM 4 · CTA (comp-4-cta referansından) ═══ -->
+  <section class="band" id="cta">
+    <div class="eyebrow">Kapanış</div>
+    <h2>Kanıt, pano yaşıyorsa canlıdır.</h2>
+    <p class="sub">Panoyu açın; son koşumun verdict'ini, kendi hash'iyle
+      basılmış mührü ve işlerin akışını görün. Ayrıntılar repoda,
+      zincir tek komutla koşar.</p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="../CIKTI/preview.html">Canlı panoyu aç</a>
+      <a class="btn btn-ghost" href="https://github.com/ali-han-kaya/leibniz2">Depoya git</a>
+    </div>
+    <div class="note">REPO: ali-han-kaya/leibniz2 · ZİNCİR: TEK GİRİŞ NOKTASI · PANO: preview_server</div>
+  </section>
+
+  <footer>
+    <span class="mark">STOIC-HUME V5</span>
+    <span class="links">
+      <a href="../CIKTI/preview.html">PANO</a>
+      <a href="#chain">ZİNCİR</a>
+      <a href="#proof">ISPATLAR</a>
+    </span>
+  </footer>
+</div>
+</main>
+</body>
+</html>

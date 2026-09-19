@@ -397,6 +397,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-18 | fix | (a11y) serve token sheet in CI gate, repair dark-theme contrast | [`0b83077`](https://github.com/ali-han-kaya/leibniz2/commit/0b83077) |
 | 2026-09-18 | other | design(dashboard): verdict seal + serif verdict voice | [`e22dfad`](https://github.com/ali-han-kaya/leibniz2/commit/e22dfad) |
 | 2026-09-18 | feat | (design) vercel.com design-primitive extraction | [`e787e9a`](https://github.com/ali-han-kaya/leibniz2/commit/e787e9a) |
+| 2026-09-19 | ci | (pre-commit) chain 47→50 — prettier+typecheck+orphan-patch gates | [`07e22aa`](https://github.com/ali-han-kaya/leibniz2/commit/07e22aa) |
 
 ### Regresyon notları
 

@@ -1,0 +1,84 @@
+<!doctype html>
+<!-- comp-2-chain — image-to-code referans kompozisyonu 2/4 (BÖLÜM: DOĞRULAMA ZİNCİRİ)
+     Tasarım dili: token dünyası; numaralı katmanlar GERÇEK K1–K19 sekansı
+     olduğundan numara yapısal bilgi taşır (süs değil). -->
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>COMP 2 — ZİNCİR</title>
+<style>@import "../../../design-system/tokens.css";</style>
+<style>
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg);
+         font:17px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; }
+  .page { max-width:1080px; margin:0 auto; padding:0 40px; }
+  .eyebrow { padding-top:88px; font:600 11px/1 var(--font-mono); letter-spacing:.22em;
+             color:var(--muted); text-transform:uppercase; }
+  h2 { font-family:var(--font-verdict); font-size:40px; line-height:1.15; font-weight:600;
+       margin:14px 0 12px; }
+  .lede { color:var(--fg-dimmed); font-size:16px; max-width:640px; margin:0 0 52px; }
+  .chain { border-left:1px solid var(--border); margin:0 0 0 7px; }
+  .stage { display:grid; grid-template-columns:96px 300px 1fr; gap:32px;
+           padding:30px 0 30px 36px; position:relative; }
+  .stage::before { content:""; position:absolute; left:-4.5px; top:44px; width:8px; height:8px;
+                   border-radius:50%; background:var(--bg); border:1.5px solid var(--muted); }
+  .stage + .stage { border-top:1px solid var(--border); }
+  .stage + .stage::before { top:-4.5px; left:-4.5px; }
+  .k { font:600 12px/1.5 var(--font-mono); letter-spacing:.08em; color:var(--muted); }
+  .k b { color:var(--fg); font-weight:600; }
+  .stage h3 { font-family:var(--font-verdict); font-size:23px; font-weight:600;
+              margin:0 0 8px; }
+  .stage p { margin:0; color:var(--fg-dimmed); font-size:15px; line-height:1.6; }
+  .chip { display:inline-block; margin-top:12px; font:600 11px/1 var(--font-mono);
+          letter-spacing:.1em; padding:5px 10px; border-radius:12px;
+          border:1px solid; }
+  .chip.ok   { color:var(--ok);   border-color:var(--ok);   background:rgba(63,185,80,.15); }
+  .chip.info { color:var(--accent); border-color:var(--accent); background:rgba(88,166,255,.15); }
+  .chip.bud  { color:var(--budget); border-color:var(--budget); background:rgba(188,140,255,.12); }
+  .foot { border-top:1px solid var(--border); padding:22px 0 40px;
+          font:500 11px/1 var(--font-mono); letter-spacing:.12em; color:var(--muted); }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="eyebrow">Doğrulama Zinciri — K1'den K19'a</div>
+  <h2>Dört katman, tek kapı.</h2>
+  <p class="lede">Her push; birim testlerden başlayıp deterministik PDF'lerin hash
+    karşılaştırmasına kadar tek giriş noktasından geçer. Katmanlar bağımsız
+    koşar, ama verdict'i birlikte üretir.</p>
+
+  <div class="chain">
+    <div class="stage">
+      <div class="k"><b>K1–K4</b><br>TEST</div>
+      <h3>Birim ve sözleşme</h3>
+      <p>2307 test, tek süitte; modül başına dosya disiplini ve sıra-bağımsız
+        koşum. Kapılar kendi kendini test eder — hatta a11y kapısı.</p>
+      <span class="chip ok">2307 TEST · OK</span>
+    </div>
+    <div class="stage">
+      <div class="k"><b>K5–K11</b><br>ISPAT</div>
+      <h3>Lean / Coq / Z3</h3>
+      <p>Deterministik PDF üretimi TeXLive pinli sürümle sabitlenir; Z3 on iki
+        önermeyi denetler, aksiyom sayısı sıfırda kilitlenir.</p>
+      <span class="chip info">Z3 12/12 · AXIOM 0</span>
+    </div>
+    <div class="stage">
+      <div class="k"><b>K12–K16</b><br>TESLİM</div>
+      <h3>Teslim ve bütçe</h3>
+      <p>Teslim artefaktları zip soy ağacıyla doğrulanır; bütçe taraması her
+        koşumun maliyetini limit içinde tutar.</p>
+      <span class="chip bud">BÜTÇE · LİMİT İÇİNDE</span>
+    </div>
+    <div class="stage">
+      <div class="k"><b>K17–K19</b><br>PANO</div>
+      <h3>Canlı pano ve imza</h3>
+      <p>Pano SSE ile canlı akar; son koşumun stripped hash'i verdict mührüne
+        basılır — sertifika, uydurması imkânsız bir veriyle yaşar.</p>
+      <span class="chip ok">SSE CANLI · MÜHÜR BASILDI</span>
+    </div>
+  </div>
+
+  <div class="foot">HER KATMAN BAĞIMSIZ KOŞAR · VERDİCT BİRLİK ÜRETİLİR</div>
+</div>
+</body>
+</html>
