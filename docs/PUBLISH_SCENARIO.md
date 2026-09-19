@@ -21,8 +21,8 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 > | AŞAMA 3 — CI doğrulama | 🔄 **aktif** — her push'ta tekrarlanır (incremental) |
 > | AŞAMA 4 — koruma kanıtı | ⏸️ opsiyonel (1 (b) sonrası) |
 >
-> Job tablosu (AŞAMA 3), `.github/workflows/verify.yml`'deki **27 job**'u 4 kategoride
-> sunar: 12 **required** + 12 **advisory** + 3 **PR-only/manifest** job. Branch protection
+> Job tablosu (AŞAMA 3), `.github/workflows/verify.yml`'deki **28 job**'u 4 kategoride
+> sunar: 13 **required** + 12 **advisory** + 3 **PR-only/manifest** job. Branch protection
 > yalnızca required job'ları bloke eder.
 > Branch protection yalnızca required job'ları bloke eder.
 > Güncel listeyi üret: `python3 _calisma/CIKTI/status_checks.py --json`.
@@ -575,7 +575,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 --exit-status` + artifact listesi; sonuç `SONUÇ: PASS/FAIL` olarak loglanır
 (dry-run'da yalnızca önizlenir).
 
-**Job kategorileri (27 job = 12 required + 12 advisory + 3 PR-only):**
+**Job kategorileri (28 job = 13 required + 12 advisory + 3 PR-only):**
 
 > **Kural:** Branch protection **yalnızca A kategorisindeki** job'ları required check olarak
 > kabul eder. B (advisory) job'ları push'ta çalışır ama required değildir;
@@ -585,7 +585,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 
 | # | Kategori | Job | Son durum |
 |---|---|---|---|
-| | **A — Required (12; merge bloke)** | | |
+| | **A — Required (13; merge bloke)** | | |
 | 1 | A | Delivery verification — K1-K19 (single entry point) | ✅ success (4m21s) — K0-K7 + K8 (Z3) + K9 (Lean) + K11 + K13 + K14 + K15 + K16 + K17 + K18 + K19 tek komutta (`--full`); pre-commit advisory bölüm |
 | 2 | A | Action runtime check (node24) | ✅ success (9s) — her `uses:` action'ın `runs.using=node24` olduğu doğrulanır |
 | 3 | A | Budget shield (aggregated) | ✅ success (7s) — limit içinde (sidecar birleştirildi) |
@@ -598,26 +598,27 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 | 10 | A | Commit-msg gate | — PR'da koşar; commit-msg ihlali varsa FAIL → merge bloke (2026-08-23) |
 | 11 | A | Config snapshot ↔ CONFIG_BASENAMES sync check | — üçlü senkron (2026-08-23) |
 | 12 | A | CI-SIMULATE (advisory) | — simülasyon replay kapısı: status_checks + simulate_verify_job (2026-08-23) |
-| | **B — Advisory (11; push'ta çalışır, required değil)** | | |
-| 13 | B | Publish precheck (AŞAMA 0, advisory) | ✅ success (9s) — AŞAMA 0 kapıları otomatik denetlenir |
-| 14 | B | Plist drift check (macOS, advisory) | ✅ success (11s) — K12, macOS-runner'lı; negatif smoke: bozuk-plist + eksik-golden yakalanmalı (YAKALANMADI → fail-closed) |
-| 15 | B | Mirror sync check (macOS, fail-closed) | ✅ success (12s) — K17, sync sonrası GÜNCEL |
-| 16 | B | Daemon mode HTTP 200 (advisory) | ✅ success (45s) — üç endpoint'te 200 |
-| 17 | B | Refs-trend audit (advisory) | ✅ success (56s) — trend satırları kaynak artifact'larla birebir |
-| 18 | B | Live CI doc↔GitHub sync audit (advisory) | ✅ success (8s) — doc 24 artifact = canlı 24 artifact, PASS |
-| 19 | B | CLI override trend (warning=true time series) | ✅ — run'lar arası override zaman serisi |
-| 20 | B | Changelog drift check (advisory) | — gen_changelog --check drift bulguları run summary'de (2026-08-23) |
-| 21 | B | Merge pattern drift check (advisory) | — merge pattern ↔ ARTIFACT_JOBS tutarlılığı (advisory, run summary) |
-| 22 | B | Preview reload smoke (advisory, macOS) | — preview restart + endpoint smoke (advisory) |
-| 23 | B | K9 Lake proof (Lean 4.14.0) | ✅ success — ayrı-step lake build --wfail (lean-toolchain v4.14.0); K9 ayrıca verify job'unun `--full` içinde de koşar (required DEĞİL) |
-| 24 | B | Fresh-clone HTTP smoke (advisory) | — temiz clone'dan preview_server.py başlatılır; `/api/health` + `/api/latest` curl ile doğrulanır |
+| 13 | A | A11y gate (axe-core, fail-closed) | — a11y-gate (2026-09-17): headless Chromium + sha256 pinli vendor axe-core ile /preview.html taraması; preview_server health-poll (30×1s) ile başlatılır; blocking/warn/allowlist = a11y_gate_config.json; sunucu/tarayıcı/checksum arızası FAIL (retry yok) |
+| | **B — Advisory (12; push'ta çalışır, required değil)** | | |
+| 14 | B | Publish precheck (AŞAMA 0, advisory) | ✅ success (9s) — AŞAMA 0 kapıları otomatik denetlenir |
+| 15 | B | Plist drift check (macOS, advisory) | ✅ success (11s) — K12, macOS-runner'lı; negatif smoke: bozuk-plist + eksik-golden yakalanmalı (YAKALANMADI → fail-closed) |
+| 16 | B | Mirror sync check (macOS, fail-closed) | ✅ success (12s) — K17, sync sonrası GÜNCEL |
+| 17 | B | Daemon mode HTTP 200 (advisory) | ✅ success (45s) — üç endpoint'te 200 |
+| 18 | B | Refs-trend audit (advisory) | ✅ success (56s) — trend satırları kaynak artifact'larla birebir |
+| 19 | B | Live CI doc↔GitHub sync audit (advisory) | ✅ success (8s) — doc 24 artifact = canlı 24 artifact, PASS |
+| 20 | B | CLI override trend (warning=true time series) | ✅ — run'lar arası override zaman serisi |
+| 21 | B | Changelog drift check (advisory) | — gen_changelog --check drift bulguları run summary'de (2026-08-23) |
+| 22 | B | Merge pattern drift check (advisory) | — merge pattern ↔ ARTIFACT_JOBS tutarlılığı (advisory, run summary) |
+| 23 | B | Preview reload smoke (advisory, macOS) | — preview restart + endpoint smoke (advisory) |
+| 24 | B | K9 Lake proof (Lean 4.14.0) | ✅ success — ayrı-step lake build --wfail (lean-toolchain v4.14.0); K9 ayrıca verify job'unun `--full` içinde de koşar (required DEĞİL) |
+| 25 | B | Fresh-clone HTTP smoke (advisory) | — temiz clone'dan preview_server.py başlatılır; `/api/health` + `/api/latest` curl ile doğrulanır |
 | | **C — PR-only (push'ta çalışmaz, PR'da çalışır)** | | |
-| 25 | C | Pre-commit P1 label gate (optional) | — skipped (push'ta çalışmaz) |
+| 26 | C | Pre-commit P1 label gate (optional) | — skipped (push'ta çalışmaz) |
 | | **D — PR-only (yorum/etiket düşürme)** | | |
-| 26 | D | Manifest PR comment | — skipped (PR'da çalışır) |
-| 27 | D | Budget status PR comment | — bütçe + pre-commit PR yorumu; job-level PR-only, push'ta tamamen skipped (bütçe kapısı ayrı `budget` job'ında kalır) |
+| 27 | D | Manifest PR comment | — skipped (PR'da çalışır) |
+| 28 | D | Budget status PR comment | — bütçe + pre-commit PR yorumu; job-level PR-only, push'ta tamamen skipped (bütçe kapısı ayrı `budget` job'ında kalır) |
 
-**Artifact listesi (29):**
+**Artifact listesi (30):**
 - `unit-tests` (CIKTI birim test logu — `test_*.py` glob'u)
 - `verify-report` (tek log: K1-K14 + pre-commit bölümü + .sha256)
 - `action-runtimes` (her action'ın runs.using denetimi JSON — node24 kapısı)
@@ -646,6 +647,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 - `changelog-drift` (gen_changelog --check drift logu + rc — advisory, run summary'ye yazılır)
 - `pattern-drift` (merge pattern ↔ ARTIFACT_JOBS tutarlılık denetimi — advisory, run summary'ye yazılır)
 - `preview-reload-smoke` (preview sunucu restart + endpoint smoke testi — advisory, macOS)
+- `a11y-report` (a11y-gate raporu: axe sonuçları + config echo + verdict — fail-closed kapı; blocking/warn/allowlisted/incomplete özeti)
 
 **Not:** Kapı artık `verify_delivery.py --full`'dur (K1-K14, fail-closed) ve yeşildir —
 Beth 1953 / Fosl 1998 gibi referans düzeltmeleri V5h'te yapıldı; Kalan çevrimdışı

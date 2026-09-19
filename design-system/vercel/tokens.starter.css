@@ -1,0 +1,21 @@
+:root {
+  --color-primary: rgb(255, 255, 255);
+  --color-secondary: rgba(0, 0, 0, 0);
+  --font-heading: GeistSans;
+  --font-body: GeistSans;
+  --space-1: 1px;
+  --space-2: 2px;
+  --space-3: 4px;
+  --space-4: 5px;
+  --space-5: 6px;
+  --space-6: 8px;
+  --space-7: 12px;
+  --space-8: 16px;
+  --space-9: 20px;
+  --space-10: 24px;
+  --space-11: 32px;
+  --space-12: 40px;
+  --space-13: 80px;
+  --space-14: 208px;
+  --space-15: 276px;
+}

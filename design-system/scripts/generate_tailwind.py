@@ -25,6 +25,12 @@ HEADER = """/*
  *   @import "tailwindcss";
  *   @import "./design-system/tailwind.css";
  *
+ * NOTE (2026-09-19): this bridge does NOT embed `@import "tailwindcss"`.
+ * A bare specifier inside the bridge resolves from the bridge's own
+ * directory (design-system/) where tailwindcss is NOT installed, and
+ * breaks consumers (observed: Next.js build "Can't resolve 'tailwindcss'").
+ * The CONSUMER imports tailwindcss first, then this bridge.
+ *
  * The :root vars are the same values preview.html already consumes (no
  * extra runtime cost). The @theme block re-exposes them as Tailwind v4
  * theme variables so utilities like `bg-bg`, `text-fg`, `border-border`,
@@ -35,8 +41,6 @@ HEADER = """/*
  * --paper) are kept verbatim so existing var(--surface) references work
  * in both the static dashboard and Tailwind utilities.
  */
-
-@import "tailwindcss";
 """
 
 

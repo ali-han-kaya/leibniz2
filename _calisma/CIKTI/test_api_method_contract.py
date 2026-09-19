@@ -39,7 +39,8 @@ import preview_server as ps  # noqa: E402
 API_CONTRACT = {
     "/api/latest": {"GET"},
     "/api/run": {"GET"},           # SSE — canlı stream (served by serve_sse)
-    "/api/run-now": {"POST"},      # tek POST endpoint (state-changing)
+    "/api/run-now": {"POST"},      # state-changing: verify run tetikler
+    "/api/stop": {"POST"},         # state-changing: daemon'ı durdurur
     "/api/run-stream": {"GET"},    # SSE — satır akışı
     "/api/history": {"GET"},
     "/api/refs-trend": {"GET"},
@@ -59,6 +60,7 @@ SSE_PATHS = {"/api/run", "/api/run-stream"}
 LIVE_URLS = {
     "/api/latest": "/api/latest",
     "/api/run-now": "/api/run-now",
+    "/api/stop": "/api/stop",
     "/api/history": "/api/history",
     "/api/refs-trend": "/api/refs-trend",
     "/api/trend": "/api/trend",
@@ -112,6 +114,7 @@ class TestApiMethodContractSource(unittest.TestCase):
                 "/api/latest": '"latest"',
                 "/api/run": '"sse"',
                 "/api/run-now": '"run_now"',
+                "/api/stop": '"stop"',
                 "/api/run-stream": '"run_stream"',
                 "/api/history": '"history"',
                 "/api/refs-trend": '"refs_trend"',

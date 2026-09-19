@@ -1,0 +1,242 @@
+{
+  "pixels": [
+    {
+      "file": "comp-1-hero.png",
+      "size": "1440x900",
+      "mean_lum": 21.8,
+      "ink_ratio": 0.028,
+      "accent_px_pct": 0.5,
+      "ok_px_pct": 0.08,
+      "dominant": [
+        {
+          "hex": "#0e1116",
+          "pct": 96.3
+        },
+        {
+          "hex": "#e6edf3",
+          "pct": 1.1
+        },
+        {
+          "hex": "#131d1c",
+          "pct": 1.1
+        },
+        {
+          "hex": "#5e6a6f",
+          "pct": 0.6
+        },
+        {
+          "hex": "#5ba6fc",
+          "pct": 0.4
+        }
+      ]
+    },
+    {
+      "file": "comp-2-chain.png",
+      "size": "1440x1117",
+      "mean_lum": 21.0,
+      "ink_ratio": 0.023,
+      "accent_px_pct": 0.03,
+      "ok_px_pct": 0.1,
+      "dominant": [
+        {
+          "hex": "#0e1116",
+          "pct": 96.7
+        },
+        {
+          "hex": "#1c202c",
+          "pct": 0.7
+        },
+        {
+          "hex": "#74918d",
+          "pct": 0.5
+        },
+        {
+          "hex": "#bdc5cd",
+          "pct": 0.5
+        },
+        {
+          "hex": "#e6edf3",
+          "pct": 0.5
+        }
+      ]
+    },
+    {
+      "file": "comp-3-proof.png",
+      "size": "1440x1140",
+      "mean_lum": 33.7,
+      "ink_ratio": 0.082,
+      "accent_px_pct": 0.0,
+      "ok_px_pct": 0.01,
+      "dominant": [
+        {
+          "hex": "#0e1116",
+          "pct": 88.5
+        },
+        {
+          "hex": "#f4efe5",
+          "pct": 4.1
+        },
+        {
+          "hex": "#0d1015",
+          "pct": 3.1
+        },
+        {
+          "hex": "#e1e0dc",
+          "pct": 1.9
+        },
+        {
+          "hex": "#686c71",
+          "pct": 1.2
+        }
+      ]
+    },
+    {
+      "file": "comp-4-cta.png",
+      "size": "1440x900",
+      "mean_lum": 19.9,
+      "ink_ratio": 0.018,
+      "accent_px_pct": 0.49,
+      "ok_px_pct": 0.0,
+      "dominant": [
+        {
+          "hex": "#0e1116",
+          "pct": 98.0
+        },
+        {
+          "hex": "#e6edf3",
+          "pct": 0.7
+        },
+        {
+          "hex": "#58a6ff",
+          "pct": 0.5
+        },
+        {
+          "hex": "#86919e",
+          "pct": 0.2
+        },
+        {
+          "hex": "#292e34",
+          "pct": 0.2
+        }
+      ]
+    }
+  ],
+  "dom": [
+    {
+      "file": "comp-1-hero.html",
+      "h1": {
+        "font": "Georgia",
+        "size": "58px",
+        "weight": "600",
+        "lines": 2
+      },
+      "sub": {
+        "size": "17px",
+        "lh": "28.05px",
+        "color": "rgb(182, 190, 199)",
+        "maxW": 620,
+        "contrast": 10.07
+      },
+      "btn": {
+        "bg": "rgb(88, 166, 255)",
+        "color": "rgb(14, 17, 22)",
+        "radius": "6px",
+        "pad": "14px 26px",
+        "box": {
+          "x": 220,
+          "y": 411,
+          "w": 161,
+          "h": 44
+        },
+        "contrast": 7.49
+      },
+      "sectionPad": "96px/88px",
+      "bodyBg": "rgb(14, 17, 22)",
+      "eyebrow": {
+        "size": "13px",
+        "ls": "1.82px",
+        "color": "rgb(230, 237, 243)"
+      },
+      "counts": {
+        "stages": 0,
+        "plates": 0
+      }
+    },
+    {
+      "file": "comp-2-chain.html",
+      "sub": {
+        "size": "16px",
+        "lh": "25.6px",
+        "color": "rgb(182, 190, 199)",
+        "maxW": 640,
+        "contrast": 10.07
+      },
+      "sectionPad": null,
+      "bodyBg": "rgb(14, 17, 22)",
+      "eyebrow": {
+        "size": "11px",
+        "ls": "2.42px",
+        "color": "rgb(139, 148, 158)"
+      },
+      "counts": {
+        "stages": 4,
+        "plates": 0
+      }
+    },
+    {
+      "file": "comp-3-proof.html",
+      "sub": {
+        "size": "16px",
+        "lh": "25.6px",
+        "color": "rgb(182, 190, 199)",
+        "maxW": 520,
+        "contrast": 10.07
+      },
+      "sectionPad": null,
+      "bodyBg": "rgb(14, 17, 22)",
+      "eyebrow": {
+        "size": "11px",
+        "ls": "2.42px",
+        "color": "rgb(139, 148, 158)"
+      },
+      "counts": {
+        "stages": 0,
+        "plates": 3
+      }
+    },
+    {
+      "file": "comp-4-cta.html",
+      "sub": {
+        "size": "16px",
+        "lh": "25.6px",
+        "color": "rgb(182, 190, 199)",
+        "maxW": 520,
+        "contrast": 10.07
+      },
+      "btn": {
+        "bg": "rgb(88, 166, 255)",
+        "color": "rgb(14, 17, 22)",
+        "radius": "6px",
+        "pad": "14px 26px",
+        "box": {
+          "x": 570,
+          "y": 334,
+          "w": 161,
+          "h": 44
+        },
+        "contrast": 7.49
+      },
+      "sectionPad": "104px/84px",
+      "bodyBg": "rgb(14, 17, 22)",
+      "eyebrow": {
+        "size": "11px",
+        "ls": "2.42px",
+        "color": "rgb(139, 148, 158)"
+      },
+      "counts": {
+        "stages": 0,
+        "plates": 0
+      }
+    }
+  ]
+}

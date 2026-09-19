@@ -52,6 +52,19 @@ python3 _calisma/CIKTI/verify_delivery.py --dir _calisma/CIKTI --symbolic-proof
 Exit kodu: `0` = PASS, `1` = FAIL (fail-closed), `2` = ortam hatası.
 Çevrimiçi referans denetimi: `--check-references` (CrossRef/SEP).
 
+## Fresh checkout bootstrap
+
+Yeni bir clone/worktree'de üç araç-kümesi gitignore'ludur ve tek komutla
+kurulur (her adım idempotent — kurulu araca dokunmaz):
+
+```bash
+bash _calisma/dev_bootstrap.sh           # venv_z3 (pinned) + pptx + dashboard-next
+bash _calisma/dev_bootstrap.sh --check   # fail-closed doğrulama (rc=0/1)
+```
+
+Pinler `docs/HOOK_ENV_MATRIX.md` ile tek-kaynaklıdır; `--check` eksik araçta
+rc=1 ile düşer (fail-closed).
+
 ## _calisma/lean_reduct — Sınır İspatı Çekirdeği (illüstratif, Mathlib-free)
 
 Bu modül Stoa/Hume formalizasyonu **DEĞİLDİR**. İspatlanan: 4 forget
@@ -384,6 +397,40 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-13 | fix | (verify) import status-checks without PyYAML; skip bare-runner | [`7669f2a`](https://github.com/ali-han-kaya/leibniz2/commit/7669f2a) |
 | 2026-09-17 | fix | (verify) tolerate fresh-clone cleanup rm race after PASS | [`8256bcf`](https://github.com/ali-han-kaya/leibniz2/commit/8256bcf) |
 | 2026-09-17 | docs | (review) rebuild compilation after source resync (d69c3c1) | [`f575c87`](https://github.com/ali-han-kaya/leibniz2/commit/f575c87) |
+| 2026-09-17 | docs | (readme) refresh changelog rows after history rewrite | [`619913d`](https://github.com/ali-han-kaya/leibniz2/commit/619913d) |
+| 2026-09-17 | feat | (a11y) keyboard access, landmarks, lang, focus trap | [`a9b5c53`](https://github.com/ali-han-kaya/leibniz2/commit/a9b5c53) |
+| 2026-09-17 | feat | (api) enforce POST-only contract on /api/stop (405+Allow:POST, TDD) | [`e981f1e`](https://github.com/ali-han-kaya/leibniz2/commit/e981f1e) |
+| 2026-09-17 | docs | (spec) add a11y-gate design (browser+axe, threshold gate) | [`a927476`](https://github.com/ali-han-kaya/leibniz2/commit/a927476) |
+| 2026-09-17 | ci | (workflows) add docker-security manual dispatch; fix smoke comment | [`1215e5f`](https://github.com/ali-han-kaya/leibniz2/commit/1215e5f) |
+| 2026-09-17 | other | art(canvas): Incidental Proof plate 01 — deterministic TeXLive render | [`ed60036`](https://github.com/ali-han-kaya/leibniz2/commit/ed60036) |
+| 2026-09-17 | docs | (spec) a11y-gate reader-test pass, add reporting surfaces | [`66721a4`](https://github.com/ali-han-kaya/leibniz2/commit/66721a4) |
+| 2026-09-17 | docs | (how-to) local verification guide (Diataxis how-to quadrant) | [`f24ee15`](https://github.com/ali-han-kaya/leibniz2/commit/f24ee15) |
+| 2026-09-17 | docs | (docx) Final RC Report as Word deliverable (TOC, header, tables) | [`0116050`](https://github.com/ali-han-kaya/leibniz2/commit/0116050) |
+| 2026-09-17 | feat | (ci) a11y-gate — fail-closed axe-core accessibility gate | [`daeff15`](https://github.com/ali-han-kaya/leibniz2/commit/daeff15) |
+| 2026-09-18 | fix | (a11y) serve token sheet in CI gate, repair dark-theme contrast | [`0b83077`](https://github.com/ali-han-kaya/leibniz2/commit/0b83077) |
+| 2026-09-18 | other | design(dashboard): verdict seal + serif verdict voice | [`e22dfad`](https://github.com/ali-han-kaya/leibniz2/commit/e22dfad) |
+| 2026-09-18 | feat | (design) vercel.com design-primitive extraction | [`e787e9a`](https://github.com/ali-han-kaya/leibniz2/commit/e787e9a) |
+| 2026-09-19 | ci | (pre-commit) chain 47→50 — prettier+typecheck+orphan-patch gates | [`07e22aa`](https://github.com/ali-han-kaya/leibniz2/commit/07e22aa) |
+| 2026-09-19 | feat | (apps) dashboard-next, trend-db, landing, mcp, pptx surfaces | [`d1cbfb2`](https://github.com/ali-han-kaya/leibniz2/commit/d1cbfb2) |
+| 2026-09-19 | docs | (session) plan files through 2026-09-19 worktree tour | [`e9cdcb2`](https://github.com/ali-han-kaya/leibniz2/commit/e9cdcb2) |
+| 2026-09-19 | test | (pptx) survive missing node_modules in fresh checkouts | [`d396b8c`](https://github.com/ali-han-kaya/leibniz2/commit/d396b8c) |
+| 2026-09-19 | refactor | (dashboard) composition pass — cva variants + repo-token bond | [`9ce6e32`](https://github.com/ali-han-kaya/leibniz2/commit/9ce6e32) |
+| 2026-09-19 | perf | (dashboard) per-request dedup via React.cache + ternary render | [`b156cb4`](https://github.com/ali-han-kaya/leibniz2/commit/b156cb4) |
+| 2026-09-19 | docs | record zero RN/Expo surface survey findings | [`f0e21fe`](https://github.com/ali-han-kaya/leibniz2/commit/f0e21fe) |
+| 2026-09-19 | feat | (dashboard) client-side navigation via next/link | [`41e1f48`](https://github.com/ali-han-kaya/leibniz2/commit/41e1f48) |
+| 2026-09-19 | docs | verify-chain live audit — fail-closed proven at three points | [`17339eb`](https://github.com/ali-han-kaya/leibniz2/commit/17339eb) |
+| 2026-09-19 | docs | web-design-guidelines review of dashboard-next (13 findings) | [`5779ab0`](https://github.com/ali-han-kaya/leibniz2/commit/5779ab0) |
+| 2026-09-19 | docs | web-design-guidelines review of dashboard-next (13 findings) | [`5779ab0`](https://github.com/ali-han-kaya/leibniz2/commit/5779ab0) |
+| 2026-09-19 | fix | (dashboard) trend page honors its 20-row contract (E2E-caught) | [`d503a45`](https://github.com/ali-han-kaya/leibniz2/commit/d503a45) |
+| 2026-09-19 | docs | workers-best-practices zero-surface audit | [`81a0f82`](https://github.com/ali-han-kaya/leibniz2/commit/81a0f82) |
+| 2026-09-19 | docs | wrangler turn — CLI absent, no commands to govern, install skipped | [`98b5acd`](https://github.com/ali-han-kaya/leibniz2/commit/98b5acd) |
+| 2026-09-19 | docs | (superpowers) dev-bootstrap implementation plan (2 tasks, TDD) | [`e286779`](https://github.com/ali-han-kaya/leibniz2/commit/e286779) |
+| 2026-09-19 | feat | (dev) dev_bootstrap.sh — tek komutla yeşil-batarya | [`ef0b6dc`](https://github.com/ali-han-kaya/leibniz2/commit/ef0b6dc) |
+| 2026-09-19 | docs | dev-bootstrap README quickstart + tur kaydi | [`0d4196e`](https://github.com/ali-han-kaya/leibniz2/commit/0d4196e) |
+| 2026-09-19 | docs | xlsx zero-surface audit | [`11a673b`](https://github.com/ali-han-kaya/leibniz2/commit/11a673b) |
+| 2026-09-19 | fix | (dev) bootstrap pin list as array, shellcheck-clean | [`dd913c8`](https://github.com/ali-han-kaya/leibniz2/commit/dd913c8) |
+| 2026-09-19 | refactor | (dev) bootstrap UNITS table, contract suite, live hint | [`a9717ee`](https://github.com/ali-han-kaya/leibniz2/commit/a9717ee) |
+| 2026-09-19 | refactor | (dev) table-driven contract suite, function-level checks | [`7c589b4`](https://github.com/ali-han-kaya/leibniz2/commit/7c589b4) |
 
 ### Regresyon notları
 

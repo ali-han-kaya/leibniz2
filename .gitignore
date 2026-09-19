@@ -26,3 +26,23 @@ _calisma/.venv_z3
 # Yerel çalışma logları (temiz kopyada üretilir; kanıt raporları docs/ci_simulate/
 # veya git-takipli karşılıklarında yaşar — buradaki kopya kaynak değil)
 logs/
+
+# CI/lab koşumlarında üretilen token mirror kopyası (preview_server
+# /design-system/tokens.css rotası; CI a11y-gate her koşumda taze kopyalar)
+_calisma/CIKTI/design-system-tokens.css
+
+# frontend-design demo derlemesi (build_design_preview.py üretir)
+_calisma/CIKTI/design_preview.html
+
+# Oturum yüzeyleri (2026-09-18): bağımlılıklar ve üretilen artefaktlar kaynak-değil
+_calisma/mcp/.venv/
+_calisma/pptx/node_modules/
+_calisma/pptx/verification_chain.pptx
+apps/trend-db/node_modules/
+apps/trend-db/.env
+apps/trend-db/generated/
+apps/dashboard-next/node_modules/
+apps/dashboard-next/.next/
+
+# isolated worktrees (using-git-worktrees skill)
+.worktrees/

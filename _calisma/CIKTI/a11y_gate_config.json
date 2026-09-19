@@ -1,0 +1,6 @@
+{
+  "blocking": ["critical", "serious"],
+  "warn": ["moderate", "minor"],
+  "incomplete": "report-only",
+  "allowlist": []
+}

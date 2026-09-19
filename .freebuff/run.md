@@ -291,3 +291,8 @@ rm -f $HOME/Library/Logs/com.freebuff/preview-server.log
     The refs check verdicts are network-dependent: `verified/total`
     (e.g. 46/54) and P1s from UNVERIFIED refs vary per run — the
     dashboard reflects the latest completed run honestly.
+    **Stale `preview.html`/`preview.js` is a DIFFERENT seam**: steps 4
+    do NOT touch the preview/ mirror copies (they sync the verify
+    mirror only). Re-run step 5 (`update_preview.sh --bootstrap`) —
+    it rebuilds the token-injected HTML into preview/ in place and
+    the running server picks it up on the next request (no restart).

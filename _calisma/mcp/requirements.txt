@@ -1,0 +1,5 @@
+# leibniz2_mcp — tekrarlanabilir ortam (Python 3.11 venv)
+# mcp<2 pinn: FastMCP yüzeyi (mcp.server.fastmcp) 2.x'te MCPServer'a göç etti;
+# server.py skill-rehberindeki v1 desenini izler (bkz. 2.x migration guide).
+mcp[cli]>=1.10,<2
+pydantic>=2.7,<3

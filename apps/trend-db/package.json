@@ -1,0 +1,20 @@
+{
+  "name": "leibniz2-trend-db",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Dogrulama-zinciri trend gecmisinin Postgres (Neon) katmani — prisma-database-setup skill'i",
+  "scripts": {
+    "load": "tsx scripts/load.ts",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:studio": "prisma studio"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.10.0",
+    "@prisma/client": "^7.10.0",
+    "dotenv": "^18.0.0",
+    "pg": "^8.23.0",
+    "prisma": "^7.10.0",
+    "tsx": "^4.23.13"
+  }
+}

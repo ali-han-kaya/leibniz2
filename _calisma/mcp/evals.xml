@@ -1,0 +1,42 @@
+<evaluation>
+  <qa_pair>
+    <question>Depodaki doğrulama zincirinin en son koşumunun genel verdict'i (PASS/FAIL) nedir? Yalnızca verdict kelimesini yanıtla.</question>
+    <answer>PASS</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Son koşumda kaç tane P0 bulgu var?</question>
+    <answer>0</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Son koşumun deterministik PDF hash'i (stripped_sha256 alanı) nedir? 16 karakterlik onaltılık öneki yanıtla.</question>
+    <answer>74b2cdbdb18fafbf</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Z3 denetimi kaç önermeyi geçti ve toplam kaç önerme vardı? "gecen/total" biçiminde yanıtla (örnek: 11/12).</question>
+    <answer>12/12</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Son 5 koşumun trend kaydında P0 sayısı hiç 1 veya üzerine çıktı mı? "evet" veya "hayır" yanıtla.</question>
+    <answer>hayır</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Koşum kayıtlarında (run history) en yeni koşumun kimliği nedir?</question>
+    <answer>20260918-101530</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>En yeni koşumun stdout çıktısında "OK (skipped=12)" ifadesi geçiyor mu? "evet" veya "hayır" yanıtla.</question>
+    <answer>evet</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Referans-denetim (refs-trend) kayıtlarının en yenisi hangi tarihe ait? YYYY-MM-DD biçiminde yanıtla.</question>
+    <answer>2026-09-13</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>preview_server'ın health ucu bağlı mı ve erişilebilir mi? "bagli" veya "kapali" yanıtla.</question>
+    <answer>bagli</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Son koşumun bütçe kaydı limit altında mı? "evet" veya "hayır" yanıtla.</question>
+    <answer>evet</answer>
+  </qa_pair>
+</evaluation>

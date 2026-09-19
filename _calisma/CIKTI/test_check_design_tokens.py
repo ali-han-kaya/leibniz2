@@ -33,6 +33,8 @@ def _tmp_repo() -> pathlib.Path:
     (td / "design-system" / "scripts").mkdir(parents=True)
     shutil.copy(CSS, td / "design-system" / "tokens.css")
     shutil.copy(REPO / "design-system" / "tokens.json", td / "design-system" / "tokens.json")
+    # the Tailwind bridge is part of the gate's contract-6 (verbatim :root)
+    shutil.copy(REPO / "design-system" / "tailwind.css", td / "design-system" / "tailwind.css")
     shutil.copy(SCRIPT, td / "design-system" / "scripts" / "check_tokens.py")
     shutil.copy(HTML, td / "_calisma" / "CIKTI" / "preview.html")
     return td

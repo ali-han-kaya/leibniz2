@@ -1,0 +1,57 @@
+<!doctype html>
+<!-- comp-4-cta — image-to-code referans kompozisyonu 4/4 (BÖLÜM: CTA+footer)
+     Poster-benzeri istiflenmiş anlatı: sınırlı, ortalanmış kapanış. -->
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>COMP 4 — CTA</title>
+<style>@import "../../../design-system/tokens.css";</style>
+<style>
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg);
+         font:17px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; }
+  .page { max-width:1080px; margin:0 auto; padding:0 40px; }
+  .band { text-align:center; padding:104px 0 84px; }
+  .eyebrow { font:600 11px/1 var(--font-mono); letter-spacing:.22em;
+             color:var(--muted); text-transform:uppercase; }
+  h2 { font-family:var(--font-verdict); font-size:44px; line-height:1.16; font-weight:600;
+       margin:18px auto 14px; max-width:640px; }
+  .sub { color:var(--fg-dimmed); font-size:16px; max-width:520px; margin:0 auto 34px; }
+  .cta-row { display:flex; gap:14px; justify-content:center; }
+  .btn { font:600 14px/1 var(--font-sans); padding:14px 26px; border-radius:6px;
+         border:1px solid transparent; cursor:pointer; }
+  .btn-primary { background:var(--accent); color:var(--on-accent); }
+  .btn-ghost { background:transparent; color:var(--fg); border-color:var(--border); }
+  .note { margin-top:22px; font:500 11px/1.6 var(--font-mono); letter-spacing:.1em;
+          color:var(--muted); }
+  footer { border-top:1px solid var(--border); padding:30px 0 44px;
+           display:flex; justify-content:space-between; align-items:center; }
+  .mark { font:600 12px/1 var(--font-mono); letter-spacing:.14em; }
+  .links { display:flex; gap:26px; }
+  .links a { color:var(--muted); font:500 11px/1 var(--font-mono); letter-spacing:.12em;
+             text-decoration:none; }
+</style>
+</head>
+<body>
+<div class="page">
+  <section class="band">
+    <div class="eyebrow">Kapanış</div>
+    <h2>Kanıt, pano yaşıyorsa canlıdır.</h2>
+    <p class="sub">Panoyu açın; son koşumun verdict'ini, kendi hash'iyle
+      basılmış mührü ve 28 işin akışını görün. Ayrıntılar repoda,
+      zincir tek komutla koşar.</p>
+    <div class="cta-row">
+      <button class="btn btn-primary">Canlı panoyu aç</button>
+      <button class="btn btn-ghost">Depoya git</button>
+    </div>
+    <div class="note">REPO: ali-han-kaya/leibniz2 · ZİNCİR: make verify · PANO: preview_server</div>
+  </section>
+  <footer>
+    <span class="mark">STOIC-HUME V5</span>
+    <span class="links">
+      <a href="#">PANO</a><a href="#">ZİNCİR</a><a href="#">ISPATLAR</a>
+    </span>
+  </footer>
+</div>
+</body>
+</html>

@@ -1,0 +1,108 @@
+<!doctype html>
+<!-- comp-3-proof — image-to-code referans kompozisyonu 3/4 (BÖLÜM: ISPAT)
+     Asimetrik premium akış: solda büyüken open-layout anlatı, sağda
+     archive panosu (dashboard'un .z3-gallery Dil/işaret dilinden) + gerçek
+     deck görselleri (crop YOK — taze bağımsız render'da yeniden çerçeveleme). -->
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>COMP 3 — ISPAT</title>
+<style>@import "../../../design-system/tokens.css";</style>
+<style>
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg);
+         font:17px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; }
+  .page { max-width:1080px; margin:0 auto; padding:0 40px; }
+  .eyebrow { padding-top:88px; font:600 11px/1 var(--font-mono); letter-spacing:.22em;
+             color:var(--muted); text-transform:uppercase; }
+  h2 { font-family:var(--font-verdict); font-size:40px; line-height:1.15; font-weight:600;
+       margin:14px 0 12px; }
+  .lede { color:var(--fg-dimmed); font-size:16px; max-width:520px; margin:0 0 52px; }
+  .proof { display:grid; grid-template-columns:1fr 420px; gap:56px; align-items:start; }
+  .col-item { padding:26px 0; border-top:1px solid var(--border); }
+  .col-item:first-child { border-top:0; padding-top:0; }
+  .col-item h3 { font-family:var(--font-verdict); font-size:24px; font-weight:600;
+                 margin:0 0 10px; }
+  .col-item p { margin:0 0 14px; color:var(--fg-dimmed); font-size:15px; line-height:1.65; }
+  .num { display:block; font:600 11px/1 var(--font-mono); letter-spacing:.18em;
+         color:var(--muted); margin-bottom:10px; }
+  .stat { display:inline-block; margin-right:24px; }
+  .stat b { display:block; font:600 26px/1.1 var(--font-mono); color:var(--fg); }
+  .stat span { display:block; margin-top:4px; font:600 10px/1 var(--font-mono);
+               letter-spacing:.14em; color:var(--muted); }
+  .stat b.ok { color:var(--ok); }
+  /* Archive panosu — dashboard z3-gallery dünyasından */
+  .archive { background:#f4efe5; color:#2b2926; border:1px solid #d6cbb9;
+             border-radius:2px; padding:26px 22px 22px;
+             box-shadow:0 16px 40px rgba(0,0,0,.18), inset 0 0 0 8px #ebe3d4; }
+  .archive::before { content:"Z3 / TWELVE PROPOSITIONS"; display:block;
+             color:#8b7355; font:600 10px/1 "SF Mono",Menlo,monospace;
+             letter-spacing:.2em; text-transform:uppercase; margin-bottom:14px; }
+  .plates { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+  .plate { background:#fffdf8; border:1px solid #d6cbb9; padding:8px 8px 20px;
+           box-shadow:0 5px 12px rgba(65,48,30,.12); }
+  .plate:nth-child(2n) { transform:rotate(.45deg); }
+  .plate:nth-child(3n) { transform:rotate(-.35deg); }
+  .plate img { display:block; width:100%; height:auto; border:1px solid #e2d7c6; }
+  .plate figcaption { font:600 9px/1.4 "SF Mono",Menlo,monospace; letter-spacing:.12em;
+                      color:#7a6144; margin-top:8px; text-align:center; }
+  .archive-note { margin:18px 0 0; font:italic 400 13px/1.5 Georgia,serif; color:#5c4d3c; }
+  .foot { border-top:1px solid var(--border); padding:22px 0 40px; margin-top:64px;
+          font:500 11px/1 var(--font-mono); letter-spacing:.12em; color:var(--muted); }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="eyebrow">İspat ve Kanıt</div>
+  <h2>İddia değil, artefakt.</h2>
+  <p class="lede">Her koşum denetlenebilir çıktı bırakır: ispat plakaları,
+    hash kayıtları ve ci-uzunluğunda açık raporlar. Panoda gördüğünüz her
+    renk, altındaki bir dosyadan okunur.</p>
+
+  <div class="proof">
+    <div>
+      <div class="col-item">
+        <span class="num">01 · DETERMİNİZM</span>          <h3>Aynı girdi, aynı PDF.</h3>
+          <p>Girdi PDF'inin raw SHA-256'sı donmuş kayıtta mühürlenir; normalize
+            edilmiş çıktının hash'i koşumdan koşuma karşılaştırılır. Sapma
+            varsa zincir durur — sessiz kalmaz.</p>
+        <div>
+          <span class="stat"><b>SHA-256</b><span>STRIPPED</span></span>
+          <span class="stat"><b class="ok">0</b><span>AXIOM</span></span>
+        </div>
+      </div>
+      <div class="col-item">
+        <span class="num">02 · A11Y</span>
+        <h3>Fail-closed kapı.</h3>
+        <p>axe-core kapısı raporu artifact olarak arşivler ve engelleyici
+          bulgu varsa koşumu kırar. Panonun kendi koyu teması da bu kapıdan geçti.</p>
+        <div>
+          <span class="stat"><b>AXE-CORE</b><span>ENGELLEYEN 0</span></span>
+        </div>
+      </div>
+      <div class="col-item">
+        <span class="num">03 · KAPSAM</span>
+        <h3>Meta-disiplin.</h3>
+        <p>Kapılar kendi kendini test eder: 80-testlik hedefli tur, token
+          eşleme sözleşmesi ve tip sözlüğü drift kapılarıyla korunur.</p>
+        <div>
+          <span class="stat"><b>80</b><span>META-TEST</span></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="archive">
+      <div class="plates">
+        <figure class="plate"><img src="../../CIKTI/slides_z3/P1-a.png" alt="Z3 ispat plakası 1"><figcaption>PLAKA I</figcaption></figure>
+        <figure class="plate"><img src="../../CIKTI/slides_z3/P2.png" alt="Z3 ispat plakası 2"><figcaption>PLAKA II</figcaption></figure>
+        <figure class="plate"><img src="../../CIKTI/slides_z3/P3-a.png" alt="Z3 ispat plakası 3"><figcaption>PLAKA III</figcaption></figure>
+      </div>
+      <p class="archive-note">İspat plakaları arşiv panosunda, kendi geometrisiyle yaşar —
+        kesit değil, taze render.</p>
+    </div>
+  </div>
+
+  <div class="foot">PANODAKİ HER RENK BİR DOSYADAN OKUNUR</div>
+</div>
+</body>
+</html>

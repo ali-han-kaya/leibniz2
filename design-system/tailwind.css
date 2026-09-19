@@ -10,6 +10,12 @@
  *   @import "tailwindcss";
  *   @import "./design-system/tailwind.css";
  *
+ * NOTE (2026-09-19): this bridge does NOT embed `@import "tailwindcss"`.
+ * A bare specifier inside the bridge resolves from the bridge's own
+ * directory (design-system/) where tailwindcss is NOT installed, and
+ * breaks consumers (observed: Next.js build "Can't resolve 'tailwindcss'").
+ * The CONSUMER imports tailwindcss first, then this bridge.
+ *
  * The :root vars are the same values preview.html already consumes (no
  * extra runtime cost). The @theme block re-exposes them as Tailwind v4
  * theme variables so utilities like `bg-bg`, `text-fg`, `border-border`,
@@ -21,23 +27,22 @@
  * in both the static dashboard and Tailwind utilities.
  */
 
-@import "tailwindcss";
-
 :root {
   /* ── color ── */
   --bg: #0e1116;
   --fg: #e6edf3;
   --muted: #8b949e;
+  --fg-dimmed: #b6bec7;      /* AA 4.5:1 bg üzerinde — inline #555/#888/#999 yerine (WCAG 1.4.3) */
   --accent: #58a6ff;
   --ok: #3fb950;
   --warn: #d29922;
-  --err: #f85149;
+  --err: #ff7b72;              /* on-tint 5.78:1 (eski #f85149 4.35 fail — WCAG 1.4.3) */
   --border: #30363d;
   --budget: #bc8cff;
 
   --surface-1: #161b22;        /* cards, code, pre, th */
   --surface-2: #21262d;        /* buttons, z3 bar track */
-  --on-accent: #fff;
+  --on-accent: #0e1116;        /* accent #58a6ff uzerinde 7.49:1 (beyaz 2.52 fail) */
 
   /* legacy aliases — preview.html still references these names verbatim */
   --surface: #161b22;
@@ -66,6 +71,7 @@
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI",
                Helvetica, Arial, sans-serif;
   --font-mono: "SF Mono", Menlo, Consolas, monospace;
+  --font-verdict: Georgia, "Iowan Old Style", "Times New Roman", serif; /* karar/hüküm sesi — açık-tema kimliğinden */
 
   --text-2xs: 10px;
   --text-xs: 11px;
@@ -135,6 +141,7 @@
   --bg: #f3efe7;
   --fg: #292722;
   --muted: #70695f;
+  --fg-dimmed: #56504a;      /* light: #f3efe7 bg üzerinde AA 4.5:1+ */
   --accent: #8b5e2b;
   --ok: #287a3d;
   --warn: #996b08;
@@ -151,6 +158,8 @@
   /* keep surface-1/2 in sync with legacy aliases for token consumers */
   --surface-1: #fffdf8;
   --surface-2: #e9e1d3;
+  /* accent #8b5e2b üzerinde 5.53:1 (WCAG 1.4.3 — global button fg) */
+  --on-accent: #fffdf8;
 }
 
 @theme {

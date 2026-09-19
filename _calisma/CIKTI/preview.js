@@ -147,6 +147,8 @@ function toggleBudgetOverDetail() {
   const open = det.style.display !== "none";
   det.style.display = open ? "none" : "block";
   if (caret) caret.textContent = open ? "▸" : "▾";
+  const banner = $("budget-over-banner");
+  if (banner) banner.setAttribute("aria-expanded", String(!open));
 }
 function updateBudgetOverBanner() {
   const el = $("budget-over-banner");
@@ -184,6 +186,32 @@ function updateBudgetOverBanner() {
   }
   const caret = $("budget-over-caret");
   if (caret) caret.textContent = "▸";
+}
+
+// ── Verdict seal (noter mührü) — imza öğesi ──
+// Halkadaki dairesel metin koşumun deterministik PDF hash'idir (süs değil,
+// mühür). Veri tamamen sunucudan gelir; hash yoksa mühür basılmaz
+// (fail-silent — sahte mühür yok). Damga animasyonu CSS'te: hidden→gösterim
+// anında bir kez oynar; prefers-reduced-motion genel bloğu onu nötrler.
+function sealHashFromSnapshot(d) {
+  const snap = d && d.pdf_hash;
+  return (snap && typeof snap.stripped === "string" && snap.stripped) ||
+         (typeof d.stripped_sha256 === "string" && d.stripped_sha256) || "";
+}
+
+function renderVerdictSeal(d) {
+  const seal = $("verdict-seal");
+  if (!seal) return;
+  const hash = sealHashFromSnapshot(d);
+  if (!hash) { seal.hidden = true; return; }
+  const ok = (d.verdict || "").toUpperCase() === "PASS";
+  seal.hidden = false;
+  seal.classList.toggle("seal-pass", ok);
+  seal.classList.toggle("seal-fail", !ok);
+  const tp = seal.querySelector("textPath");
+  if (tp) tp.textContent = "VERIFIED • " + hash.slice(0, 12).toUpperCase() + " •";
+  const stamp = seal.querySelector(".seal-hash");
+  if (stamp) stamp.textContent = hash.slice(0, 6).toUpperCase() + "…";
 }
 
 function renderTrend(rows) {
@@ -1594,11 +1622,14 @@ function applySnapshotInner(d) {
     if (trendCache.length) renderTrend(trendCache);
   }
 
-  // Status board: CI consolidate_summary.py ile aynı 5 ikonlu tek satır
+  // Status board: CI consolidate_summary.py ile ayni 5 ikonlu tek satir
   if (d.status_board) {
     $("status-board").textContent = d.status_board;
-    $("status-board").style.color = d.status_board.includes("🔴") ? "#c0392b" : "#27ae60";
+    $("status-board").style.color = ""; // renk CSS sinifina devredildi (token tek kaynagi)
+    $("status-board").classList.toggle("board-pass", !d.status_board.includes("\uD83D\uDD34"));
+    $("status-board").classList.toggle("board-fail", d.status_board.includes("\uD83D\uDD34"));
   }
+  renderVerdictSeal(d);
 
   // Pre-commit hooks panel: PRECOMMIT_RAPORU.json'dan okunan hook durumları
   const hooksEl = $("precommit-hooks");
@@ -1617,7 +1648,7 @@ function applySnapshotInner(d) {
   if (k15El) {
     if (d.history_sidecar_sha256) {
       const h = d.history_sidecar_sha256;
-      k15El.innerHTML = `<span style="color:var(--ok)">🔒</span> K15 sidecar: <code style="font-size:10px;color:#666">${h.substring(0, 16)}…</code>`;
+      k15El.innerHTML = `<span style="color:var(--ok)">🔒</span> K15 sidecar: <code style="font-size:10px;color:var(--muted)">${h.substring(0, 16)}…</code>`;
     } else {
       k15El.innerHTML = "<span style='color:var(--muted)'>⏳ K15 sidecar bekleniyor…</span>";
     }
@@ -1908,7 +1939,8 @@ function loadRunHistory(fromSSE = false) {
         `<span class=\"muted\">P0=${r.p0||0} P1=${r.p1||0} refs=${refs} ${pg}p ${bud} ${dur}</span>` +
         ` ${lean}${overBadge}${srcEl}`;
       const tsAttr = r.ts ? r.ts.replace(/'/g, "\'").replace(/"/g, "&quot;") : "";
-      return `<div class="rh-row" data-ts="${tsAttr}" onclick="loadRunStdout('${tsAttr}')" ` +
+      return `<div class="rh-row" role="button" tabindex="0" data-ts="${tsAttr}" onclick="loadRunStdout('${tsAttr}')" ` +
+        `onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();loadRunStdout('${tsAttr}')}" ` +
         `title="Tıklayınca bu run'un stdout'u yüklenir">${text}</div>`;
     });
     el.innerHTML = lines.join("\n");
@@ -1997,6 +2029,22 @@ connect();
   function close() { box.hidden = true; root.querySelector('button')?.focus(); }
   root.querySelectorAll('.z3-slide').forEach((button, i) => {
     button.addEventListener('click', () => open(i));
+  });
+  // Lightbox açıldığında Tab diyalogda kalır (WCAG 2.4.3): odak bir turda
+  // kapat/önceki/sonraki butonları arasında döner, diyalog dışına sızmaz.
+  box.addEventListener('keydown', e => {
+    if (e.key !== 'Tab' || box.hidden) return;
+    const focusables = [document.getElementById('z3-prev'),
+                        document.getElementById('z3-next'),
+                        document.getElementById('z3-close')]
+      .filter(el => el && el.offsetParent !== null);
+    if (!focusables.length) return;
+    const first = focusables[0], last = focusables[focusables.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault(); last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault(); first.focus();
+    }
   });
   document.getElementById('z3-prev').addEventListener('click', () => show(index - 1));
   document.getElementById('z3-next').addEventListener('click', () => show(index + 1));

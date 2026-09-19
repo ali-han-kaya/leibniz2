@@ -1,0 +1,9 @@
+{
+  "name": "leibniz2-pptx-export",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PNG deck'leri gerçek .pptx'e çeviren jeneratörler (skill: pptx / pptxgenjs)",
+  "dependencies": {
+    "pptxgenjs": "^4.0.1"
+  }
+}
