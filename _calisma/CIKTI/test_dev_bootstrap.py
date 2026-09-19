@@ -1,15 +1,18 @@
 """test_dev_bootstrap.py — dev_bootstrap.sh sözleşme-testleri (stdlib-only).
 
-Kapsam: varlık+çalıştırılabilirlik (kırmızı-faz: script yokken fail),
---check exit-kontratı (fail-closed), --help rc=0, idempotence, pin-paritesi.
+Kapsam: --check exit-kontratı (fail-closed), --help rc=0, arg-kontratı
+(rc=2), idempotence, pin-paritesi.
 Çalıştırma: venv_z3 python ile (battery listesine girer).
+
+Ortam-guard: venv/node_modules yoksa ortama-bağlı testler SKIP eder —
+CI'nın venv'siz `unittest discover` koşumunda süit kırmızıya düşmez
+(2026-09-19 adversarial-tur düzeltmesi).
 
 Not: fail-closed testi gerçek .venv_z3'ü geçici-adla gizler; finally bloğu
 her durumda geri koyar. Test venv'in kendi yorumlayıcısı altında koştuğu
 için rename çalışan süreci bozmaz (açık dosya-tutamaçları inode-bağlıdır).
 """
 import os
-import stat
 import subprocess
 import unittest
 
@@ -26,18 +29,10 @@ def _run(args, **kw):
     return subprocess.run(args, capture_output=True, text=True, **kw)
 
 
-class TestScriptExists(unittest.TestCase):
-    def test_script_exists_and_executable(self):
-        self.assertTrue(os.path.isfile(SCRIPT), "dev_bootstrap.sh henüz yok")
-        mode = os.stat(SCRIPT).st_mode if os.path.isfile(SCRIPT) else 0
-        self.assertTrue(mode & stat.S_IXUSR, "dev_bootstrap.sh çalıştırılabilir değil")
-
-
-@unittest.skipUnless(
-    os.path.isfile(SCRIPT), "dev_bootstrap.sh henüz yok (TDD kırmızı-fazı)"
-)
 class TestCheckContract(unittest.TestCase):
     def test_check_passes_on_provisioned_checkout(self):
+        if not os.path.isdir(VENV):
+            self.skipTest("araç-kümesi eksik — provisioned-ortam testi tam-kurulumda koşar")
         r = _run(["bash", SCRIPT, "--check"])
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
@@ -54,9 +49,25 @@ class TestCheckContract(unittest.TestCase):
                 os.rename(hidden, VENV)
 
 
-@unittest.skipUnless(
-    os.path.isfile(SCRIPT), "dev_bootstrap.sh henüz yok (TDD kırmızı-fazı)"
-)
+class TestArgContract(unittest.TestCase):
+    """Arg-kontratı: bilinmeyen/ekstra bayrak rc=2; "" no-args'la-özdeş."""
+
+    def test_bad_usage_exits_two(self):
+        for argv in (["--version"], ["--check", "extra"]):
+            r = _run(["bash", SCRIPT, *argv])
+            self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+            self.assertIn("--check", r.stderr)
+
+    def test_empty_string_arg_is_install_not_error(self):
+        """${1:-} sözleşmesi: "" bayrağısız-koşumla-özdeş (kurulum-yolu)."""
+        check = _run(["bash", SCRIPT, "--check"])
+        if check.returncode != 0:
+            self.skipTest("araç-kümesi eksik")
+        r = _run(["bash", SCRIPT, ""])
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("BOOTSTRAP OK", r.stdout)
+
+
 class TestHelpAndIdempotence(unittest.TestCase):
     def test_help_exits_zero(self):
         r = _run(["bash", SCRIPT, "--help"])

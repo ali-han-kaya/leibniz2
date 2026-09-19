@@ -1,13 +1,15 @@
 #!/bin/bash
 # dev_bootstrap.sh — fresh-checkout'u yeşil-bataryaya taşıyan tek komut.
-# Kapsam: _calisma/.venv_z3 (pinned) + _calisma/pptx/node_modules +
-# apps/dashboard-next/node_modules. Idempotent: kurulu araca dokunmaz.
+# Kapsam: UNITS'teki araç-kümeleri — venv_z3 (pinned) + _calisma/pptx +
+# apps/dashboard-next node_modules. Idempotent: kurulu araca dokunmaz.
 # Kullanım: dev_bootstrap.sh [--check|--help]
 set -eu
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 VENV="$ROOT/_calisma/.venv_z3"
 VENV_PY="$VENV/bin/python"
+PPTX="$ROOT/_calisma/pptx"
+DASH="$ROOT/apps/dashboard-next"
 PINS=(z3-solver==5.1.0.0 PyYAML==6.0.3 pre_commit==4.3.0)
 
 say() { printf '%s\n' "$*"; }
@@ -20,18 +22,35 @@ usage() {
   say "  --help      bu yardım"
 }
 
+# Yeni araç-kümesi = bir check_ + bir provision_ + UNITS'e bir giriş.
 node_modules_ok() {
   [ -d "$1/node_modules" ] && [ -f "$1/package.json" ]
 }
 
-venv_ok() {
+check_venv_z3() {
   [ -x "$VENV_PY" ] || return 1
-  local frozen
-  frozen="$("$VENV_PY" -m pip freeze 2>/dev/null)" || return 1
-  printf '%s\n' "$frozen" | grep -qx 'z3-solver==5.1.0.0' || return 1
-  printf '%s\n' "$frozen" | grep -qx 'PyYAML==6.0.3' || return 1
-  printf '%s\n' "$frozen" | grep -qx 'pre_commit==4.3.0' || return 1
+  local frozen pin
+  frozen="$($VENV_PY -m pip freeze 2>/dev/null)" || return 1
+  for pin in "${PINS[@]}"; do
+    printf '%s\n' "$frozen" | grep -qx "$pin" || return 1
+  done
 }
+provision_venv_z3() {
+  say "venv_z3: kuruluyor (pinned: ${PINS[*]})"
+  python3 -m venv "$VENV" || die "venv olusturma"
+  "$VENV_PY" -m pip install --quiet "${PINS[@]}" || die "venv_z3 pip install"
+}
+check_pptx() { node_modules_ok "$PPTX"; }
+provision_pptx() {
+  say "_calisma/pptx: npm ci"
+  npm ci --prefix "$PPTX" || die "_calisma/pptx npm ci"
+}
+check_dashboard_next() { node_modules_ok "$DASH"; }
+provision_dashboard_next() {
+  say "apps/dashboard-next: npm ci"
+  npm ci --prefix "$DASH" || die "apps/dashboard-next npm ci"
+}
+UNITS=(venv_z3 pptx dashboard_next)
 
 case "${1:-}" in
   --help)
@@ -39,9 +58,10 @@ case "${1:-}" in
     exit 0
     ;;
   --check)
-    venv_ok || { say "CHECK FAIL: venv_z3 eksik veya pin-paritesiz"; exit 1; }
-    node_modules_ok "$ROOT/_calisma/pptx" || { say "CHECK FAIL: _calisma/pptx/node_modules eksik"; exit 1; }
-    node_modules_ok "$ROOT/apps/dashboard-next" || { say "CHECK FAIL: apps/dashboard-next/node_modules eksik"; exit 1; }
+    [ "$#" -eq 1 ] || { usage >&2; exit 2; }
+    for u in "${UNITS[@]}"; do
+      "check_$u" || { say "CHECK FAIL: $u eksik veya paritesiz (kurulum: bash '$ROOT/_calisma/dev_bootstrap.sh')"; exit 1; }
+    done
     say "CHECK OK"
     exit 0
     ;;
@@ -52,27 +72,12 @@ case "${1:-}" in
     ;;
 esac
 
-if venv_ok; then
-  say "venv_z3: up to date"
-else
-  say "venv_z3: kuruluyor (pinned: ${PINS[*]})"
-  python3 -m venv "$VENV"
-  "$VENV_PY" -m pip install --quiet --upgrade pip
-  "$VENV_PY" -m pip install --quiet "${PINS[@]}" || die "venv_z3 pip install"
-fi
-
-if node_modules_ok "$ROOT/_calisma/pptx"; then
-  say "_calisma/pptx: up to date"
-else
-  say "_calisma/pptx: npm ci"
-  npm ci --prefix "$ROOT/_calisma/pptx" || die "_calisma/pptx npm ci"
-fi
-
-if node_modules_ok "$ROOT/apps/dashboard-next"; then
-  say "apps/dashboard-next: up to date"
-else
-  say "apps/dashboard-next: npm ci"
-  npm ci --prefix "$ROOT/apps/dashboard-next" || die "apps/dashboard-next npm ci"
-fi
+for u in "${UNITS[@]}"; do
+  if "check_$u"; then
+    say "$u: up to date"
+  else
+    "provision_$u"
+  fi
+done
 
 say "BOOTSTRAP OK"
