@@ -411,6 +411,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-19 | fix | (dashboard) trend page honors its 20-row contract (E2E-caught) | [`d503a45`](https://github.com/ali-han-kaya/leibniz2/commit/d503a45) |
 | 2026-09-19 | docs | workers-best-practices zero-surface audit | [`81a0f82`](https://github.com/ali-han-kaya/leibniz2/commit/81a0f82) |
 | 2026-09-19 | docs | wrangler turn — CLI absent, no commands to govern, install skipped | [`98b5acd`](https://github.com/ali-han-kaya/leibniz2/commit/98b5acd) |
+| 2026-09-19 | docs | (superpowers) dev-bootstrap implementation plan (2 tasks, TDD) | [`e286779`](https://github.com/ali-han-kaya/leibniz2/commit/e286779) |
 
 ### Regresyon notları
 

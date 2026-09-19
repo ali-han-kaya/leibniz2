@@ -227,7 +227,8 @@ HOOK_COVERAGE = {
         "test_security_headers.py",
         "test_pptx_export.py",
         "test_trend_db_contract.py",
-        "test_check_precommit_orphans.py",],
+        "test_check_precommit_orphans.py",
+        "test_dev_bootstrap.py",],
 }
 
 # verify.yml CI job'ları → kapsadığı test dosyaları
