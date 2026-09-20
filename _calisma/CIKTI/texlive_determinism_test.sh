@@ -56,6 +56,19 @@ SDE="${SOURCE_DATE_EPOCH:-0}"
 export SOURCE_DATE_EPOCH="$SDE"
 printf 'pdflatex=%s\ntectonic=%s\nsource_date_epoch=%s\n' "$PDFlatex" "$TECTONIC" "$SDE" >> "$OUT"
 
+# ── Geçiş modu (Faz 0/2 sözleşmesi: docs/TEXLIVE_MIGRATION_PLAN.md) ─────
+# DETERMINISM_PASSES=N: her koşum tam N pdflatex geçişi koşar (çapraz ref/
+# bib çözümü ancak çok geçişte tamamlanır) ve son geçiş logunda 'Rerun to
+# get' KALMADIĞI fail-closed denetlenir — K6 hizalama iddiası ancak o zaman
+# yapılır. Default 1: mevcut tek-geçiş trend/hook sözleşmesi Faz 4'e dek
+# korunur; Makefile.texlive target'ları PASSES=3 ile bu modu sürer.
+PASSES="${DETERMINISM_PASSES:-1}"
+case "$PASSES" in ''|*[!0-9]*|0)
+  echo "FAIL: DETERMINISM_PASSES pozitif tam sayı olmalı: $PASSES" >&2
+  exit 2 ;;
+esac
+printf 'passes=%s\n' "$PASSES" >> "$OUT"
+
 mkdir -p "$tmp/tectonic" "$tmp/texlive1" "$tmp/texlive2"
 # GÜVENLİK: tectonic/pdflatex'e explicit çıktı dizini verilir — gerçek
 # araçlar aksi halde PDF'i KAYNAK yanına yazar ve teslim paketindeki
@@ -77,15 +90,49 @@ if [[ ! -f "$tmp/tectonic/$pdf_name" ]]; then
 fi
 printf 'tectonic_sha256=%s\n' "$(run_hash "$tmp/tectonic/$pdf_name")" >> "$OUT"
 
+run_idx=0
 for dir in texlive1 texlive2; do
+  run_idx=$((run_idx + 1))
   (
     cd "$tmp/$dir"
     export TEXMFOUTPUT="$PWD"
     export TEXINPUTS="$TEXDIR//:"
-    "$PDFlatex" -interaction=nonstopmode -halt-on-error \
-      -output-directory="$PWD" "$TEX" >/dev/null
+    export TEXLIVE_RUN_INDEX="$run_idx" TEXLIVE_PASSES="$PASSES"
+    i=0
+    while [ "$i" -lt "$PASSES" ]; do
+      i=$((i + 1))
+      export TEXLIVE_PASS_INDEX="$i"
+      "$PDFlatex" -interaction=nonstopmode -halt-on-error \
+        -output-directory="$PWD" "$TEX" >/dev/null
+    done
   )
 done
+
+# ── Rerun denetimi (yalnız çok-geçiş modunda; Faz 0) ────────────────────
+# Hizalama iddiası: son geçiş logunda 'Rerun to get' YOK. Tek-geçiş modu bu
+# denetimi yapmaz (hizalama iddiası üretmez); log yoksa da fail-closed —
+# kanıt üretilemedi, hizalama kanıtlanamaz.
+if [ "$PASSES" -gt 1 ]; then
+  tex_base="$(basename "${TEX%.tex}")"
+  run_idx=0
+  for dir in texlive1 texlive2; do
+    run_idx=$((run_idx + 1))
+    logf="$tmp/$dir/$tex_base.log"
+    if [[ ! -f "$logf" ]]; then
+      printf 'texlive_run%s_rerun_left=unknown\n' "$run_idx" >> "$OUT"
+      printf 'residual=unverifiable (run%s son-geçiş logu yok — hizalama kanıtlanamadı)\nverdict=FAIL\n' "$run_idx" >> "$OUT"
+      exit 1
+    fi
+    rerun="$(grep -c 'Rerun to get' "$logf" || true)"
+    if [ -z "$rerun" ]; then rerun=0; fi
+    printf 'texlive_run%s_rerun_left=%s\n' "$run_idx" "$rerun" >> "$OUT"
+    if [ "$rerun" -gt 0 ]; then
+      printf 'residual=unconverged (run%s son geçiş logunda Rerun=%s — K6 hizalama iddiası üretilemez)\nverdict=FAIL\n' "$run_idx" "$rerun" >> "$OUT"
+      exit 1
+    fi
+  done
+fi
+
 P1="$tmp/texlive1/$pdf_name"
 P2="$tmp/texlive2/$pdf_name"
 h1="$(run_hash "$P1")"

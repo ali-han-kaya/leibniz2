@@ -68,6 +68,7 @@ test_gen_publish_artifact_list.py
 test_gen_repro_manifest_e2e.py
 test_github_scripts.py
 test_history_sources.py
+test_id_residual_acceptance_doc.py
 test_incremental_doc_sync.py
 test_k13_coverage_sync.py
 test_k9_lean_files_sync.py
@@ -80,6 +81,7 @@ test_lineage_schema.py
 test_lineage_sidecar_guarantee.py
 test_m0_k12_sidecar_sync.py
 test_m0_k_table_sync.py
+test_makefile_texlive.py
 test_mirror_check.py
 test_mirror_panel.py
 test_orchestrate_k_dag.py

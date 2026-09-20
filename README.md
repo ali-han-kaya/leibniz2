@@ -432,6 +432,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-19 | refactor | (dev) bootstrap UNITS table, contract suite, live hint | [`a9717ee`](https://github.com/ali-han-kaya/leibniz2/commit/a9717ee) |
 | 2026-09-19 | refactor | (dev) table-driven contract suite, function-level checks | [`7c589b4`](https://github.com/ali-han-kaya/leibniz2/commit/7c589b4) |
 | 2026-09-19 | fix | (ci) a11y scan bypasses nonce CSP, bootstrap test guards, dead hash | [`5c02474`](https://github.com/ali-han-kaya/leibniz2/commit/5c02474) |
+| 2026-09-20 | fix | (server) close history/sidecar write race on shutdown | [`3cabbff`](https://github.com/ali-han-kaya/leibniz2/commit/3cabbff) |
 
 ### Regresyon notları
 
