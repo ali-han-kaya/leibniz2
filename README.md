@@ -65,6 +65,28 @@ bash _calisma/dev_bootstrap.sh --check   # fail-closed doğrulama (rc=0/1)
 Pinler `docs/HOOK_ENV_MATRIX.md` ile tek-kaynaklıdır; `--check` eksik araçta
 rc=1 ile düşer (fail-closed).
 
+## PDF üretimi — iki motor paralel yaşam (tectonic ↔ TeXLive)
+
+Deterministik PDF üretimi iki Makefile ile yapılır; motor geçişi
+devam ederken ikisi de yaşar (TEXLIVE_MIGRATION_PLAN.md):
+
+```bash
+# TeXLive (pdfTeX) — göç hedefi; Faz 1 kabul kanıtı: kanonik hash 544516b0…
+make -f docs/Makefile.texlive pdf       # 3-geçişli derleme + Rerun=0 denetimi
+make -f docs/Makefile.texlive check     # 2×3-geçiş determinism deneyi (fail-closed)
+make -f docs/Makefile.texlive accept    # kanonik hash'i ID_RESIDUAL_ACCEPTANCE defterinde doğrular
+make -f docs/Makefile.texlive engineinfo  # motor kilidi + sözleşme sabitleri (CI log'u için)
+
+# tectonic — paralel yaşam, geri dönüş yolu
+make -f docs/Makefile.tectonic pdf
+```
+
+Sözleşme: `SOURCE_DATE_EPOCH ?= git log -1 --format=%ct` (geçmiş commit'i
+yeniden üretme), `TEXINPUTS="$TEXDIR//:"`, `TEXMFOUTPUT`/`-output-directory`
+BUILD_DIR'a (kaynak dizinine asla yazma), `PASSES ?= 3` + son-geçiş
+`Rerun to get`=0 (fail-closed). Motor sürüm kilidi: pdfTeX
+3.141592653-2.6 (TeX Live 2026) — `engineinfo` ile kanıtlanır.
+
 ## _calisma/lean_reduct — Sınır İspatı Çekirdeği (illüstratif, Mathlib-free)
 
 Bu modül Stoa/Hume formalizasyonu **DEĞİLDİR**. İspatlanan: 4 forget
@@ -433,6 +455,11 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-19 | refactor | (dev) table-driven contract suite, function-level checks | [`7c589b4`](https://github.com/ali-han-kaya/leibniz2/commit/7c589b4) |
 | 2026-09-19 | fix | (ci) a11y scan bypasses nonce CSP, bootstrap test guards, dead hash | [`5c02474`](https://github.com/ali-han-kaya/leibniz2/commit/5c02474) |
 | 2026-09-20 | fix | (server) close history/sidecar write race on shutdown | [`3cabbff`](https://github.com/ali-han-kaya/leibniz2/commit/3cabbff) |
+| 2026-09-20 | feat | (texlive) 3-pass determinism + /ID acceptance report (Faz 1-3) | [`24a9b25`](https://github.com/ali-han-kaya/leibniz2/commit/24a9b25) |
+| 2026-09-20 | fix | (ci) check-unit-tests hook goes fail-closed on sync drift | [`5280500`](https://github.com/ali-han-kaya/leibniz2/commit/5280500) |
+| 2026-09-20 | fix | (docker) build-context parity, CVE pins, live smoke evidence | [`cfa33d9`](https://github.com/ali-han-kaya/leibniz2/commit/cfa33d9) |
+| 2026-09-20 | feat | (ci) docker security surface — cron smoke + patching hook | [`9c6e1b3`](https://github.com/ali-han-kaya/leibniz2/commit/9c6e1b3) |
+| 2026-09-20 | feat | (docker) pip patching layer joins the ARG mechanism | [`9b32376`](https://github.com/ali-han-kaya/leibniz2/commit/9b32376) |
 
 ### Regresyon notları
 

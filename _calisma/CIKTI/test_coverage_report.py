@@ -230,7 +230,8 @@ HOOK_COVERAGE = {
         "test_check_precommit_orphans.py",
         "test_dev_bootstrap.py",
         "test_id_residual_acceptance_doc.py",
-        "test_makefile_texlive.py",],
+        "test_makefile_texlive.py",
+        "test_gated_schedules.py",],
 }
 
 # verify.yml CI job'ları → kapsadığı test dosyaları
