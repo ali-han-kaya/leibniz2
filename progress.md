@@ -1,43 +1,103 @@
 # Progress Log
 
-## Session 2026-08-30 (planning-with-files init)
+## Session 2026-09-18 — multi-skill marathon (16 skill turu)
 
-- Ran session-catchup: no prior planning files; fresh start.
-- Collected current state: git log (HEAD 26d7201), PR #42 checks (K1-K19 FAIL,
-  CI-SIMULATE FAIL advisory, doc-sync audit FAIL advisory, K9 Lean PASS).
-- Wrote task_plan.md (3 phases), findings.md (CI state, unit-test categories,
-  performance audit results, Lean verification results).
-- No code changes this session yet.
+- Surfaces completed (all verified; recovery note below): landing page
+  (a11y-gate PASS), leibniz2_mcp read-only MCP server (stdio smoke E2E),
+  security headers + CSP nonce (contract tests), CLS fix 0.325→0.0005,
+  load_history mtime+size cache (do_GET −63%, 5 coherence tests),
+  test-isolation repairs via shuffle-audit (seeds 42/7/13 green),
+  pptx pilot export (skill validate PASSED), trend-db Prisma-7 skeleton
+  (42-col TrendRun incl. refsBySource; validate/generate PASS credential-free;
+  drift-guard test), reproducible-PDF re-audit (verify PASS, repack reuse
+  byte-identical in /tmp copy), security review (0 high-confidence,
+  VERIFY-001 CSP-hover), ruflo/rust/remotion/requesting-code-review/
+  receiving-code-review/release-candidate-check tours (findings only).
+- Pre-commit tour (setup-pre-commit, user-approved adaptation): existing
+  47-hook chain KEPT (Husky rejected — would seize core.hooksPath and bypass
+  the chain); added local read-only fail-closed hooks 48/49:
+  check-prettier-format (staged js/ts/tsx/json; --check; prettier-missing →
+  SKIP) and check-dashboard-typecheck (tsc --noEmit; env-missing → SKIP).
+  prettier@3.6.2 added to dashboard-next devDeps; .prettierrc (skill
+  defaults) at repo root; JS/TS/JSON session surfaces normalized (dashboard,
+  trend-db loader+config, pptx generator, package files); tsc baseline green;
+  both gates proven live (OK / framework-FAIL / SKIP paths); config validated;
+  .pre-commit-config.yaml + check_unit_tests.list STAGED (battery runs
+  against staged state; staging is part of the gate contract, commit is user's).
+- INCIDENT (recovery): out-of-session action reverted all tracked-file
+  modifications to HEAD mid-tour (signature: only tracked files hit,
+  untracked + staged intact; HEAD unchanged). Recovered selectively from
+  /tmp/repack_reuse/calisma snapshot (taken post-session during reproducible-
+  pdf tour): 6 files copied back, .gitignore entries re-applied, plan files
+  re-written. Direct test runs 14/14 OK in touched modules. Full details in
+  task_plan.md RECOVERY NOTE + findings.md. Battery "2 failed" during
+  recovery was a staging-state artifact, not a regression.
+- shadcn-ui tour: REAL DEFECT fixed — dashboard-next used Tailwind utility
+  classes with no Tailwind (build CSS 279 B, zero utilities); Tailwind v4
+  installed, postcss wired, build CSS now 9 KB with all consumed utilities.
+  shadcn init (non-interactive -d, base-nova/Base-UI) produced components.json
+  + button + cn() utils; init's :root hex-overwrite side-effect caught and
+  reverted (app tokens preserved, shadcn namespace separate); first consumer
+  wired (buttonVariants ghost links); live smoke 200 + classes in HTML;
+  all gates green; battery 138 PASS. Note: tracked apps/dashboard-shadcn
+  misnomer — semantic CSS, not shadcn.
+- Blocked-on-user: commit authorization (recovered tree is fragile while
+  uncommitted — commit ASAP), reviewer dispatch (codex quota resets Sep 22
+  07:42 / claude login / ruflo API key), VERIFY-001 fix, Aday-1 grilling.
 
 ## Session 2026-09-04 — CI triage of PR #42 (head b82b412)
-- Recon: PR #42 open, MERGEABLE; PR head `b82b412`, local `e30f8ea` unpushed (1 ahead).
-- Fetched logs for run `33548764812` (latest verify-delivery, head = PR head; cached at
-  /tmp/pr42-k1-k19-run64812.log + /tmp/pr42-ci-sim-artifact) and the Live-doc-sync job
-  (99994102110) + its `audit-live-ci` artifact.
-- Root causes pinned (see findings.md): (1) K1-K19 killed by unit-test battery red on the
-  committed tree — the 19-failure baseline; fixes live only in uncommitted local state + the
-  handoff worktree; (2) CI-SIMULATE 5 P0s = stale lineage/K14 zip-hash records vs committed
-  zips + missing lean/lake installs in the simulate job; (3) doc-sync audit =
-  docs/PUBLISH_SCENARIO.md missing the `K9 Lake proof (Lean 4.14.0)` job row.
-- findings.md updated with the fresh b82b412 evidence; task_plan not reopened (work items live
-  in the handoff agent + doc fix).
-- No code changes this session; findings/progress docs only.
+- (archived: root causes pinned in findings.md archive of that date;
+  closed at 5ab5196.)
 
-## Next
-Add the `K9 Lake proof (Lean 4.14.0)` row to docs/PUBLISH_SCENARIO.md (tiny, unblocks the
-advisory audit), and merge the handoff agent's unit-fixes commit when it reports OK; then
-regenerate lineage/K14 zip records (repack producer) so CI-SIMULATE's P0s clear.
+## Session 2026-08-30 (planning-with-files init)
+- (archived: fresh start, PR #42 checks snapshot K1-K19 FAIL, plan created.)
 
-## Session 2026-08-31 — receiving-code-review turn
-- Verified PR #42 bot feedback: 3 unit-test ERRORs = status_checks import-crash modules (fix implemented earlier, validated); commit-msg advisory = 6 violations, gate passes vacuously (sidecar never reaches gate job — verified in job log).
-- User authorized: (1) rewrite all 6 commit subjects, (2) commit unit-test fix with --no-verify.
-- Committed fix as `test(verify): status_checks yaml-guard + abs WORKFLOW path` (--no-verify, hook blocked by 25 pre-existing test-file failures).
-- Rewrote all 6 violating subjects via 3 sequential interactive rebases (edit+amend, --no-verify); advisory re-audit: 11 commits, 0 violations; tree identity verified (zero content drift).
-- Force-with-lease push done: remote = local = PR head = c70722c. Next CI run should show the 3 status_checks module ERRORs converted to skips.
+## 2026-09-19 — stripe-best-practices tour
+- Skill activation: payment domain has no surface in this repo (evidence:
+  git-grep 6 hits all design-system/stripe, no sk_/rk_ keys, no SDK/CLI).
+- No code written; audit-only turn. Tree stable after Freebuff restart
+  (porcelain 29, staged 16, HEAD unchanged).
+- Live audits: stripe mirror gate OK (710 tokens), linear OK (398), primer
+  OK (2051); zero --hds-* consumers outside design-system/.
+- findings.md updated with tour section; both files staged + battery.
 
-## Session 2026-08-31 — requesting-code-review turn (inline review)
-- Orca reviewer (Codex) hit usage cap; released; review run inline per user choice, template code-reviewer.md, range 7333a55..5e3211d.
-- Multi-pass findings: Critical 0; Important 1 (status_checks pin-drift blocks honest commits — policy decision pending: lake-proof/refs-trend/reports/reproducibility required vs GATE_EXCLUDE); Minor 3 (unused _WORKFLOW in test_status_checks.py:34; unused ThreadPoolExecutor import coordinator_loop.py:37; commit-msg sidecar never reaches the required gate job — fail-open).
-- Bulk publish spot checks: no secrets, no absolute local paths in published code (only test fixture text).
-- Validation this turn: test_mirror_check 28 OK; coordinator/orchestrate 19 OK; status_checks family 36 skip-clean; py_compile clean.
-- Verdict recorded: Ready to merge = With fixes (pin-drift resolution is the blocker).
+## 2026-09-19 — supabase-postgres-best-practices tour
+- Rule audit of apps/trend-db: 2 fixes (Timestamptz(6) + Decimal(10,2);
+  batched createMany loader), 3 already-compliant rules noted.
+- Gates: prisma validate/generate, tsc strict, drift-guard 8/8, battery
+  138/138. Staged: schema.prisma + scripts/load.ts (generated/ ignored).
+
+## 2026-09-19 — systematic-debugging tour
+- 4-phase process completed on the 2026-09-18 revert incident: root cause
+  = pre-commit stash-window process death (reproduced minimally with
+  control group), prior other-thread hypothesis corrected in task_plan.
+- Incident patches archived (_calisma/CIKTI/recovery_patches_20260918/);
+  ~170 orphan patch files purged from ~/.cache/pre-commit.
+- Scratch repro cleaned (probe hygiene).
+
+## 2026-09-19 — tailwind-design-system tour
+- dashboard-next wired to the token chain via the generated bridge;
+  copied :root removed. Generator defect fixed (embedded tailwindcss
+  import broke consumers); gate extended with contracts 5+6 (five proven
+  paths incl. comment-mention trap). Build + live smoke + battery green.
+
+## 2026-09-19 — tdd tour
+- check_precommit_orphans.py built red→green at the approved CLI seam
+  (6 contracts); wired as hook 19 + manifest; framework green/fail paths
+  proven; battery 139/139.
+
+## 2026-09-19 — test-driven-development tour
+- Fingerprint slice red→green (8/8); incident patches sha256-verified
+  against archive and removed from live cache (time-bomb defused).
+
+## 2026-09-19 — typescript-advanced-types tour
+- Loader escape hatches removed (as never[] → generated input type;
+  json(): unknown → recursive type guard + DbNull decision). Gates green;
+  battery 139/139.
+
+## 2026-09-19 (worktree tour)
+- Pruned 6 stale worktree records; .worktrees/ gitignored (line 48).
+- commit 07e22aa: pre-commit chain 47→50 + recovery patches + plan files
+- commit d1cbfb2: apps surfaces (dashboard-next, trend-db, landing, mcp, pptx) + contract tests
+- 2 stash-window retries diagnosed; unstaged-delta rule enforced
+- Next: .worktrees/work/2026-09-19 from HEAD, setup, baseline battery

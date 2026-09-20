@@ -35,12 +35,12 @@ class TestGateCoverageSync(unittest.TestCase):
         cls.ci_map = coverage.build_ci_job_map(coverage.CI_JOB_COVERAGE, cls.test_files)
 
     def test_required_gate_set_is_explicit_and_stable(self):
-        self.assertEqual(len(self.gates), 13)
+        self.assertEqual(len(self.gates), 14)
         self.assertEqual(set(self.gates), {
             "verify", "action-runtimes", "budget", "label-gate",
             "commit-msg-gate", "reports", "reproducibility", "config-drift",
             "config-sync", "repack-verify", "refs-trend",
-            "preview-reload-smoke", "ci-simulate",
+            "preview-reload-smoke", "ci-simulate", "a11y-gate",
         })
 
     def test_every_required_gate_has_ci_coverage_or_is_explicit_aggregate(self):
@@ -51,7 +51,7 @@ class TestGateCoverageSync(unittest.TestCase):
         dedicated = {"action-runtimes", "budget", "label-gate", "commit-msg-gate",
                      "config-drift", "config-sync", "coverage-report-ci",
                      "repack-verify", "preview-reload-smoke", "reports",
-                     "reproducibility", "refs-trend"}
+                     "reproducibility", "refs-trend", "a11y-gate"}
         missing = sorted(set(self.gates) - aggregate - dedicated)
         self.assertEqual(missing, [], f"required gate coverage missing: {missing}")
 

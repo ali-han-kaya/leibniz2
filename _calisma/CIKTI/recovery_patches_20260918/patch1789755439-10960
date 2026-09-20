@@ -1,0 +1,332 @@
+diff --git a/.gitignore b/.gitignore
+index 07b221d..994269e 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -33,3 +33,13 @@ _calisma/CIKTI/design-system-tokens.css
+ 
+ # frontend-design demo derlemesi (build_design_preview.py üretir)
+ _calisma/CIKTI/design_preview.html
++
++# Oturum yüzeyleri (2026-09-18): bağımlılıklar ve üretilen artefaktlar kaynak-değil
++_calisma/mcp/.venv/
++_calisma/pptx/node_modules/
++_calisma/pptx/verification_chain.pptx
++apps/trend-db/node_modules/
++apps/trend-db/.env
++apps/trend-db/generated/
++apps/dashboard-next/node_modules/
++apps/dashboard-next/.next/
+diff --git a/_calisma/CIKTI/check_unit_tests.list b/_calisma/CIKTI/check_unit_tests.list
+index b7447d5..cdc1411 100644
+--- a/_calisma/CIKTI/check_unit_tests.list
++++ b/_calisma/CIKTI/check_unit_tests.list
+@@ -86,7 +86,6 @@ test_override_trend_badge.py
+ test_pdf_repro_findings_deck.py
+ test_pdf_source_freshness.py
+ test_plist_check_workflow.py
+-test_pptx_export.py
+ test_precheck_advisory_contract.py
+ test_preview_findings_panel.py
+ test_preview_server.py
+@@ -111,7 +110,9 @@ test_run_summary_precommit.py
+ test_run_summary_refs_trend.py
+ test_scan_stale_zips.py
+ test_sde_texlive_sync.py
++test_pptx_export.py
+ test_security_headers.py
++test_trend_db_contract.py
+ test_setup_branch_protection.py
+ test_sidecar_guarantee.py
+ test_skill_layer_sync.py
+@@ -126,7 +127,6 @@ test_test_coverage_report.py
+ test_texlive_determinism_hook.py
+ test_texlive_determinism_id_residual.py
+ test_texlive_repro_documented.py
+-test_trend_db_contract.py
+ test_update_preview_sync_server.py
+ test_validate_config_schema.py
+ test_verification_chain_deck.py
+diff --git a/_calisma/CIKTI/preview.html b/_calisma/CIKTI/preview.html
+index d182cdb..3f9ca1f 100644
+--- a/_calisma/CIKTI/preview.html
++++ b/_calisma/CIKTI/preview.html
+@@ -144,7 +144,15 @@
+      Halkadaki dairesel metin koşumun deterministik PDF hash'idir:
+      süs değil, mühür. Renkler + fontlar tamamen token katmanından. */
+   .seal { width:64px; height:64px; flex:0 0 64px; margin-left:14px;
++    /* CLS düzeltmesi (perf turu): seal "hidden" iken UA display:none uyguluyor,
++       snapshot gelince hidden=false 64px kutuyu aniden akışa sokuyordu —
++       header genişleyip MAIN'in tamamı kayıyordu (ölçülen tek-shift CLS +0.2555,
++       mobil 390px @4x CPU). Alanı baştan rezerve et: display yerine visibility,
++       basma animasyonunu hidden iken beklet. */
++    visibility:hidden;
+     filter:drop-shadow(0 1px 4px rgba(0,0,0,.35)); }
++  .seal[hidden] { display:block; }
++  .seal[hidden] svg { animation-play-state:paused; }
+   .seal svg { width:100%; height:100%; display:block;
+     animation:seal-stamp .5s cubic-bezier(.2,1.6,.4,1) both;
+     transform-origin:50% 50%; }
+@@ -228,18 +236,18 @@
+   <section id="z3-slide-gallery" class="z3-gallery" aria-labelledby="z3-gallery-title">
+     <h2 id="z3-gallery-title">Z3 slayt galerisi</h2>
+     <div id="z3-slides" class="z3-slides">
+-      <button type="button" class="z3-slide" aria-label="P1-a slaydını büyüt"><img src="/slides_z3/P1-a.png" alt="P1-a Z3 slaytı" loading="lazy"></button>
+-      <button type="button" class="z3-slide" aria-label="P1-b slaydını büyüt"><img src="/slides_z3/P1-b.png" alt="P1-b Z3 slaytı" loading="lazy"></button>
+-      <button type="button" class="z3-slide" aria-label="P2 slaydını büyüt"><img src="/slides_z3/P2.png" alt="P2 Z3 slaytı" loading="lazy"></button>
+-      <button type="button" class="z3-slide" aria-label="P3-a slaydını büyüt"><img src="/slides_z3/P3-a.png" alt="P3-a Z3 slaytı" loading="lazy"></button>
+-      <button type="button" class="z3-slide" aria-label="P3-b slaydını büyüt"><img src="/slides_z3/P3-b.png" alt="P3-b Z3 slaytı" loading="lazy"></button>
+-      <button type="button" class="z3-slide" aria-label="P4-a slaydını büyüt"><img src="/slides_z3/P4-a.png" alt="P4-a Z3 slaytı" loading="lazy"></button>
+-      <button type="button" class="z3-slide" aria-label="P4-b slaydını büyüt"><img src="/slides_z3/P4-b.png" alt="P4-b Z3 slaytı" loading="lazy"></button>
+-      <button type="button" class="z3-slide" aria-label="P4-c slaydını büyüt"><img src="/slides_z3/P4-c.png" alt="P4-c Z3 slaytı" loading="lazy"></button>
+-      <button type="button" class="z3-slide" aria-label="P4-d slaydını büyüt"><img src="/slides_z3/P4-d.png" alt="P4-d Z3 slaytı" loading="lazy"></button>
+-      <button type="button" class="z3-slide" aria-label="P4-e slaydını büyüt"><img src="/slides_z3/P4-e.png" alt="P4-e Z3 slaytı" loading="lazy"></button>
+-      <button type="button" class="z3-slide" aria-label="P5 slaydını büyüt"><img src="/slides_z3/P5.png" alt="P5 Z3 slaytı" loading="lazy"></button>
+-      <button type="button" class="z3-slide" aria-label="P5-note slaydını büyüt"><img src="/slides_z3/P5-note.png" alt="P5-note Z3 slaytı" loading="lazy"></button>
++      <button type="button" class="z3-slide" aria-label="P1-a slaydını büyüt"><img src="/slides_z3/P1-a.png" alt="P1-a Z3 slaytı" width="305" height="75" loading="lazy"></button>
++      <button type="button" class="z3-slide" aria-label="P1-b slaydını büyüt"><img src="/slides_z3/P1-b.png" alt="P1-b Z3 slaytı" width="273" height="69" loading="lazy"></button>
++      <button type="button" class="z3-slide" aria-label="P2 slaydını büyüt"><img src="/slides_z3/P2.png" alt="P2 Z3 slaytı" width="367" height="75" loading="lazy"></button>
++      <button type="button" class="z3-slide" aria-label="P3-a slaydını büyüt"><img src="/slides_z3/P3-a.png" alt="P3-a Z3 slaytı" width="311" height="75" loading="lazy"></button>
++      <button type="button" class="z3-slide" aria-label="P3-b slaydını büyüt"><img src="/slides_z3/P3-b.png" alt="P3-b Z3 slaytı" width="311" height="75" loading="lazy"></button>
++      <button type="button" class="z3-slide" aria-label="P4-a slaydını büyüt"><img src="/slides_z3/P4-a.png" alt="P4-a Z3 slaytı" width="416" height="75" loading="lazy"></button>
++      <button type="button" class="z3-slide" aria-label="P4-b slaydını büyüt"><img src="/slides_z3/P4-b.png" alt="P4-b Z3 slaytı" width="416" height="75" loading="lazy"></button>
++      <button type="button" class="z3-slide" aria-label="P4-c slaydını büyüt"><img src="/slides_z3/P4-c.png" alt="P4-c Z3 slaytı" width="171" height="68" loading="lazy"></button>
++      <button type="button" class="z3-slide" aria-label="P4-d slaydını büyüt"><img src="/slides_z3/P4-d.png" alt="P4-d Z3 slaytı" width="700" height="75" loading="lazy"></button>
++      <button type="button" class="z3-slide" aria-label="P4-e slaydını büyüt"><img src="/slides_z3/P4-e.png" alt="P4-e Z3 slaytı" width="190" height="68" loading="lazy"></button>
++      <button type="button" class="z3-slide" aria-label="P5 slaydını büyüt"><img src="/slides_z3/P5.png" alt="P5 Z3 slaytı" width="919" height="75" loading="lazy"></button>
++      <button type="button" class="z3-slide" aria-label="P5-note slaydını büyüt"><img src="/slides_z3/P5-note.png" alt="P5-note Z3 slaytı" width="575" height="75" loading="lazy"></button>
+     </div>
+   </section>
+   <div id="z3-lightbox" class="z3-lightbox" hidden role="dialog" aria-modal="true" aria-labelledby="z3-lightbox-title">
+diff --git a/_calisma/CIKTI/preview_server.py b/_calisma/CIKTI/preview_server.py
+index 578d5c0..0804549 100755
+--- a/_calisma/CIKTI/preview_server.py
++++ b/_calisma/CIKTI/preview_server.py
+@@ -36,10 +36,16 @@ import threading
+ import time
+ import urllib.parse
+ from datetime import datetime, timezone
++import secrets
+ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+ 
+ REQUEST_TIMEOUT_SECONDS = 30
+ ALLOWED_HOSTS = {"127.0.0.1", "localhost", "::1"}
++
++# CSP nonce — serve_preview'in enjekte ettiği build-damga inline script'i
++# için (süreç başına taze; CSP script-src bunu taşır, 'unsafe-inline'
++# script için gerekmez).
++BUILD_TS_NONCE = secrets.token_urlsafe(16)
+ SERVER = None
+ STOP_EVENT = None
+ 
+@@ -437,10 +443,42 @@ def load_cached_latest():
+     return True
+ 
+ 
++# load_history in-process önbelleği: (anahtar, satır-listesi). Tek-adımlı
++# isim-yeniden-ataması GIL altında atomiktir — okuyucu iş-parçacığı ya eski
++# çifti ya yeni çifti görür, karışık çift asla göremez. Satır-dict'leri
++# paylaşıldığından salt-okunur kullanılır (çağrıcılar denetlendi: 199
++# projeksiyon-kopyası, 434 alan-ataması LATEST'e; yerinde mutasyon yok).
++_history_cache = (None, ())
++
++
++def _history_cache_key():
++    """Önbellek anahtarı: (yol, mtime_ns, boyut). Dosya yoksa None."""
++    try:
++        st = os.stat(HISTORY_PATH)
++    except OSError:
++        return None
++    return (HISTORY_PATH, st.st_mtime_ns, st.st_size)
++
++
+ def load_history():
+-    """Disk'teki JSONL'ı oku, en son HISTORY_MAX kaydı döndür (en yeni önce)."""
++    """Disk'teki JSONL'ı oku, en son HISTORY_MAX kaydı döndür (en yeni önce).
++
++    mtime_ns+boyut anahtarlı in-process önbellek: her /api/history ve
++    /api/trend isteği 270 KB'lık dosyayı yeniden parse etmez; dosya
++    değişmediyse önbellek döner (profil: load_history request-işininin
++    ~%45'iydi — istek başına ~100 json.loads). Doğruluk: persist_history tek
++    yazıcıdır, LOCK altında _write_atomic ile dosyayı yeniden üretir; mtime
++    değişimi önbelleği bayatlatır. Dönen liste kopyasıdır; satır-dict'leri
++    paylaşıldığından çağrıcılar onları MUTATE ETMEMELİ (mevcut çağrıcılar
++    salt-okunur; yeni çağrıcılar da öyle kalmalı).
++    """
++    global _history_cache
+     if not HISTORY_PATH or not os.path.isfile(HISTORY_PATH):
+         return []
++    key = _history_cache_key()
++    cached_key, cached_rows = _history_cache
++    if key is not None and cached_key == key:
++        return list(cached_rows)
+     out = []
+     try:
+         with open(HISTORY_PATH, encoding="utf-8") as f:
+@@ -456,7 +494,10 @@ def load_history():
+         sys.stderr.write(f"[history] okunamadı: {e}\n")
+         sys.stderr.flush()
+         return []
+-    return out[-HISTORY_MAX:]
++    out = out[-HISTORY_MAX:]
++    if key is not None:
++        _history_cache = (key, out)
++    return list(out)
+ 
+ 
+ def _prune_run_logs():
+@@ -1267,6 +1308,53 @@ def _route(path):
+ 
+ 
+ class Handler(BaseHTTPRequestHandler):
++    # Güvenlik başlıkları — her yanıt satırı (statik, API, SSE dahil).
++    #      • X-Content-Type-Options: nosniff — tarayıcı MIME-esnetmesine
++    #        izin vermez; JSON yanıtının text/html olarak yorumlanması
++    #        (saldırgan-kontrol content) XSS vektörünü kapatır.
++    #      • Referrer-Policy: no-referrer — sunucu localhost-tekil; URL
++    #        sızıntısı küçük ama bedava kapatılır.
++    #      • CSP — script-src 'self' + nonce: statik script'ler dışarıdan
++    #        preview.js'ten yüklenir; serve_preview'in enjekte ettiği
++    #        build-damga <script> TEK inline script'tir ve süreç-başı nonce
++    #        ile taşınır (kaynak HTML'de yer tutucu `<script data-build-ts>`
++    #        olduğundan grep sayacı yanlış-negatif vermişti — smoke testi
++    #        enjeksiyonu yakaladı). Inline style'lara izin (48 style= var,
++    #        style-src 'unsafe-inline'); img/data mühür PNG'si için serbest;
++    #        SSE için connect-src 'self'. frame-ancestors 'none' tıklama-
++    #        kaçırma çerçevesini kapatır.
++    # Not: BaseHTTPRequestHandler.end_headers override edildiği için bu
++    #      başlıklar _send, serve_preview ve SSE dahil TÜM yanıt yollarına
++    #      otomatik eklenir — ayrı dokunma gerektirmez.
++    _SECURITY_HEADERS = (
++        ("X-Content-Type-Options", "nosniff"),
++        ("Referrer-Policy", "no-referrer"),
++        ("Content-Security-Policy",
++         f"default-src 'none'; script-src 'self' 'nonce-{BUILD_TS_NONCE}'; "
++         "style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
++         "connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; "
++         "form-action 'none'"),
++    )
++
++    def end_headers(self):
++        # Tek-funnel başlık enjeksiyonu: BaseHTTPRequestHandler'ın tüm
++        # yanıt yolları buradan geçer (_send, serve_preview, SSE …).
++        for name, value in self._SECURITY_HEADERS:
++            self.send_header(name, value)
++        super().end_headers()
++
++    def do_HEAD(self):
++        # HEAD = GET'in başlıkları, gövdesiz (route tablosunu yeniden
++        # kullanır; _route None döndürürse 404).
++        route = _route(self.path)
++        if route is None:
++            self._send(404, "404 not found")
++            return
++        # Bilişli kısayol: gövde yazılmaz — tek amaç başlıkları teşhir.
++        self.send_response(200)
++        self.send_header("Content-Type", "text/plain; charset=utf-8")
++        self.end_headers()
++
+     def log_message(self, fmt, *args):
+         # Sunucu loglarını kendi dosyamıza yönlendir (stderr'i kirletmesin).
+         # EBADF'e dayanıklı: daemon modu fds'yi /dev/null'a yönlendirse bile,
+@@ -1640,7 +1728,7 @@ class Handler(BaseHTTPRequestHandler):
+             ts = "0"
+         html = html.replace(
+             '<script data-build-ts></script>',
+-            f'<script>window.BUILD_TS={ts};</script>',
++            f'<script nonce="{BUILD_TS_NONCE}">window.BUILD_TS={ts};</script>',
+             1)
+         self._send(200, html, content_type="text/html; charset=utf-8")
+ 
+diff --git a/_calisma/CIKTI/test_coordinator_loop.py b/_calisma/CIKTI/test_coordinator_loop.py
+index e9c7fb7..4ac56aa 100644
+--- a/_calisma/CIKTI/test_coordinator_loop.py
++++ b/_calisma/CIKTI/test_coordinator_loop.py
+@@ -57,10 +57,19 @@ class TestLoopFlow(unittest.TestCase):
+         self.wt = pathlib.Path(self.td.name, "wt")
+         self.wt.mkdir()
+         self.done = pathlib.Path(self.td.name, "done")
++        # İzolasyon: _patch_commands GATES'i yerinde değiştirir; restore-suz
++        # test TestGateChain'e 'echo ok' sızardı (shuffle-audit kanıtı).
++        self._gates_backup = {g: dict(cl.GATES[g]) for g in cl.GATES}
+ 
+     def tearDown(self):
+         self.td.cleanup()
+ 
++    def tearDown(self):
++        self.td.cleanup()
++        for g, spec in self._gates_backup.items():
++            cl.GATES[g].clear()
++            cl.GATES[g].update(spec)
++
+     def _patch_commands(self, fail=()):
+         """Kapı komutlarını no-op'a çevir; fail set'indekiler 'false' olur."""
+         for gate in cl.GATE_ORDER:
+diff --git a/_calisma/CIKTI/test_preview_server.py b/_calisma/CIKTI/test_preview_server.py
+index e7ae9ac..e85a753 100644
+--- a/_calisma/CIKTI/test_preview_server.py
++++ b/_calisma/CIKTI/test_preview_server.py
+@@ -1023,6 +1023,20 @@ class LineageSummaryTests(unittest.TestCase):
+ class StatusBoardTests(unittest.TestCase):
+     """status_board: 5 ikonlu tek satır durum panosu (CI consolidate_summary.py ile tutarlı)."""
+ 
++    def setUp(self):
++        # İzolasyon: testler LATEST.update ile layers/p0/budget yazıyor;
++        # restore etmeyen test, sonraki testlere sızardı (shuffle-audit
++        # kanıtı: LATEST['layers'] sızıntısı). Tam-dict yedek + geri yükleme.
++        import preview_server as ps
++        with ps.LOCK:
++            self._latest_backup = dict(ps.LATEST)
++
++    def tearDown(self):
++        import preview_server as ps
++        with ps.LOCK:
++            ps.LATEST.clear()
++            ps.LATEST.update(self._latest_backup)
++
+     def test_all_pass(self):
+         """Tüm alanlar PASS ise 5 ✅ üretmeli."""
+         import preview_server as ps
+@@ -1851,6 +1865,15 @@ class SSEHandlerThreadTests(unittest.TestCase):
+     def setUp(self):
+         self._saved = {}
+         self._patch("SSE_POLL_TIMEOUT", 0.05)
++        # İzolasyon: serve_sse/serve_run_stream klient kaydını modül-listesine
++        # yapar; önceki bir testin gecikmeli/geri-kalmış klientı bu testin
++        # 'len == 1' sözleşmesini kırdırabilir (shuffle-audit: geçici 2 != 1).
++        # Önceki durumu kaydet + boşalt; tearDown birebir geri sarar.
++        with ps.LOCK:
++            self._clients_before = list(ps.SSE_CLIENTS)
++            ps.SSE_CLIENTS[:] = []
++            self._stream_before = list(ps.STREAM_CLIENTS)
++            ps.STREAM_CLIENTS[:] = []
+         self._buf = io.BytesIO()
+         self._buf_lock = threading.Lock()
+         self._broken = threading.Event()
+@@ -1859,7 +1882,13 @@ class SSEHandlerThreadTests(unittest.TestCase):
+     def tearDown(self):
+         self._broken.set()          # döngüyü bitir (sonraki write patlar)
+         if self._thread:
+-            self._thread.join(timeout=5)
++            self._thread.join(timeout=10)
++        # Kayıt/çıkarma sözleşmesi test içinde assert edilir; burada
++        # kalıntı ne olursa olsun önceki duruma geri sar (sonraki testleri
++        # kirletme).
++        with ps.LOCK:
++            ps.SSE_CLIENTS[:] = self._clients_before
++            ps.STREAM_CLIENTS[:] = self._stream_before
+         for name, val in self._saved.items():
+             setattr(ps, name, val)
+ 
+diff --git a/_calisma/CIKTI/test_z3_slide_gallery.py b/_calisma/CIKTI/test_z3_slide_gallery.py
+index f0efaaf..441fcec 100644
+--- a/_calisma/CIKTI/test_z3_slide_gallery.py
++++ b/_calisma/CIKTI/test_z3_slide_gallery.py
+@@ -23,7 +23,7 @@ class TestZ3SlideGallery(unittest.TestCase):
+         self.assertEqual(text.count('loading="lazy"'), len(EXPECTED))
+         for name in EXPECTED:
+             self.assertIn(f'src="/slides_z3/{name}.png"', text)
+-            self.assertRegex(text, rf'<img src="/slides_z3/{re.escape(name)}\.png" alt="[^"]+" loading="lazy">')
++            self.assertRegex(text, rf'<img src="/slides_z3/{re.escape(name)}\.png" alt="[^"]+"( width="\d+" height="\d+")? loading="lazy">')
+ 
+ 
+ if __name__ == "__main__":

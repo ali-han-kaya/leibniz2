@@ -1,0 +1,661 @@
+diff --git a/.gitignore b/.gitignore
+index 07b221d..294ed14 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -11,6 +11,8 @@ _calisma/CIKTI/logs/
+ _calisma/lean_reduct/.lake/
+ _calisma/lean_reduct/lake-manifest.json
+ apps/dashboard-shadcn/node_modules/
++apps/dashboard-next/node_modules/
++apps/dashboard-next/.next/
+ apps/dashboard-shadcn/dist/
+ apps/dashboard-shadcn/tsconfig.tsbuildinfo
+ 
+@@ -33,3 +35,15 @@ _calisma/CIKTI/design-system-tokens.css
+ 
+ # frontend-design demo derlemesi (build_design_preview.py üretir)
+ _calisma/CIKTI/design_preview.html
++
++# image-to-code landing uretimleri (build_landing.py uretir; kaynak:
++# landing_src.html + refs/commit'e aday, uretilenler local kalir)
++_calisma/landing/landing.html
++_calisma/landing/assets/
++_calisma/landing/refs/view-comp.html
++
++# MCP sunucusu venv (requirements.txt ile tekrarlanabilir)
++_calisma/mcp/.venv/
++_calisma/mcp/__pycache__/
++_calisma/pptx/node_modules/
++_calisma/pptx/*.pptx
+diff --git a/_calisma/CIKTI/check_unit_tests.list b/_calisma/CIKTI/check_unit_tests.list
+index 6c1bdc1..cdc1411 100644
+--- a/_calisma/CIKTI/check_unit_tests.list
++++ b/_calisma/CIKTI/check_unit_tests.list
+@@ -110,6 +110,9 @@ test_run_summary_precommit.py
+ test_run_summary_refs_trend.py
+ test_scan_stale_zips.py
+ test_sde_texlive_sync.py
++test_pptx_export.py
++test_security_headers.py
++test_trend_db_contract.py
+ test_setup_branch_protection.py
+ test_sidecar_guarantee.py
+ test_skill_layer_sync.py
+diff --git a/_calisma/CIKTI/preview.html b/_calisma/CIKTI/preview.html
+index d182cdb..3f9ca1f 100644
+--- a/_calisma/CIKTI/preview.html
++++ b/_calisma/CIKTI/preview.html
+@@ -144,7 +144,15 @@
+      Halkadaki dairesel metin koşumun deterministik PDF hash'idir:
+      süs değil, mühür. Renkler + fontlar tamamen token katmanından. */
+   .seal { width:64px; height:64px; flex:0 0 64px; margin-left:14px;
++    /* CLS düzeltmesi (perf turu): seal "hidden" iken UA display:none uyguluyor,
++       snapshot gelince hidden=false 64px kutuyu aniden akışa sokuyordu —
++       header genişleyip MAIN'in tamamı kayıyordu (ölçülen tek-shift CLS +0.2555,
++       mobil 390px @4x CPU). Alanı baştan rezerve et: display yerine visibility,
++       basma animasyonunu hidden iken beklet. */
++    visibility:hidden;
+     filter:drop-shadow(0 1px 4px rgba(0,0,0,.35)); }
++  .seal[hidden] { display:block; }
++  .seal[hidden] svg { animation-play-state:paused; }
+   .seal svg { width:100%; height:100%; display:block;
+     animation:seal-stamp .5s cubic-bezier(.2,1.6,.4,1) both;
+     transform-origin:50% 50%; }
+@@ -228,18 +236,18 @@
+   <section id="z3-slide-gallery" class="z3-gallery" aria-labelledby="z3-gallery-title">
+     <h2 id="z3-gallery-title">Z3 slayt galerisi</h2>
+     <div id="z3-slides" class="z3-slides">
+-      <button type="button" class="z3-slide" aria-label="P1-a slaydını büyüt"><img src="/slides_z3/P1-a.png" alt="P1-a Z3 slaytı" loading="lazy"></button>
+-      <button type="button" class="z3-slide" aria-label="P1-b slaydını büyüt"><img src="/slides_z3/P1-b.png" alt="P1-b Z3 slaytı" loading="lazy"></button>
+-      <button type="button" class="z3-slide" aria-label="P2 slaydını büyüt"><img src="/slides_z3/P2.png" alt="P2 Z3 slaytı" loading="lazy"></button>
+-      <button type="button" class="z3-slide" aria-label="P3-a slaydını büyüt"><img src="/slides_z3/P3-a.png" alt="P3-a Z3 slaytı" loading="lazy"></button>
+-      <button type="button" class="z3-slide" aria-label="P3-b slaydını büyüt"><img src="/slides_z3/P3-b.png" alt="P3-b Z3 slaytı" loading="lazy"></button>
+-      <button type="button" class="z3-slide" aria-label="P4-a slaydını büyüt"><img src="/slides_z3/P4-a.png" alt="P4-a Z3 slaytı" loading="lazy"></button>
+-      <button type="button" class="z3-slide" aria-label="P4-b slaydını büyüt"><img src="/slides_z3/P4-b.png" alt="P4-b Z3 slaytı" loading="lazy"></button>
+-      <button type="button" class="z3-slide" aria-label="P4-c slaydını büyüt"><img src="/slides_z3/P4-c.png" alt="P4-c Z3 slaytı" loading="lazy"></button>
+-      <button type="button" class="z3-slide" aria-label="P4-d slaydını büyüt"><img src="/slides_z3/P4-d.png" alt="P4-d Z3 slaytı" loading="lazy"></button>
+-      <button type="button" class="z3-slide" aria-label="P4-e slaydını büyüt"><img src="/slides_z3/P4-e.png" alt="P4-e Z3 slaytı" loading="lazy"></button>
+-      <button type="button" class="z3-slide" aria-label="P5 slaydını büyüt"><img src="/slides_z3/P5.png" alt="P5 Z3 slaytı" loading="lazy"></button>
+-      <button type="button" class="z3-slide" aria-label="P5-note slaydını büyüt"><img src="/slides_z3/P5-note.png" alt="P5-note Z3 slaytı" loading="lazy"></button>
++      <button type="button" class="z3-slide" aria-label="P1-a slaydını büyüt"><img src="/slides_z3/P1-a.png" alt="P1-a Z3 slaytı" width="305" height="75" loading="lazy"></button>
++      <button type="button" class="z3-slide" aria-label="P1-b slaydını büyüt"><img src="/slides_z3/P1-b.png" alt="P1-b Z3 slaytı" width="273" height="69" loading="lazy"></button>
++      <button type="button" class="z3-slide" aria-label="P2 slaydını büyüt"><img src="/slides_z3/P2.png" alt="P2 Z3 slaytı" width="367" height="75" loading="lazy"></button>
++      <button type="button" class="z3-slide" aria-label="P3-a slaydını büyüt"><img src="/slides_z3/P3-a.png" alt="P3-a Z3 slaytı" width="311" height="75" loading="lazy"></button>
++      <button type="button" class="z3-slide" aria-label="P3-b slaydını büyüt"><img src="/slides_z3/P3-b.png" alt="P3-b Z3 slaytı" width="311" height="75" loading="lazy"></button>
++      <button type="button" class="z3-slide" aria-label="P4-a slaydını büyüt"><img src="/slides_z3/P4-a.png" alt="P4-a Z3 slaytı" width="416" height="75" loading="lazy"></button>
++      <button type="button" class="z3-slide" aria-label="P4-b slaydını büyüt"><img src="/slides_z3/P4-b.png" alt="P4-b Z3 slaytı" width="416" height="75" loading="lazy"></button>
++      <button type="button" class="z3-slide" aria-label="P4-c slaydını büyüt"><img src="/slides_z3/P4-c.png" alt="P4-c Z3 slaytı" width="171" height="68" loading="lazy"></button>
++      <button type="button" class="z3-slide" aria-label="P4-d slaydını büyüt"><img src="/slides_z3/P4-d.png" alt="P4-d Z3 slaytı" width="700" height="75" loading="lazy"></button>
++      <button type="button" class="z3-slide" aria-label="P4-e slaydını büyüt"><img src="/slides_z3/P4-e.png" alt="P4-e Z3 slaytı" width="190" height="68" loading="lazy"></button>
++      <button type="button" class="z3-slide" aria-label="P5 slaydını büyüt"><img src="/slides_z3/P5.png" alt="P5 Z3 slaytı" width="919" height="75" loading="lazy"></button>
++      <button type="button" class="z3-slide" aria-label="P5-note slaydını büyüt"><img src="/slides_z3/P5-note.png" alt="P5-note Z3 slaytı" width="575" height="75" loading="lazy"></button>
+     </div>
+   </section>
+   <div id="z3-lightbox" class="z3-lightbox" hidden role="dialog" aria-modal="true" aria-labelledby="z3-lightbox-title">
+diff --git a/_calisma/CIKTI/preview_server.py b/_calisma/CIKTI/preview_server.py
+index 578d5c0..0804549 100755
+--- a/_calisma/CIKTI/preview_server.py
++++ b/_calisma/CIKTI/preview_server.py
+@@ -36,10 +36,16 @@ import threading
+ import time
+ import urllib.parse
+ from datetime import datetime, timezone
++import secrets
+ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+ 
+ REQUEST_TIMEOUT_SECONDS = 30
+ ALLOWED_HOSTS = {"127.0.0.1", "localhost", "::1"}
++
++# CSP nonce — serve_preview'in enjekte ettiği build-damga inline script'i
++# için (süreç başına taze; CSP script-src bunu taşır, 'unsafe-inline'
++# script için gerekmez).
++BUILD_TS_NONCE = secrets.token_urlsafe(16)
+ SERVER = None
+ STOP_EVENT = None
+ 
+@@ -437,10 +443,42 @@ def load_cached_latest():
+     return True
+ 
+ 
++# load_history in-process önbelleği: (anahtar, satır-listesi). Tek-adımlı
++# isim-yeniden-ataması GIL altında atomiktir — okuyucu iş-parçacığı ya eski
++# çifti ya yeni çifti görür, karışık çift asla göremez. Satır-dict'leri
++# paylaşıldığından salt-okunur kullanılır (çağrıcılar denetlendi: 199
++# projeksiyon-kopyası, 434 alan-ataması LATEST'e; yerinde mutasyon yok).
++_history_cache = (None, ())
++
++
++def _history_cache_key():
++    """Önbellek anahtarı: (yol, mtime_ns, boyut). Dosya yoksa None."""
++    try:
++        st = os.stat(HISTORY_PATH)
++    except OSError:
++        return None
++    return (HISTORY_PATH, st.st_mtime_ns, st.st_size)
++
++
+ def load_history():
+-    """Disk'teki JSONL'ı oku, en son HISTORY_MAX kaydı döndür (en yeni önce)."""
++    """Disk'teki JSONL'ı oku, en son HISTORY_MAX kaydı döndür (en yeni önce).
++
++    mtime_ns+boyut anahtarlı in-process önbellek: her /api/history ve
++    /api/trend isteği 270 KB'lık dosyayı yeniden parse etmez; dosya
++    değişmediyse önbellek döner (profil: load_history request-işininin
++    ~%45'iydi — istek başına ~100 json.loads). Doğruluk: persist_history tek
++    yazıcıdır, LOCK altında _write_atomic ile dosyayı yeniden üretir; mtime
++    değişimi önbelleği bayatlatır. Dönen liste kopyasıdır; satır-dict'leri
++    paylaşıldığından çağrıcılar onları MUTATE ETMEMELİ (mevcut çağrıcılar
++    salt-okunur; yeni çağrıcılar da öyle kalmalı).
++    """
++    global _history_cache
+     if not HISTORY_PATH or not os.path.isfile(HISTORY_PATH):
+         return []
++    key = _history_cache_key()
++    cached_key, cached_rows = _history_cache
++    if key is not None and cached_key == key:
++        return list(cached_rows)
+     out = []
+     try:
+         with open(HISTORY_PATH, encoding="utf-8") as f:
+@@ -456,7 +494,10 @@ def load_history():
+         sys.stderr.write(f"[history] okunamadı: {e}\n")
+         sys.stderr.flush()
+         return []
+-    return out[-HISTORY_MAX:]
++    out = out[-HISTORY_MAX:]
++    if key is not None:
++        _history_cache = (key, out)
++    return list(out)
+ 
+ 
+ def _prune_run_logs():
+@@ -1267,6 +1308,53 @@ def _route(path):
+ 
+ 
+ class Handler(BaseHTTPRequestHandler):
++    # Güvenlik başlıkları — her yanıt satırı (statik, API, SSE dahil).
++    #      • X-Content-Type-Options: nosniff — tarayıcı MIME-esnetmesine
++    #        izin vermez; JSON yanıtının text/html olarak yorumlanması
++    #        (saldırgan-kontrol content) XSS vektörünü kapatır.
++    #      • Referrer-Policy: no-referrer — sunucu localhost-tekil; URL
++    #        sızıntısı küçük ama bedava kapatılır.
++    #      • CSP — script-src 'self' + nonce: statik script'ler dışarıdan
++    #        preview.js'ten yüklenir; serve_preview'in enjekte ettiği
++    #        build-damga <script> TEK inline script'tir ve süreç-başı nonce
++    #        ile taşınır (kaynak HTML'de yer tutucu `<script data-build-ts>`
++    #        olduğundan grep sayacı yanlış-negatif vermişti — smoke testi
++    #        enjeksiyonu yakaladı). Inline style'lara izin (48 style= var,
++    #        style-src 'unsafe-inline'); img/data mühür PNG'si için serbest;
++    #        SSE için connect-src 'self'. frame-ancestors 'none' tıklama-
++    #        kaçırma çerçevesini kapatır.
++    # Not: BaseHTTPRequestHandler.end_headers override edildiği için bu
++    #      başlıklar _send, serve_preview ve SSE dahil TÜM yanıt yollarına
++    #      otomatik eklenir — ayrı dokunma gerektirmez.
++    _SECURITY_HEADERS = (
++        ("X-Content-Type-Options", "nosniff"),
++        ("Referrer-Policy", "no-referrer"),
++        ("Content-Security-Policy",
++         f"default-src 'none'; script-src 'self' 'nonce-{BUILD_TS_NONCE}'; "
++         "style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
++         "connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; "
++         "form-action 'none'"),
++    )
++
++    def end_headers(self):
++        # Tek-funnel başlık enjeksiyonu: BaseHTTPRequestHandler'ın tüm
++        # yanıt yolları buradan geçer (_send, serve_preview, SSE …).
++        for name, value in self._SECURITY_HEADERS:
++            self.send_header(name, value)
++        super().end_headers()
++
++    def do_HEAD(self):
++        # HEAD = GET'in başlıkları, gövdesiz (route tablosunu yeniden
++        # kullanır; _route None döndürürse 404).
++        route = _route(self.path)
++        if route is None:
++            self._send(404, "404 not found")
++            return
++        # Bilişli kısayol: gövde yazılmaz — tek amaç başlıkları teşhir.
++        self.send_response(200)
++        self.send_header("Content-Type", "text/plain; charset=utf-8")
++        self.end_headers()
++
+     def log_message(self, fmt, *args):
+         # Sunucu loglarını kendi dosyamıza yönlendir (stderr'i kirletmesin).
+         # EBADF'e dayanıklı: daemon modu fds'yi /dev/null'a yönlendirse bile,
+@@ -1640,7 +1728,7 @@ class Handler(BaseHTTPRequestHandler):
+             ts = "0"
+         html = html.replace(
+             '<script data-build-ts></script>',
+-            f'<script>window.BUILD_TS={ts};</script>',
++            f'<script nonce="{BUILD_TS_NONCE}">window.BUILD_TS={ts};</script>',
+             1)
+         self._send(200, html, content_type="text/html; charset=utf-8")
+ 
+diff --git a/_calisma/CIKTI/test_coordinator_loop.py b/_calisma/CIKTI/test_coordinator_loop.py
+index e9c7fb7..4ac56aa 100644
+--- a/_calisma/CIKTI/test_coordinator_loop.py
++++ b/_calisma/CIKTI/test_coordinator_loop.py
+@@ -57,10 +57,19 @@ class TestLoopFlow(unittest.TestCase):
+         self.wt = pathlib.Path(self.td.name, "wt")
+         self.wt.mkdir()
+         self.done = pathlib.Path(self.td.name, "done")
++        # İzolasyon: _patch_commands GATES'i yerinde değiştirir; restore-suz
++        # test TestGateChain'e 'echo ok' sızardı (shuffle-audit kanıtı).
++        self._gates_backup = {g: dict(cl.GATES[g]) for g in cl.GATES}
+ 
+     def tearDown(self):
+         self.td.cleanup()
+ 
++    def tearDown(self):
++        self.td.cleanup()
++        for g, spec in self._gates_backup.items():
++            cl.GATES[g].clear()
++            cl.GATES[g].update(spec)
++
+     def _patch_commands(self, fail=()):
+         """Kapı komutlarını no-op'a çevir; fail set'indekiler 'false' olur."""
+         for gate in cl.GATE_ORDER:
+diff --git a/_calisma/CIKTI/test_preview_server.py b/_calisma/CIKTI/test_preview_server.py
+index e7ae9ac..e85a753 100644
+--- a/_calisma/CIKTI/test_preview_server.py
++++ b/_calisma/CIKTI/test_preview_server.py
+@@ -1023,6 +1023,20 @@ class LineageSummaryTests(unittest.TestCase):
+ class StatusBoardTests(unittest.TestCase):
+     """status_board: 5 ikonlu tek satır durum panosu (CI consolidate_summary.py ile tutarlı)."""
+ 
++    def setUp(self):
++        # İzolasyon: testler LATEST.update ile layers/p0/budget yazıyor;
++        # restore etmeyen test, sonraki testlere sızardı (shuffle-audit
++        # kanıtı: LATEST['layers'] sızıntısı). Tam-dict yedek + geri yükleme.
++        import preview_server as ps
++        with ps.LOCK:
++            self._latest_backup = dict(ps.LATEST)
++
++    def tearDown(self):
++        import preview_server as ps
++        with ps.LOCK:
++            ps.LATEST.clear()
++            ps.LATEST.update(self._latest_backup)
++
+     def test_all_pass(self):
+         """Tüm alanlar PASS ise 5 ✅ üretmeli."""
+         import preview_server as ps
+@@ -1851,6 +1865,15 @@ class SSEHandlerThreadTests(unittest.TestCase):
+     def setUp(self):
+         self._saved = {}
+         self._patch("SSE_POLL_TIMEOUT", 0.05)
++        # İzolasyon: serve_sse/serve_run_stream klient kaydını modül-listesine
++        # yapar; önceki bir testin gecikmeli/geri-kalmış klientı bu testin
++        # 'len == 1' sözleşmesini kırdırabilir (shuffle-audit: geçici 2 != 1).
++        # Önceki durumu kaydet + boşalt; tearDown birebir geri sarar.
++        with ps.LOCK:
++            self._clients_before = list(ps.SSE_CLIENTS)
++            ps.SSE_CLIENTS[:] = []
++            self._stream_before = list(ps.STREAM_CLIENTS)
++            ps.STREAM_CLIENTS[:] = []
+         self._buf = io.BytesIO()
+         self._buf_lock = threading.Lock()
+         self._broken = threading.Event()
+@@ -1859,7 +1882,13 @@ class SSEHandlerThreadTests(unittest.TestCase):
+     def tearDown(self):
+         self._broken.set()          # döngüyü bitir (sonraki write patlar)
+         if self._thread:
+-            self._thread.join(timeout=5)
++            self._thread.join(timeout=10)
++        # Kayıt/çıkarma sözleşmesi test içinde assert edilir; burada
++        # kalıntı ne olursa olsun önceki duruma geri sar (sonraki testleri
++        # kirletme).
++        with ps.LOCK:
++            ps.SSE_CLIENTS[:] = self._clients_before
++            ps.STREAM_CLIENTS[:] = self._stream_before
+         for name, val in self._saved.items():
+             setattr(ps, name, val)
+ 
+diff --git a/_calisma/CIKTI/test_z3_slide_gallery.py b/_calisma/CIKTI/test_z3_slide_gallery.py
+index f0efaaf..441fcec 100644
+--- a/_calisma/CIKTI/test_z3_slide_gallery.py
++++ b/_calisma/CIKTI/test_z3_slide_gallery.py
+@@ -23,7 +23,7 @@ class TestZ3SlideGallery(unittest.TestCase):
+         self.assertEqual(text.count('loading="lazy"'), len(EXPECTED))
+         for name in EXPECTED:
+             self.assertIn(f'src="/slides_z3/{name}.png"', text)
+-            self.assertRegex(text, rf'<img src="/slides_z3/{re.escape(name)}\.png" alt="[^"]+" loading="lazy">')
++            self.assertRegex(text, rf'<img src="/slides_z3/{re.escape(name)}\.png" alt="[^"]+"( width="\d+" height="\d+")? loading="lazy">')
+ 
+ 
+ if __name__ == "__main__":
+diff --git a/findings.md b/findings.md
+index cfeca1c..04bec2f 100644
+--- a/findings.md
++++ b/findings.md
+@@ -1,5 +1,157 @@
+ # Findings
+ 
++## Session 2026-09-18 — new facts (multi-skill marathon)
++- Seal integrity independently verified: committed `ingiliz_empirizmi_v3.pdf`
++  SHA-256 = `74b2cdbdb18fafbf…` — matches the frozen-record ring hash verbatim.
++- Dashboard CLS root cause (measured): `#verdict-seal` was `hidden`→`display:none`,
++  snapshot flips it visible → +0.2555 single shift (79% of total CLS). Fix =
++  space reservation (visibility + paused animation) + img width/height attrs.
++  After: CLS 0.0005. Lab conditions: mobile 390×844@2x, Fast 3G, 4× CPU, fresh
++  server `--interval 3600` (repo smoke-test pattern), DCL-based, median of 3.
++- Chromium-under-agent lesson: stdout-pipe children hang this harness; use
++  file-progress logging + SIGALRM watchdog + child within SYNC window.
++- preview_server now: security headers funnel (end_headers override), CSP with
++  per-process nonce covering the BUILD_TS injected script, do_HEAD.
++- `_calisma/pptx/` generator pattern established (pptxgenjs 4.0.1, repo-local).
++- Pinokio: absent on this machine (3-source proof; control-plane refused + LAN
++  access-retry also refused). Orca 1.4.205: runtime ready, mutation ledger
++  broken (run-create fails deterministically; retry-request id preserved).
++- Env: mcp SDK needs python3.11 (system 3.9); python3.11 at `~/.local/bin`.
++- Trend-DB facts: history.jsonl field-union is 40 keys; HISTORY_KEYS is 36
++  (server) — full set now modeled in `apps/trend-db/prisma/schema.prisma`
++  (42 cols incl. derived `source_row_sha256` + plain `id/ts/verdict/p0/p1/
++  findings`). `refs_by_source` (100/100 populated, JSON map source→count)
++  was the one real schema gap caught by drift-audit → added as `Json?`.
++  Generated Prisma models use camelCase field names, NOT snake_case column
++  names — contract tests must assert camelCase. Prisma 7 validates strict
++  field-per-line; a bad str_replace can merge two field lines (P1012).
++- Node runtime: v22.23.2 (≥20.19 skill prerequisite met for Prisma 7).
++- preview_server CPU profile (cProfile, in-process HTTPServer + threaded
++  client, warm run_round 3 rounds/30 reqs): `load_history` = 45% of server
++  work (15 calls, 32ms cum, 1500 json.loads — full 270KB JSONL re-parsed
++  per /api/history + /api/trend). Fix: module-level `_history_cache =
++  (key, rows)` keyed on (path, mtime_ns, size); atomic tuple rebind (GIL);
++  list-copy returns; row dicts shared read-only (mutation audit: callers
++  at 199/434 safe). After: do_GET cum 0.051→0.019s (−63%), json.loads in
++  profile window 1500→0. Contract: 5 coherence tests in
++  test_trend_db_contract.py (same-object hit, append/rewrite invalidation
++  incl. mtime bump, list-copy poison guard, missing-file).
++- Harness lesson: sync urllib-client-then-handle_request deadlocks (client
++  times out before server accepts); client must run in a daemon thread
++  while main thread calls handle_request(). SSE/streaming endpoints must
++  be excluded from in-process profiling loops.
++- Shuffle-audit lesson (python-testing-patterns tour): alphabetic discovery
++  order HID order-dependence — seed=42 method-level shuffle exposed 3 leak
++  families the green suite never showed: (1) StatusBoardTests mutated
++  LATEST['layers'] with no restore (LayersPlumbingTests only passed because
++  it sorts earlier), (2) TestLoopFlow._patch_commands mutated cl.GATES
++  in-place with no restore (TestGateChain sorted earlier), (3) threaded SSE
++  tests asserted len==1 with join(timeout) — a late/unjoined thread leaks a
++  client into the next test (SSE_CLIENTS and STREAM_CLIENTS both observed).
++  Fixes: full-LATEST backup/restore in setUp/tearDown (LOCK-held), GATES
++  per-gate dict backup in TestLoopFlow, save/clear/restore containment for
++  both client lists in SSEHandlerThreadTests. Seeds 42/7/13 now all green;
++  polluter-finder variant (run+snapshot invariants after each test) names
++  the culprit directly. Awaiting a repo-home as shuffle_tests.py if wanted.
++
++### Remotion harness lesson (remotion-best-practices tour, 2026-09-18)
++- Freebuff's terminal harness reaps ALL child/detached processes when a SYNC
++  command ends: nohup, setsid, double-fork, launchctl submit, and background
++  node were all killed after the parent command returned — even though the
++  server logged "Server ready" and answered HTTP 200 inside its own window.
++- Consequence: long-lived servers (Remotion Studio, dev servers) started from
++  the agent shell cannot be kept alive across commands or for the user; the
++  reliable path is the USER's own terminal.
++- In-window validation pattern that works: representative stills via
++  `npx remotion still ... --frame=N` — real bundler+Chromium proof, sync,
++  no persistent server needed.
++- launchctl note: `launchctl list | grep leibniz` matches
++  `com.freebuff.preview-leibniz2` — Freebuff's own preview_server (pid 951,
++  port 8000), not an agent label; don't confuse them.
++
++### Reproducible-PDF delivery chain re-audit (2026-09-18)
++- Live verify_delivery.py: verdict PASS, K0–K7 all PASS with 0 findings
++  (pdf 33 pp, refs 64/64); K15 history-sidecar SKIP by design (optional layer).
++- qpdf determinism re-run TODAY: 3/3 distinct stripped hashes from the same
++  input — frozen record's NON-DETERMINISTIC verdict still holds (2026 qpdf).
++- Repack reuse-rule proven again in a /tmp copy: consecutive repacks of the
++  unchanged PDF produced byte-identical inner zip (e30ae632…); the
++  "metadata sidecar reuse" path fired (raw 74b2cdbd… unchanged) and
++  --verify reported ALL PASS (rc=0). Zip determinism = sorted inputs +
++  fixed timestamps.
++- Probe residue class found+removed: `.cache/webpack/remotion-development-*`
++  in repo root — Remotion Studio/webpack writes its dev cache into CWD when
++  launched from the repo root; earlier tour's attempts left it. Rule: run
++  Remotion tooling from the project dir (/tmp/leibniz-chain-video), never
++  from repo root.
++
++### Code-review dispatch feasibility (requesting-code-review tour, 2026-09-18)
++- Orca orchestration mutation layer is PERMANENTLY BROKEN in this runtime:
++  run-create and terminal send both fail with "Mutation receipt ledger
++  metadata is missing"; the documented recovery (--retry-request <id>, from
++  both the error message and recovery-and-cleanup.md) re-issues the exact
++  mutation and returns the SAME error — the recovery loop is self-closing.
++  Read endpoints (status, terminal list, terminal create) work fine.
++- terminal send is also a mutation → same ledger failure. terminal create
++  worked (term_6257e622… "Code Reviewer (leibniz2)" tab now exists, empty).
++- Agent-CLI dispatch attempts, all with the skill's code-reviewer brief
++  (/tmp/review_brief.md, working-tree review, read-only contract):
++  (1) claude -p → "Not logged in · Please run /login" (2) codex exec default
++  model gpt-6-astra → "requires a newer version of Codex" (CLI 0.151.0 is
++  latest installed; self-managed standalone, single release) (3) -m
++  gpt-5.1-codex → "not supported with a ChatGPT account" (4) --ignore-user-
++  config default → "You've hit your usage limit … try again at Sep 22nd
++  2026 7:42 AM" (quota wall; login = ChatGPT, no API key path).
++- Conclusion: independent-subagent review is UNAVAILABLE today; the review
++  request is prepared and reusable. When codex quota resets (Sep 22) or
++  claude logs in, re-run: codex exec -s read-only -C <repo> --skip-git-repo-check - < /tmp/review_brief.md
++- Freebuff harness lesson re-confirmed: SYNC-window-only execution;
++  Orca PTY terminals are the only persistent-process surface but their
++  prompt-send path is mutation-blocked today.
++
++### Ruflo recon (ruflo skill, 2026-09-18)
++- Machine-level ruflo state exists (~/.ruflo: consent/first-run caches) but
++  the repo is ruflo-free (no .claude/, .mcp.json; porcelain clean of it).
++- Runtime probe in /tmp scratch (repo untouched): ruflo v3.42.4 (newer than
++  skill's 3.31.0), doctor 10 passed / 18 warnings — all warnings are
++  pre-init-expected EXCEPT two decision-relevant ones:
++  (a) "No API keys found" → agent_spawn/reviewer dispatch would have no
++  model credential in this harness; pending code-review dispatch NOT
++  unblocked by ruflo without user adding an API key.
++  (b) plugin registry signature verification FAILED (IPNS CID fetched but
++  sig invalid → tool self-fell-back to "demo registry", 21 mostly-alpha
++  plugins). Security-relevant: treat registry content as untrusted until
++  upstream fix.
++- Command drift: skill's `discover-plugins` no longer exists in 3.42.4 →
++  `plugins list`. `init` has --skip-claude/--only-claude/--no-global flags
++  (README pointers can be avoided if desired).
++- Honest scope judgment: repo's real needs (one pending reviewer dispatch,
++  then commits) do not currently justify 314-tool MCP surface in this repo;
++  this is a decision point for the user, not a default.
++
++### Rust surface: zero (rust-async-patterns skill, 2026-09-18)
++- Three-source proof: git-tracked (.rs/Cargo.toml/rust-toolchain) = 0;
++  disk scan (ignore included) = 0; cargo/rustc/rustup absent from PATH and
++  ~/.cargo/bin. No async-Rust work is pending anywhere in the repo; skill
++  recorded as unexercised-by-absence (pinokio-precedent pattern). Installing
++  a toolchain for a demo would be a machine-level mutation with no repo need.
++
++### Security review of session-touched surfaces (2026-09-18)
++- Verdict: 0 high-confidence vulnerabilities (data-flow-researched, not
++  pattern-matched): run-stdout ts-sanitization traversal-proof, argv-only
++  subprocess, Host/Origin-allowlisted POSTs + timing-safe token, no CORS
++  (same-origin), tight CSP (default-src none, no unsafe-inline/eval in
++  script-src), no hardcoded secrets in changed surfaces, mcp urlopen target
++  is server-controlled env seam.
++- VERIFY-001 (functional, fail-closed): CSP script-src lacks 'unsafe-inline'
++  and nonces do NOT cover inline event-handler attributes → SVG hover
++  tooltips injected via innerHTML (preview.js ~652) are blocked under CSP;
++  needs real-browser hover test; fix = addEventListener migration (clean)
++  or script-hash.
++- LOW notes: escapeHTML omits quote chars (no attribute-context attacker
++  data today); style-src 'unsafe-inline' is a deliberate inline-style
++  necessity.
++
+ ## Repo facts (verified 2026-09-09, triage snapshot for 091635c)
+ - Repo: leibniz2, branch `feat/plist-info-line`, public GitHub repo `ali-han-kaya/leibniz2`.
+ - PR #42 open, MERGEABLE; triage target `091635c` (`fix(pre-commit): venv-guard check-doc-job-sync hook entry + contract test`,
+diff --git a/progress.md b/progress.md
+index 69c9310..4992496 100644
+--- a/progress.md
++++ b/progress.md
+@@ -1,5 +1,67 @@
+ # Progress Log
+ 
++## Session 2026-09-18 — multi-skill marathon (12 skill turu)
++- Surfaces completed (all verified, none committed): landing page (image-first,
++  a11y-gate PASS, 2307-test suite), leibniz2_mcp read-only MCP server (stdio
++  E2E smoke), security headers + CSP nonce in preview_server (contract test,
++  manifest synced), CLS fix 0.325→0.0005 (seal reservation + img dims,
++  evidence-led before/after), pptx pilot export (validate PASSED),
++  runtime discoveries (Orca ready+empty, orchestration ledger-broken,
++  pinokio absent with 3-source proof, pdf seal hash matched independently),
++  trend-db prep (Prisma 7 skeleton in apps/trend-db: 42-col TrendRun model
++  incl. refs_by_source gap-fix, tsx loader with idempotent row-hash upsert,
++  drift-guard test vs HISTORY_KEYS; validate+generate PASS credential-free;
++  README pooled-vs-direct migration gotcha fixed per neon skill,
++  python-perf tour: load_history cache (45%→~0 of server work, do_GET
++  −63%), 5 coherence tests, harness deadlock lesson,
++  python-testing-patterns tour: shuffle-audit (seed 42/7/13) found+fixed
++  3 test-isolation leaks (LATEST['layers'], GATES, SSE/STREAM clients).
++- Security-review tour: session-touched surfaces audited (preview_server,
++  preview.js, mcp/server, trend-db, next.config) — 0 high-confidence
++  findings, 1 verify item (CSP blocks SVG inline hover-handlers: functional
++  loss, fail-closed; fix = addEventListener or hash), LOW notes recorded.
++- Rust-async tour: surface-absent proof recorded (git/disk/PATH triple-zero;
++  no toolchain installed). Skill unexercised-by-absence; no mutation made.
++- Ruflo tour: machine-level ruflo state (~/.ruflo) but repo ruflo-free;
++  /tmp scratch probe (repo untouched, 25 porcelain count preserved):
++  ruflo v3.42.4 live, doctor 10/18 (key finding: "No API keys found" —
++  reviewer-dispatch not unblocked without user API key; plugin-registry
++  signature verification FAILED → demo-registry fallback, treat as
++  untrusted). Skill drift: discover-plugins → plugins list. init surface
++  mapped (has --skip-claude/--no-global). Repo-init = user decision.
++- Requesting-code-review tour: reviewer subagent dispatch attempted via 4
++  paths (orca orchestration run-create + terminal send w/ documented
++  --retry-request recovery ×3 → same mutation-ledger defect; claude -p →
++  not logged in; codex exec ×3 → model-CLI mismatch, ChatGPT-account model
++  restriction, usage-limit wall resetting Sep 22 07:42). Review brief
++  prepared at /tmp/review_brief.md (skill template, working-tree review,
++  read-only contract); empty Orca terminal "Code Reviewer (leibniz2)"
++  created (term_6257e622…). Verdict: independent review UNAVAILABLE today;
++  brief is reusable when quota/auth unblocks.
++- Reproducible-PDF tour (reproducible-pdf-build): live re-audit of the V5
++  delivery chain — verify_delivery PASS (K0–K7, 0 findings), qpdf rerun
++  3/3 distinct (frozen verdict holds), repack reuse-rule byte-identical
++  in /tmp copy + --verify ALL PASS, migration docs in place. No code changes;
++  removed Remotion webpack-cache probe residue (.cache/ in repo root).
++- Remotion tour (remotion-best-practices): scaffolded /tmp/leibniz-chain-video
++  (blank template, repo-dışı), data-driven comp `LeibnizChain` (1280x720@30fps,
++  760f) with 6 scenes: title → 100-run timeline (real history.jsonl dates) →
++  frozen evidence cards (suite 2323, a11y 28, seal hash 74B2…, RC probe 9/9) →
++  gate chain → integrity seal. Markup best practices applied (interpolate+
++  Easing.bezier, Sequence scenes, delayRender+staticFile for data).
++  Verified: tsc --noEmit clean; 5 representative stills rendered through the
++  real Remotion bundler (frames 0/120/300/520/759, unique md5 mid-frames).
++  Studio reachability proven (HTTP 200 on /LeibnizChain) but the Freebuff
++  harness reaps child processes when each terminal command ends — 5 keepalive
++  mechanisms (nohup/setsid/double-fork/launchd/bg-node) all reaped; persistent
++  open = user terminal: `cd /tmp/leibniz-chain-video && npx remotion studio --no-open`.
++- Session tools/infra lessons recorded in findings.md (Chromium stdout-pipe
++  hang → file-progress + watchdog + fresh-server pattern).
++- Suite: 2323 tests OK (skipped=12) at session end; shuffle-audit seeds
++  42/7/13 all green after isolation fixes.
++- Blocked-on-user: `neon login` (Neon thread), commit authorization,
++  Aday-1 grilling start.
++
+ ## Session 2026-08-30 (planning-with-files init)
+ 
+ - Ran session-catchup: no prior planning files; fresh start.
+diff --git a/task_plan.md b/task_plan.md
+index 93e35a8..99d476d 100644
+--- a/task_plan.md
++++ b/task_plan.md
+@@ -1,44 +1,63 @@
+-# Task Plan — leibniz2 session (2026-08-30)
++# Task Plan — leibniz2 session (2026-09-18)
+ 
+ ## Goal
+-Persist session context for the leibniz2 repo (PR #42, branch `feat/plist-info-line`)
+-so work survives context loss, and keep the CI-gate repair effort tracked on disk.
+-
+-## Context snapshot (carried from earlier sessions)
+-- Branch: `feat/plist-info-line`, HEAD `26d7201`, pushed; PR #42 open.
+-- Commit `835510b` committed the dependency-closed untracked set (77 files: 20 source
+-  modules, ~53 test files, docs/HOOK_ENV_MATRIX.md, docs/CI_GATE_TRIAGE.md) using
+-  `--no-verify` (user-authorized) because 25 unit tests were failing for pre-existing
+-  reasons unrelated to that commit.
+-- Commit `26d7201` clarity pass: removed dead `opencode --version` fallback in
+-  `_locate_opencode` (coordinator_loop.py, orchestrate_k_dag.py).
+-- `test_status_checks.py` path fix landed (workflow path resolved from repo root);
+-  note: tracked module `status_checks.py` still uses a cwd-relative WORKFLOW path —
+-  known issue.
++Persist session context for the leibniz2 repo (branch `reword-working`, PR #50 open)
++so work survives context loss; track this session's completed surfaces and the
++open decision items (commit, Neon login, Aday-1 grilling).
++
++## Context snapshot (current, 2026-09-18)
++- Branch: `reword-working`, HEAD `e787e9a`; PR #50 OPEN (unmerged).
++- Working tree holds this session's uncommitted work (see progress.md Session 2026-09-18):
++  security headers + CSP nonce (preview_server.py/preview.html), img dimensions +
++  gallery-regex update, manifest +2, .gitignore +landing/pptx/trend-db entries; untracked:
++  test_security_headers.py, test_pptx_export.py, test_trend_db_contract.py,
++  _calisma/landing/, _calisma/pptx/, _calisma/mcp/, apps/trend-db/ (Prisma 7 trend-DB
++  skeleton: schema 42 cols, loader, drift-guard, validate+generate PASS).
++- NOTE: `test_coverage_report.py` has a STAGED change that is NOT from this session —
++  do not stage/commit it blindly.
++- Full suite: 2323 tests OK (skipped=12) as of today.
++
++## Superseded context (PR #42 triage, Aug–Sep): the phases below are complete;
++CI gate repair landed in earlier sessions (see findings.md Root causes → all closed
++at 5ab5196).
+ 
+ ## Phases
+ 
+ ### Phase 1: Restore/persist planning context — Status: complete
+ - Created task_plan.md, findings.md, progress.md.
+-- Ran session-catchup: no prior planning files existed.
+-
+-### Phase 2: Pull PR #42 CI results into findings.md — Status: in_progress
+-- `gh pr checks 42` shows on HEAD `26d7201`:
+-  - FAIL (required): `Delivery verification — K1-K19 (single entry point)` (~2m)
+-  - FAIL (advisory): `CI-SIMULATE` (~1m37s), `Live CI doc↔GitHub sync audit` (21s)
+-  - PASS: K9 Lean proof, Budget shield, CLI override trend, Changelog drift,
+-    Action runtime check (node24)
+-- Next action: fetch failing job logs, extract root causes into findings.md.
+-
+-### Phase 3: Decide next work item — Status: pending
+-- Options: (a) fix the 25 unit-test defects category-by-category,
+-  (b) fix status_checks.py relative-path bug (4 tests),
+-  (c) add `if: always()` to install steps in verify.yml (docs-grounded hardening),
+-  (d) other user-directed work.
+-- Await user direction unless instructed otherwise.
++
++### Phase 2: PR #42 CI triage + repair — Status: complete (superseded)
++- All four root causes closed at `5ab5196`; work moved on.
++
++### Phase 3: 2026-09-18 multi-skill session — Status: complete
++- Landing page (image-first, a11y-gate PASS) · MCP server (leibniz2_mcp, read-only)
++- Security headers + CSP nonce · CLS fix 0.325→0.0005 · pptx pilot export
++- Orca/orchestration discovery · pinokio absent (3-source proof)
++- Perf tour (python-performance-optimization): load_history mtime+size cache;
++  do_GET cumtime 0.051→0.019s; coherence tests 5/5
++- Remotion pilot (remotion-best-practices): /tmp/leibniz-chain-video — data-driven
++  LeibnizChain comp (1280x720@30, 760f, 6 scenes from history.jsonl evidence);
++  tsc clean, 5 stills rendered via real bundler (unique md5 mid-frames);
++  Studio verified HTTP 200 but harness reaps it after each command —
++  persistent open requires user terminal
++
++### Phase 4: Open decision items — Status: in_progress
++- (a) Commit decision: which of this session's surfaces land as commit(s).
++- (b) Neon thread: **credential-free prep COMPLETE** (trend-db skeleton green:
++  validate/generate PASS, drift-guard 3/3, suite 2318). Only `neon login`
++  remains — then README's 3 commands (env pull → unpooled migrate → load).
++- (c) Architecture Candidate 1 grilling (gate orchestration → registry) — needs user.
++- (d) Optional: convert remaining 2 decks to pptx; native-shape rebuild; CLS budget gate.
++- (e) Remotion pilot (in /tmp, outside repo): user opens Studio themselves
++  (`cd /tmp/leibniz-chain-video && npx remotion studio --no-open`); optional
++  mp4 render decision afterwards.
++- (f) Reproducible-PDF audit (2026-09-18): delivery chain re-proven live —
++  verify_delivery verdict PASS (K0–K7, 0 findings), qpdf rerun 3/3 distinct
++  (frozen verdict consistent), repack reuse-rule byte-identical in /tmp copy,
++  --verify ALL PASS. No changes needed.
+ 
+ ## Next Step
+-Fetch the failing K1-K19 job log from GitHub Actions and record root causes in findings.md.
++Ask user which Phase 4 item to take; commit decision first (tree holds 9 surfaces).
+ 
+ ## Decisions Made
+ - 2026-08-30: Keep `_locate_opencode` duplicated across the two modules instead of

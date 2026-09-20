@@ -1,0 +1,80 @@
+// leibniz2 doğrulama-zinciri trend şeması (39 alanın tam modeli).
+// Prisma 7 sözleşmesi: datasource URL prisma.config.ts'ten (env ile),
+// schema'da url satırı yok; generator explicit output kullanır.
+// Kaynak: preview_server HISTORY_KEYS sözleşmesi + history.jsonl (100 kayıt).
+//
+// supabase-postgres-best-practices turu (2026-09-19) kural-uyumu:
+//  - schema-data-types: ts → Timestamptz(6) (kaynak offset-bilgili ISO-8601,
+//    mikro-saniyeli; timestamp(3) offset atar + hassasiyet keser);
+//    budget_* → Decimal(10,2) (para = numeric, float değil).
+//  - query-composite-indexes: @@index([verdict, ts(sort: Desc)]) — eşitlik
+//    kolonu önce, aralık kolonu sonra (mevcut, doğru sırada).
+
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated"
+}
+
+model TrendRun {
+  id        Int      @id @default(autoincrement())
+  ts        DateTime @db.Timestamptz(6) @unique @map("ts")
+  verdict   String
+
+  // Bulgu sayıları
+  p0        Int
+  p1        Int
+
+  // Süre + bütçe
+  durationS          Float? @map("duration_s")
+  durationPctWarn    Boolean? @map("duration_pct_warn")
+  budgetUsd          Decimal? @db.Decimal(10, 2) @map("budget_usd")
+  budgetLimit        Decimal? @db.Decimal(10, 2) @map("budget_limit")
+  budgetMethod       String? @map("budget_method")
+
+  // Kanıt sayıları
+  refCount           Int? @map("ref_count")
+  refsVerified        Int?     @map("refs_verified")
+  refsTotal           Int?     @map("refs_total")
+  refsMismatch        Int?     @map("refs_mismatch")
+  refsBySource        Json?    @map("refs_by_source")
+  z3Passed           Int? @map("z3_passed")
+  z3Failed           Int? @map("z3_failed")
+  z3Total            Int? @map("z3_total")
+  leanOk             Boolean? @map("lean_ok")
+  leanSource         String? @map("lean_source")
+  leanOverride       Boolean? @map("lean_override")
+  leanDetail         Json? @map("lean_detail")
+  lineageOk          Boolean? @map("lineage_ok")
+  lineageCount       Int? @map("lineage_count")
+  lineageSummary     Json? @map("lineage_summary")
+  patternDrift       Json? @map("pattern_drift")
+  patternDriftDetail Json? @map("pattern_drift_detail")
+  cliOverrideCount   Int? @map("cli_override_count")
+  cliOverrides       Json? @map("cli_overrides")
+  hookEnv            Json? @map("hook_env")
+  precommitHooks     Json? @map("precommit_hooks")
+  statusBoard        Json? @map("status_board")
+  findings           Json?
+  auditRefsTrend     String? @map("audit_refs_trend")
+  flakyCount         Int? @map("flaky_count")
+  deterministicCount Int? @map("deterministic_count")
+  exitCode           Int? @map("exit_code")
+
+  // Bütünlük zinciri
+  rawSha256          String? @map("raw_sha256")
+  strippedSha256     String? @map("stripped_sha256")
+  historySidecarSha256 String? @map("history_sidecar_sha256")
+
+  // Sayfa/referans sayıları
+  pdfPages           Int? @map("pdf_pages")
+
+  // Kayıt: hash'i hesaba kat
+  sourceRowSha256    String? @map("source_row_sha256") @unique
+
+  @@index([verdict, ts(sort: Desc)])
+  @@map("trend_runs")
+}

@@ -23,7 +23,7 @@ class TestZ3SlideGallery(unittest.TestCase):
         self.assertEqual(text.count('loading="lazy"'), len(EXPECTED))
         for name in EXPECTED:
             self.assertIn(f'src="/slides_z3/{name}.png"', text)
-            self.assertRegex(text, rf'<img src="/slides_z3/{re.escape(name)}\.png" alt="[^"]+" loading="lazy">')
+            self.assertRegex(text, rf'<img src="/slides_z3/{re.escape(name)}\.png" alt="[^"]+"( width="\d+" height="\d+")? loading="lazy">')
 
 
 if __name__ == "__main__":

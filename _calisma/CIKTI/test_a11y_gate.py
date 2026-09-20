@@ -1,0 +1,375 @@
+#!/usr/bin/env python3
+"""test_a11y_gate.py — a11y_gate için tarayıcısız (browser-free) test süiti.
+
+Spec: docs/superpowers/specs/2026-09-17-a11y-gate-design.md (§Testing)
+Plan: docs/superpowers/plans/2026-09-17-a11y-gate-implementation.md (T4)
+
+Kapsam: saf-unit (eşikleme, bilinmeyen-severity fail-closed, allowlist,
+rapor şekli) + in-process sözleşme testleri (ölü port → FAIL, canlı sunucu →
+PASS, checksum uyuşmazlığı → FAIL, geçersiz konfig → FAIL). Tarayıcı
+entegrasyonu (gerçek Playwright koşumu) CI job'ının kendisidir; bu süit
+Playwright'a dokunmaz — sürücü dikşi `collect` üzerinden sahte bir
+soket-kanıt sürücüyle değiştirilir (gerçek TCP davranışı korunur).
+"""
+
+import contextlib
+import io
+import json
+import os
+import socket
+import sys
+import tempfile
+import threading
+import unittest
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from unittest import mock
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, SCRIPT_DIR)
+
+import a11y_gate  # noqa: E402
+
+
+# ----------------------------------------------------------------- yardımcılar
+
+def node(target=("body",)):
+    return {"target": list(target)}
+
+
+def axe_v(rule, impact, nodes=None):
+    return {"id": rule, "impact": impact, "nodes": nodes if nodes is not None else [node()]}
+
+
+def base_cfg():
+    return {
+        "blocking": ["critical", "serious"],
+        "warn": ["moderate", "minor"],
+        "incomplete": "report-only",
+        "allowlist": [],
+    }
+
+
+class _OKHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        body = b"ok"
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *args):
+        pass
+
+
+@contextlib.contextmanager
+def live_server():
+    srv = HTTPServer(("127.0.0.1", 0), _OKHandler)
+    t = threading.Thread(target=srv.serve_forever, daemon=True)
+    t.start()
+    try:
+        yield "http://127.0.0.1:%d" % srv.server_address[1]
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+
+@contextlib.contextmanager
+def dead_port():
+    srv = HTTPServer(("127.0.0.1", 0), _OKHandler)
+    port = srv.server_address[1]
+    srv.server_close()
+    yield "http://127.0.0.1:%d" % port
+
+
+def socket_probe_connect(base_url, axe_src):
+    """Soket-kanıt sahte sürücü: gerçek TCP bağlantısı kurar (tarayıcı yok).
+
+    Bağlantı kurulamazsa exception fırlatır (gerçek sunucu arızası simülasyonu);
+    kurulursa boş-tarama sonucu döndürür.
+    """
+    from urllib.parse import urlsplit
+
+    u = urlsplit(base_url)
+    s = socket.create_connection((u.hostname, u.port), timeout=2)
+    s.close()
+    return {"violations": [], "incomplete": []}, base_url.rstrip("/") + "/preview.html"
+
+
+# ------------------------------------------------------------- saf eşikleme
+
+class ClassifyTests(unittest.TestCase):
+    def test_critical_is_blocking(self):
+        rows = a11y_gate.classify_violations({"violations": [axe_v("r1", "critical")], "incomplete": []}, base_cfg())
+        self.assertEqual(rows[0]["level"], "blocking")
+        self.assertEqual(a11y_gate.decide_verdict(rows), "FAIL")
+
+    def test_serious_is_blocking(self):
+        rows = a11y_gate.classify_violations({"violations": [axe_v("r1", "serious")], "incomplete": []}, base_cfg())
+        self.assertEqual(rows[0]["level"], "blocking")
+
+    def test_moderate_and_minor_are_warn(self):
+        for impact in ("moderate", "minor"):
+            rows = a11y_gate.classify_violations({"violations": [axe_v("r1", impact)], "incomplete": []}, base_cfg())
+            self.assertEqual(rows[0]["level"], "warn", impact)
+        rows = a11y_gate.classify_violations(
+            {"violations": [axe_v("a", "moderate"), axe_v("b", "minor")], "incomplete": []}, base_cfg())
+        self.assertEqual(a11y_gate.decide_verdict(rows), "PASS")
+
+    def test_unknown_impact_is_blocking(self):
+        rows = a11y_gate.classify_violations({"violations": [axe_v("r1", "banana")], "incomplete": []}, base_cfg())
+        self.assertEqual(rows[0]["level"], "blocking")
+        self.assertEqual(a11y_gate.decide_verdict(rows), "FAIL")
+
+    def test_missing_impact_is_blocking(self):
+        rows = a11y_gate.classify_violations({"violations": [{"id": "r1", "nodes": [node()]}], "incomplete": []}, base_cfg())
+        self.assertEqual(rows[0]["level"], "blocking")
+
+    def test_incomplete_is_report_only(self):
+        results = {"violations": [], "incomplete": [{"id": "i1", "impact": None, "nodes": [node(), node()]}]}
+        rows = a11y_gate.classify_violations(results, base_cfg())
+        self.assertEqual(rows[0]["level"], "incomplete")
+        self.assertEqual(rows[0]["nodes"], 2)
+        self.assertEqual(a11y_gate.decide_verdict(rows), "PASS")
+
+    def test_empty_scan_passes(self):
+        rows = a11y_gate.classify_violations({"violations": [], "incomplete": []}, base_cfg())
+        self.assertEqual(a11y_gate.decide_verdict(rows), "PASS")
+
+
+class AllowlistTests(unittest.TestCase):
+    def test_rule_level_allowlist_silences_everywhere(self):
+        cfg = base_cfg()
+        cfg["allowlist"] = [{"rule": "color-contrast", "reason": "bilinen borç, rokunda"}]
+        results = {"violations": [axe_v("color-contrast", "serious", nodes=[node(["#a"]), node(["#b"])])], "incomplete": []}
+        rows = a11y_gate.classify_violations(results, cfg)
+        self.assertEqual(rows[0]["level"], "allowlisted")
+        self.assertEqual(rows[0]["nodes"], 0)
+        self.assertEqual(a11y_gate.decide_verdict(rows), "PASS")
+
+    def test_target_scoped_allowlist_covers_matching_nodes_only(self):
+        cfg = base_cfg()
+        cfg["allowlist"] = [{"rule": "r1", "reason": "legacy sayfa", "target": "#legacy"}]
+        results = {"violations": [axe_v("r1", "critical", nodes=[node(["#legacy", "div"]), node(["#main"])])], "incomplete": []}
+        rows = a11y_gate.classify_violations(results, cfg)
+        self.assertEqual(rows[0]["level"], "blocking")  # kalan node blocking
+        self.assertEqual(rows[0]["nodes"], 1)
+        self.assertEqual(rows[0]["allowlisted_nodes"], 1)
+        self.assertEqual(a11y_gate.decide_verdict(rows), "FAIL")
+
+    def test_allowlist_never_hides_other_rules(self):
+        cfg = base_cfg()
+        cfg["allowlist"] = [{"rule": "r1", "reason": "sadece r1"}]
+        results = {"violations": [axe_v("r1", "serious"), axe_v("r2", "serious")], "incomplete": []}
+        rows = a11y_gate.classify_violations(results, cfg)
+        levels = {r["rule"]: r["level"] for r in rows}
+        self.assertEqual(levels["r1"], "allowlisted")
+        self.assertEqual(levels["r2"], "blocking")
+
+
+# ------------------------------------------------------------ konfig doğrulama
+
+class ConfigTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+
+    def write(self, cfg):
+        p = os.path.join(self.tmp.name, "cfg.json")
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump(cfg, f)
+        return p
+
+    def test_valid_config_loads(self):
+        cfg = a11y_gate.load_config(self.write(base_cfg()))
+        self.assertEqual(cfg["blocking"], ["critical", "serious"])
+
+    def test_unknown_top_key_rejected(self):
+        bad = base_cfg()
+        bad["extra"] = 1
+        with self.assertRaises(ValueError):
+            a11y_gate.load_config(self.write(bad))
+
+    def test_missing_top_key_rejected(self):
+        bad = base_cfg()
+        del bad["incomplete"]
+        with self.assertRaises(ValueError):
+            a11y_gate.load_config(self.write(bad))
+
+    def test_blocking_warn_overlap_rejected(self):
+        bad = base_cfg()
+        bad["warn"] = ["serious"]
+        with self.assertRaises(ValueError):
+            a11y_gate.load_config(self.write(bad))
+
+    def test_incomplete_policy_locked_to_report_only(self):
+        bad = base_cfg()
+        bad["incomplete"] = "block"
+        with self.assertRaises(ValueError):
+            a11y_gate.load_config(self.write(bad))
+
+    def test_allowlist_entry_requires_reason(self):
+        bad = base_cfg()
+        bad["allowlist"] = [{"rule": "r1"}]
+        with self.assertRaises(ValueError):
+            a11y_gate.load_config(self.write(bad))
+
+    def test_allowlist_entry_requires_rule(self):
+        bad = base_cfg()
+        bad["allowlist"] = [{"reason": "neden"}]
+        with self.assertRaises(ValueError):
+            a11y_gate.load_config(self.write(bad))
+
+    def test_non_dict_rejected(self):
+        p = os.path.join(self.tmp.name, "cfg.json")
+        with open(p, "w", encoding="utf-8") as f:
+            f.write("[]")
+        with self.assertRaises(ValueError):
+            a11y_gate.load_config(p)
+
+
+# ------------------------------------------------------------------ checksum
+
+class ChecksumTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+
+    def bundle(self, content, pin_content=None):
+        p = os.path.join(self.tmp.name, "axe.min.js")
+        with open(p, "w", encoding="utf-8") as f:
+            f.write(content)
+        import hashlib
+        if pin_content is None:
+            pin_content = content
+        with open(p + ".sha256", "w", encoding="utf-8") as f:
+            f.write(hashlib.sha256(pin_content.encode()).hexdigest() + "  axe.min.js\n")
+        return p
+
+    def test_matching_pin_passes(self):
+        a11y_gate.verify_checksum(self.bundle("axe-source"))
+
+    def test_mismatch_raises(self):
+        with self.assertRaises(ValueError):
+            a11y_gate.verify_checksum(self.bundle("axe-source", pin_content="farklı"))
+
+    def test_missing_pin_raises(self):
+        p = os.path.join(self.tmp.name, "axe.min.js")
+        with open(p, "w", encoding="utf-8") as f:
+            f.write("x")
+        with self.assertRaises(ValueError):
+            a11y_gate.verify_checksum(p)
+
+
+# ---------------------------------------------- main() sözleşme testleri
+
+class GateContractTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+
+    def run_gate(self, argv, connect=None):
+        out = os.path.join(self.tmp.name, "report.json")
+        buf = io.StringIO()
+        argv = argv + ["--output", out]
+        if connect is not None:
+            with mock.patch.object(a11y_gate, "collect", connect):
+                with contextlib.redirect_stdout(buf):
+                    rc = a11y_gate.main(argv)
+        else:
+            with contextlib.redirect_stdout(buf):
+                rc = a11y_gate.main(argv)
+        report = {}
+        if os.path.exists(out):
+            with open(out, encoding="utf-8") as f:
+                report = json.load(f)
+        return rc, buf.getvalue(), report
+
+    def test_dead_port_fails_closed(self):
+        # plan: "in-process HTTPServer contract test: server unreachable → FAIL"
+        with dead_port() as url:
+            rc, out, report = self.run_gate(["--base-url", url], connect=socket_probe_connect)
+        self.assertEqual(rc, 1)
+        self.assertIn("verdict: FAIL", out)
+        self.assertIn("[SCAN]", out)
+        self.assertIn("tarama arızası", report["error"])
+
+    def test_live_server_passes(self):
+        with live_server() as url:
+            rc, out, report = self.run_gate(["--base-url", url], connect=socket_probe_connect)
+        self.assertEqual(rc, 0)
+        self.assertIn("verdict: PASS", out)
+        self.assertEqual(report["violations"], [])
+        self.assertEqual(report["summary"], {"blocking": 0, "warn": 0, "allowlisted": 0, "incomplete": 0})
+        self.assertEqual(report["page_url"], url.rstrip("/") + "/preview.html")
+        self.assertEqual(report["config"]["blocking"], ["critical", "serious"])  # config echo
+
+    def test_checksum_mismatch_fails_without_scan(self):
+        called = []
+
+        def must_not_scan(base_url, axe_src):
+            called.append(True)
+            raise AssertionError("checksum uyuşmazlığında taranmamalı")
+
+        p = os.path.join(self.tmp.name, "axe.min.js")
+        with open(p, "w", encoding="utf-8") as f:
+            f.write("değişmiş-bundle")
+        with open(p + ".sha256", "w", encoding="utf-8") as f:
+            f.write("0" * 64 + "  axe.min.js\n")
+        rc, out, report = self.run_gate(["--base-url", "http://127.0.0.1:1", "--axe", p],
+                                        connect=must_not_scan)
+        self.assertEqual(rc, 1)
+        self.assertFalse(called)
+        self.assertIn("[AXE]", out)
+        self.assertIn("checksum", report["error"])
+
+    def test_invalid_config_fails(self):
+        bad = os.path.join(self.tmp.name, "bad.json")
+        with open(bad, "w", encoding="utf-8") as f:
+            json.dump({"blocking": ["critical"]}, f)  # eksik anahtarlar
+        rc, out, report = self.run_gate(["--base-url", "http://127.0.0.1:1", "--config", bad])
+        self.assertEqual(rc, 1)
+        self.assertIn("[CONFIG]", out)
+        self.assertIn("eksik anahtar", report["error"])
+
+    def test_missing_playwright_is_exit_2(self):
+        def no_playwright(base_url, axe_src):
+            raise ImportError("playwright")
+
+        rc, out, _ = self.run_gate(["--base-url", "http://127.0.0.1:1"], connect=no_playwright)
+        self.assertEqual(rc, 2)
+        self.assertNotIn("verdict:", out)  # kullanım/ortam hatası — verdict yok
+        self.assertIn("playwright", out)
+
+    def test_blocking_violation_report_shape(self):
+        def scan(base_url, axe_src):
+            return ({"violations": [axe_v("color-contrast", "serious", nodes=[node(["#x"])])],
+                     "incomplete": []}, base_url + "/preview.html")
+
+        rc, out, report = self.run_gate(["--base-url", "http://127.0.0.1:1"], connect=scan)
+        self.assertEqual(rc, 1)
+        self.assertEqual(report["summary"]["blocking"], 1)
+        self.assertEqual(report["violations"][0]["rule"], "color-contrast")
+        self.assertEqual(report["violations"][0]["level"], "blocking")
+        self.assertEqual(report["violations"][0]["nodes"], 1)
+        self.assertIn("color-contrast", out)  # stdout tablosu
+
+    def test_allowlisted_violation_reported_not_hidden(self):
+        cfg = os.path.join(self.tmp.name, "cfg.json")
+        with open(cfg, "w", encoding="utf-8") as f:
+            json.dump({**base_cfg(), "allowlist": [{"rule": "r1", "reason": "kayitli borc"}]}, f)
+
+        def scan(base_url, axe_src):
+            return ({"violations": [axe_v("r1", "serious")], "incomplete": []}, base_url + "/preview.html")
+
+        rc, out, report = self.run_gate(["--base-url", "http://127.0.0.1:1", "--config", cfg], connect=scan)
+        self.assertEqual(rc, 0)
+        self.assertEqual(report["violations"][0]["level"], "allowlisted")
+        self.assertEqual(report["violations"][0]["reasons"], ["kayitli borc"])
+        self.assertEqual(report["summary"]["allowlisted"], 1)
+        self.assertIn("ALLOWLISTED", out)  # borç raporda görünür
+
+
+if __name__ == "__main__":
+    unittest.main()

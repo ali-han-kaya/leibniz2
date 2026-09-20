@@ -57,9 +57,18 @@ class TestLoopFlow(unittest.TestCase):
         self.wt = pathlib.Path(self.td.name, "wt")
         self.wt.mkdir()
         self.done = pathlib.Path(self.td.name, "done")
+        # İzolasyon: _patch_commands GATES'i yerinde değiştirir; restore-suz
+        # test TestGateChain'e 'echo ok' sızardı (shuffle-audit kanıtı).
+        self._gates_backup = {g: dict(cl.GATES[g]) for g in cl.GATES}
 
     def tearDown(self):
         self.td.cleanup()
+
+    def tearDown(self):
+        self.td.cleanup()
+        for g, spec in self._gates_backup.items():
+            cl.GATES[g].clear()
+            cl.GATES[g].update(spec)
 
     def _patch_commands(self, fail=()):
         """Kapı komutlarını no-op'a çevir; fail set'indekiler 'false' olur."""

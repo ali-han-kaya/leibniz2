@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="tr">
 <head>
 <meta charset="utf-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -20,6 +20,7 @@
   :root[data-theme="light"] .card, :root[data-theme="light"] th, :root[data-theme="light"] code,
   :root[data-theme="light"] pre, :root[data-theme="light"] .rh-filter button,
   :root[data-theme="light"] .z3bar { background:var(--surface); }
+  :root[data-theme="light"] button { color:var(--on-accent); }
   :root[data-theme="light"] .rh-filter button { color:var(--muted); }
   :root[data-theme="light"] .rh-filter button.active { color:var(--fg); }
   :root[data-theme="light"] .footer { background:var(--surface-raised); }
@@ -30,7 +31,8 @@
   header { padding:18px 28px; border-bottom:1px solid var(--border);
            background:linear-gradient(180deg,var(--header-start),var(--header-end));
            display:flex; align-items:center; gap:18px; flex-wrap:wrap; }
-  h1 { margin:0; font-size:20px; flex:1; }
+  h1 { margin:0; font-size:20px; flex:1; font-family:var(--font-verdict);
+    font-weight:600; letter-spacing:.01em; }
   .live-dot { width:10px; height:10px; border-radius:50%; background:var(--err);
               display:inline-block; box-shadow:0 0 8px currentColor;
               transition: background-color 0.4s, box-shadow 0.4s; }
@@ -88,12 +90,15 @@
   .source-badge.daemon { color:var(--budget); border-color:var(--budget);
                          background:rgba(188,140,255,.12); }
   .rh-row { cursor:pointer; padding:1px 4px; border-radius:3px;
-            transition:background 0.15s; }
+            min-height:24px; box-sizing:border-box; transition:background 0.15s; }
   .rh-row:hover { background:rgba(88,166,255,.1); }
+  .rh-row:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+  [role="button"]:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
   .rh-row:active { background:rgba(88,166,255,.2); }
   .rh-filter { display:flex; gap:4px; align-items:center; margin-bottom:4px; }
   .rh-filter button { background:var(--surface-raised); color:var(--muted); border:1px solid var(--border);
-    padding:2px 8px; border-radius:4px; cursor:pointer; font-size:11px; font-weight:600; }
+    padding:2px 8px; border-radius:4px; cursor:pointer; font-size:11px; font-weight:600;
+    min-height:24px; min-width:24px; }  /* WCAG 2.5.8 hedef boyutu (AA) */
   .rh-filter button.active { color:#fff; border-color:var(--accent); background:rgba(88,166,255,.15); }
   .rh-filter button.active[data-f="all"] { border-color:var(--muted); }
   .rh-filter button.active[data-f="PASS"] { border-color:var(--ok); color:var(--ok); background:rgba(63,185,80,.15); }
@@ -131,10 +136,46 @@
   .tip .tt-under { color:var(--ok); }
   a { color:var(--accent); text-decoration:none; }
   a:hover { text-decoration:underline; }
-  button { background:var(--accent); color:#fff; border:0; padding:6px 14px;
+  button { background:var(--accent); color:var(--on-accent); border:0; padding:6px 14px;
            border-radius:6px; cursor:pointer; font-size:12px; font-weight:600; }
   button:hover { opacity:0.85; }
   button:disabled { opacity:0.5; cursor:not-allowed; }
+  /* ── Verdict seal (noter mührü) — imza öğesi ──
+     Halkadaki dairesel metin koşumun deterministik PDF hash'idir:
+     süs değil, mühür. Renkler + fontlar tamamen token katmanından. */
+  .seal { width:64px; height:64px; flex:0 0 64px; margin-left:14px;
+    /* CLS düzeltmesi (perf turu): seal "hidden" iken UA display:none uyguluyor,
+       snapshot gelince hidden=false 64px kutuyu aniden akışa sokuyordu —
+       header genişleyip MAIN'in tamamı kayıyordu (ölçülen tek-shift CLS +0.2555,
+       mobil 390px @4x CPU). Alanı baştan rezerve et: display yerine visibility,
+       basma animasyonunu hidden iken beklet. */
+    visibility:hidden;
+    filter:drop-shadow(0 1px 4px rgba(0,0,0,.35)); }
+  .seal[hidden] { display:block; }
+  .seal[hidden] svg { animation-play-state:paused; }
+  .seal svg { width:100%; height:100%; display:block;
+    animation:seal-stamp .5s cubic-bezier(.2,1.6,.4,1) both;
+    transform-origin:50% 50%; }
+  .seal-circle { fill:rgba(88,166,255,.06); stroke:var(--muted); stroke-width:1.2; }
+  .seal-circle-inner { fill:none; stroke:var(--muted); stroke-width:.6; }
+  .seal-ring { font-family:var(--font-mono); font-size:8.6px; font-weight:600;
+    letter-spacing:.14em; fill:var(--muted); }
+  .seal-verdict { font-family:var(--font-verdict); font-size:10.5px; font-weight:700;
+    letter-spacing:.06em; fill:var(--muted); }
+  .seal-hash { font-family:var(--font-mono); font-size:6.5px; font-weight:600;
+    letter-spacing:.12em; fill:var(--fg-dimmed); }
+  .seal-pass .seal-verdict { fill:var(--ok); }
+  .seal-pass .seal-circle { stroke:var(--ok); fill:rgba(63,185,80,.07); }
+  .seal-fail .seal-verdict { fill:var(--err); }
+  .seal-fail .seal-circle { stroke:var(--err); fill:rgba(248,81,73,.08); }
+  @keyframes seal-stamp {
+    0% { transform:scale(1.8) rotate(-8deg); opacity:0; }
+    60% { opacity:1; }
+    100% { transform:scale(1) rotate(0deg); opacity:1; }
+  }
+  @media (max-width:600px) { .seal { width:48px; height:48px; flex-basis:48px; } }
+  #status-board.board-pass { color:var(--ok); }
+  #status-board.board-fail { color:var(--err); }
   .footer { padding:14px 28px; border-top:1px solid var(--border);
             color:var(--muted); font-size:11px; text-align:center; }
   .z3-gallery { position:relative; margin:34px 0 28px; padding:28px 24px 24px; background:#f4efe5; color:#2b2926; border:1px solid #d6cbb9; border-radius:2px; box-shadow:0 16px 40px rgba(0,0,0,.18), inset 0 0 0 8px #ebe3d4; }
@@ -172,21 +213,41 @@
 </style>
 </head>
 <body>
+<header>
+  <h1>Stoic-Hume V5 — Live CI Dashboard</h1>
+  <div id="verdict-seal" class="seal" hidden aria-hidden="true">
+    <svg viewBox="0 0 100 100">
+      <defs>
+        <path id="seal-arc-top" d="M 50,50 m -38,0 a 38,38 0 1,1 76,0" fill="none"></path>
+      </defs>
+      <circle class="seal-circle" cx="50" cy="50" r="45.5"></circle>
+      <circle class="seal-circle seal-circle-inner" cx="50" cy="50" r="25"></circle>
+      <text class="seal-ring"><textPath href="#seal-arc-top" startOffset="6%">VERIFIED</textPath></text>
+      <text class="seal-verdict" x="50" y="48" text-anchor="middle">VERIFIED</text>
+      <text class="seal-hash" x="50" y="60" text-anchor="middle"></text>
+    </svg>
+  </div>
+  <span id="live-dot" class="live-dot"></span>
+  <span id="live-status" class="ts">connecting…</span>
+  <button id="reconnect">reconnect</button>
+  <button id="theme-toggle" type="button" aria-pressed="false" aria-label="Switch to light theme">light mode</button>
+</header>
+<main>
   <section id="z3-slide-gallery" class="z3-gallery" aria-labelledby="z3-gallery-title">
     <h2 id="z3-gallery-title">Z3 slayt galerisi</h2>
     <div id="z3-slides" class="z3-slides">
-      <button type="button" class="z3-slide" aria-label="P1-a slaydını büyüt"><img src="/slides_z3/P1-a.png" alt="P1-a Z3 slaytı" loading="lazy"></button>
-      <button type="button" class="z3-slide" aria-label="P1-b slaydını büyüt"><img src="/slides_z3/P1-b.png" alt="P1-b Z3 slaytı" loading="lazy"></button>
-      <button type="button" class="z3-slide" aria-label="P2 slaydını büyüt"><img src="/slides_z3/P2.png" alt="P2 Z3 slaytı" loading="lazy"></button>
-      <button type="button" class="z3-slide" aria-label="P3-a slaydını büyüt"><img src="/slides_z3/P3-a.png" alt="P3-a Z3 slaytı" loading="lazy"></button>
-      <button type="button" class="z3-slide" aria-label="P3-b slaydını büyüt"><img src="/slides_z3/P3-b.png" alt="P3-b Z3 slaytı" loading="lazy"></button>
-      <button type="button" class="z3-slide" aria-label="P4-a slaydını büyüt"><img src="/slides_z3/P4-a.png" alt="P4-a Z3 slaytı" loading="lazy"></button>
-      <button type="button" class="z3-slide" aria-label="P4-b slaydını büyüt"><img src="/slides_z3/P4-b.png" alt="P4-b Z3 slaytı" loading="lazy"></button>
-      <button type="button" class="z3-slide" aria-label="P4-c slaydını büyüt"><img src="/slides_z3/P4-c.png" alt="P4-c Z3 slaytı" loading="lazy"></button>
-      <button type="button" class="z3-slide" aria-label="P4-d slaydını büyüt"><img src="/slides_z3/P4-d.png" alt="P4-d Z3 slaytı" loading="lazy"></button>
-      <button type="button" class="z3-slide" aria-label="P4-e slaydını büyüt"><img src="/slides_z3/P4-e.png" alt="P4-e Z3 slaytı" loading="lazy"></button>
-      <button type="button" class="z3-slide" aria-label="P5 slaydını büyüt"><img src="/slides_z3/P5.png" alt="P5 Z3 slaytı" loading="lazy"></button>
-      <button type="button" class="z3-slide" aria-label="P5-note slaydını büyüt"><img src="/slides_z3/P5-note.png" alt="P5-note Z3 slaytı" loading="lazy"></button>
+      <button type="button" class="z3-slide" aria-label="P1-a slaydını büyüt"><img src="/slides_z3/P1-a.png" alt="P1-a Z3 slaytı" width="305" height="75" loading="lazy"></button>
+      <button type="button" class="z3-slide" aria-label="P1-b slaydını büyüt"><img src="/slides_z3/P1-b.png" alt="P1-b Z3 slaytı" width="273" height="69" loading="lazy"></button>
+      <button type="button" class="z3-slide" aria-label="P2 slaydını büyüt"><img src="/slides_z3/P2.png" alt="P2 Z3 slaytı" width="367" height="75" loading="lazy"></button>
+      <button type="button" class="z3-slide" aria-label="P3-a slaydını büyüt"><img src="/slides_z3/P3-a.png" alt="P3-a Z3 slaytı" width="311" height="75" loading="lazy"></button>
+      <button type="button" class="z3-slide" aria-label="P3-b slaydını büyüt"><img src="/slides_z3/P3-b.png" alt="P3-b Z3 slaytı" width="311" height="75" loading="lazy"></button>
+      <button type="button" class="z3-slide" aria-label="P4-a slaydını büyüt"><img src="/slides_z3/P4-a.png" alt="P4-a Z3 slaytı" width="416" height="75" loading="lazy"></button>
+      <button type="button" class="z3-slide" aria-label="P4-b slaydını büyüt"><img src="/slides_z3/P4-b.png" alt="P4-b Z3 slaytı" width="416" height="75" loading="lazy"></button>
+      <button type="button" class="z3-slide" aria-label="P4-c slaydını büyüt"><img src="/slides_z3/P4-c.png" alt="P4-c Z3 slaytı" width="171" height="68" loading="lazy"></button>
+      <button type="button" class="z3-slide" aria-label="P4-d slaydını büyüt"><img src="/slides_z3/P4-d.png" alt="P4-d Z3 slaytı" width="700" height="75" loading="lazy"></button>
+      <button type="button" class="z3-slide" aria-label="P4-e slaydını büyüt"><img src="/slides_z3/P4-e.png" alt="P4-e Z3 slaytı" width="190" height="68" loading="lazy"></button>
+      <button type="button" class="z3-slide" aria-label="P5 slaydını büyüt"><img src="/slides_z3/P5.png" alt="P5 Z3 slaytı" width="919" height="75" loading="lazy"></button>
+      <button type="button" class="z3-slide" aria-label="P5-note slaydını büyüt"><img src="/slides_z3/P5-note.png" alt="P5-note Z3 slaytı" width="575" height="75" loading="lazy"></button>
     </div>
   </section>
   <div id="z3-lightbox" class="z3-lightbox" hidden role="dialog" aria-modal="true" aria-labelledby="z3-lightbox-title">
@@ -197,19 +258,11 @@
     <button type="button" id="z3-next" aria-label="Sonraki slayt">›</button>
     <button type="button" id="z3-close" aria-label="Büyütmeyi kapat">Kapat</button>
   </div>
-<header>
-  <h1>Stoic-Hume V5 — Live CI Dashboard</h1>
-  <span id="live-dot" class="live-dot"></span>
-  <span id="live-status" class="ts">connecting…</span>
-  <button id="reconnect">reconnect</button>
-  <button id="theme-toggle" type="button" aria-pressed="false" aria-label="Switch to light theme">light mode</button>
-</header>
-<main>
   <section>
     <h2>Verification chain</h2>
-    <div id="status-board" style="font-size:15px;font-weight:600;padding:6px 0;letter-spacing:0.3px;color:#555;view-transition-name:status-board">⏳ bekleniyor…</div>
-    <div id="precommit-hooks" style="font-size:12px;color:#888;padding:2px 0 6px 0;view-transition-name:precommit-hooks"></div>
-    <div id="k15-sidecar" style="font-size:11px;color:#999;padding:0 0 4px 0;view-transition-name:k15-sidecar"></div>
+    <div id="status-board" style="font-size:15px;font-weight:600;padding:6px 0;letter-spacing:0.3px;color:var(--fg-dimmed);view-transition-name:status-board">⏳ bekleniyor…</div>
+    <div id="precommit-hooks" style="font-size:12px;color:var(--fg-dimmed);padding:2px 0 6px 0;view-transition-name:precommit-hooks"></div>
+    <div id="k15-sidecar" style="font-size:11px;color:var(--fg-dimmed);padding:0 0 4px 0;view-transition-name:k15-sidecar"></div>
     <div class="badges" id="badges" style="view-transition-name:badges">
       <span class="badge unknown">K8 Z3: ?</span>
       <span class="badge unknown">K9 Lean: ?</span>
@@ -273,9 +326,13 @@
   <section>
     <h2>P0 / P1 trend — son 100 run <span class="ts" id="trend-count"></span></h2>
     <div id="budget-over-banner" class="err" role="alert"
-         style="display:none;margin:6px 0 2px;padding:6px 10px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer"
-         onclick="toggleBudgetOverDetail()" title="Aşım yapan run'ları göster/gizle">
+         style="display:none;margin:6px 0 2px;padding:6px 10px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">
+      <span id="budget-over-toggle" role="button" tabindex="0" aria-expanded="false"
+            onclick="toggleBudgetOverDetail()"
+            onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleBudgetOverDetail()}"
+            title="Aşım yapan run'ları göster/gizle">
       <span id="budget-over-summary"></span><span class="ts" id="budget-over-caret" style="margin-left:6px">▸</span>
+      </span>
       <div id="budget-over-detail" style="display:none;margin-top:6px;font-weight:400;font-family:'SF Mono',monospace;font-size:11px;line-height:1.6;white-space:pre"></div>
     </div>
     <div class="card" style="padding:10px">
@@ -422,10 +479,10 @@
     </table>
   </section>
 </main>
-<div class="footer">
+<footer class="footer">
   Fail-closed CI gate · P0 = paket kırılır · P1 = düzeltilebilir bulgu ·
   PASS = (P0=0 ∧ P1=0) · SSE stream via <code>/api/run</code>
-</div>
+</footer>
 <div id="tip" class="tip" aria-hidden="true"></div>
 
 <script data-build-ts></script>

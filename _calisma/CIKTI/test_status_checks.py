@@ -69,12 +69,12 @@ class TestGateJobs(unittest.TestCase):
                          "Action runtime check (node24)")
 
     def test_count_matches_workflow_minus_excludes(self):
-        # 27 job − 14 hariç = 13 required aday (tek kaynak: workflow).
+        # 28 job − 14 hariç = 14 required aday (tek kaynak: workflow).
         # Hariç: manifest-comment, precheck, label-gate-p1, plist-check,
         #        mirror-check, daemon-http, fresh-clone-http, audit-live-ci,
         #        audit-refs-trend, override-trend, changelog-drift, pattern-drift,
         #        budget-comment, lake-proof
-        self.assertEqual(len(sc.gate_jobs()), 13)
+        self.assertEqual(len(sc.gate_jobs()), 14)
 
     def test_gate_jobs_exact_set_includes_label_gate(self):
         """gate_jobs() tam id kümesini birebir sabitler (fail-closed).
@@ -84,10 +84,8 @@ class TestGateJobs(unittest.TestCase):
         senkron kararı insana bırakılır (yanlış-PASS yok). label-gate
         BİLEREK bu kümededir: P0 label kapısı required'dır.
 
-        NOT: Kapsam 9 değil 13'tür — 9, workflow'un daha az gate job'a
-        sahip olduğu eski dönemin sayısıydı; label-gate, commit-msg-gate,
-        reports, reproducibility, config-sync, refs-trend, ci-simulate,
-        action-runtimes, preview-reload-smoke eklenerek büyüdü.
+        NOT: Kapsam 13 değil 14'tür — 13, a11y-gate eklenmeden önceki sayıydı;
+        a11y-gate (2026-09-17) ile 14'e büyüdü.
         """
         self.assertEqual(
             set(sc.gate_jobs()),
@@ -105,6 +103,7 @@ class TestGateJobs(unittest.TestCase):
                 "refs-trend",
                 "preview-reload-smoke",
                 "ci-simulate",
+                "a11y-gate",
             },
         )
         # label-gate P0 kapısı required aday olmalı (özel vurgu).
