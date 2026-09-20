@@ -1,0 +1,96 @@
+# Reproducible PDF build via TeXLive (pdfTeX) — docs/Makefile.tectonic'in
+# Faz 1 ikizi (docs/TEXLIVE_MIGRATION_PLAN.md).
+# Usage:
+#   make -f docs/Makefile.texlive pdf
+#   make -f docs/Makefile.texlive check
+#   make -f docs/Makefile.texlive accept
+#   make -f docs/Makefile.texlive clean
+#
+# SOURCE_DATE_EPOCH is explicit so the build does not depend on wall-clock
+# time. Override SOURCE_DATE_EPOCH=... to reproduce a historical commit.
+#
+# 3-geçiş sözleşmesi (plan Faz 0): her target tam PASSES geçiş koşar; son
+# geçiş logunda 'Rerun to get' kalmadan hizalama iddiası ÜRETİLEMEZ
+# (fail-closed). pdf çıktıyı yalnız BUILD_DIR'a yazar, sonra OUTPUT'a
+# kopyalar — kaynak dizinine ASLA yazılmaz. check, deney betiğini
+# DETERMINISM_PASSES=$(PASSES) ile delege eder: 2 bağımsız 3-geçişli koşum
+# + /ID-kanonik hash karşılaştırması + rerun=0 denetimi.
+# accept: Faz 3 — check'i koşturur, kanonik hash'i kabul raporunun hash
+# geçiş defterinde (docs/ID_RESIDUAL_ACCEPTANCE.md §4) arar; yoksa
+# fail-closed (yeni bağlam → bilinçli defter satırı, Faz 6 çıkış yolu).
+# Makefile.tectonic paralel yaşamlı kalır (geri dönüş yolu).
+
+SHELL := /bin/sh
+ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/..)
+PACKAGE := $(ROOT)/_calisma/V5_ICERIK/TESLIM_V5_FINAL_2026-08-17/stoic_hume_package/Stoic_Hume_Formal_Section_2026-08-17
+SOURCE ?= $(PACKAGE)/ingiliz_empirizmi_v3.tex
+OUTPUT ?= $(PACKAGE)/ingiliz_empirizmi_v3.pdf
+TEXDIR := $(abspath $(dir $(SOURCE)))
+TEXBASE := $(notdir $(SOURCE))
+STEM := $(TEXBASE:.tex=)
+BUILD_DIR ?= $(ROOT)/.build/texlive
+SOURCE_DATE_EPOCH ?= $(shell git -C "$(ROOT)" log -1 --format=%ct 2>/dev/null || printf '0')
+PDFlatex ?= pdflatex
+PASSES ?= 3
+DETERMINISM_SCRIPT := $(abspath $(ROOT)/_calisma/CIKTI/texlive_determinism_test.sh)
+ACCEPT_DOC := $(ROOT)/docs/ID_RESIDUAL_ACCEPTANCE.md
+REPORT := $(BUILD_DIR)/determinism_report.txt
+
+.PHONY: all pdf check accept clean
+
+all: pdf
+
+pdf:
+	@command -v "$(PDFlatex)" >/dev/null 2>&1 || { echo "ERROR: pdflatex not found (PDFlatex= veya PATH)" >&2; exit 2; }
+	@test -f "$(SOURCE)" || { echo "ERROR: TeX source not found: $(SOURCE)" >&2; exit 1; }
+	@mkdir -p "$(BUILD_DIR)"
+	@i=1; while [ "$$i" -le "$(PASSES)" ]; do \
+	  echo "pdflatex pass $$i/$(PASSES)"; \
+	  TEXLIVE_PASS_INDEX="$$i" TEXLIVE_PASSES="$(PASSES)" \
+	  SOURCE_DATE_EPOCH="$(SOURCE_DATE_EPOCH)" \
+	  TEXINPUTS="$(TEXDIR)//:" TEXMFOUTPUT="$(BUILD_DIR)" \
+	  "$(PDFlatex)" -interaction=nonstopmode -halt-on-error \
+	    -output-directory="$(BUILD_DIR)" "$(SOURCE)" >/dev/null || exit 1; \
+	  i=$$((i + 1)); \
+	done
+	@if grep -q 'Rerun to get' "$(BUILD_DIR)/$(STEM).log"; then \
+	  echo "ERROR: son geçiş logunda 'Rerun to get' kaldı — $(PASSES) geçiş hizalamayı tamamlamadı (Faz 0 sözleşmesi)" >&2; \
+	  grep -n 'Rerun to get' "$(BUILD_DIR)/$(STEM).log" >&2; exit 1; \
+	fi
+	@cp "$(BUILD_DIR)/$(STEM).pdf" "$(OUTPUT)"
+	@printf 'built=%s\npasses=%s\nsource_date_epoch=%s\n' "$(OUTPUT)" "$(PASSES)" "$(SOURCE_DATE_EPOCH)"
+
+check:
+	@command -v "$(PDFlatex)" >/dev/null 2>&1 || { echo "ERROR: pdflatex not found (PDFlatex= veya PATH)" >&2; exit 2; }
+	@test -f "$(DETERMINISM_SCRIPT)" || { echo "ERROR: deney betiği yok: $(DETERMINISM_SCRIPT)" >&2; exit 1; }
+	@mkdir -p "$(BUILD_DIR)"
+	@PDBIN="$$(command -v "$(PDFlatex)")"; \
+	 test -n "$$PDBIN" || { echo "ERROR: pdflatex not found (PDFlatex= veya PATH)" >&2; exit 2; }; \
+	 TEX_SOURCE="$(SOURCE)" \
+	 TEXLIVE_BIN="$${PDBIN%/*}" \
+	 DETERMINISM_PASSES="$(PASSES)" \
+	 DETERMINISM_OUT="$(REPORT)" \
+	 bash "$(DETERMINISM_SCRIPT)" || exit 1
+	@grep -q '^passes=$(PASSES)$$' "$(REPORT)" || { echo "ERROR: raporda passes=$(PASSES) yok — geçiş sözleşmesi rapora yansımadı" >&2; exit 1; }
+	@grep -q '^verdict=PASS' "$(REPORT)" || { echo "ERROR: determinism verdict PASS değil" >&2; exit 1; }
+	@grep -q '^texlive_run1_rerun_left=0$$' "$(REPORT)" || { echo "ERROR: run1 rerun_left=0 değil" >&2; exit 1; }
+	@grep -q '^texlive_run2_rerun_left=0$$' "$(REPORT)" || { echo "ERROR: run2 rerun_left=0 değil" >&2; exit 1; }
+	@echo "── TeXLive determinism check kanıtı ──"
+	@grep -E '^(passes|source_date_epoch|texlive_canonical_run1_sha256|texlive_canonical_run2_sha256|residual|verdict)=' "$(REPORT)"
+
+accept: check
+	@CANON=$$(sed -n 's/^texlive_canonical_run1_sha256=//p' "$(REPORT)"); \
+	 test -n "$$CANON" || { echo "ERROR: raporda kanonik hash yok" >&2; exit 1; }; \
+	 if grep -q "$$CANON" "$(ACCEPT_DOC)"; then \
+	   echo "── Faz 3 kabul ──"; \
+	   echo "KABUL: kanonik hash kabul raporunun hash geçiş defterinde"; \
+	   echo "canon=$$CANON"; \
+	 else \
+	   echo "ERROR: kanonik hash kabul raporunun hash geçiş defterinde yok: $$CANON" >&2; \
+	   echo "       Yeni bağlam (CI/font paketi) ise docs/ID_RESIDUAL_ACCEPTANCE.md" >&2; \
+	   echo "       defterine bu ikiliyi bilinçli ekle (Faz 6 çıkış yolu), sonra tekrar koş." >&2; \
+	   exit 1; \
+	 fi
+
+clean:
+	rm -rf "$(BUILD_DIR)"

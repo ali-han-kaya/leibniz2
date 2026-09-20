@@ -107,7 +107,13 @@ Temiz kopya (`git clone` → `/tmp/leibniz2-final`, HEAD = `3918a04092279450e743
   workflow'u push'unun ilk Pazartesi'sinden itibaren koşar. Planın
   ölçülmüş çapraz-motor eşitlik kanıtı: sayfa 33=33, metin farkı yalnız heceleme/glif eşlemesi;
   TeXLive 3-geçiş pipeline'ı kanonik `544516b0…` ×2 bağımsız koşum
-  deterministik).
+  deterministik). **Faz 3 kabul raporu YAZILDI:**
+  `docs/ID_RESIDUAL_ACCEPTANCE.md` — `/ID` kalıntısının kök nedeni +
+  ölçümü + kabul kararı (teslim boru hattı `/ID`-kanonik hash'i referans
+  alır; ham hash yalnız bilgi) + hash geçiş defteri (tectonic
+  `ad8fca69…`/`47681218…` → TeXLive `544516b0…`; teslim sidecar tectonic-era
+  ikilisi kayıtlı, TeXLive-era yenilemesi Faz 4) + `make accept` defteri
+  fail-closed doğrular + Faz 4 `--strict-determinism` semantiği referansı.
 - PDF raw hash repack sırasında değişti (qpdf sidecar yeniden üretildi) —
   K6-DETERM bilgi düzeyinde izleniyor.
 - `python3 -m unittest discover` sistem python3 ile `--full` koşursa Z3 yok
