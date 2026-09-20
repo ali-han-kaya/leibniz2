@@ -21,6 +21,7 @@ güvenlik-yama desenini Dockerfile üzerinde sözleşme satırlarıyla sabitler:
 Desen bozulursa (floor silinmesi, tüm-upgrade'e geçiş, hijyen kaybı)
 test fail eder → commit bloke olur (fail-closed). stdlib-only, OFFLINE.
 """
+import re
 import unittest
 from pathlib import Path
 
@@ -34,6 +35,30 @@ class TestDockerfileSecurityPatching(unittest.TestCase):
     def setUpClass(cls):
         cls._df = DOCKERFILE.read_text(encoding="utf-8")
         cls._doc = DOC.read_text(encoding="utf-8")
+
+    def test_precommit_hook_triggers_on_dockerfile_change(self):
+        # Commit-anında tetikleme sözleşmesi: Dockerfile değişince sözleşme
+        # süiti koşar; değişim-farkında (always_run YOK — başka dosyalı
+        # committe koşmaz, nedensel sinyal korunur).
+        cfg = (ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8")
+        self.assertIn("- id: check-dockerfile-security-patching", cfg,
+                      "pre-commit hook'u config'de yok")
+        block = next(b for b in cfg.split("\n      - id: ")
+                     if b.startswith("check-dockerfile-security-patching"))
+        self.assertIn("test_dockerfile_security_patching", block,
+                      "hook sözleşme süitini çağırmalı")
+        self.assertRegex(block, r"files: \^Dockerfile\$",
+                         "değişim-farkında tetikleme: files Dockerfile'ı eşlemeli")
+        # Anahtar-formu araması: description prose'ündeki geçiş sayılmaz
+        # (yoksa hook'un kendi açıklaması testi tuzağa düşürür).
+        self.assertIsNone(
+            re.search(r"^\s*always_run:", block, re.M),
+            "değişim-farkında: always_run anahtarı olmamalı (her committe koşmaz)")
+        # Regresyon (gerçek koşumda ölçüldü): pass_filenames true kalırsa
+        # pre-commit 'Dockerfile'ı unittest'e arg olarak ekler →
+        # "No module named 'Dockerfile'" error.
+        self.assertIn("pass_filenames: false", block,
+                      "dosya adları unittest'e arg olarak geçmemeli")
 
     def test_patch_layer_present_with_cve_ledger_default(self):
         # ARG default'u floor girdisini taşır + defter CVE kimlikleriyle kayıtlı.

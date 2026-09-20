@@ -2,6 +2,11 @@ name: docker-security
 
 on:
   push:
+  schedule:
+    # Haftalık: her Pazartesi 03:43 UTC. Determinism-trend (03:17) ile bilinçli
+    # çakışmaz. Yeni CVE'ler en çok hazırlıksız anda gelir — gating doc'unun
+    # "Trivy gate kırmızı" döngüsünün CI bacağı haftalık kendi başına koşar.
+    - cron: "43 3 * * 1"
   workflow_dispatch: {}  # CVE tazelemesi gibi olaylarda elle tetikleme
 
 permissions:
@@ -51,3 +56,28 @@ jobs:
       # kimse yok ve adım hiçbir koşuda geçemezdi. Zorlayıcı CVE taraması
       # yukarıdaki Trivy gate'te yaşıyor (CRITICAL/HIGH, exit-code 1).
       # (SARIF upload da kaldırıldı: code scanning hedefi yok.)
+
+  smoke:
+    name: Local security smoke (script parity)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # SKIP kuralı runner araçlarıyla uyumlu: ubuntu-latest'te docker ve
+      # trivy YOKTUR; script'in "araç yok → exit 0 SKIP" sözleşmesiyle job
+      # bilinçli SKIP üretir (görünür, loglanır — sessiz kanıt kaybı değil).
+      # Aksi halde görünümlü yeşil her hafta SKIP'i gizlerdi. Kurulacak olsaydı
+      # (trivy-action image-ref yüzeyi gibi) job gerçek koşum kanıtı üretirdi.
+      # Bu satır K3 sözleşmesinin adım-düzeyi kanıtıdır.
+      - name: Run local security smoke (SKIP-aware)
+        run: bash _calisma/CIKTI/docker_security_smoke.sh
+        env:
+          DOCKER_SMOKE_OUT: docs/ci_simulate/docker_security_smoke/docker_security_smoke_report.txt
+
+      - name: Show smoke evidence
+        if: always()
+        run: |
+          cat docs/ci_simulate/docker_security_smoke/docker_security_smoke_report.txt 2>/dev/null \
+            || echo "(smoke kanıt dosyası yok — SKIP koşumunda üretilmez)"

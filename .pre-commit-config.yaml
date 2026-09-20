@@ -84,6 +84,18 @@
 #   19) check-precommit-orphans : ~/.cache/pre-commit'te 24s+ eski patch-
 #                               kalıntısı (yetim-stash) commit'i bloke eder;
 #                               taze (<24s) kurtarma-penceresinde serbest.
+#   20) check-docker-security-smoke: docker_security_smoke.sh (build + Trivy
+#                               gate + canlı sağlık) — Dockerfile stage'liyken
+#                               ateşlenir (tam build dakikalar sürer; her
+#                               committe değil surface'te). SKIP-farkında:
+#                               docker/trivy/colima yoksa script exit 0 SKIP
+#                               üretir (ortam-yok ≠ kod-bozuk); bulgu varsa
+#                               rc=1 fail-closed bloke eder.
+#   21) check-dockerfile-security-patching: test_dockerfile_security_patching.py
+#                               — yama-desen sözleşmesi (CVE-defteri floor,
+#                               --only-upgrade, apt hijyeni, pip floors) —
+#                               Dockerfile stage'liyken ateşlenir
+#                               (değişim-farkında; always_run yok).
 # Herhangi bir P0/P1 bulgusu commit'i bloke eder (sıfır-dışı exit).
 #
 # Not: update-config TEK yazan hook'tur (config'i stage eder). Diğer kapılar
@@ -104,6 +116,8 @@
 #   pre-commit run check-mirror-coverage
 #   pre-commit run check-prettier-format
 #   pre-commit run check-dashboard-typecheck
+#   pre-commit run check-docker-security-smoke
+#   pre-commit run check-dockerfile-security-patching
 #
 # update-config hariç hook'lar read-only'dir: dosya değiştirmez, yalnızca
 # doğrular (fail-closed). update-config, config'i paket içeriğiyle senkron eder.
@@ -910,5 +924,41 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+        stages: [pre-commit]
+        verbose: true
+
+      - id: check-docker-security-smoke
+        name: "Docker security smoke (SKIP-aware, fail-closed)"
+        description: >-
+          docker_security_smoke.sh — CI docker-security workflow'unun
+          birebir yerel karşılığı: image build (arm64→linux/amd64 emülasyon)
+          + Trivy gate (CRITICAL,HIGH, --ignore-unfixed) + canlı /api/health
+          + HEALTHCHECK. Trigger: Dockerfile stage'liyken
+          (check-dashboard-typecheck örüntüsü — tam build dakikalar sürer,
+          her committe değil surface'te koşar). SKIP-farkında: docker/trivy
+          yok veya colima daemon sağlanamazsa script exit 0 SKIP üretir
+          (ortam-yok ≠ kod-bozuk; sebebini kanıt dosyasına yazar); build
+          hatası / Trivy bulgusu / sağlık ihlali rc=1 → fail-closed bloke.
+        entry: bash _calisma/CIKTI/docker_security_smoke.sh
+        language: system
+        files: Dockerfile
+        stages: [pre-commit]
+        verbose: true
+
+      - id: check-dockerfile-security-patching
+        name: "Dockerfile security-patching contract (fail-closed)"
+        description: >-
+          test_dockerfile_security_patching.py — docs/DOCKER_SECURITY_PATCHING.md
+          desenini Dockerfile'da sözleşme satırlarıyla sabitler:
+          SECURITY_PATCH_PACKAGES CVE-defteri default'u, --only-upgrade
+          (tüm-upgrade yasağı), apt hijyeni, dpkg-query kanıt satırı,
+          bookworm dağıtım pini, pip floor deseni. Değişim-farkında
+          tetikleme: yalnızca Dockerfile stage'liyken koşar (always_run
+          yok — nedensel sinyal korunur); desen bozulursa commit bloke.
+          OFFLINE, stdlib-only, ~0.05s.
+        entry: python3 -m unittest _calisma.CIKTI.test_dockerfile_security_patching
+        language: system
+        files: ^Dockerfile$
+        pass_filenames: false
         stages: [pre-commit]
         verbose: true

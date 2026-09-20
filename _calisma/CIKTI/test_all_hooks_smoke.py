@@ -145,6 +145,17 @@ HOOKS = [
     ("check-unit-tests", "Unit tests for new gates", 0, 1,
      [r"Passed"], [], 180),
 
+    # 25) check-docker-security-smoke: Docker guvenlik akisinin yerel smoke'u
+    # (SKIP-farkindali: docker/trivy/colima yoksa script exit 0 SKIP uretir;
+    #  bulgu varsa fail-closed rc=1. Trigger: Dockerfile stage'liyken).
+    ("check-docker-security-smoke", "Docker security smoke (SKIP-aware, fail-closed)", 0, 0,
+     [r"Passed"], [], 600),
+
+    # 26) check-dockerfile-security-patching: yama-desen sözleşmesi
+    # (değişim-farkında: --all-files Dockerfile'ı eşler → süit koşar).
+    ("check-dockerfile-security-patching", "Dockerfile security-patching contract", 0, 0,
+     [r"Passed"], [], 10),
+
     # 22) commit-msg-style: commit mesaji noise denetimi (ozel — pre-commit run ile calismaz)
     # Bu hook yalnizca git commit sirasinda .git/COMMIT_EDITMSG uzerinde calisir.
     # Smoke'da ayri bir mock commit senaryosu ile test edilir.

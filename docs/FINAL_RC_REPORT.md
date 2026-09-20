@@ -39,7 +39,7 @@ kaynağın kopyası istenirse kopya verilir — özet "kaynak" diye etiketlenmez
 | `repack_delivery.py --verify` | TÜMÜ PASS (iki zip ↔ sidecar) |
 | K14 zip-lineage / K17 review-freshness / skills-index | PASS |
 | actionlint (3 workflow) | RC=0 |
-| `test_all_hooks_smoke.py` | 25/25 hook PASS |
+| `test_all_hooks_smoke.py` | 27/27 hook PASS (check-docker-security-smoke + check-dockerfile-security-patching ekledi; 2026-09-20) |
 | CIKTI unittest discover | 2.228 OK (71 SKIP — ortam-koşullu, documented) |
 | MCP `server.py --list-tools` + test bataryası | 26/26 OK, 5 tool |
 | Dashboard lint + build | PASS |
