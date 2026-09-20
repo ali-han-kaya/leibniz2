@@ -431,6 +431,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-19 | fix | (dev) bootstrap pin list as array, shellcheck-clean | [`dd913c8`](https://github.com/ali-han-kaya/leibniz2/commit/dd913c8) |
 | 2026-09-19 | refactor | (dev) bootstrap UNITS table, contract suite, live hint | [`a9717ee`](https://github.com/ali-han-kaya/leibniz2/commit/a9717ee) |
 | 2026-09-19 | refactor | (dev) table-driven contract suite, function-level checks | [`7c589b4`](https://github.com/ali-han-kaya/leibniz2/commit/7c589b4) |
+| 2026-09-19 | fix | (ci) a11y scan bypasses nonce CSP, bootstrap test guards, dead hash | [`5c02474`](https://github.com/ali-han-kaya/leibniz2/commit/5c02474) |
 
 ### Regresyon notları
 

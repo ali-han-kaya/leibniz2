@@ -1244,7 +1244,7 @@ def verify_loop(verify_dir, interval, stop_event=None):
     """Her interval saniyede bir run_verify çalıştırır (arka plan thread)."""
     import traceback
     sys.stderr.write("[verify_loop] started\n"); sys.stderr.flush()
-    while True:
+    while stop_event is None or not stop_event.is_set():
         try:
             sys.stderr.write(f"[verify_loop] running verify...\n"); sys.stderr.flush()
             run_verify(verify_dir)
@@ -2017,6 +2017,14 @@ def main():
         t.join(timeout=REQUEST_TIMEOUT_SECONDS)
         srv.shutdown()
         srv.server_close()
+        # K15 yarışı kapanışı: run'ın son yazım fazı (persist_history) LOCK
+        # altında history.jsonl ve .sha256 sidecar'ını İKİ ayrı atomik yazımla
+        # yazar; daemon-thread çıkışta yarım kalırsa diskte yeni-history +
+        # eski-sidecar kalır (K15 P1: hash uyuşmazlığı — CI'da daemon-http
+        # kırmızısının kök-nedeni). LOCK'u sınırlı süreyle alıp bırakmak:
+        # aktif yazım biter, yeni yazım başlayamaz.
+        if LOCK.acquire(timeout=REQUEST_TIMEOUT_SECONDS):
+            LOCK.release()
 
 
 if __name__ == "__main__":
