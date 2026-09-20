@@ -22,6 +22,8 @@ stdlib only, OFFLINE — geçici dizinlerle izole çalışır.
 
 import os
 import re
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -290,6 +292,90 @@ class TestRepoConsistency(unittest.TestCase):
                 f"Hook pattern '{pattern}' hiçbir test dosyasıyla eşleşmiyor "
                 f"(çift uzantı/yanlış giriş) — kaynak: {name}",
             )
+
+
+HOOK_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                           "check_unit_tests_hook.sh")
+STUB_TEST_BODY = ("import unittest\n\n\nclass T(unittest.TestCase):\n"
+                  "    def test_ok(self):\n        pass\n")
+# Gerçek repoda olduğu gibi: test_coverage_report.py kendisi keşfedilen
+# bir test dosyasıdır (manifest girişli) — HOOK bloğu + test gövdesi.
+COV_FILE = "test_coverage_report.py"
+BASE = ["test_a.py", "test_b.py", COV_FILE]
+
+
+class TestHookEntryFailClosed(unittest.TestCase):
+    """check_unit_tests_hook.sh artık drift'i BLOKLAR (sessiz auto-fix değil).
+
+    Ölçülen boşluk: hook daha önce `sync --update >/dev/null || true`
+    çalıştırıyordu — (1) documented 'yalnız bir yazan hook' invariant'ını
+    çiğniyordu, (2) senkron hatalarını yutuyordu, (3) drift'i sessizce
+    düzeltip stage'liyordu. Yeni sözleşme: hook fail-closed --check
+    koşturur; drift → commit bloke + remedy (sync --update)."""
+
+    def _sandbox(self, disk, manifest, coverage):
+        """Gerçek hook + gerçek sync-aracıyla izole repo kökü kurar."""
+        td = tempfile.TemporaryDirectory()
+        cikti = os.path.join(td.name, "_calisma", "CIKTI")
+        os.makedirs(cikti)
+        shutil.copy(os.path.abspath(s.__file__), cikti)
+        shutil.copy(HOOK_SCRIPT, cikti)
+        for t in disk:
+            with open(os.path.join(cikti, t), "w", encoding="utf-8") as f:
+                f.write(STUB_TEST_BODY)
+        cov = os.path.join(cikti, COV_FILE)
+        _write_coverage(cov, coverage)
+        with open(cov, "a", encoding="utf-8") as f:
+            f.write(STUB_TEST_BODY)
+        s.write_manifest(manifest, os.path.join(cikti, "check_unit_tests.list"))
+        return td, cikti
+
+    def _run_hook(self, cikti):
+        return subprocess.run(
+            ["bash", os.path.join(cikti, "check_unit_tests_hook.sh")],
+            capture_output=True, text=True,
+            cwd=os.path.dirname(os.path.dirname(cikti)))
+
+    def test_hook_blocks_when_new_test_missing_from_manifest(self):
+        td, cikti = self._sandbox(
+            disk=BASE + ["test_c.py"],
+            manifest=BASE,
+            coverage=BASE)
+        try:
+            r = self._run_hook(cikti)
+            self.assertNotEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertIn("--update", r.stderr, "remedy komutu gösterilmeli")
+            # Okuma-hook invariantı: drift BLOKLANIR, sessizce DÜZELTİLMEZ.
+            self.assertEqual(
+                s.read_manifest(os.path.join(cikti, "check_unit_tests.list")),
+                BASE)
+        finally:
+            td.cleanup()
+
+    def test_hook_blocks_when_hook_coverage_missing_entry(self):
+        td, cikti = self._sandbox(
+            disk=BASE,
+            manifest=BASE,
+            coverage=["test_a.py", "test_b.py"])
+        try:
+            r = self._run_hook(cikti)
+            self.assertNotEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertIn("HOOK_COVERAGE", r.stderr)
+        finally:
+            td.cleanup()
+
+    def test_hook_passes_and_is_read_only_on_synced_tree(self):
+        td, cikti = self._sandbox(disk=BASE, manifest=BASE, coverage=BASE)
+        try:
+            mf = os.path.join(cikti, "check_unit_tests.list")
+            cov = os.path.join(cikti, COV_FILE)
+            r = self._run_hook(cikti)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertIn("PASS", r.stdout)
+            self.assertEqual(s.read_manifest(mf), BASE)
+            self.assertEqual(s.read_hook_coverage(cov), BASE)
+        finally:
+            td.cleanup()
 
 
 if __name__ == "__main__":

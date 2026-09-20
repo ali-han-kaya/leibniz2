@@ -225,8 +225,7 @@ def run_check_hook_coverage(discovered=None, path=None, cikti_dir=None):
     if orphan:
         print("HOOK_COVERAGE'ta diskte olmayan girdi: " + ", ".join(orphan))
     if add or orphan:
-        print("Çözüm: `python3 _calisma/CIKTI/sync_check_unit_tests.py --update` "
-              "veya pre-commit hook otomatik günceller.")
+        print("Çözüm: `python3 _calisma/CIKTI/sync_check_unit_tests.py --update`.")
         return 1
     return 0
 
@@ -293,7 +292,8 @@ def run_check(directory=None, manifest=None, coverage=None):
             print(f"YENİ test dosyası check-unit-tests listesinde YOK: {', '.join(missing)}")
         if stale:
             print(f"Manifest'te artık olmayan dosya: {', '.join(stale)}")
-        print("Çözüm: `pre-commit` hook otomatik günceller — dosyayı stage edip yeniden commit et.")
+        print("Çözüm: python3 _calisma/CIKTI/sync_check_unit_tests.py --update "
+              "(stage eder) — sonra yeniden commit et.")
         rc = 1
     # İkinci hedef: HOOK_COVERAGE['check-unit-tests'] (coverage rapor kapısı).
     cov = _coverage_target(directory, coverage)
