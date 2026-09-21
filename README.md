@@ -466,6 +466,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-21 | test | (sync) pin sync lifecycle as subprocess regression gate | [`5fdf2e4`](https://github.com/ali-han-kaya/leibniz2/commit/5fdf2e4) |
 | 2026-09-21 | feat | (dashboard) TeX engine determinism trend panel | [`49008e6`](https://github.com/ali-han-kaya/leibniz2/commit/49008e6) |
 | 2026-09-21 | docs | (report) record 3/3 CI evidence for PR-route delivery | [`5621c4e`](https://github.com/ali-han-kaya/leibniz2/commit/5621c4e) |
+| 2026-09-21 | style | (github_scripts) prettier-canonical format for comment scripts | [`9beef0a`](https://github.com/ali-han-kaya/leibniz2/commit/9beef0a) |
 
 ### Regresyon notları
 
