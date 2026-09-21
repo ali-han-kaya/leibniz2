@@ -101,13 +101,21 @@ jobs:
           fi
           git commit -m "chore: record weekly determinism trend measurement" -m "TeXLive+SDE experiment (two independent SDE runs) on ubuntu-latest with pinned tectonic 0.17.0 (release digest verified) and TeXLive pdflatex; canonical hashes appended to docs/determinism_trend/determinism_trend.jsonl." -m "Generated with GitHub Actions. Co-Authored-By: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
           git push --force origin "HEAD:$TREND_BRANCH"
+          # PR yolu: Actions'a PR-oluşturma izni kapalıysa (repo ayarı) ölçüm
+          # yine bot dalında güvendedir; adım görünür yönergeyle yeşil biter
+          # (kayıp yok — koşum 35590265995 kanıtı: create GraphQL-blok).
           PR=$(gh pr list --head "$TREND_BRANCH" --state open --json number --jq '.[0].number // ""')
           if [ -z "$PR" ]; then
-            gh pr create --base main --head "$TREND_BRANCH" --title "chore: weekly determinism trend record (bot)" --body "Automated weekly determinism trend measurement (linux baseline). Canonical hashes in docs/determinism_trend/determinism_trend.jsonl."
+            if gh pr create --base main --head "$TREND_BRANCH" --title "chore: weekly determinism trend record (bot)" --body "Automated weekly determinism trend measurement (linux baseline). Canonical hashes in docs/determinism_trend/determinism_trend.jsonl."; then
+              gh pr merge "$PR" --auto --merge || echo "(auto-merge kuyruğa alınamadı — PR açık kalır, elle incelenir)"
+            else
+              echo "NOT: bot-PR oluşturulamadı (repo ayarı Actions-PR'yi kapatmış olabilir)."
+              echo "Ölçüm bot dalında güvende: $TREND_BRANCH @ $(git rev-parse --short HEAD)"
+              echo "Elle PR: gh pr create --base main --head $TREND_BRANCH"
+            fi
           else
             gh pr comment "$PR" --body "New measurement appended (run ${GITHUB_RUN_ID:-unknown})."
           fi
-          gh pr merge "$PR" --auto --merge || echo "(auto-merge kuyruğa alınamadı — PR açık kalır, elle incelenir)"
 
       # Fail-closed tamamlama: yeşil = deney PASS + uzlaşma OK + kayıt
       # işlendi. Kırmızı = deney fail-closed, uzlaşma ihlali ya da izin
