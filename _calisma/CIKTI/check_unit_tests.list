@@ -131,6 +131,7 @@ test_texlive_determinism_hook.py
 test_texlive_determinism_id_residual.py
 test_texlive_repro_documented.py
 test_trend_db_contract.py
+test_trend_record_pr_contract.py
 test_update_preview_sync_server.py
 test_validate_config_schema.py
 test_verification_chain_deck.py
