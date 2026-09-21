@@ -85,6 +85,31 @@ STUB_TECTONIC = (
 )
 
 
+class TestMakefileTexlivePhase0(unittest.TestCase):
+    """Faz 0 sözleşme sabitleri: motor-kilidi dokümantasyonu + paralel yaşam."""
+
+    def test_engineinfo_target_contract(self):
+        # Motor sürüm kilidi: `make engineinfo` pdfTeX/TeXLive sürümünü ve
+        # sözleşme sabitlerini yazdırır (CI log'u için makine-okur satırlar).
+        mk = MAKEFILE.read_text(encoding="utf-8")
+        self.assertIn("engineinfo:", mk, "engineinfo target'ı yok")
+        self.assertIn(".PHONY: all pdf check accept clean engineinfo", mk)
+        self.assertIn("$(PDBIN) -version", mk)
+        self.assertIn("pdtex_version=", mk)
+        self.assertIn("texinputs_contract=", mk)
+        self.assertIn("texmfoutput_contract=", mk)
+        self.assertIn("output_dir_contract=-output-directory", mk)
+        self.assertIn("engine_lock=pdfTeX 3.141592653-2.6", mk)
+
+    def test_readme_documents_parallel_life(self):
+        # Paralel yaşam dokümantasyonu (plan Faz 1): README'de her iki
+        # Makefile yan yana — motor geçiş rotası + geri dönüş yolu.
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertIn("docs/Makefile.texlive", readme)
+        self.assertIn("docs/Makefile.tectonic", readme)
+        self.assertIn("engineinfo", readme)
+
+
 class TestMakefileTexliveStructural(unittest.TestCase):
     def test_tectonic_twin_still_present(self):
         # Paralel yaşam: geri dönüş yolu (plan Faz 1).

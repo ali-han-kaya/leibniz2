@@ -27,24 +27,54 @@
 # package set is the mature, continuously-patched line (upstream rebuilds
 # the tag as security fixes land), keeping the scan green without
 # weakening the gate.
+# PYTHON KATMANI güvenlik-yama ARG'si — apt katmanıyla (SECURITY_PATCH_PACKAGES)
+# TEK MEKANİZMADA: floors burada yaşar (tek kopya, global scope — her stage
+# bare ARG ile miras alır), stage'ler yeniden beyan eder. CVE-defteri:
+#   setuptools: pip/pkg_resources zinciri HIGH CVE'si → floor >=80
+#   wheel: CVE-2026-24049 (privesc) → floor >=0.46.2
+#   (kanıt: 2026-09-16 trivy docker-security gate bulgusu → yama → 0 bulgu)
+# Floor'lar minimumdur (>=): base image daha yenisini taşıyorsa pip onu kullanır.
+ARG PYTHON_SECURITY_PATCH_PACKAGES="setuptools>=80 wheel>=0.46.2"
+
 FROM python:3.11-slim-bookworm AS builder
 
 # z3-solver: K8 symbolic proof engine (tek üçüncü-parti bağımlılık).
-# setuptools: güvenlik yaması — image'e taşınan pip/pkg_resources zinciri
-# eski setuptools sürümüyle HIGH CVE taşıyordu (trivy docker-security gate);
-# en az yamalı sürüm sabitlenir.
-RUN python -m venv /opt/venv \
-    && /opt/venv/bin/pip install --no-cache-dir --upgrade "setuptools>=80" \
-    && /opt/venv/bin/pip install --no-cache-dir z3-solver
+# Pip yaması: global ARG default'u (üstteki CVE-defteri) — apt katmanıyla
+# simetrik guard/kanıt: boş ARG = yama yok (net kanıt), kurulan sürümler
+# pip show ile build log'una yazılır (floor eki kırpılır — yalın paket adı).
+ARG PYTHON_SECURITY_PATCH_PACKAGES
+# Tuzaka-notu (canlı build'de ölçüldü): unquoted $VAR genişlemesi floor'lardaki
+# '>' karakterini shell REDIRECT'ine çevirir — floor yutulur, pip bare sürüm
+# kurar. Güvenli form: QUOTED genişleme satır başına floor yazıp -r dosyası.
+RUN set -eux; \
+    python -m venv /opt/venv; \
+    if [ "$(printf '%s' "$PYTHON_SECURITY_PATCH_PACKAGES" | tr -d '[:space:]')" = "" ]; then \
+      echo "PYTHON_SECURITY_PATCH_PACKAGES empty — no targeted pip patch"; \
+    else \
+      printf '%s\n' "$PYTHON_SECURITY_PATCH_PACKAGES" | tr ' ' '\n' > /tmp/pip_security_reqs.txt; \
+      /opt/venv/bin/pip install --no-cache-dir --upgrade -r /tmp/pip_security_reqs.txt; \
+      /opt/venv/bin/pip show \
+        $(printf '%s\n' "$PYTHON_SECURITY_PATCH_PACKAGES" | tr ' ' '\n' | sed 's/[><=!~].*//') \
+        | grep -E '^(Name|Version):'; \
+    fi; \
+    /opt/venv/bin/pip install --no-cache-dir z3-solver
 
 FROM python:3.11-slim-bookworm AS runtime
 
-# Base image'in sistem setuptools/wheel'i (pip/pkg_resources zinciri ile)
-# HIGH CVE taşıyordu: CVE-2026-23949 (jaraco.context path traversal,
-# 6.1.0'da fix) + CVE-2026-24049 (wheel privesc, 0.46.2'de fix).
-# Sistem site-packages'ı yamalı sürüme yükselt — gate'in tetiklediği
-# yamalar bu aşamada uygulanır.
-RUN pip install --no-cache-dir --upgrade "setuptools>=80" "wheel>=0.46.2"
+# Sistem setuptools/wheel'i (pip/pkg_resources zinciri) aynı ARG mekanizmasıyla
+# yamalanır — gate'in tetiklediği yamalar bu aşamada uygulanır (guard/kanıt
+# builder stage'iyle özdeş; bare ARG global default'u miras alır).
+ARG PYTHON_SECURITY_PATCH_PACKAGES
+RUN set -eux; \
+    if [ "$(printf '%s' "$PYTHON_SECURITY_PATCH_PACKAGES" | tr -d '[:space:]')" = "" ]; then \
+      echo "PYTHON_SECURITY_PATCH_PACKAGES empty — no targeted pip patch"; \
+    else \
+      printf '%s\n' "$PYTHON_SECURITY_PATCH_PACKAGES" | tr ' ' '\n' > /tmp/pip_security_reqs.txt; \
+      pip install --no-cache-dir --upgrade -r /tmp/pip_security_reqs.txt; \
+      pip show \
+        $(printf '%s\n' "$PYTHON_SECURITY_PATCH_PACKAGES" | tr ' ' '\n' | sed 's/[><=!~].*//') \
+        | grep -E '^(Name|Version):'; \
+    fi
 
 # GENELLEŞTİRİLMİŞ güvenlik-yama katmanı — base-image güncellemelerinin
 # getirdiği CRITICAL/HIGH Trivy bulgularını kapatan tek nokta. Desen:

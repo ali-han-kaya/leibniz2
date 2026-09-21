@@ -126,6 +126,7 @@ test_status_checks_smoke.py
 test_stop_post_only.py
 test_summary_pattern_drift.py
 test_sync_check_unit_tests.py
+test_sync_lifecycle.py
 test_sync_one_atomic.py
 test_test_coverage_report.py
 test_texlive_determinism_hook.py

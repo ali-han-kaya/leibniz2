@@ -101,22 +101,52 @@ class TestDockerfileSecurityPatching(unittest.TestCase):
             self.assertIn("python:3.11-slim-bookworm", ln,
                           f"dağıtım pini kaymış: {ln}")
 
+    def test_pip_layer_arg_mechanism(self):
+        # Python zinciri apt katmanıyla TEK MEKANİZMADA: floors
+        # PYTHON_SECURITY_PATCH_PACKAGES ARG default'unda yaşar (tek kopya,
+        # global) ve her stage yeniden beyan eder; RUN satırları hardcoded
+        # floor yerine ARG genişlemesi kullanır.
+        self.assertIn('ARG PYTHON_SECURITY_PATCH_PACKAGES="setuptools>=80 wheel>=0.46.2"',
+                      self._df, "pip floor default'u ARG'de olmalı")
+        stage_redeclares = [ln for ln in self._df.splitlines()
+                            if ln.strip() == "ARG PYTHON_SECURITY_PATCH_PACKAGES"]
+        self.assertEqual(len(stage_redeclares), 2,
+                         "builder + runtime stage'leri ARG'yi yeniden beyan etmeli")
+        # Empty-guard apt katmanıyla simetrik (ortam/yama yoksa net kanıt).
+        self.assertIn('"$PYTHON_SECURITY_PATCH_PACKAGES" | tr -d', self._df)
+        self.assertIn("PYTHON_SECURITY_PATCH_PACKAGES empty", self._df)
+
     def test_pip_floor_pattern(self):
-        # Python zinciri aynı desen: floor'lu upgrade.
-        self.assertIn('pip install --no-cache-dir --upgrade "setuptools>=80"',
-                      self._df)
-        self.assertIn('"wheel>=0.46.2"', self._df)
+        # Floor'lar ARG default'unda (pip gereksinim sözdizimi, >=); kanıt
+        # satırı dpkg-query karşılığı: pip show + floor ekranı kırpma.
+        arg_line = next(ln for ln in self._df.splitlines()
+                        if ln.startswith('ARG PYTHON_SECURITY_PATCH_PACKAGES='))
+        for floor in ("setuptools>=80", "wheel>=0.46.2"):
+            self.assertIn(floor, arg_line, f"CVE-defteri floor'u ARG'de: {floor}")
+        self.assertIn("pip show", self._df,
+                      "pip katmanı kanıtı pip show ile (apt dpkg-query simetrisi)")
+        self.assertIn("sed 's/[><=!~].*//'", self._df,
+                      "pip show'a floor eki ham geçemez (yalın paket adı)")
         # Fail-closed: floorsuz toplu pip upgrade satırı yasak.
         for ln in self._df.splitlines():
             s = ln.strip()
             if s.startswith("pip install") and "--upgrade" in s:
-                self.assertRegex(
-                    s, r"--upgrade\s+[\"'][A-Za-z0-9_.-]+(>=|==)",
-                    f"floorsuz pip upgrade: {s}")
+                # Regresyon (canlı build'de ölçüldü): unquoted $VAR genişlemesi
+                # 'setuptools>=80' içindeki '>'yi shell REDIRECT'ine çevirir —
+                # floor yutulur, bare latest kurulur (sessiz kontrat ihlali).
+                # Güvenli form: quoted printf → tr → -r dosyası.
+                self.assertIn("-r /tmp/pip_security_reqs.txt", s,
+                              f"pip upgrade -r dosyasından olmalı: {s}")
+                self.assertNotIn("$PYTHON_SECURITY_PATCH_PACKAGES", s,
+                                 f"pip satırında unquoted $VAR yasak (> redirect tuzakası): {s}")
+        # Guard + reqs dosyası QUOTED genişlemeden üretilir ('>' korunur).
+        self.assertIn('printf \'%s\\n\' "$PYTHON_SECURITY_PATCH_PACKAGES"',
+                      self._df, "reqs dosyası quoted genişlemeden üretilmeli")
 
     def test_doc_contract(self):
         # Desenin dokümanı: kapalı döngü + defter + smoke aracı + katkı sözleşmesi.
         for token in ("SECURITY_PATCH_PACKAGES",
+                      "PYTHON_SECURITY_PATCH_PACKAGES",
                       "Kapalı döngü",
                       "CVE-defteri",
                       "libpcre2-8-0",
