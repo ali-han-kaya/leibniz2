@@ -39,6 +39,14 @@ TEST_DIR = REPO_ROOT / "_calisma" / "CIKTI"
 
 CHECK_UNIT_TESTS_LIST = TEST_DIR / "check_unit_tests.list"
 
+# HOOK_COVERAGE okuması TEK KAYNAKTAN: sync_check_unit_tests'in AST tabanlı
+# parse'ı. Eski kopya span sezgisi (anahtar → ilk `],`) gövde-içi bir yorumda
+# geçen `],`'da bloğu kırpar (ölçüldü) — kaldırıldı.
+if str(TEST_DIR) not in sys.path:
+    sys.path.insert(0, str(TEST_DIR))
+
+from sync_check_unit_tests import read_hook_coverage as _read_hook_coverage  # noqa: E402
+
 
 def read_check_unit_tests_list():
     if not CHECK_UNIT_TESTS_LIST.exists():
@@ -48,19 +56,11 @@ def read_check_unit_tests_list():
 
 
 def read_hook_coverage_check_unit_tests():
-    """test_coverage_report.py içindeki HOOK_COVERAGE['check-unit-tests'] listesini
-    statik parse eder (runtime import etmek yerine)."""
-    src = (TEST_DIR / "test_coverage_report.py").read_text(encoding="utf-8")
-    i = src.find('"check-unit-tests":')
-    if i < 0:
-        return set()
-    j = src.find("],", i)
-    if j < 0:
-        return set()
-    block = src[i:j + 1]
-    # "test_X.py" desenlerini al
-    import re
-    return {m for m in re.findall(r'"([^"]+\.py)"', block)}
+    """HOOK_COVERAGE['check-unit-tests'] listesi — AST tabanlı paylaşımlı
+    parse'tan (sync_check_unit_tests tek kaynak); yalnız .py girdileri
+    (bu gate'in discover evreni)."""
+    entries = _read_hook_coverage(str(TEST_DIR / "test_coverage_report.py"))
+    return {e for e in entries if e.endswith(".py")}
 
 
 EXEMPT_FROM_DIFF_GUARD = frozenset({

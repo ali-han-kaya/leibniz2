@@ -119,6 +119,23 @@ Temiz kopya (`git clone` → `/tmp/leibniz2-final`, HEAD = `3918a04092279450e743
 - `python3 -m unittest discover` sistem python3 ile `--full` koşursa Z3 yok
   deyip P0 üretir: kapı venv python ile koşulmalı (belgelendi).
 
+**2026-09-21 PR-yolu CI kanıtı (branch protection main'e direkt-push'u
+blokluyor — 14 required check):** yerel main'in 9 commit'i (5280500…5fdf2e4,
+8c59bb4 merge dahil) PR #52 dalına merge edildi (M1 `69ab9a9`, 12 dosya
++391/−49; 0 çakışma) ve dal `b5126f9..69ab9a9` pushlandı. PR-head koşumları:
+
+| Workflow | Run | Sonuç |
+|---|---|---|
+| verify-delivery | 35566880485 | **success** |
+| docker-security | 35566880477 | **success** |
+| test-smoke | 35566880476 | **success** |
+
+→ **3/3 workflow success** merge-commit `69ab9a9`'da; PR #52 MERGEABLE.
+Bu oturumun yeni kapıları CI'da da yeşil: `test_sync_lifecycle` (subprocess
+yaşam-döngüsü regresyonu; batarya 144 dosya / check-unit-tests 159) ve
+48h-guard-kaldırılmış trend-kayıt yolu (bayat rapor tarihiyle kaydolur;
+tazelik iddiası `--check`'te). Kapanış main'e PR #52 merge'iyle gelir.
+
 ## Karar
 
 Yerel fail-closed zinciri bu SHA ağacında uçtan uca yeşil: K0–K21, 25/25
