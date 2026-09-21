@@ -47,6 +47,7 @@ test_coq_lake.py
 test_coverage_report.py
 test_dashboard_k17_exit_sync.py
 test_dashboard_smoke.py
+test_determinism_trend_badge.py
 test_dev_bootstrap.py
 test_diff_config_artifacts.py
 test_doc_job_sync.py

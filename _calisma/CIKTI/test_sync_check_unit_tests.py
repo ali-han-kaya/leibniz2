@@ -203,25 +203,61 @@ class TestHookCoverageSync(unittest.TestCase):
         finally:
             td.cleanup()
 
-    def test_drift_guard_can_still_parse_regenerated_block(self):
-        """Yeniden yazılan blok, ci_full_discover_drift_guard'ın statik parse'
-       ıyla okunabilir olmalı (format kontratı)."""
+    def test_regenerated_block_is_ast_round_trip(self):
+        """Yeniden yazılan blok, AST tabanlı okuyucuyla birebir geri okunmalı
+        (yazım-sonrası read == entries sözleşmesi)."""
         entries = ["test_a.py", "test_b.py"]
         td, cov = self._env(entries, ("test_new.py",))
         try:
             s.run_update(stage=False, directory=td.name,
                          manifest=os.path.join(td.name, "mf.list"), coverage=cov)
-            src = open(cov, encoding="utf-8").read()
-            i = src.find('"check-unit-tests":')
-            j = src.find("],", i)
-            self.assertGreater(i, 0)
-            self.assertGreater(j, i)
-            import re as _re
-            found = _re.findall(r'"([^"]+\.py)"', src[i:j + 1])
-            self.assertIn("test_new.py", found)
-            self.assertIn("test_a.py", found)
+            self.assertEqual(
+                s.read_hook_coverage(cov),
+                ["test_a.py", "test_b.py", "test_new.py"])
         finally:
             td.cleanup()
+
+    def test_reader_is_span_heuristic_free(self):
+        """KIRILMA-TUZAĞI: blok-içi yorum ']," taşıyorsa span sezgisi kırılır;
+        AST tabanlı okuma/yazım bu durumda da doğru çalışmalı (bkz. ölçülen
+        2026-09-21 boşluğu: ci_full_discover_drift_guard.py satır 129)."""
+        td = tempfile.TemporaryDirectory()
+        try:
+            cov = os.path.join(td.name, "coverage_report.py")
+            with open(cov, "w", encoding="utf-8") as f:
+                f.write(
+                    "HOOK_COVERAGE = {\n"
+                    '    "other-hook": ["test_other.py"],\n'
+                    '    "check-unit-tests": [\n'
+                    '        # 2026-09-21 boşluğu: ci_full_discover_drift_guard.py\n'
+                    '        # ... sorusunun cevabı ], tam burada — tuzak\n'
+                    '        "test_a.py",\n'
+                    '        "test_b.py",],\n'
+                    "}\n")
+            open(os.path.join(td.name, "test_a.py"), "w").close()
+            open(os.path.join(td.name, "test_b.py"), "w").close()
+            open(os.path.join(td.name, "test_c.py"), "w").close()
+            # Okuma: eski span sezgisi gövdeyi yorumdaki '],'-da kırpıp boş
+            # gövde okur; AST tabanlı okuma gerçek girdileri döndürmeli.
+            self.assertEqual(s.read_hook_coverage(cov),
+                             ["test_a.py", "test_b.py"])
+            # Yazım da sağlam kalmalı (parite: read(update(read)) = yazılan).
+            s.run_update(stage=False, directory=td.name,
+                         manifest=os.path.join(td.name, "mf.list"),
+                         coverage=cov)
+            self.assertEqual(s.read_hook_coverage(cov),
+                             ["test_a.py", "test_b.py", "test_c.py"])
+        finally:
+            td.cleanup()
+
+    def test_guard_reader_matches_sync_reader_on_real_repo(self):
+        """Parite kapısı: ci_full_discover_drift_guard'ın HOOK_COVERAGE okuması,
+        sync aracının okumasıyla gerçek repoda birebir aynı olmalı (guard
+        yalnız .py ister; sync .js girdilerini de taşır — py-only küme)."""
+        import ci_full_discover_drift_guard as g
+        self.assertEqual(
+            g.read_hook_coverage_check_unit_tests(),
+            {e for e in s.read_hook_coverage() if e.endswith(".py")})
 
     def test_real_repo_hook_coverage_covers_discovery(self):
         """Gerçek repo regresyon kapısı: keşif, tüm hook listelerinin

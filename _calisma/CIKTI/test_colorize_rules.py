@@ -314,13 +314,19 @@ class TestRefsBySourceCards(unittest.TestCase):
         self.assertIn("srcColors[k] || \"var(--accent)\"", self._html)
 
     def test_table_bar_is_colored(self):
-        """Yatay çubuk grafiği src renk ile doldurulur (background: + clr)."""
-        self.assertIn("background:' + clr", self._html)
+        """Yatay çubuk grafiği src renk ile doldurulur (background: + clr).
+
+        Pin prettier-kanonik çok-satır birleştirmeye whitespace-tolerant:
+        `"background:" + clr` tek satırda da (prettier öncesi) çok satıra
+        bölünmiş de (prettier sonrası) eşleşir.
+        """
+        self.assertRegex(self._html, r"background:?[\"' ]?\s*\+\s*clr")
         self.assertIn('height:14px', self._html)  # thicker bars
 
     def test_table_rows_have_colored_left_border(self):
         """Her tablo satırı border-left:3px solid <renk>."""
-        self.assertIn("border-left:3px solid ' + clr", self._html)
+        self.assertRegex(self._html,
+                         r"border-left:3px solid[\s\"']*\+\s*clr")
 
     def test_table_has_columns_cnt_pct_bar(self):
         """Tablo: Source, Cnt, %, Bar sütunları."""
@@ -363,7 +369,7 @@ class TestRefsTrendBySourceStacked(unittest.TestCase):
         """showRefsTrendTip hover tooltip'i by_source kırılımını gösterir."""
         self.assertIn("── by_source ──", self._html)
         self.assertIn("refs_by_source", self._html)
-        self.assertIn("srcKeys.sort", self._html)
+        self.assertRegex(self._html, r"srcKeys\s*\.sort")
 
     def test_refs_tooltip_shares_budget_line(self):
         """refs tooltip'i de P0/P1 ile aynı trendTipHeader formatını kullanır:
@@ -382,7 +388,7 @@ class TestRefsTrendBySourceStacked(unittest.TestCase):
 
     def test_legend_shows_per_source_counts(self):
         """Lejant: son run'un her kaynak için ayrı ayrı sayısını gösterir."""
-        self.assertIn("SRC_NAMES[s]||s", self._html)
+        self.assertIn("SRC_NAMES[s] || s", self._html)
         self.assertIn("lastSrc", self._html)
 
     def test_src_colors_include_all_types(self):
@@ -619,7 +625,8 @@ class TestRunHistoryAutoRefresh(unittest.TestCase):
         """SSE refresh 30 saniye cache'lenir; filtre değişimi cache'i bypass eder."""
         self.assertIn("const RUN_HISTORY_CACHE_MS = 30000;", self._html)
         self.assertIn("function loadRunHistory(fromSSE = false)", self._html)
-        self.assertIn("if (fromSSE && runHistoryCache !== null", self._html)
+        self.assertRegex(self._html,
+                         r"if\s*\(\s*fromSSE\s*&&\s*runHistoryCache !== null")
         self.assertIn("loadRunHistory();", self._html)
         self.assertEqual(self._html.count("loadRunHistory(true);"), 2)
 
@@ -737,7 +744,7 @@ class TestRunHistoryFilter(unittest.TestCase):
     def test_pass_filter_logic(self):
         """PASS filtresi: verdict === "PASS" && p0 === 0."""
         self.assertIn('r.verdict === "PASS"', self._html)
-        self.assertIn('(r.p0||0) === 0', self._html)
+        self.assertIn('(r.p0 || 0) === 0', self._html)
 
     def test_fail_filter_logic(self):
         """FAIL filtresi: verdict === "FAIL" || "ERROR"."""
@@ -745,7 +752,7 @@ class TestRunHistoryFilter(unittest.TestCase):
 
     def test_p0_filter_logic(self):
         """P0 filtresi: (r.p0||0) > 0."""
-        self.assertIn('(r.p0||0) > 0', self._html)
+        self.assertIn('(r.p0 || 0) > 0', self._html)
 
     def test_filter_count_suffix(self):
         """Filtreli sayı: "(3 / 15)" gösterilir."""
@@ -861,8 +868,9 @@ class TestServiceWorkerRegistration(unittest.TestCase):
 
     def test_sw_registration_code_present(self):
         """navigator.serviceWorker.register('/sw.js') cagrisi mevcut."""
-        self.assertIn("navigator.serviceWorker.register('/sw.js'", self._html)
-        self.assertIn("scope: '/'", self._html)
+        self.assertRegex(self._html,
+                         r"navigator\.serviceWorker\s*\.register\(\"/sw\.js\"")
+        self.assertIn('scope: "/"', self._html)
 
     def test_skip_waiting_and_claim_in_sw_js(self):
         """sw.js'te skipWaiting + clients.claim her ikisi de mevcut."""
@@ -886,7 +894,8 @@ class TestServiceWorkerRegistration(unittest.TestCase):
 
     def test_sw_registration_wrapped_in_feature_detect(self):
         """'serviceWorker' in navigator kontrolu var."""
-        self.assertIn("'serviceWorker' in navigator", self._html)
+        self.assertRegex(self._html,
+                         r"['\"]serviceWorker['\"] in navigator")
 
 if __name__ == "__main__":
     unittest.main()
