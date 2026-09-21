@@ -463,6 +463,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-20 | docs | (texlive) Faz 0-1 engine lock surface + parallel-life docs | [`173a2f4`](https://github.com/ali-han-kaya/leibniz2/commit/173a2f4) |
 | 2026-09-20 | docs | (audit) close R4 — weekly docker-security scan is live | [`b726e0c`](https://github.com/ali-han-kaya/leibniz2/commit/b726e0c) |
 | 2026-09-21 | refactor | (trend) remove stale-report 48h guard from record path | [`abd3ec5`](https://github.com/ali-han-kaya/leibniz2/commit/abd3ec5) |
+| 2026-09-21 | test | (sync) pin sync lifecycle as subprocess regression gate | [`5fdf2e4`](https://github.com/ali-han-kaya/leibniz2/commit/5fdf2e4) |
 
 ### Regresyon notları
 

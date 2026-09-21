@@ -232,7 +232,9 @@ HOOK_COVERAGE = {
         "test_id_residual_acceptance_doc.py",
         "test_makefile_texlive.py",
         "test_gated_schedules.py",
-        "test_sync_lifecycle.py",],
+        "test_sync_lifecycle.py",
+        "test_determinism_trend_badge.py",
+    ],
 }
 
 # verify.yml CI job'ları → kapsadığı test dosyaları

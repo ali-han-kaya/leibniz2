@@ -164,6 +164,7 @@ RUN_LOG_MAX = 20                 # disk'te tutulacak + replay edilecek en son ru
 SSE_POLL_TIMEOUT = 15            # SSE q.get(timeout=...) — keepalive periyodu (saniye)
 REFS_TREND_PATH = None           # main()'de set edilir; refs-trend.json yolu
 OVERRIDE_TREND_PATH = None       # main()'de set edilir; override-trend.json yolu
+DETERMINISM_TREND_PATH = None    # main()'de set edilir; determinism_trend.jsonl yolu
 # Matris doc'u tek kaynaktır. Sunucu TCC-safe mirror'dan koştuğunda (launchd
 # GUI agent'ı repo'yu okuyamaz) doc kopyası preview mirror'a senkronlanır
 # (sync_verify_mirror.sh) ve ROOT'un yanına düşer; yerel dev/test ise repo
@@ -1294,6 +1295,8 @@ def _route(path):
         return "trend"
     if p == "/api/override-trend":
         return "override_trend"
+    if p == "/api/determinism-trend":
+        return "det_trend"
     if p == "/api/run-history":
         return "run_history"
     if p.startswith("/api/run-stdout"):
@@ -1424,6 +1427,8 @@ class Handler(BaseHTTPRequestHandler):
             self.serve_trend()
         elif route == "override_trend":
             self.serve_override_trend()
+        elif route == "det_trend":
+            self.serve_determinism_trend()
         elif route == "run_history":
             self.serve_run_history()
         elif route == "run_stdout":
@@ -1649,6 +1654,17 @@ class Handler(BaseHTTPRequestHandler):
                        content_type="application/json; charset=utf-8")
             return
         self._send(200, json.dumps(data, ensure_ascii=False),
+                   content_type="application/json; charset=utf-8")
+
+    def serve_determinism_trend(self):
+        """determinism_trend.jsonl'ı badge'li satırlarla döndür (TeX motor
+        determinizm trend paneli — determinism_trend_badge.py üreticisi)."""
+        import determinism_trend_badge as dtb
+        rows = dtb.rows_from(DETERMINISM_TREND_PATH) or []
+        enriched = [dict(r, badge=dtb.badge([r])) for r in rows]
+        self._send(200, json.dumps({"badge": dtb.badge(rows),
+                                    "rows": enriched},
+                                   ensure_ascii=False),
                    content_type="application/json; charset=utf-8")
 
     def serve_run_history(self):
@@ -1915,6 +1931,7 @@ def redirect_stdio_to_devnull():
 
 def main():
     global PREVIEW_DIR, VERIFY_DIR, HISTORY_PATH, RUNS_DIR, RUN_LOG_MAX, REFS_TREND_PATH
+    global OVERRIDE_TREND_PATH, DETERMINISM_TREND_PATH
     # Daemon modunda: yeni process group + session oluştur (tamamen detach).
     # Bu, parent shell exit ettiğinde SIGHUP/SIGTERM almamızı engeller.
     if os.environ.get("PREVIEW_DAEMON") == "1":
@@ -1961,6 +1978,15 @@ def main():
     if not os.path.isfile(_ot_candidate):
         _ot_candidate = os.path.join(PREVIEW_DIR, "override-trend.json")
     OVERRIDE_TREND_PATH = _ot_candidate if os.path.isfile(_ot_candidate) else None
+
+    # determinism_trend.jsonl: versiyonlu trend verisi
+    # (record_determinism_trend.py üreticisi).
+    _dt_candidate = os.path.join(REPO_ROOT, "docs",
+                                 "determinism_trend",
+                                 "determinism_trend.jsonl")
+    DETERMINISM_TREND_PATH = (_dt_candidate
+                              if os.path.isfile(_dt_candidate)
+                              else None)
 
     if not os.path.isfile(os.path.join(PREVIEW_DIR, "preview.html")):
         print(f"UYARI: {PREVIEW_DIR}/preview.html bulunamadı; "
