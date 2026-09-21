@@ -47,6 +47,7 @@ test_coq_lake.py
 test_coverage_report.py
 test_dashboard_k17_exit_sync.py
 test_dashboard_smoke.py
+test_determinism_trend_badge.py
 test_dev_bootstrap.py
 test_diff_config_artifacts.py
 test_doc_job_sync.py
@@ -59,6 +60,7 @@ test_fallback_evidence_hook.py
 test_full_publish_doc_sync.py
 test_gate_coverage_sync.py
 test_gate_scripts_meta_guard.py
+test_gated_schedules.py
 test_gen_ci_trend.py
 test_gen_commit_msg_evidence.py
 test_gen_k_layer.py
@@ -125,6 +127,7 @@ test_status_checks_smoke.py
 test_stop_post_only.py
 test_summary_pattern_drift.py
 test_sync_check_unit_tests.py
+test_sync_lifecycle.py
 test_sync_one_atomic.py
 test_test_coverage_report.py
 test_texlive_determinism_hook.py

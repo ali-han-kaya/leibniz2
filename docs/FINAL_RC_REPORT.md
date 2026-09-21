@@ -39,7 +39,7 @@ kaynağın kopyası istenirse kopya verilir — özet "kaynak" diye etiketlenmez
 | `repack_delivery.py --verify` | TÜMÜ PASS (iki zip ↔ sidecar) |
 | K14 zip-lineage / K17 review-freshness / skills-index | PASS |
 | actionlint (3 workflow) | RC=0 |
-| `test_all_hooks_smoke.py` | 25/25 hook PASS |
+| `test_all_hooks_smoke.py` | 27/27 hook PASS (check-docker-security-smoke + check-dockerfile-security-patching ekledi; 2026-09-20) |
 | CIKTI unittest discover | 2.228 OK (71 SKIP — ortam-koşullu, documented) |
 | MCP `server.py --list-tools` + test bataryası | 26/26 OK, 5 tool |
 | Dashboard lint + build | PASS |
@@ -47,7 +47,7 @@ kaynağın kopyası istenirse kopya verilir — özet "kaynak" diye etiketlenmez
 | `verify_delivery.py --check-launchd` (K20, bu turda canlı onarıldı) | PASS — birincil PID canlı HTTP 200; yedek BILGI (steady-state'te yüklü değil, kontrat) |
 | fresh_clone_setup.sh --check-ci ×4 | PASS ×4 (ilk koşum sync sonrası tek seferlik bayatlık yarışı, kararlı RC=0) |
 | TeXLive+SDE determinism deneyi (`texlive_determinism_hook.sh`) | PASS — SKIP kapatıldı: gerçek pdfTeX 3.141592653-2.6-1.40.29 (TeX Live 2026/Homebrew) + tectonic 0.17.0; iki bağımsız SDE koşumunda tek kalıntı pdfTeX'in rastgele trailer `/ID`'si (64 bayt), `/ID` harici baytlar birebir aynı (kanonik hash `a75c3409…` — oturumlar arası 3 bağımsız ölçümde birebir kararlı). Düzeltme: SDE artık tectonic ayağına da export ediliyor; düzeltme sonrası tectonic PDF'i de bağlamlar arası birebir aynı (`ad8fca69…`) |
-| Docker/Trivy güvenlik iş akışı (gerçek daemon ile yerel smoke) | PASS — colima start (Docker 29.5.2, amd64 emülasyon) → image `--platform linux/amd64` build OK (~100 MB); Trivy 0.74.0 gate'i CI parametreleriyle (CRITICAL,HIGH, ignore-unfixed, exit-code 1) **İLK KOŞUMDA 2 HIGH BULGU YAKALADI** (libpcre2-8-0: CVE-2026-86145 + CVE-2026-89161, bookworm 12.15 tabanı) → Dockerfile targeted `--only-upgrade libpcre2-8-0` yaması → **gate 0 bulgu ile yeşil**. Canlı smoke: compose `running healthy` (HEALTHCHECK HTTP 200, restarts=0) + ayrılmış rastgele port üzerinden host→konteyner `/api/health` HTTP 200 `ok` (host 8000 portu Freebuff önizleme sunucusu tarafından meşgul olduğundan kanıt bağlantı noktası bağımsız portla verildi). **2026-09-17 desen genelleştirmesi:** apt yama katmanı `SECURITY_PATCH_PACKAGES` ARG'sine bağlandı (CVE-defteri Dockerfile'da işlenmiş kalıcı kayıt; boş arg → yama yok; `dpkg-query` kanıt satırı yalın paket adıyla — `pkg=sürüm` sözdizimi canlı build'de patladı, sed ile kırpılır), kapalı döngü + katkı sözleşmesi `docs/DOCKER_SECURITY_PATCHING.md`'de dokümante edildi, desen sözleşme testiyle sabitlendi (`test_dockerfile_security_patching.py`, 7 test) ve değiştirilmiş Dockerfile canlı smoke ile yeniden doğrulandı (yama log kanıtı `libpcre2-8-0 10.42-1+deb12u1`, trivy 0 bulgu, health 200/healthy, verdict=PASS) |
+| Docker/Trivy güvenlik iş akışı (gerçek daemon ile yerel smoke) | PASS — colima start (Docker 29.5.2, amd64 emülasyon) → image `--platform linux/amd64` build OK (~100 MB); Trivy 0.74.0 gate'i CI parametreleriyle (CRITICAL,HIGH, ignore-unfixed, exit-code 1) **İLK KOŞUMDA 2 HIGH BULGU YAKALADI** (libpcre2-8-0: CVE-2026-86145 + CVE-2026-89161, bookworm 12.15 tabanı) → Dockerfile targeted `--only-upgrade libpcre2-8-0` yaması → **gate 0 bulgu ile yeşil**. Canlı smoke: compose `running healthy` (HEALTHCHECK HTTP 200, restarts=0) + ayrılmış rastgele port üzerinden host→konteyner `/api/health` HTTP 200 `ok` (host 8000 portu Freebuff önizleme sunucusu tarafından meşgul olduğundan kanıt bağlantı noktası bağımsız portla verildi). **2026-09-17 desen genelleştirmesi:** apt yama katmanı `SECURITY_PATCH_PACKAGES` ARG'sine bağlandı (CVE-defteri Dockerfile'da işlenmiş kalıcı kayıt; boş arg → yama yok; `dpkg-query` kanıt satırı yalın paket adıyla — `pkg=sürüm` sözdizimi canlı build'de patladı, sed ile kırpılır), kapalı döngü + katkı sözleşmesi `docs/DOCKER_SECURITY_PATCHING.md`'de dokümante edildi, desen sözleşme testiyle sabitlendi (`test_dockerfile_security_patching.py`, 7 test) ve değiştirilmiş Dockerfile canlı smoke ile yeniden doğrulandı (yama log kanıtı `libpcre2-8-0 10.42-1+deb12u1`, trivy 0 bulgu, health 200/healthy, verdict=PASS) **2026-09-20 taze canlı koşum — Docker SKIP notu KAPANDI:** `docker_security_smoke.sh` ilk koşumda Trivy gate 4 bulgu yakaladı (fail-closed doğru çalıştı): postcss ×2 (CVE-2026-45623 + CVE-2026-73646) + sharp ×2 (GHSA-f88m-g3jw-g9cj, GHSA-rgj7-g3m4-5g8c) — kök neden: `.worktrees/` bağlam sızıntısı (linked worktree'nin bayat lock'u: postcss 8.4.31, sharp 0.34.5; bare ignore yalnız kök düzeyini yakalar — venv olayının aynı sınıfı; CI'da `.worktrees`/`node_modules` olmadığından CI yeşil kalıyordu) + GERÇEK bulgu `next 15.5.4` (GHSA-mwv6-3258-q52c + GHSA-q4gf-8mx6-v5v3, fixed 15.5.15). Düzeltmeler: `.dockerignore` +`.worktrees`/`**/node_modules`/`**/.next` (yerel≡CI bağlam eşitliği geri geldi), `overrides` (postcss ^8.5.18 → 8.5.28, sharp ^0.35.4 → 0.35.4), `next 15.5.15` + lockfile. İkinci koşum: **trivy_findings=0 (Clean), container_health=healthy, verdict=PASS, smoke rc=0** (kanıt: `docs/ci_simulate/docker_security_smoke/docker_security_smoke_report.txt` — gitignored yerel kanıt; kalıcı kayıt bu satır). Dashboard `tsc --noEmit` rc=0 + `next build` rc=0. SKIP bundan böyle yalnız araç-yokluğu sözleşmesi (docker/trivy/colima yokken exit 0 + gerekçe); canlı koşum kanıtı günceldir |
 
 ## Aday commit + temiz kopya kabulü (2026-09-16)
 
@@ -118,6 +118,23 @@ Temiz kopya (`git clone` → `/tmp/leibniz2-final`, HEAD = `3918a04092279450e743
   K6-DETERM bilgi düzeyinde izleniyor.
 - `python3 -m unittest discover` sistem python3 ile `--full` koşursa Z3 yok
   deyip P0 üretir: kapı venv python ile koşulmalı (belgelendi).
+
+**2026-09-21 PR-yolu CI kanıtı (branch protection main'e direkt-push'u
+blokluyor — 14 required check):** yerel main'in 9 commit'i (5280500…5fdf2e4,
+8c59bb4 merge dahil) PR #52 dalına merge edildi (M1 `69ab9a9`, 12 dosya
++391/−49; 0 çakışma) ve dal `b5126f9..69ab9a9` pushlandı. PR-head koşumları:
+
+| Workflow | Run | Sonuç |
+|---|---|---|
+| verify-delivery | 35566880485 | **success** |
+| docker-security | 35566880477 | **success** |
+| test-smoke | 35566880476 | **success** |
+
+→ **3/3 workflow success** merge-commit `69ab9a9`'da; PR #52 MERGEABLE.
+Bu oturumun yeni kapıları CI'da da yeşil: `test_sync_lifecycle` (subprocess
+yaşam-döngüsü regresyonu; batarya 144 dosya / check-unit-tests 159) ve
+48h-guard-kaldırılmış trend-kayıt yolu (bayat rapor tarihiyle kaydolur;
+tazelik iddiası `--check`'te). Kapanış main'e PR #52 merge'iyle gelir.
 
 ## Karar
 
