@@ -74,6 +74,7 @@ HOOK_COVERAGE = {
     "check-reproducible-pdf-skill": ["test_reproducible_pdf_skill.py"],
     "check-changelog-sync":    ["test_update_changelog_hook.py", "test_gen_changelog.py"],
     "check-unit-tests": [
+        "test_server_events.py",
         "test_workflow_install_hardening.py",
         "test_verify_refs.py",
         "test_verify_checks.py",

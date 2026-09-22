@@ -476,6 +476,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-22 | feat | (server) peer allowlist gate for /api/stop | [`39d86e4`](https://github.com/ali-han-kaya/leibniz2/commit/39d86e4) |
 | 2026-09-22 | feat | (api) OpenAPI 3.1 schema from API_CONTRACT + versioning policy | [`77a0832`](https://github.com/ali-han-kaya/leibniz2/commit/77a0832) |
 | 2026-09-22 | feat | (docker) PR-triggered Trivy scan with SARIF diff comment | [`097fffc`](https://github.com/ali-han-kaya/leibniz2/commit/097fffc) |
+| 2026-09-22 | feat | (ci) CI hygiene gate - permissions, timeout, concurrency matrix | [`69ca3e1`](https://github.com/ali-han-kaya/leibniz2/commit/69ca3e1) |
 
 ### Regresyon notları
 

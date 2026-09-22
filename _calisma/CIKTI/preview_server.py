@@ -209,6 +209,7 @@ VERIFY_DIR = None               # main()'de set edilir; /api/run-now handler'ı 
 HISTORY_PATH = None             # main()'de set edilir; JSONL trend dosyası
 HISTORY_MAX = 100               # disk'te tutulacak en son run sayısı
 RUNS_DIR = None                 # main()'de set edilir; run logları (stdout+stderr) dizini
+SERVER_EVENTS_PATH = None       # main()'de set edilir; yaşam-döngüsü olay-kaydı (append-only)
 RUN_LOG_MAX = 20                 # disk'te tutulacak + replay edilecek en son run sayısı
 SSE_POLL_TIMEOUT = 15            # SSE q.get(timeout=...) — keepalive periyodu (saniye)
 REFS_TREND_PATH = None           # main()'de set edilir; refs-trend.json yolu
@@ -460,6 +461,34 @@ def persist_history(rec):
     except OSError as e:
         sys.stderr.write(f"[history] yazılamadı: {e}\n")
         sys.stderr.flush()
+
+
+def _lifecycle_event(event, detail=""):
+    """Sunucu yaşam-döngüsü olayını kalıcı kayda yaz (append-only JSONL).
+
+    Konum: PREVIEW_DIR/logs/server_events.jsonl (gitignore'da — logs/ zaten
+    öyle). Amaç: daemon çökme/kurtarma olaylarının stdout-stderr akışından
+    bağımsız, yeniden-başlatmalara dayanıklı kaydı (disk-kanıtı) — daemon
+    stdout'u /dev/null'a dup2'lenmişken bile iz bırakır.
+
+    Telemetri servisi DEĞİL: hiçbir hata sunucu-yüzeyini düşürmez — her
+    başarısızlık sessizce yutulur (yazılamaz dizin, bozuk mevcut dosya).
+    Append-only: mevcut dosya asla ezilmez/truncate edilmez.
+    """
+    if not SERVER_EVENTS_PATH:
+        return
+    try:
+        rec = {"ts": datetime.now(timezone.utc).isoformat().replace(
+            "+00:00", "Z"), "event": event, "pid": os.getpid()}
+        if detail:
+            rec["detail"] = detail
+        d = os.path.dirname(SERVER_EVENTS_PATH)
+        if d:
+            os.makedirs(d, exist_ok=True)
+        with open(SERVER_EVENTS_PATH, "a", encoding="utf-8") as f:
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    except OSError:
+        pass
 
 
 def load_cached_latest():
@@ -1988,7 +2017,7 @@ def redirect_stdio_to_devnull():
 
 def main():
     global PREVIEW_DIR, VERIFY_DIR, HISTORY_PATH, RUNS_DIR, RUN_LOG_MAX, REFS_TREND_PATH
-    global OVERRIDE_TREND_PATH, DETERMINISM_TREND_PATH
+    global SERVER_EVENTS_PATH, OVERRIDE_TREND_PATH, DETERMINISM_TREND_PATH
     # Daemon modunda: yeni process group + session oluştur (tamamen detach).
     # Bu, parent shell exit ettiğinde SIGHUP/SIGTERM almamızı engeller.
     if os.environ.get("PREVIEW_DAEMON") == "1":
@@ -2017,6 +2046,8 @@ def main():
     VERIFY_DIR = os.path.abspath(args.dir)
     HISTORY_PATH = os.path.join(PREVIEW_DIR, "history.jsonl")
     RUNS_DIR = os.path.join(PREVIEW_DIR, "runs")
+    SERVER_EVENTS_PATH = os.path.join(PREVIEW_DIR, "logs",
+                                      "server_events.jsonl")
     RUN_LOG_MAX = args.replay_runs
     # refs-trend.json: CI artifact'ı repo kökünde (refs-trend/refs-trend.json);
     # yerel kurulumda preview-dir'de de olabilir (nested veya flat).
@@ -2060,9 +2091,10 @@ def main():
 
     # Sinyal yakalama — neden öldüğümüzü görelim
     import signal
-    def _sig(term_frame, signum):
+    def _sig(signum, frame):
         sys.stderr.write(f"\n[main] SIGTERM/SIGINT received ({signum}), exiting\n")
         sys.stderr.flush()
+        _lifecycle_event("signal_exit", detail=f"signum={signum}")
         sys.exit(143)
     signal.signal(signal.SIGTERM, _sig)
     signal.signal(signal.SIGINT, _sig)
@@ -2074,6 +2106,9 @@ def main():
             sys.stderr.write(
                 "[main] önbelleklenmiş son run yüklendi: "
                 f"verdict={LATEST['verdict']} ts={LATEST['ts']}\n")
+            _lifecycle_event(
+                "cache_loaded",
+                detail=f"verdict={LATEST['verdict']} ts={LATEST['ts']}")
         else:
             sys.stderr.write(
                 "[main] önbellek yok — /api/latest ilk verify bitene dek "
@@ -2093,6 +2128,7 @@ def main():
 
     srv = ThreadingHTTPServer((args.bind, args.port), Handler)
     SERVER = srv
+    _lifecycle_event("start", detail=f"bind={args.bind} port={args.port}")
     sys.stderr.write(f"[main] preview_server: serving {PREVIEW_DIR} on http://{args.bind}:{args.port}\n")
     sys.stderr.write(f"[main] preview_server: verify loop interval={args.interval}s, dir={VERIFY_DIR}\n")
     sys.stderr.write(f"[main] PID={os.getpid()} PGID={os.getpgrp()}\n")
@@ -2114,6 +2150,7 @@ def main():
         # aktif yazım biter, yeni yazım başlayamaz.
         if LOCK.acquire(timeout=REQUEST_TIMEOUT_SECONDS):
             LOCK.release()
+        _lifecycle_event("shutdown")
 
 
 if __name__ == "__main__":
