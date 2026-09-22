@@ -235,6 +235,7 @@ HOOK_COVERAGE = {
         "test_sync_lifecycle.py",
         "test_determinism_trend_badge.py",
         "test_dashboard_keyboard_nav.py",
+        "test_api_method_matrix.py",
     ],
 }
 

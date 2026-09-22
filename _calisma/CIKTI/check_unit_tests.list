@@ -4,6 +4,7 @@ test_a11y_gate.py
 test_actionlint_gate.py
 test_advisory_coe_surfacing.py
 test_api_method_contract.py
+test_api_method_matrix.py
 test_architecture_deepening_deck.py
 test_atomic_write_guard.py
 test_audit_live_ci_sync.py
