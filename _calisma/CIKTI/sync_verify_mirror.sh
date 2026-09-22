@@ -80,6 +80,7 @@ FILES=(
   "github_scripts/label_gate.js|github_scripts/label_gate.js"
   "github_scripts/label_gate_p1.js|github_scripts/label_gate_p1.js"
   "github_scripts/commit_msg_gate.js|github_scripts/commit_msg_gate.js"
+  "github_scripts/trivy_sarif_pr_comment.js|github_scripts/trivy_sarif_pr_comment.js"
   "github_scripts/sync_labels.js|github_scripts/sync_labels.js"
   "github_scripts/validate_labels.js|github_scripts/validate_labels.js"
   "github_scripts/manifest_comment.js|github_scripts/manifest_comment.js"
