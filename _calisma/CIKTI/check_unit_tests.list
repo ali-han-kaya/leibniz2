@@ -71,6 +71,7 @@ test_gen_m0_live_table.py
 test_gen_precommit_report.py
 test_gen_publish_artifact_list.py
 test_gen_repro_manifest_e2e.py
+test_gh_run_rca.py
 test_github_scripts.py
 test_history_sources.py
 test_id_residual_acceptance_doc.py
