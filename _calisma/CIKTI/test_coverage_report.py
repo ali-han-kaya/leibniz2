@@ -237,6 +237,7 @@ HOOK_COVERAGE = {
         "test_dashboard_keyboard_nav.py",
         "test_api_method_matrix.py",
         "test_stop_peer_allowlist.py",
+        "test_openapi_schema.py",
     ],
 }
 

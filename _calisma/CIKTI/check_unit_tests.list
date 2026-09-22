@@ -88,6 +88,7 @@ test_m0_k_table_sync.py
 test_makefile_texlive.py
 test_mirror_check.py
 test_mirror_panel.py
+test_openapi_schema.py
 test_orchestrate_k_dag.py
 test_override_trend.py
 test_override_trend_badge.py

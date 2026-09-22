@@ -473,6 +473,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-22 | test | (api) property-based method matrix for /api/* contract | [`c9d74cf`](https://github.com/ali-han-kaya/leibniz2/commit/c9d74cf) |
 | 2026-09-22 | fix | (dashboard) repair node suites for preview.js vm architecture | [`a951474`](https://github.com/ali-han-kaya/leibniz2/commit/a951474) |
 | 2026-09-22 | fix | (sync) complete mirror manifest coverage for QA findings | [`09d972c`](https://github.com/ali-han-kaya/leibniz2/commit/09d972c) |
+| 2026-09-22 | feat | (server) peer allowlist gate for /api/stop | [`39d86e4`](https://github.com/ali-han-kaya/leibniz2/commit/39d86e4) |
 
 ### Regresyon notları
 
