@@ -468,6 +468,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-21 | docs | (report) record 3/3 CI evidence for PR-route delivery | [`5621c4e`](https://github.com/ali-han-kaya/leibniz2/commit/5621c4e) |
 | 2026-09-21 | style | (github_scripts) prettier-canonical format for comment scripts | [`9beef0a`](https://github.com/ali-han-kaya/leibniz2/commit/9beef0a) |
 | 2026-09-21 | docs | (changelog) sync README rows after style commit | [`10de328`](https://github.com/ali-han-kaya/leibniz2/commit/10de328) |
+| 2026-09-22 | fix | (a11y) CSP-compliant event delegation + keyboard nav suite | [`2fee44f`](https://github.com/ali-han-kaya/leibniz2/commit/2fee44f) |
 
 ### Regresyon notları
 
