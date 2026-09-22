@@ -26,6 +26,7 @@ Tek dosyalık Python HTTP sunucusu (stdlib-only):
 import argparse
 import hashlib
 import hmac
+import ipaddress
 import json
 import os
 import re
@@ -48,6 +49,54 @@ ALLOWED_HOSTS = {"127.0.0.1", "localhost", "::1"}
 BUILD_TS_NONCE = secrets.token_urlsafe(16)
 SERVER = None
 STOP_EVENT = None
+
+# /api/stop TCP-peer izin-kümesi: default yalnız loopback. Sandbox-dışı
+# ortamlarda (0.0.0.0 bind, konteyner, tünel) dış-peer'lar /api/stop'a
+# erişemez; genişletme yalnız PREVIEW_STOP_ALLOWLIST ile (geçersiz girdi
+# düşülür — kapı asla genişlemez).
+DEFAULT_STOP_ALLOWLIST = frozenset({"127.0.0.1", "::1"})
+STOP_ALLOWLIST = DEFAULT_STOP_ALLOWLIST
+_STOP_HOSTS_ENV = "PREVIEW_STOP_ALLOWLIST"
+
+
+def load_stop_allowlist(env_value):
+    """PREVIEW_STOP_ALLOWLIST değerini izin-kümesine çevirir.
+
+    Virgülle ayrılmış IP listesi; geçersiz girdiler düşülür, kalan küme
+    default'a EKLENİR (loopback operatörü her zaman geçerli — typo'lu env
+    yerel-kilitleme yapamaz), geçerli-kalan boşsa yalnız default döner.
+    """
+    if not env_value:
+        return DEFAULT_STOP_ALLOWLIST
+    allowed = set()
+    for token in env_value.split(","):
+        token = token.strip()
+        if not token:
+            continue
+        try:
+            allowed.add(str(ipaddress.ip_address(token)))
+        except ValueError:
+            continue  # geçersiz girdi: düşür (kapı asla genişlemez)
+    return frozenset(allowed | DEFAULT_STOP_ALLOWLIST)
+
+
+def _stop_peer_allowed(peer, allowlist=None):
+    """TCP-peer adresi izin-kümesinde değilse gerekçe, izinliyse None.
+
+    Sahtelenemez katman: karar soket-peer'ına bakar (Host/Origin'in
+    aksine istemci-kontrolünde değil). IPv4-mapped IPv6 canonical'lanır;
+    ayrıştırılamayan peer deny (fail-closed).
+    """
+    allowed = DEFAULT_STOP_ALLOWLIST if allowlist is None else allowlist
+    try:
+        addr = ipaddress.ip_address(str(peer[0]))
+    except ValueError:
+        return "forbidden peer"
+    if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped:
+        addr = addr.ipv4_mapped
+    if str(addr) not in allowed:
+        return "forbidden peer"
+    return None
 
 
 def _trusted_request(headers):
@@ -1456,6 +1505,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def stop_server(self):
         """Yerel daemon'ı güvenli biçimde durdurur; GET ile tetiklenemez."""
+        # TCP-peer kapısı: Host/Origin'in aksine sahtelenemez; sandbox-dışı
+        # bind'ta bile dış-peer'ı /api/stop'tan uzak tutar (bind'dan bağımsız).
+        # Sahtelenemez katman önce değerlendirilir (güven-sırası).
+        peer_error = _stop_peer_allowed(self.client_address, STOP_ALLOWLIST)
+        if peer_error:
+            self._send(403, json.dumps({"error": peer_error}),
+                       content_type="application/json; charset=utf-8")
+            return
         request_error = _trusted_request(self.headers)
         if request_error:
             self._send(403, json.dumps({"error": request_error}),
@@ -2024,9 +2081,11 @@ def main():
         sys.stderr.flush()
 
     # Arka plan thread: periyodik verify çalıştırma
-    global SERVER, STOP_EVENT
+    global SERVER, STOP_EVENT, STOP_ALLOWLIST
     stop_event = threading.Event()
     STOP_EVENT = stop_event
+    STOP_ALLOWLIST = load_stop_allowlist(
+        os.environ.get(_STOP_HOSTS_ENV))
     t = threading.Thread(target=verify_loop,
                          args=(VERIFY_DIR, args.interval, stop_event),
                          daemon=True, name="verify-loop")

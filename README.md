@@ -472,6 +472,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-22 | docs | (changelog) sync README row after a11y commit | [`06b25d3`](https://github.com/ali-han-kaya/leibniz2/commit/06b25d3) |
 | 2026-09-22 | test | (api) property-based method matrix for /api/* contract | [`c9d74cf`](https://github.com/ali-han-kaya/leibniz2/commit/c9d74cf) |
 | 2026-09-22 | fix | (dashboard) repair node suites for preview.js vm architecture | [`a951474`](https://github.com/ali-han-kaya/leibniz2/commit/a951474) |
+| 2026-09-22 | fix | (sync) complete mirror manifest coverage for QA findings | [`09d972c`](https://github.com/ali-han-kaya/leibniz2/commit/09d972c) |
 
 ### Regresyon notları
 
