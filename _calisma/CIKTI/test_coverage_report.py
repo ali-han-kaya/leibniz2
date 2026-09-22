@@ -238,6 +238,7 @@ HOOK_COVERAGE = {
         "test_api_method_matrix.py",
         "test_stop_peer_allowlist.py",
         "test_openapi_schema.py",
+        "test_ci_hygiene_gate.py",
     ],
 }
 

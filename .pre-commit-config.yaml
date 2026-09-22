@@ -167,6 +167,18 @@ repos:
         language: system
         always_run: true
         pass_filenames: false
+
+      - id: check-ci-hygiene
+        name: CI hygiene (permissions + timeout + concurrency)
+        description: >-
+          Tüm workflow'larda top-level `permissions:` haritası, her job'da
+          `timeout-minutes` (1..120 int; bool reddi) ve top-level
+          `concurrency.group` (non-empty) var mı denetler; eksikse commit
+          bloke (fail-closed, rc=1). PyYAML yoksa rc=2 — sessiz-PASS yok.
+        entry: python3 _calisma/CIKTI/ci_hygiene_gate.py --workflow .github/workflows
+        language: system
+        always_run: true
+        pass_filenames: false
         stages: [pre-commit]
         verbose: true
 

@@ -35,6 +35,7 @@ test_check_unit_tests_timing.py
 test_check_zip_lineage_drift.py
 test_ci_check_rate.py
 test_ci_failure_pattern.py
+test_ci_hygiene_gate.py
 test_ci_sidecar_wiring.py
 test_ci_stats.py
 test_classify_lean_error.py

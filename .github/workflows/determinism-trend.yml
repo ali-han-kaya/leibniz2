@@ -11,6 +11,12 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  # CI-hijyen: aynı ref'te üst üste binen koşumlar (elle-tetikleme + cron
+  # çakışması) eski koşumu iptal eder — trend kaydı bir-bir yazılır.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   record:
     name: Run determinism experiment and record trend
