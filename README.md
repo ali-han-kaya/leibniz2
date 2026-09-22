@@ -542,6 +542,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-04 | fix | (trend-db) tsconfig + typescript ekle, prisma CLI'yi devDeps'e tasi | [`563d0c6`](https://github.com/ali-han-kaya/leibniz2/commit/563d0c6) |
 | 2026-09-22 | feat | (api) OpenAPI 3.1 schema from API_CONTRACT + versioning policy | [`77a0832`](https://github.com/ali-han-kaya/leibniz2/commit/77a0832) |
 | 2026-10-04 | other | verify: surface unregistered P0/P1 as an Other layer | [`35a7940`](https://github.com/ali-han-kaya/leibniz2/commit/35a7940) |
+| 2026-09-22 | feat | (docker) PR-triggered Trivy scan with SARIF diff comment | [`097fffc`](https://github.com/ali-han-kaya/leibniz2/commit/097fffc) |
 
 ### Regresyon notları
 
