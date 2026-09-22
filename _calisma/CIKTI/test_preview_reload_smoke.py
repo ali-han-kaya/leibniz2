@@ -25,6 +25,7 @@ Kullanim:
 import argparse
 import json
 import os
+import socket
 import subprocess
 import sys
 import time
@@ -59,6 +60,40 @@ def _get_json(port, path, timeout=5):
         except (json.JSONDecodeError):
             pass
     return None
+
+
+def _sse_first_events(port, path, timeout, want_events=2):
+    """SSE akisindan ilk event'leri soketle okur (blocking-response YOK).
+
+    urllib.read() SSE'de sona ermez (stream acik kaliyor); bunun yerine
+    socket timeout'lu okuma yapip gelen tam event'leri (boş satırla
+    biten \n\n bloklari) sayar, yeterli event birikince kapanir.
+    Döner: sayılan event sayısı (hata durumunda 0).
+    """
+    try:
+        s = socket.create_connection(("127.0.0.1", port), timeout=timeout)
+        s.sendall((f"GET {path} HTTP/1.1\r\n"
+                   f"Host: 127.0.0.1:{port}\r\nAccept: text/event-stream\r\n"
+                   f"\r\n").encode())
+        buf = b""
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            try:
+                chunk = s.recv(4096)
+            except socket.timeout:
+                break
+            if not chunk:
+                break
+            buf += chunk
+            events = [e for e in buf.split(b"\n\n")[:-1]
+                      if b"event:" in e]
+            if len(events) >= want_events:
+                break
+        s.close()
+        # event: satırı taşıyan tam blokları say (kısmi kuyruk hariç)
+        return len([e for e in buf.split(b"\n\n")[:-1] if b"event:" in e])
+    except OSError:
+        return 0
 
 
 def restart_preview():
@@ -138,14 +173,29 @@ def main(argv=None):
     checks["preview.html"] = {"ok": status == 200, "status": status,
                               "build_ts_injected": "window.BUILD_TS" in (html or "")}
 
-    # ── ADIM 4: /api/latest — valid JSON + data populated ──────────────
+    # ── ADIM 3b: İlk verify koşumunun tamamlanmasını bekle (VERIFY_WAIT) ─
+    # Restart sonrası /api/latest layers=None gelir (ilk verify bitmedi);
+    # "data-populated" sözleşmesi için kısa poll ile bekle.
+    waited = 0.0
     latest = _get_json(port, "/api/latest", timeout=10)
+    while (waited < VERIFY_WAIT and
+           not (latest and isinstance(latest.get("layers"), dict))):
+        time.sleep(2)
+        waited += 2
+        latest = _get_json(port, "/api/latest", timeout=10)
+
+    # ── ADIM 4: /api/latest — valid JSON + data populated ──────────────
+    # Not: VERIFY_WAIT'te bitmezse layers=None kalabilir ("veri henüz yok"
+    # durumu crash değil — zarifçe raporlanır).
+    latest = _get_json(port, "/api/latest", timeout=10)
+    layers = latest.get("layers") if latest else None
     latest_ok = (latest is not None and
                  latest.get("exit_code") is not None and
-                 isinstance(latest.get("layers"), dict))
+                 isinstance(layers, dict))
     checks["api_latest"] = {"ok": latest_ok,
                             "exit_code": latest.get("exit_code") if latest else None,
-                            "layers_count": len(latest.get("layers", {})) if latest else 0}
+                            "layers_count": len(layers) if isinstance(layers, dict) else 0,
+                            "layers_pending": layers is None}
 
     # ── ADIM 5: /api/history — valid JSON + en az 1 kayit ─────────────
     history = _get_json(port, "/api/history", timeout=10)
@@ -154,45 +204,15 @@ def main(argv=None):
                              "records": len(history or [])}
 
     # ── ADIM 6: SSE /api/run — snapshot event'i gelmeli ────────────────
-    sse_ok = False
-    events_seen = 0
-    try:
-        r = urllib.request.urlopen(
-            f"http://127.0.0.1:{port}/api/run", timeout=SSE_TIMEOUT)
-        # Ilk 4 SSE event'ini oku (connect + snapshot yeterli)
-        events_seen = 0
-        deadline_sse = time.monotonic() + SSE_TIMEOUT
-        buf = b""
-        while time.monotonic() < deadline_sse:
-            chunk = r.read(1024)
-            if not chunk:
-                break
-            buf += chunk
-            lines = buf.split(b"\n\n")
-            for line in lines[:-1]:
-                if b"event: snapshot" in line or b"event: connected" in line:
-                    events_seen += 1
-            buf = lines[-1]
-            if events_seen >= 2:
-                break
-        sse_ok = events_seen >= 1
-        r.close()
-    except Exception:
-        sse_ok = False
+    events_seen = _sse_first_events(port, "/api/run", SSE_TIMEOUT, want_events=2)
+    sse_ok = events_seen >= 1
     checks["sse_run"] = {"ok": sse_ok, "events_seen": events_seen}
 
     # ── ADIM 7: SSE /api/run-stream — ilk event gelmeli ────────────────
-    stream_ok = False
-    try:
-        r = urllib.request.urlopen(
-            f"http://127.0.0.1:{port}/api/run-stream", timeout=SSE_TIMEOUT)
-        # Ilk data: satirini oku
-        chunk = r.read(4096)
-        stream_ok = b"data:" in chunk
-        r.close()
-    except Exception:
-        stream_ok = False
-    checks["sse_run_stream"] = {"ok": stream_ok}
+    stream_events = _sse_first_events(port, "/api/run-stream", SSE_TIMEOUT,
+                                      want_events=1)
+    stream_ok = stream_events >= 1
+    checks["sse_run_stream"] = {"ok": stream_ok, "events_seen": stream_events}
 
     # ── ADIM 8: /api/run-history — valid JSON ──────────────────────────
     run_history = _get_json(port, "/api/run-history?_t=" + str(int(time.time())), timeout=10)
