@@ -50,6 +50,19 @@ def fake_repo(root):
     os.makedirs(ds, exist_ok=True)
     with open(os.path.join(ds, "tokens.css"), "w", encoding="utf-8") as f:
         f.write("x\n")
+    # SDE deney + donmuş kayıt — sync SDE_FILES bloğu mirror'a taşır;
+    # _sde_experiment_paths mirror-layout'ta MIRROR_DIR/../sde_experiment
+    # çözer. Ayrıca determinism-trend versiyonlu verisi (GUIDE_FILES,
+    # dest: determinism_trend.jsonl).
+    sde = os.path.join(root, "_calisma", "sde_experiment")
+    os.makedirs(sde, exist_ok=True)
+    for n in ("sde_determinism_experiment.py", "sde_determinism_output.txt"):
+        with open(os.path.join(sde, n), "w", encoding="utf-8") as f:
+            f.write("x\n")
+    trend = os.path.join(root, "docs", "determinism_trend")
+    os.makedirs(trend, exist_ok=True)
+    with open(os.path.join(trend, "determinism_trend.jsonl"), "w", encoding="utf-8") as f:
+        f.write("x\n")
     for n in ("ReductInvariance.lean", "lean-toolchain", "lakefile.toml",
               "Leibniz2Reduct/Content.lean"):
         with open(os.path.join(lean, n), "w", encoding="utf-8") as f:

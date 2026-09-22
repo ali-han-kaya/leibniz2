@@ -1980,10 +1980,14 @@ def main():
     OVERRIDE_TREND_PATH = _ot_candidate if os.path.isfile(_ot_candidate) else None
 
     # determinism_trend.jsonl: versiyonlu trend verisi
-    # (record_determinism_trend.py üreticisi).
+    # (record_determinism_trend.py üreticisi). Mirror-runtime'da repo-doküman
+    # yolu yoktur; sync_verify_mirror.sh dosyayı PREVIEW_DIR'e düz adla
+    # düşer (QA bulgusu F1, 2026-09-21) — ikinci aday orası.
     _dt_candidate = os.path.join(REPO_ROOT, "docs",
                                  "determinism_trend",
                                  "determinism_trend.jsonl")
+    if not os.path.isfile(_dt_candidate):
+        _dt_candidate = os.path.join(PREVIEW_DIR, "determinism_trend.jsonl")
     DETERMINISM_TREND_PATH = (_dt_candidate
                               if os.path.isfile(_dt_candidate)
                               else None)
