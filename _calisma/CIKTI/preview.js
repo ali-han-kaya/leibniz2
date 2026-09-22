@@ -200,8 +200,10 @@ function toggleBudgetOverDetail() {
   const open = det.style.display !== "none";
   det.style.display = open ? "none" : "block";
   if (caret) caret.textContent = open ? "▸" : "▾";
-  const banner = $("budget-over-banner");
-  if (banner) banner.setAttribute("aria-expanded", String(!open));
+  // aria-expanded role=button üzerinde yaşamalı (ekran-okuyucu sözleşmesi);
+  // banner'a yazmak erişilebilirlik-ağacında görünmez.
+  const toggle = $("budget-over-toggle");
+  if (toggle) toggle.setAttribute("aria-expanded", String(!open));
 }
 function updateBudgetOverBanner() {
   const el = $("budget-over-banner");
@@ -571,7 +573,7 @@ function renderTrend(rows) {
   rows.forEach((r, i) => {
     const cx = x(i);
     parts.push(
-      `<rect x="${(cx - halfW).toFixed(2)}" y="${PT}" width="${(halfW * 2).toFixed(2)}" height="${ih}" fill="transparent" style="cursor:crosshair" onmousemove="showTrendTip(${i}, event)" onmouseleave="hideTrendTip()"/>`
+      `<rect x="${(cx - halfW).toFixed(2)}" y="${PT}" width="${(halfW * 2).toFixed(2)}" height="${ih}" fill="transparent" style="cursor:crosshair" data-tip="trend" data-i="${i}"/>`
     );
   });
   // x ekseni zaman etiketleri (ilk/orta/son)
@@ -928,7 +930,7 @@ function renderRefsTrend(rows) {
   const rHalfW = Math.max(4, Math.min(10, rColW / 2));
   have.forEach((r, i) => {
     parts.push(
-      `<rect x="${(x(i) - rHalfW).toFixed(2)}" y="${PT}" width="${(rHalfW * 2).toFixed(2)}" height="${ih}" fill="transparent" style="cursor:crosshair" onmousemove="showRefsTrendTip(${i}, event)" onmouseleave="hideTrendTip()"/>`
+      `<rect x="${(x(i) - rHalfW).toFixed(2)}" y="${PT}" width="${(rHalfW * 2).toFixed(2)}" height="${ih}" fill="transparent" style="cursor:crosshair" data-tip="refs" data-i="${i}"/>`
     );
   });
   // x ekseni zaman etiketleri (ilk/orta/son)
@@ -2278,7 +2280,7 @@ function renderHookEnvTrend(rows) {
   const rHalfW = Math.max(6, Math.min(16, rColW / 2));
   have.forEach((r, i) => {
     parts.push(
-      `<rect x="${(x(i) - rHalfW).toFixed(2)}" y="${PT}" width="${(rHalfW * 2).toFixed(2)}" height="${ih}" fill="transparent" style="cursor:crosshair" onmousemove="showHookEnvTrendTip(${i}, event)" onmouseleave="hideTrendTip()"/>`
+      `<rect x="${(x(i) - rHalfW).toFixed(2)}" y="${PT}" width="${(rHalfW * 2).toFixed(2)}" height="${ih}" fill="transparent" style="cursor:crosshair" data-tip="hookenv" data-i="${i}"/>`
     );
   });
   svg.innerHTML = parts.join("\n");
@@ -2820,8 +2822,7 @@ function loadRunHistory(fromSSE = false) {
             ? r.ts.replace(/'/g, "\'").replace(/"/g, "&quot;")
             : "";
           return (
-            `<div class="rh-row" role="button" tabindex="0" data-ts="${tsAttr}" onclick="loadRunStdout('${tsAttr}')" ` +
-            `onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();loadRunStdout('${tsAttr}')}" ` +
+            `<div class="rh-row" role="button" tabindex="0" data-ts="${tsAttr}" data-act="load-stdout" ` +
             `title="Tıklayınca bu run'un stdout'u yüklenir">${text}</div>`
           );
         });
@@ -2888,6 +2889,44 @@ function connect() {
     setTimeout(connect, reconnectDelay);
     reconnectDelay = Math.min(reconnectDelay * 2, MAX_RECONNECT_DELAY);
   };
+}
+
+// ---- CSP-uyumlu event-delegation (inline onclick/onkeydown YOK) ----
+// CSP script-src 'self' + nonce içerir; inline öznitelik-handler'lar
+// tarayıcıda bloklanır. Tıklanabilir/hover yüzeyleri data-act/data-tip
+// taşıyıp tek document/SVG-düzeyi dinleyiciye delege edilir.
+const KEY_ACTIVATORS = new Set(["budget-toggle", "load-stdout"]);
+document.addEventListener("click", (ev) => {
+  const t = ev.target.closest("[data-act]");
+  if (!t) return;
+  if (t.dataset.act === "budget-toggle") toggleBudgetOverDetail();
+  else if (t.dataset.act === "rh-filter") setRhFilter(t.dataset.f);
+  else if (t.dataset.act === "load-stdout") loadRunStdout(t.dataset.ts);
+});
+// role=button div'ler için klavye-aktivasyon (gerçek button'lar native).
+document.addEventListener("keydown", (ev) => {
+  if (ev.key !== "Enter" && ev.key !== " ") return;
+  const t = ev.target.closest("[data-act]");
+  if (!t || !KEY_ACTIVATORS.has(t.dataset.act)) return;
+  ev.preventDefault();
+  if (t.dataset.act === "budget-toggle") toggleBudgetOverDetail();
+  else if (t.dataset.act === "load-stdout") loadRunStdout(t.dataset.ts);
+});
+// Trend/refs/hookenv SVG hover hit-alanları: rect'ler data-tip+data-i
+// taşır; mousemove/mouseleave SVG düzeyinde dinlenir (template başına
+// inline handler yok — CSP-uyumlu).
+for (const [svgId, tipName] of Object.entries({
+  trend: "showTrendTip",
+  "refs-trend": "showRefsTrendTip",
+  "he-trend": "showHookEnvTrendTip",
+})) {
+  const svg = document.getElementById(svgId);
+  if (!svg) continue;
+  svg.addEventListener("mousemove", (ev) => {
+    const r = ev.target.closest("rect[data-tip]");
+    if (r) window[tipName](+r.dataset.i, ev);
+  });
+  svg.addEventListener("mouseleave", hideTrendTip);
 }
 
 $("reconnect").addEventListener("click", connect);

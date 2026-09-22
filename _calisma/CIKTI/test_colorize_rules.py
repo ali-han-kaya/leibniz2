@@ -687,8 +687,11 @@ class TestRunHistoryClickToLoad(unittest.TestCase):
         self.assertIn('data-ts=', self._html)
 
     def test_rows_have_onclick_handler(self):
-        """onclick="loadRunStdout('...')" çağrısı var."""
-        self.assertIn('onclick="loadRunStdout', self._html)
+        """rh-row'lar data-act=load-stdout taşır (CSP-uyumlu delegation)."""
+        self.assertIn('data-act="load-stdout"', self._html)
+        # Inline öznitelik-handler CSP script-src tarafından bloklanır —
+        # geri-dönüş yasak (regresyon-koruma).
+        self.assertNotIn('onclick="loadRunStdout', self._html)
     def test_load_run_stdout_function_exists(self):
         """loadRunStdout(ts) fonksiyonu tanımlı."""
         self.assertIn("function loadRunStdout(ts)", self._html)
@@ -730,7 +733,10 @@ class TestRunHistoryFilter(unittest.TestCase):
     def test_filter_bar_exists(self):
         """rh-filter div'i var."""
         self.assertIn('class="rh-filter"', self._html)
-        self.assertIn('onclick="setRhFilter', self._html)
+        # CSP-uyumlu delegation: butonlar data-act taşır, document-düzeyi
+        # click-dinleyici setRhFilter'a delege eder.
+        self.assertIn('data-act="rh-filter"', self._html)
+        self.assertIn('setRhFilter(t.dataset.f)', self._html)
 
     def test_filter_var_declared(self):
         """let rhFilter = "all" değişkeni tanımlı."""

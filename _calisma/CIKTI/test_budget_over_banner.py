@@ -61,7 +61,7 @@ class TestBudgetOverBannerElement(unittest.TestCase):
 
     def test_banner_clickable_expandable(self):
         # Şerit tıklanabilir; özet + caret + gizli detay bölümü içerir.
-        self.assertIn("onclick=\"toggleBudgetOverDetail()\"", self.html)
+        self.assertIn('data-act="budget-toggle"', self.html)
         self.assertIn("cursor:pointer", self.html)
         self.assertIn('id="budget-over-summary"', self.html)
         self.assertIn('id="budget-over-caret"', self.html)

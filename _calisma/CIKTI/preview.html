@@ -340,8 +340,7 @@
     <div id="budget-over-banner" class="err" role="alert"
          style="display:none;margin:6px 0 2px;padding:6px 10px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">
       <span id="budget-over-toggle" role="button" tabindex="0" aria-expanded="false"
-            onclick="toggleBudgetOverDetail()"
-            onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleBudgetOverDetail()}"
+            data-act="budget-toggle"
             title="Aşım yapan run'ları göster/gizle">
       <span id="budget-over-summary"></span><span class="ts" id="budget-over-caret" style="margin-left:6px">▸</span>
       </span>
@@ -384,10 +383,10 @@
   <section>
     <h2>Run history <span class="ts" id="run-history-count"></span></h2>
     <div class="rh-filter">
-      <button data-f="all" onclick="setRhFilter('all')">all</button>
-      <button data-f="PASS" onclick="setRhFilter('PASS')">PASS</button>
-      <button data-f="FAIL" onclick="setRhFilter('FAIL')">FAIL</button>
-      <button data-f="P0" onclick="setRhFilter('P0')">P0</button>
+      <button data-f="all" data-act="rh-filter">all</button>
+      <button data-f="PASS" data-act="rh-filter">PASS</button>
+      <button data-f="FAIL" data-act="rh-filter">FAIL</button>
+      <button data-f="P0" data-act="rh-filter">P0</button>
     </div>
     <div id="run-history" style="max-height:240px;overflow-y:auto;font-size:12px;line-height:1.6"></div>
   </section>

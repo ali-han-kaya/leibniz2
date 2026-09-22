@@ -46,6 +46,7 @@ test_coq_evidence_smoke.py
 test_coq_lake.py
 test_coverage_report.py
 test_dashboard_k17_exit_sync.py
+test_dashboard_keyboard_nav.py
 test_dashboard_smoke.py
 test_determinism_trend_badge.py
 test_dev_bootstrap.py

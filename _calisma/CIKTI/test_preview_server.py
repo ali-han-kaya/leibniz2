@@ -662,9 +662,11 @@ class HookEnvTrendPlumbingTests(unittest.TestCase):
         self.assertIn("renderHookEnvTrend(rows)", self.html)
 
     def test_hover_hit_area_wired(self):
-        # Hover tooltip'i bant vuruş alanlarına bağlı olmalı.
-        self.assertIn("onmousemove=\"showHookEnvTrendTip(", self.html)
-        self.assertIn("onmouseleave=\"hideTrendTip()", self.html)
+        # Hover tooltip'i bant vuruş alanlarına bağlı olmalı — CSP-uyumlu
+        # delegation: rect data-tip+data-i taşır, SVG-düzeyi dinleyici
+        # showHookEnvTrendTip'e delege eder.
+        self.assertIn('data-tip="hookenv"', self.html)
+        self.assertIn('"he-trend": "showHookEnvTrendTip"', self.html)
 
 
 class BudgetLimitPlumbingTests(unittest.TestCase):
