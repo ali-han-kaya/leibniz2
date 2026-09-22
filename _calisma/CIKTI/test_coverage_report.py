@@ -241,6 +241,7 @@ HOOK_COVERAGE = {
         "test_openapi_schema.py",
         "test_ci_hygiene_gate.py",
         "test_gh_run_rca.py",
+        "test_deploy_evidence.py",
     ],
 }
 

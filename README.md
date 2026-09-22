@@ -478,6 +478,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-22 | feat | (docker) PR-triggered Trivy scan with SARIF diff comment | [`097fffc`](https://github.com/ali-han-kaya/leibniz2/commit/097fffc) |
 | 2026-09-22 | feat | (ci) CI hygiene gate - permissions, timeout, concurrency matrix | [`69ca3e1`](https://github.com/ali-han-kaya/leibniz2/commit/69ca3e1) |
 | 2026-09-22 | feat | (server) persistent lifecycle event log for preview daemon | [`6cdf03d`](https://github.com/ali-han-kaya/leibniz2/commit/6cdf03d) |
+| 2026-09-22 | feat | (ci) gh-run RCA - red-run root-cause table generator | [`c279e57`](https://github.com/ali-han-kaya/leibniz2/commit/c279e57) |
 
 ### Regresyon notları
 
