@@ -483,6 +483,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-23 | fix | (ci) install pyyaml for runner unit tests | [`9272108`](https://github.com/ali-han-kaya/leibniz2/commit/9272108) |
 | 2026-09-23 | fix | (server) gate GET APIs vs DNS rebinding + run-now peer parity | [`37790f5`](https://github.com/ali-han-kaya/leibniz2/commit/37790f5) |
 | 2026-09-23 | docs | (azure) azd project, bicep infra and deployment plan (Draft) | [`8041a58`](https://github.com/ali-han-kaya/leibniz2/commit/8041a58) |
+| 2026-09-23 | docs | (eval) AI-service evaluation with measured repo baselines | [`a741b81`](https://github.com/ali-han-kaya/leibniz2/commit/a741b81) |
 
 ### Regresyon notları
 
