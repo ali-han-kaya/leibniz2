@@ -481,6 +481,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-22 | feat | (ci) gh-run RCA - red-run root-cause table generator | [`c279e57`](https://github.com/ali-han-kaya/leibniz2/commit/c279e57) |
 | 2026-09-23 | feat | (docs) deployment evidence ledger with staleness gate | [`5c4527c`](https://github.com/ali-han-kaya/leibniz2/commit/5c4527c) |
 | 2026-09-23 | fix | (ci) install pyyaml for runner unit tests | [`9272108`](https://github.com/ali-han-kaya/leibniz2/commit/9272108) |
+| 2026-09-23 | fix | (server) gate GET APIs vs DNS rebinding + run-now peer parity | [`37790f5`](https://github.com/ali-han-kaya/leibniz2/commit/37790f5) |
 
 ### Regresyon notları
 

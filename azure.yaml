@@ -1,0 +1,10 @@
+# azure.yaml — azd proje tanımlaması (verify-dashboard)
+# azure-prepare artifaktı; çalıştırma azure-deploy skill'i ile olur.
+name: verify-dashboard
+metadata:
+  template: verify-dashboard@0.0.1
+services:
+  dashboard:
+    project: .
+    language: docker
+    host: containerapp
