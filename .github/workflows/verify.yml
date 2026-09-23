@@ -161,6 +161,14 @@ jobs:
         shell: bash
         run: pip install Pillow
 
+      # ci_hygiene_gate.py (K-11c CI-hijyen kapısı) PyYAML ile workflow-matrisini
+      # parse eder; kurulu değilse test_ci_hygiene_gate import-patlar (K-11c
+      # loader-ERROR'u job'u düşürür). Repo-venv'de var — runner'da açık kur:
+      - name: Install PyYAML for unit tests
+        if: always()
+        shell: bash
+        run: pip install pyyaml
+
       - name: Run CIKTI unit tests (test_*.py)
         shell: bash
         run: |
