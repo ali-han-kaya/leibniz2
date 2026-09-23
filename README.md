@@ -480,6 +480,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-22 | feat | (server) persistent lifecycle event log for preview daemon | [`6cdf03d`](https://github.com/ali-han-kaya/leibniz2/commit/6cdf03d) |
 | 2026-09-22 | feat | (ci) gh-run RCA - red-run root-cause table generator | [`c279e57`](https://github.com/ali-han-kaya/leibniz2/commit/c279e57) |
 | 2026-09-23 | feat | (docs) deployment evidence ledger with staleness gate | [`5c4527c`](https://github.com/ali-han-kaya/leibniz2/commit/5c4527c) |
+| 2026-09-23 | fix | (ci) install pyyaml for runner unit tests | [`9272108`](https://github.com/ali-han-kaya/leibniz2/commit/9272108) |
 
 ### Regresyon notları
 

@@ -1439,6 +1439,7 @@ class TestRouteQueryParams(unittest.TestCase):
             handler = object.__new__(ps.Handler)
             sent = []
             handler.path = "/api/run-now"
+            handler.client_address = ("127.0.0.1", 55555)
             handler.headers = {"Authorization": "Bearer secret-token", "Host": "evil.example"}
             handler._send = lambda status, body, content_type="", extra_headers=None: sent.append((status, body, extra_headers))
             handler.trigger_run_now()
@@ -1460,6 +1461,7 @@ class TestRouteQueryParams(unittest.TestCase):
             handler = object.__new__(ps.Handler)
             sent = []
             handler.path = "/api/run-now"
+            handler.client_address = ("127.0.0.1", 55555)
             handler.headers = {"Host": "127.0.0.1:8000"}
             handler._send = lambda status, body, content_type="", extra_headers=None: sent.append((status, body, extra_headers))
             handler.trigger_run_now()
@@ -1475,6 +1477,7 @@ class TestRouteQueryParams(unittest.TestCase):
             handler = object.__new__(ps.Handler)
             sent = []
             handler.path = "/api/run-now"
+            handler.client_address = ("127.0.0.1", 55555)
             handler.headers = {"Authorization": "Bearer secret-token", "Host": "127.0.0.1:8000", "Origin": "https://evil.example"}
             handler._send = lambda status, body, content_type="", extra_headers=None: sent.append((status, body, extra_headers))
             handler.trigger_run_now()
@@ -1495,6 +1498,7 @@ class TestRouteQueryParams(unittest.TestCase):
             handler = object.__new__(ps.Handler)
             sent = []
             handler.path = "/api/run-now"
+            handler.client_address = ("127.0.0.1", 55555)
             handler._send = lambda status, body, content_type="", extra_headers=None: sent.append((status, body, extra_headers))
             handler.headers = {"Host": "127.0.0.1:8000"}
             handler.trigger_run_now()
@@ -1518,6 +1522,7 @@ class TestRouteQueryParams(unittest.TestCase):
             handler = object.__new__(ps.Handler)
             sent = []
             handler.path = "/api/run-now"
+            handler.client_address = ("127.0.0.1", 55555)
             handler._send = lambda status, body, content_type="", extra_headers=None: sent.append((status, body, extra_headers))
             handler.headers = {"Host": "127.0.0.1:8000", "Authorization": "Bearer secret-token"}
             original = ps.run_verify

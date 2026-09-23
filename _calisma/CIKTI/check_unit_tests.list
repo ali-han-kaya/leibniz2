@@ -86,6 +86,7 @@ test_lean_lake.py
 test_lean_override_snapshot.py
 test_lineage_schema.py
 test_lineage_sidecar_guarantee.py
+test_local_security_surface.py
 test_m0_k12_sidecar_sync.py
 test_m0_k_table_sync.py
 test_makefile_texlive.py

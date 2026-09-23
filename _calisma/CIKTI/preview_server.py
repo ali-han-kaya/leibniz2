@@ -55,6 +55,10 @@ STOP_EVENT = None
 # erişemez; genişletme yalnız PREVIEW_STOP_ALLOWLIST ile (geçersiz girdi
 # düşülür — kapı asla genişlemez).
 DEFAULT_STOP_ALLOWLIST = frozenset({"127.0.0.1", "::1"})
+
+# Import-time default: main() env ile genişletene kadar yalnız loopback.
+# (Unit-prob'lar main()'i koşmadan Handler'ı kurar — global burada var olmalı.)
+STOP_ALLOWLIST = DEFAULT_STOP_ALLOWLIST
 STOP_ALLOWLIST = DEFAULT_STOP_ALLOWLIST
 _STOP_HOSTS_ENV = "PREVIEW_STOP_ALLOWLIST"
 
@@ -113,6 +117,16 @@ def _trusted_request(headers):
 
 def api_error(status, message):
     return status, {"error": message}
+
+
+# GET-API route kümesi: DNS-rebinding kapısı bunlara uygulanır (do_GET).
+# Statik varlıklar (sw/preview/guide/preview_js/design_tokens/slides) veri
+# taşımaz — kapı dışı. /api/health yerel-monitör için düşük-duyarlı.
+_API_GET_ROUTES = frozenset({
+    "latest", "sse", "run_stream", "history", "refs_trend", "trend",
+    "override_trend", "determinism_trend", "run_history", "health",
+    "stop", "run_now",
+})
 
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -1477,6 +1491,15 @@ class Handler(BaseHTTPRequestHandler):
         # Query string'li istekler (cache-buster ?_t= / ?v=) da aynı rotaya
         # düşer — bkz. _route().
         route = _route(self.path)
+        # DNS-rebinding kapısı: /api/* GET'leri de Host/Origin kurallarına
+        # tabidir (POST-uçlarla aynı ALLOWED_HOSTS). Statik varlıklar ve
+        # do_HEAD kapı dışı — veri-taşımayan yüzeyler.
+        if route in _API_GET_ROUTES:
+            request_error = _trusted_request(self.headers)
+            if request_error:
+                self._send(403, json.dumps({"error": request_error}),
+                           content_type="application/json; charset=utf-8")
+                return
         if route == "sw":
             self.serve_sw()
         elif route == "preview":
@@ -1566,6 +1589,13 @@ class Handler(BaseHTTPRequestHandler):
         yanlışlıkla silinmişti (serve_run_stdout ile yer değiştirdi) —
         geri yüklendi.
         """
+        # Peer-paritesi: state-changing uç, /api/stop ile aynı sahtelenemez
+        # TCP-peer kapısını taşır (güven-sırası: peer → trusted → auth).
+        peer_error = _stop_peer_allowed(self.client_address, STOP_ALLOWLIST)
+        if peer_error:
+            self._send(403, json.dumps({"error": peer_error}),
+                       content_type="application/json; charset=utf-8")
+            return
         request_error = _trusted_request(self.headers)
         if request_error:
             self._send(403, json.dumps({"error": request_error}),
