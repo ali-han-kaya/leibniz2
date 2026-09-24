@@ -160,18 +160,36 @@ def decide_verdict(rows):
 
 # ----------------------------------------------------------------- scan
 
-def playwright_connect(base_url, axe_src):
-    """Varsayılan sürücü: Playwright sync API. Lazy import — yoksa ImportError."""
+def playwright_connect(base_url, axe_src, axe_url_path="/vendor/axe.min.js"):
+    """Varsayılan sürücü: Playwright sync API. Lazy import — yoksa ImportError.
+
+    CSP-sözleşmesi: sayfa script-src 'self' + nonce; bundle aynı-kökte
+    /vendor/axe.min.js'ten 'self' ile yüklenir (temiz yol). Same-origin
+    script-tag doğrulanamazsa (eski-daemon: route yok) bilinçli yedek —
+    CSP-bypass'lı context'te add_script_tag enjeksiyonu.
+    """
     from playwright.sync_api import sync_playwright  # noqa: PLC0415 (lazy)
 
     page_url = base_url.rstrip("/") + "/preview.html"
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         try:
-            # preview_server nonce-CSP'si inline axe injection'ı bloklar —
-            # tarama-connect'i CSP-bypass'lı context'te aç (yalnız kapı-scan'i).
-            context = browser.new_context(bypass_csp=True)
-            page = context.new_page()
+            page = browser.new_context().new_page()
+            page.goto(page_url, wait_until="load")
+            results = page.evaluate(
+                """async (axeUrl) => {
+                    await new Promise((resolve, reject) => {
+                        const s = document.createElement('script');
+                        s.src = axeUrl;
+                        s.onload = resolve;
+                        s.onerror = () => reject(new Error('same-origin axe yüklenemedi'));
+                        document.head.appendChild(s);
+                    });
+                    return await axe.run();
+                }""", axe_url_path)
+        except Exception:
+            # Yedek (eski-daemon uyumu): CSP-bypass + inline enjeksiyon.
+            page = browser.new_context(bypass_csp=True).new_page()
             page.goto(page_url, wait_until="load")
             page.add_script_tag(content=axe_src)
             results = page.evaluate("() => axe.run()")

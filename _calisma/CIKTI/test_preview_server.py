@@ -1415,6 +1415,7 @@ class TestRouteQueryParams(unittest.TestCase):
         self.assertEqual(ps._route("/"), "preview")
         # Candidate 3: dashboard JS dış dosyada — kendi rotasını kullanır.
         self.assertEqual(ps._route("/preview.js"), "preview_js")
+        self.assertEqual(ps._route("/vendor/axe.min.js"), "vendor_axe")
         self.assertEqual(ps._route("/preview.js?v=123"), "preview_js")
 
     def test_unknown_paths_are_none(self):

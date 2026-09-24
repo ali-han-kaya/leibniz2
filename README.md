@@ -494,6 +494,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-24 | docs | (reference) preview_server /api contract reference | [`2295ed1`](https://github.com/ali-han-kaya/leibniz2/commit/2295ed1) |
 | 2026-09-24 | docs | (explanation) why SDE and the /ID residual work this way | [`193d85a`](https://github.com/ali-han-kaya/leibniz2/commit/193d85a) |
 | 2026-09-24 | docs | (process) fresh-session reader-test protocol | [`f79307d`](https://github.com/ali-han-kaya/leibniz2/commit/f79307d) |
+| 2026-09-24 | feat | (canvas) plates 02-05 and the seven-leaf plate book | [`bae1519`](https://github.com/ali-han-kaya/leibniz2/commit/bae1519) |
 
 ### Regresyon notları
 

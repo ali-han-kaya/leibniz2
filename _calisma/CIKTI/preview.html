@@ -409,7 +409,10 @@
       <span style="color:var(--warn)">■ sarı = P1/CLI override</span> ·
       <span style="color:var(--muted)">■ gri = ayraç/K katmanı</span>
     </div>
-    <pre id="stdout">Waiting for first run…</pre>
+    <!-- a11y: CSS ile overflow-auto olan pre, odaklanabilir-değilken axe
+         scrollable-region-focusable (serious) verir; tabindex=0 ile klavye-
+         erişilebilir kaydırma (a11y-gate blocking-eşiği). -->
+    <pre id="stdout" tabindex="0">Waiting for first run…</pre>
   </section>
 
   <section>

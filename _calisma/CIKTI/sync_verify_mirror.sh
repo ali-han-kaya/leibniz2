@@ -164,6 +164,10 @@ PREVIEW_FILES=(
   # tutar (güncelleme-çekimi hep 404 → skipWaiting asla çalışmaz) —
   # dashboard gömülü-webview'de asılı kalır (QA bulgusu F2, 2026-09-23)
   "sw.js|sw.js"
+  # a11y-gate same-origin axe-bundle'ı: preview_server /vendor/axe.min.js
+  # rotası PREVIEW_DIR/vendor/ altından servis eder (CSP 'self' temiz-yol;
+  # checksum-kapısı repo-kaynağını pinler — mirror-drift ayrı denetim).
+  "vendor/axe.min.js|vendor/axe.min.js"
   # determinism-trend endpoint handler'ının importu (PREVIEW_DIR'den
   # çözülür — QA bulgusu F1, 2026-09-21)
   "determinism_trend_badge.py|determinism_trend_badge.py"

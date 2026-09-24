@@ -45,6 +45,13 @@ DETERMINISM_TREND_REL = "docs/determinism_trend/determinism_trend.jsonl"
 # <repo>/design-system/tokens.css — kapsam tanımı bunu beklemeli (yoksa
 # fail-closed coverage CI'da "BEKLENMEYEN: design-system/tokens.css" ile kırılır).
 DESIGN_TOKENS_REL = "design-system/tokens.css"
+# a11y-gate same-origin axe bundle'ı: preview_server /vendor/axe.min.js rotası
+# bunu PREVIEW_DIR/vendor/ altından servis eder; sync_verify_mirror.sh
+# PREVIEW_FILES bloğu mirror'a taşır (a11y düzeltmesi, 2026-09-24). Kapsam
+# tanımı bunu beklemeli — yoksa fail-closed coverage "BEKLENMEYEN:
+# _calisma/CIKTI/vendor/axe.min.js" ile kırılır (design-system/tokens.css
+# ile aynı desen).
+VENDOR_AXE_REL = "_calisma/CIKTI/vendor/axe.min.js"
 
 
 def run_list(script):
@@ -115,6 +122,7 @@ def expected_repo_files(root, cikti, lean_src):
     expected.add(DOC_REL)
     expected.add(DETERMINISM_TREND_REL)
     expected.add(DESIGN_TOKENS_REL)
+    expected.add(VENDOR_AXE_REL)
     expected.update(SDE_RUNTIME)
     if os.path.isdir(lean_src):
         for directory, dirs, files in os.walk(lean_src):

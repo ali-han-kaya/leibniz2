@@ -1367,6 +1367,8 @@ def _route(path):
         return "preview"
     if p == "/preview.js":
         return "preview_js"
+    if p == "/vendor/axe.min.js":
+        return "vendor_axe"
     if p == "/design-system/tokens.css":
         return "design_tokens"
     if p == "/guide.html":
@@ -1508,6 +1510,8 @@ class Handler(BaseHTTPRequestHandler):
             self.serve_guide()
         elif route == "preview_js":
             self.serve_preview_js()
+        elif route == "vendor_axe":
+            self.serve_vendor_axe()
         elif route == "design_tokens":
             self.serve_design_tokens()
         elif route == "latest":
@@ -1851,6 +1855,13 @@ class Handler(BaseHTTPRequestHandler):
         fallback'ine düşer (davranış aynı).
         """
         preview_path = os.path.join(PREVIEW_DIR, "preview.html")
+        if not os.path.isfile(preview_path):
+            # Fail-closed: mirror'da HTML yoksa 404 — çıplak open() daemon-
+            # thread'ini öldürür ve istemci "empty reply" alır (ölçüldü:
+            # verify-mirror preview-server'ı, 2026-09-24).
+            self._send(404, "404 — preview.html mirror'da yok "
+                             "(bash update_preview.sh)")
+            return
         with open(preview_path, encoding="utf-8") as f:
             html = f.read()
         try:
@@ -1928,6 +1939,25 @@ class Handler(BaseHTTPRequestHandler):
         with open(path, encoding="utf-8") as f:
             js = f.read()
         self._send(200, js, content_type="application/javascript; charset=utf-8")
+
+    def serve_vendor_axe(self):
+        """vendor/axe.min.js — a11y-gate'in same-origin axe-bundle'ı.
+
+        CSP script-src 'self' + nonce: dış enjeksiyon yok; gate, bundle'ı
+        sayfa-içinden 'self'ten yükletir (<script src>) — eski add_script_tag
+        enjeksiyon-yolu yalnız CSP-bypass yedeği. Bundle PREVIEW_DIR/vendor/
+        altında (sync_verify_mirror.sh taşır; checksum-kapısı repo-kaynağını
+        pinler). Kaynak yoksa 404 (fail-closed: sessiz boş-skript yok).
+        """
+        path = os.path.join(PREVIEW_DIR, "vendor", "axe.min.js")
+        if not os.path.isfile(path):
+            self._send(404, "404 — vendor/axe.min.js mirror'da yok "
+                             "(bash sync_verify_mirror.sh)")
+            return
+        with open(path, "rb") as f:
+            data = f.read()
+        self._send(200, data,
+                   content_type="application/javascript; charset=utf-8")
 
     def serve_design_tokens(self):
         """design-system/tokens.css — dashboard token sheet (tek stil kaynağı).
