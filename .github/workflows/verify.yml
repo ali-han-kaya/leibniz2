@@ -3043,6 +3043,40 @@ jobs:
             --base-url "http://127.0.0.1:$A11Y_PORT" \
             --output a11y_report.json
 
+      - name: Write a11y job summary
+        if: always()
+        shell: bash
+        run: |
+          # Spec §Reporting-3: ucuncu yuzey — raporu salt-okur render eder
+          # (verdict + ozet sayaclari + violation satirlari + hata).
+          # Fail-closed: if: always() — gate kiriliminde de ozet uretilir.
+          python3 - <<'PY'
+          import json, os, pathlib
+          report = pathlib.Path("a11y_report.json")
+          lines = ["## a11y-gate özeti"]
+          if report.exists():
+              data = json.loads(report.read_text(encoding="utf-8"))
+              lines.append("verdict: **%s**" % data.get("verdict", "BILINMIYOR"))
+              s = data.get("summary") or {}
+              lines.append("")
+              lines.append("| seviye | sayı |")
+              lines.append("|---|---|")
+              for k in ("blocking", "warn", "allowlisted", "incomplete"):
+                  lines.append("| %s | %s |" % (k, s.get(k, 0)))
+              for v in data.get("violations", []):
+                  extra = " (allowlisted: %s düğüm)" % v["allowlisted_nodes"] \
+                      if v.get("allowlisted_nodes") else ""
+                  lines.append("- `%s` %s → %s, %s düğüm%s" % (
+                      v.get("rule", "?"), v.get("impact") or "-",
+                      v.get("level"), v.get("nodes"), extra))
+              if data.get("error"):
+                  lines.append("- hata: %s" % data["error"])
+          else:
+              lines.append("a11y_report.json üretilmedi — gate adımına bak.")
+          pathlib.Path(os.environ["GITHUB_STEP_SUMMARY"]).write_text(
+              "\n".join(lines) + "\n", encoding="utf-8")
+          PY
+
       - name: Upload a11y report
         if: always()
         uses: actions/upload-artifact@v6

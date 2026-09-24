@@ -498,6 +498,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-24 | fix | (a11y) same-origin axe bundle and focusable stdout pane | [`c77ccc9`](https://github.com/ali-han-kaya/leibniz2/commit/c77ccc9) |
 | 2026-09-24 | chore | record weekly determinism trend measurement | [`6da1bda`](https://github.com/ali-han-kaya/leibniz2/commit/6da1bda) |
 | 2026-09-24 | feat | (ci) docx export job with LibreOffice artifact check | [`43e4824`](https://github.com/ali-han-kaya/leibniz2/commit/43e4824) |
+| 2026-09-24 | feat | (docx) merge RC report and full scope audit into one docx | [`f3c9fdc`](https://github.com/ali-han-kaya/leibniz2/commit/f3c9fdc) |
 
 ### Regresyon notları
 

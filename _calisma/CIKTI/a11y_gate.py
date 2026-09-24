@@ -226,7 +226,8 @@ def main(argv=None):
                     help="rapor JSON yolu (CI artifact)")
     args = ap.parse_args(argv)
 
-    report = {"base_url": args.base_url, "page_url": None,
+    report = {"verdict": "FAIL",  # fail-closed default: her arıza FAIL kalır
+              "base_url": args.base_url, "page_url": None,
               "config": None, "violations": [], "summary": {}, "error": None}
 
     def fail(code):
@@ -287,6 +288,7 @@ def main(argv=None):
         "incomplete": sum(1 for r in rows if r["level"] == "incomplete"),
     }
 
+    report["verdict"] = verdict
     print("verdict: %s" % verdict)
     _print_table(rows)
     if report["summary"]["warn"] or report["summary"]["incomplete"]:
