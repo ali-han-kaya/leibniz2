@@ -488,6 +488,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-23 | docs | (a11y) remaining-scope implementation plan for approved spec | [`ebd0251`](https://github.com/ali-han-kaya/leibniz2/commit/ebd0251) |
 | 2026-09-23 | docs | (a11y) detail plan to writing-plans granularity | [`faf6d75`](https://github.com/ali-han-kaya/leibniz2/commit/faf6d75) |
 | 2026-09-24 | feat | (vercel) serverless /api adapter, git-push deploy config and docs | [`38edfc1`](https://github.com/ali-han-kaya/leibniz2/commit/38edfc1) |
+| 2026-09-24 | feat | (canvas) determinism CI job, header banner and test registrations | [`8d860cc`](https://github.com/ali-han-kaya/leibniz2/commit/8d860cc) |
 
 ### Regresyon notları
 

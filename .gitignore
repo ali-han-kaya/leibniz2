@@ -49,3 +49,5 @@ apps/dashboard-next/.next/
 
 # make build dirs (docs/Makefile.tectonic + docs/Makefile.texlive BUILD_DIR)
 .build/
+.vercel
+.env*

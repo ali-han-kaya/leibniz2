@@ -149,6 +149,21 @@ PREVIEW_FILES=(
   "preview_server.py|preview_server.py"
   "_daemonize.py|_daemonize.py"
   "preview_prestart.py|preview_prestart.py"
+  # Dashboard frontend ikilisi: preview_server.py /preview.js'i HER
+  # İSTEKTE PREVIEW_DIR'den okur; burada bayat kalırsa daemon ESKİ JS'i
+  # servis eder (inline onmousemove-handler'lı eski-sürüm 09-19 kopyası —
+  # QA bulgusu F3, 2026-09-23; tooltip-delegasyonu boş).
+  # DİKKAT: preview.html burada TAŞINMAZ — mirror-yazarı update_preview.sh
+  # build()'dir (build-stamp enjekte eder; stamp zamanlı olduğundan raw
+  # kaynağıyla byte-farklı). sync RAW kopyalayıp üstüne yazsaydı hem
+  # build'i ezerdi hem --check'i kalıcı-BAYAT'a düşürürdü (F3-fix
+  # ilk-denenme, 2026-09-23; bootstrap-idempotence süitiyle kanıtlandı).
+  "preview.js|preview.js"
+  # SW bayat-deploy tuzası: preview.js /sw.js'i kaydeder; mirror'da yoksa
+  # kayıt 404 alır ve webview'deki ESKİ SW kontrolü sonsuza dek elinde
+  # tutar (güncelleme-çekimi hep 404 → skipWaiting asla çalışmaz) —
+  # dashboard gömülü-webview'de asılı kalır (QA bulgusu F2, 2026-09-23)
+  "sw.js|sw.js"
   # determinism-trend endpoint handler'ının importu (PREVIEW_DIR'den
   # çözülür — QA bulgusu F1, 2026-09-21)
   "determinism_trend_badge.py|determinism_trend_badge.py"
