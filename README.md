@@ -486,6 +486,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-23 | docs | (eval) AI-service evaluation with measured repo baselines | [`a741b81`](https://github.com/ali-han-kaya/leibniz2/commit/a741b81) |
 | 2026-09-23 | docs | (azure) AI Search hybrid-resolution design for K6 refs | [`d9bffa6`](https://github.com/ali-han-kaya/leibniz2/commit/d9bffa6) |
 | 2026-09-23 | docs | (a11y) remaining-scope implementation plan for approved spec | [`ebd0251`](https://github.com/ali-han-kaya/leibniz2/commit/ebd0251) |
+| 2026-09-23 | docs | (a11y) detail plan to writing-plans granularity | [`faf6d75`](https://github.com/ali-han-kaya/leibniz2/commit/faf6d75) |
 
 ### Regresyon notları
 

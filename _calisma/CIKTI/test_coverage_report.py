@@ -243,6 +243,7 @@ HOOK_COVERAGE = {
         "test_gh_run_rca.py",
         "test_deploy_evidence.py",
         "test_local_security_surface.py",
+        "test_vercel_adapter.py",
     ],
 }
 
