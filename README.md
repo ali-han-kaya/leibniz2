@@ -499,6 +499,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-24 | chore | record weekly determinism trend measurement | [`6da1bda`](https://github.com/ali-han-kaya/leibniz2/commit/6da1bda) |
 | 2026-09-24 | feat | (ci) docx export job with LibreOffice artifact check | [`43e4824`](https://github.com/ali-han-kaya/leibniz2/commit/43e4824) |
 | 2026-09-24 | feat | (docx) merge RC report and full scope audit into one docx | [`f3c9fdc`](https://github.com/ali-han-kaya/leibniz2/commit/f3c9fdc) |
+| 2026-09-24 | feat | (a11y) report verdict field + job summary surface | [`08deae8`](https://github.com/ali-han-kaya/leibniz2/commit/08deae8) |
 
 ### Regresyon notları
 
