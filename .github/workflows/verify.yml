@@ -3364,6 +3364,12 @@ jobs:
           set -euo pipefail
           SOURCE_DATE_EPOCH=1700000000 node _calisma/docx/make_docx.js \
             | tee docx_build.txt
+          # Iki raporu tek Word dosyasinda birlestir (bolum kirilimli):
+          # FINAL_RC_REPORT + FULL_SCOPE_AUDIT; ikinci rapor yeni sayfada baslar.
+          SOURCE_DATE_EPOCH=1700000000 node _calisma/docx/make_docx.js \
+            --in docs/FINAL_RC_REPORT.md \
+            --in docs/FULL_SCOPE_AUDIT_2026-09-17.md \
+            | tee docx_build_combined.txt
 
       - name: Install LibreOffice (writer only)
         run: |
@@ -3375,7 +3381,13 @@ jobs:
         run: |
           set -euo pipefail
           bash _calisma/docx/check_docx_libreoffice.sh \
-            _calisma/docx/out/final_rc_report.docx | tee docx_libreoffice_check.txt
+            _calisma/docx/out/final_rc_report.docx \
+            "Final Release Candidate Report" | tee docx_libreoffice_check.txt
+          # Birlesik belge: iki raporun baslik tanigi da aranir.
+          bash _calisma/docx/check_docx_libreoffice.sh \
+            _calisma/docx/out/combined_report.docx \
+            "Final Release Candidate Report" "Tam Kapsam Denetim Raporu" \
+            | tee docx_libreoffice_check_combined.txt
 
       - name: Summary
         if: always()
@@ -3384,7 +3396,9 @@ jobs:
             echo "## docx-export"
             echo '```'
             cat docx_build.txt 2>/dev/null || echo '(build cikti yok)'
+            cat docx_build_combined.txt 2>/dev/null || echo '(birlesik build cikti yok)'
             cat docx_libreoffice_check.txt 2>/dev/null || echo '(libreoffice kontrolu yok)'
+            cat docx_libreoffice_check_combined.txt 2>/dev/null || echo '(birlesik libreoffice kontrolu yok)'
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -3395,7 +3409,10 @@ jobs:
           name: docx-report
           path: |
             _calisma/docx/out/final_rc_report.docx
+            _calisma/docx/out/combined_report.docx
             docx_build.txt
+            docx_build_combined.txt
             docx_libreoffice_check.txt
+            docx_libreoffice_check_combined.txt
           if-no-files-found: ignore
           retention-days: 30

@@ -497,6 +497,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-24 | feat | (canvas) plates 02-05 and the seven-leaf plate book | [`bae1519`](https://github.com/ali-han-kaya/leibniz2/commit/bae1519) |
 | 2026-09-24 | fix | (a11y) same-origin axe bundle and focusable stdout pane | [`c77ccc9`](https://github.com/ali-han-kaya/leibniz2/commit/c77ccc9) |
 | 2026-09-24 | chore | record weekly determinism trend measurement | [`6da1bda`](https://github.com/ali-han-kaya/leibniz2/commit/6da1bda) |
+| 2026-09-24 | feat | (ci) docx export job with LibreOffice artifact check | [`43e4824`](https://github.com/ali-han-kaya/leibniz2/commit/43e4824) |
 
 ### Regresyon notları
 

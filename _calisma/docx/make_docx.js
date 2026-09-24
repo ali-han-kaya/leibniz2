@@ -5,7 +5,13 @@
  * Kullanim:
  *   node make_docx.js                                   # varsayilan kaynak/cikti
  *   node make_docx.js --in docs/X.md --out out/x.docx
+ *   node make_docx.js --in docs/A.md --in docs/B.md     # iki raporu tek dosyada birlestir
  *   node make_docx.js --self-test                       # parser sozlesmesi
+ *
+ * Coklu kaynak: her kaynak yeni sayfada baslar (bolum kirilimi, NEXT_PAGE);
+ * ilk kaynaktan sonraki basliklar bir seviye terfi eder (h1→h2, tavan h6) —
+ * boylece ikinci raporun h1'i birinci raporun bolum basligi olur.
+ * Coklu kaynakta varsayilan cikti: out/combined_report.docx.
  *
  * Varsayilanlar: kaynak docs/FINAL_RC_REPORT.md, cikti _calisma/docx/out/final_rc_report.docx.
  * Cikti, kaynak dizinine YAZILMAZ: uretilen artifact ayri bir cikti dizininde
@@ -38,6 +44,7 @@ const {
   TableCell,
   WidthType,
   AlignmentType,
+  SectionType,
 } = require("docx");
 
 const ROOT = path.resolve(__dirname, "..", "..");
@@ -263,11 +270,27 @@ function blockToDocx(blk) {
   }
 }
 
-function buildDocument(blocks, meta) {
-  const children = [];
-  for (const blk of blocks) {
-    children.push(...blockToDocx(blk));
-  }
+/**
+ * Coklu kaynak icin baslik terfisi: h1→h2 ... h5→h6, h6 ayni kalir (tavan).
+ * Saf; self-test ile dogrulanir.
+ */
+function promoteHeadingBlocks(blocks) {
+  return blocks.map((b) =>
+    b.kind === "heading"
+      ? { ...b, level: Math.min(b.level + 1, HEADING_LEVELS.length) }
+      : b
+  );
+}
+
+/**
+ * Coklu kaynagi tek belgede birlestirir: her part yeni sayfada baslar
+ * (SectionType.NEXT_PAGE bolum kirilimi). parts: [{ blocks }].
+ */
+function buildSectionsDocument(parts, meta) {
+  const sections = parts.map((p, idx) => ({
+    ...(idx > 0 ? { properties: { type: SectionType.NEXT_PAGE } } : {}),
+    children: p.blocks.flatMap(blockToDocx),
+  }));
   return new Document({
     creator: meta.creator,
     lastModifiedBy: meta.creator,
@@ -289,15 +312,22 @@ function buildDocument(blocks, meta) {
       ],
     },
     styles: { default: { document: { run: { font: "Calibri", size: 22 } } } },
-    sections: [{ children }],
+    sections,
   });
+}
+
+/** Tek kaynak: buildSectionsDocument'in tek bolumluk kisa yolu. */
+function buildDocument(blocks, meta) {
+  return buildSectionsDocument([{ blocks }], meta);
 }
 
 // ── Self-test (parser sozlesmesi; CI'da kosar) ───────────────────────────────
 
 function selfTest() {
   const fails = [];
+  let checks = 0;
   const eq = (name, got, want) => {
+    checks++;
     const a = JSON.stringify(got);
     const b = JSON.stringify(want);
     if (a !== b) fails.push(`${name}: got=${a} want=${b}`);
@@ -346,32 +376,65 @@ function selfTest() {
   const runs = inlineRuns("a **b** `c`");
   eq("inline run sayisi", runs.length, 4);
 
+  // Coklu kaynak: baslik terfisi (h1→h2, h6 tavani asamaz, paragraf dokunulmaz).
+  const promoted = promoteHeadingBlocks([
+    { kind: "heading", level: 1, text: "A" },
+    { kind: "heading", level: 6, text: "B" },
+    { kind: "paragraph", text: "x" },
+  ]);
+  eq(
+    "baslik terfisi",
+    promoted.map((x) => [x.kind, x.level ?? 0]),
+    [
+      ["heading", 2],
+      ["heading", 6],
+      ["paragraph", 0],
+    ]
+  );
+
+  // Coklu kaynak birlesimi: part sirasi korunur, bloklar kaybolmaz.
+  const p1 = parseMarkdown("# Bir\n\nmetin");
+  const p2 = parseMarkdown("# Iki\n\n| A |\n|---|\n| 1 |");
+  const parts = [{ blocks: p1 }, { blocks: p2 }];
+  eq(
+    "coklu bolum birlesimi",
+    parts.flatMap((p) => p.blocks).map((x) => x.kind),
+    ["heading", "paragraph", "heading", "table"]
+  );
+
   if (fails.length) {
     for (const f of fails) console.error(`self-test FAIL: ${f}`);
     console.log("self-test=FAIL");
     return 1;
   }
-  console.log("self-test=PASS checks=10");
+  console.log(`self-test=PASS checks=${checks}`);
   return 0;
 }
 
 // ── Uretim ──────────────────────────────────────────────────────────────────
 
 function parseArgs(argv) {
-  const args = { in: DEFAULT_IN, out: DEFAULT_OUT, selfTest: false };
+  const args = { in: [], out: null, selfTest: false };
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === "--in") args.in = path.resolve(argv[++i]);
+    if (argv[i] === "--in") args.in.push(path.resolve(argv[++i]));
     else if (argv[i] === "--out") args.out = path.resolve(argv[++i]);
     else if (argv[i] === "--self-test") args.selfTest = true;
     else if (argv[i] === "--help" || argv[i] === "-h") {
       console.log(
-        "kullanim: node make_docx.js [--in <md>] [--out <docx>] [--self-test]"
+        "kullanim: node make_docx.js [--in <md>]... [--out <docx>] [--self-test]"
       );
       process.exit(0);
     } else {
       console.error(`bilinmeyen arguman: ${argv[i]}`);
       process.exit(2);
     }
+  }
+  if (args.in.length === 0) args.in = [DEFAULT_IN];
+  if (!args.out) {
+    args.out =
+      args.in.length > 1
+        ? path.join(__dirname, "out", "combined_report.docx")
+        : DEFAULT_OUT;
   }
   return args;
 }
@@ -380,21 +443,34 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.selfTest) process.exit(selfTest());
 
-  if (!fs.existsSync(args.in)) {
-    console.error(`HATA: kaynak bulunamadi: ${args.in}`);
-    process.exit(1);
+  const parts = [];
+  for (const src of args.in) {
+    if (!fs.existsSync(src)) {
+      console.error(`HATA: kaynak bulunamadi: ${src}`);
+      process.exit(1);
+    }
+    parts.push({ path: src, md: fs.readFileSync(src, "utf8") });
   }
-  const md = fs.readFileSync(args.in, "utf8");
-  const blocks = parseMarkdown(md);
-  const firstHeading = blocks.find(
+
+  const allBlocks = [];
+  parts.forEach((p, idx) => {
+    p.blocks = parseMarkdown(p.md);
+    if (idx > 0) p.blocks = promoteHeadingBlocks(p.blocks);
+    allBlocks.push(...p.blocks);
+  });
+
+  const firstHeading = parts[0].blocks.find(
     (x) => x.kind === "heading" && x.level === 1
   );
   const stamp = new Date(SOURCE_DATE_EPOCH * 1000).toISOString();
+  const relSources = parts.map((p) => path.relative(ROOT, p.path)).join(",");
   const buf = await Packer.toBuffer(
-    buildDocument(blocks, {
+    buildSectionsDocument(parts, {
       creator: "leibniz2 docx-export",
-      title: firstHeading ? firstHeading.text : path.basename(args.in, ".md"),
-      description: `${path.relative(ROOT, args.in)} — SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH} (${stamp})`,
+      title: firstHeading
+        ? firstHeading.text
+        : path.basename(parts[0].path, ".md"),
+      description: `${relSources} — SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH} (${stamp})`,
     })
   );
 
@@ -402,17 +478,18 @@ async function main() {
   fs.writeFileSync(args.out, buf);
 
   const sha = crypto.createHash("sha256").update(buf).digest("hex");
-  const counts = blocks.reduce((a, x) => {
+  const counts = allBlocks.reduce((a, x) => {
     a[x.kind] = (a[x.kind] || 0) + 1;
     return a;
   }, {});
-  console.log(`source=${path.relative(ROOT, args.in)}`);
+  console.log(`source=${relSources}`);
+  console.log(`sections=${parts.length}`);
   console.log(`docx=${path.relative(ROOT, args.out)}`);
   console.log(`source_date_epoch=${SOURCE_DATE_EPOCH}`);
   console.log(`bytes=${buf.length}`);
   console.log(`sha256=${sha}`);
   console.log(
-    `blocks=${blocks.length} headings=${counts.heading || 0} tables=${counts.table || 0}`
+    `blocks=${allBlocks.length} headings=${counts.heading || 0} tables=${counts.table || 0}`
   );
   console.log("verdict=OK");
   return 0;

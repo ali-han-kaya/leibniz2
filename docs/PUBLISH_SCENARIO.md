@@ -612,7 +612,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 | 23 | B | Preview reload smoke (advisory, macOS) | — preview restart + endpoint smoke (advisory) |
 | 24 | B | K9 Lake proof (Lean 4.14.0) | ✅ success — ayrı-step lake build --wfail (lean-toolchain v4.14.0); K9 ayrıca verify job'unun `--full` içinde de koşar (required DEĞİL) |
 | 25 | B | Fresh-clone HTTP smoke (advisory) | — temiz clone'dan preview_server.py başlatılır; `/api/health` + `/api/latest` curl ile doğrulanır |
-| 26 | B | Docx export (LibreOffice check, advisory) | — `make_docx.js`: markdown → gerçek .docx; artifact `docx-report`; doğrulama byte-identity DEĞİL — LibreOffice headless dönüşümü + tanık metin (docx paketi core.xml tarihlerini kendi zamanından üretir: iki koşum arasındaki tek fark `dcterms:created/modified`, ölçüldü 2026-09-24) |
+| 26 | B | Docx export (LibreOffice check, advisory) | — `make_docx.js`: markdown → gerçek .docx; tek rapor (`final_rc_report.docx`) + iki raporu bölüm kırılımıyla birleştiren üretim (`combined_report.docx`: FINAL_RC_REPORT + FULL_SCOPE_AUDIT, ikinci rapor yeni sayfada); artifact `docx-report`; doğrulama byte-identity DEĞİL — LibreOffice headless dönüşümü + tanık metin (docx paketi core.xml tarihlerini kendi zamanından üretir: iki koşum arasındaki tek fark `dcterms:created/modified`, ölçüldü 2026-09-24) |
 | | **C — PR-only (push'ta çalışmaz, PR'da çalışır)** | | |
 | 27 | C | Pre-commit P1 label gate (optional) | — skipped (push'ta çalışmaz) |
 | | **D — PR-only (yorum/etiket düşürme)** | | |
@@ -649,7 +649,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 - `pattern-drift` (merge pattern ↔ ARTIFACT_JOBS tutarlılık denetimi — advisory, run summary'ye yazılır)
 - `preview-reload-smoke` (preview sunucu restart + endpoint smoke testi — advisory, macOS)
 - `a11y-report` (a11y-gate raporu: axe sonuçları + config echo + verdict — fail-closed kapı; blocking/warn/allowlisted/incomplete özeti)
-- `docx-report` (docx-export job'unun ürünü: `make_docx.js` çıktısı .docx + build key=value logu + LibreOffice açılabilirlik raporu — advisory job, ürün yine artefakt olarak saklanır)
+- `docx-report` (docx-export job'unun ürünü: `make_docx.js` çıktısı .docx ×2 — tek rapor + bölüm kırılımlı birleşik rapor — build key=value logları + LibreOffice açılabilirlik raporları — advisory job, ürün yine artefakt olarak saklanır)
 
 **Not:** Kapı artık `verify_delivery.py --full`'dur (K1-K14, fail-closed) ve yeşildir —
 Beth 1953 / Fosl 1998 gibi referans düzeltmeleri V5h'te yapıldı; Kalan çevrimdışı
