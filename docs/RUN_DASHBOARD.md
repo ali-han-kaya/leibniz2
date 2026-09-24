@@ -110,8 +110,8 @@ The dashboard provides:
 - **Run history list** — last 15 runs with verdict/P0/P1/budget/duration
 - **Mirror sync + pattern drift** indicators
 
-The first verify run starts after `--interval` seconds (default 60). To trigger
-one immediately:
+The first verify run starts immediately on startup; subsequent runs repeat every
+`--interval` seconds (default 60). To trigger an extra run immediately:
 
 ```bash
 # If PREVIEW_RUN_NOW_TOKEN is not set, no auth is required locally:
@@ -180,6 +180,10 @@ container path.
 ---
 
 ## API reference (read-only endpoints)
+
+> Tam ve makine-doğrulanmış sözleşme (metot matrisi, alan listeleri, hata
+> zarfları, SSE olay sözlüğü): [`PREVIEW_API_REFERENCE.md`](PREVIEW_API_REFERENCE.md).
+> Aşağıdaki tablo hızlı bakış içindir.
 
 | Endpoint | Method | Returns |
 |---|---|---|
