@@ -501,6 +501,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-24 | feat | (docx) merge RC report and full scope audit into one docx | [`f3c9fdc`](https://github.com/ali-han-kaya/leibniz2/commit/f3c9fdc) |
 | 2026-09-24 | feat | (a11y) report verdict field + job summary surface | [`08deae8`](https://github.com/ali-han-kaya/leibniz2/commit/08deae8) |
 | 2026-09-24 | docs | (specs) add verify.yml job needs-DAG excalidraw map | [`04af000`](https://github.com/ali-han-kaya/leibniz2/commit/04af000) |
+| 2026-09-25 | feat | (a11y) scan the branch protection guide | [`9e5160f`](https://github.com/ali-han-kaya/leibniz2/commit/9e5160f) |
 
 ### Regresyon notları
 

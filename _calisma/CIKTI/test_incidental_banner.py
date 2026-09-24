@@ -8,8 +8,10 @@ data-URI ile gömülü dekoratif-katmanı. Üç sözleşmeyi sabitler:
      data-URI bunun birebir base64'üdür (drift = fail). Aracı yok —
      el-yazımı base64 bozulursa test kırılır (fail-closed).
   2) CSP/boyut disiplini: img-src data: CSP izniyle uyum (svg+xml),
-     katman CSS background-image'dır (AT'ye görünmez → aria-hidden
-     eşdeğeri); header interaktif-çocukları z-index:1 ile dokunulmaz.
+     katman gerçek bir aria-hidden DOM-düğümüdür (.header-decor — a11y-gate
+     color-contrast'ın metin-zeminini çözebilmesi için header::after
+     pseudo-katmanından taşındı, 2026-09-24); header interaktif-çocukları
+     z-index:1 ile dokunulmaz.
   3) Kontrast-koruma: her iki temada katman-opaklığı eşik-altında
      (dark ≤ .18, light ≤ .25) — metin-kontrastını düşürmez; ayrıca
      banner-SVG'nin vermilion'u tek (testifies-only) kalır.
@@ -34,7 +36,7 @@ def _read(path):
 
 
 class TestBannerEmbedding(unittest.TestCase):
-    """Tek-kaynak zinciri: banner.svg → data-URI → header::after."""
+    """Tek-kaynak zinciri: banner.svg → data-URI → .header-decor katmanı."""
 
     def setUp(self):
         self.svg = _read(BANNER_PATH)
@@ -52,14 +54,20 @@ class TestBannerEmbedding(unittest.TestCase):
         # el-değmesi/drift olmadan yeniden-üretilebilir.
         self.assertIn(self.expected_uri, self.html)
 
-    def test_banner_used_in_header_pseudo_layer(self):
-        # Katman header::after'da yaşar (dekoratif; DOM-düğümü yok →
-        # aria-hidden gerekmez, AT ağacına hiç girmez).
-        m = re.search(r"header::after\s*\{[^}]*\}", self.html)
-        self.assertIsNotNone(m, "header::after katmanı yok")
+    def test_banner_used_in_header_decor_layer(self):
+        # Katman .header-decor'da yaşar: gerçek DOM-düğümü, aria-hidden=true
+        # (a11y-gate'in color-contrast çözümü pseudo-katmanda tıkanıyordu;
+        # dekor metinlerin KARDEŞİ olarak atanınca ata-yığını temizlendi).
+        m = re.search(r"\.header-decor\s*\{[^}]*\}", self.html)
+        self.assertIsNotNone(m, ".header-decor katmanı yok")
         block = m.group(0)
         self.assertIn("background-image", block)
         self.assertIn("pointer-events:none", block)
+        # İşaretleme: aria-hidden ile AT'ye açıkça kapalı.
+        self.assertRegex(
+            self.html,
+            r'<div class="header-decor" aria-hidden="true">',
+        )
 
     def test_header_children_above_layer(self):
         # Interaktif-çocuklar katmanın üstünde: z-index:1 (tıklama/odak
@@ -81,11 +89,11 @@ class TestBannerContrastBudget(unittest.TestCase):
         return float(m.group(1))
 
     def test_dark_theme_opacity_under_threshold(self):
-        self.assertLessEqual(self._opacity_of("header::after"), 0.18)
+        self.assertLessEqual(self._opacity_of(".header-decor"), 0.18)
 
     def test_light_theme_opacity_under_threshold(self):
         self.assertLessEqual(
-            self._opacity_of(':root[data-theme="light"] header::after'), 0.25
+            self._opacity_of(':root[data-theme="light"] .header-decor'), 0.25
         )
 
 
