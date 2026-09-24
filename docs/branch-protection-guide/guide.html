@@ -72,6 +72,7 @@
 </style>
 </head>
 <body>
+<main id="guide-content">
 
 <!-- ═══════════════ ADIM 1 — Branches sayfası ═══════════════ -->
 <div class="screen" id="screen-01">
@@ -137,16 +138,16 @@
         <span class="badge">1</span>
       </div>
       <div class="rules-label">Protect matching branches</div>
-      <div class="rule-item"><div class="row"><input type="checkbox"><div><div class="title">Require a pull request before merging</div></div></div></div>
-      <div class="rule-item"><div class="row"><input type="checkbox"><div><div class="title">Require status checks to pass before merging</div></div></div></div>
-      <div class="rule-item"><div class="row"><input type="checkbox"><div><div class="title">Require conversation resolution</div></div></div></div>
-      <div class="rule-item"><div class="row"><input type="checkbox"><div><div class="title">Require signed commits</div></div></div></div>
-      <div class="rule-item"><div class="row"><input type="checkbox"><div><div class="title">Require linear history</div></div></div></div>
-      <div class="rule-item"><div class="row"><input type="checkbox"><div><div class="title">Require deployments to succeed before merging</div></div></div></div>
-      <div class="rule-item"><div class="row"><input type="checkbox"><div><div class="title">Lock branch</div></div></div></div>
-      <div class="rule-item"><div class="row"><input type="checkbox"><div><div class="title">Do not allow bypassing the above settings</div></div></div></div>
-      <div class="rule-item"><div class="row"><input type="checkbox"><div><div class="title">Allow force pushes</div></div></div></div>
-      <div class="rule-item"><div class="row"><input type="checkbox"><div><div class="title">Allow deletions</div></div></div></div>
+    <div class="rule-item"><div class="row"><input type="checkbox" aria-label="Require a pull request before merging"><div><div class="title">Require a pull request before merging</div></div></div></div>
+    <div class="rule-item"><div class="row"><input type="checkbox" aria-label="Require status checks to pass before merging"><div><div class="title">Require status checks to pass before merging</div></div></div></div>
+    <div class="rule-item"><div class="row"><input type="checkbox" aria-label="Require conversation resolution"><div><div class="title">Require conversation resolution</div></div></div></div>
+    <div class="rule-item"><div class="row"><input type="checkbox" aria-label="Require signed commits"><div><div class="title">Require signed commits</div></div></div></div>
+    <div class="rule-item"><div class="row"><input type="checkbox" aria-label="Require linear history"><div><div class="title">Require linear history</div></div></div></div>
+    <div class="rule-item"><div class="row"><input type="checkbox" aria-label="Require deployments to succeed before merging"><div><div class="title">Require deployments to succeed before merging</div></div></div></div>
+    <div class="rule-item"><div class="row"><input type="checkbox" aria-label="Lock branch"><div><div class="title">Lock branch</div></div></div></div>
+    <div class="rule-item"><div class="row"><input type="checkbox" aria-label="Do not allow bypassing the above settings"><div><div class="title">Do not allow bypassing the above settings</div></div></div></div>
+    <div class="rule-item"><div class="row"><input type="checkbox" aria-label="Allow force pushes"><div><div class="title">Allow force pushes</div></div></div></div>
+    <div class="rule-item"><div class="row"><input type="checkbox" aria-label="Allow deletions"><div><div class="title">Allow deletions</div></div></div></div>
     </div>
   </div>
 </div>
@@ -168,23 +169,23 @@
     </div>
     <div class="main">
       <div class="breadcrumb">Branches <span class="sep">/</span> <span class="cur">Add rule</span></div>
-      <div class="field"><label>Branch name pattern</label><input type="text" value="main" style="max-width:200px"></div>
+      <div class="field"><label>Branch name pattern</label><input type="text" aria-label="Branch name pattern" value="main" style="max-width:200px"></div>
       <div class="rules-label">Protect matching branches</div>
       <div class="annot">
         <div class="rule-item">
-          <div class="row"><input type="checkbox" checked><div><div class="title">Require a pull request before merging</div><div class="sub">When enabled, all commits must be made to a non-protected branch and submitted via a pull request before they can merge into branches matching this rule.</div></div></div>
+          <div class="row"><input type="checkbox" aria-label="Require a pull request before merging" checked><div><div class="title">Require a pull request before merging</div><div class="sub">When enabled, all commits must be made to a non-protected branch and submitted via a pull request before they can merge into branches matching this rule.</div></div></div>
           <div class="expand">
             <div class="erow">Requiring <b>&nbsp;1&nbsp;</b> approval from reviewers</div>
-            <div class="erow"><input type="checkbox" checked><span>Dismiss stale pull request approvals when new commits are pushed</span></div>
-            <div class="erow"><input type="checkbox"><span>Require review from Code Owners</span></div>
-            <div class="erow"><input type="checkbox"><span>Restrict who can dismiss pull request reviews</span></div>
-            <div class="erow"><input type="checkbox"><span>Allow specified actors to bypass required pull requests</span></div>
+            <div class="erow"><input type="checkbox" aria-label="Dismiss stale pull request approvals when new commits are pushed" checked><span>Dismiss stale pull request approvals when new commits are pushed</span></div>
+            <div class="erow"><input type="checkbox" aria-label="Require review from Code Owners"><span>Require review from Code Owners</span></div>
+            <div class="erow"><input type="checkbox" aria-label="Restrict who can dismiss pull request reviews"><span>Restrict who can dismiss pull request reviews</span></div>
+            <div class="erow"><input type="checkbox" aria-label="Allow specified actors to bypass required pull requests"><span>Allow specified actors to bypass required pull requests</span></div>
           </div>
         </div>
         <span class="badge">1</span>
       </div>
-      <div class="rule-item"><div class="row"><input type="checkbox"><div><div class="title">Require status checks to pass before merging</div></div></div></div>
-      <div class="rule-item"><div class="row"><input type="checkbox"><div><div class="title">Require conversation resolution</div></div></div></div>
+      <div class="rule-item"><div class="row"><input type="checkbox" aria-label="Require status checks to pass before merging"><div><div class="title">Require status checks to pass before merging</div></div></div></div>
+      <div class="rule-item"><div class="row"><input type="checkbox" aria-label="Require conversation resolution"><div><div class="title">Require conversation resolution</div></div></div></div>
     </div>
   </div>
 </div>
@@ -206,29 +207,29 @@
     </div>
     <div class="main">
       <div class="breadcrumb">Branches <span class="sep">/</span> <span class="cur">Add rule</span></div>
-      <div class="field"><label>Branch name pattern</label><input type="text" value="main" style="max-width:200px"></div>
+      <div class="field"><label>Branch name pattern</label><input type="text" aria-label="Branch name pattern" value="main" style="max-width:200px"></div>
       <div class="rules-label">Protect matching branches</div>
-      <div class="rule-item"><div class="row"><input type="checkbox"><div><div class="title">Require a pull request before merging</div></div></div></div>
+      <div class="rule-item"><div class="row"><input type="checkbox" aria-label="Require a pull request before merging"><div><div class="title">Require a pull request before merging</div></div></div></div>
       <div class="annot">
         <div class="rule-item">
-          <div class="row"><input type="checkbox" checked><div><div class="title">Require status checks to pass before merging</div><div class="sub">Choose which status checks must pass before branches can be merged into a branch matching this rule.</div></div></div>
+          <div class="row"><input type="checkbox" aria-label="Require status checks to pass before merging" checked><div><div class="title">Require status checks to pass before merging</div><div class="sub">Choose which status checks must pass before branches can be merged into a branch matching this rule.</div></div></div>
           <div class="expand">
             <input class="search" placeholder="Search by check name">
             <div class="check-list">
-              <div class="chk checked"><input type="checkbox" checked><span>Delivery verification — K1-K14 (single entry point)</span></div>
-              <div class="chk checked"><input type="checkbox" checked><span>Action runtime check (node24)</span></div>
-              <div class="chk checked"><input type="checkbox" checked><span>Budget shield (aggregated)</span></div>
-              <div class="chk checked"><input type="checkbox" checked><span>Pre-commit P0 label gate</span></div>
-              <div class="chk checked"><input type="checkbox" checked><span>Static markdown reports (incl. pre-commit findings)</span></div>
-              <div class="chk checked"><input type="checkbox" checked><span>Reproducibility bundle</span></div>
-              <div class="chk checked"><input type="checkbox" checked><span>Config drift check (gen_config + diff-on-drift)</span></div>
-              <div class="chk checked"><input type="checkbox" checked><span>Repack determinism + verify (sidecar sync)</span></div>
-              <div class="chk checked"><input type="checkbox" checked><span>Online verification trend (refs-online across runs)</span></div>
-              <div class="chk checked"><input type="checkbox" checked><span>Commit-msg gate</span></div>
-              <div class="chk checked"><input type="checkbox" checked><span>Config snapshot ↔ CONFIG_BASENAMES sync check</span></div>
-              <div class="chk checked"><input type="checkbox" checked><span>CI-SIMULATE (advisory)</span></div>
+              <div class="chk checked"><input type="checkbox" aria-label="Delivery verification — K1-K14 (single entry point)" checked><span>Delivery verification — K1-K14 (single entry point)</span></div>
+              <div class="chk checked"><input type="checkbox" aria-label="Action runtime check (node24)" checked><span>Action runtime check (node24)</span></div>
+              <div class="chk checked"><input type="checkbox" aria-label="Budget shield (aggregated)" checked><span>Budget shield (aggregated)</span></div>
+              <div class="chk checked"><input type="checkbox" aria-label="Pre-commit P0 label gate" checked><span>Pre-commit P0 label gate</span></div>
+              <div class="chk checked"><input type="checkbox" aria-label="Static markdown reports (incl. pre-commit findings)" checked><span>Static markdown reports (incl. pre-commit findings)</span></div>
+              <div class="chk checked"><input type="checkbox" aria-label="Reproducibility bundle" checked><span>Reproducibility bundle</span></div>
+              <div class="chk checked"><input type="checkbox" aria-label="Config drift check (gen_config + diff-on-drift)" checked><span>Config drift check (gen_config + diff-on-drift)</span></div>
+              <div class="chk checked"><input type="checkbox" aria-label="Repack determinism + verify (sidecar sync)" checked><span>Repack determinism + verify (sidecar sync)</span></div>
+              <div class="chk checked"><input type="checkbox" aria-label="Online verification trend (refs-online across runs)" checked><span>Online verification trend (refs-online across runs)</span></div>
+              <div class="chk checked"><input type="checkbox" aria-label="Commit-msg gate" checked><span>Commit-msg gate</span></div>
+              <div class="chk checked"><input type="checkbox" aria-label="Config snapshot ↔ CONFIG_BASENAMES sync check" checked><span>Config snapshot ↔ CONFIG_BASENAMES sync check</span></div>
+              <div class="chk checked"><input type="checkbox" aria-label="CI-SIMULATE (advisory)" checked><span>CI-SIMULATE (advisory)</span></div>
             </div>
-            <div class="erow" style="margin-top:10px"><input type="checkbox" checked><span><b>Require branches to be up to date before merging</b> <span style="color:#656d76">(strict)</span></span></div>
+            <div class="erow" style="margin-top:10px"><input type="checkbox" aria-label="Require branches to be up to date before merging (strict)" checked><span><b>Require branches to be up to date before merging</b> <span style="color:#656d76">(strict)</span></span></div>
           </div>
         </div>
         <span class="badge">1</span>
@@ -254,14 +255,14 @@
     </div>
     <div class="main">
       <div class="breadcrumb">Branches <span class="sep">/</span> <span class="cur">Add rule</span></div>
-      <div class="field"><label>Branch name pattern</label><input type="text" value="main" style="max-width:200px"></div>
+      <div class="field"><label>Branch name pattern</label><input type="text" aria-label="Branch name pattern" value="main" style="max-width:200px"></div>
       <div class="rules-label">Protect matching branches</div>
       <div class="annot">
-        <div class="rule-item"><div class="row"><input type="checkbox" checked><div><div class="title">Do not allow bypassing the above settings</div><div class="sub">Enforce all configured restrictions for administrators and custom roles with "bypass branch protections" permission. (Requires "Allow force pushes" to be unselected.)</div></div></div></div>
+        <div class="rule-item"><div class="row"><input type="checkbox" aria-label="Do not allow bypassing the above settings" checked><div><div class="title">Do not allow bypassing the above settings</div><div class="sub">Enforce all configured restrictions for administrators and custom roles with "bypass branch protections" permission. (Requires "Allow force pushes" to be unselected.)</div></div></div></div>
         <span class="badge">1</span>
       </div>
       <div class="annot">
-        <div class="rule-item"><div class="row"><input type="checkbox" checked><div><div class="title">Allow force pushes</div></div></div></div>
+        <div class="rule-item"><div class="row"><input type="checkbox" aria-label="Allow force pushes" checked><div><div class="title">Allow force pushes</div></div></div></div>
         <div class="radio-row">
           <label><input type="radio" name="fp" checked> <span><b>Block</b> force pushes</span></label>
           <label><input type="radio" name="fp"> <span>Allow force pushes</span></label>
@@ -269,7 +270,7 @@
         <span class="badge">2</span>
       </div>
       <div class="annot">
-        <div class="rule-item"><div class="row"><input type="checkbox"><div><div class="title">Allow deletions</div><div class="sub">Allow users with push access to delete matching branches.</div></div></div></div>
+        <div class="rule-item"><div class="row"><input type="checkbox" aria-label="Allow deletions"><div><div class="title">Allow deletions</div><div class="sub">Allow users with push access to delete matching branches.</div></div></div></div>
         <span class="badge">3</span>
       </div>
     </div>
@@ -293,12 +294,12 @@
     </div>
     <div class="main">
       <div class="breadcrumb">Branches <span class="sep">/</span> <span class="cur">Add rule</span></div>
-      <div class="field"><label>Branch name pattern</label><input type="text" value="main" style="max-width:200px"></div>
+      <div class="field"><label>Branch name pattern</label><input type="text" aria-label="Branch name pattern" value="main" style="max-width:200px"></div>
       <div class="rules-label">Protect matching branches</div>
-      <div class="rule-item"><div class="row"><input type="checkbox" checked><div><div class="title">Require a pull request before merging</div></div></div></div>
-      <div class="rule-item"><div class="row"><input type="checkbox" checked><div><div class="title">Require status checks to pass before merging</div><div class="sub">9 status checks selected · strict</div></div></div></div>
-      <div class="rule-item"><div class="row"><input type="checkbox" checked><div><div class="title">Do not allow bypassing the above settings</div></div></div></div>
-      <div class="rule-item"><div class="row"><input type="checkbox" checked><div><div class="title">Allow force pushes — <b>Block</b></div></div></div></div>
+      <div class="rule-item"><div class="row"><input type="checkbox" aria-label="Require a pull request before merging" checked><div><div class="title">Require a pull request before merging</div></div></div></div>
+      <div class="rule-item"><div class="row"><input type="checkbox" aria-label="Require status checks to pass before merging" checked><div><div class="title">Require status checks to pass before merging</div><div class="sub">9 status checks selected · strict</div></div></div></div>
+      <div class="rule-item"><div class="row"><input type="checkbox" aria-label="Do not allow bypassing the above settings" checked><div><div class="title">Do not allow bypassing the above settings</div></div></div></div>
+      <div class="rule-item"><div class="row"><input type="checkbox" aria-label="Allow force pushes — Block" checked><div><div class="title">Allow force pushes — <b>Block</b></div></div></div></div>
       <div class="annot footer-bar">
         <button class="btn btn-green">Create</button>
         <span>or</span>
@@ -363,5 +364,6 @@
   </div>
 </div>
 
+</main>
 </body>
 </html>

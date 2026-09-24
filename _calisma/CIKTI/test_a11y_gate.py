@@ -6,16 +6,18 @@ Plan: docs/superpowers/plans/2026-09-17-a11y-gate-implementation.md (T4)
 
 Kapsam: saf-unit (eşikleme, bilinmeyen-severity fail-closed, allowlist,
 rapor şekli) + in-process sözleşme testleri (ölü port → FAIL, canlı sunucu →
-PASS, checksum uyuşmazlığı → FAIL, geçersiz konfig → FAIL). Tarayıcı
-entegrasyonu (gerçek Playwright koşumu) CI job'ının kendisidir; bu süit
-Playwright'a dokunmaz — sürücü dikşi `collect` üzerinden sahte bir
-soket-kanıt sürücüyle değiştirilir (gerçek TCP davranışı korunur).
+PASS, checksum uyuşmazlığı → FAIL, geçersiz konfig → FAIL) + sayfa kapsamı
+(witness, --page ve iki CI tarama yüzeyi). Tarayıcı entegrasyonu (gerçek
+Playwright koşumu) CI job'ının kendisidir; bu süit Playwright'a dokunmaz —
+sürücü dikşi `collect` üzerinden sahte bir soket-kanıt sürücüyle
+değiştirilir (gerçek TCP davranışı korunur).
 """
 
 import contextlib
 import io
 import json
 import os
+import re
 import socket
 import sys
 import tempfile
@@ -25,6 +27,9 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from unittest import mock
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.dirname(os.path.dirname(SCRIPT_DIR))
+GUIDE_HTML = os.path.join(
+    REPO_ROOT, "docs", "branch-protection-guide", "guide.html")
 if SCRIPT_DIR not in sys.path:
     sys.path.insert(0, SCRIPT_DIR)
 
@@ -47,6 +52,16 @@ def base_cfg():
         "warn": ["moderate", "minor"],
         "incomplete": "report-only",
         "allowlist": [],
+        "pages": [
+            {
+                "path": "/preview.html",
+                "witness": "Stoic-Hume V5 — Live CI Dashboard",
+            },
+            {
+                "path": "/guide.html",
+                "witness": "Ayarlar → Branches — kural listesi boş",
+            },
+        ],
     }
 
 
@@ -83,7 +98,7 @@ def dead_port():
     yield "http://127.0.0.1:%d" % port
 
 
-def socket_probe_connect(base_url, axe_src):
+def socket_probe_connect(base_url, axe_src, page_path="/preview.html", witness=None):
     """Soket-kanıt sahte sürücü: gerçek TCP bağlantısı kurar (tarayıcı yok).
 
     Bağlantı kurulamazsa exception fırlatır (gerçek sunucu arızası simülasyonu);
@@ -94,7 +109,8 @@ def socket_probe_connect(base_url, axe_src):
     u = urlsplit(base_url)
     s = socket.create_connection((u.hostname, u.port), timeout=2)
     s.close()
-    return {"violations": [], "incomplete": []}, base_url.rstrip("/") + "/preview.html"
+    return ({"violations": [], "incomplete": []},
+            base_url.rstrip("/") + page_path)
 
 
 # ------------------------------------------------------------- saf eşikleme
@@ -185,6 +201,17 @@ class ConfigTests(unittest.TestCase):
         cfg = a11y_gate.load_config(self.write(base_cfg()))
         self.assertEqual(cfg["blocking"], ["critical", "serious"])
 
+    def test_repo_config_declares_dashboard_and_guide_witnesses(self):
+        cfg = a11y_gate.load_config(
+            os.path.join(SCRIPT_DIR, "a11y_gate_config.json"))
+        self.assertEqual(
+            [(entry["path"], entry["witness"]) for entry in cfg["pages"]],
+            [
+                ("/preview.html", "Stoic-Hume V5 — Live CI Dashboard"),
+                ("/guide.html", "Ayarlar → Branches — kural listesi boş"),
+            ],
+        )
+
     def test_unknown_top_key_rejected(self):
         bad = base_cfg()
         bad["extra"] = 1
@@ -221,12 +248,61 @@ class ConfigTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             a11y_gate.load_config(self.write(bad))
 
+    def test_page_requires_witness(self):
+        bad = base_cfg()
+        bad["pages"] = [{"path": "/guide.html"}]
+        with self.assertRaises(ValueError):
+            a11y_gate.load_config(self.write(bad))
+
+    def test_duplicate_page_path_rejected(self):
+        bad = base_cfg()
+        bad["pages"].append(dict(bad["pages"][0]))
+        with self.assertRaises(ValueError):
+            a11y_gate.load_config(self.write(bad))
+
     def test_non_dict_rejected(self):
         p = os.path.join(self.tmp.name, "cfg.json")
         with open(p, "w", encoding="utf-8") as f:
             f.write("[]")
         with self.assertRaises(ValueError):
             a11y_gate.load_config(p)
+
+
+# ------------------------------------------------------- guide source invariants
+
+class GuideSourceTests(unittest.TestCase):
+    """Statik görsel kılavuzun tarayıcısız semantik sözleşmeleri.
+
+    CI axe taraması canlı kanıttır; bu test aynı niyeti kaynakta erken
+    yakalar: 39 checkbox'un ve örtük 4 branch-name text input'unun her biri
+    erişilebilir ad taşır; sekiz ekran tek bir main landmark altında toplanır.
+    """
+
+    def setUp(self):
+        with open(GUIDE_HTML, encoding="utf-8") as f:
+            self.html = f.read()
+
+    def test_every_checkbox_has_descriptive_aria_label(self):
+        tags = re.findall(r"<input\b[^>]*\btype=[\"']checkbox[\"'][^>]*>",
+                           self.html, flags=re.I)
+        self.assertEqual(len(tags), 39)
+        for tag in tags:
+            self.assertRegex(tag, r"\baria-label=[\"'][^\"']+[\"']", tag)
+
+    def test_every_text_input_has_accessible_name(self):
+        tags = re.findall(r"<input\b[^>]*\btype=[\"']text[\"'][^>]*>",
+                           self.html, flags=re.I)
+        self.assertEqual(len(tags), 5)  # 1 explicit <label for> + 4 aria-label
+        for tag in tags:
+            self.assertTrue(
+                re.search(r"\baria-label=[\"'][^\"']+[\"']", tag) or
+                re.search(r"\bid=[\"'][^\"']+[\"']", tag),
+                tag,
+            )
+
+    def test_all_screens_share_one_main_landmark(self):
+        self.assertEqual(self.html.count("<main "), 1)
+        self.assertIn("</main>\n</body>", self.html)
 
 
 # ------------------------------------------------------------------ checksum
@@ -308,7 +384,7 @@ class GateContractTests(unittest.TestCase):
     def test_checksum_mismatch_fails_without_scan(self):
         called = []
 
-        def must_not_scan(base_url, axe_src):
+        def must_not_scan(base_url, axe_src, page_path, witness):
             called.append(True)
             raise AssertionError("checksum uyuşmazlığında taranmamalı")
 
@@ -334,7 +410,7 @@ class GateContractTests(unittest.TestCase):
         self.assertIn("eksik anahtar", report["error"])
 
     def test_missing_playwright_is_exit_2(self):
-        def no_playwright(base_url, axe_src):
+        def no_playwright(base_url, axe_src, page_path, witness):
             raise ImportError("playwright")
 
         rc, out, _ = self.run_gate(["--base-url", "http://127.0.0.1:1"], connect=no_playwright)
@@ -343,9 +419,9 @@ class GateContractTests(unittest.TestCase):
         self.assertIn("playwright", out)
 
     def test_blocking_violation_report_shape(self):
-        def scan(base_url, axe_src):
+        def scan(base_url, axe_src, page_path, witness):
             return ({"violations": [axe_v("color-contrast", "serious", nodes=[node(["#x"])])],
-                     "incomplete": []}, base_url + "/preview.html")
+                     "incomplete": []}, base_url + page_path)
 
         rc, out, report = self.run_gate(["--base-url", "http://127.0.0.1:1"], connect=scan)
         self.assertEqual(rc, 1)
@@ -360,8 +436,8 @@ class GateContractTests(unittest.TestCase):
         with open(cfg, "w", encoding="utf-8") as f:
             json.dump({**base_cfg(), "allowlist": [{"rule": "r1", "reason": "kayitli borc"}]}, f)
 
-        def scan(base_url, axe_src):
-            return ({"violations": [axe_v("r1", "serious")], "incomplete": []}, base_url + "/preview.html")
+        def scan(base_url, axe_src, page_path, witness):
+            return ({"violations": [axe_v("r1", "serious")], "incomplete": []}, base_url + page_path)
 
         rc, out, report = self.run_gate(["--base-url", "http://127.0.0.1:1", "--config", cfg], connect=scan)
         self.assertEqual(rc, 0)
@@ -369,6 +445,32 @@ class GateContractTests(unittest.TestCase):
         self.assertEqual(report["violations"][0]["reasons"], ["kayitli borc"])
         self.assertEqual(report["summary"]["allowlisted"], 1)
         self.assertIn("ALLOWLISTED", out)  # borç raporda görünür
+
+    def test_requested_page_uses_configured_witness(self):
+        calls = []
+
+        def scan(base_url, axe_src, page_path, witness):
+            calls.append((page_path, witness))
+            return ({"violations": [], "incomplete": []}, base_url + page_path)
+
+        rc, out, report = self.run_gate(
+            ["--base-url", "http://127.0.0.1:1", "--page", "/guide.html"],
+            connect=scan,
+        )
+        self.assertEqual(rc, 0)
+        self.assertEqual(calls, [
+            ("/guide.html", "Ayarlar → Branches — kural listesi boş"),
+        ])
+        self.assertEqual(report["page_url"], "http://127.0.0.1:1/guide.html")
+        self.assertIn("verdict: PASS", out)
+
+    def test_unconfigured_page_fails_closed(self):
+        rc, out, report = self.run_gate([
+            "--base-url", "http://127.0.0.1:1", "--page", "/not-allowed.html",
+        ], connect=socket_probe_connect)
+        self.assertEqual(rc, 1)
+        self.assertIn("[CONFIG]", out)
+        self.assertIn("kapsam dışı", report["error"])
 
 
 class TestReportVerdictField(unittest.TestCase):
@@ -443,6 +545,34 @@ class TestWorkflowSummaryStep(unittest.TestCase):
     def test_summary_step_reads_report_verdict(self):
         # Task-1 sözleşmesi: özet, rapordaki verdict alanını okumalı.
         self.assertIn('data.get("verdict"', self._summary_step())
+
+    def test_summary_step_covers_dashboard_and_guide_reports(self):
+        step = self._summary_step()
+        self.assertIn("a11y_report.json", step)
+        self.assertIn("a11y_guide_report.json", step)
+        self.assertIn("Dashboard", step)
+        self.assertIn("Branch protection guide", step)
+
+    def test_ci_scans_both_configured_pages_independently(self):
+        block = self._a11y_block()
+        self.assertIn(
+            "cp docs/branch-protection-guide/guide.html "
+            "_calisma/CIKTI/guide.html",
+            block,
+        )
+        self.assertIn("--page /preview.html", block)
+        self.assertIn("--output a11y_report.json", block)
+        self.assertIn("--page /guide.html", block)
+        self.assertIn("--output a11y_guide_report.json", block)
+        guide_step = block.split("- name: Run a11y gate — guide", 1)[1]
+        guide_step = guide_step.split("- name:", 1)[0]
+        self.assertIn("if: always()", guide_step)
+
+    def test_guide_report_has_separate_artifact(self):
+        block = self._a11y_block()
+        upload = block.split("- name: Upload guide a11y report", 1)[1]
+        self.assertIn("name: a11y-guide-report", upload)
+        self.assertIn("path: a11y_guide_report.json", upload)
 
 
 if __name__ == "__main__":

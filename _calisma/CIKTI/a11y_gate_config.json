@@ -2,5 +2,15 @@
   "blocking": ["critical", "serious"],
   "warn": ["moderate", "minor"],
   "incomplete": "report-only",
-  "allowlist": []
+  "allowlist": [],
+  "pages": [
+    {
+      "path": "/preview.html",
+      "witness": "Stoic-Hume V5 — Live CI Dashboard"
+    },
+    {
+      "path": "/guide.html",
+      "witness": "Ayarlar → Branches — kural listesi boş"
+    }
+  ]
 }

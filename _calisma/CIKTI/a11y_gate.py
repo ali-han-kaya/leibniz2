@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
-"""a11y_gate.py — dashboard için fail-closed erişilebilirlik kapısı.
+"""a11y_gate.py — dashboard ve görsel kılavuz için fail-closed erişilebilirlik kapısı.
 
 Spec: docs/superpowers/specs/2026-09-17-a11y-gate-design.md
 Plan: docs/superpowers/plans/2026-09-17-a11y-gate-implementation.md
 
 Akış: konfig yükle/doğrula → axe bundle checksum kapısı → headless Chromium
-(Playwright) ile <base-url>/preview.html yükle → axe.run() → eşikleme
-(blocking/warn/report-only; bilinmeyen etki = blocking) → verdict + rapor.
+(Playwright) ile config'te tanımlı sayfayı yükle ve witness metnini doğrula →
+axe.run() → eşikleme (blocking/warn/report-only; bilinmeyen etki = blocking)
+→ verdict + rapor.
 
 Çıkış kodları: 0 = PASS · 1 = FAIL (fail-closed koşul dahil) · 2 = kullanım/
 ortam hatası (argparse, playwright kurulu değil).
 
-Rapor yüzeyleri (spec §Reporting): stdout (verdict + tablo) ve
-a11y_report.json (CI artifact). Üçüncü yüzey (job summary) CI job'ının.
+Rapor yüzeyleri (spec §Reporting): stdout (verdict + tablo) ve JSON
+(CI artifact). Üçüncü yüzey (job summary) CI job'ının.
 """
 
 import argparse
@@ -23,8 +24,9 @@ import sys
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-VALID_TOP_KEYS = {"blocking", "warn", "incomplete", "allowlist"}
+VALID_TOP_KEYS = {"blocking", "warn", "incomplete", "allowlist", "pages"}
 VALID_ENTRY_KEYS = {"rule", "reason", "target"}
+VALID_PAGE_KEYS = {"path", "witness"}
 INCOMPLETE_POLICY = "report-only"
 
 
@@ -54,6 +56,32 @@ def load_config(path):
     if cfg["incomplete"] != INCOMPLETE_POLICY:
         raise ValueError("config: incomplete yalnız '%s' olabilir" % INCOMPLETE_POLICY)
 
+    pages = cfg["pages"]
+    if not isinstance(pages, list) or not pages:
+        raise ValueError("config: pages boş olmayan liste olmalı")
+    seen_paths = set()
+    for i, entry in enumerate(pages):
+        if not isinstance(entry, dict):
+            raise ValueError("config: pages[%d] sözlük olmalı" % i)
+        unknown = set(entry) - VALID_PAGE_KEYS
+        if unknown:
+            raise ValueError("config: pages[%d] bilinmeyen anahtar: %s" % (
+                i, sorted(unknown)))
+        path = entry.get("path")
+        if not isinstance(path, str) or not path:
+            raise ValueError("config: pages[%d].path boş olamaz" % i)
+        if (not path.startswith("/") or path.startswith("//") or
+                "\\" in path or "?" in path or "#" in path or
+                ".." in path.split("/")):
+            raise ValueError("config: pages[%d].path same-origin olmalı: %s" % (
+                i, path))
+        if path in seen_paths:
+            raise ValueError("config: yinelenen pages path: %s" % path)
+        seen_paths.add(path)
+        witness = entry.get("witness")
+        if not isinstance(witness, str) or not witness:
+            raise ValueError("config: pages[%d].witness boş olamaz" % i)
+
     if not isinstance(cfg["allowlist"], list):
         raise ValueError("config: allowlist liste olmalı")
     for i, entry in enumerate(cfg["allowlist"]):
@@ -69,6 +97,19 @@ def load_config(path):
         if "target" in entry and not entry["target"]:
             raise ValueError("config: allowlist[%d].target boş olamaz" % i)
     return cfg
+
+
+def select_page(cfg, page_path):
+    """Config'te izin verilen sayfanın witness metnini döndürür.
+
+    CLI --page ile keyfi URL taraması yapılamaz; her hedef config'te kanıt
+    metniyle tanımlı olmalıdır. 404/yanlış mirror gibi durumlar witness
+    eşleşmediği için tarama öncesi fail-closed hata verir.
+    """
+    for entry in cfg["pages"]:
+        if entry["path"] == page_path:
+            return entry["witness"]
+    raise ValueError("config: --page %s kapsam dışı" % page_path)
 
 
 # -------------------------------------------------------------- checksum
@@ -160,7 +201,17 @@ def decide_verdict(rows):
 
 # ----------------------------------------------------------------- scan
 
-def playwright_connect(base_url, axe_src, axe_url_path="/vendor/axe.min.js"):
+def _verify_witness(page, witness):
+    """Render edilen gerçek sayfa witness'ı taşımalı; aksi halde FAIL."""
+    if not witness:
+        raise ValueError("sayfa witness metni zorunlu")
+    body_text = page.locator("body").inner_text()
+    if witness not in body_text:
+        raise ValueError("sayfa witness metni bulunamadı: %s" % witness)
+
+
+def playwright_connect(base_url, axe_src, page_path="/preview.html", witness=None,
+                       axe_url_path="/vendor/axe.min.js"):
     """Varsayılan sürücü: Playwright sync API. Lazy import — yoksa ImportError.
 
     CSP-sözleşmesi: sayfa script-src 'self' + nonce; bundle aynı-kökte
@@ -170,12 +221,13 @@ def playwright_connect(base_url, axe_src, axe_url_path="/vendor/axe.min.js"):
     """
     from playwright.sync_api import sync_playwright  # noqa: PLC0415 (lazy)
 
-    page_url = base_url.rstrip("/") + "/preview.html"
+    page_url = base_url.rstrip("/") + page_path
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         try:
             page = browser.new_context().new_page()
             page.goto(page_url, wait_until="load")
+            _verify_witness(page, witness)
             results = page.evaluate(
                 """async (axeUrl) => {
                     await new Promise((resolve, reject) => {
@@ -191,6 +243,7 @@ def playwright_connect(base_url, axe_src, axe_url_path="/vendor/axe.min.js"):
             # Yedek (eski-daemon uyumu): CSP-bypass + inline enjeksiyon.
             page = browser.new_context(bypass_csp=True).new_page()
             page.goto(page_url, wait_until="load")
+            _verify_witness(page, witness)
             page.add_script_tag(content=axe_src)
             results = page.evaluate("() => axe.run()")
         finally:
@@ -198,11 +251,11 @@ def playwright_connect(base_url, axe_src, axe_url_path="/vendor/axe.min.js"):
     return results, page_url
 
 
-def collect(base_url, axe_src, connect=None):
+def collect(base_url, axe_src, page_path="/preview.html", witness=None, connect=None):
     """Sürücüyü çalıştır; exception'ı yukarı fırlatır (main FAIL'e çevirir)."""
     if connect is None:
         connect = playwright_connect
-    return connect(base_url, axe_src)
+    return connect(base_url, axe_src, page_path, witness)
 
 
 # ----------------------------------------------------------------- main
@@ -222,12 +275,14 @@ def main(argv=None):
                     help="preview_server kök adresi (ör. http://127.0.0.1:PORT)")
     ap.add_argument("--config", default=os.path.join(SCRIPT_DIR, "a11y_gate_config.json"))
     ap.add_argument("--axe", default=os.path.join(SCRIPT_DIR, "vendor", "axe.min.js"))
+    ap.add_argument("--page", default="/preview.html",
+                    help="config'te witness ile tanımlı same-origin sayfa")
     ap.add_argument("--output", default="a11y_report.json",
                     help="rapor JSON yolu (CI artifact)")
     args = ap.parse_args(argv)
 
     report = {"verdict": "FAIL",  # fail-closed default: her arıza FAIL kalır
-              "base_url": args.base_url, "page_url": None,
+              "base_url": args.base_url, "page": args.page, "page_url": None,
               "config": None, "violations": [], "summary": {}, "error": None}
 
     def fail(code):
@@ -239,6 +294,7 @@ def main(argv=None):
     # 1) config (geçersiz → FAIL; config-drift kapısı)
     try:
         cfg = load_config(args.config)
+        witness = select_page(cfg, args.page)
     except (OSError, ValueError) as exc:
         report["error"] = "config hatası: %s" % exc
         print("verdict: FAIL")
@@ -259,7 +315,7 @@ def main(argv=None):
 
     # 3) tarama (sunucu/tarayıcı arızası → FAIL; playwright yok → 2)
     try:
-        results, page_url = collect(args.base_url, axe_src)
+        results, page_url = collect(args.base_url, axe_src, args.page, witness)
     except ImportError:
         print("playwright kurulu değil: pip install playwright && playwright install chromium")
         return 2

@@ -45,7 +45,8 @@ MERGE_PATTERN_EXCLUDED = frozenset({
 # artifact'lar. test_doc_artifact_sync fazlalık denetiminde bunları muaf tutar.
 # ─────────────────────────────────────────────────────────────────────────────
 DOC_ONLY_ADVISORY = frozenset({
-    "a11y-report",           # advisory değil AMA reproducibility bundle kapsamı dışı (tarayıcı artifact)
+    "a11y-report",           # dashboard tarayıcı artifact'ı — bundle dışı
+    "a11y-guide-report",     # guide tarayıcı artifact'ı — bundle dışı
     "audit-live-ci",         # advisory meta-denetçi — job output
     "pattern-drift",         # advisory: merge pattern ↔ ARTIFACT_JOBS
     "preview-reload-smoke",  # advisory: preview reload smoke testi
@@ -60,6 +61,7 @@ UPLOAD_EXCEPTIONS = frozenset({
     "badge-check",
     "action-pins",
     "a11y-report",
+    "a11y-guide-report",
     "audit-live-ci",
     "pattern-drift",
     "preview-reload-smoke",
