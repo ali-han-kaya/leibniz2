@@ -1,0 +1,118 @@
+% ============================================================
+%  INCIDENTAL PROOF — plate 03  (ledger of witness)
+%  Canvas: 180x225mm (4:5), three-voice palette (paper/fathom/verm)
+%  Fonts: Big Shoulders (display) + Geist Mono (labels)  [OFL]
+%  Frame: origin = page south-west, y grows upward. All mm.
+%  Subject: verification as a ledger — every entry a witness that
+%  converts one line of belief into one line of measurement.
+% ============================================================
+\documentclass[12pt]{article}
+\pagestyle{empty}
+\usepackage[margin=0pt,paperwidth=180mm,paperheight=225mm]{geometry}
+\usepackage{tikz}
+\usepackage{fontspec}
+\setmainfont{BigShoulders.ttf}[Path=]
+\setmonofont{GeistMono.ttf}[Path=]
+\usepackage{xcolor}
+\definecolor{paper}{HTML}{F2EBD9}
+\definecolor{fathom}{HTML}{1B2A41}
+\definecolor{verm}{HTML}{C1440E}
+\definecolor{fathom40}{HTML}{8E97A8}
+\definecolor{fathom25}{HTML}{B4BAC7}
+\definecolor{fathom12}{HTML}{D8DCE2}
+
+\begin{document}
+\begin{tikzpicture}[remember picture,overlay, x=1mm, y=1mm]
+  \begin{scope}[shift={(current page.south west)}]
+    % ---- paper ground ---------------------------------------
+    \fill[paper] (0,0) rectangle (180,225);
+
+    % ============ THE LEDGER (upper 2/3) ======================
+    % 18 ruled rows; each row = one witness entry. Columns:
+    % date-rule, source-rule, then the conversion field where a
+    % handwritten-style tick (vermilion) seals the row. Belief
+    % rows are blank; measured rows carry the seal.
+    \begin{scope}[shift={(14,84)}]
+      \def\W{152} \def\H{98} \def\rows{18}
+      % row rules
+      \foreach \r in {0,...,\rows}{%
+        \pgfmathsetmacro{\yy}{\r*\H/\rows}%
+        \ifnum\r=0
+          \draw[fathom,line width=0.8pt] (0,\yy) -- (\W,\yy);\else
+          \draw[fathom12,line width=0.5pt] (0,\yy) -- (\W,\yy);\fi}
+      % column rules: date (0-28), source (28-104), seal (104-116), margin
+      \foreach \xx in {28,104,116}{%
+        \draw[fathom25,line width=0.5pt] (\xx,0) -- (\xx,\H);}
+      % entries: mono "dates" in col 1, source ticks col 2.
+      % Rows 1-9: belief era — hairline source ticks, no seal.
+      % Rows 10-14: doubt era — doubled ticks.
+      % Rows 15-18: measured era — vermilion seal + date.
+      \foreach \r in {1,...,9}{%
+        \pgfmathsetmacro{\yy}{(\rows-\r)*\H/\rows+\H/\rows*0.5}%
+        \draw[fathom,line width=0.4pt] (6,\yy-1.1) -- (22,\yy-1.1);
+        \draw[fathom25,line width=0.4pt] (34,\yy) -- (98,\yy);}
+      \foreach \r in {10,...,14}{%
+        \pgfmathsetmacro{\yy}{(\rows-\r)*\H/\rows+\H/\rows*0.5}%
+        \draw[fathom,line width=0.5pt] (6,\yy-1.4) -- (22,\yy-1.4);
+        \draw[fathom,line width=0.5pt] (6,\yy+0.6) -- (18,\yy+0.6);
+        \draw[fathom40,line width=0.5pt] (34,\yy) -- (98,\yy);
+        \draw[fathom40,line width=0.5pt] (34,\yy-1.6) -- (86,\yy-1.6);}
+      \foreach \r/\d in {15/{1743}, 16/{1748}, 17/{1763}, 18/{1781}}{%
+        \pgfmathsetmacro{\yy}{(\rows-\r)*\H/\rows+\H/\rows*0.5}%
+        \draw[fathom,line width=0.5pt] (6,\yy-1.2) -- (22,\yy-1.2);
+        \draw[fathom,line width=0.6pt] (34,\yy) -- (98,\yy);
+        % the seal: vermilion tick + date, load-bearing
+        \draw[verm,line width=0.9pt] (108,\yy-2.2) -- (112,\yy+2.2);
+        \node[anchor=west, text=verm, font=\ttfamily\fontsize{5.0}{6}\selectfont]
+          at (118.5,\yy) {\d};
+      }
+      % column headers (engraver's line)
+      \node[anchor=south west, text=fathom40, font=\ttfamily\fontsize{4.6}{5.6}\selectfont]
+        at (0,\H+2.0) {ENTRY};
+      \node[anchor=south, text=fathom40, font=\ttfamily\fontsize{4.6}{5.6}\selectfont]
+        at (66,\H+2.0) {SOURCE OF BELIEF};
+      \node[anchor=south west, text=verm, font=\ttfamily\fontsize{4.6}{5.6}\selectfont]
+        at (104,\H+2.0) {SEAL};
+      % row-count annotation
+      \node[anchor=north west, text=fathom40, font=\ttfamily\fontsize{5.0}{6}\selectfont]
+        at (0,-4.2) {18 ENTRIES / 4 SEALED};
+    \end{scope}
+
+    % rotated margin annotation
+    \node[anchor=south west, text=fathom25, font=\ttfamily\fontsize{5.0}{6}\selectfont,
+          rotate=90] at (6.6,166) {FIELD 03 — LEDGER OF WITNESS, 18 ENTRIES, SEAL AT ROW 15--18};
+
+    % ============ CONVERSION STRIP (lower third) ==============
+    % The mechanics of the seal: belief-line meets measurement-line;
+    % their intersection is the vermilion witness coordinate.
+    \begin{scope}[shift={(14,34)}]
+      \def\W{152} \def\H{34}
+      \draw[fathom12,line width=0.5pt] (0,0) -- (\W,0);
+      \draw[fathom12,line width=0.5pt] (0,\H) -- (\W,\H);
+      % belief approach (hairline, from west)
+      \draw[fathom,line width=0.4pt] (0,26)
+        .. controls (30,26) and (52,22) .. (70,17);
+      % measurement approach (0.9pt, from east)
+      \draw[fathom40,line width=0.9pt] (\W,8)
+        .. controls (118,12) and (96,14) .. (70,17);
+      % witness: the crossing
+      \draw[verm,line width=0.9pt] (70,17-2.2) -- (70,17+2.2);
+      \node[anchor=north, text=verm, font=\ttfamily\fontsize{5.0}{6}\selectfont]
+        at (70,12.6) {(70.0, 15.0)};
+      \node[anchor=west, text=fathom25, font=\ttfamily\fontsize{4.6}{5.6}\selectfont]
+        at (0,5.0) {belief, approaching};
+      \node[anchor=east, text=fathom40, font=\ttfamily\fontsize{4.6}{5.6}\selectfont]
+        at (\W,5.0) {measurement, approaching};
+      \node[anchor=south, text=verm, font=\ttfamily\fontsize{4.6}{5.6}\selectfont]
+        at (70,\H-1.2) {the seal};
+    \end{scope}
+
+    % ---- title block ------------------------------------------
+    \draw[fathom,line width=1.4pt] (10,24) -- (170,24);
+    \node[anchor=north west, text=fathom, font=\fontsize{22}{24}\selectfont]
+      at (9.6,22.2) {LEDGER OF WITNESS};
+    \node[anchor=west, text=fathom40, font=\ttfamily\fontsize{5.6}{7}\selectfont]
+      at (104,17.4) {PLATE 03 / BELIEF, FILED};
+  \end{scope}
+\end{tikzpicture}
+\end{document}

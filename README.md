@@ -493,6 +493,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-24 | docs | (tutorial) clone → first verify → first dashboard | [`9ac700a`](https://github.com/ali-han-kaya/leibniz2/commit/9ac700a) |
 | 2026-09-24 | docs | (reference) preview_server /api contract reference | [`2295ed1`](https://github.com/ali-han-kaya/leibniz2/commit/2295ed1) |
 | 2026-09-24 | docs | (explanation) why SDE and the /ID residual work this way | [`193d85a`](https://github.com/ali-han-kaya/leibniz2/commit/193d85a) |
+| 2026-09-24 | docs | (process) fresh-session reader-test protocol | [`f79307d`](https://github.com/ali-han-kaya/leibniz2/commit/f79307d) |
 
 ### Regresyon notları
 
