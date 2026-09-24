@@ -11,6 +11,7 @@ test_audit_live_ci_sync.py
 test_audit_octokit_names.py
 test_audit_refs_trend.py
 test_budget_over_banner.py
+test_canvas_determinism.py
 test_check_action_pins.py
 test_check_action_runtimes.py
 test_check_badge_endpoints.py
@@ -52,6 +53,7 @@ test_dashboard_keyboard_nav.py
 test_dashboard_smoke.py
 test_deploy_evidence.py
 test_determinism_trend_badge.py
+test_determinism_trend_canvas.py
 test_dev_bootstrap.py
 test_diff_config_artifacts.py
 test_doc_job_sync.py
@@ -76,6 +78,7 @@ test_gh_run_rca.py
 test_github_scripts.py
 test_history_sources.py
 test_id_residual_acceptance_doc.py
+test_incidental_banner.py
 test_incremental_doc_sync.py
 test_k13_coverage_sync.py
 test_k9_lean_files_sync.py
