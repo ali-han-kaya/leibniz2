@@ -491,6 +491,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-24 | feat | (canvas) determinism CI job, header banner and test registrations | [`8d860cc`](https://github.com/ali-han-kaya/leibniz2/commit/8d860cc) |
 | 2026-09-24 | fix | (dashboard) mirror preview.js/sw.js freshness, rAF stream batching | [`e7401b9`](https://github.com/ali-han-kaya/leibniz2/commit/e7401b9) |
 | 2026-09-24 | docs | (tutorial) clone → first verify → first dashboard | [`9ac700a`](https://github.com/ali-han-kaya/leibniz2/commit/9ac700a) |
+| 2026-09-24 | docs | (reference) preview_server /api contract reference | [`2295ed1`](https://github.com/ali-han-kaya/leibniz2/commit/2295ed1) |
 
 ### Regresyon notları
 
