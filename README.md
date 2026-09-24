@@ -492,6 +492,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-24 | fix | (dashboard) mirror preview.js/sw.js freshness, rAF stream batching | [`e7401b9`](https://github.com/ali-han-kaya/leibniz2/commit/e7401b9) |
 | 2026-09-24 | docs | (tutorial) clone → first verify → first dashboard | [`9ac700a`](https://github.com/ali-han-kaya/leibniz2/commit/9ac700a) |
 | 2026-09-24 | docs | (reference) preview_server /api contract reference | [`2295ed1`](https://github.com/ali-han-kaya/leibniz2/commit/2295ed1) |
+| 2026-09-24 | docs | (explanation) why SDE and the /ID residual work this way | [`193d85a`](https://github.com/ali-han-kaya/leibniz2/commit/193d85a) |
 
 ### Regresyon notları
 
