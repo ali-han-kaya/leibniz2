@@ -1,13 +1,13 @@
 /*
- * design-system/vercel/tokens.verbatim.css — Vercel (vercel.com) tokens, verbatim
+ * design-system/vercel/tokens.css — Vercel (vercel.com) tokens, verbatim
  *
  * Values are copied verbatim from the CSS variables the vercel.com homepage
  * exposed to computed style on 2026-09-18 (light theme). Partial by nature:
  * Vercel inlines most styling, so the homepage surfaces a subset of the real
  * design system (19 vars). No remapping, no renaming, no rounding.
  *
- * The `tokens.starter.css` file next to it is the unmodified output of
- * `npx extract-design-system init` (tool-normalized layer) — see README.
+ * Canonical source: raw.json → tokens.json / tokens.css. Run
+ * `python3 design-system/vercel/scripts/check_vercel_tokens.py` after capture.
  */
 :root {
   /* ── gray scale (hsla verbatim) ── */
