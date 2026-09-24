@@ -58,7 +58,7 @@ Yeni bir clone/worktree'de üç araç-kümesi gitignore'ludur ve tek komutla
 kurulur (her adım idempotent — kurulu araca dokunmaz):
 
 ```bash
-bash _calisma/dev_bootstrap.sh           # venv_z3 (pinned) + pptx + dashboard-next
+bash _calisma/dev_bootstrap.sh           # venv_z3 (pinned) + pptx + docx + dashboard-next
 bash _calisma/dev_bootstrap.sh --check   # fail-closed doğrulama (rc=0/1)
 ```
 
@@ -495,6 +495,8 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-24 | docs | (explanation) why SDE and the /ID residual work this way | [`193d85a`](https://github.com/ali-han-kaya/leibniz2/commit/193d85a) |
 | 2026-09-24 | docs | (process) fresh-session reader-test protocol | [`f79307d`](https://github.com/ali-han-kaya/leibniz2/commit/f79307d) |
 | 2026-09-24 | feat | (canvas) plates 02-05 and the seven-leaf plate book | [`bae1519`](https://github.com/ali-han-kaya/leibniz2/commit/bae1519) |
+| 2026-09-24 | fix | (a11y) same-origin axe bundle and focusable stdout pane | [`c77ccc9`](https://github.com/ali-han-kaya/leibniz2/commit/c77ccc9) |
+| 2026-09-24 | chore | record weekly determinism trend measurement | [`6da1bda`](https://github.com/ali-han-kaya/leibniz2/commit/6da1bda) |
 
 ### Regresyon notları
 

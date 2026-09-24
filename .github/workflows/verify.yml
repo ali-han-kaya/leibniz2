@@ -1327,7 +1327,7 @@ jobs:
         with:
           path: all_artifacts/
           merge-multiple: true
-          pattern: '{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,config,k0-findings,budget-verify,lineage-findings,klayers,unit-tests,action-runtimes,changelog-drift,ci-simulate}'
+          pattern: '{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,config,k0-findings,budget-verify,lineage-findings,klayers,unit-tests,action-runtimes,changelog-drift,ci-simulate,docx-report}'
 
       - name: Download precommit-logs artifact (precommit-logs/ prefix)
         uses: actions/download-artifact@v7
@@ -3327,5 +3327,75 @@ jobs:
             mirror_report.json
             bootstrap_smoke.txt
             fresh_clone_check_report.txt
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # ── DOCX EXPORT (advisory) ───────────────────────────────────────────────
+  # _calisma/docx/make_docx.js markdown'u gercek .docx'e cevirir; uretilen belge
+  # artifact olarak yayinlanir. Dogrulama byte-identity DEGIL: olculdu ki docx
+  # paketi core.xml tarihlerini kendi zamanindan uretir (iki kosum arasindaki
+  # TEK fark dcterms:created/modified — 2026-09-24). Onun yerine belgeyi gercek
+  # bir ofis motoru acar ve beklenen tanik metin aranir (birim testi degil,
+  # entegrasyon kaniti). GATE_EXCLUDE'da: advisory, required set'i degismez.
+  docx-export:
+    name: Docx export (LibreOffice check, advisory)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Install generator dependencies (npm ci)
+        run: npm ci --prefix _calisma/docx --no-audit --no-fund
+
+      - name: Generator self-test (parser contract)
+        run: node _calisma/docx/make_docx.js --self-test
+
+      - name: Build docx (SOURCE_DATE_EPOCH pinned)
+        run: |
+          set -euo pipefail
+          SOURCE_DATE_EPOCH=1700000000 node _calisma/docx/make_docx.js \
+            | tee docx_build.txt
+
+      - name: Install LibreOffice (writer only)
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends libreoffice-writer
+
+      - name: LibreOffice check (opens + text witness)
+        run: |
+          set -euo pipefail
+          bash _calisma/docx/check_docx_libreoffice.sh \
+            _calisma/docx/out/final_rc_report.docx | tee docx_libreoffice_check.txt
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## docx-export"
+            echo '```'
+            cat docx_build.txt 2>/dev/null || echo '(build cikti yok)'
+            cat docx_libreoffice_check.txt 2>/dev/null || echo '(libreoffice kontrolu yok)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload docx artifact
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: docx-report
+          path: |
+            _calisma/docx/out/final_rc_report.docx
+            docx_build.txt
+            docx_libreoffice_check.txt
           if-no-files-found: ignore
           retention-days: 30

@@ -1,0 +1,13 @@
+{
+  "name": "leibniz2-docx-export",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Markdown kaynaklarini gercek .docx'e ceviren jenerator (docx npm paketi). Deterministik: SOURCE_DATE_EPOCH ile sabitlenmis belge zaman damgalari.",
+  "scripts": {
+    "make": "node make_docx.js",
+    "self-test": "node make_docx.js --self-test"
+  },
+  "dependencies": {
+    "docx": "9.7.2"
+  }
+}

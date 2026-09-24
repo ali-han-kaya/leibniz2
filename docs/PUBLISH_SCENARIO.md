@@ -575,7 +575,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 --exit-status` + artifact listesi; sonuç `SONUÇ: PASS/FAIL` olarak loglanır
 (dry-run'da yalnızca önizlenir).
 
-**Job kategorileri (28 job = 13 required + 12 advisory + 3 PR-only):**
+**Job kategorileri (29 job = 13 required + 13 advisory + 3 PR-only):**
 
 > **Kural:** Branch protection **yalnızca A kategorisindeki** job'ları required check olarak
 > kabul eder. B (advisory) job'ları push'ta çalışır ama required değildir;
@@ -612,13 +612,14 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 | 23 | B | Preview reload smoke (advisory, macOS) | — preview restart + endpoint smoke (advisory) |
 | 24 | B | K9 Lake proof (Lean 4.14.0) | ✅ success — ayrı-step lake build --wfail (lean-toolchain v4.14.0); K9 ayrıca verify job'unun `--full` içinde de koşar (required DEĞİL) |
 | 25 | B | Fresh-clone HTTP smoke (advisory) | — temiz clone'dan preview_server.py başlatılır; `/api/health` + `/api/latest` curl ile doğrulanır |
+| 26 | B | Docx export (LibreOffice check, advisory) | — `make_docx.js`: markdown → gerçek .docx; artifact `docx-report`; doğrulama byte-identity DEĞİL — LibreOffice headless dönüşümü + tanık metin (docx paketi core.xml tarihlerini kendi zamanından üretir: iki koşum arasındaki tek fark `dcterms:created/modified`, ölçüldü 2026-09-24) |
 | | **C — PR-only (push'ta çalışmaz, PR'da çalışır)** | | |
-| 26 | C | Pre-commit P1 label gate (optional) | — skipped (push'ta çalışmaz) |
+| 27 | C | Pre-commit P1 label gate (optional) | — skipped (push'ta çalışmaz) |
 | | **D — PR-only (yorum/etiket düşürme)** | | |
-| 27 | D | Manifest PR comment | — skipped (PR'da çalışır) |
-| 28 | D | Budget status PR comment | — bütçe + pre-commit PR yorumu; job-level PR-only, push'ta tamamen skipped (bütçe kapısı ayrı `budget` job'ında kalır) |
+| 28 | D | Manifest PR comment | — skipped (PR'da çalışır) |
+| 29 | D | Budget status PR comment | — bütçe + pre-commit PR yorumu; job-level PR-only, push'ta tamamen skipped (bütçe kapısı ayrı `budget` job'ında kalır) |
 
-**Artifact listesi (30):**
+**Artifact listesi (31):**
 - `unit-tests` (CIKTI birim test logu — `test_*.py` glob'u)
 - `verify-report` (tek log: K1-K14 + pre-commit bölümü + .sha256)
 - `action-runtimes` (her action'ın runs.using denetimi JSON — node24 kapısı)
@@ -648,6 +649,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 - `pattern-drift` (merge pattern ↔ ARTIFACT_JOBS tutarlılık denetimi — advisory, run summary'ye yazılır)
 - `preview-reload-smoke` (preview sunucu restart + endpoint smoke testi — advisory, macOS)
 - `a11y-report` (a11y-gate raporu: axe sonuçları + config echo + verdict — fail-closed kapı; blocking/warn/allowlisted/incomplete özeti)
+- `docx-report` (docx-export job'unun ürünü: `make_docx.js` çıktısı .docx + build key=value logu + LibreOffice açılabilirlik raporu — advisory job, ürün yine artefakt olarak saklanır)
 
 **Not:** Kapı artık `verify_delivery.py --full`'dur (K1-K14, fail-closed) ve yeşildir —
 Beth 1953 / Fosl 1998 gibi referans düzeltmeleri V5h'te yapıldı; Kalan çevrimdışı
