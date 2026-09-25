@@ -507,6 +507,7 @@ def main(argv=None):
         "test_all_hooks_smoke.py",       # standalone smoke: tum hook'lari kosar
         "test_budget_scan.js",          # JS-only, ayrı Node hook'unda
         "test_dashboard_playwright_smoke.py",  # standalone Playwright smoke (Chromium ~10s) — CI'da ayrı job
+        "test_dashboard_csp_nonce.py",   # standalone Playwright CSP+nonce smoke (Chromium) — canlı sunucu/kendi sunucusu
         "test_refs_trend_badge_node.js", # standalone JS smoke (Node-only assertion), dokümante bilinçlileşti
     })
     if args.check:

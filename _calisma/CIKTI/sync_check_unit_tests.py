@@ -98,6 +98,11 @@ EXCLUDE = {
     # its own preview_server.py. Runs standalone, not in the 10s pre-commit
     # gate (pre-commit's check-unit-tests budget would blow up).
     "test_dashboard_playwright_smoke.py",
+
+    # Canlı-sunucu CSP + nonce smoke'u: Chromium gerektirir; DASHBOARD_BASE_URL
+    # verilirse CANLI sunucuya, verilmezse kendi preview_server.py'sini başlatır.
+    # Yerel/canlı doğrulama içindir — pre-commit bütçesinde koşmaz.
+    "test_dashboard_csp_nonce.py",
 }
 
 
