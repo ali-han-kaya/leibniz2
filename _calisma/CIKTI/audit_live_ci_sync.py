@@ -45,6 +45,7 @@ import ci_failure_pattern
 import re
 import subprocess
 import sys
+import time
 
 HERE = pathlib.Path(__file__).resolve().parent
 REPO_ROOT = HERE.parents[1]
@@ -205,9 +206,57 @@ def get_run_jobs(repo, run_id):
 
 def get_run_artifacts(repo, run_id):
     out = run_gh(["gh", "api",
-                  f"repos/{repo}/actions/runs/{run_id}/artifacts",
+                  f"repos/{repo}/actions/runs/{run_id}/artifacts?per_page=100",
                   "-q", ".artifacts[].name"])
     return [n for n in (line.strip() for line in out.splitlines()) if n]
+
+
+def wait_for_visible_run(repo, run_id, expected_jobs, expected_artifacts,
+                         timeout_seconds=0.0, interval_seconds=2.0):
+    """Wait until the run API exposes the expected jobs and artifacts.
+
+    GitHub can report a completed job before its artifact/list endpoint is
+    eventually consistent. A bounded poll avoids turning that race into a
+    false doc↔live drift verdict without hiding a real mismatch forever.
+    """
+    started = time.monotonic()
+    deadline = started + max(0.0, timeout_seconds)
+    attempts = 0
+    jobs = []
+    artifacts = []
+    while True:
+        attempts += 1
+        jobs = get_run_jobs(repo, run_id)
+        artifacts = get_run_artifacts(repo, run_id)
+        missing_jobs = sorted(set(expected_jobs) - set(jobs))
+        missing_artifacts = sorted(set(expected_artifacts) - set(artifacts))
+        now = time.monotonic()
+        waited = max(0.0, now - started)
+        if not missing_jobs and not missing_artifacts:
+            return {
+                "jobs": jobs,
+                "artifacts": artifacts,
+                "visibility": {
+                    "attempts": attempts,
+                    "waited_seconds": waited,
+                    "timed_out": False,
+                    "missing_jobs": [],
+                    "missing_artifacts": [],
+                },
+            }
+        if now >= deadline:
+            return {
+                "jobs": jobs,
+                "artifacts": artifacts,
+                "visibility": {
+                    "attempts": attempts,
+                    "waited_seconds": waited,
+                    "timed_out": True,
+                    "missing_jobs": missing_jobs,
+                    "missing_artifacts": missing_artifacts,
+                },
+            }
+        time.sleep(max(0.0, min(max(0.0, interval_seconds), deadline - now)))
 
 
 def get_run_job_conclusions(repo, run_id):
@@ -387,6 +436,10 @@ def main(argv=None):
                     help="PUBLISH_SCENARIO.md yolu (varsayılan: docs/)")
     ap.add_argument("--run-id", default=None, help="run ID (varsayılan: son run)")
     ap.add_argument("--json", action="store_true", help="makine-okur JSON")
+    ap.add_argument("--visibility-timeout", type=float, default=0.0,
+                    help="canlı job/artifact görünürlüğü için bekleme üst sınırı (saniye)")
+    ap.add_argument("--visibility-interval", type=float, default=2.0,
+                    help="görünürlük yoklamaları arasındaki aralık (saniye)")
     ap.add_argument("--with-failure-pattern", action="store_true",
                     help="aynı JSON'a son CI run failure sınıflandırmasını ekle")
     args = ap.parse_args(argv)
@@ -419,9 +472,17 @@ def main(argv=None):
         print(f"HATA: run bulunamadı ({e})", file=sys.stderr)
         return 2
 
+    expected_job_names = [n for (_cat, n) in doc_jobs if n != SELF_JOB]
+    expected_artifact_names = [n for n in doc_artifacts if n != SELF_ARTIFACT]
     try:
-        live_jobs = get_run_jobs(repo, run_id)
-        live_artifacts = get_run_artifacts(repo, run_id)
+        snapshot = wait_for_visible_run(
+            repo, run_id, expected_job_names, expected_artifact_names,
+            timeout_seconds=args.visibility_timeout,
+            interval_seconds=args.visibility_interval,
+        )
+        live_jobs = snapshot["jobs"]
+        live_artifacts = snapshot["artifacts"]
+        visibility = snapshot["visibility"]
         try:
             conclusions = get_run_job_conclusions(repo, run_id)
         except RuntimeError:
@@ -468,6 +529,7 @@ def main(argv=None):
         "repo": repo,
         "run_id": run_id,
         "doc": str(doc_path),
+        "visibility": visibility,
         "jobs": {
             "doc": doc_job_names,
             "live": sorted(live_jobs),

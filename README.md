@@ -505,6 +505,8 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-25 | fix | (a11y) stabilize dashboard contrast analysis | [`e099545`](https://github.com/ali-han-kaya/leibniz2/commit/e099545) |
 | 2026-09-21 | chore | record weekly determinism trend measurement | [`80ba037`](https://github.com/ali-han-kaya/leibniz2/commit/80ba037) |
 | 2026-09-20 | chore | record weekly determinism trend measurement | [`2ebc5a0`](https://github.com/ali-han-kaya/leibniz2/commit/2ebc5a0) |
+| 2026-09-25 | fix | resolve README changelog merge for PR #50 branch | [`2dd1476`](https://github.com/ali-han-kaya/leibniz2/commit/2dd1476) |
+| 2026-09-25 | refactor | (design) align vercel tokens with provider contract | [`34b6ea3`](https://github.com/ali-han-kaya/leibniz2/commit/34b6ea3) |
 
 ### Regresyon notları
 

@@ -2097,9 +2097,13 @@ jobs:
         run: |
           # Mevcut run'ı denetle (--run-id) — push'ta verify+audit aynı run'da;
           # PR'da PR run'ının kendi job/artifact'ları denetlenir.
+          # GitHub API, upload sonrası job/artifact listelerini kısa süreli
+          # eventual-consistency ile geçirir; bounded retry false FAIL'i önler.
           python3 _calisma/CIKTI/audit_live_ci_sync.py --json \
             --with-failure-pattern \
             --run-id ${{ github.run_id }} \
+            --visibility-timeout 30 \
+            --visibility-interval 2 \
             > audit_live_ci_sync.json
           cat audit_live_ci_sync.json
 
