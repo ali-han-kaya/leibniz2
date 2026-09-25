@@ -500,9 +500,14 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-24 | feat | (ci) docx export job with LibreOffice artifact check | [`43e4824`](https://github.com/ali-han-kaya/leibniz2/commit/43e4824) |
 | 2026-09-24 | feat | (docx) merge RC report and full scope audit into one docx | [`f3c9fdc`](https://github.com/ali-han-kaya/leibniz2/commit/f3c9fdc) |
 | 2026-09-24 | feat | (a11y) report verdict field + job summary surface | [`08deae8`](https://github.com/ali-han-kaya/leibniz2/commit/08deae8) |
+<<<<<<< 34b6ea35357ee292f60286e420b0de089fc224e1
 | 2026-09-24 | docs | (specs) add verify.yml job needs-DAG excalidraw map | [`04af000`](https://github.com/ali-han-kaya/leibniz2/commit/04af000) |
 | 2026-09-25 | feat | (a11y) scan the branch protection guide | [`9e5160f`](https://github.com/ali-han-kaya/leibniz2/commit/9e5160f) |
 | 2026-09-25 | fix | (a11y) stabilize dashboard contrast analysis | [`e099545`](https://github.com/ali-han-kaya/leibniz2/commit/e099545) |
+=======
+| 2026-09-21 | chore | record weekly determinism trend measurement | [`80ba037`](https://github.com/ali-han-kaya/leibniz2/commit/80ba037) |
+| 2026-09-20 | chore | record weekly determinism trend measurement | [`2ebc5a0`](https://github.com/ali-han-kaya/leibniz2/commit/2ebc5a0) |
+>>>>>>> 1b93467027782ad0f2330a1e17e5eb47f5378584
 
 ### Regresyon notları
 
