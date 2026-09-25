@@ -63,6 +63,10 @@ GATE_EXCLUDE = {
     "audit-refs-trend",     # advisory: refs-trend satırları ↔ kaynak denetimi
     "override-trend",       # advisory: CLI override zaman serisi
     "changelog-drift",      # advisory: gen_changelog --check drift bulguları
+    "docx-export",          # advisory: docx üretimi + LibreOffice açılabilirlik
+                            #   kontrolü (required set 14'te sabit kalır;
+                            #   required'a almak branch-protection UI değişikliği
+                            #   gerektirirdi — bilinçli advisory)
     "pattern-drift",         # advisory: merge pattern ↔ ARTIFACT_JOBS drift
     "budget-comment",        # PR-only: bütçe + pre-commit PR yorumu (bütçe kapısı ayrı job)
     "lake-proof",            # ayrı-step K9 lake build (lean-toolchain v4.14.0);

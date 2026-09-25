@@ -133,24 +133,17 @@ class TestUpdateMode(unittest.TestCase):
         # docs/ci_simulate ignore edilmiş konumda kayıt (asla) versiyonlanmaz.
         self.assertIn("docs/determinism_trend", rdt.TREND)
 
-    def test_stale_evidence_guard(self):
-        # Bayat-kanıt koruması: --update, rapor mtime'ı 48h eskiyse rc=1 ve
-        # KAYIT EKLEMEZ (time-mock ile deterministik; temp trend'e yazar).
+    def test_stale_evidence_is_recorded(self):
+        # 48h bayat-kanıt koruması kaldırıldı: --update, rapor bayat olsa bile
+        # ölçümü ekler. Kaydın dürüstlüğü date alanındadır; tazelik iddiası
+        # --check kapısının işidir. Temp trend'e yazar (gerçek dosyaya dokunmaz).
         if not REAL_REPORT.exists():
             self.skipTest("gerçek deney raporu yok (deney koşulmamış)")
-        mtime = os.stat(REAL_REPORT).st_mtime
         orig_trend = rdt.TREND
         with tempfile.TemporaryDirectory() as td:
             rdt.TREND = os.path.join(td, "trend.jsonl")
             try:
-                with unittest.mock.patch.object(rdt.time, "time",
-                                                lambda: mtime + 3600):
-                    self.assertEqual(rdt.main(["--update"]), 0)  # taze
-                self.assertEqual(len(rdt._records(rdt.TREND)), 1)
-                with unittest.mock.patch.object(rdt.time, "time",
-                                                lambda: mtime + 72 * 3600):
-                    self.assertEqual(rdt.main(["--update"]), 1)  # bayat
-                # Bayat koşum kayıt EKLEMEMELİ (append yok).
+                self.assertEqual(rdt.main(["--update"]), 0)  # bayat da olsa kaydolur
                 self.assertEqual(len(rdt._records(rdt.TREND)), 1)
             finally:
                 rdt.TREND = orig_trend

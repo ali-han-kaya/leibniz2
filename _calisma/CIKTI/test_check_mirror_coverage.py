@@ -43,12 +43,32 @@ def fake_repo(root):
         f.write("x\n")
     with open(os.path.join(root, "docs", "HOOK_ENV_MATRIX.md"), "w", encoding="utf-8") as f:
         f.write("x\n")
+    # a11y same-origin axe bundle — sync PREVIEW_FILES ile mirror'a girer
+    # (preview_server /vendor/axe.min.js rotası); kapsam tanımı beklemeli,
+    # yoksa fail-closed coverage "BEKLENMEYEN" ile kırılır.
+    vendor = os.path.join(cikti, "vendor")
+    os.makedirs(vendor, exist_ok=True)
+    with open(os.path.join(vendor, "axe.min.js"), "w", encoding="utf-8") as f:
+        f.write("x\n")
     # design-system token sheet — sync_verify_mirror.sh GUIDE_FILES ile
     # mirror'lar; kapsam tanımı bunu beklenen runtime kümesine almalı (CI'da
     # "BEKLENMEYEN: design-system/tokens.css" regresyonu).
     ds = os.path.join(root, "design-system")
     os.makedirs(ds, exist_ok=True)
     with open(os.path.join(ds, "tokens.css"), "w", encoding="utf-8") as f:
+        f.write("x\n")
+    # SDE deney + donmuş kayıt — sync SDE_FILES bloğu mirror'a taşır;
+    # _sde_experiment_paths mirror-layout'ta MIRROR_DIR/../sde_experiment
+    # çözer. Ayrıca determinism-trend versiyonlu verisi (GUIDE_FILES,
+    # dest: determinism_trend.jsonl).
+    sde = os.path.join(root, "_calisma", "sde_experiment")
+    os.makedirs(sde, exist_ok=True)
+    for n in ("sde_determinism_experiment.py", "sde_determinism_output.txt"):
+        with open(os.path.join(sde, n), "w", encoding="utf-8") as f:
+            f.write("x\n")
+    trend = os.path.join(root, "docs", "determinism_trend")
+    os.makedirs(trend, exist_ok=True)
+    with open(os.path.join(trend, "determinism_trend.jsonl"), "w", encoding="utf-8") as f:
         f.write("x\n")
     for n in ("ReductInvariance.lean", "lean-toolchain", "lakefile.toml",
               "Leibniz2Reduct/Content.lean"):
@@ -114,6 +134,25 @@ class TestDesignTokensCoverage(unittest.TestCase):
             self.assertIn("design-system/tokens.css", exp)
 
     def test_listing_with_tokens_css_passes(self):
+        with tempfile.TemporaryDirectory(prefix="cov-") as root:
+            cikti, lean = fake_repo(root)
+            rc = run_main(root, list_output(cikti, lean, root))
+            self.assertEqual(rc, 0)
+
+
+class TestVendorAxeCoverage(unittest.TestCase):
+    """a11y axe bundle'ı mirror'da YER ALIR (preview_server aynı-koken /vendor/
+    axe.min.js rotasından servis eder) — kapsam tanımı bunu beklemeli; aksi
+    halde fail-closed coverage "BEKLENMEYEN: _calisma/CIKTI/vendor/axe.min.js"
+    ile kırılır. design-system/tokens.css testiyle aynı sözleşme."""
+
+    def test_vendor_axe_in_expected_set(self):
+        with tempfile.TemporaryDirectory(prefix="cov-") as root:
+            cikti, lean = fake_repo(root)
+            exp = cmc.expected_repo_files(root, cikti, lean)
+            self.assertIn("_calisma/CIKTI/vendor/axe.min.js", exp)
+
+    def test_listing_with_vendor_axe_passes(self):
         with tempfile.TemporaryDirectory(prefix="cov-") as root:
             cikti, lean = fake_repo(root)
             rc = run_main(root, list_output(cikti, lean, root))

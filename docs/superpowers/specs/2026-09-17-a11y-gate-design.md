@@ -1,6 +1,12 @@
 # A11y Gate Design (2026-09-17)
 
-**Status:** Approved design, reader-tested (2 gaps fixed inline); awaiting implementation
+**Status:** Implemented (2026-09-24; report verdict field, job summary, local E2E evidence complete)
+
+> **Local E2E evidence (2026-09-24):** gerçek preview_server (ephemeral port
+> 54893) + gerçek headless Chromium (playwright 1.60.0 venv / chromium
+> 148.0.7778.96) ile `a11y_gate.py` koşusu: `verdict: PASS`, rc=0; rapor
+> `verdict` alanını taşıyor (summary: blocking 0, warn 0, allowlisted 0,
+> incomplete 1 — color-contrast, report-only).
 **Author:** Buffy (Codebuff) with ali-han-kaya
 **Path:** Architectural — new subsystem
 

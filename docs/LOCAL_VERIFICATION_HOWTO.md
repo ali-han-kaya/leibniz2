@@ -2,7 +2,7 @@
 
 > **Diátaxis: How-to guide** — Problem-yönelimli. Amacı: CI'da kırmızı almadan
 > *önce*, deponun kendi kapılarını lokalde aynı parametrelerle koşmak.
-> Öğretici değil (yeni-gelen için bkz. README "Doğrulama" bölümü), referans da
+> Öğretici değil (yeni-gelen için bkz. [`FIRST_RUN_TUTORIAL.md`](FIRST_RUN_TUTORIAL.md)), referans da
 > değil (kapı satır-içi sözlüğü için bkz. `docs/HOOK_ENV_MATRIX.md`).
 
 ## 0. Ön koşullar

@@ -26,6 +26,7 @@ Tek dosyalık Python HTTP sunucusu (stdlib-only):
 import argparse
 import hashlib
 import hmac
+import ipaddress
 import json
 import os
 import re
@@ -49,6 +50,58 @@ BUILD_TS_NONCE = secrets.token_urlsafe(16)
 SERVER = None
 STOP_EVENT = None
 
+# /api/stop TCP-peer izin-kümesi: default yalnız loopback. Sandbox-dışı
+# ortamlarda (0.0.0.0 bind, konteyner, tünel) dış-peer'lar /api/stop'a
+# erişemez; genişletme yalnız PREVIEW_STOP_ALLOWLIST ile (geçersiz girdi
+# düşülür — kapı asla genişlemez).
+DEFAULT_STOP_ALLOWLIST = frozenset({"127.0.0.1", "::1"})
+
+# Import-time default: main() env ile genişletene kadar yalnız loopback.
+# (Unit-prob'lar main()'i koşmadan Handler'ı kurar — global burada var olmalı.)
+STOP_ALLOWLIST = DEFAULT_STOP_ALLOWLIST
+STOP_ALLOWLIST = DEFAULT_STOP_ALLOWLIST
+_STOP_HOSTS_ENV = "PREVIEW_STOP_ALLOWLIST"
+
+
+def load_stop_allowlist(env_value):
+    """PREVIEW_STOP_ALLOWLIST değerini izin-kümesine çevirir.
+
+    Virgülle ayrılmış IP listesi; geçersiz girdiler düşülür, kalan küme
+    default'a EKLENİR (loopback operatörü her zaman geçerli — typo'lu env
+    yerel-kilitleme yapamaz), geçerli-kalan boşsa yalnız default döner.
+    """
+    if not env_value:
+        return DEFAULT_STOP_ALLOWLIST
+    allowed = set()
+    for token in env_value.split(","):
+        token = token.strip()
+        if not token:
+            continue
+        try:
+            allowed.add(str(ipaddress.ip_address(token)))
+        except ValueError:
+            continue  # geçersiz girdi: düşür (kapı asla genişlemez)
+    return frozenset(allowed | DEFAULT_STOP_ALLOWLIST)
+
+
+def _stop_peer_allowed(peer, allowlist=None):
+    """TCP-peer adresi izin-kümesinde değilse gerekçe, izinliyse None.
+
+    Sahtelenemez katman: karar soket-peer'ına bakar (Host/Origin'in
+    aksine istemci-kontrolünde değil). IPv4-mapped IPv6 canonical'lanır;
+    ayrıştırılamayan peer deny (fail-closed).
+    """
+    allowed = DEFAULT_STOP_ALLOWLIST if allowlist is None else allowlist
+    try:
+        addr = ipaddress.ip_address(str(peer[0]))
+    except ValueError:
+        return "forbidden peer"
+    if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped:
+        addr = addr.ipv4_mapped
+    if str(addr) not in allowed:
+        return "forbidden peer"
+    return None
+
 
 def _trusted_request(headers):
     host = headers.get("Host", "").split(":", 1)[0].lower()
@@ -64,6 +117,16 @@ def _trusted_request(headers):
 
 def api_error(status, message):
     return status, {"error": message}
+
+
+# GET-API route kümesi: DNS-rebinding kapısı bunlara uygulanır (do_GET).
+# Statik varlıklar (sw/preview/guide/preview_js/design_tokens/slides) veri
+# taşımaz — kapı dışı. /api/health yerel-monitör için düşük-duyarlı.
+_API_GET_ROUTES = frozenset({
+    "latest", "sse", "run_stream", "history", "refs_trend", "trend",
+    "override_trend", "determinism_trend", "run_history", "health",
+    "stop", "run_now",
+})
 
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -160,10 +223,12 @@ VERIFY_DIR = None               # main()'de set edilir; /api/run-now handler'ı 
 HISTORY_PATH = None             # main()'de set edilir; JSONL trend dosyası
 HISTORY_MAX = 100               # disk'te tutulacak en son run sayısı
 RUNS_DIR = None                 # main()'de set edilir; run logları (stdout+stderr) dizini
+SERVER_EVENTS_PATH = None       # main()'de set edilir; yaşam-döngüsü olay-kaydı (append-only)
 RUN_LOG_MAX = 20                 # disk'te tutulacak + replay edilecek en son run sayısı
 SSE_POLL_TIMEOUT = 15            # SSE q.get(timeout=...) — keepalive periyodu (saniye)
 REFS_TREND_PATH = None           # main()'de set edilir; refs-trend.json yolu
 OVERRIDE_TREND_PATH = None       # main()'de set edilir; override-trend.json yolu
+DETERMINISM_TREND_PATH = None    # main()'de set edilir; determinism_trend.jsonl yolu
 # Matris doc'u tek kaynaktır. Sunucu TCC-safe mirror'dan koştuğunda (launchd
 # GUI agent'ı repo'yu okuyamaz) doc kopyası preview mirror'a senkronlanır
 # (sync_verify_mirror.sh) ve ROOT'un yanına düşer; yerel dev/test ise repo
@@ -410,6 +475,34 @@ def persist_history(rec):
     except OSError as e:
         sys.stderr.write(f"[history] yazılamadı: {e}\n")
         sys.stderr.flush()
+
+
+def _lifecycle_event(event, detail=""):
+    """Sunucu yaşam-döngüsü olayını kalıcı kayda yaz (append-only JSONL).
+
+    Konum: PREVIEW_DIR/logs/server_events.jsonl (gitignore'da — logs/ zaten
+    öyle). Amaç: daemon çökme/kurtarma olaylarının stdout-stderr akışından
+    bağımsız, yeniden-başlatmalara dayanıklı kaydı (disk-kanıtı) — daemon
+    stdout'u /dev/null'a dup2'lenmişken bile iz bırakır.
+
+    Telemetri servisi DEĞİL: hiçbir hata sunucu-yüzeyini düşürmez — her
+    başarısızlık sessizce yutulur (yazılamaz dizin, bozuk mevcut dosya).
+    Append-only: mevcut dosya asla ezilmez/truncate edilmez.
+    """
+    if not SERVER_EVENTS_PATH:
+        return
+    try:
+        rec = {"ts": datetime.now(timezone.utc).isoformat().replace(
+            "+00:00", "Z"), "event": event, "pid": os.getpid()}
+        if detail:
+            rec["detail"] = detail
+        d = os.path.dirname(SERVER_EVENTS_PATH)
+        if d:
+            os.makedirs(d, exist_ok=True)
+        with open(SERVER_EVENTS_PATH, "a", encoding="utf-8") as f:
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    except OSError:
+        pass
 
 
 def load_cached_latest():
@@ -1274,6 +1367,8 @@ def _route(path):
         return "preview"
     if p == "/preview.js":
         return "preview_js"
+    if p == "/vendor/axe.min.js":
+        return "vendor_axe"
     if p == "/design-system/tokens.css":
         return "design_tokens"
     if p == "/guide.html":
@@ -1294,6 +1389,8 @@ def _route(path):
         return "trend"
     if p == "/api/override-trend":
         return "override_trend"
+    if p == "/api/determinism-trend":
+        return "det_trend"
     if p == "/api/run-history":
         return "run_history"
     if p.startswith("/api/run-stdout"):
@@ -1396,6 +1493,15 @@ class Handler(BaseHTTPRequestHandler):
         # Query string'li istekler (cache-buster ?_t= / ?v=) da aynı rotaya
         # düşer — bkz. _route().
         route = _route(self.path)
+        # DNS-rebinding kapısı: /api/* GET'leri de Host/Origin kurallarına
+        # tabidir (POST-uçlarla aynı ALLOWED_HOSTS). Statik varlıklar ve
+        # do_HEAD kapı dışı — veri-taşımayan yüzeyler.
+        if route in _API_GET_ROUTES:
+            request_error = _trusted_request(self.headers)
+            if request_error:
+                self._send(403, json.dumps({"error": request_error}),
+                           content_type="application/json; charset=utf-8")
+                return
         if route == "sw":
             self.serve_sw()
         elif route == "preview":
@@ -1404,6 +1510,8 @@ class Handler(BaseHTTPRequestHandler):
             self.serve_guide()
         elif route == "preview_js":
             self.serve_preview_js()
+        elif route == "vendor_axe":
+            self.serve_vendor_axe()
         elif route == "design_tokens":
             self.serve_design_tokens()
         elif route == "latest":
@@ -1424,6 +1532,8 @@ class Handler(BaseHTTPRequestHandler):
             self.serve_trend()
         elif route == "override_trend":
             self.serve_override_trend()
+        elif route == "det_trend":
+            self.serve_determinism_trend()
         elif route == "run_history":
             self.serve_run_history()
         elif route == "run_stdout":
@@ -1451,6 +1561,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def stop_server(self):
         """Yerel daemon'ı güvenli biçimde durdurur; GET ile tetiklenemez."""
+        # TCP-peer kapısı: Host/Origin'in aksine sahtelenemez; sandbox-dışı
+        # bind'ta bile dış-peer'ı /api/stop'tan uzak tutar (bind'dan bağımsız).
+        # Sahtelenemez katman önce değerlendirilir (güven-sırası).
+        peer_error = _stop_peer_allowed(self.client_address, STOP_ALLOWLIST)
+        if peer_error:
+            self._send(403, json.dumps({"error": peer_error}),
+                       content_type="application/json; charset=utf-8")
+            return
         request_error = _trusted_request(self.headers)
         if request_error:
             self._send(403, json.dumps({"error": request_error}),
@@ -1475,6 +1593,13 @@ class Handler(BaseHTTPRequestHandler):
         yanlışlıkla silinmişti (serve_run_stdout ile yer değiştirdi) —
         geri yüklendi.
         """
+        # Peer-paritesi: state-changing uç, /api/stop ile aynı sahtelenemez
+        # TCP-peer kapısını taşır (güven-sırası: peer → trusted → auth).
+        peer_error = _stop_peer_allowed(self.client_address, STOP_ALLOWLIST)
+        if peer_error:
+            self._send(403, json.dumps({"error": peer_error}),
+                       content_type="application/json; charset=utf-8")
+            return
         request_error = _trusted_request(self.headers)
         if request_error:
             self._send(403, json.dumps({"error": request_error}),
@@ -1651,6 +1776,17 @@ class Handler(BaseHTTPRequestHandler):
         self._send(200, json.dumps(data, ensure_ascii=False),
                    content_type="application/json; charset=utf-8")
 
+    def serve_determinism_trend(self):
+        """determinism_trend.jsonl'ı badge'li satırlarla döndür (TeX motor
+        determinizm trend paneli — determinism_trend_badge.py üreticisi)."""
+        import determinism_trend_badge as dtb
+        rows = dtb.rows_from(DETERMINISM_TREND_PATH) or []
+        enriched = [dict(r, badge=dtb.badge([r])) for r in rows]
+        self._send(200, json.dumps({"badge": dtb.badge(rows),
+                                    "rows": enriched},
+                                   ensure_ascii=False),
+                   content_type="application/json; charset=utf-8")
+
     def serve_run_history(self):
         """Son N run'ın özetini stdout/stderr olmadan döndür (dashboard run history listesi)."""
         records = load_run_logs(15)  # son 15 run
@@ -1719,6 +1855,13 @@ class Handler(BaseHTTPRequestHandler):
         fallback'ine düşer (davranış aynı).
         """
         preview_path = os.path.join(PREVIEW_DIR, "preview.html")
+        if not os.path.isfile(preview_path):
+            # Fail-closed: mirror'da HTML yoksa 404 — çıplak open() daemon-
+            # thread'ini öldürür ve istemci "empty reply" alır (ölçüldü:
+            # verify-mirror preview-server'ı, 2026-09-24).
+            self._send(404, "404 — preview.html mirror'da yok "
+                             "(bash update_preview.sh)")
+            return
         with open(preview_path, encoding="utf-8") as f:
             html = f.read()
         try:
@@ -1796,6 +1939,25 @@ class Handler(BaseHTTPRequestHandler):
         with open(path, encoding="utf-8") as f:
             js = f.read()
         self._send(200, js, content_type="application/javascript; charset=utf-8")
+
+    def serve_vendor_axe(self):
+        """vendor/axe.min.js — a11y-gate'in same-origin axe-bundle'ı.
+
+        CSP script-src 'self' + nonce: dış enjeksiyon yok; gate, bundle'ı
+        sayfa-içinden 'self'ten yükletir (<script src>) — eski add_script_tag
+        enjeksiyon-yolu yalnız CSP-bypass yedeği. Bundle PREVIEW_DIR/vendor/
+        altında (sync_verify_mirror.sh taşır; checksum-kapısı repo-kaynağını
+        pinler). Kaynak yoksa 404 (fail-closed: sessiz boş-skript yok).
+        """
+        path = os.path.join(PREVIEW_DIR, "vendor", "axe.min.js")
+        if not os.path.isfile(path):
+            self._send(404, "404 — vendor/axe.min.js mirror'da yok "
+                             "(bash sync_verify_mirror.sh)")
+            return
+        with open(path, "rb") as f:
+            data = f.read()
+        self._send(200, data,
+                   content_type="application/javascript; charset=utf-8")
 
     def serve_design_tokens(self):
         """design-system/tokens.css — dashboard token sheet (tek stil kaynağı).
@@ -1915,6 +2077,7 @@ def redirect_stdio_to_devnull():
 
 def main():
     global PREVIEW_DIR, VERIFY_DIR, HISTORY_PATH, RUNS_DIR, RUN_LOG_MAX, REFS_TREND_PATH
+    global SERVER_EVENTS_PATH, OVERRIDE_TREND_PATH, DETERMINISM_TREND_PATH
     # Daemon modunda: yeni process group + session oluştur (tamamen detach).
     # Bu, parent shell exit ettiğinde SIGHUP/SIGTERM almamızı engeller.
     if os.environ.get("PREVIEW_DAEMON") == "1":
@@ -1943,6 +2106,8 @@ def main():
     VERIFY_DIR = os.path.abspath(args.dir)
     HISTORY_PATH = os.path.join(PREVIEW_DIR, "history.jsonl")
     RUNS_DIR = os.path.join(PREVIEW_DIR, "runs")
+    SERVER_EVENTS_PATH = os.path.join(PREVIEW_DIR, "logs",
+                                      "server_events.jsonl")
     RUN_LOG_MAX = args.replay_runs
     # refs-trend.json: CI artifact'ı repo kökünde (refs-trend/refs-trend.json);
     # yerel kurulumda preview-dir'de de olabilir (nested veya flat).
@@ -1962,6 +2127,19 @@ def main():
         _ot_candidate = os.path.join(PREVIEW_DIR, "override-trend.json")
     OVERRIDE_TREND_PATH = _ot_candidate if os.path.isfile(_ot_candidate) else None
 
+    # determinism_trend.jsonl: versiyonlu trend verisi
+    # (record_determinism_trend.py üreticisi). Mirror-runtime'da repo-doküman
+    # yolu yoktur; sync_verify_mirror.sh dosyayı PREVIEW_DIR'e düz adla
+    # düşer (QA bulgusu F1, 2026-09-21) — ikinci aday orası.
+    _dt_candidate = os.path.join(REPO_ROOT, "docs",
+                                 "determinism_trend",
+                                 "determinism_trend.jsonl")
+    if not os.path.isfile(_dt_candidate):
+        _dt_candidate = os.path.join(PREVIEW_DIR, "determinism_trend.jsonl")
+    DETERMINISM_TREND_PATH = (_dt_candidate
+                              if os.path.isfile(_dt_candidate)
+                              else None)
+
     if not os.path.isfile(os.path.join(PREVIEW_DIR, "preview.html")):
         print(f"UYARI: {PREVIEW_DIR}/preview.html bulunamadı; "
               f"sunucu yine de başlatılıyor ama /preview.html 404 döner",
@@ -1973,9 +2151,10 @@ def main():
 
     # Sinyal yakalama — neden öldüğümüzü görelim
     import signal
-    def _sig(term_frame, signum):
+    def _sig(signum, frame):
         sys.stderr.write(f"\n[main] SIGTERM/SIGINT received ({signum}), exiting\n")
         sys.stderr.flush()
+        _lifecycle_event("signal_exit", detail=f"signum={signum}")
         sys.exit(143)
     signal.signal(signal.SIGTERM, _sig)
     signal.signal(signal.SIGINT, _sig)
@@ -1987,6 +2166,9 @@ def main():
             sys.stderr.write(
                 "[main] önbelleklenmiş son run yüklendi: "
                 f"verdict={LATEST['verdict']} ts={LATEST['ts']}\n")
+            _lifecycle_event(
+                "cache_loaded",
+                detail=f"verdict={LATEST['verdict']} ts={LATEST['ts']}")
         else:
             sys.stderr.write(
                 "[main] önbellek yok — /api/latest ilk verify bitene dek "
@@ -1994,9 +2176,11 @@ def main():
         sys.stderr.flush()
 
     # Arka plan thread: periyodik verify çalıştırma
-    global SERVER, STOP_EVENT
+    global SERVER, STOP_EVENT, STOP_ALLOWLIST
     stop_event = threading.Event()
     STOP_EVENT = stop_event
+    STOP_ALLOWLIST = load_stop_allowlist(
+        os.environ.get(_STOP_HOSTS_ENV))
     t = threading.Thread(target=verify_loop,
                          args=(VERIFY_DIR, args.interval, stop_event),
                          daemon=True, name="verify-loop")
@@ -2004,6 +2188,7 @@ def main():
 
     srv = ThreadingHTTPServer((args.bind, args.port), Handler)
     SERVER = srv
+    _lifecycle_event("start", detail=f"bind={args.bind} port={args.port}")
     sys.stderr.write(f"[main] preview_server: serving {PREVIEW_DIR} on http://{args.bind}:{args.port}\n")
     sys.stderr.write(f"[main] preview_server: verify loop interval={args.interval}s, dir={VERIFY_DIR}\n")
     sys.stderr.write(f"[main] PID={os.getpid()} PGID={os.getpgrp()}\n")
@@ -2025,6 +2210,7 @@ def main():
         # aktif yazım biter, yeni yazım başlayamaz.
         if LOCK.acquire(timeout=REQUEST_TIMEOUT_SECONDS):
             LOCK.release()
+        _lifecycle_event("shutdown")
 
 
 if __name__ == "__main__":

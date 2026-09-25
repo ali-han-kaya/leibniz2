@@ -11,6 +11,12 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  # CI-hijyen: aynı ref'te üst üste binen koşumlar (elle-tetikleme + cron
+  # çakışması) eski koşumu iptal eder — trend kaydı bir-bir yazılır.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   record:
     name: Run determinism experiment and record trend
@@ -105,3 +111,55 @@ jobs:
           echo "## determinism-trend" >> "$GITHUB_STEP_SUMMARY"
           tail -1 docs/determinism_trend/determinism_trend.jsonl >> "$GITHUB_STEP_SUMMARY" \
             || echo "(trend kaydı yok)" >> "$GITHUB_STEP_SUMMARY"
+
+  # Canvas (Incidental Proof) kaynağı: aynı motor-pini, aynı SDE-semantiği
+  # (sabit epoch), tectonic-only deney (fontspec/XeTeX sözleşmesi — pdfTeX
+  # zinciri bu kaynağı derleyemez). Yerel karşılığı:
+  #   SOURCE_DATE_EPOCH=1700000000 bash _calisma/CIKTI/canvas_determinism_test.sh
+  canvas-determinism:
+    name: Canvas determinism (tectonic, two SDE runs)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: record
+    # Least-privilege: job push etmiyor — top-level contents:write sadece
+    # record job'ının ihtiyacı; canvas job read ile yeter.
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      # Motor-pini TEK KAYNAK: "Install tectonic" adımıyla birebir aynı
+      # sürüm+digest (test_determinism_trend_canvas K2 bunu pinler; sürüm
+      # yükseltmesi iki job'ı birlikte değiştirmeli).
+      - name: Install tectonic (pinned, digest-verified)
+        run: |
+          set -euo pipefail
+          TECTONIC_VERSION="0.17.0"
+          TECTONIC_SHA256="8533d07f9ccbd7a65824b9e0459041bca34af1eb33daba48f59215593753a3b7"
+          curl -sL "https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%40${TECTONIC_VERSION}/tectonic-${TECTONIC_VERSION}-x86_64-unknown-linux-musl.tar.gz" -o /tmp/tectonic.tar.gz
+          echo "${TECTONIC_SHA256}  /tmp/tectonic.tar.gz" | sha256sum -c -
+          mkdir -p /tmp/tectonic-bin
+          tar -xzf /tmp/tectonic.tar.gz -C /tmp/tectonic-bin
+          sudo mv /tmp/tectonic-bin/tectonic /usr/local/bin/tectonic
+          tectonic --version
+
+      - name: Run canvas determinism experiment (two independent SDE runs)
+        run: |
+          set -euo pipefail
+          SOURCE_DATE_EPOCH=1700000000 \
+            bash _calisma/CIKTI/canvas_determinism_test.sh
+          echo '--- evidence ---'
+          cat docs/ci_simulate/canvas_determinism/canvas_determinism_report.txt
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## canvas-determinism" >> "$GITHUB_STEP_SUMMARY"
+          cat docs/ci_simulate/canvas_determinism/canvas_determinism_report.txt >> "$GITHUB_STEP_SUMMARY" \
+            || echo "(canvas raporu yok)" >> "$GITHUB_STEP_SUMMARY"

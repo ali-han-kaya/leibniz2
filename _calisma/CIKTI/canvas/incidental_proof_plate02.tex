@@ -1,0 +1,115 @@
+% ============================================================
+%  INCIDENTAL PROOF — plate 02  (the ridge line)
+%  Canvas: 180x225mm (4:5), three-voice palette (paper/fathom/verm)
+%  Fonts: Big Shoulders (display) + Geist Mono (labels)  [OFL]
+%  Frame: origin = page south-west, y grows upward. All mm.
+%  Subject: a theorem's history as elevation — plateaus of silence,
+%  the ascent of scrutiny, the flat horizon a counterexample crosses.
+% ============================================================
+\documentclass[12pt]{article}
+\pagestyle{empty}
+\usepackage[margin=0pt,paperwidth=180mm,paperheight=225mm]{geometry}
+\usepackage{tikz}
+\usepackage{fontspec}
+\setmainfont{BigShoulders.ttf}[Path=]
+\setmonofont{GeistMono.ttf}[Path=]
+\usepackage{xcolor}
+\definecolor{paper}{HTML}{F2EBD9}
+\definecolor{fathom}{HTML}{1B2A41}
+\definecolor{verm}{HTML}{C1440E}
+\definecolor{fathom40}{HTML}{8E97A8}
+\definecolor{fathom25}{HTML}{B4BAC7}
+\definecolor{fathom12}{HTML}{D8DCE2}
+
+\begin{document}
+\begin{tikzpicture}[remember picture,overlay, x=1mm, y=1mm]
+  \begin{scope}[shift={(current page.south west)}]
+    % ---- paper ground ---------------------------------------
+    \fill[paper] (0,0) rectangle (180,225);
+
+    % ============ THE RIDGE LINE (upper 2/3) ==================
+    % One profile drawn three times: hairline (belief), 0.9pt
+    % (doubt), vermilion (the measured season). Elevation y =
+    % confidence; x = three centuries, unlabeled.
+    \begin{scope}[shift={(10,84)}]
+      \def\W{160} \def\H{96}
+      % grid: faint vertical centuries (7 rules, unlabeled)
+      \foreach \i in {1,...,7}{%
+        \pgfmathsetmacro{\xx}{\i*\W/8}%
+        \draw[fathom12,line width=0.4pt] (\xx,0) -- (\xx,\H);}
+      % horizontal datum at the plateau of assumption
+      \draw[fathom12,line width=0.5pt] (0,84) -- (\W,84);
+
+      % --- profile 1: hairline fathom (the long belief) -------
+      \draw[fathom,line width=0.35pt]
+        (0,84) -- (34,84)
+          .. controls (44,84) and (50,80) .. (58,79)
+        -- (74,78) .. controls (86,77) and (92,64) .. (104,52)
+          .. controls (112,43) and (118,42) .. (126,44)
+        -- (140,47) .. controls (148,49) and (154,50) .. (\W,50);
+
+      % --- profile 2: 0.9pt fathom40 (the doubt season) -------
+      \draw[fathom40,line width=0.9pt]
+        (58,79) .. controls (66,79) and (70,71) .. (74,78)
+        (86,66) .. controls (92,64) and (96,56) .. (104,52);
+
+      % --- profile 3: vermilion (the measured season) ---------
+      \draw[verm,line width=1.1pt]
+        (104,52) .. controls (112,43) and (118,42) .. (126,44)
+        -- (140,47);
+
+      % witness: the exact crossing where belief became measured
+      \draw[verm,line width=0.9pt] (104,52-2.4) -- (104,52+2.4);
+      \node[anchor=north, text=verm, font=\ttfamily\fontsize{5.2}{6}\selectfont]
+        at (104,52-3.6) {(104.0, 44.0)};
+
+      % archive ticks + section labels (left margin)
+      \foreach \y/\t in {84/Y+0, 52/Y-1, 44/Y-2}{%
+        \draw[fathom40,line width=0.5pt] (-2.6,\y) -- (0,\y);}
+      \node[anchor=east, text=fathom40, font=\ttfamily\fontsize{4.6}{5.6}\selectfont]
+        at (-3.6,84) {ASSUMED};
+      \node[anchor=east, text=fathom40, font=\ttfamily\fontsize{4.6}{5.6}\selectfont]
+        at (-3.6,52) {DOUBTED};
+      \node[anchor=east, text=verm, font=\ttfamily\fontsize{4.6}{5.6}\selectfont]
+        at (-3.6,44) {MEASURED};
+
+      % the counterexample, drawn as weather entering from the east
+      \foreach \i in {0,...,5}{%
+        \pgfmathsetmacro{\wx}{150+\i*1.7}%
+        \pgfmathsetmacro{\wy}{70+\i*3.4}%
+        \draw[fathom25,line width=0.5pt] (\wx,\wy) -- (\wx+1.2,\wy-2.6);}
+      \node[anchor=south west, text=fathom25, font=\ttfamily\fontsize{4.6}{5.6}\selectfont]
+        at (146,88.4) {counterexample, arriving};
+    \end{scope}
+
+    % rotated margin annotation
+    \node[anchor=south west, text=fathom25, font=\ttfamily\fontsize{5.0}{6}\selectfont,
+          rotate=90] at (6.6,166) {FIELD 02 — RIDGE LINE, THREE PROFILES, WITNESS AT X=104};
+
+    % ============ STRATA FOOTER (lower third) =================
+    % core-sample rows: the paper trail beneath the ridge.
+    \begin{scope}[shift={(10,30)}]
+      \def\rows{7} \def\cols{26} \def\W{160} \def\H{38}
+      \foreach \r in {0,...,\rows}{%
+        \pgfmathsetmacro{\yy}{\r*\H/\rows}%
+        \draw[fathom12,line width=0.5pt] (0,\yy) -- (\W,\yy);}
+      \foreach \c in {0,...,\cols}{%
+        \pgfmathsetmacro{\xx}{\c*\W/\cols}%
+        \pgfmathsetmacro{\hh}{2 + 30*mod(\c*29+7,31)/30}%
+        \draw[fathom,line width=0.6pt] (\xx,0) -- (\xx,\hh);}
+      % vermilion column: the single season with measurements
+      \pgfmathsetmacro{\xv}{20*\W/\cols}%
+      \fill[verm] (\xv,0) rectangle ++(0.9,38);
+      \node[anchor=south west, text=fathom40, font=\ttfamily\fontsize{5.0}{6}\selectfont]
+        at (0,40.6) {27 SOURCES / 1 MEASURED SEASON};
+    \end{scope}
+
+    % ---- title block ------------------------------------------
+    \draw[fathom,line width=1.4pt] (10,24) -- (170,24);
+    \node[anchor=north west, text=fathom, font=\fontsize{22}{24}\selectfont]
+      at (9.6,22.2) {THE RIDGE LINE};
+    \node[anchor=west, text=fathom40, font=\ttfamily\fontsize{5.6}{7}\selectfont]
+      at (112,17.4) {PLATE 02 / A CLAIM IN ELEVATION};
+  \end{scope}
+\end{tikzpicture}
+\end{document}

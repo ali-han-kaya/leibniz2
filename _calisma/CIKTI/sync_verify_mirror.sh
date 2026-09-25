@@ -65,6 +65,11 @@ FILES=(
   "fresh_clone_setup.sh|fresh_clone_setup.sh"
   "test_fresh_clone_setup.py|test_fresh_clone_setup.py"
   "update_preview.sh|update_preview.sh"
+  # determinism-trend paneli (dashboard): endpoint handler'ının importu +
+  # versiyonlu trend verisi + üreticisi. Bu üçü mirror-disı kalınca panel
+  # "veri yok" ve /api/determinism-trend 404 döner (QA bulgusu F1, 2026-09-21).
+  "determinism_trend_badge.py|determinism_trend_badge.py"
+  "record_determinism_trend.py|record_determinism_trend.py"
   "sync_check_unit_tests.py|sync_check_unit_tests.py"
   "check_unit_tests.list|check_unit_tests.list"
   "check_unit_tests_hook.sh|check_unit_tests_hook.sh"
@@ -75,6 +80,7 @@ FILES=(
   "github_scripts/label_gate.js|github_scripts/label_gate.js"
   "github_scripts/label_gate_p1.js|github_scripts/label_gate_p1.js"
   "github_scripts/commit_msg_gate.js|github_scripts/commit_msg_gate.js"
+  "github_scripts/trivy_sarif_pr_comment.js|github_scripts/trivy_sarif_pr_comment.js"
   "github_scripts/sync_labels.js|github_scripts/sync_labels.js"
   "github_scripts/validate_labels.js|github_scripts/validate_labels.js"
   "github_scripts/manifest_comment.js|github_scripts/manifest_comment.js"
@@ -101,6 +107,21 @@ FILES=(
   "TESLIM_V5_FINAL_2026-08-17.zip.sha256|TESLIM_V5_FINAL_2026-08-17.zip.sha256"
   "render_z3_slides.py|render_z3_slides.py"
   "test_render_z3_slides.py|test_render_z3_slides.py"
+  # K6-DETERM skill-reuse zinciri + K21 SDE frozen kaydı — mirror-disi
+  # kalınca canlı dashboard'da P1 düşer (QA bulgusu F2, 2026-09-21):
+  # check_pdf_skill_reuse() sys.executable ile CIKTI'daki checker'ı,
+  # _sde_experiment_paths() ise verify_delivery.py'ye göre ../sde_experiment
+  # yolunu çözüyor (mirror-layout'ta MIRROR_DIR/../sde_experiment).
+  "check_reproducible_pdf_skill.py|check_reproducible_pdf_skill.py"
+  "reproducible_pdf_skill.py|reproducible_pdf_skill.py"
+  "test_reproducible_pdf_skill.py|test_reproducible_pdf_skill.py"
+)
+
+# SDE deney kaynağı + donmuş kayıt: dest MIRROR_DIR'ın KARDEŞİNE (sde_experiment)
+# — _sde_experiment_paths mirror-layout'ta __file__/../sde_experiment çözer.
+SDE_FILES=(
+  "_calisma/sde_experiment/sde_determinism_experiment.py|../sde_experiment/sde_determinism_experiment.py"
+  "_calisma/sde_experiment/sde_determinism_output.txt|../sde_experiment/sde_determinism_output.txt"
 )
 
 # Lean dosyaları: kaynak LEAN_SRC'ye, dest LEAN_MIRROR_DIR'a göre.
@@ -128,6 +149,28 @@ PREVIEW_FILES=(
   "preview_server.py|preview_server.py"
   "_daemonize.py|_daemonize.py"
   "preview_prestart.py|preview_prestart.py"
+  # Dashboard frontend ikilisi: preview_server.py /preview.js'i HER
+  # İSTEKTE PREVIEW_DIR'den okur; burada bayat kalırsa daemon ESKİ JS'i
+  # servis eder (inline onmousemove-handler'lı eski-sürüm 09-19 kopyası —
+  # QA bulgusu F3, 2026-09-23; tooltip-delegasyonu boş).
+  # DİKKAT: preview.html burada TAŞINMAZ — mirror-yazarı update_preview.sh
+  # build()'dir (build-stamp enjekte eder; stamp zamanlı olduğundan raw
+  # kaynağıyla byte-farklı). sync RAW kopyalayıp üstüne yazsaydı hem
+  # build'i ezerdi hem --check'i kalıcı-BAYAT'a düşürürdü (F3-fix
+  # ilk-denenme, 2026-09-23; bootstrap-idempotence süitiyle kanıtlandı).
+  "preview.js|preview.js"
+  # SW bayat-deploy tuzası: preview.js /sw.js'i kaydeder; mirror'da yoksa
+  # kayıt 404 alır ve webview'deki ESKİ SW kontrolü sonsuza dek elinde
+  # tutar (güncelleme-çekimi hep 404 → skipWaiting asla çalışmaz) —
+  # dashboard gömülü-webview'de asılı kalır (QA bulgusu F2, 2026-09-23)
+  "sw.js|sw.js"
+  # a11y-gate same-origin axe-bundle'ı: preview_server /vendor/axe.min.js
+  # rotası PREVIEW_DIR/vendor/ altından servis eder (CSP 'self' temiz-yol;
+  # checksum-kapısı repo-kaynağını pinler — mirror-drift ayrı denetim).
+  "vendor/axe.min.js|vendor/axe.min.js"
+  # determinism-trend endpoint handler'ının importu (PREVIEW_DIR'den
+  # çözülür — QA bulgusu F1, 2026-09-21)
+  "determinism_trend_badge.py|determinism_trend_badge.py"
 )
 
 # Branch protection görsel kılavuzu (adım 2, preview mirror): kaynak repo
@@ -145,6 +188,10 @@ GUIDE_FILES=(
   # launchd rotasında panelin doğru karşılaştırması için kopya buraya drop
   # edilir (tek kaynak repo docs/HOOK_ENV_MATRIX.md).
   "docs/HOOK_ENV_MATRIX.md|HOOK_ENV_MATRIX.md"
+  # Determinism-trend versiyonlu verisi — /api/determinism-trend'in okuduğu
+  # dosya; mirror-disi kalınca endpoint verisiz kalır (QA bulgusu F1,
+  # 2026-09-21). Tek kaynak: docs/determinism_trend/determinism_trend.jsonl.
+  "docs/determinism_trend/determinism_trend.jsonl|determinism_trend.jsonl"
 )
 
 say() { printf '%s\n' "$*"; }
@@ -185,6 +232,13 @@ validate_sources() {
       rc=1
     fi
   done < <(printf '%s\n' "${GUIDE_FILES[@]}")
+  while IFS='|' read -r src dst; do
+    [ -n "$src" ] || continue
+    if [ ! -f "$ROOT/$src" ]; then
+      err "kaynak yok: $ROOT/$src (sde)"
+      rc=1
+    fi
+  done < <(printf '%s\n' "${SDE_FILES[@]}")
   return "$rc"
 }
 
@@ -266,6 +320,13 @@ run_sync() {
     [ "$st" = "GÜNCELLENDİ" ] && SYNC_CHANGED=$((SYNC_CHANGED + 1))
     say "$st: preview/$dst (guide)"
   done < <(printf '%s\n' "${GUIDE_FILES[@]}")
+  while IFS='|' read -r src dst; do
+    [ -n "$src" ] || continue
+    SYNC_TOTAL=$((SYNC_TOTAL + 1))
+    st="$(sync_one "$ROOT/$src" "$MIRROR_DIR/$dst" "$mode")"
+    [ "$st" = "GÜNCELLENDİ" ] && SYNC_CHANGED=$((SYNC_CHANGED + 1))
+    say "$st: $dst (sde)"
+  done < <(printf '%s\n' "${SDE_FILES[@]}")
   say "ÖZET: $SYNC_TOTAL dosya, $SYNC_CHANGED güncellendi · git $(git_short)"
 }
 
@@ -308,6 +369,15 @@ run_check() {
       stale=1
     fi
   done < <(printf '%s\n' "${GUIDE_FILES[@]}")
+  while IFS='|' read -r src dst; do
+    [ -n "$src" ] || continue
+    if same_file "$ROOT/$src" "$MIRROR_DIR/$dst"; then
+      say "GÜNCEL: $dst (sde)"
+    else
+      say "BAYAT/EKSİK: $dst (sde)"
+      stale=1
+    fi
+  done < <(printf '%s\n' "${SDE_FILES[@]}")
   return "$stale"
 }
 
@@ -331,6 +401,10 @@ run_list() {
     [ -n "$src" ] || continue
     say "$CIKTI/$src -> $PREVIEW_MIRROR/$dst"
   done < <(printf '%s\n' "${PREVIEW_FILES[@]}")
+  while IFS='|' read -r src dst; do
+    [ -n "$src" ] || continue
+    say "$ROOT/$src -> $MIRROR_DIR/$dst (sde)"
+  done < <(printf '%s\n' "${SDE_FILES[@]}")
   while IFS='|' read -r src dst; do
     [ -n "$src" ] || continue
     say "$ROOT/$src -> $PREVIEW_MIRROR/$dst (guide)"

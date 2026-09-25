@@ -1,0 +1,32 @@
+# Vercel deploy upload/bundle dışlamaları (leibniz2).
+# @vercel/python builder'ı fonksiyon-bundle'ını workPath'ten `**` glob'u ile
+# kurar — git-dışı ağır dizinler (.worktrees, build-artifacts, venv'ler)
+# bundle'a girer ve 250MB Lambda eşiğini aşar (ölçüldü: 397.62MB, 2026-09-23;
+# aynı yapi küçük-izole-depo'da fonksiyon-çıktısı üretti: /tmp/vercel_iso2).
+# API-fonksiyonlarının yalnız gerçek-kaynaklarına ihtiyacı var:
+#   api/*.py, preview_server.py + determinism_trend_badge.py (import),
+#   docs/determinism_trend/determinism_trend.jsonl (canlı-veri).
+# env-dosyaları bundle'a ASLA girmez (sır-disiplini).
+.env.local
+.env*.local
+.env
+.worktrees/
+.worktrees/**
+_calisma/mcp/
+_calisma/mcp/**
+_calisma/pptx/
+_calisma/pptx/**
+_calisma/CIKTI/**
+!_calisma/CIKTI/preview_server.py
+!_calisma/CIKTI/determinism_trend_badge.py
+_calisma/ALI_KOMUT_TOOLKIT*/
+_calisma/REVIEW/
+apps/
+design-system/
+skills/
+infra/
+.github/
+node_modules/
+**/node_modules/**
+**/.venv/
+**/venv/

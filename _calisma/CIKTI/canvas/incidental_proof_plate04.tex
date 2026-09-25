@@ -1,0 +1,125 @@
+% ============================================================
+%  INCIDENTAL PROOF — plate 04  (the moved point)
+%  Canvas: 180x225mm (4:5), three-voice palette (paper/fathom/verm)
+%  Fonts: Big Shoulders (display) + Geist Mono (labels)  [OFL]
+%  Frame: origin = page south-west, y grows upward. All mm.
+%  Subject: verification as triangulation — 108 stations hold the
+%  lattice; one station moved. The obstruction is never drawn;
+%  only the displacement of the stations near it is drawn.
+% ============================================================
+\documentclass[12pt]{article}
+\pagestyle{empty}
+\usepackage[margin=0pt,paperwidth=180mm,paperheight=225mm]{geometry}
+\usepackage{tikz}
+\usepackage{fontspec}
+\setmainfont{BigShoulders.ttf}[Path=]
+\setmonofont{GeistMono.ttf}[Path=]
+\usepackage{xcolor}
+\definecolor{paper}{HTML}{F2EBD9}
+\definecolor{fathom}{HTML}{1B2A41}
+\definecolor{verm}{HTML}{C1440E}
+\definecolor{fathom40}{HTML}{8E97A8}
+\definecolor{fathom25}{HTML}{B4BAC7}
+\definecolor{fathom12}{HTML}{D8DCE2}
+
+\begin{document}
+\begin{tikzpicture}[remember picture,overlay, x=1mm, y=1mm]
+  \begin{scope}[shift={(current page.south west)}]
+    % ---- paper ground ---------------------------------------
+    \fill[paper] (0,0) rectangle (180,225);
+
+    % ============ TRIANGULATION LATTICE (upper 2/3) ===========
+    % 12 x 9 = 108 stations on ruled rows. The lattice is the
+    % claim: machine-straight, unchanged. One station moved;
+    % its neighbours drift outward — the effect is drawn, the
+    % cause never is. Sight-lines converge on the moved point.
+    \begin{scope}[shift={(14,84)}]
+      \def\W{152} \def\H{96}
+      % ruled rows (the claim's frame, sound)
+      \foreach \r in {0,...,8}{%
+        \pgfmathsetmacro{\yy}{\r*\H/8}%
+        \draw[fathom12,line width=0.4pt] (0,\yy) -- (\W,\yy);}
+      % sight-lines (surveyor's bearings), drawn beneath the dots
+      \draw[fathom12,line width=0.4pt] (0,8) -- (96.6,60);
+      \draw[fathom12,line width=0.4pt] (152,4) -- (96.6,60);
+      \draw[fathom12,line width=0.4pt] (26,96) -- (96.6,60);
+      % the measured bearing: vermilion, load-bearing
+      \draw[verm,line width=0.7pt] (0,8) -- (96.6,60);
+      % station ticks at the sight-line origins
+      \draw[fathom,line width=0.5pt] (-1.2,8) -- (1.2,8);
+      \draw[fathom,line width=0.5pt] (0,6.8) -- (0,9.2);
+      \draw[fathom,line width=0.5pt] (150.8,4) -- (153.2,4);
+      \draw[fathom,line width=0.5pt] (26,94.8) -- (26,97.2);
+      \node[anchor=north, text=fathom40, font=\ttfamily\fontsize{4.6}{5.6}\selectfont]
+        at (0,5.4) {ST-07};
+      % the lattice: 108 stations; displacement near the witness
+      \foreach \c in {0,...,11}{%
+        \foreach \r in {0,...,8}{%
+          \pgfmathsetmacro{\xx}{\c*\W/11}%
+          \pgfmathsetmacro{\yy}{\r*\H/8}%
+          \pgfmathsetmacro{\skip}{(\c==7) && (\r==5)}%
+          \ifdim\skip pt>0pt\else
+            \pgfmathsetmacro{\dx}{\xx-96.6}%
+            \pgfmathsetmacro{\dy}{\yy-60.0}%
+            \pgfmathsetmacro{\dd}{sqrt(\dx*\dx+\dy*\dy)}%
+            \pgfmathsetmacro{\mag}{max(0, 2.6*(1-\dd/18))}%
+            \ifdim\mag pt>0pt
+              \pgfmathsetmacro{\ux}{\dx/\dd}%
+              \pgfmathsetmacro{\uy}{\dy/\dd}%
+              \fill[fathom] ({\xx+\ux*\mag},{\yy+\uy*\mag}) circle (0.65);
+            \else
+              \fill[fathom] (\xx,\yy) circle (0.65);
+            \fi
+          \fi
+        }
+      }
+      % witness: the moved point
+      \fill[verm] (96.6,60) circle (1.15);
+      \draw[verm,line width=0.9pt] (96.6,56.8) -- (96.6,63.2);
+      \node[anchor=north, text=verm, font=\ttfamily\fontsize{5.2}{6}\selectfont]
+        at (96.6,55.4) {(96.6, 60.0)};
+      % archive ticks, left edge
+      \foreach \r/\t in {0/{R-00}, 4/{R-04}, 8/{R-08}}{%
+        \pgfmathsetmacro{\yy}{\r*\H/8}%
+        \draw[fathom40,line width=0.5pt] (-2.6,\yy) -- (0,\yy);
+        \node[anchor=east, text=fathom40, font=\ttfamily\fontsize{4.6}{5.6}\selectfont]
+          at (-3.6,\yy) {\t};}
+      % count annotation
+      \node[anchor=north west, text=fathom40, font=\ttfamily\fontsize{5.0}{6}\selectfont]
+        at (0,-4.6) {108 STATIONS / 1 MOVED};
+    \end{scope}
+
+    % rotated margin annotation
+    \node[anchor=south west, text=fathom25, font=\ttfamily\fontsize{5.0}{6}\selectfont,
+          rotate=90] at (6.6,164) {FIELD 04 — TRIANGULATION LATTICE, 108 STATIONS};
+
+    % ============ CALIBRATION RULER (lower third) =============
+    % the moved point's easting, read against the ruler.
+    \begin{scope}[shift={(14,44)}]
+      \draw[fathom,line width=0.8pt] (0,18) -- (152,18);
+      \foreach \g in {0,...,38}{%
+        \pgfmathsetmacro{\xx}{\g*4}%
+        \pgfmathtruncatemacro{\longtick}{mod(\g,5)}%
+        \ifnum\longtick=0
+          \draw[fathom,line width=0.5pt] (\xx,18) -- (\xx,22.2);\else
+          \draw[fathom25,line width=0.5pt] (\xx,18) -- (\xx,20.6);\fi
+      }
+      % vermilion graduation at the witness easting
+      \draw[verm,line width=0.9pt] (96.6,18) -- (96.6,23.8);
+      \node[anchor=south, text=verm, font=\ttfamily\fontsize{4.6}{5.6}\selectfont]
+        at (96.6,25.0) {(96.6)};
+      % ruler numbers
+      \foreach \g/\t in {0/{0}, 10/{40}, 20/{80}, 30/{120}}{%
+        \node[anchor=north, text=fathom40, font=\ttfamily\fontsize{4.2}{5.2}\selectfont]
+          at (\g*4,15.2) {\t};}
+    \end{scope}
+
+    % ---- title block ------------------------------------------
+    \draw[fathom,line width=1.4pt] (10,24) -- (170,24);
+    \node[anchor=north west, text=fathom, font=\fontsize{22}{24}\selectfont]
+      at (9.6,22.2) {THE MOVED POINT};
+    \node[anchor=west, text=fathom40, font=\ttfamily\fontsize{5.6}{7}\selectfont]
+      at (104,17.4) {PLATE 04 / A CLAIM, RESECTIONED};
+  \end{scope}
+\end{tikzpicture}
+\end{document}

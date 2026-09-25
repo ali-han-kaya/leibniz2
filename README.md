@@ -58,12 +58,34 @@ Yeni bir clone/worktree'de üç araç-kümesi gitignore'ludur ve tek komutla
 kurulur (her adım idempotent — kurulu araca dokunmaz):
 
 ```bash
-bash _calisma/dev_bootstrap.sh           # venv_z3 (pinned) + pptx + dashboard-next
+bash _calisma/dev_bootstrap.sh           # venv_z3 (pinned) + pptx + docx + dashboard-next
 bash _calisma/dev_bootstrap.sh --check   # fail-closed doğrulama (rc=0/1)
 ```
 
 Pinler `docs/HOOK_ENV_MATRIX.md` ile tek-kaynaklıdır; `--check` eksik araçta
 rc=1 ile düşer (fail-closed).
+
+## PDF üretimi — iki motor paralel yaşam (tectonic ↔ TeXLive)
+
+Deterministik PDF üretimi iki Makefile ile yapılır; motor geçişi
+devam ederken ikisi de yaşar (TEXLIVE_MIGRATION_PLAN.md):
+
+```bash
+# TeXLive (pdfTeX) — göç hedefi; Faz 1 kabul kanıtı: kanonik hash 544516b0…
+make -f docs/Makefile.texlive pdf       # 3-geçişli derleme + Rerun=0 denetimi
+make -f docs/Makefile.texlive check     # 2×3-geçiş determinism deneyi (fail-closed)
+make -f docs/Makefile.texlive accept    # kanonik hash'i ID_RESIDUAL_ACCEPTANCE defterinde doğrular
+make -f docs/Makefile.texlive engineinfo  # motor kilidi + sözleşme sabitleri (CI log'u için)
+
+# tectonic — paralel yaşam, geri dönüş yolu
+make -f docs/Makefile.tectonic pdf
+```
+
+Sözleşme: `SOURCE_DATE_EPOCH ?= git log -1 --format=%ct` (geçmiş commit'i
+yeniden üretme), `TEXINPUTS="$TEXDIR//:"`, `TEXMFOUTPUT`/`-output-directory`
+BUILD_DIR'a (kaynak dizinine asla yazma), `PASSES ?= 3` + son-geçiş
+`Rerun to get`=0 (fail-closed). Motor sürüm kilidi: pdfTeX
+3.141592653-2.6 (TeX Live 2026) — `engineinfo` ile kanıtlanır.
 
 ## _calisma/lean_reduct — Sınır İspatı Çekirdeği (illüstratif, Mathlib-free)
 
@@ -433,6 +455,53 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-19 | refactor | (dev) table-driven contract suite, function-level checks | [`7c589b4`](https://github.com/ali-han-kaya/leibniz2/commit/7c589b4) |
 | 2026-09-19 | fix | (ci) a11y scan bypasses nonce CSP, bootstrap test guards, dead hash | [`5c02474`](https://github.com/ali-han-kaya/leibniz2/commit/5c02474) |
 | 2026-09-20 | fix | (server) close history/sidecar write race on shutdown | [`3cabbff`](https://github.com/ali-han-kaya/leibniz2/commit/3cabbff) |
+| 2026-09-20 | feat | (texlive) 3-pass determinism + /ID acceptance report (Faz 1-3) | [`24a9b25`](https://github.com/ali-han-kaya/leibniz2/commit/24a9b25) |
+| 2026-09-20 | fix | (ci) check-unit-tests hook goes fail-closed on sync drift | [`5280500`](https://github.com/ali-han-kaya/leibniz2/commit/5280500) |
+| 2026-09-20 | fix | (docker) build-context parity, CVE pins, live smoke evidence | [`cfa33d9`](https://github.com/ali-han-kaya/leibniz2/commit/cfa33d9) |
+| 2026-09-20 | feat | (ci) docker security surface — cron smoke + patching hook | [`9c6e1b3`](https://github.com/ali-han-kaya/leibniz2/commit/9c6e1b3) |
+| 2026-09-20 | feat | (docker) pip patching layer joins the ARG mechanism | [`9b32376`](https://github.com/ali-han-kaya/leibniz2/commit/9b32376) |
+| 2026-09-20 | docs | (texlive) Faz 0-1 engine lock surface + parallel-life docs | [`173a2f4`](https://github.com/ali-han-kaya/leibniz2/commit/173a2f4) |
+| 2026-09-20 | docs | (audit) close R4 — weekly docker-security scan is live | [`b726e0c`](https://github.com/ali-han-kaya/leibniz2/commit/b726e0c) |
+| 2026-09-21 | refactor | (trend) remove stale-report 48h guard from record path | [`abd3ec5`](https://github.com/ali-han-kaya/leibniz2/commit/abd3ec5) |
+| 2026-09-21 | test | (sync) pin sync lifecycle as subprocess regression gate | [`5fdf2e4`](https://github.com/ali-han-kaya/leibniz2/commit/5fdf2e4) |
+| 2026-09-21 | feat | (dashboard) TeX engine determinism trend panel | [`49008e6`](https://github.com/ali-han-kaya/leibniz2/commit/49008e6) |
+| 2026-09-21 | docs | (report) record 3/3 CI evidence for PR-route delivery | [`5621c4e`](https://github.com/ali-han-kaya/leibniz2/commit/5621c4e) |
+| 2026-09-21 | style | (github_scripts) prettier-canonical format for comment scripts | [`9beef0a`](https://github.com/ali-han-kaya/leibniz2/commit/9beef0a) |
+| 2026-09-21 | docs | (changelog) sync README rows after style commit | [`10de328`](https://github.com/ali-han-kaya/leibniz2/commit/10de328) |
+| 2026-09-22 | fix | (a11y) CSP-compliant event delegation + keyboard nav suite | [`2fee44f`](https://github.com/ali-han-kaya/leibniz2/commit/2fee44f) |
+| 2026-09-22 | docs | (changelog) sync README row after a11y commit | [`06b25d3`](https://github.com/ali-han-kaya/leibniz2/commit/06b25d3) |
+| 2026-09-22 | test | (api) property-based method matrix for /api/* contract | [`c9d74cf`](https://github.com/ali-han-kaya/leibniz2/commit/c9d74cf) |
+| 2026-09-22 | fix | (dashboard) repair node suites for preview.js vm architecture | [`a951474`](https://github.com/ali-han-kaya/leibniz2/commit/a951474) |
+| 2026-09-22 | fix | (sync) complete mirror manifest coverage for QA findings | [`09d972c`](https://github.com/ali-han-kaya/leibniz2/commit/09d972c) |
+| 2026-09-22 | feat | (server) peer allowlist gate for /api/stop | [`39d86e4`](https://github.com/ali-han-kaya/leibniz2/commit/39d86e4) |
+| 2026-09-22 | feat | (api) OpenAPI 3.1 schema from API_CONTRACT + versioning policy | [`77a0832`](https://github.com/ali-han-kaya/leibniz2/commit/77a0832) |
+| 2026-09-22 | feat | (docker) PR-triggered Trivy scan with SARIF diff comment | [`097fffc`](https://github.com/ali-han-kaya/leibniz2/commit/097fffc) |
+| 2026-09-22 | feat | (ci) CI hygiene gate - permissions, timeout, concurrency matrix | [`69ca3e1`](https://github.com/ali-han-kaya/leibniz2/commit/69ca3e1) |
+| 2026-09-22 | feat | (server) persistent lifecycle event log for preview daemon | [`6cdf03d`](https://github.com/ali-han-kaya/leibniz2/commit/6cdf03d) |
+| 2026-09-22 | feat | (ci) gh-run RCA - red-run root-cause table generator | [`c279e57`](https://github.com/ali-han-kaya/leibniz2/commit/c279e57) |
+| 2026-09-23 | feat | (docs) deployment evidence ledger with staleness gate | [`5c4527c`](https://github.com/ali-han-kaya/leibniz2/commit/5c4527c) |
+| 2026-09-23 | fix | (ci) install pyyaml for runner unit tests | [`9272108`](https://github.com/ali-han-kaya/leibniz2/commit/9272108) |
+| 2026-09-23 | fix | (server) gate GET APIs vs DNS rebinding + run-now peer parity | [`37790f5`](https://github.com/ali-han-kaya/leibniz2/commit/37790f5) |
+| 2026-09-23 | docs | (azure) azd project, bicep infra and deployment plan (Draft) | [`8041a58`](https://github.com/ali-han-kaya/leibniz2/commit/8041a58) |
+| 2026-09-23 | docs | (eval) AI-service evaluation with measured repo baselines | [`a741b81`](https://github.com/ali-han-kaya/leibniz2/commit/a741b81) |
+| 2026-09-23 | docs | (azure) AI Search hybrid-resolution design for K6 refs | [`d9bffa6`](https://github.com/ali-han-kaya/leibniz2/commit/d9bffa6) |
+| 2026-09-23 | docs | (a11y) remaining-scope implementation plan for approved spec | [`ebd0251`](https://github.com/ali-han-kaya/leibniz2/commit/ebd0251) |
+| 2026-09-23 | docs | (a11y) detail plan to writing-plans granularity | [`faf6d75`](https://github.com/ali-han-kaya/leibniz2/commit/faf6d75) |
+| 2026-09-24 | feat | (vercel) serverless /api adapter, git-push deploy config and docs | [`38edfc1`](https://github.com/ali-han-kaya/leibniz2/commit/38edfc1) |
+| 2026-09-24 | feat | (canvas) determinism CI job, header banner and test registrations | [`8d860cc`](https://github.com/ali-han-kaya/leibniz2/commit/8d860cc) |
+| 2026-09-24 | fix | (dashboard) mirror preview.js/sw.js freshness, rAF stream batching | [`e7401b9`](https://github.com/ali-han-kaya/leibniz2/commit/e7401b9) |
+| 2026-09-24 | docs | (tutorial) clone → first verify → first dashboard | [`9ac700a`](https://github.com/ali-han-kaya/leibniz2/commit/9ac700a) |
+| 2026-09-24 | docs | (reference) preview_server /api contract reference | [`2295ed1`](https://github.com/ali-han-kaya/leibniz2/commit/2295ed1) |
+| 2026-09-24 | docs | (explanation) why SDE and the /ID residual work this way | [`193d85a`](https://github.com/ali-han-kaya/leibniz2/commit/193d85a) |
+| 2026-09-24 | docs | (process) fresh-session reader-test protocol | [`f79307d`](https://github.com/ali-han-kaya/leibniz2/commit/f79307d) |
+| 2026-09-24 | feat | (canvas) plates 02-05 and the seven-leaf plate book | [`bae1519`](https://github.com/ali-han-kaya/leibniz2/commit/bae1519) |
+| 2026-09-24 | fix | (a11y) same-origin axe bundle and focusable stdout pane | [`c77ccc9`](https://github.com/ali-han-kaya/leibniz2/commit/c77ccc9) |
+| 2026-09-24 | chore | record weekly determinism trend measurement | [`6da1bda`](https://github.com/ali-han-kaya/leibniz2/commit/6da1bda) |
+| 2026-09-24 | feat | (ci) docx export job with LibreOffice artifact check | [`43e4824`](https://github.com/ali-han-kaya/leibniz2/commit/43e4824) |
+| 2026-09-24 | feat | (docx) merge RC report and full scope audit into one docx | [`f3c9fdc`](https://github.com/ali-han-kaya/leibniz2/commit/f3c9fdc) |
+| 2026-09-24 | feat | (a11y) report verdict field + job summary surface | [`08deae8`](https://github.com/ali-han-kaya/leibniz2/commit/08deae8) |
+| 2026-09-21 | chore | record weekly determinism trend measurement | [`80ba037`](https://github.com/ali-han-kaya/leibniz2/commit/80ba037) |
+| 2026-09-20 | chore | record weekly determinism trend measurement | [`2ebc5a0`](https://github.com/ali-han-kaya/leibniz2/commit/2ebc5a0) |
 
 ### Regresyon notları
 

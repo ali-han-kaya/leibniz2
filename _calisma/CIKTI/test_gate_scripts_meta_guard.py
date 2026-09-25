@@ -57,6 +57,7 @@ GATE_SCRIPTS = {
     "label_gate.js",        # precommit-p0 etiketi → setFailed
     "label_gate_p1.js",     # precommit-p1 etiketi → setFailed
     "validate_labels.js",   # label tanım doğrulama → setFailed
+    "trivy_sarif_pr_comment.js",  # CRITICAL/HIGH bulgu + bozuk SARIF → setFailed
 }
 ADVISORY_SCRIPTS = {
     # yorum yazıcılar / yardımcılar (merge bloke etmez)
@@ -297,10 +298,15 @@ class TestGateContracts(unittest.TestCase):
                 report.append(f"{name}: {v}")
         self.assertEqual(report, [], "fail-open kapı taraması ihlalleri:\n" + "\n".join(report))
 
-    def test_gate_scripts_are_wired_in_verify_yml(self):
-        wf = WORKFLOW.read_text(encoding="utf-8")
-        missing = sorted(n for n in GATE_SCRIPTS if f"github_scripts/{n}" not in wf)
-        self.assertFalse(missing, f"verify.yml'de tüketilmeyen gate script'ler: {missing}")
+    def test_gate_scripts_are_wired_in_some_workflow(self):
+        # Kapı-script'i herhangi bir CI workflow'unda tüketilmeli (verify.yml
+        # veya komşu job-workflow'lar); yetimsiğe düşen gate ölü kapıdır.
+        workflows_dir = WORKFLOW.parent
+        wf_all = "\n".join(
+            p.read_text(encoding="utf-8") for p in sorted(workflows_dir.glob("*.yml"))
+        )
+        missing = sorted(n for n in GATE_SCRIPTS if f"github_scripts/{n}" not in wf_all)
+        self.assertFalse(missing, f"hiçbir workflow'da tüketilmeyen gate script'ler: {missing}")
 
     def test_workflow_only_runs_classified_scripts(self):
         wf = WORKFLOW.read_text(encoding="utf-8")

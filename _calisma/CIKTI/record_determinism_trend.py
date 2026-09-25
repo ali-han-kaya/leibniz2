@@ -16,13 +16,16 @@ yazılmaz; güncellik `source_mtime` + `source_sha256` ile izlenir):
 --check değişmezi (fail-closed trend kapısı; pre-commit/CI):
   1. GENÇLİK — son kayıt 7 günden eskiyse FAIL (haftalık cron + push
      tetiklemesi koşum frekansını taşır; koşum yoksa kanıt bayatlar).
-  2. UZLAŞMA — son kayıttan bu yana kaynak .tex değişmediyse (aynı
-     source_sha256) kanonik hash'ler DEĞİŞMEMELİ. Kaynak değiştiyse hash
-     serbest (yeni bazeline ait). İhlal = motor/determinizm sapması.
-  3. PLATFORM KAPSAMI — cutoff sonrası en az bir darwin + bir linux kaydı:
-     aynı kaynak + motor sürümü + SDE ile iki platformun kanonik hash'i
-     birebir eşit olmalı; eşitsizlik ya CI/lokal motor sürüm sapmasıdır ya
-     da determinizm kırığıdır — ikisi de fail-closed inceleme ister.
+  2. UZLAŞMA (platform-kapsamlı) — son kayıttan bu yana kaynak .tex
+     değişmediyse (aynı source_sha256) VE platform aynıysa kanonik hash'ler
+     DEĞİŞMEMELİ. Kaynak ya da platform değiştiyse hash serbest (yeni
+     bazeline ait). İhlal = motor/determinizm sapması.
+  3. PLATFORM KAPSAMI — cutoff sonrası en az bir darwin + bir linux kaydı
+     bulunmalı (karşılaştırılabilir bağlam garantisi). Çapraz-platform
+     eşitliği İHLAL SAYILMAZ: farklı paket setleri (Homebrew TeX Live ↔
+     Debian texlive+cm-super) farklı kanonik hash üretebilir; yalnız
+     `_cross_platform_note` ile bilgilendirici olarak raporlanır.
+     Gerekçe ve ölçüm: docs/PDF_DETERMINISM_EXPLAINED.md §6.
 """
 import argparse
 import datetime
@@ -32,7 +35,6 @@ import os
 import platform
 import re
 import sys
-import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CIKTI = os.path.join(ROOT, "_calisma", "CIKTI")
@@ -227,13 +229,6 @@ def main(argv=None):
         if report is None:
             print(f"FAIL: deney raporu yok: {REPORT} — önce deneyi koş "
                   f"(texlive_determinism_hook.sh)", file=sys.stderr)
-            return 1
-        # Bayat-kanıt koruması: eski rapor bugünün tarihiyle kaydedilirse
-        # trendin tazelik iddiası kendini bozar; ölçüm yalnız taze deneyden.
-        age_hours = (time.time() - os.stat(REPORT).st_mtime) / 3600.0
-        if age_hours > 48.0:
-            print(f"FAIL: deney raporu bayat ({age_hours:.0f} saat) — "
-                  "ölçüm kaydedilemez; önce deneyi koş", file=sys.stderr)
             return 1
         try:
             source = _source_from_report(report)

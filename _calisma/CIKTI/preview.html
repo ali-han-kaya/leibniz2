@@ -31,6 +31,15 @@
   header { padding:18px 28px; border-bottom:1px solid var(--border);
            background:linear-gradient(180deg,var(--header-start),var(--header-end));
            display:flex; align-items:center; gap:18px; flex-wrap:wrap; }
+  /* Incidental Proof arşiv-katmanı: dekoratif doku (aria-hidden eşdeğeri —
+     CSS arka-planı AT'ye görünmez), kağıt-üstü vermilion bükülme sağda. */
+  header::after { content:""; position:absolute; inset:0; pointer-events:none;
+           background-image:url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNDQwIDE2MCIgcHJlc2VydmVBc3BlY3RSYXRpbz0ieE1pZFlNaWQgc2xpY2UiPgo8ZyBmaWxsPSJub25lIiBzdHJva2UtbGluZWNhcD0icm91bmQiPgo8cmVjdCB3aWR0aD0iMTQ0MCIgaGVpZ2h0PSIxNjAiIGZpbGw9IiNGMkVCRDkiIG9wYWNpdHk9IjAuMDUiLz4KPHBhdGggZD0iTTAsMTAuMCBDMTIwLDkuNyAyNDAsOS40IDM2MCw5LjUgQzQ4MCw5LjcgNTYwLDkuOSA2NDAsMTAuMyBDNzYwLDEwLjggODQwLDExLjEgOTQwLDExLjMgQzk2MCwxMS4xIDk3MiwxMC41IDk4MCwxMC4wIEM5ODgsMTAuNSAxMDAwLDExLjEgMTAyMCwxMS4zIEMxMTIwLDExLjEgMTMwMCwxMC40IDE0NDAsMTAuMiIgc3Ryb2tlPSIjOEU5N0E4IiBzdHJva2Utd2lkdGg9IjAuNiIgb3BhY2l0eT0iMC4zMCIvPgo8cGF0aCBkPSJNMCwyMi4wIEMxMjAsMjEuNSAyNDAsMjEuMCAzNjAsMjEuMiBDNDgwLDIxLjUgNTYwLDIxLjggNjQwLDIyLjUgQzc2MCwyMy4zIDg0MCwyMy44IDk0MCwyNC4xIEM5NjAsMjMuOCA5NzIsMjIuOCA5ODAsMjIuMCBDOTg4LDIyLjggMTAwMCwyMy44IDEwMjAsMjQuMSBDMTEyMCwyMy44IDEzMDAsMjIuNiAxNDQwLDIyLjMiIHN0cm9rZT0iI0I0QkFDNyIgc3Ryb2tlLXdpZHRoPSIwLjYiIG9wYWNpdHk9IjAuMzAiLz4KPHBhdGggZD0iTTAsMzQuMCBDMTIwLDMzLjMgMjQwLDMyLjcgMzYwLDMyLjkgQzQ4MCwzMy4zIDU2MCwzMy44IDY0MCwzNC43IEM3NjAsMzUuOCA4NDAsMzYuNSA5NDAsMzYuOSBDOTYwLDM2LjUgOTcyLDM1LjEgOTgwLDM0LjAgQzk4OCwzNS4xIDEwMDAsMzYuNSAxMDIwLDM2LjkgQzExMjAsMzYuNSAxMzAwLDM0LjkgMTQ0MCwzNC40IiBzdHJva2U9IiNCNEJBQzciIHN0cm9rZS13aWR0aD0iMC42IiBvcGFjaXR5PSIwLjMwIi8+CjxwYXRoIGQ9Ik0wLDQ2LjAgQzEyMCw0NS4xIDI0MCw0NC4zIDM2MCw0NC42IEM0ODAsNDUuMSA1NjAsNDUuNyA2NDAsNDYuOSBDNzYwLDQ4LjMgODQwLDQ5LjEgOTQwLDQ5LjcgQzk2MCw0OS4xIDk3Miw0Ny40IDk4MCw0Ni4wIEM5ODgsNDcuNCAxMDAwLDQ5LjEgMTAyMCw0OS43IEMxMTIwLDQ5LjEgMTMwMCw0Ny4xIDE0NDAsNDYuNiIgc3Ryb2tlPSIjOEU5N0E4IiBzdHJva2Utd2lkdGg9IjAuNiIgb3BhY2l0eT0iMC4zMCIvPgo8cGF0aCBkPSJNMCw1OC4wIEMxMjAsNTcuMCAyNDAsNTUuOSAzNjAsNTYuMyBDNDgwLDU3LjAgNTYwLDU3LjcgNjQwLDU5LjAgQzc2MCw2MC44IDg0MCw2MS44IDk0MCw2Mi41IEM5NjAsNjEuOCA5NzIsNTkuNyA5ODAsNTguMCBDOTg4LDU5LjcgMTAwMCw2MS44IDEwMjAsNjIuNSBDMTEyMCw2MS44IDEzMDAsNTkuNCAxNDQwLDU4LjciIHN0cm9rZT0iI0I0QkFDNyIgc3Ryb2tlLXdpZHRoPSIwLjYiIG9wYWNpdHk9IjAuMzAiLz4KPHBhdGggZD0iTTAsNzAuMCBDMTIwLDY4LjggMjQwLDY3LjUgMzYwLDY4LjAgQzQ4MCw2OC44IDU2MCw2OS42IDY0MCw3MS4yIEM3NjAsNzMuMyA4NDAsNzQuNSA5NDAsNzUuMyBDOTYwLDc0LjUgOTcyLDcyLjAgOTgwLDcwLjAgQzk4OCw3Mi4wIDEwMDAsNzQuNSAxMDIwLDc1LjMgQzExMjAsNzQuNSAxMzAwLDcxLjYgMTQ0MCw3MC44IiBzdHJva2U9IiNCNEJBQzciIHN0cm9rZS13aWR0aD0iMC42IiBvcGFjaXR5PSIwLjMwIi8+CjxwYXRoIGQ9Ik0wLDgyLjAgQzEyMCw4MC42IDI0MCw3OS4yIDM2MCw3OS42IEM0ODAsODAuNiA1NjAsODEuNSA2NDAsODMuNCBDNzYwLDg1LjggODQwLDg3LjIgOTQwLDg4LjEgQzk2MCw4Ny4yIDk3Miw4NC40IDk4MCw4Mi4wIEM5ODgsODQuNCAxMDAwLDg3LjIgMTAyMCw4OC4xIEMxMTIwLDg3LjIgMTMwMCw4My45IDE0NDAsODIuOSIgc3Ryb2tlPSIjOEU5N0E4IiBzdHJva2Utd2lkdGg9IjAuNiIgb3BhY2l0eT0iMC4zMCIvPgo8cGF0aCBkPSJNMCw5NC4wIEMxMjAsOTIuNCAyNDAsOTAuOCAzNjAsOTEuMyBDNDgwLDkyLjQgNTYwLDkzLjUgNjQwLDk1LjYgQzc2MCw5OC4zIDg0MCw5OS45IDk0MCwxMDAuOSBDOTYwLDk5LjkgOTcyLDk2LjcgOTgwLDk0LjAgQzk4OCw5Ni43IDEwMDAsOTkuOSAxMDIwLDEwMC45IEMxMTIwLDk5LjkgMTMwMCw5Ni4xIDE0NDAsOTUuMSIgc3Ryb2tlPSIjQzE0NDBFIiBzdHJva2Utd2lkdGg9IjEuMiIgb3BhY2l0eT0iMC45Ii8+CjxwYXRoIGQ9Ik0wLDEwNi4wIEMxMjAsMTA0LjIgMjQwLDEwMi40IDM2MCwxMDMuMCBDNDgwLDEwNC4yIDU2MCwxMDUuNCA2NDAsMTA3LjggQzc2MCwxMTAuOCA4NDAsMTEyLjYgOTQwLDExMy43IEM5NjAsMTEyLjYgOTcyLDEwOS4wIDk4MCwxMDYuMCBDOTg4LDEwOS4wIDEwMDAsMTEyLjYgMTAyMCwxMTMuNyBDMTEyMCwxMTIuNiAxMzAwLDEwOC40IDE0NDAsMTA3LjIiIHN0cm9rZT0iI0I0QkFDNyIgc3Ryb2tlLXdpZHRoPSIwLjYiIG9wYWNpdHk9IjAuMzAiLz4KPHBhdGggZD0iTTAsMTE4LjAgQzEyMCwxMTYuMCAyNDAsMTE0LjEgMzYwLDExNC43IEM0ODAsMTE2LjAgNTYwLDExNy4zIDY0MCwxMjAuMCBDNzYwLDEyMy4zIDg0MCwxMjUuMiA5NDAsMTI2LjYgQzk2MCwxMjUuMiA5NzIsMTIxLjMgOTgwLDExOC4wIEM5ODgsMTIxLjMgMTAwMCwxMjUuMiAxMDIwLDEyNi42IEMxMTIwLDEyNS4yIDEzMDAsMTIwLjYgMTQ0MCwxMTkuMyIgc3Ryb2tlPSIjOEU5N0E4IiBzdHJva2Utd2lkdGg9IjAuNiIgb3BhY2l0eT0iMC4zMCIvPgo8cGF0aCBkPSJNMCwxMzAuMCBDMTIwLDEyNy44IDI0MCwxMjUuNyAzNjAsMTI2LjQgQzQ4MCwxMjcuOCA1NjAsMTI5LjMgNjQwLDEzMi4yIEM3NjAsMTM1LjggODQwLDEzNy45IDk0MCwxMzkuNCBDOTYwLDEzNy45IDk3MiwxMzMuNiA5ODAsMTMwLjAgQzk4OCwxMzMuNiAxMDAwLDEzNy45IDEwMjAsMTM5LjQgQzExMjAsMTM3LjkgMTMwMCwxMzIuOSAxNDQwLDEzMS40IiBzdHJva2U9IiNCNEJBQzciIHN0cm9rZS13aWR0aD0iMC42IiBvcGFjaXR5PSIwLjMwIi8+CjxwYXRoIGQ9Ik0wLDE0Mi4wIEMxMjAsMTM5LjcgMjQwLDEzNy4zIDM2MCwxMzguMSBDNDgwLDEzOS43IDU2MCwxNDEuMiA2NDAsMTQ0LjMgQzc2MCwxNDguMyA4NDAsMTUwLjYgOTQwLDE1Mi4yIEM5NjAsMTUwLjYgOTcyLDE0NS45IDk4MCwxNDIuMCBDOTg4LDE0NS45IDEwMDAsMTUwLjYgMTAyMCwxNTIuMiBDMTEyMCwxNTAuNiAxMzAwLDE0NS4xIDE0NDAsMTQzLjYiIHN0cm9rZT0iI0I0QkFDNyIgc3Ryb2tlLXdpZHRoPSIwLjYiIG9wYWNpdHk9IjAuMzAiLz4KPHBhdGggZD0iTTk4MCw5MC44IEw5ODAsOTcuMiIgc3Ryb2tlPSIjQzE0NDBFIiBzdHJva2Utd2lkdGg9IjEuNCIvPgo8Y2lyY2xlIGN4PSI5ODAiIGN5PSI5NC4wIiByPSIxLjUiIGZpbGw9IiNDMTQ0MEUiLz4KPHBhdGggZD0iTTAsMTAuMCBMNiwxMC4wIiBzdHJva2U9IiM4RTk3QTgiIHN0cm9rZS13aWR0aD0iMC43IiBvcGFjaXR5PSIwLjU1Ii8+CjxwYXRoIGQ9Ik0wLDgyLjAgTDYsODIuMCIgc3Ryb2tlPSIjOEU5N0E4IiBzdHJva2Utd2lkdGg9IjAuNyIgb3BhY2l0eT0iMC41NSIvPgo8cGF0aCBkPSJNMCwxNDIuMCBMNiwxNDIuMCIgc3Ryb2tlPSIjOEU5N0E4IiBzdHJva2Utd2lkdGg9IjAuNyIgb3BhY2l0eT0iMC41NSIvPgo8L2c+PC9zdmc+");
+           background-size:cover; background-position:center right;
+           opacity:.14; mix-blend-mode:luminosity; }
+  :root[data-theme="light"] header::after { opacity:.22; mix-blend-mode:multiply; }
+  header { position:relative; }
+  header > * { position:relative; z-index:1; }
   h1 { margin:0; font-size:20px; flex:1; font-family:var(--font-verdict);
     font-weight:600; letter-spacing:.01em; }
   .live-dot { width:10px; height:10px; border-radius:50%; background:var(--err);
@@ -324,12 +333,23 @@
   </section>
 
   <section>
+    <h2>TeX motor determinizm trend <span class="ts" id="det-trend-ts"></span></h2>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap">
+      <span class="badge unknown" id="det-trend-badge">determinizm: veri yok</span>
+      <span class="muted" id="det-trend-legend" style="font-size:11px">nokta = ölçüm (yeşil PASS, amber gate-sorun) · çizgi = aynı-hash zinciri</span>
+    </div>
+    <div class="card" style="padding:8px">
+      <svg id="det-trend" viewBox="0 0 1160 90" width="100%" height="90" role="img"
+           aria-label="TeX motor determinizm trend grafiği"></svg>
+    </div>
+  </section>
+
+  <section>
     <h2>P0 / P1 trend — son 100 run <span class="ts" id="trend-count"></span></h2>
     <div id="budget-over-banner" class="err" role="alert"
          style="display:none;margin:6px 0 2px;padding:6px 10px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">
       <span id="budget-over-toggle" role="button" tabindex="0" aria-expanded="false"
-            onclick="toggleBudgetOverDetail()"
-            onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleBudgetOverDetail()}"
+            data-act="budget-toggle"
             title="Aşım yapan run'ları göster/gizle">
       <span id="budget-over-summary"></span><span class="ts" id="budget-over-caret" style="margin-left:6px">▸</span>
       </span>
@@ -372,10 +392,10 @@
   <section>
     <h2>Run history <span class="ts" id="run-history-count"></span></h2>
     <div class="rh-filter">
-      <button data-f="all" onclick="setRhFilter('all')">all</button>
-      <button data-f="PASS" onclick="setRhFilter('PASS')">PASS</button>
-      <button data-f="FAIL" onclick="setRhFilter('FAIL')">FAIL</button>
-      <button data-f="P0" onclick="setRhFilter('P0')">P0</button>
+      <button data-f="all" data-act="rh-filter">all</button>
+      <button data-f="PASS" data-act="rh-filter">PASS</button>
+      <button data-f="FAIL" data-act="rh-filter">FAIL</button>
+      <button data-f="P0" data-act="rh-filter">P0</button>
     </div>
     <div id="run-history" style="max-height:240px;overflow-y:auto;font-size:12px;line-height:1.6"></div>
   </section>
@@ -389,7 +409,10 @@
       <span style="color:var(--warn)">■ sarı = P1/CLI override</span> ·
       <span style="color:var(--muted)">■ gri = ayraç/K katmanı</span>
     </div>
-    <pre id="stdout">Waiting for first run…</pre>
+    <!-- a11y: CSS ile overflow-auto olan pre, odaklanabilir-değilken axe
+         scrollable-region-focusable (serious) verir; tabindex=0 ile klavye-
+         erişilebilir kaydırma (a11y-gate blocking-eşiği). -->
+    <pre id="stdout" tabindex="0">Waiting for first run…</pre>
   </section>
 
   <section>

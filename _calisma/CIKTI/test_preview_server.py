@@ -662,9 +662,11 @@ class HookEnvTrendPlumbingTests(unittest.TestCase):
         self.assertIn("renderHookEnvTrend(rows)", self.html)
 
     def test_hover_hit_area_wired(self):
-        # Hover tooltip'i bant vuruş alanlarına bağlı olmalı.
-        self.assertIn("onmousemove=\"showHookEnvTrendTip(", self.html)
-        self.assertIn("onmouseleave=\"hideTrendTip()", self.html)
+        # Hover tooltip'i bant vuruş alanlarına bağlı olmalı — CSP-uyumlu
+        # delegation: rect data-tip+data-i taşır, SVG-düzeyi dinleyici
+        # showHookEnvTrendTip'e delege eder.
+        self.assertIn('data-tip="hookenv"', self.html)
+        self.assertIn('"he-trend": "showHookEnvTrendTip"', self.html)
 
 
 class BudgetLimitPlumbingTests(unittest.TestCase):
@@ -1413,6 +1415,7 @@ class TestRouteQueryParams(unittest.TestCase):
         self.assertEqual(ps._route("/"), "preview")
         # Candidate 3: dashboard JS dış dosyada — kendi rotasını kullanır.
         self.assertEqual(ps._route("/preview.js"), "preview_js")
+        self.assertEqual(ps._route("/vendor/axe.min.js"), "vendor_axe")
         self.assertEqual(ps._route("/preview.js?v=123"), "preview_js")
 
     def test_unknown_paths_are_none(self):
@@ -1437,6 +1440,7 @@ class TestRouteQueryParams(unittest.TestCase):
             handler = object.__new__(ps.Handler)
             sent = []
             handler.path = "/api/run-now"
+            handler.client_address = ("127.0.0.1", 55555)
             handler.headers = {"Authorization": "Bearer secret-token", "Host": "evil.example"}
             handler._send = lambda status, body, content_type="", extra_headers=None: sent.append((status, body, extra_headers))
             handler.trigger_run_now()
@@ -1458,6 +1462,7 @@ class TestRouteQueryParams(unittest.TestCase):
             handler = object.__new__(ps.Handler)
             sent = []
             handler.path = "/api/run-now"
+            handler.client_address = ("127.0.0.1", 55555)
             handler.headers = {"Host": "127.0.0.1:8000"}
             handler._send = lambda status, body, content_type="", extra_headers=None: sent.append((status, body, extra_headers))
             handler.trigger_run_now()
@@ -1473,6 +1478,7 @@ class TestRouteQueryParams(unittest.TestCase):
             handler = object.__new__(ps.Handler)
             sent = []
             handler.path = "/api/run-now"
+            handler.client_address = ("127.0.0.1", 55555)
             handler.headers = {"Authorization": "Bearer secret-token", "Host": "127.0.0.1:8000", "Origin": "https://evil.example"}
             handler._send = lambda status, body, content_type="", extra_headers=None: sent.append((status, body, extra_headers))
             handler.trigger_run_now()
@@ -1493,6 +1499,7 @@ class TestRouteQueryParams(unittest.TestCase):
             handler = object.__new__(ps.Handler)
             sent = []
             handler.path = "/api/run-now"
+            handler.client_address = ("127.0.0.1", 55555)
             handler._send = lambda status, body, content_type="", extra_headers=None: sent.append((status, body, extra_headers))
             handler.headers = {"Host": "127.0.0.1:8000"}
             handler.trigger_run_now()
@@ -1516,6 +1523,7 @@ class TestRouteQueryParams(unittest.TestCase):
             handler = object.__new__(ps.Handler)
             sent = []
             handler.path = "/api/run-now"
+            handler.client_address = ("127.0.0.1", 55555)
             handler._send = lambda status, body, content_type="", extra_headers=None: sent.append((status, body, extra_headers))
             handler.headers = {"Host": "127.0.0.1:8000", "Authorization": "Bearer secret-token"}
             original = ps.run_verify
@@ -1794,7 +1802,7 @@ class ExternalScriptContractTests(unittest.TestCase):
         js = _preview_js()
         self.assertIn("function colorizeLine(line)", js)
         self.assertIn("function renderHookEnvTrend(rows)", js)
-        self.assertIn("navigator.serviceWorker.register('/sw.js'", js)
+        self.assertRegex(js, r"navigator\.serviceWorker\s*\.register\(\"/sw\.js\"")
 
     def _patch_preview_dir(self, value):
         """PREVIEW_DIR yalnızca main()'de tanımlanır; test için module'a bağla."""

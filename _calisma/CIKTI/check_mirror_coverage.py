@@ -18,16 +18,40 @@ RUNTIME_REQUIRED = (
     "run_summary_k12.py", "run_summary_k13.py", "run_summary_klayers.py",
     "run_summary_lineage.py", "run_summary_precommit.py", "run_summary_refs_trend.py",
     "consolidate_summary.py",
+    # Determinism-trend paneli (dashboard): endpoint importu + üretici +
+    # versiyonlu veri — mirror-disi kalınca /api/determinism-trend 404
+    # (QA bulgusu F1, 2026-09-21).
+    "determinism_trend_badge.py", "record_determinism_trend.py",
+    # K6-DETERM skill-reuse + K21 SDE frozen kayıt zinciri — mirror-disi
+    # kalınca canlı dashboard'da P1 (QA bulgusu F2, 2026-09-21).
+    "check_reproducible_pdf_skill.py", "reproducible_pdf_skill.py",
+    "test_reproducible_pdf_skill.py",
+)
+# SDE deney kaynağı + donmuş kayıt — _sde_experiment_paths mirror-layout'ta
+# MIRROR_DIR/../sde_experiment çözer; sync SDE_FILES bloğu oraya kopyalar.
+SDE_RUNTIME = (
+    "_calisma/sde_experiment/sde_determinism_experiment.py",
+    "_calisma/sde_experiment/sde_determinism_output.txt",
 )
 PREVIEW_RUNTIME = ("preview_server.py", "_daemonize.py", "preview_prestart.py", "sw.js")
 GUIDE_REL = "docs/branch-protection-guide/guide.html"
 DOC_REL = "docs/HOOK_ENV_MATRIX.md"
+# Determinism-trend versiyonlu verisi (dashboard endpoint'inin okuduğu dosya;
+# mirror'da determinism_trend.jsonl olarak düz adla yaşar).
+DETERMINISM_TREND_REL = "docs/determinism_trend/determinism_trend.jsonl"
 # design-system token sheet — preview.html /design-system/tokens.css import
 # eder; sync_verify_mirror.sh GUIDE_FILES bloğu bunu PREVIEW_DIR'e
 # design-system-tokens.css olarak mirror'lar. Tek kaynak:
 # <repo>/design-system/tokens.css — kapsam tanımı bunu beklemeli (yoksa
 # fail-closed coverage CI'da "BEKLENMEYEN: design-system/tokens.css" ile kırılır).
 DESIGN_TOKENS_REL = "design-system/tokens.css"
+# a11y-gate same-origin axe bundle'ı: preview_server /vendor/axe.min.js rotası
+# bunu PREVIEW_DIR/vendor/ altından servis eder; sync_verify_mirror.sh
+# PREVIEW_FILES bloğu mirror'a taşır (a11y düzeltmesi, 2026-09-24). Kapsam
+# tanımı bunu beklemeli — yoksa fail-closed coverage "BEKLENMEYEN:
+# _calisma/CIKTI/vendor/axe.min.js" ile kırılır (design-system/tokens.css
+# ile aynı desen).
+VENDOR_AXE_REL = "_calisma/CIKTI/vendor/axe.min.js"
 
 
 def run_list(script):
@@ -96,7 +120,10 @@ def expected_repo_files(root, cikti, lean_src):
     expected.update("_calisma/CIKTI/" + n for n in PREVIEW_RUNTIME)
     expected.add(GUIDE_REL)
     expected.add(DOC_REL)
+    expected.add(DETERMINISM_TREND_REL)
     expected.add(DESIGN_TOKENS_REL)
+    expected.add(VENDOR_AXE_REL)
+    expected.update(SDE_RUNTIME)
     if os.path.isdir(lean_src):
         for directory, dirs, files in os.walk(lean_src):
             dirs[:] = [d for d in dirs if d != ".lake"]

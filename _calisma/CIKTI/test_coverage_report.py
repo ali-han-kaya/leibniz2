@@ -74,6 +74,7 @@ HOOK_COVERAGE = {
     "check-reproducible-pdf-skill": ["test_reproducible_pdf_skill.py"],
     "check-changelog-sync":    ["test_update_changelog_hook.py", "test_gen_changelog.py"],
     "check-unit-tests": [
+        "test_server_events.py",
         "test_workflow_install_hardening.py",
         "test_verify_refs.py",
         "test_verify_checks.py",
@@ -230,7 +231,23 @@ HOOK_COVERAGE = {
         "test_check_precommit_orphans.py",
         "test_dev_bootstrap.py",
         "test_id_residual_acceptance_doc.py",
-        "test_makefile_texlive.py",],
+        "test_makefile_texlive.py",
+        "test_gated_schedules.py",
+        "test_sync_lifecycle.py",
+        "test_determinism_trend_badge.py",
+        "test_dashboard_keyboard_nav.py",
+        "test_api_method_matrix.py",
+        "test_stop_peer_allowlist.py",
+        "test_openapi_schema.py",
+        "test_ci_hygiene_gate.py",
+        "test_gh_run_rca.py",
+        "test_deploy_evidence.py",
+        "test_local_security_surface.py",
+        "test_vercel_adapter.py",
+        "test_canvas_determinism.py",
+        "test_determinism_trend_canvas.py",
+        "test_incidental_banner.py",
+    ],
 }
 
 # verify.yml CI job'ları → kapsadığı test dosyaları

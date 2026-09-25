@@ -49,10 +49,14 @@ Two independent sources of byte drift were found in the field:
 
 ### 1. Compiler-level (tectonic 0.17.0)
 
-`tectonic` is NOT byte-deterministic: consecutive builds of the same `.tex`
-produce different byte streams (observed: 33-page manuscript, stable page
-count, unstable bytes). This is a known property of the engine's internal
-ordering; it does NOT affect content correctness.
+`tectonic` built **without** `SOURCE_DATE_EPOCH` is not byte-deterministic:
+consecutive builds of the same `.tex` produce different byte streams (observed:
+33-page manuscript, stable page count, unstable bytes; across sessions
+`4ad65b9b…` → `6cfc6c0a…`). Later measurement refined this: with an explicit
+`SOURCE_DATE_EPOCH` the same source built byte-stable across two platforms
+(`ad8fca69…` on darwin and linux). Determinism is a property of the
+(engine, source, SDE, platform) tuple — see leibniz2
+`docs/PDF_DETERMINISM_EXPLAINED.md` §2-3.
 
 ### 2. Post-processing (qpdf --remove-metadata)
 
@@ -172,10 +176,15 @@ pdflatex -interaction=nonstopmode manuscript.tex       # (run twice for refs)
 Notes from the field:
 
 - `SOURCE_DATE_EPOCH` makes TeXLive emit stable `/CreationDate` and
-  `/ID` — removing the need for qpdf stripping in the common case.
-- `tectonic` does not honor `SOURCE_DATE_EPOCH` the same way; the migration
-  path is TeXLive + `SOURCE_DATE_EPOCH`, and the strict-determinism gate
-  should stay OFF until that migration lands.
+  `/ModDate`. It does **not** stabilize pdfTeX's trailer `/ID`, which stays
+  random per run (measured: two runs at `SDE=0` differ in exactly the 64-byte
+  `/ID` line) — so a canonical `/ID`-neutral comparison is still required.
+  See leibniz2 `docs/PDF_DETERMINISM_EXPLAINED.md` §3-4.
+- `tectonic` **does** honor `SOURCE_DATE_EPOCH` (with it, output was
+  byte-stable across darwin+linux for one source). Engine choice is therefore
+  a *contract* question, not a determinism question: `fontspec` sources are
+  XeTeX-family and the pdfTeX chain cannot compile them (leibniz2 "engine
+  stratification").
 - Even after migration, keep the sidecar + reuse rule: it is the layer that
   makes repacks byte-identical regardless of engine behavior.
 

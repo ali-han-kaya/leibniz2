@@ -1,7 +1,8 @@
 #!/bin/bash
 # dev_bootstrap.sh — fresh-checkout'u yeşil-bataryaya taşıyan tek komut.
 # Kapsam: UNITS'teki araç-kümeleri — venv_z3 (pinned) + _calisma/pptx +
-# apps/dashboard-next node_modules. Idempotent: kurulu araca dokunmaz.
+# _calisma/docx + apps/dashboard-next node_modules. Idempotent: kurulu araca
+# dokunmaz.
 # Kullanım: dev_bootstrap.sh [--check|--help]
 set -eu
 
@@ -9,6 +10,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 VENV="$ROOT/_calisma/.venv_z3"
 VENV_PY="$VENV/bin/python"
 PPTX="$ROOT/_calisma/pptx"
+DOCX="$ROOT/_calisma/docx"
 DASH="$ROOT/apps/dashboard-next"
 PINS=(z3-solver==5.1.0.0 PyYAML==6.0.3 pre_commit==4.3.0)
 
@@ -46,6 +48,15 @@ provision_pptx() {
   say "_calisma/pptx: npm ci"
   npm ci --prefix "$PPTX" || die "_calisma/pptx npm ci"
 }
+# docx jeneratoru (markdown → .docx): CI'da LibreOffice ile acilabilirlik
+# kontrolu yapilir; yerelde de ayni jenerator kosabilsin diye burada kurulur.
+check_docx() {
+  (cd "$DOCX" && node -e "require.resolve('docx')" >/dev/null 2>&1)
+}
+provision_docx() {
+  say "_calisma/docx: npm ci"
+  npm ci --prefix "$DOCX" || die "_calisma/docx npm ci"
+}
 check_dashboard_next() {
   [ -x "$DASH/node_modules/.bin/tsc" ] \
     && [ -x "$DASH/node_modules/.bin/next" ]
@@ -54,7 +65,7 @@ provision_dashboard_next() {
   say "apps/dashboard-next: npm ci"
   npm ci --prefix "$DASH" || die "apps/dashboard-next npm ci"
 }
-UNITS=(venv_z3 pptx dashboard_next)
+UNITS=(venv_z3 pptx docx dashboard_next)
 
 case "${1:-}" in
   --help)

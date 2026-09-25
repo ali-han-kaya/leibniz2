@@ -371,5 +371,79 @@ class GateContractTests(unittest.TestCase):
         self.assertIn("ALLOWLISTED", out)  # borç raporda görünür
 
 
+class TestReportVerdictField(unittest.TestCase):
+    """a11y_report.json makine-okunur verdict taşimali (spec §Summary).
+
+    Fail-closed sözlesme: alan her zaman mevcut; default "FAIL", yalniz
+    basarili-scan sonunda hesaplanan degerle ezilir. Hata-yollari (config,
+    checksum, tarama) raporu FAIL ile yazar.
+    """
+
+    def _run_invalid_config(self):
+        # Eksik-anahtar config: tarayicisiz FAIL-path'e ulasan tek gercek akis
+        # (load_config -> ValueError -> fail(1); kanitlanmis mevcut sözlesme).
+        with tempfile.TemporaryDirectory() as td:
+            cfg = os.path.join(td, "bad.json")
+            with open(cfg, "w", encoding="utf-8") as f:
+                json.dump({"blocking": ["critical"]}, f)  # eksik anahtarlar
+            out = os.path.join(td, "report.json")
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = a11y_gate.main(["--base-url", "http://127.0.0.1:1",
+                                     "--config", cfg, "--output", out])
+            with open(out, encoding="utf-8") as f:
+                report = json.load(f)
+            return rc, buf.getvalue(), report
+
+    def test_error_path_report_carries_fail_verdict(self):
+        rc, out, report = self._run_invalid_config()
+        self.assertEqual(rc, 1)
+        self.assertIn("[CONFIG]", out)
+        self.assertEqual(report["verdict"], "FAIL")
+
+    def test_report_verdict_only_pass_or_fail(self):
+        # Sözlesme-pin: rapor-verdict yalniz PASS/FAIL (default-deny).
+        # Init dict-literal'de fail-closed default "FAIL"; basari-yolunda
+        # hesaplanan degerle ezilir.
+        with open(a11y_gate.__file__, encoding="utf-8") as f:
+            src = f.read()
+        self.assertIn('report = {"verdict": "FAIL"', src)
+        self.assertIn('report["verdict"] = verdict', src)
+
+
+WORKFLOW = os.path.join(os.path.dirname(os.path.dirname(
+    os.path.dirname(os.path.abspath(__file__)))),
+    ".github", "workflows", "verify.yml")
+
+
+class TestWorkflowSummaryStep(unittest.TestCase):
+    """Spec §Reporting-3: job özeti GITHUB_STEP_SUMMARY'ye yazılmalı.
+
+    Adim raporu salt-okur render eder (verdict + summary + violations +
+    error); if: always() — fail-closed: gate-kiriliminde de özet üretilir.
+    """
+
+    def _a11y_block(self):
+        with open(WORKFLOW, encoding="utf-8") as f:
+            text = f.read()
+        block = text.split("  a11y-gate:", 1)[1]
+        return block.split("\n  changelog-drift:", 1)[0]
+
+    def _summary_step(self):
+        return self._a11y_block().split("- name: Write a11y job summary", 1)[1]
+
+    def test_summary_step_exists(self):
+        self.assertIn("Write a11y job summary", self._a11y_block())
+
+    def test_summary_step_always_and_writes_step_summary(self):
+        step = self._summary_step()
+        self.assertIn("if: always()", step)
+        self.assertIn("GITHUB_STEP_SUMMARY", step)
+
+    def test_summary_step_reads_report_verdict(self):
+        # Task-1 sözleşmesi: özet, rapordaki verdict alanını okumalı.
+        self.assertIn('data.get("verdict"', self._summary_step())
+
+
 if __name__ == "__main__":
     unittest.main()

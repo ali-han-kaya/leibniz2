@@ -1,0 +1,400 @@
+{
+  "info": {
+    "description": "Dashboard API sözleşmesi — tek kaynak test_api_method_contract.API_CONTRACT; bu şema ondan üretilir (python3 gen_openapi.py). Yöntem-sözleşmesi: 405 = bilinçli metot-reddi (Allow başlığıyla), 404 = bilinmeyen yol / dağıtım-dışı POST, 501 = do_<METHOD> tanımsız (desteklenmeyen metot). Sürümleme ve deprecation: docs/API_VERSIONING.md; PREVIEW_API_VERSION env'i şema-sürümünü dışarıdan bildirir.",
+    "title": "leibniz2 preview dashboard API",
+    "version": "1.0.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/determinism-trend": {
+      "get": {
+        "operationId": "api_determinism-trend_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "JSON yanıt"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "JSON yanıt"
+          }
+        },
+        "summary": "GET /api/determinism-trend"
+      }
+    },
+    "/api/health": {
+      "get": {
+        "operationId": "api_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "JSON yanıt"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "JSON yanıt"
+          }
+        },
+        "summary": "GET /api/health"
+      }
+    },
+    "/api/history": {
+      "get": {
+        "operationId": "api_history_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "JSON yanıt"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "JSON yanıt"
+          }
+        },
+        "summary": "GET /api/history"
+      }
+    },
+    "/api/latest": {
+      "get": {
+        "operationId": "api_latest_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "JSON yanıt"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "JSON yanıt"
+          }
+        },
+        "summary": "GET /api/latest"
+      }
+    },
+    "/api/override-trend": {
+      "get": {
+        "operationId": "api_override-trend_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "JSON yanıt"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "JSON yanıt"
+          }
+        },
+        "summary": "GET /api/override-trend"
+      }
+    },
+    "/api/refs-trend": {
+      "get": {
+        "operationId": "api_refs-trend_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "JSON yanıt"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "JSON yanıt"
+          }
+        },
+        "summary": "GET /api/refs-trend"
+      }
+    },
+    "/api/run": {
+      "get": {
+        "description": "SSE akışı: text/event-stream; bağlantı uzun ömürlü.",
+        "operationId": "api_run_get",
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "SSE akışı"
+          }
+        },
+        "summary": "GET /api/run"
+      }
+    },
+    "/api/run-history": {
+      "get": {
+        "operationId": "api_run-history_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "JSON yanıt"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "JSON yanıt"
+          }
+        },
+        "summary": "GET /api/run-history"
+      }
+    },
+    "/api/run-now": {
+      "post": {
+        "description": "POST-only: GET → 405 + Allow: POST (tetikleme asla GET).",
+        "operationId": "api_run-now_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "JSON yanıt"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "JSON yanıt"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "JSON yanıt"
+          }
+        },
+        "summary": "POST /api/run-now"
+      }
+    },
+    "/api/run-stdout": {
+      "get": {
+        "description": "Veri-bağımlı: ts bulunamazsa alan-404 (routing-404'ten farklı gövde).",
+        "operationId": "api_run-stdout_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "JSON yanıt"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "JSON yanıt"
+          }
+        },
+        "summary": "GET /api/run-stdout"
+      }
+    },
+    "/api/run-stream": {
+      "get": {
+        "description": "SSE akışı: text/event-stream.",
+        "operationId": "api_run-stream_get",
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "SSE akışı"
+          }
+        },
+        "summary": "GET /api/run-stream"
+      }
+    },
+    "/api/stop": {
+      "post": {
+        "description": "POST-only: GET → 405. Peer/Host kapıları: izinli-küme dışı kaynak 403 (PREVIEW_STOP_ALLOWLIST ile genişler).",
+        "operationId": "api_stop_post",
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "JSON yanıt"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "JSON yanıt"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "JSON yanıt"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "JSON yanıt"
+          }
+        },
+        "summary": "POST /api/stop"
+      }
+    },
+    "/api/trend": {
+      "get": {
+        "operationId": "api_trend_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "JSON yanıt"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "JSON yanıt"
+          }
+        },
+        "summary": "GET /api/trend"
+      }
+    }
+  },
+  "servers": [
+    {
+      "description": "preview_server (varsayılan bind loopback; sandbox-dışı ortamlar için PREVIEW_STOP_ALLOWLIST'e bakın)",
+      "url": "http://127.0.0.1:{port}",
+      "variables": {
+        "port": {
+          "default": "8000"
+        }
+      }
+    }
+  ]
+}

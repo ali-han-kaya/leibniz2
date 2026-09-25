@@ -1,0 +1,14 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "git": {
+    "deploymentEnabled": {
+      "main": true,
+      "reword-working": true
+    }
+  },
+  "functions": {
+    "api/*.py": {
+      "excludeFiles": "{.worktrees/**,apps/**,_calisma/.venv_z3/**,_calisma/mcp/**,_calisma/pptx/**,.env,.env.local,.env*.local,.pytest_cache/**,logs/**}"
+    }
+  }
+}

@@ -20,6 +20,13 @@
 # Node scratch / tooling
 node_modules
 package-lock.json
+# Bare isimler yalnız kök düzeyini yakalar — aynı sızıntı sınıfı (venv notu):
+# linked worktree'ler (bayat lock/node_modules) ve app build çıktıları context'e
+# sızıyordu ve Trivy gate'ini besliyordu (ölçüldü: .worktrees'taki eski lock
+# postcss 8.4.31 + sharp 0.34.5 HIGH bulguları üretti; CI'da yok — yerel/CI ayrışıyordu).
+.worktrees
+**/node_modules
+**/.next
 
 # Editor / OS
 .DS_Store
