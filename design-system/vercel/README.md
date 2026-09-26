@@ -66,17 +66,31 @@ The extractor is evidence tooling, not a repo runtime dependency. Preserve
 `raw.json`; update `tokens.json` and `tokens.css` from its
 `colors.cssVariables` map without remapping, renaming, or rounding.
 
-## Using
+## How to use
+
+`tokens.css` is the only file needed at runtime. Import it once in the global
+stylesheet, then reference the original custom-property names:
 
 ```css
 @import "design-system/vercel/tokens.css";
-.ink   { color: var(--color-gray-1000); }
-.link  { color: var(--geist-console-text-color-blue); } /* #0070f3 */
-.accent{ color: var(--ship-text); }                      /* #ff5b4f */
+
+.cta {
+  color: var(--develop-text);
+  border-color: var(--color-gray-500);
+}
+
+.selected { background: var(--geist-selection-text-color); }
+
+.focus-ring:focus-visible {
+  outline: 2px solid var(--ds-focus-color);
+}
 ```
 
-Fonts expect **GeistSans / Geist Mono**; load them through the consuming
-project's font pipeline or fall back to platform system stacks.
+With Tailwind, use arbitrary values such as
+`text-[var(--develop-text)]` and `bg-[var(--color-background-100)]`. Do not
+copy values from `raw.json` at runtime or rename the variables. The capture is
+color-only: load **GeistSans / Geist Mono** separately if the consuming project
+needs them, or use platform fallbacks.
 
 ## Limits
 
