@@ -249,6 +249,7 @@ HOOK_COVERAGE = {
         "test_incidental_banner.py",
         "test_dashboard_cls_budget.py",
         "test_surface_cwv_report.py",
+        "test_shuffle_tests.py",
     ],
 }
 
