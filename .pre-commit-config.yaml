@@ -947,6 +947,26 @@ repos:
         stages: [pre-commit]
         verbose: true
 
+      - id: check-security-posture
+        name: "Security posture: headers + CSP + isolation (fail-closed)"
+        description: >-
+          check_security_posture.sh: check_security_posture.list rosterindeki
+          dokuz guvenlik modulunu ADIYLA kosar — baslik beyani (25 rota + SSE),
+          CSP direktif sozlesmesi (reddet-once, unsafe-inline/eval yasak, nonce
+          uretimi ve bagi), izolasyon sozlesmeleri (DNS-rebinding, peer-parite,
+          statik kok hapsetme) ve tarayici kanitlari. Amac gecis izlenebilirligi:
+          ayni moduller check_unit_tests.list icinde de kosulur ama orada bir
+          guvenlik regresyonu "unit test kirildi" diye gorunur. READ-ONLY:
+          dosya yazmaz. Kapinin kendisi bosalamaz: roster eksik/eksik girişli/
+          diskte olmayan dosyali ise ya da tek modul basarisizsa FAIL-CLOSED
+          bloklar. Offline (yalnizca loopback HTTP + yerel Chromium).
+        entry: bash _calisma/CIKTI/check_security_posture.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+        verbose: true
+
       - id: audit-octokit-names
         name: "Octokit metod adı denetimi (fail-closed)"
         description: >-

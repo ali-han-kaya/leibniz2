@@ -289,6 +289,27 @@ jobs:
           python3 _calisma/CIKTI/check_latex_surface.py \
             --root . --json --out logs/latex_surface_findings.json
 
+      # ─── GÜVENLİK DURUŞU — STATİK TIER (fail-closed) ───────────────────
+      # Güvenlik modülleri zaten check-unit-tests bataryasında koşuyor;
+      # orada bir regresyon "unit test kırıldı" diye görünür. Bu adım
+      # AYNI modülleri check_security_posture.list roster'iyle ADIYLA
+      # koşar: hangi güvenlik yüzeyinin kırıldığı stderr'de görünür.
+      #
+      # Neden ayrı roster (browser tier başka adımda): bu modüller
+      # skipIf(playwright yok) ile ATLANIR. Tek listede "PASS" gibi
+      # görünürlerdi. Statik tier'da tarayıcı bağımlılığı YOKTUR ve
+      # kapı SKIP sayısını da reddeder (skip = "koşmadı" ≠ "yeşil").
+      #
+      # Tarayıcı kanıtı (CSP'nin fiilen uygulanması + enjeksiyonun
+      # gerçek DOM'da durması) a11y-gate job'unda, Chromium kurulu
+      # olduğu yerde aynı betikle koşar.
+      - name: Check security posture (static tier, fail-closed)
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash _calisma/CIKTI/check_security_posture.sh \
+            _calisma/CIKTI/check_security_posture.list
+
       # ─── MCP SUNUCU SMOKE'U (fail-closed) ───────────────────────────
       # leibniz2_mcp'yi gerçekten konuşturur: stdio transport üzerinden
       # list_tools + leibniz2_health/latest/trend çağrıları (Senaryo A,
@@ -3127,6 +3148,20 @@ jobs:
           chrome_path="$(python3 -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()')"
           test -x "$chrome_path"
           echo "CHROME_PATH=$chrome_path" >> "$GITHUB_ENV"
+
+      # ─── GÜVENLİK DURUŞU — TARAYICI TIER (fail-closed) ────────────────
+      # Chromium YUKARIDA kurulduğu için bu roster'da skip OLUŞAMAZ;
+      # yine de kapı skip sayısını reddeder (sessiz "PASS" olmaz).
+      # Kanıtladığı: CSP tarayıcıda fiilen uygulanıyor (hover-tooltip,
+      # 0 CSP ihlali) ve kaçırılmış veri gerçek DOM ayrıştırıcısında
+      # duruyor (nitelik/etiket enjeksiyonu yok). Statik tier bunları
+      # kanıtlayamaz — o yüzden ayrı adım.
+      - name: Check security posture (browser tier, fail-closed)
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash _calisma/CIKTI/check_security_posture.sh \
+            _calisma/CIKTI/check_security_browser.list
 
       - name: Start preview_server (fresh-clone-http pattern)
         run: |

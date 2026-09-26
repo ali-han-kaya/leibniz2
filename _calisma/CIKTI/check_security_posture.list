@@ -1,0 +1,35 @@
+# check-security-posture.list — güvenlik-duruşu paketi, STATİK TIER (fail-closed)
+#
+# Bu roster HARİÇ BİR AĞ/TARAYICI BAĞIMLILIĞI OLMAYAN modüllerden oluşur ve
+# HER ortamda (yerel pre-commit, CI precheck) koşabilir. Tarayıcı kanıtı
+# ayrı roster'dadır: check_security_browser.list.
+#
+# Neden ayrı? SKIP sessiz bir açıktır. `test_preview_hover_tooltip.py` ve
+# `test_preview_escaping.py`, Playwright kurulu değilse `skipIf` ile
+# ATLANIR (fail değil) — CI'ın birim-test adımında Chromium yoktur. Tek
+# roster'de bu iki modül "PASS" görünürken fiilen hiç koşmamış olurdu;
+# kapı da "9/9 PASS" derdi. İkiye bölerek hiçbir ortamda skip OLUŞAMAZ:
+# statik tier her yerde koşar, tarayıcı tier yalnız Chromium'un kurulu
+# olduğu işte (a11y-gate) koşar.
+#
+# Tek kaynak: check_security_posture.sh bu listeyi koşar. Aynı modüller
+# check_unit_tests.list içinde de koşar; oradaki rol genel batarya,
+# buradaki rol güvenlik regresyonunu ADIYLA göstermek.
+#
+# Kural: buraya yalnız güvenlik yüzeyini ölçen ve ortam-bağımlılığı
+# OLMAYAN modüller girer.
+
+# (1) Güvenlik başlığı beyanı — 25 rotanın tamamı + SSE
+test_security_headers.py
+test_security_header_matrix.py
+
+# (2) CSP — direktif kümesi, reddet-önce, nonce üretimi ve bağı
+test_csp_directives.py
+test_dashboard_csp_nonce.py
+
+# (3) İzolasyon — DNS-rebinding/peer-parite ve statik kök hapsetme
+test_local_security_surface.py
+test_static_isolation.py
+
+# (4) Üçüncü yüzey: video paketi kendi CSP'si + allowlist izolasyonu
+test_preview_video_player.py

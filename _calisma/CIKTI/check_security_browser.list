@@ -1,0 +1,20 @@
+# check_security_browser.list — güvenlik-duruşu paketi, TARAYICI TIER
+#
+# Gerçek tarayıcı kanıtı: CSP'nin tarayıcıda FIİLEN uygulandığı ve
+# kaçırılmış verinin gerçek DOM ayrıştırıcısında durduğu. Bu modüller
+# Playwright + Chromium ister.
+#
+# Neden ayrı roster? Bu modüller `skipIf(sync_playwright is None)` ile
+# ATLANIR — yani Chromium yokken sessizce hiç koşmazlar. Tek roster'de
+# "PASS" gibi görünürlerdi. Ayrı roster + yalnız Chromium'un kurulu
+# olduğu işte çalıştırma (CI: a11y-gate) = skip hiç oluşamaz.
+#
+# Kapı, bu tier'ı koşarken SKIP sayısını da raporlar: sıfır değilse
+# fail-closed — "kanıt koşmadı" ile "kanıt yeşil" aynı şey değildir.
+
+# CSP'nin gerçek uygulanması: gerçek page.hover() → tooltip, 0 CSP ihlali
+test_preview_hover_tooltip.py
+
+# Enjeksiyonun gerçek ayrıştırıcıda durması: class/title üzerinden nitelik
+# enjeksiyonu yok, metin bağlamında etiket açılmıyor, data-ts birebir dönüyor
+test_preview_escaping.py

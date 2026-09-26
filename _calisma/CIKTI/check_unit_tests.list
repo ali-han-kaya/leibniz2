@@ -52,6 +52,7 @@ test_coordinator_loop.py
 test_coq_evidence_smoke.py
 test_coq_lake.py
 test_coverage_report.py
+test_csp_directives.py
 test_dashboard_cls_budget.py
 test_dashboard_k17_exit_sync.py
 test_dashboard_keyboard_nav.py
@@ -137,6 +138,7 @@ test_run_summary_precommit.py
 test_run_summary_refs_trend.py
 test_scan_stale_zips.py
 test_sde_texlive_sync.py
+test_security_header_matrix.py
 test_security_headers.py
 test_server_events.py
 test_setup_branch_protection.py
@@ -144,6 +146,7 @@ test_shuffle_tests.py
 test_sidecar_guarantee.py
 test_skill_layer_sync.py
 test_skills_index.py
+test_static_isolation.py
 test_status_checks.py
 test_status_checks_smoke.py
 test_stop_peer_allowlist.py

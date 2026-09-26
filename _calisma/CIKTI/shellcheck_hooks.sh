@@ -3,7 +3,8 @@
 # betiklerini POSIX/bash lint ile denetler.
 #
 # Kapsam: verify_lean.sh (sh), commit_msg_hook.sh (sh),
-#         update_config_hook.sh (bash).
+#         update_config_hook.sh (bash), check_unit_tests_hook.sh (bash),
+#         check_security_posture.sh (bash).
 #
 # Kullanım:
 #   bash _calisma/CIKTI/shellcheck_hooks.sh          # tümünü denetle
@@ -32,6 +33,8 @@ HOOKS="
 sh  $SCRIPT_DIR/verify_lean.sh
 sh  $SCRIPT_DIR/commit_msg_hook.sh
 bash $SCRIPT_DIR/update_config_hook.sh
+bash $SCRIPT_DIR/check_unit_tests_hook.sh
+bash $SCRIPT_DIR/check_security_posture.sh
 "
 
 FAIL=0

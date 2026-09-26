@@ -221,3 +221,56 @@ bir test eklendi ("satır kıran ihlali de görmeli").
 **Not:** `preview.js` HEAD'de de prettier-kırmızıydı; bu turdaki hunk
 prettier ile düzeltildi, dosya artık temiz. `test_budget_scan.js` ve
 `github_scripts/*.js` de kırmızı ama **bu değişikliğe ait değil**, dokunulmadı.
+---
+
+## Güvenlik-duruşu kalıcılaştırıldı — 3 yeni modül + 2 kademeli kapı
+
+**Ne:** Güvenlik yüzeyi üç yeni test modülüyle ölçülüyor ve ADIYLA
+koşan bir kapıya bağlandı — `check-security-posture`. Daha önce bu
+modüller yalnız genel birim-test bataryasının içinde koşuyordu, yani bir
+güvenlik regresyonu "unit test kırıldı" diye görünüyordu.
+
+**Yeni modüller (36 test):**
+- `test_security_header_matrix.py` (9) — rota listesi `_route()` kaynağından
+  türetilir; 25 rotanın tamamı + SSE başlıkları + 404/HEAD + başlık
+  değerinin rotadan rotaya değişmediği. Yeni rota eklenip matrise
+  girilmezse fail-closed.
+- `test_csp_directives.py` (13) — direktif kümesi birebir, `default-src
+  'none'`, `script-src`'ta `unsafe-inline`/`unsafe-eval` yasağı, joker
+  ve dış origin yasağı, nonce'un `secrets`'tan üretildiği ve başlık↔gövde
+  bağının eşit olduğu.
+- `test_static_isolation.py` (14) — `serve_slides` ve
+  `serve_landing_assets` için yol kaçışı (ham, yüzde-kodlanmış, çift
+  kodlanmış), sembol bağı kaçışı, uzantı/karakter beyaz listesi, dizin
+  listelememe — artı zorunlu pozitif kontrol (geçerli dosya 200 döner).
+
+**Kapı iki kademeli, çünkü atlanan test yeşil gibi görünüyordu:**
+Tarayıcı modülleri Chromium yoksa `skipIf` ile atlanıyor. Tek roster'de
+kapı "PASS" derken kanıt hiç koşmamış olurdu. Bu yüzden statik kademe
+(7 modül, ortam bağımsız) her yerde, tarayıcı kademesi (2 modül) yalnız
+Chromium'un kurulu olduğu yerde koşar. Kapı ayrıca **atlanan test
+sayısını da reddeder** — ölçüldü: Chromium yokluğu simüle edilince
+`rc=1` ve hangi kanıtın koşmadığını adıyla yazıyor.
+
+**Ölçülen iki altyapı hatası (kendi yazdığım):** (1) test sunucusu
+tek iş parçacıklı `HTTPServer` idi, üretim `ThreadingHTTPServer` — SSE
+testi kilitlenmişti, yani üretimi değil sapmayı ölçüyordum;
+(2) boşluk karakterli istekleri `urllib` istemci tarafında reddettiği için
+test tarayıcının gerçekte gönderdiği yüzde-kodlanmış hali sınıyor.
+
+**Bilinçli bırakılan ölçüm:** dört statik koruma katmanından yalnız
+`realpath`+`commonpath` davranışsal yük taşıyor; diğer üçü tek tek
+kaldırıldığında sunucu yine 404 dönüyor. Katmanlar silinmedi (savunma
+derinliği) ama artık yapısal olarak sabitlendiği için sessizce
+kaybolamıyorlar.
+
+**Wiring:** pre-commit hook (57.), CI `precheck` statik kademe fail-closed,
+CI `a11y-gate` tarayıcı kademe fail-closed. Yeni iş eklenmedi — iş
+sayısı 31'de ve required/advisory sözleşmesi aynı. `shellcheck_hooks.sh`
+listesine yeni betik eklendi.
+
+**Doğrulama:** 12 mutasyonun 11'i kırmızıya düşüyor (üçüncüsü kasıtlı
+bulgu, aşağıda). Kapı 5 senaryoda sınandı (boş roster / eksik roster /
+hayali dosya / kırık modül / temiz) — doğru çıkış kodlarıyla. Tam
+batarya **174 test dosyası PASS**, actionlint/status-check-names/artifact-
+docs/shellcheck/precommit-orphans yeşil.

@@ -262,6 +262,9 @@ HOOK_COVERAGE = {
         "test_preview_video_player.py",
         "test_preview_hover_tooltip.py",
         "test_preview_escaping.py",
+        "test_csp_directives.py",
+        "test_security_header_matrix.py",
+        "test_static_isolation.py",
     ],
 }
 

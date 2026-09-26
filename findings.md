@@ -742,3 +742,110 @@ veriliyor — `class`/`title` üzerinden nitelik enjeksiyonu yok, metin
 bağlamında etiket açılmıyor, `data-ts` birebir geri dönüyor, kaçırma
 metni **bozmuyor** (kullanıcı aynı metni görüyor). Düzeltme öncesi sürümde
 bu testler 3 hata veriyor.
+---
+
+## Güvenlik-duruşu kalıcılaştırıldı: başlık matrisi + CSP + izolasyon
+
+**Ölçümle başlandı, varsayımla değil.** 25 rotanın tamamı gerçek bir
+in-process sunucuya istek atılarak tarandı: üç başlığın (`X-Content-Type-
+Options`, `Referrer-Policy`, `Content-Security-Policy`) hepsini her rota
+taşıyor. Boşluk sunucuda değil **testlerin kapsamındaydı**.
+
+**Ölçülen dört gerçek boşluk:**
+
+1. **Testler `_route()`'tan türetilmiyordu.** `test_security_headers.py`
+   404/405/statik kök/HEAD'i tek tek ölçüyor — ama rota listesini elle
+   tutuyor. `_route()`'a yeni bir `return "x"` eklenince kapsam
+   BÜYÜMÜYOR, sessizce küçük kalıyor. Yeni modül rota listesini
+   **kaynak koddan** çıkarıyor; karşılığı yoksa test fail-closed.
+2. **SSE hiç ölçülmemişti.** `/api/run` ve `/api/run-stream` kendi
+   `send_header` blogunu taşıyor (övülü: `end_headers()` hunisi onları
+   da kapsıyor — ham soketle ölçüldü, 0.0 sn'de üç başlık geliyor).
+3. **`serve_slides` / `serve_landing_assets` korumaları test edilmemişti.**
+   Dört katman uygulanmış (tek segment · gizli dosya · `.png` + karakter
+   beyaz listesi · realpath+commonpath) ama sıfır testi vardı.
+4. **CSP'nin tamamı tek yerde sabitlenmemişti.** Yalnız
+   `frame-ancestors 'none'` ve nonce kapsaması ölçülüyordu.
+
+**Yeni üç modül (36 test):** `test_security_header_matrix.py` (9),
+`test_csp_directives.py` (13), `test_static_isolation.py` (14).
+
+### Kırılan iki test altyapısı
+
+**Tarayıcı sınıfı üretimden sapmıştı.** İlk yazımda `HTTPServer` (tek
+iş parçacıklı) kullandım; SSE sonsuz akış olduğu için test kilitlendi.
+Üretim `ThreadingHTTPServer` kullanıyor (`main()` satır 2440) — yani
+ölçtüğüm şey üretim değildi. Düzeltildi. Not: `test_security_headers.py`
+hâlâ `HTTPServer` kullanıyor; SSE'e dokunmadığı için çalışıyor ama
+aynı sapmayı taşıyor.
+
+**Boşluk karakterleri ham gönderilemiyor.** `urllib` boşluk/kontrol
+karakteri içeren isteği istemci tarafında reddediyor. Test istemciyi
+suçlamak yerine **tarayıcının gerçekte gönderdiği** yüzde-kodlanmış
+hale baktı — ham metni sınamak gerçeği ölçmezdi.
+
+### Kapının kendisi ölçüldü: 12 mutasyon
+
+| mutasyon | sonuç |
+|---|---|
+| realpath+commonpath katmanı kaldırıldı | FAIL |
+| `script-src`'a `'unsafe-inline'` | FAIL (2) |
+| `default-src` `'none'`→`'self'` | FAIL (3) |
+| `frame-ancestors` kaldırıldı | FAIL (2) |
+| nonce sabit literal yapıldı | FAIL |
+| nonce başlıktan ayrıldı | FAIL |
+| bir başlık tablodan silindi | FAIL (6) |
+| `_route()`'a yeni rota eklendi (matrise girmemiş) | FAIL (2) |
+| karakter / uzantı / gizli dosya filtresi kaldırıldı | **PASS** |
+
+Son satır bilinçli bir bulgu: **dört koruma katmanından yalnız
+`realpath`+`commonpath` davranışsal olarak yük taşıyor.** Diğer üçü tek
+tek devre dışı bırakıldığında sunucu yine de 404 dönüyor (o adlar diskte
+zaten yok). Yani onlar bugün savunma derinliği. Davranış testleri
+sessizce silinmelerine izin veriyordu; `test_guard_stack_is_still_
+present_in_source` artık dört katmanı **iki handler'da da** yapısal
+olarak sabitliyor ve kaldıran birinin önce testi güncellemesini zorunlu
+kılıyor. Katmanları silmedim — savunma derinliği meşrudur.
+
+**Pozitif kontrol zorunluydu:** korumalar "her şeyi reddet" haline
+gelirse tüm saldırı testleri sessizce geçer. Her modül geçerli dosya
+senaryosuyla da sınandı (200 + bayt bayt gövde) — yalnız 404 döndüren bir
+kapı bu testleri geçemez.
+
+### En tehlikeli bulgu: atlanan test, geçen gibi görünüyordu
+
+Yeni kapıyı tek roster ile yazmıştım. Tarayıcı modülleri
+`skipIf(playwright yok)` ile **ATLANIYOR** — hata değil. CI'ın birim-test
+adımında Chromium kurulu değil. Yani kapı CI'da "9/9 PASS" derken
+gerçekte iki güvenlik kanıtı hiç koşmamış olacaktı. Atlanmış bir kanıt
+kanıt değildir; sayımı yok sayan bir kapı onu yeşile çevirir.
+
+Çözüm iki kademe:
+- `check_security_posture.list` — 7 statik modül, tarayıcı bağımlılığı
+  yok, **her ortamda** koşar (yerel pre-commit + CI `precheck`).
+- `check_security_browser.list` — 2 tarayıcı modülü, yalnız Chromium'un
+  kurulu olduğu yerde koşar (CI `a11y-gate`).
+
+Kapı **atlanan test sayısını da reddediyor**. Chromium yokluğu
+simüle edilerek ölçüldü: iki modül `SKIP (8/7 test atlandi)` → kapı
+`rc=1` ve hangi kanıtın koşmadığını adıyla yazdı.
+
+### Kapı kendisi de boş olamaz
+
+| senaryo | rc |
+|---|---|
+| roster dosyası yok | 1 |
+| roster boşaltıldı (0 giriş) | 1 |
+| roster'da diskte olmayan dosya | 1 |
+| gerçekten kırılmış modül | 1 (modülün adı stderr'de) |
+| temiz | 0 |
+
+### Wiring
+
+- pre-commit: `check-security-posture` hook'u (57. hook) — yerelde
+  commit'i bloklar.
+- CI `precheck`: statik kademe **fail-closed** adım.
+- CI `a11y-gate`: tarayıcı kademe **fail-closed** adım (Chromium zaten
+  kurulu). Yeni *iş* değil, mevcut işlere adım — iş sayısı 31'de sabit,
+  required/advisory sözleşmesi değişmedi.
+- `shellcheck_hooks.sh` listesine yeni betik eklendi (kapı da linte girer).
