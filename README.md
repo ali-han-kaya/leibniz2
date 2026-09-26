@@ -546,6 +546,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-26 | docs | (design-system) Vercel token kullanimini CSS ornegine cevir | [`1e8ab4c`](https://github.com/ali-han-kaya/leibniz2/commit/1e8ab4c) |
 | 2026-09-26 | feat | (gallery) denklem galerisi uretim ciktisini kaydet | [`7f3d7a5`](https://github.com/ali-han-kaya/leibniz2/commit/7f3d7a5) |
 | 2026-09-26 | docs | (preview) dashboard ve Vercel token fark raporu | [`e61b104`](https://github.com/ali-han-kaya/leibniz2/commit/e61b104) |
+| 2026-09-26 | chore | (recovery) 2026-09-20 ve 2026-09-26 kurtarma yamalarini arsivle | [`6dcfca6`](https://github.com/ali-han-kaya/leibniz2/commit/6dcfca6) |
 
 ### Regresyon notları
 
