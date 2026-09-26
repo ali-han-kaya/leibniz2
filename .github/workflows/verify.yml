@@ -3500,6 +3500,88 @@ jobs:
       - name: Build dashboard (next build)
         run: npm run build --prefix apps/dashboard-next
 
+  # ── VIDEO RENDER (LeibnizChain) ──────────────────────────────────────────
+  # _calisma/video kompozisyonu (Remotion) mp4'e render edilir ve çıktının
+  # kare bütçesi DENETLENİR: 760 kare @ 30fps = 25.33 sn, 1280x720. Ölçüm
+  # mp4 kutu (box) ayrıştırmasıyla yapılır — ffprobe'ye bağımlılık yok
+  # (paketlenmiş ffprobe macOS'ta libavdevice.dylib bulamıyor, ölçüldü).
+  # Amaç teslim edilen videonun "bozuk dosya" değil, SÖZLEŞMESİNE UYAN
+  # dosya olduğunu kanıtlamak: data üretimi → tip kapısı → gerçek render →
+  # kare/süre/çözünürlük ölçümü.
+  # GATE_EXCLUDE'da: required set 14'te sabit (docx-export/dashboard-next ile
+  # aynı gerekçe — required'a almak branch-protection UI değişikliği gerektirir).
+  # Job yine de FAIL-CLOSED'dır: `continue-on-error` YOK.
+  video-render:
+    name: LeibnizChain video render (760 kare, advisory)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Install generator dependencies (npm ci)
+        run: npm ci --prefix _calisma/video --no-audit --no-fund
+
+      # history.jsonl CI'da yoktur (gitignore'daki calisma zamani verisi) —
+      # üretici fail-closed: girdi yoksa sentinel JSON üretir ve render
+      # yine koşar. Böylece kapı tip/render tarafını ölçer, KANIT KARTLARI
+      # (2323 OK, 9/9 vb.) ise kayıttan gelen sabitlerdir.
+      - name: Generate composition data (make_data.py)
+        run: python3 _calisma/video/make_data.py
+
+      - name: Typecheck composition (tsc --noEmit)
+        run: bash _calisma/CIKTI/check_video_typecheck.sh
+
+      # Chromium'u remotion'un kendi sürümüyle indir (~85 MB); sistem
+      # Chrome'a bağımlılık yok → runner imajı değişse de kapı sabit.
+      # working-dictionarya göre çalıştığı için --prefix GEREKMEZ (göreli
+      # yol çakıştırır — ölçüldü: --prefix + working-directory birlikte
+      # _calisma/video/_calisma/video arar).
+      - name: Ensure Remotion browser
+        working-directory: _calisma/video
+        run: npx remotion browser ensure
+
+      - name: Render 760 frames (h264)
+        run: npm run render --prefix _calisma/video
+
+      # SÖZLEŞME ÖLÇÜMÜ: kare/süre/çözünürlük. Ayrıştırıcı stdlib mp4 kutu
+      # ağacıdır (check_render.py) — paketlenmiş ffprobe macOS'ta
+      # libavdevice.dylib bulamıyor; runner'da da harici bağımlılık gerekmesin.
+      - name: Probe render contract (760 kare / 25.33 sn / 1280x720)
+        run: |
+          set -euo pipefail
+          python3 _calisma/video/check_render.py \
+            _calisma/video/out/leibniz-chain.mp4 --json \
+            | tee video_render_probe.json
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## video-render"
+            echo '```'
+            cat video_render_probe.json 2>/dev/null || echo "(probe cikti yok)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload video artifact
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: video-report
+          path: |
+            _calisma/video/out/leibniz-chain.mp4
+            video_render_probe.json
+          if-no-files-found: ignore
+          retention-days: 30
+
   # CHANGELOG DRIFT CHECK (advisory) — gen_changelog.py --check'i CI'da koşar
   # ve drift bulgularını run summary'ye yazar. Advisory: changelog tabloları
   # (README/PUBLISH_SCENARIO) tasarım gereği HEAD'in bir commit gerisinde

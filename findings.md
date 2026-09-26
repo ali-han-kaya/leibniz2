@@ -74,6 +74,38 @@ pre-commit chain adaptation (47→49 hooks). Key lessons below.
   (HTTP 200) but harness reaps it; user opens it themselves:
   `cd /tmp/leibniz-chain-video && npx remotion studio --no-open`
 
+### Remotion pilot repoya taşındı (2026-09-26)
+- **Pilot kayboldu**: `/tmp` macOS temizliğinde silinmiş — `ls /tmp/leibniz-chain-video`
+  → No such file; `find /tmp /var/folders ~/Downloads ~/Documents -iname '*leibniz-chain*'`
+  → boş; `~/.npm/_npx` + npm cache'te remotion paketi yok. Hayatta kalan tek iz
+  prose kaydıydı (bu dosya + `recovery_patches_20260918/patch1789754982-84993:540-549`).
+  Ders: repo dışında tutulan jeneratör, temizlikte kanıt zincirini de siler.
+- **Yeniden inşa (uydurma değil)**: spesifikasyon kayıttan birebir kuruldu
+  (1280x720@30, 760 kare, aynı 6 sahne sırası). Sayılar gömülmedi:
+  `_calisma/video/make_data.py` her koşuda `history.jsonl` +
+  `test_id_residual_acceptance_doc.py` sabitlerinden `public/data/leibniz.json`
+  üretir. Ölçülen ilk render: 1.893.303 B, 25.3870 sn kap, 760 kare, 1280x720,
+  avc1 — 14,7 sn'de (Chromium headless shell).
+- **Ölçülen iki gerçek hata** (görsel denetimde yakalandı, koddan görünmüyordu):
+  (1) `rise()` bir `<div height={…}>` değerine konunca her sahne başlığını 0'a
+  çökertiyor, koşu satırlarını/kanıt kartlarını ekran dışına sıkıştırıyordu —
+  4 karttan 1'i görünüyordu. Çözüm: `Reveal` (opacity + transform, doğal yükseklik).
+  (2) `interpolate` sıfır uzunluklu aralığı reddettiği için ilk kare tamamen
+  siyahtı; Title artık `fadeIn=0` ile sert kesişle açılıyor. İkisi de regression
+  testi değil, görsel denetimle bulundu — tip kapısı ikisini de sessizce geçti.
+- **CI'da history.jsonl yok** (gitignore'daki çalışma zamanı verisi) → üretici
+  fail-closed kalırsa render job'ı her push'ta kırmızı olurdu. `--allow-missing-data`
+  sentinel modu eklendi: koşu listesi boş + `data_missing` işareti, mühürler ve
+  kare bütçesi yine üretilir (sahne "veri yok (temiz klon / CI)" der). Sentinel
+  kare ile render ölçüldü — düz render kırılmıyor.
+- **ffprobe ölçülemiyor**: paketlenmiş `node_modules/@remotion/compositor-darwin-arm64/ffprobe`
+  macOS'ta `libavdevice.dylib` bulamıyor (Abort trap 6). Ölçüm stdlib mp4 kutu
+  ayrıştırmasıyla yapıldı (mvhd/mdhd/stsd/stts/stsz) — CI probe'u da aynısını
+  kullanıyor, ffprobe'ye bağımlılık yok.
+- **prettier kapısı gerçekten koşuyor**: `_calisma/video` için `apps/dashboard-next`
+  prettier'ı kullanıldı (kök `.prettierrc`; singleQuote=false, printWidth=80) —
+  ilk yazım singleQuote/uzun satır idi, kapı 7 dosyayı yeniden biçimlendirdi.
+
 ### Reproducible-PDF delivery chain re-audit
 - verify_delivery verdict PASS (K0–K7, 0 findings); qpdf rerun 3/3 distinct
   (frozen NON-DETERMINISTIC verdict holds); repack reuse-rule proven in /tmp

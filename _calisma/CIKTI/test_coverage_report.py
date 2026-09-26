@@ -256,6 +256,9 @@ HOOK_COVERAGE = {
         "test_surface_cwv_report.py",
         "test_shuffle_tests.py",
         "test_repack_idempotence.py",
+        "test_check_video_typecheck.py",
+        "test_video_data_contract.py",
+        "test_check_video_render.py",
     ],
 }
 

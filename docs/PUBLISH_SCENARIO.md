@@ -573,7 +573,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 --exit-status` + artifact listesi; sonuç `SONUÇ: PASS/FAIL` olarak loglanır
 (dry-run'da yalnızca önizlenir).
 
-**Job kategorileri (30 job = 13 required + 14 advisory + 3 PR-only):**
+**Job kategorileri (31 job = 13 required + 15 advisory + 3 PR-only):**
 
 > **Kural:** Branch protection **yalnızca A kategorisindeki** job'ları required check olarak
 > kabul eder. B (advisory) job'ları push'ta çalışır ama required değildir;
@@ -618,7 +618,9 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 | 29 | D | Budget status PR comment | — bütçe + pre-commit PR yorumu; job-level PR-only, push'ta tamamen skipped (bütçe kapısı ayrı `budget` job'ında kalır) |
 | 30 | B | Dashboard-next typecheck + build (Next 15) | — trend-db `npm ci` + `prisma generate` (kod üretimi, DB'ye bağlanmaz); dashboard `npm ci` + `tsc --noEmit` (`check_dashboard_typecheck.sh`) + `next build`; tip/derleme hatası workflow'u kırmızıya düşürür (`continue-on-error` YOK), ama required check DEĞİL — `GATE_EXCLUDE`'da, required set 14'te sabit (docx-export/lake-proof ile aynı gerekçe) |
 
-**Artifact listesi (38):**
+| 31 | B | LeibnizChain video render (760 kare, advisory) | — `_calisma/video` (Remotion) `npm ci` + `make_data.py` (CI'da `history.jsonl` yok → `--allow-missing-data` sentinel: koşu listesi boş, `data_missing` işaretli; mühürler ve kare bütçesi yine üretilir) + `check_video_typecheck.sh` (`tsc --noEmit`) + `remotion browser ensure` (~85 MB, runner imajından bağımsız) + `npm run render` (760 kare, h264) + **kutu ayrıştırmalı ölçüm**: kare=760, kap süresi≈25.387 sn, 1280×720 — sapma fail-closed; artifact `video-report`. required check DEĞİL — `GATE_EXCLUDE`'da, required set 14'te sabit (docx-export/dashboard-next ile aynı gerekçe). Job `continue-on-error` YOK |
+
+**Artifact listesi (39):**
 - `unit-tests` (CIKTI birim test logu — `test_*.py` glob'u)
 - `verify-report` (tek log: K1-K14 + pre-commit bölümü + .sha256)
 - `action-runtimes` (her action'ın runs.using denetimi JSON — node24 kapısı)
@@ -652,6 +654,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 - `a11y-landing-report-dark` + `a11y-landing-report-light` (Landing'in koyu/açık tema `/landing.html` a11y-gate raporları: generated witness + DOM tema doğrulamalı, aynı fail-closed özet sözleşmesi)
 - `lighthouse-dashboard-dark` + `lighthouse-dashboard-light` (dashboard'ın koyu/açık temada Lighthouse 13.5.0 accessibility-only JSON raporları: sorgu ile tema witness'ı + 1.0 skor kapısı)
 - `docx-report` (docx-export job'unun ürünü: `make_docx.js` çıktısı .docx ×2 — tek rapor + bölüm kırılımlı birleşik rapor — build key=value logları + LibreOffice açılabilirlik raporları — advisory job, ürün yine artefakt olarak saklanır)
+- `video-report` (video-render job'unun ürünü: `npm run render` çıktısı `leibniz-chain.mp4` + kutu ayrıştırmalı ölçüm satırı `kare/süre/çözünürlük/bayt` — advisory job, tip ve render hattının sözleşmeye uyduğunun kanıtı)
 
 **Not:** Kapı artık `verify_delivery.py --full`'dur (K1-K14, fail-closed) ve yeşildir —
 Beth 1953 / Fosl 1998 gibi referans düzeltmeleri V5h'te yapıldı; Kalan çevrimdışı

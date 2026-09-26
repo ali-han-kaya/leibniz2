@@ -44,6 +44,14 @@ _calisma/docx/out/
 _calisma/pptx/verification_chain.pptx
 _calisma/pptx/architecture_deepening.pptx
 _calisma/pptx/pdf_repro_findings.pptx
+# video jeneratoru (LeibnizChain, Remotion): kaynak .ts/.tsx repoda;
+# bagimliliklar, Remotion'un indirdigi tarayici ve uretilen mp4/stiller tutulmaz
+_calisma/video/node_modules/
+_calisma/video/out/
+_calisma/video/.remotion/
+# public/data/leibniz.json canli history.jsonl'den uretilir (make_data.py) —
+# history.jsonl de calisma zamani verisi oldugu icin (asagida) ikisi de repoda degil
+_calisma/video/public/data/
 apps/trend-db/node_modules/
 apps/trend-db/.env
 apps/trend-db/generated/

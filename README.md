@@ -550,6 +550,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-26 | chore | (canvas) incidental_proof_plate02 plakasini yenile | [`3fe0720`](https://github.com/ali-han-kaya/leibniz2/commit/3fe0720) |
 | 2026-09-26 | chore | (git) yerel calistirma ciktilarini yoksay | [`a4cb060`](https://github.com/ali-han-kaya/leibniz2/commit/a4cb060) |
 | 2026-09-26 | test | (repack) ust-uste repack byte-identical testi | [`b221f6c`](https://github.com/ali-han-kaya/leibniz2/commit/b221f6c) |
+| 2026-09-26 | docs | (qpdf) donmus kayda surum izleme bolumu (v2) | [`de5865d`](https://github.com/ali-han-kaya/leibniz2/commit/de5865d) |
 
 ### Regresyon notları
 

@@ -525,6 +525,20 @@ repos:
         stages: [pre-commit]
         verbose: true
 
+      - id: check-video-typecheck
+        name: "TypeScript typecheck for _calisma/video (LeibnizChain, tsc --noEmit)"
+        description: >-
+          check-dashboard-typecheck ile aynı sözleşme, _calisma/video
+          (Remotion LeibnizChain) projesine uygulanmış hâli: tsc --noEmit.
+          READ-ONLY: emit yok, dosya yazmaz. node_modules veya tsconfig yoksa
+          SKIP; tip-hatası varsa fail-closed. Yalnızca video projesinin
+          dosyaları stage'liyken koşar. OFFLINE.
+        entry: bash _calisma/CIKTI/check_video_typecheck.sh
+        language: system
+        files: ^_calisma/video/.*\.(ts|tsx|js|json)$
+        stages: [pre-commit]
+        verbose: true
+
       - id: check-plist-drift
         name: "Plist gate unit tests (exit 0/1/2)"
         description: >-

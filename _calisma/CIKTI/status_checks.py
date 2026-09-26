@@ -78,6 +78,12 @@ GATE_EXCLUDE = {
                              #   fail-closed: tip/derleme hatası workflow'u kırar.
                              #   Kaldırmak = branch protection'a eklemek; o zaman
                              #   test_status_checks'in 14-sabitleri de güncellenir.
+    "video-render",          # LeibnizChain mp4 render'ı + kare/süre ölçümü
+                             #   (advisory: ~85 MB Chromium indirir, push başına
+                             #   maliyetli). Job YİNE fail-closed: sapma
+                             #   (kare≠760, süre/çözünürlük kayması) workflow'u
+                             #   kırar. docx-export/dashboard-next ile aynı
+                             #   gerekçe: required set 14'te sabit.
 }
 # Not: "label-gate" (Pre-commit P0 label gate) BİLEREK required check'tir —
 # precommit-p0 etiketi varken FAIL verip merge'i bloke eder; bu yüzden

@@ -101,3 +101,26 @@
 - commit d1cbfb2: apps surfaces (dashboard-next, trend-db, landing, mcp, pptx) + contract tests
 - 2 stash-window retries diagnosed; unstaged-delta rule enforced
 - Next: .worktrees/work/2026-09-19 from HEAD, setup, baseline battery
+
+## 2026-09-26 — LeibnizChain render + repoya taşıma
+- `/npx remotion render` isteği: repoda **sıfır** video yüzeyi (`<Composition>`/
+  `registerRoot`/`@remotion/player` yok, mp4 yok, bağımlılık yok); kompozisyon
+  2026-09-18'de `/tmp/leibniz-chain-video` altında kurulmuş ve **silinmişti**
+  (4 kanıt: ls/find/npm cache/_npx). Uydurma render yerine bulgu raporlandı.
+- Kullanıcı kararıyla kayıttaki spesifikasyondan yeniden kuruldu ve render
+  edildi: 1.893.303 B (1,81 MiB), 25,3870 sn kap / 25,3333 sn video, 760 kare
+  @ 30 fps, 1280×720, avc1 CRF 20, 597 kbit/s, sha256 87f6101d…, 14,7 sn.
+- İlk render'da iki gerçek yerleşim hatası bulundu (baskı(height) sıkıştırması,
+  sıfır uzunluklu interpolate → siyah ilk kare); ikisi de düzeltilip kareler
+  görsel olarak denetlendi (0/60/120/300/420/520/580/620/690/699).
+- Taşıma: `_calisma/video/` (kaynak takip altında), `node_modules/ out/ .remotion/
+  public/data/` ignore'da. Paket komutları kültüre bağlandı:
+  `npm run data|typecheck|format|render|studio`.
+- Kapılar: yeni `check-video-typecheck` pre-commit hook'u (dashboard ile aynı
+  SKIP/OK/fail-closed sözleşmesi), prettier kapısı 9 dosyada geçti, iki yeni
+  test (18 + 6), manifest + HOOK_COVERAGE senkron (165 → **167 dosya PASS**),
+  `video-render` CI iş'i (advisory, fail-closed, kutu ayrıştırmalı ölçüm) +
+  PUBLISH_SCENARIO tablo/artifact satırları + GATE_EXCLUDE + workflow_contract.
+- Tüm doc/workflow kapıları yeşil: doc-job-sync 10/10, doc-artifact-sync 10/10,
+  workflow-contract 12/12, workflow-artifact-docs PASS, actionlint RC=0,
+  absolute-paths PASS (575 dosya), pattern-consistency PASS, config-sync PASS.

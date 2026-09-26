@@ -56,6 +56,9 @@ DOC_ONLY_ADVISORY = frozenset({
     "audit-live-ci",         # advisory meta-denetçi — job output
     "pattern-drift",         # advisory: merge pattern ↔ ARTIFACT_JOBS
     "preview-reload-smoke",  # advisory: preview reload smoke testi
+    "video-report",          # LeibnizChain mp4 + olcum satiri (video-render,
+                              #   advisory) — bundle disi: uretilen video
+                              #   teslim zincirinin parcasi degil
 })
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -77,6 +80,9 @@ UPLOAD_EXCEPTIONS = frozenset({
     "audit-live-ci",
     "pattern-drift",
     "preview-reload-smoke",
+    "video-report",          # LeibnizChain mp4 + olcum satiri (video-render) —
+                             #   DOC_ONLY_ADVISORY ile ayni kumesel (alt kume
+                             #   kurali), ARTIFACT_JOBS'a girmez
 })
 
 # ─────────────────────────────────────────────────────────────────────────────

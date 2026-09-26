@@ -35,6 +35,8 @@ test_check_repro_manifest_hook.py
 test_check_sde_determinism.py
 test_check_seal_hash.py
 test_check_unit_tests_timing.py
+test_check_video_render.py
+test_check_video_typecheck.py
 test_check_zip_lineage_drift.py
 test_ci_check_rate.py
 test_ci_failure_pattern.py
@@ -159,6 +161,7 @@ test_vercel_adapter.py
 test_verification_chain_deck.py
 test_verify_checks.py
 test_verify_k_layers.py
+test_video_data_contract.py
 test_workflow_contract.py
 test_workflow_install_hardening.py
 test_workflow_timeouts.py
