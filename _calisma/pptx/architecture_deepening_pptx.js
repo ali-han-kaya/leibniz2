@@ -1,27 +1,31 @@
 /**
  * architecture_deepening_pptx.js — deck'i NATIVE pptx şekilleri + metniyle kurar.
  *
- * İçerik kaynağı: _calisma/CIKTI/architecture_deepening_deck.py (PNG deck,
- * görsel QA). Slaytlar görsel değil: gerçek metin run'ları + vektör şekiller
- * (aranabilir/düzenlenebilir). Palet: design-system/tokens.json.
+ * İçerik kaynağı: _calisma/CIKTI/architecture_deepening_deck.py (PNG deck, görsel
+ * QA). PNG'ler artık pptx'e GÖMÜLMEZ: slayt gerçek metin run'ları ve vektör
+ * şekillerle kurulur → aranabilir, kopyalanabilir, düzenlenebilir.
+ *
+ * Palet/tipografi: `design-system/tokens.json` (tokens.js). Slaytta tek bir
+ * ad-hoc hex yoktur; renkler rol adıyla seçilir (accent/budget/ok/warn…).
+ * Geometri 1600x900 px deck ızgarasından türetilir (T.grid, inç).
+ * Karşılaştırma panosu PNG deck'teki 630 px'lik iki sütundan gelir.
  */
 const path = require("path");
 const { renderDeck, T } = require("./native_deck");
 
 const G = T.grid;
-const X = G.marginX;                   // 90 px
-const ROW_X = 110 / 160;               // 0.6875
-const ROW_W = 8.25;                    // 1320 px
+const ROW_X = 110 / 160; // 0.6875
 // Karşılaştırma panosu (PNG deck'teki 630 px'lik iki sütun)
-const LEFT_X = 100 / 160;              // 0.625
-const RIGHT_X = 870 / 160;             // 5.4375
-const COL_W = 630 / 160;               // 3.9375
+const LEFT_X = 100 / 160; // 0.625
+const RIGHT_X = 870 / 160; // 5.4375
+const COL_W = 630 / 160; // 3.9375
 
 renderDeck(() => ({
   file: path.resolve(__dirname, "architecture_deepening.pptx"),
   meta: {
     title: "leibniz2 — Architecture Deepening",
-    subject: "Üç derinleştirme adayı: analitik geçmiş · temiz arayüz sınırı · drift kanıtı (native slaytlar)",
+    subject:
+      "Üç derinleştirme adayı: analitik geçmiş · temiz arayüz sınırı · drift kanıtı (native slaytlar)",
     author: "leibniz2 verification pipeline",
     company: "leibniz2",
   },
@@ -33,24 +37,45 @@ renderDeck(() => ({
       rail: "accent",
       blocks: [
         {
-          kind: "text", x: ROW_X, y: 1.8125, w: 5.4, h: 1.1,
+          kind: "text",
+          x: ROW_X,
+          y: 1.8125,
+          w: 5.4,
+          h: 1.1,
           text: "Keep the verification boundary stable.\nDeepen the layers around it.",
           size: T.type.lead,
         },
         {
-          kind: "text", x: ROW_X, y: 3.04, w: 5.4, h: 1.1,
+          kind: "text",
+          x: ROW_X,
+          y: 3.04,
+          w: 5.4,
+          h: 1.1,
           text: "01  Queryable history\n02  Controlled frontend boundary\n03  Stronger delivery evidence",
-          size: T.type.body, bold: true,
-        },
-        {
-          kind: "text", x: 6.4375, y: 2.3125, w: 3.0, h: 0.9,
-          text: "SAME\nAUTHORITY", size: T.type.display, color: "accent",
+          size: T.type.body,
           bold: true,
         },
         {
-          kind: "text", x: 6.4375, y: 3.44, w: 3.0, h: 0.7,
+          kind: "text",
+          x: 6.4375,
+          y: 2.3125,
+          w: 3.0,
+          h: 0.9,
+          text: "SAME\nAUTHORITY",
+          size: T.type.display,
+          color: "accent",
+          bold: true,
+        },
+        {
+          kind: "text",
+          x: 6.4375,
+          y: 3.44,
+          w: 3.0,
+          h: 0.7,
           text: "JSONL + SHA-256\nremain the audit source",
-          size: T.type.small, color: "muted", bold: true,
+          size: T.type.small,
+          color: "muted",
+          bold: true,
         },
       ],
       notes:
@@ -66,9 +91,19 @@ renderDeck(() => ({
       rail: "budget",
       blocks: [
         {
-          kind: "comparison", left: { x: LEFT_X, body: "JSONL\n↓\nmanual scans\n↓\nlimited trend views" },
-          right: { x: RIGHT_X, body: "Verified JSONL\n↓\nrebuildable SQL projection\n↓\ntrends · flakiness · anomalies" },
-          y: G.panelY, h: G.panelH, w: COL_W, accent: "budget",
+          kind: "comparison",
+          left: {
+            x: LEFT_X,
+            body: "JSONL\n↓\nmanual scans\n↓\nlimited trend views",
+          },
+          right: {
+            x: RIGHT_X,
+            body: "Verified JSONL\n↓\nrebuildable SQL projection\n↓\ntrends · flakiness · anomalies",
+          },
+          y: G.panelY,
+          h: G.panelH,
+          w: COL_W,
+          accent: "budget",
           size: T.type.body,
           footnote: "Projection failure ≠ gate failure",
         },
@@ -87,9 +122,20 @@ renderDeck(() => ({
       blocks: [
         {
           kind: "comparison",
-          left: { x: LEFT_X, body: "Browser\n↓\nPython /api/*", sub: "Static shell + SSE works,\nbut contract is implicit" },
-          right: { x: RIGHT_X, body: "Browser\n↓\nvalidated REST proxy\n↓\nPython dashboard", sub: "Allowlisted routes · rate limits\nstructured errors · timeouts" },
-          y: G.panelY, h: G.panelH, w: COL_W, accent: "accent",
+          left: {
+            x: LEFT_X,
+            body: "Browser\n↓\nPython /api/*",
+            sub: "Static shell + SSE works,\nbut contract is implicit",
+          },
+          right: {
+            x: RIGHT_X,
+            body: "Browser\n↓\nvalidated REST proxy\n↓\nPython dashboard",
+            sub: "Allowlisted routes · rate limits\nstructured errors · timeouts",
+          },
+          y: G.panelY,
+          h: G.panelH,
+          w: COL_W,
+          accent: "accent",
           size: T.type.body,
         },
       ],
@@ -106,9 +152,19 @@ renderDeck(() => ({
       blocks: [
         {
           kind: "comparison",
-          left: { x: LEFT_X, body: "Build PDF\n↓\nsidecar\n↓\nreview discovers drift late" },
-          right: { x: RIGHT_X, body: "SOURCE_DATE_EPOCH build\n↓\nrebuild hash comparison\n↓\nCI blocks source/PDF drift", sub: "Before/after evidence in summary" },
-          y: G.panelY, h: G.panelH, w: COL_W, accent: "warn",
+          left: {
+            x: LEFT_X,
+            body: "Build PDF\n↓\nsidecar\n↓\nreview discovers drift late",
+          },
+          right: {
+            x: RIGHT_X,
+            body: "SOURCE_DATE_EPOCH build\n↓\nrebuild hash comparison\n↓\nCI blocks source/PDF drift",
+            sub: "Before/after evidence in summary",
+          },
+          y: G.panelY,
+          h: G.panelH,
+          w: COL_W,
+          accent: "warn",
           size: T.type.body,
         },
       ],
@@ -124,23 +180,47 @@ renderDeck(() => ({
       rail: "ok",
       blocks: [
         {
-          kind: "text", x: ROW_X, y: 1.8125, w: 6, h: 0.35,
-          text: "Recommended order", size: T.type.small, color: "ok", bold: true,
+          kind: "text",
+          x: ROW_X,
+          y: 1.8125,
+          w: 6,
+          h: 0.35,
+          text: "Recommended order",
+          size: T.type.small,
+          color: "ok",
+          bold: true,
         },
         {
-          kind: "text", x: 0.875, y: 2.25, w: 5.4, h: 1.3,
+          kind: "text",
+          x: 0.875,
+          y: 2.25,
+          w: 5.4,
+          h: 1.3,
           text: "1. Add the rebuild-and-compare gate\n2. Add a read-only history projection\n3. Add the external frontend proxy when needed",
-          size: T.type.body, lineSpacing: 1.3,
+          size: T.type.body,
+          lineSpacing: 1.3,
         },
         {
-          kind: "text", x: 5.9375, y: 2.4375, w: 3.4, h: 1.4,
-          text: "FILES\n→\nPROJECTION\n→\nPRODUCT", size: T.type.display,
-          color: "ok", bold: true,
+          kind: "text",
+          x: 5.9375,
+          y: 2.4375,
+          w: 3.4,
+          h: 1.4,
+          text: "FILES\n→\nPROJECTION\n→\nPRODUCT",
+          size: T.type.display,
+          color: "ok",
+          bold: true,
         },
         {
-          kind: "text", x: 5.9375, y: 3.85, w: 3.4, h: 0.7,
+          kind: "text",
+          x: 5.9375,
+          y: 3.85,
+          w: 3.4,
+          h: 0.7,
           text: "Each step remains reversible\nand independently verifiable.",
-          size: T.type.small, color: "muted", bold: true,
+          size: T.type.small,
+          color: "muted",
+          bold: true,
         },
       ],
       notes:

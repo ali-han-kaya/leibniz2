@@ -177,6 +177,33 @@ def shapes_crossing_canvas(body):
     return crossing
 
 
+PILOT = "verification_chain"
+# Pilot kalıbı: üç jeneratörün ORTAK iskeleti. İçerik deck'e göre değişir;
+# bu satırlar değişmez — yeni bir deck eklenirken kopyalanacak şablon budur.
+SKELETON_TITLE = "NATIVE pptx şekilleri + metniyle kurar."
+SKELETON_HEADER_LINES = (
+    "İçerik kaynağı:",
+    "PNG'ler artık pptx'e GÖMÜLMEZ:",
+    "Palet/tipografi: `design-system/tokens.json` (tokens.js).",
+    "Geometri 1600x900 px deck ızgarasından türetilir (T.grid, inç).",
+)
+# Jeneratörün kullanabileceği blok sözlüğü (renderer bilinmeyen türde throw eder;
+# burada node'a gitmeden yakalanır).
+BLOCK_KINDS = frozenset({"text", "card", "rows", "steps", "badge", "comparison"})
+CONST_DEF = re.compile(r"(?m)^const (\w+) = ")
+
+
+def unused_constants(src):
+    """Tanımlanıp hiç kullanılmayan sabitler (pilot kalıbı: ölü sabit yok).
+
+    Pilot ilk sürümünde `X`/`W` tanımlanıp hiç kullanılmamıştı; kalıbı
+    kopyalayan deck'ler de aynı ölü sabitleri taşımıştı. Sayısal kapı bunu
+    tekrarlanabilir kılar.
+    """
+    return [name for name in CONST_DEF.findall(src)
+            if len(re.findall(r"\b%s\b" % name, src)) < 2]
+
+
 def embedded_media(names):
     """Zip girdi listesinden gömülü medya parçaları (dizin girdileri hariç)."""
     return sorted(n for n in names
@@ -247,6 +274,51 @@ class TestPptxExport(unittest.TestCase):
                 self.assertIsNone(
                     re.search(r"#[0-9a-fA-F]{3,6}\b", src),
                     "jeneratörde ad-hoc hex renk var (tokens rolü kullan)")
+
+    def test_generators_follow_the_pilot_skeleton(self):
+        """Pilot kalıbı (verification_chain) üç jeneratörde de aynı olmalı.
+
+        İçerik deck'e göre değişir; İSKELET değişmez: başlık şekli, tek
+        `renderDeck` girişi, meta + footer, `NN / …` kicker'lı slaytlar ve
+        notlar, yalnız tanıdık blok türleri, yalnız KULLANILAN sabitler.
+        """
+        for deck in DECKS:
+            name = deck["name"]
+            with self.subTest(deck=name):
+                src = generator_path(name).read_text(encoding="utf-8")
+                lines = src.splitlines()
+                # 1) başlık şekli: ilk satır " * <ad>_pptx.js — … <pilot cümlesi>"
+                self.assertIn("%s_pptx.js" % name, lines[1])
+                self.assertIn(SKELETON_TITLE, lines[1])
+                for needle in SKELETON_HEADER_LINES:
+                    self.assertIn(needle, src,
+                                  "ortak başlık satırı eksik: %r" % needle)
+                # 2) tek giriş noktası: yerleşim/metadata/notlar native_deck'te
+                self.assertIn('const { renderDeck, T } = require("./native_deck");', src)
+                self.assertEqual(src.count("renderDeck("), 1,
+                                 "jeneratör başına tek renderDeck çağrısı")
+                # 3) metadata + footer + slayt iskeleti
+                for field in ("title", "subject", "author", "company"):
+                    self.assertIn("\n    %s:" % field, src)
+                self.assertIn('footer: "LEIBNIZ2  /  ', src)
+                self.assertEqual(
+                    re.findall(r'kicker: "(\d{2}) / ', src),
+                    ["%02d" % (i + 1) for i in range(SLIDES)],
+                    "kicker'lar 01..05 sırasında olmalı")
+                self.assertEqual(src.count("notes:"), SLIDES)
+                self.assertRegex(src.rstrip(), r"\n\}\)\);$")
+                # 4) blok sözlüğü: yazım hatası node'a kalmadan yakalanır
+                kinds = set(re.findall(r'kind: "(\w+)"', src))
+                self.assertTrue(kinds, "hiç blok yok")
+                self.assertLessEqual(
+                    kinds, BLOCK_KINDS,
+                    "tanınmayan blok türü: %s" % sorted(kinds - BLOCK_KINDS))
+                # 5) ölü sabit yok — pilot kalıbı yalnız kullandığını tanımlar
+                self.assertEqual(unused_constants(src), [],
+                                 "kullanılmayan sabit (pilot kalıbı dışı)")
+        # referansın kendisi de kalıba uyar (pilot kendini denetler)
+        self.assertEqual(unused_constants(
+            (PPTX_DIR / (PILOT + "_pptx.js")).read_text(encoding="utf-8")), [])
 
     def test_shared_renderer_owns_the_export_contract(self):
         """LAYOUT/metadata/addNotes tek yerde: jeneratörler yalnız içerik taşır."""
