@@ -45,8 +45,14 @@ MERGE_PATTERN_EXCLUDED = frozenset({
 # artifact'lar. test_doc_artifact_sync fazlalık denetiminde bunları muaf tutar.
 # ─────────────────────────────────────────────────────────────────────────────
 DOC_ONLY_ADVISORY = frozenset({
-    "a11y-report",           # dashboard tarayıcı artifact'ı — bundle dışı
-    "a11y-guide-report",     # guide tarayıcı artifact'ı — bundle dışı
+    "a11y-report-dark",      # dashboard dark tarayıcı artifact'ı — bundle dışı
+    "a11y-report-light",     # dashboard light tarayıcı artifact'ı — bundle dışı
+    "a11y-guide-report-dark",   # guide dark tarayıcı artifact'ı — bundle dışı
+    "a11y-guide-report-light",  # guide light tarayıcı artifact'ı — bundle dışı
+    "a11y-landing-report-dark",   # landing dark tarayıcı artifact'ı — bundle dışı
+    "a11y-landing-report-light",  # landing light tarayıcı artifact'ı — bundle dışı
+    "lighthouse-dashboard-dark",  # dashboard dark Lighthouse artifact'ı — bundle dışı
+    "lighthouse-dashboard-light", # dashboard light Lighthouse artifact'ı — bundle dışı
     "audit-live-ci",         # advisory meta-denetçi — job output
     "pattern-drift",         # advisory: merge pattern ↔ ARTIFACT_JOBS
     "preview-reload-smoke",  # advisory: preview reload smoke testi
@@ -60,8 +66,14 @@ DOC_ONLY_ADVISORY = frozenset({
 UPLOAD_EXCEPTIONS = frozenset({
     "badge-check",
     "action-pins",
-    "a11y-report",
-    "a11y-guide-report",
+    "a11y-report-dark",
+    "a11y-report-light",
+    "a11y-guide-report-dark",
+    "a11y-guide-report-light",
+    "a11y-landing-report-dark",
+    "a11y-landing-report-light",
+    "lighthouse-dashboard-dark",
+    "lighthouse-dashboard-light",
     "audit-live-ci",
     "pattern-drift",
     "preview-reload-smoke",

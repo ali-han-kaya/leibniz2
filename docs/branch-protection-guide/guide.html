@@ -69,6 +69,53 @@
   .term .warn { color: #d29922; }
   .term .dim { color: #8b949e; }
   .empty-state { border: 2px dashed #d0d7de; border-radius: 6px; padding: 44px; text-align: center; color: #656d76; font-size: 14px; background: #f6f8fa; }
+
+  /* CI a11y gate dark child'ı gerçek bir koyu yüzeyi tarar; light varsayılandır. */
+  :root[data-theme="dark"] { background: #010409; }
+  :root[data-theme="dark"] body { color: #e6edf3; }
+  :root[data-theme="dark"] .screen { background: #0d1117; border-color: #30363d; box-shadow: 0 1px 4px rgba(1,4,9,.8); }
+  :root[data-theme="dark"] .caption { background: #010409; color: #e6edf3; }
+  :root[data-theme="dark"] .caption .desc,
+  :root[data-theme="dark"] .nav-sec,
+  :root[data-theme="dark"] .tab,
+  :root[data-theme="dark"] .field .hint,
+  :root[data-theme="dark"] .rule-item .sub,
+  :root[data-theme="dark"] .rule-card .desc,
+  :root[data-theme="dark"] .empty-state { color: #8b949e; }
+  :root[data-theme="dark"] .topbar,
+  :root[data-theme="dark"] .tabbar,
+  :root[data-theme="dark"] .main,
+  :root[data-theme="dark"] .nav-item.active,
+  :root[data-theme="dark"] .btn-sec,
+  :root[data-theme="dark"] input[type=text],
+  :root[data-theme="dark"] .expand,
+  :root[data-theme="dark"] .check-list,
+  :root[data-theme="dark"] .rule-item { background: #0d1117; border-color: #30363d; color: #e6edf3; }
+  :root[data-theme="dark"] .sidebar,
+  :root[data-theme="dark"] .empty-state { background: #161b22; }
+  :root[data-theme="dark"] .nav-item,
+  :root[data-theme="dark"] .logo,
+  :root[data-theme="dark"] .crumb-cur,
+  :root[data-theme="dark"] .breadcrumb .cur,
+  :root[data-theme="dark"] .tab.active,
+  :root[data-theme="dark"] .field label,
+  :root[data-theme="dark"] .rules-label,
+  :root[data-theme="dark"] .rule-item .title,
+  :root[data-theme="dark"] .rule-card .name { color: #e6edf3; }
+  :root[data-theme="dark"] .crumbs,
+  :root[data-theme="dark"] .breadcrumb,
+  :root[data-theme="dark"] .link,
+  :root[data-theme="dark"] .rule-card .actions { color: #58a6ff; }
+  :root[data-theme="dark"] .nav-item.active { border-color: #30363d; border-left-color: #fd8c73; }
+  :root[data-theme="dark"] .tab.active,
+  :root[data-theme="dark"] .annot { border-bottom-color: #fd8c73; }
+  :root[data-theme="dark"] .check-list .chk.checked { background: #121d2f; }
+  :root[data-theme="dark"] .term { background: #010409; color: #e6edf3; }
+  :root[data-theme="dark"] .term .prompt,
+  :root[data-theme="dark"] .term .ok { color: #7ee787; }
+  :root[data-theme="dark"] .term .warn { color: #d29922; }
+  :root[data-theme="dark"] .term .dim { color: #8b949e; }
+  :root[data-theme="dark"] [style*="color:#656d76"] { color: #8b949e !important; }
 </style>
 </head>
 <body>

@@ -18,6 +18,21 @@ from workflow_contract import UPLOAD_EXCEPTIONS  # noqa: E402
 
 
 def workflow_artifacts(text):
+    """Upload artifact adlarını matrix child'larına göre fail-closed aç.
+
+    GitHub Actions aynı artifact step'ini N matrix child'da çalıştırır ve
+    sonuç adları child değeridir. Denetleyici de doc/manifest karşılaştırmasında
+    aynı genişletilmiş adları görmelidir; aksi halde doğru bir workflow yanlışlıkla
+    eksik artifact üretimi gibi raporlanır.
+    """
+    matrix_values = {}
+    for match in re.finditer(
+            r"^\s+([A-Za-z_][A-Za-z0-9_-]*):\s*\[([^]\n]+)\]\s*$",
+            text, flags=re.M):
+        matrix_values[match.group(1)] = [
+            value.strip().strip("'\"") for value in match.group(2).split(",")
+        ]
+
     names = []
     in_upload = False
     for line in text.splitlines():
@@ -27,9 +42,20 @@ def workflow_artifacts(text):
         if in_upload and re.match(r"^\s*- name:", line):
             in_upload = False
         if in_upload:
-            m = re.match(r"^\s{10}name:\s*([^#\s]+)", line)
-            if m and m.group(1) not in names:
-                names.append(m.group(1).strip("'\""))
+            m = re.match(r"^\s{10}name:\s*([^#\n]+)", line)
+            if not m:
+                continue
+            template = m.group(1).strip().strip("'\"")
+            expanded = [template]
+            for key, values in matrix_values.items():
+                token = "${{ matrix.%s }}" % key
+                if token not in template:
+                    continue
+                expanded = [name.replace(token, value)
+                            for name in expanded for value in values]
+            for name in expanded:
+                if name not in names:
+                    names.append(name)
     return names
 
 

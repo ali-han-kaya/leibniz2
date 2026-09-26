@@ -128,6 +128,20 @@ class TestExtractWorkflowUploadNames(unittest.TestCase):
         self.assertEqual(als.extract_workflow_upload_names(wf),
                          ["b-art", "a-art"])
 
+    def test_matrix_artifact_names_expand_to_child_values(self):
+        wf = ("      - name: Upload landing\n"
+              "        uses: actions/upload-artifact@v6\n"
+              "        if: always()\n"
+              "        with:\n"
+              "          name: a11y-landing-report-${{ matrix.theme }}\n"
+              "          path: a11y_landing_${{ matrix.theme }}.json\n")
+        # Matrix tanımı extractor'ın girdi metninde bulunmalıdır.
+        wf = "    matrix:\n      theme: [dark, light]\n" + wf
+        self.assertEqual(
+            als.extract_workflow_upload_names(wf),
+            ["a11y-landing-report-dark", "a11y-landing-report-light"],
+        )
+
     def test_non_upload_artifact_ignored(self):
         wf = ("      - name: Download\n"
               "        uses: actions/download-artifact@v7\n"

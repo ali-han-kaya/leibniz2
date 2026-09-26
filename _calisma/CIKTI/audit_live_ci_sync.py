@@ -91,26 +91,43 @@ _JOB_ROW_RE = re.compile(
 # Artifact satırları: "- `unit-tests` (...)" veya "- `budget-verify` + `budget` (...)"
 _ARTIFACT_BULLET_RE = re.compile(r"^\s*-\s*(.+)$")
 
-# upload-artifact bloğu: `uses:` → `with:` → `name:` (yalnızca yatay boşluk;
-# \s* değil — `with:` ile `name:` arasına başka anahtar giremez).
+# upload-artifact bloğu: `uses:` → (varsa `if:`/`retention-days:` gibi
+# ara anahtarlar) → `with:` → `name:`. CI a11y adımlarında `if: always()`
+# bulunduğu için önceki komşu-satır regex'i bu artifact'ları kaçırıyordu.
 _UPLOAD_ARTIFACT_RE = re.compile(
     r"^[ \t]*uses:[ \t]*actions/upload-artifact@\S+[ \t]*\n"
-    r"[ \t]*with:[ \t]*\n"
-    r"[ \t]*name:[ \t]*(\S+)[ \t]*$",
+    r"(?:^[ \t]+(?!with:|name:|uses:)[A-Za-z0-9_-]+:[^\n]*\n)*"
+    r"^[ \t]*with:[ \t]*\n"
+    r"^[ \t]*name:[ \t]*(.+?)[ \t]*$",
     re.M)
 
 
 def extract_workflow_upload_names(wf_text):
     """Workflow metnindeki TÜM `actions/upload-artifact` `name:` değerlerini
-    çıkarır (sıralı, tekil). Bu, canlı run'ın artifact kümesinin OFFLINE
-    eşdeğeridir: `--doc` karşılaştırmasında canlı tarafı temsil eder ve
-    yeni eklenen artifact'ları otomatik yakalar (python3-shell drift
-    regression'ı — `845206a`)."""
+    çıkarır (sıralı, tekil). Matrix üretimleri child değerlerine açılır; böylece
+    doc'taki `a11y-*-dark` + `a11y-*-light` artifact'larıyla offline küme
+    eşdeğerleri birebir karşılaştırılabilir."""
+    matrix_values = {}
+    for match in re.finditer(
+            r"^\s+([A-Za-z_][A-Za-z0-9_-]*):\s*\[([^]\n]+)\]\s*$",
+            wf_text, flags=re.M):
+        matrix_values[match.group(1)] = [
+            value.strip().strip("'\"") for value in match.group(2).split(",")
+        ]
+
     names = []
     for m in _UPLOAD_ARTIFACT_RE.finditer(wf_text):
-        n = m.group(1).strip()
-        if n and n not in names:
-            names.append(n)
+        template = m.group(1).strip()
+        expanded = [template]
+        for key, values in matrix_values.items():
+            token = "${{ matrix.%s }}" % key
+            if token not in template:
+                continue
+            expanded = [name.replace(token, value)
+                        for name in expanded for value in values]
+        for name in expanded:
+            if name and name not in names:
+                names.append(name)
     return names
 
 
