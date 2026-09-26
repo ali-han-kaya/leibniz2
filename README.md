@@ -62,6 +62,18 @@ bash _calisma/dev_bootstrap.sh           # venv_z3 (pinned) + pptx + docx + dash
 bash _calisma/dev_bootstrap.sh --check   # fail-closed doğrulama (rc=0/1)
 ```
 
+Pinokio'suz Live CI Dashboard için macOS'ta tam kurulum + launchd başlatma tek
+komuttur:
+
+```bash
+bash _calisma/CIKTI/fresh_clone_setup.sh --start
+```
+
+Bu akış mirror + HTML + `update_preview.sh` plist zincirini kurar, primary
+LaunchAgent'ı bootstrap eder ve `/api/health` ile `/preview.html` hazır olmadan
+başarı vermez. Ayrıntılı yaşam döngüsü ve `--check`/`--stop` komutları için
+bkz. [`docs/RUN_DASHBOARD.md`](docs/RUN_DASHBOARD.md).
+
 Pinler `docs/HOOK_ENV_MATRIX.md` ile tek-kaynaklıdır; `--check` eksik araçta
 rc=1 ile düşer (fail-closed).
 
@@ -503,6 +515,24 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-24 | docs | (specs) add verify.yml job needs-DAG excalidraw map | [`04af000`](https://github.com/ali-han-kaya/leibniz2/commit/04af000) |
 | 2026-09-25 | feat | (a11y) scan the branch protection guide | [`9e5160f`](https://github.com/ali-han-kaya/leibniz2/commit/9e5160f) |
 | 2026-09-25 | fix | (a11y) stabilize dashboard contrast analysis | [`e099545`](https://github.com/ali-han-kaya/leibniz2/commit/e099545) |
+| 2026-09-25 | refactor | (design) align vercel tokens with provider contract | [`34b6ea3`](https://github.com/ali-han-kaya/leibniz2/commit/34b6ea3) |
+| 2026-09-26 | test | (coverage) check-seal-hash hook'unu kapsam tablosuna ekle | [`9e0f8e9`](https://github.com/ali-han-kaya/leibniz2/commit/9e0f8e9) |
+| 2026-09-26 | test | (coverage) seal-hash testini check-unit-tests'e bağla | [`614ae70`](https://github.com/ali-han-kaya/leibniz2/commit/614ae70) |
+| 2026-09-26 | test | (coverage) shuffle_tests'ı check-unit-tests kapsamına bağla | [`b72f775`](https://github.com/ali-han-kaya/leibniz2/commit/b72f775) |
+| 2026-09-26 | feat | (audit) shuffle_tests.py - tohumlu test izolasyonu denetimi | [`c8a1074`](https://github.com/ali-han-kaya/leibniz2/commit/c8a1074) |
+| 2026-09-26 | test | (coordinator) TestLoopFlow GATES izolasyonunu mock.patch.dict'e devret | [`691155d`](https://github.com/ali-han-kaya/leibniz2/commit/691155d) |
+| 2026-09-26 | test | (preview-server) StatusBoardTests LATEST izolasyonunu mock.patch.dict'e devret | [`a1fc2ee`](https://github.com/ali-han-kaya/leibniz2/commit/a1fc2ee) |
+| 2026-09-26 | feat | (mcp) health/latest/trend tools with a hermetic stdio smoke | [`8a5008d`](https://github.com/ali-han-kaya/leibniz2/commit/8a5008d) |
+| 2026-09-26 | refactor | (pptx) align the generators with the pilot skeleton and gate it | [`c8fb0f5`](https://github.com/ali-han-kaya/leibniz2/commit/c8fb0f5) |
+| 2026-09-26 | test | (cwv) report CLS/LCP/FCP/TTFB for the landing surface too | [`7802667`](https://github.com/ali-han-kaya/leibniz2/commit/7802667) |
+| 2026-09-26 | test | (a11y) scan the landing surface in both themes over the run snapshot | [`f1aae30`](https://github.com/ali-han-kaya/leibniz2/commit/f1aae30) |
+| 2026-09-26 | feat | (landing) build, serve and seal the landing surface | [`5586080`](https://github.com/ali-han-kaya/leibniz2/commit/5586080) |
+| 2026-09-26 | feat | (preview) themed scan override and a FAIL-state verdict seal | [`4ee11eb`](https://github.com/ali-han-kaya/leibniz2/commit/4ee11eb) |
+| 2026-09-26 | feat | (trend-db) Neon-backed read path, migrations and the /trend panel | [`a7077a9`](https://github.com/ali-han-kaya/leibniz2/commit/a7077a9) |
+| 2026-09-26 | perf | (ci) deepen the build caches (cache v6, setup-python v7, pip mount) | [`b6fa88f`](https://github.com/ali-han-kaya/leibniz2/commit/b6fa88f) |
+| 2026-09-26 | feat | (pptx) rebuild the decks as native shapes with real text | [`32d76c4`](https://github.com/ali-han-kaya/leibniz2/commit/32d76c4) |
+| 2026-09-26 | test | (cwv) add CLS budget gate and three-surface CWV report | [`8ec7702`](https://github.com/ali-han-kaya/leibniz2/commit/8ec7702) |
+| 2026-09-25 | test | (security) add Playwright CSP+nonce smoke for the live dashboard | [`e9ca14a`](https://github.com/ali-han-kaya/leibniz2/commit/e9ca14a) |
 
 ### Regresyon notları
 

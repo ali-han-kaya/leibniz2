@@ -60,7 +60,8 @@ HOOK_COVERAGE = {
     "verify-delivery-github-scripts": ["test_github_scripts_battery.py"],
     "verify-delivery-sde":       ["test_check_sde_determinism.py"],
     "texlive-repro-documented":  ["test_texlive_repro_documented.py"],
-    "check-z3-slide-sync":       ["test_render_z3_slides.py", "test_z3_slide_reproducibility.py"],
+    "check-z3-slide-sync":       ["test_render_z3_slides.py", "test_render_equation_gallery.py", "test_z3_slide_reproducibility.py"],
+    "check-latex-surface":      ["test_check_latex_surface.py"],
     "check-seal-hash":          ["test_check_seal_hash.py"],
     "check-pattern-consistency": ["test_gen_repro_manifest.py"],
     "check-config-sync":       ["test_check_config_sync.py"],
@@ -151,11 +152,13 @@ HOOK_COVERAGE = {
         "test_sync_one_atomic.py",
         "test_check_lean_axioms.py",
         "test_classify_lean_error.py",
+        "test_check_latex_surface.py",
         "test_check_lean_statements.py",
         "test_check_sde_determinism.py",
         "test_skill_layer_sync.py",
         "test_gen_k_layer.py",
         "test_reproducible_pdf_skill.py",
+        "test_render_equation_gallery.py",
         "test_render_z3_slides.py",
         "test_check_hook_env_matrix.py",
         "test_ci_sidecar_wiring.py",
@@ -266,8 +269,8 @@ CI_JOB_COVERAGE = {
     # a11y-gate job'ı dashboard'ın axe taramasına ek olarak CLS bütçe kapısını
     # (CLS < 0.1) aynı canlı preview_server üzerinde koşar — "Run CLS budget
     # gate — dashboard (CLS < 0.1)" adımı. İkinci adım ("Run CWV report —
-    # dashboard") aynı ölçüm çekirdeğini dashboard yüzeyine koşturur
-    # (CLS/LCP/FCP/TTFB); landing yüzeyi mirror'a stage edildiğinde eklenir.
+    # dashboard + landing") aynı ölçüm çekirdeğini dashboard + landing
+    # yüzeylerine koşturur (CLS/LCP/FCP/TTFB).
     "a11y-gate": ["test_a11y_gate.py", "test_dashboard_cls_budget.py",
                   "test_surface_cwv_report.py"],
     "dashboard-smoke": ["test_dashboard_playwright_smoke.py"],
@@ -476,6 +479,28 @@ def build_report(test_files, hook_map, ci_map, hook_names, ci_data=None):
     }
 
 
+# ────────────────────────────────────────────────────────────────────────────
+# CHECK_EXEMPT — `--check` modunun muafiyet sözleşmesi: bu dosyalar hiçbir
+# pre-commit hook'unda koşmaz (standalone smoke/Playwright/JS-only) ve
+# kapsamsız kalmaları FAIL sayılmaz. TEK KAYNAK burasıdır; kardeş test
+# (test_test_coverage_report.py) eskiden aynı listeyi elle kopyalıyordu ve
+# kopya sürüklendiği için süit kırmızıya düştü — artık buradan okunur.
+# Modül düzeyinde durur ki test/araç onu import edebilsin. Metin biçimi
+# ("CHECK_EXEMPT = frozenset({") test_sync_check_unit_tests.py'nin metin
+# ayrıştırmasıyla uyumlu tutulmalıdır.
+# ────────────────────────────────────────────────────────────────────────────
+CHECK_EXEMPT = frozenset({
+    "test_coverage_report.py",      # meta: kendi kendini test edemez
+    "test_test_coverage_report.py",  # meta: kendini test eder, ayrıca check-unit-tests'te
+    "test_preview_reload_smoke.py",  # standalone smoke script, def test_ yok
+    "test_all_hooks_smoke.py",       # standalone smoke: tum hook'lari kosar
+    "test_budget_scan.js",          # JS-only, ayrı Node hook'unda
+    "test_dashboard_playwright_smoke.py",  # standalone Playwright smoke (Chromium ~10s) — CI'da ayrı job
+    "test_dashboard_csp_nonce.py",   # standalone Playwright CSP+nonce smoke (Chromium) — canlı sunucu/kendi sunucusu
+    "test_refs_trend_badge_node.js", # standalone JS smoke (Node-only assertion), dokümante bilinçlileşti
+})
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Test coverage report aggregator")
     ap.add_argument("--json", dest="json_out", help="JSON output file")
@@ -510,17 +535,8 @@ def main(argv=None):
         print(md)
 
     # Pre-commit check mode: yalnızca gerçek test dosyalarını kontrol et
-    # (meta dosyalar, smoke script'leri, JS-only testleri hariç)
-    CHECK_EXEMPT = frozenset({
-        "test_coverage_report.py",      # meta: kendi kendini test edemez
-        "test_test_coverage_report.py",  # meta: kendini test eder, ayrıca check-unit-tests'te
-        "test_preview_reload_smoke.py",  # standalone smoke script, def test_ yok
-        "test_all_hooks_smoke.py",       # standalone smoke: tum hook'lari kosar
-        "test_budget_scan.js",          # JS-only, ayrı Node hook'unda
-        "test_dashboard_playwright_smoke.py",  # standalone Playwright smoke (Chromium ~10s) — CI'da ayrı job
-        "test_dashboard_csp_nonce.py",   # standalone Playwright CSP+nonce smoke (Chromium) — canlı sunucu/kendi sunucusu
-        "test_refs_trend_badge_node.js", # standalone JS smoke (Node-only assertion), dokümante bilinçlileşti
-    })
+    # (meta dosyalar, smoke script'leri, JS-only testleri — modül düzeyi
+    # CHECK_EXEMPT ile aynı sözleşme).
     if args.check:
         gaps = [g for g in report["gaps"]["not_covered_by_any_hook"]
                 if g not in CHECK_EXEMPT]
