@@ -565,7 +565,7 @@ gh run list --limit 3 --json databaseId,status,conclusion,name
 RUN_ID=$(gh run list --limit 1 --json databaseId -q '.[0].databaseId')
 gh run watch $RUN_ID --exit-status
 
-# (c) Artifact'ları kontrol et (32 adet olmalı — liste aşağıda)
+# (c) Artifact'ları kontrol et (38 adet olmalı — liste aşağıda)
 gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_bytes) B)"'
 ```
 
@@ -596,7 +596,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 | 10 | A | Commit-msg gate | — PR'da koşar; commit-msg ihlali varsa FAIL → merge bloke (2026-08-23) |
 | 11 | A | Config snapshot ↔ CONFIG_BASENAMES sync check | — üçlü senkron (2026-08-23) |
 | 12 | A | CI-SIMULATE (advisory) | — simülasyon replay kapısı: status_checks + simulate_verify_job (2026-08-23) |
-| 13 | A | A11y gate (axe-core, fail-closed) | — a11y-gate: headless Chromium + sha256 pinli vendor axe-core ile config witness'lı `/preview.html` **ve** `/guide.html` taraması; preview_server health-poll (30×1s) ile başlatılır; iki rapor ayrı artifact + job summary; blocking/warn/allowlist = a11y_gate_config.json; sunucu/tarayıcı/checksum/witness arızası FAIL (retry yok) |
+| 13 | A | A11y gate (axe-core, fail-closed) | — a11y-gate: `dark` ve `light` matrix child'larında headless Chromium + sha256 pinli vendor axe-core ile config witness'lı `/preview.html`, `/guide.html` **ve** `/landing.html` taraması; aynı iki temada Lighthouse 13.5.0 accessibility-only dashboard taraması; preview_server health-poll (30×1s) ile başlatılır; altı axe + iki Lighthouse tema-suffixed rapor ayrı artifact + job summary; blocking/warn/allowlist = a11y_gate_config.json; Lighthouse accessibility score 1.0 ve tema witness'ı; sunucu/tarayıcı/checksum/witness/tema arızası FAIL (retry yok) |
 | | **B — Advisory (13; push'ta çalışır, required değil)** | | |
 | 14 | B | Publish precheck (AŞAMA 0, advisory) | ✅ success (9s) — AŞAMA 0 kapıları otomatik denetlenir |
 | 15 | B | Plist drift check (macOS, advisory) | ✅ success (11s) — K12, macOS-runner'lı; negatif smoke: bozuk-plist + eksik-golden yakalanmalı (YAKALANMADI → fail-closed) |
@@ -617,7 +617,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 | 28 | D | Manifest PR comment | — skipped (PR'da çalışır) |
 | 29 | D | Budget status PR comment | — bütçe + pre-commit PR yorumu; job-level PR-only, push'ta tamamen skipped (bütçe kapısı ayrı `budget` job'ında kalır) |
 
-**Artifact listesi (32):**
+**Artifact listesi (38):**
 - `unit-tests` (CIKTI birim test logu — `test_*.py` glob'u)
 - `verify-report` (tek log: K1-K14 + pre-commit bölümü + .sha256)
 - `action-runtimes` (her action'ın runs.using denetimi JSON — node24 kapısı)
@@ -627,7 +627,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 - `lineage-findings` (zip soy hattı doğrulaması JSON)
 - `klayers` (K1-K14 PASS/FAIL/SKIP özeti — run summary)
 - `refs-online` (çevrimiçi referans denetimi VERSION JSON — `ht_ids_summary` dahil)
-- `run-history` (history.jsonl — run zaman serisi)
+- `run-history` (history.jsonl + SHA-256 sidecar — run zaman serisi; `a11y-gate` bu artifact'ı `preview_server --snapshot-file ... --no-verify` ile aynı origin'de sunar ve landing mührünü `/api/latest` raw SHA-256'sından üretir)
 - `precommit-logs` (ham log + PRECOMMIT_RAPORU.md/.json + cache/env özeti)
 - `python3-shell` (check_python3_shell.py --json denetimi — SHA-256 ile manifest'te sabitlenir; **sabit (pinned)** artifact: `audit-live-ci` her run'da doc'ta VE canlıda varlığını fail-closed denetler)
 - `reports` (statik markdown raporları)
@@ -646,8 +646,10 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 - `changelog-drift` (gen_changelog --check drift logu + rc — advisory, run summary'ye yazılır)
 - `pattern-drift` (merge pattern ↔ ARTIFACT_JOBS tutarlılık denetimi — advisory, run summary'ye yazılır)
 - `preview-reload-smoke` (preview sunucu restart + endpoint smoke testi — advisory, macOS)
-- `a11y-report` (dashboard a11y-gate raporu: axe sonuçları + config echo + verdict — fail-closed kapı; blocking/warn/allowlisted/incomplete özeti)
-- `a11y-guide-report` (Branch protection görsel kılavuzunun a11y-gate raporu: witness doğrulamalı `/guide.html` taraması + aynı fail-closed özet sözleşmesi)
+- `a11y-report-dark` + `a11y-report-light` (dashboard'ın koyu/açık tema a11y-gate raporları: axe sonuçları + config echo + verdict — fail-closed kapı; blocking/warn/allowlisted/incomplete özeti)
+- `a11y-guide-report-dark` + `a11y-guide-report-light` (Branch protection görsel kılavuzunun koyu/açık tema `/guide.html` a11y-gate raporları: witness + DOM tema doğrulamalı, aynı fail-closed özet sözleşmesi)
+- `a11y-landing-report-dark` + `a11y-landing-report-light` (Landing'in koyu/açık tema `/landing.html` a11y-gate raporları: generated witness + DOM tema doğrulamalı, aynı fail-closed özet sözleşmesi)
+- `lighthouse-dashboard-dark` + `lighthouse-dashboard-light` (dashboard'ın koyu/açık temada Lighthouse 13.5.0 accessibility-only JSON raporları: sorgu ile tema witness'ı + 1.0 skor kapısı)
 - `docx-report` (docx-export job'unun ürünü: `make_docx.js` çıktısı .docx ×2 — tek rapor + bölüm kırılımlı birleşik rapor — build key=value logları + LibreOffice açılabilirlik raporları — advisory job, ürün yine artefakt olarak saklanır)
 
 **Not:** Kapı artık `verify_delivery.py --full`'dur (K1-K14, fail-closed) ve yeşildir —

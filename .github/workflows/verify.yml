@@ -277,6 +277,18 @@ jobs:
           pip install jsonschema
           python3 _calisma/CIKTI/validate_config_schema.py
 
+      # LaTeX yüzeyi: tracked .tex dosyalarında aktif $$ ve aynı
+      # input/include yüzeyinde label'sız cross-reference bulunursa
+      # commit/CI akışı fail-closed durur. JSON sidecar precommit log
+      # artifact'ına da girer.
+      - name: Check LaTeX surface (fail-closed)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p logs
+          python3 _calisma/CIKTI/check_latex_surface.py \
+            --root . --json --out logs/latex_surface_findings.json
+
       # ─── MCP SUNUCU SMOKE'U (fail-closed) ───────────────────────────
       # leibniz2_mcp'yi gerçekten konuşturur: stdio transport üzerinden
       # list_tools + leibniz2_health/latest/trend çağrıları (Senaryo A,
