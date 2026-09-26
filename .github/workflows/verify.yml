@@ -277,6 +277,45 @@ jobs:
           pip install jsonschema
           python3 _calisma/CIKTI/validate_config_schema.py
 
+      # ─── MCP SUNUCU SMOKE'U (fail-closed) ───────────────────────────
+      # leibniz2_mcp'yi gerçekten konuşturur: stdio transport üzerinden
+      # list_tools + leibniz2_health/latest/trend çağrıları (Senaryo A,
+      # canlı mock) ve arkada sunucu yokken fail-closed hata payload'u
+      # (Senaryo B). Tamamen hermetik — yalnız 127.0.0.1 loopback + stdio,
+      # dış ağ bağımlılığı yok; bu yüzden zincirin geri kalanından bağımsız
+      # ve deterministik.
+      #
+      # Venv: _calisma/mcp/.venv gitignored (README'deki kurulum yolu), CI'da
+      # her koşuda requirements.txt'ten kurulur. `mcp<2` pinn'i şart:
+      # FastMCP yüzeyi 2.x'te MCPServer'a göç etti. Pin'in tek kaynağı
+      # _calisma/mcp/requirements.txt'tir — burada sürüm tekrarlanmaz.
+      #
+      # pip cache: aşağıdaki pip install yukarıdaki "Cache pip packages"
+      # adımının ~/.cache/pip dizinini kullanır → ayrı cache adımı ya da yeni
+      # artifact GEREKMEZ (artifact sözleşmesine dokunmadan log yakalanır;
+      # logs/ zaten mevcut artifact'ta toplanır).
+      #
+      # Fail-closed: venv kurulamazsa da smoke düşerse de adım job'ı düşürür.
+      # Sessiz SKIP yok — "ortam kurulamadı" ile "smoke kırıldı" stderr'de
+      # farklı görünür, ikisi de kırmızıdır (smoke_mcp.py: 0=PASS, 1=FAIL).
+      - name: Check MCP server smoke (fail-closed)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p logs
+          MCP_VENV="_calisma/mcp/.venv"
+          if [ ! -x "$MCP_VENV/bin/python" ]; then
+            echo "[MCP-GATE] venv yok — kuruluyor: $MCP_VENV"
+            python3 -m venv "$MCP_VENV"
+            "$MCP_VENV/bin/python" -m pip install \
+              --disable-pip-version-check -q \
+              -r _calisma/mcp/requirements.txt
+          else
+            echo "[MCP-GATE] venv mevcut — yeniden kullanılıyor: $MCP_VENV"
+          fi
+          "$MCP_VENV/bin/python" _calisma/mcp/smoke_mcp.py 2>&1 \
+            | tee logs/mcp_smoke.log
+
       # pdfinfo (PDF sayfa kapısı 33) + qpdf (K6-DETERM metadata-stripped hash).
       # Yoksa verify_delivery.py bu kontrolleri atlar (FAIL etmez); kapıyı
       # eksiksiz çalıştırmak için kuruyoruz.
