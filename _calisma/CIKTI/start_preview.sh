@@ -1,98 +1,104 @@
 #!/usr/bin/env bash
 # =============================================================================
-# start_preview.sh — HTML rebuild + launchd start + health check tek komutta
+# start_preview.sh — Live CI Dashboard için launchd start + readiness
 #
-# update_preview.sh --force + --start'i birleştirir, sunucu hazır olana kadar
-# bekler ve URL/PID'i.stdout'a yazar (register_preview için).
+# Kurulum zincirini tek yerde toplar:
+#   1. update_preview.sh --bootstrap (mirror + HTML + plist; varsayılan)
+#   2. update_preview.sh --start     (yalnız launchctl bootstrap/kickstart)
+#   3. /api/health + /preview.html   (iki endpoint 200 olmadan başarı sayılmaz)
+#
+# Güvenlik: port 8000'i dinleyen süreci sahiplenmez; rastgele port eşleme
+# PID'lerini öldürmez. Mevcut LaunchAgent yalnızca update_preview.sh --start tarafından
+# bootout/bootstrap edilir. Başka bir servis portu kullanıyorsa timeout ile
+# fail-closed durulur ve o servis zorla sonlandırılmaz.
 #
 # Kullanım:
-#   bash _calisma/CIKTI/start_preview.sh          # rebuild + start + register bilgisi
-#   bash _calisma/CIKTI/start_preview.sh --no-rebuild  # sadece start + health
+#   bash _calisma/CIKTI/start_preview.sh
+#   bash _calisma/CIKTI/start_preview.sh --no-rebuild
+#   PREVIEW_HEALTH_TIMEOUT=60 bash _calisma/CIKTI/start_preview.sh --no-rebuild
 # =============================================================================
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-CALISMA="$(dirname "$SCRIPT_DIR")"
-ROOT="$(dirname "$CALISMA")"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LABEL="${PREVIEW_LABEL:-com.freebuff.preview-leibniz2}"
 PORT=8000
-LABEL="com.freebuff.preview-leibniz2"
-MAX_WAIT=30
-
-say()  { printf "\033[36m[start_preview]\033[0m %s\n" "$*"; }
-err()  { printf "\033[31m[start_preview]\033[0m %s\n" "$*" >&2; exit 1; }
-
-# --- Argümanlar ---
+MAX_WAIT="${PREVIEW_HEALTH_TIMEOUT:-30}"
 REBUILD=true
+HEALTH_URL="http://127.0.0.1:${PORT}/api/health"
+PREVIEW_URL="http://127.0.0.1:${PORT}/preview.html"
+LOG_BASENAME="${LABEL#com.freebuff.}"
+LOG_PATH="${HOME}/Library/Logs/com.freebuff/${LOG_BASENAME}.log"
+
+say() { printf '[start_preview] %s\n' "$*"; }
+err() { printf '[start_preview] HATA: %s\n' "$*" >&2; exit 1; }
+
+usage() {
+  cat <<'EOF'
+Kullanım: start_preview.sh [--no-rebuild]
+
+  --no-rebuild  Yalnız launchd start + HTTP readiness; mirror/HTML/plist
+                hazırlanmış varsayılır.
+  --help       Bu yardım metnini gösterir.
+
+Ortam:
+  PREVIEW_HEALTH_TIMEOUT  Hazır olma bekleme süresi (varsayılan: 30 saniye)
+  PREVIEW_LABEL           LaunchAgent label (varsayılan: com.freebuff.preview-leibniz2)
+EOF
+}
+
 for arg in "$@"; do
-    case "$arg" in
-        --no-rebuild) REBUILD=false ;;
-        --help|-h)
-            echo "Kullanım: $0 [--no-rebuild]"
-            echo "  --no-rebuild  HTML rebuild yapmadan start + health check"
-            exit 0 ;;
-        *) err "bilinmeyen argüman: $arg" ;;
-    esac
+  case "$arg" in
+    --no-rebuild) REBUILD=false ;;
+    --help|-h) usage; exit 0 ;;
+    *) err "bilinmeyen argüman: $arg (--help)" ;;
+  esac
 done
 
-# --- 1) HTML rebuild ---
+case "$MAX_WAIT" in
+  ''|*[!0-9]*) err "PREVIEW_HEALTH_TIMEOUT pozitif tam sayı olmalı: $MAX_WAIT" ;;
+esac
+[ "$MAX_WAIT" -gt 0 ] || err "PREVIEW_HEALTH_TIMEOUT 0'dan büyük olmalı"
+
+command -v curl >/dev/null 2>&1 || err "curl bulunamadı — readiness doğrulanamıyor"
+[ -f "$SCRIPT_DIR/update_preview.sh" ] || err "update_preview.sh yok: $SCRIPT_DIR/update_preview.sh"
+
+# 1) İsteğe bağlı hazırlık: mirror + build + plist. Bu adım launchd'ye
+# yüklemez; --start aşağıdaki ikinci adımda yapılır.
 if $REBUILD; then
-    say "HTML rebuild ediliyor..."
-    bash "$SCRIPT_DIR/update_preview.sh" --force
+  say "hazırlık: mirror + HTML + LaunchAgent plist zinciri"
+  bash "$SCRIPT_DIR/update_preview.sh" --bootstrap
 fi
 
-# --- 2) Mevcut sunucuyu durdur (varsa) ---
-# launchctl bootout ile temiz durdur: KeepAlive SuccessfulExit=false
-# olduğu için temiz çıkışta launchd yeniden başlatmaz.
-OLD_PID=$(lsof -i :"$PORT" -t 2>/dev/null | head -1 || true)
-if [ -n "$OLD_PID" ]; then
-    say "Mevcut sunucu durduruluyor (pid $OLD_PID)..."
-    launchctl bootout gui/$(id -u) "/Users/$USER/Library/LaunchAgents/$LABEL.plist" 2>/dev/null || true
-    sleep 1
-    # Eğer hâlâ ayakta ise zorla öldür
-    if kill -0 "$OLD_PID" 2>/dev/null; then
-        say "PID hâlâ ayakta, zorla öldürülüyor..."
-        kill -9 "$OLD_PID" 2>/dev/null || true
-        sleep 1
-    fi
-fi
-
-# --- 3) launchd ile başlat ---
-say "launchd ile başlatılıyor ($LABEL)..."
+# 2) launchd yaşam döngüsü. update_preview.sh yalnızca kendi label'ının
+# plist'ini bootout/bootstrap eder; port sahibini tahmin edip öldürmez.
+say "launchd: $LABEL etiketi bootstrap ediliyor"
 bash "$SCRIPT_DIR/update_preview.sh" --start "$LABEL"
 
-# --- 4) Sağlık kontrolü ---
-say "Sunucu hazır olana kadar bekleniyor (max ${MAX_WAIT}s)..."
-READY=false
-for i in $(seq 1 "$MAX_WAIT"); do
-    if curl -sf "http://127.0.0.1:$PORT/api/latest" >/dev/null 2>&1; then
-        READY=true
-        break
-    fi
-    sleep 1
+# 3) Readiness: health tek başına yeterli değildir; dashboard yüzeyi de
+# gerçekten servis edilebilmeli. HTTP durum kodu 200 yeterli kabul edilir.
+say "readiness: $HEALTH_URL + $PREVIEW_URL (max ${MAX_WAIT}s)"
+deadline=$(( $(date +%s) + MAX_WAIT ))
+ready=false
+while [ "$(date +%s)" -lt "$deadline" ]; do
+  if curl -fsS --max-time 2 -o /dev/null "$HEALTH_URL" \
+     && curl -fsS --max-time 2 -o /dev/null "$PREVIEW_URL"; then
+    ready=true
+    break
+  fi
+  sleep 1
 done
 
-if ! $READY; then
-    err "sunucu ${MAX_WAIT}s içinde hazır olmadı (port $PORT)"
+if ! $ready; then
+  say "readiness başarısız; launchd durumu:"
+  bash "$SCRIPT_DIR/update_preview.sh" --status || true
+  err "dashboard ${MAX_WAIT}s içinde hazır olmadı; log: $LOG_PATH"
 fi
 
-# --- 5) PID ve URL ---
-PID=$(lsof -i :"$PORT" -t 2>/dev/null | head -1)
-URL="http://127.0.0.1:${PORT}/preview.html"
+pid="$({ launchctl list 2>/dev/null || true; } \
+  | awk -v label="$LABEL" '$3 == label { print $1; exit }')"
+[ -n "$pid" ] || pid="-"
 
-say "✅ Sunucu hazır"
-say "   URL:  $URL"
-say "   PID:  $PID"
-say "   Port: $PORT"
-
-# --- 6) Health snapshot ---
-LATEST=$(curl -sf "http://127.0.0.1:$PORT/api/latest" 2>/dev/null || echo "{}")
-VERDICT=$(echo "$LATEST" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('verdict','?'))" 2>/dev/null || echo "?")
-REFS=$(echo "$LATEST" | python3 -c "import json,sys; d=json.load(sys.stdin); print(f\"{d.get('refs_verified','?')}/{d.get('regs_total','?')}\")" 2>/dev/null || echo "?")
-
-say "   Durum: verdict=$VERDICT refs=$REFS"
-
-# --- 7) register_preview için çıktı ---
-echo ""
-echo "# register_preview komutu:"
-echo "#   url: $URL"
-echo "#   pid: $PID"
+say "READY: Live CI Dashboard"
+printf 'DASHBOARD_URL: %s\n' "$PREVIEW_URL"
+printf 'PID: %s\n' "$pid"
+printf '# register_preview: url=%s pid=%s\n' "$PREVIEW_URL" "$pid"

@@ -158,6 +158,20 @@ curl -s http://127.0.0.1:8000/api/latest | head -c 200
 Tarayıcıda açın: **http://127.0.0.1:8000/preview.html**
 Sayfa başlığı: `Stoic-Hume V5 — Live CI Dashboard`.
 
+### macOS launchd kısayolu (Pinokio'suz)
+
+Kalıcı TCC-safe mirror + LaunchAgent + plist zincirini tek komutta kurup
+hazır olana kadar beklemek için:
+
+```bash
+bash _calisma/CIKTI/fresh_clone_setup.sh --start
+```
+
+Bu akış `update_preview.sh --bootstrap` ve `--start` çağrılarını birleştirir;
+`/api/health` ile `/preview.html` yanıt vermeden başarı vermez. Kurulumun
+tekrarlanabilirliği, loglar ve `--stop`/`--check` yaşam döngüsü için
+[`RUN_DASHBOARD.md`](RUN_DASHBOARD.md) bölümüne bakın.
+
 Sunucu açılır açılmaz **ilk verify koşumunu hemen başlatır** (`[verify_loop]
 started` → `[verify_loop] running verify...`); sonraki koşumlar `--interval`
 aralığıyla tekrarlanır. Ek bir koşumu hemen tetiklemek isterseniz yerelde

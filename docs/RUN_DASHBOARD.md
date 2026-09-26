@@ -10,6 +10,8 @@
 |---|---|---|
 | Python | 3.11+ (3.9 works without z3) | `python3 --version` |
 | Git | any recent | `git --version` |
+| curl | any recent | `curl --version` |
+| launchd / launchctl (Option C only) | macOS built-in | `launchctl help` |
 | Docker (optional) | any | `docker --version` |
 | Node.js (optional, React prototype) | 18+ | `node --version` |
 
@@ -62,15 +64,79 @@ This builds the two-stage Dockerfile (python:3.11-slim + z3-solver venv),
 publishes on `127.0.0.1:8000` (loopback-only), and persists state to a named
 volume. The healthcheck polls `/api/health` every 30s.
 
-### Option C: Full TCC-safe setup (macOS launchd path)
+### Option C: Full TCC-safe setup + launchd (recommended on macOS)
 
 ```bash
-bash _calisma/CIKTI/fresh_clone_setup.sh
+bash _calisma/CIKTI/fresh_clone_setup.sh --start
 ```
 
-This one command sets up the repo venv, TCC-safe mirror venv, preview+verify
-mirrors, HTML build, and LaunchAgent plists. Use this if you plan to run the
-launchd daemon, not just a foreground server.
+This is the canonical one-command path from a fresh checkout to a running
+Live CI Dashboard. It performs the complete chain, fail-closed:
+
+1. creates/checks the repo and TCC-safe mirror virtual environments;
+2. synchronizes the preview + verification mirrors with `sync_verify_mirror.sh`;
+3. builds the stamped `preview.html`/`preview.js` pair;
+4. renders and validates the `com.freebuff.preview-leibniz2` LaunchAgent plist
+   (plus the managed failover profile) through `update_preview.sh`;
+5. bootstraps the primary LaunchAgent through `update_preview.sh --start`;
+6. waits for both `http://127.0.0.1:8000/api/health` and
+   `http://127.0.0.1:8000/preview.html` to answer before reporting `READY`.
+
+The command is idempotent: rerunning it refreshes only changed mirror/HTML
+files and reuses healthy virtual environments. It does **not** use Pinokio.
+The starter only bootouts the LaunchAgent label it owns; it never kills an
+arbitrary process found on port 8000. If another service owns that port, the
+readiness check fails and leaves that service untouched.
+
+The final output includes machine-readable `DASHBOARD_URL` and `PID` lines.
+For a faster rerun after the artifacts already exist:
+
+```bash
+bash _calisma/CIKTI/fresh_clone_setup.sh --start             # full idempotent setup
+bash _calisma/CIKTI/start_preview.sh --no-rebuild             # start + readiness only
+PREVIEW_HEALTH_TIMEOUT=60 bash _calisma/CIKTI/start_preview.sh --no-rebuild
+```
+
+Use the lower-level commands only when debugging the chain:
+
+```bash
+bash _calisma/CIKTI/fresh_clone_setup.sh                     # install artifacts, do not launch
+bash _calisma/CIKTI/update_preview.sh --bootstrap --start    # mirror + plist + launchctl
+bash _calisma/CIKTI/update_preview.sh --status                # launchd/PID/HTTP snapshot
+bash _calisma/CIKTI/update_preview.sh --stop                  # stop the managed agent
+bash _calisma/CIKTI/fresh_clone_setup.sh --check              # fail-closed artifact check
+```
+
+Operational files:
+
+- plist: `~/Library/LaunchAgents/com.freebuff.preview-leibniz2.plist`
+- server log: `~/Library/Logs/com.freebuff/preview-leibniz2.log`
+- pre-start log: `~/Library/Logs/com.freebuff/prestart-preview-leibniz2.log`
+- URL: <http://127.0.0.1:8000/preview.html>
+
+`--force-venv --start` is available when the two virtual environments need to
+be rebuilt. `--check` validates mirrors, HTML, plist drift, and the agent's
+mirror paths; it does not claim that a daemon is currently running.
+
+### Failure, logs, and rollback
+
+`--start` is fail-closed: if either readiness endpoint does not answer before
+`PREVIEW_HEALTH_TIMEOUT`, it returns non-zero and does not kill the process that
+may be using port 8000. The generated plist, mirrors, and logs are deliberately
+left in place for diagnosis. Inspect the state, then stop only the managed
+agent and retry:
+
+```bash
+bash _calisma/CIKTI/update_preview.sh --status
+cat ~/Library/Logs/com.freebuff/prestart-preview-leibniz2.log
+cat ~/Library/Logs/com.freebuff/preview-leibniz2.log
+bash _calisma/CIKTI/update_preview.sh --stop
+bash _calisma/CIKTI/fresh_clone_setup.sh --start
+```
+
+`--stop` unloads the managed LaunchAgent; it does not delete the plist, mirror,
+or evidence logs. Removing those artifacts is an explicit operator cleanup
+step, not part of automatic rollback.
 
 ## 3. Verify the API surface
 

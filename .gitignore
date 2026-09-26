@@ -57,3 +57,6 @@ apps/dashboard-next/.next/
 .build/
 .vercel
 .env*
+
+# Pinokio launcher runtime mirror (generated dashboard state and static copies)
+pinokio/.runtime/

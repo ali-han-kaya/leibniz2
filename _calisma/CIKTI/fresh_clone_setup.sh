@@ -24,6 +24,7 @@
 #
 # Kullanım:
 #   fresh_clone_setup.sh             # beş artefaktı kur (yoksa) / senkron et (bayatsa)
+#   fresh_clone_setup.sh --start     # kur + launchd bootstrap + HTTP health (TEK KOMUT)
 #   fresh_clone_setup.sh --check      # hepsi hazır mı? (0 evet / 1 eksik / 2 hata)
 #   fresh_clone_setup.sh --check-ci   # CI runner: daemon + mirror venv atla
 #   fresh_clone_setup.sh --force-venv# venv'leri her zaman yeniden kur (pip install --upgrade)
@@ -316,9 +317,10 @@ check_all_ci() {
   return 0
 }
 
-# Tüm kurulum: 5 adım (fail-closed).
+# Tüm kurulum: 5 adım (fail-closed). --start ile launchd + health aynı akışa
+# eklenir; böylece fresh clone → çalışan dashboard tek komut olur.
 setup_all() {
-  local force_venv="${1:-0}"
+  local force_venv="${1:-0}" start_flag="${2:-0}"
 
   say "=== 1/5: Repo venv ($REPO_VENV) ==="
   if venv_ok "$REPO_VENV" && [ "$force_venv" -eq 0 ]; then
@@ -340,9 +342,20 @@ setup_all() {
   say "=== 5/5: HTML build + LaunchAgent plist'leri (--bootstrap) ==="
   "$SCRIPT_DIR/update_preview.sh" --bootstrap || return $?
 
-  say "FRESH-CLONE KURULUM: tamam — 5/5 artefakt hazır (adım 2+4 tek komutta)"
-  say "           sonraki adım: update_preview.sh --start (launchctl bootstrap) " \
-       "veya fresh_clone_setup.sh --check"
+  if [ "$start_flag" = "1" ]; then
+    say "=== 6/6: launchd bootstrap + HTTP health (--start) ==="
+    if [ ! -f "$SCRIPT_DIR/start_preview.sh" ]; then
+      err "start_preview.sh yok — launchd başlatılamıyor"
+      return 1
+    fi
+    bash "$SCRIPT_DIR/start_preview.sh" --no-rebuild || return $?
+    say "FRESH-CLONE KURULUM: tamam — 5/5 artefakt + launchd + health hazır"
+    say "           durum: bash _calisma/CIKTI/update_preview.sh --status"
+  else
+    say "FRESH-CLONE KURULUM: tamam — 5/5 artefakt hazır (adım 2+4 tek komutta)"
+    say "           canlıya almak için: fresh_clone_setup.sh --start"
+    say "           ya da yalnızca doğrulamak için: fresh_clone_setup.sh --check"
+  fi
 }
 
 usage() {
@@ -350,29 +363,46 @@ usage() {
 }
 
 main() {
-  local mode="${1:-setup}" force_venv=0
-  case "$mode" in
-    --help|-h)
-      usage
-      exit 0
-      ;;
-    --check)
-      check_all
-      ;;
-    --check-ci)
-      check_all_ci
-      ;;
-    --force-venv)
-      force_venv=1
-      setup_all "$force_venv"
-      ;;
-    setup)
-      setup_all "$force_venv"
-      ;;
-    *)
-      err "bilinmeyen mod: $mode (--help)"
-      exit 2
-      ;;
+  local action="" force_venv=0 start_flag=0 arg
+  for arg in "$@"; do
+    case "$arg" in
+      --help|-h)
+        usage
+        exit 0
+        ;;
+      --check)
+        [ -z "$action" ] || { err "birden fazla mod verilemez"; exit 2; }
+        action="check"
+        ;;
+      --check-ci)
+        [ -z "$action" ] || { err "birden fazla mod verilemez"; exit 2; }
+        action="check-ci"
+        ;;
+      setup)
+        [ -z "$action" ] || { err "birden fazla mod verilemez"; exit 2; }
+        action="setup"
+        ;;
+      --force-venv)
+        force_venv=1
+        ;;
+      --start)
+        start_flag=1
+        ;;
+      *)
+        err "bilinmeyen mod/argüman: $arg (--help)"
+        exit 2
+        ;;
+    esac
+  done
+  [ -n "$action" ] || action="setup"
+  if [ "$start_flag" = "1" ] && [ "$action" != "setup" ]; then
+    err "--start yalnızca setup akışıyla kullanılabilir"
+    exit 2
+  fi
+  case "$action" in
+    check) check_all ;;
+    check-ci) check_all_ci ;;
+    setup) setup_all "$force_venv" "$start_flag" ;;
   esac
 }
 
