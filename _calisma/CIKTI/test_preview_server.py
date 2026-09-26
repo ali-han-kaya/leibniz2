@@ -24,6 +24,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
@@ -1135,16 +1136,22 @@ class StatusBoardTests(unittest.TestCase):
     def setUp(self):
         # İzolasyon: testler LATEST.update ile layers/p0/budget yazıyor;
         # restore etmeyen test, sonraki testlere sızardı (shuffle-audit
-        # kanıtı: LATEST['layers'] sızıntısı). Tam-dict yedek + geri yükleme.
+        # kanıtı: LATEST['layers'] sızıntısı). Geri yüklemeyi framework'e
+        # devret: patch.dict + addCleanup, test BİTİNCE (hata/skip dahil)
+        # LATEST'i yerine koyar — elle yedek + tearDown, setUp'un devamında
+        # patlama/atlama olursa kaçabiliyordu. Kilit disiplini korunur:
+        # yedek de geri yükleme de ps.LOCK altında.
         import preview_server as ps
+        patcher = mock.patch.dict(ps.LATEST)
         with ps.LOCK:
-            self._latest_backup = dict(ps.LATEST)
+            patcher.start()
+        self.addCleanup(self._stop_latest_patcher, patcher)
 
-    def tearDown(self):
+    def _stop_latest_patcher(self, patcher):
+        """patch.dict geri yüklemesini kilit altında çalıştırır (tearDown yok)."""
         import preview_server as ps
         with ps.LOCK:
-            ps.LATEST.clear()
-            ps.LATEST.update(self._latest_backup)
+            patcher.stop()
 
     def test_all_pass(self):
         """Tüm alanlar PASS ise 5 ✅ üretmeli."""
