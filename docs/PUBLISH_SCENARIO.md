@@ -573,7 +573,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 --exit-status` + artifact listesi; sonuç `SONUÇ: PASS/FAIL` olarak loglanır
 (dry-run'da yalnızca önizlenir).
 
-**Job kategorileri (29 job = 13 required + 13 advisory + 3 PR-only):**
+**Job kategorileri (30 job = 13 required + 14 advisory + 3 PR-only):**
 
 > **Kural:** Branch protection **yalnızca A kategorisindeki** job'ları required check olarak
 > kabul eder. B (advisory) job'ları push'ta çalışır ama required değildir;
@@ -616,6 +616,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 | | **D — PR-only (yorum/etiket düşürme)** | | |
 | 28 | D | Manifest PR comment | — skipped (PR'da çalışır) |
 | 29 | D | Budget status PR comment | — bütçe + pre-commit PR yorumu; job-level PR-only, push'ta tamamen skipped (bütçe kapısı ayrı `budget` job'ında kalır) |
+| 30 | B | Dashboard-next typecheck + build (Next 15) | — trend-db `npm ci` + `prisma generate` (kod üretimi, DB'ye bağlanmaz); dashboard `npm ci` + `tsc --noEmit` (`check_dashboard_typecheck.sh`) + `next build`; tip/derleme hatası workflow'u kırmızıya düşürür (`continue-on-error` YOK), ama required check DEĞİL — `GATE_EXCLUDE`'da, required set 14'te sabit (docx-export/lake-proof ile aynı gerekçe) |
 
 **Artifact listesi (38):**
 - `unit-tests` (CIKTI birim test logu — `test_*.py` glob'u)

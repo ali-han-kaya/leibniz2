@@ -540,6 +540,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-26 | feat | (ci) action major advisory katmanı | [`d90c5b9`](https://github.com/ali-han-kaya/leibniz2/commit/d90c5b9) |
 | 2026-09-26 | refactor | (lean) K9 lake build'i tek kaynaklı wrapper'a taşı | [`a088982`](https://github.com/ali-han-kaya/leibniz2/commit/a088982) |
 | 2026-09-26 | feat | (latex-surface) tracked .tex yüzeyi için fail-closed kapı | [`e9466bd`](https://github.com/ali-han-kaya/leibniz2/commit/e9466bd) |
+| 2026-09-26 | docs | (preview) history önbelleği ve CSP nonce sözleşmesini belgele | [`103fb7d`](https://github.com/ali-han-kaya/leibniz2/commit/103fb7d) |
 
 ### Regresyon notları
 
