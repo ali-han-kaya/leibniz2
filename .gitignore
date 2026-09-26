@@ -85,3 +85,11 @@ _calisma/CIKTI/a11y_report*.json
 _calisma/CIKTI/runs/
 _calisma/CIKTI/history.jsonl
 _calisma/CIKTI/history.jsonl.sha256
+
+# Kokteki paketleme dosyalari: Vercel Python fonksiyonu derlemesinin
+# biraktigi kalinti (api/pyproject.toml + api/uv.lock ile bayt bayt ayni,
+# .vercel/output/static/ altina kopyalanmis). Gercek API paketi api/
+# altinda ve adi "app"; buradaki "leibniz2-api" hayalet bir kok paket
+# yaratirdi. Kokle kisitli: / oneki olmadan api/ icin de gecerli olurdu.
+/pyproject.toml
+/uv.lock

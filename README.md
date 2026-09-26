@@ -557,6 +557,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-26 | feat | (video) verdict dagilim grafigi + kapi kirilmasi animasyonu | [`b0b7ae3`](https://github.com/ali-han-kaya/leibniz2/commit/b0b7ae3) |
 | 2026-09-26 | fix | (preview) VERIFY-001 kaniti - CSP altinda hover-tooltip | [`5fb2f74`](https://github.com/ali-han-kaya/leibniz2/commit/5fb2f74) |
 | 2026-09-27 | fix | (preview) kacakli veriyi nitelik baglamindan da kacir | [`517e37a`](https://github.com/ali-han-kaya/leibniz2/commit/517e37a) |
+| 2026-09-27 | chore | (changelog) 517e37a satirini tabloya ekle | [`d5eef5a`](https://github.com/ali-han-kaya/leibniz2/commit/d5eef5a) |
 
 ### Regresyon notları
 
