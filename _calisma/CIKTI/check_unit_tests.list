@@ -115,6 +115,7 @@ test_readme_skills.py
 test_record_determinism_trend.py
 test_refs_trend.py
 test_refs_trend_badge.py
+test_render_equation_gallery.py
 test_render_z3_slides.py
 test_repack_verify.py
 test_repro_artifact_sections_e2e.py
