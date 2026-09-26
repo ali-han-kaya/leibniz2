@@ -255,6 +255,7 @@ HOOK_COVERAGE = {
         "test_dashboard_cls_budget.py",
         "test_surface_cwv_report.py",
         "test_shuffle_tests.py",
+        "test_repack_idempotence.py",
     ],
 }
 
