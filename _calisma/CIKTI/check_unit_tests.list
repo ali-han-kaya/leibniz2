@@ -132,6 +132,7 @@ test_sde_texlive_sync.py
 test_security_headers.py
 test_server_events.py
 test_setup_branch_protection.py
+test_shuffle_tests.py
 test_sidecar_guarantee.py
 test_skill_layer_sync.py
 test_skills_index.py
