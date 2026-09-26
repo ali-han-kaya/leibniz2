@@ -247,6 +247,7 @@ HOOK_COVERAGE = {
         "test_canvas_determinism.py",
         "test_determinism_trend_canvas.py",
         "test_incidental_banner.py",
+        "test_check_seal_hash.py",
         "test_dashboard_cls_budget.py",
         "test_surface_cwv_report.py",
         "test_shuffle_tests.py",
