@@ -553,6 +553,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-26 | docs | (qpdf) donmus kayda surum izleme bolumu (v2) | [`de5865d`](https://github.com/ali-han-kaya/leibniz2/commit/de5865d) |
 | 2026-09-26 | feat | (video) LeibnizChain kompozisyonunu kalici yuzeye tasi | [`b7b5199`](https://github.com/ali-han-kaya/leibniz2/commit/b7b5199) |
 | 2026-09-26 | feat | (video) LeibnizChain'i preview sunucusuna gom (@remotion/player) | [`06cde8d`](https://github.com/ali-han-kaya/leibniz2/commit/06cde8d) |
+| 2026-09-26 | chore | (changelog) amend sonrasi tabloyu gecerli hash'e bagla | [`24e5d4b`](https://github.com/ali-han-kaya/leibniz2/commit/24e5d4b) |
 
 ### Regresyon notları
 

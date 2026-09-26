@@ -146,3 +146,25 @@
   commit'i blokladı; `playwright install chromium` ile onarıldı (92,4 MiB,
   v1223) ve üçü de yeşile döndü. `__dirlock` tuzağı ve kısmi-indirme
   davranışı findings.md'ye yazıldı.
+
+## 2026-09-26 — LeibnizChain: verdict grafiği + kapı kırılma animasyonu
+- Timeline sahnesine gerçek dağılım grafiği: VERDICT ve ÇIKIŞ KODU yığılmış
+  çubukları (0–100% cetveli, `stage()` ile sırayla dolan segmentler) + P0/P1/
+  bulgu/sapma/Z3/kapı telemetrisi şeridi. Hepsı `history.jsonl`'dan türetildi.
+- Gates sahnesine kapı kırılma animasyonu: 16 kapı sırayla yanar, soldan
+  sağa kırmızı tarama çizgisi geçer, ardından KIRILMA şeridi + `status_board`
+  çipleri + "1 ✓ · 4 ⚠" sayacı. Kırılma **sayısı sabit değil**: `exit_code < 0`
+  olan koşularla birebir eşleşir (ölçüldü: 7/7, −15 SIGTERM).
+- Dürüstlük: tek sonuçlu dağılım tek renkli çizildi ve notla açıklandı; yeşil
+  koşu/kırmızı kapı sayısı UYDURULMADI. `0` ile `null` ayrıldı (z3 0/0 ≠
+  rapor), `K katmanları ⚠️` grup sinyali olarak ayrıldı (kapı numarası değil).
+- Kare bütçesi 760'da korundu; kare, statik sahnelerden alındı
+  (90/200/120/200/100/50). Yeniden render ölçüldü: 760 kare / 25,387 sn /
+  1280×720 → `check_render` PASS.
+- Doğrulama: tsc temiz, prettier uygulandı, 4 video testi yeşil
+  (data-contract 30 test, render 20, preview 14, typecheck), 9 kare görsel
+  denetimden geçti. Bulunan iki çizim hatası (süre etiketi binmesi, 58 px
+  sütunda sarma) düzeltildi.
+- Yol üstünde bulunan gerçek hata: `video-render` CI adımı sentinel bayrağı
+  vermediği için üretici fail-closed çıkıyordu (adım yorumu bunun tersini
+  söylüyordu) → `--allow-missing-data` ile düzeltildi.

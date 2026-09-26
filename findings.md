@@ -573,3 +573,46 @@ pre-commit chain adaptation (47→49 hooks). Key lessons below.
   ÖNCE `~/Library/Caches/ms-playwright/` ve `node_modules` varlığını denetle;
   kod değişikliği sanma. Playwright/ffprobe/paket kurulumları bu makinede
   kalıcı sayılmaz — CI'da kurulum adımını adım olarak yaz.
+
+### LeibnizChain sahnelerinin zenginleştirilmesi (2026-09-26)
+- **İstenen**: `history.jsonl`'den verdict-dağılımı grafiği ve kapı-kırılma
+  animasyonu. Ölçülen veri 7 koşu, **hepsi** `verdict=FAIL`, `exit_code=-15`
+  (SIGTERM), `p0=p1=0`, `findings=[]`, `duration_s` 1,02–13,99.
+- **Veri yetersizliği ölçüldü, uydurma yapılmadı**: `z3_passed/total=0/0` ve
+  `lean_ok`, `lineage_ok`, `refs_verified`, `flaky_count` … **null**. Yani
+  kapı telemetrisinin 12 sütunundan 9'u HİÇ dolmadı; dolu görünen 3 sütun
+  z3 ailesi ve değerleri 0. Bu yüzden "kaç kapı kırıldı" sayısı **verilemez**;
+  üretilen şey kırılmanın kendisi: 7/7 koşu SIGTERM ile kesilmiş.
+- **Dürüstlük kararı (bilinçli)**: dağılım tek sonuçlu olduğu için grafik tek
+  renkli çizildi ve sahne bunu açıkça yazdı ("geçen koşu KAYIT YOK"). Tek
+  renkli grafik görsel hata değil, verinin kendisidir.
+- **İki ayrım kapatıldı** (ikisi de önce sessizce yanlış sayılıyordu):
+  1. `0` ≠ `null` — z3 `0/0` "raporlandı" sayılmaz; "kanıt yükümlülüğü yok".
+  2. `K katmanları ⚠️` bir kapı numarası DEĞİLDİR — 15 kapıya kırmızı
+     dağıtılmadı, grup sinyali olarak ayrıldı. Yeşil işaret yalnız `K0` alır
+     (tahtada adı geçen tek kapı). `gates.ok_ids` yalnız `GATE_NAMES` içinde
+     olan etiketleri kabul eder; test bunu zorlar.
+- **Ölçülen çizim hatası**: koşu satırında süre etiketi mutlak konumlanınca
+  `FAIL` sütununa biniyordu (250. karede "2.98 s" iki satıra sarıyordu).
+  Düzeltme: her sütun kendi sabit genişliğinde, etiket akış içinde.
+  Ayrıca "13.99 s" 58 px sütunda sardi → 70 px.
+- **Kare bütçesi 760 DEĞİŞMEDİ**: yeni içerik için kare, statik sahnelerden
+  alındı (Evidence 180→120, Closing 60→50; Timeline 180→200, Gates 140→200).
+  760 sayısı `Root.tsx` + `check_render.py` + CI adında + testlerde yaşıyor;
+  büyütmek dört yeri birden kırmak demekti. Yeniden ölçüldü: 760 kare /
+  25,387 sn / 1280×720 → `check_render` PASS.
+- **Bulunan gerçek hata (bu işle bağlantılı)**: `video-render` CI adımının
+  yorumu "sentinel JSON üretir" diyordu ama komut bayrat vermiyordu; üretici
+  fail-closed olduğu için CI'da 1 ile çıkıp advisory işi kırıyordu. Adım
+  `--allow-missing-data` ile düzeltildi (sentinel'in CI'da istenen yol bu).
+- **Tuzak (shell)**: paralel `run_terminal_command` çağrıları cwd'de yarışıyor
+  — biri `_calisma/CIKTI`'yi görürken diğeri "No such file or directory"
+  diyordu. Çağrıları sıraya koy. `cd` birleşik komutta sonraki satırlara da
+  sızıyor (`cd _calisma/video` sonrası göreli yol `_calisma/video/...` olur).
+- **Tuzak (biçim)**: `prettier --write` .md/.yml dosyalarını da yeniden
+  biçimlendirip **ilgisiz** satırları değiştiriyor (verify.yml'de 94 satır).
+  `check-prettier-format` hook'u yalnız stage'li JS/TS/JSON'a bakar; .md/.yml
+  elle korunmalı. Aynı sebeple `git checkout --` ile geri alındı.
+- **Görsel doğrulama**: `remotion still` tek kare ~9 sn; 9 kare render edilip
+  base64 gömülü HTML olarak önizlemede incelendi. Tarayıcı önizlemesi yalnız
+  HTML'yi servis eder — kardeş dosyalar (png) 404 olur, base64 gömmek gerekir.

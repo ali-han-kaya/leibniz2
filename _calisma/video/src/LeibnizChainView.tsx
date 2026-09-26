@@ -1,16 +1,17 @@
 import React from "react";
 import { AbsoluteFill, Sequence } from "remotion";
 import { Closing, Evidence, Gates, Seal, Timeline, Title } from "./scenes";
-import { useLeibnizData } from "./useLeibnizData";
-
-/**
+import { useLeibnizData } from "./useLeibnizData"; /**
  * Kare butcesi: 760 kare @ 30 fps = 25.33 sn.
  *  1 Title     0-89    (90f)
- *  2 Timeline  90-269  (180f)
- *  3 Evidence 270-449 (180f)
- *  4 Gates    450-589 (140f)
- *  5 Seal     590-699 (110f)
- *  6 Closing  700-759 (60f)
+ *  2 Timeline  90-289  (200f)  verdict/çıkış kodu dagilim grafigi
+ *  3 Evidence 290-409 (120f)  statik kartlar — kare harcamaz
+ *  4 Gates     410-609 (200f)  kapi kirilmasi animasyonu + durum tahtasi
+ *  5 Seal     610-709 (100f)
+ *  6 Closing  710-759 (50f)
+ *
+ * Toplam 760 DEGİŞMEZ (Root.tsx + check_render.py + CI sözleşmesi); yeni
+ * sahne içeriğine kare, Evidence/Closing gibi statik sahnelerden alındı.
  *
  * `dataUrl` verilirse (tarayici-ici oynatma) veri o adresten okunur; verilmezse
  * render varsayilani (`staticFile`) kullanilir. Boylece TEK sahne agaci hem
@@ -30,20 +31,20 @@ export const LeibnizChainView: React.FC<{ dataUrl?: string }> = ({
       <Sequence from={0} durationInFrames={90} name="1 · Title">
         <Title data={data} lengthInFrames={90} />
       </Sequence>
-      <Sequence from={90} durationInFrames={180} name="2 · Timeline">
-        <Timeline data={data} lengthInFrames={180} />
+      <Sequence from={90} durationInFrames={200} name="2 · Timeline">
+        <Timeline data={data} lengthInFrames={200} />
       </Sequence>
-      <Sequence from={270} durationInFrames={180} name="3 · Evidence">
-        <Evidence data={data} lengthInFrames={180} />
+      <Sequence from={290} durationInFrames={120} name="3 · Evidence">
+        <Evidence data={data} lengthInFrames={120} />
       </Sequence>
-      <Sequence from={450} durationInFrames={140} name="4 · Gates">
-        <Gates data={data} lengthInFrames={140} />
+      <Sequence from={410} durationInFrames={200} name="4 · Gates">
+        <Gates data={data} lengthInFrames={200} />
       </Sequence>
-      <Sequence from={590} durationInFrames={110} name="5 · Seal">
-        <Seal data={data} lengthInFrames={110} />
+      <Sequence from={610} durationInFrames={100} name="5 · Seal">
+        <Seal data={data} lengthInFrames={100} />
       </Sequence>
-      <Sequence from={700} durationInFrames={60} name="6 · Closing">
-        <Closing data={data} lengthInFrames={60} />
+      <Sequence from={710} durationInFrames={50} name="6 · Closing">
+        <Closing data={data} lengthInFrames={50} />
       </Sequence>
     </AbsoluteFill>
   );

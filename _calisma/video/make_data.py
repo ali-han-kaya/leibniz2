@@ -6,7 +6,8 @@ Kompozisyon kendi sayilarini GÖMMEZ: `public/data/leibniz.json` dosyasini
 `delayRender` + `staticFile` ile okur (src/useLeibnizData.ts). Bu script o
 dosyayi repodaki gercek kaynaklardan deterministik olarak uretir:
 
-  - _calisma/CIKTI/history.jsonl            → zaman cizelgesi sahnesi
+  - _calisma/CIKTI/history.jsonl            → zaman cizelgesi + verdict
+                                                 dagilimi + kapi kirilmasi
   - test_id_residual_acceptance_doc.py      → SHA-256 mühür sabitleri
 
 Girdi dosyalarindan biri yoksa fail-closed: sessizce bozuk veriyle sahne
@@ -32,6 +33,7 @@ import argparse
 import collections
 import json
 import os
+import signal
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -89,6 +91,33 @@ GATE_NAMES = {
     "K15": "History sidecar",
 }
 
+# history.jsonl'deki kapı telemetri sütunları. Hepsi null ise kapı hiç
+# sonuç üretmeden koşu kesildi demektir — sahne "RAPOR YOK" der, ✅ uydurmaz.
+GATE_TELEMETRY = [
+    "refs_verified",
+    "refs_total",
+    "refs_mismatch",
+    "z3_passed",
+    "z3_failed",
+    "z3_total",
+    "lean_ok",
+    "lineage_ok",
+    "lineage_count",
+    "flaky_count",
+    "deterministic_count",
+    "precommit_hooks",
+]
+
+# status_board işaretleri. Tanınmayan işaret UYDURULMAZ: "UNKNOWN" olur ve
+# sahne soluk çizer (sessizce PASS saymak, uydurma sayı üretmektir).
+BOARD_MARKS = {
+    "✅": "PASS",  # U+2705
+    "✔": "PASS",
+    "⚠": "WARN",  # U+26A0 (+ varyasyon seçici U+FE0F)
+    "❌": "FAIL",  # U+274C
+    "⛔": "FAIL",
+}
+
 RECONSTRUCTION = (
     "yeniden inşa: kaynak proje /tmp temizliginde kayboldu; spesifikasyon "
     "findings.md:70-75 ve recovery_patches_20260918/patch1789754982-84993:540-549"
@@ -101,12 +130,17 @@ def fail(msg):
 
 
 def read_history(allow_missing=False):
-    """history.jsonl -> kosu satirlari."""
+    """history.jsonl -> (kosu satirlari, kapı telemetri doluluk sayaci).
+
+    Telemetri sayaci GATE_TELEMETRY sutun basina "bu kosuda dolu olan kac
+    sutun" sayar. 0 olan sutun "hicbir kosuda raporlanmadi" demektir.
+    """
     if not os.path.isfile(HISTORY):
         if not allow_missing:
             fail("girdi yok: %s (preview_server calismasi gerekli)" % HISTORY)
-        return []
+        return [], {c: 0 for c in GATE_TELEMETRY}
     runs = []
+    telemetry = {c: 0 for c in GATE_TELEMETRY}
     with open(HISTORY, encoding="utf-8") as fh:
         for lineno, line in enumerate(fh, 1):
             line = line.strip()
@@ -118,6 +152,9 @@ def read_history(allow_missing=False):
                 fail("history.jsonl:%d ayristirilamadi: %s" % (lineno, exc))
             if "ts" not in row:
                 fail("history.jsonl:%d 'ts' alani yok" % lineno)
+            for col in GATE_TELEMETRY:
+                if row.get(col) is not None:
+                    telemetry[col] += 1
             runs.append(
                 {
                     "n": len(runs) + 1,
@@ -126,11 +163,57 @@ def read_history(allow_missing=False):
                     "verdict": row.get("verdict") or "?",
                     "duration_s": row.get("duration_s"),
                     "findings": len(row.get("findings") or []),
+                    "exit_code": row.get("exit_code"),
+                    "p0": row.get("p0"),
+                    "p1": row.get("p1"),
+                    "drift": row.get("pattern_drift") or "?",
+                    "z3_passed": row.get("z3_passed") or 0,
+                    "z3_total": row.get("z3_total") or 0,
+                    "overrides": row.get("cli_override_count") or 0,
+                    "board": row.get("status_board") or "",
+                    "telemetry_reported": sum(
+                        1 for c in GATE_TELEMETRY if row.get(c) is not None
+                    ),
                 }
             )
     if not runs and not allow_missing:
         fail("history.jsonl bos — zaman cizelgesi sahnesi veri alamaz")
-    return runs
+    return runs, telemetry
+
+
+def parse_status_board(text):
+    """"Pre-commit ⚠️ · K0 ✅ · …" -> [{label, state}].
+
+    ayirici "·" (U+00B7); isaretler "⚠️" gibi varyasyon seçici (U+FE0F)
+    taşıyabildiği için önce onu temizlenir, sonra işaret bulunur — böylece
+    "K0✅" (boşluksuz) ve "K0 ✅" aynı ayrışır.
+    """
+    out = []
+    for chunk in (text or "").split("·"):
+        chunk = chunk.replace("\ufe0f", "").strip()
+        if not chunk:
+            continue
+        mark, label = "", chunk
+        for glyph, state in BOARD_MARKS.items():
+            if glyph in chunk:
+                mark, label = glyph, chunk.replace(glyph, "").strip()
+                break
+        if not label:
+            label = chunk
+        out.append(
+            {"label": label, "state": BOARD_MARKS.get(mark, "UNKNOWN"), "mark": mark}
+        )
+    return out
+
+
+def signal_name(exit_code):
+    """exit_code=-15 -> "SIGTERM". Pozitif/None kod sinyali degildir."""
+    if exit_code is None or exit_code >= 0:
+        return None
+    try:
+        return signal.Signals(-exit_code).name
+    except ValueError:
+        return None
 
 
 def read_frozen_constants():
@@ -159,16 +242,98 @@ def read_frozen_constants():
 
 
 def build(allow_missing=False):
-    runs = read_history(allow_missing=allow_missing)
+    runs, telemetry = read_history(allow_missing=allow_missing)
     frozen = read_frozen_constants()
+    total = len(runs)
+
     verdicts = collections.Counter(r["verdict"] for r in runs)
+    exit_codes = collections.Counter(r["exit_code"] for r in runs)
+    drift = collections.Counter(r["drift"] for r in runs)
     span = {
-        "count": len(runs),
+        "count": total,
         "verdicts": dict(sorted(verdicts.items())),
+        # Sıralı liste (sinyal adıyla): grafik segmentleri için sayı-dizesi
+        # anahtar yerine gerçek kod + ad.
+        "exits": [
+            {
+                "code": code,
+                "count": n,
+                "signal": signal_name(code),
+            }
+            for code, n in sorted(
+                exit_codes.items(), key=lambda kv: (kv[0] is None, kv[0] or 0)
+            )
+        ],
+        "drift": dict(sorted(drift.items())),
         "data_missing": not runs,
     }
     span["first"] = runs[0]["day"] if runs else None
     span["last"] = runs[-1]["day"] if runs else None
+    span["severity"] = {
+        "p0": sum(r["p0"] or 0 for r in runs),
+        "p1": sum(r["p1"] or 0 for r in runs),
+        "findings": sum(r["findings"] for r in runs),
+        "z3_passed": sum(r["z3_passed"] for r in runs),
+        "z3_total": sum(r["z3_total"] for r in runs),
+        "overrides": sum(r["overrides"] for r in runs),
+    }
+    span["max_duration_s"] = (
+        max((r["duration_s"] or 0) for r in runs) if runs else None
+    )
+    span["telemetry"] = {
+        "columns": len(GATE_TELEMETRY),
+        # "dolu" = hicbir kosuda null olmayan sutun. z3 ailesi 0/0 degerlidir
+        # (sutun dolu, kanit yukumlulugu yok) — bu yuzden "raporlandi" ile
+        # "basarili" birbirine karistirilmaz.
+        "reported": sorted(c for c, n in telemetry.items() if n > 0),
+        "unreported": sorted(c for c, n in telemetry.items() if n == 0),
+        "min_per_run": min((r["telemetry_reported"] for r in runs), default=0),
+        "max_per_run": max((r["telemetry_reported"] for r in runs), default=0),
+    }
+    boards = [r["board"] for r in runs if r["board"]]
+    span["board"] = parse_status_board(boards[-1] if boards else "")
+    span["board_raw"] = boards[-1] if boards else ""
+    span["board_agreement"] = {"distinct": len(set(boards)), "of_runs": total}
+
+    states = collections.Counter(b["state"] for b in span["board"])
+    broken = [r for r in runs if r["exit_code"] is not None and r["exit_code"] < 0]
+    top = collections.Counter(r["exit_code"] for r in broken).most_common(1)
+    break_exit = top[0][0] if top else None
+    gates = {
+        "range": "K0 – K15",
+        "core": GATES_CORE,
+        "all": GATES_ALL,
+        "names": GATE_NAMES,
+        "verdict": {
+            "ok": states.get("PASS", 0),
+            "warn": states.get("WARN", 0),
+            "other": states.get("UNKNOWN", 0) + states.get("FAIL", 0),
+        },
+        "board": span["board"],
+        "board_raw": span["board_raw"],
+        # Tahta adı doğrudan kapı numarası olan kayıtlar: K0 ✅ -> K0 yeşil.
+        "ok_ids": [
+            b["label"] for b in span["board"] if b["state"] == "PASS" and b["label"] in GATE_NAMES
+        ],
+        # K0 dışında kalan tahta adları grup sinyali (kapı numarası değil):
+        # "K katmanları ⚠️" -> 16 kutunun tamamı için grup uyarısı.
+        "group_warn": [
+            b["label"] for b in span["board"] if b["label"] not in GATE_NAMES
+        ],
+        "break": {
+            "kind": "signal" if broken else ("none" if runs else "no_data"),
+            "exit_code": break_exit,
+            "signal": signal_name(break_exit),
+            "runs": len(broken),
+            "of_runs": total,
+            "share_pct": round(100.0 * len(broken) / total, 1) if total else 0.0,
+            "telemetry_reported": len(span["telemetry"]["reported"]),
+            "telemetry_columns": span["telemetry"]["columns"],
+            "p0": span["severity"]["p0"],
+            "p1": span["severity"]["p1"],
+            "max_duration_s": span["max_duration_s"],
+        },
+    }
     return {
         "meta": {
             "repo": "leibniz2",
@@ -183,13 +348,7 @@ def build(allow_missing=False):
         "runs": runs,
         "run_span": span,
         "evidence": EVIDENCE,
-        "gates": {
-            "range": "K0 – K15",
-            "core": GATES_CORE,
-            "all": GATES_ALL,
-            "names": GATE_NAMES,
-            "verdict": "PASS",
-        },
+        "gates": gates,
         "seal": {
             "delivery_raw": frozen["DELIVERY_RAW"],
             "delivery_stripped": frozen["DELIVERY_STRIPPED"],

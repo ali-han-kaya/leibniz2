@@ -1,6 +1,6 @@
 import React from "react";
 import { interpolate, useCurrentFrame } from "remotion";
-import type { LeibnizData, Run } from "./data";
+import type { BoardItem, LeibnizData, Run } from "./data";
 import { Mono, palette, Reveal, Sans, stage } from "./ui";
 
 /** Shared scene shell: background wash, fixed bottom progress hairline. */
@@ -76,6 +76,184 @@ const Heading: React.FC<{ children: React.ReactNode }> = ({ children }) => (
     {children}
   </Sans>
 );
+
+/* ------------------------------------------------------------ grafik ortakları */
+
+/** Çubuk genişliği — cetvel ve segmentler aynı sayıyı kullanmalı. */
+const TRACK_W = 452;
+
+/** verdict metnine göre renk: koşu satırı ile dağılım çubuğu aynı rengi paylaşır. */
+const verdictColor = (v: string) =>
+  v === "PASS" ? palette.accent2 : v === "FAIL" ? palette.bad : palette.warn;
+
+/** Negatif çıkış kodu, sürecin sinyalle öldürüldüğü anlamına gelir (-15 = SIGTERM). */
+const isSignalExit = (code: number | null) => code !== null && code < 0;
+
+const stateColor = (s: BoardItem["state"]) =>
+  s === "PASS"
+    ? palette.accent2
+    : s === "WARN"
+      ? palette.warn
+      : s === "FAIL"
+        ? palette.bad
+        : palette.faint;
+
+const stateGlyph = (s: BoardItem["state"]) =>
+  s === "PASS" ? "✓" : s === "WARN" ? "⚠" : s === "FAIL" ? "✕" : "?";
+
+/** {FAIL: 7} + toplam 7 → "FAIL 7/7"; sentinel (toplam 0) → "—". */
+const tally = (rec: Record<string, number>, total: number) =>
+  total === 0
+    ? "—"
+    : Object.entries(rec)
+        .map(([k, v]) => `${k} ${v}/${total}`)
+        .join(" · ");
+
+type BarSegment = { key: string; count: number; color: string };
+
+/**
+ * Yığılmış dağılım çubuğu: solda etiket, ortada yüzde şerit, sağda sayaç.
+ * Segmentler sırayla `stage()` ile dolar. `total` 0 ise (sentinel) sıfıra bölme
+ * yapılmaz — yalnız boş iskelet çizilir.
+ */
+const StackBar: React.FC<{
+  label: string;
+  segments: BarSegment[];
+  total: number;
+  frame: number;
+  base: number;
+  trail: string;
+  trailColor: string;
+}> = ({ label, segments, total, frame, base, trail, trailColor }) => {
+  const safe = total > 0 ? total : 1;
+  let cursor = 0;
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 18,
+        marginBottom: 11,
+      }}
+    >
+      <div style={{ width: 100, flexShrink: 0 }}>
+        <Mono size={12} color={palette.faint} letter={1.4}>
+          {label}
+        </Mono>
+      </div>
+      <div
+        style={{
+          width: TRACK_W,
+          height: 22,
+          position: "relative",
+          backgroundColor: palette.bgSoft,
+          flexShrink: 0,
+        }}
+      >
+        {segments.map((s, i) => {
+          const share = s.count / safe;
+          const left = cursor;
+          cursor += share;
+          const p = stage(frame, base + i * 5, 12);
+          return (
+            <div
+              key={s.key}
+              style={{
+                position: "absolute",
+                left: `${left * 100}%`,
+                top: 0,
+                bottom: 0,
+                width: `${share * 100}%`,
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: p > 0 ? `${100 / p}%` : "0%",
+                  backgroundColor: s.color,
+                  opacity: 0.9,
+                }}
+              />
+            </div>
+          );
+        })}
+        {total === 0 ? (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              border: `1px solid ${palette.line}`,
+            }}
+          />
+        ) : null}
+      </div>
+      <Mono size={14} color={trailColor}>
+        {trail}
+      </Mono>
+    </div>
+  );
+};
+
+/** 0–100% cetveli — çubukların altına, aynı hizada. */
+const Ruler: React.FC = () => (
+  <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
+    <div style={{ width: 100, flexShrink: 0 }} />
+    <div style={{ width: TRACK_W, position: "relative", height: 14 }}>
+      {[0, 25, 50, 75, 100].map((t) => (
+        <div
+          key={t}
+          style={{
+            position: "absolute",
+            left: `${t}%`,
+            top: 0,
+            transform:
+              t === 0
+                ? "none"
+                : t === 100
+                  ? "translateX(-100%)"
+                  : "translateX(-50%)",
+          }}
+        >
+          <Mono size={10} color={palette.faint}>
+            {t}%
+          </Mono>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
+/** status_board kalemi rozeti. */
+const Chip: React.FC<{ label: string; state: BoardItem["state"] }> = ({
+  label,
+  state,
+}) => {
+  const c = stateColor(state);
+  return (
+    <div
+      style={{
+        border: `1px solid ${c}`,
+        backgroundColor: palette.bgSoft,
+        padding: "5px 11px",
+        display: "flex",
+        alignItems: "center",
+        gap: 7,
+      }}
+    >
+      <Mono size={13} color={c}>
+        {stateGlyph(state)}
+      </Mono>
+      <Mono size={13} color={palette.text}>
+        {label}
+      </Mono>
+    </div>
+  );
+};
 
 /* ---------------------------------------------------------------- scene 1 */
 export const Title: React.FC<{ data: LeibnizData; lengthInFrames: number }> = ({
@@ -178,36 +356,36 @@ const RunRow: React.FC<{
   frame: number;
   maxMs: number;
 }> = ({ run, index, frame, maxMs }) => {
-  const p = stage(frame, 22 + index * 9, 14);
+  const p = stage(frame, 22 + index * 8, 14);
   const ms = (run.duration_s ?? 0) * 1000;
-  const bar = Math.max(3, (ms / maxMs) * 420);
-  const color =
-    run.verdict === "PASS"
-      ? palette.accent2
-      : run.verdict === "FAIL"
-        ? palette.bad
-        : palette.warn;
+  const bar = Math.max(3, (ms / maxMs) * 340);
+  const color = verdictColor(run.verdict);
+  const signal = isSignalExit(run.exit_code);
 
   return (
     <div
       style={{
         display: "flex",
         alignItems: "center",
-        gap: 20,
-        marginBottom: 17,
+        gap: 18,
+        marginBottom: 10,
       }}
     >
-      <div style={{ width: 26 }}>
-        <Mono size={15} color={palette.faint}>
+      <div style={{ width: 24 }}>
+        <Mono size={14} color={palette.faint}>
           {String(run.n).padStart(2, "0")}
         </Mono>
       </div>
-      <div style={{ width: 108 }}>
-        <Mono size={16} color={palette.dim}>
+      <div style={{ width: 96 }}>
+        <Mono size={15} color={palette.dim}>
           {run.day}
         </Mono>
       </div>
-      <div style={{ width: 420, height: 18, position: "relative" }}>
+      {/* Her sütun KENDI genişliğinde: süre etiketi mutlak konumlanırsa
+          verdict sütununa biner ve iki satıra sarar (ölçüldü: 250. kare). */}
+      <div
+        style={{ width: 340, height: 16, position: "relative", flexShrink: 0 }}
+      >
         <div
           style={{
             position: "absolute",
@@ -236,19 +414,28 @@ const RunRow: React.FC<{
             opacity: p,
           }}
         />
-        <div style={{ position: "absolute", left: 420 + 14, top: 1 }}>
-          <Mono size={15} color={palette.dim}>
-            {run.duration_s !== null ? `${run.duration_s.toFixed(2)} s` : "—"}
-          </Mono>
-        </div>
       </div>
-      <div style={{ width: 60 }}>
-        <Mono size={15} color={color}>
+      <div style={{ width: 70 }}>
+        <Mono size={14} color={palette.dim}>
+          {run.duration_s !== null ? `${run.duration_s.toFixed(2)} s` : "—"}
+        </Mono>
+      </div>
+      <div style={{ width: 48 }}>
+        <Mono size={14} color={color}>
           {run.verdict}
         </Mono>
       </div>
-      <Reveal p={p} distance={10}>
-        <Mono size={13} color={palette.faint}>
+      <div style={{ width: 54 }}>
+        <Mono size={14} color={signal ? palette.bad : palette.dim}>
+          {run.exit_code === null
+            ? "—"
+            : signal
+              ? `−${Math.abs(run.exit_code)}`
+              : String(run.exit_code)}
+        </Mono>
+      </div>
+      <Reveal p={p} distance={8}>
+        <Mono size={12} color={palette.faint}>
           {run.findings} bulgu
         </Mono>
       </Reveal>
@@ -261,10 +448,55 @@ export const Timeline: React.FC<{
   lengthInFrames: number;
 }> = ({ data, lengthInFrames }) => {
   const f = useCurrentFrame();
+  const span = data.run_span;
+  const total = span.count;
+  const sev = span.severity;
   const maxMs = Math.max(
     ...data.runs.map((r) => (r.duration_s ?? 0) * 1000),
     1
   );
+
+  const verdictSegments: BarSegment[] = Object.entries(span.verdicts).map(
+    ([k, v]) => ({ key: k, count: v, color: verdictColor(k) })
+  );
+  const exitSegments: BarSegment[] = span.exits.map((e) => ({
+    key: String(e.code),
+    count: e.count,
+    color: isSignalExit(e.code) ? palette.bad : palette.warn,
+  }));
+  const verdictKeys = Object.keys(span.verdicts);
+
+  const exitTrail =
+    total === 0
+      ? "—"
+      : span.exits
+          .map(
+            (e) =>
+              `${e.code === null ? "?" : e.code < 0 ? `−${Math.abs(e.code)}` : e.code}` +
+              `${e.signal ? ` ${e.signal}` : ""} ${e.count}/${total}`
+          )
+          .join(" · ");
+  const signalExit = span.exits.find((e) => isSignalExit(e.code));
+
+  // Tek sonuçlu dağılımda grafik tek renkli olur; bu bir görsel hata değil,
+  // verinin kendisi. Not bunu açıkça söyler ve yeşil koşu UYDURMAZ.
+  const note = span.data_missing
+    ? "veri yok (temiz klon / CI) — dağılım iskeleti doğrulandı"
+    : verdictKeys.length === 1
+      ? `tek sonuçlu dağılım: ${total}/${total} koşu ${verdictKeys[0]} — P0=P1=0, bulgu yok; hepsi exit=${signalExit?.code ?? "?"} (${signalExit?.signal ?? "sinyal yok"}) ile kesildi, geçen koşu KAYIT YOK.`
+      : `toplam ${sev.findings} bulgu · P0=${sev.p0} P1=${sev.p1} · sapma ${tally(span.drift, total)}`;
+
+  const metrics = [
+    { k: "P0", v: `${sev.p0}` },
+    { k: "P1", v: `${sev.p1}` },
+    { k: "BULGU", v: `${sev.findings}` },
+    { k: "SAPMA", v: tally(span.drift, total) },
+    { k: "Z3", v: `${sev.z3_passed}/${sev.z3_total}` },
+    {
+      k: "KAPI TELEMETRISI",
+      v: `${span.telemetry.reported.length}/${span.telemetry.columns}`,
+    },
+  ];
 
   return (
     <Shell lengthInFrames={lengthInFrames}>
@@ -279,13 +511,13 @@ export const Timeline: React.FC<{
       <Reveal p={stage(f, 12, 16)}>
         <Mono size={16} color={palette.dim}>
           _calisma/CIKTI/history.jsonl ·{" "}
-          {data.run_span.data_missing
+          {span.data_missing
             ? "veri yok (temiz klon / CI)"
-            : `${data.run_span.count} kayıt · ${data.run_span.first} → ${data.run_span.last}`}
+            : `${span.count} kayıt · ${span.first} → ${span.last}`}
         </Mono>
       </Reveal>
 
-      <div style={{ height: 34 }} />
+      <div style={{ height: 30 }} />
 
       <div>
         {data.runs.map((run, i) => (
@@ -293,30 +525,62 @@ export const Timeline: React.FC<{
         ))}
       </div>
 
-      <div style={{ marginTop: "auto" }}>
-        <Reveal p={stage(f, 110, 18)}>
-          <div style={{ display: "flex", gap: 40, alignItems: "center" }}>
-            <Mono size={13} color={palette.faint} letter={1.6}>
-              VERDICT DAĞILIMI
-            </Mono>
-            {Object.entries(data.run_span.verdicts).map(([k, v]) => (
-              <Mono
-                key={k}
-                size={15}
-                color={k === "PASS" ? palette.accent2 : palette.bad}
+      <div
+        style={{
+          marginTop: "auto",
+          borderTop: `1px solid ${palette.line}`,
+          paddingTop: 18,
+        }}
+      >
+        <Reveal p={stage(f, 100, 16)}>
+          <StackBar
+            label="VERDICT"
+            segments={verdictSegments}
+            total={total}
+            frame={f}
+            base={102}
+            trail={tally(span.verdicts, total)}
+            trailColor={
+              verdictKeys.length === 1
+                ? verdictColor(verdictKeys[0])
+                : palette.dim
+            }
+          />
+          <StackBar
+            label="ÇIKIŞ KODU"
+            segments={exitSegments}
+            total={total}
+            frame={f}
+            base={116}
+            trail={exitTrail}
+            trailColor={palette.bad}
+          />
+          <Ruler />
+        </Reveal>
+
+        <Reveal p={stage(f, 136, 16)}>
+          <div style={{ display: "flex", gap: 26, marginTop: 18 }}>
+            {metrics.map((m) => (
+              <div
+                key={m.k}
+                style={{ display: "flex", alignItems: "baseline", gap: 8 }}
               >
-                {k} {v}
-              </Mono>
+                <Sans size={11} color={palette.faint} letter={1.4}>
+                  {m.k}
+                </Sans>
+                <Mono size={14} color={palette.text}>
+                  {m.v}
+                </Mono>
+              </div>
             ))}
-            <Mono size={15} color={palette.faint}>
-              {data.run_span.data_missing
-                ? "koşu verisi bu ortamda yok — sahne iskeleti doğrulandı"
-                : `toplam ${data.runs.reduce(
-                    (n, r) => n + r.findings,
-                    0
-                  )} bulgu · P0=0 P1=0`}
-            </Mono>
           </div>
+        </Reveal>
+
+        <Reveal p={stage(f, 154, 16)}>
+          <div style={{ height: 16 }} />
+          <Mono size={12} color={palette.faint}>
+            {note}
+          </Mono>
         </Reveal>
       </div>
     </Shell>
@@ -382,7 +646,7 @@ export const Evidence: React.FC<{
         ))}
       </div>
 
-      <Reveal p={stage(f, 96, 18)}>
+      <Reveal p={stage(f, 84, 16)}>
         <Mono size={12} color={palette.faint}>
           KAYNAK · findings.md:102 · progress.md:6 · recovery_patches_20260918 ·
           test_id_residual_acceptance_doc.py
@@ -399,6 +663,9 @@ export const Gates: React.FC<{ data: LeibnizData; lengthInFrames: number }> = ({
 }) => {
   const f = useCurrentFrame();
   const g = data.gates;
+  const bk = g.break;
+  // Kırılma yalnızca history.jsonl'da sinyalle kesilmiş koşu varsa oynar.
+  const broken = bk.kind === "signal";
   const perRow = 6;
   const rows = [
     g.all.slice(0, perRow),
@@ -406,41 +673,74 @@ export const Gates: React.FC<{ data: LeibnizData; lengthInFrames: number }> = ({
     g.all.slice(perRow * 2),
   ];
 
+  // Kırılma animasyonu: soldan sağa tarama çizgisi, ardından sönümlenen flaş.
+  const sweep = broken
+    ? interpolate(f, [112, 132], [-4, 104], {
+        extrapolateLeft: "clamp",
+        extrapolateRight: "clamp",
+      })
+    : 0;
+  const flash = broken
+    ? interpolate(f, [112, 122, 154], [0, 0.8, 0.06], {
+        extrapolateLeft: "clamp",
+        extrapolateRight: "clamp",
+      })
+    : 0;
+
   return (
     <Shell lengthInFrames={lengthInFrames}>
       <Reveal p={stage(f, 2, 14)}>
         <Kicker>SAHNE 4 / 6</Kicker>
       </Reveal>
-      <div style={{ height: 12 }} />
+      <div style={{ height: 10 }} />
       <Reveal p={stage(f, 6, 16)}>
         <Heading>Kapı zinciri {g.range}</Heading>
       </Reveal>
-      <div style={{ height: 10 }} />
+      <div style={{ height: 8 }} />
       <Reveal p={stage(f, 12, 16)}>
-        <Mono size={15} color={palette.dim}>
-          çekirdek katman K0–K7 her koşuda · tam tarama --full
+        <Mono size={14} color={palette.dim}>
+          çekirdek K0–K7 · tam zincir {g.all.length} katman · durum tahtası{" "}
+          {g.board.length > 0
+            ? `${g.board.length} kalem (son koşu)`
+            : "veri yok"}
         </Mono>
       </Reveal>
 
-      <div
-        style={{
-          marginTop: 26,
-          display: "flex",
-          flexDirection: "column",
-          gap: 14,
-          flex: 1,
-          minHeight: 0,
-        }}
-      >
+      <div style={{ marginTop: 20, position: "relative" }}>
         {rows.map((row, ri) => (
           <div
             key={ri}
-            style={{ display: "flex", gap: 12, flex: 1, minHeight: 0 }}
+            style={{
+              display: "flex",
+              gap: 11,
+              marginBottom: ri < rows.length - 1 ? 11 : 0,
+            }}
           >
             {row.map((k, ki) => {
               const idx = ri * perRow + ki;
-              const p = stage(f, 18 + idx * 4, 12);
+              const p = stage(f, 18 + idx * 5, 12);
               const isCore = g.core.includes(k);
+              const ok = g.ok_ids.includes(k);
+              const mark = ok ? "✓" : broken ? "!" : "·";
+              const markColor = ok
+                ? palette.accent2
+                : broken
+                  ? palette.bad
+                  : palette.faint;
+              const tag = ok
+                ? "GEÇTİ"
+                : broken
+                  ? "RAPOR YOK"
+                  : isCore
+                    ? "ÇEKİRDEK"
+                    : "KAYIT YOK";
+              const tagColor = ok
+                ? palette.accent2
+                : broken
+                  ? palette.bad
+                  : isCore
+                    ? palette.accent
+                    : palette.faint;
               return (
                 <Reveal
                   key={k}
@@ -448,9 +748,15 @@ export const Gates: React.FC<{ data: LeibnizData; lengthInFrames: number }> = ({
                   distance={12}
                   style={{
                     flex: 1,
-                    border: `1px solid ${p > 0.85 ? palette.line : palette.bgSoft}`,
+                    border: `1px solid ${
+                      p <= 0.85
+                        ? palette.bgSoft
+                        : broken && !ok && flash > 0.25
+                          ? palette.bad
+                          : palette.line
+                    }`,
                     backgroundColor: palette.bgSoft,
-                    padding: "16px 18px",
+                    padding: "12px 14px",
                     boxSizing: "border-box",
                     display: "flex",
                     flexDirection: "column",
@@ -464,42 +770,151 @@ export const Gates: React.FC<{ data: LeibnizData; lengthInFrames: number }> = ({
                       alignItems: "center",
                     }}
                   >
-                    <Mono size={18} color={palette.text} weight={600}>
+                    <Mono size={17} color={palette.text} weight={600}>
                       {k}
                     </Mono>
-                    <Mono
-                      size={15}
-                      color={p > 0.6 ? palette.accent2 : palette.faint}
-                    >
-                      ✓
+                    <Mono size={14} color={p > 0.6 ? markColor : palette.faint}>
+                      {p > 0.6 ? mark : ""}
                     </Mono>
                   </div>
-                  <div style={{ height: 8 }} />
-                  <Sans size={13} color={palette.dim}>
+                  <div style={{ height: 6 }} />
+                  <Sans size={12} color={palette.dim}>
                     {g.names[k]}
                   </Sans>
-                  {isCore ? <div style={{ height: 8 }} /> : null}
-                  {isCore ? (
-                    <Mono size={11} color={palette.accent} letter={1.2}>
-                      ÇEKİRDEK
-                    </Mono>
-                  ) : null}
+                  <div style={{ height: 7 }} />
+                  <Mono size={10} color={tagColor} letter={1.1}>
+                    {tag}
+                  </Mono>
                 </Reveal>
               );
             })}
           </div>
         ))}
+        {broken && flash > 0.02 ? (
+          <div
+            style={{ position: "absolute", inset: 0, pointerEvents: "none" }}
+          >
+            <div
+              style={{
+                position: "absolute",
+                left: `${sweep}%`,
+                top: -8,
+                bottom: -8,
+                width: 2,
+                backgroundColor: palette.bad,
+                boxShadow: `0 0 16px 3px ${palette.bad}`,
+                opacity: Math.min(1, flash * 1.4),
+              }}
+            />
+          </div>
+        ) : null}
       </div>
 
-      <Reveal p={stage(f, 100, 18)}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 20 }}>
-          <Mono size={28} color={palette.accent2} weight={600}>
-            {g.verdict}
+      <div style={{ marginTop: 20 }}>
+        {broken ? (
+          <Reveal p={stage(f, 126, 16)}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 20,
+                border: `1px solid ${palette.bad}`,
+                borderLeft: `3px solid ${palette.bad}`,
+                backgroundColor: palette.bgSoft,
+                padding: "13px 20px",
+              }}
+            >
+              <Mono size={19} color={palette.bad} weight={600}>
+                KIRILMA
+              </Mono>
+              <Mono size={15} color={palette.text}>
+                exit={bk.exit_code} {bk.signal ?? ""} · {bk.runs}/{bk.of_runs}{" "}
+                koşu · %{bk.share_pct} · en uzun{" "}
+                {bk.max_duration_s !== null
+                  ? `${bk.max_duration_s.toFixed(2)} sn`
+                  : "—"}
+              </Mono>
+              <Mono size={13} color={palette.faint}>
+                kapı telemetrisi {bk.telemetry_reported}/{bk.telemetry_columns}{" "}
+                sütun · P0={bk.p0} P1={bk.p1}
+              </Mono>
+            </div>
+          </Reveal>
+        ) : (
+          <Reveal p={stage(f, 126, 16)}>
+            <div
+              style={{
+                border: `1px solid ${palette.line}`,
+                borderLeft: `3px solid ${palette.accent2}`,
+                backgroundColor: palette.bgSoft,
+                padding: "13px 20px",
+              }}
+            >
+              <Mono size={15} color={palette.dim}>
+                {bk.kind === "no_data"
+                  ? "kapı kırılma kaydı yok — history.jsonl bu ortamda yok (temiz klon / CI)"
+                  : `kırılma yok · ${bk.of_runs} koşunun hiçbirinde sinyalle kesilme görülmedi`}
+              </Mono>
+            </div>
+          </Reveal>
+        )}
+      </div>
+
+      <div style={{ height: 16 }} />
+
+      <Reveal p={stage(f, 148, 16)}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            flexWrap: "wrap",
+          }}
+        >
+          <Mono size={11} color={palette.faint} letter={1.6}>
+            STATUS_BOARD · SON KOŞU
           </Mono>
-          <Mono size={14} color={palette.faint}>
-            verify_delivery · P0=0 · P1=0 · 16 katman
+          {g.board.length > 0 ? (
+            g.board.map((item) => (
+              <Chip key={item.label} label={item.label} state={item.state} />
+            ))
+          ) : (
+            <Mono size={13} color={palette.faint}>
+              tahta kaydı yok
+            </Mono>
+          )}
+        </div>
+      </Reveal>
+
+      <div style={{ height: 14 }} />
+
+      <Reveal p={stage(f, 164, 16)}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 18 }}>
+          <Mono
+            size={20}
+            weight={600}
+            color={
+              g.verdict.warn === 0 && g.verdict.ok > 0
+                ? palette.accent2
+                : palette.warn
+            }
+          >
+            {g.verdict.ok} ✓ · {g.verdict.warn} ⚠
+            {g.verdict.other > 0 ? ` · ${g.verdict.other} ?` : ""}
+          </Mono>
+          <Mono size={12} color={palette.faint}>
+            {g.group_warn.length > 0
+              ? `grup sinyali: ${g.group_warn.join(" · ")}`
+              : "grup sinyeli yok"}
+            {broken ? " · kapı başına sonuç kaydı yok" : ""}
           </Mono>
         </div>
+        <div style={{ height: 8 }} />
+        <Mono size={10} color={palette.faint}>
+          status_board: {g.board_raw || "—"} · tahta çeşitliliği{" "}
+          {data.run_span.board_agreement.distinct}/
+          {data.run_span.board_agreement.of_runs}
+        </Mono>
       </Reveal>
     </Shell>
   );
@@ -583,7 +998,7 @@ export const Seal: React.FC<{ data: LeibnizData; lengthInFrames: number }> = ({
         offset={2}
       />
 
-      <Reveal p={stage(f, 82, 18)}>
+      <Reveal p={stage(f, 72, 16)}>
         <Mono size={12} color={palette.faint}>
           SHA-256 · 64 haneli · test_id_residual_acceptance_doc.py sabitleri
         </Mono>

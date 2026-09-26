@@ -3531,10 +3531,13 @@ jobs:
 
       # history.jsonl CI'da yoktur (gitignore'daki calisma zamani verisi) —
       # üretici fail-closed: girdi yoksa sentinel JSON üretir ve render
-      # yine koşar. Böylece kapı tip/render tarafını ölçer, KANIT KARTLARI
-      # (2323 OK, 9/9 vb.) ise kayıttan gelen sabitlerdir.
-      - name: Generate composition data (make_data.py)
-        run: python3 _calisma/video/make_data.py
+      # yine koşar. Bayrak OTMALI: verimsiz mod sentinel'i yalniz acikca
+      # isteyerek uretir, aksi halde bu adim 1 ile cikip isi kirmasi
+      # durur. Yani bosluk "veri yok" demekten iyidir, ama CI'da beklenen
+      # davranis bu degil. Böylece kapı tip/render tarafını ölçer,
+      # KANIT KARTLARI (2323 OK, 9/9 vb.) ise kayıttan gelen sabitlerdir.
+      - name: Generate composition data (make_data.py, sentinel)
+        run: python3 _calisma/video/make_data.py --allow-missing-data
 
       - name: Typecheck composition (tsc --noEmit)
         run: bash _calisma/CIKTI/check_video_typecheck.sh

@@ -35,11 +35,11 @@ CHAIN_TSX = os.path.join(VIDEO, "src", "LeibnizChainView.tsx")
 
 SCENES = [
     ("1 · Title", 0, 90),
-    ("2 · Timeline", 90, 180),
-    ("3 · Evidence", 270, 180),
-    ("4 · Gates", 450, 140),
-    ("5 · Seal", 590, 110),
-    ("6 · Closing", 700, 60),
+    ("2 · Timeline", 90, 200),
+    ("3 · Evidence", 290, 120),
+    ("4 · Gates", 410, 200),
+    ("5 · Seal", 610, 100),
+    ("6 · Closing", 710, 50),
 ]
 
 
@@ -158,6 +158,151 @@ class TestGeneratedData(unittest.TestCase):
         self.assertEqual(gates["core"], ["K%d" % i for i in range(8)])
         self.assertEqual(sorted(gates["names"]), sorted(gates["all"]))
 
+
+class TestDistributionData(unittest.TestCase):
+    """Verdigrafi ve kapi kirilmasi sahnelerinin girdisi.
+
+    Ikisi de history.jsonl'dan TURETILIR; testler yalnizca "uydurma sayi
+    uretilmiyor" diye denetler: dagilimlar kosu sayisina toplanir, kapi
+    kirkilmasi gercekten sinyalle kesilen kosu sayisina esit olur.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.mod = _load_make_data()
+        try:
+            cls.payload = cls.mod.build()
+            cls.available = True
+        except SystemExit:
+            cls.available = False
+
+    def setUp(self):
+        if not self.available:
+            self.skipTest("canli history.jsonl yok (temiz klon / calisma verisi disinda)")
+
+    def test_distributions_sum_to_run_count(self):
+        span = self.payload["run_span"]
+        self.assertEqual(sum(span["verdicts"].values()), span["count"])
+        self.assertEqual(sum(e["count"] for e in span["exits"]), span["count"])
+        self.assertEqual(sum(span["drift"].values()), span["count"])
+
+    def test_exit_segments_carry_signal_names(self):
+        """Negatif kod sinyal kodudur ve adı stdlib'den gelir (-15 -> SIGTERM)."""
+        for seg in self.payload["run_span"]["exits"]:
+            if seg["code"] is not None and seg["code"] < 0:
+                self.assertEqual(seg["signal"], "SIGTERM")
+            else:
+                self.assertIsNone(seg["signal"])
+
+    def test_severity_totals_agree_with_runs(self):
+        runs = self.payload["runs"]
+        sev = self.payload["run_span"]["severity"]
+        self.assertEqual(sev["p0"], sum(r["p0"] or 0 for r in runs))
+        self.assertEqual(sev["p1"], sum(r["p1"] or 0 for r in runs))
+        self.assertEqual(sev["findings"], sum(r["findings"] for r in runs))
+        self.assertEqual(sev["z3_total"], sum(r["z3_total"] for r in runs))
+
+    def test_status_board_parses_every_recorded_item(self):
+        span = self.payload["run_span"]
+        raw = span["board_raw"]
+        self.assertTrue(raw, "son kosunun status_board metni olmali")
+        chunks = [c for c in raw.split("·") if c.strip()]
+        self.assertEqual(len(span["board"]), len(chunks), "her tahta kalemi ayristirilmali")
+        for item in span["board"]:
+            self.assertTrue(item["label"], "bos etiket uretilmemeli")
+            self.assertIn(item["state"], {"PASS", "WARN", "FAIL", "UNKNOWN"})
+
+    def test_unknown_board_mark_is_never_upgraded_to_pass(self):
+        """Tanınmayan isaret UNKNOWN kalir — sessizce PASS sayilmaz."""
+        items = self.mod.parse_status_board("K0 ? · Bütçe ✅")
+        self.assertEqual(items[0]["state"], "UNKNOWN")
+        self.assertEqual(items[1]["state"], "PASS")
+        self.assertEqual(self.mod.parse_status_board(""), [])
+
+    def test_board_marks_split_without_spaces(self):
+        """"K0✅" ve "K0 ✅" ayni ayrismali (varyasyon seçici temizlenir)."""
+        tight = self.mod.parse_status_board("Pre-commit ⚠️ · K0✅")
+        self.assertEqual([i["label"] for i in tight], ["Pre-commit", "K0"])
+        self.assertEqual([i["state"] for i in tight], ["WARN", "PASS"])
+
+    def test_gate_marks_only_use_real_gate_ids(self):
+        """Yeşil işaret yalnız tahtada ADI OLAN kapılara verilir.
+
+        "K katmanları ⚠️" bir kapı numarası değildir: grup uyarısı olarak
+        ayrılır, 15 kapıya uydurma PASS dağıtılmaz.
+        """
+        gates = self.payload["gates"]
+        for gid in gates["ok_ids"]:
+            self.assertIn(gid, gates["names"], "olmayan kapi yesil gosterilmemeli")
+        for label in gates["group_warn"]:
+            self.assertNotIn(label, gates["names"], "kapı olmayan etiket ok_ids olamaz")
+        self.assertEqual(
+            sorted(gates["ok_ids"] + gates["group_warn"]),
+            sorted(i["label"] for i in gates["board"]),
+        )
+
+    def test_gate_verdict_counts_every_board_item(self):
+        v = self.payload["gates"]["verdict"]
+        self.assertEqual(v["ok"] + v["warn"] + v["other"], len(self.payload["gates"]["board"]))
+
+    def test_break_block_matches_actual_signal_runs(self):
+        """Kırılma sayısı: exit_code<0 olan koşuların KENDİSİ, sabit değil."""
+        runs = self.payload["runs"]
+        broken = [r for r in runs if r["exit_code"] is not None and r["exit_code"] < 0]
+        bk = self.payload["gates"]["break"]
+        self.assertEqual(bk["runs"], len(broken))
+        self.assertEqual(bk["of_runs"], len(runs))
+        self.assertEqual(
+            bk["share_pct"], round(100.0 * len(broken) / len(runs), 1) if runs else 0.0
+        )
+        if broken:
+            self.assertEqual(bk["kind"], "signal")
+            self.assertLess(bk["exit_code"], 0)
+            self.assertTrue(bk["signal"], "sinyal kodu adı cozulmeli")
+        else:
+            self.assertEqual(bk["kind"], "none")
+            self.assertIsNone(bk["exit_code"])
+            self.assertIsNone(bk["signal"])
+
+    def test_telemetry_separates_missing_from_zero(self):
+        """0/0 (sutun dolu) ile null (rapor yok) ayrı sayılır.
+
+        Bu ayrım dürüstlüğün temeli: 12 sütundan 3'ü dolu görünse bile
+        bunlar z3 ailesidir ve değerleri 0'dır.
+        """
+        tel = self.payload["run_span"]["telemetry"]
+        reported = set(tel["reported"])
+        unreported = set(tel["unreported"])
+        self.assertEqual(reported & unreported, set(), "bir sutun hem dolu hem bos olamaz")
+        self.assertEqual(len(reported) + len(unreported), tel["columns"])
+        self.assertEqual(len(self.mod.GATE_TELEMETRY), tel["columns"])
+        self.assertEqual(
+            tel["min_per_run"], tel["max_per_run"], "kosu basina telemetre sabit olmali"
+        )
+
+    def test_scenes_consume_the_new_blocks(self):
+        """scenes.tsx yeni alanları kullanmalı — grafik sessizce düşmez.
+
+        Not: Timeline sahnesi `const span = data.run_span` ile ayrıştirdığı
+        için alanlar `span.*` ön ekiyle aranır.
+        """
+        with open(os.path.join(VIDEO, "src", "scenes.tsx"), encoding="utf-8") as fh:
+            src = fh.read()
+        for token in (
+            "span.exits",
+            "span.verdicts",
+            "span.telemetry",
+            "span.severity",
+            "g.break",
+            "g.ok_ids",
+            "g.group_warn",
+            "g.board_raw",
+            "bk.signal",
+        ):
+            self.assertTrue(
+                token in src, "scenes.tsx %s alanini kullanmiyor" % token
+            )
+
     def test_dump_is_stable_and_prettier_compatible(self):
         """Üretim deterministik: iki çağrı bayt bayt aynı.
 
@@ -203,6 +348,29 @@ class TestSentinelMode(unittest.TestCase):
         self.assertEqual(payload["meta"]["frames"], 760)
         for value in payload["seal"].values():
             self.assertRegex(value, r"^[0-9a-f]{64}$")
+
+    def test_sentinel_chart_blocks_are_empty_not_invented(self):
+        """Veri yokken grafik boş kalır: sıfır bölme, uydurma segment yok.
+
+        CI'daki video-render işi tam olarak bu yolu çizer; `StackBar`
+        `total=0` için `safe=1` ile payı böler, dolayısıyla payload'da
+        run olmaması tek başına bölmeyi patlatmamalı.
+        """
+        mod = _load_make_data()
+        self._missing(mod)
+        payload = mod.build(allow_missing=True)
+        span = payload["run_span"]
+        self.assertEqual(span["verdicts"], {})
+        self.assertEqual(span["exits"], [], "sinyal kodu uydurulmamali")
+        self.assertEqual(span["board"], [])
+        self.assertEqual(span["board_raw"], "")
+        self.assertEqual(span["severity"]["p0"], 0)
+        self.assertEqual(payload["gates"]["ok_ids"], [])
+        bk = payload["gates"]["break"]
+        self.assertEqual(bk["kind"], "no_data")
+        self.assertEqual(bk["runs"], 0)
+        self.assertEqual(bk["share_pct"], 0.0)
+        self.assertIsNone(bk["signal"])
 
     def test_sentinel_dumps_to_valid_json(self):
         mod = _load_make_data()
@@ -264,6 +432,8 @@ class TestGeneratorFailsClosed(unittest.TestCase):
             "collections",
             "json",
             "os",
+            # signal: exit_code=-15 -> "SIGTERM" adı (kapı kırılma bloğu)
+            "signal",
             "sys",
             "tempfile",
             "unittest",
