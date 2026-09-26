@@ -3058,6 +3058,50 @@ jobs:
             --page /guide.html \
             --output a11y_guide_report.json
 
+      # CLS (Cumulative Layout Shift) bütçe kapısı — fail-closed.
+      # Yukarıdaki Lighthouse adımı `--only-categories=accessibility` koşar,
+      # yani layout-shift auditi rapora HİÇ girmez: "sayfa zıplamıyor" iddiası
+      # bu repoda hiçbir gate tarafından ölçülmüyordu. Bu adım iddiayı
+      # CLS < 0.1 olarak sabitler (Web Vitals "good" eşiği).
+      - name: Run CLS budget gate — dashboard (CLS < 0.1)
+        if: always()
+        env:
+          A11Y_THEME: ${{ matrix.theme }}
+        shell: bash
+        run: |
+          if [ -z "${A11Y_PORT:-}" ]; then
+            echo "A11Y_PORT yok — preview_server başlatılamadı; CLS ölçülemez (fail-closed)" >&2
+            exit 1
+          fi
+          DASHBOARD_BASE_URL="http://127.0.0.1:${A11Y_PORT}" \
+          DASHBOARD_THEME="$A11Y_THEME" \
+          CLS_REPORT_PATH="cls_budget_${A11Y_THEME}.json" \
+            python3 _calisma/CIKTI/test_dashboard_cls_budget.py
+
+      # Aynı ölçüm çekirdeğinin ikinci koşumu: CWV raporu dashboard'ın
+      # CLS + LCP + FCP + TTFB değerlerini bütçelerine karşı kapılar
+      # (CLS < 0.1, LCP < 2500 ms, FCP < 1800 ms, TTFB < 800 ms). Ölçüm
+      # çekirdeği kopyalanmaz: `test_surface_cwv_report.py` CLS recorder'ını
+      # ve session-window matematiğini `test_dashboard_cls_budget.py`'den
+      # import eder. Landing yüzeyi bu adıma landing.html mirror'a stage
+      # edildiğinde eklenir (CWV_SURFACES=dashboard,landing); yerelde üç
+      # yüzey birden koşar: `python3 _calisma/CIKTI/test_surface_cwv_report.py`
+      - name: Run CWV report — dashboard (CLS/LCP/FCP/TTFB)
+        if: always()
+        env:
+          A11Y_THEME: ${{ matrix.theme }}
+        shell: bash
+        run: |
+          if [ -z "${A11Y_PORT:-}" ]; then
+            echo "A11Y_PORT yok — preview_server başlatılamadı; CWV ölçülemez (fail-closed)" >&2
+            exit 1
+          fi
+          CWV_SURFACES=dashboard \
+          DASHBOARD_BASE_URL="http://127.0.0.1:${A11Y_PORT}" \
+          DASHBOARD_THEME="$A11Y_THEME" \
+          CWV_REPORT_PATH="surface_cwv_${A11Y_THEME}.json" \
+            python3 _calisma/CIKTI/test_surface_cwv_report.py
+
       - name: Write a11y job summary
         if: always()
         shell: bash

@@ -247,6 +247,8 @@ HOOK_COVERAGE = {
         "test_canvas_determinism.py",
         "test_determinism_trend_canvas.py",
         "test_incidental_banner.py",
+        "test_dashboard_cls_budget.py",
+        "test_surface_cwv_report.py",
     ],
 }
 
@@ -258,7 +260,13 @@ CI_JOB_COVERAGE = {
         "ALL",
     ],
     "preview-reload-smoke": ["test_preview_reload_smoke.py"],
-    "a11y-gate": ["test_a11y_gate.py"],
+    # a11y-gate job'ı dashboard'ın axe taramasına ek olarak CLS bütçe kapısını
+    # (CLS < 0.1) aynı canlı preview_server üzerinde koşar — "Run CLS budget
+    # gate — dashboard (CLS < 0.1)" adımı. İkinci adım ("Run CWV report —
+    # dashboard") aynı ölçüm çekirdeğini dashboard yüzeyine koşturur
+    # (CLS/LCP/FCP/TTFB); landing yüzeyi mirror'a stage edildiğinde eklenir.
+    "a11y-gate": ["test_a11y_gate.py", "test_dashboard_cls_budget.py",
+                  "test_surface_cwv_report.py"],
     "dashboard-smoke": ["test_dashboard_playwright_smoke.py"],
     "daemon-http": ["test_daemon_http.py"],
     "plist-check": ["test_plist_gate_exit.py", "test_gen_plist_golden.py"],

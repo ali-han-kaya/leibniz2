@@ -48,6 +48,7 @@ test_coordinator_loop.py
 test_coq_evidence_smoke.py
 test_coq_lake.py
 test_coverage_report.py
+test_dashboard_cls_budget.py
 test_dashboard_k17_exit_sync.py
 test_dashboard_keyboard_nav.py
 test_dashboard_smoke.py
@@ -138,6 +139,7 @@ test_status_checks_smoke.py
 test_stop_peer_allowlist.py
 test_stop_post_only.py
 test_summary_pattern_drift.py
+test_surface_cwv_report.py
 test_sync_check_unit_tests.py
 test_sync_lifecycle.py
 test_sync_one_atomic.py
