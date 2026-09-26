@@ -5,7 +5,7 @@
 Kare bütçesi ÜÇ yerde birden yaşar ve üçü de birden doğrulanır:
   1. make_data.py           → meta.frames / meta.fps
   2. src/Root.tsx           → <Composition durationInFrames={…} fps={…}>
-  3. src/LeibnizChain.tsx   → <Sequence from=… durationInFrames=…> × 6
+  3. src/LeibnizChainView.tsx → <Sequence from=… durationInFrames=…> × 6
 
 Bunlardan biri kayarsa ya render beklenenden farklı sürede çıkar ya da
 son kare boş/siyah kalır — iki durumda da teslim edilen mp4 sessizce yanlış
@@ -30,7 +30,8 @@ REPO = os.path.dirname(os.path.dirname(HERE))
 VIDEO = os.path.join(REPO, "_calisma", "video")
 MAKE_DATA = os.path.join(VIDEO, "make_data.py")
 ROOT_TSX = os.path.join(VIDEO, "src", "Root.tsx")
-CHAIN_TSX = os.path.join(VIDEO, "src", "LeibnizChain.tsx")
+# Sahne agaci LeibnizChainView'ta yasar (LeibnizChain yalnizca onu sarar).
+CHAIN_TSX = os.path.join(VIDEO, "src", "LeibnizChainView.tsx")
 
 SCENES = [
     ("1 · Title", 0, 90),
@@ -82,7 +83,7 @@ class TestFrameBudget(unittest.TestCase):
         self.assertEqual((int(w.group(1)), int(h.group(1))), (1280, 720))
 
     def test_sequences_match_scene_table(self):
-        """LeibnizChain.tsx'teki Sequence from/duration değerleri sahne tablosuyla aynı."""
+        """LeibnizChainView.tsx'teki Sequence from/duration değerleri sahne tablosuyla aynı."""
         with open(CHAIN_TSX, encoding="utf-8") as fh:
             src = fh.read()
         found = [

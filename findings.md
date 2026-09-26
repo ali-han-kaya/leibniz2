@@ -523,3 +523,53 @@ pre-commit chain adaptation (47→49 hooks). Key lessons below.
   tabular history.jsonl does not qualify without a user request.
   No work invented; the xlsx contract (openpyxl formulas + mandatory
   recalc.py, LibreOffice function limits) stays retrieval-ready.
+
+### Tarayıcı içi oynatma: @remotion/player → preview sunucusu
+- Studio yerine Player: Studio ayrı sunucu + webpack dev-cache ve Freebuff
+  harness'i her komut sonunda child process'leri reap ediyor (5 keepalive
+  yöntemi de denendi, hepsi öldü — 2026-09-18 kaydı). `@remotion/player`
+  tek statik dosyada toplanıp preview sunucusundan servis ediliyor.
+- **Ölçülen hata**: Remotion `<Player>` bilesene özel propları `inputProps`
+  ile geçiriyor; doğrudan `dataUrl={…}` yazmak Player'ın kendi propları
+  sanılıp yutuluyor ve `useLeibnizData` `staticFile` yedeğine düşüyordu →
+  tarayıcıda "leibniz.json 404". `inputProps={{dataUrl}}` ile düzeldi.
+  Ölçüm: konsol hatası + sayfa metni (0:00/0:25 kontrolleri görünmüyordu).
+- **CSP**: sunucu `default-src 'none'; script-src 'self' 'nonce-…'` uyguluyor.
+  Sayfa **inline script içermiyor**; paket `/video/player.js` harici dosyadan
+  geliyor, veri `data-src` niteliğiyle taşınıyor (`data-*` script değildir).
+  `test_preview_video_player.py` her `<script>` satırını denetliyor.
+- **Tarayıcıda doğrulandı** (Chromium): başlık sahnesi gerçek veriyle çizildi
+  (1280×720 / 30 fps / 760 kare / 25,33 sn), oynatma başladı, 3 sn'de 0:07 +
+  sahne 2, ardından sahne 3 → 4 → döngü; konsol hatasız, ağ hatasız.
+  Sahne 5/6'yı tarayıcıda ayrıca ölçülmedi — mp4 render'ı altı sahneyi de
+  kanıtlıyor ve oynatma aynı bileşen ağacını kullanıyor.
+- **Yol kacisi kapatıldı**: `/video/*` üç adlık ACIK allowlist ile servis
+  ediliyor (`VIDEO_ASSETS`); `..`, alt dizin, `.map`, bilinmeyen uzantı →
+  404. Ölçüldü: 6/6 404.
+- Dist kökü `PREVIEW_DIR` mirror'ından BAGIMSIZ (repo checkout'undan), böylece
+  CI'da da çalışır; paket `.gitignore`'da (yeniden üretilebilir çıktı).
+
+### Ortam kaybı: Playwright tarayıcı önbelleği silinmiş (2026-09-26)
+- **Belirti**: `~/Library/Caches/ms-playwright/` dizini oturum ortasında TAMAMEN
+  silinmişti (oturum başında 10 dizin vardı: chromium/headless_shell 1208, 1223,
+  1234, 1243, ffmpeg-1011, webkit-2287). Aynı turda `/tmp` de temizlenmişti —
+  aynı olayın iki yüzü: bu makinede cache'ler arac duraklamalarında toplanıyor.
+- **Ölçülen hata değil, ortam hatası**: `chromium_headless_shell-1223` yürütülebiliri
+  yok → `BrowserType.launch: Executable doesn't exist`. Üç test fail-closed düştü
+  (`test_dashboard_cls_budget` 5 hata, `test_dashboard_keyboard_nav` 14 hata,
+  `test_surface_cwv_report` 6 hata) ve `check-unit-tests` commit'i blokladı.
+- **Kapının doğru çalıştığı nokta**: dört Playwright testi SKIP ediyordu
+  (dürüst SKIP), üçü ise ortam yoksa düşüyor — yani eksik ortam GİZLENMEDİ.
+  `test_dashboard_playwright_smoke` zaten EXCLUDE'da.
+- **Onarım**: `python3 -m playwright install chromium` → Chrome Headless Shell
+  148.0.7778.96 (chromium-headless-shell v1223, 92,4 MiB). Üç test de yeşile
+  döndü. Ölçüm: 92,4 MiB, kurulum ~2 dk.
+- **Tuzak**: öldürülen kurulum `__dirlock` dizini bırakıyor; sonraki kurulumu
+  kilitliyor (`rm -rf ~/Library/Caches/ms-playwright/__dirlock` gerekir).
+  Kısmi indirme de tutulmuyor — iki 600 sn'lik deneme boşa gitti, sonra ağ
+  düzeldi (curl 0,18 sn) ve tek denemede tamamlandı. Ağ takılırken
+  `curl --max-time` bile komutu kilitleyebiliyor; `timeout` sarmalayıcı gerekli.
+- **Sonuç dışa aktarılabilir kural**: tarayıcıya bağlı bir test kırmızıysa
+  ÖNCE `~/Library/Caches/ms-playwright/` ve `node_modules` varlığını denetle;
+  kod değişikliği sanma. Playwright/ffprobe/paket kurulumları bu makinede
+  kalıcı sayılmaz — CI'da kurulum adımını adım olarak yaz.

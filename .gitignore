@@ -49,6 +49,9 @@ _calisma/pptx/pdf_repro_findings.pptx
 _calisma/video/node_modules/
 _calisma/video/out/
 _calisma/video/.remotion/
+# tarayici-ici oynatma paketi (esbuild ciktisi) ve sayfa kabugu kopyasi:
+# preview sunucusu /video/* altindan servis eder, hepsi yeniden uretilebilir
+_calisma/video/dist/
 # public/data/leibniz.json canli history.jsonl'den uretilir (make_data.py) —
 # history.jsonl de calisma zamani verisi oldugu icin (asagida) ikisi de repoda degil
 _calisma/video/public/data/

@@ -259,6 +259,7 @@ HOOK_COVERAGE = {
         "test_check_video_typecheck.py",
         "test_video_data_contract.py",
         "test_check_video_render.py",
+        "test_preview_video_player.py",
     ],
 }
 

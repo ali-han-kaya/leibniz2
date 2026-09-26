@@ -9,6 +9,7 @@
     "check": "python3 check_render.py",
     "format": "prettier --ignore-unknown --write .",
     "format:check": "prettier --ignore-unknown --check .",
+    "build:player": "python3 make_data.py && node scripts/build_player.mjs",
     "render": "python3 make_data.py && remotion render LeibnizChain out/leibniz-chain.mp4 --codec=h264 --crf=20",
     "render:stills": "python3 make_data.py && remotion still LeibnizChain out/frame-0.png --frame=0",
     "studio": "python3 make_data.py && remotion studio"
@@ -21,6 +22,8 @@
   },
   "devDependencies": {
     "@types/react": "19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "esbuild": "^0.25.9",
     "prettier": "3.6.2",
     "typescript": "5.6.3"
   }

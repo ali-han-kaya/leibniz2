@@ -132,6 +132,20 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(os.path.dirname(ROOT))
 DEFAULT_PREVIEW_DIR = os.path.expanduser("~/Library/Caches/com.freebuff/preview")
 
+# LeibnizChain tarayici-ici oynatma paketi. `npm run build:player` ciktisi;
+# yeniden uretilebilir oldugu icin repoda tutulmaz (.gitignore) ve PREVIEW_DIR
+# mirror'indan BAGIMSIZDIR — CI'da da repo checkout'undan servis edilir.
+VIDEO_DIST = os.path.join(REPO_ROOT, "_calisma", "video", "dist")
+
+# /video/* altinda servis edilebilecek dosyalar — ACIK ALLOWLIST. Yol kacisi
+# (../) ve dizin listelemesi bu yuzden yapilandirilamaz: adi listede olmayan
+# her sey 404.
+VIDEO_ASSETS = {
+    "player.js": "text/javascript; charset=utf-8",
+    "player.css": "text/css; charset=utf-8",
+    "leibniz.json": "application/json; charset=utf-8",
+}
+
 
 def _find_python(verify_dir):
     """venv python tercih et; yoksa fall back to sys.executable.
@@ -1500,6 +1514,10 @@ def _route(path):
         return "stop"
     if p.startswith("/slides_z3/"):
         return "slides"
+    if p == "/video.html":
+        return "video"
+    if p.startswith("/video/"):
+        return "video_asset"
     return None
 
 
@@ -1645,6 +1663,10 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, "ok")
         elif route == "slides":
             self.serve_slides()
+        elif route == "video":
+            self.serve_video()
+        elif route == "video_asset":
+            self.serve_video_asset()
         elif route is None and urllib.parse.urlparse(self.path).path.startswith("/api/"):
             status, payload = api_error(404, "not found")
             self._send(status, json.dumps(payload),
@@ -2026,6 +2048,55 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
+
+    def serve_video(self):
+        """LeibnizChain oynatma sayfasi — VIDEO_DIST/player.html.
+
+        Remotion Studio DEGIL: Studio ayri bir sunucu + webpack dev-cache ile
+        gelir ve arac tarafindan surekli olarak oldurulur. @remotion/player
+        butun yuzeyi TEK statik dosyaya toplar; burada yalnizca o paket, sayfa
+        kabugu ve uretilen veri servis edilir.
+
+        Cikti yoksa 404 (fail-closed) — bos sayfa degil, ne yapilacagini
+        soyleyen mesaj doner: `npm run build:player`.
+        """
+        page = os.path.join(VIDEO_DIST, "player.html")
+        if not os.path.isfile(page):
+            self._send(
+                404,
+                "404 — LeibnizChain player paketi yok. "
+                "Uret: cd _calisma/video && npm ci && npm run build:player",
+            )
+            return
+        try:
+            with open(page, encoding="utf-8") as f:
+                html = f.read()
+        except OSError:
+            self._send(404, "404 — player.html okunamadi")
+            return
+        self._send(200, html, content_type="text/html; charset=utf-8")
+
+    def serve_video_asset(self):
+        """`/video/<ad>` — yalnizca VIDEO_ASSETS allowlist'indeki dosyalar.
+
+    Allowlist oldugu icin yol kacisi (`..`), dizin listelemesi ve dis uzantilar
+    yapilandirilamaz. player.js metin/javascript olarak servis edilir; sayfa
+    CSP'si `script-src 'self'` oldugu icin bu dosya zaten izin kapsaminda
+    (dis origin degil).
+        """
+        name = urllib.parse.urlparse(self.path).path[len("/video/"):]
+        content_type = VIDEO_ASSETS.get(name)
+        if content_type is None:
+            self._send(404, "404 not found")
+            return
+        full = os.path.join(VIDEO_DIST, name)
+        try:
+            with open(full, "rb") as f:
+                data = f.read()
+        except OSError:
+            self._send(404, "404 not found")
+            return
+        self._send(200, data, content_type=content_type)
 
     def serve_preview_js(self):
         """preview.js — dashboard JS (preview.html'den ayrılmış dış dosya).

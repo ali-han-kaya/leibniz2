@@ -142,7 +142,8 @@ def read_frozen_constants():
     """
     if not os.path.isfile(FROZEN):
         fail("girdi yok: %s" % FROZEN)
-    src = open(FROZEN, encoding="utf-8").read()
+    with open(FROZEN, encoding="utf-8") as fh:
+        src = fh.read()
     out = {}
     for name in ("DELIVERY_RAW", "DELIVERY_STRIPPED", "PDFTEX_3PASS"):
         marker = name + " = ("

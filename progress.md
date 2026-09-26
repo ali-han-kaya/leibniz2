@@ -124,3 +124,25 @@
 - Tüm doc/workflow kapıları yeşil: doc-job-sync 10/10, doc-artifact-sync 10/10,
   workflow-contract 12/12, workflow-artifact-docs PASS, actionlint RC=0,
   absolute-paths PASS (575 dosya), pattern-consistency PASS, config-sync PASS.
+
+## 2026-09-26 — LeibnizChain'i preview sunucusuna göm (@remotion/player)
+- Studio yerine tarayıcı-içi oynatma: Studio ayrı sunucu + webpack dev-cache
+  ve harness child process'leri reap ediyor; `@remotion/player` esbuild ile tek
+  statik pakete toplanıp preview sunucusundan servis ediliyor.
+- Yeni rotalar: `/video.html` + `/video/{player.js,player.css,leibniz.json}`
+  (3 adlık ACIK allowlist; 6/6 kaçış denemesi 404). Dist kökü repo checkout'unda
+  (`VIDEO_DIST`), PREVIEW_DIR mirror'ından bağımsız → CI'da da çalışır.
+- CSP uyumu: `default-src 'none'; script-src 'self' 'nonce-…'` → sayfada
+  **inline script yok**, veri `data-src` niteliğiyle taşınıyor; paket harici.
+- Tek sahne ağacı iki ortakta: `LeibnizChainView` (mp4 render `staticFile`,
+  oynatma `dataUrl`). Kopya sahne yok.
+- Ölçülen hata: `<Player>` bilesene özel propları `inputProps` ile geçiriyor;
+  doğrudan geçilen `dataUrl` yutulup `staticFile` yedeğine düşüyordu
+  ("leibniz.json 404"). `inputProps={{dataUrl}}` ile düzeldi.
+- Tarayıcı doğrulaması (Chromium): gerçek veriyle başlık sahnesi, oynatma
+  başladı, 3 sn'de 0:07 + sahne 2 → sahne 3 → 4 → döngü; konsol/ağ hatasız.
+- Ortam kaybı notu: oturum ortasında `~/Library/Caches/ms-playwright/` tamamen
+  silinmişti (aynı turda `/tmp` de). Üç dashboard testi fail-closed düştü ve
+  commit'i blokladı; `playwright install chromium` ile onarıldı (92,4 MiB,
+  v1223) ve üçü de yeşile döndü. `__dirlock` tuzağı ve kısmi-indirme
+  davranışı findings.md'ye yazıldı.

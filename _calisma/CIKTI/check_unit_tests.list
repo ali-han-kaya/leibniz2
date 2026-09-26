@@ -112,6 +112,7 @@ test_precheck_advisory_contract.py
 test_preview_findings_panel.py
 test_preview_server.py
 test_preview_server_atomic.py
+test_preview_video_player.py
 test_readme_badges.py
 test_readme_skills.py
 test_record_determinism_trend.py

@@ -34,6 +34,7 @@ npm ci                 # bağımlılıklar (node_modules repoda tutulmaz)
 npm run data           # public/data/leibniz.json üret (history.jsonl'den)
 npm run typecheck      # tsc --noEmit
 npm run check          # mp4 sözleşmesini ölç (kare/süre/çözünürlük)
+npm run build:player   # tarayıcı paketi (preview sunucusu /video.html)
 npm run format         # prettier --write
 npm run render         # 760 kare → out/leibniz-chain.mp4
 npm run studio         # Remotion Studio (kullanıcı terminalinde açılmalı)
@@ -63,8 +64,33 @@ yazar — bu yüzden proje kökünden değil, `_calisma/video` içinden koşulur
   `libavdevice.dylib` bulamadığı için kullanılamıyor. Birim testi dosyayı elle
   kurar; render beklenmez.
 
+## Tarayıcı içi oynatma (preview sunucusu)
+
+`npm run build:player` paketi üretir; preview sunucusu bunu üç rota ile
+servis eder:
+
+| Rota | İçerik |
+|---|---|
+| `/video.html` | sayfa kabuğu (`build/player.html`) |
+| `/video/player.js` | esbuild paketi (~368 KiB, `@remotion/player` + sahne ağacı) |
+| `/video/leibniz.json` | `make_data.py` çıktısının kopyası |
+| `/video/player.css` | sayfa kabuğu stilleri |
+
+Remotion Studio **değil**: Studio ayrı bir sunucu + webpack dev-cache ile gelir
+ve araç tarafından sürekli öldürülür. Player tek statik dosyada toplanır.
+
+Aynı sahne ağacı iki yerde çalışır: `LeibnizChainView` hem mp4 render'ında
+(`staticFile` verisi) hem oynatmada (`dataUrl` verisi) kullanılır — kopya
+sahne yok. Veri adresi sayfadaki `data-src` niteliğinden gelir; CSP
+`script-src 'self' 'nonce-…'` olduğu için **inline script yoktur**.
+
+Paket üretilmemişse `/video.html` boş sayfa değil, yol gösteren bir 404 döner
+(`npm run build:player`).
+
 ## Repoda tutulmayanlar
 
-`node_modules/`, `out/` (mp4 + still'ler), `.remotion/` (indirilen tarayıcı)
-ve `public/data/leibniz.json` — hepsi yeniden üretilebilir çıktıdır. Kaynak
-yalnız `src/`, `make_data.py`, `package.json`, `tsconfig.json` ve bu dosyadır.
+`node_modules/`, `out/` (mp4 + still'ler), `dist/` (oynatma paketi),
+`.remotion/` (indirilen tarayıcı) ve `public/data/leibniz.json` — hepsi yeniden
+üretilebilir çıktıdır. Kaynak yalnız `src/`, `scripts/`, `build/`,
+`make_data.py`, `check_render.py`, `package.json`, `tsconfig.json` ve bu
+dosyadır.

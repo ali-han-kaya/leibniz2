@@ -8,16 +8,21 @@ import {
 import type { LeibnizData } from "./data";
 
 /**
- * delayRender + staticFile: the data file gates the first frame, so no scene
- * ever renders against a half-loaded payload.
+ * delayRender + fetch: veri dosyasi ilk kareyi bekletir, hicbir sahne yari
+ * yuklenmis veriyle cizilmez.
+ *
+ * `url` verilirse o adres okunur — tarayici-ici oynatmada (@remotion/player)
+ * veri preview sunucusundan gelir, `staticFile` ise render pipeline'ina
+ * ozgudur. Verilmezse render varsayilanina dusulur.
  */
-export const useLeibnizData = (): LeibnizData | null => {
+export const useLeibnizData = (url?: string): LeibnizData | null => {
   const [data, setData] = useState<LeibnizData | null>(null);
   const [handle] = useState(() => delayRender("leibniz-data"));
+  const source = url ?? staticFile("data/leibniz.json");
 
   useEffect(() => {
     let cancelled = false;
-    fetch(staticFile("data/leibniz.json"))
+    fetch(source)
       .then((res) => {
         if (!res.ok) {
           throw new Error(`leibniz.json ${res.status}`);
@@ -36,7 +41,7 @@ export const useLeibnizData = (): LeibnizData | null => {
     return () => {
       cancelled = true;
     };
-  }, [handle]);
+  }, [handle, source]);
 
   return data;
 };

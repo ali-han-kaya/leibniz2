@@ -551,6 +551,8 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-26 | chore | (git) yerel calistirma ciktilarini yoksay | [`a4cb060`](https://github.com/ali-han-kaya/leibniz2/commit/a4cb060) |
 | 2026-09-26 | test | (repack) ust-uste repack byte-identical testi | [`b221f6c`](https://github.com/ali-han-kaya/leibniz2/commit/b221f6c) |
 | 2026-09-26 | docs | (qpdf) donmus kayda surum izleme bolumu (v2) | [`de5865d`](https://github.com/ali-han-kaya/leibniz2/commit/de5865d) |
+| 2026-09-26 | feat | (video) LeibnizChain kompozisyonunu kalici yuzeye tasi | [`b7b5199`](https://github.com/ali-han-kaya/leibniz2/commit/b7b5199) |
+| 2026-09-26 | feat | (video) LeibnizChain'i preview sunucusuna gom (@remotion/player) | [`8a2a5a9`](https://github.com/ali-han-kaya/leibniz2/commit/8a2a5a9) |
 
 ### Regresyon notları
 
