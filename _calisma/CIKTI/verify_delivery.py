@@ -75,8 +75,8 @@ Doğrulama zinciri (Katman 0..19):
                Internet Archive / Perseus çevrimiçi denetimi
   K7  Hijyen   secret/anahtar + artefakt taraması
   K8  İspat    Z3 sembolik ispat (--symbolic-proof; z3-solver gerektirir)
-  K9  Lean     Lean 4 reduct-invariance tümevarımsal kanıt + 8 teoremli Sınır
-               İspatı çekirdeği lake build --wfail (--lean-proof; lean+lake gerektirir)
+  K9  Lean     Lean 4 reduct-invariance kanıtı + Content.lean/LaTeX statement
+               envanter kapısı + lake build --wfail (--lean-proof; lean+lake gerektirir)
   K10 Manifest gen_repro_manifest.py çıktısı manifest.json'daki her dosyanın
                SHA-256'sını gerçek dosyayla karşılaştır + config.combined_sha256'ı
                config.files'tan YENİDEN hesaplayıp doğrula + effective_config.json'
@@ -179,8 +179,10 @@ PDF_METADATA_SIDECAR = "ingiliz_empirizmi_v3.pdf.metadata.sha256"
 PDF_RAW_SIDECAR = "ingiliz_empirizmi_v3.pdf.sha256"
 SYMBOLIC_PROOF_SCRIPT = "symbolic_proof_z3.py"
 LEAN_PROOF_SCRIPT = "../lean_reduct/ReductInvariance.lean"
-# K9 ek kapısı: 8 teoremli Sınır İspatı çekirdeği (Content.lean) lake projesi.
-# lake build --wfail, lean-toolchain v4.14.0 ile fail-closed derlenir.
+# K9 statement gate canonical sourceları (MAP.md yalnız legacy Z3 eşlemesidir).
+LEAN_STATEMENT_LEAN = "Content.lean"
+LEAN_STATEMENT_LATEX = "Content.lean.tex"
+# K9 lake projesi ve statement gate aynı Lean kaynak kökünü kullanır.
 LEAN_REDUCT_DIR = "../lean_reduct"
 
 
@@ -230,7 +232,7 @@ LAYER_LABELS = {
     "K6": "İçerik (PDF + referans + skill reuse)",
     "K7": "Hijyen (secret/artefakt)",
     "K8": "Z3 sembolik ispat",
-    "K9": "Lean reduct-invariance + 8 teorem çekirdek",
+    "K9": "Lean statement gate + reduct-invariance çekirdek",
     "K10": "Manifest digest",
     "K11": "Config drift",
     "K12": "Plist şablon",
@@ -1972,7 +1974,7 @@ def _lean_compiler_available():
 
 
 def run_lake_build(lake_path, project_dir, lean_only=False):
-    """K9 ek kapısı: 8 teoremli Sınır İspatı çekirdeğini lake ile derler.
+    """K9 lake kapısı: Lean kaynak çekirdeğini lake ile derler.
 
     Fail-closed: (a) lean-toolchain v4.14.0 olmalı (uyuşmaz/yok → FAIL),
     (b) `lake clean` ve (c) `lake build --wfail` başarılı olmalı. Elan shim
@@ -2014,7 +2016,7 @@ def run_lake_build(lake_path, project_dir, lean_only=False):
         return False, "lake build zaman aşımı (>600s — toolchain indirme dahil)"
     out = (r.stdout or "") + (r.stderr or "")
     if r.returncode == 0:
-        return True, "lake build --wfail: 8 teorem PASS (v4.14.0)"
+        return True, "lake build --wfail: Lean core PASS (v4.14.0)"
     tail = [l.strip() for l in out.splitlines() if l.strip()][-3:]
     detail = " | ".join(tail) if tail else f"exit={r.returncode}"
     detail = f"lake build hatası: {detail}"
@@ -2242,9 +2244,9 @@ def _scan_lean_dir(lean_dir):
     return _lean_axioms.scan_lean_dir(lean_dir)
 
 
-def _check_statements(lean_file, map_file):
-    """K9 statement-safety kapısı — tek kaynak check_lean_statements.py."""
-    return _lean_statements.check_statements(lean_file, map_file)
+def _check_statements(lean_file, latex_file):
+    """K9 LaTeX↔Lean statement gate — tek kaynak check_lean_statements.py."""
+    return _lean_statements.check_statements(lean_file, latex_file)
 
 
 def write_json_sidecar(path, report, detail="not run"):
@@ -5038,58 +5040,79 @@ def main():
 
     lean_ok = None
     lean_detail = None
-    # ---- K9: Lean 4 reduct-invariance + 8 teorem çekirdek (isteğe bağlı) ----
+    # ---- K9: Lean statement gate + reduct-invariance + lake (isteğe bağlı) ----
     if args.lean_proof:
+        reduct_dir = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), LEAN_REDUCT_DIR)
+        statement_lean = os.path.join(reduct_dir, LEAN_STATEMENT_LEAN)
+        statement_latex = os.path.join(reduct_dir, LEAN_STATEMENT_LATEX)
+        statement_ok, statement_findings = _check_statements(
+            statement_lean, statement_latex)
+        if statement_ok:
+            statement_detail = "Content.lean ↔ Content.lean.tex envanteri uyumlu"
+        else:
+            statement_detail = "; ".join(
+                f"{item.get('kind', 'source')}: {item.get('detail', '')}"
+                for item in statement_findings)
+            add("P0", "K9-STMNT", "K9 LaTeX statement gate", statement_detail)
+        statement_line = (
+            f"[K9] Lean statement gate: {'PASS' if statement_ok else 'FAIL'} — "
+            f"{statement_detail}")
+        if not args.json:
+            print(statement_line)
+        else:
+            print(statement_line, file=sys.stderr)
+
         lp = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                           LEAN_PROOF_SCRIPT)
         # lean + lake'i PATH'ten, /opt/homebrew/bin'den veya ~/.elan/bin'den bul
         lean_cmd = find_tool("lean")
         if not os.path.isfile(lp):
-            add("P0", "K9-LEAN", "K9 Lean ispatı", f"{LEAN_PROOF_SCRIPT} yok", lp)
+            proof_ok = False
+            proof_detail = f"{LEAN_PROOF_SCRIPT} yok: {lp}"
+            add("P0", "K9-LEAN", "K9 Lean ispatı", proof_detail)
         else:
-            ok, detail = run_lean_proof(lean_cmd, lp)
-            # ── K9 ek kapısı: 8 teoremli Sınır İspatı çekirdeği ──
-            # lake build --wfail, lean-toolchain v4.14.0 (fail-closed).
-            # --full / --lean-proof ile otomatik koşar; lake yoksa P0.
-            reduct_dir = os.path.join(
-                os.path.dirname(os.path.abspath(__file__)), LEAN_REDUCT_DIR)
-            lakefile = os.path.join(reduct_dir, "lakefile.toml")
-            if os.path.isfile(lakefile):
-                lake_cmd = find_tool("lake")
-                lake_ok, lake_detail = run_lake_build(
-                    lake_cmd, reduct_dir,
-                    lean_only=getattr(args, "lean_only", False))
-                lake_state = ("SKIP" if lake_ok is None
-                              else ("PASS" if lake_ok else "FAIL"))
-                lake_line = (f"[K9] Lean reduct (8 teorem, lake build --wfail): "
-                             f"{lake_state} — {lake_detail}")
-                if args.json:
-                    print(lake_line, file=sys.stderr)
-                else:
-                    print(lake_line)
-                if lake_ok is False:
-                    add("P0", "K9-LAKE", "K9 Lean çekirdeği", lake_detail)
+            proof_ok, proof_detail = run_lean_proof(lean_cmd, lp)
+
+        # lake build --wfail, lean-toolchain v4.14.0 (fail-closed).
+        # --full / --lean-proof ile otomatik koşar; lake yoksa P0.
+        lakefile = os.path.join(reduct_dir, "lakefile.toml")
+        if os.path.isfile(lakefile):
+            lake_cmd = find_tool("lake")
+            lake_ok, lake_detail = run_lake_build(
+                lake_cmd, reduct_dir,
+                lean_only=getattr(args, "lean_only", False))
+            lake_state = ("SKIP" if lake_ok is None
+                          else ("PASS" if lake_ok else "FAIL"))
+            lake_line = (f"[K9] Lean core (lake build --wfail): "
+                         f"{lake_state} — {lake_detail}")
+            if args.json:
+                print(lake_line, file=sys.stderr)
             else:
-                lake_ok, lake_detail = False, f"lake projesi yok: {reduct_dir}"
+                print(lake_line)
+            if lake_ok is False:
                 add("P0", "K9-LAKE", "K9 Lean çekirdeği", lake_detail)
-            # K9 genel: İKİ kapı da geçmeli (fail-closed) — dashboard rozeti
-            # ve history lean_ok bu birleşimi taşır. SKIP (None) nötrdür:
-            # yalnızca --lean-only + lean-derleyicisi-yok ortamında oluşur.
-            ok = ok and (lake_ok is not False)
-            if lake_detail:
-                detail = f"{detail} · {lake_detail}"
-            lean_ok = ok
-            lean_detail = detail
-            k9_line = f"[K9] Lean 4 reduct-invariance: {'PASS' if ok else 'FAIL'} — {detail}"
-            if not args.json:
-                print(k9_line)
-            else:
-                # --json modunda stdout yalnızca JSON olmalı; K9 sonucu
-                # dashboard'un gerçek rozet için stderr'e relay edilir
-                # (preview_server._parse_lean_result bunu ayrıştırır).
-                print(k9_line, file=sys.stderr)
-            if not ok:
-                add("P0", "K9-LEAN", "K9 Lean ispatı", detail)
+        else:
+            lake_ok, lake_detail = False, f"lake projesi yok: {reduct_dir}"
+            add("P0", "K9-LAKE", "K9 Lean çekirdeği", lake_detail)
+
+        # K9 genel: statement gate ∧ proof ∧ lake. SKIP (None) yalnız
+        # --lean-only + derleyicisi-yok ortamında nötrdür.
+        ok = statement_ok and proof_ok and (lake_ok is not False)
+        detail = " · ".join(
+            part for part in (proof_detail, statement_detail, lake_detail) if part)
+        lean_ok = ok
+        lean_detail = detail
+        k9_line = f"[K9] Lean 4 reduct-invariance: {'PASS' if ok else 'FAIL'} — {detail}"
+        if not args.json:
+            print(k9_line)
+        else:
+            # --json modunda stdout yalnızca JSON olmalı; K9 sonucu
+            # dashboard'un gerçek rozet için stderr'e relay edilir
+            # (preview_server._parse_lean_result bunu ayrıştırır).
+            print(k9_line, file=sys.stderr)
+        if not ok:
+            add("P0", "K9-LEAN", "K9 Lean ispatı", detail)
 
     # ---- K19: Coq reduct-invariance (--coq-proof, isteğe bağlı) ----
     # Content.v çekirdeğini coqtop -compile ile fail-closed derler. coqtop

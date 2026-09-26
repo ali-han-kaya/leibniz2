@@ -358,6 +358,16 @@ jobs:
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
           export PATH="$HOME/.elan/bin:$PATH"
           elan toolchain install leanprover/lean4:v4.14.0
+      # K5–K11 zincirinde Lean projesi ayrı, görünür ve fail-closed adımda
+      # derlenir. verify_delivery --full içindeki K9 raporu bunun sonucunu
+      # birleşik katman özetine de yansıtır; bu adım gizli bir alt çağrı değildir.
+      - name: Run Lean lake build (K5-K11 separate step)
+        if: always()
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh _calisma/CIKTI/verify_lean_lake.sh 2>&1 | tee lean_lake_build.log
       #
       # `pipefail` + `tee`: çıktı hem log'a hem dosyaya yazılır, ama exit kodu
       # python'dan gelir (boru, fail-closed kapıyı gizleyemez).
@@ -951,6 +961,15 @@ jobs:
           curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain leanprover/lean4:stable
           export PATH="$HOME/.elan/bin:$PATH"
           elan toolchain install leanprover/lean4:v4.14.0
+      - name: Check Lean LaTeX statement contract (K9)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 _calisma/CIKTI/check_lean_statements.py \
+            --lean-file _calisma/lean_reduct/Content.lean \
+            --latex-file _calisma/lean_reduct/Content.lean.tex \
+            --json
+
       - name: Check Lean sorry and axioms (K9)
         shell: bash
         run: |
@@ -960,12 +979,11 @@ jobs:
       # `pipefail` + `--json`: çıktı hem log'a hem dosyaya yazılır, ama exit
       # kodu pipeline'ın ilk hatasını yansıtır (fail-closed).
 
-      - name: Build Lean lake proof (8 theorems)
-        working-directory: _calisma/lean_reduct
+      - name: Build Lean lake proof (statement-gated core)
+        shell: bash
         run: |
-          export PATH="$HOME/.elan/bin:$PATH"
-          lake clean
-          lake build --wfail
+          set -euo pipefail
+          sh _calisma/CIKTI/verify_lean_lake.sh
 
   action-runtimes:
     name: Action runtime check (node24)

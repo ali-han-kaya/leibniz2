@@ -46,6 +46,8 @@ LEAN_MIRROR_DIR="${LEAN_MIRROR_DIR:-$HOME/Library/Caches/com.freebuff/lean_reduc
 # Sıra deterministic: her satır bir dosya; önce runtime, sonra zips.
 FILES=(
   "verify_delivery.py|verify_delivery.py"
+  "check_lean_statements.py|check_lean_statements.py"
+  "check_lean_axioms.py|check_lean_axioms.py"
   "verify_delivery.config.json|verify_delivery.config.json"
   "verify_delivery.config.schema.json|verify_delivery.config.schema.json"
   "symbolic_proof_z3.py|symbolic_proof_z3.py"
@@ -125,8 +127,8 @@ SDE_FILES=(
 )
 
 # Lean dosyaları: kaynak LEAN_SRC'ye, dest LEAN_MIRROR_DIR'a göre.
-# K9 iki kapılıdır: (1) ReductInvariance.lean meta-teoremi, (2) 8 teoremli
-# Sınır İspatı çekirdeği — lake build --wfail (lean-toolchain v4.14.0).
+# K9 iki kapılıdır: (1) ReductInvariance.lean meta-teoremi, (2) Content.lean
+# statement sözleşmesi ve Lean core — lake build --wfail (lean-toolchain v4.14.0).
 # Bu yüzden lake projesinin TÜM kaynak dosyaları mirror'a gider; yalnızca
 # ReductInvariance.lean senkronlanırsa mirror rotasında K9-LAKE P0 üretir
 # (canlı dashboard FAIL — dashboard_smoke.sh bunu yakalamıştı).
@@ -135,6 +137,7 @@ SDE_FILES=(
 # iki tarafta da dışarıda bırakılır.
 LEAN_FILES=(
   "Content.lean|Content.lean"
+  "Content.lean.tex|Content.lean.tex"
   "Leibniz2Reduct.lean|Leibniz2Reduct.lean"
   "Leibniz2Reduct/Content.lean|Leibniz2Reduct/Content.lean"
   "ReductInvariance.lean|ReductInvariance.lean"

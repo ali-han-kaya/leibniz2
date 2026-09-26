@@ -1,0 +1,102 @@
+% Formal Lean statement contract for Content.lean.
+% This file is deliberately independent from the publication manuscript: the
+% Content.lean theorems are illustrative and are not presented as manuscript
+% propositions.  The K9 gate inventories every theorem/lemma environment here;
+% it does not contain a frozen list of theorem names.
+\documentclass{article}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsthm}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\newtheorem{proposition}{Proposition}
+\newtheorem{corollary}{Corollary}
+
+% A statement-only child environment.  The parser requires exactly one of
+% these directly inside every formal theorem/lemma environment.
+\newenvironment{leanstatement}
+  {\par\noindent\ttfamily\begin{minipage}{0.94\linewidth}}
+  {\end{minipage}\par}
+
+\begin{document}
+
+\begin{theorem}
+\label{lean:historical_pair_collapses_under_forgetTopic}
+\begin{leanstatement}
+\(
+  \mathsf{forgetTopic}\,\mathsf{katalepticContent}
+  =
+  \mathsf{forgetTopic}\,\mathsf{customaryContent}
+\)
+\end{leanstatement}
+\end{theorem}
+
+\begin{theorem}
+\label{lean:historical_pair_survives_forgetAccess}
+\begin{leanstatement}
+\(
+  \mathsf{forgetAccess}\,\mathsf{katalepticContent}
+  \neq
+  \mathsf{forgetAccess}\,\mathsf{customaryContent}
+\)
+\end{leanstatement}
+\end{theorem}
+
+\begin{theorem}
+\label{lean:historical_pair_survives_forgetJustification}
+\begin{leanstatement}
+\(
+  \mathsf{forgetJustification}\,\mathsf{katalepticContent}
+  \neq
+  \mathsf{forgetJustification}\,\mathsf{customaryContent}
+\)
+\end{leanstatement}
+\end{theorem}
+
+\begin{theorem}
+\label{lean:historical_pair_survives_forgetSource}
+\begin{leanstatement}
+\(
+  \mathsf{forgetSource}\,\mathsf{katalepticContent}
+  \neq
+  \mathsf{forgetSource}\,\mathsf{customaryContent}
+\)
+\end{leanstatement}
+\end{theorem}
+
+\begin{theorem}
+\label{lean:forgetAccess_not_injective}
+\begin{leanstatement}
+\(
+  \lnot\,\mathsf{Injective}\,\mathsf{forgetAccess}
+\)
+\end{leanstatement}
+\end{theorem}
+
+\begin{theorem}
+\label{lean:forgetJustification_not_injective}
+\begin{leanstatement}
+\(
+  \lnot\,\mathsf{Injective}\,\mathsf{forgetJustification}
+\)
+\end{leanstatement}
+\end{theorem}
+
+\begin{theorem}
+\label{lean:forgetSource_not_injective}
+\begin{leanstatement}
+\(
+  \lnot\,\mathsf{Injective}\,\mathsf{forgetSource}
+\)
+\end{leanstatement}
+\end{theorem}
+
+\begin{theorem}
+\label{lean:forgetTopic_not_injective}
+\begin{leanstatement}
+\(
+  \lnot\,\mathsf{Injective}\,\mathsf{forgetTopic}
+\)
+\end{leanstatement}
+\end{theorem}
+
+\end{document}

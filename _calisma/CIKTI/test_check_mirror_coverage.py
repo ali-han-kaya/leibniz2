@@ -71,7 +71,7 @@ def fake_repo(root):
     with open(os.path.join(trend, "determinism_trend.jsonl"), "w", encoding="utf-8") as f:
         f.write("x\n")
     for n in ("ReductInvariance.lean", "lean-toolchain", "lakefile.toml",
-              "Leibniz2Reduct/Content.lean"):
+              "Content.lean.tex", "Leibniz2Reduct/Content.lean"):
         with open(os.path.join(lean, n), "w", encoding="utf-8") as f:
             f.write("x\n")
     return cikti, lean

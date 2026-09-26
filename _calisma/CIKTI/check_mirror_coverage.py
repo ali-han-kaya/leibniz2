@@ -8,7 +8,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 RUNTIME_REQUIRED = (
     "verify_delivery.py", "verify_delivery.config.json", "verify_delivery.config.schema.json",
-    "symbolic_proof_z3.py", "verify_lean.sh", "zip_lineage.json", "gen_repro_manifest.py",
+    "symbolic_proof_z3.py", "check_lean_statements.py", "check_lean_axioms.py", "verify_lean.sh", "zip_lineage.json", "gen_repro_manifest.py",
     "gen_config.py", "cleanup_log.json", "github_scripts_battery.py", "github_scripts_selftest.js",
     "daemon_http_test.py", "preview.html", "preview.js", "fresh_clone_setup.sh", "test_fresh_clone_setup.py",
     "update_preview.sh", "check_unit_tests.list", "check_unit_tests_hook.sh", "sync_check_unit_tests.py",
@@ -129,7 +129,8 @@ def expected_repo_files(root, cikti, lean_src):
             dirs[:] = [d for d in dirs if d != ".lake"]
             for name in files:
                 rel = os.path.relpath(os.path.join(directory, name), lean_src)
-                if rel.endswith(".lean") or rel in {"lean-toolchain", "lakefile.toml"}:
+                if (rel.endswith(".lean")
+                    or rel in {"lean-toolchain", "lakefile.toml", "Content.lean.tex"}):
                     expected.add("_calisma/lean_reduct/" + rel)
     return expected
 
