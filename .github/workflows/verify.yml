@@ -2964,21 +2964,38 @@ jobs:
   #
   # preview_server'ı fresh-clone-http deseniyle başlatır (ephemeral port +
   # health poll 30×1s), headless Chromium + axe-core (sha256 pinli vendor
-  # bundle) ile config'te witness ile tanımlı /preview.html ve /guide.html
-  # sayfalarını tarar. Fail-closed: sunucu/tarayıcı/checksum/witness arızası
-  # FAIL — retry yok. İkinci tarama if: always() ile ilk sonuç ne olursa
-  # olsun çalışır; iki rapor ve özet her zaman yüzeye çıkar.
+  # bundle) ile config'te witness ile tanımlı /preview.html, /guide.html ve
+  # /landing.html sayfalarını dark ve light DOM temalarında tarar. Fail-closed:
+  # sunucu/tarayıcı/checksum/witness/tema arızası FAIL — retry yok.
+  # Matrix child'ları fail-fast=false ile bağımsız tamamlanır; her child
+  # üç sayfanın axe raporunu ve dashboard'ın Lighthouse accessibility
+  # raporunu iki tema-suffixed artifact olarak üretir.
   # ============================================================
   a11y-gate:
     name: A11y gate (axe-core, fail-closed)
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    needs: [verify]
+    strategy:
+      fail-fast: false
+      matrix:
+        theme: [dark, light]
     steps:
       - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Download verified run snapshot
+        uses: actions/download-artifact@v7
+        with:
+          name: run-history
+          path: run-history/
 
       - name: Install pinned Playwright
         run: pip install playwright==1.63.0
@@ -2991,6 +3008,13 @@ jobs:
 
       - name: Install Chromium
         run: playwright install --with-deps chromium
+
+      - name: Resolve Chromium for Lighthouse
+        shell: bash
+        run: |
+          chrome_path="$(python3 -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()')"
+          test -x "$chrome_path"
+          echo "CHROME_PATH=$chrome_path" >> "$GITHUB_ENV"
 
       - name: Start preview_server (fresh-clone-http pattern)
         run: |
@@ -3006,6 +3030,23 @@ jobs:
           # rotası PREVIEW_DIR'den servis eder. CI runner'ı mirror rolünü
           # üstlendiği için aynı tek kaynağı çalışma alanına kopyalarız.
           cp docs/branch-protection-guide/guide.html _calisma/CIKTI/guide.html
+          # Landing, verify job'ının aynı koşumundan taşınan history
+          # artifact'ıyla üretilir; preview_server aynı artifact'ı
+          # snapshot-only modda servis eder. Böylece hash donmuq PDF kaydından
+          # değil, CI koşumunun doğrulanmış /api/latest snapshot'ından gelir.
+          python3 - run-history/history.jsonl <<'PY'
+          import hashlib
+          import pathlib
+          import sys
+          path = pathlib.Path(sys.argv[1])
+          sidecar = pathlib.Path(str(path) + ".sha256")
+          if not path.is_file() or not sidecar.is_file():
+              raise SystemExit("run-history artifact/sidecar eksik")
+          expected = sidecar.read_text(encoding="utf-8").split()[0].lower()
+          actual = hashlib.sha256(path.read_bytes()).hexdigest()
+          if expected != actual:
+              raise SystemExit("run-history SHA-256 sidecar uyuşmuyor")
+          PY
           port=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')
           echo "A11Y_PORT=$port" >> "$GITHUB_ENV"
           work=$RUNNER_TEMP/a11y-server
@@ -3024,7 +3065,8 @@ jobs:
               "--preview-dir", "_calisma/CIKTI",
               "--bind", "127.0.0.1",
               "--port", port,
-              "--interval", "3600",
+              "--snapshot-file", "run-history/history.jsonl",
+              "--no-verify",
           ])
           PYEOF
           ready=0
@@ -3042,13 +3084,44 @@ jobs:
             exit 1
           fi
           grep -Fx 'ok' "$work/health.txt"
+          curl --fail --silent --show-error --max-time 5 \
+            "http://127.0.0.1:$port/api/latest" > "$work/latest.json"
+          python3 - "$work/latest.json" <<'PY'
+          import json
+          import sys
+
+          with open(sys.argv[1], encoding="utf-8") as f:
+              latest = json.load(f)
+          if (latest.get("verdict") != "PASS" or
+                  latest.get("exit_code") != 0 or
+                  latest.get("cached") is True or
+                  not latest.get("ts")):
+              raise SystemExit("preview snapshot PASS/0/fresh değil")
+          print("Landing snapshot source: PASS (ts=%s raw=%s)" % (
+              latest.get("ts"), latest.get("raw_sha256")))
+          PY
+          python3 _calisma/landing/build_landing.py \
+            --snapshot-url "http://127.0.0.1:$port/api/latest" \
+            --hash-field raw \
+            --wait-seconds 5 \
+            --poll-seconds 1 \
+            --output _calisma/CIKTI/landing.html \
+            --assets-dir _calisma/CIKTI/landing/assets
+          cp _calisma/landing/landing_src.html _calisma/CIKTI/landing-src.html
+          curl --fail --silent --show-error --max-time 5 \
+            "http://127.0.0.1:$port/landing.html" \
+            | grep -F 'teslim anına kadar.'
+          curl --fail --silent --show-error --max-time 5 \
+            "http://127.0.0.1:$port/landing/assets/P1-a.png" \
+            --output /dev/null
 
       - name: Run a11y gate — dashboard
         run: |
           python3 _calisma/CIKTI/a11y_gate.py \
             --base-url "http://127.0.0.1:$A11Y_PORT" \
             --page /preview.html \
-            --output a11y_report.json
+            --theme "${{ matrix.theme }}" \
+            --output "a11y_dashboard_${{ matrix.theme }}.json"
 
       - name: Run a11y gate — guide
         if: always()
@@ -3056,7 +3129,64 @@ jobs:
           python3 _calisma/CIKTI/a11y_gate.py \
             --base-url "http://127.0.0.1:$A11Y_PORT" \
             --page /guide.html \
-            --output a11y_guide_report.json
+            --theme "${{ matrix.theme }}" \
+            --output "a11y_guide_${{ matrix.theme }}.json"
+
+      - name: Run a11y gate — landing
+        if: always()
+        run: |
+          python3 _calisma/CIKTI/a11y_gate.py \
+            --base-url "http://127.0.0.1:$A11Y_PORT" \
+            --page /landing.html \
+            --theme "${{ matrix.theme }}" \
+            --output "a11y_landing_${{ matrix.theme }}.json"
+
+      - name: Run Lighthouse accessibility — dashboard
+        if: always()
+        env:
+          A11Y_THEME: ${{ matrix.theme }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          report="lighthouse_dashboard_${A11Y_THEME}.json"
+          url="http://127.0.0.1:${A11Y_PORT}/preview.html?theme=${A11Y_THEME}"
+          npx --yes lighthouse@13.5.0 "$url" \
+            --only-categories=accessibility \
+            --form-factor=desktop \
+            --output=json \
+            --output-path="$report" \
+            --chrome-flags="--headless --no-sandbox --disable-background-timer-throttling" \
+            --throttling-method=provided \
+            --max-wait-for-load=10000 \
+            --disable-full-page-screenshot \
+            --quiet
+          python3 - "$report" "$A11Y_THEME" <<'PY'
+          import json
+          import pathlib
+          import sys
+          from urllib.parse import parse_qs, urlparse
+
+          report = pathlib.Path(sys.argv[1])
+          expected_theme = sys.argv[2]
+          if not report.is_file():
+              raise SystemExit("Lighthouse raporu üretilmedi: %s" % report)
+          data = json.loads(report.read_text(encoding="utf-8"))
+          requested = urlparse(data.get("requestedUrl", ""))
+          query_theme = parse_qs(requested.query).get("theme", [None])[0]
+          if query_theme != expected_theme:
+              raise SystemExit("Lighthouse tema witness uyuşmazlığı: %r != %r" % (
+                  query_theme, expected_theme))
+          score = (data.get("categories", {}).get("accessibility", {})
+                   .get("score"))
+          # Category score is the fail-closed contract. Individual zero-score
+          # experimental/manual audits stay visible in the artifact and log.
+          if score != 1:
+              raise SystemExit("Lighthouse accessibility score PASS değil: %r" % score)
+          failed = [key for key, audit in data.get("audits", {}).items()
+                    if audit.get("score") == 0]
+          print("Lighthouse accessibility: PASS (score=1.0; zero-score audits: %s)" %
+                (", ".join(failed) if failed else "none"))
+          PY
 
       # CLS (Cumulative Layout Shift) bütçe kapısı — fail-closed.
       # Yukarıdaki Lighthouse adımı `--only-categories=accessibility` koşar,
@@ -3104,19 +3234,23 @@ jobs:
 
       - name: Write a11y job summary
         if: always()
+        env:
+          A11Y_THEME: ${{ matrix.theme }}
         shell: bash
         run: |
-          # Spec §Reporting-3: iki raporu salt-okur render eder. Guide
-          # taraması if: always() ile çalıştığı için dashboard FAIL olsa
-          # bile ikinci rapor ve özet kaybolmaz.
+          # Her matrix child'ı kendi temasında üç raporu salt-okur render
+          # eder. Guide ve landing if: always() ile çalıştığı için dashboard
+          # FAIL olsa bile diğer raporlar ve özet kaybolmaz.
           python3 - <<'PY'
           import json, os, pathlib
+          theme = os.environ["A11Y_THEME"]
           reports = [
-              ("Dashboard", pathlib.Path("a11y_report.json")),
-              ("Branch protection guide", pathlib.Path("a11y_guide_report.json")),
+              ("Dashboard", pathlib.Path("a11y_dashboard_%s.json" % theme)),
+              ("Branch protection guide", pathlib.Path("a11y_guide_%s.json" % theme)),
+              ("Landing", pathlib.Path("a11y_landing_%s.json" % theme)),
           ]
           lines = [
-              "## a11y-gate özeti",
+              "## a11y-gate özeti (%s)" % theme,
               "",
               "| sayfa | verdict | blocking / warn / allowlisted / incomplete |",
               "|---|---|---|",
@@ -3139,6 +3273,19 @@ jobs:
                       v.get("level"), v.get("nodes"), extra))
               if data.get("error"):
                   lines.append("- hata: %s" % data["error"])
+          lighthouse = pathlib.Path("lighthouse_dashboard_%s.json" % theme)
+          if lighthouse.exists():
+              try:
+                  lighthouse_data = json.loads(lighthouse.read_text(encoding="utf-8"))
+                  lighthouse_score = (lighthouse_data.get("categories", {})
+                                       .get("accessibility", {}).get("score"))
+                  lines.append("- Lighthouse dashboard accessibility: **%s** (score: %s)" % (
+                      "PASS" if lighthouse_score == 1 else "FAIL",
+                      lighthouse_score if lighthouse_score is not None else "unknown"))
+              except (OSError, ValueError, TypeError) as exc:
+                  lines.append("- Lighthouse dashboard accessibility: **FAIL** (%s)" % exc)
+          else:
+              lines.append("- Lighthouse dashboard accessibility: **FAIL** (rapor üretilmedi)")
           pathlib.Path(os.environ["GITHUB_STEP_SUMMARY"]).write_text(
               "\n".join(lines) + "\n", encoding="utf-8")
           PY
@@ -3147,8 +3294,8 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: a11y-report
-          path: a11y_report.json
+          name: a11y-report-${{ matrix.theme }}
+          path: a11y_dashboard_${{ matrix.theme }}.json
           if-no-files-found: ignore
           retention-days: 30
 
@@ -3156,10 +3303,90 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: a11y-guide-report
-          path: a11y_guide_report.json
+          name: a11y-guide-report-${{ matrix.theme }}
+          path: a11y_guide_${{ matrix.theme }}.json
           if-no-files-found: ignore
           retention-days: 30
+
+      - name: Upload landing a11y report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: a11y-landing-report-${{ matrix.theme }}
+          path: a11y_landing_${{ matrix.theme }}.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Upload Lighthouse dashboard report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: lighthouse-dashboard-${{ matrix.theme }}
+          path: lighthouse_dashboard_${{ matrix.theme }}.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # ============================================================
+  # DASHBOARD-NEXT — tip kapısı + üretim derlemesi (fail-closed)
+  # ============================================================
+  # `apps/dashboard-next` panosu verisini `apps/trend-db` şemasının
+  # ÜRETİLMİŞ Prisma istemcisinden okur (`lib/trend-db.ts` →
+  # `../../trend-db/generated/client`). `apps/trend-db/generated/`
+  # gitignored'dır: taze checkout'ta istemci YOKTUR ve hem tip kapısı hem
+  # derleme "Cannot find module '../../trend-db/generated/client'" ile
+  # düşer. Bu yüzden kapı önce istemciyi üretir.
+  #
+  # `prisma.config.ts` URL'i `env("DATABASE_URL")` ile çözer; değişken yoksa
+  # PrismaConfigEnvError atar — `generate` BAĞLANMAZ ama değişkenin VAR
+  # olmasını ister. Bu yüzden erişilemez bir yer tutucu URL verilir: gerçek
+  # kimlik bilgisi CI'a girmez, DSN hiç kullanılmaz (yalnız kod üretilir).
+  #
+  # `next build` gerçek DATABASE_URL istemez: `/` ve `/trend`
+  # `force-dynamic` olduğu için build anında veri çekilmez.
+  #
+  # GATE_EXCLUDE'da (status_checks.py): required check seti 14'te sabit
+  # kalır — required'a almak branch-protection UI değişikliği gerektirirdi
+  # (docx-export/lake-proof ile aynı gerekçe). Job yine de FAIL-CLOSED'dır:
+  # `continue-on-error` YOK, tip/derleme hatası workflow'u kırmızıya düşürür.
+  dashboard-next:
+    name: Dashboard-next typecheck + build (Next 15)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      # SIRA ÖNEMLİ: (1) Prisma istemcisi, (2) tip kapısı, (3) derleme.
+      # İstemci üretilmeden (2) ve (3) de düşer.
+      - name: Install trend-db dependencies (npm ci)
+        run: npm ci --prefix apps/trend-db --no-audit --no-fund
+
+      - name: Generate Prisma client (kod üretimi — DB'ye bağlanmaz)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd apps/trend-db
+          DATABASE_URL="postgresql://ci:ci@127.0.0.1:5432/ci?sslmode=disable" \
+            npx prisma generate
+
+      - name: Install dashboard dependencies (npm ci)
+        run: npm ci --prefix apps/dashboard-next --no-audit --no-fund
+
+      # Repo'nun KENDI kapısı (pre-commit ile aynı script): node_modules
+      # yoksa SKIP, varsa fail-closed `tsc --noEmit`. Burada node_modules
+      # az önce kurulduğu için SKIP yolu kapalıdır.
+      - name: Typecheck dashboard (tsc --noEmit)
+        run: bash _calisma/CIKTI/check_dashboard_typecheck.sh
+
+      - name: Build dashboard (next build)
+        run: npm run build --prefix apps/dashboard-next
 
   # CHANGELOG DRIFT CHECK (advisory) — gen_changelog.py --check'i CI'da koşar
   # ve drift bulgularını run summary'ye yazar. Advisory: changelog tabloları

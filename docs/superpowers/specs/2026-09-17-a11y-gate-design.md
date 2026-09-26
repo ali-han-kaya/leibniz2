@@ -154,6 +154,14 @@ A `warn` never changes the exit code; it is a reporting level only.
 - The CI job itself is the browser integration test; local full-browser runs
   are optional and manual.
 
+### Follow-up: two-theme Lighthouse accessibility scan
+
+The `a11y-gate` matrix also runs pinned Lighthouse 13.5.0 accessibility-only
+against `/preview.html?theme=dark` and `/preview.html?theme=light`. The query
+is a validated, non-persistent theme override used only to make the browser
+context deterministic; each matrix child uploads its raw JSON report and
+fails closed unless the accessibility category score is `1.0`.
+
 ## Scope (YAGNI)
 
 - Exactly two server-rendered pages: the Live CI Dashboard and the
@@ -161,4 +169,4 @@ A `warn` never changes the exit code; it is a reporting level only.
   witness; URL discovery, crawling, and arbitrary user-supplied scan targets
   are out of scope.
 - A historical score trend (determinism-trend pattern), PR annotation bot,
-  Lighthouse scoring, and per-element screenshots remain out of scope.
+  and per-element screenshots remain out of scope.

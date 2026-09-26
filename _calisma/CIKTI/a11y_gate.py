@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""a11y_gate.py — dashboard ve görsel kılavuz için fail-closed erişilebilirlik kapısı.
+"""a11y_gate.py — dashboard, görsel kılavuz ve landing için fail-closed erişilebilirlik kapısı.
 
 Spec: docs/superpowers/specs/2026-09-17-a11y-gate-design.md
 Plan: docs/superpowers/plans/2026-09-17-a11y-gate-implementation.md
@@ -28,6 +28,7 @@ VALID_TOP_KEYS = {"blocking", "warn", "incomplete", "allowlist", "pages"}
 VALID_ENTRY_KEYS = {"rule", "reason", "target"}
 VALID_PAGE_KEYS = {"path", "witness"}
 INCOMPLETE_POLICY = "report-only"
+VALID_THEMES = ("dark", "light")
 
 
 # ---------------------------------------------------------------- config
@@ -136,27 +137,44 @@ def _node_targets(node):
     return " ".join(str(t) for t in node.get("target", []))
 
 
+def _incomplete_node_details(incomplete):
+    """Incomplete axe node'larını target + outer HTML kanıtıyla koru.
+
+    `nodes` alanı geriye uyumlu sayım olarak kalır; yeni alanlar inceleme
+    sırasında hangi gerçek DOM düğümünün belirsiz kaldığını kanıtlar.
+    """
+    nodes = incomplete.get("nodes", [])
+    return {
+        "node_targets": [node.get("target", []) for node in nodes],
+        "node_html": [node.get("html") for node in nodes],
+    }
+
+
 def _allowlisted_nodes(violation, allowlist):
     """Node-bazlı allowlist kararı → (eşleşen entry listesi, eşleşmeyen node sayısı)."""
-    remaining = len(violation.get("nodes", []))
+    nodes = violation.get("nodes", [])
+    matched = set()
     reasons = []
     for entry in allowlist:
         if entry["rule"] != violation.get("id"):
             continue
         target = entry.get("target")
-        for node in violation.get("nodes", []):
+        for index, node in enumerate(nodes):
             if target is not None and target not in _node_targets(node):
                 continue
-            if _node_targets(node) is not None:
-                reasons.append(entry["reason"])
-                remaining -= 1
-    # dedupe reasons (aynı entry birden çok node'u kapatırsa)
+            # Aynı düğüm birden çok allowlist girdisiyle eşleşebilir; her
+            # düğümü yalnız bir kez say ve ilk gerekçesini kaydet.
+            if index in matched:
+                continue
+            matched.add(index)
+            reasons.append(entry["reason"])
+    # Aynı gerekçe birden çok mühür düğümünde tekrar edebilir.
     seen, uniq = set(), []
-    for r in reasons:
-        if r not in seen:
-            seen.add(r)
-            uniq.append(r)
-    return uniq, max(remaining, 0)
+    for reason in reasons:
+        if reason not in seen:
+            seen.add(reason)
+            uniq.append(reason)
+    return uniq, len(nodes) - len(matched)
 
 
 def classify_violations(axe_results, cfg):
@@ -174,7 +192,9 @@ def classify_violations(axe_results, cfg):
         reasons, remaining = _allowlisted_nodes(v, cfg["allowlist"])
         if remaining == 0 and reasons:
             rows.append({"rule": v.get("id", "?"), "impact": impact,
-                         "level": "allowlisted", "nodes": 0, "reasons": reasons})
+                         "level": "allowlisted", "nodes": 0,
+                         "allowlisted_nodes": len(v.get("nodes", [])),
+                         "reasons": reasons})
             continue
         if impact in blocking or impact not in (blocking | warn):
             level = "blocking"  # bilinmeyen/None etki → default-deny
@@ -190,8 +210,18 @@ def classify_violations(axe_results, cfg):
         rows.append(row)
 
     for inc in axe_results.get("incomplete", []):
-        rows.append({"rule": inc.get("id", "?"), "impact": inc.get("impact"),
-                     "level": "incomplete", "nodes": len(inc.get("nodes", []))})
+        # Incomplete policy report-only kalır; allowlist bunu gizlemez.
+        # Yalnızca bilinçli/reason'lu SVG mühür düğümlerini görünür metadata
+        # ile işaretler ve kalan düğüm sayısını korur.
+        reasons, remaining = _allowlisted_nodes(inc, cfg["allowlist"])
+        total_nodes = len(inc.get("nodes", []))
+        row = {"rule": inc.get("id", "?"), "impact": inc.get("impact"),
+               "level": "incomplete", "nodes": remaining}
+        row.update(_incomplete_node_details(inc))
+        if total_nodes != remaining:
+            row["allowlisted_nodes"] = total_nodes - remaining
+            row["reasons"] = reasons
+        rows.append(row)
     return rows
 
 
@@ -210,14 +240,39 @@ def _verify_witness(page, witness):
         raise ValueError("sayfa witness metni bulunamadı: %s" % witness)
 
 
+def _apply_theme(page, theme):
+    """İstenen DOM tema witness'ını uygular; sayfa CSS'i bunu okur."""
+    if theme not in VALID_THEMES:
+        raise ValueError("tema dark|light olmalı")
+    page.evaluate("(theme) => document.documentElement.dataset.theme = theme", theme)
+
+
+def _verify_theme(page, theme):
+    """DOM, tarama başında istenen tema witness'ını taşımalı."""
+    actual = page.evaluate("() => document.documentElement.dataset.theme")
+    if actual != theme:
+        raise ValueError("tema witness uyuşmazlığı: DOM=%r, beklenen=%r" % (actual, theme))
+
+
+def _new_themed_page(browser, theme, bypass_csp=False):
+    """Navigation'dan önce tema attribute'ını yerleştiren context/page üretir."""
+    if theme not in VALID_THEMES:
+        raise ValueError("tema dark|light olmalı")
+    context = browser.new_context(bypass_csp=bypass_csp)
+    # tema enum ile validate edildiği için bu string güvenli bir init script'tir.
+    context.add_init_script(
+        script="document.documentElement.dataset.theme = %s;" % json.dumps(theme))
+    return context.new_page()
+
+
 def playwright_connect(base_url, axe_src, page_path="/preview.html", witness=None,
-                       axe_url_path="/vendor/axe.min.js"):
+                       axe_url_path="/vendor/axe.min.js", theme="dark"):
     """Varsayılan sürücü: Playwright sync API. Lazy import — yoksa ImportError.
 
-    CSP-sözleşmesi: sayfa script-src 'self' + nonce; bundle aynı-kökte
-    /vendor/axe.min.js'ten 'self' ile yüklenir (temiz yol). Same-origin
-    script-tag doğrulanamazsa (eski-daemon: route yok) bilinçli yedek —
-    CSP-bypass'lı context'te add_script_tag enjeksiyonu.
+    Tema navigation öncesi same-origin DOM'a yazılır ve scan öncesi yeniden
+    doğrulanır. CSP-sözleşmesi: script-src 'self' + nonce; bundle aynı-kökte
+    /vendor/axe.min.js'ten 'self' ile yüklenir. Bu yol başarısızsa aynı tema
+    witness'ı ile CSP-bypass context'inde inline enjeksiyon denenir.
     """
     from playwright.sync_api import sync_playwright  # noqa: PLC0415 (lazy)
 
@@ -225,9 +280,13 @@ def playwright_connect(base_url, axe_src, page_path="/preview.html", witness=Non
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         try:
-            page = browser.new_context().new_page()
+            page = _new_themed_page(browser, theme)
             page.goto(page_url, wait_until="load")
             _verify_witness(page, witness)
+            # Uygulama başlangıçta attribute'ı silebilir; scan öncesi yeniden
+            # uygulayıp gerçek DOM witness'ı ile kilitleriz.
+            _apply_theme(page, theme)
+            _verify_theme(page, theme)
             results = page.evaluate(
                 """async (axeUrl) => {
                     await new Promise((resolve, reject) => {
@@ -241,9 +300,11 @@ def playwright_connect(base_url, axe_src, page_path="/preview.html", witness=Non
                 }""", axe_url_path)
         except Exception:
             # Yedek (eski-daemon uyumu): CSP-bypass + inline enjeksiyon.
-            page = browser.new_context(bypass_csp=True).new_page()
+            page = _new_themed_page(browser, theme, bypass_csp=True)
             page.goto(page_url, wait_until="load")
             _verify_witness(page, witness)
+            _apply_theme(page, theme)
+            _verify_theme(page, theme)
             page.add_script_tag(content=axe_src)
             results = page.evaluate("() => axe.run()")
         finally:
@@ -251,11 +312,12 @@ def playwright_connect(base_url, axe_src, page_path="/preview.html", witness=Non
     return results, page_url
 
 
-def collect(base_url, axe_src, page_path="/preview.html", witness=None, connect=None):
+def collect(base_url, axe_src, page_path="/preview.html", witness=None, connect=None,
+            theme="dark"):
     """Sürücüyü çalıştır; exception'ı yukarı fırlatır (main FAIL'e çevirir)."""
     if connect is None:
         connect = playwright_connect
-    return connect(base_url, axe_src, page_path, witness)
+    return connect(base_url, axe_src, page_path, witness, theme)
 
 
 # ----------------------------------------------------------------- main
@@ -279,17 +341,28 @@ def main(argv=None):
                     help="config'te witness ile tanımlı same-origin sayfa")
     ap.add_argument("--output", default="a11y_report.json",
                     help="rapor JSON yolu (CI artifact)")
+    ap.add_argument("--theme", default="dark",
+                    help="tarama DOM teması (dark|light)")
     args = ap.parse_args(argv)
 
     report = {"verdict": "FAIL",  # fail-closed default: her arıza FAIL kalır
               "base_url": args.base_url, "page": args.page, "page_url": None,
-              "config": None, "violations": [], "summary": {}, "error": None}
+              "theme": args.theme, "config": None, "violations": [],
+              "summary": {}, "error": None}
 
     def fail(code):
         with open(args.output, "w", encoding="utf-8") as f:
             json.dump(report, f, indent=2, ensure_ascii=False)
             f.write("\n")
         return code
+
+    # 0) tema usage-policy; argparse'ın choices'i SystemExit ile rapor
+    # yazmadan çıkar. Burada report + FAIL yazarak fail-closed sözleşmesini koru.
+    if args.theme not in VALID_THEMES:
+        report["error"] = "kullanım hatası: tema dark|light olmalı"
+        print("verdict: FAIL")
+        print("  [CONFIG] %s" % report["error"])
+        return fail(1)
 
     # 1) config (geçersiz → FAIL; config-drift kapısı)
     try:
@@ -315,7 +388,8 @@ def main(argv=None):
 
     # 3) tarama (sunucu/tarayıcı arızası → FAIL; playwright yok → 2)
     try:
-        results, page_url = collect(args.base_url, axe_src, args.page, witness)
+        results, page_url = collect(args.base_url, axe_src, args.page, witness,
+                                    theme=args.theme)
     except ImportError:
         print("playwright kurulu değil: pip install playwright && playwright install chromium")
         return 2
