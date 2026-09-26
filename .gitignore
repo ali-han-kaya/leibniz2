@@ -40,7 +40,10 @@ _calisma/pptx/node_modules/
 # docx jeneratoru (markdown → .docx): bagimliliklar ve uretilen cikti repoda tutulmaz
 _calisma/docx/node_modules/
 _calisma/docx/out/
+# pptx jeneratorleri (native slaytlar): kaynak .js repoda, uretilen .pptx repoda tutulmaz
 _calisma/pptx/verification_chain.pptx
+_calisma/pptx/architecture_deepening.pptx
+_calisma/pptx/pdf_repro_findings.pptx
 apps/trend-db/node_modules/
 apps/trend-db/.env
 apps/trend-db/generated/
