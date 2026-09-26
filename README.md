@@ -545,6 +545,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-26 | docs | (design-system) GitHub token yuzeyi ve Vercel kullanim rehberi | [`7fe3a5b`](https://github.com/ali-han-kaya/leibniz2/commit/7fe3a5b) |
 | 2026-09-26 | docs | (design-system) Vercel token kullanimini CSS ornegine cevir | [`1e8ab4c`](https://github.com/ali-han-kaya/leibniz2/commit/1e8ab4c) |
 | 2026-09-26 | feat | (gallery) denklem galerisi uretim ciktisini kaydet | [`7f3d7a5`](https://github.com/ali-han-kaya/leibniz2/commit/7f3d7a5) |
+| 2026-09-26 | docs | (preview) dashboard ve Vercel token fark raporu | [`e61b104`](https://github.com/ali-han-kaya/leibniz2/commit/e61b104) |
 
 ### Regresyon notları
 
