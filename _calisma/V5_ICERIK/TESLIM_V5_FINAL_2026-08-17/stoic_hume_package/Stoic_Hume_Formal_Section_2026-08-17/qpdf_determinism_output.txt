@@ -1,4 +1,4 @@
-qpdf determinism experiment — frozen record (V5l, 2026-08-18)
+qpdf determinism experiment — frozen record v2 (V5l, 2026-08-18 + sürüm izleme)
 ====================================================================
 input PDF      : ingiliz_empirizmi_v3.pdf
 raw SHA-256    : 74b2cdbdb18fafbf5b3c87570c92f1500e7580469bcf4295b09734116df0779f   (on-disk PDF'ten hesaplanır)
@@ -13,6 +13,20 @@ HISTORICAL RECORD (V5l, 2026-08-18, MANIFEST notu): aynı girdi PDF
 verdict        : NON-DETERMINISTIC — metadata-stripped SHA-256
                  serbestçe yeniden hesaplanamaz; repack sidecar'ı
                  yalnızca raw hash değişince yeniden üretir (V5l fix).
+====================================================================
+SÜRÜM İZLEME (v2) — aynı komut, farklı qpdf sürümleri
+  2026-08-18  qpdf kayıtsız   3 rerun → 3/3 farklı  NON-DETERMINISTIC
+              stripped: b090ac01…  429984da…  509a47a6…
+              raw PDF  : e7b0bc0b…
+  2026-09-26  qpdf 12.4.0     5 rerun → 5/5 farklı  NON-DETERMINISTIC
+              stripped: c086cdab…  4fe4275b…  22898321…  4efa9262…  77a95c44…
+              raw PDF  : 74b2cdbd…
+okuma        : iki ayrı qpdf sürümü, iki ayrı koşu serisi, AYNI hüküm —
+               bulgu araç sürümünden bağımsızdır; repack'in
+               sidecar-reuse düzeltmesi (V5l fix) her iki sürümde de
+               zorunludur. Yeni sürüm eklerken: qpdf --version'ı
+               NOT AL, --rerun N çalıştır, hash'leri VERSION_TRACKING
+               satırına yaz.
 ====================================================================
 Bu dosya donmuş kayıttır (K5 byte-for-byte). Yukarıdaki raw SHA-256
 kayıttakinden farklıysa (PDF yeniden derlendi) kaydı yeniden üretin:
