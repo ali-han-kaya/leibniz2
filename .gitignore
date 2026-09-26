@@ -60,3 +60,17 @@ apps/dashboard-next/.next/
 
 # Pinokio launcher runtime mirror (generated dashboard state and static copies)
 pinokio/.runtime/
+
+# Freebuff desktop istemcisinin kendi durumu (proje kimligi, commit mesaji
+# taslaklari, preview logu) — repo yuzeyi degil
+.freebuff/
+
+# a11y-gate yerel kosu raporlari (CI artifact'i; 6+ MB, uretilmis)
+_calisma/CIKTI/a11y_report*.json
+
+# preview_server calisma zamani verisi: canli kopyalar zaten
+# ~/Library/Caches/com.freebuff/preview/ altinda; CIKTI ici yalnizca
+# yerel calistirma artigi
+_calisma/CIKTI/runs/
+_calisma/CIKTI/history.jsonl
+_calisma/CIKTI/history.jsonl.sha256
