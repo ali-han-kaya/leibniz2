@@ -3208,15 +3208,15 @@ jobs:
           CLS_REPORT_PATH="cls_budget_${A11Y_THEME}.json" \
             python3 _calisma/CIKTI/test_dashboard_cls_budget.py
 
-      # Aynı ölçüm çekirdeğinin ikinci koşumu: CWV raporu dashboard'ın
-      # CLS + LCP + FCP + TTFB değerlerini bütçelerine karşı kapılar
-      # (CLS < 0.1, LCP < 2500 ms, FCP < 1800 ms, TTFB < 800 ms). Ölçüm
-      # çekirdeği kopyalanmaz: `test_surface_cwv_report.py` CLS recorder'ını
-      # ve session-window matematiğini `test_dashboard_cls_budget.py`'den
-      # import eder. Landing yüzeyi bu adıma landing.html mirror'a stage
-      # edildiğinde eklenir (CWV_SURFACES=dashboard,landing); yerelde üç
-      # yüzey birden koşar: `python3 _calisma/CIKTI/test_surface_cwv_report.py`
-      - name: Run CWV report — dashboard (CLS/LCP/FCP/TTFB)
+      # Aynı ölçüm çekirdeğinin iki YÜZEYLİ koşumu: bu job'ın mirror'ında hem
+      # dashboard (/preview.html) hem landing (/landing.html + assets) stage
+      # edilmiş durumda (bkz. yukarıdaki build_landing.py adımı), yani aynı
+      # canlı sunucu iki yüzeyi de sunar. CLS + LCP + FCP + TTFB bütçeleri
+      # ölçülür; landing'in CLS'i bu repoda başka hiçbir yerde ölçülmüyordu.
+      # dashboard-next bu job'da derlenmediği için kapsam dışıdır — üç yüzeyin
+      # tamamı yerelde `python3 _calisma/CIKTI/test_surface_cwv_report.py`
+      # ile koşar.
+      - name: Run CWV report — dashboard + landing (CLS/LCP/FCP/TTFB)
         if: always()
         env:
           A11Y_THEME: ${{ matrix.theme }}
@@ -3226,7 +3226,7 @@ jobs:
             echo "A11Y_PORT yok — preview_server başlatılamadı; CWV ölçülemez (fail-closed)" >&2
             exit 1
           fi
-          CWV_SURFACES=dashboard \
+          CWV_SURFACES=dashboard,landing \
           DASHBOARD_BASE_URL="http://127.0.0.1:${A11Y_PORT}" \
           DASHBOARD_THEME="$A11Y_THEME" \
           CWV_REPORT_PATH="surface_cwv_${A11Y_THEME}.json" \
