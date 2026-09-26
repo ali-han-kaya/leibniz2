@@ -11,7 +11,7 @@ if ("serviceWorker" in navigator) {
 }
 const $ = (id) => document.getElementById(id);
 
-function setTheme(theme) {
+function setTheme(theme, persist = true) {
   const light = theme === "light";
   document.documentElement.dataset.theme = light ? "light" : "dark";
   const toggle = $("theme-toggle");
@@ -23,17 +23,32 @@ function setTheme(theme) {
     );
     toggle.textContent = light ? "dark mode" : "light mode";
   }
-  try {
-    localStorage.setItem("dashboard-theme", light ? "light" : "dark");
-  } catch (e) {}
+  if (persist) {
+    try {
+      localStorage.setItem("dashboard-theme", light ? "light" : "dark");
+    } catch (e) {}
+  }
 }
 
+// Lighthouse cannot seed localStorage before navigation. A validated query
+// override gives CI a deterministic scan theme without changing the user's
+// stored preference; normal navigation continues to use localStorage.
+function themeQueryOverride() {
+  try {
+    const requested = new URLSearchParams(window.location.search).get("theme");
+    return requested === "dark" || requested === "light" ? requested : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+const queryTheme = themeQueryOverride();
 try {
-  setTheme(
-    localStorage.getItem("dashboard-theme") === "light" ? "light" : "dark"
-  );
+  const storedTheme =
+    localStorage.getItem("dashboard-theme") === "light" ? "light" : "dark";
+  setTheme(queryTheme || storedTheme, !queryTheme);
 } catch (e) {
-  setTheme("dark");
+  setTheme(queryTheme || "dark", !queryTheme);
 }
 
 // View Transitions API (Chromium 111+, Safari 18+): subtle cross-fade
@@ -271,6 +286,14 @@ function sealHashFromSnapshot(d) {
   );
 }
 
+function sealJobFromSnapshot(d) {
+  const raw = [d && d.job_name, d && d.workflow_job, d && d.job].find(
+    (value) => typeof value === "string" && value.trim()
+  );
+  const job = (raw || "verify").trim().replace(/\s+/g, " ");
+  return (job.length > 14 ? job.slice(0, 13) + "…" : job).toUpperCase();
+}
+
 function renderVerdictSeal(d) {
   const seal = $("verdict-seal");
   if (!seal) return;
@@ -280,12 +303,17 @@ function renderVerdictSeal(d) {
     return;
   }
   const ok = (d.verdict || "").toUpperCase() === "PASS";
+  const job = sealJobFromSnapshot(d);
   seal.hidden = false;
   seal.classList.toggle("seal-pass", ok);
   seal.classList.toggle("seal-fail", !ok);
   const tp = seal.querySelector("textPath");
-  if (tp)
-    tp.textContent = "VERIFIED • " + hash.slice(0, 12).toUpperCase() + " •";
+  if (tp) {
+    const ringVerdict = ok ? "VERIFIED" : "JOB FAILED";
+    tp.textContent = ringVerdict + " • " + hash.slice(0, 12).toUpperCase() + " •";
+  }
+  const verdict = seal.querySelector(".seal-verdict");
+  if (verdict) verdict.textContent = ok ? "VERIFIED" : job;
   const stamp = seal.querySelector(".seal-hash");
   if (stamp) stamp.textContent = hash.slice(0, 6).toUpperCase() + "…";
 }

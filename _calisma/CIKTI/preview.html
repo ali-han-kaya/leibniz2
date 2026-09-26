@@ -191,10 +191,18 @@
     letter-spacing:.06em; fill:var(--muted); }
   .seal-hash { font-family:var(--font-mono); font-size:6.5px; font-weight:600;
     letter-spacing:.12em; fill:var(--fg-dimmed); }
+  .seal-ring-break, .seal-job-break { display:none; fill:none; stroke:var(--err);
+    stroke-linecap:round; stroke-linejoin:round; pointer-events:none; }
+  .seal-ring-break { stroke-width:2.6; }
+  .seal-job-break { stroke-width:1.8; }
   .seal-pass .seal-verdict { fill:var(--ok); }
   .seal-pass .seal-circle { stroke:var(--ok); fill:rgba(63,185,80,.07); }
-  .seal-fail .seal-verdict { fill:var(--err); }
-  .seal-fail .seal-circle { stroke:var(--err); fill:rgba(248,81,73,.08); }
+  .seal-fail .seal-verdict { fill:var(--err); font-family:var(--font-mono);
+    font-size:6.2px; letter-spacing:.04em; }
+  .seal-fail .seal-circle { stroke:var(--err); fill:rgba(248,81,73,.08);
+    stroke-dasharray:7 3 1.5 3; }
+  .seal-fail .seal-circle-inner { stroke:var(--err); stroke-dasharray:2 3; }
+  .seal-fail .seal-ring-break, .seal-fail .seal-job-break { display:inline; }
   @keyframes seal-stamp {
     0% { transform:scale(1.8) rotate(-8deg); opacity:0; }
     60% { opacity:1; }
@@ -250,9 +258,11 @@
       </defs>
       <circle class="seal-circle" cx="50" cy="50" r="45.5"></circle>
       <circle class="seal-circle seal-circle-inner" cx="50" cy="50" r="25"></circle>
-      <text class="seal-ring"><textPath href="#seal-arc-top" startOffset="6%">VERIFIED</textPath></text>
+      <text class="seal-ring"><textPath id="seal-ring-path" href="#seal-arc-top" startOffset="6%">VERIFIED</textPath></text>
       <text class="seal-verdict" x="50" y="48" text-anchor="middle">VERIFIED</text>
-      <text class="seal-hash" x="50" y="60" text-anchor="middle"></text>
+      <text class="seal-hash" x="50" y="61" text-anchor="middle"></text>
+      <path class="seal-ring-break" d="M 15 24 L 35 42 L 32 46 L 50 50 L 47 54 L 66 71 L 84 78"></path>
+      <line class="seal-job-break" x1="25" y1="46" x2="75" y2="46"></line>
     </svg>
   </div>
   <span id="live-dot" class="live-dot"></span>

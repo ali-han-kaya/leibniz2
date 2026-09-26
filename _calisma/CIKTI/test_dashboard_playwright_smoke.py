@@ -121,6 +121,93 @@ class DashboardSmokeTest(unittest.TestCase):
         self.assertEqual(js_errors, [],
                          f"JS console errors ({len(js_errors)}): {js_errors}")
 
+    def test_query_theme_overrides_stored_theme_without_persisting(self):
+        base = f"http://127.0.0.1:{self.PORT}"
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+            page.goto(base + "/?theme=light", wait_until="domcontentloaded")
+            page.wait_for_timeout(300)
+            self.assertEqual(
+                page.evaluate("() => document.documentElement.dataset.theme"),
+                "light",
+            )
+            self.assertIsNone(
+                page.evaluate("() => localStorage.getItem('dashboard-theme')")
+            )
+            page.goto(base + "/", wait_until="domcontentloaded")
+            page.wait_for_timeout(300)
+            self.assertEqual(
+                page.evaluate("() => document.documentElement.dataset.theme"),
+                "dark",
+            )
+            browser.close()
+
+    def test_fail_verdict_seal_uses_broken_ring_and_job_name(self):
+        base = f"http://127.0.0.1:{self.PORT}"
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+            page.goto(base + "/", wait_until="domcontentloaded")
+            page.wait_for_timeout(400)
+            page.evaluate("""() => renderVerdictSeal({
+                verdict: 'FAIL',
+                job_name: 'a11y-gate',
+                stripped_sha256: '0123456789abcdef'
+            })""")
+
+            seal = page.locator("#verdict-seal")
+            self.assertFalse(seal.evaluate("(el) => el.hidden"))
+            self.assertIn("seal-fail", seal.get_attribute("class"))
+            self.assertEqual(
+                page.locator("#seal-ring-path").text_content(),
+                "JOB FAILED • 0123456789AB •",
+            )
+            self.assertEqual(
+                page.locator(".seal-verdict").text_content(),
+                "A11Y-GATE",
+            )
+            self.assertEqual(
+                page.locator(".seal-hash").text_content(),
+                "012345…",
+            )
+            self.assertEqual(
+                page.locator(".seal-ring-break").evaluate(
+                    "(el) => getComputedStyle(el).display"
+                ),
+                "inline",
+            )
+            self.assertEqual(
+                page.locator(".seal-job-break").evaluate(
+                    "(el) => getComputedStyle(el).display"
+                ),
+                "inline",
+            )
+            self.assertNotEqual(
+                page.locator(".seal-circle").first.evaluate(
+                    "(el) => getComputedStyle(el).strokeDasharray"
+                ),
+                "none",
+            )
+
+            page.evaluate("""() => renderVerdictSeal({
+                verdict: 'PASS',
+                job_name: 'a11y-gate',
+                stripped_sha256: '0123456789abcdef'
+            })""")
+            self.assertNotIn("seal-fail", seal.get_attribute("class"))
+            self.assertEqual(
+                page.locator("#seal-ring-path").text_content(),
+                "VERIFIED • 0123456789AB •",
+            )
+            self.assertEqual(
+                page.locator(".seal-ring-break").evaluate(
+                    "(el) => getComputedStyle(el).display"
+                ),
+                "none",
+            )
+            browser.close()
+
     def test_sse_event_source_connects(self):
         base = f"http://127.0.0.1:{self.PORT}"
         with sync_playwright() as p:
