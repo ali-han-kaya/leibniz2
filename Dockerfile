@@ -46,18 +46,43 @@ ARG PYTHON_SECURITY_PATCH_PACKAGES
 # Tuzaka-notu (canlı build'de ölçüldü): unquoted $VAR genişlemesi floor'lardaki
 # '>' karakterini shell REDIRECT'ine çevirir — floor yutulur, pip bare sürüm
 # kurar. Güvenli form: QUOTED genişleme satır başına floor yazıp -r dosyası.
-RUN set -eux; \
+#
+# PIP CACHE MOUNT (build cache derinleştirme — hijyen değişmeden):
+#   RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked
+# Kural: cache mount ile --no-cache-dir BİRLİKTE kullanılamaz — pip
+# --no-cache-dir ile cache'i kapatır, mount boşa çıkar. Bu yüzden
+# --no-cache-dir aşağıdaki pip satırlarından KALDIRILDI.
+# Hijyen değişmedi: BuildKit cache mount'u KATMANA yazmaz (ephemeral,
+# image'a girmez) → imaj katman yüzeyi, Trivy tarama yüzeyi ve imaj
+# boyutu DEĞİŞMEZ; --no-cache-dir'in sağladığı "imajda pip cache
+# kalıntısı yok" garantisinin yerini bu mount alır. Cache yalnız
+# indirilen wheel/indeks dosyalarını tutar (kimlik bilgisi içermez,
+# repo'ya yazılmaz).
+# Derinleştirme kazancı: pip katmanı PYTHON_SECURITY_PATCH_PACKAGES
+# ARG'si (her CVE floor yükseltmesi) veya base image değiştiğinde
+# invalide olur; mount o invalidasyonda indirmeyi yeniden kullanır —
+# yani güvenlik yaması döngüsü bedava indirme yapar.
+# id verilmediği için mount id'si target yoludur → builder ve runtime
+# stage'leri AYNI pip cache'ini paylaşır (runtime'daki setuptools/wheel
+# floor yükseltmesi builder'ın indirdiği wheel'i tekrar kullanır).
+# sharing=locked: eşzamanlı build'ler aynı HTTP cache'e yazmasın
+# (cache bozulma guard'ı).
+# Ön koşul: BuildKit builder. Legacy (BuildKit'siz) builder'da
+# `--mount` parse hatası verir; satır 1'deki syntax direktifi frontend'i
+# sabitler, CI'da buildx (docker/build-push-action@v6) BuildKit kullanır.
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    set -eux; \
     python -m venv /opt/venv; \
     if [ "$(printf '%s' "$PYTHON_SECURITY_PATCH_PACKAGES" | tr -d '[:space:]')" = "" ]; then \
       echo "PYTHON_SECURITY_PATCH_PACKAGES empty — no targeted pip patch"; \
     else \
       printf '%s\n' "$PYTHON_SECURITY_PATCH_PACKAGES" | tr ' ' '\n' > /tmp/pip_security_reqs.txt; \
-      /opt/venv/bin/pip install --no-cache-dir --upgrade -r /tmp/pip_security_reqs.txt; \
+      /opt/venv/bin/pip install --upgrade -r /tmp/pip_security_reqs.txt; \
       /opt/venv/bin/pip show \
         $(printf '%s\n' "$PYTHON_SECURITY_PATCH_PACKAGES" | tr ' ' '\n' | sed 's/[><=!~].*//') \
         | grep -E '^(Name|Version):'; \
     fi; \
-    /opt/venv/bin/pip install --no-cache-dir z3-solver
+    /opt/venv/bin/pip install z3-solver
 
 FROM python:3.11-slim-bookworm AS runtime
 
@@ -65,12 +90,15 @@ FROM python:3.11-slim-bookworm AS runtime
 # yamalanır — gate'in tetiklediği yamalar bu aşamada uygulanır (guard/kanıt
 # builder stage'iyle özdeş; bare ARG global default'u miras alır).
 ARG PYTHON_SECURITY_PATCH_PACKAGES
-RUN set -eux; \
+# Aynı pip cache mount deseni (builder ile paylaşılan cache id'si:
+# target yolu varsayılan id'dir) — bkz. yukarıdaki mount yorum bloğu.
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    set -eux; \
     if [ "$(printf '%s' "$PYTHON_SECURITY_PATCH_PACKAGES" | tr -d '[:space:]')" = "" ]; then \
       echo "PYTHON_SECURITY_PATCH_PACKAGES empty — no targeted pip patch"; \
     else \
       printf '%s\n' "$PYTHON_SECURITY_PATCH_PACKAGES" | tr ' ' '\n' > /tmp/pip_security_reqs.txt; \
-      pip install --no-cache-dir --upgrade -r /tmp/pip_security_reqs.txt; \
+      pip install --upgrade -r /tmp/pip_security_reqs.txt; \
       pip show \
         $(printf '%s\n' "$PYTHON_SECURITY_PATCH_PACKAGES" | tr ' ' '\n' | sed 's/[><=!~].*//') \
         | grep -E '^(Name|Version):'; \
