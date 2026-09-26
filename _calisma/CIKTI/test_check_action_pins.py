@@ -12,6 +12,7 @@ import pathlib
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 CIKTI = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(CIKTI))
@@ -260,6 +261,133 @@ class TestBump(unittest.TestCase):
             rows = cap.check(_wf("actions/checkout@v8"),
                              json.loads(pins_path.read_text(encoding="utf-8")))
             self.assertEqual(rows[0]["verdict"], "PASS")
+
+
+class TestLatestMajorAdvisory(unittest.TestCase):
+    """--latest canlı upstream major'ını advisory, hata halinde exit 0 üretir."""
+
+    def test_parse_latest_major_ignores_unstable_and_invalid_tags(self):
+        tags = [
+            {"name": "v8-beta.0"},
+            {"name": "v7.2.1"},
+            {"name": "v7"},
+            {"name": "v6.4.0"},
+            {"name": "v5.1.2.3"},
+            {"name": "main"},
+            "not-an-object",
+        ]
+        self.assertEqual(cap.parse_latest_major(tags), 7)
+
+    def test_parse_latest_major_requires_json_list(self):
+        with self.assertRaises(ValueError):
+            cap.parse_latest_major({"tags": []})
+
+    def test_report_groups_workflows_and_queries_repository_once(self):
+        workflows = {
+            "verify.yml": _wf("actions/checkout@v6"),
+            "nightly.yml": _wf(
+                "actions/checkout@v6",
+                "actions/setup-python@v7",
+                "actions/download-artifact@v9",
+                "docker/build-push-action@v5",
+                "./.github/actions/local",
+            ),
+        }
+        calls = []
+
+        def fetcher(repository):
+            calls.append(repository)
+            return {
+                "actions/checkout": 7,
+                "actions/setup-python": 7,
+                "actions/download-artifact": 8,
+                "docker/build-push-action": 6,
+            }[repository], None
+
+        report = cap.build_latest_major_report(workflows, fetcher=fetcher)
+        self.assertEqual(calls, [
+            "actions/checkout",
+            "actions/download-artifact",
+            "actions/setup-python",
+            "docker/build-push-action",
+        ])
+        self.assertEqual(report["verdict"], "ADVISORY")
+        self.assertEqual(report["summary"], {
+            "total": 4, "current": 1, "behind": 2, "ahead": 1,
+            "unavailable": 0,
+        })
+        deviations = {row["action"]: row for row in report["deviations"]}
+        self.assertEqual(deviations["actions/checkout@v6"]["gap"], 1)
+        self.assertEqual(len(deviations["actions/checkout@v6"]["workflows"]), 2)
+        self.assertEqual(deviations["docker/build-push-action@v5"]["gap"], 1)
+        ahead = {row["action"]: row for row in report["actions"]}
+        self.assertEqual(ahead["actions/download-artifact@v9"]["status"], "ahead")
+
+    def test_monorepo_subpath_queries_repository_root(self):
+        report = cap.build_latest_major_report(
+            {"wf.yml": _wf("owner/repo/path-action@v1")},
+            fetcher=lambda repository: (2, None),
+        )
+        self.assertEqual(report["actions"][0]["repository"], "owner/repo")
+        self.assertEqual(report["actions"][0]["status"], "behind")
+
+    def test_api_failure_is_advisory_not_exit_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            pins = root / "pins.json"
+            workflow = root / "verify.yml"
+            output = root / "latest.json"
+            pins.write_text(json.dumps({"actions/checkout": 6}),
+                            encoding="utf-8")
+            workflow.write_text(_wf("actions/checkout@v6"), encoding="utf-8")
+            with mock.patch.object(
+                    cap, "fetch_latest_major",
+                    return_value=(None, "GitHub API HTTP 503")):
+                rc, text = run_main([
+                    "--workflow", str(workflow), "--pins", str(pins),
+                    "--latest", "--json", "--out", str(output),
+                ])
+            self.assertEqual(rc, 0, text)
+            data = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(data["latest_major"]["verdict"], "ADVISORY")
+            self.assertEqual(data["latest_major"]["summary"]["unavailable"], 1)
+            self.assertIn("HTTP 503", data["latest_major"]["errors"][0]["error"])
+
+    def test_main_writes_latest_report_without_blocking_behind_major(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            pins = root / "pins.json"
+            workflow = root / "verify.yml"
+            output = root / "latest.json"
+            pins.write_text(json.dumps({"actions/checkout": 6}),
+                            encoding="utf-8")
+            workflow.write_text(_wf("actions/checkout@v6"), encoding="utf-8")
+            with mock.patch.object(cap, "fetch_latest_major",
+                                   return_value=(7, None)):
+                rc, text = run_main([
+                    "--workflow", str(workflow), "--pins", str(pins),
+                    "--latest", "--json", "--out", str(output),
+                ])
+            self.assertEqual(rc, 0, text)
+            data = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(data["summary"]["fail"], 0)
+            self.assertEqual(data["latest_major"]["summary"]["behind"], 1)
+            self.assertEqual(data["latest_major"]["deviations"][0]["gap"], 1)
+
+    def test_latest_is_rejected_with_mutating_modes(self):
+        rc, text = run_main(["--latest", "--update"])
+        self.assertEqual(rc, 2)
+        self.assertIn("birlikte kullanılamaz", text)
+
+    def test_ci_wires_report_to_summary_and_existing_artifact(self):
+        repo_root = CIKTI.parents[1]
+        workflow = (repo_root / ".github/workflows/verify.yml").read_text(
+            encoding="utf-8")
+        self.assertIn("Report latest action majors (advisory)", workflow)
+        self.assertIn(
+            "--latest --json --out action_pins_latest.json", workflow)
+        self.assertIn("Latest major advisory", workflow)
+        self.assertIn("action_pins_latest.json", workflow)
 
 
 def run_main(argv):

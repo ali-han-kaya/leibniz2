@@ -26,10 +26,15 @@ Desen kaynağı: `adobe/skills@appbuilder-cicd-pipeline` `references/checklist.m
       `@main`/`@master` yok:
       ```bash
       python3 _calisma/CIKTI/check_action_pins.py --workflow .github/workflows
+      # CI advisory: upstream stable major'dan geride kalanları raporla
+      python3 _calisma/CIKTI/check_action_pins.py --latest --json \
+        --out /tmp/action_pins_latest.json
       ```
       (dizin modu: `.github/workflows/` altındaki tüm `*.yml`/`*.yaml`
       otomatik denetlenir — yeni workflow dosyası eklemek pin kapsamını
-      otomatik genişletir; tek dosya için `--workflow …/verify.yml` verilir)
+      otomatik genişletir; tek dosya için `--workflow …/verify.yml` verilir.
+      `--latest` yalnız advisory'dir: upstream tag/API erişim hatası veya
+      major geriliği core pin exit kodunu değiştirmez.)
 - [ ] **`scriptPath` yasağı** — github-script adımlarında `scriptPath:` input'u
       yok (yalnızca `script:`); `check_action_pins.py` bunu fail-closed yakalar.
 - [ ] `verify.yml`'de YAML yapışıklığı yok (actionlint + CI advisory step çift kapı).

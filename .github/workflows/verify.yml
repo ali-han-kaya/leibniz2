@@ -1011,8 +1011,18 @@ jobs:
             --workflow .github/workflows/verify.yml \
             --json --out action_runtimes.json
 
+      # GitHub stable vN tag'lerine göre workflow major sapmaları. Advisory
+      # katmanıdır: gecikmeler/erişim hataları listelenir, job exit 1 yapmaz.
+      - name: Report latest action majors (advisory)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          python3 _calisma/CIKTI/check_action_pins.py \
+            --latest --json --out action_pins_latest.json
+
       # Kapı FAIL olsa bile (if: always) sonucu run summary'e yaz — tek bakışta
-      # hangi action'ın deprecated olduğu görünür.
+      # hangi action'ın deprecated veya latest major'dan geride olduğu görünür.
       - name: Write action runtime result to run summary
         if: always()
         shell: bash
@@ -1039,9 +1049,40 @@ jobs:
           for r in d['actions']:
               using = r.get('using') or '?'
               lines.append('| `' + r['action'] + '` | `' + using + '` | ' + r['verdict'] + ' |')
+          latest_path = 'action_pins_latest.json'
+          if os.path.exists(latest_path):
+              latest = json.load(open(latest_path, encoding='utf-8'))['latest_major']
+              ls = latest['summary']
+              lines.extend([
+                  '',
+                  '## Latest major advisory (bloke etmez)',
+                  '',
+                  ('**ℹ️ ADVISORY**' if latest['verdict'] == 'ADVISORY' else '**✅ CURRENT**') +
+                  ' — ' + str(ls['total']) + ' action; ' + str(ls['current']) +
+                  ' current, ' + str(ls['behind']) + ' behind, ' +
+                  str(ls['ahead']) + ' ahead, ' + str(ls['unavailable']) +
+                  ' unavailable',
+              ])
+              if latest['deviations']:
+                  lines.extend([
+                      '',
+                      '| Action | Current | Latest | Gap |',
+                      '|---|---:|---:|---:|',
+                  ])
+                  for row in latest['deviations']:
+                      lines.append('| `' + row['action'] + '` | v' +
+                                   str(row['current_major']) + ' | v' +
+                                   str(row['latest_major']) + ' | ' +
+                                   str(row['gap']) + ' |')
+              else:
+                  lines.append('\nGüncel stable major arkasında action yok.')
+              for error in latest['errors']:
+                  lines.append('- ⚠️ `' + error['repository'] +
+                               '`: upstream latest alınamadı — ' +
+                               error['error'])
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as f:
               f.write('\n'.join(lines) + '\n')
-          print('action runtime summary yazıldı: ' + verdict)
+          print('action runtime + latest-major summary yazıldı: ' + verdict)
           PYEOF
 
       - name: Upload action runtime report
@@ -1049,7 +1090,9 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: action-runtimes
-          path: action_runtimes.json
+          path: |
+            action_runtimes.json
+            action_pins_latest.json
           if-no-files-found: error
           retention-days: 30
 
