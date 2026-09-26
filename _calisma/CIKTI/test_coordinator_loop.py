@@ -54,21 +54,21 @@ class TestGateChain(unittest.TestCase):
 class TestLoopFlow(unittest.TestCase):
     def setUp(self):
         self.td = tempfile.TemporaryDirectory()
+        self.addCleanup(self.td.cleanup)
         self.wt = pathlib.Path(self.td.name, "wt")
         self.wt.mkdir()
         self.done = pathlib.Path(self.td.name, "done")
         # İzolasyon: _patch_commands GATES'i yerinde değiştirir; restore-suz
         # test TestGateChain'e 'echo ok' sızardı (shuffle-audit kanıtı).
-        self._gates_backup = {g: dict(cl.GATES[g]) for g in cl.GATES}
-
-    def tearDown(self):
-        self.td.cleanup()
-
-    def tearDown(self):
-        self.td.cleanup()
-        for g, spec in self._gates_backup.items():
-            cl.GATES[g].clear()
-            cl.GATES[g].update(spec)
+        # Geri yüklemeyi framework'e devret: patch.dict her kapının sözlüğünü
+        # kopyalar, addCleanup test BİTİNCE (hata/skip dahil) geri koyar —
+        # elle yedek + tearDown zinciri sıraya ve istisnaya açıktı.
+        # Dış sözlüğe TEK patcher yetmez: _patch_commands iç içe spec'i bozuyor
+        # (spec["command"]), dış kopyalama bunu geri almazdı.
+        for spec in cl.GATES.values():
+            patcher = mock.patch.dict(spec)
+            patcher.start()
+            self.addCleanup(patcher.stop)
 
     def _patch_commands(self, fail=()):
         """Kapı komutlarını no-op'a çevir; fail set'indekiler 'false' olur."""
