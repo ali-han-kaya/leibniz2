@@ -310,7 +310,8 @@ function renderVerdictSeal(d) {
   const tp = seal.querySelector("textPath");
   if (tp) {
     const ringVerdict = ok ? "VERIFIED" : "JOB FAILED";
-    tp.textContent = ringVerdict + " • " + hash.slice(0, 12).toUpperCase() + " •";
+    tp.textContent =
+      ringVerdict + " • " + hash.slice(0, 12).toUpperCase() + " •";
   }
   const verdict = seal.querySelector(".seal-verdict");
   if (verdict) verdict.textContent = ok ? "VERIFIED" : job;
@@ -1342,6 +1343,13 @@ function flushStream() {
 }
 function connectStream() {
   const st = $("stream-state");
+  // `el` yalnız flushStream()'in içinde const idi; aynı fonksiyondaki
+  // replay-start / replay-end / end dinleyicileri de `el.innerHTML` +
+  // `el.scrollTop` yazıyordu → her run özetinde ReferenceError
+  // ("el is not defined") atılıp akış paneli güncellenmiyordu
+  // (VERIFY-001 kanıt koşusunda 18 kez ölçüldü). Kapsam buraya taşındı:
+  // yazma davranışı değişmedi, yalnız isim artık görünür.
+  const el = $("runstream");
   if (runStreamES) runStreamES.close();
   runStreamES = new EventSource(
     "/api/run-stream?v=" + (window.BUILD_TS || Date.now())

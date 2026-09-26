@@ -168,3 +168,26 @@
 - Yol üstünde bulunan gerçek hata: `video-render` CI adımı sentinel bayrağı
   vermediği için üretici fail-closed çıkıyordu (adım yorumu bunun tersini
   söylüyordu) → `--allow-missing-data` ile düzeltildi.
+
+## 2026-09-26 — VERIFY-001: CSP altında hover-tooltip kanıtlandı
+- Handler'lar `preview.js` şablon stringlerindeydi (`svg.innerHTML` ile basılan
+  hit-alanları); bulgunun gösterdiği `preview.js ~652` satırı doğru değildi.
+  `design_preview.html` yalnız URETILMIŞ, bayat bir kopyaydı (14 inline
+  handler) → yeniden üretildi.
+- Kaynak `2fee44f`'te zaten `data-tip`+`data-i` ve SVG-düzeyi delegeye
+  geçmişti; eksik olan **koruyan kapıydı**. İki kapı eklendi:
+  - `test_preview_server.py → InlineEventHandlerContractTests` (6 test,
+    statik): inline handler yok, sunucunun gerçek gönderdiği CSP sıkı, üç
+    yüzey de delege haritasında, kapının kendisi sentetik ihlalle sınanır.
+  - `test_preview_hover_tooltip.py` (8 test, Playwright + gerçek sunucu):
+    CSP başlığı doğrulanır → `page.hover()` ile tooltip none→block, içerik
+    hoverlanan sütunun verisi, çıkınca gizlenir, konsolda 0 CSP ihlali.
+- Ters kanıt: `preview.js` `2fee44f^`'a çekildi → 7 hata / 0 skip; düzeltmeli
+  sürüm 8/8 yeşil. İlk yazımdaki iki test skip ediyor, CSP-konsol testi
+  boş geçiyordu; hit-alanı sayısı testin içinde zorlanarak kapatıldı.
+- Yol üstünde ayrı hata bulundu ve düzeltildi: `connectStream()`'daki üç
+  dinleyici kapsam dışı `el` kullanıyordu → her run özetinde
+  ReferenceError "el is not defined" (18 kez ölçüldü), akış paneli
+  güncellenmiyordu. Düzeltme sonrası kanıt: CSP ihlali 0, konsol 0, sayfa 0.
+- Ön koşul: `check-prettier-format` `preview.js`'i HEAD'de de kırmızıydı
+  (tek satır); turda `--write` ile düzeltildi.

@@ -18,6 +18,7 @@ import json
 import os
 import pathlib
 import queue
+import re
 import subprocess
 import sys
 import tempfile
@@ -1929,6 +1930,119 @@ class TestServeHistoryTrendCompact(unittest.TestCase):
             self.assertNotIn(": ", body)
         finally:
             ps.RUNS_DIR = old
+
+
+class InlineEventHandlerContractTests(unittest.TestCase):
+    """VERIFY-001 regresyon kapısı: satır içi event-handler NITELIĞI olmayacak.
+
+    Neden ayrı kapı: CSP `script-src 'self' + nonce` altında `<script>`
+    blogunu zaten ayrı bir test denetliyor, ama **nitelik** handler'lar
+    (`onclick="…"`, `onmousemove="…"`) nonce kapsamına GİRMEZ — tarayıcı
+    sessizce reddeder ve düğme/hover ölü kalır. VERIFY-001 tam olarak bu
+    sessiz kayıptı; düzeltme `2fee44f`'te (data-act/data-taşıyıcı + delege
+    dinleyici) yapıldı, ama o düzeltmeyi KİMSİ koruyacak bir kapı yoktu.
+    """
+
+    # Nitelik adı, boşluk, '=', sonra alıntı. `data-*` tutmaz (on ile başlamaz),
+    # `connection=` gibi kelimeler de eşleşmez (ön ek `on` değil).
+    INLINE_HANDLER = re.compile(r"""\son[a-z]+\s*=\s*["']""", re.IGNORECASE)
+
+    def _scan(self, label, text):
+        hits = self.INLINE_HANDLER.findall(text)
+        self.assertEqual(
+            hits, [],
+            "%s içinde %d satır içi event-handler bulundu: %s — CSP altında "
+            "bu handler'lar ÇALIŞMAZ (nonce niteliklere uygulanmaz). "
+            "data-* taşıyıcı + addEventListener delege et." % (label, len(hits), hits[:6]),
+        )
+
+    def test_preview_html_has_no_inline_event_handlers(self):
+        self._scan("preview.html", _preview_html())
+
+    def test_preview_js_emits_no_inline_event_handlers(self):
+        """preview.js şablonları ürettikleri işaretlemeyi de denetlenir.
+
+        SVG hit-alanları JS ile `svg.innerHTML` üzerinden yazıldığı için
+        yalnız HTML dosyasını denetlemek yetmezdi — asıl VERIFY-001 yeri
+        burasıydı.
+        """
+        self._scan("preview.js", _preview_js())
+
+    def test_built_design_preview_has_no_inline_event_handlers(self):
+        """Üretilen demo artifact'ı (gitignore) güncel kaynaktan gelmeli.
+
+        Bulgu: artifact'ın `2fee44f`'ten ÖNCE üretilmiş olması. Inline
+        handler içeren bayat bir artifact, düzeltilmiş kaynağa rağmen
+        incelemede hâlâ ölü UI gösteriyordu.
+        """
+        built = pathlib.Path(HERE, "design_preview.html")
+        if not built.is_file():
+            self.skipTest("design_preview.html yok (build_design_preview.py çalıştır)")
+        self._scan("design_preview.html", built.read_text(encoding="utf-8"))
+
+    def test_guard_itself_detects_a_known_violation(self):
+        """Kapının kendisi bozulursa (regex köreleşirse) sessizce geçmesin.
+
+        Düzeltme ÖNCESİ gerçek satırlar (2fee44f^): 3 onmousemove +
+        3 onmouseleave + 1 onclick. Aynı desen sentetik olarak üretilip
+        eşleştiği doğrulanır.
+        """
+        historical = (
+            '<rect fill="transparent" onmousemove="showRefsTrendTip(0, event)"'
+            ' onmouseleave="hideTrendTip()"/>'
+            '<button onclick="setRhFilter(\'PASS\')">PASS</button>'
+        )
+        self.assertEqual(len(self.INLINE_HANDLER.findall(historical)), 3)
+        self.assertEqual(self.INLINE_HANDLER.findall(_preview_js()), [])
+
+    def test_csp_script_src_does_not_allow_inline_handlers(self):
+        """'unsafe-inline' script-src'a sızarsa kapı sessizce işsiz kalır.
+
+        VERIFY-001'in diğer yol gösterilmişti: "script-hash ekle". Hash,
+        yalnız HARİCİ script'leri kapsar; nitelik handler'lar yine ölür.
+        Bu yüzden CSP'nin sıkı kaldığı da kilitlenir.
+
+        Kaynak metin değil, SUNUCUNUN GERÇEKTEN GÖNDERDİĞİ başlık denetlenir
+        (dosyada CSP benzeri bir yorum satırına takılıp yeşile yanmasın).
+        """
+        csp = None
+        for name, value in ps.Handler._SECURITY_HEADERS:
+            if name == "Content-Security-Policy":
+                csp = value
+        self.assertIsNotNone(csp, "CSP başlığı tanımlı değil")
+        script_src = re.search(r"script-src[^;]*", csp).group(0)
+        self.assertIn("'self'", script_src)
+        self.assertIn("'nonce-", script_src)
+        self.assertNotIn("unsafe-inline", script_src)
+        self.assertNotIn("unsafe-eval", script_src)
+        # style-src gevşek kalmalı: inline style="..." kullanımı mevcut.
+        self.assertIn("style-src 'self' 'unsafe-inline'", csp)
+
+    def test_all_three_hover_surfaces_are_delegated(self):
+        """Üç trend yüzeyi de data-tip taşır ve delege haritasında adı vardır.
+
+        Yarım düzeltme (sadece refs) VERIFY-001'in yarısını çözer: aynı
+        desen trend ve hook-env grafiklerinde de vardı.
+        """
+        js = _preview_js()
+        for svg_id, tip_name in (
+            ("trend", "showTrendTip"),
+            ("refs-trend", "showRefsTrendTip"),
+            ("he-trend", "showHookEnvTrendTip"),
+        ):
+            self.assertIn('id="%s"' % svg_id, _preview_html())
+            # Harita anahtarı JS'te tırnaksız da yazılabilir (trend: "…").
+            self.assertRegex(
+                js, r"""(?m)^\s*["']?%s["']?\s*:\s*["']%s["']""" % (
+                    re.escape(svg_id), tip_name),
+                "%s yüzeyi delege haritasında yok" % svg_id,
+            )
+        for tip_key in ('data-tip="trend"', 'data-tip="refs"',
+                        'data-tip="hookenv"'):
+            self.assertIn(tip_key, js, "%s taşıyıcısı yok" % tip_key)
+        # Delege çağrısı indeksi DOM'dan okur (statik değer gömmez).
+        self.assertIn("window[tipName](+r.dataset.i, ev)", js)
+        self.assertIn('addEventListener("mouseleave", hideTrendTip)', js)
 
 
 class ExternalScriptContractTests(unittest.TestCase):

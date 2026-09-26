@@ -276,9 +276,14 @@ class TestDistributionData(unittest.TestCase):
         self.assertEqual(reported & unreported, set(), "bir sutun hem dolu hem bos olamaz")
         self.assertEqual(len(reported) + len(unreported), tel["columns"])
         self.assertEqual(len(self.mod.GATE_TELEMETRY), tel["columns"])
-        self.assertEqual(
-            tel["min_per_run"], tel["max_per_run"], "kosu basina telemetre sabit olmali"
-        )
+        # Koşu başına dolu sütun sayısı SABİT DEĞİLDİR ve olmamalıdır:
+        # ölçüldü — sinyalle kesilen koşu 3 sütun (yalnız z3 ailesi),
+        # tamamlanan PASS koşusu 9 sütun raporluyor. Eski sürüm burada
+        # "sabit" diyordu ve o anki 7 BENZER koşuya aşırı uydurulmuştu;
+        # history.jsonl'e yeni bir koşu düşünce kapı patladı.
+        self.assertLessEqual(0, tel["min_per_run"])
+        self.assertLessEqual(tel["min_per_run"], tel["max_per_run"])
+        self.assertLessEqual(tel["max_per_run"], tel["columns"])
 
     def test_scenes_consume_the_new_blocks(self):
         """scenes.tsx yeni alanları kullanmalı — grafik sessizce düşmez.

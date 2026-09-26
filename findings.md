@@ -119,10 +119,11 @@ pre-commit chain adaptation (47→49 hooks). Key lessons below.
   Host/Origin-allowlisted POSTs + timing-safe token, no CORS (same-origin),
   tight CSP (default-src none, no unsafe-inline/eval in script-src), no
   hardcoded secrets in changed surfaces, mcp urlopen target server-controlled.
-- VERIFY-001 (fail-closed functional loss): CSP script-src lacks
-  'unsafe-inline' and nonces do NOT cover inline event-handler attributes →
-  SVG hover tooltips injected via innerHTML (preview.js ~652) blocked under
-  CSP; fix = addEventListener migration or script-hash + browser check.
+- VERIFY-001 (fail-closed functional loss) — **ÇÖZÜLDÜ 2026-09-26, kanıtlı**:
+  CSP script-src lacks 'unsafe-inline' ve nonce'ler inline event-handler
+  NİTELİKLERİNİ kapsamaz → SVG hover tooltip'ları (refs-trend) sessizce
+  ölüydü. Düzeltme kaynakta zaten vardı (`2fee44f`: `data-tip` + SVG-düzeyi
+  delege) ama **koruyan kapı yoktu**; durum/kanıt aşağıda.
 - LOW notes: escapeHTML omits quote chars (no attribute-context attacker
   data today); style-src 'unsafe-inline' deliberate.
 
@@ -616,3 +617,68 @@ pre-commit chain adaptation (47→49 hooks). Key lessons below.
 - **Görsel doğrulama**: `remotion still` tek kare ~9 sn; 9 kare render edilip
   base64 gömülü HTML olarak önizlemede incelendi. Tarayıcı önizlemesi yalnız
   HTML'yi servis eder — kardeş dosyalar (png) 404 olur, base64 gömmek gerekir.
+
+### VERIFY-001 çözümü ve kanıtı (2026-09-26)
+
+**Teşhis (varsayım değil, ölçüm):** bulgu `preview.js ~652` diyordu; gerçek
+yer başka. Handler'lar `_calisma/CIKTI/preview.js` içindeki **şablon
+stringlerinde** (`svg.innerHTML` ile basılan hit-alanları) duruyordu ve
+`design_preview.html` DIŞINDA hiçbir yerde değildi. Yani bulgu doğru
+sınıfı tarif ediyor, işaret ettiği satırı değil.
+
+**Zaten düzeltilmişmişti, kapısı yoktu:**
+- `2fee44f fix(a11y): CSP-compliant event delegation + keyboard nav suite`
+  üç yüzeyin de `onmousemove/onmouseleave` → `data-tip`+`data-i` + SVG-düzeyi
+  `addEventListener` delege geçişini yapmış.
+- Ölçülen boşluk: hiçbir test "inline handler geri gelmez" demiyordu.
+  Yarım düzeltme (sadece refs) de sessizce geçerdi.
+- `design_preview.html` (gitignore'da, üretilmiş) **2fee44f'ten ÖNCE**
+  üretilmişti: 14 inline handler içeriyordu. Kaynak düzeltilmiş olsa bile
+  inceleme/ demo yüzeyi bayat kopyayı gösteriyordu → yeniden üretildi.
+
+**Eklenen iki kapı (ikisi de fail-closed, ikisi de kendini kanıtladı):**
+1. `test_preview_server.py → InlineEventHandlerContractTests` (6 test, her
+   yerde çalışır, tarayıcı gerektirmez): preview.html + preview.js +
+   üretilmiş artifact'te `\son[a-z]+=` deseniyle inline handler yok; sunucunun
+   **gerçekten gönderdiği** CSP başlığında script-src'de `unsafe-inline` yok
+   (kaynak metin değil `ps.Handler._SECURITY_HEADERS` okunur — yorum
+   satırına takılıp yanlış yeşil vermesin diye); üç yüzey de delege
+   haritasında. Ayrıca **kapının kendisi** sentetik bir ihlalle sınanır
+   (köre regex sessizce kalırsa yakalansın).
+2. `test_preview_hover_tooltip.py` (8 test, Playwright, CI'da çalışır):
+   gerçek preview_server + gerçek Chromium. Sırası ölçüldü:
+   - önce kapı: yanıtta CSP var, script-src `'self' 'nonce-…'`, unsafe-inline
+     yok — yoksa "CSP altında çalışıyor" iddiası boş olurdu;
+   - refs-trend hit-alanları `data-tip`/`data-i` taşıyor, `onmousemove` null;
+   - **gerçek `page.hover()`** (CDP Input) → `#tip` `none`→`block`, içerik O
+     SÜTUNUN verisi (data-i 3 → refs 39/60);
+   - başka sütun → içerik DEĞİŞİR (delege indeksi çalışıyor);
+   - grafikten çıkınca gizlenir;
+   - konsolda **0** CSP ihlali / "Refused to execute inline event handler";
+   - trend + hook-env grafikleri de aynı sınıf → üçü de sınandı.
+
+**Kanıtın kendisi ters yönde de sınandı:** `preview.js` geçici olarak
+`2fee44f^`'a (düzeltme öncesi) çekildi → **7 hata, 0 skip**; düzeltmeli
+sürüm → 8/8 yeşil. İlk yazımda iki test "veri yok" sanıp **skip** ediyordu
+ve CSP-konsol testi 0 hit-alanı gezdiği için **boş** geçiyordu: kapının
+kendisi boştu. Hit-alanı sayısı artık testin içinde zorlanıyor.
+
+**Ölçülen araç tuzağı:** önizleme panelindeki `preview_click` bu webview'a
+**gerçek fare girdisi teslim etmiyor** — SVG'ye capture dinleyici asılsa
+bile 0 mousemove ulaştı (ölçüldü). Bu yüzden kanıt Playwright'ın kendi
+Chromium'uyla alındı; panel içindeki görsel deneme araç kaynaklı başarısız
+denemeydi, kodun değil.
+
+**Yol üstünde bulunan AYRI hata (düzeltildi):** `connectStream()` içinde
+`el` yalnız `flushStream()`'in yerel `const`'ıydı; aynı fonksiyondaki
+`replay-start` / `replay-end` / `end` dinleyicileri de `el.innerHTML` +
+`el.scrollTop` yazıyordu → her run özetinde **ReferenceError "el is not
+defined"** (kanıt koşusunda 18 kez ölçüldü) ve akış paneli güncellenmiyordu.
+Kapsam `connectStream()`'a taşındı; yazma davranışı değişmedi. Düzeltmeden
+sonra kanıt koşusu: CSP ihlali 0, konsol hatası 0, sayfa hatası 0.
+
+**Ölçülen ön koşul:** `check-prettier-format` `preview.js`'i HEAD'de de
+kırmızı gösteriyordu (tek bir satır, 313: `tp.textContent = …`). Yeni
+regresyondan değil; küçük olduğu için bu turda `--write` ile düzeltildi,
+böylece kapı yeşil. (`.md`/`.yml` dosyalarında prettier hâlâ elde
+değil — o hook kapsamı dışında.)
