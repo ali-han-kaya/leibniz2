@@ -61,6 +61,7 @@ HOOK_COVERAGE = {
     "verify-delivery-sde":       ["test_check_sde_determinism.py"],
     "texlive-repro-documented":  ["test_texlive_repro_documented.py"],
     "check-z3-slide-sync":       ["test_render_z3_slides.py", "test_z3_slide_reproducibility.py"],
+    "check-seal-hash":          ["test_check_seal_hash.py"],
     "check-pattern-consistency": ["test_gen_repro_manifest.py"],
     "check-config-sync":       ["test_check_config_sync.py"],
     "check-lake-evidence":     ["test_lake_evidence_smoke.py"],
