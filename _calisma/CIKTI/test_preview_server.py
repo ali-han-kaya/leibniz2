@@ -158,6 +158,113 @@ class CachedLatestTests(unittest.TestCase):
         self.assertEqual(ps.LATEST["verdict"], "PASS")
 
 
+class SnapshotFileTests(unittest.TestCase):
+    """CI artifact'ından aynı-origin snapshot-only preview_server modu."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self._old_latest = dict(ps.LATEST)
+
+    def tearDown(self):
+        ps.LATEST = self._old_latest
+        self._tmp.cleanup()
+
+    def _write_snapshot(self, rec, *, sidecar=True, corrupt_sidecar=False):
+        root = pathlib.Path(self._tmp.name)
+        path = root / "history.jsonl"
+        raw = (json.dumps(rec, ensure_ascii=False) + "\n").encode("utf-8")
+        path.write_bytes(raw)
+        if sidecar:
+            digest = hashlib.sha256(raw).hexdigest()
+            if corrupt_sidecar:
+                digest = "0" * 64
+            (root / "history.jsonl.sha256").write_text(
+                digest + "  history.jsonl\n", encoding="utf-8")
+        return str(path)
+
+    def test_valid_jsonl_last_record_populates_latest(self):
+        first = _rec("2026-09-25T10:00:00Z", exit_code=1,
+                     raw_sha256="a" * 64, stripped_sha256="b" * 64)
+        last = _rec("2026-09-25T11:00:00Z", exit_code=0,
+                    raw_sha256="c" * 64, stripped_sha256="d" * 64)
+        path = pathlib.Path(self._tmp.name) / "history.jsonl"
+        raw = (json.dumps(first) + "\n" + json.dumps(last) + "\n").encode()
+        path.write_bytes(raw)
+        (path.parent / "history.jsonl.sha256").write_text(
+            hashlib.sha256(raw).hexdigest() + "  history.jsonl\n",
+            encoding="utf-8")
+        loaded = ps.load_snapshot_file(str(path))
+        self.assertEqual(loaded["ts"], last["ts"])
+        self.assertEqual(ps.snapshot_dict()["raw_sha256"], "c" * 64)
+        self.assertFalse(ps.snapshot_dict()["cached"])
+
+    def test_json_object_is_supported(self):
+        path = self._write_snapshot(_rec(
+            "2026-09-25T12:00:00Z", exit_code=0,
+            raw_sha256="a" * 64, stripped_sha256="b" * 64))
+        self.assertEqual(ps.load_snapshot_file(path)["verdict"], "PASS")
+
+    def test_nested_hash_conflict_is_rejected(self):
+        rec = _rec("t", exit_code=0, raw_sha256="a" * 64,
+                   stripped_sha256="b" * 64,
+                   pdf_hash={"raw": "c" * 64, "stripped": "b" * 64})
+        path = self._write_snapshot(rec)
+        with self.assertRaisesRegex(ValueError, "çelişkili"):
+            ps.load_snapshot_file(path)
+
+    def test_missing_or_mismatched_sidecar_fails_closed(self):
+        rec = _rec("2026-09-25T12:00:00Z", exit_code=0,
+                   raw_sha256="a" * 64, stripped_sha256="b" * 64)
+        missing = self._write_snapshot(rec, sidecar=False)
+        with self.assertRaisesRegex(ValueError, "sidecar yok"):
+            ps.load_snapshot_file(missing)
+        # Aynı path'i yeniden yazıp digest'i bilerek boz.
+        root = pathlib.Path(self._tmp.name)
+        path = root / "history.jsonl"
+        (root / "history.jsonl.sha256").write_text(
+            "0" * 64 + "  history.jsonl\n", encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "uyuşmuyor"):
+            ps.load_snapshot_file(str(path))
+
+    def test_invalid_verdict_hash_or_cached_fails_closed(self):
+        cases = (
+            _rec("t", verdict="FAIL", exit_code=0,
+                 raw_sha256="a" * 64, stripped_sha256="b" * 64),
+            _rec("t", exit_code=1, raw_sha256="a" * 64,
+                 stripped_sha256="b" * 64),
+            _rec("t", exit_code=0, raw_sha256="bad",
+                 stripped_sha256="b" * 64),
+            _rec("t", exit_code=0, raw_sha256="a" * 64,
+                 stripped_sha256="b" * 64, cached=True),
+        )
+        for rec in cases:
+            with self.subTest(rec=rec):
+                path = self._write_snapshot(rec)
+                with self.assertRaises(ValueError):
+                    ps.load_snapshot_file(path)
+
+    def test_corrupt_jsonl_line_is_not_silently_skipped(self):
+        root = pathlib.Path(self._tmp.name)
+        path = root / "history.jsonl"
+        raw = b'{"ts":"t","verdict":"PASS","exit_code":0}\nnot-json\n'
+        path.write_bytes(raw)
+        (root / "history.jsonl.sha256").write_text(
+            hashlib.sha256(raw).hexdigest() + "  history.jsonl\n",
+            encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "JSONL satırı"):
+            ps.load_snapshot_file(str(path))
+
+    def test_cli_requires_explicit_snapshot_only_pair(self):
+        source = pathlib.Path(ps.__file__).read_text(encoding="utf-8")
+        self.assertIn('ap.add_argument("--snapshot-file"', source)
+        self.assertIn('ap.add_argument("--no-verify", action="store_true"',
+                      source)
+        self.assertIn('if args.snapshot_file and not args.no_verify:', source)
+        self.assertIn('if args.no_verify and not args.snapshot_file:', source)
+        self.assertIn("if not args.no_verify:\n        t = threading.Thread",
+                      source)
+
+
 class PersistHistoryTests(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
@@ -1430,6 +1537,44 @@ class TestRouteQueryParams(unittest.TestCase):
         self.assertEqual(ps._route("/design-system/tokens.css?v=123"), "design_tokens")
         self.assertIsNone(ps._route("/design-system/other.css"))
         self.assertIsNone(ps._route("/design-system/"))
+
+    def test_landing_routes_are_query_safe_and_asset_scoped(self):
+        self.assertEqual(ps._route("/landing.html"), "landing")
+        self.assertEqual(ps._route("/landing.html?theme=light"), "landing")
+        self.assertEqual(ps._route("/landing/assets/P1-a.png"), "landing_assets")
+        self.assertEqual(ps._route("/landing/assets/../secret"), "landing_assets")
+        self.assertIsNone(ps._route("/landing/other.png"))
+
+    def test_landing_handler_adapts_repo_relative_links_and_assets(self):
+        old_dir = getattr(ps, "PREVIEW_DIR", None)
+        with tempfile.TemporaryDirectory(prefix="landing-route-") as work:
+            root = pathlib.Path(work)
+            (root / "landing" / "assets").mkdir(parents=True)
+            (root / "landing.html").write_text(
+                '<a href="../CIKTI/preview.html">Pano</a>'
+                '<img src="assets/P1-a.png">', encoding="utf-8")
+            (root / "landing" / "assets" / "P1-a.png").write_bytes(b"png")
+            ps.PREVIEW_DIR = work
+            handler = object.__new__(ps.Handler)
+            sent = []
+            handler._send = lambda status, body, content_type="", extra_headers=None: sent.append(
+                (status, body, content_type))
+            try:
+                ps.Handler.serve_landing(handler)
+                self.assertEqual(sent[-1][0], 200)
+                self.assertIn('href="/preview.html"', sent[-1][1])
+                self.assertIn('src="/landing/assets/P1-a.png"', sent[-1][1])
+
+                handler.path = "/landing/assets/P1-a.png"
+                ps.Handler.serve_landing_assets(handler)
+                self.assertEqual(sent[-1][0], 200)
+                self.assertEqual(sent[-1][1], b"png")
+                self.assertEqual(sent[-1][2], "image/png")
+            finally:
+                if old_dir is None:
+                    del ps.PREVIEW_DIR
+                else:
+                    ps.PREVIEW_DIR = old_dir
 
     def test_run_now_rejects_untrusted_host(self):
         old_token = os.environ.get("PREVIEW_RUN_NOW_TOKEN")

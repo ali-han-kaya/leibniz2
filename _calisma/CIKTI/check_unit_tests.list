@@ -32,6 +32,7 @@ test_check_precommit_orphans.py
 test_check_python3_shell.py
 test_check_repro_manifest_hook.py
 test_check_sde_determinism.py
+test_check_seal_hash.py
 test_check_unit_tests_timing.py
 test_check_zip_lineage_drift.py
 test_ci_check_rate.py

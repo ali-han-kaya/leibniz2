@@ -17,6 +17,12 @@
 #                               kabuk kalıbı (&&, $VAR, echo, cd, set -e...) içeriyorsa
 #                               commit bloke edilir (CI'da geç NameError/SyntaxError
 #                               patlamasını commit öncesi yakalar; OFFLINE, stdlib-only).
+#   3b) check-seal-hash       : landing mühür halkasındaki hash'in committed
+#                               PDF'in gerçek baytlarıyla (ve donmuş
+#                               `# raw:` sidecar kaydıyla) eşleşmesini
+#                               doğrular — build sonrası PDF yeniden
+#                               paketlenip landing yeniden derlenmezse mühür
+#                               sessizce yalan söyler; bu kapı onu bloke eder.
 #   4) verify-delivery-symbolic: Z3 sembolik ispat (z3-solver, izole venv)
 #   5) verify-delivery-lean    : Lean 4 reduct-invariance (lean, system)
 #   6) check-plist-drift       : plist kapısının exit 0/1/2 davranışını koşan
@@ -107,6 +113,7 @@
 #   pre-commit run verify-delivery-symbolic
 #   pre-commit run verify-delivery-lean
 #   pre-commit run check-action-pins
+#   pre-commit run check-seal-hash
 #   pre-commit run check-repro-manifest
 #   pre-commit run verify-delivery-repro-manifest
 #   pre-commit run verify-delivery-github-scripts
@@ -193,6 +200,23 @@ repos:
           kalıbı içeriyorsa commit bloke edilir. `;`/`|` (bitwise) Python'da
           geçerli olduğundan bilerek denetlenmez (yanlış pozitif yok).
         entry: python3 _calisma/CIKTI/check_python3_shell.py
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
+      - id: check-seal-hash
+        name: "Check landing seal hash ↔ committed PDF (fail-closed)"
+        description: >-
+          _calisma/landing/landing.html içindeki verdict mühürünün
+          (`VERIFIED • <hex> •` halkası + `<hex>…` merkezi) taşıdığı hash'i
+          committed ingiliz_empirizmi_v3.pdf'in GERÇEK SHA-256'sıyla ve
+          donmuş `# raw:` sidecar kaydıyla üç yönlü karşılaştırır. Üçü
+          ayrışırsa, mühür eksik/placeholder ise veya kısaltılmış önek kanıt
+          için çok kısaysa commit fail-closed bloke edilir. OFFLINE,
+          stdlib-only, ~0.05s.
+        entry: python3 _calisma/CIKTI/check_seal_hash.py --root .
         language: system
         always_run: true
         pass_filenames: false

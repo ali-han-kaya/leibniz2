@@ -59,7 +59,6 @@ DEFAULT_STOP_ALLOWLIST = frozenset({"127.0.0.1", "::1"})
 # Import-time default: main() env ile genişletene kadar yalnız loopback.
 # (Unit-prob'lar main()'i koşmadan Handler'ı kurar — global burada var olmalı.)
 STOP_ALLOWLIST = DEFAULT_STOP_ALLOWLIST
-STOP_ALLOWLIST = DEFAULT_STOP_ALLOWLIST
 _STOP_HOSTS_ENV = "PREVIEW_STOP_ALLOWLIST"
 
 
@@ -503,6 +502,102 @@ def _lifecycle_event(event, detail=""):
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
     except OSError:
         pass
+
+
+def _read_snapshot_file(path):
+    """Snapshot JSON/JSONL dosyasını fail-closed oku ve son kaydı doğrula.
+
+    CI preview_server'ı `verify` job'ının aynı koşumdan ürettiği history
+    artifact'ıyla, yeni full verify çalıştırmadan besler. Sidecar yoksa veya
+    hash'ı uyuşmazsa dosya güvenilmez sayılır. Bozuk JSONL satırları yok sayılmaz;
+    böylece kısmi/eskimiş bir kayıt PASS gibi sunulamaz.
+    """
+    if not path or not os.path.isfile(path):
+        raise ValueError("snapshot dosyası yok: %s" % path)
+    real = os.path.realpath(path)
+    sidecar = real + ".sha256"
+    if not os.path.isfile(sidecar):
+        raise ValueError("snapshot SHA-256 sidecar yok: %s" % sidecar)
+    try:
+        with open(real, "rb") as f:
+            raw = f.read()
+        with open(sidecar, encoding="utf-8") as f:
+            sidecar_text = f.read().strip()
+    except OSError as exc:
+        raise ValueError("snapshot/sidecar okunamadı: %s" % exc) from exc
+    expected = sidecar_text.split(None, 1)[0].lower() if sidecar_text else ""
+    actual = hashlib.sha256(raw).hexdigest()
+    if not re.fullmatch(r"[0-9a-f]{64}", expected) or expected != actual:
+        raise ValueError("snapshot SHA-256 sidecar uyuşmuyor: %s" % sidecar)
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValueError("snapshot UTF-8 değil: %s" % real) from exc
+    try:
+        value = json.loads(text)
+    except json.JSONDecodeError as first_error:
+        records = []
+        for line_no, line in enumerate(text.splitlines(), 1):
+            if not line.strip():
+                continue
+            try:
+                records.append(json.loads(line))
+            except json.JSONDecodeError as exc:
+                raise ValueError(
+                    "snapshot JSONL satırı geçersiz (%d): %s" %
+                    (line_no, exc)) from exc
+        if not records:
+            raise ValueError("snapshot JSON/JSONL kaydı yok: %s" % real) \
+                from first_error
+        value = records[-1]
+    if not isinstance(value, dict):
+        raise ValueError("snapshot JSON object değil: %s" % real)
+    return value
+
+
+def _validate_snapshot_file_snapshot(value):
+    """CI snapshot sözleşmesini server başlamadan fail-closed doğrula."""
+    if not isinstance(value, dict):
+        raise ValueError("snapshot JSON object değil")
+    if value.get("verdict") != "PASS" or value.get("exit_code") != 0:
+        raise ValueError("snapshot tamamlanmış PASS/0 değil")
+    if not isinstance(value.get("ts"), str) or not value["ts"].strip():
+        raise ValueError("snapshot ts boş")
+    nested = value.get("pdf_hash")
+    nested = nested if isinstance(nested, dict) else {}
+    for field in ("raw_sha256", "stripped_sha256"):
+        name = field.removesuffix("_sha256")
+        values = [sha for sha in (value.get(field), nested.get(name))
+                  if sha is not None]
+        if not values or any(
+                not isinstance(sha, str) or
+                not re.fullmatch(r"[0-9a-fA-F]{64}", sha)
+                for sha in values):
+            raise ValueError("snapshot %s 64 hex değil" % field)
+        if len({sha.lower() for sha in values}) != 1:
+            raise ValueError("snapshot %s alanları çelişkili" % field)
+    for field in ("p0", "p1"):
+        if value.get(field) is not None and value[field] != 0:
+            raise ValueError("snapshot %s sıfır değil" % field)
+    if value.get("cached") is True:
+        raise ValueError("snapshot cached")
+    return value
+
+
+def load_snapshot_file(path):
+    """Doğrulanmış snapshot kaydını LATEST'e snapshot-only mod için yükle.
+
+    `cached` bilinçli olarak False'tır: kaynak, aynı CI koşumunun artifact'ıdır;
+    preview_server'ın eski disk cache'ini (`load_cached_latest`) yeniden kullanmaz.
+    """
+    value = _validate_snapshot_file_snapshot(_read_snapshot_file(path))
+    with LOCK:
+        for key, item in value.items():
+            if key in LATEST and key != "cached":
+                LATEST[key] = item
+        LATEST["cached"] = False
+        LATEST["status_board"] = _compute_status_board()
+    return dict(value)
 
 
 def load_cached_latest():
@@ -1373,6 +1468,10 @@ def _route(path):
         return "design_tokens"
     if p == "/guide.html":
         return "guide"
+    if p == "/landing.html":
+        return "landing"
+    if p.startswith("/landing/assets/"):
+        return "landing_assets"
     if p == "/api/latest":
         return "latest"
     if p == "/api/run":
@@ -1508,6 +1607,10 @@ class Handler(BaseHTTPRequestHandler):
             self.serve_preview()
         elif route == "guide":
             self.serve_guide()
+        elif route == "landing":
+            self.serve_landing()
+        elif route == "landing_assets":
+            self.serve_landing_assets()
         elif route == "preview_js":
             self.serve_preview_js()
         elif route == "vendor_axe":
@@ -2009,6 +2112,56 @@ class Handler(BaseHTTPRequestHandler):
             html = f.read()
         self._send(200, html, content_type="text/html; charset=utf-8")
 
+    def serve_landing(self):
+        """Serve the generated landing page from PREVIEW_DIR.
+
+        CI stages the generated ``landing.html`` and its PNG assets beside
+        the preview mirror.  The source file is authored for the repository
+        landing directory, so rewrite only the two served-root-relative
+        prefixes here; the on-disk artifact remains directly usable too.
+        Missing output is a fail-closed 404 rather than an empty page.
+        """
+        path = os.path.join(PREVIEW_DIR, "landing.html")
+        if not os.path.isfile(path):
+            self._send(404, "404 — landing.html mirror'da yok")
+            return
+        with open(path, encoding="utf-8") as f:
+            html = f.read()
+        html = html.replace('href="../CIKTI/preview.html"',
+                            'href="/preview.html"')
+        html = html.replace('src="assets/', 'src="/landing/assets/')
+        self._send(200, html, content_type="text/html; charset=utf-8")
+
+    def serve_landing_assets(self):
+        """Serve staged landing PNGs with the same path/symlink guards as slides."""
+        request_path = urllib.parse.urlparse(self.path).path
+        name = request_path[len("/landing/assets/"):]
+        if (not name or "/" in name or name.startswith(".") or
+                not name.lower().endswith(".png") or
+                not re.fullmatch(r"[A-Za-z0-9._-]+", name)):
+            self._send(404, "404 not found")
+            return
+        base = os.path.realpath(os.path.join(PREVIEW_DIR, "landing", "assets"))
+        full = os.path.join(PREVIEW_DIR, "landing", "assets", name)
+        try:
+            real = os.path.realpath(full)
+            if os.path.commonpath([real, base]) != base:
+                self._send(404, "404 not found")
+                return
+        except ValueError:
+            self._send(404, "404 not found")
+            return
+        if not os.path.isfile(full):
+            self._send(404, "404 not found")
+            return
+        try:
+            with open(full, "rb") as f:
+                data = f.read()
+        except OSError:
+            self._send(404, "404 not found")
+            return
+        self._send(200, data, content_type="image/png")
+
     def serve_latest(self):
         self._send(200, json.dumps(snapshot_dict(), ensure_ascii=False,
                                    separators=(",", ":")),
@@ -2100,7 +2253,16 @@ def main():
     ap.add_argument("--replay-runs", type=int, default=RUN_LOG_MAX,
                     help="/api/run-stream'de replay edilecek + disk'te "
                          "tutulacak son run sayısı")
+    ap.add_argument("--snapshot-file",
+                    help="tamamlanmış verify JSON/JSONL + .sha256; "
+                         "snapshot-only mod")
+    ap.add_argument("--no-verify", action="store_true",
+                    help="periyodik verify döngüsünü başlatma")
     args = ap.parse_args()
+    if args.snapshot_file and not args.no_verify:
+        ap.error("--snapshot-file için --no-verify zorunludur")
+    if args.no_verify and not args.snapshot_file:
+        ap.error("--no-verify için --snapshot-file zorunludur")
 
     PREVIEW_DIR = os.path.abspath(args.preview_dir)
     VERIFY_DIR = os.path.abspath(args.dir)
@@ -2145,9 +2307,17 @@ def main():
               f"sunucu yine de başlatılıyor ama /preview.html 404 döner",
               file=sys.stderr)
 
-    if not os.path.isfile(os.path.join(VERIFY_DIR, "verify_delivery.py")):
+    if not args.no_verify and not os.path.isfile(
+            os.path.join(VERIFY_DIR, "verify_delivery.py")):
         print(f"HATA: {VERIFY_DIR}/verify_delivery.py yok", file=sys.stderr)
         sys.exit(2)
+
+    if args.snapshot_file:
+        try:
+            load_snapshot_file(os.path.abspath(args.snapshot_file))
+        except ValueError as exc:
+            print("HATA: snapshot reddedildi: %s" % exc, file=sys.stderr)
+            sys.exit(2)
 
     # Sinyal yakalama — neden öldüğümüzü görelim
     import signal
@@ -2161,19 +2331,22 @@ def main():
 
     # Restart sonrası ilk verify bitene dek /api/latest UNKNOWN göstermesin:
     # önbelleklenmiş son run durumunu (runs/ veya history.jsonl) yükle.
-    with LOCK:
-        if load_cached_latest():
-            sys.stderr.write(
-                "[main] önbelleklenmiş son run yüklendi: "
-                f"verdict={LATEST['verdict']} ts={LATEST['ts']}\n")
-            _lifecycle_event(
-                "cache_loaded",
-                detail=f"verdict={LATEST['verdict']} ts={LATEST['ts']}")
-        else:
-            sys.stderr.write(
-                "[main] önbellek yok — /api/latest ilk verify bitene dek "
-                "UNKNOWN\n")
-        sys.stderr.flush()
+    # Snapshot-only modda aynı koşum artifact'ı doğrulandı; disk cache tekrar
+    # yüklenmez ve periyodik pahalı verify başlatılmaz.
+    if not args.no_verify:
+        with LOCK:
+            if load_cached_latest():
+                sys.stderr.write(
+                    "[main] önbelleklenmiş son run yüklendi: "
+                    f"verdict={LATEST['verdict']} ts={LATEST['ts']}\n")
+                _lifecycle_event(
+                    "cache_loaded",
+                    detail=f"verdict={LATEST['verdict']} ts={LATEST['ts']}")
+            else:
+                sys.stderr.write(
+                    "[main] önbellek yok — /api/latest ilk verify bitene dek "
+                    "UNKNOWN\n")
+            sys.stderr.flush()
 
     # Arka plan thread: periyodik verify çalıştırma
     global SERVER, STOP_EVENT, STOP_ALLOWLIST
@@ -2181,16 +2354,26 @@ def main():
     STOP_EVENT = stop_event
     STOP_ALLOWLIST = load_stop_allowlist(
         os.environ.get(_STOP_HOSTS_ENV))
-    t = threading.Thread(target=verify_loop,
-                         args=(VERIFY_DIR, args.interval, stop_event),
-                         daemon=True, name="verify-loop")
-    t.start()
+    t = None
+    if not args.no_verify:
+        t = threading.Thread(target=verify_loop,
+                             args=(VERIFY_DIR, args.interval, stop_event),
+                             daemon=True, name="verify-loop")
+        t.start()
+    else:
+        sys.stderr.write(
+            "[main] snapshot-only: verify loop kapalı, ts=%s\n" %
+            LATEST["ts"])
+        sys.stderr.flush()
 
     srv = ThreadingHTTPServer((args.bind, args.port), Handler)
     SERVER = srv
     _lifecycle_event("start", detail=f"bind={args.bind} port={args.port}")
     sys.stderr.write(f"[main] preview_server: serving {PREVIEW_DIR} on http://{args.bind}:{args.port}\n")
-    sys.stderr.write(f"[main] preview_server: verify loop interval={args.interval}s, dir={VERIFY_DIR}\n")
+    if args.no_verify:
+        sys.stderr.write("[main] preview_server: snapshot-only, verify loop kapalı\n")
+    else:
+        sys.stderr.write(f"[main] preview_server: verify loop interval={args.interval}s, dir={VERIFY_DIR}\n")
     sys.stderr.write(f"[main] PID={os.getpid()} PGID={os.getpgrp()}\n")
     sys.stderr.flush()
     try:
@@ -2199,7 +2382,8 @@ def main():
         pass
     finally:
         stop_event.set()
-        t.join(timeout=REQUEST_TIMEOUT_SECONDS)
+        if t is not None:
+            t.join(timeout=REQUEST_TIMEOUT_SECONDS)
         srv.shutdown()
         srv.server_close()
         # K15 yarışı kapanışı: run'ın son yazım fazı (persist_history) LOCK
