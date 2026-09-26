@@ -543,6 +543,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-26 | docs | (preview) history önbelleği ve CSP nonce sözleşmesini belgele | [`103fb7d`](https://github.com/ali-han-kaya/leibniz2/commit/103fb7d) |
 | 2026-09-26 | docs | (ci) dashboard-next job'unu PUBLISH tablosuna isle | [`d20a44c`](https://github.com/ali-han-kaya/leibniz2/commit/d20a44c) |
 | 2026-09-26 | docs | (design-system) GitHub token yuzeyi ve Vercel kullanim rehberi | [`7fe3a5b`](https://github.com/ali-han-kaya/leibniz2/commit/7fe3a5b) |
+| 2026-09-26 | docs | (design-system) Vercel token kullanimini CSS ornegine cevir | [`1e8ab4c`](https://github.com/ali-han-kaya/leibniz2/commit/1e8ab4c) |
 
 ### Regresyon notları
 
