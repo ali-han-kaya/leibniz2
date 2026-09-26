@@ -72,6 +72,12 @@ GATE_EXCLUDE = {
     "lake-proof",            # ayrı-step K9 lake build (lean-toolchain v4.14.0);
                              #   GitHub required kontrollerinde DEĞİL (advisory) —
                              #   K9, verify job'unun --full içinde de koşar.
+    "dashboard-next",        # required set 14'te sabit kalır — required'a almak
+                             #   branch-protection UI değişikliği gerektirirdi
+                             #   (docx-export ile aynı gerekçe). Job YİNE
+                             #   fail-closed: tip/derleme hatası workflow'u kırar.
+                             #   Kaldırmak = branch protection'a eklemek; o zaman
+                             #   test_status_checks'in 14-sabitleri de güncellenir.
 }
 # Not: "label-gate" (Pre-commit P0 label gate) BİLEREK required check'tir —
 # precommit-p0 etiketi varken FAIL verip merge'i bloke eder; bu yüzden

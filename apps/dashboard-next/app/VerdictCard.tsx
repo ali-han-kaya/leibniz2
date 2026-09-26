@@ -18,7 +18,11 @@ const verdictVariants = cva("mt-3 font-serif text-5xl font-semibold", {
 export default async function VerdictCard() {
   const latest = await getLatest();
   const verdict = (latest.verdict ?? "").toUpperCase();
-  const z3 = latest.z3;
+  // Sunucu düz alan yayınlıyor: z3_passed/z3_total (iç içe `z3` nesnesi yok).
+  const z3 =
+    latest.z3_total === undefined && latest.z3_passed === undefined
+      ? "—"
+      : `${latest.z3_passed ?? "—"}/${latest.z3_total ?? "—"}`;
 
   return (
     <section className="rounded-lg border border-border bg-surface p-6">
@@ -44,10 +48,7 @@ export default async function VerdictCard() {
       <dl className="mt-6 grid grid-cols-2 gap-4 font-mono text-sm sm:grid-cols-4">
         <Stat label="P0" value={latest.p0 ?? "—"} />
         <Stat label="P1" value={latest.p1 ?? "—"} />
-        <Stat
-          label="Z3"
-          value={z3 ? `${z3.pass ?? "—"}/${z3.total ?? "—"}` : "—"}
-        />
+        <Stat label="Z3" value={z3} />
         <Stat
           label="STRIPPED"
           value={latest.stripped_sha256?.slice(0, 12).toUpperCase() ?? "—"}

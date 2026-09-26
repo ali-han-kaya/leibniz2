@@ -15,6 +15,9 @@ export const metadata: Metadata = {
     "2307 test, K1–K19 doğrulama katmanı ve Lean/Z3 ispat kanallarının canlı özeti.",
 };
 
+// Kök layout yalnız kabuktur (başlık/nav/footer). Panellerin paralel rota
+// slotları `app/(panel)/layout.tsx`'te yaşar — oraya kapsanmaları `/trend`'in
+// onları görmemesini sağlar (gerekçe o dosyada).
 export default function RootLayout({
   children,
 }: {

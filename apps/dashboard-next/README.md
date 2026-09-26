@@ -36,6 +36,14 @@ PREVIEW_API=http://127.0.0.1:8000 npm start   # varsayılan: http://127.0.0.1:80
 | Root layout + metadata | `app/layout.tsx` | `%s \| leibniz2` template başlık |
 | Client bileşen yalnız sınırda | `app/error.tsx` | Tek `"use client"` dosyası: hata sınırı (zorunlu) |
 
+## Trend grafiği okuma yolu (tasarım)
+
+`docs/TREND_CHART_READ_PATH.md`: trend yüzeyini kalıcı `trend_runs` tablosundan
+besleyen okuma yolu — UTC kova (gün/saat), JS kovalama (tek şema kaynağı +
+drift-guard), preview modunda sessiz boş kutu yerine açık "grafik yok" notu.
+Tablo (koşu listesi) için DB yolu çalışıyor; grafik bileşeni ve agrega katmanı
+tasarımdadır.
+
 ## Doğrulama kanıtı (2026-09-18)
 
 - `npm run build` yeşil: `/` ve `/trend` ƒ Dynamic, `_not-found` ○ Static
