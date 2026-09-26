@@ -533,6 +533,13 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-26 | feat | (pptx) rebuild the decks as native shapes with real text | [`32d76c4`](https://github.com/ali-han-kaya/leibniz2/commit/32d76c4) |
 | 2026-09-26 | test | (cwv) add CLS budget gate and three-surface CWV report | [`8ec7702`](https://github.com/ali-han-kaya/leibniz2/commit/8ec7702) |
 | 2026-09-25 | test | (security) add Playwright CSP+nonce smoke for the live dashboard | [`e9ca14a`](https://github.com/ali-han-kaya/leibniz2/commit/e9ca14a) |
+| 2026-09-26 | chore | (coverage) CHECK_EXEMPT tek kaynak + yeni kapıların kapsam girdileri | [`5d1712e`](https://github.com/ali-han-kaya/leibniz2/commit/5d1712e) |
+| 2026-09-26 | feat | (gallery) makale denklem galerisi üreticisi | [`617a0c1`](https://github.com/ali-han-kaya/leibniz2/commit/617a0c1) |
+| 2026-09-26 | feat | (dashboard) Pinokio'suz kurulum ve launchd yaşam döngüsü | [`0896de0`](https://github.com/ali-han-kaya/leibniz2/commit/0896de0) |
+| 2026-09-26 | feat | (ci) artifact adları matrix child'larına göre fail-closed | [`eab8f1f`](https://github.com/ali-han-kaya/leibniz2/commit/eab8f1f) |
+| 2026-09-26 | feat | (ci) action major advisory katmanı | [`d90c5b9`](https://github.com/ali-han-kaya/leibniz2/commit/d90c5b9) |
+| 2026-09-26 | refactor | (lean) K9 lake build'i tek kaynaklı wrapper'a taşı | [`a088982`](https://github.com/ali-han-kaya/leibniz2/commit/a088982) |
+| 2026-09-26 | feat | (latex-surface) tracked .tex yüzeyi için fail-closed kapı | [`e9466bd`](https://github.com/ali-han-kaya/leibniz2/commit/e9466bd) |
 
 ### Regresyon notları
 

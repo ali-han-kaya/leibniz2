@@ -73,6 +73,19 @@ Ek başlıklar:
 | `405` (metot kapısı) | `Allow: POST` |
 | `401` (bearer) | `WWW-Authenticate: Bearer` |
 
+Nonce **süreç başına bir kez** üretilir (`secrets.token_urlsafe(16)` →
+`BUILD_TS_NONCE`): her restart'ta değer değişir, bu yüzden yanıtlar zaten
+`Cache-Control: no-store` ile birlikte düşünülmelidir — nonce bir kimlik
+token'ı değil, yalnız aynı sürecin enjekte ettiği `<script>`'i yetkilendiren
+bir etikettir.
+
+Nonce yalnız `<script>` etiketlerini yetkilendirir; CSP spec'i gereği **olay
+niteliklerini kapsamaz**. Bu yüzden yüzeyde inline `on*=` kullanılamaz:
+`preview.js` 21 `addEventListener` kaydıyla çalışır, `preview_server.py` ve
+`preview.html` sıfır inline nitelik taşır. Sıkılaştırılmış bir CSP altında
+inline bir `onclick` sessizce ölür (betik hiç çalışmaz, konsolda hata bile
+görünmez) — yeni etkileşim eklerken kural: `on*=` değil, olay delegasyonu.
+
 ### 2.2 Hata zarfı
 
 `api_error(status, message)` → `(status, {"error": message})`. JSON hata
@@ -167,6 +180,23 @@ z3_total, lean_ok, lean_detail, cli_override_count`.
 
 Kaynak: JSONL trend dosyası (`HISTORY_MAX` = 100 satır). Disk üzerindeki tam
 şema `HISTORY_KEYS`'tir (36 alan) ve bu alt kümeden geniştir.
+
+#### Önbellek — in-process, `mtime_ns` anahtarlı
+
+| Özellik | Değer |
+|---|---|
+| Anahtar | `(HISTORY_PATH, st_mtime_ns, st_size)`; dosya yoksa `None` |
+| Geçersizleşme | `persist_history` dosyayı `LOCK` altında `_write_atomic` ile yeniden üretir; `mtime_ns` değişimi önbelleği düşürür |
+| Kapsam | `/api/history` ve `/api/trend` aynı önbelleği paylaşır; süreç yeniden başlayınca kaybolur |
+| Dönen değer | Yeni **liste** (kopyadır); satır-dict'leri salt-okunur paylaşılır, çağıran mutasyon yapmamalı |
+| Dosya yoksa | `[]` — önbellek atlanır, anahtar `None` |
+| Gerekçe | Profil: `load_history` istek-işininin ~%45'i; istek başına ~100 `json.loads` atlanıyor (270 KB JSONL) |
+
+Doğruluk **tek yazıcı** varsayımına dayanır: `persist_history` dosyayı atomik
+olarak yeniden üreten tek yazıcıdır, bu yüzden "aynı `mtime_ns` + aynı boyut
+= aynı içerik" eşitliği güvenlidir. Dosyaya ikinci bir yazıcı eklenirse bu
+varsayım bozulur ve bayat satırlar okunabilir. Bozuk JSON satırları atlanır,
+dosya silinmez.
 
 ### `GET /api/refs-trend`
 
