@@ -109,6 +109,7 @@ test_pdf_source_freshness.py
 test_plist_check_workflow.py
 test_pptx_export.py
 test_precheck_advisory_contract.py
+test_preview_escaping.py
 test_preview_findings_panel.py
 test_preview_hover_tooltip.py
 test_preview_server.py

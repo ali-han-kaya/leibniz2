@@ -191,3 +191,33 @@
   güncellenmiyordu. Düzeltme sonrası kanıt: CSP ihlali 0, konsol 0, sayfa 0.
 - Ön koşul: `check-prettier-format` `preview.js`'i HEAD'de de kırmızıydı
   (tek satır); turda `--write` ile düzeltildi.
+
+---
+
+## escapeHTML nitelik bağlamı için güçlendirildi + havuz tabanlı tarama kapısı
+
+**Ne:** `escapeHTML` artık tırnakları da kaçırıyor (`& < > " '`, `&` ÖNCE),
+`preview.js`'teki üç nitelik yuvası (`lean_detail` → `title`, `source` →
+`class`, `ts` → `data-ts`) tek yola bağlandı. Yeni statik kapı **tüm
+template literal havuzlarını** tarıyor (çok satırlı şablonlar dahil) ve
+nitelik bağlamına kaçışsız veri girdiğini fail-closed reddediyor. Güvenli
+sayılan yardımcı listesi de tanım bazında sınanıyor (ölü giriş yok).
+
+**Ölçüm:** 135 havuz / 237 interpolasyon → nitelik bağlamında **0** kaçışsız
+veri; 137'nin tamamı ya kaçırılmış ya da aritmetik sayı üretiyor. Kalan 8
+veri türetli interpolasyon metin bağlamında.
+
+**Doğrulama:** 6 mutasyonun hepsi kırmızıya düşüyor (tırnak kaçırma, yuva
+kaçırma, tek satırlı ve çok satırlı enjeksiyon, `data-ts` elle kaçırma,
+HTML parçasına kaçırma). Statik 164 test + gerçek tarayıcı enjeksiyon
+testi 7/7 yeşil. Tam batarya **171 test dosyası PASS**, `check-video-typecheck`
+OK, `preview.js` prettier-uyumlu.
+
+**Yol üstünde bulunan ikinci açık:** ilk statik kapı satır tabanlıydı ve
+çok satırlı nitelik enjeksiyonunu **kaçırıyordu** — yani kapının kendisi
+körleşmişti. Havuz tabanlı tarama ile değiştirildi ve tarayıcısına öz
+bir test eklendi ("satır kıran ihlali de görmeli").
+
+**Not:** `preview.js` HEAD'de de prettier-kırmızıydı; bu turdaki hunk
+prettier ile düzeltildi, dosya artık temiz. `test_budget_scan.js` ve
+`github_scripts/*.js` de kırmızı ama **bu değişikliğe ait değil**, dokunulmadı.

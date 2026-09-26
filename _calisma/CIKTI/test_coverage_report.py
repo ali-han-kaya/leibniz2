@@ -261,6 +261,7 @@ HOOK_COVERAGE = {
         "test_check_video_render.py",
         "test_preview_video_player.py",
         "test_preview_hover_tooltip.py",
+        "test_preview_escaping.py",
     ],
 }
 

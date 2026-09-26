@@ -682,3 +682,63 @@ kırmızı gösteriyordu (tek bir satır, 313: `tp.textContent = …`). Yeni
 regresyondan değil; küçük olduğu için bu turda `--write` ile düzeltildi,
 böylece kapı yeşil. (`.md`/`.yml` dosyalarında prettier hâlâ elde
 değil — o hook kapsamı dışında.)
+
+---
+
+## escapeHTML nitelik bağlamı için güçlendirildi (HTML enjeksiyon yüzeyi)
+
+**Bulgu:** `escapeHTML` yalnız `& < >` kaçırıyordu — `title="…"`,
+`class="…"`, `data-ts="…"` gibi **nitelik değerleri** için yetersiz.
+Sunucudan gelen serbest dizgi (`run.source`, `lean_detail`, `ts`, hook adı,
+bulgu metni) tırnağı kapatıp **yeni nitelik** enjekte edebilirdi.
+
+**Ölçülen iki açık yuva** (tarama sonucu, 26 `escapeHTML` çağrısı içinde):
+`lean_detail` → `title="Lean FAIL${ld}"` ve `source` → `class="source-badge
+${srcBadge}"`; ayrıca `data-ts` elle kaçırılıyordu. Üçü de `escapeHTML`'e
+bağlandı. Fonksiyon artık beş karakteri de kaçırıyor (`& < > " '`), `&`
+ÖNCE — sıra tersine dönerse kendi kaçışımız bozulur.
+
+**Tarama (tüm havuzlar):** `preview.js`'te 135 template literal havuzu,
+237 interpolasyon tarandı. Nitelik bağlamındakiler: 137'nin tamamı ya
+`escapeHTML` ile kaçırılmış ya da **sayı** üreten yardımcı
+(`x`/`xAt`/`yP`/`yD`/`yB`/`yZ`/`yL`/`y`, `fmtLimit`…). Kalan 8 veri
+türetli interpolasyon **metin** bağlamında. **Nitelik bağlamında kaçışsız
+veri interpolasyonu: 0.**
+
+**Sayı yardımcılarının güvenliği isim listesine değil tanıma dayandırıldı:**
+`x = PL + (n === 1 ? iw/2 : (iw*i)/(n-1))`, `y = PT + ih - (ih*v)/maxN`
+gibi tamamen aritmetik. Düşman girdi (`" onmouseover="alert(1)`) verildiğinde
+sonuç `NaN` olur — tırnak işareti hiçbir yolla sonuca taşınamaz.
+`fmtLimit/fmtTs/fmtDuration` ise `isFinite()` elemesiyle dizgiyi ya sabit
+("—") döndürür ya da sayıya indirir.
+
+**Bulunan ikinci açık: tarayıcının kendisi körleşmişti.** İlk statik kapı
+**satır tabanlıydı**; `title="x ${…}` açılışı ile kapanış tırnağı ayrı
+satırlarda olduğunda hiçbir satırda `="…"` kalıbı oluşmuyor ve ihlal
+**görünmüyordu** (ölçüldü: satır taraması 0 buldu, havuz taraması 1 buldu).
+Kapı **havuz tabanlı** tarama ile değiştirildi; çok satırlı şablonlar da
+kapsanıyor. Ayrıca ölü bir yardımcı adı (`colorFor` — dosyada hiç yok)
+güvenli listesinde kalmıştı; silindi ve listenin ölü giriş taşımadığı
+ayrıca sınanıyor.
+
+**Düzeltilen test kusuru:** `assertIn` hata mesajına `preview.js`'in tamamını
+döküyordu (3000 satır gürültü). Varoluş denetimine çevrildi, mesaj sabit.
+
+**Kapının boş olmadığı kanıtlandı** — 6 mutasyon, hepsi yakalandı:
+
+| # | mutasyon | sonuç |
+|---|---|---|
+| M1 | `escapeHTML` tırnak kaçırmaz | FAIL |
+| M2 | `srcBadge` yuvası kaçışsız | FAIL |
+| M3 | **çok satırlı** nitelik enjeksiyonu | FAIL |
+| M4 | tek satırlı nitelik enjeksiyonu | FAIL |
+| M5 | `data-ts` elle kaçırılıyor | FAIL |
+| M6 | `escapeHTML` HTML parçasına uygulanıyor | FAIL |
+| — | temiz sürüm | 6/6 OK |
+
+**Tarayıcı kanıtı** (`test_preview_escaping.py`, 7 test): kötü veri gerçek
+`/api/run-history` render yolundan geçirilip gerçek DOM ayrıştırıcısına
+veriliyor — `class`/`title` üzerinden nitelik enjeksiyonu yok, metin
+bağlamında etiket açılmıyor, `data-ts` birebir geri dönüyor, kaçırma
+metni **bozmuyor** (kullanıcı aynı metni görüyor). Düzeltme öncesi sürümde
+bu testler 3 hata veriyor.

@@ -2045,6 +2045,175 @@ class InlineEventHandlerContractTests(unittest.TestCase):
         self.assertIn('addEventListener("mouseleave", hideTrendTip)', js)
 
 
+class EscapeHtmlContractTests(unittest.TestCase):
+    """Kaçırma NİTELİK bağlamını da kapatmalı — statik sözleşme.
+
+    `escapeHTML` metin bağlamı için `& < >` ile yeterlidir; ama aynı
+    fonksiyon `title="…"`, `class="…"`, `data-ts="…"` içinde de kullanılıyor.
+    Orada tırnak kaçırmadan veri niteliği kapatıp yeni nitelik enjekte
+    edebilir (ölçülen açık: `lean_detail` ve `run.source`). Tarayıcı
+    kanıtı `test_preview_escaping.py`'de; bu sınıtar tarayıcısız ortamda
+    da kırılmayı yakalar.
+    """
+
+    # Veri türetli, serbest biçimli alanlar: sunucudan gelen dizgiler.
+    DATA_FIELD = re.compile(r"\b(?:r|d|h|f|v|b|k|item|rec|row|it|o)\.[a-z_]+")
+    # Zararsız: ölçek/eksen fonksiyonları ve sayıya bağlı biçimlendirme.
+    # Yalnız SAYI üretenler. Hepsi aritmetik:
+    #   x = PL + (n === 1 ? iw/2 : (iw*i)/(n-1))            (x, xAt)
+    #   yP = PT + ih - (ih * (v||0)) / maxP                  (yP, yD, yB, yZ, yL, y)
+    #   fmtLimit/fmtTs/fmtDuration/fmtBytes/fmtVal: girdi dizgiyse
+    #   ya sabit ("—") döner ya da isFinite() elemesiyle sayıya iner.
+    # Zararsız girdi ALANI: kabul edilen veri nitelik değerine girmez,
+    # tırnak işareti hiçbir yolla sonuca taşınamaz.
+    SCALE_HELPERS = ("x", "xAt", "yP", "yD", "yB", "yZ", "yL", "y",
+                     "fmtLimit", "fmtTs", "fmtDuration", "fmtBytes", "fmtVal")
+    SAFE_EXPR = re.compile(
+        r"^(?:" + "|".join(SCALE_HELPERS) + r")\(|\.toFixed\(|\.join\(")
+    TEMPLATE_SLOT = re.compile(r"\$\{([^{}]*)\}")
+
+    @classmethod
+    def _template_pools(cls, js):
+        """TÜM template literal havuzları (kaçışlı backtick yok sayar)."""
+        pools, i = [], 0
+        while i < len(js):
+            if js[i] == "`":
+                j = i + 1
+                while j < len(js):
+                    if js[j] == "\\":
+                        j += 2
+                        continue
+                    if js[j] == "`":
+                        break
+                    j += 1
+                pools.append((i, js[i:j + 1]))
+                i = j + 1
+            else:
+                i += 1
+        return pools
+
+    @classmethod
+    def _attr_sinks(cls, js):
+        """(satır, ifade) — NİTELİK değeri içindeki kaçışsız veri yuvaları.
+
+        SATIR tabanlı tarama yetmez: `title="x ${…}` açılışı ile kapanış
+        tırnağı ayrı satırlarda olduğunda hiçbir satırda `="…"` kalıbı
+        oluşmaz ve ihlal görünmez. Bu yüzden havuz metni kendi içinde
+        taranır (çok satırlı şablonlar dahil).
+        """
+        offenders = []
+        for start, body in cls._template_pools(js):
+            for m in re.finditer(r"\$\{", body):
+                depth, k = 1, m.end()
+                while k < len(body) and depth:
+                    if body[k] == "\\":
+                        k += 2
+                        continue
+                    if body.startswith("${", k):
+                        depth += 1
+                        k += 2
+                        continue
+                    if body[k] == "}":
+                        depth -= 1
+                    k += 1
+                expr = body[m.end():k - 1].strip()
+                # Nitelik değeri içinde miyiz? `="…` açılışından sonra, kapanış
+                # tırnağı görmeden → evet.
+                if not re.search(r'=\s*"[^"]*$', body[:m.end()]):
+                    continue
+                if not expr or "escapeHTML(" in expr:
+                    continue
+                if not cls.DATA_FIELD.search(expr) or cls.SAFE_EXPR.search(expr):
+                    continue
+                offenders.append(
+                    "%d: ${%s}" % (js.count("\n", 0, start) + 1, expr))
+        return offenders
+
+    def test_escape_html_covers_ampersand_angle_brackets_and_quotes(self):
+        js = _preview_js()
+        body = re.search(
+            r"function escapeHTML\(s\)\s*\{(.*?)\n\}", js, re.S).group(1)
+        for needle, why in (
+            ("&amp;", "&"), ("&lt;", "<"), ("&gt;", ">"),
+            ("&quot;", '"'), ("&#39;", "'"),
+        ):
+            self.assertIn(needle, body,
+                          "escapeHTML %s karakterini kaçırmıyor — %s"
+                          % (why, "nitelik bağlamı kırılır"))
+        # & ÖNCE kaçırılmalı: sıra tersine dönerse kendi kaçışımız bozulur.
+        self.assertLess(body.index("&amp;"), body.index("&lt;"))
+
+    def test_no_unescaped_data_reaches_attribute_context(self):
+        """Nitelik değeri içine kaçışsız veri interpolasyonu olmasın.
+
+        TÜM template literal havuzları taranır (çok satırlı şablonlar dahil):
+        `="…${expr}…"` kalıbında `expr` veri türetliyse (r.ts, h.name,
+        f.message …) ve escapeHTML/ölçek/sayı biçimi değilse → fail-closed.
+        """
+        offenders = self._attr_sinks(_preview_js())
+        self.assertEqual(
+            offenders, [],
+            "NİTELİK bağlamında kaçışsız veri interpolasyonu — tırnak kaçır:\n  "
+            + "\n  ".join(offenders))
+
+    def test_attr_sink_scanner_sees_across_line_breaks(self):
+        """Tarayıcının KENDİSİ: tarayıcı satır kıran bir ihlali kaçırmamalı.
+
+        Satır tabanlı tarama bu vakada 0 bulur (kapanış tırnağı ayrı
+        satırda, hiçbir satırda `="…"` kalıbı oluşmaz). Havuz tabanlı
+        tarama bulmalı — yoksa kapı sessizce körleşir.
+        """
+        evil = 'const EVIL = `<span title="x ${r.source}\n"></span>`;'
+        self.assertEqual(
+            self._attr_sinks(evil), ["1: ${r.source}"],
+            "havuz taramasi satir kirilmis niteligi gormuyor — "
+            "guard korrelmis/korelasyonmis olamaz")
+
+    def test_scale_helper_allowlist_has_no_dead_entries(self):
+        """Güvenli sayılan yardımcılar gerçekten tanımlı olmalı.
+
+        Ölü bir ad (silinmiş fonksiyon) listede kalırsa, ileride aynı adla
+        yazılan KAÇIŞSIZ bir interpolasyonı yanlışlıkla güvenli sayar.
+        """
+        js = _preview_js()
+        dead = [n for n in self.SCALE_HELPERS
+                if not re.search(r"\b%s\s*(?:=|\()" % re.escape(n), js)]
+        self.assertEqual(dead, [], "ölü yardımcı adı: " + ", ".join(dead))
+
+    SINKS = (
+        ('const ld = r.lean_detail ? " \u2014 " + escapeHTML(r.lean_detail)',
+         'title="Lean FAIL${ld}" ka\u00e7\u0131\u015fs\u0131z \u2014 lean_detail t\u0131rnak i\u00e7erebilir'),
+        ('const srcBadge = escapeHTML(r.source || "daemon")',
+         'class="source-badge ${srcBadge}" ka\u00e7\u0131\u015fs\u0131z'),
+        ('const tsAttr = r.ts ? escapeHTML(r.ts) : ""',
+         "data-ts elle ka\u00e7\u0131r\u0131l\u0131yor \u2014 tek yol escapeHTML olmal\u0131"),
+    )
+
+    def test_known_attribute_sinks_are_escaped(self):
+        """Ölçülen üç açık yuva hep kaçırılmalı (satır kaymasına dayanıklı).
+
+        assertIn tüm dosyayı hata mesajına döktüğü için varlık denetimi
+        yapılıp mesaj sabit tutulur — 3000 satır gürültü olmasın.
+        """
+        js = _preview_js()
+        missing = [why for needle, why in self.SINKS if needle not in js]
+        self.assertEqual(
+            missing, [], "kaçırılmamış nitelik yuvası:\n  " + "\n  ".join(missing))
+
+    def test_escaping_never_runs_on_markup_fragments(self):
+        """Kaçırma HTML PARÇASI üzerinde kullanılmamalı (etiketleri öldürürdü).
+
+        Kaçırılması gerekenler metin/nitelik değerleridir; `<b>` gibi
+        parçalar önceden kurulmuş HTML'dir ve kaçırılırsa görünmez olur.
+        """
+        for lineno, line in enumerate(_preview_js().split("\n"), 1):
+            for e in self.TEMPLATE_SLOT.finditer(line):
+                expr = e.group(1).strip()
+                if expr.startswith("escapeHTML(") and re.search(r"<[a-z/]", expr):
+                    self.fail("satır %d: escapeHTML bir HTML parçasına uygulanmış "
+                              "— %s" % (lineno, expr))
+
+
 class ExternalScriptContractTests(unittest.TestCase):
     """Candidate 3: dashboard JS preview.html'dan ayrılıp preview.js'e taşındı.
 

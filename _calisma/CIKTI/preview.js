@@ -177,8 +177,19 @@ function colorizeStdout(text) {
   return text.split("\n").map(colorizeLine).join("\n");
 }
 
+// Kaçış, METİN bağlamı için yeterli DEĞİLDİ: aynı fonksiyon artık
+// NİTELİK bağlamında da kullanılıyor (title="…", class="…", data-ts="…").
+// Tırnak kaçırılmadan veri alanları (`lean_detail`, `source`, `ts`, hook adı,
+// bulgu metni) niteliği kapatıp yeni nitelik enjekte edebilirdi.
+// Sıra önemli: & ÖNCE kaçırılır, yoksa kendi kaçışımız bozulur.
+// `&#39;` tercih edildi (`&apos;` HTML5'te güvenli değil).
 function escapeHTML(s) {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 // ---- P0/P1 trend (son 100 run) ----
@@ -1038,10 +1049,7 @@ function renderConfigSync(s) {
     } else if (s.has_drift) {
       body.innerHTML =
         (s.details || [])
-          .map(
-            (d) =>
-              `<div style="color:var(--err)">✗ ${d.replace(/</g, "&lt;")}</div>`
-          )
+          .map((d) => `<div style="color:var(--err)">✗ ${escapeHTML(d)}</div>`)
           .join("") ||
         `<div style="color:var(--err)">✗ Schema Sync: ${s.verified || 0}/${s.total || 0} (${s.error_count || 0} drift)</div>`;
     } else {
@@ -1551,7 +1559,7 @@ function renderOverrideTrend(rows) {
         : OVERRIDE_COLOR_RULES.clean.color;
       parts.push(
         `<circle cx="${x.toFixed(1)}" cy="${H / 2}" r="5" fill="${color}">` +
-          `<title>${r.ts || ""} ${r.warning ? "override VAR" : "override YOK"}</title></circle>`
+          `<title>${escapeHTML(r.ts || "")} ${r.warning ? "override VAR" : "override YOK"}</title></circle>`
       );
     });
     svg.innerHTML = parts.join("");
@@ -1602,7 +1610,7 @@ function renderDeterminismTrend(rows) {
         const tec = String(r.tectonic_canonical_sha256 || "").slice(0, 8);
         parts.push(
           `<circle cx="${xAt(i, n).toFixed(1)}" cy="${H / 2}" r="5" fill="${color}">` +
-            `<title>${r.date} · ${r.platform} · texlive ${tex} · tectonic ${tec} · gate ${r.gate || "?"}</title></circle>`
+            `<title>${escapeHTML(r.date)} · ${escapeHTML(r.platform)} · texlive ${tex} · tectonic ${tec} · gate ${escapeHTML(r.gate || "?")}</title></circle>`
         );
       });
       for (let i = 1; i < n; i++) {
@@ -2460,7 +2468,7 @@ function applySnapshotInner(d) {
       .map((h) => {
         const icon = h.status === "Passed" ? "✅" : "❌";
         const color = h.status === "Passed" ? "var(--ok)" : "var(--err)";
-        return `<span style="margin-right:10px;color:${color}">${icon} <span style="color:var(--fg)">${h.name}</span></span>`;
+        return `<span style="margin-right:10px;color:${color}">${icon} <span style="color:var(--fg)">${escapeHTML(h.name)}</span></span>`;
       })
       .join("");
   } else if (hooksEl) {
@@ -2473,7 +2481,7 @@ function applySnapshotInner(d) {
   if (k15El) {
     if (d.history_sidecar_sha256) {
       const h = d.history_sidecar_sha256;
-      k15El.innerHTML = `<span style="color:var(--ok)">🔒</span> K15 sidecar: <code style="font-size:10px;color:var(--muted)">${h.substring(0, 16)}…</code>`;
+      k15El.innerHTML = `<span style="color:var(--ok)">🔒</span> K15 sidecar: <code style="font-size:10px;color:var(--muted)">${escapeHTML(h.substring(0, 16))}…</code>`;
     } else {
       k15El.innerHTML =
         "<span style='color:var(--muted)'>⏳ K15 sidecar bekleniyor…</span>";
@@ -2497,7 +2505,7 @@ function applySnapshotInner(d) {
         html += p0s
           .map(
             (f) =>
-              `<div style=\"color:var(--err);margin:2px 0\">🔴 <b>P0</b> <span style=\"color:#999\">${f.id || f.label || ""}</span> ${f.message || ""}</div>`
+              `<div style=\"color:var(--err);margin:2px 0\">🔴 <b>P0</b> <span style=\"color:#999\">${escapeHTML(f.id || f.label || "")}</span> ${escapeHTML(f.message || "")}</div>`
           )
           .join("");
       }
@@ -2505,7 +2513,7 @@ function applySnapshotInner(d) {
         html += p1s
           .map(
             (f) =>
-              `<div style=\"color:var(--warn);margin:2px 0\">🟡 <b>P1</b> <span style=\"color:#999\">${f.id || f.label || ""}</span> ${f.message || ""}</div>`
+              `<div style=\"color:var(--warn);margin:2px 0\">🟡 <b>P1</b> <span style=\"color:#999\">${escapeHTML(f.id || f.label || "")}</span> ${escapeHTML(f.message || "")}</div>`
           )
           .join("");
       }
@@ -2735,8 +2743,8 @@ function applySnapshotInner(d) {
         const li = document.createElement("li");
         const tag = r.tag === "OK" ? "ok" : r.tag === "FAIL" ? "err" : "warn";
         li.innerHTML =
-          `<span class="badge ${tag}" style="min-width:42px;text-align:center">${r.tag}</span>` +
-          `<span style="min-width:60px;color:var(--muted)">${r.src}</span>` +
+          `<span class="badge ${tag}" style="min-width:42px;text-align:center">${escapeHTML(r.tag)}</span>` +
+          `<span style="min-width:60px;color:var(--muted)">${escapeHTML(r.src)}</span>` +
           `<span style="flex:1">${escapeHTML(r.name)}</span>`;
         list.appendChild(li);
       }
@@ -2843,7 +2851,9 @@ function loadRunHistory(fromSSE = false) {
           if (r.lean_ok === true) {
             lean = `<span style="color:var(--ok)" title="Lean PASS">●</span>`;
           } else if (r.lean_ok === false) {
-            const ld = r.lean_detail ? " — " + r.lean_detail : "";
+            // lean_detail NİTELİK (title="…") içinde: tırnak kaçırmadan
+            // kapatıp yeni nitelik enjekte edebilirdi.
+            const ld = r.lean_detail ? " — " + escapeHTML(r.lean_detail) : "";
             lean = `<span style="color:var(--err)" title="Lean FAIL${ld}">●</span>`;
           } else {
             lean = `<span class="muted" title="Lean: koşulmadı">·</span>`;
@@ -2860,15 +2870,21 @@ function loadRunHistory(fromSSE = false) {
             : "";
           // Kaynak rozeti: run'un geldiği yol (smoke/daemon/verify). source
           // alanı olmayan eski kayıtlar daemon varsayılır (server persist).
-          const srcBadge = r.source || "daemon";
+          // source NİTELİK (class="source-badge …") ve metin konumunda;
+          // sunucudan gelen serbest bir dizgi → kaçırılır.
+          const srcBadge = escapeHTML(r.source || "daemon");
           const srcEl = `<span class="source-badge ${srcBadge}">${srcBadge}</span>`;
           const text =
             `<span class=\"muted\">${t}</span> <span class=\"${cls}\">${sv}</span> ` +
             `<span class=\"muted\">P0=${r.p0 || 0} P1=${r.p1 || 0} refs=${refs} ${pg}p ${bud} ${dur}</span>` +
             ` ${lean}${overBadge}${srcEl}`;
-          const tsAttr = r.ts
-            ? r.ts.replace(/'/g, "\'").replace(/"/g, "&quot;")
-            : "";
+          // data-ts NİTELİK bağlamı → tırnak kaçırmak zorunlu.
+          // Ölçüm notu: eski `.replace(/'/g, "\'")` yazımı bir HATA DEĞİLDI —
+          // JS'te "\'" iç çift tırnaklı dizgide simply `'`'dir, yani o
+          // replace hiçbir şeyi değiştirmiyordu (çift tırnaklı nitelikte
+          // tek tırnak zaten zararsızdır). Gerçek koruma `"`→`&quot;` idi.
+          // Şimdi tek yol escapeHTML: tırnaklar + < > & birlikte.
+          const tsAttr = r.ts ? escapeHTML(r.ts) : "";
           return (
             `<div class="rh-row" role="button" tabindex="0" data-ts="${tsAttr}" data-act="load-stdout" ` +
             `title="Tıklayınca bu run'un stdout'u yüklenir">${text}</div>`
