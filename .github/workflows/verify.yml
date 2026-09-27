@@ -704,7 +704,12 @@ jobs:
         shell: bash
         run: |
           if [ -f logs/PRECOMMIT_RAPORU.json ]; then
-            python3 -c 'import json, jsonschema, sys; schema=json.load(open("logs/PRECOMMIT_RAPORU.schema.json")); data=json.load(open("logs/PRECOMMIT_RAPORU.json")); jsonschema.validate(data, schema); print("PRECOMMIT_RAPORU.json schema: PASS")' 2>&1 | tee -a logs/precommit_schema_check.txt || echo "PRECOMMIT_RAPORU.json schema: FAIL" >> logs/precommit_schema_check.txt
+            # Şema TAKİP EDİLEN yoldan okunur (_calisma/CIKTI/…); eskiden
+            # logs/PRECOMMIT_RAPORU.schema.json okunuyordu ama onu hiçbir
+            # üretici yazmıyordu → her run'da FileNotFoundError, "schema: FAIL"
+            # satırı ve sessiz yutma (2026-09-12 bulgusu;
+            # test_advisory_coe_surfacing.TestLogsSidecarSurfacing pinler).
+            python3 -c 'import json, jsonschema, sys; schema=json.load(open("_calisma/CIKTI/PRECOMMIT_RAPORU.schema.json")); data=json.load(open("logs/PRECOMMIT_RAPORU.json")); jsonschema.validate(data, schema); print("PRECOMMIT_RAPORU.json schema: PASS")' 2>&1 | tee -a logs/precommit_schema_check.txt || echo "PRECOMMIT_RAPORU.json schema: FAIL" >> logs/precommit_schema_check.txt
           else
             echo 'PRECOMMIT_RAPORU.json yok — atlandı'
           fi
