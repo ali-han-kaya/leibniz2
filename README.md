@@ -572,6 +572,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-27 | fix | (status-checks) GATE_EXCLUDE kararini gercekten tek kaynaga tasi | [`05019e1`](https://github.com/ali-han-kaya/leibniz2/commit/05019e1) |
 | 2026-09-27 | fix | (audit) canli CI denetimini run'in head branch'ine scope'la | [`62968eb`](https://github.com/ali-han-kaya/leibniz2/commit/62968eb) |
 | 2026-09-27 | test | (gates) atomik yazma ve sidecar garantisi kapilarini genislet | [`6be9d12`](https://github.com/ali-han-kaya/leibniz2/commit/6be9d12) |
+| 2026-09-27 | test | (verify) yeni job ekleme kontrol listesini kapiya cevir | [`d1ddff4`](https://github.com/ali-han-kaya/leibniz2/commit/d1ddff4) |
 
 ### Regresyon notları
 

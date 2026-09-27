@@ -193,7 +193,16 @@ Two failure modes keep the chain honest only if you audit for them:
   the fail-closed `check-unit-tests` hook goes red and every commit needs
   `--no-verify` until someone decides whether the new job is required or
   belongs in `GATE_EXCLUDE`. Treat that decision as a policy change, not a
-  test edit, and update the pins together with the exclusion set.
+  test edit. The exclusion set and each member's rationale live in ONE
+  place — `_calisma/CIKTI/workflow_contract.py` (`GATE_EXCLUDE`), next to
+  the other verify.yml contract sets; `status_checks.py` imports it rather
+  than copying it, and `test_workflow_contract` fails if a consumer drifts
+  or holds a copy. Update the pins together with that set.
+
+Adding a job touches several surfaces (workflow, contract sets, doc tables,
+artifact/manifest registries, pins). The step-by-step list — filename, the
+gate that fails if you forget it, and the observed failure text — is
+`docs/VERIFY_JOB_CHECKLIST.md`.
 
 ## Checklist
 
