@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import "./globals.css";
 import { Geist } from "next/font/google";
+import { brandMark, footerNote } from "@/components/panel-style";
 import { cn } from "@/lib/utils";
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
@@ -32,9 +33,7 @@ export default function RootLayout({
       <body className="min-h-screen bg-bg text-fg antialiased">
         <header className="border-b border-border px-8 py-4">
           <div className="mx-auto flex max-w-4xl items-baseline gap-6">
-            <span className="font-mono text-[13px] font-semibold tracking-[0.14em]">
-              STOIC-HUME V5
-            </span>
+            <span className={brandMark()}>STOIC-HUME V5</span>
             <nav className="ml-auto flex gap-6 font-mono text-xs tracking-[0.12em] text-muted">
               <Link className="transition-colors hover:text-fg" href="/">
                 ÖZET
@@ -46,7 +45,12 @@ export default function RootLayout({
           </div>
         </header>
         <main className="mx-auto max-w-4xl px-8 py-8">{children}</main>
-        <footer className="border-t border-border px-8 py-6 text-center font-mono text-[11px] tracking-[0.12em] text-muted">
+        <footer
+          className={cn(
+            "border-t border-border px-8 py-6 text-center",
+            footerNote()
+          )}
+        >
           HER KOŞUM, KENDİ DETERMİNİSTİK HASH&apos;İYLE İMZALANIR
         </footer>
       </body>

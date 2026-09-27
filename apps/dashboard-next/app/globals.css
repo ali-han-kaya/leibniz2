@@ -10,7 +10,6 @@
  * --border/--surface + tüm @theme eşlemeleri) artık KOPYA değil: köprüden
  * gelir ve check-design-tokens kapısı globals.css'in bu sözleşmeyi
  * bozmasını (inline yeniden-tanımlama / import-silme) bloke eder.
- * Aşağıdaki oklch blokları shadcn/UI namespace'idir — ayrı tutulur.
  */
 @import "tailwindcss";
 @import "../../../design-system/tailwind.css";
@@ -19,36 +18,62 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * shadcn/UI namespace'i — tamamı repo-token'larına bağlı (tek-kaynak:
+ * design-system/tokens.json). Bu blokta SABİT RENK YOKTUR: buradaki her
+ * yuva `var(--repo-token)` ile çözülür, dolayısıyla
+ *   - pano paleti (koyu `:root`) ve açık tema (`:root[data-theme="light"]`)
+ *     aynı anda doğru döner; shadcn'ın ayrı bir koyu paleti (`.dark`
+ *     bloğu + 40 oklch) panonun paletiyle çelişiyordu, hiç uygulanmadığı
+ *     için de ölü koddu → kaldırıldı (kompozisyon turu, shadcn-slot ->
+ *     repo-token),
+ *   - Card/Badge/Table gibi primitive'ler renk kararını bileşende değil,
+ *     yuvada taşır: `bg-card`, `text-card-foreground`, `bg-primary` gibi
+ *     shadcn utility'leri doğrudan pano paletine düşer.
+ *
+ * İsim çakışması (bilinçli): repo `--muted`'u BİR METİN rengidir (#8b949e),
+ * shadcn `--muted`'u ise bir YÜZEY rengi. Aynı isim iki farklı şey
+ * arıyor; köprüde `--color-muted: var(--muted)` bağlandığı için
+ * `text-muted` (app'in kullandığı) metin rengini korur ve `bg-muted`
+ * kullanılamaz — pano kodunda satır vurgusu gibi yüzeyler
+ * `bg-surface-raised` ile verilir. `--muted`'u burada yeniden
+ * tanımlamak check-design-tokens kapısını (tokens.css gölgesi) kırardı.
+ */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: var(--accent); /* kompozisyon-turu: shadcn-slot -> repo-token (tek-kaynak) */
+  --background: var(--bg);
+  --foreground: var(--fg);
+  /* `.card` reçetesi (preview.html): yüzey --surface, kenar --border. */
+  --card: var(--surface);
+  --card-foreground: var(--fg);
+  --popover: var(--surface-raised);
+  --popover-foreground: var(--fg);
+  --primary: var(--accent);
   --primary-foreground: var(--on-accent);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --secondary: var(--surface-raised);
+  --secondary-foreground: var(--fg);
+  --muted-foreground: var(--muted);
+  --accent-foreground: var(--on-accent);
   --destructive: var(--err);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --input: var(--border);
+  --ring: var(--accent);
+  /* Grafik kanalı: paletin durum renkleri (accent/ok/warn/err/budget). */
+  --chart-1: var(--accent);
+  --chart-2: var(--ok);
+  --chart-3: var(--warn);
+  --chart-4: var(--err);
+  --chart-5: var(--budget);
+  /* shadcn yarıçap ölçeği repo'nun kanonik kontrol yarıçapından türer
+     (--radius-6 = 8px): `rounded-lg` artık preview.html'deki `.card`
+     ile aynı 8px'i verir. */
+  --radius: var(--radius-6);
+  --sidebar: var(--surface);
+  --sidebar-foreground: var(--fg);
+  --sidebar-primary: var(--accent);
+  --sidebar-primary-foreground: var(--on-accent);
+  --sidebar-accent: var(--surface-raised);
+  --sidebar-accent-foreground: var(--fg);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--accent);
 }
 
 body {
@@ -102,40 +127,6 @@ body {
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
-}
-
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: var(--accent);
-  --primary-foreground: var(--on-accent);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: var(--err);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
 }
 
 @layer base {

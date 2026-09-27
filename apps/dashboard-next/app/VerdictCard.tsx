@@ -1,19 +1,26 @@
-import { cva, type VariantProps } from "class-variance-authority";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import {
+  countTone,
+  microLabel,
+  panelCard,
+  panelLabel,
+  statBadge,
+  toneForVerdict,
+  verdictTone,
+  type VerdictTone,
+} from "@/components/panel-style";
 import { getLatest } from "@/lib/preview";
 
-// patterns-explicit-variants: PASS/FAIL karari cva-variant'ta — bilesende
-// boolean-ternary degil. Renkler repo-token'lari (tek-kaynak: design-system).
-const verdictVariants = cva("mt-3 font-serif text-5xl font-semibold", {
-  variants: {
-    verdict: {
-      pass: "text-ok",
-      fail: "text-err",
-      none: "text-muted",
-    },
-  },
-  defaultVariants: { verdict: "none" },
-});
-
+// patterns-explicit-variants: PASS/FAIL kararı ve P0/P1 rozet tonları
+// cva-variant'ta (components/panel-style.ts) — bileşende ternary değil.
+// Renkler repo-token'ları (tek-kaynak: design-system).
+//
+// Kabuk shadcn `Card` + `CardHeader`/`CardContent`: panel ölçüleri
+// (yarıçap/dolgu) ve metin stilleri primitive'in üstüne tek yerde
+// (`panelCard`/`panelLabel`) bağlanır. Başlık bilinçli olarak `CardTitle`
+// DEĞİL: `CardTitle` bir `div` basar, pano ise gerçek `<h2>` ile bölüm
+// hiyerarşisi kuruyor (a11y).
 // Server Component — veri burada toplanır, istemciye JS gitmez.
 export default async function VerdictCard() {
   const latest = await getLatest();
@@ -25,44 +32,62 @@ export default async function VerdictCard() {
       : `${latest.z3_passed ?? "—"}/${latest.z3_total ?? "—"}`;
 
   return (
-    <section className="rounded-lg border border-border bg-surface p-6">
-      <div className="flex items-baseline justify-between">
-        <h2 className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted">
-          Son Koşum
-        </h2>
+    <Card className={panelCard()}>
+      <CardHeader className="flex flex-row items-baseline justify-between">
+        <h2 className={panelLabel()}>Son Koşum</h2>
         {latest.ts ? (
-          <time className="font-mono text-[11px] text-muted">{latest.ts}</time>
+          <time className="font-mono text-xs text-muted">{latest.ts}</time>
         ) : null}
-      </div>
+      </CardHeader>
 
-      <p
-        className={verdictVariants({
-          verdict:
-            verdict === "PASS" ? "pass" : verdict === "" ? "none" : "fail",
-        })}
-        aria-live="polite"
-      >
-        {verdict || "—"}
-      </p>
+      <CardContent>
+        <p
+          className={verdictTone({ tone: toneForVerdict(latest.verdict) })}
+          aria-live="polite"
+        >
+          {verdict || "—"}
+        </p>
 
-      <dl className="mt-6 grid grid-cols-2 gap-4 font-mono text-sm sm:grid-cols-4">
-        <Stat label="P0" value={latest.p0 ?? "—"} />
-        <Stat label="P1" value={latest.p1 ?? "—"} />
-        <Stat label="Z3" value={z3} />
-        <Stat
-          label="STRIPPED"
-          value={latest.stripped_sha256?.slice(0, 12).toUpperCase() ?? "—"}
-        />
-      </dl>
-    </section>
+        <dl className="mt-6 grid grid-cols-2 gap-4 font-mono text-sm sm:grid-cols-4">
+          <Stat
+            label="P0"
+            value={latest.p0 ?? "—"}
+            tone={countTone(latest.p0, "fail")}
+          />
+          <Stat
+            label="P1"
+            value={latest.p1 ?? "—"}
+            tone={countTone(latest.p1, "warn")}
+          />
+          <Stat label="Z3" value={z3} />
+          <Stat
+            label="STRIPPED"
+            value={latest.stripped_sha256?.slice(0, 12).toUpperCase() ?? "—"}
+          />
+        </dl>
+      </CardContent>
+    </Card>
   );
 }
 
-function Stat({ label, value }: { label: string; value: string | number }) {
+// `tone` verilmişse değer rozet olarak basılır (P0/P1: sıfır sessiz, sıfır
+// dışı vurgulu); verilmemişse düz değer kalır (Z3/STRIPPED — kimlik/hash
+// rozeti değil, metin). Ton seçimi bileşende değil varyant tablosunda.
+function Stat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string | number;
+  tone?: VerdictTone;
+}) {
   return (
     <div className="bg-bg">
-      <dt className="text-[10px] tracking-[0.14em] text-muted">{label}</dt>
-      <dd className="mt-1 font-semibold text-fg">{value}</dd>
+      <dt className={microLabel()}>{label}</dt>
+      <dd className="mt-1 font-semibold text-fg">
+        {tone ? <Badge className={statBadge({ tone })}>{value}</Badge> : value}
+      </dd>
     </div>
   );
 }

@@ -163,13 +163,19 @@ SURFACE_SPECS = {
         "url_path": "/",
         "server": "next",
         "theme_scoped": False,
-        "ready": "main section",
-        "panels": ("main section", "main section h2", "header nav"),
+        # Paneller artık shadcn `Card` (div[data-slot="card"]) — `<section>`
+        # kalktı. data-slot shadcn'ın kararli kancası (registry'den gelir ve
+        # `has-data-[slot=…]` varyantlari onu anahtarlar), yol ise markupsiz
+        # bir `h2` bulamaz. Ölçüm sözleşmesi GERÇEK markup'ı izlemeli:
+        # eski `main section` seçicisi sessizce "panel yok" sanıp FAIL eder.
+        "ready": 'main [data-slot="card"]',
+        "panels": ('main [data-slot="card"]', 'main [data-slot="card"] h2',
+                   "header nav"),
         "content": ("Son Koşum",),
         # Trend paneli veriyle doldu mu: satır varsa tablo, yoksa boş-durum
         # metni. Panelin hiç gelmemesi (Suspense'te takılı kalması) FAIL.
         "content_any": ("ZAMAN", "henüz veri yok"),
-        "inp_target": "main section h2",
+        "inp_target": 'main [data-slot="card"] h2',
         # `.next` gitignore'lu bir derleme çıktısı: BUILD_ID derlemeyi,
         # build-manifest chunk listesini kilitler — rapor "hangi derleme
         # ölçüldü" sorusunu yanıtlar.
