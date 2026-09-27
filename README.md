@@ -565,6 +565,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-27 | chore | (ruflo) V3 runtime yapilandirmasini kayda gecir | [`9c08763`](https://github.com/ali-han-kaya/leibniz2/commit/9c08763) |
 | 2026-09-27 | fix | (gitignore) ruflo yuzeyini sayma yerine kural ile gizle | [`1f3f212`](https://github.com/ali-han-kaya/leibniz2/commit/1f3f212) |
 | 2026-09-27 | docs | (hakem) teslim paketini sablonla incele, siniflandir | [`4084589`](https://github.com/ali-han-kaya/leibniz2/commit/4084589) |
+| 2026-09-27 | ci | (verify) VERIFY-001 canli CSP kanitini a11y-gate'e bagla | [`0dc7d4d`](https://github.com/ali-han-kaya/leibniz2/commit/0dc7d4d) |
 
 ### Regresyon notları
 

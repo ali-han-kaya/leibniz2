@@ -52,8 +52,9 @@
 #                               commit-msg stage'inde; CI --all-files'ta ÇALIŞMAZ.
 #   11) check-changelog-sync  : README.md ve docs/PUBLISH_SCENARIO.md'deki
 #                               changelog tablolarını git log ile senkron eder
-#                               (drift varsa --update + stage — update-config
-#                               deseni; commit'in kendi hash'i ancak sonraki
+#                               (drift varsa --prune + stage — update-config
+#                               deseni; eksik satırları ekler, stale hash'leri
+#                               temizler; commit'in kendi hash'i ancak sonraki
 #                               commit'te bilinir, bu yüzden auto-sync yapar).
 #   12) check-dryrun-summary  : publish_wrapper.sh `--dry-run-summary`
 #                               regresyon kapısı — gen_dryrun_summary
@@ -727,7 +728,9 @@ repos:
           ÖNCE (tectonic, tek derleme) / SONRA (TeXLive + SOURCE_DATE_EPOCH,
           2 bağımsız derleme) hash karşılaştırması. SONRA'nın iki run'ı
           byte-farklıysa deney exit 1 → commit bloke (fail-closed: göç
-          determinism getirmedi). Rapor .freebuff/sim/ altına yazılır.
+          determinism getirmedi). Rapor logs/texlive_determinism_report.txt'e
+          yazılır (precommit-logs artifact'ı bu dizini bütünüyle yükler) ve
+          aynı kanıt stdout'a da basılır — bulgu ne artifact ne log'da kaybolur.
           tectonic + TeXLive pdflatex kurulu DEĞİLSE SKIP (exit 0) — kapı
           yalnızca araçların var olduğu ortamda iddia üretir
           (check-lake-evidence deseni); K21 --check-sde her ortamda koşar.
@@ -753,15 +756,17 @@ repos:
         stages: [pre-commit]
 
       - id: check-changelog-sync
-        name: Changelog sync (git log ↔ docs, auto-update)
+        name: Changelog sync (git log ↔ docs, prune + auto-update)
         description: >-
           update_changelog_hook.sh: README.md ve docs/PUBLISH_SCENARIO.md'deki
           changelog tablolarını git log ile senkron eder. Drift varsa
-          gen_changelog.py --update ile tabloları günceller ve stage eder
-          (update-config deseni). Check-only bir kapı olamaz: commit'in kendi
-          hash'i ancak commit oluştuktan sonra bilinir — bu yüzden auto-sync
-          yapar, kapı hiç kırılmaz. Mevcut insan özetleri korunur; yalnızca
-          yeni commit'ler eklenir.
+          gen_changelog.py --prune ile eksik satırları ekler ve rewrite/rebase
+          artığı stale hash satırlarını güvenle temizler, sonra değişen
+          tabloları stage eder (update-config deseni). Check-only bir kapı
+          olamaz: commit'in kendi hash'i ancak commit oluştuktan sonra bilinir
+          — bu yüzden auto-sync yapar, kapı hiç kırılmaz. Mevcut insan
+          özetleri korunur; yalnızca yeni commit'ler eklenir ve stale satırlar
+          temizlenir.
         entry: bash _calisma/CIKTI/update_changelog_hook.sh
         language: system
         pass_filenames: false
