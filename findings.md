@@ -1063,3 +1063,41 @@ panonun ve landing'in gerçek bir tema varyantını besliyor.
   Playwright'sız işte SKIP ediyor; bu artık *sessiz* değil çünkü aynı süit
   skip-reddeden roster'da da koşuyor. Aynı desen başka Playwright süitleri
   için de taranmalı (roster dışında kalan canlı kanıt = sessiz boşluk).
+
+### arbitrary-renk sızması turu (2026-09-27) — taşınacak sınıf yok, kapı var
+
+- **Ölçüm (önce):** `apps/dashboard-next` kaynağında **arbitrary-hex utility
+  0**. Tarama kapsamı: tüm `*.tsx/*.ts/*.css` (node_modules/.next hariç) +
+  `components/ui/`; hex/rgb/hsl/oklch literali **0**, `style={{` **0**.
+  Tailwind varsayılan paleti (`bg-slate-900`, `text-white`, …) da **0**.
+  Tek `#…` eşleşmesi `app/globals.css` içindeki bir **yorum** satırı
+  (`--muted`'un `#8b949e` olduğunu anlatan Türkçe not) — yorum-boşaltma
+  bunu zaten ele alıyor.
+- **Yani taşıma 2026-09-19 tailwind-design-system turunda bitmişti;**
+  eksik olan **regresyon kapısıydı** (kapı olmadığı için sınıf sessizce
+  geri gelebilirdi).
+- **Kapı (contract 8f):** `check_tokens.py` `_color_literal_findings()` üç
+  kural denetler — (1) arbitrary renk utility'si (`bg-[#0e1116]`), (2) ham
+  hex/rgb/hsl literali (inline `style={{…}}` ve globals.css dahil;
+  `@theme`/`@utility`/`@layer` direktif blokları muaf), (3) Tailwind
+  varsayılan paleti (renk ailesi + ton şartı → `border-0`/`ring-3` gibi
+  ölçü utility'leri ve `text-current`/`border-transparent` girmiyor).
+  Yorumlar **boşlukla** silinir, satır numaraları kaymaz. Meşru arbitrary
+  değerler (harf aralığı, `text-[11px]`, `rounded-[min(var(--radius-md),10px)]`,
+  `shadow-[…rgba(0,0,0,.5)]`, `bg-[color-mix(…var(--secondary)…)]`,
+  `&#8212;`) karşı-testle korunuyor.
+- **Görsel QA (canlı, gerçek build):** `npm run build` temiz (3/3 statik,
+  First Load JS 102 kB) → `next start :3210` → Playwright/DevTools ile
+  hesaplanmış stiller: `bg-bg` → `rgb(14,17,22)` = `#0e1116`,
+  `text-fg` → `rgb(230,237,243)` = `#e6edf3`, `border-border` →
+  `rgb(48,54,61)` = `#30363d`, `text-muted` → `rgb(139,148,158)` = `#8b949e`,
+  `bg-card` → `rgb(22,27,34)` = `#161b22`; `/` ve `/trend` sayfalarının
+  TÜM çizili düğümlerinde ölçülen renk kümesi yalnız token değerleri
+  (+ Next.js route-announcer ve tarayıcı rozeti gibi uygulama-dışı yüzeyler).
+  Sayfada arbitrary sınıf **0**.
+- **Sessiz stil kaybı taraması (ek kanıt):** kaynaktaki **66** farklı
+  renk-ailesi utility'sinin tamamı derlenmiş CSS'te gerçek kural olarak
+  var → köprü kopukluğu yok (`bg-secondary`, `text-secondary-foreground`,
+  `dark:bg-input/30`, `aria-invalid:ring-destructive/20` dahil).
+- **Test:** `test_check_design_tokens.py` 33 → **35** (palet-pozitif +
+  ölçü/`current`/`transparent` karşı-testi); gerçek ağaçta kapı rc 0.

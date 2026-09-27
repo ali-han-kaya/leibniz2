@@ -405,6 +405,114 @@ class TestDesignTokensGate(unittest.TestCase):
                       '/ "theme.css"', landing)
         self.assertIn('THEMES = ("dark", "light", "stripe")', landing)
 
+    # ── contract 8(f): gömülü renk sızması (köprü utility'i varken) ──
+
+    def _source_repo(self, rel: str, content: str):
+        """Geçici repoya verilen kaynağı yaz → (sonuç, out) döner."""
+        td = _tmp_repo()
+        try:
+            tmp_script = td / "design-system" / "scripts" / "check_tokens.py"
+            target = td / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(content, encoding="utf-8")
+            r = run_check_copy(tmp_script)
+            return r, r.stdout + r.stderr
+        finally:
+            shutil.rmtree(td, ignore_errors=True)
+
+    def test_arbitrary_hex_utility_fails(self):
+        """`bg-[#0e1116]` köprü token'ını baypas eder → kapı kırmızı."""
+        r, out = self._source_repo(
+            "apps/dashboard-next/components/kart.tsx",
+            'export const X = () => <div className="bg-[#0e1116] text-fg" />;\n')
+        self.assertNotEqual(r.returncode, 0, out)
+        self.assertIn("arbitrary renk utility", out)
+        self.assertIn("bg-bg", out, "bulgu köprü utility'sini önermeli")
+        self.assertIn("kart.tsx:1", out, "bulgu dosya:satır bildirmeli")
+
+    def test_inline_style_hex_fails(self):
+        """JSX inline stilinde gömülü hex de aynı sınıftır → kırmızı."""
+        r, out = self._source_repo(
+            "apps/dashboard-next/app/kart.tsx",
+            'export const X = () => <div style={{ color: "#e6edf3" }} />;\n')
+        self.assertNotEqual(r.returncode, 0, out)
+        self.assertIn("koda gömülü renk literali", out)
+
+    def test_raw_hex_in_globals_css_fails(self):
+        """globals.css'e yazıyla verilmiş ton → kırmızı (yuva var(--…) olmalı)."""
+        td = _tmp_repo()
+        try:
+            tmp_script = td / "design-system" / "scripts" / "check_tokens.py"
+            target = td / "apps" / "dashboard-next" / "app" / "globals.css"
+            target.write_text(
+                GLOBALS.read_text(encoding="utf-8")
+                + "\n.kart { background: #161b22; }\n", encoding="utf-8")
+            r = run_check_copy(tmp_script)
+            out = r.stdout + r.stderr
+            self.assertNotEqual(r.returncode, 0, out)
+            self.assertIn("globals.css", out)
+            self.assertIn("renk literali", out)
+        finally:
+            shutil.rmtree(td, ignore_errors=True)
+
+    def test_tailwind_palette_colour_fails(self):
+        """`bg-slate-900` de köprü dışı renk kaynağıdır → kırmızı.
+
+        Arbitrary değer DEĞİL ama aynı hata sınıfı: jeneratörden kopuk sabit
+        ton, koyu/açık/stripe varyantında donar.
+        """
+        r, out = self._source_repo(
+            "apps/dashboard-next/components/kart.tsx",
+            'export const X = () => <div className="bg-slate-900 text-white" />;\n')
+        self.assertNotEqual(r.returncode, 0, out)
+        self.assertIn("varsayılan palet rengi", out)
+        self.assertIn("slate-900", out, "bulgu sınıfı adıyla bildirmeli")
+        self.assertIn("kart.tsx:1", out, "bulgu dosya:satır bildirmeli")
+        self.assertIn("bg-bg", out, "bulgu köprü utility'sini önermeli")
+
+    def test_palette_shade_required_so_metrics_do_not_trip(self):
+        """Karşı-test: palet deseni renk ailesi + TON şartı arar.
+
+        `border-0` / `ring-3` ölçü utility'si, `border-transparent` ve
+        `text-current` (renk devralır) meşrudur — kırmızı olmamalı.
+        """
+        r, out = self._source_repo(
+            "apps/dashboard-next/components/ui/kart.tsx",
+            'export const X = () => (\n'
+            '  <div className="border-0 border-b-0 ring-3 border-transparent"\n'
+            '       data-x="text-current" data-y="grid grid-cols-2" />\n'
+            ');\n')
+        self.assertEqual(r.returncode, 0, out)
+
+    def test_token_derived_and_metric_arbitrary_values_do_not_trip(self):
+        """Karşı-test: kapı aşırı-geniş olmamalı.
+
+        Ölçü/harf-aralığı arbitrary değerleri (`text-[11px]`,
+        `tracking-[0.22em]`), `var()` tabanlı türetmeler
+        (`bg-[color-mix(…var(--secondary)…)]`, `rounded-[min(var(--radius-md)…)]`)
+        ve ölçü değeri içinde rgba taşıyan gölgeler meşrudur — kırmızı
+        olmamalı. Aksi halde kapı kullanılamaz hale gelir (her satır ihlal).
+        """
+        r, out = self._source_repo(
+            "apps/dashboard-next/components/ui/kart.tsx",
+            'export const X = () => (\n'
+            '  <div className="text-[11px] tracking-[0.22em] rounded-[min(var(--radius-md),10px)]"\n'
+            '       data-bg="bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)]"\n'
+            '       data-shadow="shadow-[0_8px_24px_rgba(0,0,0,.5)]"\n'
+            '       data-entity="&#8212;" />\n'
+            ');\n')
+        self.assertEqual(r.returncode, 0, out)
+
+    def test_colour_literal_gate_is_wired(self):
+        """Kapı gerçekten kurulu mu: desen + mesaj + çağrı tek yerde."""
+        src = SCRIPT.read_text(encoding="utf-8")
+        for token in ("_ARBITRARY_COLOR_UTIL", "_RAW_COLOR_LITERAL",
+                      "_NON_BRIDGE_PALETTE_UTIL",
+                      "_color_literal_findings", "_blank_out_comments"):
+            self.assertIn(token, src, "kapı bağlantısı eksik: %s" % token)
+        self.assertIn("bg-[#", src + "bg-[#0e1116]",
+                      "mesaj somut utility örneği vermeli")
+
     def test_preset_only_word_in_comment_does_not_trip(self):
         """Yorumdaki yüzey adı bloke etmez (yorum-sonrası metin taranır)."""
         td = _tmp_repo()

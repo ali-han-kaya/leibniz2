@@ -20,8 +20,13 @@ Starter design tokens extracted from the live CI dashboard at
   ve referans kapanışını denetler: köprü importu zorunlu, dış shadcn preset
   sheet'i yasak, her yuva değeri `var()`/`calc()` referansı olmalı, her
   `var(--X)` çözülebilmeli, her yuva `@theme`'de `--color-<yuva>` alias'ı
-  almalı ve uygulama kaynağı preset-only yüzey
-  (`data-open:`/`no-scrollbar`/`scroll-fade`/`shimmer`) kullanamaz. Contract 9
+  almalı, uygulama kaynağı preset-only yüzey
+  (`data-open:`/`no-scrollbar`/`scroll-fade`/`shimmer`) kullanamaz ve
+  uygulama kaynağında koda gömülü **renk** bulunamaz: arbitrary renk
+  utility'si (`bg-[#0e1116]`), ham hex/rgb/hsl literali (inline stil dahil)
+  ve Tailwind'ın varsayılan paleti (`bg-slate-900`, `text-white`) üçü de
+  köprü token'ını baypas eder — `bg-bg`/`text-fg`/`border-border` ya da
+  `var(--…)` tabanlı türetme kullanılmalı. Contract 9
   ise Stripe HDS tema varyantını denetler: `stripe/theme.css` üreticinin
   (`stripe/scripts/generate_stripe_theme.py`) `render()` çıktısıyla **birebir**
   olmalı, yalnız `:root[data-theme="stripe"]` bloğu taşımalı, 32 yuvanın

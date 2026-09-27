@@ -41,7 +41,12 @@ Contracts (post-import):
    yeniden sunulmalı (--radius istisna: yarıçap ölçeğini besler),
    (e) uygulama kaynağı preset-only utility (data-open: …, no-scrollbar,
    scroll-fade, shimmer) kullanamaz — preset silindiği için o sınıflar
-   sessizce stilsiz kalır.
+   sessizce stilsiz kalır,
+   (f) uygulama kaynağında koda gömülü RENK OLAMAZ: ne arbitrary renk
+   utility'si (`bg-[#0e1116]`), ne ham hex/rgb/hsl literali (inline stil
+   dahil), ne de Tailwind'ın varsayılan paleti (`bg-slate-900`,
+   `text-white`) — üçü de köprü token'ını baypas eder ve temayı
+   koyu/açık/stripe varyantlarında dondurur.
 
 Exit 0 on match, 1 on drift.
 """
@@ -79,6 +84,40 @@ _VAR_REF = re.compile(r"var\(\s*(--[\w-]+)")
 # `--radius` bir renk değil: @theme'de --radius-* ölçeğini besler, --color-*
 # alias'ı beklenmez.
 _THEME_SLOT_EXEMPT = frozenset({"--radius"})
+
+# Köprü utility'leri (bg-bg / text-fg / border-border) varken arbitrary RENK
+# değeri kullanılamaz: `bg-[#0e1116]` token kaynağını atlar ve tema
+# değişiminde (koyu/açık/stripe) donar. Kural, arbitrary değerin BAŞINDA
+# literal renk arar — değerin `var()` tabanlı türetme olması serbesttir
+# (shadcn'ın `bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)]`
+# yuvaları tam olarak böyledir ve token'a bağlıdır).
+_ARBITRARY_COLOR_UTIL = re.compile(
+    r"(?<![\w-])(?:bg|text|border|ring|divide|fill|stroke|from|to|via|outline|"
+    r"decoration|caret|accent|shadow)-\[\s*"
+    r"(?:#[0-9a-fA-F]{3,8}|rgba?\(|hsla?\(|oklch\(\s*[\d.])"
+)
+# Ham renk literali (TS/TSX + globals.css): token dururken koda gömülü ton.
+# `(?<!&)` HTML varlıkları (&#8212;) hex sanılmasın diye şart.
+_RAW_COLOR_LITERAL = re.compile(
+    r"(?<!&)#[0-9a-fA-F]{3,8}\b|(?<![\w-])(?:rgba?|hsla?)\("
+)
+# Tailwind arbitrary değerleri ([…]) renk taramasından önce ayıklanır:
+# `shadow-[0_8px_24px_rgba(0,0,0,.5)]` sınıfın kendisi zaten token'lıdır,
+# içindeki rgba koda gömülü renk DEĞİLDİR.
+_ARBITRARY_VALUE = re.compile(r"\[[^\]\n]*\]")
+# Tailwind'ın VARSAYILAN paleti de köprü dışı bir renk kaynağıdır:
+# `bg-slate-900`/`text-white` yazmak `bg-bg`/`text-fg` yerine jeneratörden
+# koparılmış sabit bir ton demektir (light/stripe varyantı donar). Ölçü
+# utility'leri (border-0, ring-3) bu desene GİRMEZ: renk aileleri ton
+# şartıyla (`-\d{2,3}`), yalnız white/black tonsuz aranır; `transparent` ve
+# `current` (renk devralan) meşru kalır.
+_NON_BRIDGE_PALETTE_UTIL = re.compile(
+    r"(?<![\w-])(?:bg|text|border|ring|divide|fill|stroke|from|to|via|outline|"
+    r"decoration|caret|accent|shadow)(?:-[trblxyse])?-"
+    r"(?:(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|"
+    r"emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)"
+    r"-\d{2,3}|white|black)(?![\w-])"
+)
 
 
 def vars_in_block(text: str, selector_pat: str) -> dict:
@@ -282,6 +321,100 @@ def _strip_source_comments(text: str) -> str:
     return re.sub(r"//[^\n]*", " ", text)
 
 
+def _blank_out_comments(text: str) -> str:
+    """Yorumları BOŞLUKLA sil — satır numaraları korunsun diye.
+
+    `_strip_css_comments` blok yorumu tek boşluğa indirir (satırlar kayar);
+    renk taraması bulguyu `dosya:satır` diye bildirdiği için hizası şart.
+    """
+    text = re.sub(r"/\*.*?\*/",
+                  lambda m: re.sub(r"[^\n]", " ", m.group(0)), text, flags=re.S)
+    return re.sub(r"//[^\n]*", lambda m: " " * len(m.group(0)), text)
+
+
+def _color_literal_findings():
+    """dashboard-next kaynağında koda gömülü RENK literali arar.
+
+    Üç kural (tema tek kaynaktan gelir: design-system köprüsü + shadcn yuvası):
+      • arbitrary renk utility'si  → `bg-[#0e1116]` yerine `bg-bg`
+      • ham hex/rgb/hsl literali    → `var(--token)` ya da köprü utility'si
+      • Tailwind varsayılan paleti  → `bg-slate-900` yerine `bg-bg`
+    Değerin token-tabanlı olması (var(), color-mix(var()…)) ihlal değildir.
+    """
+    findings = []
+    for path in sorted(NEXT_APP.rglob("*")):
+        if not path.is_file() or path.suffix not in _SOURCE_SUFFIXES:
+            continue
+        if {"node_modules", ".next"} & set(path.parts):
+            continue
+        rel = path.relative_to(REPO)
+        source = _blank_out_comments(
+            path.read_text(encoding="utf-8", errors="replace"))
+        for lineno, line in enumerate(source.splitlines(), 1):
+            hit = _ARBITRARY_COLOR_UTIL.search(line)
+            if hit:
+                findings.append(
+                    f"{rel}:{lineno}: arbitrary renk utility'si "
+                    f"({hit.group(0).strip()}) — köprü token'ını kullanın: "
+                    "bg-bg / text-fg / border-border ya da var(--…) tabanlı "
+                    "türetme"
+                )
+                continue
+            pal = _NON_BRIDGE_PALETTE_UTIL.search(line)
+            if pal:
+                findings.append(
+                    f"{rel}:{lineno}: Tailwind varsayılan palet rengi "
+                    f"({pal.group(0).strip()}) — köprü token'ını kullanın: "
+                    "bg-bg / text-fg / border-border (tema tek kaynaktan gelir)"
+                )
+                continue
+            if _RAW_COLOR_LITERAL.search(_ARBITRARY_VALUE.sub(" ", line)):
+                findings.append(
+                    f"{rel}:{lineno}: koda gömülü renk literali — token'a "
+                    "bağlayın (var(--…)); tema tek kaynaktan gelir"
+                )
+    if NEXT_GLOBALS.exists():
+        css = _blank_out_comments(NEXT_GLOBALS.read_text(encoding="utf-8"))
+        exempt = _tailwind_directive_lines(css)
+        for lineno, line in enumerate(css.splitlines(), 1):
+            if lineno in exempt:
+                continue
+            if _RAW_COLOR_LITERAL.search(line):
+                findings.append(
+                    f"{NEXT_REL}:{lineno}: globals.css'te koda gömülü renk "
+                    "literali — shadcn yuvası repo token'ına referans vermeli "
+                    "(var(--…))"
+                )
+    return findings
+
+
+def _tailwind_directive_lines(css: str):
+    """`@theme`/`@utility` vb. direktif bloklarının satırları (1-tabanlı).
+
+    Bu bloklar Tailwind'in utility NAMESPACE eşlemesidir — belge custom
+    property'si değil; mevcut sözleşme de onları muaf tutuyor
+    (`test_theme_block_is_exempt`). Aksi halde `@theme inline { --tw-x: … }`
+    gibi meşru eşlemeler renk-literali diye kırmızıya düşerdi.
+    """
+    lines = css.splitlines()
+    inside = False
+    depth = 0
+    exempt = set()
+    for idx, line in enumerate(lines, 1):
+        if not inside:
+            if re.match(r"\s*@(theme|utility|variant|custom-variant|source|"
+                        r"plugin|layer)\b", line):
+                depth = line.count("{") - line.count("}")
+                exempt.add(idx)
+                inside = depth > 0
+            continue
+        exempt.add(idx)
+        depth += line.count("{") - line.count("}")
+        if depth <= 0:
+            inside = False
+    return exempt
+
+
 def _in_tailwind_directive(selector_path: str) -> bool:
     for part in selector_path.split(" > "):
         part = part.strip()
@@ -477,6 +610,20 @@ def main() -> int:
                 "karşılığını design-system köprüsüne/repo CSS'ine ekleyin"
             )
 
+        # (f) renk literali sızması: `bg-[#0e1116]` / gömülü hex, köprü
+        # utility'lerini (bg-bg, text-fg, border-border) baypas eder ve temayı
+        # dondurur. Aynı sınıf: 2026-09-19 tailwind-design-system turunda
+        # temizlendi, kapı olmadığı için geri gelebilirdi.
+        colour_hits = _color_literal_findings()
+        if colour_hits:
+            shown = ", ".join(colour_hits[:5])
+            more = f" (+{len(colour_hits) - 5} more)" if len(colour_hits) > 5 else ""
+            drift.append(
+                "dashboard-next kaynağında koda gömülü renk değeri var: "
+                f"{shown}{more} — köprü token'ı kullanın (bg-bg / text-fg / "
+                "border-border); tema tek kaynaktan gelir"
+            )
+
     # 9. stripe HDS tema varyantı (GENERATED) — kapsam + referans kapanışı
     drift.extend(_stripe_variant_findings())
 
@@ -504,7 +651,7 @@ def main() -> int:
     print(f"OK — import present, tokens.css :root {len(css_dark)} + light {len(css_light)} vars, "
           f"{len(tokens['color']['tint'])} tints in sheet, "
           f"dashboard-next bridge+copy-drift {'OK' if clean else 'n/a'}"
-          f" (preset-bağımsız + referans-kapalı), "
+          f" (preset-bağımsız + referans-kapalı + renk-kaynağı-temiz), "
           f"stripe HDS varyantı {stripe_slots} yuva jeneratörle birebir")
     return 0
 
