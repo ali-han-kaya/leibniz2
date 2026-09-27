@@ -57,6 +57,14 @@ def fake_repo(root):
     os.makedirs(ds, exist_ok=True)
     with open(os.path.join(ds, "tokens.css"), "w", encoding="utf-8") as f:
         f.write("x\n")
+    # Stripe HDS tema varyantı — sync GUIDE_FILES bloğu bunu
+    # design-system-stripe-theme.css olarak mirror'lar; kapsam tanımı
+    # (STRIPE_THEME_REL) beklemeli, yoksa fail-closed coverage
+    # "BEKLENMEYEN: design-system/stripe/theme.css" ile kırılır.
+    stripe_ds = os.path.join(ds, "stripe")
+    os.makedirs(stripe_ds, exist_ok=True)
+    with open(os.path.join(stripe_ds, "theme.css"), "w", encoding="utf-8") as f:
+        f.write("x\n")
     # SDE deney + donmuş kayıt — sync SDE_FILES bloğu mirror'a taşır;
     # _sde_experiment_paths mirror-layout'ta MIRROR_DIR/../sde_experiment
     # çözer. Ayrıca determinism-trend versiyonlu verisi (GUIDE_FILES,
@@ -134,6 +142,26 @@ class TestDesignTokensCoverage(unittest.TestCase):
             self.assertIn("design-system/tokens.css", exp)
 
     def test_listing_with_tokens_css_passes(self):
+        with tempfile.TemporaryDirectory(prefix="cov-") as root:
+            cikti, lean = fake_repo(root)
+            rc = run_main(root, list_output(cikti, lean, root))
+            self.assertEqual(rc, 0)
+
+
+class TestStripeThemeCoverage(unittest.TestCase):
+    """Stripe HDS tema varyantı mirror'da YER ALIR (preview.html
+    /design-system/stripe-theme.css linkini import eder; preview_server aynı
+    rotadan servis eder) — kapsam tanımı bunu beklemeli; aksi halde
+    fail-closed coverage "BEKLENMEYEN: design-system/stripe/theme.css" ile
+    kırılır (design-system/tokens.css ile aynı sözleşme)."""
+
+    def test_stripe_theme_in_expected_set(self):
+        with tempfile.TemporaryDirectory(prefix="cov-") as root:
+            cikti, lean = fake_repo(root)
+            exp = cmc.expected_repo_files(root, cikti, lean)
+            self.assertIn(cmc.STRIPE_THEME_REL, exp)
+
+    def test_listing_with_stripe_theme_passes(self):
         with tempfile.TemporaryDirectory(prefix="cov-") as root:
             cikti, lean = fake_repo(root)
             rc = run_main(root, list_output(cikti, lean, root))

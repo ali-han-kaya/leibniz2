@@ -145,8 +145,14 @@ class ThemeToggleKeyboardTest(KeyboardNavTestBase):
         theme = self.page.evaluate("document.documentElement.dataset.theme")
         self.assertEqual((pressed == "true"), (theme == "light"),
                          "Space: aria-pressed ↔ tema uyumsuz")
-        self.assertIn("dark theme" if pressed == "true" else "light theme",
-                      label or "", "aria-label döngüsü bozuk")
+        # Tema kümesi: dark · light · stripe — hem erişilebilir ad (aria-label)
+        # hem görünür etiket (THEME_LABELS) güncel temayı yazmalı.
+        self.assertIn("current: %s" % theme, label or "",
+                      "aria-label döngüsü bozuk")
+        self.assertEqual(
+            self.page.locator(self.TOGGLE).inner_text().strip(),
+            {"dark": "dark mode", "light": "light mode",
+             "stripe": "stripe theme"}[theme], "görünür etiket tema ile uyumsuz")
         # Klavye-tema kalıcılığı (localStorage) — reload sonrası korunur.
         self.page.reload(wait_until="domcontentloaded")
         self.page.wait_for_timeout(600)
@@ -154,10 +160,10 @@ class ThemeToggleKeyboardTest(KeyboardNavTestBase):
             self.page.evaluate("document.documentElement.dataset.theme"),
             theme, "tema tercihi reload'ta korunmadı")
 
-    def test_toggle_round_trip_dark_light_dark(self):
+    def test_toggle_round_trip_dark_light_stripe_dark(self):
         t = self.page.locator(self.TOGGLE)
         t.focus()
-        for expected in ("light", "dark", "light"):
+        for expected in ("light", "stripe", "dark"):
             t.press("Enter")
             self.page.wait_for_timeout(120)
             self.assertEqual(

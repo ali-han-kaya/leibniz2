@@ -11,21 +11,28 @@ if ("serviceWorker" in navigator) {
 }
 const $ = (id) => document.getElementById(id);
 
+// Tema kumesi: dark (varsayilan) · light · stripe (design-system/stripe
+// HDS varyanti — /design-system/stripe-theme.css). Toggle bu sirada doner.
+const THEMES = ["dark", "light", "stripe"];
+const THEME_LABELS = {
+  dark: "dark mode",
+  light: "light mode",
+  stripe: "stripe theme",
+};
+
 function setTheme(theme, persist = true) {
-  const light = theme === "light";
-  document.documentElement.dataset.theme = light ? "light" : "dark";
+  const next = THEMES.includes(theme) ? theme : "dark";
+  document.documentElement.dataset.theme = next;
   const toggle = $("theme-toggle");
   if (toggle) {
+    const light = next === "light";
     toggle.setAttribute("aria-pressed", String(light));
-    toggle.setAttribute(
-      "aria-label",
-      light ? "Switch to dark theme" : "Switch to light theme"
-    );
-    toggle.textContent = light ? "dark mode" : "light mode";
+    toggle.setAttribute("aria-label", `Switch theme — current: ${next}`);
+    toggle.textContent = THEME_LABELS[next];
   }
   if (persist) {
     try {
-      localStorage.setItem("dashboard-theme", light ? "light" : "dark");
+      localStorage.setItem("dashboard-theme", next);
     } catch (e) {}
   }
 }
@@ -36,7 +43,7 @@ function setTheme(theme, persist = true) {
 function themeQueryOverride() {
   try {
     const requested = new URLSearchParams(window.location.search).get("theme");
-    return requested === "dark" || requested === "light" ? requested : null;
+    return THEMES.includes(requested) ? requested : null;
   } catch (e) {
     return null;
   }
@@ -44,8 +51,8 @@ function themeQueryOverride() {
 
 const queryTheme = themeQueryOverride();
 try {
-  const storedTheme =
-    localStorage.getItem("dashboard-theme") === "light" ? "light" : "dark";
+  const stored = localStorage.getItem("dashboard-theme");
+  const storedTheme = THEMES.includes(stored) ? stored : "dark";
   setTheme(queryTheme || storedTheme, !queryTheme);
 } catch (e) {
   setTheme(queryTheme || "dark", !queryTheme);
@@ -2995,9 +3002,9 @@ for (const [svgId, tipName] of Object.entries({
 
 $("reconnect").addEventListener("click", connect);
 $("theme-toggle").addEventListener("click", () => {
-  setTheme(
-    document.documentElement.dataset.theme === "light" ? "dark" : "light"
-  );
+  const current = document.documentElement.dataset.theme || "dark";
+  const index = THEMES.indexOf(current);
+  setTheme(THEMES[(index + 1) % THEMES.length]);
 });
 
 // staleness watchdog: 90s boyunca güncelleme yoksa "stale" göster

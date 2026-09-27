@@ -580,6 +580,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-27 | other | design-system: dashboard-next kopya-drift denetimi (contract 7) | [`41d50f2`](https://github.com/ali-han-kaya/leibniz2/commit/41d50f2) |
 | 2026-09-27 | other | preview: demo artifact denetimini taze klonda fail-closed kil | [`961bdce`](https://github.com/ali-han-kaya/leibniz2/commit/961bdce) |
 | 2026-09-27 | ci | (pre-commit) marka-mirror drift kapısını zincire ekle (fail-closed) | [`eab61e1`](https://github.com/ali-han-kaya/leibniz2/commit/eab61e1) |
+| 2026-09-27 | other | design-system: preset-bağımsız dashboard-next + contract 8 kapısı | [`7e4916a`](https://github.com/ali-han-kaya/leibniz2/commit/7e4916a) |
 
 ### Regresyon notları
 

@@ -1546,6 +1546,15 @@ class TestRouteQueryParams(unittest.TestCase):
         self.assertIsNone(ps._route("/design-system/other.css"))
         self.assertIsNone(ps._route("/design-system/"))
 
+    def test_stripe_theme_route(self):
+        # Stripe HDS tema varyantı (GENERATED) — preview.js tema döngüsünün
+        # `stripe` adımı bu rotadan stil alır; mirror'da yoksa 404 (fail-closed).
+        self.assertEqual(ps._route("/design-system/stripe-theme.css"),
+                         "design_tokens_stripe")
+        self.assertEqual(ps._route("/design-system/stripe-theme.css?v=9"),
+                         "design_tokens_stripe")
+        self.assertIsNone(ps._route("/design-system/stripe-theme"))
+
     def test_landing_routes_are_query_safe_and_asset_scoped(self):
         self.assertEqual(ps._route("/landing.html"), "landing")
         self.assertEqual(ps._route("/landing.html?theme=light"), "landing")

@@ -1480,6 +1480,8 @@ def _route(path):
         return "vendor_axe"
     if p == "/design-system/tokens.css":
         return "design_tokens"
+    if p == "/design-system/stripe-theme.css":
+        return "design_tokens_stripe"
     if p == "/guide.html":
         return "guide"
     if p == "/landing.html":
@@ -1635,6 +1637,8 @@ class Handler(BaseHTTPRequestHandler):
             self.serve_vendor_axe()
         elif route == "design_tokens":
             self.serve_design_tokens()
+        elif route == "design_tokens_stripe":
+            self.serve_stripe_theme()
         elif route == "latest":
             self.serve_latest()
         elif route == "sse":
@@ -2145,6 +2149,25 @@ class Handler(BaseHTTPRequestHandler):
         if not os.path.isfile(path):
             self._send(404, "404 — design-system/tokens.css mirror'da yok "
                             "(bash update_preview.sh --force)")
+            return
+        with open(path, encoding="utf-8") as f:
+            css = f.read()
+        self._send(200, css, content_type="text/css; charset=utf-8")
+
+    def serve_stripe_theme(self):
+        """design-system/stripe/theme.css — Stripe HDS tema varyantı.
+
+        Kaynak: <repo>/design-system/stripe/theme.css (GENERATED;
+        generate_stripe_theme.py). check_tokens.py contract 9 bu dosyayı
+        jeneratörle birebir + `:root[data-theme="stripe"]` kapsamlı olarak
+        doğrular. sync_verify_mirror.sh bunu mirror PREVIEW_DIR'e
+        design-system-stripe-theme.css adıyla taşır; mirror'da yoksa 404
+        (fail-closed — varyant sayfasız kalır, koyu palete sessiz düşmez).
+        """
+        path = os.path.join(PREVIEW_DIR, "design-system-stripe-theme.css")
+        if not os.path.isfile(path):
+            self._send(404, "404 — design-system/stripe/theme.css mirror'da "
+                            "yok (bash update_preview.sh --force)")
             return
         with open(path, encoding="utf-8") as f:
             css = f.read()

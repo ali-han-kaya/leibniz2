@@ -45,6 +45,13 @@ DETERMINISM_TREND_REL = "docs/determinism_trend/determinism_trend.jsonl"
 # <repo>/design-system/tokens.css — kapsam tanımı bunu beklemeli (yoksa
 # fail-closed coverage CI'da "BEKLENMEYEN: design-system/tokens.css" ile kırılır).
 DESIGN_TOKENS_REL = "design-system/tokens.css"
+# Stripe HDS tema varyantı — preview.html /design-system/stripe-theme.css
+# rotasından servis eder; sync_verify_mirror.sh GUIDE_FILES bloğu bunu
+# PREVIEW_DIR'e design-system-stripe-theme.css olarak mirror'lar. Tek kaynak:
+# <repo>/design-system/stripe/theme.css (GENERATED). Kapsam tanımı bunu
+# beklemeli — yoksa fail-closed coverage "BEKLENMEYEN:
+# design-system/stripe/theme.css" ile kırılır.
+STRIPE_THEME_REL = "design-system/stripe/theme.css"
 # a11y-gate same-origin axe bundle'ı: preview_server /vendor/axe.min.js rotası
 # bunu PREVIEW_DIR/vendor/ altından servis eder; sync_verify_mirror.sh
 # PREVIEW_FILES bloğu mirror'a taşır (a11y düzeltmesi, 2026-09-24). Kapsam
@@ -122,6 +129,7 @@ def expected_repo_files(root, cikti, lean_src):
     expected.add(DOC_REL)
     expected.add(DETERMINISM_TREND_REL)
     expected.add(DESIGN_TOKENS_REL)
+    expected.add(STRIPE_THEME_REL)
     expected.add(VENDOR_AXE_REL)
     expected.update(SDE_RUNTIME)
     if os.path.isdir(lean_src):

@@ -21,7 +21,19 @@ Starter design tokens extracted from the live CI dashboard at
   sheet'i yasak, her yuva değeri `var()`/`calc()` referansı olmalı, her
   `var(--X)` çözülebilmeli, her yuva `@theme`'de `--color-<yuva>` alias'ı
   almalı ve uygulama kaynağı preset-only yüzey
-  (`data-open:`/`no-scrollbar`/`scroll-fade`/`shimmer`) kullanamaz.
+  (`data-open:`/`no-scrollbar`/`scroll-fade`/`shimmer`) kullanamaz. Contract 9
+  ise Stripe HDS tema varyantını denetler: `stripe/theme.css` üreticinin
+  (`stripe/scripts/generate_stripe_theme.py`) `render()` çıktısıyla **birebir**
+  olmalı, yalnız `:root[data-theme="stripe"]` bloğu taşımalı, 32 yuvanın
+  tamamını içermeli, HDS ön-koşulları aynayla aynı olmalı ve yuva değerlerinde
+  renk literali bulunmamalı; ayrıca varyantı tüketen yüzeylerdeki
+  (`preview.html`, `landing/landing_src.html`) `[data-theme="stripe"]`
+  kurallarında her değer `var(` taşımalı.
+- `stripe/theme.css` — **Generated** Stripe HDS tema varyantı: repo semantik
+  yuvalarını (`--bg`, `--fg`, `--accent`, `--border`, `--paper`, …) mirror'daki
+  `--hds-*` token'larına bağlar. Kaynak: `stripe/README.md` ("Tema varyantı").
+  `python3 design-system/stripe/scripts/generate_stripe_theme.py` ile üretilir;
+  elle düzenleme drift sayılır (contract 9).
 - `scripts/generate_tailwind.py` — renders `tailwind.css` from `tokens.css`.
   No `tailwindcss` install needed to generate; validates the two `:root`
   blocks stay byte-identical.
@@ -101,6 +113,7 @@ Composition vars (`--card-*`, `--badge-*`, `--table-*`, `--pre-*`,
 ## Verification
 
 ```bash
-python3 design-system/scripts/check_tokens.py      # exit 0 = in sync
+python3 design-system/scripts/check_tokens.py      # exit 0 = in sync (contract 1-9)
 python3 design-system/scripts/generate_tailwind.py # exit 0 = tailwind in sync
+python3 design-system/stripe/scripts/generate_stripe_theme.py --check  # stripe varyantı
 ```

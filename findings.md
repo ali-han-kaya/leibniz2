@@ -896,3 +896,57 @@ preset sheet'ine bağlı değil.
   kullanılmıyor; yeni bir shadcn bileşeni preset-only yüzey getirirse
   contract 8(e) onu commit anında yakalar ve karşılığının repo CSS'ine
   eklenmesini zorlar.
+
+## Session 2026-09-27 — Stripe HDS tema varyantı (contract 9)
+
+2026-09-19 notundaki "mirror'lar zincirde değil" açığı `eab61e1` ile
+(`check-brand-mirrors`), mirror'ın **yüzeye** bağlanması ise bu oturumla
+kapandı: `design-system/stripe/` artık kendi başına duran bir arşiv değil,
+panonun ve landing'in gerçek bir tema varyantını besliyor.
+
+- **Üretici (`stripe/scripts/generate_stripe_theme.py` →`stripe/theme.css`,
+  GENERATED):** `SLOT_MAP` 32 repo yuvasını (`--bg`, `--fg`, `--muted`,
+  `--ok/--warn/--err/--budget`, `--accent/--on-accent`, `--surface*`,
+  `--code-bg`, `--paper/--paper-ink`, `--tint-*`, `--shadow-tip`,
+  `--backdrop-lightbox`) HDS token'larına bağlar; `closure()` `var()`
+  transitif kapanışını aynadan **birebir** kopyalar (24 HDS token),
+  `REQUIRED_SLOTS` eksikse `SystemExit`. Çıktı yalnız
+  `:root[data-theme="stripe"]` bloğu; `--check` modu drift'i yazar.
+  Docstring `r"""` yapıldı (`\s` invalid escape → DeprecationWarning).
+- **Kapı (check-design-tokens contract 9):** `theme.css` üreticinin
+  `render()` çıktısıyla bayt-bayt eşleşmeli; kapsam sızıntısı (tek blok
+  dışında stripe kuralı), eksik yuva, renk literali, çürük HDS referansı ve
+  aynadan farklı HDS değeri fail-closed BLOKE. Ayrıca varyantı **tüketen**
+  yüzeyler taranır: `preview.html` + `landing/landing_src.html` içinde
+  `[data-theme="stripe"]` kapsamlı kural yoksa hata, her değerde `var(`
+  şart, renk literali yasak.
+- **Yüzey kablolaması:** pano tema döngüsü `dark → light → stripe` oldu
+  (`?theme=stripe`, `localStorage` doğrulamalı, `aria-label` theme adını
+  yazıyor); `preview_server.py` `/design-system/stripe-theme.css` rotası
+  (mirror'da yoksa fail-closed 404), `sync_verify_mirror.sh` guide listesi ve
+  `check_mirror_coverage.py` kapsamı 77/77. Landing tarafı `--theme
+  dark|light|stripe`: stripe varyantı `<style>` olarak gömülür ve `<html
+  data-theme="stripe">` yazılır; **varsayılan dark çıktısı bayt-bayt
+  değişmez** (nitelik yazılmaz), bilinmeyen tema `SnapshotInvalid`.
+- **Krema arındırması (ölçülmüş):** arşiv/kâğıt motifinin literalleri
+  (`#f4efe5`, `#fffdf8`, `#d6cbb9`, `#e2d7c6`, `#8b7355`, `#c9b18e`,
+  `#b8874a`, `#ebe3d4`, …) yalnız dark/light varsayılanlarında kalır;
+  stripe kapsamında yerlerini `var(--paper)`, `var(--paper-ink)`,
+  `var(--border)`, `var(--surface*)`, `var(--accent)`,
+  `var(--backdrop-lightbox)`, `color-mix(... var(--fg) …)` alır. Canlı
+  Chromium ölçümü (sunucu :8123): `dataset.theme="stripe"`, `--accent:
+  #533afd`, `--paper:#fff`, gövde `rgb(255,255,255)`, galeri/karo/lightbox
+  içinde tespit edilen krema-literal sayısı **0**; dark ve light
+  varyantları eskisi gibi (galeri `rgb(244,239,229)` / `rgb(255,253,248)`,
+  eyebrow `rgb(139,115,85)`). Landing'in stripe derlemesi de aynı ölçümle
+  temiz (arşiv panosu beyaz + lacivert, CTA `#533afd`).
+- **Kanıt:** `check_tokens.py` rc 0 ("stripe HDS varyantı 32 yuva
+  jeneratörle birebir"), `generate_stripe_theme.py --check` OK,
+  `test_check_design_tokens.py` 28 vaka, `test_build_landing.py` 16 vaka,
+  `test_preview_server.py` 166 vaka, `check_mirror_coverage.py` 77/77,
+  `check_seal_hash.py` temiz (mühür 74b2cdbdb18f ↔ committed PDF; landing
+  yeniden derlemesi mühürü değiştirmedi, yalnız +12 satır varyant eklendi).
+- **Kalan açı:** varyant yalnız `[data-theme]` seçicisiyle devreye giriyor —
+  otomatik "sistem teması" eşlemesi yok; ayrıca HDS font ailesi
+  (`sohne-var`/`SourceCodePro`) bundle edilmediği için stripe varyantı
+  tipografiyi değiştirmiyor, yalnız renk yüzeylerini değiştiriyor.

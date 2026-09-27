@@ -675,7 +675,10 @@ class ThemeContractTests(unittest.TestCase):
             source = f.read()
         self.assertIn("function themeQueryOverride()", source)
         self.assertIn('new URLSearchParams(window.location.search).get("theme")', source)
-        self.assertIn('requested === "dark" || requested === "light"', source)
+        # Tema beyaz listesi TEK kaynak: THEMES (stripe varyantı dahil). Query
+        # override yalnız bu listede olan bir değeri kabul eder.
+        self.assertIn('const THEMES = ["dark", "light", "stripe"]', source)
+        self.assertIn("return THEMES.includes(requested) ? requested : null;", source)
         self.assertIn("setTheme(queryTheme || storedTheme, !queryTheme)", source)
 
 

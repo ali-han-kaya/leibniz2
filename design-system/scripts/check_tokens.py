@@ -22,6 +22,14 @@ Contracts (post-import):
    tokens.css value (a copy instead of a reference), and (c) a hard-coded
    colour literal in any custom property. Comments are stripped first, so
    prose mentioning `:root {` can neither trip nor mask a finding.
+9. STRIPE TEMA VARYANTI (design-system/stripe/theme.css): meta/landing'in
+   `data-theme="stripe"` varyantı GENERATED'dır. Kapı: dosya jeneratörle
+   BİREBİR olmalı (elle drift yasak), tanımlar yalnız
+   `:root[data-theme="stripe"]` kapsamında olmalı, jeneratörün
+   REQUIRED_SLOTS'ünün tamamı bağlanmalı (eksik yuva = koyu palete sessiz
+   geri dönüş), HDS ön-koşulları aynadaki (stripe/tokens.css) değerlerle
+   birebir olmalı ve her yuva değeri en az bir `var(--hds-*)` referansı
+   taşımalı (literal renk yasak).
 8. dashboard-next PRESET BAĞIMSIZLIĞI + REFERANS KAPANIŞI: globals.css
    (a) shadcn preset CSS'i (@import "shadcn/…") DIŞARIDAN çekemez — tema
    yalnız design-system/tailwind.css köprüsünden ve repo-içi yuva
@@ -47,6 +55,16 @@ CSS = REPO / "design-system" / "tokens.css"
 NEXT_GLOBALS = REPO / "apps" / "dashboard-next" / "app" / "globals.css"
 NEXT_REL = "apps/dashboard-next/app/globals.css"
 TAILWIND_BRIDGE = REPO / "design-system" / "tailwind.css"
+STRIPE_MIRROR = REPO / "design-system" / "stripe" / "tokens.css"
+STRIPE_THEME = REPO / "design-system" / "stripe" / "theme.css"
+STRIPE_GEN = (REPO / "design-system" / "stripe" / "scripts"
+              / "generate_stripe_theme.py")
+# Varyantın tüketici yüzeyleri: tema kapsamlı override kuralları burada yaşar.
+STRIPE_SURFACES = (
+    REPO / "_calisma" / "CIKTI" / "preview.html",
+    REPO / "_calisma" / "landing" / "landing_src.html",
+)
+_STRIPE_RULE = re.compile(r'\[data-theme="stripe"\]([^{}]*)\{([^{}]*)\}')
 NEXT_APP = REPO / "apps" / "dashboard-next"
 # shadcn preset CSS'i (shadcn/dist/tailwind.css) tarafından tanımlanan ve
 # repo tarafında karşılığı OLMAYAN yüzeyler: preset importu kaldırıldığı için
@@ -133,6 +151,124 @@ def _css_custom_props(text: str):
             yield from flush()
         else:
             buf.append(ch)
+
+
+def _first_occurrence_vars(text: str) -> dict:
+    """İlk-görülüm custom-property haritası (değerler normalize)."""
+    out: dict = {}
+    for name, value in re.findall(r"(--[\w-]+)\s*:\s*([^;{}]+?)\s*;", text):
+        out.setdefault(name, re.sub(r"\s+", " ", value).strip())
+    return out
+
+
+def _load_stripe_generator():
+    """stripe varyant jeneratörünü yol üzerinden yükle (stdlib importlib)."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("stripe_theme_gen",
+                                                  STRIPE_GEN)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _stripe_variant_findings() -> list:
+    """Contract 9 — GENERATED stripe tema varyantının yapısal denetimi."""
+    findings = []
+    if not (STRIPE_THEME.is_file() and STRIPE_GEN.is_file()):
+        return ["design-system/stripe/{theme.css,scripts/generate_stripe_theme.py} "
+                "eksik — stripe tema varyantı (contract 9) denetlenemedi"]
+
+    gen = _load_stripe_generator()
+    variant = STRIPE_THEME.read_text(encoding="utf-8")
+    if variant != gen.render():
+        findings.append(
+            "design-system/stripe/theme.css jeneratörle birebir değil — "
+            "yeniden üret: python3 design-system/stripe/scripts/"
+            "generate_stripe_theme.py")
+
+    blocks = list(_css_custom_props(variant))
+    scopes = {selector for selector, _, _ in blocks}
+    if gen.SCOPE not in scopes:
+        findings.append(
+            f"design-system/stripe/theme.css: {gen.SCOPE} kapsam bloğu yok")
+    for selector in sorted(scopes - {gen.SCOPE}):
+        findings.append(
+            f"design-system/stripe/theme.css: beklenmeyen blok '{selector}' — "
+            f"varyant yalnız {gen.SCOPE} altında tanımlar (global sızıntı yasak)")
+
+    in_scope = {name: value for selector, name, value in blocks
+                if selector == gen.SCOPE}
+    mirror = _first_occurrence_vars(STRIPE_MIRROR.read_text(encoding="utf-8"))
+
+    for slot in gen.REQUIRED_SLOTS:
+        if slot not in in_scope:
+            findings.append(
+                f"design-system/stripe/theme.css: yuva {slot} bağlanmamış — "
+                "eksik yuva koyu palete sessiz geri düşer")
+    for name, value in sorted(in_scope.items()):
+        if name.startswith("--hds-"):
+            mirrored = mirror.get(name)
+            if mirrored is None:
+                findings.append(
+                    f"design-system/stripe/theme.css: {name} aynada yok "
+                    "(design-system/stripe/tokens.css)")
+            elif _norm_value(value) != _norm_value(mirrored):
+                findings.append(
+                    f"design-system/stripe/theme.css: {name} aynadan farklı "
+                    f"({value!r} != {mirrored!r})")
+            continue
+        if not name.startswith("--"):
+            continue
+        if not _VAR_REF.findall(value) or "--hds-" not in value:
+            findings.append(
+                f"design-system/stripe/theme.css: {name} bir --hds-* "
+                f"token'ına bağlanmıyor ({value!r}) — varyant HDS kaynaklı olmalı")
+        if _COLOR_LITERAL.search(_norm_value(value)):
+            findings.append(
+                f"design-system/stripe/theme.css: {name} renk literal'i "
+                f"taşıyor ({value!r}) — HDS token'ına/türevine bağlayın")
+    for name, value in sorted(in_scope.items()):
+        if name.startswith("--hds-"):
+            continue
+        for ref in _VAR_REF.findall(value):
+            if ref.startswith("--hds-") and (ref not in in_scope
+                                              and ref not in mirror):
+                findings.append(
+                    f"design-system/stripe/theme.css: {name} çürük HDS "
+                    f"referansı taşıyor (var({ref}) ne dosyada ne aynada)")
+
+    # Yüzey tarafı: varyant kapsamlı override kuralları yalnız token tüketir
+    # (krema/kağıt literalleri HDS paletini yarı-yolda keser).
+    for path in STRIPE_SURFACES:
+        rel = path.relative_to(REPO)
+        if not path.is_file():
+            findings.append(f"{rel} yok — stripe varyantı kablolaması "
+                            "denetlenemedi")
+            continue
+        text = _strip_css_comments(path.read_text(encoding="utf-8"))
+        rules = _STRIPE_RULE.findall(text)
+        if not rules:
+            findings.append(
+                f"{rel}: `[data-theme=\"stripe\"]` override kuralı yok — "
+                "tema varyantı yüzeyde karşılıksız")
+            continue
+        for selector, body in rules:
+            where = f"{rel}: [data-theme=\"stripe\"]{selector.strip()}"
+            for decl in body.split(";"):
+                if ":" not in decl:
+                    continue
+                value = decl.split(":", 1)[1].strip()
+                if not value:
+                    continue
+                if _COLOR_LITERAL.search(_norm_value(value)):
+                    findings.append(
+                        f"{where} renk literal'i taşıyor ({value!r}) — "
+                        "repo token'ına bağlayın")
+                if "var(" not in value:
+                    findings.append(
+                        f"{where} token referansı yok ({value!r})")
+    return findings
 
 
 def _strip_css_comments(text: str) -> str:
@@ -341,6 +477,9 @@ def main() -> int:
                 "karşılığını design-system köprüsüne/repo CSS'ine ekleyin"
             )
 
+    # 9. stripe HDS tema varyantı (GENERATED) — kapsam + referans kapanışı
+    drift.extend(_stripe_variant_findings())
+
     # 6. the generated bridge must stay verbatim-equal to tokens.css :root
     bridge_root = (
         vars_in_block(TAILWIND_BRIDGE.read_text(encoding="utf-8"), r":root")
@@ -359,10 +498,14 @@ def main() -> int:
             print(f"  {line}")
         return 1
     clean = next_ok and not (shadowed or copies or hardcoded)
+    stripe_slots = 0
+    if STRIPE_THEME.is_file() and STRIPE_GEN.is_file():
+        stripe_slots = len(_load_stripe_generator().REQUIRED_SLOTS)
     print(f"OK — import present, tokens.css :root {len(css_dark)} + light {len(css_light)} vars, "
           f"{len(tokens['color']['tint'])} tints in sheet, "
           f"dashboard-next bridge+copy-drift {'OK' if clean else 'n/a'}"
-          f" (preset-bağımsız + referans-kapalı)")
+          f" (preset-bağımsız + referans-kapalı), "
+          f"stripe HDS varyantı {stripe_slots} yuva jeneratörle birebir")
     return 0
 
 

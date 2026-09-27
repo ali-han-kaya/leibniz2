@@ -36,6 +36,13 @@ ASSETS = Path(__file__).resolve().parent / "assets"
 SLIDES = ROOT / "_calisma" / "CIKTI" / "slides_z3"
 PLATES = ["P1-a.png", "P2.png", "P3-a.png"]
 TOKENS = ROOT / "design-system" / "tokens.css"
+# Stripe HDS tema varyantı — GENERATED (design-system/stripe/scripts/
+# generate_stripe_theme.py; check-design-tokens contract 9 denetler).
+# `--theme stripe` derlemesi bunu tokens.css'in yanına gömer ve <html>
+# etiketine data-theme="stripe" yazar; varsayılan derleme (dark) dokunulmaz.
+STRIPE_THEME = ROOT / "design-system" / "stripe" / "theme.css"
+THEMES = ("dark", "light", "stripe")
+HTML_TAG = '<html lang="tr">'
 DEFAULT_SNAPSHOT_URL = "http://127.0.0.1:8000/api/latest"
 SNAPSHOT_HTTP_TIMEOUT = 5.0
 HASH_RE = re.compile(r"^[0-9a-fA-F]{64}$")
@@ -203,8 +210,18 @@ def resolve_snapshot(source, hash_field="raw", wait_seconds=0.0,
         time.sleep(min(poll_seconds, remaining))
 
 
-def build_page(snapshot, sha, hash_field="raw", output=None, assets_dir=None):
-    """Snapshot hash'ini landing HTML'ine gömer ve çıktıyı yazar."""
+def build_page(snapshot, sha, hash_field="raw", output=None, assets_dir=None,
+               theme="dark"):
+    """Snapshot hash'ini landing HTML'ine gömer ve çıktıyı yazar.
+
+    `theme` (dark|light|stripe) yalnız <html data-theme="..."> enjekte eder;
+    `stripe` ayrıca GENERATED HDS varyantını (design-system/stripe/theme.css)
+    tokens.css'in hemen yanına gömer. Varsayılan `dark` çıktısı bayt-bayt
+    aynı kalır (data-theme niteliği yazılmaz).
+    """
+    if theme not in THEMES:
+        raise SnapshotInvalid("bilinmeyen tema: %r (desteklenen: %s)"
+                              % (theme, ", ".join(THEMES)))
     output = Path(output) if output is not None else OUT
     assets_dir = Path(assets_dir) if assets_dir is not None else ASSETS
     if not isinstance(snapshot, dict):
@@ -219,7 +236,23 @@ def build_page(snapshot, sha, hash_field="raw", output=None, assets_dir=None):
     imp = '<style>@import "../../design-system/tokens.css";</style>'
     if imp not in src:
         raise SnapshotInvalid("@import satırı kaynakta bulunamadı — dosya değişti mi?")
-    src = src.replace(imp, "<style>\n" + tokens + "\n</style>")
+    embed = "<style>\n" + tokens + "\n</style>"
+    if theme == "stripe":
+        if not STRIPE_THEME.is_file():
+            raise SnapshotInvalid(
+                "stripe tema varyantı yok: %s — üret: python3 design-system/"
+                "stripe/scripts/generate_stripe_theme.py" % STRIPE_THEME)
+        embed += ("\n<style>\n" + STRIPE_THEME.read_text(encoding="utf-8")
+                  + "\n</style>")
+    src = src.replace(imp, embed)
+
+    # 1b) tema varyantı — yalnız varsayılan-dışı temalarda nitelik yazılır
+    if theme != "dark":
+        if HTML_TAG not in src:
+            raise SnapshotInvalid(
+                "html etiketi beklenen biçimde değil (%s) — data-theme "
+                "enjekte edilemedi" % HTML_TAG)
+        src = src.replace(HTML_TAG, '<html lang="tr" data-theme="%s">' % theme, 1)
 
     # 2) snapshot'tan doğrulanmış gerçek hash (donmuş kayıt yok).
     sha = sha.upper()
@@ -284,6 +317,9 @@ def main(argv=None):
                     help="mühürde kullanılacak snapshot hash alanı")
     ap.add_argument("--output", type=Path, default=OUT)
     ap.add_argument("--assets-dir", type=Path, default=ASSETS)
+    ap.add_argument("--theme", choices=THEMES, default="dark",
+                    help="landing tema varyantı: dark (varsayılan), light ya "
+                         "da stripe (HDS varyantı gömülür)")
     args = ap.parse_args(argv)
 
     try:
@@ -292,13 +328,14 @@ def main(argv=None):
             source_value, hash_field=args.hash_field,
             wait_seconds=args.wait_seconds, poll_seconds=args.poll_seconds)
         build_page(snapshot, sha, hash_field=args.hash_field,
-                   output=args.output, assets_dir=args.assets_dir)
+                   output=args.output, assets_dir=args.assets_dir,
+                   theme=args.theme)
     except (SnapshotUnavailable, SnapshotInvalid, ValueError, OSError) as exc:
         print("BUILD FAIL: %s" % exc, file=sys.stderr)
         return 1
-    print("OK: %s (%s bayt) — mühür %s (%s snapshot ts=%s)" % (
+    print("OK: %s (%s bayt) — mühür %s (%s snapshot ts=%s, tema %s)" % (
         args.output, args.output.stat().st_size, sha[:12], args.hash_field,
-        snapshot.get("ts")))
+        snapshot.get("ts"), args.theme))
     return 0
 
 

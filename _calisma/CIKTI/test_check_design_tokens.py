@@ -8,6 +8,7 @@ Contracts:
   hard-coded colour literal — in ANY block (second :root, .dark, @media …)
 - check_tokens.py is ~0.05s and stdlib-only
 """
+import importlib.util
 import pathlib
 import re
 import shutil
@@ -21,6 +22,15 @@ REPO = HERE.parent.parent
 HTML = REPO / "_calisma" / "CIKTI" / "preview.html"
 CSS = REPO / "design-system" / "tokens.css"
 SCRIPT = REPO / "design-system" / "scripts" / "check_tokens.py"
+STRIPE_GEN_NAME = "generate_stripe_theme.py"
+STRIPE_THEME = REPO / "design-system" / "stripe" / "theme.css"
+PREVIEW_HTML = REPO / "_calisma" / "CIKTI" / "preview.html"
+PREVIEW_JS = REPO / "_calisma" / "CIKTI" / "preview.js"
+PREVIEW_SERVER = REPO / "_calisma" / "CIKTI" / "preview_server.py"
+SYNC_MIRROR = REPO / "_calisma" / "CIKTI" / "sync_verify_mirror.sh"
+MIRROR_COVERAGE = REPO / "_calisma" / "CIKTI" / "check_mirror_coverage.py"
+BUILD_LANDING = REPO / "_calisma" / "landing" / "build_landing.py"
+LANDING_SRC = REPO / "_calisma" / "landing" / "landing_src.html"
 GLOBALS = REPO / "apps" / "dashboard-next" / "app" / "globals.css"
 
 
@@ -28,6 +38,15 @@ def run_check_copy(tmp_script: pathlib.Path):
     return subprocess.run(
         [sys.executable, str(tmp_script)],
         capture_output=True, text=True, timeout=10)
+
+
+def _load_gate(script_path: pathlib.Path):
+    """check_tokens.py'yi yol üzerinden modül olarak yükle (fonksiyon testi)."""
+    spec = importlib.util.spec_from_file_location("check_tokens_fixture",
+                                                  script_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _tmp_repo() -> pathlib.Path:
@@ -44,6 +63,20 @@ def _tmp_repo() -> pathlib.Path:
     # contract 5/7 live on dashboard-next — without this file the gate skips
     # them (next_ok False) and every drift test below would pass vacuously
     shutil.copy(GLOBALS, td / "apps" / "dashboard-next" / "app" / "globals.css")
+    # contract 9: stripe tema varyantı (ayna + GENERATED çıktı + jeneratör)
+    stripe = td / "design-system" / "stripe"
+    (stripe / "scripts").mkdir(parents=True)
+    shutil.copy(REPO / "design-system" / "stripe" / "tokens.css",
+                stripe / "tokens.css")
+    shutil.copy(REPO / "design-system" / "stripe" / "theme.css",
+                stripe / "theme.css")
+    shutil.copy(REPO / "design-system" / "stripe" / "scripts" / STRIPE_GEN_NAME,
+                stripe / "scripts" / STRIPE_GEN_NAME)
+    # contract 9 ayrıca varyantı tüketen yüzeyleri denetler (preview + landing
+    # kaynağı); fixture'da yoksa kapı "kablolama denetlenemedi" der.
+    landing = td / "_calisma" / "landing"
+    landing.mkdir(parents=True)
+    shutil.copy(LANDING_SRC, landing / "landing_src.html")
     return td
 
 
@@ -230,6 +263,147 @@ class TestDesignTokensGate(unittest.TestCase):
             self.assertIn("no-scrollbar", out)
         finally:
             shutil.rmtree(td, ignore_errors=True)
+
+    # ── contract 9: stripe HDS tema varyantı ───────────────────────────
+
+    def test_stripe_variant_passes_on_real_repo(self):
+        r = subprocess.run([sys.executable, str(SCRIPT)], capture_output=True,
+                           text=True, timeout=10)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("stripe HDS varyantı", r.stdout)
+        self.assertIn("32 yuva", r.stdout)
+
+    def test_stripe_variant_hand_edit_fails(self):
+        td = _tmp_repo()
+        try:
+            tmp_script = td / "design-system" / "scripts" / "check_tokens.py"
+            theme = td / "design-system" / "stripe" / "theme.css"
+            theme.write_text(
+                theme.read_text(encoding="utf-8").replace(
+                    "--accent: var(--hds-color-action-bg-solid);",
+                    "--accent: #533afd;"),
+                encoding="utf-8")
+            r = run_check_copy(tmp_script)
+            self.assertNotEqual(r.returncode, 0)
+            out = r.stdout + r.stderr
+            self.assertIn("jeneratörle birebir değil", out)
+            self.assertIn("--accent renk literal", out)
+        finally:
+            shutil.rmtree(td, ignore_errors=True)
+
+    def test_stripe_variant_scope_leak_fails(self):
+        td = _tmp_repo()
+        try:
+            tmp_script = td / "design-system" / "scripts" / "check_tokens.py"
+            theme = td / "design-system" / "stripe" / "theme.css"
+            theme.write_text(
+                theme.read_text(encoding="utf-8")
+                + '\n:root { --sizinti: var(--hds-color-core-brand-600); }\n',
+                encoding="utf-8")
+            r = run_check_copy(tmp_script)
+            self.assertNotEqual(r.returncode, 0)
+            self.assertIn("beklenmeyen blok", r.stdout + r.stderr)
+        finally:
+            shutil.rmtree(td, ignore_errors=True)
+
+    def test_stripe_variant_dangling_hds_reference_fails(self):
+        """Çürük HDS referansı: ne dosyada ne aynada tanımlı."""
+        td = _tmp_repo()
+        try:
+            module = _load_gate(td / "design-system" / "scripts"
+                                / "check_tokens.py")
+            theme = td / "design-system" / "stripe" / "theme.css"
+            theme.write_text(
+                theme.read_text(encoding="utf-8").replace(
+                    "  --accent: var(--hds-color-action-bg-solid);",
+                    "  --accent: var(--hds-color-action-bg-solid);\n"
+                    "  --tint-yeni: var(--hds-color-yok-boyle-token);"),
+                encoding="utf-8")
+            findings = module._stripe_variant_findings()
+            self.assertTrue(any("çürük HDS referansı" in f for f in findings),
+                            findings)
+        finally:
+            shutil.rmtree(td, ignore_errors=True)
+
+    def test_stripe_variant_mirror_value_drift_fails(self):
+        """theme.css'teki HDS ön-koşulu aynadaki değerle birebir olmalı."""
+        td = _tmp_repo()
+        try:
+            module = _load_gate(td / "design-system" / "scripts"
+                                / "check_tokens.py")
+            theme = td / "design-system" / "stripe" / "theme.css"
+            theme.write_text(
+                theme.read_text(encoding="utf-8").replace(
+                    "--hds-color-core-brand-600: #533afd;",
+                    "--hds-color-core-brand-600: #533afe;"),
+                encoding="utf-8")
+            findings = module._stripe_variant_findings()
+            self.assertTrue(any("aynadan farklı" in f for f in findings),
+                            findings)
+        finally:
+            shutil.rmtree(td, ignore_errors=True)
+
+    def test_stripe_variant_missing_slot_fails(self):
+        """REQUIRED_SLOTS eksik bağlanırsa jeneratör render'ı reddeder."""
+        td = _tmp_repo()
+        try:
+            module = _load_gate(td / "design-system" / "scripts"
+                                / "check_tokens.py")
+            gen = module._load_stripe_generator()
+            gen.SLOT_MAP.pop("--budget")
+            with self.assertRaises(SystemExit):
+                gen.render()
+        finally:
+            shutil.rmtree(td, ignore_errors=True)
+
+    def test_stripe_surface_override_with_literal_fails(self):
+        """Yüzeydeki stripe override'ı literal renkle HDS paletini kesemez."""
+        td = _tmp_repo()
+        try:
+            module = _load_gate(td / "design-system" / "scripts"
+                                / "check_tokens.py")
+            surface = td / "_calisma" / "CIKTI" / "preview.html"
+            surface.write_text(
+                surface.read_text(encoding="utf-8").replace(
+                    ':root[data-theme="stripe"] .z3-slide { background:var(--surface);',
+                    ':root[data-theme="stripe"] .z3-slide { background:#fffdf8;'),
+                encoding="utf-8")
+            findings = module._stripe_variant_findings()
+            self.assertTrue(any("renk literal" in f for f in findings),
+                            findings)
+        finally:
+            shutil.rmtree(td, ignore_errors=True)
+
+    # ── contract 9 wiring: yüzey + servis + mirror zinciri ──────────────
+
+    def test_stripe_variant_is_wired_into_preview_and_landing(self):
+        preview_html = PREVIEW_HTML.read_text(encoding="utf-8")
+        self.assertIn('/design-system/stripe-theme.css', preview_html,
+                      "preview.html vrariant stylesheet'ini yüklemiyor")
+
+        preview_js = PREVIEW_JS.read_text(encoding="utf-8")
+        self.assertIn('const THEMES = ["dark", "light", "stripe"]', preview_js)
+        self.assertIn("THEMES.includes(requested)", preview_js)
+
+        server = PREVIEW_SERVER.read_text(encoding="utf-8")
+        self.assertIn('return "design_tokens_stripe"', server)
+        self.assertIn("def serve_stripe_theme(self):", server)
+        self.assertIn('"design-system-stripe-theme.css"', server)
+
+        mirror = SYNC_MIRROR.read_text(encoding="utf-8")
+        self.assertIn(
+            '"design-system/stripe/theme.css|design-system-stripe-theme.css"',
+            mirror, "mirror eşlemesi yok — sunucu rotası 404'e düşer")
+
+        coverage = MIRROR_COVERAGE.read_text(encoding="utf-8")
+        self.assertIn('STRIPE_THEME_REL = "design-system/stripe/theme.css"',
+                      coverage)
+        self.assertIn("expected.add(STRIPE_THEME_REL)", coverage)
+
+        landing = BUILD_LANDING.read_text(encoding="utf-8")
+        self.assertIn('STRIPE_THEME = ROOT / "design-system" / "stripe" '
+                      '/ "theme.css"', landing)
+        self.assertIn('THEMES = ("dark", "light", "stripe")', landing)
 
     def test_preset_only_word_in_comment_does_not_trip(self):
         """Yorumdaki yüzey adı bloke etmez (yorum-sonrası metin taranır)."""

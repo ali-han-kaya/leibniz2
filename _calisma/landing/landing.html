@@ -257,6 +257,18 @@
                       color:#7a6144; margin-top:8px; text-align:center; }
   .archive-note { margin:18px 0 0; font:italic 400 13px/1.5 Georgia,serif; color:#5c4d3c; }
 
+  /* Stripe HDS varyantı (--theme stripe) — arşiv tahtasının krema literalleri
+     repo token'larına bağlanır; dark/light varsayılanları DEĞİŞMEZ.
+     check-design-tokens contract 9 bu kapsamda renk literal'ini yasaklar. */
+  :root[data-theme="stripe"] .archive { background:var(--paper); color:var(--paper-ink);
+             border-color:var(--border);
+             box-shadow:0 16px 40px color-mix(in oklab, var(--fg) 12%, transparent); }
+  :root[data-theme="stripe"] .archive::before { color:var(--muted); }
+  :root[data-theme="stripe"] .plate { background:var(--surface); border-color:var(--border); }
+  :root[data-theme="stripe"] .plate img { border-color:var(--border); }
+  :root[data-theme="stripe"] .plate figcaption { color:var(--muted); }
+  :root[data-theme="stripe"] .archive-note { color:var(--fg-dimmed); }
+
   /* ═══ cta + footer (comp-4) ═══ */
   .band { text-align:center; padding:96px 0 0; }
   .band h2 { margin:18px auto 14px; max-width:640px; }

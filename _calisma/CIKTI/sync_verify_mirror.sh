@@ -186,6 +186,12 @@ GUIDE_FILES=(
   # PREVIEW_DIR/design-system-tokens.css'ten servis eder (repo'daki tek
   # kaynak <repo>/design-system/tokens.css).
   "design-system/tokens.css|design-system-tokens.css"
+  # Stripe HDS tema varyantı — GENERATED (generate_stripe_theme.py);
+  # preview.html /design-system/stripe-theme.css rotasından servis eder
+  # (?theme=stripe / tema döngüsü). Tek kaynak <repo>/design-system/stripe/
+  # theme.css; check_design_tokens contract 9 jeneratörle birebirliği ve
+  # kapsamı doğrular.
+  "design-system/stripe/theme.css|design-system-stripe-theme.css"
   # Hook env sürüm matrisi — dashboard env-drift paneli (preview_server, ROOT
   # yanındaki HOOK_ENV_MATRIX.md'yi okur). TCC mirror'da repoyu okuyamaz;
   # launchd rotasında panelin doğru karşılaştırması için kopya buraya drop

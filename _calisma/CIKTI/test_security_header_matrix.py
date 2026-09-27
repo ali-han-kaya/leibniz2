@@ -55,6 +55,7 @@ ROUTE_URLS = {
     "preview_js": "/preview.js",
     "vendor_axe": "/vendor/axe.min.js",
     "design_tokens": "/design-system/tokens.css",
+    "design_tokens_stripe": "/design-system/stripe-theme.css",
     "guide": "/guide.html",
     "landing": "/landing.html",
     "landing_assets": "/landing/assets/yok.png",

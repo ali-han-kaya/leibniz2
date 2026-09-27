@@ -7,7 +7,12 @@
 <meta http-equiv="Expires" content="0">
 <title>Stoic-Hume V5 — Live CI Dashboard</title>
 <link rel="stylesheet" href="/design-system/tokens.css?v=1">
+<link rel="stylesheet" href="/design-system/stripe-theme.css?v=1">
 <style>
+  /* Marka varyantı: design-system/stripe/theme.css (GENERATED) —
+     `data-theme="stripe"` iken repo semantik yuvalarını HDS token'larına
+     bağlar (tema döngüsü: dark → light → stripe; ?theme=stripe). Kapı:
+     check-design-tokens contract 9. */
   /* Token tek kaynağı: design-system/tokens.css — /design-system/tokens.css
      rotasından servis edilir (PREVIEW_DIR/design-system-tokens.css kopyası;
      sync_verify_mirror.sh GUIDE_FILES taşır). Inline :root var blokları
@@ -47,6 +52,32 @@
            background-size:cover; background-position:center right;
            opacity:.14; mix-blend-mode:luminosity; }
   :root[data-theme="light"] .header-decor { opacity:.22; mix-blend-mode:multiply; }
+  /* Stripe HDS varyantı (data-theme="stripe") — arşiv/kâğıt panelinin krema
+     literallerini repo token'larına bağlar (koyu/açık varsayılanlar
+     DEĞİŞMEZ; varyantta kâğıt HDS beyazına, mürekkep laciverte düşer).
+     check-design-tokens contract 9 bu kapsamda renk literal'ini yasaklar. */
+  :root[data-theme="stripe"] .z3-gallery { background:var(--paper); color:var(--paper-ink);
+           border-color:var(--border);
+           box-shadow:0 16px 40px color-mix(in oklab, var(--fg) 12%, transparent),
+                      inset 0 0 0 8px var(--surface-2); }
+  :root[data-theme="stripe"] .z3-gallery::before { color:var(--fg-dimmed); }
+  :root[data-theme="stripe"] .z3-gallery h2 { color:var(--paper-ink); border-bottom-color:var(--border); }
+  :root[data-theme="stripe"] .z3-gallery h2::after { border-bottom-color:var(--accent); }
+  :root[data-theme="stripe"] .z3-slide { background:var(--surface); color:var(--fg); border-color:var(--border);
+           box-shadow:0 5px 12px color-mix(in oklab, var(--fg) 10%, transparent); }
+  :root[data-theme="stripe"] .z3-slide img { border-color:var(--border); }
+  :root[data-theme="stripe"] .z3-slide:hover, :root[data-theme="stripe"] .z3-slide:focus-visible {
+           box-shadow:0 12px 22px color-mix(in oklab, var(--fg) 16%, transparent); outline-color:var(--accent); }
+  :root[data-theme="stripe"] .z3-lightbox { background:var(--backdrop-lightbox); }
+  :root[data-theme="stripe"] .z3-lightbox::before, :root[data-theme="stripe"] .z3-lightbox .lightbox-hint {
+           color:color-mix(in oklab, var(--paper) 72%, transparent); }
+  :root[data-theme="stripe"] .z3-lightbox img { background:var(--paper); border-color:var(--border);
+           box-shadow:0 18px 60px color-mix(in oklab, var(--fg) 60%, transparent); }
+  :root[data-theme="stripe"] .z3-lightbox h2 { color:var(--paper); }
+  :root[data-theme="stripe"] .z3-lightbox #z3-close { border-color:var(--border); color:var(--paper); }
+  :root[data-theme="stripe"] .z3-lightbox #z3-prev, :root[data-theme="stripe"] .z3-lightbox #z3-next {
+           background:color-mix(in oklab, var(--paper) 10%, transparent);
+           border-color:var(--border); color:var(--paper); }
   header { position:relative; }
   header > * { position:relative; z-index:1; }
   /* dekor-en-arkada: dekor-en-arkada = z-index:0 (metin z-index:1 ustunde) */
@@ -226,6 +257,7 @@
   .z3-lightbox { position:fixed; inset:0; z-index:1000; background:rgba(24,20,16,.96); display:flex; align-items:center; justify-content:center; gap:20px; padding:72px 24px 32px; }
   .z3-lightbox[hidden] { display:none; }
   .z3-lightbox::before { content:"Z3 / ARCHIVE LIGHTBOX"; position:absolute; top:28px; left:32px; color:#c9b18e; font:11px/1.2 "SF Mono",monospace; letter-spacing:.16em; }
+  .z3-lightbox .lightbox-hint { color:#c9b18e; }
   .z3-lightbox img { max-width:82vw; max-height:78vh; padding:12px; background:#fffdf8; border:1px solid #d6cbb9; box-shadow:0 18px 60px rgba(0,0,0,.5); }
   .z3-lightbox button { font-size:2rem; padding:.25em .5em; cursor:pointer; }
   .z3-lightbox h2 { position:absolute; top:48px; left:32px; color:#f4efe5; border:0; font:20px Georgia,"Times New Roman",serif; text-transform:none; letter-spacing:0; }
@@ -290,7 +322,7 @@
   </section>
   <div id="z3-lightbox" class="z3-lightbox" hidden role="dialog" aria-modal="true" aria-labelledby="z3-lightbox-title">
     <h2 id="z3-lightbox-title">Z3 slayt önizleme</h2>
-    <p class="ts" style="position:absolute;top:78px;left:32px;color:#c9b18e">← → gezin · Esc kapat</p>
+    <p class="ts lightbox-hint" style="position:absolute;top:78px;left:32px">← → gezin · Esc kapat</p>
     <button type="button" id="z3-prev" aria-label="Önceki slayt">‹</button>
     <img id="z3-lightbox-image" alt="" />
     <button type="button" id="z3-next" aria-label="Sonraki slayt">›</button>

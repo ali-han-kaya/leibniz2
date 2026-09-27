@@ -6,6 +6,7 @@ import io
 import json
 import os
 import pathlib
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -119,6 +120,48 @@ class BuildPageTests(unittest.TestCase):
             self.assertNotIn("../../CIKTI/slides_z3", html)
             for plate in build_landing.PLATES:
                 self.assertTrue((assets / plate).is_file())
+
+
+class ThemeVariantTests(unittest.TestCase):
+    """--theme (dark|light|stripe): varsayılan dark dokunulmaz; stripe HDS
+    varyantını gömer ve <html data-theme> yazar (JS'siz tema)."""
+
+    def _build(self, theme):
+        work = tempfile.mkdtemp(prefix="landing-theme-")
+        self.addCleanup(shutil.rmtree, work, ignore_errors=True)
+        root = pathlib.Path(work)
+        output = root / "landing.html"
+        build_landing.build_page(snapshot(), RAW_SHA, output=output,
+                                 assets_dir=root / "assets", theme=theme)
+        return output.read_text(encoding="utf-8")
+
+    def test_default_theme_stays_attribute_free(self):
+        html = self._build("dark")
+        self.assertIn('<html lang="tr">', html)
+        self.assertNotIn('<html lang="tr" data-theme', html)
+        self.assertNotIn("--hds-color-core-brand-600", html)
+
+    def test_stripe_theme_embeds_variant_and_sets_attribute(self):
+        html = self._build("stripe")
+        self.assertIn('<html lang="tr" data-theme="stripe">', html)
+        self.assertIn(':root[data-theme="stripe"]', html)
+        self.assertIn("--hds-color-core-brand-600: #533afd;", html)
+        self.assertIn("--accent: var(--hds-color-action-bg-solid);", html)
+        self.assertNotIn("{{SEAL_", html)
+
+    def test_light_theme_sets_attribute_without_variant(self):
+        html = self._build("light")
+        self.assertIn('<html lang="tr" data-theme="light">', html)
+        self.assertNotIn("--hds-color-core-brand-600", html)
+
+    def test_unknown_theme_is_rejected(self):
+        with tempfile.TemporaryDirectory(prefix="landing-theme-") as work:
+            root = pathlib.Path(work)
+            with self.assertRaisesRegex(build_landing.SnapshotInvalid,
+                                        "bilinmeyen tema"):
+                build_landing.build_page(
+                    snapshot(), RAW_SHA, output=root / "landing.html",
+                    assets_dir=root / "assets", theme="neon")
 
 
 class CliTests(unittest.TestCase):
