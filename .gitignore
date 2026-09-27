@@ -94,23 +94,27 @@ _calisma/CIKTI/history.jsonl.sha256
 /pyproject.toml
 /uv.lock
 
-# Ruflo V3 runtime yuzeyi. Yapilandirma (config.yaml, CAPABILITIES.md,
-# .gitignore) IZLENIR; calisma zamani artiklari degildir.
+# Ruflo V3 runtime yuzeyi. Ilke: `.claude-flow/` altindaki HER sey calisma
+# zamanidir; yalniz YAPILANDIRMA izlenir.
+#
+# Dosya isimlerini tek tek saymak yanlis yaklasim — ruflo yeni bir durum
+# dosyasi uretiginde sizar. Negatif testle olculdu: sayma yaklasimi
+# `.claude-flow/olay.state.json` gibi bilinmeyen bir durum dosyasini
+# geciriyordu. Bu yuzden "hepsini gizle, yapilandirma haric" kalibi.
 #
 # NOT: ruflo init buraya ayrica `.env`, `.env.local`, `.env.*.local`
 # desenlerini de eklemisti. Ucu de GEREKSIZDI: yukarida (sat. 70)
 # `.env*` zaten hepsini kapsiyor. Eklenmeleri kapsam degil, oncelik
 # sirasi degistiriyordu — o yuzden geri alindi.
 #
-# Ayrica ruflo KENDI calisma zamani dosyalarini ignore etmemisti:
+# Ayrica ruflo KENDI calisma zamani dosyalarini hic ignore etmemisti:
 # daemon.pid bir PID sayisidir (makineye ozgu, baska yerde yanlis),
 # daemon-state.json / policy/state.json / harness-active-policy.json
-# canli durumdur. Bunlar commit edilmemeli — calisma zamani, kaynak degil.
-.claude-flow/data/
-.claude-flow/logs/
-.claude-flow/sessions/
-.claude-flow/daemon.pid
-.claude-flow/daemon-state.json
-.claude-flow/harness-active-policy.json
-.claude-flow/policy/
+# canli durumdur. Bunlar commit edilmemeli — kaynak degil.
+.claude-flow/*
+!.claude-flow/.gitignore
+!.claude-flow/config.yaml
+!.claude-flow/CAPABILITIES.md
+# `--skip-claude` bayragina ragmen olusan dizin; icinde yalnizca
+# daemon'in urettigi dosyalar var, yapilandirma degil.
 .claude/

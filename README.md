@@ -562,6 +562,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-27 | feat | (security) baslik matrisi + CSP sozlesmesi + izolasyon kapisi | [`827430d`](https://github.com/ali-han-kaya/leibniz2/commit/827430d) |
 | 2026-09-27 | docs | oturum ozeti - commit'ler, olculmus bulgular, bekleyen kararlar | [`59fc35e`](https://github.com/ali-han-kaya/leibniz2/commit/59fc35e) |
 | 2026-09-27 | chore | (gitignore) ruflo calisma zamani yuzeylerini gizle | [`748f12f`](https://github.com/ali-han-kaya/leibniz2/commit/748f12f) |
+| 2026-09-27 | chore | (ruflo) V3 runtime yapilandirmasini kayda gecir | [`9c08763`](https://github.com/ali-han-kaya/leibniz2/commit/9c08763) |
 
 ### Regresyon notları
 
