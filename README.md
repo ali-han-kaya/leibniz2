@@ -568,6 +568,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-27 | ci | (verify) VERIFY-001 canli CSP kanitini a11y-gate'e bagla | [`0dc7d4d`](https://github.com/ali-han-kaya/leibniz2/commit/0dc7d4d) |
 | 2026-09-27 | chore | (changelog) stale satirlari temizleyen --prune moduna gec | [`b2f4acd`](https://github.com/ali-han-kaya/leibniz2/commit/b2f4acd) |
 | 2026-09-27 | fix | (texlive) determinism kanitini yuklenen bir yola tasi | [`8d64b4f`](https://github.com/ali-han-kaya/leibniz2/commit/8d64b4f) |
+| 2026-09-27 | fix | (verify) PRECOMMIT_RAPORU semasi takip edilen yoldan okunuyor | [`817bb6a`](https://github.com/ali-han-kaya/leibniz2/commit/817bb6a) |
 
 ### Regresyon notları
 
