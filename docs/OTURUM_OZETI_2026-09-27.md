@@ -1,7 +1,10 @@
 # Oturum Özeti — 2026-09-27
 
 **Dal:** `main` · **HEAD:** `827430d` · **Push yapılmadı** (tüm iş yerelde).
-**Kapsam:** video kompozisyonu → önizleme güvenliği → izolasyon kapıları.
+**Kapsam:** video kompozisyonu → önizleme güvenliği → izolasyon kapıları → hakem incelemesi.
+**Hakem incelemesi:** `docs/HAKEM_INCELEME_RAPORU_2026-09-27.md` (son tur) —
+depodaki gerçek hakem raporu şablonu kullanılarak yapıldı; **1 Critical,
+4 Important, 3 Minor**, hepsi `dosya:satır` kanıtıyla.
 **Doğrulama notu:** aşağıdaki açık kalemlerden bazıları bir önceki
 turdan devralınmıştı ve **bayattı**; her biri bu oturumda yeniden
 ölçüldü. "Doğrulandı" ibaresi ölçüldüğü anlamına gelir.
@@ -91,15 +94,14 @@ Chromium kurulu yerde.
 
 ## 4. Bekleyen kararlar
 
-| kalem                                      | durum                                                                                                                                                                                                                                                                                                            |
-| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Hakem raporundaki 2 Critical               | **Doğrulanamadı.** `a11y_gate.py` artık `_apply_theme` kullanıyor (sat. 243, 288, 306) — tema bağlayıcısı ölçülebilir biçimde çözülmüş görünüyor. `preview_server._route()` da mevcut ve testli. Raporun **metni repoda yok**; `findings.md`/`progress.md` içinde "Critical" geçmiyor. Karar için rapor gerekir. |
-| `repack_delivery.py:75-76` ResourceWarning | **Doğrulandı: hâlâ açık.** Yol `_calisma/repack_delivery.py` (CIKTI değil). İki `sum(1 for _ in open(...))` — `with` yok.                                                                                                                                                                                        |
-| `docs/Makefile.texlive` SOURCE_DATE_EPOCH  | Kapatılmış görünüyor (6 geçiş).                                                                                                                                                                                                                                                                                  |
-| `/tmp/review_brief.md`                     | **Dosya yok.** Ne diskte, ne git geçmişinde, ne worktree'lerde. Taşınacak içerik yok.                                                                                                                                                                                                                            |
-| Kota tarihi                                | "22 Eylül" 27 Eylül'ün **5 gün öncesi**. Not 22 Ekim mi, "gecikti" mi — karar gerekiyor.                                                                                                                                                                                                                         |
-| `github-site-sample` worktree              | 8 untracked dosya (Primer örneği + ADR). **Bu oturumun işi değil**, başka dalda. Sahipliği belirsiz → dokunulmadı.                                                                                                                                                                                               |
-| `pyproject.toml` / `uv.lock`               | Kök Vercel kalıntısı; `.gitignore`'a eklendi (`a2d681e`). Kapandı.                                                                                                                                                                                                                                               |
+| kalem | durum |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- || Hakem raporundaki 2 Critical | **Kapatıldı (son tur).** "2 Critical" ifadesi repoda **doğrulanamıyor** — raporun metni yok. Bunun yerine hakem incelemesinin **kendisi** yapıldı: `docs/HAKEM_INCELEME_RAPORU_2026-09-27.md`. Şablon: paketteki `internal_review_report.md` (388 sat., P0/P1/P2 + L1–L4 lens) → P0=**Critical**, P1=**Important**, P2=**Minor**. 15 denetim ölçüldü (D1–D15). |
+| `repack_delivery.py:75-76` ResourceWarning | **Doğrulandı: hâlâ açık** → hakem raporunda **M-1 (Minor)** olarak sınıflandırıldı. Yol `_calisma/repack_delivery.py` (CIKTI değil). İki `sum(1 for _ in open(...))` — `with` yok. |
+| `docs/Makefile.texlive` SOURCE_DATE_EPOCH | Kapatılmış görünüyor (6 geçiş). |
+| `/tmp/review_brief.md` | **Dosya yok.** Ne diskte, ne git geçmişinde, ne worktree'lerde. Taşınacak içerik yok. |
+| Kota tarihi | "22 Eylül" 27 Eylül'ün **5 gün öncesi**. Not 22 Ekim mi, "gecikti" mi — karar gerekiyor. |
+| `github-site-sample` worktree | 8 untracked dosya (Primer örneği + ADR). **Bu oturumun işi değil**, başka dalda. Sahipliği belirsiz → dokunulmadı. |
+| `pyproject.toml` / `uv.lock` | Kök Vercel kalıntısı; `.gitignore`'a eklendi (`a2d681e`). Kapandı. |
 
 ---
 
