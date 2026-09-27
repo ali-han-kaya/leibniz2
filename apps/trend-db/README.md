@@ -15,15 +15,24 @@ bağlantı sözleşmesi (pooled/direct ayrımı).
   (`HISTORY_MAX=100`) düşürdüğü eski koşuları da saklar; `npm run load` ile idempotent senkron
 - ✅ `dashboard-next` artık bu tablodan okuyor (`lib/trend-db.ts`)
 - ✅ `--dry-run` ön-uçuş (2026-09-27; DB'siz satır sayacı + kaynak SHA-256)
+- ✅ RLS şablonu (2026-09-27; service-role yazar / anon aggregate okur) — migration hazır, **uygulama bekliyor**
 
 ## Kurulum (tamamlanmış hali)
 
 ```bash
 cd apps/trend-db
 neon env pull --project-id orange-bar-58985004 -e DATABASE_URL -e DATABASE_URL_UNPOOLED -e NEON_BRANCH
+set -a && . ./.env && set +a
+DATABASE_URL="$DATABASE_URL_UNPOOLED" npx prisma migrate deploy   # init + RLS (pooled'a dokunmaz)
 npm run load -- --dry-run        # ön-uçuş: DB'ye dokunmadan sayaç + kaynak SHA-256
 npm run load                     # TCC-mirror history.jsonl → TrendRun (idempotent, pooled)
 ```
+
+> `prisma migrate deploy` (interaktif olmayan, yalnız bekleyen migration'ları
+> uygular) tercih edilir: `migrate dev` paylaşılan bir veritabanında drift
+> tespit edip **reset** önerebilir. `DATABASE_URL` override'ı zorunludur —
+> migration PgBouncer (pooled) üzerinden koşmaz (`prepared statement` çakışması,
+> kayan `SET` session-state, `SQLSTATE 25006`).
 
 ## Dry-run (ön-uçuş): `--dry-run`
 
@@ -65,6 +74,69 @@ npm run load -- /yol/history.jsonl --dry-run   # belirli kaynak
   argüman — `--dri-run` yazım hatası sessizce yükleme başlatmaz).
 - Sözleşme testleri: `_calisma/CIKTI/test_trend_db_contract.py`
   (`TestTrendDbDryRun` — gerçek `tsx` koşusu, kimlik bilgisi verilmeden).
+
+## RLS (satır düzeyi güvenlik) — `20260927193000_trend_runs_rls`
+
+Şablon: `prisma/migrations/20260927193000_trend_runs_rls/migration.sql`.
+Sözleşme: **service-role YAZAR, anonim YALNIZ aggregate OKUR.** Skill
+`supabase-postgres-best-practices` kuralları ve her kararın gerekçesi dosyanın
+başındadır (`security-rls-basics` CRITICAL · `security-privileges` MEDIUM ·
+`security-rls-performance` HIGH).
+
+| Nesne | Rol | Yetki |
+|---|---|---|
+| `public.trend_runs` (yazma) | `trend_service` | `select/insert/update/delete` + sequence `usage,select` |
+| `public.trend_runs` (okuma) | `trend_anon` | **yok** — grant ve policy yok (RLS'te "deny") |
+| `public.trend_runs_daily` (view) | `trend_anon` | yalnız `select` — gün × verdict aggregate |
+
+- **RLS enable + `force`:** tablo sahibi de politikalara tabidir; yazar
+  politikası `for all to trend_service using (true) with check (true)`, anon
+  için temel tabloda politika YOK (bilinçli deny).
+- **En az yetki:** `grant all` yok, `revoke all ... from public` (şema + tablo +
+  sequence), anon temel tabloya hiç yetkili değil.
+- **Anon yüzeyi agregattır:** görünüm yalnız `day/verdict/counts/avg/sum` seçer;
+  `findings`, `cli_overrides`, `hook_env`, `*_sha256`, `lineage_*`, `status_board`
+  gibi hassas kolonlar gövdeye giremez — `_calisma/CIKTI/test_trend_db_rls_contract.py`
+  bu sözleşmeyi statik olarak (DB'siz) kapıya bağlar.
+- **Geçici köprü:** mevcut yükleme hattı `neondb_owner` ile bağlandığı için
+  migration `grant trend_service to neondb_owner` yapar (guard'lı + `raise
+  notice`). FORCE RLS owner'ı da kapsadığı için bu köprü olmadan `npm run load`
+  düşer. Kalıcı çözüm: loader için ayrı login rolü (`grant trend_service to
+  trend_loader`) ve köprünün düşürülmesi (dosyanın 5. ve 9. blokları).
+- **Anon satır okuma GEREKİRSE:** dosyanın 7. bloğu (yorumda) dar kolon
+  grant'ı + `security_invoker = true` görünüm verir; varsayılan yol bu değildir.
+
+**Ölçülen davranış** (2026-09-27, rollback'li transaction — kalıcı iz yok,
+`neondb_owner` + PG 18.6): `rls=true forced=true`, `trend_runs` policy 1
+(`cmd=* → trend_service`), roller 2, görünüm 1.
+
+| Probe | Sonuç |
+|---|---|
+| yazar `select/insert/update/delete` | **OK** |
+| anon `select public.trend_runs_daily` | **OK** (3 gün; 133 PASS 09-25, 100 PASS + 36 FAIL 09-26) |
+| anon `select/insert/update/delete public.trend_runs` | **DENIED** `42501` (dördü de) |
+| anon `select findings, raw_sha256` | **DENIED** `42501` |
+| görünüm kolon yüzeyi | yalnız 9 aggregate kolon |
+
+> Köprüyü düşürmenin etkisini AYNI oturumda ölçmek mümkün değildir: aynı
+transaction içindeki `revoke trend_service from neondb_owner` sonrasında bile
+`pg_has_role(..., 'MEMBER')` `true` döner (backend membership cache'i).
+Görünümün köprüye bağımlılığı bu yüzden **ölçülmedi, gerekçelendirildi**
+(görünüm definer-haklarıyla koşar ve anon'un grant'ı olmadığı halde okur →
+nitelendirme görünüm sahibinin policy'si üzerinden yapılır). Köprüyü
+kaldıracaksanız görünüm için eşdeğer bir policy bırakın.
+
+Uygulama ve doğrulama:
+
+```bash
+cd apps/trend-db
+set -a && . ./.env && set +a
+DATABASE_URL="$DATABASE_URL_UNPOOLED" npx prisma migrate status   # bekleyeni göster
+DATABASE_URL="$DATABASE_URL_UNPOOLED" npx prisma migrate deploy   # uygula (pooled değil!)
+# kanıt: migration dosyasının 8. bloğu
+#   set role trend_anon; select * from public.trend_runs_daily;   -- ✅
+#   set role trend_anon; select count(*) from public.trend_runs;  -- ❌ denied
+```
 
 ## Notlar
 
