@@ -93,6 +93,9 @@
 #                               yoksa SKIP; tip-hatası commit'i bloke eder.
 #   19) check-precommit-orphans : ~/.cache/pre-commit'te 24s+ eski patch-
 #                               kalıntısı (yetim-stash) commit'i bloke eder;
+#                               parmak-izleri recovery_patches_* arşivlerinin
+#                               tamamından (bilinen-olay etiketi) — taze eşleşme
+#                               bloklamaz, tekrar uyarısı basar;
 #                               taze (<24s) kurtarma-penceresinde serbest.
 #   20) check-docker-security-smoke: docker_security_smoke.sh (build + Trivy
 #                               gate + canlı sağlık) — Dockerfile stage'liyken
@@ -1045,8 +1048,12 @@ repos:
           2026-09-19): pre-commit patch dosyalarını asla silmez; pencere-içi
           süreç-ölümü ağacı sessizce revert eder ve delta yalnız patch'te
           kalır. Taze patch (<24s) kurtarma-penceresi içindedir ve
-          cezalandırılmaz. Test: test_check_precommit_orphans.py (6
-          sözleşme, PRE_COMMIT_HOME-fixture üzerinden).
+          cezalandırılmaz; içeriği arşivle birebir eşleşirse tekrar-olay
+          uyarısı basılır (yine bloklamaz). Bilinen-olay parmak-izleri
+          _calisma/CIKTI/recovery_patches_* dizinlerinin TAMAMINDAN gelir
+          (2026-09-27: tek dizin sabitti → sonraki arşivler görünmezdi).
+          Test: test_check_precommit_orphans.py (13 sözleşme,
+          PRE_COMMIT_HOME-fixture üzerinden).
         entry: python3 _calisma/CIKTI/check_precommit_orphans.py
         language: system
         pass_filenames: false

@@ -14,7 +14,12 @@ than the recovery window = accumulating residue + revert-incident evidence):
   killed run's patch may be the only recovery artifact; never punish it)
 - empty / missing cache dir → exit 0
 - age boundary is strict: 24h is OK, 24h+1s trips
+- fingerprint source is EVERY `recovery_patches_*` archive, not one pinned
+  date (2026-09-27: the 09-20 and 09-26 archives were invisible, so replicas
+  of those deltas got no KNOWN-INCIDENT label); a fresh patch whose content
+  matches an archive warns without blocking (recurrence signal)
 """
+import importlib.util
 import os
 import pathlib
 import subprocess
@@ -142,6 +147,77 @@ class TestPrecommitOrphanGate(unittest.TestCase):
             r = run_gate(td)
             self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
             self.assertNotIn("KNOWN-INCIDENT", r.stdout + r.stderr)
+        finally:
+            shutil.rmtree(td, ignore_errors=True)
+
+    def test_archive_glob_covers_every_dated_archive_dir(self):
+        # 2026-09-27: tek dizin sabitlemesi sonraki arşivleri görünmez kılar.
+        # Parmak-izi kaynağı glob olmalı; sabit tarih yasağı statik olarak
+        # pinlenir (yeni arşiv eklenince kaynak kendiliğinden genişler).
+        src = GATE.read_text(encoding="utf-8")
+        self.assertIn('ARCHIVE_GLOB = "recovery_patches_*"', src)
+        self.assertNotIn('"recovery_patches_2026', src,
+                         "arşiv yolu sabitlenmemeli — glob kullan")
+
+    def test_every_archive_contributes_fingerprints(self):
+        # Dinamik: her arşiv dizininden en az bir parmak-izi yüklenmeli.
+        spec = importlib.util.spec_from_file_location("orphan_gate", GATE)
+        gate = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(gate)
+        known = gate.archive_fingerprints()
+        archives = sorted(p for p in HERE.glob("recovery_patches_*") if p.is_dir())
+        self.assertTrue(archives, "arşiv dizini yok — test anlamsızlaşır")
+        seen = {loc.split("/", 1)[0] for locs in known.values() for loc in locs}
+        for d in archives:
+            self.assertIn(d.name, seen, f"arşiv parmak-izi yüklenmedi: {d.name}")
+
+    def test_later_archive_fingerprint_is_recognised(self):
+        # 09-18 dışındaki bir arşivden gelen kopya da KNOWN-INCIDENT almalı.
+        archive = HERE / "recovery_patches_20260926"
+        sample = sorted(p for p in archive.glob("patch*") if p.is_file())
+        self.assertTrue(sample, "2026-09-26 arşivi boş — kapsam testi kurulamaz")
+        original = sample[0]
+        td = make_cache(None)
+        try:
+            p = td / "patch9999000001-88888"
+            p.write_bytes(original.read_bytes())
+            old = time.time() - 30 * HOUR
+            os.utime(p, (old, old))
+            r = run_gate(td)
+            out = r.stdout + r.stderr
+            self.assertEqual(r.returncode, 1, out)
+            self.assertIn("KNOWN-INCIDENT", out)
+            self.assertIn(f"{archive.name}/{original.name}", out,
+                          "eşleşen arşiv dosyası adıyla anılmalı")
+        finally:
+            shutil.rmtree(td, ignore_errors=True)
+
+    def test_fresh_recurrence_warns_but_does_not_block(self):
+        # Taze patch kurtarma penceresinde → exit 0; ama içerik arşivle aynıysa
+        # tekrar-olay sessiz kalmamalı.
+        incident = next(ARCHIVE.glob("patch1789754982*"))
+        td = make_cache(None)
+        try:
+            p = td / "patch9999000002-99999"
+            p.write_bytes(incident.read_bytes())  # mtime = şimdi
+            r = run_gate(td)
+            out = r.stdout + r.stderr
+            self.assertEqual(r.returncode, 0, out)
+            self.assertIn("KNOWN-INCIDENT", out)
+            self.assertIn("bloklamaz", out)
+        finally:
+            shutil.rmtree(td, ignore_errors=True)
+
+    def test_orphan_report_states_archive_surface(self):
+        # Yetim bildirirken kaynağın kapsamı görünmeli (kaç dizin/patch) —
+        # aksi halde "etiket yok" ile "arşiv boş" ayırt edilemez.
+        td = make_cache([30.0])
+        try:
+            r = run_gate(td)
+            out = r.stdout + r.stderr
+            self.assertEqual(r.returncode, 1, out)
+            self.assertIn("arşiv parmak-izleri:", out)
+            self.assertRegex(out, r"arşiv parmak-izleri: [1-9]\d* dizin / [1-9]\d* patch")
         finally:
             shutil.rmtree(td, ignore_errors=True)
 

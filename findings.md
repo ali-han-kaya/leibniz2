@@ -950,3 +950,39 @@ panonun ve landing'in gerçek bir tema varyantını besliyor.
   otomatik "sistem teması" eşlemesi yok; ayrıca HDS font ailesi
   (`sohne-var`/`SourceCodePro`) bundle edilmediği için stripe varyantı
   tipografiyi değiştirmiyor, yalnız renk yüzeylerini değiştiriyor.
+
+### gate-audit tour (2026-09-27) — check-precommit-orphans: arşiv parmak-izi kapsamı
+
+- **İstek:** "24s+ patch-kalıntısında engelleyen + recovery_patches arşivini
+  kontrol eden fail-closed hook". Kapı 2026-09-19 tdd turunda zaten kurulmuş
+  (`check_precommit_orphans.py`, hook 19, always_run, PRE_COMMIT_HOME
+  fixture'lı 8 sözleşme); **gerçek eksik arşiv tarafındaydı.**
+- **Bulgu:** parmak-izi kaynağı `recovery_patches_20260918` diye SABİTTİ.
+  Diskte üç arşiv var (`_20260918` 2, `_20260920` 14, `_20260926` 24 patch =
+  **40 patch**) → arşivlenen deltaların **38'i kapıya görünmezdi**: aynı
+  içerik yeniden yetim kalsa `KNOWN-INCIDENT` etiketi üretilemez, kurtarma
+  yolu tek bir tarihe bağlı kalırdı. Sınıf: "tek örnekten genellenmiş
+  sabitleme" — arşiv deseni büyüdükçe sessizce körleşen kapı.
+- **Düzeltme:** `ARCHIVE_GLOB = "recovery_patches_*"` (glob; yeni arşiv
+  eklendiğinde kaynak kendiliğinden genişler), aynı içerik birden çok arşivde
+  varsa hepsi adıyla listelenir, yetim raporu kaynağın kapsamını yazar
+  (`arşiv parmak-izleri: 3 dizin / 40 patch`; arşiv boşsa "etiket üretilemedi
+  — kontrol körleşti" uyarısı). Arşivsizlik tek başına blok değil.
+- **Yeni sözleşme — taze tekrar:** <24s patch kurtarma penceresindedir ve
+  bloklamaz, ama içeriği arşivle birebir aynıysa `PRE-COMMIT PATCH RECURRENCE`
+  + `KNOWN-INCIDENT` satırı basılır (exit 0). Yani "aynı delta yine yetim
+  kaldı" sinyali görünür olur, commit bloke olmaz.
+- **Test:** `test_check_precommit_orphans.py` 8 → **13** (glob sabitlemesi
+  yasaklandı statik olarak, her arşivin parmak-izi yüklediği dinamik olarak,
+  09-26 kopyasının etiketlendiği, taze tekrarın bloklamadığı, raporda arşiv
+  kapsamının yazıldığı); 13/13 PASS.
+- **Canlı çerçeve kanıtı** (yapay dosyalar sonrası silindi): gerçek cache
+  rc 0; 32h'lik yapay patch → hook **Failed** + dosya adı + `3 dizin / 40
+  patch`; 09-26 arşiv kopyası (taze) → iki arşiv kopyası adıyla RECURRENCE,
+  blok yok; temizlik sonrası rc 0.
+- **Süre-sınırı notu (eylem bekliyor):** `~/.cache/pre-commit`'te
+  2026-09-26 20:01 ve 20:06 tarihli iki 185 kB'lik patch (V5 teslim-zip
+   çalışması, 8 dosya) 24s penceresini **2026-09-27 20:01/20:06'da** aşıyor ve
+  o saatten sonraki commit'leri bloklayacak. İkisi de `git apply --reverse
+  --check` ile TERS-uygulanabilir → delta ağaçta zaten var (artık, kurtarma
+  değeri yok).
