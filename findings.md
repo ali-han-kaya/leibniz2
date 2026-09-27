@@ -986,3 +986,41 @@ panonun ve landing'in gerçek bir tema varyantını besliyor.
   o saatten sonraki commit'leri bloklayacak. İkisi de `git apply --reverse
   --check` ile TERS-uygulanabilir → delta ağaçta zaten var (artık, kurtarma
   değeri yok).
+
+### archive-audit turu (2026-09-27) — olay-patch'i plan dosyaları ↔ bugünkü sürüm
+
+- **Soru:** revert olayının arşiv patch'i (`recovery_patches_20260918/`
+  `patch1789754982-84993`) `findings.md`/`progress.md`/`task_plan.md`'nin
+  olay-anı snapshot'ını taşıyor; bu delta "oturum-belleğinden yeniden
+  yazılırken" içerik kaçırıldı mı?
+- **Yöntem:** patch'in `+` satırları üç kademede denetlendi: (1) bugünkü
+  dosyada birebir/normalize var mı, (2) yoksa git TARİHİNDE hiç commit
+  edilmiş mi, (3) hiç commit edilmemişse teknik belirteçleri (yol/hash/sayı/
+  bayrak) bugünkü repo metninde izlenebiliyor mu. Ayrıca yeniden-yazımın ilk
+  commit'i (`07e22aa`, 2026-09-19 09:02) ayrı taban alındı ve ters yön
+  (patch'te silinen satır bugün geri gelmiş mi) kontrol edildi.
+- **Sonuç 1 — hiç commit edilmemiş satırlar: 247** (findings 140, progress
+  61, task_plan 46). 132'si teknik belirteç taşıyor ve tamamı bugün repoda
+  izlenebilir; 115'i belirteçsiz düzyazı — yalnız arşivde kalıyor (09-18
+  oturum günlüğü sonradan Türkçe yeniden yazıldı, bu beklenen).
+- **Sonuç 2 — yeniden-yazım anı:** `07e22aa`'da snapshot'ın teknik
+  belirteçlerinin 57/101 (findings), 30/46 (progress), 22/41 (task_plan)'i
+  dosyalarda YOKTU (birebir satır: 5/145, 0/61, 0/46). Bugün bu **109
+  belirtecin tamamı başka yüzeylerde yaşıyor**: `74b2cdbdb18fafbf`
+  (verdict-seal testi + PDF metadata), `0.2555` (preview.html CLS ölçümü),
+  `0.0005` (progress.md), `end_headers` / `do_head` / `build_ts`
+  (preview_server + testler), `ingiliz_empirizmi_v3.pdf`
+  (.pre-commit-config + M0 raporu) → **kayıp 0**.
+- **Sonuç 3 — yalnız arşivde kalan izler:** tek-seferlik scratch/env
+  dizgileri (`/tmp/leibniz-chain-video`, `/tmp/review_brief.md`,
+  `--skip-claude/--only-claude/--no-global`, `~/.local/bin`,
+  `~/.cargo/bin`) — olguları bugün başka dosyalarda (video pilotu
+  `_calisma/video/`'ya taşındı, `skip-claude` `.gitignore`'da). Tüm repoda
+  **hiç iz bırakmayan tek dizgi:** Orca sürümü `1.4.205` (Orca bulgusunun
+  kendisi AGENTS.md + findings.md'de duruyor).
+- **Sonuç 4 — ters yön:** patch'in silinen satırlarından bugün geri gelen
+  yok → olay-öncesi metin dirilmemiş.
+- **Sınıf notu:** "bellekten yeniden yazım" iddiasının doğrulanabilir tek
+  yolu bu üçlü karşılaştırma (patch = olay-anı snapshot'ı ↔ yazım commit'i ↔
+  bugünkü yüzeyler). Sonuç: arşivin kurtarma değeri kanıtlı, olgu kaybı yok;
+  kaybolan şey satır düzeni ve İngilizce düzyazı.

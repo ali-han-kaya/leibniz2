@@ -9,6 +9,12 @@ preview.html, test_preview_server.py, test_coordinator_loop.py,
 test_z3_slide_gallery.py, check_unit_tests.list; .gitignore entries re-applied
 from session record; plan files (this file, findings.md, progress.md) re-written
 from session memory. Recovery proven: direct runs 14/14 in touched modules.
+**DENETİM (2026-09-27):** patch snapshot'ı ↔ yeniden-yazım commit'i
+(`07e22aa`) ↔ bugünkü yüzeyler karşılaştırıldı — yazımda satır düzeyinde
+taşınmayan 109 teknik belirtecin tamamı bugün başka dosyalarda izlenebilir
+(mühür hash'i `74b2cdbdb18fafbf` dahil; kayıp 0); yalnız tek-seferlik scratch
+yolları ve Orca `1.4.205` dizgisi arşivde kaldı, snapshot'ın silinen
+yalnızında bugün geri gelen yok. Ayrıntı: findings.md, "archive-audit turu".
 
 **ROOT CAUSE (systematic-debugging tour, 2026-09-19 — proven, not speculated):**
 NOT an out-of-session/other-thread action. pre-commit's own
@@ -59,8 +65,6 @@ items (commit, reviewer dispatch, Aday-1 grilling).
   stage/commit promptly to prevent repeat reverts.
 - (b) Reviewer dispatch: prepared at /tmp/review_brief.md; blocked on
   codex quota (resets Sep 22 07:42) / claude login / ruflo API key.
-- (c) VERIFY-001 (security review): CSP blocks SVG inline hover handlers —
-  fix = addEventListener migration or script-hash; then real-browser check.
 - (d) Architecture Candidate 1 grilling — needs user.
 
 ## Next Step
