@@ -583,6 +583,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-27 | other | design-system: preset-bağımsız dashboard-next + contract 8 kapısı | [`7e4916a`](https://github.com/ali-han-kaya/leibniz2/commit/7e4916a) |
 | 2026-09-27 | other | design-system: Stripe HDS varyantını panoya ve landing'e bağla | [`2c3e1fe`](https://github.com/ali-han-kaya/leibniz2/commit/2c3e1fe) |
 | 2026-09-27 | other | trend-db: load.ts'e --dry-run ön-uçuşu (DB'siz sayaç + SHA-256) | [`8a82cf8`](https://github.com/ali-han-kaya/leibniz2/commit/8a82cf8) |
+| 2026-09-27 | other | trend-db: RLS şablonu (service-role yazar, anon aggregate okur) | [`a6ce6b4`](https://github.com/ali-han-kaya/leibniz2/commit/a6ce6b4) |
 
 ### Regresyon notları
 

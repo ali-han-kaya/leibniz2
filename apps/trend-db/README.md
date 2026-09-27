@@ -138,6 +138,70 @@ DATABASE_URL="$DATABASE_URL_UNPOOLED" npx prisma migrate deploy   # uygula (pool
 #   set role trend_anon; select count(*) from public.trend_runs;  -- ❌ denied
 ```
 
+## Sorgu indeksleri — `20260927194500_trend_runs_query_indexes`
+
+Panonun **okuma desenlerine** göre planlandı (`docs/TREND_CHART_READ_PATH.md`);
+partial (filtreli) ve covering (INCLUDE) indeksler Prisma şemasında **ifade
+edilemez** (`@@index([ts], include: [...], where: "...")` → Prisma 7.10:
+"No such argument", ölçüldü) — bu yüzden raw SQL migration'da yaşarlar,
+şemadaki not bloğu adlarını aynalar.
+
+| İndeks | Şekil | Desen |
+|---|---|---|
+| `trend_runs_ts_cover_idx` | `(ts) INCLUDE (verdict, p0, p1, duration_s, budget_usd, z3_total)` | `where ts >= $1 order by ts desc limit N` + dar `select` → index-only scan |
+| `trend_runs_fail_ts_cover_idx` | `(ts DESC) INCLUDE (p0, p1, z3_total) WHERE verdict = 'FAIL'` | yalnız-FAIL ucu (`verdict = 'FAIL'` predicate'i birebir aynı olmalı) |
+| `trend_runs_verdict_ts_idx` (init) | `(verdict, ts DESC)` | tüm verdict'ler için eşitlik→aralık |
+| `trend_runs_ts_key` (init) | unique `(ts)` | "en yeni satır" (`order by ts desc limit 1`) |
+
+- **Ölçüm (2026-09-27, canlı tablo, migration `BEGIN … ROLLBACK` ile
+  uygulanmış — kalıcı iz yok):** 269 satır = 233 PASS + **36 FAIL (%13,4)**,
+  `p0>0`: 0, `budget_usd` dolu: 233; heap 376 kB / toplam 512 kB. İndeks
+  boyutları bu boyutta: `ts_cover_idx` 40 kB, `fail_ts_cover_idx` 16 kB
+  (unique `ts_key` 16 kB). Planner'ın doğal kararı:
+  - `yalnız-FAIL` → **`Index Only Scan using trend_runs_fail_ts_cover_idx`**,
+    `actual rows=36`, `Heap Fetches: 36` — yani **partial indeks 269 satırda
+    bile seçiliyor** (arşiv büyümesini beklemesi gerekmiyor).
+  - seri/`select *` pencere → hâlâ `Index Scan Backward using trend_runs_ts_key`
+    (62/12 buffer): covering indeks bu boyutta **seçilmiyor**, çünkü index-only
+    scan eşikleri (all-visible sayfa oranı) arşivle birlikte gelir. 0,28 ms'lik
+    seq scan ölçümü (`docs/TREND_CHART_READ_PATH.md` §4) kova/agrega desenine ait.
+  - Migration **idempotent**: aynı dosya ikinci kez uygulandı, hata vermedi
+    (`create index if not exists`); rollback sonrası indeks sayısı 4'e döndü.
+- **Ölçek ölçümü (2026-09-27, TEMP tabloda 100k satır / 78 MB heap, ~1,4 kB
+  satır, %12,5 FAIL — oturuma özel, kalıcı iz yok; plan node'u + `Buffers:` +
+  koşu süresi, ısınma turu atılarak):**
+
+  | Sorgu | S1: yalnız unique `ts` | S2: + bu iki indeks |
+  |---|---|---|
+  | seri (14g, 5000 satır, dar select) | Index Scan Backward `ts_key` — **528 buffer, 1,46–1,53 ms** | **Index Only Scan** `ts_cover_idx` — **46 buffer, 0,82 ms** |
+  | yalnız-FAIL (limit 50) | Index Scan Backward `ts_key` — 45 buffer, 0,15–0,18 ms | **Index Only Scan** `fail_ts_cover_idx` — **4 buffer, 0,09–0,10 ms** |
+  | en yeni satır (`select *`, limit 1) | `ts_key` | `ts_key` (değişmez — satırın tamamı istenir, 40 kolonu INCLUDE etmek anlamsız) |
+
+  İndeks boyutları (aynı ölçekte, heap 78 MB): `ts_cover_idx` **6600 kB**
+  (unique `ts_key` 3952 kB'ın ~1,7 katı), `fail_ts_cover_idx` **512 kB**
+  (~7,7× `ts_key`'den, ~12,9× covering'den küçük), init'in
+  `verdict_ts_idx` 3104 kB. Yani covering'in bedeli ilk anahtarın kopyası,
+  kazancı pencere okumasında **~1,8× hız / ~11× az buffer**; partial'ın bedeli
+  aynı ölçekte ~hiç.
+- **Bulgu — mevcut `(verdict, ts DESC)` FAIL ucu için artık gerekli değil:**
+  aynı ölçekte partial indeks kaldırılıp yerine `(verdict, ts DESC)` bırakılınca
+  planner o composite'i **yine seçmedi**; covering indeksi seçti (8 buffer,
+  0,18 ms) — eq→aralık taraması PASS satırlarını da geziyor, oysa covering
+  planı yalnız indeksten okunuyor. Yani `verdict_ts_idx`'in FAIL desenine
+  katkısı kalmıyor; **yine de duruyor**, çünkü PASS gibi öbür verdict
+  filtrelerinde tek seçenek, 3,1 MB ve init migration'ın (şema `@@index`'inin)
+  parçası — düşürmek ayrı bir şema+drift işi.
+- **Ön koşul:** covering indeks ancak `select` daraldığında index-only scan'e
+döner; bugünkü pencere sorgusu (`lib/trend-db.ts::getTrendFromDb`) tüm kolonları
+çekiyor, planındaki dar `select` `docs/TREND_CHART_READ_PATH.md` §3'te planlı.
+- **Reddedilenler** (gerekçe migration'ın sonunda yazılı): `p0 > 0` partial
+  (bugün 0 satır, DB'de P0 ucu yok), `budget_usd` (eşik config'ten → partial
+  predicate olamaz), agrega görünümü için ifade indeksi (50k tetiğine kadar seq scan).
+- `CONCURRENTLY` bilinçli kullanılmadı: Prisma migration'ı transaction içinde
+  koşar, CONCURRENTLY orada çalışmaz; bu boyutta kilit süresi ihmal edilebilir.
+- Sözleşme testi: `_calisma/CIKTI/test_trend_db_index_contract.py` (statik —
+  partial predicate, INCLUDE seti, `if not exists`, şema notu ile uyum).
+
 ## Notlar
 
 - **Pooled/direct ayrımı (Neon sözleşmesi):** `DATABASE_URL` pooled'dır

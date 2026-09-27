@@ -111,11 +111,36 @@ quicksort 41 kB, execution **0.28 ms**, 233 satır — bu boyutta planner'ın se
 scan seçmesi **doğru** (indeks kurulumu daha pahalı). `trend_runs_ts_key` arşiv
 büyüdükçe devreye girer; 50k tetiği zaten o noktayı işaretliyor.
 
-**İndeks:** kova sorgusu ts-aralığı taramasıdır; `trend_runs_ts_key` (unique `ts`)
-ve `trend_runs_verdict_ts_idx (verdict, ts DESC)` bunu karşılar
-(`apps/trend-db/prisma/migrations/20260925171004_init/migration.sql`) → **yeni
-indeks gerekmez**. Verdict-filtreli kova (ör. yalnız FAIL) composite indeksin
-eşitlik→aralık sırasını kullanır (`prisma/schema.prisma`, "query-composite-indexes" notu).
+**İndeks (2026-09-27 güncellemesi):** init migration'ın `trend_runs_ts_key`
+(unique `ts`) ve `trend_runs_verdict_ts_idx (verdict, ts DESC)` indeksleri
+kova sorgusunun ts-aralığı/verdict-eşitliği şeklini karşılar. Üzerine iki
+**sorgu-deseni indeksi** eklendi
+(`apps/trend-db/prisma/migrations/20260927194500_trend_runs_query_indexes/`):
+
+| İndeks | Şekil | Hangi deseni karşılar |
+|---|---|---|
+| `trend_runs_ts_cover_idx` | `(ts) INCLUDE (verdict, p0, p1, duration_s, budget_usd, z3_total)` | Pencere/seri sorgusu (§3 dar `select`) → index-only scan |
+| `trend_runs_fail_ts_cover_idx` | `(ts DESC) INCLUDE (p0, p1, z3_total) WHERE verdict = 'FAIL'` | Yalnız-FAIL ucu; FAIL azınlık (%13,4) → kısmi indeks PASS hacmiyle büyümez |
+
+- **Neden raw SQL:** Prisma 7.10 `@@index` partial/covering ifade edemiyor
+  (`include:`/`where:` → "No such argument", ölçüldü); şemada not bloğu adları
+  aynalar, `test_trend_db_index_contract.py` drift'i kapatır.
+- **Bugün neden hâlâ seq scan:** 269 satırda sıralı tarama 0,28 ms; planner
+  doğru kararı veriyor (yukarıdaki ölçüm). İndeksler arşiv büyüdükçe ve
+  `select` daraldıkça (bugünkü pencere sorgusu tüm kolonları çekiyor) devreye
+  girer — tetik §4'teki **50k satır** ya da `truncated` sürekliliği.
+- **INCLUDE seti kuralı:** yalnız dar `select`'lerin birleşimi; kolon eklemek
+  index-only scan'i bozar, kolon eksiltmek heap fetch'e döndürür.
+- **Ölçek kanıtı (100k satır / 78 MB heap, TEMP tablo, %12,5 FAIL):** seri
+  sorgusu `ts_key` ile 528 buffer / 1,46–1,53 ms → covering ile **46 buffer /
+  0,82 ms** (index-only); yalnız-FAIL ucu 45 buffer / 0,15–0,18 ms → partial ile
+  **4 buffer / 0,09–0,10 ms**. Boyut: covering 6,6 MB, partial **512 kB**
+  (unique `ts_key` 3,95 MB). Tam tablo + yöntem: `apps/trend-db/README.md`
+  "Sorgu indeksleri" (oturuma özel ölçüm, kalıcı iz yok).
+- Verdict-filtreli kova composite indeksin eşitlik→aralık sırasını kullanır
+  (`prisma/schema.prisma`, "query-composite-indexes" notu); `p0 > 0` için
+  kısmi indeks **özellikle reddedildi** (bugün 0 satır + DB'de P0 ucu yok —
+  gerekçe migration dosyasının "REDDEDILENLER" bloğunda).
 
 ## 5. Sıra, saat dilimi, kırpma
 

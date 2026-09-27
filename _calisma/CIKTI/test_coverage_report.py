@@ -276,6 +276,7 @@ HOOK_COVERAGE = {
         "test_static_isolation.py",
         "test_dashboard_next_style_gates.py",
         "test_brand_mirror_gate.py",
+        "test_trend_db_index_contract.py",
         "test_trend_db_rls_contract.py",
     ],
 }
