@@ -911,7 +911,12 @@ repos:
           design-system/scripts/check_tokens.py: preview.html'ın
           design-system/tokens.css import'u, inline :root drift'i ve
           tokens.json ↔ tokens.css tutarlılığını (tint dahil) doğrular.
-          Stil değişirse (renk/space/radius) kapı fail-closed bloke eder.
+          dashboard-next/app/globals.css için kopya drift'i de denetler:
+          HERhangi bir blokta (ikinci :root, .dark, @media, @layer …)
+          token adı gölgelemesi, tokens.css değerinin yazıyla kopyalanması
+          ya da özel mülkte sabit renk literal'i (yorumlar ayıklanır, bu
+          yüzden metinde geçen `:root {` aldatmaz). Stil değişirse
+          (renk/space/radius) kapı fail-closed bloke eder.
           OFFLINE, stdlib-only, ~0.05s.
         entry: python3 design-system/scripts/check_tokens.py
         language: system

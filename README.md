@@ -576,6 +576,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-27 | docs | (verify) history temizlik kaydi + is sozlesmesi yorumlari | [`bc86e20`](https://github.com/ali-han-kaya/leibniz2/commit/bc86e20) |
 | 2026-09-27 | chore | (changelog) bc86e20 satirini tabloya ekle | [`3457f12`](https://github.com/ali-han-kaya/leibniz2/commit/3457f12) |
 | 2026-09-27 | other | dashboard-next: shadcn Card/Badge/Table + token koprusu | [`d20fc07`](https://github.com/ali-han-kaya/leibniz2/commit/d20fc07) |
+| 2026-09-27 | test | (gates) prettier + tip kapilarinin birim modulu | [`8de9544`](https://github.com/ali-han-kaya/leibniz2/commit/8de9544) |
 
 ### Regresyon notları
 
