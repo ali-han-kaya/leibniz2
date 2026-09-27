@@ -1156,5 +1156,59 @@ panonun ve landing'in gerçek bir tema varyantını besliyor.
   rostera yeni ayna → exit 2) + sentetik aynada kapsam/ad kuralları.
 - **Yakalanan gerçek hata (öğrenme notu):** ilk üretimde `@theme` bloğu
   BOŞ çıktı — gruplama `tn.split("-")[1]` ile yapılıyordu ve `--color-…`
-  adının `[1]`'i boş string'dir. Gözle yakalandı; sayım kilidi (theme satır
+  adının `[1]`'i  boş string'dir. Gözle yakalandı; sayım kilidi (theme satır
   sayısı = `aliases`) artık bunu teste bağlıyor (`test_theme_line_count_…`).
+
+### trend-db loader TDD turu 2 (2026-09-27) — dry-run'un makine-okunur yüzü + JS koşucusu
+
+- **Başlangıç ölçümü:** 1. tur (`8a82cf8`) `--dry-run`'u prose kilitlemişti
+  (Python 6 vaka), ama `apps/trend-db` içinde **tek bir test dosyası/koşucu
+  yoktu** ve rapor `[DRY-RUN] etiket: değer` Türkçe **prose**'di → makine
+  tarafında sözleşme değil, insan metni. Üstelik eksik kaynakta
+  `fs.readFileSync`'in ENOENT'i `main().catch → console.error(e)` ile **ham
+  Node yığını** olarak basılıyordu (`Error: ENOENT` + 9 çerçeve).
+- **TDD kanıtı ÖNCE alındı (8/11 kırmızı):** 8. vaka yığını birebir gösterdi,
+  9. vaka `bilinmeyen bayrak: --json` ile exit 2 verdi, 10. vaka ise
+  **yanlış-sahte yeşil** çıktı. Kırmızı görülmeden uygulamaya geçilmedi.
+- **Karar (1) — framework yok:** tek seam (CLI stdout/stderr/çıkış kodu) için
+  jest/vitest eklemek denenecek yüzeyden büyük olurdu → `test/mini.mjs`
+  (~80 satır, bağımlılık sıfır): `test/eq/ok/match/notMatch`, TAP-benzeri
+  `ok N - ad (Xms)` / `not ok` + `--- mesaj`, sonra `# X/Y geçti`.
+- **Karar (2) — `--json`:** prose insan içindir; tüketen sözleşme JSON'dur.
+  `--json` prose'in **yerine** geçer (ikisi birden basılmaz) ve tek satır
+  verir. Sayılar bir `DryRunSummary` nesnesinde **bir kez** hesaplanır, iki
+  yüzey de ona bakar → ayrışma yapısal olarak imkânsız; çapraz-kapı testi
+  (`test_json_numbers_match_prose_numbers`) bunu sayısal olarak da bağlar.
+- **Karar (3) — `--json` tek başına anlamsız:** gerçek koşuda "eklenecek"
+  ancak `ON CONFLICT DO NOTHING` sonrası bilinir → exit 2 +
+  `yalnız --dry-run ile birlikte` (bilinmeyen-bayrak reddi DEĞİL, ikisi
+  farklı gerekçe). Alan `insertedCount` değil **`insertAtMost`** diye adlandırıldı.
+- **Karar (4) — `CliError`:** girdi/kullanım hatası → üst düzey yakalayıcı
+  yalnız `message` basar; beklenmeyen hata `Error` kalır ve **yığınıyla**
+  basılır. "Temiz hata" böylece tek yerde uygulanır (okunamayan kaynak, bozuk
+  JSON satırı) ve program hatası sessizce yutulmaz. `errno` → Türkçe tek
+  cümle (`dosya bulunamadı`); ham errno metni yığınla birlikte sızmıyor.
+- **Kapsam kaybı kapandı (asıl risk):** `.mjs` dosyaları
+  `test_coverage_report.py` keşfine girmiyor (yalnız `test_*.py`/`test_*.js`
+  glob) ve `check-prettier-format` da `.mjs`'yi kapsam dışı bırakıyor
+  (`.(js|jsx|ts|tsx|json)$`) → JS koşucusu `npm test`'e bağlı kalıp sessizce
+  çürüyebilirdi (kimse koşmaz, kırılır, fark edilmez). Yeni pre-commit hook
+  yerine **`_calisma/CIKTI/test_trend_db_js_runner.py`** mevcut fail-closed
+  manifest'e alındı: (a) JS koşucusunu koşar ve yeşil değilse bloklar,
+  (b) `MIN_KURULU_VAKA` eşiği boş/eksik koşuyu "hepsi geçti" göstermez,
+  (c) yeni `*.test.mjs` eklenip `run.mjs` MODULES'e yazılmazsa bloklar,
+  (d) TMP temizliğinin kaybolmasını görür (/tmp şişmesi).
+  `sync_check_unit_tests.py --update` manifest + HOOK_COVERAGE'yi senkronladı.
+- **Sonuç (ölçülen):** JS **11/11** yeşil (~3.1 s, 11 tsx alt süreci),
+  Python `test_trend_db_contract` **18/18** (`TestTrendDbDryRun` 6 → 10 vaka),
+  sarmalayıcı 3/3 (4.2 s). `prettier --check` dört dosyada da temiz.
+- **Öğrenme (yanlış-sahte yeşil):** 10. vaka uygulama olmadan da geçiyordu —
+  `--json` zaten "bilinmeyen bayrak" olarak exit 2 veriyordu. **Aynı çıkış
+  kodu iki farklı gerekçeyi karşılayabilir.** Exit kodu + mesaj eşleşmesi
+  yetmez; gerekçe de kilitlenmeli (`notMatch(/bilinmeyen bayrak/)`).
+- **Öğrenme (prose sözleşme tuzağı):** prose'in sözleşme gibi davranması
+  sessiz kırılma üretir (kelime/noktalama/sıra). Bu yüzden çift yüzey
+  yazıldı ve ayrışma teste bağlandı — tip zaten ayrışmayı engellemez,
+  engelleyen şey **testtir**.
+- **Bekleyen:** RLS (`20260927193000`) + query-index (`20260927194500`)
+  migration'ları hâlâ `prisma migrate deploy` bekliyor.

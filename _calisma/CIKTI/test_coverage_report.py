@@ -283,6 +283,7 @@ HOOK_COVERAGE = {
         "test_trend_db_index_contract.py",
         "test_trend_db_rls_contract.py",
         "test_mirror_bridges.py",
+        "test_trend_db_js_runner.py",
     ],
 }
 

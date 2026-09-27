@@ -15,6 +15,8 @@ bağlantı sözleşmesi (pooled/direct ayrımı).
   (`HISTORY_MAX=100`) düşürdüğü eski koşuları da saklar; `npm run load` ile idempotent senkron
 - ✅ `dashboard-next` artık bu tablodan okuyor (`lib/trend-db.ts`)
 - ✅ `--dry-run` ön-uçuş (2026-09-27; DB'siz satır sayacı + kaynak SHA-256)
+- ✅ `--json` makine-okunur dry-run özeti (2026-09-27; tek satır JSON sözleşmesi)
+- ✅ JS tarafı test koşucusu (2026-09-27; `npm test` → 11 CLI-seam vakası, pre-commit'e bağlı)
 - ✅ RLS şablonu (2026-09-27; service-role yazar / anon aggregate okur) — migration hazır, **uygulama bekliyor**
 
 ## Kurulum (tamamlanmış hali)
@@ -72,8 +74,62 @@ npm run load -- /yol/history.jsonl --dry-run   # belirli kaynak
 - **Çıkış kodları:** `0` = yüklenebilir, `1` = kaynak okunamaz / bozuk JSON
   (satır numarasıyla), `2` = kullanım hatası (bilinmeyen bayrak ya da fazla
   argüman — `--dri-run` yazım hatası sessizce yükleme başlatmaz).
-- Sözleşme testleri: `_calisma/CIKTI/test_trend_db_contract.py`
-  (`TestTrendDbDryRun` — gerçek `tsx` koşusu, kimlik bilgisi verilmeden).
+- Sözleşme testleri: aşağıdaki [Testler](#testler) bölümü — **üç yüz** aynı
+  seam'i kilitler (JS `npm test` + Python `TestTrendDbDryRun` + kalıtsal sürükleme).
+
+## Makine-okunur rapor: `--dry-run --json`
+
+Prose insan içindir; bir betiğin, cron'un ya da başka bir dilin tükettiği
+sözleşme JSON'dur. `--json` prose'in **yerine** geçer (ikisi aynı anda basılmaz)
+ve `DryRunSummary` tipindeki alanları **tek satırda** verir:
+
+```bash
+npm run load -- history.jsonl --dry-run --json | jq '.insertAtMost, .skipAtLeast'
+```
+
+```json
+{"mode":"dry-run","source":"/…/history.jsonl","sourceSha256":"6868240e…","bytes":265,"linesFull":5,"linesPhysical":6,"blankSkipped":1,"candidates":2,"invalidSkipped":2,"duplicatesInFile":1,"insertAtMost":2,"skipAtLeast":3,"dbConnected":false}
+```
+
+| Alan | Anlamı |
+|---|---|
+| `mode` | daima `"dry-run"` — çıktının hangi moda ait olduğu belirsiz kalmasın |
+| `source` / `sourceSha256` / `bytes` | kaynak yolu, baytların SHA-256'sı, bayt sayısı (prose ile aynı) |
+| `linesFull` / `linesPhysical` / `blankSkipped` | dolu satır / fiziksel satır / boş atlanan |
+| `candidates` / `invalidSkipped` / `duplicatesInFile` | aday / doğrulama-dışı / dosya-içi çakışma |
+| `insertAtMost` / `skipAtLeast` | "en çok eklenecek" / "en az atlanacak" (bkz. Ölçülemeyen) |
+| `dbConnected` | daima `false` — dry-run'ın DB'ye dokunmadığının makine tarafı kanıtı |
+
+- **Tek kaynak:** prose ve JSON aynı `summary` nesnesine bakar; iki yüzey
+  ayrı hesap yapmadığı için sayı **ayrışamaz** (çapraz-kapı:
+  `test_json_numbers_match_prose_numbers`).
+- **`--json` tek başına anlamsızdır** → çıkış `2` + `yalnız --dry-run ile
+  birlikte` (fail-closed: sessizce prose'e düşmez). Gerçek koşuda "eklenecek"
+  sayısı ancak `ON CONFLICT DO NOTHING` sonrası bilinir; `skipDuplicates`
+  nedeniyle JSON `insertAtMost` diye adlandırır, `insertedCount` değil.
+
+## Testler
+
+Loader'ın sözleşmesi **tek bir seam**'e bağlı: CLI'nin stdout/stderr'i ve
+çıkış kodu. Üç yüz aynı seam'i kilitler — biri sessizce düşse diye:
+
+| Yüz | Kapsam | Nasıl koşar |
+|---|---|---|
+| `test/dry-run.test.mjs` (11 vaka) | CLI siyah kutu: sayaçlar, SHA-256, çıkış kodları, `--json`, determinizm | `cd apps/trend-db && npm test` |
+| `_calisma/CIKTI/test_trend_db_contract.py::TestTrendDbDryRun` (10 vaka) | aynı seam, gerçek `tsx` alt süreci | `python3 -m unittest _calisma.CIKTI.test_trend_db_contract` |
+| `_calisma/CIKTI/test_trend_db_js_runner.py` | JS koşucusunu **pre-commit'e** bağlar (rot koruması) | `check-unit-tests` hook'u |
+
+- **Kendi koşucumuz (`test/mini.mjs`, ~80 satır, bağımlılık sıfır):** tek
+  bir seam'i test etmek için jest/vitest eklemek, denenecek yüzeyden büyük
+  olurdu. `test/eq|ok|match|notMatch` + TAP-benzeri rapor yeter.
+- **Kapsam kaybı yok:** `.mjs` dosyaları `test_coverage_report.py` keşfine
+  girmez (o yalnız `test_*.py`/`test_*.js` glob'lar); bu yüzden JS koşucusunu
+  Python sarmalayıcı manifest'e sokar — yeni bir `*.test.mjs` eklenip
+  `run.mjs`'e yazılmazsa sarmalayıcı **bloke eder** (sessiz rot olmaz).
+- **Kimlik bilgisi yok:** her iki koşucu da `DATABASE_URL` /
+  `DATABASE_URL_UNPOOLED` değişkenlerini siler ve cwd'yi geçici dizine
+  çevirir (dotenv `.env` bulamaz) — dry-run'ın bağlantısız çalıştığı
+  kanıtlanır, varsayılmaz.
 
 ## RLS (satır düzeyi güvenlik) — `20260927193000_trend_runs_rls`
 

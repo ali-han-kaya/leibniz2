@@ -19,7 +19,14 @@
  * Mevcut satırlarla çakışma bağlantısız ÖLÇÜLEMEZ — rapor bunu "en çok
  * eklenecek / en az atlanacak" olarak işaretler.
  *
- * Kullanım: DATABASE_URL=... npm run load -- [history.jsonl yolu] [--dry-run]
+ * `--json` (2026-09-27, 2. TDD turu): `--dry-run` raporunun MAKİNE-okunur
+ * karşılığı — prose'in yerine tek satır JSON (aynı `prepare()` sayıları).
+ * İnsan-okunur Türkçe prose bu modda insan içindir; bir betiğin/başka bir
+ * dilin tükettiği sözleşme JSON'dır. `--json` TEK BAŞINA anlamsızdır
+ * (gerçek koşuda "eklenecek" sayısı ancak DB'ye yazdıktan sonra bilinir)
+ * → kullanım hatası, çıkış 2 (fail-closed: sessizce prose'e düşmez).
+ *
+ * Kullanım: DATABASE_URL=... npm run load -- [history.jsonl yolu] [--dry-run] [--json]
  * Varsayılan yol: TCC-mirror (~/Library/Caches/com.freebuff/preview/history.jsonl)
  */
 import "dotenv/config";
@@ -42,8 +49,8 @@ const DEFAULT_SOURCE = path.join(
 );
 
 const USAGE =
-  "kullanım: DATABASE_URL=... npm run load -- [history.jsonl yolu] [--dry-run]";
-const KNOWN_FLAGS = new Set(["--dry-run"]);
+  "kullanım: DATABASE_URL=... npm run load -- [history.jsonl yolu] [--dry-run] [--json]";
+const KNOWN_FLAGS = new Set(["--dry-run", "--json"]);
 
 // Bayraklar konumdan bağımsızdır; bilinmeyen bayrak sessizce yutulmaz
 // (fail-closed): `--dri-run` yazım hatası gerçek yükleme başlatmasın.
@@ -56,12 +63,46 @@ if (unknownFlags.length > 0) {
   process.exit(2);
 }
 const dryRun = argv.includes("--dry-run");
+const jsonMode = argv.includes("--json");
+if (jsonMode && !dryRun) {
+  console.error(
+    `--json yalnız --dry-run ile birlikte kullanılabilir — ${USAGE}`
+  );
+  process.exit(2);
+}
 const positional = argv.filter((a) => !a.startsWith("--"));
 if (positional.length > 1) {
   console.error(`fazla argüman: ${positional.slice(1).join(", ")} — ${USAGE}`);
   process.exit(2);
 }
 const sourcePath = positional[0] ?? DEFAULT_SOURCE;
+
+/**
+ * GİRDİ/KULLANIM hatası — beklenen, düzeltilebilir durum. Üst düzey
+ * yakalayıcı yalnız `message` basar: kullanıcıya Node yığını değil, ne
+ * yapması gerektiğini söyleyen tek satır gider. Beklenmeyen hatalar
+ * (program hatası) `Error` kalır ve YIĞINIyla basılır — sessizce
+ * yutulmaz, ayıklanır.
+ */
+class CliError extends Error {}
+
+/** `errno` kodunu okunabilir tek cümleye çevirir (yol zaten ayrı yazılır). */
+const READ_ERRORS: Record<string, string> = {
+  ENOENT: "dosya bulunamadı",
+  EACCES: "erişilemedi",
+  EPERM: "izin yok",
+  EISDIR: "dizin, dosya değil",
+  ENOTDIR: "yolun bir bileşeni dosya değil",
+};
+
+function readSource(p: string): Buffer {
+  try {
+    return fs.readFileSync(p);
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code ?? "Bilinmeyen hata";
+    throw new CliError(`kaynak okunamadı: ${p} (${READ_ERRORS[code] ?? code})`);
+  }
+}
 
 type Row = Record<string, unknown>;
 
@@ -127,6 +168,28 @@ function json(
   return v as runtime.InputJsonValue;
 }
 
+/**
+ * `--json` sözleşmesi (makine-okunur dry-run özeti). Alan adları ve
+ * tipleri KAPI: betikler bunları okur, prose yalnız insan içindir.
+ * `insertAtMost`/`skipAtLeast` "en çok/en az"tur — DB'ye bağlanmadan
+ * mevcut satırlarla çakışma ölçülemez (bkz. `skipDuplicates`).
+ */
+type DryRunSummary = {
+  mode: "dry-run";
+  source: string;
+  sourceSha256: string;
+  bytes: number;
+  linesFull: number;
+  linesPhysical: number;
+  blankSkipped: number;
+  candidates: number;
+  invalidSkipped: number;
+  duplicatesInFile: number;
+  insertAtMost: number;
+  skipAtLeast: number;
+  dbConnected: false;
+};
+
 type PreparedRow = {
   data: TrendRunCreateManyInput;
   hash: string;
@@ -149,7 +212,7 @@ function prepare(line: string, lineNo: number): PreparedRow | null {
   try {
     parsed = JSON.parse(line);
   } catch (e) {
-    throw new Error(
+    throw new CliError(
       `satır ${lineNo}: JSON ayrıştırılamadı — ${(e as Error).message}`
     );
   }
@@ -211,7 +274,7 @@ function prepare(line: string, lineNo: number): PreparedRow | null {
 async function main() {
   // Kaynak dosya bir kez Buffer olarak okunur: SHA-256 ve ayrıştırma aynı
   // baytlardan gelir (ikinci okuma = TOCTOU penceresi yok).
-  const buf = fs.readFileSync(sourcePath);
+  const buf = readSource(sourcePath);
   const sourceSha256 = crypto.createHash("sha256").update(buf).digest("hex");
   const physicalLines = buf.toString("utf-8").split("\n");
   const lines = physicalLines.filter((l) => l.trim().length > 0);
@@ -242,22 +305,45 @@ async function main() {
 
   if (dryRun) {
     // DB'ye dokunulmaz: Prisma Client hiç kurulmaz, DATABASE_URL okunmaz.
-    console.log(`[DRY-RUN] kaynak: ${sourcePath} (${buf.length} bayt)`);
-    console.log(`[DRY-RUN] sha256: ${sourceSha256}`);
+    // Sayılar TEK yerden hesaplanır; prose ve JSON bu özete bakar, ayrı
+    // hesap yapmaz — iki yüzeyin ayrışması bu yüzden mümkün değildir.
+    const summary: DryRunSummary = {
+      mode: "dry-run",
+      source: sourcePath,
+      sourceSha256,
+      bytes: buf.length,
+      linesFull: lines.length,
+      linesPhysical: physicalLines.length,
+      blankSkipped: physicalLines.length - lines.length,
+      candidates: pending.length,
+      invalidSkipped: invalid,
+      duplicatesInFile: duplicates,
+      insertAtMost: pending.length,
+      skipAtLeast: invalid + duplicates,
+      dbConnected: false,
+    };
+    if (jsonMode) {
+      // Tek satır, satır sonu olmadan: `| jq` ve satır-bazlı okuyucular
+      // için güvenli. Alan adları sözleşmedir (docs: README "dry-run").
+      console.log(JSON.stringify(summary));
+      return;
+    }
+    console.log(`[DRY-RUN] kaynak: ${summary.source} (${summary.bytes} bayt)`);
+    console.log(`[DRY-RUN] sha256: ${summary.sourceSha256}`);
     console.log(
-      `[DRY-RUN] satır: ${lines.length} dolu / ${physicalLines.length} fiziksel` +
-        ` (boş atlanan: ${physicalLines.length - lines.length})`
+      `[DRY-RUN] satır: ${summary.linesFull} dolu / ${summary.linesPhysical} fiziksel` +
+        ` (boş atlanan: ${summary.blankSkipped})`
     );
     console.log(
-      `[DRY-RUN] aday: ${pending.length} · doğrulama-dışı atlanan: ${invalid}`
+      `[DRY-RUN] aday: ${summary.candidates} · doğrulama-dışı atlanan: ${summary.invalidSkipped}`
     );
     console.log(
-      `[DRY-RUN] dosya-içi çakışma: ${duplicates}` +
+      `[DRY-RUN] dosya-içi çakışma: ${summary.duplicatesInFile}` +
         " (aynı ts veya aynı satır-hash → ON CONFLICT DO NOTHING)"
     );
     console.log(
-      `[DRY-RUN] eklenecek (en çok): ${pending.length} ·` +
-        ` atlanacak (en az): ${invalid + duplicates}`
+      `[DRY-RUN] eklenecek (en çok): ${summary.insertAtMost} ·` +
+        ` atlanacak (en az): ${summary.skipAtLeast}`
     );
     console.log(
       "[DRY-RUN] DB bağlantısı kurulmadı (DATABASE_URL gerekmez);" +
@@ -301,6 +387,8 @@ async function main() {
 }
 
 main().catch((e) => {
-  console.error(e);
+  // CliError = kullanıcının düzeltebileceği hata → tek satır mesaj.
+  // Diğer hatalar program hatasıdır → yığın basılır (ayıklanabilsin).
+  console.error(e instanceof CliError ? e.message : e);
   process.exit(1);
 });

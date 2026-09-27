@@ -6,6 +6,7 @@ Sürükleme (drift) koruması: preview_server.HISTORY_KEYS'teki her anahtar
 mevcut olmalıdır. Statik denetim — ağ/DB/node gerektirmez.
 """
 import hashlib
+import json
 import os
 import pathlib
 import re
@@ -220,6 +221,68 @@ class TestTrendDbDryRun(unittest.TestCase):
         res = self._run(str(path), "--dry-run")
         self.assertEqual(res.returncode, 1)
         self.assertIn("satır 2: JSON ayrıştırılamadı", res.stderr)
+
+    def test_json_flag_emits_single_line_machine_summary(self):
+        """`--json`: prose'in yerine TEK satır JSON — betikler için sözleşme.
+
+        JS tarafı (apps/trend-db/test/dry-run.test.mjs) aynı seam'i kendi
+        koşucusuyla kilitler; buradaki kopya kasıtlı: repo kökünde tek kapı
+        (check_unit_tests) Python testlerini koşar, JS koşucusu yalnız
+        `npm test` ile çalışır — iki yüz birden kaybolmasın.
+        """
+        fixture = self._fixture()
+        raw = fixture.read_bytes()
+        res = self._run(str(fixture), "--dry-run", "--json")
+        self.assertEqual(res.returncode, 0, res.stderr)
+        lines = res.stdout.strip().split("\n")
+        self.assertEqual(len(lines), 1, "tek satır JSON beklenir: %r" % res.stdout)
+        self.assertNotIn("[DRY-RUN]", res.stdout, "--json prose basmamalı")
+        j = json.loads(lines[0])
+        self.assertEqual(j["mode"], "dry-run")
+        self.assertEqual(j["source"], str(fixture))
+        self.assertEqual(j["sourceSha256"], hashlib.sha256(raw).hexdigest())
+        self.assertEqual(j["bytes"], len(raw))
+        self.assertEqual(
+            (j["linesFull"], j["linesPhysical"], j["blankSkipped"]),
+            (5, 6, 1), "satır sayaçları prose ile aynı olmalı")
+        self.assertEqual(
+            (j["candidates"], j["invalidSkipped"], j["duplicatesInFile"]),
+            (2, 2, 1), "aday/doğrulama-dışı/çakışma prose ile aynı olmalı")
+        self.assertEqual((j["insertAtMost"], j["skipAtLeast"]), (2, 3))
+        self.assertIs(j["dbConnected"], False, "dry-run DB'ye bağlanmamalı")
+
+    def test_json_numbers_match_prose_numbers(self):
+        """İki yüzey AYNI sayıları söyler — çapraz-kapı (drift yok)."""
+        fixture = self._fixture()
+        prose = self._run(str(fixture), "--dry-run").stdout
+        j = json.loads(
+            self._run(str(fixture), "--dry-run", "--json").stdout.strip())
+        m = re.search(r"eklenecek \(en çok\): (\d+) · atlanacak \(en az\): (\d+)", prose)
+        self.assertIsNotNone(m, "prose sayaç etiketi kayboldu: %r" % prose)
+        self.assertEqual(j["insertAtMost"], int(m.group(1)))
+        self.assertEqual(j["skipAtLeast"], int(m.group(2)))
+
+    def test_json_without_dry_run_exits_2(self):
+        """`--json` tek başına anlamsız: gerçek koşuda sayı ancak yazdıktan
+        sonra bilinir → kullanım hatası (2), sessizce prose'e düşmez."""
+        fixture = self._fixture()
+        res = self._run(str(fixture), "--json")
+        self.assertEqual(res.returncode, 2, res.stdout)
+        self.assertIn("--json", res.stderr)
+        self.assertIn("--dry-run", res.stderr)
+        self.assertNotIn("bilinmeyen bayrak", res.stderr,
+                         "--json bilinen bayrak olmalı (KNOWN_FLAGS)")
+        self.assertNotIn("[DRY-RUN]", res.stdout, "rapor basılmamalı")
+
+    def test_missing_source_reports_clean_error(self):
+        """Eksik kaynak: ham Node/ENOENT yığını DEĞİL, tek satır mesaj."""
+        missing = pathlib.Path(self.tmp.name) / "yok.jsonl"
+        res = self._run(str(missing), "--dry-run")
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("kaynak okunamadı", res.stderr)
+        self.assertIn("yok.jsonl", res.stderr, "hata yolu söylemeli")
+        self.assertNotIn("Error: ENOENT", res.stderr, "ham Node hatası sızmamalı")
+        self.assertNotRegex(res.stderr, r"\n\s+at\s", "yığın çerçevesi basılmamalı")
 
     def test_dry_run_branch_precedes_client_construction(self):
         """Yapısal sözleşme: dry-run erken döner — client ONDAN SONRA kurulur."""
