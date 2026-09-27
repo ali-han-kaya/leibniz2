@@ -866,3 +866,33 @@ simüle edilerek ölçüldü: iki modül `SKIP (8/7 test atlandi)` → kapı
   kurulu). Yeni *iş* değil, mevcut işlere adım — iş sayısı 31'de sabit,
   required/advisory sözleşmesi değişmedi.
 - `shellcheck_hooks.sh` listesine yeni betik eklendi (kapı da linte girer).
+
+## Session 2026-09-27 — dashboard-next preset bağımsızlığı (contract 8)
+
+2026-09-19 notundaki açık açı kapandı: dashboard-next artık shadcn npm
+preset sheet'ine bağlı değil.
+
+- **Kaldırılan bağ:** `apps/dashboard-next/app/globals.css` içindeki
+  `@import "shadcn/tailwind.css"` (629 satırlık preset: `data-*`
+  variant'ları, `no-scrollbar`/`scroll-fade`/`shimmer` utility'leri +
+  kendi `@property`/`@theme` blokları). Repo kaynağında bu yüzeylerin
+  HİÇBİRİ kullanılmıyordu (kaynak grep: 0 eşleşme) — yani ikinci bir tema
+  kaynağı, kullanılmayan stil yükü ve habersiz renk enjekte etme riski.
+- **Kanıt (yeniden derleme):** `npm run build` yeşil, BUILD_ID
+  `Ca5LNsJqJ0dIWdrZifvhL`, rotalar değişmedi (`/` ve `/trend` ƒ Dynamic,
+  `_not-found` ○ Static); üretilen tek CSS 33.623 B ve içinde
+  `shimmer`/`scroll-fade`/`no-scrollbar`/`data-open` geçmiyor (grep 0),
+  repo token'ları (`#0e1116`, `var(--accent)`, `var(--card)`,
+  `var(--radius)`) yerinde. Tema zinciri artık: tailwindcss çekirdeği +
+  `design-system/tailwind.css` GENERATED köprüsü + globals.css'teki
+  repo-içi shadcn yuva eşlemesi (her değer `var()` referansı).
+- **Kapı kapatması (check-design-tokens contract 8):** dış preset importu,
+  yazıyla verilmiş yuva değeri, çözülemeyen `var(--X)`, `@theme`'de
+  alias'sız yuva ve uygulama kaynağında preset-only yüzey kullanımı
+  fail-closed BLOKE. Negatif kanıt: `test_check_design_tokens.py` 20 vaka
+  (yedisi yeni contract 8; yorumdaki yüzey adının bloke etmediği vaka
+  dahil) — hepsi OK.
+- **Kalan açı:** `tw-animate-css` hâlâ import ediliyor ama kaynakta hiç
+  kullanılmıyor; yeni bir shadcn bileşeni preset-only yüzey getirirse
+  contract 8(e) onu commit anında yakalar ve karşılığının repo CSS'ine
+  eklenmesini zorlar.

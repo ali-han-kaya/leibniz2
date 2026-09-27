@@ -36,6 +36,36 @@ PREVIEW_API=http://127.0.0.1:8000 npm start   # varsayılan: http://127.0.0.1:80
 | Root layout + metadata | `app/layout.tsx` | `%s \| leibniz2` template başlık |
 | Client bileşen yalnız sınırda | `app/error.tsx` | Tek `"use client"` dosyası: hata sınırı (zorunlu) |
 
+## Tema zinciri (CSS) — preset-bağımsız
+
+`app/globals.css` tema kaynağını **tek zincirden** alır:
+
+```css
+@import "tailwindcss";                            /* çekirdek */
+@import "../../../design-system/tailwind.css";    /* GENERATED köprü (tokens.json → tokens.css) */
+@import "tw-animate-css";                         /* utility animasyonları */
+```
+
+shadcn yuvaları (`--background`, `--card`, `--primary`, `--sidebar-*`,
+`--chart-*`, `--radius`) bu dosyada **repo token'larına bağlanır**:
+her değer `var(--bg)` / `var(--radius-6)` gibi bir referanstır, yazıyla
+verilmiş renk/ölçü YOKTUR. `@theme inline` bloğu aynı yuvaları
+`--color-*` alias'ı olarak yeniden sunar; böylece `bg-card`,
+`text-muted-foreground`, `border-border` gibi utility'ler doğrudan pano
+paletine düşer.
+
+- **Preset bağımsızlığı (2026-09-27):** `@import "shadcn/tailwind.css"`
+  (npm preset sheet'i: `data-*` variant'ları, `no-scrollbar`,
+  `scroll-fade`, `shimmer`) **kaldırıldı** — ikinci bir tema kaynağıydı ve
+  bileşenlerimiz bu yüzeyleri kullanmıyordu. Yeni bir shadcn bileşeni
+  preset-only bir yüzey getirirse, karşılığı repo CSS'ine eklenir.
+- **Kapı:** `python3 design-system/scripts/check_tokens.py` (pre-commit
+  `check-design-tokens`, fail-closed) contract 7+8'i denetler: köprü
+  importu zorunlu; token gölgelemesi, kopya değer, renk literal'i, dış
+  preset importu, yazıyla verilmiş yuva değeri, çürük `var(--X)`
+  referansı, `@theme` alias'sız yuva ve kaynakta preset-only yüzey
+  kullanımı commit'i BLOKE eder.
+
 ## Trend grafiği okuma yolu (tasarım)
 
 `docs/TREND_CHART_READ_PATH.md`: trend yüzeyini kalıcı `trend_runs` tablosundan

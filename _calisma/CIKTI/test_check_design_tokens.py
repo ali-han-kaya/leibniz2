@@ -178,6 +178,74 @@ class TestDesignTokensGate(unittest.TestCase):
         )
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
+    # ── contract 8: preset bağımsızlığı + referans kapanışı ────────────────
+
+    def test_preset_import_fails(self):
+        """shadcn preset sheet'i ikinci tema kaynağıdır — import edilemez."""
+        r = _run_with_globals('\n@import "shadcn/tailwind.css";\n')
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("preset sheet", r.stdout + r.stderr)
+
+    def test_preset_import_is_gone_from_real_globals(self):
+        text = GLOBALS.read_text(encoding="utf-8")
+        self.assertNotRegex(
+            text, r'@import\s+["\']shadcn/',
+            msg="shadcn preset CSS importu geri gelmemeli (contract 8)")
+
+    def test_written_out_slot_value_fails(self):
+        """Yazıyla verilmiş değer = kopya adayı; köprüye referans şart."""
+        # 9px tokens.css'te YOK (8px olsaydı contract 7 kopya olarak yakalardı).
+        r = _run_with_globals("\n:root { --sidebar: 9px; }\n")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("yazıyla verilmiş değer", r.stdout + r.stderr)
+
+    def test_dangling_var_reference_fails(self):
+        """Çürük referans sessiz stil kaybıdır (ne token ne yuva)."""
+        r = _run_with_globals("\n:root { --sidebar: var(--yok-boyle-token); }\n")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("çürük referans", r.stdout + r.stderr)
+
+    def test_slot_without_theme_alias_fails(self):
+        """Yeni yuva @theme'de --color-<yuva> alias'ı olmadan eklenemez."""
+        r = _run_with_globals("\n:root { --brand-x: var(--accent); }\n")
+        self.assertNotEqual(r.returncode, 0)
+        out = r.stdout + r.stderr
+        self.assertIn("--brand-x", out)
+        self.assertIn("--color-brand-x", out)
+
+    def test_preset_only_utility_in_source_fails(self):
+        """Preset silindi: onun utility'sini kullanmak sessiz stilsizlik."""
+        td = _tmp_repo()
+        try:
+            tmp_script = td / "design-system" / "scripts" / "check_tokens.py"
+            ui = td / "apps" / "dashboard-next" / "components" / "ui"
+            ui.mkdir(parents=True)
+            (ui / "yeni.tsx").write_text(
+                'export const X = () => <div className="no-scrollbar" />;\n',
+                encoding="utf-8")
+            r = run_check_copy(tmp_script)
+            self.assertNotEqual(r.returncode, 0)
+            out = r.stdout + r.stderr
+            self.assertIn("preset-only", out)
+            self.assertIn("no-scrollbar", out)
+        finally:
+            shutil.rmtree(td, ignore_errors=True)
+
+    def test_preset_only_word_in_comment_does_not_trip(self):
+        """Yorumdaki yüzey adı bloke etmez (yorum-sonrası metin taranır)."""
+        td = _tmp_repo()
+        try:
+            tmp_script = td / "design-system" / "scripts" / "check_tokens.py"
+            ui = td / "apps" / "dashboard-next" / "components" / "ui"
+            ui.mkdir(parents=True)
+            (ui / "yorum.tsx").write_text(
+                '// shimmer efekti ileride\nexport const X = 1;\n',
+                encoding="utf-8")
+            r = run_check_copy(tmp_script)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        finally:
+            shutil.rmtree(td, ignore_errors=True)
+
 
 if __name__ == "__main__":
     unittest.main()

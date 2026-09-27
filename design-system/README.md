@@ -14,7 +14,14 @@ Starter design tokens extracted from the live CI dashboard at
 - `scripts/check_tokens.py` — drift gate: parses `preview.html` and asserts
   the extraction still matches (dashboard `:root` vars, surfaced literals
   `#161b22` / `#21262d` / `#fff`, all rgba tints, and every derived scale
-  value appear verbatim in the source).
+  value appear verbatim in the source). Contract 7 dashboard-next kopya
+  drift'ini (herhangi bir blokta token gölgelemesi / tokens.css değerinin
+  yazıyla kopyası / renk literal'i), contract 8 ise preset bağımsızlığını
+  ve referans kapanışını denetler: köprü importu zorunlu, dış shadcn preset
+  sheet'i yasak, her yuva değeri `var()`/`calc()` referansı olmalı, her
+  `var(--X)` çözülebilmeli, her yuva `@theme`'de `--color-<yuva>` alias'ı
+  almalı ve uygulama kaynağı preset-only yüzey
+  (`data-open:`/`no-scrollbar`/`scroll-fade`/`shimmer`) kullanamaz.
 - `scripts/generate_tailwind.py` — renders `tailwind.css` from `tokens.css`.
   No `tailwindcss` install needed to generate; validates the two `:root`
   blocks stay byte-identical.

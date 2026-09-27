@@ -22,6 +22,18 @@ Contracts (post-import):
    tokens.css value (a copy instead of a reference), and (c) a hard-coded
    colour literal in any custom property. Comments are stripped first, so
    prose mentioning `:root {` can neither trip nor mask a finding.
+8. dashboard-next PRESET BAĞIMSIZLIĞI + REFERANS KAPANIŞI: globals.css
+   (a) shadcn preset CSS'i (@import "shadcn/…") DIŞARIDAN çekemez — tema
+   yalnız design-system/tailwind.css köprüsünden ve repo-içi yuva
+   eşlemesinden gelir, (b) stilde YAZIYLA verilmiş değer taşıyamaz (her
+   custom property var()/calc() ile bağlanır; literal = kopya adayı),
+   (c) her var(--X) referansı çözülebilir olmalı (tokens.css ya da aynı
+   dosyada tanımlı yuva) — çürük/typo referans sessiz stil kaybıdır,
+   (d) :root'ta tanımlı her renk yuvası @theme'de --color-<yuva> olarak
+   yeniden sunulmalı (--radius istisna: yarıçap ölçeğini besler),
+   (e) uygulama kaynağı preset-only utility (data-open: …, no-scrollbar,
+   scroll-fade, shimmer) kullanamaz — preset silindiği için o sınıflar
+   sessizce stilsiz kalır.
 
 Exit 0 on match, 1 on drift.
 """
@@ -35,6 +47,20 @@ CSS = REPO / "design-system" / "tokens.css"
 NEXT_GLOBALS = REPO / "apps" / "dashboard-next" / "app" / "globals.css"
 NEXT_REL = "apps/dashboard-next/app/globals.css"
 TAILWIND_BRIDGE = REPO / "design-system" / "tailwind.css"
+NEXT_APP = REPO / "apps" / "dashboard-next"
+# shadcn preset CSS'i (shadcn/dist/tailwind.css) tarafından tanımlanan ve
+# repo tarafında karşılığı OLMAYAN yüzeyler: preset importu kaldırıldığı için
+# bunları kullanmak sessiz stilsizlik demektir (fail-closed denylist).
+PRESET_ONLY = (
+    "data-open", "data-closed", "data-checked", "data-unchecked",
+    "data-selected", "data-disabled", "data-active", "data-horizontal",
+    "data-vertical", "no-scrollbar", "scroll-fade", "shimmer",
+)
+_SOURCE_SUFFIXES = frozenset({".tsx", ".ts", ".jsx", ".js"})
+_VAR_REF = re.compile(r"var\(\s*(--[\w-]+)")
+# `--radius` bir renk değil: @theme'de --radius-* ölçeğini besler, --color-*
+# alias'ı beklenmez.
+_THEME_SLOT_EXEMPT = frozenset({"--radius"})
 
 
 def vars_in_block(text: str, selector_pat: str) -> dict:
@@ -107,6 +133,17 @@ def _css_custom_props(text: str):
             yield from flush()
         else:
             buf.append(ch)
+
+
+def _strip_css_comments(text: str) -> str:
+    """Prose is not code: contract 8 taramaları yorum-sonrası metinde koşar."""
+    return re.sub(r"/\*.*?\*/", " ", text, flags=re.S)
+
+
+def _strip_source_comments(text: str) -> str:
+    """TSX/TS yorumlarını sil (blok + satır) — yorumdaki yüzey adı bloke etmez."""
+    text = _strip_css_comments(text)
+    return re.sub(r"//[^\n]*", " ", text)
 
 
 def _in_tailwind_directive(selector_path: str) -> bool:
@@ -232,6 +269,78 @@ def main() -> int:
                 f"{shown}{more}"
             )
 
+    # 8. dashboard-next preset-bağımsızlığı + referans kapanışı
+    if next_ok:
+        next_text = NEXT_GLOBALS.read_text(encoding="utf-8")
+
+        next_clean = _strip_css_comments(next_text)
+        preset_imports = re.findall(
+            r'@import\s+["\']([^"\']*(?:shadcn|preset)[^"\']*)["\']', next_clean)
+        if preset_imports:
+            drift.append(
+                f"{NEXT_REL} imports an external preset sheet "
+                f"({', '.join(sorted(set(preset_imports)))}) — token'lar ve "
+                "yuva eşlemesi repo-içinde kalmalı; preset'ten bağımsız "
+                "tema yalnız design-system/tailwind.css köprüsünden gelir"
+            )
+
+        local_slots = {name for selector, name, _ in _css_custom_props(next_text)
+                       if not _in_tailwind_directive(selector)}
+        known = set(css_dark) | set(css_light)
+        theme_aliases = {name for selector, name, _ in _css_custom_props(next_text)
+                         if _in_tailwind_directive(selector)
+                         and "theme" in selector}
+
+        for selector, name, value in _css_custom_props(next_text):
+            if _in_tailwind_directive(selector):
+                continue
+            norm = _norm_value(value)
+            specific = (_COLOR_LITERAL.search(norm) or norm in literal_owners)
+            if _is_literal(value) and not specific:
+                drift.append(
+                    f"{NEXT_REL} {selector}: {name} yazıyla verilmiş değer "
+                    f"taşıyor ({value.strip()}) — kopya yerine repo "
+                    "token'ına referans verin (var(--...))"
+                )
+
+        for ref in sorted(set(_VAR_REF.findall(next_clean))):
+            if ref not in known and ref not in local_slots:
+                drift.append(
+                    f"{NEXT_REL}: var({ref}) çözülemiyor — ne "
+                    "design-system/tokens.css'te ne de dosyanın kendi "
+                    "yuva bloğunda tanımlı (çürük referans)"
+                )
+
+        for name in sorted(local_slots - _THEME_SLOT_EXEMPT):
+            if f"--color-{name[2:]}" not in theme_aliases:
+                drift.append(
+                    f"{NEXT_REL}: :root yuvası {name} @theme'de "
+                    f"--color-{name[2:]} olarak yeniden sunulmamış — "
+                    "utility'ler (bg-*/text-*) bu yuvaya bağlanamaz"
+                )
+
+        preset_hits = []
+        for path in sorted(NEXT_APP.rglob("*")):
+            if not path.is_file() or path.suffix not in _SOURCE_SUFFIXES:
+                continue
+            if {"node_modules", ".next"} & set(path.parts):
+                continue
+            source = _strip_source_comments(
+                path.read_text(encoding="utf-8", errors="replace"))
+            for lineno, line in enumerate(source.splitlines(), 1):
+                for token in PRESET_ONLY:
+                    if re.search(rf"(?<![\w-]){re.escape(token)}(?![\w-])", line):
+                        preset_hits.append(
+                            f"{path.relative_to(REPO)}:{lineno} ({token})")
+        if preset_hits:
+            shown = ", ".join(preset_hits[:5])
+            more = f" (+{len(preset_hits) - 5} more)" if len(preset_hits) > 5 else ""
+            drift.append(
+                "dashboard-next kaynağı preset-only yüzey kullanıyor "
+                f"(shadcn/tailwind.css importu YOK): {shown}{more} — "
+                "karşılığını design-system köprüsüne/repo CSS'ine ekleyin"
+            )
+
     # 6. the generated bridge must stay verbatim-equal to tokens.css :root
     bridge_root = (
         vars_in_block(TAILWIND_BRIDGE.read_text(encoding="utf-8"), r":root")
@@ -252,7 +361,8 @@ def main() -> int:
     clean = next_ok and not (shadowed or copies or hardcoded)
     print(f"OK — import present, tokens.css :root {len(css_dark)} + light {len(css_light)} vars, "
           f"{len(tokens['color']['tint'])} tints in sheet, "
-          f"dashboard-next bridge+copy-drift {'OK' if clean else 'n/a'}")
+          f"dashboard-next bridge+copy-drift {'OK' if clean else 'n/a'}"
+          f" (preset-bağımsız + referans-kapalı)")
     return 0
 
 

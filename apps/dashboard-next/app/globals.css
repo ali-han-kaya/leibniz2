@@ -10,11 +10,22 @@
  * --border/--surface + tüm @theme eşlemeleri) artık KOPYA değil: köprüden
  * gelir ve check-design-tokens kapısı globals.css'in bu sözleşmeyi
  * bozmasını (inline yeniden-tanımlama / import-silme) bloke eder.
+ *
+ * PRESET-BAĞIMSIZLIK (2026-09-27): shadcn'ın `tailwind.css` preset
+ * importu KALDIRILDI. Preset sheet'i (data-* variant'ları, no-scrollbar/
+ * scroll-fade/shimmer utility'leri + kendi @property/@theme blokları) ikinci
+ * bir tema kaynağıydı: bileşenlerimiz bu yüzeyleri kullanmıyor ve preset
+ * değiştiğinde pano token'larından habersiz stil enjekte edebiliyordu.
+ * Tema artık TEK kaynaktan gelir: tailwindcss çekirdeği + repo köprüsü +
+ * aşağıdaki repo-içi shadcn yuva eşlemesi. check-design-tokens contract 8
+ * bunu fail-closed kilitler: dış preset importu, yazıyla verilmiş değer,
+ * çürük var(--X) referansı, @theme'de alias'sız yuva ve kaynakta
+ * preset-only yüzey kullanımı BLOKE edilir. Yeni bir shadcn bileşeni
+ * preset-only bir yüzey getirirse, karşılığı repo CSS'ine eklenir.
  */
 @import "tailwindcss";
 @import "../../../design-system/tailwind.css";
 @import "tw-animate-css";
-@import "shadcn/tailwind.css";
 
 @custom-variant dark (&:is(.dark *));
 

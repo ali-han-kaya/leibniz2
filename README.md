@@ -579,6 +579,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-27 | test | (gates) prettier + tip kapilarinin birim modulu | [`8de9544`](https://github.com/ali-han-kaya/leibniz2/commit/8de9544) |
 | 2026-09-27 | other | design-system: dashboard-next kopya-drift denetimi (contract 7) | [`41d50f2`](https://github.com/ali-han-kaya/leibniz2/commit/41d50f2) |
 | 2026-09-27 | other | preview: demo artifact denetimini taze klonda fail-closed kil | [`961bdce`](https://github.com/ali-han-kaya/leibniz2/commit/961bdce) |
+| 2026-09-27 | ci | (pre-commit) marka-mirror drift kapısını zincire ekle (fail-closed) | [`eab61e1`](https://github.com/ali-han-kaya/leibniz2/commit/eab61e1) |
 
 ### Regresyon notları
 
