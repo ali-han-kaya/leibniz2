@@ -1,0 +1,25 @@
+# design-system/scripts/brand_mirrors.list — marka-mirror drift kapısı roster'ı.
+#
+# check_brand_mirrors.py bu dosyayı TEK KAYNAK olarak okur: mirror dizinini,
+# drift kaynağını (raw.*), pinlenen token sayısını ve checker'ı buradan alır.
+#
+# Biçim (boşluk-ayrımlı 4 alan):
+#   <dizin>  <raw dosyası>  <pin>  <checker (dizine göreli)>
+#
+# Pin = checker'ın "OK — N" satırındaki N ile BİREBİR eşleşmeli. Mirror
+# upstream'de güncellenip tokens.css/tokens.json yenilendiğinde pin BİLİNÇLİ
+# güncellenir — kapı, sessiz mirror değişimini (kaynak değişti ama kimse
+# fark etmedi) fail-closed bloke eder.
+#
+# Kapsam: tokens.json + raw.css|raw.json taşıyan HER design-system/<dizin>/
+# ya aşağıda kayıtlı ya da gerekçeli `# exempt:` satırında olmalıdır; kayıtsız
+# yeni bir mirror kapıyı kırar (sessiz kapsam kaybı yasağı).
+#
+# exempt: github — GitHub homepage mirror'ı ayrı bir yeniden-üretim sözleşmesi
+#         taşır (check_github_tokens.py --sync; bkz. design-system/github/README.md).
+#         Kapsama alınmak istenirse: `github  raw.json  304  scripts/check_github_tokens.py`
+
+stripe  raw.css  710   scripts/check_stripe_tokens.py
+linear  raw.css  398   scripts/check_linear_tokens.py
+primer  raw.css  2051  scripts/check_primer_tokens.py
+vercel  raw.json 19    scripts/check_vercel_tokens.py

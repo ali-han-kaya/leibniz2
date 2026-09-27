@@ -32,6 +32,35 @@ python3 design-system/scripts/generate_tailwind.py # tokens.css → tailwind.css
 Both must exit `0`. Commit `tokens.json` + `tokens.css` + `tailwind.css`
  together so the three files never drift.
 
+## Marka mirror drift kapısı (pre-commit)
+
+`stripe/`, `linear/`, `primer/` ve `vercel/` mirror'larının kendi drift
+kapıları (`scripts/check_<marka>_tokens.py`) pre-commit zincirinde
+`check-brand-mirrors` hook'uyla koşar:
+
+```bash
+python3 design-system/scripts/check_brand_mirrors.py   # exit 0 = 4/4 PASS
+```
+
+- **Roster (tek kaynak):** `design-system/scripts/brand_mirrors.list` —
+  `<dizin> <raw> <pin> <checker>`.
+- **Pin:** checker'ın bastığı `OK — N` satırındaki N, pinlenen sayıya birebir
+  eşit olmalı. Mirror upstream'de değişip `tokens.css`/`tokens.json`
+  yenilendiğinde pin'i aynı commit'te **bilinçli** güncelleyin — kapı sessiz
+  mirror değişimini bloke eder. `OK` satırı yoksa veya N=0 ise FAIL
+  (vacuous PASS yasağı).
+- **Tetikleme:** yalnız `design-system/` altından dosya stage'lendiğinde koşar
+  (değişim-farkında; `always_run` yok).
+- **Fail-closed sözleşmeleri:** roster bütünlüğü (roster yok / <4 giriş /
+  kayıtlı dosya diskte yok → exit 2); kapsam (tokens.json + raw.* taşıyan
+  kayıtsız mirror kalamaz; açık istisna `# exempt: <dizin> — <gerekçe>` →
+  exit 2); checker rc != 0 ve pin uyuşmazlığı → exit 1.
+- `github` mirror'ı gerekçeli exempt'tir (ayrı `--sync` yeniden-üretim akışı,
+  bkz. `github/README.md`); kapsama almak için roster'a
+  `github  raw.json  304  scripts/check_github_tokens.py` satırını ekleyin.
+- Birim testleri: `_calisma/CIKTI/test_brand_mirror_gate.py` (R1-R5 + hook
+  wiring; `check-unit-tests` bataryasında koşar).
+
 ## Tailwind v4 usage (no tailwind.config.js)
 
 ```css

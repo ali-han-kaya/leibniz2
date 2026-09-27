@@ -10,6 +10,7 @@ test_atomic_write_guard.py
 test_audit_live_ci_sync.py
 test_audit_octokit_names.py
 test_audit_refs_trend.py
+test_brand_mirror_gate.py
 test_budget_over_banner.py
 test_canvas_determinism.py
 test_check_action_pins.py

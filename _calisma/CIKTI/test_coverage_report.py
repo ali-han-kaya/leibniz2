@@ -73,6 +73,9 @@ HOOK_COVERAGE = {
     "check-doc-artifact-sync": ["test_doc_artifact_sync.py"],
     "check-skills-index":       ["test_skills_index.py", "test_readme_skills.py"],
     "check-design-tokens":      ["test_check_design_tokens.py"],
+    # Marka mirror drift kapısı (stripe/linear/primer/vercel): roster
+    # bütünlüğü + pin eşleşmesi + kapsam sözleşmeleri tek modülde test edilir.
+    "check-brand-mirrors":      ["test_brand_mirror_gate.py"],
     # dashboard-next'in JS kapı çifti: ikisi de aynı yüzeyin (biçim + tip)
     # sözleşmesini denetliyor ve tek bir birim modülü var. HOOK_COVERAGE'a
     # girmeden önce bu iki hook'un kapsam raporunda testi YOKTU.
@@ -272,6 +275,7 @@ HOOK_COVERAGE = {
         "test_security_header_matrix.py",
         "test_static_isolation.py",
         "test_dashboard_next_style_gates.py",
+        "test_brand_mirror_gate.py",
     ],
 }
 
