@@ -14,15 +14,57 @@ bağlantı sözleşmesi (pooled/direct ayrımı).
 - ✅ `trend_runs` **kalıcı arşivdir** — kayan 100-koşuluk `history.jsonl` penceresinin
   (`HISTORY_MAX=100`) düşürdüğü eski koşuları da saklar; `npm run load` ile idempotent senkron
 - ✅ `dashboard-next` artık bu tablodan okuyor (`lib/trend-db.ts`)
+- ✅ `--dry-run` ön-uçuş (2026-09-27; DB'siz satır sayacı + kaynak SHA-256)
 
 ## Kurulum (tamamlanmış hali)
 
 ```bash
 cd apps/trend-db
 neon env pull --project-id orange-bar-58985004 -e DATABASE_URL -e DATABASE_URL_UNPOOLED -e NEON_BRANCH
-DATABASE_URL="$DATABASE_URL_UNPOOLED" npx prisma migrate dev --name init
+npm run load -- --dry-run        # ön-uçuş: DB'ye dokunmadan sayaç + kaynak SHA-256
 npm run load                     # TCC-mirror history.jsonl → TrendRun (idempotent, pooled)
 ```
+
+## Dry-run (ön-uçuş): `--dry-run`
+
+DB'ye **dokunmadan** yüklemenin ne yapacağını raporlar: eşleme gerçek koşuyla
+aynı `prepare()` yolundan geçer (rapor ile yükleme ayrışamaz), Prisma Client
+hiç kurulmaz ve `DATABASE_URL` **gerekmez** — kimlik bilgisi olmayan makinede
+veya CI'da koşabilir.
+
+```bash
+cd apps/trend-db
+npm run load -- --dry-run                      # TCC-mirror history.jsonl
+npm run load -- /yol/history.jsonl --dry-run   # belirli kaynak
+```
+
+```
+[DRY-RUN] kaynak: …/preview/history.jsonl (36612 bayt)
+[DRY-RUN] sha256: ce8f66b0…eddb3759
+[DRY-RUN] satır: 36 dolu / 37 fiziksel (boş atlanan: 1)
+[DRY-RUN] aday: 36 · doğrulama-dışı atlanan: 0
+[DRY-RUN] dosya-içi çakışma: 0 (aynı ts veya aynı satır-hash → ON CONFLICT DO NOTHING)
+[DRY-RUN] eklenecek (en çok): 36 · atlanacak (en az): 0
+[DRY-RUN] DB bağlantısı kurulmadı (DATABASE_URL gerekmez); mevcut satırlarla çakışma bu raporda YOK — kesin sayı için normal koşu
+```
+
+- **Sayaç sözleşmesi:** `aday` = dosyadan gelen geçerli kayıt; `atlanacak` =
+  doğrulama-dışı satırlar (`ts` yok / `verdict` string değil / JSON nesnesi
+  değil, ör. `null`) + dosya-içi çakışma (aynı `ts` veya aynı
+  `source_row_sha256`). Çakışan satır JS'te elenir — sonuç
+  `ON CONFLICT DO NOTHING` ile birebir aynı (ilk görülüm kazanır) ve böylece
+  rapor ile gerçek koşunun sayaçları aynı olur.
+- **Ölçülemeyen:** DB'de **zaten duran** satırlarla çakışma bağlantısız
+  bilinemez; bu yüzden çıktı "en çok eklenecek / en az atlanacak" der. Kesin
+  sayı ancak normal koşunun `bitti:` satırından okunur.
+- **Kaynak SHA-256:** dosyanın **baytlarından** hesaplanır ve ayrıştırma aynı
+  okumadan yapılır (ikinci okuma = TOCTOU penceresi yok); mühür/karşılaştırma
+  için rapora basılır. Normal koşunun açılış satırı da sha256'yı yazar.
+- **Çıkış kodları:** `0` = yüklenebilir, `1` = kaynak okunamaz / bozuk JSON
+  (satır numarasıyla), `2` = kullanım hatası (bilinmeyen bayrak ya da fazla
+  argüman — `--dri-run` yazım hatası sessizce yükleme başlatmaz).
+- Sözleşme testleri: `_calisma/CIKTI/test_trend_db_contract.py`
+  (`TestTrendDbDryRun` — gerçek `tsx` koşusu, kimlik bilgisi verilmeden).
 
 ## Notlar
 
