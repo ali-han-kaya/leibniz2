@@ -118,3 +118,15 @@ _calisma/CIKTI/history.jsonl.sha256
 # `--skip-claude` bayragina ragmen olusan dizin; icinde yalnizca
 # daemon'in urettigi dosyalar var, yapilandirma degil.
 .claude/
+
+# macOS `unzip` artiklari: AppleDouble yan dosyalari (`._dosya`) ve unzip'in
+# urettigi `__MACOSX/` dizini. Bunlar kaynak DEGIL — ayni icerigin ikinci
+# kopyasi; ekip halinde bagimsiz copy/paste karisikligi uretiyor.
+__MACOSX/
+._*
+
+# _calisma/CIKTI/check_unit_tests_timing.py'nin OLÇÜM çıktısı (scratch):
+# kök dizine varsayılan `--out check_unit_tests.json` ile düşer ve "ok:false"
+# gibi geçici bir ölçüm yazar. Rapor değil, tekrarlanabilir araç çıktısıdır;
+# gerçek kayıt `findings.md`/log dosyasına yazılır.
+check_unit_tests.json

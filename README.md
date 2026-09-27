@@ -589,6 +589,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-27 | docs | olay-patch plan snapshot'ını bugünkü yüzeylerle denetle | [`9508591`](https://github.com/ali-han-kaya/leibniz2/commit/9508591) |
 | 2026-09-27 | other | preview: VERIFY-001'i canlı kanıtla kapat (tıklama yarısı dahil) | [`2a9c0d3`](https://github.com/ali-han-kaya/leibniz2/commit/2a9c0d3) |
 | 2026-09-27 | other | design-system: dashboard-next renk kaynağını kapıya bağla | [`b656b5d`](https://github.com/ali-han-kaya/leibniz2/commit/b656b5d) |
+| 2026-09-27 | other | design-system: marka aynalarının @theme köprüsü ve kapısı | [`9b4133b`](https://github.com/ali-han-kaya/leibniz2/commit/9b4133b) |
 
 ### Regresyon notları
 
