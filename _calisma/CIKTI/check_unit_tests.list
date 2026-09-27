@@ -56,6 +56,7 @@ test_csp_directives.py
 test_dashboard_cls_budget.py
 test_dashboard_k17_exit_sync.py
 test_dashboard_keyboard_nav.py
+test_dashboard_next_style_gates.py
 test_dashboard_smoke.py
 test_deploy_evidence.py
 test_determinism_trend_badge.py

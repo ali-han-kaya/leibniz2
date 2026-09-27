@@ -73,6 +73,11 @@ HOOK_COVERAGE = {
     "check-doc-artifact-sync": ["test_doc_artifact_sync.py"],
     "check-skills-index":       ["test_skills_index.py", "test_readme_skills.py"],
     "check-design-tokens":      ["test_check_design_tokens.py"],
+    # dashboard-next'in JS kapı çifti: ikisi de aynı yüzeyin (biçim + tip)
+    # sözleşmesini denetliyor ve tek bir birim modülü var. HOOK_COVERAGE'a
+    # girmeden önce bu iki hook'un kapsam raporunda testi YOKTU.
+    "check-prettier-format":    ["test_dashboard_next_style_gates.py"],
+    "check-dashboard-typecheck": ["test_dashboard_next_style_gates.py"],
     "check-reproducible-pdf-skill": ["test_reproducible_pdf_skill.py"],
     "check-changelog-sync":    ["test_update_changelog_hook.py", "test_gen_changelog.py"],
     "check-unit-tests": [
@@ -266,6 +271,7 @@ HOOK_COVERAGE = {
         "test_csp_directives.py",
         "test_security_header_matrix.py",
         "test_static_isolation.py",
+        "test_dashboard_next_style_gates.py",
     ],
 }
 
