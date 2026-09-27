@@ -663,6 +663,23 @@ sürüm → 8/8 yeşil. İlk yazımda iki test "veri yok" sanıp **skip** ediyor
 ve CSP-konsol testi 0 hit-alanı gezdiği için **boş** geçiyordu: kapının
 kendisi boştu. Hit-alanı sayısı artık testin içinde zorlanıyor.
 
+**Yeni ölçüm (2026-09-27) — demo artifact denetimi taze klonda BOŞLUKTA'ydı:**
+`design_preview.html` commit dışı (`.gitignore:35`) ve
+`build_design_preview.py` **hiçbir CI/hook'tan çağrılmıyor**; dosya yoksa
+`test_built_design_preview_has_no_inline_event_handlers` `skipTest` ile
+atlıyordu. Yani inceleme/demo yüzeyinin VERIFY-001 koruması "dosya varsa"
+çalışıyordu; `2fee44f`'ten önceki 14 inline handler'lı bayat kopya senaryosu
+sessizce geri dönebilirdi. Düzeltme: üretici çıktı yolunu argümandan alıyor
+(`build_design_preview.py [ÇIKTI]`), kapı artifact'ı geçici dizine **üretip**
+denetliyor (her koşuda, skip yok; 0.077 sn) ve yerel kopyayı taze üretimle
+karşılaştırıp **bayatlığı FAIL** ediyor. Ölçüm: üretim deterministik (iki
+koşu birebir aynı, 153 766 bayt), taze artifact'ta 0 inline handler /
+6 `data-tip` / 22 `addEventListener`. Mutasyon kanıtı: `preview.js`'e bir
+`onmousemove` geri konunca **üç** denetim de kızdı (kaynak taraması, üretilen
+artifact taraması, bayat-kopya denetimi). Ayrıca `verify.yml` başarı
+mesajındaki sabit "8/8" kaldırıldı: sayaç artık logdan okunuyor ve 0 test
+koşarsa adım FAIL ediyor.
+
 **Ölçülen araç tuzağı:** önizleme panelindeki `preview_click` bu webview'a
 **gerçek fare girdisi teslim etmiyor** — SVG'ye capture dinleyici asılsa
 bile 0 mousemove ulaştı (ölçüldü). Bu yüzden kanıt Playwright'ın kendi

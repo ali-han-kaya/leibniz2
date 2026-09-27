@@ -3207,7 +3207,15 @@ jobs:
             echo "::error::VERIFY-001 kanıtı SKIP edildi (Playwright/Chromium yok) — kanıt koşmadı, bu iş geçemez."
             exit 1
           fi
-          echo "VERIFY-001 canlı CSP kanıtı: 8/8 geçti, konsolda CSP ihlali yok."
+          # SAYAÇ LOGDAN OKUNUR, SİLME YAZILMAZ: "8/8" sabit bir metindi ve
+          # süit büyüyüp küçülünce yalan söylüyordu. Ayrıca 0 test koşarsa
+          # (keşif hatası, filtre değişimi) kanıt yok sayılır.
+          ran="$(grep -oE 'Ran ([0-9]+) test' "$log" | tail -1 | grep -oE '[0-9]+' || true)"
+          if [ -z "${ran}" ] || [ "$ran" -lt 1 ]; then
+            echo "::error::VERIFY-001 kanıtı logdan okunamadı (koşan test sayısı yok) — $log"
+            exit 1
+          fi
+          echo "VERIFY-001 canlı CSP kanıtı: ${ran} test koştu, konsolda CSP ihlali yok (log: $log)."
 
       - name: Start preview_server (fresh-clone-http pattern)
         run: |

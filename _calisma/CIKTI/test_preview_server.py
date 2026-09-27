@@ -1968,17 +1968,69 @@ class InlineEventHandlerContractTests(unittest.TestCase):
         """
         self._scan("preview.js", _preview_js())
 
-    def test_built_design_preview_has_no_inline_event_handlers(self):
-        """Üretilen demo artifact'ı (gitignore) güncel kaynaktan gelmeli.
+    def _generate_artifact(self, dest: pathlib.Path) -> str:
+        """Artifact'ı GEÇİCİ bir yola üret ve içeriğini döndür.
 
-        Bulgu: artifact'ın `2fee44f`'ten ÖNCE üretilmiş olması. Inline
-        handler içeren bayat bir artifact, düzeltilmiş kaynağa rağmen
-        incelemede hâlâ ölü UI gösteriyordu.
+        Neden üreticiyi çağırıyoruz: `design_preview.html` commit dışı
+        (gitignore) ve taze klonda YOK. Ölçüldü (2026-09-27): dosya yoksa
+        yalnız yerel kopyaya bakan denetim `skipTest` ile atlanıyordu,
+        yani demo yüzeyinin VERIFY-001 koruması taze klonda BOŞLUKTA
+        kalıyordu — `2fee44f`'ten önceki 14 inline handler'lı bayat kopya
+        senaryosu sessizce geri dönebilirdi. Üretici 0.04 sn sürdüğü için
+        "taze klonda da" yanıtlamak bedava; ayrıca üretim SONRASI doğan
+        nitelik handler'ını da yakalar (kaynak temiz olsa bile).
+        """
+        proc = subprocess.run(
+            [sys.executable, str(pathlib.Path(HERE) / "build_design_preview.py"),
+             str(dest)],
+            capture_output=True, text=True, check=False, cwd=HERE,
+        )
+        self.assertEqual(
+            proc.returncode, 0,
+            "build_design_preview.py başarısız: %s" % proc.stderr[-400:],
+        )
+        return dest.read_text(encoding="utf-8")
+
+    def test_generated_artifact_has_no_inline_event_handlers(self):
+        """ÜRETİLEN demo artifact'ı da CSP altında çalışır durumda mı?
+
+        Kaynak temiz olmak yetmez: demo dosyası preview.js'i satır içi
+        `<script>` olarak gömüyor, dolayısıyla üretim sonrası ortaya
+        çıkabilecek bir nitelik handler'ı kaynakta hiç görünmez.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            html = self._generate_artifact(
+                pathlib.Path(tmp) / "design_preview.html")
+        self.assertGreater(len(html), 50_000,
+                           "artifact beklenmedik derecede küçük: %d bayt"
+                           % len(html))
+        self._scan("üretilen design_preview.html", html)
+        # Nitelik handler yokken hover tooltip ancak delege yoluyla
+        # çalışır; ikisinin de artifact'a girdiğini doğrula.
+        self.assertIn("addEventListener", html)
+        self.assertIn("data-tip", html)
+
+    def test_local_artifact_is_not_stale(self):
+        """İnceleme/demo kopyası bayat mı?
+
+        Bulgu (findings.md): artifact `2fee44f`'ten ÖNCE üretilmişti —
+        düzeltilmiş kaynağa rağmen incelemede 14 inline handler'lı ölü UI
+        gösteriyordu. Üretim deterministik ölçüldü (iki koşu birebir aynı,
+        153 766 bayt), yani "bayat mı" sorusu her koşuda yanıtlanabilir.
         """
         built = pathlib.Path(HERE, "design_preview.html")
         if not built.is_file():
-            self.skipTest("design_preview.html yok (build_design_preview.py çalıştır)")
-        self._scan("design_preview.html", built.read_text(encoding="utf-8"))
+            self.skipTest(
+                "design_preview.html yok (commit dışı) — yerel kopya "
+                "denetlenemez; ÜRETİCİ yukarıdaki testte denetleniyor")
+        with tempfile.TemporaryDirectory() as tmp:
+            fresh = self._generate_artifact(
+                pathlib.Path(tmp) / "design_preview.html")
+        self.assertEqual(
+            built.read_text(encoding="utf-8"), fresh,
+            "Yerel design_preview.html BAYAT — düzeltilmiş kaynaktan gelmiyor, "
+            "yani inceleme yüzeyi ölü UI gösterebilir. Çözüm: python3 "
+            "_calisma/CIKTI/build_design_preview.py")
 
     def test_guard_itself_detects_a_known_violation(self):
         """Kapının kendisi bozulursa (regex köreleşirse) sessizce geçmesin.
