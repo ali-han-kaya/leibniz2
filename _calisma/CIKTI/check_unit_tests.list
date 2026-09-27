@@ -166,6 +166,7 @@ test_validate_config_schema.py
 test_vercel_adapter.py
 test_verification_chain_deck.py
 test_verify_checks.py
+test_verify_job_checklist.py
 test_verify_k_layers.py
 test_video_data_contract.py
 test_workflow_contract.py

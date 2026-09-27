@@ -580,6 +580,9 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 > C (PR-only) job'ları push'ta hiç çalışmaz.
 > **İstisna:** `Pre-commit P0 label gate` C gibi PR-only'dir ama **BİLEREK required**
 > check'tir (precommit-p0 etiketi merge'i bloke eder) — A'da listelenir.
+> **Yeni job eklerken:** adım adım kontrol listesi `docs/VERIFY_JOB_CHECKLIST.md`;
+> karar ve gerekçelerin tek kaynağı `_calisma/CIKTI/workflow_contract.py`
+> (`GATE_EXCLUDE` ve artifact kapsam kümeleri) — bu tablo/kayıtlar ondan türer.
 
 | # | Kategori | Job | Son durum |
 |---|---|---|---|
