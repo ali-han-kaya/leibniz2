@@ -559,6 +559,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-27 | fix | (preview) kacakli veriyi nitelik baglamindan da kacir | [`517e37a`](https://github.com/ali-han-kaya/leibniz2/commit/517e37a) |
 | 2026-09-27 | chore | (changelog) 517e37a satirini tabloya ekle | [`d5eef5a`](https://github.com/ali-han-kaya/leibniz2/commit/d5eef5a) |
 | 2026-09-27 | chore | (gitignore) kokteki Vercel paketleme kalintisini gizle | [`a2d681e`](https://github.com/ali-han-kaya/leibniz2/commit/a2d681e) |
+| 2026-09-27 | feat | (security) baslik matrisi + CSP sozlesmesi + izolasyon kapisi | [`827430d`](https://github.com/ali-han-kaya/leibniz2/commit/827430d) |
 
 ### Regresyon notları
 
