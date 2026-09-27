@@ -512,5 +512,54 @@ class TestMainFailClosed(unittest.TestCase):
         self.assertEqual(rc, 2)
 
 
+class TestBranchScopedFailurePattern(unittest.TestCase):
+    """failure_pattern window'u denetlenen run'ın branch'ine scope'lanmalı.
+
+    Branch'siz (branch=None) pencere feat push fail'lerini main audit'ine
+    taşır ve main deterministik FAIL üretir (main UNSTABLE yanlışı).
+    Branch-scoped pencere (branch=main) yalnızca main run'larını sayar.
+    """
+
+    def test_main_verdict_pass_when_only_feat_has_failures(self):
+        # main run 34533974871 (doc PASS) ama global pencere feat fail'leri
+        # içeriyorsa combined FAIL olurdu; branch=main ile PASS kalmalı.
+        doc_text = als.REPO_ROOT.joinpath("docs/PUBLISH_SCENARIO.md").read_text(encoding="utf-8")
+        doc_artifacts = als.parse_doc_artifacts(doc_text)
+        doc_jobs = [n for (_c, n) in als.parse_doc_jobs(doc_text)]
+        live_jobs = list(dict.fromkeys(doc_jobs + [als.SELF_JOB]))
+        live = list(dict.fromkeys(doc_artifacts + [als.SELF_ARTIFACT]))
+        with tempfile.TemporaryDirectory() as td:
+            doc = pathlib.Path(td) / "PUBLISH_SCENARIO.md"
+            doc.write_text(doc_text, encoding="utf-8")
+            buf = io.StringIO()
+            # list_runs(branch=main) yalnızca main run'ları döner, bu yüzden
+            # kızım pencere deterministik içermez (feat fail'leri hariç).
+            fake_runs_main = [
+                {"databaseId": 34533974871, "status": "completed", "conclusion": "failure"},
+                {"databaseId": 34533974893, "status": "completed", "conclusion": "success"},
+            ]
+            def fake_list_runs(repo, branch, limit):
+                self.assertEqual(branch, "main", "failure_pattern window must be branch-scoped")
+                return fake_runs_main
+            def fake_list_jobs(repo, rid):
+                if rid == 34533974871:
+                    return [{"name": als.SELF_JOB, "conclusion": "failure"}]
+                return [{"name": als.SELF_JOB, "conclusion": "success"}]
+            with mock.patch.object(als, "get_repo", return_value="o/r"), \
+                    mock.patch.object(als, "get_run_head_branch", return_value="main"), \
+                    mock.patch.object(als, "get_latest_run", return_value={"databaseId": 34533974871, "headSha": "e6572d1"}), \
+                    mock.patch.object(als, "get_run_jobs", return_value=live_jobs), \
+                    mock.patch.object(als, "get_run_artifacts", return_value=live), \
+                    mock.patch("ci_failure_pattern.list_runs", side_effect=fake_list_runs), \
+                    mock.patch("ci_failure_pattern.list_jobs", side_effect=fake_list_jobs), \
+                    mock.patch.object(als, "get_run_job_conclusions", return_value={}), \
+                    mock.patch.object(sys, "stdout", new=buf):
+                rc = als.main(["--doc", str(doc), "--json", "--with-failure-pattern"])
+            d = json.loads(buf.getvalue())
+        self.assertEqual(rc, 0, d)
+        self.assertEqual(d["verdict"], "PASS")
+        self.assertEqual(d["failure_pattern"]["categories"]["deterministic"], [])
+
+
 if __name__ == "__main__":
     unittest.main()

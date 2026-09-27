@@ -227,6 +227,18 @@ def get_run_artifacts(repo, run_id):
     return [n for n in (line.strip() for line in out.splitlines()) if n]
 
 
+def get_run_head_branch(repo, run_id):
+    """Run'ın head branch'ini döndürür (failure_pattern window'u
+    branch'e scope'lamak için — aksi halde feat push fail'leri main
+    audit'inin deterministic penceresini kirletir)."""
+    try:
+        return run_gh(["gh", "api",
+                       f"repos/{repo}/actions/runs/{run_id}",
+                       "-q", ".head_branch"])
+    except RuntimeError:
+        return None
+
+
 def get_run_job_conclusions(repo, run_id):
     """Run'daki job ad → conclusion eşlemesi (skipped vs failure ayrımı için).
 
@@ -507,7 +519,8 @@ def main(argv=None):
     failure_result = None
     if args.with_failure_pattern:
         try:
-            runs = ci_failure_pattern.list_runs(repo, None, ci_failure_pattern.DEFAULT_LIMIT)
+            branch = get_run_head_branch(repo, run_id)
+            runs = ci_failure_pattern.list_runs(repo, branch, ci_failure_pattern.DEFAULT_LIMIT)
             timeline, jobs = ci_failure_pattern.analyze(runs)
             failure_result = ci_failure_pattern.summarize(timeline, jobs)
             failure_result["flaky_count"] = len(failure_result["categories"]["flaky"])
