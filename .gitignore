@@ -130,3 +130,11 @@ __MACOSX/
 # gibi geçici bir ölçüm yazar. Rapor değil, tekrarlanabilir araç çıktısıdır;
 # gerçek kayıt `findings.md`/log dosyasına yazılır.
 check_unit_tests.json
+
+# _calisma/TOOLKIT/ — BAŞKA repoların denetim paketi (atlas-rag,
+# atlas-verify-api, komuta-merkezi, pflege-v2.0): kendi kanıt logları ve
+# düz metin dev parolası (`dev-bakici-pass`) taşıyan taşınmış bir düşüş.
+# leibniz2'nin kaynağı DEĞİLDİR ve `check-absolute-paths` hook'u bu dizini
+# zaten açıkça muaf tutuyor (SKIP_PREFIXES) — yani kapılar da onu "yerel
+#artifact" sayıyor. Dosyalar diskte kalır (kayıp yok), yalnız takip dışıdır.
+_calisma/TOOLKIT/
