@@ -1212,3 +1212,47 @@ panonun ve landing'in gerçek bir tema varyantını besliyor.
   engelleyen şey **testtir**.
 - **Bekleyen:** RLS (`20260927193000`) + query-index (`20260927194500`)
   migration'ları hâlâ `prisma migrate deploy` bekliyor.
+
+### precommit-orphans turu (2026-09-27) — yetim patch'e çift parmak-izi + özel uyarı
+
+- **Başlangıç ölçümü:** kapı (`check_precommit_orphans.py`, hook 19) olay
+  arşivini (`recovery_patches_*`, 4 dizin / 42 patch) **sha256 ile** tarıyor ve
+  eşleşmeyi yetim listesinin **içine gömülü bir satır** olarak basıyordu.
+  İki zayıf nokta: (1) gömülü satır scroll'lanıp geçilebilir — bir uyarı
+  ancak görüldüğünde işe yarar; (2) tek özet yalnız "birebir aynı" sorusuna
+  cevap veriyor, "özet aynı ama içerik farklı" durumunu (kısmi kopya / arşiv
+  bozulması) hiç göstermiyor.
+- **Karar (1) — md5 ikinci sinyal, oracle DEĞİL:** istenen md5 karşılaştırması
+  eşleşmeyi güçlendirmek için değil, **ikinci sinyâl** olarak eklendi. Temel
+  kural: bilinen-olay etiketi **yalnız sha256 birebir eşleşmesinden** doğar.
+  md5 çakışabildiği için (bilinen saldırı yüzeyi) onu ikinci otorite yapmak
+  kapıyı zayıflatırdı; bunun yerine sha256 düştüğünde ayrı bir tanı
+  (`ZAYIF-PARMAK-İZİ ÇAKIŞMASI`) üretiyor: "özet aynı, içerik farklı". Yani
+  ikinci özet hiçbir zaman birincinin yerine geçmiyor, sadece onun göremediği
+  durumu görünür kılıyor. Sıra `classify()` içinde tek yerde yazılı.
+- **Karar (2) — özel uyarı bloğu çıktının en üstünde:** taze/yetim ayrımı
+  kaldırıldı, iki eşleşme TEK `BİLİNEN OLAY PARMAK-İZİ (KNOWN-INCIDENT)`
+  bloğunda toplandı; her eşleşme için patch adı + arşiv konumu + **sha256 ve
+  md5** yazılıyor (elle doğrulanabilirlik: olay notlarına kısa md5
+  yapıştırılabilir). Taze olanların altında "bloklamaz" gerekçesi duruyor —
+  kurtarma penceresi felsefesi korundu (exit 0).
+- **Karar (3) — tek okuma, iki hesap:** `archive_fingerprints()` artık
+  `Fingerprints(sha256, md5, archives, patch_count)` döndürüyor. İki ayrı okuma
+  olsaydı dosya arada değişseydi haritalar birbirini tutmaz ve "birebir aynı"
+  yargısı sessizce yanlışlaşırdı.
+- **Eşleşme yokken gürültü yasağı:** digest'ler yalnız iki özel blokta basılıyor.
+  Yeni test, bilinmeyen bir yetimde 32-hex bile görünmediğini kilitliyor —
+  kırmızı çıktıda her satır anlam taşımalı, yoksa operatör alışkanlığı
+  kaybedilir.
+- **md5 ve FIPS:** `hashlib.md5(data, usedforsecurity=False)` — kimlik etiketi
+  üretir, bütünlük güvencesi sağlamaz; FIPS çekirdeklerde düz `md5()` reddedilir.
+- **TDD (kırmızı önce):** 13 var olan yeşil + 5 yeni kırmızı (özel blok yok,
+  md5 basılmıyor, `Fingerprints`/`classify` yok, boş arşiv uyarısı yok).
+  Sonra 18/18 yeşil. Çarpışma dalı gerçek md5 çakışması gerektirdiği için
+  (üretim-dışı) **saf `classify()` seam'i** üzerinden kilitlendi; CLI aynı
+  sınıflandırmayı kullandığı için ayrışma yok. CLI'de de canlı blok çıktısı
+  elle denetlendi (birebir kopya + sahte zayıf eşleşme birlikte).
+- **Test:** `test_check_precommit_orphans.py` **13 → 18** (özel blok, çift
+  digest, md5'in etiket üretmemesi, gürültü yasağı, iki haritanın da her
+  arşivi görmesi + patch sayımı tutarlılığı, boş arşiv iki haritayı da
+  körleştirir). `AGENTS.md` operatör kuralı güncellendi.

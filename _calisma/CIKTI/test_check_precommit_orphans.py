@@ -22,11 +22,16 @@ than the recovery window = accumulating residue + revert-incident evidence):
 import importlib.util
 import os
 import pathlib
+import re
 import subprocess
 import sys
 import tempfile
 import time
 import unittest
+
+BANNER = "BİLİNEN OLAY PARMAK-İZİ"
+WEAK_BANNER = "ZAYIF-PARMAK-İZİ ÇAKIŞMASI"
+MD5_HEX = "[0-9a-f]{32}"
 
 HERE = pathlib.Path(__file__).resolve().parent
 GATE = HERE / "check_precommit_orphans.py"
@@ -68,6 +73,14 @@ def make_cache_with_archive_content(patch_ages_h) -> pathlib.Path:
 
 
 import shutil
+
+
+def _load_gate():
+    """Kapıyı modül olarak yükler (saf fonksiyon dalları için CLI'sız seam)."""
+    spec = importlib.util.spec_from_file_location("orphan_gate", GATE)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 class TestPrecommitOrphanGate(unittest.TestCase):
@@ -160,16 +173,21 @@ class TestPrecommitOrphanGate(unittest.TestCase):
                          "arşiv yolu sabitlenmemeli — glob kullan")
 
     def test_every_archive_contributes_fingerprints(self):
-        # Dinamik: her arşiv dizininden en az bir parmak-izi yüklenmeli.
-        spec = importlib.util.spec_from_file_location("orphan_gate", GATE)
-        gate = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(gate)
-        known = gate.archive_fingerprints()
+        # Dinamik: her arşiv dizininden en az bir parmak-izi yüklenmeli —
+        # ve İKİ haritaya da (sha256 otorite, md5 ikinci sinyal).
+        known = _load_gate().archive_fingerprints()
         archives = sorted(p for p in HERE.glob("recovery_patches_*") if p.is_dir())
         self.assertTrue(archives, "arşiv dizini yok — test anlamsızlaşır")
-        seen = {loc.split("/", 1)[0] for locs in known.values() for loc in locs}
-        for d in archives:
-            self.assertIn(d.name, seen, f"arşiv parmak-izi yüklenmedi: {d.name}")
+        for name in ("sha256", "md5"):
+            table = getattr(known, name)
+            seen = {loc.split("/", 1)[0] for locs in table.values() for loc in locs}
+            for d in archives:
+                self.assertIn(d.name, seen,
+                              f"{name} parmak-izi yüklenmedi: {d.name}")
+        self.assertEqual(
+            known.patch_count,
+            sum(1 for d in archives for p in d.glob("patch*") if p.is_file()),
+            "arşiv patch sayısı sayımı tutarsız")
 
     def test_later_archive_fingerprint_is_recognised(self):
         # 09-18 dışındaki bir arşivden gelen kopya da KNOWN-INCIDENT almalı.
@@ -208,6 +226,91 @@ class TestPrecommitOrphanGate(unittest.TestCase):
         finally:
             shutil.rmtree(td, ignore_errors=True)
 
+    def test_known_incident_prints_dedicated_warning_block(self):
+        # Bilinen-olay eşleşmesi yetim listesinin içine gömülü satır
+        # olmaktan çıkmalı: scroll'layıp geçilen bir uyarı uyarı değildir.
+        # Taze/yetim fark etmez — TEK özel blok, dosya adıyla birlikte.
+        incident = next(ARCHIVE.glob("patch1789754982*"))
+        td = make_cache(None)
+        try:
+            p = td / "patch9999000003-77777"
+            p.write_bytes(incident.read_bytes())
+            old = time.time() - 30 * HOUR
+            os.utime(p, (old, old))
+            r = run_gate(td)
+            out = r.stdout + r.stderr
+            self.assertEqual(r.returncode, 1, out)
+            self.assertIn(BANNER, out, "özel bilinen-olay uyarı bloğu yok")
+            self.assertIn("KNOWN-INCIDENT", out)
+            self.assertIn("patch1789754982-84993", out,
+                          "eşleşen arşiv dosyası adıyla anılmalı")
+            # blok kendi satırında, eşleşen patch altında gruplanmalı
+            self.assertRegex(out, re.escape(BANNER) + r"[\s\S]*patch9999000003-77777")
+        finally:
+            shutil.rmtree(td, ignore_errors=True)
+
+    def test_known_incident_block_reports_both_digests(self):
+        # İki parmak-izi: sha256 (otorite, birebir) + md5 (32 hex, kısa —
+        # olay notlarına yapıştırılabilir). İkisi de görünmeli ki eşleşme
+        # sonradan elle doğrulanabilsin.
+        import hashlib
+        incident = next(ARCHIVE.glob("patch1789754982*"))
+        td = make_cache(None)
+        try:
+            p = td / "patch9999000004-77777"
+            p.write_bytes(incident.read_bytes())
+            old = time.time() - 30 * HOUR
+            os.utime(p, (old, old))
+            r = run_gate(td)
+            out = r.stdout + r.stderr
+            self.assertRegex(out, MD5_HEX, "md5 (32 hex) basılmalı")
+            self.assertRegex(out, "[0-9a-f]{64}", "sha256 (64 hex) basılmalı")
+            self.assertEqual(
+                hashlib.md5(incident.read_bytes()).hexdigest() in out, True,
+                "arşiv içeriğinin md5'si çıktıda olmalı")
+            self.assertEqual(
+                hashlib.sha256(incident.read_bytes()).hexdigest() in out, True,
+                "arşiv içeriğinin sha256'sı çıktıda olmalı")
+        finally:
+            shutil.rmtree(td, ignore_errors=True)
+
+    def test_md5_match_alone_never_labels_known_incident(self):
+        # md5 tek başına ORACLE olamaz: kasıtlı çakıştırılabilir. sha256
+        # eşleşmediyse etiket düşer, sonuç ayrı bir tanıya iner. Gerçek bir
+        # md5 çakışması üretmek üretim-dışı olduğundan bu dal SAF fonksiyon
+        # (classify) üzerinden kilitlenir — CLI aynı sınıflandırmayı kullanır.
+        gate = _load_gate()
+        prints = gate.Fingerprints(
+            sha256={"a" * 64: ["recovery_patches_X/patch1"]},
+            md5={"b" * 32: ["recovery_patches_Y/patch2"]},
+            archives=["recovery_patches_X"], patch_count=1)
+        label, locs = gate.classify(prints, "c" * 64, "b" * 32)
+        self.assertNotEqual(label, gate.KNOWN,
+                            "sha256 eşleşmeden KNOWN-INCIDENT üretilemez")
+        self.assertEqual(label, gate.WEAK, "zayif-eşleşme tanısı beklenir")
+        self.assertEqual(locs, ["recovery_patches_Y/patch2"])
+        # sha256 birebir eşleşirse md5'ye bakılmaz (otorite sırası)
+        label, locs = gate.classify(prints, "a" * 64, "0" * 32)
+        self.assertEqual(label, gate.KNOWN)
+        self.assertEqual(locs, ["recovery_patches_X/patch1"])
+        # hiç eşleşme yok → etiket yok
+        self.assertEqual(gate.classify(prints, "d" * 64, "e" * 32),
+                         (gate.NONE, []))
+
+    def test_unknown_orphan_prints_no_digest_noise(self):
+        # Eşleşme yokken parmak-izi basmak gürültüdür: operatör kırmızıyı
+        # gerçekten kaçırır. Tanı boşken hiçbir etiket/özet satırı olmamalı.
+        td = make_cache([30.0])
+        try:
+            r = run_gate(td)
+            out = r.stdout + r.stderr
+            self.assertNotIn(BANNER, out)
+            self.assertNotIn(WEAK_BANNER, out)
+            self.assertNotIn("KNOWN-INCIDENT", out)
+            self.assertNotRegex(out, MD5_HEX, "eşleşme yokken md5 basılmamalı")
+        finally:
+            shutil.rmtree(td, ignore_errors=True)
+
     def test_orphan_report_states_archive_surface(self):
         # Yetim bildirirken kaynağın kapsamı görünmeli (kaç dizin/patch) —
         # aksi halde "etiket yok" ile "arşiv boş" ayırt edilemez.
@@ -220,6 +323,12 @@ class TestPrecommitOrphanGate(unittest.TestCase):
             self.assertRegex(out, r"arşiv parmak-izleri: [1-9]\d* dizin / [1-9]\d* patch")
         finally:
             shutil.rmtree(td, ignore_errors=True)
+
+    def test_empty_archive_blinds_both_digests(self):
+        # Arşiv kaybolursa iki harita da boşalır — kontrol körleşmemeli:
+        # kapı bunu görünürce "parmak-izi üretilemedi" demeli.
+        src = GATE.read_text(encoding="utf-8")
+        self.assertIn("parmak-izi üretilemedi", src)
 
 
 if __name__ == "__main__":
