@@ -27,6 +27,15 @@ Bu süit iddiayı UÇTAN UCA kanıtlar; hepsi gerçek tarayıcı + gerçek sunuc
 Playwright kurulu değilse SKIP (fail değil) — ortam-bağımlı kapı ortamı
 bloke etmez, ama statik eşdeğeri (test_preview_server.py →
 InlineEventHandlerContractTests) her yerde çalışır.
+
+SKIP'in nerede SESSİZCE işe yaramadığı da not edilmelidir (ölçüldü
+2026-09-27): dosya check_unit_tests.list'te olduğu halde `verify` işinin
+birim-test adımında Playwright kurulu değil → 8 test SKIP; Playwright
+yalnız `a11y-gate` işinde kuruluyor, ama o iş bu süiti KOŞMAMIYORDU. Yani
+kanıt hiçbir işte çalışmıyordu. `a11y-gate` işine "VERIFY-001 — hover-tooltip
+CSP kanıtı (canlı, fail-closed)" adımı eklendi: süiti koşturur ve SKIP
+izini de reddeder (atlanan kanıt geçen kanıt değildir). Statik kapı
+çağrılmadıysa ilk iş burasıdır.
 """
 
 import os

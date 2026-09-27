@@ -3163,6 +3163,47 @@ jobs:
           bash _calisma/CIKTI/check_security_posture.sh \
             _calisma/CIKTI/check_security_browser.list
 
+      # VERIFY-001'in CANLI kanıtı — buraya, çünkü Playwright'ın kurulu
+      # olduğu TEK iş burası.
+      #
+      # Boşluk (ölçüldü 2026-09-27): test_preview_hover_tooltip.py manifestte
+      # var (check_unit_tests.list:115) ve `verify` işinin birim-test adımında
+      # koşuyor; ama Playwright YALNIZ bu işte kurulu (pip install playwright +
+      # `playwright install chromium` yukarıda). Süit `skipIf(sync_playwright
+      # is None)` ile SKIP ediyor → 8 test hiçbir yerde çalışmıyordu. Statik
+      # eşdeğeri (InlineEventHandlerContractTests) yalnız "inline handler YOK"
+      # diyor; "tooltip gerçekten çıkıyor ve konsolda CSP ihlali YOK" ancak
+      # burada kanıtlanır. Düzeltme geri alınırsa (ör. bir rect template'ine
+      # onmouseleave dönerse) bu adım kızar.
+      #
+      # DİSİPLİN: bu YAML dosyası prettier'dan GEÇMEZ — pre-commit
+      # "Prettier format check on staged JS/TS/JSON" yalnız JS/TS/JSON
+      # kapsar. Denendi (2026-09-27): prettier YAML'daki merge-pattern
+      # tırnaklarını soyuyor ve check_pattern_consistency.py'nin brace regex'i
+      # kırılıyor ("brace merge pattern bulunamadı").
+      - name: VERIFY-001 — hover-tooltip CSP kanıtı (canlı, fail-closed)
+        shell: bash
+        run: |
+          set -uo pipefail
+          mkdir -p logs
+          log=logs/verify_001_hover_csp.log
+          status=0
+          python3 -m unittest discover -s _calisma/CIKTI \
+            -p "test_preview_hover_tooltip.py" -v > "$log" 2>&1 || status=$?
+          cat "$log"
+          if [ "$status" -ne 0 ]; then
+            echo "::error::VERIFY-001 canlı CSP kanıtı başarısız (exit $status)"
+            exit "$status"
+          fi
+          # Fail-closed kural: atlanan kanıt geçen kanıt değildir. Süit
+          # Playwright yoksa SKIP döner ve exit 0 verirdi; bu yüzden
+          # "skipped" izini ayrıca reddediyoruz.
+          if grep -qE '^OK \(skipped=|^OK .*skipped|skipped=[1-9]' "$log"; then
+            echo "::error::VERIFY-001 kanıtı SKIP edildi (Playwright/Chromium yok) — kanıt koşmadı, bu iş geçemez."
+            exit 1
+          fi
+          echo "VERIFY-001 canlı CSP kanıtı: 8/8 geçti, konsolda CSP ihlali yok."
+
       - name: Start preview_server (fresh-clone-http pattern)
         run: |
           # /design-system/tokens.css rotası PREVIEW_DIR icindeki
