@@ -957,6 +957,29 @@ repos:
         stages: [pre-commit]
         verbose: true
 
+      - id: check-mirror-bridges
+        name: "Brand mirror @theme bridges (fail-closed)"
+        description: >-
+          check_mirror_bridges.py: her marka aynasının Tailwind v4 @theme
+          köprüsünü (design-system/<marka>/tailwind.css, üretici:
+          generate_mirror_tailwind.py) denetler. Kök köprünün aksine bu
+          dosyalar TEK paletin parçası değil, birlikte import edilebilir;
+          linear/vercel token'ları `--color-*` adları taşıdığı için ön-eksiz
+          üretim temel paleti (`bg-bg`/`bg-accent`) sessizce marka paletine
+          kaydırırdı. Fail-closed: köprü yok / roster bozuk → bloke;
+          köprü jeneratörle BİREBİR değilse (elle düzenleme) → bloke; ad
+          ön-ek kuralı bozuk, ön-koşul aynadaki değerle uyuşmuyor, @theme
+          değeri literal, referans çürük, sayım bloğu düşmüş (aliases +
+          skipped = tokens değil) ya da :root/@theme dışında seçici varsa →
+          bloke. Değişim-farkında tetikleme: yalnız design-system/
+          stage'liyken koşar. READ-ONLY, OFFLINE, stdlib-only, ~0.3s.
+        entry: python3 design-system/scripts/check_mirror_bridges.py
+        language: system
+        files: ^design-system/
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
       - id: extract-unstaged-deps
         name: "Extract unstaged dependency findings from hook output"
         description: >-

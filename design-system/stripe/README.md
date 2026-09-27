@@ -12,6 +12,10 @@ Values are copied **verbatim** — no remapping, no renaming, no rounding.
 - `theme.css` — **GENERATED** tema varyantı: `:root[data-theme="stripe"]` altında
   repo semantik yuvalarını (`--bg`, `--fg`, `--accent`, `--paper`, `--border`, …)
   710 HDS token'ının bir alt kümesine bağlar. Elle düzenlemeyin.
+- `tailwind.css` — **GENERATED** Tailwind v4 `@theme` köprüsü: 556 yuva
+  (`bg-stripe-surface-bg-quiet`, `p-stripe-core-100`, `font-stripe-family`, …).
+  Üretici `design-system/scripts/generate_mirror_tailwind.py`, kapı
+  `check_mirror_bridges.py` (bkz. `design-system/README.md`). Elle düzenlemeyin.
 - `scripts/generate_stripe_theme.py` — `theme.css`'i `tokens.css` aynasından
   üretir (`SLOT_MAP`, 32 yuva) + `--check` modu.
 
@@ -113,6 +117,8 @@ python3 design-system/stripe/scripts/check_stripe_tokens.py
 # OK — 710 HDS tokens verbatim against raw.css
 python3 design-system/stripe/scripts/generate_stripe_theme.py --check
 # OK — stripe tema varyantı jeneratörle birebir (32 yuva, 24 HDS token)
+python3 design-system/scripts/generate_mirror_tailwind.py --check
+# OK — 4/4 marka köprüsü jeneratörle birebir (… stripe 556/710 yuva …)
 python3 design-system/scripts/check_tokens.py       # contract 9: varyant + yüzeyler
 # exit 0 = drift yok (elle düzenleme / literal / eksik yuva = FAIL)
 ```

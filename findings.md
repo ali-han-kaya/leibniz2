@@ -1101,3 +1101,60 @@ panonun ve landing'in gerçek bir tema varyantını besliyor.
   `dark:bg-input/30`, `aria-invalid:ring-destructive/20` dahil).
 - **Test:** `test_check_design_tokens.py` 33 → **35** (palet-pozitif +
   ölçü/`current`/`transparent` karşı-testi); gerçek ağaçta kapı rc 0.
+
+### mirror-@theme turu (2026-09-27) — dört marka aynasının kendi köprüsü
+
+- **Başlangıç ölçümü:** aynalar `tokens.css` + `tokens.json` + `raw.*` +
+  kendi checker'ına sahip ve `check-brand-mirrors` roster'ında pinli
+  (710/398/2051/19), ama köprüden yalnız `stripe` vardı ve o da `@theme`
+  değil `:root[data-theme="stripe"]` semantik varyantıydı. Diğer üçü ve
+  stripe'in kendisi Tailwind utility'si üretmiyordu.
+- **Tasarım kararı (ölçümden çıktı, varsayılmadı):** linear ve vercel
+  token'ları `--color-*` adları taşıyor (`--color-accent`, `--color-bg-*`) ve
+  kök köprü de `@theme` içinde `--color-accent` tanımlıyor → ön-eksiz üretim,
+  köprüler yan yana import edildiğinde temel `bg-accent`'i sessizce marka
+  paletine kaydırırdı. Kullanıcıya iki karar soruldu; seçilen model
+  "mirror-prefixli `@theme` köprüsü" + "değer sınıfına göre kapsam".
+- **Kapsam kuralı:** renk → `--color-*`, font ailesi → `--font-*`,
+  `cubic-bezier` → `--ease-*`, gölge → `--shadow-*`, uzunluk → adında
+  `radius` varsa `--radius-*`, `space|spacing|gap` varsa `--spacing-*`. Sınıf
+  **DEĞERDEN** çözülür (ada değil): `--color-alpha: 255` renk değildir, bu
+  yüzden `--font-weight-*` gibi bilinçli kapsam dışı namespace'ler `font`'a
+  düşmez, gerekçeyle atlanır. Marka katmanı (`hds-`) ilk segment namespace
+  değil ikincisi öyleyse düşülür; düşürme yuva üretmezse düşürülmemiş hâli
+  denenir (sıra sabit → deterministik).
+- **Çakışma bulundu ve çözüldü:** linear'da 3, primer'de 39 çakışma
+  (`--blue` ↔ `--color-blue`, `--ansi-black` ↔ `--color-ansi-black`).
+  Hakem kuralı: kısa anahtarı adında namespace'i AÇIKÇA taşıyan token alır;
+  kaybeden yuva almaz ama DEĞERİ ön-koşul olarak dosyada kalır
+  (`skip:key-collision`) — ölçülen değer kaybolmaz.
+- **Sonuç (ölçülen):** stripe 556/710 · linear 168/398 · primer 1500/2051 ·
+  vercel 19/19 = **2243/3178** yuva; dosyalar 40 kB / 9.5 kB / 100 kB / 2.3 kB.
+  Kapsam dışı her token dosyanın sonundaki sayım bloğunda gerekçesiyle
+  yazılır (`aliases + skipped = tokens` kapıyla kilitli → sessiz kayıp yok).
+- **Kapı (B1–B7, fail-closed):** roster/köprü bütünlüğü (exit 2) · üretim
+  birebirliği · **temel palet ayrıklığı** (kötü `bg-bg` senaryosunun sınıfı
+  bu) · `var()`-only bağlantı · ön-koşulun aynayla birebirliği · sayım
+  kilitleri · tek `:root` + tek `@theme` bloğu. pre-commit'te
+  `check-mirror-bridges` (değişim-farkında, `files: ^design-system/`).
+- **Canlı doğrulama (statik değil):** (1) gerçek Tailwind v4 derlemesi
+  (postcss + `@tailwindcss/postcss`, kök köprü + dört ayna köprüsü yan yana
+  import) — 20 probe sınıfının **20'si** üretildi, `--color-bg` çıktıda
+  **tek** tanımla kaldı; (2) derlenmiş CSS tarayıcıda açıldı, hesaplanmış
+  stiller: `bg-bg` → `rgb(14,17,22)` (temel `#0e1116` DEĞİŞMEDİ),
+  `bg-accent` → `rgb(88,166,255)` (Linear'ın `#7170ff`'i kazanmadı),
+  `text-linear-accent` → `rgb(113,112,255)`, `bg-stripe-accent-border-quiet`
+  → `rgb(214,217,252)`, `bg-primer-accent-primary` → `rgb(13,103,49)`,
+  `bg-vercel-background-100` → `rgb(255,255,255)`,
+  `rounded-linear-12` → `12px`, `font-stripe-family` → `sohne-var,…`,
+  `ease-primer-base-easing-ease` → `cubic-bezier(.25,.1,.25,1)`,
+  `shadow-primer-avatar-shadow` → `rgb(13,17,23) 0 0 0 2px` (ayna
+  değeriyle birebir).
+- **Test:** `_calisma/CIKTI/test_mirror_bridges.py` **25** vaka — gerçek ağaç
+  (kapı + `--check` + ayrıklık yeniden hesabı + `aliases` sayım kilidi +
+  wiring) ve sahte ağaç (köprü yok → exit 2, elle düzenleme → exit 1,
+  rostera yeni ayna → exit 2) + sentetik aynada kapsam/ad kuralları.
+- **Yakalanan gerçek hata (öğrenme notu):** ilk üretimde `@theme` bloğu
+  BOŞ çıktı — gruplama `tn.split("-")[1]` ile yapılıyordu ve `--color-…`
+  adının `[1]`'i boş string'dir. Gözle yakalandı; sayım kilidi (theme satır
+  sayısı = `aliases`) artık bunu teste bağlıyor (`test_theme_line_count_…`).

@@ -76,6 +76,10 @@ HOOK_COVERAGE = {
     # Marka mirror drift kapısı (stripe/linear/primer/vercel): roster
     # bütünlüğü + pin eşleşmesi + kapsam sözleşmeleri tek modülde test edilir.
     "check-brand-mirrors":      ["test_brand_mirror_gate.py"],
+    # Marka aynası @theme köprüleri (üretici + kapı): ad/ön-ek kuralları,
+    # temel palet ayrıklığı, ön-koşul birebirliği ve sayım kilitleri tek
+    # modülde test edilir.
+    "check-mirror-bridges":     ["test_mirror_bridges.py"],
     # dashboard-next'in JS kapı çifti: ikisi de aynı yüzeyin (biçim + tip)
     # sözleşmesini denetliyor ve tek bir birim modülü var. HOOK_COVERAGE'a
     # girmeden önce bu iki hook'un kapsam raporunda testi YOKTU.
@@ -278,6 +282,7 @@ HOOK_COVERAGE = {
         "test_brand_mirror_gate.py",
         "test_trend_db_index_contract.py",
         "test_trend_db_rls_contract.py",
+        "test_mirror_bridges.py",
     ],
 }
 

@@ -18,6 +18,11 @@ system.
 - `raw.json` — full extractor capture: computed palette, CSS-variable map,
   typography, spacing, borders, shadows, breakpoints, and framework hints.
   This is the audit source for the canonical token files.
+- `tailwind.css` — **GENERATED** Tailwind v4 `@theme` köprüsü: 19/19 yuva
+  (`bg-vercel-gray-900`, `bg-vercel-background-100`, …). Üretici
+  `design-system/scripts/generate_mirror_tailwind.py`, kapı
+  `check_mirror_bridges.py`. Vercel'in `--color-*` adları ön-eksiz
+  üretilseydi kök paleti gölgelerdi.
 - `scripts/check_vercel_tokens.py` — fail-closed drift gate. It derives the
   expected token map from `raw.json → colors.cssVariables`, then requires
   `tokens.css` and grouped `tokens.json` to match exactly.
@@ -116,4 +121,6 @@ offline and deterministic; it never contacts vercel.com.
 ```bash
 python3 design-system/vercel/scripts/check_vercel_tokens.py
 # OK — 19 Vercel tokens verbatim against raw.json (tokens.css + tokens.json in sync)
+python3 design-system/scripts/generate_mirror_tailwind.py --check
+# OK — 4/4 marka köprüsü jeneratörle birebir (… vercel 19/19 yuva …)
 ```
