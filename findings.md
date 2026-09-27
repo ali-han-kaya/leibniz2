@@ -1256,3 +1256,38 @@ panonun ve landing'in gerçek bir tema varyantını besliyor.
   digest, md5'in etiket üretmemesi, gürültü yasağı, iki haritanın da her
   arşivi görmesi + patch sayımı tutarlılığı, boş arşiv iki haritayı da
   körleştirir). `AGENTS.md` operatör kuralı güncellendi.
+
+### commit'lenmemiş iş envanteri (2026-09-27) — risk ölçüldü, commit'lenmedi
+
+- **İstek:** "bekleyen tüm oturum işini mantıksal gruplara ayırıp commit'le
+  (tip-güvenli loader, 50 hook'lu zincir, parmak-izi kapısı dahil)". Adı
+  geçen üç kalemin **üçü de zaten commit'liydi**: `07e22aa` (tip-güvenli
+  loader'ın `InputJsonValue` guard'ı + chain 47→50; bugün 59 hook),
+  `a624cdb` + `11ea4c1` (parmak-izi kapısının üç turu). Ana çalışma ağacı
+  `git status --porcelain -uall` → **boş**. Yani commit'lenecek kendi işimiz
+  yoktu; commit üretmek iş değil **uydurma** olurdu.
+- **Ölçüm yöntemi (varsayım değil):** (1) `git worktree list` + her
+  worktree'nin `status -uall`; (2) `git stash list` + her stash'in `^3`
+  (gizli untracked) ağacı; (3) **blob geçmişi testi** — `git log --all
+  --find-object=<blob>`: içerik depoda daha önce commit'lenmiş mi?; (4)
+  `git diff --numstat HEAD stash@{N}` (+ = stash'ta yeni satır).
+- **Bulgu 1 (uncommitted iş gerçek, ama başka thread'lerde):**
+  `feat/github-site-sample` worktree'sinde 8 untracked dosya; 3'ü depoda
+  **hiç yok** (`sample.html`, `check_github_primer_sample.py`, ADR-0001) —
+  worktree silinirse kalıcı kaybolurlar. Sahiplik belirsiz → dokunulmadı.
+- **Bulgu 2 (tehlike ters yöndeydi):** iki stash "commit'lenmemiş iş" gibi
+  görünüyor ama tabanları HEAD'den yüzlerce commit geride. `numstat`
+  **hiçbir dosyada saf ekleme göstermiyor**: `verify.yml` −892,
+  `.pre-commit-config.yaml` −276 (**50 hook'lu zincir**), `README.md` −244,
+  `check_unit_tests.list` −51 ve **+0**. Gizli untracked ağaç da yeni iş
+  değil: `.venv_z3/`, `__pycache__/`, `.build/`, `TOOLKIT/` → hepsi
+  `.gitignore`'da (18/68/140) ve yeniden üretilebilir; `rc-review` arşivi
+  ise `028d744`'ten **önceki** (normalize edilmemiş) sürüm. Yani "kaybedelim
+  diye commit'le" tersi olurdu: ~1 700 satır silinirdi.
+- **Bulgu 3 (commit'lenmemiş değil, uygulanmamış):** RLS + query-index
+  migration'ları dosya olarak commit'li ama `prisma migrate deploy`
+  çalıştırılmamış — "RLS hazır" iddiası canlı DB'de henüz doğru değil.
+- **Çıktı:** `docs/UNCOMMITTED-INVENTORY.md` — üç kalem, kanıt tablolarıyla
+  (numstat, blob geçmişi, worktree sahipliği) ve bekleyen kararların sahibi
+  belirtilerek. Risk silinmedi, **görünür hâle geldi**; envanter de
+  commit'lendiği için unutulamaz. Kayıt, kapının kendisi kadar değerlidir.
