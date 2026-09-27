@@ -10,9 +10,11 @@
 # üretir; test betiği kalıntının yalnız /ID olduğunu kanonik (/ID nötrlenmiş
 # hash) karşılaştırmayla KANITLAR ve residual=/ID olarak raporlar — bu
 # durum PASS sayılır, çünkü /ID harici tüm baytlar birebir aynıdır.
-# Rapor: docs/ci_simulate/texlive_determinism/ (gitignore altında, yerel
-# kanıt; git takipli değildir — kanıt her ortamda aynı betikle yeniden
-# üretilir).
+# Rapor: logs/texlive_determinism_report.txt — CI'da precommit-logs
+# artifact'ı (path: logs/) ile yayınlanır; kanıt hem dosyaya hem stdout'a
+# yazılır (artifact indirilmese de log'da görünür). Eski varsayılan yol
+# gitignore altındaydı ve hiçbir upload kapsamında değildi, yani PASS kanıtı
+# hiçbir yerde görünmüyordu.
 #
 # Araç yoksa SKIP (exit 0) — kapı yalnızca araçların var olduğu ortamda
 # iddia üretir (check-lake-evidence deseni). Hafif K21 self-testi

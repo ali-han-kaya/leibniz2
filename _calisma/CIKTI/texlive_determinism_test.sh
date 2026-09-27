@@ -3,7 +3,11 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 TEX="${TEX_SOURCE:-$ROOT/_calisma/V5_ICERIK/TESLIM_V5_FINAL_2026-08-17/stoic_hume_package/Stoic_Hume_Formal_Section_2026-08-17/ingiliz_empirizmi_v3.tex}"
-OUT="${DETERMINISM_OUT:-$ROOT/docs/ci_simulate/texlive_determinism/texlive_determinism_report.txt}"
+# Rapor yolu: varsayılan logs/ — CI'da precommit-logs artifact'ı (path: logs/)
+# bütünüyle yüklenir, yani kanıt (3 sha256 + verdict) runner'da ölmez.
+# Eski varsayılan docs/ci_simulate/ YOLU GITIGNORE'LUYDU ve hiçbir upload
+# kapsamında değildi → PASS kanıtı görünmez oluyordu (coe A sınıfı maskeleme).
+OUT="${DETERMINISM_OUT:-$ROOT/logs/texlive_determinism_report.txt}"
 PDFlatex="${TEXLIVE_BIN:-}/pdflatex"
 TECTONIC="${TECTONIC_BIN:-$(command -v tectonic 2>/dev/null || true)}"
 
@@ -49,6 +53,23 @@ PY
 
 printf '%s\n' "TeXLive determinism evidence" > "$OUT"
 printf 'source=%s\n' "$TEX" >> "$OUT"
+# Kanıt hem rapor dosyasına hem stdout'a yazılır: artifact indirilmese bile
+# pre-commit log'unda (logs/precommit.log) görünür — ikinci yüzeyleme yolu.
+# Tek noktadan: EXIT tuzağı raporun tamamını stdout'a basar, böylece PASS/FAIL
+# yollarının hepsi (erken çıkışlar dahil) aynı yüzeyi garanti eder.
+record() { printf '%s\n' "$1" >> "$OUT"; }
+emit_report() {
+  if [ -f "$OUT" ]; then
+    echo "── texlive determinism kanıtı ($OUT) ──"
+    cat "$OUT"
+  fi
+}
+trap emit_report EXIT
+
+mkdir -p "$(dirname "$OUT")"
+: > "$OUT"
+record "TeXLive determinism evidence"
+record "source=$TEX"
 SDE="${SOURCE_DATE_EPOCH:-0}"
 # SDE her iki motora da (tectonic + pdflatex) iletilir; aksi halde motor
 # güncel zamanı gömer ve hash oturumdan oturuma değişir (ölçüldü: tectonic
