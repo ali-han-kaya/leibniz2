@@ -32,6 +32,15 @@ except ImportError:  # CI runner'da playwright kurulu değilse SKIP (fail değil
 HERE = os.path.dirname(os.path.abspath(__file__))
 SERVER_SCRIPT = os.path.join(HERE, "preview_server.py")
 
+# Chrome'un CSP ihlali mesajları — nitelik-handler reddi tam olarak bu kalıpla
+# gelir (VERIFY-001: `onmousemove="…"` CSP altında SESSİZCE ölür; görünür hata
+# yok, yalnız konsolda bir ret satırı). Bu yüzden konsol sayacı şart.
+CSP_VIOLATION_MARKERS = (
+    "Content Security Policy",
+    "Refused to execute inline event handler",
+    "Refused to apply inline style",
+)
+
 
 def free_port():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -100,14 +109,51 @@ class KeyboardNavTestBase(unittest.TestCase):
         self.context = self.browser.new_context(service_workers="block")
         self.page = self.context.new_page()
         self.page.route("**/sw.js", lambda route: route.fulfill(body=""))
-        self.page.goto(f"http://127.0.0.1:{self.PORT}/",
-                       wait_until="domcontentloaded")
+        # CSP ihlalleri yalnız konsolda görünür → suite boyunca toplanır.
+        # Bu sayaç olmadan "delege çalışıyor" kanıtı, "konsolda CSP reddi
+        # yok" iddiasını kanıtlamaz (VERIFY-001'in yarısı eksik kalır).
+        self.console = []
+        self.errors = []
+        self.page.on("console", lambda m: self.console.append(
+            "%s: %s" % (m.type, m.text)))
+        self.page.on("pageerror", lambda e: self.errors.append(str(e)))
+        self.response = self.page.goto(f"http://127.0.0.1:{self.PORT}/",
+                                       wait_until="domcontentloaded")
         self.page.wait_for_timeout(1200)
 
     def tearDown(self):
         self.context.close()
         self.browser.close()
         self._pw.stop()
+
+    # ------------------------------------------------------------- yardımcılar
+    def _csp_header(self):
+        return (self.response.headers.get("content-security-policy") or "") \
+            if self.response is not None else ""
+
+    def _csp_violations(self):
+        return [line for line in (self.console + self.errors)
+                if any(m in line for m in CSP_VIOLATION_MARKERS)]
+
+    def _inline_handlers_in_live_dom(self):
+        """Canlı DOM'da (üretilen markup dahil) `on*` nitelik-handler taraması.
+
+        Statik tarama runtime-üretilen SVG rect'lerini göremez; burada
+        sayfanın kendi render yolu çalıştırıldıktan sonra bakılır.
+        """
+        return self.page.evaluate(
+            """(() => {
+              const out = [];
+              for (const el of document.querySelectorAll('*')) {
+                for (const a of el.attributes) {
+                  if (/^on[a-z]+$/.test(a.name)) {
+                    out.push(el.tagName + '[' + a.name + '=' +
+                             JSON.stringify(a.value.slice(0, 40)) + ']');
+                  }
+                }
+              }
+              return out;
+            })()""")
 
 
 @unittest.skipIf(sync_playwright is None,
@@ -450,6 +496,107 @@ class KeyboardCoverageScanTest(KeyboardNavTestBase):
         self.assertEqual(
             violators, [],
             f"klavye-aktivasyonu eksik role=button elementleri: {violators}")
+
+
+@unittest.skipIf(sync_playwright is None,
+                 "playwright kurulu değil (pip install playwright + chromium)")
+class DelegatedSurfacesUnderCSPTest(KeyboardNavTestBase):
+    """VERIFY-001'in TIKLAMA yarısı: delege yüzeyler CSP altında canlı kanıtı.
+
+    Hover yarısı `test_preview_hover_tooltip.py`'de kanıtlanmıştı; aynı sınıfın
+    tıklama/klavye yarısı (data-act=rh-filter / budget-toggle / load-stdout)
+    burada kanıtlanır. Kendi başına "tıklama işe yarıyor" yetmez: asıl iddia
+    "CSP altında işe yarıyor ve konsolda ret yok" — üç test bunu böler:
+    (1) sayfa gerçekten sıkı CSP ile servis ediliyor mu (kapı-önce),
+    (2) canlı DOM'da (runtime-üretilen markup dahil) hiç inline handler var mı,
+    (3) gerçek fare tıklaması durumu değiştiriyor mu + 0 CSP ihlali.
+    """
+
+    def _seed_generated_markup(self):
+        """Runtime-üretilen yüzeyleri (SVG hit-alanları) oluştur."""
+        self.page.evaluate(
+            """(() => {
+              const rows = Array.from({length: 3}, (_, i) => ({
+                ts: new Date(Date.now() - (3 - i) * 3600e3).toISOString(),
+                refs_verified: 10 + i, refs_total: 40, refs_mismatch: 0,
+                verdict: "PASS", p0: 0, p1: 0,
+              }));
+              renderRefsTrend(rows);
+            })()""")
+        self.page.wait_for_timeout(120)
+
+    def test_page_is_served_under_strict_csp(self):
+        """Kapı-önce: CSP yoksa/gevşekse aşağıdaki kanıtlar değersiz olurdu."""
+        csp = self._csp_header()
+        self.assertTrue(csp, "yanıt Content-Security-Policy başlığı taşımıyor")
+        self.assertIn("script-src 'self'", csp)
+        self.assertIn("'nonce-", csp)
+        script_src = csp.split("script-src", 1)[1].split(";", 1)[0]
+        self.assertNotIn("unsafe-inline", script_src,
+                         "script-src gevşek — CSP kanıtı geçersiz olur")
+
+    def test_live_dom_has_no_inline_event_handlers(self):
+        """Canlı DOM (üretilen markup dahil) inline handler taşımamalı."""
+        self._seed_generated_markup()
+        offenders = self._inline_handlers_in_live_dom()
+        self.assertEqual(
+            offenders, [],
+            "canlı DOM'da inline handler var — CSP altında SESSİZCE ölür: %s"
+            % offenders[:5])
+        # Delege yüzeyleri data-act taşımalı (nitelik değil, veri).
+        acts = self.page.evaluate(
+            "[...document.querySelectorAll('[data-act]')]"
+            ".map(e => e.dataset.act).sort()")
+        for expected in ("budget-toggle", "rh-filter"):
+            self.assertIn(expected, acts,
+                          "delege yüzeyi kaybolmuş: data-act=%s" % expected)
+
+    def test_real_click_on_delegated_filter_filters_rows_without_csp_violation(self):
+        """Gerçek fare tıklaması → delege çalışır + konsolda ret yok."""
+        pass_btn = self.page.locator('.rh-filter button[data-f="PASS"]')
+        pass_btn.click()
+        self.page.wait_for_timeout(400)
+        active = self.page.evaluate(
+            "document.querySelector('.rh-filter button.active')?.dataset.f"
+            " || null")
+        self.assertEqual(active, "PASS",
+                         "tıklama .active'i PASS butonuna taşımadı — "
+                         "data-act delegation ölü")
+        all_btn = self.page.locator('.rh-filter button[data-f="all"]')
+        all_btn.click()
+        self.page.wait_for_timeout(300)
+        self.assertEqual(
+            self.page.evaluate(
+                "document.querySelector('.rh-filter button.active')?.dataset.f"
+                " || null"),
+            "all", "geri dönüş tıklaması çalışmadı")
+        violations = self._csp_violations()
+        self.assertEqual(violations, [],
+                         "tıklama sırasında CSP ihlali: %s" % violations[:5])
+
+    def test_real_click_on_delegated_budget_toggle_without_csp_violation(self):
+        """Aynı sınıfın ikinci yüzeyi: banner toggle'ı gerçek tıklamayla."""
+        self.page.evaluate(
+            """(() => {
+              trendCache = Array.from({length: 5}, (_, i) => ({
+                ts: new Date(Date.now() - (5 - i) * 3600e3).toISOString(),
+                budget_usd: 20 + i * 5, p0: 0, p1: 0,
+              }));
+              updateBudgetOverBanner();
+            })()""")
+        self.page.wait_for_timeout(120)
+        if self.page.evaluate(
+                "document.getElementById('budget-over-banner').style.display") \
+                == "none":
+            self.skipTest("banner öndataya rağmen görünmedi (render-yolu değişti)")
+        toggle = self.page.locator("#budget-over-toggle")
+        toggle.click()
+        self.page.wait_for_timeout(150)
+        self.assertEqual(self.page.get_attribute("#budget-over-toggle",
+                                                 "aria-expanded"), "true",
+                         "gerçek tıklama aria-expanded'ı açmadı")
+        self.assertEqual(self._csp_violations(), [],
+                         "banner toggle'ında CSP ihlali")
 
 
 if __name__ == "__main__":

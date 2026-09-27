@@ -586,6 +586,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-27 | other | trend-db: RLS şablonu (service-role yazar, anon aggregate okur) | [`a6ce6b4`](https://github.com/ali-han-kaya/leibniz2/commit/a6ce6b4) |
 | 2026-09-27 | other | trend-db: sorgu-deseni partial/covering indeksler (trend_runs) | [`e7efae3`](https://github.com/ali-han-kaya/leibniz2/commit/e7efae3) |
 | 2026-09-27 | ci | (pre-commit) orphan kapısının arşiv parmak-izini genelleştir | [`a624cdb`](https://github.com/ali-han-kaya/leibniz2/commit/a624cdb) |
+| 2026-09-27 | docs | olay-patch plan snapshot'ını bugünkü yüzeylerle denetle | [`9508591`](https://github.com/ali-han-kaya/leibniz2/commit/9508591) |
 
 ### Regresyon notları
 

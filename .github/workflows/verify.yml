@@ -3181,6 +3181,15 @@ jobs:
       # burada kanıtlanır. Düzeltme geri alınırsa (ör. bir rect template'ine
       # onmouseleave dönerse) bu adım kızar.
       #
+      # VERIFY-001'in İKİNCİ yarısı (delege TIKLAMA/KLAVYE yüzeyleri:
+      # data-act=rh-filter/budget-toggle/load-stdout) yukarıdaki
+      # "browser tier" adımında koşar: süit
+      # _calisma/CIKTI/check_security_browser.list roster'ına alındı, çünkü
+      # o adım SKIP'i de reddediyor. Ölçüldü (2026-09-27): süit yalnız
+      # check_unit_tests.list'te olduğu için Playwright'sız `verify` birim
+      # adımında 14 test SESSİZCE atlanıyordu — hover yarısındaki boşluğun
+      # aynısı. Süit artık CSP-ihlali sayacını da taşıyor (konsolda ret yok).
+      #
       # DİSİPLİN: bu YAML dosyası prettier'dan GEÇMEZ — pre-commit
       # "Prettier format check on staged JS/TS/JSON" yalnız JS/TS/JSON
       # kapsar. Denendi (2026-09-27): prettier YAML'daki merge-pattern

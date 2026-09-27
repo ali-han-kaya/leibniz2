@@ -1024,3 +1024,42 @@ panonun ve landing'in gerçek bir tema varyantını besliyor.
   yolu bu üçlü karşılaştırma (patch = olay-anı snapshot'ı ↔ yazım commit'i ↔
   bugünkü yüzeyler). Sonuç: arşivin kurtarma değeri kanıtlı, olgu kaybı yok;
   kaybolan şey satır düzeni ve İngilizce düzyazı.
+
+### verify-001 turu (2026-09-27) — CSP altında hover + tıklama kanıtı
+
+- **Düzeltme zaten kodda:** ana ağaçta inline `on*` nitelik handler **0**
+  (statik tarama); üç grafik (`trend`, `refs-trend`, `he-trend`) rect'leri
+  `data-tip`/`data-i` taşıyor ve SVG düzeyinde
+  `addEventListener("mousemove"/"mouseleave")` ile delege; tıklama/klavye
+  yüzeyleri (`budget-toggle`, `rh-filter`, `load-stdout`) document-düzeyi
+  `data-act` delege. Yani VERIFY-001'in kod yarısı kapanmıştı.
+- **Kanıt canlı koştu (yerel Chromium 148 + gerçek preview_server):**
+  `test_preview_hover_tooltip.py` **8/8** — sayfa gerçekten sıkı CSP ile
+  servis ediliyor (`script-src 'self'` + nonce, `unsafe-inline` YOK), hover →
+  tooltip O run'ın değerini gösteriyor (10/17/24/31), mouseleave → gizleniyor,
+  üç grafikte de aynı, konsolda **0 CSP ihlali**. Statik eşdeğer
+  `test_preview_server.py` **166** (candidate handler sözleşmeleri).
+- **Bulunan gerçek boşluk (aynı sınıfın ikinci yarısı):**
+  `test_dashboard_keyboard_nav.py` (14 canlı test: delege TIKLAMA/KLAVYE
+  yüzeyleri + tema döngüsü) yalnız `check_unit_tests.list`'teydi; Playwright
+  yalnız `a11y-gate` işinde kurulduğu için `verify` birim adımında
+  module-level `skipIf` yüzünden **14 test sessizce atlanıyordu**. Üstelik
+  süitte **CSP-ihlali sayacı yoktu** → "delege çalışıyor" kanıtı, "konsolda
+  CSP reddi yok" iddiasını kanıtlamıyordu. Hover yarısındaki boşluğun birebir
+  tekrarı.
+- **Kapatma:** (1) süit `_calisma/CIKTI/check_security_browser.list`
+  roster'ına alındı — tarayıcı-tier kapısı SKIP'i reddediyor (artık
+  Chromium'lu işte koşar); (2) taban sınıfa console/pageerror toplama +
+  `_csp_violations()` ve sıkı-CSP kapı testi eklendi; (3) canlı DOM'da
+  (runtime-üretilen `<rect>`'ler dahil) inline-handler taraması ve gerçek
+  fare tıklamasıyla delege kanıtı (filtre `.active` taşır, banner toggle
+  `aria-expanded` açar) + sıfır CSP ihlali. 14 → **18 test**.
+- **Doğrulanmış koşular:** hover 8/8, klavye 18/18, tarayıcı-tier
+  `check_security_posture.sh check_security_browser.list` → **3 modül PASS,
+  0 SKIP**; `actionlint` PASS; YAML parse OK. CI'da tarayıcı-tier adımı
+  roster'ı okuduğu için ek adım gerekmedi; VERIFY-001 adımının yorumu
+  tıklama yarısının nerede koştuğunu yazacak şekilde güncellendi.
+- **Kalan açı:** `test_dashboard_keyboard_nav.py` hâlâ manifestte olduğu için
+  Playwright'sız işte SKIP ediyor; bu artık *sessiz* değil çünkü aynı süit
+  skip-reddeden roster'da da koşuyor. Aynı desen başka Playwright süitleri
+  için de taranmalı (roster dışında kalan canlı kanıt = sessiz boşluk).

@@ -65,6 +65,17 @@ items (commit, reviewer dispatch, Aday-1 grilling).
   stage/commit promptly to prevent repeat reverts.
 - (b) Reviewer dispatch: prepared at /tmp/review_brief.md; blocked on
   codex quota (resets Sep 22 07:42) / claude login / ruflo API key.
+- ~~(c) VERIFY-001 (security review): CSP blocks SVG inline hover handlers~~
+  **KAPANDI 2026-09-27.** Düzeltme: üç grafik SVG-düzeyi
+  `addEventListener("mousemove"/"mouseleave")` + `rect[data-tip][data-i]`;
+  tıklama/klavye yüzeyleri `data-act` delege (document-düzeyi). Kanıt (gerçek
+  Chromium 148 + gerçek preview_server, sıkı CSP): `test_preview_hover_tooltip`
+  8/8 (hover → tooltip doğru run'ın verisiyle, mouseleave → gizlenir,
+  konsolda 0 CSP ihlali), `test_dashboard_keyboard_nav` 18/18 (tıklama/
+  klavye yarısı; CSP-ihlali sayacı ve canlı DOM'da inline-handler taraması
+  eklendi), statik kapı `test_preview_server` 166. CI boşluğu kapandı:
+  klavye süiti `check_security_browser.list` roster'ına alındı (skip reddi) —
+  öncesinde Playwright'sız işte 14 test sessizce atlanıyordu.
 - (d) Architecture Candidate 1 grilling — needs user.
 
 ## Next Step
