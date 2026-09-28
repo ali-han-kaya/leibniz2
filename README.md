@@ -642,7 +642,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-28 | feat | (dashboard-next) tip-testler + tanı-kodu doğrulamalı negatifler | [`0ecc884`](https://github.com/ali-han-kaya/leibniz2/commit/0ecc884) |
 | 2026-09-28 | docs | tip-test turu kaydı + commit'lenmemiş iş envanteri kapanışı | [`366abeb`](https://github.com/ali-han-kaya/leibniz2/commit/366abeb) |
 | 2026-09-28 | feat | (trend-db) dry-run'a kesin çakışma ölçümü (--check-db/--keys-file) | [`75b1b88`](https://github.com/ali-han-kaya/leibniz2/commit/75b1b88) |
-| 2026-09-28 | feat | (gates) oturumun kapı ve yüzey ölçümlerini topla | [`da998b2`](https://github.com/ali-han-kaya/leibniz2/commit/da998b2) |
+| 2026-09-28 | feat | (gates) oturumun kapı ve yüzey ölçümlerini topla | [`59557b5`](https://github.com/ali-han-kaya/leibniz2/commit/59557b5) |
 
 ### Regresyon notları
 
