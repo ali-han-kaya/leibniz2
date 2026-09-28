@@ -284,14 +284,74 @@ class TestTrendDbDryRun(unittest.TestCase):
         self.assertNotIn("Error: ENOENT", res.stderr, "ham Node hatası sızmamalı")
         self.assertNotRegex(res.stderr, r"\n\s+at\s", "yığın çerçevesi basılmamalı")
 
-    def test_dry_run_branch_precedes_client_construction(self):
-        """Yapısal sözleşme: dry-run erken döner — client ONDAN SONRA kurulur."""
+    def test_dry_run_client_only_constructed_for_explicit_check_db(self):
+        """Yapısal sözleşme: dry-run'ın client'ı YALNIZ `--check-db` ile kurulur.
+
+        Düz `--dry-run` DB'ye dokunmaz (davranışsal kanıt: JSON'da
+        `dbConnected: false`). `--check-db` bilinçli bir SALT-OKUNUR istisnadır,
+        bu yüzden kaynakta client kurulumu o bayrağın guard'ının ALTINDA olmalı:
+        guard silinirse her dry-run kimliksiz koşamaz hâle gelir.
+        """
         src = (TREND_DB / "scripts" / "load.ts").read_text(encoding="utf-8")
         self.assertIn("if (dryRun)", src)
-        self.assertLess(src.index("if (dryRun)"),
-                        src.index("new PrismaClient("),
-                        "dry-run bloğu client kurulumundan önce olmalı")
         self.assertIn("KNOWN_FLAGS", src, "bayrak whitelist'i kayboldu")
+        self.assertLess(src.index("else if (checkDb)"),
+                        src.index("new PrismaClient("),
+                        "--check-db guard'ı client kurulumundan önce olmalı")
+
+    # ── 3. tur: çakışma ölçümü (`--check-db` / `--keys-file`) ──────────────
+
+    def _snapshot(self, name, lines):
+        path = pathlib.Path(self.tmp.name) / name
+        path.write_text("\n".join(lines) + ("\n" if lines else ""),
+                        encoding="utf-8")
+        return path
+
+    def test_keys_file_snapshot_makes_counts_exact(self):
+        """`--keys-file`: kimliksiz KESİN ölçüm — "en çok" değil, gerçek sayı.
+
+        JS tarafı (check-db.test.mjs) aynı seam'i kilitler; buradaki kopya
+        kasıtlı: repo kökündeki tek kapı Python testlerini koşar, JS koşucusu
+        yalnız `npm test` ile çalışır — iki yüz birden kaybolmasın.
+        """
+        fixture = self._fixture()
+        snap = self._snapshot(
+            "keys.jsonl", ['{"ts": "2026-09-27T10:00:00.000000+00:00"}'])
+        res = self._run(str(fixture), "--dry-run", "--json",
+                        "--keys-file=%s" % snap)
+        self.assertEqual(res.returncode, 0, res.stderr)
+        j = json.loads(res.stdout.strip())
+        self.assertEqual(j["conflictSource"], "snapshot")
+        self.assertEqual(j["conflictRows"], 1)
+        self.assertEqual(j["alreadyPresent"], 1)
+        self.assertEqual(j["insert"], 1, "3. satır dosya-içi çakışma → 1 aday")
+        self.assertEqual(j["skip"], 4,
+                         "2 doğrulama-dışı + 1 dosya-içi + 1 zaten var")
+        self.assertIs(j["dbConnected"], False, "snapshot ağ kurmamalı")
+        prose = self._run(str(fixture), "--dry-run", "--keys-file=%s" % snap)
+        self.assertIn("çakışma kaynağı: snapshot (1 satır)", prose.stdout)
+        self.assertNotIn("bu raporda YOK", prose.stdout,
+                         "ölçülmüş sayı varken \"yok\" denemez")
+
+    def test_keys_file_requires_equals_form_and_dry_run(self):
+        fixture = self._fixture()
+        snap = self._snapshot("keys2.jsonl", [])
+        spaced = self._run(str(fixture), "--dry-run", "--keys-file", str(snap))
+        self.assertEqual(spaced.returncode, 2, spaced.stdout)
+        self.assertIn("--keys-file=<yol>", spaced.stderr)
+        nodry = self._run(str(fixture), "--keys-file=%s" % snap)
+        self.assertEqual(nodry.returncode, 2, nodry.stdout)
+        self.assertIn("--keys-file yalnız --dry-run ile", nodry.stderr)
+
+    def test_check_db_without_credentials_exits_1_without_report(self):
+        """Kesin sayı isteyen çağıran, sınır raporunu KESİN sanmasın."""
+        fixture = self._fixture()
+        res = self._run(str(fixture), "--dry-run", "--check-db")
+        self.assertEqual(res.returncode, 1, res.stdout)
+        self.assertIn("DATABASE_URL", res.stderr)
+        self.assertNotIn("[DRY-RUN]", res.stdout, "belirsiz rapor basılmamalı")
+        self.assertNotIn("bilinmeyen bayrak", res.stderr,
+                         "--check-db bilinen bayrak olmalı")
 
 
 if __name__ == "__main__":

@@ -16,7 +16,9 @@ bağlantı sözleşmesi (pooled/direct ayrımı).
 - ✅ `dashboard-next` artık bu tablodan okuyor (`lib/trend-db.ts`)
 - ✅ `--dry-run` ön-uçuş (2026-09-27; DB'siz satır sayacı + kaynak SHA-256)
 - ✅ `--json` makine-okunur dry-run özeti (2026-09-27; tek satır JSON sözleşmesi)
-- ✅ JS tarafı test koşucusu (2026-09-27; `npm test` → 11 CLI-seam vakası, pre-commit'e bağlı)
+- ✅ `--check-db` / `--keys-file=<yol>` **kesin** çakışma ölçümü (2026-09-28;
+  salt-okunur DB okuması veya kimliksiz JSONL anlık görüntüsü; "en çok" → "kesin")
+- ✅ JS tarafı test koşucusu (2026-09-27; `npm test` → 29 CLI-seam vakası, pre-commit'e bağlı)
 - ✅ RLS + sorgu indeksleri **canlıda** (2026-09-27; `migrate deploy` uygulandı, `rls=true forced=true`, 3 sorgu indeksi, 269 satır)
 
 ## Kurulum (tamamlanmış hali)
@@ -65,9 +67,10 @@ npm run load -- /yol/history.jsonl --dry-run   # belirli kaynak
   `source_row_sha256`). Çakışan satır JS'te elenir — sonuç
   `ON CONFLICT DO NOTHING` ile birebir aynı (ilk görülüm kazanır) ve böylece
   rapor ile gerçek koşunun sayaçları aynı olur.
-- **Ölçülemeyen:** DB'de **zaten duran** satırlarla çakışma bağlantısız
-  bilinemez; bu yüzden çıktı "en çok eklenecek / en az atlanacak" der. Kesin
-  sayı ancak normal koşunun `bitti:` satırından okunur.
+- **Ölçülemeyen (varsayılan):** DB'de **zaten duran** satırlarla çakışma
+  bağlantısız bilinemez; bu yüzden çıktı "en çok eklenecek / en az atlanacak"
+  der. Kesin sayı için bir çakışma kaynağı verin (`--check-db` ya da
+  `--keys-file=<yol>`, aşağıda) — ya da normal koşunun `bitti:` satırını okuyun.
 - **Kaynak SHA-256:** dosyanın **baytlarından** hesaplanır ve ayrıştırma aynı
   okumadan yapılır (ikinci okuma = TOCTOU penceresi yok); mühür/karşılaştırma
   için rapora basılır. Normal koşunun açılış satırı da sha256'yı yazar.
@@ -76,6 +79,52 @@ npm run load -- /yol/history.jsonl --dry-run   # belirli kaynak
   argüman — `--dri-run` yazım hatası sessizce yükleme başlatmaz).
 - Sözleşme testleri: aşağıdaki [Testler](#testler) bölümü — **üç yüz** aynı
   seam'i kilitler (JS `npm test` + Python `TestTrendDbDryRun` + kalıtsal sürükleme).
+
+## Kesin ölçüm: `--dry-run --check-db` ve `--dry-run --keys-file=<yol>`
+
+Varsayılan dry-run "en çok/en az" der, çünkü mevcut satırlarla çakışma
+bağlantısız bilinemez. Bu iki kaynak o boşluğu kapatır ve sayaçları **kesin**
+yapar (`insert` / `skip`); ikisi **birlikte verilemez** (kaynak tektir) ve
+ikisi de **yalnız `--dry-run` ile** geçerlidir.
+
+```bash
+cd apps/trend-db
+npm run load -- --dry-run --check-db                  # mevcut satırları oku
+npm run load -- h.jsonl --dry-run --json --check-db | jq '.insert, .alreadyPresent'
+npm run load -- h.jsonl --dry-run --keys-file=snap.jsonl   # kimliksiz ölçüm
+```
+
+- **`--check-db`:** tablo **SALT-OKUNUR** okunur (`select ts, source_row_sha256`,
+  hiç yazma yok). `DATABASE_URL` yoksa belirsiz rapora düşmek yerine **çıkış 1**
+  (kesin sayı isteyen çağıran, sınır dilini kesin sanmasın) + stderr'de
+  `DATABASE_URL`; stdout'a `[DRY-RUN]` basılmaz.
+- **`--keys-file=<yol>`:** aynı ölçüm kimlik bilgisi olmadan — JSONL anlık
+  görüntüsü. Satırlar `{"ts": "..."}` ve/veya `{"source_row_sha256":
+  "..."}` taşır; boş satırlar atlanır, bozuk JSON **satır numarasıyla**
+  raporlanır (`snapshot satır N: JSON ayrıştırılamadı`), dosya yoksa tek satır
+  `snapshot okunamadı: <yol>` (Node yığını basılmaz).
+- **`=` biçimi şarttır:** `--keys-file yol` yazımı yolu konum argümanı
+  sanardı (sessiz yanlış kaynak) → **çıkış 2** + `--keys-file=<yol>` uyarısı;
+  `--keys-file=` (boş) de çıkış 2.
+- **Eşleşme kuralı:** bir aday `ts` **veya** `source_row_sha256` ile mevcut
+  kümeye düşerse `alreadyPresent`. Aday dosya-içi çakışmalardan arınmış
+  olduğu için bir aday birden çok satırla eşleşse bile **bir kez** sayılır.
+  `conflictRows` = karşılaştırılan satır sayısı (kaynak-tarafsız; kaçının
+  eşleştiğinden ayrı).
+- **Değişmezler (her modda):** `insert + alreadyPresent = candidates`;
+  `skip = invalidSkipped + duplicatesInFile + alreadyPresent`;
+  `insert ≤ insertAtMost`; `skip ≥ skipAtLeast`. Ölçüsüz modda
+  `alreadyPresent = 0` olduğundan `insert = insertAtMost` ve
+  `skip = skipAtLeast` döner (geri uyumlu).
+
+```
+[DRY-RUN] çakışma kaynağı: snapshot (1 satır)
+[DRY-RUN] zaten var olan aday: 1
+[DRY-RUN] eklenecek (kesin): 2 · atlanacak (kesin): 1
+```
+
+> Ölçülmüş modda "(en çok)"/"(en az)" ve "bu raporda YOK" bilinçli olarak
+> **kaybolur**: kesin sayı varken sınır dili yanıltıcıdır.
 
 ## Makine-okunur rapor: `--dry-run --json`
 
@@ -88,7 +137,7 @@ npm run load -- history.jsonl --dry-run --json | jq '.insertAtMost, .skipAtLeast
 ```
 
 ```json
-{"mode":"dry-run","source":"/…/history.jsonl","sourceSha256":"6868240e…","bytes":265,"linesFull":5,"linesPhysical":6,"blankSkipped":1,"candidates":2,"invalidSkipped":2,"duplicatesInFile":1,"insertAtMost":2,"skipAtLeast":3,"dbConnected":false}
+{"mode":"dry-run","source":"/…/history.jsonl","sourceSha256":"6868240e…","bytes":265,"linesFull":5,"linesPhysical":6,"blankSkipped":1,"candidates":2,"invalidSkipped":2,"duplicatesInFile":1,"insertAtMost":2,"skipAtLeast":3,"conflictSource":"none","conflictRows":0,"alreadyPresent":0,"insert":2,"skip":3,"dbConnected":false}
 ```
 
 | Alan | Anlamı |
@@ -98,7 +147,11 @@ npm run load -- history.jsonl --dry-run --json | jq '.insertAtMost, .skipAtLeast
 | `linesFull` / `linesPhysical` / `blankSkipped` | dolu satır / fiziksel satır / boş atlanan |
 | `candidates` / `invalidSkipped` / `duplicatesInFile` | aday / doğrulama-dışı / dosya-içi çakışma |
 | `insertAtMost` / `skipAtLeast` | "en çok eklenecek" / "en az atlanacak" (bkz. Ölçülemeyen) |
-| `dbConnected` | daima `false` — dry-run'ın DB'ye dokunmadığının makine tarafı kanıtı |
+| `conflictSource` | çakışma kaynağı: `"none"` (ölçüsüz) \| `"snapshot"` \| `"db"` |
+| `conflictRows` | karşılaştırılan mevcut satır sayısı (kaynak-tarafsız; ölçüsüzde `0`) |
+| `alreadyPresent` | adaylardan kaçı zaten mevcut (ölçüsüzde `0`) |
+| `insert` / `skip` | KESİN eklenecek/atlanacak; ölçülmüşte `insert ≤ insertAtMost` ve `skip ≥ skipAtLeast` |
+| `dbConnected` | `"db"` kaynağında `true`, aksi hâlde `false` (dry-run ağ kurmadı) |
 
 - **Tek kaynak:** prose ve JSON aynı `summary` nesnesine bakar; iki yüzey
   ayrı hesap yapmadığı için sayı **ayrışamaz** (çapraz-kapı:
@@ -116,7 +169,8 @@ Loader'ın sözleşmesi **tek bir seam**'e bağlı: CLI'nin stdout/stderr'i ve
 | Yüz | Kapsam | Nasıl koşar |
 |---|---|---|
 | `test/dry-run.test.mjs` (11 vaka) | CLI siyah kutu: sayaçlar, SHA-256, çıkış kodları, `--json`, determinizm | `cd apps/trend-db && npm test` |
-| `_calisma/CIKTI/test_trend_db_contract.py::TestTrendDbDryRun` (10 vaka) | aynı seam, gerçek `tsx` alt süreci | `python3 -m unittest _calisma.CIKTI.test_trend_db_contract` |
+| `test/check-db.test.mjs` (18 vaka) | çakışma ölçümü: bayrak sözleşmeleri, `--keys-file` kesin sayıları, prose/JSON, canlı `--check-db` | `cd apps/trend-db && npm test` |
+| `_calisma/CIKTI/test_trend_db_contract.py::TestTrendDbDryRun` (13 vaka) | aynı seam, gerçek `tsx` alt süreci | `python3 -m unittest _calisma.CIKTI.test_trend_db_contract` |
 | `_calisma/CIKTI/test_trend_db_js_runner.py` | JS koşucusunu **pre-commit'e** bağlar (rot koruması) | `check-unit-tests` hook'u |
 
 - **Kendi koşucumuz (`test/mini.mjs`, ~80 satır, bağımlılık sıfır):** tek
@@ -130,6 +184,11 @@ Loader'ın sözleşmesi **tek bir seam**'e bağlı: CLI'nin stdout/stderr'i ve
   `DATABASE_URL_UNPOOLED` değişkenlerini siler ve cwd'yi geçici dizine
   çevirir (dotenv `.env` bulamaz) — dry-run'ın bağlantısız çalıştığı
   kanıtlanır, varsayılmaz.
+- **Canlı vakalar `skip` olur, "geçti" sayılmaz:** `--check-db`'nin gerçek
+  tabloyu okuduğunu kanıtlayan iki vaka `.env`te `DATABASE_URL` yoksa
+  atlanır ve özet satırında `N ortam yokluğundan atlandı` diye **ayrı**
+  yazılır (`mini.mjs` `Skip`); atlananlar paydaya girmez, çünkü
+  "`passed === total`" sözleşmesi "hiçbir vaka kırmızı değil" demektir.
 
 ## RLS (satır düzeyi güvenlik) — `20260927193000_trend_runs_rls`
 

@@ -13,7 +13,7 @@ import fs from "node:fs";
 import process from "node:process";
 import { runAll } from "./mini.mjs";
 
-const MODULES = ["./dry-run.test.mjs"];
+const MODULES = ["./dry-run.test.mjs", "./check-db.test.mjs"];
 const tempDirs = [];
 
 try {

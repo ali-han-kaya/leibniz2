@@ -13,64 +13,20 @@
  */
 import crypto from "node:crypto";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
-import process from "node:process";
-import { fileURLToPath } from "node:url";
-import { spawnSync } from "node:child_process";
-import { eq, match, notMatch, ok, test } from "./mini.mjs";
+import { eq, match, notMatch, test } from "./mini.mjs";
+// Koşum aracı paylaşılan modülde (helpers.mjs): bu dosya yalnız `--dry-run`
+// sözleşmesini, check-db.test.mjs ise çakışma ölçümünü sınar. İkisi aynı
+// seam'i (loader CLI) ve aynı geçici dizini kullanır.
+import {
+  MIXED as MIXED_ROWS,
+  TMP as SHARED_TMP,
+  fixture,
+  runLoader,
+} from "./helpers.mjs";
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const APP = path.resolve(HERE, "..");
-const LOADER = path.join(APP, "scripts", "load.ts");
-const TSX = path.join(APP, "node_modules", ".bin", "tsx");
-
-/** Testler için tek geçici çalışma alanı (giriş noktası sonunda silinir). */
-export const TMP = fs.mkdtempSync(path.join(os.tmpdir(), "trend-dry-"));
-
-ok(fs.existsSync(TSX), `tsx yok: ${TSX} (apps/trend-db: npm install)`);
-ok(fs.existsSync(LOADER), `loader yok: ${LOADER}`);
-
-/** Loader'ı kimlik bilgisi olmadan koşar; sonucu {code, stdout, stderr} verir. */
-export function runLoader(...args) {
-  const env = { ...process.env };
-  delete env.DATABASE_URL;
-  delete env.DATABASE_URL_UNPOOLED;
-  const res = spawnSync(process.execPath, [TSX, LOADER, ...args], {
-    cwd: TMP, // dotenv'in .env bulamaması için repo kökü DEĞİL
-    env,
-    encoding: "utf-8",
-    timeout: 120000,
-  });
-  return {
-    code: res.status,
-    stdout: res.stdout ?? "",
-    stderr: res.stderr ?? "",
-  };
-}
-
-/** Fixture yazar: satır listesinden JSONL üretir, yolunu döner. */
-export function fixture(name, lines) {
-  const p = path.join(TMP, name);
-  fs.writeFileSync(p, lines.join("\n") + "\n", "utf-8");
-  return p;
-}
-
-/**
- * Ana fixture — 5 dolu satır:
- *   1) geçerli (aday)
- *   2) geçerli (aday)
- *   3) 2 ile aynı ts → dosya-içi çakışma
- *   4) ts yok → doğrulama-dışı
- *   5) "null" → JSON nesnesi değil → doğrulama-dışı
- */
-export const MIXED = [
-  '{"ts": "2026-09-27T10:00:00.000000+00:00", "verdict": "PASS", "p0": 0, "p1": 0}',
-  '{"ts": "2026-09-27T10:05:00.000000+00:00", "verdict": "FAIL", "p0": 1, "p1": 2}',
-  '{"ts": "2026-09-27T10:05:00.000000+00:00", "verdict": "PASS", "p0": 0, "p1": 0}',
-  '{"verdict": "PASS"}',
-  "null",
-];
+export const TMP = SHARED_TMP;
+export const MIXED = MIXED_ROWS;
 
 /** Prose raporundaki `etiket: değer` çiftlerini {etiket: değer} sözlüğüne çevirir. */
 function parseProse(stdout) {

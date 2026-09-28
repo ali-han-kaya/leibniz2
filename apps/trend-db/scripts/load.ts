@@ -19,6 +19,19 @@
  * Mevcut satırlarla çakışma bağlantısız ÖLÇÜLEMEZ — rapor bunu "en çok
  * eklenecek / en az atlanacak" olarak işaretler.
  *
+ * `--check-db` / `--keys-file=<yol>` (2026-09-28, 3. TDD turu): dry-run'ın
+ * "en çok/en az" sınırını KESİN sayıya çeviren çakışma kaynakları. Yalnız
+ * `--dry-run` ile verilir; ikisi BİRLİKTE verilemez (tek kaynak).
+ *   - `--check-db`: mevcut satırlar SALT-OKUNUR okunur (findMany SELECT ts,
+ *     source_row_sha256) → `insert`/`skip` gerçek olur. DATABASE_URL yoksa
+ *     belirsiz rapor basmak yerine çıkış 1 (kesin sayı isteyen çağıran,
+ *     sınır dilini kesin sanmasın).
+ *   - `--keys-file=<yol>`: aynı ölçüm kimlik bilgisi olmadan, JSONL anlık
+ *     görüntüsünden (`{"ts": ...}` ve/veya `{"source_row_sha256": ...}`).
+ *     `=` biçimi şarttır: `--keys-file yol` yazımı yolu konum argümanı
+ *     sanardı (sessiz yanlış kaynak) → çıkış 2.
+ * Ölçülen modda prose "(kesin)" der ve "bu raporda YOK" iddiasını düşürür.
+ *
  * `--json` (2026-09-27, 2. TDD turu): `--dry-run` raporunun MAKİNE-okunur
  * karşılığı — prose'in yerine tek satır JSON (aynı `prepare()` sayıları).
  * İnsan-okunur Türkçe prose bu modda insan içindir; bir betiğin/başka bir
@@ -26,7 +39,8 @@
  * (gerçek koşuda "eklenecek" sayısı ancak DB'ye yazdıktan sonra bilinir)
  * → kullanım hatası, çıkış 2 (fail-closed: sessizce prose'e düşmez).
  *
- * Kullanım: DATABASE_URL=... npm run load -- [history.jsonl yolu] [--dry-run] [--json]
+ * Kullanım: DATABASE_URL=... npm run load -- [history.jsonl yolu] [--dry-run]
+ *   [--json] [--check-db | --keys-file=<yol>]
  * Varsayılan yol: TCC-mirror (~/Library/Caches/com.freebuff/preview/history.jsonl)
  */
 import "dotenv/config";
@@ -49,14 +63,35 @@ const DEFAULT_SOURCE = path.join(
 );
 
 const USAGE =
-  "kullanım: DATABASE_URL=... npm run load -- [history.jsonl yolu] [--dry-run] [--json]";
-const KNOWN_FLAGS = new Set(["--dry-run", "--json"]);
+  "kullanım: DATABASE_URL=... npm run load -- [history.jsonl yolu] [--dry-run]" +
+  " [--json] [--check-db | --keys-file=<yol>]";
+const KEYS_FILE_PREFIX = "--keys-file=";
+const KNOWN_FLAGS = new Set(["--dry-run", "--json", "--check-db"]);
 
 // Bayraklar konumdan bağımsızdır; bilinmeyen bayrak sessizce yutulmaz
 // (fail-closed): `--dri-run` yazım hatası gerçek yükleme başlatmasın.
 const argv = process.argv.slice(2);
+
+// `--keys-file` YALNIZ `=` biçiminde kabul edilir. Boşluklu yazımda yol
+// konum argümanı sanılır ve "fazla argüman"a düşerdi; hangi hatanın
+// olduğunu söylemek için bunu bilinmeyen-bayrak denetiminden ÖNCE ele al.
+if (argv.some((a) => a === "--keys-file")) {
+  console.error(`--keys-file=<yol> biçiminde verilmeli — ${USAGE}`);
+  process.exit(2);
+}
+const keysFileArg = argv.find((a) => a.startsWith(KEYS_FILE_PREFIX));
+const keysFile =
+  keysFileArg === undefined
+    ? undefined
+    : keysFileArg.slice(KEYS_FILE_PREFIX.length);
+if (keysFile !== undefined && keysFile.length === 0) {
+  console.error(`--keys-file=<yol> boş olamaz — ${USAGE}`);
+  process.exit(2);
+}
+
 const unknownFlags = argv.filter(
-  (a) => a.startsWith("--") && !KNOWN_FLAGS.has(a)
+  (a) =>
+    a.startsWith("--") && !KNOWN_FLAGS.has(a) && !a.startsWith(KEYS_FILE_PREFIX)
 );
 if (unknownFlags.length > 0) {
   console.error(`bilinmeyen bayrak: ${unknownFlags.join(", ")} — ${USAGE}`);
@@ -64,9 +99,30 @@ if (unknownFlags.length > 0) {
 }
 const dryRun = argv.includes("--dry-run");
 const jsonMode = argv.includes("--json");
+const checkDb = argv.includes("--check-db");
 if (jsonMode && !dryRun) {
   console.error(
     `--json yalnız --dry-run ile birlikte kullanılabilir — ${USAGE}`
+  );
+  process.exit(2);
+}
+// Çakışma ölçümü yalnız dry-run'ın anlamıdır: gerçek koşuda "eklenecek"
+// sayısı ancak yazdıktan sonra bilinir (ölçüm yazımdan önce yalan olur).
+if (checkDb && !dryRun) {
+  console.error(
+    `--check-db yalnız --dry-run ile birlikte kullanılabilir — ${USAGE}`
+  );
+  process.exit(2);
+}
+if (keysFile !== undefined && !dryRun) {
+  console.error(
+    `--keys-file yalnız --dry-run ile birlikte kullanılabilir — ${USAGE}`
+  );
+  process.exit(2);
+}
+if (checkDb && keysFile !== undefined) {
+  console.error(
+    `--check-db ve --keys-file birlikte verilemez (tek çakışma kaynağı) — ${USAGE}`
   );
   process.exit(2);
 }
@@ -102,6 +158,84 @@ function readSource(p: string): Buffer {
     const code = (e as NodeJS.ErrnoException).code ?? "Bilinmeyen hata";
     throw new CliError(`kaynak okunamadı: ${p} (${READ_ERRORS[code] ?? code})`);
   }
+}
+
+/**
+ * Çakışma ölçümünün NORMALİZE anahtar kümesi: bir aday bu kümelerden
+ * herhangi biriyle eşleşirse `ON CONFLICT DO NOTHING` onu zaten düşürürdü.
+ * `rows` = kaynağın satır sayısı (kaynak-tarafsız): "kaç satırla
+ * karşılaştırıldı" sorusunun cevabı, kaçının eşleştiğinden ayrı raporlanır.
+ */
+type ConflictKeys = {
+  ts: Set<string>;
+  hashes: Set<string>;
+  rows: number;
+};
+
+/**
+ * `--keys-file` anlık görüntüsünü okur (JSONL). Satırlar `{"ts": ...}`
+ * ve/veya `{"source_row_sha256": ...}` taşır; boş satırlar atlanır.
+ * Bozuk JSON satır numarasıyla raporlanır (kaynak dosyayla aynı disiplin) —
+ * sessizce "eşleşme yok" saymak çakışmayı gizlerdi.
+ */
+function readSnapshot(p: string): ConflictKeys {
+  let buf: Buffer;
+  try {
+    buf = fs.readFileSync(p);
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code ?? "Bilinmeyen hata";
+    throw new CliError(
+      `snapshot okunamadı: ${p} (${READ_ERRORS[code] ?? code})`
+    );
+  }
+  const physical = buf.toString("utf-8").split("\n");
+  const ts = new Set<string>();
+  const hashes = new Set<string>();
+  let rows = 0;
+  for (let i = 0; i < physical.length; i += 1) {
+    const line = physical[i].trim();
+    if (line.length === 0) continue;
+    rows += 1;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line);
+    } catch (e) {
+      throw new CliError(
+        `snapshot satır ${i + 1}: JSON ayrıştırılamadı — ${(e as Error).message}`
+      );
+    }
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      Array.isArray(parsed)
+    ) {
+      continue;
+    }
+    const row = parsed as Row;
+    if (typeof row.ts === "string" && row.ts.length > 0) {
+      ts.add(tsToDate(row.ts).toISOString());
+    }
+    if (
+      typeof row.source_row_sha256 === "string" &&
+      row.source_row_sha256.length > 0
+    ) {
+      hashes.add(row.source_row_sha256);
+    }
+  }
+  return { ts, hashes, rows };
+}
+
+/**
+ * Adaylardan kaçının mevcut olduğunu sayar. `pending` dosya-içi çakışmaları
+ * ŞİMDİDEN elemiş olduğundan her aday en fazla BİR kez sayılır — bir adayın
+ * birden çok snapshot satırıyla eşleşmesi sayıyı şişirmez.
+ */
+function countPresent(pending: PreparedRow[], keys: ConflictKeys): number {
+  let n = 0;
+  for (const p of pending) {
+    if (keys.ts.has(p.tsKey) || keys.hashes.has(p.hash)) n += 1;
+  }
+  return n;
 }
 
 type Row = Record<string, unknown>;
@@ -187,7 +321,17 @@ type DryRunSummary = {
   duplicatesInFile: number;
   insertAtMost: number;
   skipAtLeast: number;
-  dbConnected: false;
+  /** Çakışmanın kaynağı: ölçülmediyse "none", snapshot/DB ise ilgili kaynak. */
+  conflictSource: "none" | "snapshot" | "db";
+  /** Karşılaştırılan mevcut satır sayısı (kaynak-tarafsız). */
+  conflictRows: number;
+  /** Adaylardan kaçı zaten mevcut (ölçüldüyse KESİN, değilse 0). */
+  alreadyPresent: number;
+  /** KESİN eklenecek = candidates − alreadyPresent. */
+  insert: number;
+  /** KESİN atlanacak = doğrulama-dışı + dosya-içi + zaten var. */
+  skip: number;
+  dbConnected: boolean;
 };
 
 type PreparedRow = {
@@ -304,9 +448,57 @@ async function main() {
   }
 
   if (dryRun) {
-    // DB'ye dokunulmaz: Prisma Client hiç kurulmaz, DATABASE_URL okunmaz.
-    // Sayılar TEK yerden hesaplanır; prose ve JSON bu özete bakar, ayrı
-    // hesap yapmaz — iki yüzeyin ayrışması bu yüzden mümkün değildir.
+    // Çakışma ölçümü: TEK kaynak (snapshot VEYA canlı DB) ya da hiçbiri.
+    // Ölçülmezse sınır dili ("en çok/en az") korunur; kesin sayı yalnız
+    // buradan doğar. Sayılar tek yerden hesaplanır — prose ve JSON ayrışamaz.
+    let conflictSource: "none" | "snapshot" | "db" = "none";
+    let conflictRows = 0;
+    let alreadyPresent = 0;
+    let dbConnected = false;
+    if (keysFile !== undefined) {
+      const keys = readSnapshot(keysFile);
+      conflictSource = "snapshot";
+      conflictRows = keys.rows;
+      alreadyPresent = countPresent(pending, keys);
+    } else if (checkDb) {
+      // Kesin sayı isteyen çağıran, kesin OLMAYAN sayı görürse onu kesin
+      // sanar: kimlik yokken sınır raporuna düşmek sessiz bir yalan olurdu.
+      if (!process.env.DATABASE_URL) {
+        console.error(
+          "DATABASE_URL yok — --check-db mevcut satırları okumak için pooled URL gerektirir"
+        );
+        process.exit(1);
+      }
+      // SALT-OKUNUR: yalnız iki kolon çekilir, hiçbir yazma yapılmaz.
+      const adapter = new PrismaPg({
+        connectionString: process.env.DATABASE_URL,
+      });
+      const prisma = new PrismaClient({ adapter });
+      try {
+        const rows = await prisma.trendRun.findMany({
+          select: { ts: true, sourceRowSha256: true },
+        });
+        const keys: ConflictKeys = {
+          ts: new Set(rows.map((r) => r.ts.toISOString())),
+          hashes: new Set(
+            rows
+              .map((r) => r.sourceRowSha256)
+              .filter((h): h is string => typeof h === "string" && h.length > 0)
+          ),
+          rows: rows.length,
+        };
+        conflictSource = "db";
+        conflictRows = keys.rows;
+        alreadyPresent = countPresent(pending, keys);
+        dbConnected = true;
+      } finally {
+        await prisma.$disconnect();
+      }
+    }
+
+    // Değişmezler: insert + alreadyPresent = aday; skip = doğrulama-dışı +
+    // dosya-içi + zaten var. Ölçülmemiş modda alreadyPresent = 0 olduğundan
+    // insert/skip sırasıyla insertAtMost/skipAtLeast'ye EŞİT olur (uyumlu).
     const summary: DryRunSummary = {
       mode: "dry-run",
       source: sourcePath,
@@ -320,8 +512,14 @@ async function main() {
       duplicatesInFile: duplicates,
       insertAtMost: pending.length,
       skipAtLeast: invalid + duplicates,
-      dbConnected: false,
+      conflictSource,
+      conflictRows,
+      alreadyPresent,
+      insert: pending.length - alreadyPresent,
+      skip: invalid + duplicates + alreadyPresent,
+      dbConnected,
     };
+    const measured = conflictSource !== "none";
     if (jsonMode) {
       // Tek satır, satır sonu olmadan: `| jq` ve satır-bazlı okuyucular
       // için güvenli. Alan adları sözleşmedir (docs: README "dry-run").
@@ -341,14 +539,27 @@ async function main() {
       `[DRY-RUN] dosya-içi çakışma: ${summary.duplicatesInFile}` +
         " (aynı ts veya aynı satır-hash → ON CONFLICT DO NOTHING)"
     );
-    console.log(
-      `[DRY-RUN] eklenecek (en çok): ${summary.insertAtMost} ·` +
-        ` atlanacak (en az): ${summary.skipAtLeast}`
-    );
-    console.log(
-      "[DRY-RUN] DB bağlantısı kurulmadı (DATABASE_URL gerekmez);" +
-        " mevcut satırlarla çakışma bu raporda YOK — kesin sayı için normal koşu"
-    );
+    if (measured) {
+      // Ölçülmüş mod: kesin sayı varken sınır dili yanıltıcı olurdu
+      // ("en çok 3" ile "3" karıştırılırdı) — bu yüzden dil ayrışır.
+      console.log(
+        `[DRY-RUN] çakışma kaynağı: ${conflictSource} (${conflictRows} satır)`
+      );
+      console.log(`[DRY-RUN] zaten var olan aday: ${summary.alreadyPresent}`);
+      console.log(
+        `[DRY-RUN] eklenecek (kesin): ${summary.insert} ·` +
+          ` atlanacak (kesin): ${summary.skip}`
+      );
+    } else {
+      console.log(
+        `[DRY-RUN] eklenecek (en çok): ${summary.insertAtMost} ·` +
+          ` atlanacak (en az): ${summary.skipAtLeast}`
+      );
+      console.log(
+        "[DRY-RUN] DB bağlantısı kurulmadı (DATABASE_URL gerekmez);" +
+          " mevcut satırlarla çakışma bu raporda YOK — kesin sayı için normal koşu"
+      );
+    }
     return;
   }
 

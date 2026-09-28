@@ -1404,3 +1404,49 @@ panonun ve landing'in gerçek bir tema varyantını besliyor.
 - **Ders:** "en büyük risk commit'lenmemiş iş" çerçevesi doğruydu ve artık
   ölçülebilir biçimde YOK. Aynı istek tekrar geldiğinde cevap iş uydurmak
   değil, ölçümü ve kararı tazelemek: `status` × 4 ağaç + kapı + stash listesi.
+
+### trend-db loader TDD turu 3 (2026-09-28) — "en çok" sınırı kesin sayıya çevrildi
+
+- **Sorun:** dry-run "eklenecek (en çok): 36" diyordu; GERÇEK ise **0**'dı.
+  Sınır dili yanlış değildi ama karar için işe yaramazdı: 269 satırlık arşive
+  karşı mirrored 36-satırlık pencere tamamen zaten yüklüydü. Loader'ın kendi
+  docstring'i itiraf ediyordu: *"Mevcut satırlarla çakışma bağlantısız
+  ÖLÇÜLEMEZ"*. Boşluğu `--check-db` (salt-okunur DB okuması) ve
+  `--keys-file=<yol>` (kimliksiz JSONL anlık görüntüsü) kapatır.
+- **Kırmızı önce yazıldı:** `test/check-db.test.mjs` **18 vaka** (bayrak
+  sözleşmeleri, `--keys-file` kesin sayıları, prose/JSON, iki canlı
+  `--check-db`), `test/helpers.mjs` paylaşılan harness, `mini.mjs`e `Skip`
+  (ortam yokluğu "geçti" sayılmaz, ayrı sayılır), `run.mjs` MODULES kaydı,
+  `dry-run.test.mjs` helpers'a bağlandı. Kırmızı doğru sebeplerle düştü
+  (`bilinmeyen bayrak: --check-db`, `beklenen "none", gelen undefined`).
+- **Ölçüm: 12/29 → 29/29.** `load.ts`te: iki bayrak `KNOWN_FLAGS`/ön-ek
+  eşleşmesiyle tanınır; ikisi de **yalnız `--dry-run`** (aksi çıkış 2), ikisi
+  **birlikte verilemez** (tek kaynak), `--keys-file` **`=` biçimi şart**
+  (boşluklu yazım yolu konum argümanı sanardı → çıkış 2).
+- **Değişmezler sözleşmeye yazıldı:** `insert + alreadyPresent = candidates`;
+  `skip = invalidSkipped + duplicatesInFile + alreadyPresent`;
+  `insert ≤ insertAtMost`; `skip ≥ skipAtLeast`. Ölçüsüz modda
+  `alreadyPresent = 0` olduğu için kesin değerler sınırlara **eşit** çıkar —
+  yeni alanlar geri uyumludur. Eşleşme `ts` VEYA `source_row_sha256`
+  kümesinden; aday dosya-içi çakışmalardan arınmış olduğu için bir aday
+  birden çok satırla eşleşse bile **bir kez** sayılır.
+- **İki sessiz yeşil yakalandı:** (1) determinizm vakası iki koşu da aynı
+  HATAYI verse stdout eşit olurdu → `eq(a.code, 0)`/`eq(b.code, 0)` eklendi;
+  (2) `liveCredentials()` `.env`teki **tırnaklı** değeri ham geçiriyordu →
+  host `base` gibi anlamsız bir parçaya düşüp `P1001` verdi; dotenv
+  sözleşmesi gereği tırnaklar sadeleştirildi (ham değer geçirmek bağlantı
+  dizesini bozar).
+- **Canlı ölçüm (salt-okunur, kalıcı iz yok):** `--dry-run --check-db` →
+  `çakışma kaynağı: db (269 satır) · zaten var olan aday: 36 ·`
+  `eklenecek (kesin): 0 · atlanacak (kesin): 36`. İki ardışık koşu AYNI
+  sayıları görüyor — dry-run'ın yazmadığının kanıtı. Yani eski raporun
+  "en çok 36" dediği iş aslında **sıfır**dı.
+- **Diller ayrıldı:** ölçülmüş modda "(en çok)"/"(en az)" ve "bu raporda
+  YOK" bilinçli olarak kaybolur — kesin sayı varken sınır dili yanıltıcıdır.
+  `--check-db` kimlik yokken belirsiz rapora düşmez: **çıkış 1** + stderr'de
+  `DATABASE_URL`, stdout'a hiç `[DRY-RUN]` basılmaz.
+- **Kapılar:** `npm test` **29/29** (kimlik yoksa 27 + 2 `skip`),
+  `test_trend_db_contract` **21/21** (yapısal test `--check-db` guard'ına
+  sıkılaştırıldı, +3 yeni vaka), `test_trend_db_js_runner` 3/3,
+  `sync_check_unit_tests --check` temiz. README'ye kesin-ölçüm bölümü +
+  JSON alan tablosu (yeni 5 alan) eklendi.
