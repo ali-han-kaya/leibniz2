@@ -15,11 +15,20 @@
 import type { VariantProps } from "class-variance-authority";
 import {
   countTone,
+  panelCard,
   statBadge,
   toneForVerdict,
   verdictTone,
+  type PanelTone,
   type VerdictTone,
 } from "@/components/panel-style";
+import {
+  PanelCard,
+  PanelCardContent,
+  PanelCardHeader,
+  PanelCardTitle,
+} from "@/components/PanelCard";
+import type { ComponentProps, ReactNode } from "react";
 import {
   API_BASE,
   getLatest,
@@ -28,6 +37,7 @@ import {
   type TrendRow,
   type TrendSource,
 } from "@/lib/preview";
+import { isTheme, resolveTheme, THEMES, type Theme } from "@/lib/theme";
 import type { Assert, Equal } from "./assertions";
 
 // ── ton sözlüğü ─────────────────────────────────────────────────────────────
@@ -142,3 +152,70 @@ type _TrendRowFields = Assert<
 //     alan eklemek `{}` yanıtını tip hatasına çevirir ve panoyu kırılgan yapar.
 type _LatestAllOptional = Assert<{} extends Latest ? true : false>;
 type _TrendRowAllOptional = Assert<{} extends TrendRow ? true : false>;
+
+// ── tema sözleşmesi (açık tema köprüsünün kapısı) ───────────────────────────
+
+// 12) Tema kümesi KAPALI ve tam olarak {dark, light}. Köprüde karşılığı
+//     olmayan bir ad eklenirse (`stripe` sheet'i burada import EDİLMEZ)
+//     `data-theme` hiçbir bloğa düşmez: pano "açık tema" derken koyu kalır —
+//     hata değil, sessiz boşluk. Kümeyi burada dondurmak o sessizliği kırar.
+type _ThemeSetIsExact = Assert<
+  Equal<(typeof THEMES)[number], "dark" | "light">
+>;
+
+// 13) Çözümleyicinin `theme` alanı `string`e genişlememeli: genişlerse
+//     `dataset.theme` doğrulanmamış yazım hatalarını (`"strkpe"`) sessizce
+//     kabul eder ve doğrulama yalnız çalışma anında, görünmeden kaybolur.
+type _ResolveThemeReturn = Assert<
+  Equal<ReturnType<typeof resolveTheme>, { theme: Theme; persist: boolean }>
+>;
+
+// 14) `isTheme` bir tip-koruyucusudur (type predicate), düz `boolean` değil.
+//     Düz `boolean`'a düşerse çağrı yerlerindeki daralma kaybolur ve geçersiz
+//     tema adları yine de `Theme` sanılır — kapının kendisi kanıtsız kalır.
+type _IsThemeIsTypeGuard = Assert<
+  Equal<typeof isTheme, (value: string | null | undefined) => value is Theme>
+>;
+
+// ── panel kabuğu (Card bileşimi) ────────────────────────────────────────
+
+// 15) Yüzey tonu KAPALI: {default, error}. Hata yüzeyi bir ara çağrı yerinde
+//     `cn(panelCard(), "border border-err …")` diye kuruluyordu; yani aynı
+//     yüzey iki dosyada iki farklı dizge olabiliyordu. Kümeyi burada dondurmak
+//     "üçüncü bir hata tonu"nun sessizce eklenmesini engeller.
+type _PanelToneSetIsExact = Assert<Equal<PanelTone, "default" | "error">>;
+
+// 16) Kabuk tonu OPSİYONELdir (verilmezse `default`) ve ton tam olarak
+//     `PanelTone`tır: `string`e genişlerse tüm varyant tablosu anlamını
+//     yitirir, çağrı yerleri serbest metin geçer.
+type _PanelCardToneIsOptional = Assert<
+  Equal<Parameters<typeof PanelCard>[0]["tone"], PanelTone | undefined>
+>;
+
+// 17) Başlık etiketi TAM olarak `<h2>` prop'larını alır ve `children`ı
+//     düğümdür. Bir `div`e (shadcn `CardTitle` gibi) kayarsa bölüm
+//     hiyerarşisi sessizce kaybolur — axe bunu "heading-order" ihlali olarak
+//     değil, sadece başlıksız bölüm olarak görür.
+type _PanelCardTitleIsAnH2 = Assert<
+  Equal<Parameters<typeof PanelCardTitle>[0], ComponentProps<"h2">>
+>;
+
+// 18) Başlık satırı yalnız bir YERLEŞİM yuvasıdır: içeriği `children`dan
+//     alır (iskeletler metin yerine nabız çubukları koyar). `title`/`meta`
+//     gibi özel prop'ları olsaydı aynı yuva iki farklı yolla doldurulur ve
+//     ikisi zamanla ayrışırdı.
+type _PanelCardHeaderIsASlot = Assert<
+  Equal<Parameters<typeof PanelCardHeader>[0]["children"], ReactNode>
+>;
+
+// 19) İçerik yuvası ek bir zorunlu prop İCAT ETMEZ: `children` standarttır,
+//     çağrı yerleri `PanelCardContent`'i sarmalayıcı olarak kullanabilir.
+type _PanelCardContentTakesChildren = Assert<
+  Equal<Parameters<typeof PanelCardContent>[0]["children"], ReactNode>
+>;
+
+// 20) `panelCard` varyantlı çağrıyı ve varyantsız çağrıyı birlikte kabul eder
+//     (mevcut çağrı yerleri `panelCard()` yazıyor; varsayılan ton `default`).
+type _PanelCardStillCallableBare = Assert<
+  Equal<ReturnType<typeof panelCard>, string>
+>;

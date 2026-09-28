@@ -28,14 +28,18 @@ test_check_hook_unstaged_deps.py
 test_check_latex_surface.py
 test_check_lean_axioms.py
 test_check_lean_statements.py
+test_check_merge_precondition.py
 test_check_mirror_coverage.py
 test_check_orchestration_stdin.py
+test_check_precommit_inventory.py
 test_check_precommit_orphans.py
 test_check_python3_shell.py
 test_check_repro_manifest_hook.py
 test_check_sde_determinism.py
 test_check_seal_hash.py
+test_check_skill_surfaces.py
 test_check_unit_tests_timing.py
+test_check_unstaged_delta.py
 test_check_video_render.py
 test_check_video_typecheck.py
 test_check_zip_lineage_drift.py
@@ -58,6 +62,7 @@ test_dashboard_cls_budget.py
 test_dashboard_k17_exit_sync.py
 test_dashboard_keyboard_nav.py
 test_dashboard_next_style_gates.py
+test_dashboard_next_ui_contract.py
 test_dashboard_smoke.py
 test_deploy_evidence.py
 test_determinism_trend_badge.py
@@ -82,6 +87,7 @@ test_gen_m0_live_table.py
 test_gen_precommit_report.py
 test_gen_publish_artifact_list.py
 test_gen_repro_manifest_e2e.py
+test_gen_skill_surface_inventory.py
 test_gh_run_rca.py
 test_github_scripts.py
 test_history_sources.py
@@ -174,6 +180,7 @@ test_verification_chain_deck.py
 test_verify_checks.py
 test_verify_job_checklist.py
 test_verify_k_layers.py
+test_verify_sweep.py
 test_video_data_contract.py
 test_workflow_contract.py
 test_workflow_install_hardening.py

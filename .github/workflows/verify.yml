@@ -3559,7 +3559,7 @@ jobs:
   # (docx-export/lake-proof ile aynı gerekçe). Job yine de FAIL-CLOSED'dır:
   # `continue-on-error` YOK, tip/derleme hatası workflow'u kırmızıya düşürür.
   dashboard-next:
-    name: Dashboard-next typecheck + build (Next 15)
+    name: Dashboard-next typecheck + build (Next 16)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -3572,6 +3572,14 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: "22"
+
+      # Açık tema smoke'u Chromium tarafında koşar (aşağıdaki Playwright
+      # adımları) — a11y-gate job'ıyla AYNI pinli kurulum, ikinci bir sürüm
+      # hattı drift üretmesin.
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
 
       # SIRA ÖNEMLİ: (1) Prisma istemcisi, (2) tip kapısı, (3) derleme.
       # İstemci üretilmeden (2) ve (3) de düşer.
@@ -3597,6 +3605,49 @@ jobs:
 
       - name: Build dashboard (next build)
         run: npm run build --prefix apps/dashboard-next
+
+      # İstek-basi dedup sözleşmesi: SAYAN upstream + `next start` başlatılır,
+      # panel render'ının upstream'e kaç istek attığı ÖLÇÜLÜR. Tarayıcı
+      # gerektirmez (stdlib HTTP) — bu yüzden Chromium kurulumundan önce,
+      # derlemenin hemen ardından koşar. Ölçülen gerekçesi dosyanın
+      # başlığında: `cache()` dedup'ın MEKANİZMA DEĞİL (mutasyonla çürütüldü),
+      # bu yüzden test davranışı (istek sayısı, istek kapsamı, dikiş kümesi)
+      # tutar — kendi varlığını değil.
+      - name: Request dedup contract — dashboard-next (fail-closed)
+        run: python3 _calisma/CIKTI/test_dashboard_next_request_dedup.py
+
+      # ── AÇIK TEMA SMOKE (fail-closed) ─────────────────────────────────
+      # Boşluk (ölçüldü 2026-09-28): `dashboard-next`'in AÇIK TEMASI hiçbir
+      # job'da ölçülmüyordu. a11y-gate/CWV job'ları yalnız `preview.html`
+      # yüzeyini tarar; `test_surface_cwv_report.py` dashboard-next'i
+      # varsayılan (koyu) temada ölçer. Köprüdeki
+      # `:root[data-theme="light"]` bloğu silinse/gölgelense pano "açık tema"
+      # derken koyu kalırdı ve HİÇBİR şey kırmızıya düşmezdi.
+      #
+      # Derleme YUKARIDA yapıldı: `next start` önceden derlenmiş bundle'ı
+      # sunar, yani smoke'un gördüğü şey bu commit'in kendisidir (taze
+      # artefakt yoksa test SKIP değil, açık mesajla düşer).
+      - name: Install pinned Playwright
+        run: pip install playwright==1.63.0
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-1.63.0
+
+      - name: Install Chromium
+        run: playwright install --with-deps chromium
+
+      - name: Surface smoke — dashboard-next (fail-closed)
+        run: python3 _calisma/CIKTI/test_dashboard_next_surface_smoke.py
+
+      # Canlı akış: yayınlayan upstream + `next start` + Chromium. /trend
+      # sayfasının SSE verisiyle YENİDEN YÜKLENMEDEN güncellendiğini ölçer
+      # (window işareti + timeOrigin korunumu). Chromium gerektiği için
+      # yukarıdaki smoke ile AYNI job'da, kurulumdan sonra koşar.
+      - name: Live stream contract — dashboard-next (fail-closed)
+        run: python3 _calisma/CIKTI/test_dashboard_next_live_stream.py
 
   # ── VIDEO RENDER (LeibnizChain) ──────────────────────────────────────────
   # _calisma/video kompozisyonu (Remotion) mp4'e render edilir ve çıktının

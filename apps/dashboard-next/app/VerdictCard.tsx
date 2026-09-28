@@ -1,26 +1,29 @@
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import {
+  PanelCard,
+  PanelCardContent,
+  PanelCardHeader,
+  PanelCardTitle,
+} from "@/components/PanelCard";
 import {
   countTone,
   microLabel,
-  panelCard,
-  panelLabel,
   statBadge,
   toneForVerdict,
   verdictTone,
   type VerdictTone,
 } from "@/components/panel-style";
+import { EMPTY_VALUE, formatTimestamp } from "@/lib/format";
 import { getLatest } from "@/lib/preview";
 
 // patterns-explicit-variants: PASS/FAIL kararı ve P0/P1 rozet tonları
 // cva-variant'ta (components/panel-style.ts) — bileşende ternary değil.
 // Renkler repo-token'ları (tek-kaynak: design-system).
 //
-// Kabuk shadcn `Card` + `CardHeader`/`CardContent`: panel ölçüleri
-// (yarıçap/dolgu) ve metin stilleri primitive'in üstüne tek yerde
-// (`panelCard`/`panelLabel`) bağlanır. Başlık bilinçli olarak `CardTitle`
-// DEĞİL: `CardTitle` bir `div` basar, pano ise gerçek `<h2>` ile bölüm
-// hiyerarşisi kuruyor (a11y).
+// Kabuk `PanelCard` bileşimidir: hangi shadcn primitive'lerinin hangi sırayla
+// kullanıldığı (ve panel ölçüleri) orada tek yerde durur; burada yalnız
+// içerik yazılır. Başlık `<h2>` basar — `CardTitle` bir `div` olduğu için
+// bölüm hiyerarşisini kuramazdı (a11y).
 // Server Component — veri burada toplanır, istemciye JS gitmez.
 export default async function VerdictCard() {
   const latest = await getLatest();
@@ -28,45 +31,60 @@ export default async function VerdictCard() {
   // Sunucu düz alan yayınlıyor: z3_passed/z3_total (iç içe `z3` nesnesi yok).
   const z3 =
     latest.z3_total === undefined && latest.z3_passed === undefined
-      ? "—"
-      : `${latest.z3_passed ?? "—"}/${latest.z3_total ?? "—"}`;
+      ? EMPTY_VALUE
+      : `${latest.z3_passed ?? EMPTY_VALUE}/${latest.z3_total ?? EMPTY_VALUE}`;
 
   return (
-    <Card className={panelCard()}>
-      <CardHeader className="flex flex-row items-baseline justify-between">
-        <h2 className={panelLabel()}>Son Koşum</h2>
+    <PanelCard>
+      <PanelCardHeader>
+        <PanelCardTitle>Son Koşum</PanelCardTitle>
+        {/* Zaman damgası: `dateTime` makine-okunur ISO değeri KORUR, görünen
+            metni Intl biçimler (lib/format.ts) — ham damgayı basmak hem
+            okunmaz hem de "raw ts instead of Intl" bulgusudur.
+            `tabular-nums` mono rakamları hizalar. */}
         {latest.ts ? (
-          <time className="font-mono text-xs text-muted">{latest.ts}</time>
+          <time
+            className="font-mono text-xs text-muted tabular-nums"
+            dateTime={latest.ts}
+          >
+            {formatTimestamp(latest.ts)}
+          </time>
         ) : null}
-      </CardHeader>
+      </PanelCardHeader>
 
-      <CardContent>
+      <PanelCardContent>
+        {/* `role="status"` — verdict bir DURUM mesajıdır
+            (web-interface-guidelines). `role="status"` zaten
+            `aria-live="polite"` demektir; ikisini birden yazmak yinelemeli
+            olurdu — bu yüzden eski `aria-live` özniteliği rolle değişti. */}
         <p
           className={verdictTone({ tone: toneForVerdict(latest.verdict) })}
-          aria-live="polite"
+          role="status"
         >
-          {verdict || "—"}
+          {verdict || EMPTY_VALUE}
         </p>
 
-        <dl className="mt-6 grid grid-cols-2 gap-4 font-mono text-sm sm:grid-cols-4">
+        <dl className="mt-6 grid grid-cols-2 gap-4 font-mono text-sm tabular-nums sm:grid-cols-4">
           <Stat
             label="P0"
-            value={latest.p0 ?? "—"}
+            value={latest.p0 ?? EMPTY_VALUE}
             tone={countTone(latest.p0, "fail")}
           />
           <Stat
             label="P1"
-            value={latest.p1 ?? "—"}
+            value={latest.p1 ?? EMPTY_VALUE}
             tone={countTone(latest.p1, "warn")}
           />
           <Stat label="Z3" value={z3} />
           <Stat
             label="STRIPPED"
-            value={latest.stripped_sha256?.slice(0, 12).toUpperCase() ?? "—"}
+            value={
+              latest.stripped_sha256?.slice(0, 12).toUpperCase() ?? EMPTY_VALUE
+            }
           />
         </dl>
-      </CardContent>
-    </Card>
+      </PanelCardContent>
+    </PanelCard>
   );
 }
 

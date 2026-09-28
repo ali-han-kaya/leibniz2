@@ -130,32 +130,85 @@ hatası: unsolved goals`).
 ### Wiring into pre-commit
 
 Add a hook per gate (local repo, `language: system`, `always_run: true`,
-`pass_filenames: false`, `verbose: true`). Existing hook inventory:
+`pass_filenames: false`, `verbose: true`). Existing hook inventory — the FULL
+chain in `repos:` order, kept honest by `check_precommit_inventory.py`
+(`.pre-commit-config.yaml`'s `- id:` set ↔ this block's id set):
 
 ```
-update-config                  # gen_config.py: sync config from package content
-verify-delivery                # K1-K7 core (stdlib-only, fast)
-check-action-pins              # action major version pinning (no downgrade)
-check-python3-shell            # block shell cmds under shell: python3 {0}
-check-absolute-paths           # block /Users/…, /home/… absolute paths
-actionlint                     # workflow YAML lint (fail-closed)
-verify-delivery-symbolic       # K8 Z3
-verify-delivery-lean           # K9 Lean
-check-plist-drift              # K12 plist gate unit tests (fake HOME)
-check-repro-manifest           # K13 repro manifest + pattern coverage
-check-pattern-consistency      # merge pattern ↔ ARTIFACT_JOBS
-verify-delivery-github-scripts # K16 (node required)
-verify-delivery-repro-manifest # K13 layer via verify_delivery.py
-shellcheck-hooks               # POSIX/bash lint of hook scripts
-check-changelog-sync           # git log ↔ docs changelog auto-sync
-check-dryrun-summary           # publish_wrapper --dry-run-summary regression
-check-colorize-rules           # dashboard colorizeLine regex regression
-check-unit-tests               # battery of unit test files (venv python)
-commit-msg-style               # commit-msg stage: title rules
+check-unstaged-delta                # block commits while unstaged tracked delta exists (fail-closed, first in chain)
+update-config                       # gen_config.py: sync config from package content (the ONLY writing hook)
+verify-delivery                     # K1-K7 core (stdlib-only, fast)
+check-action-pins                   # action major version pinning (no downgrade)
+check-ci-hygiene                    # workflow permissions + timeout-minutes + concurrency
+check-python3-shell                 # block shell cmds under `shell: python3 {0}`
+check-latex-surface                 # active $$ + unlabeled \ref/eqref surface
+check-seal-hash                     # landing seal hash vs committed PDF bytes
+check-absolute-paths                # block /Users/…, /home/… absolute paths
+actionlint                          # workflow YAML lint (fail-closed)
+verify-delivery-symbolic            # K8 Z3 symbolic proof (12 checks)
+verify-delivery-lean                # K9 Lean 4 reduct-invariance
+check-orchestration-stdin           # require closed stdin for opencode orchestration
+check-lake-evidence                 # §6.3 lake build evidence smoke
+check-status-check-names            # reject stale branch-protection check names
+check-config-sync                   # workflow config snapshot <-> CONFIG_BASENAMES
+check-fallback-evidence             # REFERANS §5.3 fallback evidence (5/5)
+check-refs-table-sync               # REFERANS §2 table <-> code lists
+check-bibliography-sync             # thesis References <-> built PDF
+check-skills-index                  # README skills index <-> skills/
+check-workflow-artifact-docs        # upload-artifact <-> PUBLISH_SCENARIO <-> ARTIFACT_JOBS
+check-doc-artifact-sync             # PUBLISH_SCENARIO artifact list <-> ARTIFACT_JOBS
+check-doc-job-sync                  # PUBLISH_SCENARIO job table <-> workflow job names
+check-mirror-coverage               # sync --list <-> repo runtime set (K17)
+check-prettier-format               # prettier --check on staged JS/TS/JSON (SKIP without node)
+check-dashboard-typecheck           # apps/dashboard-next tsc --noEmit + test-d/ type tests
+check-video-typecheck               # _calisma/video tsc --noEmit (LeibnizChain)
+check-plist-drift                   # plist gate unit tests, exit 0/1/2 (fake HOME)
+check-repro-manifest                # K13 repro manifest + merge-pattern coverage
+check-pattern-consistency           # merge pattern <-> ARTIFACT_JOBS
+verify-delivery-github-scripts      # K16 github_scripts self-test (node)
+check-repro-manifest-e2e            # repro-manifest override E2E
+check-repro-artifact-sections-e2e   # audit-refs-trend + daemon-http manifest E2E
+verify-delivery-repro-manifest      # K13 producer self-test (manifest digests)
+verify-delivery-sde                 # K21 SDE determinism guard
+check-reproducible-pdf-skill        # reproducible-pdf-build skill contract
+check-z3-slide-sync                 # reproducible Z3 slide PNGs
+texlive-repro-documented            # documented tectonic/TeXLive reproducibility smoke
+texlive-determinism                 # TeXLive+SDE PDF determinism (tectonic -> TeXLive)
+shellcheck-hooks                    # POSIX/bash lint of hook scripts (explicit HOOKS list)
+check-changelog-sync                # git log <-> docs changelog auto-sync (prune + stage)
+check-full-publish-doc-sync         # full publish ASAMA 0-4 doc sync
+check-dryrun-summary                # publish_wrapper --dry-run-summary regression
+check-colorize-rules                # dashboard colorizeLine regex regression
+check-budget-scan                   # dashboard scan modules (budget + Z3 bar, node)
+check-coverage-report               # every non-exempt test file covered by >=1 hook
+check-review-freshness              # Review compilation freshness + sidecar
+check-zip-lineage-drift             # K14 zip lineage/canonical registry <-> live zip
+check-hook-env-matrix               # hook env version matrix (structural, fail-closed)
+check-design-tokens                 # dashboard design tokens (fail-closed)
+check-brand-mirrors                 # stripe/linear/primer/vercel mirror drift gates
+check-mirror-bridges                # brand mirror @theme bridges
+extract-unstaged-deps               # extract unstaged dependency findings from hook output
+check-unit-tests                    # battery of unit test files (venv python, manifest-driven)
+check-security-posture              # security headers + CSP + isolation
+audit-octokit-names                 # Octokit method-name audit
+commit-msg-style                    # commit-msg stage: commit title rules (<=72 chars)
+check-precommit-orphans             # pre-commit patch/stash residue (fail-closed)
+check-precommit-inventory           # doc inventory (this block) <-> config hook set (advisory)
+check-skill-surfaces                # skill-domain <-> repo-surface manifest (two-way package audit)
+check-skill-surface-inventory-doc   # generated docs/SKILL_SURFACE_INVENTORY.md <-> its generator (drift, fail-closed)
+check-docker-security-smoke         # docker build + Trivy + live health (SKIP-aware)
+check-dockerfile-security-patching  # Dockerfile security-patching contract
 ```
 
 Rules that keep the chain honest:
 
+- **The inventory above is gated, not trusted**: `check-precommit-inventory`
+  parses the `- id:` set out of `.pre-commit-config.yaml` and compares it with
+  the ids in the block above (both directions: an id here that no longer
+  exists, or a config hook missing here). It is **advisory by default** — a
+  stale inventory prints a `BAYAT:` warning and still exits 0; run it with
+  `--strict` when you want a non-zero exit. A missing marker/block exits 2, so
+  a renamed section cannot silently blind the gate.
 - **Only one writing hook** (`update-config` stages the synced config). All
   other gates are read-only: they verify, never modify.
 - **Unit tests run in pre-commit** (`check-unit-tests` + per-gate hooks) so a

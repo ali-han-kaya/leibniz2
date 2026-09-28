@@ -51,6 +51,12 @@
  * tanımlamak check-design-tokens kapısını (tokens.css gölgesi) kırardı.
  */
 :root {
+  /* Tarayıcıya seçili paleti bildir: kaydırma çubuğu, form kontrolleri ve
+     yerleşik UI `color-scheme`e bakar. Koyu `:root` varsayılan olduğu için
+     değer burada; açık varyantı aşağıdaki blok verir. Bu bir RENK değil
+     anahtar sözcüktür — token köprüsüne bağlanamaz (var() ile türetilemez),
+     bu yüzden tema başına açıkça yazılır. */
+  color-scheme: dark;
   --background: var(--bg);
   --foreground: var(--fg);
   /* `.card` reçetesi (preview.html): yüzey --surface, kenar --border. */
@@ -85,6 +91,13 @@
   --sidebar-accent-foreground: var(--fg);
   --sidebar-border: var(--border);
   --sidebar-ring: var(--accent);
+}
+
+/* Açık tema anahtarı. `color-scheme` bir renk değil anahtar sözcüktür;
+   `var()`/`calc()` ile türetilemediği için seçim burada açıkça yapılır —
+   tema anahtarının (`data-theme`) tarayıcı tarafındaki karşılığı budur. */
+:root[data-theme="light"] {
+  color-scheme: light;
 }
 
 body {
@@ -149,5 +162,104 @@ body {
   }
   html {
     @apply font-sans;
+  }
+}
+
+/* Hareket azaltma: iskelet nabzı (`animate-pulse`), geçişler ve View
+   Transitions kullanıcı tercihine saygı göstermeli. Dizge preview.html'in
+   kendi bloğuyla AYNIdır (tek kural, iki yüzey): süreler sıfıra çekilir →
+   nabız durur. `!important` şart, çünkü utility'lerin kendi süreleri var;
+   `*` seçicisiyle bir kez yazmak, her pulse çağrı yerine `motion-reduce:`
+   eklemekten daha dayanıklıdır (yeni bir animasyon sessizce muaf kalmaz). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* ── View Transitions (Next 16 + React <ViewTransition>) ───────────────────
+   Next 16'da App Router geçişleri zaten birer Transition'dır; bileşen
+   ağacına yerleştirilen <ViewTransition> sınırları navigasyonda otomatik
+   ateşlenir (deneysel bayrak YOK — guide: "no configuration").
+
+   Gezinme haritasının sözleşmesi (findings.md, 2026-09-19):
+   - / <-> /trend YANAL GEÇİŞ: YALIN crossfade. Yön kaydı (
+     transitionTypes / slide) YASAK — iki eşit panel arasında sahte mekânsal
+     derinlik üretirdi. Bu yüzden aşağıda yalnız default (yönsüz) animasyon
+     vardır; nav-* tipi hiçbir yerde eşlenmez.
+   - Header SABİT kalır (uzamsal çapa): kendi view-transition-name'i var,
+     group animasyonu bastırılır, eski snapshot gizlenir (çift header
+     flaşı olmasın), yeni snapshot animasyonsuz basılır.
+   - Süreler preview.html'in pulse ölçeğiyle aynı ailede: 200ms.
+   - `prefers-reduced-motion: reduce` YUKARIDAKİ blokla zaten kapsanır:
+     `*` seçicisi ::view-transition pseudo-element'lerinin animasyonlarını
+     da sıfıra çeker (tek kural, iki yüzey — yeni animasyon muaf kalamaz).
+   - `::view-transition { pointer-events: none }`: geçiş sırasında overlay
+     tıklamaları yutmaz (guide'ın "keeping the page interactive" adımı).
+   Tarayıcı desteği Chromium 125+/yeni Safari-Firefox; destek yoksa geçiş
+   animasyonsuz anında olur — uygulama normal çalışır (düşmez). */
+::view-transition {
+  pointer-events: none;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 200ms;
+  animation-timing-function: ease-in-out;
+}
+
+/* Header çapası: grup animasyonsuz, eski kare gizli (çift-basım yok).
+   `site-header` adı app/layout.tsx'teki style={{ viewTransitionName }}
+   ile eşleşir — iki uç tek sözleşmede. */
+::view-transition-group(site-header) {
+  animation: none;
+  z-index: 100;
+}
+
+::view-transition-old(site-header) {
+  display: none;
+}
+
+::view-transition-new(site-header) {
+  animation: none;
+}
+
+/* Suspense reveal — panel slotları (checklist maddesi). Yön mantığıyla
+   aynı asimetri: çıkan hızlı (150ms), gelen daha yumuşak ve gecikmeli
+   (210ms + 150ms delay) — iskelet uzayı bırakır, içerik onu tamamen
+   bıraktıktan sonra belirir. Sınıf adları slot sarmalayıcılarındaki
+   exit/enter prop'larıyla eşleşir (app/(panel)/@verdict/page.tsx,
+   app/(panel)/@trend/page.tsx). */
+::view-transition-old(.slot-exit) {
+  animation:
+    150ms ease-out both vt-fade reverse,
+    150ms ease-out both vt-slide-y reverse;
+}
+
+::view-transition-new(.slot-enter) {
+  animation:
+    210ms ease-in 150ms both vt-fade,
+    400ms ease-in both vt-slide-y;
+}
+
+@keyframes vt-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes vt-slide-y {
+  from {
+    transform: translateY(10px);
+  }
+  to {
+    transform: translateY(0);
   }
 }

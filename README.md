@@ -54,13 +54,51 @@ Exit kodu: `0` = PASS, `1` = FAIL (fail-closed), `2` = ortam hatası.
 
 ## Fresh checkout bootstrap
 
-Yeni bir clone/worktree'de üç araç-kümesi gitignore'ludur ve tek komutla
-kurulur (her adım idempotent — kurulu araca dokunmaz):
+Yeni bir clone/worktree'de yedi araç-kümesi eksiktir; tek komutla kurulup
+doğrulanır (her adım idempotent — kurulu araca dokunmaz):
 
 ```bash
-bash _calisma/dev_bootstrap.sh           # venv_z3 (pinned) + pptx + docx + dashboard-next
+bash _calisma/dev_bootstrap.sh --full    # uçtan uca: kurulum + temel batarya
+bash _calisma/dev_bootstrap.sh           # yalnız kurulum (hızlı; tekrar koşuma uygun)
 bash _calisma/dev_bootstrap.sh --check   # fail-closed doğrulama (rc=0/1)
 ```
+
+Küme listesi ÖLÇÜLEREK kuruldu: her unit'in gerekçesi, o olmadan SKIP edecek
+batarya testleridir. Eksik bağımlılık testi kırmızıya düşürmez (gerekçesinde
+kurulum reçetesi yazan bir `skip` olur) — yani eksik bir unit, taze
+checkout'ta sessiz kapsam kaybıdır.
+
+| # | Araç-kümesi | Ne kurar | `--check` kapısı | Bataryada karşılığı |
+|---|---|---|---|---|
+| 1 | `_calisma/.venv_z3` | pinli `z3-solver==5.1.0.0`, `PyYAML==6.0.3`, `pre_commit==4.3.0`, `jsonschema==4.25.1`, `pillow==11.3.0` | `pip freeze` satır-eşitliği | `test_validate_config_schema` (jsonschema), `*_deck` süitleri (PIL), kapı süitleri (yaml), K8 (z3) |
+| 2 | `_calisma/pptx` | `npm ci` | `require.resolve('pptxgenjs')` | `test_pptx_export` |
+| 3 | `_calisma/docx` | `npm ci` | `require.resolve('docx')` | docx jeneratör testleri |
+| 4 | `apps/dashboard-next` | `npm ci` | `tsc` + `next` binary'leri | `test_dashboard_next_*` süitleri |
+| 5 | `apps/trend-db` | `npm ci` | `node_modules/.bin/tsx` | `test_trend_db_js_runner` |
+| 6 | `_calisma/video` | `npm ci` | `node_modules/.bin/tsc` | `test_check_video_typecheck` |
+| 7 | tarayıcı katmanı | `playwright==1.63.0` + `playwright install chromium` | **işlevsel**: başsız chromium gerçekten başlıyor mu | `test_dashboard_keyboard_nav`, `test_preview_escaping`, `test_preview_hover_tooltip`, `test_dashboard_cls_budget`, `test_surface_cwv_report` |
+
+Ardından `--full` **temel bataryayı** koşar: `check_unit_tests_hook.sh`
+(pre-commit `check-unit-tests` kapısının ta kendisi) — tüm test dosyaları PASS
+değilse rc=1.
+
+- **Tarayıcı katmanı ilk kurulumda ~150 MB indirir** ve iki adımlı bir
+  bağımlılıktır (pip paketi + ayrı inen chromium). Diğer unit'lerden farklı
+  olarak ölçümü pin-paritesi değil **işlevsel**: çalışan bir chromium, sürüm
+  etiketinden daha güçlü kanıttır ve yerelde farklı ama çalışan bir playwright
+  sürümü kuruluysa gereksiz indirme tetiklenmez. Kurulumda kullanılan pin,
+  CI'daki `playwright==` piniyle aynıdır — sözleşme testi iki kaynağın
+  ayrışmasını yakalar.
+- **Neden batarya `--full`a bağlı, varsayılana değil:** batarya manifesti bu
+  betiğin sözleşme-testini (`test_dev_bootstrap.py`) de içerir ve o test betiği
+  bayraksız koşar; batarya varsayılan yola konsaydı test → betik → batarya →
+  test özyinelemesi olurdu. İkinci savunma: batarya çalışırken
+  `LEIBNIZ2_IN_BATTERY=1` taşınır, içerideki `--full` reddedilir.
+- **Batarya dakikalar sürer** (~180 test dosyası, dosya başına bir
+  yorumlayıcı); çıktısı kısılmaz, kırmızı satırlar doğrudan görünür ve batarya
+  düşerse `BOOTSTRAP OK` basılmaz (fail-closed).
+- Varsayılan (bayraksız) akış bilinçli olarak **yalnız kurulumdur**: CI ve
+  tekrarlı koşumlar için hızlı kalır.
 
 Pinokio'suz Live CI Dashboard için macOS'ta tam kurulum + launchd başlatma tek
 komuttur:
@@ -74,8 +112,11 @@ LaunchAgent'ı bootstrap eder ve `/api/health` ile `/preview.html` hazır olmada
 başarı vermez. Ayrıntılı yaşam döngüsü ve `--check`/`--stop` komutları için
 bkz. [`docs/RUN_DASHBOARD.md`](docs/RUN_DASHBOARD.md).
 
-Pinler `docs/HOOK_ENV_MATRIX.md` ile tek-kaynaklıdır; `--check` eksik araçta
-rc=1 ile düşer (fail-closed).
+`--check` eksik araçta rc=1 ile düşer (fail-closed). Pin'lerin hook-ortamı
+kısmı (`z3-solver`, `pre_commit`) `docs/HOOK_ENV_MATRIX.md` ile aynı sürümü
+taşır; `jsonschema`/`pillow` o tabloda YOKTUR çünkü onlar hook ortamı değil
+batarya bağımlılığıdır (gerekçesi tabloda: `test_validate_config_schema`,
+`*_deck` süitleri).
 
 ## PDF üretimi — iki motor paralel yaşam (tectonic ↔ TeXLive)
 
@@ -600,6 +641,8 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-28 | docs | oturum kapanış kaydı + uzun-hook koşum tuzağı (AGENTS.md) | [`76d683a`](https://github.com/ali-han-kaya/leibniz2/commit/76d683a) |
 | 2026-09-28 | feat | (dashboard-next) tip-testler + tanı-kodu doğrulamalı negatifler | [`0ecc884`](https://github.com/ali-han-kaya/leibniz2/commit/0ecc884) |
 | 2026-09-28 | docs | tip-test turu kaydı + commit'lenmemiş iş envanteri kapanışı | [`366abeb`](https://github.com/ali-han-kaya/leibniz2/commit/366abeb) |
+| 2026-09-28 | feat | (trend-db) dry-run'a kesin çakışma ölçümü (--check-db/--keys-file) | [`75b1b88`](https://github.com/ali-han-kaya/leibniz2/commit/75b1b88) |
+| 2026-09-28 | feat | (gates) oturumun kapı ve yüzey ölçümlerini topla | [`da998b2`](https://github.com/ali-han-kaya/leibniz2/commit/da998b2) |
 
 ### Regresyon notları
 

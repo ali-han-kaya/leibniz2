@@ -46,6 +46,24 @@ export const brandMark = cva(
 // Dipnot satırı.
 export const footerNote = cva("font-mono text-xs tracking-[0.12em] text-muted");
 
+// Üst kabuktaki nav bağlantısı (ÖZET / TREND).
+//
+// Neden burada: aynı dizge (`transition-colors hover:text-fg`) iki bağlantıda
+// birebir kopyalanmıştı ve ODAK işareti hiç yoktu — klavyeyle gezen kullanıcı
+// nav'da nerede olduğunu göremiyordu (bulgu ailesi: odak halkası yalnız
+// primitive tabanlarındaydı). Halka sözleşmesi buton tabanıyla AYNIdır
+// (`focus-visible:ring-3` + `ring-ring/50`): iki yüzey iki farklı odak
+// işareti göstermemeli.
+//
+// `focus-visible:outline-none` bilinçli olarak butondaki çıplak
+// `outline-none`dan daha DAR: bağlantı tarayıcı varsayılanıyla zaten
+// odaklanabilir bir öğe, yerleşik halkayı yalnız klavye odağında kapatıp
+// yerine token'lı halkayı koymak yeterli. `rounded-sm` halkayı metnin
+// etrafında dikdörtgen yerine yumuşak gösterir (--radius-sm token'ı).
+export const navLink = cva(
+  "rounded-sm transition-colors hover:text-fg focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+);
+
 // Card örneğini repo paletine bağlar. shadcn `Card` yapıyı (kabuk,
 // başlık/içerik slotları, halka kenarı) verir; bu iki ölçü panonun kanonik
 // `.card` reçetesine (preview.html: 8px yarıçap, 14px dolgu) oturtur:
@@ -53,7 +71,27 @@ export const footerNote = cva("font-mono text-xs tracking-[0.12em] text-muted");
 //   `--card-spacing` → `--card-padding` (= --space-6 = 14px); shadcn
 //     varsayılanı `--spacing(4)` = 10px, aynı dolguyu header/content/gap
 //     için üç yerden taşıyan değişken.
-export const panelCard = cva("rounded-lg [--card-spacing:var(--card-padding)]");
+//
+// `tone` KAPALI bir kümedir (patterns-explicit-variants): hata yüzeyi çağrı
+// yerinde `cn(panelCard(), "border border-err …")` diye kuruluyordu, yani
+// yüzey kararı iki dosyada iki farklı dizge olabiliyordu. Artık tek varyant:
+//   `default` → shadcn halkası (`ring-1 ring-foreground/10`)
+//   `error`   → repo token'larıyla tint zemin + --err kenarı; halka KAPALI
+//               (`ring-0`), aksi halde iki ayrı kenar üst üste biner.
+export const panelCard = cva(
+  "rounded-lg [--card-spacing:var(--card-padding)]",
+  {
+    variants: {
+      tone: {
+        default: "",
+        error: "border border-err bg-tint-err-bg ring-0",
+      },
+    },
+    defaultVariants: { tone: "default" },
+  }
+);
+
+export type PanelTone = NonNullable<VariantProps<typeof panelCard>["tone"]>;
 
 // Verdict tonu → repo token'ı. Kullanım yerinde ternary DEĞİL: karar
 // varyant tablosunda (patterns-explicit-variants).

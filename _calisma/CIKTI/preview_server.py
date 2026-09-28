@@ -235,6 +235,15 @@ VERIFY_BUSY = threading.Lock()  # aynı anda yalnızca bir verify koşsun (loop 
 VERIFY_DIR = None               # main()'de set edilir; /api/run-now handler'ı kullanır
 HISTORY_PATH = None             # main()'de set edilir; JSONL trend dosyası
 HISTORY_MAX = 100               # disk'te tutulacak en son run sayısı
+# /api/trend?limit=N penceresi. Sınırlar dashboard-next SSE tüneliyle BİREBİR
+# aynıdır (apps/dashboard-next/app/api/events/route.ts): tünel `Math.trunc` ile
+# kırpar, 1..200 aralığına sıkıştırır, sayı değilse 20'ye düşer. Aynı değer
+# tünolden geçse doğrudan geldiğinde de aynı davranmalıdır — iki katman ayrı
+# kural uygularsa pencere "hangi katmana göre?" belirsizliği doğar.
+# Sürüklenmeye karşı `test_preview_server.py` iki katmanın sabitlerini birlikte
+# denetler.
+TREND_LIMIT_MAX = 200
+TREND_LIMIT_FALLBACK = 20
 RUNS_DIR = None                 # main()'de set edilir; run logları (stdout+stderr) dizini
 SERVER_EVENTS_PATH = None       # main()'de set edilir; yaşam-döngüsü olay-kaydı (append-only)
 RUN_LOG_MAX = 20                 # disk'te tutulacak + replay edilecek en son run sayısı
@@ -700,6 +709,87 @@ def load_history():
     if key is not None:
         _history_cache = (key, out)
     return list(out)
+
+
+def parse_query_param(path, name, default=None):
+    """`path` sorgu dizesinden TEK parametre (mevcut `?ts=` deseniyle aynı).
+
+    Boş değer (`?limit=`) yok sayılır → `default` döner; yani "boş sınır"
+    "penceresiz" demektir, 0 demek DEĞİLDİR. Modül düzeyinde tanımlı ki
+    handler'a bağlı olmadan (ve testlerde sahte handler ile) sınanabilsin.
+    """
+    parsed = urllib.parse.urlparse(path or "")
+    values = urllib.parse.parse_qs(parsed.query).get(name)
+    return values[0] if values else default
+
+
+def parse_trend_limit(raw):
+    """`?limit=` ham değerini pencereye çevirir. None = penceresiz (tüm geçmiş).
+
+    Kırpma kuralı `apps/dashboard-next/app/api/events/route.ts` ile aynıdır:
+    tüm sayılar tıma doğru atılır (`Math.trunc`), 1..200 aralığına sıkıştırılır,
+    sayıya çevrilemeyen değer TREND_LIMIT_FALLBACK'e düşer.
+
+    Neden 400 değil: bu bir OKUMA ucu. Bozuk sorgu parametresi hata sayfası
+    değil, TANIMLI bir pencere üretir — `preview.js` parametresiz çağırır,
+    MCP her zaman gönderir, arada bir yerde bozulmuş bir değer 500 üretirse
+    pano sessizce boş kalır. Pencere zaten sınırlı olduğu için "hata"
+    göstermenin bir güvenlik kazancı yok.
+    """
+    if raw is None:
+        return None
+    try:
+        # Math.trunc gibi davran: "5.9" → 5 (int("5.9") ValueError verirdi ve
+        # tünelle AYRIŞIRDI). float("inf") int()'te ValueError değil
+        # OverflowError verir — üçü de yakalanmalı.
+        value = int(float(str(raw).strip()))
+    except (TypeError, ValueError, OverflowError):
+        return TREND_LIMIT_FALLBACK
+    return min(max(value, 1), TREND_LIMIT_MAX)
+
+
+def window_tail(rows, limit):
+    """`rows`'un EN YENİ `limit` kaydı — SIRA KORUNARAK (eski → yeni).
+
+    Sıra sözleşmesi: `load_history()` kronolojik döner (en eski başta —
+    `test_serve_history_compact_content` 09:00 → 10:00 diye sıralıyor).
+    Dolayısıyla "son N" = `rows[-limit:]`; `rows[:limit]` EN ESKİ N'yi
+    döndürürdü ve pencere istenenin tersini yapardı.
+    """
+    if limit is None or not isinstance(rows, list):
+        return rows
+    return rows[-limit:]
+
+
+def window_refs_trend(payload, limit):
+    """refs_trend yarısına AYNI pencereyi uygular (yalnız satır listeleri).
+
+    Neden gerekiyor: `/api/trend` gövdesi İKİ zaman serisini birleştirir ve
+    `preview.js` ikisini yan yana basar (refs-trend + duration/budget grafiği).
+    Yalnız `history` kırpılırsa gövdenin iki yarısı FARKLI zaman aralıklarını
+    anlatır; aynı ekranda iki ayrı "son" görünür.
+
+    Dokunulmayanlar:
+      * Satır listesi olmayan payload'lar ve hata nesnesi (`{"error": ...}`)
+        — refs-trend.json okunamazsa 200 içinde hata döner, kırpma onu bozmaz.
+      * `summary` / `totals` / `warnings`: bunlar refs_trend.py'nin TÜM
+        artifact üzerindeki hesabıdır. Burada yeniden hesaplamak ikinci bir
+        doğruluk kaynağı doğururdu. Pencere gövdede `limit` alanıyla
+        bildirildiği için "özet 100 koşumu, satırlar 20'yi anlatıyor" farkı
+        tüketicide GİZLİ kalmaz.
+    """
+    if limit is None or not isinstance(payload, dict):
+        return payload
+    out = dict(payload)
+    if isinstance(out.get("rows"), list):
+        out["rows"] = window_tail(out["rows"], limit)
+    duration_budget = out.get("duration_budget")
+    if isinstance(duration_budget, dict) \
+            and isinstance(duration_budget.get("rows"), list):
+        duration_budget = dict(duration_budget)
+        duration_budget["rows"] = window_tail(duration_budget["rows"], limit)
+        out["duration_budget"] = duration_budget
+    return out
 
 
 def _prune_run_logs():
@@ -1843,6 +1933,14 @@ class Handler(BaseHTTPRequestHandler):
                 except ValueError:
                     pass
 
+    def _query(self, name, default=None):
+        """`self.path` sorgu dizesinden TEK parametre (mevcut `?ts=` deseniyle aynı).
+
+        Boş değer (`?limit=`) yok sayılır → `default` döner; yani
+        "boş sınır" "penceresiz" demektir, 0 demek DEĞİLDİR.
+        """
+        return parse_query_param(getattr(self, "path", ""), name, default)
+
     def serve_history(self):
         """Return the dashboard projection of the recent history rows."""
         data = [_project_history_record(record) for record in load_history()
@@ -1873,9 +1971,23 @@ class Handler(BaseHTTPRequestHandler):
         history = dashboard-projected history.jsonl rows (same as /api/history).
         refs_trend = refs-trend.json payload or {rows: [], duration_budget: {rows: []}} fallback.
         Errors in refs_trend surface as {error: ...} inside refs_trend field (200 outer).
+
+        Query: ?limit=N → EN YENİ N koşum (penceresiz çağrıda tüm geçmiş, eski
+        davranış). Neden sunucu tarafı: parametre zaten sözleşmenin parçasıydı
+        ve iki canlı tüketici onu gönderiyordu — MCP `leibniz2_trend`
+        (`_calisma/mcp/server.py`, README'de "?limit=N → Son N koşum" olarak
+        belgeli) ve dashboard-next `getTrend` (`/api/trend?limit=20`).
+        Parametre yok sayıldığı için ikisi de İSTEDİKLERİ PENCEREYİ ALAMIYORDU
+        (ölçüldü: 100 kayda kadar tam geçmiş dönüyordu).
+        Pencere `history`ye VE refs_trend'in satır listelerine BİRLİKTE
+        uygulanır (bkz. `window_refs_trend`); uygulanan pencere gövdede
+        `limit` alanıyla bildirilir.
         """
-        history = [_project_history_record(record) for record in load_history()
-                   if isinstance(record, dict)]
+        limit = parse_trend_limit(
+            parse_query_param(getattr(self, "path", ""), "limit"))
+        history = window_tail(
+            [_project_history_record(record) for record in load_history()
+             if isinstance(record, dict)], limit)
         if not REFS_TREND_PATH or not os.path.isfile(REFS_TREND_PATH):
             refs_trend = {"rows": [], "duration_budget": {"rows": []}}
         else:
@@ -1884,8 +1996,15 @@ class Handler(BaseHTTPRequestHandler):
                     refs_trend = json.load(f)
             except (json.JSONDecodeError, OSError):
                 refs_trend = {"error": "refs trend unavailable"}
-        self._send(200, json.dumps({"history": history, "refs_trend": refs_trend},
-                                   ensure_ascii=False, separators=(",", ":")),
+        body = {"history": history,
+                "refs_trend": window_refs_trend(refs_trend, limit)}
+        if limit is not None:
+            # Pencere uygulandığını gövde kendisi söyler: özet alanları
+            # pencerelenmediği için tüketicinin "bu N satırlık bir pencere"
+            # ile "tüm artifact" farkını görebilmesi gerekir.
+            body["limit"] = limit
+        self._send(200, json.dumps(body, ensure_ascii=False,
+                                   separators=(",", ":")),
                    content_type="application/json; charset=utf-8")
 
     def serve_override_trend(self):

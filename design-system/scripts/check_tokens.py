@@ -46,10 +46,16 @@ Contracts (post-import):
    utility'si (`bg-[#0e1116]`), ne ham hex/rgb/hsl literali (inline stil
    dahil), ne de Tailwind'ın varsayılan paleti (`bg-slate-900`,
    `text-white`) — üçü de köprü token'ını baypas eder ve temayı
-   koyu/açık/stripe varyantlarında dondurur.
+   koyu/açık/stripe varyantlarında dondurur. Kapsam TÜM uygulama
+   kaynağıdır (`.tsx .ts .jsx .js`) — yalnız globals.css değil,
+   (g) globals.css DIŞINDAKİ her `.css` de aynı ham-renk taramasından
+   geçer: yeni bir stil dosyası açmak, bir literali bu kapının dışına
+   taşımanın en kolay yolu olurdu (@theme/@utility blokları burada da
+   muaftır — onlar utility EŞLEMESİdir, belge custom property'si değil).
 
 Exit 0 on match, 1 on drift.
 """
+import os
 import re
 import sys
 from pathlib import Path
@@ -332,6 +338,24 @@ def _blank_out_comments(text: str) -> str:
     return re.sub(r"//[^\n]*", lambda m: " " * len(m.group(0)), text)
 
 
+def _app_source_files(suffixes):
+    """`apps/dashboard-next` altındaki kaynak dosyalar — `node_modules` ve
+    `.next` AĞAÇLARINA HİÇ GİRMEDEN.
+
+    Neden: `Path.rglob` bu iki dizini de geziyordu (ölçüldü 2026-09-28:
+    `node_modules` altında tek başına 24.917 dosya → kapı ~1,4s) ve tarama
+    birkaç ayrı yerde koştuğu için maliyet katlanıyordu. Kapının sözleşmesi
+    zaten bu dizinlerin DIŞINI kapsar, o yüzden ağacı budamak hem doğru hem
+    hızlı: ölçüm, budanmış gezinmeyle kapıyı ~0,2s'ye indiriyor.
+    """
+    for root, dirnames, filenames in os.walk(NEXT_APP):
+        dirnames[:] = sorted(
+            d for d in dirnames if d not in ("node_modules", ".next"))
+        for name in filenames:
+            if Path(name).suffix in suffixes:
+                yield Path(root) / name
+
+
 def _color_literal_findings():
     """dashboard-next kaynağında koda gömülü RENK literali arar.
 
@@ -342,11 +366,7 @@ def _color_literal_findings():
     Değerin token-tabanlı olması (var(), color-mix(var()…)) ihlal değildir.
     """
     findings = []
-    for path in sorted(NEXT_APP.rglob("*")):
-        if not path.is_file() or path.suffix not in _SOURCE_SUFFIXES:
-            continue
-        if {"node_modules", ".next"} & set(path.parts):
-            continue
+    for path in sorted(_app_source_files(_SOURCE_SUFFIXES)):
         rel = path.relative_to(REPO)
         source = _blank_out_comments(
             path.read_text(encoding="utf-8", errors="replace"))
@@ -373,6 +393,27 @@ def _color_literal_findings():
                     f"{rel}:{lineno}: koda gömülü renk literali — token'a "
                     "bağlayın (var(--…)); tema tek kaynaktan gelir"
                 )
+    # (g) globals.css'in kendi dalı aşağıda (@theme muafiyetiyle); buradaki
+    # tarama panoya EKLENEN herhangi bir .css'in aynı kapıdan geçmesini
+    # sağlar. Ölçüldü (2026-09-28): hex literal taşıyan yeni bir .css dosyası
+    # bu dal olmadan kapıyı YEŞİL bırakıyordu — yani kural, yeni bir stil
+    # dosyası açılarak sessizce atlatılabiliyordu.
+    for path in sorted(_app_source_files({".css"})):
+        if path == NEXT_GLOBALS:
+            continue
+        other_css = _blank_out_comments(
+            path.read_text(encoding="utf-8", errors="replace"))
+        other_exempt = _tailwind_directive_lines(other_css)
+        for lineno, line in enumerate(other_css.splitlines(), 1):
+            if lineno in other_exempt:
+                continue
+            if _RAW_COLOR_LITERAL.search(line):
+                findings.append(
+                    f"{path.relative_to(REPO)}:{lineno}: CSS'te koda gömülü "
+                    "renk literali — token'a bağlayın (var(--…)); tema tek "
+                    "kaynaktan gelir"
+                )
+
     if NEXT_GLOBALS.exists():
         css = _blank_out_comments(NEXT_GLOBALS.read_text(encoding="utf-8"))
         exempt = _tailwind_directive_lines(css)
@@ -589,11 +630,7 @@ def main() -> int:
                 )
 
         preset_hits = []
-        for path in sorted(NEXT_APP.rglob("*")):
-            if not path.is_file() or path.suffix not in _SOURCE_SUFFIXES:
-                continue
-            if {"node_modules", ".next"} & set(path.parts):
-                continue
+        for path in sorted(_app_source_files(_SOURCE_SUFFIXES)):
             source = _strip_source_comments(
                 path.read_text(encoding="utf-8", errors="replace"))
             for lineno, line in enumerate(source.splitlines(), 1):

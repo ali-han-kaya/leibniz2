@@ -31,6 +31,17 @@ const nextConfig = {
   // istemcisi ise apps/trend-db/generated'dan TS kaynağı olarak gelir ve
   // derlenmesi gerekir — dışta TUTULMAZ.
   serverExternalPackages: ["pg"],
+
+  // Turbopack (Next 16'da varsayılan derleyici) çalışma alanı kökünü
+  // KİLİT DOSYASINDAN çıkarır: `apps/dashboard-next/package-lock.json` var
+  // olduğu için kök `apps/dashboard-next` sanılır ve lib/trend-db.ts'teki
+  // `../../trend-db/generated/client` (repo kökünde, kardeş paket)
+  // "Module not found" ile düşer (Next 15'te webpack bu geçişi izliyordu).
+  // Kök AÇIKÇA repo köküne sabitlenir — CI'daki yerleşim de aynı olduğu
+  // için hem yerel hem CI aynı kökten çözer.
+  turbopack: {
+    root: path.join(__dirname, "..", ".."),
+  },
 };
 
 module.exports = nextConfig;

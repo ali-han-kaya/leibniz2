@@ -1,3 +1,5 @@
+import { ViewTransition } from "react";
+
 import VerdictCard from "../../VerdictCard";
 
 // Paralel rota slotu (`app/(panel)/@verdict`) — ana panonun verdict paneli.
@@ -11,5 +13,19 @@ import VerdictCard from "../../VerdictCard";
 export const dynamic = "force-dynamic";
 
 export default function VerdictSlot() {
-  return <VerdictCard />;
+  // Suspense reveal (gezinme haritası maddesi): iskelet (slot loading.tsx)
+  // HIZLI çıkar (slot-exit), gerçek kart yumuşak ve GECİKMELİ girer
+  // (slot-enter) — CSS anahtar kareleri globals.css'te. `default: "none"`
+  // bu sınırı navigasyon crossfade'inden AYRIR: kart, yalnız kendi
+  // Suspense çözülümünde animasyonlu olur (yönsüz geçişte içerik zaten
+  // root sarmalayıcıyla crossfade olur).
+  return (
+    <ViewTransition
+      enter={{ "slot-enter": "slot-enter", default: "none" }}
+      exit={{ "slot-exit": "slot-exit", default: "none" }}
+      default="none"
+    >
+      <VerdictCard />
+    </ViewTransition>
+  );
 }

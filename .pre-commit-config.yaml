@@ -5,6 +5,20 @@
 #   pre-commit install
 #
 # Bu noktadan sonra her `git commit` sırasında aşağıdaki kapılar çalışır:
+#   *) check-unstaged-delta   : ZİNCİRİN İLK KOŞAN kapısı — ağaçta unstaged
+#                               İZLENEN delta varsa commit'i anında bloke
+#                               eder. Gerekçe: karışık ağaçta ölçüm yanıltıcı
+#                               olur ve pre-commit'in stash penceresi
+#                               (patch<epoch>-<pid> → `git checkout -- .` →
+#                               finally `git apply`) süreç-ölümünde sessiz
+#                               revert riski taşır. Gizli deltayı patch'in
+#                               ATA-pid'i üzerinden bulur (stash altında saf
+#                               `git diff` BOŞ döner); yetim patch'ler
+#                               eşleşmez. İLK sırada koşar: hata ilk görünen
+#                               şey olur ve karar, sonraki hook'ların
+#                               dosya-stage'lemesinden kirlenemez (not:
+#                               `fail_fast` kapalı — zincir yine de sonuna
+#                               kadar koşar, süre kazancı iddiası YOK).
 #   0) update-config          : config'i paket içeriğinden senkron et (gen_config.py)
 #                               — repack sayıları değiştirdiyse verify_delivery.config.json'u
 #                               otomatik günceller ve stage eder; değişmediyse dokunmaz.
@@ -148,6 +162,25 @@
 repos:
   - repo: local
     hooks:
+      - id: check-unstaged-delta
+        name: "Block commits while unstaged tracked changes exist (fail-closed)"
+        description: >-
+          check_unstaged_delta.py: ağaçta unstaged İZLENEN delta varken
+          commit'i bloke eder. İlk sıradadır (hata ilk görünsün; karar,
+          sonraki hook'ların stage'lemesinden kirlenmesin): pre-commit
+          unstaged deltayı `patch<epoch>-<pid>` dosyasına stash'ler ve
+          pencere-içi süreç-ölümü sessiz revert'e yol açar; ayrıca karışık
+          ağaçta diğer kapılar yanıltıcı sonuç üretir. Gizli deltayı stash
+          patch'inin ATA-pid'i üzerinden bulur (stash altında saf `git diff`
+          BOŞ döner — ölçüldü), hem commit hem manuel `--all-files` yolunu
+          kapsar; yetim patch'ler yanlış-pozitif üretmez. OFFLINE,
+          stdlib-only, ~0.05s.
+        entry: python3 _calisma/CIKTI/check_unstaged_delta.py
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
       - id: update-config
         name: Sync config from package content (gen_config.py)
         description: >-
@@ -929,7 +962,20 @@ repos:
           ya da özel mülkte sabit renk literal'i (yorumlar ayıklanır, bu
           yüzden metinde geçen `:root {` aldatmaz). Stil değişirse
           (renk/space/radius) kapı fail-closed bloke eder.
-          OFFLINE, stdlib-only, ~0.05s.
+          Uygulama KAYNAĞI da denetlenir (contract 8f/8g): dashboard-next
+          altındaki her .ts/.tsx/.js/.jsx dosyasında ve globals.css
+          DIŞINDAKİ her .css'te koda gömülü hex/rgb/hsl literali, arbitrary
+          renk utility'si (`bg-[#0e1116]`) ya da Tailwind varsayılan paleti
+          (`bg-slate-900` / `text-white`) bulunursa commit BLOKE edilir —
+          üçü de köprü token'ını baypas eder ve temayı koyu/açık/stripe
+          varyantlarında dondurur. Yorumlar ayıklanır; ölçü/harf-aralığı
+          arbitrary değerleri, var() tabanlı türetmeler ve gölge içi rgba
+          MEŞRUDUR (yanlış-pozitif üretmez). Kapsam yalnız globals.css
+          DEĞİLDİR: yeni bir stil dosyası açmak kapıyı atlatmaz. Gezinme
+          node_modules/.next ağaçlarını BUDAR, yani sonuç kurulu paketlerin
+          içinden gelen renklerden etkilenmez (ölçüldü: budama öncesi 24.917
+          dosya → ~1,4s; sonrası ~0,15s).
+          OFFLINE, stdlib-only, ~0.15s.
         entry: python3 design-system/scripts/check_tokens.py
         language: system
         always_run: true
@@ -1078,11 +1124,97 @@ repos:
           uyarısı basılır (yine bloklamaz). Bilinen-olay parmak-izleri
           _calisma/CIKTI/recovery_patches_* dizinlerinin TAMAMINDAN gelir
           (2026-09-27: tek dizin sabitti → sonraki arşivler görünmezdi).
-          Test: test_check_precommit_orphans.py (13 sözleşme,
+          OTOMATİK KARANTİNA (2026-09-28): kanıtlanmış gereksiz yetimler
+          SİLİNMEZ, `<cache>-orphans-quarantine-<tarih>/` altına TAŞINIR
+          (sha256+md5+kanıt kaydıyla MANIFEST.md) → elle temizlik
+          ölçeklenmiyor ama körlemesine silmek veri kaybıydı. Kanıt: (a)
+          `git apply --reverse --check` temiz = ağaç patch'in sonrası
+          durumda; (b) patch'in ANLAMLI `+` satırlarının tümü hedef dosyada
+          var. Hiç `@@` hunk'ı olmayan patch asla taşınmaz (ölçüldü:
+          `git apply --check` hunk'sız diff'te 0 döner → yanlış-pozitif).
+          KNOWN-INCIDENT / ZAYIF kayıtlar ve taze patch'ler (<24h, uçuş-içi
+          stash olabilir) asla taşınmaz; kanıtlanamayanlar fail-closed
+          bloklamaya devam eder. `--no-clean` karantinayı kapatır.
+          Test: test_check_precommit_orphans.py (31 sözleşme,
           PRE_COMMIT_HOME-fixture üzerinden).
         entry: python3 _calisma/CIKTI/check_precommit_orphans.py
         language: system
         pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+        verbose: true
+
+      - id: check-precommit-inventory
+        name: "Pre-commit doc envanteri ↔ config hook set (advisory uyarı)"
+        description: >-
+          Zinciri ANLATAN dokümanı tek gerçekle karşılaştırır: 'hook
+          inventory' bloğu (skills/verify-chain/SKILL.md) ↔
+          .pre-commit-config.yaml `- id:` kümesi. İki yönlü fark — envanterde
+          olup config'te OLMAYAN (kaldırılmış/yeniden adlandırılmış kapı) ve
+          config'te olup envanterde BELGESIZ kapı. Varsayılan ADVISORY: bayat
+          envanterde `BAYAT:` uyarısı basar ve commit'i BLOKLAMAZ (kullanıcı
+          sözleşmesi: "bayat-ise uyarı versin"); sıkı mod `--strict` ile
+          rc=1. İşaret/blok/config bulunamazsa rc=2 — yeniden adlandırılmış
+          bir bölüm kapıyı sessizce körleştiremez (kör kapı PASS üretmez).
+          stdlib-only (PyYAML gerekmez), OFFLINE, ~0.02s. Test:
+          test_check_precommit_inventory.py (27 sözleşme, hermetik fixture +
+          gerçek ağaç senkron invariant'ı).
+        entry: python3 _calisma/CIKTI/check_precommit_inventory.py
+        language: system
+        pass_filenames: false
+        files: ^(\.pre-commit-config\.yaml|skills/verify-chain/SKILL\.md)$
+        stages: [pre-commit]
+        verbose: true
+
+      - id: check-skill-surfaces
+        name: "Skill-alanı ↔ repo-yüzeyi envanteri (fail-closed)"
+        description: >-
+          skill_surfaces.list manifest'ini TEK KAYNAK olarak denetler:
+          her skill alanının (RN/Expo, Stripe, Prisma, Postgres, Next,
+          Remotion, pptx, docx, tailwind, marka-token mirror'ları) repo
+          yüzeyi + paket imzası. İki yönlü paket denetimi — hayalet satır
+          (manifest'te var, ağaçta yok) VE kayıtsız paket (ağaçta var,
+          manifest'te yok) ikisi de bloke eder; zero-surface alanların
+          (rn-expo, wrangler, xlsx) imza paketi GÖRÜNÜRSE bloke eder
+          (sıfır-yüzey iddiaları 2026-09-19 denetimlerinden). Snapshot
+          mirror'lar (stripe/linear/primer/vercel tokens) identity takma
+          adıdır: bağımlılık taşımazlar, yalnız yol varlığı denetlenir.
+          Arç paketleri (prettier/typescript/esbuild/…) TOOLCHAIN_NOISE
+          kümesinde — alan yüzeyi değiller; küme kapalıdır, yeni girdi
+          testte gerekçelenir. --update öneri üretir, alan kararını elle
+          bırakır. stdlib-only, OFFLINE, ~0.05s. Test:
+          test_check_skill_surfaces.py (24 sözleşme).
+        entry: python3 _calisma/CIKTI/check_skill_surfaces.py
+        language: system
+        pass_filenames: false
+        # always_run: envanter AĞAÇ-ÇAPRAZIdır (tüm package.json'ları tarar) —
+        # yalnız manifest stage'liyken koşarsa bağımlılık ekleyen ama manifest'e
+        # dokunmayan commit kapıyı atlatır (sessiz kapsam kaybı tam da bu).
+        always_run: true
+        stages: [pre-commit]
+        verbose: true
+
+      - id: check-skill-surface-inventory-doc
+        name: "Skill↔yüzey envanter dokümanı ↔ üretici (drift, fail-closed)"
+        description: >-
+          `docs/SKILL_SURFACE_INVENTORY.md` ÜRETİLMİŞ bir dosyadır: elle
+          yazılmaz, `skill_surfaces.list` manifest'i + `check_skill_surfaces.py`
+          canlı ölçümünden `gen_skill_surface_inventory.py` ile türetilir.
+          Bu kapı dokümanı yeniden üretip KARŞILAŞTIRIR; bayaltsa exit 1.
+          Neden kapı gerekiyor: elle yazılan envanter zamanla bayatlar —
+          ölçüldü (`check_precommit_inventory.py` gerekçesi): SKILL.md 19 hook
+          derken config'te 60 hook vardı, 41 kapı belgesiz kalmıştı. Üretilen
+          doküman da üreticisinden ayrılırsa aynı hastalık çürüme olarak
+          döner. Test: test_gen_skill_surface_inventory.py (17 sözleşme;
+          kanıt bağlantılarının findings.md'de HÂLÂ yaşadığını da pinler).
+        entry: python3 _calisma/CIKTI/gen_skill_surface_inventory.py --check
+        language: system
+        pass_filenames: false
+        # always_run: envanter AĞAÇ-ÇAPRAZIdır (tüm package.json'ları tarar) —
+        # yalnız manifest stage'liyken koşarsa bağımlılık ekleyen ama dokümanı
+        # yeniden üretmeyen commit kapıyı atlatır. `files` bilinçli YOK:
+        # `always_run: true` ile birlikte tanımlı olması pre-commit'te
+        # anlamsızdır (kardeş kapı `check-skill-surfaces` da yalnız always_run).
         always_run: true
         stages: [pre-commit]
         verbose: true

@@ -79,9 +79,12 @@ verdictTone({ tone: _rawVerdict });
 // @ts-expect-error TS2322 — "unknown" varyant tablosunda yok
 statBadge({ tone: "unknown" });
 
-// Varyantsız stil öğeleri ton almaz; almaya başlarsa stil sözleşmesi kaymış
-// demektir.
-// @ts-expect-error TS2353 — panelCardın varyantı yok, ton geçilemez
+// Yüzey tonu ile KARAR tonu ayrı sözlüklerdir. `panelCard`in ton kümesi
+// {default, error} — verdict tonları değil. İkisi karışırsa hata yüzeyi
+// "pass" diye boyanır ve tek bir varyant tablosu iki farklı anlam taşır.
+// (Kod TS2353 DEĞİL TS2322: `tone` artık bilinen bir anahtar, ama değeri
+// kapalı kümeye girmiyor — eskiden anahtarın kendisi yoktu.)
+// @ts-expect-error TS2322 — "pass" bir PanelTone değil (kapalı küme)
 panelCard({ tone: "pass" });
 
 // ── veri katmanı ────────────────────────────────────────────────────────────

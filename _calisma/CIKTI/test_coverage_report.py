@@ -80,6 +80,14 @@ HOOK_COVERAGE = {
     # temel palet ayrıklığı, ön-koşul birebirliği ve sayım kilitleri tek
     # modülde test edilir.
     "check-mirror-bridges":     ["test_mirror_bridges.py"],
+    # Zincir envanteri ↔ config hook kümesi (advisory uyarı + --strict).
+    # Testi aynı zamanda şu değişmezi çiviler: gerçek ağaçta envanter bloğu
+    # ile `.pre-commit-config.yaml` hook kümesi BİREBİR eşit olmalı.
+    "check-precommit-inventory": ["test_check_precommit_inventory.py"],
+    # Skill-alanı ↔ repo-yüzeyi envanteri: iki yönlü paket denetimi +
+    # zero-surface iddiaları (rn-expo/wrangler/xlsx). Manifest
+    # skill_surfaces.list tek kaynaktır.
+    "check-skill-surfaces": ["test_check_skill_surfaces.py"],
     # dashboard-next'in JS kapı çifti: ikisi de aynı yüzeyin (biçim + tip)
     # sözleşmesini denetliyor ve tek bir birim modülü var. HOOK_COVERAGE'a
     # girmeden önce bu iki hook'un kapsam raporunda testi YOKTU.
@@ -284,6 +292,13 @@ HOOK_COVERAGE = {
         "test_trend_db_rls_contract.py",
         "test_mirror_bridges.py",
         "test_trend_db_js_runner.py",
+        "test_check_unstaged_delta.py",
+        "test_dashboard_next_ui_contract.py",
+        "test_check_precommit_inventory.py",
+        "test_verify_sweep.py",
+        "test_check_skill_surfaces.py",
+        "test_check_merge_precondition.py",
+        "test_gen_skill_surface_inventory.py",
     ],
 }
 
@@ -302,7 +317,29 @@ CI_JOB_COVERAGE = {
     # yüzeylerine koşturur (CLS/LCP/FCP/TTFB).
     "a11y-gate": ["test_a11y_gate.py", "test_dashboard_cls_budget.py",
                   "test_surface_cwv_report.py"],
-    "dashboard-smoke": ["test_dashboard_playwright_smoke.py"],
+    # ÖLÇÜLENLİ BOŞLUK (2026-09-28): `test_dashboard_playwright_smoke.py`
+    # HİÇBİR CI JOB'INDA KOŞMUYOR. Önceden burada `dashboard-smoke` diye bir
+    # job kayıtlıydı; ölçüldü: verify.yml'de böyle bir job YOK (jobs: verify,
+    # a11y-gate, dashboard-next, preview-reload-smoke, …) ve hiçbir workflow bu
+    # dosyayı çalıştırmıyor. `verify` job'ı `unittest discover` ile dosyayı
+    # KEŞFEDİYOR ama o job'da Playwright kurulu değil (yalnız a11y-gate ve
+    # dashboard-next'te kurulu) → süit `skipIf` ile sessizce ATLANIYOR.
+    # Yani kayıt, koşan bir kapı varmış gibi rapor veriyordu (fail-open'ın
+    # kardeşi: kayıt var, koşum yok). Kayıt KALDIRILDI; dosya CHECK_EXEMPT'te
+    # kalıyor ve gerçek bir job eklenirse buraya geri gelmelidir.
+    # dashboard-next job'ı panoyu derledikten SONRA yüzey smoke'unu koşar
+    # ("Surface smoke — dashboard-next"): bu dosyanın canlı katmanı `next
+    # start` + Chromium ister, derleme zaten aynı job'da yapılır. Dosya
+    # check_unit_tests.list DIŞINDADIR (EXCLUDE) — pre-commit bütçesi. Statik
+    # eşi `test_dashboard_next_ui_contract.py` unit bataryasındadır.
+    "dashboard-next": ["test_dashboard_next_surface_smoke.py",
+                       # İstek-basi dedup sözleşmesi: SAYAN upstream + `next
+                       # start`. Aynı job'da, derlemenin hemen ardından
+                       # (Chromium'dan ÖNCE — stdlib HTTP, tarayıcı yok).
+                       "test_dashboard_next_request_dedup.py",
+                       # Canlı akış sözleşmesi: yayınlayan upstream + Chromium
+                       # gerektirir → Chromium kurulumundan SONRA koşmalı.
+                       "test_dashboard_next_live_stream.py"],
     "daemon-http": ["test_daemon_http.py"],
     "plist-check": ["test_plist_gate_exit.py", "test_gen_plist_golden.py"],
     "coq-proof": ["test_coq_lake.py"],
@@ -524,8 +561,21 @@ CHECK_EXEMPT = frozenset({
     "test_preview_reload_smoke.py",  # standalone smoke script, def test_ yok
     "test_all_hooks_smoke.py",       # standalone smoke: tum hook'lari kosar
     "test_budget_scan.js",          # JS-only, ayrı Node hook'unda
-    "test_dashboard_playwright_smoke.py",  # standalone Playwright smoke (Chromium ~10s) — CI'da ayrı job
+    "test_dashboard_playwright_smoke.py",  # standalone Playwright smoke (Chromium ~10s) — ÖLÇÜLDÜ: hiçbir
+                                           # CI job'ında koşmuyor (verify job'ında Playwright yok → skipIf;
+                                           # ayrı `dashboard-smoke` job'ı YOK). Kapsam dışı olduğu için
+                                           # CHECK_EXEMPT; gerçek job eklenirse CI_JOB_COVERAGE'a girer.
     "test_dashboard_csp_nonce.py",   # standalone Playwright CSP+nonce smoke (Chromium) — canlı sunucu/kendi sunucusu
+    "test_dashboard_next_surface_smoke.py",  # standalone Playwright yüzey smoke'u (Chromium + `next start`) — derleme
+                                             # gerektirir, pre-commit bütçesine sığmaz; CI_JOB_COVERAGE'da
+                                             # `dashboard-next` job'ı ile kayıtlıdır (o job panoyu derler).
+    "test_dashboard_next_request_dedup.py",  # standalone istek-basi dedup sözleşmesi (sayan upstream + `next start`)
+                                             # — derleme gerektirir, pre-commit bütçesine sığmaz; CI_JOB_COVERAGE'da
+                                             # `dashboard-next` job'ı ile kayıtlıdır (o job panoyu derler).
+    "test_dashboard_next_live_stream.py",  # standalone canlı akış sözleşmesi (yayınlayan upstream + `next start`
+                                           # + Chromium) — pre-commit bütçesine sığmaz; CI_JOB_COVERAGE'da
+                                           # `dashboard-next` job'ı ile kayıtlıdır (o job panoyu derler ve
+                                           # Chromium kurar).
     "test_refs_trend_badge_node.js", # standalone JS smoke (Node-only assertion), dokümante bilinçlileşti
 })
 

@@ -1,0 +1,57 @@
+# _calisma/CIKTI/skill_surfaces.list — skill-alanı ↔ repo-yüzeyi envanteri.
+#
+# check_skill_surfaces.py bu dosyayı TEK KAYNAK olarak okur: her skill
+# alanının (ajan-beceri ailesi) bu repodaki GERÇEK yüzeylerini buradan alır.
+# Amaç, "bu alanda yetkin miyim" sorusunun cevabını git geçmişine değil
+# denetlenen bir manifest'e bağlamak — 2026-09-19 turları sıfır-yüzey
+# denetimlerini (RN/Expo, Workers/wrangler, xlsx) kanıtlamıştı ama kanıt
+# yalnız findings.md notundaydı; bu envanter o kanıtı YÜZEYDE tutar.
+#
+# Biçim (boşluk-ayrımlı 3 alan; satır içi `#` sonrası serbest açıklama):
+#   <alan>  <pip/paket-ismi>  <repo-göreli yol>
+#
+# Alan = beceri ailesinin ADI (rn-expo, stripe, …). Paket isimleri alanın
+# PAKET İMZASIDIR: o isimlerden biri herhangi bir package.json'da belirse
+# ve alan `zero-surface` olarak işaretli değilse, kapı manifest'e kayıtsız
+# yeni yüzey satırı ister (sessiz kapsam kaybı yasağı — brand_mirrors.list
+# sözleşmesiyle aynı desen). `zero-surface` alanlarında bu isimler TERS
+# çalışır: paket GÖRÜNÜRSE kapı kırılır (sıfır-yüzey iddiası bozuldu).
+#
+# Yol = alanın doküman/girdi yüzeyi (skill'in okuması gereken yer). Var
+# olması zorunludur (fail-closed); yalnız bir alanın "nereye bakacağını"
+# sabitler. Zero-surface alanlarda yol o alanın SIFIR-yüzey denetim
+# kaydını gösterir (findings.md bölümü).
+#
+# Güncelleme: `python3 _calisma/CIKTI/check_skill_surfaces.py --update`
+# kayıtsız paket/package.json için YENİ satır önerir (--update ekler);
+# elle gerekçelendirme serbesttir ama satırsız paket kalamaz.
+#
+# ── Aktif yüzeyler ──────────────────────────────────────────────────────────
+nextjs        next                      apps/dashboard-next
+react-web     react                     apps/dashboard-next
+react-web     react                     apps/dashboard-shadcn
+react-web     react                     _calisma/video
+prisma        @prisma/client            apps/trend-db/prisma/schema.prisma
+prisma        @prisma/adapter-pg        apps/dashboard-next/lib/trend-db.ts
+postgres      pg                        apps/trend-db
+remotion      remotion                  _calisma/video
+pptx          pptxgenjs                 _calisma/pptx
+docx          docx                      _calisma/docx/make_docx.js
+tailwind      tailwindcss               design-system/tailwind.css
+# Marka-token mirror'ları: stripe/linear/primer/vercel frontend-token
+# aynalarıdır (ödeme altyapısı DEĞİL — Stripe SDK'sı yoktur, bilinçli).
+# Sürüşüm kanıtı: mirror'lar SNAPSHOT raw.css/raw.json taşır (hiçbir
+# package.json bağımlılığı YOKTUR), o yüzden paket sütunu takma isimdir
+# ve kapı bunu imza değil KIMLIK olarak denetler (yalnız yol varlığı —
+# görülen 'hayalet' davranışı bilinçlidir). Kayıtları brand_mirrors.list
+# ayrı ve daha dar bir sözleşmeyle tutar; burada yalnız token-yüzeyi.
+stripe-tokens stripe-tokens             design-system/stripe/tokens.css
+linear-tokens linear-tokens             design-system/linear/tokens.css
+primer-tokens primer-tokens             design-system/primer/tokens.css
+vercel-tokens vercel-tokens             design-system/vercel/tokens.json
+# ── Sıfır-yüzey alanları (iddia: bu repoda kod YOKTUR) ─────────────────────
+# `zero-surface` işaretli alanların paket imzası HİÇBİR package.json'da
+# geçemez; geçerse kapı kırılır (iddia bozuldu). Yol = kanıt kaydı.
+rn-expo       zero-surface              findings.md
+wrangler      zero-surface              findings.md
+xlsx          zero-surface              findings.md

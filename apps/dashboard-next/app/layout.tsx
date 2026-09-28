@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import "./globals.css";
 import { Geist } from "next/font/google";
-import { brandMark, footerNote } from "@/components/panel-style";
+import { brandMark, footerNote, navLink } from "@/components/panel-style";
+import { ThemeInit } from "@/components/ThemeInit";
 import { cn } from "@/lib/utils";
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
@@ -31,14 +32,37 @@ export default function RootLayout({
       className={cn("font-sans", geist.variable)}
     >
       <body className="min-h-screen bg-bg text-fg antialiased">
-        <header className="border-b border-border px-8 py-4">
+        {/* `?theme=` / localStorage tercihini `data-theme`'e uygular; açık
+            tema köprüsü (`:root[data-theme="light"]`) böylece devreye girer.
+            Görsel çıktısı yoktur — yan etki yalnız documentElement'te. */}
+        <ThemeInit />
+        {/* VT uzamsal çapa: header geçiş boyunca SABİT kalır (gezinme
+            haritası — kayan header yönsüz geçişte sahte hareket üretir).
+            Ad, globals.css'teki ::view-transition-group(site-header)
+            kuralıyla eşleşir; CSS satır-içi stili ezer (animation: none). */}
+        <header
+          className="border-b border-border px-8 py-4"
+          style={{ viewTransitionName: "site-header" }}
+        >
           <div className="mx-auto flex max-w-4xl items-baseline gap-6">
-            <span className={brandMark()}>STOIC-HUME V5</span>
+            {/* Sayfa başlığı gerçek bir `<h1>` (bulgular: "no h1 on
+                pages"): marka yalnız bir `<span>`di, yani her sayfa
+                başlıksız kalıyordu ve bölüm `<h2>`leri hiyerarşide
+                köksüzdü. Kök layout'ta durduğu için tüm rotaları kapsar.
+                `translate="no"`: marka bir ürün adıdır, makine çevirisi
+                onu bozmamalı. */}
+            <h1 className={brandMark()} translate="no">
+              STOIC-HUME V5
+            </h1>
+            {/* Nav bağlantıları `navLink`ten beslenir: hover rengi ve
+                ODAK halkası buton tabanıyla aynı sözleşmeden gelir.
+                Dizge ikisinde kopyalanmıştı ve odak işareti yoktu; kök
+                layout'ta durduğu için her rota kapsanır. */}
             <nav className="ml-auto flex gap-6 font-mono text-xs tracking-[0.12em] text-muted">
-              <Link className="transition-colors hover:text-fg" href="/">
+              <Link className={navLink()} href="/">
                 ÖZET
               </Link>
-              <Link className="transition-colors hover:text-fg" href="/trend">
+              <Link className={navLink()} href="/trend">
                 TREND
               </Link>
             </nav>

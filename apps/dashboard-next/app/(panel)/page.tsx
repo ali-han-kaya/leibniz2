@@ -1,3 +1,4 @@
+import { ViewTransition } from "react";
 import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
 import { API_BASE, trendSource } from "@/lib/preview";
@@ -14,26 +15,28 @@ export default function HomePage() {
   const source = trendSource();
 
   return (
-    <p className="text-sm text-muted">
-      Trend görünümü:{" "}
-      <Link
-        className={cn(buttonVariants({ variant: "ghost" }), "text-accent")}
-        href="/trend"
-      >
-        /trend
-      </Link>{" "}
-      · Canlı pano:{" "}
-      <a
-        className={cn(buttonVariants({ variant: "ghost" }), "text-accent")}
-        href={`${API_BASE}/preview.html`}
-      >
-        preview.html
-      </a>{" "}
-      {/* Veri kaynağını panoda görünür kıl: aynı ekran DB'den de
+    <ViewTransition>
+      <p className="text-sm text-muted">
+        Trend görünümü:{" "}
+        <Link
+          className={cn(buttonVariants({ variant: "ghost" }), "text-accent")}
+          href="/trend"
+        >
+          /trend
+        </Link>{" "}
+        · Canlı pano:{" "}
+        <a
+          className={cn(buttonVariants({ variant: "ghost" }), "text-accent")}
+          href={`${API_BASE}/preview.html`}
+        >
+          preview.html
+        </a>{" "}
+        {/* Veri kaynağını panoda görünür kıl: aynı ekran DB'den de
           preview_server'dan da beslenebiliyor, karıştırılmasın. */}
-      <span className="font-mono text-xs">
-        · kaynak: <span className="text-fg">{source}</span>
-      </span>
-    </p>
+        <span className="font-mono text-xs">
+          · kaynak: <span className="text-fg">{source}</span>
+        </span>
+      </p>
+    </ViewTransition>
   );
 }

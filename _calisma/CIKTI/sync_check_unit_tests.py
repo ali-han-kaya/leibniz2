@@ -103,6 +103,28 @@ EXCLUDE = {
     # verilirse CANLI sunucuya, verilmezse kendi preview_server.py'sini başlatır.
     # Yerel/canlı doğrulama içindir — pre-commit bütçesinde koşmaz.
     "test_dashboard_csp_nonce.py",
+
+    # dashboard-next YÜZEY smoke'u (açık tema + UI bulgularının canlı kanıtı):
+    # Chromium + `next start` (mevcut `.next` derlemesi) ister; Next boot'u
+    # dosya başına bütçeyi aşar. Tarayıcısız sözleşme katmanı olsa da, canlı
+    # katman bu bütçeye sığmaz — CI'da `dashboard-next` job'ı (derleme zaten
+    # orada) koşar. Statik (tarayıcısız) eşi `test_dashboard_next_ui_contract.py`
+    # bataryadadır.
+    "test_dashboard_next_surface_smoke.py",
+
+    # dashboard-next İSTEK-BASI DEDUP sözleşmesi: SAYAN upstream + derlenmiş
+    # `next start` gerektirir (`.next` derlemesi olmadan ayağa kalkmaz). Next
+    # boot'u dosya başına bütçeyi aşar → pre-commit'te koşmaz. Tarayıcı
+    # GEREKMEZ (yalnız stdlib HTTP), bu yüzden CI'da Chromium kurulumundan
+    # ÖNCE, doğrudan build adımının arkasına konur — daha hızlı geri bildirim,
+    # sıfır ek bağımlılık. CI'da aynı `dashboard-next` job'ı koşar.
+    "test_dashboard_next_request_dedup.py",
+
+    # dashboard-next CANLI AKIŞ sözleşmesi: yayınlayan upstream + `next start`
+    # + Chromium. İki ağır bağımlılık birden (Next boot'u + tarayıcı) → pre-commit
+    # bütçesine kesinlikle sığmaz. CI'da `dashboard-next` job'ı koşar (derleme
+    # ve Chromium kurulumu orada zaten var).
+    "test_dashboard_next_live_stream.py",
 }
 
 

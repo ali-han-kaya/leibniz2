@@ -1450,3 +1450,1548 @@ panonun ve landing'in gerçek bir tema varyantını besliyor.
   sıkılaştırıldı, +3 yeni vaka), `test_trend_db_js_runner` 3/3,
   `sync_check_unit_tests --check` temiz. README'ye kesin-ölçüm bölümü +
   JSON alan tablosu (yeni 5 alan) eklendi.
+
+### dev_bootstrap uçtan uca `--full` (2026-09-28) — kurulum + temel batarya
+
+- **Boşluk:** `dev_bootstrap.sh` başlığında "fresh-checkout'u yeşil-**bataryaya**
+  taşıyan tek komut" diyordu ama yalnız araç-kümelerini kuruyordu; batarya ayrı
+  bir işti. Kapanan tur: uçtan uca `--full` (pinli venv + 3 node ağacı + batarya).
+- **Neden `--full`, neden varsayılan değil (ölçülmüş tuzak):** batarya manifesti
+  (`check_unit_tests.list`) `test_dev_bootstrap.py`yi de içerir ve o test betiği
+  **bayraksız** koşar. Batarya varsayılan yola konsaydı: test → betik → batarya →
+  test **özyinelemesi** olurdu. İkinci savunma: batarya `LEIBNIZ2_IN_BATTERY=1`
+  ile başlatılır, içerideki `--full` reddedilir (test edilmiş davranış).
+- **Ölçüm (yerel macOS):** `bash _calisma/dev_bootstrap.sh --full` → 4 unit
+  "up to date" → `check-unit-tests: 181 test dosyası PASS` → `BOOTSTRAP OK`,
+  **rc=0, 394 sn**. Batarya tek başına 346 sn (≈6 dk) — varsayılan akışın
+  (kurulum-only) hızlı kalması bu yüzden bilinçli bir tasarım, gecikme değil.
+- **Seam:** `LEIBNIZ2_BOOTSTRAP_BATTERY` batarya betiğini ezer → sözleşme
+  testleri **sahte** batarya enjekte eder (gerçek batarya dakikalar sürer ve
+  kendini içerir). Sözleşme **kablolamadır**, bataryanın kendisi değil:
+  yeşil → `BOOTSTRAP OK` son satır; kırmızı → `BOOTSTRAP FAIL`, `BOOTSTRAP OK`
+  basılmaz (fail-closed); batarya-içi → ret.
+- **Kapılar:** `test_dev_bootstrap.py` 6 → **12 vaka** (yeşil), shellcheck
+  temiz, `sync_check_unit_tests --check` temiz. README "Fresh checkout
+  bootstrap" üç adımlı tablo + `--full` ile güncellendi ("üç" → "dört"
+  araç-kümesi: venv_z3 + 3 node ağacı — `.gitignore` ile doğrulandı).
+
+### unstaged-delta kapısı (2026-09-28) — yazılı kural artık ZORLANIYOR
+
+- **Kural → kapı:** yalnız belge olan "commit öncesi sıfır unstaged izlenen
+  delta" kuralı artık fail-closed bir kapı: `check-unstaged-delta`
+  (`_calisma/CIKTI/check_unstaged_delta.py`), zincirin İLK hook'u.
+- **Naif yazım İŞE YARAMAZ (ölçüldü):** pre-commit 4.3.0 `run.py` →
+  `stash = not args.all_files and not args.files`. Gerçek `git commit`'te stash
+  AÇIKTIR: kapı çalışırken ağaç index'e eşitlenir ve `git diff --name-only`
+  **BOŞ** döner. İzole scratch repo'da kanıtlandı: karışık ağaçta commit
+  GEÇTİ, hook'un gördüğü diff boştu — saf `git diff` kontrolü sessiz yeşil verir.
+- **Gerçek sinyal:** stash patch'i YALNIZ unstaged delta varsa yazılır
+  (`_unstaged_changes_cleared`: retcode 0 → erken dönüş), adı
+  `patch<epoch>-<pid>`; buradaki pid pre-commit sürecidir ve kapının ATA
+  zincirindedir (ölçüldü: zincirde `-72274` eşleşti). Kapı bu yüzden iki
+  sinyali BİRLEŞTİRİR: görünür `git diff` (manuel `--all-files`/`--files`,
+  pre-commit dışı çağrı) + ATA-pid'li stash patch'i. **Ada göre eşleştirme
+  yapılmaz:** pre-commit patch'leri hiç silmez, aynı dizinde yetimler birikir
+  (ölçümde 3 patch vardı, ikisi yetim) → yabancı pid'ler yanlış-pozitif üretirdi.
+- **Kapsam:** yalnız İZLENEN dosyalar; untracked dosyalar stash'e girmez
+  (test edildi — spec dışı bırakıldı).
+- **Çürüme-guard'ı:** `test_check_unstaged_delta.py::
+  test_mixed_tree_commit_is_blocked_and_delta_survives` gerçek bir
+  `git commit` koşar: commit BLOKE olmalı VE unstaged delta stash'ten geri
+  gelmeli (kayıp yok). pre-commit patch adlandırmasını değiştirirse bu test
+  kırmızıya düşer — kapı sessizce çürüyemez.
+- **Ölçüm:** 14 vaka (sinyal / kirlilik / yanlış-pozitif / entegrasyon /
+  gerçek-repo tutarlılığı), hepsi yeşil. Canlı doğrulama: gerçek repoda kirli
+  ağaçta `pre-commit run check-unstaged-delta --all-files` → `Failed`, bekleyen
+  4 dosyayı adlar ve `git add` / `git stash` çözümünü söyler.
+- **Düzeltilen iddia:** "ilk sırada koşar → dakikalar süren zincir başlamaz"
+  YANLIŞ — `fail_fast` kapalı, pre-commit tüm hook'ları koşar. Gerekçe "hata
+  ilk görünür + karar sonraki hook'ların stage'lemesinden kirlenmez" olarak
+  düzeltildi; süre kazancı iddia edilmiyor.
+- **Kablolama:** kapı zincirin ilk hook'u + başlık dokümantasyonu;
+  `sync_check_unit_tests.py --update` testi manifest + HOOK_COVERAGE'a ekledi;
+  `test_gate_coverage_sync` / `test_test_coverage_report` /
+  `test_gen_precommit_report` / `test_sync_check_unit_tests` yeşil (dokümana
+  yazılmadı: hiçbiri kirli ağaçta yan etki üretmedi).
+
+### dashboard-next açık tema smoke'u (2026-09-28) — palet artık ÖLÇÜLÜYOR
+
+- **Boşluk (ölçüldü):** `apps/dashboard-next` panosunun AÇIK TEMASI hiçbir
+  gate tarafından ölçülmüyordu. `test_dashboard_playwright_smoke.py` ile
+  a11y-gate/CWV job'ları YALNIZ `preview.html` yüzeyini (preview_server)
+  tarar; `test_surface_cwv_report.py` dashboard-next'i ölçer ama tema
+  parametresiz → yalnız varsayılan koyu palete bakar. Köprüdeki
+  `:root[data-theme="light"]` bloğu silinse, gölgelense ya da yalnız
+  tüketilmeyen bir sheet'te kalsa HİÇBİR şey kırmızıya düşmezdi: pano
+  "açık tema" derken koyu kalırdı (hata yok, sessiz boşluk).
+- **Ön koşul doğrulandı:** dashboard-next kaynağında koda gömülü renk
+  literali YOK (ölçüm: 0 eşleşme; `check-design-tokens` contract 5/8 bunu
+  zaten fail-closed kilitler) → tema anahtarı çevrilince paletin dönmesi
+  *beklenir*. Bu tur o beklentiyi ölçüye çevirir.
+- **Kablolama:** `dataset.theme` hiç yazılmıyordu. Eklenen: `lib/theme.ts`
+  (saf çözümleyici), `components/ThemeInit.tsx` (istemci `useEffect`),
+  `app/layout.tsx` (bağlama). Sözleşme `preview.js`'in AYNISI: geçerli
+  `?theme=` sorgusu saklı tercihi EZER ve KALICI OLMAZ; yoksa
+  `localStorage[dashboard-theme]`; o da yoksa `dark` (CSS `:root` ile aynı →
+  ilk boyamada kayma yok). Küme `dark|light` ile sınırlı: `stripe` varyantı
+  ayrı sheet'tir, dashboard-next onu import ETMEZ.
+- **Neden istemci tarafı:** App Router'da kök layout `searchParams` görmez
+  (yalnız sayfalar görür) ve "override kalıcı olmasın" zaten istemci
+  sözleşmesidir. Sunucuda çözmek için middleware/inline script gerekirdi;
+  inline script ayrıca nonce/CSP yüzeyi doğururdu.
+- **Beklenen renkler koda GÖMÜLMEDİ:** `design-system/tailwind.css`'ten
+  okunur (koyu `:root` + `:root[data-theme="light"]`, `--bg`/`--fg`) ve
+  `css_rgb()` ile `getComputedStyle` biçimine çevrilip karşılaştırılır.
+  Sabit ton yazsaydık test "panonun rengi şu" derdi; ölçülen iddia
+  "panonun rengi TOKEN'ın değeri" — sheet değişince test takip eder.
+- **İki katman:** (a) sözleşme (tarayıcısız, her yerde koşar): tüketilen
+  sheet'te açık blok var mı, açık/koyu palet GERÇEKTEN FARKLI mı (yoksa
+  canlı smoke vakum olur), köprü ↔ tokens.css ayrışmış mı, `data-theme`
+  kablosu takılı mı, `dashboard-theme` anahtarı `preview.js` ile aynı mı,
+  `hex_to_rgb` bozuk token'da sessizce 0'a düşmek yerine yükseliyor mu;
+  (b) canlı (Playwright): `/` koyu token'ları, `/?theme=light` açık
+  token'ları uygular; override KALICI OLMAZ; konsol hatası yok; pano kabuğu
+  (marka) görünür — yani hata sayfası ölçülmüyor.
+- **Drift önleme:** sunucu kablosu KOPYALANMADI — `preview_server.py` +
+  `next start` başlatma sırası, argümanları ve `terminate`
+  `test_surface_cwv_report.py`'den import edilir. İkinci bir başlatma hattı
+  yazsaydık biri sessizce sürüklenir ve bu smoke "panoyu" ölçmezdi.
+- **Ölçüm hatası bir kez GERÇEKTEN kırmızıya düştü ve doğru teşhisi verdi:**
+  ilk koşumda 3 canlı vaka düştü — `.next` derlemesi `ThemeInit`'ten eskiydi,
+  yani `next start` önceden derlenmiş bundle'ı sundu ve `data-theme` hiç
+  yazılmadı. `npm run build --prefix apps/dashboard-next` sonrası 9/9 yeşil
+  (13,3 sn). Bu yüzden timeout artık stale-build teşhisi içeren adı konmuş
+  bir hata basıyor, sessiz 15 sn bekleme değil.
+- **Kablolama/CI:** dosya `check_unit_tests.list` DIŞINDA
+  (`sync_check_unit_tests.EXCLUDE`) — Next boot'u pre-commit'in dosya başına
+  bütçesini aşar. `CHECK_EXEMPT`'e eklendi (kardeşleri
+  `test_dashboard_playwright_smoke.py` / `test_dashboard_csp_nonce.py` gibi,
+  çünkü `--check` YALNIZ pre-commit hook kapsamına bakar) ve
+  `CI_JOB_COVERAGE["dashboard-next"]` ile kayıtlı. verify.yml'in
+  `dashboard-next` job'ına (panoyu ZATEN derleyen tek job) pinli Playwright +
+  Chromium + `Light-theme smoke — dashboard-next (fail-closed)` adımı eklendi;
+  derleme aynı job'da yapıldığı için smoke bu commit'in artefaktını ölçer.
+- **Yeşil bırakılanlar:** `check-design-tokens` (OK — açık tema 20 var,
+  köprü+copy-drift temiz), `check-dashboard-typecheck` + tip-testleri
+  (14 direktif; tema sözleşmesi için 3 yeni tip iddiası), prettier (3 dosya
+  --write), actionlint (4 workflow RC=0), `check-action-pins`,
+  `sync_check_unit_tests --check`, `test_coverage_report --check`,
+  `test_gate_coverage_sync`, `test_test_coverage_report`,
+  `test_gen_precommit_report`, `test_sync_check_unit_tests`.
+- **Kapsam dışı bırakılan:** başlığa bir TEMA DÜĞMESİ eklemek (kullanıcı
+  etkileşimi + durum yönetimi ister; smoke'un iddiası paletin dönmesi,
+  düğmenin varlığı değil) ve `stripe` varyantını dashboard-next'e taşımak
+  (ayrı sheet importu + köprü kararı gerektirir).
+
+### PanelCard bileşimi (2026-09-28) — yüzey dizgesi beş dosyadan tek bileşime
+
+- **Ölçülen tekrar:** `panelCard()` + başlık dizgesi + `CardHeader`/
+  `CardContent` BEŞ dosyada elle kuruluyordu: `VerdictCard`, `RunsTable`
+  (trend sayfası ve `@trend` slotu ondan beslenir), hata sınırı
+  (`app/error.tsx`) ve iki akış iskeleti (`@verdict/loading.tsx`,
+  `@trend/loading.tsx`). Başlık satırı yerleşimi
+  (`flex flex-row items-baseline justify-between`) ayrıca VerdictCard ile
+  verdict iskeletinde kopyalanmıştı. `panel-style.ts` kuruluş gerekçesinin
+  ("aynı dizge üç dosyada") bileşen tarafındaki karşılığı.
+- **Somut bedeli (ölçüldü):** hata sınırı `Card`ı doğrudan kullandığı için
+  `CardHeader`/`CardContent`in `px-(--card-spacing)` dolgusunu atlıyordu.
+  Tarayıcı ölçümü: kabuğun `padding-left/right = 0px`, `padding-top = 14px`
+  (`Card` yalnız `py` verir) → içerik kartın yan kenarına değiyordu. Bileşime
+  geçtikten sonraki ölçüm: `contentPaddingLeft = 14px`, `contentInsetLeft = 1`
+  (1px `--err` kenarı).
+- **Yeni bileşim:** `components/PanelCard.tsx` — dört parça, her birinin TEK
+  işi: `PanelCard` (kabuk; `tone: default | error`), `PanelCardHeader` (yalnız
+  başlık SATIRI yerleşimi), `PanelCardTitle` (gerçek `<h2>`, `panelLabel()`
+  stilinde), `PanelCardContent` (yatay dolgunun tek kaynağı). Desen shadcn
+  `Card` ailesinin aynısı; iki sapma bilinçli: ton repo token'larına bağlı bir
+  varyant, başlık `div` değil `<h2>` (bölüm hiyerarşisi — a11y).
+- **`title`/`meta` prop'u bilinçli olarak YOK.** İlk taslakta vardı; iskeletler
+  başlık yuvasına metin yerine nabız çubukları koyduğu için `title`ı
+  opsiyonel yapmak gerekiyordu, bu da aynı yuvayı iki farklı yolla
+  doldurulabilir kılıyordu. Yerleşim yuvası + `children` tek yol bırakır.
+- **Hata yüzeyi artık varyant:** `panelCard` cva tablosuna `tone` eklendi
+  (`error: "border border-err bg-tint-err-bg ring-0"`). Çağrı yerindeki
+  `cn(panelCard(), "border border-err …")` dizgesi kalktı — aynı yüzey iki
+  dosyada iki farklı dizge olabiliyordu.
+- **Kapı ısırdı (beklenen):** `test-d/negatives.test-d.ts` `panelCard({ tone:
+  "pass" })` için TS2353 bekliyordu ("varyantı yok"); ton eklendiği için hata
+  TS2322'ye döndü. Test KOD EŞLEŞMESİNİ pinladığı için kırmızıya düştü ve
+  sözleşme bilinçli güncellendi — iddia artık daha güçlü: "yüzey tonu ile
+  KARAR tonu ayrı sözlüklerdir" (`"pass"` bir `PanelTone` değil).
+  `contracts.test-d.ts`'e 6 iddia eklendi (PanelTone kümesi, ton
+  opsiyonelliği, başlığın tam `<h2>` prop'ları olması, header'ın yuva olması,
+  içeriğin children alması, `panelCard()`nin varyantsız çağrılabilirliği).
+- **Çalışma anı kanıtı — üç yol da ölçüldü:**
+  * mutlu yol (smoke): `/` iki başlığı basar — "Son Koşum", "Son 5 Koşum",
+  * hata sınırı (ölü port): `cardBg = rgba(248,81,73,.15)` (`--tint-err-bg`),
+    `borderLeftColor = rgb(255,123,114)` (`--err`), içerik 14px içeride,
+  * iskeletler (ASILI API — kabul edip yanıt vermeyen soket): 2 kart, 2
+    `aria-busy` bölgesi (`Son koşum yükleniyor`, `Koşum geçmişi yükleniyor`),
+    `<h2>` YOK (yuva metin değil çubuk taşır), konsol hatası yok.
+  * Ölçüm notu: kapalı port iskeleti GÖSTERMEZ (fetch hemen düşer → hata
+    sınırı); asılı sunucu şart. Ayrıca HTML akışı açık kaldığı için
+    `domcontentloaded` hiç ateşlenmez — `wait_until="commit"` gerekir.
+- **Yeşil:** `check-dashboard-typecheck` + tip-testleri (14 direktif, iki
+  geçiş), prettier, `check-design-tokens`, `next build`, açık-tema smoke'u
+  10/10, `test_dashboard_next_style_gates` 26/26, `test_check_design_tokens`
+  35/35, `test_brand_mirror_gate` 20/20, `test_mirror_bridges` 25/25,
+  `sync_check_unit_tests --check`.
+- **Kapsam dışı:** iskelet ÇUBUK dizgesini (`animate-pulse rounded
+  bg-border`) de adlandırmak — bu tur kart BİLEŞİMİNİ topladı, yuva içi çubuk
+  ölçülerini değil.
+
+### hex-literal kapısı: premise çürütüldü, ölçülen tek delik kapatıldı (2026-09-28)
+
+- **İstenen zaten VARDI.** "dashboard-next tsx'lerinde hex literal çıkarsa
+  check-design-tokens kırmızı olsun" iddiası kapının MEVCUT sözleşmesidir:
+  `check_tokens.py` contract 8(f) — "uygulama kaynağında koda gömülü RENK
+  OLAMAZ" — `_color_literal_findings()` ile `apps/dashboard-next` altındaki
+  `.tsx .ts .jsx .js` dosyalarını tarar ve `_RAW_COLOR_LITERAL` (hex/rgb/hsl),
+  `_ARBITRARY_COLOR_UTIL` (`bg-[#0e1116]`) ve `_NON_BRIDGE_PALETTE_UTIL`
+  (`bg-slate-900`) desenleriyle reddeder. **Ölçüm:** beş varyantı (hex string,
+  arbitrary utility, inline stil hex, kısa hex, `rgb()`) taşıyan geçici bir
+  `.tsx` → kapı rc=1, satır satır bulgu.
+- **Testlerle PİNLİ:** `test_arbitrary_hex_utility_fails`,
+  `test_inline_style_hex_fails`, `test_raw_hex_in_globals_css_fails`,
+  `test_tailwind_palette_colour_fails`, iki karşı-test (ölçü/`var()`
+  türetmeleri gölge içi rgba kırmızı OLMAMALI) ve
+  `test_colour_literal_gate_is_wired` (kabloyu kaynak metninde arar). Yani
+  kural hem koşuyor hem çürümeye karşı bağlı.
+- **AMA ölçülen gerçek bir delik vardı:** CSS dalı yalnız `app/globals.css`e
+  sabitlenmişti ve `_SOURCE_SUFFIXES` `.css` içermiyordu → pano altına YENİ
+  bir `.css` dosyası açıp içine `#ff0000` yazmak kapıyı **YEŞİL**
+  bırakıyordu (ölçüldü: rc=0). Kural vardı ama yeni bir dosyayla sessizce
+  atlatılabiliyordu.
+- **Kapatıldı (contract 8(g)):** globals.css dışındaki her `.css` aynı
+  ham-renk taramasından geçer; `@theme`/`@utility` blokları orada da muaftır
+  (onlar utility EŞLEMESİdir, belge custom property'si değil). Ölçüm: aynı
+  probe artık rc=1 ve `…__probe_tmp.css:1` diye ad veriyor.
+- **Bulunan ikinci kusur — denetim maliyeti:** `Path.rglob` hem uygulama
+  kaynağı hem preset-only taramasında `node_modules`/`.next` içine giriyordu
+  (ölçüldü: node_modules altında tek başına 24.917 dosya, kapı ~1,4s) ve
+  CSS taraması eklenince maliyet katlandı. Gezinme `os.walk` + dizin
+  budamasıyla tek yardımcıya (`_app_source_files`) taşındı: **~1,45s →
+  ~0,13s** — yani yeni kural eklendiği hâlde kapı eskisinden hızlı. Sessiz
+  yan kazanç: sonuç artık kurulu paketlerin içeriğinden bağımsız (aksi halde
+  her `npm ci` sonrası node_modules'teki hex'ler kapıyı kirletirdi). Yeni
+  test: `test_source_walk_prunes_installed_trees`.
+- **Yanlış iddia düzeltildi:** hook açıklaması ve test docstring'i "~0.05s"
+  diyordu; ölçüm ~0,15s (budama öncesi ~1,4s) — yani iddia zaten yanlıştı.
+  Değerler ölçülenle değiştirildi.
+- **Keşfedilebilirlik — talebin asıl nedeni:** `check-design-tokens` hook
+  açıklaması YALNIZ globals.css'i anlatıyordu; uygulama KAYNAĞI (ts/tsx)
+  taraması, arbitrary utility ve varsayılan palet kuralları yazmıyordu, bu
+  yüzden kural "yok" sanılıyor. Açıklama artık 8f/8g'yi, MEŞRU istisnaları
+  (ölçü/harf-aralığı arbitrary değerleri, `var()` türetmeleri, gölge içi
+  rgba) ve budama notunu içeriyor. Kuralı eklemek yetmez; görünür olmalı.
+- **Yeşil:** `test_check_design_tokens` 39/39 (35 → 39: 2 yeni kural vakası +
+  2 karşı-test), `check-design-tokens` hook'u (0,13s),
+  `pre-commit validate-config`, `sync_check_unit_tests --check`,
+  `test_coverage_report --check`, `test_gate_coverage_sync`,
+  `test_dashboard_next_style_gates` 26/26. Geçici probe dosyaları silindi
+  (`git status`'ta iz yok).
+
+### 13 UI bulgusu kapatıldı — statik sözleşme + canlı kanıt (2026-09-28)
+
+- **Kaynak:** §"web-design-guidelines review (2026-09-19)" (5779ab0) — 13
+  bulgu; inceleme turu yalnız dokümandı, düzeltmeler bu turda uygulandı. Her
+  bulgu İKİ katmanla kilitlendi: **statik** `test_dashboard_next_ui_contract.py`
+  (36/36, tarayıcısız, 0,06 sn — bataryada) ve **canlı**
+  `test_dashboard_next_surface_smoke.py` (16/16, Chromium + `next start`).
+- **Uygulanan düzeltmeler.** `globals.css`: `:root { color-scheme: dark }` +
+  `:root[data-theme="light"] { color-scheme: light }` (bir renk değil anahtar
+  sözcük — `var()` ile türetilemez, jeneratör kopyalamaz, bu yüzden elle
+  yazılan sheet'te) ve preview.html'inkinin AYNISI olan global
+  `@media (prefers-reduced-motion: reduce)` bloğu. Yeni `lib/format.ts`:
+  `Intl.DateTimeFormat` sabit `tr-TR` + `UTC` ile (varsayılanlar ortama göre
+  değişir; aynı veri sunucuda ve tarayıcıda farklı metne dönerdi),
+  bozuk/boş değer uydurma tarih yerine `EMPTY_VALUE`. `ThemeInit`:
+  `applyThemeColor()` meta `theme-color`ı computed `--bg`den yazar — hex
+  gömülseydi check-design-tokens 8(f) kırmızı olurdu. `layout.tsx`: marka
+  `<span>` → **`<h1 translate="no">`** (kök layout → tüm rotalar).
+  `ui/button.tsx`: `transition-all` → tek arbitrary liste. `VerdictCard`:
+  `role="status"` (`aria-live` yinelemesi kaldırıldı), `tabular-nums`,
+  `<time dateTime>` + `formatTimestamp`. `RunsTable`: `tabular-nums`
+  `cellVariants` TABANINDA (gövde hücrelerinin hepsi sayı/damga; yeni bir
+  sayı sütunu sessizce muaf kalamaz), `<time dateTime>`. `error.tsx`:
+  `role="alert"`. `app/loading.tsx`: rol'süz div'deki `aria-label` →
+  `role="status" + aria-busy` — bu ÜÇÜNCÜ iskeletti; PanelCard turu yalnız
+  iki paralel-rota slotunu düzeltmişti, kök `loading.tsx` açık kalmıştı.
+- **Ölçüm dersi 1 (harness düzeltmesi).** `/` sayfası `domcontentloaded` +
+  `data-theme` beklendiğinde HÂLÂ iskeleti gösteriyordu; ölçüldü: 13 GÖRÜNÜR
+  `animate-pulse` düğümü, iki `aria-busy` bölgesi, İKİ `<dl>` (ilki
+  iskeletin — `font-variant-numeric: normal`), gerçek içerik ise akış
+  konteynerinde (`div[hidden]`). Yani eski smoke iddiaları (ör. `<h2>`
+  listesi) gizli içeriği okuyordu ve "yeşil" olması ekranın doğru olduğunu
+  kanıtlamıyordu. `_measure` artık iskelet kalkana kadar bekliyor
+  (`[aria-busy="true"]` sayısı 0) → tüm vakalar GERÇEK panoyu ölçer; mevcut
+  10 vakanın kapsamı da bu beklemeden kazandı.
+- **Ölçüm dersi 2 (birim normalizasyonu).** `0.001ms` Chromium'da `1e-06s`
+  olarak serileşir; metin karşılaştırması kırılgan. `css_seconds()` saniyeye
+  çevirip EŞİK karşılaştırıyor (tercih yokken `2s` > 0,01 sn; reduce'da
+  ≤ 0,001 sn) ve ayrıştırılamayan değer sessizce 0 sayılmıyor, FAIL ediyor.
+- **Yeniden adlandırma.** `test_dashboard_next_light_theme.py` →
+  `test_dashboard_next_surface_smoke.py`: dosya artık tema değil YÜZEY
+  sözleşmesini taşıyor. Dört referans aynı turda güncellendi (EXCLUDE,
+  CHECK_EXEMPT, `CI_JOB_COVERAGE["dashboard-next"]`, verify.yml adımı:
+  "Surface smoke — dashboard-next (fail-closed)") ve yeni statik süit eski
+  adın hiçbir yerde kalmadığını test ediyor. İkinci bir Playwright boot'u
+  açmak yerine aynı sunucu kablosu kullanıldı (drift + ~10 sn).
+- **Anti-vakum karşı-testleri.** Nabız azaltma kuralı üç iskelette hedef
+  arar; `tabular-nums` iddiası sayı sütunlarının (p0/p1/duration_s/z3_total)
+  varlığını; `<time>` kuralı ≥2 düğüm; `aria-label` kuralı ≥3 etiket;
+  `color-scheme`/`theme-color` ölçümü açık/koyu token'ın gerçekten FARKLI
+  olmasını; canlı reduce ölçümü de "utility yüklü mü"yü (reduce öncesi süre
+  > 0,01 sn) şart koşar. `theme-color` beklenen değeri sabit hex değil,
+  köprüdeki `--bg` token'ıdır.
+- **Yeşil:** yeni statik süit 36/36, yüzey smoke'u 16/16 (rebuild sonrası),
+  `check-dashboard-typecheck` + tip-testleri (iki geçiş), prettier,
+  `check-design-tokens` (rc=0), `check_tokens.py` OK, `next build`,
+  `sync_check_unit_tests --check` 22/22 (yeni süit bataryaya eklendi),
+  `test_coverage_report --check`, `test_gate_coverage_sync`,
+  `test_test_coverage_report` 15/15, `test_dashboard_next_style_gates` OK,
+  `test_brand_mirror_gate` 20/20, `test_mirror_bridges` 25/25,
+  `test_actionlint_gate` 5/5.
+- **Kapsam dışı:** azaltma kuralını `motion-reduce:` utility'lerine dağıtmak
+  (global kural yeni animasyonları da kapsar), `transition-[…]`ı token'a
+  bağlamak ve panoya tema DÜĞMESİ eklemek (etkileşim + durum yönetimi;
+  `?theme=`/localStorage kablosu zaten var).
+
+### transition-all ailesi tamamlandı + odak halkası nav'a taşındı (2026-09-28)
+
+- **Aynı kusur ikinci primitive'de:** buton tabanındaki düzeltmeden sonra
+  arama yapıldığında `components/ui/badge.tsx` tabanı da `transition-all`
+  taşıyordu ve rozet panoda CANLI (VerdictCard P0/P1 istatistikleri
+  `statBadge` ile bu primitive'i kullanır). Liste rozetin GERÇEKTEN
+  değiştirdiği özelliklerden kuruldu: `color, background-color,
+  border-color, box-shadow`. Butondaki `transform`/`opacity` rozette YOK
+  (işaret de yok — olmayan özelliği listeye yazmak sözleşmeyi süslerdi) ve
+  `link` varyantındaki `hover:underline` bilinçli dışarıda:
+  `text-decoration-line` ayrık (discrete) bir özellik, geçiş üretmez.
+- **Statik sözleşme genelleştirildi** (`PrimitiveTransitionTest`, tek
+  primitive'e değil ikisine birden bakıyor): (a) hiçbir tabanda
+  `transition-all` yok, (b) primitive başına tek `transition-*` utility
+  (birden fazlası birbirini ezer), (c) liste HER primitive'in KENDİ
+  işaretlerini kapsıyor (işaret→özellik tablosu dosya başına; işaretin
+  kendisi de doğrulanır, yani iddia vakum değil), (d) ortak dört aile
+  ikisinde de bulunur (drift kilidi), (e) karşı-test: `text-decoration`
+  listede değil — birinin "eksik" sanıp eklememesi için karar pinlendi.
+- **Odak halkası nav'a taşındı.** `layout.tsx`'teki iki nav bağlantısı
+  `transition-colors hover:text-fg` dizgesini birebir kopyalıyordu ve ODAK
+  işareti hiç yoktu (halka yalnız primitive tabanlarındaydı). Dizge
+  `panel-style.ts`e `navLink` cva'sı olarak alındı: hover + halka sözleşmesi
+  buton tabanıyla AYNI (`focus-visible:ring-3` + `ring-ring/50`), yarıçap
+  `rounded-sm` token'ıyla yumuşatılır ve `focus-visible:outline-none`
+  bilinçli olarak butonun çıplak `outline-none`ından daha DAR (bağlantı
+  zaten odaklanabilir; yalnız klavye odağında yerleşik halka kapatılır).
+  `/` sayfasındaki iki satır-içi bağlantı zaten
+  `buttonVariants({variant:"ghost"})` kullandığı için halkayı taşıyordu.
+- **Genel kural (statik):** her `<Link>`/`<a>` ya `navLink(`, ya
+  `buttonVariants(`, ya açık `focus-visible:` taşır — yeni bir bağlantı
+  sessizce işaretsiz kalamaz (4 bağlantı + anti-vakum eşiği).
+- **Canlı kanıt (yüzey smoke'u, yeni vaka):** ilk TAB nav'ın ilk
+  bağlantısına (`ÖZET`) gider — sekme sırası da bu vakayla kilitlenir — ve
+  hesaplanan `box-shadow` 3px halka taşır. Beklenen RENK sabit yazılmaz:
+  sayfada `color-mix(in oklab, var(--ring) 50%, transparent)` ile çözülür
+  ve bileşenler sayısal karşılaştırılır, `--ring` = `--accent` (%50
+  saydamlık da alfanın 0,5 olmasıyla ölçülür). **Ölçüm dersi:**
+  Chromium'un `/50` saydamlığı `rgba()` değil `oklab(… / 0.5)` olarak
+  serileşiyor; rgb üçlüsü arayan ilk sürüm bu yüzden düştü (hata mesajı
+  beklenen değeri gösterdi) ve iddia renk uzayından bağımsız hâle getirildi.
+- **Yeşil:** statik süit 40/40 (36 → 40), yüzey smoke'u 17/17 (16 → 17),
+  prettier, `check_dashboard_typecheck.sh` + tip-testleri (iki geçiş),
+  `check_tokens.py`, `next build`.
+- **Kapsam dışı:** `ring-[3px]` (rozet, arbitrary) ile `ring-3` (buton,
+  token ölçeği) yazımını birleştirmek — aynı 3px'i verir;  ölçü arbitrary
+  değerleri kapının renk taramasına girmediği için acil değil, ama iki
+  primitive arasında yazım farkı olarak duruyor.
+
+### Fresh-checkout bootstrap: kapsam ÖLÇÜLEREK genişletildi (2026-09-28)
+
+- **İstenen çekirdek zaten VARDI:** `_calisma/dev_bootstrap.sh` venv_z3'ü
+  pinli kuruyor ve `_calisma/pptx` npm ci'sini bağlıyordu; README'nin
+  "Fresh checkout bootstrap" bölümü de bunu belgeliyordu (ikisi de
+  commit'lenmemiş, README tarafı stage'li). Bu tur **açığı ölçüp** kapattı:
+  kapsam iddiası ile bataryanın gerçekte istediği ortam arasındaki fark.
+- **Ölçüm yöntemi:** manifestteki 183 test dosyası AST ile tarandı, üçüncü
+  taraf importler VENV python'uyla çözüldü (`site-packages` → üçüncü taraf)
+  ve her import'un korumalı mı (`try/except` + `skipIf`) olduğu denetlendi.
+  Ayrıca ortam-duyarlı 12 test dosyası venv python'uyla koşuldu: hepsi
+  yeşil, yani eksik bağımlılık KIRMIZI değil SKIP üretir.
+- **Bulunan açık (ölçüldü):** kurulu olmayan bağımlılık testi düşürmüyor,
+  sessizce ATLIYOR — taze checkout'ta `--full` yeşil görünüp 9 manifest test
+  dosyası kapsam dışı kalırdı: `jsonschema` → `test_validate_config_schema`
+  (doğrulama yolu), `pillow` → üç `*_deck` süiti (`HAS_PIL` kapısı),
+  playwright+chromium → `test_dashboard_keyboard_nav`, `test_preview_escaping`,
+  `test_preview_hover_tooltip`, `test_dashboard_cls_budget`,
+  `test_surface_cwv_report`, ve iki npm ağacı → `test_trend_db_js_runner`
+  (`node_modules/.bin/tsx`), `test_check_video_typecheck` (`…/.bin/tsc`).
+  Pin listesi 3 paket iddia ediyordu, venv'de 21 paket vardı.
+- **Kapatıldı:** PINS'e `jsonschema==4.25.1` + `pillow==11.3.0` eklendi
+  (değerler yerelde yeşil olan venv'in `pip freeze` satırları), iki yeni npm
+  unit'i geldi (`apps/trend-db`, `_calisma/video`) ve yedinci unit **tarayıcı
+  katmanı** oldu: `playwright==1.63.0` (CI pini) + `playwright install
+  chromium`.
+- **Tarayıcı katmanının ölçümü İŞLEVSEL, pin-paritesi değil:** başsız bir
+  chromium gerçekten başlatılıyor — çalışan tarayıcı sürüm etiketinden daha
+  güçlü kanıt ve yerelde farklı ama çalışan bir playwright (1.60.0) varsa
+  gereksiz ~150 MB indirme tetiklenmiyor. Pin YALNIZ kurulumda kullanılır ve
+  CI'daki piniyle eşitliği sözleşme testiyle bağlandı (ikinci kaynak yok).
+- **Kanıt:** `--check` CHECK OK (2,0 sn; gerçek chromium başlatma dahil),
+  her yeni unit için fail-closed ölçümü — sentinel gizlenince rc=1
+  (`CHECK FAIL: trend_db` / `video`) ve tarayıcı için boş
+  `PLAYWRIGHT_BROWSERS_PATH` ile rc=1 (`CHECK FAIL: browsers`) · bu yol
+  paketi gizlemediği için paralel bir tarayıcı testini bozmuyor. Yeni
+  hermetik sahte-kök testi `--full`un pin+chromium kurulumunu AĞA ÇIKMADAN
+  koşuyor ve çalışan tarayıcıda indirme TETİKLENMEDİĞİNİ (idempotence)
+  kanıtlıyor. Sözleşme süiti 18/18 (12 → 18), shellcheck temiz.
+- **Belgeleme:** README tablosu 7 unit'e çıktı ve her satıra "Bataryada
+  karşılığı" sütunu eklendi (kapsam gerekçesi artık görünür); pin/tarayıcı
+  notları ve `docs/HOOK_ENV_MATRIX.md` ile ilişki (yalnız z3/pre_commit
+  paylaşılır, jsonschema/pillow hook-ortamı değil batarya bağımlılığıdır)
+  yazıldı.
+- **Kapsam dışı / sınırlar:** `--full`un GERÇEK bataryası bu tur koşulmadı
+  (dakikalar; kablolama sahte bataryayla + önceki turun canlı koşumuyla
+  ölçüldü). Repo dışına kurulan araçlar (`lean`, `qpdf`, `pdfinfo`)
+  bootstrap kapsamında DEĞİL — onlar `docs/HOOK_ENV_MATRIX.md`/K-katmanı
+  job'larının konusu. `.vercel/output/static` altındaki eski script kopyası
+  bilinçli olarak güncellenmedi (gitignore'lu derleme artefaktı).
+- **Not:** README bu turda hem stage'li (önceki turun hunk'ı) hem
+  değiştirilmiş (bu turun hunk'ı) durumda — stage'e dokunulmadı.
+
+### work/2026-09-19 → reword-working ff-merge: koşuldu, no-op çıktı (2026-09-28)
+
+- **Dal yoktu:** `work/2026-09-19` ref'i daha önce (fully-merged olduğu için)
+  silinmişti; istek üzerine `dd913c8`'te geri kuruldu — uç commit'i
+  "fix(dev): bootstrap pin list as array, shellcheck-clean".
+- **7 commit'in kimliği ölçüldü:** `git log -7 dd913c8` = `81a0f82` (workers
+  audit) · `98b5acd` (wrangler) · `e286779` (dev-bootstrap planı) ·
+  `ef0b6dc` (dev_bootstrap.sh) · `0d4196e` (README quickstart) · `11a673b`
+  (xlsx audit) · `dd913c8` (pin listesi diziye). Yedisi de `reword-working`
+  ve `main` içinde: `git rev-list --count reword-working..dd913c8` = 0.
+- **Merge gerçekten koşuldu**, `main` ağacı (34 değişik dosya) ve çalışan
+  thread'ler rahatsız edilmeden: geçici bir worktree'de
+  (`git worktree add /tmp/ff-merge-check reword-working`) `git merge --ff-only
+  work/2026-09-19` → **"Already up to date."** rc=0; `reword-working` ucu
+  `1b93467`'de kaldı, merge commit'i doğmadı, hiçbir şey push edilmedi.
+  Worktree iş bitince kaldırıldı (`git worktree list` orijinal 3 kayda döndü).
+- **İçerik kanıtı (commit grafiği yeterli değildi):** `reword-working`
+  ağacında `_calisma/dev_bootstrap.sh`, `_calisma/CIKTI/test_dev_bootstrap.py`,
+  `docs/superpowers/plans/2026-09-19-dev-bootstrap.md` VAR; `findings.md`
+  workers/wrangler/xlsx kayıtlarını, `README.md` "Fresh checkout bootstrap"
+  bölümünü, `dev_bootstrap.sh` `PINS=(` dizisini taşıyor.
+- **Gerçek eksik başka yönde:** yerel `reword-working`, `origin/reword-working`
+  in **6 commit gerisinde** (uzak uç: `a24c4db` "fix(ci): paginate live audit
+  artifacts"). Yani bu dal için anlamlı iş "work dalını almak" değil,
+  uzakla hizalanmak.
+- **Kalan ref:** `work/2026-09-19` bu turda geri kuruldu ve bırakıldı (istenen
+  merge'in konusuydu, içeriği zaten `main`/`reword-working`'de). Zararsız —
+  ölçüldü: dal listesini denetleyen bir kapı yok. İstenirse tek satır:
+  `git branch -d work/2026-09-19`.
+
+### pre-commit envanter kapısı: doküman ↔ config hook seti (2026-09-28)
+
+- **İstek:** "pre-commit doc envanteri ile gerçek `.pre-commit-config.yaml`
+  hook sayısını karşılaştırıp bayat-ise uyarı versin".
+- **Hedef yüzey ÖLÇÜMLE seçildi:** repoda envanter bloğu zaten var —
+  `skills/verify-chain/SKILL.md` §"Wiring into pre-commit" içinde "Existing
+  hook inventory:" işaretini izleyen kod bloğu. Ölçüm: blok **19** hook
+  listelerken config'te **60** hook vardı (41 kapı belgesiz); 2026-09-19 turu
+  bu bayatlığı zaten not etmişti ("says 19 pre-commit gates; live config has
+  50").
+- **Sayı yerine KÜME karşılaştırıldı:** naif "her doküman 61 demeli" kuralı
+  yanlış-pozitif üretirdi — `docs/PRE_PUSH_DENETIM_RAPORU.md` (14 hook),
+  `docs/PUBLISH_SCENARIO.md` (13/13), `docs/FINAL_RC_REPORT.md` (27/27),
+  `docs/AI_SERVICE_EVAL.md` (53), `docs/FULL_SCOPE_AUDIT_2026-09-17.md` (~70),
+  `docs/UNCOMMITTED-INVENTORY.md` (50/51/59) TARİHSEL/tur-spesifik kayıtlardır.
+  Bu yüzden TEK kanonik envanter yüzeyi seçildi ve karşılaştırma iki yönlü id
+  kümesi üzerinden yapıldı.
+- **Kapı:** `_calisma/CIKTI/check_precommit_inventory.py` (stdlib-only —
+  PyYAML gerekmez, OFFLINE, ~0.02s). `repos:` sonrası `- id:` kümesi ↔ işaret
+  sonrası ilk kod bloğunun id kümesi.
+  - `eksik` = config'te var, envanterde yok (kapsam sessizce daralmış).
+  - `fazla` = envanterde var, config'te yok (kaldırılmış/yeniden
+    adlandırılmış kapı).
+  - Varsayılan **ADVISORY**: `BAYAT:` uyarısı basar, exit 0 (istek: "uyarı
+    versin"); `--strict` ile exit 1; `--json` makine-okunur.
+  - **Kör kapı exit 2:** `repos:` yok / işaret yok / blok yok / config yok.
+    Yeniden adlandırılmış bir bölüm kapıyı sessizce PASS'a çeviremez.
+- **Bayatlık DÜZELTİLDİ, sonra kilitlendi:** blok 19 → 60 satıra çıkarıldı
+  (config `repos:` sırası, kısa İngilizce yorumlarla), sonra yeni hook eklendiği
+  için ikisi de **61**'de senkron. Kapı yeşil başlangıçla açılıyor; bundan
+  sonra hook eklenip blok güncellenmezse uyarı gelir.
+- **Kablolama:** zincire `check-precommit-inventory` eklendi
+  (`files: ^(\.pre-commit-config\.yaml|skills/verify-chain/SKILL\.md)$` —
+  değişim-farkında/nedensel; `pass_filenames: false`, `verbose: true`).
+  `HOOK_COVERAGE["check-precommit-inventory"]` eklendi; test dosyası
+  `check_unit_tests.list`e + `check-unit-tests` kapsam bloğuna otomatik girdi
+  (`sync_check_unit_tests.py --update`), `test_all_hooks_smoke.HOOKS`a eklendi.
+- **Test:** `test_check_precommit_inventory.py` 27/27 (0.011s) — ayrıştırıcı
+  disiplini (yorum-içi id, başlık-yorumu `# - id:`, blok-dışı satır, tekrar),
+  iki yönlü fark, advisory/`--strict`/kör (exit 2) ve gerçek-ağaç değişmezi
+  (envanter kümesi == config kümesi).
+- **Doğrulama:** yeni süit 27/27 · `test_gate_scripts_meta_guard` 15/15 ·
+  `test_test_coverage_report` 15/15 · `test_gate_coverage_sync` 4/4 ·
+  `test_sync_check_unit_tests` OK · `test_coverage_report.py --check` rc=0 ·
+  `sync_check_unit_tests.py --check` rc=0 ·
+  `pre-commit run check-precommit-inventory --all-files` → Passed ·
+  all-hooks smoke (tek id) 1/1 PASS · YAML `yaml.safe_load` → 61 hook.
+- **Kapsam dışı:** `AGENTS.md` hâlâ "59-hook"/"50-hook" sayılarını taşıyor —
+  bu turda DOKUNULMADI (dosyada başka bir thread'in unstaged değişikliği var,
+  `M AGENTS.md`); tarihsel raporlardaki sayılar bilinçli olarak hedef dışı.
+  Commit yapılmadı.
+
+### work/2026-09-19 → reword-working ff + batarya (2026-09-28, 3. koşum)
+
+- **İstenen:** ff-merge ("verified possible") → birleşmiş HEAD'de tam batarya →
+  worktree'yi prune et.
+- **Öncül ÖLÇÜMLE çürütüldü:** ff-merge bir no-op'tur, çakışma yüzünden
+  değil, kaynak dal hedefin ATASI olduğu için. `git merge-base --is-ancestor
+  work/2026-09-19 reword-working` → EVET; `git rev-list --count
+  reword-working..work/2026-09-19` = **0**; ters yön (=work..reword) = **60**.
+  Yani `reword-working` zaten `work/2026-09-19`'ı İÇİYOR; ff mümkün değil,
+  gereksiz. (`work/2026-09-19` ayrıca `main`'in de atasıdır → içeriği aktif
+  ağaçta fazlasıyla var.)
+- **Merge yine de GERÇEKTEN koşuldu** (kanıt için, main ağacına dokunmadan):
+  `git worktree add /tmp/ff-merge-check reword-working` → `git merge --ff-only
+  work/2026-09-19` → **"Already up to date."** rc=0; HEAD `1b93467`'de
+  sabit kaldı, dal İLERLEMEDİ, çalışma ağacı temiz.
+- **Birleşmiş HEAD = `1b93467`** (merge no-op olduğu için). Batarya BU HEAD'de
+  koşuldu. Sonuç: **158/158 PASS** (2m49s) — `check_unit_tests_hook.sh`,
+  manifest'in 160 satırından 2'si yorum başlığı.
+- **İlk koşum 156/158 verdi; İKİ hata da ortam kaynaklıydı, regresyon değil:**
+  - `test_dev_bootstrap` → `CHECK FAIL: docx eksik veya paritesiz`: taze
+    worktree'de `_calisma/docx/node_modules` yok (gitignore'lu). Bu tek
+    girdi sağlanınca `bash dev_bootstrap.sh --check` → **CHECK OK** ve süit
+    **7/7 OK**.
+  - `test_dashboard_keyboard_nav` → Playwright `.rh-row` / `#trend
+    rect[data-tip]` bulamıyor: test kendi `preview_server.py`'sini
+    `--dir <worktree>/_calisma/CIKTI` ile başlatır, ama CANLI VERİ
+    (`history.jsonl`, `runs/`) gitignore'ludur → taze worktree'de boş pano.
+    Veri symlink'lenince **14/14 OK** (68.6s).
+- **Yöntem notu (tekrar kullanılabilir):** taze bir worktree'de tam batarya
+  koşmak için gitignore'lu toolchain + canlı veri ana checkout'tan
+  symlink'lenir (`_calisma/.venv_z3`, `*/node_modules`, `_calisma/docx|
+  pptx|video/node_modules`, `_calisma/CIKTI/{history.jsonl,runs,logs}`).
+  Aksi halde hatalar ortam-kaynaklıdır ve "branch kırmızı" diye YANLIŞ
+  okunur — iki vaka da tam olarak böyle çıktı.
+- **Yan etki (dürüstçe):** canlı veri symlink'lendiği için worktree'nin
+  sunucusu ana checkout'un gitignore'lu `runs/`+`history.jsonl`'ini PAYLAŞIR.
+  Ölçüldü: `runs/` en yeni kaydı 13:47 (277s'lik gerçek bir `verify_delivery
+  --full` kaydı, `pdf_pages=33`+`ref_count=64`; 3 dakikalık unittest
+  bataryasından gelmiş OLAMAZ) — yani bu kayıt benim koşumumun ürettiği bir
+  şey değil. İzlenen dosya değişmedi: ana checkout `git status` sayısı
+  baştan sona **38** kaldı.
+- **Temizlik:** `git worktree remove --force /tmp/ff-merge-check` rc=0 →
+  `git worktree prune -v` rc=0 (sessiz: budanacak yetim kayıt YOK — nitekim
+  prune iş öncesi `--dry-run -v` de boş dönmüştü). `git worktree list`
+  orijinal 3 kayda döndü; `/tmp/ff-merge-check` silindi. `work/2026-09-19`
+  dalı dokunulmadan bırakıldı (`dd913c8`).
+- **Gerçek eksik hâlâ aynı yönde:** yerel `reword-working`,
+  `origin/reword-working`'in **6 commit gerisinde**. Push/commit YAPILMADI.
+
+### Doğrulama süpürmesi: tek komut, tek verdict (2026-09-28)
+
+- **İstek:** "verification sweep habit"ı kalıcılaştır — batarya + token kapısı
+  + build + cache-clean'ı tek komutta, TEK verdict'le koşan bir giriş noktası.
+- **Kararlar (kullanıcıya soruldu):** git commit YOK (ağaçta 38 kirli dosya,
+  bir kısmı başka thread'lerin); cache-clean = pre-commit yetim patch'leri +
+  K14 cleanup; build = dashboard-next `next build`.
+- **Yeni giriş noktası:** kök `Makefile` (`make verify`, `make verify-list`,
+  `make verify DRY=1`, `make verify ONLY=tokens,build`) — repo'nun İLK kök
+  Makefile'ı (şimdiye dek yalnız `docs/Makefile.texlive|tectonic` vardı;
+  `test_makefile_texlive.py` o dosyaya bakar, etkilenmedi). Makefile ince
+  giriş noktasıdır: mantık `_calisma/CIKTI/verify_sweep.py`'de (stdlib-only).
+  Ayrılma gerekçesi: adım eklemek Makefile'a dokunmayı gerektirmesin ve
+  süpürme birim-test edilebilsin.
+- **Adımlar ve sıra (nedensel):** `cache-precommit` (yetim patch, 0.1s) →
+  `cache-cleanup-log` (K14, 0.5s) → `tokens` (0.1s) → `build` (10s) →
+  `battery` (325s). Cache en başta çünkü kirli cache SONRAKİ ölçümü yanıltır;
+  en yavaş adım en sonda (erken kırıklar dakika beklemeden görünür). Zincir
+  sözleşmesiyle aynı: **fail-fast KAPALI** — bir adım kırılsa da süpürme
+  sonuna kadar koşar, tek turda TÜM kırıkları gösterir.
+- **Kapsam dışı (bilinçli):** `verify_delivery.py --full` (K-katman zinciri)
+  süpürmeye DAHİL EDİLMEDİ — dakikalar sürer, Z3/Lean ister; dahil edilse
+  `make verify` commit-öncesi alışkanlık olamayacak kadar yavaşlardı.
+- **Koşucu seam'i (gerçek hata yakalandı):** `run_sweep(steps, runner=…)`
+  varsayılanı ÖNCE `runner=subprocess_runner` diye bağlanmıştı → varsayılan
+  parametre ÇAĞRI ANINDA değil TANIM ANINDA çözülür, bu yüzden testteki
+  `sweep.subprocess_runner` monkeypatch'i ETKİSİZDİ ve testler npm build +
+  bataryayı GERÇEKTEN koştu (ölçüldü: 19 test 83.9s). Düzeltme: varsayılan
+  `None`, gövdede çözülür → 20 test 0.003s.
+- **CLI/exit sözleşmesi:** `--list`, `--dry-run` (hiçbir adımı koşmaz),
+  `--only a,b`, `--json` (tek JSON belgesi), `--verbose`. Exit: 0 PASS,
+  1 ≥1 adım FAIL, 2 kullanım hatası. Adımlar argv listesidir (kabuk yok).
+  **Make notu:** kırık recipe'de make KENDİ koduyla **2** döndürür (0=PASS
+  korunur; fail-closed bozulmaz) — 2, koşucunun "kullanım hatası" 2'siyle
+  karıştırılmasın diye Makefile başlığında ve testte çivilendi.
+- **Kanıt:** `make verify` → `SWEEP: PASS — 5/5 adım yeşil (336.1s)` rc=0
+  (gerçek koşum, batarya 325.6s). FAIL yolu TEORİK DEĞİL, ölçüldü:
+  `PRE_COMMIT_HOME=/tmp/ff_orphan_cache` (24s+ yaşlı sahte patch) ile
+  `make verify ONLY=cache-precommit` → `SWEEP: FAIL — 1/1 adım başarısız` ve
+  make Error 1; kırılan adımın çıktı kuyruğu rapora gömüldü. `--only nope`
+  → rc=2. Kullanım hatası rc=2.
+- **Test:** `test_verify_sweep.py` **20/20** (0.003s) — adım tablosu (dört
+  alan, sıra, argv-liste, benzersizlik, hedef yollarının varlığı), verdict
+  mantığı (PASS/FAIL, fail-fast kapalı, çıktı kuyruğu, OSError = kırık adım),
+  CLI (dry-run koşmaz, --only filtre/usage, --json şekli) ve Makefile pin'i
+  (delegasyon, TAB recipe, .PHONY).
+- **Kablolama:** test dosyası `check_unit_tests.list`e + `check-unit-tests`
+  HOOK_COVERAGE bloğuna otomatik girdi (`sync --update`). Süpürme bir
+  pre-commit HOOK'u DEĞİLDİR (bilinçli): batarya zaten commit'te koşuyor;
+  `make verify` elle/CI kullanımı için.
+- **Yan etkisizlik:** yeni kök dosya mevcut kapıları bozmadı —
+  `test_coverage_report.py --check` rc=0; `test_gate_coverage_sync`,
+  `test_test_coverage_report`, `test_gate_scripts_meta_guard`,
+  `test_static_isolation` OK; pre-commit `check-mirror-coverage`,
+  `check-absolute-paths`, `check-skills-index`, `check-doc-job-sync` PASS.
+- **Commit YAPILMADI** (kullanıcı kararı); yeni üç dosya untracked:
+  `Makefile`, `_calisma/CIKTI/verify_sweep.py`, `_calisma/CIKTI/test_verify_sweep.py`.
+
+### check-precommit-orphans: kanıta-dayalı otomatik karantina (2026-09-28)
+
+- **İstek:** kapıyı genişlet — `+` satırları ağaçta kanıtlanan kalıntıyı
+  otomatik temizle, yalnız içeriği bilinmeyenleri elle incelemeye bırak.
+- **Karar (kullanıcıya soruldu):** SİLME değil, **KARANTİNA** —
+  `<cache>-orphans-quarantine-<tarih>/` altına taşı + `MANIFEST.md`
+  (sha256+md5+kanıt+yaş+arşiv eşleşmesi). Gerekçe: AGENTS.md'nin kendi
+  kuralı ("silme yerine karantina") ve taşımanın geri alınabilirliği.
+- **KRİTİK BAĞLAM:** mevcut kapı 24s+ yetimde exit 1 ile commit'i BLOKE
+  ediyor ve AGENTS.md "kapıyı geçirmek için ASLA gevşetme" diyor. Bu tur
+  kapıyı GEVŞETMİYOR: tespit değişmedi, kanıtlanamayan kalıntı bloklamaya
+  devam ediyor. Yalnız içeriği AĞAÇTA KANITLI olan kalıntı için blok
+  kalkıyor — "sessiz revert" riski tam da o vakada yok.
+- **İki kanıt sinyali (53 arşiv patch'inde ÖLÇÜLDÜ):**
+  - `rev-apply`: `git apply --reverse --check` temiz = ağaç patch'in
+    sonrası durumda → **12/53**.
+  - `+lines`: patch'in anlamlı `+` satırlarının TÜMÜ hedef dosyada
+    (çokluk-farkında, dosya-başına) → **23/53**.
+  - İkisi İKİ YÖNDE ayrışır (ağaç sürüklenince `+lines` daha bağışlayıcı;
+    satır-eklemeyen patch'te `rev-apply` daha güçlü) → birlikte kullanılır.
+- **Guard'lar (hepsi ölçümle gerekçeli, hepsi test edildi):**
+  - **Hunk şartı:** `@@` yoksa ASLA taşınmaz. Ölçüldü: `git apply --check`
+    hunk'sız/boş diff'te **0** döndürür (uygulanacak değişiklik yok) →
+    guard olmadan "kanıtlanmış gereksiz" sanılırdı. Kapının KENDİ eski
+    fixture'ı tam olarak `diff --git a/x b/x` (hunksız) — yani guard
+    olmadan mevcut 18 testin bir kısmı da kırılırdı.
+  - **Önem eşiği:** <4 anlamlı karakter (`}`, `#`, boş) kanıt SAYILMAZ;
+    yoksa "satır zaten dosyada var" tesadüfü yanlış-pozitif üretirdi.
+  - **Etiket koruması:** KNOWN-INCIDENT ve ZAYIF-PARMAK-İZİ ASLA taşınmaz.
+    Etiket UYARI'dır, muafiyet değil (AGENTS.md) — ve bu kayıtlar olayın
+    **tekrar ettiğinin** kanıtıdır; otomatik taşımak tekrar-sinyalini
+    silerdi. (Yan sonuç: mevcut `test_later_archive_fingerprint_is_recognised`
+    fixture'ı aslında KANITLI idi — bu koruma onu da yeşil tutuyor.)
+  - **Taze patch'e dokunulmaz:** yalnız >24h yetimler; taze patch uçuş-içi
+    pre-commit stash'i olabilir.
+- **Kısmi temizlik semantiği:** kanıtlılar taşınır, kanıtsızlar KALIR ve
+  kapı **exit 1** verir (tek turda tüm kalan kırıkları gösterir); hiç
+  incelenecek yetim kalmadıysa exit 0.
+- **Özet sızıntısı yok:** sha256/md5 YALNIZ `MANIFEST.md`'ye yazılır;
+  stdout'a basılırsa mevcut "eşleşme yokken özet gürültüsü yok" sözleşmesi
+  kırılırdı (o test bilinçli).
+- **Test:** `test_check_precommit_orphans.py` **18 → 31** (+13 sözleşme):
+  karantina+unblock, bayt-birebir taşıma, MANIFEST içeriği, stdout'a özet
+  sızmaması, kanıtsız kalır+bloklar, KISMİ temizlik, hunk'sız ASLA,
+  önemsiz satır kanıt değil, taze patch dokunulmaz, `--no-clean`, bilinen-olay
+  taşınmaz (+dinamik fixture kurulamazsa kod-pini), karantina dizini kardeş.
+- **Gerçek-veri E2E (ünite testi değil):** geçici worktree'de GERÇEK bir
+  `git diff` üretildi → `rev-apply` kanıtıyla karantinaya alındı; aynı koşumda
+  ağaçta olmayan satır ekleyen ikinci patch YERİNDE kaldı ve kapı exit 1 verdi.
+  `cmp` ile taşımanın bayt-birebir olduğu doğrulandı. Geçici worktree ve
+  dizinler silindi; ana ağaç etkilenmedi (`README.md` durumu değişmedi).
+- **Kablolama:** `check-precommit-orphans` hook açıklaması güncellendi
+  (otomatik karantina + `--no-clean`); `entry` değişmedi (öntanımlı temizler).
+  Yeni test dosyası YOK → manifest/coverage senkronu zaten temiz.
+- **Doğrulama:** `sync --check` rc=0 · `coverage --check` rc=0 ·
+  `make verify` → **SWEEP: PASS 5/5 (339.9s)** (batarya 31'lik orphan süitini
+  içeriyor) · `pre-commit run check-precommit-orphans` → Passed.
+- **Not:** AGENTS.md'deki `check-precommit-orphans` paragrafı hâlâ eski
+  davranışı anlatıyor (dosyada başka thread'in unstaged değişikliği var →
+  dokunulmadı). Commit YAPILMADI.
+
+### work/2026-09-19 → reword-working (4. koşum): "6 stacked commit" öncülü
+yanlış-refliydi (2026-09-28)
+
+- **İstek öncülü:** dalda "pptx fix, composition pass, perf dedup, RN survey,
+  client-side nav" diye 6 üst-üste commit var, bunlar merge edilecek.
+  **Bu betimleme mevcut git durumunda YANLIŞ:** `work/2026-09-19`'ın ucu
+  `dd913c8` — 7 commit'lik dev-bootstrap yığını (workers audit → bootstrap
+  → pin listesi); pptx/composition/nav temaları bu dalda DEĞİL.
+- **Öznelerin gerçek ref'i ölçüldü (hepsi eski tarih):** composition pass =
+  `9ce6e32`, perf dedup = `b156cb4`, client-side nav = `41e1f48`, RN survey =
+  `f0e21fe` (2026-09-19 "record zero RN/Expo surface survey findings"),
+  pptx fix = `d396b8c`. `git branch -a --contains` → hepsi `reword-working`
+  VE `main` içinde; `merge-base --is-ancestor` ile üçü de teyitli. Yani
+  özneler yeni bir yığın değil, zaten iki dalda da olan tarih.
+- **Kapsayıcılık invariyantı:** `rev-list --count reword-working..work/2026-09-19`
+  = **0** → merge no-op (bu dal için 4. koşum; öncekiler 2026-09-28'de 2× ve
+  bugün). Yine de kanıt için geçici worktree'de `git merge --ff-only
+  work/2026-09-19` → **"Already up to date."** rc=0; HEAD `1b93467` sabit.
+- **Prune:** `git worktree remove --force /tmp/ff-merge-check` rc=0 →
+  `git worktree prune -v` sessiz (budanacak yetim yok — iş öncesi
+  `--dry-run -v` de boştu). Worktree listesi 3 kayda döndü; iki ref de
+  çözülüyor (`reword-working`=`1b93467`, `work/2026-09-19`=`dd913c8`),
+  atanlık invariyantı sürüyor; ana ağaç 43 kirli dosyayla dokunulmadan
+  kaldı; stash 2.
+- **Ders:** bu istek zincirinde aynı merge artık 4 kez istendi ve 4 kez
+  no-op çıktı. "X dalını Y'ye merge et" isteklerinde ÖNCE
+  `rev-list --count Y..X` + konu öznelerinin hangi ref'te olduğu ölçülmeli;
+  özneler hedef dala `--contains` ile aranmalı (isim eşleşmesi yeterli
+  değil — tarih yerine geçmez). Push/commit YAPILMADI.
+
+### dashboard-next Next 16 yükseltmesi + ertelenmiş VT desenleri (2026-09-28)
+
+- **İstek:** Next 16'ya yükselt, 2026-09-19 turunun ETELEDİĞİ VT desenlerini
+  yanal crossfade, Suspense reveal, loading.tsx, header izolasyonu
+  rayına oturtsun.
+- **Ön koşul zaten ölçülmüştü:** eski turda tüm iç bağlantılar next/link'e
+  çevrilmişti (soft-nav kanıtlı, marker before=42 after=42) — VT'nin tetik
+  ön koşulu hazırdı; "ViewTransition YALNIZ Next 15.5.4'ün vendored
+  react-experimental kanalında" tespiti de aynı kayıtta.
+- **Sürüm ÖLÇÜLDÜ:** npm dist-tags → `latest` **16.3.6** (canary 16.4.0-51,
+  preview 16.3.0-10; kullanıcı stable'ı seçti). `npm install next@16.3.6`
+  → 15.5.15 → 16.3.6, react/react-dom 19.2.0'da kaldı (next 16 peer
+  `^18.2.0 || ^19.0.0`).
+- **Kritik API gerçeği (vendor'da KANITLANDI):** Next 16'nın vendored
+  react'ı `exports.ViewTransition`'ı hem istemci
+  (`cjs/react.development.js:878`) hem react-server
+  (`cjs/react.react-server.development.js:596`) girişinde DIŞA AKTARIYOR ve
+  config-schema'da `experimental.viewTransition` YOK — guide'ın "no
+  configuration" sözü yerinde doğrulandı. Bayrak eklenmedi.
+- **Yükseltme molası #1 (ölçüldü):** Turbopack (16'da varsayılan derleyici)
+  çalışma alanı kökünü lockfile'dan çıkarıyor: dashboard-next'in kendi
+  `package-lock.json`u kökü o pakete kilitliyor → `lib/trend-db.ts`'in
+  `../../trend-db/generated/client` import'u (kardeş paket, gitignored)
+  "Module not found" düşüyor. Next 15'te webpack bu geçişi izliyordu.
+  Çözüm: `next.config.js`'e `turbopack: { root: repo-kökü }` — CI yerleşimi
+  aynı olduğu için yerel/CI aynı kökten çözer. Ayrıca yerelde CI
+  sözleşmesindeki `prisma generate` adımı yeniden koşuldu (generated/
+  gitignored; tip kapısı da ona bakıyor).
+- **Yükseltme molası #2 (next'in kendisi mutate etti):** `tsconfig.json`
+  (`jsx: preserve` → **react-jsx** Next 16'da zorunlu; include'a
+  `.next/dev/types`) ve `next-env.d.ts` (`import "./.next/types/routes.d.ts"`
+  + `root-params.d.ts` — reference → import dönüşümü). İkisi de next build
+  tarafından yazıldı; elle düzenleme değil, sürüm sözleşmesi.
+- **İsim pinleri senkron:** verify.yml job adı + PUBLISH_SCENARIO satır 30
+  "Next 15" → "Next 16" (`test_doc_job_sync` 10/10 OK — ad değişimi iki
+  kaynakta birden yapılmadığında kapı kırılardı).
+- **VT uygulaması (harita sözleşmesiyle):**
+  - **Yanal crossfade YALIN:** `(panel)/page.tsx` ve `trend/page.tsx`
+    içeriklerini `import { ViewTransition } from "react"` sarmalayıcısı
+    örter — prop YOK (default crossfade). `transitionTypes`/`nav-*`
+    KASITLI OLARAK hiçbir yerde yok (iki eşit panel arası sahte mekânsal
+    derinlik yasak; guide'daki Step 3'ün tersi bilinçli).
+  - **Header çapası:** `viewTransitionName: "site-header"` (inline) + CSS
+    `::view-transition-group(site-header){animation:none;z-index:100}`,
+    `-old{display:none}` (çift-basım flaşı yok), `-new{animation:none}`.
+  - **Suspense reveal (kullanıcı slotlara istedi):** `@verdict`/`@trend`
+    slot sayfaları `enter:{"slot-enter":…,default:"none"}` /
+    `exit:{"slot-exit":…,default:"none"}` sarmalayıcı aldı; CSS asimetrisi
+    guide'dan: çıkış 150ms, giriş 210ms + 150ms gecikme + 400ms kayma.
+    `default:"none"` slotu navigasyon crossfade'inden İZOLE eder.
+  - **CSS:** `::view-transition{pointer-events:none}` (overlay tıklama
+    yutmaz); root crossfade 200ms ease-in-out. Süre sabitleri KODA
+    GÖMÜLMEDİ (token-kapısı disiplini); `prefers-reduced-motion` bloğu
+    zaten evrensel `*` seçiciyle VT pseudo-element'lerini de sıfırlar —
+    yeni kural eklenmedi (tek kural iki yüzey).
+- **Kapı genişledi:** `test_dashboard_next_ui_contract.py` **40 → 50** (+10
+  ViewTransitionTest): yalın sarmalayıcılar, import kaynağı `react` (shim/
+  react-experimental yasak), header adı + üç çapa kuralı, crossfade yönsüz
+  (nav-* VE translateX yasak), pointer-events guard, slot reveal çifti,
+  slot/default izolasyonu, yön-yasağı taraması YALNIZ JSX özniteliklerinde
+  (ilk sürüm yasağı ANLATAN kendi yorumuma yakalandı — tarayıcı,
+  iddianın spesifikliğini kanıtladı).
+- **Prodüksiyon-derleme kuralı (kullanıcı kararı):** VT kanıtı YALNIZ
+  `next start` (production build) üzerinden; `next dev` VT'yi
+  desteklemediği için dev-sunucu kanıtı ölçüt OLAMAZ. Statik kapı kaynağı
+  denetler; canlı iddia smoke'un prod-derlemesinden gelir.
+- **Canlı kanıt (production build, 9 iddia):** SSR `/` h1 + header VT adı;
+  `/trend` tablo akış sonrası render (Suspense template — iskelet yalnız
+  akış içinde); bundle CSS'te VT guard + header çapası + slot reveal
+  kuralları + nav-* YOK + reduced-motion bloğu. **ALL PASS.**
+- **Süit kanıtı:** ui-contract 50/50 · tip kapısı (tsc + 14 direktif iki
+  geçiş) OK · check_tokens rc=0 · prettier temiz · `next build` yeşil
+  (Next.js 16.3.6 Turbopack) · surface smoke **17/17** (19.7s) ·
+  doc_job_sync 10/10 · sync/coverage `--check` rc=0.
+- **Kapsam dışı:** `next dev` altında VT (kural gereği ölçülmez);
+  Safari/Firefox'ta animasyon farklılıkları (guide'ın belirttiği degrade
+  — uygulama düşmez, animasyon oynmaz). CI `dashboard-next` job'ı bir sonraki
+  push'ta "Next 16" adıyla koşacak. Commit YAPILMADI.
+
+### Soft-nav kanıtı bataryaya alındı (2026-09-28)
+
+- **İstek:** "window-marker survival across / -> /trend" iddiası KALICI bir
+  Playwright testi olsun — bugüne kadar yalnız 2026-09-19 turunun (work/
+  2026-09-19)一次性 E2E kanıtındaydı (before=42 after=42); betik repoya
+  girmemişti, tek kanıt findings.md notuydu.
+- **Yer:** YENİ dosya DEĞİL — `test_dashboard_next_surface_smoke.py`e eklendi
+  (17 → 19 test). Gerekçe: sunucu kablosu (preview_server + `next start` +
+  log dizinleri) `test_surface_cwv_report`'tan TEK kaynak olarak import
+  ediliyor; ikinci dosya ikinci boot hattı = drift (dosyanın kendi
+  başlığındaki sözleşme). Dosya zaten CI `dashboard-next` job'ında,
+  manifest DIŞINDA (Next boot pre-commit bütçesine sığmaz — aynı kural).
+- **Ölçüm dili (iki sinyal, tek değerle yetinmemek):**
+  - `window.__softNavProbe = 42` — probe UYGULAMA özelliği DEĞİL, testin
+    kendisinin koyduğu işaret. Soru "uygulama onu tanıyor mu" değil
+    "window nesnesi gezinmeden hayatta mı".
+  - `performance.timeOrigin` — BELGE doğum zamanı. Soft navda SABİT kalır
+    (aynı belge), tam yenilemede DEĞİŞİR. Marker tek başına yetmezdi:
+    bozuk bir senaryoda kalıntı bellek "kalıcı" gibi görünebilirdi.
+- **İki test, birbirinin karşıtı (vakum koruması):**
+  - `test_soft_nav_preserves_window_marker_across_routes`: / üzerinde probe
+    kurulur → GERÇEK Link tıklaması (`page.click`, `page.goto` DEĞİL —
+    goto ile gitmek iddiayı vakum ederdi) → `/trend`te marker=42 VE
+    timeOrigin aynı → geri dönüş (nav ÖZET linki) aynı iki iddia. Konsol/
+    pageerror da boş olmalı.
+  - `test_full_reload_resets_the_marker_counter_proof`: `page.reload`
+    sonrası marker SIFIRLANMALI ve timeOrigin DEĞİŞMELİ. Soft-nav testinin
+    "ayrım gücü"nü ölçer — reload marker'ı koruyabilseydi ilk test
+    ayrım yapamıyor demekti.
+- **Teşhis edilen iki gerçek (test yazılırken yakalandı, ölçümle):**
+  1. `main a[href='/']` yok: panel sayfasının Link'i yalnız /trend'e GİDER;
+     köke dönen bağlantı nav'dadır → dönüş de nav linkiyle ölçülür.
+  2. `/trend` tam sayfasında `aria-busy` iskeleti BEKLENMEZ: panel slotları
+     `(panel)` grubunda; `/trend` slotun DIŞINDA (bu yüzden gruba kondu).
+     `_wait_panels(path=...)` kalktı, dönüş için yalnız URL bekleme +
+     iddiası kaldı.
+- **Kanıt:** izole teşhis koşumu → tıklama sonrası path=/trend, marker=42
+  (aynı belge); tam süit **19/19** (22.6s) — 17 eski test bozulmadı.
+  ui-contract 50/50 · sync/coverage `--check` rc=0 · prettier temiz.
+- **Not:** VT turunun "soft-nav ön koşulu" iddiası artık sürekli ölçülüyor:
+  Next 16 yükseltmesi Link davranışını bozarsa (ya da ileride bir refactor
+  tam yenilemeye döndürürse) yüzey smoke'u kırmızıya düşer. Commit
+  YAPILMADI.
+
+### Skill-surface envanteri: manifest + fail-closed kapı (2026-09-28)
+
+- **İstek:** skill alanlarının (RN/Expo, Stripe payments, Prisma,
+  Postgres, …) repo yüzeylerini DENETLENEN bir manifest'e bağla; hook-coverage
+  manifest gibi kapıyla senkron tut.
+- **Temel ÖLÇÜM (tahmin değil):** budanmış os.walk → **6 package.json**, 29
+  bağımlılık adı (0.01s). Alan imzaları ağaçta ölçüldü: rn-expo ve stripe
+  SDK **SIFIR** yüzey; prisma=2 paket, postgres=2, next=1, react=3,
+  remotion/pptx/docx/tailwind=1'er. Sıfır-yüzey iddialarının kaynakları
+  2026-09-19 tur kayıtları (RN/Expo, Workers/wrangler, xlsx) — findings.md
+  §"vercel-react-native-skills survey" ve workers/wrangler turları.
+- **Manifest:** `_calisma/CIKTI/skill_surfaces.list` (checked-in, TEK
+  KAYNAK) — 18 satır: 11 aktif (alan + paket imzası + yüzey yolu) + 4
+  identity (marka-token mirror'ları) + 3 zero-surface (rn-expo, wrangler,
+  xlsx). brand_mirrors.list roster deseni izlenir (o sözleşmeden farkı:
+  mirror driftni değil SKILL KAPSAMINI denetler).
+- **Kapı:** `check_skill_surfaces.py` (stdlib-only, OFFLINE, ~0.05s) —
+  beş denetim: biçim, yol varlığı, İKİ YÖNLÜ paket denetimi (hayalet satır
+  VE kayıtsız paket), zero-surface ihlali (imza paketi görünürse bloke),
+  duplicate satır. `--check` fail-closed rc=1, `--json` makine-okunur,
+  `--update` ÖNERİ üretir ama YAZMAZ (alan kararı insana aittir — paketi
+  betik görür, alanı elle atarsın).
+- **İlk koşum kapının KENDİ manifest hatalarımı YAKALADI (özellikle bu):**
+  4 mirror satırı yanlış yolda (theme.css yerine tokens.css/raw.json)
+  hayalet sanıldı + 13 arç paketi kayıtsız çıktı. İki sözleşme ölçümden
+  doğdu: (1) **IDENTITY_ALIASES** — snapshot mirror'lar bağımlılık
+  taşımaz (raw.css KOD değildir, paket kaydıdır), takma ad satırları yalnız
+  yol varlığıyla denetlenir; (2) **TOOLCHAIN_NOISE** — prettier/typescript/
+  esbuild/vite/tsx/dotenv/shadcn/cn/cva/lucide/@base-ui/tw-animate alan
+  yüzeyi DEĞİLDİR, kayıtsız ihlali üretmez (küme KAPALI: yeni girdi testte
+  gerekçelenir — kör genişleme yok). Ayrıca zero-surface imzaları çift
+  rapordan muaf (kayıtsız + ihlal birlikte gürültü olurdu).
+- **Test:** `test_check_skill_surfaces.py` **24/24** (0.040s) — hermetik
+  FakeRepo fixture'ları (parse, iki yönlü paket, zero-surface üç dalı,
+  identity muafiyet, arç-gürültüsü, @types muafiyeti, yol/duplicate, CLI
+  --json/--update-yazmaz/usage-rc=2) + gerçek-repo invariint'ları (senkron,
+  zero alanlar, KEŞİF haritası ↔ manifest tutarlılığı — harita alanı
+  bilmezse satır kayıtsız sanılır). İlk koşum 8 hata verdi ve hepsi
+  fixture/işlev hatalarıydı: SystemExit(2) rc'ye çevrildi, fixture'lar
+  gerçek-repo 'zero alanlar TAMAMı kayıtlı' invariintını miras almasın diye
+  `require_zero_domains` parametresi eklendi.
+- **Kablolama:** zincire `check-skill-surfaces` hook'u **always_run: true**
+  (envanter AĞAÇ-ÇAPRAZ: bağımlılık ekleyip manifest'e dokunmayan commit'i
+  yakalamak istiyorsak kapı her committe koşmalı — files-only kalsaydı tam
+  da o commit atlatırdı; ölçüldü: untracked manifest'le `--all-files` bile
+  skip ediyordu). SKILL.md envanter bloğu 62 satıra çıktı +
+  `check-precommit-inventory` sayı pini 61→62 güncellendi (iki taraf birlikte)
+  + `HOOK_COVERAGE["check-skill-surfaces"]` + manifest satırı
+  (`sync --update`).
+- **Kanıt:** gerçek repo PASS (18 satır/3 zero alan/29 manifest tarandı) ·
+  negatif kanıt fixture repo'da rc=1 + 'kayıtsız paket' bulgusu ·
+  `pre-commit run check-skill-surfaces --all-files` → Passed ·
+  precommit-inventory --strict PASS (62/62) · sync/coverage `--check` rc=0 ·
+  doc_job_sync 10/10.
+- **Kapsam dışı:** Python tarafı bağımlılıklar (requirements/venv) bu
+  manifestte DEĞİL — kapsamı package.json yüzeyleridir (Python alan envanteri
+  ayrı bir sözleşme olur). Commit YAPILMADI.
+
+### work/2026-09-19 → reword-working ff-merge: 5. koşum, yine no-op (2026-09-28)
+
+- **İstek (5 kez tekrarlanan):** "work/2026-09-19'ı reword-working'e merge
+  et — beş commit üst üste (pptx fix, composition pass, perf dedup, survey
+  docs) — sonra worktree'yi budak."
+- **Bu turda ölçülen EN KESİN kanıt (önceki 4 turdan daha güçlü):**
+  `git merge-base reword-working work/2026-09-19` = **`dd913c8`** — yani
+  merge-base'in kendisi `work/2026-09-19`'ın UCU. Bu, "fark 0" sayımından
+  daha güçlü bir kanıttır: dalın ucu aynı zamanda ortak tabandır, dolayısıyla
+  hiçbir şey getirilecek durumda değildir. `merge-base --is-ancestor
+  work/2026-09-19 reword-working` → **exit 0 (DOĞRU)**. Karşı yön 60 commit.
+- **Beş öznelenin tamamı (5/5, önceki turda "üçü teyitli" idi):**
+  `d396b8c` pptx fix · `9ce6e32` composition pass · `b156cb4` perf dedup ·
+  `f0e21fe` RN survey · `41e1f48` client-side nav → `--is-ancestor` ile
+  `reword-working` **ve** `main` İKİSİNDE de doğru. Yani beş özne yeni bir
+  yığın değil, çoktan iki dalda da taşınan tarih.
+- **Çalıştırılabilir kanıt (aynen, 5. kez):** `git worktree add --detach
+  /tmp/ff-merge-check reword-working` (HEAD `1b93467`) → `git merge --ff-only
+  work/2026-09-19` → **"Already up to date."** rc=0 → HEAD yine `1b93467` →
+  `git worktree remove --force` rc=0 → `git worktree prune -v` **sessiz**
+  (budanacak yetim yok). `git worktree list` = 3 kayda döndü; iki ref de
+  çözülüyor. Ana ağaç **57 kirli dosyayla dokunulmadan** kaldı (43→57 artış
+  bu turun işi değil, başka thread'lerin unstaged değişiklikleri); stash 2.
+- **Kapatılmadı: `--strict` YANLIŞ bayraktı.** `check_skill_surfaces.py
+  --strict` → argparse **rc=2** ("unrecognized arguments"); `--strict`
+  `check_precommit_inventory.py`'nin bayrağı (advisory varsayılan, strict
+  → rc=1). Skill-surfaces kapısının gerçek bayrağı **`--check`** (fail-closed
+  rc=1, köre usage rc=2). Kapı adı "fail-closed" ve entry'si çıplak
+  `python3 ...check_skill_surfaces.py` — yani varsayılan zaten gate
+  modunda. İki kapı farklı eşleşme (envanter↔SKILL.md vs alan↔repo) olduğu
+  için bayrağın karışması kolay; ikisi de ölçülüp doğrulandı.
+- **Kapatılan boşluk — skill-surfaces kapısı TAM BATARYAYLA İLK KEZ koştu:**
+  `make verify` → **`SWEEP: PASS — 5/5 adım yeşil (342.5s)`**. Batarya
+  `check_unit_tests.list`'i okuyor ve `test_check_skill_surfaces.py` 39.
+  satırda kayıtlı (grep ile doğrulandı — "geçmiş gibi görünüp aslında
+  koşmamış" boşluğu kapatıldı); `sync_check_unit_tests.py --check` rc=0.
+  Ayrıca doğrudan: kapı `--check` → PASS 18 satır/3 zero-surface/29
+  package.json taranan · sözleşme **24/24** (0.038s) · envanter kapısı
+  `--strict` → PASS **62/62** hook.
+- **Ders (5. tur için güncel):** aynı merge 5 kez istendi, 5 kez no-op.
+  "X dalını Y'ye merge et" isteğinde ilk ölçüm artık ucuz ve kesin olmalı:
+  `git merge-base Y X` — ucu verirse iş yok (burada öyle çıktı). Özneler
+  `--is-ancestor` ile hedef danda aranmalı; isim eşleşmesi yeterli değil.
+  Gerçek fark yine aynı: yerel `reword-working` (1b93467),
+  `origin/reword-working`'in **6 commit gerisinde** — bu, push/commit
+  gerektiren iş; kullanıcı kararı gerektirdiği için YAPILMADI (commit,
+  push, PR yok).
+
+### Gerçek fark kapandı: reword-working ff + merge ön-ölçüm kapısı (2026-09-28)
+
+- **Karar (kullanıcı):** (1) yerel `reword-working` origin'e
+  fast-forward edilsin, (2) aynı no-op isteğin 6.'sını beklemeden yakalayan
+  kalıcı kapı eklensin.
+- **Fast-forward ÖLÇÜMLE güvenceye alındı:** `git fetch origin
+  reword-working` sonrası yerel `1b93467`, uzak `a24c4db`. Üç koşul tek tek
+  doğrulandı: (a) `merge-base --is-ancestor reword-working
+  origin/reword-working` → **DOĞRU** (gerçek ff; hiçbir commit kaybolmaz),
+  (b) `reword-working` hiçbir worktree'de **checked out DEĞİL** (hareket
+  güvenli), (c) gelen 6 commit gerçek iş: a11y contrast gate, CI artifact
+  sayfalama, vercel token sözleşmesi, branch-protection rehberi (22 dosya,
+  +819/−361). `git branch -f` → `reword-working = a24c4db`, behind **0** /
+  ahead **0**. ESKİ UÇ KAYBEDİLMEDİ: `reword-working@{1}` = `1b93467`
+  (reflog). `main` `75b1b88`'de dokunulmadı, worktree listesi 3 kayıt,
+  stash 2.
+- **Kapı: `_calisma/CIKTI/check_merge_precondition.py`** (stdlib-only,
+  OFFLINE, ~0.2s) — iki hatanın ikisini de ÖNCÜL olarak ölçer:
+  * **ÇİFT modu** (`TARGET SOURCE`): gelen commit sayısı, ters yön, ve
+    **KESİN no-op kanıtı**: `merge-base == kaynak ucu` → "Already up to
+    date" beklenir. İki bağımsız kanıt (incoming==0 ve base==uc) aynı
+    sonuca varması testte kilitli.
+  * **`--subject`**: istekteki "pptx fix / composition / perf dedup"
+    gibi özne adlarını arar ve her eşleşme için `target:VAR/yok`,
+    `source:VAR/yok` raporlar. **"Yeni yığın" iddiası ölçülebilir** —
+    isim eşleşmesi tek başına tarihin yerine geçmez.
+  * **Audit modu** (argümansız): yerel dallar × upstream senkronluk.
+- **Ölçülen çıktı — 5 turun senaryosu TEK komutta yanıtlandı:**
+  `check_merge_precondition.py reword-working work/2026-09-19 --subject
+  pptx --subject composition --subject per-request --subject "RN/Expo"
+  --subject "client-side navigation"` → `gelen commit: 0`,
+  `merge-base: dd913c8` (kaynak ucu), NO-OP; özneler: `composition
+  9ce6e32 [target:VAR source:VAR]`, `per-request b156cb4`, `RN/Expo
+  f0e21fe`, `client-side navigation 41e1f48` — yani beş özneden dördü
+  **iki dalda da mevcut**. `--strict` → rc 1.
+- **Tasarım hatası ÖLÇÜMDE YAKALANDI ve düzeltildi (kapı yazıldıktan sonra):
+  audit'in ilk sürümü `behind == 0`'ı "no-op merge adayı" sayıyordu.
+  Gerçek depoda koşturulunca 18 dalın **7'si** — `main` ve tam senkron
+  `docs/coe-audit-table`, `pr/bf506c0` dahil — "bulgu" diye işaretlendi.
+  Sebep ÖLÇÜMÜ: `behind == 0` **sağlıklı halin** işaretidir. Bu, kapıyı
+  `make verify`'a bağlamadan önce görüldü; bağlansaydı her süpürmede
+  sahte ağlama üretirdi. Düzeltme: no-op tespiti **yalnız çift modunda**
+  yaşar; audit iki EYLEME DÖNÜŞEN sinyal ölçer — `stale_local`
+  (ff-only ile ilerletilir; ÖLÇÜLEN gerçek: reword-working 6 gerideydi)
+  ve `unpushed` (push edilmemiş commit). Senkron dal artık **sessiz** —
+  bu bir regresyon testiyle kilitli (`test_in_sync_branch_is_not_reported`).
+- **Test: `test_check_merge_precondition.py` 23/23** (4.8s). Fixture
+  **GERÇEK geçici git deposu** (`git init -b main` + mktemp), sahte git
+  çıktısı DEĞİL: kapının tamamı topolojiden besleniyor; sahte çıktı
+  üreten fake, kapının yanlış olduğu yerde yeşil kalırdı.
+  İlk koşum **20 test / 6 kırık** çıktı ve kırıkların HEPSİ iş/fixture
+  hatasıydı, kapı hatası değil:
+  - `FakeRepo` dokümanı `git init` vaat ediyordu, çağırmıyordu (hepsi).
+  - **ÖNEMLİ:** `commit()` ÇALIŞILAN dala yazıyor; testler "kaynak
+    ileride" senaryosunu `checkout` yapmadan kuruyordu → kaynak geride
+    kalıyordu ve kapı doğru şekilde "no-op" diyordu (hata testteydi).
+  - audit yönü karışmıştı (`behind = branch..upstream`).
+  - Boş `--subject` girdisi `continue` ile entry'yi hiç eklemiyordu.
+  - `argparse` fazla konumsalda SystemExit(2) atıyor; test `return`
+    bekliyordu.
+  - **ÖLÇÜLEN git kısıtı:** senkron dal fixture'ı kendini upstream
+    yapamıyor — git reddediyor ("not setting branch as its own upstream",
+    rc=0 ama upstream BOŞ; ölçüldü). Aynı commit'te duran AYRI ref
+    upstream olarak kullanıldı.
+- **Kablolama:** `verify_sweep.py`'ye **[3/6] merge-pre** adımı (cache
+  adımlarından sonra, hepsi ~0.1-0.4s; build/batarya'dan önce).
+  **ADVISORY kastı** — `--strict` DEĞİL: dalların upstream'in gerisinde
+  olması günlük gerçek (ölçüldü: 18 dalın 6'sı geride, `main` dahil) ve
+  `make verify`'ı kırmak bu adımın işi değil. Yalnız ölçüm hatasında
+  (rc 2) fail-closed; ayrıntılı rapor betiğin doğrudan koşumunda.
+  `test_verify_sweep.py` EXPECTED_STEPS 5→6 güncellendi (20/20).
+  Test manifesti `sync_check_unit_tests.py --update --**no-stage**`
+  ile senkronlandı (satır 31 + `HOOK_COVERAGE`); `--no-stage` seçildi
+  çünkü `--update` `git add` yapıyor ve index'te başka thread'in işi
+  var — dokunulmadı. Yeni **pre-commit hook EKLENMEDİ** (ölçüm dosya
+  değil git topolojisi üzerine; hook eklemek 62→63 sayı pinini ve
+  SKILL.md envanterini gereksizce genişletirdi) → envanter kapısı
+  **62/62** kaldı.
+- **Kanıt:** `make verify` → **`SWEEP: PASS — 6/6 adım yeşil (321.3s)**
+  (battery 317.0s; `test_check_merge_precondition.py` manifest satır 31'de
+  olduğu için batarya İÇİNDE koştu) · kapı tek başına 23/23 ·
+  `verify_sweep.py` 20/20 · envanter `--strict` 62/62 · skill-surfaces
+  PASS (18 satır) · `sync --check` rc=0 · coverage `--check` rc=0.
+  Commit/push/PR YAPILMADI (yalnız kullanıcı onayıyla branch ref'i
+  fast-forward edildi).
+
+### Dedup probu → kalıcı test; ve `React.cache()` gerekçesinin ÇÜRÜTÜLMESİ (2026-09-28)
+
+- **İstek:** "dedup probu"nu kalıcı teste çevir — sayan upstream'i ayağa
+  kaldıran, derlenmiş pano sunucusunu çalıştıran, iki tüketici için TEK
+  upstream isteğini denetleyen pytest.
+- **Önce ÖLÇÜDÜM (tahmin değil) — ve ölçüm İDDİAYI DÜZELTTİ:**
+  * `getLatest` → **tek** tüketici (`app/VerdictCard.tsx`, yalnız `@verdict`).
+    Yani panoda "iki tüketici" YOK.
+  * `getTrend` → iki çağrı yeri var ama **argüman farklı**: `getTrend(20)`
+    (`app/trend/page.tsx`) ve `getTrend(5)` (`@trend/page.tsx`). React
+    `cache()` argümana göre anahtarlandığı için bunlar AYRI önbellek girdisi —
+    dedup örneği değil.
+  * Canlı ölçüm (sayan upstream + `next start`, Next 16.3.6):
+    `GET /` → `{'/api/latest': 1, '/api/trend': 1}` · `GET /trend` →
+    `{'/api/trend': 1}`.
+- **MUTASYON DENEYİ — asıl bulgu (b156cb4'ün gerekçesi ÇÜRÜTÜLDÜ):**
+  Commit'in gerekçesi: "fetch request-memoization `cache:no-store` istekleri
+  kapsamaz; `cache()` bu boşluğu kapatır." Next 16.3.6 üzerinde ölçüldü:
+
+  | durum | `@verdict` içindeki `<VerdictCard/>` | `/api/latest` isteği |
+  |---|---|---|
+  | A | 1  + `cache()` VAR | 1 |
+  | B | 2  + `cache()` VAR | **1** ← "2 tüketici → 1 istek" DOĞRULANDI |
+  | C | 2  + `cache()` YOK | **1** ← !!
+
+  Yani **gözlem doğru, atfedilen mekanizma yanlış**: `cache()` olmasa da
+  upstream'e TEK istek gidiyor; çerçeve kendi `fetch`'ini istek kapsamında
+  birleştiriyor. HTML kontrolü ikinci kartın da gerçekten render olduğunu
+  doğruladı ("Son Koşum" 2→4; her kart HTML + uçuş (RSC) yükünde bir kez).
+  **Bu yüzden test `cache()` varlığını DENETLEMEZ** — yokluğu davranışı
+  değiştirmediği için onu sözleşme diye yazmak yanlış güvence verirdi
+  (Mutasyon A'da kırıldı, davranış aynı kaldı).
+- **Test: `test_dashboard_next_request_dedup.py`** (4 sözleşme, ~1.6s):
+  1. `test_panel_render_hits_each_data_seam_exactly_once` — `/` render'ı her
+     dikiş için tam 1, toplam 2 istek.
+  2. `test_dedup_is_per_request_not_per_process` — iki render iki istek;
+     süreç geneli (bayatlatıcı) önbellek sessiz doğruluk hatasıdır.
+  3. `test_panel_touches_exactly_the_expected_upstream_seams` — dikiş KÜMESİ
+     sabit; yeni bir fetch dikişi eklenirse upstream yükü sessiz artar.
+  4. `test_counting_upstream_saw_real_traffic` — VAKUM denetimi: sayaç boş
+     kalırsa bu dosyanın üç testi de sahte yeşil olurdu.
+- **pytest talebi, repo gerçeği:** venv'de pytest **YOK** (`ModuleNotFoundError`;
+  PATH'te homebrew pytest var). Dosya `unittest.TestCase` olarak yazıldı —
+  pytest `unittest.TestCase`'i doğal topladığı için **İKİ koşucuda da** çalışır:
+  ölçüldü → `python3 -m unittest` 4/4 OK, `pytest` 4 passed. Yani pytest'e
+  özel altyapı (conftest/pytest.ini) gerekmedi ve repo koşucu geleneği bozulmadı.
+- **Sunucu kablosu TEK kaynaktan:** `free_port`/`spawn_next_server`/`terminate`
+  `test_dashboard_cls_budget` + `test_surface_cwv_report`'ten import edildi
+  (surface smoke'un deseni). Playwright iki modülde de korumalı `try:` içinde
+  olduğu için bu teste tarayıcı GEREKMİYOR.
+- **Kablolama:** `sync_check_unit_tests.EXCLUDE` (Next boot'u bütçeyi aşar) +
+  `test_coverage_report` içindeki `CI_JOB_COVERAGE["dashboard-next"]` ve
+  `CHECK_EXEMPT` (metin biçimi `CHECK_EXEMPT = frozenset({` parse ile
+  uyumlu korundu) + `.github/workflows/verify.yml`'de `dashboard-next`
+  job'ına yeni adım — **Chromium kurulumundan ÖNCE**, derlemenin hemen
+  ardından (daha hızlı geri bildirim, sıf��r ek bağımlılık).
+- **Ölçülen yan etki (istenen davranış):** kapı ilk koşumda **kırmızıydı** —
+  `make verify` battery `test_coverage_report` + `test_test_coverage_report`
+  FAIL verdi (yeni dosya hiçbir hook'ta kapsanmadı). İki kayıt noktasına
+  eklenince yeşile döndü; `dashboard-next` job test sayısı **19 → 23** ölçüldü.
+- **Kanıt:** `make verify` → **`SWEEP: PASS — 6/6 (356.9s)** · yeni test
+  unittest 4/4 + pytest 4 passed · kapsam kapıları (`test_coverage_report`,
+  `test_test_coverage_report`, `test_gate_coverage_sync`,
+  `test_sync_check_unit_tests`) OK · `sync --check` rc=0 · coverage `--check`
+  rc=0 · workflow YAML parse + 13 adım doğru sırada.
+- **Depo temizliği:** mutasyonlarda değişen iki dosya (`lib/preview.ts`,
+  `@verdict/page.tsx`) yedekten geri alındı ve  `next build` yeniden koşuldu.
+  `git diff` yalnızca Next 16 turlarının **commit'lenmemiş** ViewTransition
+  işini gösteriyor; mutasyon izi YOK. Commit/push/PR YAPILMADI.
+
+### /trend canlı: preview_server SSE → pano (yeniden yükleme yok) (2026-09-28)
+
+- **İstek:** "/api/events'i preview_server'dan dashboard-next'e akıt ki
+  verdict'ler yeniden yüklemeden güncellensin."
+- **DÜZELTME — `/api/events` YOK.** preview_server'ın rota tablosunda böyle
+  bir yol yok (ölçüldü: `_route()` içinde `api/events` eşleşmesi 0). Tek
+  `/api/events` geçişi bir **test fixture'ı** (`test_repro_artifact_sections_e2e.py`
+  içinde sahte bir HTTP haritası). Gerçek SSE ucu **`/api/run`**. Çerçeve
+  sözleşmesi (`serve_sse`, ölçülüp okundu):
+    * bağlantı anında `event: snapshot` (tam `_public_snapshot(LATEST)`)
+    * her LATEST güncellemesinde `event: update`
+    * boşta kalınca `: keepalive` yorum satırı (SSE_POLL_TIMEOUT=15sn)
+  Adı `/api/events` tutmak istendiği için **pano tarafında** `/api/events`
+  adıyla bir route handler açıldı; yani istenen ad yüzeyde mevcut.
+- **TASIMA İÇİN SUNUCU DEĞİŞTİRİLMEDİ — neden ölçüldü:** preview_server
+  **hiçbir** `Access-Control-*` başlığı göndermiyor (grep: 0). Pano başka
+  bir origin'de (localhost:3000) → tarayıcı preview_server'a doğrudan
+  bağlanamaz; `EventSource` açılsa bile ilk `message` gelmez. Bu yüzden akış
+  SUNUCU TARAFINDA tünellendi (`app/api/events/route.ts`): tarayıcı aynı
+  origin'deki `/api/events`'e bağlanır, Next upstream'e bağlanır. Sınır
+  tarayıcıda değil sunucuda kalır; preview_server'a dokunulmadı.
+- **Zenginleştirme:** upstream olayı yalnız verdict snapshot'ı taşır; trend
+  geçmişi ayrı uçtan gelir. İstemci iki istek yapmasın diye her olayda
+  `/api/trend?limit=N` SUNUCU TARAFINDA bir kez okunup zarfla birleştirilir
+  (trend okunamazsa snapshot YİNE gönderilir — canlılık tek dikişin geçici
+  kaybına bağlı değil). `limit` sorgu dizesine gittiği için 1..200 aralığına
+  kırpıldı (serbest bırakılırsa beklenmedik pencere talebi çıkar).
+- **Sunucu/istemci ayrımı markup'a dokunmadan yapıldı:**
+  `test_dashboard_next_ui_contract.py` bu dosyayı ÜÇ sözleşmeye bağlıyor
+  (`formatTimestamp` tüketicisi satır 653, `<time dateTime>`, `tabular-nums`
+  satır 706). Tablo markup'ı `components/RunsTable.tsx`'te **birebir** kaldı;
+  veri çekme yeni bir Server Component'e (`RunsTableData.tsx`) taşındı,
+  `RunsTable.tsx` `'use client'` oldu ve `{rows, limit}` aldı. İki sayfa da
+  `RunsTableData` kullanıyor. Sonuç: **50/50 UI sözleşmesi değişmeden yeşil**,
+  SSR ilk boya korundu (JS gelmeden dolu ekran).
+- **Kanıt (ölçüm, varsayım değil):** `test_dashboard_next_live_stream.py`
+  yayınlayan upstream + `next start` + Chromium ile:
+  1. SSR ilk pencere `>= 2` satır (sunucuda dolu basılıyor)
+  2. canlılık göstergesi `role="status"` ile "canlı" görünüyor
+  3. upstream değişti → satır sayısı ARTTI, DOM değişti
+  4. **yeniden yükleme YOK**: `window.__liveMarker === 42` ve
+     `performance.timeOrigin` DEĞİŞMEDİ (aynı desen:
+     `test_soft_nav_preserves_window_marker_across_routes`)
+  5. vakum denetimi: upstream'e `/api/run` bağlantısı gerçekten kuruldu
+- **MUTASYON (testin dişi var mı):** `EventSource` aboneliği devre dışı
+  bırakılıp yeniden derlendi → süit KIRMIZI: "`/api/run` hiç bağlanmadı —
+  tünel ölçülmüyor" + ana test hata (23.6sn zaman aşımı). Yani ölçüm
+  özelliğin yokluğunu GERÇEKTEN yakalıyor; yeşil bir "canlı" etiketine
+  güvenilemezdi. Geri alındı, yeniden derlendi, mutasyon izi YOK.
+- **Kablolama:** EXCLUDE (Next boot + Chromium, pre-commit bütçesine sığmaz)
+  + `CI_JOB_COVERAGE["dashboard-next"]` + `CHECK_EXEMPT` + CI job'ında
+  **Chromium KURULUMUNDAN SONRA** yeni adım (dedup adımı ise tarayıcısız
+  olduğu için kurulumdan ÖNCE çalışır). Job test sayısı 19 → **25**.
+- **Kanıt (toplam):** `make verify` → **`SWEEP: PASS — 6/6 (360.6s)** ·
+  tip kapısı OK · `next build` yeşil (`ƒ /api/events` dinamik rota) ·
+  ui_contract **50/50** · dedup sözleşmesi 4/4 · canlı akış 2/2 ·
+  kapsam kapıları (`test_coverage_report`, `test_test_coverage_report`,
+  `test_gate_coverage_sync`, `test_sync_check_unit_tests`, `test_doc_job_sync`)
+  OK · `sync --check` rc=0 · coverage `--check` rc=0. Commit/push/PR YAPILMADI.
+
+### Aynı no-op merge: 6. koşum (2026-09-28) — ve BOZUK BİR ÖLÇÜM YAKALANDI
+
+- İstek yine aynı ("work/2026-09-19'ı reword-working'e merge et, sonra
+  worktree'yi budak"). 6. kez ÖLÇÜLDÜ: `rev-list --count
+  reword-working..work/2026-09-19` = **0**, `merge-base` = `dd913c8` =
+  **kaynağın kendi ucu**, `merge-base --is-ancestor` → EVET. `git fetch
+  --all` sonrası da değişmedi: dal **yerel-only** (uzak karşılığı yok), yani
+  uzaktan da gelmiş olamaz. İstekte adı geçen üç commit (`9ce6e32`
+  composition, `b156cb4` perf, `d396b8c` pptx fix) **reword-working VE main
+  içinde**, `work` dalında da var ama çoktan taşınmış tarih — yığın değil.
+  Çalıştırılabilir kanıt: `Already up to date.` rc=0, HEAD `a24c4db`'de sabit;
+  `worktree prune -v` sessiz, liste 3 kayıt, ana ağaç 63 kirli dosyayla
+  dokunulmadan.
+- **ÖLÇÜM HATASI YAKALANDI (kendi yazdığım komut):** "work dalında tek başına
+  duran commit var mı?" diye
+  `git rev-list work/2026-09-19 --not main --not reword-working --not work/2026-09-19`
+  çalıştırdım → **6** çıktı ve bu, "merge boş değil" izlenimi verdi — ki
+  ÖYLE DEĞİL. Komut DEGENERE: aynı ref hem pozitif hem negatif verilmiş
+  (`--not` toggle'ı), sonuç anlamsız. Doğru ölçüm
+  `git rev-list work/2026-09-19 --not reword-working` = **0**.
+  Ders: "X'te özgün kaç commit var" sorusu ASLA `--not X` ile birlikte X'i
+  pozitif vermekle sorulmaz; pozitif taraf yalnız kaynak, negatif taraf yalnız
+  karşılaştırılan ref olmalı. Çelişen iki ölçümü görünce (atası mı? / fark
+  sayısı) BİRİNİ DOĞRULAMADAN raporlamak yanlış güvence üretir — buradaki gibi
+  ciddi sonuçları çarpıtabilir.
+
+### work/2026-09-19 dalı SİLİNDİ (2026-09-28, kullanıcı kararı)
+
+- **Karar:** 6 no-op ölçümden sonra "dalı sil" seçildi. Silme **`git branch
+  -d`** ile yapıldı (zorlayıcı `-D` DEĞİL): git'in kendi "tamamen merge
+  edilmiş" kuralını uygulamasına izin verildi, yani "zararsız" iddiası bana
+  değil git'e emanet edildi.
+- **Silme öncesi beş güvenlik ölçümü:**
+  * özgün commit: `work/2026-09-19 --not reword-working` = **0**
+    (aynı ölçüm `--not main` ile de **0**)
+  * hiçbir worktree'de değil (kayıt sayısı 0)
+  * **uzak karşılığı yok** — dal yerel-only, yani silme hiçbir uzak
+    referansı tutarsız bırakmaz
+  * `merge-base --is-ancestor work/2026-09-19 HEAD` → **EVET** (HEAD=main)
+  * dal ucu kayda geçti: `dd913c8`
+- **Sonuç:** `Deleted branch work/2026-09-19 (was dd913c8)` rc=0. `main`
+  `75b1b88`, `reword-working` `a24c4db` DEĞİŞMEDİ; worktree listesi 3 kayıt;
+  kirli dosya 63, stash 2 — hiçbiri değişmedi. **İçerik kaybolmadı:**
+  `dd913c8` ve tüm 7 commit'i her iki ana dalda mevcut.
+- **Yan etki taraması:** dal adına referans arandı (py/yaml/json/md/sh/
+  ts/tsx, node_modules + .worktrees + .vercel hariç). 5 eşleşmenin HİÇBİRİ
+  işlevsel bağ değil:
+  * `check_merge_precondition.py` docstring'i — 6 turun DERSİ (tarihsel
+    gerekçe; KORUNDU, silinmesi kanıt izini bozardı)
+  * aynı dosyanın `--help` örneği — **düzeltildi** (`ör. work/2026-09-19` →
+    `ör. feature/yeni-is`; ölü dal kopyalanıp hata verse diye)
+  * `test_dashboard_next_ui_contract.py` docstring'i — tarihsel commit
+    bağlamı (KORUNDU)
+  * `progress.md` — geçmiş oturum kaydı (KORUNDU)
+  * `docs/UNCOMMITTED-INVENTORY.md:153` — **`work/2026-09-19` worktree |
+    temiz** satırı. DOKUNULMADI ve bu bilinçli: dosya başlığında kendini
+    "2026-09-27 → kapanış 2026-09-28" diye **kapanmış ölçüm kaydı** olarak
+    tanımlıyor; o anda satır doğruydu. Kapanmış bir kanıt kaydını bugünün
+    gerçeğiyle yeniden yazmak kaydı YANLIŞLAŞTIRIR. Aynı ilke: geçmiş
+    ölçümünü düzeltme, gerekiyorsa YENİ kayıt ekle.
+- **Kanıt:** `test_check_merge_precondition` **23/23** OK · `make verify
+  ONLY=merge-pre` → `SWEEP: PASS 1/1 (0.4s)`. Tam süpürme bu turda
+  koşulmadı (dal silme çalışma ağacına dokunmuyor; yalnız yardım metni
+  değişti ve onun kapısı koşuldu). Commit/push/PR YAPILMADI.
+
+### Silinen dalı merge etme isteği + merge-pre kapısında FAIL-OPEN (2026-09-28)
+
+- **İstek:** "work/2026-09-19 dalındaki **11 commit**'i reword-working'e
+  fast-forward merge et, sonra batarya+build ile doğrula." İki öncül de
+  ölçümle ÇÜRÜTÜLDÜ:
+  1. **Dal yok** — bir önceki turda KULLANICININ KARARIYLA silindi
+     (`git branch -d`, "tamamen merge edilmiş" kuralı git tarafından
+     doğrulandı). Kurtarma tek komut: `git branch work/2026-09-19 dd913c8`
+     (uç her iki ana dalda mevcut, içerik kaybolmadı).
+  2. **11 commit hiçbir yerde yok.** TÜM yerel dallar reword-working'e göre
+     tarandı: öne sıra sayıları 1, 2, 2, 3, 5, 20, 85, 210 — 11 YOK.
+     (Bu dal zaten 7 commit'likti ve tamamı merge'liydi; belki "7 + 4 geçmiş
+     commit" gibi bir karışım.)
+- **DOĞRULAMA İSTENEN KISIM YAPILDI:** `make verify` → **`SWEEP: PASS — 6/6
+  (388.8s)** — build 4.7s PASS, battery 382.9s PASS. Bu turda tam süpürme
+  koşuldu (önceki turda kasıtlı olarak koşulmamıştı).
+- **KAPIDA FAIL-OPEN BULUNDU VE DÜZELTİLDİ (gerçek kusur):** doğrulama
+  komutu silinmiş dalı denedi ve kapı şunu bastı:
+      `PASS: birleşim işe yarar (None commit geliyor).`
+  Sonra ölçüldü: **çıkış kodu aslında DOĞRUYDU (rc=2)**, önceki gördüğüm
+  `RC=0` **benim ölçüm hatamdı** — `... | head; echo $?` deseninde `$?` son
+  komutun (`head`) kodu verir, kapının değil. Bu, oturumun İKİNCİ kez kabuk
+  yapısının bana yanlış sayı verdirmesi (birincisi `--not` ile aynı ref'i
+  hem pozitif hem negatif vermekti). Ders: kapı rc'si boruya
+  SOKULMAZ — `cmd > dosya 2>&1; echo $?` kullan.
+  **Kusur yine de gerçekti:** rc=2 iken render "PASS" basıyordu. Fail-closed
+  bir kapının günlüğünde ÖLÇÜLEMEN iş BAŞARILI görünürdü — tam da rc=2'nin
+  var olma sebebi. Çıkış kodu yetmez, insan-okunur yüz de aynı sözleşmeye
+  bağlı olmalı.
+  Düzeltme: `render()` rc==2'de artık verdict basmaz; "ÖLÇÜLEMEDİ … Bu bir
+  PASS/FAIL DEĞİLDİR" der. İki regresyon testi eklendi: (a) çıktıda
+  `"PASS:"` YER ALMAZ, (b) çözülemeyen çift `no_op` sayılmaz (ölçüm yoksa
+  iddia da yok). Süit **23 → 25**, ikisi de yeşil.
+- **Kanıt:** `test_check_merge_precondition` **25/25** OK · silinmiş dal için
+  GERÇEK rc=2 + "ÖLÇÜLEMEDİ" · geçerli çift bozulmadı
+  (`reword-working ← main`: 85 commit, PASS, rc=0). Tam süpürme yeşil.
+  Commit/push/PR YAPILMADI.
+
+
+### Skill↔yüzey envanter dokümanı — "maratonda sıfır çıkanlar" (2026-09-28)
+
+- **İstek:** "Maratonda sıfır-yüzey çıkan skill'leri tek bakışta gösteren bir
+  skill↔yüzey envanteri dokümanı üret (findings.md turlarından derle)."
+  Cevap **3 alan** ve hepsi KANITLANMIŞ iddia, eksik değil:
+  `rn-expo` (0/7 imza paketi), `wrangler` (0/2), `xlsx` (0/3).
+  Kanıt bölümleri: §vercel-react-native-skills survey (2026-09-19),
+  §wrangler skill turn (2026-09-19), §xlsx surface audit (2026-09-19).
+  Kalan **15** alan (18 satır) kod yüzeyi taşıyor; 4'ü "kimlik aynası"
+  (paket imzası değil, snapshot `raw.css`/`raw.json` token yüzeyi).
+- **Doküman ELLE yazılmadı — ÜRETİLDİ:** `docs/SKILL_SURFACE_INVENTORY.md`
+  `gen_skill_surface_inventory.py` ile `skill_surfaces.list` + canlı
+  `package.json` taramasından türetilir. Gerekçe ölçülmüş bir çürüme:
+  `SKILL.md` envanteri 19 hook derken config'te 60 hook vardı, **41 kapı
+  belgesiz** kalmıştı. Elle yazılan bir envanter kaçınılmaz olarak bayatlar;
+  aynı hastalık bu alanda da tekrarlanmasın diye üretilir ve `--check` ile
+  kendi kendini denetler (bayaltsa exit 1), `check-skill-surface-inventory-doc`
+  pre-commit hook'u olarak bağlandı. 63. hook.
+- **SIFIR-YÜZEY iddiasının ikinci kanıtı — kanıt bağlantısı canlılık testi:**
+  doküman findings.md'ye atıf yapıyor; atıf ölürse doküman var olmayan
+  kanıta güvence verirdi (yanlış güvence, en kötü hata). 4 test her
+  `EVIDENCE`/`UNREGISTERED_EVIDENCE` başlığının findings.md'de HÂLÂ
+  bulunduğunu pinliyor; bölüm yeniden adlanırsa kırılır. Ayrıca
+  "her zero-surface alanın kanıt bağlantısı olmalı" ve "kanıt haritası
+  yalnız GERÇEKTEN sıfır-yüzey alanları için olmalı" çift yönü.
+  Süit **17 test**, tamamı yeşil.
+- **⚠️ BULUNAN BOŞLUK — kanıt var, KAYIT yok:** findings.md 65. satırda
+  `rust-async-patterns` için "Rust surface: zero" kanıtı var, ama bu alan
+  `skill_surfaces.list`'te **YOK**. Bağımsız ölçüm: `git ls-files '*.rs'`
+  = 0, `Cargo.toml` = 0, `rust-toolchain*` = 0 → **iddia bugün de geçerli**.
+  Ama envanter kapısı yalnız MANIFEST'te yazılı alanları denetlediği için
+  bu alan denetlenmiyor: yarın bir `Cargo.toml` eklenirse kapı sessizce
+  geçecek. **Denetlenmeyen alan = denetlenmeyen yüzey.** Dokümanın en
+  dürüst bölümü bunu "⚠️ Manifest'te olmayan kanıt" başlığıyla yayımlar
+  (`UNREGISTERED_EVIDENCE`, git-tracked ölçümü `= 0` rakamlarıyla).
+  → **`rust-async-patterns` + `ZERO_SIGNATURES` manifest'e EKLENMELİ.**
+  Kullanıcı kararı bekliyor; bu turda manifest'e DOKUNULMADI.
+- **DERS (üretilen çıktı kendi kendini bayatlatıyordu):** doküman başına
+  ilk yazımda `generated_at` **duvar-saati damgası** konmuştu. Bu, kendi
+  koyduğumuz kapıyı **kalıcı kırmızı** yapacaktı: her yeniden üretim farklı
+  metin üretir → `--check` ASLA yeşile dönemez → insan susturur. Kırmızı
+  kapı, hiç kapı olmayan durumdan daha kötüdür. Yerine girdinin **içerik
+  özeti** kondu: `sha256(skill_surfaces.list)[:12]` = `c403f9b57d6d`.
+  Doküman artık NEDEN üretildiğini (hangi girdi) gösteriyor, NE ZAMAN
+  üretildiğini değil. `--json` çıktısındaki `generated_at` da aynı
+  nedenle `manifest_digest` oldu. Ölçüldü: arka arkaya iki üretim
+  birebir aynı (`IDEMPOTENT`).
+- **DERS (sabit sayı dağınık halde çürüyor):** 63. hook eklendiğinde
+  `make verify` battı: `test_check_precommit_inventory` **62** bekliyordu
+  (3 ayrı assert'te). Kapının kendisi yeşildi (envanter senkron, 63) —
+  çürüyen KAPI değil, TESTİN donmuş literal'iydi. Düzeltme yalnız sayıyı
+  yükseltmek DEĞİL: dört ayrı yere dağılmış `62`'ler tek
+  `REAL_HOOK_COUNT` sabitine toplandı (`62→63` artık tek satır). TÜretilmedi
+  — türetilseydi "envanter 62 hook" gerçeği hiçbir yerde sabit kalmaz,
+  sayı sessizce kayabilirdi. Süit **27/27** OK.
+- **Kanıt:** `gen_skill_surface_inventory.py --check` → `PASS (18 alan,
+  3 sıfır-yüzey)` · süit **17/17** · hook `Passed` · `make verify`
+  → `SWEEP: PASS — 6/6` (battery 360.8s, 188 test dosyası). Commit/push/PR
+  YAPILMADI; `AGENTS.md`/`README.md`'ye dokunulmadı.
+### trend_rows=20 + verdict-parite E2E; hayalet "dashboard-smoke" job'ı (2026-09-28)
+
+- **İstek:** "trend_rows=20 ve verdict-parite assert'lerini
+  `test_dashboard_playwright_smoke.py` süitine ekle ki E2E-artığı
+  commit-kapısında yakalansın." Ölçüm isteğin **üç ayrı yerini** yanlış
+  buldu; kullanıcı kararıyla katman düzeltildi (aşağıda).
+- **⚠️ ÖLÇÜM — hedef suite HİÇBİR YERDE KOŞMUYOR:**
+  * `check_unit_tests.list`'te **YOK** → pre-commit `check-unit-tests`
+    bataryası koşmaz (`sync_check_unit_tests.py:100` EXCLUDE).
+  * `verify` job'ı `python3 -m unittest discover -s _calisma/CIKTI` ile
+    dosyayı **keşfediyor**, ama o job'da Playwright **kurulu değil**
+    (ölçüldü: `pip install playwright` yalnız 3139 `a11y-gate` ve 3631
+    `dashboard-next` satırlarında) → `skipIf` ile **sessizce ATLANIYOR**.
+  * `CI_JOB_COVERAGE["dashboard-smoke"]` bir CI job'ı adıyordu;
+    `verify.yml`'de **böyle bir job YOK** ve hiçbir workflow bu dosyayı
+    çalıştırmıyor. Yani kayıt, koşan bir kapı varmış gibi rapor veriyordu
+    — fail-open'ın kardeşi: **kayıt var, koşum yok.**
+  * Düzeltme (kullanıcı kararı: "hayalet kaydı düzelt"): `dashboard-smoke`
+    girdisi `CI_JOB_COVERAGE`'dan **kaldırıldı**, gerekçesi kodda yazılı;
+    `CHECK_EXEMPT` yorumu "CI'da ayrı job" yerine "hiçbir job'da koşmuyor,
+    keşfedilip atlanıyor" diye düzeltildi. Dosya kapsam dışı kalıyor;
+    gerçek bir job eklenirse kayıt geri gelmeli. `check_coverage_report
+    --check` rc=0, kardeş süitler (`test_test_coverage_report`,
+    `test_gate_coverage_sync`, `test_summary_pattern_drift`) yeşil.
+  * **Doğru katman:** `test_dashboard_next_live_stream.py` — CI'da
+    `dashboard-next` job'ında FİİLEN koşuyor (verify.yml:3650). Yakalama
+    commit kapısında değil CI'da olur; commit kapısında koşabilen tek
+    dashboard-next katmanı tarayıcısız `test_dashboard_next_ui_contract.py`.
+- **Üretilen ölçüm (bu dosyaya eklendi, 2 → 4 test):**
+  * `TrendWindowTest.test_trend_page_renders_exactly_twenty_newest_rows` —
+    upstream **25** satırla açılır, `/trend` tablosu **tam 20** satır basmalı,
+    ilk satır upstream'in **en yenisi** olmalı (sıra tekil ve artan), 3
+    yayından sonra hâlâ 20 ve pencere **kaymış** (eski en yeni satır
+    düşmüş) olmalı. İki ayrı sessiz hata bu ölçümü kırar: kırpma yok (limit
+    ölü kod) ve ters sıra ("son 20" başlığı en ESKİ 20'yi gösterir).
+    Ayrı sınıf + ayrı upstream **zorunluydu**: canlı-akış testi "yayın
+    sonrası satır sayısı arttı" diye ölçtüğü için 25 satırlık ortak
+    upstream onu bozardı (pencere 20'de doyardı).
+  * `LiveStreamTest.test_verdict_panel_and_live_trend_describe_the_same_run`
+    — pano (`/`) üzerinde `VerdictCard` (`/api/latest`) ile `RunsTable`
+    (`/api/trend`) **iki ayrı uçtan** beslenir; parite bozulursa pano
+    "Son Koşum: FAIL" derken tabloda üç saat önceki koşumu gösterir ve bu
+    çelişki **hiçbir mevcut katmanda görünmez** (her kart ayrı ayrı
+    doğrudur, statik sözleşme testleri yeşil kalır). Üç ölçüt: (a) verdict
+    kartının damgası == tablodaki en yeni satır, (b) canlı göstergenin
+    verdict'i == kartın verdict metni, (c) yayın sonrası tablo **öne
+    geçer** (geriye kayma = tekrarlanan/bayat olay sızıntısı).
+- **Fixture düzeltmesi (pariteyi ANLAMLI kıldı):** upstream `snapshot()`
+  önce sabit `ts`/`verdict` basıyordu; "parite" ölçümü o zaman **her zaman
+  "uyuşur"**, yani hiçbir şey ölçmezdi. Artık `snapshot()` **en yeni trend
+  satısını** tarif ediyor (`/api/latest` = `LATEST` = history'nin son
+  satırı, gerçek sözleşme) ve `push()` verdict'i de değiştiriyor. Damgalar
+  `_ts(index)` ile **tekil ve artan**; eski `2026-09-2%d` + `index % 10`
+  dizisi 10 satırda bir döndüğü için pencere 20'yi aşınca **en yeni
+  sanılan satır en eskiydi** — yani ölçüm kendi ölçtüğü hatayı gizliyordu.
+- **DERS — var olmayan testin bekleyişi BAĞLANMAMIŞ olmanın anlamını
+  yakalıyordu:** eski ölçüm `/canlı/` diye bekliyordu; bu desen
+  `RunsTable`'ın **bağlanmamış** göstergesinin kendi metniyle eşleşir
+  ("canlı bağlantı bekleniyor" — içinde "canlı" var). Yani bekleme "bağlı"
+  anını değil "bağlı değil" anını yakalıyordu; ilk koşuda verdict-parite
+  testi tam olarak bununla `"canlı bağlantı bekleniyor"` okuyup düştü.
+  Doğru ölçüt bağlı **ve** verdict basılmış hâli: `/canlı ·/`. Dört
+  testin dördünde de bu ölçüte geçildi.
+- **DERS (kendi assert'im yanlıştı, uygulama doğruydu):** sıra kontrolünü
+  `for older, newer in zip(stamps, stamps[1:])` ile yazmış, değişkenleri
+  ters adlandırmışım → "en yeni en eskiden büyük" kontrolü YANLIŞ yönde
+  çalıştı ve ilk koşuda kırmızı verdi. Ölçüm **ilk çalıştırmada** kırıldı
+  (yeşil'e ayarlanmadı), tablo fiilen yeni→eski basıyordu. Doğrulama: üç
+  MUTASYONla testlerin boş olmadığı kanıtlandı —
+  (1) `windowRows`'ta `slice(-limit)` → `slice()`: pencere testi
+      `25 != 20` ile KIRMIZI; (2) `.reverse()` silindi: "ilk satır en yeni
+      değil" (`00:05 != 00:24`) KIRMIZI; (3) `setVerdict("BOGUS")`:
+      `'canlı · BOGUS' != 'canlı · PASS'` KIRMIZI. Uygulama kodu
+      `cp /tmp/RunsTable.tsx.bak` ile **birebir** geri alındı (diff yok,
+      `slice(-limit).reverse()` ve `setVerdict(payload…)` yerinde).
+- **Kanıt:** süit **4/4** OK (yerelde gerçek Chromium ile; `Ran 4 tests in
+  6.3s`) · 3/3 mutasyon yakalandı · `make verify` → `SWEEP: PASS — 6/6`
+  (battery 359.1s) · `check_coverage_report --check` rc=0. Commit/push/PR
+  YAPILMADI.
+### `/api/trend?limit=N` — sunucu-tarafı pencere (refs_trend ile tutarlı) (2026-09-28)
+
+- **İstek:** "/api/trend'e sunucu-tarafı limit desteği ekle (query-string
+  okuyan, refs_trend ile tutarlı pencere) ve testle."
+- **ÖLÇÜLEN BOŞLUK — parametre zaten VARDI, sunucu YOK SAYIYORDU.**
+  `?limit=` belgelenmiş bir sözleşmeydi ve **iki canlı tüketici** onu
+  gönderiyordu:
+  * MCP `leibniz2_trend` → `_calisma/mcp/server.py:135`
+    `/api/trend?limit={params.limit}`; `_calisma/mcp/README.md` tablosu
+    bunu "?limit=N → **Son N koşumun** trend kayıtları" diye belgeliyor.
+  * dashboard-next `lib/preview.ts` `getTrend(limit)` →
+    `/api/trend?limit=${limit}` (pano slotu 5, `/trend` sayfası 20).
+  `serve_trend` parametreyi hiç okumuyordu → ikisi de **İSTEDİKLERİ PENCEREYİ
+  ALAMIYORDU**, `HISTORY_MAX=100` kaydın tamamını alıyordu. Yani bir model
+  "son 5 koşumu getir" dediğinde 100 kayıt alıyordu ve farkı **sessizce**
+  yok oluyordu.
+- **Uygulanan sözleşme:**
+  * `?limit=N` → **en yeni N** koşum; sıra korunur (eski → yeni). Yani
+    `rows[-limit:]`; `rows[:limit]` en ESKİ N'yi döndürürdü.
+  * **Parametre yoksa tüm geçmiş** (geriye uyum): `preview.js` `/api/trend`'i
+    parametresiz çağırır; zorunlu olsaydı pano boşalırdı.
+  * **Boş değer (`?limit=`) "penceresiz"**, 0 değil (`parse_qs` boş değeri
+    düşürür). 0 ise 1'e kırpılır.
+  * Kırpma **dashboard-next SSE tüneliyle birebir aynı**: `Math.trunc`
+    (5.9 → 5), 1..200 sıkıştırma, sayıya çevrilemeyen → 20. Aynı değer
+    tünolden geçerken ve doğrudan gelirken farklı pencere üretmemeli; iki
+    katman ayrı kural uygularsa "hangi katmana göre?" belirsizleşir.
+  * Bozuk parametre **400 değil** tanımlı pencere: okuma ucu, hata sayfası
+    üretse pano sessizce boş kalırdı; pencere zaten sınırlı, güvenlik
+    kazancı yok.
+- **"refs_trend ile tutarlı pencere" = gövdenin İKİ yarısı aynı pencereyi
+  anlatmalı.** `/api/trend` iki zaman serisini birleştirir ve `preview.js`
+  ikisini **yan yana** basar (trend grafiği + refs-trend + duration/budget).
+  Yalnız `history` kırpılırsa ekranda iki ayrı "son" görünür. Bu yüzden
+  pencere `refs_trend.rows` **ve** `refs_trend.duration_budget.rows`
+  listelerine de uygulanır.
+  *Dokunulmayan:* satır listesi olmayan payload'lar, hata nesnesi
+  (`{"error": ...}` — refs-trend.json okunamazsa 200 içinde gelir) ve
+  `summary`/`totals`/`warnings`. Özetler `refs_trend.py`'nin TÜM artifact
+  üzerindeki hesabıdır; burada yeniden hesaplamak **ikinci bir doğruluk
+  kaynağı** doğururdu. "Özet 100 koşumu, satırlar 20'yi anlatıyor" farkı
+  gizli kalmasın diye pencere uygulandığında gövdeye `limit` alanı eklendi —
+  pencere yoksa alan da YOK (tüketici "tüm geçmiş" sanmalı).
+- **Testler:** `test_preview_server.py` → yeni `TestTrendLimitWindow`
+  (**11 test**): pencere + sıra, geçmişten büyük limit, parametresiz geriye
+  uyum, boş değer, **iki yarının birlikte pencerelenmesi**, hata/eksik
+  payload dayanıklılığı, kırpma sınırları, `Math.trunc` ayrışmaması,
+  `window_tail` birim sözleşmesi ve **cross-layer drift guard** (`route.ts`
+  kaynağındaki tavan/yedek sabitler Python sabitleriyle eşleşmeli).
+- **Mutasyonla kanıtlandı (testler boş değil):** (1) kırpma kaldırıldı → 4
+  test kırmızı; (2) `rows[:limit]` (en eski N) → 3 test kırmızı; (3)
+  `window_refs_trend` çağrısı kaldırıldı → **yalnız** "iki yarı" testi
+  kırmızı (tutarlılık sözleşmesinin tek sahibi o). Uygulama `cp` ile birebir
+  geri alındı.
+- **Canlı doğrulama (gerçek sunucu, 8 satırlık fixture + sunucunun kendi
+  koşumu = 9):** parametresiz `history=9 refs=8 dur=8` ve `limit` anahtarı
+  YOK · `?limit=3` → 3/3/3 · `?limit=0` → 1/1/1 · `?limit=9999` → 9/8/8
+  (`limit=200`) · `?limit=abc` → tamamı (`limit=20`) · `?limit=2.9` → 2/2/2
+  (`limit=2`) · `?limit=` → tamamı, `limit` anahtarı yok.
+- **Yan etki taraması:** `/api/trend` gövdesine `limit` alanı eklendi;
+  tüketiciler alan bazında okuyor (`preview.js` `data.history` +
+  `refs_trend.duration_budget.rows`; Next `getJson<{history}>`; MCP ham JSON),
+  gövde eşitliği kullanan tüketici yok. `docs/RUN_DASHBOARD.md` güncellendi.
+- **Kapsam dışı bırakılan (ölçüldü, kullanıcı kararı gerektiriyor):** MCP
+  README'si **dört** uçta da `?limit=N` belgeliyor — `/api/history`,
+  `/api/refs-trend`, `/api/run-history` **hiçbiri** limit okumuyor
+  (`serve_run_history` `load_run_logs(15)`'i sabit kullanıyor). Bu tur
+  yalnız istenen `/api/trend` değişti; komşu uçlar **ayrı bir iş**.
+- **Kanıt:** `TestTrendLimitWindow` **11/11** · `test_preview_server` +
+  `test_api_method_contract` + `test_security_header_matrix` +
+  `test_vercel_adapter` **206 test OK** · canlı sunucu ölçümü yukarıda ·
+  `make verify` → `SWEEP: PASS — 6/6` (battery 320.9s). Commit/push/PR
+  YAPILMADI.
+### "work/2026-09-19'un 9 commit'ini merge et" — ÜÇÜNCÜ ÖLÇÜM (2026-09-28)
+
+- **İstek (3. kez):** "work/2026-09-19 dalındaki 9 commit'i reword-working'e
+  fast-forward merge et ve sonrasını batarya+build ile doğrula." Önceki iki
+  turda 11 ve 7 denmişti; **9** yeni bir sayı olduğu için durum DEĞİŞMİŞ
+  olabilirdi — ölçüldü, DEĞİŞMEMİŞ.
+- **ÖLÇÜM (üç bağımsız kanıt):**
+  1. **Dal yok.** `git rev-parse --verify refs/heads/work/2026-09-19` → yok.
+     `git for-each-ref` ile TÜM ref'ler tarandı: 16 yerel dal + remote ref'ler
+     arasında `work/*` **hiçbir** dal yok, `work/2026-09-19` uzak karşılığı da
+     yok. Bu dal iki tur önce **KULLANICI KARARIYLA** silinmişti
+     (`git branch -d`, "was dd913c8"; içeriği tamamen merge'liydi, 0 özgün
+     commit, remote karşılığı yok).
+  2. **9 commit'li dal yok.** Her yerel dal için
+     `git rev-list <dal> --not reword-working` (DEJENERE olmayan biçim —
+     aynı ref'i pozitif+negatif vermek anlamsız sayı üretir): 0,0,0,0,0,1,2,2,
+     2,3,5,20,85,210. **9'a düşen dal YOK.**
+  3. **Kayıtlı dal ucu hâlâ okunabilir ve içeriği KAYIP DEĞİL.**
+     `dd913c8` nesne olarak duruyor ve `reword-working'in ATASI**
+     (`merge-base --is-ancestor` → EVET). Yani `git rev-list dd913c8 --not
+     reword-working` = **0**: dalın taşıdığı her şey zaten hedefte.
+     7 commit'in (`dd913c8 11a673b 0d4196e ef0b6dc e286779 98b5acd 81a0f82`)
+     YEDİSİ DE `reword-working` içinde, tek bir "EKSİK" yok.
+- **Kapı doğru davrandı (fail-closed, önceki turun düzeltmesi kanıtlandı):**
+  `check_merge_precondition.py reword-working work/2026-09-19 --subject "9
+  commit fast-forward merge"` → **rc=2** ve insan-okunur yüz "PASS" değil
+  "**ÖLÇÜLEMEDİ: hedef veya kaynak ref çözülemedi. Bu bir PASS/FAIL DEĞİLDİR
+  — karar yok**" diyor. Merge denenmedi. Özne araştırması da `9 commit
+  fast-forward merge → eşleşme yok` dedi. Bu, iki tur önce düzeltilen
+  fail-open render hatasının **artık çalıştığının** kanıtı: aynı durum o
+  zaman "PASS: birleşim işe yarar (None commit geliyor)" basıyordu.
+- **NE YAPILDI:** Merge **YAPILMADI** — çünkü yapılacak bir şey yok; fast-forward
+  boş bir merge olurdu ve `--allow-empty`-e ihtiyaç duyardı. İçerik zaten
+  hedefte olduğu için birleştirmek hiçbir şeyi değiştirmezdi. Talep edilen
+  doğrulama yine de **koşuldu** (aşağıda).
+- **Doğrulama (istenen kısım YAPILDI):** `make verify` → **`SWEEP: PASS — 6/6`**
+  (build 3.3s PASS, battery 305.3s PASS, merge-pre advisory PASS). Ayrıca
+  `test_preview_server` + `test_api_method_contract` +
+  `test_security_header_matrix` + `test_vercel_adapter` **206 test OK** ve
+  `TestTrendLimitWindow` 11/11 (önceki turun işi). Commit/push/PR YAPILMADI.
+- **Kurtarma (yine tek komut, hâlâ geçerli):** `git branch work/2026-09-19
+  dd913c8` — dalı 7 commit'iyle geri getirir; içeriği zaten `reword-working`
+  ve `main` içinde olduğu için merge yine 0 commit üretir. Bu dalı geri
+  getirmek isteyen bir SEY varsa (9 commit'lik başka bir dal mı kastedildi,
+  farklı bir repo mu), adını/commit'ini ver — ölçüm tekrar yapılır.
+### Push isteği → commit (main) + iki ölçüm boşluğu (2026-09-28)
+
+- **İstek:** "Push reword-working to origin so CI verifies the merge … and the
+  branch has a remote backup." Ölçüldü ve **push'un hiçbir amacını
+  gerçekleştiremeyeceği** çıktı:
+  1. `reword-working` == `origin/reword-working` == `a24c4dba7afc…`;
+     `git push --dry-run origin reword-working` → **"Everything up-to-date"**.
+     ahead=0 · behind=0 · upstream zaten `origin/reword-working`. Gönderilecek
+     commit YOK.
+  2. Doğrulanacak **merge yok** (aynı gün 3. kez ölçüldü: `work/2026-09-19`
+     hiçbir ref'te yok). Üstelik push olsaydı **hiçbir workflow tetiklenmezdi**:
+     ref güncellenmediği için push event'i oluşmaz.
+  3. **Bu oturumun işi `reword-working`'te değildi:** 69 değişiklik (27 yeni
+     dosya) `main` üzerinde ve COMMIT EDİLMEMİŞTİ. Yani o dalı push etmek
+     yedeklenmesi gereken şeyin **sıfırını** yedeklerdi.
+  Kullanıcı kararı: **commit `main` üzerine, push sonra konuşulacak.**
+- **Commit:** `da998b2` — 67 dosya, +10624/-268. 64 pre-commit hook
+  Passed/Skipped, **0 Failed**; `check-unit-tests: 188 test dosyası PASS`.
+  `reword-working` **DOKUNULMADI**. Başka thread'lerin iki stash'i
+  (`pre-reword-stash: dirty entries from other threads`) **dokunulmadan**
+  bırakıldı.
+- **Commit sırasında ölçülen iki gerçek kusur:**
+  * **1) `test_dashboard_keyboard_nav` tam bataryada FLAKY.** İlk commit
+    denemesinde 343s'lik `check-unit-tests` koşusunda düştü
+    (`1/188 BAŞARISIZ — commit bloke`); **tek başına 18/18 geçiyor (85.8s)**,
+    ikinci denemede 188/188 PASS oldu. Yani test canlı preview_server +
+    Chromium kullanıyor ve yük altında kararsız. Bu tür bir kapı, insanı
+    `--no-verify`'ya iten tam olarak "gürültüye dönen kapı"dır; `--no-verify`
+    **kullanılmadı**. Sonraki adım: süre bütçesi/koşu sırası incelenmeli.
+  * **2) Prettier kapısı 2 dosyada geçmiş işi yakaladı**
+    (`apps/dashboard-next/tsconfig.json`, `app/api/events/route.ts`).
+    `npx prettier --write` ile düzeltildi; fark **tamamen biçimsel**
+    (dizi tek satıra indirme, satır kaydırma, sondaki virgül) — anlamsal
+    değişiklik YOK, `tsc --noEmit` yeşil.
+- **Commit'ten BİLEREK çıkarılan iki untracked artefakt:**
+  * `_calisma/CIKTI/_calisma/` — preview_server'ın **yanlış kökten**
+    çalışmasından kalmış iç içe runtime ağacı (`logs/server_events.jsonl`,
+    `history.jsonl`, `runs/run-*.json`, `history.jsonl.sha256`, 16 KB).
+    Silinmedi (başka sürecin çıktısı olabilir), sadece commit'e alınmadı.
+  * `_calisma/CIKTI/klayers.json` — `verify_delivery.py --klayers-out`
+    **üretimi** CI sidecar'ı. **HİJYEN BOŞLUĞU:** kardeş runtime
+    artefaktlarının hepsi gitignore'da (`_calisma/CIKTI/logs/`, `runs/`,
+    `history.jsonl`, `history.jsonl.sha256`) ama `klayers.json` **yok** —
+    `make verify` her koşuda onu üretip çalışma ağacını kirletiyor.
+    Commit'e almak yanlış olurdu; `.gitignore`'a eklenmeli (ayrı iş).
+- **Doğrulama:** `make verify` → `SWEEP: PASS — 6/6` (commit öncesi) ·
+  commit sonrası 64 hook yeşil, `check-unit-tests` 188/188 PASS ·
+  `check-skill-surfaces` 18 satır · `check-skill-surface-inventory-doc`
+  güncel · `check-precommit-inventory` 63/63 senkron. **PUSH YAPILMADI**
+  (`main` vs `origin/main`: ahead=138, **behind=4** → push zaten
+  reddedilirdi; önce `da58b14 3f043bc c78dc67 fa1809b` alınmalı).

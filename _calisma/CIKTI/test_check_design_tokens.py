@@ -6,7 +6,14 @@ Contracts:
 - tokens.css :root + light block mirror tokens.json (tints included)
 - dashboard-next/app/globals.css: no token-name shadow, no literal copy, no
   hard-coded colour literal — in ANY block (second :root, .dark, @media …)
-- check_tokens.py is ~0.05s and stdlib-only
+- dashboard-next UYGULAMA KAYNAĞI (.tsx/.ts/.jsx/.js) ve globals.css DIŞINDAKİ
+  her .css: koda gömülü hex/rgb/hsl literali, arbitrary renk utility'si ya da
+  Tailwind varsayılan paleti olamaz (contract 8f/8g) — aksi halde tema
+  koyu/açık/stripe varyantlarında donar. Ölçü arbitrary değerleri, var()
+  türetmeleri ve gölge içi rgba meşrudur (karşı-testlerle pinlenir).
+- check_tokens.py is OFFLINE and stdlib-only; gezinme node_modules/.next
+  ağaçlarını budar, yani sonuç kurulu paketlerden bağımsızdır (ölçüldü
+  2026-09-28: budama öncesi 24.917 dosya → ~1,4s; sonrası ~0,15s).
 """
 import importlib.util
 import pathlib
@@ -454,6 +461,63 @@ class TestDesignTokensGate(unittest.TestCase):
             self.assertIn("renk literali", out)
         finally:
             shutil.rmtree(td, ignore_errors=True)
+
+    def test_source_walk_prunes_installed_trees(self):
+        """Kaynak gezinmesi node_modules/.next içine GİRMEZ.
+
+        İki iddia birlikte: (1) kurulu bağımlılıkların içindeki renk
+        literalleri kapıyı kirletmez (aksi halde her `npm ci` sonrası kapı
+        kırmızı olurdu — node_modules'te hex kaçınılmaz), (2) gezinme o
+        ağaçlara girmediği için kapının süresi kurulu paket sayısından
+        bağımsızdır.
+        """
+        gate = _load_gate(SCRIPT)
+        walked = list(gate._app_source_files({".tsx", ".ts", ".js", ".jsx"}))
+        self.assertTrue(walked, "gezinme boş — kapı hiçbir kaynağı görmüyor")
+        bad = [str(p) for p in walked
+               if {"node_modules", ".next"} & set(p.parts)]
+        self.assertEqual(bad, [], "gezinme kurulu ağaca giriyor: %s" % bad[:3])
+
+    def test_hex_in_other_css_file_fails(self):
+        """globals.css DIŞINDAKİ bir .css de aynı kapıdan geçmeli (8g).
+
+        Ölçüldü (2026-09-28): bu dal olmadan panoya YENİ bir .css dosyası
+        açıp içine hex yazmak kapıyı YEŞİL bırakıyordu — yani kural teknik
+        olarak vardı ama yeni bir dosyayla sessizce atlatılabiliyordu.
+        """
+        r, out = self._source_repo(
+            "apps/dashboard-next/components/kart.css",
+            ".kart { background: #ff0000; }\n")
+        self.assertNotEqual(r.returncode, 0, out)
+        self.assertIn("kart.css:1", out, "bulgu dosya:satır bildirmeli")
+        self.assertIn("renk literali", out)
+
+    def test_other_css_var_values_and_theme_block_do_not_trip(self):
+        """Karşı-test: yeni .css aşırı-geniş cezalandırılmamalı (8g).
+
+        `@theme` bloğu bir utility EŞLEMESİdir (belge custom property'si
+        değil; globals.css dalındaki muafiyetin aynısı) ve `var()` tabanlı
+        değerler zaten token'a bağlıdır — kırmızı olmamalı.
+        """
+        r, out = self._source_repo(
+            "apps/dashboard-next/components/kart.css",
+            "@theme { --color-brand: #ff0000; }\n"
+            ".kart { background: var(--surface-raised); }\n"
+            ".kart:hover { border-color: var(--border); }\n")
+        self.assertEqual(r.returncode, 0, out)
+
+    def test_app_source_hex_literal_fails(self):
+        """Uygulama kaynağında çıplak hex (inline stil) kırmızı olmalı (8f).
+
+        `bg-[#…]` biçimi ayrı bir dala düşer; buradaki iddia çıplak literali
+        pinler (üretimde `style={{ color: "#e6edf3" }}` gibi görünür).
+        """
+        r, out = self._source_repo(
+            "apps/dashboard-next/components/kart.ts",
+            'export const S = { color: "#e6edf3" };\n')
+        self.assertNotEqual(r.returncode, 0, out)
+        self.assertIn("kart.ts:1", out)
+        self.assertIn("renk literali", out)
 
     def test_tailwind_palette_colour_fails(self):
         """`bg-slate-900` de köprü dışı renk kaynağıdır → kırmızı.

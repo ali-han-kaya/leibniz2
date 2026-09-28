@@ -1941,6 +1941,222 @@ class TestServeHistoryTrendCompact(unittest.TestCase):
             ps.RUNS_DIR = old
 
 
+class TestTrendLimitWindow(unittest.TestCase):
+    """`/api/trend?limit=N` — sunucu tarafı pencere sözleşmesi.
+
+    Neden ayrı kapı: `?limit=` zaten BELGELENMİŞ bir sözleşmeydi ve iki canlı
+    tüketici onu gönderiyordu (MCP `leibniz2_trend`, dashboard-next
+    `getTrend` → `/api/trend?limit=20`) ama sunucu parametreyi tamamen yok
+    sayıyordu — istenen pencere sessizce gelmiyordu (ölçüldü 2026-09-28).
+
+    Kırılan iki ayrı sessiz hata:
+      * kırpma YOK  → tüketicinin istediği N yerine 100 kaytın TAMAMı döner;
+      * YANLIŞ UÇ  → `rows[:limit]` EN ESKİ N'yi döndürür, "son N" olmaz.
+    İkisi de HTTP 200 döner, ölçülebilir tek fark: satır SAYISI ve SIRASI.
+    """
+
+    ROWS = 5
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self._old_hist, self._old_rt = ps.HISTORY_PATH, ps.REFS_TREND_PATH
+        ps.HISTORY_PATH = os.path.join(self._tmp.name, "history.jsonl")
+        ps.REFS_TREND_PATH = os.path.join(self._tmp.name, "refs-trend.json")
+        # Önbellek sıfırla: load_history() mtime_ns+boyut ile anahtarlıyor,
+        # testler aynı dosya yolunu paylaşıyor.
+        ps._history_cache = (None, [])
+
+    def tearDown(self):
+        ps.HISTORY_PATH, ps.REFS_TREND_PATH = self._old_hist, self._old_rt
+        ps._history_cache = (None, [])
+        self._tmp.cleanup()
+
+    # ── fixture yazıcıları ───────────────────────────────────────────
+    def _write_history(self, count=None):
+        count = self.ROWS if count is None else count
+        with open(ps.HISTORY_PATH, "w", encoding="utf-8") as f:
+            for i in range(count):
+                f.write(json.dumps({
+                    "ts": "2026-08-23T%02d:00:00Z" % (9 + i),
+                    "verdict": "PASS", "p0": 0, "p1": 0,
+                }, ensure_ascii=False) + "\n")
+        ps._history_cache = (None, [])
+
+    def _write_refs_trend(self, count=None):
+        count = self.ROWS if count is None else count
+        rows = [{"date": "2026-08-%02d" % (20 + i), "run_id": 100 + i,
+                 "duration_s": float(i)} for i in range(count)]
+        with open(ps.REFS_TREND_PATH, "w", encoding="utf-8") as f:
+            json.dump({"generated": "2026-08-25T00:00:00Z",
+                       "rows": list(rows),
+                       "duration_budget": {"rows": list(rows),
+                                           "summary": {"run_count": count}}},
+                      f, ensure_ascii=False)
+
+    def _capture(self):
+        class _FakeHandler:
+            def __init__(self):
+                self.sent = None
+
+            def _send(self, status, body,
+                      content_type="text/plain; charset=utf-8",
+                      extra_headers=None):
+                self.sent = (status, body, content_type)
+
+        return _FakeHandler()
+
+    def _serve(self, path):
+        fake = self._capture()
+        fake.path = path
+        ps.Handler.serve_trend(fake)
+        status, body, ctype = fake.sent
+        self.assertEqual(status, 200)
+        self.assertIn("application/json", ctype)
+        return json.loads(body)
+
+    def _history_ts(self, data):
+        return [r["ts"] for r in data["history"]]
+
+    # ── sözleşme ─────────────────────────────────────────────────────
+    def test_limit_windows_history_to_the_newest_rows_in_order(self):
+        self._write_history()
+        data = self._serve("/api/trend?limit=2")
+        # 09,10,11,12,13 yazıldı → "son 2" = 12,13 (ESKİDEN YENİYE, sıra bozulmaz)
+        self.assertEqual(self._history_ts(data), ["2026-08-23T12:00:00Z",
+                                                  "2026-08-23T13:00:00Z"])
+        self.assertEqual(data["limit"], 2)
+
+    def test_limit_larger_than_history_returns_everything(self):
+        self._write_history()
+        data = self._serve("/api/trend?limit=500")
+        self.assertEqual(len(data["history"]), self.ROWS,
+                         "pencere geçmişten büyükse HER ŞEY dönmeli")
+
+    def test_absent_limit_keeps_the_whole_history(self):
+        """Geriye uyum: parametresiz çağrı ESKİ davranışı korur.
+
+        `preview.js` `/api/trend`'i parametresiz çağırır; parametre zorunlu
+        olsaydı pano boşalırdı.
+        """
+        self._write_history()
+        data = self._serve("/api/trend")
+        self.assertEqual(len(data["history"]), self.ROWS)
+        self.assertNotIn("limit", data,
+                         "pencere uygulanmadıysa gövde `limit` bildirmemeli "
+                         "(tüketici 'tüm geçmiş' sanmalı)")
+
+    def test_blank_limit_is_not_a_limit(self):
+        """`?limit=` boş değer = penceresiz, 0 DEĞİL (0 → 1'e kırpılırdı)."""
+        self._write_history()
+        data = self._serve("/api/trend?limit=")
+        self.assertEqual(len(data["history"]), self.ROWS)
+        self.assertNotIn("limit", data)
+
+    # ── "refs_trend ile tutarlı pencere" ─────────────────────────────
+    def test_limit_windows_both_halves_of_the_merged_response(self):
+        """Gövdenin İKİ yarısı AYNI pencereyi anlatmalı.
+
+        `preview.js` refs-trend ve duration/budget grafiğini yan yana basar;
+        yalnız history kırpılırsa ekranda iki ayrı "son" görünür.
+        """
+        self._write_history()
+        self._write_refs_trend()
+        data = self._serve("/api/trend?limit=2")
+        refs = data["refs_trend"]
+        # 20..24 yazıldı → "son 2" = 23,24 (refs_trend.py satırları history
+        # sırasını korur: `build_duration_budget` history_rows'u sırayla gezer)
+        self.assertEqual([r["date"] for r in refs["rows"]],
+                         ["2026-08-23", "2026-08-24"],
+                         "refs_trend.rows pencerelenmedi")
+        self.assertEqual([r["date"] for r in refs["duration_budget"]["rows"]],
+                         ["2026-08-23", "2026-08-24"],
+                         "duration_budget.rows pencerelenmedi")
+        # Özet TÜM artifact'i anlatır; pencerelenmez ama GİZLİ de kalmaz.
+        self.assertEqual(refs["duration_budget"]["summary"]["run_count"],
+                         self.ROWS, "özet refs_trend.py'nin hesabıdır")
+
+    def test_limit_preserves_the_error_shape_of_refs_trend(self):
+        """refs-trend.json okunamazsa hata nesnesi bozulmadan kalır."""
+        self._write_history()
+        with open(ps.REFS_TREND_PATH, "w", encoding="utf-8") as f:
+            f.write("{not json")
+        data = self._serve("/api/trend?limit=2")
+        self.assertEqual(data["refs_trend"],
+                         {"error": "refs trend unavailable"})
+        self.assertEqual(len(data["history"]), 2, "history yine pencerelendi")
+
+    def test_limit_tolerates_refs_trend_without_row_lists(self):
+        """Satır listesi olmayan refs_trend payload'ı çökmez."""
+        self._write_history()
+        with open(ps.REFS_TREND_PATH, "w", encoding="utf-8") as f:
+            json.dump({"generated": "x", "repo": "o/r"}, f)
+        data = self._serve("/api/trend?limit=2")
+        self.assertEqual(data["refs_trend"], {"generated": "x", "repo": "o/r"})
+
+    # ── kırpma sınırları ─────────────────────────────────────────────
+    def test_limit_clamping_matches_the_sse_tunnel(self):
+        """Sınırlar `route.ts` ile aynı olmalı (0→1, dev→200, bozuk→20).
+
+        Boş değer (`:limit=`) listede YOK: o "penceresiz" demek (ayrı test),
+        kırpma değil — tünel de boş değeri `Number.isFinite("")` → false
+        görür ama sunucu tarafında `parse_qs` boş değeri zaten düşürür.
+        """
+        self._write_history(count=1)
+        for raw, expected in (("0", 1), ("-3", 1), ("9999", 200),
+                              ("abc", ps.TREND_LIMIT_FALLBACK),
+                              ("5.9", 5)):
+            with self.subTest(limit=raw):
+                data = self._serve("/api/trend?limit=" + raw)
+                self.assertEqual(data["limit"], expected,
+                                 "?limit=%s → %s bekleniyordu"
+                                 % (raw, expected))
+                self.assertLessEqual(len(data["history"]), expected)
+
+    def test_truncation_does_not_diverge_from_the_tunnel(self):
+        """Tünel `Math.trunc` kırpar; sunucu da öyle kırpmalı.
+
+        `int("5.9")` ValueError verir ve bozuk değer gibi 20'ye düşerdi —
+        yani iki katman AYRI pencere üretirdi. `float` + `int` bunu `Math.trunc`
+        ile aynı yapar.
+        """
+        self.assertEqual(ps.parse_trend_limit("5.9"), 5)
+        self.assertEqual(ps.parse_trend_limit("5"), 5)
+        for raw in ("inf", "-inf", "nan", "abc", "1e400"):
+            with self.subTest(raw=raw):
+                self.assertEqual(ps.parse_trend_limit(raw),
+                                 ps.TREND_LIMIT_FALLBACK,
+                                 "sayıya çevrilemeyen değer tanımlı yedek "
+                                 "pencereye düşmeli")
+
+    def test_clamp_constants_match_the_next_tunnel(self):
+        """İki katmanın sabitleri SÜRÜKLENMESİN (cross-layer drift guard).
+
+        `route.ts` pencereyi `Math.min(Math.max(Math.trunc(rawLimit), 1), 200)`
+        ile kırpar ve sayı değilse 20'ye düşürür. Sunucu tarafı aynı sayıyı
+        kabul etmiyorsa aynı istek tünolden geçerken ve doğrudan gelirken
+        FARKLI pencere üretir — hangisi doğru olduğu belirsizleşir.
+        """
+        route = os.path.join(ps.REPO_ROOT, "apps", "dashboard-next", "app",
+                             "api", "events", "route.ts")
+        with open(route, encoding="utf-8") as f:
+            source = f.read()
+        self.assertIn("Math.min(Math.max(Math.trunc(rawLimit), 1), %d)"
+                      % ps.TREND_LIMIT_MAX, source,
+                      "route.ts tavanı değişti: preview_server "
+                      "TREND_LIMIT_MAX ile eşitlenmeli")
+        self.assertIn(": %d;" % ps.TREND_LIMIT_FALLBACK, source,
+                      "route.ts yedeği değişti: preview_server "
+                      "TREND_LIMIT_FALLBACK ile eşitlenmeli")
+
+    def test_window_tail_keeps_order_and_is_a_noop_without_limit(self):
+        rows = [{"n": i} for i in range(5)]
+        self.assertEqual(ps.window_tail(rows, 2), [{"n": 3}, {"n": 4}])
+        self.assertEqual(ps.window_tail(rows, None), rows)
+        self.assertEqual(ps.window_tail(rows, 99), rows)
+        self.assertIs(ps.window_tail("satır değil", 2), "satır değil",
+                      "liste olmayan girdi dokunulmadan dönmeli")
+
+
 class InlineEventHandlerContractTests(unittest.TestCase):
     """VERIFY-001 regresyon kapısı: satır içi event-handler NITELIĞI olmayacak.
 

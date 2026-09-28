@@ -154,6 +154,14 @@ curl -s http://127.0.0.1:8000/api/run-history | python3 -m json.tool
 # Unified trend (one fetch: history + refs-trend)
 curl -s http://127.0.0.1:8000/api/trend | python3 -m json.tool
 
+# ?limit=N → EN YENİ N koşum. history VE refs_trend'in satır listeleri
+# birlikte pencerelenir (gövdenin iki yarısı aynı zaman aralığını anlatır);
+# sıra korunur (eski → yeni). Pencere uygulanınca gövde `limit` alanıyla
+# bildirir — refs_trend özetleri TÜM artifact'i anlatmaya devam eder.
+# Kırpma dashboard-next SSE tüneliyle aynı: 1..200, tümüne doğru atma,
+# sayıya çevrilemeyen değer 20. Parametre yoksa tüm geçmiş döner.
+curl -s 'http://127.0.0.1:8000/api/trend?limit=20' | python3 -m json.tool
+
 # Legacy split endpoints (still served, prefer /api/trend):
 # curl -s http://127.0.0.1:8000/api/history | python3 -m json.tool
 # curl -s http://127.0.0.1:8000/api/refs-trend | python3 -m json.tool
@@ -255,7 +263,7 @@ container path.
 |---|---|---|
 | `/api/health` | GET | `ok` (plain text) |
 | `/api/latest` | GET | Compact JSON: latest verify snapshot (verdict, P0/P1, layers, budget, stdout_short, hook_env_matrix) |
-| `/api/trend` | GET | Compact JSON: {history, refs_trend} (one fetch, replaces two) |
+| `/api/trend` | GET | Compact JSON: {history, refs_trend} (one fetch, replaces two) — `?limit=N` en yeni N koşum (iki yarıya birlikte uygulanır) |
 | `/api/history` | GET | JSON array of trend rows (JSONL-backed) — legacy, use /api/trend |
 | `/api/run-history` | GET | JSON array of last 15 run summaries |
 | `/api/refs-trend` | GET | JSON: duration/budget trend (CI artifact) — legacy, use /api/trend |
