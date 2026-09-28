@@ -1340,3 +1340,67 @@ panonun ve landing'in gerçek bir tema varyantını besliyor.
   start_new_session=True, stdin=DEVNULL)` + log dosyası, sonra kısa
   yoklamalar; mesajı da `git commit -F <dosya>` ile vermek heredoc/tırnak
   hasarını tümden eliyor. Ölü koşum yeni yetim patch bırakmadı (ölçüldü).
+
+### dashboard-next tip-test katmanı (2026-09-28) — "sözleşme hâlâ aynı mı?"
+
+- **Sorun:** `tsc --noEmit` "bu atama geçiyor mu" diye sorar, "sözleşme AYNI mı"
+  diye sormaz. Atanabilirlik eşitlikten gevşek olduğu için bir union'a varyant
+  eklenmesi, bir alan adının değişmesi ya da `API_BASE` fallback'inin düşmesi
+  derlemeden GEÇİYORDU ve panoyu sessizce bozuyordu (eksik alan hata vermez,
+  "—" basar). Commit `0ecc884` (14 dosya, 55 hook yeşil, 0 Failed): `test-d/`
+  altında 11 pozitif iddia + 14 negatif direktif + iki geçişli koşucu.
+- **Neden iki geçiş:** `@ts-expect-error` yalnız "bir hata var" der. `countTone`
+  ikinci parametresi `string`e gevşetilseydi `countTone(1, "none")` yine hata
+  verirdi — ama BAŞKA bir hata. Koşucu `test-d/`yi kopyalayıp direktifleri
+  kapatıyor ve tsc'nin bastığı tanı KODUNU etiketle karşılaştırıyor. Üç ihlal
+  fail-closed: etiketsiz direktif, eşleşmeyen kod, İDDİA EDİLMEYEN tanı.
+  Bağımlılık yok (stdlib + yerel tsc).
+- **`AssertEqual` tek parça YAZILAMAZ (ölçüldü):** generic bir takma adın
+  gövdesi çözülmemiş parametrelerle denetlenir, `Equal<A, B>` o anda `boolean`a
+  düşer ve `true` kısıtını ihlal eder → `TS2344`. Kısıt denetimi çağrı yerinde
+  olmak zorunda; desen `Assert<Equal<A, B>>`. Gerekçe `test-d/assertions.ts`
+  başlığında, derleyicinin bastığı hata metniyle birlikte yazılı.
+- **İnşa sırasında dört altyapı hatası bulundu (hepsi kilitlendi):**
+  1. `@ts-expect-error-disabled` YETMİYOR — tsc direktifi alt-dize olarak
+     arıyor, "kapatılmış" sanılan biçim susturmaya devam ediyordu (geçiş 2
+     sıfır tanı bastı). Çözüm: `@`i düşürmek.
+  2. `re.MULTILINE` olmadan satır-başı çapası yalnız metnin ilk karakterinde
+     eşleşiyordu → `strip_directives` sessiz no-op. Üstelik zayıf kontrol
+     (`"ts-expect-error" in metin`) her zaman doğru olduğu için yeşil kaldı;
+     kontrol `@`in YOKLUĞUNA çevrildi.
+  3. Yorum ön-eki (`//`) yutulunca satır yorum olmaktan çıkıp sözdizimi
+     bozuluyordu (TS1005/TS1127 yağmuru) → yakalama grubu ön-eki korur.
+  4. İddia anahtarı direktif satırı sanıldı; direktif BİR SONRAKİ satırı
+     susturduğu için tüm iddialar tek satır kaydı → çeviri tek yerde
+     (`parse_annotations`).
+- **Etiketler ölçümle yazıldı, varsayımla değil:** 14 koddan üçü düzeltildi —
+  `"PASS"` → TS2322 değil **TS2820** ("did you mean 'pass'?"), `verdicts`
+  → TS2339 değil **TS2551** ("did you mean 'verdict'?"), bilinmeyen rozet tonu
+  → TS2353 değil **TS2322**. Tip sistemi typo'yu yakalamakla kalmıyor,
+  doğrusunu da öneriyor.
+- **Mutasyon sondası (fail-closed kanıtı):** sözleşmeyi gevşet → pozitif iddia
+  düştü; yasağı kaldır → TS2578; `countTone`a zorunlu 3. parametre ekle →
+  **geçiş 1 yeşil kaldı**, yalnız geçiş 2 "kod uyuşmuyor: beklenen TS2345,
+  gelen TS2554" diyerek yakaladı. Üçünde de ağaç sha256 ile geri yüklendi.
+- **Kablolama:** `check-dashboard-typecheck` iki katmanlı ve önce koşucunun
+  kendi selftest'ini (18 vaka) koşuyor — parser sessizce bozulursa iddialar
+  denetlenmeden "yeşil" görünmesin. Modül testleri 18 → 26 (sahte tsc ile
+  hermetik boru hattı vakaları). `test-d` app tsconfig'inden dışlandı ki
+  üretilen `stripped/` kopyası `tsc --noEmit`i kirletemesin.
+
+### "Commit'lenmemiş iş" thread'i kapandı (2026-09-28 son ölçüm)
+
+- **Dört worktree de tertemiz**; ana ağaçta tek untracked `klayers.json`
+  (bilinçli, envanterde §F). Yani commit'lenmemiş oturum işi **kalmadı** —
+  `git status --porcelain -uall` ana ağaçta ve üç worktree'de de boş.
+- Koruma kalemleri commit'li: 59 hook'lu zincir (son dokunuş `0ecc884`),
+  parmak-izi kapısı + 18 testi (`11ea4c1`). Kapı `exit 0`; cache'te yalnız
+  taze ve eşleşmesiz 1 patch (`patch1790561449-4597`, karantina kuralı gereği
+  dokunulmadı).
+- **Kalan risk sınıfı artık FARKLI:** üç dal main'e merge değil
+  (`codex/ci-cache6-setup-python7-20260925` 5, `feat/github-site-sample` 7,
+  `feat/plist-info-line` 20 commit ileride). Bunlar *commit'li* iş: "kaybolma"
+  değil "teslim edilmedi" riski. Bu thread'in konusu değil, karar gerektirir.
+- **Ders:** "en büyük risk commit'lenmemiş iş" çerçevesi doğruydu ve artık
+  ölçülebilir biçimde YOK. Aynı istek tekrar geldiğinde cevap iş uydurmak
+  değil, ölçümü ve kararı tazelemek: `status` × 4 ağaç + kapı + stash listesi.

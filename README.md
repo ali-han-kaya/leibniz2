@@ -598,6 +598,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-27 | docs | commit'lenmemiş iş envanteri — üç kalem ölçüldü, sahiplik açık | [`ae45333`](https://github.com/ali-han-kaya/leibniz2/commit/ae45333) |
 | 2026-09-28 | other | recovery: yetim 23 patch arşivi + oturum kapanış kaydı | [`9bceacf`](https://github.com/ali-han-kaya/leibniz2/commit/9bceacf) |
 | 2026-09-28 | docs | oturum kapanış kaydı + uzun-hook koşum tuzağı (AGENTS.md) | [`76d683a`](https://github.com/ali-han-kaya/leibniz2/commit/76d683a) |
+| 2026-09-28 | feat | (dashboard-next) tip-testler + tanı-kodu doğrulamalı negatifler | [`0ecc884`](https://github.com/ali-han-kaya/leibniz2/commit/0ecc884) |
 
 ### Regresyon notları
 

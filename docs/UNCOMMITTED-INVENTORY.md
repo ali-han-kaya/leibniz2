@@ -143,3 +143,31 @@ yeterli.
 provenance kaydı yok. Bu yüzden commit'lenmedi, untracked bırakıldı ve burada
 belgelendi. (`CIKTI/` içinde 512 dosya izleniyor; ama izlenenler adlandırılmış
 kanıt dosyaları, bu ise geçici bir sidecar.)
+
+## G. Son ölçüm — kalem kapandı (2026-09-28)
+
+| Ölçüm | Değer |
+|---|---|
+| Ana çalışma ağacı | yalnız `?? _calisma/CIKTI/klayers.json` (§F kararı) |
+| `ci-cache6-setup-python7-20260925` worktree | temiz |
+| `work/2026-09-19` worktree | temiz |
+| `github-site-sample` worktree | temiz (`2ef1821`, §C) |
+| Parmak-izi kapısı | `exit 0` — cache'te 1 taze, eşleşmesiz patch |
+| Hook zinciri | 59 hook, commit'li (son dokunuş `0ecc884`) |
+
+`git status --porcelain -uall` dört ağaçta da boş: **commit'lenmemiş oturum
+işi kalmadı**. Kalan tek untracked dosya bilinçli bırakılan `klayers.json`
+(§F). Yeni bir untracked dosya, staged hunk ya da stash belirdiğinde bu
+tabloyu güncelleyin.
+
+### Kapsam DIŞI kalan karar — merge edilmemiş dallar
+
+Aşağıdakiler *commit'li* iş, yani "kaybolma" değil "teslim edilmedi" riski;
+bu envanter commit'lenmemiş işi izler, o yüzden karar bekliyor olarak not
+düşülür:
+
+| Dal | main'e göre |
+|---|---|
+| `codex/ci-cache6-setup-python7-20260925` | 5 commit ileride |
+| `feat/github-site-sample` | 7 commit ileride (`2ef1821` dahil) |
+| `feat/plist-info-line` | 20 commit ileride |
