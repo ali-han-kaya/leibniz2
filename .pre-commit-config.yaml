@@ -88,9 +88,12 @@
 #                               bağımlı kapı ortam yoksa bloke etmez.
 #                               (setup-pre-commit zincir-uyarlaması: Husky
 #                               yerine bu zincir; tek hooksPath, bypass yok.)
-#   18) check-dashboard-typecheck: apps/dashboard-next tsc --noEmit kapısı
-#                               (READ-ONLY, emit yok). node_modules/tsconfig
-#                               yoksa SKIP; tip-hatası commit'i bloke eder.
+#   18) check-dashboard-typecheck: apps/dashboard-next tip kapısı, İKİ katman:
+#                               (a) `tsc --noEmit` (READ-ONLY, emit yok) ve
+#                               (b) `test-d/run_type_tests.py` — pozitif
+#                               `Assert<Equal<..>>` iddiaları + `@ts-expect-error`
+#                               negatiflerin tanı-kodu kimliği. node_modules/
+#                               tsconfig yoksa SKIP; bulgu varsa commit bloke.
 #   19) check-precommit-orphans : ~/.cache/pre-commit'te 24s+ eski patch-
 #                               kalıntısı (yetim-stash) commit'i bloke eder;
 #                               parmak-izleri recovery_patches_* arşivlerinin

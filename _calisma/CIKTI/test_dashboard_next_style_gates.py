@@ -12,6 +12,12 @@ Sözleşmeler:
               READ-ONLY: --check, yazmaz.
   typecheck : `tsc --noEmit` ve BAŞKA HİÇBİR argüman (emit yok); tsc ya da
               tsconfig yoksa SKIP exit 0; tip hatası exit != 0.
+  tip-test  : aynı kapının İKİNCİ katmanı (test-d/run_type_tests.py). Geçiş 1
+              pozitif iddiaları ve direktif kullanımını denetler; geçiş 2
+              direktifleri geçici bir kopyada kapatıp tsc'nin bastığı tanı
+              KODUNU etiketle karşılaştırır. Bu vakalar sahte bir tsc ile
+              koşar: boru hattının tamamı (kopyalama, kapatma, ayrıştırma,
+              eşleştirme, çıkış kodu) gerçek bir derleyici olmadan sınanır.
   wiring    : hook id'leri .pre-commit-config.yaml'da doğru entry/files ile
               durur ve bu modül check-unit-tests bataryasındadır.
 
@@ -294,6 +300,12 @@ class HookWiringTest(unittest.TestCase):
         self.assertTrue(hook["files"].startswith("^apps/dashboard-next/"))
         self.assertEqual(hook["stages"], ["pre-commit"])
 
+    def test_typecheck_gate_runs_both_layers(self):
+        """Kapı yalnız `tsc --noEmit` ile kalmamalı: tip-test katmanı da bağlı."""
+        src = TYPECHECK_GATE.read_text(encoding="utf-8")
+        self.assertIn("test-d/run_type_tests.py", src)
+        self.assertIn("--selftest", src)
+
     def test_module_is_in_the_battery(self):
         """check-unit_tests.list bu modülü koşmalı (sync --update'in işi)."""
         listed = [ln.strip() for ln in MANIFEST.read_text(encoding="utf-8").splitlines()]
@@ -306,6 +318,137 @@ class HookWiringTest(unittest.TestCase):
         for hook_id in ("check-prettier-format", "check-dashboard-typecheck"):
             self.assertIn(hook_id, cov.HOOK_COVERAGE, hook_id)
             self.assertIn(THIS_FILE, cov.HOOK_COVERAGE[hook_id], hook_id)
+
+
+# ── tip-test koşucusu (check-dashboard-typecheck'ın ikinci katmanı) ──────────
+
+DASHBOARD = REPO / "apps" / "dashboard-next"
+TYPE_RUNNER = DASHBOARD / "test-d" / "run_type_tests.py"
+DASHBOARD_TSC = DASHBOARD / "node_modules" / ".bin" / "tsc"
+
+needs_dashboard_tsc = unittest.skipUnless(
+    DASHBOARD_TSC.is_file(), "tsc yok (apps/dashboard-next/node_modules)")
+
+# Sahte tsc: geçiş 1'de (pozitif config) sessizce başarılı olur, geçiş 2'de
+# (negative config) FAKE_DIAGS'i basıp 1 döner. Böylece koşucunun tüm boru
+# hattı gerçek bir derleyici olmadan, hızlı ve hermetik sınanır.
+FAKE_TSC_SCRIPT = (
+    '#!/usr/bin/env bash\n'
+    'case "$*" in\n'
+    '  *negative*) [ -n "$FAKE_DIAGS" ] && printf "%s\\n" "$FAKE_DIAGS"; exit 1 ;;\n'
+    '  *) exit 0 ;;\n'
+    'esac\n'
+)
+
+
+def _fake_type_runner_app(diagnostics="", bare=False, configs=True):
+    """Koşucunun APP'yi kendi konumundan türettiği izole ağaç."""
+    td = pathlib.Path(tempfile.mkdtemp())
+    app = td / "apps" / "dashboard-next"
+    (app / "test-d").mkdir(parents=True)
+    shutil.copy(TYPE_RUNNER, app / "test-d" / TYPE_RUNNER.name)
+    if configs:
+        (app / "tsconfig.typetests.json").write_text("{}\n", encoding="utf-8")
+        (app / "tsconfig.typetests.negative.json").write_text("{}\n", encoding="utf-8")
+    directive = ("// @ts-expect-error etiketsiz" if bare
+                 else "// @ts-expect-error TS2345 — sahte iddia")
+    (app / "test-d" / "negatives.test-d.ts").write_text(
+        f"{directive}\nfoo();\nbar();\n", encoding="utf-8")
+    bin_dir = app / "node_modules" / ".bin"
+    bin_dir.mkdir(parents=True)
+    fake = bin_dir / "tsc"
+    fake.write_text(FAKE_TSC_SCRIPT, encoding="utf-8")
+    fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
+    return td
+
+
+def _run_type_runner(td, diagnostics=""):
+    app = td / "apps" / "dashboard-next"
+    env = dict(os.environ, FAKE_DIAGS=diagnostics)
+    return _run([sys.executable, str(app / "test-d" / TYPE_RUNNER.name)],
+                cwd=app, env=env)
+
+
+class TypeTestRunnerTest(unittest.TestCase):
+    def test_matching_diagnostic_passes(self):
+        td = _fake_type_runner_app(
+            "test-d/stripped/negatives.test-d.ts(2,1): error TS2345: sahte")
+        try:
+            r = _run_type_runner(td, "test-d/stripped/negatives.test-d.ts"
+                                     "(2,1): error TS2345: sahte")
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertIn("0 sorun", r.stdout)
+        finally:
+            shutil.rmtree(td, ignore_errors=True)
+
+    def test_wrong_code_fails_closed(self):
+        """Direktif hâlâ 'kullanılmış' ama BAŞKA bir nedenden: yakalanmalı."""
+        diag = "test-d/stripped/negatives.test-d.ts(2,1): error TS2322: başka"
+        td = _fake_type_runner_app(diag)
+        try:
+            r = _run_type_runner(td, diag)
+            self.assertNotEqual(r.returncode, 0)
+            self.assertIn("kod uyuşmuyor", r.stdout + r.stderr)
+        finally:
+            shutil.rmtree(td, ignore_errors=True)
+
+    def test_unclaimed_diagnostic_fails_closed(self):
+        """İddia edilmemiş tanı = test dışı derleme hatası; sessiz geçemez."""
+        diags = ("test-d/stripped/negatives.test-d.ts(2,1): error TS2345: sahte\n"
+                 "test-d/stripped/negatives.test-d.ts(3,1): error TS1005: fazladan")
+        td = _fake_type_runner_app(diags)
+        try:
+            r = _run_type_runner(td, diags)
+            self.assertNotEqual(r.returncode, 0)
+            self.assertIn("İDDİA EDİLMEYEN", r.stdout + r.stderr)
+        finally:
+            shutil.rmtree(td, ignore_errors=True)
+
+    def test_missing_diagnostic_fails_closed(self):
+        """Yasak hiç hata üretmiyorsa etiket doğrulanamaz."""
+        td = _fake_type_runner_app("")
+        try:
+            r = _run_type_runner(td, "")
+            self.assertNotEqual(r.returncode, 0)
+            self.assertIn("doğrulanamadı", r.stdout + r.stderr)
+        finally:
+            shutil.rmtree(td, ignore_errors=True)
+
+    def test_bare_directive_is_rejected(self):
+        """Kod etiketsiz direktif reddedilir: kimliği doğrulanamayan iddia."""
+        td = _fake_type_runner_app(
+            "test-d/stripped/negatives.test-d.ts(2,1): error TS2345: sahte",
+            bare=True)
+        try:
+            r = _run_type_runner(td, "test-d/stripped/negatives.test-d.ts"
+                                     "(2,1): error TS2345: sahte")
+            self.assertNotEqual(r.returncode, 0)
+            self.assertIn("kod etiketi olmayan", r.stdout + r.stderr)
+        finally:
+            shutil.rmtree(td, ignore_errors=True)
+
+    def test_missing_config_skips(self):
+        td = _fake_type_runner_app(configs=False)
+        try:
+            r = _run_type_runner(td)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertIn("SKIP", r.stdout)
+        finally:
+            shutil.rmtree(td, ignore_errors=True)
+
+    def test_selftest_is_green(self):
+        """Ayrıştırıcının kendi testleri (tsc'siz, her ortamda koşar)."""
+        r = _run([sys.executable, str(TYPE_RUNNER), "--selftest"])
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("OK", r.stdout)
+
+    @needs_dashboard_tsc
+    def test_real_suite_is_green(self):
+        """Gerçek ağaçta iki geçiş de yeşil olmalı."""
+        r = _run([sys.executable, str(TYPE_RUNNER)])
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("GEÇİŞ 1: OK", r.stdout)
+        self.assertIn("GEÇİŞ 2: OK", r.stdout)
 
 
 if __name__ == "__main__":

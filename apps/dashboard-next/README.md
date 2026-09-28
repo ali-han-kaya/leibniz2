@@ -25,6 +25,33 @@ PREVIEW_API=http://127.0.0.1:8000 npm start   # varsayılan: http://127.0.0.1:80
 
 Önkoşul: `python3 _calisma/CIKTI/preview_server.py --preview-dir _calisma/CIKTI --port 8000`
 
+## Tip-testleri (`test-d/`)
+
+`tsc --noEmit` "bu atama geçiyor mu" diye sorar; "sözleşme hâlâ AYNI mı" diye
+sormaz. Atanabilirlik eşitlikten gevşektir: bir union'a varyant eklenmesi, bir
+alan adının değişmesi ya da bir fallback'in düşmesi derlemeden geçer ve panoyu
+sessizce bozar. Bu yüzden ikinci bir katman var:
+
+```bash
+npm run test:types     # iki geçiş (pozitif + negatif); tsc'yi kendisi koşar
+npm run typecheck      # yalnız gönderilen kodun tip denetimi
+npm run lint           # typecheck + test:types
+```
+
+- **Pozitif iddialar** (`contracts.test-d.ts`, `Assert<Equal<A, B>>`): ton
+  kümesinin kapalılığı, metin ile rozet tonlarının aynı kümeyi taşıması,
+  `TrendSource` ile `trendSource()` guard'ının uyumu, `API_BASE` fallback'i,
+  `getLatest`/`getTrend` dönüş yüzeyi ve tel-alanı kümeleri.
+- **Negatif iddialar** (`negatives.test-d.ts`, `@ts-expect-error TSxxxx`):
+  derlenmemesi gereken kullanımlar. Koşucu direktifleri geçici bir kopyada
+  kapatıp tsc'nin bastığı tanı KODUNU etiketle karşılaştırır: "bir hata var"
+  yetmez, "beklediğim hata var" gerekir.
+- `@ts-ignore` yasak: hatayı koşulsuz yutup iddiayı sessizce öldürür.
+- Desenin neden `Assert<Equal<..>>` olduğu (tek parça bir `AssertEqual` takma
+  adı tsc'de derlenmez) `test-d/assertions.ts` başlığında yazılı.
+- **Kapı:** pre-commit `check-dashboard-typecheck` ( `tsc --noEmit` + tip-test
+  katmanı), fail-closed; ortam yoksa SKIP.
+
 ## Uygulanan App Router desenleri (skill: nextjs-app-router-patterns)
 
 | Desen | Dosya | Not |
