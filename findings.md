@@ -1291,3 +1291,52 @@ panonun ve landing'in gerçek bir tema varyantını besliyor.
   (numstat, blob geçmişi, worktree sahipliği) ve bekleyen kararların sahibi
   belirtilerek. Risk silinmedi, **görünür hâle geldi**; envanter de
   commit'lendiği için unutulamaz. Kayıt, kapının kendisi kadar değerlidir.
+
+### oturum kapanışı (2026-09-28) — kararlar uygulandı, kapı teşhis edildi
+
+- **Kararlar (kullanıcıya soruldu):** P1 → worktree dosyalarını kendi dalında
+  commit'le; P2 → stash'lere dokunma; P3 → migration'ları canlıya uygula.
+  Üçü de yürütüldü. P1 = `2ef1821` (`feat/github-site-sample`, 9 dosya,
+  51 hook yeşil, 0 Failed, worktree artık tümüyle temiz). P3 = aşağıda.
+  P2 = tek dosya değişmedi; kanıt envanterde §B.
+- **Kapı teşhisi — ileri sürülen hipotez çürütüldü.** `check-precommit-orphans`
+  exit 1'in kaynağı "kapsanmamış 24. patch" DEĞİL, kapının **tasarımı**ydı:
+  `main()` her patch'in yaşını `WINDOW_HOURS = 24` ile karşılaştırır ve eskiyi
+  yetim sayar; `KNOWN` etiketi yalnız uyarı bloğu üretir, **muafiyet
+  üretmez**. İki test bunu açıkça sabitler
+  (`test_known_incident_fingerprint_gets_recovery_warning`,
+  `test_known_incident_prints_dedicated_warning_block` → `returncode == 1`).
+  Ölçüm: cache'te 24 patch; 23'ü arşivle sha256 birebir (11 benzersiz
+  içerik), 1'i (`patch1790561449-4597`, 5.8 saatlik) taze ve eşleşmesiz.
+  Yani **arşivlemek kapıyı açmıyor**; cache temizlenmedikçe kırmızı kalıyor.
+- **Çözüm: karantina, silme değil.** Kural tek: sha256 arşivle birebir
+  eşleşen dosya taşınır, eşleşmeyen dokunulmaz. 23 patch
+  `~/.cache/pre-commit-orphans-quarantine-20260928/` altına gitti (MANIFEST
+  ile geri-alma kaydı), taze olan cache'te kaldı → kapı `exit 0`, 18 test
+  `OK`, cache'te tek dosya. Bilgi kaybı yok: her taşınan dosyanın arşivde
+  byte-eşdeğeri var.
+- **Genel ders:** kapıyı yeşile çevirmenin yanlış refleksi kapıyı gevşetmek.
+  Önce "kapı haklı mı" ölçülür — burada haklıydı; eksik olan kapı değil,
+  **ortamın durumu**ydu. Düzeltme ortamda yapıldı, sözleşmede değil.
+- **`raw.json` (P1) — beklenmedik sonuç:** worktree'deki kopya
+  prettier-uyumsuzdu. `--write` sonrası kanonik JSON sha256 **değişmedi**
+  (`efb36bca…`) ve dosya 88 589 → 87 689 bayt ile main'deki sürümle
+  **byte-eşit** çıktı. Yani "iki dalda farklı raw.json" bir içerik
+  ayrışması değilmiş, yalnız bu dalda biçimin uygulanmamış olmasıymış;
+  main'in sürümünü kopyalamak gereksizdi.
+- **Çalışma-zamanı artefaktları:** worktree'de `history.jsonl`, `.sha256`,
+  `runs/` untracked görünüyordu; sebep dalın `.gitignore`'unun 85-87
+  satırlarından **önce** olması. `.gitignore` onları zaten repo dışı veri
+  sayıyor → commit'e alınmadı, **silinmedi**, `/tmp/worktree-artifacts-20260928/`
+  altına taşındı.
+- **`klayers.json`:** `verify_delivery.py --klayers-out` üretimi bir koşum
+  sidecar'ı; tüketicisi (`verify_mcp/server.py`) onu bir *preview dir*'den
+  okuyor, `CIKTI/`'den değil; zaman damgası/provenance yok → commit'lenmedi,
+  gerekçesi envanterde §F'ye yazıldı.
+- **Araç tuzağı (yeni, AGENTS.md'ye yazıldı):** uzun hook zincirini (7-10 dk)
+  ön planda koşmak araç zaman-aşımına takılıyor ve **süreç grubunu
+  öldürüyor**. `nohup … &` YETMİYOR (aynı süreç grubunda kalır) — ilk deneme
+  tam da böyle yarıda öldü. Çözüm: `subprocess.Popen(...,
+  start_new_session=True, stdin=DEVNULL)` + log dosyası, sonra kısa
+  yoklamalar; mesajı da `git commit -F <dosya>` ile vermek heredoc/tırnak
+  hasarını tümden eliyor. Ölü koşum yeni yetim patch bırakmadı (ölçüldü).
