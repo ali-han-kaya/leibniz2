@@ -17,7 +17,7 @@ bağlantı sözleşmesi (pooled/direct ayrımı).
 - ✅ `--dry-run` ön-uçuş (2026-09-27; DB'siz satır sayacı + kaynak SHA-256)
 - ✅ `--json` makine-okunur dry-run özeti (2026-09-27; tek satır JSON sözleşmesi)
 - ✅ JS tarafı test koşucusu (2026-09-27; `npm test` → 11 CLI-seam vakası, pre-commit'e bağlı)
-- ✅ RLS şablonu (2026-09-27; service-role yazar / anon aggregate okur) — migration hazır, **uygulama bekliyor**
+- ✅ RLS + sorgu indeksleri **canlıda** (2026-09-27; `migrate deploy` uygulandı, `rls=true forced=true`, 3 sorgu indeksi, 269 satır)
 
 ## Kurulum (tamamlanmış hali)
 
@@ -194,6 +194,34 @@ DATABASE_URL="$DATABASE_URL_UNPOOLED" npx prisma migrate deploy   # uygula (pool
 #   set role trend_anon; select count(*) from public.trend_runs;  -- ❌ denied
 ```
 
+### Canlı durum (2026-09-27, `migrate deploy` sonrası ölçüldü)
+
+İki migration kalıcı olarak uygulandı (`20260927193000` + `20260927194500`);
+`_prisma_migrations` üç kaydı da `finished_at` dolu gösteriyor.
+
+| Ölçüm | Değer |
+|---|---|
+| `relrowsecurity` / `relforcerowsecurity` | `true` / `true` |
+| policy | 1 — `trend_runs_service_all` (`cmd=ALL`, rol `trend_service`) |
+| roller | `trend_service`, `trend_anon` |
+| görünüm | `trend_runs_daily` mevcut |
+| satır | 269 (veri bozulmadı) |
+| indeksler | 6: `ts_cover_idx`, `fail_ts_cover_idx`, `verdict_ts_idx` + `pkey`, `ts_key`, `source_row_sha256_key` |
+
+- **Yazma yolu ölçüldü (kayıtlı iddia değil):** `neondb_owner` (login rolü,
+  yani loader'ın rolü) altında `BEGIN` → `INSERT` → **270** → `ROLLBACK` →
+  **269**. Yani FORCE RLS + geçici köprü birlikte `npm run load` yolunu
+  açık tutuyor; kalıcı iz bırakmadı.
+- **Gözlem (kozmetik, işlevsel değil):** `pg_auth_members` içinde
+  `neondb_owner → trend_service` **iki satır** görünüyor; migration'da grant
+  ifadesi tek (`…_rls/migration.sql:107`), yani ikinci satır 2026-09-27
+  ölçüm oturumundan kalmış. Postgres üyelikleri çoklu saymaz → yetki
+  değişmez. Köprü düşürülürken tek seferlik `revoke` + `grant` ile
+  normalleştirilebilir.
+- **Köprü hâlâ duruyor** (bilinçli): kalıcı çözüm ayrı bir Neon login rolü
+  (`trend_loader`) açıp `trend_service` vermek, sonra köprüyü düşürmek —
+  migration'ın 5. bloğu. Bu yapılmadan `npm run load` düşer.
+
 ## Sorgu indeksleri — `20260927194500_trend_runs_query_indexes`
 
 Panonun **okuma desenlerine** göre planlandı (`docs/TREND_CHART_READ_PATH.md`);
@@ -208,6 +236,11 @@ edilemez** (`@@index([ts], include: [...], where: "...")` → Prisma 7.10:
 | `trend_runs_fail_ts_cover_idx` | `(ts DESC) INCLUDE (p0, p1, z3_total) WHERE verdict = 'FAIL'` | yalnız-FAIL ucu (`verdict = 'FAIL'` predicate'i birebir aynı olmalı) |
 | `trend_runs_verdict_ts_idx` (init) | `(verdict, ts DESC)` | tüm verdict'ler için eşitlik→aralık |
 | `trend_runs_ts_key` (init) | unique `(ts)` | "en yeni satır" (`order by ts desc limit 1`) |
+
+> **Durum:** bu üç indeks **canlıda** (2026-09-27 `migrate deploy`). Aşağıdaki
+> ölçümler migration `BEGIN … ROLLBACK` ile prova edildiği tarih için geçerli;
+> kalıcı uygulama sonrası tablo aynı (269 satır), indeks sayısı 6'ya çıktı
+> (3 yeni + `pkey` + iki unique).
 
 - **Ölçüm (2026-09-27, canlı tablo, migration `BEGIN … ROLLBACK` ile
   uygulanmış — kalıcı iz yok):** 269 satır = 233 PASS + **36 FAIL (%13,4)**,

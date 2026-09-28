@@ -595,6 +595,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-27 | ci | TOOLKIT denetim paketini takip dışı bırak | [`a33c586`](https://github.com/ali-han-kaya/leibniz2/commit/a33c586) |
 | 2026-09-27 | other | trend-db: loader dry-run'unu makine-okunur yüzle kilitle | [`e3ef72d`](https://github.com/ali-han-kaya/leibniz2/commit/e3ef72d) |
 | 2026-09-27 | other | precommit-orphans: yetim patch'e çift parmak-izi + özel uyarı | [`11ea4c1`](https://github.com/ali-han-kaya/leibniz2/commit/11ea4c1) |
+| 2026-09-27 | docs | commit'lenmemiş iş envanteri — üç kalem ölçüldü, sahiplik açık | [`ae45333`](https://github.com/ali-han-kaya/leibniz2/commit/ae45333) |
 
 ### Regresyon notları
 

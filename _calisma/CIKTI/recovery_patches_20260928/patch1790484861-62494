@@ -1,0 +1,330 @@
+diff --git a/_calisma/CIKTI/test_check_design_tokens.py b/_calisma/CIKTI/test_check_design_tokens.py
+index 42c081d..6884001 100644
+--- a/_calisma/CIKTI/test_check_design_tokens.py
++++ b/_calisma/CIKTI/test_check_design_tokens.py
+@@ -4,6 +4,8 @@
+ Contracts:
+ - preview.html imports design-system/tokens.css (no stray inline :root drift)
+ - tokens.css :root + light block mirror tokens.json (tints included)
++- dashboard-next/app/globals.css: no token-name shadow, no literal copy, no
++  hard-coded colour literal — in ANY block (second :root, .dark, @media …)
+ - check_tokens.py is ~0.05s and stdlib-only
+ """
+ import pathlib
+@@ -19,6 +21,7 @@ REPO = HERE.parent.parent
+ HTML = REPO / "_calisma" / "CIKTI" / "preview.html"
+ CSS = REPO / "design-system" / "tokens.css"
+ SCRIPT = REPO / "design-system" / "scripts" / "check_tokens.py"
++GLOBALS = REPO / "apps" / "dashboard-next" / "app" / "globals.css"
+ 
+ 
+ def run_check_copy(tmp_script: pathlib.Path):
+@@ -31,15 +34,36 @@ def _tmp_repo() -> pathlib.Path:
+     td = pathlib.Path(tempfile.mkdtemp())
+     (td / "_calisma" / "CIKTI").mkdir(parents=True)
+     (td / "design-system" / "scripts").mkdir(parents=True)
++    (td / "apps" / "dashboard-next" / "app").mkdir(parents=True)
+     shutil.copy(CSS, td / "design-system" / "tokens.css")
+     shutil.copy(REPO / "design-system" / "tokens.json", td / "design-system" / "tokens.json")
+     # the Tailwind bridge is part of the gate's contract-6 (verbatim :root)
+     shutil.copy(REPO / "design-system" / "tailwind.css", td / "design-system" / "tailwind.css")
+     shutil.copy(SCRIPT, td / "design-system" / "scripts" / "check_tokens.py")
+     shutil.copy(HTML, td / "_calisma" / "CIKTI" / "preview.html")
++    # contract 5/7 live on dashboard-next — without this file the gate skips
++    # them (next_ok False) and every drift test below would pass vacuously
++    shutil.copy(GLOBALS, td / "apps" / "dashboard-next" / "app" / "globals.css")
+     return td
+ 
+ 
++def _run_with_globals(append: str, replace: str = None):
++    """Run the gate against a temp repo whose globals.css is mutated."""
++    td = _tmp_repo()
++    try:
++        tmp_script = td / "design-system" / "scripts" / "check_tokens.py"
++        target = td / "apps" / "dashboard-next" / "app" / "globals.css"
++        text = GLOBALS.read_text(encoding="utf-8")
++        if replace is not None:
++            text = text.replace(replace, append, 1)
++        else:
++            text = text + append
++        target.write_text(text, encoding="utf-8")
++        return run_check_copy(tmp_script)
++    finally:
++        shutil.rmtree(td, ignore_errors=True)
++
++
+ class TestDesignTokensGate(unittest.TestCase):
+     def test_real_repo_pass(self):
+         r = subprocess.run([sys.executable, str(SCRIPT)], capture_output=True, text=True, timeout=10)
+@@ -103,6 +127,57 @@ class TestDesignTokensGate(unittest.TestCase):
+         self.assertNotRegex(text, r"<style>.*?:root\s*\{[^}]*--bg", msg="inline :root --bg shadows import")
+         self.assertIn("design-system/tokens.css", text)
+ 
++    # ── contract 7: dashboard-next copy drift ──────────────────────────────
++
++    def test_dashboard_next_globals_passes(self):
++        """The migrated globals.css is the shape the gate enforces."""
++        r = _run_with_globals("")
++        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
++        self.assertIn("copy-drift OK", r.stdout)
++
++    def test_second_root_shadow_fails(self):
++        """A SECOND :root block — invisible to the old `:root {...}` regex."""
++        r = _run_with_globals("\n:root { --bg: #000; }\n")
++        self.assertNotEqual(r.returncode, 0)
++        self.assertIn("--bg", r.stdout + r.stderr)
++
++    def test_dark_block_shadow_fails(self):
++        """`.dark` re-declaring a token name is shadowing too — this is the
++        block that used to sit in globals.css unflagged (and dead)."""
++        r = _run_with_globals("\n.dark { --border: #fff; }\n")
++        self.assertNotEqual(r.returncode, 0)
++        out = r.stdout + r.stderr
++        self.assertIn("re-defines token", out)
++        self.assertIn("--border", out)
++        self.assertIn(".dark", out)
++
++    def test_literal_value_copy_fails(self):
++        """A written-out value that IS a tokens.css value = two sources."""
++        r = _run_with_globals("\n:root { --card: #161b22; }\n")
++        self.assertNotEqual(r.returncode, 0)
++        self.assertIn("copies the value", r.stdout + r.stderr)
++
++    def test_colour_literal_fails(self):
++        """A colour that is NOT in tokens.css is just as much a bypass."""
++        r = _run_with_globals("\n:root { --sidebar: oklch(1 0 0); }\n")
++        self.assertNotEqual(r.returncode, 0)
++        self.assertIn("colour literal", r.stdout + r.stderr)
++
++    def test_comment_mentioning_root_does_not_trip(self):
++        """Prose about `:root { --bg }` must neither trip nor mask the gate."""
++        r = _run_with_globals(
++            "\n/* see :root { --bg: #000; } below — historical, not a token */\n"
++        )
++        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
++
++    def test_theme_block_is_exempt(self):
++        """`@theme` holds utility MAPPINGS, not document custom properties:
++        `--font-mono: var(--font-mono)` is the bridge, not a shadow."""
++        r = _run_with_globals(
++            "\n@theme inline { --font-mono: var(--font-mono); --tw-x: #123456; }\n"
++        )
++        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
++
+ 
+ if __name__ == "__main__":
+     unittest.main()
+diff --git a/_calisma/CIKTI/test_surface_cwv_report.py b/_calisma/CIKTI/test_surface_cwv_report.py
+index 1e851c9..02c90ab 100644
+--- a/_calisma/CIKTI/test_surface_cwv_report.py
++++ b/_calisma/CIKTI/test_surface_cwv_report.py
+@@ -163,13 +163,19 @@ SURFACE_SPECS = {
+         "url_path": "/",
+         "server": "next",
+         "theme_scoped": False,
+-        "ready": "main section",
+-        "panels": ("main section", "main section h2", "header nav"),
++        # Paneller artık shadcn `Card` (div[data-slot="card"]) — `<section>`
++        # kalktı. data-slot shadcn'ın kararli kancası (registry'den gelir ve
++        # `has-data-[slot=…]` varyantlari onu anahtarlar), yol ise markupsiz
++        # bir `h2` bulamaz. Ölçüm sözleşmesi GERÇEK markup'ı izlemeli:
++        # eski `main section` seçicisi sessizce "panel yok" sanıp FAIL eder.
++        "ready": 'main [data-slot="card"]',
++        "panels": ('main [data-slot="card"]', 'main [data-slot="card"] h2',
++                   "header nav"),
+         "content": ("Son Koşum",),
+         # Trend paneli veriyle doldu mu: satır varsa tablo, yoksa boş-durum
+         # metni. Panelin hiç gelmemesi (Suspense'te takılı kalması) FAIL.
+         "content_any": ("ZAMAN", "henüz veri yok"),
+-        "inp_target": "main section h2",
++        "inp_target": 'main [data-slot="card"] h2',
+         # `.next` gitignore'lu bir derleme çıktısı: BUILD_ID derlemeyi,
+         # build-manifest chunk listesini kilitler — rapor "hangi derleme
+         # ölçüldü" sorusunu yanıtlar.
+diff --git a/design-system/scripts/check_tokens.py b/design-system/scripts/check_tokens.py
+index d4100fc..42c9725 100644
+--- a/design-system/scripts/check_tokens.py
++++ b/design-system/scripts/check_tokens.py
+@@ -10,11 +10,18 @@ Contracts (post-import):
+ 4. The HTML must not contain a duplicate inline :root var block that would
+    shadow the import (drift — two sources of truth).
+ 5. apps/dashboard-next/app/globals.css must import design-system/tailwind.css
+-   (the generated Tailwind v4 bridge) and must NOT re-define any token
+-   name from tokens.css :root in its own :root block (shadow = drift).
++   (the generated Tailwind v4 bridge) and must NOT re-define any token name
++   from tokens.css :root in its own :root block (shadow = drift).
+ 6. design-system/tailwind.css :root block must equal tokens.css :root
+    verbatim (the file is GENERATED by scripts/generate_tailwind.py;
+    hand-edits break the bridge).
++7. dashboard-next COPY DRIFT: the same walk that backs contract 5 also
++   rejects (a) a token name re-declared in ANY style-rule block — a second
++   :root, .dark, @media, @layer … not just the first :root the old regex
++   could see, (b) a custom property whose literal value is verbatim a
++   tokens.css value (a copy instead of a reference), and (c) a hard-coded
++   colour literal in any custom property. Comments are stripped first, so
++   prose mentioning `:root {` can neither trip nor mask a finding.
+ 
+ Exit 0 on match, 1 on drift.
+ """
+@@ -26,6 +33,7 @@ REPO = Path(__file__).resolve().parent.parent.parent
+ HTML = REPO / "_calisma" / "CIKTI" / "preview.html"
+ CSS = REPO / "design-system" / "tokens.css"
+ NEXT_GLOBALS = REPO / "apps" / "dashboard-next" / "app" / "globals.css"
++NEXT_REL = "apps/dashboard-next/app/globals.css"
+ TAILWIND_BRIDGE = REPO / "design-system" / "tailwind.css"
+ 
+ 
+@@ -36,6 +44,82 @@ def vars_in_block(text: str, selector_pat: str) -> dict:
+     return {n: v.strip() for n, v in re.findall(r"(--[\w-]+)\s*:\s*([^;]+);", m.group(1))}
+ 
+ 
++# Tailwind directive blocks are NOT document-level custom-property
++# declarations: they compile into the `theme`/`utilities` layer and lose to
++# the bridge's unlayered :root. What they hold is a utility MAPPING — e.g.
++# `--font-sans: var(--font-sans)` means "the `font-sans` utility resolves to
++# the repo font" — so token names and literals in there are legitimate and
++# contract 7 must not flag them.
++_TAILWIND_DIRECTIVES = frozenset({
++    "theme", "custom-variant", "utility", "property", "keyframes",
++    "plugin", "reference", "source", "variant", "apply", "config",
++})
++
++# A colour literal in a custom property = a palette that bypasses tokens.css.
++_COLOR_LITERAL = re.compile(
++    r"(?:^|[\s,(])(?:#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(|oklch\(|oklab\(|lab\(|lch\(|color\()"
++)
++
++_DECL = re.compile(r"^(--[\w-]+)\s*:\s*(.+)$", re.S)
++
++
++def _norm_value(value: str) -> str:
++    """Comparable form of a CSS value: lowercase, whitespace collapsed."""
++    return re.sub(r"\s+", "", value.strip().lower())
++
++
++def _is_literal(value: str) -> bool:
++    """True for a written-out value (no var()/calc() indirection)."""
++    return "var(" not in value and "calc(" not in value
++
++
++def _css_custom_props(text: str):
++    """Yield (selector_path, name, value) for every custom property in `text`.
++
++    Comment-stripped and brace-stack driven, so unlike the `:root { ... }`
++    regex this sees EVERY block (a second :root, .dark, @media, @layer …) and
++    knows which selector each declaration lives in — that is what makes a
++    finding actionable. Token sheets carry no `;` or `{` inside a value, so
++    the scanner stays simple and dependency-free.
++    """
++    text = re.sub(r"/\*.*?\*/", " ", text, flags=re.S)
++    stack: list[str] = []
++    buf: list[str] = []
++
++    def flush():
++        raw = "".join(buf).strip()
++        buf.clear()
++        if not raw or not stack:
++            return
++        m = _DECL.match(raw)
++        if m:
++            yield " > ".join(stack), m.group(1), m.group(2).strip()
++
++    for ch in text:
++        if ch == "{":
++            stack.append(" ".join("".join(buf).split()))
++            buf.clear()
++        elif ch == "}":
++            yield from flush()
++            if stack:
++                stack.pop()
++        elif ch == ";":
++            yield from flush()
++        else:
++            buf.append(ch)
++
++
++def _in_tailwind_directive(selector_path: str) -> bool:
++    for part in selector_path.split(" > "):
++        part = part.strip()
++        if not part.startswith("@"):
++            continue
++        name = part[1:].split()[0].lower() if part[1:].split() else ""
++        if name in _TAILWIND_DIRECTIVES:
++            return True
++    return False
++
++
+ def main() -> int:
+     html_text = HTML.read_text(encoding="utf-8")
+     css_text = CSS.read_text(encoding="utf-8")
+@@ -92,7 +176,10 @@ def main() -> int:
+             drift.append(f"light var {name} present inline in preview.html but missing from tokens.css light block")
+ 
+     # 5. dashboard-next must consume the generated bridge, not re-define tokens
++    #    (extended by contract 7: every block, not just the first :root)
+     shadowed: list[str] = []
++    copies: list[str] = []
++    hardcoded: dict[str, list[str]] = {}
+     next_ok = NEXT_GLOBALS.exists()
+     if next_ok:
+         next_text = NEXT_GLOBALS.read_text(encoding="utf-8")
+@@ -105,12 +192,44 @@ def main() -> int:
+                 "apps/dashboard-next/app/globals.css does not import "
+                 "design-system/tailwind.css (bridge import missing)"
+             )
+-        next_root = vars_in_block(next_text, r":root")
+-        shadowed = sorted(set(css_dark) & set(next_root))
++        token_names = set(css_dark) | set(css_light)
++        # literal tokens.css value -> the names that own it (#161b22 is both
++        # --surface-1 and the legacy --surface/--header-start/--code-bg)
++        literal_owners: dict[str, list[str]] = {}
++        for owner, value in css_dark.items():
++            norm = _norm_value(value)
++            if _is_literal(norm):
++                literal_owners.setdefault(norm, []).append(owner)
++        for selector, name, value in _css_custom_props(next_text):
++            if _in_tailwind_directive(selector):
++                continue
++            if name in token_names:
++                shadowed.append(f"{name} ({selector})")
++            norm = _norm_value(value)
++            if _is_literal(norm) and norm in literal_owners:
++                owners = literal_owners[norm]
++                copies.append(
++                    f"{NEXT_REL} {selector}: {name} copies the value of "
++                    f"tokens.css {', '.join(owners[:3])} "
++                    f"({value.strip()}) — reference the token instead"
++                )
++            elif _COLOR_LITERAL.search(norm):
++                hardcoded.setdefault(selector, []).append(name)
+         if shadowed:
+             drift.append(
+                 "apps/dashboard-next/app/globals.css re-defines token(s) from "
+-                f"tokens.css :root — shadowed: {', '.join(shadowed)}"
++                "tokens.css :root — shadowed: "
++                + ", ".join(sorted(shadowed))
++            )
++        drift.extend(sorted(copies))
++        for selector, names in sorted(hardcoded.items()):
++            shown = ", ".join(sorted(names)[:6])
++            more = f" (+{len(names) - 6} more)" if len(names) > 6 else ""
++            drift.append(
++                f"{NEXT_REL} {selector}: {len(names)} custom propert"
++                f"{'y' if len(names) == 1 else 'ies'} hard-code a colour "
++                f"literal — bind them to design-system tokens (var(--...)): "
++                f"{shown}{more}"
+             )
+ 
+     # 6. the generated bridge must stay verbatim-equal to tokens.css :root
+@@ -130,9 +249,10 @@ def main() -> int:
+         for line in drift:
+             print(f"  {line}")
+         return 1
++    clean = next_ok and not (shadowed or copies or hardcoded)
+     print(f"OK — import present, tokens.css :root {len(css_dark)} + light {len(css_light)} vars, "
+           f"{len(tokens['color']['tint'])} tints in sheet, "
+-          f"dashboard-next bridge {'OK' if next_ok and not shadowed else 'n/a'}")
++          f"dashboard-next bridge+copy-drift {'OK' if clean else 'n/a'}")
+     return 0
+ 
+ 

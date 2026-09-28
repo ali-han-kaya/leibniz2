@@ -1,0 +1,954 @@
+diff --git a/_calisma/CIKTI/test_check_design_tokens.py b/_calisma/CIKTI/test_check_design_tokens.py
+index 42c081d..6884001 100644
+--- a/_calisma/CIKTI/test_check_design_tokens.py
++++ b/_calisma/CIKTI/test_check_design_tokens.py
+@@ -4,6 +4,8 @@
+ Contracts:
+ - preview.html imports design-system/tokens.css (no stray inline :root drift)
+ - tokens.css :root + light block mirror tokens.json (tints included)
++- dashboard-next/app/globals.css: no token-name shadow, no literal copy, no
++  hard-coded colour literal — in ANY block (second :root, .dark, @media …)
+ - check_tokens.py is ~0.05s and stdlib-only
+ """
+ import pathlib
+@@ -19,6 +21,7 @@ REPO = HERE.parent.parent
+ HTML = REPO / "_calisma" / "CIKTI" / "preview.html"
+ CSS = REPO / "design-system" / "tokens.css"
+ SCRIPT = REPO / "design-system" / "scripts" / "check_tokens.py"
++GLOBALS = REPO / "apps" / "dashboard-next" / "app" / "globals.css"
+ 
+ 
+ def run_check_copy(tmp_script: pathlib.Path):
+@@ -31,15 +34,36 @@ def _tmp_repo() -> pathlib.Path:
+     td = pathlib.Path(tempfile.mkdtemp())
+     (td / "_calisma" / "CIKTI").mkdir(parents=True)
+     (td / "design-system" / "scripts").mkdir(parents=True)
++    (td / "apps" / "dashboard-next" / "app").mkdir(parents=True)
+     shutil.copy(CSS, td / "design-system" / "tokens.css")
+     shutil.copy(REPO / "design-system" / "tokens.json", td / "design-system" / "tokens.json")
+     # the Tailwind bridge is part of the gate's contract-6 (verbatim :root)
+     shutil.copy(REPO / "design-system" / "tailwind.css", td / "design-system" / "tailwind.css")
+     shutil.copy(SCRIPT, td / "design-system" / "scripts" / "check_tokens.py")
+     shutil.copy(HTML, td / "_calisma" / "CIKTI" / "preview.html")
++    # contract 5/7 live on dashboard-next — without this file the gate skips
++    # them (next_ok False) and every drift test below would pass vacuously
++    shutil.copy(GLOBALS, td / "apps" / "dashboard-next" / "app" / "globals.css")
+     return td
+ 
+ 
++def _run_with_globals(append: str, replace: str = None):
++    """Run the gate against a temp repo whose globals.css is mutated."""
++    td = _tmp_repo()
++    try:
++        tmp_script = td / "design-system" / "scripts" / "check_tokens.py"
++        target = td / "apps" / "dashboard-next" / "app" / "globals.css"
++        text = GLOBALS.read_text(encoding="utf-8")
++        if replace is not None:
++            text = text.replace(replace, append, 1)
++        else:
++            text = text + append
++        target.write_text(text, encoding="utf-8")
++        return run_check_copy(tmp_script)
++    finally:
++        shutil.rmtree(td, ignore_errors=True)
++
++
+ class TestDesignTokensGate(unittest.TestCase):
+     def test_real_repo_pass(self):
+         r = subprocess.run([sys.executable, str(SCRIPT)], capture_output=True, text=True, timeout=10)
+@@ -103,6 +127,57 @@ class TestDesignTokensGate(unittest.TestCase):
+         self.assertNotRegex(text, r"<style>.*?:root\s*\{[^}]*--bg", msg="inline :root --bg shadows import")
+         self.assertIn("design-system/tokens.css", text)
+ 
++    # ── contract 7: dashboard-next copy drift ──────────────────────────────
++
++    def test_dashboard_next_globals_passes(self):
++        """The migrated globals.css is the shape the gate enforces."""
++        r = _run_with_globals("")
++        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
++        self.assertIn("copy-drift OK", r.stdout)
++
++    def test_second_root_shadow_fails(self):
++        """A SECOND :root block — invisible to the old `:root {...}` regex."""
++        r = _run_with_globals("\n:root { --bg: #000; }\n")
++        self.assertNotEqual(r.returncode, 0)
++        self.assertIn("--bg", r.stdout + r.stderr)
++
++    def test_dark_block_shadow_fails(self):
++        """`.dark` re-declaring a token name is shadowing too — this is the
++        block that used to sit in globals.css unflagged (and dead)."""
++        r = _run_with_globals("\n.dark { --border: #fff; }\n")
++        self.assertNotEqual(r.returncode, 0)
++        out = r.stdout + r.stderr
++        self.assertIn("re-defines token", out)
++        self.assertIn("--border", out)
++        self.assertIn(".dark", out)
++
++    def test_literal_value_copy_fails(self):
++        """A written-out value that IS a tokens.css value = two sources."""
++        r = _run_with_globals("\n:root { --card: #161b22; }\n")
++        self.assertNotEqual(r.returncode, 0)
++        self.assertIn("copies the value", r.stdout + r.stderr)
++
++    def test_colour_literal_fails(self):
++        """A colour that is NOT in tokens.css is just as much a bypass."""
++        r = _run_with_globals("\n:root { --sidebar: oklch(1 0 0); }\n")
++        self.assertNotEqual(r.returncode, 0)
++        self.assertIn("colour literal", r.stdout + r.stderr)
++
++    def test_comment_mentioning_root_does_not_trip(self):
++        """Prose about `:root { --bg }` must neither trip nor mask the gate."""
++        r = _run_with_globals(
++            "\n/* see :root { --bg: #000; } below — historical, not a token */\n"
++        )
++        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
++
++    def test_theme_block_is_exempt(self):
++        """`@theme` holds utility MAPPINGS, not document custom properties:
++        `--font-mono: var(--font-mono)` is the bridge, not a shadow."""
++        r = _run_with_globals(
++            "\n@theme inline { --font-mono: var(--font-mono); --tw-x: #123456; }\n"
++        )
++        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
++
+ 
+ if __name__ == "__main__":
+     unittest.main()
+diff --git a/_calisma/CIKTI/test_surface_cwv_report.py b/_calisma/CIKTI/test_surface_cwv_report.py
+index 1e851c9..02c90ab 100644
+--- a/_calisma/CIKTI/test_surface_cwv_report.py
++++ b/_calisma/CIKTI/test_surface_cwv_report.py
+@@ -163,13 +163,19 @@ SURFACE_SPECS = {
+         "url_path": "/",
+         "server": "next",
+         "theme_scoped": False,
+-        "ready": "main section",
+-        "panels": ("main section", "main section h2", "header nav"),
++        # Paneller artık shadcn `Card` (div[data-slot="card"]) — `<section>`
++        # kalktı. data-slot shadcn'ın kararli kancası (registry'den gelir ve
++        # `has-data-[slot=…]` varyantlari onu anahtarlar), yol ise markupsiz
++        # bir `h2` bulamaz. Ölçüm sözleşmesi GERÇEK markup'ı izlemeli:
++        # eski `main section` seçicisi sessizce "panel yok" sanıp FAIL eder.
++        "ready": 'main [data-slot="card"]',
++        "panels": ('main [data-slot="card"]', 'main [data-slot="card"] h2',
++                   "header nav"),
+         "content": ("Son Koşum",),
+         # Trend paneli veriyle doldu mu: satır varsa tablo, yoksa boş-durum
+         # metni. Panelin hiç gelmemesi (Suspense'te takılı kalması) FAIL.
+         "content_any": ("ZAMAN", "henüz veri yok"),
+-        "inp_target": "main section h2",
++        "inp_target": 'main [data-slot="card"] h2',
+         # `.next` gitignore'lu bir derleme çıktısı: BUILD_ID derlemeyi,
+         # build-manifest chunk listesini kilitler — rapor "hangi derleme
+         # ölçüldü" sorusunu yanıtlar.
+diff --git a/apps/dashboard-next/app/(panel)/@trend/loading.tsx b/apps/dashboard-next/app/(panel)/@trend/loading.tsx
+index 664231d..bf9dc7a 100644
+--- a/apps/dashboard-next/app/(panel)/@trend/loading.tsx
++++ b/apps/dashboard-next/app/(panel)/@trend/loading.tsx
+@@ -1,18 +1,31 @@
++import { Card, CardContent, CardHeader } from "@/components/ui/card";
++import { panelCard } from "@/components/panel-style";
++
+ // `@trend` slotunun akış iskeleti — tablo satırlarını taklit eder.
+ // `@verdict` iskeletinden AYRI bir sınır: iki panel birbirini beklemez.
++// Kabuk RunsTable ile aynı primitive (Card); satır yerine iskelet çubuklar
++// çizilir ama dolgu/kenar ölçüleri tabloyla uyuşur.
++//
++// `role="region"`: göç öncesi `<section aria-label>` idi; rolsuz div'de
++// `aria-label` yok sayılır (bkz. @verdict/loading.tsx).
+ export default function TrendLoading() {
+   return (
+-    <section
+-      className="rounded-lg border border-border bg-surface p-6"
++    <Card
++      className={panelCard()}
++      role="region"
+       aria-busy="true"
+       aria-label="Koşum geçmişi yükleniyor"
+     >
+-      <div className="h-3 w-32 animate-pulse rounded bg-border" />
+-      <div className="mt-4 space-y-3">
+-        {[0, 1, 2, 3, 4].map((i) => (
+-          <div key={i} className="h-5 w-full animate-pulse rounded bg-bg" />
+-        ))}
+-      </div>
+-    </section>
++      <CardHeader>
++        <div className="h-3 w-32 animate-pulse rounded bg-border" />
++      </CardHeader>
++      <CardContent>
++        <div className="space-y-3">
++          {[0, 1, 2, 3, 4].map((i) => (
++            <div key={i} className="h-5 w-full animate-pulse rounded bg-bg" />
++          ))}
++        </div>
++      </CardContent>
++    </Card>
+   );
+ }
+diff --git a/apps/dashboard-next/app/(panel)/@verdict/loading.tsx b/apps/dashboard-next/app/(panel)/@verdict/loading.tsx
+index 1c595ce..3d3d4b0 100644
+--- a/apps/dashboard-next/app/(panel)/@verdict/loading.tsx
++++ b/apps/dashboard-next/app/(panel)/@verdict/loading.tsx
+@@ -1,30 +1,42 @@
++import { Card, CardContent, CardHeader } from "@/components/ui/card";
++import { microLabel, panelCard } from "@/components/panel-style";
++
+ // `@verdict` slotunun akış iskeleti. Kartın son yerleşimini (başlık satırı,
+ // büyük verdict, 4 istatistik) taklit eder ki veri gelince yükseklik
+-// zıplamasın. Renkler repo-token'ları; animasyon tw-animate-css'ten.
++// zıplamasın. Kabuk VerdictCard ile AYNI primitive (Card) — iskelet de
++// gerçek kartla aynı ölçüleri paylaşır, gövde yüksekliği zıplamaz.
++// Renkler repo-token'ları; animasyon tw-animate-css'ten.
++//
++// `role="region"`: göç öncesi bu iskelet `<section aria-label>` idi, yani
++// ADLANDIRILMIŞ bir landmark. `Card` bir `div` basıyor ve rolü olmayan
++// div'de `aria-label` yok sayılır (axe `aria-prohibited-attr`) → etiket
++// düşerdi. Tek öznitelikle eski semantik aynen geri geliyor; `aria-busy`
++// ise her elemanda geçerlidir.
+ export default function VerdictLoading() {
+   return (
+-    <section
+-      className="rounded-lg border border-border bg-surface p-6"
++    <Card
++      className={panelCard()}
++      role="region"
+       aria-busy="true"
+       aria-label="Son koşum yükleniyor"
+     >
+-      <div className="flex items-baseline justify-between">
++      <CardHeader className="flex flex-row items-baseline justify-between">
+         <div className="h-3 w-24 animate-pulse rounded bg-border" />
+         <div className="h-3 w-48 animate-pulse rounded bg-border" />
+-      </div>
+-      <div className="mt-5 h-12 w-44 animate-pulse rounded bg-border" />
+-      <dl className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
+-        {["P0", "P1", "Z3", "STRIPPED"].map((label) => (
+-          <div key={label} className="bg-bg">
+-            <dt className="text-[10px] tracking-[0.14em] text-muted">
+-              {label}
+-            </dt>
+-            <dd className="mt-1">
+-              <div className="h-4 w-full animate-pulse rounded bg-border" />
+-            </dd>
+-          </div>
+-        ))}
+-      </dl>
+-    </section>
++      </CardHeader>
++      <CardContent>
++        <div className="mt-5 h-12 w-44 animate-pulse rounded bg-border" />
++        <dl className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
++          {["P0", "P1", "Z3", "STRIPPED"].map((label) => (
++            <div key={label} className="bg-bg">
++              <dt className={microLabel()}>{label}</dt>
++              <dd className="mt-1">
++                <div className="h-4 w-full animate-pulse rounded bg-border" />
++              </dd>
++            </div>
++          ))}
++        </dl>
++      </CardContent>
++    </Card>
+   );
+ }
+diff --git a/apps/dashboard-next/app/VerdictCard.tsx b/apps/dashboard-next/app/VerdictCard.tsx
+index dfd8984..0d0441f 100644
+--- a/apps/dashboard-next/app/VerdictCard.tsx
++++ b/apps/dashboard-next/app/VerdictCard.tsx
+@@ -1,19 +1,26 @@
+-import { cva, type VariantProps } from "class-variance-authority";
++import { Badge } from "@/components/ui/badge";
++import { Card, CardContent, CardHeader } from "@/components/ui/card";
++import {
++  countTone,
++  microLabel,
++  panelCard,
++  panelLabel,
++  statBadge,
++  toneForVerdict,
++  verdictTone,
++  type VerdictTone,
++} from "@/components/panel-style";
+ import { getLatest } from "@/lib/preview";
+ 
+-// patterns-explicit-variants: PASS/FAIL karari cva-variant'ta — bilesende
+-// boolean-ternary degil. Renkler repo-token'lari (tek-kaynak: design-system).
+-const verdictVariants = cva("mt-3 font-serif text-5xl font-semibold", {
+-  variants: {
+-    verdict: {
+-      pass: "text-ok",
+-      fail: "text-err",
+-      none: "text-muted",
+-    },
+-  },
+-  defaultVariants: { verdict: "none" },
+-});
+-
++// patterns-explicit-variants: PASS/FAIL kararı ve P0/P1 rozet tonları
++// cva-variant'ta (components/panel-style.ts) — bileşende ternary değil.
++// Renkler repo-token'ları (tek-kaynak: design-system).
++//
++// Kabuk shadcn `Card` + `CardHeader`/`CardContent`: panel ölçüleri
++// (yarıçap/dolgu) ve metin stilleri primitive'in üstüne tek yerde
++// (`panelCard`/`panelLabel`) bağlanır. Başlık bilinçli olarak `CardTitle`
++// DEĞİL: `CardTitle` bir `div` basar, pano ise gerçek `<h2>` ile bölüm
++// hiyerarşisi kuruyor (a11y).
+ // Server Component — veri burada toplanır, istemciye JS gitmez.
+ export default async function VerdictCard() {
+   const latest = await getLatest();
+@@ -25,44 +32,62 @@ export default async function VerdictCard() {
+       : `${latest.z3_passed ?? "—"}/${latest.z3_total ?? "—"}`;
+ 
+   return (
+-    <section className="rounded-lg border border-border bg-surface p-6">
+-      <div className="flex items-baseline justify-between">
+-        <h2 className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted">
+-          Son Koşum
+-        </h2>
++    <Card className={panelCard()}>
++      <CardHeader className="flex flex-row items-baseline justify-between">
++        <h2 className={panelLabel()}>Son Koşum</h2>
+         {latest.ts ? (
+-          <time className="font-mono text-[11px] text-muted">{latest.ts}</time>
++          <time className="font-mono text-xs text-muted">{latest.ts}</time>
+         ) : null}
+-      </div>
++      </CardHeader>
+ 
+-      <p
+-        className={verdictVariants({
+-          verdict:
+-            verdict === "PASS" ? "pass" : verdict === "" ? "none" : "fail",
+-        })}
+-        aria-live="polite"
+-      >
+-        {verdict || "—"}
+-      </p>
++      <CardContent>
++        <p
++          className={verdictTone({ tone: toneForVerdict(latest.verdict) })}
++          aria-live="polite"
++        >
++          {verdict || "—"}
++        </p>
+ 
+-      <dl className="mt-6 grid grid-cols-2 gap-4 font-mono text-sm sm:grid-cols-4">
+-        <Stat label="P0" value={latest.p0 ?? "—"} />
+-        <Stat label="P1" value={latest.p1 ?? "—"} />
+-        <Stat label="Z3" value={z3} />
+-        <Stat
+-          label="STRIPPED"
+-          value={latest.stripped_sha256?.slice(0, 12).toUpperCase() ?? "—"}
+-        />
+-      </dl>
+-    </section>
++        <dl className="mt-6 grid grid-cols-2 gap-4 font-mono text-sm sm:grid-cols-4">
++          <Stat
++            label="P0"
++            value={latest.p0 ?? "—"}
++            tone={countTone(latest.p0, "fail")}
++          />
++          <Stat
++            label="P1"
++            value={latest.p1 ?? "—"}
++            tone={countTone(latest.p1, "warn")}
++          />
++          <Stat label="Z3" value={z3} />
++          <Stat
++            label="STRIPPED"
++            value={latest.stripped_sha256?.slice(0, 12).toUpperCase() ?? "—"}
++          />
++        </dl>
++      </CardContent>
++    </Card>
+   );
+ }
+ 
+-function Stat({ label, value }: { label: string; value: string | number }) {
++// `tone` verilmişse değer rozet olarak basılır (P0/P1: sıfır sessiz, sıfır
++// dışı vurgulu); verilmemişse düz değer kalır (Z3/STRIPPED — kimlik/hash
++// rozeti değil, metin). Ton seçimi bileşende değil varyant tablosunda.
++function Stat({
++  label,
++  value,
++  tone,
++}: {
++  label: string;
++  value: string | number;
++  tone?: VerdictTone;
++}) {
+   return (
+     <div className="bg-bg">
+-      <dt className="text-[10px] tracking-[0.14em] text-muted">{label}</dt>
+-      <dd className="mt-1 font-semibold text-fg">{value}</dd>
++      <dt className={microLabel()}>{label}</dt>
++      <dd className="mt-1 font-semibold text-fg">
++        {tone ? <Badge className={statBadge({ tone })}>{value}</Badge> : value}
++      </dd>
+     </div>
+   );
+ }
+diff --git a/apps/dashboard-next/app/error.tsx b/apps/dashboard-next/app/error.tsx
+index 189a35a..8626e31 100644
+--- a/apps/dashboard-next/app/error.tsx
++++ b/apps/dashboard-next/app/error.tsx
+@@ -1,13 +1,16 @@
+ "use client";
+ 
+ import { Button } from "@/components/ui/button";
++import { Card } from "@/components/ui/card";
++import { panelCard } from "@/components/panel-style";
++import { cn } from "@/lib/utils";
+ 
+ // Hata sınırı — istemci bileşeni olması zorunlu (App Router sözleşmesi).
+ // İki veri kaynağı olduğu için iki ayrı çözüm yolu gösterilir: panellerin
+ // hangisinden beslendiği `TREND_SOURCE` ile seçilir (lib/preview.ts). Yalnız
+ // preview_server'ı işaret etmek, DB kaynaklı bir hatada yanlış yönlendirirdi.
+ // patterns-children-over-render-props: buton mevcut Button primitive'iyle
+-// kurulur (destructive variant repo-token'ina bond'lu) — raw className yok.
++// kurulur (destructive variant repo-token'ına bond'lu) — raw className yok.
+ export default function Error({
+   error,
+   reset,
+@@ -16,20 +19,24 @@ export default function Error({
+   reset: () => void;
+ }) {
+   return (
+-    <div className="rounded-lg border border-err bg-tint-err-bg p-6">
++    // Kabuk da diğer paneller gibi `Card`; hata yüzeyi repo-token'larıyla
++    // (tint-err-bg + err kenarı) Card'ın varsayılan yüzeyini/halkanını ezer.
++    <Card
++      className={cn(panelCard(), "border border-err bg-tint-err-bg ring-0")}
++    >
+       <h2 className="font-serif text-xl font-semibold text-err">
+         Panoya ulaşılamadı
+       </h2>
+-      <p className="mt-2 text-sm text-fg">{error.message}</p>
+-      <p className="mt-3 font-mono text-xs text-muted">
++      <p className="text-sm text-fg">{error.message}</p>
++      <p className="font-mono text-xs text-muted">
+         veri kaynağı: Neon Postgres → apps/trend-db/.env (neon env pull)
+         <br />
+         alternatif: python3 _calisma/CIKTI/preview_server.py --port 8000 (ve
+         TREND_SOURCE=preview)
+       </p>
+-      <Button variant="destructive" className="mt-4" onClick={reset}>
++      <Button variant="destructive" onClick={reset}>
+         Tekrar dene
+       </Button>
+-    </div>
++    </Card>
+   );
+ }
+diff --git a/apps/dashboard-next/app/globals.css b/apps/dashboard-next/app/globals.css
+index b55db24..1488c90 100644
+--- a/apps/dashboard-next/app/globals.css
++++ b/apps/dashboard-next/app/globals.css
+@@ -10,7 +10,6 @@
+  * --border/--surface + tüm @theme eşlemeleri) artık KOPYA değil: köprüden
+  * gelir ve check-design-tokens kapısı globals.css'in bu sözleşmeyi
+  * bozmasını (inline yeniden-tanımlama / import-silme) bloke eder.
+- * Aşağıdaki oklch blokları shadcn/UI namespace'idir — ayrı tutulur.
+  */
+ @import "tailwindcss";
+ @import "../../../design-system/tailwind.css";
+@@ -19,36 +18,62 @@
+ 
+ @custom-variant dark (&:is(.dark *));
+ 
++/*
++ * shadcn/UI namespace'i — tamamı repo-token'larına bağlı (tek-kaynak:
++ * design-system/tokens.json). Bu blokta SABİT RENK YOKTUR: buradaki her
++ * yuva `var(--repo-token)` ile çözülür, dolayısıyla
++ *   - pano paleti (koyu `:root`) ve açık tema (`:root[data-theme="light"]`)
++ *     aynı anda doğru döner; shadcn'ın ayrı bir koyu paleti (`.dark`
++ *     bloğu + 40 oklch) panonun paletiyle çelişiyordu, hiç uygulanmadığı
++ *     için de ölü koddu → kaldırıldı (kompozisyon turu, shadcn-slot ->
++ *     repo-token),
++ *   - Card/Badge/Table gibi primitive'ler renk kararını bileşende değil,
++ *     yuvada taşır: `bg-card`, `text-card-foreground`, `bg-primary` gibi
++ *     shadcn utility'leri doğrudan pano paletine düşer.
++ *
++ * İsim çakışması (bilinçli): repo `--muted`'u BİR METİN rengidir (#8b949e),
++ * shadcn `--muted`'u ise bir YÜZEY rengi. Aynı isim iki farklı şey
++ * arıyor; köprüde `--color-muted: var(--muted)` bağlandığı için
++ * `text-muted` (app'in kullandığı) metin rengini korur ve `bg-muted`
++ * kullanılamaz — pano kodunda satır vurgusu gibi yüzeyler
++ * `bg-surface-raised` ile verilir. `--muted`'u burada yeniden
++ * tanımlamak check-design-tokens kapısını (tokens.css gölgesi) kırardı.
++ */
+ :root {
+-  --background: oklch(1 0 0);
+-  --foreground: oklch(0.145 0 0);
+-  --card: oklch(1 0 0);
+-  --card-foreground: oklch(0.145 0 0);
+-  --popover: oklch(1 0 0);
+-  --popover-foreground: oklch(0.145 0 0);
+-  --primary: var(--accent); /* kompozisyon-turu: shadcn-slot -> repo-token (tek-kaynak) */
++  --background: var(--bg);
++  --foreground: var(--fg);
++  /* `.card` reçetesi (preview.html): yüzey --surface, kenar --border. */
++  --card: var(--surface);
++  --card-foreground: var(--fg);
++  --popover: var(--surface-raised);
++  --popover-foreground: var(--fg);
++  --primary: var(--accent);
+   --primary-foreground: var(--on-accent);
+-  --secondary: oklch(0.97 0 0);
+-  --secondary-foreground: oklch(0.205 0 0);
+-  --muted-foreground: oklch(0.556 0 0);
+-  --accent-foreground: oklch(0.205 0 0);
++  --secondary: var(--surface-raised);
++  --secondary-foreground: var(--fg);
++  --muted-foreground: var(--muted);
++  --accent-foreground: var(--on-accent);
+   --destructive: var(--err);
+-  --input: oklch(0.922 0 0);
+-  --ring: oklch(0.708 0 0);
+-  --chart-1: oklch(0.87 0 0);
+-  --chart-2: oklch(0.556 0 0);
+-  --chart-3: oklch(0.439 0 0);
+-  --chart-4: oklch(0.371 0 0);
+-  --chart-5: oklch(0.269 0 0);
+-  --radius: 0.625rem;
+-  --sidebar: oklch(0.985 0 0);
+-  --sidebar-foreground: oklch(0.145 0 0);
+-  --sidebar-primary: oklch(0.205 0 0);
+-  --sidebar-primary-foreground: oklch(0.985 0 0);
+-  --sidebar-accent: oklch(0.97 0 0);
+-  --sidebar-accent-foreground: oklch(0.205 0 0);
+-  --sidebar-border: oklch(0.922 0 0);
+-  --sidebar-ring: oklch(0.708 0 0);
++  --input: var(--border);
++  --ring: var(--accent);
++  /* Grafik kanalı: paletin durum renkleri (accent/ok/warn/err/budget). */
++  --chart-1: var(--accent);
++  --chart-2: var(--ok);
++  --chart-3: var(--warn);
++  --chart-4: var(--err);
++  --chart-5: var(--budget);
++  /* shadcn yarıçap ölçeği repo'nun kanonik kontrol yarıçapından türer
++     (--radius-6 = 8px): `rounded-lg` artık preview.html'deki `.card`
++     ile aynı 8px'i verir. */
++  --radius: var(--radius-6);
++  --sidebar: var(--surface);
++  --sidebar-foreground: var(--fg);
++  --sidebar-primary: var(--accent);
++  --sidebar-primary-foreground: var(--on-accent);
++  --sidebar-accent: var(--surface-raised);
++  --sidebar-accent-foreground: var(--fg);
++  --sidebar-border: var(--border);
++  --sidebar-ring: var(--accent);
+ }
+ 
+ body {
+@@ -104,40 +129,6 @@ body {
+   --radius-4xl: calc(var(--radius) * 2.6);
+ }
+ 
+-.dark {
+-  --background: oklch(0.145 0 0);
+-  --foreground: oklch(0.985 0 0);
+-  --card: oklch(0.205 0 0);
+-  --card-foreground: oklch(0.985 0 0);
+-  --popover: oklch(0.205 0 0);
+-  --popover-foreground: oklch(0.985 0 0);
+-  --primary: var(--accent);
+-  --primary-foreground: var(--on-accent);
+-  --secondary: oklch(0.269 0 0);
+-  --secondary-foreground: oklch(0.985 0 0);
+-  --muted: oklch(0.269 0 0);
+-  --muted-foreground: oklch(0.708 0 0);
+-  --accent: oklch(0.269 0 0);
+-  --accent-foreground: oklch(0.985 0 0);
+-  --destructive: var(--err);
+-  --border: oklch(1 0 0 / 10%);
+-  --input: oklch(1 0 0 / 15%);
+-  --ring: oklch(0.556 0 0);
+-  --chart-1: oklch(0.87 0 0);
+-  --chart-2: oklch(0.556 0 0);
+-  --chart-3: oklch(0.439 0 0);
+-  --chart-4: oklch(0.371 0 0);
+-  --chart-5: oklch(0.269 0 0);
+-  --sidebar: oklch(0.205 0 0);
+-  --sidebar-foreground: oklch(0.985 0 0);
+-  --sidebar-primary: oklch(0.488 0.243 264.376);
+-  --sidebar-primary-foreground: oklch(0.985 0 0);
+-  --sidebar-accent: oklch(0.269 0 0);
+-  --sidebar-accent-foreground: oklch(0.985 0 0);
+-  --sidebar-border: oklch(1 0 0 / 10%);
+-  --sidebar-ring: oklch(0.556 0 0);
+-}
+-
+ @layer base {
+   * {
+     @apply border-border outline-ring/50;
+diff --git a/apps/dashboard-next/app/layout.tsx b/apps/dashboard-next/app/layout.tsx
+index e7b3725..f482bbc 100644
+--- a/apps/dashboard-next/app/layout.tsx
++++ b/apps/dashboard-next/app/layout.tsx
+@@ -2,6 +2,7 @@ import type { Metadata } from "next";
+ import Link from "next/link";
+ import "./globals.css";
+ import { Geist } from "next/font/google";
++import { brandMark, footerNote } from "@/components/panel-style";
+ import { cn } from "@/lib/utils";
+ 
+ const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
+@@ -32,9 +33,7 @@ export default function RootLayout({
+       <body className="min-h-screen bg-bg text-fg antialiased">
+         <header className="border-b border-border px-8 py-4">
+           <div className="mx-auto flex max-w-4xl items-baseline gap-6">
+-            <span className="font-mono text-[13px] font-semibold tracking-[0.14em]">
+-              STOIC-HUME V5
+-            </span>
++            <span className={brandMark()}>STOIC-HUME V5</span>
+             <nav className="ml-auto flex gap-6 font-mono text-xs tracking-[0.12em] text-muted">
+               <Link className="transition-colors hover:text-fg" href="/">
+                 ÖZET
+@@ -46,7 +45,12 @@ export default function RootLayout({
+           </div>
+         </header>
+         <main className="mx-auto max-w-4xl px-8 py-8">{children}</main>
+-        <footer className="border-t border-border px-8 py-6 text-center font-mono text-[11px] tracking-[0.12em] text-muted">
++        <footer
++          className={cn(
++            "border-t border-border px-8 py-6 text-center",
++            footerNote()
++          )}
++        >
+           HER KOŞUM, KENDİ DETERMİNİSTİK HASH&apos;İYLE İMZALANIR
+         </footer>
+       </body>
+diff --git a/apps/dashboard-next/components/RunsTable.tsx b/apps/dashboard-next/components/RunsTable.tsx
+index 89dd631..ecd9f38 100644
+--- a/apps/dashboard-next/components/RunsTable.tsx
++++ b/apps/dashboard-next/components/RunsTable.tsx
+@@ -1,4 +1,14 @@
+ import { cva } from "class-variance-authority";
++import { Card, CardContent, CardHeader } from "@/components/ui/card";
++import {
++  Table,
++  TableBody,
++  TableCell,
++  TableHead,
++  TableHeader,
++  TableRow,
++} from "@/components/ui/table";
++import { panelCard, panelLabel, tableHead } from "@/components/panel-style";
+ import { getTrend } from "@/lib/preview";
+ 
+ // Koşum geçmişi tablosu — iki tüketici paylaşır:
+@@ -7,9 +17,14 @@ import { getTrend } from "@/lib/preview";
+ // İkisi de aynı sözleşmeyi okur; markup tek yerde kalır ki pencere/başlık
+ // dışındaki her şey sürüklenemesin.
+ //
++// Markup shadcn ailesinden kurulur: `Card` (kabuk) + `Table`/`TableHeader`/
++// `TableBody`/`TableRow`/`TableHead`/`TableCell`. Satır kenarı ve hücre
++// dolgusu primitive'in varsayılanlarından gelir (`border-b` → --border,
++// `p-2` + `px-4` → 6px/10px = preview.html'in `th, td` değerleri).
++//
+ // patterns-explicit-variants: hucre-rengi kararlari (p0>0 kirmizi, p1>0 sari)
+ // cva-variant'ta — sira-bileseninde ternary-degil. Renkler repo-token'lari.
+-const cellVariants = cva("py-2", {
++const cellVariants = cva("px-4", {
+   variants: {
+     tone: {
+       neutral: "",
+@@ -35,52 +50,61 @@ export default async function RunsTable({
+   const rows = history.slice(-limit).reverse();
+ 
+   return (
+-    <section className="rounded-lg border border-border bg-surface p-6">
+-      <h2 className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted">
+-        {title}
+-      </h2>
+-      {history.length === 0 ? (
+-        <p className="mt-4 text-sm text-muted">
+-          henüz veri yok — ilk run bekleniyor
+-        </p>
+-      ) : (
+-        <table className="mt-4 w-full font-mono text-sm">
+-          <thead>
+-            <tr className="border-b border-border text-left text-[10px] tracking-[0.14em] text-muted">
+-              <th className="py-2">ZAMAN</th>
+-              <th className="py-2">P0</th>
+-              <th className="py-2">P1</th>
+-              <th className="py-2">SÜRE</th>
+-              <th className="py-2">Z3</th>
+-            </tr>
+-          </thead>
+-          <tbody>
+-            {rows.map((r, i) => (
+-              <tr key={i} className="border-b border-surface-raised">
+-                <td className="py-2 text-muted">{r.ts ?? "—"}</td>
+-                <td
+-                  className={cellVariants({
+-                    tone: (r.p0 ?? 0) > 0 ? "error" : "neutral",
+-                  })}
+-                >
+-                  {r.p0 ?? "—"}
+-                </td>
+-                <td
+-                  className={cellVariants({
+-                    tone: (r.p1 ?? 0) > 0 ? "warn" : "neutral",
+-                  })}
+-                >
+-                  {r.p1 ?? "—"}
+-                </td>
+-                <td className={cellVariants()}>
+-                  {r.duration_s != null ? `${r.duration_s}s` : "—"}
+-                </td>
+-                <td className={cellVariants()}>{r.z3_total ?? "—"}</td>
+-              </tr>
+-            ))}
+-          </tbody>
+-        </table>
+-      )}
+-    </section>
++    <Card className={panelCard()}>
++      <CardHeader>
++        <h2 className={panelLabel()}>{title}</h2>
++      </CardHeader>
++      <CardContent>
++        {history.length === 0 ? (
++          <p className="text-sm text-muted">
++            henüz veri yok — ilk run bekleniyor
++          </p>
++        ) : (
++          <Table className="font-mono text-sm">
++            <TableHeader>
++              <TableRow>
++                <TableHead className={tableHead}>ZAMAN</TableHead>
++                <TableHead className={tableHead}>P0</TableHead>
++                <TableHead className={tableHead}>P1</TableHead>
++                <TableHead className={tableHead}>SÜRE</TableHead>
++                <TableHead className={tableHead}>Z3</TableHead>
++              </TableRow>
++            </TableHeader>
++            <TableBody>
++              {rows.map((r, i) => (
++                // Satır vurgusu `bg-surface-raised`: shadcn'ın `bg-muted/50`
++                // gölgesi bu depoda yanlış çalışır — `--color-muted` pano
++                // token'larında bir METİN rengi (globals.css notu).
++                <TableRow key={i} className="hover:bg-surface-raised">
++                  <TableCell className={cellVariants({ tone: "muted" })}>
++                    {r.ts ?? "—"}
++                  </TableCell>
++                  <TableCell
++                    className={cellVariants({
++                      tone: (r.p0 ?? 0) > 0 ? "error" : "neutral",
++                    })}
++                  >
++                    {r.p0 ?? "—"}
++                  </TableCell>
++                  <TableCell
++                    className={cellVariants({
++                      tone: (r.p1 ?? 0) > 0 ? "warn" : "neutral",
++                    })}
++                  >
++                    {r.p1 ?? "—"}
++                  </TableCell>
++                  <TableCell className={cellVariants()}>
++                    {r.duration_s != null ? `${r.duration_s}s` : "—"}
++                  </TableCell>
++                  <TableCell className={cellVariants()}>
++                    {r.z3_total ?? "—"}
++                  </TableCell>
++                </TableRow>
++              ))}
++            </TableBody>
++          </Table>
++        )}
++      </CardContent>
++    </Card>
+   );
+ }
+diff --git a/design-system/scripts/check_tokens.py b/design-system/scripts/check_tokens.py
+index d4100fc..42c9725 100644
+--- a/design-system/scripts/check_tokens.py
++++ b/design-system/scripts/check_tokens.py
+@@ -10,11 +10,18 @@ Contracts (post-import):
+ 4. The HTML must not contain a duplicate inline :root var block that would
+    shadow the import (drift — two sources of truth).
+ 5. apps/dashboard-next/app/globals.css must import design-system/tailwind.css
+-   (the generated Tailwind v4 bridge) and must NOT re-define any token
+-   name from tokens.css :root in its own :root block (shadow = drift).
++   (the generated Tailwind v4 bridge) and must NOT re-define any token name
++   from tokens.css :root in its own :root block (shadow = drift).
+ 6. design-system/tailwind.css :root block must equal tokens.css :root
+    verbatim (the file is GENERATED by scripts/generate_tailwind.py;
+    hand-edits break the bridge).
++7. dashboard-next COPY DRIFT: the same walk that backs contract 5 also
++   rejects (a) a token name re-declared in ANY style-rule block — a second
++   :root, .dark, @media, @layer … not just the first :root the old regex
++   could see, (b) a custom property whose literal value is verbatim a
++   tokens.css value (a copy instead of a reference), and (c) a hard-coded
++   colour literal in any custom property. Comments are stripped first, so
++   prose mentioning `:root {` can neither trip nor mask a finding.
+ 
+ Exit 0 on match, 1 on drift.
+ """
+@@ -26,6 +33,7 @@ REPO = Path(__file__).resolve().parent.parent.parent
+ HTML = REPO / "_calisma" / "CIKTI" / "preview.html"
+ CSS = REPO / "design-system" / "tokens.css"
+ NEXT_GLOBALS = REPO / "apps" / "dashboard-next" / "app" / "globals.css"
++NEXT_REL = "apps/dashboard-next/app/globals.css"
+ TAILWIND_BRIDGE = REPO / "design-system" / "tailwind.css"
+ 
+ 
+@@ -36,6 +44,82 @@ def vars_in_block(text: str, selector_pat: str) -> dict:
+     return {n: v.strip() for n, v in re.findall(r"(--[\w-]+)\s*:\s*([^;]+);", m.group(1))}
+ 
+ 
++# Tailwind directive blocks are NOT document-level custom-property
++# declarations: they compile into the `theme`/`utilities` layer and lose to
++# the bridge's unlayered :root. What they hold is a utility MAPPING — e.g.
++# `--font-sans: var(--font-sans)` means "the `font-sans` utility resolves to
++# the repo font" — so token names and literals in there are legitimate and
++# contract 7 must not flag them.
++_TAILWIND_DIRECTIVES = frozenset({
++    "theme", "custom-variant", "utility", "property", "keyframes",
++    "plugin", "reference", "source", "variant", "apply", "config",
++})
++
++# A colour literal in a custom property = a palette that bypasses tokens.css.
++_COLOR_LITERAL = re.compile(
++    r"(?:^|[\s,(])(?:#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(|oklch\(|oklab\(|lab\(|lch\(|color\()"
++)
++
++_DECL = re.compile(r"^(--[\w-]+)\s*:\s*(.+)$", re.S)
++
++
++def _norm_value(value: str) -> str:
++    """Comparable form of a CSS value: lowercase, whitespace collapsed."""
++    return re.sub(r"\s+", "", value.strip().lower())
++
++
++def _is_literal(value: str) -> bool:
++    """True for a written-out value (no var()/calc() indirection)."""
++    return "var(" not in value and "calc(" not in value
++
++
++def _css_custom_props(text: str):
++    """Yield (selector_path, name, value) for every custom property in `text`.
++
++    Comment-stripped and brace-stack driven, so unlike the `:root { ... }`
++    regex this sees EVERY block (a second :root, .dark, @media, @layer …) and
++    knows which selector each declaration lives in — that is what makes a
++    finding actionable. Token sheets carry no `;` or `{` inside a value, so
++    the scanner stays simple and dependency-free.
++    """
++    text = re.sub(r"/\*.*?\*/", " ", text, flags=re.S)
++    stack: list[str] = []
++    buf: list[str] = []
++
++    def flush():
++        raw = "".join(buf).strip()
++        buf.clear()
++        if not raw or not stack:
++            return
++        m = _DECL.match(raw)
++        if m:
++            yield " > ".join(stack), m.group(1), m.group(2).strip()
++
++    for ch in text:
++        if ch == "{":
++            stack.append(" ".join("".join(buf).split()))
++            buf.clear()
++        elif ch == "}":
++            yield from flush()
++            if stack:
++                stack.pop()
++        elif ch == ";":
++            yield from flush()
++        else:
++            buf.append(ch)
++
++
++def _in_tailwind_directive(selector_path: str) -> bool:
++    for part in selector_path.split(" > "):
++        part = part.strip()
++        if not part.startswith("@"):
++            continue
++        name = part[1:].split()[0].lower() if part[1:].split() else ""
++        if name in _TAILWIND_DIRECTIVES:
++            return True
++    return False
++
++
+ def main() -> int:
+     html_text = HTML.read_text(encoding="utf-8")
+     css_text = CSS.read_text(encoding="utf-8")
+@@ -92,7 +176,10 @@ def main() -> int:
+             drift.append(f"light var {name} present inline in preview.html but missing from tokens.css light block")
+ 
+     # 5. dashboard-next must consume the generated bridge, not re-define tokens
++    #    (extended by contract 7: every block, not just the first :root)
+     shadowed: list[str] = []
++    copies: list[str] = []
++    hardcoded: dict[str, list[str]] = {}
+     next_ok = NEXT_GLOBALS.exists()
+     if next_ok:
+         next_text = NEXT_GLOBALS.read_text(encoding="utf-8")
+@@ -105,12 +192,44 @@ def main() -> int:
+                 "apps/dashboard-next/app/globals.css does not import "
+                 "design-system/tailwind.css (bridge import missing)"
+             )
+-        next_root = vars_in_block(next_text, r":root")
+-        shadowed = sorted(set(css_dark) & set(next_root))
++        token_names = set(css_dark) | set(css_light)
++        # literal tokens.css value -> the names that own it (#161b22 is both
++        # --surface-1 and the legacy --surface/--header-start/--code-bg)
++        literal_owners: dict[str, list[str]] = {}
++        for owner, value in css_dark.items():
++            norm = _norm_value(value)
++            if _is_literal(norm):
++                literal_owners.setdefault(norm, []).append(owner)
++        for selector, name, value in _css_custom_props(next_text):
++            if _in_tailwind_directive(selector):
++                continue
++            if name in token_names:
++                shadowed.append(f"{name} ({selector})")
++            norm = _norm_value(value)
++            if _is_literal(norm) and norm in literal_owners:
++                owners = literal_owners[norm]
++                copies.append(
++                    f"{NEXT_REL} {selector}: {name} copies the value of "
++                    f"tokens.css {', '.join(owners[:3])} "
++                    f"({value.strip()}) — reference the token instead"
++                )
++            elif _COLOR_LITERAL.search(norm):
++                hardcoded.setdefault(selector, []).append(name)
+         if shadowed:
+             drift.append(
+                 "apps/dashboard-next/app/globals.css re-defines token(s) from "
+-                f"tokens.css :root — shadowed: {', '.join(shadowed)}"
++                "tokens.css :root — shadowed: "
++                + ", ".join(sorted(shadowed))
++            )
++        drift.extend(sorted(copies))
++        for selector, names in sorted(hardcoded.items()):
++            shown = ", ".join(sorted(names)[:6])
++            more = f" (+{len(names) - 6} more)" if len(names) > 6 else ""
++            drift.append(
++                f"{NEXT_REL} {selector}: {len(names)} custom propert"
++                f"{'y' if len(names) == 1 else 'ies'} hard-code a colour "
++                f"literal — bind them to design-system tokens (var(--...)): "
++                f"{shown}{more}"
+             )
+ 
+     # 6. the generated bridge must stay verbatim-equal to tokens.css :root
+@@ -130,9 +249,10 @@ def main() -> int:
+         for line in drift:
+             print(f"  {line}")
+         return 1
++    clean = next_ok and not (shadowed or copies or hardcoded)
+     print(f"OK — import present, tokens.css :root {len(css_dark)} + light {len(css_light)} vars, "
+           f"{len(tokens['color']['tint'])} tints in sheet, "
+-          f"dashboard-next bridge {'OK' if next_ok and not shadowed else 'n/a'}")
++          f"dashboard-next bridge+copy-drift {'OK' if clean else 'n/a'}")
+     return 0
+ 
+ 

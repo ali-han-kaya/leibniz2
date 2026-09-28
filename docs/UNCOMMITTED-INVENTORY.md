@@ -1,4 +1,10 @@
-# Commit'lenmemiş iş envanteri (2026-09-27)
+# Commit'lenmemiş iş envanteri (2026-09-27 → kapanış 2026-09-28)
+
+> **Kapanış (2026-09-28):** envanterdeki üç kalem de karara bağlandı ve
+> yürütüldü — P1 worktree'si kendi dalında commit'lendi, P2 stash'lerine
+> dokunulmadı, P3 migration'ları canlıya uygulandı. Ayrıca commit'i bloklayan
+> 23 yetim pre-commit patch'i arşivlenip karantinaya alındı. Kararlar ve
+> kanıtlar: §C–§F.
 
 Bu dosya **ölçüm kaydıdır**: "ne commit'li, ne commit'lenmemiş, kimin kararı"
 sorusunun cevabı. Amaç, commit'lenmemiş iş riskini görünmez olmaktan
@@ -77,20 +83,63 @@ stash'teki kopya normalize edilmemiş hâli).
 > bu iki stash'i uygulamak/geri almak ~1 700 satırı **silmek** olurdu.
 > Doğru işlem: dokunmamak (veya bilinçli olarak düşürmek).
 
-### P3 — Migration'lar repoda, **veritabanında uygulanmadı**
+### P3 — Migration'lar repoda, veritabanında **uygulanmamıştı** → uygulandı
 `20260927193000_trend_runs_rls` + `20260927194500_trend_runs_query_indexes`
-dosya olarak commit'li; `prisma migrate deploy` çalıştırılmamış. Bu commit
-konusu değil, **çalışma zamanı eylemi**: RLS + index'ler canlı DB'de yok,
-yani "RLS hazır" iddiası henüz gerçek değil.
+dosya olarak commit'liydi; `prisma migrate deploy` çalıştırılmamıştı. Bu commit
+konusu değil, **çalışma zamanı eylemi**ydi: RLS + index'ler canlı DB'de yoktu,
+yani "RLS hazır" iddiası o an gerçek değildi. **2026-09-28'de uygulandı** (§D).
 
-## C. Bekleyen kararlar (sahibi başka)
+## C. Kararlar — soruldu ve uygulandı (2026-09-28)
 
-| Kalem | Karar | Öneri |
-|---|---|---|
-| P1 worktree dosyaları | `feat/github-site-sample` dalında commit'lenir mi, silinir mi? | **Commit'le** (3 dosya yalnız orada) |
-| P2 stash'ler | Uygulansın mı, düşürülsün mü, dursun mu? | **Dokunma** — kanıtı gösteren bu tablo yeterli |
-| P3 migration | `migrate deploy` çalıştırılsın mı? | **Evet** — uygulanmamış migration "hazır" sayılmaz |
+| Kalem | Soru | Karar | Sonuç |
+|---|---|---|---|
+| P1 worktree dosyaları | `feat/github-site-sample` dalında commit'lenir mi, silinir mi? | **kendi dalında commit'le** | `2ef1821` (9 dosya, 51 hook yeşil, worktree artık temiz) |
+| P2 stash'ler | Uygulansın mı, düşürülsün mü, dursun mu? | **dokunma** | Değişiklik yok; kanıt §B tablosu |
+| P3 migration | `migrate deploy` çalıştırılsın mı? | **canlıya uygula** | §D |
 
-Bu tablo kararları bekliyor; kalemlerin sahibi farklı thread'lerde olduğu
-için karar onlara aittir. Yeni bir untracked dosya ya da stash belirdiğinde
-tabloyu güncelle — kayıt, kapının kendisi kadar değerlidir.
+Kalemler farklı thread'lerde doğduğu için karar sahipliği kullanıcıya
+soruldu; yukarıdaki sonuçlar o kararların uygulanmış hâlidir. Yeni bir
+untracked dosya ya da stash belirdiğinde tabloyu güncelle — kayıt, kapının
+kendisi kadar değerlidir.
+
+## D. P3 sonucu — migration'lar canlıya uygulandı
+
+`DATABASE_URL="$DATABASE_URL_UNPOOLED" npx prisma migrate deploy` ile
+`20260927193000_trend_runs_rls` ve `20260927194500_trend_runs_query_indexes`
+uygulandı; pooled bağlantıya dokunulmadı. Yazma yolu köprü (grant) üzerinden
+**rollback'li bir prob** ile doğrulandı: sayaç 269 → 270 → 269, kalıcı iz yok.
+`apps/trend-db/README.md`'deki artık yanlış olan "migration uygulama bekliyor"
+iddiası kaldırıldı.
+
+## E. Yetim pre-commit patch'leri — arşiv + karantina
+
+Kapı (`check_precommit_orphans.py`) commit'i blokluyordu. Teşhis: `exit 1`
+gizli bir eksik patch'ten değil, **kapının tasarımından** geliyordu — 24
+saatten eski her patch fail-closed bloklar; KNOWN-INCIDENT etiketi *uyarıdır*,
+muafiyet değildir (iki test bunu `returncode == 1` ile sabitler). Cache'teki
+24 patch'in 23'ü arşivle sha256 birebir aynıydı; kalan 1'i
+(`patch1790561449-4597`, 5.8 saatlik) taze ve eşleşmesiz → zaten bloklamıyordu.
+Yani "kapsanmamış 24. patch" hipotezi **yanlış** çıktı.
+
+| Ölçüm | Değer |
+|---|---|
+| Cache'teki patch | 24 |
+| Arşivle birebir (sha256) aynı | 23 (11 benzersiz içerik) |
+| Arşivle eşleşmeyen, dokunulmadı | 1 — taze, kurtarma penceresinde |
+| Arşiv | `_calisma/CIKTI/recovery_patches_20260928/` — MANIFEST + 11 patch |
+| Karantina | `~/.cache/pre-commit-orphans-quarantine-20260928/` — 23 patch + MANIFEST |
+
+Karantina **silme değil taşımadır**: her dosyanın arşivde byte-eşdeğeri var,
+yani bilgi kaybı yok. Taşıma sonrası kapı `exit 0`; 18 kapı testi `OK`. Geri
+almak için karantinadaki dosyayı `~/.cache/pre-commit/` içine geri taşımak
+yeterli.
+
+## F. `klayers.json` — commit'lenmedi
+
+`_calisma/CIKTI/klayers.json` (2.7 kB, `verdict: PASS`, 22 katman) bu oturumda
+09:23'te üretilmiş bir **koşum sidecar'ı**. Üreticisi `verify_delivery.py
+--klayers-out`; tüketicisi `_calisma/mcp/verify_mcp/server.py`, ama onu bir
+*preview dir*'den okur — `CIKTI/`'den değil. İçinde zaman damgası yok,
+provenance kaydı yok. Bu yüzden commit'lenmedi, untracked bırakıldı ve burada
+belgelendi. (`CIKTI/` içinde 512 dosya izleniyor; ama izlenenler adlandırılmış
+kanıt dosyaları, bu ise geçici bir sidecar.)
