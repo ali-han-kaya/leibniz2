@@ -651,6 +651,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-29 | fix | (bootstrap) kurulum çıktısı da gerçek yolu gösteriyor | [`eda2f2a`](https://github.com/ali-han-kaya/leibniz2/commit/eda2f2a) |
 | 2026-09-29 | fix | (video) remotion 4.0.408 → 4.0.530, kritik RCE kapandi | [`9b95723`](https://github.com/ali-han-kaya/leibniz2/commit/9b95723) |
 | 2026-09-29 | feat | (gates) --verify bayrağı ve pin kaynağı sözleşmeleri | [`63e21a9`](https://github.com/ali-han-kaya/leibniz2/commit/63e21a9) |
+| 2026-09-29 | chore | (changelog) 63e21a9 satirini tabloya ekle | [`50d13b6`](https://github.com/ali-han-kaya/leibniz2/commit/50d13b6) |
 
 ### Regresyon notları
 

@@ -306,6 +306,7 @@ HOOK_COVERAGE = {
         "test_check_merge_precondition.py",
         "test_gen_skill_surface_inventory.py",
         "test_dashboard_next_battery_smoke.py",
+        "test_trend_record_pr_contract.py",
     ],
 }
 
@@ -759,6 +760,12 @@ ALWAYS_RUN = frozenset({
     "test_k_layer_tokens.py",
     "test_incidental_banner.py",
     "test_check_video_render.py",          # ortam-bağımlı
+    # PR #53 ile geldi (origin/main -> 34b6ea3 ayrışması). Test, izlenen
+    # bir kaynak dosyaya BAĞLI DEĞİL: `determinism-trend.yml` akışının
+    # branch/PR politikasını sözleşme düzeyinde sınar, bu yüzden hiçbir
+    # TEST_SOURCE_GLOBS girdisi onu seçemiyor. Manifest'e girdiği için
+    # fail-closed gereği burada olmazsa "sessizce hiç koşmayan test" olurdu.
+    "test_trend_record_pr_contract.py",
 })
 # ⚠️ Playwright testleri ALWAYS_RUN'DAN ÇIKARILDI (2026-09-29, ölçüm):
 # dört Playwright testi (dashboard_keyboard_nav, dashboard_cls_budget,

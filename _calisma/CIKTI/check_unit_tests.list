@@ -176,6 +176,7 @@ test_trend_db_contract.py
 test_trend_db_index_contract.py
 test_trend_db_js_runner.py
 test_trend_db_rls_contract.py
+test_trend_record_pr_contract.py
 test_update_preview_sync_server.py
 test_validate_config_schema.py
 test_vercel_adapter.py
