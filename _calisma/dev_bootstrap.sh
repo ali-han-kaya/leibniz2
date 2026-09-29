@@ -141,9 +141,10 @@ _load_pins
 BROWSER_PIN_MIN_PY="3.10"
 
 usage() {
-  say "Kullanım: dev_bootstrap.sh [--full|--check|--help]"
+  say "Kullanım: dev_bootstrap.sh [--full|--verify|--check|--help]"
   say "  (bayraksız) araç-kümesini kur (idempotent, hızlı)"
   say "  --full      kur + temel bataryayı koş (uçtan uca, fail-closed)"
+  say "  --verify    araç-kümesi tam mı, SONRA batarya (KURMAZ, fail-closed)"
   say "  --check     araç-kümesi tam mı? rc=0/1 (fail-closed)"
   say "  --help      bu yardım"
   say "Not: tarayıcı katmanı (chromium) eksikse ilk kurulumda ~150 MB iner."
@@ -373,6 +374,17 @@ run_battery() {
 }
 
 FULL=0
+# Tüm birimleri ölç; ilk eksikte fail-closed. `--check` ve `--verify` AYNI
+# ölçümü kullanır: iki ayrı kopya olsaydı biri güncellenip diğeri eski
+# kalırdı — ve `check_bootstrap_toolchain.py`'nin okuduğu `CHECK FAIL:`
+# imzası iki yerden gelirdi.
+check_all_units() {
+  for u in "${UNITS[@]}"; do
+    check_unit "$u" || { say "CHECK FAIL: $(unit_path "$u") eksik veya paritesiz (kurulum: bash '$SELF')"; return 1; }
+  done
+  say "CHECK OK"
+}
+
 case "${1:-}" in
   --help)
     # rc=2 kuralı TÜM bayraklarda aynı: `--help extra` de "fazladan argüman
@@ -387,10 +399,18 @@ case "${1:-}" in
     ;;
   --check)
     [ "$#" -eq 1 ] || { usage >&2; exit 2; }
-    for u in "${UNITS[@]}"; do
-      check_unit "$u" || { say "CHECK FAIL: $(unit_path "$u") eksik veya paritesiz (kurulum: bash '$ROOT/_calisma/dev_bootstrap.sh')"; exit 1; }
-    done
-    say "CHECK OK"
+    check_all_units || exit 1
+    exit 0
+    ;;
+  --verify)
+    # `--full` gibi uçtan uca, ama KURULUM YAPMAZ. Farkı bilinçli: eksik
+    # bir birim sessizce kurulmaz, fail-closed ÖLÜR. Amaç "bu ağaç hazır
+    # mı ve batarya yeşil mi" sorusunu ağacı DEĞİŞTİRMEDEN yanıtlamak —
+    # `--full` bunu yaparken ağacı değiştirir, yani soru değişmiştir.
+    [ "$#" -eq 1 ] || { usage >&2; exit 2; }
+    check_all_units || exit 1
+    run_battery
+    say "BOOTSTRAP OK"
     exit 0
     ;;
   --full)

@@ -74,6 +74,24 @@ def run_gate(argv=None, script=None):
     return rc, buf.getvalue()
 
 
+def branch(script: str, label: str) -> str:
+    """`case` dalının GÖVDESİ: `label)` ile kendi `;;` terminatörü arası.
+
+    Neden: önceki ölçüm `end = text.index("--full)", start)` ile
+    sınırlıydı, yani dalın sonunu değil İSİMDE geçen bir sonraki bayrağı
+    arıyordu. `--verify` eklendiğinde `--check)` ile `--full)` arasına
+    girdi ve `run_battery` aralığa düştü — test kendi kurgusundan
+    kırmızıya döndü (ölçüldü: "'run_battery' unexpectedly found").
+
+    `;;` terminatörü dalın GERÇEK sonudur, dolayısıyla bu hem daha dar
+    hem daha doğru bir sınırdır: invariant artık "bu dalın içinde"
+    der, "bu daldan sonraki her şeyde" değil.
+    """
+    start = script.index(label)
+    end = script.index(";;", start)
+    return script[start:end]
+
+
 def code_only(path: pathlib.Path) -> str:
     """Yalnız ÇALIŞTIRILABILIR kod — docstring ve yorumlar düşer.
 
@@ -261,9 +279,22 @@ class TestWiringInvariants(unittest.TestCase):
         yarısıdır. Metinsel invariant: `--check)` case bloğu içinde
         run_battery geçmemeli."""
         text = REAL_BOOTSTRAP.read_text(encoding="utf-8")
-        start = text.index("--check)")
-        end = text.index("--full)", start)
-        self.assertNotIn("run_battery", text[start:end])
+        self.assertNotIn("run_battery", branch(text, "--check)"))
+
+    def test_bootstrap_verify_branch_runs_the_battery(self):
+        """`--verify` bataryayı KOŞAR — `--full` ile aynı uçtan uca yol."""
+        text = REAL_BOOTSTRAP.read_text(encoding="utf-8")
+        self.assertIn("run_battery", branch(text, "--verify)"))
+
+    def test_bootstrap_verify_branch_never_provisions(self):
+        """`--verify` ÖLÇER, KURMAZ — `--full`'in ayırt edici farkı.
+
+        Kapı (`check_bootstrap_toolchain.py`) kurulum yapmaz; `--verify`
+        de kurmamalı, yoksa "ölçtüğünü sandığın ağacı değiştirmiş olursun"
+        ve fail-closed ölçümü sessizce kendi koşulunu bozar.
+        """
+        text = REAL_BOOTSTRAP.read_text(encoding="utf-8")
+        self.assertNotIn("provision_unit", branch(text, "--verify)"))
 
     def test_gate_never_auto_installs(self):
         """Kapı ölçer, KURMAZ. Kurulum commit'e gömülemez (ağ + dakikalar)."""
@@ -292,13 +323,24 @@ class TestWiringInvariants(unittest.TestCase):
         için seçim bir YORUM satırına kayabiliyordu (ölçüldü: "not found in
         '# `^CHECK FAIL:...` ile İLK token...'"). Kurtarma komutunu yazan
         satır, `say` çağrısı olan gerçek `CHECK FAIL:` üretimidir.
+
+        BİÇİM AYRIMI: bootstrap'ın kendi öğütü artık GÖRELI değil
+        mutlak yol basıyor (`bash '$SELF'`). Sebep: göreli komut
+        başka bir dizinden çalıştırıldığında kırılıyordu (2026-09-29
+        düzeltmesi) — yani eski literal, aynı betiğe daha kötü bir
+        referanstı. Bu yüzden invariant LITERAL'I değil "aynı betiğe
+        işaret eder" gerçeğini ölçer: `$SELF` tanımı göreli yoldan
+        türetilmiş olmalı, kapının `RECOVERY`'si ise değişmemiş kalmalı.
         """
         text = REAL_BOOTSTRAP.read_text(encoding="utf-8")
         lines = [l for l in text.splitlines()
                  if "CHECK FAIL:" in l and not l.lstrip().startswith("#")]
         self.assertTrue(lines, "bootstrap'ta CHECK FAIL uretimi bulunamadi")
-        line = next(l for l in lines if "dev_bootstrap.sh" in l)
-        self.assertIn("_calisma/dev_bootstrap.sh", line)
+        line = next(l for l in lines if "SELF" in l or "dev_bootstrap.sh" in l)
+        self.assertIn("bash '$SELF'", line)
+        # $SELF, göreli yoldan türetilir → kök dizinden de geçerli kalır.
+        self.assertIn('_calisma/dev_bootstrap.sh"',
+                      next(l for l in text.splitlines() if l.startswith("SELF=")))
         self.assertEqual(gate.RECOVERY, "bash _calisma/dev_bootstrap.sh")
 
     def test_unit_name_stays_the_first_token(self):

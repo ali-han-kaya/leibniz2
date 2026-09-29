@@ -366,6 +366,105 @@ class TestFullArgContract(unittest.TestCase):
         self.assertIn("--full", r.stdout)
 
 
+class TestVerifyFlag(unittest.TestCase):
+    """`--verify` = araç-kümesi ölçümü, SONRA batarya — kurulum YAPMAZ.
+
+    `--full` ile farkı sözleşmenin KENDİSİ: `--full` eksik bulduğu birimi
+    kurar, yani "bu ağaç hazır mı" sorusunu kurulum yaparak değiştirip
+    yanıtlar. `--verify` fail-closed ölür — ölçtüğü ağaca dokunmaz.
+
+    Ölçüm SAHTE KÖKTE: gerçek ağaç değiştirilmeden hem yeşil hem kırık dal
+    ölçülebilir, dolayısıyla zincir yarışı imkânsız olur (bkz.
+    `TestBrokenUnitFailsCheckClosedHermetic`).
+    """
+
+    def setUp(self):
+        self.root = _fake_bootstrap_root()
+        self.addCleanup(shutil.rmtree, str(self.root), True)
+        self.env = _fake_env(self.root)
+        self.battery = str(self.root / "fake_battery.sh")
+        self.env["LEIBNIZ2_BOOTSTRAP_BATTERY"] = self.battery
+
+    def _battery(self, body):
+        """Sahte batarya betiği — gerçeği dakikalar sürer ve BU testi içerir."""
+        with open(self.battery, "w", encoding="utf-8") as fh:
+            fh.write("#!/bin/bash\n" + body + "\n")
+
+    def _run_boot(self, *argv):
+        script = str(self.root / "_calisma" / "dev_bootstrap.sh")
+        return _run(["bash", script, *argv], env=self.env)
+
+    def _hide_first_npm_sentinel(self):
+        """Envanterden TÜRETİLMİŞ bir `resolve:` sentinel'ini gizle.
+
+        Birim ADINA bağlanmaz: elle seçilmiş bir birim, envanter değişince
+        ölçüm sessizce yanlış hedefe kayabilirdi.
+        """
+        name, rel = next(s for s in SENTINELS if "/node_modules/" in s[1])
+        p = self.root / rel
+        hidden = p.with_name(p.name + ".hidden_by_test")
+        os.rename(p, hidden)
+        self.addCleanup(os.rename, str(hidden), str(p))
+        return name
+
+    def test_green_tree_runs_battery_after_the_toolchain_check(self):
+        """SIRA sözleşmesi: batarya, araç-kümesi ölçülmeden başlamaz."""
+        self._battery('echo "sahte batarya: 191 dosya PASS."')
+        r = self._run_boot("--verify")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("CHECK OK", r.stdout)
+        self.assertIn("temel batarya:", r.stdout)
+        self.assertIn("sahte batarya", r.stdout, "batarya çıktısı akışa karışmalı")
+        self.assertLess(r.stdout.index("CHECK OK"), r.stdout.index("temel batarya:"),
+                        "batarya araç-kümesi ölçülmeden başladı")
+        self.assertTrue(r.stdout.rstrip().endswith("BOOTSTRAP OK"), r.stdout)
+
+    def test_broken_unit_dies_before_the_battery(self):
+        name = self._hide_first_npm_sentinel()
+        self._battery('echo "SAHTE BATARYA CAAGRILDI"')
+        r = self._run_boot("--verify")
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("CHECK FAIL: %s (" % name, r.stdout)
+        self.assertNotIn("temel batarya:", r.stdout,
+                         "kırık araç-kümesinde batarya KOŞMAMALI")
+        self.assertEqual(_read(self.env["FAKE_LOG"]), "",
+                         "--verify kurulum YAPMAMALI: sahte npm/pip çağrısı görüldü")
+
+    def test_the_same_broken_tree_would_be_provisioned_by_full(self):
+        """Yukarıdaki 'kurulum yok' iddiasının BOŞ OLMAYAN kanıtı.
+
+        Aynı kırık ağaçta `--full` sahte npm'yi GERÇEKTEN çağırıyor. Yani
+        log'un boş kalması ölçüm hatası değil, `--verify`'nin kurmama
+        kararı — bu eşleşme olmadan `test_broken_unit...` kendi kurgusu
+        yüzünden yeşil kalabilirdi.
+        """
+        self._hide_first_npm_sentinel()
+        self._battery('echo "sahte batarya: 191 dosya PASS."')
+        r = self._run_boot("--full")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("npm", _read(self.env["FAKE_LOG"]))
+
+    def test_verify_rejects_extra_arg(self):
+        r = self._run_boot("--verify", "extra")
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+        self.assertIn("--verify", r.stderr)
+
+    def test_recursion_is_refused_inside_battery(self):
+        """Batarya içinden `--verify`: özyineleme, hiç başlamadan reddedilir."""
+        self._battery("exit 0")
+        self.env["LEIBNIZ2_IN_BATTERY"] = "1"
+        r = self._run_boot("--verify")
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("özyineleme", r.stderr)
+        self.assertNotIn("temel batarya:", r.stdout, "batarya hiç başlamamalı")
+
+    def test_help_lists_verify_next_to_full(self):
+        r = _run(["bash", SCRIPT, "--help"])
+        self.assertEqual(r.returncode, 0)
+        self.assertIn("--verify", r.stdout)
+        self.assertIn("[--full|--verify|--check|--help]", r.stdout)
+
+
 class TestPinParity(unittest.TestCase):
     @unittest.skipUnless(os.path.isfile(VENV_PY), "venv_z3 kurulu değil")
     def test_venv_pins_match_matrix(self):
@@ -1584,12 +1683,20 @@ class TestSinglePinSource(unittest.TestCase):
     geri dönmesini fail-closed engeller: sürüm bump'ı tek satır olmalı.
     """
 
+    # `docs/HOOK_ENV_MATRIX.md` de TÜKETİCİDİR: z3 satırı "`z3-solver`
+    # pip pin'i" diyor. Üç öteki doc'ta bu bağ zorunluydu
+    # (`test_user_docs_reference_pin_source...`), bu doc listede OLMADIĞI
+    # için boşlukta kaldı — yani sürüm matrisinin okuru, o pini nereden
+    # alacağını öğrenemiyordu. Ölçüldü: doc'ta `requirements-z3.txt` YOK.
+    MATRIX_DOC = "docs/HOOK_ENV_MATRIX.md"
+
     CONSUMERS = ("_calisma/dev_bootstrap.sh",
                  ".github/workflows/verify.yml",
                  "_calisma/CIKTI/test_dev_bootstrap.py",
                  "README.md",
                  "docs/FIRST_RUN_TUTORIAL.md",
-                 "docs/READER_TEST_PROTOCOL.md")
+                 "docs/READER_TEST_PROTOCOL.md",
+                 MATRIX_DOC)
 
     def test_no_version_literal_outside_the_requirements_file(self):
         leaks = []
@@ -1658,11 +1765,62 @@ class TestSinglePinSource(unittest.TestCase):
 
     def test_user_docs_reference_pin_source_instead_of_versions(self):
         for rel in ("README.md", "docs/FIRST_RUN_TUTORIAL.md",
-                    "docs/READER_TEST_PROTOCOL.md"):
+                    "docs/READER_TEST_PROTOCOL.md", self.MATRIX_DOC):
             with self.subTest(file=rel):
                 text = _read(os.path.join(ROOT, rel))
                 self.assertIn("requirements-z3.txt", text,
                               "%s pin kaynağını göstermeli" % rel)
+
+    def _matrix_rows(self):
+        """HOOK_ENV_MATRIX tablosunu AYNI ayrıştırıcıyla okur.
+
+        İkinci bir ayrıştırıcı YAZILMAZ: doc'un sahibi zaten
+        `check_hook_env_matrix.parse_table`. İki ayrı ayrıştırıcı, tablonun
+        iki farklı yorumunu (ve aralarında sessiz bir kaymayı) üretirdi —
+        doc'un yapısal denetimini burada yeniden yorumlama riski.
+        """
+        import check_hook_env_matrix as chem
+        return chem.parse_table(_read(os.path.join(ROOT, self.MATRIX_DOC)))
+
+    def test_env_matrix_doc_delegates_pip_pins_to_the_single_source(self):
+        """Sürüm matrisi pip pini VAAT EDER ama sürüm YAZMAZ.
+
+        Matrisin işi gözlenen sürümleri göstermektir (`z3` prob'u
+        `5.1.0` döner, pip pini ise dört haneli `5.1.0.0` der — gözlem ile pin
+        AYNI ŞEY DEĞİLDİR ve karıştırılmamalıdır). Pin hücresinin dediği
+        dağıtımın gerçekten kaynakta kurulu olduğunu ölçüyoruz: doc,
+        script'in hiç kurmadığı bir şeyi vaat edemez.
+        """
+        rows = self._matrix_rows()
+        self.assertTrue(rows, "HOOK_ENV_MATRIX.md tablosu okunamadı")
+
+        pinned = {re.sub(r"[-_.]+", "-", p.split("==", 1)[0].lower())
+                  for p in PINS}
+        pip_cells = {k: c[3] for k, c in rows.items() if "pip pin" in c[3]}
+        self.assertTrue(pip_cells,
+                        "matriste 'pip pin' diyen satır yok — ölçüm yüzeyi kayboldu")
+        for key, cell in sorted(pip_cells.items()):
+            named = {re.sub(r"[-_.]+", "-", t.lower())
+                     for t in re.findall(r"`([^`]+)`", cell) if "/" not in t}
+            self.assertTrue(named, "%s: 'pip pin' diyor ama paket adlamıyor" % key)
+            unknown = named - pinned
+            self.assertEqual(unknown, set(),
+                             "%s: doc pip pin'i diyor ama kaynakta yok: %s"
+                             % (key, sorted(unknown)))
+
+    def test_env_matrix_observed_column_is_not_mistaken_for_a_pin(self):
+        """Gözlem sütunu ile pip pini AYRIŞMALI.
+
+        z3 prob'u `5.1.0` dondurur, pip pini ise dört haneli `5.1.0.0`
+        der — yani gözlem ile pin aynı metin DEĞİLDİR. Karıştırılırsa
+        matris, kaynağa dokunmadan "pini güncelledin" izlenimi verir.
+        Beklenen: doc'ta `paket==sürüm` biçimli LİTERAL yok. (Bu satırın
+        kendisi de tarama altında: literal yazmak, taradığı kuralı ihlal
+        eder — ölçüldü, ilk yazımda bu test kendi kaynağını yakaladı.)
+        """
+        text = _read(os.path.join(ROOT, self.MATRIX_DOC))
+        self.assertEqual(PIN_LITERAL.findall(text), [],
+                         "matris sürümü YAZMAMALI, kaynağı göstermeli")
 
 
 if __name__ == "__main__":
