@@ -647,6 +647,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-29 | feat | (bootstrap) UNITS dokuz, pinler tek kaynaktan, kapılar artımlı | [`e7b48a2`](https://github.com/ali-han-kaya/leibniz2/commit/e7b48a2) |
 | 2026-09-29 | refactor | (bootstrap) unit envanteri tek kaynağa, iki taraf da okur | [`8a41a96`](https://github.com/ali-han-kaya/leibniz2/commit/8a41a96) |
 | 2026-09-29 | fix | (bootstrap) venv artık pini taşıyan yorumlayıcıyla kuruluyor | [`af07f76`](https://github.com/ali-han-kaya/leibniz2/commit/af07f76) |
+| 2026-09-29 | chore | (changelog) af07f76 satirini tabloya ekle | [`9ebadc4`](https://github.com/ali-han-kaya/leibniz2/commit/9ebadc4) |
 
 ### Regresyon notları
 

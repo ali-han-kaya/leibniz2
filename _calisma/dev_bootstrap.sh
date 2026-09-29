@@ -222,13 +222,13 @@ provision_unit() {  # <ad>
       if _sat="$(_satisfying_interpreter "$BROWSER_PIN_MIN_PY")"; then
         _vp="$_sat"
       fi
-      say "$1: kuruluyor (python3=$(_vp_basename "$_vp"), pins: $REQ_FILE [venv])"
+      say "$(unit_path "$1"): kuruluyor (python3=$(_vp_basename "$_vp"), pins: $REQ_FILE [venv])"
       "$_vp" -m venv "$VENV" || die "venv olusturma"
       "$VENV_PY" -m pip install --quiet "${PINS[@]}" || die "venv_z3 pip install"
       ;;
     npm)
       _d="$ROOT/$(_unit_field label "$1")"
-      say "${_d#$ROOT/}: npm ci"
+      say "$(unit_path "$1"): npm ci"
       npm ci --prefix "$_d" || die "${_d#$ROOT/} npm ci"
       ;;
     # docx jeneratörü de buradan kurulur: CI'da LibreOffice ile
@@ -245,7 +245,7 @@ provision_unit() {  # <ad>
         fi
         say "UYARI: '$BROWSER_PIN' bu yorumlayıcıda kurulamaz (Python <$BROWSER_PIN_MIN_PY) — açık geçersiz kılmayla deneniyor; CI ile ayrışır"
       fi
-      say "$1: ${LEIBNIZ2_BROWSER_PIN:-$BROWSER_PIN} + chromium (~150 MB)"
+      say "$(unit_path "$1"): ${LEIBNIZ2_BROWSER_PIN:-$BROWSER_PIN} + chromium (~150 MB)"
       "$VENV_PY" -m pip install --quiet "${LEIBNIZ2_BROWSER_PIN:-$BROWSER_PIN}" \
         || die "playwright pip install"
       "$VENV_PY" -m playwright install chromium || die "playwright install chromium"
@@ -255,13 +255,13 @@ provision_unit() {  # <ad>
     # generate BAĞLANMAZ. Yer tutucu DSN gerçek kimlik bilgisi taşımaz ve
     # hiç kullanılmaz.
     prisma)
-      say "$(_unit_field label trend_db_codegen | sed 's#/generated##'): prisma generate (kod üretimi — DB'ye bağlanmaz)"
+      say "$(unit_path "$1"): prisma generate (kod üretimi — DB'ye bağlanmaz)"
       ( cd "$PRISMA_DIR" \
         && DATABASE_URL="${LEIBNIZ2_PRISMA_URL:-postgresql://ci:ci@127.0.0.1:5432/ci?sslmode=disable}" \
            npx prisma generate ) || die "prisma generate"
       ;;
     nextbuild)
-      say "$(_unit_field label dashboard_next_build | sed 's#/.next##'): next build (üretim derlemesi)"
+      say "$(unit_path "$1"): next build (üretim derlemesi)"
       npm run build --prefix "$NEXT_DIR" || die "next build"
       ;;
     *) die "bilinmeyen provision türü: $1" ;;

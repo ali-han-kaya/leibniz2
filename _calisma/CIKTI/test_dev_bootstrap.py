@@ -683,7 +683,7 @@ class TestBrowserLayerProvisioning(unittest.TestCase):
         calls = _read(self.log)
         self.assertIn("pip install --quiet " + BROWSER_PIN, calls)
         self.assertIn("playwright install chromium", calls)
-        self.assertIn("browsers:", r.stdout)
+        self.assertIn("browsers (venv_z3+chromium):", r.stdout)
         self.assertTrue(r.stdout.rstrip().endswith("BOOTSTRAP OK"), r.stdout)
 
     def test_working_browser_is_not_reinstalled(self):
@@ -790,7 +790,7 @@ class TestBrokenUnitFailsCheckClosedHermetic(unittest.TestCase):
         try:
             r = self._run_boot()
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-            self.assertIn("video: npm ci", r.stdout)
+            self.assertIn("video (_calisma/video): npm ci", r.stdout)
             self.assertTrue(r.stdout.rstrip().endswith("BOOTSTRAP OK"), r.stdout)
         finally:
             if hidden.exists():
@@ -1139,7 +1139,8 @@ class TestGeneratedArtifactUnits(unittest.TestCase):
         self._drop_artifact("apps/trend-db/generated")
         r = self._run_boot()
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertIn("prisma generate (kod üretimi", r.stdout)
+        self.assertIn("trend_db_codegen (apps/trend-db/generated): "
+                      "prisma generate (kod üretimi", r.stdout)
 
 
 class TestBrowserPinPythonFloor(unittest.TestCase):
@@ -1343,6 +1344,110 @@ def _write_fake_interpreters(bindir):
     return bindir
 
 
+class TestProvisionLinesPrintRealPaths(unittest.TestCase):
+    """Kurulum çıktısı da `ad (gerçek yol)` biçimini kullanır.
+
+    Ölçülen tutarsızlık (2026-09-29): `unit_path` yalnız `--check` ve
+    "up to date" satırlarında kullanılıyordu. Beş provision türünün
+    çıktısı birbirinden FARKLI ve üçü hataydı:
+
+        venv_z3: kuruluyor            → yol YOK
+        _calisma/pptx: npm ci         → ad YOK
+        browsers: playwright==…        → yol YOK
+        apps/trend-db: prisma …       → `sed` ile üst dizine budanmış
+        apps/dashboard-next: next …   → `sed` ile üst dizine budanmış
+
+    Yani "hangi dizini açmam lazım" sorusunun cevabı kurulum sırasında
+    kayboluyordu. İki `sed` de gereksizdi: etiket envanterde olduğuna
+    göre `unit_path` zaten doğru yolu veriyor.
+    """
+
+    def setUp(self):
+        self.root = _fake_bootstrap_root()
+        self.addCleanup(shutil.rmtree, str(self.root), True)
+        self.env = _fake_env(self.root)
+
+    def _run_boot(self, *argv):
+        return _run(["bash", str(self.root / "_calisma" / "dev_bootstrap.sh"),
+                     *argv], env=self.env)
+
+    def _hide(self, *rel_paths):
+        for rel in rel_paths:
+            p = self.root / rel
+            self.assertTrue(p.exists(), "sentinel yok: " + rel)
+            p.rename(self.root / (rel + ".h"))
+
+    def _unhide(self, *rel_paths):
+        for rel in rel_paths:
+            h = self.root / (rel + ".h")
+            if h.exists():
+                h.rename(self.root / rel)
+
+    def _lines(self, out):
+        return [l for l in out.splitlines() if ": " in l]
+
+    def test_venv_provision_prints_its_real_path(self):
+        self._hide("_calisma/.venv_z3/bin/python")
+        try:
+            r = self._run_boot()
+            self.assertTrue(
+                any(l.startswith("venv_z3 (_calisma/.venv_z3): kuruluyor")
+                    for l in self._lines(r.stdout)),
+                r.stdout)
+        finally:
+            self._unhide("_calisma/.venv_z3/bin/python")
+
+    def test_npm_provision_prints_name_and_path(self):
+        self._hide("_calisma/pptx/node_modules/pptxgenjs")
+        try:
+            r = self._run_boot()
+            self.assertTrue(
+                any(l.startswith("pptx (_calisma/pptx): npm ci")
+                    for l in self._lines(r.stdout)),
+                r.stdout)
+        finally:
+            self._unhide("_calisma/pptx/node_modules/pptxgenjs")
+
+    def test_browser_provision_prints_its_label(self):
+        self.env["FAKE_BROWSER_OK"] = "0"      # tarayıcı katmanı eksik
+        r = self._run_boot()
+        self.assertTrue(
+            any(l.startswith("browsers (%s):" % UNIT_LABELS["browsers"])
+                for l in self._lines(r.stdout)),
+            r.stdout)
+
+    def test_generated_provisions_print_name_and_path(self):
+        for unit, rel in (("trend_db_codegen",
+                           "apps/trend-db/generated/client.ts"),
+                          ("dashboard_next_build",
+                           "apps/dashboard-next/.next/BUILD_ID")):
+            with self.subTest(unit=unit):
+                self._hide(rel)
+                try:
+                    r = self._run_boot()
+                    label = UNIT_LABELS[unit]
+                    self.assertTrue(
+                        any(l.startswith("%s (%s):" % (unit, label))
+                            for l in self._lines(r.stdout)),
+                        "%s satırı gerçek yolu taşımadı:\n%s" % (unit, r.stdout))
+                finally:
+                    self._unhide(rel)
+
+    def test_no_provision_line_prints_a_bare_unit_name(self):
+        """Hiçbir provision satırı `ad: ...` biçiminde KALMAMALI.
+
+        Yapısal denetim: `say "$1: ..."` ya da elle budanmış yol kalırsa
+        tutarsızlık sessizce geri gelir ve yukarıdaki testlerden biri
+        kırılana kadar fark edilmez.
+        """
+        code = "\n".join(l for l in _read(SCRIPT).splitlines()
+                         if not l.lstrip().startswith("#"))
+        self.assertNotRegex(code, r'say "\$1:',
+                            "provision çıktısı çıplak unit adı basıyor")
+        self.assertNotIn("sed 's#/generated##'", code,
+                         "budanmış yol etiketi yerine kullanılıyor")
+
+
 class TestBrowserRemedyHint(unittest.TestCase):
     """Ölüm mesajı KURTARMA YOLU da verir, ve o yol ölçülmüştür.
 
@@ -1450,7 +1555,8 @@ class TestBrowserRemedyHint(unittest.TestCase):
         `python3`'ü değiştirmiyor. Yani ölüm, reçeteden de geliyordu.
         """
         r = self._provision_venv(self._only("python3.12"))
-        self.assertIn("venv_z3: kuruluyor (python3=python3.12", r.stdout,
+        self.assertIn("venv_z3 (_calisma/.venv_z3): kuruluyor (python3=python3.12",
+                      r.stdout,
                       "venv tabanı geçen yorumlayıcıyla kurulmadı")
         self.assertTrue((self.root / "_calisma" / ".venv_z3" / "bin" / "python")
                         .exists(), "sahte venv oluşmadı")
@@ -1462,7 +1568,8 @@ class TestBrowserRemedyHint(unittest.TestCase):
         yoksa "iyileştirme" dar bir makine kümesini kırardı.
         """
         r = self._provision_venv({n: "3.9.6" for n in INTERP_CANDIDATES})
-        self.assertIn("venv_z3: kuruluyor (python3=python3,", r.stdout,
+        self.assertIn("venv_z3 (_calisma/.venv_z3): kuruluyor (python3=python3,",
+                      r.stdout,
                       "yedek davranış bozuldu: sadece python3 kullanılmalı")
 
 
