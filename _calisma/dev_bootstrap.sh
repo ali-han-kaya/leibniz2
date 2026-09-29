@@ -1,23 +1,13 @@
 #!/bin/bash
 # dev_bootstrap.sh — fresh-checkout'u yeşil-bataryaya taşıyan tek komut.
-# Kapsam: UNITS'teki araç-kümeleri (aşağıda) + --full ile temel batarya.
+# Kapsam: envanterdeki araç-kümeleri + --full ile temel batarya.
 # Idempotent: kurulu araca dokunmaz.
 #
 # Kapsam neden GENİŞ: her unit, bataryadaki testlerin ortam-yok diye SKIP
 # etmemesi için var. Kurulu olmayan bir bağımlılık testi KIRMIZIYA düşürmez
 # (repo kültürü: "skip" + gerekçede kurulum reçetesi), ama taze checkout'ta
-# yeşil görünen batarya sessizce kapsam kaybeder. Ölçülen eşleme:
-#   venv_z3      → PIL/jsonschema/yaml isteyen testler (deck üretimi,
-#                  config şema doğrulaması) — pin listesi aşağıda
-#   pptx         → test_pptx_export
-#   docx         → docx jeneratör/SKILL testleri
-#   dashboard_next → style/typecheck/ui-contract süitleri
-#   trend_db     → test_trend_db_js_runner (`node_modules/.bin/tsx`)
-#   video        → test_check_video_typecheck (`node_modules/.bin/tsc`)
-#   browsers     → 5 manifest test dosyası (keyboard-nav, escaping,
-#                  hover-tooltip, cls-budget, cwv-report) playwright+chromium
-#   trend_db_codegen    → prisma generate (üretilen istemci; gitignored)
-#   dashboard_next_build → next build (BUILD_ID; gitignored)
+# yeşil görünen batarya sessizce kapsam kaybeder. HANGİ unit'in HANGİ testi
+# kurtardığı envanterin yorumunda yazılı; burada ve testlerde kopyalanmaz.
 #
 # KAPSAM DIŞI (ölçüldü 2026-09-28, dürüst sınır): script ARAÇ-KÜMESİ + ÜRETİM
 # ARTEFAKTI sağlar, RUNTIME VERİSİ sağlamaz. `_calisma/CIKTI/history.jsonl` ve
@@ -35,13 +25,68 @@
 set -eu
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-VENV="$ROOT/_calisma/.venv_z3"
+
+say() { printf '%s\n' "$*"; }
+die() { printf 'BOOTSTRAP FAIL: %s\n' "$*" >&2; exit 1; }
+
+# ── Unit envanteri: TEK KAYNAK ───────────────────────────────────────────────
+# Liste, sıra, görünen yol, check türü ve provision türü
+# `_calisma/bootstrap_units.conf` içinde. Burada hiçbir unit ADI sabit
+# yazılmaz; `test_dev_bootstrap.py` de AYNI dosyayı okur, böylece ikisi
+# birbirinden kayamaz. Ölçülen sebep: liste `UNITS=(...)` dizisi,
+# `unit_path()` case tablosu ve iki test sınıfında elle yazılmıştı.
+UNITS_CONF="$ROOT/_calisma/bootstrap_units.conf"
+[ -f "$UNITS_CONF" ] || die "unit envanteri yok: $UNITS_CONF"
+UNITS=(); U_LABEL=(); U_CHECK=(); U_PROV=()
+while read -r _u _label _check _prov _rest; do
+  case "$_u" in ''|\#*) continue ;; esac
+  [ -n "$_label" ] && [ -n "$_check" ] && [ -n "$_prov" ] \
+    || die "eksik satır (ad yol check provision): $_u"
+  # Beşinci alan boş OLMAK ZORUNDA: alanlar boşlukla ayrıldığı için bir
+  # etiketteki boşluk ("venv_z3 + chromium") alan sayısını sessizce
+  # bozuyordu — eksik alan denetimi onu yakalamıyordu. Ölçüldü.
+  [ -z "$_rest" ] || die "fazladan alan var ($#$_u satırı): $_u"
+  UNITS+=("$_u"); U_LABEL+=("$_label"); U_CHECK+=("$_check"); U_PROV+=("$_prov")
+done < "$UNITS_CONF"
+[ "${#UNITS[@]}" -gt 0 ] || die "unit envanteri boş: $UNITS_CONF"
+
+# Paralel dizilerde alan arama (bash 3.2'de assoc dizi yok → doğrusal tarama;
+# 9 birim maliyetsiz). Bilinmeyen ad = envanterle çelişki = fail-closed.
+_unit_field() {  # <label|check|prov> <ad>
+  _f="$1"; _n="$2"; _i=0
+  while [ "$_i" -lt "${#UNITS[@]}" ]; do
+    if [ "${UNITS[$_i]}" = "$_n" ]; then
+      case "$_f" in
+        label) printf '%s\n' "${U_LABEL[$_i]}" ;;
+        check) printf '%s\n' "${U_CHECK[$_i]}" ;;
+        prov)  printf '%s\n' "${U_PROV[$_i]}" ;;
+        *) die "bilinmeyen alan: $_f" ;;
+      esac
+      return 0
+    fi
+    _i=$((_i + 1))
+  done
+  die "envanterde olmayan unit: $_n"
+}
+
+# Etiket: "<ad> (<görünen yol>)". Sipariş KORUNUR —
+# `check_bootstrap_toolchain.py`'in UNIT_RE'si `^CHECK FAIL:\s*(\S+)` ile İLK
+# token'ı, yani unit ADINI, yakalar. Yol parantez içinde geldiği için imza
+# bozulmaz (ölçüldü: ayrıştırılan 'pptx').
+unit_path() { printf '%s (%s)\n' "$1" "$(_unit_field label "$1")"; }
+
+# Yol değişkenleri envanterden TÜRETİLİR; hiçbiri burada sabit yazılmaz.
+VENV="$ROOT/$(_unit_field label venv_z3)"
 VENV_PY="$VENV/bin/python"
-PPTX="$ROOT/_calisma/pptx"
-DOCX="$ROOT/_calisma/docx"
-DASH="$ROOT/apps/dashboard-next"
-TREND_DB="$ROOT/apps/trend-db"
-VIDEO="$ROOT/_calisma/video"
+PPTX="$ROOT/$(_unit_field label pptx)"
+DOCX="$ROOT/$(_unit_field label docx)"
+DASH="$ROOT/$(_unit_field label dashboard_next)"
+TREND_DB="$ROOT/$(_unit_field label trend_db)"
+VIDEO="$ROOT/$(_unit_field label video)"
+# İki üretim birimi kendi üst DİZİNİNDE çalışır: `apps/trend-db/generated`
+# → `apps/trend-db`, `apps/dashboard-next/.next` → `apps/dashboard-next`.
+PRISMA_DIR="$ROOT/$(dirname "$(_unit_field label trend_db_codegen)")"
+NEXT_DIR="$ROOT/$(dirname "$(_unit_field label dashboard_next_build)")"
 # Sürümler TEK KAYNAKTAN okunur (aşağıdaki `_load_pins`); burada sabit
 # dizi YOKTUR. Ölçülen gerekçe: sürüm 6 yerde kopyalanmıştı (bu script,
 # test_dev_bootstrap.py, verify.yml'de 4 satır + 2 cache key) ve
@@ -52,11 +97,8 @@ REQ_FILE="$ROOT/_calisma/requirements-z3.txt"
 # kaynak). Sözleşme testleri sahte batarya enjekte edebilsin diye ezilebilir.
 BATTERY_SCRIPT="${LEIBNIZ2_BOOTSTRAP_BATTERY:-$ROOT/_calisma/CIKTI/check_unit_tests_hook.sh}"
 
-say() { printf '%s\n' "$*"; }
-die() { printf 'BOOTSTRAP FAIL: %s\n' "$*" >&2; exit 1; }
-
 # Pini tek kaynaktan yükle. Bölümler pip'e zarar vermeyen yorumlardır:
-#   [venv]    → PINS          (check_venv_z3 birebir `pip freeze` eşitliği arar)
+#   [venv]    → PINS          (`venv` türlü check birebir `pip freeze` eşitliği arar)
 #   [browser] → BROWSER_PIN   (işlevsel denetim: chromium gerçekten açılıyor mu)
 # Sürüm bump = requirements dosyasında tek satır; burada, CI'da ve testte
 # kopya kalmaz (kapsam dışı kopyayı `test_dev_bootstrap.py` kırmızıya düşürür).
@@ -104,85 +146,104 @@ usage() {
 # check_ = işlev-ölçümü, varlık-değil: venv pin-paritesi, npm unit'leri
 # kendi-sözleşmeleri (library çözümü / kapı-binary'leri) — node_modules
 # yoksa probe doğal-fail eder, ayrıca varlık-kontrolü gerekmez.
-# Yeni araç-kümesi = bir check_ + bir provision_ + UNITS'e bir giriş.
-check_venv_z3() {
-  [ -x "$VENV_PY" ] || return 1
-  local frozen pin
-  frozen="$($VENV_PY -m pip freeze 2>/dev/null)" || return 1
-  for pin in "${PINS[@]}"; do
-    printf '%s\n' "$frozen" | grep -qx "$pin" || return 1
-  done
-}
-provision_venv_z3() {
-  say "venv_z3: kuruluyor (pins: $REQ_FILE [venv])"
-  python3 -m venv "$VENV" || die "venv olusturma"
-  "$VENV_PY" -m pip install --quiet "${PINS[@]}" || die "venv_z3 pip install"
-}
-check_pptx() {
-  (cd "$PPTX" && node -e "require.resolve('pptxgenjs')" >/dev/null 2>&1)
-}
-provision_pptx() {
-  say "_calisma/pptx: npm ci"
-  npm ci --prefix "$PPTX" || die "_calisma/pptx npm ci"
-}
-# docx jeneratoru (markdown → .docx): CI'da LibreOffice ile acilabilirlik
-# kontrolu yapilir; yerelde de ayni jenerator kosabilsin diye burada kurulur.
-check_docx() {
-  (cd "$DOCX" && node -e "require.resolve('docx')" >/dev/null 2>&1)
-}
-provision_docx() {
-  say "_calisma/docx: npm ci"
-  npm ci --prefix "$DOCX" || die "_calisma/docx npm ci"
-}
-check_dashboard_next() {
-  [ -x "$DASH/node_modules/.bin/tsc" ] \
-    && [ -x "$DASH/node_modules/.bin/next" ]
-}
-provision_dashboard_next() {
-  say "apps/dashboard-next: npm ci"
-  npm ci --prefix "$DASH" || die "apps/dashboard-next npm ci"
-}
-check_trend_db() {
-  [ -x "$TREND_DB/node_modules/.bin/tsx" ]
-}
-provision_trend_db() {
-  say "apps/trend-db: npm ci"
-  npm ci --prefix "$TREND_DB" || die "apps/trend-db npm ci"
-}
-check_video() {
-  [ -x "$VIDEO/node_modules/.bin/tsc" ]
-}
-provision_video() {
-  say "_calisma/video: npm ci"
-  npm ci --prefix "$VIDEO" || die "_calisma/video npm ci"
-}
-# Tarayıcı katmanı iki adımlı bir bağımlılıktır (pip paketi + ayrı inen
-# chromium), bu yüzden ölçüm pin-karşılaştırması DEĞİL işlevsel: gerçekten
-# bir chromium başlatabiliyor muyuz? Çalışan bir tarayıcı, sürüm etiketinden
-# daha güçlü kanıt; ayrıca yerelde farklı ama çalışan bir playwright sürümü
-# kuruluysa gereksiz bir ~150 MB indirme tetiklenmez.
-check_browsers() {
-  "$VENV_PY" - >/dev/null 2>&1 <<'PY'
+#
+# Birim başına `check_<ad>` fonksiyonu YOK: tür envanterdeki 3. alanda
+# durur ve `check_unit` ona bakar. Yeni araç-kümesi = envantere bir satır.
+check_unit() {  # <ad>
+  _spec="$(_unit_field check "$1")"
+  case "$_spec" in
+    venv)
+      [ -x "$VENV_PY" ] || return 1
+      _frozen="$($VENV_PY -m pip freeze 2>/dev/null)" || return 1
+      for _pin in "${PINS[@]}"; do
+        printf '%s\n' "$_frozen" | grep -qx "$_pin" || return 1
+      done
+      ;;
+    # Tarayıcı katmanı iki adımlı bir bağımlılıktır (pip paketi + ayrı inen
+    # chromium), bu yüzden ölçüm pin-karşılaştırması DEĞİL işlevsel:
+    # gerçekten bir chromium başlatabiliyor muyuz? Çalışan bir tarayıcı,
+    # sürüm etiketinden daha güçlü kanıt; ayrıca yerelde farklı ama
+    # çalışan bir playwright sürümü kuruluysa gereksiz bir ~150 MB
+    # indirme tetiklenmez.
+    browser)
+      "$VENV_PY" - >/dev/null 2>&1 <<'PY'
 from playwright.sync_api import sync_playwright
 with sync_playwright() as p:
     p.chromium.launch(headless=True).close()
 PY
+      ;;
+    resolve:*)
+      ( cd "$ROOT/$(_unit_field label "$1")" \
+        && node -e "require.resolve('${_spec#resolve:}')" >/dev/null 2>&1 )
+      ;;
+    # Virgülle ayrılmış her yol çalıştırılabilir olmalı (dashboard_next
+    # hem `tsc` hem `next` ister — ikisinden biri eksikse eksik sayılır).
+    exec:*)
+      _rest="${_spec#exec:}"; _ok=0
+      while [ -n "$_rest" ]; do
+        _p="${_rest%%,*}"; case "$_rest" in *,*) _rest="${_rest#*,}" ;; *) _rest="" ;; esac
+        [ -x "$ROOT/$_p" ] || { _ok=1; break; }
+      done
+      return "$_ok"
+      ;;
+    # Varlık-olmayan ilke burada BİLEREK esniyor (prisma istemcisi ve
+    # BUILD_ID): üretilen çıktı birer içerik imzasıdır, boş/eksik derleme
+    # onu üretmez. Ölçülen boşluk 2026-09-28: `apps/trend-db/generated/`
+    # ve `.next/` gitignore, CI'da üretiliyordu ama script ÇALIŞTIRMIYORDU →
+    # taze checkout'ta bootstrap VE --check yeşilken 5 test kırmızıydı.
+    artifact:*)
+      [ -s "$ROOT/${_spec#artifact:}" ]
+      ;;
+    *) die "bilinmeyen check türü ($_spec): $1" ;;
+  esac
 }
-provision_browsers() {
-  # Pin, VENV'in YORUMLAYICISIYLA kurulur (python3 yalnızca venv'i yaratır);
-  # bu yüzden taban denetimi de aynı yorumlayıcıya bakar.
-  local interp="$VENV_PY"
-  [ -x "$interp" ] || interp="$(command -v python3 || true)"
-  if ! python_floor_ok "$BROWSER_PIN_MIN_PY" "$interp"; then
-    if [ -z "${LEIBNIZ2_BROWSER_PIN:-}" ]; then
-      die "tarayıcı pini $BROWSER_PIN Python >=$BROWSER_PIN_MIN_PY istiyor; kurulum yorumlayıcısı $("$interp" --version 2>&1 || echo 'bilinmiyor'). ÖNEMLİ: taban PATH'teki python3'e değil VENV'in yorumlayıcısına bakılır ve venv bu çağrıda zaten kurulmuş olduğu için PATH'i değiştirmek tek başına YETMEZ — ölçüldü (2026-09-29 taze-worktree kanıtı): o komut aynı hatayı anında yeniden döndürdü. Çözüm: venv'i silip >=$BROWSER_PIN_MIN_PY bir python3 ile YENİDEN kur: rm -rf '$VENV' && PATH=<python3'ün bulunduğu dizin>:\$PATH bash $0  (örn. python3.11 — CI 3.12 çalıştırıyor). 3.9 için geçici çözüm: LEIBNIZ2_BROWSER_PIN=<sürüm> bash $0; uygun sürüm ve tam komut $REQ_FILE içindeki [browser] notunda yazılı (sürüm burada SABİTLENMEZ — tek kaynak). O seçenek CI ile ayrışır, o yüzden --check'in işlevsel tarayıcı probu SESSİZCE kabul eder."
-    fi
-    say "UYARI: '$BROWSER_PIN' bu yorumlayıcıda kurulamaz (Python <$BROWSER_PIN_MIN_PY) — açık geçersiz kılmayla deneniyor; CI ile ayrışır"
-  fi
-  say "browsers: ${LEIBNIZ2_BROWSER_PIN:-$BROWSER_PIN} + chromium (~150 MB)"
-  "$VENV_PY" -m pip install --quiet "${LEIBNIZ2_BROWSER_PIN:-$BROWSER_PIN}" \
-    || die "playwright pip install"
-  "$VENV_PY" -m playwright install chromium || die "playwright install chromium"
+
+provision_unit() {  # <ad>
+  case "$(_unit_field prov "$1")" in
+    venv)
+      say "$1: kuruluyor (pins: $REQ_FILE [venv])"
+      python3 -m venv "$VENV" || die "venv olusturma"
+      "$VENV_PY" -m pip install --quiet "${PINS[@]}" || die "venv_z3 pip install"
+      ;;
+    npm)
+      _d="$ROOT/$(_unit_field label "$1")"
+      say "${_d#$ROOT/}: npm ci"
+      npm ci --prefix "$_d" || die "${_d#$ROOT/} npm ci"
+      ;;
+    # docx jeneratörü de buradan kurulur: CI'da LibreOffice ile
+    # açılabilirlik kontrolü yapılır, yerelde de aynı jeneratör koşabilsin.
+    browser)
+      # Pin, VENV'in YORUMLAYICISIYLA kurulur (python3 yalnızca venv'i
+      # yaratır); bu yüzden taban denetimi de aynı yorumlayıcıya bakar.
+      interp="$VENV_PY"
+      [ -x "$interp" ] || interp="$(command -v python3 || true)"
+      if ! python_floor_ok "$BROWSER_PIN_MIN_PY" "$interp"; then
+        if [ -z "${LEIBNIZ2_BROWSER_PIN:-}" ]; then
+          die "tarayıcı pini $BROWSER_PIN Python >=$BROWSER_PIN_MIN_PY istiyor; kurulum yorumlayıcısı $("$interp" --version 2>&1 || echo 'bilinmiyor'). ÖNEMLİ: taban PATH'teki python3'e değil VENV'in yorumlayıcısına bakılır ve venv bu çağrıda zaten kurulmuş olduğu için PATH'i değiştirmek tek başına YETMEZ — ölçüldü (2026-09-29 taze-worktree kanıtı): o komut aynı hatayı anında yeniden döndürdü. Çözüm: venv'i silip >=$BROWSER_PIN_MIN_PY bir python3 ile YENİDEN kur: rm -rf '$VENV' && PATH=<python3'ün bulunduğu dizin>:\$PATH bash $0  (örn. python3.11 — CI 3.12 çalıştırıyor). 3.9 için geçici çözüm: LEIBNIZ2_BROWSER_PIN=<sürüm> bash $0; uygun sürüm ve tam komut $REQ_FILE içindeki [browser] notunda yazılı (sürüm burada SABİTLENMEZ — tek kaynak). O seçenek CI ile ayrışır, o yüzden --check'in işlevsel tarayıcı probu SESSİZCE kabul eder."
+        fi
+        say "UYARI: '$BROWSER_PIN' bu yorumlayıcıda kurulamaz (Python <$BROWSER_PIN_MIN_PY) — açık geçersiz kılmayla deneniyor; CI ile ayrışır"
+      fi
+      say "$1: ${LEIBNIZ2_BROWSER_PIN:-$BROWSER_PIN} + chromium (~150 MB)"
+      "$VENV_PY" -m pip install --quiet "${LEIBNIZ2_BROWSER_PIN:-$BROWSER_PIN}" \
+        || die "playwright pip install"
+      "$VENV_PY" -m playwright install chromium || die "playwright install chromium"
+      ;;
+    # CI'ın dashboard-next job'ının birebir komutu (verify.yml).
+    # `prisma.config.ts` URL'i env("DATABASE_URL") ile çözer; değişken yoksa
+    # generate BAĞLANMAZ. Yer tutucu DSN gerçek kimlik bilgisi taşımaz ve
+    # hiç kullanılmaz.
+    prisma)
+      say "$(_unit_field label trend_db_codegen | sed 's#/generated##'): prisma generate (kod üretimi — DB'ye bağlanmaz)"
+      ( cd "$PRISMA_DIR" \
+        && DATABASE_URL="${LEIBNIZ2_PRISMA_URL:-postgresql://ci:ci@127.0.0.1:5432/ci?sslmode=disable}" \
+           npx prisma generate ) || die "prisma generate"
+      ;;
+    nextbuild)
+      say "$(_unit_field label dashboard_next_build | sed 's#/.next##'): next build (üretim derlemesi)"
+      npm run build --prefix "$NEXT_DIR" || die "next build"
+      ;;
+    *) die "bilinmeyen provision türü: $1" ;;
+  esac
 }
 # Yorumlayıcı tabanı denetimi (fail-closed): ölçülemiyorsa da kurulum DURUR —
 # "bilmiyorum" sessizce geçmemeli, çünkü tam olarak o sessiz geçiş 3.9'da
@@ -200,64 +261,6 @@ python_floor_ok() {   # <taban> <yorumlayıcı>
   "$interp" -c 'import sys; raise SystemExit(0 if tuple(map(int, sys.argv[2].split("."))) >= tuple(map(int, sys.argv[1].split("."))) else 1)' \
     "$floor" "$have" >/dev/null 2>&1
 }
-check_trend_db_codegen() {
-  # Varlık-değil ilkesi burada BİLİNÇLİ esniyor: üretilen Prisma istemcisi
-  # sözleşmenin kendisidir (dashboard-next `lib/trend-db.ts` onu içe aktarır).
-  # Ölçülen boşluk 2026-09-28: `apps/trend-db/generated/` gitignored, CI
-  # `prisma generate` çalıştırıyor, bu script ÇALIŞTIRMIYORDU → taze
-  # checkout'ta tip kapısı ve 3 trend-db testi kırmızıydı.
-  [ -s "$TREND_DB/generated/client.ts" ]
-}
-provision_trend_db_codegen() {
-  say "apps/trend-db: prisma generate (kod üretimi — DB'ye bağlanmaz)"
-  # CI'ın dashboard-next job'ının birebir komutu (verify.yml). `prisma.config.ts`
-  # URL'i env("DATABASE_URL") ile çözer; değişken yoksa generate BAĞLANMAZ.
-  # Yer tutucu DSN gerçek kimlik bilgisi taşımaz ve hiç kullanılmaz.
-  ( cd "$TREND_DB" \
-    && DATABASE_URL="${LEIBNIZ2_PRISMA_URL:-postgresql://ci:ci@127.0.0.1:5432/ci?sslmode=disable}" \
-       npx prisma generate ) || die "prisma generate"
-}
-check_dashboard_next_build() {
-  # Aynı esneme: BUILD_ID bir içerik imzasıdır; boş/eksik derleme onu
-  # üretmez. Tarayıcı ve CWV testleri ÖNCEDEN derlenmiş bundle'ı sunan
-  # `next start` bekler (ölçülen boşluk: taze worktree'de 2 test kırmızıydı).
-  [ -s "$DASH/.next/BUILD_ID" ]
-}
-provision_dashboard_next_build() {
-  say "apps/dashboard-next: next build (üretim derlemesi)"
-  npm run build --prefix "$DASH" || die "next build"
-}
-# Sıra önemli: codegen `trend_db` node_modules'ına, build ise `dashboard_next`
-# node_modules'ına VE üretilen istemciye ihtiyaç duyar.
-#
-# `unit_path`: etiket TEK başına "pptx" derken, kullanıcı `ls` ile bakacağı
-# yeri bilmez. Ölçülen boşluk: `--check` kırmızısı ve "up to date" satırları
-# yalnız unit ADIYDI (pptx, dashboard_next), gerçek yer `_calisma/pptx`,
-# `apps/dashboard-next`. Yani "hangi dizini açmam lazım" sorusu ekran
-# dışında kalıyordu. Etiket artık "unit-adı (gerçek/yol)" biçiminde.
-# Sipariş KORUNUR: `check_bootstrap_toolchain.py`'in UNIT_RE'si
-# `^CHECK FAIL:\s*(\S+)` ile İLK token'ı (unit adını) yakalar — yol
-# parantez içinde gelir, bu yüzden imza bozulmaz. `test_units_are_not_
-# duplicated_in_the_gate` da `CHECK FAIL:\s*<unit>\b` aradığı için aynı
-# düzen korunur.
-unit_path() {  # <unit-adı> → "<unit-adı> (<görünen yol>)"
-  case "$1" in
-    venv_z3)            printf '%s (%s)\n' "$1" "${VENV#$ROOT/}" ;;
-    pptx)               printf '%s (%s)\n' "$1" "${PPTX#$ROOT/}" ;;
-    docx)               printf '%s (%s)\n' "$1" "${DOCX#$ROOT/}" ;;
-    dashboard_next)     printf '%s (%s)\n' "$1" "${DASH#$ROOT/}" ;;
-    trend_db)           printf '%s (%s)\n' "$1" "${TREND_DB#$ROOT/}" ;;
-    video)              printf '%s (%s)\n' "$1" "${VIDEO#$ROOT/}" ;;
-    browsers)           printf '%s (%s)\n' "$1" "venv_z3 + chromium" ;;
-    trend_db_codegen)   printf '%s (%s)\n' "$1" "${TREND_DB#$ROOT/}/generated" ;;
-    dashboard_next_build) printf '%s (%s)\n' "$1" "${DASH#$ROOT/}/.next" ;;
-    *)                  printf '%s\n' "$1" ;;
-  esac
-}
-
-UNITS=(venv_z3 pptx docx dashboard_next trend_db video browsers
-       trend_db_codegen dashboard_next_build)
-
 # Temel batarya: tüm test dosyaları + manifest drift denetimi, venv python'la.
 # Çıktı akışı KISILMAZ (kırmızı satırlar kullanıcıya görünür), sonuç `die` ile
 # fail-closed tek koda indirilir.
@@ -287,7 +290,7 @@ case "${1:-}" in
   --check)
     [ "$#" -eq 1 ] || { usage >&2; exit 2; }
     for u in "${UNITS[@]}"; do
-      "check_$u" || { say "CHECK FAIL: $(unit_path "$u") eksik veya paritesiz (kurulum: bash '$ROOT/_calisma/dev_bootstrap.sh')"; exit 1; }
+      check_unit "$u" || { say "CHECK FAIL: $(unit_path "$u") eksik veya paritesiz (kurulum: bash '$ROOT/_calisma/dev_bootstrap.sh')"; exit 1; }
     done
     say "CHECK OK"
     exit 0
@@ -304,10 +307,10 @@ case "${1:-}" in
 esac
 
 for u in "${UNITS[@]}"; do
-  if "check_$u"; then
+  if check_unit "$u"; then
     say "$(unit_path "$u"): up to date"
   else
-    "provision_$u"
+    provision_unit "$u"
   fi
 done
 

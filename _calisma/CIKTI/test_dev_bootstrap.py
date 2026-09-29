@@ -40,6 +40,7 @@ TREND_DB_TSX = os.path.join(ROOT, "apps", "trend-db", "node_modules", ".bin", "t
 VIDEO_TSC = os.path.join(ROOT, "_calisma", "video", "node_modules", ".bin", "tsc")
 VERIFY_YML = os.path.join(ROOT, ".github", "workflows", "verify.yml")
 REQ_FILE = os.path.join(ROOT, "_calisma", "requirements-z3.txt")
+UNITS_CONF = os.path.join(ROOT, "_calisma", "bootstrap_units.conf")
 
 
 def _run(args, **kw):
@@ -104,6 +105,97 @@ ALLOWED_TEST_FIXTURES = {
 # Fixture değeri de requirements-z3.txt içindeki açık uyumluluk örneğinden gelir.
 OLD_PY_PIN = LEGACY_BROWSER_PIN
 PIN_LITERAL = re.compile(r"[A-Za-z_][A-Za-z0-9_.-]*==[0-9][0-9A-Za-z.]*")
+
+
+# ── Unit envanteri: TEK KAYNAK ──────────────────────────────────────────────
+# Liste, sıra ve görünen yollar `dev_bootstrap.sh`'in okuduğu AYNI dosyada
+# yaşar. Bu modülde hiçbir unit ADI sabit yazılmaz. Ölçülen sebep: liste
+# `UNITS=(...)` dizisi, `unit_path()` case tablosu ve ÜÇ test sınıfında elle
+# yazılmıştı; yeni bir unit eklemek dört yerden birini unutmak demekti ve
+# unutulan yer sessizce kapsam kaybediyordu (o unit `--check`'te hiç ölçülmüyor,
+# testleri yeşil görünüyordu).
+def _unit_rows():
+    """Envanteri satır satır oku: [(ad, görünen-yol, check-türü, prov-türü)].
+
+    `dev_bootstrap.sh` ile AYNI ayrıştırma kuralı (boşlukla ayrılmış alanlar,
+    `#` ile başlayan satırlar yorum) — iki taraf ayrışırsa sessiz sapma olur,
+    bu yüzden burada da fail-closed: alan sayısı ne eksik ne fazla kabul edilir.
+
+    Alan sayısı denetimi daha önce ölçülen bir tuzağı kapatır: alanlardan
+    birinde boşluk ("venv_z3 + chromium") satırı sessizce bozuyordu.
+    """
+    rows = []
+    for lineno, raw in enumerate(_read(UNITS_CONF).splitlines(), 1):
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        fields = line.split()
+        if len(fields) != 4:
+            raise AssertionError(
+                "bootstrap_units.conf:%d dört alan bekleniyordu, %d bulundu: %r"
+                % (lineno, len(fields), raw))
+        rows.append(tuple(fields))
+    if not rows:
+        raise AssertionError("bootstrap_units.conf boş — envanter kayboldu")
+    names = [r[0] for r in rows]
+    dupes = sorted({n for n in names if names.count(n) > 1})
+    if dupes:
+        raise AssertionError("bootstrap_units.conf'te yinelenen unit: %s" % dupes)
+    return rows
+
+
+UNIT_ROWS = _unit_rows()                  # sıra = bağımlılık sırası = envanter sırası
+UNIT_NAMES = [r[0] for r in UNIT_ROWS]
+UNIT_LABELS = {r[0]: r[1] for r in UNIT_ROWS}
+# Yapı denetimi: `check_unit`/`provision_unit` yalnız bu türleri bilir ve
+# başka her şeyi `die` ile reddeder. Bilinmeyen bir tür sızarsa — yeni unit
+# ekleyen kişi envanteri günceller, script'i güncellemezse — kapı fail-closed
+# ölmeli, yoksa o unit sessizce hiç ölçülmezdi.
+KNOWN_CHECK_KINDS = {"venv", "browser", "resolve", "exec", "artifact"}
+KNOWN_PROV_KINDS = {"venv", "npm", "browser", "prisma", "nextbuild"}
+
+
+def _check_kind(check):
+    return check.split(":", 1)[0]
+
+
+def _prov_kind(prov):
+    return prov.split(":", 1)[0]
+
+
+# Etiket iki çeşit: yol (`/` içerir — `ls` ile bakılacak yer) veya tariftir
+# (`browsers` → `venv_z3+chromium`; yol değil, iki bileşeni anlatıyor).
+# Ayırıcı: `/`. Tarifi olan tek unit `browser` türündedir; bu, alanların
+# boşlukla ayrıldığı bir dosyada "venv_z3 + chromium" yazmanın sessizce
+# alan sayısını bozduğu ölçülen tuzağın canlı karşılığıdır.
+PATH_UNITS = [r for r in UNIT_ROWS if "/" in r[1]]
+DESCRIPTIVE_UNITS = [r for r in UNIT_ROWS if "/" not in r[1]]
+
+
+def _sentinels(row):
+    """(ad, check-türü) → gizlenince o unit'i kıran sentinel dosya yolları.
+
+    Kırık-unit sözleşmesi envanterden TÜRETİLİR: yeni bir `exec:` ya da
+    `artifact:` unit'i eklenince fail-closed ölçümü kendiliğinden gelir —
+    elle tutulan bir sentinel tablosu olsaydı yeni unit ölçümsüz kalırdı.
+
+    Biçim ÖNEMLİ: `resolve:` paket DİZİNİ çözer, `exec:`/`artifact:` dosya
+    YOLU arar. Dosyayı gizlemek paket dizini durduğu için ölçüm yapmaz
+    (ölçüldü: "CHECK OK", rc=0).
+    """
+    name, label, check, _prov = row
+    if check == "venv":
+        return [(name, "%s/bin/python" % label)]
+    if check.startswith("resolve:"):
+        return [(name, "%s/node_modules/%s" % (label, check.split(":", 1)[1]))]
+    if check.startswith("exec:"):
+        return [(name, p) for p in check.split(":", 1)[1].split(",") if p]
+    if check.startswith("artifact:"):
+        return [(name, check.split(":", 1)[1])]
+    return []            # `browser` dosya değil süreç probelidir (ayrı ölçülür)
+
+
+SENTINELS = [s for row in UNIT_ROWS for s in _sentinels(row)]
 
 
 @unittest.skipUnless(os.path.isfile(VENV_PY),
@@ -436,6 +528,11 @@ def _fake_bootstrap_root():
     # okuyor (ROOT scriptin konumundan türetilir), yoksa script "requirements
     # dosyası yok" deyip ölür ve sözleşme ölçülmez.
     shutil.copy(REQ_FILE, root / "_calisma" / "requirements-z3.txt")
+    # Envanter de kopyalanır: script kendi kökünden okuyor. Eksik kalsaydı
+    # "unit envanteri yok" diye ölürdü — sözleşme ölçülmeden bütün sahte
+    # kök testleri kırmızı olurdu. (Bu ikinci kez unutuluyordu: refs eklendi
+    # ama sahte kök yalnız SCRIPT + REQ_FILE kopyalıyordu.)
+    shutil.copy(UNITS_CONF, root / "_calisma" / "bootstrap_units.conf")
     # node/npm sahte PATH'ten gelir: ortamda node olmasa da test koşar.
     bindir = root / "bin"
     bindir.mkdir()
@@ -469,6 +566,79 @@ def _fake_bootstrap_root():
     npx.chmod(0o755)
     _write_generated_artifacts(root)
     return root
+
+
+def _fake_env(root, **extra):
+    """Sahte kökün ortamı: sahte PATH/log + gerçek pinler.
+
+    `browser` probu `FAKE_BROWSER_OK`'a bakar, `venv` probu `pip freeze`
+    çıktısını PINS ile karşılaştırır; ikisi de sahte kökte ÖLÇÜLEBİLİR
+    kalmalı yoksa kırık-unit sözleşmesi ölçülemez yeşil olur.
+    """
+    env = dict(os.environ)
+    env["FAKE_LOG"] = str(root / "calls.log")
+    env["FAKE_FREEZE"] = "\n".join(_script_pins())
+    env["FAKE_BROWSER_OK"] = "1"
+    env["FAKE_ROOT"] = str(root)          # sahte npm/npx sınırı
+    env["PATH"] = str(root / "bin") + os.pathsep + env["PATH"]
+    env.pop("LEIBNIZ2_IN_BATTERY", None)
+    pathlib.Path(env["FAKE_LOG"]).write_text("", encoding="utf-8")
+    env.update(extra)
+    return env
+
+
+def _row_fields(text, name):
+    """Envanter metninden `name` satırının alanlarını döndürür."""
+    for raw in text.splitlines():
+        s = raw.strip()
+        if s and not s.startswith("#") and s.split()[0] == name:
+            return s.split()
+    raise AssertionError("envanterde satır yok: " + name)
+
+
+def _set_row(text, name, fields):
+    """`name` satırını verilen alanlarla değiştirir; sıra KORUNUR.
+
+    Alan BİÇİMİ elle yazılmaz — envanterden okunur, yalnız değiştirilecek
+    alan elle verilir. Yoksa test kendi kopyasını koruyor ve envanterden
+    saparsa test yanlış yere yeşil kalır.
+    """
+    out, hit = [], False
+    for raw in text.splitlines():
+        s = raw.strip()
+        if s and not s.startswith("#") and s.split()[0] == name:
+            out.append(" ".join(fields))
+            hit = True
+        else:
+            out.append(raw)
+    if not hit:
+        raise AssertionError("envanterde satır yok: " + name)
+    return "\n".join(out) + "\n"
+
+
+def _drop_row(text, name):
+    """`name` satırını siler; yorumlar ve diğer satırlar yerinde kalır."""
+    out, hit = [], False
+    for raw in text.splitlines():
+        s = raw.strip()
+        if s and not s.startswith("#") and s.split()[0] == name:
+            hit = True
+            continue
+        out.append(raw)
+    if not hit:
+        raise AssertionError("envanterde satır yok: " + name)
+    return "\n".join(out) + "\n"
+
+
+def _rewrite_conf(root, transform):
+    """Sahte kökteki envanteri dönüştürür; GERÇEK dosyaya dokunmaz.
+
+    Envanter de test edilen bileşenlerden biri: satır eklemek, sıra
+    değiştirmek, türü bozmak script'i değiştirmeden davranışı değiştirmeli.
+    """
+    p = pathlib.Path(root) / "_calisma" / "bootstrap_units.conf"
+    p.write_text(transform(p.read_text(encoding="utf-8")), encoding="utf-8")
+    return p
 
 
 def _write_generated_artifacts(root):
@@ -520,7 +690,8 @@ class TestBrowserLayerProvisioning(unittest.TestCase):
         self.env["FAKE_BROWSER_OK"] = "1"
         r = self._run_boot()
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertIn("browsers (venv_z3 + chromium): up to date", r.stdout)
+        self.assertIn("browsers (%s): up to date" % UNIT_LABELS["browsers"],
+                      r.stdout)
         self.assertEqual(_read(self.log), "")
 
     def test_missing_browser_layer_fails_check_closed(self):
@@ -558,37 +729,22 @@ class TestBrokenUnitFailsCheckClosedHermetic(unittest.TestCase):
     geçiyor, pre-commit altında aralıklı KIRMIZI. Hook ayrıca test
     çıktısını `>/dev/null 2>&1` ile attığı için kırmızı sebepsiz görünüyor.
 
-    Sözleşme SAĞLAMDIR, sadece ölçüm yeri değişti: aynı beş sentinel
-    sahte kökte kurulur, orada gizlenir, orada geri konur. Gerçek ağaç
-    hiç değişmez → yarış imkânsız.
+    Sözleşme SAĞLAMDIR, sadece ölçüm yeri değişti: sentinel'ler sahte kökte
+    kurulur, orada gizlenir, orada geri konur. Gerçek ağaç hiç değişmez →
+    yarış imkânsız.
     """
 
-    # (unit etiketi, fake kök içindeki göreli sentinel yolu, gizleme biçimi)
-    #
-    # Biçim ÖNEMLİ: her `check_` unit'inin kendi sentinel türü var —
-    # `check_pptx` paket DİZİNİNİ çözümlüyor (`require.resolve`), venv ise
-    # `bin/python` YOLUNU `-x` ile yokluyor. Kırık-unit sözleşmesi yalnız
-    # unit'i gerçekten kırdığında kırmızı olur; dosyayı gizlemek paket
-    # dizini durduğu için ölçüm yapmaz (ölçüldü: "CHECK OK", rc=0).
-    UNITS = (
-        ("venv", "_calisma/.venv_z3/bin/python", "file"),
-        ("pptx", "_calisma/pptx/node_modules/pptxgenjs", "dir"),
-        ("dash-tsc", "apps/dashboard-next/node_modules/.bin/tsc", "file"),
-        ("trend-db-tsx", "apps/trend-db/node_modules/.bin/tsx", "file"),
-        ("video-tsc", "_calisma/video/node_modules/.bin/tsc", "file"),
-    )
+    # Sentinel tablosu ENVANTERDEN türetilir (`_sentinels`), elle yazılmaz:
+    # (unit adı, fake kök içindeki göreli sentinel yolu). Kapsam ölçüldü —
+    # elle tablo dokuz birimin beşini kapsıyordu, `docx` ve iki üretim
+    # biriminin kırık-unit ölçümü YOKTU; yani eklenen birim sessizce
+    # ölçümsüz kalıyordu.
+    UNITS = SENTINELS
 
     def setUp(self):
         self.root = _fake_bootstrap_root()
         self.addCleanup(shutil.rmtree, str(self.root), True)
-        self.env = dict(os.environ)
-        self.env["FAKE_LOG"] = str(self.root / "calls.log")
-        self.env["FAKE_FREEZE"] = "\n".join(_script_pins())
-        self.env["FAKE_BROWSER_OK"] = "1"
-        self.env["FAKE_ROOT"] = str(self.root)  # sahte npm/npx sınırı
-        self.env["PATH"] = str(self.root / "bin") + os.pathsep + self.env["PATH"]
-        self.env.pop("LEIBNIZ2_IN_BATTERY", None)
-        pathlib.Path(self.env["FAKE_LOG"]).write_text("", encoding="utf-8")
+        self.env = _fake_env(self.root)
 
     def _run_boot(self, *argv):
         script = str(self.root / "_calisma" / "dev_bootstrap.sh")
@@ -599,13 +755,13 @@ class TestBrokenUnitFailsCheckClosedHermetic(unittest.TestCase):
         Yoksa `test_..._fails_check_closed` 'gizledim' sandığı için yeşil
         kalır ve hiçbir şey ölçmez (fail-closed'un kendisi gibi: ölçülemeyen
         yeşil sayılmaz)."""
-        for label, rel, _kind in self.UNITS:
+        for label, rel in self.UNITS:
             with self.subTest(unit=label):
                 self.assertTrue((self.root / rel).exists(),
                                 "sahte kökte sentinel yok: " + rel)
 
     def test_each_broken_unit_fails_check_closed(self):
-        for label, rel, _kind in self.UNITS:
+        for label, rel in self.UNITS:
             with self.subTest(unit=label):
                 target = self.root / rel
                 hidden = self.root / (rel + ".hidden_by_test")
@@ -646,17 +802,18 @@ class TestBrokenUnitFailsCheckClosedHermetic(unittest.TestCase):
         çalıştıranın değil başkasının `--check`'ini bozuyordu. Tüm yeniden
         adlandırmalar `self.root` (tempdir) altında olduğu için burada ölçülür.
         """
-        for label, rel, kind in self.UNITS:
+        for label, rel in self.UNITS:
             with self.subTest(unit=label):
                 self.assertFalse((self.root / (rel + ".hidden_by_test")).exists())
-        # Gerçek kökte hiçbir gizli sentinel olmamalı.
-        for label, abs_rel in (("venv", VENV), ("pptx", PPTX_LIB),
-                               ("dash-tsc", DASH_TSC), ("trend-db-tsx", TREND_DB_TSX),
-                               ("video-tsc", VIDEO_TSC)):
-            with self.subTest(real=abs_rel):
+        # Gerçek kökte hiçbir gizli sentinel olmamalı. Yol listesi de elle
+        # değil, envanterin göreli sentinel'lerinden türetilir.
+        for label, rel in self.UNITS:
+            abs_rel = os.path.join(ROOT, rel)
+            with self.subTest(real=label):
                 self.assertFalse(os.path.exists(abs_rel + ".hidden_by_test"),
                                  "gerçek ağaçta gizli sentinel kalmış: " + abs_rel)
-                self.assertTrue(os.path.exists(abs_rel), "gerçek ağaç bozuldu")
+                self.assertTrue(os.path.exists(abs_rel),
+                                "gerçek ağaç bozuldu: " + abs_rel)
 
     # Birim etiketi artık gerçek yolu da yazıyor. Raporun üç tüketicisi var
     # ve hepsi korunmalı: (1) `check_bootstrap_toolchain.py` UNIT_RE'si
@@ -665,16 +822,10 @@ class TestBrokenUnitFailsCheckClosedHermetic(unittest.TestCase):
     # "unit listesini kapıda kopyalama" testi `CHECK FAIL:\s*<unit>\b`
     # arar; (3) `test_recovery_command_matches_bootstrap_own_advice` blok
     # satırının kendi komutunu taşıdığını okur.
-    EXPECTED_PATHS = {
-        "venv_z3": "_calisma/.venv_z3",
-        "pptx": "_calisma/pptx",
-        "docx": "_calisma/docx",
-        "dashboard_next": "apps/dashboard-next",
-        "trend_db": "apps/trend-db",
-        "video": "_calisma/video",
-        "trend_db_codegen": "apps/trend-db/generated",
-        "dashboard_next_build": "apps/dashboard-next/.next",
-    }
+    # Beklenen yollar da ENVANTERDEN gelir: elle yazılmış bir sözlük, yeni
+    # unit eklenince sessizce eksik kalırdı (dokuz birimin sekizini kapsıyor,
+    # `browsers` dışarıda bırakılmıştı).
+    EXPECTED_PATHS = {name: label for name, label, _c, _p in PATH_UNITS}
 
     def test_check_fail_line_keeps_unit_name_first(self):
         """Tuketicinin ayakta kalması: İLK token hâlâ unit adı olmalı.
@@ -733,6 +884,182 @@ class TestBrokenUnitFailsCheckClosedHermetic(unittest.TestCase):
         for unit, rel in self.EXPECTED_PATHS.items():
             with self.subTest(unit=unit):
                 self.assertIn(f"{unit} ({rel}): up to date", r.stdout)
+
+    def test_up_to_date_lines_follow_the_inventory_order(self):
+        """Sıra da envanterden gelir — `trend_db_codegen` `trend_db`'den
+        SONRA kurulmalı (node_modules'ına ihtiyaç duyar). Sıranın kayması
+        `npm ci`'ın başarısız olmasıyla değil, TÜM unit'lerin ölçülmez
+        hale gelmesiyle ölçülür, o yüzden burada sabit bir dizi değil
+        envanterin kendi sırası referans alınır."""
+        r = self._run_boot()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        positions = [r.stdout.index("%s (%s): up to date" % (n, l))
+                     for n, l, _c, _p in UNIT_ROWS]
+        self.assertEqual(positions, sorted(positions),
+                         "kurulum sırası envanterdeki sırayla aynı değil")
+
+
+class TestUnitInventoryIsSingleSource(unittest.TestCase):
+    """Envanter TEK kaynakta: `bootstrap_units.conf` → script + testler.
+
+    Ölçülen sebep: liste `dev_bootstrap.sh` içindeki `UNITS=(...)` dizisinde,
+    `unit_path()` case tablosunda ve ÜÇ test sınıfında ayrı ayrı yazılıydı.
+    Yeni bir unit eklemek dört yerden birini unutmak demekti; unutulan yer
+    SESSİZCE kapsam kaybediyordu — script o unit'i hiç kontrol etmiyor,
+    testler onu hiç ölçmüyor, yeşil batarya eksik kapsamı saklıyordu.
+
+    Buradaki testler iki işi birden yapar: (1) STRÜKTÜREL — envanter ve
+    script arasında kalan kopya yok; (2) DAVRANIŞSAL — envanteri bozunca
+    script, script'i değiştirmeden, doğru şekilde ölür. İkinci tür asıl
+    güvence: "yeni unit ekle" adımının gerçekten tek dosyalık olduğunu
+    ölçer.
+    """
+
+    def setUp(self):
+        self.root = _fake_bootstrap_root()
+        self.addCleanup(shutil.rmtree, str(self.root), True)
+        self.env = _fake_env(self.root)
+
+    def _run_boot(self, *argv):
+        script = str(self.root / "_calisma" / "dev_bootstrap.sh")
+        return _run(["bash", script, *argv], env=self.env)
+
+    # ── envanterin kendisi ──────────────────────────────────────────────────
+
+    def test_every_row_declares_a_known_check_and_provision_kind(self):
+        """Script yalnız beş provision türü ve dört check türü biliyor.
+
+        Envanter bunlardan birine uymayan bir satır taşırsa script'in o
+        satırı `die` ile reddetmesi beklenir (aşağıda ölçülüyor). Bu test
+        yalnız hatırlatır: neden var olduğu buradadır.
+        """
+        for name, _label, check, prov in UNIT_ROWS:
+            with self.subTest(unit=name):
+                self.assertIn(_check_kind(check), KNOWN_CHECK_KINDS)
+                self.assertIn(_prov_kind(prov), KNOWN_PROV_KINDS)
+
+    def test_browsers_is_the_only_descriptive_label(self):
+        """Alanlar BOŞLUKLA ayrılır, bu yüzden hiçbir alanda boşluk olmaz.
+
+        Ölçülen tuzak: `browsers`'ın etiketi bir zamanlar `venv_z3 + chromium`
+        idi. Beşinci alan (`_rest`) boş kaldığı için eksik-alan denetimi
+        yakalamadı, satır sessizce `check`=venv_z3 `provision`=+ olarak
+        ayrıştı ve script "bilinmeyen check türü (+)" ile öldü. Yapı denetimi
+        bunu ikinci kez yakalıyor: yol olmayan tek etiket `browsers` ve türü
+        `browser`.
+        """
+        self.assertEqual([n for n, _l, c, _p in DESCRIPTIVE_UNITS], ["browsers"])
+        checks = {n: c for n, _l, c, _p in UNIT_ROWS}
+        self.assertEqual(_check_kind(checks["browsers"]), "browser")
+
+    def test_inventory_drives_both_the_script_and_the_tests(self):
+        """`test_check_bootstrap_toolchain.py` de AYNI dosyayı okur.
+
+        Kapıdaki "unit listesini kopyalama" testi elle dokuz ad yazıyordu;
+        envanterden bir ad silinirse kapı sessizce bir ad daha az denetlerdi.
+        """
+        other = _read(os.path.join(HERE, "test_check_bootstrap_toolchain.py"))
+        self.assertIn("bootstrap_units.conf", other,
+                      "kapı testi envanteri okumuyor — kopya riski")
+
+    # ── script envanteri okuyor, kopyalamıyor ───────────────────────────────
+
+    def test_script_holds_no_inventory_copy(self):
+        """Script'te unit listesi YOK: envanteri okur, kendi listesi yok.
+
+        `UNITS=()` boş bir dizi olarak açılıp envanterle doldurulmalı; literal
+        bir liste ya da `unit_path()` case tablosu kalmamalı.
+        """
+        script = _read(SCRIPT)
+        self.assertIn("bootstrap_units.conf", script)
+        # Kod satırları (yorumlar hariç): envanter dışında liste kurulmaz.
+        code = "\n".join(l for l in script.splitlines()
+                         if not l.lstrip().startswith("#"))
+        self.assertNotRegex(code, r"UNITS=\([^)]",
+                            "script unit listesini gömüyor, envanteri okumalı")
+        for name in UNIT_NAMES:
+            with self.subTest(unit=name):
+                self.assertNotRegex(code, rf"check_{name}\b|provision_{name}\b",
+                                    f"birim başına fonksiyon kalmış: {name}")
+
+    def test_a_new_unit_needs_no_script_change(self):
+        """TEK DOSYALIK EKLEME — asıl güvence.
+
+        Envantere yeni bir satır eklemek script'i değiştirmeden onu
+        ölçülebilir kılar: `--check` yeni birimi kendi adıyla, kendi
+        görünen yoluyla fail-closed olarak raporlar. Elle tutulan bir
+        `UNITS=(...)` dizisi olsaydı bu test kırmızı olurdu.
+        """
+        _rewrite_conf(self.root, lambda t: t + "\n# yeni satır\n"
+                      "yeni_birim _calisma/yeni artifact:_calisma/yeni/u.txt venv\n")
+        r = self._run_boot("--check")
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("CHECK FAIL: yeni_birim (_calisma/yeni)", r.stdout)
+
+    def test_inventory_order_is_the_check_order(self):
+        """Sıra envanterin sırasıdır: satırı taşı, ölçülen sıra da taşınır.
+
+        İLK satır sona taşınır (son satırı taşımak bir işe yaramaz — zaten
+        sondadır). Ölçüm: ilk "up to date" satırı değişen birim olmalı, yani
+        script'in gezdiği sırayı `dev_bootstrap.sh` içinde sabitleyen bir
+        liste olmadığı kanıtlanır.
+        """
+        first_row = UNIT_ROWS[0]
+        second = UNIT_ROWS[1]
+        _rewrite_conf(self.root,
+                      lambda t: _drop_row(t, first_row[0]) + " ".join(first_row) + "\n")
+        r = self._run_boot()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        seen = [l for l in r.stdout.splitlines() if "up to date" in l]
+        self.assertTrue(seen[0].startswith("%s (" % second[0]),
+                        "ilk kurulan birim değişmedi: " + seen[0])
+        self.assertEqual(seen[-1], "%s (%s): up to date" % (first_row[0], first_row[1]))
+
+    # ── bozuk envanter fail-closed ──────────────────────────────────────────
+
+    def test_label_with_a_space_is_rejected(self):
+        """REGRESYON: boşluklu etiket ölçülen şekilde öldürür.
+
+        Ölçüldü (2026-09-29): "venv_z3 + chromium" beşinci alanı doldurduğu
+        için eksik-alan denetimi sessizce geçti ve script daha geç, yanlış
+        bir sebeple ("bilinmeyen check türü (+)") öldü. Artık beşinci alanın
+        boş olması zorunlu — ve bu satır o tuzağın canlı karşılığıdır.
+        """
+        _rewrite_conf(self.root, lambda t: _set_row(
+            t, "browsers", ["browsers", "venv_z3 + chromium", "browser", "browser"]))
+        r = self._run_boot("--check")
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("fazladan alan var", r.stderr)
+
+    def test_missing_field_is_rejected(self):
+        _rewrite_conf(self.root, lambda t: _set_row(
+            t, "browsers", _row_fields(t, "browsers")[:3]))
+        r = self._run_boot("--check")
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("eksik satır", r.stderr)
+
+    def test_unknown_check_kind_fails_closed(self):
+        _rewrite_conf(self.root, lambda t: _set_row(
+            t, "venv_z3", ["venv_z3", UNIT_LABELS["venv_z3"], "bilinmeyen", "venv"]))
+        r = self._run_boot("--check")
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("bilinmeyen check türü", r.stderr)
+
+    def test_unknown_provision_kind_fails_closed(self):
+        # Provision yalnız check BAŞARISIZKEN çağrılır; bu yüzden ilk satır
+        # hem kırık check'e hem de bilinmeyen türe çevrilir.
+        _rewrite_conf(self.root, lambda t: _set_row(
+            t, "venv_z3",
+            ["venv_z3", UNIT_LABELS["venv_z3"], "artifact:eksik/yok", "bilinmeyen"]))
+        r = self._run_boot()
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("bilinmeyen provision türü", r.stderr)
+
+    def test_empty_inventory_is_rejected(self):
+        _rewrite_conf(self.root, lambda t: "# hepsi yorum oldu\n")
+        r = self._run_boot("--check")
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("unit envanteri boş", r.stderr)
 
 
 class TestGeneratedArtifactUnits(unittest.TestCase):

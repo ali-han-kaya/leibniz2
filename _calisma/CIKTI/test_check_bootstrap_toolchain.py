@@ -315,13 +315,21 @@ class TestWiringInvariants(unittest.TestCase):
 
     def test_units_are_not_duplicated_in_the_gate(self):
         """Unit listesi TEK kaynakta (bootstrap). Kapıda bir unit adı
-        geçerse iki doğruluk kaynağı doğar ve sapma sessiz kalır."""
+        geçerse iki doğruluk kaynağı doğar ve sapma sessiz kalır.
+
+        Adlar elle yazılmaz — `_calisma/bootstrap_units.conf`'tan okunur.
+        Elle yazılan bir liste, envanterden bir ad silindiğinde kapının o
+        adı artık denetlememesi anlamına gelirdi: kapı sessizce daha az
+        denetlerdi."""
         source = code_only(CIKTI / "check_bootstrap_toolchain.py")
-        for unit in ("venv_z3", "pptx", "docx", "dashboard_next", "trend_db",
-                     "video", "browsers", "trend_db_codegen",
-                     "dashboard_next_build"):
+        conf = ROOT / "_calisma" / "bootstrap_units.conf"
+        self.assertTrue(conf.is_file(), f"envanter yok: {conf}")
+        units = [ln.split()[0] for ln in conf.read_text(encoding="utf-8").splitlines()
+                 if ln.strip() and not ln.strip().startswith("#")]
+        self.assertTrue(units, "envanter boş")
+        for unit in units:
             self.assertIsNone(
-                re.search(rf"CHECK FAIL:\s*{unit}\b", source),
+                re.search(rf"CHECK FAIL:\s*{re.escape(unit)}\b", source),
                 f"kapı unit listesini kopyalamış: {unit}",
             )
 
