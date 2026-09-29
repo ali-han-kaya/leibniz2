@@ -22,6 +22,7 @@ import pathlib
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -1228,6 +1229,241 @@ class TestBrowserPinPythonFloor(unittest.TestCase):
         self.assertIsNotNone(floor, "BROWSER_PIN_MIN_PY bulunamadı")
         self.assertIn("python_floor_ok", text)
         self.assertIn("requires_python", text, "taban gerekçesi yazılı olmalı")
+
+
+# Sahte yorumlayıcı: `_satisfying_interpreter` aday taramasını ÖLÇER.
+#
+# İki biçim, ikisi de /bin/sh: shebang `env python3` olsaydı sahte dizin
+# kendi `python3`'ünü çağırır ve sonsuz özyinelemeye düşerdi.
+#
+#   SAF      — yalnız sürüm probuna cevap verir. Sürüm DENETLENMEZ,
+#              ortam değişkeninden okunur; karşılaştırma gerçekten
+#              yapılır, yani adayın tabanı geçip geçmediği ölçülür.
+#   DELEGATE — sürüm probunu sahte yanıtlar, diğer her şeyi GERÇEK bir
+#              Python'a devreder. `python3`/`python` için şart: sahte venv
+#              yorumlayıcısının shebang'i `#!/usr/bin/env python3` ve o
+#              sahte `python3` PATH'te birinci sırada; saf biçim
+#              konulursa FAKE_VENV_PY hiç çalışmaz ve test ölçtüğünü
+#              sandığı şeyi değil "venv olusturma" hatasını ölçer
+#              (böyle bir kırılma yaşandı).
+FAKE_INTERP_PURE = '''#!/bin/sh
+ver="${%s:-3.9.6}"
+case "$1" in
+  --version) echo "Python $ver"; exit 0 ;;
+  -c)
+    case "$2" in
+      *'version_info[:3]'*) echo "$ver"; exit 0 ;;
+      *'version_info[:2]'*) echo "$ver" | cut -d. -f1,2; exit 0 ;;
+      *)
+        awk -v f="$3" -v h="$4" 'BEGIN{
+          split(f,F,"."); split(h,H,".");
+          for(i=1;i<=3;i++){ if((H[i]+0)>(F[i]+0)) exit 0; if((H[i]+0)<(F[i]+0)) exit 1 }
+          exit 0 }'
+        exit $?          # awk'in rc'si DIŞARI AKTARILMAZSA dal düşer ve
+      ;;                # satır sonundaki `exit 1` çalışır — hep "başarısız".
+    esac
+    ;;
+  -m)
+    # Venv'i kuran yorumlayıcı HANGİ adaysa o olabilir; hepsinde bu kol
+    # olmalı, yoksa seçilen aday `exit 1` ile kurulumu öldürür.
+    if [ "$2" = "venv" ]; then
+      mkdir -p "$3/bin" && cp "__FAKE_VENV_PY__" "$3/bin/python" \
+        && chmod 755 "$3/bin/python"
+      exit $?
+    fi
+    ;;
+esac
+exit 1
+'''
+
+FAKE_INTERP_DELEGATE = '''#!/bin/sh
+ver="${%s:-3.9.6}"
+case "$1" in
+  --version) echo "Python $ver"; exit 0 ;;
+  -c)
+    case "$2" in
+      *'version_info[:3]'*) echo "$ver"; exit 0 ;;
+      *'version_info[:2]'*) echo "$ver" | cut -d. -f1,2; exit 0 ;;
+    esac
+    ;;
+  -m)
+    # `python3 -m venv <dir>` — gerçek venv KURMAZ (ağ + saniyeler), onun
+    # yerine sahte venv python'u yazar. Scriptin bundan sonraki adımları
+    # (`$VENV_PY -m pip install`, `pip freeze`) normalde işler.
+    if [ "$2" = "venv" ]; then
+      mkdir -p "$3/bin" && cp "__FAKE_VENV_PY__" "$3/bin/python" \
+        && chmod 755 "$3/bin/python"
+      exit $?
+    fi
+    ;;
+esac
+exec "__REAL_PYTHON__" "$@"
+'''
+
+# `_satisfying_interpreter` bu adayları sırayla arar ve İLK GEÇENDE
+# durur. Test her adaya ne döneceğini bildirmek ZORUNDA: listede boşluk
+# bırakılırsa sıradaki GERÇEK yorumlayıcı (PATH'te `~/.local/bin` gibi
+# bir dizin) devreye girer ve test ölçtüğünü sandığı şeyi ölçmez —
+# yani test makineden makineye değişir.
+INTERP_CANDIDATES = ("python3.13", "python3.12", "python3.11", "python3.10",
+                     "python3", "python")
+INTERP_DELEGATING = ("python3", "python")
+
+
+def _interp_env_key(name):
+    """Sahte yorumlayıcının sürüm değişkeni — kabukta GENİŞLETİLEBİLİR olmalı.
+
+    Ölçülen kırılma: `python3.11` için `FAKE_INTERP_VERSION_python3.11`
+    yazıldığında kabuk genişletmesi NOKTADA durur (`${A_python3}` + `.11`),
+    değişken okunmaz ve her aday sessizce 3.9.6 bildirir. Bu yüzden
+    test, "geçen yorumlayıcı bulundu" dalını hiç göremiyordu ve not-found
+    dalı yeşildi. Nokta → alt çizgi.
+    """
+    return "FAKE_INTERP_VERSION_" + name.replace(".", "_")
+
+
+def _write_fake_interpreters(bindir):
+    """Sahte yorumlayıcı dizini yazar; sürüm adaya gömülü gelir.
+
+    Sürüm `FAKE_INTERP_VERSION_<ad>` ortam değişkeninden okunur — tek bir
+    değişken tüm adaylara aynı sürümü bildirirdi.
+    """
+    bindir = pathlib.Path(bindir)
+    bindir.mkdir(parents=True, exist_ok=True)
+    (bindir / "fake_venv_py").write_text(FAKE_VENV_PY, encoding="utf-8")
+    for name in INTERP_CANDIDATES:
+        tpl = (FAKE_INTERP_DELEGATE if name in INTERP_DELEGATING
+               else FAKE_INTERP_PURE)
+        body = (tpl % _interp_env_key(name)) \
+            .replace("__REAL_PYTHON__", sys.executable) \
+            .replace("__FAKE_VENV_PY__", str(bindir / "fake_venv_py"))
+        p = bindir / name
+        p.write_text(body, encoding="utf-8")
+        p.chmod(0o755)
+    return bindir
+
+
+class TestBrowserRemedyHint(unittest.TestCase):
+    """Ölüm mesajı KURTARMA YOLU da verir, ve o yol ölçülmüştür.
+
+    Ölçülen boşluk (2026-09-29, taze-worktree kanıtı): eski mesaj
+    `PATH=<python3'ün bulunduğu dizin>` diyordu — yer tutucu, ve bu makede
+    ÇALIŞMIYORDU: PATH'te `python3.11` vardı ama `python3` yoktu, `python3`
+    3.9.6'ydı. Yani reçete tam olarak ölümü doğuran koşulu yeniden
+    öneriyordu. Şimdi script tabanı geçen yorumlayıcıyı sistemde arıyor ve
+    TAM yolunu yazıyor; bulunamazsa bunu açıkça söylüyor (uydurma komut
+    basmıyor — "ölçülemeyen yeşil sayılmaz").
+    """
+
+    def setUp(self):
+        self.root = _fake_bootstrap_root()
+        self.addCleanup(shutil.rmtree, str(self.root), True)
+        self.env = _fake_env(self.root)
+        self.env["FAKE_PY_VERSION"] = "3.9.6"     # venv yorumlayıcısı eski
+        # Tarayıcı katmanı EKSİK olmalı: ipucu `browsers` PROVISION
+        # yolunda basılır, check yeşilken o yol hiç çalışmaz.
+        self.env["FAKE_BROWSER_OK"] = "0"
+
+    def _hint_output(self, version_by_name):
+        """Belirtilen yorumlayıcı haritasıyla çözüm ipucu çıktısını verir."""
+        bindir = _write_fake_interpreters(self.root / "fakebin")
+        self.env["PATH"] = str(bindir) + os.pathsep + self.env["PATH"]
+        for name, ver in version_by_name.items():
+            self.env[_interp_env_key(name)] = ver
+        r = _run(["bash", str(self.root / "_calisma" / "dev_bootstrap.sh")],
+                 env=self.env)
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        return r.stdout + r.stderr
+
+    def _only(self, passing):
+        """Verilen aday dışında hepsi tabanı GEÇEMEYEN harita."""
+        return {n: ("3.12.1" if n == passing else "3.9.6")
+                for n in INTERP_CANDIDATES}
+
+    def test_hint_names_a_real_interpreter_not_a_placeholder(self):
+        """Bulunan yorumlayıcının TAM YOLU ve çalıştırılabilir komut yazılır."""
+        out = self._hint_output(self._only("python3.11"))
+        bindir = str(self.root / "fakebin")
+        self.assertIn(bindir, out, "bulunan yorumlayıcının dizini yazılmadı")
+        self.assertIn("rm -rf", out, "kurtarma komutu yok")
+        self.assertIn("_calisma/.venv_z3", out, "silinecek venv yolu yok")
+        self.assertIn("dev_bootstrap.sh", out, "yeniden koşulacak betik yok")
+        # Yer tutucu KALMAMALI: ölçülen boşluğun kendisiydi.
+        self.assertNotIn("<python3", out,
+                         "hâlâ yer tutucu basıyor — reçete çalıştırılamaz")
+
+    def test_hint_is_fail_closed_when_nothing_satisfies_the_floor(self):
+        """Hiçbir aday geçmiyorsa mesaj bunu SÖYLER, komut UYDURMAZ."""
+        out = self._hint_output({n: "3.9.6" for n in INTERP_CANDIDATES})
+        self.assertIn("YÖK", out, "yetersiz durum açıkça söylenmeli")
+        self.assertNotIn("bulundu:", out, "olmayan yorumlayıcı varsayıldı")
+        # Uydurma kurtarma komutu basılmamalı: `rm -rf ... PATH=` satırı
+        # yalnız GERÇEKTEN bulunan bir dizin varsa basılır.
+        self.assertNotRegex(out, r"rm -rf '[^']*' && PATH=",
+                            "bulunmayan yorumlayıcı için komut basıldı")
+
+    def test_hint_always_offers_the_39_escape_hatch(self):
+        """Geçici geçersiz kılma HER iki dalda da sunulur.
+
+        Yorumlayıcı bulunmuş olsa bile bu seçenek geçerlidir; yalnız
+        bulunamadığı dalda yazılırsa mesaj, eskisinden daha eksik olurdu.
+        """
+        for passing in (None, "python3.11"):
+            with self.subTest(bulunan=passing):
+                out = self._hint_output(
+                    self._only("python3.11") if passing else
+                    {n: "3.9.6" for n in INTERP_CANDIDATES})
+                self.assertIn("LEIBNIZ2_BROWSER_PIN", out)
+
+    def test_hint_tells_you_to_delete_the_venv_first(self):
+        """Venv silinmeden önerilen komut ÇALIŞMAZ (ölçüldü: 0 s'de geri döner)."""
+        out = self._hint_output(self._only("python3.11"))
+        self.assertIn("SİL", out, "venv'in silinmesi söylenmiyor")
+        self.assertIn("YETMEZ", out,
+                      "PATH'in tek başına yetmediği uyarısı korunmalı")
+
+    # ── venv'i kuran yorumlayıcı ────────────────────────────────────────────
+    def _provision_venv(self, version_by_name):
+        """Venv'i YOK edip kurulumu koşturur; venv satırının logunu verir.
+
+        Venv check'inin kırık olması gerekir, yoksa provision hiç çağrılmaz
+        ve hangi yorumlayıcının seçildiği ölçülemez.
+        """
+        bindir = _write_fake_interpreters(self.root / "fakebin")
+        self.env["PATH"] = str(bindir) + os.pathsep + self.env["PATH"]
+        for name, ver in version_by_name.items():
+            self.env[_interp_env_key(name)] = ver
+        import shutil as _sh
+        _sh.rmtree(str(self.root / "_calisma" / ".venv_z3"))
+        r = _run(["bash", str(self.root / "_calisma" / "dev_bootstrap.sh")],
+                 env=self.env)
+        return r
+
+    def test_venv_is_built_with_an_interpreter_that_satisfies_the_pin(self):
+        """Venv, tarayıcı pinini taşıyabilen bir yorumlayıcıyla kurulur.
+
+        Ölçülen kırılma (2026-09-29): venv daima PATH'teki `python3` ile
+        kuruluyordu. Bu makinede `python3` 3.9.6, ama `python3.11` PATH'te
+        VARDI; yine de venv 3.9 ile kurulup `browsers` adımında ölüyor ve
+        kullanıcı kurtarma turuna giriyordu. Dahası: ipucunun önerdiği
+        komut da çalışmıyordu — `python3.11` dizinini PATH'e eklemek
+        `python3`'ü değiştirmiyor. Yani ölüm, reçeteden de geliyordu.
+        """
+        r = self._provision_venv(self._only("python3.12"))
+        self.assertIn("venv_z3: kuruluyor (python3=python3.12", r.stdout,
+                      "venv tabanı geçen yorumlayıcıyla kurulmadı")
+        self.assertTrue((self.root / "_calisma" / ".venv_z3" / "bin" / "python")
+                        .exists(), "sahte venv oluşmadı")
+
+    def test_venv_falls_back_to_python3_when_nothing_satisfies(self):
+        """Tabanı geçen yorumlayıcı YOKSA davranış DEĞİŞMEZ: `python3`.
+
+        Yeni seçim, uygun yorumlayıcı bulunmayan makineleri etkilememeli —
+        yoksa "iyileştirme" dar bir makine kümesini kırardı.
+        """
+        r = self._provision_venv({n: "3.9.6" for n in INTERP_CANDIDATES})
+        self.assertIn("venv_z3: kuruluyor (python3=python3,", r.stdout,
+                      "yedek davranış bozuldu: sadece python3 kullanılmalı")
 
 
 class TestSinglePinSource(unittest.TestCase):

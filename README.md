@@ -645,6 +645,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-28 | feat | (gates) oturumun kapı ve yüzey ölçümlerini topla | [`59557b5`](https://github.com/ali-han-kaya/leibniz2/commit/59557b5) |
 | 2026-09-28 | fix | (docs) amend'in bıraktığı bayat changelog satırını temizle | [`e2b0150`](https://github.com/ali-han-kaya/leibniz2/commit/e2b0150) |
 | 2026-09-29 | feat | (bootstrap) UNITS dokuz, pinler tek kaynaktan, kapılar artımlı | [`e7b48a2`](https://github.com/ali-han-kaya/leibniz2/commit/e7b48a2) |
+| 2026-09-29 | refactor | (bootstrap) unit envanteri tek kaynağa, iki taraf da okur | [`8a41a96`](https://github.com/ali-han-kaya/leibniz2/commit/8a41a96) |
 
 ### Regresyon notları
 

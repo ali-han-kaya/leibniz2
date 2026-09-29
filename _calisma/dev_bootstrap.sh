@@ -25,6 +25,12 @@
 set -eu
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# Betiğin KENDİ mutlak yolu: önerilen kurtarma komutunda kullanılır.
+# `$0` çağrıldığı yere göre göreli olabiliyor (`bash _calisma/dev_bootstrap.sh`
+# → `_calisma/dev_bootstrap.sh`), o zaman kopyala-yapıştır komutu başka bir
+# dizinden ÇALIŞMAZDI. Ölçüldü (2026-09-29): ipucu tam yol yazarken betik
+# yolunu göreli basıyordu.
+SELF="$ROOT/_calisma/dev_bootstrap.sh"
 
 say() { printf '%s\n' "$*"; }
 die() { printf 'BOOTSTRAP FAIL: %s\n' "$*" >&2; exit 1; }
@@ -201,8 +207,23 @@ PY
 provision_unit() {  # <ad>
   case "$(_unit_field prov "$1")" in
     venv)
-      say "$1: kuruluyor (pins: $REQ_FILE [venv])"
-      python3 -m venv "$VENV" || die "venv olusturma"
+      # Venv'i kuran yorumlayıcı, bu venv'e kurulan EN YÜKSEK tabanı da
+      # sağlamalıdır. Buradaki tek ek taban `BROWSER_PIN_MIN_PY`'dir
+      # (playwright `requires_python >=3.10`): aynı venv'e kuruluyor.
+      #
+      # Ölçülen kırılma (2026-09-29): venv daima `python3` ile kuruluyordu.
+      # PATH'te `python3` 3.9.6 iken tabanı geçen bir yorumlayıcı (`python3.11`)
+      # bulunduğunda bile venv 3.9 ile kuruluyor, `browsers` adımı ölüyor ve
+      # kullanıcıya kurtarma turu yükleniyordu — üstelik önerilen komut da
+      # ÇALIŞMIYORDU, çünkü `python3.11` dizinini PATH'e eklemek `python3`'ü
+      # değiştirmiyor. Yani venv'i doğru yorumlayıcıyla kurmak, ölüp
+      # reçeteyi çalıştırmaktan daha az iş.
+      _vp="python3"
+      if _sat="$(_satisfying_interpreter "$BROWSER_PIN_MIN_PY")"; then
+        _vp="$_sat"
+      fi
+      say "$1: kuruluyor (python3=$(_vp_basename "$_vp"), pins: $REQ_FILE [venv])"
+      "$_vp" -m venv "$VENV" || die "venv olusturma"
       "$VENV_PY" -m pip install --quiet "${PINS[@]}" || die "venv_z3 pip install"
       ;;
     npm)
@@ -219,7 +240,8 @@ provision_unit() {  # <ad>
       [ -x "$interp" ] || interp="$(command -v python3 || true)"
       if ! python_floor_ok "$BROWSER_PIN_MIN_PY" "$interp"; then
         if [ -z "${LEIBNIZ2_BROWSER_PIN:-}" ]; then
-          die "tarayıcı pini $BROWSER_PIN Python >=$BROWSER_PIN_MIN_PY istiyor; kurulum yorumlayıcısı $("$interp" --version 2>&1 || echo 'bilinmiyor'). ÖNEMLİ: taban PATH'teki python3'e değil VENV'in yorumlayıcısına bakılır ve venv bu çağrıda zaten kurulmuş olduğu için PATH'i değiştirmek tek başına YETMEZ — ölçüldü (2026-09-29 taze-worktree kanıtı): o komut aynı hatayı anında yeniden döndürdü. Çözüm: venv'i silip >=$BROWSER_PIN_MIN_PY bir python3 ile YENİDEN kur: rm -rf '$VENV' && PATH=<python3'ün bulunduğu dizin>:\$PATH bash $0  (örn. python3.11 — CI 3.12 çalıştırıyor). 3.9 için geçici çözüm: LEIBNIZ2_BROWSER_PIN=<sürüm> bash $0; uygun sürüm ve tam komut $REQ_FILE içindeki [browser] notunda yazılı (sürüm burada SABİTLENMEZ — tek kaynak). O seçenek CI ile ayrışır, o yüzden --check'in işlevsel tarayıcı probu SESSİZCE kabul eder."
+          remedy_hint "$BROWSER_PIN_MIN_PY"
+          die "tarayıcı pini $BROWSER_PIN Python >=$BROWSER_PIN_MIN_PY istiyor; kurulum yorumlayıcısı $("$interp" --version 2>&1 || echo 'bilinmiyor'). Yukarıdaki ÇÖZÜM ADIMI'nı uygula."
         fi
         say "UYARI: '$BROWSER_PIN' bu yorumlayıcıda kurulamaz (Python <$BROWSER_PIN_MIN_PY) — açık geçersiz kılmayla deneniyor; CI ile ayrışır"
       fi
@@ -245,6 +267,13 @@ provision_unit() {  # <ad>
     *) die "bilinmeyen provision türü: $1" ;;
   esac
 }
+# Sürüm karşılaştırmasının TEK yolu: `python_floor_ok` (sebebiyle ölür) ve
+# `_floor_probe` (sessizce sırf rc döner) aynı karşılaştırmayı paylaşır —
+# iki yerde ayrı ayrı yazılırsa biri güncellenip diğeri eski kalır.
+_py_at_least() {   # <taban> <bulunan-sürüm> <yorumlayıcı>
+  "$3" -c 'import sys; raise SystemExit(0 if tuple(map(int, sys.argv[2].split("."))) >= tuple(map(int, sys.argv[1].split("."))) else 1)' \
+    "$1" "$2" >/dev/null 2>&1
+}
 # Yorumlayıcı tabanı denetimi (fail-closed): ölçülemiyorsa da kurulum DURUR —
 # "bilmiyorum" sessizce geçmemeli, çünkü tam olarak o sessiz geçiş 3.9'da
 # beş dakikalık kurulumun sonunda pip hatasına dönüşmüştü.
@@ -258,8 +287,77 @@ python_floor_ok() {   # <taban> <yorumlayıcı>
     [0-9]*.[0-9]*) ;;
     *) die "python sürümü çözümlenemedi: '$have'" ;;
   esac
-  "$interp" -c 'import sys; raise SystemExit(0 if tuple(map(int, sys.argv[2].split("."))) >= tuple(map(int, sys.argv[1].split("."))) else 1)' \
-    "$floor" "$have" >/dev/null 2>&1
+  _py_at_least "$floor" "$have" "$interp"
+}
+# ÖLÜMSÜZ ikizi: yalnız "tabanı geçiyor mu" sorusunu yanıtlar, sebep
+# söylemez. Aday listeyi tararken kullanılır — orada "ölçülemeyen aday
+# atlanır" demek doğru davranış, `python_floor_ok`'in fail-closed
+# davranışı değil.
+_floor_probe() {   # <taban> <yorumlayıcı>
+  local floor="$1" interp="$2" have
+  [ -n "$interp" ] && [ -x "$interp" ] || return 1
+  have="$("$interp" -c 'import sys; print("%d.%d" % sys.version_info[:2])' 2>/dev/null)" \
+    || return 1
+  case "$have" in
+    [0-9]*.[0-9]*) ;;
+    *) return 1 ;;
+  esac
+  _py_at_least "$floor" "$have" "$interp"
+}
+# Yorumlayıcı yolundan yalnız ADı (log satırı okunur kalsın diye).
+_vp_basename() { printf '%s\n' "${1##*/}"; }
+# Tabanı geçen yorumlayıcıyı SİSTEMDE ARA ve tam yolunu yaz.
+# Neden `python3` değil de isimli adaylar: ölçülen tuzak (2026-09-29) —
+# kullanıcının PATH'inde `python3.11` vardı ama `python3` değildi, "PATH'e
+# dizin ekle" reçetesi bu yüzden hiçbir şeyi değiştirmiyordu. Adı ne
+# olursa olsun, tabanı gerçekten geçeni bulup O'nun dizinini vermek
+# reçeteyi çalıştırılabilir kılıyor.
+_satisfying_interpreter() {   # <taban>
+  local floor="$1" c resolved
+  for c in python3.13 python3.12 python3.11 python3.10 python3 python; do
+    resolved="$(command -v "$c" 2>/dev/null)" || continue
+    if _floor_probe "$floor" "$resolved"; then
+      printf '%s\n' "$resolved"
+      return 0
+    fi
+  done
+  return 1
+}
+# Ölüm nedeni kadar KURTARMA YOLU da yazılır — ve yazılan yol ÖLÇÜLMÜŞTÜR,
+# tahmin değil. Bulunan yorumlayıcının tam yolu + sürümü + kopyalanabilir
+# tek satırlık komut verilir; hiçbiri bulunamazsa bu AÇIKÇA söylenir ve
+# uydurma bir komut basılmaz ("ölçülemeyen yeşil sayılmaz" ilkesi).
+remedy_hint() {   # <taban>
+  local floor="$1" found dir ver
+  hint() { printf '%s\n' "$*" >&2; }
+  hint ""
+  hint "ÇÖZÜM ADIMI:"
+  hint "  1) '<$VENV>' bu yorumlayıcıyla zaten kuruldu; venv'i SİL —"
+  hint "     silmezsen aynı hata anında geri döner (ölçüldü: 0 s)."
+  hint "  2) Tabanı geçen yorumlayıcı:"
+  if found="$(_satisfying_interpreter "$floor")"; then
+    ver="$("$found" -c 'import sys; print("%d.%d.%d" % sys.version_info[:3])' 2>/dev/null || echo '?')"
+    dir="$(dirname "$found")"
+    hint "     bulundu: $found (Python $ver)"
+    hint "  3) Bu komutu çalıştır:"
+    hint "       rm -rf '$VENV' && PATH=$dir:\$PATH bash '$SELF'"
+  else
+    hint "     PATH'te Python >=$floor olan yorumlayıcı YÖK."
+    hint "     (python3.11/3.12 gibi ADIYLA kurulu olanlar da aranır;"
+    hint "      hiçbiri geçmiyorsa bu satır boş yazılmaz.)"
+    hint "  3) Önce >=$floor bir Python kur, sonra 1-2. adımı tekrarla."
+  fi
+  # 3.9 kaçışı HER iki dalda da yazılır: uygun yorumlayıcı bulunmuş olsa
+  # bile geçici geçersiz kılma geçerli bir seçenektir ve kullanıcıya
+  # sunulmazsa bu, mesajı eskisinden daha eksik kılar.
+  hint ""
+  hint "  Alternatif (3.9'da geçici, CI ile ayrışır):"
+  hint "       LEIBNIZ2_BROWSER_PIN=<uygun sürüm> bash '$SELF'"
+  hint ""
+  hint "  Not: ölçüm taban PATH'teki python3'e değil VENV'in yorumlayıcısına"
+  hint "  bakar ve venv bu çağrıda kurulmuş olduğu için PATH'i değiştirmek"
+  hint "  tek başına YETMEZ. Uygun sürüm $REQ_FILE içindeki [browser]"
+  hint "  notunda yazılıdır; sürüm burada SABİTLENMEZ (tek kaynak)."
 }
 # Temel batarya: tüm test dosyaları + manifest drift denetimi, venv python'la.
 # Çıktı akışı KISILMAZ (kırmızı satırlar kullanıcıya görünür), sonuç `die` ile
