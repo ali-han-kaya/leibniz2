@@ -2995,3 +2995,407 @@ yanlış-refliydi (2026-09-28)
   güncel · `check-precommit-inventory` 63/63 senkron. **PUSH YAPILMADI**
   (`main` vs `origin/main`: ahead=138, **behind=4** → push zaten
   reddedilirdi; önce `da58b14 3f043bc c78dc67 fa1809b` alınmalı).
+### CI ortamı yeniden üretimi: venv + node_modules gizliyken unittest discover (2026-09-28)
+
+- **İstek:** "Run unittest discover in the primary checkout with .venv_z3 and
+  node_modules temporarily hidden, to prove no environment-dependent test
+  fails on CI." Deney **CI'ın koşulunu gerçekten üretir**: ölçüldü,
+  `verify.yml`'in `verify` job'ında `npm ci` **YOKTUR** (npm ci yalnız
+  dashboard-next 3597, video 3678, docx 4038 satırlarında) ve Playwright
+  yalnız a11y-gate (3139) + dashboard-next (3631) job'larında kuruluyor. Yani
+  o job'da node bağımlılığı **ve** tarayıcı yokken `unittest discover -s
+  _calisma/CIKTI` tüm `test_*.py` dosyalarını keşfedip koşuyor.
+- **⚠️ YÖNTEM DÜZELTMESİ (önce yapılan hatayı kayıt altına alıyorum):** ilk
+  koşu `trap ... EXIT` ile geri alma vaat etti ama **aracın 600s tavanı
+  kabuğu SIGKILL etti, trap çalışmadı ve 7 dizin GİZLİ KALDI**; süreç de
+  çalışır durumda kaldı. Elle `pkill` + `mv` ile geri alındı ve DOĞRULANDI
+  (`next` binary ✓, venv z3 5.1.0 ✓, `.hidden-ci` kalıntısı yok ✓). Ders:
+  bir aracın sert zaman tavanı varsa geri alma için `trap`'e **tek başına**
+  güvenilmez — ikinci bir komutla geri alınabilir olmalı. Sonraki iki koşu
+  Python `finally` bloğu + iç süre bütçesiyle yapıldı ve **7/7 dizin
+  doğrulandı**.
+- **Ölçüm (2 parça):** 1. parça CI komutuyla, ~2031 test, `test_m0*`e kadar.
+  2. parça kalan **88 dosya: 82 PASS · 6 FAIL**. Toplamda gizli ortamda
+  düşen **7 modül** ölçüldü ve HER BİRİ tek tek incelendi.
+- **SONUÇ: CI'ın `verify` job'ında çevreye bağlı **KAYBEDEN TEST YOK** —
+  ama üç gerçek risk çıktı:**
+  1. **Metodoloji: yeniden adlandırma = gizlemek DEĞİL.** `check_skill_surfaces`
+     gizli koşuda **1708** package.json taradı ve `apps/dashboard-next/
+     node_modules.hidden-ci/...` yollarını GÖRDÜ — kapı `node_modules`
+     **adına** göre eliyor, `node_modules.hidden-ci` artık o adı taşımıyor.
+     Bu yüzden o iki testin düşüşü **tamamen benim yöntemimin artefaktı**,
+     kanıt değil. Gerçek CI hesabı yapıldı: node_modules'sız repo package.json
+     dosyaları (dashboard-next, trend-db, dashboard-shadcn, video, docx, pptx)
+     ve zero-surface imza paketleri (`wrangler`,
+     `@cloudflare/workers-types`, `react-native`, `expo`, `xlsx`, `exceljs`,
+     `sheetjs`) için **0 eşleşme** → kapı CI'da **GEÇER**. Öğretim: gizleme
+     deneyi "yok et" değil "adını değiştir" ise, ada dayalı gürültü
+     filtreleri onu yine de görür.
+  2. **`test_surface_cwv_report` CI'ı Playwright'ın YOKLUĞUyla kurtarıyor.**
+     Gizli koşuda `RuntimeError: apps/dashboard-next/node_modules/.bin/next
+     yok — npm ci gerekli` veriyor; sınıf `@unittest.skipIf(sync_playwright
+     is None)` (satır 785) sayesinde CI'da **atlanıyor**. Yani tek şey onu
+     kurtaran şey tarayıcının yokluğu. `verify` job'ına Playwright bir gün
+     eklenirse bu test anında kırmızıya döner — kırılgan bağımlılık.
+  3. **`test_check_design_tokens` çevreye değil ZAMANA bağlı.** Gizli koşuda
+     2 ERROR, sebebi `check_tokens.py`'nin **10 saniyelik** `timeout`'a
+     takılması (`subprocess.TimeoutExpired … timed out after 10 seconds`).
+     Ortam geri gelince 39/39 PASS. Yani bu, bu oturumda ikinci kez görülen
+     **yük altında kırılan test** deseni (`test_dashboard_keyboard_nav` de
+     tam bataryada düşüyordu). 10s bütçe dar; artan yavaşlık kapıyı
+     yanlış yere düşürüyor.
+- **Yanlış ölçüm (kendi hatam, düzeltildi):** 2. parçada 5 modül
+  (`test_skills_index`, `test_readme_skills`, `test_run_summary_*`)
+  `ModuleNotFoundError` verdi ve "gizlemeye bağlı" sanıldı. **Yanlıştı:**
+  bu testler `import check_skills_index` gibi **çıplak** import yapıyor ve
+  yalnız CIKTI `sys.path`'teyken çalışıyor; ben kökten
+  `python3 -m unittest _calisma.CIKTI.X` çağırınca yol eklenmiyor. Doğru
+  biçimde (cwd=CIKTI) **hepsi PASS**, CI logunda **0 ModuleNotFoundError**.
+  Ders: "modülün adıyla koş" hatası da bir ortam bulgusu gibi görünebilir.
+- **Yanlış giden ikinci yer:** `test_dashboard_playwright_smoke` gizleme
+  olmadan da düşüyor — sebep `stripe-theme.css` **text/plain MIME** ile
+  sunuluyor (JS konsol hatası). Bu suite zaten hiçbir CI job'ında
+  koşmadığı için (önceki tur) kırık olduğu fark edilmemiş; Playwright'ın
+  yokluğu onu da gizliyor. Yani "koşmayan test" + "kırık test" birleşimi.
+- **Doğrulama:** deney sonrası checkout **7/7 dizin yerinde**, kalıntı yok,
+  süreç kalmadı; `make verify` → `SWEEP: PASS — 6/6` (battery 335.0s).
+  Ayrıca bu tur bulunan **benim kusurum** giderildi: `check-changelog-sync`
+  hook'u commit anında hash'i bilinmeyen changelog satırını yazıyor;
+  `--amend` sonrası README'de `da998b2` bayat kaldı ve
+  `test_gen_changelog` düşüyordu. `gen_changelog.py --prune` ile tek satır
+  silindi (`e2b0150`), süit 72/72 OK. **Amend edilmedi** — her amend yeni
+  hash üretip aynı bayat satırı yeniden yaratırdı; kapının tasarımı changelog'u
+  bir commit geriden getirmek. Commit/push YAPILMADI.
+### Üç sözleşmenin bataryaya girmiş (skip-guard'lı) smoke hâli (2026-09-28)
+
+- **İstek:** "Add skip-guarded smoke assertions to the repo test battery for
+  the dashboard's 20-row trend contract, React.cache dedup, and next/link
+  soft navigation."
+- **Sorun ölçüldü:** üç sözleşmenin derin ölçümü var ama `check_unit_tests.
+  list`in **DIŞINDA** (EXCLUDE — Chromium/`next start` bütçesi gerekçesiyle).
+  Yani **batarya bu üç sözleşme hakkında hiçbir şey bilmiyor**. Daha kötüsü:
+  `check_unit_tests_hook.sh` her dosyanın çıktısını `>/dev/null 2>&1`'ye
+  atıyor → "18 test koştu" ile "18 test skip oldu" **ayırt edilemiyor**. Bu,
+  depodaki "koşmayan test" hastalığının (hayalet `dashboard-smoke` job'ı,
+  hiç koşmayan `test_dashboard_playwright_smoke`) bir başka yüzü.
+- **Çözüm: iki katman.** Yeni dosya `_calisma/CIKTI/test_dashboard_next_
+  battery_smoke.py` (**18 test**).
+  1. **STATİK katman (13 test, ön koşul YOK, her koşuda).** Sözleşmenin kaynak
+     tarafındaki değişmezi okur; saniyeler sürer, Chromium gerekmez, **hiçbir
+     ortamda skip olmaz.** Bataryadaki asıl garanti budur — dosya, ortam ne
+     olursa olsun bu üç sözleşmeden birini ölçülemez hâle getiremez.
+  2. **CANLI katman (5 test, skip-guard'lı, İKİ farklı ön koşul profili).**
+     Dedup için `next start` yeterli (sunucu tarafı, tarayıcısız); 20-satır
+     ve yumuşak gezinme için Chromium gerekir. Eksikse SKIP sebebi **açıkça**
+     yazılır (`raise unittest.SkipTest("canlı katman atlandı: %s")`).
+     Sunucu kablosu TEK kaynaktan (`test_dashboard_cls_budget` +
+     `test_surface_cwv_report`) gelir, ikinci kablolama yazılmadı.
+- **Sözleşmeler:** (A) `/trend` limit=20, pano slotu limit=5, iki pencere
+  **farklı önbellek girdisi**; SSR (`RunsTableData`) ve canlı (`RunsTable.
+  windowRows`) **ayni** `slice(-limit).reverse()` kuralını uygular. (B)
+  `getLatest`/`getTrend` **ve** DB dalı `cache()` ile sarılı; iki trend
+  tüketicisi farklı argümanla çağrılır; `getLatest` tek tüketicili.
+  (C) pano→/trend `next/link` ile, ham `<a>` yalnız DIŞ hedefte, slotlar
+  `(panel)` grubunda, `ViewTransition` layout'ta değil sayfada.
+- **Mutasyonla kanıtlandı (4/4, yani testler boş değil):**
+  (1) `/trend` `limit={20}`→`{10}`: statik **ve canlı** katman kırmızı
+  (`10 != 20 … basılan: 10`) + sözleşmeler arası `two_call_sites_distinct_
+  args` de kırıldı; (2) `getLatest`'ten `cache(` sarmalayıcısı: kırmızı;
+  (3) `next/link`→ham `<a>`: İKİ soft-nav testi kırmızı; (4) canlı mutasyon
+  `next build` sonrası yeniden ölçüldü. Uygulama kodu `cp` ile birebir geri
+  alındı (`git status` altında dashboard-next **temiz**), `next build` yeniden
+  koşuldu.
+- **Tasarım hatası yakalandı ve düzeltildi:** sınıf düzeyinde TEK upstream
+  paylaşıldığı için istek sayacı testler arası birikiyordu; "tam 1 istek"
+  iddiası ikinci testte kendi kendini çürütüyordu. `CountingUpstream.reset()`
+  eklendi ve `setUp`'a bağlandı — sayaç başarısızlığının sebebi çevreden değil
+  **test düzeninden** kaynaklanmasın diye.
+- **Kayıt:** `sync_check_unit_tests.py --update --no-stage` ile
+  `check_unit_tests.list` (satır 64) + `HOOK_COVERAGE`'a girdi;
+  `test_coverage_report.py --check` rc=0, `sync --check` rc=0. Batarya
+  süresi 305–360s bandından **345.0s** — yeni dosya ~5s ekliyor (statik
+  katmanın maliyeti ihmal edilebilir; canlı katman ölçüldüğü için).
+- **Kanıt:** süit **18/18** (sistem python 5.2s, venv python 3.3s — hook'un
+  kullandığı koşucu) · `make verify` → `SWEEP: PASS — 6/6` (battery 345.0s).
+  Commit/push YAPILMADI.
+
+## `/api/trend?limit=` — GERÇEK VERİYLE payload ölçümü (2026-09-28)
+
+Parametre bir önceki turda uygulanmış ve `59557b5`'te commitliydi; bu tur
+kabul ölçütü **sayı** olduğu için iddiayı sentetik fixture ile değil, gerçek
+veriyle doğruladım.
+
+- **Veri kaynağı:** `history.jsonl`'deki 24 GERÇEK kayıt (40 alan, ortalama
+  1.619 B) 100'e tamamlandı + CI'ın `refs-trend` job'ından indirilen artifact
+  (`refs-trend.json`, **75.778 B**, 100 satır, 23.541 B `rows` + 22.793 B
+  `duration_budget.rows`). Sentetik alan yok.
+- **Ölçüm iki yoldan yapıldı ve BİREBİR tuttu:** (a) sunucunun kendi
+  fonksiyonları (`parse_trend_limit`/`parse_query_param`/`window_tail`/
+  `window_refs_trend`/`_project_history_record`), (b) canlı HTTP — sunucu
+  ayakta, istek gerçek, yanıt soketten okundu (`--dir` fixture + `--preview-dir`
+  `history.jsonl` yeri: `HISTORY_PATH = PREVIEW_DIR/history.jsonl`; `--dir`
+  yalnızca `verify_delivery.py` kökü).
+
+| istek | indirilen B | history | refs_trend | limit |
+|---|---|---|---|---|
+| penceresiz | **110.360** | 63.480 | 46.854 | — |
+| `?limit=20` | **23.496** | 13.656 | 9.803 | 20 |
+| `?limit=10` | 11.545 | 6.346 | 5.162 | 10 |
+| `?limit=5` | 5.095 | 2.217 | 2.842 | 5 |
+| `?limit=1` | 1.369 | 347 | 986 | 1 |
+
+- **"72 kB → 8 kB" hedefi tam gerçekleşmiyor, ve nedeni ölçüldü.** 8 kB eşiği
+  tam olarak **limit=7**'de geçiliyor (7.673 B; limit=8 = 8.965 B). limit=20
+  gerçek kayıtlarla **23,5 kB** veriyor, çünkü projekte edilmiş history satırı
+  ~683 B (40 alan) ve refs satırı ~490 B. Ayrıca 72 kB sayısı muhtemelen
+  `refs-trend.json` artifact'ının kendisi (75.778 B): o yarı **9.803 B**'a
+  iniyor, yani 7.7× — iddia refs_trend yarısı için doğru, tüm gövde için değil.
+- **Kalan tüketici bağlı:** statik pano `preview.js:1673` `fetch("/api/trend")`
+  diyerek parametresiz çağırıyor → 110 kB'nin tamamını indiriyor. Limit
+  eklemek görünür bir değişiklik olurdu: `renderTrend` satır 461'de
+  `rows.length` boyunca çiziyor, **nokta sayısı sınırlı değil** (100 nokta →
+  N nokta). Bu yüzden tek taraflı değiştirilmedi; karar kullanıcının.
+- **Kapsam dışı bırakılan kazanç (ölçüldü):** `RunsTable` 40 alanın yalnız
+  3'ünü okuyor (`r.ts`, `r.duration_s`, `payload.verdict`); `cli_overrides`
+  (20 satırda 6.340 B) ve `hook_env` (4.860 B) pano yüzeyinde hiç görünmüyor.
+  Alan projeksiyonu limit=20'yi ~8 kB'ye indirirdi — ama MCP
+  `leibniz2_trend` **tüm gövdeyi** LLM'e veriyor ("P0/P1 sayıları, süre,
+  bütçe, Z3 toplamları" diye belgeli), yani projeksiyon o aracı körleştirir.
+  Sözleşme değişikliği → karar kullanıcının, ölçüm burada.
+- **Kanıt:** `TestTrendLimitWindow` **11/11** · `sync --check` rc=0 ·
+  `test_coverage_report --check` rc=0 · `make verify` → `SWEEP: PASS — 6/6`
+  (battery 367.0s). Ölçüm betikleri `/tmp`'de (repo dışı), kalıntı yok,
+  öldürülmeyen sunucu yok. Commit/push YAPILMADI.
+
+## `dev_bootstrap.sh` — gerçek-fresh-worktree'de uçtan uca kanıt (2026-09-28)
+
+AGENTS.md'daki "gitignored araç-kümeleri taze checkout'u kırar; `dev_bootstrap.sh`
+koş" maddesi **hiç kanıtlanmamıştı**. Bu tur `git worktree add --detach HEAD`
+ile gerçek taze ağaçta ölçüldü: `--check` (önce) → bootstrap → `--check`
+(sonra) → 188 dosyalık batarya. Script'in değiştirilmiş hâli worktree'ye
+elle kopyalandı (düzeltmeler henüz commitli değil).
+
+### Ölçülen çerçeve (ilk koşu, DEĞİŞTİRİLMEDİĞİN script)
+
+| adım | sonuç |
+|---|---|
+| worktree'de araç-kümesi | 6 yolun 6'sı da YOK (gerçekten taze) |
+| `--check` (bootstrap öncesi) | **rc=1** kırmızı — fail-closed çalışıyor |
+| bootstrap | **rc=1** — 5 npm kurulumundan sonra ÖLDÜ |
+| `--check` (sonrası) | koşmadı |
+| batarya | koşmadı |
+
+### Bulgu 1 — ölüm sebebi "eksik paket" değil, **yorumlayıcı sürümü**
+
+`BROWSER_PIN=playwright==1.63.0` **PyPI'da var** (85 sürüm, en yüksek 1.63.0) —
+ilk ölçüm bunu sandım, yanlıştı. Gerçek: playwright **1.61+ `requires_python
+>=3.10`** istiyor; bu makinenin varsayılan `python3`'ü **3.9.6**, CI ise
+**3.12**. Script `python3 -m venv` dediği için venv 3.9'a düşüyor ve pip beş
+dakikalık kurulumun sonunda `No matching distribution found for
+playwright==1.63.0` diyerek ölüyor — **sebebi yanlış göstererek** (pini
+kaldır, sürümü düşür; oysa tek doğru hamle yorumlayıcıyı değiştirmek).
+Script'te hiç Python sürüm denetimi yoktu.
+
+### Bulgu 2 — script, CI'ın yaptığı iki üretim adımını atlıyor
+
+CI bunu **biliyor**: `verify.yml:3540-3546` yorumu tam olarak
+`Cannot find module '../../trend-db/generated/client'` hatasını açıklıyor ve
+ardından `prisma generate` + `next build` çalıştırıyor. `dev_bootstrap.sh`
+ikisini de atıyordu; ikisi de gitignored (`apps/trend-db/.gitignore:3`,
+`apps/dashboard-next/.gitignore:2`).
+
+Ölçülen etki (bootstrap + `--check` **yeşilken**): batarya **5/188 kırmızı**.
+Elle düzeltilip yeniden koşuldu:
+
+| eksik adım | süre | düzelttiği testler |
+|---|---|---|
+| `npx prisma generate` | **2 s** | `test_dashboard_next_style_gates`, `test_trend_db_contract`, `test_trend_db_js_runner` |
+| `next build` | **13 s** | (kalan 2'nin bir kısmı) |
+| `history.jsonl` + `runs/` (koşum verisi) | — | `test_surface_cwv_report`, `test_dashboard_keyboard_nav` |
+
+### Düzeltme (fail-closed, CI ile aynı komutlar)
+
+- `BROWSER_PIN_MIN_PY="3.10"` + `python_floor_ok`: yorumlayıcı tabanı **önceden**
+  ölçülüyor; eskiyse reçeteyle (`PATH'te ≥3.10 python3`, ya da
+  `LEIBNIZ2_BROWSER_PIN=playwright==1.60.0` ile **açık** ayrışma) duruluyor.
+  Ölçülemeyen yorumlayıcı da engellenir — "bilmiyorum"un sessiz geçmesi tam
+  olarak bu sınıf ölümü üretti.
+- Yeni unit'ler: `trend_db_codegen` (prisma generate) ve `dashboard_next_build`
+  (BUILD_ID). İkisi de `--check`'e bağlı → "CHECK OK" artık üretim yapılmamış
+  ağacı sessizce kabul etmiyor. CI'ın birebir komutları kullanıldı (yer
+  tutucu DSN dahil; gerçek kimlik bilgisi girmiyor).
+- **Dürüstlük düzeltmesi:** başlık "fresh-checkout'u yeşil-bataryaya taşıyan tek
+  komut" diyordu. Artık kapsam dışını da yazıyor: script araç-kümeleri + üretim
+  artefaktı sağlar, **runtime verisi sağlamaz**.
+
+### Kanıt zinciri
+
+- `test_dev_bootstrap.py`: 18 → **27 test**, hepsi yeşil.
+- **Mutasyonla boş değil (3/3):** `UNITS`'ten `trend_db_codegen` çıkarıldı → 4
+  kırmızı · `python_floor_ok` guard'ı silindi → 2 kırmızı ·
+  `provision_trend_db_codegen` no-op yapıldı → 2 kırmızı. Script `cp` ile
+  birebir geri alındı (`diff -q` aynı).
+- **Düzeltilmiş scriptle taze worktree tekrarı:** `--check` önce rc=1 · bootstrap
+  **rc=0 (45 s)** · `--check` sonra rc=0 · batarya **186/188** (5 → 2 kırmızı).
+- Kalan 2 test elle kanıtlandı: worktree'ye gerçek `history.jsonl` (12 kayıt) +
+  `runs/` (20 log) konunca `test_surface_cwv_report` **OK**,
+  `test_dashboard_keyboard_nav` **18/18 OK**. Yani bu ikisi **koşum geçmişini**
+  ölçüyor, araç-kümesini değil — `test_surface_cwv_report.py:713` yorumu da
+  bunu söylüyor ("yoksa dashboard 'no run yet' iskeleti ölçülürdü").
+
+### Kendi eklediğim kusur: sözleşme testi gerçek ağaca yazıyordu
+
+Yeni sahte `npm`/`npx`, `--prefix`'i yok sayan bir sürümde CWD'ye göre
+`apps/dashboard-next/.next/BUILD_ID` yazdı; bir mutasyon koşusu bunu
+`_calisma/CIKTI/` altına bıraktı (izlenmeyen, gitignore'lu bile değil — 4 kB
+çöp). Düzeltme iki katmanlı: (a) sahte `--prefix`'i argümandan okuyor,
+(b) `FAKE_ROOT` dışına yazmayı **reddedip exit 9** ile duruyor — test artık
+gerçek ağaca artefakt bırakamaz, kanıtlanabilir biçimde.
+
+### Kapanmayan sınır (bilinçli)
+
+`history.jsonl` ve `runs/` gitignored ve yalnız gerçek koşumlarla oluşur;
+bootstrap **yaratamaz**. Bu 2 testi "yeşile" çevirmenin tek yolu skip eklemek —
+kırmızıyı ölçümü zayıflatmakla eşdeğer. Karar kullanıcının; burada dokunulmadı.
+
+## Sürüm tek kaynağı: `_calisma/requirements-z3.txt` (2026-09-28)
+
+### Ölçülen durum (önce)
+
+Sürüm sabitleri **6 yerde** kopyalanmıştı ve üstüne bir de **pinsiz** kurulum
+vardı:
+
+| yer | içerik |
+|---|---|
+| `dev_bootstrap.sh` | `PINS=(…)` dizisi (5 satır) + `BROWSER_PIN` |
+| `test_dev_bootstrap.py` | PINS'in **aynası** (5 satır) |
+| `verify.yml:370` | `pip install z3-solver==5.1.0.0` |
+| `verify.yml:2904` | `pip install pre-commit pyyaml jsonschema z3-solver==…` → **pre-commit/pyyaml/jsonschema PİNSİZ** |
+| `verify.yml:3139, 3631` | `pip install playwright==1.63.0` (iki ayrı job) |
+| `verify.yml:3145, 3637` | `key: playwright-1.63.0` (iki cache key) |
+
+Mevcut "pini karşılaştır" testi (`test_browser_pin_matches_ci`) yalnız
+**script ↔ CI** eşitliğini ölçüyordu; iki sürüm hattını birlikte yaşatan
+pinsiz satırı göremezdi, `test_dev_bootstrap.py` kendi aynasını da "tek
+kaynak" sanıyordu.
+
+### Yeni yapı
+
+`_calisma/requirements-z3.txt` — bölüm işaretleri pip'e zarar vermeyen
+yorumlar, yani dosya doğrudan `pip install -r` ile kullanılabilir:
+
+- `[venv]` → `PINS` (`check_venv_z3` birebir `pip freeze` eşitliği arar)
+- `[browser]` → `BROWSER_PIN` (**işlevsel** denetim: chromium açılıyor mu)
+
+Üç tüketici bağlandı: `dev_bootstrap.sh` (`_load_pins`), `verify.yml`
+(4 kurulum + 2 cache key), `test_dev_bootstrap.py` (`_requirements_sections`).
+
+**Cache key de kaynaktan türedi:** `playwright-${{ hashFiles('_calisma/requirements-z3.txt') }}`
+— sürüm bump'ı cache'i kendiliğinden geçersiz kılar, elle yazılmış ikinci bir
+kopya kalmaz.
+
+`BROWSER_PIN_MIN_PY` requirements dosyasında **değil** script'te: bir sürüm
+değil, o sürümün taşıyıcı şartı. 3.9 için geçici override komutu da sürüm
+sabiti olduğu için dosyanın `[browser]` notuna taşındı; script mesajı
+değişkenin **adını** söyler, değeri değil.
+
+### Doğrulama (4 deney, hepsi ölçüldü)
+
+| deney | beklenti | sonuç |
+|---|---|---|
+| requirements'te bump (1.63.0 → 1.70.0) | YEŞİL, tüketici akışı canlı | **rc=0**, `BROWSER_PIN=playwright==1.70.0` |
+| `verify.yml`'e `pip install z3-solver==9.9.9` | KIRMIZI | **rc=1** (2 test) |
+| script'e sabitlenmiş pin | KIRMIZI | **rc=1** (1 test) |
+| requirements'te **pinsiZ** satır | KIRMIZI | **rc=1** (8 test) |
+
+Kapı `test_no_version_literal_outside_the_requirements_file`: üç tüketicinin
+hiçbirinde `paket==sürüm` sabiti kalamaz. Tek istisna test fixture'ı
+(`playwright==1.60.0`, 3.9 override yolu) ve gerekçesi `ALLOWED_TEST_FIXTURES`
+içinde yazılı; ayrıca "her istisnanın gerekçesi kodda yazılı mı" testi var.
+
+**Yakalanan iki tuzak:**
+- İlk 2a deneyi **geçersizdi**: mutasyonun çapası beyazlık farkı yüzünden
+  uymadı, dosya hiç değişmedi ve kapı "yeşil" dedi — yani ölçüm kendini
+  doğrulamadan sonuç üretti. Mutasyonlara `assert mutated != original`
+  eklendi; artık uygulanmayan mutasyon deneyi geçersiz sayıyor.
+- `test_pins_cover_the_battery_imports` sürüm literaline göre eşleme
+  yapıyordu (bump'ta kırılırdı). Paket **adıyla** eşleşmeye çevrildi.
+
+### Sonuç
+
+Sürüm bump artık **tek dosyada tek satır**: `requirements-z3.txt`.
+Doğrulama: `test_dev_bootstrap` 27 → **32 test** · `make verify` →
+`SWEEP: PASS — 6/6` (396.1s) · YAML geçerli (31 job) · üç tüketicide sıfır
+sabit. Commit/push YAPILMADI.
+
+## venv_z3 gizliyken CI `unittest discover` simülasyonu (2026-09-29)
+
+**Komut CI ile aynı:** `python3 -m unittest discover -s _calisma/CIKTI -p
+"test_*.py" -v`, primary checkout'ta, yalnız `_calisma/.venv_z3` geçici
+olarak `.hidden-ci` adına taşınarak. `node_modules`'a dokunulmadı. İlk 540 s
+çağrı tavanı keşfin ortasında kesildi; bu kez Python worker `Popen`
+`start_new_session=True` ile ayrıldı ve içeride 1.200 s watchdog kullandı.
+Venv her zaman Python `finally` ile geri konur — doğrulandı: **venv var,
+hidden path yok**, orphan unittest yok. Ana checkout `git status` koşumdan
+önce/sonra aynı.
+
+### Tam koşum sonucu
+
+- `Ran 3271 tests in 560.431s` · `FAILED (failures=1, skipped=25)` · rc=1.
+- **Tek gerçek failing test:** `test_dashboard_renders_with_no_js_console_errors`
+  (`test_dashboard_playwright_smoke.py:88`). Ayrı tek-modül koşumunda da
+  aynı hata yakalandı: Chromium `/design-system/stripe-theme.css` dosyasını
+  `text/plain` MIME yüzünden reddediyor (strict stylesheet MIME check).
+- Bu **venv_z3 eksikliği kaynaklı değil**: system Python 3.9.6'da global
+  Playwright kurulu, dolayısıyla test gerçekten açıldı. CI `verify` job'ı
+  ise Playwright kurmuyor (`pip install pyyaml` var; Playwright yalnız a11y /
+  dashboard-next job'larında) ve aynı suite kendi `skipIf(sync_playwright is
+  None)` guard'ıyla orada skip olur. Ayrı fixture/çevre kaynaklı bir smoke
+  hatasıdır; bu istekte dashboard MIME koduna dokunulmadı.
+- Beş satırda `FAIL:` görünmesi **5 failing test demek değil**: dördü beklenen
+  diagnostic çıktısı ve testlerin status'u `ok` (`test_main_exit_codes`,
+  `test_exit_1_on_contract_violation`, `test_dep_blocked_task_skipped`,
+  `test_fail_closed_single_failure`). Unittest summary + `... FAIL` satırları
+  esas alındı; sonuçta yalnız yukarıdaki bir gerçek fail var.
+
+### Ortam-bağımlı skips (25 toplam; hiçbirisi fail değil)
+
+| koşul | skip sayısı | not |
+|---|---:|---|
+| `.venv_z3` yok — `test_dev_bootstrap` host bağımlı testleri | 9 | 7 yeni decorator ile (`TestCheckContract` 3 + `TestFullFlag` 3 + `TestPinParity.test_venv_pins_match_matrix` 1); 2 mevcut tam-kurulum/idempotence koşulu kendi `--check` guard'ında skip |
+| gerçek pre-commit executable yok | 4 | commit entegrasyon testleri |
+| `jsonschema` kurulu değil | 8 | config-schema 6 + precommit-report schema 2; verify job'ında bu paket kurulumu yok |
+| CI refs-trend artifact yok | 1 | yalnız canlı artifact ile koşabilen dipnot denetimi |
+| elan/lake shim yok | 1 | `test_returns_elan_shim_when_present` |
+| K12 repro manifest üretilmemiş | 1 | sidecar senaryosu |
+| host'ta TeXLive bulundu | 1 | negatif keşif senaryosu — bilerek skip |
+| **Toplam** | **25** | tamamı açık skip reason basıyor |
+
+### `test_dev_bootstrap.py` guard'ı ve iki yönde doğrulama
+
+Yalnız gerçek checkout'ta `.venv_z3/bin/python` isteyen testlere
+`@unittest.skipUnless(os.path.isfile(VENV_PY), ...)` eklendi:
+
+- `TestCheckContract` (3 host-unit testi) ve `TestFullFlag` (3 gerçek
+  provisioned-env testi) sınıf guard'ı kullanıyor.
+- `TestPinParity` sınıfını bütünüyle skip etmedim: yalnız
+  `test_venv_pins_match_matrix` venv'e bağlı; package-consumer ve tek-kaynak
+  kontrolleri CI'da da çalışmaya devam ediyor.
+- Sahte kök kullanan `TestBrowserLayerProvisioning`, `TestGeneratedArtifactUnits`,
+  `TestBrowserPinPythonFloor`, `TestSinglePinSource` **skip edilmedi** —
+  bağımsız sözleşmeler ortam yokken de ölçülüyor.
+
+| koşum | sonuç |
+|---|---|
+| yerel venv ile `test_dev_bootstrap` | **32/32 OK** |
+| venv gizliyken aynı discovery | **32 test, 9 skip, rc=0** |
+| venv geri konduktan sonra `bash _calisma/dev_bootstrap.sh --check` | **CHECK OK** |
+| manifest `sync_check_unit_tests.py --check` | rc=0 |
+| coverage `test_coverage_report.py --check` | rc=0 |
+
+Venv taşıması yalnız her iki uzun koşuda Python `finally` içinde yapıldı;
+`_calisma/.venv_z3` eski konumunda/sürümünde bırakıldı. Başka ortam (node_modules,
+CI sidecar'ları, diğer worktree'ler) değiştirilmedi. Tam discover'ın tek
+başarısızlığı MIME smoke testidir — `test_dev_bootstrap` suite'si hem CI-benzeri
+(venv yok) hem yerel tam ortamda yeşildir. Yeni bulgular, test guard'ı ve bu
+koşum için commit/push yapılmadı.

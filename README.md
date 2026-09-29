@@ -70,13 +70,13 @@ checkout'ta sessiz kapsam kaybıdır.
 
 | # | Araç-kümesi | Ne kurar | `--check` kapısı | Bataryada karşılığı |
 |---|---|---|---|---|
-| 1 | `_calisma/.venv_z3` | pinli `z3-solver==5.1.0.0`, `PyYAML==6.0.3`, `pre_commit==4.3.0`, `jsonschema==4.25.1`, `pillow==11.3.0` | `pip freeze` satır-eşitliği | `test_validate_config_schema` (jsonschema), `*_deck` süitleri (PIL), kapı süitleri (yaml), K8 (z3) |
+| 1 | `_calisma/.venv_z3` | `_calisma/requirements-z3.txt` içindeki `[venv]` pinleri | `pip freeze` satır-eşitliği | `test_validate_config_schema` (jsonschema), `*_deck` süitleri (PIL), kapı süitleri (yaml), K8 (z3) |
 | 2 | `_calisma/pptx` | `npm ci` | `require.resolve('pptxgenjs')` | `test_pptx_export` |
 | 3 | `_calisma/docx` | `npm ci` | `require.resolve('docx')` | docx jeneratör testleri |
 | 4 | `apps/dashboard-next` | `npm ci` | `tsc` + `next` binary'leri | `test_dashboard_next_*` süitleri |
 | 5 | `apps/trend-db` | `npm ci` | `node_modules/.bin/tsx` | `test_trend_db_js_runner` |
 | 6 | `_calisma/video` | `npm ci` | `node_modules/.bin/tsc` | `test_check_video_typecheck` |
-| 7 | tarayıcı katmanı | `playwright==1.63.0` + `playwright install chromium` | **işlevsel**: başsız chromium gerçekten başlıyor mu | `test_dashboard_keyboard_nav`, `test_preview_escaping`, `test_preview_hover_tooltip`, `test_dashboard_cls_budget`, `test_surface_cwv_report` |
+| 7 | tarayıcı katmanı | `_calisma/requirements-z3.txt` içindeki `[browser]` pini + `playwright install chromium` | **işlevsel**: başsız chromium gerçekten başlıyor mu | `test_dashboard_keyboard_nav`, `test_preview_escaping`, `test_preview_hover_tooltip`, `test_dashboard_cls_budget`, `test_surface_cwv_report` |
 
 Ardından `--full` **temel bataryayı** koşar: `check_unit_tests_hook.sh`
 (pre-commit `check-unit-tests` kapısının ta kendisi) — tüm test dosyaları PASS
@@ -87,8 +87,8 @@ değilse rc=1.
   olarak ölçümü pin-paritesi değil **işlevsel**: çalışan bir chromium, sürüm
   etiketinden daha güçlü kanıttır ve yerelde farklı ama çalışan bir playwright
   sürümü kuruluysa gereksiz indirme tetiklenmez. Kurulumda kullanılan pin,
-  CI'daki `playwright==` piniyle aynıdır — sözleşme testi iki kaynağın
-  ayrışmasını yakalar.
+  CI da aynı `_calisma/requirements-z3.txt` dosyasından kurar; sözleşme testi
+  başka yerde sabitlenmiş sürüm kalırsa başarısız olur.
 - **Neden batarya `--full`a bağlı, varsayılana değil:** batarya manifesti bu
   betiğin sözleşme-testini (`test_dev_bootstrap.py`) de içerir ve o test betiği
   bayraksız koşar; batarya varsayılan yola konsaydı test → betik → batarya →
@@ -643,6 +643,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-28 | docs | tip-test turu kaydı + commit'lenmemiş iş envanteri kapanışı | [`366abeb`](https://github.com/ali-han-kaya/leibniz2/commit/366abeb) |
 | 2026-09-28 | feat | (trend-db) dry-run'a kesin çakışma ölçümü (--check-db/--keys-file) | [`75b1b88`](https://github.com/ali-han-kaya/leibniz2/commit/75b1b88) |
 | 2026-09-28 | feat | (gates) oturumun kapı ve yüzey ölçümlerini topla | [`59557b5`](https://github.com/ali-han-kaya/leibniz2/commit/59557b5) |
+| 2026-09-28 | fix | (docs) amend'in bıraktığı bayat changelog satırını temizle | [`e2b0150`](https://github.com/ali-han-kaya/leibniz2/commit/e2b0150) |
 
 ### Regresyon notları
 

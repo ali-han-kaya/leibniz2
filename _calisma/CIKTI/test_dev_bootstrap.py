@@ -31,8 +31,6 @@ SCRIPT = os.path.join(ROOT, "_calisma", "dev_bootstrap.sh")
 VENV = os.path.join(ROOT, "_calisma", ".venv_z3")
 VENV_PY = os.path.join(VENV, "bin", "python")
 
-PINS = ("z3-solver==5.1.0.0", "PyYAML==6.0.3", "pre_commit==4.3.0",
-        "jsonschema==4.25.1", "pillow==11.3.0")
 PPTX_LIB = os.path.join(ROOT, "_calisma", "pptx", "node_modules", "pptxgenjs")
 DASH_TSC = os.path.join(ROOT, "apps", "dashboard-next", "node_modules", ".bin", "tsc")
 # Batarya manifestindeki testlerin istediği ortam-sentinelleri: biri eksikse
@@ -41,6 +39,7 @@ DASH_TSC = os.path.join(ROOT, "apps", "dashboard-next", "node_modules", ".bin", 
 TREND_DB_TSX = os.path.join(ROOT, "apps", "trend-db", "node_modules", ".bin", "tsx")
 VIDEO_TSC = os.path.join(ROOT, "_calisma", "video", "node_modules", ".bin", "tsc")
 VERIFY_YML = os.path.join(ROOT, ".github", "workflows", "verify.yml")
+REQ_FILE = os.path.join(ROOT, "_calisma", "requirements-z3.txt")
 
 
 def _run(args, **kw):
@@ -52,38 +51,86 @@ def _read(path):
         return fh.read()
 
 
+def _legacy_browser_override():
+    """Python 3.9 test fixture override'ını requirements dosyasından oku."""
+    matches = []
+    for raw in _read(REQ_FILE).splitlines():
+        line = raw.strip()
+        if not line.startswith("#"):
+            continue
+        line = line[1:].strip()
+        if (line.startswith("LEIBNIZ2_BROWSER_PIN=") and
+                line.endswith(" bash _calisma/dev_bootstrap.sh")):
+            matches.append(line.split("=", 1)[1].split(None, 1)[0])
+    if len(matches) != 1:
+        raise AssertionError("requirements-z3.txt tek eski-Python override örneği taşımalı")
+    return matches[0]
+
+
+def _requirements_sections():
+    """Tek kaynağın iki bölümü: ([venv] satırları, [browser] pini).
+
+    Sürümler BURADA yaşar. Bu modül de dahil hiçbir yerde `paket==sürüm`
+    sabiti tutulmaz; `TestSinglePinSource` bunu kırmızıya düşürür. Sürüm
+    bump'ı = requirements dosyasında tek satır, testte de dokunulmaz.
+    """
+    venv, browser, in_browser = [], "", False
+    for raw in _read(REQ_FILE).splitlines():
+        line = raw.strip()
+        if line.startswith("# [browser]"):
+            if in_browser:
+                raise ValueError("[browser] bölümü birden fazla tanımlanmış")
+            in_browser = True
+            continue
+        if not line or line.startswith("#"):
+            continue
+        if in_browser:
+            if browser:
+                raise ValueError("[browser] bölümünde birden fazla pin var")
+            browser = line
+        else:
+            venv.append(line)
+    return venv, browser
+
+
+PINS, BROWSER_PIN = _requirements_sections()
+# Tek istisna: bu değer bir test FİXTÜRÜ (3.9 için geçersiz kılma yolu),
+# repo'nun kullandığı sürüm değil. İzin listesi açıkça yazılı ki "neden
+# burada?" sorusu yanıtsız kalmasın.
+LEGACY_BROWSER_PIN = _legacy_browser_override()
+ALLOWED_TEST_FIXTURES = {
+    LEGACY_BROWSER_PIN: "3.9 override yolunun sınanması için sentetik değer",
+}
+# Fixture değeri de requirements-z3.txt içindeki açık uyumluluk örneğinden gelir.
+OLD_PY_PIN = LEGACY_BROWSER_PIN
+PIN_LITERAL = re.compile(r"[A-Za-z_][A-Za-z0-9_.-]*==[0-9][0-9A-Za-z.]*")
+
+
+@unittest.skipUnless(os.path.isfile(VENV_PY),
+                     "yerel araç-kümesi (venv_z3) kurulu değil")
 class TestCheckContract(unittest.TestCase):
+    """Gerçek host araç-kümesini prob'lar; CI verify job'ında venv yoktur.
+
+    Bu guard yalın CI keşfinde yalnız bu host-bağımlı sınıfı atlar. Sahte kök
+    kullanan sözleşme testleri (aşağıdaki sınıflar) her ortamda çalışmaya devam
+    eder; guard tüm modüle uygulanmaz.
+    """
     def test_check_passes_on_provisioned_checkout(self):
         if not os.path.isdir(VENV):
             self.skipTest("araç-kümesi eksik — provisioned-ortam testi tam-kurulumda koşar")
         r = _run(["bash", SCRIPT, "--check"])
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
-    def test_check_fail_closed_on_broken_unit(self):
-        """Kontrat: herhangi bir unit bozulunca --check rc=1 (işlev-ölçümü)."""
-        cases = (
-            ("venv", VENV, VENV + ".hidden_by_test", os.path.isdir(VENV)),
-            ("pptx", PPTX_LIB, PPTX_LIB + ".hidden_by_test", os.path.isdir(PPTX_LIB)),
-            ("dash-tsc", DASH_TSC, DASH_TSC + ".hidden_by_test", os.path.isfile(DASH_TSC)),
-            ("trend-db-tsx", TREND_DB_TSX, TREND_DB_TSX + ".hidden_by_test",
-             os.path.isfile(TREND_DB_TSX)),
-            ("video-tsc", VIDEO_TSC, VIDEO_TSC + ".hidden_by_test",
-             os.path.isfile(VIDEO_TSC)),
-        )
-        for label, target, hidden, present in cases:
-            with self.subTest(unit=label):
-                if not present:
-                    self.skipTest(label + " kurulu değil — tam-kurulumda koşar")
-                os.rename(target, hidden)
-                try:
-                    r = _run(["bash", SCRIPT, "--check"])
-                    self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
-                    self.assertIn("CHECK FAIL", r.stdout)
-                finally:
-                    if os.path.exists(hidden):
-                        os.rename(hidden, target)
-                r2 = _run(["bash", SCRIPT, "--check"])
-                self.assertEqual(r2.returncode, 0, "geri-koyma sonrası --check yeşil olmalı")
+    # Kırık-unit sözleşmesi artık MUTASYONSUZ: `TestBrokenUnitFailsCheckClosed
+    # Hermetic` (aşağıda) aynı beş sentinel'i sahte kökte gizleyip ölçüyor.
+    # Buradaki eski sürüm GERÇEK `.venv_z3`/`pptxgenjs`/`tsc`/`tsx`
+    # dosyalarını `os.rename` ile ağaçtan çıkarıyordu; o pencere boyunca aynı
+    # checkout'taki BAŞKA bir `--check` çağrısı kırmızı görüyordu (ölçüldü:
+    # "CHECK FAIL: venv_z3 eksik veya paritesiz rc=1"). Zincirde
+    # `check-unit-tests` ile `check-bootstrap-toolchain` aynı commit'te
+    # `--check` çağırdığı için batarya 10/10 tek başına yeşilken pre-commit
+    # altında aralıklı kırmızıydı ve hook test çıktısını attığı için sebep
+    # görünmüyordu. Ağaç artık ölçüm aracı DEĞİLDİR.
 
     def test_check_fail_closed_without_browser_layer(self):
         """Tarayıcı katmanı ÖLÇÜMÜ işlevsel: boş `PLAYWRIGHT_BROWSERS_PATH`
@@ -108,6 +155,28 @@ class TestArgContract(unittest.TestCase):
             r = _run(["bash", SCRIPT, *argv])
             self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
             self.assertIn("--check", r.stderr)
+
+    def test_help_rejects_extra_arg(self):
+        """REGRESYON (2026-09-29): `--help extra` rc=0 dönüyordu.
+
+        `--check extra` ve `--full extra` rc=2 veriyor, `--help extra` ise
+        `--help`'ı basıp çıkıyordu. Üçü de tek bayrak bekleyen aynı komut;
+        sessizce yutulan fazladan argüman, kullanıcının yazım hatasını
+        "komut çalıştı" sanmasına yol açar. Kural: `--help` de dahil
+        TÜM bayraklar tek argümanla sınırlı, fazlası rc=2.
+        """
+        r = _run(["bash", SCRIPT, "--help", "extra"])
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+        # Kullanım stdout'a DEĞIL stderr'e basılır (rc=2 yolu) — kullanıcı
+        # yardım metnini görür, yanlış bayrağın sessizce yutulmadığını bilir.
+        self.assertIn("--check", r.stderr)
+
+    def test_help_exits_zero_when_alone(self):
+        """Dengesi: `--help` TEK başına yardım basıp rc=0 vermeye devam eder."""
+        r = _run(["bash", SCRIPT, "--help"])
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        for flag in ("--full", "--check", "--help"):
+            self.assertIn(flag, r.stdout)
 
     def test_empty_string_arg_is_install_not_error(self):
         """${1:-} sözleşmesi: "" bayrağısız-koşumla-özdeş (kurulum-yolu)."""
@@ -143,6 +212,8 @@ def _provisioned_or_skip(testcase):
         testcase.skipTest("araç-kümesi eksik — --full kablolaması tam-kurulumda koşar")
 
 
+@unittest.skipUnless(os.path.isfile(VENV_PY),
+                     "yerel araç-kümesi (venv_z3) kurulu değil")
 class TestFullFlag(unittest.TestCase):
     """`--full` = kurulum + temel batarya (uçtan uca yeşil koşum)."""
 
@@ -202,8 +273,8 @@ class TestFullArgContract(unittest.TestCase):
         self.assertIn("--full", r.stdout)
 
 
-@unittest.skipUnless(os.path.isfile(VENV_PY), "venv_z3 kurulu değil")
 class TestPinParity(unittest.TestCase):
+    @unittest.skipUnless(os.path.isfile(VENV_PY), "venv_z3 kurulu değil")
     def test_venv_pins_match_matrix(self):
         r = _run([VENV_PY, "-m", "pip", "freeze"])
         frozen = set(r.stdout.splitlines())
@@ -213,30 +284,40 @@ class TestPinParity(unittest.TestCase):
     def test_pins_cover_the_battery_imports(self):
         """Pin listesi bataryanın GERÇEKTEN istediği paketleri kapsamalı:
         manifestte jsonschema/PIL isteyen testler var; pin eksikse taze
-        checkout'ta o testler SKIP eder (sessiz kapsam kaybı)."""
-        script = _read(SCRIPT)
-        for pin in PINS:
-            self.assertIn(pin, script, "scriptte pin yok: " + pin)
+        checkout'ta o testler SKIP eder (sessiz kapsam kaybı).
+
+        Eşleme pakET ADIYLA kurulur, sürümle değil: aksi halde sürüm bump'ı
+        (tek dosyalık olması gereken işlem) testi de kırar."""
         battery = os.path.join(ROOT, "_calisma", "CIKTI", "check_unit_tests.list")
         listed = set(_read(battery).split())
+        names = {p.split("==")[0].lower().replace("_", "-") for p in PINS}
         consumers = {
-            "jsonschema==4.25.1": "test_validate_config_schema.py",
-            "pillow==11.3.0": "test_verification_chain_deck.py",
+            "jsonschema": "test_validate_config_schema.py",
+            "pillow": "test_verification_chain_deck.py",
         }
-        for pin, test in consumers.items():
+        required = {"z3-solver", "pyyaml", "pre-commit", "jsonschema", "pillow"}
+        self.assertTrue(required <= names,
+                        "requirements'ta bataryanın temel pin'leri eksik: %s"
+                        % sorted(required - names))
+        for pkg, test in consumers.items():
             self.assertIn(test, listed,
                           "%s bataryada değil — pin gerekçesi boşa düşmüş" % test)
-            self.assertIn(pin, PINS)
+            self.assertIn(pkg, names, "requirements'ta %s pini yok" % pkg)
+
+    def test_requirements_file_is_the_only_pin_source(self):
+        """Sürüm sabiti bu dosyada yaşar; script onu okur, kendi listesi yok."""
+        script = _read(SCRIPT)
+        self.assertIn("requirements-z3.txt", script)
+        self.assertIn("_load_pins", script)
+        self.assertNotRegex(script, r"BROWSER_PIN=\"[^\"]+==",
+                            "BROWSER_PIN sabitlenmiş, dosyadan okunmalı")
 
 
 # ── tarayıcı katmanı: sahte kök ile hermetik kurulum testi ───────────────
 
 def _script_pins():
-    """Script'in PINS dizisi (tek kaynak) — sahte venv aynı satırları basar."""
-    m = re.search(r"PINS=\(([^)]*)\)", _read(SCRIPT), re.S)
-    if not m:
-        raise AssertionError("PINS dizisi bulunamadı")
-    return m.group(1).split()
+    """Sahte venv'in `pip freeze` çıktısı = tek kaynağın [venv] bölümü."""
+    return _requirements_sections()[0]
 
 
 FAKE_VENV_PY = '''#!/usr/bin/env python3
@@ -256,11 +337,88 @@ if args[:2] == ["-m", "playwright"]:
 if args[:1] == ["-"]:                     # stdin programı: check_browsers
     sys.stdin.read()
     sys.exit(0 if os.environ.get("FAKE_BROWSER_OK") == "1" else 1)
+if args[:1] == ["-c"] and "version_info" in args[1]:
+    # python_floor_ok sürüm probunu `-c` ile sorar; sahte yorumlayıcı
+    # ölçülemez dönerse script fail-closed olarak ÖLÜMÜ seçer.
+    print(os.environ.get("FAKE_PY_VERSION", "3.11.0"))
+    sys.exit(0)
+if args[:1] == ["-c"]:
+    floor, have = args[2], args[3]        # taban karşılaştırması
+    f = tuple(int(x) for x in floor.split("."))
+    h = tuple(int(x) for x in have.split("."))
+    sys.exit(0 if h >= f else 1)
+if args[:1] == ["--version"]:
+    print("Python %s" % os.environ.get("FAKE_PY_VERSION", "3.11.0"))
+    sys.exit(0)
 sys.exit(1)                              # beklenmeyen çağrı = gürültülü fail
 '''
 
-FAKE_NODE = '#!/bin/bash\nexit 0\n'
-FAKE_NPM = '#!/bin/bash\nprintf "npm %s\\n" "$*" >> "$FAKE_LOG"\n'
+# Sahte node: `check_pptx`/`check_docx` unit'leri `node -e
+# "require.resolve('<pkg>')"` çağırır. Ölçülen boşluk (2026-09-29): shim
+# koşulsuz `exit 0` idi, dolayısıyla `check_pptx` SAHTE KÖKTE HİÇBİR ZAMAN
+# kırmızı olamıyordu — paket dizini gizlendiğinde bile "CHECK OK" dönüyordu
+# (rc=0). Yani kırık-unit sözleşmesi bu iki unit'i hiç ölçemiyordu.
+# Shim artık GERÇEKTEN çözümler: paket dizini yoksa exit 1 (node'un
+# `require.resolve` hata kodu), varsa exit 0.
+FAKE_NODE = '''#!/bin/bash
+if [ "$1" = "-e" ] && [ "$2" = "require.resolve('pptxgenjs')" ]; then
+  [ -d "$PWD/node_modules/pptxgenjs" ] && exit 0
+  echo "Cannot find module 'pptxgenjs'" >&2
+  exit 1
+fi
+if [ "$1" = "-e" ] && [ "$2" = "require.resolve('docx')" ]; then
+  [ -d "$PWD/node_modules/docx" ] && exit 0
+  echo "Cannot find module 'docx'" >&2
+  exit 1
+fi
+exit 0
+'''
+FAKE_NPM = '''#!/bin/bash
+printf "npm %s\\n" "$*" >> "$FAKE_LOG"
+# Güvenlik: sahte npm YALNIZ kendi sahte köküne yazabilir. Test koşumları
+# yanlışlıkla gerçek ağaca artefakt bırakmamalı (ölçüldü: bir mutasyon
+# koşusu `_calisma/CIKTI/apps/dashboard-next/.next/BUILD_ID` bırakmıştı —
+# izlenmeyen, gitignore'lu olmayan çöp).
+[ -n "$FAKE_ROOT" ] || { echo "FAKE_ROOT yok — yazma reddedildi" >&2; exit 9; }
+# `npm run build --prefix apps/dashboard-next` → BUILD_ID üret (yoksa ikinci
+# koşuda dashboard_next_build hâlâ "eksik" görünür ve idempotence ölçülemez).
+if [ "$1" = "run" ] && [ "$2" = "build" ]; then
+  # `npm run build --prefix apps/dashboard-next` → BUILD_ID prefix'in altına.
+  # --prefix CWD'den bağımsız olduğu için argümandan okunur.
+  shift 2
+  prefix=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --prefix) prefix="$2"; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+  [ -n "$prefix" ] || prefix="."
+  case "$prefix" in
+    "$FAKE_ROOT"/*) ;;
+    *) echo "build gerçek ağacın dışına çıktı: $prefix" >&2; exit 9 ;;
+  esac
+  mkdir -p "$prefix/.next"
+  printf 'fakebuildid00000000000000\\n' > "$prefix/.next/BUILD_ID"
+fi
+exit 0
+'''
+# npx prisma generate → sahte artefaktı yazar; npm run build → BUILD_ID yazar.
+# Böylece ikinci koşuda unit'ler "up to date" der (idempotence gerçekten ölçülür).
+FAKE_NPX = '''#!/bin/bash
+printf "npx %s\\n" "$*" >> "$FAKE_LOG"
+if [ "$1" = "prisma" ] && [ "$2" = "generate" ]; then
+  # provision, CI'ın komutu gibi `cd apps/trend-db` YAPILARAK çağırır →
+  # çıktı schema'nın `output = "../generated"` hedefidir, yani CWD'ye göre.
+  case "$PWD" in
+    "$FAKE_ROOT"/*) ;;
+    *) echo "prisma generate gerçek ağacın dışına çıktı: $PWD" >&2; exit 9 ;;
+  esac
+  mkdir -p generated
+  printf '// fake prisma client\\nexport class PrismaClient {}\\n' > generated/client.ts
+fi
+exit 0
+'''
 
 
 def _fake_bootstrap_root():
@@ -274,6 +432,10 @@ def _fake_bootstrap_root():
     root = pathlib.Path(td)
     (root / "_calisma").mkdir(parents=True)
     shutil.copy(SCRIPT, root / "_calisma" / "dev_bootstrap.sh")
+    # Pinlerin TEK KAYNAK dosyası da kopyalanır: sahte kök kendi kökünden
+    # okuyor (ROOT scriptin konumundan türetilir), yoksa script "requirements
+    # dosyası yok" deyip ölür ve sözleşme ölçülmez.
+    shutil.copy(REQ_FILE, root / "_calisma" / "requirements-z3.txt")
     # node/npm sahte PATH'ten gelir: ortamda node olmasa da test koşar.
     bindir = root / "bin"
     bindir.mkdir()
@@ -299,7 +461,25 @@ def _fake_bootstrap_root():
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text("#!/bin/bash\nexit 0\n", encoding="utf-8")
         p.chmod(0o755)
+    # `npx` sahte: prisma generate + npm run build ağa/kuruluma çıkmadan
+    # ölçülsün, üretilen artefaktlar da sahte kökte DOĞSUN (yoksa ikinci
+    # koşu "up to date" der ve test hiçbir şey ölçmezdi).
+    npx = root / "bin" / "npx"
+    npx.write_text(FAKE_NPX, encoding="utf-8")
+    npx.chmod(0o755)
+    _write_generated_artifacts(root)
     return root
+
+
+def _write_generated_artifacts(root):
+    """Sahte prisma istemcisi + BUILD_ID (bootstrap'un ürettiği artefaktlar)."""
+    client = root / "apps/trend-db/generated/client.ts"
+    client.parent.mkdir(parents=True, exist_ok=True)
+    client.write_text("// fake prisma client\nexport class PrismaClient {}\n",
+                      encoding="utf-8")
+    build_id = root / "apps/dashboard-next/.next/BUILD_ID"
+    build_id.parent.mkdir(parents=True, exist_ok=True)
+    build_id.write_text("fakebuildid00000000000000\n", encoding="utf-8")
 
 
 class TestBrowserLayerProvisioning(unittest.TestCase):
@@ -330,7 +510,7 @@ class TestBrowserLayerProvisioning(unittest.TestCase):
         r = self._run_boot("--full")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         calls = _read(self.log)
-        self.assertIn("pip install --quiet playwright==1.63.0", calls)
+        self.assertIn("pip install --quiet " + BROWSER_PIN, calls)
         self.assertIn("playwright install chromium", calls)
         self.assertIn("browsers:", r.stdout)
         self.assertTrue(r.stdout.rstrip().endswith("BOOTSTRAP OK"), r.stdout)
@@ -340,7 +520,7 @@ class TestBrowserLayerProvisioning(unittest.TestCase):
         self.env["FAKE_BROWSER_OK"] = "1"
         r = self._run_boot()
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertIn("browsers: up to date", r.stdout)
+        self.assertIn("browsers (venv_z3 + chromium): up to date", r.stdout)
         self.assertEqual(_read(self.log), "")
 
     def test_missing_browser_layer_fails_check_closed(self):
@@ -350,13 +530,469 @@ class TestBrowserLayerProvisioning(unittest.TestCase):
         self.assertIn("CHECK FAIL: browsers", r.stdout)
 
     def test_browser_pin_matches_ci(self):
-        """İkinci kaynak yok: scriptin tarayıcı pini CI'daki `playwright==`
-        piniyle AYNI olmalı (verify.yml'de iki adım aynı sürümü kurar)."""
-        m = re.search(r'BROWSER_PIN="playwright==([^"]+)"', _read(SCRIPT))
-        self.assertIsNotNone(m, "BROWSER_PIN bulunamadı")
-        pins = set(re.findall(r"playwright==([0-9.]+)", _read(VERIFY_YML)))
-        self.assertEqual(pins, {m.group(1)},
-                         "script ile CI pinleri ayrıştı: %s vs %s" % (pins, m.group(1)))
+        """İkinci kaynak YOK: CI `-r` ile aynı pin dosyasından kuruyor."""
+        yml = _read(VERIFY_YML)
+        self.assertNotRegex(yml, r"playwright==[0-9]",
+                            "verify.yml'de sabitlenmiş tarayıcı sürümü kaldı")
+        self.assertIn("pip install -r _calisma/requirements-z3.txt", yml)
+        self.assertTrue(BROWSER_PIN.startswith("playwright=="), BROWSER_PIN)
+
+
+class TestBrokenUnitFailsCheckClosedHermetic(unittest.TestCase):
+    """`--check` birim kırıkken fail-closed — SAHTE KÖKTE, ağaca dokunmadan.
+
+    Ölçülen yarış (2026-09-29): `TestCheckContract.test_check_fail_closed_on_
+    broken_unit` aynı sözleşmeyi GERÇEK ağacı mutilate ederek ölçüyordu —
+    `os.rename(VENV, VENV + ".hidden_by_test")` ile repo'nun kurulu
+    `.venv_z3`'ünü (ve `pptxgenjs`, dashboard `tsc`, trend-db `tsx`, video
+    `tsc` sentinel'lerini) ağaçtan çıkarıyor, `--check` kırmızıyı ölçüyor,
+    geri koyuyordu. O pencere boyunca aynı checkout'ta çalışan BAŞKA bir
+    `--check` kırmızı görüyor:
+
+        CHECK FAIL: venv_z3 eksik veya paritesiz   rc=1     (gizliyken)
+        CHECK OK                                     rc=0     (geri konunca)
+
+    Zincir bunu kaçınılmaz kılıyor: `check-unit-tests` (config:1045) ve
+    `check-bootstrap-toolchain` (config:1087) AYNI commit'te `--check`
+    çağırıyor; ölçüldü — batarya `test_dev_bootstrap`'ı 10/10 tek başına
+    geçiyor, pre-commit altında aralıklı KIRMIZI. Hook ayrıca test
+    çıktısını `>/dev/null 2>&1` ile attığı için kırmızı sebepsiz görünüyor.
+
+    Sözleşme SAĞLAMDIR, sadece ölçüm yeri değişti: aynı beş sentinel
+    sahte kökte kurulur, orada gizlenir, orada geri konur. Gerçek ağaç
+    hiç değişmez → yarış imkânsız.
+    """
+
+    # (unit etiketi, fake kök içindeki göreli sentinel yolu, gizleme biçimi)
+    #
+    # Biçim ÖNEMLİ: her `check_` unit'inin kendi sentinel türü var —
+    # `check_pptx` paket DİZİNİNİ çözümlüyor (`require.resolve`), venv ise
+    # `bin/python` YOLUNU `-x` ile yokluyor. Kırık-unit sözleşmesi yalnız
+    # unit'i gerçekten kırdığında kırmızı olur; dosyayı gizlemek paket
+    # dizini durduğu için ölçüm yapmaz (ölçüldü: "CHECK OK", rc=0).
+    UNITS = (
+        ("venv", "_calisma/.venv_z3/bin/python", "file"),
+        ("pptx", "_calisma/pptx/node_modules/pptxgenjs", "dir"),
+        ("dash-tsc", "apps/dashboard-next/node_modules/.bin/tsc", "file"),
+        ("trend-db-tsx", "apps/trend-db/node_modules/.bin/tsx", "file"),
+        ("video-tsc", "_calisma/video/node_modules/.bin/tsc", "file"),
+    )
+
+    def setUp(self):
+        self.root = _fake_bootstrap_root()
+        self.addCleanup(shutil.rmtree, str(self.root), True)
+        self.env = dict(os.environ)
+        self.env["FAKE_LOG"] = str(self.root / "calls.log")
+        self.env["FAKE_FREEZE"] = "\n".join(_script_pins())
+        self.env["FAKE_BROWSER_OK"] = "1"
+        self.env["FAKE_ROOT"] = str(self.root)  # sahte npm/npx sınırı
+        self.env["PATH"] = str(self.root / "bin") + os.pathsep + self.env["PATH"]
+        self.env.pop("LEIBNIZ2_IN_BATTERY", None)
+        pathlib.Path(self.env["FAKE_LOG"]).write_text("", encoding="utf-8")
+
+    def _run_boot(self, *argv):
+        script = str(self.root / "_calisma" / "dev_bootstrap.sh")
+        return _run(["bash", script, *argv], env=self.env)
+
+    def test_every_unit_is_present_in_the_fake_root(self):
+        """Sözleşmenin ölçülebilir olması için: her sentinel GERÇEKTEN var.
+        Yoksa `test_..._fails_check_closed` 'gizledim' sandığı için yeşil
+        kalır ve hiçbir şey ölçmez (fail-closed'un kendisi gibi: ölçülemeyen
+        yeşil sayılmaz)."""
+        for label, rel, _kind in self.UNITS:
+            with self.subTest(unit=label):
+                self.assertTrue((self.root / rel).exists(),
+                                "sahte kökte sentinel yok: " + rel)
+
+    def test_each_broken_unit_fails_check_closed(self):
+        for label, rel, _kind in self.UNITS:
+            with self.subTest(unit=label):
+                target = self.root / rel
+                hidden = self.root / (rel + ".hidden_by_test")
+                target.rename(hidden)
+                try:
+                    r = self._run_boot("--check")
+                    self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+                    self.assertIn("CHECK FAIL", r.stdout)
+                finally:
+                    if hidden.exists():
+                        hidden.rename(target)
+                r2 = self._run_boot("--check")
+                self.assertEqual(r2.returncode, 0,
+                                 "geri-koyma sonrası --check yeşil olmalı: "
+                                 + r2.stdout + r2.stderr)
+
+    def test_hidden_unit_is_provisionable_again(self):
+        """Gizlenen unit `provision_` ile geri gelir: `die` değil, kurulum.
+
+        Bu, `check_`→`provision_` hattının fail-CLOSED ama kendini onarıcı
+        olduğunu ölçer; `npm ci` sahte PATH'ten geldiği için ağa çıkmaz."""
+        target = self.root / "_calisma/video/node_modules/.bin/tsc"
+        hidden = self.root / "_calisma/video/node_modules/.bin/tsc.hidden"
+        target.rename(hidden)
+        try:
+            r = self._run_boot()
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertIn("video: npm ci", r.stdout)
+            self.assertTrue(r.stdout.rstrip().endswith("BOOTSTRAP OK"), r.stdout)
+        finally:
+            if hidden.exists():
+                hidden.rename(target)
+
+    def test_real_tree_is_never_mutated(self):
+        """REGRESYON: bu sınıf gerçek ağaca hiç dokunmaz.
+
+        Kırmızıyı üretmek için ağaçta `*.hidden_by_test` izi bırakmak, testi
+        çalıştıranın değil başkasının `--check`'ini bozuyordu. Tüm yeniden
+        adlandırmalar `self.root` (tempdir) altında olduğu için burada ölçülür.
+        """
+        for label, rel, kind in self.UNITS:
+            with self.subTest(unit=label):
+                self.assertFalse((self.root / (rel + ".hidden_by_test")).exists())
+        # Gerçek kökte hiçbir gizli sentinel olmamalı.
+        for label, abs_rel in (("venv", VENV), ("pptx", PPTX_LIB),
+                               ("dash-tsc", DASH_TSC), ("trend-db-tsx", TREND_DB_TSX),
+                               ("video-tsc", VIDEO_TSC)):
+            with self.subTest(real=abs_rel):
+                self.assertFalse(os.path.exists(abs_rel + ".hidden_by_test"),
+                                 "gerçek ağaçta gizli sentinel kalmış: " + abs_rel)
+                self.assertTrue(os.path.exists(abs_rel), "gerçek ağaç bozuldu")
+
+    # Birim etiketi artık gerçek yolu da yazıyor. Raporun üç tüketicisi var
+    # ve hepsi korunmalı: (1) `check_bootstrap_toolchain.py` UNIT_RE'si
+    # `^CHECK FAIL:\s*(\S+)` ile İLK token'ı, yani unit ADINI, yakalar —
+    # yol parantez içinde geldiği için imza bozulmaz; (2) aynı dosyanın
+    # "unit listesini kapıda kopyalama" testi `CHECK FAIL:\s*<unit>\b`
+    # arar; (3) `test_recovery_command_matches_bootstrap_own_advice` blok
+    # satırının kendi komutunu taşıdığını okur.
+    EXPECTED_PATHS = {
+        "venv_z3": "_calisma/.venv_z3",
+        "pptx": "_calisma/pptx",
+        "docx": "_calisma/docx",
+        "dashboard_next": "apps/dashboard-next",
+        "trend_db": "apps/trend-db",
+        "video": "_calisma/video",
+        "trend_db_codegen": "apps/trend-db/generated",
+        "dashboard_next_build": "apps/dashboard-next/.next",
+    }
+
+    def test_check_fail_line_keeps_unit_name_first(self):
+        """Tuketicinin ayakta kalması: İLK token hâlâ unit adı olmalı.
+
+        `UNIT_RE = ^CHECK FAIL:\\s*(\\S+)` kapının hangi unit'i okuduğunu
+        belirler. Etiket yolu öne aldıysa kapı `pptx (_calisma/pptx)` diye
+        okur ve kullanıcıya yanlış isim raporlar.
+        """
+        # `--check` fail-fast: ilk bozuk unit'te durur. `tsx` sentinel'i
+        # `trend_db` unit'inin parçası olduğu için KIRMIZI unit trend_db'dir
+        # (tsx adı bir alt-sentinel, ayrı unit değil).
+        target = self.root / "apps/trend-db/node_modules/.bin/tsx"
+        target.rename(self.root / "apps/trend-db/node_modules/.bin/tsx.h")
+        try:
+            r = self._run_boot("--check")
+            self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+            line = next(l for l in r.stdout.splitlines() if l.startswith("CHECK FAIL:"))
+            first_token = line.split(":", 1)[1].split()[0]
+            self.assertEqual(first_token, "trend_db",
+                             "ilk token unit adi olmaliydi: " + line)
+            self.assertRegex(line, r"^CHECK FAIL:\s*trend_db\s+\(apps/trend-db\)")
+        finally:
+            hidden = self.root / "apps/trend-db/node_modules/.bin/tsx.h"
+            if hidden.exists():
+                hidden.rename(target)
+
+    def test_check_fail_line_prints_real_path(self):
+        """Etiket artık `ls` ile bakılacak yeri söylüyor."""
+        target = self.root / "_calisma/pptx/node_modules/pptxgenjs"
+        hidden = self.root / "_calisma/pptx/node_modules/pptxgenjs.h"
+        target.rename(hidden)
+        try:
+            r = self._run_boot("--check")
+            self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+            self.assertIn("CHECK FAIL: pptx (_calisma/pptx)", r.stdout)
+        finally:
+            if hidden.exists():
+                hidden.rename(target)
+
+    def test_every_unit_path_is_reachable_in_the_fake_root(self):
+        """Etiket yolları sahte kökte de GERÇEK yol olmalı.
+
+        `unit_path` `$ROOT/` önekini soyuyor; sahte kökte göreli yol
+        (`_calisma/pptx`) aynen görünmeli. Etiket kökten bağımsız bir
+        sabite yaslanırsa bu test kırılır.
+        """
+        for unit, rel in self.EXPECTED_PATHS.items():
+            with self.subTest(unit=unit):
+                self.assertTrue((self.root / rel).exists(),
+                                "etiket yolu sahte kökte yok: " + rel)
+
+    def test_up_to_date_lines_print_real_paths(self):
+        """Kurulum yolunun etiketi de yol yazıyor (tutarlılık)."""
+        r = self._run_boot()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        for unit, rel in self.EXPECTED_PATHS.items():
+            with self.subTest(unit=unit):
+                self.assertIn(f"{unit} ({rel}): up to date", r.stdout)
+
+
+class TestGeneratedArtifactUnits(unittest.TestCase):
+    """`trend_db_codegen` + `dashboard_next_build` unit'leri.
+
+    Ölçülen boşluk (2026-09-28): ikisi de CI'da VAR, scriptte YOKTU. Taze
+    worktree'de bootstrap + --check yeşilken batarya 5/188 kırmızıydı:
+    `prisma generate` 3 testi, `next build` kalan 2'yi düzeltiyor (ölçüldü).
+    Buradaki sözleşme: ikisi de unit, yani --check onları da fail-closed
+    ölçer — "yeşil CHECK OK" artık üretim yapılmamış ağacı sessizce kabul etmez.
+    """
+
+    def setUp(self):
+        self.root = _fake_bootstrap_root()
+        self.addCleanup(shutil.rmtree, str(self.root), True)
+        self.log = str(self.root / "calls.log")
+        self.env = dict(os.environ)
+        self.env["FAKE_LOG"] = self.log
+        self.env["FAKE_FREEZE"] = "\n".join(_script_pins())
+        self.env["PATH"] = str(self.root / "bin") + os.pathsep + self.env["PATH"]
+        self.env.pop("LEIBNIZ2_IN_BATTERY", None)
+        self.env["FAKE_BROWSER_OK"] = "1"      # tarayıcı katmanı yeşil
+        self.env["FAKE_ROOT"] = str(self.root)  # sahte npm/npx sınırı
+        pathlib.Path(self.log).write_text("", encoding="utf-8")
+
+    def _run_boot(self, *argv):
+        script = str(self.root / "_calisma" / "dev_bootstrap.sh")
+        return _run(["bash", script, *argv], env=self.env)
+
+    def _drop_artifact(self, rel):
+        p = self.root / rel
+        if p.is_dir():
+            shutil.rmtree(str(p))
+        elif p.exists():
+            p.unlink()
+
+    def test_check_fails_closed_without_generated_client(self):
+        self._drop_artifact("apps/trend-db/generated")
+        r = self._run_boot("--check")
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("CHECK FAIL: trend_db_codegen", r.stdout)
+
+    def test_check_fails_closed_without_next_build(self):
+        self._drop_artifact("apps/dashboard-next/.next")
+        r = self._run_boot("--check")
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("CHECK FAIL: dashboard_next_build", r.stdout)
+
+    def test_bootstrap_produces_client_and_build_id(self):
+        self._drop_artifact("apps/trend-db/generated")
+        self._drop_artifact("apps/dashboard-next/.next")
+        r = self._run_boot()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertTrue(r.stdout.rstrip().endswith("BOOTSTRAP OK"), r.stdout)
+        calls = _read(self.log)
+        self.assertIn("npx prisma generate", calls)
+        self.assertIn("npm run build", calls)
+        self.assertTrue((self.root / "apps/trend-db/generated/client.ts").is_file())
+        self.assertTrue((self.root / "apps/dashboard-next/.next/BUILD_ID").is_file())
+
+    def test_provisioning_is_idempotent(self):
+        r = self._run_boot()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        pathlib.Path(self.log).write_text("", encoding="utf-8")
+        r2 = self._run_boot()
+        self.assertEqual(r2.returncode, 0, r2.stdout + r2.stderr)
+        self.assertIn("trend_db_codegen (apps/trend-db/generated): up to date",
+                      r2.stdout)
+        self.assertIn("dashboard_next_build (apps/dashboard-next/.next): up to date",
+                      r2.stdout)
+        self.assertEqual(_read(self.log), "", "ikinci koşu hiçbir şey kurmamalı")
+
+    def test_prisma_generate_gets_placeholder_url(self):
+        """`prisma.config.ts` DATABASE_URL'siz generate'ı reddeder; CI'ın
+        kullandığı yer tutucu DSN verilmeli (gerçek kimlik bilgisi değil)."""
+        self._drop_artifact("apps/trend-db/generated")
+        r = self._run_boot()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("prisma generate (kod üretimi", r.stdout)
+
+
+class TestBrowserPinPythonFloor(unittest.TestCase):
+    """BROWSER_PIN'in taşıyıcı yorumlayıcı tabanı (ölçülen ölüm).
+
+    playwright 1.61+ `requires_python >=3.10` istiyor; 3.9'da pip "No matching
+    distribution" der — beş npm kurulumundan SONRA ve sebebi yanlış göstererek.
+    Script bu yüzden tabanı ÖNCEDEN ölçüyor ve reçete veriyor.
+    """
+
+    def setUp(self):
+        self.root = _fake_bootstrap_root()
+        self.addCleanup(shutil.rmtree, str(self.root), True)
+        self.log = str(self.root / "calls.log")
+        self.env = dict(os.environ)
+        self.env["FAKE_LOG"] = self.log
+        self.env["FAKE_FREEZE"] = "\n".join(_script_pins())
+        self.env["PATH"] = str(self.root / "bin") + os.pathsep + self.env["PATH"]
+        self.env.pop("LEIBNIZ2_IN_BATTERY", None)
+        self.env["FAKE_BROWSER_OK"] = "0"      # tarayıcı katmanı eksik → provision
+        self.env["FAKE_ROOT"] = str(self.root)  # sahte npm/npx sınırı
+        pathlib.Path(self.log).write_text("", encoding="utf-8")
+
+    def _run_boot(self, *argv):
+        script = str(self.root / "_calisma" / "dev_bootstrap.sh")
+        return _run(["bash", script, *argv], env=self.env)
+
+    def test_old_interpreter_fails_with_recipe_not_pip_noise(self):
+        self.env["FAKE_PY_VERSION"] = "3.9.6"
+        r = self._run_boot()
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("Python >=3.10", r.stdout + r.stderr)
+        self.assertIn("3.9.6", r.stdout + r.stderr)
+        self.assertIn("LEIBNIZ2_BROWSER_PIN", r.stdout + r.stderr)
+        self.assertNotIn("No matching distribution", r.stdout + r.stderr)
+
+    def test_explicit_pin_override_is_honored_and_loud(self):
+        self.env["FAKE_PY_VERSION"] = "3.9.6"
+        self.env["LEIBNIZ2_BROWSER_PIN"] = OLD_PY_PIN
+        r = self._run_boot()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("UYARI", r.stdout)
+        self.assertIn("pip install --quiet " + OLD_PY_PIN, _read(self.log))
+
+    def test_supported_interpreter_uses_the_pinned_version(self):
+        self.env["FAKE_PY_VERSION"] = "3.11.15"
+        r = self._run_boot()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertNotIn("UYARI", r.stdout)
+        self.assertIn("pip install --quiet " + BROWSER_PIN, _read(self.log))
+
+    def test_recipe_does_not_blame_path_alone(self):
+        """REGRESYON (2026-09-29 taze-worktree kanıtı): mesaj "Çözüm: PATH'te
+        >=3.10 bir python3 kullan" diyordu, ama taban denetimi VENV'in
+        yorumlayıcısına bakıyor ve `venv_z3` aynı çağrıda ÖNCE çalıştığı
+        için hata anında venv çoktan 3.9 ile yaratılmış oluyor. Yani
+        önerilen kurtarma taze makinede ÇALIŞMIYORDU — ölçüldü: aynı hata
+        0 s'de yeniden döndü. Reçete artık (a) ölçümün hangi yorumlayıcıya
+        baktığını, (b) PATH'in tek başına yetmediğini, (c) kopyala-yapıştır
+        kurtarma komutunu taşımalı."""
+        self.env["FAKE_PY_VERSION"] = "3.9.6"
+        r = self._run_boot()
+        out = r.stdout + r.stderr
+        self.assertIn("VENV", out,
+                      "hangi yorumlayıcıya bakıldığı belirtilmeli")
+        self.assertIn("YETMEZ", out,
+                      "PATH'i değiştirmenin tek başına yetmediği söylenmeli")
+        self.assertIn("rm -rf", out,
+                      "kopyala-yapıştır kurtarma komutu taşımalı")
+        self.assertIn("LEIBNIZ2_BROWSER_PIN", out, "3.9 kaçışı korunmalı")
+
+    def test_floor_is_measured_on_the_venv_interpreter(self):
+        """Reçetenin gerekçesi yapısal: taban denetimi `$VENV_PY`'ye bakar.
+        Bu bir gün PATH python3'üne çevrilirse (doğru bir iyileştirme olurdu)
+        mesajın uyarısı yanlışlaşır — ikisi birlikte değişmelidir."""
+        text = _read(SCRIPT)
+        self.assertIn('interp="$VENV_PY"', text,
+                      "taban denetimi venv yorumlayıcısına bakmalı")
+
+    def test_pin_floor_is_declared_next_to_the_pin(self):
+        """Taban sabiti script'te durmalı ve gerekçesi yazılı olmalı: sürüm
+        yükseltilip taban unutulursa (ör. 1.63 → 1.70) aynı sınıf ölüm
+        sessizce geri gelir. Taban bir SÜRÜM değil, taşıyıcı şart olduğu için
+        requirements dosyasında değil burada yaşar."""
+        text = _read(SCRIPT)
+        floor = re.search(r'BROWSER_PIN_MIN_PY="([0-9.]+)"', text)
+        self.assertIsNotNone(floor, "BROWSER_PIN_MIN_PY bulunamadı")
+        self.assertIn("python_floor_ok", text)
+        self.assertIn("requires_python", text, "taban gerekçesi yazılı olmalı")
+
+
+class TestSinglePinSource(unittest.TestCase):
+    """Sürüm sabiti TEK dosyada yaşar: `_calisma/requirements-z3.txt`.
+
+    Ölçülen gerekçe (2026-09-28): sürümler kopyalanmıştı — scriptin PINS
+    dizisi, testin PINS aynası, doğrudan workflow kurulumları ve cache key'leri.
+    Daha kötüsü `verify.yml`'in bir job'ı pre-commit/pyyaml/jsonschema'yı
+    **PİNSİZ** kuruyordu: iki sürüm hattı sessizce birlikte yaşıyordu ve
+    "iki kaynak eşit mi" testi onu görmüyordu. Bu kapı aynı sınıf sızıntının
+    geri dönmesini fail-closed engeller: sürüm bump'ı tek satır olmalı.
+    """
+
+    CONSUMERS = ("_calisma/dev_bootstrap.sh",
+                 ".github/workflows/verify.yml",
+                 "_calisma/CIKTI/test_dev_bootstrap.py",
+                 "README.md",
+                 "docs/FIRST_RUN_TUTORIAL.md",
+                 "docs/READER_TEST_PROTOCOL.md")
+
+    def test_no_version_literal_outside_the_requirements_file(self):
+        leaks = []
+        for rel in self.CONSUMERS:
+            is_test = rel.endswith("test_dev_bootstrap.py")
+            for m in PIN_LITERAL.finditer(_read(os.path.join(ROOT, rel))):
+                if is_test and m.group(0) in ALLOWED_TEST_FIXTURES:
+                    continue
+                leaks.append("%s → %s" % (rel, m.group(0)))
+        self.assertEqual(leaks, [],
+                         "sürüm tek kaynaktan sabitlenmeli: " + "; ".join(leaks))
+
+    def test_requirements_file_is_complete_and_fully_pinned(self):
+        venv, browser = _requirements_sections()
+        self.assertTrue(venv, "[venv] bölümü boş")
+        normalize = lambda pin: re.sub(r"[-_.]+", "-", pin.split("==", 1)[0].lower())
+        self.assertEqual(len(venv), len(set(normalize(pin) for pin in venv)),
+                         "[venv] paketleri yinelenmemeli")
+        for pin in venv:
+            self.assertRegex(pin, r"^[A-Za-z_][A-Za-z0-9_.-]*==[0-9][0-9A-Za-z.]*$",
+                             "pinsiZ satır (sürüm hattı açılır): %r" % pin)
+        self.assertRegex(browser, r"^playwright==[0-9][0-9A-Za-z.]*$", browser)
+
+    def test_ci_installs_and_caches_from_the_requirements_file(self):
+        yml = _read(VERIFY_YML)
+        self.assertNotRegex(yml, r"pip install \S+==",
+                            "CI'da sabitlenmiş kurulum kaldı")
+        self.assertEqual(yml.count("pip install -r _calisma/requirements-z3.txt"), 8,
+                         "tüm kök-ortam CI kurulumları tek kaynaktan olmalı")
+        self.assertEqual(yml.count("hashFiles('_calisma/requirements-z3.txt')"), 2,
+                         "iki cache anahtarı da kaynaktan türemeli")
+
+        lines = yml.splitlines()
+        direct_installs = []
+        managed = {"z3-solver", "pyyaml", "pre-commit", "jsonschema",
+                   "pillow", "playwright"}
+        index = 0
+        while index < len(lines):
+            line = lines[index]
+            index += 1
+            if line.lstrip().startswith("#") or "pip install" not in line:
+                continue
+            command = line.split("pip install", 1)[1].strip()
+            while command.endswith("\\") and index < len(lines):
+                command = command[:-1] + " " + lines[index].strip()
+                index += 1
+            if "-r _calisma/requirements-z3.txt" in command:
+                continue
+            packages = {
+                token.strip("\\\"'").split("==", 1)[0].lower().replace("_", "-")
+                for token in command.split()
+            }
+            if packages & managed:
+                direct_installs.append(line.strip())
+        self.assertEqual(
+            direct_installs, [],
+            "gereksinim dosyasındaki paketler başka bir pip komutunda kuruluyor: %s"
+            % direct_installs)
+
+    def test_every_fixture_exception_is_documented(self):
+        """İzin listesi boş doldurulmasın: her istisna bir gerekçe taşır ve
+        o gerekçe gerçekten dosyada yazılıdır."""
+        text = _read(os.path.join(ROOT, "_calisma", "CIKTI", "test_dev_bootstrap.py"))
+        for pin, why in ALLOWED_TEST_FIXTURES.items():
+            self.assertIn(why, text, "fixture gerekçesi kodda yazılı değil")
+
+    def test_user_docs_reference_pin_source_instead_of_versions(self):
+        for rel in ("README.md", "docs/FIRST_RUN_TUTORIAL.md",
+                    "docs/READER_TEST_PROTOCOL.md"):
+            with self.subTest(file=rel):
+                text = _read(os.path.join(ROOT, rel))
+                self.assertIn("requirements-z3.txt", text,
+                              "%s pin kaynağını göstermeli" % rel)
 
 
 if __name__ == "__main__":

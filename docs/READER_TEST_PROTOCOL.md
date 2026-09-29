@@ -170,7 +170,7 @@ and not drift:
 | Q | Verified against | Result |
 | - | ---------------- | ------ |
 | 1 | `.github/workflows/verify.yml` (`a11y-gate` job) | matches |
-| 2 | `pip install playwright==1.63.0`; no `package.json` | matches (number deliberately absent from the spec) |
+| 2 | `pip install -r _calisma/requirements-z3.txt`; no `package.json` | matches (the browser pin comes from the shared requirements file) |
 | 3 | `a11y_gate_config.json` (`blocking`/`warn`/`incomplete`) | matches |
 | 5 | `axe.min.js.sha256` pin check in `a11y_gate.py` | matches |
 | 6 | ephemeral port + 30 × 1 s `/api/health` poll; body `ok` asserted | matches (key widened to include the body check) |

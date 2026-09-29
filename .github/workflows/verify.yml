@@ -148,26 +148,12 @@ jobs:
       #   test_dryrun_summary.py — publish_wrapper.sh `--dry-run-summary`
       #     regresyon kapısı: gen_dryrun_summary fonksiyonunu gerçek kaynaktan
       #     ayıklayıp örnek logla koşar; markdown yapısını doğrular (OFDLINE).
-      - name: Install jsonschema for unit tests
+      # check-unit-tests kapısının Python bağımlılıkları, bootstrap ve diğer
+      # CI job'larıyla aynı pin kaynağından kurulur.
+      - name: Install pinned Python dependencies for unit tests
         if: always()
         shell: bash
-        run: pip install jsonschema
-
-      # Deck üreticileri (architecture_deepening_deck vb.) PIL import eder;
-      # kurulu değilse testler artık HAS_PIL ile SKIP eder (Unit A kontratı),
-      # ama kapının gerçek üretim yolunu da doğrulayabilmesi için burada kur:
-      - name: Install Pillow for unit tests
-        if: always()
-        shell: bash
-        run: pip install Pillow
-
-      # ci_hygiene_gate.py (K-11c CI-hijyen kapısı) PyYAML ile workflow-matrisini
-      # parse eder; kurulu değilse test_ci_hygiene_gate import-patlar (K-11c
-      # loader-ERROR'u job'u düşürür). Repo-venv'de var — runner'da açık kur:
-      - name: Install PyYAML for unit tests
-        if: always()
-        shell: bash
-        run: pip install pyyaml
+        run: pip install -r _calisma/requirements-z3.txt
 
       - name: Run CIKTI unit tests (test_*.py)
         shell: bash
@@ -251,9 +237,9 @@ jobs:
       # if: always() — advisory pre-commit bölümü (if: always) pre-commit
       # kurulu olmaya bağlı; birim testler düşse bile kurulur, yoksa bölüm
       # gerçek bulgular yerine "command not found" hayaleti üretir.
-      - name: Install pre-commit (advisory pre-commit section)
+      - name: Install pinned Python dependencies (advisory pre-commit section)
         if: always()
-        run: pip install pre-commit
+        run: pip install -r _calisma/requirements-z3.txt
 
       # ─── pre-commit hook ortamlarını önbelleğe al ──────────────────────
       # pre-commit, hook'ları (özellikle verify-delivery-symbolic → z3-solver
@@ -273,9 +259,7 @@ jobs:
       # Konfig şema doğrulaması (jsonschema) — parse/schema hatalarını
       # henüz Z3/Lean kurulumuna girmeden bloke eder (fail-fast).
       - name: Validate config schema (jsonschema)
-        run: |
-          pip install jsonschema
-          python3 _calisma/CIKTI/validate_config_schema.py
+        run: python3 _calisma/CIKTI/validate_config_schema.py
 
       # LaTeX yüzeyi: tracked .tex dosyalarında aktif $$ ve aynı
       # input/include yüzeyinde label'sız cross-reference bulunursa
@@ -367,7 +351,7 @@ jobs:
       # K8: Z3 sembolik ispat. Yerel ispatla aynı sürüm (tekrarlanabilirlik).
       - name: Install Z3 (K8)
         if: always()
-        run: pip install z3-solver==5.1.0.0
+        run: pip install -r _calisma/requirements-z3.txt
 
       # K9: Lean 4 reduct-invariance (elan + stable toolchain). --full
       # --lean-proof'ü içerir; lake-proof job ayrıca bağımsız kapıdır, bu
@@ -1025,8 +1009,8 @@ jobs:
           python-version: '3.12'
 
       # workflow YAML ayrıştırma için (status_checks.py ile aynı bağımlılık).
-      - name: Install PyYAML
-        run: pip install pyyaml
+      - name: Install pinned Python dependencies
+        run: pip install -r _calisma/requirements-z3.txt
 
       # Fail-closed kapı: deprecated node VEYA doğrulanamayan action → exit 1.
       # --out: makine-okur raporu artifact'a yazar (denetim izi).
@@ -2266,8 +2250,8 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Install PyYAML (status_checks.py dependency)
-        run: pip install pyyaml
+      - name: Install pinned Python dependencies (status_checks.py dependency)
+        run: pip install -r _calisma/requirements-z3.txt
 
       - name: Run AŞAMA 0 precheck (publish_precheck.sh)
         continue-on-error: true
@@ -2901,7 +2885,7 @@ jobs:
       # adımlarıyla aynı (tekrarlanabilirlik: sim ile gerçek CI aynı env).
       - name: Install deps (pre-commit + PyYAML + jsonschema + Z3)
         if: always()
-        run: pip install pre-commit pyyaml jsonschema z3-solver==5.1.0.0
+        run: pip install -r _calisma/requirements-z3.txt
 
       - name: Install pdfinfo (poppler-utils) + qpdf (K6-DETERM)
         if: always()
@@ -3136,13 +3120,15 @@ jobs:
           path: run-history/
 
       - name: Install pinned Playwright
-        run: pip install playwright==1.63.0
+        run: pip install -r _calisma/requirements-z3.txt
 
       - name: Cache Playwright browsers
         uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-1.63.0
+          # Cache anahtarı da TEK KAYNAKTAN türer: sürüm bump'ı cache'i de
+          # geçersiz kılar, elle "1.63.0" yazılmış ikinci bir kopya olmaz.
+          key: playwright-${{ hashFiles('_calisma/requirements-z3.txt') }}
 
       - name: Install Chromium
         run: playwright install --with-deps chromium
@@ -3628,13 +3614,15 @@ jobs:
       # sunar, yani smoke'un gördüğü şey bu commit'in kendisidir (taze
       # artefakt yoksa test SKIP değil, açık mesajla düşer).
       - name: Install pinned Playwright
-        run: pip install playwright==1.63.0
+        run: pip install -r _calisma/requirements-z3.txt
 
       - name: Cache Playwright browsers
         uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-1.63.0
+          # Cache anahtarı da TEK KAYNAKTAN türer: sürüm bump'ı cache'i de
+          # geçersiz kılar, elle "1.63.0" yazılmış ikinci bir kopya olmaz.
+          key: playwright-${{ hashFiles('_calisma/requirements-z3.txt') }}
 
       - name: Install Chromium
         run: playwright install --with-deps chromium

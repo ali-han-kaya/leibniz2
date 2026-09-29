@@ -1043,18 +1043,71 @@ repos:
         verbose: true
 
       - id: check-unit-tests
-        name: "Unit tests for new gates (fail-closed manifest)"
+        name: "Unit tests for new gates (fail-closed manifest, incremental)"
         description: >-
           check_unit_tests_hook.sh: önce sync_check_unit_tests.py --check ile
-          manifest↔disk + HOOK_COVERAGE tutarlılığını DOĞRULAR — drift varsa
-          commit BLOKE (remedy: sync --update; hook YAZMAZ — tek yazan hook
-          update-config kalır). Ardından manifest listesindeki HER test
-          dosyasını koşar (fail-closed — herhangi bir başarısızlık commit'i
-          bloke eder). Ortam-bağımlı testler (launchctl/daemon/canlı
-          sunucu/ağ) EXCLUDE setiyle çıkarılır ve CI job'larında ayrı
-          koşulur. Liste tek kaynak: diskteki test_*.py dosyaları;
-          PyYAML/jsonschema bağımlılığı yok.
+          manifest↔disk + HOOK_COVERAGE + glob-kapsam tutarlılığını
+          DOĞRULAR — drift varsa commit BLOKE (remedy: sync --update; hook
+          YAZMAZ — tek yazan hook update-config kalır). Ardından manifest
+          listesindeki testleri koşar (fail-closed — herhangi bir başarısızlık
+          commit'i bloke eder). ARTIRMLI: commit'in DOKUNDUĞU testler koşar
+          (ölçülen boşluk: tam batarya 190 dosya / ~345-370 s idi; tipik
+          commit artık 22-36 test). Seçim `select_affected_tests.py` ile
+          yapılır, kapsam eşlemesi `test_coverage_report.py`'deki TEK
+          kaynaktan gelir: TÜRETİLEN (testin import'ladığı, diskte gerçekten
+          bulunan modüller — sürüklemesi imkânsız) ∪ BİLANEN kaynak
+          glob'ları (import EDİLEMEYEN config/YAML/markdown bağımlılıkları)
+          ∪ ALWAYS_RUN (makine testleri + bağımlılığı ölçülemeyenler, her
+          commit'te koşar). Toplam erişilebilirlik kuralı: her manifest
+          testi ya ALWAYS_RUN'da ya en az bir glob'a sahip OLMAK ZORUNDA;
+          ulaşılamayan test sync --check'te bloklar, "stale" (diskte hiçbir
+          şey tutmayan) glob da bloklar — yeniden adlandırılmış bir gate'in
+          glob'u sessizce ölüp o testi koşmaz hâle getirmesin diye.
+          FAIL-SAFE: seçim üretilemezse TAM BATARYA koşulur; bayraksız elle
+          çağrı da tam bataryadır. `pre-commit run --all-files` girdisinde
+          seçim manifest'in tamamına eşittir, yani CI'daki tam koşum
+          korunur (ayrıca CI'ın fail-closed adımı doğrudan
+          `unittest discover -p "test_*.py"` koşar, bu yoldan geçmez).
+          Ortam-bağımlı testler (launchctl/daemon/canlı sunucu/ağ) EXCLUDE
+          setiyle çıkarılır ve CI job'larında ayrı koşulur. Liste tek
+          kaynak: diskteki test_*.py dosyaları; PyYAML/jsonschema
+          bağımlılığı yok.
         entry: bash _calisma/CIKTI/check_unit_tests_hook.sh
+        language: system
+        # Stage'lenen dosyaları AL — artımlı seçim bunlarla yapılır.
+        # `always_run` her commit'te koşmayı garanti eder (boş stage
+        # durumunda seçim üretilemez; o zaman sarmalayıcı tam bataryaya
+        # düşer). `--all-files` (CI) verildiğinde tüm depo dosyaları
+        # gelir → seçim tam batarya olur.
+        pass_filenames: true
+        always_run: true
+        stages: [pre-commit]
+        verbose: true
+
+      - id: check-bootstrap-toolchain
+        name: "Araç-kümesi tamlığı — eksikse fail-fast blok (fail-closed)"
+        description: >-
+          dev_bootstrap.sh --check'i TEK KAYNAK olarak çağırır ve commit'i
+          araç-kümesi eksikken BLOKE eder. Neden ayrı sarmalayıcı: `--check`
+          zaten fail-closed, ama kapı üç şeyi daha katar — (1) KÖR KAPI
+          rc=2: bootstrap betiği yoksa "araç-kümesi tam" diye PASS üretmek
+          sessiz kapsam kaybıdır, ölçülemeyen yeşil sayılmaz; (2) blok
+          mesajı kopyala-yapıştır kurtarma komutu taşır (`bash
+          _calisma/dev_bootstrap.sh`), kullanıcı "ne yapayım?" diye
+          araştırmaz; (3) yalnız `--check` çağrılır — bayraksız/`--full`
+          çağrı dakikalarca süren kurulumu commit'e gömer. Kapı KURMAZ,
+          yalnız ölçer: `npm ci` + `prisma generate` + `next build` + ~150
+          MB chromium indirmesi bilinçli bir ağ/disk yan etkisidir.
+          Ölçülen boşluk: taze checkout'ta araç-kümesi eksikken commit
+          sessizce geçiyor, hata ancak CI'da ya da çok sonra çıkıyordu.
+          `always_run` BİLEREK: `files:` dar tetikleme olsaydı yalnız
+          dokunulmayan bir dosyaya yapılan commit kapıyı atlatırdı — bu
+          kapının varlık sebebi olan sessiz boşluk. Cost ölçüldü ~1.3 s
+          (9 unit: varlık+pin probe'ları ve tek gerçek chromium açılışı).
+          Test: test_check_bootstrap_toolchain.py (24 sözleşme; hermetik
+          sahte-bootstrap fixture'ları, `--check`-only özyineleme kilidi ve
+          kurtarma komutunun bootstrap'ın kendi komutuyla eşleşmesi).
+        entry: python3 _calisma/CIKTI/check_bootstrap_toolchain.py
         language: system
         pass_filenames: false
         always_run: true

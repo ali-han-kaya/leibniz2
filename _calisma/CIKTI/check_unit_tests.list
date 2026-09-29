@@ -27,6 +27,7 @@ test_check_hook_env_matrix.py
 test_check_hook_unstaged_deps.py
 test_check_latex_surface.py
 test_check_lean_axioms.py
+test_check_bootstrap_toolchain.py
 test_check_lean_statements.py
 test_check_merge_precondition.py
 test_check_mirror_coverage.py
@@ -61,6 +62,7 @@ test_csp_directives.py
 test_dashboard_cls_budget.py
 test_dashboard_k17_exit_sync.py
 test_dashboard_keyboard_nav.py
+test_dashboard_next_battery_smoke.py
 test_dashboard_next_style_gates.py
 test_dashboard_next_ui_contract.py
 test_dashboard_smoke.py
@@ -149,6 +151,7 @@ test_scan_stale_zips.py
 test_sde_texlive_sync.py
 test_security_header_matrix.py
 test_security_headers.py
+test_select_affected_tests.py
 test_server_events.py
 test_setup_branch_protection.py
 test_shuffle_tests.py

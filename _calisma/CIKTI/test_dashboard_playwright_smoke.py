@@ -14,12 +14,19 @@ Also asserts the key DOM panels are present so "renders" is real, not an
 empty page that happened to load without errors.
 """
 
+import datetime
+import json
 import os
 import socket
 import subprocess
 import sys
+import tempfile
+import threading
 import time
 import unittest
+import urllib.request
+from collections import Counter
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 try:
     from playwright.sync_api import sync_playwright
@@ -28,6 +35,37 @@ except ImportError:  # CI runner'da playwright kurulu değilse SKIP (fail değil
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SERVER_SCRIPT = os.path.join(HERE, "preview_server.py")
+
+# Dashboard-next canlı smoke'ları ortak sunucu başlatıcısını kullanır; bu
+# dosyanın mevcut static preview smoke'larıyla birbirine bağımlı değiller.
+sys.path.insert(0, HERE)
+import test_surface_cwv_report as cwv  # noqa: E402
+
+
+def _next_missing_reason():
+    next_bin = os.path.join(cwv.NEXT_DIR, "node_modules", ".bin", "next")
+    if not os.path.isfile(next_bin):
+        return "apps/dashboard-next/node_modules/.bin/next yok"
+    if not os.path.isfile(cwv.NEXT_BUILD_ID):
+        return "apps/dashboard-next/.next/BUILD_ID yok (next build gerekli)"
+    return ""
+
+
+def _chromium_missing_reason():
+    if sync_playwright is None:
+        return "playwright kurulu değil"
+    try:
+        with sync_playwright() as p:
+            executable = p.chromium.executable_path
+    except Exception as exc:  # bozuk/eksik Playwright kurulumu
+        return "Chromium çözülemedi: %s" % exc
+    if not os.path.isfile(executable):
+        return "Chromium indirilmemiş (playwright install chromium)"
+    return ""
+
+
+_NEXT_MISSING = _next_missing_reason()
+_CHROMIUM_MISSING = _chromium_missing_reason()
 
 
 def free_port():
@@ -244,3 +282,207 @@ class DashboardSmokeTest(unittest.TestCase):
         self.assertFalse(erred, "SSE EventSource: onerror fired")
         self.assertTrue(snapshot,
                         "SSE EventSource: snapshot event did not arrive")
+
+
+class _CountingPreviewAPI:
+    """Deterministik dashboard-next upstream'ı ve gerçek HTTP istek sayacı."""
+
+    def __init__(self, rows):
+        start = datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc)
+        self._rows = [{
+            "ts": (start + datetime.timedelta(seconds=i)).isoformat(
+                timespec="seconds").replace("+00:00", "Z"),
+            "p0": 0,
+            "p1": 0,
+            "duration_s": 300.0 + i,
+            "budget_usd": 12.0,
+            "z3_total": 5,
+        } for i in range(rows)]
+        self._hits = Counter()
+        self._lock = threading.Lock()
+        outer = self
+
+        class Handler(BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1"
+
+            def do_GET(self):  # noqa: N802 — stdlib arayüz adı
+                outer.record(self.path)
+                path = self.path.split("?", 1)[0]
+                if path == "/api/trend":
+                    self._send_json({"history": outer.rows()})
+                elif path == "/api/latest":
+                    self._send_json(outer.latest())
+                elif path == "/api/run":
+                    payload = "data: %s\n\n" % json.dumps(outer.latest())
+                    raw = payload.encode("utf-8")
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+                    self.send_header("Cache-Control", "no-store")
+                    self.send_header("Content-Length", str(len(raw)))
+                    self.end_headers()
+                    self.wfile.write(raw)
+                else:
+                    self.send_error(404)
+
+            def _send_json(self, body):
+                raw = json.dumps(body).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(raw)))
+                self.end_headers()
+                self.wfile.write(raw)
+
+            def log_message(self, *_args):
+                pass
+
+        self._server = ThreadingHTTPServer(("127.0.0.1", free_port()), Handler)
+        self._server.daemon_threads = True
+        self.port = self._server.server_address[1]
+        self._thread = threading.Thread(target=self._server.serve_forever,
+                                        daemon=True)
+        self._thread.start()
+
+    @property
+    def url(self):
+        return "http://127.0.0.1:%d" % self.port
+
+    def rows(self):
+        return list(self._rows)
+
+    def latest(self):
+        newest = self._rows[-1] if self._rows else {}
+        return {
+            "verdict": "PASS",
+            "ts": newest.get("ts"),
+            "p0": 0,
+            "p1": 0,
+            "budget_usd": 12.0,
+            "budget_limit": 30.0,
+            "z3_passed": 5,
+            "z3_total": 5,
+        }
+
+    def record(self, path):
+        with self._lock:
+            self._hits[path] += 1
+
+    def reset(self):
+        with self._lock:
+            self._hits.clear()
+
+    def hits(self):
+        with self._lock:
+            return dict(self._hits)
+
+    def stop(self):
+        self._server.shutdown()
+        self._server.server_close()
+        self._thread.join(timeout=3)
+
+
+@unittest.skipIf(_NEXT_MISSING,
+                 "dashboard-next canlı smoke atlandı: " + _NEXT_MISSING)
+class DashboardNextLiveSmokeTest(unittest.TestCase):
+    """Trend penceresi, React cache() ve next/link canlı sözleşmeleri."""
+
+    UPSTREAM_ROWS = 25  # 20'lik pencereyi gerçekten kırpmak için >20
+
+    @classmethod
+    def setUpClass(cls):
+        cls._tmp = tempfile.TemporaryDirectory(prefix="dashboard_next_smoke_")
+        cls.addClassCleanup(cls._tmp.cleanup)
+        cls.upstream = _CountingPreviewAPI(rows=cls.UPSTREAM_ROWS)
+        cls.addClassCleanup(cls.upstream.stop)
+        port = free_port()
+        cls.proc = cwv.spawn_next_server(
+            port, cls.upstream.url, os.path.join(cls._tmp.name, "next_start.log"))
+        cls.addClassCleanup(cwv.terminate, cls.proc)
+        cls.base = "http://127.0.0.1:%d" % port
+
+    def setUp(self):
+        self.upstream.reset()
+
+    def _render(self, path="/"):
+        request = urllib.request.Request(self.base + path, method="GET")
+        with urllib.request.urlopen(request, timeout=30) as response:
+            return response.status, response.read().decode("utf-8")
+
+    def test_react_cache_deduplicates_each_upstream_seam_per_render(self):
+        status, html = self._render("/")
+        self.assertEqual(status, 200)
+        self.assertIn("Son 5 Koşum", html,
+                      "ölçüm gerçek dashboard render'ından gelmeli")
+        hits = self.upstream.hits()
+        self.assertEqual(hits.get("/api/latest"), 1,
+                         "bir render /api/latest'e tam bir kez gitmeli: %s" % hits)
+        self.assertEqual(hits.get("/api/trend?limit=5"), 1,
+                         "bir render /api/trend?limit=5'e tam bir kez gitmeli: %s"
+                         % hits)
+        self.assertEqual(sum(hits.values()), 2,
+                         "dashboard render'ı iki upstream dikişine birer kez "
+                         "gitmeli: %s" % hits)
+
+    def test_react_cache_is_scoped_to_the_http_request(self):
+        self._render("/")
+        self._render("/")
+        hits = self.upstream.hits()
+        self.assertEqual(hits.get("/api/latest"), 2,
+                         "iki ayrı render iki latest isteği yapmalı: %s" % hits)
+        self.assertEqual(hits.get("/api/trend?limit=5"), 2,
+                         "iki ayrı render iki trend isteği yapmalı: %s" % hits)
+
+    @unittest.skipIf(_CHROMIUM_MISSING,
+                     "trend Playwright smoke atlandı: " + _CHROMIUM_MISSING)
+    def test_trend_page_renders_twenty_newest_rows(self):
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            try:
+                page = browser.new_page()
+                # Canlı SSE yan yolu bu iddianın kapsamı değil; yalnızca SSR
+                # penceresini ölç ve sayaçları arka plan polling'inden ayır.
+                page.route("**/api/events**", lambda route: route.abort())
+                page.goto(self.base + "/trend", wait_until="domcontentloaded")
+                page.wait_for_function(
+                    "() => document.querySelectorAll('tbody tr').length > 0",
+                    timeout=20000)
+                stamps = page.eval_on_selector_all(
+                    "tbody tr time", "els => els.map(e => e.getAttribute('datetime'))")
+            finally:
+                browser.close()
+
+        self.assertEqual(len(stamps), 20,
+                         "25 upstream satırından /trend tam 20 satır göstermeli")
+        self.assertEqual(stamps[0], self.upstream.rows()[-1]["ts"],
+                         "ilk satır en yeni koşum olmalı")
+        for newer, older in zip(stamps, stamps[1:]):
+            self.assertGreater(newer, older,
+                               "koşumlar en yeniden eskiye sıralanmalı: %s" % stamps)
+
+    @unittest.skipIf(_CHROMIUM_MISSING,
+                     "soft-nav Playwright smoke atlandı: " + _CHROMIUM_MISSING)
+    def test_next_link_navigation_preserves_document_state(self):
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            try:
+                page = browser.new_page()
+                page.route("**/api/events**", lambda route: route.abort())
+                page.goto(self.base + "/", wait_until="domcontentloaded")
+                page.wait_for_selector('a[href="/trend"]', timeout=20000)
+                page.evaluate("() => { window.__softNavMarker = 42; }")
+                origin_before = page.evaluate("() => performance.timeOrigin")
+
+                page.click('a[href="/trend"]')
+                page.wait_for_function(
+                    "() => location.pathname === '/trend'", timeout=20000)
+                page.wait_for_function(
+                    "() => document.querySelectorAll('tbody tr').length > 0",
+                    timeout=20000)
+                marker = page.evaluate("() => window.__softNavMarker")
+                origin_after = page.evaluate("() => performance.timeOrigin")
+            finally:
+                browser.close()
+
+        self.assertEqual(marker, 42,
+                         "window işareti kayboldu; /trend tam sayfa yüklendi")
+        self.assertEqual(origin_after, origin_before,
+                         "performance.timeOrigin değişti; next/link soft-nav olmadı")

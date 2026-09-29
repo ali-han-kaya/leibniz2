@@ -338,6 +338,45 @@ STUB_TEST_BODY = ("import unittest\n\n\nclass T(unittest.TestCase):\n"
 # bir test dosyasıdır (manifest girişli) — HOOK bloğu + test gövdesi.
 COV_FILE = "test_coverage_report.py"
 BASE = ["test_a.py", "test_b.py", COV_FILE]
+# Senkron kapısı artık ÜÇÜNCÜ hedefi de denetler: artımlı seçimin glob kapsamı
+# (ulaşılamayan test + stale glob). Bu yüzden "senkron" bir sandbox ağacı
+# yalnız manifest + HOOK_COVERAGE değil, kapsam API'sini de sunmalıdır —
+# üçü de drift'se kapı geçer, biri drift'se bloklar. Stok kapsam modülü
+# gerçek modülle AYNI sözleşmeyi sunar; bu sandbox'ta her test ALWAYS_RUN'dır
+# (diskte hiçbir gerçek kaynak dosya yoktur).
+STUB_SCOPE_TAIL = '''
+
+ALWAYS_RUN = frozenset({base!r})
+TEST_SOURCE_GLOBS = {{}}
+
+
+def read_manifest():
+    import os as _os
+    _here = _os.path.dirname(_os.path.abspath(__file__))
+    _out = []
+    with open(_os.path.join(_here, "check_unit_tests.list"), encoding="utf-8") as _fh:
+        for _line in _fh:
+            _line = _line.strip()
+            if _line and not _line.startswith("#"):
+                _out.append(_line)
+    return _out
+
+
+def reachable():
+    _manifest = read_manifest()
+    _always = [t for t in _manifest if t in ALWAYS_RUN]
+    return {{
+        "manifest": _manifest,
+        "always": _always,
+        "reactive": [t for t in _manifest if t not in ALWAYS_RUN],
+        "unreachable": [t for t in _manifest
+                        if t not in ALWAYS_RUN and t not in TEST_SOURCE_GLOBS],
+    }}
+
+
+def stale_globs():
+    return []
+'''.format(base=BASE)
 
 
 class TestHookEntryFailClosed(unittest.TestCase):
@@ -363,6 +402,7 @@ class TestHookEntryFailClosed(unittest.TestCase):
         _write_coverage(cov, coverage)
         with open(cov, "a", encoding="utf-8") as f:
             f.write(STUB_TEST_BODY)
+            f.write(STUB_SCOPE_TAIL)
         s.write_manifest(manifest, os.path.join(cikti, "check_unit_tests.list"))
         return td, cikti
 

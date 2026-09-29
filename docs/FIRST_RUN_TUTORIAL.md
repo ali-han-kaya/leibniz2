@@ -82,7 +82,7 @@ bash _calisma/dev_bootstrap.sh
 Beklenen (ilk koşumda indirir; idempotenttir, kuruluya dokunmaz):
 
 ```
-venv_z3: kuruluyor (pinned: z3-solver==5.1.0.0 PyYAML==6.0.3 pre_commit==4.3.0)
+venv_z3: kuruluyor (pins: <repo>/_calisma/requirements-z3.txt [venv])
 _calisma/pptx: npm ci
 apps/dashboard-next: npm ci
 BOOTSTRAP OK

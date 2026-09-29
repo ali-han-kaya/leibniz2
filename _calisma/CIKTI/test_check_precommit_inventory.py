@@ -40,7 +40,7 @@ REAL_DOC = CIKTI.parent.parent / "skills" / "verify-chain" / "SKILL.md"
 # bilinçli bir karar: config'e EKLERSEN bu sabiti de güncelle (biri eklenip
 # diğeri unutulursa test kırılır — bkz. 2026-09-28: yeni envanter hook'unda
 # 62→63 güncellemesi dört ayrı yerde dağınık haldeydi; tek sabite toplandı).
-REAL_HOOK_COUNT = 63
+REAL_HOOK_COUNT = 64
 
 # Gerçek dosyaların biçimine sadık asgari fixture'lar.
 FIXTURE_CONFIG = """\

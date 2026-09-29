@@ -320,8 +320,55 @@ def _coverage_target(directory, coverage):
     return COVERAGE_FILE
 
 
+def run_check_glob_scope(coverage_mod=None):
+    """Artımlı seçimin kapsam eşlemesi drift'liyse 1 döndür (fail-closed).
+
+    İKİ denetim, ikisi de "sessiz kapsam kaybı"nı hedefler:
+
+      1. ULAŞILAMAZ test: manifest'te olup ne ALWAYS_RUN'da ne de herhangi
+         bir glob'a sahip olan test. Artımlı koşumda HİÇ seçilemez — yani
+         test eklenmiş ama asla koşmuyor olabilir. Bulgu: yeni bir test
+         dosyası eklenip glob'u unutulduğunda oluşur.
+      2. STALE glob: diskte HİÇBİR ŞEYİ tutmayan bildirilmiş glob. Bir
+         gate yeniden adlandırıldığında eski glob sessizce ölür ve o test
+         bir daha seçilmez.
+
+    Kapsam modülü okunamazsa KÖR KAPI: ölçülemeyen bir kapsam "tam" değildir.
+    """
+    if coverage_mod is None:
+        try:
+            sys.path.insert(0, CIKTI)
+            import test_coverage_report as coverage_mod  # noqa: PLC0415
+        except Exception as exc:  # noqa: BLE001 — kör kapı, sebebi yaz
+            print(f"HATA: kapsam eşlemesi modülü içe aktarılamadı ({exc}) — "
+                  "artımlı seçim denetlenemedi, commit bloklanır.")
+            return 1
+    rc = 0
+    try:
+        reach = coverage_mod.reachable()
+        stale = coverage_mod.stale_globs()
+    except Exception as exc:  # noqa: BLE001
+        print(f"HATA: kapsam denetimi çalışmadı ({exc}) — commit bloklanır.")
+        return 1
+    if reach["unreachable"]:
+        print("Artımlı koşumda ULAŞILAMAZ test (ne ALWAYS_RUN'da ne glob'lu): "
+              + ", ".join(reach["unreachable"]))
+        print("  Çözüm: her birini test_coverage_report.py'de ALWAYS_RUN kümesine "
+              "ekle ya da TEST_SOURCE_GLOBS'a kaynak glob'u bildir. "
+              "Sessizce hiç koşmayan test kabul edilmez.")
+        rc = 1
+    for test, pattern in stale:
+        print(f"STALE glob: {test} → {pattern} (diskte hiçbir şeyi tutmuyor; "
+              "yeniden adlandırılmış bağımlılık olabilir)")
+    if stale:
+        print("  Çözüm: test_coverage_report.py'deki TEST_SOURCE_GLOBS "
+              "girdisini güncelle veya testi ALWAYS_RUN'a taşı.")
+        rc = 1
+    return rc
+
+
 def run_check(directory=None, manifest=None, coverage=None):
-    """manifest VEYA HOOK_COVERAGE drift'liyse 1 döndür (fail-closed)."""
+    """manifest VEYA HOOK_COVERAGE VEYA glob-kapsam drift'liyse 1 döndür (fail-closed)."""
     rc = 0
     disc = discover(directory)
     mf = manifest or MANIFEST
@@ -338,6 +385,9 @@ def run_check(directory=None, manifest=None, coverage=None):
     cov = _coverage_target(directory, coverage)
     if cov is not None and run_check_hook_coverage(
             discovered=disc, path=cov, cikti_dir=directory) == 1:
+        rc = 1
+    # Üçüncü hedef: artımlı seçimin glob kapsamı (sessiz kapsam kaybı).
+    if run_check_glob_scope() == 1:
         rc = 1
     return rc
 

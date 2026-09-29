@@ -188,7 +188,8 @@ check-design-tokens                 # dashboard design tokens (fail-closed)
 check-brand-mirrors                 # stripe/linear/primer/vercel mirror drift gates
 check-mirror-bridges                # brand mirror @theme bridges
 extract-unstaged-deps               # extract unstaged dependency findings from hook output
-check-unit-tests                    # battery of unit test files (venv python, manifest-driven)
+check-unit-tests                    # unit tests touched by the commit (venv python, manifest-driven; --all-files = full battery)
+check-bootstrap-toolchain           # dev_bootstrap.sh --check: missing toolset blocks commit (fail-closed)
 check-security-posture              # security headers + CSP + isolation
 audit-octokit-names                 # Octokit method-name audit
 commit-msg-style                    # commit-msg stage: commit title rules (<=72 chars)
@@ -212,7 +213,12 @@ Rules that keep the chain honest:
 - **Only one writing hook** (`update-config` stages the synced config). All
   other gates are read-only: they verify, never modify.
 - **Unit tests run in pre-commit** (`check-unit-tests` + per-gate hooks) so a
-  broken gate blocks the commit, not the CI run.
+  broken gate blocks the commit, not the CI run. The hook runs INCREMENTALLY:
+  it selects the tests that the commit's files can affect (scope map in
+  `test_coverage_report.py`, selector `select_affected_tests.py`) and falls
+  back to the full battery whenever that selection cannot be produced. CI
+  still runs the whole battery twice over: a fail-closed
+  `unittest discover -p "test_*.py"` and the advisory `--all-files` hook run.
 - **Optional tools degrade honestly**: `node` absent → K16 P0 (fail-closed,
   no silent skip); venv python absent → tests SKIP (documented, CI still
   runs the full suite).
