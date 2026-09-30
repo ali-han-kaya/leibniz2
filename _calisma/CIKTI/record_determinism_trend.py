@@ -59,8 +59,18 @@ PLATFORM_SCOPE_CUTOFF = "2026-09-17"
 CONCORDANCE_WINDOW = 5
 
 
-def _read_report(path=REPORT):
-    """Deney raporunu `key=value` satırlarından okur; dosya yoksa None."""
+def _read_report(path=None):
+    """Deney raporunu `key=value` satırlarından okur; dosya yoksa None.
+
+    Varsayılan `REPORT`'u IMPORT anında bağlamak yanlıştı: `main()` ve testler
+    `rdt.REPORT`'u geçici bir dosyaya yönlendirir, ama `def f(path=REPORT)`
+    o anki bağı yakalar — yönlendirme sessizce yok sayılır ve `--update` var
+    olmayan GERÇEK rapora düşüp rc=1 verir (yerelde rapor mevcut olduğu için
+    yeşil, CI'da rapor yok olduğu için kırmızı). Default None → çağrı anında
+    modül seviyesine bakılır.
+    """
+    if path is None:
+        path = REPORT  # noqa
     if not os.path.exists(path):
         return None
     fields = {}
@@ -307,7 +317,7 @@ def main(argv=None):
         parser.error("bir mod gerekli: --update veya --check")
 
     if args.update:
-        report = _read_report()
+        report = _read_report(REPORT)
         if report is None:
             print(f"FAIL: deney raporu yok: {REPORT} — önce deneyi koş "
                   f"(texlive_determinism_hook.sh)", file=sys.stderr)

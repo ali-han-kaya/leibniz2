@@ -46,6 +46,24 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(os.path.dirname(HERE))
 
+NEXT = os.path.join(REPO_ROOT, "apps", "dashboard-next")
+NEXT_BIN = os.path.join(NEXT, "node_modules", ".bin", "next")
+BUILD_ID = os.path.join(NEXT, ".next", "BUILD_ID")
+
+
+def _next_missing():
+    """`next start` için ön koşullar: binary + derlenmiş pano.
+
+    Aynı sözleşme `test_dashboard_next_battery_smoke.py`de ölçülüyor; canlı
+    katmanı olan her suite aynı "eksikse SKIP" kuralını paylaşmalı.
+    """
+    if not os.path.isfile(NEXT_BIN):
+        return "apps/dashboard-next/node_modules yok (npm ci gerekli)"
+    if not os.path.isfile(BUILD_ID):
+        return "apps/dashboard-next/.next derlemesi yok (next build gerekli)"
+    return ""
+
+
 sys.path.insert(0, HERE)
 import test_dashboard_cls_budget as cwv_core  # noqa: E402
 import test_surface_cwv_report as cwv  # noqa: E402
@@ -288,6 +306,13 @@ class _NextPanelE2E(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        # `next start` yalnızca derlenmiş panoyla ayağa kalkar; CI'ın birim test
+        # adımı `npm ci`/`next build` çalıştırmaz. Ön koşul yoksa SKIP —
+        # setUpClass içinde RuntimeError raise etmek testi ERROR yapıyordu
+        # (yani eksik ortam "kapı kırık" gibi görünüyordu).
+        missing = _next_missing()
+        if missing:
+            raise unittest.SkipTest("canlı katman atlandı: %s" % missing)
         cls._tmp = tempfile.mkdtemp(prefix="next_live_")
         cls.addClassCleanup(shutil.rmtree, cls._tmp, True)
         cls.upstream = BroadcastUpstream(rows=cls.UPSTREAM_ROWS)

@@ -66,6 +66,21 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(os.path.dirname(HERE))
 
+NEXT = os.path.join(REPO_ROOT, "apps", "dashboard-next")
+NEXT_BIN = os.path.join(NEXT, "node_modules", ".bin", "next")
+BUILD_ID = os.path.join(NEXT, ".next", "BUILD_ID")
+
+
+def _next_missing():
+    """`next start` ön koşulları — `test_dashboard_next_battery_smoke.py` ile
+    aynı sözleşme (binary + derlenmiş pano); eksikse canlı katman SKIP."""
+    if not os.path.isfile(NEXT_BIN):
+        return "apps/dashboard-next/node_modules yok (npm ci gerekli)"
+    if not os.path.isfile(BUILD_ID):
+        return "apps/dashboard-next/.next derlemesi yok (next build gerekli)"
+    return ""
+
+
 sys.path.insert(0, HERE)
 import test_dashboard_cls_budget as cwv_core  # noqa: E402
 import test_surface_cwv_report as cwv  # noqa: E402
@@ -161,6 +176,12 @@ class RequestDedupTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        # Derlenmiş pano yoksa `next start` ayağa kalkamaz; CI birim test
+        # adımında `next build` koşmadığı için bu katman SKIP olmalı (ERROR
+        # değil — eksik ön koşul, kapı kusuru değil).
+        missing = _next_missing()
+        if missing:
+            raise unittest.SkipTest("canlı katman atlandı: %s" % missing)
         cls._tmp = tempfile.mkdtemp(prefix="next_dedup_")
         cls.addClassCleanup(shutil.rmtree, cls._tmp, True)
         cls.upstream = CountingUpstream()

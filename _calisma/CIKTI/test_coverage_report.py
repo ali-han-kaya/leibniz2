@@ -312,6 +312,7 @@ HOOK_COVERAGE = {
         "test_plist_keepalive_golden.py",
         "test_gen_id_residual_acceptance.py",
         "test_k6_determ_canonical.py",
+        "test_ci_env_independence.py",
     ],
 }
 

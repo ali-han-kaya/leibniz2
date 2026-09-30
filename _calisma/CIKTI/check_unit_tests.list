@@ -47,6 +47,7 @@ test_check_video_render.py
 test_check_video_typecheck.py
 test_check_zip_lineage_drift.py
 test_ci_check_rate.py
+test_ci_env_independence.py
 test_ci_failure_pattern.py
 test_ci_hygiene_gate.py
 test_ci_sidecar_wiring.py

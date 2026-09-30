@@ -845,6 +845,13 @@ class TestBrokenUnitFailsCheckClosedHermetic(unittest.TestCase):
         self.root = _fake_bootstrap_root()
         self.addCleanup(shutil.rmtree, str(self.root), True)
         self.env = _fake_env(self.root)
+        # Gerçek ağacın "kurulum ÖNCESİ" hali. `test_real_tree_is_never_mutated`
+        # değişmezliği snapshot'a göre ölçer; aşağıdaki yorumda neden bu
+        # şekilde kurulduğu açık.
+        self._real_before = {
+            label: os.path.exists(os.path.join(ROOT, rel))
+            for label, rel in self.UNITS
+        }
 
     def _run_boot(self, *argv):
         script = str(self.root / "_calisma" / "dev_bootstrap.sh")
@@ -912,8 +919,17 @@ class TestBrokenUnitFailsCheckClosedHermetic(unittest.TestCase):
             with self.subTest(real=label):
                 self.assertFalse(os.path.exists(abs_rel + ".hidden_by_test"),
                                  "gerçek ağaçta gizli sentinel kalmış: " + abs_rel)
-                self.assertTrue(os.path.exists(abs_rel),
-                                "gerçek ağaç bozuldu: " + abs_rel)
+                # Değişmezlik "var/yok" DEĞİL "DÜZENİ DEĞİŞMEDİ" demektir.
+                # `assertTrue(exists)` yazmak ölçülecek şeyi değil, geliştirici
+                # makinesinin KURULUĞUNU ölçüyordu: CI runner'da hiçbir unit
+                # kurulu değil (venv/node_modules/BUILD_ID üretilmiyor), bu
+                # yüzden test burada 9 unit'in hepsinde kırmızıydı — oysa
+                # sınıfın yaptığı her şey tempdir altında. Snapshot, kurulu
+                # olsun olmasın her iki makinede de aynı şeyi ölçer: kurulum
+                # ÖNCESİ yoksa SONRA da yok olmalı, varsa aynen durmalı.
+                self.assertEqual(os.path.exists(abs_rel),
+                                 self._real_before[label],
+                                 "gerçek ağaç bozuldu: " + abs_rel)
 
     # Birim etiketi artık gerçek yolu da yazıyor. Raporun üç tüketicisi var
     # ve hepsi korunmalı: (1) `check_bootstrap_toolchain.py` UNIT_RE'si

@@ -105,6 +105,8 @@ SERVER_SCRIPT = os.path.join(HERE, "preview_server.py")
 LANDING_DIR = os.path.join(REPO_ROOT, "_calisma", "landing")
 NEXT_DIR = os.path.join(REPO_ROOT, "apps", "dashboard-next")
 NEXT_BUILD_ID = os.path.join(NEXT_DIR, ".next", "BUILD_ID")
+# `history.jsonl` çalışma zamanı verisi (gitignored) — temiz klonda yok.
+HISTORY_JSONL = os.path.join(HERE, "history.jsonl")
 
 # Web Vitals "good" eşikleri (web.dev). CLS eşiği paylaşılan çekirdekten
 # gelir; diğerleri burada sabittir ve env ile geçici override edilebilir.
@@ -706,6 +708,14 @@ class SurfaceCwvReportContractTest(unittest.TestCase):
         try:
             if not os.path.isfile(os.path.join(LANDING_DIR, "landing.html")):
                 self.skipTest("landing.html üretilmemiş")
+            # `history.jsonl` çalışma zamanı verisidir (gitignored) — temiz
+            # klonda ve CI'da YOKTUR. Staging aynada ölçülecek gerçek veri
+            # olmadan kurulursa dashboard "no run yet" iskeleti ölçülür; o
+            # yüzden eksikken SKIP, aynı gerekçe ve aynı mesaj
+            # (`test_video_data_contract.py`).
+            if not os.path.isfile(HISTORY_JSONL):
+                self.skipTest("canlı history.jsonl yok "
+                              "(temiz klon / çalışma verisi dışında)")
             stage_preview_dir(("dashboard", "landing"), tmp)
             for rel in ("preview.html", "preview.js", "landing.html",
                         "landing/assets/P1-a.png"):
