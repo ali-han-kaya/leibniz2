@@ -652,6 +652,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-29 | fix | (video) remotion 4.0.408 → 4.0.530, kritik RCE kapandi | [`9b95723`](https://github.com/ali-han-kaya/leibniz2/commit/9b95723) |
 | 2026-09-29 | feat | (gates) --verify bayrağı ve pin kaynağı sözleşmeleri | [`63e21a9`](https://github.com/ali-han-kaya/leibniz2/commit/63e21a9) |
 | 2026-09-29 | chore | (changelog) 63e21a9 satirini tabloya ekle | [`50d13b6`](https://github.com/ali-han-kaya/leibniz2/commit/50d13b6) |
+| 2026-09-30 | feat | (gates) protection-drift kapısı ve SIGTERM yarışı düzeltmesi | [`b72b303`](https://github.com/ali-han-kaya/leibniz2/commit/b72b303) |
 
 ### Regresyon notları
 

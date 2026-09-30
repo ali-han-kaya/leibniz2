@@ -19,8 +19,10 @@ Davranış:
      denetlenir: '??' (untracked) veya iş-ağacı sütununda 'M' (unstaged /
      staged+unstaged) → uyarı listesine girer; yalnızca staged ('M ') temizdir.
   2. Uyarı varsa net bir blok basılır (advisory).
-  3. Asıl kapı koşulur: verify_delivery.py --dir _calisma/CIKTI (önceki hook
-     entry'siyle birebir aynı komut). Exit kodu korunur.
+  3. Asıl kapı koşulur: verify_delivery.py --dir _calisma/CIKTI
+     --strict-determinism (Faz 4: determinizm referansı /ID-kanonik hash'tir
+     ve kabul defterinde kayıtlı olmalıdır — defter `ID_RESIDUAL_LEDGER` env
+     ile ya da repo/mirror kopyasıyla çözülür). Exit kodu korunur.
 """
 import pathlib
 import subprocess
@@ -34,6 +36,11 @@ import hook_unstaged_deps as hud  # noqa: E402
 # Hook'un test ettiği ve commit'in içeriğini belirleyen bağımlılıklar.
 DEPS = [
     "_calisma/CIKTI/verify_delivery.py",                  # test edilen doğrulayıcı
+    # K6-DETERM /ID-kanonik çekirdeği + kabul defteri (determinizm
+    # referansının TEK kaynağı). İkisi de stage edilmemişse strict kapı
+    # commit edilecek sürümden FARKLI bir referansla koşardı.
+    "_calisma/CIKTI/id_canonical.py",
+    "docs/ID_RESIDUAL_ACCEPTANCE.md",
     "_calisma/CIKTI/verify_delivery.config.json",         # denetlenen config
     "_calisma/CIKTI/verify_delivery.config.schema.json",  # config şeması
     "_calisma/CIKTI/TESLIM_KLASOR_V5_2026-08-17.zip",     # K1 girdisi
@@ -57,10 +64,13 @@ def main(argv=None):
             # Fail-closed: stage edilen sürümle aynı içerik test edilemez.
             return hud.block_strict("verify-delivery", dirty)
         hud.print_warning("verify-delivery", dirty)
-    # Asıl kapı: önceki hook entry'siyle birebir aynı komut.
+    # Asıl kapı: Faz 4'te strict determinizm AÇIK — K6-DETERM teslim PDF'inin
+    # /ID-kanonik hash'ini kabul defterinde (docs/ID_RESIDUAL_ACCEPTANCE.md)
+    # arar. Referans kayıtlı değilse P1 ile bloklar (defter = tek kaynak;
+    # motor geçişi/yeniden paketleme bilinçli defter satırı ister).
     r = subprocess.run(
         [sys.executable, str(CIKTI / "verify_delivery.py"),
-         "--dir", "_calisma/CIKTI"])
+         "--dir", "_calisma/CIKTI", "--strict-determinism"])
     return r.returncode
 
 

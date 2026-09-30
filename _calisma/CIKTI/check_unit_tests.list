@@ -34,6 +34,7 @@ test_check_mirror_coverage.py
 test_check_orchestration_stdin.py
 test_check_precommit_inventory.py
 test_check_precommit_orphans.py
+test_check_prettier_format.py
 test_check_protection_drift.py
 test_check_python3_shell.py
 test_check_repro_manifest_hook.py
@@ -85,6 +86,7 @@ test_gate_scripts_meta_guard.py
 test_gated_schedules.py
 test_gen_ci_trend.py
 test_gen_commit_msg_evidence.py
+test_gen_id_residual_acceptance.py
 test_gen_k_layer.py
 test_gen_m0_live_table.py
 test_gen_precommit_report.py
@@ -98,6 +100,7 @@ test_id_residual_acceptance_doc.py
 test_incidental_banner.py
 test_incremental_doc_sync.py
 test_k13_coverage_sync.py
+test_k6_determ_canonical.py
 test_k9_lean_files_sync.py
 test_k_layer_tokens.py
 test_label_gate_contracts.py
@@ -120,6 +123,7 @@ test_override_trend_badge.py
 test_pdf_repro_findings_deck.py
 test_pdf_source_freshness.py
 test_plist_check_workflow.py
+test_plist_keepalive_golden.py
 test_pptx_export.py
 test_precheck_advisory_contract.py
 test_preview_escaping.py

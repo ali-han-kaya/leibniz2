@@ -43,6 +43,14 @@ def fake_repo(root):
         f.write("x\n")
     with open(os.path.join(root, "docs", "HOOK_ENV_MATRIX.md"), "w", encoding="utf-8") as f:
         f.write("x\n")
+    # Kabul defteri (Faz 4) — sync LEDGER_FILES bloğu bunu MIRROR_DIR'a düz
+    # adla kopyalar; id_canonical.ledger_candidates() mirror rotasında bu
+    # kopyayı çözer. Kapsam tanımı (LEDGER_DOC_REL) beklemeli, yoksa
+    # fail-closed coverage "BEKLENMEYEN/BEKLEYEN: docs/ID_RESIDUAL_ACCEPTANCE.md"
+    # ile kırılır.
+    with open(os.path.join(root, "docs", "ID_RESIDUAL_ACCEPTANCE.md"), "w",
+              encoding="utf-8") as f:
+        f.write("x\n")
     # a11y same-origin axe bundle — sync PREVIEW_FILES ile mirror'a girer
     # (preview_server /vendor/axe.min.js rotası); kapsam tanımı beklemeli,
     # yoksa fail-closed coverage "BEKLENMEYEN" ile kırılır.
@@ -181,6 +189,31 @@ class TestVendorAxeCoverage(unittest.TestCase):
             self.assertIn("_calisma/CIKTI/vendor/axe.min.js", exp)
 
     def test_listing_with_vendor_axe_passes(self):
+        with tempfile.TemporaryDirectory(prefix="cov-") as root:
+            cikti, lean = fake_repo(root)
+            rc = run_main(root, list_output(cikti, lean, root))
+            self.assertEqual(rc, 0)
+
+
+class TestLedgerDocCoverage(unittest.TestCase):
+    """Kabul defteri mirror'da YER ALIR (id_canonical.ledger_candidates()
+    mirror rotasında `<script dizini>/ID_RESIDUAL_ACCEPTANCE.md` fallback'ini
+    çözer) — kapsam tanımı bunu beklemeli; aksi halde fail-closed coverage
+    "BEKLENMEYEN: docs/ID_RESIDUAL_ACCEPTANCE.md" ile kırılır."""
+
+    def test_id_canonical_in_expected_set(self):
+        with tempfile.TemporaryDirectory(prefix="cov-") as root:
+            cikti, lean = fake_repo(root)
+            exp = cmc.expected_repo_files(root, cikti, lean)
+            self.assertIn("_calisma/CIKTI/id_canonical.py", exp)
+
+    def test_ledger_doc_in_expected_set(self):
+        with tempfile.TemporaryDirectory(prefix="cov-") as root:
+            cikti, lean = fake_repo(root)
+            exp = cmc.expected_repo_files(root, cikti, lean)
+            self.assertIn(cmc.LEDGER_DOC_REL, exp)
+
+    def test_listing_with_ledger_passes(self):
         with tempfile.TemporaryDirectory(prefix="cov-") as root:
             cikti, lean = fake_repo(root)
             rc = run_main(root, list_output(cikti, lean, root))

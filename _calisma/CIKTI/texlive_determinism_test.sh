@@ -77,13 +77,16 @@ SDE="${SOURCE_DATE_EPOCH:-0}"
 export SOURCE_DATE_EPOCH="$SDE"
 printf 'pdflatex=%s\ntectonic=%s\nsource_date_epoch=%s\n' "$PDFlatex" "$TECTONIC" "$SDE" >> "$OUT"
 
-# ── Geçiş modu (Faz 0/2 sözleşmesi: docs/TEXLIVE_MIGRATION_PLAN.md) ─────
+# ── Geçiş modu (Faz 0/2 → Faz 4 re-baseline'ı) ──────────────────────────
 # DETERMINISM_PASSES=N: her koşum tam N pdflatex geçişi koşar (çapraz ref/
 # bib çözümü ancak çok geçişte tamamlanır) ve son geçiş logunda 'Rerun to
 # get' KALMADIĞI fail-closed denetlenir — K6 hizalama iddiası ancak o zaman
-# yapılır. Default 1: mevcut tek-geçiş trend/hook sözleşmesi Faz 4'e dek
-# korunur; Makefile.texlive target'ları PASSES=3 ile bu modu sürer.
-PASSES="${DETERMINISM_PASSES:-1}"
+# yapılır. Default **3** (Faz 4 re-baseline'ı, 2026-09-30): trend/hook/kabul
+# referansı artık 3-geçiş ölçümüdür, çünkü tek geçişte çapraz referans ve
+# bibliyografya çözülmemiş kalır ve hizalama iddiası kurulamaz. Tek-geçiş
+# modu env ile hâlâ seçilebilir (DETERMINISM_PASSES=1) — tarihsel karşılaştırma
+# ve hızlı duman koşumu için.
+PASSES="${DETERMINISM_PASSES:-3}"
 case "$PASSES" in ''|*[!0-9]*|0)
   echo "FAIL: DETERMINISM_PASSES pozitif tam sayı olmalı: $PASSES" >&2
   exit 2 ;;

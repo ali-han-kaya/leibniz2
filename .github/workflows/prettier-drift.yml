@@ -1,0 +1,70 @@
+name: prettier-drift
+
+# Haftalık "TÜM takipli JS/TS/JSON prettier uyumlu mu" denetimi (fail-closed).
+#
+# NEDEN AYRI JOB: pre-commit `check-prettier-format` kapısı yalnız STAGE'li
+# dosyaları görür. Hiç dokunulmayan bir dosya biçim-dışı kalsa bile sonsuza
+# dek görünmez kalır — grandfather drift sessizce birikir (ölçüldü
+# 2026-09-30: dokunulmayan 26 takipli dosya biçim-dışı). Bu job tüm takipli
+# yüzeyi tarar, yani borç görünür kalır ve "yeni dokunulan dosya" şartına
+# bağlı olmaktan çıkar.
+#
+# NEDEN `--require-prettier`: bu job'ın tek işi prettier'ı koşturmak.
+# Prettier kurulmazsa `check_prettier_format.py` SKIP ederdi (pre-commit
+# hook'unun ortam-bağımlı sözleşmesi) ve job her hafta YEŞİL görünüp hiçbir
+# şey ölçmezdi — sessiz kanıt kaybı. CI'da rc=2 ile kırmızı döner.
+#
+# Prettier sürümü TEK kaynaktan okunur: `apps/dashboard-next/package-lock.json`
+# içindeki `node_modules/prettier` girdisi. Sürüm burada tekrar yazılmaz —
+# iki kopya olsaydı biri kayar ve CI'nin "uyumlu" dediği dosyaya geliştirici
+# farklı bir prettier'la bakardı.
+
+on:
+  schedule:
+    # Haftalık: Pazartesi 04:07 UTC — determinism-trend 03:17 ve
+    # protection-drift 03:43'ten ayrı dakika (üçü aynı anda yarışmasın).
+    - cron: "7 4 * * 1"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  drift:
+    name: Prettier drift (tüm takipli JS/TS/JSON, haftalık)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      # Yalnız prettier kurulur: tüm dashboard-next ağacını kurmak haftalık
+      # bir biçim denetimi için gereksiz ağırlık olurdu. Sürüm lock'tan
+      # alınır, yani geliştiricinin `npm ci` ile aldığı sürümün AYNISI.
+      - name: Install prettier (locked version)
+        run: |
+          set -o pipefail
+          VER=$(python3 -c "import json; print(json.load(open('apps/dashboard-next/package-lock.json'))['packages']['node_modules/prettier']['version'])")
+          echo "prettier@$VER (kaynak: apps/dashboard-next/package-lock.json)"
+          npm install --no-save --no-audit --no-fund --prefix "${{ runner.temp }}/pw" "prettier@$VER"
+          "${{ runner.temp }}/pw/node_modules/.bin/prettier" --version
+
+      - name: Prettier drift denetimi (tüm takipli yüzey)
+        env:
+          PRETTIER_BIN: ${{ runner.temp }}/pw/node_modules/.bin/prettier
+        run: |
+          python3 _calisma/CIKTI/check_prettier_format.py --all-tracked --require-prettier

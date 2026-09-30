@@ -17,6 +17,7 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
@@ -36,6 +37,52 @@ def _write(path, data):
 def _sha256(path):
     with open(path, "rb") as f:
         return hashlib.sha256(f.read()).hexdigest()
+
+
+class CheckLedgerEntryTests(unittest.TestCase):
+    """repack determinizm kapısı (Faz 4): yeni kanonik hash defterde olmalı.
+
+    Motor geçişi sidecar'ı bilinçli yeniler; referansı (kabul defteri satırı)
+    olmayan kanonik hash yazılırsa strict K6-DETERM ilk koşuda P1 verir —
+    yani repack kanıtsız teslim üretmiş olur. `check_ledger_entry` bu yüzden
+    fail-closed durur. Defter `ID_RESIDUAL_LEDGER` env'i ile izole edilir;
+    okunamayan defter de aynı şekilde fail-closed'dır.
+    """
+
+    TOKEN_IN = "a" * 64
+    TOKEN_OUT = "b" * 64
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.ledger = os.path.join(self._tmp.name, "ID_RESIDUAL_ACCEPTANCE.md")
+        with open(self.ledger, "w", encoding="utf-8") as f:
+            f.write(f"# defter\n{self.TOKEN_IN}  ingiliz_empirizmi_v3.pdf\n")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_true_when_canonical_recorded(self):
+        with mock.patch.dict(os.environ,
+                             {rd.id_canonical.LEDGER_ENV: self.ledger}):
+            ok, detail = rd.check_ledger_entry(self.TOKEN_IN)
+        self.assertTrue(ok)
+        self.assertIn(self.TOKEN_IN[:16], detail)
+
+    def test_false_when_canonical_absent_with_remedy(self):
+        with mock.patch.dict(os.environ,
+                             {rd.id_canonical.LEDGER_ENV: self.ledger}):
+            ok, detail = rd.check_ledger_entry(self.TOKEN_OUT)
+        self.assertFalse(ok)
+        self.assertIn("defterinde yok", detail)
+        self.assertIn("LEDGER=update", detail)  # uygulanabilir remedy
+        self.assertIn(rd.id_canonical.LEDGER_DOC, detail)
+
+    def test_fail_closed_when_ledger_unreadable(self):
+        with mock.patch.object(rd.id_canonical, "ledger_candidates",
+                               return_value=["/nonexistent/defter.md"]):
+            ok, detail = rd.check_ledger_entry(self.TOKEN_IN)
+        self.assertFalse(ok)
+        self.assertIn("okunamadı", detail)
 
 
 class VerifySidecarTests(unittest.TestCase):

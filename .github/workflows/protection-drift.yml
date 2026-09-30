@@ -16,9 +16,15 @@ name: protection-drift
 
 on:
   schedule:
-    # Haftalık: her Pazartesi 03:43 UTC (determinism-trend 03:17'den ayrı
-    # saat — iki scheduled koşum aynı dakikada yarışmasın).
-    - cron: "43 3 * * 1"
+    # Haftalık: her Pazartesi 03:53 UTC. Dakikalar BİLİNÇLİ ayrık:
+    # determinism-trend 03:17, docker-security 03:43, protection-drift 03:53,
+    # prettier-drift 04:07.
+    # Ölçülen düzeltme (2026-09-30): bu job ilk eklendiğinde
+    # docker-security.yml ile AYNI `43 3 * * 1`'i almıştı; iki haftalık
+    # koşum aynı dakikada runner kuyruğunda birbirini geciktirir ve zamanlama
+    # kanıtını bulanıklaştırır. `test_gated_schedules` K7 artık çakışmayı
+    # fail-closed yasaklıyor.
+    - cron: "53 3 * * 1"
   workflow_dispatch: {}
 
 permissions:

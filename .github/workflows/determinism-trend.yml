@@ -58,7 +58,9 @@ jobs:
           sudo apt-get install -y --no-install-recommends texlive-latex-base texlive-latex-recommended cm-super
           pdflatex --version | head -1
 
-      # Deney: iki bağımsız SDE koşumu + kanonik (/ID nötr) karşılaştırma.
+      # Deney: iki bağımsız SDE koşumu (her biri 3 geçiş — Faz 4 default'u;
+      # tek geçişte çapraz ref/bib çözülmez, hizalama iddiası kurulamaz) +
+      # kanonik (/ID nötr) karşılaştırma.
       # env semantiği: TEXLIVE_BIN = bin DİZİNİ, TECTONIC_BIN = ikili YOL.
       - name: Run determinism experiment (two independent SDE runs)
         run: |
@@ -80,8 +82,10 @@ jobs:
           tail -1 docs/determinism_trend/determinism_trend.jsonl
 
       # Trend değişmezleri (fail-closed): tazelik + kaynak-uzlaşma (aynı
-      # platform, değişmemiş kaynak → değişmemiş kanonik hash; ihlal = motor
-      # determinizmi sapması → KIRMIZI) + platform kapsamı (darwin+linux).
+      # platform + AYNI GEÇİŞ MODU, değişmemiş kaynak → değişmemiş kanonik
+      # hash; ihlal = motor determinizmi sapması → KIRMIZI; mod değişimi
+      # bilinçli re-baseline'dır ve nota yazılır) + platform kapsamı
+      # (darwin+linux).
       - name: Validate trend invariants
         run: |
           set -euo pipefail

@@ -46,6 +46,11 @@ LEAN_MIRROR_DIR="${LEAN_MIRROR_DIR:-$HOME/Library/Caches/com.freebuff/lean_reduc
 # Sıra deterministic: her satır bir dosya; önce runtime, sonra zips.
 FILES=(
   "verify_delivery.py|verify_delivery.py"
+  # K6-DETERM /ID-kanonik determinizm çekirdeği — verify_delivery.py bunu
+  # import eder; mirror'da yoksa launchd rotasında K-zinciri IMPORT hatasıyla
+  # düşer (repack_delivery.py + check_zip_lineage_drift.py da aynı modülü
+  # kullanır — tek kaynak).
+  "id_canonical.py|id_canonical.py"
   "check_lean_statements.py|check_lean_statements.py"
   "check_lean_axioms.py|check_lean_axioms.py"
   "verify_delivery.config.json|verify_delivery.config.json"
@@ -124,6 +129,16 @@ FILES=(
 SDE_FILES=(
   "_calisma/sde_experiment/sde_determinism_experiment.py|../sde_experiment/sde_determinism_experiment.py"
   "_calisma/sde_experiment/sde_determinism_output.txt|../sde_experiment/sde_determinism_output.txt"
+)
+
+# Kabul defteri (Faz 4): kaynak repo köküne göre (docs/), dest MIRROR_DIR'a
+# DÜZ adla. Neden: id_canonical.ledger_candidates() TCC-safe mirror rotasında
+# repo kökünü okuyamaz; `<script dizini>/ID_RESIDUAL_ACCEPTANCE.md` fallback'i
+# bu kopyayı çözer. Mirror'da eksik kalırsa strict K6-DETERM + repack
+# determinizm kapısı + K14 sidecar denetimi "defter okunamadı" ile
+# fail-closed düşer (defter = determinizm referansının TEK kaynağı).
+LEDGER_FILES=(
+  "docs/ID_RESIDUAL_ACCEPTANCE.md|ID_RESIDUAL_ACCEPTANCE.md"
 )
 
 # Lean dosyaları: kaynak LEAN_SRC'ye, dest LEAN_MIRROR_DIR'a göre.
@@ -248,6 +263,13 @@ validate_sources() {
       rc=1
     fi
   done < <(printf '%s\n' "${SDE_FILES[@]}")
+  while IFS='|' read -r src dst; do
+    [ -n "$src" ] || continue
+    if [ ! -f "$ROOT/$src" ]; then
+      err "kaynak yok: $ROOT/$src (defter)"
+      rc=1
+    fi
+  done < <(printf '%s\n' "${LEDGER_FILES[@]}")
   return "$rc"
 }
 
@@ -336,6 +358,13 @@ run_sync() {
     [ "$st" = "GÜNCELLENDİ" ] && SYNC_CHANGED=$((SYNC_CHANGED + 1))
     say "$st: $dst (sde)"
   done < <(printf '%s\n' "${SDE_FILES[@]}")
+  while IFS='|' read -r src dst; do
+    [ -n "$src" ] || continue
+    SYNC_TOTAL=$((SYNC_TOTAL + 1))
+    st="$(sync_one "$ROOT/$src" "$MIRROR_DIR/$dst" "$mode")"
+    [ "$st" = "GÜNCELLENDİ" ] && SYNC_CHANGED=$((SYNC_CHANGED + 1))
+    say "$st: $dst (defter)"
+  done < <(printf '%s\n' "${LEDGER_FILES[@]}")
   say "ÖZET: $SYNC_TOTAL dosya, $SYNC_CHANGED güncellendi · git $(git_short)"
 }
 
@@ -387,6 +416,15 @@ run_check() {
       stale=1
     fi
   done < <(printf '%s\n' "${SDE_FILES[@]}")
+  while IFS='|' read -r src dst; do
+    [ -n "$src" ] || continue
+    if same_file "$ROOT/$src" "$MIRROR_DIR/$dst"; then
+      say "GÜNCEL: $dst (defter)"
+    else
+      say "BAYAT/EKSİK: $dst (defter)"
+      stale=1
+    fi
+  done < <(printf '%s\n' "${LEDGER_FILES[@]}")
   return "$stale"
 }
 
@@ -418,6 +456,10 @@ run_list() {
     [ -n "$src" ] || continue
     say "$ROOT/$src -> $PREVIEW_MIRROR/$dst (guide)"
   done < <(printf '%s\n' "${GUIDE_FILES[@]}")
+  while IFS='|' read -r src dst; do
+    [ -n "$src" ] || continue
+    say "$ROOT/$src -> $MIRROR_DIR/$dst (defter)"
+  done < <(printf '%s\n' "${LEDGER_FILES[@]}")
 }
 
 usage() {

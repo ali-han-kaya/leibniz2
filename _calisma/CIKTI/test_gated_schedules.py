@@ -14,7 +14,7 @@ eklerken iki drift riski ölçüldü:
      kurulum satırı yoksa job her hafta SKIP üretir ve kimse fark etmez
      (sessiz kanıt kaybı — cron'un amacıyla çelişir).
 
-Üç kural (fail-closed, offline, stdlib-only):
+Kurallar (fail-closed, offline, stdlib-only):
 
   K1) schedule: içeren her workflow, repo kapı script'lerinden en az birini
       çağırır (GATE_SCRIPTS kaydındaki kalıplardan biri).
@@ -22,6 +22,14 @@ eklerken iki drift riski ölçüldü:
       adımı sayılmaz — action'lar script'i substitute edemez).
   K3) docker_security_smoke.sh çağıran her schedule job'ı, runner'a trivy
       kuran ya da SKIP sözleşmesini uyumlu belgeleyen bir satır taşır.
+  K4) Kayıtlı her kapı script'i, geçtiği scheduled workflow'da `run:`
+      adımında çağrılır (metinde geçmesi yetmez — K2'nin genellemesi).
+  K5) protection-drift job'ı, secret YOKKEN SKIP ettiğini ve okunamazsa
+      KIRMIZI döndüğünü görünür biçimde belgeler.
+  K6) prettier-drift job'ı `--require-prettier` kullanır: kurulmamış bir
+      prettier'la job yeşil görünüp hiçbir şey ölçmemeli.
+  K7) Hiçbir iki scheduled workflow aynı cron'u paylaşmaz (aynı dakikadaki
+      iki haftalık koşum runner kuyruğunda birbirini geciktirir).
 
 OFFLINE, stdlib-only, ~0.02s.
 """
@@ -44,11 +52,16 @@ WORKFLOWS = ROOT / ".github" / "workflows"
 # edilmiyor. Kayda eklemek kapıyı GEVŞETMEZ: K3'ün SKIP-görünürlüğü kuralı
 # burada da geçerli (aşağıdaki test_registry_entries_are_invoked_via_run_not_uses
 # ve test_protection_drift_job_documents_token_skip).
+# check_prettier_format.py (2026-09-30): pre-commit hook'unun TÜM takipli
+# yüzeye genişletilmiş hâli — aynı script hem hook'ta (stage'li dosyalar)
+# hem haftalık cron'da (--all-tracked) koşar. K6, CI'nin SKIP'e düşüp
+# sessizce yeşil görünmesini engeller.
 GATE_SCRIPTS = (
     "docker_security_smoke.sh",
     "texlive_determinism_test.sh",
     "verify_delivery.py",
     "check_protection_drift.py",
+    "check_prettier_format.py",
 )
 
 
@@ -166,6 +179,62 @@ class TestScheduleGateParity(unittest.TestCase):
         self.assertIn("PROTECTION_PAT", text,
                       "protection-drift.yml: okuma yetkisinin hangi secret'tan "
                       "geldiği görünür olmalı")
+
+    def test_no_two_scheduled_workflows_share_a_cron(self):
+        """K7: hiçbir iki scheduled workflow aynı cron'u paylaşmaz.
+
+        Ölçülen vaka (2026-09-30): `protection-drift.yml` ilk eklendiğinde
+        `docker-security.yml` ile AYNI `43 3 * * 1`'i almıştı — hem de
+        kendi yorumunda "determinism-trend 03:17'den ayrı" diyerek. Kısmi
+        kontrol (komşuya bakmak) yeterli değil: çakışma ancak TÜM set
+        karşılaştırılınca görünür. Aynı dakikadaki iki haftalık koşum runner
+        kuyruğunda birbirini geciktirir ve zamanlama kanıtını (trend kaydı)
+        bulanıklaştırır.
+        """
+        seen = {}
+        for wf in scheduled_workflows():
+            text = wf.read_text(encoding="utf-8")
+            # Cron değeri TIRNAK İÇİNDE ve BOŞLUK taşır ("43 3 * * 1"):
+            # `[^\s]+` ile yakalamaya kalkmak hiçbir kayıt bulmaz ve test
+            # vacuous kalır (ölçüldü — aşağıdaki non-vacuity kontrolü bu
+            # yüzden var).
+            for cron in re.findall(r'^\s*-\s*cron:\s*["\']?([^"\']+?)["\']?\s*$',
+                                   text, re.M):
+                with self.subTest(workflow=wf.name, cron=cron):
+                    self.assertNotIn(
+                        cron, seen,
+                        "%s ve %s AYNI cron'u paylaşıyor (%s) — haftalık "
+                        "dakikalar ayrı olmalı"
+                        % (wf.name, seen.get(cron), cron))
+                seen[cron] = wf.name
+        # Non-vacuity: regex kayarsa döngü hiç dönmez ve test yeşil kalırdı.
+        self.assertGreaterEqual(
+            len(seen), 2, "cron taraması hiç kayıt bulamadı — desen bozuk")
+
+    def test_prettier_drift_job_requires_prettier(self):
+        """K6: prettier-drift job'ı `--require-prettier` ile koşmalı.
+
+        `check_prettier_format.py` pre-commit'te ortam-bağımlıdır ve prettier
+        yoksa SKIP eder (rc=0). CI'da aynı semantik job'ı anlamsız kılardı:
+        prettier kurulmadığı her hafta YEŞİL görünüp hiçbir şey ölçmezdi.
+        `--require-prettier` o dalı rc=2'ye çevirir.
+        """
+        text = (WORKFLOWS / "prettier-drift.yml").read_text(encoding="utf-8")
+        bodies = "\n".join(run_bodies(text))
+        self.assertIn(
+            "--all-tracked", bodies,
+            "prettier-drift.yml: job TÜM takipli yüzeyi taramalı "
+            "(`--all-tracked`) — yalnız stage'li/dokunulan dosyaları tarayan "
+            "pre-commit kapısını kopyalamak grandfather drift'i kapatmaz")
+        self.assertIn(
+            "--require-prettier", bodies,
+            "prettier-drift.yml: `--require-prettier` olmadan prettier "
+            "kurulmadığında job rc=0 SKIP ederdi (sessiz kanıt kaybı)")
+        self.assertIn(
+            "package-lock.json", text,
+            "prettier-drift.yml: prettier sürümünün TEK kaynağı "
+            "(package-lock) görünür olmalı — sürüm elle yazılırsa iki kopya "
+            "olur ve biri kayar")
 
 
 class TestRunBodyExtractor(unittest.TestCase):

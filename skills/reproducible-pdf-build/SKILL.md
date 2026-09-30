@@ -153,9 +153,12 @@ exactly the signal you want.
 
 ### Step 4 — Gate fail-closed on the proxy
 
-- Keep strict raw-byte determinism checks OFF by default if the toolchain is
-  known non-deterministic (a strict check would false-positive on every
-  repack). Expose it behind an opt-in flag (e.g. `--strict-determinism`).
+- If the toolchain is known non-deterministic, do not gate on raw bytes:
+  gate the **stable proxy** instead. Canonicalize the residual (e.g. the
+  pdfTeX trailer `/ID`) and require the canonical hash to be *recorded* in an
+  acceptance ledger; then the strict gate is safe to ENABLE (leibniz2 Faz 4
+  turned `--strict-determinism` on in both the pre-commit hook and CI). Keep
+  it opt-in/OFF only while the proxy itself is unstable.
 - Gate on: raw hash sidecar match (P0), manifest integrity, and — for
   build-specific claims — the frozen experiment record.
 - Report drift as informational when it is expected (P0/P1 only when the
@@ -204,7 +207,7 @@ Notes from the field:
 | Symptom | Cause | Fix |
 |---|---|---|
 | Sidecar hash differs after every repack | qpdf non-determinism | Apply reuse rule (regenerate only on raw change) |
-| Strict determinism gate false-positives | Engine non-deterministic | Keep `--strict-determinism` OFF until SOURCE_DATE_EPOCH migration |
+| Strict determinism gate false-positives | Gate is on an unstable proxy | Gate the canonical `/ID`-neutral hash + acceptance ledger (not metadata-stripped bytes); then enable strict mode |
 | Frozen record stale after rebuild | PDF recompiled | Regenerate record, review diff, commit as new frozen version |
 | `qpdf` not installed in CI | Optional layer | Return `(raw, None)` and skip — never fail on absent optional tool |
 

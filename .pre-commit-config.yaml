@@ -771,9 +771,12 @@ repos:
         description: >-
           texlive_determinism_test.sh — ingiliz_empirizmi_v3.tex üzerinde
           ÖNCE (tectonic, tek derleme) / SONRA (TeXLive + SOURCE_DATE_EPOCH,
-          2 bağımsız derleme) hash karşılaştırması. SONRA'nın iki run'ı
+          2 bağımsız derleme × 3 geçiş — default PASSES=3, Faz 4 re-baseline'ı)
+          hash karşılaştırması. SONRA'nın iki run'ı
           byte-farklıysa deney exit 1 → commit bloke (fail-closed: göç
-          determinism getirmedi). Rapor logs/texlive_determinism_report.txt'e
+          determinism getirmedi). Çok-geçişte son log'da 'Rerun to get'
+          kalırsa da FAIL (hizalama iddiası üretilemez); kalıntı yalnız
+          /ID ise kanonik karşılaştırma PASS verir. Rapor logs/texlive_determinism_report.txt'e
           yazılır (precommit-logs artifact'ı bu dizini bütünüyle yükler) ve
           aynı kanıt stdout'a da basılır — bulgu ne artifact ne log'da kaybolur.
           tectonic + TeXLive pdflatex kurulu DEĞİLSE SKIP (exit 0) — kapı

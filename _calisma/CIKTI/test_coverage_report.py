@@ -308,6 +308,10 @@ HOOK_COVERAGE = {
         "test_dashboard_next_battery_smoke.py",
         "test_trend_record_pr_contract.py",
         "test_check_protection_drift.py",
+        "test_check_prettier_format.py",
+        "test_plist_keepalive_golden.py",
+        "test_gen_id_residual_acceptance.py",
+        "test_k6_determ_canonical.py",
     ],
 }
 
@@ -680,7 +684,14 @@ TEST_SOURCE_GLOBS = {
     "test_texlive_repro_documented.py": ["*texlive_determinism_hook.sh", "*texlive_determinism_test.sh",
                                          ".pre-commit-config.yaml", "*REPRODUCIBILITY.md"],
     "test_makefile_texlive.py": ["docs/Makefile.texlive", "docs/Makefile.tectonic",
-                                 "docs/ID_RESIDUAL_ACCEPTANCE.md"],
+                                 "docs/ID_RESIDUAL_ACCEPTANCE.md",
+                                 "*gen_id_residual_acceptance.py"],
+    # K6-DETERM (Faz 4): strict kapı /ID-kanonik hash'e + kabul defterine
+    # bağlı. Test verify_delivery.py'nin yeni yardımcılarını (canonical_pdf_sha256,
+    # id_residual_ledger_tokens, k6_determ_verdict) ve kaynak sözleşmesini
+    # denetler; defter (referans kaydı) değişince de seçilmelidir.
+    "test_k6_determ_canonical.py": ["*verify_delivery.py",
+                                    "docs/ID_RESIDUAL_ACCEPTANCE.md"],
 
     # ── docker ──
     "test_docker_security_smoke.py": ["*docker_security_smoke.sh", "Dockerfile"],
@@ -696,6 +707,12 @@ TEST_SOURCE_GLOBS = {
                                        "_calisma/CIKTI/ia_ol_fallback_evidence.py",
                                        ".pre-commit-config.yaml"],
     "test_update_preview_sync_server.py": ["*update_preview.sh"],
+    # keepalive profil mimarisi altın-dosya testi: update_preview.sh'in
+    # PLIST_PROFILES son kolonunu (true/false) render edip üretilen plist
+    # GÖVDELERİNİ commit'li plist-golden/ ile karşılaştırır — drift kapısının
+    # (check_plist_drift.py, advisory) fail-closed birim karşılığı. Bu yüzden
+    # hem şablon kaynağı hem golden dizini izlenir.
+    "test_plist_keepalive_golden.py": ["*update_preview.sh", "*plist-golden/*"],
     "test_verify_checks.py": ["*verify_checks.sh"],
 
     # ── üretici ↔ doküman sözleşmeleri ──
@@ -705,6 +722,11 @@ TEST_SOURCE_GLOBS = {
                                             "docs/SKILL_SURFACE_INVENTORY.md",
                                             "findings.md", "*skill_surfaces.list"],
     "test_id_residual_acceptance_doc.py": ["docs/ID_RESIDUAL_ACCEPTANCE.md"],
+    # Faz 3 kabul üreticisi: kanıt (determinism raporu) → defter satırı.
+    # Üreticiyi, kabul raporunu ve Makefile'ın accept bağını izler.
+    "test_gen_id_residual_acceptance.py": ["*gen_id_residual_acceptance.py",
+                                           "docs/ID_RESIDUAL_ACCEPTANCE.md",
+                                           "docs/Makefile.texlive"],
     "test_duration_pct_config.py": ["*verify_delivery.config.json"],
 
     # ── trend-db ──

@@ -34,11 +34,15 @@ class TestDocumentedTexliveRepro(unittest.TestCase):
             tools = root / "tools"
             tools.mkdir()
             pdf = b"deterministic-pdf"
+            # Gerçek motor her geçişte bir .log bırakır; çok-geçiş
+            # varsayılanında (Faz 4) script son geçiş logunda 'Rerun to get'
+            # KALMADIĞINI denetler — stub bunu taklit etmeli.
             stub = (
                 "#!/bin/sh\n"
                 "for arg in \"$@\"; do case \"$arg\" in *.tex) src=\"$arg\";; esac; done\n"
                 "out=$(basename -- \"${src:-sample.tex}\" .tex).pdf; "
                 "printf 'deterministic-pdf' > \"$out\"\n"
+                "printf 'no rerun needed\\n' > \"${out%.pdf}.log\"\n"
             )
             for name in ("tectonic", "pdflatex"):
                 path = tools / name
@@ -80,11 +84,14 @@ class TestTexliveReportPersistence(unittest.TestCase):
     def _stub_tools(self, td):
         tools = Path(td) / "tools"
         tools.mkdir()
+        # .log: çok-geçiş modunun (default) 'son geçiş logu' denetimi için;
+        # gerçek pdflatex de her geçişte log yazar.
         stub = (
             "#!/bin/sh\n"
             "for arg in \"$@\"; do case \"$arg\" in *.tex) src=\"$arg\";; esac; done\n"
             "out=$(basename -- \"${src:-sample.tex}\" .tex).pdf; "
             "printf 'deterministic-pdf' > \"$out\"\n"
+            "printf 'no rerun needed\\n' > \"${out%.pdf}.log\"\n"
         )
         for name in ("tectonic", "pdflatex"):
             path = tools / name

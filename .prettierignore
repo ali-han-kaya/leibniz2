@@ -1,0 +1,21 @@
+# .prettierignore — Prettier'ın BİÇİMLENDİRMEDİĞİ takipli yüzey.
+#
+# NEDEN VAR: pre-commit `check-prettier-format` kapısı yalnız STAGE'li
+# js/jsx/ts/tsx/json dosyalarını görür. Hiç dokunulmayan bir dosya
+# biçim-dışı kalsa bile sonsuza dek görünmez kalır — drift sessizce
+# birikir. Haftalık `.github/workflows/prettier-drift.yml` job'ı tüm
+# takipli yüzeyi tarar; bu dosya o taramanın muafiyet listesidir.
+#
+# KURAL — buraya yalnız biçimlendirilmesi YANLIŞ olan dosya girer:
+#   * üçüncü-taraf minified paketler (Prettier'ın amacı onları düzeltmek
+#     değil; yeniden üretimde değişiklik yok olur),
+#   * bütünlüğü hash ile pinlenmiş artefaktlar (biçimlendirme hash'i
+#     değiştirir → pin kırılır).
+# "Kırmızıyı azaltmak" veya "gürültü çok" GEREKÇE DEĞİLDİR: elle yazılmış
+# biçim-dışı dosya borçtur ve görünür kalmalıdır.
+
+# Üçüncü-taraf minified a11y motoru (553 KB); sha256 sidecar'ı ile pinli
+# (axe.min.js.sha256) ve `a11y_gate.py` onu bu pinle doğrular. Bu dosyayı
+# biçimlendirmek vendor bütünlüğünü bozar — yani muafiyet tercih değil,
+# repo'nun kendi sözleşmesinin gereği.
+_calisma/CIKTI/vendor/axe.min.js

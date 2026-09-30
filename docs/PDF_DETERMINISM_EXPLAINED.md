@@ -34,6 +34,8 @@ noktadan kırdı (hepsi `docs/ID_RESIDUAL_ACCEPTANCE.md` §2 ve
 | pdfTeX, 2 bağımsız koşum (SDE=0) | ham hash `da868c13…` ↔ `014bed9a…` | Tek fark trailer'daki `/ID [<32-hex> <32-hex>]` satırı |
 | tectonic (SDE'siz, oturumlar arası) | `4ad65b9b…` → `6cfc6c0a…` | SDE verilmezse motor güncel zamanı gömer |
 | qpdf `--remove-metadata` (aynı girdi, 3 koşum) | `b090ac01…` / `429984da…` / `509a47a6…` | "Metadata'yı soyup hash'le" katmanının kendisi kararsız |
+| qpdf `--remove-metadata` (teslim PDF'i, 2026-09-30 yeniden ölçüm) | `38fc668c…` / `747334c4…` / `0de3124d…` (+ `verify_delivery.py` koşumunda `de8be5a0…`) | Aynı bulgu: araç kendi `/ID`'sini rastgele üretir — her çağrı yeni hash |
+| pdfTeX `/ID`-kanonik hash (teslim PDF'i, 2026-09-30) | `d4f67e39…` ×3 birebir aynı | Referans olarak KARARLI; K6-DETERM strict bağlaması buna dayanır |
 
 Üçüncü satır tasarımı en çok etkileyenidir: eğer kararlı bir dolaylı gösterge
 aranırken kullanılan araç kendisi kararsızsa, o araç **referans** olamaz. Bu
@@ -160,8 +162,17 @@ tutulur:
 | Değişmez | Neyi korur |
 |---|---|
 | **Gençlik** — son kayıt < 7 gün | Kanıt bayatlamasın: koşum atlanırsa "yeşil" görüntü kanıtsız kalır |
-| **Uzlaşma** — aynı kaynak + aynı platform → aynı hash'ler | Sessiz motor/ortam sapması: kaynak değişmediyse hash de değişmemeli |
+| **Uzlaşma** — aynı kaynak + aynı platform + aynı **geçiş modu** → aynı hash'ler | Sessiz motor/ortam sapması: kaynak değişmediyse hash de değişmemeli |
 | **Platform kapsamı** — iki platformdan kayıt | Karşılaştırılabilir bağlam var olsun; tek platformda kıyaslanamaz |
+
+Geçiş modu (`passes`) kapsaması Faz 4 re-baseline'ıyla geldi: deney default'u
+tek geçişten **3 geçişe** çevrildi (çapraz referans/bibliyografya ancak çok
+geçişte çözülür) ve iki modun kanonik hash'leri tanım gereği farklıdır. Aynı
+kaynağı 1-geçiş ve 3-geçiş ile ölçmek **sahte ihlal** üretirdi; bu yüzden
+uzlaşma yalnız aynı mod içinde karşılaştırılır, mod değişimi bilgilendirici
+not olarak yazılır (`--check` çıktısı: "geçiş modu değişti 1 → 3 … bilinçli
+re-baseline"). Aynı mod içindeki sapma yakalanmaya devam eder; çok-geçiş
+ölçümü `rerun_left=0 ×2` kanıtı olmadan kaydedilmez (fail-closed).
 
 Kayıtlar asla yeniden yazılmaz (append-only); güncellik `source_mtime` +
 `source_sha256` ile izlenir. Böylece sapma, sürüm çıkışında değil **ilk
@@ -189,7 +200,7 @@ haftada** görünür.
 |---|---|
 | Ham bayt eşitliğini referans yapmak | pdfTeX `/ID`'si yüzünden her repack'te kırmızı olur; sinyal gürültüye boğulur |
 | Karşılaştırmayı qpdf'e devretmek (`--static-id`, `--remove-metadata`) | Biri kalıntıyı gidermiyor, diğeri kendisi kararsız (§2) |
-| Strict determinizm kapısını varsayılan açmak | Bilinen-kararsız zincirde her repack'te yanlış-pozitif; bu yüzden opt-in (`--strict-determinism`) |
+| Strict determinizm kapısını varsayılan açmak | İtiraz Faz 4 (2026-09-30) ile kalktı: strict mod `/ID`-kanonik hash'e + kabul defterine bağlandı (yanlış-pozitif üreten metadata-stripped karşılaştırması artık P1 nedeni değil), bu yüzden bayrak pre-commit hook'u + CI `--full` adımında **ETKİN** koşar; MANIFEST V5k notu tarihsel kayıttır |
 | Çapraz-platform/çapraz-motor eşitliği zorunlu tutmak | Ölçüm bunu desteklemiyor; "ölçmeden varsayma" ihlali olurdu |
 | Motor değişiminde defter satırını güncellemek | Kanıt kaydını iddiaya çevirir; geçmiş bağlam kaybolur |
 | Engine'i değiştirip kanonik hash'i "yeni baseline" ilan etmek | Tam da fark edilmesi gereken sessiz kaymayı meşrulaştırır |
@@ -211,6 +222,7 @@ haftada** görünür.
 
 | Parça | Yer |
 |---|---|
+| Kanonik `/ID`-nötr hash + kabul defteri çözümlemesi (ortak çekirdek) | `_calisma/CIKTI/id_canonical.py` |
 | Kanonik `/ID`-nötr hash (pdfTeX) | `_calisma/CIKTI/texlive_determinism_test.sh` (`canonical_sha`) |
 | Kanonik `/ID`-nötr hash (canvas) | `_calisma/CIKTI/canvas_determinism_test.sh` |
 | SDE varsayılanı (`git log -1 --format=%ct`) | `docs/Makefile.texlive`, `docs/Makefile.tectonic` |

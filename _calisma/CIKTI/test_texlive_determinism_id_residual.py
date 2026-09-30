@@ -9,13 +9,13 @@ deterministik doğrular (gerçek TeXLive derlemesi yapmaz):
      residual=/ID, kanonik hash'ler EŞİT raporlanır.
   2) İçerik gerçekten farklıysa (canary bayt) → verdict=FAIL, exit 1
      (fail-closed: kanonik /ID nötrleme hiçbir içerik farkını gizlemez).
-  3) Hash'ler baştan eşitse → residual=none (hızlı yol).
-  4) 3-geçiş modu (DETERMINISM_PASSES — Faz 0/2 sözleşmesi): her koşum tam
+  3) Hash'ler baştan eşitse → residual=none (hızlı yol).  4) 3-geçiş modu (DETERMINISM_PASSES — Faz 0/2 sözleşmesi; Faz 4
+     re-baseline'ı ile DEFAULT): her koşum tam
      N geçiş koşar (stub sayaç N×2 çağrıyı kanıtlar), rapor passes=N taşır
      ve rerun_left=0 ×2 yazar; son geçiş logunda 'Rerun to get' kalan
      multi-pass koşum fail-closed FAIL üretir (K6 hizalama iddiası ancak
-     Rerun=0 ile yapılır). Default 1 kalır — trend/hook sözleşmesi Faz 4'e
-     dek korunur.
+     Rerun=0 ile yapılır). Default 3'tür (Faz 4 re-baseline'ı, 2026-09-30);
+     tek-geçiş modu DETERMINISM_PASSES=1 ile seçilir.
   5) SOURCE_DATE_EPOCH HER İKİ motora da export edilmeli (SDE-setken ölen
      stub → fail-closed, PASS yazılmaz).
 
@@ -122,18 +122,30 @@ class TestTexliveDeterminismIdResidual(unittest.TestCase):
                 n = -1
             return rc, report, n
 
-    def test_id_only_residual_is_reported_and_passes(self):
-        # Default (tek-geçiş): iki koşum içerik aynı, /ID farklı → residual=/ID.
+    def test_default_mode_is_three_passes(self):
+        # Faz 4 re-baseline'ı: varsayılan mod 3 geçiştir (env verilmezse).
+        # 3 geçiş × 2 bağımsız koşum = 6 pdflatex çağrısı; rapor passes=3.
         rc, report, n = self._run_with_counter(_stub_pdflatex("fresh-id", "x", "x"))
         self.assertEqual(rc, 0, report)
-        self.assertEqual(n, 2, "default mod 2 bağımsız tek-geçiş koşumu (Faz 4'e dek)")
+        self.assertEqual(n, 6, "default 3 geçiş × 2 bağımsız koşum")
+        self.assertIn("passes=3", report)
         self.assertIn("residual=/ID", report)
         self.assertIn("verdict=PASS", report)
-        self.assertIn("passes=1", report)
+        self.assertIn("texlive_run1_rerun_left=0", report)
+        self.assertIn("texlive_run2_rerun_left=0", report)
         lines = dict(ln.split("=", 1) for ln in report.splitlines() if "=" in ln)
         self.assertEqual(lines["texlive_canonical_run1_sha256"],
                          lines["texlive_canonical_run2_sha256"],
                          "kanonik hash'ler /ID nötrlenince eşit olmalı")
+
+    def test_one_pass_mode_is_env_selectable(self):
+        # Tek-geçiş modu kaldırılmadı: DETERMINISM_PASSES=1 → 2 çağrı,
+        # passes=1, rerun denetimi YOK (tek geçiş hizalama iddiası üretmez).
+        rc, report, n = self._run_with_counter(_stub_pdflatex("fresh-id"), passes=1)
+        self.assertEqual(rc, 0, report)
+        self.assertEqual(n, 2, "1 geçiş × 2 bağımsız koşum")
+        self.assertIn("passes=1", report)
+        self.assertNotIn("texlive_run1_rerun_left", report)
 
     def test_three_pass_contract_runs_each_run_three_times(self):
         # Faz 0/2: DETERMINISM_PASSES=3 → her koşum 3 geçiş (sayaç 6), rapor

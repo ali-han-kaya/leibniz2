@@ -4,8 +4,10 @@
 #
 # texlive_determinism_test.sh'i koşar: ingiliz_empirizmi_v3.tex üzerinde
 # ÖNCE (tectonic, tek derleme) / SONRA (TeXLive + SOURCE_DATE_EPOCH, 2
-# bağımsız derleme) hash karşılaştırması. Sonra'nın iki run'ı içerik
-# düzeyinde farklıysa deney exit 1 döner → commit BLOKE. Bilinen istisna:
+# bağımsız derleme × 3 geçiş — Faz 4 re-baseline'ı) hash karşılaştırması.
+# Sonra'nın iki run'ı içerik düzeyinde farklıysa deney exit 1 döner → commit
+# BLOKE; çok-geçişte son log'da 'Rerun to get' kalırsa da FAIL (hizalama
+# iddiası üretilemez). Bilinen istisna:
 # pdfTeX SDE+FORCE_SOURCE_DATE ile bile her koşumda RASTGELE trailer /ID
 # üretir; test betiği kalıntının yalnız /ID olduğunu kanonik (/ID nötrlenmiş
 # hash) karşılaştırmayla KANITLAR ve residual=/ID olarak raporlar — bu

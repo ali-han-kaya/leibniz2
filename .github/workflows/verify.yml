@@ -377,6 +377,10 @@ jobs:
       # `pipefail` + `tee`: çıktı hem log'a hem dosyaya yazılır, ama exit kodu
       # python'dan gelir (boru, fail-closed kapıyı gizleyemez).
       # --full: K1-K7 + K8 (Z3) + K9 (Lean) + CrossRef/SEP/OpenLibrary + bütçe.
+      # --strict-determinism (Faz 4): K6-DETERM referansı /ID-kanonik hash'tir
+      # ve kabul defterinde (docs/ID_RESIDUAL_ACCEPTANCE.md) KAYITLI olmalıdır —
+      # motor geçişi/yeniden paketleme bilinçli defter satırı ister; kayıtsız
+      # kanonik P1 ile bloklar (strict referanssız geçmez).
       # --budget-out: bütçe sonucunu ayrı JSON'a yazar (budget job'u tüketir).
       # --refs-out: çevrimiçi referans denetim sonuçlarını VERSION JSON olarak
       # yazar (her run'da kaç referansın çevrimiçi doğrulandığını izlemek için).
@@ -392,6 +396,7 @@ jobs:
         run: |
           set -o pipefail
           python3 _calisma/CIKTI/verify_delivery.py --dir _calisma/CIKTI --full \
+            --strict-determinism \
             --budget-out budget_verify.json \
             --config-out effective_config.json \
             --refs-out references_online.json \

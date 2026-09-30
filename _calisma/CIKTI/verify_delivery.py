@@ -157,6 +157,7 @@ import classify_lean_error as _cle  # noqa: E402
 import github_scripts_battery as _battery  # noqa: E402
 import check_lean_axioms as _lean_axioms  # noqa: E402
 import check_lean_statements as _lean_statements  # noqa: E402
+import id_canonical as _idc  # noqa: E402  (K6-DETERM tek kaynak)
 
 _LAUNCHD_NODE_PATHS = _battery.NODE_KNOWN_PATHS
 _LAUNCHD_PDFINFO_PATHS = _battery.PDFINFO_KNOWN_PATHS
@@ -177,6 +178,12 @@ EXPECTED_PAGES = 33
 DEFAULT_BUDGET_RATIOS = {"text": 3, "pdf": 8, "archive": 12, "binary": 20}
 PDF_METADATA_SIDECAR = "ingiliz_empirizmi_v3.pdf.metadata.sha256"
 PDF_RAW_SIDECAR = "ingiliz_empirizmi_v3.pdf.sha256"
+# K6-DETERM (Faz 4): determinizm referansı /ID-kanonik hash'tir; strict modda
+# bu hash kabul defterinde kayıtlı olmalıdır (motor geçişi/yeniden paketleme
+# bilinçli defter satırı ister). Normalizasyon + defter çözümlemesi TEK
+# KAYNAK: id_canonical.py (repack_delivery.py ve check_zip_lineage_drift.py
+# aynı modülü kullanır).
+ID_RESIDUAL_LEDGER_DOC = _idc.LEDGER_DOC
 SYMBOLIC_PROOF_SCRIPT = "symbolic_proof_z3.py"
 LEAN_PROOF_SCRIPT = "../lean_reduct/ReductInvariance.lean"
 # K9 statement gate canonical sourceları (MAP.md yalnız legacy Z3 eşlemesidir).
@@ -1781,10 +1788,84 @@ def check_pdf_skill_reuse(add):
     return True, detail
 
 
+def canonical_pdf_sha256(pdf_path):
+    """PDF'in `/ID`-nötrlenmiş SHA-256'si — determinizm REFERANSI (Faz 4).
+
+    Uygulama TEK KAYNAKta: `id_canonical.py` (repack + K14 kapısı da aynı
+    normalizasyonu kullanır). pdfTeX SOURCE_DATE_EPOCH ile bile her koşumda
+    rastgele `/ID` üretir; nötrleme içerik farkını GİZLEMEZ, desen yoksa ham
+    hash döner (fail-safe), dosya okunamazsa None.
+    """
+    return _idc.canonical_pdf_sha256(pdf_path)
+
+
+def resolve_id_residual_ledger(path=None):
+    """Kabul defteri referansını çöz → (tokens, error, source).
+
+    Aday sırası (id_canonical.ledger_candidates): `ID_RESIDUAL_LEDGER` env →
+    `<repo>/docs/ID_RESIDUAL_ACCEPTANCE.md` → script yanındaki düz mirror
+    kopyası. Hiçbiri okunamazsa boş küme + hata metni; strict mod bunu
+    fail-closed P1'e çevirir (referanssız determinizm iddiası üretilmez).
+    """
+    return _idc.ledger_tokens(path)
+
+
+def id_residual_ledger_tokens(path=None):
+    """(tokens, error) — resolve_id_residual_ledger'ın iki-değerli biçimi."""
+    tokens, error, _source = resolve_id_residual_ledger(path)
+    return tokens, error
+
+
+def k6_determ_verdict(strict, canonical, ledger_tokens, ledger_error="",
+                      sidecar_canonical=None):
+    """K6-DETERM karar fonksiyonu (saf — testler doğrudan çağırır).
+
+    Döndürür: (ok, priority, detail). ok=False ise (priority, detail) ile
+    bulgu üretilir. Kural (Faz 4): determinizm referansı `/ID`-kanonik
+    hash'tır; strict modda bu hash kabul defterinde KAYITLI olmalıdır —
+    motor geçişi/yeniden paketleme bilinçli defter satırı ister, aksi
+    halde sessiz drift. `sidecar_canonical` verilmişse (repack'in yazdığı
+    `# canonical:` satırı) teslim PDF'iyle birebir aynı olmalıdır — iki
+    taraf ayrı düşerse yenileme/senkron eksik demektir.
+    """
+    if canonical is None:
+        if strict:
+            return (False, "P1",
+                    "teslim PDF'i okunamadı — kanonik hash hesaplanamadı "
+                    "(determinizm iddiası doğrulanamaz)")
+        return True, None, "kanonik hash hesaplanamadı (PDF okunamadı)"
+    if sidecar_canonical and sidecar_canonical != canonical:
+        if strict:
+            return (False, "P1",
+                    f"sidecar kanonik referansı teslim PDF'iyle uyuşmuyor: "
+                    f"sidecar={sidecar_canonical[:16]}… "
+                    f"pdf={canonical[:16]}… — repack/"
+                    f"sidecar yenilemesi gerekli")
+        return (True, None,
+                f"sidecar kanonik={sidecar_canonical[:16]}… ↔ pdf "
+                f"canonical={canonical[:16]}… (bilgi)")
+    if not strict:
+        return (True, None,
+                f"canonical={canonical[:16]}… (bilgi; strict modda defterle "
+                f"karşılaştırılır)")
+    if ledger_error:
+        return False, "P1", f"kabul defteri okunamadı: {ledger_error}"
+    if canonical not in ledger_tokens:
+        return (False, "P1",
+                f"teslim PDF'inin /ID-kanonik hash'i kabul defterinde yok: "
+                f"canonical={canonical[:16]}… — bilinçli yenileme gerekli "
+                f"(make -f docs/Makefile.texlive accept LEDGER=update)")
+    return True, None, f"canonical={canonical[:16]}… kabul defterinde kayıtlı"
+
+
 def qpdf_check_determinism(pdf_path):
-    """PDF'in metadata-stripped SHA-256 hash'ini hesapla (build determinism ölçümü).
-    qpdf --remove-metadata ile volatile alanlar (/Info, /ID, /CreationDate) temizlenir.
-    qpdf yoksa (None, None) döner — bu durumda kontrol atlanır.
+    """Ham + metadata-stripped SHA-256 (BİLGİ amaçlı build determinism ölçümü).
+
+    qpdf --remove-metadata ile /Info temizlenir ama qpdf 12.4.0'ın KENDİSİ
+    nondeterministiktir: aynı girdi 3 koşumda 3 farklı çıktı verir (ölçüldü
+    2026-09-30, bu makinede). Bu yüzden stripped hash karşılaştırması strict
+    kapı OLAMAZ (her koşumda yapay "drift"); referans `/ID`-kanonik hash'tır
+    (canonical_pdf_sha256). qpdf yoksa (raw, None) döner.
     Döndürür: (raw_sha256, stripped_sha256) veya (raw_sha256, None)."""
     raw = sha256_file(pdf_path)
     qpdf = "qpdf"
@@ -4483,7 +4564,9 @@ def main():
     ap.add_argument("--dir", default=os.path.dirname(os.path.abspath(__file__)))
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--strict-determinism", action="store_true",
-                    help="K6-DETERM: PDF metadata-stripped hash sidecar drift'ini P1'e çevir")
+                    help="K6-DETERM: teslim PDF'inin /ID-kanonik hash'i kabul "
+                         "defterinde (docs/ID_RESIDUAL_ACCEPTANCE.md) kayıtlı "
+                         "değilse P1 üret (Faz 4 semantiği)")
     ap.add_argument("--budget", type=float, default=None,
                     help="Bütçe kalkanı: tahmini USD üretim maliyeti "
                          "(token ≈ bytes/4; $3/M token + $0.55; v3_verify.py H4). "
@@ -5020,44 +5103,57 @@ def main():
         if refs is not None and refs != EXPECTED_REFS:
             add("P0", "K6-REFS", "K6 içerik", f"References {refs} (beklenen {EXPECTED_REFS})")
 
-        # ---- K6-DETERM: PDF metadata-stripped hash (build determinism proxy) ----
-        # qpdf --remove-metadata ile volatile alanlar (/Info, /ID, /CreationDate)
-        # çıkarılır. Sidecar varsa karşılaştırılır; default'ta BİLGİ amaçlı
-        # (tectonic non-deterministic olduğundan strict karşılaştırma her
-        # repack'te yanlış pozitif üretir). --strict-determinism ile P1'e
-        # çevrilebilir.
+        # ---- K6-DETERM: /ID-kanonik hash (build determinism REFERANSI) ----
+        # Ölçüm (2026-09-30, Faz 4): pdfTeX SDE ile deterministiktir; tek
+        # kalıntı trailer /ID'dir (docs/ID_RESIDUAL_ACCEPTANCE.md §1-2).
+        # qpdf --remove-metadata'ın KENDİSİ nondeterministiktir (aynı girdi
+        # 3 koşum → 3 farklı çıktı, ölçüldü) — bu yüzden metadata-stripped
+        # hash yalnız BİLGİdir, strict kapı onun üzerine kurulamaz. Strict
+        # referans /ID-kanonik hash'tir ve kabul defterinde kayıtlı olmalıdır:
+        # motor geçişi/yeniden paketleme bilinçli defter satırı gerektirir.
         pdf_meta_report = None
         if pdf and os.path.isfile(pdf):
             raw_h, stripped_h = qpdf_check_determinism(pdf)
-            skill_reuse_ok, skill_reuse_detail = check_pdf_skill_reuse(add)
-            pdf_meta_report = {"raw": raw_h, "stripped": stripped_h,
-                               "strict": getattr(args, "strict_determinism", False),
-                               "skill_reuse": {"ok": skill_reuse_ok,
-                                               "detail": skill_reuse_detail}}
+            canonical_h = canonical_pdf_sha256(pdf)
+            strict = bool(getattr(args, "strict_determinism", False))
+            ledger_tokens, ledger_error, ledger_src = resolve_id_residual_ledger()
+            sidecar_path = os.path.join(pkg, PDF_METADATA_SIDECAR)
+            sidecar_canon = _idc.sidecar_canonical(sidecar_path)
+            skills_ok, skill_reuse_detail = check_pdf_skill_reuse(add)
+            determ_ok, determ_pri, determ_detail = k6_determ_verdict(
+                strict, canonical_h, ledger_tokens, ledger_error,
+                sidecar_canonical=sidecar_canon)
+            pdf_meta_report = {
+                "raw": raw_h, "stripped": stripped_h, "canonical": canonical_h,
+                "sidecar_canonical": sidecar_canon,
+                "strict": strict,
+                "ledger": ID_RESIDUAL_LEDGER_DOC,
+                "ledger_source": ledger_src,
+                "in_ledger": _idc.has_canonical(canonical_h, ledger_tokens),
+                "check": determ_detail,
+                "skill_reuse": {"ok": skills_ok,
+                                "detail": skill_reuse_detail}}
+            if not determ_ok:
+                add(determ_pri, "K6-DETERM", "K6 build determinism",
+                    determ_detail, f"{ID_RESIDUAL_LEDGER_DOC}")
             if stripped_h:
-                sidecar_path = os.path.join(pkg, PDF_METADATA_SIDECAR)
+                expected_stripped = None
                 if os.path.isfile(sidecar_path):
-                    expected_stripped = parse_sha256sums(sidecar_path).get(
-                        PDF_METADATA_SIDECAR.replace(".sha256", "").replace(
-                            "ingiliz_empirizmi_v3.pdf.", "ingiliz_empirizmi_v3.pdf.metadata."))
-                    # Yukarıdaki karmaşık extract'i basitleştir:
-                    expected_stripped = None
-                    with open(sidecar_path) as sf:
+                    with open(sidecar_path, encoding="utf-8",
+                              errors="replace") as sf:
                         for line in sf:
                             parts = line.split()
                             if len(parts) == 2 and "metadata" in parts[1]:
                                 expected_stripped = parts[0]
                                 break
-                    pdf_meta_report["expected_stripped"] = expected_stripped
-                    pdf_meta_report["drift"] = (
-                        expected_stripped is not None
-                        and stripped_h != expected_stripped)
-                    if pdf_meta_report["drift"]:
-                        if getattr(args, "strict_determinism", False):
-                            add("P1", "K6-DETERM", "K6 build determinism",
-                                f"PDF metadata-stripped hash drift (strict): "
-                                f"expected={expected_stripped[:16]}… "
-                                f"actual={stripped_h[:16]}…")
+                    if expected_stripped:
+                        pdf_meta_report["expected_stripped"] = expected_stripped
+                        pdf_meta_report["stripped_drift_info"] = (
+                            stripped_h != expected_stripped)
+                        pdf_meta_report["stripped_note"] = (
+                            "metadata-stripped hash qpdf'nin kendi rastgele "
+                            "/ID'sini taşır (3 koşum → 3 hash); karşılaştırma "
+                            "yalnız bilgidir, P1 üretmez")
 
         # ---- K6+: referans denetimi (CrossRef/SEP/OpenLibrary çevrimiçi) ----
         # Sonuçlar online_refs'e toplanır; --refs-out ile her run'ın kaç
@@ -5744,7 +5840,11 @@ def main():
                   + (f" (unverified={u}, mismatch={m})" if u or m else ""))
         if pdf_meta_report and pdf_meta_report.get("stripped"):
             print(f"PDF hash: raw={pdf_meta_report['raw'][:16]}… "
-                  f"metadata-stripped={pdf_meta_report['stripped'][:16]}…")
+                  f"metadata-stripped={pdf_meta_report['stripped'][:16]}… "
+                  f"canonical(/ID-nötr)="
+                  f"{(pdf_meta_report.get('canonical') or '?')[:16]}…")
+            if pdf_meta_report.get("check"):
+                print(f"K6-DETERM: {pdf_meta_report['check']}")
         if args.verify_manifest:
             print(f"K10 manifest digest: {'PASS' if manifest_ok else 'FAIL'}")
         if cleanup_report:

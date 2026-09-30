@@ -26,6 +26,11 @@ RUNTIME_REQUIRED = (
     # kalınca canlı dashboard'da P1 (QA bulgusu F2, 2026-09-21).
     "check_reproducible_pdf_skill.py", "reproducible_pdf_skill.py",
     "test_reproducible_pdf_skill.py",
+    # K6-DETERM /ID-kanonik determinizm çekirdeği (tek kaynak): verify_delivery.py
+    # bunu import eder, repack_delivery.py + check_zip_lineage_drift.py aynı
+    # modülü kullanır. Mirror'da yoksa launchd rotasında K-zinciri import
+    # hatasıyla düşer (Faz 4, 2026-09-30).
+    "id_canonical.py",
 )
 # SDE deney kaynağı + donmuş kayıt — _sde_experiment_paths mirror-layout'ta
 # MIRROR_DIR/../sde_experiment çözer; sync SDE_FILES bloğu oraya kopyalar.
@@ -36,6 +41,12 @@ SDE_RUNTIME = (
 PREVIEW_RUNTIME = ("preview_server.py", "_daemonize.py", "preview_prestart.py", "sw.js")
 GUIDE_REL = "docs/branch-protection-guide/guide.html"
 DOC_REL = "docs/HOOK_ENV_MATRIX.md"
+# Kabul defteri (Faz 4): sync_verify_mirror.sh LEDGER_FILES bloğu bunu repo
+# kökünden MIRROR_DIR'a DÜZ adla (ID_RESIDUAL_ACCEPTANCE.md) kopyalar;
+# id_canonical.ledger_candidates() mirror rotasında bu kopyayı çözer. Kapsam
+# tanımı bunu beklemeli — yoksa fail-closed coverage "BEKLENMEYEN:
+# docs/ID_RESIDUAL_ACCEPTANCE.md" ile kırılır.
+LEDGER_DOC_REL = "docs/ID_RESIDUAL_ACCEPTANCE.md"
 # Determinism-trend versiyonlu verisi (dashboard endpoint'inin okuduğu dosya;
 # mirror'da determinism_trend.jsonl olarak düz adla yaşar).
 DETERMINISM_TREND_REL = "docs/determinism_trend/determinism_trend.jsonl"
@@ -127,6 +138,7 @@ def expected_repo_files(root, cikti, lean_src):
     expected.update("_calisma/CIKTI/" + n for n in PREVIEW_RUNTIME)
     expected.add(GUIDE_REL)
     expected.add(DOC_REL)
+    expected.add(LEDGER_DOC_REL)
     expected.add(DETERMINISM_TREND_REL)
     expected.add(DESIGN_TOKENS_REL)
     expected.add(STRIPE_THEME_REL)

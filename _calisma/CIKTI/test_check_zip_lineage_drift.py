@@ -8,12 +8,16 @@ until the registry resync lands).
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -110,6 +114,96 @@ class TestCleanupCanonical(unittest.TestCase):
             _mk_repo(tmp, b"zip", live, [rec])
             rc = gate.main(["--repo-root", tmp])
         self.assertEqual(0, rc)
+
+
+class TestVerifyDeliveryConstantParity(unittest.TestCase):
+    """K14 kapısı verify_delivery ile AYNI sidecar adını ve paket yolunu kullanır.
+
+    check_zip_lineage_drift.py stdlib-only kalsın diye verify_delivery'yi
+    import ETMEZ; bu yüzden drift'i burada fail-closed pinleriz (kanonik
+    çekirdek id_canonical.py zaten ortak — tek kalan elle eşleşme bu iki
+    sabittir).
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        src = open(os.path.join(HERE, "verify_delivery.py"),
+                   encoding="utf-8").read()
+        cls.vd_pkg = re.search(r'^PKG_REL = "([^"]+)"', src,
+                               re.M).group(1)
+        cls.vd_sidecar = re.search(r'^PDF_METADATA_SIDECAR = "([^"]+)"',
+                                   src, re.M).group(1)
+
+    def test_sidecar_name_matches_verify_delivery(self):
+        self.assertEqual(gate.SIDECAR_NAME, self.vd_sidecar)
+
+    def test_pkg_rel_is_repo_relative_form_of_verify_delivery(self):
+        # verify_delivery.PKG_REL ZIP-çıkarma köküne göre; kapınınki repo
+        # köküne göre → V5_ICERIK önekiyle başlar, son ek birebir aynı.
+        self.assertEqual(gate.PKG_REL, "_calisma/V5_ICERIK/" + self.vd_pkg)
+
+
+class TestSidecarCanonical(unittest.TestCase):
+    """Sidecar `# canonical:` referansı ↔ kabul defteri (Faz 4, P0).
+
+    repack motor geçişinde sidecar'ı bilinçli yeniler ve yazma anında defterde
+    arar (fail-closed). Bu kapı AYNI iki kaynağı commit anında karşılaştırır:
+    referans defterde yoksa P0; `# canonical:` satırı YOKSA (henüz yenilenmemiş
+    sidecar) INFO — engellemez. Defter `ID_RESIDUAL_LEDGER` env'i ile izole
+    edilir.
+    """
+
+    def _mk_sidecar(self, tmp, text):
+        d = os.path.join(tmp, gate.PKG_REL)
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, gate.SIDECAR_NAME), "w",
+                  encoding="utf-8") as f:
+            f.write(text)
+
+    def _mk_ledger(self, tmp, token):
+        path = os.path.join(tmp, "ID_RESIDUAL_ACCEPTANCE.md")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(f"{token}  ingiliz_empirizmi_v3.pdf\n")
+        return path
+
+    def _run(self, tmp, ledger):
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.dict(os.environ,
+                             {gate.id_canonical.LEDGER_ENV: ledger}), \
+                contextlib.redirect_stdout(out), \
+                contextlib.redirect_stderr(err):
+            rc = gate.main(["--repo-root", tmp])
+        return rc, out.getvalue(), err.getvalue()
+
+    def test_pass_when_sidecar_canonical_in_ledger(self):
+        token = "c" * 64
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = self._mk_ledger(tmp, token)
+            self._mk_sidecar(tmp, "stripped  ingiliz_empirizmi_v3.pdf.metadata\n"
+                                  f"# canonical: {token}  ingiliz_empirizmi_v3.pdf\n")
+            rc, out, _ = self._run(tmp, ledger)
+        self.assertEqual(rc, 0)
+        self.assertIn("defterde kayıtlı", out)
+
+    def test_p0_when_sidecar_canonical_not_in_ledger(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = self._mk_ledger(tmp, "a" * 64)
+            self._mk_sidecar(tmp, "stripped  ingiliz_empirizmi_v3.pdf.metadata\n"
+                                  f"# canonical: {'d' * 64}  ingiliz_empirizmi_v3.pdf\n")
+            rc, _, err = self._run(tmp, ledger)
+        self.assertEqual(rc, 1)
+        self.assertIn("kabul defterinde yok", err)
+        self.assertIn("LEDGER=update", err)  # uygulanabilir remedy
+
+    def test_info_when_no_canonical_line(self):
+        # Henüz yenilenmemiş sidecar (yalnız ham/stripped) → engellemez.
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = self._mk_ledger(tmp, "a" * 64)
+            self._mk_sidecar(tmp, "stripped  ingiliz_empirizmi_v3.pdf.metadata\n"
+                                  "# raw: rrr  ingiliz_empirizmi_v3.pdf\n")
+            rc, out, _ = self._run(tmp, ledger)
+        self.assertEqual(rc, 0)
+        self.assertIn("# canonical: referansı yok", out)
 
 
 class TestMissingRegistries(unittest.TestCase):

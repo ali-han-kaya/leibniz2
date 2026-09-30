@@ -32,6 +32,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent.parent
 MAKEFILE = ROOT / "docs" / "Makefile.texlive"
 TECTONIC_MAKEFILE = ROOT / "docs" / "Makefile.tectonic"
+ACCEPT_PRODUCER = ROOT / "_calisma" / "CIKTI" / "gen_id_residual_acceptance.py"
 
 TEX = "\\documentclass{article}\\begin{document}x\\end{document}\n"
 
@@ -127,6 +128,39 @@ class TestMakefileTexliveStructural(unittest.TestCase):
                           f"Makefile sözleşme işareti eksik: {marker}")
 
 
+class TestMakefileTexliveAcceptWiring(unittest.TestCase):
+    """Faz 3: accept, kabul kanıtını GERÇEK ÜRETİCİYE bağlar.
+
+    Önceki hâli kanonik hash'i `sed` ile rapordan çıkarıp defteri kendisi
+    grep'liyordu (satır elle yazılıyordu). Artık kanıt-okuma + defter
+    doğrulama/üretme tek kaynakta: gen_id_residual_acceptance.py.
+    """
+
+    def test_accept_invokes_producer_with_real_evidence_paths(self):
+        mk = MAKEFILE.read_text(encoding="utf-8")
+        self.assertIn("ACCEPT_PRODUCER :=", mk, "üretici değişkeni yok")
+        self.assertIn('python3 "$(ACCEPT_PRODUCER)"', mk,
+                      "accept üreticiyi çağırmalı")
+        self.assertIn('--report "$(REPORT)"', mk, "kanıt yolu üreticiye geçmeli")
+        self.assertIn('--doc "$(ACCEPT_DOC)"', mk, "defter yolu üreticiye geçmeli")
+
+    def test_accept_offers_deliberate_ledger_update(self):
+        mk = MAKEFILE.read_text(encoding="utf-8")
+        self.assertIn("LEDGER ?=", mk)
+        self.assertIn('"$(LEDGER)" = "update"', mk)
+        self.assertIn("--update", mk, "bilinçli defter güncelleme yolu")
+
+    def test_hash_extraction_is_not_duplicated_in_makefile(self):
+        # Tek kaynak: kanonik hash çıkarımı üreticide; Makefile'da satır
+        # ayrıştırma kalmamalı (aksi halde iki farklı doğruluk tanımı doğar).
+        mk = MAKEFILE.read_text(encoding="utf-8")
+        self.assertNotIn("sed -n 's/^texlive_canonical_run1_sha256=", mk)
+
+    def test_producer_script_present(self):
+        self.assertTrue(ACCEPT_PRODUCER.is_file(),
+                        f"kabul üreticisi yok: {ACCEPT_PRODUCER}")
+
+
 class TestMakefileTexliveBehavioral(unittest.TestCase):
     """Stub pdflatex/tectonic ile gerçek make koşumu (TeX derlemesi yok)."""
 
@@ -204,6 +238,14 @@ class TestMakefileTexliveBehavioral(unittest.TestCase):
         self.assertNotEqual(res["rc"], 0, res["out"])
         self.assertIn("ID_RESIDUAL_ACCEPTANCE", res["out"])
         self.assertIn("defter", res["out"])
+
+    def test_accept_runs_the_real_producer_script(self):
+        # Fail-closed çıktısı üreticinin remedy satırını içermeli — yani
+        # accept defteri kendi grep'lemiyor, gerçek üreticiye delege ediyor.
+        res = self._make("accept", passes=None)
+        self.assertNotEqual(res["rc"], 0, res["out"])
+        self.assertIn("gen_id_residual_acceptance.py", res["out"],
+                      "accept gerçek üreticiyi çağırmalı (grep-taklidi değil)")
 
 
 @unittest.skipUnless(
