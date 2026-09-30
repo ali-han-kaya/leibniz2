@@ -414,5 +414,199 @@ class TestHookEntryFailClosed(unittest.TestCase):
             td.cleanup()
 
 
+class TestExcludeCiBindingGate(unittest.TestCase):
+    """EXCLUDE ↔ CI-job/hook BAĞLAMA kapısı (sync --check'in üçüncü hedefi).
+
+    Ölçülen boşluk (2026-09-30): EXCLUDE'lanan test pre-commit manifest'inde
+    koşmaz; "CI'da X job'ında koşar" iddiası YALNIZCA yorumlarda yaşıyordu.
+    Doğrulanan işaretler:
+      * `ci_full_discover_drift_guard.py` (tam discover emniyet ağı) repo'da
+        HİÇBİR yere bağlı değil (workflow/pre-commit/manifest: 0 eşleşme)
+        → "CI her şeyi koşar" sözleşmesinin makinesel garantisi yok.
+      * CI'da `verify` job'ı full discover koşuyor
+        (`unittest discover -p "test_*.py"`) — yani var olan koşma yolu bu.
+    Yani EXCLUDE'a yeni bir test ekleyen kişi onun HİÇBİR YERDE koşmadığını
+    fark edemiyor. Bu kapı: (1) her EXCLUDE girdisi bir hedefe bağlı olmalı,
+    (2) bildirilen hedef GERÇEKTEN var olmalı, (3) ters/stale bağ olmamalı,
+    (4) full-discover sözleşmesi ölçülebilir kalmalı. Hepsi fail-closed.
+    """
+
+    WORKFLOW = (
+        "name: t\non: [push]\njobs:\n"
+        "  alpha:\n    name: Alpha job\n    steps:\n"
+        "      - name: Run tests\n        run: |\n"
+        '          python3 -m unittest discover -s _calisma/CIKTI -p "test_*.py"\n'
+    )
+    CONFIG = "repos:\n  - hooks:\n      - id: gate-x\n        name: x\n"
+
+    def _surfaces(self, workflow=WORKFLOW, config=CONFIG):
+        td = tempfile.mkdtemp()
+        wf = os.path.join(td, "workflows")
+        os.makedirs(wf)
+        with open(os.path.join(wf, "verify.yml"), "w") as fh:
+            fh.write(workflow)
+        cfg = os.path.join(td, ".pre-commit-config.yaml")
+        with open(cfg, "w") as fh:
+            fh.write(config)
+        return td, wf, cfg
+
+    def _gate(self, wf, cfg, **kw):
+        return s.run_check_exclude_binding(workflows_dir=wf, config_path=cfg, **kw)
+
+    def test_gate_passes_when_every_exclude_has_existing_home(self):
+        td, wf, cfg = self._surfaces()
+        try:
+            rc = self._gate(wf, cfg, exclude={"test_a.py"},
+                            ci_jobs={"test_a.py": "alpha"}, hooks={})
+            self.assertEqual(rc, 0, "tam bağlı küme bloklanmamalı")
+        finally:
+            shutil.rmtree(td)
+
+    def test_gate_blocks_exclude_without_any_home(self):
+        # Kapının özü: manifest'te koşmayan testin bir koşma YERİ olmalı.
+        td, wf, cfg = self._surfaces()
+        try:
+            rc = self._gate(wf, cfg, exclude={"test_a.py"}, ci_jobs={}, hooks={})
+            self.assertEqual(rc, 1, "bağsız EXCLUDE girdisi bloklanmalı")
+        finally:
+            shutil.rmtree(td)
+
+    def test_gate_blocks_dangling_ci_job(self):
+        # Job yeniden adlandırıldı/silindi → bağ boşlukta kalmasın.
+        td, wf, cfg = self._surfaces()
+        try:
+            rc = self._gate(wf, cfg, exclude={"test_a.py"},
+                            ci_jobs={"test_a.py": "ghost-job"}, hooks={})
+            self.assertEqual(rc, 1, "var olmayan job id'si bloklanmalı")
+        finally:
+            shutil.rmtree(td)
+
+    def test_gate_blocks_dangling_hook(self):
+        td, wf, cfg = self._surfaces()
+        try:
+            rc = self._gate(wf, cfg, exclude={"test_b.py"}, ci_jobs={},
+                            hooks={"test_b.py": "gate-yok"})
+            self.assertEqual(rc, 1, "var olmayan hook id'si bloklanmalı")
+        finally:
+            shutil.rmtree(td)
+
+    def test_gate_blocks_stale_binding_for_non_excluded_test(self):
+        # Ters yön: EXCLUDE'da olmayan teste bağlama bildirilemez.
+        td, wf, cfg = self._surfaces()
+        try:
+            rc = self._gate(wf, cfg, exclude=set(),
+                            ci_jobs={"test_ghost.py": "alpha"}, hooks={})
+            self.assertEqual(rc, 1, "EXCLUDE dışı stale bağ bloklanmalı")
+        finally:
+            shutil.rmtree(td)
+
+    def test_gate_blocks_double_binding(self):
+        td, wf, cfg = self._surfaces()
+        try:
+            rc = self._gate(wf, cfg, exclude={"test_a.py"},
+                            ci_jobs={"test_a.py": "alpha"},
+                            hooks={"test_a.py": "gate-x"})
+            self.assertEqual(rc, 1, "çift bağlama (belirsizlik) bloklanmalı")
+        finally:
+            shutil.rmtree(td)
+
+    def test_gate_is_fail_closed_when_workflow_surface_missing(self):
+        # KÖR KAPI: yüzey okunamıyorsa "bağlar sağlam" sayılamaz.
+        td, _wf, cfg = self._surfaces()
+        try:
+            rc = self._gate(os.path.join(td, "yok"), cfg,
+                            exclude={"test_a.py"},
+                            ci_jobs={"test_a.py": "alpha"}, hooks={})
+            self.assertEqual(rc, 1, "okunamayan yüzeyde kapı kör geçmemeli")
+        finally:
+            shutil.rmtree(td)
+
+    def test_gate_blocks_when_full_discover_sentinel_disappears(self):
+        # "CI her şeyi koşar" vaadi ölçülebilir olmalı: full discover satırı
+        # workflow'larda yoksa EXCLUDE'lu testlerin koşma yeri kalmamıştır.
+        td, wf, cfg = self._surfaces(
+            workflow=("name: t\non: [push]\njobs:\n  alpha:\n"
+                      "    steps:\n      - name: x\n        run: true\n"))
+        try:
+            rc = self._gate(wf, cfg, exclude={"test_a.py"},
+                            ci_jobs={"test_a.py": "alpha"}, hooks={})
+            self.assertEqual(rc, 1, "full-discover sentinel yoksa bloklanmalı")
+        finally:
+            shutil.rmtree(td)
+
+    def test_gate_is_skipped_in_fully_isolated_run(self):
+        # Tam izole koşum (check_unit_tests_hook.sh'nin sandbox kopyası):
+        # repo yüzeyi YOK → kapı "kapsam dışı" der, bloklamaz. Doğrulanacak
+        # yüzey bulunmadığında kör FAIL de üretmek yanlış olur (sandbox
+        # sözleşmesi: izole koşumda hook yeşil kalmalı).
+        td = tempfile.mkdtemp()
+        try:
+            rc = self._gate(os.path.join(td, "yok"), os.path.join(td, "yok.yaml"),
+                            exclude={"test_a.py"},
+                            ci_jobs={"test_a.py": "alpha"}, hooks={})
+            self.assertEqual(rc, 0, "tam izole koşumda kapı kapsam dışı olmalı")
+        finally:
+            shutil.rmtree(td)
+
+    def test_gate_blocks_partial_surface(self):
+        # Kısmi yüzey (config var, workflow yok) → ölçülemeyen bağlama
+        # "temiz" sayılamaz: fail-closed.
+        td = tempfile.mkdtemp()
+        cfg = os.path.join(td, "cfg.yaml")
+        with open(cfg, "w") as fh:
+            fh.write(self.CONFIG)
+        try:
+            rc = self._gate(os.path.join(td, "yok-wf"), cfg,
+                            exclude={"test_a.py"},
+                            ci_jobs={"test_a.py": "alpha"}, hooks={})
+            self.assertEqual(rc, 1, "kısmi yüzeyde kör PASS üretilmemeli")
+        finally:
+            shutil.rmtree(td)
+
+    def test_real_repo_every_exclude_entry_declares_a_home(self):
+        # Regresyon kapısı: yeni EXCLUDE girdisi bağlama bildirmeden eklenemez.
+        rc = s.run_check_exclude_binding()
+        self.assertEqual(rc, 0, "gerçek repo EXCLUDE↔hedef bağları temiz olmalı")
+
+    def test_real_repo_declared_targets_exist(self):
+        missing_jobs = sorted({j for j in s.EXCLUDE_CI_JOBS.values()
+                               if j not in s.workflow_ci_tokens()})
+        missing_hooks = sorted({h for h in s.EXCLUDE_HOOKS.values()
+                                if h not in s.precommit_hook_ids()})
+        self.assertEqual(missing_jobs, [], f"EXCLUDE, var olmayan CI job'a bağlı: {missing_jobs}")
+        self.assertEqual(missing_hooks, [], f"EXCLUDE, var olmayan hook'a bağlı: {missing_hooks}")
+
+    def test_real_repo_ci_runs_full_discover(self):
+        # EXCLUDE sözleşmesinin makinesel kanıtı: full discover hâlâ koşuyor.
+        blobs = s.read_workflows_text()
+        self.assertTrue(any(s.FULL_DISCOVER_SENTINEL in b for b in blobs),
+                        "CI full discover satırı kayboldu — EXCLUDE vaadi ölçülemez")
+
+    def test_run_check_wires_binding_gate_and_skips_it_when_isolated(self):
+        # (a) bağlama: --check yolunda kapı gerçekten çağrılıyor
+        orig = s.run_check_exclude_binding
+        s.run_check_exclude_binding = lambda **kw: 1
+        try:
+            rc = s.run_check()
+        finally:
+            s.run_check_exclude_binding = orig
+        self.assertEqual(rc, 1, "binding gate run_check'e bağlı değil (sessiz kör kapı)")
+
+        # (b) izolasyon: --dir ile geçici dizin koşumunda repo-geneli kapı çalışmaz
+        calls = []
+
+        def _spy(**kw):
+            calls.append(kw)
+            return 0
+
+        with tempfile.TemporaryDirectory() as td:
+            s.run_check_exclude_binding = _spy
+            try:
+                s.run_check(directory=td, manifest=os.path.join(td, "m.list"))
+            finally:
+                s.run_check_exclude_binding = orig
+        self.assertEqual(calls, [], "izole koşumda repo-geneli kapı çalışmamalı")
+
+
 if __name__ == "__main__":
     unittest.main()

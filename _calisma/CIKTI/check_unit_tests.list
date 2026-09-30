@@ -61,6 +61,7 @@ test_full_publish_doc_sync.py
 test_gate_coverage_sync.py
 test_gate_scripts_meta_guard.py
 test_gated_schedules.py
+test_gen_changelog.py
 test_gen_ci_trend.py
 test_gen_commit_msg_evidence.py
 test_gen_k_layer.py
@@ -129,11 +130,14 @@ test_summary_pattern_drift.py
 test_sync_check_unit_tests.py
 test_sync_lifecycle.py
 test_sync_one_atomic.py
+test_sync_skills_index.py
 test_test_coverage_report.py
 test_texlive_determinism_hook.py
 test_texlive_determinism_id_residual.py
 test_texlive_repro_documented.py
 test_trend_db_contract.py
+test_trend_record_pr_contract.py
+test_update_changelog_hook.py
 test_update_preview_sync_server.py
 test_validate_config_schema.py
 test_verification_chain_deck.py

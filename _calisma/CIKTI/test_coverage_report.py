@@ -72,7 +72,6 @@ HOOK_COVERAGE = {
     "check-skills-index":       ["test_skills_index.py", "test_readme_skills.py"],
     "check-design-tokens":      ["test_check_design_tokens.py"],
     "check-reproducible-pdf-skill": ["test_reproducible_pdf_skill.py"],
-    "check-changelog-sync":    ["test_update_changelog_hook.py", "test_gen_changelog.py"],
     "check-unit-tests": [
         "test_workflow_install_hardening.py",
         "test_verify_refs.py",
@@ -231,9 +230,13 @@ HOOK_COVERAGE = {
         "test_dev_bootstrap.py",
         "test_id_residual_acceptance_doc.py",
         "test_makefile_texlive.py",
+        "test_trend_record_pr_contract.py",
+        "test_gen_changelog.py",
+        "test_update_changelog_hook.py",
+        "test_sync_skills_index.py",
+        "test_determinism_trend_badge.py",
         "test_gated_schedules.py",
         "test_sync_lifecycle.py",
-        "test_determinism_trend_badge.py",
     ],
 }
 

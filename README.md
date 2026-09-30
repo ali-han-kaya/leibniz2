@@ -24,9 +24,13 @@ teslimini ve onu doğrulayan fail-closed araç zincirini içerir.
 ## Skills
 
 Kurulabilir Agent Skill'leri `skills/` altında tutulur. Bu tablo, her skill'in
-kanonik yönergesini gösterir; `check-skills-index` kapısı dizin ile tabloyu
-çift yönlü senkron tutar.
+kanonik yönergesini gösterir. `check-skills-index` kapısı tabloyu
+`skills/*/SKILL.md` frontmatter'ından **üretir** (auto-sync): yeni skill
+eklendiğinde satır kendiliğinden girer, silinen skill satırı düşer; elle
+yazılmış özetler ve satır sırası korunur. Elle denetim:
+`python3 _calisma/CIKTI/sync_skills_index.py --check` (drift → exit 1).
 
+<!-- skills-index:start -->
 | Skill | Açıklama |
 |---|---|
 | `skills/birincil-kayit-dogrulama/SKILL.md` | İddiaları birincil kayıtlardan doğrulama ve OLÇULMEDI/BEYAN ayrımı |
@@ -37,6 +41,7 @@ kanonik yönergesini gösterir; `check-skills-index` kapısı dizin ile tabloyu
 | `skills/verify-chain/SKILL.md` | K0–K21 fail-closed teslim doğrulama zinciri |
 | `skills/reproducible-pdf-build/SKILL.md` | PDF determinism, SHA-256 sidecar ve SDE akışı |
 | `skills/release-candidate-check/SKILL.md` | verify_mcp MCP sunucusu için release-candidate doğrulaması |
+<!-- skills-index:end -->
 
 
 ## Doğrulama (tek komut)
@@ -458,13 +463,28 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-20 | feat | (texlive) 3-pass determinism + /ID acceptance report (Faz 1-3) | [`24a9b25`](https://github.com/ali-han-kaya/leibniz2/commit/24a9b25) |
 | 2026-09-20 | fix | (ci) check-unit-tests hook goes fail-closed on sync drift | [`5280500`](https://github.com/ali-han-kaya/leibniz2/commit/5280500) |
 | 2026-09-20 | fix | (docker) build-context parity, CVE pins, live smoke evidence | [`cfa33d9`](https://github.com/ali-han-kaya/leibniz2/commit/cfa33d9) |
-| 2026-09-20 | feat | (ci) docker security surface — cron smoke + patching hook | [`9c6e1b3`](https://github.com/ali-han-kaya/leibniz2/commit/9c6e1b3) |
-| 2026-09-20 | feat | (docker) pip patching layer joins the ARG mechanism | [`9b32376`](https://github.com/ali-han-kaya/leibniz2/commit/9b32376) |
-| 2026-09-20 | docs | (texlive) Faz 0-1 engine lock surface + parallel-life docs | [`173a2f4`](https://github.com/ali-han-kaya/leibniz2/commit/173a2f4) |
-| 2026-09-20 | docs | (audit) close R4 — weekly docker-security scan is live | [`b726e0c`](https://github.com/ali-han-kaya/leibniz2/commit/b726e0c) |
-| 2026-09-21 | refactor | (trend) remove stale-report 48h guard from record path | [`abd3ec5`](https://github.com/ali-han-kaya/leibniz2/commit/abd3ec5) |
-| 2026-09-21 | test | (sync) pin sync lifecycle as subprocess regression gate | [`5fdf2e4`](https://github.com/ali-han-kaya/leibniz2/commit/5fdf2e4) |
+| 2026-09-21 | fix | (ci) trend record via bot branch + PR (protection wall) | [`fa1809b`](https://github.com/ali-han-kaya/leibniz2/commit/fa1809b) |
+| 2026-09-21 | chore | record weekly determinism trend measurement | [`3f043bc`](https://github.com/ali-han-kaya/leibniz2/commit/3f043bc) |
+| 2026-09-21 | fix | (ci) trend PR step policy-aware (Actions PR-permission off) | [`c78dc67`](https://github.com/ali-han-kaya/leibniz2/commit/c78dc67) |
+| 2026-09-30 | chore | (changelog) 5280500 ve cfa33d9 satirlarini tabloya ekle | [`f194e89`](https://github.com/ali-han-kaya/leibniz2/commit/f194e89) |
+| 2026-09-30 | docs | (docker) npm katmanı kapalı döngüsü + kontrat testi | [`4e7d758`](https://github.com/ali-han-kaya/leibniz2/commit/4e7d758) |
+| 2026-09-30 | chore | (changelog) 4e7d758 satirini tabloya ekle | [`e89165b`](https://github.com/ali-han-kaya/leibniz2/commit/e89165b) |
+| 2026-09-30 | feat | (sync-tests) EXCLUDE↔CI-job/hook bağlama kapısı (üçüncü hedef) | [`3385697`](https://github.com/ali-han-kaya/leibniz2/commit/3385697) |
+| 2026-09-30 | chore | (changelog) 3385697 satirini tabloya ekle | [`bf91c8f`](https://github.com/ali-han-kaya/leibniz2/commit/bf91c8f) |
+| 2026-09-30 | fix | (changelog) iki-yazan değişmezi beyanı + kontrat testi | [`29761ad`](https://github.com/ali-han-kaya/leibniz2/commit/29761ad) |
+| 2026-09-30 | chore | (changelog) 29761ad satirini tabloya ekle | [`b09cb0d`](https://github.com/ali-han-kaya/leibniz2/commit/b09cb0d) |
+| 2026-09-30 | feat | (skills) README index'i frontmatter'dan üreten yazar + --check | [`bf25095`](https://github.com/ali-han-kaya/leibniz2/commit/bf25095) |
+| 2026-09-21 | chore | record weekly determinism trend measurement | [`23a6ece`](https://github.com/ali-han-kaya/leibniz2/commit/23a6ece) |
+| 2026-09-21 | docs | (report) record 3/3 CI evidence for PR-route delivery | [`5621c4e`](https://github.com/ali-han-kaya/leibniz2/commit/5621c4e) |
 | 2026-09-21 | feat | (dashboard) TeX engine determinism trend panel | [`49008e6`](https://github.com/ali-han-kaya/leibniz2/commit/49008e6) |
+| 2026-09-21 | test | (sync) pin sync lifecycle as subprocess regression gate | [`5fdf2e4`](https://github.com/ali-han-kaya/leibniz2/commit/5fdf2e4) |
+| 2026-09-21 | refactor | (trend) remove stale-report 48h guard from record path | [`abd3ec5`](https://github.com/ali-han-kaya/leibniz2/commit/abd3ec5) |
+| 2026-09-20 | docs | (audit) close R4 — weekly docker-security scan is live | [`b726e0c`](https://github.com/ali-han-kaya/leibniz2/commit/b726e0c) |
+| 2026-09-20 | chore | record weekly determinism trend measurement | [`b5126f9`](https://github.com/ali-han-kaya/leibniz2/commit/b5126f9) |
+| 2026-09-20 | chore | record weekly determinism trend measurement | [`6fe7c86`](https://github.com/ali-han-kaya/leibniz2/commit/6fe7c86) |
+| 2026-09-20 | docs | (texlive) Faz 0-1 engine lock surface + parallel-life docs | [`173a2f4`](https://github.com/ali-han-kaya/leibniz2/commit/173a2f4) |
+| 2026-09-20 | feat | (docker) pip patching layer joins the ARG mechanism | [`9b32376`](https://github.com/ali-han-kaya/leibniz2/commit/9b32376) |
+| 2026-09-20 | feat | (ci) docker security surface — cron smoke + patching hook | [`9c6e1b3`](https://github.com/ali-han-kaya/leibniz2/commit/9c6e1b3) |
 
 ### Regresyon notları
 
