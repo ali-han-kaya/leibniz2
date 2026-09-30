@@ -487,6 +487,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-20 | feat | (ci) docker security surface — cron smoke + patching hook | [`9c6e1b3`](https://github.com/ali-han-kaya/leibniz2/commit/9c6e1b3) |
 | 2026-09-30 | chore | (changelog) bf25095 satirini tabloya ekle | [`8fcc3d4`](https://github.com/ali-han-kaya/leibniz2/commit/8fcc3d4) |
 | 2026-10-01 | docs | (cron) docker-security ilk Pazartesi koşumu runbook satırı | [`93ef34d`](https://github.com/ali-han-kaya/leibniz2/commit/93ef34d) |
+| 2026-10-01 | chore | (changelog) 93ef34d satirini tabloya ekle | [`5073212`](https://github.com/ali-han-kaya/leibniz2/commit/5073212) |
 
 ### Regresyon notları
 
