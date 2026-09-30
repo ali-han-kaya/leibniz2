@@ -472,6 +472,7 @@ class TestPreCommitHooksSurviveACleanCheckout(unittest.TestCase):
                          % (imported & third_party))
 
 
+@unittest.skipIf(yaml is None, "PyYAML yok — workflow denetimi ölçülemiyor")
 class TestGhConsumingStepsReceiveAToken(unittest.TestCase):
     """K2 — `gh` çağıran CI adımı GH_TOKEN almak ZORUNDA.
 
