@@ -229,5 +229,58 @@ class TestStagingSkipsWithoutLiveHistory(unittest.TestCase):
         method.test_staging_produces_preview_server_layout()
 
 
+class TestKeyboardNavSeedsItsOwnDashboardData(unittest.TestCase):
+    """Kural 5 — klavye suite'i canlı `history.jsonl` ÖLÇMEZ, kendi verisini tohumlar.
+
+    `.rh-row` ve `#trend rect[data-tip]` yalnız `/api/run-history` ve
+    `/api/trend` yanıtından doğar; bu uçlar `history.jsonl`'i okur ve o dosya
+    gitignored olduğu için temiz klonda (ve CI'da) YOKTUR. Tohumlama
+    yapılmazsa suite sessizce "0 satır" ölçerdi: `wait_for(attached)` zaman
+    aşımı → hata, filtre testi `0 <= 0` ile boşuna geçerdi.
+
+    Playwright'yi burada koşturmak ~90 s sürerdi; kural kaynaktan okunur
+    (AST) — canlı kanıt `test_dashboard_keyboard_nav.py`'nın kendi koşusudur.
+    """
+
+    ROW_DEPENDENT = ("_first_row", "_hover_center")
+
+    def _module(self):
+        return importlib.import_module("test_dashboard_keyboard_nav")
+
+    def test_both_seeder_helpers_exist(self):
+        mod = self._module()
+        for name in ("_seed_run_history", "_seed_trend"):
+            self.assertTrue(callable(getattr(mod.KeyboardNavTestBase, name,
+                                             None)),
+                            "tohumlayıcı kayboldu: %s" % name)
+
+    def test_seeded_tests_are_never_left_data_dependent(self):
+        """Satır/grafik bekleyen her test önce tohumlamALI.
+
+        Tohumlama çağrısı düşerse: temiz klonda hata, dolu klonda sessiz
+        yeşil — yani kural yalnız `ast` ile korunabilir.
+        """
+        import ast
+        path = os.path.join(HERE, "test_dashboard_keyboard_nav.py")
+        with open(path, encoding="utf-8") as f:
+            tree = ast.parse(f.read(), path)
+        offenders = []
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ClassDef):
+                continue
+            for fn in node.body:
+                if not isinstance(fn, ast.FunctionDef) or not \
+                        fn.name.startswith("test_"):
+                    continue
+                called = {c.func.attr for c in ast.walk(fn)
+                          if isinstance(c, ast.Call)
+                          and isinstance(c.func, ast.Attribute)}
+                if called & set(self.ROW_DEPENDENT) and not \
+                        any(c.startswith("_seed_") for c in called):
+                    offenders.append("%s.%s" % (node.name, fn.name))
+        self.assertEqual(offenders, [],
+                         "canlı veriye bağımlı kalan testler: %s" % offenders)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

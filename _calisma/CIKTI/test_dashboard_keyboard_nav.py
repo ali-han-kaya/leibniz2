@@ -17,6 +17,7 @@ dashboard'ın TÜM etkileşimli akışlarını klavyeyle sürer:
 Klavye-tablosu: test_refs_trend_badge.py deseni — beklentiler sabitlenir.
 """
 
+import json
 import os
 import socket
 import subprocess
@@ -31,6 +32,29 @@ except ImportError:  # CI runner'da playwright kurulu değilse SKIP (fail değil
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SERVER_SCRIPT = os.path.join(HERE, "preview_server.py")
+
+# Dashboard satır şekli, ÜRETİM okuyucularıyla birebir (`preview.js`):
+# `loadRunHistory()` → verdict/p0/p1/ts/duration_s/budget_usd/source,
+# `renderTrend()` → + budget_limit/z3_total, `renderRefsTrend()` → + refs_*.
+# 3 PASS + 1 FAIL + 1 P0 → PASS filtresi GERÇEKTEN daraltır; hepsi PASS
+# olsaydı `n_pass <= n_all` boşuna geçerdi.
+DASHBOARD_ROW_SEED = [
+    {"ts": "2026-09-30T09:00:00Z", "verdict": "PASS", "p0": 0, "p1": 0,
+     "duration_s": 12.0, "budget_usd": 1.5, "budget_limit": 5.0,
+     "z3_total": 120, "refs_total": 43, "refs_verified": 43, "source": "seed"},
+    {"ts": "2026-09-30T10:00:00Z", "verdict": "PASS", "p0": 0, "p1": 1,
+     "duration_s": 14.0, "budget_usd": 2.5, "budget_limit": 5.0,
+     "z3_total": 118, "refs_total": 43, "refs_verified": 42, "source": "seed"},
+    {"ts": "2026-09-30T11:00:00Z", "verdict": "PASS", "p0": 0, "p1": 0,
+     "duration_s": 11.0, "budget_usd": 1.0, "budget_limit": 5.0,
+     "z3_total": 121, "refs_total": 43, "refs_verified": 43, "source": "seed"},
+    {"ts": "2026-09-30T12:00:00Z", "verdict": "FAIL", "p0": 0, "p1": 2,
+     "duration_s": 31.0, "budget_usd": 9.0, "budget_limit": 5.0,
+     "z3_total": 90, "refs_total": 43, "refs_verified": 40, "source": "seed"},
+    {"ts": "2026-09-30T13:00:00Z", "verdict": "PASS", "p0": 2, "p1": 0,
+     "duration_s": 22.0, "budget_usd": 4.0, "budget_limit": 5.0,
+     "z3_total": 110, "refs_total": 43, "refs_verified": 43, "source": "seed"},
+]
 
 # Chrome'un CSP ihlali mesajları — nitelik-handler reddi tam olarak bu kalıpla
 # gelir (VERIFY-001: `onmousemove="…"` CSP altında SESSİZCE ölür; görünür hata
@@ -127,6 +151,43 @@ class KeyboardNavTestBase(unittest.TestCase):
         self._pw.stop()
 
     # ------------------------------------------------------------- yardımcılar
+    def _seed_run_history(self, rows=None):
+        """Run-history satırlarını ÜRETİM yolundan besle.
+
+        `.rh-row` yalnız `loadRunHistory()` → `/api/run-history` → innerHTML
+        zinciriyle doğar. O uç nokta `history.jsonl`'i okur; `history.jsonl`
+        çalışma zamanı verisidir (gitignored) → temiz klonda ve CI'da YOKTUR.
+        Satırları beklerken bu suite sessizce "0 satır" ölçerdi: `wait_for
+        (attached)` zaman aşımı → hata, filtre testi `0 <= 0` ile boşuna
+        geçerdi. Aynı gerekçeyle `test_surface_cwv_report.py` SKIP eder;
+        burada ölçülecek şey üretim render yolu olduğu için ÖN DATA ÜRETİLİR
+        (intercept + reload) — test her ortamda gerçekten bir şey ölçer.
+        """
+        payload = json.dumps(DASHBOARD_ROW_SEED if rows is None else rows)
+        self.page.route("**/api/run-history*",
+                        lambda route: route.fulfill(
+                            content_type="application/json", body=payload))
+        self.page.reload(wait_until="domcontentloaded")
+        self.page.wait_for_timeout(600)
+
+    def _seed_trend(self, rows=None):
+        """Trend grafiklerini ÜRETİM yolundan besle (`/api/trend` → loadTrend).
+
+        `renderTrend()` veri yoksa `svg.innerHTML = ""` yapar → `#trend`
+        içinde `rect[data-tip]` hiç oluşmaz. Aynı gerekçe: `/api/trend` de
+        `history.jsonl`'den beslenir, temiz klonda boş döner. Kardeş test
+        (`test_refs_trend_tip_wired`) boş-veri hâlinde SKIP ediyordu; burada
+        veri tohumlanır ki delegation zinciri gerçekten ölçülsün.
+        """
+        payload = json.dumps(
+            {"history": DASHBOARD_ROW_SEED if rows is None else rows,
+             "dbRows": []})
+        self.page.route("**/api/trend*",
+                        lambda route: route.fulfill(
+                            content_type="application/json", body=payload))
+        self.page.reload(wait_until="domcontentloaded")
+        self.page.wait_for_timeout(600)
+
     def _csp_header(self):
         return (self.response.headers.get("content-security-policy") or "") \
             if self.response is not None else ""
@@ -296,6 +357,7 @@ class RunHistoryRowKeyboardTest(KeyboardNavTestBase):
         return row
 
     def test_rows_are_focusable(self):
+        self._seed_run_history()
         row = self._first_row()
         row.focus()
         self.assertEqual(
@@ -312,6 +374,7 @@ class RunHistoryRowKeyboardTest(KeyboardNavTestBase):
             lambda route: route.fulfill(
                 content_type="application/json",
                 body='{"stdout": "KLAVYE-STDOUT-KANIT", "stderr": ""}'))
+        self._seed_run_history()
         row = self._first_row()
         row.focus()
         row.press("Enter")
@@ -398,7 +461,10 @@ class RhFilterKeyboardTest(KeyboardNavTestBase):
                          "Space: .active all butonuna taşınmadı")
 
     def test_filter_keys_narrow_history_rows(self):
-        # Filtre daraltması: en az all>=PASS satır sayısı (veri-dolu sayfada).
+        # Filtre daraltması: all >= PASS satır sayısı. Tohum veri karışık
+        # (3 PASS / 1 FAIL / 1 P0) olduğu için PASS gerçekten daraltır;
+        # `all` hepsini gösterir.
+        self._seed_run_history()
         all_btn = self.page.locator('.rh-filter button[data-f="all"]')
         all_btn.focus()
         all_btn.press("Enter")
@@ -409,7 +475,11 @@ class RhFilterKeyboardTest(KeyboardNavTestBase):
         pass_btn.press("Enter")
         self.page.wait_for_timeout(700)
         n_pass = self.page.locator(".rh-row").count()
-        self.assertLessEqual(
+        # Önce satır var mı? Yoksa `0 <= 0` her zaman geçer ve test hiçbir
+        # şey ölçmeden yeşil görünür (sessiz boşuna-geçme).
+        self.assertGreater(n_all, 0,
+                           "tohum satırları render edilmedi — all=0")
+        self.assertLess(
             n_pass, n_all,
             f"PASS filtresi daraltmadı (all={n_all}, pass={n_pass})")
 
@@ -440,6 +510,7 @@ class TrendTipKeyboardTest(KeyboardNavTestBase):
             "document.getElementById('tip').style.display === 'block'")
 
     def test_hover_shows_and_leave_hides_tip(self):
+        self._seed_trend()
         x, y = self._hover_center("trend")
         self.page.mouse.move(x, y)
         self.page.wait_for_timeout(150)
@@ -457,6 +528,9 @@ class TrendTipKeyboardTest(KeyboardNavTestBase):
     def test_refs_trend_tip_wired(self):
         # refs-trend verisi boşken rect[data-tip] render edilmez (0 hit-alanı)
         # — svg'de rect yoksa süit bunu SKIP eder (boş-veri koşulu, kusur değil).
+        # Veri tohumlandığı için normalde SKIP'e düşmez; guard yine de duruyor
+        # (render yolu değişirse sessizce yeşile çevirmesin).
+        self._seed_trend()
         n = self.page.locator("#refs-trend rect[data-tip]").count()
         if n == 0:
             self.skipTest("refs-trend boş-veri: hit-rect yok")
