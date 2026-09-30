@@ -885,9 +885,16 @@ class TestServiceWorkerRegistration(unittest.TestCase):
         self.assertIn("self.clients.claim()", self._sw)
 
     def test_fetch_no_cache_in_sw_js(self):
-        """sw.js fetch handler'i no-cache zorlar."""
+        """sw.js fetch handler'i no-cache zorlar.
+
+        TIRNAK DUYARSIZ: eski assertion `cache: 'no-cache'` (tek tırnak)ydi ve
+        dosyanın gündelik yazım biçimine bağlıydı. Prettier bu repo'da çift
+        tırnak uyguluyor; grandfather drift `prettier --write` ile kapanınca
+        test kırıldı. Ölçmek istediğimiz şey tarz değil, fetch SEÇENEĞİ:
+        cache anahtarı 'no-cache' değerine eşit mi.
+        """
         self.assertIsNotNone(self._sw, "sw.js bulunamadi")
-        self.assertIn("cache: 'no-cache'", self._sw)
+        self.assertRegex(self._sw, r"""cache\s*:\s*(['"`])no-cache\1""")
 
     def test_api_endpoints_bypass_cache_in_sw_js(self):
         """sw.js /api/* endpoint'leri icin network-first, cache atlanir."""

@@ -15,19 +15,36 @@
 const fs = require("fs");
 const path = require("path");
 
-const TOKENS_PATH = path.resolve(__dirname, "..", "..", "design-system", "tokens.json");
+const TOKENS_PATH = path.resolve(
+  __dirname,
+  "..",
+  "..",
+  "design-system",
+  "tokens.json"
+);
 const PX_PER_INCH = 160; // 1600 px / 10 inç
-const PT_PER_PX = 0.45;  // 720 pt / 1600 px
+const PT_PER_PX = 0.45; // 720 pt / 1600 px
 
 // CSS yığınında geçen ama PowerPoint'te KARŞILIĞI OLMAYAN aileler
 // (-apple-system vb.) atlanır; tercih listesi iki platformda da bulunan
 // adlardan seçilir (PowerPoint bulamazsa kendi eşdeğerine düşer).
 const GENERIC_FACES = new Set([
-  "-apple-system", "blinkmacsystemfont", "system-ui", "sans-serif",
-  "monospace", "serif", "ui-monospace", "ui-sans-serif",
+  "-apple-system",
+  "blinkmacsystemfont",
+  "system-ui",
+  "sans-serif",
+  "monospace",
+  "serif",
+  "ui-monospace",
+  "ui-sans-serif",
 ]);
-const PORTABLE_PREFERENCE = ["Helvetica", "Arial", "Menlo", "Consolas",
-                            "DejaVu Sans Mono"];
+const PORTABLE_PREFERENCE = [
+  "Helvetica",
+  "Arial",
+  "Menlo",
+  "Consolas",
+  "DejaVu Sans Mono",
+];
 
 function load(pathname = TOKENS_PATH) {
   let raw;
@@ -39,11 +56,15 @@ function load(pathname = TOKENS_PATH) {
   const hex = (group, key) => {
     const value = (raw[group] || {})[key];
     if (typeof value !== "string" || !value.trim()) {
-      throw new Error(`tokens.json: ${group}.${key} eksik — palette türetilemez`);
+      throw new Error(
+        `tokens.json: ${group}.${key} eksik — palette türetilemez`
+      );
     }
     const match = /^#([0-9a-fA-F]{6})$/.exec(value.trim());
     if (!match) {
-      throw new Error(`tokens.json: ${group}.${key} 6-haneli hex değil: ${value}`);
+      throw new Error(
+        `tokens.json: ${group}.${key} 6-haneli hex değil: ${value}`
+      );
     }
     return match[1].toUpperCase();
   };
@@ -52,17 +73,21 @@ function load(pathname = TOKENS_PATH) {
     if (typeof value !== "string" || !value.trim()) {
       throw new Error(`tokens.json: ${group}.${key} eksik`);
     }
-    const stack = value.split(",")
+    const stack = value
+      .split(",")
       .map((part) => part.trim().replace(/^["']|["']$/g, ""))
       .filter(Boolean);
     const portable = PORTABLE_PREFERENCE.find((name) =>
-      stack.some((family) => family.toLowerCase() === name.toLowerCase()));
+      stack.some((family) => family.toLowerCase() === name.toLowerCase())
+    );
     if (portable) return portable;
     const first = stack.find(
-      (family) => !GENERIC_FACES.has(family.toLowerCase()));
+      (family) => !GENERIC_FACES.has(family.toLowerCase())
+    );
     if (!first) {
       throw new Error(
-        `tokens.json: ${group}.${key} taşınabilir font ailesi içermiyor: ${value}`);
+        `tokens.json: ${group}.${key} taşınabilir font ailesi içermiyor: ${value}`
+      );
     }
     return first;
   };
@@ -103,13 +128,13 @@ function load(pathname = TOKENS_PATH) {
     },
     // Tipografi: deck piksel ölçüleri → pt (PX_TO_PT ile).
     type: {
-      kicker: Math.round(22 * PT_PER_PX * 10) / 10,   // 9.9
-      title: Math.round(53 * PT_PER_PX * 10) / 10,    // 23.9
-      lead: Math.round(34 * PT_PER_PX * 10) / 10,     // 15.3
-      body: Math.round(30 * PT_PER_PX * 10) / 10,     // 13.5
-      small: Math.round(24 * PT_PER_PX * 10) / 10,    // 10.8
-      micro: Math.round(18 * PT_PER_PX * 10) / 10,    // 8.1
-      display: Math.round(64 * PT_PER_PX * 10) / 10,  // 28.8
+      kicker: Math.round(22 * PT_PER_PX * 10) / 10, // 9.9
+      title: Math.round(53 * PT_PER_PX * 10) / 10, // 23.9
+      lead: Math.round(34 * PT_PER_PX * 10) / 10, // 15.3
+      body: Math.round(30 * PT_PER_PX * 10) / 10, // 13.5
+      small: Math.round(24 * PT_PER_PX * 10) / 10, // 10.8
+      micro: Math.round(18 * PT_PER_PX * 10) / 10, // 8.1
+      display: Math.round(64 * PT_PER_PX * 10) / 10, // 28.8
     },
     lineHeight: {
       base: (raw["line-height"] || {}).base || 1.5,

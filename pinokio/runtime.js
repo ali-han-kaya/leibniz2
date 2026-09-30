@@ -70,7 +70,11 @@ function prepareRuntimeCommand() {
 
 function serverCommand(port) {
   const numericPort = Number(port);
-  if (!Number.isInteger(numericPort) || numericPort < 1 || numericPort > 65535) {
+  if (
+    !Number.isInteger(numericPort) ||
+    numericPort < 1 ||
+    numericPort > 65535
+  ) {
     throw new Error(`invalid Pinokio port: ${port}`);
   }
   return [
