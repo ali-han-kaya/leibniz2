@@ -1,0 +1,77 @@
+diff --git a/.gitignore b/.gitignore
+index 2804afd..1061cff 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -49,3 +49,5 @@ apps/dashboard-next/.next/
+ 
+ # make build dirs (docs/Makefile.tectonic + docs/Makefile.texlive BUILD_DIR)
+ .build/
++.vercel
++.env*
+diff --git a/_calisma/CIKTI/preview.js b/_calisma/CIKTI/preview.js
+index b10f27a..b0eaf39 100644
+--- a/_calisma/CIKTI/preview.js
++++ b/_calisma/CIKTI/preview.js
+@@ -1302,11 +1302,18 @@ function scanZ3(line) {
+ }
+ 
+ let streamLines = []; // renklendirilmiş HTML satırları (son STREAM_MAX)
++let streamDirty = false; // push'lar arası tek-DOM-yazımı (rAF ile birleştir)
+ let liveFindings = []; // canlı akıştan toplanan P0/P1 satırları [{type, line}]
+ const STREAM_MAX = 600; // son N run replay edilirken yeterli bağlam kalsın
++function flushStream() {
++  if (!streamDirty) return;
++  streamDirty = false;
++  const el = $("runstream");
++  el.innerHTML = streamLines.join("\n");
++  el.scrollTop = el.scrollHeight;
++}
+ function connectStream() {
+-  const el = $("runstream"),
+-    st = $("stream-state");
++  const st = $("stream-state");
+   if (runStreamES) runStreamES.close();
+   runStreamES = new EventSource(
+     "/api/run-stream?v=" + (window.BUILD_TS || Date.now())
+@@ -1325,8 +1332,13 @@ function connectStream() {
+     streamLines.push(mark + arrow + colorizeLine(line));
+     if (streamLines.length > STREAM_MAX)
+       streamLines = streamLines.slice(-STREAM_MAX);
+-    el.innerHTML = streamLines.join("\n");
+-    el.scrollTop = el.scrollHeight;
++    // Satır-başı innerHTML yerine rAF-birleşik yazım: replay 19k satır
++    // bağlantı-açılışında tek-frame'e iner (QA bulgusu F4, 2026-09-23 —
++    // satır-başı tam-DOM-serileştirme main-thread'i kilitliyordu).
++    if (!streamDirty) {
++      streamDirty = true;
++      requestAnimationFrame(flushStream);
++    }
+     // P0/P1 satırlarını canlı findings paneline ekle
+     if (
+       /^\[P0\]/.test(line) ||
+diff --git a/_calisma/CIKTI/sync_verify_mirror.sh b/_calisma/CIKTI/sync_verify_mirror.sh
+index 6111d0c..05318e7 100755
+--- a/_calisma/CIKTI/sync_verify_mirror.sh
++++ b/_calisma/CIKTI/sync_verify_mirror.sh
+@@ -149,6 +149,21 @@ PREVIEW_FILES=(
+   "preview_server.py|preview_server.py"
+   "_daemonize.py|_daemonize.py"
+   "preview_prestart.py|preview_prestart.py"
++  # Dashboard frontend ikilisi: preview_server.py /preview.js'i HER
++  # İSTEKTE PREVIEW_DIR'den okur; burada bayat kalırsa daemon ESKİ JS'i
++  # servis eder (inline onmousemove-handler'lı eski-sürüm 09-19 kopyası —
++  # QA bulgusu F3, 2026-09-23; tooltip-delegasyonu boş).
++  # DİKKAT: preview.html burada TAŞINMAZ — mirror-yazarı update_preview.sh
++  # build()'dir (build-stamp enjekte eder; stamp zamanlı olduğundan raw
++  # kaynağıyla byte-farklı). sync RAW kopyalayıp üstüne yazsaydı hem
++  # build'i ezerdi hem --check'i kalıcı-BAYAT'a düşürürdü (F3-fix
++  # ilk-denenme, 2026-09-23; bootstrap-idempotence süitiyle kanıtlandı).
++  "preview.js|preview.js"
++  # SW bayat-deploy tuzası: preview.js /sw.js'i kaydeder; mirror'da yoksa
++  # kayıt 404 alır ve webview'deki ESKİ SW kontrolü sonsuza dek elinde
++  # tutar (güncelleme-çekimi hep 404 → skipWaiting asla çalışmaz) —
++  # dashboard gömülü-webview'de asılı kalır (QA bulgusu F2, 2026-09-23)
++  "sw.js|sw.js"
+   # determinism-trend endpoint handler'ının importu (PREVIEW_DIR'den
+   # çözülür — QA bulgusu F1, 2026-09-21)
+   "determinism_trend_badge.py|determinism_trend_badge.py"

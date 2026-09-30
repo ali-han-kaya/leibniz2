@@ -49,6 +49,7 @@
 #   update_preview.sh --plist-watch [N]    # şablonları izle; değişince yeniden üret
 #   update_preview.sh --plist-reset        # şablonları yerleşik varsayılandan geri yaz
 #   update_preview.sh --start [LABEL]       # plist'i üret + launchctl bootstrap (vars. birincil)
+#                                            # (HTTP readiness için start_preview.sh kullan)
 #   update_preview.sh --stop [LABEL|all]    # launchctl bootout
 #   update_preview.sh --status              # her label için yüklü/PID/exit/HTTP durumu
 #   update_preview.sh --mirror             # verify mirror'ı senkron et (sync_verify_mirror.sh)
@@ -475,6 +476,10 @@ plist_is_loaded() {
 # Tek label'ı bootstrap et (idempotent: varsa sök → yükle → enable).
 plist_start_one() {
   local label="$1" profile dst logname port interval keepalive
+  command -v launchctl >/dev/null 2>&1 || {
+    err "launchctl bulunamadı — launchd profili yüklenemez (macOS gerekir)"
+    return 1
+  }
   profile="$(plist_profile_for "$label")" || {
     err "bilinmeyen label: $label"
     say "  profiller:"
@@ -500,6 +505,7 @@ plist_start_one() {
   fi
   say "START: $label → bootstrap edildi ($dst)"
   say "       yüklü: $(plist_is_loaded "$label" && echo evet || echo hayır)"
+  say "       URL: http://127.0.0.1:${port}/preview.html"
 }
 
 # Tek label'ı bootout et.

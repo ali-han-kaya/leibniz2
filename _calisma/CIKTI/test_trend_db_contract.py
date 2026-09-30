@@ -5,9 +5,13 @@ Sürükleme (drift) koruması: preview_server.HISTORY_KEYS'teki her anahtar
 (2) apps/trend-db/scripts/load.ts'te `row.<anahtar>` okuması olarak
 mevcut olmalıdır. Statik denetim — ağ/DB/node gerektirmez.
 """
+import hashlib
+import json
 import os
 import pathlib
 import re
+import shutil
+import subprocess
 import sys
 import tempfile
 import time
@@ -129,6 +133,225 @@ class TestTrendDbContract(unittest.TestCase):
         body = model.read_text(encoding="utf-8")
         for field in ("refsBySource", "sourceRowSha256", "rawSha256"):
             self.assertIn(field, body, f"üretilen modelde alan yok: {field}")
+
+
+class TestTrendDbDryRun(unittest.TestCase):
+    """`--dry-run` sözleşmesi: DB'ye dokunmadan sayaç + kaynak SHA-256 raporu.
+
+    Ön-uçuş, gerçek koşuyla AYNI eşleme yolundan (`prepare`) geçtiği için
+    rapor ile yükleme ayrışamaz. Test bunu gerçek `tsx` koşusuyla kanıtlar;
+    node/tsx yoksa atlanır (test_github_scripts/test_pptx_export deseni).
+    Kimlik bilgisi verilmez: DATABASE_URL temizlenir ve cwd geçici dizindir
+    (dotenv `.env` bulamaz) — dry-run'ın bağlantısız koştuğunun kanıtı.
+    """
+
+    NODE = shutil.which("node")
+    TSX = TREND_DB / "node_modules" / ".bin" / "tsx"
+    LOADER = TREND_DB / "scripts" / "load.ts"
+
+    def setUp(self):
+        if self.NODE is None or not self.TSX.exists():
+            self.skipTest("node/tsx yok (apps/trend-db/node_modules kurulmalı)")
+        self.tmp = tempfile.TemporaryDirectory(prefix="trend-dry-")
+        self.addCleanup(self.tmp.cleanup)
+
+    def _run(self, *args):
+        """Loader'ı kimlik bilgisi OLMADAN koşar (cwd: geçici dizin)."""
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("DATABASE_URL", "DATABASE_URL_UNPOOLED")}
+        return subprocess.run(
+            [self.NODE, str(self.TSX), str(self.LOADER), *args],
+            cwd=self.tmp.name, env=env, capture_output=True, text=True,
+            timeout=120)
+
+    def _fixture(self, name="history.jsonl"):
+        """5 dolu satır: 2 aday, 1 dosya-içi ts tekrarı, 2 doğrulama-dışı."""
+        lines = [
+            '{"ts": "2026-09-27T10:00:00.000000+00:00", "verdict": "PASS",'
+            ' "p0": 0, "p1": 0}',
+            '{"ts": "2026-09-27T10:05:00.000000+00:00", "verdict": "FAIL",'
+            ' "p0": 1, "p1": 2}',
+            '{"ts": "2026-09-27T10:05:00.000000+00:00", "verdict": "PASS",'
+            ' "p0": 0, "p1": 0}',
+            '{"verdict": "PASS"}',   # ts yok → doğrulama-dışı
+            "null",                    # JSON nesnesi değil → doğrulama-dışı
+        ]
+        path = pathlib.Path(self.tmp.name) / name
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return path
+
+    def test_dry_run_reports_sha256_and_insert_skip_counts(self):
+        fixture = self._fixture()
+        raw = fixture.read_bytes()
+        res = self._run(str(fixture), "--dry-run")
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertIn(
+            "[DRY-RUN] sha256: %s" % hashlib.sha256(raw).hexdigest(),
+            res.stdout, "kaynak SHA-256 raporlanmadı")
+        self.assertIn("(%d bayt)" % len(raw), res.stdout)
+        self.assertIn("satır: 5 dolu / 6 fiziksel (boş atlanan: 1)", res.stdout)
+        self.assertIn("aday: 2 · doğrulama-dışı atlanan: 2", res.stdout)
+        self.assertIn("dosya-içi çakışma: 1", res.stdout)
+        self.assertIn("eklenecek (en çok): 2", res.stdout)
+        self.assertIn("atlanacak (en az): 3", res.stdout)
+        self.assertNotIn("bitti:", res.stdout, "dry-run yükleme yapmamalı")
+
+    def test_dry_run_needs_no_database_url(self):
+        fixture = self._fixture()
+        res = self._run(str(fixture), "--dry-run")
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertIn("DB bağlantısı kurulmadı", res.stdout)
+        self.assertNotIn("DATABASE_URL yok", res.stdout + res.stderr)
+
+    def test_real_run_still_requires_database_url(self):
+        fixture = self._fixture()
+        res = self._run(str(fixture))
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("DATABASE_URL yok", res.stderr)
+
+    def test_unknown_flag_exits_2(self):
+        res = self._run("--dri-run")
+        self.assertEqual(res.returncode, 2, res.stdout)
+        self.assertIn("bilinmeyen bayrak: --dri-run", res.stderr)
+
+    def test_malformed_json_exits_1_with_line_number(self):
+        path = pathlib.Path(self.tmp.name) / "bad.jsonl"
+        path.write_text('{"ts": "2026-09-27T10:00:00Z", "verdict": "PASS"}\n'
+                        "{bozuk\n", encoding="utf-8")
+        res = self._run(str(path), "--dry-run")
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("satır 2: JSON ayrıştırılamadı", res.stderr)
+
+    def test_json_flag_emits_single_line_machine_summary(self):
+        """`--json`: prose'in yerine TEK satır JSON — betikler için sözleşme.
+
+        JS tarafı (apps/trend-db/test/dry-run.test.mjs) aynı seam'i kendi
+        koşucusuyla kilitler; buradaki kopya kasıtlı: repo kökünde tek kapı
+        (check_unit_tests) Python testlerini koşar, JS koşucusu yalnız
+        `npm test` ile çalışır — iki yüz birden kaybolmasın.
+        """
+        fixture = self._fixture()
+        raw = fixture.read_bytes()
+        res = self._run(str(fixture), "--dry-run", "--json")
+        self.assertEqual(res.returncode, 0, res.stderr)
+        lines = res.stdout.strip().split("\n")
+        self.assertEqual(len(lines), 1, "tek satır JSON beklenir: %r" % res.stdout)
+        self.assertNotIn("[DRY-RUN]", res.stdout, "--json prose basmamalı")
+        j = json.loads(lines[0])
+        self.assertEqual(j["mode"], "dry-run")
+        self.assertEqual(j["source"], str(fixture))
+        self.assertEqual(j["sourceSha256"], hashlib.sha256(raw).hexdigest())
+        self.assertEqual(j["bytes"], len(raw))
+        self.assertEqual(
+            (j["linesFull"], j["linesPhysical"], j["blankSkipped"]),
+            (5, 6, 1), "satır sayaçları prose ile aynı olmalı")
+        self.assertEqual(
+            (j["candidates"], j["invalidSkipped"], j["duplicatesInFile"]),
+            (2, 2, 1), "aday/doğrulama-dışı/çakışma prose ile aynı olmalı")
+        self.assertEqual((j["insertAtMost"], j["skipAtLeast"]), (2, 3))
+        self.assertIs(j["dbConnected"], False, "dry-run DB'ye bağlanmamalı")
+
+    def test_json_numbers_match_prose_numbers(self):
+        """İki yüzey AYNI sayıları söyler — çapraz-kapı (drift yok)."""
+        fixture = self._fixture()
+        prose = self._run(str(fixture), "--dry-run").stdout
+        j = json.loads(
+            self._run(str(fixture), "--dry-run", "--json").stdout.strip())
+        m = re.search(r"eklenecek \(en çok\): (\d+) · atlanacak \(en az\): (\d+)", prose)
+        self.assertIsNotNone(m, "prose sayaç etiketi kayboldu: %r" % prose)
+        self.assertEqual(j["insertAtMost"], int(m.group(1)))
+        self.assertEqual(j["skipAtLeast"], int(m.group(2)))
+
+    def test_json_without_dry_run_exits_2(self):
+        """`--json` tek başına anlamsız: gerçek koşuda sayı ancak yazdıktan
+        sonra bilinir → kullanım hatası (2), sessizce prose'e düşmez."""
+        fixture = self._fixture()
+        res = self._run(str(fixture), "--json")
+        self.assertEqual(res.returncode, 2, res.stdout)
+        self.assertIn("--json", res.stderr)
+        self.assertIn("--dry-run", res.stderr)
+        self.assertNotIn("bilinmeyen bayrak", res.stderr,
+                         "--json bilinen bayrak olmalı (KNOWN_FLAGS)")
+        self.assertNotIn("[DRY-RUN]", res.stdout, "rapor basılmamalı")
+
+    def test_missing_source_reports_clean_error(self):
+        """Eksik kaynak: ham Node/ENOENT yığını DEĞİL, tek satır mesaj."""
+        missing = pathlib.Path(self.tmp.name) / "yok.jsonl"
+        res = self._run(str(missing), "--dry-run")
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("kaynak okunamadı", res.stderr)
+        self.assertIn("yok.jsonl", res.stderr, "hata yolu söylemeli")
+        self.assertNotIn("Error: ENOENT", res.stderr, "ham Node hatası sızmamalı")
+        self.assertNotRegex(res.stderr, r"\n\s+at\s", "yığın çerçevesi basılmamalı")
+
+    def test_dry_run_client_only_constructed_for_explicit_check_db(self):
+        """Yapısal sözleşme: dry-run'ın client'ı YALNIZ `--check-db` ile kurulur.
+
+        Düz `--dry-run` DB'ye dokunmaz (davranışsal kanıt: JSON'da
+        `dbConnected: false`). `--check-db` bilinçli bir SALT-OKUNUR istisnadır,
+        bu yüzden kaynakta client kurulumu o bayrağın guard'ının ALTINDA olmalı:
+        guard silinirse her dry-run kimliksiz koşamaz hâle gelir.
+        """
+        src = (TREND_DB / "scripts" / "load.ts").read_text(encoding="utf-8")
+        self.assertIn("if (dryRun)", src)
+        self.assertIn("KNOWN_FLAGS", src, "bayrak whitelist'i kayboldu")
+        self.assertLess(src.index("else if (checkDb)"),
+                        src.index("new PrismaClient("),
+                        "--check-db guard'ı client kurulumundan önce olmalı")
+
+    # ── 3. tur: çakışma ölçümü (`--check-db` / `--keys-file`) ──────────────
+
+    def _snapshot(self, name, lines):
+        path = pathlib.Path(self.tmp.name) / name
+        path.write_text("\n".join(lines) + ("\n" if lines else ""),
+                        encoding="utf-8")
+        return path
+
+    def test_keys_file_snapshot_makes_counts_exact(self):
+        """`--keys-file`: kimliksiz KESİN ölçüm — "en çok" değil, gerçek sayı.
+
+        JS tarafı (check-db.test.mjs) aynı seam'i kilitler; buradaki kopya
+        kasıtlı: repo kökündeki tek kapı Python testlerini koşar, JS koşucusu
+        yalnız `npm test` ile çalışır — iki yüz birden kaybolmasın.
+        """
+        fixture = self._fixture()
+        snap = self._snapshot(
+            "keys.jsonl", ['{"ts": "2026-09-27T10:00:00.000000+00:00"}'])
+        res = self._run(str(fixture), "--dry-run", "--json",
+                        "--keys-file=%s" % snap)
+        self.assertEqual(res.returncode, 0, res.stderr)
+        j = json.loads(res.stdout.strip())
+        self.assertEqual(j["conflictSource"], "snapshot")
+        self.assertEqual(j["conflictRows"], 1)
+        self.assertEqual(j["alreadyPresent"], 1)
+        self.assertEqual(j["insert"], 1, "3. satır dosya-içi çakışma → 1 aday")
+        self.assertEqual(j["skip"], 4,
+                         "2 doğrulama-dışı + 1 dosya-içi + 1 zaten var")
+        self.assertIs(j["dbConnected"], False, "snapshot ağ kurmamalı")
+        prose = self._run(str(fixture), "--dry-run", "--keys-file=%s" % snap)
+        self.assertIn("çakışma kaynağı: snapshot (1 satır)", prose.stdout)
+        self.assertNotIn("bu raporda YOK", prose.stdout,
+                         "ölçülmüş sayı varken \"yok\" denemez")
+
+    def test_keys_file_requires_equals_form_and_dry_run(self):
+        fixture = self._fixture()
+        snap = self._snapshot("keys2.jsonl", [])
+        spaced = self._run(str(fixture), "--dry-run", "--keys-file", str(snap))
+        self.assertEqual(spaced.returncode, 2, spaced.stdout)
+        self.assertIn("--keys-file=<yol>", spaced.stderr)
+        nodry = self._run(str(fixture), "--keys-file=%s" % snap)
+        self.assertEqual(nodry.returncode, 2, nodry.stdout)
+        self.assertIn("--keys-file yalnız --dry-run ile", nodry.stderr)
+
+    def test_check_db_without_credentials_exits_1_without_report(self):
+        """Kesin sayı isteyen çağıran, sınır raporunu KESİN sanmasın."""
+        fixture = self._fixture()
+        res = self._run(str(fixture), "--dry-run", "--check-db")
+        self.assertEqual(res.returncode, 1, res.stdout)
+        self.assertIn("DATABASE_URL", res.stderr)
+        self.assertNotIn("[DRY-RUN]", res.stdout, "belirsiz rapor basılmamalı")
+        self.assertNotIn("bilinmeyen bayrak", res.stderr,
+                         "--check-db bilinen bayrak olmalı")
 
 
 if __name__ == "__main__":

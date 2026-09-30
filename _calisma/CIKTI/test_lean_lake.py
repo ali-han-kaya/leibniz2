@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """test_lean_lake.py — K9 lake build kapısının regresyon testleri.
 
-verify_delivery.run_lake_build: 8 teoremli Content.lean çekirdeğini
+verify_delivery.run_lake_build: Lean kaynak çekirdeğini
 `lake clean && lake build --wfail` ile, lean-toolchain v4.14.0 zorunluluğuyla
 fail-closed derler. subprocess mock'lu (OFFLINE) — gerçek lake koşmaz.
 
@@ -37,6 +37,25 @@ def _proc(returncode=0, stdout="", stderr=""):
     return p
 
 
+class TestStandaloneLakeWrapper(unittest.TestCase):
+    def test_wrapper_is_fail_closed_and_reuses_canonical_command(self):
+        script = (pathlib.Path(__file__).resolve().parent /
+                  "verify_lean_lake.sh").read_text(encoding="utf-8")
+        self.assertIn("set -eu", script)
+        self.assertIn("lake clean", script)
+        self.assertIn("lake build --wfail", script)
+        self.assertIn("lean-toolchain", script)
+        self.assertIn("lakefile.toml", script)
+
+    def test_workflow_has_separate_lake_step(self):
+        workflow = (pathlib.Path(__file__).resolve().parents[2] /
+                    ".github" / "workflows" / "verify.yml").read_text(
+                        encoding="utf-8")
+        self.assertIn("Run Lean lake build (K5-K11 separate step)", workflow)
+        self.assertIn("verify_lean_lake.sh", workflow)
+        self.assertIn("timeout-minutes: 10", workflow)
+
+
 class TestRunLakeBuild(unittest.TestCase):
     """run_lake_build: toolchain + clean + build zinciri (fail-closed)."""
 
@@ -58,7 +77,7 @@ class TestRunLakeBuild(unittest.TestCase):
                                side_effect=[_proc(0), _proc(0)]):
             ok, detail = self._run()
         self.assertTrue(ok, detail)
-        self.assertIn("8 teorem PASS", detail)
+        self.assertIn("Lean core PASS", detail)
 
     def test_missing_toolchain_fails(self):
         os.remove(self.tc)
@@ -181,7 +200,7 @@ class TestLeanOnlySkip(unittest.TestCase):
                                   return_value="/usr/bin/lean"):
             ok, detail = vd.run_lake_build("lake", self.dir, lean_only=True)
         self.assertTrue(ok, detail)
-        self.assertIn("8 teorem PASS", detail)
+        self.assertIn("Lean core PASS", detail)
 
     def test_wrong_toolchain_still_fails_even_with_flag(self):
         # SKIP kararı toolchain doğrulamasını BYPASS ETMEZ: lean kuruluysa
@@ -226,8 +245,9 @@ class TestK9Combined(unittest.TestCase):
     def test_skip_does_not_rescue_failing_file_check(self):
         self.assertFalse(self._call_k9(False, None))
 
-    def test_k9_layer_label_mentions_both_cores(self):
-        self.assertIn("8 teorem", vd.LAYER_LABELS["K9"])
+    def test_k9_layer_label_mentions_statement_and_core(self):
+        self.assertIn("statement gate", vd.LAYER_LABELS["K9"])
+        self.assertIn("reduct-invariance", vd.LAYER_LABELS["K9"])
 
     def test_constants(self):
         self.assertEqual(vd.LEAN_TOOLCHAIN, "leanprover/lean4:v4.14.0")

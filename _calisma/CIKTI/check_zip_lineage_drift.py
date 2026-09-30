@@ -12,10 +12,13 @@ Kaynaklar (verify_delivery.py ile AYNI tek kaynaklar):
     verify_delivery.check_zip_lineage / LINEAGE-CUR ile aynı eşik)
   - cleanup_log.json  → canonical[].hash ↔ canlı dosya (P0, K14-CANON-HASH
     ile aynı eşik)
+  - teslim metadata sidecar'ı → `# canonical:` referansı ↔ kabul defteri
+    (Faz 4 repack determinizm kapısı; referans defterde yoksa P0)
 
 Yalnızca P0 sınıfı denetlenir: P1 geçmiş-nesil türetmeleri (git show)
 ve expect_absent/moved kayıtları CI'ın --full akışına bırakılır — kapı
-offline, stdlib-only ve ~10ms'dir.
+offline, stdlib-only (id_canonical yardımcı modülü dışında bağımlılıksız)
+ve ~10ms'dir.
 
 Eşleşmeyen zip/dosya YOKSA (yeni checkout): UNVERIFIED (INFO) — engellemez,
 aynı manier verify_delivery.check_cleanup'in CI davranışıdır.
@@ -33,6 +36,19 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(os.path.dirname(HERE))
+
+sys.path.insert(0, HERE)
+import id_canonical  # noqa: E402  (defter/normalizasyon tek kaynak)
+
+# Teslim paketi + metadata sidecar adı. SIDECAR_NAME verify_delivery.
+# PDF_METADATA_SIDECAR ile BİREBİR aynı olmalıdır. PKG_REL ise verify_delivery.
+# PKG_REL'in REPO-göreli biçimidir (verify_delivery onu ZIP çıkarma köküne göre
+# çözer): PKG_REL == "_calisma/V5_ICERIK/" + verify_delivery.PKG_REL. Kapı
+# stdlib-only kalsın diye import edilmez; ikisi de test_check_zip_lineage_drift.
+# py'de fail-closed pinlenir.
+PKG_REL = ("_calisma/V5_ICERIK/TESLIM_V5_FINAL_2026-08-17/stoic_hume_package/"
+           "Stoic_Hume_Formal_Section_2026-08-17")
+SIDECAR_NAME = "ingiliz_empirizmi_v3.pdf.metadata.sha256"
 
 
 def sha256_file(path: str) -> str | None:
@@ -110,6 +126,39 @@ def check_cleanup_canonical(cleanup_path: str, repo_root: str, findings: list) -
     return ok
 
 
+def check_delivery_sidecar_canonical(sidecar_path: str, findings: list) -> bool:
+    """Sidecar `# canonical:` referansı ↔ kabul defteri (Faz 4, P0).
+
+    repack motor geçişinde sidecar'ı bilinçli yenilerken kanonik referansı
+    yazar ve yazma anında defterde arar (repack fail-closed). Bu kapı AYNI
+    iki kaynağı commit anında karşılaştırır: sidecar'daki referans defterde
+    kayıtlı değilse P0 — motor geçişi ya defter satırı olmadan yapılmış ya da
+    sidecar yenilemesi eksik. `# canonical:` satırı YOKSA (henüz yenilenmemiş
+    tectonic-era sidecar) INFO: engellemez, yenileme beklemede demektir.
+    """
+    canonical = id_canonical.sidecar_canonical(sidecar_path)
+    if not canonical:
+        print("K14-DRIFT (INFO): sidecar'da # canonical: referansı yok — "
+              "motor-geçişi yenilemesi beklemede (engellemez)")
+        return True
+    tokens, error, source = id_canonical.ledger_tokens()
+    if error:
+        findings.append(fail(
+            f"kabul defteri okunamadı: {error} (sidecar kanonik referansı "
+            f"doğrulanamaz)"))
+        return False
+    if not id_canonical.has_canonical(canonical, tokens):
+        findings.append(fail(
+            f"sidecar kanonik referansı kabul defterinde yok: "
+            f"{canonical[:16]}… — defter satırı üret "
+            f"(make -f docs/Makefile.texlive accept LEDGER=update) ya da "
+            f"sidecar yenilemesini ({SIDECAR_NAME}) geri al"))
+        return False
+    print(f"K14-DRIFT PASS: sidecar kanonik referansı defterde kayıtlı: "
+          f"{canonical[:12]}… (defter: {source})")
+    return True
+
+
 def main(argv: list | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--repo-root", default=REPO_ROOT,
@@ -131,6 +180,12 @@ def main(argv: list | None = None) -> int:
         ok &= check_cleanup_canonical(cleanup_path, args.repo_root, findings)
     else:
         print("K14-DRIFT (INFO): cleanup_log.json yok — bölüm atlandı")
+
+    sidecar_path = os.path.join(args.repo_root, PKG_REL, SIDECAR_NAME)
+    if os.path.isfile(sidecar_path):
+        ok &= check_delivery_sidecar_canonical(sidecar_path, findings)
+    else:
+        print("K14-DRIFT (INFO): teslim metadata sidecar'ı yok — bölüm atlandı")
 
     if not findings:
         print("K14-DRIFT: PASS — kayıt ↔ canlı dosya bütünlüğü tamam")

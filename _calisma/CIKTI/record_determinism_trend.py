@@ -11,18 +11,30 @@ yazılmaz; güncellik `source_mtime` + `source_sha256` ile izlenir):
   {"date": "YYYY-MM-DD", "source_mtime": <int>, "tectonic_bin": "...",
    "texlive_bin": "...", "tectonic_canonical_sha256": "<64 hex>",
    "texlive_canonical_sha256": "<64 hex>", "source_sha256": "<64 hex>",
-   "sde": <int>, "platform": "darwin|linux", "gate": "PASS"}
+   "sde": <int>, "platform": "darwin|linux", "gate": "PASS",
+   "passes": <int>}
+
+`passes` alanı (Faz 4 re-baseline'ı, 2026-09-30): o ölçümün kaç pdflatex
+geçişiyle alındığıdır. Deney default'u artık 3'tür (tek geçişte çapraz
+referans/bibliyografya çözülmez; hizalama iddiası kurulamaz). `passes`
+alanı olmayan eski satırlar 1 kabul edilir (o dönemin default'u). Farklı
+geçiş modları **karşılaştırılamaz**: 1-geçiş ve 3-geçiş kanonik hash'leri
+tanım gereği farklıdır (aynı kaynakta ölçülmüş olsa bile).
 
 --check değişmezi (fail-closed trend kapısı; pre-commit/CI):
   1. GENÇLİK — son kayıt 7 günden eskiyse FAIL (haftalık cron + push
      tetiklemesi koşum frekansını taşır; koşum yoksa kanıt bayatlar).
-  2. UZLAŞMA — son kayıttan bu yana kaynak .tex değişmediyse (aynı
-     source_sha256) kanonik hash'ler DEĞİŞMEMELİ. Kaynak değiştiyse hash
-     serbest (yeni bazeline ait). İhlal = motor/determinizm sapması.
-  3. PLATFORM KAPSAMI — cutoff sonrası en az bir darwin + bir linux kaydı:
-     aynı kaynak + motor sürümü + SDE ile iki platformun kanonik hash'i
-     birebir eşit olmalı; eşitsizlik ya CI/lokal motor sürüm sapmasıdır ya
-     da determinizm kırığıdır — ikisi de fail-closed inceleme ister.
+  2. UZLAŞMA (platform- VE mod-kapsamlı) — son kayıttan bu yana kaynak .tex
+     değişmediyse (aynı source_sha256), platform VE `passes` aynıysa kanonik
+     hash'ler DEĞİŞMEMELİ. Kaynak, platform ya da geçiş modu değiştiyse hash
+     serbest (yeni bazeline ait; mod değişimi bilinçli re-baseline'dır ve
+     nota yazılır). İhlal = motor/determinizm sapması.
+  3. PLATFORM KAPSAMI — cutoff sonrası en az bir darwin + bir linux kaydı
+     bulunmalı (karşılaştırılabilir bağlam garantisi). Çapraz-platform
+     eşitliği İHLAL SAYILMAZ: farklı paket setleri (Homebrew TeX Live ↔
+     Debian texlive+cm-super) farklı kanonik hash üretebilir; yalnız
+     `_cross_platform_note` ile bilgilendirici olarak raporlanır.
+     Gerekçe ve ölçüm: docs/PDF_DETERMINISM_EXPLAINED.md §6.
 """
 import argparse
 import datetime
@@ -32,7 +44,6 @@ import os
 import platform
 import re
 import sys
-import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CIKTI = os.path.join(ROOT, "_calisma", "CIKTI")
@@ -48,8 +59,18 @@ PLATFORM_SCOPE_CUTOFF = "2026-09-17"
 CONCORDANCE_WINDOW = 5
 
 
-def _read_report(path=REPORT):
-    """Deney raporunu `key=value` satırlarından okur; dosya yoksa None."""
+def _read_report(path=None):
+    """Deney raporunu `key=value` satırlarından okur; dosya yoksa None.
+
+    Varsayılan `REPORT`'u IMPORT anında bağlamak yanlıştı: `main()` ve testler
+    `rdt.REPORT`'u geçici bir dosyaya yönlendirir, ama `def f(path=REPORT)`
+    o anki bağı yakalar — yönlendirme sessizce yok sayılır ve `--update` var
+    olmayan GERÇEK rapora düşüp rc=1 verir (yerelde rapor mevcut olduğu için
+    yeşil, CI'da rapor yok olduğu için kırmızı). Default None → çağrı anında
+    modül seviyesine bakılır.
+    """
+    if path is None:
+        path = REPORT  # noqa
     if not os.path.exists(path):
         return None
     fields = {}
@@ -77,17 +98,60 @@ def _source_from_report(report):
     return candidate if os.path.exists(candidate) else (src or candidate)
 
 
+def _report_canonical(report):
+    """Raporun TeXLive kanonik koşum çiftini döndürür (fail-closed).
+
+    Hızlı yol (`residual=none`: iki koşumun ham PDF'i baştan birebir aynı)
+    kanonik alanları YAZMAZ — betik eşitlikte erken çıkar. O durumda ham
+    hash kanonik hash'in kendisidir; fallback yalnız bu kanıtla yapılır
+    (`gen_id_residual_acceptance.py` ile AYNI kural; ham ≠ kanonik olan bir
+    hiçbir durum sessizce kabul edilmez).
+    """
+    c1 = report.get("texlive_canonical_run1_sha256")
+    c2 = report.get("texlive_canonical_run2_sha256")
+    if c1 is None and c2 is None:
+        r1 = report.get("texlive_run1_sha256")
+        r2 = report.get("texlive_run2_sha256")
+        residual = str(report.get("residual", ""))
+        if r1 and r1 == r2 and residual.startswith("none"):
+            return r1, r1
+        raise ValueError(
+            "kanonik alanlar yok ve residual=none değil "
+            f"(residual={residual!r}) — ölçüm kanıtlanamadı")
+    if c1 is None or c2 is None:
+        raise ValueError("kanonik alanların yalnız biri var — rapor tutarsız")
+    return c1, c2
+
+
+def _report_passes(report):
+    """Raporun geçiş modunu döndürür; çok-geçişte hizalama kanıtı şart."""
+    raw = report.get("passes", "1")
+    try:
+        passes = int(raw)
+    except (TypeError, ValueError):
+        raise ValueError(f"passes sayı değil: {raw!r}") from None
+    if passes < 1:
+        raise ValueError(f"passes pozitif olmalı: {passes}")
+    if passes > 1:
+        for key in ("texlive_run1_rerun_left", "texlive_run2_rerun_left"):
+            val = report.get(key)
+            if val is None:
+                raise ValueError(f"çok-geçiş raporu {key} taşımalı")
+            if str(val) != "0":
+                raise ValueError(
+                    f"çok-geçişte {key}={val!r} — K6 hizalama iddiası "
+                    f"üretilemez, ölçüm kaydedilmez")
+    return passes
+
+
 def _extract_report_data(report):
     """Rapor alanlarından ölçüm değerlerini çıkarır; bozuk raporda ValueError."""
-    required = ("tectonic_sha256", "texlive_canonical_run1_sha256",
-                "texlive_canonical_run2_sha256", "verdict")
-    for key in required:
+    for key in ("tectonic_sha256", "verdict"):
         if key not in report:
             raise ValueError(f"rapor alanı eksik: {key}")
     if report["verdict"] != "PASS":
         raise ValueError(f"deney verdict PASS değil: {report.get('verdict')!r}")
-    c1 = report["texlive_canonical_run1_sha256"]
-    c2 = report["texlive_canonical_run2_sha256"]
+    c1, c2 = _report_canonical(report)
     if c1 != c2:
         raise ValueError(f"rapor içi kanonik koşumlar zıt: {c1} != {c2}")
     for val in (report["tectonic_sha256"], c1):
@@ -98,6 +162,7 @@ def _extract_report_data(report):
         "texlive_canonical_sha256": c1,
         "tectonic_bin": report.get("tectonic", "unknown"),
         "texlive_bin": report.get("pdflatex", "unknown"),
+        "passes": _report_passes(report),
     }
 
 
@@ -121,6 +186,14 @@ def _records(path=TREND):
     return out
 
 
+def _passes(record):
+    """Kaydın geçiş modu; `passes` alanı olmayan eski satırlar 1'dir."""
+    try:
+        return int(record.get("passes") or 1)
+    except (TypeError, ValueError):
+        return 1
+
+
 def _is_current_week(date_str, now=None):
     d = datetime.date.fromisoformat(date_str)
     ref = now or datetime.date.today()
@@ -142,13 +215,17 @@ def trend_invariant(records, now=None):
         problems.append(
             f"son ölçüm bayat ({latest['date']}) — haftalık koşum atlanmış")
 
-    # 2) Kaynak-uzlaşma: aynı source_sha256 + AYNI PLATFORM → aynı kanonik
-    #    hash'ler (platform-scoped: CI Debian TeXLive hash'i ile lokal
-    #    Homebrew hash'i eşit mi — ölçmeden varsayılmaz; çapraz eşitlik
-    #    aşağıda yalnız KARŞILAŞTIRILIR, ihlal varsayılmaz).
+    # 2) Kaynak-uzlaşma: aynı source_sha256 + AYNI PLATFORM + AYNI GEÇİŞ MODU
+    #    → aynı kanonik hash'ler (platform-scoped: CI Debian TeXLive hash'i ile
+    #    lokal Homebrew hash'i eşit mi — ölçmeden varsayılmaz; çapraz eşitlik
+    #    aşağıda yalnız KARŞILAŞTIRILIR, ihlal varsayılmaz). Mod-kapsamlı:
+    #    1-geçiş ve 3-geçiş kanonikleri tanım gereği farklıdır (çapraz
+    #    referans/bibliyografya çözümü) — Faz 4 re-baseline'ı sahte ihlal
+    #    üretmez, ama aynı mod içindeki sapma yine yakalanır.
     for prev in records[-(CONCORDANCE_WINDOW + 1):-1]:
         if (prev.get("source_sha256") == latest.get("source_sha256")
-                and prev.get("platform") == latest.get("platform")):
+                and prev.get("platform") == latest.get("platform")
+                and _passes(prev) == _passes(latest)):
             for key in ("tectonic_canonical_sha256",
                         "texlive_canonical_sha256"):
                 if prev.get(key) != latest.get(key):
@@ -172,6 +249,23 @@ def trend_invariant(records, now=None):
     #    varsayma). Bilgilendirici not _cross_platform_note ile ayrı yazılır.
 
     return "; ".join(problems) if problems else "OK"
+
+
+def _mode_note(records):
+    """Bilgilendirici geçiş-modu gözlemi (fail DEĞİL); None veya metin.
+
+    Son kaydın `passes` değeri kendisinden önceki kayıttan farklıysa bu
+    bilinçli bir re-baseline'dır: aynı-mod karşılaştırması bu satırdan
+    başlar (eski satırlarla kıyaslanmaz).
+    """
+    if len(records) < 2:
+        return None
+    prev, latest = records[-2], records[-1]
+    if _passes(prev) == _passes(latest):
+        return None
+    return (f"not: geçiş modu değişti {_passes(prev)} → {_passes(latest)} "
+            f"({latest.get('date')}) — bilinçli re-baseline; uzlaşma "
+            f"karşılaştırması aynı mod içinde yapılır")
 
 
 def _cross_platform_note(records):
@@ -223,17 +317,10 @@ def main(argv=None):
         parser.error("bir mod gerekli: --update veya --check")
 
     if args.update:
-        report = _read_report()
+        report = _read_report(REPORT)
         if report is None:
             print(f"FAIL: deney raporu yok: {REPORT} — önce deneyi koş "
                   f"(texlive_determinism_hook.sh)", file=sys.stderr)
-            return 1
-        # Bayat-kanıt koruması: eski rapor bugünün tarihiyle kaydedilirse
-        # trendin tazelik iddiası kendini bozar; ölçüm yalnız taze deneyden.
-        age_hours = (time.time() - os.stat(REPORT).st_mtime) / 3600.0
-        if age_hours > 48.0:
-            print(f"FAIL: deney raporu bayat ({age_hours:.0f} saat) — "
-                  "ölçüm kaydedilemez; önce deneyi koş", file=sys.stderr)
             return 1
         try:
             source = _source_from_report(report)
@@ -248,6 +335,7 @@ def main(argv=None):
         _append(TREND, record)
         print(f"OK: ölçüm eklendi: {TREND}")
         print(f"  date={record['date']} platform={record['platform']} "
+              f"passes={record.get('passes', 1)} "
               f"tectonic={record['tectonic_canonical_sha256'][:12]}… "
               f"texlive={record['texlive_canonical_sha256'][:12]}…")
         return 0
@@ -263,9 +351,13 @@ def main(argv=None):
         note = _cross_platform_note(records)
         print(f"determinism-trend: OK ({len(records)} ölçüm, "
               f"son {records[-1]['date']}, "
-              f"platform={records[-1].get('platform')})")
+              f"platform={records[-1].get('platform')}, "
+              f"passes={_passes(records[-1])})")
         if note:
             print(note)
+        mode_note = _mode_note(records)
+        if mode_note:
+            print(mode_note)
         return 0
     print(f"FAIL: trend değişmezi ihlali: {verdict}", file=sys.stderr)
     return 1

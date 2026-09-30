@@ -80,6 +80,9 @@ ARTIFACT_JOBS = {
     "changelog-drift": "changelog-drift",
     "ci-simulate": "ci-simulate",
     "reproducibility": "reproducibility",
+    # docx jeneratoru (_calisma/docx/make_docx.js) cikitisi — ureten job
+    # advisory `docx-export` (LibreOffice acilabilirlik kontrolu).
+    "docx-report": "docx-export",
 }
 
 # Config artifact'ının bilinen dosya ADLARI (basename). Config dosyaları

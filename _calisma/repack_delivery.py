@@ -22,6 +22,7 @@ Zip'ler sıralı girdiler + sabit zaman damgasıyla üretilir (tekrarlanabilir).
                → exit 1, fail-closed)
 """
 import argparse
+import datetime
 import hashlib
 import os
 import re
@@ -34,6 +35,35 @@ PKG = os.path.join(ROOT, "V5_ICERIK", "TESLIM_V5_FINAL_2026-08-17",
 INNER_SRC = os.path.join(ROOT, "V5_ICERIK", "TESLIM_V5_FINAL_2026-08-17")
 OUTER_SRC = os.path.join(ROOT, "TESLIM", "Stoic-Hume-Final-V5_2026-08-17")
 CIKTI = os.path.join(ROOT, "CIKTI")
+
+# K6-DETERM /ID-kanonik referansı — TEK KAYNAK: verify_delivery.py ve
+# check_zip_lineage_drift.py ile aynı modül (id_canonical.py).
+import sys as _sys  # noqa: E402
+_sys.path.insert(0, CIKTI)
+import id_canonical  # noqa: E402
+
+
+def check_ledger_entry(canonical):
+    """Repack determinizm kapısı: yeni kanonik hash defterde kayıtlı olmalı.
+
+    Motor geçişi/yeniden derleme sidecar'ı bilinçli yeniler; referansı
+    (docs/ID_RESIDUAL_ACCEPTANCE.md §4 defter satırı) olmayan bir kanonik
+    hash yazılırsa strict K6-DETERM ilk koşuda P1 verir — yani repack
+    "kanıtsız" bir teslim üretmiş olur. Bu yüzden repack fail-closed durur:
+    önce `make -f docs/Makefile.texlive accept LEDGER=update` ile satır
+    üretilir, sonra repack koşar.
+
+    Döndürür: (ok: bool, detail: str).
+    """
+    tokens, error, source = id_canonical.ledger_tokens()
+    if error:
+        return False, f"kabul defteri okunamadı: {error}"
+    if not id_canonical.has_canonical(canonical, tokens):
+        return False, (
+            f"yeni kanonik hash kabul defterinde yok: {canonical[:16]}… — "
+            f"önce satırı üret: make -f docs/Makefile.texlive accept "
+            f"LEDGER=update ({id_canonical.LEDGER_DOC})")
+    return True, f"kabul defteri={source} kanonik={canonical[:16]}…"
 
 INNER_DIR = "TESLIM_V5_FINAL_2026-08-17"
 OUTER_DIR = "Stoic-Hume-Final-V5_2026-08-17"
@@ -327,9 +357,25 @@ def main():
         _sp.run([qpdf, "--remove-metadata", pdf, _tmp],
                        capture_output=True, timeout=60)
         if os.path.isfile(_tmp):
+            # BİLİNÇLİ YENİLEME (Faz 4): ham hash değişti — yani PDF yeniden
+            # derlendi (motor geçişi dahil). Sidecar yalnız ham+stripped
+            # ikilisini değil, determinizm REFERANSINI (`/ID`-kanonik hash)
+            # ve yenileme gerekçesini de taşır; kanonik referans kabul
+            # defterinde kayıtlı değilse repack fail-closed durur.
+            canonical = id_canonical.canonical_pdf_sha256(pdf)
+            ok, detail = check_ledger_entry(canonical)
+            if not ok:
+                os.unlink(_tmp)
+                print(f"FAIL: repack determinizm kapısı — {detail}",
+                      file=_sys.stderr)
+                raise SystemExit(1)
+            renewal = datetime.date.today().isoformat()
             with open(pdf_sidecar, "w", encoding="utf-8") as f:
                 f.write(f"{sha256(_tmp)}  ingiliz_empirizmi_v3.pdf.metadata\n")
                 f.write(f"# raw: {raw_hash}  ingiliz_empirizmi_v3.pdf\n")
+                f.write(f"# canonical: {canonical}  ingiliz_empirizmi_v3.pdf\n")
+                f.write(f"# renewal: {renewal} — ham hash değişti "
+                        f"(motor geçişi/yeniden derleme); {detail}\n")
             os.unlink(_tmp)
         else:
             print(f"  UYARI: qpdf başarısız, sidecar oluşturulmadı")

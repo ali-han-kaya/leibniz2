@@ -70,5 +70,7 @@ _calisma/.venv_z3/bin/python docs/branch-protection-guide/render_screens.py
 ```
 
 `guide.html` değişince scripti tekrar koş — PNG'ler aynı boyutlarda yeniden
-yazılır. Playwright yalnızca bu görsel kılavuzu üretmek içindir; CI zincirinde
-**kullanılmaz** (birim testler + verify_delivery stdlib-only kalır).
+yazılır. CI'da `render_screens.py` **çalıştırılmaz**; a11y-gate yalnızca aynı
+tek kaynak `guide.html` dosyasını mirror'a alıp headless Chromium + axe-core ile
+tarar. Bu iki kullanım farklıdır: PNG yeniden üretimi manuel, erişilebilirlik
+kapısı ise her CI push'unda otomatiktir.

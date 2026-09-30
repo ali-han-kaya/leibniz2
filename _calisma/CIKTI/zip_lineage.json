@@ -79,6 +79,12 @@
       "note": "V5o: K5 frozen-record regen (raw 74b2cdbd) + repack Delivery (güncel kanonik)",
       "hash": "afd6aec0bfa6b8d2162e386503031d8b3644a6fd2b4c9d07173b708bfb56645b",
       "commit": null,
+      "current": false
+    },
+    {
+      "note": "V5p: qpdf donmuş kaydı v2 (sürüm izleme, qpdf 12.4.0 5/5) + repack Delivery (güncel kanonik)",
+      "hash": "80a16a50de11269117a5f0ad22c9cb6162ebc697a43c92b643eae3714be15521",
+      "commit": null,
       "current": true
     }
   ]

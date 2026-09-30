@@ -5,13 +5,14 @@ record_determinism_trend.py sözleşmelerini OFFLINE sabitler:
 
   1) Rapor extract: kanıt alanlarından ölçüm çıkarımı; bozuk raporda
      fail-closed ValueError (verdict != PASS, eksik alan, 64-hex olmayan
-     hash, rapor-içi koşum çelişkisi).
+     hash, rapor-içi koşum çelişkisi, kanıtlanmamış çok-geçiş).
   2) --update: gerçek rapor yoksa fail-closed rc=1 (deney koşulmadan
-     kayıt üretilmez); rapor varsa ölçüm eklenir.
+     kayıt üretilmez); rapor varsa ölçüm eklenir (passes alanı dahil).
   3) --check değişmezleri (trend_invariant): boş trend geçici-FAIL; bayat
-     ölçüm FAIL; aynı kaynakta hash sapması FAIL (uzlaşma ihlali); kaynak
-     değişince serbest; platform kapsamı (cutoff sonrası darwin+linux)
-     eksikse FAIL; iki platform aynı kaynak+hash'i paylaşırsa OK.
+     ölçüm FAIL; aynı kaynak+platform+GEÇİŞ MODUNDA hash sapması FAIL
+     (uzlaşma ihlali); kaynak/PLATFORM/MOD değişince serbest; platform
+     kapsamı (cutoff sonrası darwin+linux) eksikse FAIL; iki platform aynı
+     kaynak+hash'i paylaşırsa OK.
   4) jsonl yalnız eklenir; bozuk satırda ValueError.
 
 Tarihler cutoff'tan (2026-09-17) SONRA seçilir ki yalnız hedeflenen
@@ -49,6 +50,7 @@ def _rec(**over):
         "sde": 0,
         "platform": "darwin",
         "gate": "PASS",
+        "passes": 1,
     }
     base.update(over)
     return base
@@ -93,6 +95,64 @@ class TestParseAndExtract(unittest.TestCase):
             fields = rdt._read_report(p)
         self.assertEqual(fields, {"a": "1", "b": "iki bir"})
 
+    def test_extract_carries_pass_mode(self):
+        # Faz 4: ölçümün kaç geçişle alındığı kayda geçer; çok-geçişte
+        # hizalama kanıtı (rerun_left=0 ×2) ZORUNLU.
+        report = {
+            "tectonic_sha256": "a" * 64,
+            "texlive_canonical_run1_sha256": "b" * 64,
+            "texlive_canonical_run2_sha256": "b" * 64,
+            "passes": "3",
+            "texlive_run1_rerun_left": "0",
+            "texlive_run2_rerun_left": "0",
+            "verdict": "PASS",
+        }
+        self.assertEqual(rdt._extract_report_data(report)["passes"], 3)
+        # passes alanı olmayan eski raporlar tek-geçiş kabul edilir.
+        del report["passes"]
+        del report["texlive_run1_rerun_left"]
+        del report["texlive_run2_rerun_left"]
+        self.assertEqual(rdt._extract_report_data(report)["passes"], 1)
+
+    def test_extract_rejects_unproven_multi_pass(self):
+        base = {
+            "tectonic_sha256": "a" * 64,
+            "texlive_canonical_run1_sha256": "b" * 64,
+            "texlive_canonical_run2_sha256": "b" * 64,
+            "passes": "3",
+            "verdict": "PASS",
+        }
+        # rerun kanıtı yok → kaydedilmez (hizalama iddiası üretilemez).
+        with self.assertRaises(ValueError):
+            rdt._extract_report_data(dict(base))
+        # rerun kaldı → kaydedilmez.
+        with self.assertRaises(ValueError):
+            rdt._extract_report_data(dict(
+                base, texlive_run1_rerun_left="0",
+                texlive_run2_rerun_left="2"))
+        for bad in ("abc", "0", "-1"):
+            with self.assertRaises(ValueError):
+                rdt._extract_report_data(dict(base, passes=bad))
+
+    def test_extract_residual_none_falls_back_to_raw(self):
+        # Hızlı yol (ham hash'ler baştan eşit) kanonik alanları YAZMAZ;
+        # o durumda ham = kanonik (Faz 3 kabul üreticisiyle aynı kural).
+        report = {
+            "tectonic_sha256": "a" * 64,
+            "texlive_run1_sha256": "b" * 64,
+            "texlive_run2_sha256": "b" * 64,
+            "residual": "none",
+            "verdict": "PASS",
+        }
+        self.assertEqual(rdt._extract_report_data(report)["texlive_canonical_sha256"],
+                         "b" * 64)
+        # /ID kalıntısı varken kanonik alanlar yoksa kanıt eksiktir → FAIL.
+        with self.assertRaises(ValueError):
+            rdt._extract_report_data(dict(report, residual="content"))
+        # Koşumlar çelişkiliyse fallback de yapılmaz.
+        with self.assertRaises(ValueError):
+            rdt._extract_report_data(dict(report, texlive_run2_sha256="e" * 64))
+
 
 class TestUpdateMode(unittest.TestCase):
     def setUp(self):
@@ -121,6 +181,36 @@ class TestUpdateMode(unittest.TestCase):
             finally:
                 rdt.TREND = orig_trend
 
+    def test_update_records_pass_mode_end_to_end(self):
+        # Hermetik: sahte rapor + sahte trend; passes alanı jsonl'a yazılır.
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            source = root / "sample.tex"
+            source.write_text("\\documentclass{article}\n", encoding="utf-8")
+            report = root / "report.txt"
+            report.write_text(
+                f"source={source}\n"
+                f"tectonic_sha256={'a' * 64}\n"
+                "passes=3\n"
+                "texlive_run1_sha256=" + "b" * 64 + "\n"
+                "texlive_run2_sha256=" + "b" * 64 + "\n"
+                "texlive_canonical_run1_sha256=" + "b" * 64 + "\n"
+                "texlive_canonical_run2_sha256=" + "b" * 64 + "\n"
+                "texlive_run1_rerun_left=0\n"
+                "texlive_run2_rerun_left=0\n"
+                "residual=/ID\nverdict=PASS\n",
+                encoding="utf-8")
+            orig_report, orig_trend = rdt.REPORT, rdt.TREND
+            rdt.REPORT = str(report)
+            rdt.TREND = os.path.join(td, "trend.jsonl")
+            try:
+                self.assertEqual(rdt.main(["--update"]), 0)
+                row = rdt._records(rdt.TREND)[0]
+            finally:
+                rdt.REPORT, rdt.TREND = orig_report, orig_trend
+        self.assertEqual(row["passes"], 3)
+        self.assertEqual(row["gate"], "PASS")
+
     def test_records_rejects_corrupt_jsonl(self):
         with tempfile.TemporaryDirectory() as td:
             p = Path(td) / "trend.jsonl"
@@ -133,24 +223,17 @@ class TestUpdateMode(unittest.TestCase):
         # docs/ci_simulate ignore edilmiş konumda kayıt (asla) versiyonlanmaz.
         self.assertIn("docs/determinism_trend", rdt.TREND)
 
-    def test_stale_evidence_guard(self):
-        # Bayat-kanıt koruması: --update, rapor mtime'ı 48h eskiyse rc=1 ve
-        # KAYIT EKLEMEZ (time-mock ile deterministik; temp trend'e yazar).
+    def test_stale_evidence_is_recorded(self):
+        # 48h bayat-kanıt koruması kaldırıldı: --update, rapor bayat olsa bile
+        # ölçümü ekler. Kaydın dürüstlüğü date alanındadır; tazelik iddiası
+        # --check kapısının işidir. Temp trend'e yazar (gerçek dosyaya dokunmaz).
         if not REAL_REPORT.exists():
             self.skipTest("gerçek deney raporu yok (deney koşulmamış)")
-        mtime = os.stat(REAL_REPORT).st_mtime
         orig_trend = rdt.TREND
         with tempfile.TemporaryDirectory() as td:
             rdt.TREND = os.path.join(td, "trend.jsonl")
             try:
-                with unittest.mock.patch.object(rdt.time, "time",
-                                                lambda: mtime + 3600):
-                    self.assertEqual(rdt.main(["--update"]), 0)  # taze
-                self.assertEqual(len(rdt._records(rdt.TREND)), 1)
-                with unittest.mock.patch.object(rdt.time, "time",
-                                                lambda: mtime + 72 * 3600):
-                    self.assertEqual(rdt.main(["--update"]), 1)  # bayat
-                # Bayat koşum kayıt EKLEMEMELİ (append yok).
+                self.assertEqual(rdt.main(["--update"]), 0)  # bayat da olsa kaydolur
                 self.assertEqual(len(rdt._records(rdt.TREND)), 1)
             finally:
                 rdt.TREND = orig_trend
@@ -184,6 +267,28 @@ class TestTrendInvariant(unittest.TestCase):
                      tectonic_canonical_sha256="d" * 64)]
         v = rdt.trend_invariant(recs, now=NOW)
         self.assertIn("aynı kaynakta değişti", v)
+
+    def test_mode_change_is_a_rebaseline_not_a_violation(self):
+        # Faz 4 re-baseline'ı: aynı kaynak+platform ama FARKLI geçiş modu →
+        # kanonik farkı BEKLENENdir (çapraz ref/bib çözümü). İhlal sayılmaz,
+        # nota yazılır. Aynı mod içindeki sapma yine yakalanır.
+        recs = [_rec(platform="darwin", passes=1),
+                _rec(platform="linux", passes=1),
+                _rec(platform="darwin", passes=3,
+                     texlive_canonical_sha256="e" * 64)]
+        v = rdt.trend_invariant(recs, now=NOW)
+        self.assertEqual(v, "OK")
+        self.assertIn("geçiş modu değişti 1 → 3", rdt._mode_note(recs))
+        # Aynı modda (3 → 3) sapma yakalanır.
+        drift = recs + [_rec(platform="darwin", passes=3,
+                             texlive_canonical_sha256="f" * 64)]
+        self.assertIn("aynı kaynakta değişti", rdt.trend_invariant(drift, now=NOW))
+
+    def test_mode_note_silent_without_change(self):
+        self.assertIsNone(rdt._mode_note([_rec(passes=1)]))
+        self.assertIsNone(rdt._mode_note([_rec(passes=3), _rec(passes=3)]))
+        # `passes` alanı olmayan eski satırlar 1 kabul edilir → değişim yok.
+        self.assertIsNone(rdt._mode_note([_rec(), _rec(passes=1)]))
 
     def test_concordance_free_cross_platform(self):
         # Aynı kaynak, FARKLI platform, farklı hash → ihlal DEĞİL

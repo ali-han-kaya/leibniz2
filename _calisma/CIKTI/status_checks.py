@@ -12,6 +12,14 @@ PR-merge engeli smoke koşar: required_status_checks.strict, enforce_admins,
 allow_force_pushes/allow_deletions — bunlar eksikse merge gerçekten BLOKE
 edilmez (fail-closed; doğru check adlarına rağmen kapı açık kalabilir).
 
+Smoke'un ölçtüğü şey ile korumanın CANLI DEĞERİ ayrı raporlanır (2026-09-30):
+`strict` denetimi yalnızca alanın VARLIĞINI arar — `strict: false`
+doğrudan-push'a izin veren depolar için geçerlidir, o yüzden değeri zorunlu
+kılmak yanlış-FAIL üretirdi. Bunun bedeli açıkça yazılıdır: `strict`in sonradan
+KAPATILMASI bu smoke ile yakalanmaz. Canlı değerler ayrı blokta basılır
+(`--json`'da `live` anahtarı), böylece "strict zorunlu kılınıyor" diye
+YANLIŞ okunmaz.
+
 Kullanım:
   python3 _calisma/CIKTI/status_checks.py                  # beklenen adlar
   python3 _calisma/CIKTI/status_checks.py --gh             # GitHub ile doğrula
@@ -50,25 +58,18 @@ except ImportError:  # pragma: no cover — stdlib-only runnerlarda yaml yok
 # CIKTI'dan da repo kökünden de koşabilsin).
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 WORKFLOW = str(_REPO_ROOT / ".github" / "workflows" / "verify.yml")
-# Required check OLMAYAN job'lar: PR-only/advisory (banner kapı olmasın).
-GATE_EXCLUDE = {
-    "manifest-comment",    # PR-only: yorum düşürme
-    "precheck",             # AŞAMA 0 advisory
-    "label-gate-p1",        # PR-only: P1 etiket opsiyonel blokaj (required DEĞİL)
-    "plist-check",          # macOS-advisory: push'ta çalışmaz
-    "mirror-check",         # macOS: sync sonrası K17 fail-closed (advisory)
-    "daemon-http",          # advisory: daemon-modu HTTP 200 smoke (advisory)
-    "fresh-clone-http",      # advisory: temiz clone + preview HTTP smoke
-    "audit-live-ci",        # advisory: doc↔GitHub senkron denetimi
-    "audit-refs-trend",     # advisory: refs-trend satırları ↔ kaynak denetimi
-    "override-trend",       # advisory: CLI override zaman serisi
-    "changelog-drift",      # advisory: gen_changelog --check drift bulguları
-    "pattern-drift",         # advisory: merge pattern ↔ ARTIFACT_JOBS drift
-    "budget-comment",        # PR-only: bütçe + pre-commit PR yorumu (bütçe kapısı ayrı job)
-    "lake-proof",            # ayrı-step K9 lake build (lean-toolchain v4.14.0);
-                             #   GitHub required kontrollerinde DEĞİL (advisory) —
-                             #   K9, verify job'unun --full içinde de koşar.
-}
+
+# ── Tek kaynak: GATE_EXCLUDE (required check OLMAYAN job id'leri) ───────
+# Karar ve her üyenin gerekçesi workflow_contract.py'de yaşar. Burada kopya
+# taşımak yerine oradan alınıyor; test_workflow_contract nesne-özdeşliğini
+# commit anında yakalar (kopya → assertIs FAIL).
+_CIKTI_DIR = str(pathlib.Path(__file__).resolve().parent)
+if _CIKTI_DIR not in sys.path:
+    sys.path.insert(0, _CIKTI_DIR)
+try:
+    from workflow_contract import GATE_EXCLUDE  # noqa: E402
+except ImportError:  # pragma: no cover — CIKTI sys.path'te değilse paket içi
+    from .workflow_contract import GATE_EXCLUDE  # noqa: E402
 # Not: "label-gate" (Pre-commit P0 label gate) BİLEREK required check'tir —
 # precommit-p0 etiketi varken FAIL verip merge'i bloke eder; bu yüzden
 # GATE_EXCLUDE'da DEĞİL. 12'li required liste (2026-08-23): 9 eski gate +
@@ -208,24 +209,80 @@ def merge_block_smoke(protection):
     `required_status_checks.contexts` birebir doğru olsa bile aşağıdakiler
     kapalıysa merge butonu gerçekten BLOKE ETMEZ. Her alan için
     (label, ok, failure_note) döner; ok=False → o koruma eksik (fail-closed).
+
+    LABEL'LAR NE ÖLÇÜLDÜĞÜNÜ SÖYLER (2026-09-30, canlı API ile netleştirme):
+    `strict` için ölçülen şey alanın VARLIĞI, değeri DEĞİL — `strict: false`
+    doğrudan-push'a izin veren depolar için gerçekten geçerlidir, bu yüzden
+    değeri zorunlu kılmak yanlış-FAIL üretirdi. Ama "strict" etiketi tek
+    başına "up-to-date zorunlu" diye okunuyordu; etiket artık bunu açıkça
+    yazıyor ve CANLI değer ayrı blokta basılıyor (`_live_facts`).
     """
     sc = protection.get("required_status_checks") or {}
     admins = protection.get("enforce_admins") or {}
     fp = protection.get("allow_force_pushes") or {}
     dele = protection.get("allow_deletions") or {}
     return [
-        ("required_status_checks.strict",
+        ("required_status_checks.strict (alan TANIMLI — değeri değil)",
          sc.get("strict") is not None,
-         "strict tanımlı değil — up-to-date zorunluluğu ayarlanmamış"),
+         "strict alanı hiç dönmüyor — required_status_checks kurulu değil "
+         "ya da eksik. NOT: bu kontrol DEĞERİ ölçmez, o yüzden strict'in "
+         "kapanması bu smoke ile YAKALANMAZ (canlı değer ayrı blokta)."),
         ("enforce_admins.enabled (admin bypass kapalı)",
          admins.get("enabled") is True,
-         "admin bypass açık — koruma bypass edilebilir"),
+         "admin bypass açık/doğrulanamadı — yönetici korumayı atlayabilir"),
         ("allow_force_pushes.enabled == false",
          fp.get("enabled") is False,
-         "force push açık/doğrulanamadı — geçmiş değiştirilebilir"),
+         "force push açık/doğrulanamadı — non-fast-forward (geçmiş yeniden "
+         "yazımı) mümkün. NOT: fast-forward push'lar bu ayardan BAĞIMSIZDIR; "
+         "ölçülen şey geçmişin değiştirilebilirliğidir."),
         ("allow_deletions.enabled == false",
          dele.get("enabled") is False,
-         "deletion açık/doğrulanamadı — branch silinebilir"),
+         "deletion açık/doğrulanamadı — main dalı silinebilir"),
+    ]
+
+
+def _live_facts(protection):
+    """Korumanın CANLI değerlerini (ölçülen değil, BİLDİRİLEN) döndürür.
+
+    Neden ayrı: smoke yalnızca varlık/yokluk denetler. Çıktıda yalnızca
+    smoke olsaydı, `strict: false` olan bir depo da `strict: true` olan bir
+    depo da aynı görünürdü — oysa davranışları zıttır. Bu liste gerçek
+    değerleri anlamıyla birlikte basar.
+    """
+    sc = protection.get("required_status_checks") or {}
+    admins = protection.get("enforce_admins") or {}
+    fp = protection.get("allow_force_pushes") or {}
+    dele = protection.get("allow_deletions") or {}
+
+    def _yn(value, when_true, when_false, when_absent):
+        if value is True:
+            return when_true
+        if value is False:
+            return when_false
+        return when_absent
+
+    strict = sc.get("strict")
+    return [
+        ("required_status_checks.strict", strict,
+         _yn(strict,
+             "PR dalı base'e göre GÜNCEL olmalı (değilse merge bloke)",
+             "up-to-date kuralı KAPALI (doğrudan-push akışı için geçerli)",
+             "alan yok — required_status_checks kurulu değil")),
+        ("enforce_admins.enabled", admins.get("enabled"),
+         _yn(admins.get("enabled"),
+             "admin de korumayı atlayamaz",
+             "admin bypass AÇIK",
+             "alan yok")),
+        ("allow_force_pushes.enabled", fp.get("enabled"),
+         _yn(fp.get("enabled"),
+             "non-fast-forward push MÜMKÜN — geçmiş yeniden yazılabilir",
+             "non-fast-forward push reddedilir (fast-forward serbest)",
+             "alan yok")),
+        ("allow_deletions.enabled", dele.get("enabled"),
+         _yn(dele.get("enabled"),
+             "dal silinebilir",
+             "dal silinemez",
+             "alan yok")),
     ]
 
 
@@ -252,6 +309,10 @@ def evaluate_protection(expected, protection):
         "configured": sorted(conf),
         "smoke": smoke,
         "enforcement_ok": enforcement_ok,
+        # Canlı değerler — smoke'un varlık denetimini DEĞİL, gerçek ayarı
+        # gösterir; ikisi karıştırılmasın diye ayrı anahtar.
+        "live": [{"label": label, "value": value, "meaning": meaning}
+                 for (label, value, meaning) in _live_facts(protection)],
     }
 
 
@@ -390,6 +451,7 @@ def main(argv=None):
         "configured": result["configured"],
         "enforcement_ok": result["enforcement_ok"],
         "smoke": smoke_json,
+        "live": result["live"],
         "verdict": verdict,
     })
 
@@ -412,6 +474,15 @@ def main(argv=None):
         print(f"  [{'PASS' if ok else 'FAIL'}] {label}"
               + ("" if ok else f" — {note}"))
 
+    # ── canlı koruma değerleri ─────────────────────────────────────────────
+    # Smoke "alan var mı" der; bu blok "değeri ne" der. İkisi ayrı şey:
+    # `strict: false` ile `strict: true` smoke'ta AYNI görünür, davranışları
+    # ise zıttır (canlı API ile netleştirildi, 2026-09-30).
+    print("\n── canlı koruma değerleri (smoke'un ÖLÇTÜĞÜ değil, BİLDİRİLEN) ──")
+    for fact in result["live"]:
+        print(f"  {fact['label']} = {fact['value']}"
+              f"  — {fact['meaning']}")
+
     if result["names_ok"] and result["enforcement_ok"]:
         print(f"\nSONUÇ: PASS — {len(result['configured'])} check birebir "
               "eşleşiyor (workflow ↔ GitHub) ve merge engeli etkin")
@@ -425,7 +496,9 @@ def main(argv=None):
         print(f"\nSONUÇ: FAIL — " + "; ".join(problems))
         print("  Düzeltme: AŞAMA 1 (b) web UI'da required check listesini "
               "yukarıdaki adlarla eşitle VE smoke FAIL'lerini düzelt "
-              "(strict / enforce_admins / disallow force-push+deletions)")
+              "(enforce_admins aç / force-push+deletions kapat). "
+              "NOT: `strict` smoke'u yalnızca ALANIN varlığını arar — "
+              "canlı değer yukarıdaki 'canlı koruma değerleri' bloğunda.")
         sys.exit(1)
 
 

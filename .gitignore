@@ -37,7 +37,24 @@ _calisma/CIKTI/design_preview.html
 # Oturum yüzeyleri (2026-09-18): bağımlılıklar ve üretilen artefaktlar kaynak-değil
 _calisma/mcp/.venv/
 _calisma/pptx/node_modules/
+# docx jeneratoru (markdown → .docx): bagimliliklar ve uretilen cikti repoda tutulmaz
+_calisma/docx/node_modules/
+_calisma/docx/out/
+# pptx jeneratorleri (native slaytlar): kaynak .js repoda, uretilen .pptx repoda tutulmaz
 _calisma/pptx/verification_chain.pptx
+_calisma/pptx/architecture_deepening.pptx
+_calisma/pptx/pdf_repro_findings.pptx
+# video jeneratoru (LeibnizChain, Remotion): kaynak .ts/.tsx repoda;
+# bagimliliklar, Remotion'un indirdigi tarayici ve uretilen mp4/stiller tutulmaz
+_calisma/video/node_modules/
+_calisma/video/out/
+_calisma/video/.remotion/
+# tarayici-ici oynatma paketi (esbuild ciktisi) ve sayfa kabugu kopyasi:
+# preview sunucusu /video/* altindan servis eder, hepsi yeniden uretilebilir
+_calisma/video/dist/
+# public/data/leibniz.json canli history.jsonl'den uretilir (make_data.py) —
+# history.jsonl de calisma zamani verisi oldugu icin (asagida) ikisi de repoda degil
+_calisma/video/public/data/
 apps/trend-db/node_modules/
 apps/trend-db/.env
 apps/trend-db/generated/
@@ -49,3 +66,75 @@ apps/dashboard-next/.next/
 
 # make build dirs (docs/Makefile.tectonic + docs/Makefile.texlive BUILD_DIR)
 .build/
+.vercel
+.env*
+
+# Pinokio launcher runtime mirror (generated dashboard state and static copies)
+pinokio/.runtime/
+
+# Freebuff desktop istemcisinin kendi durumu (proje kimligi, commit mesaji
+# taslaklari, preview logu) — repo yuzeyi degil
+.freebuff/
+
+# a11y-gate yerel kosu raporlari (CI artifact'i; 6+ MB, uretilmis)
+_calisma/CIKTI/a11y_report*.json
+
+# preview_server calisma zamani verisi: canli kopyalar zaten
+# ~/Library/Caches/com.freebuff/preview/ altinda; CIKTI ici yalnizca
+# yerel calistirma artigi
+_calisma/CIKTI/runs/
+_calisma/CIKTI/history.jsonl
+_calisma/CIKTI/history.jsonl.sha256
+
+# Kokteki paketleme dosyalari: Vercel Python fonksiyonu derlemesinin
+# biraktigi kalinti (api/pyproject.toml + api/uv.lock ile bayt bayt ayni,
+# .vercel/output/static/ altina kopyalanmis). Gercek API paketi api/
+# altinda ve adi "app"; buradaki "leibniz2-api" hayalet bir kok paket
+# yaratirdi. Kokle kisitli: / oneki olmadan api/ icin de gecerli olurdu.
+/pyproject.toml
+/uv.lock
+
+# Ruflo V3 runtime yuzeyi. Ilke: `.claude-flow/` altindaki HER sey calisma
+# zamanidir; yalniz YAPILANDIRMA izlenir.
+#
+# Dosya isimlerini tek tek saymak yanlis yaklasim — ruflo yeni bir durum
+# dosyasi uretiginde sizar. Negatif testle olculdu: sayma yaklasimi
+# `.claude-flow/olay.state.json` gibi bilinmeyen bir durum dosyasini
+# geciriyordu. Bu yuzden "hepsini gizle, yapilandirma haric" kalibi.
+#
+# NOT: ruflo init buraya ayrica `.env`, `.env.local`, `.env.*.local`
+# desenlerini de eklemisti. Ucu de GEREKSIZDI: yukarida (sat. 70)
+# `.env*` zaten hepsini kapsiyor. Eklenmeleri kapsam degil, oncelik
+# sirasi degistiriyordu — o yuzden geri alindi.
+#
+# Ayrica ruflo KENDI calisma zamani dosyalarini hic ignore etmemisti:
+# daemon.pid bir PID sayisidir (makineye ozgu, baska yerde yanlis),
+# daemon-state.json / policy/state.json / harness-active-policy.json
+# canli durumdur. Bunlar commit edilmemeli — kaynak degil.
+.claude-flow/*
+!.claude-flow/.gitignore
+!.claude-flow/config.yaml
+!.claude-flow/CAPABILITIES.md
+# `--skip-claude` bayragina ragmen olusan dizin; icinde yalnizca
+# daemon'in urettigi dosyalar var, yapilandirma degil.
+.claude/
+
+# macOS `unzip` artiklari: AppleDouble yan dosyalari (`._dosya`) ve unzip'in
+# urettigi `__MACOSX/` dizini. Bunlar kaynak DEGIL — ayni icerigin ikinci
+# kopyasi; ekip halinde bagimsiz copy/paste karisikligi uretiyor.
+__MACOSX/
+._*
+
+# _calisma/CIKTI/check_unit_tests_timing.py'nin OLÇÜM çıktısı (scratch):
+# kök dizine varsayılan `--out check_unit_tests.json` ile düşer ve "ok:false"
+# gibi geçici bir ölçüm yazar. Rapor değil, tekrarlanabilir araç çıktısıdır;
+# gerçek kayıt `findings.md`/log dosyasına yazılır.
+check_unit_tests.json
+
+# _calisma/TOOLKIT/ — BAŞKA repoların denetim paketi (atlas-rag,
+# atlas-verify-api, komuta-merkezi, pflege-v2.0): kendi kanıt logları ve
+# düz metin dev parolası (`dev-bakici-pass`) taşıyan taşınmış bir düşüş.
+# leibniz2'nin kaynağı DEĞİLDİR ve `check-absolute-paths` hook'u bu dizini
+# zaten açıkça muaf tutuyor (SKIP_PREFIXES) — yani kapılar da onu "yerel
+#artifact" sayıyor. Dosyalar diskte kalır (kayıp yok), yalnız takip dışıdır.
+_calisma/TOOLKIT/

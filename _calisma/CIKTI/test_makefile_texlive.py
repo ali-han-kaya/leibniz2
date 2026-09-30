@@ -32,6 +32,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent.parent
 MAKEFILE = ROOT / "docs" / "Makefile.texlive"
 TECTONIC_MAKEFILE = ROOT / "docs" / "Makefile.tectonic"
+ACCEPT_PRODUCER = ROOT / "_calisma" / "CIKTI" / "gen_id_residual_acceptance.py"
 
 TEX = "\\documentclass{article}\\begin{document}x\\end{document}\n"
 
@@ -85,6 +86,31 @@ STUB_TECTONIC = (
 )
 
 
+class TestMakefileTexlivePhase0(unittest.TestCase):
+    """Faz 0 sözleşme sabitleri: motor-kilidi dokümantasyonu + paralel yaşam."""
+
+    def test_engineinfo_target_contract(self):
+        # Motor sürüm kilidi: `make engineinfo` pdfTeX/TeXLive sürümünü ve
+        # sözleşme sabitlerini yazdırır (CI log'u için makine-okur satırlar).
+        mk = MAKEFILE.read_text(encoding="utf-8")
+        self.assertIn("engineinfo:", mk, "engineinfo target'ı yok")
+        self.assertIn(".PHONY: all pdf check accept clean engineinfo", mk)
+        self.assertIn("$(PDBIN) -version", mk)
+        self.assertIn("pdtex_version=", mk)
+        self.assertIn("texinputs_contract=", mk)
+        self.assertIn("texmfoutput_contract=", mk)
+        self.assertIn("output_dir_contract=-output-directory", mk)
+        self.assertIn("engine_lock=pdfTeX 3.141592653-2.6", mk)
+
+    def test_readme_documents_parallel_life(self):
+        # Paralel yaşam dokümantasyonu (plan Faz 1): README'de her iki
+        # Makefile yan yana — motor geçiş rotası + geri dönüş yolu.
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertIn("docs/Makefile.texlive", readme)
+        self.assertIn("docs/Makefile.tectonic", readme)
+        self.assertIn("engineinfo", readme)
+
+
 class TestMakefileTexliveStructural(unittest.TestCase):
     def test_tectonic_twin_still_present(self):
         # Paralel yaşam: geri dönüş yolu (plan Faz 1).
@@ -100,6 +126,39 @@ class TestMakefileTexliveStructural(unittest.TestCase):
                        "ID_RESIDUAL_ACCEPTANCE.md"):
             self.assertIn(marker, text,
                           f"Makefile sözleşme işareti eksik: {marker}")
+
+
+class TestMakefileTexliveAcceptWiring(unittest.TestCase):
+    """Faz 3: accept, kabul kanıtını GERÇEK ÜRETİCİYE bağlar.
+
+    Önceki hâli kanonik hash'i `sed` ile rapordan çıkarıp defteri kendisi
+    grep'liyordu (satır elle yazılıyordu). Artık kanıt-okuma + defter
+    doğrulama/üretme tek kaynakta: gen_id_residual_acceptance.py.
+    """
+
+    def test_accept_invokes_producer_with_real_evidence_paths(self):
+        mk = MAKEFILE.read_text(encoding="utf-8")
+        self.assertIn("ACCEPT_PRODUCER :=", mk, "üretici değişkeni yok")
+        self.assertIn('python3 "$(ACCEPT_PRODUCER)"', mk,
+                      "accept üreticiyi çağırmalı")
+        self.assertIn('--report "$(REPORT)"', mk, "kanıt yolu üreticiye geçmeli")
+        self.assertIn('--doc "$(ACCEPT_DOC)"', mk, "defter yolu üreticiye geçmeli")
+
+    def test_accept_offers_deliberate_ledger_update(self):
+        mk = MAKEFILE.read_text(encoding="utf-8")
+        self.assertIn("LEDGER ?=", mk)
+        self.assertIn('"$(LEDGER)" = "update"', mk)
+        self.assertIn("--update", mk, "bilinçli defter güncelleme yolu")
+
+    def test_hash_extraction_is_not_duplicated_in_makefile(self):
+        # Tek kaynak: kanonik hash çıkarımı üreticide; Makefile'da satır
+        # ayrıştırma kalmamalı (aksi halde iki farklı doğruluk tanımı doğar).
+        mk = MAKEFILE.read_text(encoding="utf-8")
+        self.assertNotIn("sed -n 's/^texlive_canonical_run1_sha256=", mk)
+
+    def test_producer_script_present(self):
+        self.assertTrue(ACCEPT_PRODUCER.is_file(),
+                        f"kabul üreticisi yok: {ACCEPT_PRODUCER}")
 
 
 class TestMakefileTexliveBehavioral(unittest.TestCase):
@@ -179,6 +238,14 @@ class TestMakefileTexliveBehavioral(unittest.TestCase):
         self.assertNotEqual(res["rc"], 0, res["out"])
         self.assertIn("ID_RESIDUAL_ACCEPTANCE", res["out"])
         self.assertIn("defter", res["out"])
+
+    def test_accept_runs_the_real_producer_script(self):
+        # Fail-closed çıktısı üreticinin remedy satırını içermeli — yani
+        # accept defteri kendi grep'lemiyor, gerçek üreticiye delege ediyor.
+        res = self._make("accept", passes=None)
+        self.assertNotEqual(res["rc"], 0, res["out"])
+        self.assertIn("gen_id_residual_acceptance.py", res["out"],
+                      "accept gerçek üreticiyi çağırmalı (grep-taklidi değil)")
 
 
 @unittest.skipUnless(

@@ -7,18 +7,22 @@ kopyalanır (SCRIPT_DIR sandbox'a düşer → README/PUBLISH yolları sandbox i�
 kalır) ve yanına bir MOCK gen_changelog.py konur (gerçek gen_changelog'a,
 git log'a veya canlı repo'ya bağımlılık yok).
 
+Hook drift algıladığında `gen_changelog.py --prune` çağırır; bu hem eksik
+satırları ekler hem de artık git geçmişinde olmayan stale hash satırlarını
+silerek yeniden yazım/rebase sonrası tabloyu temiz tutar.
+
 Mock, ortam değişkenleriyle yönlendirilir:
   MOCK_GC_CHECK_EXIT     --check exit kodu (0 = drift yok, 1 = drift var)
-  MOCK_GC_UPDATE_EXIT    --update exit kodu (0 = başarı, 1 = hata)
-  MOCK_GC_UPDATE_TOUCH   "1" ise --update README/PUBLISH'a satır ekler
-                         (gerçek tablo güncellemesini simüle → hook git add
-                         tetiklenir)
+  MOCK_GC_PRUNE_EXIT    --prune exit kodu (0 = başarı, 1 = hata)
+  MOCK_GC_PRUNE_TOUCH   "1" ise --prune README/PUBLISH'a satır ekler
+                        (gerçek tablo güncellemesini simüle → hook git add
+                        tetiklenir)
 
 Kapsanan dallar:
   drift yok        → --check exit 0 → hook dokunmaz, exit 0
-  drift var+stage  → --check exit 1 → --update başarılı + tablolar değişti →
+  drift var+stage  → --check exit 1 → --prune başarılı + tablolar değişti →
                      README/PUBLISH stage edilir, ℹ️ mesajı, exit 0
-  gen_changelog hata → --update exit 1 → "HATA: ..." stderr + exit 1 (bloke)
+  gen_changelog hata → --prune exit 1 → "HATA: ..." stderr + exit 1 (bloke)
 
 stdlib unittest — ek bağımlılık yok.
 """
@@ -41,13 +45,13 @@ import sys
 mode = sys.argv[1] if len(sys.argv) > 1 else ""
 if mode == "--check":
     sys.exit(int(os.environ.get("MOCK_GC_CHECK_EXIT", "0")))
-if mode == "--update":
-    if os.environ.get("MOCK_GC_UPDATE_TOUCH", "0") == "1":
+if mode == "--prune":
+    if os.environ.get("MOCK_GC_PRUNE_TOUCH", "0") == "1":
         line = "| 2026-08-23 | fix | (test) mock update | `mockhash` |\\n"
         for rel in ("README.md", "docs/PUBLISH_SCENARIO.md"):
             with open(pathlib.Path(rel), "a", encoding="utf-8") as f:
                 f.write(line)
-    sys.exit(int(os.environ.get("MOCK_GC_UPDATE_EXIT", "0")))
+    sys.exit(int(os.environ.get("MOCK_GC_PRUNE_EXIT", "0")))
 sys.exit(0)
 """
 
@@ -99,6 +103,12 @@ class UpdateChangelogHookTest(unittest.TestCase):
             ["git", "status", "--porcelain"], cwd=str(self.tmp),
             capture_output=True, text=True, check=True).stdout
 
+    def test_hook_invokes_prune_mode(self):
+        """Stale/missing driftinde hook --prune çağırmalı."""
+        source = REAL_HOOK.read_text(encoding="utf-8")
+        self.assertIn('gen_changelog.py" --prune', source)
+        self.assertNotIn('gen_changelog.py" --update', source)
+
     def test_no_drift_exits_0_without_touching(self):
         # --check exit 0 → hook dokunmadan exit 0; ℹ️ mesajı yok, stage yok.
         r = self._run_hook({"MOCK_GC_CHECK_EXIT": "0"})
@@ -106,13 +116,13 @@ class UpdateChangelogHookTest(unittest.TestCase):
         self.assertNotIn("changelog tabloları", r.stdout)
         self.assertEqual(self._porcelain(), "")
 
-    def test_drift_updates_and_stages_both_files(self):
-        # --check exit 1 (drift) → --update başarılı + tabloları değiştirdi →
+    def test_drift_prunes_and_stages_both_files(self):
+        # --check exit 1 (drift) → --prune başarılı + tabloları değiştirdi →
         # README + PUBLISH stage edilir, ℹ️ mesajı basılır, exit 0.
         r = self._run_hook({
             "MOCK_GC_CHECK_EXIT": "1",
-            "MOCK_GC_UPDATE_EXIT": "0",
-            "MOCK_GC_UPDATE_TOUCH": "1",
+            "MOCK_GC_PRUNE_EXIT": "0",
+            "MOCK_GC_PRUNE_TOUCH": "1",
         })
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("changelog tabloları git log'a göre güncellendi", r.stdout)
@@ -128,26 +138,26 @@ class UpdateChangelogHookTest(unittest.TestCase):
             (self.tmp / "docs" / "PUBLISH_SCENARIO.md").read_text(encoding="utf-8"))
 
     def test_drift_without_changes_stages_nothing(self):
-        # Drift var ama --update hiçbir dosyayı değiştirmedi → stage yok,
+        # Drift var ama --prune hiçbir dosyayı değiştirmedi → stage yok,
         # ℹ️ mesajı yok, yine exit 0.
         r = self._run_hook({
             "MOCK_GC_CHECK_EXIT": "1",
-            "MOCK_GC_UPDATE_EXIT": "0",
-            "MOCK_GC_UPDATE_TOUCH": "0",
+            "MOCK_GC_PRUNE_EXIT": "0",
+            "MOCK_GC_PRUNE_TOUCH": "0",
         })
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertNotIn("changelog tabloları", r.stdout)
         self.assertEqual(self._porcelain(), "")
 
-    def test_update_failure_blocks_with_hata(self):
-        # --check exit 1 (drift) → --update exit 1 → "HATA: ..." stderr +
+    def test_prune_failure_blocks_with_hata(self):
+        # --check exit 1 (drift) → --prune exit 1 → "HATA: ..." stderr +
         # exit 1 (fail-closed — commit bloke).
         r = self._run_hook({
             "MOCK_GC_CHECK_EXIT": "1",
-            "MOCK_GC_UPDATE_EXIT": "1",
+            "MOCK_GC_PRUNE_EXIT": "1",
         })
         self.assertEqual(r.returncode, 1)
-        self.assertIn("HATA: gen_changelog --update başarısız", r.stderr)
+        self.assertIn("HATA: gen_changelog --prune başarısız", r.stderr)
         self.assertEqual(self._porcelain(), "")
 
 

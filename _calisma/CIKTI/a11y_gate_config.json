@@ -2,5 +2,35 @@
   "blocking": ["critical", "serious"],
   "warn": ["moderate", "minor"],
   "incomplete": "report-only",
-  "allowlist": []
+  "allowlist": [
+    {
+      "rule": "color-contrast",
+      "target": "#seal-ring-path",
+      "reason": "SVG verdict mühründeki dairesel VERIFIED/hash metni kasıtlı bir imza katmanıdır; axe bu metnin gerçek SVG yüzeyi arka planını çözemediği için color-contrast sonucu incomplete olarak raporlanır. Gerekçeli allowlist yalnız bu bilinen metin düğümünü kapsar; token renkleri ve erişilebilir metin anlamı korunur."
+    },
+    {
+      "rule": "color-contrast",
+      "target": ".seal-verdict",
+      "reason": "SVG verdict mühründeki merkezi VERIFIED metni kasıtlı bir imza katmanıdır; axe bu metnin gerçek SVG yüzeyi arka planını çözemediği için color-contrast sonucu incomplete olarak raporlanır. Gerekçeli allowlist yalnız bu bilinen metin düğümünü kapsar; token renkleri ve erişilebilir metin anlamı korunur."
+    },
+    {
+      "rule": "color-contrast",
+      "target": ".seal-hash",
+      "reason": "SVG verdict mühründeki kısa hash metni kasıtlı bir imza katmanıdır; axe bu metnin gerçek SVG yüzeyi arka planını çözemediği için color-contrast sonucu incomplete olarak raporlanır. Gerekçeli allowlist yalnız bu bilinen metin düğümünü kapsar; token renkleri ve erişilebilir metin anlamı korunur."
+    }
+  ],
+  "pages": [
+    {
+      "path": "/preview.html",
+      "witness": "Stoic-Hume V5 — Live CI Dashboard"
+    },
+    {
+      "path": "/guide.html",
+      "witness": "Ayarlar → Branches — kural listesi boş"
+    },
+    {
+      "path": "/landing.html",
+      "witness": "teslim anına kadar."
+    }
+  ]
 }

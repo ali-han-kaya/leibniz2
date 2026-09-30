@@ -45,6 +45,7 @@ import ci_failure_pattern
 import re
 import subprocess
 import sys
+import time
 
 HERE = pathlib.Path(__file__).resolve().parent
 REPO_ROOT = HERE.parents[1]
@@ -91,26 +92,43 @@ _JOB_ROW_RE = re.compile(
 # Artifact satırları: "- `unit-tests` (...)" veya "- `budget-verify` + `budget` (...)"
 _ARTIFACT_BULLET_RE = re.compile(r"^\s*-\s*(.+)$")
 
-# upload-artifact bloğu: `uses:` → `with:` → `name:` (yalnızca yatay boşluk;
-# \s* değil — `with:` ile `name:` arasına başka anahtar giremez).
+# upload-artifact bloğu: `uses:` → (varsa `if:`/`retention-days:` gibi
+# ara anahtarlar) → `with:` → `name:`. CI a11y adımlarında `if: always()`
+# bulunduğu için önceki komşu-satır regex'i bu artifact'ları kaçırıyordu.
 _UPLOAD_ARTIFACT_RE = re.compile(
     r"^[ \t]*uses:[ \t]*actions/upload-artifact@\S+[ \t]*\n"
-    r"[ \t]*with:[ \t]*\n"
-    r"[ \t]*name:[ \t]*(\S+)[ \t]*$",
+    r"(?:^[ \t]+(?!with:|name:|uses:)[A-Za-z0-9_-]+:[^\n]*\n)*"
+    r"^[ \t]*with:[ \t]*\n"
+    r"^[ \t]*name:[ \t]*(.+?)[ \t]*$",
     re.M)
 
 
 def extract_workflow_upload_names(wf_text):
     """Workflow metnindeki TÜM `actions/upload-artifact` `name:` değerlerini
-    çıkarır (sıralı, tekil). Bu, canlı run'ın artifact kümesinin OFFLINE
-    eşdeğeridir: `--doc` karşılaştırmasında canlı tarafı temsil eder ve
-    yeni eklenen artifact'ları otomatik yakalar (python3-shell drift
-    regression'ı — `845206a`)."""
+    çıkarır (sıralı, tekil). Matrix üretimleri child değerlerine açılır; böylece
+    doc'taki `a11y-*-dark` + `a11y-*-light` artifact'larıyla offline küme
+    eşdeğerleri birebir karşılaştırılabilir."""
+    matrix_values = {}
+    for match in re.finditer(
+            r"^\s+([A-Za-z_][A-Za-z0-9_-]*):\s*\[([^]\n]+)\]\s*$",
+            wf_text, flags=re.M):
+        matrix_values[match.group(1)] = [
+            value.strip().strip("'\"") for value in match.group(2).split(",")
+        ]
+
     names = []
     for m in _UPLOAD_ARTIFACT_RE.finditer(wf_text):
-        n = m.group(1).strip()
-        if n and n not in names:
-            names.append(n)
+        template = m.group(1).strip()
+        expanded = [template]
+        for key, values in matrix_values.items():
+            token = "${{ matrix.%s }}" % key
+            if token not in template:
+                continue
+            expanded = [name.replace(token, value)
+                        for name in expanded for value in values]
+        for name in expanded:
+            if name and name not in names:
+                names.append(name)
     return names
 
 
@@ -205,9 +223,69 @@ def get_run_jobs(repo, run_id):
 
 def get_run_artifacts(repo, run_id):
     out = run_gh(["gh", "api",
-                  f"repos/{repo}/actions/runs/{run_id}/artifacts",
+                  f"repos/{repo}/actions/runs/{run_id}/artifacts?per_page=100",
                   "-q", ".artifacts[].name"])
     return [n for n in (line.strip() for line in out.splitlines()) if n]
+
+
+def get_run_head_branch(repo, run_id):
+    """Run'ın head branch'ini döndürür (failure_pattern window'u
+    branch'e scope'lamak için — aksi halde feat push fail'leri main
+    audit'inin deterministic penceresini kirletir)."""
+    try:
+        return run_gh(["gh", "api",
+                       f"repos/{repo}/actions/runs/{run_id}",
+                       "-q", ".head_branch"])
+    except RuntimeError:
+        return None
+
+
+def wait_for_visible_run(repo, run_id, expected_jobs, expected_artifacts,
+                         timeout_seconds=0.0, interval_seconds=2.0):
+    """Wait until the run API exposes the expected jobs and artifacts.
+
+    GitHub can report a completed job before its artifact/list endpoint is
+    eventually consistent. A bounded poll avoids turning that race into a
+    false doc↔live drift verdict without hiding a real mismatch forever.
+    """
+    started = time.monotonic()
+    deadline = started + max(0.0, timeout_seconds)
+    attempts = 0
+    jobs = []
+    artifacts = []
+    while True:
+        attempts += 1
+        jobs = get_run_jobs(repo, run_id)
+        artifacts = get_run_artifacts(repo, run_id)
+        missing_jobs = sorted(set(expected_jobs) - set(jobs))
+        missing_artifacts = sorted(set(expected_artifacts) - set(artifacts))
+        now = time.monotonic()
+        waited = max(0.0, now - started)
+        if not missing_jobs and not missing_artifacts:
+            return {
+                "jobs": jobs,
+                "artifacts": artifacts,
+                "visibility": {
+                    "attempts": attempts,
+                    "waited_seconds": waited,
+                    "timed_out": False,
+                    "missing_jobs": [],
+                    "missing_artifacts": [],
+                },
+            }
+        if now >= deadline:
+            return {
+                "jobs": jobs,
+                "artifacts": artifacts,
+                "visibility": {
+                    "attempts": attempts,
+                    "waited_seconds": waited,
+                    "timed_out": True,
+                    "missing_jobs": missing_jobs,
+                    "missing_artifacts": missing_artifacts,
+                },
+            }
+        time.sleep(max(0.0, min(max(0.0, interval_seconds), deadline - now)))
 
 
 def get_run_job_conclusions(repo, run_id):
@@ -387,6 +465,10 @@ def main(argv=None):
                     help="PUBLISH_SCENARIO.md yolu (varsayılan: docs/)")
     ap.add_argument("--run-id", default=None, help="run ID (varsayılan: son run)")
     ap.add_argument("--json", action="store_true", help="makine-okur JSON")
+    ap.add_argument("--visibility-timeout", type=float, default=0.0,
+                    help="canlı job/artifact görünürlüğü için bekleme üst sınırı (saniye)")
+    ap.add_argument("--visibility-interval", type=float, default=2.0,
+                    help="görünürlük yoklamaları arasındaki aralık (saniye)")
     ap.add_argument("--with-failure-pattern", action="store_true",
                     help="aynı JSON'a son CI run failure sınıflandırmasını ekle")
     args = ap.parse_args(argv)
@@ -419,9 +501,17 @@ def main(argv=None):
         print(f"HATA: run bulunamadı ({e})", file=sys.stderr)
         return 2
 
+    expected_job_names = [n for (_cat, n) in doc_jobs if n != SELF_JOB]
+    expected_artifact_names = [n for n in doc_artifacts if n != SELF_ARTIFACT]
     try:
-        live_jobs = get_run_jobs(repo, run_id)
-        live_artifacts = get_run_artifacts(repo, run_id)
+        snapshot = wait_for_visible_run(
+            repo, run_id, expected_job_names, expected_artifact_names,
+            timeout_seconds=args.visibility_timeout,
+            interval_seconds=args.visibility_interval,
+        )
+        live_jobs = snapshot["jobs"]
+        live_artifacts = snapshot["artifacts"]
+        visibility = snapshot["visibility"]
         try:
             conclusions = get_run_job_conclusions(repo, run_id)
         except RuntimeError:
@@ -468,6 +558,7 @@ def main(argv=None):
         "repo": repo,
         "run_id": run_id,
         "doc": str(doc_path),
+        "visibility": visibility,
         "jobs": {
             "doc": doc_job_names,
             "live": sorted(live_jobs),
@@ -490,7 +581,8 @@ def main(argv=None):
     failure_result = None
     if args.with_failure_pattern:
         try:
-            runs = ci_failure_pattern.list_runs(repo, None, ci_failure_pattern.DEFAULT_LIMIT)
+            branch = get_run_head_branch(repo, run_id)
+            runs = ci_failure_pattern.list_runs(repo, branch, ci_failure_pattern.DEFAULT_LIMIT)
             timeline, jobs = ci_failure_pattern.analyze(runs)
             failure_result = ci_failure_pattern.summarize(timeline, jobs)
             failure_result["flaky_count"] = len(failure_result["categories"]["flaky"])

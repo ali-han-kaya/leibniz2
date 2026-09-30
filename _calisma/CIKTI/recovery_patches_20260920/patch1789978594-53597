@@ -1,0 +1,308 @@
+diff --git a/_calisma/CIKTI/ci_full_discover_drift_guard.py b/_calisma/CIKTI/ci_full_discover_drift_guard.py
+index 3a7d796..2cafb2e 100644
+--- a/_calisma/CIKTI/ci_full_discover_drift_guard.py
++++ b/_calisma/CIKTI/ci_full_discover_drift_guard.py
+@@ -39,6 +39,14 @@ TEST_DIR = REPO_ROOT / "_calisma" / "CIKTI"
+ 
+ CHECK_UNIT_TESTS_LIST = TEST_DIR / "check_unit_tests.list"
+ 
++# HOOK_COVERAGE okuması TEK KAYNAKTAN: sync_check_unit_tests'in AST tabanlı
++# parse'ı. Eski kopya span sezgisi (anahtar → ilk `],`) gövde-içi bir yorumda
++# geçen `],`'da bloğu kırpar (ölçüldü) — kaldırıldı.
++if str(TEST_DIR) not in sys.path:
++    sys.path.insert(0, str(TEST_DIR))
++
++from sync_check_unit_tests import read_hook_coverage as _read_hook_coverage  # noqa: E402
++
+ 
+ def read_check_unit_tests_list():
+     if not CHECK_UNIT_TESTS_LIST.exists():
+@@ -48,19 +56,11 @@ def read_check_unit_tests_list():
+ 
+ 
+ def read_hook_coverage_check_unit_tests():
+-    """test_coverage_report.py içindeki HOOK_COVERAGE['check-unit-tests'] listesini
+-    statik parse eder (runtime import etmek yerine)."""
+-    src = (TEST_DIR / "test_coverage_report.py").read_text(encoding="utf-8")
+-    i = src.find('"check-unit-tests":')
+-    if i < 0:
+-        return set()
+-    j = src.find("],", i)
+-    if j < 0:
+-        return set()
+-    block = src[i:j + 1]
+-    # "test_X.py" desenlerini al
+-    import re
+-    return {m for m in re.findall(r'"([^"]+\.py)"', block)}
++    """HOOK_COVERAGE['check-unit-tests'] listesi — AST tabanlı paylaşımlı
++    parse'tan (sync_check_unit_tests tek kaynak); yalnız .py girdileri
++    (bu gate'in discover evreni)."""
++    entries = _read_hook_coverage(str(TEST_DIR / "test_coverage_report.py"))
++    return {e for e in entries if e.endswith(".py")}
+ 
+ 
+ EXEMPT_FROM_DIFF_GUARD = frozenset({
+diff --git a/_calisma/CIKTI/sync_check_unit_tests.py b/_calisma/CIKTI/sync_check_unit_tests.py
+index 6d5b456..5b96476 100644
+--- a/_calisma/CIKTI/sync_check_unit_tests.py
++++ b/_calisma/CIKTI/sync_check_unit_tests.py
+@@ -35,8 +35,8 @@ stdlib only — PyYAML/yok bağımlılık.
+ """
+ 
+ import argparse
++import ast
+ import os
+-import re
+ import subprocess
+ import sys
+ 
+@@ -138,46 +138,43 @@ def diff(discovered, manifest):
+ 
+ # ────────────────────────────────────────────────────────────────────────────
+ # HOOK_COVERAGE senkronu — test_coverage_report.py'deki
+-# HOOK_COVERAGE["check-unit-tests"] bloğu. ci_full_discover_drift_guard.py
+-# bu bloğu statik metin parse ile okur (anahtar → ilk `],`); yeniden yazım
+-# bu formatı birebir korur.
++# HOOK_COVERAGE["check-unit-tests"] bloğu. Okuma/yazım AST tabanlıdır:
++# anahtar→ilk `],` span sezgisi, gövde-içi bir yorumda geçen `],`'da bloğu
++# kırpar (ölçüldü). ci_full_discover_drift_guard.py aynı parse'ı buradan
++# kullanır (tek kaynak; kopya sezgi yok).
+ # ────────────────────────────────────────────────────────────────────────────
+ 
+-HOOK_COVERAGE_KEY = '"check-unit-tests":'
+ 
+-
+-def _hook_coverage_span(src):
+-    """Kaynak metinde bloğun [gövde] span'ını döndürür (None: blok yok)."""
+-    i = src.find(HOOK_COVERAGE_KEY)
+-    if i < 0:
+-        return None
+-    b = src.find("[", i)
+-    if b < 0:
+-        return None
+-    e = src.find("],", b)
+-    if e < 0:
+-        return None
+-    return b + 1, e
+-
+-
+-def _entry_indent(body):
+-    """Bloktaki ilk girdinin girintisini döndürür (8 boşluk beklenir)."""
+-    m = re.search(r'\n(\s*)"', body)
+-    return m.group(1) if m else "        "
++def _hook_coverage_list_node(tree):
++    """HOOK_COVERAGE["check-unit-tests"] değeri olan ast.List düğümünü döndürür
++    (None: blok yok)."""
++    for node in ast.walk(tree):
++        if (isinstance(node, ast.Assign)
++                and any(getattr(t, "id", None) == "HOOK_COVERAGE"
++                        for t in node.targets)
++                and isinstance(node.value, ast.Dict)):
++            for k, v in zip(node.value.keys, node.value.values):
++                if isinstance(k, ast.Constant) and k.value == "check-unit-tests":
++                    return v
++    return None
+ 
+ 
+ def read_hook_coverage(path=None):
+-    """Bloktaki tüm girdileri (py + js) sıra korunarak döndürür."""
++    """Bloktaki tüm girdileri (py + js) sıra korunarak döndürür (AST tabanlı;
++    dosya/blok bozuksa [] — üst katman fail-closed rc=1 verir)."""
+     p = path or COVERAGE_FILE
+     if not os.path.exists(p):
+         return []
+-    with open(p, encoding="utf-8") as f:
+-        src = f.read()
+-    span = _hook_coverage_span(src)
+-    if span is None:
++    try:
++        with open(p, encoding="utf-8") as f:
++            tree = ast.parse(f.read(), filename=str(p))
++    except SyntaxError:
+         return []
+-    body = src[span[0]:span[1]]
+-    return re.findall(r'"([^"]+\.(?:py|js))"', body)
++    node = _hook_coverage_list_node(tree)
++    if node is None:
++        return []
++    return [e.value for e in node.elts
++            if isinstance(e, ast.Constant) and isinstance(e.value, str)]
+ 
+ 
+ def diff_hook_coverage(discovered, entries, cikti_dir=None):
+@@ -197,16 +194,22 @@ def diff_hook_coverage(discovered, entries, cikti_dir=None):
+     return sorted(add), orphan
+ 
+ 
+-def _rewrite_hook_coverage(src, entries, add, orphan):
+-    span = _hook_coverage_span(src)
+-    body = src[span[0]:span[1]]
+-    indent = _entry_indent(body)
++def _rewrite_hook_coverage(src, add, orphan):
++    """check-unit-tests listesini yeniden yazıp yeni kaynak döndürür
++    (None: blok/segment bulunamadı — çağıran fail-closed raporlar)."""
++    node = _hook_coverage_list_node(ast.parse(src))
++    if node is None:
++        return None
++    seg = ast.get_source_segment(src, node)
++    if seg is None:
++        return None
+     orphan_set = set(orphan)
+-    add_set = set(add)
+-    kept = [e for e in entries if e not in orphan_set]
+-    new_entries = kept + [a for a in sorted(add_set)]
+-    new_body = "\n" + "\n".join(indent + '"%s",' % e for e in new_entries)
+-    return src[:span[0]] + new_body + src[span[1]:]
++    current = [e.value for e in node.elts
++               if isinstance(e, ast.Constant) and isinstance(e.value, str)]
++    kept = [e for e in current if e not in orphan_set]
++    new_entries = kept + sorted(set(add))
++    lines = "".join('\n        "%s",' % e for e in new_entries)
++    return src.replace(seg, "[" + lines + "\n    ]", 1)
+ 
+ 
+ def run_check_hook_coverage(discovered=None, path=None, cikti_dir=None):
+@@ -234,13 +237,18 @@ def run_update_hook_coverage(stage=True, discovered=None, path=None, cikti_dir=N
+     """Bloğu senkronlar; değiştiyse (changed, added, removed) döndürür."""
+     p = path or COVERAGE_FILE
+     d = cikti_dir or CIKTI
+-    with open(p, encoding="utf-8") as f:
+-        src = f.read()
+-    span = _hook_coverage_span(src)
+-    if span is None:
++    try:
++        with open(p, encoding="utf-8") as f:
++            src = f.read()
++        ast.parse(src, filename=str(p))
++    except (OSError, SyntaxError) as exc:
+         # Hedef bozuksa sessiz başarı yerine dürüst hata; rc'yi update-sonrası
+         # run_check fail-closed yapar.
+-        print(f"HATA: HOOK_COVERAGE['check-unit-tests'] bloğu okunamadı: {p} "
++        print(f"HATA: HOOK_COVERAGE dosyası okunamadı/parse edilemedi: {p} "
++              f"({exc}) — ikinci hedef senkronlanmadı.")
++        return False, [], []
++    if _hook_coverage_list_node(ast.parse(src)) is None:
++        print(f"HATA: HOOK_COVERAGE['check-unit-tests'] bloğu bulunamadı: {p} "
+               "— ikinci hedef senkronlanmadı.")
+         return False, [], []
+     entries = read_hook_coverage(p)
+@@ -248,7 +256,11 @@ def run_update_hook_coverage(stage=True, discovered=None, path=None, cikti_dir=N
+         discovered if discovered is not None else discover(), entries, d)
+     if not add and not orphan:
+         return False, [], []
+-    new_src = _rewrite_hook_coverage(src, entries, add, orphan)
++    new_src = _rewrite_hook_coverage(src, add, orphan)
++    if new_src is None:
++        print(f"HATA: HOOK_COVERAGE bloğu yeniden yazılamadı: {p} "
++              "— ikinci hedef senkronlanmadı.")
++        return False, [], []
+     with open(p, "w", encoding="utf-8") as f:
+         f.write(new_src)
+     if stage:
+diff --git a/_calisma/CIKTI/test_sync_check_unit_tests.py b/_calisma/CIKTI/test_sync_check_unit_tests.py
+index dd47796..052da95 100644
+--- a/_calisma/CIKTI/test_sync_check_unit_tests.py
++++ b/_calisma/CIKTI/test_sync_check_unit_tests.py
+@@ -203,26 +203,62 @@ class TestHookCoverageSync(unittest.TestCase):
+         finally:
+             td.cleanup()
+ 
+-    def test_drift_guard_can_still_parse_regenerated_block(self):
+-        """Yeniden yazılan blok, ci_full_discover_drift_guard'ın statik parse'
+-       ıyla okunabilir olmalı (format kontratı)."""
++    def test_regenerated_block_is_ast_round_trip(self):
++        """Yeniden yazılan blok, AST tabanlı okuyucuyla birebir geri okunmalı
++        (yazım-sonrası read == entries sözleşmesi)."""
+         entries = ["test_a.py", "test_b.py"]
+         td, cov = self._env(entries, ("test_new.py",))
+         try:
+             s.run_update(stage=False, directory=td.name,
+                          manifest=os.path.join(td.name, "mf.list"), coverage=cov)
+-            src = open(cov, encoding="utf-8").read()
+-            i = src.find('"check-unit-tests":')
+-            j = src.find("],", i)
+-            self.assertGreater(i, 0)
+-            self.assertGreater(j, i)
+-            import re as _re
+-            found = _re.findall(r'"([^"]+\.py)"', src[i:j + 1])
+-            self.assertIn("test_new.py", found)
+-            self.assertIn("test_a.py", found)
++            self.assertEqual(
++                s.read_hook_coverage(cov),
++                ["test_a.py", "test_b.py", "test_new.py"])
+         finally:
+             td.cleanup()
+ 
++    def test_reader_is_span_heuristic_free(self):
++        """KIRILMA-TUZAĞI: blok-içi yorum ']," taşıyorsa span sezgisi kırılır;
++        AST tabanlı okuma/yazım bu durumda da doğru çalışmalı (bkz. ölçülen
++        2026-09-21 boşluğu: ci_full_discover_drift_guard.py satır 129)."""
++        td = tempfile.TemporaryDirectory()
++        try:
++            cov = os.path.join(td.name, "coverage_report.py")
++            with open(cov, "w", encoding="utf-8") as f:
++                f.write(
++                    "HOOK_COVERAGE = {\n"
++                    '    "other-hook": ["test_other.py"],\n'
++                    '    "check-unit-tests": [\n'
++                    '        # 2026-09-21 boşluğu: ci_full_discover_drift_guard.py\n'
++                    '        # ... sorusunun cevabı ], tam burada — tuzak\n'
++                    '        "test_a.py",\n'
++                    '        "test_b.py",],\n'
++                    "}\n")
++            open(os.path.join(td.name, "test_a.py"), "w").close()
++            open(os.path.join(td.name, "test_b.py"), "w").close()
++            open(os.path.join(td.name, "test_c.py"), "w").close()
++            # Okuma: eski span sezgisi gövdeyi yorumdaki '],'-da kırpıp boş
++            # gövde okur; AST tabanlı okuma gerçek girdileri döndürmeli.
++            self.assertEqual(s.read_hook_coverage(cov),
++                             ["test_a.py", "test_b.py"])
++            # Yazım da sağlam kalmalı (parite: read(update(read)) = yazılan).
++            s.run_update(stage=False, directory=td.name,
++                         manifest=os.path.join(td.name, "mf.list"),
++                         coverage=cov)
++            self.assertEqual(s.read_hook_coverage(cov),
++                             ["test_a.py", "test_b.py", "test_c.py"])
++        finally:
++            td.cleanup()
++
++    def test_guard_reader_matches_sync_reader_on_real_repo(self):
++        """Parite kapısı: ci_full_discover_drift_guard'ın HOOK_COVERAGE okuması,
++        sync aracının okumasıyla gerçek repoda birebir aynı olmalı (guard
++        yalnız .py ister; sync .js girdilerini de taşır — py-only küme)."""
++        import ci_full_discover_drift_guard as g
++        self.assertEqual(
++            g.read_hook_coverage_check_unit_tests(),
++            {e for e in s.read_hook_coverage() if e.endswith(".py")})
++
+     def test_real_repo_hook_coverage_covers_discovery(self):
+         """Gerçek repo regresyon kapısı: keşif, tüm hook listelerinin
+         BİRLEŞİMİ + CHECK_EXEMPT muafiyetiyle kapsanmalı.
+diff --git a/docs/FINAL_RC_REPORT.md b/docs/FINAL_RC_REPORT.md
+index 22d2dff..d041563 100644
+--- a/docs/FINAL_RC_REPORT.md
++++ b/docs/FINAL_RC_REPORT.md
+@@ -119,6 +119,23 @@ Temiz kopya (`git clone` → `/tmp/leibniz2-final`, HEAD = `3918a04092279450e743
+ - `python3 -m unittest discover` sistem python3 ile `--full` koşursa Z3 yok
+   deyip P0 üretir: kapı venv python ile koşulmalı (belgelendi).
+ 
++**2026-09-21 PR-yolu CI kanıtı (branch protection main'e direkt-push'u
++blokluyor — 14 required check):** yerel main'in 9 commit'i (5280500…5fdf2e4,
++8c59bb4 merge dahil) PR #52 dalına merge edildi (M1 `69ab9a9`, 12 dosya
+++391/−49; 0 çakışma) ve dal `b5126f9..69ab9a9` pushlandı. PR-head koşumları:
++
++| Workflow | Run | Sonuç |
++|---|---|---|
++| verify-delivery | 35566880485 | **success** |
++| docker-security | 35566880477 | **success** |
++| test-smoke | 35566880476 | **success** |
++
++→ **3/3 workflow success** merge-commit `69ab9a9`'da; PR #52 MERGEABLE.
++Bu oturumun yeni kapıları CI'da da yeşil: `test_sync_lifecycle` (subprocess
++yaşam-döngüsü regresyonu; batarya 144 dosya / check-unit-tests 159) ve
++48h-guard-kaldırılmış trend-kayıt yolu (bayat rapor tarihiyle kaydolur;
++tazelik iddiası `--check`'te). Kapanış main'e PR #52 merge'iyle gelir.
++
+ ## Karar
+ 
+ Yerel fail-closed zinciri bu SHA ağacında uçtan uca yeşil: K0–K21, 25/25

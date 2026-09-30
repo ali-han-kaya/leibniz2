@@ -1,0 +1,6 @@
+node_modules/
+out/
+dist/
+.remotion/
+public/data/
+package-lock.json

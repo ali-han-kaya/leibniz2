@@ -38,7 +38,7 @@ hangi CVE'nin hangi floor'la kapatıldığı image'in kendisinde yaşar.
 | Katman | Nerede | Ne zaman | Desen |
 |---|---|---|---|
 | Sistem paketleri (apt) | Dockerfile runtime stage, `SECURITY_PATCH_PACKAGES` ARG | Debian kütüphane CVE'leri (ör. libpcre2-8-0) | `--only-upgrade <pkg>=<floor>`, `--no-install-recommends`, liste temizliği, kurulan sürüm kanıta yazılır |
-| Python zinciri (pip) | builder + runtime stage'lerde `pip install --upgrade` floor'ları | setuptools/wheel gibi image'e taşınan Python paketi CVE'leri | `--upgrade "pkg>=<floor>"` — asla `latest` |
+| Python zinciri (pip) | builder + runtime stage'lerde `PYTHON_SECURITY_PATCH_PACKAGES` ARG (global default + bare redeclare) | setuptools/wheel gibi image'e taşınan Python paketi CVE'leri | `--upgrade $PYTHON_SECURITY_PATCH_PACKAGES` — floor'lar ARG default'unda, asla floorsuz |
 
 Aynı üç kural her iki katmanda da geçerli:
 
@@ -50,16 +50,22 @@ Aynı üç kural her iki katmanda da geçerli:
 3. **Kanıt zorunludur** — yama iddiası kurulumun kendisinden doğrulanır
    (apt katmanı `dpkg-query -W` çıktısıyla — **yalın paket adıyla**:
    `pkg=sürüm` sözdizimi apt'a geçer ama dpkg-query'ye geçmez, canlı
-   build'de ölçüldü; pip katmanı `pip show` sürümüyle) ve Trivy'nin
-   yeniden taramasıyla kapanır.
+   build'de ölçüldü; pip katmanı `pip show` sürümüyle — floor eki
+   `sed 's/[><=!~].*//'` ile kırpılır, yalın paket adı). Aynı üç kural iki
+   ARG mekanizmasına da uygulanır: floor'lar ARG default'unda yaşar (tek
+   kopya — CVE-defteri), empty-guard net "yama yok" kanıtı verir, kurulum
+   kanıtı build log'una yazılır.
 
 ## Katkı sözleşmesi (yeni bulgu geldiğinde)
 
 1. Trivy gate'inin tablo çıktısındaki paket + "Fixed version" değerini al.
-2. `SECURITY_PATCH_PACKAGES` default'una `paket=floor` ekle (aynı paketin
+2.   `SECURITY_PATCH_PACKAGES` default'una `paket=floor` ekle (aynı paketin
    mevcut floor'u varsa yükselt) ve CVE-defteri bloğuna kaydı yaz
    (CVE kimlikleri + floor + kanıt tarihi).
-3. Sistem-paket katmanıysa aynı satırı bu dokümandaki CVE-defterine de işle.
+3. Sistem-paket katmanıysa aynı satırı bu dokümandaki CVE-defterine de işle;
+   Python-paketi katmanıysa `PYTHON_SECURITY_PATCH_PACKAGES` default'una
+   `paket>=floor` ekle (pip gereksinim sözdizimi) ve Dockerfile'daki
+   PYTHON-CVE-defteri bloğuna kaydı yaz.
 4. `_calisma/CIKTI/docker_security_smoke.sh` ile build+scan+health kanıtını
    üret; `test_dockerfile_security_patching.py` sözleşme testlerinin
    üzerinden geç.
@@ -79,6 +85,9 @@ Yeni girdiler buraya ve Dockerfile'daki defter bloğuna eklenir.
 Dockerfile'daki deseni sözleşme satırlarıyla sabitler: ARG default'unda
 CVE-defteri girdisi, `--only-upgrade` (tüm-upgrade yasağı), apt liste
 hijyeni, `dpkg-query` kanıt satırı, `rm -rf /var/lib/apt/lists/*`,
-bookworm dağıtım pini ve pip floor deseni (`--upgrade "pkg>=x"` + asla
-`pip install --upgrade` tek başına). Desenin bozulması (ör. floor'un
+bookworm dağıtım pini, iki katmanın ortak ARG mekanizması
+(`SECURITY_PATCH_PACKAGES` apt + `PYTHON_SECURITY_PATCH_PACKAGES` pip:
+floor'lar ARG default'unda tek kopya, empty-guard, kurulum-kanıtı satırı)
+ve pip floor deseni (`--upgrade $PYTHON_SECURITY_PATCH_PACKAGES` + asla
+floorsuz). Desenin bozulması (ör. floor'un
 silinmesi, tüm-upgrade'e geçilmesi) testi fail yapar → commit bloke olur.

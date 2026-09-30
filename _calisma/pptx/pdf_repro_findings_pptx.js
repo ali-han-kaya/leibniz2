@@ -1,0 +1,305 @@
+/**
+ * pdf_repro_findings_pptx.js — deck'i NATIVE pptx şekilleri + metniyle kurar.
+ *
+ * İçerik kaynağı: _calisma/CIKTI/pdf_repro_findings_deck.py (PNG deck, görsel
+ * QA) + qpdf_determinism_output.txt kanıtı. PNG'ler artık pptx'e GÖMÜLMEZ:
+ * hash'ler slaytta MONO token fontuyla GERÇEK metin olarak durur → aranabilir,
+ * kopyalanabilir, düzenlenebilir.
+ *
+ * Palet/tipografi: `design-system/tokens.json` (tokens.js). Slaytta tek bir
+ * ad-hoc hex yoktur; renkler rol adıyla seçilir (err = bulgu, warn = sayısal
+ * kanıt, ok = güvenilir kanıt, accent = teknik vurgu).
+ * Geometri 1600x900 px deck ızgarasından türetilir (T.grid, inç).
+ */
+const path = require("path");
+const { renderDeck, T } = require("./native_deck");
+
+const ROW_X = 110 / 160; // 0.6875
+const ROW_W = 8.25; // 1320 px
+
+renderDeck(() => ({
+  file: path.resolve(__dirname, "pdf_repro_findings.pptx"),
+  meta: {
+    title: "leibniz2 — PDF Reproducibility Findings",
+    subject:
+      "PDF yeniden-üretilebilirlik bulguları: üç epoch, NON-DETERMINISTIC kayıt (native slaytlar)",
+    author: "leibniz2 verification pipeline",
+    company: "leibniz2",
+  },
+  footer: "LEIBNIZ2  /  PDF REPRODUCIBILITY FINDINGS",
+  slides: [
+    {
+      kicker: "01 / finding",
+      title: "The shipped PDF is behind its source",
+      rail: "err",
+      blocks: [
+        {
+          kind: "text",
+          x: ROW_X,
+          y: 1.8125,
+          w: 6.0,
+          h: 0.9,
+          text: "Current TeX source and shipped PDF are not the same reproducible build.",
+          size: T.type.lead,
+        },
+        {
+          kind: "text",
+          x: ROW_X,
+          y: 2.6875,
+          w: 6.0,
+          h: 0.3,
+          text: "Finding",
+          size: T.type.small,
+          color: "err",
+          bold: true,
+          caps: true,
+        },
+        {
+          kind: "text",
+          x: ROW_X,
+          y: 2.96875,
+          w: 5.6,
+          h: 0.9,
+          text: "A source change can pass review while the delivered PDF\ncontinues to represent an earlier artifact.",
+          size: T.type.body,
+        },
+        {
+          kind: "badge",
+          x: 6.4375,
+          y: 1.875,
+          w: 2.5,
+          h: 1.4,
+          text: "SOURCE\n≠\nSHIPPED",
+          color: "err",
+          textColor: "fg",
+          size: T.type.title,
+        },
+      ],
+      notes:
+        "01 / finding — The shipped PDF is behind its source. " +
+        "The current TeX source and the shipped PDF are not the same reproducible " +
+        "build: a source change can pass review while the delivered PDF still " +
+        "represents an earlier artifact. SOURCE ≠ SHIPPED.",
+    },
+    {
+      kicker: "02 / experiment",
+      title: "Evidence: three epochs, three outputs",
+      rail: "err",
+      blocks: [
+        {
+          kind: "text",
+          x: ROW_X,
+          y: 1.6875,
+          w: ROW_W,
+          h: 0.4,
+          text: "The same input PDF was stripped repeatedly under the recorded experiment.",
+          size: T.type.body,
+        },
+        {
+          kind: "rows",
+          x: ROW_X,
+          y: 2.4375,
+          w: ROW_W,
+          h: 0.5125,
+          gap: 0.14,
+          size: T.type.body,
+          rows: [
+            {
+              label: "Epoch / run 1",
+              value: "b090ac01…",
+              color: "warn",
+              mono: true,
+            },
+            {
+              label: "Epoch / run 2",
+              value: "429984da…",
+              color: "warn",
+              mono: true,
+            },
+            {
+              label: "Epoch / run 3",
+              value: "509a47a6…",
+              color: "warn",
+              mono: true,
+            },
+          ],
+        },
+        {
+          kind: "text",
+          x: ROW_X,
+          y: 4.65625,
+          w: ROW_W,
+          h: 0.4,
+          text: "Same raw input  →  distinct metadata-stripped hashes",
+          size: T.type.body,
+          color: "err",
+          bold: true,
+        },
+      ],
+      notes:
+        "02 / experiment — Evidence: three epochs, three outputs. " +
+        "The same input PDF was stripped repeatedly under the recorded experiment: " +
+        "b090ac01… · 429984da… · 509a47a6…. " +
+        "Same raw input → distinct metadata-stripped hashes.",
+    },
+    {
+      kicker: "03 / diagnosis",
+      title: "The frozen record says NON-DETERMINISTIC",
+      rail: "err",
+      blocks: [
+        {
+          kind: "text",
+          x: ROW_X,
+          y: 1.8125,
+          w: 5.0,
+          h: 0.3,
+          text: "raw SHA-256",
+          size: T.type.small,
+          color: "muted",
+          bold: true,
+          caps: true,
+        },
+        {
+          kind: "text",
+          x: ROW_X,
+          y: 2.09375,
+          w: 5.0,
+          h: 0.4,
+          text: "533f00297183ac72…",
+          size: T.type.body,
+          color: "accent",
+          bold: true,
+          mono: true,
+        },
+        {
+          kind: "text",
+          x: ROW_X,
+          y: 2.875,
+          w: 5.0,
+          h: 0.3,
+          text: "verdict",
+          size: T.type.small,
+          color: "muted",
+          bold: true,
+          caps: true,
+        },
+        {
+          kind: "text",
+          x: ROW_X,
+          y: 3.15625,
+          w: 5.6,
+          h: 0.5,
+          text: "NON-DETERMINISTIC",
+          size: T.type.title,
+          color: "err",
+          bold: true,
+        },
+        {
+          kind: "text",
+          x: 5.3125,
+          y: 2.125,
+          w: 4.1,
+          h: 1.0,
+          text: "The metadata-stripped\nrepresentation cannot be\nfreely regenerated byte-for-byte.",
+          size: T.type.body,
+          lineSpacing: 1.3,
+        },
+      ],
+      notes:
+        "03 / diagnosis — The frozen record says NON-DETERMINISTIC. " +
+        "raw SHA-256 533f00297183ac72…. " +
+        "The metadata-stripped representation cannot be freely regenerated " +
+        "byte-for-byte, so byte identity must never be inferred from it.",
+    },
+    {
+      kicker: "04 / boundary",
+      title: "What is safe to trust",
+      rail: "err",
+      blocks: [
+        {
+          kind: "card",
+          x: ROW_X,
+          y: 1.8125,
+          w: 3.6875,
+          h: 2.0625,
+          outline: "ok",
+          label: "Audit evidence",
+          labelColor: "ok",
+          body: "Raw PDF SHA-256\n+ committed sidecar\n+ frozen experiment record",
+          bodySize: T.type.body,
+        },
+        {
+          kind: "card",
+          x: 5.125,
+          y: 1.8125,
+          w: 3.8125,
+          h: 2.0625,
+          outline: "warn",
+          label: "Rebuild risk",
+          labelColor: "warn",
+          body: "Do not infer\nbyte identity from\nmetadata removal alone.",
+          bodySize: T.type.body,
+        },
+      ],
+      notes:
+        "04 / boundary — What is safe to trust. " +
+        "AUDIT EVIDENCE: raw PDF SHA-256 + committed sidecar + frozen experiment record. " +
+        "REBUILD RISK: do not infer byte identity from metadata removal alone.",
+    },
+    {
+      kicker: "05 / action",
+      title: "Recommended delivery gate",
+      rail: "err",
+      blocks: [
+        {
+          kind: "text",
+          x: ROW_X,
+          y: 1.84375,
+          w: ROW_W,
+          h: 0.4,
+          text: "Rebuild from current TeX with an explicit SOURCE_DATE_EPOCH.",
+          size: T.type.lead,
+        },
+        {
+          kind: "text",
+          x: 0.9375,
+          y: 2.625,
+          w: 5.4,
+          h: 1.6,
+          text: "1. Build the package PDF\n2. Hash the rebuilt bytes\n3. Compare against the pinned sidecar\n4. Block delivery on drift\n5. Regenerate the record only after review",
+          size: T.type.body,
+          lineSpacing: 1.25,
+        },
+        {
+          kind: "text",
+          x: 5.9375,
+          y: 2.9375,
+          w: 3.4,
+          h: 0.9,
+          text: "DRIFT\n→ BLOCK",
+          size: T.type.display,
+          color: "err",
+          bold: true,
+        },
+        {
+          kind: "text",
+          x: 5.9375,
+          y: 3.875,
+          w: 3.4,
+          h: 0.7,
+          text: "source / artifact\nrejoin the same chain",
+          size: T.type.small,
+          color: "muted",
+          bold: true,
+        },
+      ],
+      notes:
+        "05 / action — Recommended delivery gate. " +
+        "Rebuild from the current TeX with an explicit SOURCE_DATE_EPOCH: " +
+        "1) build the package PDF · 2) hash the rebuilt bytes · " +
+        "3) compare against the pinned sidecar · 4) block delivery on drift · " +
+        "5) regenerate the record only after review. " +
+        "DRIFT → BLOCK: source and artifact rejoin the same chain.",
+    },
+  ],
+}));

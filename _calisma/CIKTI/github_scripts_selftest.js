@@ -16,15 +16,17 @@
 // Stdout'a TEK JSON satırı yazar: {script, ok, error, setFailed, calls,
 // console}. Harness hatası yoksa exit 0 — gerçek PASS/FAIL kararını
 // battery (Python) verir; script throw ederse ok=false + error dolar.
-'use strict';
+"use strict";
 
-const fs = require('fs');
-const path = require('path');
-const vm = require('vm');
+const fs = require("fs");
+const path = require("path");
+const vm = require("vm");
 
 const [scriptPath, fixtureDir] = process.argv.slice(2);
 if (!scriptPath || !fixtureDir) {
-  process.stderr.write('kullanım: node github_scripts_selftest.js <script> <fixtureDir>\n');
+  process.stderr.write(
+    "kullanım: node github_scripts_selftest.js <script> <fixtureDir>\n"
+  );
   process.exit(2);
 }
 process.chdir(fixtureDir);
@@ -33,21 +35,21 @@ function loadJson(name, fallback) {
   const p = path.join(fixtureDir, name);
   if (!fs.existsSync(p)) return fallback;
   try {
-    return JSON.parse(fs.readFileSync(p, 'utf8'));
+    return JSON.parse(fs.readFileSync(p, "utf8"));
   } catch (e) {
     process.stderr.write(`mock dosya bozuk (${name}): ${e}\n`);
     process.exit(2);
   }
 }
 
-const labels = loadJson('mock_labels.json', []);
-const comments = loadJson('mock_comments.json', []);
-const repoLabels = loadJson('mock_repo_labels.json', []);
-const ctx = loadJson('mock_context.json', null);
+const labels = loadJson("mock_labels.json", []);
+const comments = loadJson("mock_comments.json", []);
+const repoLabels = loadJson("mock_repo_labels.json", []);
+const ctx = loadJson("mock_context.json", null);
 
-const calls = [];          // her REST çağrısı: {fn, args}
-const setFailed = [];      // core.setFailed mesajları
-const consoleLines = [];   // yakalanan console çıktısı
+const calls = []; // her REST çağrısı: {fn, args}
+const setFailed = []; // core.setFailed mesajları
+const consoleLines = []; // yakalanan console çıktısı
 
 const record = (fn) => async (args) => {
   calls.push({ fn, args: args || {} });
@@ -58,24 +60,24 @@ const github = {
   rest: {
     issues: {
       listLabelsOnIssue: async (a) => {
-        calls.push({ fn: 'issues.listLabelsOnIssue', args: a || {} });
+        calls.push({ fn: "issues.listLabelsOnIssue", args: a || {} });
         return { data: labels };
       },
       listComments: async (a) => {
-        calls.push({ fn: 'issues.listComments', args: a || {} });
+        calls.push({ fn: "issues.listComments", args: a || {} });
         return { data: comments };
       },
-      addLabels: record('issues.addLabels'),
-      removeLabel: record('issues.removeLabel'),
-      createComment: record('issues.createComment'),
-      updateComment: record('issues.updateComment'),
-      deleteComment: record('issues.deleteComment'),
+      addLabels: record("issues.addLabels"),
+      removeLabel: record("issues.removeLabel"),
+      createComment: record("issues.createComment"),
+      updateComment: record("issues.updateComment"),
+      deleteComment: record("issues.deleteComment"),
       listLabelsForRepo: async (a) => {
-        calls.push({ fn: 'issues.listLabelsForRepo', args: a || {} });
+        calls.push({ fn: "issues.listLabelsForRepo", args: a || {} });
         return { data: repoLabels };
       },
-      createLabel: record('issues.createLabel'),
-      updateLabel: record('issues.updateLabel'),
+      createLabel: record("issues.createLabel"),
+      updateLabel: record("issues.updateLabel"),
     },
   },
 };
@@ -91,24 +93,24 @@ const core = {
 const context = Object.assign(
   {
     issue: { number: 1 },
-    repo: { owner: 'mock-owner', repo: 'mock-repo' },
+    repo: { owner: "mock-owner", repo: "mock-repo" },
     runId: 42,
     payload: {
-      repository: { html_url: 'https://github.com/mock-owner/mock-repo' },
+      repository: { html_url: "https://github.com/mock-owner/mock-repo" },
     },
   },
-  ctx || {},
+  ctx || {}
 );
 
-const scriptBody = fs.readFileSync(scriptPath, 'utf8');
+const scriptBody = fs.readFileSync(scriptPath, "utf8");
 const wrapped = `(async () => {\n${scriptBody}\n})();`;
 
 const sandbox = {
   require: (m) => require(m),
   console: {
-    log: (...a) => consoleLines.push(a.map(String).join(' ')),
-    error: (...a) => consoleLines.push('ERR ' + a.map(String).join(' ')),
-    warn: (...a) => consoleLines.push('WARN ' + a.map(String).join(' ')),
+    log: (...a) => consoleLines.push(a.map(String).join(" ")),
+    error: (...a) => consoleLines.push("ERR " + a.map(String).join(" ")),
+    warn: (...a) => consoleLines.push("WARN " + a.map(String).join(" ")),
   },
   github,
   core,
@@ -137,17 +139,23 @@ function finish(res) {
   process.stdout.write(JSON.stringify(res));
 }
 const timer = setTimeout(() => {
-  finish(Object.assign({}, base, { ok: false, error: 'timeout 15s' }));
+  finish(Object.assign({}, base, { ok: false, error: "timeout 15s" }));
 }, 15000);
 
 try {
   vm.runInContext(wrapped, sandbox, { filename: path.basename(scriptPath) })
     .then(() => finish(base))
-    .catch((e) => finish(Object.assign({}, base, {
-      ok: false,
-      error: String((e && e.stack) || e),
-    })));
+    .catch((e) =>
+      finish(
+        Object.assign({}, base, {
+          ok: false,
+          error: String((e && e.stack) || e),
+        })
+      )
+    );
 } catch (e) {
   // Senkron hata (ör. söz dizimi) — promise üretilemeden patladı.
-  finish(Object.assign({}, base, { ok: false, error: String((e && e.stack) || e) }));
+  finish(
+    Object.assign({}, base, { ok: false, error: String((e && e.stack) || e) })
+  );
 }

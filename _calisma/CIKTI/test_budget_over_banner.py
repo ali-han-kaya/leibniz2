@@ -61,7 +61,7 @@ class TestBudgetOverBannerElement(unittest.TestCase):
 
     def test_banner_clickable_expandable(self):
         # Şerit tıklanabilir; özet + caret + gizli detay bölümü içerir.
-        self.assertIn("onclick=\"toggleBudgetOverDetail()\"", self.html)
+        self.assertIn('data-act="budget-toggle"', self.html)
         self.assertIn("cursor:pointer", self.html)
         self.assertIn('id="budget-over-summary"', self.html)
         self.assertIn('id="budget-over-caret"', self.html)
@@ -135,7 +135,7 @@ class TestBudgetOverBannerLogic(unittest.TestCase):
 
     def test_detail_built_and_collapsed_each_update(self):
         # Detay her güncellemede yeniden yazılır ve kapalı başlar.
-        self.assertIn("det.innerHTML = budgetOverDetailRows(over)", self.body)
+        self.assertRegex(self.body, r"det\.innerHTML\s*=\s*\n?\s*budgetOverDetailRows\(over\)")
         self.assertIn("det.style.display = \"none\";", self.body)
         self.assertIn("budgetOverRuns = over;", self.body)
 
@@ -179,7 +179,7 @@ class TestTrendTooltipBudgetNote(unittest.TestCase):
         self.assertIn("budgetLimitNote(r.budget_usd, lim)", body)
         self.assertIn("budgetTipColor(r.budget_usd, lim)", body)
         self.assertIn("runBudgetLimit(r)", body)
-        self.assertIn(r'class=\"', body)
+        self.assertRegex(body, r"class=[\"']")
 
     def test_budget_tip_color_over_under(self):
         # budgetTipColor: aşım tt-over (kırmızı), altında tt-under (yeşil),

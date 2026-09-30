@@ -1,7 +1,71 @@
-# Bilinen CI Olayları (Known Incidents)
+# Bilinen Olaylar (Known Incidents)
 
-Bu belge, CI pipeline'ında yaşanan ve düzeltilen bilinen olayların kaydıdır.
-Amaç: aynı sınıf olaylar tekrarlandığında kök neden ve çözüm tek bakışta görünür.
+Bu belge, CI pipeline'ında ve Freebuff Preview tooling'inde yaşanan bilinen
+olayların kaydıdır. Amaç: aynı sınıf olaylar tekrarlandığında en küçük
+yeniden-üretim, gözlem, kök neden veya geçici çalışma yolu tek bakışta görünür.
+
+---
+
+## PREVIEW-1: Ekran-görüntüleyici kompozitörü frame üretmiyor
+
+- **Tarih:** 2026-09-25
+- **Durum:** 🔴 Açık — kök neden doğrulanmadı
+- **Etkilenen yüzey:** Freebuff Preview ekran-görüntüleyicisi
+- **Kapsam gözlemi:** Default ve incognito profillerdeki birden fazla localhost
+  sekmesi
+
+### Belirti
+
+Preview sekmesi DOM'a bağlıdır ve `preview_snapshot` içerik üretir; buna
+karşın `preview_screenshot` PNG üretmez ve şu hatayı döndürür:
+
+```text
+Could not capture the preview page: it produced no frames, which means the preview webview is not being composited. Reload the preview (preview_navigate "reload") or reopen the Preview tab, then try again.
+```
+
+Bu, uygulama sayfasının hata vermesi anlamına gelmez: aynı sekmede erişilebilirlik
+ağacı okunabilir. Sorun snapshot ile compositor/capture hattı arasındadır.
+
+### Üç adımlı minimum yeniden-üretim
+
+1. `preview_open` ile herhangi bir `http://127.0.0.1:<port>/` sayfasını yeni bir
+   Preview sekmesinde aç.
+2. `preview_snapshot` çağır; DOM'un `RootWebArea` ve sayfa metniyle geldiğini
+   doğrula.
+3. Aynı sekmede `preview_screenshot` çağır; kompozitörün frame üretmediği hata
+   döner.
+
+### Gözlenen kontroller
+
+- Yeni açılan default-profile sekmesi aynı hatayı verdi.
+- Var olan localhost dashboard, `_preview_jobs_map.html` ve Pinokio sekmeleri
+  aynı hatayı verdi.
+- Incognito profil de aynı davranışı gösterdi.
+- `preview_navigate "reload"` sonrasında ikinci screenshot denemesi de başarısız
+  oldu; reload yanıtında ayrıca 15 saniyede load event gözlenmedi.
+- DOM snapshot çalıştığı için “webview tamamen detach oldu” veya “sayfa kodu
+  çalışmıyor” sonucu çıkarılamaz.
+
+### Minimum kabul ölçütü
+
+Aşağıdaki üç durumun aynı sekmede birlikte doğrulanması yeterlidir:
+
+1. `preview_status` sekmede `loading: false` gösterir.
+2. `preview_snapshot` DOM ağacını döndürür.
+3. `preview_screenshot` geçerli bir PNG döndürmek yerine “no frames” hatası
+   verir.
+
+### Geçici çalışma yolu ve sonraki adımlar
+
+- Metin/DOM doğrulaması `preview_snapshot` ile sürdürülebilir; ekran-görüntüsü
+  için doğrulanmış bir workaround yoktur.
+- Reload önerisi bu oturumda işe yaramadı; “Preview sekmesini yeniden aç” adımı
+  ayrıca kullanıcı tarafından doğrulanmalı.
+- İzleme hedefi compositor/surface lifecycle ve screenshot isteğinin frame
+  beklerken aldığı hata olmalıdır.
+- Düzeltme kapısı: snapshot veren herhangi bir localhost sekmesinde geçerli PNG
+  alınması, reload sonrasında tekrar alınabilmesi ve console/loglarda en az bir
+  frame üretildiğinin görülmesi.
 
 ---
 

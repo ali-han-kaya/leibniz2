@@ -1,75 +1,27 @@
-import { cva, type VariantProps } from "class-variance-authority";
-import { getTrend } from "@/lib/preview";
+import { ViewTransition } from "react";
+
+import RunsTableData from "@/components/RunsTableData";
 
 export const metadata = { title: "Trend" };
 
-// patterns-explicit-variants: hucre-rengi kararlari (p0>0 kirmizi, p1>0 sari)
-// cva-variant'ta — sira-bileseninde ternary-degil. Renkler repo-token'lari.
-const cellVariants = cva("py-2", {
-  variants: {
-    tone: {
-      neutral: "",
-      error: "text-err",
-      warn: "text-warn",
-      muted: "text-muted",
-    },
-  },
-  defaultVariants: { tone: "neutral" },
-});
+// Trend penceresi her koşumda büyür; build anında dondurulamaz (app/page.tsx
+// ile aynı gerekçe — DB kaynağında `no-store` fetch sinyali yok).
+export const dynamic = "force-dynamic";
 
-export default async function TrendPage() {
-  const { history } = await getTrend(20);
-  // /api/trend limit'i yok sayar (full-list sözleşmesi) — pencereyi tüketici
-  // kısar: en-yeni 20, en-yeni üstte ("Son 20 Koşum" başlık-sözleşmesi).
-  const rows = history.slice(-20).reverse();
-
+// Tam sayfa görünümü. Tablo markup'ı `@trend` slotuyla paylaşılır
+// (components/RunsTable.tsx) — burada yalnız pencere ve başlık farklı.
+// `RunsTableData` sunucuda ilk pencereyi basar, tablo canlıdır
+// (`/api/events` ← preview_server SSE tüneli).
+//
+// <ViewTransition> YALIN sarmalayıcı (default crossfade): / <-> /trend
+// yanal geçişi TARAFSIZDIR — transitionTypes (slide yönü) KULLANILMAZ
+// (gezinme haritası: iki eşit panel arası sahte mekânsal derinlik yasak).
+// Sarmalayıcı page.tsx'tedir, layout'ta DEĞİL: layout'lar navigasyonlar
+// arasında kalıcıdır, enter/exit orada hiç ateşlenmez (guide sözleşmesi).
+export default function TrendPage() {
   return (
-    <section className="rounded-lg border border-border bg-surface p-6">
-      <h2 className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted">
-        Son 20 Koşum
-      </h2>
-      {history.length === 0 ? (
-        <p className="mt-4 text-sm text-muted">
-          henüz veri yok — ilk run bekleniyor
-        </p>
-      ) : (
-        <table className="mt-4 w-full font-mono text-sm">
-          <thead>
-            <tr className="border-b border-border text-left text-[10px] tracking-[0.14em] text-muted">
-              <th className="py-2">ZAMAN</th>
-              <th className="py-2">P0</th>
-              <th className="py-2">P1</th>
-              <th className="py-2">SÜRE</th>
-              <th className="py-2">Z3</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r, i) => (
-              <tr key={i} className="border-b border-surface-raised">
-                <td className="py-2 text-muted">{r.ts ?? "—"}</td>
-                <td
-                  className={cellVariants({
-                    tone: (r.p0 ?? 0) > 0 ? "error" : "neutral",
-                  })}
-                >
-                  {r.p0 ?? "—"}
-                </td>
-                <td
-                  className={cellVariants({
-                    tone: (r.p1 ?? 0) > 0 ? "warn" : "neutral",
-                  })}
-                >
-                  {r.p1 ?? "—"}
-                </td>
-                <td className={cellVariants()}>
-                  {r.duration_s != null ? `${r.duration_s}s` : "—"}
-                </td>
-                <td className={cellVariants()}>{r.z3_total ?? "—"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </section>
+    <ViewTransition>
+      <RunsTableData title="Son 20 Koşum" limit={20} />
+    </ViewTransition>
   );
 }

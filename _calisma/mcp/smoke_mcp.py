@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 """smoke_mcp.py — leibniz2_mcp için uçtan-uca MCP istemci testi.
 
-Senaryo A (canlı-mock): 127.0.0.1:8000'de minimal bir mock preview_server
-    çalıştırır; list_tools + leibniz2_latest/health/trend çağrılarını gerçek
-    MCP stdio transport'uyla sınar.
+Senaryo A (canlı-mock veya canlı sunucu): varsayılan olarak 127.0.0.1'de
+    minimal bir mock preview_server çalıştırır; list_tools + health/latest/
+    trend çağrılarını gerçek MCP stdio transport'uyla sınar. MCP_SMOKE_BASE_URL
+    verilirse mock kalkar ve GERÇEK bir preview_server'a karşı çalışılır
+    (o zaman değer yerine şekil iddiaları doğrulanır).
 Senaryo B (kapalı-sunucu): arkada sunucu yokken araç çağrısının actioned
     hata payload'u döndürdüğünü doğrular (fail-closed, kibar mesaj).
 """
 import asyncio
 import json
+import os
 import sys
 import threading
 import functools
@@ -35,6 +38,19 @@ def _mock_server(port: int) -> http.server.ThreadingHTTPServer:
             pass
 
         def do_GET(self):
+            # Sözleşme sadakati: gerçek preview_server /api/health ucu JSON
+            # DEĞİL, düz metin `ok` döndürüyor (Content-Type: text/plain).
+            # Mock her ucu JSON döndürürse, health aracının canlı sunucuda
+            # bozuk olduğu (koşulsuz json.loads) smoke'da görünmezdi —
+            # ölçüldü ve düzeltildi. Mock bilinçli olarak sadık kırıldı.
+            if self.path.startswith("/api/health"):
+                body = b"ok"
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
             body = json.dumps({
                 "verdict": "PASS",
                 "ts": "2026-09-18T10:15:30Z",
@@ -56,11 +72,24 @@ def _mock_server(port: int) -> http.server.ThreadingHTTPServer:
 async def main() -> int:
     ok = True
 
-    # ── Senaryo A: canlı-mock ──
-    port = _free_port()
-    srv = _mock_server(port)
+    # ── Senaryo A: canlı sunucu (MCP_SMOKE_BASE_URL) veya mock ──
+    # MCP_SMOKE_BASE_URL verilirse mock KALKAR ve gerçek bir preview_server'a
+    # karşı çalışılır; o zaman değer iddiaları yerine ŞEKİL iddiaları
+    # kullanılır (gerçek koşumun verdict'i PASS olmak zorunda değildir).
+    # Verilmezse varsayılan hermetik mock yolu çalışır (CI kapısı).
+    live_base = os.environ.get("MCP_SMOKE_BASE_URL", "").strip()
+    using_mock = not live_base
+    if using_mock:
+        port = _free_port()
+        srv = _mock_server(port)
+        target = f"http://127.0.0.1:{port}"
+        print(f"[senaryo A] mock sunucu: {target}")
+    else:
+        srv = None
+        target = live_base
+        print(f"[senaryo A] canlı sunucu: {target}")
     params = StdioServerParameters(command=SERVER[0], args=[SERVER[1]],
-                                   env={"LEIBNIZ2_MCP_BASE_URL": f"http://127.0.0.1:{port}"})
+                                   env={"LEIBNIZ2_MCP_BASE_URL": target})
     async with stdio_client(params) as (read, write):
         async with ClientSession(read, write) as session:
             await session.initialize()
@@ -75,23 +104,51 @@ async def main() -> int:
             else:
                 print(f"OK list_tools: {len(names)} araç — salt-okuma seti birebir")
 
+            # Health ucu: erişilebilir sunucuda reachable=true, gövde 'ok'.
+            # (Mock ve canlı sunucu aynı sözleşmeyi paylaşır: düz metin.)
+            res = await session.call_tool("leibniz2_health", {})
+            hp = json.loads(res.content[0].text)
+            if hp.get("reachable") is True and hp.get("body") == "ok":
+                print("OK leibniz2_health: reachable=true, body=ok (düz metin ucu)")
+            else:
+                print("FAIL leibniz2_health:", hp)
+                ok = False
+
             res = await session.call_tool("leibniz2_latest", {})
             payload = json.loads(res.content[0].text)
-            if payload.get("verdict") == "PASS" and payload.get("z3", {}).get("pass") == 12:
-                print("OK leibniz2_latest: verdict=PASS, z3 12/12 (mock'tan)")
+            if using_mock:
+                latest_ok = (payload.get("verdict") == "PASS"
+                             and payload.get("z3", {}).get("pass") == 12)
+                latest_note = "verdict=PASS, z3 12/12 (mock'tan)"
+            else:
+                # Gerçek koşum: PASS olmak zorunda değil — sözleşme
+                # (verdict kümesi + p0 alanı) doğrulanır.
+                latest_ok = (payload.get("verdict") in {"PASS", "FAIL", "ERROR"}
+                             and "p0" in payload)
+                latest_note = (f"verdict={payload.get('verdict')!r} geçerli kümede, "
+                               f"p0 alanı mevcut (canlı)")
+            if latest_ok:
+                print(f"OK leibniz2_latest: {latest_note}")
             else:
                 print("FAIL leibniz2_latest:", payload)
                 ok = False
 
             res = await session.call_tool("leibniz2_trend", {"limit": 5})
             payload = json.loads(res.content[0].text)
-            if payload.get("verdict") == "PASS":
-                print("OK leibniz2_trend: limit parametresi kabul, yanıt JSON")
+            if using_mock:
+                trend_ok = payload.get("verdict") == "PASS"
+                trend_note = "limit parametresi kabul, yanıt JSON (mock'tan)"
+            else:
+                trend_ok = "history" in payload or "rows" in payload
+                trend_note = "limit parametresi kabul, yanıt liste/nesne (canlı)"
+            if trend_ok:
+                print(f"OK leibniz2_trend: {trend_note}")
             else:
                 print("FAIL leibniz2_trend:", payload)
                 ok = False
 
-    srv.shutdown()
+    if srv is not None:
+        srv.shutdown()
 
     # ── Senaryo B: kapalı-sunucu (actioned hata) ──
     dead = _free_port()

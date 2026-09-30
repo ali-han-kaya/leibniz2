@@ -54,6 +54,42 @@ class TestProducersMatchFixture(unittest.TestCase):
                          "fixture'dan koptu")
 
 
+class TestArtifactDocMatrixExpansion(unittest.TestCase):
+    def test_matrix_artifact_names_expand_to_documented_children(self):
+        import check_workflow_artifact_docs as cwad
+        text = """
+jobs:
+  a11y-gate:
+    strategy:
+      matrix:
+        theme: [dark, light]
+    steps:
+      - name: Upload dashboard
+        with:
+          name: a11y-report-${{ matrix.theme }}
+      - name: Upload guide
+        with:
+          name: a11y-guide-report-${{ matrix.theme }}
+      - name: Upload landing
+        with:
+          name: a11y-landing-report-${{ matrix.theme }}
+      - name: Upload Lighthouse dashboard
+        with:
+          name: lighthouse-dashboard-${{ matrix.theme }}
+"""
+        self.assertEqual(cwad.workflow_artifacts(text), [
+            "a11y-report-dark", "a11y-report-light",
+            "a11y-guide-report-dark", "a11y-guide-report-light",
+            "a11y-landing-report-dark", "a11y-landing-report-light",
+            "lighthouse-dashboard-dark", "lighthouse-dashboard-light",
+        ])
+
+    def test_repository_artifact_contracts_stay_synchronized(self):
+        import check_workflow_artifact_docs as cwad
+        _workflow, _doc, errors = cwad.check()
+        self.assertEqual(errors, [])
+
+
 class TestLazyReExports(unittest.TestCase):
     """ARTIFACT_JOBS / GATE_EXCLUDE re-export'ları üreticiyle özdeş."""
 

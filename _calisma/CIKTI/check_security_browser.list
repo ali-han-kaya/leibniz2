@@ -1,0 +1,30 @@
+# check_security_browser.list — güvenlik-duruşu paketi, TARAYICI TIER
+#
+# Gerçek tarayıcı kanıtı: CSP'nin tarayıcıda FIİLEN uygulandığı ve
+# kaçırılmış verinin gerçek DOM ayrıştırıcısında durduğu. Bu modüller
+# Playwright + Chromium ister.
+#
+# Neden ayrı roster? Bu modüller `skipIf(sync_playwright is None)` ile
+# ATLANIR — yani Chromium yokken sessizce hiç koşmazlar. Tek roster'de
+# "PASS" gibi görünürlerdi. Ayrı roster + yalnız Chromium'un kurulu
+# olduğu işte çalıştırma (CI: a11y-gate) = skip hiç oluşamaz.
+#
+# Kapı, bu tier'ı koşarken SKIP sayısını da raporlar: sıfır değilse
+# fail-closed — "kanıt koşmadı" ile "kanıt yeşil" aynı şey değildir.
+
+# CSP'nin gerçek uygulanması: gerçek page.hover() → tooltip, 0 CSP ihlali
+test_preview_hover_tooltip.py
+
+# Enjeksiyonun gerçek ayrıştırıcıda durması: class/title üzerinden nitelik
+# enjeksiyonu yok, metin bağlamında etiket açılmıyor, data-ts birebir dönüyor
+test_preview_escaping.py
+
+# VERIFY-001 sınıfının İKİNCİ yarısı: hover kanıtlandıktan sonra aynı
+# sınıfın kalan yüzeyi de canlı kanıtlanmalı — delege TIKLAMA/KLAVYE
+# yüzeyleri (data-act=rh-filter / budget-toggle / load-stdout) ve tema
+# döngüsü. Ölçüldü (2026-09-27): bu süit yalnız check_unit_tests.list'te
+# olduğu için Playwright'sız `verify` birim adımında module-level
+# skipIf(sync_playwright is None) yüzünden 14 test SESSİZCE atlanıyordu —
+# yani "inline handler CSP'de ölür" sınıfının tıklama yarısının CI'da
+# hiçbir canlı kanıtı yoktu. Roster'a alınınca skip reddi devreye girer.
+test_dashboard_keyboard_nav.py

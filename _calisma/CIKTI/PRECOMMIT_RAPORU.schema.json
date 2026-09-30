@@ -4,7 +4,15 @@
   "title": "PRECOMMIT_RAPORU.json",
   "description": "Pre-commit denetim raporu sidecar'ı (gen_precommit_report.py üretir, run_summary_precommit.py tüketir).",
   "type": "object",
-  "required": ["generated_at", "exit_code", "verdict", "role", "hooks", "findings", "counts"],
+  "required": [
+    "generated_at",
+    "exit_code",
+    "verdict",
+    "role",
+    "hooks",
+    "findings",
+    "counts"
+  ],
   "properties": {
     "generated_at": {
       "type": "string",

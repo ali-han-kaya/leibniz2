@@ -21,8 +21,8 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 > | AŞAMA 3 — CI doğrulama | 🔄 **aktif** — her push'ta tekrarlanır (incremental) |
 > | AŞAMA 4 — koruma kanıtı | ⏸️ opsiyonel (1 (b) sonrası) |
 >
-> Job tablosu (AŞAMA 3), `.github/workflows/verify.yml`'deki **28 job**'u 4 kategoride
-> sunar: 13 **required** + 12 **advisory** + 3 **PR-only/manifest** job. Branch protection
+> Job tablosu (AŞAMA 3), `.github/workflows/verify.yml`'deki **29 job**'u 4 kategoride
+> sunar: 13 **required** + 13 **advisory** + 3 **PR-only/manifest** job. Branch protection
 > yalnızca required job'ları bloke eder.
 > Branch protection yalnızca required job'ları bloke eder.
 > Güncel listeyi üret: `python3 _calisma/CIKTI/status_checks.py --json`.
@@ -207,13 +207,12 @@ bash docs/publish_precheck.sh --allow-remote
 #    (geçici kapat → push → geri aç). Manuel push'ta önce kapatıp sonra geri açın.
 git push origin main
 
-# 3) CI'ı izle (24 job — 12 required + 10 advisory + 2 PR-only;
+# 3) CI'ı izle (29 job — 13 required + 13 advisory + 3 PR-only;
 #    aşağıdaki AŞAMA 3 job tablosu)
 RUN_ID=$(gh run list --limit 1 --json databaseId -q '.[0].databaseId')
 gh run watch $RUN_ID --exit-status
 
-# 4) Son durum + artifact'lar (27 adet — doc listesi; canlı run'da 28,
-#    audit-live-ci meta-denetçinin kendi artifact'ı dahil)
+# 4) Son durum + artifact'lar (32 adet — doc listesi)
 gh run view $RUN_ID --json jobs --jq '.jobs[] | "\(.name)\t\(.conclusion)"'
 gh api "repos/ali-han-kaya/leibniz2/actions/runs/$RUN_ID/artifacts" \
   --jq '.artifacts[].name' | sort
@@ -423,6 +422,13 @@ open "https://github.com/ali-han-kaya/leibniz2/settings/branches"
      > sadece bilgilendirme rozeti olarak kalır.
    - **"Require branches to be up to date before merging"** ✓ (strict) — PR'ın base'i
      main'in gerisindeyse merge reddedilir.
+     > **PR akışındaki "dal güncelle" adımı (strict'in doğrudan sonucu):** başka bir PR
+     > önce merge olursa açık PR main'in gerisine düşer ve merge butonu **kilitli** kalır
+     > ("This branch is out-of-date with the base branch"). Merge'den önce PR sayfasında
+     > **"Update branch"** ya da yerelde `git fetch origin && git rebase origin/main`.
+     > `--force-with-lease` yalnızca **kendi PR dalında** serbesttir: bu kural `main`
+     > desenine bağlıdır (ölçüldü 2026-09-30 — diğer dallar "Branch not protected"
+     > döner), yani yukarıdaki 7. adım PR dalını DEĞİL, main'i korur.
 
 6. **Enforce admins:** **"Do not allow bypassing the above settings"** ✓ — adminler de
    kapıya takılır.
@@ -566,8 +572,7 @@ gh run list --limit 3 --json databaseId,status,conclusion,name
 RUN_ID=$(gh run list --limit 1 --json databaseId -q '.[0].databaseId')
 gh run watch $RUN_ID --exit-status
 
-# (c) Artifact'ları kontrol et (22 adet olmalı — liste aşağıda; canlı run'da
-#     23, audit-live-ci meta-denetçinin kendi artifact'ı dahil)
+# (c) Artifact'ları kontrol et (38 adet olmalı — liste aşağıda)
 gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_bytes) B)"'
 ```
 
@@ -575,13 +580,16 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 --exit-status` + artifact listesi; sonuç `SONUÇ: PASS/FAIL` olarak loglanır
 (dry-run'da yalnızca önizlenir).
 
-**Job kategorileri (28 job = 13 required + 12 advisory + 3 PR-only):**
+**Job kategorileri (31 job = 13 required + 15 advisory + 3 PR-only):**
 
 > **Kural:** Branch protection **yalnızca A kategorisindeki** job'ları required check olarak
 > kabul eder. B (advisory) job'ları push'ta çalışır ama required değildir;
 > C (PR-only) job'ları push'ta hiç çalışmaz.
 > **İstisna:** `Pre-commit P0 label gate` C gibi PR-only'dir ama **BİLEREK required**
 > check'tir (precommit-p0 etiketi merge'i bloke eder) — A'da listelenir.
+> **Yeni job eklerken:** adım adım kontrol listesi `docs/VERIFY_JOB_CHECKLIST.md`;
+> karar ve gerekçelerin tek kaynağı `_calisma/CIKTI/workflow_contract.py`
+> (`GATE_EXCLUDE` ve artifact kapsam kümeleri) — bu tablo/kayıtlar ondan türer.
 
 | # | Kategori | Job | Son durum |
 |---|---|---|---|
@@ -598,8 +606,8 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 | 10 | A | Commit-msg gate | — PR'da koşar; commit-msg ihlali varsa FAIL → merge bloke (2026-08-23) |
 | 11 | A | Config snapshot ↔ CONFIG_BASENAMES sync check | — üçlü senkron (2026-08-23) |
 | 12 | A | CI-SIMULATE (advisory) | — simülasyon replay kapısı: status_checks + simulate_verify_job (2026-08-23) |
-| 13 | A | A11y gate (axe-core, fail-closed) | — a11y-gate (2026-09-17): headless Chromium + sha256 pinli vendor axe-core ile /preview.html taraması; preview_server health-poll (30×1s) ile başlatılır; blocking/warn/allowlist = a11y_gate_config.json; sunucu/tarayıcı/checksum arızası FAIL (retry yok) |
-| | **B — Advisory (12; push'ta çalışır, required değil)** | | |
+| 13 | A | A11y gate (axe-core, fail-closed) | — a11y-gate: `dark` ve `light` matrix child'larında headless Chromium + sha256 pinli vendor axe-core ile config witness'lı `/preview.html`, `/guide.html` **ve** `/landing.html` taraması; aynı iki temada Lighthouse 13.5.0 accessibility-only dashboard taraması; preview_server health-poll (30×1s) ile başlatılır; altı axe + iki Lighthouse tema-suffixed rapor ayrı artifact + job summary; blocking/warn/allowlist = a11y_gate_config.json; Lighthouse accessibility score 1.0 ve tema witness'ı; sunucu/tarayıcı/checksum/witness/tema arızası FAIL (retry yok) |
+| | **B — Advisory (13; push'ta çalışır, required değil)** | | |
 | 14 | B | Publish precheck (AŞAMA 0, advisory) | ✅ success (9s) — AŞAMA 0 kapıları otomatik denetlenir |
 | 15 | B | Plist drift check (macOS, advisory) | ✅ success (11s) — K12, macOS-runner'lı; negatif smoke: bozuk-plist + eksik-golden yakalanmalı (YAKALANMADI → fail-closed) |
 | 16 | B | Mirror sync check (macOS, fail-closed) | ✅ success (12s) — K17, sync sonrası GÜNCEL |
@@ -612,13 +620,17 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 | 23 | B | Preview reload smoke (advisory, macOS) | — preview restart + endpoint smoke (advisory) |
 | 24 | B | K9 Lake proof (Lean 4.14.0) | ✅ success — ayrı-step lake build --wfail (lean-toolchain v4.14.0); K9 ayrıca verify job'unun `--full` içinde de koşar (required DEĞİL) |
 | 25 | B | Fresh-clone HTTP smoke (advisory) | — temiz clone'dan preview_server.py başlatılır; `/api/health` + `/api/latest` curl ile doğrulanır |
+| 26 | B | Docx export (LibreOffice check, advisory) | — `make_docx.js`: markdown → gerçek .docx; tek rapor (`final_rc_report.docx`) + iki raporu bölüm kırılımıyla birleştiren üretim (`combined_report.docx`: FINAL_RC_REPORT + FULL_SCOPE_AUDIT, ikinci rapor yeni sayfada); artifact `docx-report`; doğrulama byte-identity DEĞİL — LibreOffice headless dönüşümü + tanık metin (docx paketi core.xml tarihlerini kendi zamanından üretir: iki koşum arasındaki tek fark `dcterms:created/modified`, ölçüldü 2026-09-24) |
 | | **C — PR-only (push'ta çalışmaz, PR'da çalışır)** | | |
-| 26 | C | Pre-commit P1 label gate (optional) | — skipped (push'ta çalışmaz) |
+| 27 | C | Pre-commit P1 label gate (optional) | — skipped (push'ta çalışmaz) |
 | | **D — PR-only (yorum/etiket düşürme)** | | |
-| 27 | D | Manifest PR comment | — skipped (PR'da çalışır) |
-| 28 | D | Budget status PR comment | — bütçe + pre-commit PR yorumu; job-level PR-only, push'ta tamamen skipped (bütçe kapısı ayrı `budget` job'ında kalır) |
+| 28 | D | Manifest PR comment | — skipped (PR'da çalışır) |
+| 29 | D | Budget status PR comment | — bütçe + pre-commit PR yorumu; job-level PR-only, push'ta tamamen skipped (bütçe kapısı ayrı `budget` job'ında kalır) |
+| 30 | B | Dashboard-next typecheck + build (Next 16) | — trend-db `npm ci` + `prisma generate` (kod üretimi, DB'ye bağlanmaz); dashboard `npm ci` + `tsc --noEmit` (`check_dashboard_typecheck.sh`) + `next build`; tip/derleme hatası workflow'u kırmızıya düşürür (`continue-on-error` YOK), ama required check DEĞİL — `GATE_EXCLUDE`'da, required set 14'te sabit (docx-export/lake-proof ile aynı gerekçe) |
 
-**Artifact listesi (30):**
+| 31 | B | LeibnizChain video render (760 kare, advisory) | — `_calisma/video` (Remotion) `npm ci` + `make_data.py` (CI'da `history.jsonl` yok → `--allow-missing-data` sentinel: koşu listesi boş, `data_missing` işaretli; mühürler ve kare bütçesi yine üretilir) + `check_video_typecheck.sh` (`tsc --noEmit`) + `remotion browser ensure` (~85 MB, runner imajından bağımsız) + `npm run render` (760 kare, h264) + **kutu ayrıştırmalı ölçüm**: kare=760, kap süresi≈25.387 sn, 1280×720 — sapma fail-closed; artifact `video-report`. required check DEĞİL — `GATE_EXCLUDE`'da, required set 14'te sabit (docx-export/dashboard-next ile aynı gerekçe). Job `continue-on-error` YOK |
+
+**Artifact listesi (39):**
 - `unit-tests` (CIKTI birim test logu — `test_*.py` glob'u)
 - `verify-report` (tek log: K1-K14 + pre-commit bölümü + .sha256)
 - `action-runtimes` (her action'ın runs.using denetimi JSON — node24 kapısı)
@@ -628,7 +640,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 - `lineage-findings` (zip soy hattı doğrulaması JSON)
 - `klayers` (K1-K14 PASS/FAIL/SKIP özeti — run summary)
 - `refs-online` (çevrimiçi referans denetimi VERSION JSON — `ht_ids_summary` dahil)
-- `run-history` (history.jsonl — run zaman serisi)
+- `run-history` (history.jsonl + SHA-256 sidecar — run zaman serisi; `a11y-gate` bu artifact'ı `preview_server --snapshot-file ... --no-verify` ile aynı origin'de sunar ve landing mührünü `/api/latest` raw SHA-256'sından üretir)
 - `precommit-logs` (ham log + PRECOMMIT_RAPORU.md/.json + cache/env özeti)
 - `python3-shell` (check_python3_shell.py --json denetimi — SHA-256 ile manifest'te sabitlenir; **sabit (pinned)** artifact: `audit-live-ci` her run'da doc'ta VE canlıda varlığını fail-closed denetler)
 - `reports` (statik markdown raporları)
@@ -647,7 +659,12 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 - `changelog-drift` (gen_changelog --check drift logu + rc — advisory, run summary'ye yazılır)
 - `pattern-drift` (merge pattern ↔ ARTIFACT_JOBS tutarlılık denetimi — advisory, run summary'ye yazılır)
 - `preview-reload-smoke` (preview sunucu restart + endpoint smoke testi — advisory, macOS)
-- `a11y-report` (a11y-gate raporu: axe sonuçları + config echo + verdict — fail-closed kapı; blocking/warn/allowlisted/incomplete özeti)
+- `a11y-report-dark` + `a11y-report-light` (dashboard'ın koyu/açık tema a11y-gate raporları: axe sonuçları + config echo + verdict — fail-closed kapı; blocking/warn/allowlisted/incomplete özeti)
+- `a11y-guide-report-dark` + `a11y-guide-report-light` (Branch protection görsel kılavuzunun koyu/açık tema `/guide.html` a11y-gate raporları: witness + DOM tema doğrulamalı, aynı fail-closed özet sözleşmesi)
+- `a11y-landing-report-dark` + `a11y-landing-report-light` (Landing'in koyu/açık tema `/landing.html` a11y-gate raporları: generated witness + DOM tema doğrulamalı, aynı fail-closed özet sözleşmesi)
+- `lighthouse-dashboard-dark` + `lighthouse-dashboard-light` (dashboard'ın koyu/açık temada Lighthouse 13.5.0 accessibility-only JSON raporları: sorgu ile tema witness'ı + 1.0 skor kapısı)
+- `docx-report` (docx-export job'unun ürünü: `make_docx.js` çıktısı .docx ×2 — tek rapor + bölüm kırılımlı birleşik rapor — build key=value logları + LibreOffice açılabilirlik raporları — advisory job, ürün yine artefakt olarak saklanır)
+- `video-report` (video-render job'unun ürünü: `npm run render` çıktısı `leibniz-chain.mp4` + kutu ayrıştırmalı ölçüm satırı `kare/süre/çözünürlük/bayt` — advisory job, tip ve render hattının sözleşmeye uyduğunun kanıtı)
 
 **Not:** Kapı artık `verify_delivery.py --full`'dur (K1-K14, fail-closed) ve yeşildir —
 Beth 1953 / Fosl 1998 gibi referans düzeltmeleri V5h'te yapıldı; Kalan çevrimdışı

@@ -56,13 +56,13 @@ rc=0). Rapor içindeki her sayı bu yüzden koşum-kanıtına bağlıdır, hafı
 
 | # | Risk | Etki | Azaltım / durum |
 |---|---|---|---|
-| R1 | tectonic→TeXLive göçü **planlandı, uygulanmadı** | iki motor paralel yaşamaya devam; byte-düzeyi çapraz eşitlik imkânsız (font/ligatür farkı — ölçüldü) | `TEXLIVE_MIGRATION_PLAN.md` 7 faz; Faz 3 `/ID` kabul raporu; her faz ölçüm kapılı |
-| R2 | pdfTeX rastgele trailer `/ID` kalıntısı kalıcı | qpdf `--static-id`/`--remove-metadata` gideremiyor (donmuş bulgu ×2 doğrulandı) | sözleşme /ID-kanonik karşılaştırmaya bağlı; kanonik hash oturumlar arası kararlı — içerik determinizmi zaten kanıtlı; **haftalık determinism-trend CI job'ı (2026-09-17) kararlılığı sürekli izler**: `determinism-trend.yml` cron + `record_determinism_trend.py` jsonl trendi (tazelik + kaynak-uzlaşma [platform-scoped] + darwin/linux kapsam değişmezleri, fail-closed) |
-| R3 | CI runner'ında TeXLive paket seti yerel Homebrew'dan farklı olabilir | Faz 6 CI koşumunda hash sapması | plan kuralı: **ölçmeden varsayma** — sapma çıkarsa kabul raporu CI'ya özgü ikiliyle genişler |
-| R4 | base-image güncellemeleri yeni CVE getirebilir | trivy gate kırmızı (fail-closed — beklenen davranış) | desen: floor + defter + tek build-arg; haftalık tarama önerisi: docker-security'ye schedule job'ı |
+| R1 | tectonic→TeXLive göçü planlı — **Faz 1+3 uygulandı (2026-09-20): `docs/Makefile.texlive` + `/ID` kabul raporu diskte; Faz 4-6 açık** | iki motor paralel yaşamaya devam; byte-düzeyi çapraz eşitlik imkânsız (font/ligatür farkı — ölçüldü) | `TEXLIVE_MIGRATION_PLAN.md` 7 faz; her faz ölçüm kapılı — `make check` kanonik `544516b0…` ×2 (2026-09-21 tekrar kanıtlandı) |
+| R2 | pdfTeX rastgele trailer `/ID` kalıntısı kalıcı | qpdf `--static-id`/`--remove-metadata` gideremiyor (donmuş bulgu ×2 doğrulandı) | sözleşme /ID-kanonik karşılaştırmaya bağlı; kanonik hash oturumlar arası kararlı — içerik determinizmi zaten kanıtlı; **haftalık determinism-trend CI job'ı (2026-09-17) kararlılığı sürekli izler**: `determinism-trend.yml` cron + `record_determinism_trend.py` jsonl trendi (tazelik + kaynak-uzlaşma [platform-scoped] + darwin/linux kapsam değişmezleri, fail-closed) **— kayıt yolu 2026-09-21'de iki izin-duvarını aştı**: main-schedule koşumu 35580855610 deney+ölçüm PASS iken GH006'ya, fix koşumu 35590265995 Actions-PR-blokuna düştü; kayıt artık bot-dalı + PR deseni (sözleşme: `test_trend_record_pr_contract`, 6 test). Trend @main: **darwin+linux 2 kayıt (PR #53, merge `da58b14`)** |
+| R3 | CI runner'ında TeXLive paket seti yerel Homebrew'dan farklı olabilir | Faz 6 CI koşumunda hash sapması | plan kuralı: **ölçmeden varsayma** — **linux baseline ölçüldü (2026-09-21, run 35591330167): CI kanonik `092154a0473e…` — yerel `544516b0…`'den farklı, kabul-raporu defter-satırı beklemede** (Faz 6 çıkış yolu hazır: deftere satır ekle, `make accept` açılır) |
+| R4 | base-image güncellemeleri yeni CVE getirebilir | trivy gate kırmızı (fail-closed — beklenen davranış) | desen: floor + defter + tek build-arg (apt + pip iki katman); **haftalık tarama yerleşti (2026-09-20): `docker-security.yml` cron `43 3 * * 1` + script-parite smoke job'ı** — push koşumu 35516666559 ve en güncel koşum 35577515987 (2026-09-21) success; cron'un fiilen haftalık ateşlenmesi PR #52 merge'iyle canlanır (schedule yalnız default branch'ten koşar) |
 | R5 | colima arm64 → amd64 qemu emülasyonu | yerel build yavaş; CI amd64 native olduğundan **CI riski değil** | `DOCKER_SMOKE_PLATFORM` override; dokümante |
-| R6 | `reword-working`→`main` birleştirmesi **karar aşamasında** | 22 dosyada çakışma (çoğu add/add — aynı işin iki kopyası); main'in 5 bağımsız düzeltmesi merge'de korunmalı | `MERGE_DECISION_…md`: 3-way merge-commit önerisi + dosya tablosu + siper zinciri; tek `revert -m 1` geri dönüş |
-| R7 | 15 untracked test dosyası (CI job'larında koşan ortam-bağımlılar) + pre-commit bataryası (132) ile kayıtlı full liste (141) farkı | kafa karışıklığı riski; kapsam sessizce zayıflamaz (drift guard + coverage kapısı) | drift-guard çıktısı farkı açıkça not eder; EXCLUDE listesi gerekçeli |
+| R6 | `reword-working`→`main` birleştirmesi **KAPANDI (2026-09-17, PR #49 MERGED)** | eski risk: 22 dosyada çakışma (çoğu add/add — aynı işin iki kopyası); main'in 5 bağımsız düzeltmesi merge'de korunmalıydı | **kanıt: PR #49 merge-commit `53967f6` (100 commit, `reword-working ← main`, mergedAt 2026-09-17T04:42Z); oturum-commitleri `3cabbff`/`5c02474` origin/main atası (`git merge-base --is-ancestor`); kalan dal-farkı yalnız 2 bot-trend commit'i — eşdeğer ölçümler PR #53 (`da58b14`) ile main'de; `MERGE_DECISION_…md` 3-way strateji + tek `revert -m 1` geri dönüşü belgeli kalır |
+| R7 | untracked test dosyaları + batarya/kayıt-liste farkı (eski: 132 batarya / 141 liste / 15 untracked) | kafa karışıklığı riski; kapsam sessizce zayıflamaz (drift guard + coverage kapısı) | **taze (2026-09-21): manifest 146 girdi; PR #53 CI zinciri (35591865126) full-listeyi 157 dosya / 1940 test olarak kanıtladı; fark drift-guard çıktısında gerekçeli (EXCLUDE + untracked, ortam-bağımlılar)** |
 | R8 | K19 coqtop yok / K9 lake ağırlığı | opsiyonel katmanlar SKIP | tasarım gereği; `--coq-proof` bayrağı dokümante; K9 elan kurulumu ile açılabilir |
 
 ## 4. Kanıt dizini
@@ -77,6 +77,7 @@ rc=0). Rapor içindeki her sayı bu yüzden koşum-kanıtına bağlıdır, hafı
 ## 5. Sonuç
 
 Taranan sekiz katmanın yedisi **ölçülmüş yeşil** kanıtla kapalı; sekizincisi
-(TeXLive göçü) planlı ve her fazı ölçüm kapılı. Kalan risklerin tamamı ya
-tasarım gereği SKIP (R2/R5/R7/R8), ya karar bekleyen işlem (R6 birleştirme),
-ya da planı yazılmış göç (R1) sınıfında — **bilinmeyen/belgelenmemiş risk kalmadı.**
+(TeXLive göçü) Faz 1+3 uygulandı, Faz 4-6 açık ve her faz ölçüm kapılı. Kalan
+risklerin tamamı ya tasarım gereği SKIP (R2/R5/R7/R8), ya planı yazılmış göç
+(R1), ya da kanıtla kapatılmış geçmiş karar (R6) sınıfında — **bilinmeyen/
+belgelenmemiş risk kalmadı.**

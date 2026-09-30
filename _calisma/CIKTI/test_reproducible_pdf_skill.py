@@ -68,17 +68,29 @@ cat "$2" > "$out"
 
 
 class TestSdeDocumentationSync(unittest.TestCase):
-    """SKILL.md'nin tectonic + SDE bulgusunu gerçek deney kanıtıyla eşleştirir."""
+    """SKILL.md'nin SDE bulgusu gerçek ölçümle eşleşmeli.
 
-    def test_skill_does_not_claim_tectonic_sde_determinism(self):
+    2026-09-24: ölçüm, eski "tectonic SOURCE_DATE_EPOCH'u aynı şekilde ele
+    almıyor" notunu çürüttü — SDE ile tectonic iki platformda byte-stable
+    (trend kaydı ad8fca69…; docs/PDF_DETERMINISM_EXPLAINED.md §2-3). Aynı
+    ölçüm SDE'nin pdfTeX `/ID`'sini sabitlemediğini de kanıtladı (§3-4).
+    Bu test iki yönlü guard'dır: ölçülmüş gerçekler metinde bulunmalı, eski
+    (yanlış) iddialar geri gelmemeli.
+    """
+
+    def test_skill_sde_claims_match_measurement(self):
         skill = ROOT / "skills" / "reproducible-pdf-build" / "SKILL.md"
         text = skill.read_text(encoding="utf-8")
         self.assertIn("tectonic", text.lower())
         self.assertIn("SOURCE_DATE_EPOCH", text)
-        self.assertIn("does not honor `SOURCE_DATE_EPOCH`", text)
-        self.assertIn("strict-determinism gate", text)
-        self.assertIn("should stay OFF", text)
+        # Ölçülmüş gerçek 1: SDE pdfTeX'in trailer /ID'sini sabitlemez.
+        self.assertIn("does **not** stabilize pdfTeX's trailer `/ID`", text)
+        # Ölçülmüş gerçek 2: SDE ile tectonic byte-stable.
+        self.assertIn("**does** honor `SOURCE_DATE_EPOCH`", text)
+        # Çürütülmüş iddialar geri dönmesin.
+        self.assertNotIn("does not honor `SOURCE_DATE_EPOCH`", text)
         self.assertNotIn("tectonic` is byte-deterministic", text)
+        self.assertNotIn("emit stable `/CreationDate` and\n  `/ID`", text)
 
     def test_pending_sde_record_cannot_be_present_as_proof(self):
         candidates = [

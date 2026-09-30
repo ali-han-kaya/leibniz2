@@ -53,25 +53,58 @@ farklarının kabul raporuyla belgelenmesi.
 
 ## Faz 2 — Hook geçişi
 
-- [ ] `texlive_determinism_hook.sh` birincil kapı olur: TeXLive+python3
-  varken SKIP **yok** (bu makinede ölçüldü: PASS); tectonic ayağı bilgi
-  amaçlı ikincil kalır. Verdict semantiği zaten dürüst: ham farklı +
-  kanonik eşit + `residual=/ID` → PASS; kanonik farklı → FAIL.
-- [ ] `texlive_determinism_test.sh`'e **3-geçiş modu** eklenir (mevcut
-  tek-geçiş deneyi K6 hizalama gerçeğini yakalamaz); stub testleri
-  (test_texlive_determinism_hook, test_texlive_determinism_id_residual)
-  yeni akışa uyarlanır; `check-unit-tests` manifest + HOOK_COVERAGE
-  senkronu yenilenir.
-- [ ] `render_z3_slides.py` zaten `pdflatex → latex → tectonic` sırasını
-  deniyor — koruyucu test eklenir: motor seçimi log'da görünür ve
-  pdflatex varken tectonic'e düşmez.
-- [ ] `check_review_freshness.py` / `check_bibliography_sync.py`
-  doküman/metin yorumlarında "tectonic + qpdf" ifadeleri güncellenir
-  (davranış değişmez; engine-agnostik kontrol).
+**Durum (2026-09-30):** dört kalem de kapandı. 3.–4. kalemler önceki tura,
+1.–2. kalemler bu tura aittir; 1.–2. kalemlerin **çalışma-zamanı PASS
+ölçümü** artık tazelendi (koşum kanıtı aşağıda) ve `DETERMINISM_PASSES`
+default'u 3'e çevrildi (Faz 4 re-baseline'ı) — tek-geçiş modu
+`DETERMINISM_PASSES=1` ile hâlâ seçilebilir.
+
+- [x] `texlive_determinism_hook.sh` birincil kapı olur: TeXLive+python3
+  varken SKIP **yok**; tectonic ayağı bilgi amaçlı ikincil kalır. Verdict
+  semantiği dürüst: ham farklı + kanonik eşit + `residual=/ID` → PASS;
+  kanonik farklı → FAIL. **Ölçüm (2026-09-30, bu makine):** `TEXLIVE_BIN=/opt/homebrew/bin
+  bash texlive_determinism_test.sh` → rc=0, `passes=3`, tectonic
+  `ad8fca69…`, TeXLive kanonik `544516b0…` ×2 bağımsız koşum birebir eşit,
+  `residual=/ID`, `verdict=PASS`; kanıt `logs/texlive_determinism_report.txt`
+  (CI artifact'ı) + stdout'a da basılır.
+- [x] `texlive_determinism_test.sh`'e **3-geçiş modu** eklendi ve artık
+  **varsayılan** (tek-geçiş deneyi K6 hizalama gerçeğini yakalamıyor: çapraz
+  ref/bib ancak çok geçişte çözülür). Son-log `Rerun to get` kalmadığı
+  fail-closed denetlenir (`texlive_run1/2_rerun_left=0`; ölçümde 0). Stub
+  testleri yeni akışa uyarlandı
+  (test_texlive_determinism_id_residual **8 test** yeşil: default 3-geçiş +
+  env ile tek-geçiş + rerun fail-closed yolları).
+- [x] `render_z3_slides.py` zaten `pdflatex → latex → tectonic` sırasını
+  deniyor — **koruyucu test eklendi**
+  (`test_render_z3_slides.TestEngineSelection`, 9 test): öncelik
+  pdflatex > latex > tectonic; pdflatex kuruluyken tectonic'e DÜŞÜLMEZ;
+  seçim `Araçlar: LaTeX=...` satırında log'lanır; motor/PDF→PNG aracı
+  yoksa fail-closed (rc=2). Makine kurulumundan bağımsız ölçüm: sahte
+  PATH + `rz.shutil` yaması. **4 mutasyonun 4'ü yakalandı** ve bu kanıt artık
+  KALICI: `TestEngineSelectionMutationGuard` (2 test) her koşumda
+  `render_z3_slides.py`'nin geçici bir kopyasına sıra-ters /
+  latex-düşürülmüş / fail-open mutasyonlarını uygular ve koruyucunun KIRMIZI
+  düştüğünü doğrular (mutasyon kaçarsa test fail — sessiz motor kayması geri
+  gelemez). `test_render_z3_slides.py` toplam 23 test.
+- [x] `check_review_freshness.py` / `check_bibliography_sync.py`
+  doküman/metin yorumlarında "tectonic + qpdf" ifadeleri **güncellendi**
+  (davranış değişmedi — iki kapı da rc=0; 39 sözleşme testi yeşil):
+  artık "LaTeX derleme (motor-agnostik: tectonic ya da TeXLive) + qpdf"
+  deniyor, kapının motordan bağımsız olduğu açıkça yazılı.
 
 ## Faz 3 — `/ID` kalıntısı kabul raporu
 
-- [ ] `docs/ID_RESIDUAL_ACCEPTANCE.md` (veya FINAL_RC_REPORT ekine)
+**Durum (2026-09-30):** kapandı. Rapor `docs/ID_RESIDUAL_ACCEPTANCE.md`
+olarak yazıldı (2026-09-20, `24a9b25`); bu turda planın istediği **eski→yeni
+motor hash ikilisi** §5'e açıkça yazıldı ve `accept` artık kabul kanıtını
+**gerçek üreticiye** delege ediyor — `docs/Makefile.texlive`'in `accept`
+target'ı `_calisma/CIKTI/gen_id_residual_acceptance.py`'yi çağırıyor:
+rapor ayrıştırılır (verdict=PASS + rerun=0 ×2 + run1=run2), kanonik hash §4
+defterinde aranır, **defter satırı ölçülen alanlardan üretilir**
+(`LEDGER=update`; `residual=none` → ham-hash fallback). Önceden Makefile
+yalnız `sed`+`grep` ile elle yazılmış satırı okuyordu.
+
+- [x] `docs/ID_RESIDUAL_ACCEPTANCE.md` (veya FINAL_RC_REPORT ekine)
   yazılır; içerik:
   - Kalıntının tanımı ve kök nedeni: pdfTeX `/ID` = trailer'da rastgele
     64 bayt; SDE `/CreationDate`/`/ModDate`'i sabitler, `/ID`'yi değil.
@@ -85,18 +118,69 @@ farklarının kabul raporuyla belgelenmesi.
     hash'i artık motor değişiminde değişir → sidecar'lar `accept` target'ı
     ile **bilinçli yenilenir**; eski→yeni hash ikilisi rapora yazılır
     (tectonic `ad8fca69…`/`47681218…` → TeXLive `544516b0…`).
-- [ ] Kabul raporu, `verify_delivery.py` --strict-determinism bayrağının
-  yeni semantiğine referans verir (Faz 4).
+- [x] Kabul raporu, `verify_delivery.py` --strict-determinism bayrağının
+  yeni semantiğine referans verir (Faz 4) — §6 mezhep: strict mod
+  `/ID`-kanonik karşılaştırmaya bağlanır ve K6-DETERM'in "tectonic
+  non-deterministic" yorumu §1–2 ölçümüyle güncellenir.
+
+Kanıt (2026-09-30): `test_gen_id_residual_acceptance.py` 24 test (kanonik
+fallback, kanıt tutarsızlığı fail-closed, defter üretimi + idempotans,
+varsayılan mod salt-okunur); `test_makefile_texlive.py` 15 test (accept
+üreticiye bağlı + `LEDGER` güncelleme yolu); `make … accept` gerçek motorlarla
+rc=0 verip defter satırı 4'ün `544516b0…` önekini kabul ediyor.
 
 ## Faz 4 — Doğrulama zinciri güncellemesi
 
-- [ ] `verify_delivery.py` K6-DETERM yorum/davranışı: "tectonic
-  non-deterministic" yorumu ölçüyle güncellenir (SDE ile
-  deterministik; kalıntı /ID) — strict mod, /ID-kanonik karşılaştırmaya
-  bağlanır.
-- [ ] `check-zip-lineage-drift` + repack akışı: motor geçişi tek seferlik
-  **bilinçli sidecar yenilemesi** ile işaretlenir (repack determinizm
-  kapısı, yeni kanonik hash'i bekler).
+**Durum (2026-09-30, 2. tur):** 1. ve 2. kalem kapandı; 3. kalem açık.
+Kanonik çekirdek `_calisma/CIKTI/id_canonical.py`'ye çıkarıldı (verify +
+repack + K14 tek kaynak) ve `--strict-determinism` artık pre-commit hook'u +
+CI (`verify.yml --full`) düzeyinde **ETKİN**.
+
+- [x] `verify_delivery.py` K6-DETERM yorum/davranışı ölçüyle güncellendi:
+  "tectonic non-deterministic" teşhisi kaldırıldı (SDE ile motor
+  deterministik; tek kalıntı `/ID`), strict mod **`/ID`-kanonik hash'e**
+  bağlandı. Ortak çekirdek: `_calisma/CIKTI/id_canonical.py` (verify +
+  repack + K14 aynı normalizasyon + defter çözümlemesi). Yeni yardımcılar:
+  `canonical_pdf_sha256` (`/ID` çiftini `<0…0>`'a indirger; desen yoksa ham
+  hash — fail-safe), `resolve_id_residual_ledger` (tokens/error/source; env →
+  repo docs → mirror-drop), `k6_determ_verdict` (saf karar fonksiyonu;
+  sidecar kanonik uyuşmazlığı da strict'te P1). Semantik: default'ta ham +
+  metadata-stripped + kanonik bilgi olarak raporlanır (P1 yok);
+  `--strict-determinism` ile kanonik hash defterde kayıtlı değilse **P1** +
+  remedy (`make … accept LEDGER=update`), defter/PDF okunamıyorsa
+  fail-closed P1. **metadata-stripped karşılaştırması artık P1 nedeni
+  değil**: qpdf `--remove-metadata`'nın kendisi kararsız (teslim PDF'i
+  üzerinde ölçüldü: 3 koşum → 3 farklı hash `38fc668c…`/`747334c4…`/`0de3124d…`,
+  gate koşumunda 4. değer `de8be5a0…`). Defter tarafı: teslim PDF'inin
+  kanoniği `d4f67e39…` §4 teslim tablosuna ölçülerek yazıldı (3× kararlı).
+  **Doğrulama:** `test_k6_determ_canonical.py` 20 test (kanonik `/ID`
+  nötrleme + içerik farkı gizlenmez + fail-safe + defter kümesi + strict
+  kararları + kaynak sözleşmesi + ortak çekirdek `TestIdCanonicalModule`),
+  4/4 mutasyon yakalandı;
+  `verify_delivery.py --dir _calisma/CIKTI --strict-determinism` →
+  **rc=0, P0=0, P1=0**, çıktı: "K6-DETERM: canonical=d4f67e39… kabul
+  defterinde kayıtlı".
+  **Etkinleştirme (bu tur):** bayrak artık gerçekten AÇIK — pre-commit
+  `verify_delivery_hook.py` iç çağrısına ve CI `verify.yml` `--full`
+  adımına `--strict-determinism` eklendi; hook DEPS'ine `id_canonical.py` +
+  `docs/ID_RESIDUAL_ACCEPTANCE.md` de girdi (stage edilmemişse uyarı).
+- [x] `check-zip-lineage-drift` + repack akışı: motor geçişi tek seferlik
+  **bilinçli sidecar yenilemesi** ile işaretlenir. Uygulandı:
+  - Kabul defterinin "Teslim sidecar'ı geçiş kaydı" tablosunda **kanonik
+    kolonu** var; strict kapı bu deftere bağlı.
+  - `repack_delivery.py` motor-geçişinde sidecar'ı bilinçli yeniler ve
+    yazmadan ÖNCE `check_ledger_entry` ile yeni kanonik hash'i defterde
+    arar — kayıtsızsa **fail-closed** durur (exit 1; remedy: `make … accept
+    LEDGER=update`). Sidecar artık `# canonical:` (determinizm referansı) ve
+    `# renewal: <tarih> — gerekçe` satırlarını taşır.
+  - `check_zip_lineage_drift.py` (K14) commit anında sidecar `# canonical:`
+    referansını defterle karşılaştırır: kayıtsız → **P0**; `# canonical:`
+    satırı yoksa (yenileme beklemede) INFO — engellemez.
+  - Kanıt: `test_repack_verify.py::CheckLedgerEntryTests` (kayıtlı→PASS,
+    kayıtsız→remedy'li FAIL, defter okunamaz→fail-closed),
+    `test_check_zip_lineage_drift.py::TestSidecarCanonical` +
+    `TestVerifyDeliveryConstantParity`; canlı repoda `check_zip_lineage_drift.py`
+    rc=0 (sidecar yenilemesi beklemede → INFO).
 - [ ] Tam batarya (130 dosya) + coverage/drift/sync senkron kapıları
   yeşile sabitlenir.
 
@@ -122,6 +206,30 @@ farklarının kabul raporuyla belgelenmesi.
   docker-security Trivy gate'i etkilenmez.
 - [ ] Kabul: 3 workflow (test-smoke, docker-security, verify-delivery)
   success — gerçek koşum kanıtıyla.
+
+### Faz 4 trend re-baseline'ı (2026-09-30)
+
+Deney default'u 3-geçişe çevrilince trend kaydı da yeni baza bağlandı:
+
+- `record_determinism_trend.py` kayıt şemasına **`passes`** alanı eklendi;
+  eski satırlar (alan yok) 1 kabul edilir. Uzlaşma değişmezi artık
+  kaynak + platform + **geçiş modu** kapsamlıdır: 1-geçiş ve 3-geçiş
+  kanonikleri tanım gereği farklı olduğundan mod değişimi **sahte ihlal
+  üretmez** (not olarak yazılır: "geçiş modu değişti 1 → 3 … bilinçli
+  re-baseline"), ama aynı mod içindeki sapma yine FAIL'dir. Çok-geçiş
+  ölçümü, `rerun_left=0 ×2` kanıtı olmadan kaydedilmez (fail-closed).
+  `residual=none` (ham hash'ler baştan eşit) raporunda kanonik alanlar
+  yoktur → kanonik = ham fallback'i
+  (`gen_id_residual_acceptance.py` ile aynı kural).
+- **Ölçüm:** gerçek 3-geçiş koşumu `docs/ci_simulate/…` raporuna yazıldı ve
+  `--update` ile kaydedildi: satır 6 = `2026-09-30 / darwin / passes=3 /
+  tectonic ad8fca69… / texlive 544516b0…`. `--check` → **rc=0**; notlar:
+  çapraz-platform tectonic eşitliği + geçiş-modu re-baseline'ı. Mod
+  kapsaması olmasa bu satır uzlaşma ihlali gibi görünürdü (aynı
+  platform+kaynak, farklı kanonik) — kanıt: `_passes` filtreleri.
+- **Test:** `test_record_determinism_trend.py` 22 test yeşil (passes
+  çıkarımı + kanıtlanmamış çok-geçiş reddi + `residual=none` fallback +
+  mod-kapsamlı uzlaşma + `_mode_note`).
 
 ## Faz 7 — Geri dönüş planı
 

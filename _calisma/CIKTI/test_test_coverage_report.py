@@ -98,11 +98,18 @@ class TestDetectGaps(unittest.TestCase):
         cls.hmap = tcr.build_hook_map(tcr.HOOK_COVERAGE, cls.files)
 
     def test_exempt_files_not_flagged_as_zero_tests(self):
-        """Standalone smoke script'leri exempt — --check FAIL etmez."""
+        """Muafiyet sözleşmesi: keşfedilen her dosya ya bir hook'ta ya
+        CHECK_EXEMPT'te olmalı — --check tam olarak bunu ister.
+
+        Muafiyet kümesi TEK KAYNAK'tan (modül düzeyi CHECK_EXEMPT) okunur.
+        Eskiden burada elle kopyalanmış bir liste vardı; kopya sürüklenince
+        (test_dashboard_csp_nonce.py CHECK_EXEMPT'e eklendi ama kopyaya
+        eklenmedi) süit kırmızıya düştü — kopya invariant'ı değil, kopyanın
+        kendisi bozuluyordu.
+        """
         gaps = tcr.detect_gaps(self.files, self.hmap)
-        exempt = {"test_coverage_report.py", "test_preview_reload_smoke.py",
-                  "test_all_hooks_smoke.py", "test_dashboard_playwright_smoke.py"}
-        actual_uncovered = set(gaps["not_covered_by_any_hook"]) - exempt
+        actual_uncovered = set(gaps["not_covered_by_any_hook"]) \
+            - set(tcr.CHECK_EXEMPT)
         self.assertEqual(actual_uncovered, set(),
                          f"Unexpected uncovered: {actual_uncovered}")
 

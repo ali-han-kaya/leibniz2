@@ -35,8 +35,8 @@ stdlib only — PyYAML/yok bağımlılık.
 """
 
 import argparse
+import ast
 import os
-import re
 import subprocess
 import sys
 
@@ -98,6 +98,33 @@ EXCLUDE = {
     # its own preview_server.py. Runs standalone, not in the 10s pre-commit
     # gate (pre-commit's check-unit-tests budget would blow up).
     "test_dashboard_playwright_smoke.py",
+
+    # Canlı-sunucu CSP + nonce smoke'u: Chromium gerektirir; DASHBOARD_BASE_URL
+    # verilirse CANLI sunucuya, verilmezse kendi preview_server.py'sini başlatır.
+    # Yerel/canlı doğrulama içindir — pre-commit bütçesinde koşmaz.
+    "test_dashboard_csp_nonce.py",
+
+    # dashboard-next YÜZEY smoke'u (açık tema + UI bulgularının canlı kanıtı):
+    # Chromium + `next start` (mevcut `.next` derlemesi) ister; Next boot'u
+    # dosya başına bütçeyi aşar. Tarayıcısız sözleşme katmanı olsa da, canlı
+    # katman bu bütçeye sığmaz — CI'da `dashboard-next` job'ı (derleme zaten
+    # orada) koşar. Statik (tarayıcısız) eşi `test_dashboard_next_ui_contract.py`
+    # bataryadadır.
+    "test_dashboard_next_surface_smoke.py",
+
+    # dashboard-next İSTEK-BASI DEDUP sözleşmesi: SAYAN upstream + derlenmiş
+    # `next start` gerektirir (`.next` derlemesi olmadan ayağa kalkmaz). Next
+    # boot'u dosya başına bütçeyi aşar → pre-commit'te koşmaz. Tarayıcı
+    # GEREKMEZ (yalnız stdlib HTTP), bu yüzden CI'da Chromium kurulumundan
+    # ÖNCE, doğrudan build adımının arkasına konur — daha hızlı geri bildirim,
+    # sıfır ek bağımlılık. CI'da aynı `dashboard-next` job'ı koşar.
+    "test_dashboard_next_request_dedup.py",
+
+    # dashboard-next CANLI AKIŞ sözleşmesi: yayınlayan upstream + `next start`
+    # + Chromium. İki ağır bağımlılık birden (Next boot'u + tarayıcı) → pre-commit
+    # bütçesine kesinlikle sığmaz. CI'da `dashboard-next` job'ı koşar (derleme
+    # ve Chromium kurulumu orada zaten var).
+    "test_dashboard_next_live_stream.py",
 }
 
 
@@ -138,46 +165,43 @@ def diff(discovered, manifest):
 
 # ────────────────────────────────────────────────────────────────────────────
 # HOOK_COVERAGE senkronu — test_coverage_report.py'deki
-# HOOK_COVERAGE["check-unit-tests"] bloğu. ci_full_discover_drift_guard.py
-# bu bloğu statik metin parse ile okur (anahtar → ilk `],`); yeniden yazım
-# bu formatı birebir korur.
+# HOOK_COVERAGE["check-unit-tests"] bloğu. Okuma/yazım AST tabanlıdır:
+# anahtar→ilk `],` span sezgisi, gövde-içi bir yorumda geçen `],`'da bloğu
+# kırpar (ölçüldü). ci_full_discover_drift_guard.py aynı parse'ı buradan
+# kullanır (tek kaynak; kopya sezgi yok).
 # ────────────────────────────────────────────────────────────────────────────
 
-HOOK_COVERAGE_KEY = '"check-unit-tests":'
 
-
-def _hook_coverage_span(src):
-    """Kaynak metinde bloğun [gövde] span'ını döndürür (None: blok yok)."""
-    i = src.find(HOOK_COVERAGE_KEY)
-    if i < 0:
-        return None
-    b = src.find("[", i)
-    if b < 0:
-        return None
-    e = src.find("],", b)
-    if e < 0:
-        return None
-    return b + 1, e
-
-
-def _entry_indent(body):
-    """Bloktaki ilk girdinin girintisini döndürür (8 boşluk beklenir)."""
-    m = re.search(r'\n(\s*)"', body)
-    return m.group(1) if m else "        "
+def _hook_coverage_list_node(tree):
+    """HOOK_COVERAGE["check-unit-tests"] değeri olan ast.List düğümünü döndürür
+    (None: blok yok)."""
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.Assign)
+                and any(getattr(t, "id", None) == "HOOK_COVERAGE"
+                        for t in node.targets)
+                and isinstance(node.value, ast.Dict)):
+            for k, v in zip(node.value.keys, node.value.values):
+                if isinstance(k, ast.Constant) and k.value == "check-unit-tests":
+                    return v
+    return None
 
 
 def read_hook_coverage(path=None):
-    """Bloktaki tüm girdileri (py + js) sıra korunarak döndürür."""
+    """Bloktaki tüm girdileri (py + js) sıra korunarak döndürür (AST tabanlı;
+    dosya/blok bozuksa [] — üst katman fail-closed rc=1 verir)."""
     p = path or COVERAGE_FILE
     if not os.path.exists(p):
         return []
-    with open(p, encoding="utf-8") as f:
-        src = f.read()
-    span = _hook_coverage_span(src)
-    if span is None:
+    try:
+        with open(p, encoding="utf-8") as f:
+            tree = ast.parse(f.read(), filename=str(p))
+    except SyntaxError:
         return []
-    body = src[span[0]:span[1]]
-    return re.findall(r'"([^"]+\.(?:py|js))"', body)
+    node = _hook_coverage_list_node(tree)
+    if node is None:
+        return []
+    return [e.value for e in node.elts
+            if isinstance(e, ast.Constant) and isinstance(e.value, str)]
 
 
 def diff_hook_coverage(discovered, entries, cikti_dir=None):
@@ -197,16 +221,22 @@ def diff_hook_coverage(discovered, entries, cikti_dir=None):
     return sorted(add), orphan
 
 
-def _rewrite_hook_coverage(src, entries, add, orphan):
-    span = _hook_coverage_span(src)
-    body = src[span[0]:span[1]]
-    indent = _entry_indent(body)
+def _rewrite_hook_coverage(src, add, orphan):
+    """check-unit-tests listesini yeniden yazıp yeni kaynak döndürür
+    (None: blok/segment bulunamadı — çağıran fail-closed raporlar)."""
+    node = _hook_coverage_list_node(ast.parse(src))
+    if node is None:
+        return None
+    seg = ast.get_source_segment(src, node)
+    if seg is None:
+        return None
     orphan_set = set(orphan)
-    add_set = set(add)
-    kept = [e for e in entries if e not in orphan_set]
-    new_entries = kept + [a for a in sorted(add_set)]
-    new_body = "\n" + "\n".join(indent + '"%s",' % e for e in new_entries)
-    return src[:span[0]] + new_body + src[span[1]:]
+    current = [e.value for e in node.elts
+               if isinstance(e, ast.Constant) and isinstance(e.value, str)]
+    kept = [e for e in current if e not in orphan_set]
+    new_entries = kept + sorted(set(add))
+    lines = "".join('\n        "%s",' % e for e in new_entries)
+    return src.replace(seg, "[" + lines + "\n    ]", 1)
 
 
 def run_check_hook_coverage(discovered=None, path=None, cikti_dir=None):
@@ -225,8 +255,7 @@ def run_check_hook_coverage(discovered=None, path=None, cikti_dir=None):
     if orphan:
         print("HOOK_COVERAGE'ta diskte olmayan girdi: " + ", ".join(orphan))
     if add or orphan:
-        print("Çözüm: `python3 _calisma/CIKTI/sync_check_unit_tests.py --update` "
-              "veya pre-commit hook otomatik günceller.")
+        print("Çözüm: `python3 _calisma/CIKTI/sync_check_unit_tests.py --update`.")
         return 1
     return 0
 
@@ -235,13 +264,18 @@ def run_update_hook_coverage(stage=True, discovered=None, path=None, cikti_dir=N
     """Bloğu senkronlar; değiştiyse (changed, added, removed) döndürür."""
     p = path or COVERAGE_FILE
     d = cikti_dir or CIKTI
-    with open(p, encoding="utf-8") as f:
-        src = f.read()
-    span = _hook_coverage_span(src)
-    if span is None:
+    try:
+        with open(p, encoding="utf-8") as f:
+            src = f.read()
+        ast.parse(src, filename=str(p))
+    except (OSError, SyntaxError) as exc:
         # Hedef bozuksa sessiz başarı yerine dürüst hata; rc'yi update-sonrası
         # run_check fail-closed yapar.
-        print(f"HATA: HOOK_COVERAGE['check-unit-tests'] bloğu okunamadı: {p} "
+        print(f"HATA: HOOK_COVERAGE dosyası okunamadı/parse edilemedi: {p} "
+              f"({exc}) — ikinci hedef senkronlanmadı.")
+        return False, [], []
+    if _hook_coverage_list_node(ast.parse(src)) is None:
+        print(f"HATA: HOOK_COVERAGE['check-unit-tests'] bloğu bulunamadı: {p} "
               "— ikinci hedef senkronlanmadı.")
         return False, [], []
     entries = read_hook_coverage(p)
@@ -249,7 +283,11 @@ def run_update_hook_coverage(stage=True, discovered=None, path=None, cikti_dir=N
         discovered if discovered is not None else discover(), entries, d)
     if not add and not orphan:
         return False, [], []
-    new_src = _rewrite_hook_coverage(src, entries, add, orphan)
+    new_src = _rewrite_hook_coverage(src, add, orphan)
+    if new_src is None:
+        print(f"HATA: HOOK_COVERAGE bloğu yeniden yazılamadı: {p} "
+              "— ikinci hedef senkronlanmadı.")
+        return False, [], []
     with open(p, "w", encoding="utf-8") as f:
         f.write(new_src)
     if stage:
@@ -282,8 +320,55 @@ def _coverage_target(directory, coverage):
     return COVERAGE_FILE
 
 
+def run_check_glob_scope(coverage_mod=None):
+    """Artımlı seçimin kapsam eşlemesi drift'liyse 1 döndür (fail-closed).
+
+    İKİ denetim, ikisi de "sessiz kapsam kaybı"nı hedefler:
+
+      1. ULAŞILAMAZ test: manifest'te olup ne ALWAYS_RUN'da ne de herhangi
+         bir glob'a sahip olan test. Artımlı koşumda HİÇ seçilemez — yani
+         test eklenmiş ama asla koşmuyor olabilir. Bulgu: yeni bir test
+         dosyası eklenip glob'u unutulduğunda oluşur.
+      2. STALE glob: diskte HİÇBİR ŞEYİ tutmayan bildirilmiş glob. Bir
+         gate yeniden adlandırıldığında eski glob sessizce ölür ve o test
+         bir daha seçilmez.
+
+    Kapsam modülü okunamazsa KÖR KAPI: ölçülemeyen bir kapsam "tam" değildir.
+    """
+    if coverage_mod is None:
+        try:
+            sys.path.insert(0, CIKTI)
+            import test_coverage_report as coverage_mod  # noqa: PLC0415
+        except Exception as exc:  # noqa: BLE001 — kör kapı, sebebi yaz
+            print(f"HATA: kapsam eşlemesi modülü içe aktarılamadı ({exc}) — "
+                  "artımlı seçim denetlenemedi, commit bloklanır.")
+            return 1
+    rc = 0
+    try:
+        reach = coverage_mod.reachable()
+        stale = coverage_mod.stale_globs()
+    except Exception as exc:  # noqa: BLE001
+        print(f"HATA: kapsam denetimi çalışmadı ({exc}) — commit bloklanır.")
+        return 1
+    if reach["unreachable"]:
+        print("Artımlı koşumda ULAŞILAMAZ test (ne ALWAYS_RUN'da ne glob'lu): "
+              + ", ".join(reach["unreachable"]))
+        print("  Çözüm: her birini test_coverage_report.py'de ALWAYS_RUN kümesine "
+              "ekle ya da TEST_SOURCE_GLOBS'a kaynak glob'u bildir. "
+              "Sessizce hiç koşmayan test kabul edilmez.")
+        rc = 1
+    for test, pattern in stale:
+        print(f"STALE glob: {test} → {pattern} (diskte hiçbir şeyi tutmuyor; "
+              "yeniden adlandırılmış bağımlılık olabilir)")
+    if stale:
+        print("  Çözüm: test_coverage_report.py'deki TEST_SOURCE_GLOBS "
+              "girdisini güncelle veya testi ALWAYS_RUN'a taşı.")
+        rc = 1
+    return rc
+
+
 def run_check(directory=None, manifest=None, coverage=None):
-    """manifest VEYA HOOK_COVERAGE drift'liyse 1 döndür (fail-closed)."""
+    """manifest VEYA HOOK_COVERAGE VEYA glob-kapsam drift'liyse 1 döndür (fail-closed)."""
     rc = 0
     disc = discover(directory)
     mf = manifest or MANIFEST
@@ -293,12 +378,16 @@ def run_check(directory=None, manifest=None, coverage=None):
             print(f"YENİ test dosyası check-unit-tests listesinde YOK: {', '.join(missing)}")
         if stale:
             print(f"Manifest'te artık olmayan dosya: {', '.join(stale)}")
-        print("Çözüm: `pre-commit` hook otomatik günceller — dosyayı stage edip yeniden commit et.")
+        print("Çözüm: python3 _calisma/CIKTI/sync_check_unit_tests.py --update "
+              "(stage eder) — sonra yeniden commit et.")
         rc = 1
     # İkinci hedef: HOOK_COVERAGE['check-unit-tests'] (coverage rapor kapısı).
     cov = _coverage_target(directory, coverage)
     if cov is not None and run_check_hook_coverage(
             discovered=disc, path=cov, cikti_dir=directory) == 1:
+        rc = 1
+    # Üçüncü hedef: artımlı seçimin glob kapsamı (sessiz kapsam kaybı).
+    if run_check_glob_scope() == 1:
         rc = 1
     return rc
 

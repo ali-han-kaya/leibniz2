@@ -40,13 +40,18 @@ class _ApiUpstreamError(Exception):
     """preview_server'a ulaşılamadı veya hata döndü."""
 
 
-def _api_get(path: str, timeout: float = 10.0) -> dict:
-    """preview_server'a GET; JSON bekler. Hatalar _ApiUpstreamError'a sarılır."""
+def _api_get(path: str, timeout: float = 10.0, expect_json: bool = True) -> dict | str:
+    """preview_server'a GET. Varsayılan JSON bekler; `expect_json=False` ham
+    gövde metnini döndürür. Gerekçe: /api/health JSON DEĞİL, düz metin `ok`
+    döndürüyor (ölçüldü: `Content-Type: text/plain; charset=utf-8`, gövde
+    `ok`) — koşulsuz json.loads bu ucu canlı sunucuda her zaman hata
+    payload'ına çeviriyordu. Hatalar _ApiUpstreamError'a sarılır."""
     url = BASE_URL + path
     req = urllib.request.Request(url, headers={"Accept": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return json.loads(resp.read().decode("utf-8"))
+            raw = resp.read().decode("utf-8")
+            return json.loads(raw) if expect_json else raw
     except urllib.error.HTTPError as e:
         detail = e.read().decode("utf-8", "replace")[:300]
         raise _ApiUpstreamError(
@@ -218,13 +223,20 @@ def leibniz2_run_stdout(params: _RunStdoutInput | None = None) -> str:
 )
 def leibniz2_health(params: _Empty | None = None) -> str:
     """preview_server sağlık ucu: bağlantı ve temel durum. Diğer araçlar hata
-    verdiğinde altyapıyı doğrulamak için kullanılır."""
+    verdiğinde altyapıyı doğrulamak için kullanılır.
+
+    Uç JSON döndürmez, düz metin `ok` döndürür; bu yüzden gövde ham
+    okunur (expect_json=False). Erişilebilirlik `reachable` alanıyla, ham
+    gövde `body` alanıyla raporlanır — erişilemiyorsa _tool_error devreye
+    girer, yani `reachable` ancak gerçekten bağlandığımızda true'dur.
+    """
     params = params or _Empty()
     try:
-        data = _api_get("/api/health")
+        body = _api_get("/api/health", expect_json=False)
     except _ApiUpstreamError as e:
         return _tool_error(str(e))
-    return json.dumps(data, ensure_ascii=False, indent=2)
+    return json.dumps({"reachable": True, "body": str(body).strip()},
+                      ensure_ascii=False, indent=2)
 
 
 if __name__ == "__main__":

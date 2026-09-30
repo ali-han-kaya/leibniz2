@@ -15,9 +15,12 @@
 # kopyalar — kaynak dizinine ASLA yazılmaz. check, deney betiğini
 # DETERMINISM_PASSES=$(PASSES) ile delege eder: 2 bağımsız 3-geçişli koşum
 # + /ID-kanonik hash karşılaştırması + rerun=0 denetimi.
-# accept: Faz 3 — check'i koşturur, kanonik hash'i kabul raporunun hash
-# geçiş defterinde (docs/ID_RESIDUAL_ACCEPTANCE.md §4) arar; yoksa
-# fail-closed (yeni bağlam → bilinçli defter satırı, Faz 6 çıkış yolu).
+# accept: Faz 3 — check'i koşturur, sonra kabul kanıtını GERÇEK ÜRETİCİYE
+# bağlar: _calisma/CIKTI/gen_id_residual_acceptance.py determinism raporunu
+# (gerçek 2× bağımsız 3-geçiş ölçümü) okuyup kanonik hash'i kabul raporunun
+# hash geçiş defterinde (docs/ID_RESIDUAL_ACCEPTANCE.md §4) doğrular; defter
+# satırını elle yazmak yerine ölçülen alanlardan ÜRETİR. Yoksa fail-closed;
+# `LEDGER=update` ile bilinçli satır eklenir (Faz 6 çıkış yolu).
 # Makefile.tectonic paralel yaşamlı kalır (geri dönüş yolu).
 
 SHELL := /bin/sh
@@ -31,14 +34,31 @@ STEM := $(TEXBASE:.tex=)
 BUILD_DIR ?= $(ROOT)/.build/texlive
 SOURCE_DATE_EPOCH ?= $(shell git -C "$(ROOT)" log -1 --format=%ct 2>/dev/null || printf '0')
 PDFlatex ?= pdflatex
+PDBIN := $(shell command -v $(PDFlatex) 2>/dev/null)
 PASSES ?= 3
 DETERMINISM_SCRIPT := $(abspath $(ROOT)/_calisma/CIKTI/texlive_determinism_test.sh)
 ACCEPT_DOC := $(ROOT)/docs/ID_RESIDUAL_ACCEPTANCE.md
+ACCEPT_PRODUCER := $(abspath $(ROOT)/_calisma/CIKTI/gen_id_residual_acceptance.py)
 REPORT := $(BUILD_DIR)/determinism_report.txt
+# LEDGER=update → defterde satır yoksa ölçülen kanıttan ÜRET ve ekle
+# (bilinçli; yeni bağlam: CI, font paketi, motor sürümü). Varsayılan: --check.
+LEDGER ?=
 
-.PHONY: all pdf check accept clean
+.PHONY: all pdf check accept clean engineinfo
 
 all: pdf
+
+# Faz 0 motor kilidi + sözleşme sabitleri (plan §Faz 0): sürüm çıktısı
+# makine-okur pdtex_version= satırıyla log'a düşer (CI'da kanıt kalır).
+engineinfo:
+	@command -v "$(PDFlatex)" >/dev/null 2>&1 || { echo "ERROR: pdflatex not found (PDFlatex= veya PATH)" >&2; exit 2; }
+	@$(PDBIN) -version | head -1 | sed 's/^/pdtex_version=/'
+	@echo "engine_lock=pdfTeX 3.141592653-2.6 (TeX Live 2026; plan Faz 0 motor kilidi)"
+	@echo "texinputs_contract=TEXINPUTS=$(TEXDIR)//: (input bağımlılıkları: core_section)"
+	@echo "texmfoutput_contract=TEXMFOUTPUT=$(BUILD_DIR)"
+	@echo "output_dir_contract=-output-directory=$(BUILD_DIR) — kaynak dizinine ASLA yazma"
+	@echo "source_date_epoch=$(SOURCE_DATE_EPOCH)"
+	@echo "passes=$(PASSES)"
 
 pdf:
 	@command -v "$(PDFlatex)" >/dev/null 2>&1 || { echo "ERROR: pdflatex not found (PDFlatex= veya PATH)" >&2; exit 2; }
@@ -79,17 +99,24 @@ check:
 	@grep -E '^(passes|source_date_epoch|texlive_canonical_run1_sha256|texlive_canonical_run2_sha256|residual|verdict)=' "$(REPORT)"
 
 accept: check
-	@CANON=$$(sed -n 's/^texlive_canonical_run1_sha256=//p' "$(REPORT)"); \
-	 test -n "$$CANON" || { echo "ERROR: raporda kanonik hash yok" >&2; exit 1; }; \
-	 if grep -q "$$CANON" "$(ACCEPT_DOC)"; then \
-	   echo "── Faz 3 kabul ──"; \
-	   echo "KABUL: kanonik hash kabul raporunun hash geçiş defterinde"; \
-	   echo "canon=$$CANON"; \
+	@test -f "$(ACCEPT_PRODUCER)" || { \
+	  echo "ERROR: kabul üreticisi yok: $(ACCEPT_PRODUCER)" >&2; exit 1; \
+	}
+	@command -v python3 >/dev/null 2>&1 || { \
+	  echo "ERROR: python3 yok — kabul kanıtı doğrulanamaz" >&2; exit 2; \
+	}
+	@label=""; \
+	 if [ -n "$(PDBIN)" ]; then \
+	   ver="$$("$(PDBIN)" -version 2>/dev/null | head -1 || true)"; \
+	   case "$$ver" in pdfTeX*) label="$$ver" ;; esac; \
+	 fi; \
+	 if [ "$(LEDGER)" = "update" ]; then \
+	   echo "NOT: defter BİLİNÇLİ güncelleniyor (LEDGER=update)"; \
+	   PDFLATEX_VERSION="$$label" python3 "$(ACCEPT_PRODUCER)" \
+	     --report "$(REPORT)" --doc "$(ACCEPT_DOC)" --update; \
 	 else \
-	   echo "ERROR: kanonik hash kabul raporunun hash geçiş defterinde yok: $$CANON" >&2; \
-	   echo "       Yeni bağlam (CI/font paketi) ise docs/ID_RESIDUAL_ACCEPTANCE.md" >&2; \
-	   echo "       defterine bu ikiliyi bilinçli ekle (Faz 6 çıkış yolu), sonra tekrar koş." >&2; \
-	   exit 1; \
+	   PDFLATEX_VERSION="$$label" python3 "$(ACCEPT_PRODUCER)" \
+	     --report "$(REPORT)" --doc "$(ACCEPT_DOC)"; \
 	 fi
 
 clean:

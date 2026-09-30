@@ -43,6 +43,21 @@ def fake_repo(root):
         f.write("x\n")
     with open(os.path.join(root, "docs", "HOOK_ENV_MATRIX.md"), "w", encoding="utf-8") as f:
         f.write("x\n")
+    # Kabul defteri (Faz 4) — sync LEDGER_FILES bloğu bunu MIRROR_DIR'a düz
+    # adla kopyalar; id_canonical.ledger_candidates() mirror rotasında bu
+    # kopyayı çözer. Kapsam tanımı (LEDGER_DOC_REL) beklemeli, yoksa
+    # fail-closed coverage "BEKLENMEYEN/BEKLEYEN: docs/ID_RESIDUAL_ACCEPTANCE.md"
+    # ile kırılır.
+    with open(os.path.join(root, "docs", "ID_RESIDUAL_ACCEPTANCE.md"), "w",
+              encoding="utf-8") as f:
+        f.write("x\n")
+    # a11y same-origin axe bundle — sync PREVIEW_FILES ile mirror'a girer
+    # (preview_server /vendor/axe.min.js rotası); kapsam tanımı beklemeli,
+    # yoksa fail-closed coverage "BEKLENMEYEN" ile kırılır.
+    vendor = os.path.join(cikti, "vendor")
+    os.makedirs(vendor, exist_ok=True)
+    with open(os.path.join(vendor, "axe.min.js"), "w", encoding="utf-8") as f:
+        f.write("x\n")
     # design-system token sheet — sync_verify_mirror.sh GUIDE_FILES ile
     # mirror'lar; kapsam tanımı bunu beklenen runtime kümesine almalı (CI'da
     # "BEKLENMEYEN: design-system/tokens.css" regresyonu).
@@ -50,8 +65,29 @@ def fake_repo(root):
     os.makedirs(ds, exist_ok=True)
     with open(os.path.join(ds, "tokens.css"), "w", encoding="utf-8") as f:
         f.write("x\n")
+    # Stripe HDS tema varyantı — sync GUIDE_FILES bloğu bunu
+    # design-system-stripe-theme.css olarak mirror'lar; kapsam tanımı
+    # (STRIPE_THEME_REL) beklemeli, yoksa fail-closed coverage
+    # "BEKLENMEYEN: design-system/stripe/theme.css" ile kırılır.
+    stripe_ds = os.path.join(ds, "stripe")
+    os.makedirs(stripe_ds, exist_ok=True)
+    with open(os.path.join(stripe_ds, "theme.css"), "w", encoding="utf-8") as f:
+        f.write("x\n")
+    # SDE deney + donmuş kayıt — sync SDE_FILES bloğu mirror'a taşır;
+    # _sde_experiment_paths mirror-layout'ta MIRROR_DIR/../sde_experiment
+    # çözer. Ayrıca determinism-trend versiyonlu verisi (GUIDE_FILES,
+    # dest: determinism_trend.jsonl).
+    sde = os.path.join(root, "_calisma", "sde_experiment")
+    os.makedirs(sde, exist_ok=True)
+    for n in ("sde_determinism_experiment.py", "sde_determinism_output.txt"):
+        with open(os.path.join(sde, n), "w", encoding="utf-8") as f:
+            f.write("x\n")
+    trend = os.path.join(root, "docs", "determinism_trend")
+    os.makedirs(trend, exist_ok=True)
+    with open(os.path.join(trend, "determinism_trend.jsonl"), "w", encoding="utf-8") as f:
+        f.write("x\n")
     for n in ("ReductInvariance.lean", "lean-toolchain", "lakefile.toml",
-              "Leibniz2Reduct/Content.lean"):
+              "Content.lean.tex", "Leibniz2Reduct/Content.lean"):
         with open(os.path.join(lean, n), "w", encoding="utf-8") as f:
             f.write("x\n")
     return cikti, lean
@@ -114,6 +150,70 @@ class TestDesignTokensCoverage(unittest.TestCase):
             self.assertIn("design-system/tokens.css", exp)
 
     def test_listing_with_tokens_css_passes(self):
+        with tempfile.TemporaryDirectory(prefix="cov-") as root:
+            cikti, lean = fake_repo(root)
+            rc = run_main(root, list_output(cikti, lean, root))
+            self.assertEqual(rc, 0)
+
+
+class TestStripeThemeCoverage(unittest.TestCase):
+    """Stripe HDS tema varyantı mirror'da YER ALIR (preview.html
+    /design-system/stripe-theme.css linkini import eder; preview_server aynı
+    rotadan servis eder) — kapsam tanımı bunu beklemeli; aksi halde
+    fail-closed coverage "BEKLENMEYEN: design-system/stripe/theme.css" ile
+    kırılır (design-system/tokens.css ile aynı sözleşme)."""
+
+    def test_stripe_theme_in_expected_set(self):
+        with tempfile.TemporaryDirectory(prefix="cov-") as root:
+            cikti, lean = fake_repo(root)
+            exp = cmc.expected_repo_files(root, cikti, lean)
+            self.assertIn(cmc.STRIPE_THEME_REL, exp)
+
+    def test_listing_with_stripe_theme_passes(self):
+        with tempfile.TemporaryDirectory(prefix="cov-") as root:
+            cikti, lean = fake_repo(root)
+            rc = run_main(root, list_output(cikti, lean, root))
+            self.assertEqual(rc, 0)
+
+
+class TestVendorAxeCoverage(unittest.TestCase):
+    """a11y axe bundle'ı mirror'da YER ALIR (preview_server aynı-koken /vendor/
+    axe.min.js rotasından servis eder) — kapsam tanımı bunu beklemeli; aksi
+    halde fail-closed coverage "BEKLENMEYEN: _calisma/CIKTI/vendor/axe.min.js"
+    ile kırılır. design-system/tokens.css testiyle aynı sözleşme."""
+
+    def test_vendor_axe_in_expected_set(self):
+        with tempfile.TemporaryDirectory(prefix="cov-") as root:
+            cikti, lean = fake_repo(root)
+            exp = cmc.expected_repo_files(root, cikti, lean)
+            self.assertIn("_calisma/CIKTI/vendor/axe.min.js", exp)
+
+    def test_listing_with_vendor_axe_passes(self):
+        with tempfile.TemporaryDirectory(prefix="cov-") as root:
+            cikti, lean = fake_repo(root)
+            rc = run_main(root, list_output(cikti, lean, root))
+            self.assertEqual(rc, 0)
+
+
+class TestLedgerDocCoverage(unittest.TestCase):
+    """Kabul defteri mirror'da YER ALIR (id_canonical.ledger_candidates()
+    mirror rotasında `<script dizini>/ID_RESIDUAL_ACCEPTANCE.md` fallback'ini
+    çözer) — kapsam tanımı bunu beklemeli; aksi halde fail-closed coverage
+    "BEKLENMEYEN: docs/ID_RESIDUAL_ACCEPTANCE.md" ile kırılır."""
+
+    def test_id_canonical_in_expected_set(self):
+        with tempfile.TemporaryDirectory(prefix="cov-") as root:
+            cikti, lean = fake_repo(root)
+            exp = cmc.expected_repo_files(root, cikti, lean)
+            self.assertIn("_calisma/CIKTI/id_canonical.py", exp)
+
+    def test_ledger_doc_in_expected_set(self):
+        with tempfile.TemporaryDirectory(prefix="cov-") as root:
+            cikti, lean = fake_repo(root)
+            exp = cmc.expected_repo_files(root, cikti, lean)
+            self.assertIn(cmc.LEDGER_DOC_REL, exp)
+
+    def test_listing_with_ledger_passes(self):
         with tempfile.TemporaryDirectory(prefix="cov-") as root:
             cikti, lean = fake_repo(root)
             rc = run_main(root, list_output(cikti, lean, root))

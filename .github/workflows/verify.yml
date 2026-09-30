@@ -67,13 +67,13 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
       # ─── PIP CACHE — pip install süresini düşür ──────────────────────
       - name: Cache pip packages
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/pip
           key: pip|${{ runner.os }}|${{ hashFiles('.github/workflows/verify.yml') }}
@@ -148,18 +148,33 @@ jobs:
       #   test_dryrun_summary.py — publish_wrapper.sh `--dry-run-summary`
       #     regresyon kapısı: gen_dryrun_summary fonksiyonunu gerçek kaynaktan
       #     ayıklayıp örnek logla koşar; markdown yapısını doğrular (OFDLINE).
-      - name: Install jsonschema for unit tests
+      # check-unit-tests kapısının Python bağımlılıkları, bootstrap ve diğer
+      # CI job'larıyla aynı pin kaynağından kurulur.
+      - name: Install pinned Python dependencies for unit tests
         if: always()
         shell: bash
-        run: pip install jsonschema
+        run: pip install -r _calisma/requirements-z3.txt
 
-      # Deck üreticileri (architecture_deepening_deck vb.) PIL import eder;
-      # kurulu değilse testler artık HAS_PIL ile SKIP eder (Unit A kontratı),
-      # ama kapının gerçek üretim yolunu da doğrulayabilmesi için burada kur:
-      - name: Install Pillow for unit tests
+      # Chromium YALNIZ pip'e değil, tarayıcı ikilisiyle birlikte kurulur.
+      # Ölçülen boşluk (PR #54, 2026-09-30): `requirements-z3.txt` Playwright'u
+      # pinliyor ama `verify` işinin birim-test adımında Chromium KURULU
+      # DEĞİLDİ; aynı dosyanın a11y-gate ve dashboard işleri
+      # `playwright install --with-deps chromium` çalıştırıyor. Sonuç: 6 ölçüm
+      # dosyasındaki 50 test `skipIf(sync_playwright is None)` guard'ını
+      # GEÇTİ (import çalışıyor) ama Chromium yoktu ve hepsi ERROR oldu —
+      # "kapı kırık" gibi raporlanan bir ortam kusuru. `origin/main` yeşildi
+      # çünkü o dosyaların hiçbiri main'de yok.
+      #
+      # Kural (aynı dosyanın a11y-gate notu): Playwright kuruluysa ölçüm
+      # GERÇEKTEN koşmalı. Guard'ı gevşetip SKIP'e çevirmek, 50 ölçümü
+      # hiçbir yerde çalıştırmamak anlamına gelirdi — fail-closed sessizleşir.
+      #
+      # Sürüm BURAYA yazılmaz: tek kaynak `_calisma/requirements-z3.txt`
+      # (TestSinglePinSource kapısı, `test_dev_bootstrap`). Yukarıdaki cache
+      # adımlarının kullandığı `hashFiles(...)` da aynı dosyadan türer.
+      - name: Install Chromium (unit-test ölçümleri için)
         if: always()
-        shell: bash
-        run: pip install Pillow
+        run: playwright install --with-deps chromium
 
       - name: Run CIKTI unit tests (test_*.py)
         shell: bash
@@ -167,10 +182,10 @@ jobs:
           set -o pipefail
           python3 -m unittest discover -s _calisma/CIKTI -p "test_*.py" -v 2>&1 | tee unit_tests.log
           # docs/branch-protection-guide/test_render_screens.py: render_screens.py
-          # mock HTML'den PNG üretimini doğrular. Playwright CI runner'da kurulu
-          # değilse testler SKIP (fail değil) — kuruluysa gerçekten koşar
-          # (venv: _calisma/.venv_z3/bin/python …). Dokümantasyon üretim aracı
-          # kapısıdır, teslim kapısı değil.
+          # mock HTML'den PNG üretimini doğrular. Playwright + Chromium
+          # YUKARIDA kuruldu (aynı pin, aynı komut) — yani bu işte de
+          # gerçekten koşar; Playwright/Chromium hiç yoksa SKIP (fail değil).
+          # Dokümantasyon üretim aracı kapısıdır, teslim kapısı değil.
           python3 -m unittest discover -s docs/branch-protection-guide \
             -p "test_render_screens.py" -v 2>&1 | tee -a unit_tests.log
 
@@ -243,9 +258,9 @@ jobs:
       # if: always() — advisory pre-commit bölümü (if: always) pre-commit
       # kurulu olmaya bağlı; birim testler düşse bile kurulur, yoksa bölüm
       # gerçek bulgular yerine "command not found" hayaleti üretir.
-      - name: Install pre-commit (advisory pre-commit section)
+      - name: Install pinned Python dependencies (advisory pre-commit section)
         if: always()
-        run: pip install pre-commit
+        run: pip install -r _calisma/requirements-z3.txt
 
       # ─── pre-commit hook ortamlarını önbelleğe al ──────────────────────
       # pre-commit, hook'ları (özellikle verify-delivery-symbolic → z3-solver
@@ -253,9 +268,9 @@ jobs:
       # her run'da z3-solver ortamının yeniden kurulmasını önler → run süresi
       # düşer. Key .pre-commit-config.yaml hash'ine bağlı: config (dolayısıyla
       # additional_dependencies) değişirse cache otomatik geçersizleşir.
-      # actions/cache@v5 = Node 24 (repo'daki diğer action'larla tutarlı).
+      # actions/cache@v6 = Node 24 (repo'daki diğer action'larla tutarlı).
       - name: Cache pre-commit hook environments
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/pre-commit
           key: pre-commit|${{ runner.os }}|${{ hashFiles('.pre-commit-config.yaml') }}
@@ -265,9 +280,79 @@ jobs:
       # Konfig şema doğrulaması (jsonschema) — parse/schema hatalarını
       # henüz Z3/Lean kurulumuna girmeden bloke eder (fail-fast).
       - name: Validate config schema (jsonschema)
+        run: python3 _calisma/CIKTI/validate_config_schema.py
+
+      # LaTeX yüzeyi: tracked .tex dosyalarında aktif $$ ve aynı
+      # input/include yüzeyinde label'sız cross-reference bulunursa
+      # commit/CI akışı fail-closed durur. JSON sidecar precommit log
+      # artifact'ına da girer.
+      - name: Check LaTeX surface (fail-closed)
+        shell: bash
         run: |
-          pip install jsonschema
-          python3 _calisma/CIKTI/validate_config_schema.py
+          set -euo pipefail
+          mkdir -p logs
+          python3 _calisma/CIKTI/check_latex_surface.py \
+            --root . --json --out logs/latex_surface_findings.json
+
+      # ─── GÜVENLİK DURUŞU — STATİK TIER (fail-closed) ───────────────────
+      # Güvenlik modülleri zaten check-unit-tests bataryasında koşuyor;
+      # orada bir regresyon "unit test kırıldı" diye görünür. Bu adım
+      # AYNI modülleri check_security_posture.list roster'iyle ADIYLA
+      # koşar: hangi güvenlik yüzeyinin kırıldığı stderr'de görünür.
+      #
+      # Neden ayrı roster (browser tier başka adımda): bu modüller
+      # skipIf(playwright yok) ile ATLANIR. Tek listede "PASS" gibi
+      # görünürlerdi. Statik tier'da tarayıcı bağımlılığı YOKTUR ve
+      # kapı SKIP sayısını da reddeder (skip = "koşmadı" ≠ "yeşil").
+      #
+      # Tarayıcı kanıtı (CSP'nin fiilen uygulanması + enjeksiyonun
+      # gerçek DOM'da durması) a11y-gate job'unda, Chromium kurulu
+      # olduğu yerde aynı betikle koşar.
+      - name: Check security posture (static tier, fail-closed)
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash _calisma/CIKTI/check_security_posture.sh \
+            _calisma/CIKTI/check_security_posture.list
+
+      # ─── MCP SUNUCU SMOKE'U (fail-closed) ───────────────────────────
+      # leibniz2_mcp'yi gerçekten konuşturur: stdio transport üzerinden
+      # list_tools + leibniz2_health/latest/trend çağrıları (Senaryo A,
+      # canlı mock) ve arkada sunucu yokken fail-closed hata payload'u
+      # (Senaryo B). Tamamen hermetik — yalnız 127.0.0.1 loopback + stdio,
+      # dış ağ bağımlılığı yok; bu yüzden zincirin geri kalanından bağımsız
+      # ve deterministik.
+      #
+      # Venv: _calisma/mcp/.venv gitignored (README'deki kurulum yolu), CI'da
+      # her koşuda requirements.txt'ten kurulur. `mcp<2` pinn'i şart:
+      # FastMCP yüzeyi 2.x'te MCPServer'a göç etti. Pin'in tek kaynağı
+      # _calisma/mcp/requirements.txt'tir — burada sürüm tekrarlanmaz.
+      #
+      # pip cache: aşağıdaki pip install yukarıdaki "Cache pip packages"
+      # adımının ~/.cache/pip dizinini kullanır → ayrı cache adımı ya da yeni
+      # artifact GEREKMEZ (artifact sözleşmesine dokunmadan log yakalanır;
+      # logs/ zaten mevcut artifact'ta toplanır).
+      #
+      # Fail-closed: venv kurulamazsa da smoke düşerse de adım job'ı düşürür.
+      # Sessiz SKIP yok — "ortam kurulamadı" ile "smoke kırıldı" stderr'de
+      # farklı görünür, ikisi de kırmızıdır (smoke_mcp.py: 0=PASS, 1=FAIL).
+      - name: Check MCP server smoke (fail-closed)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p logs
+          MCP_VENV="_calisma/mcp/.venv"
+          if [ ! -x "$MCP_VENV/bin/python" ]; then
+            echo "[MCP-GATE] venv yok — kuruluyor: $MCP_VENV"
+            python3 -m venv "$MCP_VENV"
+            "$MCP_VENV/bin/python" -m pip install \
+              --disable-pip-version-check -q \
+              -r _calisma/mcp/requirements.txt
+          else
+            echo "[MCP-GATE] venv mevcut — yeniden kullanılıyor: $MCP_VENV"
+          fi
+          "$MCP_VENV/bin/python" _calisma/mcp/smoke_mcp.py 2>&1 \
+            | tee logs/mcp_smoke.log
 
       # pdfinfo (PDF sayfa kapısı 33) + qpdf (K6-DETERM metadata-stripped hash).
       # Yoksa verify_delivery.py bu kontrolleri atlar (FAIL etmez); kapıyı
@@ -287,7 +372,7 @@ jobs:
       # K8: Z3 sembolik ispat. Yerel ispatla aynı sürüm (tekrarlanabilirlik).
       - name: Install Z3 (K8)
         if: always()
-        run: pip install z3-solver==5.1.0.0
+        run: pip install -r _calisma/requirements-z3.txt
 
       # K9: Lean 4 reduct-invariance (elan + stable toolchain). --full
       # --lean-proof'ü içerir; lake-proof job ayrıca bağımsız kapıdır, bu
@@ -299,10 +384,24 @@ jobs:
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
           export PATH="$HOME/.elan/bin:$PATH"
           elan toolchain install leanprover/lean4:v4.14.0
+      # K5–K11 zincirinde Lean projesi ayrı, görünür ve fail-closed adımda
+      # derlenir. verify_delivery --full içindeki K9 raporu bunun sonucunu
+      # birleşik katman özetine de yansıtır; bu adım gizli bir alt çağrı değildir.
+      - name: Run Lean lake build (K5-K11 separate step)
+        if: always()
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh _calisma/CIKTI/verify_lean_lake.sh 2>&1 | tee lean_lake_build.log
       #
       # `pipefail` + `tee`: çıktı hem log'a hem dosyaya yazılır, ama exit kodu
       # python'dan gelir (boru, fail-closed kapıyı gizleyemez).
       # --full: K1-K7 + K8 (Z3) + K9 (Lean) + CrossRef/SEP/OpenLibrary + bütçe.
+      # --strict-determinism (Faz 4): K6-DETERM referansı /ID-kanonik hash'tir
+      # ve kabul defterinde (docs/ID_RESIDUAL_ACCEPTANCE.md) KAYITLI olmalıdır —
+      # motor geçişi/yeniden paketleme bilinçli defter satırı ister; kayıtsız
+      # kanonik P1 ile bloklar (strict referanssız geçmez).
       # --budget-out: bütçe sonucunu ayrı JSON'a yazar (budget job'u tüketir).
       # --refs-out: çevrimiçi referans denetim sonuçlarını VERSION JSON olarak
       # yazar (her run'da kaç referansın çevrimiçi doğrulandığını izlemek için).
@@ -318,6 +417,7 @@ jobs:
         run: |
           set -o pipefail
           python3 _calisma/CIKTI/verify_delivery.py --dir _calisma/CIKTI --full \
+            --strict-determinism \
             --budget-out budget_verify.json \
             --config-out effective_config.json \
             --refs-out references_online.json \
@@ -614,7 +714,12 @@ jobs:
         shell: bash
         run: |
           if [ -f logs/PRECOMMIT_RAPORU.json ]; then
-            python3 -c 'import json, jsonschema, sys; schema=json.load(open("logs/PRECOMMIT_RAPORU.schema.json")); data=json.load(open("logs/PRECOMMIT_RAPORU.json")); jsonschema.validate(data, schema); print("PRECOMMIT_RAPORU.json schema: PASS")' 2>&1 | tee -a logs/precommit_schema_check.txt || echo "PRECOMMIT_RAPORU.json schema: FAIL" >> logs/precommit_schema_check.txt
+            # Şema TAKİP EDİLEN yoldan okunur (_calisma/CIKTI/…); eskiden
+            # logs/PRECOMMIT_RAPORU.schema.json okunuyordu ama onu hiçbir
+            # üretici yazmıyordu → her run'da FileNotFoundError, "schema: FAIL"
+            # satırı ve sessiz yutma (2026-09-12 bulgusu;
+            # test_advisory_coe_surfacing.TestLogsSidecarSurfacing pinler).
+            python3 -c 'import json, jsonschema, sys; schema=json.load(open("_calisma/CIKTI/PRECOMMIT_RAPORU.schema.json")); data=json.load(open("logs/PRECOMMIT_RAPORU.json")); jsonschema.validate(data, schema); print("PRECOMMIT_RAPORU.json schema: PASS")' 2>&1 | tee -a logs/precommit_schema_check.txt || echo "PRECOMMIT_RAPORU.json schema: FAIL" >> logs/precommit_schema_check.txt
           else
             echo 'PRECOMMIT_RAPORU.json yok — atlandı'
           fi
@@ -892,6 +997,15 @@ jobs:
           curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain leanprover/lean4:stable
           export PATH="$HOME/.elan/bin:$PATH"
           elan toolchain install leanprover/lean4:v4.14.0
+      - name: Check Lean LaTeX statement contract (K9)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 _calisma/CIKTI/check_lean_statements.py \
+            --lean-file _calisma/lean_reduct/Content.lean \
+            --latex-file _calisma/lean_reduct/Content.lean.tex \
+            --json
+
       - name: Check Lean sorry and axioms (K9)
         shell: bash
         run: |
@@ -901,12 +1015,11 @@ jobs:
       # `pipefail` + `--json`: çıktı hem log'a hem dosyaya yazılır, ama exit
       # kodu pipeline'ın ilk hatasını yansıtır (fail-closed).
 
-      - name: Build Lean lake proof (8 theorems)
-        working-directory: _calisma/lean_reduct
+      - name: Build Lean lake proof (statement-gated core)
+        shell: bash
         run: |
-          export PATH="$HOME/.elan/bin:$PATH"
-          lake clean
-          lake build --wfail
+          set -euo pipefail
+          sh _calisma/CIKTI/verify_lean_lake.sh
 
   action-runtimes:
     name: Action runtime check (node24)
@@ -917,13 +1030,13 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
       # workflow YAML ayrıştırma için (status_checks.py ile aynı bağımlılık).
-      - name: Install PyYAML
-        run: pip install pyyaml
+      - name: Install pinned Python dependencies
+        run: pip install -r _calisma/requirements-z3.txt
 
       # Fail-closed kapı: deprecated node VEYA doğrulanamayan action → exit 1.
       # --out: makine-okur raporu artifact'a yazar (denetim izi).
@@ -934,8 +1047,18 @@ jobs:
             --workflow .github/workflows/verify.yml \
             --json --out action_runtimes.json
 
+      # GitHub stable vN tag'lerine göre workflow major sapmaları. Advisory
+      # katmanıdır: gecikmeler/erişim hataları listelenir, job exit 1 yapmaz.
+      - name: Report latest action majors (advisory)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          python3 _calisma/CIKTI/check_action_pins.py \
+            --latest --json --out action_pins_latest.json
+
       # Kapı FAIL olsa bile (if: always) sonucu run summary'e yaz — tek bakışta
-      # hangi action'ın deprecated olduğu görünür.
+      # hangi action'ın deprecated veya latest major'dan geride olduğu görünür.
       - name: Write action runtime result to run summary
         if: always()
         shell: bash
@@ -962,9 +1085,40 @@ jobs:
           for r in d['actions']:
               using = r.get('using') or '?'
               lines.append('| `' + r['action'] + '` | `' + using + '` | ' + r['verdict'] + ' |')
+          latest_path = 'action_pins_latest.json'
+          if os.path.exists(latest_path):
+              latest = json.load(open(latest_path, encoding='utf-8'))['latest_major']
+              ls = latest['summary']
+              lines.extend([
+                  '',
+                  '## Latest major advisory (bloke etmez)',
+                  '',
+                  ('**ℹ️ ADVISORY**' if latest['verdict'] == 'ADVISORY' else '**✅ CURRENT**') +
+                  ' — ' + str(ls['total']) + ' action; ' + str(ls['current']) +
+                  ' current, ' + str(ls['behind']) + ' behind, ' +
+                  str(ls['ahead']) + ' ahead, ' + str(ls['unavailable']) +
+                  ' unavailable',
+              ])
+              if latest['deviations']:
+                  lines.extend([
+                      '',
+                      '| Action | Current | Latest | Gap |',
+                      '|---|---:|---:|---:|',
+                  ])
+                  for row in latest['deviations']:
+                      lines.append('| `' + row['action'] + '` | v' +
+                                   str(row['current_major']) + ' | v' +
+                                   str(row['latest_major']) + ' | ' +
+                                   str(row['gap']) + ' |')
+              else:
+                  lines.append('\nGüncel stable major arkasında action yok.')
+              for error in latest['errors']:
+                  lines.append('- ⚠️ `' + error['repository'] +
+                               '`: upstream latest alınamadı — ' +
+                               error['error'])
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as f:
               f.write('\n'.join(lines) + '\n')
-          print('action runtime summary yazıldı: ' + verdict)
+          print('action runtime + latest-major summary yazıldı: ' + verdict)
           PYEOF
 
       - name: Upload action runtime report
@@ -972,7 +1126,9 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: action-runtimes
-          path: action_runtimes.json
+          path: |
+            action_runtimes.json
+            action_pins_latest.json
           if-no-files-found: error
           retention-days: 30
 
@@ -1298,7 +1454,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -1319,7 +1475,7 @@ jobs:
         with:
           path: all_artifacts/
           merge-multiple: true
-          pattern: '{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,config,k0-findings,budget-verify,lineage-findings,klayers,unit-tests,action-runtimes,changelog-drift,ci-simulate}'
+          pattern: '{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,config,k0-findings,budget-verify,lineage-findings,klayers,unit-tests,action-runtimes,changelog-drift,ci-simulate,docx-report}'
 
       - name: Download precommit-logs artifact (precommit-logs/ prefix)
         uses: actions/download-artifact@v7
@@ -1509,7 +1665,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -1586,7 +1742,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -1796,7 +1952,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -1900,7 +2056,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -1967,7 +2123,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -2022,7 +2178,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -2089,9 +2245,13 @@ jobs:
         run: |
           # Mevcut run'ı denetle (--run-id) — push'ta verify+audit aynı run'da;
           # PR'da PR run'ının kendi job/artifact'ları denetlenir.
+          # GitHub API, upload sonrası job/artifact listelerini kısa süreli
+          # eventual-consistency ile geçirir; bounded retry false FAIL'i önler.
           python3 _calisma/CIKTI/audit_live_ci_sync.py --json \
             --with-failure-pattern \
             --run-id ${{ github.run_id }} \
+            --visibility-timeout 30 \
+            --visibility-interval 2 \
             > audit_live_ci_sync.json
           cat audit_live_ci_sync.json
 
@@ -2120,8 +2280,8 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Install PyYAML (status_checks.py dependency)
-        run: pip install pyyaml
+      - name: Install pinned Python dependencies (status_checks.py dependency)
+        run: pip install -r _calisma/requirements-z3.txt
 
       - name: Run AŞAMA 0 precheck (publish_precheck.sh)
         continue-on-error: true
@@ -2363,7 +2523,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -2496,7 +2656,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -2642,7 +2802,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -2729,13 +2889,13 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
       # ─── PIP CACHE — pip install süresini düşür ──────────────────────
       - name: Cache pip packages
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/pip
           key: pip|${{ runner.os }}|${{ hashFiles('.github/workflows/verify.yml') }}
@@ -2744,7 +2904,7 @@ jobs:
 
       # ─── PRE-COMMIT CACHE — ~/.cache/pre-commit (z3-solver vb.) ─────
       - name: Cache pre-commit hook environments
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/pre-commit
           key: pre-commit|${{ runner.os }}|${{ hashFiles('.pre-commit-config.yaml') }}
@@ -2755,7 +2915,7 @@ jobs:
       # adımlarıyla aynı (tekrarlanabilirlik: sim ile gerçek CI aynı env).
       - name: Install deps (pre-commit + PyYAML + jsonschema + Z3)
         if: always()
-        run: pip install pre-commit pyyaml jsonschema z3-solver==5.1.0.0
+        run: pip install -r _calisma/requirements-z3.txt
 
       - name: Install pdfinfo (poppler-utils) + qpdf (K6-DETERM)
         if: always()
@@ -2956,31 +3116,131 @@ jobs:
   #
   # preview_server'ı fresh-clone-http deseniyle başlatır (ephemeral port +
   # health poll 30×1s), headless Chromium + axe-core (sha256 pinli vendor
-  # bundle) ile /preview.html'i tarar, eşikleri a11y_gate_config.json'dan
-  # alır. Fail-closed: sunucu/tarayıcı/checksum arızası FAIL — retry yok.
+  # bundle) ile config'te witness ile tanımlı /preview.html, /guide.html ve
+  # /landing.html sayfalarını dark ve light DOM temalarında tarar. Fail-closed:
+  # sunucu/tarayıcı/checksum/witness/tema arızası FAIL — retry yok.
+  # Matrix child'ları fail-fast=false ile bağımsız tamamlanır; her child
+  # üç sayfanın axe raporunu ve dashboard'ın Lighthouse accessibility
+  # raporunu iki tema-suffixed artifact olarak üretir.
   # ============================================================
   a11y-gate:
     name: A11y gate (axe-core, fail-closed)
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    needs: [verify]
+    strategy:
+      fail-fast: false
+      matrix:
+        theme: [dark, light]
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Download verified run snapshot
+        uses: actions/download-artifact@v7
+        with:
+          name: run-history
+          path: run-history/
+
       - name: Install pinned Playwright
-        run: pip install playwright==1.63.0
+        run: pip install -r _calisma/requirements-z3.txt
 
       - name: Cache Playwright browsers
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-1.63.0
+          # Cache anahtarı da TEK KAYNAKTAN türer: sürüm bump'ı cache'i de
+          # geçersiz kılar, elle "1.63.0" yazılmış ikinci bir kopya olmaz.
+          key: playwright-${{ hashFiles('_calisma/requirements-z3.txt') }}
 
       - name: Install Chromium
         run: playwright install --with-deps chromium
+
+      - name: Resolve Chromium for Lighthouse
+        shell: bash
+        run: |
+          chrome_path="$(python3 -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()')"
+          test -x "$chrome_path"
+          echo "CHROME_PATH=$chrome_path" >> "$GITHUB_ENV"
+
+      # ─── GÜVENLİK DURUŞU — TARAYICI TIER (fail-closed) ────────────────
+      # Chromium YUKARIDA kurulduğu için bu roster'da skip OLUŞAMAZ;
+      # yine de kapı skip sayısını reddeder (sessiz "PASS" olmaz).
+      # Kanıtladığı: CSP tarayıcıda fiilen uygulanıyor (hover-tooltip,
+      # 0 CSP ihlali) ve kaçırılmış veri gerçek DOM ayrıştırıcısında
+      # duruyor (nitelik/etiket enjeksiyonu yok). Statik tier bunları
+      # kanıtlayamaz — o yüzden ayrı adım.
+      - name: Check security posture (browser tier, fail-closed)
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash _calisma/CIKTI/check_security_posture.sh \
+            _calisma/CIKTI/check_security_browser.list
+
+      # VERIFY-001'in CANLI kanıtı — buraya, çünkü Playwright'ın kurulu
+      # olduğu TEK iş burası.
+      #
+      # Boşluk (ölçüldü 2026-09-27): test_preview_hover_tooltip.py manifestte
+      # var (check_unit_tests.list:115) ve `verify` işinin birim-test adımında
+      # koşuyor; ama Playwright YALNIZ bu işte kurulu (pip install playwright +
+      # `playwright install chromium` yukarıda). Süit `skipIf(sync_playwright
+      # is None)` ile SKIP ediyor → 8 test hiçbir yerde çalışmıyordu. Statik
+      # eşdeğeri (InlineEventHandlerContractTests) yalnız "inline handler YOK"
+      # diyor; "tooltip gerçekten çıkıyor ve konsolda CSP ihlali YOK" ancak
+      # burada kanıtlanır. Düzeltme geri alınırsa (ör. bir rect template'ine
+      # onmouseleave dönerse) bu adım kızar.
+      #
+      # VERIFY-001'in İKİNCİ yarısı (delege TIKLAMA/KLAVYE yüzeyleri:
+      # data-act=rh-filter/budget-toggle/load-stdout) yukarıdaki
+      # "browser tier" adımında koşar: süit
+      # _calisma/CIKTI/check_security_browser.list roster'ına alındı, çünkü
+      # o adım SKIP'i de reddediyor. Ölçüldü (2026-09-27): süit yalnız
+      # check_unit_tests.list'te olduğu için Playwright'sız `verify` birim
+      # adımında 14 test SESSİZCE atlanıyordu — hover yarısındaki boşluğun
+      # aynısı. Süit artık CSP-ihlali sayacını da taşıyor (konsolda ret yok).
+      #
+      # DİSİPLİN: bu YAML dosyası prettier'dan GEÇMEZ — pre-commit
+      # "Prettier format check on staged JS/TS/JSON" yalnız JS/TS/JSON
+      # kapsar. Denendi (2026-09-27): prettier YAML'daki merge-pattern
+      # tırnaklarını soyuyor ve check_pattern_consistency.py'nin brace regex'i
+      # kırılıyor ("brace merge pattern bulunamadı").
+      - name: VERIFY-001 — hover-tooltip CSP kanıtı (canlı, fail-closed)
+        shell: bash
+        run: |
+          set -uo pipefail
+          mkdir -p logs
+          log=logs/verify_001_hover_csp.log
+          status=0
+          python3 -m unittest discover -s _calisma/CIKTI \
+            -p "test_preview_hover_tooltip.py" -v > "$log" 2>&1 || status=$?
+          cat "$log"
+          if [ "$status" -ne 0 ]; then
+            echo "::error::VERIFY-001 canlı CSP kanıtı başarısız (exit $status)"
+            exit "$status"
+          fi
+          # Fail-closed kural: atlanan kanıt geçen kanıt değildir. Süit
+          # Playwright yoksa SKIP döner ve exit 0 verirdi; bu yüzden
+          # "skipped" izini ayrıca reddediyoruz.
+          if grep -qE '^OK \(skipped=|^OK .*skipped|skipped=[1-9]' "$log"; then
+            echo "::error::VERIFY-001 kanıtı SKIP edildi (Playwright/Chromium yok) — kanıt koşmadı, bu iş geçemez."
+            exit 1
+          fi
+          # SAYAÇ LOGDAN OKUNUR, SİLME YAZILMAZ: "8/8" sabit bir metindi ve
+          # süit büyüyüp küçülünce yalan söylüyordu. Ayrıca 0 test koşarsa
+          # (keşif hatası, filtre değişimi) kanıt yok sayılır.
+          ran="$(grep -oE 'Ran ([0-9]+) test' "$log" | tail -1 | grep -oE '[0-9]+' || true)"
+          if [ -z "${ran}" ] || [ "$ran" -lt 1 ]; then
+            echo "::error::VERIFY-001 kanıtı logdan okunamadı (koşan test sayısı yok) — $log"
+            exit 1
+          fi
+          echo "VERIFY-001 canlı CSP kanıtı: ${ran} test koştu, konsolda CSP ihlali yok (log: $log)."
 
       - name: Start preview_server (fresh-clone-http pattern)
         run: |
@@ -2992,6 +3252,27 @@ jobs:
           # yapar; CI'da runner calisma alani mirror rolundedir. Tek kaynak:
           # design-system/tokens.css (check_tokens.py'in korudugu dosya).
           cp design-system/tokens.css _calisma/CIKTI/design-system-tokens.css
+          # Guide kaynağı docs/ altındadır; preview_server /guide.html
+          # rotası PREVIEW_DIR'den servis eder. CI runner'ı mirror rolünü
+          # üstlendiği için aynı tek kaynağı çalışma alanına kopyalarız.
+          cp docs/branch-protection-guide/guide.html _calisma/CIKTI/guide.html
+          # Landing, verify job'ının aynı koşumundan taşınan history
+          # artifact'ıyla üretilir; preview_server aynı artifact'ı
+          # snapshot-only modda servis eder. Böylece hash donmuq PDF kaydından
+          # değil, CI koşumunun doğrulanmış /api/latest snapshot'ından gelir.
+          python3 - run-history/history.jsonl <<'PY'
+          import hashlib
+          import pathlib
+          import sys
+          path = pathlib.Path(sys.argv[1])
+          sidecar = pathlib.Path(str(path) + ".sha256")
+          if not path.is_file() or not sidecar.is_file():
+              raise SystemExit("run-history artifact/sidecar eksik")
+          expected = sidecar.read_text(encoding="utf-8").split()[0].lower()
+          actual = hashlib.sha256(path.read_bytes()).hexdigest()
+          if expected != actual:
+              raise SystemExit("run-history SHA-256 sidecar uyuşmuyor")
+          PY
           port=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')
           echo "A11Y_PORT=$port" >> "$GITHUB_ENV"
           work=$RUNNER_TEMP/a11y-server
@@ -3010,7 +3291,8 @@ jobs:
               "--preview-dir", "_calisma/CIKTI",
               "--bind", "127.0.0.1",
               "--port", port,
-              "--interval", "3600",
+              "--snapshot-file", "run-history/history.jsonl",
+              "--no-verify",
           ])
           PYEOF
           ready=0
@@ -3028,19 +3310,445 @@ jobs:
             exit 1
           fi
           grep -Fx 'ok' "$work/health.txt"
+          curl --fail --silent --show-error --max-time 5 \
+            "http://127.0.0.1:$port/api/latest" > "$work/latest.json"
+          python3 - "$work/latest.json" <<'PY'
+          import json
+          import sys
 
-      - name: Run a11y gate
+          with open(sys.argv[1], encoding="utf-8") as f:
+              latest = json.load(f)
+          if (latest.get("verdict") != "PASS" or
+                  latest.get("exit_code") != 0 or
+                  latest.get("cached") is True or
+                  not latest.get("ts")):
+              raise SystemExit("preview snapshot PASS/0/fresh değil")
+          print("Landing snapshot source: PASS (ts=%s raw=%s)" % (
+              latest.get("ts"), latest.get("raw_sha256")))
+          PY
+          python3 _calisma/landing/build_landing.py \
+            --snapshot-url "http://127.0.0.1:$port/api/latest" \
+            --hash-field raw \
+            --wait-seconds 5 \
+            --poll-seconds 1 \
+            --output _calisma/CIKTI/landing.html \
+            --assets-dir _calisma/CIKTI/landing/assets
+          cp _calisma/landing/landing_src.html _calisma/CIKTI/landing-src.html
+          curl --fail --silent --show-error --max-time 5 \
+            "http://127.0.0.1:$port/landing.html" \
+            | grep -F 'teslim anına kadar.'
+          curl --fail --silent --show-error --max-time 5 \
+            "http://127.0.0.1:$port/landing/assets/P1-a.png" \
+            --output /dev/null
+
+      - name: Run a11y gate — dashboard
         run: |
           python3 _calisma/CIKTI/a11y_gate.py \
             --base-url "http://127.0.0.1:$A11Y_PORT" \
-            --output a11y_report.json
+            --page /preview.html \
+            --theme "${{ matrix.theme }}" \
+            --output "a11y_dashboard_${{ matrix.theme }}.json"
+
+      - name: Run a11y gate — guide
+        if: always()
+        run: |
+          python3 _calisma/CIKTI/a11y_gate.py \
+            --base-url "http://127.0.0.1:$A11Y_PORT" \
+            --page /guide.html \
+            --theme "${{ matrix.theme }}" \
+            --output "a11y_guide_${{ matrix.theme }}.json"
+
+      - name: Run a11y gate — landing
+        if: always()
+        run: |
+          python3 _calisma/CIKTI/a11y_gate.py \
+            --base-url "http://127.0.0.1:$A11Y_PORT" \
+            --page /landing.html \
+            --theme "${{ matrix.theme }}" \
+            --output "a11y_landing_${{ matrix.theme }}.json"
+
+      - name: Run Lighthouse accessibility — dashboard
+        if: always()
+        env:
+          A11Y_THEME: ${{ matrix.theme }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          report="lighthouse_dashboard_${A11Y_THEME}.json"
+          url="http://127.0.0.1:${A11Y_PORT}/preview.html?theme=${A11Y_THEME}"
+          npx --yes lighthouse@13.5.0 "$url" \
+            --only-categories=accessibility \
+            --form-factor=desktop \
+            --output=json \
+            --output-path="$report" \
+            --chrome-flags="--headless --no-sandbox --disable-background-timer-throttling" \
+            --throttling-method=provided \
+            --max-wait-for-load=10000 \
+            --disable-full-page-screenshot \
+            --quiet
+          python3 - "$report" "$A11Y_THEME" <<'PY'
+          import json
+          import pathlib
+          import sys
+          from urllib.parse import parse_qs, urlparse
+
+          report = pathlib.Path(sys.argv[1])
+          expected_theme = sys.argv[2]
+          if not report.is_file():
+              raise SystemExit("Lighthouse raporu üretilmedi: %s" % report)
+          data = json.loads(report.read_text(encoding="utf-8"))
+          requested = urlparse(data.get("requestedUrl", ""))
+          query_theme = parse_qs(requested.query).get("theme", [None])[0]
+          if query_theme != expected_theme:
+              raise SystemExit("Lighthouse tema witness uyuşmazlığı: %r != %r" % (
+                  query_theme, expected_theme))
+          score = (data.get("categories", {}).get("accessibility", {})
+                   .get("score"))
+          # Category score is the fail-closed contract. Individual zero-score
+          # experimental/manual audits stay visible in the artifact and log.
+          if score != 1:
+              raise SystemExit("Lighthouse accessibility score PASS değil: %r" % score)
+          failed = [key for key, audit in data.get("audits", {}).items()
+                    if audit.get("score") == 0]
+          print("Lighthouse accessibility: PASS (score=1.0; zero-score audits: %s)" %
+                (", ".join(failed) if failed else "none"))
+          PY
+
+      # CLS (Cumulative Layout Shift) bütçe kapısı — fail-closed.
+      # Yukarıdaki Lighthouse adımı `--only-categories=accessibility` koşar,
+      # yani layout-shift auditi rapora HİÇ girmez: "sayfa zıplamıyor" iddiası
+      # bu repoda hiçbir gate tarafından ölçülmüyordu. Bu adım iddiayı
+      # CLS < 0.1 olarak sabitler (Web Vitals "good" eşiği).
+      - name: Run CLS budget gate — dashboard (CLS < 0.1)
+        if: always()
+        env:
+          A11Y_THEME: ${{ matrix.theme }}
+        shell: bash
+        run: |
+          if [ -z "${A11Y_PORT:-}" ]; then
+            echo "A11Y_PORT yok — preview_server başlatılamadı; CLS ölçülemez (fail-closed)" >&2
+            exit 1
+          fi
+          DASHBOARD_BASE_URL="http://127.0.0.1:${A11Y_PORT}" \
+          DASHBOARD_THEME="$A11Y_THEME" \
+          CLS_REPORT_PATH="cls_budget_${A11Y_THEME}.json" \
+            python3 _calisma/CIKTI/test_dashboard_cls_budget.py
+
+      # Aynı ölçüm çekirdeğinin iki YÜZEYLİ koşumu: bu job'ın mirror'ında hem
+      # dashboard (/preview.html) hem landing (/landing.html + assets) stage
+      # edilmiş durumda (bkz. yukarıdaki build_landing.py adımı), yani aynı
+      # canlı sunucu iki yüzeyi de sunar. CLS + LCP + FCP + TTFB bütçeleri
+      # ölçülür; landing'in CLS'i bu repoda başka hiçbir yerde ölçülmüyordu.
+      # dashboard-next bu job'da derlenmediği için kapsam dışıdır — üç yüzeyin
+      # tamamı yerelde `python3 _calisma/CIKTI/test_surface_cwv_report.py`
+      # ile koşar.
+      - name: Run CWV report — dashboard + landing (CLS/LCP/FCP/TTFB)
+        if: always()
+        env:
+          A11Y_THEME: ${{ matrix.theme }}
+        shell: bash
+        run: |
+          if [ -z "${A11Y_PORT:-}" ]; then
+            echo "A11Y_PORT yok — preview_server başlatılamadı; CWV ölçülemez (fail-closed)" >&2
+            exit 1
+          fi
+          CWV_SURFACES=dashboard,landing \
+          DASHBOARD_BASE_URL="http://127.0.0.1:${A11Y_PORT}" \
+          DASHBOARD_THEME="$A11Y_THEME" \
+          CWV_REPORT_PATH="surface_cwv_${A11Y_THEME}.json" \
+            python3 _calisma/CIKTI/test_surface_cwv_report.py
+
+      - name: Write a11y job summary
+        if: always()
+        env:
+          A11Y_THEME: ${{ matrix.theme }}
+        shell: bash
+        run: |
+          # Her matrix child'ı kendi temasında üç raporu salt-okur render
+          # eder. Guide ve landing if: always() ile çalıştığı için dashboard
+          # FAIL olsa bile diğer raporlar ve özet kaybolmaz.
+          python3 - <<'PY'
+          import json, os, pathlib
+          theme = os.environ["A11Y_THEME"]
+          reports = [
+              ("Dashboard", pathlib.Path("a11y_dashboard_%s.json" % theme)),
+              ("Branch protection guide", pathlib.Path("a11y_guide_%s.json" % theme)),
+              ("Landing", pathlib.Path("a11y_landing_%s.json" % theme)),
+          ]
+          lines = [
+              "## a11y-gate özeti (%s)" % theme,
+              "",
+              "| sayfa | verdict | blocking / warn / allowlisted / incomplete |",
+              "|---|---|---|",
+          ]
+          for label, report in reports:
+              if not report.exists():
+                  lines.append("| %s | — | rapor üretilmedi |" % label)
+                  continue
+              data = json.loads(report.read_text(encoding="utf-8"))
+              s = data.get("summary") or {}
+              lines.append("| %s | **%s** | %s / %s / %s / %s |" % (
+                  label, data.get("verdict", "BILINMIYOR"),
+                  s.get("blocking", 0), s.get("warn", 0),
+                  s.get("allowlisted", 0), s.get("incomplete", 0)))
+              for v in data.get("violations", []):
+                  extra = " (allowlisted: %s düğüm)" % v["allowlisted_nodes"] \
+                      if v.get("allowlisted_nodes") else ""
+                  lines.append("- `%s` %s → %s, %s düğüm%s" % (
+                      v.get("rule", "?"), v.get("impact") or "-",
+                      v.get("level"), v.get("nodes"), extra))
+              if data.get("error"):
+                  lines.append("- hata: %s" % data["error"])
+          lighthouse = pathlib.Path("lighthouse_dashboard_%s.json" % theme)
+          if lighthouse.exists():
+              try:
+                  lighthouse_data = json.loads(lighthouse.read_text(encoding="utf-8"))
+                  lighthouse_score = (lighthouse_data.get("categories", {})
+                                       .get("accessibility", {}).get("score"))
+                  lines.append("- Lighthouse dashboard accessibility: **%s** (score: %s)" % (
+                      "PASS" if lighthouse_score == 1 else "FAIL",
+                      lighthouse_score if lighthouse_score is not None else "unknown"))
+              except (OSError, ValueError, TypeError) as exc:
+                  lines.append("- Lighthouse dashboard accessibility: **FAIL** (%s)" % exc)
+          else:
+              lines.append("- Lighthouse dashboard accessibility: **FAIL** (rapor üretilmedi)")
+          pathlib.Path(os.environ["GITHUB_STEP_SUMMARY"]).write_text(
+              "\n".join(lines) + "\n", encoding="utf-8")
+          PY
 
       - name: Upload a11y report
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: a11y-report
-          path: a11y_report.json
+          name: a11y-report-${{ matrix.theme }}
+          path: a11y_dashboard_${{ matrix.theme }}.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Upload guide a11y report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: a11y-guide-report-${{ matrix.theme }}
+          path: a11y_guide_${{ matrix.theme }}.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Upload landing a11y report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: a11y-landing-report-${{ matrix.theme }}
+          path: a11y_landing_${{ matrix.theme }}.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Upload Lighthouse dashboard report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: lighthouse-dashboard-${{ matrix.theme }}
+          path: lighthouse_dashboard_${{ matrix.theme }}.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # ============================================================
+  # DASHBOARD-NEXT — tip kapısı + üretim derlemesi (fail-closed)
+  # ============================================================
+  # `apps/dashboard-next` panosu verisini `apps/trend-db` şemasının
+  # ÜRETİLMİŞ Prisma istemcisinden okur (`lib/trend-db.ts` →
+  # `../../trend-db/generated/client`). `apps/trend-db/generated/`
+  # gitignored'dır: taze checkout'ta istemci YOKTUR ve hem tip kapısı hem
+  # derleme "Cannot find module '../../trend-db/generated/client'" ile
+  # düşer. Bu yüzden kapı önce istemciyi üretir.
+  #
+  # `prisma.config.ts` URL'i `env("DATABASE_URL")` ile çözer; değişken yoksa
+  # PrismaConfigEnvError atar — `generate` BAĞLANMAZ ama değişkenin VAR
+  # olmasını ister. Bu yüzden erişilemez bir yer tutucu URL verilir: gerçek
+  # kimlik bilgisi CI'a girmez, DSN hiç kullanılmaz (yalnız kod üretilir).
+  #
+  # `next build` gerçek DATABASE_URL istemez: `/` ve `/trend`
+  # `force-dynamic` olduğu için build anında veri çekilmez.
+  #
+  # GATE_EXCLUDE'da (status_checks.py): required check seti 14'te sabit
+  # kalır — required'a almak branch-protection UI değişikliği gerektirirdi
+  # (docx-export/lake-proof ile aynı gerekçe). Job yine de FAIL-CLOSED'dır:
+  # `continue-on-error` YOK, tip/derleme hatası workflow'u kırmızıya düşürür.
+  dashboard-next:
+    name: Dashboard-next typecheck + build (Next 16)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      # Açık tema smoke'u Chromium tarafında koşar (aşağıdaki Playwright
+      # adımları) — a11y-gate job'ıyla AYNI pinli kurulum, ikinci bir sürüm
+      # hattı drift üretmesin.
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      # SIRA ÖNEMLİ: (1) Prisma istemcisi, (2) tip kapısı, (3) derleme.
+      # İstemci üretilmeden (2) ve (3) de düşer.
+      - name: Install trend-db dependencies (npm ci)
+        run: npm ci --prefix apps/trend-db --no-audit --no-fund
+
+      - name: Generate Prisma client (kod üretimi — DB'ye bağlanmaz)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd apps/trend-db
+          DATABASE_URL="postgresql://ci:ci@127.0.0.1:5432/ci?sslmode=disable" \
+            npx prisma generate
+
+      - name: Install dashboard dependencies (npm ci)
+        run: npm ci --prefix apps/dashboard-next --no-audit --no-fund
+
+      # Repo'nun KENDI kapısı (pre-commit ile aynı script): node_modules
+      # yoksa SKIP, varsa fail-closed `tsc --noEmit`. Burada node_modules
+      # az önce kurulduğu için SKIP yolu kapalıdır.
+      - name: Typecheck dashboard (tsc --noEmit)
+        run: bash _calisma/CIKTI/check_dashboard_typecheck.sh
+
+      - name: Build dashboard (next build)
+        run: npm run build --prefix apps/dashboard-next
+
+      # İstek-basi dedup sözleşmesi: SAYAN upstream + `next start` başlatılır,
+      # panel render'ının upstream'e kaç istek attığı ÖLÇÜLÜR. Tarayıcı
+      # gerektirmez (stdlib HTTP) — bu yüzden Chromium kurulumundan önce,
+      # derlemenin hemen ardından koşar. Ölçülen gerekçesi dosyanın
+      # başlığında: `cache()` dedup'ın MEKANİZMA DEĞİL (mutasyonla çürütüldü),
+      # bu yüzden test davranışı (istek sayısı, istek kapsamı, dikiş kümesi)
+      # tutar — kendi varlığını değil.
+      - name: Request dedup contract — dashboard-next (fail-closed)
+        run: python3 _calisma/CIKTI/test_dashboard_next_request_dedup.py
+
+      # ── AÇIK TEMA SMOKE (fail-closed) ─────────────────────────────────
+      # Boşluk (ölçüldü 2026-09-28): `dashboard-next`'in AÇIK TEMASI hiçbir
+      # job'da ölçülmüyordu. a11y-gate/CWV job'ları yalnız `preview.html`
+      # yüzeyini tarar; `test_surface_cwv_report.py` dashboard-next'i
+      # varsayılan (koyu) temada ölçer. Köprüdeki
+      # `:root[data-theme="light"]` bloğu silinse/gölgelense pano "açık tema"
+      # derken koyu kalırdı ve HİÇBİR şey kırmızıya düşmezdi.
+      #
+      # Derleme YUKARIDA yapıldı: `next start` önceden derlenmiş bundle'ı
+      # sunar, yani smoke'un gördüğü şey bu commit'in kendisidir (taze
+      # artefakt yoksa test SKIP değil, açık mesajla düşer).
+      - name: Install pinned Playwright
+        run: pip install -r _calisma/requirements-z3.txt
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          # Cache anahtarı da TEK KAYNAKTAN türer: sürüm bump'ı cache'i de
+          # geçersiz kılar, elle "1.63.0" yazılmış ikinci bir kopya olmaz.
+          key: playwright-${{ hashFiles('_calisma/requirements-z3.txt') }}
+
+      - name: Install Chromium
+        run: playwright install --with-deps chromium
+
+      - name: Surface smoke — dashboard-next (fail-closed)
+        run: python3 _calisma/CIKTI/test_dashboard_next_surface_smoke.py
+
+      # Canlı akış: yayınlayan upstream + `next start` + Chromium. /trend
+      # sayfasının SSE verisiyle YENİDEN YÜKLENMEDEN güncellendiğini ölçer
+      # (window işareti + timeOrigin korunumu). Chromium gerektiği için
+      # yukarıdaki smoke ile AYNI job'da, kurulumdan sonra koşar.
+      - name: Live stream contract — dashboard-next (fail-closed)
+        run: python3 _calisma/CIKTI/test_dashboard_next_live_stream.py
+
+  # ── VIDEO RENDER (LeibnizChain) ──────────────────────────────────────────
+  # _calisma/video kompozisyonu (Remotion) mp4'e render edilir ve çıktının
+  # kare bütçesi DENETLENİR: 760 kare @ 30fps = 25.33 sn, 1280x720. Ölçüm
+  # mp4 kutu (box) ayrıştırmasıyla yapılır — ffprobe'ye bağımlılık yok
+  # (paketlenmiş ffprobe macOS'ta libavdevice.dylib bulamıyor, ölçüldü).
+  # Amaç teslim edilen videonun "bozuk dosya" değil, SÖZLEŞMESİNE UYAN
+  # dosya olduğunu kanıtlamak: data üretimi → tip kapısı → gerçek render →
+  # kare/süre/çözünürlük ölçümü.
+  # GATE_EXCLUDE'da: required set 14'te sabit (docx-export/dashboard-next ile
+  # aynı gerekçe — required'a almak branch-protection UI değişikliği gerektirir).
+  # Job yine de FAIL-CLOSED'dır: `continue-on-error` YOK.
+  video-render:
+    name: LeibnizChain video render (760 kare, advisory)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Install generator dependencies (npm ci)
+        run: npm ci --prefix _calisma/video --no-audit --no-fund
+
+      # history.jsonl CI'da yoktur (gitignore'daki calisma zamani verisi) —
+      # üretici fail-closed: girdi yoksa sentinel JSON üretir ve render
+      # yine koşar. Bayrak OTMALI: verimsiz mod sentinel'i yalniz acikca
+      # isteyerek uretir, aksi halde bu adim 1 ile cikip isi kirmasi
+      # durur. Yani bosluk "veri yok" demekten iyidir, ama CI'da beklenen
+      # davranis bu degil. Böylece kapı tip/render tarafını ölçer,
+      # KANIT KARTLARI (2323 OK, 9/9 vb.) ise kayıttan gelen sabitlerdir.
+      - name: Generate composition data (make_data.py, sentinel)
+        run: python3 _calisma/video/make_data.py --allow-missing-data
+
+      - name: Typecheck composition (tsc --noEmit)
+        run: bash _calisma/CIKTI/check_video_typecheck.sh
+
+      # Chromium'u remotion'un kendi sürümüyle indir (~85 MB); sistem
+      # Chrome'a bağımlılık yok → runner imajı değişse de kapı sabit.
+      # working-dictionarya göre çalıştığı için --prefix GEREKMEZ (göreli
+      # yol çakıştırır — ölçüldü: --prefix + working-directory birlikte
+      # _calisma/video/_calisma/video arar).
+      - name: Ensure Remotion browser
+        working-directory: _calisma/video
+        run: npx remotion browser ensure
+
+      - name: Render 760 frames (h264)
+        run: npm run render --prefix _calisma/video
+
+      # SÖZLEŞME ÖLÇÜMÜ: kare/süre/çözünürlük. Ayrıştırıcı stdlib mp4 kutu
+      # ağacıdır (check_render.py) — paketlenmiş ffprobe macOS'ta
+      # libavdevice.dylib bulamıyor; runner'da da harici bağımlılık gerekmesin.
+      - name: Probe render contract (760 kare / 25.33 sn / 1280x720)
+        run: |
+          set -euo pipefail
+          python3 _calisma/video/check_render.py \
+            _calisma/video/out/leibniz-chain.mp4 --json \
+            | tee video_render_probe.json
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## video-render"
+            echo '```'
+            cat video_render_probe.json 2>/dev/null || echo "(probe cikti yok)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload video artifact
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: video-report
+          path: |
+            _calisma/video/out/leibniz-chain.mp4
+            video_render_probe.json
           if-no-files-found: ignore
           retention-days: 30
 
@@ -3114,7 +3822,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -3181,7 +3889,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -3319,5 +4027,92 @@ jobs:
             mirror_report.json
             bootstrap_smoke.txt
             fresh_clone_check_report.txt
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # ── DOCX EXPORT (advisory) ───────────────────────────────────────────────
+  # _calisma/docx/make_docx.js markdown'u gercek .docx'e cevirir; uretilen belge
+  # artifact olarak yayinlanir. Dogrulama byte-identity DEGIL: olculdu ki docx
+  # paketi core.xml tarihlerini kendi zamanindan uretir (iki kosum arasindaki
+  # TEK fark dcterms:created/modified — 2026-09-24). Onun yerine belgeyi gercek
+  # bir ofis motoru acar ve beklenen tanik metin aranir (birim testi degil,
+  # entegrasyon kaniti). GATE_EXCLUDE'da: advisory, required set'i degismez.
+  docx-export:
+    name: Docx export (LibreOffice check, advisory)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Install generator dependencies (npm ci)
+        run: npm ci --prefix _calisma/docx --no-audit --no-fund
+
+      - name: Generator self-test (parser contract)
+        run: node _calisma/docx/make_docx.js --self-test
+
+      - name: Build docx (SOURCE_DATE_EPOCH pinned)
+        run: |
+          set -euo pipefail
+          SOURCE_DATE_EPOCH=1700000000 node _calisma/docx/make_docx.js \
+            | tee docx_build.txt
+          # Iki raporu tek Word dosyasinda birlestir (bolum kirilimli):
+          # FINAL_RC_REPORT + FULL_SCOPE_AUDIT; ikinci rapor yeni sayfada baslar.
+          SOURCE_DATE_EPOCH=1700000000 node _calisma/docx/make_docx.js \
+            --in docs/FINAL_RC_REPORT.md \
+            --in docs/FULL_SCOPE_AUDIT_2026-09-17.md \
+            | tee docx_build_combined.txt
+
+      - name: Install LibreOffice (writer only)
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends libreoffice-writer
+
+      - name: LibreOffice check (opens + text witness)
+        run: |
+          set -euo pipefail
+          bash _calisma/docx/check_docx_libreoffice.sh \
+            _calisma/docx/out/final_rc_report.docx \
+            "Final Release Candidate Report" | tee docx_libreoffice_check.txt
+          # Birlesik belge: iki raporun baslik tanigi da aranir.
+          bash _calisma/docx/check_docx_libreoffice.sh \
+            _calisma/docx/out/combined_report.docx \
+            "Final Release Candidate Report" "Tam Kapsam Denetim Raporu" \
+            | tee docx_libreoffice_check_combined.txt
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## docx-export"
+            echo '```'
+            cat docx_build.txt 2>/dev/null || echo '(build cikti yok)'
+            cat docx_build_combined.txt 2>/dev/null || echo '(birlesik build cikti yok)'
+            cat docx_libreoffice_check.txt 2>/dev/null || echo '(libreoffice kontrolu yok)'
+            cat docx_libreoffice_check_combined.txt 2>/dev/null || echo '(birlesik libreoffice kontrolu yok)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload docx artifact
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: docx-report
+          path: |
+            _calisma/docx/out/final_rc_report.docx
+            _calisma/docx/out/combined_report.docx
+            docx_build.txt
+            docx_build_combined.txt
+            docx_libreoffice_check.txt
+            docx_libreoffice_check_combined.txt
           if-no-files-found: ignore
           retention-days: 30

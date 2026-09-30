@@ -11,14 +11,24 @@ tex-render-guide Method 1 (standalone LaTeX → PDF → yüksek DPI PNG) ile
   3) Beklenen sonuç tutarlılığı: aynı ID'nin verdict'i kodla eşleşmeli
      (ör. P4-b SAT, P4-d UNSAT — yanlış beklenen → drift)
   4) _latex_doc: geçerli standalone doküman üretir (preamble + teorem)
-  5) Araç zinciri fallback: pdflatex→tectonic, convert→pdftoppm→sips
+  5) Araç zinciri fallback: pdflatex→latex→tectonic, convert→pdftoppm→sips
      sırası (Method 1 yedekliliği); gerçek derleme yalnızca araç varsa
      (skip — CI'da TeX motoru olmayabilir).
+  6) MOTOR SEÇİMİ koruyucu sözleşmesi (TestEngineSelection): öncelik
+     pdflatex > latex > tectonic; pdflatex kuruluyken tectonic'e DÜŞÜLMEZ ve
+     seçim 'Araçlar: LaTeX=...' satırında log'lanır; motor yoksa fail-closed.
+  7) Bu koruyucunun kendisi mutasyonla sınanır (TestEngineSelectionMutation
+     Guard): sıra ters / latex düşürülmüş / fail-open mutasyonlarının 4'ü de
+     yakalanmalı (plan Faz 2 kanıtı '4/4' kalıcı hale getirildi).
 """
+import os
 import pathlib
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -121,6 +131,165 @@ class TestToolchain(unittest.TestCase):
         c = rz.find_pdf_to_png()
         if c is not None:
             self.assertIn(c, ("convert", "magick", "pdftoppm", "sips"))
+
+
+class _FakeShutil:
+    """shutil.which yerine: yalnız verilen araç kümesini 'kurulu' sayar.
+
+    Gerçek makinenin kurulumundan bağımsız, deterministik öncelik ölçümü için
+    (stdlib shutil modülü DEĞİŞTİRİLMEZ — rz.shutil namespace'i yamanır).
+    """
+
+    def __init__(self, available):
+        self.available = set(available)
+
+    def which(self, candidate):
+        return f"/fake/bin/{candidate}" if candidate in self.available else None
+
+
+class TestEngineSelection(unittest.TestCase):
+    """Motor seçimi koruyucu sözleşmesi (Faz 2).
+
+    Neden: göç sonrası makinede hem pdflatex (TeXLive) hem tectonic kurulu
+    olabilir. Seçim sessizce tectonic'e düşerse slaytlar farklı bir motorla
+    (farklı font/ligatür) üretilir ve bu ancak gözle fark edilirdi. Sözleşme:
+      - öncelik pdflatex > latex > tectonic (Method 1 sırası korunur)
+      - pdflatex VARSA tectonic'e düşülmez
+      - seçilen motor log'da görünür ('Araçlar: LaTeX=<motor>')
+      - motor yoksa fail-closed (rc=2)
+    """
+
+    SCRIPT = HERE / "render_z3_slides.py"
+
+    def _engine_for(self, available):
+        with mock.patch.object(rz, "shutil", _FakeShutil(available)):
+            return rz.find_tex_engine()
+
+    # ── öncelik (deterministik; makine kurulumundan bağımsız) ─────────────
+    def test_priority_pdflatex_first(self):
+        self.assertEqual(self._engine_for({"pdflatex", "latex", "tectonic"}),
+                         "pdflatex")
+
+    def test_no_tectonic_fallback_when_pdflatex_present(self):
+        self.assertEqual(self._engine_for({"pdflatex", "tectonic"}), "pdflatex",
+                         "pdflatex varken tectonic'e düşülmemeli")
+
+    def test_latex_between_pdflatex_and_tectonic(self):
+        self.assertEqual(self._engine_for({"latex", "tectonic"}), "latex")
+
+    def test_tectonic_is_last_resort(self):
+        self.assertEqual(self._engine_for({"tectonic"}), "tectonic")
+
+    def test_none_when_no_engine(self):
+        self.assertIsNone(self._engine_for(set()))
+
+    # ── log görünürlüğü + fail-closed (gerçek main() koşumu) ──────────────
+    def _fake_bin(self, root, tools):
+        """Sahte bin/: yalnız verilen araçlar 'kurulu' (çalıştırılmazlar
+        — --only eşleşmeyen ID ile döngü hiç dönmez)."""
+        b = root / "bin"
+        b.mkdir()
+        for tool in tools:
+            p = b / tool
+            p.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            p.chmod(0o755)
+        return b
+
+    def _run_main(self, bin_dir, out_dir):
+        env = dict(os.environ, PATH=str(bin_dir))
+        return subprocess.run(
+            [sys.executable, str(self.SCRIPT), "--out", str(out_dir),
+             "--only", "__hicbir_id__"],
+            capture_output=True, text=True, env=env, timeout=120)
+
+    def test_log_shows_pdflatex_and_never_tectonic(self):
+        """pdflatex kuruluyken log pdflatex der; tectonic seçilmez."""
+        with tempfile.TemporaryDirectory(prefix="z3-engine-") as td:
+            root = pathlib.Path(td)
+            r = self._run_main(self._fake_bin(root, ("pdflatex", "pdftoppm")),
+                               root / "out")
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertIn("LaTeX=pdflatex", r.stdout)
+            self.assertNotIn("LaTeX=tectonic", r.stdout)
+
+    def test_log_shows_tectonic_when_pdflatex_absent(self):
+        """pdflatex yokken yedek zincir çalışır ve seçim log'da görünür."""
+        with tempfile.TemporaryDirectory(prefix="z3-engine-") as td:
+            root = pathlib.Path(td)
+            r = self._run_main(self._fake_bin(root, ("tectonic", "pdftoppm")),
+                               root / "out")
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertIn("LaTeX=tectonic", r.stdout)
+
+    def test_missing_engine_is_fail_closed(self):
+        """Hiç motor yoksa rc=2 + açık hata (sessiz geçiş yok)."""
+        with tempfile.TemporaryDirectory(prefix="z3-engine-") as td:
+            root = pathlib.Path(td)
+            r = self._run_main(self._fake_bin(root, ("pdftoppm",)), root / "out")
+            self.assertEqual(r.returncode, 2)
+            self.assertIn("TeX motoru bulunamadı", r.stderr)
+
+    def test_missing_converter_is_fail_closed(self):
+        """Motor var, PDF→PNG aracı yok → rc=2."""
+        with tempfile.TemporaryDirectory(prefix="z3-engine-") as td:
+            root = pathlib.Path(td)
+            r = self._run_main(self._fake_bin(root, ("pdflatex",)), root / "out")
+            self.assertEqual(r.returncode, 2)
+            self.assertIn("PDF→PNG aracı bulunamadı", r.stderr)
+
+
+class TestEngineSelectionMutationGuard(unittest.TestCase):
+    """Koruyucu sözleşmenin KENDİSİNİ sınar (plan Faz 2 kanıtı kalıcı).
+
+    Planın kanıtı "4 mutasyonun 4'ü yakalandı" idi ama kanıt dışarıda
+    (elle) üretiliyordu. Bu sınıf onu YENİDEN ÜRETİLEBİLİR yapar:
+    `render_z3_slides.py`'nin geçici bir kopyasına her mutasyon uygulanır ve
+    `TestEngineSelection`'ın KIRMIZI düştüğü görülür. Bir mutasyon KAÇARSA
+    koruyucu test zayıftır (sessiz motor kayması geri gelebilir) → fail.
+    """
+
+    SRC = HERE / "render_z3_slides.py"
+    TEST = HERE / "test_render_z3_slides.py"
+    # (ad, çapa, mutasyon) — çapalar kısa ve kararlı seçildi.
+    MUTATIONS = (
+        ("motor sırası ters (tectonic başa)",
+         '("pdflatex", "latex", "tectonic")',
+         '("tectonic", "latex", "pdflatex")'),
+        ("laTeX zincirden çıkarıldı",
+         '("pdflatex", "latex", "tectonic")',
+         '("pdflatex", "tectonic")'),
+        ("motor yokluğu fail-open",
+         "if not engine:", "if False:"),
+        ("PDF→PNG yokluğu fail-open",
+         "if not converter:", "if False:"),
+    )
+
+    def _run_guard(self, td, source):
+        (td / "render_z3_slides.py").write_text(source, encoding="utf-8")
+        shutil.copy2(self.TEST, td / "test_render_z3_slides.py")
+        return subprocess.run(
+            [sys.executable, "-m", "unittest",
+             "test_render_z3_slides.TestEngineSelection"],
+            cwd=str(td), capture_output=True, text=True, timeout=300)
+
+    def test_baseline_is_green(self):
+        src = self.SRC.read_text(encoding="utf-8")
+        with tempfile.TemporaryDirectory(prefix="z3-mut-") as td:
+            r = self._run_guard(pathlib.Path(td), src)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_every_mutation_is_caught(self):
+        src = self.SRC.read_text(encoding="utf-8")
+        with tempfile.TemporaryDirectory(prefix="z3-mut-") as td:
+            tdp = pathlib.Path(td)
+            for name, old, new in self.MUTATIONS:
+                with self.subTest(mutation=name):
+                    self.assertIn(old, src,
+                                  f"mutasyon çapası kaynakta yok: {name}")
+                    r = self._run_guard(tdp, src.replace(old, new))
+                    self.assertNotEqual(
+                        r.returncode, 0,
+                        f"mutasyon YAKALANMADI ({name}) — koruyucu test zayıf")
 
 
 if __name__ == "__main__":

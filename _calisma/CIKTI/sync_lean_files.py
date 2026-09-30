@@ -14,7 +14,8 @@ def source_files(root: Path):
     for path in base.rglob("*"):
         if not path.is_file() or ".lake" in path.parts or path.name == "lake-manifest.json":
             continue
-        if path.suffix == ".lean" or path.name in {"lean-toolchain", "lakefile.toml"}:
+        if (path.suffix == ".lean"
+                or path.name in {"lean-toolchain", "lakefile.toml", "Content.lean.tex"}):
             out.append(path.relative_to(base).as_posix())
     return sorted(out)
 

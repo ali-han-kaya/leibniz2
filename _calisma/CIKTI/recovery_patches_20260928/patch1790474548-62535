@@ -1,0 +1,696 @@
+diff --git a/_calisma/CIKTI/audit_live_ci_sync.py b/_calisma/CIKTI/audit_live_ci_sync.py
+index 3945083..61ab70b 100644
+--- a/_calisma/CIKTI/audit_live_ci_sync.py
++++ b/_calisma/CIKTI/audit_live_ci_sync.py
+@@ -227,6 +227,18 @@ def get_run_artifacts(repo, run_id):
+     return [n for n in (line.strip() for line in out.splitlines()) if n]
+ 
+ 
++def get_run_head_branch(repo, run_id):
++    """Run'ın head branch'ini döndürür (failure_pattern window'u
++    branch'e scope'lamak için — aksi halde feat push fail'leri main
++    audit'inin deterministic penceresini kirletir)."""
++    try:
++        return run_gh(["gh", "api",
++                       f"repos/{repo}/actions/runs/{run_id}",
++                       "-q", ".head_branch"])
++    except RuntimeError:
++        return None
++
++
+ def get_run_job_conclusions(repo, run_id):
+     """Run'daki job ad → conclusion eşlemesi (skipped vs failure ayrımı için).
+ 
+@@ -507,7 +519,8 @@ def main(argv=None):
+     failure_result = None
+     if args.with_failure_pattern:
+         try:
+-            runs = ci_failure_pattern.list_runs(repo, None, ci_failure_pattern.DEFAULT_LIMIT)
++            branch = get_run_head_branch(repo, run_id)
++            runs = ci_failure_pattern.list_runs(repo, branch, ci_failure_pattern.DEFAULT_LIMIT)
+             timeline, jobs = ci_failure_pattern.analyze(runs)
+             failure_result = ci_failure_pattern.summarize(timeline, jobs)
+             failure_result["flaky_count"] = len(failure_result["categories"]["flaky"])
+diff --git a/_calisma/CIKTI/status_checks.py b/_calisma/CIKTI/status_checks.py
+index 2d5918e..b84d1dc 100644
+--- a/_calisma/CIKTI/status_checks.py
++++ b/_calisma/CIKTI/status_checks.py
+@@ -50,41 +50,19 @@ except ImportError:  # pragma: no cover — stdlib-only runnerlarda yaml yok
+ # CIKTI'dan da repo kökünden de koşabilsin).
+ _REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
+ WORKFLOW = str(_REPO_ROOT / ".github" / "workflows" / "verify.yml")
+-# Required check OLMAYAN job'lar: PR-only/advisory (banner kapı olmasın).
+-GATE_EXCLUDE = {
+-    "manifest-comment",    # PR-only: yorum düşürme
+-    "precheck",             # AŞAMA 0 advisory
+-    "label-gate-p1",        # PR-only: P1 etiket opsiyonel blokaj (required DEĞİL)
+-    "plist-check",          # macOS-advisory: push'ta çalışmaz
+-    "mirror-check",         # macOS: sync sonrası K17 fail-closed (advisory)
+-    "daemon-http",          # advisory: daemon-modu HTTP 200 smoke (advisory)
+-    "fresh-clone-http",      # advisory: temiz clone + preview HTTP smoke
+-    "audit-live-ci",        # advisory: doc↔GitHub senkron denetimi
+-    "audit-refs-trend",     # advisory: refs-trend satırları ↔ kaynak denetimi
+-    "override-trend",       # advisory: CLI override zaman serisi
+-    "changelog-drift",      # advisory: gen_changelog --check drift bulguları
+-    "docx-export",          # advisory: docx üretimi + LibreOffice açılabilirlik
+-                            #   kontrolü (required set 14'te sabit kalır;
+-                            #   required'a almak branch-protection UI değişikliği
+-                            #   gerektirirdi — bilinçli advisory)
+-    "pattern-drift",         # advisory: merge pattern ↔ ARTIFACT_JOBS drift
+-    "budget-comment",        # PR-only: bütçe + pre-commit PR yorumu (bütçe kapısı ayrı job)
+-    "lake-proof",            # ayrı-step K9 lake build (lean-toolchain v4.14.0);
+-                             #   GitHub required kontrollerinde DEĞİL (advisory) —
+-                             #   K9, verify job'unun --full içinde de koşar.
+-    "dashboard-next",        # required set 14'te sabit kalır — required'a almak
+-                             #   branch-protection UI değişikliği gerektirirdi
+-                             #   (docx-export ile aynı gerekçe). Job YİNE
+-                             #   fail-closed: tip/derleme hatası workflow'u kırar.
+-                             #   Kaldırmak = branch protection'a eklemek; o zaman
+-                             #   test_status_checks'in 14-sabitleri de güncellenir.
+-    "video-render",          # LeibnizChain mp4 render'ı + kare/süre ölçümü
+-                             #   (advisory: ~85 MB Chromium indirir, push başına
+-                             #   maliyetli). Job YİNE fail-closed: sapma
+-                             #   (kare≠760, süre/çözünürlük kayması) workflow'u
+-                             #   kırar. docx-export/dashboard-next ile aynı
+-                             #   gerekçe: required set 14'te sabit.
+-}
++
++# ── Tek kaynak: GATE_EXCLUDE (required check OLMAYAN job id'leri) ───────
++# Required-vs-advisory kararı ve her üyenin gerekçesi workflow_contract.py'de
++# yaşar (diğer sözleşme kümeleriyle aynı tek-kaynak kuralı). Burada kopya
++# taşımak yerine oradan alınıyor; test_workflow_contract nesne-özdeşliğini
++# commit anında yakalar (kopya → FAIL).
++_CIKTI_DIR = str(pathlib.Path(__file__).resolve().parent)
++if _CIKTI_DIR not in sys.path:
++    sys.path.insert(0, _CIKTI_DIR)
++try:
++    from workflow_contract import GATE_EXCLUDE  # noqa: E402
++except ImportError:  # pragma: no cover — CIKTI sys.path'te değilse paket içi
++    from .workflow_contract import GATE_EXCLUDE  # noqa: E402
+ # Not: "label-gate" (Pre-commit P0 label gate) BİLEREK required check'tir —
+ # precommit-p0 etiketi varken FAIL verip merge'i bloke eder; bu yüzden
+ # GATE_EXCLUDE'da DEĞİL. 12'li required liste (2026-08-23): 9 eski gate +
+diff --git a/_calisma/CIKTI/test_atomic_write_guard.py b/_calisma/CIKTI/test_atomic_write_guard.py
+index e620e55..eb35dd0 100644
+--- a/_calisma/CIKTI/test_atomic_write_guard.py
++++ b/_calisma/CIKTI/test_atomic_write_guard.py
+@@ -7,8 +7,22 @@ if written with plain `open(path, "w")` + write.  The safe path is the
+ same-directory `mkstemp` + `os.replace` helper (`_write_atomic`).
+ 
+ This guard fails when any production module that writes a preview-served
+-file uses `open(..., "w")` directly instead of delegating to its
+-`_write_atomic` helper.  It is intentionally narrow:
++file uses a truncating write directly instead of delegating to its
++`_write_atomic` helper.  "Truncating" covers every in-place teardown of the
++destination, not just the builtin `open(..., "w")`:
++
++* `open(dest, "w")` / `open(dest, mode="w")`
++* `Path(dest).open("w")` and other `.open(<write mode>)` calls
++* `dest.write_text(...)` / `dest.write_bytes(...)`
++* `os.open(dest, ... O_TRUNC ...)`
++
++Out of scope by design: shell writers.  Shell redirects (`> dest`) cannot be
++reached by this AST pass, and the scripts that redirect preview filenames
++(`simulate_verify_job.sh`) do so inside a per-run simulation workspace
++(`SIM_DIR`), never the served preview directory — scanning them would only
++produce false positives.
++
++It is intentionally narrow:
+ 
+ * Only production files (not test_*) are scanned.
+ * Only writes whose enclosing scope mentions a preview-served indicator are
+@@ -18,6 +32,8 @@ file uses `open(..., "w")` directly instead of delegating to its
+   itself uses `os.fdopen(fd, "w")`).
+ """
+ 
++from __future__ import annotations
++
+ import ast
+ import pathlib
+ import unittest
+@@ -91,6 +107,24 @@ def _is_write_mode(call: ast.Call) -> bool:
+     return False
+ 
+ 
++def _mode_is_write(call: ast.Call, index: int) -> bool:
++    """Return True if argument ``index`` (or ``mode=``) carries a write mode.
++
++    ``index`` differs by call style: the builtin is ``open(path, mode)``
++    (mode at 1) while the method form is ``Path.open(mode)`` (mode at 0).
++    """
++    if len(call.args) > index:
++        arg = call.args[index]
++        if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
++            if "w" in arg.value:
++                return True
++    for kw in call.keywords:
++        if kw.arg == "mode" and isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, str):
++            if "w" in kw.value.value:
++                return True
++    return False
++
++
+ def _is_open_call(node: ast.AST) -> bool:
+     return (
+         isinstance(node, ast.Call)
+@@ -99,6 +133,49 @@ def _is_open_call(node: ast.AST) -> bool:
+     )
+ 
+ 
++def _dotted(node: ast.AST) -> str:
++    """Render a name/attribute chain: ``open``, ``os.open``, ``x.y.write_text``."""
++    if isinstance(node, ast.Name):
++        return node.id
++    if isinstance(node, ast.Attribute):
++        base = _dotted(node.value)
++        return f"{base}.{node.attr}" if base else node.attr
++    return ""
++
++
++def _truncating_write(node: ast.Call) -> str | None:
++    """Classify a call that truncates its destination in place.
++
++    Returns a short mechanism label, or ``None`` when the call does not
++    truncate.  ``_write_atomic`` (same-dir mkstemp + os.replace) is the only
++    sanctioned path for preview-served files, so every label returned here is
++    a violation whenever the destination is preview-served.
++
++    Detection used to be limited to the builtin ``open(path, "w")`` call,
++    which left an easy bypass: ``Path(dest).write_text(...)`` truncates and
++    tears exactly the same way but scanned clean.  The alternative
++    truncating APIs are therefore classified too.
++    """
++    if _is_open_call(node) and _is_write_mode(node):
++        return "open(..., 'w')"
++    name = _dotted(node.func)
++    if name == "os.open":
++        # Only flag the truncating variant; O_APPEND / O_RDONLY are not
++        # in-place truncates of the destination.
++        try:
++            rendered = ast.unparse(node)
++        except Exception:  # pragma: no cover - defensive
++            rendered = ""
++        return "os.open(..., O_TRUNC)" if "O_TRUNC" in rendered else None
++    leaf = name.rsplit(".", 1)[-1]
++    # Method form: `Path.open("w")` puts the mode in the first position.
++    if leaf == "open" and (_mode_is_write(node, 0) or _mode_is_write(node, 1)):
++        return f"{name}(..., 'w')"
++    if leaf in ("write_text", "write_bytes"):
++        return f".{leaf}()"
++    return None
++
++
+ class _Visitor(ast.NodeVisitor):
+     def __init__(self, source: str):
+         self.source = source
+@@ -116,7 +193,8 @@ class _Visitor(ast.NodeVisitor):
+         self.stack.pop()
+ 
+     def visit_Call(self, node):
+-        if _is_open_call(node) and _is_write_mode(node):
++        mechanism = _truncating_write(node)
++        if mechanism is not None:
+             # Allow the helper itself.
+             if self.stack and self.stack[-1].name == "_write_atomic":
+                 pass
+@@ -136,12 +214,12 @@ class _Visitor(ast.NodeVisitor):
+                 # generic path via the function name.
+                 if not is_preview and self.stack and self.stack[-1].name in PREVIEW_WRITER_FUNCS:
+                     is_preview = True
+-                    seg = seg or "open(path, 'w')"
++                    seg = seg or mechanism
+                 if is_preview:
+                     try:
+-                        disp = ast.get_source_segment(self.source, node) or "open(...)"
++                        disp = ast.get_source_segment(self.source, node) or mechanism
+                     except Exception:
+-                        disp = "open(...)"
++                        disp = mechanism
+                     self.violations.append((getattr(node, "lineno", 0), disp.strip()))
+         self.generic_visit(node)
+ 
+@@ -255,6 +333,58 @@ def tamper(m, out):
+         v.visit(tree)
+         self.assertEqual(v.violations, [])
+ 
++    def test_guard_catches_write_text_on_preview_path(self):
++        """`Path.write_text` truncates in place exactly like open(..., 'w')
++        and used to scan clean — the bypass this guard must not allow."""
++        src = '''import pathlib
++
++def persist_history(rec):
++    HISTORY_PATH = "history.jsonl"
++    pathlib.Path(HISTORY_PATH).write_text("hi", encoding="utf-8")
++'''
++        tree = ast.parse(src)
++        v = _Visitor(src)
++        v.visit(tree)
++        self.assertEqual(len(v.violations), 1, v.violations)
++        self.assertIn("write_text", v.violations[0][1])
++
++    def test_guard_catches_path_open_and_os_open_trunc(self):
++        """`Path.open('w')` ve `os.open(..., O_TRUNC)` de yerinde truncate eder."""
++        src = '''import os, pathlib
++
++def persist_history(rec):
++    HISTORY_PATH = "history.jsonl"
++    with pathlib.Path(HISTORY_PATH).open("w", encoding="utf-8") as f:
++        f.write("hi")
++
++def persist_override(rec):
++    OVERRIDE_TREND_PATH = "override-trend.json"
++    fd = os.open(OVERRIDE_TREND_PATH, os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
++    os.close(fd)
++'''
++        tree = ast.parse(src)
++        v = _Visitor(src)
++        v.visit(tree)
++        self.assertEqual(len(v.violations), 2, v.violations)
++        rendered = " ".join(seg for _, seg in v.violations)
++        self.assertIn("O_TRUNC", rendered)
++
++    def test_guard_ignores_append_only_and_non_preview_truncators(self):
++        """O_APPEND truncate ETMEZ; preview dışı write_text de flaglenmemeli."""
++        src = '''import os
++
++def write_done_sidecar(done_path, payload):
++    fd = os.open(done_path, os.O_WRONLY | os.O_CREAT | os.O_APPEND)
++    os.close(fd)
++
++def write_manifest(report):
++    report.write_text("manifest", encoding="utf-8")
++'''
++        tree = ast.parse(src)
++        v = _Visitor(src)
++        v.visit(tree)
++        self.assertEqual(v.violations, [])
++
+ 
+ if __name__ == "__main__":
+     unittest.main()
+diff --git a/_calisma/CIKTI/test_audit_live_ci_sync.py b/_calisma/CIKTI/test_audit_live_ci_sync.py
+index 8901135..5b827fa 100644
+--- a/_calisma/CIKTI/test_audit_live_ci_sync.py
++++ b/_calisma/CIKTI/test_audit_live_ci_sync.py
+@@ -512,5 +512,54 @@ class TestMainFailClosed(unittest.TestCase):
+         self.assertEqual(rc, 2)
+ 
+ 
++class TestBranchScopedFailurePattern(unittest.TestCase):
++    """failure_pattern window'u denetlenen run'ın branch'ine scope'lanmalı.
++
++    Branch'siz (branch=None) pencere feat push fail'lerini main audit'ine
++    taşır ve main deterministik FAIL üretir (main UNSTABLE yanlışı).
++    Branch-scoped pencere (branch=main) yalnızca main run'larını sayar.
++    """
++
++    def test_main_verdict_pass_when_only_feat_has_failures(self):
++        # main run 34533974871 (doc PASS) ama global pencere feat fail'leri
++        # içeriyorsa combined FAIL olurdu; branch=main ile PASS kalmalı.
++        doc_text = als.REPO_ROOT.joinpath("docs/PUBLISH_SCENARIO.md").read_text(encoding="utf-8")
++        doc_artifacts = als.parse_doc_artifacts(doc_text)
++        doc_jobs = [n for (_c, n) in als.parse_doc_jobs(doc_text)]
++        live_jobs = list(dict.fromkeys(doc_jobs + [als.SELF_JOB]))
++        live = list(dict.fromkeys(doc_artifacts + [als.SELF_ARTIFACT]))
++        with tempfile.TemporaryDirectory() as td:
++            doc = pathlib.Path(td) / "PUBLISH_SCENARIO.md"
++            doc.write_text(doc_text, encoding="utf-8")
++            buf = io.StringIO()
++            # list_runs(branch=main) yalnızca main run'ları döner, bu yüzden
++            # kızım pencere deterministik içermez (feat fail'leri hariç).
++            fake_runs_main = [
++                {"databaseId": 34533974871, "status": "completed", "conclusion": "failure"},
++                {"databaseId": 34533974893, "status": "completed", "conclusion": "success"},
++            ]
++            def fake_list_runs(repo, branch, limit):
++                self.assertEqual(branch, "main", "failure_pattern window must be branch-scoped")
++                return fake_runs_main
++            def fake_list_jobs(repo, rid):
++                if rid == 34533974871:
++                    return [{"name": als.SELF_JOB, "conclusion": "failure"}]
++                return [{"name": als.SELF_JOB, "conclusion": "success"}]
++            with mock.patch.object(als, "get_repo", return_value="o/r"), \
++                    mock.patch.object(als, "get_run_head_branch", return_value="main"), \
++                    mock.patch.object(als, "get_latest_run", return_value={"databaseId": 34533974871, "headSha": "e6572d1"}), \
++                    mock.patch.object(als, "get_run_jobs", return_value=live_jobs), \
++                    mock.patch.object(als, "get_run_artifacts", return_value=live), \
++                    mock.patch("ci_failure_pattern.list_runs", side_effect=fake_list_runs), \
++                    mock.patch("ci_failure_pattern.list_jobs", side_effect=fake_list_jobs), \
++                    mock.patch.object(als, "get_run_job_conclusions", return_value={}), \
++                    mock.patch.object(sys, "stdout", new=buf):
++                rc = als.main(["--doc", str(doc), "--json", "--with-failure-pattern"])
++            d = json.loads(buf.getvalue())
++        self.assertEqual(rc, 0, d)
++        self.assertEqual(d["verdict"], "PASS")
++        self.assertEqual(d["failure_pattern"]["categories"]["deterministic"], [])
++
++
+ if __name__ == "__main__":
+     unittest.main()
+diff --git a/_calisma/CIKTI/test_sidecar_guarantee.py b/_calisma/CIKTI/test_sidecar_guarantee.py
+index b43f180..0c3b4f8 100644
+--- a/_calisma/CIKTI/test_sidecar_guarantee.py
++++ b/_calisma/CIKTI/test_sidecar_guarantee.py
+@@ -4,6 +4,7 @@ import json
+ import os
+ import tempfile
+ import unittest
++from unittest import mock
+ 
+ import sys
+ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+@@ -33,6 +34,54 @@ class AtomicVerifySidecarTests(unittest.TestCase):
+                 self.assertEqual(stream.read(), "new")
+             self.assertEqual(os.listdir(td), ["klayers.json"])
+ 
++    def test_atomic_writer_failure_preserves_klayers_json(self):
++        """klayers.json hedefi de JSONL history satırlarıyla aynı yazım
++        yolundan geçer: başarısız yazım hedefi truncate ETMEZ ve dizinde
++        tmp artığı bırakmaz.
++        """
++        with tempfile.TemporaryDirectory() as td:
++            path = os.path.join(td, "klayers.json")
++            payload = '{"verdict": "PASS", "layers": {"K1": {"status": "PASS"}}}'
++            with open(path, "w", encoding="utf-8") as stream:
++                stream.write(payload)
++            with self.assertRaises(TypeError):
++                vd._write_atomic(path, object())
++            with open(path, encoding="utf-8") as stream:
++                self.assertEqual(stream.read(), payload)
++            self.assertEqual(os.listdir(td), ["klayers.json"])
++
++    def test_klayers_written_through_same_tmp_replace_path_as_history(self):
++        """Açık kontrat satırı: klayers.json ve history.jsonl AYNI yardımcıdan
++        (`_write_atomic`) geçer; yardımcı aynı dizinde `mkstemp` + `os.replace`
++        uygular. klayers replace, history append semantiği taşır — ikisi de
++        hedefi yerinde truncate etmez.
++        """
++        writer = inspect.getsource(vd._write_atomic)
++        self.assertIn("tempfile.mkstemp(", writer)
++        self.assertIn("os.replace(tmp, path)", writer)
++        main_source = inspect.getsource(vd.main)
++        self.assertIn("_write_atomic(args.klayers_out, klayers_payload)",
++                      main_source)
++        self.assertIn("_write_atomic(args.history_out, history_payload, append=True)",
++                      main_source)
++        # Aynı-dizin şartı davranışsal olarak pinlenir: tmp hedefle AYNI dizinde
++        # açılmazsa os.replace atomik olmaz (farklı dosya sistemine düşebilir).
++        # Kaynak metnine bağlı kalmadan, çağrının kendisi doğrulanır.
++        with tempfile.TemporaryDirectory() as td:
++            dest = os.path.join(td, "klayers.json")
++            real_mkstemp = tempfile.mkstemp
++            seen = {}
++
++            def spy(*args, **kwargs):
++                seen.update(kwargs)
++                return real_mkstemp(*args, **kwargs)
++
++            with mock.patch("tempfile.mkstemp", spy):
++                vd._write_atomic(dest, "{}")
++            self.assertEqual(seen.get("dir"),
++                             os.path.dirname(os.path.abspath(dest)))
++            self.assertTrue(seen.get("prefix", "").startswith("klayers.json"))
++
+     def test_atomic_writer_append_preserves_history_jsonl(self):
+         with tempfile.TemporaryDirectory() as td:
+             path = os.path.join(td, "history.jsonl")
+diff --git a/_calisma/CIKTI/workflow_contract.py b/_calisma/CIKTI/workflow_contract.py
+index 6172bda..2c05e1d 100644
+--- a/_calisma/CIKTI/workflow_contract.py
++++ b/_calisma/CIKTI/workflow_contract.py
+@@ -12,9 +12,9 @@ Kural: bir küme burada bir kez tanımlanır, üretici modüller ve testler
+ BURADAN içe aktarır. Drift'i yakalamak için test_workflow_contract.py
+ hem bu kümeleri hem üreticilerin attr'larını çapraz doğrular.
+ 
+-stdlib-only; yan etkisiz. Ağır tek kaynaklara (ARTIFACT_JOBS,
+-GATE_EXCLUDE) PEP 562 __getattr__ ile lazy erişim sağlar — bu modülü
+-import etmek PyYAML veya başka bir bağımlılık gerektirmez.
++stdlib-only; yan etkisiz. Ağır tek kaynağa (ARTIFACT_JOBS) PEP 562
++__getattr__ ile lazy erişim sağlar — bu modülü import etmek PyYAML veya
++başka bir bağımlılık gerektirmez.
+ """
+ import importlib
+ 
+@@ -86,12 +86,79 @@ UPLOAD_EXCEPTIONS = frozenset({
+ })
+ 
+ # ─────────────────────────────────────────────────────────────────────────────
+-# Ağır tek kaynaklar: lazy re-export (modül import'u yan etkisiz kalır).
++# REQUIRED vs ADVISORY: required check OLMAYAN job id'leri (banner kapı
++# olmasın). status_checks.gate_jobs() bu kümeyi dışlar; required liste bu
++# yüzden workflow job'larından TÜRETİLİR. Her üyenin gerekçesi — "PR-only"
++# mi "advisory" mi olduğu ve hangi kanıta dayandığı — burada, kümenin
++# yanında yaşar: aynı karar iki dosyaya dağılıp ayrışmasın diye
++# status_checks.py kopya taşımaz, BURADAN içe aktarır (test_workflow_contract
++# nesne-özdeşliğini yakalar). YÖN 2026-09-27'de ters çevrildi: küme
++# önce status_checks.py'de yaşıyordu, workflow_contract yalnızca PEP 562
++# lazy re-export ile onu geri veriyordu — yani "tek kaynak" yorumu tek
++# kaynağın kendisini barındırmıyordu. Artık tanım burada, tüketici oradan
++# içe aktarıyor. Karar bir POLICY değişikliğidir, test düzeltmesi değil
++# (bkz. skills/verify-chain).
++# ─────────────────────────────────────────────────────────────────────────────
++GATE_EXCLUDE = frozenset({
++    "manifest-comment",      # PR-only: yorum düşürme
++    "precheck",              # AŞAMA 0 advisory
++    "label-gate-p1",         # PR-only: P1 etiket opsiyonel blokaj (required DEĞİL)
++    "plist-check",           # macOS-advisory: push'ta çalışmaz
++    "mirror-check",          # macOS: sync sonrası K17 fail-closed (advisory)
++    "daemon-http",           # advisory: daemon-modu HTTP 200 smoke (advisory)
++    "fresh-clone-http",      # advisory: temiz clone + preview HTTP smoke
++    "audit-live-ci",         # advisory: doc↔GitHub senkron denetimi
++    "audit-refs-trend",      # advisory: refs-trend satırları ↔ kaynak denetimi
++    "override-trend",        # advisory: CLI override zaman serisi
++    "changelog-drift",       # advisory: gen_changelog --check drift bulguları
++    "docx-export",           # advisory: docx üretimi + LibreOffice açılabilirlik
++                             #   kontrolü (required set 14'te sabit kalır;
++                             #   required'a almak branch-protection UI değişikliği
++                             #   gerektirirdi — bilinçli advisory)
++    "pattern-drift",         # advisory: merge pattern ↔ ARTIFACT_JOBS drift
++    "budget-comment",        # PR-only: bütçe + pre-commit PR yorumu (bütçe kapısı ayrı job)
++    "lake-proof",            # ayrı-step K9 lake build (lean-toolchain v4.14.0);
++                             #   GitHub required kontrollerinde DEĞİL (advisory) —
++                             #   K9, verify job'unun --full içinde de koşar.
++    "dashboard-next",        # required set 14'te sabit kalır — required'a almak
++                             #   branch-protection UI değişikliği gerektirirdi
++                             #   (docx-export ile aynı gerekçe). Job YİNE
++                             #   fail-closed: tip/derleme hatası workflow'u kırar.
++                             #   Kaldırmak = branch protection'a eklemek; o zaman
++                             #   test_status_checks'in 14-sabitleri de güncellenir.
++    "video-render",          # LeibnizChain mp4 render'ı + kare/süre ölçümü
++                             #   (advisory: ~85 MB Chromium indirir, push başına
++                             #   maliyetli). Job YİNE fail-closed: sapma
++                             #   (kare≠760, süre/çözünürlük kayması) workflow'u
++                             #   kırar. docx-export/dashboard-next ile aynı
++                             #   gerekçe: required set 14'te sabit.
++})
++# Not: "label-gate" (Pre-commit P0 label gate) BİLEREK required check'tir —
++# precommit-p0 etiketi varken FAIL verip merge'i bloke eder; bu yüzden
++# GATE_EXCLUDE'da DEĞİL. 12'li required liste (2026-08-23): 9 eski gate +
++# commit-msg-gate (commit-msg ihlal blokajı — PR-only ama required),
++# config-sync (config snapshot ↔ CONFIG_BASENAMES üçlü senkron),
++# ci-simulate (yerel CI simülasyonu — full K1-K14 replay).
++# 27 job − 14 hariç = 13 required (fresh-clone-http dahil advisory).
++#
++# 2026-09-04 denetimi (job-id → karar, kanıt verify.yml + GitHub required set):
++#   reports          REQUIRED kalır — tüketilen precommit-logs artifact'ı
++#                    job içinde indirilir (coe=True), bundle repo-kaynaklı;
++#                    kriter: fail-open değil, tüketim bağlı.
++#   reproducibility  REQUIRED kalır — K10 bütünlük adımı (--verify-manifest)
++#                    set -e altında job'u düşürür (fail-closed uç); manifest
++#                    bundle'ı merge-blok kapıdır.
++#   refs-trend       REQUIRED kalır — koddan türeyen trend tablosu in-jobs
++#                    üretilir (artifact bağımlılığı yok), K6 trend zinciri.
++#   lake-proof       ADVISORY kalır (exclude'da) — ayrı-step K9 lake build;
++#                    K9, verify --full içinde bağımsız koşar (e30f8ea).
++
++# ─────────────────────────────────────────────────────────────────────────────
++# Ağır tek kaynak: lazy re-export (modül import'u yan etkisiz kalır).
+ #   ARTIFACT_JOBS  ← gen_repro_manifest (artifact → üreten job)
+-#   GATE_EXCLUDE   ← status_checks      (required-olmayan job id'leri)
+ # ─────────────────────────────────────────────────────────────────────────────
+ 
+-_LAZY = {"ARTIFACT_JOBS": "gen_repro_manifest", "GATE_EXCLUDE": "status_checks"}
++_LAZY = {"ARTIFACT_JOBS": "gen_repro_manifest"}
+ 
+ 
+ def __getattr__(name):  # PEP 562
+diff --git a/docs/HISTORY_CLEANUP.md b/docs/HISTORY_CLEANUP.md
+index 566cb5c..a3dc725 100644
+--- a/docs/HISTORY_CLEANUP.md
++++ b/docs/HISTORY_CLEANUP.md
+@@ -259,3 +259,126 @@ Admin bypass: `gh pr merge --admin` ile koruma atlanabilir, ancak
+ | test_combined_scenario_shares_comment_list FAIL | ⚠️ flaky (CI-only) | Yerelde yeşilse güven, yeniden push |
+ | pre-commit exit 127 | ⚠️ advisory (atlanır) | Görmezden gel, bir sonraki run'da düzelir |
+ | `gh push origin main` red | ℹ️ beklenen | PR aç, CI bekle, merge et |
++
++---
++
++## 8. Ref envanteri (stale inventory) — 2026-09-12
++
++History rewrite'ları (reword + force-push) ve taşınan worktree'lerden kalan
++ulaşılamaz nesnelerin sayımı. Amaç: `git gc` öncesi/sonrası durumu tek yerde
++kayıtlı tutmak — sonraki temizlik turu bu sayılarla karşılaştırılır.
++
++**Yöntem (yeniden üretilebilir):**
++
++```bash
++git fsck --no-reflogs --dangling        # dangling commit/blob/tree sayımı
++git worktree list; git branch -a; git stash list
++git count-objects -vH; du -sh .git
++git reflog expire --expire-unreachable=now --all   # yalnız ULAŞILAMAZ girdiler
++git gc --prune=now
++```
++
++`--expire-unreachable` bilinçli: erişilebilir commit'lerin reflog geçmişi
++(undo ağı) korunur, yalnız ulaşılamaz girdiler düşer.
++
++| Ölçüm | Önce | Sonra |
++|---|---|---|
++| dangling commit | 159 | **0** |
++| dangling blob | 35 | **0** |
++| dangling tree | (tam sayım saklanmadı) | **0** |
++| loose object (boyut) | 6826 (116.30 MiB) | 0 (0 B) |
++| pack (boyut) | 2 pack (6.97 MiB) | 1 pack (6.88 MiB) |
++| `.git` dizin boyutu | 128 MiB | **11 MiB** |
++| reflog girdisi | 178 | 118 |
++
++### 8.1 Kaynaklanan içerik kaybı doğrulaması
++
++`gc` öncesi ulaşılamaz nesnelerdeki **120 benzersiz blob** (6.51 MiB) tek tek
++çıkarıldı. Bunların dağıldığı 64 yolun:
++
++- **40'ı HEAD'de hâlâ var olan dosyaların eski revizyonları** (rewrite artığı):
++  README 18, PUBLISH_SCENARIO 12, verify.yml 8, check_unit_tests.list 7,
++  eski teslim zip'leri + sha256 sidecar'ları, eski PDF/qpdf kayıtları.
++- **23'ü artık gitignore'da** (`.gitignore` satır 5: `docs/ci_simulate/`) olan
++  CI-simülasyon çıktıları — koşularak yeniden üretilir.
++- **1'i** `_calisma/CIKTI/test-hook-dummy.txt` (6 bayt, hook denemesi artığı).
++
++**Hedefli doğrulama — kurtarılan iki zincir:**
++`.github/workflows/docker-security.yml`, `Dockerfile` ve `design-system/**`
++yollarında **benzersiz blob sayısı 0**. İki bağımsız yöntemle doğrulandı:
++(1) bu yollardaki her blob refs'ten erişilebilir (blob-hash kümesi testi),
++(2) ilgili dangling commit'lerin (`52c87cb`, `031f7f4`, `d4f095e`, `4ec2706`)
++bu yollardaki içeriği HEAD'de mevcut (yol-yol `rev-parse` karşılaştırması).
++
++**Kanıt arşivi (silmeden önce alındı):**
++`/tmp/leibniz2-dangling-salvage-20260912.tar.gz` — 3.7 MiB, sha256
++`4ae0a92d16d51b39e700ca5193c928df694be5bf1f18a4b3f7db56fdf8731d2f`.
++İçerik: 120 blob + `MANIFEST.json` (blob → yol → kaynak dangling commit →
++sha256 → boyut). `/tmp` kalıcı değildir; saklanacaksa repoya/arşive taşınmalı.
++
++### 8.2 Kalan envanter (orphan-ref süpürmesi sonrası)
++
++| Öğe | Adet | Durum |
++|---|---|---|
++| `backup/*` ref'leri | 6 → 1 | Yalnız `backup/orphan-pre-reword-33e9b8a` kaldı: **benzersiz kurtarılabilir içerik** taşıyor (§8.4) |
++| stash | 2 → 1 | `stash@{0}` korundu (`refs/stash` = `7d58b5d`; reflog girdisi `git stash store` ile geri yazıldı). `stash@{1}` ("stale-audit wiring") yalnız reflog'la ayakta kalıyordu: `--expire-unreachable` onu düşürdü, commit'i prune edildi — **içeriği arşivde** (`d7343f0`: 3 benzersiz blob) |
++| harici worktree | 2 | `/private/tmp/followup` (`feat/plist-info-line-followup`), `/private/tmp/wt224` (detached `224dcd7`) |
++| yerel-only branch | 2 → 1 | `pr/bf506c0` kaldı: 84 benzersiz yol taşıyan ayrı bir eski hat (ayrıca `origin/pr/bf506c0`'da mevcut). `feat/compact-json`, `rewrite-preview-test` silindi (0 ahead) |
++
++### 8.3 Yan etki: `--expire-unreachable` stash reflog'unu da kapsar
++
++`refs/stash` bir reflog-ref'idir; `--expire-unreachable=now --all` bu reflog'u da
++işler, dolayısıyla **@{0} dışındaki stash girdileri düşer** (bu turda stash
++listesi boşaldı). @{0}'ın commit'i `refs/stash` ref korumasında olduğu için
++nesnesi duruyordu; liste `git stash store 7d58b5d` ile aynı sha'ya geri yazıldı.
++Bir sonraki temizlikte stash'ler korunacaksa refine yalnız ref'ler üzerinde
++koşturulmalı (`git reflog expire --expire-unreachable=now refs/heads/<b>` gibi)
++veya stash'ler önce `git stash push` ile yeniden yazılmalı.
++
++### 8.4 Orphan-ref süpürmesi — 2026-09-12
++
++Kriter: **ref'i sil, ancak ve ancak hiçbir yerde bulunmayan kurtarılabilir içerik
++yoksa.** Ölçüm, `git rev-list --objects <ref> --not main feat/plist-info-line
++feat/plist-info-line-followup` ile her ref'in spine'a göre benzersiz nesnelerini
++çıkarıp yol-yol HEAD ile karşılaştırarak yapıldı.
++
++**Silinen 9 ref — üç sınıf:**
++
++| Ref | Sınıf | Gerekçe |
++|---|---|---|
++| `backup/orig-091635c-73chars` | yalnız commit | Reword öncesi aynı ağaç; 4 commit, **0 benzersiz yol** |
++| `backup/orig-b5e74dc-91chars` | yalnız commit | Aynı; 1 commit, 0 benzersiz yol |
++| `backup/reword-091635c-56chars` | yalnız commit | Aynı; 4 commit, 0 benzersiz yol |
++| `backup/reword-b5e74dc-57chars` | yalnız commit | Aynı; 1 commit, 0 benzersiz yol |
++| `backup/self-loop-a345284` | tamamen birleşik | Spine'a göre **0 commit ahead** |
++| `feat/compact-json` | tamamen birleşik | 0 commit ahead |
++| `rewrite-preview-test` | tamamen birleşik | 0 commit ahead |
++| `refs/original/HEAD` | eskimiş taslak | 12 commit; benzersiz blob'lar yalnız `preview_server.py` + `test_preview_server.py`'nin **eski** hali. HEAD `_write_atomic`/`SSE_POLL_TIMEOUT`/`OVERRIDE_TREND_PATH` içeriyor, bu ref içermiyor; test dosyası 90 KB vs 72 KB |
++| `feat/compact-json-patch` | eskimiş taslak | Aynı iki dosyanın daha eski hali; ayrıca `origin/feat/compact-json-patch`'te duruyor |
++
++`refs/original/HEAD` ve `feat/compact-json-patch`'in "HEAD'de yok" görünen 13
++yolu `_calisma/slides_z3/**` idi; bunlar `_calisma/CIKTI/slides_z3/**`'a
++**taşınmış** ve 13 dosyanın **13'ünde blob hash'i birebir aynı** — kayıp yok.
++
++**Korunan ref ve gerekçesi:** `backup/orphan-pre-reword-33e9b8a` (`33e9b8a`) —
++tek başına benzersiz içerik taşıyan ref:
++
++- `_calisma/CIKTI/update_preview.sh` (`43adbac8`, +27 satır): `--no-mirror` /
++  `--no-html` bayraklarını `--bootstrap`'dan **önce** verildiğinde de işleyen
++  üst-seviye `case` dalı. HEAD bu sırayı işlemiyor (`bootstrap_all "${@:2}"`
++  yalnız sonraki argümanları geçirir; `--no-mirror` doğrudan `${1:-build}` olur
++  ve `ERR bilinmeyen mod` + `exit 2` ile düşer).
++- `_calisma/CIKTI/test_check_bootstrap_start_smoke.py` (`8c895433`, +26 satır):
++  `test_leading_flags_before_bootstrap` — bu sıra için regresyon testi.
++
++İki blob da HEAD'de **ve** çalışma ağacında yok (çalışma ağacı hash'leri
++`cbf8adc6` / `76cee799`, yani HEAD ile aynı). Bu yüzden ref silinmedi.
++
++**Geri alma ağı:** silinen tüm tip SHA'ları
++`/tmp/leibniz2-refs-sweep-manifest-20260912.txt` (sha256 `3687d826…`) içinde;
++nesneler `gc --prune` koşmadığı için hâlâ nesne veritabanında. Geri alma:
++`git branch <ad> <sha>`.
++
++**Not:** Job/artifact doc-senkron kapıları (`test_doc_job_sync`,
++`test_doc_artifact_sync`, `check_workflow_artifact_docs`) yalnız
++`docs/PUBLISH_SCENARIO.md`'yi ayrıştırır; bu bölüm onları etkilemez.
+diff --git a/docs/PUBLISH_SCENARIO.md b/docs/PUBLISH_SCENARIO.md
+index b230099..9fd38c9 100644
+--- a/docs/PUBLISH_SCENARIO.md
++++ b/docs/PUBLISH_SCENARIO.md
+@@ -580,6 +580,9 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
+ > C (PR-only) job'ları push'ta hiç çalışmaz.
+ > **İstisna:** `Pre-commit P0 label gate` C gibi PR-only'dir ama **BİLEREK required**
+ > check'tir (precommit-p0 etiketi merge'i bloke eder) — A'da listelenir.
++> **Yeni job eklerken:** adım adım kontrol listesi `docs/VERIFY_JOB_CHECKLIST.md`;
++> karar ve gerekçelerin tek kaynağı `_calisma/CIKTI/workflow_contract.py`
++> (`GATE_EXCLUDE` ve artifact kapsam kümeleri) — bu tablo/kayıtlar ondan türer.
+ 
+ | # | Kategori | Job | Son durum |
+ |---|---|---|---|
+diff --git a/docs/publish_precheck.sh b/docs/publish_precheck.sh
+index 70ff76b..0c19d23 100755
+--- a/docs/publish_precheck.sh
++++ b/docs/publish_precheck.sh
+@@ -207,7 +207,7 @@ else
+   SMOKE_BEFORE="$(git rev-parse HEAD)"
+   # Chicken-and-egg: changelog tabloları TASARIM gereği HEAD'in bir commit
+   # gerisindedir (bir commit'in satırı ancak SONRAKİ commit'te eklenir). Bu
+-  # yüzden smoke commit'i pre-commit sırasında changelog hook'unun --update
++  # yüzden smoke commit'i pre-commit sırasında changelog hook'unun --prune
+   # ile tabloları değiştirip stage etmesine yol açar; o mutasyon reset ile
+   # atılır ama smoke'u hermetic olmayan kılar (hook'lar arası etkileşim +
+   # pre-commit'in "files were modified by this hook" riski). Smoke'u yeşil ve
+diff --git a/skills/verify-chain/SKILL.md b/skills/verify-chain/SKILL.md
+index eb46398..f36de07 100644
+--- a/skills/verify-chain/SKILL.md
++++ b/skills/verify-chain/SKILL.md
+@@ -193,7 +193,16 @@ Two failure modes keep the chain honest only if you audit for them:
+   the fail-closed `check-unit-tests` hook goes red and every commit needs
+   `--no-verify` until someone decides whether the new job is required or
+   belongs in `GATE_EXCLUDE`. Treat that decision as a policy change, not a
+-  test edit, and update the pins together with the exclusion set.
++  test edit. The exclusion set and each member's rationale live in ONE
++  place — `_calisma/CIKTI/workflow_contract.py` (`GATE_EXCLUDE`), next to
++  the other verify.yml contract sets; `status_checks.py` imports it rather
++  than copying it, and `test_workflow_contract` fails if a consumer drifts
++  or holds a copy. Update the pins together with that set.
++
++Adding a job touches several surfaces (workflow, contract sets, doc tables,
++artifact/manifest registries, pins). The step-by-step list — filename, the
++gate that fails if you forget it, and the observed failure text — is
++`docs/VERIFY_JOB_CHECKLIST.md`.
+ 
+ ## Checklist
+ 

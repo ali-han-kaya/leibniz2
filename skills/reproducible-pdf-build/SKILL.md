@@ -49,10 +49,14 @@ Two independent sources of byte drift were found in the field:
 
 ### 1. Compiler-level (tectonic 0.17.0)
 
-`tectonic` is NOT byte-deterministic: consecutive builds of the same `.tex`
-produce different byte streams (observed: 33-page manuscript, stable page
-count, unstable bytes). This is a known property of the engine's internal
-ordering; it does NOT affect content correctness.
+`tectonic` built **without** `SOURCE_DATE_EPOCH` is not byte-deterministic:
+consecutive builds of the same `.tex` produce different byte streams (observed:
+33-page manuscript, stable page count, unstable bytes; across sessions
+`4ad65b9b…` → `6cfc6c0a…`). Later measurement refined this: with an explicit
+`SOURCE_DATE_EPOCH` the same source built byte-stable across two platforms
+(`ad8fca69…` on darwin and linux). Determinism is a property of the
+(engine, source, SDE, platform) tuple — see leibniz2
+`docs/PDF_DETERMINISM_EXPLAINED.md` §2-3.
 
 ### 2. Post-processing (qpdf --remove-metadata)
 
@@ -149,9 +153,12 @@ exactly the signal you want.
 
 ### Step 4 — Gate fail-closed on the proxy
 
-- Keep strict raw-byte determinism checks OFF by default if the toolchain is
-  known non-deterministic (a strict check would false-positive on every
-  repack). Expose it behind an opt-in flag (e.g. `--strict-determinism`).
+- If the toolchain is known non-deterministic, do not gate on raw bytes:
+  gate the **stable proxy** instead. Canonicalize the residual (e.g. the
+  pdfTeX trailer `/ID`) and require the canonical hash to be *recorded* in an
+  acceptance ledger; then the strict gate is safe to ENABLE (leibniz2 Faz 4
+  turned `--strict-determinism` on in both the pre-commit hook and CI). Keep
+  it opt-in/OFF only while the proxy itself is unstable.
 - Gate on: raw hash sidecar match (P0), manifest integrity, and — for
   build-specific claims — the frozen experiment record.
 - Report drift as informational when it is expected (P0/P1 only when the
@@ -172,10 +179,15 @@ pdflatex -interaction=nonstopmode manuscript.tex       # (run twice for refs)
 Notes from the field:
 
 - `SOURCE_DATE_EPOCH` makes TeXLive emit stable `/CreationDate` and
-  `/ID` — removing the need for qpdf stripping in the common case.
-- `tectonic` does not honor `SOURCE_DATE_EPOCH` the same way; the migration
-  path is TeXLive + `SOURCE_DATE_EPOCH`, and the strict-determinism gate
-  should stay OFF until that migration lands.
+  `/ModDate`. It does **not** stabilize pdfTeX's trailer `/ID`, which stays
+  random per run (measured: two runs at `SDE=0` differ in exactly the 64-byte
+  `/ID` line) — so a canonical `/ID`-neutral comparison is still required.
+  See leibniz2 `docs/PDF_DETERMINISM_EXPLAINED.md` §3-4.
+- `tectonic` **does** honor `SOURCE_DATE_EPOCH` (with it, output was
+  byte-stable across darwin+linux for one source). Engine choice is therefore
+  a *contract* question, not a determinism question: `fontspec` sources are
+  XeTeX-family and the pdfTeX chain cannot compile them (leibniz2 "engine
+  stratification").
 - Even after migration, keep the sidecar + reuse rule: it is the layer that
   makes repacks byte-identical regardless of engine behavior.
 
@@ -195,7 +207,7 @@ Notes from the field:
 | Symptom | Cause | Fix |
 |---|---|---|
 | Sidecar hash differs after every repack | qpdf non-determinism | Apply reuse rule (regenerate only on raw change) |
-| Strict determinism gate false-positives | Engine non-deterministic | Keep `--strict-determinism` OFF until SOURCE_DATE_EPOCH migration |
+| Strict determinism gate false-positives | Gate is on an unstable proxy | Gate the canonical `/ID`-neutral hash + acceptance ledger (not metadata-stripped bytes); then enable strict mode |
 | Frozen record stale after rebuild | PDF recompiled | Regenerate record, review diff, commit as new frozen version |
 | `qpdf` not installed in CI | Optional layer | Return `(raw, None)` and skip — never fail on absent optional tool |
 

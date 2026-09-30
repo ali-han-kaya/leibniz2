@@ -1,0 +1,399 @@
+/*
+ * design-system/linear/tailwind.css — GENERATED, DO NOT EDIT.
+ *
+ * linear marka aynasının Tailwind CSS v4 `@theme` köprüsü.
+ * Tek doğru kaynak: design-system/linear/tokens.css
+ *
+ * Üretici: scripts/generate_mirror_tailwind.py
+ *   python3 design-system/scripts/generate_mirror_tailwind.py          # üret
+ *   python3 design-system/scripts/generate_mirror_tailwind.py --check   # drift
+ * Kapı: scripts/check_mirror_bridges.py (pre-commit: check-mirror-bridges).
+ *
+ * Sözleşmeler (kapı fail-closed doğrular):
+ *   1. TEMEL PALET DOKUNULMAZ — ön-koşullar `<marka>-` ön-ekli,
+ *      @theme anahtarları `<namespace>-<marka>-*`. `bg-bg`/`text-fg` gibi
+ *      kök utility'ler bu dosya import edildiğinde DEĞİŞMEZ.
+ *   2. LİTERAL YOK — her @theme değeri `var(<marka>-…)`; değerin kendisi
+ *      aynadan birebir gelir (yalnız ayna-içi var() referansları ön-eklenir).
+ *   3. SESSİZ KAYIP YOK — aliases + skipped = aynadaki token sayısı; kapsam
+ *      dışı sınıflar aşağıdaki sayım bloğunda gerekçesiyle listelenir.
+ *
+ * Kullanım:
+ *   @import "tailwindcss";
+ *   @import "./design-system/linear/tailwind.css";
+ *   → bg-linear-…  text-linear-…  border-linear-…  rounded-linear-…
+ */
+
+
+/* ── ön-koşullar (ayna: linear/tokens.css, birebir) ── */
+:root {
+  --linear-Marquee-gap: 24px;
+  --linear-agent-card-border: #ffffff1f;
+  --linear-agent-chip-bg: #ffffff12;
+  --linear-agent-chip-border: #ffffff14;
+  --linear-anchor-glass-bg: #ffffff14;
+  --linear-app-radius: 12px;
+  --linear-badge-surface: var(--linear-bg-base);
+  --linear-bg-base: #0f1011;
+  --linear-bg-shade: #191d20;
+  --linear-blue: #56cdff;
+  --linear-border-faint-thin: #191d21;
+  --linear-border-frame: #151616;
+  --linear-border-solid: #2a2e33;
+  --linear-border-thin: #24282c;
+  --linear-btn-highlight-bg: transparent;
+  --linear-button-corner-radius: var(--linear-radius-rounded);
+  --linear-button-gap: 4px;
+  --linear-card-gap: 12px;
+  --linear-card-radius: 12px;
+  --linear-color-accent: #7170ff;
+  --linear-color-accent-hover: #828fff;
+  --linear-color-bg-level-0: #08090a;
+  --linear-color-bg-level-1: #0f1011;
+  --linear-color-bg-level-2: #141516;
+  --linear-color-bg-level-3: #191a1b;
+  --linear-color-bg-marketing: #010102;
+  --linear-color-bg-panel: #161718;
+  --linear-color-bg-primary: #08090a;
+  --linear-color-bg-quaternary: #28282c;
+  --linear-color-bg-quinary: #282828;
+  --linear-color-bg-secondary: #1c1c1f;
+  --linear-color-bg-tertiary: #232326;
+  --linear-color-bg-tint: #141516;
+  --linear-color-bg-translucent: #ffffff0d;
+  --linear-color-black: #000;
+  --linear-color-blue: #4ea7fc;
+  --linear-color-border-primary: #23252a;
+  --linear-color-border-secondary: #34343a;
+  --linear-color-border-tertiary: #3e3e44;
+  --linear-color-border-translucent: #ffffff0d;
+  --linear-color-border-translucent-strong: #ffffff14;
+  --linear-color-brand-bg: #5e6ad2;
+  --linear-color-brand-text: #fff;
+  --linear-color-button-invert-bg: #e5e5e6;
+  --linear-color-button-invert-bg-hover: #fff;
+  --linear-color-fg-primary: #f7f8f8;
+  --linear-color-fg-quaternary: #62666d;
+  --linear-color-fg-secondary: #d0d6e0;
+  --linear-color-fg-tertiary: #8a8f98;
+  --linear-color-green: #27a644;
+  --linear-color-indigo: #5e6ad2;
+  --linear-color-line-primary: #37393a;
+  --linear-color-line-quaternary: #141515;
+  --linear-color-line-secondary: #202122;
+  --linear-color-line-tertiary: #18191a;
+  --linear-color-line-tint: #141516;
+  --linear-color-linear-build: #d4b144;
+  --linear-color-linear-plan: #68cc58;
+  --linear-color-linear-security: #7a7fad;
+  --linear-color-link-hover: #fff;
+  --linear-color-link-primary: #828fff;
+  --linear-color-orange: #fc7840;
+  --linear-color-overlay-primary: #000000d9;
+  --linear-color-red: #eb5757;
+  --linear-color-selection-bg: color-mix(in lch, var(--linear-color-brand-bg), black 10%);
+  --linear-color-selection-dim: color-mix(in lch, var(--linear-color-brand-bg), transparent 80%);
+  --linear-color-selection-text: var(--linear-color-white);
+  --linear-color-teal: #00b8cc;
+  --linear-color-text-primary: #f7f8f8;
+  --linear-color-text-quaternary: #62666d;
+  --linear-color-text-secondary: #d0d6e0;
+  --linear-color-text-tertiary: #8a8f98;
+  --linear-color-white: #fff;
+  --linear-color-yellow: #f0bf00;
+  --linear-description: var(--linear-color-text-tertiary);
+  --linear-ease-in-circ: cubic-bezier(.6, .04, .98, .335);
+  --linear-ease-in-cubic: cubic-bezier(.55, .055, .675, .19);
+  --linear-ease-in-expo: cubic-bezier(.95, .05, .795, .035);
+  --linear-ease-in-out-circ: cubic-bezier(.785, .135, .15, .86);
+  --linear-ease-in-out-cubic: cubic-bezier(.645, .045, .355, 1);
+  --linear-ease-in-out-expo: cubic-bezier(1, 0, 0, 1);
+  --linear-ease-in-out-quad: cubic-bezier(.455, .03, .515, .955);
+  --linear-ease-in-out-quart: cubic-bezier(.77, 0, .175, 1);
+  --linear-ease-in-out-quint: cubic-bezier(.86, 0, .07, 1);
+  --linear-ease-in-quad: cubic-bezier(.55, .085, .68, .53);
+  --linear-ease-in-quart: cubic-bezier(.895, .03, .685, .22);
+  --linear-ease-in-quint: cubic-bezier(.755, .05, .855, .06);
+  --linear-ease-out-circ: cubic-bezier(.075, .82, .165, 1);
+  --linear-ease-out-cubic: cubic-bezier(.215, .61, .355, 1);
+  --linear-ease-out-expo: cubic-bezier(.19, 1, .22, 1);
+  --linear-ease-out-quad: cubic-bezier(.25, .46, .45, .94);
+  --linear-ease-out-quart: cubic-bezier(.165, .84, .44, 1);
+  --linear-ease-out-quint: cubic-bezier(.23, 1, .32, 1);
+  --linear-edge-highlight-color: #ffffff1f;
+  --linear-edge-highlight-radius: var(--linear-card-radius);
+  --linear-editor-block-radius: 6px;
+  --linear-editor-block-spacing: 1rem;
+  --linear-editor-last-invisible-paragraph-spacing: 10px;
+  --linear-editor-letter-spacing: -.00666667em;
+  --linear-font-emoji: "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Segoe UI", "Twemoji Mozilla", "Noto Color Emoji", "Android Emoji";
+  --linear-font-monospace: "Berkeley Mono", ui-monospace, "SF Mono", "Menlo", monospace;
+  --linear-font-regular: "Inter Variable", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Open Sans", "Helvetica Neue", sans-serif;
+  --linear-font-serif-display: "Tiempos Headline", ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+  --linear-font-settings: "cv01", "ss03";
+  --linear-graph-cluster-glow: color-mix(in srgb, var(--linear-color-yellow) 10%, transparent);
+  --linear-graph-dot: var(--linear-color-teal);
+  --linear-graph-dot-ring: var(--linear-color-bg-primary);
+  --linear-graph-key-gap: 24px;
+  --linear-graph-line: #2e2e32;
+  --linear-graph-percentile-high: #f34e52;
+  --linear-graph-percentile-low: var(--linear-color-text-quaternary);
+  --linear-graph-percentile-mid: #ff7236;
+  --linear-grid-gap: 32px;
+  --linear-header-bg: #0b0b0bcc;
+  --linear-header-border: transparent;
+  --linear-hero-line: #2e2e32;
+  --linear-kbd-bg: var(--linear-color-bg-tertiary);
+  --linear-label-base: #e2e4e7;
+  --linear-label-faint: #585a5c;
+  --linear-label-muted: var(--linear-color-text-quaternary);
+  --linear-mask-ease: #0003;
+  --linear-mask-invisible: transparent;
+  --linear-mask-off: transparent;
+  --linear-mask-on: black;
+  --linear-mask-visible: black;
+  --linear-orange: #ff7236;
+  --linear-plan-icon-car: #2e2f2e;
+  --linear-plan-icon-robot: #55cdff;
+  --linear-plan-milestone-late: #f34e52;
+  --linear-plan-tail-accent: #21b3ff;
+  --linear-radius-12: 12px;
+  --linear-radius-16: 16px;
+  --linear-radius-24: 24px;
+  --linear-radius-32: 32px;
+  --linear-radius-4: 4px;
+  --linear-radius-6: 6px;
+  --linear-radius-8: 8px;
+  --linear-radius-circle: 50%;
+  --linear-radius-rounded: 9999px;
+  --linear-red: #f34f52;
+  --linear-row-bg: #111213;
+  --linear-scrollbar-color: #ffffff1a;
+  --linear-scrollbar-color-active: #fff6;
+  --linear-scrollbar-color-hover: #fff3;
+  --linear-scrollbar-gap: 4px;
+  --linear-shadow-high: var(--linear-shadow-none);
+  --linear-shadow-low: var(--linear-shadow-none);
+  --linear-shadow-medium: var(--linear-shadow-none);
+  --linear-shadow-none: 0px 0px 0px transparent;
+  --linear-shadow-stack-low: 0px 8px 2px 0px #0000, 0px 5px 2px 0px #00000003, 0px 3px 2px 0px #0000000a, 0px 1px 1px 0px #00000012, 0px 0px 1px 0px #00000014;
+  --linear-shadow-tiny: var(--linear-shadow-none);
+  --linear-timeline-backdrop: #131415;
+  --linear-timeline-block-border: #ffffff1f;
+  --linear-timeline-block-fill: #ffffff0d;
+  --linear-timeline-block-inset: #0003;
+  --linear-title-1-letter-spacing: -.012em;
+  --linear-title-2-letter-spacing: -.012em;
+  --linear-title-3-letter-spacing: -.012em;
+  --linear-title-4-letter-spacing: -.022em;
+  --linear-title-5-letter-spacing: -.022em;
+  --linear-title-6-letter-spacing: -.022em;
+  --linear-title-7-letter-spacing: -.022em;
+  --linear-title-8-letter-spacing: -.022em;
+  --linear-title-9-letter-spacing: -.022em;
+  --linear-token-constant: #8fa6ff;
+  --linear-token-entity: #83dcdc;
+  --linear-token-keyword: #e391cf;
+  --linear-token-string: #ffdf9f;
+  --linear-token-text: var(--linear-color-text-secondary);
+  --linear-token-variable: #f7bf8b;
+  --linear-transparent: #fff0;
+}
+
+@theme {
+  /* ── color (107) ── */
+  --color-linear-accent: var(--linear-color-accent);
+  --color-linear-accent-hover: var(--linear-color-accent-hover);
+  --color-linear-active: var(--linear-scrollbar-color-active);
+  --color-linear-agent-card-border: var(--linear-agent-card-border);
+  --color-linear-agent-chip-bg: var(--linear-agent-chip-bg);
+  --color-linear-agent-chip-border: var(--linear-agent-chip-border);
+  --color-linear-anchor-glass-bg: var(--linear-anchor-glass-bg);
+  --color-linear-badge-surface: var(--linear-badge-surface);
+  --color-linear-bg-base: var(--linear-bg-base);
+  --color-linear-bg-level-0: var(--linear-color-bg-level-0);
+  --color-linear-bg-level-1: var(--linear-color-bg-level-1);
+  --color-linear-bg-level-2: var(--linear-color-bg-level-2);
+  --color-linear-bg-level-3: var(--linear-color-bg-level-3);
+  --color-linear-bg-marketing: var(--linear-color-bg-marketing);
+  --color-linear-bg-panel: var(--linear-color-bg-panel);
+  --color-linear-bg-primary: var(--linear-color-bg-primary);
+  --color-linear-bg-quaternary: var(--linear-color-bg-quaternary);
+  --color-linear-bg-quinary: var(--linear-color-bg-quinary);
+  --color-linear-bg-secondary: var(--linear-color-bg-secondary);
+  --color-linear-bg-shade: var(--linear-bg-shade);
+  --color-linear-bg-tertiary: var(--linear-color-bg-tertiary);
+  --color-linear-bg-tint: var(--linear-color-bg-tint);
+  --color-linear-bg-translucent: var(--linear-color-bg-translucent);
+  --color-linear-black: var(--linear-color-black);
+  --color-linear-blue: var(--linear-color-blue);
+  --color-linear-border-faint-thin: var(--linear-border-faint-thin);
+  --color-linear-border-frame: var(--linear-border-frame);
+  --color-linear-border-primary: var(--linear-color-border-primary);
+  --color-linear-border-secondary: var(--linear-color-border-secondary);
+  --color-linear-border-solid: var(--linear-border-solid);
+  --color-linear-border-tertiary: var(--linear-color-border-tertiary);
+  --color-linear-border-thin: var(--linear-border-thin);
+  --color-linear-border-translucent: var(--linear-color-border-translucent);
+  --color-linear-border-translucent-strong: var(--linear-color-border-translucent-strong);
+  --color-linear-brand-bg: var(--linear-color-brand-bg);
+  --color-linear-brand-text: var(--linear-color-brand-text);
+  --color-linear-btn-highlight-bg: var(--linear-btn-highlight-bg);
+  --color-linear-button-invert-bg: var(--linear-color-button-invert-bg);
+  --color-linear-button-invert-bg-hover: var(--linear-color-button-invert-bg-hover);
+  --color-linear-description: var(--linear-description);
+  --color-linear-edge-highlight-color: var(--linear-edge-highlight-color);
+  --color-linear-fg-primary: var(--linear-color-fg-primary);
+  --color-linear-fg-quaternary: var(--linear-color-fg-quaternary);
+  --color-linear-fg-secondary: var(--linear-color-fg-secondary);
+  --color-linear-fg-tertiary: var(--linear-color-fg-tertiary);
+  --color-linear-graph-cluster-glow: var(--linear-graph-cluster-glow);
+  --color-linear-graph-dot: var(--linear-graph-dot);
+  --color-linear-graph-dot-ring: var(--linear-graph-dot-ring);
+  --color-linear-graph-line: var(--linear-graph-line);
+  --color-linear-graph-percentile-high: var(--linear-graph-percentile-high);
+  --color-linear-graph-percentile-low: var(--linear-graph-percentile-low);
+  --color-linear-graph-percentile-mid: var(--linear-graph-percentile-mid);
+  --color-linear-green: var(--linear-color-green);
+  --color-linear-header-bg: var(--linear-header-bg);
+  --color-linear-header-border: var(--linear-header-border);
+  --color-linear-hero-line: var(--linear-hero-line);
+  --color-linear-hover: var(--linear-scrollbar-color-hover);
+  --color-linear-indigo: var(--linear-color-indigo);
+  --color-linear-kbd-bg: var(--linear-kbd-bg);
+  --color-linear-label-base: var(--linear-label-base);
+  --color-linear-label-faint: var(--linear-label-faint);
+  --color-linear-label-muted: var(--linear-label-muted);
+  --color-linear-line-primary: var(--linear-color-line-primary);
+  --color-linear-line-quaternary: var(--linear-color-line-quaternary);
+  --color-linear-line-secondary: var(--linear-color-line-secondary);
+  --color-linear-line-tertiary: var(--linear-color-line-tertiary);
+  --color-linear-line-tint: var(--linear-color-line-tint);
+  --color-linear-linear-build: var(--linear-color-linear-build);
+  --color-linear-linear-plan: var(--linear-color-linear-plan);
+  --color-linear-linear-security: var(--linear-color-linear-security);
+  --color-linear-link-hover: var(--linear-color-link-hover);
+  --color-linear-link-primary: var(--linear-color-link-primary);
+  --color-linear-mask-ease: var(--linear-mask-ease);
+  --color-linear-mask-invisible: var(--linear-mask-invisible);
+  --color-linear-mask-off: var(--linear-mask-off);
+  --color-linear-mask-on: var(--linear-mask-on);
+  --color-linear-mask-visible: var(--linear-mask-visible);
+  --color-linear-orange: var(--linear-color-orange);
+  --color-linear-overlay-primary: var(--linear-color-overlay-primary);
+  --color-linear-plan-icon-car: var(--linear-plan-icon-car);
+  --color-linear-plan-icon-robot: var(--linear-plan-icon-robot);
+  --color-linear-plan-milestone-late: var(--linear-plan-milestone-late);
+  --color-linear-plan-tail-accent: var(--linear-plan-tail-accent);
+  --color-linear-red: var(--linear-color-red);
+  --color-linear-row-bg: var(--linear-row-bg);
+  --color-linear-scrollbar-color: var(--linear-scrollbar-color);
+  --color-linear-selection-bg: var(--linear-color-selection-bg);
+  --color-linear-selection-dim: var(--linear-color-selection-dim);
+  --color-linear-selection-text: var(--linear-color-selection-text);
+  --color-linear-teal: var(--linear-color-teal);
+  --color-linear-text-primary: var(--linear-color-text-primary);
+  --color-linear-text-quaternary: var(--linear-color-text-quaternary);
+  --color-linear-text-secondary: var(--linear-color-text-secondary);
+  --color-linear-text-tertiary: var(--linear-color-text-tertiary);
+  --color-linear-timeline-backdrop: var(--linear-timeline-backdrop);
+  --color-linear-timeline-block-border: var(--linear-timeline-block-border);
+  --color-linear-timeline-block-fill: var(--linear-timeline-block-fill);
+  --color-linear-timeline-block-inset: var(--linear-timeline-block-inset);
+  --color-linear-token-constant: var(--linear-token-constant);
+  --color-linear-token-entity: var(--linear-token-entity);
+  --color-linear-token-keyword: var(--linear-token-keyword);
+  --color-linear-token-string: var(--linear-token-string);
+  --color-linear-token-text: var(--linear-token-text);
+  --color-linear-token-variable: var(--linear-token-variable);
+  --color-linear-transparent: var(--linear-transparent);
+  --color-linear-white: var(--linear-color-white);
+  --color-linear-yellow: var(--linear-color-yellow);
+  /* ── font (5) ── */
+  --font-linear-emoji: var(--linear-font-emoji);
+  --font-linear-monospace: var(--linear-font-monospace);
+  --font-linear-regular: var(--linear-font-regular);
+  --font-linear-serif-display: var(--linear-font-serif-display);
+  --font-linear-settings: var(--linear-font-settings);
+  /* ── ease (18) ── */
+  --ease-linear-in-circ: var(--linear-ease-in-circ);
+  --ease-linear-in-cubic: var(--linear-ease-in-cubic);
+  --ease-linear-in-expo: var(--linear-ease-in-expo);
+  --ease-linear-in-out-circ: var(--linear-ease-in-out-circ);
+  --ease-linear-in-out-cubic: var(--linear-ease-in-out-cubic);
+  --ease-linear-in-out-expo: var(--linear-ease-in-out-expo);
+  --ease-linear-in-out-quad: var(--linear-ease-in-out-quad);
+  --ease-linear-in-out-quart: var(--linear-ease-in-out-quart);
+  --ease-linear-in-out-quint: var(--linear-ease-in-out-quint);
+  --ease-linear-in-quad: var(--linear-ease-in-quad);
+  --ease-linear-in-quart: var(--linear-ease-in-quart);
+  --ease-linear-in-quint: var(--linear-ease-in-quint);
+  --ease-linear-out-circ: var(--linear-ease-out-circ);
+  --ease-linear-out-cubic: var(--linear-ease-out-cubic);
+  --ease-linear-out-expo: var(--linear-ease-out-expo);
+  --ease-linear-out-quad: var(--linear-ease-out-quad);
+  --ease-linear-out-quart: var(--linear-ease-out-quart);
+  --ease-linear-out-quint: var(--linear-ease-out-quint);
+  /* ── shadow (6) ── */
+  --shadow-linear-high: var(--linear-shadow-high);
+  --shadow-linear-low: var(--linear-shadow-low);
+  --shadow-linear-medium: var(--linear-shadow-medium);
+  --shadow-linear-none: var(--linear-shadow-none);
+  --shadow-linear-stack-low: var(--linear-shadow-stack-low);
+  --shadow-linear-tiny: var(--linear-shadow-tiny);
+  /* ── radius (14) ── */
+  --radius-linear-12: var(--linear-radius-12);
+  --radius-linear-16: var(--linear-radius-16);
+  --radius-linear-24: var(--linear-radius-24);
+  --radius-linear-32: var(--linear-radius-32);
+  --radius-linear-4: var(--linear-radius-4);
+  --radius-linear-6: var(--linear-radius-6);
+  --radius-linear-8: var(--linear-radius-8);
+  --radius-linear-app-radius: var(--linear-app-radius);
+  --radius-linear-button-corner-radius: var(--linear-button-corner-radius);
+  --radius-linear-card-radius: var(--linear-card-radius);
+  --radius-linear-circle: var(--linear-radius-circle);
+  --radius-linear-edge-highlight-radius: var(--linear-edge-highlight-radius);
+  --radius-linear-editor-block-radius: var(--linear-editor-block-radius);
+  --radius-linear-rounded: var(--linear-radius-rounded);
+  /* ── spacing (18) ── */
+  --spacing-linear-button-gap: var(--linear-button-gap);
+  --spacing-linear-card-gap: var(--linear-card-gap);
+  --spacing-linear-editor-block-spacing: var(--linear-editor-block-spacing);
+  --spacing-linear-editor-last-invisible-paragraph-spacing: var(--linear-editor-last-invisible-paragraph-spacing);
+  --spacing-linear-editor-letter-spacing: var(--linear-editor-letter-spacing);
+  --spacing-linear-graph-key-gap: var(--linear-graph-key-gap);
+  --spacing-linear-grid-gap: var(--linear-grid-gap);
+  --spacing-linear-marquee-gap: var(--linear-Marquee-gap);
+  --spacing-linear-scrollbar-gap: var(--linear-scrollbar-gap);
+  --spacing-linear-title-1-letter-spacing: var(--linear-title-1-letter-spacing);
+  --spacing-linear-title-2-letter-spacing: var(--linear-title-2-letter-spacing);
+  --spacing-linear-title-3-letter-spacing: var(--linear-title-3-letter-spacing);
+  --spacing-linear-title-4-letter-spacing: var(--linear-title-4-letter-spacing);
+  --spacing-linear-title-5-letter-spacing: var(--linear-title-5-letter-spacing);
+  --spacing-linear-title-6-letter-spacing: var(--linear-title-6-letter-spacing);
+  --spacing-linear-title-7-letter-spacing: var(--linear-title-7-letter-spacing);
+  --spacing-linear-title-8-letter-spacing: var(--linear-title-8-letter-spacing);
+  --spacing-linear-title-9-letter-spacing: var(--linear-title-9-letter-spacing);
+}
+
+/*
+ * ── sayımlar (kapı bunları kilitler) ──
+ *   tokens=398
+ *   aliases=168
+ *   preconditions=171
+ *   skipped=230
+ *   external_refs=0
+ *   collisions=3
+ *   skip:class-composite-ref=13
+ *   skip:class-external-ref=3
+ *   skip:class-mismatch=19
+ *   skip:class-number=42
+ *   skip:class-time=7
+ *   skip:class-unknown=18
+ *   skip:class-url=1
+ *   skip:key-collision=3
+ *   skip:namespace-not-in-scope=35
+ *   skip:no-key=1
+ *   skip:no-namespace-length=88
+ */

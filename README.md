@@ -54,16 +54,91 @@ Exit kodu: `0` = PASS, `1` = FAIL (fail-closed), `2` = ortam hatası.
 
 ## Fresh checkout bootstrap
 
-Yeni bir clone/worktree'de üç araç-kümesi gitignore'ludur ve tek komutla
-kurulur (her adım idempotent — kurulu araca dokunmaz):
+Yeni bir clone/worktree'de yedi araç-kümesi eksiktir; tek komutla kurulup
+doğrulanır (her adım idempotent — kurulu araca dokunmaz):
 
 ```bash
-bash _calisma/dev_bootstrap.sh           # venv_z3 (pinned) + pptx + dashboard-next
+bash _calisma/dev_bootstrap.sh --full    # uçtan uca: kurulum + temel batarya
+bash _calisma/dev_bootstrap.sh           # yalnız kurulum (hızlı; tekrar koşuma uygun)
 bash _calisma/dev_bootstrap.sh --check   # fail-closed doğrulama (rc=0/1)
 ```
 
-Pinler `docs/HOOK_ENV_MATRIX.md` ile tek-kaynaklıdır; `--check` eksik araçta
-rc=1 ile düşer (fail-closed).
+Küme listesi ÖLÇÜLEREK kuruldu: her unit'in gerekçesi, o olmadan SKIP edecek
+batarya testleridir. Eksik bağımlılık testi kırmızıya düşürmez (gerekçesinde
+kurulum reçetesi yazan bir `skip` olur) — yani eksik bir unit, taze
+checkout'ta sessiz kapsam kaybıdır.
+
+| # | Araç-kümesi | Ne kurar | `--check` kapısı | Bataryada karşılığı |
+|---|---|---|---|---|
+| 1 | `_calisma/.venv_z3` | `_calisma/requirements-z3.txt` içindeki `[venv]` pinleri | `pip freeze` satır-eşitliği | `test_validate_config_schema` (jsonschema), `*_deck` süitleri (PIL), kapı süitleri (yaml), K8 (z3) |
+| 2 | `_calisma/pptx` | `npm ci` | `require.resolve('pptxgenjs')` | `test_pptx_export` |
+| 3 | `_calisma/docx` | `npm ci` | `require.resolve('docx')` | docx jeneratör testleri |
+| 4 | `apps/dashboard-next` | `npm ci` | `tsc` + `next` binary'leri | `test_dashboard_next_*` süitleri |
+| 5 | `apps/trend-db` | `npm ci` | `node_modules/.bin/tsx` | `test_trend_db_js_runner` |
+| 6 | `_calisma/video` | `npm ci` | `node_modules/.bin/tsc` | `test_check_video_typecheck` |
+| 7 | tarayıcı katmanı | `_calisma/requirements-z3.txt` içindeki `[browser]` pini + `playwright install chromium` | **işlevsel**: başsız chromium gerçekten başlıyor mu | `test_dashboard_keyboard_nav`, `test_preview_escaping`, `test_preview_hover_tooltip`, `test_dashboard_cls_budget`, `test_surface_cwv_report` |
+
+Ardından `--full` **temel bataryayı** koşar: `check_unit_tests_hook.sh`
+(pre-commit `check-unit-tests` kapısının ta kendisi) — tüm test dosyaları PASS
+değilse rc=1.
+
+- **Tarayıcı katmanı ilk kurulumda ~150 MB indirir** ve iki adımlı bir
+  bağımlılıktır (pip paketi + ayrı inen chromium). Diğer unit'lerden farklı
+  olarak ölçümü pin-paritesi değil **işlevsel**: çalışan bir chromium, sürüm
+  etiketinden daha güçlü kanıttır ve yerelde farklı ama çalışan bir playwright
+  sürümü kuruluysa gereksiz indirme tetiklenmez. Kurulumda kullanılan pin,
+  CI da aynı `_calisma/requirements-z3.txt` dosyasından kurar; sözleşme testi
+  başka yerde sabitlenmiş sürüm kalırsa başarısız olur.
+- **Neden batarya `--full`a bağlı, varsayılana değil:** batarya manifesti bu
+  betiğin sözleşme-testini (`test_dev_bootstrap.py`) de içerir ve o test betiği
+  bayraksız koşar; batarya varsayılan yola konsaydı test → betik → batarya →
+  test özyinelemesi olurdu. İkinci savunma: batarya çalışırken
+  `LEIBNIZ2_IN_BATTERY=1` taşınır, içerideki `--full` reddedilir.
+- **Batarya dakikalar sürer** (~180 test dosyası, dosya başına bir
+  yorumlayıcı); çıktısı kısılmaz, kırmızı satırlar doğrudan görünür ve batarya
+  düşerse `BOOTSTRAP OK` basılmaz (fail-closed).
+- Varsayılan (bayraksız) akış bilinçli olarak **yalnız kurulumdur**: CI ve
+  tekrarlı koşumlar için hızlı kalır.
+
+Pinokio'suz Live CI Dashboard için macOS'ta tam kurulum + launchd başlatma tek
+komuttur:
+
+```bash
+bash _calisma/CIKTI/fresh_clone_setup.sh --start
+```
+
+Bu akış mirror + HTML + `update_preview.sh` plist zincirini kurar, primary
+LaunchAgent'ı bootstrap eder ve `/api/health` ile `/preview.html` hazır olmadan
+başarı vermez. Ayrıntılı yaşam döngüsü ve `--check`/`--stop` komutları için
+bkz. [`docs/RUN_DASHBOARD.md`](docs/RUN_DASHBOARD.md).
+
+`--check` eksik araçta rc=1 ile düşer (fail-closed). Pin'lerin hook-ortamı
+kısmı (`z3-solver`, `pre_commit`) `docs/HOOK_ENV_MATRIX.md` ile aynı sürümü
+taşır; `jsonschema`/`pillow` o tabloda YOKTUR çünkü onlar hook ortamı değil
+batarya bağımlılığıdır (gerekçesi tabloda: `test_validate_config_schema`,
+`*_deck` süitleri).
+
+## PDF üretimi — iki motor paralel yaşam (tectonic ↔ TeXLive)
+
+Deterministik PDF üretimi iki Makefile ile yapılır; motor geçişi
+devam ederken ikisi de yaşar (TEXLIVE_MIGRATION_PLAN.md):
+
+```bash
+# TeXLive (pdfTeX) — göç hedefi; Faz 1 kabul kanıtı: kanonik hash 544516b0…
+make -f docs/Makefile.texlive pdf       # 3-geçişli derleme + Rerun=0 denetimi
+make -f docs/Makefile.texlive check     # 2×3-geçiş determinism deneyi (fail-closed)
+make -f docs/Makefile.texlive accept    # kanonik hash'i ID_RESIDUAL_ACCEPTANCE defterinde doğrular
+make -f docs/Makefile.texlive engineinfo  # motor kilidi + sözleşme sabitleri (CI log'u için)
+
+# tectonic — paralel yaşam, geri dönüş yolu
+make -f docs/Makefile.tectonic pdf
+```
+
+Sözleşme: `SOURCE_DATE_EPOCH ?= git log -1 --format=%ct` (geçmiş commit'i
+yeniden üretme), `TEXINPUTS="$TEXDIR//:"`, `TEXMFOUTPUT`/`-output-directory`
+BUILD_DIR'a (kaynak dizinine asla yazma), `PASSES ?= 3` + son-geçiş
+`Rerun to get`=0 (fail-closed). Motor sürüm kilidi: pdfTeX
+3.141592653-2.6 (TeX Live 2026) — `engineinfo` ile kanıtlanır.
 
 ## _calisma/lean_reduct — Sınır İspatı Çekirdeği (illüstratif, Mathlib-free)
 
@@ -434,7 +509,157 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-19 | fix | (ci) a11y scan bypasses nonce CSP, bootstrap test guards, dead hash | [`5c02474`](https://github.com/ali-han-kaya/leibniz2/commit/5c02474) |
 | 2026-09-20 | fix | (server) close history/sidecar write race on shutdown | [`3cabbff`](https://github.com/ali-han-kaya/leibniz2/commit/3cabbff) |
 | 2026-09-20 | feat | (texlive) 3-pass determinism + /ID acceptance report (Faz 1-3) | [`24a9b25`](https://github.com/ali-han-kaya/leibniz2/commit/24a9b25) |
-| 2026-09-21 | fix | (ci) trend record via bot branch + PR (protection wall) | [`fa1809b`](https://github.com/ali-han-kaya/leibniz2/commit/fa1809b) |
+| 2026-09-20 | fix | (ci) check-unit-tests hook goes fail-closed on sync drift | [`5280500`](https://github.com/ali-han-kaya/leibniz2/commit/5280500) |
+| 2026-09-20 | fix | (docker) build-context parity, CVE pins, live smoke evidence | [`cfa33d9`](https://github.com/ali-han-kaya/leibniz2/commit/cfa33d9) |
+| 2026-09-20 | feat | (ci) docker security surface — cron smoke + patching hook | [`9c6e1b3`](https://github.com/ali-han-kaya/leibniz2/commit/9c6e1b3) |
+| 2026-09-20 | feat | (docker) pip patching layer joins the ARG mechanism | [`9b32376`](https://github.com/ali-han-kaya/leibniz2/commit/9b32376) |
+| 2026-09-20 | docs | (texlive) Faz 0-1 engine lock surface + parallel-life docs | [`173a2f4`](https://github.com/ali-han-kaya/leibniz2/commit/173a2f4) |
+| 2026-09-20 | docs | (audit) close R4 — weekly docker-security scan is live | [`b726e0c`](https://github.com/ali-han-kaya/leibniz2/commit/b726e0c) |
+| 2026-09-21 | refactor | (trend) remove stale-report 48h guard from record path | [`abd3ec5`](https://github.com/ali-han-kaya/leibniz2/commit/abd3ec5) |
+| 2026-09-21 | test | (sync) pin sync lifecycle as subprocess regression gate | [`5fdf2e4`](https://github.com/ali-han-kaya/leibniz2/commit/5fdf2e4) |
+| 2026-09-21 | feat | (dashboard) TeX engine determinism trend panel | [`49008e6`](https://github.com/ali-han-kaya/leibniz2/commit/49008e6) |
+| 2026-09-21 | docs | (report) record 3/3 CI evidence for PR-route delivery | [`5621c4e`](https://github.com/ali-han-kaya/leibniz2/commit/5621c4e) |
+| 2026-09-21 | style | (github_scripts) prettier-canonical format for comment scripts | [`9beef0a`](https://github.com/ali-han-kaya/leibniz2/commit/9beef0a) |
+| 2026-09-21 | docs | (changelog) sync README rows after style commit | [`10de328`](https://github.com/ali-han-kaya/leibniz2/commit/10de328) |
+| 2026-09-22 | fix | (a11y) CSP-compliant event delegation + keyboard nav suite | [`2fee44f`](https://github.com/ali-han-kaya/leibniz2/commit/2fee44f) |
+| 2026-09-22 | docs | (changelog) sync README row after a11y commit | [`06b25d3`](https://github.com/ali-han-kaya/leibniz2/commit/06b25d3) |
+| 2026-09-22 | test | (api) property-based method matrix for /api/* contract | [`c9d74cf`](https://github.com/ali-han-kaya/leibniz2/commit/c9d74cf) |
+| 2026-09-22 | fix | (dashboard) repair node suites for preview.js vm architecture | [`a951474`](https://github.com/ali-han-kaya/leibniz2/commit/a951474) |
+| 2026-09-22 | fix | (sync) complete mirror manifest coverage for QA findings | [`09d972c`](https://github.com/ali-han-kaya/leibniz2/commit/09d972c) |
+| 2026-09-22 | feat | (server) peer allowlist gate for /api/stop | [`39d86e4`](https://github.com/ali-han-kaya/leibniz2/commit/39d86e4) |
+| 2026-09-22 | feat | (api) OpenAPI 3.1 schema from API_CONTRACT + versioning policy | [`77a0832`](https://github.com/ali-han-kaya/leibniz2/commit/77a0832) |
+| 2026-09-22 | feat | (docker) PR-triggered Trivy scan with SARIF diff comment | [`097fffc`](https://github.com/ali-han-kaya/leibniz2/commit/097fffc) |
+| 2026-09-22 | feat | (ci) CI hygiene gate - permissions, timeout, concurrency matrix | [`69ca3e1`](https://github.com/ali-han-kaya/leibniz2/commit/69ca3e1) |
+| 2026-09-22 | feat | (server) persistent lifecycle event log for preview daemon | [`6cdf03d`](https://github.com/ali-han-kaya/leibniz2/commit/6cdf03d) |
+| 2026-09-22 | feat | (ci) gh-run RCA - red-run root-cause table generator | [`c279e57`](https://github.com/ali-han-kaya/leibniz2/commit/c279e57) |
+| 2026-09-23 | feat | (docs) deployment evidence ledger with staleness gate | [`5c4527c`](https://github.com/ali-han-kaya/leibniz2/commit/5c4527c) |
+| 2026-09-23 | fix | (ci) install pyyaml for runner unit tests | [`9272108`](https://github.com/ali-han-kaya/leibniz2/commit/9272108) |
+| 2026-09-23 | fix | (server) gate GET APIs vs DNS rebinding + run-now peer parity | [`37790f5`](https://github.com/ali-han-kaya/leibniz2/commit/37790f5) |
+| 2026-09-23 | docs | (azure) azd project, bicep infra and deployment plan (Draft) | [`8041a58`](https://github.com/ali-han-kaya/leibniz2/commit/8041a58) |
+| 2026-09-23 | docs | (eval) AI-service evaluation with measured repo baselines | [`a741b81`](https://github.com/ali-han-kaya/leibniz2/commit/a741b81) |
+| 2026-09-23 | docs | (azure) AI Search hybrid-resolution design for K6 refs | [`d9bffa6`](https://github.com/ali-han-kaya/leibniz2/commit/d9bffa6) |
+| 2026-09-23 | docs | (a11y) remaining-scope implementation plan for approved spec | [`ebd0251`](https://github.com/ali-han-kaya/leibniz2/commit/ebd0251) |
+| 2026-09-23 | docs | (a11y) detail plan to writing-plans granularity | [`faf6d75`](https://github.com/ali-han-kaya/leibniz2/commit/faf6d75) |
+| 2026-09-24 | feat | (vercel) serverless /api adapter, git-push deploy config and docs | [`38edfc1`](https://github.com/ali-han-kaya/leibniz2/commit/38edfc1) |
+| 2026-09-24 | feat | (canvas) determinism CI job, header banner and test registrations | [`8d860cc`](https://github.com/ali-han-kaya/leibniz2/commit/8d860cc) |
+| 2026-09-24 | fix | (dashboard) mirror preview.js/sw.js freshness, rAF stream batching | [`e7401b9`](https://github.com/ali-han-kaya/leibniz2/commit/e7401b9) |
+| 2026-09-24 | docs | (tutorial) clone → first verify → first dashboard | [`9ac700a`](https://github.com/ali-han-kaya/leibniz2/commit/9ac700a) |
+| 2026-09-24 | docs | (reference) preview_server /api contract reference | [`2295ed1`](https://github.com/ali-han-kaya/leibniz2/commit/2295ed1) |
+| 2026-09-24 | docs | (explanation) why SDE and the /ID residual work this way | [`193d85a`](https://github.com/ali-han-kaya/leibniz2/commit/193d85a) |
+| 2026-09-24 | docs | (process) fresh-session reader-test protocol | [`f79307d`](https://github.com/ali-han-kaya/leibniz2/commit/f79307d) |
+| 2026-09-24 | feat | (canvas) plates 02-05 and the seven-leaf plate book | [`bae1519`](https://github.com/ali-han-kaya/leibniz2/commit/bae1519) |
+| 2026-09-24 | fix | (a11y) same-origin axe bundle and focusable stdout pane | [`c77ccc9`](https://github.com/ali-han-kaya/leibniz2/commit/c77ccc9) |
+| 2026-09-24 | chore | record weekly determinism trend measurement | [`6da1bda`](https://github.com/ali-han-kaya/leibniz2/commit/6da1bda) |
+| 2026-09-24 | feat | (ci) docx export job with LibreOffice artifact check | [`43e4824`](https://github.com/ali-han-kaya/leibniz2/commit/43e4824) |
+| 2026-09-24 | feat | (docx) merge RC report and full scope audit into one docx | [`f3c9fdc`](https://github.com/ali-han-kaya/leibniz2/commit/f3c9fdc) |
+| 2026-09-24 | feat | (a11y) report verdict field + job summary surface | [`08deae8`](https://github.com/ali-han-kaya/leibniz2/commit/08deae8) |
+| 2026-09-24 | docs | (specs) add verify.yml job needs-DAG excalidraw map | [`04af000`](https://github.com/ali-han-kaya/leibniz2/commit/04af000) |
+| 2026-09-25 | feat | (a11y) scan the branch protection guide | [`9e5160f`](https://github.com/ali-han-kaya/leibniz2/commit/9e5160f) |
+| 2026-09-25 | fix | (a11y) stabilize dashboard contrast analysis | [`e099545`](https://github.com/ali-han-kaya/leibniz2/commit/e099545) |
+| 2026-09-25 | refactor | (design) align vercel tokens with provider contract | [`34b6ea3`](https://github.com/ali-han-kaya/leibniz2/commit/34b6ea3) |
+| 2026-09-26 | test | (coverage) check-seal-hash hook'unu kapsam tablosuna ekle | [`9e0f8e9`](https://github.com/ali-han-kaya/leibniz2/commit/9e0f8e9) |
+| 2026-09-26 | test | (coverage) seal-hash testini check-unit-tests'e bağla | [`614ae70`](https://github.com/ali-han-kaya/leibniz2/commit/614ae70) |
+| 2026-09-26 | test | (coverage) shuffle_tests'ı check-unit-tests kapsamına bağla | [`b72f775`](https://github.com/ali-han-kaya/leibniz2/commit/b72f775) |
+| 2026-09-26 | feat | (audit) shuffle_tests.py - tohumlu test izolasyonu denetimi | [`c8a1074`](https://github.com/ali-han-kaya/leibniz2/commit/c8a1074) |
+| 2026-09-26 | test | (coordinator) TestLoopFlow GATES izolasyonunu mock.patch.dict'e devret | [`691155d`](https://github.com/ali-han-kaya/leibniz2/commit/691155d) |
+| 2026-09-26 | test | (preview-server) StatusBoardTests LATEST izolasyonunu mock.patch.dict'e devret | [`a1fc2ee`](https://github.com/ali-han-kaya/leibniz2/commit/a1fc2ee) |
+| 2026-09-26 | feat | (mcp) health/latest/trend tools with a hermetic stdio smoke | [`8a5008d`](https://github.com/ali-han-kaya/leibniz2/commit/8a5008d) |
+| 2026-09-26 | refactor | (pptx) align the generators with the pilot skeleton and gate it | [`c8fb0f5`](https://github.com/ali-han-kaya/leibniz2/commit/c8fb0f5) |
+| 2026-09-26 | test | (cwv) report CLS/LCP/FCP/TTFB for the landing surface too | [`7802667`](https://github.com/ali-han-kaya/leibniz2/commit/7802667) |
+| 2026-09-26 | test | (a11y) scan the landing surface in both themes over the run snapshot | [`f1aae30`](https://github.com/ali-han-kaya/leibniz2/commit/f1aae30) |
+| 2026-09-26 | feat | (landing) build, serve and seal the landing surface | [`5586080`](https://github.com/ali-han-kaya/leibniz2/commit/5586080) |
+| 2026-09-26 | feat | (preview) themed scan override and a FAIL-state verdict seal | [`4ee11eb`](https://github.com/ali-han-kaya/leibniz2/commit/4ee11eb) |
+| 2026-09-26 | feat | (trend-db) Neon-backed read path, migrations and the /trend panel | [`a7077a9`](https://github.com/ali-han-kaya/leibniz2/commit/a7077a9) |
+| 2026-09-26 | perf | (ci) deepen the build caches (cache v6, setup-python v7, pip mount) | [`b6fa88f`](https://github.com/ali-han-kaya/leibniz2/commit/b6fa88f) |
+| 2026-09-26 | feat | (pptx) rebuild the decks as native shapes with real text | [`32d76c4`](https://github.com/ali-han-kaya/leibniz2/commit/32d76c4) |
+| 2026-09-26 | test | (cwv) add CLS budget gate and three-surface CWV report | [`8ec7702`](https://github.com/ali-han-kaya/leibniz2/commit/8ec7702) |
+| 2026-09-25 | test | (security) add Playwright CSP+nonce smoke for the live dashboard | [`e9ca14a`](https://github.com/ali-han-kaya/leibniz2/commit/e9ca14a) |
+| 2026-09-26 | chore | (coverage) CHECK_EXEMPT tek kaynak + yeni kapıların kapsam girdileri | [`5d1712e`](https://github.com/ali-han-kaya/leibniz2/commit/5d1712e) |
+| 2026-09-26 | feat | (gallery) makale denklem galerisi üreticisi | [`617a0c1`](https://github.com/ali-han-kaya/leibniz2/commit/617a0c1) |
+| 2026-09-26 | feat | (dashboard) Pinokio'suz kurulum ve launchd yaşam döngüsü | [`0896de0`](https://github.com/ali-han-kaya/leibniz2/commit/0896de0) |
+| 2026-09-26 | feat | (ci) artifact adları matrix child'larına göre fail-closed | [`eab8f1f`](https://github.com/ali-han-kaya/leibniz2/commit/eab8f1f) |
+| 2026-09-26 | feat | (ci) action major advisory katmanı | [`d90c5b9`](https://github.com/ali-han-kaya/leibniz2/commit/d90c5b9) |
+| 2026-09-26 | refactor | (lean) K9 lake build'i tek kaynaklı wrapper'a taşı | [`a088982`](https://github.com/ali-han-kaya/leibniz2/commit/a088982) |
+| 2026-09-26 | feat | (latex-surface) tracked .tex yüzeyi için fail-closed kapı | [`e9466bd`](https://github.com/ali-han-kaya/leibniz2/commit/e9466bd) |
+| 2026-09-26 | docs | (preview) history önbelleği ve CSP nonce sözleşmesini belgele | [`103fb7d`](https://github.com/ali-han-kaya/leibniz2/commit/103fb7d) |
+| 2026-09-26 | docs | (ci) dashboard-next job'unu PUBLISH tablosuna isle | [`d20a44c`](https://github.com/ali-han-kaya/leibniz2/commit/d20a44c) |
+| 2026-09-26 | docs | (design-system) GitHub token yuzeyi ve Vercel kullanim rehberi | [`7fe3a5b`](https://github.com/ali-han-kaya/leibniz2/commit/7fe3a5b) |
+| 2026-09-26 | docs | (design-system) Vercel token kullanimini CSS ornegine cevir | [`1e8ab4c`](https://github.com/ali-han-kaya/leibniz2/commit/1e8ab4c) |
+| 2026-09-26 | feat | (gallery) denklem galerisi uretim ciktisini kaydet | [`7f3d7a5`](https://github.com/ali-han-kaya/leibniz2/commit/7f3d7a5) |
+| 2026-09-26 | docs | (preview) dashboard ve Vercel token fark raporu | [`e61b104`](https://github.com/ali-han-kaya/leibniz2/commit/e61b104) |
+| 2026-09-26 | chore | (recovery) 2026-09-20 ve 2026-09-26 kurtarma yamalarini arsivle | [`6dcfca6`](https://github.com/ali-han-kaya/leibniz2/commit/6dcfca6) |
+| 2026-09-26 | chore | (canvas) incidental_proof_plate02 plakasini yenile | [`3fe0720`](https://github.com/ali-han-kaya/leibniz2/commit/3fe0720) |
+| 2026-09-26 | chore | (git) yerel calistirma ciktilarini yoksay | [`a4cb060`](https://github.com/ali-han-kaya/leibniz2/commit/a4cb060) |
+| 2026-09-26 | test | (repack) ust-uste repack byte-identical testi | [`b221f6c`](https://github.com/ali-han-kaya/leibniz2/commit/b221f6c) |
+| 2026-09-26 | docs | (qpdf) donmus kayda surum izleme bolumu (v2) | [`de5865d`](https://github.com/ali-han-kaya/leibniz2/commit/de5865d) |
+| 2026-09-26 | feat | (video) LeibnizChain kompozisyonunu kalici yuzeye tasi | [`b7b5199`](https://github.com/ali-han-kaya/leibniz2/commit/b7b5199) |
+| 2026-09-26 | feat | (video) LeibnizChain'i preview sunucusuna gom (@remotion/player) | [`06cde8d`](https://github.com/ali-han-kaya/leibniz2/commit/06cde8d) |
+| 2026-09-26 | chore | (changelog) amend sonrasi tabloyu gecerli hash'e bagla | [`24e5d4b`](https://github.com/ali-han-kaya/leibniz2/commit/24e5d4b) |
+| 2026-09-26 | feat | (video) verdict dagilim grafigi + kapi kirilmasi animasyonu | [`b0b7ae3`](https://github.com/ali-han-kaya/leibniz2/commit/b0b7ae3) |
+| 2026-09-26 | fix | (preview) VERIFY-001 kaniti - CSP altinda hover-tooltip | [`5fb2f74`](https://github.com/ali-han-kaya/leibniz2/commit/5fb2f74) |
+| 2026-09-27 | fix | (preview) kacakli veriyi nitelik baglamindan da kacir | [`517e37a`](https://github.com/ali-han-kaya/leibniz2/commit/517e37a) |
+| 2026-09-27 | chore | (changelog) 517e37a satirini tabloya ekle | [`d5eef5a`](https://github.com/ali-han-kaya/leibniz2/commit/d5eef5a) |
+| 2026-09-27 | chore | (gitignore) kokteki Vercel paketleme kalintisini gizle | [`a2d681e`](https://github.com/ali-han-kaya/leibniz2/commit/a2d681e) |
+| 2026-09-27 | feat | (security) baslik matrisi + CSP sozlesmesi + izolasyon kapisi | [`827430d`](https://github.com/ali-han-kaya/leibniz2/commit/827430d) |
+| 2026-09-27 | docs | oturum ozeti - commit'ler, olculmus bulgular, bekleyen kararlar | [`59fc35e`](https://github.com/ali-han-kaya/leibniz2/commit/59fc35e) |
+| 2026-09-27 | chore | (gitignore) ruflo calisma zamani yuzeylerini gizle | [`748f12f`](https://github.com/ali-han-kaya/leibniz2/commit/748f12f) |
+| 2026-09-27 | chore | (ruflo) V3 runtime yapilandirmasini kayda gecir | [`9c08763`](https://github.com/ali-han-kaya/leibniz2/commit/9c08763) |
+| 2026-09-27 | fix | (gitignore) ruflo yuzeyini sayma yerine kural ile gizle | [`1f3f212`](https://github.com/ali-han-kaya/leibniz2/commit/1f3f212) |
+| 2026-09-27 | docs | (hakem) teslim paketini sablonla incele, siniflandir | [`4084589`](https://github.com/ali-han-kaya/leibniz2/commit/4084589) |
+| 2026-09-27 | ci | (verify) VERIFY-001 canli CSP kanitini a11y-gate'e bagla | [`0dc7d4d`](https://github.com/ali-han-kaya/leibniz2/commit/0dc7d4d) |
+| 2026-09-27 | chore | (changelog) stale satirlari temizleyen --prune moduna gec | [`b2f4acd`](https://github.com/ali-han-kaya/leibniz2/commit/b2f4acd) |
+| 2026-09-27 | fix | (texlive) determinism kanitini yuklenen bir yola tasi | [`8d64b4f`](https://github.com/ali-han-kaya/leibniz2/commit/8d64b4f) |
+| 2026-09-27 | fix | (verify) PRECOMMIT_RAPORU semasi takip edilen yoldan okunuyor | [`817bb6a`](https://github.com/ali-han-kaya/leibniz2/commit/817bb6a) |
+| 2026-09-27 | fix | (status-checks) GATE_EXCLUDE kararini gercekten tek kaynaga tasi | [`05019e1`](https://github.com/ali-han-kaya/leibniz2/commit/05019e1) |
+| 2026-09-27 | fix | (audit) canli CI denetimini run'in head branch'ine scope'la | [`62968eb`](https://github.com/ali-han-kaya/leibniz2/commit/62968eb) |
+| 2026-09-27 | test | (gates) atomik yazma ve sidecar garantisi kapilarini genislet | [`6be9d12`](https://github.com/ali-han-kaya/leibniz2/commit/6be9d12) |
+| 2026-09-27 | test | (verify) yeni job ekleme kontrol listesini kapiya cevir | [`d1ddff4`](https://github.com/ali-han-kaya/leibniz2/commit/d1ddff4) |
+| 2026-09-27 | docs | (verify) history temizlik kaydi + is sozlesmesi yorumlari | [`bc86e20`](https://github.com/ali-han-kaya/leibniz2/commit/bc86e20) |
+| 2026-09-27 | chore | (changelog) bc86e20 satirini tabloya ekle | [`3457f12`](https://github.com/ali-han-kaya/leibniz2/commit/3457f12) |
+| 2026-09-27 | other | dashboard-next: shadcn Card/Badge/Table + token koprusu | [`d20fc07`](https://github.com/ali-han-kaya/leibniz2/commit/d20fc07) |
+| 2026-09-27 | test | (gates) prettier + tip kapilarinin birim modulu | [`8de9544`](https://github.com/ali-han-kaya/leibniz2/commit/8de9544) |
+| 2026-09-27 | other | design-system: dashboard-next kopya-drift denetimi (contract 7) | [`41d50f2`](https://github.com/ali-han-kaya/leibniz2/commit/41d50f2) |
+| 2026-09-27 | other | preview: demo artifact denetimini taze klonda fail-closed kil | [`961bdce`](https://github.com/ali-han-kaya/leibniz2/commit/961bdce) |
+| 2026-09-27 | ci | (pre-commit) marka-mirror drift kapısını zincire ekle (fail-closed) | [`eab61e1`](https://github.com/ali-han-kaya/leibniz2/commit/eab61e1) |
+| 2026-09-27 | other | design-system: preset-bağımsız dashboard-next + contract 8 kapısı | [`7e4916a`](https://github.com/ali-han-kaya/leibniz2/commit/7e4916a) |
+| 2026-09-27 | other | design-system: Stripe HDS varyantını panoya ve landing'e bağla | [`2c3e1fe`](https://github.com/ali-han-kaya/leibniz2/commit/2c3e1fe) |
+| 2026-09-27 | other | trend-db: load.ts'e --dry-run ön-uçuşu (DB'siz sayaç + SHA-256) | [`8a82cf8`](https://github.com/ali-han-kaya/leibniz2/commit/8a82cf8) |
+| 2026-09-27 | other | trend-db: RLS şablonu (service-role yazar, anon aggregate okur) | [`a6ce6b4`](https://github.com/ali-han-kaya/leibniz2/commit/a6ce6b4) |
+| 2026-09-27 | other | trend-db: sorgu-deseni partial/covering indeksler (trend_runs) | [`e7efae3`](https://github.com/ali-han-kaya/leibniz2/commit/e7efae3) |
+| 2026-09-27 | ci | (pre-commit) orphan kapısının arşiv parmak-izini genelleştir | [`a624cdb`](https://github.com/ali-han-kaya/leibniz2/commit/a624cdb) |
+| 2026-09-27 | docs | olay-patch plan snapshot'ını bugünkü yüzeylerle denetle | [`9508591`](https://github.com/ali-han-kaya/leibniz2/commit/9508591) |
+| 2026-09-27 | other | preview: VERIFY-001'i canlı kanıtla kapat (tıklama yarısı dahil) | [`2a9c0d3`](https://github.com/ali-han-kaya/leibniz2/commit/2a9c0d3) |
+| 2026-09-27 | other | design-system: dashboard-next renk kaynağını kapıya bağla | [`b656b5d`](https://github.com/ali-han-kaya/leibniz2/commit/b656b5d) |
+| 2026-09-27 | other | design-system: marka aynalarının @theme köprüsü ve kapısı | [`9b4133b`](https://github.com/ali-han-kaya/leibniz2/commit/9b4133b) |
+| 2026-09-27 | ci | macOS unzip ve ölçüm scratch artıklarını yoksay | [`800dde6`](https://github.com/ali-han-kaya/leibniz2/commit/800dde6) |
+| 2026-09-27 | docs | rc-review çalışma ağacı arşivini depoya al | [`028d744`](https://github.com/ali-han-kaya/leibniz2/commit/028d744) |
+| 2026-09-27 | ci | TOOLKIT denetim paketini takip dışı bırak | [`a33c586`](https://github.com/ali-han-kaya/leibniz2/commit/a33c586) |
+| 2026-09-27 | other | trend-db: loader dry-run'unu makine-okunur yüzle kilitle | [`e3ef72d`](https://github.com/ali-han-kaya/leibniz2/commit/e3ef72d) |
+| 2026-09-27 | other | precommit-orphans: yetim patch'e çift parmak-izi + özel uyarı | [`11ea4c1`](https://github.com/ali-han-kaya/leibniz2/commit/11ea4c1) |
+| 2026-09-27 | docs | commit'lenmemiş iş envanteri — üç kalem ölçüldü, sahiplik açık | [`ae45333`](https://github.com/ali-han-kaya/leibniz2/commit/ae45333) |
+| 2026-09-28 | other | recovery: yetim 23 patch arşivi + oturum kapanış kaydı | [`9bceacf`](https://github.com/ali-han-kaya/leibniz2/commit/9bceacf) |
+| 2026-09-28 | docs | oturum kapanış kaydı + uzun-hook koşum tuzağı (AGENTS.md) | [`76d683a`](https://github.com/ali-han-kaya/leibniz2/commit/76d683a) |
+| 2026-09-28 | feat | (dashboard-next) tip-testler + tanı-kodu doğrulamalı negatifler | [`0ecc884`](https://github.com/ali-han-kaya/leibniz2/commit/0ecc884) |
+| 2026-09-28 | docs | tip-test turu kaydı + commit'lenmemiş iş envanteri kapanışı | [`366abeb`](https://github.com/ali-han-kaya/leibniz2/commit/366abeb) |
+| 2026-09-28 | feat | (trend-db) dry-run'a kesin çakışma ölçümü (--check-db/--keys-file) | [`75b1b88`](https://github.com/ali-han-kaya/leibniz2/commit/75b1b88) |
+| 2026-09-28 | feat | (gates) oturumun kapı ve yüzey ölçümlerini topla | [`59557b5`](https://github.com/ali-han-kaya/leibniz2/commit/59557b5) |
+| 2026-09-28 | fix | (docs) amend'in bıraktığı bayat changelog satırını temizle | [`e2b0150`](https://github.com/ali-han-kaya/leibniz2/commit/e2b0150) |
+| 2026-09-29 | feat | (bootstrap) UNITS dokuz, pinler tek kaynaktan, kapılar artımlı | [`e7b48a2`](https://github.com/ali-han-kaya/leibniz2/commit/e7b48a2) |
+| 2026-09-29 | refactor | (bootstrap) unit envanteri tek kaynağa, iki taraf da okur | [`8a41a96`](https://github.com/ali-han-kaya/leibniz2/commit/8a41a96) |
+| 2026-09-29 | fix | (bootstrap) venv artık pini taşıyan yorumlayıcıyla kuruluyor | [`af07f76`](https://github.com/ali-han-kaya/leibniz2/commit/af07f76) |
+| 2026-09-29 | chore | (changelog) af07f76 satirini tabloya ekle | [`9ebadc4`](https://github.com/ali-han-kaya/leibniz2/commit/9ebadc4) |
+| 2026-09-29 | fix | (bootstrap) kurulum çıktısı da gerçek yolu gösteriyor | [`eda2f2a`](https://github.com/ali-han-kaya/leibniz2/commit/eda2f2a) |
+| 2026-09-29 | fix | (video) remotion 4.0.408 → 4.0.530, kritik RCE kapandi | [`9b95723`](https://github.com/ali-han-kaya/leibniz2/commit/9b95723) |
+| 2026-09-29 | feat | (gates) --verify bayrağı ve pin kaynağı sözleşmeleri | [`63e21a9`](https://github.com/ali-han-kaya/leibniz2/commit/63e21a9) |
+| 2026-09-29 | chore | (changelog) 63e21a9 satirini tabloya ekle | [`50d13b6`](https://github.com/ali-han-kaya/leibniz2/commit/50d13b6) |
+| 2026-09-30 | feat | (gates) protection-drift kapısı ve SIGTERM yarışı düzeltmesi | [`b72b303`](https://github.com/ali-han-kaya/leibniz2/commit/b72b303) |
+| 2026-09-30 | feat | (texlive) göç Faz 1-4 zinciri ve determinizm kapıları | [`5036f1b`](https://github.com/ali-han-kaya/leibniz2/commit/5036f1b) |
+| 2026-09-30 | fix | (ci) testler geliştirici makinesini ölçmeyi bırakıyor | [`a0f2cd5`](https://github.com/ali-han-kaya/leibniz2/commit/a0f2cd5) |
+| 2026-09-30 | fix | (ci) regresyon testinin kendisi de ortamı ölçüyordu | [`be0d4c0`](https://github.com/ali-han-kaya/leibniz2/commit/be0d4c0) |
+| 2026-09-30 | fix | (ci) birim-test işine Chromium kurulumu | [`125e795`](https://github.com/ali-han-kaya/leibniz2/commit/125e795) |
+| 2026-09-30 | style | (prettier) 26 dosyadaki grandfathered biçim drift'ini kapat | [`1a71245`](https://github.com/ali-han-kaya/leibniz2/commit/1a71245) |
+| 2026-09-30 | fix | (dashboard) klavye suite'i canlı history.jsonl ölçüyordu | [`cb4a88e`](https://github.com/ali-han-kaya/leibniz2/commit/cb4a88e) |
+| 2026-09-30 | chore | (changelog) cb4a88e satirini tabloya ekle | [`dae7624`](https://github.com/ali-han-kaya/leibniz2/commit/dae7624) |
 
 ### Regresyon notları
 

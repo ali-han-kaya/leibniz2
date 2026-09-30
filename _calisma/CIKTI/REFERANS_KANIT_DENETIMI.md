@@ -134,7 +134,19 @@ Indagationes Mathematicae 15: 330--339. (Proc. Kon. Ned. Akad. Wetensch. A56: 33
 
 ### 5.2 V5i determinism notu (referans bağlamı dışı)
 
-V5i (2026-08-17) K6-DETERM katmanını ekledi: `qpdf --remove-metadata` ile PDF'in metadata-stripped SHA-256'sı hesaplanır (`ingiliz_empirizmi_v3.pdf.metadata.sha256`). **Known limitation:** tectonic 0.17.0 byte-deterministic olmadığından `--strict-determinism` varsayılan kapalıdır; drift bilgi amaçlı raporlanır (P0/P1 yok). Bu, referans doğruluğunu değil yalnızca PDF derleme tekrarlanabilirliğini etkiler (bkz. MANIFEST V5k notu).
+V5i (2026-08-17) K6-DETERM katmanını ekledi: `qpdf --remove-metadata` ile PDF'in metadata-stripped SHA-256'sı hesaplanır (`ingiliz_empirizmi_v3.pdf.metadata.sha256`). `--strict-determinism` varsayılan kapalıdır (MANIFEST V5k kararı); drift bilgi amaçlı raporlanır (P0/P1 yok). Bu, referans doğruluğunu değil yalnızca PDF derleme tekrarlanabilirliğini etkiler.
+
+**Faz 4 düzeltmesi (2026-09-30):** eski gerekçe "tectonic 0.17.0
+byte-deterministic değildir" idi; ölçüm bunu düzeltir — motor
+`SOURCE_DATE_EPOCH` ile **deterministiktir**, tek kalıntı trailer `/ID`'dir
+ve `qpdf --remove-metadata`'nın KENDİSİ kararsızdır (aynı girdi ≠ aynı çıktı).
+Bu yüzden K6-DETERM'in strict referansı artık metadata-stripped hash değil
+`/ID`-kanonik hash'tir (`verify_delivery.py::canonical_pdf_sha256`) ve strict
+mod bu hash'i kabul defterinde (`docs/ID_RESIDUAL_ACCEPTANCE.md`) arar —
+ayrıntı: `docs/ID_RESIDUAL_ACCEPTANCE.md` §6 + `docs/TEXLIVE_MIGRATION_PLAN.md`
+Faz 4. Ortak çekirdek `_calisma/CIKTI/id_canonical.py`'dir (verify + repack
++ K14 tek kaynak). Bayrak artık yerel pre-commit hook'u + CI `verify.yml`
+`--full` adımında **ETKİN** koşar (V5k notunun "OFF kalır" hükmü geçersiz).
 
 **V5l/V5m eki (2026-08-18):** qpdf non-determinizm deneyi `qpdf_determinism_experiment.py` + donmuş çıktı `qpdf_determinism_output.txt` olarak yeniden üretilebilir hale getirildi (K5 4. script çifti; varsayılan mod donmuş kayıt, `--rerun [N]` canlı deney). V5l bulgusu aynen teyit edildi: `qpdf --remove-metadata` aynı girdi üzerinde farklı çıktılar üretir; repack sidecar'ı yalnızca raw hash değişince yeniden üretir. Bu, referans doğruluğunu değil yalnızca PDF derleme/repack tekrarlanabilirliğini etkiler (bkz. MANIFEST V5l/V5m notu).
 

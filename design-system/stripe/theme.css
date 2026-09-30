@@ -1,0 +1,79 @@
+/*
+ * design-system/stripe/theme.css — GENERATED, DO NOT EDIT.
+ *
+ * Stripe HDS tabanlı tema varyantı: `:root[data-theme="stripe"]` altında
+ * pano/landing'in repo semantik yuvalarını (`--bg`, `--fg`, `--accent`, …)
+ * design-system/stripe/tokens.css aynasındaki --hds-* token'larına bağlar.
+ *
+ * Üretici: scripts/generate_stripe_theme.py
+ *   python3 design-system/stripe/scripts/generate_stripe_theme.py
+ *   python3 design-system/stripe/scripts/generate_stripe_theme.py --check
+ *
+ * İçerik: (1) SLOT_MAP'in referans verdiği --hds-* token'larının transitif
+ * kapanışı aynadan birebir, (2) 32 renk yuvasının tamamı için eşleme.
+ * Elle düzenleme drift sayılır: check-design-tokens contract 9 fail-closed
+ * bloke eder (yeniden üret → commit et).
+ */
+
+
+:root[data-theme="stripe"] {
+  /* ── HDS ön-koşulları (ayna: stripe/tokens.css, birebir) ── */
+  --hds-color-action-bg-solid: var(--hds-color-core-brand-600);
+  --hds-color-action-text-onSolid: var(--hds-color-core-neutral-0);
+  --hds-color-core-brand-600: #533afd;
+  --hds-color-core-error-500: #d8351e;
+  --hds-color-core-error-600: #a01400;
+  --hds-color-core-lemon-300: #e8a30b;
+  --hds-color-core-lemon-500: #9b6829;
+  --hds-color-core-magenta-350: #f44bcc;
+  --hds-color-core-magenta-600: #a51d85;
+  --hds-color-core-neutral-0: #fff;
+  --hds-color-core-neutral-25: #f8fafd;
+  --hds-color-core-neutral-50: #e5edf5;
+  --hds-color-core-neutral-500: #64748d;
+  --hds-color-core-neutral-600: #50617a;
+  --hds-color-core-neutral-990: #061b31;
+  --hds-color-core-success-400: #00b261;
+  --hds-color-core-success-600: #006f3a;
+  --hds-color-surface-bg-quiet: var(--hds-color-util-white);
+  --hds-color-surface-bg-subdued: var(--hds-color-core-neutral-25);
+  --hds-color-surface-border-quiet: var(--hds-color-core-neutral-50);
+  --hds-color-text-soft: var(--hds-color-core-neutral-600);
+  --hds-color-text-solid: var(--hds-color-core-neutral-990);
+  --hds-color-text-subdued: var(--hds-color-core-neutral-500);
+  --hds-color-util-white: var(--hds-color-core-neutral-0);
+
+  /* ── repo semantiği → HDS ── */
+  --bg: var(--hds-color-surface-bg-quiet);
+  --fg: var(--hds-color-text-solid);
+  --muted: var(--hds-color-text-subdued);
+  --fg-dimmed: var(--hds-color-text-soft);
+  --ok: var(--hds-color-core-success-600);
+  --warn: var(--hds-color-core-lemon-500);
+  --err: var(--hds-color-core-error-600);
+  --budget: var(--hds-color-core-magenta-600);
+  --border: var(--hds-color-surface-border-quiet);
+  --accent: var(--hds-color-action-bg-solid);
+  --on-accent: var(--hds-color-action-text-onSolid);
+  --surface: var(--hds-color-surface-bg-subdued);
+  --surface-1: var(--hds-color-surface-bg-subdued);
+  --surface-2: var(--hds-color-core-neutral-50);
+  --surface-raised: var(--hds-color-core-neutral-50);
+  --code-bg: var(--hds-color-surface-bg-subdued);
+  --header-start: var(--hds-color-surface-bg-quiet);
+  --header-end: var(--hds-color-surface-bg-subdued);
+  --paper: var(--hds-color-surface-bg-quiet);
+  --paper-ink: var(--hds-color-text-solid);
+  --tint-ok-bg: color-mix(in oklab, var(--hds-color-core-success-400) 15%, transparent);
+  --tint-warn-bg: color-mix(in oklab, var(--hds-color-core-lemon-300) 15%, transparent);
+  --tint-err-bg: color-mix(in oklab, var(--hds-color-core-error-500) 15%, transparent);
+  --tint-err-bg-strong: color-mix(in oklab, var(--hds-color-core-error-500) 12%, transparent);
+  --tint-err-bg-weak: color-mix(in oklab, var(--hds-color-core-error-500) 10%, transparent);
+  --tint-budget-bg: color-mix(in oklab, var(--hds-color-core-magenta-350) 12%, transparent);
+  --tint-accent-bg: color-mix(in oklab, var(--hds-color-action-bg-solid) 15%, transparent);
+  --tint-accent-hover: color-mix(in oklab, var(--hds-color-action-bg-solid) 10%, transparent);
+  --tint-accent-active: color-mix(in oklab, var(--hds-color-action-bg-solid) 20%, transparent);
+  --tint-unknown-bg: color-mix(in oklab, var(--hds-color-text-subdued) 15%, transparent);
+  --shadow-tip: 0 8px 24px color-mix(in oklab, var(--hds-color-text-solid) 18%, transparent);
+  --backdrop-lightbox: color-mix(in oklab, var(--hds-color-text-solid) 92%, transparent);
+}

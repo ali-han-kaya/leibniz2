@@ -23,6 +23,9 @@ Pre-commit hook'u olarak:
 """
 
 import argparse
+import ast
+import fnmatch
+import glob
 import json
 import os
 import pathlib
@@ -60,7 +63,9 @@ HOOK_COVERAGE = {
     "verify-delivery-github-scripts": ["test_github_scripts_battery.py"],
     "verify-delivery-sde":       ["test_check_sde_determinism.py"],
     "texlive-repro-documented":  ["test_texlive_repro_documented.py"],
-    "check-z3-slide-sync":       ["test_render_z3_slides.py", "test_z3_slide_reproducibility.py"],
+    "check-z3-slide-sync":       ["test_render_z3_slides.py", "test_render_equation_gallery.py", "test_z3_slide_reproducibility.py"],
+    "check-latex-surface":      ["test_check_latex_surface.py"],
+    "check-seal-hash":          ["test_check_seal_hash.py"],
     "check-pattern-consistency": ["test_gen_repro_manifest.py"],
     "check-config-sync":       ["test_check_config_sync.py"],
     "check-lake-evidence":     ["test_lake_evidence_smoke.py"],
@@ -71,9 +76,31 @@ HOOK_COVERAGE = {
     "check-doc-artifact-sync": ["test_doc_artifact_sync.py"],
     "check-skills-index":       ["test_skills_index.py", "test_readme_skills.py"],
     "check-design-tokens":      ["test_check_design_tokens.py"],
+    # Marka mirror drift kapısı (stripe/linear/primer/vercel): roster
+    # bütünlüğü + pin eşleşmesi + kapsam sözleşmeleri tek modülde test edilir.
+    "check-brand-mirrors":      ["test_brand_mirror_gate.py"],
+    # Marka aynası @theme köprüleri (üretici + kapı): ad/ön-ek kuralları,
+    # temel palet ayrıklığı, ön-koşul birebirliği ve sayım kilitleri tek
+    # modülde test edilir.
+    "check-mirror-bridges":     ["test_mirror_bridges.py"],
+    # Zincir envanteri ↔ config hook kümesi (advisory uyarı + --strict).
+    # Testi aynı zamanda şu değişmezi çiviler: gerçek ağaçta envanter bloğu
+    # ile `.pre-commit-config.yaml` hook kümesi BİREBİR eşit olmalı.
+    "check-precommit-inventory": ["test_check_precommit_inventory.py"],
+    "check-bootstrap-toolchain": ["test_check_bootstrap_toolchain.py"],
+    # Skill-alanı ↔ repo-yüzeyi envanteri: iki yönlü paket denetimi +
+    # zero-surface iddiaları (rn-expo/wrangler/xlsx). Manifest
+    # skill_surfaces.list tek kaynaktır.
+    "check-skill-surfaces": ["test_check_skill_surfaces.py"],
+    # dashboard-next'in JS kapı çifti: ikisi de aynı yüzeyin (biçim + tip)
+    # sözleşmesini denetliyor ve tek bir birim modülü var. HOOK_COVERAGE'a
+    # girmeden önce bu iki hook'un kapsam raporunda testi YOKTU.
+    "check-prettier-format":    ["test_dashboard_next_style_gates.py"],
+    "check-dashboard-typecheck": ["test_dashboard_next_style_gates.py"],
     "check-reproducible-pdf-skill": ["test_reproducible_pdf_skill.py"],
     "check-changelog-sync":    ["test_update_changelog_hook.py", "test_gen_changelog.py"],
     "check-unit-tests": [
+        "test_server_events.py",
         "test_workflow_install_hardening.py",
         "test_verify_refs.py",
         "test_verify_checks.py",
@@ -146,14 +173,17 @@ HOOK_COVERAGE = {
         "test_coverage_report.py",
         "test_test_coverage_report.py",
         "test_sync_check_unit_tests.py",
+        "test_select_affected_tests.py",
         "test_sync_one_atomic.py",
         "test_check_lean_axioms.py",
         "test_classify_lean_error.py",
+        "test_check_latex_surface.py",
         "test_check_lean_statements.py",
         "test_check_sde_determinism.py",
         "test_skill_layer_sync.py",
         "test_gen_k_layer.py",
         "test_reproducible_pdf_skill.py",
+        "test_render_equation_gallery.py",
         "test_render_z3_slides.py",
         "test_check_hook_env_matrix.py",
         "test_ci_sidecar_wiring.py",
@@ -161,6 +191,7 @@ HOOK_COVERAGE = {
         "test_audit_octokit_names.py",
         "test_check_badge_endpoints.py",
         "test_check_bootstrap_start_smoke.py",
+        "test_check_bootstrap_toolchain.py",
         "test_check_config_drift_summary.py",
         "test_check_coq_axioms.py",
         "test_check_orchestration_stdin.py",
@@ -214,6 +245,7 @@ HOOK_COVERAGE = {
         "test_budget_over_detail.js",
         "test_refs_trend_badge_node.js",
         "test_z3_scan.js",
+        "test_verify_job_checklist.py",
         "test_check_design_tokens.py",
         "test_check_zip_lineage_drift.py",
         "test_readme_skills.py",
@@ -231,7 +263,57 @@ HOOK_COVERAGE = {
         "test_dev_bootstrap.py",
         "test_id_residual_acceptance_doc.py",
         "test_makefile_texlive.py",
-        "test_trend_record_pr_contract.py",],
+        "test_gated_schedules.py",
+        "test_sync_lifecycle.py",
+        "test_determinism_trend_badge.py",
+        "test_dashboard_keyboard_nav.py",
+        "test_api_method_matrix.py",
+        "test_stop_peer_allowlist.py",
+        "test_openapi_schema.py",
+        "test_ci_hygiene_gate.py",
+        "test_gh_run_rca.py",
+        "test_deploy_evidence.py",
+        "test_local_security_surface.py",
+        "test_vercel_adapter.py",
+        "test_canvas_determinism.py",
+        "test_determinism_trend_canvas.py",
+        "test_incidental_banner.py",
+        "test_check_seal_hash.py",
+        "test_dashboard_cls_budget.py",
+        "test_surface_cwv_report.py",
+        "test_shuffle_tests.py",
+        "test_repack_idempotence.py",
+        "test_check_video_typecheck.py",
+        "test_video_data_contract.py",
+        "test_check_video_render.py",
+        "test_preview_video_player.py",
+        "test_preview_hover_tooltip.py",
+        "test_preview_escaping.py",
+        "test_csp_directives.py",
+        "test_security_header_matrix.py",
+        "test_static_isolation.py",
+        "test_dashboard_next_style_gates.py",
+        "test_brand_mirror_gate.py",
+        "test_trend_db_index_contract.py",
+        "test_trend_db_rls_contract.py",
+        "test_mirror_bridges.py",
+        "test_trend_db_js_runner.py",
+        "test_check_unstaged_delta.py",
+        "test_dashboard_next_ui_contract.py",
+        "test_check_precommit_inventory.py",
+        "test_verify_sweep.py",
+        "test_check_skill_surfaces.py",
+        "test_check_merge_precondition.py",
+        "test_gen_skill_surface_inventory.py",
+        "test_dashboard_next_battery_smoke.py",
+        "test_trend_record_pr_contract.py",
+        "test_check_protection_drift.py",
+        "test_check_prettier_format.py",
+        "test_plist_keepalive_golden.py",
+        "test_gen_id_residual_acceptance.py",
+        "test_k6_determ_canonical.py",
+        "test_ci_env_independence.py",
+    ],
 }
 
 # verify.yml CI job'ları → kapsadığı test dosyaları
@@ -242,8 +324,36 @@ CI_JOB_COVERAGE = {
         "ALL",
     ],
     "preview-reload-smoke": ["test_preview_reload_smoke.py"],
-    "a11y-gate": ["test_a11y_gate.py"],
-    "dashboard-smoke": ["test_dashboard_playwright_smoke.py"],
+    # a11y-gate job'ı dashboard'ın axe taramasına ek olarak CLS bütçe kapısını
+    # (CLS < 0.1) aynı canlı preview_server üzerinde koşar — "Run CLS budget
+    # gate — dashboard (CLS < 0.1)" adımı. İkinci adım ("Run CWV report —
+    # dashboard + landing") aynı ölçüm çekirdeğini dashboard + landing
+    # yüzeylerine koşturur (CLS/LCP/FCP/TTFB).
+    "a11y-gate": ["test_a11y_gate.py", "test_dashboard_cls_budget.py",
+                  "test_surface_cwv_report.py"],
+    # ÖLÇÜLENLİ BOŞLUK (2026-09-28): `test_dashboard_playwright_smoke.py`
+    # HİÇBİR CI JOB'INDA KOŞMUYOR. Önceden burada `dashboard-smoke` diye bir
+    # job kayıtlıydı; ölçüldü: verify.yml'de böyle bir job YOK (jobs: verify,
+    # a11y-gate, dashboard-next, preview-reload-smoke, …) ve hiçbir workflow bu
+    # dosyayı çalıştırmıyor. `verify` job'ı `unittest discover` ile dosyayı
+    # KEŞFEDİYOR ama o job'da Playwright kurulu değil (yalnız a11y-gate ve
+    # dashboard-next'te kurulu) → süit `skipIf` ile sessizce ATLANIYOR.
+    # Yani kayıt, koşan bir kapı varmış gibi rapor veriyordu (fail-open'ın
+    # kardeşi: kayıt var, koşum yok). Kayıt KALDIRILDI; dosya CHECK_EXEMPT'te
+    # kalıyor ve gerçek bir job eklenirse buraya geri gelmelidir.
+    # dashboard-next job'ı panoyu derledikten SONRA yüzey smoke'unu koşar
+    # ("Surface smoke — dashboard-next"): bu dosyanın canlı katmanı `next
+    # start` + Chromium ister, derleme zaten aynı job'da yapılır. Dosya
+    # check_unit_tests.list DIŞINDADIR (EXCLUDE) — pre-commit bütçesi. Statik
+    # eşi `test_dashboard_next_ui_contract.py` unit bataryasındadır.
+    "dashboard-next": ["test_dashboard_next_surface_smoke.py",
+                       # İstek-basi dedup sözleşmesi: SAYAN upstream + `next
+                       # start`. Aynı job'da, derlemenin hemen ardından
+                       # (Chromium'dan ÖNCE — stdlib HTTP, tarayıcı yok).
+                       "test_dashboard_next_request_dedup.py",
+                       # Canlı akış sözleşmesi: yayınlayan upstream + Chromium
+                       # gerektirir → Chromium kurulumundan SONRA koşmalı.
+                       "test_dashboard_next_live_stream.py"],
     "daemon-http": ["test_daemon_http.py"],
     "plist-check": ["test_plist_gate_exit.py", "test_gen_plist_golden.py"],
     "coq-proof": ["test_coq_lake.py"],
@@ -449,6 +559,465 @@ def build_report(test_files, hook_map, ci_map, hook_names, ci_data=None):
     }
 
 
+# ────────────────────────────────────────────────────────────────────────────
+# CHECK_EXEMPT — `--check` modunun muafiyet sözleşmesi: bu dosyalar hiçbir
+# pre-commit hook'unda koşmaz (standalone smoke/Playwright/JS-only) ve
+# kapsamsız kalmaları FAIL sayılmaz. TEK KAYNAK burasıdır; kardeş test
+# (test_test_coverage_report.py) eskiden aynı listeyi elle kopyalıyordu ve
+# kopya sürüklendiği için süit kırmızıya düştü — artık buradan okunur.
+# Modül düzeyinde durur ki test/araç onu import edebilsin. Metin biçimi
+# ("CHECK_EXEMPT = frozenset({") test_sync_check_unit_tests.py'nin metin
+# ayrıştırmasıyla uyumlu tutulmalıdır.
+# ────────────────────────────────────────────────────────────────────────────
+CHECK_EXEMPT = frozenset({
+    "test_coverage_report.py",      # meta: kendi kendini test edemez
+    "test_test_coverage_report.py",  # meta: kendini test eder, ayrıca check-unit-tests'te
+    "test_preview_reload_smoke.py",  # standalone smoke script, def test_ yok
+    "test_all_hooks_smoke.py",       # standalone smoke: tum hook'lari kosar
+    "test_budget_scan.js",          # JS-only, ayrı Node hook'unda
+    "test_dashboard_playwright_smoke.py",  # standalone Playwright smoke (Chromium ~10s) — ÖLÇÜLDÜ: hiçbir
+                                           # CI job'ında koşmuyor (verify job'ında Playwright yok → skipIf;
+                                           # ayrı `dashboard-smoke` job'ı YOK). Kapsam dışı olduğu için
+                                           # CHECK_EXEMPT; gerçek job eklenirse CI_JOB_COVERAGE'a girer.
+    "test_dashboard_csp_nonce.py",   # standalone Playwright CSP+nonce smoke (Chromium) — canlı sunucu/kendi sunucusu
+    "test_dashboard_next_surface_smoke.py",  # standalone Playwright yüzey smoke'u (Chromium + `next start`) — derleme
+                                             # gerektirir, pre-commit bütçesine sığmaz; CI_JOB_COVERAGE'da
+                                             # `dashboard-next` job'ı ile kayıtlıdır (o job panoyu derler).
+    "test_dashboard_next_request_dedup.py",  # standalone istek-basi dedup sözleşmesi (sayan upstream + `next start`)
+                                             # — derleme gerektirir, pre-commit bütçesine sığmaz; CI_JOB_COVERAGE'da
+                                             # `dashboard-next` job'ı ile kayıtlıdır (o job panoyu derler).
+    "test_dashboard_next_live_stream.py",  # standalone canlı akış sözleşmesi (yayınlayan upstream + `next start`
+                                           # + Chromium) — pre-commit bütçesine sığmaz; CI_JOB_COVERAGE'da
+                                           # `dashboard-next` job'ı ile kayıtlıdır (o job panoyu derler ve
+                                           # Chromium kurar).
+    "test_refs_trend_badge_node.js", # standalone JS smoke (Node-only assertion), dokümante bilinçlileşti
+})
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# ARTIRMLI SEÇİM — kapsam eşlemesi kaynak-dosya GLOB'larına genişletildi
+# ══════════════════════════════════════════════════════════════════════════
+# Ölçülen boşluk: check-unit-tests her commit'te manifest'in TAMAMINI
+# (190 dosya, ~345-370 s) koşuyordu. Commit'in dokunduğu testlerle sınırlı
+# bir koşum aynı güvenliği çok daha kısa sürede veriyor.
+#
+# Eşleme ÜÇ kaynağın BİRLEŞİMİDİR — ve bu kasıtlıdır:
+#
+#   1. TÜRETİLEN (import): testin `import`'ladığı ve diskte GERÇEKTEN
+#      bulunan modüller. Sürükleme İMKANSIZ: eşleme testin kendi
+#      kaynak kodundan hesaplanır, ayrı bir tablo kopyalanmaz. Yeni bir
+#      import eklemek otomatik olarak kapsamı genişletir.
+#   2. BİLANEN (aşağıdaki tablo): import EDİLEMEYEN bağımlılıklar —
+#      config dosyaları, YAML, markdown, shell betikleri, JSON manifestler.
+#      Bunlar okunur ama import edilmez; elle bildirilir.
+#   3. ALWAYS_RUN: hiçbir yolla seçilemeyecek testler. Bir test listede
+#      yoksa VE import'ı yoksa artımlı koşumda HİÇ seçilmez — bu sessiz
+#      kapsam kaybıdır, bu yüzden varsayılan "hep koş"tur.
+#
+# ⚠️ FAIL-CLOSED İLKESİ: her manifest testi ya ALWAYS_RUN'da ya en az bir
+# glob'a sahip OLMAK ZORUNDA (total erişilebilirlik kuralı, `reachable()`
+# ve sync --check bunu denetler). Yeni bir test eklenip glob'u unutulursa
+# commit bloklanır — "yavaş çalışsın" değil, "HİÇ çalışmasın" riski
+# komşu bir kurala bırakılmaz.
+#
+# Glob sözdizimi: `fnmatch` — `*` `/` sınırını AŞAR (`*verify.yml`
+# `.github/workflows/verify.yml`'yi de tutar). Bu, "hangi klasörde
+# olursa olsun" anlamına gelir ve choke-point dosyaları (verify.yml,
+# .pre-commit-config.yaml) için ayrı bir tabloya gerek bırakmaz.
+
+# Playwright kapılarının ORTAK kaynak yüzeyi (dört test aynı sunucuyu
+# sürüyor). `preview_server.py` sunucuyu başlatan ve statik yüzeyi
+# servis eden dosyadır; statik HTML üretilmiş çıktıdır (PREVIEW_DIR =
+# kullanıcı önbelleği, repoda izlenmez) — bu yüzden izlenebilir olan
+# ÜRETİCİ kaynaklar bildirilir.
+PLAYWRIGHT_SOURCES = [
+    "_calisma/CIKTI/preview_server.py",
+    "design-system/*",
+    "apps/dashboard-next/*",
+]
+TEST_SOURCE_GLOBS = {
+    # ── config / workflow choke-point'leri: nerede olurlarsa olsunlar ──
+    "test_advisory_coe_surfacing.py": ["*verify.yml", "*github_scripts/*.js"],
+    "test_check_unstaged_delta.py": [".pre-commit-config.yaml"],
+    "test_ci_sidecar_wiring.py": ["*verify.yml", "*github_scripts/*.js"],
+    "test_ci_hygiene_gate.py": ["*.yml"],
+    "test_doc_job_sync.py": [".pre-commit-config.yaml", "docs/PUBLISH_SCENARIO.md", "*verify.yml"],
+    "test_gate_scripts_meta_guard.py": ["*github_scripts/*.js", "*verify.yml"],
+    "test_gated_schedules.py": ["*.yml", "*docker_security_smoke.sh", "*texlive_determinism_test.sh"],
+    "test_github_scripts.py": ["*github_scripts/*.js", "*verify.yml"],
+    "test_label_gate_contracts.py": ["*label_gate*.js", "*verify.yml"],
+    "test_m0_k12_sidecar_sync.py": ["*verify.yml", "docs/*"],
+    "test_plist_check_workflow.py": ["*verify.yml"],
+    "test_workflow_install_hardening.py": ["*verify.yml"],
+    "test_workflow_timeouts.py": ["*verify.yml", "*verify_lean_lake.sh"],
+    "test_workflow_triggers.py": ["*verify.yml"],
+
+    # ── marka / tasarım yüzeyleri ──
+    "test_brand_mirror_gate.py": ["design-system/*", "apps/dashboard-next/*",
+                                  ".pre-commit-config.yaml"],
+    "test_check_design_tokens.py": ["design-system/*", "apps/dashboard-next/*"],
+    "test_pptx_export.py": ["_calisma/pptx/*", "design-system/tokens.json"],
+
+    # ── preview.js yüzeyi (kaynak kodunu import etmeden okuyan testler) ──
+    "test_budget_over_banner.py": ["*preview.js"],
+    "test_config_sync_badge.py": ["*preview.js"],
+    "test_mirror_panel.py": ["*preview.js", "*sync_verify_mirror.sh"],
+    "test_override_trend_badge.py": ["*preview.js"],
+    "test_refs_trend_badge.py": ["*preview.js"],
+
+    # ── determinizm / üretim betikleri ──
+    "test_canvas_determinism.py": ["*canvas_determinism_test.sh"],
+    "test_determinism_trend_canvas.py": ["*canvas_determinism_test.sh", "*determinism-trend.yml"],
+    "test_dashboard_k17_exit_sync.py": ["*dashboard_smoke.sh", "*sync_verify_mirror.sh"],
+    "test_dashboard_smoke.py": ["*dashboard_smoke.sh"],
+    "test_k13_coverage_sync.py": ["*sync_verify_mirror.sh"],
+    # K9 Lean senkronu: test iki SCRIPT'I okuyor. `lake-manifest.json` bir
+    # ÜRETİLMİŞ artifact'tir (izlenmez, .gitignore'da) ve test onu hiç
+    # okumaz — satırda geçen şey `! -name "lake-manifest.json"` ifadesi,
+    # yani sync'in onu DIŞLADIğının kanıtı. O dosyaya glob bağlamak iki
+    # hataya yol açtı: (1) commit listeleri izlenen dosyalardan geldiği için
+    # bu glob HİÇ seçim üretemez, (2) stale denetimi üretilmiş dosyayı
+    # gördüğü için ana ağaçta geçer, taze checkout'ta patlıyordu.
+    "test_k9_lean_files_sync.py": ["*sync_verify_mirror.sh", "*verify_delivery.py"],
+    "test_sync_one_atomic.py": ["*sync_verify_mirror.sh"],
+    "test_texlive_determinism_hook.py": ["*texlive_determinism_hook.sh", ".pre-commit-config.yaml"],
+    "test_texlive_determinism_id_residual.py": ["*texlive_determinism_test.sh"],
+    "test_texlive_repro_documented.py": ["*texlive_determinism_hook.sh", "*texlive_determinism_test.sh",
+                                         ".pre-commit-config.yaml", "*REPRODUCIBILITY.md"],
+    "test_makefile_texlive.py": ["docs/Makefile.texlive", "docs/Makefile.tectonic",
+                                 "docs/ID_RESIDUAL_ACCEPTANCE.md",
+                                 "*gen_id_residual_acceptance.py"],
+    # K6-DETERM (Faz 4): strict kapı /ID-kanonik hash'e + kabul defterine
+    # bağlı. Test verify_delivery.py'nin yeni yardımcılarını (canonical_pdf_sha256,
+    # id_residual_ledger_tokens, k6_determ_verdict) ve kaynak sözleşmesini
+    # denetler; defter (referans kaydı) değişince de seçilmelidir.
+    "test_k6_determ_canonical.py": ["*verify_delivery.py",
+                                    "docs/ID_RESIDUAL_ACCEPTANCE.md"],
+
+    # ── docker ──
+    "test_docker_security_smoke.py": ["*docker_security_smoke.sh", "Dockerfile"],
+    "test_dockerfile_security_patching.py": ["Dockerfile", "docs/DOCKER_SECURITY_PATCHING.md",
+                                              "*docker_security_smoke.sh", ".pre-commit-config.yaml"],
+
+    # ── hook betikleri ──
+    "test_check_precommit_orphans.py": ["*check_precommit_orphans.py", "*recovery_patches_*"],
+    "test_check_video_typecheck.py": ["*check_video_typecheck.sh", "_calisma/video/*"],
+    "test_commit_msg_hook.py": ["*commit_msg_hook.sh", "*commit_msg_gate.js"],
+    "test_enforce_is_on.py": ["*publish_wrapper.sh"],
+    "test_fallback_evidence_hook.py": ["*check_fallback_evidence_hook.sh",
+                                       "_calisma/CIKTI/ia_ol_fallback_evidence.py",
+                                       ".pre-commit-config.yaml"],
+    "test_update_preview_sync_server.py": ["*update_preview.sh"],
+    # keepalive profil mimarisi altın-dosya testi: update_preview.sh'in
+    # PLIST_PROFILES son kolonunu (true/false) render edip üretilen plist
+    # GÖVDELERİNİ commit'li plist-golden/ ile karşılaştırır — drift kapısının
+    # (check_plist_drift.py, advisory) fail-closed birim karşılığı. Bu yüzden
+    # hem şablon kaynağı hem golden dizini izlenir.
+    "test_plist_keepalive_golden.py": ["*update_preview.sh", "*plist-golden/*"],
+    "test_verify_checks.py": ["*verify_checks.sh"],
+
+    # ── üretici ↔ doküman sözleşmeleri ──
+    "test_gen_commit_msg_evidence.py": ["*commit_msg_hook.sh", "docs/*"],
+    "test_gen_k_layer.py": ["skills/*"],
+    "test_gen_skill_surface_inventory.py": ["_calisma/CIKTI/gen_skill_surface_inventory.py",
+                                            "docs/SKILL_SURFACE_INVENTORY.md",
+                                            "findings.md", "*skill_surfaces.list"],
+    "test_id_residual_acceptance_doc.py": ["docs/ID_RESIDUAL_ACCEPTANCE.md"],
+    # Faz 3 kabul üreticisi: kanıt (determinism raporu) → defter satırı.
+    # Üreticiyi, kabul raporunu ve Makefile'ın accept bağını izler.
+    "test_gen_id_residual_acceptance.py": ["*gen_id_residual_acceptance.py",
+                                           "docs/ID_RESIDUAL_ACCEPTANCE.md",
+                                           "docs/Makefile.texlive"],
+    "test_duration_pct_config.py": ["*verify_delivery.config.json"],
+
+    # ── trend-db ──
+    "test_trend_db_index_contract.py": ["apps/trend-db/*", "README.md"],
+    "test_trend_db_rls_contract.py": ["apps/trend-db/*"],
+    "test_trend_db_js_runner.py": ["apps/trend-db/*"],
+    "test_video_data_contract.py": ["_calisma/video/*"],
+
+    # ── bootstrap / pin kaynağı (bu turun tek-kaynak değişikliği) ──
+    "test_dev_bootstrap.py": ["_calisma/dev_bootstrap.sh", "_calisma/requirements-z3.txt",
+                              "_calisma/CIKTI/test_dev_bootstrap.py", "README.md",
+                              "docs/FIRST_RUN_TUTORIAL.md", "docs/READER_TEST_PROTOCOL.md",
+                              ".github/workflows/verify.yml"],
+
+    # ── Playwright / tarayıcı kapıları: AĞIRLIKLARI ölçüldü, kapsamları
+    # BİLDİRİLDİ. Dördü birlikte ~181 s (artımlı koşumun ~%80'i) idi ve
+    # "ortam-bağımlı" gerekçesiyle ALWAYS_RUN'da tutuluyordu. Gerçek
+    # bağımlılık: sunucuyu başlatan preview_server.py + servis ettiği
+    # statik yüzey (design-system) + dashboard-next parity'si. Statik
+    # HTML'nin kendisi PREVIEW_DIR'de (kullanıcı önbelleği, repoda
+    # izlenmez) üretildiği için üretilen çıktı izlenemez; onun yerine
+    # ÜRETEN kaynak bildirilir.
+    "test_preview_escaping.py": PLAYWRIGHT_SOURCES,
+    "test_preview_hover_tooltip.py": PLAYWRIGHT_SOURCES,
+    "test_dashboard_keyboard_nav.py": PLAYWRIGHT_SOURCES,
+    "test_dashboard_cls_budget.py": PLAYWRIGHT_SOURCES,
+}
+
+# Artımlı koşumda HER commit'te çalışan testler. İki gerekçeli küme:
+#  - MAKİNE testleri: seçimin kendisini ve kapsam eşlemesini denetleyenler
+#    (seçici bozulursa sessizce yanlış testler koşulurdu).
+#  - BAĞIMLILIĞI ÖLÇÜLEMEYENLER: kaynağı doğrudan okunabilen bir dosya
+#    olmayanlar (git komutları, üretilmiş çıktı, çok geniş yüzeyler).
+#    Bunlar "glob tahmin et" yerine "her zaman koş" ile korunur: bir testi
+#    yanlışlıkla koşturmak zaman kaybı, yanlışlıkla KOŞMAMAK sessiz
+#    regresyondur.
+ALWAYS_RUN = frozenset({
+    "test_coverage_report.py",              # kapsam eşlemesinin kendisi
+    "test_test_coverage_report.py",        # ...ve onun sözleşme testleri
+    "test_sync_check_unit_tests.py",       # manifest ↔ HOOK_COVERAGE drift'i
+    "test_select_affected_tests.py",       # seçicinin kendisi
+    "test_check_precommit_inventory.py",   # hook ↔ doküman envanteri
+    "test_verify_job_checklist.py",        # CIKTI geneli dosyaları okur
+    "test_atomic_write_guard.py",          # yazma disiplini, geniş yüzey
+    "test_check_merge_precondition.py",    # git geçmişi okur
+    "test_gen_repro_manifest_e2e.py",      # uçtan uca, dosya listesi sabit değil
+    "test_pdf_source_freshness.py",
+    "test_repack_idempotence.py",
+    "test_repack_verify.py",
+    "test_repro_artifact_sections_e2e.py",
+    "test_vercel_adapter.py",
+    "test_z3_slide_gallery.py",
+    "test_z3_slide_reproducibility.py",
+    "test_k_layer_tokens.py",
+    "test_incidental_banner.py",
+    "test_check_video_render.py",          # ortam-bağımlı
+    # PR #53 ile geldi (origin/main -> 34b6ea3 ayrışması). Test, izlenen
+    # bir kaynak dosyaya BAĞLI DEĞİL: `determinism-trend.yml` akışının
+    # branch/PR politikasını sözleşme düzeyinde sınar, bu yüzden hiçbir
+    # TEST_SOURCE_GLOBS girdisi onu seçemiyor. Manifest'e girdiği için
+    # fail-closed gereği burada olmazsa "sessizce hiç koşmayan test" olurdu.
+    "test_trend_record_pr_contract.py",
+})
+# ⚠️ Playwright testleri ALWAYS_RUN'DAN ÇIKARILDI (2026-09-29, ölçüm):
+# dört Playwright testi (dashboard_keyboard_nav, dashboard_cls_budget,
+# preview_escaping, preview_hover_tooltip) tek başına ~181 s tutuyordu —
+# artımlı koşumun ~%80'i. "Ortam-bağımlı" oldukları için buradaydılar, ama
+# bağımlılıkları ÖLÇÜLEBİLİR: repo'daki tek kaynak preview_server.py +
+# design-system + apps/dashboard-next. PREVIEW_DIR bir kullanıcı ÖNBELLEĞİ
+# (~/Library/Caches) olduğu için repoda izlenmez; üretilen çıktıdır. Yeniden
+# adlandırma riskine karşı bildirilen glob'lar "stale" denetimine tabidir:
+# diskte hiçbir şeyi tutmazlar kapı KALICI olarak bloklar.
+
+def normalize_path(path: str) -> str:
+    """Yolu depo göreli, `/` ayraçlı biçime getirir.
+
+    ⚠️ `lstrip("./")` BURADA KULLANILAMAZ: `lstrip` bir KARAKTER DİZİSİ
+    siler, yani `.github/workflows/verify.yml` → `github/workflows/...`
+    olurdu. Nokta ile başlayan her yol (.pre-commit-config.yaml dahil)
+    sessizce eşleşmez hâle gelirdi. Yalnız gerçek `./` öneki atılır.
+    """
+    p = str(path).replace("\\", "/")
+    while p.startswith("./"):
+        p = p[2:]
+    return p.lstrip("/")
+
+
+def _local_module_path(module: str):
+    """`module` CIKTI içinde GERÇEK bir dosyaya mı çözülüyor?
+
+    stdlib listesi YOK: üçüncü taraf ve stdlib adları bu dosya kontrolünde
+    doğal olarak elenir. `sys.stdlib_module_names` 3.10+ olduğu için
+    3.9'daki venv'de de aynı davranış sağlanır (yoksa stdlib listesi
+    güncellenmeyen bir ikinci gerçek kaynak olurdu).
+
+    Testler depo kökünden koştuğu için `_calisma.CIKTI.` önekli import'lar
+    da buraya düşer; TEST_DIR zaten `_calisma/CIKTI` olduğu için önek atılır.
+    """
+    prefix = "_calisma.CIKTI."
+    if module.startswith(prefix):
+        module = module[len(prefix):]
+    rel = module.replace(".", "/")
+    for cand in (TEST_DIR / f"{rel}.py", TEST_DIR / rel / "__init__.py"):
+        if cand.is_file():
+            return cand.relative_to(REPO_ROOT).as_posix()
+    return None
+
+
+def import_globs(test_file: str) -> list:
+    """Bir testin import'larından TÜRETİLEN kaynak glob'ları.
+
+    Neden türetmek: eşleme ikinci bir tabloda kopyalanırsa yeni import
+    ekleyen biri onu unutur ve test o modülü değiştirdiğimizde koşulmaz —
+    sessiz kapsam kaybı. Testin kendi kaynak kodundan okuyorsak bu
+    sınıf hata tanım gereği imkânsızdır.
+    """
+    path = TEST_DIR / test_file
+    if not path.is_file():
+        return []
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8", errors="ignore"))
+    except SyntaxError:
+        return []
+    mods = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            mods += [a.name for a in node.names]
+        elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
+            mods.append(node.module)
+            if node.module == "_calisma.CIKTI":
+                # `from _calisma.CIKTI import check_x`: modül paketin
+                # kendisi; asıl hedef import EDİLEN AD'dır (`*` hariç).
+                mods += [a.name for a in node.names if a.name != "*"]
+    found = []
+    for mod in mods:
+        rel = _local_module_path(mod)
+        if rel and rel not in found:
+            found.append(rel)
+    return sorted(found)
+
+
+def effective_globs(test_file: str) -> list:
+    """TÜRETİLEN + BİLANEN glob birleşimi (sıra duyarsız, tekilleştirilmiş)."""
+    return sorted(set(import_globs(test_file)) | set(TEST_SOURCE_GLOBS.get(test_file, [])))
+
+
+def read_manifest():
+    """check_unit_tests.list'ten koşulacak test sırası (tek kaynak)."""
+    manifest = TEST_DIR / "check_unit_tests.list"
+    return [ln.strip() for ln in manifest.read_text(encoding="utf-8").splitlines()
+            if ln.strip() and not ln.lstrip().startswith("#")]
+
+
+def reachable(manifest=None) -> dict:
+    """Manifest testlerinin kaçı artımlı koşumda SEÇİLEBİLİR?
+
+    Kapsam sözleşmesi (fail-closed): `unreachable` BOŞ olmalıdır. Doluysa
+    o test hiçbir değişiklikte seçilemez — sessizce hiç koşmaz.
+    """
+    manifest = manifest if manifest is not None else read_manifest()
+    always, reactive, unreachable = [], [], []
+    for t in manifest:
+        if t in ALWAYS_RUN:
+            always.append(t)
+        elif effective_globs(t):
+            reactive.append(t)
+        else:
+            unreachable.append(t)
+    return {"manifest": list(manifest), "always": sorted(always),
+            "reactive": sorted(reactive), "unreachable": sorted(unreachable)}
+
+
+def affected_tests(paths, manifest=None) -> dict:
+    """Değişen dosyalardan koşulacak testleri seçer (artımlı koşum).
+
+    Seçim KAPAYLA (fail-safe): her test ya hep koşar (ALWAYS_RUN), ya da
+    değişen yollardan biriyle eşleşirse. "Hiçbir şey tutmuyorsa" çıktısı
+    BOŞ olamaz — çünkü ALWAYS_RUN kümesi her zaman devreye girer.
+    """
+    manifest = list(manifest if manifest is not None else read_manifest())
+    changed = [normalize_path(p) for p in paths]
+    selected, reasons = [], {}
+    for t in manifest:
+        if t in ALWAYS_RUN:
+            selected.append(t)
+            reasons[t] = "always"
+            continue
+        # "Testin kendisi değişti" → o test koşar. Manifest girdisi çıplak
+        # dosya adıdır, değişiklik listesi ise depo göreli yol; bu yüzden
+        # karşılaştırma da depo göreli yolla yapılır. Bu satır olmadan
+        # `--all-files` (yani CI) TAM BATARYAYI guarantee edemez.
+        own = f"_calisma/CIKTI/{t}"
+        hit = own if own in changed else None
+        if not hit:
+            globs = effective_globs(t)
+            for p in changed:
+                if any(fnmatch.fnmatch(p, g) for g in globs):
+                    hit = p
+                    break
+        if hit:
+            selected.append(t)
+            reasons[t] = hit
+    return {"selected": selected, "reasons": reasons, "total": len(manifest),
+            "changed": changed}
+
+
+def _repo_files():
+    """Depo göreli yollar (dosya + dizin) — glob/index için tek tarama.
+
+    `glob.glob` KULLANILMAZ: onun `*` deseni `/` sınırını geçmez, seçim
+    ise `fnmatch` ile yapılır ve orada `*` `/`'yi aşar. Aynı eşleştirici
+    kullanılmazsa "stale glob" denetimi, sağlam glob'ları yanlışlıkla
+    stale ilan eder (ilk çalıştırmada 54 sahte-pozitif üretti).
+
+    Üretilen/ağır dizinler budanır: `node_modules` altında yüz binlerce
+    dosya var ve tarama commit süresine yansır.
+    """
+    prune = {".git", "node_modules", "__pycache__", ".next", ".vercel",
+             "generated", ".venv_z3", "dist", "build", ".pytest_cache",
+             ".worktrees"}
+    out = []
+    for dirpath, dirnames, filenames in os.walk(REPO_ROOT):
+        dirnames[:] = [d for d in dirnames if d not in prune]
+        rel_dir = pathlib.Path(dirpath).relative_to(REPO_ROOT).as_posix()
+        if rel_dir != ".":
+            out.append(rel_dir)
+        out += [(f"{rel_dir}/{f}" if rel_dir != "." else f) for f in filenames]
+    return out
+
+
+def _selectable_files():
+    """Commit'te DEĞİŞTİRİLEBİLECEK depo göreli yollar.
+
+    Seçim commit dosya listeleriyle çalışır; pre-commit bize yalnız izlenen
+    (stage'lenmiş) dosyaları verir. Bu yüzden "bu glob bir işe yarıyor mu"
+    sorusunun cevabı dosya sistemi taramasıyla değil, GİT'İN KENDİ
+    izlenen/ignored ayrımıyla verilmelidir:
+
+      git ls-files --cached --others --exclude-standard
+        --cached            izlenen (commit'e girebilir)
+        --others            izlenmeyen
+        --exclude-standard  ...ama ignored DEĞİL (yani üretilmiş çıktı DEĞİL)
+
+    Ölçülen sahte-pozitif: `*lake-manifest.json` glob'u geliştiricinin
+    ağacında ÜRETİLMİŞ (ignored) bir dosyaya tutunduğu için "canlı"
+    görünüyordu; ama ignored dosya hiçbir commit listesinde bulunamaz, yani
+    o glob seçim üretemiyordu. Dosya sistemi taraması bunu ancak geliştiri-
+    cinin ağacında gizliyor, taze checkout'ta kapıyı kırıyordu.
+
+    `--others` dahil OLMADAN sadece `--cached` kullanılsaydı, commit'e
+    henüz girmemiş ama ignored OLMAYAN yeni bir kaynak dosya da (ör. yeni
+    pin dosyası) geçici olarak "stale" görünürdü — commit'lenmemiş olması
+    onu üretilmiş çıktı yapmaz.
+    """
+    try:
+        out = subprocess.run(
+            ["git", "ls-files", "--cached", "--others", "--exclude-standard"],
+            capture_output=True, text=True, check=True,
+            cwd=str(TEST_DIR.parent.parent))
+    except (OSError, subprocess.CalledProcessError) as exc:
+        print(f"UYARI: git ls-files çalışmadı ({exc}) — stale denetimi "
+              f"taranan dosyalara düşüyor (sahte-pozitif riski).", file=sys.stderr)
+        return None
+    return {normalize_path(ln) for ln in out.stdout.splitlines() if ln.strip()}
+
+
+def stale_globs(manifest=None) -> list:
+    """BİLANEN glob'lar commit'te değiştirilebilir HİÇBİR dosyayı tutmayanlar.
+
+    Yeniden adlandırılmış bir gate'in eski glob'u sessizce ölür ve o
+    test artık hiç seçilmez. Bu, "kapsam kaybı"nın en kolay görünmeyen
+    hâli olduğu için drift kapısı FAIL-CLOSED olmalıdır.
+
+    Taban küme `_selectable_files`'tır: üretilmiş/ignored bir dosyaya
+    tutunan glob bir commit'te HİÇ seçim üretemez — canlı görünmesi bir
+    illüzyondur. git erişilemezse dosya sistemi taramasına düşülür (fail-open
+    değil, yalnız daha zayıf bir kanıt).
+    """
+    manifest = manifest if manifest is not None else read_manifest()
+    files = _selectable_files()
+    if files is None:
+        files = _repo_files()
+    stale = []
+    for t in manifest:
+        for g in TEST_SOURCE_GLOBS.get(t, []):
+            if not any(fnmatch.fnmatch(f, g) for f in files):
+                stale.append((t, g))
+    return stale
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Test coverage report aggregator")
     ap.add_argument("--json", dest="json_out", help="JSON output file")
@@ -483,16 +1052,8 @@ def main(argv=None):
         print(md)
 
     # Pre-commit check mode: yalnızca gerçek test dosyalarını kontrol et
-    # (meta dosyalar, smoke script'leri, JS-only testleri hariç)
-    CHECK_EXEMPT = frozenset({
-        "test_coverage_report.py",      # meta: kendi kendini test edemez
-        "test_test_coverage_report.py",  # meta: kendini test eder, ayrıca check-unit-tests'te
-        "test_preview_reload_smoke.py",  # standalone smoke script, def test_ yok
-        "test_all_hooks_smoke.py",       # standalone smoke: tum hook'lari kosar
-        "test_budget_scan.js",          # JS-only, ayrı Node hook'unda
-        "test_dashboard_playwright_smoke.py",  # standalone Playwright smoke (Chromium ~10s) — CI'da ayrı job
-        "test_refs_trend_badge_node.js", # standalone JS smoke (Node-only assertion), dokümante bilinçlileşti
-    })
+    # (meta dosyalar, smoke script'leri, JS-only testleri — modül düzeyi
+    # CHECK_EXEMPT ile aynı sözleşme).
     if args.check:
         gaps = [g for g in report["gaps"]["not_covered_by_any_hook"]
                 if g not in CHECK_EXEMPT]

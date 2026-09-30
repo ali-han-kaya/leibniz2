@@ -12,7 +12,10 @@ kullanımına uygun, sayfadan bağımsız PNG'lere dönüştürür:
   arka plan     : şeffaf (slayt dostu; --bg beyaz yapılabilir)
 
 Araç zinciri (Method 1 sırasıyla dener, düşen yedek):
-  LaTeX : pdflatex → tectonic (bu makinede TeXLive yok, tectonic var)
+  LaTeX : pdflatex → latex → tectonic (bu sırayla denenir; motor-agnostik —
+          TeXLive da tectonic de kurulu olabilir, pdflatex varken tectonic'e
+          düşülmez). Seçilen motor 'Araçlar: LaTeX=...' satırında log'lanır;
+          koruyucu sözleşme: test_render_z3_slides.TestEngineSelection.
   PDF→PNG : convert (ImageMagick) → pdftoppm (poppler) → sips
 
 `--check-sync`, THEOREMS tablosundaki ID/iddia setini

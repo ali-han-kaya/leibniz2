@@ -5,6 +5,20 @@
 #   pre-commit install
 #
 # Bu noktadan sonra her `git commit` sırasında aşağıdaki kapılar çalışır:
+#   *) check-unstaged-delta   : ZİNCİRİN İLK KOŞAN kapısı — ağaçta unstaged
+#                               İZLENEN delta varsa commit'i anında bloke
+#                               eder. Gerekçe: karışık ağaçta ölçüm yanıltıcı
+#                               olur ve pre-commit'in stash penceresi
+#                               (patch<epoch>-<pid> → `git checkout -- .` →
+#                               finally `git apply`) süreç-ölümünde sessiz
+#                               revert riski taşır. Gizli deltayı patch'in
+#                               ATA-pid'i üzerinden bulur (stash altında saf
+#                               `git diff` BOŞ döner); yetim patch'ler
+#                               eşleşmez. İLK sırada koşar: hata ilk görünen
+#                               şey olur ve karar, sonraki hook'ların
+#                               dosya-stage'lemesinden kirlenemez (not:
+#                               `fail_fast` kapalı — zincir yine de sonuna
+#                               kadar koşar, süre kazancı iddiası YOK).
 #   0) update-config          : config'i paket içeriğinden senkron et (gen_config.py)
 #                               — repack sayıları değiştirdiyse verify_delivery.config.json'u
 #                               otomatik günceller ve stage eder; değişmediyse dokunmaz.
@@ -17,6 +31,15 @@
 #                               kabuk kalıbı (&&, $VAR, echo, cd, set -e...) içeriyorsa
 #                               commit bloke edilir (CI'da geç NameError/SyntaxError
 #                               patlamasını commit öncesi yakalar; OFFLINE, stdlib-only).
+#   3a) check-latex-surface   : tüm tracked .tex yüzeyinde aktif $$ ve
+#                               input-graph kapsamında label'sız \ref/eqref/autoref
+#                               kullanımını fail-closed olarak bloke eder.
+#   3b) check-seal-hash       : landing mühür halkasındaki hash'in committed
+#                               PDF'in gerçek baytlarıyla (ve donmuş
+#                               `# raw:` sidecar kaydıyla) eşleşmesini
+#                               doğrular — build sonrası PDF yeniden
+#                               paketlenip landing yeniden derlenmezse mühür
+#                               sessizce yalan söyler; bu kapı onu bloke eder.
 #   4) verify-delivery-symbolic: Z3 sembolik ispat (z3-solver, izole venv)
 #   5) verify-delivery-lean    : Lean 4 reduct-invariance (lean, system)
 #   6) check-plist-drift       : plist kapısının exit 0/1/2 davranışını koşan
@@ -43,8 +66,9 @@
 #                               commit-msg stage'inde; CI --all-files'ta ÇALIŞMAZ.
 #   11) check-changelog-sync  : README.md ve docs/PUBLISH_SCENARIO.md'deki
 #                               changelog tablolarını git log ile senkron eder
-#                               (drift varsa --update + stage — update-config
-#                               deseni; commit'in kendi hash'i ancak sonraki
+#                               (drift varsa --prune + stage — update-config
+#                               deseni; eksik satırları ekler, stale hash'leri
+#                               temizler; commit'in kendi hash'i ancak sonraki
 #                               commit'te bilinir, bu yüzden auto-sync yapar).
 #   12) check-dryrun-summary  : publish_wrapper.sh `--dry-run-summary`
 #                               regresyon kapısı — gen_dryrun_summary
@@ -78,12 +102,36 @@
 #                               bağımlı kapı ortam yoksa bloke etmez.
 #                               (setup-pre-commit zincir-uyarlaması: Husky
 #                               yerine bu zincir; tek hooksPath, bypass yok.)
-#   18) check-dashboard-typecheck: apps/dashboard-next tsc --noEmit kapısı
-#                               (READ-ONLY, emit yok). node_modules/tsconfig
-#                               yoksa SKIP; tip-hatası commit'i bloke eder.
+#   18) check-dashboard-typecheck: apps/dashboard-next tip kapısı, İKİ katman:
+#                               (a) `tsc --noEmit` (READ-ONLY, emit yok) ve
+#                               (b) `test-d/run_type_tests.py` — pozitif
+#                               `Assert<Equal<..>>` iddiaları + `@ts-expect-error`
+#                               negatiflerin tanı-kodu kimliği. node_modules/
+#                               tsconfig yoksa SKIP; bulgu varsa commit bloke.
 #   19) check-precommit-orphans : ~/.cache/pre-commit'te 24s+ eski patch-
 #                               kalıntısı (yetim-stash) commit'i bloke eder;
+#                               parmak-izleri recovery_patches_* arşivlerinin
+#                               tamamından (bilinen-olay etiketi) — taze eşleşme
+#                               bloklamaz, tekrar uyarısı basar;
 #                               taze (<24s) kurtarma-penceresinde serbest.
+#   20) check-docker-security-smoke: docker_security_smoke.sh (build + Trivy
+#                               gate + canlı sağlık) — Dockerfile stage'liyken
+#                               ateşlenir (tam build dakikalar sürer; her
+#                               committe değil surface'te). SKIP-farkında:
+#                               docker/trivy/colima yoksa script exit 0 SKIP
+#                               üretir (ortam-yok ≠ kod-bozuk); bulgu varsa
+#                               rc=1 fail-closed bloke eder.
+#   21) check-dockerfile-security-patching: test_dockerfile_security_patching.py
+#                               — yama-desen sözleşmesi (CVE-defteri floor,
+#                               --only-upgrade, apt hijyeni, pip floors) —
+#                               Dockerfile stage'liyken ateşlenir
+#                               (değişim-farkında; always_run yok).
+#   22) check-brand-mirrors   : check_brand_mirrors.py — stripe/linear/primer/
+#                               vercel marka-mirror'larının drift kapılarını
+#                               roster (brand_mirrors.list) üzerinden ADIYLA
+#                               koşar; roster bütünlüğü, kayıtsız yeni mirror,
+#                               checker rc != 0 ve pin uyuşmazlığı fail-closed
+#                               bloke eder (design-system/ stage'liyken).
 # Herhangi bir P0/P1 bulgusu commit'i bloke eder (sıfır-dışı exit).
 #
 # Not: update-config TEK yazan hook'tur (config'i stage eder). Diğer kapılar
@@ -95,6 +143,8 @@
 #   pre-commit run verify-delivery-symbolic
 #   pre-commit run verify-delivery-lean
 #   pre-commit run check-action-pins
+#   pre-commit run check-latex-surface
+#   pre-commit run check-seal-hash
 #   pre-commit run check-repro-manifest
 #   pre-commit run verify-delivery-repro-manifest
 #   pre-commit run verify-delivery-github-scripts
@@ -104,12 +154,33 @@
 #   pre-commit run check-mirror-coverage
 #   pre-commit run check-prettier-format
 #   pre-commit run check-dashboard-typecheck
+#   pre-commit run check-docker-security-smoke
+#   pre-commit run check-dockerfile-security-patching
 #
 # update-config hariç hook'lar read-only'dir: dosya değiştirmez, yalnızca
 # doğrular (fail-closed). update-config, config'i paket içeriğiyle senkron eder.
 repos:
   - repo: local
     hooks:
+      - id: check-unstaged-delta
+        name: "Block commits while unstaged tracked changes exist (fail-closed)"
+        description: >-
+          check_unstaged_delta.py: ağaçta unstaged İZLENEN delta varken
+          commit'i bloke eder. İlk sıradadır (hata ilk görünsün; karar,
+          sonraki hook'ların stage'lemesinden kirlenmesin): pre-commit
+          unstaged deltayı `patch<epoch>-<pid>` dosyasına stash'ler ve
+          pencere-içi süreç-ölümü sessiz revert'e yol açar; ayrıca karışık
+          ağaçta diğer kapılar yanıltıcı sonuç üretir. Gizli deltayı stash
+          patch'inin ATA-pid'i üzerinden bulur (stash altında saf `git diff`
+          BOŞ döner — ölçüldü), hem commit hem manuel `--all-files` yolunu
+          kapsar; yetim patch'ler yanlış-pozitif üretmez. OFFLINE,
+          stdlib-only, ~0.05s.
+        entry: python3 _calisma/CIKTI/check_unstaged_delta.py
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
       - id: update-config
         name: Sync config from package content (gen_config.py)
         description: >-
@@ -153,6 +224,18 @@ repos:
         language: system
         always_run: true
         pass_filenames: false
+
+      - id: check-ci-hygiene
+        name: CI hygiene (permissions + timeout + concurrency)
+        description: >-
+          Tüm workflow'larda top-level `permissions:` haritası, her job'da
+          `timeout-minutes` (1..120 int; bool reddi) ve top-level
+          `concurrency.group` (non-empty) var mı denetler; eksikse commit
+          bloke (fail-closed, rc=1). PyYAML yoksa rc=2 — sessiz-PASS yok.
+        entry: python3 _calisma/CIKTI/ci_hygiene_gate.py --workflow .github/workflows
+        language: system
+        always_run: true
+        pass_filenames: false
         stages: [pre-commit]
         verbose: true
 
@@ -167,6 +250,37 @@ repos:
           kalıbı içeriyorsa commit bloke edilir. `;`/`|` (bitwise) Python'da
           geçerli olduğundan bilerek denetlenmez (yanlış pozitif yok).
         entry: python3 _calisma/CIKTI/check_python3_shell.py
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
+      - id: check-latex-surface
+        name: "Check LaTeX surface (fail-closed)"
+        description: >-
+          Tracked .tex dosyalarında aktif $$ delimiter'larını ve aynı
+          \input/\include yüzeyinde label'a bağlanmayan \ref, \eqref,
+          \autoref, \cref veya \pageref çağrılarını bulur. Yorumlar yok sayılır;
+          bulgu varsa commit'i bloke eder. OFFLINE, stdlib-only.
+        entry: python3 _calisma/CIKTI/check_latex_surface.py --root .
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
+      - id: check-seal-hash
+        name: "Check landing seal hash ↔ committed PDF (fail-closed)"
+        description: >-
+          _calisma/landing/landing.html içindeki verdict mühürünün
+          (`VERIFIED • <hex> •` halkası + `<hex>…` merkezi) taşıdığı hash'i
+          committed ingiliz_empirizmi_v3.pdf'in GERÇEK SHA-256'sıyla ve
+          donmuş `# raw:` sidecar kaydıyla üç yönlü karşılaştırır. Üçü
+          ayrışırsa, mühür eksik/placeholder ise veya kısaltılmış önek kanıt
+          için çok kısaysa commit fail-closed bloke edilir. OFFLINE,
+          stdlib-only, ~0.05s.
+        entry: python3 _calisma/CIKTI/check_seal_hash.py --root .
         language: system
         always_run: true
         pass_filenames: false
@@ -457,6 +571,20 @@ repos:
         stages: [pre-commit]
         verbose: true
 
+      - id: check-video-typecheck
+        name: "TypeScript typecheck for _calisma/video (LeibnizChain, tsc --noEmit)"
+        description: >-
+          check-dashboard-typecheck ile aynı sözleşme, _calisma/video
+          (Remotion LeibnizChain) projesine uygulanmış hâli: tsc --noEmit.
+          READ-ONLY: emit yok, dosya yazmaz. node_modules veya tsconfig yoksa
+          SKIP; tip-hatası varsa fail-closed. Yalnızca video projesinin
+          dosyaları stage'liyken koşar. OFFLINE.
+        entry: bash _calisma/CIKTI/check_video_typecheck.sh
+        language: system
+        files: ^_calisma/video/.*\.(ts|tsx|js|json)$
+        stages: [pre-commit]
+        verbose: true
+
       - id: check-plist-drift
         name: "Plist gate unit tests (exit 0/1/2)"
         description: >-
@@ -643,9 +771,14 @@ repos:
         description: >-
           texlive_determinism_test.sh — ingiliz_empirizmi_v3.tex üzerinde
           ÖNCE (tectonic, tek derleme) / SONRA (TeXLive + SOURCE_DATE_EPOCH,
-          2 bağımsız derleme) hash karşılaştırması. SONRA'nın iki run'ı
+          2 bağımsız derleme × 3 geçiş — default PASSES=3, Faz 4 re-baseline'ı)
+          hash karşılaştırması. SONRA'nın iki run'ı
           byte-farklıysa deney exit 1 → commit bloke (fail-closed: göç
-          determinism getirmedi). Rapor .freebuff/sim/ altına yazılır.
+          determinism getirmedi). Çok-geçişte son log'da 'Rerun to get'
+          kalırsa da FAIL (hizalama iddiası üretilemez); kalıntı yalnız
+          /ID ise kanonik karşılaştırma PASS verir. Rapor logs/texlive_determinism_report.txt'e
+          yazılır (precommit-logs artifact'ı bu dizini bütünüyle yükler) ve
+          aynı kanıt stdout'a da basılır — bulgu ne artifact ne log'da kaybolur.
           tectonic + TeXLive pdflatex kurulu DEĞİLSE SKIP (exit 0) — kapı
           yalnızca araçların var olduğu ortamda iddia üretir
           (check-lake-evidence deseni); K21 --check-sde her ortamda koşar.
@@ -671,15 +804,17 @@ repos:
         stages: [pre-commit]
 
       - id: check-changelog-sync
-        name: Changelog sync (git log ↔ docs, auto-update)
+        name: Changelog sync (git log ↔ docs, prune + auto-update)
         description: >-
           update_changelog_hook.sh: README.md ve docs/PUBLISH_SCENARIO.md'deki
           changelog tablolarını git log ile senkron eder. Drift varsa
-          gen_changelog.py --update ile tabloları günceller ve stage eder
-          (update-config deseni). Check-only bir kapı olamaz: commit'in kendi
-          hash'i ancak commit oluştuktan sonra bilinir — bu yüzden auto-sync
-          yapar, kapı hiç kırılmaz. Mevcut insan özetleri korunur; yalnızca
-          yeni commit'ler eklenir.
+          gen_changelog.py --prune ile eksik satırları ekler ve rewrite/rebase
+          artığı stale hash satırlarını güvenle temizler, sonra değişen
+          tabloları stage eder (update-config deseni). Check-only bir kapı
+          olamaz: commit'in kendi hash'i ancak commit oluştuktan sonra bilinir
+          — bu yüzden auto-sync yapar, kapı hiç kırılmaz. Mevcut insan
+          özetleri korunur; yalnızca yeni commit'ler eklenir ve stale satırlar
+          temizlenir.
         entry: bash _calisma/CIKTI/update_changelog_hook.sh
         language: system
         pass_filenames: false
@@ -824,11 +959,75 @@ repos:
           design-system/scripts/check_tokens.py: preview.html'ın
           design-system/tokens.css import'u, inline :root drift'i ve
           tokens.json ↔ tokens.css tutarlılığını (tint dahil) doğrular.
-          Stil değişirse (renk/space/radius) kapı fail-closed bloke eder.
-          OFFLINE, stdlib-only, ~0.05s.
+          dashboard-next/app/globals.css için kopya drift'i de denetler:
+          HERhangi bir blokta (ikinci :root, .dark, @media, @layer …)
+          token adı gölgelemesi, tokens.css değerinin yazıyla kopyalanması
+          ya da özel mülkte sabit renk literal'i (yorumlar ayıklanır, bu
+          yüzden metinde geçen `:root {` aldatmaz). Stil değişirse
+          (renk/space/radius) kapı fail-closed bloke eder.
+          Uygulama KAYNAĞI da denetlenir (contract 8f/8g): dashboard-next
+          altındaki her .ts/.tsx/.js/.jsx dosyasında ve globals.css
+          DIŞINDAKİ her .css'te koda gömülü hex/rgb/hsl literali, arbitrary
+          renk utility'si (`bg-[#0e1116]`) ya da Tailwind varsayılan paleti
+          (`bg-slate-900` / `text-white`) bulunursa commit BLOKE edilir —
+          üçü de köprü token'ını baypas eder ve temayı koyu/açık/stripe
+          varyantlarında dondurur. Yorumlar ayıklanır; ölçü/harf-aralığı
+          arbitrary değerleri, var() tabanlı türetmeler ve gölge içi rgba
+          MEŞRUDUR (yanlış-pozitif üretmez). Kapsam yalnız globals.css
+          DEĞİLDİR: yeni bir stil dosyası açmak kapıyı atlatmaz. Gezinme
+          node_modules/.next ağaçlarını BUDAR, yani sonuç kurulu paketlerin
+          içinden gelen renklerden etkilenmez (ölçüldü: budama öncesi 24.917
+          dosya → ~1,4s; sonrası ~0,15s).
+          OFFLINE, stdlib-only, ~0.15s.
         entry: python3 design-system/scripts/check_tokens.py
         language: system
         always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
+      - id: check-brand-mirrors
+        name: "Brand mirror drift gates (stripe/linear/primer/vercel, fail-closed)"
+        description: >-
+          check_brand_mirrors.py: design-system/{stripe,linear,primer,vercel}
+          marka-mirror'larının drift kapılarını (scripts/check_*_tokens.py)
+          roster üzerinden ADIYLA koşar — kabukta bu dördünü koşan başka
+          hook yoktu, mirror dosyaları değişse bile drift sessizce
+          commit edilebiliyordu. Fail-closed: roster eksik/<4 giriş → bloke;
+          kayıtlı dizin/raw/checker diskte yok → bloke; kayıtsız yeni mirror
+          (tokens.json + raw.*) ve bayat exempt → bloke; checker rc != 0 →
+          bloke; checker'ın 'OK — N' sayısı pinlenen N'e eşit değilse ya da
+          OK satırı yok/N=0 ise (vacuous PASS) → bloke: mirror upstream'de
+          değişip tokens.* yenilendiğinde pin BİLİNÇLİ güncellenmeden
+          geçemez. Değişim-farkında tetikleme: yalnız design-system/
+          stage'liyken koşar (always_run yok). READ-ONLY, OFFLINE,
+          stdlib-only, ~0.2s.
+        entry: python3 design-system/scripts/check_brand_mirrors.py
+        language: system
+        files: ^design-system/
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
+      - id: check-mirror-bridges
+        name: "Brand mirror @theme bridges (fail-closed)"
+        description: >-
+          check_mirror_bridges.py: her marka aynasının Tailwind v4 @theme
+          köprüsünü (design-system/<marka>/tailwind.css, üretici:
+          generate_mirror_tailwind.py) denetler. Kök köprünün aksine bu
+          dosyalar TEK paletin parçası değil, birlikte import edilebilir;
+          linear/vercel token'ları `--color-*` adları taşıdığı için ön-eksiz
+          üretim temel paleti (`bg-bg`/`bg-accent`) sessizce marka paletine
+          kaydırırdı. Fail-closed: köprü yok / roster bozuk → bloke;
+          köprü jeneratörle BİREBİR değilse (elle düzenleme) → bloke; ad
+          ön-ek kuralı bozuk, ön-koşul aynadaki değerle uyuşmuyor, @theme
+          değeri literal, referans çürük, sayım bloğu düşmüş (aliases +
+          skipped = tokens değil) ya da :root/@theme dışında seçici varsa →
+          bloke. Değişim-farkında tetikleme: yalnız design-system/
+          stage'liyken koşar. READ-ONLY, OFFLINE, stdlib-only, ~0.3s.
+        entry: python3 design-system/scripts/check_mirror_bridges.py
+        language: system
+        files: ^design-system/
         pass_filenames: false
         stages: [pre-commit]
         verbose: true
@@ -847,17 +1046,91 @@ repos:
         verbose: true
 
       - id: check-unit-tests
-        name: "Unit tests for new gates (auto-synced list)"
+        name: "Unit tests for new gates (fail-closed manifest, incremental)"
         description: >-
-          _calisma/CIKTI/test_*.py kümesini tarar (sync_check_unit_tests.py),
-          manifest'i (check_unit_tests.list) senkron eder, ardından listedeki
-          HER test dosyasını koşar (fail-closed — herhangi bir başarısızlık
-          commit'i bloke eder). Yeni test dosyası eklediğinizde listeye
-          OTOMATİK eklenir; ortam-bağımlı testler (launchctl/daemon/canlı
-          sunucu/ağ EXCLUDE setiyle çıkarılır ve CI job'larında ayrı koşulur).
-          Liste bakımı elle yok — tek kaynak disk'teki test dosyaları.
-          PyYAML/jsonschema bağımlılığı yok; ~2-3s (48 dosya, 2s ölçüldü).
+          check_unit_tests_hook.sh: önce sync_check_unit_tests.py --check ile
+          manifest↔disk + HOOK_COVERAGE + glob-kapsam tutarlılığını
+          DOĞRULAR — drift varsa commit BLOKE (remedy: sync --update; hook
+          YAZMAZ — tek yazan hook update-config kalır). Ardından manifest
+          listesindeki testleri koşar (fail-closed — herhangi bir başarısızlık
+          commit'i bloke eder). ARTIRMLI: commit'in DOKUNDUĞU testler koşar
+          (ölçülen boşluk: tam batarya 190 dosya / ~345-370 s idi; tipik
+          commit artık 22-36 test). Seçim `select_affected_tests.py` ile
+          yapılır, kapsam eşlemesi `test_coverage_report.py`'deki TEK
+          kaynaktan gelir: TÜRETİLEN (testin import'ladığı, diskte gerçekten
+          bulunan modüller — sürüklemesi imkânsız) ∪ BİLANEN kaynak
+          glob'ları (import EDİLEMEYEN config/YAML/markdown bağımlılıkları)
+          ∪ ALWAYS_RUN (makine testleri + bağımlılığı ölçülemeyenler, her
+          commit'te koşar). Toplam erişilebilirlik kuralı: her manifest
+          testi ya ALWAYS_RUN'da ya en az bir glob'a sahip OLMAK ZORUNDA;
+          ulaşılamayan test sync --check'te bloklar, "stale" (diskte hiçbir
+          şey tutmayan) glob da bloklar — yeniden adlandırılmış bir gate'in
+          glob'u sessizce ölüp o testi koşmaz hâle getirmesin diye.
+          FAIL-SAFE: seçim üretilemezse TAM BATARYA koşulur; bayraksız elle
+          çağrı da tam bataryadır. `pre-commit run --all-files` girdisinde
+          seçim manifest'in tamamına eşittir, yani CI'daki tam koşum
+          korunur (ayrıca CI'ın fail-closed adımı doğrudan
+          `unittest discover -p "test_*.py"` koşar, bu yoldan geçmez).
+          Ortam-bağımlı testler (launchctl/daemon/canlı sunucu/ağ) EXCLUDE
+          setiyle çıkarılır ve CI job'larında ayrı koşulur. Liste tek
+          kaynak: diskteki test_*.py dosyaları; PyYAML/jsonschema
+          bağımlılığı yok.
         entry: bash _calisma/CIKTI/check_unit_tests_hook.sh
+        language: system
+        # Stage'lenen dosyaları AL — artımlı seçim bunlarla yapılır.
+        # `always_run` her commit'te koşmayı garanti eder (boş stage
+        # durumunda seçim üretilemez; o zaman sarmalayıcı tam bataryaya
+        # düşer). `--all-files` (CI) verildiğinde tüm depo dosyaları
+        # gelir → seçim tam batarya olur.
+        pass_filenames: true
+        always_run: true
+        stages: [pre-commit]
+        verbose: true
+
+      - id: check-bootstrap-toolchain
+        name: "Araç-kümesi tamlığı — eksikse fail-fast blok (fail-closed)"
+        description: >-
+          dev_bootstrap.sh --check'i TEK KAYNAK olarak çağırır ve commit'i
+          araç-kümesi eksikken BLOKE eder. Neden ayrı sarmalayıcı: `--check`
+          zaten fail-closed, ama kapı üç şeyi daha katar — (1) KÖR KAPI
+          rc=2: bootstrap betiği yoksa "araç-kümesi tam" diye PASS üretmek
+          sessiz kapsam kaybıdır, ölçülemeyen yeşil sayılmaz; (2) blok
+          mesajı kopyala-yapıştır kurtarma komutu taşır (`bash
+          _calisma/dev_bootstrap.sh`), kullanıcı "ne yapayım?" diye
+          araştırmaz; (3) yalnız `--check` çağrılır — bayraksız/`--full`
+          çağrı dakikalarca süren kurulumu commit'e gömer. Kapı KURMAZ,
+          yalnız ölçer: `npm ci` + `prisma generate` + `next build` + ~150
+          MB chromium indirmesi bilinçli bir ağ/disk yan etkisidir.
+          Ölçülen boşluk: taze checkout'ta araç-kümesi eksikken commit
+          sessizce geçiyor, hata ancak CI'da ya da çok sonra çıkıyordu.
+          `always_run` BİLEREK: `files:` dar tetikleme olsaydı yalnız
+          dokunulmayan bir dosyaya yapılan commit kapıyı atlatırdı — bu
+          kapının varlık sebebi olan sessiz boşluk. Cost ölçüldü ~1.3 s
+          (9 unit: varlık+pin probe'ları ve tek gerçek chromium açılışı).
+          Test: test_check_bootstrap_toolchain.py (24 sözleşme; hermetik
+          sahte-bootstrap fixture'ları, `--check`-only özyineleme kilidi ve
+          kurtarma komutunun bootstrap'ın kendi komutuyla eşleşmesi).
+        entry: python3 _calisma/CIKTI/check_bootstrap_toolchain.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+        verbose: true
+
+      - id: check-security-posture
+        name: "Security posture: headers + CSP + isolation (fail-closed)"
+        description: >-
+          check_security_posture.sh: check_security_posture.list rosterindeki
+          dokuz guvenlik modulunu ADIYLA kosar — baslik beyani (25 rota + SSE),
+          CSP direktif sozlesmesi (reddet-once, unsafe-inline/eval yasak, nonce
+          uretimi ve bagi), izolasyon sozlesmeleri (DNS-rebinding, peer-parite,
+          statik kok hapsetme) ve tarayici kanitlari. Amac gecis izlenebilirligi:
+          ayni moduller check_unit_tests.list icinde de kosulur ama orada bir
+          guvenlik regresyonu "unit test kirildi" diye gorunur. READ-ONLY:
+          dosya yazmaz. Kapinin kendisi bosalamaz: roster eksik/eksik girişli/
+          diskte olmayan dosyali ise ya da tek modul basarisizsa FAIL-CLOSED
+          bloklar. Offline (yalnizca loopback HTTP + yerel Chromium).
+        entry: bash _calisma/CIKTI/check_security_posture.sh
         language: system
         pass_filenames: false
         always_run: true
@@ -903,11 +1176,137 @@ repos:
           2026-09-19): pre-commit patch dosyalarını asla silmez; pencere-içi
           süreç-ölümü ağacı sessizce revert eder ve delta yalnız patch'te
           kalır. Taze patch (<24s) kurtarma-penceresi içindedir ve
-          cezalandırılmaz. Test: test_check_precommit_orphans.py (6
-          sözleşme, PRE_COMMIT_HOME-fixture üzerinden).
+          cezalandırılmaz; içeriği arşivle birebir eşleşirse tekrar-olay
+          uyarısı basılır (yine bloklamaz). Bilinen-olay parmak-izleri
+          _calisma/CIKTI/recovery_patches_* dizinlerinin TAMAMINDAN gelir
+          (2026-09-27: tek dizin sabitti → sonraki arşivler görünmezdi).
+          OTOMATİK KARANTİNA (2026-09-28): kanıtlanmış gereksiz yetimler
+          SİLİNMEZ, `<cache>-orphans-quarantine-<tarih>/` altına TAŞINIR
+          (sha256+md5+kanıt kaydıyla MANIFEST.md) → elle temizlik
+          ölçeklenmiyor ama körlemesine silmek veri kaybıydı. Kanıt: (a)
+          `git apply --reverse --check` temiz = ağaç patch'in sonrası
+          durumda; (b) patch'in ANLAMLI `+` satırlarının tümü hedef dosyada
+          var. Hiç `@@` hunk'ı olmayan patch asla taşınmaz (ölçüldü:
+          `git apply --check` hunk'sız diff'te 0 döner → yanlış-pozitif).
+          KNOWN-INCIDENT / ZAYIF kayıtlar ve taze patch'ler (<24h, uçuş-içi
+          stash olabilir) asla taşınmaz; kanıtlanamayanlar fail-closed
+          bloklamaya devam eder. `--no-clean` karantinayı kapatır.
+          Test: test_check_precommit_orphans.py (31 sözleşme,
+          PRE_COMMIT_HOME-fixture üzerinden).
         entry: python3 _calisma/CIKTI/check_precommit_orphans.py
         language: system
         pass_filenames: false
         always_run: true
+        stages: [pre-commit]
+        verbose: true
+
+      - id: check-precommit-inventory
+        name: "Pre-commit doc envanteri ↔ config hook set (advisory uyarı)"
+        description: >-
+          Zinciri ANLATAN dokümanı tek gerçekle karşılaştırır: 'hook
+          inventory' bloğu (skills/verify-chain/SKILL.md) ↔
+          .pre-commit-config.yaml `- id:` kümesi. İki yönlü fark — envanterde
+          olup config'te OLMAYAN (kaldırılmış/yeniden adlandırılmış kapı) ve
+          config'te olup envanterde BELGESIZ kapı. Varsayılan ADVISORY: bayat
+          envanterde `BAYAT:` uyarısı basar ve commit'i BLOKLAMAZ (kullanıcı
+          sözleşmesi: "bayat-ise uyarı versin"); sıkı mod `--strict` ile
+          rc=1. İşaret/blok/config bulunamazsa rc=2 — yeniden adlandırılmış
+          bir bölüm kapıyı sessizce körleştiremez (kör kapı PASS üretmez).
+          stdlib-only (PyYAML gerekmez), OFFLINE, ~0.02s. Test:
+          test_check_precommit_inventory.py (27 sözleşme, hermetik fixture +
+          gerçek ağaç senkron invariant'ı).
+        entry: python3 _calisma/CIKTI/check_precommit_inventory.py
+        language: system
+        pass_filenames: false
+        files: ^(\.pre-commit-config\.yaml|skills/verify-chain/SKILL\.md)$
+        stages: [pre-commit]
+        verbose: true
+
+      - id: check-skill-surfaces
+        name: "Skill-alanı ↔ repo-yüzeyi envanteri (fail-closed)"
+        description: >-
+          skill_surfaces.list manifest'ini TEK KAYNAK olarak denetler:
+          her skill alanının (RN/Expo, Stripe, Prisma, Postgres, Next,
+          Remotion, pptx, docx, tailwind, marka-token mirror'ları) repo
+          yüzeyi + paket imzası. İki yönlü paket denetimi — hayalet satır
+          (manifest'te var, ağaçta yok) VE kayıtsız paket (ağaçta var,
+          manifest'te yok) ikisi de bloke eder; zero-surface alanların
+          (rn-expo, wrangler, xlsx) imza paketi GÖRÜNÜRSE bloke eder
+          (sıfır-yüzey iddiaları 2026-09-19 denetimlerinden). Snapshot
+          mirror'lar (stripe/linear/primer/vercel tokens) identity takma
+          adıdır: bağımlılık taşımazlar, yalnız yol varlığı denetlenir.
+          Arç paketleri (prettier/typescript/esbuild/…) TOOLCHAIN_NOISE
+          kümesinde — alan yüzeyi değiller; küme kapalıdır, yeni girdi
+          testte gerekçelenir. --update öneri üretir, alan kararını elle
+          bırakır. stdlib-only, OFFLINE, ~0.05s. Test:
+          test_check_skill_surfaces.py (24 sözleşme).
+        entry: python3 _calisma/CIKTI/check_skill_surfaces.py
+        language: system
+        pass_filenames: false
+        # always_run: envanter AĞAÇ-ÇAPRAZIdır (tüm package.json'ları tarar) —
+        # yalnız manifest stage'liyken koşarsa bağımlılık ekleyen ama manifest'e
+        # dokunmayan commit kapıyı atlatır (sessiz kapsam kaybı tam da bu).
+        always_run: true
+        stages: [pre-commit]
+        verbose: true
+
+      - id: check-skill-surface-inventory-doc
+        name: "Skill↔yüzey envanter dokümanı ↔ üretici (drift, fail-closed)"
+        description: >-
+          `docs/SKILL_SURFACE_INVENTORY.md` ÜRETİLMİŞ bir dosyadır: elle
+          yazılmaz, `skill_surfaces.list` manifest'i + `check_skill_surfaces.py`
+          canlı ölçümünden `gen_skill_surface_inventory.py` ile türetilir.
+          Bu kapı dokümanı yeniden üretip KARŞILAŞTIRIR; bayaltsa exit 1.
+          Neden kapı gerekiyor: elle yazılan envanter zamanla bayatlar —
+          ölçüldü (`check_precommit_inventory.py` gerekçesi): SKILL.md 19 hook
+          derken config'te 60 hook vardı, 41 kapı belgesiz kalmıştı. Üretilen
+          doküman da üreticisinden ayrılırsa aynı hastalık çürüme olarak
+          döner. Test: test_gen_skill_surface_inventory.py (17 sözleşme;
+          kanıt bağlantılarının findings.md'de HÂLÂ yaşadığını da pinler).
+        entry: python3 _calisma/CIKTI/gen_skill_surface_inventory.py --check
+        language: system
+        pass_filenames: false
+        # always_run: envanter AĞAÇ-ÇAPRAZIdır (tüm package.json'ları tarar) —
+        # yalnız manifest stage'liyken koşarsa bağımlılık ekleyen ama dokümanı
+        # yeniden üretmeyen commit kapıyı atlatır. `files` bilinçli YOK:
+        # `always_run: true` ile birlikte tanımlı olması pre-commit'te
+        # anlamsızdır (kardeş kapı `check-skill-surfaces` da yalnız always_run).
+        always_run: true
+        stages: [pre-commit]
+        verbose: true
+
+      - id: check-docker-security-smoke
+        name: "Docker security smoke (SKIP-aware, fail-closed)"
+        description: >-
+          docker_security_smoke.sh — CI docker-security workflow'unun
+          birebir yerel karşılığı: image build (arm64→linux/amd64 emülasyon)
+          + Trivy gate (CRITICAL,HIGH, --ignore-unfixed) + canlı /api/health
+          + HEALTHCHECK. Trigger: Dockerfile stage'liyken
+          (check-dashboard-typecheck örüntüsü — tam build dakikalar sürer,
+          her committe değil surface'te koşar). SKIP-farkında: docker/trivy
+          yok veya colima daemon sağlanamazsa script exit 0 SKIP üretir
+          (ortam-yok ≠ kod-bozuk; sebebini kanıt dosyasına yazar); build
+          hatası / Trivy bulgusu / sağlık ihlali rc=1 → fail-closed bloke.
+        entry: bash _calisma/CIKTI/docker_security_smoke.sh
+        language: system
+        files: Dockerfile
+        stages: [pre-commit]
+        verbose: true
+
+      - id: check-dockerfile-security-patching
+        name: "Dockerfile security-patching contract (fail-closed)"
+        description: >-
+          test_dockerfile_security_patching.py — docs/DOCKER_SECURITY_PATCHING.md
+          desenini Dockerfile'da sözleşme satırlarıyla sabitler:
+          SECURITY_PATCH_PACKAGES CVE-defteri default'u, --only-upgrade
+          (tüm-upgrade yasağı), apt hijyeni, dpkg-query kanıt satırı,
+          bookworm dağıtım pini, pip floor deseni. Değişim-farkında
+          tetikleme: yalnızca Dockerfile stage'liyken koşar (always_run
+          yok — nedensel sinyal korunur); desen bozulursa commit bloke.
+          OFFLINE, stdlib-only, ~0.05s.
+        entry: python3 -m unittest _calisma.CIKTI.test_dockerfile_security_patching
+        language: system
+        files: ^Dockerfile$
+        pass_filenames: false
         stages: [pre-commit]
         verbose: true

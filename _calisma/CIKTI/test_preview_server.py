@@ -18,12 +18,14 @@ import json
 import os
 import pathlib
 import queue
+import re
 import subprocess
 import sys
 import tempfile
 import threading
 import time
 import unittest
+from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
@@ -156,6 +158,113 @@ class CachedLatestTests(unittest.TestCase):
             ok = ps.load_cached_latest()
         self.assertTrue(ok)
         self.assertEqual(ps.LATEST["verdict"], "PASS")
+
+
+class SnapshotFileTests(unittest.TestCase):
+    """CI artifact'ından aynı-origin snapshot-only preview_server modu."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self._old_latest = dict(ps.LATEST)
+
+    def tearDown(self):
+        ps.LATEST = self._old_latest
+        self._tmp.cleanup()
+
+    def _write_snapshot(self, rec, *, sidecar=True, corrupt_sidecar=False):
+        root = pathlib.Path(self._tmp.name)
+        path = root / "history.jsonl"
+        raw = (json.dumps(rec, ensure_ascii=False) + "\n").encode("utf-8")
+        path.write_bytes(raw)
+        if sidecar:
+            digest = hashlib.sha256(raw).hexdigest()
+            if corrupt_sidecar:
+                digest = "0" * 64
+            (root / "history.jsonl.sha256").write_text(
+                digest + "  history.jsonl\n", encoding="utf-8")
+        return str(path)
+
+    def test_valid_jsonl_last_record_populates_latest(self):
+        first = _rec("2026-09-25T10:00:00Z", exit_code=1,
+                     raw_sha256="a" * 64, stripped_sha256="b" * 64)
+        last = _rec("2026-09-25T11:00:00Z", exit_code=0,
+                    raw_sha256="c" * 64, stripped_sha256="d" * 64)
+        path = pathlib.Path(self._tmp.name) / "history.jsonl"
+        raw = (json.dumps(first) + "\n" + json.dumps(last) + "\n").encode()
+        path.write_bytes(raw)
+        (path.parent / "history.jsonl.sha256").write_text(
+            hashlib.sha256(raw).hexdigest() + "  history.jsonl\n",
+            encoding="utf-8")
+        loaded = ps.load_snapshot_file(str(path))
+        self.assertEqual(loaded["ts"], last["ts"])
+        self.assertEqual(ps.snapshot_dict()["raw_sha256"], "c" * 64)
+        self.assertFalse(ps.snapshot_dict()["cached"])
+
+    def test_json_object_is_supported(self):
+        path = self._write_snapshot(_rec(
+            "2026-09-25T12:00:00Z", exit_code=0,
+            raw_sha256="a" * 64, stripped_sha256="b" * 64))
+        self.assertEqual(ps.load_snapshot_file(path)["verdict"], "PASS")
+
+    def test_nested_hash_conflict_is_rejected(self):
+        rec = _rec("t", exit_code=0, raw_sha256="a" * 64,
+                   stripped_sha256="b" * 64,
+                   pdf_hash={"raw": "c" * 64, "stripped": "b" * 64})
+        path = self._write_snapshot(rec)
+        with self.assertRaisesRegex(ValueError, "çelişkili"):
+            ps.load_snapshot_file(path)
+
+    def test_missing_or_mismatched_sidecar_fails_closed(self):
+        rec = _rec("2026-09-25T12:00:00Z", exit_code=0,
+                   raw_sha256="a" * 64, stripped_sha256="b" * 64)
+        missing = self._write_snapshot(rec, sidecar=False)
+        with self.assertRaisesRegex(ValueError, "sidecar yok"):
+            ps.load_snapshot_file(missing)
+        # Aynı path'i yeniden yazıp digest'i bilerek boz.
+        root = pathlib.Path(self._tmp.name)
+        path = root / "history.jsonl"
+        (root / "history.jsonl.sha256").write_text(
+            "0" * 64 + "  history.jsonl\n", encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "uyuşmuyor"):
+            ps.load_snapshot_file(str(path))
+
+    def test_invalid_verdict_hash_or_cached_fails_closed(self):
+        cases = (
+            _rec("t", verdict="FAIL", exit_code=0,
+                 raw_sha256="a" * 64, stripped_sha256="b" * 64),
+            _rec("t", exit_code=1, raw_sha256="a" * 64,
+                 stripped_sha256="b" * 64),
+            _rec("t", exit_code=0, raw_sha256="bad",
+                 stripped_sha256="b" * 64),
+            _rec("t", exit_code=0, raw_sha256="a" * 64,
+                 stripped_sha256="b" * 64, cached=True),
+        )
+        for rec in cases:
+            with self.subTest(rec=rec):
+                path = self._write_snapshot(rec)
+                with self.assertRaises(ValueError):
+                    ps.load_snapshot_file(path)
+
+    def test_corrupt_jsonl_line_is_not_silently_skipped(self):
+        root = pathlib.Path(self._tmp.name)
+        path = root / "history.jsonl"
+        raw = b'{"ts":"t","verdict":"PASS","exit_code":0}\nnot-json\n'
+        path.write_bytes(raw)
+        (root / "history.jsonl.sha256").write_text(
+            hashlib.sha256(raw).hexdigest() + "  history.jsonl\n",
+            encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "JSONL satırı"):
+            ps.load_snapshot_file(str(path))
+
+    def test_cli_requires_explicit_snapshot_only_pair(self):
+        source = pathlib.Path(ps.__file__).read_text(encoding="utf-8")
+        self.assertIn('ap.add_argument("--snapshot-file"', source)
+        self.assertIn('ap.add_argument("--no-verify", action="store_true"',
+                      source)
+        self.assertIn('if args.snapshot_file and not args.no_verify:', source)
+        self.assertIn('if args.no_verify and not args.snapshot_file:', source)
+        self.assertIn("if not args.no_verify:\n        t = threading.Thread",
+                      source)
 
 
 class PersistHistoryTests(unittest.TestCase):
@@ -662,9 +771,11 @@ class HookEnvTrendPlumbingTests(unittest.TestCase):
         self.assertIn("renderHookEnvTrend(rows)", self.html)
 
     def test_hover_hit_area_wired(self):
-        # Hover tooltip'i bant vuruş alanlarına bağlı olmalı.
-        self.assertIn("onmousemove=\"showHookEnvTrendTip(", self.html)
-        self.assertIn("onmouseleave=\"hideTrendTip()", self.html)
+        # Hover tooltip'i bant vuruş alanlarına bağlı olmalı — CSP-uyumlu
+        # delegation: rect data-tip+data-i taşır, SVG-düzeyi dinleyici
+        # showHookEnvTrendTip'e delege eder.
+        self.assertIn('data-tip="hookenv"', self.html)
+        self.assertIn('"he-trend": "showHookEnvTrendTip"', self.html)
 
 
 class BudgetLimitPlumbingTests(unittest.TestCase):
@@ -1026,16 +1137,22 @@ class StatusBoardTests(unittest.TestCase):
     def setUp(self):
         # İzolasyon: testler LATEST.update ile layers/p0/budget yazıyor;
         # restore etmeyen test, sonraki testlere sızardı (shuffle-audit
-        # kanıtı: LATEST['layers'] sızıntısı). Tam-dict yedek + geri yükleme.
+        # kanıtı: LATEST['layers'] sızıntısı). Geri yüklemeyi framework'e
+        # devret: patch.dict + addCleanup, test BİTİNCE (hata/skip dahil)
+        # LATEST'i yerine koyar — elle yedek + tearDown, setUp'un devamında
+        # patlama/atlama olursa kaçabiliyordu. Kilit disiplini korunur:
+        # yedek de geri yükleme de ps.LOCK altında.
         import preview_server as ps
+        patcher = mock.patch.dict(ps.LATEST)
         with ps.LOCK:
-            self._latest_backup = dict(ps.LATEST)
+            patcher.start()
+        self.addCleanup(self._stop_latest_patcher, patcher)
 
-    def tearDown(self):
+    def _stop_latest_patcher(self, patcher):
+        """patch.dict geri yüklemesini kilit altında çalıştırır (tearDown yok)."""
         import preview_server as ps
         with ps.LOCK:
-            ps.LATEST.clear()
-            ps.LATEST.update(self._latest_backup)
+            patcher.stop()
 
     def test_all_pass(self):
         """Tüm alanlar PASS ise 5 ✅ üretmeli."""
@@ -1413,6 +1530,7 @@ class TestRouteQueryParams(unittest.TestCase):
         self.assertEqual(ps._route("/"), "preview")
         # Candidate 3: dashboard JS dış dosyada — kendi rotasını kullanır.
         self.assertEqual(ps._route("/preview.js"), "preview_js")
+        self.assertEqual(ps._route("/vendor/axe.min.js"), "vendor_axe")
         self.assertEqual(ps._route("/preview.js?v=123"), "preview_js")
 
     def test_unknown_paths_are_none(self):
@@ -1428,6 +1546,53 @@ class TestRouteQueryParams(unittest.TestCase):
         self.assertIsNone(ps._route("/design-system/other.css"))
         self.assertIsNone(ps._route("/design-system/"))
 
+    def test_stripe_theme_route(self):
+        # Stripe HDS tema varyantı (GENERATED) — preview.js tema döngüsünün
+        # `stripe` adımı bu rotadan stil alır; mirror'da yoksa 404 (fail-closed).
+        self.assertEqual(ps._route("/design-system/stripe-theme.css"),
+                         "design_tokens_stripe")
+        self.assertEqual(ps._route("/design-system/stripe-theme.css?v=9"),
+                         "design_tokens_stripe")
+        self.assertIsNone(ps._route("/design-system/stripe-theme"))
+
+    def test_landing_routes_are_query_safe_and_asset_scoped(self):
+        self.assertEqual(ps._route("/landing.html"), "landing")
+        self.assertEqual(ps._route("/landing.html?theme=light"), "landing")
+        self.assertEqual(ps._route("/landing/assets/P1-a.png"), "landing_assets")
+        self.assertEqual(ps._route("/landing/assets/../secret"), "landing_assets")
+        self.assertIsNone(ps._route("/landing/other.png"))
+
+    def test_landing_handler_adapts_repo_relative_links_and_assets(self):
+        old_dir = getattr(ps, "PREVIEW_DIR", None)
+        with tempfile.TemporaryDirectory(prefix="landing-route-") as work:
+            root = pathlib.Path(work)
+            (root / "landing" / "assets").mkdir(parents=True)
+            (root / "landing.html").write_text(
+                '<a href="../CIKTI/preview.html">Pano</a>'
+                '<img src="assets/P1-a.png">', encoding="utf-8")
+            (root / "landing" / "assets" / "P1-a.png").write_bytes(b"png")
+            ps.PREVIEW_DIR = work
+            handler = object.__new__(ps.Handler)
+            sent = []
+            handler._send = lambda status, body, content_type="", extra_headers=None: sent.append(
+                (status, body, content_type))
+            try:
+                ps.Handler.serve_landing(handler)
+                self.assertEqual(sent[-1][0], 200)
+                self.assertIn('href="/preview.html"', sent[-1][1])
+                self.assertIn('src="/landing/assets/P1-a.png"', sent[-1][1])
+
+                handler.path = "/landing/assets/P1-a.png"
+                ps.Handler.serve_landing_assets(handler)
+                self.assertEqual(sent[-1][0], 200)
+                self.assertEqual(sent[-1][1], b"png")
+                self.assertEqual(sent[-1][2], "image/png")
+            finally:
+                if old_dir is None:
+                    del ps.PREVIEW_DIR
+                else:
+                    ps.PREVIEW_DIR = old_dir
+
     def test_run_now_rejects_untrusted_host(self):
         old_token = os.environ.get("PREVIEW_RUN_NOW_TOKEN")
         old_busy = ps.VERIFY_BUSY
@@ -1437,6 +1602,7 @@ class TestRouteQueryParams(unittest.TestCase):
             handler = object.__new__(ps.Handler)
             sent = []
             handler.path = "/api/run-now"
+            handler.client_address = ("127.0.0.1", 55555)
             handler.headers = {"Authorization": "Bearer secret-token", "Host": "evil.example"}
             handler._send = lambda status, body, content_type="", extra_headers=None: sent.append((status, body, extra_headers))
             handler.trigger_run_now()
@@ -1458,6 +1624,7 @@ class TestRouteQueryParams(unittest.TestCase):
             handler = object.__new__(ps.Handler)
             sent = []
             handler.path = "/api/run-now"
+            handler.client_address = ("127.0.0.1", 55555)
             handler.headers = {"Host": "127.0.0.1:8000"}
             handler._send = lambda status, body, content_type="", extra_headers=None: sent.append((status, body, extra_headers))
             handler.trigger_run_now()
@@ -1473,6 +1640,7 @@ class TestRouteQueryParams(unittest.TestCase):
             handler = object.__new__(ps.Handler)
             sent = []
             handler.path = "/api/run-now"
+            handler.client_address = ("127.0.0.1", 55555)
             handler.headers = {"Authorization": "Bearer secret-token", "Host": "127.0.0.1:8000", "Origin": "https://evil.example"}
             handler._send = lambda status, body, content_type="", extra_headers=None: sent.append((status, body, extra_headers))
             handler.trigger_run_now()
@@ -1493,6 +1661,7 @@ class TestRouteQueryParams(unittest.TestCase):
             handler = object.__new__(ps.Handler)
             sent = []
             handler.path = "/api/run-now"
+            handler.client_address = ("127.0.0.1", 55555)
             handler._send = lambda status, body, content_type="", extra_headers=None: sent.append((status, body, extra_headers))
             handler.headers = {"Host": "127.0.0.1:8000"}
             handler.trigger_run_now()
@@ -1516,6 +1685,7 @@ class TestRouteQueryParams(unittest.TestCase):
             handler = object.__new__(ps.Handler)
             sent = []
             handler.path = "/api/run-now"
+            handler.client_address = ("127.0.0.1", 55555)
             handler._send = lambda status, body, content_type="", extra_headers=None: sent.append((status, body, extra_headers))
             handler.headers = {"Host": "127.0.0.1:8000", "Authorization": "Bearer secret-token"}
             original = ps.run_verify
@@ -1771,6 +1941,556 @@ class TestServeHistoryTrendCompact(unittest.TestCase):
             ps.RUNS_DIR = old
 
 
+class TestTrendLimitWindow(unittest.TestCase):
+    """`/api/trend?limit=N` — sunucu tarafı pencere sözleşmesi.
+
+    Neden ayrı kapı: `?limit=` zaten BELGELENMİŞ bir sözleşmeydi ve iki canlı
+    tüketici onu gönderiyordu (MCP `leibniz2_trend`, dashboard-next
+    `getTrend` → `/api/trend?limit=20`) ama sunucu parametreyi tamamen yok
+    sayıyordu — istenen pencere sessizce gelmiyordu (ölçüldü 2026-09-28).
+
+    Kırılan iki ayrı sessiz hata:
+      * kırpma YOK  → tüketicinin istediği N yerine 100 kaytın TAMAMı döner;
+      * YANLIŞ UÇ  → `rows[:limit]` EN ESKİ N'yi döndürür, "son N" olmaz.
+    İkisi de HTTP 200 döner, ölçülebilir tek fark: satır SAYISI ve SIRASI.
+    """
+
+    ROWS = 5
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self._old_hist, self._old_rt = ps.HISTORY_PATH, ps.REFS_TREND_PATH
+        ps.HISTORY_PATH = os.path.join(self._tmp.name, "history.jsonl")
+        ps.REFS_TREND_PATH = os.path.join(self._tmp.name, "refs-trend.json")
+        # Önbellek sıfırla: load_history() mtime_ns+boyut ile anahtarlıyor,
+        # testler aynı dosya yolunu paylaşıyor.
+        ps._history_cache = (None, [])
+
+    def tearDown(self):
+        ps.HISTORY_PATH, ps.REFS_TREND_PATH = self._old_hist, self._old_rt
+        ps._history_cache = (None, [])
+        self._tmp.cleanup()
+
+    # ── fixture yazıcıları ───────────────────────────────────────────
+    def _write_history(self, count=None):
+        count = self.ROWS if count is None else count
+        with open(ps.HISTORY_PATH, "w", encoding="utf-8") as f:
+            for i in range(count):
+                f.write(json.dumps({
+                    "ts": "2026-08-23T%02d:00:00Z" % (9 + i),
+                    "verdict": "PASS", "p0": 0, "p1": 0,
+                }, ensure_ascii=False) + "\n")
+        ps._history_cache = (None, [])
+
+    def _write_refs_trend(self, count=None):
+        count = self.ROWS if count is None else count
+        rows = [{"date": "2026-08-%02d" % (20 + i), "run_id": 100 + i,
+                 "duration_s": float(i)} for i in range(count)]
+        with open(ps.REFS_TREND_PATH, "w", encoding="utf-8") as f:
+            json.dump({"generated": "2026-08-25T00:00:00Z",
+                       "rows": list(rows),
+                       "duration_budget": {"rows": list(rows),
+                                           "summary": {"run_count": count}}},
+                      f, ensure_ascii=False)
+
+    def _capture(self):
+        class _FakeHandler:
+            def __init__(self):
+                self.sent = None
+
+            def _send(self, status, body,
+                      content_type="text/plain; charset=utf-8",
+                      extra_headers=None):
+                self.sent = (status, body, content_type)
+
+        return _FakeHandler()
+
+    def _serve(self, path):
+        fake = self._capture()
+        fake.path = path
+        ps.Handler.serve_trend(fake)
+        status, body, ctype = fake.sent
+        self.assertEqual(status, 200)
+        self.assertIn("application/json", ctype)
+        return json.loads(body)
+
+    def _history_ts(self, data):
+        return [r["ts"] for r in data["history"]]
+
+    # ── sözleşme ─────────────────────────────────────────────────────
+    def test_limit_windows_history_to_the_newest_rows_in_order(self):
+        self._write_history()
+        data = self._serve("/api/trend?limit=2")
+        # 09,10,11,12,13 yazıldı → "son 2" = 12,13 (ESKİDEN YENİYE, sıra bozulmaz)
+        self.assertEqual(self._history_ts(data), ["2026-08-23T12:00:00Z",
+                                                  "2026-08-23T13:00:00Z"])
+        self.assertEqual(data["limit"], 2)
+
+    def test_limit_larger_than_history_returns_everything(self):
+        self._write_history()
+        data = self._serve("/api/trend?limit=500")
+        self.assertEqual(len(data["history"]), self.ROWS,
+                         "pencere geçmişten büyükse HER ŞEY dönmeli")
+
+    def test_absent_limit_keeps_the_whole_history(self):
+        """Geriye uyum: parametresiz çağrı ESKİ davranışı korur.
+
+        `preview.js` `/api/trend`'i parametresiz çağırır; parametre zorunlu
+        olsaydı pano boşalırdı.
+        """
+        self._write_history()
+        data = self._serve("/api/trend")
+        self.assertEqual(len(data["history"]), self.ROWS)
+        self.assertNotIn("limit", data,
+                         "pencere uygulanmadıysa gövde `limit` bildirmemeli "
+                         "(tüketici 'tüm geçmiş' sanmalı)")
+
+    def test_blank_limit_is_not_a_limit(self):
+        """`?limit=` boş değer = penceresiz, 0 DEĞİL (0 → 1'e kırpılırdı)."""
+        self._write_history()
+        data = self._serve("/api/trend?limit=")
+        self.assertEqual(len(data["history"]), self.ROWS)
+        self.assertNotIn("limit", data)
+
+    # ── "refs_trend ile tutarlı pencere" ─────────────────────────────
+    def test_limit_windows_both_halves_of_the_merged_response(self):
+        """Gövdenin İKİ yarısı AYNI pencereyi anlatmalı.
+
+        `preview.js` refs-trend ve duration/budget grafiğini yan yana basar;
+        yalnız history kırpılırsa ekranda iki ayrı "son" görünür.
+        """
+        self._write_history()
+        self._write_refs_trend()
+        data = self._serve("/api/trend?limit=2")
+        refs = data["refs_trend"]
+        # 20..24 yazıldı → "son 2" = 23,24 (refs_trend.py satırları history
+        # sırasını korur: `build_duration_budget` history_rows'u sırayla gezer)
+        self.assertEqual([r["date"] for r in refs["rows"]],
+                         ["2026-08-23", "2026-08-24"],
+                         "refs_trend.rows pencerelenmedi")
+        self.assertEqual([r["date"] for r in refs["duration_budget"]["rows"]],
+                         ["2026-08-23", "2026-08-24"],
+                         "duration_budget.rows pencerelenmedi")
+        # Özet TÜM artifact'i anlatır; pencerelenmez ama GİZLİ de kalmaz.
+        self.assertEqual(refs["duration_budget"]["summary"]["run_count"],
+                         self.ROWS, "özet refs_trend.py'nin hesabıdır")
+
+    def test_limit_preserves_the_error_shape_of_refs_trend(self):
+        """refs-trend.json okunamazsa hata nesnesi bozulmadan kalır."""
+        self._write_history()
+        with open(ps.REFS_TREND_PATH, "w", encoding="utf-8") as f:
+            f.write("{not json")
+        data = self._serve("/api/trend?limit=2")
+        self.assertEqual(data["refs_trend"],
+                         {"error": "refs trend unavailable"})
+        self.assertEqual(len(data["history"]), 2, "history yine pencerelendi")
+
+    def test_limit_tolerates_refs_trend_without_row_lists(self):
+        """Satır listesi olmayan refs_trend payload'ı çökmez."""
+        self._write_history()
+        with open(ps.REFS_TREND_PATH, "w", encoding="utf-8") as f:
+            json.dump({"generated": "x", "repo": "o/r"}, f)
+        data = self._serve("/api/trend?limit=2")
+        self.assertEqual(data["refs_trend"], {"generated": "x", "repo": "o/r"})
+
+    # ── kırpma sınırları ─────────────────────────────────────────────
+    def test_limit_clamping_matches_the_sse_tunnel(self):
+        """Sınırlar `route.ts` ile aynı olmalı (0→1, dev→200, bozuk→20).
+
+        Boş değer (`:limit=`) listede YOK: o "penceresiz" demek (ayrı test),
+        kırpma değil — tünel de boş değeri `Number.isFinite("")` → false
+        görür ama sunucu tarafında `parse_qs` boş değeri zaten düşürür.
+        """
+        self._write_history(count=1)
+        for raw, expected in (("0", 1), ("-3", 1), ("9999", 200),
+                              ("abc", ps.TREND_LIMIT_FALLBACK),
+                              ("5.9", 5)):
+            with self.subTest(limit=raw):
+                data = self._serve("/api/trend?limit=" + raw)
+                self.assertEqual(data["limit"], expected,
+                                 "?limit=%s → %s bekleniyordu"
+                                 % (raw, expected))
+                self.assertLessEqual(len(data["history"]), expected)
+
+    def test_truncation_does_not_diverge_from_the_tunnel(self):
+        """Tünel `Math.trunc` kırpar; sunucu da öyle kırpmalı.
+
+        `int("5.9")` ValueError verir ve bozuk değer gibi 20'ye düşerdi —
+        yani iki katman AYRI pencere üretirdi. `float` + `int` bunu `Math.trunc`
+        ile aynı yapar.
+        """
+        self.assertEqual(ps.parse_trend_limit("5.9"), 5)
+        self.assertEqual(ps.parse_trend_limit("5"), 5)
+        for raw in ("inf", "-inf", "nan", "abc", "1e400"):
+            with self.subTest(raw=raw):
+                self.assertEqual(ps.parse_trend_limit(raw),
+                                 ps.TREND_LIMIT_FALLBACK,
+                                 "sayıya çevrilemeyen değer tanımlı yedek "
+                                 "pencereye düşmeli")
+
+    def test_clamp_constants_match_the_next_tunnel(self):
+        """İki katmanın sabitleri SÜRÜKLENMESİN (cross-layer drift guard).
+
+        `route.ts` pencereyi `Math.min(Math.max(Math.trunc(rawLimit), 1), 200)`
+        ile kırpar ve sayı değilse 20'ye düşürür. Sunucu tarafı aynı sayıyı
+        kabul etmiyorsa aynı istek tünolden geçerken ve doğrudan gelirken
+        FARKLI pencere üretir — hangisi doğru olduğu belirsizleşir.
+        """
+        route = os.path.join(ps.REPO_ROOT, "apps", "dashboard-next", "app",
+                             "api", "events", "route.ts")
+        with open(route, encoding="utf-8") as f:
+            source = f.read()
+        self.assertIn("Math.min(Math.max(Math.trunc(rawLimit), 1), %d)"
+                      % ps.TREND_LIMIT_MAX, source,
+                      "route.ts tavanı değişti: preview_server "
+                      "TREND_LIMIT_MAX ile eşitlenmeli")
+        self.assertIn(": %d;" % ps.TREND_LIMIT_FALLBACK, source,
+                      "route.ts yedeği değişti: preview_server "
+                      "TREND_LIMIT_FALLBACK ile eşitlenmeli")
+
+    def test_window_tail_keeps_order_and_is_a_noop_without_limit(self):
+        rows = [{"n": i} for i in range(5)]
+        self.assertEqual(ps.window_tail(rows, 2), [{"n": 3}, {"n": 4}])
+        self.assertEqual(ps.window_tail(rows, None), rows)
+        self.assertEqual(ps.window_tail(rows, 99), rows)
+        self.assertIs(ps.window_tail("satır değil", 2), "satır değil",
+                      "liste olmayan girdi dokunulmadan dönmeli")
+
+
+class InlineEventHandlerContractTests(unittest.TestCase):
+    """VERIFY-001 regresyon kapısı: satır içi event-handler NITELIĞI olmayacak.
+
+    Neden ayrı kapı: CSP `script-src 'self' + nonce` altında `<script>`
+    blogunu zaten ayrı bir test denetliyor, ama **nitelik** handler'lar
+    (`onclick="…"`, `onmousemove="…"`) nonce kapsamına GİRMEZ — tarayıcı
+    sessizce reddeder ve düğme/hover ölü kalır. VERIFY-001 tam olarak bu
+    sessiz kayıptı; düzeltme `2fee44f`'te (data-act/data-taşıyıcı + delege
+    dinleyici) yapıldı, ama o düzeltmeyi KİMSİ koruyacak bir kapı yoktu.
+    """
+
+    # Nitelik adı, boşluk, '=', sonra alıntı. `data-*` tutmaz (on ile başlamaz),
+    # `connection=` gibi kelimeler de eşleşmez (ön ek `on` değil).
+    INLINE_HANDLER = re.compile(r"""\son[a-z]+\s*=\s*["']""", re.IGNORECASE)
+
+    def _scan(self, label, text):
+        hits = self.INLINE_HANDLER.findall(text)
+        self.assertEqual(
+            hits, [],
+            "%s içinde %d satır içi event-handler bulundu: %s — CSP altında "
+            "bu handler'lar ÇALIŞMAZ (nonce niteliklere uygulanmaz). "
+            "data-* taşıyıcı + addEventListener delege et." % (label, len(hits), hits[:6]),
+        )
+
+    def test_preview_html_has_no_inline_event_handlers(self):
+        self._scan("preview.html", _preview_html())
+
+    def test_preview_js_emits_no_inline_event_handlers(self):
+        """preview.js şablonları ürettikleri işaretlemeyi de denetlenir.
+
+        SVG hit-alanları JS ile `svg.innerHTML` üzerinden yazıldığı için
+        yalnız HTML dosyasını denetlemek yetmezdi — asıl VERIFY-001 yeri
+        burasıydı.
+        """
+        self._scan("preview.js", _preview_js())
+
+    def _generate_artifact(self, dest: pathlib.Path) -> str:
+        """Artifact'ı GEÇİCİ bir yola üret ve içeriğini döndür.
+
+        Neden üreticiyi çağırıyoruz: `design_preview.html` commit dışı
+        (gitignore) ve taze klonda YOK. Ölçüldü (2026-09-27): dosya yoksa
+        yalnız yerel kopyaya bakan denetim `skipTest` ile atlanıyordu,
+        yani demo yüzeyinin VERIFY-001 koruması taze klonda BOŞLUKTA
+        kalıyordu — `2fee44f`'ten önceki 14 inline handler'lı bayat kopya
+        senaryosu sessizce geri dönebilirdi. Üretici 0.04 sn sürdüğü için
+        "taze klonda da" yanıtlamak bedava; ayrıca üretim SONRASI doğan
+        nitelik handler'ını da yakalar (kaynak temiz olsa bile).
+        """
+        proc = subprocess.run(
+            [sys.executable, str(pathlib.Path(HERE) / "build_design_preview.py"),
+             str(dest)],
+            capture_output=True, text=True, check=False, cwd=HERE,
+        )
+        self.assertEqual(
+            proc.returncode, 0,
+            "build_design_preview.py başarısız: %s" % proc.stderr[-400:],
+        )
+        return dest.read_text(encoding="utf-8")
+
+    def test_generated_artifact_has_no_inline_event_handlers(self):
+        """ÜRETİLEN demo artifact'ı da CSP altında çalışır durumda mı?
+
+        Kaynak temiz olmak yetmez: demo dosyası preview.js'i satır içi
+        `<script>` olarak gömüyor, dolayısıyla üretim sonrası ortaya
+        çıkabilecek bir nitelik handler'ı kaynakta hiç görünmez.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            html = self._generate_artifact(
+                pathlib.Path(tmp) / "design_preview.html")
+        self.assertGreater(len(html), 50_000,
+                           "artifact beklenmedik derecede küçük: %d bayt"
+                           % len(html))
+        self._scan("üretilen design_preview.html", html)
+        # Nitelik handler yokken hover tooltip ancak delege yoluyla
+        # çalışır; ikisinin de artifact'a girdiğini doğrula.
+        self.assertIn("addEventListener", html)
+        self.assertIn("data-tip", html)
+
+    def test_local_artifact_is_not_stale(self):
+        """İnceleme/demo kopyası bayat mı?
+
+        Bulgu (findings.md): artifact `2fee44f`'ten ÖNCE üretilmişti —
+        düzeltilmiş kaynağa rağmen incelemede 14 inline handler'lı ölü UI
+        gösteriyordu. Üretim deterministik ölçüldü (iki koşu birebir aynı,
+        153 766 bayt), yani "bayat mı" sorusu her koşuda yanıtlanabilir.
+        """
+        built = pathlib.Path(HERE, "design_preview.html")
+        if not built.is_file():
+            self.skipTest(
+                "design_preview.html yok (commit dışı) — yerel kopya "
+                "denetlenemez; ÜRETİCİ yukarıdaki testte denetleniyor")
+        with tempfile.TemporaryDirectory() as tmp:
+            fresh = self._generate_artifact(
+                pathlib.Path(tmp) / "design_preview.html")
+        self.assertEqual(
+            built.read_text(encoding="utf-8"), fresh,
+            "Yerel design_preview.html BAYAT — düzeltilmiş kaynaktan gelmiyor, "
+            "yani inceleme yüzeyi ölü UI gösterebilir. Çözüm: python3 "
+            "_calisma/CIKTI/build_design_preview.py")
+
+    def test_guard_itself_detects_a_known_violation(self):
+        """Kapının kendisi bozulursa (regex köreleşirse) sessizce geçmesin.
+
+        Düzeltme ÖNCESİ gerçek satırlar (2fee44f^): 3 onmousemove +
+        3 onmouseleave + 1 onclick. Aynı desen sentetik olarak üretilip
+        eşleştiği doğrulanır.
+        """
+        historical = (
+            '<rect fill="transparent" onmousemove="showRefsTrendTip(0, event)"'
+            ' onmouseleave="hideTrendTip()"/>'
+            '<button onclick="setRhFilter(\'PASS\')">PASS</button>'
+        )
+        self.assertEqual(len(self.INLINE_HANDLER.findall(historical)), 3)
+        self.assertEqual(self.INLINE_HANDLER.findall(_preview_js()), [])
+
+    def test_csp_script_src_does_not_allow_inline_handlers(self):
+        """'unsafe-inline' script-src'a sızarsa kapı sessizce işsiz kalır.
+
+        VERIFY-001'in diğer yol gösterilmişti: "script-hash ekle". Hash,
+        yalnız HARİCİ script'leri kapsar; nitelik handler'lar yine ölür.
+        Bu yüzden CSP'nin sıkı kaldığı da kilitlenir.
+
+        Kaynak metin değil, SUNUCUNUN GERÇEKTEN GÖNDERDİĞİ başlık denetlenir
+        (dosyada CSP benzeri bir yorum satırına takılıp yeşile yanmasın).
+        """
+        csp = None
+        for name, value in ps.Handler._SECURITY_HEADERS:
+            if name == "Content-Security-Policy":
+                csp = value
+        self.assertIsNotNone(csp, "CSP başlığı tanımlı değil")
+        script_src = re.search(r"script-src[^;]*", csp).group(0)
+        self.assertIn("'self'", script_src)
+        self.assertIn("'nonce-", script_src)
+        self.assertNotIn("unsafe-inline", script_src)
+        self.assertNotIn("unsafe-eval", script_src)
+        # style-src gevşek kalmalı: inline style="..." kullanımı mevcut.
+        self.assertIn("style-src 'self' 'unsafe-inline'", csp)
+
+    def test_all_three_hover_surfaces_are_delegated(self):
+        """Üç trend yüzeyi de data-tip taşır ve delege haritasında adı vardır.
+
+        Yarım düzeltme (sadece refs) VERIFY-001'in yarısını çözer: aynı
+        desen trend ve hook-env grafiklerinde de vardı.
+        """
+        js = _preview_js()
+        for svg_id, tip_name in (
+            ("trend", "showTrendTip"),
+            ("refs-trend", "showRefsTrendTip"),
+            ("he-trend", "showHookEnvTrendTip"),
+        ):
+            self.assertIn('id="%s"' % svg_id, _preview_html())
+            # Harita anahtarı JS'te tırnaksız da yazılabilir (trend: "…").
+            self.assertRegex(
+                js, r"""(?m)^\s*["']?%s["']?\s*:\s*["']%s["']""" % (
+                    re.escape(svg_id), tip_name),
+                "%s yüzeyi delege haritasında yok" % svg_id,
+            )
+        for tip_key in ('data-tip="trend"', 'data-tip="refs"',
+                        'data-tip="hookenv"'):
+            self.assertIn(tip_key, js, "%s taşıyıcısı yok" % tip_key)
+        # Delege çağrısı indeksi DOM'dan okur (statik değer gömmez).
+        self.assertIn("window[tipName](+r.dataset.i, ev)", js)
+        self.assertIn('addEventListener("mouseleave", hideTrendTip)', js)
+
+
+class EscapeHtmlContractTests(unittest.TestCase):
+    """Kaçırma NİTELİK bağlamını da kapatmalı — statik sözleşme.
+
+    `escapeHTML` metin bağlamı için `& < >` ile yeterlidir; ama aynı
+    fonksiyon `title="…"`, `class="…"`, `data-ts="…"` içinde de kullanılıyor.
+    Orada tırnak kaçırmadan veri niteliği kapatıp yeni nitelik enjekte
+    edebilir (ölçülen açık: `lean_detail` ve `run.source`). Tarayıcı
+    kanıtı `test_preview_escaping.py`'de; bu sınıtar tarayıcısız ortamda
+    da kırılmayı yakalar.
+    """
+
+    # Veri türetli, serbest biçimli alanlar: sunucudan gelen dizgiler.
+    DATA_FIELD = re.compile(r"\b(?:r|d|h|f|v|b|k|item|rec|row|it|o)\.[a-z_]+")
+    # Zararsız: ölçek/eksen fonksiyonları ve sayıya bağlı biçimlendirme.
+    # Yalnız SAYI üretenler. Hepsi aritmetik:
+    #   x = PL + (n === 1 ? iw/2 : (iw*i)/(n-1))            (x, xAt)
+    #   yP = PT + ih - (ih * (v||0)) / maxP                  (yP, yD, yB, yZ, yL, y)
+    #   fmtLimit/fmtTs/fmtDuration/fmtBytes/fmtVal: girdi dizgiyse
+    #   ya sabit ("—") döner ya da isFinite() elemesiyle sayıya iner.
+    # Zararsız girdi ALANI: kabul edilen veri nitelik değerine girmez,
+    # tırnak işareti hiçbir yolla sonuca taşınamaz.
+    SCALE_HELPERS = ("x", "xAt", "yP", "yD", "yB", "yZ", "yL", "y",
+                     "fmtLimit", "fmtTs", "fmtDuration", "fmtBytes", "fmtVal")
+    SAFE_EXPR = re.compile(
+        r"^(?:" + "|".join(SCALE_HELPERS) + r")\(|\.toFixed\(|\.join\(")
+    TEMPLATE_SLOT = re.compile(r"\$\{([^{}]*)\}")
+
+    @classmethod
+    def _template_pools(cls, js):
+        """TÜM template literal havuzları (kaçışlı backtick yok sayar)."""
+        pools, i = [], 0
+        while i < len(js):
+            if js[i] == "`":
+                j = i + 1
+                while j < len(js):
+                    if js[j] == "\\":
+                        j += 2
+                        continue
+                    if js[j] == "`":
+                        break
+                    j += 1
+                pools.append((i, js[i:j + 1]))
+                i = j + 1
+            else:
+                i += 1
+        return pools
+
+    @classmethod
+    def _attr_sinks(cls, js):
+        """(satır, ifade) — NİTELİK değeri içindeki kaçışsız veri yuvaları.
+
+        SATIR tabanlı tarama yetmez: `title="x ${…}` açılışı ile kapanış
+        tırnağı ayrı satırlarda olduğunda hiçbir satırda `="…"` kalıbı
+        oluşmaz ve ihlal görünmez. Bu yüzden havuz metni kendi içinde
+        taranır (çok satırlı şablonlar dahil).
+        """
+        offenders = []
+        for start, body in cls._template_pools(js):
+            for m in re.finditer(r"\$\{", body):
+                depth, k = 1, m.end()
+                while k < len(body) and depth:
+                    if body[k] == "\\":
+                        k += 2
+                        continue
+                    if body.startswith("${", k):
+                        depth += 1
+                        k += 2
+                        continue
+                    if body[k] == "}":
+                        depth -= 1
+                    k += 1
+                expr = body[m.end():k - 1].strip()
+                # Nitelik değeri içinde miyiz? `="…` açılışından sonra, kapanış
+                # tırnağı görmeden → evet.
+                if not re.search(r'=\s*"[^"]*$', body[:m.end()]):
+                    continue
+                if not expr or "escapeHTML(" in expr:
+                    continue
+                if not cls.DATA_FIELD.search(expr) or cls.SAFE_EXPR.search(expr):
+                    continue
+                offenders.append(
+                    "%d: ${%s}" % (js.count("\n", 0, start) + 1, expr))
+        return offenders
+
+    def test_escape_html_covers_ampersand_angle_brackets_and_quotes(self):
+        js = _preview_js()
+        body = re.search(
+            r"function escapeHTML\(s\)\s*\{(.*?)\n\}", js, re.S).group(1)
+        for needle, why in (
+            ("&amp;", "&"), ("&lt;", "<"), ("&gt;", ">"),
+            ("&quot;", '"'), ("&#39;", "'"),
+        ):
+            self.assertIn(needle, body,
+                          "escapeHTML %s karakterini kaçırmıyor — %s"
+                          % (why, "nitelik bağlamı kırılır"))
+        # & ÖNCE kaçırılmalı: sıra tersine dönerse kendi kaçışımız bozulur.
+        self.assertLess(body.index("&amp;"), body.index("&lt;"))
+
+    def test_no_unescaped_data_reaches_attribute_context(self):
+        """Nitelik değeri içine kaçışsız veri interpolasyonu olmasın.
+
+        TÜM template literal havuzları taranır (çok satırlı şablonlar dahil):
+        `="…${expr}…"` kalıbında `expr` veri türetliyse (r.ts, h.name,
+        f.message …) ve escapeHTML/ölçek/sayı biçimi değilse → fail-closed.
+        """
+        offenders = self._attr_sinks(_preview_js())
+        self.assertEqual(
+            offenders, [],
+            "NİTELİK bağlamında kaçışsız veri interpolasyonu — tırnak kaçır:\n  "
+            + "\n  ".join(offenders))
+
+    def test_attr_sink_scanner_sees_across_line_breaks(self):
+        """Tarayıcının KENDİSİ: tarayıcı satır kıran bir ihlali kaçırmamalı.
+
+        Satır tabanlı tarama bu vakada 0 bulur (kapanış tırnağı ayrı
+        satırda, hiçbir satırda `="…"` kalıbı oluşmaz). Havuz tabanlı
+        tarama bulmalı — yoksa kapı sessizce körleşir.
+        """
+        evil = 'const EVIL = `<span title="x ${r.source}\n"></span>`;'
+        self.assertEqual(
+            self._attr_sinks(evil), ["1: ${r.source}"],
+            "havuz taramasi satir kirilmis niteligi gormuyor — "
+            "guard korrelmis/korelasyonmis olamaz")
+
+    def test_scale_helper_allowlist_has_no_dead_entries(self):
+        """Güvenli sayılan yardımcılar gerçekten tanımlı olmalı.
+
+        Ölü bir ad (silinmiş fonksiyon) listede kalırsa, ileride aynı adla
+        yazılan KAÇIŞSIZ bir interpolasyonı yanlışlıkla güvenli sayar.
+        """
+        js = _preview_js()
+        dead = [n for n in self.SCALE_HELPERS
+                if not re.search(r"\b%s\s*(?:=|\()" % re.escape(n), js)]
+        self.assertEqual(dead, [], "ölü yardımcı adı: " + ", ".join(dead))
+
+    SINKS = (
+        ('const ld = r.lean_detail ? " \u2014 " + escapeHTML(r.lean_detail)',
+         'title="Lean FAIL${ld}" ka\u00e7\u0131\u015fs\u0131z \u2014 lean_detail t\u0131rnak i\u00e7erebilir'),
+        ('const srcBadge = escapeHTML(r.source || "daemon")',
+         'class="source-badge ${srcBadge}" ka\u00e7\u0131\u015fs\u0131z'),
+        ('const tsAttr = r.ts ? escapeHTML(r.ts) : ""',
+         "data-ts elle ka\u00e7\u0131r\u0131l\u0131yor \u2014 tek yol escapeHTML olmal\u0131"),
+    )
+
+    def test_known_attribute_sinks_are_escaped(self):
+        """Ölçülen üç açık yuva hep kaçırılmalı (satır kaymasına dayanıklı).
+
+        assertIn tüm dosyayı hata mesajına döktüğü için varlık denetimi
+        yapılıp mesaj sabit tutulur — 3000 satır gürültü olmasın.
+        """
+        js = _preview_js()
+        missing = [why for needle, why in self.SINKS if needle not in js]
+        self.assertEqual(
+            missing, [], "kaçırılmamış nitelik yuvası:\n  " + "\n  ".join(missing))
+
+    def test_escaping_never_runs_on_markup_fragments(self):
+        """Kaçırma HTML PARÇASI üzerinde kullanılmamalı (etiketleri öldürürdü).
+
+        Kaçırılması gerekenler metin/nitelik değerleridir; `<b>` gibi
+        parçalar önceden kurulmuş HTML'dir ve kaçırılırsa görünmez olur.
+        """
+        for lineno, line in enumerate(_preview_js().split("\n"), 1):
+            for e in self.TEMPLATE_SLOT.finditer(line):
+                expr = e.group(1).strip()
+                if expr.startswith("escapeHTML(") and re.search(r"<[a-z/]", expr):
+                    self.fail("satır %d: escapeHTML bir HTML parçasına uygulanmış "
+                              "— %s" % (lineno, expr))
+
+
 class ExternalScriptContractTests(unittest.TestCase):
     """Candidate 3: dashboard JS preview.html'dan ayrılıp preview.js'e taşındı.
 
@@ -1794,7 +2514,7 @@ class ExternalScriptContractTests(unittest.TestCase):
         js = _preview_js()
         self.assertIn("function colorizeLine(line)", js)
         self.assertIn("function renderHookEnvTrend(rows)", js)
-        self.assertIn("navigator.serviceWorker.register('/sw.js'", js)
+        self.assertRegex(js, r"navigator\.serviceWorker\s*\.register\(\"/sw\.js\"")
 
     def _patch_preview_dir(self, value):
         """PREVIEW_DIR yalnızca main()'de tanımlanır; test için module'a bağla."""

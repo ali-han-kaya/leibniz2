@@ -378,7 +378,7 @@ def format_readme_row(ci: CommitInfo, base_url: str | None = None) -> str:
 # PUBLISH'te changelog YOKTUR — yalnızca README'ye işaret eden not kalır.
 PUBLISH_POINTER = (
     "> Tek kaynak: README.md → **Değişiklik Geçmişi** bölümü. "
-    "Changelog tablosu git log'dan `gen_changelog.py --update` ile otomatik "
+    "Changelog tablosu git log'dan `gen_changelog.py --prune` ile otomatik "
     "üretilir; bu senaryo belgesi ayrı changelog tutmaz "
     "(eski Bölüm-bazlı satırlar git geçmişinden geri alınabilir)."
 )
@@ -839,7 +839,7 @@ def main():
             drift = True
 
         if drift:
-            print("\nDRIFT tespit edildi. Düzeltmek için: python3 _calisma/CIKTI/gen_changelog.py --update")
+            print("\nDRIFT tespit edildi. Düzeltmek için: python3 _calisma/CIKTI/gen_changelog.py --prune")
             sys.exit(1)
         else:
             print("TÜMÜ PASS: changelog tabloları git log ile senkron")

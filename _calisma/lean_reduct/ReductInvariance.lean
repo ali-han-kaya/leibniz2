@@ -206,5 +206,67 @@ theorem reduct_invariance_sentences {Imp Cont Ep : Type} (M1 M2 : L0Structure Im
   · intro H e; exact (reduct_invariance M1 M2 h φ e).1 (H e)
   · intro H e; exact (reduct_invariance M1 M2 h φ e).2 (H e)
 
+-- Concrete mini-model: two syntactically different mock interpretations of
+-- the same L₀ reduct.  The second model uses `0 = 0` rather than `True`; the
+-- proof below is deliberately about extensional agreement, not definitional
+-- equality of the two mock definitions.
+inductive MockImp where
+  | i0 : MockImp
+
+inductive MockCont where
+  | c0 : MockCont
+
+inductive MockEp where
+  | e0 : MockEp
+
+def mockModel (p : Prop) : L0Structure MockImp MockCont MockEp :=
+  { Kat := fun _ => p
+    Rep := fun _ _ => p
+    Grasp := fun _ _ => p
+    Assent := fun _ _ => p
+    Bel := fun _ _ => p
+    Causal := fun _ _ => p
+    Custom := fun _ => p
+    Just := fun _ _ => p
+    StoicEp := fun _ => p }
+
+def mockModelOne : L0Structure MockImp MockCont MockEp :=
+  mockModel True
+
+def mockModelTwo : L0Structure MockImp MockCont MockEp :=
+  mockModel (0 = 0)
+
+theorem mockL0Agree : L0Agree mockModelOne mockModelTwo := by
+  constructor <;>
+    simp [mockModelOne, mockModelTwo, mockModel]
+
+def mockEnv : Env MockImp MockCont MockEp :=
+  { imp := fun _ => .i0
+    cont := fun _ => .c0
+    ep := fun _ => .e0 }
+
+def mockFormula : Formula :=
+  .iff (.and (.kat 0) (.rep 0 0))
+    (.or (.custom 0) (.stoicEp 0))
+
+/-- The main reduct-invariance theorem instantiated in the concrete mock
+model: the same L₀ formula and environment have equivalent truth values. -/
+theorem mock_reduct_invariance :
+    Realize mockModelOne mockFormula mockEnv ↔
+      Realize mockModelTwo mockFormula mockEnv :=
+  reduct_invariance mockModelOne mockModelTwo mockL0Agree mockFormula mockEnv
+
+/-- The mock model is not merely formally interchangeable: the displayed
+formula is true in both interpretations. -/
+theorem mock_reduct_invariance_truth :
+    Realize mockModelOne mockFormula mockEnv ∧
+      Realize mockModelTwo mockFormula mockEnv := by
+  constructor <;>
+    simp [mockFormula, mockEnv, mockModelOne, mockModelTwo, mockModel,
+      Realize]
+
 #check reduct_invariance
 #check reduct_invariance_sentences
+#check mockL0Agree
+#check mock_reduct_invariance
+#check mock_reduct_invariance_truth

@@ -15,7 +15,9 @@ Linux CI'da da çalışır):
                      exit 0 — gerçek kurulumda gerçek daemon smoke'u koşar)
 
 Sözleşme: --check → 0 = TAMAM / 1 = EKSİK-bayat / 2 = hata (bilinmeyen mod).
-setup modu fail-closed: her adımda hata → exit ≠ 0.
+setup modu fail-closed: her adımda hata → exit ≠ 0. --start ayrıca fake
+launchctl + HTTP readiness shim'leriyle bootstrap ve idempotence sözleşmesini
+kapsar.
 """
 import os
 import subprocess
@@ -25,6 +27,15 @@ import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FRESH_SETUP = os.path.join(HERE, "fresh_clone_setup.sh")
+if HERE not in sys.path:
+    sys.path.insert(0, HERE)
+
+# Fake launchctl/curl shimleri gerçek launchd/HTTP servisine dokunmadan
+# --start zincirinin tamamını fake HOME altında çalıştırmak için kullanılır.
+from check_bootstrap_start_smoke import (  # noqa: E402
+    create_full_shim_set,
+    parse_launchctl_log,
+)
 
 
 def run(home, *args, extra_env=None):
@@ -256,6 +267,57 @@ class TestFreshCloneSetupCheckCI(unittest.TestCase):
                 f.write("\n# drift\n")
             r = run(home, "bash", FRESH_SETUP, "--check-ci", extra_env=env)
             self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+
+
+class TestFreshCloneSetupStart(unittest.TestCase):
+    """--start: kurulum + launchd bootstrap + readiness tek akışta."""
+
+    def test_start_installs_bootstraps_and_reports_dashboard_url(self):
+        with tempfile.TemporaryDirectory(prefix="fc-start-") as home, \
+             tempfile.TemporaryDirectory(prefix="fc-start-shim-") as shim_root:
+            env = env_overrides(home)
+            fake_venv(env["REPO_VENV"])
+            fake_venv(env["MIRROR_VENV"])
+            shim_dir, launch_log, curl_log = create_full_shim_set(shim_root)
+            env.update({
+                "PATH": shim_dir + os.pathsep + os.environ.get("PATH", ""),
+                "LAUNCHCTL_LOG": launch_log,
+                "CURL_LOG": curl_log,
+            })
+
+            result = run(home, "bash", FRESH_SETUP, "--start", extra_env=env)
+            output = result.stdout + result.stderr
+            self.assertEqual(result.returncode, 0, output)
+            self.assertIn("=== 6/6: launchd bootstrap + HTTP health (--start) ===",
+                          result.stdout)
+            self.assertIn("DASHBOARD_URL: http://127.0.0.1:8000/preview.html",
+                          result.stdout)
+            self.assertIn("READY: Live CI Dashboard", result.stdout)
+            self.assertTrue(parse_launchctl_log(launch_log))
+            self.assertTrue(any(entry["cmd"] == "bootstrap"
+                                for entry in parse_launchctl_log(launch_log)))
+            self.assertTrue(os.path.isfile(curl_log),
+                            "readiness curl shim logu oluşmalı")
+            with open(curl_log, encoding="utf-8") as f:
+                curl_calls = f.read()
+            self.assertIn("/api/health", curl_calls)
+            self.assertIn("/preview.html", curl_calls)
+
+            # Aynı komut ikinci kez çalıştığında da bootstrap + readiness
+            # korunur; installer'ın idempotent sözleşmesi regresyonla korunur.
+            second = run(home, "bash", FRESH_SETUP, "--start", extra_env=env)
+            second_output = second.stdout + second.stderr
+            self.assertEqual(second.returncode, 0, second_output)
+            self.assertIn("DASHBOARD_URL: http://127.0.0.1:8000/preview.html",
+                          second.stdout)
+
+    def test_start_preview_source_does_not_kill_arbitrary_port_owner(self):
+        """Port 8000 sahibi başka bir servis olsa da onu öldürmeyelim."""
+        with open(os.path.join(HERE, "start_preview.sh"), encoding="utf-8") as f:
+            source = f.read()
+        self.assertNotIn("kill -9", source)
+        self.assertNotIn("lsof ", source)
+        self.assertIn("update_preview.sh", source)
 
 
 class TestFreshCloneSetupFailClosed(unittest.TestCase):

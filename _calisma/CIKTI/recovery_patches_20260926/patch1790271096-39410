@@ -1,0 +1,262 @@
+diff --git a/_calisma/CIKTI/a11y_gate.py b/_calisma/CIKTI/a11y_gate.py
+index 35462f0..25b61da 100644
+--- a/_calisma/CIKTI/a11y_gate.py
++++ b/_calisma/CIKTI/a11y_gate.py
+@@ -160,18 +160,36 @@ def decide_verdict(rows):
+ 
+ # ----------------------------------------------------------------- scan
+ 
+-def playwright_connect(base_url, axe_src):
+-    """Varsayılan sürücü: Playwright sync API. Lazy import — yoksa ImportError."""
++def playwright_connect(base_url, axe_src, axe_url_path="/vendor/axe.min.js"):
++    """Varsayılan sürücü: Playwright sync API. Lazy import — yoksa ImportError.
++
++    CSP-sözleşmesi: sayfa script-src 'self' + nonce; bundle aynı-kökte
++    /vendor/axe.min.js'ten 'self' ile yüklenir (temiz yol). Same-origin
++    script-tag doğrulanamazsa (eski-daemon: route yok) bilinçli yedek —
++    CSP-bypass'lı context'te add_script_tag enjeksiyonu.
++    """
+     from playwright.sync_api import sync_playwright  # noqa: PLC0415 (lazy)
+ 
+     page_url = base_url.rstrip("/") + "/preview.html"
+     with sync_playwright() as p:
+         browser = p.chromium.launch(headless=True)
+         try:
+-            # preview_server nonce-CSP'si inline axe injection'ı bloklar —
+-            # tarama-connect'i CSP-bypass'lı context'te aç (yalnız kapı-scan'i).
+-            context = browser.new_context(bypass_csp=True)
+-            page = context.new_page()
++            page = browser.new_context().new_page()
++            page.goto(page_url, wait_until="load")
++            results = page.evaluate(
++                """async (axeUrl) => {
++                    await new Promise((resolve, reject) => {
++                        const s = document.createElement('script');
++                        s.src = axeUrl;
++                        s.onload = resolve;
++                        s.onerror = () => reject(new Error('same-origin axe yüklenemedi'));
++                        document.head.appendChild(s);
++                    });
++                    return await axe.run();
++                }""", axe_url_path)
++        except Exception:
++            # Yedek (eski-daemon uyumu): CSP-bypass + inline enjeksiyon.
++            page = browser.new_context(bypass_csp=True).new_page()
+             page.goto(page_url, wait_until="load")
+             page.add_script_tag(content=axe_src)
+             results = page.evaluate("() => axe.run()")
+diff --git a/_calisma/CIKTI/preview.html b/_calisma/CIKTI/preview.html
+index f9dc4c1..83c0947 100644
+--- a/_calisma/CIKTI/preview.html
++++ b/_calisma/CIKTI/preview.html
+@@ -409,7 +409,10 @@
+       <span style="color:var(--warn)">■ sarı = P1/CLI override</span> ·
+       <span style="color:var(--muted)">■ gri = ayraç/K katmanı</span>
+     </div>
+-    <pre id="stdout">Waiting for first run…</pre>
++    <!-- a11y: CSS ile overflow-auto olan pre, odaklanabilir-değilken axe
++         scrollable-region-focusable (serious) verir; tabindex=0 ile klavye-
++         erişilebilir kaydırma (a11y-gate blocking-eşiği). -->
++    <pre id="stdout" tabindex="0">Waiting for first run…</pre>
+   </section>
+ 
+   <section>
+diff --git a/_calisma/CIKTI/preview_server.py b/_calisma/CIKTI/preview_server.py
+index 005d8c0..2f67817 100755
+--- a/_calisma/CIKTI/preview_server.py
++++ b/_calisma/CIKTI/preview_server.py
+@@ -1367,6 +1367,8 @@ def _route(path):
+         return "preview"
+     if p == "/preview.js":
+         return "preview_js"
++    if p == "/vendor/axe.min.js":
++        return "vendor_axe"
+     if p == "/design-system/tokens.css":
+         return "design_tokens"
+     if p == "/guide.html":
+@@ -1508,6 +1510,8 @@ class Handler(BaseHTTPRequestHandler):
+             self.serve_guide()
+         elif route == "preview_js":
+             self.serve_preview_js()
++        elif route == "vendor_axe":
++            self.serve_vendor_axe()
+         elif route == "design_tokens":
+             self.serve_design_tokens()
+         elif route == "latest":
+@@ -1851,6 +1855,13 @@ class Handler(BaseHTTPRequestHandler):
+         fallback'ine düşer (davranış aynı).
+         """
+         preview_path = os.path.join(PREVIEW_DIR, "preview.html")
++        if not os.path.isfile(preview_path):
++            # Fail-closed: mirror'da HTML yoksa 404 — çıplak open() daemon-
++            # thread'ini öldürür ve istemci "empty reply" alır (ölçüldü:
++            # verify-mirror preview-server'ı, 2026-09-24).
++            self._send(404, "404 — preview.html mirror'da yok "
++                             "(bash update_preview.sh)")
++            return
+         with open(preview_path, encoding="utf-8") as f:
+             html = f.read()
+         try:
+@@ -1929,6 +1940,25 @@ class Handler(BaseHTTPRequestHandler):
+             js = f.read()
+         self._send(200, js, content_type="application/javascript; charset=utf-8")
+ 
++    def serve_vendor_axe(self):
++        """vendor/axe.min.js — a11y-gate'in same-origin axe-bundle'ı.
++
++        CSP script-src 'self' + nonce: dış enjeksiyon yok; gate, bundle'ı
++        sayfa-içinden 'self'ten yükletir (<script src>) — eski add_script_tag
++        enjeksiyon-yolu yalnız CSP-bypass yedeği. Bundle PREVIEW_DIR/vendor/
++        altında (sync_verify_mirror.sh taşır; checksum-kapısı repo-kaynağını
++        pinler). Kaynak yoksa 404 (fail-closed: sessiz boş-skript yok).
++        """
++        path = os.path.join(PREVIEW_DIR, "vendor", "axe.min.js")
++        if not os.path.isfile(path):
++            self._send(404, "404 — vendor/axe.min.js mirror'da yok "
++                             "(bash sync_verify_mirror.sh)")
++            return
++        with open(path, "rb") as f:
++            data = f.read()
++        self._send(200, data,
++                   content_type="application/javascript; charset=utf-8")
++
+     def serve_design_tokens(self):
+         """design-system/tokens.css — dashboard token sheet (tek stil kaynağı).
+ 
+diff --git a/_calisma/CIKTI/record_determinism_trend.py b/_calisma/CIKTI/record_determinism_trend.py
+index 4e15538..177db38 100644
+--- a/_calisma/CIKTI/record_determinism_trend.py
++++ b/_calisma/CIKTI/record_determinism_trend.py
+@@ -16,13 +16,16 @@ yazılmaz; güncellik `source_mtime` + `source_sha256` ile izlenir):
+ --check değişmezi (fail-closed trend kapısı; pre-commit/CI):
+   1. GENÇLİK — son kayıt 7 günden eskiyse FAIL (haftalık cron + push
+      tetiklemesi koşum frekansını taşır; koşum yoksa kanıt bayatlar).
+-  2. UZLAŞMA — son kayıttan bu yana kaynak .tex değişmediyse (aynı
+-     source_sha256) kanonik hash'ler DEĞİŞMEMELİ. Kaynak değiştiyse hash
+-     serbest (yeni bazeline ait). İhlal = motor/determinizm sapması.
+-  3. PLATFORM KAPSAMI — cutoff sonrası en az bir darwin + bir linux kaydı:
+-     aynı kaynak + motor sürümü + SDE ile iki platformun kanonik hash'i
+-     birebir eşit olmalı; eşitsizlik ya CI/lokal motor sürüm sapmasıdır ya
+-     da determinizm kırığıdır — ikisi de fail-closed inceleme ister.
++  2. UZLAŞMA (platform-kapsamlı) — son kayıttan bu yana kaynak .tex
++     değişmediyse (aynı source_sha256) VE platform aynıysa kanonik hash'ler
++     DEĞİŞMEMELİ. Kaynak ya da platform değiştiyse hash serbest (yeni
++     bazeline ait). İhlal = motor/determinizm sapması.
++  3. PLATFORM KAPSAMI — cutoff sonrası en az bir darwin + bir linux kaydı
++     bulunmalı (karşılaştırılabilir bağlam garantisi). Çapraz-platform
++     eşitliği İHLAL SAYILMAZ: farklı paket setleri (Homebrew TeX Live ↔
++     Debian texlive+cm-super) farklı kanonik hash üretebilir; yalnız
++     `_cross_platform_note` ile bilgilendirici olarak raporlanır.
++     Gerekçe ve ölçüm: docs/PDF_DETERMINISM_EXPLAINED.md §6.
+ """
+ import argparse
+ import datetime
+diff --git a/_calisma/CIKTI/sync_verify_mirror.sh b/_calisma/CIKTI/sync_verify_mirror.sh
+index 05318e7..04c0e9f 100755
+--- a/_calisma/CIKTI/sync_verify_mirror.sh
++++ b/_calisma/CIKTI/sync_verify_mirror.sh
+@@ -164,6 +164,10 @@ PREVIEW_FILES=(
+   # tutar (güncelleme-çekimi hep 404 → skipWaiting asla çalışmaz) —
+   # dashboard gömülü-webview'de asılı kalır (QA bulgusu F2, 2026-09-23)
+   "sw.js|sw.js"
++  # a11y-gate same-origin axe-bundle'ı: preview_server /vendor/axe.min.js
++  # rotası PREVIEW_DIR/vendor/ altından servis eder (CSP 'self' temiz-yol;
++  # checksum-kapısı repo-kaynağını pinler — mirror-drift ayrı denetim).
++  "vendor/axe.min.js|vendor/axe.min.js"
+   # determinism-trend endpoint handler'ının importu (PREVIEW_DIR'den
+   # çözülür — QA bulgusu F1, 2026-09-21)
+   "determinism_trend_badge.py|determinism_trend_badge.py"
+diff --git a/_calisma/CIKTI/test_preview_server.py b/_calisma/CIKTI/test_preview_server.py
+index ea4ee49..4ad312f 100644
+--- a/_calisma/CIKTI/test_preview_server.py
++++ b/_calisma/CIKTI/test_preview_server.py
+@@ -1415,6 +1415,7 @@ class TestRouteQueryParams(unittest.TestCase):
+         self.assertEqual(ps._route("/"), "preview")
+         # Candidate 3: dashboard JS dış dosyada — kendi rotasını kullanır.
+         self.assertEqual(ps._route("/preview.js"), "preview_js")
++        self.assertEqual(ps._route("/vendor/axe.min.js"), "vendor_axe")
+         self.assertEqual(ps._route("/preview.js?v=123"), "preview_js")
+ 
+     def test_unknown_paths_are_none(self):
+diff --git a/_calisma/CIKTI/test_reproducible_pdf_skill.py b/_calisma/CIKTI/test_reproducible_pdf_skill.py
+index 93877d4..bad4e91 100644
+--- a/_calisma/CIKTI/test_reproducible_pdf_skill.py
++++ b/_calisma/CIKTI/test_reproducible_pdf_skill.py
+@@ -68,17 +68,29 @@ cat "$2" > "$out"
+ 
+ 
+ class TestSdeDocumentationSync(unittest.TestCase):
+-    """SKILL.md'nin tectonic + SDE bulgusunu gerçek deney kanıtıyla eşleştirir."""
++    """SKILL.md'nin SDE bulgusu gerçek ölçümle eşleşmeli.
++
++    2026-09-24: ölçüm, eski "tectonic SOURCE_DATE_EPOCH'u aynı şekilde ele
++    almıyor" notunu çürüttü — SDE ile tectonic iki platformda byte-stable
++    (trend kaydı ad8fca69…; docs/PDF_DETERMINISM_EXPLAINED.md §2-3). Aynı
++    ölçüm SDE'nin pdfTeX `/ID`'sini sabitlemediğini de kanıtladı (§3-4).
++    Bu test iki yönlü guard'dır: ölçülmüş gerçekler metinde bulunmalı, eski
++    (yanlış) iddialar geri gelmemeli.
++    """
+ 
+-    def test_skill_does_not_claim_tectonic_sde_determinism(self):
++    def test_skill_sde_claims_match_measurement(self):
+         skill = ROOT / "skills" / "reproducible-pdf-build" / "SKILL.md"
+         text = skill.read_text(encoding="utf-8")
+         self.assertIn("tectonic", text.lower())
+         self.assertIn("SOURCE_DATE_EPOCH", text)
+-        self.assertIn("does not honor `SOURCE_DATE_EPOCH`", text)
+-        self.assertIn("strict-determinism gate", text)
+-        self.assertIn("should stay OFF", text)
++        # Ölçülmüş gerçek 1: SDE pdfTeX'in trailer /ID'sini sabitlemez.
++        self.assertIn("does **not** stabilize pdfTeX's trailer `/ID`", text)
++        # Ölçülmüş gerçek 2: SDE ile tectonic byte-stable.
++        self.assertIn("**does** honor `SOURCE_DATE_EPOCH`", text)
++        # Çürütülmüş iddialar geri dönmesin.
++        self.assertNotIn("does not honor `SOURCE_DATE_EPOCH`", text)
+         self.assertNotIn("tectonic` is byte-deterministic", text)
++        self.assertNotIn("emit stable `/CreationDate` and\n  `/ID`", text)
+ 
+     def test_pending_sde_record_cannot_be_present_as_proof(self):
+         candidates = [
+diff --git a/skills/reproducible-pdf-build/SKILL.md b/skills/reproducible-pdf-build/SKILL.md
+index cb514e2..080f544 100644
+--- a/skills/reproducible-pdf-build/SKILL.md
++++ b/skills/reproducible-pdf-build/SKILL.md
+@@ -49,10 +49,14 @@ Two independent sources of byte drift were found in the field:
+ 
+ ### 1. Compiler-level (tectonic 0.17.0)
+ 
+-`tectonic` is NOT byte-deterministic: consecutive builds of the same `.tex`
+-produce different byte streams (observed: 33-page manuscript, stable page
+-count, unstable bytes). This is a known property of the engine's internal
+-ordering; it does NOT affect content correctness.
++`tectonic` built **without** `SOURCE_DATE_EPOCH` is not byte-deterministic:
++consecutive builds of the same `.tex` produce different byte streams (observed:
++33-page manuscript, stable page count, unstable bytes; across sessions
++`4ad65b9b…` → `6cfc6c0a…`). Later measurement refined this: with an explicit
++`SOURCE_DATE_EPOCH` the same source built byte-stable across two platforms
++(`ad8fca69…` on darwin and linux). Determinism is a property of the
++(engine, source, SDE, platform) tuple — see leibniz2
++`docs/PDF_DETERMINISM_EXPLAINED.md` §2-3.
+ 
+ ### 2. Post-processing (qpdf --remove-metadata)
+ 
+@@ -172,10 +176,15 @@ pdflatex -interaction=nonstopmode manuscript.tex       # (run twice for refs)
+ Notes from the field:
+ 
+ - `SOURCE_DATE_EPOCH` makes TeXLive emit stable `/CreationDate` and
+-  `/ID` — removing the need for qpdf stripping in the common case.
+-- `tectonic` does not honor `SOURCE_DATE_EPOCH` the same way; the migration
+-  path is TeXLive + `SOURCE_DATE_EPOCH`, and the strict-determinism gate
+-  should stay OFF until that migration lands.
++  `/ModDate`. It does **not** stabilize pdfTeX's trailer `/ID`, which stays
++  random per run (measured: two runs at `SDE=0` differ in exactly the 64-byte
++  `/ID` line) — so a canonical `/ID`-neutral comparison is still required.
++  See leibniz2 `docs/PDF_DETERMINISM_EXPLAINED.md` §3-4.
++- `tectonic` **does** honor `SOURCE_DATE_EPOCH` (with it, output was
++  byte-stable across darwin+linux for one source). Engine choice is therefore
++  a *contract* question, not a determinism question: `fontspec` sources are
++  XeTeX-family and the pdfTeX chain cannot compile them (leibniz2 "engine
++  stratification").
+ - Even after migration, keep the sidecar + reuse rule: it is the layer that
+   makes repacks byte-identical regardless of engine behavior.
+ 

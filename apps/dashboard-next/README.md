@@ -25,6 +25,33 @@ PREVIEW_API=http://127.0.0.1:8000 npm start   # varsayılan: http://127.0.0.1:80
 
 Önkoşul: `python3 _calisma/CIKTI/preview_server.py --preview-dir _calisma/CIKTI --port 8000`
 
+## Tip-testleri (`test-d/`)
+
+`tsc --noEmit` "bu atama geçiyor mu" diye sorar; "sözleşme hâlâ AYNI mı" diye
+sormaz. Atanabilirlik eşitlikten gevşektir: bir union'a varyant eklenmesi, bir
+alan adının değişmesi ya da bir fallback'in düşmesi derlemeden geçer ve panoyu
+sessizce bozar. Bu yüzden ikinci bir katman var:
+
+```bash
+npm run test:types     # iki geçiş (pozitif + negatif); tsc'yi kendisi koşar
+npm run typecheck      # yalnız gönderilen kodun tip denetimi
+npm run lint           # typecheck + test:types
+```
+
+- **Pozitif iddialar** (`contracts.test-d.ts`, `Assert<Equal<A, B>>`): ton
+  kümesinin kapalılığı, metin ile rozet tonlarının aynı kümeyi taşıması,
+  `TrendSource` ile `trendSource()` guard'ının uyumu, `API_BASE` fallback'i,
+  `getLatest`/`getTrend` dönüş yüzeyi ve tel-alanı kümeleri.
+- **Negatif iddialar** (`negatives.test-d.ts`, `@ts-expect-error TSxxxx`):
+  derlenmemesi gereken kullanımlar. Koşucu direktifleri geçici bir kopyada
+  kapatıp tsc'nin bastığı tanı KODUNU etiketle karşılaştırır: "bir hata var"
+  yetmez, "beklediğim hata var" gerekir.
+- `@ts-ignore` yasak: hatayı koşulsuz yutup iddiayı sessizce öldürür.
+- Desenin neden `Assert<Equal<..>>` olduğu (tek parça bir `AssertEqual` takma
+  adı tsc'de derlenmez) `test-d/assertions.ts` başlığında yazılı.
+- **Kapı:** pre-commit `check-dashboard-typecheck` ( `tsc --noEmit` + tip-test
+  katmanı), fail-closed; ortam yoksa SKIP.
+
 ## Uygulanan App Router desenleri (skill: nextjs-app-router-patterns)
 
 | Desen | Dosya | Not |
@@ -35,6 +62,44 @@ PREVIEW_API=http://127.0.0.1:8000 npm start   # varsayılan: http://127.0.0.1:80
 | Error boundary (actioned mesaj) | `app/error.tsx`, `app/trend/error.tsx` | preview_server kapalıyken "nasıl düzeltilir" önerisi + reset |
 | Root layout + metadata | `app/layout.tsx` | `%s \| leibniz2` template başlık |
 | Client bileşen yalnız sınırda | `app/error.tsx` | Tek `"use client"` dosyası: hata sınırı (zorunlu) |
+
+## Tema zinciri (CSS) — preset-bağımsız
+
+`app/globals.css` tema kaynağını **tek zincirden** alır:
+
+```css
+@import "tailwindcss";                            /* çekirdek */
+@import "../../../design-system/tailwind.css";    /* GENERATED köprü (tokens.json → tokens.css) */
+@import "tw-animate-css";                         /* utility animasyonları */
+```
+
+shadcn yuvaları (`--background`, `--card`, `--primary`, `--sidebar-*`,
+`--chart-*`, `--radius`) bu dosyada **repo token'larına bağlanır**:
+her değer `var(--bg)` / `var(--radius-6)` gibi bir referanstır, yazıyla
+verilmiş renk/ölçü YOKTUR. `@theme inline` bloğu aynı yuvaları
+`--color-*` alias'ı olarak yeniden sunar; böylece `bg-card`,
+`text-muted-foreground`, `border-border` gibi utility'ler doğrudan pano
+paletine düşer.
+
+- **Preset bağımsızlığı (2026-09-27):** `@import "shadcn/tailwind.css"`
+  (npm preset sheet'i: `data-*` variant'ları, `no-scrollbar`,
+  `scroll-fade`, `shimmer`) **kaldırıldı** — ikinci bir tema kaynağıydı ve
+  bileşenlerimiz bu yüzeyleri kullanmıyordu. Yeni bir shadcn bileşeni
+  preset-only bir yüzey getirirse, karşılığı repo CSS'ine eklenir.
+- **Kapı:** `python3 design-system/scripts/check_tokens.py` (pre-commit
+  `check-design-tokens`, fail-closed) contract 7+8'i denetler: köprü
+  importu zorunlu; token gölgelemesi, kopya değer, renk literal'i, dış
+  preset importu, yazıyla verilmiş yuva değeri, çürük `var(--X)`
+  referansı, `@theme` alias'sız yuva ve kaynakta preset-only yüzey
+  kullanımı commit'i BLOKE eder.
+
+## Trend grafiği okuma yolu (tasarım)
+
+`docs/TREND_CHART_READ_PATH.md`: trend yüzeyini kalıcı `trend_runs` tablosundan
+besleyen okuma yolu — UTC kova (gün/saat), JS kovalama (tek şema kaynağı +
+drift-guard), preview modunda sessiz boş kutu yerine açık "grafik yok" notu.
+Tablo (koşu listesi) için DB yolu çalışıyor; grafik bileşeni ve agrega katmanı
+tasarımdadır.
 
 ## Doğrulama kanıtı (2026-09-18)
 

@@ -1,3 +1,6 @@
 # Next.js build output
 .next/
 tsconfig.tsbuildinfo
+
+# tip-test koşucusunun ürettiği geçici kopya (run_type_tests.py)
+test-d/stripped/

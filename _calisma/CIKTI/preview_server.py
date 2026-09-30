@@ -26,6 +26,7 @@ Tek dosyalık Python HTTP sunucusu (stdlib-only):
 import argparse
 import hashlib
 import hmac
+import ipaddress
 import json
 import os
 import re
@@ -49,6 +50,57 @@ BUILD_TS_NONCE = secrets.token_urlsafe(16)
 SERVER = None
 STOP_EVENT = None
 
+# /api/stop TCP-peer izin-kümesi: default yalnız loopback. Sandbox-dışı
+# ortamlarda (0.0.0.0 bind, konteyner, tünel) dış-peer'lar /api/stop'a
+# erişemez; genişletme yalnız PREVIEW_STOP_ALLOWLIST ile (geçersiz girdi
+# düşülür — kapı asla genişlemez).
+DEFAULT_STOP_ALLOWLIST = frozenset({"127.0.0.1", "::1"})
+
+# Import-time default: main() env ile genişletene kadar yalnız loopback.
+# (Unit-prob'lar main()'i koşmadan Handler'ı kurar — global burada var olmalı.)
+STOP_ALLOWLIST = DEFAULT_STOP_ALLOWLIST
+_STOP_HOSTS_ENV = "PREVIEW_STOP_ALLOWLIST"
+
+
+def load_stop_allowlist(env_value):
+    """PREVIEW_STOP_ALLOWLIST değerini izin-kümesine çevirir.
+
+    Virgülle ayrılmış IP listesi; geçersiz girdiler düşülür, kalan küme
+    default'a EKLENİR (loopback operatörü her zaman geçerli — typo'lu env
+    yerel-kilitleme yapamaz), geçerli-kalan boşsa yalnız default döner.
+    """
+    if not env_value:
+        return DEFAULT_STOP_ALLOWLIST
+    allowed = set()
+    for token in env_value.split(","):
+        token = token.strip()
+        if not token:
+            continue
+        try:
+            allowed.add(str(ipaddress.ip_address(token)))
+        except ValueError:
+            continue  # geçersiz girdi: düşür (kapı asla genişlemez)
+    return frozenset(allowed | DEFAULT_STOP_ALLOWLIST)
+
+
+def _stop_peer_allowed(peer, allowlist=None):
+    """TCP-peer adresi izin-kümesinde değilse gerekçe, izinliyse None.
+
+    Sahtelenemez katman: karar soket-peer'ına bakar (Host/Origin'in
+    aksine istemci-kontrolünde değil). IPv4-mapped IPv6 canonical'lanır;
+    ayrıştırılamayan peer deny (fail-closed).
+    """
+    allowed = DEFAULT_STOP_ALLOWLIST if allowlist is None else allowlist
+    try:
+        addr = ipaddress.ip_address(str(peer[0]))
+    except ValueError:
+        return "forbidden peer"
+    if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped:
+        addr = addr.ipv4_mapped
+    if str(addr) not in allowed:
+        return "forbidden peer"
+    return None
+
 
 def _trusted_request(headers):
     host = headers.get("Host", "").split(":", 1)[0].lower()
@@ -66,9 +118,33 @@ def api_error(status, message):
     return status, {"error": message}
 
 
+# GET-API route kümesi: DNS-rebinding kapısı bunlara uygulanır (do_GET).
+# Statik varlıklar (sw/preview/guide/preview_js/design_tokens/slides) veri
+# taşımaz — kapı dışı. /api/health yerel-monitör için düşük-duyarlı.
+_API_GET_ROUTES = frozenset({
+    "latest", "sse", "run_stream", "history", "refs_trend", "trend",
+    "override_trend", "determinism_trend", "run_history", "health",
+    "stop", "run_now",
+})
+
+
 ROOT = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(os.path.dirname(ROOT))
 DEFAULT_PREVIEW_DIR = os.path.expanduser("~/Library/Caches/com.freebuff/preview")
+
+# LeibnizChain tarayici-ici oynatma paketi. `npm run build:player` ciktisi;
+# yeniden uretilebilir oldugu icin repoda tutulmaz (.gitignore) ve PREVIEW_DIR
+# mirror'indan BAGIMSIZDIR — CI'da da repo checkout'undan servis edilir.
+VIDEO_DIST = os.path.join(REPO_ROOT, "_calisma", "video", "dist")
+
+# /video/* altinda servis edilebilecek dosyalar — ACIK ALLOWLIST. Yol kacisi
+# (../) ve dizin listelemesi bu yuzden yapilandirilamaz: adi listede olmayan
+# her sey 404.
+VIDEO_ASSETS = {
+    "player.js": "text/javascript; charset=utf-8",
+    "player.css": "text/css; charset=utf-8",
+    "leibniz.json": "application/json; charset=utf-8",
+}
 
 
 def _find_python(verify_dir):
@@ -159,11 +235,22 @@ VERIFY_BUSY = threading.Lock()  # aynı anda yalnızca bir verify koşsun (loop 
 VERIFY_DIR = None               # main()'de set edilir; /api/run-now handler'ı kullanır
 HISTORY_PATH = None             # main()'de set edilir; JSONL trend dosyası
 HISTORY_MAX = 100               # disk'te tutulacak en son run sayısı
+# /api/trend?limit=N penceresi. Sınırlar dashboard-next SSE tüneliyle BİREBİR
+# aynıdır (apps/dashboard-next/app/api/events/route.ts): tünel `Math.trunc` ile
+# kırpar, 1..200 aralığına sıkıştırır, sayı değilse 20'ye düşer. Aynı değer
+# tünolden geçse doğrudan geldiğinde de aynı davranmalıdır — iki katman ayrı
+# kural uygularsa pencere "hangi katmana göre?" belirsizliği doğar.
+# Sürüklenmeye karşı `test_preview_server.py` iki katmanın sabitlerini birlikte
+# denetler.
+TREND_LIMIT_MAX = 200
+TREND_LIMIT_FALLBACK = 20
 RUNS_DIR = None                 # main()'de set edilir; run logları (stdout+stderr) dizini
+SERVER_EVENTS_PATH = None       # main()'de set edilir; yaşam-döngüsü olay-kaydı (append-only)
 RUN_LOG_MAX = 20                 # disk'te tutulacak + replay edilecek en son run sayısı
 SSE_POLL_TIMEOUT = 15            # SSE q.get(timeout=...) — keepalive periyodu (saniye)
 REFS_TREND_PATH = None           # main()'de set edilir; refs-trend.json yolu
 OVERRIDE_TREND_PATH = None       # main()'de set edilir; override-trend.json yolu
+DETERMINISM_TREND_PATH = None    # main()'de set edilir; determinism_trend.jsonl yolu
 # Matris doc'u tek kaynaktır. Sunucu TCC-safe mirror'dan koştuğunda (launchd
 # GUI agent'ı repo'yu okuyamaz) doc kopyası preview mirror'a senkronlanır
 # (sync_verify_mirror.sh) ve ROOT'un yanına düşer; yerel dev/test ise repo
@@ -412,6 +499,154 @@ def persist_history(rec):
         sys.stderr.flush()
 
 
+def drain_writer_lock(timeout=None):
+    """Kapanışta uçuştaki yazımı BİTİR; yenisinin başlamasını engelle.
+
+    `persist_history` history.jsonl ile .sha256 sidecar'ını İKİ ayrı atomik
+    yazımla yazar. SIGTERM tam bu ikisinin ARASINA gelirse diskte
+    yeni-history + eski-sidecar kalır — K15 P1 hash uyuşmazlığı, CI'daki
+    daemon-http kırmızısının kök-nedeni (3cabbff).
+
+    LOCK'u sınırlı süreyle ALIP BIRAKMAK aktif yazımın tamamlanmasını
+    bekler; bırakıldığı anda yeni yazım başlayabilir, bu yüzden çağıran
+    taraf bu noktadan önce yeni turu durdurmuş olmalı (stop_event).
+
+    Döner: True = drain edildi (kilit alındı), False = timeout.
+    Timeout'ta bile dönülür: kapanış ASILI KALMAMALI — bozuk disk,
+    asla bitmeyen bir çıkıştan iyidir.
+    """
+    if timeout is None:
+        timeout = REQUEST_TIMEOUT_SECONDS
+    acquired = LOCK.acquire(timeout=timeout)
+    if acquired:
+        LOCK.release()
+    return acquired
+
+
+def _lifecycle_event(event, detail=""):
+    """Sunucu yaşam-döngüsü olayını kalıcı kayda yaz (append-only JSONL).
+
+    Konum: PREVIEW_DIR/logs/server_events.jsonl (gitignore'da — logs/ zaten
+    öyle). Amaç: daemon çökme/kurtarma olaylarının stdout-stderr akışından
+    bağımsız, yeniden-başlatmalara dayanıklı kaydı (disk-kanıtı) — daemon
+    stdout'u /dev/null'a dup2'lenmişken bile iz bırakır.
+
+    Telemetri servisi DEĞİL: hiçbir hata sunucu-yüzeyini düşürmez — her
+    başarısızlık sessizce yutulur (yazılamaz dizin, bozuk mevcut dosya).
+    Append-only: mevcut dosya asla ezilmez/truncate edilmez.
+    """
+    if not SERVER_EVENTS_PATH:
+        return
+    try:
+        rec = {"ts": datetime.now(timezone.utc).isoformat().replace(
+            "+00:00", "Z"), "event": event, "pid": os.getpid()}
+        if detail:
+            rec["detail"] = detail
+        d = os.path.dirname(SERVER_EVENTS_PATH)
+        if d:
+            os.makedirs(d, exist_ok=True)
+        with open(SERVER_EVENTS_PATH, "a", encoding="utf-8") as f:
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    except OSError:
+        pass
+
+
+def _read_snapshot_file(path):
+    """Snapshot JSON/JSONL dosyasını fail-closed oku ve son kaydı doğrula.
+
+    CI preview_server'ı `verify` job'ının aynı koşumdan ürettiği history
+    artifact'ıyla, yeni full verify çalıştırmadan besler. Sidecar yoksa veya
+    hash'ı uyuşmazsa dosya güvenilmez sayılır. Bozuk JSONL satırları yok sayılmaz;
+    böylece kısmi/eskimiş bir kayıt PASS gibi sunulamaz.
+    """
+    if not path or not os.path.isfile(path):
+        raise ValueError("snapshot dosyası yok: %s" % path)
+    real = os.path.realpath(path)
+    sidecar = real + ".sha256"
+    if not os.path.isfile(sidecar):
+        raise ValueError("snapshot SHA-256 sidecar yok: %s" % sidecar)
+    try:
+        with open(real, "rb") as f:
+            raw = f.read()
+        with open(sidecar, encoding="utf-8") as f:
+            sidecar_text = f.read().strip()
+    except OSError as exc:
+        raise ValueError("snapshot/sidecar okunamadı: %s" % exc) from exc
+    expected = sidecar_text.split(None, 1)[0].lower() if sidecar_text else ""
+    actual = hashlib.sha256(raw).hexdigest()
+    if not re.fullmatch(r"[0-9a-f]{64}", expected) or expected != actual:
+        raise ValueError("snapshot SHA-256 sidecar uyuşmuyor: %s" % sidecar)
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValueError("snapshot UTF-8 değil: %s" % real) from exc
+    try:
+        value = json.loads(text)
+    except json.JSONDecodeError as first_error:
+        records = []
+        for line_no, line in enumerate(text.splitlines(), 1):
+            if not line.strip():
+                continue
+            try:
+                records.append(json.loads(line))
+            except json.JSONDecodeError as exc:
+                raise ValueError(
+                    "snapshot JSONL satırı geçersiz (%d): %s" %
+                    (line_no, exc)) from exc
+        if not records:
+            raise ValueError("snapshot JSON/JSONL kaydı yok: %s" % real) \
+                from first_error
+        value = records[-1]
+    if not isinstance(value, dict):
+        raise ValueError("snapshot JSON object değil: %s" % real)
+    return value
+
+
+def _validate_snapshot_file_snapshot(value):
+    """CI snapshot sözleşmesini server başlamadan fail-closed doğrula."""
+    if not isinstance(value, dict):
+        raise ValueError("snapshot JSON object değil")
+    if value.get("verdict") != "PASS" or value.get("exit_code") != 0:
+        raise ValueError("snapshot tamamlanmış PASS/0 değil")
+    if not isinstance(value.get("ts"), str) or not value["ts"].strip():
+        raise ValueError("snapshot ts boş")
+    nested = value.get("pdf_hash")
+    nested = nested if isinstance(nested, dict) else {}
+    for field in ("raw_sha256", "stripped_sha256"):
+        name = field.removesuffix("_sha256")
+        values = [sha for sha in (value.get(field), nested.get(name))
+                  if sha is not None]
+        if not values or any(
+                not isinstance(sha, str) or
+                not re.fullmatch(r"[0-9a-fA-F]{64}", sha)
+                for sha in values):
+            raise ValueError("snapshot %s 64 hex değil" % field)
+        if len({sha.lower() for sha in values}) != 1:
+            raise ValueError("snapshot %s alanları çelişkili" % field)
+    for field in ("p0", "p1"):
+        if value.get(field) is not None and value[field] != 0:
+            raise ValueError("snapshot %s sıfır değil" % field)
+    if value.get("cached") is True:
+        raise ValueError("snapshot cached")
+    return value
+
+
+def load_snapshot_file(path):
+    """Doğrulanmış snapshot kaydını LATEST'e snapshot-only mod için yükle.
+
+    `cached` bilinçli olarak False'tır: kaynak, aynı CI koşumunun artifact'ıdır;
+    preview_server'ın eski disk cache'ini (`load_cached_latest`) yeniden kullanmaz.
+    """
+    value = _validate_snapshot_file_snapshot(_read_snapshot_file(path))
+    with LOCK:
+        for key, item in value.items():
+            if key in LATEST and key != "cached":
+                LATEST[key] = item
+        LATEST["cached"] = False
+        LATEST["status_board"] = _compute_status_board()
+    return dict(value)
+
+
 def load_cached_latest():
     """Restart sonrası ilk verify döngüsü tamamlanana dek /api/latest'in
     UNKNOWN göstermemesini sağlar: disk'teki en son run kaydını LATEST'e
@@ -498,6 +733,87 @@ def load_history():
     if key is not None:
         _history_cache = (key, out)
     return list(out)
+
+
+def parse_query_param(path, name, default=None):
+    """`path` sorgu dizesinden TEK parametre (mevcut `?ts=` deseniyle aynı).
+
+    Boş değer (`?limit=`) yok sayılır → `default` döner; yani "boş sınır"
+    "penceresiz" demektir, 0 demek DEĞİLDİR. Modül düzeyinde tanımlı ki
+    handler'a bağlı olmadan (ve testlerde sahte handler ile) sınanabilsin.
+    """
+    parsed = urllib.parse.urlparse(path or "")
+    values = urllib.parse.parse_qs(parsed.query).get(name)
+    return values[0] if values else default
+
+
+def parse_trend_limit(raw):
+    """`?limit=` ham değerini pencereye çevirir. None = penceresiz (tüm geçmiş).
+
+    Kırpma kuralı `apps/dashboard-next/app/api/events/route.ts` ile aynıdır:
+    tüm sayılar tıma doğru atılır (`Math.trunc`), 1..200 aralığına sıkıştırılır,
+    sayıya çevrilemeyen değer TREND_LIMIT_FALLBACK'e düşer.
+
+    Neden 400 değil: bu bir OKUMA ucu. Bozuk sorgu parametresi hata sayfası
+    değil, TANIMLI bir pencere üretir — `preview.js` parametresiz çağırır,
+    MCP her zaman gönderir, arada bir yerde bozulmuş bir değer 500 üretirse
+    pano sessizce boş kalır. Pencere zaten sınırlı olduğu için "hata"
+    göstermenin bir güvenlik kazancı yok.
+    """
+    if raw is None:
+        return None
+    try:
+        # Math.trunc gibi davran: "5.9" → 5 (int("5.9") ValueError verirdi ve
+        # tünelle AYRIŞIRDI). float("inf") int()'te ValueError değil
+        # OverflowError verir — üçü de yakalanmalı.
+        value = int(float(str(raw).strip()))
+    except (TypeError, ValueError, OverflowError):
+        return TREND_LIMIT_FALLBACK
+    return min(max(value, 1), TREND_LIMIT_MAX)
+
+
+def window_tail(rows, limit):
+    """`rows`'un EN YENİ `limit` kaydı — SIRA KORUNARAK (eski → yeni).
+
+    Sıra sözleşmesi: `load_history()` kronolojik döner (en eski başta —
+    `test_serve_history_compact_content` 09:00 → 10:00 diye sıralıyor).
+    Dolayısıyla "son N" = `rows[-limit:]`; `rows[:limit]` EN ESKİ N'yi
+    döndürürdü ve pencere istenenin tersini yapardı.
+    """
+    if limit is None or not isinstance(rows, list):
+        return rows
+    return rows[-limit:]
+
+
+def window_refs_trend(payload, limit):
+    """refs_trend yarısına AYNI pencereyi uygular (yalnız satır listeleri).
+
+    Neden gerekiyor: `/api/trend` gövdesi İKİ zaman serisini birleştirir ve
+    `preview.js` ikisini yan yana basar (refs-trend + duration/budget grafiği).
+    Yalnız `history` kırpılırsa gövdenin iki yarısı FARKLI zaman aralıklarını
+    anlatır; aynı ekranda iki ayrı "son" görünür.
+
+    Dokunulmayanlar:
+      * Satır listesi olmayan payload'lar ve hata nesnesi (`{"error": ...}`)
+        — refs-trend.json okunamazsa 200 içinde hata döner, kırpma onu bozmaz.
+      * `summary` / `totals` / `warnings`: bunlar refs_trend.py'nin TÜM
+        artifact üzerindeki hesabıdır. Burada yeniden hesaplamak ikinci bir
+        doğruluk kaynağı doğururdu. Pencere gövdede `limit` alanıyla
+        bildirildiği için "özet 100 koşumu, satırlar 20'yi anlatıyor" farkı
+        tüketicide GİZLİ kalmaz.
+    """
+    if limit is None or not isinstance(payload, dict):
+        return payload
+    out = dict(payload)
+    if isinstance(out.get("rows"), list):
+        out["rows"] = window_tail(out["rows"], limit)
+    duration_budget = out.get("duration_budget")
+    if isinstance(duration_budget, dict) \
+            and isinstance(duration_budget.get("rows"), list):
+        duration_budget = dict(duration_budget)
+        duration_budget["rows"] = window_tail(duration_budget["rows"], limit)
+        out["duration_budget"] = duration_budget
+    return out
 
 
 def _prune_run_logs():
@@ -1274,10 +1590,18 @@ def _route(path):
         return "preview"
     if p == "/preview.js":
         return "preview_js"
+    if p == "/vendor/axe.min.js":
+        return "vendor_axe"
     if p == "/design-system/tokens.css":
         return "design_tokens"
+    if p == "/design-system/stripe-theme.css":
+        return "design_tokens_stripe"
     if p == "/guide.html":
         return "guide"
+    if p == "/landing.html":
+        return "landing"
+    if p.startswith("/landing/assets/"):
+        return "landing_assets"
     if p == "/api/latest":
         return "latest"
     if p == "/api/run":
@@ -1294,6 +1618,8 @@ def _route(path):
         return "trend"
     if p == "/api/override-trend":
         return "override_trend"
+    if p == "/api/determinism-trend":
+        return "det_trend"
     if p == "/api/run-history":
         return "run_history"
     if p.startswith("/api/run-stdout"):
@@ -1304,6 +1630,10 @@ def _route(path):
         return "stop"
     if p.startswith("/slides_z3/"):
         return "slides"
+    if p == "/video.html":
+        return "video"
+    if p.startswith("/video/"):
+        return "video_asset"
     return None
 
 
@@ -1396,16 +1726,33 @@ class Handler(BaseHTTPRequestHandler):
         # Query string'li istekler (cache-buster ?_t= / ?v=) da aynı rotaya
         # düşer — bkz. _route().
         route = _route(self.path)
+        # DNS-rebinding kapısı: /api/* GET'leri de Host/Origin kurallarına
+        # tabidir (POST-uçlarla aynı ALLOWED_HOSTS). Statik varlıklar ve
+        # do_HEAD kapı dışı — veri-taşımayan yüzeyler.
+        if route in _API_GET_ROUTES:
+            request_error = _trusted_request(self.headers)
+            if request_error:
+                self._send(403, json.dumps({"error": request_error}),
+                           content_type="application/json; charset=utf-8")
+                return
         if route == "sw":
             self.serve_sw()
         elif route == "preview":
             self.serve_preview()
         elif route == "guide":
             self.serve_guide()
+        elif route == "landing":
+            self.serve_landing()
+        elif route == "landing_assets":
+            self.serve_landing_assets()
         elif route == "preview_js":
             self.serve_preview_js()
+        elif route == "vendor_axe":
+            self.serve_vendor_axe()
         elif route == "design_tokens":
             self.serve_design_tokens()
+        elif route == "design_tokens_stripe":
+            self.serve_stripe_theme()
         elif route == "latest":
             self.serve_latest()
         elif route == "sse":
@@ -1424,6 +1771,8 @@ class Handler(BaseHTTPRequestHandler):
             self.serve_trend()
         elif route == "override_trend":
             self.serve_override_trend()
+        elif route == "det_trend":
+            self.serve_determinism_trend()
         elif route == "run_history":
             self.serve_run_history()
         elif route == "run_stdout":
@@ -1432,6 +1781,10 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, "ok")
         elif route == "slides":
             self.serve_slides()
+        elif route == "video":
+            self.serve_video()
+        elif route == "video_asset":
+            self.serve_video_asset()
         elif route is None and urllib.parse.urlparse(self.path).path.startswith("/api/"):
             status, payload = api_error(404, "not found")
             self._send(status, json.dumps(payload),
@@ -1451,6 +1804,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def stop_server(self):
         """Yerel daemon'ı güvenli biçimde durdurur; GET ile tetiklenemez."""
+        # TCP-peer kapısı: Host/Origin'in aksine sahtelenemez; sandbox-dışı
+        # bind'ta bile dış-peer'ı /api/stop'tan uzak tutar (bind'dan bağımsız).
+        # Sahtelenemez katman önce değerlendirilir (güven-sırası).
+        peer_error = _stop_peer_allowed(self.client_address, STOP_ALLOWLIST)
+        if peer_error:
+            self._send(403, json.dumps({"error": peer_error}),
+                       content_type="application/json; charset=utf-8")
+            return
         request_error = _trusted_request(self.headers)
         if request_error:
             self._send(403, json.dumps({"error": request_error}),
@@ -1475,6 +1836,13 @@ class Handler(BaseHTTPRequestHandler):
         yanlışlıkla silinmişti (serve_run_stdout ile yer değiştirdi) —
         geri yüklendi.
         """
+        # Peer-paritesi: state-changing uç, /api/stop ile aynı sahtelenemez
+        # TCP-peer kapısını taşır (güven-sırası: peer → trusted → auth).
+        peer_error = _stop_peer_allowed(self.client_address, STOP_ALLOWLIST)
+        if peer_error:
+            self._send(403, json.dumps({"error": peer_error}),
+                       content_type="application/json; charset=utf-8")
+            return
         request_error = _trusted_request(self.headers)
         if request_error:
             self._send(403, json.dumps({"error": request_error}),
@@ -1589,6 +1957,14 @@ class Handler(BaseHTTPRequestHandler):
                 except ValueError:
                     pass
 
+    def _query(self, name, default=None):
+        """`self.path` sorgu dizesinden TEK parametre (mevcut `?ts=` deseniyle aynı).
+
+        Boş değer (`?limit=`) yok sayılır → `default` döner; yani
+        "boş sınır" "penceresiz" demektir, 0 demek DEĞİLDİR.
+        """
+        return parse_query_param(getattr(self, "path", ""), name, default)
+
     def serve_history(self):
         """Return the dashboard projection of the recent history rows."""
         data = [_project_history_record(record) for record in load_history()
@@ -1619,9 +1995,23 @@ class Handler(BaseHTTPRequestHandler):
         history = dashboard-projected history.jsonl rows (same as /api/history).
         refs_trend = refs-trend.json payload or {rows: [], duration_budget: {rows: []}} fallback.
         Errors in refs_trend surface as {error: ...} inside refs_trend field (200 outer).
+
+        Query: ?limit=N → EN YENİ N koşum (penceresiz çağrıda tüm geçmiş, eski
+        davranış). Neden sunucu tarafı: parametre zaten sözleşmenin parçasıydı
+        ve iki canlı tüketici onu gönderiyordu — MCP `leibniz2_trend`
+        (`_calisma/mcp/server.py`, README'de "?limit=N → Son N koşum" olarak
+        belgeli) ve dashboard-next `getTrend` (`/api/trend?limit=20`).
+        Parametre yok sayıldığı için ikisi de İSTEDİKLERİ PENCEREYİ ALAMIYORDU
+        (ölçüldü: 100 kayda kadar tam geçmiş dönüyordu).
+        Pencere `history`ye VE refs_trend'in satır listelerine BİRLİKTE
+        uygulanır (bkz. `window_refs_trend`); uygulanan pencere gövdede
+        `limit` alanıyla bildirilir.
         """
-        history = [_project_history_record(record) for record in load_history()
-                   if isinstance(record, dict)]
+        limit = parse_trend_limit(
+            parse_query_param(getattr(self, "path", ""), "limit"))
+        history = window_tail(
+            [_project_history_record(record) for record in load_history()
+             if isinstance(record, dict)], limit)
         if not REFS_TREND_PATH or not os.path.isfile(REFS_TREND_PATH):
             refs_trend = {"rows": [], "duration_budget": {"rows": []}}
         else:
@@ -1630,8 +2020,15 @@ class Handler(BaseHTTPRequestHandler):
                     refs_trend = json.load(f)
             except (json.JSONDecodeError, OSError):
                 refs_trend = {"error": "refs trend unavailable"}
-        self._send(200, json.dumps({"history": history, "refs_trend": refs_trend},
-                                   ensure_ascii=False, separators=(",", ":")),
+        body = {"history": history,
+                "refs_trend": window_refs_trend(refs_trend, limit)}
+        if limit is not None:
+            # Pencere uygulandığını gövde kendisi söyler: özet alanları
+            # pencerelenmediği için tüketicinin "bu N satırlık bir pencere"
+            # ile "tüm artifact" farkını görebilmesi gerekir.
+            body["limit"] = limit
+        self._send(200, json.dumps(body, ensure_ascii=False,
+                                   separators=(",", ":")),
                    content_type="application/json; charset=utf-8")
 
     def serve_override_trend(self):
@@ -1649,6 +2046,17 @@ class Handler(BaseHTTPRequestHandler):
                        content_type="application/json; charset=utf-8")
             return
         self._send(200, json.dumps(data, ensure_ascii=False),
+                   content_type="application/json; charset=utf-8")
+
+    def serve_determinism_trend(self):
+        """determinism_trend.jsonl'ı badge'li satırlarla döndür (TeX motor
+        determinizm trend paneli — determinism_trend_badge.py üreticisi)."""
+        import determinism_trend_badge as dtb
+        rows = dtb.rows_from(DETERMINISM_TREND_PATH) or []
+        enriched = [dict(r, badge=dtb.badge([r])) for r in rows]
+        self._send(200, json.dumps({"badge": dtb.badge(rows),
+                                    "rows": enriched},
+                                   ensure_ascii=False),
                    content_type="application/json; charset=utf-8")
 
     def serve_run_history(self):
@@ -1719,6 +2127,13 @@ class Handler(BaseHTTPRequestHandler):
         fallback'ine düşer (davranış aynı).
         """
         preview_path = os.path.join(PREVIEW_DIR, "preview.html")
+        if not os.path.isfile(preview_path):
+            # Fail-closed: mirror'da HTML yoksa 404 — çıplak open() daemon-
+            # thread'ini öldürür ve istemci "empty reply" alır (ölçüldü:
+            # verify-mirror preview-server'ı, 2026-09-24).
+            self._send(404, "404 — preview.html mirror'da yok "
+                             "(bash update_preview.sh)")
+            return
         with open(preview_path, encoding="utf-8") as f:
             html = f.read()
         try:
@@ -1781,6 +2196,55 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def serve_video(self):
+        """LeibnizChain oynatma sayfasi — VIDEO_DIST/player.html.
+
+        Remotion Studio DEGIL: Studio ayri bir sunucu + webpack dev-cache ile
+        gelir ve arac tarafindan surekli olarak oldurulur. @remotion/player
+        butun yuzeyi TEK statik dosyaya toplar; burada yalnizca o paket, sayfa
+        kabugu ve uretilen veri servis edilir.
+
+        Cikti yoksa 404 (fail-closed) — bos sayfa degil, ne yapilacagini
+        soyleyen mesaj doner: `npm run build:player`.
+        """
+        page = os.path.join(VIDEO_DIST, "player.html")
+        if not os.path.isfile(page):
+            self._send(
+                404,
+                "404 — LeibnizChain player paketi yok. "
+                "Uret: cd _calisma/video && npm ci && npm run build:player",
+            )
+            return
+        try:
+            with open(page, encoding="utf-8") as f:
+                html = f.read()
+        except OSError:
+            self._send(404, "404 — player.html okunamadi")
+            return
+        self._send(200, html, content_type="text/html; charset=utf-8")
+
+    def serve_video_asset(self):
+        """`/video/<ad>` — yalnizca VIDEO_ASSETS allowlist'indeki dosyalar.
+
+    Allowlist oldugu icin yol kacisi (`..`), dizin listelemesi ve dis uzantilar
+    yapilandirilamaz. player.js metin/javascript olarak servis edilir; sayfa
+    CSP'si `script-src 'self'` oldugu icin bu dosya zaten izin kapsaminda
+    (dis origin degil).
+        """
+        name = urllib.parse.urlparse(self.path).path[len("/video/"):]
+        content_type = VIDEO_ASSETS.get(name)
+        if content_type is None:
+            self._send(404, "404 not found")
+            return
+        full = os.path.join(VIDEO_DIST, name)
+        try:
+            with open(full, "rb") as f:
+                data = f.read()
+        except OSError:
+            self._send(404, "404 not found")
+            return
+        self._send(200, data, content_type=content_type)
+
     def serve_preview_js(self):
         """preview.js — dashboard JS (preview.html'den ayrılmış dış dosya).
 
@@ -1797,6 +2261,25 @@ class Handler(BaseHTTPRequestHandler):
             js = f.read()
         self._send(200, js, content_type="application/javascript; charset=utf-8")
 
+    def serve_vendor_axe(self):
+        """vendor/axe.min.js — a11y-gate'in same-origin axe-bundle'ı.
+
+        CSP script-src 'self' + nonce: dış enjeksiyon yok; gate, bundle'ı
+        sayfa-içinden 'self'ten yükletir (<script src>) — eski add_script_tag
+        enjeksiyon-yolu yalnız CSP-bypass yedeği. Bundle PREVIEW_DIR/vendor/
+        altında (sync_verify_mirror.sh taşır; checksum-kapısı repo-kaynağını
+        pinler). Kaynak yoksa 404 (fail-closed: sessiz boş-skript yok).
+        """
+        path = os.path.join(PREVIEW_DIR, "vendor", "axe.min.js")
+        if not os.path.isfile(path):
+            self._send(404, "404 — vendor/axe.min.js mirror'da yok "
+                             "(bash sync_verify_mirror.sh)")
+            return
+        with open(path, "rb") as f:
+            data = f.read()
+        self._send(200, data,
+                   content_type="application/javascript; charset=utf-8")
+
     def serve_design_tokens(self):
         """design-system/tokens.css — dashboard token sheet (tek stil kaynağı).
 
@@ -1809,6 +2292,25 @@ class Handler(BaseHTTPRequestHandler):
         if not os.path.isfile(path):
             self._send(404, "404 — design-system/tokens.css mirror'da yok "
                             "(bash update_preview.sh --force)")
+            return
+        with open(path, encoding="utf-8") as f:
+            css = f.read()
+        self._send(200, css, content_type="text/css; charset=utf-8")
+
+    def serve_stripe_theme(self):
+        """design-system/stripe/theme.css — Stripe HDS tema varyantı.
+
+        Kaynak: <repo>/design-system/stripe/theme.css (GENERATED;
+        generate_stripe_theme.py). check_tokens.py contract 9 bu dosyayı
+        jeneratörle birebir + `:root[data-theme="stripe"]` kapsamlı olarak
+        doğrular. sync_verify_mirror.sh bunu mirror PREVIEW_DIR'e
+        design-system-stripe-theme.css adıyla taşır; mirror'da yoksa 404
+        (fail-closed — varyant sayfasız kalır, koyu palete sessiz düşmez).
+        """
+        path = os.path.join(PREVIEW_DIR, "design-system-stripe-theme.css")
+        if not os.path.isfile(path):
+            self._send(404, "404 — design-system/stripe/theme.css mirror'da "
+                            "yok (bash update_preview.sh --force)")
             return
         with open(path, encoding="utf-8") as f:
             css = f.read()
@@ -1846,6 +2348,56 @@ class Handler(BaseHTTPRequestHandler):
         with open(path, encoding="utf-8") as f:
             html = f.read()
         self._send(200, html, content_type="text/html; charset=utf-8")
+
+    def serve_landing(self):
+        """Serve the generated landing page from PREVIEW_DIR.
+
+        CI stages the generated ``landing.html`` and its PNG assets beside
+        the preview mirror.  The source file is authored for the repository
+        landing directory, so rewrite only the two served-root-relative
+        prefixes here; the on-disk artifact remains directly usable too.
+        Missing output is a fail-closed 404 rather than an empty page.
+        """
+        path = os.path.join(PREVIEW_DIR, "landing.html")
+        if not os.path.isfile(path):
+            self._send(404, "404 — landing.html mirror'da yok")
+            return
+        with open(path, encoding="utf-8") as f:
+            html = f.read()
+        html = html.replace('href="../CIKTI/preview.html"',
+                            'href="/preview.html"')
+        html = html.replace('src="assets/', 'src="/landing/assets/')
+        self._send(200, html, content_type="text/html; charset=utf-8")
+
+    def serve_landing_assets(self):
+        """Serve staged landing PNGs with the same path/symlink guards as slides."""
+        request_path = urllib.parse.urlparse(self.path).path
+        name = request_path[len("/landing/assets/"):]
+        if (not name or "/" in name or name.startswith(".") or
+                not name.lower().endswith(".png") or
+                not re.fullmatch(r"[A-Za-z0-9._-]+", name)):
+            self._send(404, "404 not found")
+            return
+        base = os.path.realpath(os.path.join(PREVIEW_DIR, "landing", "assets"))
+        full = os.path.join(PREVIEW_DIR, "landing", "assets", name)
+        try:
+            real = os.path.realpath(full)
+            if os.path.commonpath([real, base]) != base:
+                self._send(404, "404 not found")
+                return
+        except ValueError:
+            self._send(404, "404 not found")
+            return
+        if not os.path.isfile(full):
+            self._send(404, "404 not found")
+            return
+        try:
+            with open(full, "rb") as f:
+                data = f.read()
+        except OSError:
+            self._send(404, "404 not found")
+            return
+        self._send(200, data, content_type="image/png")
 
     def serve_latest(self):
         self._send(200, json.dumps(snapshot_dict(), ensure_ascii=False,
@@ -1915,6 +2467,7 @@ def redirect_stdio_to_devnull():
 
 def main():
     global PREVIEW_DIR, VERIFY_DIR, HISTORY_PATH, RUNS_DIR, RUN_LOG_MAX, REFS_TREND_PATH
+    global SERVER_EVENTS_PATH, OVERRIDE_TREND_PATH, DETERMINISM_TREND_PATH
     # Daemon modunda: yeni process group + session oluştur (tamamen detach).
     # Bu, parent shell exit ettiğinde SIGHUP/SIGTERM almamızı engeller.
     if os.environ.get("PREVIEW_DAEMON") == "1":
@@ -1937,12 +2490,23 @@ def main():
     ap.add_argument("--replay-runs", type=int, default=RUN_LOG_MAX,
                     help="/api/run-stream'de replay edilecek + disk'te "
                          "tutulacak son run sayısı")
+    ap.add_argument("--snapshot-file",
+                    help="tamamlanmış verify JSON/JSONL + .sha256; "
+                         "snapshot-only mod")
+    ap.add_argument("--no-verify", action="store_true",
+                    help="periyodik verify döngüsünü başlatma")
     args = ap.parse_args()
+    if args.snapshot_file and not args.no_verify:
+        ap.error("--snapshot-file için --no-verify zorunludur")
+    if args.no_verify and not args.snapshot_file:
+        ap.error("--no-verify için --snapshot-file zorunludur")
 
     PREVIEW_DIR = os.path.abspath(args.preview_dir)
     VERIFY_DIR = os.path.abspath(args.dir)
     HISTORY_PATH = os.path.join(PREVIEW_DIR, "history.jsonl")
     RUNS_DIR = os.path.join(PREVIEW_DIR, "runs")
+    SERVER_EVENTS_PATH = os.path.join(PREVIEW_DIR, "logs",
+                                      "server_events.jsonl")
     RUN_LOG_MAX = args.replay_runs
     # refs-trend.json: CI artifact'ı repo kökünde (refs-trend/refs-trend.json);
     # yerel kurulumda preview-dir'de de olabilir (nested veya flat).
@@ -1962,69 +2526,125 @@ def main():
         _ot_candidate = os.path.join(PREVIEW_DIR, "override-trend.json")
     OVERRIDE_TREND_PATH = _ot_candidate if os.path.isfile(_ot_candidate) else None
 
+    # determinism_trend.jsonl: versiyonlu trend verisi
+    # (record_determinism_trend.py üreticisi). Mirror-runtime'da repo-doküman
+    # yolu yoktur; sync_verify_mirror.sh dosyayı PREVIEW_DIR'e düz adla
+    # düşer (QA bulgusu F1, 2026-09-21) — ikinci aday orası.
+    _dt_candidate = os.path.join(REPO_ROOT, "docs",
+                                 "determinism_trend",
+                                 "determinism_trend.jsonl")
+    if not os.path.isfile(_dt_candidate):
+        _dt_candidate = os.path.join(PREVIEW_DIR, "determinism_trend.jsonl")
+    DETERMINISM_TREND_PATH = (_dt_candidate
+                              if os.path.isfile(_dt_candidate)
+                              else None)
+
     if not os.path.isfile(os.path.join(PREVIEW_DIR, "preview.html")):
         print(f"UYARI: {PREVIEW_DIR}/preview.html bulunamadı; "
               f"sunucu yine de başlatılıyor ama /preview.html 404 döner",
               file=sys.stderr)
 
-    if not os.path.isfile(os.path.join(VERIFY_DIR, "verify_delivery.py")):
+    if not args.no_verify and not os.path.isfile(
+            os.path.join(VERIFY_DIR, "verify_delivery.py")):
         print(f"HATA: {VERIFY_DIR}/verify_delivery.py yok", file=sys.stderr)
         sys.exit(2)
 
+    if args.snapshot_file:
+        try:
+            load_snapshot_file(os.path.abspath(args.snapshot_file))
+        except ValueError as exc:
+            print("HATA: snapshot reddedildi: %s" % exc, file=sys.stderr)
+            sys.exit(2)
+
     # Sinyal yakalama — neden öldüğümüzü görelim
     import signal
-    def _sig(term_frame, signum):
+    def _sig(signum, frame):
         sys.stderr.write(f"\n[main] SIGTERM/SIGINT received ({signum}), exiting\n")
         sys.stderr.flush()
+        _lifecycle_event("signal_exit", detail=f"signum={signum}")
         sys.exit(143)
     signal.signal(signal.SIGTERM, _sig)
     signal.signal(signal.SIGINT, _sig)
 
     # Restart sonrası ilk verify bitene dek /api/latest UNKNOWN göstermesin:
     # önbelleklenmiş son run durumunu (runs/ veya history.jsonl) yükle.
-    with LOCK:
-        if load_cached_latest():
-            sys.stderr.write(
-                "[main] önbelleklenmiş son run yüklendi: "
-                f"verdict={LATEST['verdict']} ts={LATEST['ts']}\n")
-        else:
-            sys.stderr.write(
-                "[main] önbellek yok — /api/latest ilk verify bitene dek "
-                "UNKNOWN\n")
-        sys.stderr.flush()
+    # Snapshot-only modda aynı koşum artifact'ı doğrulandı; disk cache tekrar
+    # yüklenmez ve periyodik pahalı verify başlatılmaz.
+    if not args.no_verify:
+        with LOCK:
+            if load_cached_latest():
+                sys.stderr.write(
+                    "[main] önbelleklenmiş son run yüklendi: "
+                    f"verdict={LATEST['verdict']} ts={LATEST['ts']}\n")
+                _lifecycle_event(
+                    "cache_loaded",
+                    detail=f"verdict={LATEST['verdict']} ts={LATEST['ts']}")
+            else:
+                sys.stderr.write(
+                    "[main] önbellek yok — /api/latest ilk verify bitene dek "
+                    "UNKNOWN\n")
+            sys.stderr.flush()
 
     # Arka plan thread: periyodik verify çalıştırma
-    global SERVER, STOP_EVENT
+    global SERVER, STOP_EVENT, STOP_ALLOWLIST
     stop_event = threading.Event()
     STOP_EVENT = stop_event
-    t = threading.Thread(target=verify_loop,
-                         args=(VERIFY_DIR, args.interval, stop_event),
-                         daemon=True, name="verify-loop")
-    t.start()
+    STOP_ALLOWLIST = load_stop_allowlist(
+        os.environ.get(_STOP_HOSTS_ENV))
+    t = None
+    if not args.no_verify:
+        t = threading.Thread(target=verify_loop,
+                             args=(VERIFY_DIR, args.interval, stop_event),
+                             daemon=True, name="verify-loop")
+        # .start() BİLEREK aşağıda, try/finally'nin İÇİNDE çağrılır.
+        # Ölçülen yarış (2026-09-30, 4-eşzamanlı): yazıcı thread burada,
+        # kapanış drain'i kurulmadan ÖNCE başlarsa SIGTERM tam o pencerede
+        # gelirse süreç finally'siz ölür ve history.jsonl yazılıp sidecar
+        # yazılmadan çıkılır (K15 P1 — `3cabbff`'in kapatmaya çalıştığı
+        # uyuşmazlığın ta kendisi). Değişmez: **yazıcı çalışabiliyorsa
+        # drain de kuruludur.**
+    else:
+        sys.stderr.write(
+            "[main] snapshot-only: verify loop kapalı, ts=%s\n" %
+            LATEST["ts"])
+        sys.stderr.flush()
 
     srv = ThreadingHTTPServer((args.bind, args.port), Handler)
     SERVER = srv
+    _lifecycle_event("start", detail=f"bind={args.bind} port={args.port}")
     sys.stderr.write(f"[main] preview_server: serving {PREVIEW_DIR} on http://{args.bind}:{args.port}\n")
-    sys.stderr.write(f"[main] preview_server: verify loop interval={args.interval}s, dir={VERIFY_DIR}\n")
+    if args.no_verify:
+        sys.stderr.write("[main] preview_server: snapshot-only, verify loop kapalı\n")
+    else:
+        sys.stderr.write(f"[main] preview_server: verify loop interval={args.interval}s, dir={VERIFY_DIR}\n")
     sys.stderr.write(f"[main] PID={os.getpid()} PGID={os.getpgrp()}\n")
     sys.stderr.flush()
+    # `serving`: serve_forever GERÇEKTEN başladı mı? BaseServer.shutdown(),
+    # serve_forever'ın kendi finally'sında set edilen bir event'i bekler;
+    # serve_forever hiç girmediyse shutdown() SONSUZA KADAR bekler. Yazıcı
+    # thread'i erken başlatabilmek için try'yi serve_forever'dan önce açmak
+    # zorundayız, dolayısıyla bu ayrımı açıkça tutmak gerekiyor.
+    serving = False
     try:
+        if t is not None:
+            t.start()
+        serving = True
         srv.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
         stop_event.set()
-        t.join(timeout=REQUEST_TIMEOUT_SECONDS)
-        srv.shutdown()
-        srv.server_close()
-        # K15 yarışı kapanışı: run'ın son yazım fazı (persist_history) LOCK
-        # altında history.jsonl ve .sha256 sidecar'ını İKİ ayrı atomik yazımla
-        # yazar; daemon-thread çıkışta yarım kalırsa diskte yeni-history +
-        # eski-sidecar kalır (K15 P1: hash uyuşmazlığı — CI'da daemon-http
-        # kırmızısının kök-nedeni). LOCK'u sınırlı süreyle alıp bırakmak:
-        # aktif yazım biter, yeni yazım başlayamaz.
-        if LOCK.acquire(timeout=REQUEST_TIMEOUT_SECONDS):
-            LOCK.release()
+        if t is not None:
+            t.join(timeout=REQUEST_TIMEOUT_SECONDS)
+        if serving:
+            srv.shutdown()
+            srv.server_close()
+        # K15 yarışı kapanışı: uçuştaki persist_history'nin bitmesini bekle
+        # (history.jsonl + sidecar iki ayrı atomik yazım; araya giren SIGTERM
+        # diskte uyuşmayan çift bırakır). Mantık `drain_writer_lock`'ta —
+        # sözleşmesi test edilebilsin diye dışarı alındı.
+        drain_writer_lock()
+        _lifecycle_event("shutdown")
 
 
 if __name__ == "__main__":

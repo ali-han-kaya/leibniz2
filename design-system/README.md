@@ -14,10 +14,43 @@ Starter design tokens extracted from the live CI dashboard at
 - `scripts/check_tokens.py` — drift gate: parses `preview.html` and asserts
   the extraction still matches (dashboard `:root` vars, surfaced literals
   `#161b22` / `#21262d` / `#fff`, all rgba tints, and every derived scale
-  value appear verbatim in the source).
+  value appear verbatim in the source). Contract 7 dashboard-next kopya
+  drift'ini (herhangi bir blokta token gölgelemesi / tokens.css değerinin
+  yazıyla kopyası / renk literal'i), contract 8 ise preset bağımsızlığını
+  ve referans kapanışını denetler: köprü importu zorunlu, dış shadcn preset
+  sheet'i yasak, her yuva değeri `var()`/`calc()` referansı olmalı, her
+  `var(--X)` çözülebilmeli, her yuva `@theme`'de `--color-<yuva>` alias'ı
+  almalı, uygulama kaynağı preset-only yüzey
+  (`data-open:`/`no-scrollbar`/`scroll-fade`/`shimmer`) kullanamaz ve
+  uygulama kaynağında koda gömülü **renk** bulunamaz: arbitrary renk
+  utility'si (`bg-[#0e1116]`), ham hex/rgb/hsl literali (inline stil dahil)
+  ve Tailwind'ın varsayılan paleti (`bg-slate-900`, `text-white`) üçü de
+  köprü token'ını baypas eder — `bg-bg`/`text-fg`/`border-border` ya da
+  `var(--…)` tabanlı türetme kullanılmalı. Contract 9
+  ise Stripe HDS tema varyantını denetler: `stripe/theme.css` üreticinin
+  (`stripe/scripts/generate_stripe_theme.py`) `render()` çıktısıyla **birebir**
+  olmalı, yalnız `:root[data-theme="stripe"]` bloğu taşımalı, 32 yuvanın
+  tamamını içermeli, HDS ön-koşulları aynayla aynı olmalı ve yuva değerlerinde
+  renk literali bulunmamalı; ayrıca varyantı tüketen yüzeylerdeki
+  (`preview.html`, `landing/landing_src.html`) `[data-theme="stripe"]`
+  kurallarında her değer `var(` taşımalı.
+- `stripe/theme.css` — **Generated** Stripe HDS tema varyantı: repo semantik
+  yuvalarını (`--bg`, `--fg`, `--accent`, `--border`, `--paper`, …) mirror'daki
+  `--hds-*` token'larına bağlar. Kaynak: `stripe/README.md` ("Tema varyantı").
+  `python3 design-system/stripe/scripts/generate_stripe_theme.py` ile üretilir;
+  elle düzenleme drift sayılır (contract 9).
 - `scripts/generate_tailwind.py` — renders `tailwind.css` from `tokens.css`.
   No `tailwindcss` install needed to generate; validates the two `:root`
   blocks stay byte-identical.
+- `{stripe,linear,primer,vercel}/tailwind.css` — **Generated** marka `@theme`
+  köprüleri (bkz. "Marka @theme köprüleri"). Elle düzenlenemez; üretici
+  `scripts/generate_mirror_tailwind.py`, kapı `scripts/check_mirror_bridges.py`.
+- `scripts/generate_mirror_tailwind.py` — dört marka aynasının `@theme`
+  köprüsünü üretir (kapsam/karar kuralları aşağıda). Değer sınıfına göre
+  deterministik; ayna başına elle harita YOK.
+- `scripts/check_mirror_bridges.py` — o köprülerin kapısı (fail-closed):
+  **temel palet ayrıklığı**, ön-koşul birebirliği, `var()`-only değerler,
+  sayım kilitleri ve blok disiplini.
 
 ## Keeping in sync
 
@@ -31,6 +64,74 @@ python3 design-system/scripts/generate_tailwind.py # tokens.css → tailwind.css
 
 Both must exit `0`. Commit `tokens.json` + `tokens.css` + `tailwind.css`
  together so the three files never drift.
+
+## Marka mirror drift kapısı (pre-commit)
+
+`stripe/`, `linear/`, `primer/` ve `vercel/` mirror'larının kendi drift
+kapıları (`scripts/check_<marka>_tokens.py`) pre-commit zincirinde
+`check-brand-mirrors` hook'uyla koşar:
+
+```bash
+python3 design-system/scripts/check_brand_mirrors.py   # exit 0 = 4/4 PASS
+```
+
+- **Roster (tek kaynak):** `design-system/scripts/brand_mirrors.list` —
+  `<dizin> <raw> <pin> <checker>`.
+- **Pin:** checker'ın bastığı `OK — N` satırındaki N, pinlenen sayıya birebir
+  eşit olmalı. Mirror upstream'de değişip `tokens.css`/`tokens.json`
+  yenilendiğinde pin'i aynı commit'te **bilinçli** güncelleyin — kapı sessiz
+  mirror değişimini bloke eder. `OK` satırı yoksa veya N=0 ise FAIL
+  (vacuous PASS yasağı).
+- **Tetikleme:** yalnız `design-system/` altından dosya stage'lendiğinde koşar
+  (değişim-farkında; `always_run` yok).
+- **Fail-closed sözleşmeleri:** roster bütünlüğü (roster yok / <4 giriş /
+  kayıtlı dosya diskte yok → exit 2); kapsam (tokens.json + raw.* taşıyan
+  kayıtsız mirror kalamaz; açık istisna `# exempt: <dizin> — <gerekçe>` →
+  exit 2); checker rc != 0 ve pin uyuşmazlığı → exit 1.
+- `github` mirror'ı gerekçeli exempt'tir (ayrı `--sync` yeniden-üretim akışı,
+  bkz. `github/README.md`); kapsama almak için roster'a
+  `github  raw.json  304  scripts/check_github_tokens.py` satırını ekleyin.
+- Birim testleri: `_calisma/CIKTI/test_brand_mirror_gate.py` (R1-R5 + hook
+  wiring; `check-unit-tests` bataryasında koşar).
+
+## Marka @theme köprüleri (generated)
+
+Her marka aynası `tokens.css` içinde ham token taşır ama Tailwind utility'si
+üretmez. `generate_mirror_tailwind.py` ayna başına bir köprü üretir:
+
+```css
+@import "tailwindcss";
+@import "./design-system/linear/tailwind.css";
+/* → bg-linear-bg-panel  text-linear-accent  rounded-linear-12
+     font-linear-regular  ease-linear-in-quad  p-linear-core-100 */
+```
+
+**Neden ön-ek zorunlu:** lineer/vercel token'ları `--color-*` adları taşır
+(`--color-accent`, `--color-bg-*`). Ön-eksiz üretim, kök köprüyle yan yana
+import edildiğinde `bg-bg`/`bg-accent`'i sessizce marka paletine kaydırırdı.
+Bu yüzden ön-koşullar `<marka>-` ön-ekli, `@theme` anahtarları
+`<namespace>-<marka>-*`; kapı bu ayrıklığı kök paletin 133 adına karşı
+fail-closed doğrular.
+
+| Karar | Kural |
+|---|---|
+| Değer sınıfı | Ada değil **değere** bakılır: `--color-alpha: 255` renk değildir |
+| Hedef namespace | renk → `--color-*`, font ailesi → `--font-*`, `cubic-bezier` → `--ease-*`, gölge → `--shadow-*`, uzunluk → adında `radius` varsa `--radius-*`, `space\|spacing\|gap` varsa `--spacing-*` |
+| Ada açık namespace | Adında tanınan namespace varsa o kazanır (`--font-weight-*` bilinçli kapsam dışı, `font`'a düşmez) |
+| Marka katmanı | İlk segment namespace değil, ikincisi öyleyse düşülür: `--hds-color-surface-bg-quiet` → `--color-stripe-surface-bg-quiet` |
+| Ön-koşul değeri | Aynadan **birebir**; yalnız ayna-içi `var()` referansları ön-eklenir |
+| Çakışma | Anahtarı, adında namespace'i AÇIKÇA taşıyan token alır; kaybeden yuva almaz ama değeri ön-koşul olarak dosyada kalır (`skip:key-collision`) |
+| Kapsam dışı | Sayı/süre/composite/url/dış-referans dosyada **sayılır** — `aliases + skipped = tokens` kapıyla kilitlidir (sessiz kayıp yok) |
+
+Ölçüm (2026-09-27): stripe 556/710 · linear 168/398 · primer 1500/2051 ·
+vercel 19/19 yuva; toplam 2243/3178 token. Kapsam dışı gerekçeleri köprünün
+sonundaki sayım bloğunda (`skip:class-number`, `skip:no-namespace-length`, …)
+listelenir.
+
+Kapı sözleşmeleri (B1–B7): roster/köprü bütünlüğü (exit 2) · üretim birebirliği
+· temel palet ayrıklığı · `var()`-only bağlantı · ön-koşulun aynayla birebirliği
+· sayım/kapsama kilitleri · tek `:root` + tek `@theme` bloğu. READ-ONLY, OFFLINE,
+stdlib-only, ~0.3s. Birim testleri: `_calisma/CIKTI/test_mirror_bridges.py`.
 
 ## Tailwind v4 usage (no tailwind.config.js)
 
@@ -65,6 +166,9 @@ Composition vars (`--card-*`, `--badge-*`, `--table-*`, `--pre-*`,
 ## Verification
 
 ```bash
-python3 design-system/scripts/check_tokens.py      # exit 0 = in sync
+python3 design-system/scripts/check_tokens.py      # exit 0 = in sync (contract 1-9)
 python3 design-system/scripts/generate_tailwind.py # exit 0 = tailwind in sync
+python3 design-system/stripe/scripts/generate_stripe_theme.py --check  # stripe varyantı
+python3 design-system/scripts/generate_mirror_tailwind.py --check  # 4 marka köprüsü
+python3 design-system/scripts/check_mirror_bridges.py             # exit 0 = 4/4 PASS
 ```

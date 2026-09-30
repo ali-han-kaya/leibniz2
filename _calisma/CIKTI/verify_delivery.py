@@ -75,8 +75,8 @@ Doğrulama zinciri (Katman 0..19):
                Internet Archive / Perseus çevrimiçi denetimi
   K7  Hijyen   secret/anahtar + artefakt taraması
   K8  İspat    Z3 sembolik ispat (--symbolic-proof; z3-solver gerektirir)
-  K9  Lean     Lean 4 reduct-invariance tümevarımsal kanıt + 8 teoremli Sınır
-               İspatı çekirdeği lake build --wfail (--lean-proof; lean+lake gerektirir)
+  K9  Lean     Lean 4 reduct-invariance kanıtı + Content.lean/LaTeX statement
+               envanter kapısı + lake build --wfail (--lean-proof; lean+lake gerektirir)
   K10 Manifest gen_repro_manifest.py çıktısı manifest.json'daki her dosyanın
                SHA-256'sını gerçek dosyayla karşılaştır + config.combined_sha256'ı
                config.files'tan YENİDEN hesaplayıp doğrula + effective_config.json'
@@ -157,6 +157,7 @@ import classify_lean_error as _cle  # noqa: E402
 import github_scripts_battery as _battery  # noqa: E402
 import check_lean_axioms as _lean_axioms  # noqa: E402
 import check_lean_statements as _lean_statements  # noqa: E402
+import id_canonical as _idc  # noqa: E402  (K6-DETERM tek kaynak)
 
 _LAUNCHD_NODE_PATHS = _battery.NODE_KNOWN_PATHS
 _LAUNCHD_PDFINFO_PATHS = _battery.PDFINFO_KNOWN_PATHS
@@ -177,10 +178,18 @@ EXPECTED_PAGES = 33
 DEFAULT_BUDGET_RATIOS = {"text": 3, "pdf": 8, "archive": 12, "binary": 20}
 PDF_METADATA_SIDECAR = "ingiliz_empirizmi_v3.pdf.metadata.sha256"
 PDF_RAW_SIDECAR = "ingiliz_empirizmi_v3.pdf.sha256"
+# K6-DETERM (Faz 4): determinizm referansı /ID-kanonik hash'tir; strict modda
+# bu hash kabul defterinde kayıtlı olmalıdır (motor geçişi/yeniden paketleme
+# bilinçli defter satırı ister). Normalizasyon + defter çözümlemesi TEK
+# KAYNAK: id_canonical.py (repack_delivery.py ve check_zip_lineage_drift.py
+# aynı modülü kullanır).
+ID_RESIDUAL_LEDGER_DOC = _idc.LEDGER_DOC
 SYMBOLIC_PROOF_SCRIPT = "symbolic_proof_z3.py"
 LEAN_PROOF_SCRIPT = "../lean_reduct/ReductInvariance.lean"
-# K9 ek kapısı: 8 teoremli Sınır İspatı çekirdeği (Content.lean) lake projesi.
-# lake build --wfail, lean-toolchain v4.14.0 ile fail-closed derlenir.
+# K9 statement gate canonical sourceları (MAP.md yalnız legacy Z3 eşlemesidir).
+LEAN_STATEMENT_LEAN = "Content.lean"
+LEAN_STATEMENT_LATEX = "Content.lean.tex"
+# K9 lake projesi ve statement gate aynı Lean kaynak kökünü kullanır.
 LEAN_REDUCT_DIR = "../lean_reduct"
 
 
@@ -230,7 +239,7 @@ LAYER_LABELS = {
     "K6": "İçerik (PDF + referans + skill reuse)",
     "K7": "Hijyen (secret/artefakt)",
     "K8": "Z3 sembolik ispat",
-    "K9": "Lean reduct-invariance + 8 teorem çekirdek",
+    "K9": "Lean statement gate + reduct-invariance çekirdek",
     "K10": "Manifest digest",
     "K11": "Config drift",
     "K12": "Plist şablon",
@@ -1779,10 +1788,84 @@ def check_pdf_skill_reuse(add):
     return True, detail
 
 
+def canonical_pdf_sha256(pdf_path):
+    """PDF'in `/ID`-nötrlenmiş SHA-256'si — determinizm REFERANSI (Faz 4).
+
+    Uygulama TEK KAYNAKta: `id_canonical.py` (repack + K14 kapısı da aynı
+    normalizasyonu kullanır). pdfTeX SOURCE_DATE_EPOCH ile bile her koşumda
+    rastgele `/ID` üretir; nötrleme içerik farkını GİZLEMEZ, desen yoksa ham
+    hash döner (fail-safe), dosya okunamazsa None.
+    """
+    return _idc.canonical_pdf_sha256(pdf_path)
+
+
+def resolve_id_residual_ledger(path=None):
+    """Kabul defteri referansını çöz → (tokens, error, source).
+
+    Aday sırası (id_canonical.ledger_candidates): `ID_RESIDUAL_LEDGER` env →
+    `<repo>/docs/ID_RESIDUAL_ACCEPTANCE.md` → script yanındaki düz mirror
+    kopyası. Hiçbiri okunamazsa boş küme + hata metni; strict mod bunu
+    fail-closed P1'e çevirir (referanssız determinizm iddiası üretilmez).
+    """
+    return _idc.ledger_tokens(path)
+
+
+def id_residual_ledger_tokens(path=None):
+    """(tokens, error) — resolve_id_residual_ledger'ın iki-değerli biçimi."""
+    tokens, error, _source = resolve_id_residual_ledger(path)
+    return tokens, error
+
+
+def k6_determ_verdict(strict, canonical, ledger_tokens, ledger_error="",
+                      sidecar_canonical=None):
+    """K6-DETERM karar fonksiyonu (saf — testler doğrudan çağırır).
+
+    Döndürür: (ok, priority, detail). ok=False ise (priority, detail) ile
+    bulgu üretilir. Kural (Faz 4): determinizm referansı `/ID`-kanonik
+    hash'tır; strict modda bu hash kabul defterinde KAYITLI olmalıdır —
+    motor geçişi/yeniden paketleme bilinçli defter satırı ister, aksi
+    halde sessiz drift. `sidecar_canonical` verilmişse (repack'in yazdığı
+    `# canonical:` satırı) teslim PDF'iyle birebir aynı olmalıdır — iki
+    taraf ayrı düşerse yenileme/senkron eksik demektir.
+    """
+    if canonical is None:
+        if strict:
+            return (False, "P1",
+                    "teslim PDF'i okunamadı — kanonik hash hesaplanamadı "
+                    "(determinizm iddiası doğrulanamaz)")
+        return True, None, "kanonik hash hesaplanamadı (PDF okunamadı)"
+    if sidecar_canonical and sidecar_canonical != canonical:
+        if strict:
+            return (False, "P1",
+                    f"sidecar kanonik referansı teslim PDF'iyle uyuşmuyor: "
+                    f"sidecar={sidecar_canonical[:16]}… "
+                    f"pdf={canonical[:16]}… — repack/"
+                    f"sidecar yenilemesi gerekli")
+        return (True, None,
+                f"sidecar kanonik={sidecar_canonical[:16]}… ↔ pdf "
+                f"canonical={canonical[:16]}… (bilgi)")
+    if not strict:
+        return (True, None,
+                f"canonical={canonical[:16]}… (bilgi; strict modda defterle "
+                f"karşılaştırılır)")
+    if ledger_error:
+        return False, "P1", f"kabul defteri okunamadı: {ledger_error}"
+    if canonical not in ledger_tokens:
+        return (False, "P1",
+                f"teslim PDF'inin /ID-kanonik hash'i kabul defterinde yok: "
+                f"canonical={canonical[:16]}… — bilinçli yenileme gerekli "
+                f"(make -f docs/Makefile.texlive accept LEDGER=update)")
+    return True, None, f"canonical={canonical[:16]}… kabul defterinde kayıtlı"
+
+
 def qpdf_check_determinism(pdf_path):
-    """PDF'in metadata-stripped SHA-256 hash'ini hesapla (build determinism ölçümü).
-    qpdf --remove-metadata ile volatile alanlar (/Info, /ID, /CreationDate) temizlenir.
-    qpdf yoksa (None, None) döner — bu durumda kontrol atlanır.
+    """Ham + metadata-stripped SHA-256 (BİLGİ amaçlı build determinism ölçümü).
+
+    qpdf --remove-metadata ile /Info temizlenir ama qpdf 12.4.0'ın KENDİSİ
+    nondeterministiktir: aynı girdi 3 koşumda 3 farklı çıktı verir (ölçüldü
+    2026-09-30, bu makinede). Bu yüzden stripped hash karşılaştırması strict
+    kapı OLAMAZ (her koşumda yapay "drift"); referans `/ID`-kanonik hash'tır
+    (canonical_pdf_sha256). qpdf yoksa (raw, None) döner.
     Döndürür: (raw_sha256, stripped_sha256) veya (raw_sha256, None)."""
     raw = sha256_file(pdf_path)
     qpdf = "qpdf"
@@ -1972,7 +2055,7 @@ def _lean_compiler_available():
 
 
 def run_lake_build(lake_path, project_dir, lean_only=False):
-    """K9 ek kapısı: 8 teoremli Sınır İspatı çekirdeğini lake ile derler.
+    """K9 lake kapısı: Lean kaynak çekirdeğini lake ile derler.
 
     Fail-closed: (a) lean-toolchain v4.14.0 olmalı (uyuşmaz/yok → FAIL),
     (b) `lake clean` ve (c) `lake build --wfail` başarılı olmalı. Elan shim
@@ -2014,7 +2097,7 @@ def run_lake_build(lake_path, project_dir, lean_only=False):
         return False, "lake build zaman aşımı (>600s — toolchain indirme dahil)"
     out = (r.stdout or "") + (r.stderr or "")
     if r.returncode == 0:
-        return True, "lake build --wfail: 8 teorem PASS (v4.14.0)"
+        return True, "lake build --wfail: Lean core PASS (v4.14.0)"
     tail = [l.strip() for l in out.splitlines() if l.strip()][-3:]
     detail = " | ".join(tail) if tail else f"exit={r.returncode}"
     detail = f"lake build hatası: {detail}"
@@ -2242,9 +2325,9 @@ def _scan_lean_dir(lean_dir):
     return _lean_axioms.scan_lean_dir(lean_dir)
 
 
-def _check_statements(lean_file, map_file):
-    """K9 statement-safety kapısı — tek kaynak check_lean_statements.py."""
-    return _lean_statements.check_statements(lean_file, map_file)
+def _check_statements(lean_file, latex_file):
+    """K9 LaTeX↔Lean statement gate — tek kaynak check_lean_statements.py."""
+    return _lean_statements.check_statements(lean_file, latex_file)
 
 
 def write_json_sidecar(path, report, detail="not run"):
@@ -3937,6 +4020,79 @@ def check_mirror_sync(add, auto_sync=False):
     return False, detail, rc, txt, dict(empty_meta, before_exit=rc)
 
 
+def check_protection_drift(add, protection, expected=None):
+    """Haftalık branch-protection drift denetimi → P1 (fail-closed).
+
+    NEDEN AYRI BİR YOL (ölçüldü 2026-09-30): `status_checks.py --gh` aynı
+    karşılaştırmayı yapar ama CI'da KOŞAMAZ — branch protection okumak admin
+    izni ister ve `administration` scope'u Actions `permissions:` bloğunda
+    GEÇERSİZDİR (actionlint v1.7.7: "unknown permission scope
+    administration"). Eklenirse workflow PARSE HATASIYLA 0 JOB üretir.
+    Bu yüzden okuma yetkisi `PROTECTION_PAT` secret'ından gelir; secret
+    yoksa çağıran denetimi hiç başlatmaz (yanlış-P1 gürültüsü olmasın).
+
+    ÖNEMLİ AYRIM: `status_checks.merge_block_smoke` alanların VARLIĞINI
+    ölçer (strict=false doğrudan-push depoları için geçerlidir). BURADA
+    DEĞER ölçülür: bu depo PR-akışlıdır (canlı koruma doğrudan push'u
+    GH006 ile reddeder), dolayısıyla `strict=true` beklenir ve kapanması
+    gerçek bir P1'dir.
+
+    I/O YAPMAZ: `protection` nesnesi dışarıdan verilir (test edilebilirlik).
+    `expected` None ise yalnızca ayarlar denetlenir, ad listesi atlanır.
+
+    Döner: (ok, detail). ok=False → P1 bulgusu üretildi.
+    """
+    if not isinstance(protection, dict) or not protection:
+        # Okunamadı ≠ temiz. Çağıran taraf bunu SKIP olarak raporlar.
+        return True, "protection nesnesi boş/okunamadı — atlandı"
+
+    sc = protection.get("required_status_checks") or {}
+    configured = sc.get("contexts") or []
+    if not isinstance(configured, list):
+        configured = []
+    admins = (protection.get("enforce_admins") or {}).get("enabled")
+    fp = (protection.get("allow_force_pushes") or {}).get("enabled")
+    dele = (protection.get("allow_deletions") or {}).get("enabled")
+    strict = sc.get("strict")
+
+    drift = []
+    if expected is not None:
+        exp, conf = set(expected), set(configured)
+        missing, extra = sorted(exp - conf), sorted(conf - exp)
+        if missing:
+            drift.append(("ADLAR-EKSIK", "required check listesi",
+                          "GitHub'da eksik: %s" % missing))
+        if extra:
+            drift.append(("ADLAR-FAZLA", "required check listesi",
+                          "workflow'da olmayan: %s" % extra))
+    if admins is not True:
+        drift.append(("ENFORCE-ADMINS", "admin bypass",
+                      "enforce_admins.enabled=%r — True beklenir" % (admins,)))
+    if fp is not False:
+        drift.append(("FORCE-PUSH", "force push",
+                      "allow_force_pushes.enabled=%r — False beklenir "
+                      "(non-fast-forward geçmiş yeniden yazımı)" % (fp,)))
+    if dele is not False:
+        drift.append(("DELETIONS", "dal silme",
+                      "allow_deletions.enabled=%r — False beklenir" % (dele,)))
+    if strict is not True:
+        drift.append(("STRICT", "up-to-date kuralı",
+                      "required_status_checks.strict=%r — True beklenir "
+                      "(kapalıyken bayat PR dalı merge edilebilir)" % (strict,)))
+
+    live = ("canlı: required=%d strict=%r enforce_admins=%r "
+            "force_pushes=%r deletions=%r"
+            % (len(configured), strict, admins, fp, dele))
+    for cid, check, issue in drift:
+        add("P1", "PROT-%s" % cid, "branch protection — %s" % check,
+            issue, live)
+    if drift:
+        return False, "%d drift: %s" % (len(drift),
+                                         ", ".join(c[0] for c in drift))
+    return True, ("temiz (%d required check, strict=True, admin bypass kapalı, "
+                  "force-push/deletions kapalı)" % len(configured))
+
+
 def check_daemon_smoke(add, out_path=None):
     """K18: daemon_http_test.py end-to-end daemon smoke (fail-closed).
 
@@ -4408,7 +4564,9 @@ def main():
     ap.add_argument("--dir", default=os.path.dirname(os.path.abspath(__file__)))
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--strict-determinism", action="store_true",
-                    help="K6-DETERM: PDF metadata-stripped hash sidecar drift'ini P1'e çevir")
+                    help="K6-DETERM: teslim PDF'inin /ID-kanonik hash'i kabul "
+                         "defterinde (docs/ID_RESIDUAL_ACCEPTANCE.md) kayıtlı "
+                         "değilse P1 üret (Faz 4 semantiği)")
     ap.add_argument("--budget", type=float, default=None,
                     help="Bütçe kalkanı: tahmini USD üretim maliyeti "
                          "(token ≈ bytes/4; $3/M token + $0.55; v3_verify.py H4). "
@@ -4945,44 +5103,57 @@ def main():
         if refs is not None and refs != EXPECTED_REFS:
             add("P0", "K6-REFS", "K6 içerik", f"References {refs} (beklenen {EXPECTED_REFS})")
 
-        # ---- K6-DETERM: PDF metadata-stripped hash (build determinism proxy) ----
-        # qpdf --remove-metadata ile volatile alanlar (/Info, /ID, /CreationDate)
-        # çıkarılır. Sidecar varsa karşılaştırılır; default'ta BİLGİ amaçlı
-        # (tectonic non-deterministic olduğundan strict karşılaştırma her
-        # repack'te yanlış pozitif üretir). --strict-determinism ile P1'e
-        # çevrilebilir.
+        # ---- K6-DETERM: /ID-kanonik hash (build determinism REFERANSI) ----
+        # Ölçüm (2026-09-30, Faz 4): pdfTeX SDE ile deterministiktir; tek
+        # kalıntı trailer /ID'dir (docs/ID_RESIDUAL_ACCEPTANCE.md §1-2).
+        # qpdf --remove-metadata'ın KENDİSİ nondeterministiktir (aynı girdi
+        # 3 koşum → 3 farklı çıktı, ölçüldü) — bu yüzden metadata-stripped
+        # hash yalnız BİLGİdir, strict kapı onun üzerine kurulamaz. Strict
+        # referans /ID-kanonik hash'tir ve kabul defterinde kayıtlı olmalıdır:
+        # motor geçişi/yeniden paketleme bilinçli defter satırı gerektirir.
         pdf_meta_report = None
         if pdf and os.path.isfile(pdf):
             raw_h, stripped_h = qpdf_check_determinism(pdf)
-            skill_reuse_ok, skill_reuse_detail = check_pdf_skill_reuse(add)
-            pdf_meta_report = {"raw": raw_h, "stripped": stripped_h,
-                               "strict": getattr(args, "strict_determinism", False),
-                               "skill_reuse": {"ok": skill_reuse_ok,
-                                               "detail": skill_reuse_detail}}
+            canonical_h = canonical_pdf_sha256(pdf)
+            strict = bool(getattr(args, "strict_determinism", False))
+            ledger_tokens, ledger_error, ledger_src = resolve_id_residual_ledger()
+            sidecar_path = os.path.join(pkg, PDF_METADATA_SIDECAR)
+            sidecar_canon = _idc.sidecar_canonical(sidecar_path)
+            skills_ok, skill_reuse_detail = check_pdf_skill_reuse(add)
+            determ_ok, determ_pri, determ_detail = k6_determ_verdict(
+                strict, canonical_h, ledger_tokens, ledger_error,
+                sidecar_canonical=sidecar_canon)
+            pdf_meta_report = {
+                "raw": raw_h, "stripped": stripped_h, "canonical": canonical_h,
+                "sidecar_canonical": sidecar_canon,
+                "strict": strict,
+                "ledger": ID_RESIDUAL_LEDGER_DOC,
+                "ledger_source": ledger_src,
+                "in_ledger": _idc.has_canonical(canonical_h, ledger_tokens),
+                "check": determ_detail,
+                "skill_reuse": {"ok": skills_ok,
+                                "detail": skill_reuse_detail}}
+            if not determ_ok:
+                add(determ_pri, "K6-DETERM", "K6 build determinism",
+                    determ_detail, f"{ID_RESIDUAL_LEDGER_DOC}")
             if stripped_h:
-                sidecar_path = os.path.join(pkg, PDF_METADATA_SIDECAR)
+                expected_stripped = None
                 if os.path.isfile(sidecar_path):
-                    expected_stripped = parse_sha256sums(sidecar_path).get(
-                        PDF_METADATA_SIDECAR.replace(".sha256", "").replace(
-                            "ingiliz_empirizmi_v3.pdf.", "ingiliz_empirizmi_v3.pdf.metadata."))
-                    # Yukarıdaki karmaşık extract'i basitleştir:
-                    expected_stripped = None
-                    with open(sidecar_path) as sf:
+                    with open(sidecar_path, encoding="utf-8",
+                              errors="replace") as sf:
                         for line in sf:
                             parts = line.split()
                             if len(parts) == 2 and "metadata" in parts[1]:
                                 expected_stripped = parts[0]
                                 break
-                    pdf_meta_report["expected_stripped"] = expected_stripped
-                    pdf_meta_report["drift"] = (
-                        expected_stripped is not None
-                        and stripped_h != expected_stripped)
-                    if pdf_meta_report["drift"]:
-                        if getattr(args, "strict_determinism", False):
-                            add("P1", "K6-DETERM", "K6 build determinism",
-                                f"PDF metadata-stripped hash drift (strict): "
-                                f"expected={expected_stripped[:16]}… "
-                                f"actual={stripped_h[:16]}…")
+                    if expected_stripped:
+                        pdf_meta_report["expected_stripped"] = expected_stripped
+                        pdf_meta_report["stripped_drift_info"] = (
+                            stripped_h != expected_stripped)
+                        pdf_meta_report["stripped_note"] = (
+                            "metadata-stripped hash qpdf'nin kendi rastgele "
+                            "/ID'sini taşır (3 koşum → 3 hash); karşılaştırma "
+                            "yalnız bilgidir, P1 üretmez")
 
         # ---- K6+: referans denetimi (CrossRef/SEP/OpenLibrary çevrimiçi) ----
         # Sonuçlar online_refs'e toplanır; --refs-out ile her run'ın kaç
@@ -5038,58 +5209,79 @@ def main():
 
     lean_ok = None
     lean_detail = None
-    # ---- K9: Lean 4 reduct-invariance + 8 teorem çekirdek (isteğe bağlı) ----
+    # ---- K9: Lean statement gate + reduct-invariance + lake (isteğe bağlı) ----
     if args.lean_proof:
+        reduct_dir = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), LEAN_REDUCT_DIR)
+        statement_lean = os.path.join(reduct_dir, LEAN_STATEMENT_LEAN)
+        statement_latex = os.path.join(reduct_dir, LEAN_STATEMENT_LATEX)
+        statement_ok, statement_findings = _check_statements(
+            statement_lean, statement_latex)
+        if statement_ok:
+            statement_detail = "Content.lean ↔ Content.lean.tex envanteri uyumlu"
+        else:
+            statement_detail = "; ".join(
+                f"{item.get('kind', 'source')}: {item.get('detail', '')}"
+                for item in statement_findings)
+            add("P0", "K9-STMNT", "K9 LaTeX statement gate", statement_detail)
+        statement_line = (
+            f"[K9] Lean statement gate: {'PASS' if statement_ok else 'FAIL'} — "
+            f"{statement_detail}")
+        if not args.json:
+            print(statement_line)
+        else:
+            print(statement_line, file=sys.stderr)
+
         lp = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                           LEAN_PROOF_SCRIPT)
         # lean + lake'i PATH'ten, /opt/homebrew/bin'den veya ~/.elan/bin'den bul
         lean_cmd = find_tool("lean")
         if not os.path.isfile(lp):
-            add("P0", "K9-LEAN", "K9 Lean ispatı", f"{LEAN_PROOF_SCRIPT} yok", lp)
+            proof_ok = False
+            proof_detail = f"{LEAN_PROOF_SCRIPT} yok: {lp}"
+            add("P0", "K9-LEAN", "K9 Lean ispatı", proof_detail)
         else:
-            ok, detail = run_lean_proof(lean_cmd, lp)
-            # ── K9 ek kapısı: 8 teoremli Sınır İspatı çekirdeği ──
-            # lake build --wfail, lean-toolchain v4.14.0 (fail-closed).
-            # --full / --lean-proof ile otomatik koşar; lake yoksa P0.
-            reduct_dir = os.path.join(
-                os.path.dirname(os.path.abspath(__file__)), LEAN_REDUCT_DIR)
-            lakefile = os.path.join(reduct_dir, "lakefile.toml")
-            if os.path.isfile(lakefile):
-                lake_cmd = find_tool("lake")
-                lake_ok, lake_detail = run_lake_build(
-                    lake_cmd, reduct_dir,
-                    lean_only=getattr(args, "lean_only", False))
-                lake_state = ("SKIP" if lake_ok is None
-                              else ("PASS" if lake_ok else "FAIL"))
-                lake_line = (f"[K9] Lean reduct (8 teorem, lake build --wfail): "
-                             f"{lake_state} — {lake_detail}")
-                if args.json:
-                    print(lake_line, file=sys.stderr)
-                else:
-                    print(lake_line)
-                if lake_ok is False:
-                    add("P0", "K9-LAKE", "K9 Lean çekirdeği", lake_detail)
+            proof_ok, proof_detail = run_lean_proof(lean_cmd, lp)
+
+        # lake build --wfail, lean-toolchain v4.14.0 (fail-closed).
+        # --full / --lean-proof ile otomatik koşar; lake yoksa P0.
+        lakefile = os.path.join(reduct_dir, "lakefile.toml")
+        if os.path.isfile(lakefile):
+            lake_cmd = find_tool("lake")
+            lake_ok, lake_detail = run_lake_build(
+                lake_cmd, reduct_dir,
+                lean_only=getattr(args, "lean_only", False))
+            lake_state = ("SKIP" if lake_ok is None
+                          else ("PASS" if lake_ok else "FAIL"))
+            lake_line = (f"[K9] Lean core (lake build --wfail): "
+                         f"{lake_state} — {lake_detail}")
+            if args.json:
+                print(lake_line, file=sys.stderr)
             else:
-                lake_ok, lake_detail = False, f"lake projesi yok: {reduct_dir}"
+                print(lake_line)
+            if lake_ok is False:
                 add("P0", "K9-LAKE", "K9 Lean çekirdeği", lake_detail)
-            # K9 genel: İKİ kapı da geçmeli (fail-closed) — dashboard rozeti
-            # ve history lean_ok bu birleşimi taşır. SKIP (None) nötrdür:
-            # yalnızca --lean-only + lean-derleyicisi-yok ortamında oluşur.
-            ok = ok and (lake_ok is not False)
-            if lake_detail:
-                detail = f"{detail} · {lake_detail}"
-            lean_ok = ok
-            lean_detail = detail
-            k9_line = f"[K9] Lean 4 reduct-invariance: {'PASS' if ok else 'FAIL'} — {detail}"
-            if not args.json:
-                print(k9_line)
-            else:
-                # --json modunda stdout yalnızca JSON olmalı; K9 sonucu
-                # dashboard'un gerçek rozet için stderr'e relay edilir
-                # (preview_server._parse_lean_result bunu ayrıştırır).
-                print(k9_line, file=sys.stderr)
-            if not ok:
-                add("P0", "K9-LEAN", "K9 Lean ispatı", detail)
+        else:
+            lake_ok, lake_detail = False, f"lake projesi yok: {reduct_dir}"
+            add("P0", "K9-LAKE", "K9 Lean çekirdeği", lake_detail)
+
+        # K9 genel: statement gate ∧ proof ∧ lake. SKIP (None) yalnız
+        # --lean-only + derleyicisi-yok ortamında nötrdür.
+        ok = statement_ok and proof_ok and (lake_ok is not False)
+        detail = " · ".join(
+            part for part in (proof_detail, statement_detail, lake_detail) if part)
+        lean_ok = ok
+        lean_detail = detail
+        k9_line = f"[K9] Lean 4 reduct-invariance: {'PASS' if ok else 'FAIL'} — {detail}"
+        if not args.json:
+            print(k9_line)
+        else:
+            # --json modunda stdout yalnızca JSON olmalı; K9 sonucu
+            # dashboard'un gerçek rozet için stderr'e relay edilir
+            # (preview_server._parse_lean_result bunu ayrıştırır).
+            print(k9_line, file=sys.stderr)
+        if not ok:
+            add("P0", "K9-LEAN", "K9 Lean ispatı", detail)
 
     # ---- K19: Coq reduct-invariance (--coq-proof, isteğe bağlı) ----
     # Content.v çekirdeğini coqtop -compile ile fail-closed derler. coqtop
@@ -5648,7 +5840,11 @@ def main():
                   + (f" (unverified={u}, mismatch={m})" if u or m else ""))
         if pdf_meta_report and pdf_meta_report.get("stripped"):
             print(f"PDF hash: raw={pdf_meta_report['raw'][:16]}… "
-                  f"metadata-stripped={pdf_meta_report['stripped'][:16]}…")
+                  f"metadata-stripped={pdf_meta_report['stripped'][:16]}… "
+                  f"canonical(/ID-nötr)="
+                  f"{(pdf_meta_report.get('canonical') or '?')[:16]}…")
+            if pdf_meta_report.get("check"):
+                print(f"K6-DETERM: {pdf_meta_report['check']}")
         if args.verify_manifest:
             print(f"K10 manifest digest: {'PASS' if manifest_ok else 'FAIL'}")
         if cleanup_report:

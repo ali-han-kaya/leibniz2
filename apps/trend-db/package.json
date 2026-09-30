@@ -5,6 +5,7 @@
   "description": "Dogrulama-zinciri trend gecmisinin Postgres (Neon) katmani — prisma-database-setup skill'i",
   "scripts": {
     "load": "tsx scripts/load.ts",
+    "test": "node test/run.mjs",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio"

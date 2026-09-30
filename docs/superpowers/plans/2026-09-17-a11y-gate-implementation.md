@@ -80,7 +80,9 @@ if that fails/slow, document: browser integration is proven by the CI job itself
 `test_check_python3_shell` dirts were proven on HEAD earlier).
 
 ## Out of scope (per spec YAGNI)
-guide.html coverage, score trend, PR annotations, Lighthouse scores, retries.
+guide.html coverage, score trend, PR annotations, retries. Lighthouse is
+limited to the pinned accessibility-only dashboard scan added to the existing
+`a11y-gate` theme matrix; historical Lighthouse score trends remain out of scope.
 
 ## Finishing
 After T8: use finishing-a-development-branch behavior — verify tests, then present

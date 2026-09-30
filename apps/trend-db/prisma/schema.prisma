@@ -75,6 +75,23 @@ model TrendRun {
   // Kayıt: hash'i hesaba kat
   sourceRowSha256    String? @map("source_row_sha256") @unique
 
+  // query-composite-indexes: eşitlik kolonu (verdict) önce, aralık/sıralama
+  // kolonu (ts) sonra — "severity'e göre filtrele, en yeniden eskiye" okuması.
   @@index([verdict, ts(sort: Desc)])
+
+  // PARTIAL + COVERING indeksler şemada İFADE EDİLEMEZ: Prisma 7.10 `@@index`
+  // yalnız sort/length/type alır; `include:`/`where:` → "error: No such
+  // argument ... Validation Error Count: 3" (ölçüldü). Bu yüzden raw SQL
+  // migration'da yaşarlar ve adları burada aynalanır — drift'i
+  // `_calisma/CIKTI/test_trend_db_index_contract.py` kapıya bağlar:
+  //   20260927194500_trend_runs_query_indexes/migration.sql
+  //     • trend_runs_ts_cover_idx      (ts) INCLUDE (verdict, p0, p1,
+  //                                    duration_s, budget_usd, z3_total)
+  //       → ts-sıralı dar select'lerde index-only scan
+  //     • trend_runs_fail_ts_cover_idx (ts DESC) INCLUDE (p0, p1, z3_total)
+  //                                    WHERE verdict = 'FAIL'
+  //       → yalnız-FAIL ucu; FAIL azınlık (%13) olduğu için indeks küçük kalır
+  // Gerekçe, reddedilenler ve devreye girme eşiği: apps/trend-db/README.md
+  // ("Sorgu indeksleri") + docs/TREND_CHART_READ_PATH.md §4.
   @@map("trend_runs")
 }
