@@ -32,9 +32,30 @@ def _run(args, **kw):
 
 
 class TestCheckContract(unittest.TestCase):
+    # `--check` dokuz unit'in TAMAMINI ölçer; bu test de "tam kurulumda
+    # --check yeşil" sözleşmesini ölçtüğü için TÜM unit'ler kurulu
+    # olmadan koşamaz. Kısmi kurulumda (venv var, node_modules yok) çalıştırılırsa
+    # --check'in "pptx eksik" bulgusu rc=1 döner ve test çöküyor — yani
+    # ölçtüğü şey kapı değil, GELİŞTİRİCİ KURULUMU. Tam-kurulum denetimi
+    # zaten `dev_bootstrap.sh --check`'in kendi işi; bu test yalnız onun
+    # "provisioned checkout'ta yeşil" sözleşmesini tekrarlıyor.
+    #
+    # Kısmi kurulumda çalıştırılmayacak: aynı dosyanın
+    # `test_check_fail_closed_on_broken_unit` testi zaten doğru kalıbı
+    # kullanıyor (unit başına `skipTest`). Burada da aynı disiplin —
+    # eksik ön koşul SKIP'tir, FAIL değil.
+    REQUIRED = (("venv_z3", VENV, os.path.isdir),
+                ("pptx", PPTX_LIB, os.path.isdir),
+                ("dashboard_next", DASH_TSC, os.path.isfile))
+
     def test_check_passes_on_provisioned_checkout(self):
-        if not os.path.isdir(VENV):
-            self.skipTest("araç-kümesi eksik — provisioned-ortam testi tam-kurulumda koşar")
+        missing = [name for name, path, probe in self.REQUIRED
+                   if not probe(path)]
+        if missing:
+            self.skipTest("tam kurulum değil (eksik: %s) — provisioned-ortam "
+                          "testi yalnız tüm unit'ler kurulu olduğunda koşar; "
+                          "kısmi kurulumda --check'in yeşil olması beklenmez"
+                          % ", ".join(missing))
         r = _run(["bash", SCRIPT, "--check"])
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 

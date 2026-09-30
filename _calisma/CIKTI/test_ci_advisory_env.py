@@ -1,0 +1,281 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""test_ci_advisory_env.py — advisory adımların ORTAM sözleşmesi (fail-closed).
+
+ÖLÇÜLEN OLAY (PR #54, 2026-09-30): PR'ı kırmızıya düşüren dört dalın
+toplanması sırasında üç advisory adımının ortam sözleşmesi çözüldü. Üçü de
+"advisory" oldukları için HİÇBİR ZAMAN kırmızı görünmüyordu — sessizce
+ölçmeden geçiyorlardı. Üçünün ortak gerekçesi aynı: **eksik ortam, kapı
+kırık gibi görünmemeli; ama ölçülemediğini de gizlememeli.**
+
+  K1 gh çözümlemesi PATH'e bağlı değil
+     `audit_live_ci_sync.run_gh()` çıplak `"gh"` çağırıyordu. Runner'da
+     çalışır; minimal PATH'li (launchd/TCC) her ortamda `gh` PATH'te
+     değilse denetimin TAMAMI düşüyor. Artık K16'nın `find_launchd_tool`
+     sözleşmesi kullanılıyor (PATH önce, bilinen konumlar ikincil) ve
+     hiçbiri yoksa **sessiz boş liste değil** RuntimeError (exit 2).
+
+  K2 actions kapsamı token'la birlikte verilmeli
+     `audit-live-ci` job'ı canlı run'ın job + ARTIFAKT listesini okuyor
+     (`gh api repos/…/actions/runs/<id>/artifacts`) ama üst düzey izinler
+     yalnız contents/pull-requests idi → 403, "hiçbir şey okunamadı".
+     Aynı uçları kullanan refs-trend / audit-refs-trend / override-trend
+     `actions: read` bildiriyor; bu iş eksik kalmıştı.
+
+  K3 advisory adım kendi durumunu yazmalı
+     GitHub'ın `shell: bash` komutu `bash -eo pipefail` ile koşar. Test
+     düştüğünde `errexit` bir sonraki satırı çalıştırmaz — yani
+     `echo "…: $?"` yazan eski hâl HATA HALİNDE ÇALIŞMAZDI ve karar
+     loga hiç düşmezdi; `continue-on-error` job'u yeşil bırakıyordu.
+     Yani kontrol tam olarak işe yaramadığı anda sessizdi.
+     Doğru kalıp: `set +e` → çalıştır → `rc=$?` → `set -e`.
+     Bu üç adım (label-gate, gen_config --dry-run, gen_changelog --check)
+     aynı deseni paylaşır; kapı YALNIZCA eksik olanı yakalar.
+
+Meta-not: bu dosya kurulum ortamını test etmez, SÖZLEŞMEYİ test eder —
+yani düzeltmeler geri alınırsa kırmızıya döner.
+"""
+
+import os
+import pathlib
+import re
+import subprocess
+import sys
+import inspect
+import unittest
+from unittest import mock
+
+HERE = pathlib.Path(__file__).resolve().parent
+ROOT = HERE.parent.parent
+WORKFLOWS = ROOT / ".github" / "workflows"
+VERIFY_YML = WORKFLOWS / "verify.yml"
+
+sys.path.insert(0, str(HERE))
+import audit_live_ci_sync as alcs  # noqa: E402
+
+try:
+    import yaml
+except ImportError:  # pragma: no cover
+    yaml = None
+
+
+def _load_verify():
+    with open(VERIFY_YML, encoding="utf-8") as f:
+        return yaml.safe_load(f)
+
+
+class TestGhResolutionIsNotPathDependent(unittest.TestCase):
+    """K1 — gh PATH'e bağlı değil, yoksa fail-closed."""
+
+    def test_known_paths_cover_homebrew_layouts(self):
+        self.assertTrue(alcs.GH_KNOWN_PATHS, "bilinen konum listesi boş")
+        joined = " ".join(alcs.GH_KNOWN_PATHS)
+        self.assertIn("/opt/homebrew/bin/gh", joined)
+        self.assertIn("/usr/local/bin/gh", joined)
+        self.assertIn("linuxbrew", joined,
+                      "Linuxbrew konumu yok — Linux runner fallback'i eksik")
+
+    def test_resolve_gh_falls_back_to_known_paths(self):
+        """PATH boşken bilinen konumlardan biri bulunmalı (macOS ölçümü)."""
+        real = os.path.exists
+        with mock.patch.dict(os.environ, {"PATH": "/nonexistent"}):
+            try:
+                found = alcs.resolve_gh()
+            except RuntimeError:
+                self.skipTest("bu makinede bilinen konumda gh yok — "
+                              "fallback doğrulanamıyor")
+        self.assertTrue(os.path.isfile(found))
+        self.assertTrue(real(found))
+
+    def test_resolve_gh_fails_closed_when_absent(self):
+        """Hiçbir yerde yoksa SESSİZ geçmemeli — RuntimeError (exit 2).
+
+        Sessiz geçme, denetimi "eksik/fazla yok" diye yeşile çevirirdi:
+        en kötü çıktı, çünkü denetimin işi tam olarak o listedir.
+        """
+        alcs.GH_KNOWN_PATHS = ()
+        try:
+            with mock.patch.dict(os.environ, {"PATH": "/nonexistent"}):
+                with mock.patch("os.path.isfile", lambda p: False), \
+                        mock.patch("os.access", lambda *a: False):
+                    with self.assertRaises(RuntimeError) as ctx:
+                        alcs.resolve_gh()
+        finally:
+            alcs.GH_KNOWN_PATHS = ("/opt/homebrew/bin/gh", "/usr/local/bin/gh",
+                                   "/home/linuxbrew/.linuxbrew/bin/gh")
+        self.assertIn("gh bulunamadı", str(ctx.exception))
+
+    def test_run_gh_goes_through_resolver(self):
+        """run_gh çıplak 'gh' çağırmamalı — çözümleyiciden geçmeli."""
+        import inspect
+        src = inspect.getsource(alcs.run_gh)
+        self.assertIn("resolve_gh()", src)
+        self.assertNotIn('subprocess.run(args,', src)
+
+    def test_script_compiles_and_keeps_gh_contract(self):
+        r = subprocess.run([sys.executable, "-m", "py_compile",
+                            str(HERE / "audit_live_ci_sync.py")],
+                           capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+
+
+@unittest.skipIf(yaml is None, "PyYAML yok — workflow denetimi ölçülemiyor")
+class TestActionsScopeMatchesWhatTheJobReads(unittest.TestCase):
+    """K2 — token'ın KAPSAMI da verilmeli."""
+
+    # Bu işler `actions/runs/<id>` ve `/artifacts` uçlarını okuyor.
+    API_READERS = ("refs-trend", "audit-refs-trend", "override-trend",
+                   "audit-live-ci")
+
+    def _jobs(self):
+        return _load_verify()["jobs"]
+
+    def test_every_action_api_reader_declares_actions_read(self):
+        for name in self.API_READERS:
+            with self.subTest(job=name):
+                perms = self._jobs()[name].get("permissions") or {}
+                self.assertEqual(
+                    perms.get("actions"), "read",
+                    "%s job'ı actions API'sini okuyor ama `actions: read` "
+                    "bildirmiyor → 403, denetim boş listeyi 'uyumlu' sanar"
+                    % name)
+
+    def test_top_level_permissions_cannot_grant_actions(self):
+        """Üst düzey izin `actions` vermiyorsa job SEÇİCİ olmak zorunda.
+
+        Kısıt bilinçli: daraltma bu PR'ın konusu değil, ama sessizce
+        üst düzeyden kaldırılırsa aynı sınıf hatayı geri gelir.
+        """
+        top = _load_verify().get("permissions") or {}
+        self.assertNotEqual(
+            top.get("actions"), "read",
+            "üst düzey `actions: read` yaygınlaştırıldıysa job seçicileri "
+            " gereksizleşir; bu test bilinçli olarak kırmızıya döner")
+
+    def test_audit_live_ci_keeps_pull_requests_write(self):
+        """İzin daraltma, manifest/budget PR yorum işlerini kırmamalı."""
+        perms = self._jobs()["audit-live-ci"].get("permissions") or {}
+        self.assertEqual(perms.get("pull-requests"), "write")
+        self.assertEqual(perms.get("contents"), "read")
+
+
+@unittest.skipIf(yaml is None, "PyYAML yok — workflow denetimi ölçülemiyor")
+class TestAdvisoryStepsCaptureTheirOwnStatus(unittest.TestCase):
+    """K3 — advisory adım `errexit` yüzünden sessiz kalmamalı."""
+
+    def _advisory_runs(self):
+        for jname, job in _load_verify()["jobs"].items():
+            for step in job.get("steps") or []:
+                if not step.get("continue-on-error"):
+                    continue
+                run = step.get("run")
+                if run and "$?" in run:
+                    yield jname, step.get("name", ""), run
+
+    def test_status_capture_survives_errexit(self):
+        """`$?` yazan her advisory adım `set +e` ile korunmalı.
+
+        GitHub `shell: bash` = `bash -eo pipefail`. `set +e` yoksa test
+        düştüğünde echo'ya hiç ulaşılamaz ve karar loga düşmez.
+        """
+        offenders = []
+        for jname, name, run in self._advisory_runs():
+            if "set +e" in run:
+                continue
+            if not re.search(r"^\s*echo\b.*\$\?", run, re.M):
+                continue  # $? yalnız kanala/pipeline'a gidiyorsa farklı durum
+            offenders.append("%s / %s" % (jname, name))
+        self.assertEqual(offenders, [],
+                         "advisory adımlarda errexit'e açık $? yakalama: %s"
+                         % offenders)
+
+    def test_label_gate_step_uses_the_canonical_pattern(self):
+        """Somut kural: label-gate adımı set +e / rc / set -e kullanır."""
+        jobs = _load_verify()["jobs"]
+        step = next(s for s in jobs["verify"]["steps"]
+                    if s.get("name") == "Label gate contract check (advisory)")
+        run = step["run"]
+        self.assertIn("set +e", run)
+        self.assertIn("set -e", run)
+        self.assertRegex(run, r"rc=\$\?")
+        # Durum değişkeni gerçekten kullanılmalı (yoksa yine sessiz).
+        self.assertRegex(run, r'echo "label gate contract check: \$rc"')
+
+    def test_workflow_is_lintable_yaml(self):
+        d = _load_verify()
+        self.assertIn("jobs", d)
+        self.assertGreater(len(d["jobs"]), 20)
+
+
+class TestGatesMustRunInACleanCheckout(unittest.TestCase):
+    """K4 — kapı, temiz klon'da da koşabilmeli.
+
+    ÖLÇÜLEN OLAY: bu PR'yi `git worktree` ile TEMİZ bir klon üzerinde
+    denediğimde `check-unit-tests` hook'u `test_dev_bootstrap` ile düştü.
+    `test_check_passes_on_provisioned_checkout` yalnız VENV'in varlığını
+    soruyordu, ama `dev_bootstrap.sh --check` DOKUZ unit'in tamamını
+    ölçüyor. Kısmi kurulumda (venv var, node_modules yok — yani her temiz
+    klon ve her CI) `--check` doğru biçimde "pptx eksik" dedi ve test
+    ÇÖKTÜ. Yani test, ölçtüğü şey olan kapı değil, geliştirici kurulumuydu.
+
+    Ders: bir testin skip koşulu, testin ÇALIŞTIĞI ortamın ön koşullarıyla
+    aynı genişlikte olmalı. Aynı dosyanın kardeş testi
+    (`test_check_fail_closed_on_broken_unit`) zaten doğru kalıbı
+    kullanıyor (unit başına `skipTest`) — sapma oradaydı.
+    """
+
+    def _load(self):
+        import importlib.util
+        path = HERE / "test_dev_bootstrap.py"
+        spec = importlib.util.spec_from_file_location("hyg_devboot", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    def test_required_sentinels_cover_more_than_the_venv(self):
+        """Skip koşulu tek birimi değil, --check'in ölçtüğü unit'leri kapsar."""
+        mod = self._load()
+        required = getattr(mod.TestCheckContract, "REQUIRED", ())
+        self.assertGreaterEqual(
+            len(required), 3,
+            "REQUIRED yalnız venv'e bakıyor gibi — kısmi kurulumda test "
+            "koşup çöker (ölçülen olay)")
+        names = {name for name, _p, _probe in required}
+        self.assertIn("venv_z3", names)
+        self.assertIn("pptx", names,
+                      "pptx npm bağımlılığı — en sık eksik olan unit")
+
+    def test_skip_message_names_the_missing_units(self):
+        """Skip mesajı EKSİK olanı söylemeli: 'kurulum değil' demek yetmez.
+
+        Sessiz skip, bu sınıftaki ilk hatayı doğuran şeyin ta kendisi.
+        """
+        mod = self._load()
+        src = inspect.getsource(
+            mod.TestCheckContract.test_check_passes_on_provisioned_checkout)
+        self.assertIn("skipTest", src)
+        self.assertIn("missing", src)   # eksik unit listesi yazılıyor mu
+        self.assertNotIn("assertEqual(r.returncode, 0, r.stdout + r.stderr)\n"
+                         "        ", src.split("skipTest")[0])
+
+    def test_sibling_test_already_used_the_canonical_pattern(self):
+        """Kısmi kurulumda kardeş test zaten skip ediyor — sapma tekti."""
+        mod = self._load()
+        sibling = inspect.getsource(
+            mod.TestCheckContract.test_check_fail_closed_on_broken_unit)
+        self.assertIn("skipTest", sibling)
+
+    def test_partially_provisioned_checkout_skips_instead_of_failing(self):
+        """Somut kanıt: unit'leri gizleyince SKIP, FAIL değil."""
+        mod = self._load()
+        method = mod.TestCheckContract(
+            "test_check_passes_on_provisioned_checkout")
+        with mock.patch.object(mod.os.path, "isdir", lambda p: False), \
+                mock.patch.object(mod.os.path, "isfile", lambda p: False):
+            with self.assertRaises(unittest.SkipTest) as ctx:
+                method.test_check_passes_on_provisioned_checkout()
+        self.assertIn("tam kurulum değil", str(ctx.exception))
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

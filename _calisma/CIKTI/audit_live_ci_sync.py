@@ -39,6 +39,7 @@ Kullanım:
 """
 import argparse
 import json
+import os
 import pathlib
 
 import ci_failure_pattern
@@ -48,6 +49,37 @@ import sys
 
 HERE = pathlib.Path(__file__).resolve().parent
 REPO_ROOT = HERE.parents[1]
+
+# `gh` çözümlemesi PATH'e BAĞLI olmaz. Ölçülen boşluk: run_gh() çıplak
+# "gh" çağırıyordu; GitHub runner'ında çalışır ama launchd/TCC ve minimal
+# PATH'li herhangi bir ortamda `gh` PATH'te değilse denetim TÜMÜYLE
+# düşüyor (exit 2 = "çalışma hatası") — oysa bu denetimin işi tam olarak
+# canlı run'ın job/artifact listesini okumak. K16'nın `find_launchd_tool`
+# yardımcısı bu repo'nun TEK kaynaklı çözümleme sözleşmesi (PATH önce,
+# bilinen konumlar ikincil, hiçbiri yoksa None = fail-closed) — node için
+# yazıldı, `gh` için aynı sözleşme.
+sys.path.insert(0, str(HERE))
+from github_scripts_battery import find_launchd_tool  # noqa: E402
+
+GH_KNOWN_PATHS = ("/opt/homebrew/bin/gh", "/usr/local/bin/gh",
+                  "/home/linuxbrew/.linuxbrew/bin/gh")
+
+
+def resolve_gh():
+    """Çalıştırılabilir `gh` yolunu döndürür; yoksa fail-closed hata verir.
+
+    Fail-closed SEÇİM: `gh` yoksa sessizce boş liste döndürmek, denetimi
+    "hiçbir eksik yok" diye yeşile çevirirdi — en kötü çıktı. Bunun yerine
+    RuntimeError → exit 2 (çalışma hatası), yani "ölçemedim" açıkça görünür.
+    """
+    path = find_launchd_tool("gh", GH_KNOWN_PATHS)
+    if path is None:
+        raise RuntimeError(
+            "gh bulunamadı (PATH: %s; bilinen konumlar: %s) — denetim "
+            "çalıştırılamaz, ölçüm YAPILMADI"
+            % (os.environ.get("PATH", ""), ", ".join(GH_KNOWN_PATHS)))
+    return path
+
 DEFAULT_DOC = REPO_ROOT / "docs" / "PUBLISH_SCENARIO.md"
 
 # Bu job'ın KENDİ adı/artifact'ı karşıdırmadan hariç tutulur — meta-denetçi
@@ -175,7 +207,8 @@ def parse_doc_artifacts(doc_text):
 
 # ── Canlı GitHub ─────────────────────────────────────────────────────────
 def run_gh(args):
-    r = subprocess.run(args, capture_output=True, text=True)
+    r = subprocess.run([resolve_gh()] + list(args), capture_output=True,
+                       text=True)
     if r.returncode != 0:
         raise RuntimeError((r.stderr or r.stdout).strip())
     return r.stdout.strip()
