@@ -215,8 +215,54 @@ class TestMergeBlockSmoke(unittest.TestCase):
 
     def test_labels_distinguish_merge_block(self):
         labels = [l for (l, _ok, _n) in sc.merge_block_smoke({})]
-        self.assertIn("required_status_checks.strict", labels)
+        strict = [l for l in labels
+                  if l.startswith("required_status_checks.strict")]
+        self.assertEqual(len(strict), 1, labels)
+        # Etiket NE ölçüldüğünü yazmak zorunda: smoke değeri DEĞİL, alanın
+        # varlığını ölçer. Bu açıklama düşerse çıktı yine "strict zorunlu"
+        # diye yanlış okunur — o yüzden sözleşmeye bağlı.
+        self.assertIn("alan TANIMLI", strict[0],
+                      "strict etiketi ölçülen şeyi (varlık, değer değil) "
+                      "söylemeli")
         self.assertIn("enforce_admins.enabled (admin bypass kapalı)", labels)
+
+    def test_strict_smoke_measures_presence_not_value(self):
+        """`strict: false` smoke'ta PASS eder — bilinçli, ama SESSİZ değil.
+
+        Canlı API (2026-09-30): bu depoda strict=true, enforce_admins=true,
+        force-push/deletions=false. Koruma doğrudan push'u reddediyor
+        (GH006), yani strict burada gerçekten true olmalı — ama smoke'un
+        işi o değeri denetlemek DEĞİL (strict=false doğrudan-push akışı olan
+        depolar için geçerlidir). Açıkta kalan risk, canlı değer bloğunun
+        bunu raporlamasıyla kapatılır.
+        """
+        r = sc.evaluate_protection(["a"], _protection(["a"], strict=False))
+        self.assertTrue(r["enforcement_ok"],
+                        "değer değil varlık ölçülür — strict=false PASS etmeli")
+        live = {f["label"]: f for f in r["live"]}
+        self.assertIs(live["required_status_checks.strict"]["value"], False)
+        self.assertIn("KAPALI", live["required_status_checks.strict"]["meaning"],
+                      "canlı değer bloğu strict=false'i açıkça KAPALI demeli")
+
+    def test_live_facts_report_real_values(self):
+        """Canlı değerler smoke'tan AYRI: gerçek ayarı anlamıyla basar."""
+        prot = _protection(["a"], strict=True, enforce_admins=True,
+                           force_pushes=False, deletions=False)
+        facts = {f["label"]: f for f in sc.evaluate_protection(["a"], prot)["live"]}
+        self.assertIs(facts["required_status_checks.strict"]["value"], True)
+        self.assertIn("GÜNCEL", facts["required_status_checks.strict"]["meaning"])
+        self.assertIs(facts["allow_force_pushes.enabled"]["value"], False)
+        # Ölçülen şey geçmişin yeniden yazılabilirliği; fast-forward'ın
+        # serbest olduğu metinde AÇIKÇA yazmalı (yanıltıcı genelleme olmasın).
+        self.assertIn("fast-forward", facts["allow_force_pushes.enabled"]["meaning"])
+
+    def test_missing_strict_field_is_reported_as_absent(self):
+        """Alan hiç yoksa canlı blok bunu 'alan yok' der — 0/False taklidi yok."""
+        prot = _protection(["a"])
+        prot["required_status_checks"].pop("strict")
+        facts = {f["label"]: f for f in sc.evaluate_protection(["a"], prot)["live"]}
+        self.assertIsNone(facts["required_status_checks.strict"]["value"])
+        self.assertIn("yok", facts["required_status_checks.strict"]["meaning"])
 
 
 @unittest.skipUnless(HAVE_YAML, "PyYAML gerekli")
@@ -251,7 +297,11 @@ class TestEvaluateProtection(unittest.TestCase):
         self.assertFalse(r["enforcement_ok"])
 
     def test_strict_false_is_valid_for_direct_push(self):
-        # strict=False: push izni var, PR-only engeli yok — geçerli.
+        # strict=false, DOĞRUDAN-PUSH'a izin veren depolar için geçerlidir:
+        # "PR dalı güncel olmalı" kuralı anlamsızdır çünkü PR akışı yoktur.
+        # Bu, BU deponun durumu DEĞİLDİR: canlı koruma doğrudan push'u
+        # reddediyor (GH006) ve strict=true. Test bir yapılandırma SINIFINI
+        # ölçer, deponun anlık halini iddia etmez.
         r = sc.evaluate_protection(["a"], _protection(["a"], strict=False))
         self.assertTrue(r["names_ok"])
         self.assertTrue(r["enforcement_ok"])

@@ -17,6 +17,7 @@ test_check_action_pins.py
 test_check_action_runtimes.py
 test_check_badge_endpoints.py
 test_check_bootstrap_start_smoke.py
+test_check_bootstrap_toolchain.py
 test_check_cli_overrides.py
 test_check_commit_messages.py
 test_check_config_drift_summary.py
@@ -27,13 +28,13 @@ test_check_hook_env_matrix.py
 test_check_hook_unstaged_deps.py
 test_check_latex_surface.py
 test_check_lean_axioms.py
-test_check_bootstrap_toolchain.py
 test_check_lean_statements.py
 test_check_merge_precondition.py
 test_check_mirror_coverage.py
 test_check_orchestration_stdin.py
 test_check_precommit_inventory.py
 test_check_precommit_orphans.py
+test_check_protection_drift.py
 test_check_python3_shell.py
 test_check_repro_manifest_hook.py
 test_check_sde_determinism.py

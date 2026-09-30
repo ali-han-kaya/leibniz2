@@ -307,6 +307,7 @@ HOOK_COVERAGE = {
         "test_gen_skill_surface_inventory.py",
         "test_dashboard_next_battery_smoke.py",
         "test_trend_record_pr_contract.py",
+        "test_check_protection_drift.py",
     ],
 }
 

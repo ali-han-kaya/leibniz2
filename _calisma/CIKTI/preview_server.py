@@ -499,6 +499,30 @@ def persist_history(rec):
         sys.stderr.flush()
 
 
+def drain_writer_lock(timeout=None):
+    """Kapanışta uçuştaki yazımı BİTİR; yenisinin başlamasını engelle.
+
+    `persist_history` history.jsonl ile .sha256 sidecar'ını İKİ ayrı atomik
+    yazımla yazar. SIGTERM tam bu ikisinin ARASINA gelirse diskte
+    yeni-history + eski-sidecar kalır — K15 P1 hash uyuşmazlığı, CI'daki
+    daemon-http kırmızısının kök-nedeni (3cabbff).
+
+    LOCK'u sınırlı süreyle ALIP BIRAKMAK aktif yazımın tamamlanmasını
+    bekler; bırakıldığı anda yeni yazım başlayabilir, bu yüzden çağıran
+    taraf bu noktadan önce yeni turu durdurmuş olmalı (stop_event).
+
+    Döner: True = drain edildi (kilit alındı), False = timeout.
+    Timeout'ta bile dönülür: kapanış ASILI KALMAMALI — bozuk disk,
+    asla bitmeyen bir çıkıştan iyidir.
+    """
+    if timeout is None:
+        timeout = REQUEST_TIMEOUT_SECONDS
+    acquired = LOCK.acquire(timeout=timeout)
+    if acquired:
+        LOCK.release()
+    return acquired
+
+
 def _lifecycle_event(event, detail=""):
     """Sunucu yaşam-döngüsü olayını kalıcı kayda yaz (append-only JSONL).
 
@@ -2572,7 +2596,13 @@ def main():
         t = threading.Thread(target=verify_loop,
                              args=(VERIFY_DIR, args.interval, stop_event),
                              daemon=True, name="verify-loop")
-        t.start()
+        # .start() BİLEREK aşağıda, try/finally'nin İÇİNDE çağrılır.
+        # Ölçülen yarış (2026-09-30, 4-eşzamanlı): yazıcı thread burada,
+        # kapanış drain'i kurulmadan ÖNCE başlarsa SIGTERM tam o pencerede
+        # gelirse süreç finally'siz ölür ve history.jsonl yazılıp sidecar
+        # yazılmadan çıkılır (K15 P1 — `3cabbff`'in kapatmaya çalıştığı
+        # uyuşmazlığın ta kendisi). Değişmez: **yazıcı çalışabiliyorsa
+        # drain de kuruludur.**
     else:
         sys.stderr.write(
             "[main] snapshot-only: verify loop kapalı, ts=%s\n" %
@@ -2589,7 +2619,16 @@ def main():
         sys.stderr.write(f"[main] preview_server: verify loop interval={args.interval}s, dir={VERIFY_DIR}\n")
     sys.stderr.write(f"[main] PID={os.getpid()} PGID={os.getpgrp()}\n")
     sys.stderr.flush()
+    # `serving`: serve_forever GERÇEKTEN başladı mı? BaseServer.shutdown(),
+    # serve_forever'ın kendi finally'sında set edilen bir event'i bekler;
+    # serve_forever hiç girmediyse shutdown() SONSUZA KADAR bekler. Yazıcı
+    # thread'i erken başlatabilmek için try'yi serve_forever'dan önce açmak
+    # zorundayız, dolayısıyla bu ayrımı açıkça tutmak gerekiyor.
+    serving = False
     try:
+        if t is not None:
+            t.start()
+        serving = True
         srv.serve_forever()
     except KeyboardInterrupt:
         pass
@@ -2597,16 +2636,14 @@ def main():
         stop_event.set()
         if t is not None:
             t.join(timeout=REQUEST_TIMEOUT_SECONDS)
-        srv.shutdown()
-        srv.server_close()
-        # K15 yarışı kapanışı: run'ın son yazım fazı (persist_history) LOCK
-        # altında history.jsonl ve .sha256 sidecar'ını İKİ ayrı atomik yazımla
-        # yazar; daemon-thread çıkışta yarım kalırsa diskte yeni-history +
-        # eski-sidecar kalır (K15 P1: hash uyuşmazlığı — CI'da daemon-http
-        # kırmızısının kök-nedeni). LOCK'u sınırlı süreyle alıp bırakmak:
-        # aktif yazım biter, yeni yazım başlayamaz.
-        if LOCK.acquire(timeout=REQUEST_TIMEOUT_SECONDS):
-            LOCK.release()
+        if serving:
+            srv.shutdown()
+            srv.server_close()
+        # K15 yarışı kapanışı: uçuştaki persist_history'nin bitmesini bekle
+        # (history.jsonl + sidecar iki ayrı atomik yazım; araya giren SIGTERM
+        # diskte uyuşmayan çift bırakır). Mantık `drain_writer_lock`'ta —
+        # sözleşmesi test edilebilsin diye dışarı alındı.
+        drain_writer_lock()
         _lifecycle_event("shutdown")
 
 

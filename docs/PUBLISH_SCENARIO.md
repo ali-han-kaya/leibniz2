@@ -422,6 +422,13 @@ open "https://github.com/ali-han-kaya/leibniz2/settings/branches"
      > sadece bilgilendirme rozeti olarak kalır.
    - **"Require branches to be up to date before merging"** ✓ (strict) — PR'ın base'i
      main'in gerisindeyse merge reddedilir.
+     > **PR akışındaki "dal güncelle" adımı (strict'in doğrudan sonucu):** başka bir PR
+     > önce merge olursa açık PR main'in gerisine düşer ve merge butonu **kilitli** kalır
+     > ("This branch is out-of-date with the base branch"). Merge'den önce PR sayfasında
+     > **"Update branch"** ya da yerelde `git fetch origin && git rebase origin/main`.
+     > `--force-with-lease` yalnızca **kendi PR dalında** serbesttir: bu kural `main`
+     > desenine bağlıdır (ölçüldü 2026-09-30 — diğer dallar "Branch not protected"
+     > döner), yani yukarıdaki 7. adım PR dalını DEĞİL, main'i korur.
 
 6. **Enforce admins:** **"Do not allow bypassing the above settings"** ✓ — adminler de
    kapıya takılır.

@@ -3939,6 +3939,79 @@ def check_mirror_sync(add, auto_sync=False):
     return False, detail, rc, txt, dict(empty_meta, before_exit=rc)
 
 
+def check_protection_drift(add, protection, expected=None):
+    """Haftalık branch-protection drift denetimi → P1 (fail-closed).
+
+    NEDEN AYRI BİR YOL (ölçüldü 2026-09-30): `status_checks.py --gh` aynı
+    karşılaştırmayı yapar ama CI'da KOŞAMAZ — branch protection okumak admin
+    izni ister ve `administration` scope'u Actions `permissions:` bloğunda
+    GEÇERSİZDİR (actionlint v1.7.7: "unknown permission scope
+    administration"). Eklenirse workflow PARSE HATASIYLA 0 JOB üretir.
+    Bu yüzden okuma yetkisi `PROTECTION_PAT` secret'ından gelir; secret
+    yoksa çağıran denetimi hiç başlatmaz (yanlış-P1 gürültüsü olmasın).
+
+    ÖNEMLİ AYRIM: `status_checks.merge_block_smoke` alanların VARLIĞINI
+    ölçer (strict=false doğrudan-push depoları için geçerlidir). BURADA
+    DEĞER ölçülür: bu depo PR-akışlıdır (canlı koruma doğrudan push'u
+    GH006 ile reddeder), dolayısıyla `strict=true` beklenir ve kapanması
+    gerçek bir P1'dir.
+
+    I/O YAPMAZ: `protection` nesnesi dışarıdan verilir (test edilebilirlik).
+    `expected` None ise yalnızca ayarlar denetlenir, ad listesi atlanır.
+
+    Döner: (ok, detail). ok=False → P1 bulgusu üretildi.
+    """
+    if not isinstance(protection, dict) or not protection:
+        # Okunamadı ≠ temiz. Çağıran taraf bunu SKIP olarak raporlar.
+        return True, "protection nesnesi boş/okunamadı — atlandı"
+
+    sc = protection.get("required_status_checks") or {}
+    configured = sc.get("contexts") or []
+    if not isinstance(configured, list):
+        configured = []
+    admins = (protection.get("enforce_admins") or {}).get("enabled")
+    fp = (protection.get("allow_force_pushes") or {}).get("enabled")
+    dele = (protection.get("allow_deletions") or {}).get("enabled")
+    strict = sc.get("strict")
+
+    drift = []
+    if expected is not None:
+        exp, conf = set(expected), set(configured)
+        missing, extra = sorted(exp - conf), sorted(conf - exp)
+        if missing:
+            drift.append(("ADLAR-EKSIK", "required check listesi",
+                          "GitHub'da eksik: %s" % missing))
+        if extra:
+            drift.append(("ADLAR-FAZLA", "required check listesi",
+                          "workflow'da olmayan: %s" % extra))
+    if admins is not True:
+        drift.append(("ENFORCE-ADMINS", "admin bypass",
+                      "enforce_admins.enabled=%r — True beklenir" % (admins,)))
+    if fp is not False:
+        drift.append(("FORCE-PUSH", "force push",
+                      "allow_force_pushes.enabled=%r — False beklenir "
+                      "(non-fast-forward geçmiş yeniden yazımı)" % (fp,)))
+    if dele is not False:
+        drift.append(("DELETIONS", "dal silme",
+                      "allow_deletions.enabled=%r — False beklenir" % (dele,)))
+    if strict is not True:
+        drift.append(("STRICT", "up-to-date kuralı",
+                      "required_status_checks.strict=%r — True beklenir "
+                      "(kapalıyken bayat PR dalı merge edilebilir)" % (strict,)))
+
+    live = ("canlı: required=%d strict=%r enforce_admins=%r "
+            "force_pushes=%r deletions=%r"
+            % (len(configured), strict, admins, fp, dele))
+    for cid, check, issue in drift:
+        add("P1", "PROT-%s" % cid, "branch protection — %s" % check,
+            issue, live)
+    if drift:
+        return False, "%d drift: %s" % (len(drift),
+                                         ", ".join(c[0] for c in drift))
+    return True, ("temiz (%d required check, strict=True, admin bypass kapalı, "
+                  "force-push/deletions kapalı)" % len(configured))
+
+
 def check_daemon_smoke(add, out_path=None):
     """K18: daemon_http_test.py end-to-end daemon smoke (fail-closed).
 
