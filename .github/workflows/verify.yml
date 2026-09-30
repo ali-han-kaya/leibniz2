@@ -155,16 +155,37 @@ jobs:
         shell: bash
         run: pip install -r _calisma/requirements-z3.txt
 
+      # Chromium YALNIZ pip'e değil, tarayıcı ikilisiyle birlikte kurulur.
+      # Ölçülen boşluk (PR #54, 2026-09-30): `requirements-z3.txt` Playwright'u
+      # pinliyor ama `verify` işinin birim-test adımında Chromium KURULU
+      # DEĞİLDİ; aynı dosyanın a11y-gate ve dashboard işleri
+      # `playwright install --with-deps chromium` çalıştırıyor. Sonuç: 6 ölçüm
+      # dosyasındaki 50 test `skipIf(sync_playwright is None)` guard'ını
+      # GEÇTİ (import çalışıyor) ama Chromium yoktu ve hepsi ERROR oldu —
+      # "kapı kırık" gibi raporlanan bir ortam kusuru. `origin/main` yeşildi
+      # çünkü o dosyaların hiçbiri main'de yok.
+      #
+      # Kural (aynı dosyanın a11y-gate notu): Playwright kuruluysa ölçüm
+      # GERÇEKTEN koşmalı. Guard'ı gevşetip SKIP'e çevirmek, 50 ölçümü
+      # hiçbir yerde çalıştırmamak anlamına gelirdi — fail-closed sessizleşir.
+      #
+      # Sürüm BURAYA yazılmaz: tek kaynak `_calisma/requirements-z3.txt`
+      # (TestSinglePinSource kapısı, `test_dev_bootstrap`). Yukarıdaki cache
+      # adımlarının kullandığı `hashFiles(...)` da aynı dosyadan türer.
+      - name: Install Chromium (unit-test ölçümleri için)
+        if: always()
+        run: playwright install --with-deps chromium
+
       - name: Run CIKTI unit tests (test_*.py)
         shell: bash
         run: |
           set -o pipefail
           python3 -m unittest discover -s _calisma/CIKTI -p "test_*.py" -v 2>&1 | tee unit_tests.log
           # docs/branch-protection-guide/test_render_screens.py: render_screens.py
-          # mock HTML'den PNG üretimini doğrular. Playwright CI runner'da kurulu
-          # değilse testler SKIP (fail değil) — kuruluysa gerçekten koşar
-          # (venv: _calisma/.venv_z3/bin/python …). Dokümantasyon üretim aracı
-          # kapısıdır, teslim kapısı değil.
+          # mock HTML'den PNG üretimini doğrular. Playwright + Chromium
+          # YUKARIDA kuruldu (aynı pin, aynı komut) — yani bu işte de
+          # gerçekten koşar; Playwright/Chromium hiç yoksa SKIP (fail değil).
+          # Dokümantasyon üretim aracı kapısıdır, teslim kapısı değil.
           python3 -m unittest discover -s docs/branch-protection-guide \
             -p "test_render_screens.py" -v 2>&1 | tee -a unit_tests.log
 

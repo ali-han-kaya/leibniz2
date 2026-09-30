@@ -655,6 +655,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-30 | feat | (gates) protection-drift kapısı ve SIGTERM yarışı düzeltmesi | [`b72b303`](https://github.com/ali-han-kaya/leibniz2/commit/b72b303) |
 | 2026-09-30 | feat | (texlive) göç Faz 1-4 zinciri ve determinizm kapıları | [`5036f1b`](https://github.com/ali-han-kaya/leibniz2/commit/5036f1b) |
 | 2026-09-30 | fix | (ci) testler geliştirici makinesini ölçmeyi bırakıyor | [`a0f2cd5`](https://github.com/ali-han-kaya/leibniz2/commit/a0f2cd5) |
+| 2026-09-30 | fix | (ci) regresyon testinin kendisi de ortamı ölçüyordu | [`be0d4c0`](https://github.com/ali-han-kaya/leibniz2/commit/be0d4c0) |
 
 ### Regresyon notları
 
