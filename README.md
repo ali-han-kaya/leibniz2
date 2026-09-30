@@ -441,6 +441,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-21 | fix | (ci) trend PR step policy-aware (Actions PR-permission off) | [`c78dc67`](https://github.com/ali-han-kaya/leibniz2/commit/c78dc67) |
 | 2026-09-30 | chore | (changelog) 5280500 ve cfa33d9 satirlarini tabloya ekle | [`f194e89`](https://github.com/ali-han-kaya/leibniz2/commit/f194e89) |
 | 2026-09-30 | docs | (docker) npm katmanı kapalı döngüsü + kontrat testi | [`4e7d758`](https://github.com/ali-han-kaya/leibniz2/commit/4e7d758) |
+| 2026-09-30 | chore | (changelog) 4e7d758 satirini tabloya ekle | [`e89165b`](https://github.com/ali-han-kaya/leibniz2/commit/e89165b) |
 
 ### Regresyon notları
 
