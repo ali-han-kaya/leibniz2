@@ -137,6 +137,89 @@ yanlış teşhistir (o commit'te kapı yine kırmızı kalır).
 
 Yeni girdiler buraya ve `package.json`'ın `overrides` bloğuna eklenir.
 
+## Haftalık cron koşumu — ilk Pazartesi doğrulama (runbook)
+
+`docker-security.yml` her Pazartesi **03:43 UTC**'de kendiliğinden koşar
+(`43 3 * * 1`; determinism-trend 03:17 ile bilinçli çakışmaz). Push
+tetiklemesi olmadan da koşmasının tek nedeni, yeni CVE'lerin en çok
+hazırlıksız zamanda çıkmasıdır. Ama cron yalnızca koşmaz, **görünür
+kanıt üretir** — bu bölüm o kanıtın nasıl okunacağını sabitler.
+
+Önemli ayrım: cron ve push tetiklemesi **aynı workflow'u** çalıştırır, yani
+log deseni aynıdır. Cron'un farkı tetikleyicidir, desenin kendisi değil.
+Aşağıdaki desen henüz hiçbir Pazartesi cron koşumu gerçekleşmeden, bir
+**push** koşumundan ölçülmüştür (kaynak run aşağıda). İlk Pazartesi
+koşumunda bu satırların **aynen** çıkması, cron'un ilk doğrulamasıdır;
+çıkmazsa sapma tablosuna geçilir.
+
+### Beklenen log deseni
+
+`smoke` job'ı ubuntu-latest'te trivy kurulu olmadığı için
+`docker_security_smoke.sh`'in "araç yok → exit 0 SKIP" sözleşmesine düşer.
+Ölçülen referans koşum: main push `8314fde`, run `36784930535`, job
+`Local security smoke (script parity)`.
+
+`Run local security smoke (SKIP-aware)` adımı — **üç satır, tam olarak**:
+
+```
+docker-security smoke evidence
+image=leibniz2/verify-dashboard:smoke-local
+SKIP: trivy yok — güvenlik gate'i eksik, kısmi kanıt üretilmez
+```
+
+`Show smoke evidence` adımı — **iki satır, fallback notu basılmaz**:
+
+```
+docker-security smoke evidence
+image=leibniz2/verify-dashboard:smoke-local
+```
+
+Evidence notu neden iki satır: `log()` başlık + `image=` satırını hem ekrana
+hem `$OUT` dosyasına yazar, SKIP satırı ise yalnız stderr'e gider. Bu yüzden
+kanıt dosyası SKIP koşumunda da **üretilir** — `cat ... || echo` fallback'i
+devreye girmez. Fallback ancak script `log()`'a hiç ulaşmadan çökerse basılır:
+
+```
+(smoke kanıt dosyası yok — SKIP koşumunda üretilmez)
+```
+
+Job sonucu yine de **success**'tir (SKIP, exit 0). Bu, cron'un sessiz
+kanıt-kaçırma riskidir: yeşil job tek başına hiçbir şey kanıtlamaz —
+kanıt, **SKIP satırının görünür olmasıdır**. SKIP satırı yoksa koşum
+"başarılı" değildir, sadece sessizdir.
+
+### Sapma tablosu
+
+| Gözlenen | Anlamı | Yapılacak |
+|---|---|---|
+| Üç satır birebir eşleşiyor (SKIP satırı **var**) | Beklenen koşum; cron canlı | Kayıt satırı girilir, sapma yok |
+| Job `success` ama `SKIP: trivy yok …` satırı **yok** | SKIP görünürlüğü kayboldu ya da script hiç çalışmadı | `workflow_dispatch` ile elle koşum aç, adımı `bash -x` ile izle; SKIP satırı yerine `PASS`/kanıt satırları varsa aşağıdaki satıra geç |
+| `Show smoke evidence` fallback notunu basıyor | Script `log()`'a ulaşmadan çöktü — **hiç kanıt üretilmedi** | Elle koşum log'unu oku; çökme noktası smoke adımına `if: always()` + teşhis olarak eklenmeli |
+| `verdict=PASS` / `trivy_findings=0` / `health_http=200` | Runner'da trivy **kurulmuş** (K3'ün varsayımı değişti) — daha iyi, ama parite bozuldu | Bu bölümdeki beklenen desen + `test_gated_schedules.py` K3 beklentisi güncellenir; SKIP sözleşmesi bu job'da artık geçerli değil |
+| `smoke` job **fail** | Gerçek ihlal: build / Trivy bulgusu / sağlık (fail-closed çalıştı) | `docs/ci_simulate/docker_security_smoke/docker_security_smoke_report.txt` kanıtını oku, bulguları aşağıdaki "Katkı sözleşmesi" ile kapat, `docs/CI_GATE_TRIAGE.md`'ye kaydet |
+| `image-scan` job kırmızı | Cron'un **asıl** amacı gerçekleşti: CRITICAL/HIGH bulgu | Aynı Katkı sözleşmesi; `severity: CRITICAL,HIGH` + `ignore-unfixed` + `exit-code 1` sözleşmesi bozulmadıysa bu beklenen davranıştır |
+| Ohafta hiç `docker-security` run yok | GitHub scheduler çalışmıyor (60 gün hareketsizlik politikası) ya da path filtresi | `gh run list --workflow docker-security.yml` ile doğrula; run yoksa `workflow_dispatch` ile elle koşup scheduler'ı canlandır |
+| Her iki job `success`, `Show smoke evidence` **boş** | Sessiz kanıt kaybı — en ciddi sapma | Elle koşum + kanıt dosyasının artifact olarak yüklendiğini doğrula; bu tablodaki diğer adımlar uygulanmaz, desen bozulmuştur |
+
+Sapma tablosunun değişmez kuralı: **SKIP bir hata değildir, kanıtın kendisidir.**
+SKIP'i "düzeltilecek sorun" sanıp runner'a trivy kurmak, cron'un ürettiği
+görünürlüğü sessizleştirir. Bu yüzden üçüncü satır ("SKIP satırı yok") en
+kritik sapmadır: yeşil görünen ama kanıtsız bir koşum, K3'ün kurduğu tek
+savunmayı deler.
+
+### İlk Pazartesi koşumu — kayıt satırı
+
+İlk cron koşumu bittikten sonra bu satır doldurulur. Boş kalan satır,
+cron'un henüz doğrulanmadığı anlamına gelir.
+
+| Koşum (run id) | Beklenen | Gözlenen | Sonuç |
+|---|---|---|---|
+| (henüz koşmadı — ilk Pazartesi 03:43 UTC) | üç satırlık SKIP deseni, evidence iki satır | — | — |
+
+Kaydı tutmadan cron'u "çalışıyor" saymak kanıt değildir: `gh run list
+--workflow docker-security.yml --event schedule` boş dönerse scheduler
+çalışmıyor demektir ve yukarıdaki son sapma satırı geçerlidir.
+
 ## Katkı sözleşmesi (yeni bulgu geldiğinde)
 
 1. Trivy gate'inin tablo çıktısındaki paket + "Fixed version" değerini al.
