@@ -3,12 +3,23 @@
 # update_changelog_hook.sh — pre-commit hook: changelog tablolarını git log ile
 # senkron eder (gen_changelog.py --update) ve değiştiyse stage eder.
 #
-# Neden: her yeni commit, changelog tablosuna bir satır ekler. Ama commit'in
-# kendi hash'i ancak commit OLUŞTUKTAN SONRA bilinir — bu yüzden "check-only"
-# bir kapı (--check) her zaman bir commit geride kalır ve sonraki commit'i
-# haksız yere BLOKE EDER (chicken-and-egg). update-config deseni gibi bu hook
-# da --update ile tabloları senkron eder ve değiştiyse stage eder — böylece
-# kapı hiç kırılmaz, tablolar her zaman HEAD'e kadar güncel olur.
+# Rol: repo'nun İKİ YAZAN hook'undan biri (diğeri update-config, config'i
+# yazar). Gecikmeli (lag-one) yazma zorunludur:
+#
+#   ÖLÇÜM (test_update_changelog_hook.py, gerçek gen_changelog + gerçek hook):
+#   tablo commit hash'iyle anahtarlanır; hash ancak commit OLUŞTUKTAN SONRA
+#   bilinir. --check (find_missing_commits) "tablodaki en yeni satırdan daha
+#   yeni" commit'leri eksik sayar. Bu ikisi birleşince tablo, HER commit'ten
+#   sonra tam olarak BİR commit geride kalır: okuma tarafı HEAD'i eksik sayar.
+#   Dolayısıyla saf okuma kapısı + remedy YAPISAL OLARAK İMKÂNSIZDIR — bloklayan
+#   satırın hash'i henüz var olmaz (remedy, aynı commit'te uygulanamaz).
+#   Ölçüm: /tmp kanıtı yok; test her koşumda yeniden ölçer (tam-1-commit).
+#
+#   Model iki yazandır:
+#     (1) BU hook: commit içinde eksik satırı onarır ve stage eder (yazar-1),
+#     (2) `chore(changelog): <hash> satırını tabloya ekle` commit'i: kaydı
+#         ayrı bir yazı olarak kapatır (yazar-2).
+#   Elle remedy (okuma tarafı): python3 gen_changelog.py --update.
 #
 # Sıralama: .pre-commit-config.yaml'da commit-msg-style'den ÖNCE tanımlıdır;
 # her commit'te koşar (always_run).
