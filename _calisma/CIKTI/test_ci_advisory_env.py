@@ -112,6 +112,60 @@ class TestGhResolutionIsNotPathDependent(unittest.TestCase):
         self.assertIn("resolve_gh()", src)
         self.assertNotIn('subprocess.run(args,', src)
 
+    def test_run_gh_executes_the_resolved_binary_end_to_end(self):
+        """GERÇEKTEN çalıştır: sahte `gh` + PATH → argv DOĞRU mu?
+
+        Ölçülen hata (ilk denemede CI'da yakalandı): çağıranlar
+        `run_gh(["gh", "api", …])` diyordu, çözümleyici de program adını öne
+        ekliyordu → `gh gh api …` → "unknown command \\"gh\\" for \\"gh\\"".
+        Önceki testler argv'yi hiç ÇALIŞTIRMADIĞI için bunu göremedi;
+        sahte executable ile uçtan uca ölçmek şart.
+        """
+        import stat
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            fake = os.path.join(td, "gh")
+            with open(fake, "w", encoding="utf-8") as f:
+                f.write("#!/bin/sh\nprintf '%s\\n' \"$@\"\n")
+            os.chmod(fake, os.stat(fake).st_mode | stat.S_IEXEC)
+            with mock.patch.dict(os.environ, {"PATH": td + os.pathsep +
+                                              os.environ.get("PATH", "")}):
+                # (a) sözleşme: program adı YOK
+                out = alcs.run_gh(["api", "repos/x"])
+                self.assertEqual(out.split(), ["api", "repos/x"])
+                # (b) savunmacı katman: eski biçim de aynı yere gider
+                out2 = alcs.run_gh(["gh", "api", "repos/x"])
+                self.assertEqual(out2, out, "eski çağrı biçimi farklı "
+                              "gidiyor — savunmacı katman çalışmıyor")
+
+    def test_no_call_site_passes_the_program_name(self):
+        """Hiçbir çağıran `run_gh(["gh", …])` biçimini kullanmamalı.
+
+        Savunmacı katman var ama asıl sözleşme budur: program adı tek
+        kaynaktan (resolve_gh) gelir, çağıranlardan gelmez.
+
+        AST ile ölçülüyor, metin taramasıyla DEĞİL: `run_gh` docstring'i
+        bu hatayı belgelediği için ham metin araması yanlış-pozitif verir
+        (ilk yazımda öyle oldu).
+        """
+        import ast
+        tree = ast.parse(inspect.getsource(alcs))
+        offenders = []
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.Call)
+                    and getattr(node.func, "id", None) == "run_gh"):
+                continue
+            if not node.args or not isinstance(node.args[0], (ast.List,
+                                                              ast.Tuple)):
+                continue
+            first = node.args[0].elts[0] if node.args[0].elts else None
+            if isinstance(first, ast.Constant) and first.value == "gh":
+                offenders.append(node.lineno)
+        self.assertEqual(offenders, [],
+                         "run_gh çağrıları program adı taşımamalı "
+                         "(satırlar: %s) — çözümleyici zaten veriyor, "
+                         "çift verilince `gh gh …` olur" % offenders)
+
     def test_script_compiles_and_keeps_gh_contract(self):
         r = subprocess.run([sys.executable, "-m", "py_compile",
                             str(HERE / "audit_live_ci_sync.py")],

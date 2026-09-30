@@ -207,7 +207,18 @@ def parse_doc_artifacts(doc_text):
 
 # ── Canlı GitHub ─────────────────────────────────────────────────────────
 def run_gh(args):
-    r = subprocess.run([resolve_gh()] + list(args), capture_output=True,
+    """`gh` çözümlemesiyle argv kurar ve çalıştırır.
+
+    SÖZLEŞME: `args` PROGRAM ADI İÇERMEZ — executable'ı `resolve_gh()` verir.
+    Ölçülen hata: çağıranlar `run_gh(["gh", "api", …])` diyordu ve çözümleyici
+    de program adını öne ekledi → CI'da `gh gh api …` → "unknown command \"gh\"
+    for \"gh\"" , denetim exit 2 ile düşüyordu. Savunmacı katman: başta "gh"
+    varsa düşürülür, böylece iki çağrı biçimi de aynı executable'a gider.
+    """
+    argv = [a for a in args]
+    if argv and argv[0] == "gh":
+        argv = argv[1:]
+    r = subprocess.run([resolve_gh()] + argv, capture_output=True,
                        text=True)
     if r.returncode != 0:
         raise RuntimeError((r.stderr or r.stdout).strip())
@@ -215,12 +226,12 @@ def run_gh(args):
 
 
 def get_repo():
-    return run_gh(["gh", "repo", "view", "--json", "nameWithOwner",
+    return run_gh(["repo", "view", "--json", "nameWithOwner",
                    "-q", ".nameWithOwner"])
 
 
 def get_latest_run(repo):
-    out = run_gh(["gh", "run", "list", "--repo", repo, "--branch", "main",
+    out = run_gh(["run", "list", "--repo", repo, "--branch", "main",
                   "--limit", "1", "--json", "databaseId,headSha",
                   "-q", ".[0]"])
     if not out or out == "null":
@@ -231,13 +242,13 @@ def get_latest_run(repo):
 def get_run_jobs(repo, run_id):
     """Run'daki TÜM job adları (skipped PR-only dahil — isim eşleşmesi için
     yeterli; sonuç değil ad denetlenir)."""
-    out = run_gh(["gh", "run", "view", str(run_id), "--repo", repo,
+    out = run_gh(["run", "view", str(run_id), "--repo", repo,
                   "--json", "jobs", "-q", ".jobs[].name"])
     return [n for n in (line.strip() for line in out.splitlines()) if n]
 
 
 def get_run_artifacts(repo, run_id):
-    out = run_gh(["gh", "api",
+    out = run_gh(["api",
                   f"repos/{repo}/actions/runs/{run_id}/artifacts",
                   "-q", ".artifacts[].name"])
     return [n for n in (line.strip() for line in out.splitlines()) if n]
@@ -251,7 +262,7 @@ def get_run_job_conclusions(repo, run_id):
     sınıflamak için gerekir — kırmızı verify → downstream skipped
     artifact'ları advisory audit'i double-punish etmemeli.
     """
-    out = run_gh(["gh", "run", "view", str(run_id), "--repo", repo,
+    out = run_gh(["run", "view", str(run_id), "--repo", repo,
                   "--json", "jobs", "-q", ".jobs"])
     try:
         jobs = json.loads(out or "[]")

@@ -437,6 +437,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-21 | fix | (ci) trend record via bot branch + PR (protection wall) | [`fa1809b`](https://github.com/ali-han-kaya/leibniz2/commit/fa1809b) |
 | 2026-09-21 | chore | record weekly determinism trend measurement | [`3f043bc`](https://github.com/ali-han-kaya/leibniz2/commit/3f043bc) |
 | 2026-09-21 | fix | (ci) trend PR step policy-aware (Actions PR-permission off) | [`c78dc67`](https://github.com/ali-han-kaya/leibniz2/commit/c78dc67) |
+| 2026-09-30 | fix | (ci) üç advisory adımın ortam sözleşmesi | [`a931853`](https://github.com/ali-han-kaya/leibniz2/commit/a931853) |
 
 ### Regresyon notları
 
