@@ -233,7 +233,11 @@ HOOK_COVERAGE = {
         "test_trend_record_pr_contract.py",
         "test_gen_changelog.py",
         "test_update_changelog_hook.py",
-        "test_sync_skills_index.py",],
+        "test_sync_skills_index.py",
+        "test_determinism_trend_badge.py",
+        "test_gated_schedules.py",
+        "test_sync_lifecycle.py",
+    ],
 }
 
 # verify.yml CI job'ları → kapsadığı test dosyaları

@@ -41,6 +41,26 @@ REAL_GEN = CIKTI / "gen_changelog.py"
 PRECOMMIT_CONFIG = REPO_ROOT / ".pre-commit-config.yaml"
 UNIT_TESTS_HOOK = CIKTI / "check_unit_tests_hook.sh"
 
+# Sandbox izolasyonu: `git commit` pre-commit hook'larına GIT_INDEX_FILE
+# (pre-commit bunu MUTLAK bir geçici dosyaya yönlendirir) verir. Bu değişken
+# temizlenmezse sandbox'taki `git add -A`, cwd=sandbox olmasına rağmen CANLI
+# repo'nun index'ini yazar: `git add -A` worktree kökünü index'e göre
+# farklılaştırıp tüm canlı girdileri düşürür ve sandbox'ın 4 dosyasını yazar
+# (ölçüldü: 613 → 4 girdi, merge commit'i çökertti). Aynı desen
+# check_review_freshness.py'de de kullanılıyor.
+_GIT_ENV_STRIP = frozenset(
+    {"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY",
+     "GIT_COMMON_DIR"}
+)
+
+
+def sandbox_env(extra=None):
+    """Git deposu işaretçilerini temizlenmiş ortam (sandbox için fail-closed)."""
+    env = {k: v for k, v in os.environ.items() if k not in _GIT_ENV_STRIP}
+    if extra:
+        env.update(extra)
+    return env
+
 
 def norm(text):
     """Karşılaştırma öncesi normalleştirme.
@@ -109,20 +129,18 @@ class UpdateChangelogHookTest(unittest.TestCase):
 
     def _git(self, *args):
         subprocess.run(["git", *args], cwd=str(self.tmp), check=True,
-                       capture_output=True, text=True)
+                       capture_output=True, text=True, env=sandbox_env())
 
     def _run_hook(self, env=None):
-        full_env = dict(os.environ)
-        if env:
-            full_env.update(env)
         return subprocess.run(
             ["bash", str(self.tmp / "_calisma" / "CIKTI" / "update_changelog_hook.sh")],
-            cwd=str(self.tmp), env=full_env, capture_output=True, text=True)
+            cwd=str(self.tmp), env=sandbox_env(env), capture_output=True, text=True)
 
     def _porcelain(self):
         return subprocess.run(
             ["git", "status", "--porcelain"], cwd=str(self.tmp),
-            capture_output=True, text=True, check=True).stdout
+            capture_output=True, text=True, check=True,
+            env=sandbox_env()).stdout
 
     def test_no_drift_exits_0_without_touching(self):
         # --check exit 0 → hook dokunmadan exit 0; ℹ️ mesajı yok, stage yok.
@@ -143,7 +161,8 @@ class UpdateChangelogHookTest(unittest.TestCase):
         self.assertIn("changelog tabloları git log'a göre güncellendi", r.stdout)
         staged = subprocess.run(
             ["git", "diff", "--cached", "--name-only"], cwd=str(self.tmp),
-            capture_output=True, text=True, check=True).stdout.splitlines()
+            capture_output=True, text=True, check=True,
+            env=sandbox_env()).stdout.splitlines()
         self.assertIn("README.md", staged)
         self.assertIn("docs/PUBLISH_SCENARIO.md", staged)
         # Mock güncellemesi gerçekten dosyalara işlendi.
@@ -241,7 +260,7 @@ class TestChangelogTwoWriterInvariant(unittest.TestCase):
 
     def _git(self, *args):
         r = subprocess.run(["git", *args], cwd=str(self.tmp), check=False,
-                           capture_output=True, text=True)
+                           capture_output=True, text=True, env=sandbox_env())
         self.assertEqual(r.returncode, 0,
                          "git %s: %s%s" % (" ".join(args), r.stderr, r.stdout))
         return r
@@ -253,7 +272,7 @@ class TestChangelogTwoWriterInvariant(unittest.TestCase):
     def _gen(self, *args):
         return subprocess.run(
             [sys.executable, str(REAL_GEN), *args], cwd=str(self.tmp),
-            capture_output=True, text=True)
+            capture_output=True, text=True, env=sandbox_env())
 
     # ── davranış kanıtı ────────────────────────────────────────────────
     def _run_real_hook(self):
@@ -268,7 +287,8 @@ class TestChangelogTwoWriterInvariant(unittest.TestCase):
         shutil.copy(REAL_GEN, cikti / "gen_changelog.py")
         return subprocess.run(
             ["bash", str(cikti / "update_changelog_hook.sh")],
-            cwd=str(self.tmp), capture_output=True, text=True)
+            cwd=str(self.tmp), capture_output=True, text=True,
+            env=sandbox_env())
 
     def _head_full(self):
         return self._git("rev-parse", "HEAD").stdout.strip()

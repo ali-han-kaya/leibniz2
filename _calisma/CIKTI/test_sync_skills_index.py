@@ -38,6 +38,26 @@ import sync_skills_index as sync  # noqa: E402
 
 REAL_REPO_ROOT = CIKTI.parents[1]
 
+# Sandbox izolasyonu: `git commit` pre-commit hook'larına GIT_INDEX_FILE verir
+# (pre-commit onu MUTLAK geçici bir dosyaya yönlendirir). Temizlenmezse
+# sandbox'taki `git add`, cwd=sandbox olmasına rağmen canlı repo'nun index'ini
+# yazar: `git add -A` worktree kökünü index'e göre farklılaştırdığı için tüm
+# canlı girdiler düşer, sandbox'ın fixture'ı yazılır (ölçüldü: 613 → 1 girdi,
+# README '# Repo/Prose.' fixture'ı ile değişti; merge commit'i çöktü).
+# Aynı desen: test_update_changelog_hook.py, check_review_freshness.py.
+_GIT_ENV_STRIP = frozenset(
+    {"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY",
+     "GIT_COMMON_DIR"}
+)
+
+
+def sandbox_env(extra=None):
+    """Git deposu işaretçileri temizlenmiş ortam (sandbox için fail-closed)."""
+    env = {k: v for k, v in os.environ.items() if k not in _GIT_ENV_STRIP}
+    if extra:
+        env.update(extra)
+    return env
+
 
 def fm(name, description, extra=""):
     return ("---\n"
@@ -266,13 +286,14 @@ class TestCliAndStaging(SandboxCase):
         for args in (("init", "-q"), ("config", "user.email", "t@example.com"),
                      ("config", "user.name", "t")):
             subprocess.run(["git", *args], cwd=str(self.tmp), check=True,
-                           capture_output=True)
+                           capture_output=True, env=sandbox_env())
 
     def _run(self, *args):
         return subprocess.run(
             [sys.executable, str(CIKTI / "sync_skills_index.py"),
              "--skills", str(self.skills), "--readme", str(self.readme), *args],
-            cwd=str(self.tmp), capture_output=True, text=True)
+            cwd=str(self.tmp), capture_output=True, text=True,
+            env=sandbox_env())
 
     def test_cli_check_then_update_then_staged(self):
         self.add_skill("alpha", "Alpha.")
@@ -289,7 +310,8 @@ class TestCliAndStaging(SandboxCase):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         staged = subprocess.run(["git", "diff", "--cached", "--name-only"],
                                 cwd=str(self.tmp), capture_output=True,
-                                text=True, check=True).stdout.split()
+                                text=True, check=True,
+                                env=sandbox_env()).stdout.split()
         self.assertIn("README.md", staged, "--update README'i stage etmeli")
 
         self.assertEqual(self._run("--check").returncode, 0)

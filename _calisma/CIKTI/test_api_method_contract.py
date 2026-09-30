@@ -46,6 +46,7 @@ API_CONTRACT = {
     "/api/refs-trend": {"GET"},
     "/api/trend": {"GET"},         # merged history + refs-trend (one fetch)
     "/api/override-trend": {"GET"},
+    "/api/determinism-trend": {"GET"},
     "/api/run-history": {"GET"},
     "/api/run-stdout": {"GET"},    # prefix — ?ts= ile
     "/api/health": {"GET"},
@@ -65,6 +66,7 @@ LIVE_URLS = {
     "/api/refs-trend": "/api/refs-trend",
     "/api/trend": "/api/trend",
     "/api/override-trend": "/api/override-trend",
+    "/api/determinism-trend": "/api/determinism-trend",
     "/api/run-history": "/api/run-history",
     "/api/run-stdout": "/api/run-stdout?ts=2024-01-01T00:00:00Z",
     "/api/health": "/api/health",
@@ -120,6 +122,7 @@ class TestApiMethodContractSource(unittest.TestCase):
                 "/api/refs-trend": '"refs_trend"',
                 "/api/trend": '"trend"',
                 "/api/override-trend": '"override_trend"',
+    "/api/determinism-trend": '"det_trend"',
                 "/api/run-history": '"run_history"',
                 "/api/run-stdout": '"run_stdout"',
                 "/api/health": '"health"',
