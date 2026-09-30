@@ -872,7 +872,15 @@ repos:
           eşleşmeyen çağrıları yakalar (fail-closed). pre-commit + CI'da
           çalışır. Yeni Octokit metodu eklerken ALLOWED_METHODS listesini
           güncellemeyi unutmayın.
-        entry: _calisma/.venv_z3/bin/python _calisma/CIKTI/audit_octokit_names.py
+        # venv-guard (status_checks / doc_job_sync ile aynı desen): entry'de
+        # DÜZ venv yolu vardı ve pre-commit bunu "Executable not found" ile
+        # ÇALIŞTIRMADAN reddediyordu — temiz klon ve CI'da `.venv_z3` yoktur,
+        # yani denetim hiç tarama yapmadan her koşuda kırmızıydı (CI kanıtı:
+        # "Executable `_calisma/.venv_z3/bin/python` not found", 0 s).
+        # Bu betik saf stdlib (argparse/json/os/re/sys) — sistem python3'ü
+        # yeterli; venv yalnız varsa tercih edilir.
+        entry: bash -c 'PY=python3; [ -x _calisma/.venv_z3/bin/python ] &&
+          PY=_calisma/.venv_z3/bin/python; exec "$PY" _calisma/CIKTI/audit_octokit_names.py'
         language: system
         pass_filenames: false
         always_run: true

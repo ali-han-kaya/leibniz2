@@ -208,8 +208,20 @@ jobs:
         continue-on-error: true
         shell: bash
         run: |
+          # `set +e` şart: GitHub'ın varsayılan `shell: bash` komutu
+          # `bash -eo pipefail` ile çalıştırır. Test DÜŞTÜĞÜNDE `errexit`
+          # bir sonraki satırı hiç çalıştırmaz — yani eski hâlde
+          # `echo "... $?"` bir hata HALİNDE ÇALIŞMIYORDU ve advisory
+          # karar (fail/pass) loga hiç düşmüyordu; `continue-on-error` de
+          # job'u yeşil bırakıyordu. Yani kontrol tam olarak işe yaramadığı
+          # anda sessizdi. Aynı dosyadaki `gen_config.py --dry-run` ve
+          # `gen_changelog --check` adımları doğru kalıbı zaten kullanıyor
+          # (set +e → çalıştır → $? → set -e); burada da o kalıp.
+          set +e
           python3 -m unittest _calisma.CIKTI.test_label_gate_contracts -v 2>&1
-          echo "label gate contract check: $?"
+          rc=$?
+          set -e
+          echo "label gate contract check: $rc"
 
       # ─── Label senkronizasyonu (advisory) ──────────────────────────────
       # label_definitions.json'daki tanımlara göre precommit-p0/p1
@@ -363,11 +375,30 @@ jobs:
         if: always()
         continue-on-error: true
         shell: bash
+        # GH_TOKEN ZORUNLU: bu zincirdeki `check-status-check-names` hook'u
+        # `gh api repos/…/branches/main/protection` çağırıyor. GitHub
+        # Actions `GH_TOKEN`'ı OTOMATİK dışa aktarmaz; `gh` de Actions
+        # içinde kimliksizken açıkça bu hatayı veriyor:
+        #   "To use GitHub CLI in a GitHub Actions workflow, set the GH_TOKEN
+        #    environment variable"  (hook exit 2, verdict ERROR)
+        # Yani denetim her CI koşusunda "hiçbir şey ölçemedi" diye kırmızıydı.
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p logs
+          # `set +e` şart: `shell: bash` → `bash -eo pipefail`. pre-commit
+          # DÜŞTÜĞÜNDE errexit bir sonraki satırı çalıştırmaz; yani `status=$?`
+          # hiç çalışmıyor, `logs/precommit.exit` YAZILMIYOR ve
+          # `verify_report.txt`'ye düşen "exit code: N" bloğu hiç oluşmuyordu.
+          # Kanıt: aynı artifact içinde `if/then/else` kullanan
+          # k12/k13_repro_manifest.exit VAR, bu adımın precommit.exit'i
+          # YOK. `continue-on-error` zaten job'u yeşil bıraktığı için
+          # eksik karar sessizce kayboluyordu.
+          set +e
           pre-commit run --all-files --show-diff-on-failure --color=never \
             > logs/precommit.log 2>&1
           status=$?
+          set -e
           echo "$status" > logs/precommit.exit
           {
             echo ""
@@ -534,9 +565,15 @@ jobs:
         shell: bash
         run: |
           mkdir -p logs
+          # Aynı errexit tuzağı: `bash -eo pipefail` altında test DÜŞTÜĞÜNDE
+          # `status=$?` hiç çalışmıyor → `logs/check_unit_tests.exit`
+          # yazılmıyor ve rapor bloğu oluşmuyor. K12/K13'ün kullandığı
+          # `if/then/else` (veya `set +e`) kalıbı.
+          set +e
           pre-commit run check-unit-tests --all-files --show-diff-on-failure \
             --color=never > logs/check_unit_tests.log 2>&1
           status=$?
+          set -e
           echo "$status" > logs/check_unit_tests.exit
           {
             echo ""
@@ -2075,6 +2112,20 @@ jobs:
             config-drift, repack-verify, refs-trend, audit-refs-trend,
             precheck, plist-check, daemon-http, mirror-check, label-gate,
             label-gate-p1, commit-msg-gate, manifest-comment]
+    # `actions: read` ZORUNLU: bu job canlı run'ın job + ARTIFAKT listesini
+    # okuyor (`gh api repos/…/actions/runs/<id>/artifacts`), yani tam olarak
+    # `actions` kapsamını kullanıyor. Üst düzey izinler yalnız
+    # contents/pull-requests idi → bu çağrı 403 alıyor ve denetim
+    # "eksik/fazla yok" yerine "hiçbir şey okunamadı" yoluna düşüyordu.
+    # Aynı uçları kullanan refs-trend / audit-refs-trend / override-trend
+    # job'ları `actions: read` bildiriyor — bu iş eksik kalmıştı.
+    # pull-requests: write korunuyor (PR yorumu yazan manifest/budget
+    # işleri bu izne dayanıyor; job kendisi yorum yazmasa da daraltma
+    # kapsamı değiştirirsek bu işleri kırarız).
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: write
     if: always()
     steps:
       - name: Checkout

@@ -39,6 +39,7 @@ Kullanım:
 """
 import argparse
 import json
+import os
 import pathlib
 
 import ci_failure_pattern
@@ -48,6 +49,37 @@ import sys
 
 HERE = pathlib.Path(__file__).resolve().parent
 REPO_ROOT = HERE.parents[1]
+
+# `gh` çözümlemesi PATH'e BAĞLI olmaz. Ölçülen boşluk: run_gh() çıplak
+# "gh" çağırıyordu; GitHub runner'ında çalışır ama launchd/TCC ve minimal
+# PATH'li herhangi bir ortamda `gh` PATH'te değilse denetim TÜMÜYLE
+# düşüyor (exit 2 = "çalışma hatası") — oysa bu denetimin işi tam olarak
+# canlı run'ın job/artifact listesini okumak. K16'nın `find_launchd_tool`
+# yardımcısı bu repo'nun TEK kaynaklı çözümleme sözleşmesi (PATH önce,
+# bilinen konumlar ikincil, hiçbiri yoksa None = fail-closed) — node için
+# yazıldı, `gh` için aynı sözleşme.
+sys.path.insert(0, str(HERE))
+from github_scripts_battery import find_launchd_tool  # noqa: E402
+
+GH_KNOWN_PATHS = ("/opt/homebrew/bin/gh", "/usr/local/bin/gh",
+                  "/home/linuxbrew/.linuxbrew/bin/gh")
+
+
+def resolve_gh():
+    """Çalıştırılabilir `gh` yolunu döndürür; yoksa fail-closed hata verir.
+
+    Fail-closed SEÇİM: `gh` yoksa sessizce boş liste döndürmek, denetimi
+    "hiçbir eksik yok" diye yeşile çevirirdi — en kötü çıktı. Bunun yerine
+    RuntimeError → exit 2 (çalışma hatası), yani "ölçemedim" açıkça görünür.
+    """
+    path = find_launchd_tool("gh", GH_KNOWN_PATHS)
+    if path is None:
+        raise RuntimeError(
+            "gh bulunamadı (PATH: %s; bilinen konumlar: %s) — denetim "
+            "çalıştırılamaz, ölçüm YAPILMADI"
+            % (os.environ.get("PATH", ""), ", ".join(GH_KNOWN_PATHS)))
+    return path
+
 DEFAULT_DOC = REPO_ROOT / "docs" / "PUBLISH_SCENARIO.md"
 
 # Bu job'ın KENDİ adı/artifact'ı karşıdırmadan hariç tutulur — meta-denetçi
@@ -175,19 +207,31 @@ def parse_doc_artifacts(doc_text):
 
 # ── Canlı GitHub ─────────────────────────────────────────────────────────
 def run_gh(args):
-    r = subprocess.run(args, capture_output=True, text=True)
+    """`gh` çözümlemesiyle argv kurar ve çalıştırır.
+
+    SÖZLEŞME: `args` PROGRAM ADI İÇERMEZ — executable'ı `resolve_gh()` verir.
+    Ölçülen hata: çağıranlar `run_gh(["gh", "api", …])` diyordu ve çözümleyici
+    de program adını öne ekledi → CI'da `gh gh api …` → "unknown command \"gh\"
+    for \"gh\"" , denetim exit 2 ile düşüyordu. Savunmacı katman: başta "gh"
+    varsa düşürülür, böylece iki çağrı biçimi de aynı executable'a gider.
+    """
+    argv = [a for a in args]
+    if argv and argv[0] == "gh":
+        argv = argv[1:]
+    r = subprocess.run([resolve_gh()] + argv, capture_output=True,
+                       text=True)
     if r.returncode != 0:
         raise RuntimeError((r.stderr or r.stdout).strip())
     return r.stdout.strip()
 
 
 def get_repo():
-    return run_gh(["gh", "repo", "view", "--json", "nameWithOwner",
+    return run_gh(["repo", "view", "--json", "nameWithOwner",
                    "-q", ".nameWithOwner"])
 
 
 def get_latest_run(repo):
-    out = run_gh(["gh", "run", "list", "--repo", repo, "--branch", "main",
+    out = run_gh(["run", "list", "--repo", repo, "--branch", "main",
                   "--limit", "1", "--json", "databaseId,headSha",
                   "-q", ".[0]"])
     if not out or out == "null":
@@ -198,13 +242,13 @@ def get_latest_run(repo):
 def get_run_jobs(repo, run_id):
     """Run'daki TÜM job adları (skipped PR-only dahil — isim eşleşmesi için
     yeterli; sonuç değil ad denetlenir)."""
-    out = run_gh(["gh", "run", "view", str(run_id), "--repo", repo,
+    out = run_gh(["run", "view", str(run_id), "--repo", repo,
                   "--json", "jobs", "-q", ".jobs[].name"])
     return [n for n in (line.strip() for line in out.splitlines()) if n]
 
 
 def get_run_artifacts(repo, run_id):
-    out = run_gh(["gh", "api",
+    out = run_gh(["api",
                   f"repos/{repo}/actions/runs/{run_id}/artifacts",
                   "-q", ".artifacts[].name"])
     return [n for n in (line.strip() for line in out.splitlines()) if n]
@@ -218,7 +262,7 @@ def get_run_job_conclusions(repo, run_id):
     sınıflamak için gerekir — kırmızı verify → downstream skipped
     artifact'ları advisory audit'i double-punish etmemeli.
     """
-    out = run_gh(["gh", "run", "view", str(run_id), "--repo", repo,
+    out = run_gh(["run", "view", str(run_id), "--repo", repo,
                   "--json", "jobs", "-q", ".jobs"])
     try:
         jobs = json.loads(out or "[]")
