@@ -130,12 +130,19 @@ class TestRealTreeInvarianceIsSnapshotBased(unittest.TestCase):
 
         Aksi halde yukarıdaki test hiçbir şey ölçmeden yeşil kalırdı —
         fail-closed'un kendisi gibi: ölçülemeyen yeşil sayılmaz.
+
+        ÖNEMLİ: bu kontrol KURULU ORTAMI da varsayıyor. CI'da hiçbir unit
+        kurulu olmadığı için "ölçülemez" durum SKIP'tir — FAIL değil. Aksi
+        halde bu dosya, düzeltmeye çalıştığı hatanın ta kendisini (ortamı
+        ölçmek) üretirdi: ilk CI koşusunda tam olarak bu yüzden 2 test
+        düştü. Kural aynı: eksik ön koşul SKIP.
         """
         provisioned = [rel for _l, rel in tdb.SENTINELS
                        if os.path.exists(os.path.join(ROOT, rel))]
-        self.assertTrue(
-            provisioned,
-            "bu testin geçerliliği için en az bir unit kurulu olmalı")
+        if not provisioned:
+            self.skipTest("hiçbir bootstrap unit'i kurulu değil — bu "
+                          "ortamda guard'ın geçerliliği ölçülemiyor "
+                          "(temiz klon / CI runner)")
         self.assertTrue(self._run_invariant().wasSuccessful())
 
     def test_snapshot_is_captured_in_setup(self):
@@ -206,15 +213,20 @@ class TestStagingSkipsWithoutLiveHistory(unittest.TestCase):
                 method.test_staging_produces_preview_server_layout()
 
     def test_staging_test_is_not_vacuous_when_history_present(self):
-        """Skip'in kendisi ölçülebilir olmalı: bu makinede history VAR.
+        """Skip'in kendisi ölçülebilir olmalı: kurulu ortamda history VAR.
 
         `test_video_data_contract.py` ile aynı gerekçe — skip koşulu her
-        koşuda tutulursa test hiç ölçmez ve sessizce ölür.
+        koşuda tutulursa test hiç ölçmez ve sessizce ölür. `history.jsonl`
+        gitignored olduğu için temiz klonda (ve CI'da) ölçülemez: SKIP.
         """
         scwv = self._scwv()
-        self.assertTrue(os.path.isfile(scwv.HISTORY_JSONL),
-                        "canlı history.jsonl yok — staging guard'ının "
-                        "geçerliliği ölçülemiyor")
+        if not os.path.isfile(scwv.HISTORY_JSONL):
+            self.skipTest("canlı history.jsonl yok — staging guard'ının "
+                          "geçerliliği bu ortamda ölçülemiyor "
+                          "(temiz klon / CI runner)")
+        method = scwv.SurfaceCwvReportContractTest(
+            "test_staging_produces_preview_server_layout")
+        method.test_staging_produces_preview_server_layout()
 
 
 if __name__ == "__main__":
