@@ -3,8 +3,10 @@
 # update_changelog_hook.sh — pre-commit hook: changelog tablolarını git log ile
 # senkron eder (gen_changelog.py --update) ve değiştiyse stage eder.
 #
-# Rol: repo'nun İKİ YAZAN hook'undan biri (diğeri update-config, config'i
-# yazar). Gecikmeli (lag-one) yazma zorunludur:
+# Rol: changelog TABLOSUNUN yazarı. Repo'da üç yazan hook vardır
+# (update-config, check-changelog-sync, check-skills-index); bu hook
+# tabloların yazarıdır, config/README yazmaz. Gecikmeli (lag-one) yazma
+# zorunludur:
 #
 #   ÖLÇÜM (test_update_changelog_hook.py, gerçek gen_changelog + gerçek hook):
 #   tablo commit hash'iyle anahtarlanır; hash ancak commit OLUŞTUKTAN SONRA
@@ -15,7 +17,7 @@
 #   satırın hash'i henüz var olmaz (remedy, aynı commit'te uygulanamaz).
 #   Ölçüm: /tmp kanıtı yok; test her koşumda yeniden ölçer (tam-1-commit).
 #
-#   Model iki yazandır:
+#   Changelog tablosunun modeli iki yazandır:
 #     (1) BU hook: commit içinde eksik satırı onarır ve stage eder (yazar-1),
 #     (2) `chore(changelog): <hash> satırını tabloya ekle` commit'i: kaydı
 #         ayrı bir yazı olarak kapatır (yazar-2).

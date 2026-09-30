@@ -434,7 +434,8 @@ def run_check_exclude_binding(exclude=None, ci_jobs=None, hooks=None,
       4) SÖZLEŞME   — full-discover sentinel satırı workflow'larda durmalı.
 
     Yazmaz: bildirim gerekçesiyle elle verilir (bu kapının yazma yetkisi
-    yok — repo'da iki yazan hook var: update-config, check-changelog-sync).
+    yok — repo'da üç yazan hook var: update-config, check-changelog-sync,
+    check-skills-index).
     """
     ex = set(EXCLUDE if exclude is None else exclude)
     cij = dict(EXCLUDE_CI_JOBS if ci_jobs is None else ci_jobs)
