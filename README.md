@@ -435,6 +435,8 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-20 | fix | (server) close history/sidecar write race on shutdown | [`3cabbff`](https://github.com/ali-han-kaya/leibniz2/commit/3cabbff) |
 | 2026-09-20 | feat | (texlive) 3-pass determinism + /ID acceptance report (Faz 1-3) | [`24a9b25`](https://github.com/ali-han-kaya/leibniz2/commit/24a9b25) |
 | 2026-09-21 | fix | (ci) trend record via bot branch + PR (protection wall) | [`fa1809b`](https://github.com/ali-han-kaya/leibniz2/commit/fa1809b) |
+| 2026-09-21 | chore | record weekly determinism trend measurement | [`3f043bc`](https://github.com/ali-han-kaya/leibniz2/commit/3f043bc) |
+| 2026-09-21 | fix | (ci) trend PR step policy-aware (Actions PR-permission off) | [`c78dc67`](https://github.com/ali-han-kaya/leibniz2/commit/c78dc67) |
 
 ### Regresyon notları
 

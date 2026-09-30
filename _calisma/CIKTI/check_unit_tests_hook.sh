@@ -2,16 +2,15 @@
 # =============================================================================
 # check_unit_tests_hook.sh — pre-commit check-unit-tests kapısının dış sarmalayıcısı.
 #
-# 1) sync_check_unit_tests.py --update ile test listesini _calisma/CIKTI
-#    içindeki gerçek test_*.py dosyalarıyla senkron eder (yeni test dosyası
-#    otomatik eklenir — elle liste bakımı yok) ve manifest'i stage eder.
+# 1) sync_check_unit_tests.py --check (fail-closed): manifest + HOOK_COVERAGE
+#    drift'ini BLOKLAR — sessiz auto-fix YOK. Repo invariant'ı: yalnız
+#    update-config tek yazan hook'tur; bu kapı okuma-hook'tur. Drift varsa
+#    remedy gösterilir (sync --update) ve commit engellenir.
 # 2) Manifest listesindeki her test dosyasını venv python'la koşar; herhangi
 #    bir başarısızlık commit'i BLOKE EDER (fail-closed).
 #
 # Neden ayrı script? Eski yapıda `for t in <17 isim>` hardcoded listesi
-# .pre-commit-config.yaml entry'sine gömülüydü ve her yeni test dosyası elle
-# eklenmek zorundaydı. Artık manifest tek kaynak: ~3s hedefi korunur, ortam-
-# bağımlı testler EXCLUDE'da, yeni testler otomatik kapsanır.
+# .pre-commit-config.yaml entry'sine gömülüydü; artık manifest tek kaynak.
 # =============================================================================
 set -euo pipefail
 
@@ -24,8 +23,12 @@ if [ -x "$ROOT/_calisma/.venv_z3/bin/python" ]; then
   PY="$ROOT/_calisma/.venv_z3/bin/python"
 fi
 
-# 1) Senkron (auto-add yeni testler) — manifest değişirse stage edilir.
-"$PY" "$SCRIPT_DIR/sync_check_unit_tests.py" --update >/dev/null 2>&1 || true
+# 1) Senkron kapısı — fail-closed: drift commit'i bloklar (sessiz düzeltme yok).
+if ! "$PY" "$SCRIPT_DIR/sync_check_unit_tests.py" --check >/dev/null; then
+  echo "check-unit-tests: manifest/HOOK_COVERAGE drift — commit bloke." >&2
+  echo "  remedy: python3 _calisma/CIKTI/sync_check_unit_tests.py --update" >&2
+  exit 1
+fi
 
 # 2) Manifestten her test dosyasını koş.
 if [ ! -f "$MANIFEST" ]; then

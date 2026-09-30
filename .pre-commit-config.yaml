@@ -847,16 +847,17 @@ repos:
         verbose: true
 
       - id: check-unit-tests
-        name: "Unit tests for new gates (auto-synced list)"
+        name: "Unit tests for new gates (fail-closed manifest)"
         description: >-
-          _calisma/CIKTI/test_*.py kümesini tarar (sync_check_unit_tests.py),
-          manifest'i (check_unit_tests.list) senkron eder, ardından listedeki
-          HER test dosyasını koşar (fail-closed — herhangi bir başarısızlık
-          commit'i bloke eder). Yeni test dosyası eklediğinizde listeye
-          OTOMATİK eklenir; ortam-bağımlı testler (launchctl/daemon/canlı
-          sunucu/ağ EXCLUDE setiyle çıkarılır ve CI job'larında ayrı koşulur).
-          Liste bakımı elle yok — tek kaynak disk'teki test dosyaları.
-          PyYAML/jsonschema bağımlılığı yok; ~2-3s (48 dosya, 2s ölçüldü).
+          check_unit_tests_hook.sh: önce sync_check_unit_tests.py --check ile
+          manifest↔disk + HOOK_COVERAGE tutarlılığını DOĞRULAR — drift varsa
+          commit BLOKE (remedy: sync --update; hook YAZMAZ — tek yazan hook
+          update-config kalır). Ardından manifest listesindeki HER test
+          dosyasını koşar (fail-closed — herhangi bir başarısızlık commit'i
+          bloke eder). Ortam-bağımlı testler (launchctl/daemon/canlı
+          sunucu/ağ) EXCLUDE setiyle çıkarılır ve CI job'larında ayrı
+          koşulur. Liste tek kaynak: diskteki test_*.py dosyaları;
+          PyYAML/jsonschema bağımlılığı yok.
         entry: bash _calisma/CIKTI/check_unit_tests_hook.sh
         language: system
         pass_filenames: false
