@@ -451,6 +451,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-30 | chore | (changelog) 3385697 satirini tabloya ekle | [`bf91c8f`](https://github.com/ali-han-kaya/leibniz2/commit/bf91c8f) |
 | 2026-09-30 | fix | (changelog) iki-yazan değişmezi beyanı + kontrat testi | [`29761ad`](https://github.com/ali-han-kaya/leibniz2/commit/29761ad) |
 | 2026-09-30 | chore | (changelog) 29761ad satirini tabloya ekle | [`b09cb0d`](https://github.com/ali-han-kaya/leibniz2/commit/b09cb0d) |
+| 2026-09-30 | feat | (skills) README index'i frontmatter'dan üreten yazar + --check | [`bf25095`](https://github.com/ali-han-kaya/leibniz2/commit/bf25095) |
 
 ### Regresyon notları
 
