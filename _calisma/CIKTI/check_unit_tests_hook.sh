@@ -4,8 +4,8 @@
 #
 # 1) sync_check_unit_tests.py --check (fail-closed): manifest + HOOK_COVERAGE
 #    drift'ini BLOKLAR — sessiz auto-fix YOK. Repo invariant'ı:
-#    repo'da iki yazan hook vardır (update-config, check-changelog-sync);
-#    bu kapı okuma-hook'tur. Gecikmeli (lag-one) changelog yazımı bu kapıya değil,
+#    repo'da üç yazan hook vardır (update-config, check-changelog-sync,
+#    check-skills-index); bu kapı okuma-hook'tur. Gecikmeli (lag-one) changelog yazımı bu kapıya değil,
 #    check-changelog-sync'a aittir — tablo hash'le anahtarlıdır ve hash ancak
 #    commit sonrası bilinir (bkz. update_changelog_hook.sh başlığı). Drift
 #    varsa remedy gösterilir (sync --update) ve commit engellenir.

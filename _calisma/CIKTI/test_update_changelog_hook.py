@@ -43,15 +43,19 @@ UNIT_TESTS_HOOK = CIKTI / "check_unit_tests_hook.sh"
 
 
 def norm(text):
-    """Karşılaştırma için ASCII indirgeme: Türkçe İ/ı/ş vb. 'i̇'ye
-    düşmesin (assertIn'da görünmez kıyas hatası üretmesin)."""
-    table = {"İ": "i", "I": "i", "ı": "i", "Ş": "s", "ş": "s",
-             "Ğ": "g", "ğ": "g", "Ü": "u", "ü": "u", "Ö": "o", "ö": "o",
-             "Ç": "c", "ç": "c", "’": "'"}
-    return "".join(table.get(ch, ch) for ch in text).lower()
+    """Karşılaştırma öncesi normalleştirme.
 
-# Ölçüldü (origin/main): stage eden hook betiği olan YALNIZCA bu ikisi.
-DECLARED_WRITERS = ("update-config", "check-changelog-sync")
+    Yalnız Türkçe büyük "İ" tuzağı giderilir: Unicode'da `\u0130.lower()`
+    "i" + U+0307 (birleşen nokta) üretir ve assertIn sessizce tutmaz. Diğer
+    diyakritikler KORUNUR — "üç yazan" gibi ifadeler ASCII'ye indirgenirse
+    kıyas anlamsızlaşır.
+    """
+    return text.replace("\u0130", "i").replace("\u0307", "").lower()
+
+# Ölçülen yazar kümesi (origin/main): stage eden (yazan) hook betiği olanlar
+# tam olarak BU ÜÇÜ. check-skills-index 2026-09-30'da yazara dönüştü
+# (README skills tablosu auto-sync) — küme genişledi, beyan da genişledi.
+DECLARED_WRITERS = ("update-config", "check-changelog-sync", "check-skills-index")
 
 MOCK_GEN_CHANGELOG = """#!/usr/bin/env python3
 # Mock gen_changelog.py — gerçek git log/table mantığı yerine env ile yönlendirilir.
@@ -324,13 +328,16 @@ class TestChangelogTwoWriterInvariant(unittest.TestCase):
             out[hook_id] = m.group(1).strip() if m else ""
         return out
 
-    def test_writers_are_exactly_the_two_declared_hooks(self):
-        """Stage eden hook betikleri tam olarak beyan edilen iki yazardır.
+    def test_declared_writers_match_scripts_that_stage(self):
+        """Stage eden hook betikleri tam olarak beyan edilen yazarlardır.
 
-        KAPSAM NOTU: yazarlık `git add` ile ölçülür — `git update-index`
-        gibi başka bir komutla stage eden ya da entry'si shell betiği olmayan
-        (python inline) bir yazar bu denetimi görmez. Ölçüm bilinçli olarak
-        dar: config'in kendi `entry` betiklerini tarar, hook listesini değil.
+        KAPSAM NOTU: yazarlık stage komutuyla ölçülür (`git add`, kabuk
+        biçimi ya da python listesi). `git update-index` gibi başka komut ya
+        da entry'si betik olmayan (python inline) bir yazar bu denetimi
+        görmez. Ölçüm bilinçli olarak dar: config'in kendi `entry`
+        betiklerini tarar, hook listesini değil.
+        Yeni bir yazar eklendiğinde (check-skills-index böyle oldu) hem
+        DECLARED_WRITERS hem config başlığındaki beyan güncellenmelidir.
         """
         blocks = self._hook_blocks()
         writers = set()
@@ -340,7 +347,11 @@ class TestChangelogTwoWriterInvariant(unittest.TestCase):
                 if not path.exists():
                     continue
                 body = path.read_text(encoding="utf-8", errors="replace")
-                if re.search(r"\bgit add\b", body):
+                # Hem kabuk `git add ...` hem python listesi ["git", "add"]
+                # biçimini yakalar (ölçüldü: sync_skills_index.py ikisini de
+                # kullanabiliyor; yalnız ilkini aramak sessizce kaçırırdı).
+                if re.search(r"\bgit\s+add\b|\[\s*[\"\']git[\"\']\s*,\s*[\"\']add[\"\']",
+                             body):
                     writers.add(hook_id)
         self.assertEqual(
             writers, set(DECLARED_WRITERS),
@@ -365,13 +376,13 @@ class TestChangelogTwoWriterInvariant(unittest.TestCase):
             blocks.append("\n".join(current))
         return blocks
 
-    def test_config_header_declares_both_writers(self):
+    def test_config_header_declares_every_writer(self):
         """Config başlığındaki yazar beyanı 'tek yazan' YANLIŞINI taşımaz.
 
-        Ölçüm: stage eden hook betiği olanlar tam olarak
-        (update-config, check-changelog-sync) → beyan paragrafının İKİSİNİ
-        de sayması gerekir; satır kaydırması denetimi bozmaz (paragraf
-        bazlı). Ayrıca hiçbir yerde "tek yazan" iddiası kalmamalı.
+        Ölçüm: stage eden hook betiği olanlar tam olarak DECLARED_WRITERS
+        → beyan paragrafının HEPSİNİ sayması gerekir; satır kaydırması
+        denetimi bozmaz (paragraf bazlı). Ayrıca hiçbir yerde "tek yazan"
+        iddiası kalmamalı.
         """
         header = PRECOMMIT_CONFIG.read_text(encoding="utf-8").split("repos:", 1)[0]
         self.assertNotIn("tek yazan", header.lower())
@@ -396,10 +407,15 @@ class TestChangelogTwoWriterInvariant(unittest.TestCase):
         ):
             self.assertIn("gecikmeli", norm(text),
                           "%s: 'gecikmeli' (lag-one) değişmezi yazılı değil" % label)
-        # Yazar kimliği iki yazılı olmalı (config + kapı sarmalayıcısı).
-        self.assertIn("iki yazan", norm(config_text))
-        self.assertIn("iki yazan",
-                      norm(UNIT_TESTS_HOOK.read_text(encoding="utf-8")))
+        # Yazar kimliği config + kapı sarmalayıcısında yazılı olmalı ve
+        # "İKİ yazan" gibi bayat bir sayı taşımamalı.
+        for label, text in ((".pre-commit-config.yaml", config_text),
+                            ("check_unit_tests_hook.sh",
+                             UNIT_TESTS_HOOK.read_text(encoding="utf-8"))):
+            self.assertIn("üç yazan", norm(text),
+                          "%s: yazar kümesi beyanı yok" % label)
+            self.assertNotIn("iki yazan", norm(text),
+                             "%s: bayat iki-yazan sayısı kalmamalı" % label)
 
     def test_writer_hook_ids_still_point_at_writer_scripts(self):
         """Yazar hook id'leri yeniden adlandırılırsa yazarlık sessizce kaybolmaz."""

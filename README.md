@@ -24,9 +24,13 @@ teslimini ve onu doğrulayan fail-closed araç zincirini içerir.
 ## Skills
 
 Kurulabilir Agent Skill'leri `skills/` altında tutulur. Bu tablo, her skill'in
-kanonik yönergesini gösterir; `check-skills-index` kapısı dizin ile tabloyu
-çift yönlü senkron tutar.
+kanonik yönergesini gösterir. `check-skills-index` kapısı tabloyu
+`skills/*/SKILL.md` frontmatter'ından **üretir** (auto-sync): yeni skill
+eklendiğinde satır kendiliğinden girer, silinen skill satırı düşer; elle
+yazılmış özetler ve satır sırası korunur. Elle denetim:
+`python3 _calisma/CIKTI/sync_skills_index.py --check` (drift → exit 1).
 
+<!-- skills-index:start -->
 | Skill | Açıklama |
 |---|---|
 | `skills/birincil-kayit-dogrulama/SKILL.md` | İddiaları birincil kayıtlardan doğrulama ve OLÇULMEDI/BEYAN ayrımı |
@@ -37,6 +41,7 @@ kanonik yönergesini gösterir; `check-skills-index` kapısı dizin ile tabloyu
 | `skills/verify-chain/SKILL.md` | K0–K21 fail-closed teslim doğrulama zinciri |
 | `skills/reproducible-pdf-build/SKILL.md` | PDF determinism, SHA-256 sidecar ve SDE akışı |
 | `skills/release-candidate-check/SKILL.md` | verify_mcp MCP sunucusu için release-candidate doğrulaması |
+<!-- skills-index:end -->
 
 
 ## Doğrulama (tek komut)
@@ -445,6 +450,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-30 | feat | (sync-tests) EXCLUDE↔CI-job/hook bağlama kapısı (üçüncü hedef) | [`3385697`](https://github.com/ali-han-kaya/leibniz2/commit/3385697) |
 | 2026-09-30 | chore | (changelog) 3385697 satirini tabloya ekle | [`bf91c8f`](https://github.com/ali-han-kaya/leibniz2/commit/bf91c8f) |
 | 2026-09-30 | fix | (changelog) iki-yazan değişmezi beyanı + kontrat testi | [`29761ad`](https://github.com/ali-han-kaya/leibniz2/commit/29761ad) |
+| 2026-09-30 | chore | (changelog) 29761ad satirini tabloya ekle | [`b09cb0d`](https://github.com/ali-han-kaya/leibniz2/commit/b09cb0d) |
 
 ### Regresyon notları
 

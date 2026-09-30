@@ -232,7 +232,8 @@ HOOK_COVERAGE = {
         "test_makefile_texlive.py",
         "test_trend_record_pr_contract.py",
         "test_gen_changelog.py",
-        "test_update_changelog_hook.py",],
+        "test_update_changelog_hook.py",
+        "test_sync_skills_index.py",],
 }
 
 # verify.yml CI job'ları → kapsadığı test dosyaları
