@@ -148,9 +148,10 @@ kanıt üretir** — bu bölüm o kanıtın nasıl okunacağını sabitler.
 Önemli ayrım: cron ve push tetiklemesi **aynı workflow'u** çalıştırır, yani
 log deseni aynıdır. Cron'un farkı tetikleyicidir, desenin kendisi değil.
 Aşağıdaki desen henüz hiçbir Pazartesi cron koşumu gerçekleşmeden, bir
-**push** koşumundan ölçülmüştür (kaynak run aşağıda). İlk Pazartesi
-koşumunda bu satırların **aynen** çıkması, cron'un ilk doğrulamasıdır;
-çıkmazsa sapma tablosuna geçilir.
+**push** koşumundan ölçülmüştür: run `36791434082`, job
+`Local security smoke (script parity)` (PR #62). İlk Pazartesi koşumunda bu
+satırların **aynen** çıkması, cron'un ilk doğrulamasıdır; çıkmazsa sapma
+tablosuna geçilir.
 
 ### İki mod ve çıktılarının karşılaştırması
 
@@ -262,6 +263,7 @@ cron'un henüz doğrulanmadığı anlamına gelir.
 | Koşum (run id) | Beklenen | Gözlenen | Sonuç |
 |---|---|---|---|
 | (henüz koşmadı — ilk Pazartesi 03:43 UTC) | gerçek koşum: `verdict=PASS` + `OK: verdict=PASS …` | — | — |
+| _referans_ push koşumu `36791434082` | gerçek koşum (cron değil) | `verdict=PASS`, `trivy=0.69.3`, 0 bulgu, health 200/healthy | ✅ |
 
 Kaydı tutmadan cron'u "çalışıyor" saymak kanıt değildir: `gh run list
 --workflow docker-security.yml --event schedule` boş dönerse scheduler

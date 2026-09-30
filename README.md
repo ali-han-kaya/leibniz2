@@ -488,6 +488,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-30 | chore | (changelog) bf25095 satirini tabloya ekle | [`8fcc3d4`](https://github.com/ali-han-kaya/leibniz2/commit/8fcc3d4) |
 | 2026-10-01 | docs | (cron) docker-security ilk Pazartesi koşumu runbook satırı | [`93ef34d`](https://github.com/ali-han-kaya/leibniz2/commit/93ef34d) |
 | 2026-10-01 | chore | (changelog) 93ef34d satirini tabloya ekle | [`5073212`](https://github.com/ali-han-kaya/leibniz2/commit/5073212) |
+| 2026-10-01 | ci | (docker) smoke job'ina Trivy — gerçek koşum, SKIP değil | [`a208ea9`](https://github.com/ali-han-kaya/leibniz2/commit/a208ea9) |
 
 ### Regresyon notları
 
