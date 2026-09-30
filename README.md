@@ -443,6 +443,8 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-30 | docs | (docker) npm katmanı kapalı döngüsü + kontrat testi | [`4e7d758`](https://github.com/ali-han-kaya/leibniz2/commit/4e7d758) |
 | 2026-09-30 | chore | (changelog) 4e7d758 satirini tabloya ekle | [`e89165b`](https://github.com/ali-han-kaya/leibniz2/commit/e89165b) |
 | 2026-09-30 | feat | (sync-tests) EXCLUDE↔CI-job/hook bağlama kapısı (üçüncü hedef) | [`3385697`](https://github.com/ali-han-kaya/leibniz2/commit/3385697) |
+| 2026-09-30 | chore | (changelog) 3385697 satirini tabloya ekle | [`bf91c8f`](https://github.com/ali-han-kaya/leibniz2/commit/bf91c8f) |
+| 2026-09-30 | fix | (changelog) iki-yazan değişmezi beyanı + kontrat testi | [`29761ad`](https://github.com/ali-han-kaya/leibniz2/commit/29761ad) |
 
 ### Regresyon notları
 

@@ -67,6 +67,12 @@ COVERAGE_FILE = os.path.join(CIKTI, "test_coverage_report.py")
 #    discover'ı ile HER ŞEYİ yine koşar (tam suite ~1400 test).
 # ────────────────────────────────────────────────────────────────────────────
 EXCLUDE = {
+    # ⚠️ changelog'in İKİ-YAZAN değişmezi (bkz. update_changelog_hook.sh):
+    # test_update_changelog_hook.py ve test_gen_changelog.py ESKİDEN buradaydı
+    # ("check-changelog-sync" koşuyor diye) — ama o hook'un entry'si yalnızca
+    # update_changelog_hook.sh'tir; testleri hiç koşmuyordu. 2026-09-30'da
+    # EXCLUDE'tan çıkarıldı: artık check-unit-tests manifest'inden GERÇEKTEN
+    # koşarlar (fail-closed), yani "kapı var" beyanı doğru olur.
     # launchctl / daemon / canlı servis gerektirenler — CI job'larında koşar
     "test_plist_gate_exit.py",        # launchctl + fake HOME (check-plist-drift)
     "test_check_plist_drift.py",      # launchctl (check-plist-drift)
@@ -95,8 +101,6 @@ EXCLUDE = {
     "test_check_config_sync.py",           # check-config-sync
     "test_dryrun_summary.py",              # check-dryrun-summary
     "test_colorize_rules.py",              # check-colorize-rules
-    "test_update_changelog_hook.py",       # check-changelog-sync
-    "test_gen_changelog.py",               # check-changelog-sync
     "test_gen_config.py",                  # update-config
     "test_github_scripts_battery.py",      # verify-delivery-github-scripts
     "test_all_hooks_smoke.py",             # tüm hook'ları koşar (smoke) — kendini çağırır
@@ -320,7 +324,6 @@ EXCLUDE_HOOKS = {
     "test_colorize_rules.py":                "check-colorize-rules",
     "test_doc_artifact_sync.py":             "check-doc-artifact-sync",
     "test_dryrun_summary.py":                "check-dryrun-summary",
-    "test_gen_changelog.py":                 "check-changelog-sync",
     "test_gen_config.py":                    "update-config",
     "test_gen_plist_golden.py":              "check-plist-drift",
     "test_gen_repro_manifest.py":            "check-repro-manifest",
@@ -328,7 +331,6 @@ EXCLUDE_HOOKS = {
     "test_ia_ol_fallback_evidence.py":       "check-fallback-evidence",
     "test_lake_evidence_smoke.py":           "check-lake-evidence",
     "test_plist_gate_exit.py":               "check-plist-drift",
-    "test_update_changelog_hook.py":         "check-changelog-sync",
     "test_verify_manifest_overrides.py":     "verify-delivery-repro-manifest",
     "test_verify_manifest_sidecar.py":       "verify-delivery-repro-manifest",
 }
@@ -431,7 +433,8 @@ def run_check_exclude_binding(exclude=None, ci_jobs=None, hooks=None,
          bağlama (belirsizlik) kabul edilmez.
       4) SÖZLEŞME   — full-discover sentinel satırı workflow'larda durmalı.
 
-    Yazmaz: bildirim gerekçesiyle elle verilir (bu kapının "tek yazan"i yok).
+    Yazmaz: bildirim gerekçesiyle elle verilir (bu kapının yazma yetkisi
+    yok — repo'da iki yazan hook var: update-config, check-changelog-sync).
     """
     ex = set(EXCLUDE if exclude is None else exclude)
     cij = dict(EXCLUDE_CI_JOBS if ci_jobs is None else ci_jobs)
