@@ -438,6 +438,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-21 | chore | record weekly determinism trend measurement | [`3f043bc`](https://github.com/ali-han-kaya/leibniz2/commit/3f043bc) |
 | 2026-09-21 | fix | (ci) trend PR step policy-aware (Actions PR-permission off) | [`c78dc67`](https://github.com/ali-han-kaya/leibniz2/commit/c78dc67) |
 | 2026-09-30 | fix | (ci) üç advisory adımın ortam sözleşmesi | [`a931853`](https://github.com/ali-han-kaya/leibniz2/commit/a931853) |
+| 2026-09-30 | fix | (ci) gh çözümlemesi çift program adı üretiyordu | [`07e883e`](https://github.com/ali-han-kaya/leibniz2/commit/07e883e) |
 
 ### Regresyon notları
 

@@ -213,10 +213,65 @@ class TestActionsScopeMatchesWhatTheJobReads(unittest.TestCase):
         self.assertEqual(perms.get("contents"), "read")
 
 
+# ── errexit güvenliği taraması ────────────────────────────────────────────
+# `cmd; status=$?` deseni `bash -e` altında ÖLÜDÜR: cmd düşünce shell bir
+# sonraki satıra geçmez. Üç koruma vardır ve hepsi kabul edilir:
+#   1) `set +e` görüldü (o satırdan sonrası koşar)
+#   2) `cmd || rc=$?` — `||` sağ operand'ı errexit'ten muaftır
+#   3) `if cmd; then … else status=$?; fi` — else dalı muaftır
+# Kapsam bilinçli olarak dar: yalnız kabuk satırı seviyesi. Buraya gömülü
+# heredoc (K12/K13'ün PYEOF blokları) çözümlenmez; onların `$?` yakalaması
+# heredoc'tan ÖNCE geldiği için ölçümü bozmaz.
+_SET_PLUS_E = re.compile(r"^\s*set\s+\+e\s*$")
+_OR_GUARDED = re.compile(r"(\|\||&&)\s*[\w-]*\s*=\s*\$\?")
+_HAS_STATUS = re.compile(r"\$\?")
+_IF_OPEN = re.compile(r"^if\b")
+_ELIF = re.compile(r"^elif\b")
+_ELSE = re.compile(r"^else\b")
+_FI = re.compile(r"^fi\b")
+
+
+def _unguarded_status_captures(run):
+    """`(satır_no, kod)` — errexit'ten korunmamis `$?` yakalamaları."""
+    offenders = []
+    if_stack = []          # her if için "else görüldü mü"
+    seen_set_plus_e = False
+    for lineno, raw in enumerate(run.splitlines(), 1):
+        stripped = raw.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        code = stripped.split(" #", 1)[0]
+        if _SET_PLUS_E.match(code):
+            seen_set_plus_e = True
+            continue
+        if _IF_OPEN.match(code):
+            if_stack.append(False)
+            continue
+        if _ELIF.match(code):
+            if if_stack:
+                if_stack[-1] = False
+            continue
+        if _ELSE.match(code):
+            if if_stack:
+                if_stack[-1] = True
+            continue
+        if _FI.match(code):
+            if if_stack:
+                if_stack.pop()
+            continue
+        if not _HAS_STATUS.search(code):
+            continue
+        if seen_set_plus_e or _OR_GUARDED.search(code):
+            continue
+        if if_stack and if_stack[-1]:       # else dalı
+            continue
+        offenders.append((lineno, code))
+    return offenders
+
+
 @unittest.skipIf(yaml is None, "PyYAML yok — workflow denetimi ölçülemiyor")
 class TestAdvisoryStepsCaptureTheirOwnStatus(unittest.TestCase):
     """K3 — advisory adım `errexit` yüzünden sessiz kalmamalı."""
-
     def _advisory_runs(self):
         for jname, job in _load_verify()["jobs"].items():
             for step in job.get("steps") or []:
@@ -227,18 +282,26 @@ class TestAdvisoryStepsCaptureTheirOwnStatus(unittest.TestCase):
                     yield jname, step.get("name", ""), run
 
     def test_status_capture_survives_errexit(self):
-        """`$?` yazan her advisory adım `set +e` ile korunmalı.
+        """`$?` YAKALAN her advisory adım `set +e` veya `if/else` ile korunmalı.
 
-        GitHub `shell: bash` = `bash -eo pipefail`. `set +e` yoksa test
-        düştüğünde echo'ya hiç ulaşılamaz ve karar loga düşmez.
+        GitHub `shell: bash` = `bash -eo pipefail`. Koruma yoksa komut
+        düştüğünde yakalama satırı hiç çalışmaz.
+
+        ÖNCEKİ KURAL ÇOK DARDI: yalnız `^\\s*echo\\b.*\\$\\?` arıyordu, yani
+        `status=$?` gibi ATAMA kalıbını GÖRMÜYORDU — bu yüzden tam olarak
+        kırık olan iki adım (pre-commit, check-unit-tests) yeşil geçiyordu.
+        Artık `\\w+=\\$\\?` de kapsamda.
+
+        `if/then/else` kalıbı güvenlidir (`else` dalındaki `$?` errexit'ten
+        muaftır) — bu yüzden if/else yığını izlenir. K12/K13'ün o kalıbı
+        kullandığı artifact'ta KANITLANDI: onların `.exit` dosyaları yazılmış,
+        düz kalıbınkiler yazılmamıştı.
         """
         offenders = []
         for jname, name, run in self._advisory_runs():
-            if "set +e" in run:
-                continue
-            if not re.search(r"^\s*echo\b.*\$\?", run, re.M):
-                continue  # $? yalnız kanala/pipeline'a gidiyorsa farklı durum
-            offenders.append("%s / %s" % (jname, name))
+            for lineno, code in _unguarded_status_captures(run):
+                offenders.append("%s / %s:%d → %s"
+                                 % (jname, name, lineno, code))
         self.assertEqual(offenders, [],
                          "advisory adımlarda errexit'e açık $? yakalama: %s"
                          % offenders)
@@ -329,6 +392,124 @@ class TestGatesMustRunInACleanCheckout(unittest.TestCase):
             with self.assertRaises(unittest.SkipTest) as ctx:
                 method.test_check_passes_on_provisioned_checkout()
         self.assertIn("tam kurulum değil", str(ctx.exception))
+
+
+class TestPreCommitHooksSurviveACleanCheckout(unittest.TestCase):
+    """K1 — hook `entry`'si venv YOLUNA bağlı olmamalı.
+
+    CI kanıtı: `Executable \`_calisma/.venv_z3/bin/python\` not found`,
+    duration 0 s — denetim hiç çalışmadan kırmızı. `language: system`
+    hook'larda pre-commit, `entry`'deki executable'ı YOL olarak doğrulayıp
+    "not found" ile reddediyor; sistem python3'üne düşen YOK.
+    """
+
+    VENV = "_calisma/.venv_z3/bin/python"
+
+    def _hook(self, hook_id):
+        for repo in (".pre-commit-config.yaml",):
+            text = pathlib.Path(ROOT / repo).read_text(encoding="utf-8")
+        blocks = re.split(r"\n      - id: ", text)
+        for block in blocks[1:]:
+            if block.split("\n", 1)[0].strip() == hook_id:
+                return block
+        self.fail("hook bulunamadı: %s" % hook_id)
+
+    def _entry(self, hook_id):
+        """Hook'un `entry` değeri — YAML katlanmış skaler olduğu için
+        `entry:` satırından daha DERİN girintili devam satırları da alınır
+        (aksi halde venv-guard'ın ikinci yarısı görünmez)."""
+        block = self._hook(hook_id)
+        lines = block.split("\n")
+        for i, line in enumerate(lines):
+            m = re.match(r"^(\s*)entry:\s*(.+)$", line)
+            if not m:
+                continue
+            key_indent = len(m.group(1))
+            parts = [m.group(2).strip()]
+            for cont in lines[i + 1:]:
+                if not cont.strip():
+                    break
+                cur_indent = len(cont) - len(cont.lstrip())
+                if cur_indent <= key_indent:
+                    break
+                parts.append(cont.strip())
+            return " ".join(parts)
+        self.fail("entry yok: %s" % hook_id)
+
+    def test_no_hook_entry_hardcodes_the_repo_venv(self):
+        """Hiçbir hook `entry`'si düz venv yolu içermemeli.
+
+        Tarama repo'nun TAMAMINI kapsar: aynı kusurun yeni bir hook'ta
+        yeniden doğmasını engeller. `bash -c` ile sarılmış guard'lı
+        entry'ler istisnadır (guard zaten `python3`'e düşebiliyor).
+        """
+        text = pathlib.Path(ROOT / ".pre-commit-config.yaml").read_text(
+            encoding="utf-8")
+        offenders = []
+        for m in re.finditer(r"^(\s*)entry:\s*(.+)$", text, re.M):
+            value = m.group(2)
+            if "bash -c" in value or self.VENV not in value:
+                continue          # ikinci satırda guard varsa `bash -c` zaten var
+            offenders.append(value.strip())
+        self.assertEqual(offenders, [],
+                         "entry düz venv yoluna bağlı (temiz klon/CI'da "
+                         "yok): %s" % offenders)
+
+    def test_octokit_audit_uses_the_venv_guard_pattern(self):
+        entry = self._entry("audit-octokit-names")
+        self.assertIn("[ -x _calisma/.venv_z3/bin/python ]", entry,
+                      "venv-guard deseni yok: %s" % entry)
+        self.assertIn("audit_octokit_names.py", entry)
+
+    def test_octokit_audit_needs_no_third_party_import(self):
+        """Guard `python3`'e düşüyorsa betik stdlib-only olmalı."""
+        src = (HERE / "audit_octokit_names.py").read_text(encoding="utf-8")
+        third_party = {"yaml", "requests", "PIL", "numpy", "dotenv"}
+        imported = set(re.findall(r"^\s*(?:import|from)\s+([A-Za-z_][\w.]*)",
+                                  src, re.M))
+        self.assertEqual(imported & third_party, set(),
+                         "sistem python3'ünde eksik bağımlılık: %s"
+                         % (imported & third_party))
+
+
+class TestGhConsumingStepsReceiveAToken(unittest.TestCase):
+    """K2 — `gh` çağıran CI adımı GH_TOKEN almak ZORUNDA.
+
+    GitHub Actions `GH_TOKEN`'ı otomatik dışa aktarmaz. Kanıt (CI logu):
+      "repo belirlenemedi: gh: To use GitHub CLI in a GitHub Actions
+       workflow, set the GH_TOKEN environment variable" (exit 2, ERROR)
+    Yani denetim "hiçbir şey ölçemedi" diye kırmızı; ölçtüğü şey yanlış.
+    """
+
+    PRECOMMIT_STEP = "Run pre-commit (advisory, all files, show diff on failure)"
+
+    def _precommit_step(self):
+        for job in _load_verify()["jobs"].values():
+            for step in job.get("steps") or []:
+                if step.get("name") == self.PRECOMMIT_STEP:
+                    return step
+        self.fail("pre-commit adımı bulunamadı: %s" % self.PRECOMMIT_STEP)
+
+    def test_precommit_step_injects_gh_token(self):
+        env = self._precommit_step().get("env") or {}
+        self.assertIn("GH_TOKEN", env,
+                      "pre-commit adımı GH_TOKEN vermiyor → gh kimliksiz "
+                      "kalıyor ve branch-protection okuması hiç denenmiyor")
+        self.assertIn("github.token", str(env["GH_TOKEN"]),
+                      "GH_TOKEN değeri actions token'ı olmalı")
+
+    def test_token_is_not_hardcoded(self):
+        env = self._precommit_step().get("env") or {}
+        self.assertNotRegex(str(env.get("GH_TOKEN", "")),
+                            r"gh[pousr]_[A-Za-z0-9]{10,}",
+                            "sabit token gömülü")
+
+    def test_status_check_gate_is_gh_dependent(self):
+        """Kuralın boşuna-geçmemesi: kapı gerçekten `gh` çağırıyor."""
+        src = (HERE / "status_checks.py").read_text(encoding="utf-8")
+        self.assertIn("run_gh(", src,
+                      "status_checks.py gh kullanmıyorsa token kuralı "
+                      "gereksizleşir")
 
 
 if __name__ == "__main__":

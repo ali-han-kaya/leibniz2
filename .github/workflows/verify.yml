@@ -375,11 +375,30 @@ jobs:
         if: always()
         continue-on-error: true
         shell: bash
+        # GH_TOKEN ZORUNLU: bu zincirdeki `check-status-check-names` hook'u
+        # `gh api repos/…/branches/main/protection` çağırıyor. GitHub
+        # Actions `GH_TOKEN`'ı OTOMATİK dışa aktarmaz; `gh` de Actions
+        # içinde kimliksizken açıkça bu hatayı veriyor:
+        #   "To use GitHub CLI in a GitHub Actions workflow, set the GH_TOKEN
+        #    environment variable"  (hook exit 2, verdict ERROR)
+        # Yani denetim her CI koşusunda "hiçbir şey ölçemedi" diye kırmızıydı.
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p logs
+          # `set +e` şart: `shell: bash` → `bash -eo pipefail`. pre-commit
+          # DÜŞTÜĞÜNDE errexit bir sonraki satırı çalıştırmaz; yani `status=$?`
+          # hiç çalışmıyor, `logs/precommit.exit` YAZILMIYOR ve
+          # `verify_report.txt`'ye düşen "exit code: N" bloğu hiç oluşmuyordu.
+          # Kanıt: aynı artifact içinde `if/then/else` kullanan
+          # k12/k13_repro_manifest.exit VAR, bu adımın precommit.exit'i
+          # YOK. `continue-on-error` zaten job'u yeşil bıraktığı için
+          # eksik karar sessizce kayboluyordu.
+          set +e
           pre-commit run --all-files --show-diff-on-failure --color=never \
             > logs/precommit.log 2>&1
           status=$?
+          set -e
           echo "$status" > logs/precommit.exit
           {
             echo ""
@@ -546,9 +565,15 @@ jobs:
         shell: bash
         run: |
           mkdir -p logs
+          # Aynı errexit tuzağı: `bash -eo pipefail` altında test DÜŞTÜĞÜNDE
+          # `status=$?` hiç çalışmıyor → `logs/check_unit_tests.exit`
+          # yazılmıyor ve rapor bloğu oluşmuyor. K12/K13'ün kullandığı
+          # `if/then/else` (veya `set +e`) kalıbı.
+          set +e
           pre-commit run check-unit-tests --all-files --show-diff-on-failure \
             --color=never > logs/check_unit_tests.log 2>&1
           status=$?
+          set -e
           echo "$status" > logs/check_unit_tests.exit
           {
             echo ""
