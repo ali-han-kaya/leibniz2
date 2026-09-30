@@ -658,6 +658,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-30 | fix | (ci) regresyon testinin kendisi de ortamı ölçüyordu | [`be0d4c0`](https://github.com/ali-han-kaya/leibniz2/commit/be0d4c0) |
 | 2026-09-30 | fix | (ci) birim-test işine Chromium kurulumu | [`125e795`](https://github.com/ali-han-kaya/leibniz2/commit/125e795) |
 | 2026-09-30 | style | (prettier) 26 dosyadaki grandfathered biçim drift'ini kapat | [`1a71245`](https://github.com/ali-han-kaya/leibniz2/commit/1a71245) |
+| 2026-09-30 | fix | (dashboard) klavye suite'i canlı history.jsonl ölçüyordu | [`cb4a88e`](https://github.com/ali-han-kaya/leibniz2/commit/cb4a88e) |
 
 ### Regresyon notları
 
