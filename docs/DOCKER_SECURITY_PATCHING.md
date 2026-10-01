@@ -148,18 +148,78 @@ kanıt üretir** — bu bölüm o kanıtın nasıl okunacağını sabitler.
 Önemli ayrım: cron ve push tetiklemesi **aynı workflow'u** çalıştırır, yani
 log deseni aynıdır. Cron'un farkı tetikleyicidir, desenin kendisi değil.
 Aşağıdaki desen henüz hiçbir Pazartesi cron koşumu gerçekleşmeden, bir
-**push** koşumundan ölçülmüştür (kaynak run aşağıda). İlk Pazartesi
-koşumunda bu satırların **aynen** çıkması, cron'un ilk doğrulamasıdır;
-çıkmazsa sapma tablosuna geçilir.
+**push** koşumundan ölçülmüştür: run `36791434082`, job
+`Local security smoke (script parity)` (PR #62). İlk Pazartesi koşumunda bu
+satırların **aynen** çıkması, cron'un ilk doğrulamasıdır; çıkmazsa sapma
+tablosuna geçilir.
 
-### Beklenen log deseni
+### İki mod ve çıktılarının karşılaştırması
 
-`smoke` job'ı ubuntu-latest'te trivy kurulu olmadığı için
-`docker_security_smoke.sh`'in "araç yok → exit 0 SKIP" sözleşmesine düşer.
-Ölçülen referans koşum: main push `8314fde`, run `36784930535`, job
-`Local security smoke (script parity)`.
+`docker_security_smoke.sh` iki meşru çıkış modu tanır. Hangisinin beklendiği
+ortama bağlıdır; ikisi de exit 0'dır ve ikisi de "kanıt" üretir — ama
+farklı miktarda:
 
-`Run local security smoke (SKIP-aware)` adımı — **üç satır, tam olarak**:
+| | SKIP modu (araç yok) | Gerçek koşum (CI'daki beklenti) |
+|---|---|---|
+| Tetikleyici | PATH'te docker **veya** trivy yok | `Install Trivy` adımı çalıştı |
+| Çıkış kodu | 0 | 0 |
+| Log satırı | 3 | ~15 |
+| Kanıt satırları | `trivy=`, `verdict=` **yok** | `trivy=<sürüm>`, `trivy_findings=0`, `verdict=PASS` |
+| Sağlık zinciri | yok (koşulmadı) | `health_http=200` + `container_health=healthy` |
+| Nerede yaşar | Trivy'siz yerel makine | cron + push koşumu |
+
+İki mod da ölçülerek karşılaştırıldı:
+
+- **SKIP modu**, CI ile aynı koşulla yeniden üretildi (PATH'te docker ve
+  colima var, trivy yok) → 3 satır, kanıt dosyası 2 satır, exit 0.
+- **Gerçek koşum** yerelde çalıştırıldı → `verdict=PASS`, `trivy_findings=0`,
+  `trivy_clean=Clean`, `health_http=200`, `container_health=healthy`,
+  `PASS: build + trivy(CRITICAL,HIGH=0) + health(200, healthy)`.
+
+İki ölçüm arasındaki tek yapısal fark kanıt miktarıdır: SKIP modu hiçbir
+güvenlik iddiası üretmez (güvenlik gate'i **koşmadı**), gerçek koşum
+üretir. Bu yüzden CI'da hangi modun geçerli sayıldığı bir karardır ve
+aşağıdaki assert adımıyla **fail-closed** bağlanmıştır.
+
+### Beklenen log deseni (CI)
+
+`smoke` adımı ubuntu-latest'te Trivy'yi kendisi kurar (sürüm, `image-scan`
+işinin kullandığı `trivy-action@v0.35.0` varsayılanıyla **aynı**: `0.69.3`;
+URL + sürüm + sha256 üçü de pin'li). Script tam akışı koşar:
+
+```
+docker-security smoke evidence
+image=leibniz2/verify-dashboard:smoke-local
+docker_client=<sürüm>
+docker_server=<sürüm>
+colima=<durum>
+platform=native
+image_id=sha256:<hash>
+trivy=0.69.3
+trivy_findings=0
+trivy_clean=Clean
+host_port=<rastgele port>
+health_http=200
+health_body=ok
+container_health=healthy
+verdict=PASS
+```
+
+(stdout'da ayrıca: `PASS: build + trivy(CRITICAL,HIGH=0) + health(200, healthy)`)
+
+Ardından `Assert real run (SKIP is not evidence in CI)` adımı yeşil verir:
+
+```
+OK: verdict=PASS — gerçek koşum kanıtı
+```
+
+`Show smoke evidence` adımı bu kez kanıt dosyasının **tamamını** basar
+(`verdict=PASS` dahil) — SKIP koşumunda yalnız iki satır basıp fallback
+notuna düşüyordu.
+
+### SKIP modunun log deseni (fallback kanıt)
+
+Trivy kurulamadığında ya da triviysiz bir makinede koşulduğunda:
 
 ```
 docker-security smoke evidence
@@ -167,45 +227,33 @@ image=leibniz2/verify-dashboard:smoke-local
 SKIP: trivy yok — güvenlik gate'i eksik, kısmi kanıt üretilmez
 ```
 
-`Show smoke evidence` adımı — **iki satır, fallback notu basılmaz**:
-
-```
-docker-security smoke evidence
-image=leibniz2/verify-dashboard:smoke-local
-```
-
-Evidence notu neden iki satır: `log()` başlık + `image=` satırını hem ekrana
-hem `$OUT` dosyasına yazar, SKIP satırı ise yalnız stderr'e gider. Bu yüzden
-kanıt dosyası SKIP koşumunda da **üretilir** — `cat ... || echo` fallback'i
-devreye girmez. Fallback ancak script `log()`'a hiç ulaşmadan çökerse basılır:
+Kanıt dosyası bu modda da **üretilir** ve iki satırdır: `log()` başlık +
+`image=` satırını `$OUT`'a yazar, SKIP satırı yalnız stderr'e gider. Bu
+yüzden `cat ... || echo` fallback'i devreye girmez; fallback ancak script
+`log()`'a ulaşmadan çökerse basılır:
 
 ```
 (smoke kanıt dosyası yok — SKIP koşumunda üretilmez)
 ```
 
-Job sonucu yine de **success**'tir (SKIP, exit 0). Bu, cron'un sessiz
-kanıt-kaçırma riskidir: yeşil job tek başına hiçbir şey kanıtlamaz —
-kanıt, **SKIP satırının görünür olmasıdır**. SKIP satırı yoksa koşum
-"başarılı" değildir, sadece sessizdir.
-
 ### Sapma tablosu
 
 | Gözlenen | Anlamı | Yapılacak |
 |---|---|---|
-| Üç satır birebir eşleşiyor (SKIP satırı **var**) | Beklenen koşum; cron canlı | Kayıt satırı girilir, sapma yok |
-| Job `success` ama `SKIP: trivy yok …` satırı **yok** | SKIP görünürlüğü kayboldu ya da script hiç çalışmadı | `workflow_dispatch` ile elle koşum aç, adımı `bash -x` ile izle; SKIP satırı yerine `PASS`/kanıt satırları varsa aşağıdaki satıra geç |
-| `Show smoke evidence` fallback notunu basıyor | Script `log()`'a ulaşmadan çöktü — **hiç kanıt üretilmedi** | Elle koşum log'unu oku; çökme noktası smoke adımına `if: always()` + teşhis olarak eklenmeli |
-| `verdict=PASS` / `trivy_findings=0` / `health_http=200` | Runner'da trivy **kurulmuş** (K3'ün varsayımı değişti) — daha iyi, ama parite bozuldu | Bu bölümdeki beklenen desen + `test_gated_schedules.py` K3 beklentisi güncellenir; SKIP sözleşmesi bu job'da artık geçerli değil |
-| `smoke` job **fail** | Gerçek ihlal: build / Trivy bulgusu / sağlık (fail-closed çalıştı) | `docs/ci_simulate/docker_security_smoke/docker_security_smoke_report.txt` kanıtını oku, bulguları aşağıdaki "Katkı sözleşmesi" ile kapat, `docs/CI_GATE_TRIAGE.md`'ye kaydet |
+| `verdict=PASS` + `OK: verdict=PASS …` | Beklenen koşum; cron canlı ve gerçek kanıt üretti | Kayıt satırına yaz, sapma yok |
+| `smoke` job **fail** (assert kırmızı) | Trivy kurulum adımı çalışmadı — SKIP'e düşüldü ya da script erken çıktı | `Install Trivy` adımının log'unu oku: sha256 uyuşmazlığı / ağ hatası. `sha256sum -c` çıktısını oku; `TRIVY_VERSION` + `TRIVY_SHA256` değerlerini release'in `trivy_<sürüm>_checksums.txt` dosyasıyla karşılaştır |
+| `smoke` job fail, `verdict=FAIL` | Gerçek ihlal: build / Trivy bulgusu / sağlık (fail-closed çalıştı) | `docs/ci_simulate/docker_security_smoke/docker_security_smoke_report.txt` kanıtını oku, bulguları "Katkı sözleşmesi" ile kapat, `docs/CI_GATE_TRIAGE.md`'ye kaydet |
+| `Show smoke evidence` fallback notunu basıyor | Script `log()`'a ulaşmadan çöktü — hiç kanıt üretilmedi | Elle koşum log'unu oku; çökme noktası smoke adımına teşhis olarak eklenmeli |
+| `trivy=` satırında beklenmeyen sürüm | `TRIVY_VERSION` ile `image-scan`'in motoru ayrışmış — iki job farklı motorla tarar, kapılar çelişebilir | Sürümü `trivy-action@v0.35.0` varsayılanıyla eşitle; parite bu eşitlikle korunur |
 | `image-scan` job kırmızı | Cron'un **asıl** amacı gerçekleşti: CRITICAL/HIGH bulgu | Aynı Katkı sözleşmesi; `severity: CRITICAL,HIGH` + `ignore-unfixed` + `exit-code 1` sözleşmesi bozulmadıysa bu beklenen davranıştır |
 | Ohafta hiç `docker-security` run yok | GitHub scheduler çalışmıyor (60 gün hareketsizlik politikası) ya da path filtresi | `gh run list --workflow docker-security.yml` ile doğrula; run yoksa `workflow_dispatch` ile elle koşup scheduler'ı canlandır |
-| Her iki job `success`, `Show smoke evidence` **boş** | Sessiz kanıt kaybı — en ciddi sapma | Elle koşum + kanıt dosyasının artifact olarak yüklendiğini doğrula; bu tablodaki diğer adımlar uygulanmaz, desen bozulmuştur |
 
-Sapma tablosunun değişmez kuralı: **SKIP bir hata değildir, kanıtın kendisidir.**
-SKIP'i "düzeltilecek sorun" sanıp runner'a trivy kurmak, cron'un ürettiği
-görünürlüğü sessizleştirir. Bu yüzden üçüncü satır ("SKIP satırı yok") en
-kritik sapmadır: yeşil görünen ama kanıtsız bir koşum, K3'ün kurduğu tek
-savunmayı deler.
+Değişmez kural: **SKIP bir hata değildir, ama CI'da kanıt da değildir.**
+SKIP'i "düzeltilecek sorun" sanıp betiği gevşetmek yerine, kurulumu
+onarız; Trivy kurulu bir CI'da SKIP yalnızca **kurulumun sessizce
+bozulduğunun** kanıtıdır ve assert adımı onu kırmızıya çevirir. Script'in
+SKIP sözleşmesi korunur — çünkü triviysiz yerel makinelerde hâlâ doğru
+davranıştır.
 
 ### İlk Pazartesi koşumu — kayıt satırı
 
@@ -214,7 +262,8 @@ cron'un henüz doğrulanmadığı anlamına gelir.
 
 | Koşum (run id) | Beklenen | Gözlenen | Sonuç |
 |---|---|---|---|
-| (henüz koşmadı — ilk Pazartesi 03:43 UTC) | üç satırlık SKIP deseni, evidence iki satır | — | — |
+| (henüz koşmadı — ilk Pazartesi 03:43 UTC) | gerçek koşum: `verdict=PASS` + `OK: verdict=PASS …` | — | — |
+| _referans_ push koşumu `36791434082` | gerçek koşum (cron değil) | `verdict=PASS`, `trivy=0.69.3`, 0 bulgu, health 200/healthy | ✅ |
 
 Kaydı tutmadan cron'u "çalışıyor" saymak kanıt değildir: `gh run list
 --workflow docker-security.yml --event schedule` boş dönerse scheduler

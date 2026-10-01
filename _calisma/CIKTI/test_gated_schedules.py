@@ -22,12 +22,26 @@ eklerken iki drift riski ölçüldü:
   K2) cron içeren job'ın adımlarında gate script'i RUN ile çağrılır (uses:
       adımı sayılmaz — action'lar script'i substitute edemez).
   K  3) docker_security_smoke.sh çağıran her schedule job'ı, runner'a trivy
-      kuran ya da SKIP sözleşmesini uyumlu belgeleyen bir satır taşır.
+      KURAN bir adım taşır. Tarihsel neden: ubuntu-latest'te trivy yokken
+      job her hafta exit-0 SKIP üretiyordu — yeşil ama kanıtsız. Kuralın
+      ikinci yarısı artık zorunlu: kurulum sürüm + sha256 ile pin'lenir
+      (tedarik zinciri), ve sürüm image-scan'in motoruyla eşitlenir ki iki
+      job tek tarayıcıyla çalışsın.
   4) Runbook (patching doc) beklenen log desenini KAYNAKTAN türetilmiş
-      olarak verir: cron ifadesi, SKIP satırı, evidence başlığı/görüntüsü
-      ve fallback notu workflow + script'ten okunur, sonra runbook'ta
-      birebir aranır. Kopyalanmış metin DRIFT üretir — kural yazısı
-      değişirse runbook da değişmezse kapı kırılır (fail-closed).
+      olarak verir: cron ifadesi, gerçek koşumun kanıt satırları
+      (verdict=PASS, trivy_findings=0, health_http=200 …), SKIP satırı,
+      evidence başlığı/görüntüsü, fallback notu ve assert adımının OK
+      mesajı workflow + script'ten okunur, sonra runbook'ta birebir
+      aranır. Kopyalanmış metin DRIFT üretir — kural yazısı değişirse
+      runbook da değişmezse kapı kırılır (fail-closed).
+  5) CI'da SKIP kanıt SAYILMAZ: trivy kurulu bir runner'da SKIP, kurulumun
+      sessizce bozulduğunun işaretidir. Workflow bunu fail-closed'a bağlar
+      (verdict=PASS yoksa job kırmızı) — aksi halde haftalık SKIP yine
+      görünür yeşil olur ve cron'un tek amacı sessizleşir.
+  6) Motor paritesi: smoke'un kurduğu Trivy sürümü, image-scan'in taramasıyla
+      aynı olmalı. Sürüm iki dosyada yazılıdır (workflow pin'i + runbook'un
+      beklenen `trivy=` satırı); bağ testle zorlanır, yoksa iki kapı farklı
+      motorlarla çalışıp birbirini çürütebilir.
 
 OFFLINE, stdlib-only, ~0.02s.
 """
@@ -53,6 +67,19 @@ GATE_SCRIPTS = (
 def scheduled_workflows():
     return [p for p in sorted(WORKFLOWS.glob("*.yml"))
             if re.search(r"^\s*schedule:", (p.read_text(encoding="utf-8")), re.M)]
+
+
+def step_body(text, name):
+    """`- name: <name>` adımının gövdesi (sonraki `- name:` / job sonuna kadar).
+
+    Workflow'ta birden çok benzer `|| echo` geçebildiği için regex'i TÜM
+    dosyada değil, tek adımın gövdesinde koşmak zorunlu — yoksa test yanlış
+    satırı kaynak sanar.
+    """
+    m = re.search(
+        r"- name: %s\n(?P<body>.*?)(?=\n      - |\n\Z)" % re.escape(name),
+        text, re.S)
+    return m.group("body") if m else None
 
 
 class TestScheduleGateParity(unittest.TestCase):
@@ -81,26 +108,67 @@ class TestScheduleGateParity(unittest.TestCase):
             "(action'lar script'i substitute edemez)",
         )
 
-    def test_docker_smoke_schedule_job_declares_runner_tool_skip(self):
-        """K3: cron job'ında trivy kurulu ya da SKIP sözleşmesi runner ile uyumlu."""
+    def test_docker_smoke_schedule_job_installs_trivy_pinned(self):
+        """K3: cron job'ı runner'a trivy KURAR (sürüm + sha256 pin'li)."""
         text = (WORKFLOWS / "docker-security.yml").read_text(encoding="utf-8")
-        # SKIP-farkında satır: runner'da docker/trivy yoksa script SKIP üretir
-        # (exit 0) — job bunu kasıtlı, görünür semantiyle belgelemeli.
-        self.assertIn(
-            "SKIP", text,
-            "docker-security.yml: runner-araçlarıyla uyumlu SKIP sözleşmesi "
-            "belgelenmeli (ubuntu-latest'te trivy yok → script SKIP üretir; "
-            "görünür dokümansız SKIP sessiz kanıt kaybıdır)",
-        )
+        self.assertIn("Install Trivy", text,
+                      "docker-security.yml: smoke job'ı trivy kurulum adımı "
+                      "taşımalı. Trivysiz runner'da script SKIP üretir (exit 0) "
+                      "ve cron haftalık kanıtsız yeşil koşuma düşer — K3'ün "
+                      "amacı tam olarak bunu engellemek.")
+        m = re.search(r"TRIVY_SHA256:\s*[\"']?([0-9a-f]{64})", text)
+        self.assertIsNotNone(m,
+                             "trivy kurulumu sha256 ile doğrulanmalı: indirilen "
+                             "tarball'ın hash'i release checksums.txt ile eşleşmeli")
+        self.assertIn("sha256sum -c", text,
+                      "pinlenen hash gerçekten doğrulanmalı (sha256sum -c) — "
+                      "sadece yazılı olması kanıt değildir")
+        self.assertIn("SKIP", text,
+                      "script'in SKIP sözleşmesi hâlâ belgelenmeli: triviysiz "
+                      "yerel makinelerde doğru davranış, kurulumu değil betiği "
+                      "korumak")
+
+
+class TestSkipIsNotEvidenceInCI(unittest.TestCase):
+    """K5: trivy kurulu bir CI'da SKIP, kurulumun bozulduğunun işaretidir.
+
+    Tarihsel kök-neden: SKIP exit 0 döndüğü için job yeşil görünür ve cron
+    haftalık "başarılı" ama kanıtsız bir koşuma düşer. Trivy kurulumu
+    eklendiğinde bu yol kapanmazsa SKIP yeniden sessizleşir. Kapatma
+    fail-closed olmalı: verdict=PASS yoksa job KIRMIZI.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls._wf = (WORKFLOWS / "docker-security.yml").read_text(encoding="utf-8")
+
+    def test_smoke_job_asserts_real_run(self):
+        body = step_body(self._wf, "Assert real run (SKIP is not evidence in CI)")
+        self.assertIsNotNone(body, "assert adımı yok")
+        self.assertIn("verdict=PASS", body,
+                      "assert adımı gerçek koşum kanıtını zorlamalı: "
+                      "verdict=PASS yoksa job kırmızı olmalı (fail-closed)")
+        self.assertIn("exit 1", body,
+                      "assert adımı kanıt yoksa job'u düşürmeli (exit 1) — "
+                      "yoksa SKIP yine yeşil geçer")
+
+    def test_assert_runs_after_the_smoke_step(self):
+        # Sıra sözleşmesi: assert, smoke'dan SONRA olmalı; aksi halde
+        # kanıt henüz yazılmadan okur ve her koşumda kırmızıya döner
+        # (ya da, ters yazım hatasıyla, hiç çalışmaz).
+        smoke = self._wf.index("Run local security smoke (SKIP-aware)")
+        assert_at = self._wf.index("Assert real run (SKIP is not evidence in CI)")
+        self.assertLess(smoke, assert_at,
+                        "assert adımı smoke adımından sonra gelmeli")
 
 
 class TestCronRunbookParity(unittest.TestCase):
     """K4: cron runbook'ı beklenen log desenini kaynaktan türetilmiş verir.
 
-    Runbook metni elle kopyalanırsa iki yerde birden sessizce eskir: cron'un
-    ilk Pazartesi koşumunda "SKIP bekleniyordu ama SKIP satırı yok" durumu
-    ancak runbook'a bakarak yakalanır. Bu yüzden her beklenen dizgi workflow
-    ya da script'ten REGEX ile çıkarılır, runbook bölümünde birebir aranır.
+    Runbook metni elle kopyalanırsa iki yerde birden sessizce eskir. Bunun
+    yerine her dizgi workflow ya da script'ten REGEX ile çıkarılır, runbook
+    bölümünde birebir aranır. İki mod da (gerçek koşum + SKIP fallback)
+    pinlenir — çünkü ikisi de meşru çıkış yollarıdır.
     """
 
     @classmethod
@@ -126,21 +194,59 @@ class TestCronRunbookParity(unittest.TestCase):
                       "runbook cron ifadesini workflow'tan birebir vermeli: %s"
                       % cron)
 
+    def test_runbook_quotes_real_run_evidence_lines(self):
+        # Gerçek koşumun kanıt satırları — script'ten türetilir. Bunlar
+        # kanıtın kendisidir: SKIP modunda HİÇBİRİ yazılmaz.
+        for pattern, what in (
+                (r'log\s+"(trivy_findings=0)"', "trivy_findings"),
+                (r'log\s+"(trivy_clean=Clean)"', "trivy_clean"),
+                (r'log\s+"(health_http=200)"', "health_http"),
+                (r'log\s+"(verdict=PASS)"', "verdict=PASS"),
+        ):
+            with self.subTest(evidence=what):
+                line = self._from(self._sh, pattern, what)
+                if "$" in line:  # dinamik değer: yalnız anahtar doğrulanır
+                    line = line.split("=", 1)[0] + "="
+                self.assertIn(line, self._runbook,
+                              "runbook gerçek koşumun kanıt satırını "
+                              "script'ten birebir vermeli: %s" % line)
+
+    def test_runbook_pins_healthy_evidence_value(self):
+        """container_health=<değer> dinamiktir; kanıt DEĞERİ script'ten gelir.
+
+        Script yalnız `health_status == "healthy"` ise verdict'e geçer; runbook
+        bu yüzden `container_health=healthy` demelidir. Değer kopyalanmaz —
+        script'in başarı ölçütü önce doğrulanır, sonra beklenen değer aranır.
+        """
+        self.assertIn('[[ "$health_status" == "healthy" ]]', self._sh,
+                      "script'in sağlık başarı ölçütü değişti — runbook'taki "
+                      "container_health beklenen değeri güncellenmeli")
+        self.assertIn("container_health=healthy", self._runbook,
+                      "runbook sağlık kanıtının değerini vermeli: "
+                      "container_health=healthy")
+
+    def test_runbook_quotes_pass_message_verbatim(self):
+        # printf biçimi: 'PASS: … — kanıt: %s\n' — dinamik kuyruk (%s) ve
+        # kaçış dizisi dokümana girmez; sabit önek birebir verilir.
+        msg = self._from(
+            self._sh, r"printf '(PASS:[^']+?)\s*—\s*kanıt:",
+            "PASS mesajı")
+        self.assertIn(msg, self._runbook,
+                      "runbook script'in PASS mesajını birebir vermeli")
+
     def test_runbook_quotes_skip_line_verbatim(self):
         # skip() basımı "SKIP: <mesaj>" — mesaj script'ten türetilir.
-        msg = self._from(
-            self._sh, r'skip\s+"(trivy yok[^"]*)"',
-            "trivy SKIP mesajı")
+        msg = self._from(self._sh, r'skip\s+"(trivy yok[^"]*)"',
+                         "trivy SKIP mesajı")
         self.assertIn("SKIP: %s" % msg, self._runbook,
                       "runbook SKIP satırını script'ten birebir vermeli. "
                       "Mesaj script'te değiştiyse runbook da değişmeli.")
 
     def test_runbook_quotes_smoke_evidence_header_and_image(self):
-        header = self._from(
-            self._sh, r'log\s+"([^"]*smoke evidence)"',
-            "evidence başlığı")
-        tag = self._from(
-            self._sh, r'DOCKER_SMOKE_TAG:-([^}]+)\}', "varsayılan image tag")
+        header = self._from(self._sh, r'log\s+"([^"]*smoke evidence)"',
+                            "evidence başlığı")
+        tag = self._from(self._sh, r'DOCKER_SMOKE_TAG:-([^}]+)\}',
+                         "varsayılan image tag")
         self.assertIn(header, self._runbook,
                       "runbook evidence başlığını script'ten birebir vermeli")
         self.assertIn("image=%s" % tag, self._runbook,
@@ -148,26 +254,62 @@ class TestCronRunbookParity(unittest.TestCase):
                       "birebir vermeli: image=%s" % tag)
 
     def test_runbook_quotes_evidence_fallback_verbatim(self):
-        note = self._from(
-            self._wf, r'\|\| echo\s+"([^"]+)"',
-            "Show smoke evidence fallback notu")
+        # NOT: workflow'ta İKİ `|| echo` var (assert adımı + evidence adımı).
+        # Tüm dosyada regex koşmak yanlış satırı yakalar; bu yüzden
+        # fallback yalnız "Show smoke evidence" adımının gövdesinden aranır.
+        body = step_body(self._wf, "Show smoke evidence")
+        self.assertIsNotNone(body, "Show smoke evidence adımı yok")
+        note = self._from(body, r'\|\| echo\s+"([^"]+)"',
+                          "Show smoke evidence fallback notu")
         self.assertIn(note, self._runbook,
                       "runbook fallback notunu workflow'tan birebir vermeli. "
                       "Not, script log()'a ulaşmadan çökerse basılır.")
 
+    def test_runbook_quotes_assert_ok_message_verbatim(self):
+        body = step_body(self._wf, "Assert real run (SKIP is not evidence in CI)")
+        self.assertIsNotNone(body, "assert adımı yok")
+        ok = self._from(body, r'echo\s+"(OK:[^"]+)"', "assert OK mesajı")
+        self.assertIn(ok, self._runbook,
+                      "runbook assert adımının OK mesajını birebir vermeli")
+
+    def test_runbook_trivy_version_matches_workflow_pin(self):
+        """Runbook'un `trivy=<sürüm>` satırı workflow'un pin'iyle aynı olmalı.
+
+        Sapma tablosunun "beklenmeyen sürüm" satırı bu drift'i tarif eder:
+        image-scan job'ı `trivy-action@v0.35.0` ile tararken smoke job'ı
+        ayrı bir motor kurarsa iki kapı çelişebilir (biri yeşil, biri
+        kırmızı — hangisinin doğru olduğu belli değildir). Parite iki
+        yerde yazılı olduğu için bağ testle zorlanır.
+        """
+        version = self._from(self._wf,
+                             r'TRIVY_VERSION:\s*"?([0-9]+\.[0-9]+\.[0-9]+)"?',
+                             "TRIVY_VERSION pin'i")
+        self.assertIn("trivy=%s" % version, self._runbook,
+                      "runbook'un beklenen `trivy=%s` satırı workflow'un "
+                      "TRIVY_VERSION pin'iyle eşleşmeli — iki job tek "
+                      "motorla taramalı" % version)
+
+    def test_runbook_compares_the_two_modes(self):
+        self.assertIn("### İki mod ve çıktılarının karşılaştırması",
+                      self._runbook,
+                      "runbook iki modu karşılaştırmalı — SKIP ve gerçek "
+                      "koşum farklı kanıt miktarları üretir")
+        for marker in ("SKIP modu (araç yok)", "Gerçek koşum (CI'daki beklenti)",
+                       "verdict=PASS", "trivy_findings=0"):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, self._runbook,
+                              "karşılaştırma tablosu bu işareti taşımalı: %s"
+                              % marker)
+
     def test_runbook_documents_deviation_actions(self):
-        # Sapma tablosu boş olmamalı: "SKIP satırı yok" en kritik sapmadır
-        # (yeşil ama kanıtsız koşum K3'ün savunmasını deler).
         self.assertIn("### Sapma tablosu", self._runbook,
                       "runbook sapma tablosu içermeli")
-        self.assertIn("SKIP: trivy yok", self._runbook,
-                      "tablo, beklenen SKIP satırının KAYBOLMASI durumunu "
-                      "adımlarıyla birlikte kapsamalı")
         for deviation in (
-                "Show smoke evidence",
+                "verdict=FAIL",
                 "workflow_dispatch",
                 "image-scan",
-                "trivy_findings=0",
+                "TRIVY_VERSION",
+                "sha256sum",
                 "gh run list --workflow docker-security.yml",
         ):
             with self.subTest(deviation=deviation):
@@ -175,11 +317,13 @@ class TestCronRunbookParity(unittest.TestCase):
                               "sapma tablosu bu durumu kapsamalı: %s"
                               % deviation)
 
-    def test_runbook_states_skip_is_evidence_not_error(self):
-        # Değişmez: SKIP bir hata değil kanıtın kendisi. Runner'a trivy
-        # kurmak cron'un görünürlüğünü sessizleştirir.
-        self.assertIn("SKIP bir hata değildir", self._runbook,
-                      "runbook SKIP'in kanıt olduğunu açıkça söylemeli")
+    def test_runbook_states_skip_is_not_ci_evidence(self):
+        # Yeni değişmez: SKIP bir hata değildir, ama CI'da kanıt da
+        # değildir — kurulum sessizce bozulduğunun işaretidir.
+        self.assertIn("SKIP bir hata değildir, ama CI'da kanıt da değildir",
+                      self._runbook,
+                      "runbook, CI'da SKIP'in kanıt sayılmadığını açıkça "
+                      "söylemeli (assert adımı bunu fail-closed'a bağlar)")
 
 
 if __name__ == "__main__":
