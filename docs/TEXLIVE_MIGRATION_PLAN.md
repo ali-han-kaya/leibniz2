@@ -57,17 +57,41 @@ farklarının kabul raporuyla belgelenmesi.
   varken SKIP **yok** (bu makinede ölçüldü: PASS); tectonic ayağı bilgi
   amaçlı ikincil kalır. Verdict semantiği zaten dürüst: ham farklı +
   kanonik eşit + `residual=/ID` → PASS; kanonik farklı → FAIL.
-- [ ] `texlive_determinism_test.sh`'e **3-geçiş modu** eklenir (mevcut
+  **AÇIK (ölçüldü 2026-10-01):** hook satır 46-50 hâlâ tectonic yoksa
+  `SKIP: tectonic kurulu değil` diyip exit 0 ediyor; `texlive_determinism_test.sh`
+  de iki aracı birlikte şart koşuyor. Bu davranış sözleşmeye bağlı
+  (`test_texlive_determinism_hook.test_skip_when_tectonic_missing`) —
+  yani bilinçli bir tasarım durumu; değiştirmek hook + script + stub
+  test kontratını birlikte düzenlemeyi gerektirir.
+- [x] `texlive_determinism_test.sh`'e **3-geçiş modu** eklenir (mevcut
   tek-geçiş deneyi K6 hizalama gerçeğini yakalamaz); stub testleri
   (test_texlive_determinism_hook, test_texlive_determinism_id_residual)
   yeni akışa uyarlanır; `check-unit-tests` manifest + HOOK_COVERAGE
   senkronu yenilenir.
-- [ ] `render_z3_slides.py` zaten `pdflatex → latex → tectonic` sırasını
+  **Doğrulandı (2026-10-01):** `DETERMINISM_PASSES` modu script'te
+  (`texlive_determinism_test.sh` satır 68); `Makefile.texlive` `PASSES=3`
+  ile sürüyor; `test_texlive_determinism_id_residual.py` 3-geçiş
+  sözleşmesini stub sayacı + `passes=N` rapor satırıyla sabitliyor; iki
+  stub testi hem `check_unit_tests.list` (136-137) hem HOOK_COVERAGE
+  (196-197) kayıtlı.
+- [x] `render_z3_slides.py` zaten `pdflatex → latex → tectonic` sırasını
   deniyor — koruyucu test eklenir: motor seçimi log'da görünür ve
   pdflatex varken tectonic'e düşmez.
-- [ ] `check_review_freshness.py` / `check_bibliography_sync.py`
+  **Uygulandı (2026-10-01):** `test_render_z3_slides.TestEngineGuard`
+  (5 test, motordan bağımsız: sahte `shutil.which`): TeXLive varken
+  tectonic seçilmez; tectonic yalnız son çare; seçilen motor çıktıya
+  yazılır (`LaTeX=<motor>`); derleme başarısızsa **sessiz motor değişimi
+  yok** (exit 1 + `DERLEME HATASI`). 4/4 mutasyon yakalandı (motor sırası
+  ters, sessiz tectonic fallback, sabitlenmiş motor, log'suz seçim).
+  Docstring'deki bayat "bu makinede TeXLive yok" iddiası da düzeltildi.
+- [x] `check_review_freshness.py` / `check_bibliography_sync.py`
   doküman/metin yorumlarında "tectonic + qpdf" ifadeleri güncellenir
   (davranış değişmez; engine-agnostik kontrol).
+  **Uygulandı (2026-10-01):** iki kapının docstring'i artık motoru
+  sözleşme saymıyor — hangi motor derlemiş olursa olsun denetlenen şey
+  kaynak↔çıktı tazeliği + sidecar bütünlüğü; teslim hattı (TeXLive/
+  pdfTeX) ve REVIEW ayırıcısı (tectonic) ayrı ayrı adlandırıldı.
+  Davranış değişmedi: iki kapı da PASS, 56 test OK.
 
 ## Faz 3 — `/ID` kalıntısı kabul raporu
 

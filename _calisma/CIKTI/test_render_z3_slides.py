@@ -11,9 +11,12 @@ tex-render-guide Method 1 (standalone LaTeX → PDF → yüksek DPI PNG) ile
   3) Beklenen sonuç tutarlılığı: aynı ID'nin verdict'i kodla eşleşmeli
      (ör. P4-b SAT, P4-d UNSAT — yanlış beklenen → drift)
   4) _latex_doc: geçerli standalone doküman üretir (preamble + teorem)
-  5) Araç zinciri fallback: pdflatex→tectonic, convert→pdftoppm→sips
+  5) Araç zinciri fallback: pdflatex→latex→tectonic, convert→pdftoppm→sips
      sırası (Method 1 yedekliliği); gerçek derleme yalnızca araç varsa
      (skip — CI'da TeX motoru olmayabilir).
+  6) MOTOR GUARD (Faz 2): TeXLive varken tectonic'e düşülmez, motor
+     log'da görünür, derleme hatası sessiz motor değişimine yol açmaz —
+     sahte `shutil.which` ile motordan bağımsız koşar (TestEngineGuard).
 """
 import pathlib
 import sys
@@ -24,6 +27,8 @@ HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 import render_z3_slides as rz
+
+real_compile = rz.compile_tex
 
 THEOREM_IDS = ["P1-a", "P1-b", "P2", "P3-a", "P3-b",
                "P4-a", "P4-b", "P4-c", "P4-d", "P4-e", "P5", "P5-note"]
@@ -121,6 +126,81 @@ class TestToolchain(unittest.TestCase):
         c = rz.find_pdf_to_png()
         if c is not None:
             self.assertIn(c, ("convert", "magick", "pdftoppm", "sips"))
+
+
+class TestEngineGuard(unittest.TestCase):
+    """Faz 2 koruyucu testi (docs/TEXLIVE_MIGRATION_PLAN.md §Faz 2).
+
+    Sözleşme: (1) TeXLive motoru (pdflatex/latex) varken RENDER
+    tectonic'e DÜŞMEZ — tectonic yalnız ikisinin de olmadığı yerde
+    meşru son çaredir; (2) seçilen motor çıktıya yazılır (log'da
+    görünür); (3) derleme başarısız olursa sessizce BAŞKA motora
+    geçilmez, hata açıkça raporlanır.
+
+    Motordan bağımsız (offline) test edilir: `shutil.which` sahte bir
+    PATH gibi davranacak şekilde değiştirilir — CI'da hiçbir TeX motoru
+    kurulu olmasa da sözleşme koşar.
+    """
+
+    def _fake_which(self, available):
+        """shutil.which'i yalnız `available` komutlarına yol verecek şekilde kısıtlar."""
+        real = rz.shutil.which
+
+        def fake(cmd, *a, **k):
+            return "/fake/bin/" + cmd if cmd in available else None
+
+        rz.shutil.which = fake
+        self.addCleanup(lambda: setattr(rz.shutil, "which", real))
+
+    def test_prefers_pdflatex_when_texlive_present(self):
+        self._fake_which({"pdflatex", "latex", "tectonic"})
+        self.assertEqual(rz.find_tex_engine(), "pdflatex")
+
+    def test_latex_before_tectonic(self):
+        self._fake_which({"latex", "tectonic"})
+        self.assertEqual(rz.find_tex_engine(), "latex")
+
+    def test_tectonic_is_last_resort_only(self):
+        self._fake_which({"tectonic"})
+        self.assertEqual(rz.find_tex_engine(), "tectonic",
+                         "tectonic yalnız TeXLive motorları yokken seçilebilir")
+
+    def test_no_engine_returns_none(self):
+        self._fake_which(set())
+        self.assertIsNone(rz.find_tex_engine())
+
+    def test_selected_engine_is_logged_and_no_silent_fallback(self):
+        """Motor adı log'a düşer; derleme başarısızsa tectonic denenmez."""
+        self._fake_which({"pdflatex", "tectonic", "convert"})
+        tried = []
+
+        def failing_compile(engine, tex_path, workdir):
+            tried.append(engine)
+            return False  # pdflatex derledi ama çıktı yok → başarısız
+
+        rz.compile_tex = failing_compile
+        self.addCleanup(lambda: setattr(rz, "compile_tex", real_compile))
+
+        real_argv = sys.argv
+        sys.argv = ["render_z3_slides.py", "--only", "P1-a"]
+        self.addCleanup(lambda: setattr(sys, "argv", real_argv))
+
+        import contextlib
+        import io
+        buf = io.StringIO()
+        with tempfile.TemporaryDirectory() as td:
+            sys.argv += ["--out", td]
+            with contextlib.redirect_stdout(buf):
+                rc = rz.main()
+        out = buf.getvalue()
+
+        self.assertEqual(rc, 1, "derleme hatası exit 1 olmalı")
+        self.assertIn("LaTeX=pdflatex", out,
+                      "seçilen motor log'da görünmeli (izlenebilirlik)")
+        self.assertEqual(tried, ["pdflatex"],
+                         "pdflatex varken tectonic'e düşülmemeli")
+        self.assertIn("DERLEME HATASI", out,
+                      "başarısız derleme sessiz geçmemeli")
 
 
 if __name__ == "__main__":

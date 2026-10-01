@@ -6,10 +6,16 @@ from __future__ import annotations
 The bibliography lives in ingiliz_empirizmi_v3.tex (64 \\item entries).
 The shipped artifact is ingiliz_empirizmi_v3.pdf (poppler pdftotext).
 After any repair (V5j Popkin 133-147, Priest full subtitle etc.) the
-tex → pdf pipeline (tectonic + qpdf) should be rerun; if the PDF is left
-stale (or manually edited) the drift goes silent until a reviewer
-opens the PDF. This checker makes it fail-closed *offline* (no tool
-beyond what K6 already requires).
+tex → pdf pipeline should be rerun; if the PDF is left stale (or manually
+edited) the drift goes silent until a reviewer opens the PDF. This checker
+makes it fail-closed *offline* (no tool beyond what K6 already requires).
+
+The check is ENGINE-AGNOSTIC: it compares .tex ↔ built PDF text, so it is
+indifferent to which engine produced the PDF — the delivery line builds
+with TeXLive/pdfTeX (docs/Makefile.texlive), the legacy path with tectonic
+(docs/Makefile.tectonic), and the REVIEW separator with tectonic
+(_calisma/REVIEW/build_review_pdf.sh). Rebuild tooling may therefore change
+without touching this contract.
 
 Strategy (two-source extraction + normalized comparison):
   tex  — parse ingiliz_empirizmi_v3.tex References (\\item count == 64),
