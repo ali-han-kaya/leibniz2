@@ -49,7 +49,7 @@ zaman uygular*. İkisi karıştırılmamalıdır — biri dosya/içerik yüzeyi,
 | # | Kapı | Nerede tanımlı | Ne zaman koşar | Fail-closed kanıtı |
 |---|---|---|---|---|
 | 1 | **Smoke** — build + Trivy gate + canlı sağlık | CI: `docker-security.yml` → `smoke` job (`timeout-minutes: 30`). Yerel ikizi: `check-docker-security-smoke` (`bash _calisma/CIKTI/docker_security_smoke.sh`) | CI'da push + cron + `workflow_dispatch`; yerel ikiz yalnız `Dockerfile` stage'liyken | Kanıt dosyasında `verdict=PASS` yoksa `Assert real run` adımı `exit 1` — SKIP kanıt sayılmaz. Build/Trivy/sağlık hatasında script rc=1 |
-| 2 | **Patching** — yama-desen sözleşmesi | `check-dockerfile-security-patching` (`python3 -m unittest _calisma.CIKTI.test_dockerfile_security_patching`, `files: ^Dockerfile$`, `pass_filenames: false`) | Yalnız kök `Dockerfile` stage'liyken (`always_run` yok — nedensel sinyal korunur) | Sözleşme satırı bozulursa test fail → commit blok. Dosya manifest'te yer aldığı için `check-unit-tests` de koşar |
+| 2 | **Patching** — yama-desen sözleşmesi | `check-dockerfile-security-patching` (`python3 -m unittest _calisma.CIKTI.test_dockerfile_security_patching`, `files: (^|/)Dockerfile$`, `pass_filenames: false`) | Herhangi bir yolda `Dockerfile` stage'liyken (`always_run` yok — nedensel sinyal korunur) | Sözleşme satırı bozulursa test fail → commit blok. Kapsam dışı Dockerfile varsa `test_no_uncovered_dockerfile` da fail eder. Dosya manifest'te yer aldığı için `check-unit-tests` de koşar |
 | 3 | **Cron** — zamanlanmış tazeleme | `docker-security.yml` → `on.schedule: "43 3 * * 1"` | Pazartesi 03:43 UTC, push tetiklemesi olmadan | Hazırlıksız çıkan CVE'yi yakalar; koşum kaydına yazılır, sapma tablosu yönlendirir |
 
 Kapı 1 ve 2 **yerelde**, kapı 3 **uzakta** koşar; üçü de aynı yüzeye bakar
@@ -63,20 +63,29 @@ kendisi kurar (URL + sürüm + sha256 üçü de pin'li). İki iş böylece farkl
 motorlarla değil aynı motorla döner; ayrıntı "Motor paritesi — ölçülmüş"
 bölümündedir.
 
-### Tetikleme yüzeyleri: ölçülen asimetri
+### Tetikleme yüzeyleri: ölçülen asimetri ve kapandığı
 
 İki pre-commit kapısı aynı dosyaya bakar ama **eşleşme kalıpları
 farklıdır**:
 
-| Kapı | `files:` | `pass_filenames` | Ölçülen sonuç |
+| Kapı | `files:` | `pass_filenames` | Sonuç |
 |---|---|---|---|
 | `check-docker-security-smoke` | `Dockerfile` — kök değil, yolun herhangi bir yerinde eşleşir | belirtilmemiş (varsayılan) | Alt dizinde bir `Dockerfile` da tam build+scan'i tetikler |
-| `check-dockerfile-security-patching` | `^Dockerfile$` — yalnız kök | `false` | Sözleşme **yalnız kök** Dockerfile'ı korur |
+| `check-dockerfile-security-patching` | `(^|/)Dockerfile$` — kök **ve** kök altı | `false` | Herhangi bir yolda `Dockerfile` sözleşmeyi tetikler |
 
-Bunun ölçülen sonucu şudur: ikinci bir `Dockerfile` eklenirse smoke kapısı
-yine de koşar, ancak **yama-desen sözleşmesi kapsam dışı kalır** — ihlal
-sözleşme testine uğramaz. Yeni bir Dockerfile eklendiğinde ya köke taşınmalı
-ya da `files:` deseni genişletilmelidir.
+**Boşluk (ölçüldü, kapandı).** Patching kapısı `^Dockerfile$` iken ikinci bir
+`Dockerfile` eklenmesi onu tamamen kapsam dışı bırakıyordu: ne hook
+ateşlenir ne sözleşme uygulanır. Bugün git-tracked Dockerfile sayısı 1,
+yani boşluk gizliydi; ikinci dosya eklendiği anda sessizce açılırdı. Desen
+`(^|/)Dockerfile$` yapıldı.
+
+Sözleşmenin **kendisi** iki stage'li bookworm pini beklediği için her
+Dockerfile'a körlemesine uygulanamaz (meşru bir tek-stage yardımcı image'ı
+kırılırdı). Bu yüzden çözüm genişletme değil **görünür kılma**dır:
+`repo_dockerfiles()` keşfi, kapsam dışı bir Dockerfile varsa
+`test_no_uncovered_dockerfile` fail-closed durur. Yani ikinci bir Dockerfile
+artık sessizce geçmez — ya sözleşmeye eklenir ya da gerekçesiyle kapsam
+dışı bildirilir.
 
 ## Üç katman
 
