@@ -101,6 +101,10 @@
 #                               --only-upgrade, apt hijyeni, pip floors) —
 #                               Dockerfile stage'liyken ateşlenir
 #                               (değişim-farkında; always_run yok).
+#                               files: (^|/)Dockerfile$ — kök dışı
+#                               Dockerfile'ları da eşler; süit, kapsam
+#                               dışı Dockerfile eklenmesini fail-closed
+#                               reddeder.
 # Herhangi bir P0/P1 bulgusu commit'i bloke eder (sıfır-dışı exit).
 #
 # Not: ÜÇ yazan hook vardır: update-config (config'i paket içeriğiyle
@@ -989,10 +993,13 @@ repos:
           bookworm dağıtım pini, pip floor deseni. Değişim-farkında
           tetikleme: yalnızca Dockerfile stage'liyken koşar (always_run
           yok — nedensel sinyal korunur); desen bozulursa commit bloke.
+          Kapsam: (^|/)Dockerfile$ KÖK DIŞI Dockerfile'ları da eşler —
+          kapsam dışı Dockerfile sessizce eklenirse sözleşme onu
+          yakalamaz, bu yüzden süit keşif guard'ı fail-closed durur.
           OFFLINE, stdlib-only, ~0.05s.
         entry: python3 -m unittest _calisma.CIKTI.test_dockerfile_security_patching
         language: system
-        files: ^Dockerfile$
+        files: (^|/)Dockerfile$
         pass_filenames: false
         stages: [pre-commit]
         verbose: true
