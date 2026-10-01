@@ -92,7 +92,10 @@
 #   20) check-docker-security-smoke: docker_security_smoke.sh (build + Trivy
 #                               gate + canlı sağlık) — Dockerfile stage'liyken
 #                               ateşlenir (tam build dakikalar sürer; her
-#                               committe değil surface'te). SKIP-farkında:
+#                               committe değil surface'te). files:
+#                               (^|/)Dockerfile$ — kök ve kök altı eşlenir,
+#                               Dockerfile.md/.bak gibi belgeler değil.
+#                               SKIP-farkında:
 #                               docker/trivy/colima yoksa script exit 0 SKIP
 #                               üretir (ortam-yok ≠ kod-bozuk); bulgu varsa
 #                               rc=1 fail-closed bloke eder.
@@ -973,13 +976,16 @@ repos:
           + Trivy gate (CRITICAL,HIGH, --ignore-unfixed) + canlı /api/health
           + HEALTHCHECK. Trigger: Dockerfile stage'liyken
           (check-dashboard-typecheck örüntüsü — tam build dakikalar sürer,
-          her committe değil surface'te koşar). SKIP-farkında: docker/trivy
+          her committe değil surface'te koşar). files: (^|/)Dockerfile$
+          kök ve kök altı Dockerfile'ı eşler; yalnız adı Dockerfile olan
+          dosyayı tetikler, Dockerfile.md/.bak belgeleri tetiklemez.
+          SKIP-farkında: docker/trivy
           yok veya colima daemon sağlanamazsa script exit 0 SKIP üretir
           (ortam-yok ≠ kod-bozuk; sebebini kanıt dosyasına yazar); build
           hatası / Trivy bulgusu / sağlık ihlali rc=1 → fail-closed bloke.
         entry: bash _calisma/CIKTI/docker_security_smoke.sh
         language: system
-        files: Dockerfile
+        files: (^|/)Dockerfile$
         stages: [pre-commit]
         verbose: true
 
