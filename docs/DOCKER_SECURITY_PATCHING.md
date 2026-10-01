@@ -11,7 +11,7 @@ ile genelleştirildi.
 ```
 Trivy gate kırmızı
   (CI: docker-security workflow — CRITICAL,HIGH + ignore-unfixed + exit-code 1)
-        │
+        │   ← kapı 3: cron "43 3 * * 1" (Pazartesi 03:43 UTC) · push · dispatch
         ▼
 Bulgunun paketi + yamalı sürümü tespit edilir
   (trivy tablosunda "Fixed version" sütunu; Debian tracker'dan teyit)
@@ -19,19 +19,64 @@ Bulgunun paketi + yamalı sürümü tespit edilir
         ▼
 Floor sürüm CVE-defterine yazılır
   (Dockerfile: SECURITY_PATCH_PACKAGES default'u — kalıcı, işlenmiş kayıt)
-        │
+        │   ← kapı 2: check-dockerfile-security-patching (sözleşme)
         ▼
 Image yeniden build + scan
   (yerel tek komut: _calisma/CIKTI/docker_security_smoke.sh)
-        │
+        │   ← kapı 1: check-docker-security-smoke + CI smoke job
         ▼
 Gate yeşil → satırlar Dockerfile'da DURUR
+        │   ← kapı 3: sonraki Pazartesi aynı yüzeyi yeniden ölçer
+        ▼
+Döngü kapanır: yeni bulgu gelene kadar kayıt sabit kalır
 ```
 
 Son adım kasıtlıdır: bulgu kapandıktan sonra da floor satırları silinmez.
 Amaçları (1) base-image geri kayması durumunda **hızlı tekrar yama** —
 default arg her build'de taze uygulanır, (2) **sürüm-için-dokümantasyon** —
 hangi CVE'nin hangi floor'la kapatıldığı image'in kendisinde yaşar.
+
+Döngünün her adımının **kim tarafından zorlandığı** aşağıdaki kapı
+tablosunda tanımlıdır.
+
+## Kapı zinciri — üç uygulama katmanı
+
+Aşağıdaki "Üç katman" tablosu **paket** zinciridir (apt/pip/npm): *neyin*
+yamandığını söyler. Bu tablo ise **zorlama** zinciridir: *deseni kim, ne
+zaman uygular*. İkisi karıştırılmamalıdır — biri dosya/içerik yüzeyi,
+öteki kapı tetiklemesidir.
+
+| # | Kapı | Nerede tanımlı | Ne zaman koşar | Fail-closed kanıtı |
+|---|---|---|---|---|
+| 1 | **Smoke** — build + Trivy gate + canlı sağlık | CI: `docker-security.yml` → `smoke` job (`timeout-minutes: 30`). Yerel ikizi: `check-docker-security-smoke` (`bash _calisma/CIKTI/docker_security_smoke.sh`) | CI'da push + cron + `workflow_dispatch`; yerel ikiz yalnız `Dockerfile` stage'liyken | Kanıt dosyasında `verdict=PASS` yoksa `Assert real run` adımı `exit 1` — SKIP kanıt sayılmaz. Build/Trivy/sağlık hatasında script rc=1 |
+| 2 | **Patching** — yama-desen sözleşmesi | `check-dockerfile-security-patching` (`python3 -m unittest _calisma.CIKTI.test_dockerfile_security_patching`, `files: ^Dockerfile$`, `pass_filenames: false`) | Yalnız kök `Dockerfile` stage'liyken (`always_run` yok — nedensel sinyal korunur) | Sözleşme satırı bozulursa test fail → commit blok. Dosya manifest'te yer aldığı için `check-unit-tests` de koşar |
+| 3 | **Cron** — zamanlanmış tazeleme | `docker-security.yml` → `on.schedule: "43 3 * * 1"` | Pazartesi 03:43 UTC, push tetiklemesi olmadan | Hazırlıksız çıkan CVE'yi yakalar; koşum kaydına yazılır, sapma tablosu yönlendirir |
+
+Kapı 1 ve 2 **yerelde**, kapı 3 **uzakta** koşar; üçü de aynı yüzeye bakar
+(`Dockerfile` + smoke scripti) ve üçü de sessiz geçişe kapalıdır: 1 ve 2
+sıfır-dışı çıkışla commit'i bloklar, 3 ise kanıtı boş bırakmaz — ilk
+Pazartesi koşumu gelene kadar `schedule` satırı boş kalır.
+
+Kapı 1'in CI job'ı Trivy'yi `image-scan` işinin kullandığı
+`trivy-action@v0.35.0` varsayılanıyla **aynı sürümde** (`0.69.3`) ama
+kendisi kurar (URL + sürüm + sha256 üçü de pin'li). İki iş böylece farklı
+motorlarla değil aynı motorla döner; ayrıntı "Motor paritesi — ölçülmüş"
+bölümündedir.
+
+### Tetikleme yüzeyleri: ölçülen asimetri
+
+İki pre-commit kapısı aynı dosyaya bakar ama **eşleşme kalıpları
+farklıdır**:
+
+| Kapı | `files:` | `pass_filenames` | Ölçülen sonuç |
+|---|---|---|---|
+| `check-docker-security-smoke` | `Dockerfile` — kök değil, yolun herhangi bir yerinde eşleşir | belirtilmemiş (varsayılan) | Alt dizinde bir `Dockerfile` da tam build+scan'i tetikler |
+| `check-dockerfile-security-patching` | `^Dockerfile$` — yalnız kök | `false` | Sözleşme **yalnız kök** Dockerfile'ı korur |
+
+Bunun ölçülen sonucu şudur: ikinci bir `Dockerfile` eklenirse smoke kapısı
+yine de koşar, ancak **yama-desen sözleşmesi kapsam dışı kalır** — ihlal
+sözleşme testine uğramaz. Yeni bir Dockerfile eklendiğinde ya köke taşınmalı
+ya da `files:` deseni genişletilmelidir.
 
 ## Üç katman
 
