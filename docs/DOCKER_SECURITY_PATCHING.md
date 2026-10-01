@@ -255,19 +255,47 @@ bozulduğunun** kanıtıdır ve assert adımı onu kırmızıya çevirir. Script
 SKIP sözleşmesi korunur — çünkü triviysiz yerel makinelerde hâlâ doğru
 davranıştır.
 
-### İlk Pazartesi koşumu — kayıt satırı
+### Koşum kaydı
 
-İlk cron koşumu bittikten sonra bu satır doldurulur. Boş kalan satır,
-cron'un henüz doğrulanmadığı anlamına gelir.
+Cron'un ilk Pazartesi koşumu bittikten sonra **ilk satır** doldurulur. O
+satır boş kaldığı sürece cron'un zamanlanmış koşumu doğrulanmamıştır.
 
-| Koşum (run id) | Beklenen | Gözlenen | Sonuç |
-|---|---|---|---|
-| (henüz koşmadı — ilk Pazartesi 03:43 UTC) | gerçek koşum: `verdict=PASS` + `OK: verdict=PASS …` | — | — |
-| _referans_ push koşumu `36791434082` | gerçek koşum (cron değil) | `verdict=PASS`, `trivy=0.69.3`, 0 bulgu, health 200/healthy | ✅ |
+| Koşum (run id) | Tetikleyici | Beklenen | Gözlenen | Sonuç |
+|---|---|---|---|---|
+| (henüz koşmadı — ilk Pazartesi 03:43 UTC) | `schedule` | gerçek koşum: `verdict=PASS` + `OK: verdict=PASS …` | — | — |
+| `36799425906` | `workflow_dispatch` (elle) | gerçek koşum | `trivy.tgz: OK` · `Version: 0.69.3` · `trivy=0.69.3` · `trivy_findings=0` · `trivy_clean=Clean` · `health_http=200` · `container_health=healthy` · `verdict=PASS` · `OK: verdict=PASS …` · **`SKIP: trivy yok` 0 kez** | ✅ |
+| `36791434082` | `push` (PR #62) | gerçek koşum | `verdict=PASS`, 0 bulgu, health 200/healthy | ✅ |
 
-Kaydı tutmadan cron'u "çalışıyor" saymak kanıt değildir: `gh run list
---workflow docker-security.yml --event schedule` boş dönerse scheduler
-çalışmıyor demektir ve yukarıdaki son sapma satırı geçerlidir.
+**Elle koşum ne kanıtlar, ne kanıtlamaz.** `workflow_dispatch` aynı
+workflow'u, aynı job'ı, aynı runner imajıyla çalıştırır — bu yüzden gerçek
+koşum yolunu (kurulum → build → Trivy → health → assert) eksiksiz kanıtlar
+ve runbook'un beklenen deseni üç ayrı koşumda (push, PR, dispatch) birebir
+doğrulamıştır. Ama **scheduler'ı kanıtlamaz**: `schedule` tetikleyicisi
+ayrı bir yoldur. Yani ilk satır boş kaldığı sürece "cron çalışıyor"
+denemez.
+
+Elle koşum komutu (CVE tazelemesi gibi olaylar için de aynı yol):
+
+```bash
+gh workflow run docker-security.yml --ref main
+gh run list --workflow docker-security.yml --event workflow_dispatch
+```
+
+### Motor paritesi — ölçülmüş
+
+K6 (`trivy=<sürüm>` ↔ `TRIVY_VERSION`) yalnız workflow ↔ runbook eşleşmesini
+zorlar; iki job'ın **gerçekten aynı motorla** taradığını koşum kanıtı
+doğrular. `36799425906`'de ölçüldü:
+
+| Job | Trivy sürümü | Kaynak |
+|---|---|---|
+| `image-scan` | `version: v0.69.3` | `trivy-action@v0.35.0` → `setup-trivy` (action'ın varsayılanı) |
+| `smoke` | `Version: 0.69.3` | `Install Trivy` adımı, sha256 doğrulamalı |
+
+Aynı koşumun logu ayrıca "current version is 0.69.3" diyerek bunu teyit
+eder. Kapı iki işin birbirini çürütmesini böylece ölçülmüş olarak
+engelliyor: sürüm ayrışırsa iki tarama farklı motorlarla döner ve
+"biri yeşil biri kırmızı" belirsizliği oluşur.
 
 ## Katkı sözleşmesi (yeni bulgu geldiğinde)
 
