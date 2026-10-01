@@ -506,6 +506,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-01 | chore | (changelog) 87a35c6 satirini tabloya ekle | [`1a4159c`](https://github.com/ali-han-kaya/leibniz2/commit/1a4159c) |
 | 2026-10-01 | test | (ci) docker kapi bagimsizligini sozlesmeye bagla (K8) | [`f1ced41`](https://github.com/ali-han-kaya/leibniz2/commit/f1ced41) |
 | 2026-10-01 | chore | (changelog) f1ced41 satirini tabloya ekle | [`c2258ad`](https://github.com/ali-han-kaya/leibniz2/commit/c2258ad) |
+| 2026-10-01 | docs | (docker) #65-#69 birleşik teslim raporu | [`664ef16`](https://github.com/ali-han-kaya/leibniz2/commit/664ef16) |
 
 ### Regresyon notları
 
