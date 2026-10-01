@@ -27,29 +27,61 @@ farklarının kabul raporuyla belgelenmesi.
 
 ## Faz 0 — Ön koşullar (geçişin teknik sözleşmesi)
 
-- [ ] **3-geçişli build zorunlu:** pdflatex tek geçişte çapraz referans/
+- [x] **3-geçişli build zorunlu:** pdflatex tek geçişte çapraz referans/
   bib çözülmez (ölçüldü: 32 sayfa, 1.424 kelime eksik, `§??` gövdeleri) →
   tüm yeni target'lar **tam 3 geçiş** koşar ve son geçiş log'unda
   `Rerun to get` sayısı **0** olduğunu kanıtlar.
-- [ ] Sözleşme sabitleri: `SOURCE_DATE_EPOCH` export (her iki motora),
+  **Uygulandı (2026-10-01):** `docs/Makefile.texlive` `PASSES ?= 3`
+  (satır 35); `pdf` hedefi son geçiş log'unda `Rerun to get` kalırsa
+  exit 1 (fail-closed). Ölçüm: `SOURCE_DATE_EPOCH=0 make -f
+  docs/Makefile.texlive check` raporu `passes=3`, RC=0.
+- [x] Sözleşme sabitleri: `SOURCE_DATE_EPOCH` export (her iki motora),
   `TEXINPUTS="$TEXDIR//:"` (core_section gibi \input bağımlılıkları),
   `TEXMFOUTPUT="$PWD"`, `-output-directory` ile **kaynak dizinine asla
   yazma** (texlive_determinism_test.sh'teki GÜVENLİK notu).
-- [ ] Motor sürüm kilidi dokümantasyonu: pdfTeX 3.141592653-2.6-1.40.29
+  **Uygulandı (2026-10-01):** `engineinfo` hedefi üç sözleşmeyi satır
+  çıktısına yazıyor (`texinputs_contract`, `texmfoutput_contract`,
+  `output_dir_contract`); derleme çağrısı
+  `TEXINPUTS="$(TEXDIR)//:" TEXMFOUTPUT="$(BUILD_DIR)"
+  -output-directory="$(BUILD_DIR)"` üçlüsünü birlikte veriyor —
+  kaynak dizinine yazma yok.
+- [x] Motor sürüm kilidi dokümantasyonu: pdfTeX 3.141592653-2.6-1.40.29
   (TeX Live 2026); CI'da TeX Live sürümü adım çıktısına yazılır.
+  **Uygulandı (2026-10-01):** bu makinede `pdfTeX 3.141592653-2.6-1.40.29
+  (TeX Live 2026/Homebrew)` — pinlenen sürümle birebir; `Makefile`
+  satır 49 `engine_lock=pdfTeX 3.141592653-2.6 (TeX Live 2026)`;
+  CI `.github/workflows/determinism-trend.yml:53` `pdflatex --version |
+  head -1` ile sürümü adım çıktısına yazıyor.
 
 ## Faz 1 — Makefile geçişi (`docs/Makefile.texlive`)
 
-- [ ] `docs/Makefile.tectonic`'in ikizi olarak `docs/Makefile.texlive`
+- [x] `docs/Makefile.tectonic`'in ikizi olarak `docs/Makefile.texlive`
   eklenir; target'lar: `pdf` (3 geçiş), `check` (2 bağımsız 3-geçişli
   koşum + /ID-kanonik hash karşılaştırması + `Rerun=0` denetimi),
   `accept` (Faz 3 kabul raporu üretir), `clean`.
-- [ ] `SOURCE_DATE_EPOCH ?= git log -1 --format=%ct` semantiği
+  **Uygulandı (2026-10-01):** hedefler satır 56 (`pdf`), 76 (`check`),
+  94 (`accept`), 108 (`clean`) + `engineinfo`; `check` iki bağımsız
+  koşumu koşturup `determinism_report.txt`'yi karşılaştırır,
+  `accept` kanonik hash'i `ID_RESIDUAL_ACCEPTANCE` defterinde
+  doğrular.
+- [x] `SOURCE_DATE_EPOCH ?= git log -1 --format=%ct` semantiği
   korunur (geçmiş commit'i yeniden üretme yeteneği).
-- [ ] Eski `Makefile.tectonic` **kalır** (paralel yaşam, geri dönüş
+  **Uygulandı (2026-10-01):** satır 32 `SOURCE_DATE_EPOCH ?= $(shell
+  git -C "$(ROOT)" log -1 --format=%ct …)`; bugünkü koşum bu değişken
+  0'a çevrilerek yapıldı.
+- [x] Eski `Makefile.tectonic` **kalır** (paralel yaşam, geri dönüş
   yolu); README'de her iki Makefile yan yana dokümante edilir.
-- [ ] Kabul: `make -f docs/Makefile.texlive check` RC=0 ve kanonik hash
+  **Uygulandı (2026-10-01):** `docs/Makefile.tectonic` ağaçta (1.295
+  bayt); README satır 80-83 TeXLive hedeflerini, satır 86 tectonic
+  hedefini listeler.
+- [x] Kabul: `make -f docs/Makefile.texlive check` RC=0 ve kanonik hash
   `544516b0…` ile eşleşir.
+  **Uygulandı (2026-10-01):** `SOURCE_DATE_EPOCH=0 make -f
+  docs/Makefile.texlive check` → RC=0; iki bağımsız 3-geçişli koşumun
+  kanonik hash'i birebir aynı:
+  `544516b0d9d2f4c12b05b512b79b31ad238e82d3ca3aff81166a6bac1914f597`,
+  `residual=/ID`, `verdict=PASS`. Sözleşme kapısı:
+  `_calisma/CIKTI/test_makefile_texlive.py` (10 test).
 
 ## Faz 2 — Hook geçişi
 
