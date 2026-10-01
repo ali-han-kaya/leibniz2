@@ -301,6 +301,24 @@ class TestCronRunbookParity(unittest.TestCase):
                               "karşılaştırma tablosu bu işareti taşımalı: %s"
                               % marker)
 
+    def test_runbook_separates_dispatch_from_schedule_evidence(self):
+        """Elle (dispatch) koşumun cron kanıtı SAYILMAMALI — ayrım yazılı kalmalı.
+
+        `workflow_dispatch` aynı workflow'u aynı runner'da çalıştırır, yani
+        gerçek koşum yolunu kanıtlar; ama `schedule` tetikleyicisi ayrı bir
+        yoldur. Bu ayrım kaybolursa birisi "elle koştu, cron çalışıyor"
+        diyerek ilk Pazartesi koşumunu atlayabilir.
+        """
+        self.assertIn("Elle koşum ne kanıtlar, ne kanıtlamaz", self._runbook,
+                      "runbook elle koşumun neyi kanıtladığını/ne "
+                      "kanıtlamadığını açıkça ayırmalı")
+        for marker in ("workflow_dispatch", "schedule",
+                       "scheduler"):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, self._runbook,
+                              "ayrım iki tetikleyiciyi adıyla koymalı: %s"
+                              % marker)
+
     def test_runbook_documents_deviation_actions(self):
         self.assertIn("### Sapma tablosu", self._runbook,
                       "runbook sapma tablosu içermeli")

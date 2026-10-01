@@ -490,6 +490,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-01 | chore | (changelog) 93ef34d satirini tabloya ekle | [`5073212`](https://github.com/ali-han-kaya/leibniz2/commit/5073212) |
 | 2026-10-01 | ci | (docker) smoke job'ina Trivy — gerçek koşum, SKIP değil | [`a208ea9`](https://github.com/ali-han-kaya/leibniz2/commit/a208ea9) |
 | 2026-10-01 | docs | (docker) runbook'a olcum run'unu isle (gercek kosum kaniti) | [`4701eeb`](https://github.com/ali-han-kaya/leibniz2/commit/4701eeb) |
+| 2026-10-01 | docs | (reports) TeXLive Faz 1-3 teslim raporu (PR #52 kalici kaydi) | [`872dbf0`](https://github.com/ali-han-kaya/leibniz2/commit/872dbf0) |
 
 ### Regresyon notları
 
