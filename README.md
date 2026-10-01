@@ -501,6 +501,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-01 | docs | (cron) ilk Pazartesi SKIP doğrulaması — ölçüt ve sapma | [`07b42a4`](https://github.com/ali-han-kaya/leibniz2/commit/07b42a4) |
 | 2026-10-01 | test | (cron) ilk Pazartesi ölçütlerini pinleyen K-testleri | [`e2185e6`](https://github.com/ali-han-kaya/leibniz2/commit/e2185e6) |
 | 2026-10-01 | chore | (changelog) e2185e6 satirini tabloya ekle | [`e05ae8c`](https://github.com/ali-han-kaya/leibniz2/commit/e05ae8c) |
+| 2026-10-01 | fix | (docker) smoke hook'u yalnız gerçek Dockerfile'ı tetiklesin | [`05e412f`](https://github.com/ali-han-kaya/leibniz2/commit/05e412f) |
 
 ### Regresyon notları
 

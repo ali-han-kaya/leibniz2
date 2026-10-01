@@ -162,6 +162,84 @@ class TestSkipIsNotEvidenceInCI(unittest.TestCase):
                         "assert adımı smoke adımından sonra gelmeli")
 
 
+class TestSmokeHookRegistrationContract(unittest.TestCase):
+    """K7: check-docker-security-smoke'un pre-commit kaydı sözleşmedir.
+
+    Boşluk (ölçüldü): patching hook'un kendi kayıt sözleşmesi vardı
+    (entry / files / pass_filenames / always_run — test_dockerfile_security_
+    patching.py), smoke hook'unki yoktu; yalnız genel hook listesi
+    (test_all_hooks_smoke.py) tutuluyordu. Böylece entry yanlışa çevrilse
+    ya da files daraltsa hiçbir kapsam testi yakalamıyordu.
+
+    Buradaki asıl sözleşme **paritedir**: hook'un entry'si, CI'ın smoke
+    job'ının çağırdığı script ile aynı olmalı. İkisi ayrışırsa yerel
+    koşum artık CI'ın birebir karşılığı değildir — ve dokümanın "yerel
+    ikizi" iddiası sessizce doğrulanmaz hale gelir. Script yolu
+    workflow'dan türetilir, testte sabit yazılmaz.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls._cfg = (ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8")
+        cls._wf = (WORKFLOWS / "docker-security.yml").read_text(encoding="utf-8")
+        cls._block = next(
+            (b for b in cls._cfg.split("\n      - id: ")
+             if b.startswith("check-docker-security-smoke")), "")
+
+    def test_hook_entry_runs_the_ci_parity_script(self):
+        self.assertTrue(self._block,
+                        "check-docker-security-smoke config'de yok")
+        m = re.search(r"^\s*- cron:", self._wf, re.M)
+        self.assertIsNotNone(m, "docker-security.yml'de schedule yok")
+        ci = re.search(r"^\s*run:\s*bash\s+(\S*docker_security_smoke\.sh)\s*$",
+                       self._wf, re.M)
+        self.assertIsNotNone(ci,
+                             "CI smoke job'ı script'i run: ile çağırmalı")
+        script = ci.group(1)
+        entry = re.search(r"^\s*entry:\s*(.+)$", self._block, re.M)
+        self.assertIsNotNone(entry,
+                             "hook tanımında entry: yok — hook ne çalıştırır?")
+        # TAM EŞİTLİK, alt-dize değil: '...smoke.sh.bak' alt-dizde
+        # '...smoke.sh'yi barındırır ama hook yanlış dosyayı koşardı
+        # (ölçüldü: alt-dize kontrolü bu mutasyonu kaçırdı).
+        self.assertIn(script, entry.group(1).split(),
+                      "hook'un entry'si CI ile AYNI script'i çalıştırmalı "
+                      "(yerel ikizi iddiası): %s" % script)
+        self.assertTrue((ROOT / script).is_file(),
+                        "parite script'i diskte yok: %s" % script)
+
+    def test_hook_matches_real_dockerfiles_only(self):
+        # Tetikleme yüzeyi: kök VE kök altı Dockerfile eşlenmeli —
+        # alt dizindeki image de tam build+scan'i hak ediyor. Buna karşılık
+        # Dockerfile.md / .bak BELGE ya da yedektir; onları eşlemek
+        # dakikalar süren bir build'i boşuna tetikler.
+        m = re.search(r"^\s*files:\s*'?([^'\"\n]+?)'?\s*$", self._block, re.M)
+        self.assertIsNotNone(m, "hook tanımında files: deseni yok")
+        pat = re.compile(m.group(1))
+        for hit in ("Dockerfile", "apps/x/Dockerfile", "a/b/Dockerfile"):
+            with self.subTest(path=hit):
+                self.assertIsNotNone(pat.search(hit),
+                                     "gerçek Dockerfile eşlenmeli: %s" % hit)
+        for miss in ("Dockerfile.md", "apps/web/Dockerfile.bak",
+                     "docs/dockerfile-notes.txt"):
+            with self.subTest(path=miss):
+                self.assertIsNone(pat.search(miss),
+                                  "Dockerfile olmayan dosya eşlenmemeli: %s"
+                                  % miss)
+
+    def test_hook_is_change_scoped_not_always_run(self):
+        # Tam build dakikalar sürer; hook yalnız surface'te (Dockerfile
+        # değişince) koşmalı. always_run eklenirse nedensel sinyal kaybolur
+        # ve her commit dakikalar süren bir build'e bağlanır.
+        self.assertIsNone(
+            re.search(r"^\s*always_run:", self._block, re.M),
+            "değişim-farkında: always_run olmamalı (build her committe pahalı)")
+        self.assertRegex(self._block, r"(?m)^\s*language:\s*system\s*$",
+                         "hook language: system olmalı")
+        self.assertRegex(self._block, r"(?m)^\s*stages:\s*\[pre-commit\]",
+                         "hook pre-commit aşamasına bağlı olmalı")
+
+
 class TestCronRunbookParity(unittest.TestCase):
     """K4: cron runbook'ı beklenen log desenini kaynaktan türetilmiş verir.
 
