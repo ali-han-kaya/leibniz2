@@ -237,6 +237,7 @@ HOOK_COVERAGE = {
         "test_determinism_trend_badge.py",
         "test_gated_schedules.py",
         "test_sync_lifecycle.py",
+        "test_k6_determ_canonical.py",
     ],
 }
 

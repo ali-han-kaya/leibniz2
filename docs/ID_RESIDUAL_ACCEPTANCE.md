@@ -58,7 +58,28 @@ hiçbir fark gizlenmez).
 | 1 | tectonic 0.17.0 | 1 | 0 | `ad8fca69d4e4a2e1d67e497c8a7449f22c8564f5e9b3790d0b6f85d90d318e1b` (bağlamlar arası kararlı; raw = kanonik) | `ad8fca69d4e4a2e1d67e497c8a7449f22c8564f5e9b3790d0b6f85d90d318e1b` | ci_simulate + trend baseline (darwin, 2026-09-17) |
 | 2 | tectonic 0.17.0 | 3-geçiş pipeline | 0 | — (plan probe'u) | `47681218…` (plan-donmuş önek) | planın probe'ları (2026-09-17) |
 | 3 | pdfTeX 3.141592653-2.6-1.40.29 (TeX Live 2026/Homebrew) | 1 | 0 | koşum-başına değişken (`da868c13…`/`014bed9a…`) | `a75c340911801273b38be6ffb51a34820764b8f812d528dd2705d64117f1aa00` | ci_simulate 2× koşum + trend baseline |
-| 4 | pdfTeX 3.141592653-2.6-1.40.29 | 3 | 0 | koşum-başına değişken (`/ID`) | `544516b0d9d2f4c12b05b512b79b31ad238e82d3ca3aff81166a6bac1914f597` | `make check` 2× bağımsız koşum (Faz 1 kabul; 2026-09-20 tekrar ×2) |
+| 4 | pdfTeX 3.141592653-2.6-1.40.29 | 3 | 0 | koşum-başken değişken (`/ID`) | `544516b0d9d2f4c12b05b512b79b31ad238e82d3ca3aff81166a6bac1914f597` | `make check` 2× bağımsız koşum (Faz 1 kabul; 2026-09-20 tekrar ×2) |
+| 5 | **teslim artefaktı** `TESLIM_V5_FINAL_2026-08-17/.../ingiliz_empirizmi_v3.pdf` | teslim öncesi derleme | SDE kaydı yok (derleme tarihi belgelenmemiş) | `74b2cdbdb18fafbf5b3c87570c92f1500e7580469bcf4295b09734116df0779f` (teslimde donmuş) | `d4f67e39fd0ef77e8f294ca2195bb1fc784716234d0675ab88a4fd8695263a6a` | 2026-10-01 K6-DETERM ölçümü — **bu satır K6-DETERM strict karşılaştırmasının okuduğu referanstır** (§6) |
+
+### Satır 5 neden ayrı? (2026-10-01 ölçümü)
+
+Teslimdeki PDF, defterdeki dört ölçümün **hiçbirine** eşit değil:
+kanonik hash'i `d4f67e39…`, yani ne tectonic 1-geçiş (`ad8fca69…`) ne
+tectonic 3-geçiş (`47681218…` önek) ne pdfTeX 1-geçiş (`a75c3409…`) ne
+de pdfTeX 3-geçiş (`544516b0…`). Defter protokolü gereği (yeni bağlam →
+**yeni satır**, eskisinin üzerine yazma) teslim artefaktı kendi satırını
+aldı; üstüne yazılmadı.
+
+Aynı gün pdfTeX 3-geçiş satırı da yeniden doğrulandı:
+`SOURCE_DATE_EPOCH=0 make -f docs/Makefile.texlive check` → iki bağımsız
+koşumun kanonik hash'i `544516b0…` (birebir aynı), `residual=/ID`,
+`verdict=PASS`. Yani satır 4 hâlâ üretilebilir; teslim PDF'i yalnızca
+**henüz TeXLive ile yeniden derlenmemiş** bir artefakt (aşağıdaki
+"TeXLive-era teslim" satırı hâlâ `—`).
+
+Bu ikisi birbirine bağlı: teslim yeniden derlendiğinde satır 5'in hash'i
+kaybolacak değil — kanonik hash değişecek ve o değişim **bilinçli** olarak
+yeni bir satır + sidecar yenilemesi olacak (aşağıdaki protokol).
 
 ### Teslim sidecar'ı geçiş kaydı (`PDF_METADATA_SIDECAR` deseni)
 
@@ -79,15 +100,39 @@ hiçbir fark gizlenmez).
   yoksa fail-closed: yeni bağlam → deftere bilinçli satır eklenir,
   sahte kabul üretilmez.
 
-## 6. Faz 4 referansı: `--strict-determinism` yeni semantiği
+## 6. Faz 4 uygulaması: `--strict-determinism` semantiği (2026-10-01)
 
-- Bugün (tectonic-era): `verify_delivery.py` K6-DETERM, qpdf
-  metadata-stripped hash drift'ini bilgi düzeyinde raporlar;
-  `--strict-determinism` OFF (MANIFEST V5k notu).
-- Faz 4'te: strict mod `/ID`-kanonik karşılaştırmaya bağlanır ve
-  K6-DETERM'in "tectonic non-deterministic" yorumu bu raporun ölçümüyle
-  güncellenir (SDE ile deterministik; kalıntı `/ID` — §1-2). Strict
-  karşılaştırma §4 defterindeki kanonik referansa karşı yapılır.
+**Eski gerekçe yanlıştı.** MANIFEST V5k ve K6-DETERM yorumu “tectonic
+0.17.0 byte-deterministic değildir, bu yüzden strict kapalı” diyordu.
+Ölçüm bunu tersine çevirdi:
+
+| İddia (eski) | Ölçüm (2026-10-01) |
+|---|---|
+| motor non-deterministic | motor `SOURCE_DATE_EPOCH` ile **deterministik**; aynı kaynak + aynı SDE → kanonik hash iki bağımsız koşumda birebir aynı (`544516b0…`, `make check` SDE=0) |
+| belirsizlik metadata-stripped hash’te | belirsizlik **pdfTeX trailer `/ID`**’de; kanonik görünümde nötrleniyor (§1-2) |
+| strict, metadata-stripped hash’e açılabilir | **hayır** — `qpdf --remove-metadata` **kendisi** nondeterministik: aynı teslim PDF’inde 3 koşum → `2042ba8b…` / `7f9125d0…` / `c9b9890d…`, hiçbiri sidecar’daki `50263bcf…` ile eşleşmedi. Strict buna uygulansaydı kapı **her koşumda yanlış pozitif** üretirdi |
+
+**Uygulanan sözleşme (Faz 4):**
+
+1. K6-DETERM iki yüzeyi ayrı raporlar:
+   - `stripped` (qpdf) → **yalnız BİLGİ**. Kararsız olduğu ölçüldüğü için
+     strict karşılaştırmaya **giremez**.
+   - `canonical` (`/ID` nötrlü) → **strict**. Uygulama tek kaynaktır
+     (`_calisma/CIKTI/pdf_id_canonical.py`); shell determinism betiği de
+     aynı modülü okur — regex’in iki kopyası iki gerçeklik yaratırdı.
+2. Strict karşılaştırma **bu defterin §4 tablosunun “Kanonik (referans)”
+   sütununa** karşı yapılır. Hash’i kod değil doküman taşır; kısaltılmış
+   önekler (`47681218…`) kabul edilmez, yalnız ölçülmüş tam 64-hex.
+3. **Varsayılan açık**: `--strict-determinism` default `True`;
+   `--no-strict-determinism` ile kapatılır (yalnız teşhis).
+4. Hash defterde yoksa **P1 (fail-closed)** + çıkış yolu yazılır:
+   `make -f docs/Makefile.texlive accept`. Defter okunamaz/boşsa da P1 —
+   “kapı yok” hiçbir koşulda yeşil sayılmaz.
+
+Bugün teslim artefaktı `d4f67e39…` = §4 satır 5 → kapı yeşil. Teslim
+yeniden derlenirse hash değişir ve kapı **kırmızıya düşerek** zorunlu
+“bilinçli yeni satır + sidecar yenilemesi” adımına sokar; sessizce
+geçmez.
 
 ## 7. Geri dönüş (Faz 7)
 
