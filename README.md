@@ -491,6 +491,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-01 | ci | (docker) smoke job'ina Trivy — gerçek koşum, SKIP değil | [`a208ea9`](https://github.com/ali-han-kaya/leibniz2/commit/a208ea9) |
 | 2026-10-01 | docs | (docker) runbook'a olcum run'unu isle (gercek kosum kaniti) | [`4701eeb`](https://github.com/ali-han-kaya/leibniz2/commit/4701eeb) |
 | 2026-10-01 | docs | (reports) TeXLive Faz 1-3 teslim raporu (PR #52 kalici kaydi) | [`872dbf0`](https://github.com/ali-han-kaya/leibniz2/commit/872dbf0) |
+| 2026-10-01 | docs | (docker) workflow_dispatch kanitini isle (ilk gercek CI kosumu) | [`682c419`](https://github.com/ali-han-kaya/leibniz2/commit/682c419) |
 
 ### Regresyon notları
 
