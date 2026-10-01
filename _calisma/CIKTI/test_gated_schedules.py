@@ -45,6 +45,7 @@ eklerken iki drift riski ölçüldü:
 
 OFFLINE, stdlib-only, ~0.02s.
 """
+import ast
 import pathlib
 import re
 import unittest
@@ -311,6 +312,108 @@ class TestDockerGateCiIndependence(unittest.TestCase):
                               "kapı sözleşmesi manifest'te kayıtlı olmalı "
                               "(yerel hook + CI aynı bataryayı çalıştırsın): %s"
                               % contract)
+
+
+class TestGateMergeReportContract(unittest.TestCase):
+    """K9: birleşik teslim raporu gerçek sayılarla bağlı kalmalı.
+
+    Rapor PR #65–#69'u özetler. Özet dokümanlar zamanla gerçekten ayrışır:
+    test sayısı değişir, commit hash'i yanlış yazılır, bir PR unutulur.
+    Buradaki test, raporun sayısal iddialarını **canlı yüzeyden** türetir.
+
+    Özellikle: rapor "SKIP tablosu tek mesajı belgeliyor" diye itiraz
+    edildiğinde (aşağıdaki test bunu doğruluyor) raporun da bunu kabul
+    etmesi gerekir — aksi halde rapor, düzeltilmiş bir kusuru eski hâliyle
+    anlatmaya devam eder.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls._rep = (ROOT / "docs" / "DOCKER_SECURITY_GATE_MERGE_REPORT.md").read_text(
+            encoding="utf-8")
+
+    def test_report_lists_every_merged_gate_pr(self):
+        # Satır formu aranır ("| #66 |" + backtick'li hex hash), düz geçiş
+        # değil: raporda #68 dokuz kez geçiyor ve mutasyon tablosunda da
+        # "| #68 | M1 …" satırları var — yalnız "#68" araması ikisini de
+        # geçiriyordu (ölçüldü).
+        for pr in ("#65", "#66", "#67", "#68", "#69"):
+            with self.subTest(pr=pr):
+                self.assertRegex(
+                    self._rep, r"(?m)^\| %s \|.*`[0-9a-f]{7}`" % pr,
+                    "raporda bu PR'ın özet tablo satırı olmalı: %s" % pr)
+
+    def test_report_merge_hashes_match_real_merges(self):
+        # Hash, **kendi PR satırında** aranır. Düz `assertIn` yetersiz:
+        # her hash ilerleme tablosunda da geçiyor, ilk ölçümde bozulan
+        # hash yine bulundu (ölçüldü).
+        rows = {}
+        for line in self._rep.splitlines():
+            # Satır hem PR numarası hem de backtick'li bir hex hash içermeli:
+            # raporun mutasyon tablosunda da "| #68 | M1 …" satırları var,
+            # onlar gerçek PR satırının üzerine yazıyordu (ölçüldü).
+            m = re.match(r"\| (#6[5-9]) \|", line)
+            if m and re.search(r"`[0-9a-f]{7}`", line):
+                rows.setdefault(m.group(1), line)
+        for pr, sha in (("#65", "71a6e09"), ("#66", "47e79ef"),
+                        ("#67", "fc8b010"), ("#68", "38c58ba"),
+                        ("#69", "674de6f")):
+            with self.subTest(pr=pr):
+                self.assertIn(pr, rows, "PR satırı yok: %s" % pr)
+                self.assertIn(sha, rows[pr],
+                              "PR satırındaki merge hash'i yanlış: %s → %s"
+                              % (pr, sha))
+
+    def test_report_test_counts_match_live_suites(self):
+        # Rapor #65–#69 aralığını 31 -> 45 olarak verir. CANLI toplam
+        # 45'den küçükse bir test silinmiş demektir (monoton azalma).
+        # Büyükse bu raporun kendi testleri (K9) eklenmiştir — bu bir
+        # hata değil, raporun kapsamı o noktada biter.
+        # (Eşitlik şartı konulmadı: test kendi eklediği testleri de
+        # sayar ve kendini her koşumda kırmızıya döndürürdü.)
+        total = 0
+        for name in ("test_dockerfile_security_patching", "test_gated_schedules"):
+            src = (ROOT / "_calisma" / "CIKTI" / (name + ".py")).read_text(
+                encoding="utf-8")
+            # AST ile sayılır, grep ile değil: bu dosyanın kendi kaynak
+            # satırları test metot imzasını kelime kelime içerdiği için
+            # grep tabanlı sayım yanlış pozitif verir (ölçüldü: 33/32).
+            for node in ast.walk(ast.parse(src)):
+                if isinstance(node, ast.FunctionDef) and node.name.startswith("test"):
+                    total += 1
+        self.assertGreaterEqual(total, 45,
+                               "canlı test toplamı raporun uç noktasından "
+                               "kucuk — bir test silinmis olabilir (şu an %d)"
+                               % total)
+        self.assertIn("**45**", self._rep,
+                      "rapor #65-#69 sonrası toplamı vermeli (45)")
+        self.assertIn("**31**", self._rep,
+                      "rapor oturum başı tabanını vermeli (31)")
+
+    def test_report_records_the_undocumented_skip_messages(self):
+        # Script'in birden çok SKIP koşulu var (docker yokluğu, trivy yokluğu,
+        # colima/daemon yolları…); runbook yalnız birini belgeler. Rapor
+        # **sayıyı** script'ten türetilmiş biçimde vermeli — tek tek mesajı
+        # aramak yerine, koşul sayısının doğru yazıldığını kontrol eder.
+        sh = (ROOT / "_calisma" / "CIKTI" / "docker_security_smoke.sh").read_text(
+            encoding="utf-8")
+        skips = re.findall(r'\|\|\s*skip\s+"([^"]+)"', sh)
+        skips += re.findall(r'^\s*skip\s+"([^"]+)"', sh, re.M)
+        n = len(set(skips))
+        self.assertGreaterEqual(n, 5,
+                                "script en az 5 SKIP koşulu içermeli (şu an %d)"
+                                % n)
+        self.assertIn("SKIP koşulu", self._rep,
+                      "rapor SKIP koşul sayısını vermeli")
+        # Sayı **dijital** ve SKIP koşulu'na bağlı biçimde: serbest bir
+        # `\b5\b` araması "5 PR" gibi ilgisiz sayılarla tutuyordu (ölçüldü).
+        self.assertRegex(self._rep, r"\*\*%d SKIP koşulu" % n,
+                         "rapor SKIP koşulu sayısını doğru vermeli (%d)" % n)
+        for head in ("docker CLI yok", "trivy yok"):
+            with self.subTest(head=head):
+                self.assertIn(head, self._rep,
+                              "rapor her SKIP koşulunu adıyla belgelemeli: %s"
+                              % head)
 
 
 class TestCronRunbookParity(unittest.TestCase):
