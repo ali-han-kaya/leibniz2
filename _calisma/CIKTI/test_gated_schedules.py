@@ -344,5 +344,75 @@ class TestCronRunbookParity(unittest.TestCase):
                       "söylemeli (assert adımı bunu fail-closed'a bağlar)")
 
 
+    def _skip_grep_token(self):
+        """Script'ten türetilen SKIP **grep kalıbı** (kısa biçim).
+
+        Sayım komutunda aranan kalıp mesajın başıdır (`SKIP: trivy yok`);
+        mesajın tamamının birebir verilmesi ayrı bir K-testinin
+        (test_runbook_quotes_skip_line_verbatim) görevidir. Burada da
+        script'ten türetilir, sabit yazılmaz.
+        """
+        msg = self._from(self._sh, r'skip\s+"(trivy yok[^"]*)"',
+                         "trivy SKIP mesajı")
+        return "SKIP: %s" % msg.split(" — ")[0]
+
+    def test_runbook_first_monday_requires_skip_count_zero(self):
+        # İlk Pazartesi kabul ölçütü SKIP SAYIMIDIR. Yeşil job tek başına
+        # yeterli değil: SKIP modu da exit 0 ve kanıt dosyası üretir, yalnız
+        # güvenlik iddiası taşımaz. Bu yüzden bekleyen satır hem verdict
+        # hem de SKIP sayımı ölçütünü taşımalı.
+        row = next((ln for ln in self._runbook.splitlines()
+                    if ln.startswith("| (henüz koşmadı")), "")
+        self.assertTrue(row, "koşum kaydında bekleyen ilk Pazartesi satırı yok")
+        self.assertIn("`schedule`", row,
+                      "bekleyen satır schedule tetikleyicisiyle etiketlenmeli")
+        self.assertIn("verdict=PASS", row,
+                      "bekleyen satır gerçek koşum ölçütünü içermeli")
+        self.assertRegex(row, re.escape(self._skip_grep_token()) + r".{0,20}0 kez",
+                         "bekleyen satır SKIP sayımı ölçütünü de içermeli "
+                         "(%s 0 kez)" % self._skip_grep_token())
+
+    def test_runbook_deviation_table_covers_skip_appearing(self):
+        # SKIP'in logda görünmesi kendi başına sapmadır. assert adımı onu
+        # kırmızıya çevirir ama sebebi söylemez — teşhis ancak ayrı satırla
+        # yönlendirilebilir.
+        #
+        # Satır KENDİSİ kapsanır: 'sha256sum' gibi jetonlar sapma tablosunda
+        # başka satırlarda da geçtiği için bölüm genelinde aramak, SKIP
+        # satırındaki teşhisin silinmesine izin verirdi (ölçüldü).
+        sapma = self._runbook.split("### Sapma tablosu", 1)[1]
+        sapma = sapma.split("### Koşum kaydı", 1)[0]
+        row = next((ln for ln in sapma.splitlines()
+                    if ln.startswith("| `SKIP")), "")
+        self.assertTrue(row,
+                        "sapma tablosunda SKIP'in görünmesini kapsayan "
+                        "kendi satırı olmalı")
+        for token in (self._skip_grep_token(),
+                      "gh run view",
+                      "sha256sum"):
+            with self.subTest(token=token):
+                self.assertIn(token, row,
+                              "SKIP sapma satırı bu teşhisi taşımalı: %s"
+                              % token)
+
+    def test_runbook_first_monday_pins_measurements(self):
+        # Doğrulama prosedürü iki karar verici ölçümü birebir pinlemeli.
+        # Komutun TAMAMI aranır: sadece '--event schedule' diye aramak,
+        # filtreyi yalnız prose'da geçen bir metne indirgerse yakalamaz
+        # (ölçüldü: filtre komuttan silinince test geçiyordu).
+        parts = self._runbook.split("### İlk Pazartesi doğrulaması", 1)
+        self.assertEqual(len(parts), 2,
+                         "ilk Pazartesi doğrulama bölümü yok")
+        body = parts[1].split("### ", 1)[0]
+        for needle in ("OK: verdict=PASS",
+                       self._skip_grep_token(),
+                       "gh run list --workflow docker-security.yml "
+                       "--event schedule"):
+            with self.subTest(needle=needle):
+                self.assertIn(needle, body,
+                              "ilk Pazartesi bölümü ölçümü pinlemeli: %s"
+                              % needle)
+
+
 if __name__ == "__main__":
     unittest.main()

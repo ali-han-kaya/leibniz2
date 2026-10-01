@@ -498,6 +498,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-01 | test | (docker) kapsam guard'ı için regresyon testleri | [`a712fb8`](https://github.com/ali-han-kaya/leibniz2/commit/a712fb8) |
 | 2026-10-01 | chore | (changelog) a712fb8 satirini tabloya ekle | [`4d88606`](https://github.com/ali-han-kaya/leibniz2/commit/4d88606) |
 | 2026-10-01 | docs | (docker) kapsam boşluğu kapandı, tablo güncellendi | [`1295886`](https://github.com/ali-han-kaya/leibniz2/commit/1295886) |
+| 2026-10-01 | docs | (cron) ilk Pazartesi SKIP doğrulaması — ölçüt ve sapma | [`07b42a4`](https://github.com/ali-han-kaya/leibniz2/commit/07b42a4) |
 
 ### Regresyon notları
 
