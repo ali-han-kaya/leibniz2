@@ -514,6 +514,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-01 | docs | (history) superseded dal kaydı — post-42-chain net etki 0 | [`0df0f6f`](https://github.com/ali-han-kaya/leibniz2/commit/0df0f6f) |
 | 2026-10-01 | chore | (changelog) 0df0f6f satirini tabloya ekle | [`3780537`](https://github.com/ali-han-kaya/leibniz2/commit/3780537) |
 | 2026-10-01 | ci | (docker) yama build-arg'ları CI build'lerine de bağlandı | [`e4d5518`](https://github.com/ali-han-kaya/leibniz2/commit/e4d5518) |
+| 2026-10-01 | chore | (changelog) e4d5518 satirini tabloya ekle | [`f06ecf3`](https://github.com/ali-han-kaya/leibniz2/commit/f06ecf3) |
 
 ### Regresyon notları
 
