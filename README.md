@@ -494,6 +494,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-01 | docs | (docker) workflow_dispatch kanitini isle (ilk gercek CI kosumu) | [`682c419`](https://github.com/ali-han-kaya/leibniz2/commit/682c419) |
 | 2026-10-01 | docs | (docker) kapı zinciri tablosu ve kapalı döngü güncellemesi | [`71116e5`](https://github.com/ali-han-kaya/leibniz2/commit/71116e5) |
 | 2026-10-01 | chore | (changelog) 71116e5 satirini tabloya ekle | [`83a8f69`](https://github.com/ali-han-kaya/leibniz2/commit/83a8f69) |
+| 2026-10-01 | fix | (docker) yama-desen kapısı tüm Dockerfile'ları kapsasın | [`b9f9f4c`](https://github.com/ali-han-kaya/leibniz2/commit/b9f9f4c) |
 
 ### Regresyon notları
 

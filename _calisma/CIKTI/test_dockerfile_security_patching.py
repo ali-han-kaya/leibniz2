@@ -138,6 +138,48 @@ class TestDockerfileSecurityPatching(unittest.TestCase):
             + " | ya COVERED_DOCKERFILES'a ekle (ve sözleşmeyi genişlet), "
               "ya da kapsam dışı olduğunu gerekçesiyle burada bildir")
 
+    def test_hook_pattern_matches_every_repo_dockerfile(self):
+        # Parite: hook'un files: deseni ile keşif aynı yüzeyi görmeli.
+        # İki birbirinden ayrılırsa genişleme sessizce işe yaramaz hale
+        # gelir (desen daralırsa hook kök dışı Dockerfile'ı yakalamaz).
+        pat = hook_files_pattern()
+        for p in repo_dockerfiles():
+            rel = p.relative_to(ROOT).as_posix()
+            self.assertIsNotNone(
+                pat.search(rel),
+                f"hook deseni repo Dockerfile'ını eşlemeli: {rel}")
+
+    def test_hook_pattern_rejects_near_misses(self):
+        # Genişletme aşırı-totaymamalı: yalnız Dockerfile adı olan dosyalar
+        # eşleşmeli. Yanlışlıkla 'Dockerfile' deseni gevşetilirse
+        # (örn. files: Dockerfile) markdown/şablon dosyaları da hook'u
+        # tetikler ve değişim-farkı sözleşmesi bulanıklaşır.
+        pat = hook_files_pattern()
+        for hit in ("Dockerfile", "apps/x/Dockerfile", "a/b/c/Dockerfile"):
+            self.assertIsNotNone(pat.search(hit), f"eşlemeli: {hit}")
+        for miss in ("Dockerfile.md", "Dockerfile.bak", "docs/Dockerfile.txt",
+                     "docs/DOCKERFILE.md", "dockerfile"):
+            self.assertIsNone(pat.search(miss), f"eşlememeli: {miss}")
+
+    def test_discovery_excludes_hygiene_dirs(self):
+        # Keşif, .dockerignore sınıfındaki dizinlere inmemeli: üretim
+        # artefaktı (.next/.vercel) ya da venv kökündeki Dockerfile repo
+        # yüzeyi değildir — sayılırsa kapsam guard'ı yanlış FAIL verir.
+        probe = ROOT / ".next" / "probe"
+        probe.mkdir(parents=True, exist_ok=True)
+        try:
+            (probe / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
+            found = [p.relative_to(ROOT).as_posix() for p in repo_dockerfiles()]
+            self.assertNotIn(".next/probe/Dockerfile", found,
+                             "hijyen dizini keşfe sızmamalı")
+            self.assertEqual(found, ["Dockerfile"],
+                             "hijyen dizini eklenince keşif değişmemeli")
+        finally:
+            for child in sorted(probe.rglob("*"), reverse=True):
+                child.unlink() if child.is_file() else child.rmdir()
+            probe.rmdir()
+            (ROOT / ".next").rmdir()
+
     def test_patch_layer_present_with_cve_ledger_default(self):
         # ARG default'u floor girdisini taşır + defter CVE kimlikleriyle kayıtlı.
         self.assertIn("ARG SECURITY_PATCH_PACKAGES=", self._df)
