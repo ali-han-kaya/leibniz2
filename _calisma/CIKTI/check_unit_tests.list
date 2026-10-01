@@ -74,6 +74,7 @@ test_history_sources.py
 test_id_residual_acceptance_doc.py
 test_incremental_doc_sync.py
 test_k13_coverage_sync.py
+test_k6_determ_canonical.py
 test_k9_lean_files_sync.py
 test_k_layer_tokens.py
 test_label_gate_contracts.py

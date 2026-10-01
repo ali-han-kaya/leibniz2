@@ -508,6 +508,8 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-01 | chore | (changelog) f1ced41 satirini tabloya ekle | [`c2258ad`](https://github.com/ali-han-kaya/leibniz2/commit/c2258ad) |
 | 2026-10-01 | docs | (docker) #65-#69 birleşik teslim raporu | [`664ef16`](https://github.com/ali-han-kaya/leibniz2/commit/664ef16) |
 | 2026-10-01 | test | (docker) rapor sozlesmesini canli yuzeye bagla (K9) | [`7076cdc`](https://github.com/ali-han-kaya/leibniz2/commit/7076cdc) |
+| 2026-10-01 | chore | (changelog) 7076cdc satirini tabloya ekle | [`1020317`](https://github.com/ali-han-kaya/leibniz2/commit/1020317) |
+| 2026-10-01 | fix | (texlive) K6-DETERM'i /ID-kanonik kabul defterine bagla (Faz 4) | [`7f1a3c6`](https://github.com/ali-han-kaya/leibniz2/commit/7f1a3c6) |
 
 ### Regresyon notları
 
