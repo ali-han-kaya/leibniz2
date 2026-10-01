@@ -505,6 +505,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-01 | test | (docker) smoke hook kaydı için sözleşme testleri (K7) | [`87a35c6`](https://github.com/ali-han-kaya/leibniz2/commit/87a35c6) |
 | 2026-10-01 | chore | (changelog) 87a35c6 satirini tabloya ekle | [`1a4159c`](https://github.com/ali-han-kaya/leibniz2/commit/1a4159c) |
 | 2026-10-01 | test | (ci) docker kapi bagimsizligini sozlesmeye bagla (K8) | [`f1ced41`](https://github.com/ali-han-kaya/leibniz2/commit/f1ced41) |
+| 2026-10-01 | chore | (changelog) f1ced41 satirini tabloya ekle | [`c2258ad`](https://github.com/ali-han-kaya/leibniz2/commit/c2258ad) |
 
 ### Regresyon notları
 
