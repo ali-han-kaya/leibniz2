@@ -240,6 +240,79 @@ class TestSmokeHookRegistrationContract(unittest.TestCase):
                          "hook pre-commit aşamasına bağlı olmalı")
 
 
+class TestDockerGateCiIndependence(unittest.TestCase):
+    """K8: docker güvenlik kapısı CI'da hook'tan BAĞIMSIZ çalışır.
+
+    Ölçülen durum: kapı `verify.yml` içinde bir job DEĞİLDİR — ayrı bir
+    workflow'tur (`docker-security.yml`), `verify.yml` onu hiç referans
+    almaz (0 kez) ve iki job'ın arasında `needs:` yoktur. Yani
+    bağımsızlık bugün doğru — ama **kaza**. Kimse eklemedi, kimse
+    kaldirmadi; dosyalar arasındaki tesadüfi bir durum.
+
+    Bu test onu sözleşmeye baglar:
+      - kapı ayri bir workflow olarak kalmali (verify.yml'e yutulmamali —
+        yutulursa verify job'inin ekinde kalsin diye needs: eklenir ve
+        kapi bagimsizligini kaybeder)
+      - iki job birbirine needs: ile baglanmamali
+      - push tetikleyicisi path filtresiyle daraltilmamali (Dockerfile
+        degisikliklerinde kapinin susmamasi icin)
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls._gate = (WORKFLOWS / "docker-security.yml").read_text(encoding="utf-8")
+        cls._verify = (WORKFLOWS / "verify.yml").read_text(encoding="utf-8")
+
+    def test_gate_is_a_separate_workflow(self):
+        self.assertNotIn("docker-security", self._verify,
+                         "verify.yml docker-security kapisini icermemeli — "
+                         "kapı ayrı workflow'tur (bagimsizlik sozlesmesi). "
+                         "Yutulursa needs: bagimliligi dogar ve kapı "
+                         "verify job'ine baglanir.")
+        self.assertIn("name: docker-security", self._gate,
+                      "docker-security.yml kapı workflow'u olarak kalmali")
+
+    def test_gate_jobs_have_no_needs(self):
+        # needs: eklendiginde smoke job'i image-scan'i (ya da tersi)
+        # bekler; kapılar birbirine baglanir ve biri kirmiziya dusunce
+        # digerinin kaniti kaybolur.
+        self.assertIsNone(
+            re.search(r"^\s*needs:", self._gate, re.M),
+            "docker-security.yml'de needs: olmamali — iki job birbirinden "
+            "bagimsiz kalmali (kanit kaybolmamali)")
+
+    def test_push_trigger_is_not_narrowed_by_paths(self):
+        # `push:` altinda paths:/paths-ignore: eklenirse Dockerfile
+        # degisikligi kapiyi tetiklemez ve gate sessizce kor olur.
+        m = re.search(r"^on:\n((?:  .*\n|\n)*)", self._gate, re.M)
+        self.assertIsNotNone(m, "on: blogu yok")
+        on_block = m.group(1)
+        for narrowing in ("paths:", "paths-ignore:"):
+            self.assertNotIn(narrowing, on_block,
+                             "push tetikleyicisi %s ile daraltilmamali — "
+                             "Dockerfile degisikliginde kapı susmamali"
+                             % narrowing)
+
+    def test_patching_contract_also_runs_in_ci(self):
+        # Hook degisim-farkinda (yalnizca Dockerfile stage'liyken) kostugu
+        # icin, sozlesmenin CI'da da kostugu sart: verify job'i
+        # unittest discover ile tum testleri kosuyor ve yama-desen
+        # sozlesmesi manifest'te kayitli.
+        self.assertIn('unittest discover -s _calisma/CIKTI -p "test_*.py"',
+                      self._verify,
+                      "verify job'i tam discover kosmali — yoksa kayitli "
+                      "olmayan test dosyalari hicbir yerde kosmaz")
+        manifest = (ROOT / "_calisma" / "CIKTI" / "check_unit_tests.list").read_text(
+            encoding="utf-8")
+        for contract in ("test_dockerfile_security_patching.py",
+                         "test_gated_schedules.py"):
+            with self.subTest(contract=contract):
+                self.assertIn(contract, manifest,
+                              "kapı sözleşmesi manifest'te kayıtlı olmalı "
+                              "(yerel hook + CI aynı bataryayı çalıştırsın): %s"
+                              % contract)
+
+
 class TestCronRunbookParity(unittest.TestCase):
     """K4: cron runbook'ı beklenen log desenini kaynaktan türetilmiş verir.
 

@@ -503,6 +503,8 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-01 | chore | (changelog) e2185e6 satirini tabloya ekle | [`e05ae8c`](https://github.com/ali-han-kaya/leibniz2/commit/e05ae8c) |
 | 2026-10-01 | fix | (docker) smoke hook'u yalnız gerçek Dockerfile'ı tetiklesin | [`05e412f`](https://github.com/ali-han-kaya/leibniz2/commit/05e412f) |
 | 2026-10-01 | test | (docker) smoke hook kaydı için sözleşme testleri (K7) | [`87a35c6`](https://github.com/ali-han-kaya/leibniz2/commit/87a35c6) |
+| 2026-10-01 | chore | (changelog) 87a35c6 satirini tabloya ekle | [`1a4159c`](https://github.com/ali-han-kaya/leibniz2/commit/1a4159c) |
+| 2026-10-01 | test | (ci) docker kapi bagimsizligini sozlesmeye bagla (K8) | [`f1ced41`](https://github.com/ali-han-kaya/leibniz2/commit/f1ced41) |
 
 ### Regresyon notları
 
