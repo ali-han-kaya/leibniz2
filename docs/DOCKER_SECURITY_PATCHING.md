@@ -296,6 +296,7 @@ yüzden `cat ... || echo` fallback'i devreye girmez; fallback ancak script
 |---|---|---|
 | `verdict=PASS` + `OK: verdict=PASS …` | Beklenen koşum; cron canlı ve gerçek kanıt üretti | Kayıt satırına yaz, sapma yok |
 | `smoke` job **fail** (assert kırmızı) | Trivy kurulum adımı çalışmadı — SKIP'e düşüldü ya da script erken çıktı | `Install Trivy` adımının log'unu oku: sha256 uyuşmazlığı / ağ hatası. `sha256sum -c` çıktısını oku; `TRIVY_VERSION` + `TRIVY_SHA256` değerlerini release'in `trivy_<sürüm>_checksums.txt` dosyasıyla karşılaştır |
+| `SKIP: trivy yok` logda **1 kez veya daha çok** | Kurulum sessizce bozuldu: Trivy gelmedi, yani **güvenlik gate'i hiç koşmadı**. Assert adımı bunu kırmızıya çevirir, ama sebebi SKIP'tir — `smoke` job'ının kızarması tek başına nedeni söylemez | Önce say: `gh run view <id> --log \| grep -c 'SKIP: trivy yok'`. `0` değilse koşum kanıt değildir, kayıt satırına **başarısız** yaz. Sonra `Install Trivy` adımına dön: `trivy.tgz: OK` ve `Version:` satırları yoksa kurulum adımı; `sha256sum -c` `FAILED` verdiyse `TRIVY_SHA256` sürümün `trivy_<sürüm>_checksums.txt` değeriyle uyuşmuyor |
 | `smoke` job fail, `verdict=FAIL` | Gerçek ihlal: build / Trivy bulgusu / sağlık (fail-closed çalıştı) | `docs/ci_simulate/docker_security_smoke/docker_security_smoke_report.txt` kanıtını oku, bulguları "Katkı sözleşmesi" ile kapat, `docs/CI_GATE_TRIAGE.md`'ye kaydet |
 | `Show smoke evidence` fallback notunu basıyor | Script `log()`'a ulaşmadan çöktü — hiç kanıt üretilmedi | Elle koşum log'unu oku; çökme noktası smoke adımına teşhis olarak eklenmeli |
 | `trivy=` satırında beklenmeyen sürüm | `TRIVY_VERSION` ile `image-scan`'in motoru ayrışmış — iki job farklı motorla tarar, kapılar çelişebilir | Sürümü `trivy-action@v0.35.0` varsayılanıyla eşitle; parite bu eşitlikle korunur |
@@ -316,7 +317,7 @@ satır boş kaldığı sürece cron'un zamanlanmış koşumu doğrulanmamıştı
 
 | Koşum (run id) | Tetikleyici | Beklenen | Gözlenen | Sonuç |
 |---|---|---|---|---|
-| (henüz koşmadı — ilk Pazartesi 03:43 UTC) | `schedule` | gerçek koşum: `verdict=PASS` + `OK: verdict=PASS …` | — | — |
+| (henüz koşmadı — ilk Pazartesi 03:43 UTC) | `schedule` | gerçek koşum: `verdict=PASS` + `OK: verdict=PASS …` **+ `SKIP: trivy yok` 0 kez** | — | — |
 | `36799425906` | `workflow_dispatch` (elle) | gerçek koşum | `trivy.tgz: OK` · `Version: 0.69.3` · `trivy=0.69.3` · `trivy_findings=0` · `trivy_clean=Clean` · `health_http=200` · `container_health=healthy` · `verdict=PASS` · `OK: verdict=PASS …` · **`SKIP: trivy yok` 0 kez** | ✅ |
 | `36791434082` | `push` (PR #62) | gerçek koşum | `verdict=PASS`, 0 bulgu, health 200/healthy | ✅ |
 
@@ -334,6 +335,46 @@ Elle koşum komutu (CVE tazelemesi gibi olaylar için de aynı yol):
 gh workflow run docker-security.yml --ref main
 gh run list --workflow docker-security.yml --event workflow_dispatch
 ```
+
+### İlk Pazartesi doğrulaması — SKIP dâhil
+
+`schedule` tetikleyicisiyle koşan ilk run için tek bir koşum yeterlidir:
+o run'un logu üç şeyi birden kanıtlar — gerçek koşumun kendisi, SKIP
+olmadığı ve motor paritesi. Kabul ölçütü **üçünün birden** tutmasıdır:
+
+| # | Ölçüm | Beklenen | Neden ayrı ölçüm |
+|---|---|---|---|
+| 1 | `grep -c 'OK: verdict=PASS'` | `1` | Gerçek koşumun çıktı adımı yeşil olduğunu kanıtlar |
+| 2 | `grep -c 'SKIP: trivy yok'` | `0` | SKIP modu **exit 0** ve "kanıt" üretir; yalnız yeşil job bunu ele vermez |
+| 3 | `grep -o 'trivy=[0-9.]*'` ↔ `TRIVY_VERSION` | eşit | `image-scan` ile aynı motor |
+
+2 numaralı ölçümün ayrı olmasının sebebi: SKIP modu da başarılıdır. Script
+SKIP'te de kanıt dosyasını üretir (başlık + `image=`), yalnız güvenlik
+iddiası taşımaz — bu yüzden `smoke` job'ının yeşil olması tek başına
+"gate koştu" demek değildir. `Assert real run` adımı bu yüzden vardır; ilk
+Pazartesi doğrulamasında ise o adımın **kendi kanıtını** sayıyoruz.
+
+```bash
+# 1) schedule tetikleyicisiyle koşmuş run'ı bul (Elle koşumlar burada gelmez)
+gh run list --workflow docker-security.yml --event schedule --limit 5
+
+# 2) logu indir ve üç ölçümü yap
+gh run view <run_id> --log > /tmp/cron-<run_id>.log
+grep -c 'OK: verdict=PASS' /tmp/cron-<run_id>.log        # 1
+grep -c 'SKIP: trivy yok'     /tmp/cron-<run_id>.log    # 0
+grep -o 'trivy=[0-9.]*'       /tmp/cron-<run_id>.log | sort -u
+```
+
+Sonra "Koşum kaydı" tablosunun ilk satırına üç ölçümün ham çıktısı yazılır
+(`Gözlenen` sütunu, `·` ile ayrılmış — `workflow_dispatch` satırındaki
+biçimde). Ölçümlerden biri tutmazsa satır **boş bırakılmaz**, başarısız
+işaretlenir: "satır boş = henüz doğrulanmadı" ile "satır kırmızı = doğrulandı
+ama cron bozuk" farklı iddialardır.
+
+`--event schedule` filtresi bilinçlidir: `push` ve `workflow_dispatch`
+koşumları aynı job'ı çalıştırır ama `schedule` tetikleyicisinin **kendisi**
+kanıtlamaz. Filtre olmadan ilk bulunan run `push` olur ve ilk Pazartesi
+doğrulaması yanlışlıkla tamamlanmış sayılır.
 
 ### Motor paritesi — ölçülmüş
 
