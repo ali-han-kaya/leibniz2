@@ -493,6 +493,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-01 | docs | (reports) TeXLive Faz 1-3 teslim raporu (PR #52 kalici kaydi) | [`872dbf0`](https://github.com/ali-han-kaya/leibniz2/commit/872dbf0) |
 | 2026-10-01 | docs | (docker) workflow_dispatch kanitini isle (ilk gercek CI kosumu) | [`682c419`](https://github.com/ali-han-kaya/leibniz2/commit/682c419) |
 | 2026-10-01 | docs | (docker) kapı zinciri tablosu ve kapalı döngü güncellemesi | [`71116e5`](https://github.com/ali-han-kaya/leibniz2/commit/71116e5) |
+| 2026-10-01 | chore | (changelog) 71116e5 satirini tabloya ekle | [`83a8f69`](https://github.com/ali-han-kaya/leibniz2/commit/83a8f69) |
 
 ### Regresyon notları
 
