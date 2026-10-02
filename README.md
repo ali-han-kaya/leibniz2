@@ -514,6 +514,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-01 | docs | (history) superseded dal kaydı — post-42-chain net etki 0 | [`0df0f6f`](https://github.com/ali-han-kaya/leibniz2/commit/0df0f6f) |
 | 2026-10-01 | chore | (changelog) 0df0f6f satirini tabloya ekle | [`3780537`](https://github.com/ali-han-kaya/leibniz2/commit/3780537) |
 | 2026-10-02 | feat | (trend) kayıt katmanına aynı-gün platform dedup (upsert) | [`b22f5c1`](https://github.com/ali-han-kaya/leibniz2/commit/b22f5c1) |
+| 2026-10-02 | chore | (changelog) b22f5c1 satirini tabloya ekle | [`206fa2b`](https://github.com/ali-han-kaya/leibniz2/commit/206fa2b) |
 
 ### Regresyon notları
 

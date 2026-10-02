@@ -81,6 +81,35 @@ jobs:
           set -euo pipefail
           python3 _calisma/CIKTI/record_determinism_trend.py --check
 
+      # Kanıt taşıyıcısı: determinism_trend_badge.py svg + json üretir. Ham
+      # jsonl satırı PR metnine gidiyordu; koşum sonrası erişilebilir görsel
+      # kanıt yoktu. Sıralama KAYIT → DOĞRULA → ÜRET: yeni satır görülür,
+      # değişmezler geçmeden kanıt yayımlanmaz (fail-closed zincir).
+      - name: Generate determinism-trend svg/json
+        run: |
+          set -euo pipefail
+          OUT="$RUNNER_TEMP/determinism-trend"
+          mkdir -p "$OUT"
+          # Önce env'e yaz: üretim çökse bile yükleme adımı boş yol görmesin.
+          echo "OUT_DIR=$OUT" >> "$GITHUB_ENV"
+          python3 _calisma/CIKTI/determinism_trend_badge.py --out-dir "$OUT"
+          ls -l "$OUT/determinism-trend.svg" "$OUT/determinism-trend.json"
+
+      # Kanıt, PR yolu çökse de kurtarılır: commit/gh pr adımları
+      # Actions-PR-yasak senaryosunda başarısız olabiliyor (koşum 35590265995).
+      # if: always() → ölçüm koşumun kalıcı kanıtı olur; if-no-files-found:
+      # error → üretim yoksa artifact sessizce boş geçmez.
+      - name: Upload determinism-trend artifact
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: determinism-trend
+          path: |
+            ${{ env.OUT_DIR }}/determinism-trend.svg
+            ${{ env.OUT_DIR }}/determinism-trend.json
+          if-no-files-found: error
+          retention-days: 30
+
       # Kayıt yolu: main'e bare push branch-protection'a (GH006) takılır
       # (koşum 35580855610 kanıtı: deney+ölçüm PASS, push failure). Repo
       # konvansiyonu gereği her şey PR duvarından geçer: bot-dalı + PR
