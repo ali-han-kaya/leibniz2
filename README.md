@@ -521,6 +521,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-02 | style | (prettier) bicim borcunu temizle, agac geneli kapı ekle | [`0baa72f`](https://github.com/ali-han-kaya/leibniz2/commit/0baa72f) |
 | 2026-10-02 | fix | (prettier) kapiyi degisim farkina cevir, testi hermetik kilitle | [`955c8a3`](https://github.com/ali-han-kaya/leibniz2/commit/955c8a3) |
 | 2026-10-02 | chore | (changelog) 0baa72f ve 955c8a3 satirlarini tabloya ekle | [`a63c996`](https://github.com/ali-han-kaya/leibniz2/commit/a63c996) |
+| 2026-10-02 | chore | (changelog) a63c996 satirini tabloya ekle | [`80d5801`](https://github.com/ali-han-kaya/leibniz2/commit/80d5801) |
 
 ### Regresyon notları
 

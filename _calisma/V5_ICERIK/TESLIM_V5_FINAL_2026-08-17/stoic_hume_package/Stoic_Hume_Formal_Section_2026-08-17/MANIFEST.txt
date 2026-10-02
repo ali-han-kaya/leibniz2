@@ -65,6 +65,19 @@
 #   Default mode prints the byte-stable frozen record (K5 girişi); --rerun [N]
 #   re-runs qpdf --remove-metadata N times on the same input (output varies run
 #   to run — that is the experiment itself). K5 now checks 4 script/frozen pairs.
+# V5n (2026-10-01, Faz 4): CORRECTION — the V5i/V5k KNOWN LIMITATION above is
+#   WRONG and is superseded by measurement (kept above as dated history, not as
+#   current guidance). MEASURED: the engine IS deterministic under
+#   SOURCE_DATE_EPOCH; the only byte difference between two builds is pdfTeX's
+#   random trailer /ID pair, which the /ID-canonical view neutralises. The real
+#   source of run-to-run hash noise is qpdf ITSELF: qpdf --remove-metadata
+#   produced 3 different hashes from the SAME delivery PDF (2042ba8b…/
+#   7f9125d0…/c9b9890d…), so strict must NEVER be applied to the
+#   metadata-stripped hash (that would be a false positive every run).
+#   K6-DETERM's determinism reference is the /ID-CANONICAL hash, compared
+#   against the acceptance ledger (docs/ID_RESIDUAL_ACCEPTANCE.md §4); strict is
+#   ON BY DEFAULT and a hash absent from the ledger is a P1 (fail-closed).
+#   This delivery PDF: canonical d4f67e39…
 # Python: Python 3.11 (also verified 3.10, 3.12)
 # LaTeX: core_section.tex (885 lines) + L0_Lplus_spec.md (354 lines);
 #   ingiliz_empirizmi_v3.tex compiled with tectonic 0.17.0, 33 pp.
