@@ -520,6 +520,8 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-01 | docs | (history) superseded dal kaydı — post-42-chain net etki 0 | [`0df0f6f`](https://github.com/ali-han-kaya/leibniz2/commit/0df0f6f) |
 | 2026-10-01 | chore | (changelog) e9a0c0e satirini tabloya ekle | [`0f09e50`](https://github.com/ali-han-kaya/leibniz2/commit/0f09e50) |
 | 2026-10-01 | chore | (changelog) 0df0f6f satirini tabloya ekle | [`3780537`](https://github.com/ali-han-kaya/leibniz2/commit/3780537) |
+| 2026-10-02 | style | (prettier) 4 CI betigini formatla ve singleQuote hizala | [`0baec71`](https://github.com/ali-han-kaya/leibniz2/commit/0baec71) |
+| 2026-10-02 | chore | (changelog) 3780537 satirini tabloya ekle | [`ab1b0f2`](https://github.com/ali-han-kaya/leibniz2/commit/ab1b0f2) |
 
 ### Regresyon notları
 
