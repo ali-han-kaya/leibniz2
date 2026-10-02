@@ -159,6 +159,24 @@ insan müdahalesi olmadan kaydeder. Not: `fcb14f7` main'in birinci-ebeveyn
 zincirinde **değildir** (`land/migration-gates-2026-09-30` uçlarında);
 main'e inen aynı-gün bot kayıtları `b5126f9` ve `6fe7c86`'dır.
 
+**AST tabanlı test sayımı ve iki kapı onarımı (2026-10-02 turu):**
+
+| commit | iş | ölçülen kanıt |
+|---|---|---|
+| `ab8a526` | `test_coverage_report` sayımı regex'ten AST'ye | regex `^\s+def test_` deseni docstring'deki `def test_…` satırını HAYALET test sayar, `async def test_…` gerçek testini kaçırır; iki hata telafi olduğu için **toplam doğru, küme yanlış** çıkar (fixture: regex `[test_normal, test_inside_docstring]`, AST `[test_async_case, test_normal]`, ikisi de 2). Gerçek ağaçta davranış değişmedi: regex ≡ AST = 2504, 0 farklı dosya |
+| `328d6cb` | `ci_full_discover_drift_guard` fail-closed onarımı | gate **hiçbir zaman fail-closed olamıyordu**: `python -m unittest MODUL` komutu repo kökünden çalışmıyor (`_calisma/CIKTI` paket değil: `__init__.py` yok), 161 dosyanın hepsi rc=1 → `files_passed 0/161`, `drift_detected` daima False, 5m20s. Artık saf çözümleme: FAIL/ERROR veren ve hiçbir kayıtta olmayan modül = drift; 252 → 173 satır |
+| `dcdfb40` | sync testleri tek dosyada | `test_sync_check_unit_tests.py` (40) + `test_sync_lifecycle.py` (4) → tek dosya, 46 test. TEKİL test (`HOOK_COVERAGE` girdisi eksikken hook bloklar) korundu; düşen `read-only` invariantı hayatta kalan teste taşındı |
+
+Uçtan uca kanıt: kayıt dışı ve bilerek kırmızı bir test dosyası eklendi → drift
+gate **FAIL (rc=1)** ve dosyayı adıyla bildirdi; eski sürüm aynı durumda `PASS`
+veriyordu. TDD: her iki kapıda da yeni testler eski koda karşı hata verdi
+(AST: 6/6, drift guard: 7/7), yeni sürümde yeşil. Tam batarya 150/150, ardından
+149/149 PASS; manifest senkron (`sync --check` rc=0).
+
+AÇIK: `ci_full_discover_drift_guard.py` hâlâ `.github/workflows/`,
+`.pre-commit-config.yaml` ve `check_unit_tests.list`'te **bağlı değil** — yani
+doğru çalışıyor ama henüz hiçbir yerden çağrılmıyor.
+
 ## Karar
 
 Yerel fail-closed zinciri bu SHA ağacında uçtan uca yeşil: K0–K21, 25/25
