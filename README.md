@@ -517,6 +517,8 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-01 | fix | (texlive) K6-DETERM'i /ID-kanonik kabul defterine bagla (Faz 4) | [`7f1a3c6`](https://github.com/ali-han-kaya/leibniz2/commit/7f1a3c6) |
 | 2026-10-01 | chore | (changelog) 7f1a3c6 satirini tabloya ekle | [`e08ef41`](https://github.com/ali-han-kaya/leibniz2/commit/e08ef41) |
 | 2026-10-01 | fix | (texlive) pdf teslim PDF'ini ezmiyor; yazım yalnız accept onaylı | [`e9a0c0e`](https://github.com/ali-han-kaya/leibniz2/commit/e9a0c0e) |
+| 2026-10-01 | docs | (history) superseded dal kaydı — post-42-chain net etki 0 | [`0df0f6f`](https://github.com/ali-han-kaya/leibniz2/commit/0df0f6f) |
+| 2026-10-01 | chore | (changelog) e9a0c0e satirini tabloya ekle | [`0f09e50`](https://github.com/ali-han-kaya/leibniz2/commit/0f09e50) |
 
 ### Regresyon notları
 
