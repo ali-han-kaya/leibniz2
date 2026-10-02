@@ -23,6 +23,7 @@ Pre-commit hook'u olarak:
 """
 
 import argparse
+import ast
 import json
 import os
 import pathlib
@@ -258,12 +259,45 @@ CI_JOB_COVERAGE = {
 }
 
 
+# Eski (regex) sayım — yalnız AST çözemezse devreye girer, aşağıda gerekçesi.
+_LEGACY_TEST_DEF_RX = re.compile(r"^\s+def (test_\w+)", re.MULTILINE)
+
+
+def _count_test_names(text):
+    """Bir Python kaynağındaki gerçek test fonksiyonu ADLARINI döndürür (AST).
+
+    Neden regex değil: `^\\s+def test_` deseni (a) docstring içindeki `def
+    test_…` satırını HAYALET test sayar, (b) `async def test_…` gerçek testini
+    kaçırır. Bu iki hata birbirini telafi ettiği için TOPLAM doğru çıkar ve
+    sapma raporda görünmez — ölçüldü: fixture'da regex `[test_normal,
+    test_inside_docstring]`, AST `[test_async_case, test_normal]`, ikisi de 2.
+    Yani düz toplam, yanlış küme: kapsam raporu hangi testin koştuğunu
+    söyleyemeyince sessizce yanıltır.
+
+    SyntaxError'da regex'e düşülür. Bu rapor betiği py3.9'da koşar; daha yeni
+    söz dizimi kullanan bir test dosyası kapıyı PATLATMAMALI — kötü sayım,
+    çökmeden iyidir (fail-closed burada sayım değil, rapor üretimidir).
+    """
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return _LEGACY_TEST_DEF_RX.findall(text)
+    return [n.name for n in ast.walk(tree)
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and n.name.startswith("test_")]
+
+
+def _count_tests(text):
+    """`_count_test_names` çıktısının uzunluğu (raporun kullandığı sayaç)."""
+    return len(_count_test_names(text))
+
+
 def discover_test_files():
     """Tüm test dosyalarını keşfeder, test sayılarını döndürür."""
     files = {}
     for p in sorted(TEST_DIR.glob("test_*.py")):
         text = p.read_text(encoding="utf-8")
-        cnt = len(re.findall(r"^\s+def test_", text, re.MULTILINE))
+        cnt = _count_tests(text)
         files[p.name] = {"test_count": cnt, "path": str(p.relative_to(REPO_ROOT))}
     # Ayrıca JS test'leri
     for p in sorted(TEST_DIR.glob("test_*.js")):

@@ -6,6 +6,8 @@ Test edilen:
 - detect_gaps: coverage_report + preview_reload_smoke exempt
 - render_markdown: başlık, tablo, gap section
 - --check exit 0 (bilinen exempt'lerle)
+- AST tabanli test sayimi: async test sayilir, docstring icindeki
+  hayalet `def test_` sayilmaz, bozuk dosyada kapı cokmez
 """
 import io
 import json
@@ -149,6 +151,61 @@ class TestCheckMode(unittest.TestCase):
         """--check mode: bilinen exempt'ler dışında uncovered yok."""
         rc = tcr.main(["--check"])
         self.assertEqual(rc, 0)
+
+
+class TestAstTestCounting(unittest.TestCase):
+    """test sayımı AST tabanlı olmalı: regex yanlış KÜME'yi doğru toplamla maskeler.
+
+    Ölçülen kusur: `^\s+def test_` deseni (a) docstring içindeki `def test_…`
+    satırını HAYALET test sayar, (b) `async def test_…` gerçek testini kaçırır.
+    İkisi de telafi olduğu için toplam aynı çıkar ve hata raporda görünmez
+    (fixture: regex `['test_normal', 'test_inside_docstring']`, AST
+    `['test_async_case', 'test_normal']` — ikisi de 2).
+    """
+
+    FIXTURE = (
+        'class T:\n'
+        '    async def test_async_case(self):\n'
+        '        pass\n\n'
+        '    def test_normal(self):\n'
+        '        pass\n\n'
+        '    """\n'
+        '    def test_inside_docstring(self):\n'
+        '        pass\n'
+        '    """\n'
+    )
+
+    def test_counts_async_test_defs(self):
+        self.assertEqual(tcr._count_tests(self.FIXTURE), 2)
+
+    def test_counts_the_right_set_not_just_the_total(self):
+        # regresyonun özü: toplam doğru olsa bile KÜME yanlışsa kapı yanıltır
+        counted = tcr._count_test_names(self.FIXTURE)
+        self.assertEqual(sorted(counted),
+                         ["test_async_case", "test_normal"])
+
+    def test_ignores_defs_inside_docstrings(self):
+        src = 'class T:\n    def test_real(self):\n        pass\n'
+        self.assertNotIn("test_inside_docstring",
+                         tcr._count_test_names(src + '    """\n    def test_inside_docstring(self):\n        pass\n    """\n'))
+
+    def test_ignores_non_test_methods(self):
+        src = 'class T:\n    def helper(self):\n        pass\n    def setUp(self):\n        pass\n'
+        self.assertEqual(tcr._count_tests(src), 0)
+
+    def test_syntax_error_falls_back_instead_of_raising(self):
+        # rapor betigi py3.9'da calisir; daha yeni soz dizimi iceren bir test
+        # dosyasi kapiyi PATLATMAMALI — kotu sayim, cokmenden iyidir.
+        broken = "class T:\n    def test_x(:\n"
+        self.assertEqual(tcr._count_tests(broken), 1)
+
+    def test_real_repo_counts_match_ast_truth(self):
+        # gercek dosyalarda AST dogrusu ile raporun sayimi ayrilmamali
+        files = tcr.discover_test_files()
+        for name in ("test_test_coverage_report.py", "test_sync_lifecycle.py"):
+            p = pathlib.Path(tcr.TEST_DIR) / name
+            expected = len(tcr._count_test_names(p.read_text(encoding="utf-8")))
+            self.assertEqual(files[name]["test_count"], expected, name)
 
 
 if __name__ == "__main__":
