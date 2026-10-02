@@ -140,7 +140,11 @@
 :root[data-theme="light"] {
   --bg: #f3efe7;
   --fg: #292722;
-  --muted: #70695f;
+  /* #70695f -> #655e56 (2026-10-02): acik tema koyu yuzeylerinde AA altinda
+     kaldi (en kotu 4.17:1). OLCUM + gerekce: design-system/tokens.css ayni
+     satiri ve yorumu tasir (check_tokens.py kural 6: buradaki :root, tokens.css
+     :root ile birebir esit olmak zorunda). */
+  --muted: #655e56;
   --fg-dimmed: #56504a;      /* light: #f3efe7 bg üzerinde AA 4.5:1+ */
   --accent: #8b5e2b;
   --ok: #287a3d;

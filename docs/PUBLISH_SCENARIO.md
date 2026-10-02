@@ -647,7 +647,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 - `changelog-drift` (gen_changelog --check drift logu + rc — advisory, run summary'ye yazılır)
 - `pattern-drift` (merge pattern ↔ ARTIFACT_JOBS tutarlılık denetimi — advisory, run summary'ye yazılır)
 - `preview-reload-smoke` (preview sunucu restart + endpoint smoke testi — advisory, macOS)
-- `a11y-report` (a11y-gate raporu: axe sonuçları + config echo + verdict — fail-closed kapı; blocking/warn/allowlisted/incomplete özeti)
+- `a11y-report` (a11y-gate raporu: **sayfa başına** axe sonuçları + config echo + verdict — fail-closed kapı; `blocking/warn/allowlisted/incomplete/incomplete_allowlisted` özeti. Kapsam `a11y_gate_config.json` → `pages`: `/preview.html` + `/guide.html`. Bir sayfa 404/5xx verirse kapı FAIL eder — kapsam genişletilmiş gibi görünüp taranmamış sayfa kalmaz)
 
 **Not:** Kapı artık `verify_delivery.py --full`'dur (K1-K14, fail-closed) ve yeşildir —
 Beth 1953 / Fosl 1998 gibi referans düzeltmeleri V5h'te yapıldı; Kalan çevrimdışı

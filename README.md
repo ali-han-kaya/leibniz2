@@ -523,6 +523,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-02 | chore | (changelog) 0baa72f ve 955c8a3 satirlarini tabloya ekle | [`a63c996`](https://github.com/ali-han-kaya/leibniz2/commit/a63c996) |
 | 2026-10-02 | chore | (changelog) a63c996 satirini tabloya ekle | [`80d5801`](https://github.com/ali-han-kaya/leibniz2/commit/80d5801) |
 | 2026-10-02 | fix | (delivery) V5p repack - uretici ile gemideki paketi birlestir | [`8beca13`](https://github.com/ali-han-kaya/leibniz2/commit/8beca13) |
+| 2026-10-02 | docs | (audit) R6 turunu olcumle kapat - merge zinciri bitti | [`42b545a`](https://github.com/ali-han-kaya/leibniz2/commit/42b545a) |
 
 ### Regresyon notları
 

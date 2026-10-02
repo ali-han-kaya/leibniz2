@@ -65,9 +65,11 @@ Design decisions locked during brainstorming:
 verify.yml (a11y-gate job)
   └─ preview_server.py (127.0.0.1, ephemeral port)
        └─ a11y_gate.py --base-url http://127.0.0.1:PORT
-            ├─ Playwright (headless Chromium) loads /preview.html
-            ├─ inject vendor/axe.min.js → run axe
-            ├─ load a11y_gate_config.json → threshold
+            ├─ load a11y_gate_config.json → `pages` (declared scope) + thresholds
+            ├─ for each page: Playwright (headless Chromium) loads <base-url><path>
+            │    ├─ HTTP status check → 404/5xx = page FAIL (fail-closed)
+            │    ├─ inject vendor/axe.min.js → run axe
+            │    └─ threshold with that page's thresholds + page-scoped allowlist
             ├─ stdout: verdict + violation table
             └─ writes a11y_report.json (artifact)
 ```
@@ -80,12 +82,16 @@ blocking.
 
 Every run writes three surfaces, in increasing richness:
 
-1. **stdout** — one-line verdict (`verdict: PASS|FAIL`) plus the violation
-   table (rule, impact, node count); `warn` and `incomplete` rows appear here
-   with their level, never silently dropped.
-2. **`a11y_report.json`** (CI artifact) — full axe result payload, config
-   echo (thresholds + allowlist with reasons), timestamps, and page URL, so a
-   failure can be replayed locally.
+1. **stdout** — one-line verdict (`verdict: PASS|FAIL`) then one block per
+   scanned page (`PASS|FAIL  /path`) with its violation table (rule, impact,
+   node count); `warn` and `incomplete` rows appear here with their level,
+   never silently dropped. A page that fails to load prints its HTTP error.
+2. **`a11y_report.json`** (CI artifact) — one file for all pages:
+   `{base_url, config, pages[], violations[], summary, error}`. Each entry in
+   `pages[]` carries `{path, url, verdict, error, violations, summary, raw}` —
+   `raw` is the full axe payload, so a failure can be replayed locally.
+   `violations[]`/`summary` at the top level are the union/total over all
+   pages; every row carries the `page` it came from.
 3. **job summary** — a short markdown table of violations and the config
    echo; `warn`/`incomplete` findings appear here too. There are no PR
    annotations in scope (see YAGNI).

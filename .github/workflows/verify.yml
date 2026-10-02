@@ -2999,6 +2999,12 @@ jobs:
           # yapar; CI'da runner calisma alani mirror rolundedir. Tek kaynak:
           # design-system/tokens.css (check_tokens.py'in korudugu dosya).
           cp design-system/tokens.css _calisma/CIKTI/design-system-tokens.css
+          # /guide.html ayni sekilde PREVIEW_DIR mirror'indan servis edilir
+          # (preview_server.serve_guide; eksikse 404). a11y_gate_config.json
+          # /guide.html'i kapsama alir ve sayfa yuklenemezse kapı FAIL verir
+          # (fail-closed) — yani bu kopyi olmadan eklenen kapsam sessizce
+          # "tarandi" sanilir, gercekte hicbir sey taranmamis olur.
+          cp docs/branch-protection-guide/guide.html _calisma/CIKTI/guide.html
           port=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')
           echo "A11Y_PORT=$port" >> "$GITHUB_ENV"
           work=$RUNNER_TEMP/a11y-server

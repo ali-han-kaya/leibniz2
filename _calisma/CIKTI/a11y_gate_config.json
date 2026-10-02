@@ -2,5 +2,26 @@
   "blocking": ["critical", "serious"],
   "warn": ["moderate", "minor"],
   "incomplete": "report-only",
-  "allowlist": []
+  "pages": [
+    {
+      "path": "/preview.html"
+    },
+    {
+      "path": "/guide.html"
+    }
+  ],
+  "allowlist": [
+    {
+      "page": "/preview.html",
+      "rule": "color-contrast",
+      "target": "h1",
+      "reason": "axe header gradyani (linear-gradient) uzerinde efektif arka plan rengini cozemedigi icin 'incomplete' uretiyor (bgColor=None, contrastRatio=0) — ihlal degil. Elle olcum (WCAG 1.4.3, en-kotu gradyan ucu): koyu tema --fg 14.64:1 / --muted 5.62:1, acik tema 11.94:1 / 5.11:1; AA 4.5:1 gecer. Kontrast sozlesmesi test_design_token_contrast.py ile mutasyon kanitli kilitlendi (2026-10-02)."
+    },
+    {
+      "page": "/preview.html",
+      "rule": "color-contrast",
+      "target": "#live-status",
+      "reason": "axe header gradyani (linear-gradient) uzerinde efektif arka plan rengini cozemedigi icin 'incomplete' uretiyor (bgColor=None, contrastRatio=0) — ihlal degil. Elle olcum (WCAG 1.4.3, en-kotu gradyan ucu): koyu tema --fg 14.64:1 / --muted 5.62:1, acik tema 11.94:1 / 5.11:1; AA 4.5:1 gecer. Kontrast sozlesmesi test_design_token_contrast.py ile mutasyon kanitli kilitlendi (2026-10-02)."
+    }
+  ]
 }

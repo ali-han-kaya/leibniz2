@@ -239,6 +239,7 @@ HOOK_COVERAGE = {
         "test_sync_lifecycle.py",
         "test_k6_determ_canonical.py",
         "test_check_prettier_format.py",
+        "test_design_token_contrast.py",
     ],
 }
 

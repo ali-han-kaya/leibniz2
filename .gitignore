@@ -30,6 +30,10 @@ logs/
 # CI/lab koşumlarında üretilen token mirror kopyası (preview_server
 # /design-system/tokens.css rotası; CI a11y-gate her koşumda taze kopyalar)
 _calisma/CIKTI/design-system-tokens.css
+# guide.html mirror kopyasi — kaynak docs/branch-protection-guide/guide.html;
+# preview_server /guide.html rotasini PREVIEW_DIR'dan servis eder, a11y job'u
+# `cp` ile buraya koyar. Uretilen dosya: commit edilmemeli (tokens ile ayni).
+_calisma/CIKTI/guide.html
 
 # frontend-design demo derlemesi (build_design_preview.py üretir)
 _calisma/CIKTI/design_preview.html
