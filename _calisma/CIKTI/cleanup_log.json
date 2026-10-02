@@ -21,13 +21,13 @@
   "canonical": [
     {
       "path": "_calisma/CIKTI/TESLIM_KLASOR_V5_2026-08-17.zip",
-      "hash": "afd6aec0bfa6b8d2162e386503031d8b3644a6fd2b4c9d07173b708bfb56645b",
-      "note": "§10.3: güncel kanonik dış zip (V5o repack)"
+      "hash": "c205a02e26854e081f2effe1988d2feef7d3215443691a11c139056a373fdda5",
+      "note": "§10.3: güncel kanonik dış zip (V5p repack)"
     },
     {
       "path": "_calisma/CIKTI/TESLIM_V5_FINAL_2026-08-17.zip",
-      "hash": "e30ae632e05a7cab38d6a3b15d695a4a25f0bd14b065ae0a27e5a2b7f524184a",
-      "note": "§10.3: güncel kanonik iç zip (V5o repack)"
+      "hash": "fba120ce808b721cef283cf8008d391c35d586ada022ae8fb596e273fe4b394e",
+      "note": "§10.3: güncel kanonik iç zip (V5p repack)"
     }
   ]
 }

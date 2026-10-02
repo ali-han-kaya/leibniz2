@@ -13,29 +13,29 @@
  * Kullanım: DATABASE_URL=... npm run load -- [history.jsonl yolu]
  * Varsayılan yol: TCC-mirror (~/Library/Caches/com.freebuff/preview/history.jsonl)
  */
-import "dotenv/config";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import crypto from "node:crypto";
-import { Prisma, PrismaClient } from "../generated/client";
-import type * as runtime from "@prisma/client/runtime/client";
-import type { TrendRunCreateManyInput } from "../generated/models";
-import { PrismaPg } from "@prisma/adapter-pg";
+import 'dotenv/config';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import { Prisma, PrismaClient } from '../generated/client';
+import type * as runtime from '@prisma/client/runtime/client';
+import type { TrendRunCreateManyInput } from '../generated/models';
+import { PrismaPg } from '@prisma/adapter-pg';
 
 const DEFAULT_SOURCE = path.join(
   os.homedir(),
-  "Library",
-  "Caches",
-  "com.freebuff",
-  "preview",
-  "history.jsonl"
+  'Library',
+  'Caches',
+  'com.freebuff',
+  'preview',
+  'history.jsonl'
 );
 
 const sourcePath = process.argv[2] ?? DEFAULT_SOURCE;
 if (!process.env.DATABASE_URL) {
   console.error(
-    "DATABASE_URL yok — .env veya ortam değişkeni olarak pooled URL ver"
+    'DATABASE_URL yok — .env veya ortam değişkeni olarak pooled URL ver'
   );
   process.exit(1);
 }
@@ -46,7 +46,7 @@ const prisma = new PrismaClient({ adapter });
 type Row = Record<string, unknown>;
 
 function rowHash(row: Row): string {
-  return crypto.createHash("sha256").update(JSON.stringify(row)).digest("hex");
+  return crypto.createHash('sha256').update(JSON.stringify(row)).digest('hex');
 }
 
 function tsToDate(ts: unknown): Date {
@@ -54,29 +54,29 @@ function tsToDate(ts: unknown): Date {
 }
 
 function num(v: unknown): number | null {
-  return typeof v === "number" ? v : null;
+  return typeof v === 'number' ? v : null;
 }
 
 function str(v: unknown): string | null {
-  return typeof v === "string" && v.length > 0 ? v : null;
+  return typeof v === 'string' && v.length > 0 ? v : null;
 }
 
 function bool(v: unknown): boolean | null {
-  return typeof v === "boolean" ? v : null;
+  return typeof v === 'boolean' ? v : null;
 }
 
 function isJsonInput(v: unknown): boolean {
   if (
-    typeof v === "string" ||
-    typeof v === "number" ||
-    typeof v === "boolean"
+    typeof v === 'string' ||
+    typeof v === 'number' ||
+    typeof v === 'boolean'
   ) {
     return true;
   }
   if (Array.isArray(v)) {
     return v.every((x) => x === null || isJsonInput(x));
   }
-  if (typeof v === "object" && v !== null) {
+  if (typeof v === 'object' && v !== null) {
     return Object.values(v).every((x) => x === null || isJsonInput(x));
   }
   return false;
@@ -99,7 +99,7 @@ function json(
     return Prisma.DbNull;
   }
   if (!isJsonInput(v)) {
-    const kind = Array.isArray(v) ? "array" : typeof v;
+    const kind = Array.isArray(v) ? 'array' : typeof v;
     throw new Error(
       `JSON olmayan değer (kind=${kind}) — Prisma InputJsonValue sözleşmesi dışı`
     );
@@ -109,8 +109,8 @@ function json(
 
 async function main() {
   const lines = fs
-    .readFileSync(sourcePath, "utf-8")
-    .split("\n")
+    .readFileSync(sourcePath, 'utf-8')
+    .split('\n')
     .filter((l) => l.trim().length > 0);
   console.log(`kaynak: ${sourcePath} (${lines.length} satır)`);
 
@@ -118,7 +118,7 @@ async function main() {
   const pending: TrendRunCreateManyInput[] = [];
   for (const line of lines) {
     const row: Row = JSON.parse(line);
-    if (!row.ts || typeof row.verdict !== "string") {
+    if (!row.ts || typeof row.verdict !== 'string') {
       skipped += 1;
       continue;
     }

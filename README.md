@@ -514,6 +514,14 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-01 | docs | (history) superseded dal kaydı — post-42-chain net etki 0 | [`0df0f6f`](https://github.com/ali-han-kaya/leibniz2/commit/0df0f6f) |
 | 2026-10-01 | chore | (changelog) 0df0f6f satirini tabloya ekle | [`3780537`](https://github.com/ali-han-kaya/leibniz2/commit/3780537) |
 | 2026-10-02 | style | (prettier) 4 CI betigini formatla ve singleQuote hizala | [`0baec71`](https://github.com/ali-han-kaya/leibniz2/commit/0baec71) |
+| 2026-10-02 | docs | (final-rc) linux baseline (fcb14f7) bot-commit kaydini isle | [`3a3cbf3`](https://github.com/ali-han-kaya/leibniz2/commit/3a3cbf3) |
+| 2026-10-02 | feat | (k6) strict determinizmi kapilara bagla, bayat yorumu olc | [`e3651c1`](https://github.com/ali-han-kaya/leibniz2/commit/e3651c1) |
+| 2026-10-02 | docs | (kabul) CI-linux baglamini hash gecis defterine ekle | [`c934c16`](https://github.com/ali-han-kaya/leibniz2/commit/c934c16) |
+| 2026-10-02 | docs | (faz5) pipeline/SKILL olcumlu, migration completed | [`08a5b17`](https://github.com/ali-han-kaya/leibniz2/commit/08a5b17) |
+| 2026-10-02 | style | (prettier) bicim borcunu temizle, agac geneli kapı ekle | [`0baa72f`](https://github.com/ali-han-kaya/leibniz2/commit/0baa72f) |
+| 2026-10-02 | fix | (prettier) kapiyi degisim farkina cevir, testi hermetik kilitle | [`955c8a3`](https://github.com/ali-han-kaya/leibniz2/commit/955c8a3) |
+| 2026-10-02 | chore | (changelog) 0baa72f ve 955c8a3 satirlarini tabloya ekle | [`a63c996`](https://github.com/ali-han-kaya/leibniz2/commit/a63c996) |
+| 2026-10-02 | chore | (changelog) a63c996 satirini tabloya ekle | [`80d5801`](https://github.com/ali-han-kaya/leibniz2/commit/80d5801) |
 
 ### Regresyon notları
 

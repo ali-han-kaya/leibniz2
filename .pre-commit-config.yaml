@@ -472,19 +472,39 @@ repos:
         verbose: true
 
       - id: check-prettier-format
-        name: "Prettier format check on staged JS/TS/JSON (fail-closed)"
+        name: "Prettier format check on the CHANGE SURFACE (fail-closed)"
         description: >-
-          setup-pre-commit zincir-uyarlaması (Husky yerine): stage'li
-          js/jsx/ts/tsx/json dosyalarında prettier --check. READ-ONLY:
-          yazmaz, fail-closed bloke eder; düzeltme geliştiricide
-          `npx prettier --ignore-unknown --write <dosyalar>`. package-lock.json
-          exclude. Prettier bulunamazsa (apps/dashboard-next/node_modules
-          kurulu değil) SKIP — ortam-bağımlı kapı ortam yoksa bloke etmez.
-          Konfigürasyon: repo-kökü .prettierrc (skill-defaults). OFFLINE.
-        entry: python3 _calisma/CIKTI/check_prettier_format.py
+          setup-pre-commit zincir-uyarlaması (Husky yerinde). Yüzey artık
+          `files:` filtresi (yalnız O AN stage'li) DEĞİL, değişim farkıdır:
+          (stage'li dosyalar) ∪ (merge-base..HEAD arası değişen dosyalar).
+          Ölçülen kök neden: stage yalnız commit anını görür, dalın önceki
+          commit'inden gelen bozuk dosya sessizce geçerdi. --base ile taban
+          değiştirilebilir (varsayılan origin/main, yoksa HEAD~1).
+          READ-ONLY: yazmaz, fail-closed. Düzeltme:
+          `npx prettier --ignore-unknown --write <dosyalar>`. Prettier yoksa
+          SKIP. Konfigürasyon: repo-kökü .prettierrc. OFFLINE.
+        entry: python3 _calisma/CIKTI/check_prettier_format.py --diff
         language: system
-        files: \.(js|jsx|ts|tsx|json)$
-        exclude: package-lock\.json$
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
+      # --diff yüzeyi dalın DEĞİŞTİRDİĞİ dosyaları görür; dalın hiç
+      # dokunmadığı ama çürümüş bir dosyayı görmez. Borcun toplam sıfır
+      # kalmasını garanti eden tek kapı bu olduğu için ayrı duruyor.
+      - id: check-prettier-format-all
+        name: "Prettier format check across the WHOLE tree (fail-closed)"
+        description: >-
+          Stage filtresinin göremediği biçim borcunu fail-closed yakalar:
+          git ls-files üzerinden tüm js/jsx/ts/tsx/json denetlenir.
+          .prettierignore kod/veri ayrımını uygular (vendor/ üçüncü taraf
+          minified; design-system/vercel/*.json makine çıkarımı veri).
+          Prettier yoksa SKIP. Düzeltme: npx prettier --write. OFFLINE.
+        entry: python3 _calisma/CIKTI/check_prettier_format.py --all
+        language: system
+        always_run: true
+        pass_filenames: false
         stages: [pre-commit]
         verbose: true
 

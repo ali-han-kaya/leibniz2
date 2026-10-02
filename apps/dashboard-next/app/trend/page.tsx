@@ -1,20 +1,20 @@
-import { cva, type VariantProps } from "class-variance-authority";
-import { getTrend } from "@/lib/preview";
+import { cva, type VariantProps } from 'class-variance-authority';
+import { getTrend } from '@/lib/preview';
 
-export const metadata = { title: "Trend" };
+export const metadata = { title: 'Trend' };
 
 // patterns-explicit-variants: hucre-rengi kararlari (p0>0 kirmizi, p1>0 sari)
 // cva-variant'ta — sira-bileseninde ternary-degil. Renkler repo-token'lari.
-const cellVariants = cva("py-2", {
+const cellVariants = cva('py-2', {
   variants: {
     tone: {
-      neutral: "",
-      error: "text-err",
-      warn: "text-warn",
-      muted: "text-muted",
+      neutral: '',
+      error: 'text-err',
+      warn: 'text-warn',
+      muted: 'text-muted',
     },
   },
-  defaultVariants: { tone: "neutral" },
+  defaultVariants: { tone: 'neutral' },
 });
 
 export default async function TrendPage() {
@@ -46,25 +46,25 @@ export default async function TrendPage() {
           <tbody>
             {rows.map((r, i) => (
               <tr key={i} className="border-b border-surface-raised">
-                <td className="py-2 text-muted">{r.ts ?? "—"}</td>
+                <td className="py-2 text-muted">{r.ts ?? '—'}</td>
                 <td
                   className={cellVariants({
-                    tone: (r.p0 ?? 0) > 0 ? "error" : "neutral",
+                    tone: (r.p0 ?? 0) > 0 ? 'error' : 'neutral',
                   })}
                 >
-                  {r.p0 ?? "—"}
+                  {r.p0 ?? '—'}
                 </td>
                 <td
                   className={cellVariants({
-                    tone: (r.p1 ?? 0) > 0 ? "warn" : "neutral",
+                    tone: (r.p1 ?? 0) > 0 ? 'warn' : 'neutral',
                   })}
                 >
-                  {r.p1 ?? "—"}
+                  {r.p1 ?? '—'}
                 </td>
                 <td className={cellVariants()}>
-                  {r.duration_s != null ? `${r.duration_s}s` : "—"}
+                  {r.duration_s != null ? `${r.duration_s}s` : '—'}
                 </td>
-                <td className={cellVariants()}>{r.z3_total ?? "—"}</td>
+                <td className={cellVariants()}>{r.z3_total ?? '—'}</td>
               </tr>
             ))}
           </tbody>
