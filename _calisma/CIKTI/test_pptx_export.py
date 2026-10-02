@@ -46,8 +46,14 @@ class TestVerificationChainPptx(unittest.TestCase):
     def test_generator_source_exists(self):
         self.assertTrue(GEN.is_file(), f"generator kaynağı eksik: {GEN}")
         src = GEN.read_text(encoding="utf-8")
-        # skill sözleşmesi: layout set edilmeden slayt eklenmez
-        self.assertIn('pres.layout = "LAYOUT_16x9"', src)
+        # skill sözleşmesi: layout set edilmeden slayt eklenmez.
+        # Tırnak stili KAZARA ölçülmemeli: repo .prettierrc'si singleQuote:true
+        # ve generator artık tek tırnakla yazılıyor (style commit). Sözleşme
+        # layout ATAMASI'nın varlığıdır, tırnak çeşidi değil — regex her iki
+        # stili de kabul eder, layout hiç yoksa yine düşer.
+        self.assertRegex(
+            src, r"pres\.layout\s*=\s*['\"]LAYOUT_16x9['\"]",
+            "pres.layout = 'LAYOUT_16x9' ataması kaynakta yok")
         # notlar slide.addNotes ile taşınır (görünmez metin-kutusu hilesi yasak)
         self.assertIn("addNotes", src)
 

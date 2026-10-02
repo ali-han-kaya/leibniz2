@@ -517,6 +517,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-02 | docs | (final-rc) linux baseline (fcb14f7) bot-commit kaydini isle | [`3a3cbf3`](https://github.com/ali-han-kaya/leibniz2/commit/3a3cbf3) |
 | 2026-10-02 | feat | (k6) strict determinizmi kapilara bagla, bayat yorumu olc | [`e3651c1`](https://github.com/ali-han-kaya/leibniz2/commit/e3651c1) |
 | 2026-10-02 | docs | (kabul) CI-linux baglamini hash gecis defterine ekle | [`c934c16`](https://github.com/ali-han-kaya/leibniz2/commit/c934c16) |
+| 2026-10-02 | docs | (faz5) pipeline/SKILL olcumlu, migration completed | [`08a5b17`](https://github.com/ali-han-kaya/leibniz2/commit/08a5b17) |
 
 ### Regresyon notları
 

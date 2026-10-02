@@ -27,15 +27,34 @@ function parseBudgetLine(line) {
 // Döndürür {pct, over, barClass, cntClass, text}
 // est/limit yoksa veya geçersizse → sıfır durumu.
 function computeBudgetStatus(est, limit) {
-  if (est == null || limit == null || !isFinite(est) || !isFinite(limit) || limit <= 0) {
-    return { pct: 0, over: false, barClass: 'z3fill budget', cntClass: 'z3count', text: '—' };
+  if (
+    est == null ||
+    limit == null ||
+    !isFinite(est) ||
+    !isFinite(limit) ||
+    limit <= 0
+  ) {
+    return {
+      pct: 0,
+      over: false,
+      barClass: 'z3fill budget',
+      cntClass: 'z3count',
+      text: '—',
+    };
   }
-  const pct = Math.min(100, Math.round(est / limit * 100));
+  const pct = Math.min(100, Math.round((est / limit) * 100));
   const over = est > limit;
   const barClass = over ? 'z3fill err' : 'z3fill budget';
   const cntClass = over ? 'z3count' : 'z3count ok';
-  const text = '$' + est.toFixed(2) + ' / $' + limit.toFixed(2)
-    + ' (' + pct + '%)' + (over ? ' · AŞIM' : '');
+  const text =
+    '$' +
+    est.toFixed(2) +
+    ' / $' +
+    limit.toFixed(2) +
+    ' (' +
+    pct +
+    '%)' +
+    (over ? ' · AŞIM' : '');
   return { pct, over, barClass, cntClass, text };
 }
 
@@ -44,10 +63,17 @@ function computeBudgetStatus(est, limit) {
 function budgetLimitNote(v, limit) {
   if (v == null || !isFinite(v) || limit == null || !isFinite(limit)) return '';
   const lim = '$' + fmtLimit(limit);
-  return v > limit ? ' (limit ' + lim + ' üstünde — AŞIM)' : ' (limit ' + lim + ' altında)';
+  return v > limit
+    ? ' (limit ' + lim + ' üstünde — AŞIM)'
+    : ' (limit ' + lim + ' altında)';
 }
 
 // ── Dışa aktarım (Node/browser uyumlu) ─────────────────────────────────────
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { parseBudgetLine, computeBudgetStatus, budgetLimitNote, fmtLimit };
+  module.exports = {
+    parseBudgetLine,
+    computeBudgetStatus,
+    budgetLimitNote,
+    fmtLimit,
+  };
 }

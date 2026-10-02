@@ -9,22 +9,49 @@
 
 const { Z3_TOTAL, parseZ3Line, computeZ3Status } = require('./z3_scan.js');
 
-let passed = 0, failed = 0;
+let passed = 0,
+  failed = 0;
 function assert(cond, msg) {
-  if (cond) { passed++; }
-  else { failed++; console.error('  FAIL: ' + msg); }
+  if (cond) {
+    passed++;
+  } else {
+    failed++;
+    console.error('  FAIL: ' + msg);
+  }
 }
 
 function assertEq(actual, expected, msg) {
   const ok = actual === expected;
-  if (ok) { passed++; }
-  else { failed++; console.error('  FAIL: ' + msg + ' → expected=' + JSON.stringify(expected) + ', got=' + JSON.stringify(actual)); }
+  if (ok) {
+    passed++;
+  } else {
+    failed++;
+    console.error(
+      '  FAIL: ' +
+        msg +
+        ' → expected=' +
+        JSON.stringify(expected) +
+        ', got=' +
+        JSON.stringify(actual)
+    );
+  }
 }
 
 function assertDeep(actual, expected, msg) {
   const ok = JSON.stringify(actual) === JSON.stringify(expected);
-  if (ok) { passed++; }
-  else { failed++; console.error('  FAIL: ' + msg + ' → expected=' + JSON.stringify(expected) + ', got=' + JSON.stringify(actual)); }
+  if (ok) {
+    passed++;
+  } else {
+    failed++;
+    console.error(
+      '  FAIL: ' +
+        msg +
+        ' → expected=' +
+        JSON.stringify(expected) +
+        ', got=' +
+        JSON.stringify(actual)
+    );
+  }
 }
 
 // ── Z3_TOTAL sabiti ─────────────────────────────────────────────────────────
@@ -34,35 +61,53 @@ assertEq(Z3_TOTAL, 12, 'Z3_TOTAL = 12 (K8: 12 sembolik ispat kontrolü)');
 // ── parseZ3Line ─────────────────────────────────────────────────────────────
 console.log('── parseZ3Line ──');
 // reset: yeni koşu başlangıcı
-assertDeep(parseZ3Line('SEMBOLİK İSPAT KONTROLÜ (K8) başlıyor'),
-           { type: 'reset' }, 'SEMBOLİK İSPAT → reset');
-assertDeep(parseZ3Line('  K8 SEMBOLİK İSPAT: 12 kontrol'),
-           { type: 'reset' }, 'gömülü SEMBOLİK İSPAT → reset');
+assertDeep(
+  parseZ3Line('SEMBOLİK İSPAT KONTROLÜ (K8) başlıyor'),
+  { type: 'reset' },
+  'SEMBOLİK İSPAT → reset'
+);
+assertDeep(
+  parseZ3Line('  K8 SEMBOLİK İSPAT: 12 kontrol'),
+  { type: 'reset' },
+  'gömülü SEMBOLİK İSPAT → reset'
+);
 
 // summary: PASS satırı (özet tablo)
-assertDeep(parseZ3Line('  [PASS] P1-a  reduct invariance'),
-           { type: 'summary', status: 'PASS', id: 'P1-a' },
-           'summary PASS → {summary, PASS, P1-a}');
+assertDeep(
+  parseZ3Line('  [PASS] P1-a  reduct invariance'),
+  { type: 'summary', status: 'PASS', id: 'P1-a' },
+  'summary PASS → {summary, PASS, P1-a}'
+);
 // summary: FAIL satırı + boşluk toleransı
-assertDeep(parseZ3Line('  [ FAIL ] P4-b  sat-cek'),
-           { type: 'summary', status: 'FAIL', id: 'P4-b' },
-           'summary FAIL (boşluklu) → P4-b');
+assertDeep(
+  parseZ3Line('  [ FAIL ] P4-b  sat-cek'),
+  { type: 'summary', status: 'FAIL', id: 'P4-b' },
+  'summary FAIL (boşluklu) → P4-b'
+);
 // summary: alt kimlik (P2-note gibi — regex sözleşmesi)
-assertDeep(parseZ3Line('  [PASS] P3-note  not satırı'),
-           { type: 'summary', status: 'PASS', id: 'P3-note' },
-           'summary P3-note → alt kimlik');
+assertDeep(
+  parseZ3Line('  [PASS] P3-note  not satırı'),
+  { type: 'summary', status: 'PASS', id: 'P3-note' },
+  'summary P3-note → alt kimlik'
+);
 // summary: satır başındaki önekler (renklendirme işaretleri) toleransı
-assertDeep(parseZ3Line('<span>  [PASS] P5-e</span>'),
-           { type: 'summary', status: 'PASS', id: 'P5-e' },
-           'summary HTML sarmalı → P5-e');
+assertDeep(
+  parseZ3Line('<span>  [PASS] P5-e</span>'),
+  { type: 'summary', status: 'PASS', id: 'P5-e' },
+  'summary HTML sarmalı → P5-e'
+);
 
 // control: bireysel canlı ilerleme satırı
-assertDeep(parseZ3Line('[P1-a] lem_alt: UNSAT (0.004s)'),
-           { type: 'control', id: 'P1-a' },
-           'control P1-a → UNSAT satırı');
-assertDeep(parseZ3Line('[P4-b] ... SAT'),
-           { type: 'control', id: 'P4-b' },
-           'control P4-b → SAT satırı');
+assertDeep(
+  parseZ3Line('[P1-a] lem_alt: UNSAT (0.004s)'),
+  { type: 'control', id: 'P1-a' },
+  'control P1-a → UNSAT satırı'
+);
+assertDeep(
+  parseZ3Line('[P4-b] ... SAT'),
+  { type: 'control', id: 'P4-b' },
+  'control P4-b → SAT satırı'
+);
 
 // eşleşmeyen satırlar → null
 assertEq(parseZ3Line(''), null, 'boş satır → null');
@@ -70,8 +115,11 @@ assertEq(parseZ3Line('  SONUÇ: PASS — 12/12'), null, 'SONUÇ satırı → nul
 assertEq(parseZ3Line('  [OK] P1-a'), null, 'PASS/FAIL olmayan etiket → null');
 assertEq(parseZ3Line('  [PASS] P9-x'), null, 'P9 (kapsam dışı) → null');
 assertEq(parseZ3Line('  [PASS] not-a-control'), null, 'kimlik yok → null');
-assertEq(parseZ3Line('const [P1-a] = 1;'), null,
-         'satır başı DEĞİLSE control yakalanmaz (string içi yanlış pozitif yok)');
+assertEq(
+  parseZ3Line('const [P1-a] = 1;'),
+  null,
+  'satır başı DEĞİLSE control yakalanmaz (string içi yanlış pozitif yok)'
+);
 
 // ── computeZ3Status ─────────────────────────────────────────────────────────
 console.log('── computeZ3Status ──');
@@ -107,13 +155,24 @@ assertEq(s.pct, 0, 'total<0 → pct 0');
 
 // Zincir: parse → durum (gerçek akış özeti)
 console.log('── zincir: parse → durum ──');
-let seen = new Set(), okSet = new Set(), failSet = new Set();
+let seen = new Set(),
+  okSet = new Set(),
+  failSet = new Set();
 function feed(line) {
   const p = parseZ3Line(line);
   if (!p) return;
-  if (p.type === 'reset') { seen.clear(); okSet.clear(); failSet.clear(); return; }
-  if (p.type === 'summary') { (p.status === 'PASS' ? okSet : failSet).add(p.id); seen.add(p.id); }
-  else if (p.type === 'control') { seen.add(p.id); }
+  if (p.type === 'reset') {
+    seen.clear();
+    okSet.clear();
+    failSet.clear();
+    return;
+  }
+  if (p.type === 'summary') {
+    (p.status === 'PASS' ? okSet : failSet).add(p.id);
+    seen.add(p.id);
+  } else if (p.type === 'control') {
+    seen.add(p.id);
+  }
 }
 feed('SEMBOLİK İSPAT KONTROLÜ');
 feed('[P1-a] lem_alt: UNSAT');

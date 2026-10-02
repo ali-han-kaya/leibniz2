@@ -1,23 +1,23 @@
-import { cva, type VariantProps } from "class-variance-authority";
-import { getLatest } from "@/lib/preview";
+import { cva, type VariantProps } from 'class-variance-authority';
+import { getLatest } from '@/lib/preview';
 
 // patterns-explicit-variants: PASS/FAIL karari cva-variant'ta — bilesende
 // boolean-ternary degil. Renkler repo-token'lari (tek-kaynak: design-system).
-const verdictVariants = cva("mt-3 font-serif text-5xl font-semibold", {
+const verdictVariants = cva('mt-3 font-serif text-5xl font-semibold', {
   variants: {
     verdict: {
-      pass: "text-ok",
-      fail: "text-err",
-      none: "text-muted",
+      pass: 'text-ok',
+      fail: 'text-err',
+      none: 'text-muted',
     },
   },
-  defaultVariants: { verdict: "none" },
+  defaultVariants: { verdict: 'none' },
 });
 
 // Server Component — veri burada toplanır, istemciye JS gitmez.
 export default async function VerdictCard() {
   const latest = await getLatest();
-  const verdict = (latest.verdict ?? "").toUpperCase();
+  const verdict = (latest.verdict ?? '').toUpperCase();
   const z3 = latest.z3;
 
   return (
@@ -34,23 +34,23 @@ export default async function VerdictCard() {
       <p
         className={verdictVariants({
           verdict:
-            verdict === "PASS" ? "pass" : verdict === "" ? "none" : "fail",
+            verdict === 'PASS' ? 'pass' : verdict === '' ? 'none' : 'fail',
         })}
         aria-live="polite"
       >
-        {verdict || "—"}
+        {verdict || '—'}
       </p>
 
       <dl className="mt-6 grid grid-cols-2 gap-4 font-mono text-sm sm:grid-cols-4">
-        <Stat label="P0" value={latest.p0 ?? "—"} />
-        <Stat label="P1" value={latest.p1 ?? "—"} />
+        <Stat label="P0" value={latest.p0 ?? '—'} />
+        <Stat label="P1" value={latest.p1 ?? '—'} />
         <Stat
           label="Z3"
-          value={z3 ? `${z3.pass ?? "—"}/${z3.total ?? "—"}` : "—"}
+          value={z3 ? `${z3.pass ?? '—'}/${z3.total ?? '—'}` : '—'}
         />
         <Stat
           label="STRIPPED"
-          value={latest.stripped_sha256?.slice(0, 12).toUpperCase() ?? "—"}
+          value={latest.stripped_sha256?.slice(0, 12).toUpperCase() ?? '—'}
         />
       </dl>
     </section>

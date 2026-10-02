@@ -1,6 +1,6 @@
-"use client";
+'use client';
 
-import { Button } from "@/components/ui/button";
+import { Button } from '@/components/ui/button';
 
 // Hata sınırı — istemci bileşeni olması zorunlu (App Router sözleşmesi).
 // preview_server kapalıyken actioned mesaj: ne olduğu + nasıl düzeltilir.
