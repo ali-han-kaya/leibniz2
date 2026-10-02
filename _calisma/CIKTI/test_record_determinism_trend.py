@@ -12,7 +12,8 @@ record_determinism_trend.py sözleşmelerini OFFLINE sabitler:
      ölçüm FAIL; aynı kaynakta hash sapması FAIL (uzlaşma ihlali); kaynak
      değişince serbest; platform kapsamı (cutoff sonrası darwin+linux)
      eksikse FAIL; iki platform aynı kaynak+hash'i paylaşırsa OK.
-  4) jsonl yalnız eklenir; bozuk satırda ValueError.
+  4) jsonl upsert: aynı (date, platform) satırı DEĞİŞİR, tarihsel kopyalar
+     tek satıra iner, yeni anahtar eklenir; bozuk satırda ValueError.
 
 Tarihler cutoff'tan (2026-09-17) SONRA seçilir ki yalnız hedeflenen
 değişmez ihlal edilsin (izole senaryolar). stdlib-only, OFFLINE.
@@ -115,7 +116,7 @@ class TestUpdateMode(unittest.TestCase):
                 rc = rdt.main(["--update"])
                 self.assertEqual(rc, 0)
                 lines = rdt._records(fake_trend)
-                self.assertEqual(len(lines), 1)  # append-only + tek ölçüm
+                self.assertEqual(len(lines), 1)  # upsert: aynı gün+platform tek satır
                 self.assertEqual(lines[0]["gate"], "PASS")
                 self.assertIn("platform", lines[0])
             finally:
@@ -220,6 +221,74 @@ class TestTrendInvariant(unittest.TestCase):
                 _rec(date="2026-09-22", platform="linux")]
         v = rdt.trend_invariant(recs, now=NOW)
         self.assertEqual(v, "OK")
+
+
+class TestUpsertDedup(unittest.TestCase):
+    """Aynı-gün + aynı-platform upsert/dedup: satır çoğalmaz, kopyalar iner."""
+
+    def test_upsert_adds_new_key(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = os.path.join(td, "trend.jsonl")
+            rdt._write(p, [_rec(date="2026-09-18", platform="darwin")])
+            action = rdt._upsert(p, _rec(date="2026-09-19", platform="linux"))
+            self.assertEqual(action, "added")
+            self.assertEqual(len(rdt._records(p)), 2)
+
+    def test_upsert_distinguishes_platform(self):
+        # Aynı gün, farklı platform → AYRI satır (kimlik (date, platform)).
+        with tempfile.TemporaryDirectory() as td:
+            p = os.path.join(td, "trend.jsonl")
+            rdt._write(p, [_rec(date="2026-09-18", platform="darwin")])
+            action = rdt._upsert(p, _rec(date="2026-09-18", platform="linux"))
+            self.assertEqual(action, "added")
+            self.assertEqual(len(rdt._records(p)), 2)
+
+    def test_upsert_replaces_same_day_platform(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = os.path.join(td, "trend.jsonl")
+            rdt._write(p, [_rec(date="2026-09-18", platform="darwin"),
+                           _rec(date="2026-09-19", platform="linux")])
+            action = rdt._upsert(
+                p, _rec(date="2026-09-18", platform="darwin",
+                        tectonic_canonical_sha256="e" * 64))
+            self.assertEqual(action, "updated")
+            recs = rdt._records(p)
+            self.assertEqual(len(recs), 2)  # satır sayısı değişmez
+            self.assertEqual(recs[0]["tectonic_canonical_sha256"], "e" * 64)
+            self.assertEqual([r["date"] for r in recs],
+                             ["2026-09-18", "2026-09-19"])  # sıra korunur
+
+    def test_upsert_collapses_historical_duplicates(self):
+        # Aynı gün+platform iki satır → tek satır (tarihsel kopyalar iner).
+        with tempfile.TemporaryDirectory() as td:
+            p = os.path.join(td, "trend.jsonl")
+            rdt._write(p, [_rec(date="2026-09-20", platform="linux"),
+                           _rec(date="2026-09-20", platform="linux"),
+                           _rec(date="2026-09-21", platform="linux")])
+            action = rdt._upsert(
+                p, _rec(date="2026-09-20", platform="linux",
+                        tectonic_canonical_sha256="f" * 64))
+            self.assertEqual(action, "updated")
+            recs = rdt._records(p)
+            self.assertEqual(len(recs), 2)
+            self.assertEqual([r["date"] for r in recs],
+                             ["2026-09-20", "2026-09-21"])
+            self.assertEqual(recs[0]["tectonic_canonical_sha256"], "f" * 64)
+
+    def test_upsert_is_idempotent(self):
+        # Aynı anahtarla iki kez upsert → yine tek satır (çoğalma yok).
+        with tempfile.TemporaryDirectory() as td:
+            p = os.path.join(td, "trend.jsonl")
+            rec = _rec(date="2026-09-22", platform="darwin")
+            rdt._upsert(p, rec)
+            rdt._upsert(p, rec)
+            self.assertEqual(len(rdt._records(p)), 1)
+
+    def test_write_roundtrip(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = os.path.join(td, "trend.jsonl")
+            rdt._write(p, [_rec(), _rec(platform="linux")])
+            self.assertEqual(len(rdt._records(p)), 2)
 
 
 if __name__ == "__main__":

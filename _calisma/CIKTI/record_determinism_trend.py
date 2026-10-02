@@ -6,8 +6,10 @@ ve determinism_trend.jsonl'a tek satır ekler. Amaç: tectonic ve TeXLive
 kanonik hash'lerinin **oturumlar arası** kararlılığını haftalık CI + yerel
 koşumlarla izlemek; sapma ilk haftada görünür.
 
-Veri sözleşmesi (jsonl — satır başına ölçüm; yalnız eklenir, asla yeniden
-yazılmaz; güncellik `source_mtime` + `source_sha256` ile izlenir):
+Veri sözleşmesi (jsonl — satır başına ölçüm; kayıt kimliği (date, platform):
+aynı gün + platform için ikinci satır YAZILMAZ — mevcut satır DEĞİŞTİRİLİR
+(upsert) ve varsa kopyaları tek satıra iner; diğer satırlar ve sıra korunur;
+güncellik `source_mtime` + `source_sha256` ile izlenir):
   {"date": "YYYY-MM-DD", "source_mtime": <int>, "tectonic_bin": "...",
    "texlive_bin": "...", "tectonic_canonical_sha256": "<64 hex>",
    "texlive_canonical_sha256": "<64 hex>", "source_sha256": "<64 hex>",
@@ -100,10 +102,37 @@ def _extract_report_data(report):
     }
 
 
-def _append(path, record):
+def _write(path, records):
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "a", encoding="utf-8") as f:
-        f.write(json.dumps(record, sort_keys=True) + "\n")
+    with open(path, "w", encoding="utf-8") as f:
+        for record in records:
+            f.write(json.dumps(record, sort_keys=True) + "\n")
+
+
+def _upsert(path, record):
+    """Aynı (date, platform) kaydı varsa DEĞİŞTİRİR/dedup eder, yoksa ekler.
+
+    Kayıt kimliği `(date, platform)`'dur: aynı gün + platform için ikinci bir
+    satır yazmak yerine o satır güncellenir (idempotent --update). Anahtarın
+    tarihsel KOPYALARI (aynı gün+platform birden çok satır) tek satıra iner;
+    ilk eşleşmenin sırası korunur, yeni anahtar sona eklenir.
+    Döndürür: "updated" ya da "added".
+    """
+    key = (str(record.get("date")), str(record.get("platform")))
+    kept, action, placed = [], "added", False
+    for existing in _records(path):
+        ekey = (str(existing.get("date")), str(existing.get("platform")))
+        if ekey == key:
+            if not placed:  # ilk eşleşme → yeni kayıt bu sırada yer alır
+                kept.append(record)
+                placed = True
+                action = "updated"
+            continue  # aynı anahtarın sonraki kopyaları düşürülür (dedup)
+        kept.append(existing)
+    if not placed:
+        kept.append(record)
+    _write(path, kept)
+    return action
 
 
 def _records(path=TREND):
@@ -214,7 +243,8 @@ def main(argv=None):
         description="Determinizm trend kaydı: --update ölçüm ekler, "
                     "--check trend değişmezlerini doğrular")
     parser.add_argument("--update", action="store_true",
-                        help="deney raporundan ölçüm oku ve jsonl'a ekle")
+                        help="deney raporundan ölçüm oku ve jsonl'a yaz "
+                             "(aynı gün+platform upsert)")
     parser.add_argument("--check", action="store_true",
                         help="trend değişmezlerini doğrula (fail-closed)")
     args = parser.parse_args(argv)
@@ -237,8 +267,9 @@ def main(argv=None):
         except ValueError as e:
             print(f"FAIL: {e}", file=sys.stderr)
             return 1
-        _append(TREND, record)
-        print(f"OK: ölçüm eklendi: {TREND}")
+        action = _upsert(TREND, record)
+        verb = {"updated": "güncellendi", "added": "eklendi"}.get(action, action)
+        print(f"OK: ölçüm {verb}: {TREND}")
         print(f"  date={record['date']} platform={record['platform']} "
               f"tectonic={record['tectonic_canonical_sha256'][:12]}… "
               f"texlive={record['texlive_canonical_sha256'][:12]}…")
