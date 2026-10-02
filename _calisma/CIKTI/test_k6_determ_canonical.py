@@ -38,6 +38,12 @@ SKILL = ROOT / "skills" / "reproducible-pdf-build" / "SKILL.md"
 SHELL_SCRIPT = CIKTI / "texlive_determinism_test.sh"
 VERIFY = CIKTI / "verify_delivery.py"
 MODULE = CIKTI / "pdf_id_canonical.py"
+HOOK = CIKTI / "verify_delivery_hook.py"
+WORKFLOW = ROOT / ".github" / "workflows" / "verify.yml"
+REPACK = ROOT / "_calisma" / "repack_delivery.py"
+SHIPPED_MANIFEST = (ROOT / "_calisma" / "V5_ICERIK"
+                    / "TESLIM_V5_FINAL_2026-08-17" / "stoic_hume_package"
+                    / "Stoic_Hume_Formal_Section_2026-08-17" / "MANIFEST.txt")
 
 PDF = (ROOT / "_calisma" / "V5_ICERIK" / "TESLIM_V5_FINAL_2026-08-17"
        / "stoic_hume_package" / "Stoic_Hume_Formal_Section_2026-08-17"
@@ -315,6 +321,128 @@ class TestPhase4DocumentationTruth(unittest.TestCase):
         text = VERIFY.read_text(encoding="utf-8")
         self.assertNotIn("tectonic non-deterministic olduğundan", text,
                          "ölçümle çürütülmüş gerekçe kodda kalmamalı")
+
+
+class TestStrictDeterminismIsWired(unittest.TestCase):
+    """F) Uygulanan çekirdek KAPILARA BAĞLANMIŞ olmalı.
+
+    Ölçülen boşluk: `verify_delivery.py` K6-DETERM'i kanonik hash'e
+    bağlamış ve strict'i varsayılan açmış (2026-10-01), ama BAĞLAYAN
+    yüzeyler sözleşmeyi ilan etmiyordu:
+      - pre-commit `verify_delivery_hook.py` kapıyı `--strict-determinism`
+        OLMADAN koşuyordu ve fail-closed DEPS listesinde ne kanonik
+        çekirdek (`pdf_id_canonical.py`) ne de kabul defteri vardı →
+        hook, commit'lenenden farklı bir çekirdek/defter doğrulayabilirdi
+        (DEPS'in var oluş nedeni tam olarak bu).
+      - `.github/workflows/verify.yml` hiçbir yerde `--strict-determinism`
+        demiyordu → sözleşme yalnız bir varsayılana dayanıyordu; bir
+        varsayılan çevrildiğinde kapı sessizce kapanırdı.
+    """
+
+    def test_precommit_hook_runs_the_gate_with_strict_determinism(self):
+        # Davranışsal: hook'un gerçekten ne koştuğunu ölç, kaynak
+        # metnine bakma. subprocess.run geçici olarak yakalanır (kapı
+        # koşulmaz), DEPS ön-kontrolü boşaltılır (ağaç durumundan bağımsız).
+        from unittest import mock
+
+        hook = load_module("verify_delivery_hook")
+        seen = {}
+
+        class _Done:
+            returncode = 0
+
+        def fake_run(argv, *a, **kw):
+            seen["argv"] = list(argv)
+            return _Done()
+
+        with mock.patch.object(hook.subprocess, "run", fake_run), \
+                mock.patch.object(hook, "unstaged_deps", lambda: {}):
+            rc = hook.main([])
+
+        self.assertEqual(rc, 0, "kapı çıkış kodu korunmali")
+        argv = seen.get("argv") or []
+        self.assertTrue(argv, "hook kapıyı hiç koşmadı")
+        self.assertTrue(any(a.endswith("verify_delivery.py") for a in argv),
+                        "argv'da verify_delivery.py yok: %s" % (argv,))
+        self.assertIn("--strict-determinism", argv,
+                      "pre-commit kapısı strict'i açıkça ilan etmeli; "
+                      "varsayılana güvenmek, varsayılan çevrilirse "
+                      "sessizce kapanır")
+
+    def test_hook_deps_cover_canonical_core_and_ledger(self):
+        hook = load_module("verify_delivery_hook")
+        deps = hook.DEPS
+        self.assertTrue(any(d.endswith("pdf_id_canonical.py") for d in deps),
+                        "kanonik çekirdek DEPS'te olmalı: strict karşılaştırması "
+                        "bu modülü kullanıyor")
+        self.assertTrue(
+            any(d.endswith("ID_RESIDUAL_ACCEPTANCE.md") for d in deps),
+            "kabul defteri DEPS'te olmalı: referansı O dosya taşıyor")
+
+    def test_hook_deps_ledger_is_the_file_the_gate_actually_reads(self):
+        # Yalnız "defter DEPS'te" yetmez: kapının okuduĞU dosya ile
+        # DEPS'in koruduğu dosya aynı olmalı. Ayrışırsa DEPS'te başka bir
+        # yol durur, hook yanlış dosyanın temizliğini denetler ve gerçek
+        # defterin stage'lenmemiş olması sessizce geçer.
+        vd = load_module("verify_delivery")
+        hook = load_module("verify_delivery_hook")
+        reads = os.path.relpath(
+            os.path.realpath(vd.PDF_CANONICAL_LEDGER), str(ROOT))
+        self.assertIn(reads, hook.DEPS,
+                      "kapının okuduğu defter DEPS listesinde aynı yolla "
+                      "bulunmalı (ölçülen: %s)" % reads)
+
+    def test_ci_declares_strict_determinism_on_the_full_gate(self):
+        text = WORKFLOW.read_text(encoding="utf-8")
+        # `--full` geçen satırdan başlayıp backslash ile devam eden tüm
+        # komut bloğunu birleştir: bayrak bir sonraki satıra da kayabilir.
+        lines = text.splitlines()
+        start = next((i for i, ln in enumerate(lines)
+                      if "verify_delivery.py" in ln and "--full" in ln
+                      and not ln.lstrip().startswith("#")), None)
+        self.assertIsNotNone(start, "CI'da --full kapı adımı bulunamadı")
+        block = [lines[start]]
+        for ln in lines[start + 1:]:
+            if not block[-1].rstrip().endswith("\\"):
+                break
+            block.append(ln)
+        command = "\n".join(block)
+        self.assertIn("--strict-determinism", command,
+                      "CI --full adımı strict'i ilan etmeli")
+        self.assertNotIn("--no-strict-determinism", text,
+                         "CI kapatma bayrağını kullanmamalı (teşhis bayrağı)")
+
+    def test_repack_generator_corrects_the_refuted_tectonic_claim(self):
+        # Bayat yorumun KAYDI tarihsel kayıt olarak korunur (V5k metni
+        # silinmez — teslim tarihçesi yeniden yazılmaz), ama ÜRETİCİ onu
+        # çürüten yeni bir kayıt yayımlar ve bu kayıt DAHA SONRA gelir:
+        # okuyucu en son satırı güncel sözleşme olarak görür.
+        src = REPACK.read_text(encoding="utf-8")
+        self.assertIn("must not be enabled", src,
+                      "V5k tarihsel kaydı korunmalı")
+        self.assertIn("# V5n", src,
+                      "üretici ölçümle çürütülmüş gerekçeyi düzelten kaydı "
+                      "yayımlamalı")
+        self.assertGreater(src.index("# V5n"), src.index("must not be enabled"),
+                           "düzeltme kaydı, çürüttüğü kayıttan SONRA "
+                           "gelmeli (yoksa en son okunan yanlış olur)")
+
+    def test_shipped_manifest_debt_cannot_stay_silent(self):
+        # Gemideki MANIFEST.txt V5k metnini taşır ve taşımaya devam eder
+        # (düzeltme bir sonraki repack'ta sevk edilir — teslim hash'i
+        # bugün değişmez). Bu BİR BORÇTUR; defterde yazmıyorsa kimse
+        # göremez, yani sessiz kalırsa kapı fail-closed ihlali olur.
+        if not SHIPPED_MANIFEST.is_file():
+            self.skipTest("gemideki MANIFEST yok — SKIP")
+        shipped = SHIPPED_MANIFEST.read_text(encoding="utf-8")
+        if "must not be enabled" not in shipped:
+            self.skipTest("gemideki MANIFEST bayat metni taşımıyor — borç yok")
+        text = LEDGER.read_text(encoding="utf-8")
+        self.assertIn("MANIFEST.txt", text,
+                      "gemideki MANIFEST'in bayat yorumu defterde kayıtlı "
+                      "olmalı (sessiz borç olmasın)")
+        self.assertIn("V5k", text,
+                      "borç kaydı, çürütülen kaydı (V5k) adıyla belirtilmeli")
 
 
 if __name__ == "__main__":

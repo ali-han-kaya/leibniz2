@@ -134,6 +134,33 @@ yeniden derlenirse hash değişir ve kapı **kırmızıya düşerek** zorunlu
 “bilinçli yeni satır + sidecar yenilemesi” adımına sokar; sessizce
 geçmez.
 
+### Kalan borç: gemideki `MANIFEST.txt` hâlâ V5k yorumunu taşıyor (Faz 4)
+
+Bu raporun ölçümü **gemideki teslim paketini değiştirmedi ve
+değiştirmiyor**: `_calisma/V5_ICERIK/…/MANIFEST.txt` hâlâ V5k'nın
+“informational by default (--strict-determinism OFF) … must not be
+enabled” metnini taşıyor — yani yayınlanan pakette kapının **güncel**
+sözleşmesiyle çelişen bir ifade duruyor.
+
+Düzeltmek `repack_delivery.py` çalıştırmayı gerektirir; o da iki zip'in,
+`.sha256` sidecar'ların ve `zip_lineage` neslinin hash'lerini değiştirir,
+yani **yayınlanacak artefaktın kimliğini** değiştirir. Bu commit
+kapsamında bilinçli olarak yapılmadı: teslim zip/sidecar'ları hazırlanmış
+bir yükleme yüzeyine (Dropbox taşıma birimi) bağlı ve bir yorum
+düzeltmesi tek başına taşıma birimini değiştirmeyi hak etmez. TeXLive-era
+yeniden derleme zaten ayrı ve bilinçli bir yenileme adımıdır (§4
+“TeXLive-era teslim” satırı).
+
+Sevk kuralı: teslim `MANIFEST.txt`'i bir sonraki repack'ta yeniden
+üretildiğinde `repack_delivery.py` **V5n** kaydını yayımlar — ölçümle
+çürütülen gerekçe ve strict'in varsayılan açık olduğu. Taşıma birimi
+yenilenirken bu adım zorunludur.
+
+Bu kaydın **sessiz kalamaması** testle sabitlendi:
+`test_k6_determ_canonical.py::test_shipped_manifest_debt_cannot_stay_silent`
+— gemideki `MANIFEST.txt` bayat metni taşıdığı sürece bu kaydın varlığını
+zorlar. Yani borç ya kayıtlıdır ya da repack'te gider; ortası yoktur.
+
 ## 7. Geri dönüş (Faz 7)
 
 `docs/Makefile.tectonic` ve eski sidecar'lar repo'da kalır; Faz 1-6

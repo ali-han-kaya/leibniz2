@@ -317,7 +317,14 @@ jobs:
           VD_SKIP_K18: "1"
         run: |
           set -o pipefail
+          # --strict-determinism (Faz 4): K6-DETERM, teslim PDF'inin
+          # `/ID`-kanonik hash'ini kabul defterinin §4 tablosuyla karşılaştırır;
+          # hash defterde yoksa P1 (fail-closed). K6-DETERM'in varsayılanı zaten
+          # strict — bayrak burada AÇIKÇA geçer ki sözleşme ölçülebilir olsun:
+          # varsayılan çevrilirse kapı sessizce kapanmasın. Yerel karşılığı
+          # `verify_delivery_hook.py` (pre-commit verify-delivery hook'u).
           python3 _calisma/CIKTI/verify_delivery.py --dir _calisma/CIKTI --full \
+            --strict-determinism \
             --budget-out budget_verify.json \
             --config-out effective_config.json \
             --refs-out references_online.json \
