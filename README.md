@@ -520,6 +520,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-02 | fix | (ci) drift guard'i fail-closed yap, 252 satirdan 173'e indir | [`328d6cb`](https://github.com/ali-han-kaya/leibniz2/commit/328d6cb) |
 | 2026-10-02 | chore | (changelog) 328d6cb satirini tabloya ekle | [`c169b5f`](https://github.com/ali-han-kaya/leibniz2/commit/c169b5f) |
 | 2026-10-02 | test | (sync) iki dosyalik kapsami tek dosyada birlestir | [`dcdfb40`](https://github.com/ali-han-kaya/leibniz2/commit/dcdfb40) |
+| 2026-10-02 | docs | (final-rc) AST gecisi ve fail-closed onarim kanitlarini kaydet | [`a73ffe9`](https://github.com/ali-han-kaya/leibniz2/commit/a73ffe9) |
 
 ### Regresyon notları
 
