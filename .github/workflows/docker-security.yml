@@ -7,11 +7,31 @@ on:
     # çakışmaz. Yeni CVE'ler en çok hazırlıksız anda gelir — gating doc'unun
     # "Trivy gate kırmızı" döngüsünün CI bacağı haftalık kendi başına koşar.
     - cron: "43 3 * * 1"
-  workflow_dispatch: {}  # CVE tazelemesi gibi olaylarda elle tetikleme
+  workflow_dispatch:
+    # CVE tazelemesi gibi olaylarda elle tetikleme + build-arg override'ı.
+    # Boş bırakılırsa repo değişkeni (vars.), o da yoksa Dockerfile ARG
+    # default'u kullanılır — tek çözümleyici: _calisma/CIKTI/docker_patch_build_args.sh
+    inputs:
+      security_patch_packages:
+        description: "SECURITY_PATCH_PACKAGES (apt floor'ları; boş → vars. → Dockerfile default)"
+        required: false
+        type: string
+      python_security_patch_packages:
+        description: "PYTHON_SECURITY_PATCH_PACKAGES (pip floor'ları; boş → vars. → Dockerfile default)"
+        required: false
+        type: string
 
 permissions:
   contents: read
   security-events: write
+
+env:
+  # Build-arg override kanalı (tek yer): dispatch input > repo değişkeni.
+  # Burada değer YALNIZ dolu geldiğinde kullanılır; çözümleyici boş değeri
+  # "override yok" sayıp Dockerfile default'unu taşır (boş string'e çevirmek
+  # yama katmanını sessizce kapatırdı: empty-guard "yama yok" derdi).
+  PATCH_ARG_APT_OVERRIDE: ${{ github.event.inputs.security_patch_packages || vars.SECURITY_PATCH_PACKAGES }}
+  PATCH_ARG_PY_OVERRIDE: ${{ github.event.inputs.python_security_patch_packages || vars.PYTHON_SECURITY_PATCH_PACKAGES }}
 
 jobs:
   image-scan:
@@ -25,6 +45,18 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      # Tek çözümleyici: floor'lar Dockerfile ARG'larından okunur, override
+      # (dispatch input / repo değişkeni) doluysa o kazanır. Default yoksa
+      # adım kırmızı — sessizce floorsuz build yapılmaz.
+      - name: Resolve patch build-args (Dockerfile defaults + override)
+        id: patch_args
+        env:
+          SECURITY_PATCH_PACKAGES: ${{ env.PATCH_ARG_APT_OVERRIDE }}
+          PYTHON_SECURITY_PATCH_PACKAGES: ${{ env.PATCH_ARG_PY_OVERRIDE }}
+        run: |
+          set -euo pipefail
+          bash _calisma/CIKTI/docker_patch_build_args.sh --github-output >> "$GITHUB_OUTPUT"
+
       - name: Build image
         uses: docker/build-push-action@v6
         with:
@@ -32,6 +64,11 @@ jobs:
           file: ./Dockerfile
           load: true
           tags: leibniz2/verify-dashboard:${{ github.sha }}
+          # Yama katmanı build-arg'ları: yerel build ile AYNI kapı (aynı
+          # çözümleyici) — CI'da vars./dispatch override'ı buradan geçer.
+          build-args: |
+            SECURITY_PATCH_PACKAGES=${{ steps.patch_args.outputs.apt }}
+            PYTHON_SECURITY_PATCH_PACKAGES=${{ steps.patch_args.outputs.python }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -99,6 +136,10 @@ jobs:
         run: bash _calisma/CIKTI/docker_security_smoke.sh
         env:
           DOCKER_SMOKE_OUT: docs/ci_simulate/docker_security_smoke/docker_security_smoke_report.txt
+          # Smoke build'i de aynı override kapısından geçer (script çözümleyiciyi
+          # çağırır; env boşsa Dockerfile default'u taşınır).
+          SECURITY_PATCH_PACKAGES: ${{ env.PATCH_ARG_APT_OVERRIDE }}
+          PYTHON_SECURITY_PATCH_PACKAGES: ${{ env.PATCH_ARG_PY_OVERRIDE }}
 
       # fail-closed: kanıt, kanıt satırlarıdır. Trivy kurulu bir CI'da
       # verdict=PASS yoksa koşum gerçekleşmemiştir (SKIP ya da erken çıkış).

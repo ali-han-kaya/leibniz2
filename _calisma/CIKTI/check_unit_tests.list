@@ -51,6 +51,7 @@ test_determinism_trend_badge.py
 test_dev_bootstrap.py
 test_diff_config_artifacts.py
 test_doc_job_sync.py
+test_docker_patch_build_args.py
 test_docker_security_smoke.py
 test_dockerfile_security_patching.py
 test_duration_pct_config.py

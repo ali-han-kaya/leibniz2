@@ -113,6 +113,15 @@ Aynı üç kural üç katmanda da geçerli (npm karşılıkları parantez içind
    ARG mekanizmasına da uygulanır: floor'lar ARG default'unda yaşar (tek
    kopya — CVE-defteri), empty-guard net "yama yok" kanıtı verir, kurulum
    kanıtı build log'una yazılır.
+4. **Override kapısı her build yolunda aynıdır** — CI `docker-security`
+   image-scan build'i ve smoke build'i (yerel/CI) tek çözümleyiciden geçer:
+   `_calisma/CIKTI/docker_patch_build_args.sh`. Floor'lar **Dockerfile
+   ARG'larından** okunur (workflow'da ikinci kopya yok → drift imkânsız);
+   `SECURITY_PATCH_PACKAGES` / `PYTHON_SECURITY_PATCH_PACKAGES` doluysa o
+   kazanır (CI kanalı: `workflow_dispatch` input'u → repo değişkeni
+   `vars.*`). Boş override "yama katmanını kapat" demek **değildir**
+   (empty-guard zaten "yama yok" kanıtı verir) — bu yüzden boş değer
+   default'u asla ezmez, default okunamazsa build fail-closed durur.
 
 ## npm katmanı: context hijyeni + `overrides` deseni
 
