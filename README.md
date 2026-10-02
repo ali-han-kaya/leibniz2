@@ -77,9 +77,9 @@ devam ederken ikisi de yaşar (TEXLIVE_MIGRATION_PLAN.md):
 
 ```bash
 # TeXLive (pdfTeX) — göç hedefi; Faz 1 kabul kanıtı: kanonik hash 544516b0…
-make -f docs/Makefile.texlive pdf       # 3-geçişli derleme + Rerun=0 denetimi
+make -f docs/Makefile.texlive pdf       # 3-geçişli derleme + Rerun=0 denetimi (yalnız BUILD_DIR'a yazar)
 make -f docs/Makefile.texlive check     # 2×3-geçiş determinism deneyi (fail-closed)
-make -f docs/Makefile.texlive accept    # kanonik hash'i ID_RESIDUAL_ACCEPTANCE defterinde doğrular
+make -f docs/Makefile.texlive accept    # defter onayı + kanonik eşleşme → TRACKED teslim PDF'ine tek yazım yolu
 make -f docs/Makefile.texlive engineinfo  # motor kilidi + sözleşme sabitleri (CI log'u için)
 
 # tectonic — paralel yaşam, geri dönüş yolu
@@ -91,6 +91,11 @@ yeniden üretme), `TEXINPUTS="$TEXDIR//:"`, `TEXMFOUTPUT`/`-output-directory`
 BUILD_DIR'a (kaynak dizinine asla yazma), `PASSES ?= 3` + son-geçiş
 `Rerun to get`=0 (fail-closed). Motor sürüm kilidi: pdfTeX
 3.141592653-2.6 (TeX Live 2026) — `engineinfo` ile kanıtlanır.
+
+**Yazım sınırı:** yerel derleme (`pdf`) teslim artefaktına dokunmaz — çıktı
+yalnız `BUILD_DIR`'a gider. Tracked teslim PDF'ini (`OUTPUT`) yalnız `accept`
+yazar: defter onayı + taze artefaktın kanonik hash eşleşmesi şarttır, yazım
+atomiktir (tmp + rename) ve öncesi/sonrası sha256 penceresi basılır.
 
 ## _calisma/lean_reduct — Sınır İspatı Çekirdeği (illüstratif, Mathlib-free)
 
@@ -511,9 +516,12 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-01 | chore | (changelog) 7076cdc satirini tabloya ekle | [`1020317`](https://github.com/ali-han-kaya/leibniz2/commit/1020317) |
 | 2026-10-01 | fix | (texlive) K6-DETERM'i /ID-kanonik kabul defterine bagla (Faz 4) | [`7f1a3c6`](https://github.com/ali-han-kaya/leibniz2/commit/7f1a3c6) |
 | 2026-10-01 | chore | (changelog) 7f1a3c6 satirini tabloya ekle | [`e08ef41`](https://github.com/ali-han-kaya/leibniz2/commit/e08ef41) |
+| 2026-10-01 | fix | (texlive) pdf teslim PDF'ini ezmiyor; yazım yalnız accept onaylı | [`e9a0c0e`](https://github.com/ali-han-kaya/leibniz2/commit/e9a0c0e) |
 | 2026-10-01 | docs | (history) superseded dal kaydı — post-42-chain net etki 0 | [`0df0f6f`](https://github.com/ali-han-kaya/leibniz2/commit/0df0f6f) |
+| 2026-10-01 | chore | (changelog) e9a0c0e satirini tabloya ekle | [`0f09e50`](https://github.com/ali-han-kaya/leibniz2/commit/0f09e50) |
 | 2026-10-01 | chore | (changelog) 0df0f6f satirini tabloya ekle | [`3780537`](https://github.com/ali-han-kaya/leibniz2/commit/3780537) |
 | 2026-10-02 | style | (prettier) 4 CI betigini formatla ve singleQuote hizala | [`0baec71`](https://github.com/ali-han-kaya/leibniz2/commit/0baec71) |
+| 2026-10-02 | chore | (changelog) 3780537 satirini tabloya ekle | [`ab1b0f2`](https://github.com/ali-han-kaya/leibniz2/commit/ab1b0f2) |
 
 ### Regresyon notları
 

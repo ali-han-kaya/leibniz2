@@ -11,13 +11,18 @@
 #
 # 3-geçiş sözleşmesi (plan Faz 0): her target tam PASSES geçiş koşar; son
 # geçiş logunda 'Rerun to get' kalmadan hizalama iddiası ÜRETİLEMEZ
-# (fail-closed). pdf çıktıyı yalnız BUILD_DIR'a yazar, sonra OUTPUT'a
-# kopyalar — kaynak dizinine ASLA yazılmaz. check, deney betiğini
-# DETERMINISM_PASSES=$(PASSES) ile delege eder: 2 bağımsız 3-geçişli koşum
-# + /ID-kanonik hash karşılaştırması + rerun=0 denetimi.
+# (fail-closed). pdf çıktıyı YALNIZ BUILD_DIR'a yazar: kaynak dizinine ve
+# TRACKED teslim OUTPUT'una dokunmaz (yerel derleme teslim artefaktını
+# değiştirmez). check, deney betiğini DETERMINISM_PASSES=$(PASSES) ile
+# delege eder: 2 bağımsız 3-geçişli koşum + /ID-kanonik hash karşılaştırması
+# + rerun=0 denetimi.
 # accept: Faz 3 — check'i koşturur, kanonik hash'i kabul raporunun hash
 # geçiş defterinde (docs/ID_RESIDUAL_ACCEPTANCE.md §4) arar; yoksa
 # fail-closed (yeni bağlam → bilinçli defter satırı, Faz 6 çıkış yolu).
+# TRACKED OUTPUT'a yazım TEK yoldur ve yalnız burada olur: defter onayından
+# sonra taze artefakt yeniden üretilir, kanonik hash'i defterle birebir
+# eşleşmiyorsa yazılmaz, eşleşiyorsa atomik yazılır (tmp + rename) ve
+# öncesi/sonrası sha256 penceresi basılır.
 # Makefile.tectonic paralel yaşamlı kalır (geri dönüş yolu).
 
 SHELL := /bin/sh
@@ -36,6 +41,8 @@ PASSES ?= 3
 DETERMINISM_SCRIPT := $(abspath $(ROOT)/_calisma/CIKTI/texlive_determinism_test.sh)
 ACCEPT_DOC := $(ROOT)/docs/ID_RESIDUAL_ACCEPTANCE.md
 REPORT := $(BUILD_DIR)/determinism_report.txt
+CANON_PY := $(ROOT)/_calisma/CIKTI/pdf_id_canonical.py
+MKFILE := $(lastword $(MAKEFILE_LIST))
 
 .PHONY: all pdf check accept clean engineinfo
 
@@ -70,8 +77,9 @@ pdf:
 	  echo "ERROR: son geçiş logunda 'Rerun to get' kaldı — $(PASSES) geçiş hizalamayı tamamlamadı (Faz 0 sözleşmesi)" >&2; \
 	  grep -n 'Rerun to get' "$(BUILD_DIR)/$(STEM).log" >&2; exit 1; \
 	fi
-	@cp "$(BUILD_DIR)/$(STEM).pdf" "$(OUTPUT)"
-	@printf 'built=%s\npasses=%s\nsource_date_epoch=%s\n' "$(OUTPUT)" "$(PASSES)" "$(SOURCE_DATE_EPOCH)"
+	@test -f "$(BUILD_DIR)/$(STEM).pdf" || { echo "ERROR: derleme PDF üretmedi: $(BUILD_DIR)/$(STEM).pdf" >&2; exit 1; }
+	@echo "output_write=deferred (tracked teslim OUTPUT'una yazım yok — tek onaylı yazım: 'make accept')"
+	@printf 'built=%s\npasses=%s\nsource_date_epoch=%s\n' "$(BUILD_DIR)/$(STEM).pdf" "$(PASSES)" "$(SOURCE_DATE_EPOCH)"
 
 check:
 	@command -v "$(PDFlatex)" >/dev/null 2>&1 || { echo "ERROR: pdflatex not found (PDFlatex= veya PATH)" >&2; exit 2; }
@@ -102,7 +110,33 @@ accept: check
 	   echo "ERROR: kanonik hash kabul raporunun hash geçiş defterinde yok: $$CANON" >&2; \
 	   echo "       Yeni bağlam (CI/font paketi) ise docs/ID_RESIDUAL_ACCEPTANCE.md" >&2; \
 	   echo "       defterine bu ikiliyi bilinçli ekle (Faz 6 çıkış yolu), sonra tekrar koş." >&2; \
+	   echo "       tracked OUTPUT'a YAZILMADI: $(OUTPUT)" >&2; \
 	   exit 1; \
+	 fi
+	# Onay sırası: defter kapısı GEÇMEDEN taze derleme başlamaz (onaysız
+	# bağlamda artefakt üretmek boşa iş + yanlış güven üretirdi).
+	@$(MAKE) --no-print-directory -f "$(MKFILE)" pdf
+	@ART="$(BUILD_DIR)/$(STEM).pdf"; \
+	 test -f "$$ART" || { echo "ERROR: onaylı yazım için artefakt yok: $$ART" >&2; exit 1; }; \
+	 CANON=$$(sed -n 's/^texlive_canonical_run1_sha256=//p' "$(REPORT)"); \
+	 ART_CANON=$$(python3 "$(CANON_PY)" "$$ART" | head -1); \
+	 test -n "$$ART_CANON" || { echo "ERROR: artefakt kanonik hash hesaplanamadı: $$ART" >&2; exit 1; }; \
+	 if [ "$$ART_CANON" != "$$CANON" ]; then \
+	   echo "ERROR: yazılacak artefakt, defterin onayladığı kanonik hash'le aynı değil" >&2; \
+	   echo "       artefakt=$$ART_CANON" >&2; \
+	   echo "       defter  =$$CANON" >&2; \
+	   echo "       tracked OUTPUT'a YAZILMADI: $(OUTPUT)" >&2; \
+	   exit 1; \
+	 fi; \
+	 BEFORE=$$(if [ -f "$(OUTPUT)" ]; then python3 -c 'import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$(OUTPUT)"; else echo absent; fi); \
+	 mkdir -p "$$(dirname "$(OUTPUT)")"; \
+	 TMP="$(OUTPUT).accept-tmp"; \
+	 cp "$$ART" "$$TMP" && mv -f "$$TMP" "$(OUTPUT)" || { rm -f "$$TMP"; echo "ERROR: tracked OUTPUT yazılamadı: $(OUTPUT)" >&2; exit 1; }; \
+	 AFTER=$$(python3 -c 'import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$(OUTPUT)"); \
+	 printf 'artifact=%s\noutput_path=%s\noutput_sha256_before=%s\noutput_sha256_after=%s\ntracked_output_written=true\n' \
+	   "$$ART" "$(OUTPUT)" "$$BEFORE" "$$AFTER"; \
+	 if [ "$$BEFORE" != "$$AFTER" ]; then \
+	   echo "tracked_output_note=teslim paketi baytları değişti — sidecar/zip yenilemesi ayrı adım (plan Faz 4 madde 2)" >&2; \
 	 fi
 
 clean:
