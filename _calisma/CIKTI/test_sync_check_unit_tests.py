@@ -608,5 +608,61 @@ class TestExcludeCiBindingGate(unittest.TestCase):
         self.assertEqual(calls, [], "izole koşumda repo-geneli kapı çalışmamalı")
 
 
+class TestDriftGuardParsing(unittest.TestCase):
+    """ci_full_discover_drift_guard saf (pure) çözümleme sözleşmesi.
+
+    Ölçülen boşluk: gate `python -m unittest <modul>` komutuyla 161 dosyayı
+    ayrı ayrı koşuyordu; bu komut repo kökünden ÇALIŞMIYOR (`_calisma/CIKTI`
+    paket değil → `__init__.py` yok, sys.path'te değil), dolayısıyla her dosya
+    rc=1 döndürüyor, `registered_battery_green` daima False ve
+    `drift_detected` HİÇBİR ZAMAN True olamıyordu — yani gate fail-closed
+    değildi (ölçüldü: files_passed 0/161, verdict PASS, 5m20s). Yeni çözümleme
+    yalnız kayıtsız (kayıtlı olmayan) kırmızı dosyaları arar; kayıtlı batarya
+    CI'da zaten sert kapı olarak koştuğu için YENİDEN koşulmaz.
+    """
+
+    FAIL_LINE = "FAIL: test_x (test_alpha_gate.AlphaTest.test_x)\n"
+    ERROR_LINE = "ERROR: test_y (test_beta_gate.BetaTest.test_y)\n"
+    NOISE = "FAIL: README skills index drift\nFAIL: skills index ölçülemedi\n"
+
+    def _g(self):
+        import ci_full_discover_drift_guard as g
+        return g
+
+    def test_extracts_failing_modules_from_fail_lines(self):
+        g = self._g()
+        self.assertEqual(g._failing_modules(self.FAIL_LINE), {"test_alpha_gate"})
+
+    def test_extracts_failing_modules_from_error_lines(self):
+        g = self._g()
+        self.assertEqual(g._failing_modules(self.ERROR_LINE), {"test_beta_gate"})
+
+    def test_ignores_output_lines_without_a_module(self):
+        g = self._g()
+        # alt-test basliklari parantez icermez; gercek FAIL/ERROR degildir
+        self.assertEqual(g._failing_modules(self.NOISE), set())
+
+    def test_registered_failing_file_is_not_drift(self):
+        g = self._g()
+        self.assertEqual(g._drift_modules(self.FAIL_LINE, {"test_alpha_gate"}, set()), set())
+
+    def test_unregistered_failing_file_is_drift(self):
+        g = self._g()
+        self.assertEqual(g._drift_modules(self.FAIL_LINE, set(), set()),
+                         {"test_alpha_gate"})
+
+    def test_exempt_failing_file_is_not_drift(self):
+        g = self._g()
+        # EXEMPT_FROM_DIFF_GUARD gerçekten muafiyet uygular (ci'da koşmayan
+        # smoke testleri full discover'da kırmızı olabilir ve bu DRIFT değildir)
+        line = "FAIL: t (test_dashboard_playwright_smoke.SmokeTest.t)\n"
+        self.assertEqual(
+            g._drift_modules(line, set(), g.EXEMPT_FROM_DIFF_GUARD), set())
+
+    def test_noise_never_produces_drift(self):
+        g = self._g()
+        self.assertEqual(g._drift_modules(self.NOISE, set(), set()), set())
+
+
 if __name__ == "__main__":
     unittest.main()
