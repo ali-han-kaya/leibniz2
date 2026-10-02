@@ -515,6 +515,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-01 | chore | (changelog) 0df0f6f satirini tabloya ekle | [`3780537`](https://github.com/ali-han-kaya/leibniz2/commit/3780537) |
 | 2026-10-02 | style | (prettier) 4 CI betigini formatla ve singleQuote hizala | [`0baec71`](https://github.com/ali-han-kaya/leibniz2/commit/0baec71) |
 | 2026-10-02 | docs | (final-rc) linux baseline (fcb14f7) bot-commit kaydini isle | [`3a3cbf3`](https://github.com/ali-han-kaya/leibniz2/commit/3a3cbf3) |
+| 2026-10-02 | feat | (k6) strict determinizmi kapilara bagla, bayat yorumu olc | [`e3651c1`](https://github.com/ali-han-kaya/leibniz2/commit/e3651c1) |
 
 ### Regresyon notları
 

@@ -60,6 +60,7 @@ hiçbir fark gizlenmez).
 | 3 | pdfTeX 3.141592653-2.6-1.40.29 (TeX Live 2026/Homebrew) | 1 | 0 | koşum-başına değişken (`da868c13…`/`014bed9a…`) | `a75c340911801273b38be6ffb51a34820764b8f812d528dd2705d64117f1aa00` | ci_simulate 2× koşum + trend baseline |
 | 4 | pdfTeX 3.141592653-2.6-1.40.29 | 3 | 0 | koşum-başken değişken (`/ID`) | `544516b0d9d2f4c12b05b512b79b31ad238e82d3ca3aff81166a6bac1914f597` | `make check` 2× bağımsız koşum (Faz 1 kabul; 2026-09-20 tekrar ×2) |
 | 5 | **teslim artefaktı** `TESLIM_V5_FINAL_2026-08-17/.../ingiliz_empirizmi_v3.pdf` | teslim öncesi derleme | SDE kaydı yok (derleme tarihi belgelenmemiş) | `74b2cdbdb18fafbf5b3c87570c92f1500e7580469bcf4295b09734116df0779f` (teslimde donmuş) | `d4f67e39fd0ef77e8f294ca2195bb1fc784716234d0675ab88a4fd8695263a6a` | 2026-10-01 K6-DETERM ölçümü — **bu satır K6-DETERM strict karşılaştırmasının okuduğu referanstır** (§6) |
+| 6 | **CI-linux** pdfTeX 3.141592653-2.6-1.40.29 (TeXLive, `ubuntu-latest` — apt `texlive-latex-base` + `texlive-latex-recommended` + `cm-super`, `/usr/bin/pdflatex`; tectonic 0.17.0 digest-pinned) | 1 | 0 | koşum-başına değişken (`/ID`); ham hash trend kaydında **tutulmaz** (yalnız kanonik saklanır) | `092154a0473e33c2c4d869e2123e36138612ff44f63f689437eeb8450b00fc06` | **determinism-trend CI** (`ubuntu-latest`): 5 bağımsız koşum 2026-09-20…09-28, `gate=PASS`, kanonik hash **birebir aynı**; kaynak `a9f34e05…` değişmedi |
 
 ### Satır 5 neden ayrı? (2026-10-01 ölçümü)
 
@@ -80,6 +81,46 @@ koşumun kanonik hash'i `544516b0…` (birebir aynı), `residual=/ID`,
 Bu ikisi birbirine bağlı: teslim yeniden derlendiğinde satır 5'in hash'i
 kaybolacak değil — kanonik hash değişecek ve o değişim **bilinçli** olarak
 yeni bir satır + sidecar yenilemesi olacak (aşağıdaki protokol).
+
+### Satır 6 neden ayrı? (CI-linux bağlamı — 2026-10-02)
+
+Protokol: “Yeni bağlam (CI, font paketi) → **yeni satır**; eskisinin üzerine
+asla yazma.” CI-linux tam olarak yeni bir bağlamdır: kaynak ve SDE **aynı**,
+ama derleme ortamı farklı (ubuntu-latest apt TeXLive ↔ yerel Homebrew TeX
+Live 2026). Font/ligatür/hinting farkı nedeniyle kanonik hash'ler eşit
+olmak zorunda değildir — §3 kural 3'ün platform karşılığı. Ölçülen ayrım
+şu, ve ilginç olan **asimetrik** olması:
+
+| Bacak | darwin (Homebrew) | CI (ubuntu-latest) | Sonuç |
+|---|---|---|---|
+| tectonic 0.17.0 | `ad8fca69…` | `ad8fca69…` | platformlar arası **aynı** — tectonic çıktısı platformdan bağımsız |
+| pdfTeX (1 geçiş) | `a75c3409…` (satır 3) | `092154a0…` (satır 6) | **farklı** — TeXLive/font paketi farkı |
+
+Ölçümün kaynağı: `docs/determinism_trend/determinism_trend.jsonl` —
+`determinism-trend` CI işinin (`ubuntu-latest`, haftalık cron +
+`workflow_dispatch`) yazdığı **sürümlü** kayıtlar. **5 bağımsız linux
+koşumu** (2026-09-20 ×2, 09-21 ×2, 09-28) kanonik hash'i `092154a0…`
+olarak birebir aynı üretti; her biri `gate=PASS` ve kaynak
+(`source_sha256` = `a9f34e05…`) bu arada değişmedi. Tek koşum determinizm
+kanıtı olmadığı için birden fazla koşum beklenir.
+
+**Geçiş bağlamı notu (varsayıma düşmemek için):** bu kayıtlar
+`texlive_determinism_test.sh`'in `DETERMINISM_PASSES` varsayılanı **1**
+iken alındı. Trend kaydı `passes` alanını taşımadığı için bu, kod +
+çapraz kayıt eşleşmesiyle kuruldu: aynı dönemin darwin trend kaydı
+(`a75c3409…`) 1-geçiş olan satır 3 ile **birebir aynıdır**; aynı betik aynı
+dönemde 1-geçişteydi. 3-geçiş (Faz 4 re-baseline) bir **farklı** bağlamdır:
+CI'da 3-geçiş ölçüldüğünde `092154a0…` değil **yeni** bir hash çıkar ve
+protokol gereği **kendi satırını** alır — satır 6'nın üzerine yazılmaz.
+
+Bu satırın işlevi: `make -f docs/Makefile.texlive accept` (Faz 6 çıkış
+yolu) artık bir CI runner'ında üretilmiş bir PDF'in kanonik hash'ini
+bulabileceği bir yer var. Satır 5 **korunur** ve hâlâ K6-DETERM strict'in
+okuduğu tek teslim referansıdır; CI satırı teslim PDF'ini kabul ettirmez.
+
+Bu satır kanıtla bağlıdır: `test_k6_determ_canonical.py::TestCiLinuxLedgerRow`
+satırı okunan CI kaydıyla karşılaştırır — kayıt ile defter ayrışırsa
+(ör. trend dosyası yeniden ölçülür, hash değişir) kapı kırmızıya döner.
 
 ### Teslim sidecar'ı geçiş kaydı (`PDF_METADATA_SIDECAR` deseni)
 
