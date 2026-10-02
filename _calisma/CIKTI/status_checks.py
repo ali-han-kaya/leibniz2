@@ -195,8 +195,28 @@ def format_contract(contract):
     return "\n".join(lines)
 
 
+class GhUnavailable(RuntimeError):
+    """`gh` binary'si çalıştırılamadı (kurulu değil / EACCES).
+
+    RuntimeError tabanlı: çağıranların mevcut `except RuntimeError`
+    yakalayıcıları bozulmadan çalışmaya devam eder. Alt sınıf olmasının
+    tek nedeni ayrımdır: gh binary'sinin kendisi yoksa hata metni
+    "Not Found" içerebilir ve koruma NOT_SET_UP diye yanlış sınıflanır.
+    Oysa "kurulabilir ama doğrulanamıyor" demektir → UNREADABLE.
+    """
+
+
 def run_gh(args):
-    r = subprocess.run(args, capture_output=True, text=True)
+    try:
+        r = subprocess.run(args, capture_output=True, text=True)
+    except OSError as e:
+        # subprocess, çalıştırılabilir dosya bulunamadığında OSError
+        # tabanlı FileNotFoundError/PermissionError fırlatır — bunlar
+        # RuntimeError DEĞİLDİR ve çağıranın except dalına girmez.
+        # Yakalanmazsa kapı UNREADABLE sözleşmesi yerine Python traceback'i
+        # basar, JSON üretmez ve advisory_contract.ok kaybolur.
+        raise GhUnavailable(
+            f"{args[0]} çalıştırılamadı ({e})") from e
     if r.returncode != 0:
         raise RuntimeError((r.stderr or r.stdout).strip())
     return r.stdout.strip()
@@ -354,7 +374,10 @@ def main(argv=None):
         # oluşur; gerçek doğrulama yerelde gh auth ile yapılır (fail-closed
         # exit 1 — yanlış-PASS vermez).
         err = str(e)
-        is_404 = "404" in err or "Not Found" in err
+        # GhUnavailable hiçbir zaman NOT_SET_UP değildir: gh binary'si
+        # yoksa koruma hakkında hiçbir şey bilmiyoruz — doğrulanamadı.
+        is_404 = (not isinstance(e, GhUnavailable)) and \
+            ("404" in err or "Not Found" in err)
         gh_result["warning"] = err
         gh_result["verdict"] = "NOT_SET_UP" if is_404 else "UNREADABLE"
         if args.json:

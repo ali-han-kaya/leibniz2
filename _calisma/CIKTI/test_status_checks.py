@@ -14,6 +14,7 @@ ile aynı desen).
 import io
 import json
 import pathlib
+import re
 import sys
 import unittest
 from unittest import mock
@@ -400,6 +401,193 @@ class TestGhIntegration(unittest.TestCase):
             with self.assertRaises(SystemExit) as cm:
                 sc.main(["--gh", "--repo", "owner/name"])
         self.assertEqual(cm.exception.code, 1)
+
+
+@unittest.skipUnless(HAVE_YAML, "PyYAML gerekli")
+class TestGhBinaryMissing(unittest.TestCase):
+    """`gh` binary'si YOKKEN sözleşme: traceback değil, UNREADABLE.
+
+    GitHub CLI kurulu değilse subprocess.run FileNotFoundError fırlatır;
+    bu OSError tabanlıdır ve run_gh'in yakaladığı RuntimeError DEĞİLDİR.
+    Yakalanmazsa kapı üç şekilde sözleşmeyi bozar: (1) JSON yerine Python
+    traceback'i basılır, (2) advisory_contract.ok okunmaz hale gelir —
+    CI'ın UNREADABLE'da bile offline kontratı denetlemesi bekleniyor —
+    (3) exit kodu yanlış yere düşer.
+    """
+
+    def test_run_gh_wraps_missing_binary_as_runtime_error(self):
+        # Temel sözleşme: subprocess hatası her zaman RuntimeError olarak
+        # yüzeye çıkmalı; çağıran taraf (main) yalnız RuntimeError yakalar.
+        with mock.patch.object(sc.subprocess, "run",
+                               side_effect=FileNotFoundError(
+                                   "No such file or directory: 'gh'")):
+            with self.assertRaises(RuntimeError) as cm:
+                sc.run_gh(["gh", "api", "x"])
+        self.assertIn("gh", str(cm.exception))
+
+    def test_run_gh_wraps_permission_error_as_runtime_error(self):
+        # Kurulu ama çalıştırılamayan gh (EACCES) de aynı sınıf hata.
+        with mock.patch.object(sc.subprocess, "run",
+                               side_effect=PermissionError(
+                                   "Permission denied: 'gh'")):
+            with self.assertRaises(RuntimeError) as cm:
+                sc.run_gh(["gh", "api", "x"])
+        self.assertIn("gh", str(cm.exception))
+
+    def test_gh_json_missing_binary_reports_unreadable(self):
+        # --repo verilmiş (keşif yok) + gh yok → protection okunamaz →
+        # fail-closed exit 1, verdict UNREADABLE (NOT_SET_UP DEĞİL:
+        # koruma var olabilir, sadece doğrulanamadı).
+        # NOT: run_gh değil subprocess.run mock'lanır — asıl sınır
+        # FileNotFoundError'ı burada doğurur, dönüşüm run_gh'de yapılır.
+        buf = io.StringIO()
+        with mock.patch.object(sc.subprocess, "run",
+                               side_effect=FileNotFoundError(
+                                   "No such file or directory: 'gh'")), \
+                mock.patch.object(sys, "stdout", new=buf), \
+                mock.patch.object(sys, "stderr", new=io.StringIO()):
+            with self.assertRaises(SystemExit) as cm:
+                sc.main(["--gh", "--repo", "owner/name", "--json"])
+        self.assertEqual(cm.exception.code, 1)
+        d = json.loads(buf.getvalue())
+        self.assertEqual(d["verdict"], "UNREADABLE")
+        self.assertNotEqual(d["verdict"], "NOT_SET_UP")
+
+    def test_gh_json_missing_binary_carries_advisory_contract(self):
+        # Kritik: JSON üretilmeli ve offline kontrat okunabilmeli. Traceback
+        # çıkması halinde CI precheck adımı bu alanı kaybeder.
+        buf = io.StringIO()
+        with mock.patch.object(sc.subprocess, "run",
+                               side_effect=FileNotFoundError(
+                                   "No such file or directory: 'gh'")), \
+                mock.patch.object(sys, "stdout", new=buf), \
+                mock.patch.object(sys, "stderr", new=io.StringIO()):
+            with self.assertRaises(SystemExit):
+                sc.main(["--gh", "--repo", "owner/name", "--json"])
+        d = json.loads(buf.getvalue())
+        ac = d.get("advisory_contract") or {}
+        self.assertIs(ac.get("ok"), True,
+                      "UNREADABLE'da da offline kontrat taşınmalı")
+        self.assertEqual(len(ac.get("required") or []), 14)
+
+    def test_gh_text_missing_binary_exits_1_not_traceback(self):
+        # Text modunda da exit 1 ve stderr'a anlaşılır mesraf; traceback değil.
+        err = io.StringIO()
+        with mock.patch.object(sc.subprocess, "run",
+                               side_effect=FileNotFoundError(
+                                   "No such file or directory: 'gh'")), \
+                mock.patch.object(sys, "stdout", new=io.StringIO()), \
+                mock.patch.object(sys, "stderr", new=err):
+            with self.assertRaises(SystemExit) as cm:
+                sc.main(["--gh", "--repo", "owner/name"])
+        self.assertEqual(cm.exception.code, 1)
+        self.assertNotIn("Traceback", err.getvalue())
+        self.assertIn("erişilemedi", err.getvalue())
+
+    def test_gh_binary_missing_is_not_confused_with_real_404(self):
+        # gh yokken "Not Found" metni geçebilir (ör. PATH boşken hata metni).
+        # Yanlışlıkla NOT_SET_UP dememeli — koruma yoktur anlamına gelmez.
+        buf = io.StringIO()
+        with mock.patch.object(sc.subprocess, "run",
+                               side_effect=FileNotFoundError("Not Found")), \
+                mock.patch.object(sys, "stdout", new=buf), \
+                mock.patch.object(sys, "stderr", new=io.StringIO()):
+            with self.assertRaises(SystemExit) as cm:
+                sc.main(["--gh", "--repo", "owner/name", "--json"])
+        self.assertEqual(cm.exception.code, 1)
+        d = json.loads(buf.getvalue())
+        self.assertEqual(d["verdict"], "UNREADABLE")
+
+    def test_gh_binary_missing_during_repo_discovery_is_handled(self):
+        # --repo verilmediyse keşif de subprocess'a gider; o yol exit 2
+        # (kullanım hatası) döner ve traceback basmamalı.
+        buf = io.StringIO()
+        with mock.patch.object(sc.subprocess, "run",
+                               side_effect=FileNotFoundError(
+                                   "No such file or directory: 'gh'")), \
+                mock.patch.object(sys, "stdout", new=buf), \
+                mock.patch.object(sys, "stderr", new=io.StringIO()):
+            with self.assertRaises(SystemExit) as cm:
+                sc.main(["--gh", "--json"])
+        self.assertEqual(cm.exception.code, 2)
+        d = json.loads(buf.getvalue())
+        self.assertEqual(d["verdict"], "ERROR")
+
+
+@unittest.skipUnless(HAVE_YAML, "PyYAML gerekli")
+class TestPrYoluDocContract(unittest.TestCase):
+    """docs/CI_READINESS_CHECKLIST.md ↔ status_checks.py sözleşme bağı.
+
+    Bu doc bölümü, branch protection'ın doğrudan push'u bloklamasını ve
+    `--gh`'nin dört sonucunu belgeler. Ölçülen çürüme: bölüm "9 check"
+    diyordu (gerçek 14) ve 404'ün "güvenle atlanacağını" yazıyordu —
+    kod ise fail-closed exit 1. Hiçbir kapı doc'u denetlemediği için
+    çürümüştü. Buradaki testler docu tekrar doğrulanabilir kaynağa bağlar.
+    """
+
+    def setUp(self):
+        self.doc = (CIKTI.parent.parent / "docs" /
+                    "CI_READINESS_CHECKLIST.md").read_text(encoding="utf-8")
+
+    def _branch_section(self):
+        start = self.doc.index("## Branch Protection / Required Checks")
+        end = self.doc.find("\n## ", start + 1)
+        return self.doc[start:end if end != -1 else None]
+
+    def _branch_section_flat(self):
+        """Satır sonu normalize edilmiş bölüm.
+
+        Markdown 80 kolon'da sarar; "güvenle atlar" gibi bir ifade literal
+        aramada "güvenle\\n      atlar" olarak yazılır ve kaçar. Arama
+        yapmadan önce boşlukları teke indirmek bu sınıf tuzağını kapatır.
+        """
+        return re.sub(r"\s+", " ", self._branch_section())
+
+    def test_required_check_count_matches_reality(self):
+        # Doc'ta elle yazılmış sayı varsa gerçekle aynı olmalı.
+        required = len(sc.gate_jobs())
+        found = re.findall(r"(\d+)\s*check adı", self._branch_section())
+        self.assertTrue(found, "doc required check sayısını belirtmeli")
+        for n in found:
+            self.assertEqual(int(n), required,
+                             f"doc {n} check diyor, gerçek {required}")
+
+    def test_all_four_verdicts_are_documented(self):
+        # Sözleşmenin dört sonucu da yazılı olmalı; özellikle
+        # NOT_SET_UP ile UNREADABLE ayrımı (ikisi de exit 1).
+        section = self._branch_section_flat()
+        for verdict in ("PASS", "FAIL", "NOT_SET_UP", "UNREADABLE"):
+            self.assertIn(verdict, section,
+                          f"{verdict} durumu belgelenmemiş")
+
+    def test_documented_exit_codes_match_behaviour(self):
+        # Doc "exit 0" / "exit 1" diyor; kod: PASS->0, diğer üçü->1.
+        section = self._branch_section()
+        self.assertIn("`PASS`", section)
+        for verdict in ("`FAIL`", "`NOT_SET_UP`", "`UNREADABLE`"):
+            row = [ln for ln in section.splitlines()
+                   if verdict in ln and "|" in ln]
+            self.assertTrue(row, f"{verdict} satırı yok")
+            self.assertIn("**1**", row[0],
+                          f"{verdict} exit 1 vermeli")
+
+    def test_no_stale_fail_open_claim(self):
+        # 404 güvenle atlanmaz: koruma yoksa da kapı exit 1'dir. Bu
+        # ifade geri gelirse kapı fail-open anlatılıyor demektir.
+        self.assertNotIn("güvenle atlar", self._branch_section_flat())
+
+    def test_all_four_merge_block_fields_documented(self):
+        # Doğrudan push'un bloklanması bu dört alana bağlı; hepsi yazılı.
+        section = self._branch_section_flat()
+        for field in ("strict", "enforce_admins", "allow_force_pushes",
+                      "allow_deletions"):
+            self.assertIn(field, section,
+                          f"merge-engeli alanı belgelenmemiş: {field}")
+
+    def test_blocking_hook_is_documented(self):
+        # --gh pre-commit'te bloklayıcı; doc hangi hook'un bu işi yaptığını
+        # söylemezse kapı ile doc arasındaki bağ kaybolur.
+        self.assertIn("check-status-check-names", self._branch_section_flat())
 
 
 if __name__ == "__main__":

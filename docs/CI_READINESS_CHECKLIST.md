@@ -72,12 +72,28 @@ Desen kaynağı: `adobe/skills@appbuilder-cicd-pipeline` `references/checklist.m
 
 ## Branch Protection / Required Checks
 
-- [ ] Beklenen 9 check adı tek kaynaktan (`verify.yml` job `name:` alanları):
+`main` doğrudan push'a kapalıdır; tek ilerleme yolu **PR yolu**. Koruma
+ayarlarını `setup_branch_protection.py` kurar, denetleyen kapı
+`status_checks.py --gh`'dir.
+
+Doğrudan push'un engellenmesi dört alana bağlıdır ve `--gh` dördünü de tek
+tabloda raporlar (hepsi `true` olmalı):
+
+| Alan | Değer | Etkisi |
+| --- | --- | --- |
+| `required_status_checks.strict` | `true` | dal güncel olmadan merge |
+| `enforce_admins.enabled` | `true` | admin bypass kapalı |
+| `allow_force_pushes.enabled` | `false` | force-push yasak |
+| `allow_deletions.enabled` | `false` | dal silme yasak |
+
+- [ ] **Beklenen 14 check adı** tek kaynaktan (`verify.yml` job `name:`
+      alanları) türetilir — liste `status_checks.py --json` çıktısındaki
+      `advisory_contract.required` alanıdır, elle yazılmaz:
       ```bash
       python3 _calisma/CIKTI/status_checks.py
       ```
-- [ ] **Canlı GitHub doğrulaması** — branch protection'daki required check
-      listesi birebir eşleşiyor (eksik/fazla = drift, exit 1):
+- [ ] **Canlı GitHub doğrulaması** — required check listesi **ve** dört
+      merge-engeli alanı birebir eşleşiyor (eksik/fazla = drift, exit 1):
       ```bash
       python3 _calisma/CIKTI/status_checks.py --gh --repo <owner>/<repo>
       ```
@@ -86,8 +102,33 @@ Desen kaynağı: `adobe/skills@appbuilder-cicd-pipeline` `references/checklist.m
       ```bash
       python3 _calisma/CIKTI/status_checks.py --gh --json
       ```
-- [ ] Koruma kurulu (branch protection) — koruma yoksa `--gh` 404'ü güvenle
-      atlar (ilk publish akışı), ama required check'ler kurulu olmalı.
+
+### PR-yolu sözleşmesi (`--gh` çıkış kodları)
+
+`--gh` **fail-closed**'tır: doğrulayamadığı hiçbir şeyi PASS saymaz ve
+`UNREADABLE`'da bile çıktı üretir. Dört sonuş vardır:
+
+| Durum | `verdict` | Çıkış | Anlamı |
+| --- | --- | --- | --- |
+| Koruma kurulu, adlar ve 4 engel alanı birebir | `PASS` | **0** | PR yolu açık |
+| Koruma kurulu ama ad/alan drift'i var | `FAIL` | **1** | merge engeli gerçek |
+| Koruma hiç kurulmamış (API 404) | `NOT_SET_UP` | **1** | merge engeli **yok** — kurulum gerekir |
+| `gh` yok / çalıştırılamıyor / yetki ya da ağ hatası | `UNREADABLE` | **1** | koruma **bilinmiyor** — yanlış PASS verilmez |
+
+Kritik ayrım: `NOT_SET_UP` ile `UNREADABLE` aynı çıkış kodu verir ama farklı
+anlam taşır. `NOT_SET_UP` korumanın **yokluğunu** bildirir (kur
+`python3 _calisma/CIKTI/setup_branch_protection.py`); `UNREADABLE` yalnızca
+korumanın **okunamadığını** bildirir. İkincisinde `advisory_contract.ok`
+alanı hâlâ hesaplanıp JSON'da taşınır — GitHub'a erişilemese bile offline
+kontrat denetlenebilir. `gh` binary'si kurulu değilse de bu yol çalışır:
+`run_gh` hatayı `GhUnavailable`'a çevirir, kapı traceback basmaz.
+
+Aynı kapı pre-commit'te de bloklayıcıdır (`check-status-check-names`,
+`.pre-commit-config.yaml`), `always_run: true` — yani **main'e doğrudan
+push'un bloklanmasının kaynağı GitHub branch protection ayarlarıdır**, bu
+kapı ise o ayarların kaymasını yerelde yakalar. Kapı çevrimdışı çalıştığında
+da exit 1 döner; bu kasıtlıdır (fail-closed), çevrimiçi doğrulama için
+`status_checks.py --gh --repo <owner>/<repo>` çalıştırılmalıdır.
 
 ## Verify Zinciri (K-katmanları)
 
