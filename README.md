@@ -518,6 +518,8 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-02 | feat | (k6) strict determinizmi kapilara bagla, bayat yorumu olc | [`e3651c1`](https://github.com/ali-han-kaya/leibniz2/commit/e3651c1) |
 | 2026-10-02 | docs | (kabul) CI-linux baglamini hash gecis defterine ekle | [`c934c16`](https://github.com/ali-han-kaya/leibniz2/commit/c934c16) |
 | 2026-10-02 | docs | (faz5) pipeline/SKILL olcumlu, migration completed | [`08a5b17`](https://github.com/ali-han-kaya/leibniz2/commit/08a5b17) |
+| 2026-10-02 | style | (prettier) bicim borcunu temizle, agac geneli kapı ekle | [`0baa72f`](https://github.com/ali-han-kaya/leibniz2/commit/0baa72f) |
+| 2026-10-02 | fix | (prettier) kapiyi degisim farkina cevir, testi hermetik kilitle | [`955c8a3`](https://github.com/ali-han-kaya/leibniz2/commit/955c8a3) |
 
 ### Regresyon notları
 
