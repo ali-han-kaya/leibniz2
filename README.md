@@ -522,6 +522,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-02 | test | (sync) iki dosyalik kapsami tek dosyada birlestir | [`dcdfb40`](https://github.com/ali-han-kaya/leibniz2/commit/dcdfb40) |
 | 2026-10-02 | docs | (final-rc) AST gecisi ve fail-closed onarim kanitlarini kaydet | [`a73ffe9`](https://github.com/ali-han-kaya/leibniz2/commit/a73ffe9) |
 | 2026-10-02 | chore | (changelog) a73ffe9 satirini tabloya ekle | [`8fe1964`](https://github.com/ali-han-kaya/leibniz2/commit/8fe1964) |
+| 2026-10-02 | fix | (ci) gh yokken UNREADABLE sozlesmesini geri getir | [`f9d6909`](https://github.com/ali-han-kaya/leibniz2/commit/f9d6909) |
 
 ### Regresyon notları
 
