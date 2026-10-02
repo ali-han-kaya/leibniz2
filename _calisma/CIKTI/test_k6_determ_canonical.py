@@ -46,6 +46,8 @@ SHIPPED_MANIFEST = (ROOT / "_calisma" / "V5_ICERIK"
                     / "TESLIM_V5_FINAL_2026-08-17" / "stoic_hume_package"
                     / "Stoic_Hume_Formal_Section_2026-08-17" / "MANIFEST.txt")
 TREND = ROOT / "docs" / "determinism_trend" / "determinism_trend.jsonl"
+PIPELINE = ROOT / "docs" / "TEX_RENDER_PIPELINE.md"
+SLIDES = CIKTI / "render_z3_slides.py"
 
 # §4 defterinin önceki satırları — “üzerine yazma” protokolünü ölçmek için
 # (test_id_residual_acceptance_doc.py ile aynı değerler, tek kaynak değil:
@@ -648,6 +650,90 @@ class TestCiLinuxLedgerRow(unittest.TestCase):
         self.assertIn("determinism-trend", text,
                       "satırın ölçüm kaynağı (determinism-trend CI) "
                       "adıyla yazılmalı")
+
+
+class TestFaz5DocumentationTruth(unittest.TestCase):
+    """H) Dokümantasyon ÖLÇÜLMÜŞ durumu anlatmalı (Faz 5 kapanışı).
+
+    Ölçülen boşluk: `docs/TEX_RENDER_PIPELINE.md` ve
+    `skills/reproducible-pdf-build/SKILL.md` TeXLive'nin **yok** olduğu bir
+    çağın anlatısını taşıyordu. Oysa bugün (2026-10-02) ölçülen durum:
+      - TeXLive kurulu (Homebrew TeX Live 2026) ve iki motor da ölçülmüş,
+      - `render_z3_slides.py` motoru `pdflatex → latex → tectonic` sırasıyla
+        seçiyor; bu makinede `find_tex_engine()` = **pdflatex** (tectonic
+        değil), PNG yolu `convert` (pdftoppm değil),
+      - tüm kanonik hash'ler kabul defterinde.
+    Belge kodu ve ölçümü anlatmıyorsa okuyucu yanlış pipeline'ı kopyalar.
+    """
+
+    def test_pipeline_doc_carries_the_measured_canonical_hashes(self):
+        text = PIPELINE.read_text(encoding="utf-8")
+        for h, label in ((TECTONIC_SINGLE, "tectonic"),
+                         (PDFTEX_SINGLE, "pdfTeX tek-geçiş (darwin)"),
+                         (PDFTEX_3PASS, "pdfTeX 3-geçiş (darwin)")):
+            self.assertIn(h, text,
+                          "%s kanonik hash'i belgede olmalı (ölçülmüş veri)"
+                          % label)
+        recs = [json.loads(l) for l in TREND.read_text(
+            encoding="utf-8").splitlines() if l.strip()]
+        ci = {r.get("texlive_canonical_sha256") for r in recs
+              if r.get("platform") == "linux"}
+        for h in ci:
+            self.assertIn(h, text,
+                          "CI-linux kanonik hash'i de belgede olmalı")
+
+    def test_pipeline_doc_does_not_claim_texlive_is_absent(self):
+        text = PIPELINE.read_text(encoding="utf-8")
+        for stale in ("TeXLive bağımlılığı olmayan", "TeXLive'siz, doğrulanmış"):
+            self.assertNotIn(stale, text,
+                             "açılış tezi artık doğru değil (TeXLive kurulu "
+                             "ve ölçüldü): %r" % stale)
+
+    def test_pipeline_doc_engine_order_matches_the_renderer(self):
+        src = SLIDES.read_text(encoding="utf-8")
+        m = re.search(r"def find_tex_engine\(\).*?for cand in \(([^)]*)\):",
+                      src, re.S)
+        self.assertIsNotNone(m, "find_tex_engine aday listesi bulunamadı")
+        order = [c.strip().strip("\"'") for c in m.group(1).split(",")]
+        self.assertEqual(order, ["pdflatex", "latex", "tectonic"],
+                         "motor aday sırası değişti — belgeyi de güncelle")
+        text = PIPELINE.read_text(encoding="utf-8")
+        self.assertIn("`pdflatex` → `latex` → `tectonic`", text,
+                      "belge motor çözümleme sırasını kodla aynı yazmalı")
+
+    def test_pipeline_doc_names_the_resolved_engine_and_png_path(self):
+        text = PIPELINE.read_text(encoding="utf-8")
+        self.assertRegex(text, r"(?i)find_tex_engine\(\)",
+                         "belge hangi motorun SEÇİLDİĞİNİ ölçümle yazmalı "
+                         "(tahmin değil)")
+        self.assertIn("pdflatex", text)
+
+    def test_pipeline_doc_links_the_acceptance_ledger(self):
+        text = PIPELINE.read_text(encoding="utf-8")
+        self.assertIn("ID_RESIDUAL_ACCEPTANCE", text,
+                      "belge kanonik hash'lerin tek kaynağına bağlanmalı")
+
+    def test_skill_marks_the_migration_completed_with_a_reference(self):
+        text = SKILL.read_text(encoding="utf-8")
+        self.assertRegex(text, r"(?i)migration[^\n]{0,40}completed"
+                              r"|completed[^\n]{0,40}migration",
+                         "SKILL.md göçü 'future' olarak değil tamamlanmış "
+                         "olarak işaretlemeli")
+        self.assertIn("ID_RESIDUAL_ACCEPTANCE", text,
+                      "SKILL.md /ID kabul raporuna referans vermeli")
+
+    def test_skill_no_longer_teaches_tectonic_as_nondeterministic(self):
+        # Ölçümle çürütülen alan dersi: tectonic 0.17.0 bu ölçümde byte-KARARLI
+        # (ham = kanonik, iki platformda aynı). Derleyici düzeyindeki
+        # kararsızlık pdfTeX'in rastgele trailer /ID'idir. SKILL.md bunu
+        # "ölçümle çürütüldü" diye işaretlemeli.
+        text = SKILL.read_text(encoding="utf-8")
+        self.assertNotIn("is NOT byte-deterministic: consecutive builds",
+                         text,
+                         "ölçümle çürütülmüş iddia olduğu gibi kalmamalı")
+        self.assertIn("tectonic", text)
+        self.assertRegex(text, r"(?i)(çürüt|superseded|ölçümle)",
+                         "SKILL.md çürütmeyi açıkça işaretlemeli")
 
 
 if __name__ == "__main__":

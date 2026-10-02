@@ -23,6 +23,14 @@ independent non-determinism sources were found and handled with a
 while the principled fix (`SOURCE_DATE_EPOCH`) was documented as the future
 migration.
 
+**Status update — that migration is now COMPLETED** in the repo this skill
+came from (leibniz2): the build runs TeXLive + `SOURCE_DATE_EPOCH` +
+`TEXMFOUTPUT`, and the strict gate compares the **`/ID`-canonical** hash
+against a written acceptance ledger
+(`docs/ID_RESIDUAL_ACCEPTANCE.md`), fail-closed, ON by default. The measured
+ledger — including the platform-specific canonical hashes — is the reference;
+read it instead of re-deriving the numbers.
+
 The lesson applies to any pipeline where a PDF (or other generated artifact)
 enters a signed/delivered bundle:
 
@@ -47,12 +55,20 @@ enters a signed/delivered bundle:
 
 Two independent sources of byte drift were found in the field:
 
-### 1. Compiler-level (tectonic 0.17.0)
+### 1. Compiler-level (the `/ID` trailer)
 
-`tectonic` is NOT byte-deterministic: consecutive builds of the same `.tex`
-produce different byte streams (observed: 33-page manuscript, stable page
-count, unstable bytes). This is a known property of the engine's internal
-ordering; it does NOT affect content correctness.
+**Measured correction — the earlier claim in this skill is superseded.** This
+skill originally attributed engine-level non-determinism to `tectonic`
+("consecutive builds produce different byte streams"). Measurement refuted
+that: `tectonic` 0.17.0 was **byte-stable** in the audited runs — its raw
+hash already equals its canonical hash, and it is the *same* across two
+different platforms.
+
+The real compiler-level residue is **pdfTeX's random trailer `/ID`**: every
+run writes a fresh 64-byte `/ID`, `SOURCE_DATE_EPOCH=0` included. The single
+byte-level difference between two runs of the same source is that pair. This
+is exactly what the `/ID`-canonical hash neutralises, and why the strict gate
+must sit on the canonical hash rather than on raw bytes.
 
 ### 2. Post-processing (qpdf --remove-metadata)
 
@@ -162,7 +178,7 @@ exactly the signal you want.
 - Report drift as informational when it is expected (P0/P1 only when the
   *stable* proxy breaks, not when raw bytes drift).
 
-### Step 5 — Document the migration path
+### Step 5 — Document the migration path (COMPLETED in leibniz2)
 
 The principled fix for engine-level non-determinism is a deterministic
 toolchain:
@@ -203,7 +219,7 @@ Notes from the field:
 - [ ] Verification: qpdf missing → skip (not fail); strict determinism is on the
       `/ID`-canonical hash (ledger-pinned), not on the qpdf-stripped hash
 - [ ] Manifest includes the sidecar; delivery gate verifies raw hash P0
-- [ ] Migration documented: TeXLive + `SOURCE_DATE_EPOCH` + `TEXMFOUTPUT`
+- [x] Migration documented: TeXLive + `SOURCE_DATE_EPOCH` + `TEXMFOUTPUT` — landed; the acceptance ledger (`docs/ID_RESIDUAL_ACCEPTANCE.md`) records the measured canonical hashes per engine and platform
 - [ ] Repack proof: consecutive repacks byte-identical (zip hash stable)
 
 ## Troubleshooting

@@ -112,13 +112,27 @@ farklarının kabul raporuyla belgelenmesi.
 
 ## Faz 5 — Dokümantasyon
 
-- [ ] `docs/TEX_RENDER_PIPELINE.md`: tectonic varyantı yerine
-  TeXLive-birincil akış; karşılaştırma tablosu ölçülmüş verilerle
-  güncellenir (TeXLive bağımlılığı artık VAR — Homebrew/CI paketi).
-- [ ] `skills/reproducible-pdf-build/SKILL.md`: "future migration"
-  bölümü "completed" işaretlenir; `/ID` kabul raporuna referans.
-- [ ] README changelog: göç, kabul raporu ve hash geçişi satırı
-  (`update_changelog_hook.sh` ile senkron).
+- [x] `docs/TEX_RENDER_PIPELINE.md`: TeXLive-birincil akış; karşılaştırma
+  tablosu ölçülmüş verilerle güncellendi (TeXLive bağımlılığı artık VAR —
+  Homebrew/CI paketi). **Ölçülen sonuç:** `render_z3_slides.py` motoru
+  `pdflatex → latex → tectonic` sırasıyla seçiyor ve TeXLive'li bu makinede
+  `find_tex_engine()` = **`pdflatex`**, `find_pdf_to_png()` = **`convert`** —
+  yani pratikte **Method 1** yürüyor; `tectonic` yalnız TeXLive yokken devreye
+  giren düşüş yolu. Belgeye §6 eklendi: iki motorun **tam 64-hex** kanonik
+  hash'leri, ölçülen çapraz-platform asimetrisi (ayrışan pdfTeX, tectonic
+  değil) ve yüzeye göre motor seçimi. Önceki "TeXLive'siz" tezi düzeltildi.
+  *Dürüstlük notu:* "TeXLive-birincil" **teslim artefaktı** için henüz
+  doğru değil — teslim PDF'i hâlâ tectonic-era (kabul defteri §4 satır 5),
+  yeniden derleme bilinçli yenileme olarak bekliyor.
+- [x] `skills/reproducible-pdf-build/SKILL.md`: "future migration" bölümü
+  **completed** işaretlendi (Status update + Step 5 başlığı + checklist);
+  `/ID` kabul raporuna (`docs/ID_RESIDUAL_ACCEPTANCE.md`) referans verildi.
+  Ayrıca **ölçümle çürütülmüş** alan dersi düzeltildi: kararsızlık
+  `tectonic`'e değil pdfTeX'in rastgele trailer `/ID`'sidir; eski iddia
+  "superseded" olarak işaretlendi.
+- [x] README changelog: göç (`24a9b25`, `173a2f4`), kabul raporu ve hash
+  geçişi satırları `update_changelog_hook.sh` ile senkron (gecikmeli/lag-one
+  yazım sözleşmesi: tablo her commit'ten sonra tam bir commit geridedir).
 
 ## Faz 6 — CI geçişi
 
