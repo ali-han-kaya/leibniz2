@@ -37,13 +37,16 @@ run_hash() {
 # çiftini sabit değere indirger; içerik birebir aynıysa kanonik hash eşit.
 # Desen eşleşmezse ham hash döner (fail-safe: hiçbir fark gizlenmez).
 canonical_sha() {
-  python3 - "$1" <<'PY'
-import re, sys, hashlib
-data = open(sys.argv[1], 'rb').read()
-pat = re.compile(rb'/ID\s*\[\s*<[0-9a-fA-F]{32}>\s*<[0-9a-fA-F]{32}>\s*\]')
-if pat.search(data):
-    data = pat.sub(b'/ID [<00000000000000000000000000000000><00000000000000000000000000000000>]', data)
-print(hashlib.sha256(data).hexdigest())
+  # Tek uygulama: _calisma/CIKTI/pdf_id_canonical.py (Faz 4). Buradaki
+  # regex'in ikinci bir kopyası iki gerçeklik yaratırdı — K6-DETERM aynı
+  # modülü okur, hash'ler bu yüzden tanım gereği aynı kanonik görünümü
+  # üretir.
+  python3 - "$1" "$ROOT/_calisma/CIKTI" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[2])
+import pdf_id_canonical as c
+digest, _found = c.canonical_sha256_path(sys.argv[1])
+print(digest)
 PY
 }
 

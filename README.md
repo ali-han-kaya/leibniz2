@@ -24,9 +24,13 @@ teslimini ve onu doğrulayan fail-closed araç zincirini içerir.
 ## Skills
 
 Kurulabilir Agent Skill'leri `skills/` altında tutulur. Bu tablo, her skill'in
-kanonik yönergesini gösterir; `check-skills-index` kapısı dizin ile tabloyu
-çift yönlü senkron tutar.
+kanonik yönergesini gösterir. `check-skills-index` kapısı tabloyu
+`skills/*/SKILL.md` frontmatter'ından **üretir** (auto-sync): yeni skill
+eklendiğinde satır kendiliğinden girer, silinen skill satırı düşer; elle
+yazılmış özetler ve satır sırası korunur. Elle denetim:
+`python3 _calisma/CIKTI/sync_skills_index.py --check` (drift → exit 1).
 
+<!-- skills-index:start -->
 | Skill | Açıklama |
 |---|---|
 | `skills/birincil-kayit-dogrulama/SKILL.md` | İddiaları birincil kayıtlardan doğrulama ve OLÇULMEDI/BEYAN ayrımı |
@@ -37,6 +41,7 @@ kanonik yönergesini gösterir; `check-skills-index` kapısı dizin ile tabloyu
 | `skills/verify-chain/SKILL.md` | K0–K21 fail-closed teslim doğrulama zinciri |
 | `skills/reproducible-pdf-build/SKILL.md` | PDF determinism, SHA-256 sidecar ve SDE akışı |
 | `skills/release-candidate-check/SKILL.md` | verify_mcp MCP sunucusu için release-candidate doğrulaması |
+<!-- skills-index:end -->
 
 
 ## Doğrulama (tek komut)
@@ -64,6 +69,28 @@ bash _calisma/dev_bootstrap.sh --check   # fail-closed doğrulama (rc=0/1)
 
 Pinler `docs/HOOK_ENV_MATRIX.md` ile tek-kaynaklıdır; `--check` eksik araçta
 rc=1 ile düşer (fail-closed).
+
+## PDF üretimi — iki motor paralel yaşam (tectonic ↔ TeXLive)
+
+Deterministik PDF üretimi iki Makefile ile yapılır; motor geçişi
+devam ederken ikisi de yaşar (TEXLIVE_MIGRATION_PLAN.md):
+
+```bash
+# TeXLive (pdfTeX) — göç hedefi; Faz 1 kabul kanıtı: kanonik hash 544516b0…
+make -f docs/Makefile.texlive pdf       # 3-geçişli derleme + Rerun=0 denetimi
+make -f docs/Makefile.texlive check     # 2×3-geçiş determinism deneyi (fail-closed)
+make -f docs/Makefile.texlive accept    # kanonik hash'i ID_RESIDUAL_ACCEPTANCE defterinde doğrular
+make -f docs/Makefile.texlive engineinfo  # motor kilidi + sözleşme sabitleri (CI log'u için)
+
+# tectonic — paralel yaşam, geri dönüş yolu
+make -f docs/Makefile.tectonic pdf
+```
+
+Sözleşme: `SOURCE_DATE_EPOCH ?= git log -1 --format=%ct` (geçmiş commit'i
+yeniden üretme), `TEXINPUTS="$TEXDIR//:"`, `TEXMFOUTPUT`/`-output-directory`
+BUILD_DIR'a (kaynak dizinine asla yazma), `PASSES ?= 3` + son-geçiş
+`Rerun to get`=0 (fail-closed). Motor sürüm kilidi: pdfTeX
+3.141592653-2.6 (TeX Live 2026) — `engineinfo` ile kanıtlanır.
 
 ## _calisma/lean_reduct — Sınır İspatı Çekirdeği (illüstratif, Mathlib-free)
 
@@ -434,7 +461,57 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-19 | fix | (ci) a11y scan bypasses nonce CSP, bootstrap test guards, dead hash | [`5c02474`](https://github.com/ali-han-kaya/leibniz2/commit/5c02474) |
 | 2026-09-20 | fix | (server) close history/sidecar write race on shutdown | [`3cabbff`](https://github.com/ali-han-kaya/leibniz2/commit/3cabbff) |
 | 2026-09-20 | feat | (texlive) 3-pass determinism + /ID acceptance report (Faz 1-3) | [`24a9b25`](https://github.com/ali-han-kaya/leibniz2/commit/24a9b25) |
+| 2026-09-20 | fix | (ci) check-unit-tests hook goes fail-closed on sync drift | [`5280500`](https://github.com/ali-han-kaya/leibniz2/commit/5280500) |
+| 2026-09-20 | fix | (docker) build-context parity, CVE pins, live smoke evidence | [`cfa33d9`](https://github.com/ali-han-kaya/leibniz2/commit/cfa33d9) |
 | 2026-09-21 | fix | (ci) trend record via bot branch + PR (protection wall) | [`fa1809b`](https://github.com/ali-han-kaya/leibniz2/commit/fa1809b) |
+| 2026-09-21 | chore | record weekly determinism trend measurement | [`3f043bc`](https://github.com/ali-han-kaya/leibniz2/commit/3f043bc) |
+| 2026-09-21 | fix | (ci) trend PR step policy-aware (Actions PR-permission off) | [`c78dc67`](https://github.com/ali-han-kaya/leibniz2/commit/c78dc67) |
+| 2026-09-30 | chore | (changelog) 5280500 ve cfa33d9 satirlarini tabloya ekle | [`f194e89`](https://github.com/ali-han-kaya/leibniz2/commit/f194e89) |
+| 2026-09-30 | docs | (docker) npm katmanı kapalı döngüsü + kontrat testi | [`4e7d758`](https://github.com/ali-han-kaya/leibniz2/commit/4e7d758) |
+| 2026-09-30 | chore | (changelog) 4e7d758 satirini tabloya ekle | [`e89165b`](https://github.com/ali-han-kaya/leibniz2/commit/e89165b) |
+| 2026-09-30 | feat | (sync-tests) EXCLUDE↔CI-job/hook bağlama kapısı (üçüncü hedef) | [`3385697`](https://github.com/ali-han-kaya/leibniz2/commit/3385697) |
+| 2026-09-30 | chore | (changelog) 3385697 satirini tabloya ekle | [`bf91c8f`](https://github.com/ali-han-kaya/leibniz2/commit/bf91c8f) |
+| 2026-09-30 | fix | (changelog) iki-yazan değişmezi beyanı + kontrat testi | [`29761ad`](https://github.com/ali-han-kaya/leibniz2/commit/29761ad) |
+| 2026-09-30 | chore | (changelog) 29761ad satirini tabloya ekle | [`b09cb0d`](https://github.com/ali-han-kaya/leibniz2/commit/b09cb0d) |
+| 2026-09-30 | feat | (skills) README index'i frontmatter'dan üreten yazar + --check | [`bf25095`](https://github.com/ali-han-kaya/leibniz2/commit/bf25095) |
+| 2026-09-21 | chore | record weekly determinism trend measurement | [`23a6ece`](https://github.com/ali-han-kaya/leibniz2/commit/23a6ece) |
+| 2026-09-21 | docs | (report) record 3/3 CI evidence for PR-route delivery | [`5621c4e`](https://github.com/ali-han-kaya/leibniz2/commit/5621c4e) |
+| 2026-09-21 | feat | (dashboard) TeX engine determinism trend panel | [`49008e6`](https://github.com/ali-han-kaya/leibniz2/commit/49008e6) |
+| 2026-09-21 | test | (sync) pin sync lifecycle as subprocess regression gate | [`5fdf2e4`](https://github.com/ali-han-kaya/leibniz2/commit/5fdf2e4) |
+| 2026-09-21 | refactor | (trend) remove stale-report 48h guard from record path | [`abd3ec5`](https://github.com/ali-han-kaya/leibniz2/commit/abd3ec5) |
+| 2026-09-20 | docs | (audit) close R4 — weekly docker-security scan is live | [`b726e0c`](https://github.com/ali-han-kaya/leibniz2/commit/b726e0c) |
+| 2026-09-20 | chore | record weekly determinism trend measurement | [`b5126f9`](https://github.com/ali-han-kaya/leibniz2/commit/b5126f9) |
+| 2026-09-20 | chore | record weekly determinism trend measurement | [`6fe7c86`](https://github.com/ali-han-kaya/leibniz2/commit/6fe7c86) |
+| 2026-09-20 | docs | (texlive) Faz 0-1 engine lock surface + parallel-life docs | [`173a2f4`](https://github.com/ali-han-kaya/leibniz2/commit/173a2f4) |
+| 2026-09-20 | feat | (docker) pip patching layer joins the ARG mechanism | [`9b32376`](https://github.com/ali-han-kaya/leibniz2/commit/9b32376) |
+| 2026-09-20 | feat | (ci) docker security surface — cron smoke + patching hook | [`9c6e1b3`](https://github.com/ali-han-kaya/leibniz2/commit/9c6e1b3) |
+| 2026-09-30 | chore | (changelog) bf25095 satirini tabloya ekle | [`8fcc3d4`](https://github.com/ali-han-kaya/leibniz2/commit/8fcc3d4) |
+| 2026-10-01 | docs | (cron) docker-security ilk Pazartesi koşumu runbook satırı | [`93ef34d`](https://github.com/ali-han-kaya/leibniz2/commit/93ef34d) |
+| 2026-10-01 | chore | (changelog) 93ef34d satirini tabloya ekle | [`5073212`](https://github.com/ali-han-kaya/leibniz2/commit/5073212) |
+| 2026-10-01 | ci | (docker) smoke job'ina Trivy — gerçek koşum, SKIP değil | [`a208ea9`](https://github.com/ali-han-kaya/leibniz2/commit/a208ea9) |
+| 2026-10-01 | docs | (docker) runbook'a olcum run'unu isle (gercek kosum kaniti) | [`4701eeb`](https://github.com/ali-han-kaya/leibniz2/commit/4701eeb) |
+| 2026-10-01 | docs | (reports) TeXLive Faz 1-3 teslim raporu (PR #52 kalici kaydi) | [`872dbf0`](https://github.com/ali-han-kaya/leibniz2/commit/872dbf0) |
+| 2026-10-01 | docs | (docker) workflow_dispatch kanitini isle (ilk gercek CI kosumu) | [`682c419`](https://github.com/ali-han-kaya/leibniz2/commit/682c419) |
+| 2026-10-01 | docs | (docker) kapı zinciri tablosu ve kapalı döngü güncellemesi | [`71116e5`](https://github.com/ali-han-kaya/leibniz2/commit/71116e5) |
+| 2026-10-01 | chore | (changelog) 71116e5 satirini tabloya ekle | [`83a8f69`](https://github.com/ali-han-kaya/leibniz2/commit/83a8f69) |
+| 2026-10-01 | fix | (docker) yama-desen kapısı tüm Dockerfile'ları kapsasın | [`b9f9f4c`](https://github.com/ali-han-kaya/leibniz2/commit/b9f9f4c) |
+| 2026-10-01 | test | (docker) kapsam guard'ı için regresyon testleri | [`a712fb8`](https://github.com/ali-han-kaya/leibniz2/commit/a712fb8) |
+| 2026-10-01 | chore | (changelog) a712fb8 satirini tabloya ekle | [`4d88606`](https://github.com/ali-han-kaya/leibniz2/commit/4d88606) |
+| 2026-10-01 | docs | (docker) kapsam boşluğu kapandı, tablo güncellendi | [`1295886`](https://github.com/ali-han-kaya/leibniz2/commit/1295886) |
+| 2026-10-01 | docs | (cron) ilk Pazartesi SKIP doğrulaması — ölçüt ve sapma | [`07b42a4`](https://github.com/ali-han-kaya/leibniz2/commit/07b42a4) |
+| 2026-10-01 | test | (cron) ilk Pazartesi ölçütlerini pinleyen K-testleri | [`e2185e6`](https://github.com/ali-han-kaya/leibniz2/commit/e2185e6) |
+| 2026-10-01 | chore | (changelog) e2185e6 satirini tabloya ekle | [`e05ae8c`](https://github.com/ali-han-kaya/leibniz2/commit/e05ae8c) |
+| 2026-10-01 | fix | (docker) smoke hook'u yalnız gerçek Dockerfile'ı tetiklesin | [`05e412f`](https://github.com/ali-han-kaya/leibniz2/commit/05e412f) |
+| 2026-10-01 | test | (docker) smoke hook kaydı için sözleşme testleri (K7) | [`87a35c6`](https://github.com/ali-han-kaya/leibniz2/commit/87a35c6) |
+| 2026-10-01 | chore | (changelog) 87a35c6 satirini tabloya ekle | [`1a4159c`](https://github.com/ali-han-kaya/leibniz2/commit/1a4159c) |
+| 2026-10-01 | test | (ci) docker kapi bagimsizligini sozlesmeye bagla (K8) | [`f1ced41`](https://github.com/ali-han-kaya/leibniz2/commit/f1ced41) |
+| 2026-10-01 | chore | (changelog) f1ced41 satirini tabloya ekle | [`c2258ad`](https://github.com/ali-han-kaya/leibniz2/commit/c2258ad) |
+| 2026-10-01 | docs | (docker) #65-#69 birleşik teslim raporu | [`664ef16`](https://github.com/ali-han-kaya/leibniz2/commit/664ef16) |
+| 2026-10-01 | test | (docker) rapor sozlesmesini canli yuzeye bagla (K9) | [`7076cdc`](https://github.com/ali-han-kaya/leibniz2/commit/7076cdc) |
+| 2026-10-01 | chore | (changelog) 7076cdc satirini tabloya ekle | [`1020317`](https://github.com/ali-han-kaya/leibniz2/commit/1020317) |
+| 2026-10-01 | fix | (texlive) K6-DETERM'i /ID-kanonik kabul defterine bagla (Faz 4) | [`7f1a3c6`](https://github.com/ali-han-kaya/leibniz2/commit/7f1a3c6) |
+| 2026-10-01 | chore | (changelog) 7f1a3c6 satirini tabloya ekle | [`e08ef41`](https://github.com/ali-han-kaya/leibniz2/commit/e08ef41) |
+| 2026-10-01 | docs | (history) superseded dal kaydı — post-42-chain net etki 0 | [`0df0f6f`](https://github.com/ali-han-kaya/leibniz2/commit/0df0f6f) |
 
 ### Regresyon notları
 

@@ -157,6 +157,7 @@ import classify_lean_error as _cle  # noqa: E402
 import github_scripts_battery as _battery  # noqa: E402
 import check_lean_axioms as _lean_axioms  # noqa: E402
 import check_lean_statements as _lean_statements  # noqa: E402
+import pdf_id_canonical as _idcanon  # noqa: E402
 
 _LAUNCHD_NODE_PATHS = _battery.NODE_KNOWN_PATHS
 _LAUNCHD_PDFINFO_PATHS = _battery.PDFINFO_KNOWN_PATHS
@@ -177,6 +178,12 @@ EXPECTED_PAGES = 33
 DEFAULT_BUDGET_RATIOS = {"text": 3, "pdf": 8, "archive": 12, "binary": 20}
 PDF_METADATA_SIDECAR = "ingiliz_empirizmi_v3.pdf.metadata.sha256"
 PDF_RAW_SIDECAR = "ingiliz_empirizmi_v3.pdf.sha256"
+# Faz 4: K6-DETERM'in strict karşılaştırması SABİT DEĞİL — kabul
+# raporunun hash geçiş defterinden okunur (docs/ID_RESIDUAL_ACCEPTANCE.md
+# §4). Tek kaynak burada: hash'i hem kod hem doküman taşımaz, kod defteri
+# okur; defter satırı silinirse gate kırmızıya düşer (drift görünür).
+PDF_CANONICAL_LEDGER = os.path.join(
+    os.path.dirname(_HERE), "..", "docs", "ID_RESIDUAL_ACCEPTANCE.md")
 SYMBOLIC_PROOF_SCRIPT = "symbolic_proof_z3.py"
 LEAN_PROOF_SCRIPT = "../lean_reduct/ReductInvariance.lean"
 # K9 ek kapısı: 8 teoremli Sınır İspatı çekirdeği (Content.lean) lake projesi.
@@ -1779,11 +1786,82 @@ def check_pdf_skill_reuse(add):
     return True, detail
 
 
+def canonical_pdf_hashes(pdf_path):
+    """PDF'in /ID-kanonik SHA-256'sını hesapla (Faz 4 karşılaştırma yüzeyi).
+
+    Neden qpdf değil: `qpdf --remove-metadata` KENDİSİ nondeterministik —
+    aynı teslim PDF'inde 3 koşum 3 farklı hash üretti (ölçüldü 2026-10-01:
+    2042ba8b…, 7f9125d0…, c9b9890d…; hiçbiri sidecar'daki 50263bcf… ile
+    eşleşmedi). Yani stripped hash üzerine kurulu bir strict kapı her
+    koşumda yanlış pozitif üretir — bu yüzden strict karşılaştırma
+    metadata-stripped'a UYGULANMAZ (docs/ID_RESIDUAL_ACCEPTANCE.md §2, §6).
+
+    Kanonik yüzey pdfTeX'in tek kalıntısını (/ID) nötrler; içerik
+    birebir aynıysa kanonik hash eşittir. Uygulama tek kaynaktır:
+    pdf_id_canonical.py (shell determinism betiği de aynısını okur).
+
+    Döndürür: (canonical_sha256, id_found). Okunamazsa (None, False)."""
+    return _idcanon.canonical_sha256_path(pdf_path)
+
+
+def k6_canonical_finding(pdf_path, ledger=None, strict=True,
+                         ledger_path=PDF_CANONICAL_LEDGER):
+    """K6-DETERM strict kararı — SAF fonksiyon (test edilebilir yüzey).
+
+    Kanonik hash (pdfTeX'in tek kalıntısı /ID nötrlü) kabul defterindeki
+    "Kanonik (referans)" sütunuyla karşılaştırılır. Döner:
+        (bulgu_metni | None, kanıt_dict)
+    Bulgu None ise kapı yeşildir; defter yoksa/boşsa da None DÖNMEZ —
+    "kapı yok" hiçbir koşulda yeşil sayılmaz (fail-closed).
+    """
+    canonical_h, id_found = canonical_pdf_hashes(pdf_path)
+    if ledger is None:
+        ledger = ledger_canonical_hashes(ledger_path)
+    evidence = {"canonical": canonical_h,
+                "canonical_id_found": id_found,
+                "canonical_ledger_size": len(ledger),
+                "canonical_accepted": False}
+    if not canonical_h or not strict:
+        return None, evidence
+    if not ledger:
+        return ("kanonik kabul defteri okunamadı/boş: %s (hash: %s…)"
+                % (ledger_path, canonical_h[:16]), evidence)
+    if canonical_h not in ledger:
+        return ("kanonik hash kabul defterinde yok (strict): actual=%s… "
+                "id_found=%s — motor/SDE bağlamı değiştiyse "
+                "`make -f docs/Makefile.texlive accept` ile bilinçli "
+                "defter satırı ekle (docs/ID_RESIDUAL_ACCEPTANCE.md §4)"
+                % (canonical_h[:16], id_found), evidence)
+    evidence["canonical_accepted"] = True
+    return None, evidence
+
+
+def ledger_canonical_hashes(ledger_path=PDF_CANONICAL_LEDGER):
+    """Kabul raporundaki ölçülmüş TAM kanonik hash kümesi (Faz 4 bağı).
+
+    Yalnız "Kanonik (referans)" sütunu okunur: ham/sidecar sütunları
+    teslim kanıtıdır, karşılaştırma yüzeyi değildir. Kısaltılmış önekler
+    (`47681218…`) kümede olmaz — kabul yalnız ölçülmüş tam hash ile
+    verilir. Defter okunamazsa küme boş döner ve çağıran taraf bunu P1'e
+    çevirir (fail-closed, sessiz geçiş yok).
+    """
+    try:
+        with open(ledger_path, encoding="utf-8") as fh:
+            return _idcanon.ledger_canonical_hashes(fh.read())
+    except OSError:
+        return set()
+
+
 def qpdf_check_determinism(pdf_path):
-    """PDF'in metadata-stripped SHA-256 hash'ini hesapla (build determinism ölçümü).
-    qpdf --remove-metadata ile volatile alanlar (/Info, /ID, /CreationDate) temizlenir.
-    qpdf yoksa (None, None) döner — bu durumda kontrol atlanır.
-    Döndürür: (raw_sha256, stripped_sha256) veya (raw_sha256, None)."""
+    """PDF'in metadata-stripped SHA-256 hash'ini hesapla (BİLGİ amaçlı ölçüm).
+
+    qpdf --remove-metadata ile volatile alanlar (/Info, /ID, /CreationDate)
+    temizlenir. qpdf yoksa (None, None) döner — bu durumda kontrol atlanır.
+    Döndürür: (raw_sha256, stripped_sha256) veya (raw_sha256, None).
+
+    ÖLÇÜM (2026-10-01): bu değer kararsızdır (aynı girdi → 3 koşumda 3
+    farklı hash). Bu yüzden yalnız rapor/İnfo olarak tutulur; strict
+    karşılaştırma canonical_pdf_hashes() üzerinden yapılır."""
     raw = sha256_file(pdf_path)
     qpdf = "qpdf"
     for candidate in ("qpdf", "/opt/homebrew/bin/qpdf"):
@@ -4407,8 +4485,15 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dir", default=os.path.dirname(os.path.abspath(__file__)))
     ap.add_argument("--json", action="store_true")
-    ap.add_argument("--strict-determinism", action="store_true",
-                    help="K6-DETERM: PDF metadata-stripped hash sidecar drift'ini P1'e çevir")
+    ap.add_argument("--strict-determinism", dest="strict_determinism",
+                    action="store_true", default=True,
+                    help="K6-DETERM (VARSAYILAN AÇIK): PDF /ID-kanonik hash'ini "
+                         "kabul raporunun hash geçiş defteriyle karşılaştır; "
+                         "defterde yoksa P1 (fail-closed)")
+    ap.add_argument("--no-strict-determinism", dest="strict_determinism",
+                    action="store_false",
+                    help="K6-DETERM kanonik karşılaştırmasını kapat (yalnız "
+                         "teşhis/eski karşılaştırma; kabul raporu §6)")
     ap.add_argument("--budget", type=float, default=None,
                     help="Bütçe kalkanı: tahmini USD üretim maliyeti "
                          "(token ≈ bytes/4; $3/M token + $0.55; v3_verify.py H4). "
@@ -4945,26 +5030,39 @@ def main():
         if refs is not None and refs != EXPECTED_REFS:
             add("P0", "K6-REFS", "K6 içerik", f"References {refs} (beklenen {EXPECTED_REFS})")
 
-        # ---- K6-DETERM: PDF metadata-stripped hash (build determinism proxy) ----
-        # qpdf --remove-metadata ile volatile alanlar (/Info, /ID, /CreationDate)
-        # çıkarılır. Sidecar varsa karşılaştırılır; default'ta BİLGİ amaçlı
-        # (tectonic non-deterministic olduğundan strict karşılaştırma her
-        # repack'te yanlış pozitif üretir). --strict-determinism ile P1'e
-        # çevrilebilir.
+        # ---- K6-DETERM: PDF /ID-kanonik hash (build determinism kapısı) ----
+        # Faz 4, ölçümle düzeltildi. ESKİ YORUM YANLIŞTI: "tectonic
+        # non-deterministic olduğundan strict kapalı". Gerçek: motor
+        # SOURCE_DATE_EPOCH ile deterministiktir; tek kalıntı pdfTeX'in
+        # trailer /ID çiftidir (docs/ID_RESIDUAL_ACCEPTANCE.md §1-2) ve
+        # kanonik görünümde nötrlenir. Ölçüm: aynı motor, aynı kaynak,
+        # aynı SDE → kanonik hash ×2 bağımsız koşumda birebir aynı
+        # (make -f docs/Makefile.texlive check; bugün SDE=0 ile iki kez
+        # yeniden üretildi: 544516b0…).
+        #
+        # İKİ ayrı yüzey, ikisi de raporlanır:
+        #   (a) stripped (qpdf --remove-metadata) → YALNIZ BİLGİ. qpdf'in
+        #       kendisi nondeterministik (aynı dosyada 3 koşum → 3 hash),
+        #       yani strict buna uygulanırsa kapı her koşumda yanlış
+        #       pozitive düşer. Ölçülen yanlış pozitif üretici.
+        #   (b) canonical (/ID nötrlü) → STRICT. Kabul raporunun §4 hash
+        #       geçiş defteriyle karşılaştırılır: hash defterde yoksa
+        #       P1 (fail-closed) ve çıkış yolu `make accept` yazılır.
+        #       Hash'i kod değil doküman taşır → iki gerçeklik olmaz.
         pdf_meta_report = None
         if pdf and os.path.isfile(pdf):
             raw_h, stripped_h = qpdf_check_determinism(pdf)
+            finding, canonical_evidence = k6_canonical_finding(
+                pdf, strict=getattr(args, "strict_determinism", True))
             skill_reuse_ok, skill_reuse_detail = check_pdf_skill_reuse(add)
             pdf_meta_report = {"raw": raw_h, "stripped": stripped_h,
-                               "strict": getattr(args, "strict_determinism", False),
+                               "strict": getattr(args, "strict_determinism", True),
                                "skill_reuse": {"ok": skill_reuse_ok,
                                                "detail": skill_reuse_detail}}
+            pdf_meta_report.update(canonical_evidence)
             if stripped_h:
                 sidecar_path = os.path.join(pkg, PDF_METADATA_SIDECAR)
                 if os.path.isfile(sidecar_path):
-                    expected_stripped = parse_sha256sums(sidecar_path).get(
-                        PDF_METADATA_SIDECAR.replace(".sha256", "").replace(
-                            "ingiliz_empirizmi_v3.pdf.", "ingiliz_empirizmi_v3.pdf.metadata."))
                     # Yukarıdaki karmaşık extract'i basitleştir:
                     expected_stripped = None
                     with open(sidecar_path) as sf:
@@ -4977,12 +5075,14 @@ def main():
                     pdf_meta_report["drift"] = (
                         expected_stripped is not None
                         and stripped_h != expected_stripped)
+                    # Sadece BİLGİ: stripped hash qpdf kaynaklı
+                    # kararsızdır, strict karşılaştırmaya giremez
+                    # (ölçüm: 3 koşum → 3 farklı hash).
                     if pdf_meta_report["drift"]:
-                        if getattr(args, "strict_determinism", False):
-                            add("P1", "K6-DETERM", "K6 build determinism",
-                                f"PDF metadata-stripped hash drift (strict): "
-                                f"expected={expected_stripped[:16]}… "
-                                f"actual={stripped_h[:16]}…")
+                        pdf_meta_report["drift_gated"] = False
+            # Strict karşılaştırma: kanonik hash ↔ kabul defteri.
+            if finding:
+                add("P1", "K6-DETERM", "K6 build determinism", finding)
 
         # ---- K6+: referans denetimi (CrossRef/SEP/OpenLibrary çevrimiçi) ----
         # Sonuçlar online_refs'e toplanır; --refs-out ile her run'ın kaç

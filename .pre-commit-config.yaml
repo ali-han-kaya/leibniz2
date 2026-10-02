@@ -43,9 +43,14 @@
 #                               commit-msg stage'inde; CI --all-files'ta ÇALIŞMAZ.
 #   11) check-changelog-sync  : README.md ve docs/PUBLISH_SCENARIO.md'deki
 #                               changelog tablolarını git log ile senkron eder
-#                               (drift varsa --update + stage — update-config
-#                               deseni; commit'in kendi hash'i ancak sonraki
-#                               commit'te bilinir, bu yüzden auto-sync yapar).
+#                               (drift varsa --update + stage — ikinci yazan
+#                               hook). Tablo commit hash'iyle anahtarlanır ve
+#                               hash ancak commit OLUŞTUKTAN SONRA bilinir:
+#                               tablolar her commit'ten sonra tam olarak BİR
+#                               commit geridedir (gecikmeli/lag-one değişmezi —
+#                               test_update_changelog_hook.py ile ölçülüp
+#                               sabitlenir). Saf okuma kapısı bu yüzden imkânsız:
+#                               bloklayacak satırın hash'i henüz yok.
 #   12) check-dryrun-summary  : publish_wrapper.sh `--dry-run-summary`
 #                               regresyon kapısı — gen_dryrun_summary
 #                               fonksiyonunu gerçek kaynaktan ayıklayıp örnek
@@ -84,10 +89,33 @@
 #   19) check-precommit-orphans : ~/.cache/pre-commit'te 24s+ eski patch-
 #                               kalıntısı (yetim-stash) commit'i bloke eder;
 #                               taze (<24s) kurtarma-penceresinde serbest.
+#   20) check-docker-security-smoke: docker_security_smoke.sh (build + Trivy
+#                               gate + canlı sağlık) — Dockerfile stage'liyken
+#                               ateşlenir (tam build dakikalar sürer; her
+#                               committe değil surface'te). files:
+#                               (^|/)Dockerfile$ — kök ve kök altı eşlenir,
+#                               Dockerfile.md/.bak gibi belgeler değil.
+#                               SKIP-farkında:
+#                               docker/trivy/colima yoksa script exit 0 SKIP
+#                               üretir (ortam-yok ≠ kod-bozuk); bulgu varsa
+#                               rc=1 fail-closed bloke eder.
+#   21) check-dockerfile-security-patching: test_dockerfile_security_patching.py
+#                               — yama-desen sözleşmesi (CVE-defteri floor,
+#                               --only-upgrade, apt hijyeni, pip floors) —
+#                               Dockerfile stage'liyken ateşlenir
+#                               (değişim-farkında; always_run yok).
+#                               files: (^|/)Dockerfile$ — kök dışı
+#                               Dockerfile'ları da eşler; süit, kapsam
+#                               dışı Dockerfile eklenmesini fail-closed
+#                               reddeder.
 # Herhangi bir P0/P1 bulgusu commit'i bloke eder (sıfır-dışı exit).
 #
-# Not: update-config TEK yazan hook'tur (config'i stage eder). Diğer kapılar
-# read-only'dir: dosya değiştirmez, yalnızca doğrular (fail-closed).
+# Not: ÜÇ yazan hook vardır: update-config (config'i paket içeriğiyle
+# senkronlar + stage eder), check-changelog-sync (changelog tablolarını git
+# log ile senkronlar + stage eder) ve check-skills-index (README skills
+# tablosunu skills/*/SKILL.md frontmatter'ından üretir + stage eder).
+# Diğer kapılar read-only'dir: dosya değiştirmez, yalnızca doğrular
+# (fail-closed). Yazar kümesi testle sabitlidir (test_update_changelog_hook.py).
 #
 # Manuel çalıştırma:
 #   pre-commit run --all-files
@@ -104,9 +132,16 @@
 #   pre-commit run check-mirror-coverage
 #   pre-commit run check-prettier-format
 #   pre-commit run check-dashboard-typecheck
+#   pre-commit run check-docker-security-smoke
+#   pre-commit run check-dockerfile-security-patching
 #
-# update-config hariç hook'lar read-only'dir: dosya değiştirmez, yalnızca
-# doğrular (fail-closed). update-config, config'i paket içeriğiyle senkron eder.
+# Bu üç yazan hariç hook'lar read-only'dir: dosya değiştirmez, yalnızca
+# doğrular (fail-closed). update-config config'i paket içeriğiyle,
+# check-changelog-sync changelog tablolarını git log ile,
+# check-skills-index README skills tablosunu SKILL.md frontmatter'ından
+# senkronlar; her biri yalnızca kendi hedefini stage eder (gecikmeli
+# changelog yazımı için `chore(changelog): <hash> satırını tabloya ekle`
+# konvansiyonu geçerlidir).
 repos:
   - repo: local
     hooks:
@@ -348,11 +383,21 @@ repos:
         verbose: true
 
       - id: check-skills-index
-        name: "Verify README skills index ↔ skills/"
+        name: "Sync README skills index ↔ skills/ (auto-sync + verify)"
         description: >-
-          skills/*/SKILL.md dosyalarının her biri README Skills tablosunda
-          bulunmalı; README'deki bayat skill satırları da fail-closed yakalanır.
-        entry: python3 _calisma/CIKTI/check_skills_index.py
+          sync_skills_index.py — README "## Skills" tablosunun YAZARI.
+          Satır kümesini skills/*/SKILL.md frontmatter'ından türetir; blok
+          işaretçileri (skills-index:start/end) arasındaki tabloyu üretip
+          README'i stage eder. Var olan İNSAN özetleri ve satır sırası
+          korunur (gen_changelog --update deseni): yalnızca yeni skill
+          eklenir, silinen skill satırı düşer. Hook --verify koşar: önce
+          --update, sonra --check — yakınsamazsa (bozuk frontmatter,
+          name≠dizin adı, blok dışı satır, eksik işaretçi) commit BLOKE.
+          Elle denetim (fail-closed, CI yüzeyi): python3
+          _calisma/CIKTI/sync_skills_index.py --check. Bu repo'nun ÜÇÜNCÜ
+          yazan hook'udur (update-config ve check-changelog-sync ile
+          birlikte — D2 yazar-kümesi değişmezi, testle sabitli).
+        entry: python3 _calisma/CIKTI/sync_skills_index.py --verify
         language: system
         always_run: true
         pass_filenames: false
@@ -676,10 +721,15 @@ repos:
           update_changelog_hook.sh: README.md ve docs/PUBLISH_SCENARIO.md'deki
           changelog tablolarını git log ile senkron eder. Drift varsa
           gen_changelog.py --update ile tabloları günceller ve stage eder
-          (update-config deseni). Check-only bir kapı olamaz: commit'in kendi
-          hash'i ancak commit oluştuktan sonra bilinir — bu yüzden auto-sync
-          yapar, kapı hiç kırılmaz. Mevcut insan özetleri korunur; yalnızca
-          yeni commit'ler eklenir.
+          (ikinci yazan hook; update-config birincidir). Gecikmeli (lag-one)
+          yazar: tablo commit hash'iyle anahtarlanır, hash ancak commit
+          oluştuktan sonra bilinir — bu yüzden tablo her commit'ten sonra tam
+          olarak bir commit geridedir ve bu hook O SATIRI BİR SONRAKİ commit'e
+          ekler. Saf okuma kapısı (+remedy) bu tabloda imkânsızdır: bloklayacak
+          satırın hash'i henüz var olmaz; bu yüzden auto-sync yapar, kapı hiç
+          kırılmaz. Elle remedy (okuma tarafı): python3
+          _calisma/CIKTI/gen_changelog.py --update. Mevcut insan özetleri
+          korunur; yalnızca yeni commit'ler eklenir.
         entry: bash _calisma/CIKTI/update_changelog_hook.sh
         language: system
         pass_filenames: false
@@ -847,16 +897,22 @@ repos:
         verbose: true
 
       - id: check-unit-tests
-        name: "Unit tests for new gates (auto-synced list)"
+        name: "Unit tests for new gates (fail-closed manifest)"
         description: >-
-          _calisma/CIKTI/test_*.py kümesini tarar (sync_check_unit_tests.py),
-          manifest'i (check_unit_tests.list) senkron eder, ardından listedeki
-          HER test dosyasını koşar (fail-closed — herhangi bir başarısızlık
-          commit'i bloke eder). Yeni test dosyası eklediğinizde listeye
-          OTOMATİK eklenir; ortam-bağımlı testler (launchctl/daemon/canlı
-          sunucu/ağ EXCLUDE setiyle çıkarılır ve CI job'larında ayrı koşulur).
-          Liste bakımı elle yok — tek kaynak disk'teki test dosyaları.
-          PyYAML/jsonschema bağımlılığı yok; ~2-3s (48 dosya, 2s ölçüldü).
+          check_unit_tests_hook.sh: önce sync_check_unit_tests.py --check ile
+          manifest↔disk + HOOK_COVERAGE + EXCLUDE↔CI-job/hook bağlamasını
+          DOĞRULAR — drift varsa commit BLOKE (remedy: sync --update; hook
+          YAZMAZ — repo'da üç yazan hook var: update-config,
+          check-changelog-sync, check-skills-index). Ardından manifest
+          listesindeki HER test dosyasını koşar (fail-closed — herhangi bir
+          başarısızlık commit'i bloke eder). Ortam-bağımlı testler
+          (launchctl/daemon/canlı sunucu/ağ) EXCLUDE setiyle çıkarılır; her
+          birinin koşma yeri (CI job id'si ya da hook id) EXCLUDE_CI_JOBS /
+          EXCLUDE_HOOKS sözlüklerinde AÇIKÇA bildirilir ve varlığı
+          doğrulanır — bir EXCLUDE girdisinin hedefi yoksa ya da hedefi
+          yeniden adlandırılmışsa kapı kırılır (sessiz kapsam kaybı).
+          Liste tek kaynak: diskteki test_*.py dosyaları;
+          PyYAML/jsonschema bağımlılığı yok.
         entry: bash _calisma/CIKTI/check_unit_tests_hook.sh
         language: system
         pass_filenames: false
@@ -909,5 +965,47 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+        stages: [pre-commit]
+        verbose: true
+
+      - id: check-docker-security-smoke
+        name: "Docker security smoke (SKIP-aware, fail-closed)"
+        description: >-
+          docker_security_smoke.sh — CI docker-security workflow'unun
+          birebir yerel karşılığı: image build (arm64→linux/amd64 emülasyon)
+          + Trivy gate (CRITICAL,HIGH, --ignore-unfixed) + canlı /api/health
+          + HEALTHCHECK. Trigger: Dockerfile stage'liyken
+          (check-dashboard-typecheck örüntüsü — tam build dakikalar sürer,
+          her committe değil surface'te koşar). files: (^|/)Dockerfile$
+          kök ve kök altı Dockerfile'ı eşler; yalnız adı Dockerfile olan
+          dosyayı tetikler, Dockerfile.md/.bak belgeleri tetiklemez.
+          SKIP-farkında: docker/trivy
+          yok veya colima daemon sağlanamazsa script exit 0 SKIP üretir
+          (ortam-yok ≠ kod-bozuk; sebebini kanıt dosyasına yazar); build
+          hatası / Trivy bulgusu / sağlık ihlali rc=1 → fail-closed bloke.
+        entry: bash _calisma/CIKTI/docker_security_smoke.sh
+        language: system
+        files: (^|/)Dockerfile$
+        stages: [pre-commit]
+        verbose: true
+
+      - id: check-dockerfile-security-patching
+        name: "Dockerfile security-patching contract (fail-closed)"
+        description: >-
+          test_dockerfile_security_patching.py — docs/DOCKER_SECURITY_PATCHING.md
+          desenini Dockerfile'da sözleşme satırlarıyla sabitler:
+          SECURITY_PATCH_PACKAGES CVE-defteri default'u, --only-upgrade
+          (tüm-upgrade yasağı), apt hijyeni, dpkg-query kanıt satırı,
+          bookworm dağıtım pini, pip floor deseni. Değişim-farkında
+          tetikleme: yalnızca Dockerfile stage'liyken koşar (always_run
+          yok — nedensel sinyal korunur); desen bozulursa commit bloke.
+          Kapsam: (^|/)Dockerfile$ KÖK DIŞI Dockerfile'ları da eşler —
+          kapsam dışı Dockerfile sessizce eklenirse sözleşme onu
+          yakalamaz, bu yüzden süit keşif guard'ı fail-closed durur.
+          OFFLINE, stdlib-only, ~0.05s.
+        entry: python3 -m unittest _calisma.CIKTI.test_dockerfile_security_patching
+        language: system
+        files: (^|/)Dockerfile$
+        pass_filenames: false
         stages: [pre-commit]
         verbose: true

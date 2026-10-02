@@ -136,6 +136,8 @@ Indagationes Mathematicae 15: 330--339. (Proc. Kon. Ned. Akad. Wetensch. A56: 33
 
 V5i (2026-08-17) K6-DETERM katmanını ekledi: `qpdf --remove-metadata` ile PDF'in metadata-stripped SHA-256'sı hesaplanır (`ingiliz_empirizmi_v3.pdf.metadata.sha256`). **Known limitation:** tectonic 0.17.0 byte-deterministic olmadığından `--strict-determinism` varsayılan kapalıdır; drift bilgi amaçlı raporlanır (P0/P1 yok). Bu, referans doğruluğunu değil yalnızca PDF derleme tekrarlanabilirliğini etkiler (bkz. MANIFEST V5k notu).
 
+**Faz 4 düzeltmesi (2026-10-01) — yukarıdaki gerekçe ölçümle çürütüldü:** motor `SOURCE_DATE_EPOCH` ile deterministiktir; belirsizlik pdfTeX'in trailer `/ID` çiftindedir ve `/ID`-kanonik hash'te nötrlenir. Stripped hash ise **qpdf'in kendi** kararsızlığıdır: aynı teslim PDF'i 3 koşumda 3 farklı hash üretti (`2042ba8b…` / `7f9125d0…` / `c9b9890d…`, hiçbiri sidecar'daki `50263bcf…` ile eşleşmedi). Bu yüzden strict karşılaştırma metadata-stripped'a **değil** `/ID`-kanonik hash'e bağlandı ve **varsayılan açık** oldu (`--no-strict-determinism` teşhis için). Kanıt ve kabul satırı: `docs/ID_RESIDUAL_ACCEPTANCE.md` §4 satır 5, §6.
+
 **V5l/V5m eki (2026-08-18):** qpdf non-determinizm deneyi `qpdf_determinism_experiment.py` + donmuş çıktı `qpdf_determinism_output.txt` olarak yeniden üretilebilir hale getirildi (K5 4. script çifti; varsayılan mod donmuş kayıt, `--rerun [N]` canlı deney). V5l bulgusu aynen teyit edildi: `qpdf --remove-metadata` aynı girdi üzerinde farklı çıktılar üretir; repack sidecar'ı yalnızca raw hash değişince yeniden üretir. Bu, referans doğruluğunu değil yalnızca PDF derleme/repack tekrarlanabilirliğini etkiler (bkz. MANIFEST V5l/V5m notu).
 
 ### 5.3 Paket hash (2026-08-18 repack, V5m)

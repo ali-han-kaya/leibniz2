@@ -1794,7 +1794,7 @@ class ExternalScriptContractTests(unittest.TestCase):
         js = _preview_js()
         self.assertIn("function colorizeLine(line)", js)
         self.assertIn("function renderHookEnvTrend(rows)", js)
-        self.assertIn("navigator.serviceWorker.register('/sw.js'", js)
+        self.assertRegex(js, r"navigator\.serviceWorker\s*\.register\(\"/sw\.js\"")
 
     def _patch_preview_dir(self, value):
         """PREVIEW_DIR yalnızca main()'de tanımlanır; test için module'a bağla."""

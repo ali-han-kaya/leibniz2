@@ -31,14 +31,27 @@ STEM := $(TEXBASE:.tex=)
 BUILD_DIR ?= $(ROOT)/.build/texlive
 SOURCE_DATE_EPOCH ?= $(shell git -C "$(ROOT)" log -1 --format=%ct 2>/dev/null || printf '0')
 PDFlatex ?= pdflatex
+PDBIN := $(shell command -v $(PDFlatex) 2>/dev/null)
 PASSES ?= 3
 DETERMINISM_SCRIPT := $(abspath $(ROOT)/_calisma/CIKTI/texlive_determinism_test.sh)
 ACCEPT_DOC := $(ROOT)/docs/ID_RESIDUAL_ACCEPTANCE.md
 REPORT := $(BUILD_DIR)/determinism_report.txt
 
-.PHONY: all pdf check accept clean
+.PHONY: all pdf check accept clean engineinfo
 
 all: pdf
+
+# Faz 0 motor kilidi + sözleşme sabitleri (plan §Faz 0): sürüm çıktısı
+# makine-okur pdtex_version= satırıyla log'a düşer (CI'da kanıt kalır).
+engineinfo:
+	@command -v "$(PDFlatex)" >/dev/null 2>&1 || { echo "ERROR: pdflatex not found (PDFlatex= veya PATH)" >&2; exit 2; }
+	@$(PDBIN) -version | head -1 | sed 's/^/pdtex_version=/'
+	@echo "engine_lock=pdfTeX 3.141592653-2.6 (TeX Live 2026; plan Faz 0 motor kilidi)"
+	@echo "texinputs_contract=TEXINPUTS=$(TEXDIR)//: (input bağımlılıkları: core_section)"
+	@echo "texmfoutput_contract=TEXMFOUTPUT=$(BUILD_DIR)"
+	@echo "output_dir_contract=-output-directory=$(BUILD_DIR) — kaynak dizinine ASLA yazma"
+	@echo "source_date_epoch=$(SOURCE_DATE_EPOCH)"
+	@echo "passes=$(PASSES)"
 
 pdf:
 	@command -v "$(PDFlatex)" >/dev/null 2>&1 || { echo "ERROR: pdflatex not found (PDFlatex= veya PATH)" >&2; exit 2; }

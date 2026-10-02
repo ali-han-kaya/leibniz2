@@ -90,13 +90,23 @@ farklarının kabul raporuyla belgelenmesi.
 
 ## Faz 4 — Doğrulama zinciri güncellemesi
 
-- [ ] `verify_delivery.py` K6-DETERM yorum/davranışı: "tectonic
+- [x] `verify_delivery.py` K6-DETERM yorum/davranışı: "tectonic
   non-deterministic" yorumu ölçüyle güncellenir (SDE ile
   deterministik; kalıntı /ID) — strict mod, /ID-kanonik karşılaştırmaya
   bağlanır.
+  **Uygulandı (2026-10-01):** kanıt ve sözleşme
+  `docs/ID_RESIDUAL_ACCEPTANCE.md` §4 satır 5 + §6; kapı
+  `_calisma/CIKTI/verify_delivery.py` (`canonical_pdf_hashes`,
+  `ledger_canonical_hashes`), kanonik uygulama
+  `_calisma/CIKTI/pdf_id_canonical.py`, sözleşme testleri
+  `_calisma/CIKTI/test_k6_determ_canonical.py` (17 test). Strict varsayılan
+  açık; kapatma `--no-strict-determinism`.
 - [ ] `check-zip-lineage-drift` + repack akışı: motor geçişi tek seferlik
   **bilinçli sidecar yenilemesi** ile işaretlenir (repack determinizm
   kapısı, yeni kanonik hash'i bekler).
+  *Açık: teslim PDF'i henüz TeXLive ile yeniden derlenmedi; defterdeki
+  "TeXLive-era teslim" satırı hâlâ `—`. Yenileme teslim paketini
+  değiştirdiği için ayrı iş.*
 - [ ] Tam batarya (130 dosya) + coverage/drift/sync senkron kapıları
   yeşile sabitlenir.
 

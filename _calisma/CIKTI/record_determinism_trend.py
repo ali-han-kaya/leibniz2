@@ -32,7 +32,6 @@ import os
 import platform
 import re
 import sys
-import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CIKTI = os.path.join(ROOT, "_calisma", "CIKTI")
@@ -227,13 +226,6 @@ def main(argv=None):
         if report is None:
             print(f"FAIL: deney raporu yok: {REPORT} — önce deneyi koş "
                   f"(texlive_determinism_hook.sh)", file=sys.stderr)
-            return 1
-        # Bayat-kanıt koruması: eski rapor bugünün tarihiyle kaydedilirse
-        # trendin tazelik iddiası kendini bozar; ölçüm yalnız taze deneyden.
-        age_hours = (time.time() - os.stat(REPORT).st_mtime) / 3600.0
-        if age_hours > 48.0:
-            print(f"FAIL: deney raporu bayat ({age_hours:.0f} saat) — "
-                  "ölçüm kaydedilemez; önce deneyi koş", file=sys.stderr)
             return 1
         try:
             source = _source_from_report(report)

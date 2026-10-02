@@ -2,6 +2,11 @@ name: docker-security
 
 on:
   push:
+  schedule:
+    # Haftalık: her Pazartesi 03:43 UTC. Determinism-trend (03:17) ile bilinçli
+    # çakışmaz. Yeni CVE'ler en çok hazırlıksız anda gelir — gating doc'unun
+    # "Trivy gate kırmızı" döngüsünün CI bacağı haftalık kendi başına koşar.
+    - cron: "43 3 * * 1"
   workflow_dispatch: {}  # CVE tazelemesi gibi olaylarda elle tetikleme
 
 permissions:
@@ -51,3 +56,67 @@ jobs:
       # kimse yok ve adım hiçbir koşuda geçemezdi. Zorlayıcı CVE taraması
       # yukarıdaki Trivy gate'te yaşıyor (CRITICAL/HIGH, exit-code 1).
       # (SARIF upload da kaldırıldı: code scanning hedefi yok.)
+
+  smoke:
+    name: Local security smoke (script parity)
+    runs-on: ubuntu-latest
+    # Gerçek koşum: cold build + Trivy DB indirmesi + scan + health. 20 dk
+    # yalnızca SKIP koşumu için ayrılmıştı; image-scan aynı build+scan'i
+    # 20 dk'de bitiriyor, smoke buna health zincirini ekliyor → 30 dk.
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # TRİVY KURULUMU — cron'un asıl amacı gerçek koşum kanıtı üretmek.
+      # Önceden ubuntu-latest'te trivy yoktu; script'in "araç yok → exit 0
+      # SKIP" sözleşmesi job'u haftalık SKIP'e düşürüyordu: yeşil ama
+      # kanıtsız. K3'ün ikinci dalı ("runner'a trivy kuran satır") devreye
+      # alındı. Sürüm, image-scan job'ının kullandığı trivy-action@v0.35.0
+      # varsayılanıyla AYNI (v0.69.3): iki job tek motorla tarar, böylece
+      # smoke'un fail-closed kapısı image-scan ile çelişemez. URL + sürüm +
+      # sha256 üçü de pin'li (action yerine run adımı — repo kurulum
+      # konvansiyonu: actionlint/elan/pip/apt hepsi run adımında).
+      - name: Install Trivy (pinned + sha256)
+        env:
+          TRIVY_VERSION: "0.69.3"
+          TRIVY_SHA256: "1816b632dfe529869c740c0913e36bd1629cb7688bd5634f4a858c1d57c88b75"
+        run: |
+          set -euo pipefail
+          url="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          curl -sSfL "$url" -o /tmp/trivy.tgz
+          echo "${TRIVY_SHA256}  /tmp/trivy.tgz" | sha256sum -c -
+          sudo tar -C /usr/local/bin -xzf /tmp/trivy.tgz trivy
+          trivy --version
+
+      # SKIP kuralı runner araçlarıyla uyumlu KALIR: script araç yoksa exit 0
+      # SKIP üretir (yerel makineler bu yolun canlı örneğidir). Ama CI'da
+      # trivy kurulu olduğu için SKIP artık "ortam yok" değil, **kurulum
+      # sessizce bozuldu** demektir — aşağıdaki assert adımı onu kırmızıya
+      # çevirir. Yani SKIP görünürlüğü korunur, üstelik artık gürültü de
+      # değildir.
+      - name: Run local security smoke (SKIP-aware)
+        run: bash _calisma/CIKTI/docker_security_smoke.sh
+        env:
+          DOCKER_SMOKE_OUT: docs/ci_simulate/docker_security_smoke/docker_security_smoke_report.txt
+
+      # fail-closed: kanıt, kanıt satırlarıdır. Trivy kurulu bir CI'da
+      # verdict=PASS yoksa koşum gerçekleşmemiştir (SKIP ya da erken çıkış).
+      # Adım varsayılan `if: success()` ile çalışır: smoke FAIL olduysa
+      # zaten job kırmızıdır, assert yalnızca SKIP/sessiz-çıkış yolunu kapatır.
+      - name: Assert real run (SKIP is not evidence in CI)
+        run: |
+          set -euo pipefail
+          report=docs/ci_simulate/docker_security_smoke/docker_security_smoke_report.txt
+          if ! grep -qx 'verdict=PASS' "$report" 2>/dev/null; then
+            echo "FAIL: smoke gerçek koşum üretmedi — verdict=PASS yok (SKIP mi, erken çıkış mı?)" >&2
+            cat "$report" 2>/dev/null || echo "(kanıt dosyası yok)" >&2
+            exit 1
+          fi
+          echo "OK: verdict=PASS — gerçek koşum kanıtı"
+
+      - name: Show smoke evidence
+        if: always()
+        run: |
+          cat docs/ci_simulate/docker_security_smoke/docker_security_smoke_report.txt 2>/dev/null \
+            || echo "(smoke kanıt dosyası yok — SKIP koşumunda üretilmez)"

@@ -149,9 +149,14 @@ exactly the signal you want.
 
 ### Step 4 — Gate fail-closed on the proxy
 
-- Keep strict raw-byte determinism checks OFF by default if the toolchain is
-  known non-deterministic (a strict check would false-positive on every
-  repack). Expose it behind an opt-in flag (e.g. `--strict-determinism`).
+- Never gate strictly on raw bytes or on a `qpdf --remove-metadata` hash:
+  both are unstable (raw because of `/ID`, stripped because qpdf invents a
+  new `/ID`/`/XRef` layout). A strict check on either false-positives on
+  every repack — measured, not assumed.
+- Do gate strictly on a **canonical proxy**: normalize the one known
+  volatile field, then compare against a pinned reference (an acceptance
+  ledger). Unknown hash → fail-closed with the "add a deliberate ledger
+  row" remedy, so a rebuild can never pass silently.
 - Gate on: raw hash sidecar match (P0), manifest integrity, and — for
   build-specific claims — the frozen experiment record.
 - Report drift as informational when it is expected (P0/P1 only when the
@@ -171,11 +176,21 @@ pdflatex -interaction=nonstopmode manuscript.tex       # (run twice for refs)
 
 Notes from the field:
 
-- `SOURCE_DATE_EPOCH` makes TeXLive emit stable `/CreationDate` and
-  `/ID` — removing the need for qpdf stripping in the common case.
+- `SOURCE_DATE_EPOCH` makes TeXLive emit a stable `/CreationDate` and
+  `/ModDate` — but **not** a stable `/ID`: pdfTeX writes a fresh random
+  64-byte trailer `/ID` on every run, SDE=0 included (measured; the single
+  byte-level difference between two runs of the same source). So SDE alone
+  does **not** remove the need for normalization — it removes the need for
+  *dates* to be part of the comparison.
+- The supported strict comparison is therefore the **`/ID`-canonical**
+  hash (normalize `/ID [<a…> <b…>]` → zero pair, then SHA-256), pinned to
+  an acceptance ledger. In this repo that gate is **ON by default**; the
+  opt-out is `--no-strict-determinism` (diagnosis only).
+- Do **not** put a strict gate back on the qpdf-metadata-stripped hash:
+  `qpdf --remove-metadata` is itself non-deterministic — one input PDF,
+  three runs, three hashes (`2042ba8b…` / `7f9125d0…` / `c9b9890d…`).
 - `tectonic` does not honor `SOURCE_DATE_EPOCH` the same way; the migration
-  path is TeXLive + `SOURCE_DATE_EPOCH`, and the strict-determinism gate
-  should stay OFF until that migration lands.
+  path remains TeXLive + `SOURCE_DATE_EPOCH`.
 - Even after migration, keep the sidecar + reuse rule: it is the layer that
   makes repacks byte-identical regardless of engine behavior.
 
@@ -185,7 +200,8 @@ Notes from the field:
 - [ ] Frozen `output.txt` checked in, byte-stable, stale-detecting
 - [ ] Sidecar `*.pdf.metadata.sha256` ships next to the PDF (sha256sum format)
 - [ ] Reuse rule implemented: sidecar regenerated only on raw-hash change
-- [ ] Verification: qpdf missing → skip (not fail); strict determinism opt-in
+- [ ] Verification: qpdf missing → skip (not fail); strict determinism is on the
+      `/ID`-canonical hash (ledger-pinned), not on the qpdf-stripped hash
 - [ ] Manifest includes the sidecar; delivery gate verifies raw hash P0
 - [ ] Migration documented: TeXLive + `SOURCE_DATE_EPOCH` + `TEXMFOUTPUT`
 - [ ] Repack proof: consecutive repacks byte-identical (zip hash stable)
@@ -195,7 +211,7 @@ Notes from the field:
 | Symptom | Cause | Fix |
 |---|---|---|
 | Sidecar hash differs after every repack | qpdf non-determinism | Apply reuse rule (regenerate only on raw change) |
-| Strict determinism gate false-positives | Engine non-deterministic | Keep `--strict-determinism` OFF until SOURCE_DATE_EPOCH migration |
+| Strict determinism gate false-positives | Strict is on the qpdf-stripped hash (or on raw bytes) | Gate on the `/ID`-canonical hash pinned to an acceptance ledger; `--no-strict-determinism` only for diagnosis |
 | Frozen record stale after rebuild | PDF recompiled | Regenerate record, review diff, commit as new frozen version |
 | `qpdf` not installed in CI | Optional layer | Return `(raw, None)` and skip — never fail on absent optional tool |
 
