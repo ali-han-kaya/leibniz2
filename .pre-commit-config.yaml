@@ -488,6 +488,25 @@ repos:
         stages: [pre-commit]
         verbose: true
 
+      # Yukarıdaki kapı `files:` filtresi YALNIZ stage'li dosyayı görür;
+      # hiç yeniden stage olmayan dosyalar sessizce çürüdü (ölçüm:
+      # origin/main'de 40 dosyada biçim borcu, borç ancak ağaç taranınca
+      # göründü). Bu kapı her commit'te TÜM ağacı denetler.
+      - id: check-prettier-format-all
+        name: "Prettier format check across the WHOLE tree (fail-closed)"
+        description: >-
+          Stage filtresinin göremediği biçim borcunu fail-closed yakalar:
+          git ls-files üzerinden tüm js/jsx/ts/tsx/json denetlenir.
+          .prettierignore kod/veri ayrımını uygular (vendor/ üçüncü taraf
+          minified; design-system/vercel/*.json makine çıkarımı veri).
+          Prettier yoksa SKIP. Düzeltme: npx prettier --write. OFFLINE.
+        entry: python3 _calisma/CIKTI/check_prettier_format.py --all
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
       - id: check-dashboard-typecheck
         name: "TypeScript typecheck for apps/dashboard-next (tsc --noEmit)"
         description: >-

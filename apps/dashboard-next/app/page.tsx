@@ -1,8 +1,8 @@
-import { Suspense } from "react";
-import VerdictCard from "./VerdictCard";
-import Link from "next/link";
-import { buttonVariants } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { Suspense } from 'react';
+import VerdictCard from './VerdictCard';
+import Link from 'next/link';
+import { buttonVariants } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 export default function HomePage() {
   return (
@@ -17,16 +17,16 @@ export default function HomePage() {
       </Suspense>
 
       <p className="text-sm text-muted">
-        Trend görünümü:{" "}
+        Trend görünümü:{' '}
         <Link
-          className={cn(buttonVariants({ variant: "ghost" }), "text-accent")}
+          className={cn(buttonVariants({ variant: 'ghost' }), 'text-accent')}
           href="/trend"
         >
           /trend
-        </Link>{" "}
-        · Canlı pano:{" "}
+        </Link>{' '}
+        · Canlı pano:{' '}
         <a
-          className={cn(buttonVariants({ variant: "ghost" }), "text-accent")}
+          className={cn(buttonVariants({ variant: 'ghost' }), 'text-accent')}
           href="http://127.0.0.1:8000/preview.html"
         >
           preview.html

@@ -8,9 +8,9 @@
 // $ prefix in the bundle"). Server Components'te env'e $ önekiyle
 // referans vermediğimiz için değer her istekte runtime'dan okunur.
 
-import { cache } from "react";
+import { cache } from 'react';
 
-export const API_BASE = process.env.PREVIEW_API ?? "http://127.0.0.1:8000";
+export const API_BASE = process.env.PREVIEW_API ?? 'http://127.0.0.1:8000';
 
 export type Latest = {
   verdict?: string;
@@ -34,7 +34,7 @@ export type TrendRow = {
 
 async function getJson<T>(path: string, revalidate = 0): Promise<T> {
   // Dynamic istek: pano gerçek-zamanlı verdict gösterir (cache: no-store).
-  const res = await fetch(`${API_BASE}${path}`, { cache: "no-store" });
+  const res = await fetch(`${API_BASE}${path}`, { cache: 'no-store' });
   if (!res.ok) {
     throw new Error(`preview_server ${path} → HTTP ${res.status}`);
   }
@@ -45,7 +45,7 @@ async function getJson<T>(path: string, revalidate = 0): Promise<T> {
 // calismaz (yalniz force-cache/default); cache() bunu kusar — ayni istekte
 // birden fazla kart/bilesen ayni uca tek round-trip ile baglanir.
 export const getLatest = cache(
-  (): Promise<Latest> => getJson<Latest>("/api/latest")
+  (): Promise<Latest> => getJson<Latest>('/api/latest')
 );
 
 export const getTrend = cache(

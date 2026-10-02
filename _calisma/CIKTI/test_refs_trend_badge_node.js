@@ -16,17 +16,24 @@ const previewPath = path.join(__dirname, 'preview.html');
 const html = fs.readFileSync(previewPath, 'utf8');
 const fnMatch = html.match(/function refsTrendBadge\(rows\)\s*\{[\s\S]*?\n\}/);
 if (!fnMatch) {
-  process.stdout.write(JSON.stringify({ok: false, error: 'refsTrendBadge bulunamadı'}));
+  process.stdout.write(
+    JSON.stringify({ ok: false, error: 'refsTrendBadge bulunamadı' })
+  );
   process.exit(1);
 }
 // Fonksiyonu eval ile tanımla (global scope'a)
 const fnBody = fnMatch[0];
-const fn = new Function('rows', fnBody.replace('function refsTrendBadge(rows)', ''));
+const fn = new Function(
+  'rows',
+  fnBody.replace('function refsTrendBadge(rows)', '')
+);
 // Global olarak tanımla
 globalThis.refsTrendBadge = fn;
 
 // ── Test senaryoları ──────────────────────────────────────────────────────
-function row(v, t) { return { refs_verified: v, refs_total: t }; }
+function row(v, t) {
+  return { refs_verified: v, refs_total: t };
+}
 
 const tests = [
   {
@@ -86,13 +93,15 @@ const tests = [
 ];
 
 // ── Çalıştır ──────────────────────────────────────────────────────────────
-let passed = 0, failed = 0;
+let passed = 0,
+  failed = 0;
 const results = [];
 
 for (const t of tests) {
   const actual = refsTrendBadge(t.input);
   const ok = actual.cls === t.expected.cls && actual.text === t.expected.text;
-  if (ok) passed++; else failed++;
+  if (ok) passed++;
+  else failed++;
   results.push({
     name: t.name,
     expected: t.expected,
@@ -101,10 +110,12 @@ for (const t of tests) {
   });
 }
 
-process.stdout.write(JSON.stringify({
-  ok: failed === 0,
-  passed,
-  failed,
-  total: tests.length,
-  results,
-}));
+process.stdout.write(
+  JSON.stringify({
+    ok: failed === 0,
+    passed,
+    failed,
+    total: tests.length,
+    results,
+  })
+);
