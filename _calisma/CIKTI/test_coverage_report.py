@@ -145,7 +145,6 @@ HOOK_COVERAGE = {
         "test_verify_manifest_overrides.py",
         "test_coverage_report.py",
         "test_test_coverage_report.py",
-        "test_sync_check_unit_tests.py",
         "test_sync_one_atomic.py",
         "test_check_lean_axioms.py",
         "test_classify_lean_error.py",

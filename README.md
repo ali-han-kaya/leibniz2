@@ -518,6 +518,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-02 | refactor | (coverage) test sayımını regex'ten AST'ye taşı | [`ab8a526`](https://github.com/ali-han-kaya/leibniz2/commit/ab8a526) |
 | 2026-10-02 | chore | (changelog) ab8a526 satirini tabloya ekle | [`350ab72`](https://github.com/ali-han-kaya/leibniz2/commit/350ab72) |
 | 2026-10-02 | fix | (ci) drift guard'i fail-closed yap, 252 satirdan 173'e indir | [`328d6cb`](https://github.com/ali-han-kaya/leibniz2/commit/328d6cb) |
+| 2026-10-02 | chore | (changelog) 328d6cb satirini tabloya ekle | [`c169b5f`](https://github.com/ali-han-kaya/leibniz2/commit/c169b5f) |
 
 ### Regresyon notları
 
