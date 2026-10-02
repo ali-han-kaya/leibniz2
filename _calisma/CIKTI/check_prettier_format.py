@@ -11,11 +11,13 @@ setup-pre-commit skill'inin "commit-anı format" hedefinin zincir-uyarlaması
   ortam-bağımlı kapı ortam yoksa bloke etmez (check-unit-tests SKIP deseni).
 - Yapılandırma: her dosya için en-yakın .prettierrc (apps/dashboard-next'te
   skill-defaults var); konfigürasyonsuz ağaçta Prettier built-in defaults.
-- `--all` modu TÜM ağacı denetler (git ls-files). Ölçülen kök neden:
-  `files:` filtresi yalnız stage'li dosyayı gördüğü için hiç yeniden
-  stage olmayan dosyalar sessizce çürüdü; origin/main'de 40 dosya borçluydu
-  ve borç ancak ağaç taranınca göründü. .prettierignore'daki kod/veri
-  ayrımı her iki modda da geçerlidir.
+- `--diff` modu DEĞİŞİM FARKI yüzeyini denetler: (şu an stage'li dosyalar) ∪
+  (merge-base..HEAD arası değişen dosyalar). Stage yalnız commit anını
+  gördüğü için dalın önceki commit'inden gelen bozuk dosya sessizce geçerdi
+  (ölçülen kök neden); birleşim iki yönlüdür.
+- `--all` modu TÜM ağacı denetler (git ls-files). Borcun toplam sıfır
+  kalmasını garanti eden tek mod; `--diff` yalnız değişim yüzeyini görür.
+- .prettierignore'daki kod/veri ayrımı HER ÜÇ modda da geçerlidir.
 
 OFFLINE, stdlib-only.
 """
@@ -26,7 +28,6 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent.parent
 PRETTIER = REPO / "apps" / "dashboard-next" / "node_modules" / ".bin" / "prettier"
-PRETTIERIGNORE = REPO / ".prettierignore"
 
 # Hook `files: \.(js|jsx|ts|tsx|json)$` sözleşmesi + package-lock exclude.
 _SUFFIXES = (".js", ".jsx", ".ts", ".tsx", ".json")
@@ -47,11 +48,17 @@ def matches_glob(path):
 
 
 def load_ignore_patterns():
-    """.prettierignore desenleri (yorum satırları ve boşluklar atlanır)."""
-    if not PRETTIERIGNORE.is_file():
+    """.prettierignore desenleri (yorum satırları ve boşluklar atlanır).
+
+    Yol REPO'dan ÇAĞRI ANINDA türetilir; modül sabiti değil. Kök
+    değiştiğinde (test kancası, alt ağaç) sabit eski yerden okur ve
+    kod/veri ayrımı sessizce yanlış yere uzanır.
+    """
+    ignore = REPO / ".prettierignore"
+    if not ignore.is_file():
         return []
     out = []
-    for line in PRETTIERIGNORE.read_text(encoding="utf-8").splitlines():
+    for line in ignore.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if line and not line.startswith("#"):
             out.append(line)
@@ -89,12 +96,72 @@ def collect_all_files():
             if matches_glob(f) and not is_ignored(f, patterns)]
 
 
+def _git_lines(args):
+    """git komutu → satır listesi (hata/timeout'ta boş)."""
+    try:
+        r = subprocess.run(["git", "-C", str(REPO)] + list(args),
+                           capture_output=True, text=True, timeout=30)
+    except Exception:
+        return []
+    if r.returncode != 0:
+        return []
+    return [ln.strip() for ln in r.stdout.splitlines() if ln.strip()]
+
+
+def _git_ok(args):
+    try:
+        r = subprocess.run(["git", "-C", str(REPO)] + list(args),
+                           capture_output=True, text=True, timeout=15)
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
+def collect_diff_files(base="HEAD~1"):
+    """Değişim farkı yüzeyi: stage ∪ dal farkı (muaflar hariç).
+
+    Neden iki kaynak birleşiyor:
+      - `git diff --cached` → şu AN stage'li dosya (commit anı yüzeyi)
+      - `git diff base...HEAD` → dalın commit'INDEN beri DEĞİŞTİĞİ her dosya
+    Stage tek başına yetersiz: dalın önceki commit'inden gelen bozuk dosya
+    commit anında stage'lenmiyorsa sessizce geçer (ölçülen kök neden).
+    Üç-nokta (merge-base) farkı kullanılır: iki-nokta, dal tabandan ayrıldıysa
+    yanlış yüzeyi verir.
+    """
+    staged = _git_lines(["diff", "--cached", "--name-only"])
+    branch = _git_lines(["diff", "--name-only", f"{base}...HEAD"])
+    patterns = load_ignore_patterns()
+    seen = set()
+    for f in list(staged) + list(branch):
+        f = f.replace("\\", "/")
+        if f and matches_glob(f) and not is_ignored(f, patterns):
+            seen.add(f)
+    return sorted(seen)
+
+
+def _resolve_base(argv):
+    """--base verilmişse onu, yoksa origin/main, o da yoksa HEAD~1."""
+    if "--base" in argv:
+        i = argv.index("--base")
+        if i + 1 < len(argv) and not argv[i + 1].startswith("-"):
+            return argv[i + 1]
+    if _git_ok(["rev-parse", "--verify", "--quiet", "origin/main"]):
+        return "origin/main"
+    return "HEAD~1"
+
+
 def main(argv):
     all_mode = "--all" in argv
-    files = (collect_all_files() if all_mode
-             else [f for f in argv if not f.startswith("-")
-                   and Path(f).is_file()])
-    label = "tüm ağaç" if all_mode else "stage'li"
+    diff_mode = "--diff" in argv
+    if all_mode:
+        files, label = collect_all_files(), "tüm ağaç"
+    elif diff_mode:
+        base = _resolve_base(argv)
+        files, label = collect_diff_files(base), f"değişim farkı ({base})"
+    else:
+        files = [f for f in argv if not f.startswith("-")
+                 and Path(f).is_file()]
+        label = "stage'li"
     if not files:
         print(f"check-prettier-format: eşleşen {label} dosya yok — SKIP")
         return 0

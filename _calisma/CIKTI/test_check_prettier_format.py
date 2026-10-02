@@ -16,7 +16,9 @@ ve borç ancak tüm ağaç taranınca göründü. Sözleşme:
 OFFLINE, stdlib-only. Gerçek prettier ÇALIŞTIRILMAZ: dosya listesi ve
 muaffiyet mantığı saf fonksiyonlardan doğrulanır.
 """
+import contextlib
 import json
+import os
 import pathlib
 import subprocess
 import sys
@@ -28,6 +30,39 @@ GATE = ROOT / "_calisma" / "CIKTI" / "check_prettier_format.py"
 sys.path.insert(0, str(GATE.parent))
 
 import check_prettier_format as gate  # noqa: E402
+
+# `git commit`, pre-commit hook'una GIT_DIR + GIT_INDEX_FILE export EDER
+# (git'in local_repo_env'i — ölçüldü: <common>/.git/worktrees/<wt> ve
+# .../worktrees/<wt>/index). Alt süreçler bunu MİRAS ALIR ve
+# `git -C <geçici depo>` çağrıları çalıştırıldıkları depoyu değil,
+# o değişkenlerin işaret ettiği depoyu kullanır. Test bu yüzden kendi
+# git ortamını SIFIRLAR; aksi hâlde batarya yalnız `git commit` içinde
+# kırılır — ölçülen ayrım: `pre-commit run` PASS, `git commit` FAIL.
+_GIT_IDENTITY = {
+    "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.invalid",
+    "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.invalid",
+}
+
+
+def hermetic_git_env():
+    """GIT_* mirası olmayan, yalnız commit kimliği taşıyan ortam."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    env.update(_GIT_IDENTITY)
+    return env
+
+
+@contextlib.contextmanager
+def scrubbed_git_env():
+    """Süreç ortamından TÜM GIT_* değişkenlerini süreli kaldırır."""
+    saved = {k: v for k, v in os.environ.items() if k.startswith("GIT_")}
+    for k in saved:
+        del os.environ[k]
+    try:
+        yield
+    finally:
+        for k in [k for k in os.environ if k.startswith("GIT_")]:
+            del os.environ[k]
+        os.environ.update(saved)
 
 
 class TestExtensionFilter(unittest.TestCase):
@@ -151,6 +186,159 @@ class TestGateIsStdlibOnly(unittest.TestCase):
     def test_prettier_path_points_at_dashboard_node_modules(self):
         self.assertTrue(str(gate.PRETTIER).endswith(
             "apps/dashboard-next/node_modules/.bin/prettier"))
+
+
+class TestDiffModeCollectsBranchSurface(unittest.TestCase):
+    """--diff: değişim farkı yüzeyi, yalnız stage değil.
+
+    Ölçülen boşluk: `files:` filtresi yalnız O AN stage'li dosyayı görür.
+    Dalın önceki commit'inde bozulmuş ama şu anda stage'lenmemiş bir dosya
+    sessizce geçer. --diff yüzeyi genişletir:
+
+        U ∪ B = (şu an stage'li) ∪ (merge-base..HEAD arası değişen)
+
+    Birlestirme iki yönlüdür: stage commit anını, dal farkı commit'leri
+    kapsar. Gerçek bir temp git deposunda ölçülür (mock yok).
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        import subprocess as sp
+        cls.tmp = tempfile.mkdtemp(prefix="prettier-diff-")
+        # GIT_* ortamı TAMAMEN sıfırlanmalı. `git commit`, pre-commit
+        # hook'una GIT_DIR + GIT_INDEX_FILE export EDER (ölçüldü:
+        # .git/worktrees/<wt> ve .git/worktrees/<wt>/index) ve alt süreçler
+        # bunu miras alır; `git -C tmp …` çalıştırıldığı depoyu değil o
+        # değişkenlerin işaret ettiği depoyu kullanır. Sızarsa kurulum
+        # GERÇEK repo üzerinde koşar: add -A leibniz2'nin bütün ağacını
+        # izole indekse yazar, `git diff --cached` 63 dosyalık gerçek yüzeyi
+        # döner ve fixture iddiaları (kept.js dışarıda kalmalı) yanlış yere
+        # bağlanır. Test bu yüzden hangi ortamda koşarsa koşsun aynı depoyu
+        # görmek zorundadır: yalnız commit kimliği taşınır.
+        env = hermetic_git_env()
+
+        def run(*args):
+            return sp.run(["git", "-C", cls.tmp] + list(args), env=env,
+                          capture_output=True, text=True, timeout=30)
+
+        run("init", "-q", "-b", "main")
+        # base commit: kept.js base'den sonra HİÇ değişmeyecek (dokunulmamış
+        # temiz referans); staged.js ve touched.js temiz başlar.
+        for f in ("kept.js", "staged.js", "touched.js"):
+            with open(os.path.join(cls.tmp, f), "w") as fh:
+                fh.write("const a = 1;\n")
+        run("add", "-A")
+        run("commit", "-qm", "base")
+        # feature commit: (a) boz dosya ekle — commit anında stage OLMAYACAK,
+        # (b) touched.js'i değiştir. kept.js bilerek dokunulmaz.
+        with open(os.path.join(cls.tmp, "borrowed.js"), "w") as fh:
+            fh.write("const b=2\n")
+        with open(os.path.join(cls.tmp, "touched.js"), "w") as fh:
+            fh.write("const a = 2;\n")
+        run("add", "-A")
+        run("commit", "-qm", "feature: debt + change")
+        # çalışma ağacında SADECE staged.js değişik (borrowed.js dokunulmadı)
+        with open(os.path.join(cls.tmp, "staged.js"), "w") as fh:
+            fh.write("const a = 3;\n")
+        run("add", "staged.js")
+        cls.run_git = staticmethod(run)
+
+    def _collect(self, base="HEAD~1"):
+        import importlib
+        gate = importlib.import_module("check_prettier_format")
+        orig = gate.REPO
+        gate.REPO = pathlib.Path(self.tmp)
+        # gate._git_lines os.environ'u miras alır. Ambient GIT_DIR alt süreci
+        # geçici depodan GERÇEK repoya yönlendirir (fark hesabı yanlış yerde
+        # koşar, git hatayla boş döner); GIT_INDEX_FILE ise indeksin hangi
+        # dosyayı okuyacağını değiştirir. İkisi de temizlenir: git yalnız
+        # REPO'yu keşfeder, yani geçici deponun kendi .git'ini.
+        try:
+            with scrubbed_git_env():
+                return set(gate.collect_diff_files(base))
+        finally:
+            gate.REPO = orig
+
+    def test_diff_mode_includes_files_changed_on_branch(self):
+        self.assertIn("borrowed.js", self._collect(),
+                      "onceki commit'te degisen dosya --diff yuzeyinde olmali")
+
+    def test_diff_mode_includes_touched_file(self):
+        self.assertIn("touched.js", self._collect(),
+                      "feature commit'inde degisen dosya kapsamda olmali")
+
+    def test_diff_mode_includes_staged_file(self):
+        self.assertIn("staged.js", self._collect(),
+                      "su an stage'li dosya da kapsamda olmali")
+
+    def test_diff_mode_excludes_untouched_clean_file(self):
+        self.assertNotIn("kept.js", self._collect(),
+                         "bu dosya base'den beri ayni -> kapsam disi")
+
+    def test_diff_mode_is_deterministic(self):
+        self.assertEqual(self._collect(), self._collect(),
+                         "iki tarama ayni sonucu vermeli")
+
+    def test_diff_mode_on_empty_diff_returns_empty(self):
+        # Index'i boşalt: stage tarafı katkısız kalsın, yalnız dal farkı
+        # (HEAD...HEAD = boş) ölçülsün.
+        self.run_git("reset", "-q")
+        try:
+            self.assertEqual(self._collect(base="HEAD"), set(),
+                             "HEAD..HEAD farki bos olmali")
+        finally:
+            self.run_git("add", "staged.js")
+
+    def test_diff_mode_respects_prettierignore(self):
+        # Muaf desen kapsam dışı kalmalı (kod/veri ayrımı bozulmaz).
+        ignore = os.path.join(self.tmp, ".prettierignore")
+        with open(ignore, "w") as fh:
+            fh.write("borrowed.js\n")
+        try:
+            self.assertNotIn("borrowed.js", self._collect())
+        finally:
+            os.remove(ignore)
+
+    def test_collect_is_immune_to_ambient_git_env(self):
+        """Ölçülen kırılma: `git commit` hook ortamı GIT_DIR/GIT_INDEX_FILE
+        export eder; bunlar miras alınırsa fark hesabı GERÇEK repo üzerinde
+        koşar ve temp deponun yüzeyi hiç görünmez. Kanıt: ambient GIT_DIR'yi
+        KASITLI olarak geçersiz bir değere ayarla — temp deponun yüzeyi yine
+        de doğru dönmeli. Miras alınan kod burada kırılır, temizlenen kod
+        geçer.
+        """
+        ambient = {
+            "GIT_DIR": os.path.join(self.tmp, "..", "yok-boyle-bir-depo"),
+            "GIT_INDEX_FILE": os.path.join(self.tmp, ".yanlis-indeks"),
+        }
+        saved = {k: os.environ.get(k) for k in ambient}
+        os.environ.update(ambient)
+        try:
+            got = self._collect()
+        finally:
+            for k, v in saved.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+        self.assertIn("borrowed.js", got,
+                      "ambient GIT_DIR temp deponun yuzeyini gostermemeli")
+        self.assertIn("staged.js", got, "stage'li dosya da gorunmeli")
+        self.assertNotIn("kept.js", got, "dokunulmamis temiz dosya disarida")
+
+    def test_hook_is_diff_aware_and_always_runs(self):
+        cfg = (ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8")
+        block = cfg.split("- id: check-prettier-format\n", 1)[1]
+        block = block.split("\n      - id:", 1)[0]
+        self.assertIn("--diff", block, "ana hook --diff kullanmali")
+        self.assertIn("always_run: true", block, "hook her commit'te kosmali")
+        self.assertIn("pass_filenames: false", block,
+                      "dosya listesi pre-commit'ten degil kapidan gelmeli")
+
+    def test_diff_mode_exists_in_gate_source(self):
+        src = GATE.read_text(encoding="utf-8")
+        self.assertIn("def collect_diff_files", src)
+        self.assertIn("--diff", src)
 
 
 class TestRealTreeIsClean(unittest.TestCase):
