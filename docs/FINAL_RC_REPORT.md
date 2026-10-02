@@ -136,6 +136,29 @@ yaşam-döngüsü regresyonu; batarya 144 dosya / check-unit-tests 159) ve
 48h-guard-kaldırılmış trend-kayıt yolu (bayat rapor tarihiyle kaydolur;
 tazelik iddiası `--check`'te). Kapanış main'e PR #52 merge'iyle gelir.
 
+**2026-09-20 haftalık determinizm ölçümü — linux baseline (bot commit):**
+`determinism-trend.yml`'in schedule koşumu `--update` ile linux ölçümünü
+yazdı ve `github-actions[bot]` bunu commit'ledi: **`fcb14f7`**
+*"chore: record weekly determinism trend measurement"* (2026-09-20 17:11 UTC,
+ubuntu-latest, pinned tectonic 0.17.0 + TeXLive pdflatex, iki bağımsız SDE
+koşumu; ebeveyn `3cabbff`). Eklenen **linux baseline** kaydı:
+
+| alan | değer |
+|---|---|
+| date / platform | `2026-09-20` / `linux` |
+| source_sha256 | `a9f34e05…` (darwin baseline ile **aynı kaynak**) |
+| tectonic_canonical_sha256 | `ad8fca69…` |
+| texlive_canonical_sha256 | `092154a0…` |
+| gate / sde / source_mtime | `PASS` / `0` / `1789924232` |
+
+tectonic kanonik hash'i darwin baseline'ıyla (`ad8fca69…`) birebir eşit →
+çapraz-platform determinizm kanıtı; TeXLive kanonik hash'i platforma bağlı
+(linux `092154a0…` vs darwin `a75c3409…`) ve `--check` bunu ihlal saymaz
+(yalnız bilgilendirici `_cross_platform_note`). Bot-commit zinciri ölçümü
+insan müdahalesi olmadan kaydeder. Not: `fcb14f7` main'in birinci-ebeveyn
+zincirinde **değildir** (`land/migration-gates-2026-09-30` uçlarında);
+main'e inen aynı-gün bot kayıtları `b5126f9` ve `6fe7c86`'dır.
+
 ## Karar
 
 Yerel fail-closed zinciri bu SHA ağacında uçtan uca yeşil: K0–K21, 25/25
