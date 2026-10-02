@@ -2966,6 +2966,65 @@ jobs:
   # bundle) ile /preview.html'i tarar, eşikleri a11y_gate_config.json'dan
   # alır. Fail-closed: sunucu/tarayıcı/checksum arızası FAIL — retry yok.
   # ============================================================
+  # R3 KAPANIŞI — CI-linux bağlamında Faz 3 kabulü (fail-closed).
+  #
+  # NEDEN AYRI BIR İŞ: §4 defterinin satır 6'sı (`092154a0…`) oluşturulduğu
+  # gün 5 bağımsız koşumda birebir tekrarlanmıştı; aynı tarif BUGÜN farklı
+  # sonuç veriyor (ölçüm 2026-10-02: CI vekili konteynerde kanonik hash
+  # `93e14fdd…`/SDE0, `ca3c5918…`/SDE1786924800 — satır 6 eşleşmiyor).
+  # Sapma yalnız pdflatex tarafında: defter pdfTeX 1.40.29 yazıyor, güncel
+  # apt TeXLive 1.40.25 veriyor. Tectonic tarafı birebir `ad8fca69…` çıktığı
+  # için sapma ölçüm ortamı değil MOTOR SÜRÜMÜ kaymasıdır.
+  #
+  # ÇÖZÜM: kabulü "ubuntu-latest" üzerinde değil, **digest-pini** bir
+  # konteynerde koşuyoruz. `runs-on: ubuntu-latest` apt TeXLive'ı
+  # güncelleştikçe hash kayar (ölçülmüş borç); digest + SDE sabiti ise
+  # tekrarlanabilir. Satır 8 bu bağlamın kanonik hash'idir.
+  texlive-accept:
+    name: TeXLive acceptance — CI-linux pinned (fail-closed)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    container:
+      # Ölçüldü 2026-10-02: bu digest = `docker pull ubuntu:24.04` çıktısı.
+      # apt TeXLive 2023/Debian (pdfTeX 1.40.25) buradan gelir.
+      image: ubuntu@sha256:a853f94d226358a79c740cfc7bce0c289748f3fe3488d921d038ccd752c61b60
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install make + pinned TeXLive packages
+        run: |
+          set -euo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            make texlive-latex-base texlive-latex-recommended cm-super python3 curl ca-certificates
+          pdflatex --version | head -1
+          python3 --version
+
+      # determinizm betiği İKİ moturu da zorunlu tutuyor; tectonic yoksa
+      # betik SKIP edip rapor üretmiyor ve make sessizce yeşile çıkıyordu
+      # (ölçüldü 2026-10-02). Aynı sürüm + digest, yerel ölçümle aynı ikili.
+      - name: Install tectonic (pinned, digest-verified)
+        run: |
+          set -euo pipefail
+          TECTONIC_VERSION="0.17.0"
+          TECTONIC_SHA256="8533d07f9ccbd7a65824b9e0459041bca34af1eb33daba48f59215593753a3b7"
+          curl -sL "https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%40${TECTONIC_VERSION}/tectonic-${TECTONIC_VERSION}-x86_64-unknown-linux-musl.tar.gz" -o /tmp/tectonic.tar.gz
+          echo "${TECTONIC_SHA256}  /tmp/tectonic.tar.gz" | sha256sum -c -
+          mkdir -p /tmp/tectonic-bin
+          tar -xzf /tmp/tectonic.tar.gz -C /tmp/tectonic-bin
+          mv /tmp/tectonic-bin/tectonic /usr/local/bin/tectonic
+          chmod +x /usr/local/bin/tectonic
+          tectonic --version
+
+      # SDE SABİTİ: teslim tarihi sabiti (2026-08-17T00:00:00Z). Kanonik
+      # hash SDE'ye bağlıdır; bu yüzden "hangi bağlam" satırı SDE'yi de
+      # taşır. Değiştirirsen §4 satır 8 yeniden ölçülmelidir.
+      - name: Run make accept (pinned context)
+        run: |
+          set -euo pipefail
+          SOURCE_DATE_EPOCH=1786924800 make -f docs/Makefile.texlive accept
+
   a11y-gate:
     name: A11y gate (axe-core, fail-closed)
     runs-on: ubuntu-latest

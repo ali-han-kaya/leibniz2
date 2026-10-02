@@ -38,6 +38,15 @@ _calisma/CIKTI/guide.html
 # frontend-design demo derlemesi (build_design_preview.py üretir)
 _calisma/CIKTI/design_preview.html
 
+# preview_server / consolidate_summary çalışma durumu: trend geçmişi, katman
+# özeti ve koşu günlükleri. Her koşumda yeniden üretilir; içlerine mutlak
+# yol (ör. /Users/<kullanıcı>/...) yazıldığı için değişim yüzeyinde
+# absolute-path kapısını da kırarlar — kaynak değil, runtime.
+_calisma/CIKTI/history.jsonl
+_calisma/CIKTI/history.jsonl.sha256
+_calisma/CIKTI/klayers.json
+_calisma/CIKTI/runs/
+
 # Oturum yüzeyleri (2026-09-18): bağımlılıklar ve üretilen artefaktlar kaynak-değil
 _calisma/mcp/.venv/
 _calisma/pptx/node_modules/

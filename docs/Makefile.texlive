@@ -19,6 +19,25 @@
 # geçiş defterinde (docs/ID_RESIDUAL_ACCEPTANCE.md §4) arar; yoksa
 # fail-closed (yeni bağlam → bilinçli defter satırı, Faz 6 çıkış yolu).
 # Makefile.tectonic paralel yaşamlı kalır (geri dönüş yolu).
+#
+# SOURCE_DATE_EPOCH SÖZLEŞMESİ (2026-10-02 ölçümü): `pdf` hedefi epoch'u
+# motor ortamına İHRAÇ EDER; `check`/`accept` ihraç etmiyordu, bu yüzden
+# determinizm betiği kendi varsayılanına (`:-0`) düşüyordu. Sonuç: kabul
+# edilen PDF ile teslim edilen PDF FARKLI epoch ile derleniyordu — kabul
+# ettiğimiz şey gönderdiğimiz şey değildi (ölçüm: epoch 12345 iken kanonik
+# hash 544516b0… yerine 95900f50… çıktı). `check` artık epoch'u da ihraç
+# eder; kabul edilen byte'lar üretilen byte'larla aynı epoch'tadır.
+#
+# VARSAYILAN SDE (2026-10-02 düzeltmesi): ilk ölçümde varsayılan HEAD'in
+# commit zamanıydı; bu, kanonik hash'i HER COMMIT'tE değiştiriyor ve yerel
+# `make accept`'i yalnız HEAD'in o commit'e denk gelmesi hâlinde yeşil
+# bırakıyordu (ölçüldü: HEAD bcb963b iken yerel accept kırmızı).
+# Kabul edilebilir bir çıktı commit'e bağlı olamaz; varsayılan bu yüzden
+# teslim sabitine (2026-08-17T00:00:00Z) çivilendi. Böylece `pdf`,
+# `check` ve `accept` aynı epoch'ta çalışır, hash commit'ten bağımsızdır
+# ve hem yerel (defter satır 7) hem CI-linux (satır 8) bağlamı yeşildir.
+# Başka epoch denemek için: `SOURCE_DATE_EPOCH=... make ... accept`
+# (o epoch'un kanonik hash'i defterde yoksa bilinçli kırmızı verir).
 
 SHELL := /bin/sh
 ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/..)
@@ -29,7 +48,9 @@ TEXDIR := $(abspath $(dir $(SOURCE)))
 TEXBASE := $(notdir $(SOURCE))
 STEM := $(TEXBASE:.tex=)
 BUILD_DIR ?= $(ROOT)/.build/texlive
-SOURCE_DATE_EPOCH ?= $(shell git -C "$(ROOT)" log -1 --format=%ct 2>/dev/null || printf '0')
+# Teslim sabiti 2026-08-17T00:00:00Z. Ortam değişkeni verilirse o kazanır
+# (`?=`), yani CI kabul işi kendi pinli epoch'unu buraya zorlamaz.
+SOURCE_DATE_EPOCH ?= 1786924800
 PDFlatex ?= pdflatex
 PDBIN := $(shell command -v $(PDFlatex) 2>/dev/null)
 PASSES ?= 3
@@ -79,11 +100,12 @@ check:
 	@mkdir -p "$(BUILD_DIR)"
 	@PDBIN="$$(command -v "$(PDFlatex)")"; \
 	 test -n "$$PDBIN" || { echo "ERROR: pdflatex not found (PDFlatex= veya PATH)" >&2; exit 2; }; \
-	 TEX_SOURCE="$(SOURCE)" \
-	 TEXLIVE_BIN="$${PDBIN%/*}" \
-	 DETERMINISM_PASSES="$(PASSES)" \
-	 DETERMINISM_OUT="$(REPORT)" \
-	 bash "$(DETERMINISM_SCRIPT)" || exit 1
+	TEX_SOURCE="$(SOURCE)" \
+	SOURCE_DATE_EPOCH="$(SOURCE_DATE_EPOCH)" \
+	TEXLIVE_BIN="$${PDBIN%/*}" \
+	DETERMINISM_PASSES="$(PASSES)" \
+	DETERMINISM_OUT="$(REPORT)" \
+	bash "$(DETERMINISM_SCRIPT)" || exit 1
 	@grep -q '^passes=$(PASSES)$$' "$(REPORT)" || { echo "ERROR: raporda passes=$(PASSES) yok — geçiş sözleşmesi rapora yansımadı" >&2; exit 1; }
 	@grep -q '^verdict=PASS' "$(REPORT)" || { echo "ERROR: determinism verdict PASS değil" >&2; exit 1; }
 	@grep -q '^texlive_run1_rerun_left=0$$' "$(REPORT)" || { echo "ERROR: run1 rerun_left=0 değil" >&2; exit 1; }

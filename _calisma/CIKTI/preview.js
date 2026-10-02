@@ -275,15 +275,27 @@ function renderVerdictSeal(d) {
   const hash = sealHashFromSnapshot(d);
   if (!hash) {
     seal.hidden = true;
+    // Gizlenirken eski yazi/stamp DOM'da kalmasin: bir sonraki snapshot
+    // guncellemeden once DOM denetiminde bayat "VERIFIED" gorunur.
+    const staleStamp = seal.querySelector(".seal-hash");
+    if (staleStamp) staleStamp.textContent = "";
+    const staleWord = seal.querySelector(".seal-verdict");
+    if (staleWord) staleWord.textContent = "";
     return;
   }
   const ok = (d.verdict || "").toUpperCase() === "PASS";
   seal.hidden = false;
   seal.classList.toggle("seal-pass", ok);
   seal.classList.toggle("seal-fail", !ok);
+  // Yazi verdict'TEN turer. Sabit "VERIFIED" yazisi FAIL koşumunda da
+  // basliyordu — renk degisiyordu ama metin "VERIFIED" diyordu, yani
+  // header bir basarisizligi dogrular gibi gosteriyordu. Merkez `<text>`
+  // hic guncellenmedigi icin hep o kaliyordu.
+  const word = ok ? "VERIFIED" : "NOT VERIFIED";
   const tp = seal.querySelector("textPath");
-  if (tp)
-    tp.textContent = "VERIFIED • " + hash.slice(0, 12).toUpperCase() + " •";
+  if (tp) tp.textContent = word + " • " + hash.slice(0, 12).toUpperCase() + " •";
+  const verdictText = seal.querySelector(".seal-verdict");
+  if (verdictText) verdictText.textContent = word;
   const stamp = seal.querySelector(".seal-hash");
   if (stamp) stamp.textContent = hash.slice(0, 6).toUpperCase() + "…";
 }
@@ -2527,7 +2539,14 @@ function applySnapshotInner(d) {
 
   // Top-level badges
   const badges = $("badges");
+  // `innerHTML = ""` statik #config-sync-badge'i de yok ediyordu: rozet
+  // satırından düşüp yalnız altındaki gövde satırında metin olarak
+  // kalıyordu (rozetsiz "Schema Sync" — metin binişmesi). Statik rozeti
+  // ayrı tutup yalnız JS'in ürettiği rozetleri temizle; renderConfigSync
+  // bunu fonksiyonun başında doldurmuş olduğu için metin/sınıf korunur.
+  const csBadge = document.getElementById("config-sync-badge");
   badges.innerHTML = "";
+  if (csBadge) badges.appendChild(csBadge);
   const addBadge = (cls, text) => {
     const s = document.createElement("span");
     s.className = "badge " + cls;

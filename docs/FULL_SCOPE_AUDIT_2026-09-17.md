@@ -165,6 +165,72 @@ uygulanmıyordu** (`classify_violations`'ın incomplete döngüsü
 etkisiz kalem. `incomplete` yolu da allowlist'e uyar hâle getirildi ve
 mutasyonla kanıtlandı (kayıt, başka sayfaya sızmıyor).
 
+### R3 turu (2026-10-02): `make accept` CI bağlamında gerçekten yeşile getirildi
+
+İstek "CI-linux satırını ekle, `make accept`'i CI-bağlamında yeşile çıkar"
+ idi. **Satır 6 zaten vardı** (`c934c16`, main'de); ölçüm iki ayrı gerçeği
+ ortaya çıkardı:
+
+1. **`make accept` hiçbir workflow'da koşmuyordu.** "CI-bağlamında yeşil"
+   bir çıkarımdı, ölçülmüş bir gerçek değil.
+2. **Satır 6 artık üretilmiyordu.** CI'yi vekil konteynerde (`ubuntu:24.04`
+   + CI'ın birebir tarifi + digest-pini tectonic) çalıştırıldı:
+   tectonic kanonik hash'i **birebir** `ad8fca69…` (= satır 1) çıktı →
+   ölçüm ortamı sadık; sapma **yalnız pdflatex**'te ve sürüm kayması
+   (defter 1.40.29, güncel apt 1.40.25). `make accept` → **FAIL**.
+
+**Ayrıca ölçülen, R3'ün konusu olmayan bir kusur:** `pdf` hedefi
+`SOURCE_DATE_EPOCH`'u motor ortamına **ihraç ediyor**, `check`/`accept`
+**etmiyordu** (beton `:-0`'a düşüyor). Yani **kabul edilen PDF ile teslim
+edilen PDF farklı epoch ile derleniyordu** — kabul edilen şey gönderilen
+şey değildi. Ölçüm: epoch 12345 verilince kanonik hash `544516b0…` →
+`95900f50…` değişiyor.
+
+**Varsayılan SDE tuzağı (aynı turda ölçüldü, kapatıldı):** ilk düzeltmede
+varsayılan `HEAD`'in commit zamanı yapıldı; bu, kanonik hash'i **her
+commit'te** değiştirdiği için yerel `make accept` yalnız HEAD'in doğru
+commit'e denk gelmesi hâlinde yeşil kalıyordu (`HEAD=bcb963b` iken
+kırmızı ölçüldü). Kabul edilebilir çıktı commit'e bağlı olamaz; varsayılan
+teslim sabitine (`1786924800`) çivilendi. Artık `pdf`/`check`/`accept`
+aynı epoch'ta çalışır ve iki bağlam da yeşildir:
+
+| bağlam | kanonik hash | defter satırı | sonuç |
+|---|---|---|---|
+| CI-linux (`ubuntu:24.04` digest-pini, tectonic 0.17.0 digest-pini) | `ca3c5918…` | 8 | `KABUL`, EXIT=0 |
+| yerel (macOS/Homebrew, aynı epoch) | `10d44856…` | 7 | `KABUL`, EXIT=0 |
+
+**Kalan tek engel — repo dışı:** `texlive-accept` işi workflow'a eklendi ve
+15. required adayı olarak kayıt altına alındı (gate_jobs kümesi, smoke
+sayıları 14→15, `PUBLISH_SCENARIO` tablosu 29 job). Ancak canlı branch
+protection `main` üzerinde hâlâ **14** context tutuyor (ölçüldü:
+`strict=true`, `enforce_admins=true`, 14 context); `check-status-check-names`
+kapısı bu yüzden `"missing": ["TeXLive acceptance — CI-linux pinned
+(fail-closed)"]` ile kırmızı. Bu repodan düzeltilemez — GitHub ayarıdır ve
+`PUT` koruma nesnesinin tamamını değiştirdiği için `enforce_admins` ve
+`strict` alanlarını da geri yazmadan yapılmamalıdır. Karar insanın.
+
+**Düzeltme ve kanıt:**
+
+| | `pdf` üretir | `check`/`accept` ölçerdi |
+|---|---|---|
+| öncesi | SDE=HEAD → `57c91a07…` | SDE=0 → `544516b0…` |
+| sonrası | SDE=HEAD → `57c91a07…` | **SDE=HEAD → `57c91a07…`** |
+
+Motor **CI'da pinlendi**: kabul artık `ubuntu@sha256:a853f94d…` digest-pini
+konteynerde + SDE `1786924800` sabitiyle koşuyor (`runs-on: ubuntu-latest`
+üzerinde koşmak aynı borcu yeniden üretirdi). Kapanış kanıtı:
+
+| bağlam | kanonik hash | `make accept` |
+|---|---|---|
+| CI vekili (pinli) | `ca3c5918…` | **KABUL**, EXIT=0 |
+| yerel (Homebrew, aynı SDE) | `10d44856…` | **KABUL**, EXIT=0 |
+
+`§4`'e satır 7 (yerel) ve satır 8 (CI-pinli) eklendi; ikisi de SDE'yi
+taşıyor (kanonik hash SDE'ye bağlı). Satır 6 **silinmedi** — protokol
+"yeni bağlam → yeni satır, üstüne yazma" diyor; sapma gerekçesiyle kayda
+geçti. 7 yeni test, ikisi mutasyon kanıtlı: epoch ihracı geri alınınca ve
+digest pini etikete düşünce kırmızıya dönüyor.
+
 **Mutasyon kanıtı ve bulunan boşluk.** Dört senaryo denendi (sayfa filtresi
 silindi, eşik override'ı yok sayıldı, toplam özet ilk sayfadan alındı, 404
 kontrolü silindi). **Dördüncüsü hiçbir testi kırmadı**: 404'ün *tespiti* test
@@ -183,8 +249,8 @@ EXIT=0, iki sayfada da PASS**.
 |---|---|---|---|
 | R1 | tectonic→TeXLive göçü **planlandı, uygulanmadı** | iki motor paralel yaşamaya devam; byte-düzeyi çapraz eşitlik imkânsız (font/ligatür farkı — ölçüldü) | `TEXLIVE_MIGRATION_PLAN.md` 7 faz; Faz 3 `/ID` kabul raporu; her faz ölçüm kapılı |
 | R2 | pdfTeX rastgele trailer `/ID` kalıntısı kalıcı | qpdf `--static-id`/`--remove-metadata` gideremiyor (donmuş bulgu ×2 doğrulandı) | sözleşme /ID-kanonik karşılaştırmaya bağlı; kanonik hash oturumlar arası kararlı — içerik determinizmi zaten kanıtlı; **haftalık determinism-trend CI job'ı (2026-09-17) kararlılığı sürekli izler**: `determinism-trend.yml` cron + `record_determinism_trend.py` jsonl trendi (tazelik + kaynak-uzlaşma [platform-scoped] + darwin/linux kapsam değişmezleri, fail-closed) |
-| R3 | CI runner'ında TeXLive paket seti yerel Homebrew'dan farklı olabilir | Faz 6 CI koşumunda hash sapması | plan kuralı: **ölçmeden varsayma** — sapma çıkarsa kabul raporu CI'ya özgü ikiliyle genişler |
-| R4 | base-image güncellemeleri yeni CVE getirebilir | trivy gate kırmızı (fail-closed — beklenen davranış) | desen: floor + defter + tek build-arg (apt + pip iki katman); **haftalık tarama yerleşti (2026-09-20): `docker-security.yml` cron `43 3 * * 1` + script-parite smoke job'ı** — push koşumu 35516666559 success (image-scan + smoke, runner'da SKIP yolu logda dürüst); cron'un fiilen haftalık ateşlenmesi PR #52 merge'iyle canlanır (schedule yalnız default branch'ten koşar) |
+| R3 | CI runner'ında TeXLive paket seti yerel Homebrew'dan farklı olabilir — **KAPATILDI (2026-10-02)** | öngörülen "Faz 6'da hash sapması" **gerçekleşti**: `§4` satır 6 (`092154a0…`) oluşturulduğu gün 5 bağımsız koşumda birebir tekrarlanmıştı, aynı tarif bugün üretmiyor. Ölçülen sapma pdfTeX **1.40.29 → 1.40.25**; tectonic tarafı birebir `ad8fca69…` çıktığı için sapma ölçüm ortamı değil **motor sürümü** kayması | CI-linux kabulü **`ubuntu@sha256:a853f94d…` digest-pini konteynerde** koşuyor (yeni `texlive-accept` işi, fail-closed), SDE **1786924800** sabit; `§4` satır 7 (yerel) + satır 8 (CI-pinli) aynı SDE ile ölçüldü. Satır 6 **silinmedi** — protokol "yeni bağlam → yeni satır" diyor, kayma gerekçesiyle kayda geçti. Ayrıca: `make accept` daha önce **hiçbir workflow'da koşmuyordu** |
+| R4 | base-image güncellemeleri yeni CVE getirebilir | trivy gate kırmızı (fail-closed — beklenen davranış) | desen: floor + defter + tek build-arg (apt + pip iki katman); **haftalık tarama yerleşti (2026-09-20): `docker-security.yml` cron `43 3 * * 1` + script-parite smoke job'ı** — push koşumu 35516666559 success (image-scan + smoke, runner'da SKIP yolu logda dürüst); cron **PR #52 merge'i ile tetiklenebilir hâle geldi, ancak henüz ateşlenmedi**. PR #52 merge: 2026-09-30T22:19:48Z, `ali-han-kaya` → `8314fde4a4` (schedule yalnız default branch'ten koşar; ölçüldü: `docker-security.yml` main'de `schedule: cron 43 3 * * 1` içeriyor, API `state=active`). **İlk ateşleme 2026-10-05T03:43Z'de** (Pzt) — 2026-10-02 ölçümünde `event=schedule` tetikli koşum sayısı **0**; tüm koşumlar push/workflow_dispatch. Kontrol (mekanizma çalışıyor): `determinism-trend` aynı repoda schedule ile iki kez ateşlendi (2026-09-21 failure, 2026-09-28 success). Yani bu satır **kapalı değil, bekliyor** — kayıt `test_security_cron_schedule.py` ile mekanik olarak çivilendi |
 | R5 | colima arm64 → amd64 qemu emülasyonu | yerel build yavaş; CI amd64 native olduğundan **CI riski değil** | `DOCKER_SMOKE_PLATFORM` override; dokümante |
 | R6 | `reword-working`→`main` birleştirmesi — **KAPATILDI (2026-10-02)** | öngörülen 22 dosyalık çakışma **1** ölçüldü (README.md changelog tablosu, saf add/add); iki blokaj plan dışı çıktı | iki aşamalı merge: PR #77 (`ddde854`) + PR #78 (`18e0403`); `MERGE_DECISION_…md` §5 güvenlik ağı birebir uygulandı → §2 "R6 turu"; her iki merge için `git revert -m 1` açık |
 | R7 | 15 untracked test dosyası (CI job'larında koşan ortam-bağımlılar) + pre-commit bataryası (132) ile kayıtlı full liste (141) farkı | kafa karışıklığı riski; kapsam sessizce zayıflamaz (drift guard + coverage kapısı) | drift-guard çıktısı farkı açıkça not eder; EXCLUDE listesi gerekçeli |
