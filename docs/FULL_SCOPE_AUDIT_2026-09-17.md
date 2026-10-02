@@ -48,6 +48,56 @@ ayrıştırılmıştır — SKIP kararları gerekçesiyle kaydedilir, sessiz atl
 | Docker smoke'un tek komutluk yeri yoktu | bu denetim turu | `docker_security_smoke.sh` + 4 stub test + manifest kaydı |
 | Güvenlik-yama deseni tek pakete gömülüydü | aynı tur | `SECURITY_PATCH_PACKAGES` ARG + CVE-defteri + `DOCKER_SECURITY_PATCHING.md` + 7 sözleşme testi; canlı build, `dpkg-query`'nin `pkg=sürüm` reddini yakalayıp deseni daha ilk turunda olgunlaştırdı |
 
+### R6 turu (2026-10-02): `reword-working` → `main` birleştirmesi kapatıldı
+
+`MERGE_DECISION_reword-working_to_main.md` §5'in güvenlik ağı birebir
+uygulandı. Merge iki aşamalı oldu — çünkü ilk aşamada kalan bicim borcu
+`pre-commit run --all-files` kapısını tutuyordu:
+
+| Aşama | PR | Merge commit | İçerik |
+|---|---|---|---|
+| 1 | #77 | `ddde854` | `reword-working` → `main` (dokümanın asıl hedefi) |
+| 2 | #78 | `18e0403` | bicim borcu (42 dosya) + K6 strict determinizm bağlaması + Faz 4/5 + V5p repack |
+
+**§5 güvenlik ağı — ölçülen:**
+
+| Adım | Kanıt |
+|---|---|
+| §5.1 push öncesi `pre-commit run --all-files` | **EXIT=0** (52 Passed / 0 Failed); push öncesi ölçüm EXIT=1 idi, tek hata `check-prettier-format` |
+| §5.2 teslim PDF'i `shasum -c` | OK |
+| §5.3 changelog tek yazıcı | `gen_changelog.py --prune` + iki writer-2 yazımı (`a63c996`, `80d5801`) |
+| §5.4 merge sonrası 3 workflow | `verify-delivery` (P0=0, P1=0) · `docker-security` (Trivy 28 hedef, 0 bulgu) · `test-smoke` — üçü de success |
+| §5.5 geri dönüş | her iki merge için `git revert -m 1` açık |
+
+14 required check'in tamamı yeşil (54 pass / 0 fail); merge sonrası ana-dal
+koşumları doğrulandı: `byte-identical repack OK` (kanıt 2/2), lineage
+`K14-DRIFT PASS`, teslim kanonik hash'i `d4f67e39…` **korundu** (PDF değişmedi).
+
+**Planda olmayan iki blokaj — hiçbir kapı atlanmadan çözüldü:**
+
+1. **Changelog stale-row tavuk-yumurta.** `0baa72f` henüz HEAD'e ulaşmamış
+   olduğu için tabloda *stale* sayılıyor ve `check-unit-tests` blokluyordu;
+   yazan hook `--update` stale satırı silmediği için boşuna çalışıyordu.
+   Tool'ın **kendi `--prune` modu** kullanıldı → `--check` rc=0. `--no-verify`
+   gerekmedi. Kayıt repo'nun gecikmeli yazım (writer-2) sözleşmesiyle
+   kapatıldı; yeniden üretilen `0baa72f` satırı prune öncesiyle byte-özdeş.
+2. **Repack byte-identical ihlali.** Faz 4 (`e3651c1`) **üreticiyi**
+   (`repack_delivery.py`) değiştirdi ama gemideki teslim paketini yeniden
+   üretmedi; CI'ın her push'ta koşan fail-closed kapısı bunu yakaladı
+   (`main` bu kapıda yeşildi — kırılma PR'ye özgüydü). V5p repack +
+   `zip_lineage.json`/`cleanup_log.json` senkronu; `check_zip_lineage_drift.py`
+   rc=0 (P0 3 → 0). Linux CI ile macOS repack'i **ayni** zip hash'ini üretti
+   (`c205a02e…` / `fba120ce…`) — platform-bağımsız determinizm kanıtlandı.
+
+**Yöntem dersi (bu tur):** "Bir sonraki repack'ta ödenir" diye deftere
+yazılmış bir borç, o repack'i **her push'ta koşan bir kapı** üretiyorsa
+gerçekte defer edilemez; iki commit ötede patlar. Plan, borcun kapatıcısını
+değil, **kapatmayı hangi kapının ne zaman zorladığını** da yazmalı.
+
+**Kalan operasyonel adım (kod dışı):** teslim zip'lerinin hash'i değişti
+(iç `fba120ce…`, dış `c205a02e…`); Dropbox taşıma birimine yeniden
+kopyalanmalı. `ID_RESIDUAL_ACCEPTANCE.md`'ye kaydedildi.
+
 **Yöntem dersi:** Denetim sırasında iki kez tahmin zinciri kuruldu ("5 dosya
 eksik", "son 2 test failing") — her ikisi de taze koşumda çürütüldü (17/17 OK,
 rc=0). Rapor içindeki her sayı bu yüzden koşum-kanıtına bağlıdır, hafızaya değil.
@@ -61,7 +111,7 @@ rc=0). Rapor içindeki her sayı bu yüzden koşum-kanıtına bağlıdır, hafı
 | R3 | CI runner'ında TeXLive paket seti yerel Homebrew'dan farklı olabilir | Faz 6 CI koşumunda hash sapması | plan kuralı: **ölçmeden varsayma** — sapma çıkarsa kabul raporu CI'ya özgü ikiliyle genişler |
 | R4 | base-image güncellemeleri yeni CVE getirebilir | trivy gate kırmızı (fail-closed — beklenen davranış) | desen: floor + defter + tek build-arg (apt + pip iki katman); **haftalık tarama yerleşti (2026-09-20): `docker-security.yml` cron `43 3 * * 1` + script-parite smoke job'ı** — push koşumu 35516666559 success (image-scan + smoke, runner'da SKIP yolu logda dürüst); cron'un fiilen haftalık ateşlenmesi PR #52 merge'iyle canlanır (schedule yalnız default branch'ten koşar) |
 | R5 | colima arm64 → amd64 qemu emülasyonu | yerel build yavaş; CI amd64 native olduğundan **CI riski değil** | `DOCKER_SMOKE_PLATFORM` override; dokümante |
-| R6 | `reword-working`→`main` birleştirmesi **karar aşamasında** | 22 dosyada çakışma (çoğu add/add — aynı işin iki kopyası); main'in 5 bağımsız düzeltmesi merge'de korunmalı | `MERGE_DECISION_…md`: 3-way merge-commit önerisi + dosya tablosu + siper zinciri; tek `revert -m 1` geri dönüş |
+| R6 | `reword-working`→`main` birleştirmesi — **KAPATILDI (2026-10-02)** | öngörülen 22 dosyalık çakışma **1** ölçüldü (README.md changelog tablosu, saf add/add); iki blokaj plan dışı çıktı | iki aşamalı merge: PR #77 (`ddde854`) + PR #78 (`18e0403`); `MERGE_DECISION_…md` §5 güvenlik ağı birebir uygulandı → §2 "R6 turu"; her iki merge için `git revert -m 1` açık |
 | R7 | 15 untracked test dosyası (CI job'larında koşan ortam-bağımlılar) + pre-commit bataryası (132) ile kayıtlı full liste (141) farkı | kafa karışıklığı riski; kapsam sessizce zayıflamaz (drift guard + coverage kapısı) | drift-guard çıktısı farkı açıkça not eder; EXCLUDE listesi gerekçeli |
 | R8 | K19 coqtop yok / K9 lake ağırlığı | opsiyonel katmanlar SKIP | tasarım gereği; `--coq-proof` bayrağı dokümante; K9 elan kurulumu ile açılabilir |
 
@@ -72,11 +122,12 @@ rc=0). Rapor içindeki her sayı bu yüzden koşum-kanıtına bağlıdır, hafı
 - `docs/ci_simulate/docker_security_smoke/docker_security_smoke_report.txt` — build+scan+health kanıtı
 - `docs/MERGE_DECISION_reword-working_to_main.md` · `docs/TEXLIVE_MIGRATION_PLAN.md` · `docs/DOCKER_SECURITY_PATCHING.md`
 - GitHub Actions: koşum 35161423568 (ilk — 3 borç), 35163054257 (3/3 success), 35163906063 (rapor commit'i, 3/3 success)
+- **R6 turu (2026-10-02):** PR #77 (`ddde854`) + PR #78 (`18e0403`). PR koşumları 37034123236 / 37034128875 — 14/14 required check, 54 pass / 0 fail. Merge sonrası ana-dal: `verify-delivery` 37035461060 (P0=0, P1=0 · `byte-identical repack OK` kanıt 2/2), `docker-security` 37035460831 (Trivy 28 hedef, 0 bulgu), `test-smoke`. Kapı zinciri yerelde: `pre-commit run --all-files` EXIT=0 (52 Passed), `verify_delivery.py --full` TÜMÜ PASS, `gen_changelog --check` rc=0, `test_gen_changelog` 72/72, `test_k6_determ_canonical` 44/44
 - Bu oturum koşumları: unit batarya 132/132; smoke 25/25; sync/coverage/drift kapıları rc=0; stub testler 4/4 + 7/7 + 17/17
 
 ## 5. Sonuç
 
 Taranan sekiz katmanın yedisi **ölçülmüş yeşil** kanıtla kapalı; sekizincisi
 (TeXLive göçü) planlı ve her fazı ölçüm kapılı. Kalan risklerin tamamı ya
-tasarım gereği SKIP (R2/R5/R7/R8), ya karar bekleyen işlem (R6 birleştirme),
-ya da planı yazılmış göç (R1) sınıfında — **bilinmeyen/belgelenmemiş risk kalmadı.**
+tasarım gereği SKIP (R2/R5/R7/R8), ya da planı yazılmış göç (R1) sınıfında;
+R6 birleştirme riski 2026-10-02'de ölçülerek kapatıldı (§2 "R6 turu").
