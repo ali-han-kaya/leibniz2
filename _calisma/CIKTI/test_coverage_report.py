@@ -64,6 +64,7 @@ HOOK_COVERAGE = {
     "check-pattern-consistency": ["test_gen_repro_manifest.py"],
     "check-config-sync":       ["test_check_config_sync.py"],
     "check-lake-evidence":     ["test_lake_evidence_smoke.py"],
+    "check-lean-statements":   ["test_check_lean_statements.py"],
     "check-refs-table-sync":   ["test_check_refs_table_sync.py"],
     "check-bibliography-sync": ["test_check_bibliography_sync.py"],
     "check-review-freshness":  ["test_check_review_freshness.py"],
