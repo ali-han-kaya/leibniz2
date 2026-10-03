@@ -19,11 +19,11 @@ bağlantı sözleşmesi (pooled/direct ayrımı).
 Canlı DB'de **3 migration uygulanmış**, ama `prisma/migrations/` dizini repo'da
 **YOK** — geçmiş yalnız canlı veritabanında duruyor:
 
-| # | migration | uygulanma |
-|---|---|---|
-| 1 | `20260925171004_init` | 2026-09-25 17:10:04Z |
-| 2 | `20260927193000_trend_runs_rls` | 2026-09-28 00:42:50Z |
-| 3 | `20260927194500_trend_runs_query_indexes` | 2026-09-28 00:42:50Z |
+| #   | migration                                 | uygulanma            |
+| --- | ----------------------------------------- | -------------------- |
+| 1   | `20260925171004_init`                     | 2026-09-25 17:10:04Z |
+| 2   | `20260927193000_trend_runs_rls`           | 2026-09-28 00:42:50Z |
+| 3   | `20260927194500_trend_runs_query_indexes` | 2026-09-28 00:42:50Z |
 
 Bu yüzden `npx prisma migrate dev --name init` **VERİYİ SİLER**. Ölçüm (canlıya
 değil, atılmış bir branch'e — Neon branch'leri copy-on-write, `main` hiç etkilenmedi):
@@ -52,12 +52,12 @@ repo'ya alınmadan hiçbir migration komutu çalıştırma.
 
 ### Canlıda repo'da olmayan ek yapı (2026-10-03 ölçümü)
 
-| Nesne | Detay |
-|---|---|
+| Nesne              | Detay                                                                                                                                                           |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `trend_runs_daily` | 9 kolon (`day, verdict, runs, p0_total, p1_total, avg_duration_s, avg_budget_usd, z3_passed_total, z3_failed_total`) — **şemada hiç yok**, dashboard okuma yüzü |
-| RLS | `trend_runs` üzerinde `ENABLE` + `FORCE ROW LEVEL SECURITY` |
-| Politika | `trend_runs_service_all` — rol `{trend_service}`, `USING true`, `WITH CHECK true` |
-| İndeksler | `(ts, p0, p1, z3_total)`, `(ts, verdict, p0, p1, duration_s, budget_usd, z3_total)`, `(verdict, ts)` + 2 unique |
+| RLS                | `trend_runs` üzerinde `ENABLE` + `FORCE ROW LEVEL SECURITY`                                                                                                     |
+| Politika           | `trend_runs_service_all` — rol `{trend_service}`, `USING true`, `WITH CHECK true`                                                                               |
+| İndeksler          | `(ts, p0, p1, z3_total)`, `(ts, verdict, p0, p1, duration_s, budget_usd, z3_total)`, `(verdict, ts)` + 2 unique                                                 |
 
 `trend_runs`'ın 42 kolonu `prisma/schema.prisma` ile **birebir** uyuşuyor; sürüklenme
 migration geçmişinde, kolonlarda değil.
@@ -93,7 +93,7 @@ dokunulmadan kaldı (269/3/3/1/5).
 
 ### Düzeltme: kapılar "credentialsuz" değil, "secret'sız" (2026-10-03)
 
-Eski durum satırı `prisma validate` + `prisma generate`'ı *credentialsuz* kapı olarak
+Eski durum satırı `prisma validate` + `prisma generate`'ı _credentialsuz_ kapı olarak
 listeliyordu. Bu **yanlıştı**: `prisma.config.ts` URL'yi `env('DATABASE_URL')` ile
 config modülü yüklenirken çözdüğü için, `DATABASE_URL` tanımlı değilken ikisi de
 
@@ -103,8 +103,8 @@ PrismaConfigEnvError: Cannot resolve environment variable: DATABASE_URL.
 
 ile düşüyor. **Bağlantı gerekmez** — herhangi bir sözdizimsel olarak geçerli bir URL
 (ölçümde dummy değer kullanıldı) ikisini de geçirir (`schema is valid` / client üretildi).
-Yani doğru ifade: *gerçek kimlik bilgisi gerektirmez, ama `DATABASE_URL` ortam
-değişkeninin tanımlı olmasını gerektirir.* CI'da secret'sız koşacaksa bu ayrım önemli.
+Yani doğru ifade: _gerçek kimlik bilgisi gerektirmez, ama `DATABASE_URL` ortam
+değişkeninin tanımlı olmasını gerektirir._ CI'da secret'sız koşacaksa bu ayrım önemli.
 
 ## Yapılacak adımlar
 
@@ -129,11 +129,11 @@ npm run load      # TCC-mirror history.jsonl → TrendRun (idempotent upsert, po
 
 ### Canlı rolleri ve yetkileri (2026-10-03 ölçümü — canlı GRANT'ler okundu)
 
-| Rol | `rolcanlogin` | Yetki |
-|---|---|---|
-| `neondb_owner` | true (+`BYPASSRLS`) | sahip; migration + DDL |
-| `trend_service` | **false** | `trend_runs`: SELECT/INSERT/UPDATE/DELETE + RLS policy `trend_runs_service_all` |
-| `trend_anon` | **false** (`no_login`) | `trend_runs_daily`: **SELECT-only** |
+| Rol             | `rolcanlogin`          | Yetki                                                                           |
+| --------------- | ---------------------- | ------------------------------------------------------------------------------- |
+| `neondb_owner`  | true (+`BYPASSRLS`)    | sahip; migration + DDL                                                          |
+| `trend_service` | **false**              | `trend_runs`: SELECT/INSERT/UPDATE/DELETE + RLS policy `trend_runs_service_all` |
+| `trend_anon`    | **false** (`no_login`) | `trend_runs_daily`: **SELECT-only**                                             |
 
 Bu, tutarlı bir least-privilege ayrımı: yazma rolü ham veride tam DML, okuma
 rolü yalnız günlük özet tablosunda SELECT. İkisi de şu an `rolcanlogin=false`
@@ -144,14 +144,38 @@ geçiyor (kısıtlama GRANT katmanında, politika katmanında değil).
 
 ## Notlar
 
-- **Pooled/direct ayrımı (Neon sözleşmesi):** `DATABASE_URL` pooled'dır
-  (PgBouncer, transaction-mode) — uygulama/loader trafiği buna gider.
-  **Migration pooled üzerinden koşmaz** (`prepared statement "s0" already
-  exists`, kayıp `SET` session-state, `SQLSTATE 25006` riski). Neon skill'in
-  önerisi: `DATABASE_URL`'i geçici olarak değiştirmek yerine Prisma'ya **direct**
-  URL'yi ayrı ver (`directUrl`) — uygulama trafiği havuzlamayı korusun. Mevcut
-  sözleşmede migration `DATABASE_URL="$DATABASE_URL_UNPOOLED"` ile override
-  ediliyor; bu çalışır ama havuzu yalnız migration boyunca kaybettirir.
+- **Pooled/direct ayrımı (Neon sözleşmesi) — Prisma 7'de `directUrl` YOK.**
+  `DATABASE_URL` pooled'dır (PgBouncer, transaction-mode) — uygulama/loader
+  trafiği buna gider. **Migration havuzda koşmaz** (`prepared statement "s0"
+already exists`, kaybolan `SET` session-state, `SQLSTATE 25006`; hiçbiri
+  nedeni söylemez). Neon skill'in Prisma 5/6 için verdiği öneri — "URL'yi
+  `directUrl` ile ayrı ver" — **bu projede imkânsız**, ölçüldü (prisma 7.10.0):
+
+  ```
+  error: The datasource property `directUrl` is no longer supported in schema
+  files. Move connection URLs to `prisma.config.ts`.   [P1012]
+  ```
+
+  `@prisma/config` 7.10.0 `Datasource` tipi de yalnız `{ url, shadowDatabaseUrl }`
+  taşıyor. **Gerçek çözüm: ayrım iki farklı yerde, iki farklı URL ile kurulur.**
+
+  | Yer                | Okuyan                                         | URL                              | Neden                              |
+  | ------------------ | ---------------------------------------------- | -------------------------------- | ---------------------------------- |
+  | `prisma.config.ts` | **yalnız Prisma CLI** (migrate/db pull/studio) | `DATABASE_URL_UNPOOLED` (direct) | havuzda migration bozulur          |
+  | `scripts/load.ts`  | **çalışma zamanı** (adapter'ı kendi kurar)     | `DATABASE_URL` (pooled)          | uygulama trafiği her zaman havuzda |
+
+  Config sırası `unpooled ?? pooled`; ikisi de varsa direct kazanır, havuz
+  migration boyunca "geçici olarak değiştirilmez" — hiç devreye girmez.
+  Yalnız havuz varsa config **uyarır** (sessiz düşüş, kırılmayı beklemez):
+  `[neon] DATABASE_URL_UNPOOLED yok — ...`. Hiçbiri yoksa `neon env pull` yönlendirmeli hata verir.
+
+  Ölçüldü: `DATABASE_URL` geçerli bir havuz, `DATABASE_URL_UNPOOLED` ise
+  kasıtlı olarak bilinmeyen bir host iken Prisma CLI **direct** host'a gitti
+  (`Can't reach ... ep-also-invalid-direct.invalid`) — yani config gerçekten
+  seçimini uyguluyor; negatif kontrol (yalnız havuz) havuz host'una gitti.
+  Kapı: `_calisma/CIKTI/test_trend_db_connection.py` (9 test) bu sözleşmeyi
+  statik olarak kilitler.
+
 - Loader her satırın SHA-256'sını `source_row_sha256`'a basar → aynı kaynak
   tekrar yüklenirse upsert no-op (idempotent).
 - Şema Prisma 7 sözleşmesindedir: URL `prisma.config.ts`'te, generator

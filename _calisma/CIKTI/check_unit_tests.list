@@ -141,6 +141,7 @@ test_test_coverage_report.py
 test_texlive_determinism_hook.py
 test_texlive_determinism_id_residual.py
 test_texlive_repro_documented.py
+test_trend_db_connection.py
 test_trend_db_contract.py
 test_trend_record_pr_contract.py
 test_trend_schedule_paths.py
