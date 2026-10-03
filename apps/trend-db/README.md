@@ -62,6 +62,35 @@ repo'ya alınmadan hiçbir migration komutu çalıştırma.
 `trend_runs`'ın 42 kolonu `prisma/schema.prisma` ile **birebir** uyuşuyor; sürüklenme
 migration geçmişinde, kolonlarda değil.
 
+#### `trend_runs_daily` NEDEN `schema.prisma`'da değil (ölçüldü)
+
+Tablo **primary key içermiyor** — 9 kolonun tamamı nullable, hiçbir constraint ve
+indeks yok. Prisma her modelin en az bir required benzersiz alan istediği için
+tabloyu temsil EDEMİYOR (ölçülen hata: `P1012 — Each model must have at least one
+unique criteria that has only required fields`). Aynı sebeple Prisma'nın
+`migrate diff` çıktısına da girmiyor. Yani bu tablo **bilinçli olarak Prisma
+dışında, elle yönetilen** bir nesnedir; `schema.prisma`'ya model olarak eklenemez.
+
+Sonuç: RLS, GRANT'ler ve `trend_runs_daily` canlıda yaşar ama Prisma onları
+göremez. Gerçek şemanın tek güvenilir kopyası **`prisma/live-backup-2026-10-03.sql`**
+dosyasıdır (aşağıda).
+
+### Yedek: `prisma/live-backup-2026-10-03.sql` (2026-10-03)
+
+Kayıp migration geçmişi onarılmadan önce alınmış **geri dönüş noktası**. İçerir:
+`trend_runs` (42 kolon + 6 indeks), `trend_runs_daily` (elle, bkz. yukarıdaki
+gerekçe), RLS + politika, 5 GRANT ve **checksum'leriyle 3 migration kaydı**.
+
+Gerçekten geri yüklendiği **ölçüldü**: atılabilir bir branch'in `public` şeması
+silindi, dosya uygulandı, sonuç `main` ile karşılaştırıldı — 3 tablo, 42/9 kolon,
+6 indeks, RLS açık, 1 politika, 3 migration kaydı, 5 GRANT: **birebir aynı**.
+(İlk deneme `_prisma_migrations` tablosu olmadığı için 42P01 ile düştü; Prisma bu
+defter tablosunu introspeksiyondan daşıyor — düzeltildi.) Branch silindi, `main`
+dokunulmadan kaldı (269/3/3/1/5).
+
+> Yedek **veri içermez** (269 + 3 satır yok) ve **rol parolalarını içermez**;
+> amaç yapı + migration geçmişi kurtarmasıdır.
+
 ### Düzeltme: kapılar "credentialsuz" değil, "secret'sız" (2026-10-03)
 
 Eski durum satırı `prisma validate` + `prisma generate`'ı *credentialsuz* kapı olarak
