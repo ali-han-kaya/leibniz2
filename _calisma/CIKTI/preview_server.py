@@ -1060,9 +1060,17 @@ def _finalize_run(stdout, stderr, rc, duration, data, verify_dir=None):
 
     z3_passed, z3_failed = _parse_z3_counts(stderr)
     lean_ok, lean_detail = _parse_lean_result(stderr)
-    precommit_hooks = _parse_precommit_hooks(stderr)
-    # Fallback: CI'da stderr pre-commit çıktısı üretir, yerel run'larda boş
-    # olabilir. PRECOMMIT_RAPORU.json sidecar'ından okumayı dene.
+    # pre-commit hook sonuçlarını İKİ kaynaktan oku: önce stderr, sonra
+    # stdout. Ölçüldü 2026-10-02 (bu dosya, yerel venv + `pre_commit run
+    # --all-files`): 52 hook satırının TAMAMI stdout'ta, stderr 0 bayt —
+    # hook'lar başarısız olsa bile stderr boş kalıyor. Yalnız stderr'a
+    # bakan bu yol "⏳ hook verisi bekleniyor…" panelinde takılıyordu.
+    # Aynı dosyanın _refresh_precommit_hooks_bg'si zaten
+    # `result.stderr or result.stdout` kullanıyordu; iki yolun
+    # eşleşmemesi bu paneli tek başına bozuyordu.
+    precommit_hooks = _parse_precommit_hooks(stderr) or _parse_precommit_hooks(stdout)
+    # Fallback: PRECOMMIT_RAPORU.json sidecar'ı yoksa stdout da sessizse
+    # panel yine takılır — ama bu kez nedeni açıktır (sidecar yok).
     if not precommit_hooks and verify_dir:
         for candidate in (
             os.path.join(verify_dir, "logs", "PRECOMMIT_RAPORU.json"),

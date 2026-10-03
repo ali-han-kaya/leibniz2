@@ -239,6 +239,11 @@ HOOK_COVERAGE = {
         "test_sync_lifecycle.py",
         "test_k6_determ_canonical.py",
         "test_check_prettier_format.py",
+        "test_design_token_contrast.py",
+        "test_security_cron_schedule.py",
+        "test_trend_schedule_paths.py",
+        "test_precommit_hooks_source.py",
+        "test_a11y_settle_contract.py",
     ],
 }
 
@@ -251,6 +256,8 @@ CI_JOB_COVERAGE = {
     ],
     "preview-reload-smoke": ["test_preview_reload_smoke.py"],
     "a11y-gate": ["test_a11y_gate.py"],
+    # make accept (hash ledger) — epoch ihracı + CI-linux/yerel kayıtları
+    "texlive-accept": ["test_id_residual_acceptance_doc.py"],
     "dashboard-smoke": ["test_dashboard_playwright_smoke.py"],
     "daemon-http": ["test_daemon_http.py"],
     "plist-check": ["test_plist_gate_exit.py", "test_gen_plist_golden.py"],
