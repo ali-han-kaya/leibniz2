@@ -4,10 +4,12 @@
   "incomplete": "report-only",
   "pages": [
     {
-      "path": "/preview.html"
+      "path": "/preview.html",
+      "settle": { "attribute": "scan-ready", "timeout_ms": 45000 }
     },
     {
-      "path": "/guide.html"
+      "path": "/guide.html",
+      "settle": null
     }
   ],
   "allowlist": [

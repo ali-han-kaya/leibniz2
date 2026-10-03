@@ -3048,6 +3048,53 @@ jobs:
       - name: Install Chromium
         run: playwright install --with-deps chromium
 
+      # OLCU 2026-10-03: bu job temiz clone'da history.jsonl YOKKEN
+      # basliyordu; pano trend yuzeyi hic cizilmiyor ve kapida taramiyor.
+      # Yerel Chromium olcumu (kapinin o anki davranisi vs. fetch cozulunun
+      # ardindan): #trend <text> node 0 -> 14, #trend-count "" -> "(4 run)",
+      # axe color-contrast 36 -> 43 node, trend'e ait node 0 -> 6. Yani 6
+      # GERCEK node kapidan gorusuyordu.
+      #
+      # IKI KOSUL BIRLIKTE gerekiyor:
+      #   1) tohumlama (bu adim) - aksi halde yuzey BOS,
+      #   2) hazir isareti (a11y_gate_config.json settle) - aksi halde kapi
+      #      `load` aninda tarar ve fetch'ler cozulmedigi icin ayni bosluk
+      #      korunur (Tohumlama TEK BASINA yetmez, olcum ustte).
+      #
+      # settle.timeout_ms = 45000 OLCUMDEN CIKTI, tahminden degil. Yerel
+      # Chromium olcumu (2026-10-03): sunucu her endpoint'i 1-4 ms'de
+      # yanitliyor (curl ve sunucu-i-tarafi zaman damgasi ile dogrulandi),
+      # ama tarayici bazi yanitlari ~26 sn gecikmeli goruyor; kuyruktaki
+      # TUM istekler ayni anda (25.6-27.2 sn) aciliyor. 15 sn bu yuzden
+      # yetersiz kaliyordu: isaret 15.0 sn'de FAIL veriyordu. 45 sn = olculen
+      # kotu durumun ~1.65 kati. Bu bir ASIRI GEcikme payi, gevseme degil:
+      # isaret hic gelmezse kapi yine 45 sn'de FAIL verir (fail-closed),
+      # yani fazla beklemek yalnizca YANLIS FAIL'i pahalilastirir, yanlis
+      # PASS'i mumkun kilmaz.
+      #
+      # Not: bu gecikme tarayici/ortam kaynakli, sunucu kaynakli DEGIL
+      # (LOCK, service worker, SSE, backlog, verify CPU yuku tek tek
+      # olculup elendi). Sebebi kapida aranmadi: o job'daki Linux runner
+      # farkli ortamdir.
+      #
+      # Isaretin kendisi sayacla uretilir ve `finally` ile kapatilir: render
+      # fonksiyonlarindan biri istisna atarsa (DOM elemani yok) hem eski
+      # then hem eski catch yolu atiyor, sayac 1'de asili kaliyor ve isaret
+      # hic yanmiyordu. Mutasyon kaniti: ayni kirik DOM'da eski kod
+      # pending=1/isaret yok, yeni kod pending=0/isaret var.
+      #
+      # Bu bir SAHTE VERI ureticisidir, olcum degil: amaci kapinin dolu
+      # yuzeyi taradigini kanitlamak. Gercek kosumun gecmisi (run-history
+      # artifact'i) BILEREK kullanilmaz: capraz-job artifact bagimliligi
+      # kapiyi kirilgan yapar. Uretici deterministiktir (saat/rastgelelik
+      # yok) -> ayni --rows ayni bayt.
+      - name: Seed deterministic trend history for a11y surface
+        run: |
+          python3 _calisma/CIKTI/seed_a11y_history.py \
+            --out _calisma/CIKTI/history.jsonl \
+            --rows 8
+          test "$(wc -l < _calisma/CIKTI/history.jsonl)" -eq 8
+
       - name: Start preview_server (fresh-clone-http pattern)
         run: |
           # /design-system/tokens.css rotası PREVIEW_DIR icindeki

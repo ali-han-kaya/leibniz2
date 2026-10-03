@@ -87,11 +87,14 @@ def dead_port():
     yield "http://127.0.0.1:%d" % port
 
 
-def socket_probe_connect(base_url, axe_src, page_path):
+def socket_probe_connect(base_url, axe_src, page_path, settle=None):
     """Soket-kanıt sahte sürücü: gerçek TCP bağlantısı kurar (tarayıcı yok).
 
     Bağlantı kurulamazsa exception fırlatır (gerçek sunucu arızası simülasyonu);
-    kurulursa boş-tarama sonucu döndürür.
+    kurulursa boş-tarama sonucu döndürür. `settle` kabul edilir ama
+    UYGULANMAZ: bu sürücü hazır işaretini bekleyemez (tarayıcı yok); bekleme
+    davranışının kendisi test_a11y_settle_contract.py'de sahte sayfayla
+    ölçülür.
     """
     from urllib.parse import urlsplit
 
@@ -99,7 +102,7 @@ def socket_probe_connect(base_url, axe_src, page_path):
     s = socket.create_connection((u.hostname, u.port), timeout=2)
     s.close()
     return ({"violations": [], "incomplete": []},
-            base_url.rstrip("/") + page_path)
+            base_url.rstrip("/") + page_path, None)
 
 
 # ------------------------------------------------------------- saf eşikleme
@@ -297,9 +300,9 @@ class MultiPageTests(unittest.TestCase):
     def ok_connect(self, results=None):
         payload = results if results is not None else {"violations": [], "incomplete": []}
 
-        def connect(base_url, axe_src, page_path):
+        def connect(base_url, axe_src, page_path, settle=None):
             self.scanned.append(page_path)
-            return payload, base_url + page_path
+            return payload, base_url + page_path, None
         return connect
 
     # -- kapsam -----------------------------------------------------------
@@ -320,11 +323,12 @@ class MultiPageTests(unittest.TestCase):
 
     def test_page_load_error_fails_closed(self):
         """404 sayfa kapiyi dusurur: sessizce atlanan sayfa olmaz."""
-        def connect(base_url, axe_src, page_path):
+        def connect(base_url, axe_src, page_path, settle=None):
             self.scanned.append(page_path)
             if page_path == "/guide.html":
                 raise a11y_gate.PageLoadError("%s → HTTP 404" % page_path)
-            return {"violations": [], "incomplete": []}, base_url + page_path
+            return ({"violations": [], "incomplete": []},
+                    base_url + page_path, None)
 
         cfg = self.cfg([{"path": "/preview.html"}, {"path": "/guide.html"}])
         rc, report, out = self.run_gate(cfg, connect)
@@ -509,7 +513,7 @@ class HttpStatusFailClosedTests(unittest.TestCase):
 
     def test_ok_status_scans_and_scans_the_requested_path(self):
         with FakePlaywrightPatch(200):
-            results, page_url = a11y_gate.playwright_connect(
+            results, page_url, _settle = a11y_gate.playwright_connect(
                 "http://127.0.0.1:1", "axe-src", "/guide.html")
         self.assertEqual(page_url, "http://127.0.0.1:1/guide.html")
         self.assertEqual(results, {"violations": [], "incomplete": []})
@@ -597,7 +601,8 @@ class PageConfigValidationTests(unittest.TestCase):
 # KAPSAM:anahtarlar birebir (EKLEME de SILMA da kirmizi), tip kapali kume,
 # ve asagidaki butunluk esitsizligi.
 REPORT_KEYS = {"base_url", "config", "pages", "violations", "summary", "error"}
-PAGE_KEYS = {"path", "url", "verdict", "error", "violations", "summary", "raw"}
+PAGE_KEYS = {"path", "url", "verdict", "error", "violations", "summary",
+             "raw", "settle"}
 SUMMARY_KEYS = {
     "blocking", "warn", "allowlisted", "incomplete", "incomplete_allowlisted",
 }
@@ -639,8 +644,8 @@ class ArtifactSchemaContractTests(unittest.TestCase):
         with open(cfg_path, "w", encoding="utf-8") as f:
             json.dump(cfg, f)
 
-        def fake_connect(base_url, axe_src, page_path):
-            return axe_results, base_url.rstrip("/") + page_path
+        def fake_connect(base_url, axe_src, page_path, settle=None):
+            return axe_results, base_url.rstrip("/") + page_path, None
 
         buf = io.StringIO()
         with mock.patch.object(a11y_gate, "collect", fake_connect):
@@ -932,7 +937,7 @@ class GateContractTests(unittest.TestCase):
     def test_checksum_mismatch_fails_without_scan(self):
         called = []
 
-        def must_not_scan(base_url, axe_src, page_path):
+        def must_not_scan(base_url, axe_src, page_path, settle=None):
             called.append(True)
             raise AssertionError("checksum uyuşmazlığında taranmamalı")
 
@@ -958,7 +963,7 @@ class GateContractTests(unittest.TestCase):
         self.assertIn("eksik anahtar", report["error"])
 
     def test_missing_playwright_is_exit_2(self):
-        def no_playwright(base_url, axe_src, page_path):
+        def no_playwright(base_url, axe_src, page_path, settle=None):
             raise ImportError("playwright")
 
         rc, out, _ = self.run_gate(["--base-url", "http://127.0.0.1:1"], connect=no_playwright)
@@ -967,9 +972,9 @@ class GateContractTests(unittest.TestCase):
         self.assertIn("playwright", out)
 
     def test_blocking_violation_report_shape(self):
-        def scan(base_url, axe_src, page_path):
+        def scan(base_url, axe_src, page_path, settle=None):
             return ({"violations": [axe_v("color-contrast", "serious", nodes=[node(["#x"])])],
-                     "incomplete": []}, base_url + page_path)
+                     "incomplete": []}, base_url + page_path, None)
 
         cfg = os.path.join(self.tmp.name, "one_page.json")
         with open(cfg, "w", encoding="utf-8") as f:
@@ -989,8 +994,9 @@ class GateContractTests(unittest.TestCase):
         with open(cfg, "w", encoding="utf-8") as f:
             json.dump({**base_cfg(), "allowlist": [{"rule": "r1", "reason": "kayitli borc"}]}, f)
 
-        def scan(base_url, axe_src, page_path):
-            return ({"violations": [axe_v("r1", "serious")], "incomplete": []}, base_url + page_path)
+        def scan(base_url, axe_src, page_path, settle=None):
+            return ({"violations": [axe_v("r1", "serious")],
+                     "incomplete": []}, base_url + page_path, None)
 
         rc, out, report = self.run_gate(["--base-url", "http://127.0.0.1:1", "--config", cfg], connect=scan)
         self.assertEqual(rc, 0)

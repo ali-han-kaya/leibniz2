@@ -1584,24 +1584,59 @@ function renderDeterminismTrend(rows) {
   }
 }
 
+// ─── A11Y SETTLE SÖZLEŞMESİ ──────────────────────────────────────────────
+// Tarama öncesi "pano hazır" işareti. ÖLÇÜM 2026-10-03 (yerel Chromium):
+// a11y kapısı `load` anında axe.run() çağırıyor, fetch'ler çözülmemişti;
+// #trend 0 <text> node veriyordu (axe 36 node / trend 0), çözülünce 43 node
+// / trend 6 — yani 6 gerçek node kapıdan görünmezdi. `networkidle` çözüm
+// değil: iki EventSource açık kaldığı için 2 s'de TIMEOUT veriyordu.
+// İşaret yalnız İLK sakinleşmede yazılır: sonraki fetch'ler (canlı run
+// akışı) işareti geri almaz — kapı ilk durumun yüzeyini tarar.
+// Sıfır tabanlı sayaç: fazla end çağrısı "hazır" işaretini yanlışlıkla
+// erken yakmaz.
+//
+// sayaç `finally` ile kapatılır, `then`/`catch` gövdesinin sonuyla DEĞİL:
+// render fonksiyonlarından biri istisna atarsa (DOM elemanı yok, veri
+// şekli bozuk) `catch` de aynı render'ı tekrar çağırıp yine atar ve
+// sayaç 1'de asılı kalır -> işaret hiç yanmaz -> kapı taradığı yüzeyi
+// göstermeden FAIL verir. `finally` bu hata sınıfının tamamını kapatır:
+// render patlasa da sayaç düşer, yüzey yine de taranır.
+let _scanPending = 0;
+
+function scanPendingBegin() {
+  _scanPending += 1;
+}
+
+function scanPendingEnd() {
+  _scanPending = Math.max(0, _scanPending - 1);
+  document.body.dataset.scanPending = String(_scanPending);
+  if (_scanPending === 0) {
+    document.body.dataset.scanReady = "1";
+  }
+}
+
 function loadDeterminismTrend() {
+  scanPendingBegin();
   fetch("/api/determinism-trend")
     .then((r) => r.json())
     .then((data) => {
       const rows = Array.isArray(data) ? data : (data && data.rows) || [];
       renderDeterminismTrend(rows);
     })
-    .catch(() => renderDeterminismTrend([]));
+    .catch(() => renderDeterminismTrend([]))
+    .finally(() => scanPendingEnd());
 }
 
 function loadOverrideTrend() {
+  scanPendingBegin();
   fetch("/api/override-trend")
     .then((r) => r.json())
     .then((data) => {
       const rows = Array.isArray(data) ? data : (data && data.rows) || [];
       renderOverrideTrend(rows);
     })
-    .catch(() => renderOverrideTrend([]));
+    .catch(() => renderOverrideTrend([]))
+    .finally(() => scanPendingEnd());
 }
 
 function loadTrend(force) {
@@ -1617,6 +1652,7 @@ function loadTrend(force) {
     return;
   }
   _trendFetchAt = now;
+  scanPendingBegin();
   fetch("/api/trend")
     .then((r) => r.json())
     .then((data) => {
@@ -1634,8 +1670,10 @@ function loadTrend(force) {
       if (dbRows.length) renderRefsTrendDurationBudget(dbRows);
     })
     .catch((err) => {
-      $("trend-legend").textContent = "trend yüklenemedi: " + err;
-    });
+      const el = $("trend-legend");
+      if (el) el.textContent = "trend yüklenemedi: " + err;
+    })
+    .finally(() => scanPendingEnd());
 }
 
 // ---- Budget breakdown (ratios + type_bytes) ----

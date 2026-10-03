@@ -26,13 +26,22 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import sys
+import time
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 VALID_TOP_KEYS = {"blocking", "warn", "incomplete", "pages", "allowlist"}
 VALID_ENTRY_KEYS = {"rule", "reason", "target", "page"}
-VALID_PAGE_KEYS = {"path", "blocking", "warn", "incomplete"}
+VALID_PAGE_KEYS = {"path", "blocking", "warn", "incomplete", "settle"}
+# settle: sayfa "tarama hazır" sözleşmesi. attribute = <body> üzerindeki
+# data-* işaretinin adı (preview.js scanPendingEnd yazar), timeout_ms = bu
+# işaretin gelmesi için beklenecek en fazla süre. Sessiz varsayılan YOK:
+# süre config'in sözleşmesidir, kodda gömülü değil.
+VALID_SETTLE_KEYS = {"attribute", "timeout_ms"}
+SETTLE_ATTRIBUTE_RE = re.compile(r"^[a-z][a-z0-9-]*$")
+MAX_SETTLE_TIMEOUT_MS = 600000
 INCOMPLETE_POLICY = "report-only"
 
 
@@ -95,6 +104,31 @@ def load_config(path):
         if "incomplete" in page and page["incomplete"] != INCOMPLETE_POLICY:
             raise ValueError("config: pages[%d].incomplete yalnız '%s' olabilir"
                              % (i, INCOMPLETE_POLICY))
+
+        # --- settle: veri çeken yüzeyler ancak "hazır" işareti sonrası taranır
+        # OLÇÜM 2026-10-03: kapı `load` anında axe.run() çağırıyordu; fetch'ler
+        # çözülmediği için #trend 0 <text> node veriyordu (axe 36 node / trend 0),
+        # çözülünce 43 node / trend 6. Yani 6 gerçek node görünmezdi.
+        # networkidle çözüm değil: preview.js iki EventSource'u açık tutuyor
+        # (ölçüm: 2 s'de TIMEOUT).
+        if "settle" in page and page["settle"] is not None:
+            settle = page["settle"]
+            if not isinstance(settle, dict):
+                raise ValueError("config: pages[%d].settle sözlük ya da null olmalı" % i)
+            unknown = set(settle) - VALID_SETTLE_KEYS
+            if unknown:
+                raise ValueError("config: pages[%d].settle bilinmeyen anahtar: %s"
+                                 % (i, sorted(unknown)))
+            attribute = settle.get("attribute")
+            if not isinstance(attribute, str) or not SETTLE_ATTRIBUTE_RE.match(attribute):
+                raise ValueError("config: pages[%d].settle.attribute gövde data-* "
+                                 "özniteliği adı olmalı (ör. scan-ready): %r" % (i, attribute))
+            timeout = settle.get("timeout_ms")
+            if isinstance(timeout, bool) or not isinstance(timeout, int):
+                raise ValueError("config: pages[%d].settle.timeout_ms tam sayı olmalı" % i)
+            if timeout <= 0 or timeout > MAX_SETTLE_TIMEOUT_MS:
+                raise ValueError("config: pages[%d].settle.timeout_ms 1..%d aralığında olmalı"
+                                 % (i, MAX_SETTLE_TIMEOUT_MS))
 
     if not isinstance(cfg["allowlist"], list):
         raise ValueError("config: allowlist liste olmalı")
@@ -182,6 +216,20 @@ def thresholds_for(cfg, page_path):
     raise ValueError("config: sayfa taranmıyor: %s" % page_path)
 
 
+def settle_for(cfg, page_path):
+    """Sayfanın settle sözleşmesi; yoksa None (bekleme yok).
+
+    Taranmayan sayfa → ValueError: `thresholds_for` ile aynı fail-closed
+    mantık — kapsam dışı sayfaya sessizce "bekleme yok" demek, kapının
+    yüzeyi görmediğini gizlerdi.
+    """
+    for page in cfg["pages"]:
+        if page["path"] == page_path:
+            settle = page.get("settle")
+            return dict(settle) if isinstance(settle, dict) else None
+    raise ValueError("config: sayfa taranmıyor: %s" % page_path)
+
+
 def _summary(rows):
     """level → sayım. Her level'in ES ADIYLA kovası var (sözleşme testi sabitler)."""
     return {
@@ -260,17 +308,36 @@ def decide_verdict(rows):
 
 # ----------------------------------------------------------------- scan
 
-def playwright_connect(base_url, axe_src, page_path):
+def settle_selector(settle):
+    """Settle sözleşmesi → CSS bekçi seçicisi.
+
+    Gövde üzerindeki data-* işareti: `{"attribute": "scan-ready"}` →
+    `body[data-scan-ready=\'1\']`. `wait_for_selector` bunu görünür olmasa da
+    eşleşme varlığına bakar — hazır işareti CSS ile gizlenmiş olsa bile
+    kapı yine doğru anda tarar.
+    """
+    return "body[data-%s='1']" % settle["attribute"]
+
+
+def playwright_connect(base_url, axe_src, page_path, settle=None):
     """Varsayılan sürücü: Playwright sync API. Lazy import — yoksa ImportError.
 
     Fail-closed: HTTP >= 400 veya yanıt yoksa PageLoadError fırlatır. Playwright
     `goto` 404'te exception atmaz (status yalnız response nesnesinde), dolayısıyla
     status kontrolü kapının kendisinde olmalı — aksi halde 404 sayfasının boş
     `<body>`'si taranır ve kapı "0 ihlal" diye yeşil görünür.
+
+    `settle` verilirse, `load` SONRASI hazır işareti beklenir (`settle_for`).
+    İşaret gelmezse PageLoadError → o sayfa FAIL: veri çekmeyen sayfa
+    taranmamış sayılır, "0 ihlal" yeşili gösterilmez.
+
+    Dönüş: (axe sonuçları, taranan URL, settle ölçümü | None). Ölçüm rapora
+    girer — "kapı ne kadar bekledi" gözlenebilir olur (sessiz bekleme değil).
     """
     from playwright.sync_api import sync_playwright  # noqa: PLC0415 (lazy)
 
     page_url = base_url.rstrip("/") + page_path
+    measurement = None
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         try:
@@ -282,18 +349,33 @@ def playwright_connect(base_url, axe_src, page_path):
             status = getattr(response, "status", None) if response is not None else None
             if status is None or status >= 400:
                 raise PageLoadError("%s → HTTP %s" % (page_path, status))
+            if settle:
+                selector = settle_selector(settle)
+                started = time.monotonic()
+                try:
+                    page.wait_for_selector(selector, timeout=settle["timeout_ms"])
+                except Exception as exc:  # noqa: BLE001 — fail-closed: her arıza FAIL
+                    waited_ms = int((time.monotonic() - started) * 1000)
+                    raise PageLoadError(
+                        "%s → hazır işareti gelmedi (%s, %d ms beklendi, "
+                        "a11y_gate_config.json settle.timeout_ms): %s"
+                        % (page_path, settle["attribute"], waited_ms, exc))
+                waited_ms = int((time.monotonic() - started) * 1000)
+                measurement = {"attribute": settle["attribute"],
+                               "timeout_ms": settle["timeout_ms"],
+                               "waited_ms": waited_ms}
             page.add_script_tag(content=axe_src)
             results = page.evaluate("() => axe.run()")
         finally:
             browser.close()
-    return results, page_url
+    return results, page_url, measurement
 
 
-def collect(base_url, axe_src, page_path, connect=None):
+def collect(base_url, axe_src, page_path, connect=None, settle=None):
     """Sürücüyü çalıştır; exception'ı yukarı fırlatır (main FAIL'e çevirir)."""
     if connect is None:
         connect = playwright_connect
-    return connect(base_url, axe_src, page_path)
+    return connect(base_url, axe_src, page_path, settle=settle)
 
 
 # ----------------------------------------------------------------- main
@@ -352,9 +434,12 @@ def main(argv=None):
         path = page["path"]
         entry = {"path": path, "url": args.base_url.rstrip("/") + path,
                  "verdict": None, "error": None,
-                 "violations": [], "summary": {}, "raw": None}
+                 "violations": [], "summary": {}, "raw": None,
+                 "settle": None}
+        settle = settle_for(cfg, path)
         try:
-            results, _url = collect(args.base_url, axe_src, path)
+            results, _url, settle_info = collect(args.base_url, axe_src, path,
+                                                 settle=settle)
         except ImportError:
             print("playwright kurulu değil: pip install playwright && playwright install chromium")
             return 2
@@ -369,6 +454,7 @@ def main(argv=None):
             report["pages"].append(entry)
             continue
 
+        entry["settle"] = settle_info
         if not isinstance(results, dict):
             entry["error"] = "axe.run() sözlük döndürmedi (fail-closed)"
             entry["verdict"] = "FAIL"
