@@ -533,6 +533,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-03 | refactor | (precommit) hook kayitlarini precommit_log seam'ine tasi | [`5ee5555`](https://github.com/ali-han-kaya/leibniz2/commit/5ee5555) |
 | 2026-10-03 | fix | (tex) 7 overfull hbox sifirlandi - kernel + sutun butcesi | [`5a1a981`](https://github.com/ali-han-kaya/leibniz2/commit/5a1a981) |
 | 2026-10-03 | fix | (k9) lean twin identity kapisi - iki kopya ayrismasin | [`e27118f`](https://github.com/ali-han-kaya/leibniz2/commit/e27118f) |
+| 2026-10-03 | docs | (trend-db) canli Neon durumu - roller + kapi iddiasi | [`60f002e`](https://github.com/ali-han-kaya/leibniz2/commit/60f002e) |
 
 ### Regresyon notları
 
