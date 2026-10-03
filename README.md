@@ -538,6 +538,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-03 | feat | (trend-db) canli sema yedegi + migration gecmisi geri donus noktasi | [`287ccdf`](https://github.com/ali-han-kaya/leibniz2/commit/287ccdf) |
 | 2026-10-03 | fix | (trend-db) Neon pooled/direct ayrimini Prisma 7'ye uyarla | [`923bfdc`](https://github.com/ali-han-kaya/leibniz2/commit/923bfdc) |
 | 2026-10-03 | fix | (dashboard-next) olu importleri sil, noUnused bayraklarini ac | [`097b683`](https://github.com/ali-han-kaya/leibniz2/commit/097b683) |
+| 2026-10-03 | fix | (trend-db) load.ts girdi dogrulama + graceful shutdown | [`ca118f9`](https://github.com/ali-han-kaya/leibniz2/commit/ca118f9) |
 
 ### Regresyon notları
 
