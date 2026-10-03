@@ -528,6 +528,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-03 | fix | (verify) kabul kapisi + 3 dashboard yuzeyi kontratla kilitlendi | [`aa474c3`](https://github.com/ali-han-kaya/leibniz2/commit/aa474c3) |
 | 2026-10-03 | fix | (a11y) kapi dolu trend yuzeyini tarasin, sayac finally ile kapansin | [`15abb40`](https://github.com/ali-han-kaya/leibniz2/commit/15abb40) |
 | 2026-10-03 | fix | (a11y) bekci varlik arasin, tavan olcume gore 180 sn | [`0715dfa`](https://github.com/ali-han-kaya/leibniz2/commit/0715dfa) |
+| 2026-10-03 | chore | (changelog) 0715dfa satirini tabloya ekle | [`4a68420`](https://github.com/ali-han-kaya/leibniz2/commit/4a68420) |
 
 ### Regresyon notları
 

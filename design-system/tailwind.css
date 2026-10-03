@@ -68,10 +68,14 @@
   --backdrop-lightbox: rgba(0, 0, 0, .9);
 
   /* ── font ── */
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI",
-               Helvetica, Arial, sans-serif;
+  /* Üç ses (2026-10-03): kâtip (dense UI), tel (makine çıktısı), hüküm.
+     Hepsi bu makinede ÖLÇÜLEREK mevcut bulundu (canvas genişlik ölçümü):
+     Iowan Old Style, Palatino, Georgia, Avenir Next, Menlo. */
+  --font-sans: "Avenir Next", Avenir, "Helvetica Neue", -apple-system,
+               BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: "SF Mono", Menlo, Consolas, monospace;
-  --font-verdict: Georgia, "Iowan Old Style", "Times New Roman", serif; /* karar/hüküm sesi — açık-tema kimliğinden */
+  --font-verdict: "Iowan Old Style", Palatino, Georgia,
+                  "Times New Roman", serif; /* karar/hüküm sesi — Georgia'nın daha kitabi kardeşi */
 
   --text-2xs: 10px;
   --text-xs: 11px;
@@ -140,10 +144,12 @@
 :root[data-theme="light"] {
   --bg: #f3efe7;
   --fg: #292722;
-  /* #70695f -> #655e56 (2026-10-02): acik tema koyu yuzeylerinde AA altinda
-     kaldi (en kotu 4.17:1). OLCUM + gerekce: design-system/tokens.css ayni
-     satiri ve yorumu tasir (check_tokens.py kural 6: buradaki :root, tokens.css
-     :root ile birebir esit olmak zorunda). */
+  /* #70695f -> #655e56 (2026-10-02): #70695f, acik temanin KOYU yuzeylerinde
+     AA 4.5:1'in ALTINDA kaldi — surface-raised/code-bg #e9e1d3 uzerinde 4.17:1,
+     header gradient ucu #ede5d8 uzerinde 4.34:1. #live-status (.ts, 11px) tam
+     da bu header gradyaninda oturuyor. OLCUM (WCAG 2.x relative luminance,
+     en kotu yuzeye karsi): #655e56 -> en kotu 4.92:1 (+0.42 pay).
+     Doygunluk/aile korunur; koyu tema --muted'i degismedi (5.26:1 gecerli). */
   --muted: #655e56;
   --fg-dimmed: #56504a;      /* light: #f3efe7 bg üzerinde AA 4.5:1+ */
   --accent: #8b5e2b;
