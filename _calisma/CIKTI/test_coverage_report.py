@@ -244,6 +244,7 @@ HOOK_COVERAGE = {
         "test_trend_schedule_paths.py",
         "test_precommit_hooks_source.py",
         "test_a11y_settle_contract.py",
+        "test_stream_render_coalescing.py",
     ],
 }
 

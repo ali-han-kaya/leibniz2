@@ -1327,6 +1327,24 @@ function connectStream() {
       st.textContent = "bağlı";
     } catch (_) {}
   });
+  // ─── Akış render'ı: satır-başına değil, kare-başına ─────────────────────
+  // ÖLÇÜM 2026-10-03 (CDP CPU profili): replay 14.591 satır geldiğinde her
+  // satırda 600 satırlık HTML bloğunu yeniden kurmak ana thread'i 88.0 sn
+  // kilitliyordu (profilde `push` 62.4 sn self-time = 311.849/321.552 örnek;
+  // maxGap 88.000 ms -> coalescing ile 103 ms). rAF DEĞİL setTimeout: rAF
+  // gizli sekmede duraklatılır ve akış boş kalırdı; setTimeout ~16 ms'de
+  // birleştirir. `streamLines` tek doğruluk kaynağı kalır — kırpma ve scroll
+  // davranışı değişmez.
+  let _streamRenderPending = false;
+  const scheduleStreamRender = () => {
+    if (_streamRenderPending) return;
+    _streamRenderPending = true;
+    setTimeout(() => {
+      _streamRenderPending = false;
+      el.innerHTML = streamLines.join("\n");
+      el.scrollTop = el.scrollHeight;
+    }, 16);
+  };
   const push = (tag, line, replay) => {
     scanZ3(line);
     scanBudget(line);
@@ -1335,8 +1353,7 @@ function connectStream() {
     streamLines.push(mark + arrow + colorizeLine(line));
     if (streamLines.length > STREAM_MAX)
       streamLines = streamLines.slice(-STREAM_MAX);
-    el.innerHTML = streamLines.join("\n");
-    el.scrollTop = el.scrollHeight;
+    scheduleStreamRender();
     // P0/P1 satırlarını canlı findings paneline ekle
     if (
       /^\[P0\]/.test(line) ||
@@ -1414,8 +1431,7 @@ function connectStream() {
         dur +
         "</span>"
     );
-    el.innerHTML = streamLines.join("\n");
-    el.scrollTop = el.scrollHeight;
+    scheduleStreamRender();
   });
   runStreamES.addEventListener("stdout", (e) => {
     try {
@@ -1441,16 +1457,14 @@ function connectStream() {
     }
     if (streamLines.length > STREAM_MAX)
       streamLines = streamLines.slice(-STREAM_MAX);
-    el.innerHTML = streamLines.join("\n");
-    el.scrollTop = el.scrollHeight;
+    scheduleStreamRender();
   });
   runStreamES.addEventListener("end", (e) => {
     st.textContent = "run bitti";
     streamLines.push('<span class="muted">── run sonu ──</span>');
     if (streamLines.length > STREAM_MAX)
       streamLines = streamLines.slice(-STREAM_MAX);
-    el.innerHTML = streamLines.join("\n");
-    el.scrollTop = el.scrollHeight;
+    scheduleStreamRender();
   });
   runStreamES.onerror = () => {
     st.textContent = "bağlantı koptu";
