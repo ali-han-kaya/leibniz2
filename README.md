@@ -536,6 +536,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-03 | docs | (trend-db) canli Neon durumu - roller + kapi iddiasi | [`60f002e`](https://github.com/ali-han-kaya/leibniz2/commit/60f002e) |
 | 2026-10-03 | docs | (trend-db) TEHLIKE - migrate dev veri siler, gecmis repo'da kayip | [`448cbc1`](https://github.com/ali-han-kaya/leibniz2/commit/448cbc1) |
 | 2026-10-03 | feat | (trend-db) canli sema yedegi + migration gecmisi geri donus noktasi | [`287ccdf`](https://github.com/ali-han-kaya/leibniz2/commit/287ccdf) |
+| 2026-10-03 | fix | (trend-db) Neon pooled/direct ayrimini Prisma 7'ye uyarla | [`923bfdc`](https://github.com/ali-han-kaya/leibniz2/commit/923bfdc) |
 
 ### Regresyon notları
 

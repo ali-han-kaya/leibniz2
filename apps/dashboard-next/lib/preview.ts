@@ -32,7 +32,7 @@ export type TrendRow = {
   z3_total?: number;
 };
 
-async function getJson<T>(path: string, revalidate = 0): Promise<T> {
+async function getJson<T>(path: string): Promise<T> {
   // Dynamic istek: pano gerçek-zamanlı verdict gösterir (cache: no-store).
   const res = await fetch(`${API_BASE}${path}`, { cache: 'no-store' });
   if (!res.ok) {
