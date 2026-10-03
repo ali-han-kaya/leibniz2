@@ -212,8 +212,8 @@ class TestMakefileTexliveBehavioral(unittest.TestCase):
 )
 class TestAcceptLedgerRealEngines(unittest.TestCase):
     """Faz 3 gerçek-yüzey: accept, check'in kanonik hash'ini kabul
-    raporunun hash geçiş defterinde bulmalı (defter satırı 4: SDE=0,
-    3-geçiş kanonik 544516b0…)."""
+    raporunun hash geçiş defterinde bulmalı (defter satırı 9: SDE=0,
+    3-geçiş kanonik 5899be5d…)."""
 
     def test_accept_pins_canonical_from_ledger(self):
         with tempfile.TemporaryDirectory() as td:
@@ -226,7 +226,9 @@ class TestAcceptLedgerRealEngines(unittest.TestCase):
             r = subprocess.run(cmd, capture_output=True, text=True, cwd=td)
         out = r.stdout + r.stderr
         self.assertEqual(r.returncode, 0, out)
-        self.assertIn("544516b0", out, "defter satırı 4'ün kanonik öneki")
+        # Kanonik hash KAYNAK-TÜREVLİDİR: kaynak değişince satır 9'a geçilir
+        # (defter satır 4 = kaynak öncesi ölçüm, kasıtlı olarak korunur).
+        self.assertIn("5899be5d", out, "defter satırı 9'un kanonik öneki")
         self.assertIn("KABUL", out)
 
 

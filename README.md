@@ -530,6 +530,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-03 | fix | (a11y) bekci varlik arasin, tavan olcume gore 180 sn | [`0715dfa`](https://github.com/ali-han-kaya/leibniz2/commit/0715dfa) |
 | 2026-10-03 | chore | (changelog) 0715dfa satirini tabloya ekle | [`4a68420`](https://github.com/ali-han-kaya/leibniz2/commit/4a68420) |
 | 2026-10-03 | feat | (design) kanit sayfasi kimligi - kagit ve masa, iki materyal | [`6adf365`](https://github.com/ali-han-kaya/leibniz2/commit/6adf365) |
+| 2026-10-03 | refactor | (precommit) hook kayitlarini precommit_log seam'ine tasi | [`5ee5555`](https://github.com/ali-han-kaya/leibniz2/commit/5ee5555) |
 
 ### Regresyon notları
 

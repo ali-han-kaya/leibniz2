@@ -65,6 +65,29 @@ hiçbir fark gizlenmez).
 | 7 | pdfTeX 3.141592653-2.6 (TeX Live 2026/Homebrew, macOS) | 3 | **1786924800** (teslim sabiti) | koşum-başına değişken (`/ID`) | `10d44856ba56c6f7335b7ed048f83595eb298999744f0c26cec022d52227e2db` | `SOURCE_DATE_EPOCH=1786924800 make check` 2× bağımsız (2026-10-02) |
 | 8 | **CI-linux PİNLİ** pdfTeX 3.141592653-2.6-1.40.25 (TeX Live 2023/Debian, `ubuntu:24.04` **digest-pini**; apt `texlive-latex-base` + `texlive-latex-recommended` + `cm-super`; tectonic 0.17.0 musl **digest-pini** `8533d07f…`) | 3 | **1786924800** (teslim sabiti) | koşum-başına değişken (`/ID`) | `ca3c591805eff4cbae403a77cba9b8734bf9c23ed42e766b937207e36a159573` | CI vekili konteynerinde (tectonic kanonik hash birebir `ad8fca69…` = satır 1 → **vekil sadakati kanıtlandı**), `make accept` ×1 (2026-10-02) |
 
+### Satır 9–11: kaynak sürümü değişti (overfull hbox düzeltmesi, 2026-10-03)
+
+Satır 7 ve 8 **kaynak değişmeden önceki** `.tex`'i ölçer. 7 overfull
+hbox'un sıfırlanması için kaynak tipografik olarak düzeltildi
+(`\emergencystretch=1.5em`, `\allowbreak` kırılma noktaları, longtable
+sütun bütçesi); **hiçbir düzyazı değişmedi, sayfa sayısı 33'te kaldı.**
+Kanonik hash kaynak türevi olduğu için üç bağlamda da yeniden ölçüldü ve
+protokol gereği **yeni satır** açıldı (satır 7/8 silinmedi, üzerine yazılmadı):
+
+| # | Motor / sürüm | Geçiş | SDE | Ham (bilgi) | Kanonik (referans) | Ölçüm |
+|---|---|---|---|---|---|---|
+| 9 | pdfTeX 3.141592653-2.6 (TeX Live 2026/Homebrew, macOS) | 3 | 0 | koşum-başına değişken (`/ID`) | `5899be5d4fd20480b43492bc0900b09d255f53b5a4f9731ed079b7f12028c4a8` | `SOURCE_DATE_EPOCH=0 make check` 2× bağımsız, run1==run2, `verdict=PASS` (2026-10-03) |
+| 10 | pdfTeX 3.141592653-2.6 (TeX Live 2026/Homebrew, macOS) | 3 | **1786924800** (teslim sabiti) | koşum-başına değişken (`/ID`) | `73a3d417d0811314d60bf6e0428bb54e485e339bc31f606760e2de51269e15a2` | `SOURCE_DATE_EPOCH=1786924800 make check` 2× bağımsız, run1==run2, `verdict=PASS` (2026-10-03) |
+| 11 | **CI-linux PİNLİ** pdfTeX 3.141592653-2.6-1.40.25 (TeX Live 2023/Debian, `ubuntu@sha256:a853f94d…` **digest-pini**; satır 8 ile aynı apt paketleri + tectonic 0.17.0 musl digest-pini `8533d07f…`) | 3 | **1786924800** (teslim sabiti) | koşum-başına değişken (`/ID`) | `5c083474fbf14989ebb1736a6c0edecb1a4399740f4ae77989d6dc846d70a2c5` | CI vekili konteynerinde ölçüldü: `pdflatex --version` = `pdfTeX 3.141592653-2.6-1.40.25 (TeX Live 2023/Debian)`, `tectonic 0.17.0`; `make check` 2× bağımsız, run1==run2, `verdict=PASS` (2026-10-03) |
+
+Satır 8 → 11 karşılaştırması: motor **aynı** (1.40.25, aynı digest-pini,
+aynı paketler), yalnız kaynak değişti; kanonik hash `ca3c5918…` → `5c083474…`.
+Bu, hash kaynak-türevli olduğunun ve motor sürümü kaymasının (satır 6→8)
+ayrı bir olgu olduğunun doğrulamasıdır.
+
+Satır 5 **değişmedi**: teslim artefaktı PDF'i (tectonic ile derlenmiş,
+`74b2cdbd…` ham) dokunulmadı; K6-DETERM'in okuduğu referans hâlâ `d4f67e39…`.
+
 ### Satır 6 artık üretilmiyor — ölçüm (2026-10-02)
 
 Satır 6 (`092154a0…`), oluşturulduğu gün 5 bağımsız koşumda birebir
