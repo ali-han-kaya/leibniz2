@@ -108,6 +108,18 @@ function json(
 }
 
 async function main() {
+  // Girdi dogrulama (skill nodejs-backend-patterns: "Validate input").
+  // Ölçülen: eksik dosyada ham ENOENT yığını + `at Object.readFileSync`
+  // basılıyordu — kullanıcı ne yapacağını göremiyordu.
+  if (!fs.existsSync(sourcePath)) {
+    throw new Error(
+      `kaynak bulunamadı: ${sourcePath}\n` +
+        `  · varsayılan yol TCC-mirror: ${DEFAULT_SOURCE}\n` +
+        `  · preview_server çalışıyor mu: python3 _calisma/CIKTI/preview_server.py ` +
+        `--preview-dir ${path.dirname(sourcePath)} --port 8000`
+    );
+  }
+
   const lines = fs
     .readFileSync(sourcePath, 'utf-8')
     .split('\n')
@@ -116,8 +128,20 @@ async function main() {
 
   let skipped = 0;
   const pending: TrendRunCreateManyInput[] = [];
-  for (const line of lines) {
-    const row: Row = JSON.parse(line);
+  // Bozuk satır TÜM yüklemeyi düşürüyordu ve hata hangi satır olduğunu
+  // söylemiyordu (ölçülen: "SyntaxError ... at position 45", satır no yok).
+  // Bozuk satırları fail-closed olarak TOPLANIR: sessizce atlamak bir koşumu
+  // sessizce kaybettirir (history.jsonl.sha256 sidecar'ı bunu yakalamaz),
+  // ama hepsini tek seferde, satır numarasıyla bildirmek eyleme dönüşür.
+  const parseErrors: string[] = [];
+  for (const [idx, line] of lines.entries()) {
+    let row: Row;
+    try {
+      row = JSON.parse(line) as Row;
+    } catch (e) {
+      parseErrors.push(`  satır ${idx + 1}: ${(e as Error).message}`);
+      continue;
+    }
     if (!row.ts || typeof row.verdict !== 'string') {
       skipped += 1;
       continue;
@@ -168,6 +192,18 @@ async function main() {
     };
     pending.push(data);
   }
+  // Fail-closed: bir satır bile bozuksa HİÇBİR kayıt yazılmaz. Bu denetim
+  // yazma döngüsünden ÖNCE olmalı — sonra olursa "kayıt yüklenmedi" der
+  // ama arada yazmış olur.
+  if (parseErrors.length > 0) {
+    throw new Error(
+      `${parseErrors.length} satır JSON olarak çözümlenemedi — hiçbir kayıt yüklenmedi:\n` +
+        parseErrors.slice(0, 10).join('\n') +
+        (parseErrors.length > 10
+          ? `\n  … ve ${parseErrors.length - 10} tane daha`
+          : '')
+    );
+  }
   // Tek createMany/dilim = tek round-trip (skill: data-batch-inserts,
   // 10-50x). skipDuplicates → ON CONFLICT DO NOTHING: aynı kaynak-tekrarı
   // (source_row_sha256) VE aynı ts çakışması sessizce atlanır.
@@ -186,8 +222,25 @@ async function main() {
   await prisma.$disconnect();
 }
 
+// Graceful shutdown (skill: "Handle graceful shutdown: clean up resources").
+// Ölçülen: SIGINT/SIGTERM'de bağlantı açık kalıyordu — pg havuzu sokete
+// düşmedi, Node süreç kapanışını zorladı.
+let shuttingDown = false;
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+  process.on(signal, () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.error(`\n${signal} alındı — bağlantı kapatılıyor…`);
+    prisma.$disconnect().finally(() => process.exit(1));
+  });
+}
+
 main().catch(async (e) => {
-  console.error(e);
+  // Ham yığın yerine mesaj: stack yalnız DEBUG_LOAD_STACK=1 istenirse.
+  console.error(e instanceof Error ? e.message : String(e));
+  if (process.env.DEBUG_LOAD_STACK === '1' && e instanceof Error) {
+    console.error(e.stack);
+  }
   await prisma.$disconnect();
   process.exit(1);
 });
