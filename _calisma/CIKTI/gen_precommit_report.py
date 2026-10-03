@@ -25,56 +25,16 @@ import datetime
 import json
 import os
 import pathlib
-import re
+import sys
 import tempfile
 
-STATUS_RE = re.compile(r"^(.*?)\.{4,}(Passed|Failed)\s*$", re.M)
-# Hook durum satırını izleyen öznitelik bloğu: "- hook id: check-python3-shell"
-_HOOK_ID_RE = re.compile(r"^-\s*hook\s+id:\s*(\S+)\s*$", re.M)
+_HERE = os.path.dirname(os.path.abspath(__file__))
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
+import precommit_log  # noqa: E402
 
-
-def parse_hooks(log_text):
-    """pre-commit verbose çıktısından hook sonuçlarını ayrıştır.
-
-    Her hook satırı 'Hook adı……………Passed|Failed' biçimindedir; Durum
-    satırını izleyen öznitelik bloğundaki `- hook id:` değeri de kaydedilir
-    (örn. display adı 'Block shell commands under shell: python3 {0}' iken
-    id 'check-python3-shell' — makine-okur kimlik, dashboard/tools için).
-    id bulunamazsa None (geriye uyumlu).
-    """
-    hooks = []
-    for m in STATUS_RE.finditer(log_text):
-        nxt = STATUS_RE.search(log_text, m.end())
-        seg = log_text[m.end():nxt.start() if nxt else len(log_text)]
-        idm = _HOOK_ID_RE.search(seg)
-        hooks.append({
-            "name": m.group(1).strip(),
-            "id": idm.group(1) if idm else None,
-            "status": m.group(2),
-        })
-    return hooks
-
-
-def parse_update_config(log_text):
-    """update-config hook'unun durumu + kendi çıktısı (denetim izi).
-
-    Hook satırı ('Sync config …Passed/Failed') ile bir SONRAKİ hook satırı
-    arasındaki satırlar o hook'un stdout/stderr çıktısıdır (verbose: true).
-    """
-    uc_status = None
-    uc_output = []
-    for m in STATUS_RE.finditer(log_text):
-        if "Sync config" in m.group(1) or "gen_config" in m.group(1):
-            uc_status = m.group(2)
-            nxt = STATUS_RE.search(log_text, m.end())
-            end = nxt.start() if nxt else len(log_text)
-            for line in log_text[m.end():end].splitlines():
-                s = line.strip()
-                if not s or s.startswith("- hook id:") or s.startswith("- duration:"):
-                    continue
-                uc_output.append(s)
-            break
-    return uc_status, uc_output
+# ayrıştırıcılar taşındı: precommit_log (hook raporu seam — tek kayıt şekli,
+# tek kaynak kuralı). Bu dosya artık yalnız rapor ÜRETİCİSİ adapterdir.
 
 
 def load_commit_msg(path="logs/commit_msg_findings.json"):
@@ -88,32 +48,15 @@ def load_commit_msg(path="logs/commit_msg_findings.json"):
         return None
 
 
-def parse_findings(log_text, uc_status, uc_output):
-    """P0/P1 bulgularını ayrıştır; update-config FAIL'i ayrı P1 bulgusu yapar."""
-    findings = []
-    for pri in ("P0", "P1"):
-        for m in re.finditer(rf"^\[{pri}\] (.+)$", log_text, re.M):
-            findings.append((pri, m.group(1).strip()))
-
-    # update-config FAIL → ayrı bir bulgu (CI'da drift/modifikasyon işareti).
-    if uc_status == "Failed":
-        detail = " | ".join(uc_output) if uc_output else "çıktı yok"
-        findings.append(("P1",
-                         f"update-config FAIL — config paket içeriğiyle "
-                         f"senkronlanamadı (CI'da drift/modifikasyon). "
-                         f"Çıktı: {detail}"))
-    return findings
-
-
 def build_data(log_text, exit_code, commit_msg=None):
     """Ayrıştırma sonucunu tek kaynak bir sözlüğe topla (MD + JSON ortak).
 
     commit_msg (check_commit_messages.py sidecar'ı) verilirse 'commit_msg'
     alanı olarak eklenir; None ise alan hiç yazılmaz (rapor geriye uyumlu).
     """
-    hooks = parse_hooks(log_text)
-    uc_status, uc_output = parse_update_config(log_text)
-    findings = parse_findings(log_text, uc_status, uc_output)
+    hooks = precommit_log.parse_hooks(log_text, source="log")
+    uc_status, uc_output = precommit_log.parse_update_config(log_text)
+    findings = precommit_log.parse_findings(log_text, uc_status, uc_output)
 
     now = datetime.datetime.utcnow().isoformat() + "Z"
     verdict = "PASS" if exit_code == 0 else "FAIL"

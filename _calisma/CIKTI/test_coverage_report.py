@@ -242,8 +242,8 @@ HOOK_COVERAGE = {
         "test_design_token_contrast.py",
         "test_security_cron_schedule.py",
         "test_trend_schedule_paths.py",
-        "test_precommit_hooks_source.py",
         "test_a11y_settle_contract.py",
+        "test_precommit_log.py",
     ],
 }
 

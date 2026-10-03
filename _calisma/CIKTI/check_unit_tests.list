@@ -99,7 +99,7 @@ test_pdf_source_freshness.py
 test_plist_check_workflow.py
 test_pptx_export.py
 test_precheck_advisory_contract.py
-test_precommit_hooks_source.py
+test_precommit_log.py
 test_preview_findings_panel.py
 test_preview_server.py
 test_preview_server_atomic.py
