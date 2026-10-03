@@ -18,6 +18,11 @@ NEDEN TOHUMLAMA TEK BASINA YETMEZ:
   fail-closed bekci (a11y_gate `settle`). Bu dosya yalnizca tohumlama
   yarisi; `--rows` >= 2 zorunlu (tek nokta cizgi degil).
 
+  Bekci suresi (`a11y_gate_config.json settle.timeout_ms`) OLCUMDEN gelir:
+  isaret iki modlu geliyor -- hizli ~75-130 ms, yavas 53.6-95.8 sn
+  (n=14, en kotu 95.8 sn; gecikme ONCEDEN VAR, HEAD ile birebir ayni).
+  Bu yuzden tavan 180 sn; ayrinti workflow yorumunda.
+
 BU BIR SAHTE VERI URETICISIDIR, OLCUM DEGILDIR: amaci kapinin dolu
 yuzeyi taradigini kanitlamak. Gercek kosumun gecmisi (run-history
 artifact'i) BILEREK KULLANILMAZ: capraz-job artifact bagimliligi kapiyi

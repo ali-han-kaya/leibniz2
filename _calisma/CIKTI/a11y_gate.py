@@ -312,9 +312,15 @@ def settle_selector(settle):
     """Settle sözleşmesi → CSS bekçi seçicisi.
 
     Gövde üzerindeki data-* işareti: `{"attribute": "scan-ready"}` →
-    `body[data-scan-ready=\'1\']`. `wait_for_selector` bunu görünür olmasa da
-    eşleşme varlığına bakar — hazır işareti CSS ile gizlenmiş olsa bile
-    kapı yine doğru anda tarar.
+    `body[data-scan-ready=\'1\']`.
+
+    ÖLÇÜM 2026-10-03: `wait_for_selector` VARSAYILAN OLARAK GÖRÜNÜRLÜK arar
+    (`state="visible"`). Gövde gizliyken işaret kurulmuş olsa bile bekleme
+    zaman aşımına düşüyordu — yani hazır sayfa yanlışlıkla FAIL ediyordu
+    (ölçüm: visibility:hidden + işaret VAR → default TIMEOUT 4008 ms,
+    `state="attached"` → OK 21 ms). Kapı yalnızca "işaret kuruldu mu" ile
+    ilgilenir; sayfanın o anda görünür olması gerekmez, bu yüzden
+    `state="attached"` AÇIKÇA verilir.
     """
     return "body[data-%s='1']" % settle["attribute"]
 
@@ -353,7 +359,10 @@ def playwright_connect(base_url, axe_src, page_path, settle=None):
                 selector = settle_selector(settle)
                 started = time.monotonic()
                 try:
-                    page.wait_for_selector(selector, timeout=settle["timeout_ms"])
+                    # state="attached": işaretin VARLIĞI ölçüt; gövde
+                    # gizliyken "visible" beklemek yanlış FAIL üretirdi.
+                    page.wait_for_selector(selector, state="attached",
+                                           timeout=settle["timeout_ms"])
                 except Exception as exc:  # noqa: BLE001 — fail-closed: her arıza FAIL
                     waited_ms = int((time.monotonic() - started) * 1000)
                     raise PageLoadError(

@@ -253,9 +253,14 @@ class _FakePage:
         self.wait_until = wait_until
         return _FakeResponse(self._status)
 
-    def wait_for_selector(self, selector, timeout=None, **_kw):
+    def wait_for_selector(self, selector, timeout=None, **kw):
         self.calls.append("wait_for_selector")
-        self.waits.append((selector, timeout))
+        # state KAYDEDILIR, yutulmaz: bu parametre yutuldugu icin
+        # "visible" varsayilaninin yanlis FAIL urettigi kusur testten
+        # kacmisti (olcum 2026-10-03). Sozlesme artik burada kilitli.
+        self.waits.append((selector, timeout, kw.get("state")))
+        self.states = getattr(self, "states", [])
+        self.states.append(kw.get("state"))
         if self._wait_raises is not None:
             raise self._wait_raises
 
@@ -329,7 +334,8 @@ class SettleGateBehaviourTests(unittest.TestCase):
             results, url, info = a11y_gate.playwright_connect(
                 "http://127.0.0.1:1", "axe", "/preview.html",
                 settle=self.SETTLE)
-        self.assertEqual(page.waits, [("body[data-scan-ready=\'1\']", 15000)])
+        self.assertEqual(page.waits,
+                         [("body[data-scan-ready=\'1\']", 15000, "attached")])
         self.assertEqual(url, "http://127.0.0.1:1/preview.html")
         self.assertEqual(results, {"violations": [], "incomplete": []})
         self.assertIsNotNone(info)
@@ -342,6 +348,23 @@ class SettleGateBehaviourTests(unittest.TestCase):
         self.assertEqual(page.calls,
                          ["goto", "wait_for_selector", "add_script_tag",
                           "evaluate"])
+
+    def test_wait_matches_attachment_not_visibility(self):
+        """Bekleme GÖRÜNÜRLÜK değil VARLIK ölçütü kullanmalı.
+
+        Playwright `wait_for_selector` varsayılanı `state="visible"`. Gövde
+        gizliyken (ör. bir tema/stil sayfayı gizledi) işaret kurulmuş olsa
+        bile bekleme zaman aşımına düşer ve kapı HAZIR sayfayı FAIL eder.
+        Ölçüm 2026-10-03: visibility:hidden + işaret VAR → default TIMEOUT
+        4008 ms; `state="attached"` → OK 21 ms.
+        """
+        page = _FakePage()
+        with _FakePlaywrightPatch(page):
+            a11y_gate.playwright_connect("http://127.0.0.1:1", "axe",
+                                        "/preview.html", settle=self.SETTLE)
+        self.assertEqual(page.states, ["attached"],
+                         "bekleme state='attached' ile yapilmali; "
+                         "varsayilan 'visible' yanlis FAIL uretir")
 
     def test_timeout_is_fail_closed(self):
         page = _FakePage(wait_raises=RuntimeError("Timeout 15000ms exceeded"))

@@ -5,7 +5,7 @@
   "pages": [
     {
       "path": "/preview.html",
-      "settle": { "attribute": "scan-ready", "timeout_ms": 45000 }
+      "settle": { "attribute": "scan-ready", "timeout_ms": 180000 }
     },
     {
       "path": "/guide.html",

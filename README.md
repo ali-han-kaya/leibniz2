@@ -526,6 +526,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-02 | docs | (audit) R6 turunu olcumle kapat - merge zinciri bitti | [`42b545a`](https://github.com/ali-han-kaya/leibniz2/commit/42b545a) |
 | 2026-10-02 | feat | (a11y) kapi iki yuzeye yay + sayfa-bazli esik + 44 ihlal | [`bcb963b`](https://github.com/ali-han-kaya/leibniz2/commit/bcb963b) |
 | 2026-10-03 | fix | (verify) kabul kapisi + 3 dashboard yuzeyi kontratla kilitlendi | [`aa474c3`](https://github.com/ali-han-kaya/leibniz2/commit/aa474c3) |
+| 2026-10-03 | fix | (a11y) kapi dolu trend yuzeyini tarasin, sayac finally ile kapansin | [`15abb40`](https://github.com/ali-han-kaya/leibniz2/commit/15abb40) |
 
 ### Regresyon notları
 
