@@ -543,6 +543,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-04 | other | verify: surface unregistered P0/P1 as an Other layer | [`35a7940`](https://github.com/ali-han-kaya/leibniz2/commit/35a7940) |
 | 2026-10-04 | refactor | (verify) klayers.json sozlesmesi tek module, verdict veride | [`7bb8319`](https://github.com/ali-han-kaya/leibniz2/commit/7bb8319) |
 | 2026-10-04 | fix | (verify) kapi rozet listesinde olmayan katmanlari gormuyordu | [`bba9387`](https://github.com/ali-han-kaya/leibniz2/commit/bba9387) |
+| 2026-10-04 | fix | (ci) check-unit-tests zincirine node adimi eklendi | [`0a7ea5e`](https://github.com/ali-han-kaya/leibniz2/commit/0a7ea5e) |
 
 ### Regresyon notları
 

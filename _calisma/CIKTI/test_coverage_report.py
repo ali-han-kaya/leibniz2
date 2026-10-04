@@ -253,6 +253,7 @@ HOOK_COVERAGE = {
         "test_design_token_collision.py",
         "test_klayers_contract.py",
         "test_budget_scan.js",
+        "test_api_method_matrix.py",
     ],
 }
 
