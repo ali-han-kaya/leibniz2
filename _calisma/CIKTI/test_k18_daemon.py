@@ -30,6 +30,7 @@ from unittest import mock
 HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
+import klayers_contract as kc  # noqa: E402
 import verify_delivery as vd  # noqa: E402
 
 
@@ -163,18 +164,18 @@ class TestK18Wiring(unittest.TestCase):
     """Katman numaralandırması + --full bağlantısı."""
 
     def test_layer_labels_renumbered(self):
-        self.assertIn("Daemon", vd.LAYER_LABELS["K18"])
-        self.assertIn("Launchctl", vd.LAYER_LABELS["K20"])
-        self.assertIn("Coq", vd.LAYER_LABELS["K19"])
+        self.assertIn("Daemon", kc.LAYER_LABELS["K18"])
+        self.assertIn("Launchctl", kc.LAYER_LABELS["K20"])
+        self.assertIn("Coq", kc.LAYER_LABELS["K19"])
 
     def test_optional_layer_getters(self):
         args = types.SimpleNamespace(check_daemon=False, check_launchd=False,
                                      coq_proof=False)
-        self.assertFalse(vd._OPTIONAL_LAYERS["K18"](args))
+        self.assertFalse(kc.OPTIONAL_LAYERS["K18"](args))
         args.check_daemon = True
-        self.assertTrue(vd._OPTIONAL_LAYERS["K18"](args))
+        self.assertTrue(kc.OPTIONAL_LAYERS["K18"](args))
         args.check_launchd = True
-        self.assertTrue(vd._OPTIONAL_LAYERS["K20"](args))
+        self.assertTrue(kc.OPTIONAL_LAYERS["K20"](args))
 
     def test_full_enables_daemon(self):
         args = types.SimpleNamespace(full=True)

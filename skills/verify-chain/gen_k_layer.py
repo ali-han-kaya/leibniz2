@@ -7,8 +7,8 @@ otomatikleştirir: verilen `--name` (flag) + `--label` ile bir SONRAKİ K
 numarasını LAYER_LABELS'ten türetir ve şu enjeksiyonları yapar:
 
   1. verify_delivery.py docstring katman tablosu (K{n} satırı)
-  2. LAYER_LABELS dict girişi            ("K{n}": "<label>")
-  3. _OPTIONAL_LAYERS getter'ı            ("K{n}": lambda a: a.<name>)
+  2. klayers_contract.py LAYER_LABELS girişi      ("K{n}": "<label>")
+  3. klayers_contract.py OPTIONAL_LAYERS getter'ı ("K{n}": lambda a: a.<name>)
   4. argparse --<name> bayrağı            (--full ile uyumlu help)
   5. apply_full_flags satırı             (args.<name> = True, --full ise)
   6. main() çağrı bloğu                   ([K{n}] <label> — print + report)
@@ -16,10 +16,16 @@ numarasını LAYER_LABELS'ten türetir ve şu enjeksiyonları yapar:
   8. SKILL.md K-layer map satırı         (katman haritası senkronu)
   9. test_<name>.py test şablonu         (exit contract + klayers wiring)
 
+HEDEF BÖLÜŞÜ: katman KAYITLARI (2-3) klayers_contract.py'ye yazılır —
+klayers.json sözleşmesinin sahibi orasıdır. Üretim/koşum kodu (1, 4-7)
+verify_delivery.py'de kalır. İki dosya da anchor'lı olduğu için bu ayrım
+zorunludur; yanlış dosyaya yazılan blok sessizce kaybolur.
+
 Güvenlik: yalnızca ANCHOR satırların SONRASINA ekler (deterministik);
 anchor yoksa dosyayı DEĞİŞTİRMEZ, hata basar (fail-closed). --dry-run hiçbir
-dosyaya dokunmaz, yapılacak enjeksiyonları önizler. K numarası LAYER_LABELS'teki
-en büyük sayının +1'i (tek kaynak); sayısal atlama yok.
+dosyaya dokunmaz, yapılacak enjeksiyonları önizler. K numarası
+klayers_contract.LAYER_LABELS'teki en büyük sayının +1'i (tek kaynak);
+sayısal atlama yok.
 
 Kullanım:
     python3 gen_k_layer.py --name check_demo --label "Demo katmanı" [--full] [--dry-run]
@@ -34,8 +40,13 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 VD_PATH = os.path.join(REPO_ROOT, "_calisma", "CIKTI", "verify_delivery.py")
+CONTRACT_PATH = os.path.join(REPO_ROOT, "_calisma", "CIKTI", "klayers_contract.py")
 SKILL_PATH = os.path.join(REPO_ROOT, "skills", "verify-chain", "SKILL.md")
 CIKTI = os.path.join(REPO_ROOT, "_calisma", "CIKTI")
+
+# Katman kayıtları klayers_contract.py'de yaşar (klayers.json sözleşmesinin
+# sahibi) — LAYER_LABELS / OPTIONAL_LAYERS blokları buraya yazılır.
+CONTRACT_BLOCKS = ("labels", "optional")
 
 LAYER_LABELS_RE = re.compile(r'"K(\d+)"\s*:')
 OPTIONAL_RE = re.compile(r'"K(\d+)"\s*:\s*lambda')
@@ -60,11 +71,13 @@ ANCHOR_CHECK_LAST = "    finally:\n        shutil.rmtree(tmp, ignore_errors=True
 ANCHOR_SKILL_LAST = "| K21 | SDE determinism guard"
 
 
-def next_k(text):
-    """LAYER_LABELS'teki en büyük K numarasının +1'ini bulur."""
-    nums = [int(m) for m in LAYER_LABELS_RE.findall(text)]
+def next_k(contract_text):
+    """LAYER_LABELS'teki en büyük K numarasının +1'ini bulur.
+
+    Beklenen girdi klayers_contract.py metnidir (kayıtların sahibi)."""
+    nums = [int(m) for m in LAYER_LABELS_RE.findall(contract_text)]
     if not nums:
-        raise SystemExit("LAYER_LABELS bulunamadı — verify_delivery.py yapısı değişmiş")
+        raise SystemExit("LAYER_LABELS bulunamadı — klayers_contract.py yapısı değişmiş")
     return max(nums) + 1
 
 
@@ -155,6 +168,7 @@ import unittest
 
 CIKTI = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, CIKTI)
+import klayers_contract as kc  # noqa: E402
 import verify_delivery as vd  # noqa: E402
 
 
@@ -173,11 +187,11 @@ def _ns(**kw):
 
 class Test{key}Wiring(unittest.TestCase):
     def test_layer_label(self):
-        self.assertEqual(vd.LAYER_LABELS["{key}"], "{label}")
+        self.assertEqual(kc.LAYER_LABELS["{key}"], "{label}")
 
     def test_optional_getter(self):
-        self.assertTrue(vd._OPTIONAL_LAYERS["{key}"](_ns(**{{"{fn}": True}})))
-        self.assertFalse(vd._OPTIONAL_LAYERS["{key}"](_ns()))
+        self.assertTrue(kc.OPTIONAL_LAYERS["{key}"](_ns(**{{"{fn}": True}})))
+        self.assertFalse(kc.OPTIONAL_LAYERS["{key}"](_ns()))
 
 {full_block}    def test_klayers_pass(self):
         self.assertEqual(vd.build_layers_summary(_ns(**{{"{fn}": True}}), [])
@@ -205,25 +219,32 @@ if __name__ == "__main__":
 '''
 
 
-def apply(blocks, vd_text, skill_text, dry_run):
+def apply(blocks, vd_text, contract_text, skill_text):
+    """Blokları hedef dosyalara enjekte et → (vd, contract, skill, log).
+
+    Anchor bulunamazsa blok ATLANIR ve log'a hedef dosyayı SAYARAK düşer;
+    dosya yine de yazılır (fail-closed: yarım katman sessizce kaybolmasın
+    diye çağıran `!! ` satırlarını görmek zorunda)."""
+    targets = {"klayers_contract.py": contract_text,
+               "verify_delivery.py": vd_text,
+               "SKILL.md": skill_text}
     changes = []
-    new_vd = vd_text
     for label, (anchor, block) in blocks.items():
         if label == "skill":
-            continue
-        if anchor not in new_vd:
-            changes.append(f"  !! {label}: ANCHOR bulunamadı — ATLANDI: {anchor!r}")
-            continue
-        new_vd = insert_after(new_vd, anchor, block)
-        changes.append(f"  + {label}: K-enjeksiyon OK")
-    if "skill" in blocks:
-        anchor, block = blocks["skill"]
-        if anchor in skill_text:
-            skill_text = insert_after(skill_text, anchor, block)
-            changes.append("  + skill: SKILL.md katman haritası OK")
+            target = "SKILL.md"
+        elif label in CONTRACT_BLOCKS:
+            target = "klayers_contract.py"
         else:
-            changes.append(f"  !! skill: ANCHOR bulunamadı — ATLANDI: {anchor!r}")
-    return new_vd, skill_text, changes
+            target = "verify_delivery.py"
+        text = targets[target]
+        if anchor not in text:
+            changes.append(f"  !! {label}: ANCHOR bulunamadı ({target}) — "
+                           f"ATLANDI: {anchor!r}")
+            continue
+        targets[target] = insert_after(text, anchor, block)
+        changes.append(f"  + {label}: K-enjeksiyon OK ({target})")
+    return (targets["verify_delivery.py"], targets["klayers_contract.py"],
+            targets["SKILL.md"], changes)
 
 
 def main(argv=None):
@@ -238,6 +259,7 @@ def main(argv=None):
     ap.add_argument("--dry-run", action="store_true",
                     help="hiçbir dosyaya dokunma; enjeksiyonları önizle")
     ap.add_argument("--vd-path", default=VD_PATH)
+    ap.add_argument("--contract-path", default=CONTRACT_PATH)
     ap.add_argument("--skill-path", default=SKILL_PATH)
     args = ap.parse_args(argv)
 
@@ -248,10 +270,12 @@ def main(argv=None):
 
     with open(args.vd_path, encoding="utf-8") as f:
         vd_text = f.read()
+    with open(args.contract_path, encoding="utf-8") as f:
+        contract_text = f.read()
     with open(args.skill_path, encoding="utf-8") as f:
         skill_text = f.read()
 
-    k = next_k(vd_text)
+    k = next_k(contract_text)
     blocks = build_blocks(k, args.name, args.label, args.full)
     if args.core:
         blocks = {l: b for l, b in blocks.items() if l in ("docstring", "labels")}
@@ -259,7 +283,8 @@ def main(argv=None):
     print(f"K{ k } ({args.label}) — name={args.name} "
           f"{'--full' if args.full else ('--core' if args.core else 'bağımsız')} "
           f"{'[DRY-RUN]' if args.dry_run else ''}")
-    new_vd, new_skill, changes = apply(blocks, vd_text, skill_text, args.dry_run)
+    new_vd, new_contract, new_skill, changes = apply(
+        blocks, vd_text, contract_text, skill_text)
     for c in changes:
         print(c)
 
@@ -279,11 +304,14 @@ def main(argv=None):
         return 0
     with open(args.vd_path, "w", encoding="utf-8") as f:
         f.write(new_vd)
+    with open(args.contract_path, "w", encoding="utf-8") as f:
+        f.write(new_contract)
     with open(args.skill_path, "w", encoding="utf-8") as f:
         f.write(new_skill)
     with open(tpl_path, "w", encoding="utf-8") as f:
         f.write(tpl)
-    print(f"  ✓ yazıldı: {args.vd_path}, {args.skill_path}, {tpl_path}")
+    print(f"  ✓ yazıldı: {args.vd_path}, {args.contract_path}, "
+          f"{args.skill_path}, {tpl_path}")
     return 0
 
 

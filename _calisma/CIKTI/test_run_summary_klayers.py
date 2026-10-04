@@ -11,6 +11,7 @@ import os
 import tempfile
 import unittest
 
+import klayers_contract as kc
 import run_summary_klayers as rsk
 
 
@@ -19,7 +20,7 @@ class TestStatus(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             p = os.path.join(d, "klayers.json")
             layers = {k: {"label": "X", "status": "PASS", "findings": []}
-                      for k in rsk.RENDER_LAYERS}
+                      for k in kc.RENDER_LAYERS}
             with open(p, "w") as f:
                 json.dump({"layers": layers}, f)
             self.assertEqual(rsk.status(p), "PASS")
@@ -28,7 +29,7 @@ class TestStatus(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             p = os.path.join(d, "klayers.json")
             layers = {k: {"label": "X", "status": "PASS", "findings": []}
-                      for k in rsk.RENDER_LAYERS}
+                      for k in kc.RENDER_LAYERS}
             layers["K4"] = {"label": "X", "status": "FAIL", "findings": []}
             with open(p, "w") as f:
                 json.dump({"layers": layers}, f)
@@ -38,11 +39,30 @@ class TestStatus(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             p = os.path.join(d, "klayers.json")
             layers = {k: {"label": "X", "status": "PASS", "findings": []}
-                      for k in rsk.RENDER_LAYERS}
+                      for k in kc.RENDER_LAYERS}
             layers["UNREGISTERED"] = {"status": "FAIL"}
             with open(p, "w") as f:
                 json.dump({"layers": layers}, f)
             self.assertEqual(rsk.status(p), "FAIL")
+
+    def test_malformed_unregistered_bucket_does_not_crash(self):
+        """ Bozik UNREGISTERED değeri raporun tamamını düşürmemeli.
+
+        status() consolidate_summary'ın BÖLÜM döngüsünde try/except'siz
+        çağrılır: burada AttributeError yükselirse panoya hiçbir bölüm
+        yazılmaz, yani TEK bir bozuk değer K0/bütçe/soy hattı raporunu da
+        götürür. Değer okunamıyorsa katmanların kendi durumu esas alınır.
+        """
+        for bad in (None, "FAIL", 7, []):
+            with tempfile.TemporaryDirectory() as d:
+                p = os.path.join(d, "klayers.json")
+                layers = {k: {"label": "X", "status": "PASS", "findings": []}
+                          for k in kc.RENDER_LAYERS}
+                layers["UNREGISTERED"] = bad
+                with open(p, "w") as f:
+                    json.dump({"layers": layers}, f)
+                self.assertEqual(rsk.status(p), "PASS",
+                                 f"UNREGISTERED={bad!r} panoyu düşürdü")
 
     def test_missing(self):
         self.assertEqual(rsk.status("nonexistent.json"), "MISSING")
@@ -58,7 +78,7 @@ class TestStatus(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             p = os.path.join(d, "klayers.json")
             layers = {k: {"label": "X", "status": "SKIP", "findings": []}
-                      for k in rsk.RENDER_LAYERS}
+                      for k in kc.RENDER_LAYERS}
             with open(p, "w") as f:
                 json.dump({"layers": layers}, f)
             self.assertEqual(rsk.status(p), "PASS")
@@ -92,19 +112,19 @@ class TestMain(unittest.TestCase):
                 "findings": findings or []}
 
     def test_all_pass_renders_ten_sections(self):
-        layers = {k: self._layer("PASS") for k in rsk.RENDER_LAYERS}
+        layers = {k: self._layer("PASS") for k in kc.RENDER_LAYERS}
         with tempfile.TemporaryDirectory() as d:
             p = self._write(d, layers)
             code, out = self._run(p)
         self.assertEqual(code, 0)
         # Her RENDER_LAYERS bölümü bir kez ve PASS rozetiyle (K1-K14 + K16;
         # K15 yerel-only olduğundan bilerek listede yok).
-        for k in rsk.RENDER_LAYERS:
+        for k in kc.RENDER_LAYERS:
             self.assertIn(f"## ✅ {k}", out)
-        self.assertEqual(out.count("PASS"), len(rsk.RENDER_LAYERS))
+        self.assertEqual(out.count("PASS"), len(kc.RENDER_LAYERS))
 
     def test_fail_renders_findings(self):
-        layers = {k: self._layer("PASS") for k in rsk.RENDER_LAYERS}
+        layers = {k: self._layer("PASS") for k in kc.RENDER_LAYERS}
         layers["K4"] = {"label": "Manifest 19/19", "status": "FAIL", "ran": True,
                         "findings": [
                             {"id": "K4-MANIFEST", "priority": "P0",
@@ -119,7 +139,7 @@ class TestMain(unittest.TestCase):
         self.assertIn("[P0] K4-MANIFEST: MD5 uyuşmuyor: x", out)
 
     def test_unregistered_findings_are_rendered(self):
-        layers = {k: self._layer("PASS") for k in rsk.RENDER_LAYERS}
+        layers = {k: self._layer("PASS") for k in kc.RENDER_LAYERS}
         layers["UNREGISTERED"] = {
             "label": "Unregistered findings", "status": "FAIL",
             "findings": [{"priority": "P0", "check": "LINEAGE-CUR",
@@ -132,7 +152,7 @@ class TestMain(unittest.TestCase):
         self.assertIn("- [P0] LINEAGE-CUR: generation drift", out)
 
     def test_skip_renders_na(self):
-        layers = {k: self._layer("PASS") for k in rsk.RENDER_LAYERS}
+        layers = {k: self._layer("PASS") for k in kc.RENDER_LAYERS}
         layers["K10"] = self._layer("SKIP")
         with tempfile.TemporaryDirectory() as d:
             p = self._write(d, layers)

@@ -158,6 +158,7 @@ import github_scripts_battery as _battery  # noqa: E402
 import check_lean_axioms as _lean_axioms  # noqa: E402
 import check_lean_statements as _lean_statements  # noqa: E402
 import pdf_id_canonical as _idcanon  # noqa: E402
+import klayers_contract as _klc  # noqa: E402
 
 _LAUNCHD_NODE_PATHS = _battery.NODE_KNOWN_PATHS
 _LAUNCHD_PDFINFO_PATHS = _battery.PDFINFO_KNOWN_PATHS
@@ -224,54 +225,15 @@ SCRIPTS = [
     ("qpdf_determinism_experiment.py", "qpdf_determinism_output.txt"),
 ]
 
-# ---- K-katman etiketleri (run summary + --klayers-out sidecar) ----
-# TEK KAYNAK: bu tablo, dosyanın başındaki docstring katman tablosuyla aynı
-# anlama gelir; yeni bir K katmanı eklenince İKİSİ birden güncellenmelidir.
-LAYER_LABELS = {
-    "K0": "Bayat zip taraması",
-    "K1": "Dış zip sidecar",
-    "K2": "Klasör checksum",
-    "K3": "İç zip sidecar",
-    "K4": "Manifest 19/19",
-    "K5": "Script byte-for-byte",
-    "K6": "İçerik (PDF + referans + skill reuse)",
-    "K7": "Hijyen (secret/artefakt)",
-    "K8": "Z3 sembolik ispat",
-    "K9": "Lean reduct-invariance + 8 teorem çekirdek",
-    "K10": "Manifest digest",
-    "K11": "Config drift",
-    "K12": "Plist şablon",
-    "K13": "Repro self-test",
-    "K14": "Cleanup kaydı",
-    "K15": "History sidecar",
-    "K16": "GScripts self-test",
-    "K17": "Mirror sync",
-    "K18": "Daemon HTTP smoke",
-    "K19": "Coq reduct-invariance (8 teorem)",
-    "K20": "Launchctl durum",
-    "K21": "SDE determinism guard",
-}
-
-# K0-K7 çekirdek katmanlar: --full olsun olmasın her run'da koşar.
-_CORE_LAYERS = frozenset({"K0", "K1", "K2", "K3", "K4", "K5", "K6", "K7"})
-
-# İsteğe bağlı katman → onu aktifleştiren bayrağın args üzerindeki getter'ı.
-_OPTIONAL_LAYERS = {
-    "K8": lambda a: a.symbolic_proof,
-    "K9": lambda a: a.lean_proof,
-    "K10": lambda a: bool(a.verify_manifest),
-    "K11": lambda a: a.check_config_drift,
-    "K12": lambda a: a.check_plist,
-    "K13": lambda a: a.check_repro_manifest,
-    "K14": lambda a: a.check_cleanup,
-    "K15": lambda a: bool(a.check_history),
-    "K16": lambda a: a.check_github_scripts,
-    "K17": lambda a: a.check_mirror,
-    "K18": lambda a: a.check_daemon,
-    "K19": lambda a: a.coq_proof,
-    "K20": lambda a: a.check_launchd,
-    "K21": lambda a: getattr(a, "check_sde", False),
-}
+# ---- K-katman kayıtları: TEK KAYNAK klayers_contract.py ----
+#
+# Katman kümesi, etiketleri, çekirdek/işteğe-bağlı ayrımı ve run summary'nin
+# gösterdiği alt küme artık SÖZLEŞMENİN sahibi olan klayers_contract.py'de
+# yaşıyor: klayers.json'u hem bu script üretir hem tüketiciler okur, dolayısıyla
+# sözlüğün kimde tanımlandığı iki tarafın da ortak sorusudur. Buradaki docstring
+# tablosu ise insan-okunur bir YANSIMADIR (LAYER_LABELS ile aynı anlam); ikisi
+# gen_k_layer.py tarafından birlikte güncellenir, test_m0_k_table_sync.py ve
+# test_skill_layer_sync.py çapraz denetler.
 
 
 def build_layers_summary(args, findings):
@@ -291,27 +253,27 @@ def build_layers_summary(args, findings):
         # insan-okunur etiket taşır ("K0 bayat zip") — ondan türetmek
         # gruplamayı bozardı (bulgular hiçbir katmana düşmez, hep PASS).
         key = f.get("id", "").split("-")[0] or f.get("check", "").split("-")[0]
-        if key in LAYER_LABELS:
+        if key in _klc.LAYER_LABELS:
             by_layer.setdefault(key, []).append(f)
-        elif f.get("priority") in ("P0", "P1"):
+        elif f.get("priority") in _klc.BLOCKING_PRIORITIES:
             unregistered.append(f)
     layers = {}
-    for layer in LAYER_LABELS:
-        if layer in _CORE_LAYERS:
+    for layer in _klc.LAYER_LABELS:
+        if layer in _klc.CORE_LAYERS:
             ran = True
         else:
-            getter = _OPTIONAL_LAYERS.get(layer)
+            getter = _klc.OPTIONAL_LAYERS.get(layer)
             ran = bool(getter(args)) if getter else False
         # Yalnızca P0/P1 fail-closed sayılır; INFO görünür ama katmanı FAIL
         # yapmaz (ör. --k0-toolkit-tolerant TOOLKIT zip'leri INFO olur).
         fl = [f for f in by_layer.get(layer, [])
-              if f.get("priority") in ("P0", "P1")]
+              if f.get("priority") in _klc.BLOCKING_PRIORITIES]
         status = "FAIL" if fl else ("PASS" if ran else "SKIP")
-        layers[layer] = {"label": LAYER_LABELS[layer], "status": status,
+        layers[layer] = {"label": _klc.LAYER_LABELS[layer], "status": status,
                          "ran": ran, "findings": fl}
     if unregistered:
-        layers["UNREGISTERED"] = {
-            "label": "Unregistered findings",
+        layers[_klc.OTHER_KEY] = {
+            "label": _klc.OTHER_LABEL,
             "status": "FAIL",
             "ran": True,
             "findings": unregistered,
@@ -5694,6 +5656,9 @@ def main():
     # halde gereksiz subprocess probe yapma (verify'yi hızlandır).
     hook_env = probe_tool_versions() if (args.json or args.history_out) else None
 
+    # K-katman özeti: hem --json çıktısı hem --klayers-out sidecar'ı bunu
+    # kullanır. İki kez hesaplamak iki temelli kaynak demekti.
+    klayers = build_layers_summary(args, findings)
     out = {
         "tool": "verify_delivery.py (Stoic-Hume V5 fail-closed CI)",
         "date": datetime.now(timezone.utc).isoformat(),
@@ -5722,9 +5687,14 @@ def main():
         "cleanup": cleanup_report,
         "history_sidecar": history_sidecar_report,
         # Per-katman PASS/FAIL/SKIP — dashboard'un "K1-K7" rozeti bunu
-        # gerçek veriden türetir (genel verdict değil); --klayers-out
-        # sidecar'ı ile aynı build_layers_summary kaynağı.
-        "layers": build_layers_summary(args, findings),
+        # gerçek veriden türetir (genel verdict değil).
+        "layers": klayers,
+        # Verdit BİR YERDE hesaplanır ve İKİ temelli taşır: bu --json
+        # çıktısı (preview_server verify'nin stdout'unu okur) ve aşağıdaki
+        # --klayers-out sidecar'ı. run_status yalnız sidecar'da olsaydı
+        # dashboard her run'da "K katmanları ⚠️" derdi — yeşil bir run'ı
+        # sarı gösteren yanıltıcı geri bildirim.
+        "run_status": _klc.run_verdict(klayers),
     }
 
     # ---- K-katman özeti sidecar (run summary için) ----
@@ -5733,10 +5703,13 @@ def main():
     # için run_summary_klayers.py tarafından okunur.
     if args.klayers_out:
         try:
-            klayers = build_layers_summary(args, findings)
             klayers_payload = json.dumps(
                 {"verdict": verdict,
                  "counts": {"P0": p0, "P1": p1},
+                 # Tek doğruluk kaynağı: tüketiciler bu alanı OKUR, kendi
+                 # katman listeleriyle yeniden hesaplamaz (bkz. VERDİTİN
+                 # SAHİBİ — klayers_contract.py).
+                 "run_status": _klc.run_verdict(klayers),
                  "layers": klayers},
                 indent=2, ensure_ascii=False)
             _write_atomic(args.klayers_out, klayers_payload)

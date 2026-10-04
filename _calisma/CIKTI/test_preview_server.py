@@ -1037,7 +1037,42 @@ class StatusBoardTests(unittest.TestCase):
             ps.LATEST.clear()
             ps.LATEST.update(self._latest_backup)
 
-    def test_all_pass(self):
+    def test_run_status_from_producer_wins(self):
+        """Verdict üreticiden gelir: dashboard kendi listesine bakmaz.
+
+        Önceden aynı sidecar için CI "FAIL" derken dashboard "PASS" diyordu:
+        kayıt dışı kova dashboard'un listesinde yoktu. Artık `run_status`
+        okunur.
+        """
+        import preview_server as ps
+        clean = {k: {"status": "PASS"} for k in
+                 ("K1", "K2", "K3", "K4", "K5", "K6", "K7",
+                  "K8", "K9", "K10", "K17")}
+        clean["UNREGISTERED"] = {"status": "FAIL"}
+        with ps.LOCK:
+            ps.LATEST.update({
+                "layers": clean, "run_status": "FAIL",
+                "p0": 0, "p1": 0, "budget_usd": 1.0, "lineage_ok": True})
+        self.assertIn("K katmanları 🔴", ps._compute_status_board())
+
+        # Üretici PASS dediğinde yeşil — yerel mantığa düşülmez.
+        with ps.LOCK:
+            ps.LATEST.update({"layers": clean, "run_status": "PASS"})
+        self.assertIn("K katmanları ✅", ps._compute_status_board())
+
+    def test_absent_run_status_is_unknown_not_guessed(self):
+        """Verdit yoksa ⚠️ — dashboard tahmin etmez, kendi listesine bakmaz."""
+        import preview_server as ps
+        layers = {k: {"status": "PASS"} for k in
+                  ("K1", "K2", "K8", "K9", "K10", "K17")}
+        layers["K10"] = {"status": "FAIL"}   # listede görünür ama karar değil
+        with ps.LOCK:
+            ps.LATEST.update({
+                "layers": layers, "run_status": None,
+                "p0": 0, "p1": 0, "budget_usd": 1.0, "lineage_ok": True})
+        self.assertIn("K katmanları ⚠️", ps._compute_status_board())
+
+    def test_one_fail(self):
         """Tüm alanlar PASS ise 5 ✅ üretmeli."""
         import preview_server as ps
         with ps.LOCK:
@@ -1048,6 +1083,7 @@ class StatusBoardTests(unittest.TestCase):
                             "K7": {"status": "PASS"},
                             "K8": {"status": "PASS"}, "K9": {"status": "PASS"},
                             "K10": {"status": "PASS"}},
+                "run_status": "PASS",
                 "p0": 0, "p1": 0, "budget_usd": 1.0, "lineage_ok": True,
             })
         board = ps._compute_status_board()

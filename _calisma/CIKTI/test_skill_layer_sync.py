@@ -25,6 +25,7 @@ import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+import klayers_contract as kc  # noqa: E402
 import verify_delivery as vd  # noqa: E402
 
 SKILL_MD = os.path.normpath(os.path.join(
@@ -77,7 +78,7 @@ class TestSkillLayerMapSync(unittest.TestCase):
     def test_skill_map_matches_layer_labels(self):
         """SKILL.md tablosundaki katman seti == LAYER_LABELS anahtarları."""
         skill_keys = set(self.rows)
-        code_keys = set(vd.LAYER_LABELS)
+        code_keys = set(kc.LAYER_LABELS)
         missing = skill_keys - code_keys  # skill'de var, kodda yok
         extra = code_keys - skill_keys    # kodda var, skill'de yok
         self.assertEqual(missing, set(),
@@ -87,7 +88,7 @@ class TestSkillLayerMapSync(unittest.TestCase):
 
     def test_layer_labels_numeric_order(self):
         """LAYER_LABELS sırası K0..K21 numerik olmalı (atlama yok)."""
-        nums = [int(k[1:]) for k in vd.LAYER_LABELS]
+        nums = [int(k[1:]) for k in kc.LAYER_LABELS]
         self.assertEqual(nums, sorted(nums), "LAYER_LABELS sırası bozuk")
         expected = list(range(nums[0], nums[-1] + 1))
         self.assertEqual(nums, expected,
@@ -98,7 +99,7 @@ class TestSkillLayerMapSync(unittest.TestCase):
         ns = vd.apply_full_flags(_full_test_args())
         mismatches = []
         for key, row in sorted(self.rows.items()):
-            getter = vd._OPTIONAL_LAYERS.get(key)
+            getter = kc.OPTIONAL_LAYERS.get(key)
             if getter is None:
                 continue  # çekirdek katmanlar (K0-K7) her zaman koşar
             try:
@@ -121,7 +122,7 @@ class TestSkillLayerMapSync(unittest.TestCase):
         DOI/URL denetimi `--check-references` bayrağını gerektirir — bu yüzden
         bayrak sütununda 'always' yerine `--check-references` taşır.
         """
-        for k in sorted(vd._CORE_LAYERS):
+        for k in sorted(kc.CORE_LAYERS):
             self.assertIn(k, self.rows, f"çekirdek katman SKILL.md'de yok: {k}")
             if k == "K6":
                 self.assertRegex(self.rows[k]["flag"], r"^`?--check-references",
@@ -132,7 +133,7 @@ class TestSkillLayerMapSync(unittest.TestCase):
 
     def test_optional_flags_have_skill_rows(self):
         """Her isteğe bağlı katmanın SKILL.md'de satırı ve bayrağı olmalı."""
-        for k, getter in sorted(vd._OPTIONAL_LAYERS.items()):
+        for k, getter in sorted(kc.OPTIONAL_LAYERS.items()):
             self.assertIn(k, self.rows, f"opsiyonel katman SKILL.md'de yok: {k}")
             flag = self.rows[k]["flag"]
             if flag == "always":

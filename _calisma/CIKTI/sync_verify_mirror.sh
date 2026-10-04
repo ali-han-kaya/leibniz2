@@ -85,6 +85,9 @@ FILES=(
   # Run-summary modülleri — K0-K13 ayrı-step sidecar özetleri + konsolidatör.
   # Dashboard durum-panosu/consolidate_summary.py bunları mirror'da okur;
   # mirror'da eksik kalırsa launchd rotasında panel boşalır.
+  # klayers_contract.py: run_summary_klayers.py'nin import ettiği sözleşme
+  # sahibi (katman kayıtları) — konsolidatör onu zincirle import eder.
+  "klayers_contract.py|klayers_contract.py"
   "run_summary_budget.py|run_summary_budget.py"
   "run_summary_changelog.py|run_summary_changelog.py"
   "run_summary_k0.py|run_summary_k0.py"

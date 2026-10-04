@@ -26,6 +26,7 @@ from unittest import mock
 CIKTI = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(CIKTI))
 
+import klayers_contract as kc  # noqa: E402
 import verify_delivery as vd  # noqa: E402
 
 
@@ -227,7 +228,7 @@ class TestK9Combined(unittest.TestCase):
         self.assertFalse(self._call_k9(False, None))
 
     def test_k9_layer_label_mentions_both_cores(self):
-        self.assertIn("8 teorem", vd.LAYER_LABELS["K9"])
+        self.assertIn("8 teorem", kc.LAYER_LABELS["K9"])
 
     def test_constants(self):
         self.assertEqual(vd.LEAN_TOOLCHAIN, "leanprover/lean4:v4.14.0")

@@ -240,6 +240,12 @@ function updateBudgetOverBanner() {
   const det = $("budget-over-detail");
   if (det) {
     det.style.display = "none"; // her güncellemede kapalı başla
+    // Zorlanmış kapanış erişilebilir durumu da sıfırlamalı: aria-expanded
+    // artık doğru düğme üzerinde, ama burada yalnız detay kapatılıyordu —
+    // kullanıcı açtıktan sonra bir snapshot gelirse düğme "expanded"
+    // diye duyurulurken detay kapalı kalıyordu.
+    const tog = $("budget-over-toggle");
+    if (tog) tog.setAttribute("aria-expanded", "false");
     const liveLine = liveOver
       ? "CANLI $" +
         budgetState.est.toFixed(2) +

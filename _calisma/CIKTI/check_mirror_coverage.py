@@ -25,9 +25,11 @@ RUNTIME_REQUIRED = (
 # determinism_trend_badge.py: /api/determinism-trend lazy import (guard
 # yok) — eksikse rota 500 döner. check_pattern_consistency.py: finalize
 # lazy import (guard'lu) — eksikse drift paneli sessizce boşalır.
+# klayers_contract.py: klayers.json sözleşmesinin sahibi. verify_delivery.py
+# ve run_summary_klayers.py import eder — eksikse ikisi de düşer.
 PREVIEW_RUNTIME = ("preview_server.py", "_daemonize.py", "preview_prestart.py", "sw.js",
                    "precommit_log.py", "determinism_trend_badge.py",
-                   "check_pattern_consistency.py")
+                   "check_pattern_consistency.py", "klayers_contract.py")
 GUIDE_REL = "docs/branch-protection-guide/guide.html"
 DOC_REL = "docs/HOOK_ENV_MATRIX.md"
 # design-system token sheet — preview.html /design-system/tokens.css import

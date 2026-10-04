@@ -142,6 +142,7 @@ LATEST = {
     "lean_override": None,      # K9 --lean-only override: {requested, ok} (run JSON'undan)
     "lean_source": None,        # K9 --lean-only kaynağı: "history"/"override"/None
     "layers": None,             # K0-K17 per-katman PASS/FAIL/SKIP (JSON'dan; dashboard "K1-K7" rozeti)
+    "run_status": None,         # Üreticinin verdict'i ("PASS"/"FAIL") — yüzeyler bunu okur
     "lineage_summary": None,    # soy hattı özeti: {ok, count, current_note, current_hash_prefix}
     "lineage_ok": None,          # skaler trend alanı (True/False/None)
     "lineage_count": None,       # skaler trend alanı (int/None)
@@ -334,16 +335,12 @@ def _compute_status_board():
     # 4. Soy hattı: lineage_summary.ok → PASS
     lin_ok = LATEST.get("lineage_ok")
 
-    # 5. K katmanları: K8-K20 (K8 Z3, K9 Lean, K10-K20)
-    ext = ["K8", "K9", "K10", "K11", "K12", "K13", "K14", "K16",
-           "K17", "K18", "K20"]
-    ext_statuses = [(ls.get(k) or {}).get("status") for k in ext]
-    if any(s == "FAIL" for s in ext_statuses):
-        kl_ok = False
-    elif any(s == "PASS" for s in ext_statuses):
-        kl_ok = True
-    else:
-        kl_ok = None
+    # 5. K katmanları — verdict doğrudan üreticiden gelir
+    #    (klayers_contract.run_verdict → sidecar run_status). Bu dashboard
+    #    KATMAN LİSTESİ TUTMAZ: listesinde kayıt dışı kova olmayınca aynı
+    #    sidecar için CI "FAIL" derken burada "PASS" basıyordu. Alan yoksa
+    #    bilinmiyor (❓) — tahmin etmektense bilinmeyeni göstermek.
+    kl_ok = {"PASS": True, "FAIL": False}.get(LATEST.get("run_status"))
 
     parts = [
         ("Pre-commit", pc_ok),
@@ -1136,6 +1133,9 @@ def _finalize_run(stdout, stderr, rc, duration, data, verify_dir=None):
             "z3_failed": z3_failed,
             "z3_total": z3_passed + z3_failed,
             "layers": data.get("layers"),
+            # Verdict üreticiden gelir (klayers_contract.run_verdict); yoksa
+            # _compute_status_board kendi listesine düşer.
+            "run_status": data.get("run_status"),
             # K9 Lean: son run'un gerçek sonucu (stderr [K9] satırından)
             "lean_ok": lean_ok,
             "lean_detail": lean_detail,

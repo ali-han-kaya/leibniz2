@@ -116,6 +116,24 @@ class TestBudgetOverBannerLogic(unittest.TestCase):
         self.assertIn('el.style.display = "none";', self.body)
         self.assertIn("return;", self.body)
 
+    def test_forced_collapse_resets_aria_expanded(self):
+        """Her güncellemede detay zorla kapanıyor → aria-expanded de sıfırlanmalı.
+
+        toggleBudgetOverDetail() artık durumu #budget-over-toggle üzerinde
+        tutuyor. updateBudgetOverBanner() her snapshot'ta detayı kapatıp
+        caret'i "▸" yapıyordu ama erişilebilir durum eski değerinde kalıyordu:
+        kullanıcı açmışsa bir sonraki güncellemeden sonra düğme "expanded"
+        diye duyurulurken detay kapalıydı.
+        """
+        self.assertIn(
+            'tog.setAttribute("aria-expanded", "false")', self.body,
+            "updateBudgetOverBanner zorlanmış kapanışta aria-expanded'ı "
+            "sıfırlamıyor — düğme 'expanded' diye duyurulurken detay kapalı.")
+        self.assertLess(
+            self.body.index('det.style.display = "none";'),
+            self.body.index('tog.setAttribute("aria-expanded", "false")'),
+            "aria-expanded sıfırlaması zorlanmış kapanıştan sonra olmalı.")
+
     def test_shows_block_with_prefix(self):
         self.assertIn('el.style.display = "block";', self.body)
         self.assertIn('"🔴 BÜTÇE AŞIMI — "', self.body)

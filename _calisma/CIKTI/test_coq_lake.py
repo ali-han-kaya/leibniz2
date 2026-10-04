@@ -23,6 +23,7 @@ from unittest import mock
 CIKTI = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(CIKTI))
 
+import klayers_contract as kc  # noqa: E402
 import verify_delivery as vd  # noqa: E402
 
 COQ_DIR = pathlib.Path(__file__).resolve().parent.parent / "coq_reduct"
@@ -187,7 +188,7 @@ class TestK19Combined(unittest.TestCase):
         self.assertFalse(self._call_k19(True, True, False))
 
     def test_layer_label_and_constants(self):
-        self.assertIn("Coq", vd.LAYER_LABELS["K19"])
+        self.assertIn("Coq", kc.LAYER_LABELS["K19"])
         self.assertTrue(vd.COQ_REDUCT_DIR)
         # coq-version dosyası gerçekten COQ_VERSION'ı taşıyor olmalı (tek kaynak).
         ver_file = COQ_DIR / "coq-version"

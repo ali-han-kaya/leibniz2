@@ -24,6 +24,7 @@ from unittest import mock
 
 CIKTI = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, CIKTI)
+import klayers_contract as kc  # noqa: E402
 import verify_delivery as vd  # noqa: E402
 
 ENTRIES = [(b"a.txt", b"hello\n"), (b"sub/b.txt", b"world\n")]
@@ -173,13 +174,13 @@ def _full_ns(**kw):
 
 class TestK21Wiring(unittest.TestCase):
     def test_layer_label(self):
-        self.assertEqual(vd.LAYER_LABELS["K21"], "SDE determinism guard")
+        self.assertEqual(kc.LAYER_LABELS["K21"], "SDE determinism guard")
 
     def test_optional_getter(self):
         ns = argparse.Namespace(check_sde=True)
-        self.assertTrue(vd._OPTIONAL_LAYERS["K21"](ns))
+        self.assertTrue(kc.OPTIONAL_LAYERS["K21"](ns))
         ns.check_sde = False
-        self.assertFalse(vd._OPTIONAL_LAYERS["K21"](ns))
+        self.assertFalse(kc.OPTIONAL_LAYERS["K21"](ns))
 
     def test_full_enables_k21(self):
         ns = argparse.Namespace(

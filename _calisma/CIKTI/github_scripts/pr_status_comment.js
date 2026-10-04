@@ -209,40 +209,49 @@ if (lineage) {
 }
 
 // ── K katmanları bölümü ──
+// Bu yüzeyin gösterdiği katmanlar — klayers_contract.RENDER_LAYERS ile aynı
+// alt küme, artı kayıt dışı P0/P1 kovası. Dosyada İKİ kez geçiyordu: (a) kapı
+// (hasKlayersFail — yorumun yazılıp yazılmayacağı) ve (b) rozet döngüsü. İki
+// liste ayrışınca kapı Other'ı görmez, döngü görürdü: kayıtsız bir P0 run'ı
+// düşürürken yorum hiç yazılmıyordu. Tek liste, iki okuyucu.
+const KLAYER_KEYS = [
+  'K1',
+  'K2',
+  'K3',
+  'K4',
+  'K5',
+  'K6',
+  'K7',
+  'K8',
+  'K9',
+  'K10',
+  'K11',
+  'K12',
+  'K13',
+  'K14',
+  'K16',
+  'K17',
+  // klayers_contract.OTHER_KEY — hiçbir K katmanına düşmeyen bulgular.
+  'UNREGISTERED',
+];
 const kLayerLines = [];
 let kLayerBadge;
 if (klayers && klayers.layers) {
   const layers = klayers.layers;
-  const layerKeys = [
-    'K1',
-    'K2',
-    'K3',
-    'K4',
-    'K5',
-    'K6',
-    'K7',
-    'K8',
-    'K9',
-    'K10',
-    'K11',
-    'K12',
-    'K13',
-    'K14',
-    'K16',
-    'K17',
-  ];
   let passCount = 0,
     failCount = 0,
     skipCount = 0;
   const failedLayers = [];
-  for (const key of layerKeys) {
+  for (const key of KLAYER_KEYS) {
     const lyr = layers[key];
     if (!lyr) continue;
     const s = lyr.status || 'SKIP';
     if (s === 'PASS') passCount++;
     else if (s === 'FAIL') {
       failCount++;
-      failedLayers.push(`${key}: ${lyr.label || '?'}`);
+      failedLayers.push(
+        `${key === 'UNREGISTERED' ? 'Other' : key}: ${lyr.label || '?'}`
+      );
     } else skipCount++;
   }
   if (failCount > 0) {
@@ -319,24 +328,7 @@ const hasK0Findings = k0 && (k0.count || 0) > 0;
 const hasLineageFail = lineage && !lineage.ok;
 let hasKlayersFail = false;
 if (klayers && klayers.layers) {
-  for (const key of [
-    'K1',
-    'K2',
-    'K3',
-    'K4',
-    'K5',
-    'K6',
-    'K7',
-    'K8',
-    'K9',
-    'K10',
-    'K11',
-    'K12',
-    'K13',
-    'K14',
-    'K16',
-    'K17',
-  ]) {
+  for (const key of KLAYER_KEYS) {
     const lyr = klayers.layers[key];
     if (lyr && lyr.status === 'FAIL') {
       hasKlayersFail = true;

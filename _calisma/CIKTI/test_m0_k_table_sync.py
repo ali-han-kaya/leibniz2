@@ -4,7 +4,7 @@
 
 _calisma/CIKTI/M0_TOOLKIT_DENETIM_RAPORU.md §6.2 "Katman tablosu" kendini
 "güncel fail-closed zincirini katman katman listeler" diye tanımlar;
-verify_delivery.py'deki LAYER_LABELS ise katman kümesinin TEK KAYNAĞIDIR
+klayers_contract.py'deki LAYER_LABELS ise katman kümesinin TEK KAYNAĞIDIR
 (verify-chain skill "Adding a new K-layer" adım 1: docstring tablosu +
 LAYER_LABELS birlikte güncellenir).
 
@@ -30,7 +30,7 @@ import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-import verify_delivery as vd  # noqa: E402
+import klayers_contract as kc  # noqa: E402
 
 M0_DOC = os.path.join(HERE, "M0_TOOLKIT_DENETIM_RAPORU.md")
 
@@ -48,7 +48,7 @@ def parse_k0_layers(doc_text):
 
 
 class TestM0KTableSync(unittest.TestCase):
-    """Gerçek M0 raporu K tablosu ↔ verify_delivery LAYER_LABELS çaprazı."""
+    """Gerçek M0 raporu K tablosu ↔ klayers_contract LAYER_LABELS çaprazı."""
 
     @classmethod
     def setUpClass(cls):
@@ -56,7 +56,7 @@ class TestM0KTableSync(unittest.TestCase):
             raise unittest.SkipTest(f"M0 raporu yok: {M0_DOC}")
         with open(M0_DOC, encoding="utf-8") as f:
             cls.doc_keys = parse_k0_layers(f.read())
-        cls.code_keys = list(vd.LAYER_LABELS)
+        cls.code_keys = list(kc.LAYER_LABELS)
 
     def test_doc_has_layer_table(self):
         self.assertTrue(self.doc_keys, "M0 raporunda K tablosu yok "

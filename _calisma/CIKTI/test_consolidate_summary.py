@@ -18,6 +18,7 @@ import unittest
 CIKTI = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(CIKTI))
 
+import klayers_contract as kc  # noqa: E402
 import consolidate_summary as cs  # noqa: E402
 
 
@@ -512,7 +513,7 @@ class TestSectionContentValidation(unittest.TestCase):
         self.assertEqual(code, 0)
         import run_summary_klayers as _kl
         last = -1
-        for key in _kl.RENDER_LAYERS:
+        for key in kc.RENDER_LAYERS:
             marker = f"## ✅ {key} " if key in ("K1",) else \
                 (f"## 🔴 {key} " if key == "K2" else
                  (f"## ⏭️ {key} " if key == "K3" else f"## ⏭️ {key}:"))

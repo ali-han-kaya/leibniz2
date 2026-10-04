@@ -251,6 +251,7 @@ HOOK_COVERAGE = {
         "test_preview_mirror_imports.py",
         "test_verdict_seal_css.py",
         "test_design_token_collision.py",
+        "test_klayers_contract.py",
     ],
 }
 

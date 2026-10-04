@@ -104,6 +104,41 @@ def _ctx(issue=1, run=42):
 SCENARIOS = [
     # ── pr_status_comment.js ────────────────────────────────────────────────
     (
+        "klayers: kayıtsız P0 → Other kovası kırmızı FAIL olarak sayılır",
+        "pr_status_comment.js",
+        {
+            "budget/index.json": json.dumps({
+                "runs": [{"source": "verify", "estimated_usd": 1.2,
+                          "limit": 30, "tokens_est": 400000}],
+                "method": "weighted"}),
+            "precommit_findings/PRECOMMIT_RAPORU.json": json.dumps({
+                "findings": [], "counts": {"hooks": 9, "passed": 9}}),
+            "k0_findings.json": json.dumps({"count": 0, "findings": []}),
+            "lineage_findings.json": json.dumps({"ok": True, "generations": []}),
+            # Bildirilen katmanlar TEMİZ; tek FAIL kayıt dışı kovada. Üretici
+            # run_status'u FAIL yazar — döngü de Other'ı saymalı ki rozet
+            # CI ile aynı şeyi söylesin.
+            "klayers.json": json.dumps({
+                "run_status": "FAIL",
+                "layers": {
+                    "K1": {"status": "PASS", "label": "Dış zip sidecar"},
+                    "K2": {"status": "PASS", "label": "Klasör checksum"},
+                    "UNREGISTERED": {"status": "FAIL",
+                                     "label": "Unregistered findings",
+                                     "findings": [{"priority": "P0"}]}}}),
+            "k10_verdict.txt": "PASS",
+            "reproducibility/manifest.json": "{}",
+        },
+        None, [], [],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.listComments": 1},
+            "body_contains": {"issues.createComment": [
+                "K katmanları: 1 FAIL", "Other: Unregistered findings"]},
+            "add_labels": [], "remove_labels": [],
+        },
+    ),
+    (
         "pr_state_sync: bütçe OK + pre-commit temiz + K0/lineage/klayers → yorum yok",
         "pr_status_comment.js",
         {

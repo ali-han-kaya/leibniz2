@@ -84,13 +84,27 @@ class TestSealVisibilityGate(unittest.TestCase):
             "mühür gösterildiğinde gizlenebilir: " + str(live),
         )
 
-    def test_markup_carries_aria_hidden(self):
-        """Gizliyken AT'ye duyurulmaması için aria-hidden birlikte gitmeli."""
+    def test_markup_hides_via_attribute_not_permanent_aria_hidden(self):
+        """Gizliyken `hidden` yeterli; kalıcı aria-hidden mührü gömerdi.
+
+        Gizli durumu `.seal[hidden] { visibility:hidden }` zaten taşır —
+        visibility:hidden içeriği erişilebilirlik ağacından çıkarır. Öznitelik
+        olarak `hidden` da aynı işi görür. Kalıcı `aria-hidden="true"` ise
+        JS mührü gösterdiğinde de bastırırdı: düğüm görünür ama verdict +
+        hash'i ekran okuyucuya hiç duyurulmazdı.
+        """
         m = re.search(r'<div[^>]*id="verdict-seal"[^>]*>', SOURCE)
         self.assertIsNotNone(m, "verdict-seal işaretlemesi bulunamadı")
-        self.assertIn('aria-hidden="true"', m.group(0),
-                      "verdict-seal aria-hidden taşımıyor — gizli durumda "
-                      "ekran okuyucu mührü duyurur.")
+        markup = m.group(0)
+        self.assertIn("hidden", markup,
+                      "verdict-seal `hidden` özniteliği taşımıyor — başta "
+                      "gizli olmalı.")
+        self.assertNotIn(
+            'aria-hidden="true"', markup,
+            "verdict-seal kalıcı aria-hidden taşıyor — mühür çalışma "
+            "zamanında GÖSTERİLİYOR; aria-hidden onu erişilebilirlik "
+            "ağacında tutmaya devam eder. Gizli durumu CSS "
+            "visibility:hidden zaten ele alıyor.")
 
 
 if __name__ == "__main__":

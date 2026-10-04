@@ -20,6 +20,7 @@ HERE = pathlib.Path(__file__).resolve().parent
 REPO = HERE.parent.parent
 GKL = REPO / "skills" / "verify-chain" / "gen_k_layer.py"
 VD = REPO / "_calisma" / "CIKTI" / "verify_delivery.py"
+CONTRACT = REPO / "_calisma" / "CIKTI" / "klayers_contract.py"
 
 
 def _load_gkl():
@@ -31,18 +32,21 @@ def _load_gkl():
 
 gkl = _load_gkl()
 
-# Gerçek verify_delivery.py LAYER_LABELS — K sayısı tek kaynak.
+# Katman KAYITLARI klayers_contract.py'de yaşar (klayers.json sözleşmesinin
+# sahibi); K sayısı ve labels/optional blokları oradan türetilir. verify_delivery
+# metni yalnızca docstring/argparse/main/check-somasi hedefidir.
 VD_TEXT = VD.read_text(encoding="utf-8")
+CONTRACT_TEXT = CONTRACT.read_text(encoding="utf-8")
 VD_SKILL = (REPO / "skills" / "verify-chain" / "SKILL.md").read_text(encoding="utf-8")
 
 
 class TestNextK(unittest.TestCase):
     def test_next_k_is_max_plus_one(self):
         # K21 şu an en büyük → 22.
-        self.assertEqual(gkl.next_k(VD_TEXT), 22)
+        self.assertEqual(gkl.next_k(CONTRACT_TEXT), 22)
 
     def test_next_k_deterministic(self):
-        self.assertEqual(gkl.next_k(VD_TEXT), gkl.next_k(VD_TEXT))
+        self.assertEqual(gkl.next_k(CONTRACT_TEXT), gkl.next_k(CONTRACT_TEXT))
 
     def test_next_k_no_labels_raises(self):
         with self.assertRaises(SystemExit):
@@ -54,10 +58,15 @@ class TestNextK(unittest.TestCase):
 
 class TestBuildBlocks(unittest.TestCase):
     def test_all_anchors_present_in_real_files(self):
-        k = gkl.next_k(VD_TEXT)
+        k = gkl.next_k(CONTRACT_TEXT)
         blocks = gkl.build_blocks(k, "check_demo", "Demo katmanı", True)
         for label, (anchor, _block) in blocks.items():
-            hay = VD_TEXT if label != "skill" else VD_SKILL
+            if label == "skill":
+                hay = VD_SKILL
+            elif label in gkl.CONTRACT_BLOCKS:
+                hay = CONTRACT_TEXT
+            else:
+                hay = VD_TEXT
             self.assertIn(anchor, hay,
                           f"{label}: anchor {anchor!r} gerçek dosyada yok")
 
@@ -106,14 +115,19 @@ class TestTemplate(unittest.TestCase):
     def test_template_runs_pass(self):
         # Gerçek uçtan uca: üreticinin enjeksiyonu (check_demo iskeleti dahil)
         # + test şablonu BİRLİKTE koşunca PASS vermeli (exit 0, OK).
-        k = gkl.next_k(VD_TEXT)
+        # Enjeksiyon iki dosyaya dağıldığı için ikisi de geçici dizine
+        # yazılır — şablon K{n} kaydını klayers_contract'ta arıyor.
+        k = gkl.next_k(CONTRACT_TEXT)
         blocks = gkl.build_blocks(k, "check_demo", "Demo", False)
-        new_vd, _new_sk, changes = gkl.apply(blocks, VD_TEXT, VD_SKILL, True)
+        new_vd, new_contract, _new_sk, changes = gkl.apply(
+            blocks, VD_TEXT, CONTRACT_TEXT, VD_SKILL)
         self.assertNotIn("!! ", "".join(changes), "anchor atlanmamalı")
         tpl = gkl.gen_test_template(k, "check_demo", "Demo", False)
         with tempfile.TemporaryDirectory() as td:
             pathlib.Path(td, "verify_delivery.py").write_text(
                 new_vd, encoding="utf-8")
+            pathlib.Path(td, "klayers_contract.py").write_text(
+                new_contract, encoding="utf-8")
             pathlib.Path(td, "test_check_demo.py").write_text(
                 tpl, encoding="utf-8")
             # verify_delivery'nin yan importları (battery, check_lean_axioms…)
@@ -130,24 +144,28 @@ class TestTemplate(unittest.TestCase):
             self.assertIn("OK", r.stdout + r.stderr)
 
     def test_injected_vd_compiles(self):
-        # Enjeksiyon sonrası verify_delivery.py SÖZDİZİMSEL GEÇERLİ olmalı
-        # (anchor'lar ifade bölmezse) ve import edilebilmeli.
-        k = gkl.next_k(VD_TEXT)
+        # Enjeksiyon sonrası verify_delivery.py + klayers_contract.py
+        # SÖZDİZİMSEL GEÇERLİ olmalı (anchor'lar ifade bölmezse) ve
+        # import edilebilmeli; yeni kayıt gerçekten sözleşmeye düşmeli.
+        k = gkl.next_k(CONTRACT_TEXT)
         blocks = gkl.build_blocks(k, "check_demo", "Demo", False)
-        new_vd, _new_sk, changes = gkl.apply(blocks, VD_TEXT, VD_SKILL, True)
+        new_vd, new_contract, _new_sk, changes = gkl.apply(
+            blocks, VD_TEXT, CONTRACT_TEXT, VD_SKILL)
         self.assertNotIn("!! ", "".join(changes))
         with tempfile.TemporaryDirectory() as td:
-            vd_p = pathlib.Path(td, "verify_delivery.py")
-            vd_p.write_text(new_vd, encoding="utf-8")
+            pathlib.Path(td, "verify_delivery.py").write_text(
+                new_vd, encoding="utf-8")
+            pathlib.Path(td, "klayers_contract.py").write_text(
+                new_contract, encoding="utf-8")
             # Import: yan modüller CIKTI'dan; import sırasında fonksiyon
             # tanımları değerlendirilir — sözdizimi hatası burada patlar.
             env = dict(os.environ)
             env["PYTHONPATH"] = str(HERE) + os.pathsep + env.get(
                 "PYTHONPATH", "")
             r = subprocess.run(
-                [sys.executable, "-c", "import verify_delivery; "
-                 "assert 'K%d' in verify_delivery.LAYER_LABELS; "
-                 "assert verify_delivery._OPTIONAL_LAYERS['K%d']("
+                [sys.executable, "-c", "import verify_delivery, klayers_contract; "
+                 "assert 'K%d' in klayers_contract.LAYER_LABELS; "
+                 "assert klayers_contract.OPTIONAL_LAYERS['K%d']("
                  "type('A', (), {'check_demo': True})())" % (k, k)],
                 capture_output=True, text=True, env=env, cwd=td)
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
@@ -185,21 +203,37 @@ class TestApplyAndDryRun(unittest.TestCase):
             self.assertFalse((REPO / "_calisma" / "CIKTI" / "test_check_demo.py").exists())
 
     def test_apply_inserts_all_blocks(self):
-        k = gkl.next_k(VD_TEXT)
+        k = gkl.next_k(CONTRACT_TEXT)
         blocks = gkl.build_blocks(k, "check_demo", "Demo", False)
-        new_vd, new_sk, changes = gkl.apply(blocks, VD_TEXT, VD_SKILL, True)
+        new_vd, new_contract, new_sk, changes = gkl.apply(
+            blocks, VD_TEXT, CONTRACT_TEXT, VD_SKILL)
         self.assertNotIn("!! ", "".join(changes), "anchor atlanmamalı")
-        self.assertIn(f'"K{k}": "Demo",', new_vd)
-        self.assertIn(f'lambda a: a.check_demo,', new_vd)
+        # Kayıt blokları SÖZLEŞMEYE, koşum blokları verify_delivery'ye yazılır.
+        self.assertIn(f'"K{k}": "Demo",', new_contract)
+        self.assertIn(f'lambda a: a.check_demo,', new_contract)
+        self.assertNotIn(f'"K{k}": "Demo",', new_vd)
         self.assertIn("def check_demo(add):", new_vd)
         self.assertIn(f"| K{k} | Demo | `--check-demo` | no |", new_sk)
 
     def test_missing_anchor_reports_and_skips(self):
         blocks = gkl.build_blocks(22, "check_demo", "Demo", False)
-        # Anchor'u bozuk metinle çağır — skill bloğu atlanmalı ama vd işlenmeli.
-        new_vd, new_sk, changes = gkl.apply(blocks, VD_TEXT, "no anchor here", True)
+        # Anchor'u bozuk metinle çağır — skill bloğu atlanmalı ama diğer
+        # hedefler işlenmeli.
+        new_vd, new_contract, new_sk, changes = gkl.apply(
+            blocks, VD_TEXT, CONTRACT_TEXT, "no anchor here")
         self.assertTrue(any("!! skill" in c for c in changes))
-        self.assertIn('"K22": "Demo",', new_vd)
+        self.assertIn('"K22": "Demo",', new_contract)
+        self.assertIn("def check_demo(add):", new_vd)
+
+    def test_missing_contract_anchor_names_target_file(self):
+        # Sözleşmede anchor bulunamazsa log hedef dosyayı SAYMALI — aksi
+        # halde katman kaydı sessizce kaybolur ve yeni K hiç görünmez.
+        blocks = gkl.build_blocks(22, "check_demo", "Demo", False)
+        _v, new_contract, _s, changes = gkl.apply(
+            blocks, VD_TEXT, "no anchor here", VD_SKILL)
+        self.assertTrue(any("!! labels" in c and "klayers_contract.py" in c
+                            for c in changes), changes)
+        self.assertNotIn('"K22": "Demo",', new_contract)
 
 
 class TestMainGates(unittest.TestCase):
