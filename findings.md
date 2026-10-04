@@ -63,9 +63,14 @@ pre-commit chain adaptation (47→49 hooks). Key lessons below.
   discover-plugins → plugins list. Repo-init = user decision.
 
 ### Rust surface: zero (rust-async-patterns skill)
-- Three-source proof: git-tracked (.rs/Cargo.toml/rust-toolchain) = 0;
-  disk scan = 0; cargo/rustc/rustup absent. Skill unexercised-by-absence
+- Two-source proof (re-measured 2026-10-04): git-tracked (.rs/Cargo.toml/
+  Cargo.lock/rust-toolchain) = 0; disk scan = 0. Skill unexercised-by-absence
   (pinokio-precedent). Tectonic is Rust-based but unrelated to async patterns.
+- CORRECTION to the earlier note: it claimed "cargo/rustc/rustup absent".
+  False as of 2026-10-04 — cargo 1.98.1, rustc 1.98.1, rustup 1.29.1 are all
+  installed (~/.cargo/bin). The zero-Rust *surface* conclusion is unchanged;
+  only the toolchain evidence was wrong. Toolchain presence does not create
+  an async-Rust subject: no crate, no Tokio, no async code to review.
 
 ### Remotion pilot (remotion-best-practices)
 - /tmp/leibniz-chain-video: data-driven LeibnizChain comp (1280x720@30, 760f,
@@ -491,3 +496,55 @@ pre-commit chain adaptation (47→49 hooks). Key lessons below.
   tabular history.jsonl does not qualify without a user request.
   No work invented; the xlsx contract (openpyxl formulas + mandatory
   recalc.py, LibreOffice function limits) stays retrieval-ready.
+
+## Session 2026-10-03/04 — environment & toolchain facts (branch design/preview-scrutiny-ledger)
+
+Verified facts, not inferred. Re-verify before relying on them; several are
+machine-state and can drift.
+
+### Toolchain / repo layout
+- **prettier version skew (cost me a cycle).** The repo is formatted with
+  prettier **3.6.2** at `apps/dashboard-next/node_modules/.bin/prettier`, which
+  is what `check_prettier_format.py` invokes. Root `npx prettier` is **3.9.9**
+  and produces a DIFFERENT verdict on the same file. Symptom: `npx prettier
+  --write` then `npx prettier --check` both pass, yet the gate fails. Format with
+  the dashboard-next binary.
+- **`trend-db` has no `tsconfig.json` and no `typescript` dependency.** It is
+  outside every typecheck gate; verifying it requires borrowing a compiler
+  (e.g. `../dashboard-next/node_modules/.bin/tsc` with explicit flags).
+- **No Node backend exists.** No express/fastify/koa/hono, no `route.ts`, no
+  `node:http`/`listen()`. The servers are Python (`preview_server.py`,
+  `mcp/server.py`). Node surfaces are two frontends plus one batch loader.
+
+### Prisma 7 / Neon
+- **`directUrl` does not exist in Prisma 7** (7.10.0). Adding it to the schema
+  fails with P1012 "no longer supported in schema files"; `@prisma/config`'s
+  `Datasource` type carries only `{ url, shadowDatabaseUrl }`.
+- The Neon skill's pooled/direct guidance is still correct, but its Prisma 5/6
+  *mechanism* is not. Implement the split by consumer, not by two URLs.
+- `trend_runs_daily` has no PK/constraints/indexes → Prisma rejects it as a
+  model (P1012) and `migrate diff` omits it. It is hand-managed by design.
+- **`prisma migrate status` hides history loss**, reporting "Database schema is
+  up to date!" when the migrations directory is simply absent. Only
+  `migrate dev` surfaces the drift — and then it offers to reset the schema.
+
+### Verification lessons (measure, don't infer)
+- **Stale listeners silently invalidate measurements.** Port 8000 was held by a
+  Sep-29 server from `~/Desktop/leibniz2`; a new server failed to bind and I
+  measured the old one, producing a phantom "13 image 404s" defect that does
+  not exist. Always confirm WHICH process/code answers a port before trusting
+  its numbers.
+- **Prettier + `git status` interplay:** hook-auto-staged `README.md` changelog
+  rows show up as `M ` (staged) in `git status`, distinct from ` M`.
+
+### Environment blockers (need a human)
+- **macOS TCC blocks Orca from `~/Desktop`.** Inside Orca terminals,
+  `ls ~/Desktop` → "Operation not permitted", so linked-worktree gitlinks
+  pointing into `~/Desktop` make `git` unusable there. Not fixable via CLI;
+  requires granting Files-and-Folders / Full Disk Access to Orca.
+- **Orca `worker-start --worktree new-child` is documented but rejected**
+  (selector_not_found) even with explicit `--repo`. Looks like a CLI defect.
+- **`~/.pinokio/config.json` has an absolute `home` (a real `/Users` path), not
+  `~/.pinokio`.** The skill's literal `~/.pinokio/bin/...` paths do not exist;
+  following them verbatim yields a false "pterm unavailable". `access.host`
+  (192.168.2.227) was stale — EHOSTUNREACH while pterm itself worked fine.

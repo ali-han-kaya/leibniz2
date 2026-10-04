@@ -87,6 +87,9 @@ class TestBudgetOverBannerElement(unittest.TestCase):
         tbody = t.group(0)
         self.assertIn("det.style.display = open ? \"none\" : \"block\"", tbody)
         self.assertIn("caret.textContent = open ? \"▸\" : \"▾\"", tbody)
+        self.assertIn('const toggle = $("budget-over-toggle");', tbody)
+        self.assertIn('if (toggle) toggle.setAttribute("aria-expanded", String(!open));', tbody)
+        self.assertNotIn('const banner = $("budget-over-banner");', tbody)
 
 
 class TestBudgetOverBannerLogic(unittest.TestCase):

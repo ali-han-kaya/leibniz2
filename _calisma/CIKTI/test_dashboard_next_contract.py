@@ -14,20 +14,29 @@ yeşil kaldı, çünkü `noUnusedLocals`/`noUnusedParameters` kapalıydı.
 
 Kapı iki iş yapar:
   1. `noUnusedLocals`/`noUnusedParameters` AÇIK olmalı (yoksa TS6133 geri gelir).
-  2. TypeScript varsa, dashboard-next gerçekten tip-denetlenmeli.
+  2. dashboard-next GERÇEKTEN tip-denetlenmeli.
 
-Statik denetim — node/npm gerektirmez (tsc çalışmazsa skip, yapı denetimi yine
-korunur). Böylece kapı, ortamda node bulunmayan CI'da da yanlış-negatif vermez.
+(2) için kapı `node_modules/.bin/tsc --noEmit`'i GERÇEKTEN çalıştırır
+(ölçülen ~4 sn). TypeScript kurulu değilse açıkça skip eder ve bunu
+raporlar — ama bu durum yanlış-negatife yol açmamalıdır, o yüzden
+dashboard-next'e hiçbir workflow işaret etmeyen bu depoda kapının
+skip'li hâli tek başına yeterli değildir: `npm ci` sonrası kapı
+kırmızıya döner. Statik kısım (1) ise node/npm gerektirmez ve ortamda
+node bulunmayan CI'da da çalışır.
 """
 import json
 import pathlib
-import re
+import shutil
+import subprocess
 import unittest
 
 HERE = pathlib.Path(__file__).resolve().parent
 REPO_ROOT = HERE.parents[1] if HERE.name == "CIKTI" else HERE.parents[2]
 APP = REPO_ROOT / "apps" / "dashboard-next"
 TSCONFIG = APP / "tsconfig.json"
+# Proje prettier'ı ile aynı binary (node_modules/.bin/prettier 3.6.2);
+# kökteki npx prettier farklı sürüm çözüyor ve kapıyla çelişiyor.
+TSC = APP / "node_modules" / ".bin" / "tsc"
 
 
 def read(path: pathlib.Path) -> str:
@@ -60,6 +69,40 @@ class TestUnusedChecksEnabled(unittest.TestCase):
         self.assertIs(cfg["compilerOptions"].get("strict"), True)
 
 
+class TestRealTypecheckRuns(unittest.TestCase):
+    """Statik bayrak denetimi TEK BAŞINA yetmez — gerçek tsc koşmalı.
+
+    Ölçülen çürüme: kapı tsconfig'de `noUnusedLocals: true` görüp
+    yeşil kalırken uygulamanın derlenemez hale gelmesi mümkündür;
+    kırmızı bir TS2307/TS6133 ancak tsc'yi gerçekten çalıştıran
+    bir kapı yakalar. `noUnused*` bayrakları ancak tsc koşarsa
+    gerçekten uygulanır.
+    """
+
+    def test_tsc_no_emit_is_clean(self):
+        if not TSC.is_file():
+            self.skipTest(
+                f"typescript kurulu değil ({TSC}) — statik denetim "
+                "yine de koşar; CI'da npm ci sonrası bu kapı fiilen "
+                "tip denetimi yapar")
+        r = subprocess.run(
+            [str(TSC), "--noEmit", "-p", str(TSCONFIG)],
+            capture_output=True, text=True, timeout=300, cwd=str(APP))
+        self.assertEqual(
+            0, r.returncode,
+            "tsc --noEmit hata verdi — dashboard-next derlenmiyor:\n"
+            + (r.stdout + r.stderr)[-4000:])
+
+    def test_typecheck_script_exists(self):
+        """`npm run typecheck` bulunmalı (kapı/CI çağırabilsin)."""
+        pkg = json.loads(read(APP / "package.json"))
+        self.assertIn(
+            "typecheck", pkg.get("scripts", {}),
+            "package.json'da typecheck script'i yok — kapı doğrudan "
+            "node_modules/.bin/tsc çağırıyor, ama geliştirici/CI için "
+            "kararlı bir giriş noktası şart")
+
+
 class TestLintScriptCoversUnusedChecks(unittest.TestCase):
     """`npm run lint` bayrakları baypas ediyorsa kapı işe yaramaz."""
 
@@ -83,18 +126,17 @@ class TestNoDeadImportsShipped(unittest.TestCase):
     def test_variant_props_not_imported_unused(self):
         for rel in ("app/VerdictCard.tsx", "app/trend/page.tsx"):
             body = read(APP / rel)
-            imported = re.findall(r"VariantProps", body)
-            # Yalnız import satırında geçiyorsa ölüdür; gövdede geçiyorsa canlı.
-            non_import = [
-                ln for ln in body.splitlines() if "VariantProps" in ln
-            ]
+            # Tek değişmez: tip kullanılmayacaksa dosyada hiç geçmemeli.
+            # (Önceden aynı koşul iki assertion ile ayrı ayrı sınanıyordu —
+            # regex sonucu hem boş hem de "tespit edilemedi" diye tekrar
+            # denetleniyordu; ikincisi ilkinin alt kümesiydi.)
+            mentions = [ln for ln in body.splitlines() if "VariantProps" in ln]
             self.assertEqual(
-                len(non_import),
-                0,
+                [],
+                mentions,
                 f"{rel}: VariantProps import edilmiş ama hiç kullanılmıyor — "
-                f"{non_import}",
+                f"{mentions}",
             )
-            self.assertEqual(imported, [], f"{rel}: tespit edilemedi")
 
     def test_getjson_has_no_dead_revalidate_param(self):
         body = read(APP / "lib" / "preview.ts")

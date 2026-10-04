@@ -248,6 +248,9 @@ HOOK_COVERAGE = {
         "test_trend_db_connection.py",
         "test_dashboard_next_contract.py",
         "test_trend_db_prisma_setup.py",
+        "test_preview_mirror_imports.py",
+        "test_verdict_seal_css.py",
+        "test_design_token_collision.py",
     ],
 }
 

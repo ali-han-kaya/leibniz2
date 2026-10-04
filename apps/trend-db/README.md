@@ -79,7 +79,7 @@ dosyasıdır (aşağıda).
 
 Kayıp migration geçmişi onarılmadan önce alınmış **geri dönüş noktası**. İçerir:
 `trend_runs` (42 kolon + 6 indeks), `trend_runs_daily` (elle, bkz. yukarıdaki
-gerekçe), RLS + politika, 5 GRANT ve **checksum'leriyle 3 migration kaydı**.
+gerekçe), RLS + politika, GRANT'ler ve **checksum'leriyle 3 migration kaydı**.
 
 Gerçekten geri yüklendiği **ölçüldü**: atılabilir bir branch'in `public` şeması
 silindi, dosya uygulandı, sonuç `main` ile karşılaştırıldı — 3 tablo, 42/9 kolon,
@@ -87,6 +87,20 @@ silindi, dosya uygulandı, sonuç `main` ile karşılaştırıldı — 3 tablo, 
 (İlk deneme `_prisma_migrations` tablosu olmadığı için 42P01 ile düştü; Prisma bu
 defter tablosunu introspeksiyondan daşıyor — düzeltildi.) Branch silindi, `main`
 dokunulmadan kaldı (269/3/3/1/5).
+
+> **Beklenen ayrık — dizi (sequence) yetkisi.** Ölçülen geri yüklemede GRANT
+> kümesi birebir aynıydı; sonraki adımda `trend_service` ile gerçek bir INSERT
+> denemesi `permission denied for sequence trend_runs_id_seq` ile düştü
+> (`"id" SERIAL` olduğu için INSERT dizinin `nextval()` iznini gerektirir;
+> tablo INSERT'i tek başına yetmez). Yedeğe bu yüzden **tek bir GRANT
+> ifadesi** daha eklendi:
+> `GRANT USAGE ON SEQUENCE "public"."trend_runs_id_seq" TO trend_service`
+> — **kasıtlı olarak canlıdan ayrılan tek satır**. Canlıdaki GRANT
+> kümesi kopyalandığında dokümante edilen servis yazma yolu fiilen
+> çalışmıyordu. Bu, yedeğin düzeltilmiş yazma yolunu verir; **canlıya
+> dokunmaz** — canlıda aynı GRANT hâlâ eksik ve eklenmesi ayrı bir iştir.
+> (Yukarıdaki "5 GRANT" sayısı canlıyla karşılaştırmadan gelen ölçümdür;
+> dosyadaki GRANT *ifadesi* sayısı bir az daha fazladır.)
 
 > Yedek **veri içermez** (269 + 3 satır yok) ve **rol parolalarını içermez**;
 > amaç yapı + migration geçmişi kurtarmasıdır.
@@ -138,9 +152,23 @@ npm run load      # TCC-mirror history.jsonl → TrendRun (idempotent upsert, po
 Bu, tutarlı bir least-privilege ayrımı: yazma rolü ham veride tam DML, okuma
 rolü yalnız günlük özet tablosunda SELECT. İkisi de şu an `rolcanlogin=false`
 ve Neon tarafında parolasız — **bağlanılabilir değiller**; kullanılacaksa önce
-`neon roles update <ad> --role-name ...` ile parola atanmalı. Doğrulanmamış tek
-nokta: RLS politikası `USING true` olduğu için `trend_service` RLS'i fiilen
-geçiyor (kısıtlama GRANT katmanında, politika katmanında değil).
+`neon roles update <ad> --role-name ...` ile parola atanmalı.
+
+**Bu tabloyu canlıya uygulamadan önce iki ek GRANT gerekir** (yalnız
+`trend_service` için):
+
+```sql
+GRANT USAGE ON SEQUENCE public.trend_runs_id_seq TO trend_service;
+```
+
+1. **Dizi USAGE'ı** — `"id" SERIAL` olduğu için tablo INSERT'i tek başına
+   yetmez. Bu GRANT canlıda **yok**; olmadan INSERT yetki hatası verir
+   (yedeğe eklenmiştir, bkz. yukarıdaki ayrık notu).
+2. Parola (`rolcanlogin=false` olduğu için zaten ayrı bir iş).
+
+RLS tarafında `trend_service` politika `USING true` olduğu için fiilen geçer
+(kısıtlama GRANT katmanında, politika katmanında değil) — bu, INSERT'in
+tek engelinin dizi yetkisi olduğu anlamına gelir.
 
 ## Notlar
 

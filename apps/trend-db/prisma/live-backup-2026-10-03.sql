@@ -114,12 +114,23 @@ CREATE POLICY "trend_runs_service_all" ON "public"."trend_runs"
     USING (true)
     WITH CHECK (true);
 
--- (d) GRANT'ler — canlıdaki yetkiler birebir.
+-- (d) GRANT'ler — canlıdaki yetkiler birebir, TEK istisna: dizi (aşağıda).
 GRANT USAGE ON SCHEMA "public" TO trend_service;
 GRANT USAGE ON SCHEMA "public" TO trend_anon;
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON "public"."trend_runs" TO trend_service;
 GRANT SELECT ON "public"."trend_runs_daily" TO trend_anon;
+
+GRANT USAGE ON SEQUENCE "public"."trend_runs_id_seq" TO trend_service;
+--     ↑ TEK BİLEŞİK AYRIK (canlıda bu GRANT YOK). Gerekçe: "id" SERIAL
+--     olduğu için INSERT, dizinin nextval() iznini gerektirir. Tablo
+--     INSERT'i tek başına yetmez; dizi USAGE'ı olmadan trend_service
+--     "permission denied for sequence trend_runs_id_seq" ile düşer
+--     (ölçülen: geçici Postgres'te geri yükleme + SET ROLE + INSERT).
+--     Yani canlıdaki GRANT kümesi kopyalandığında dokümante edilen
+--     servis yazma yolu fiilen ÇALIŞMIYORDU. Bu satır, yedeğin canlı
+--     birebir kopyası olmaktan çıkıp düzeltilmiş yazma yolunu verir.
+--     Etki: canlıya dokunmaz (yalnız bu geri yükleme dosyası).
 
 -- (e) Migration defteri — kayıp 3 kayıt, checksum'leriyle.
 --     ÖNCE tablo kendisi: Prisma bu defter tablosunu introspeksiyondan

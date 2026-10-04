@@ -123,7 +123,12 @@ async function main() {
   const lines = fs
     .readFileSync(sourcePath, 'utf-8')
     .split('\n')
-    .filter((l) => l.trim().length > 0);
+    // Boş satırları at ama FİZİKSEL satır numarasını koru: hata
+    // mesajı "satır N" diyor, N dosyadaki gerçek satır olmalı.
+    // (Filtrelenmiş dizi üzerinden saymak, boş satır içeren bir
+    // dosyada yanlış satır bildiriyordu.)
+    .map((text, i) => ({ text, lineNo: i + 1 }))
+    .filter((l) => l.text.trim().length > 0);
   console.log(`kaynak: ${sourcePath} (${lines.length} satır)`);
 
   let skipped = 0;
@@ -134,12 +139,12 @@ async function main() {
   // sessizce kaybettirir (history.jsonl.sha256 sidecar'ı bunu yakalamaz),
   // ama hepsini tek seferde, satır numarasıyla bildirmek eyleme dönüşür.
   const parseErrors: string[] = [];
-  for (const [idx, line] of lines.entries()) {
+  for (const { text: line, lineNo } of lines) {
     let row: Row;
     try {
       row = JSON.parse(line) as Row;
     } catch (e) {
-      parseErrors.push(`  satır ${idx + 1}: ${(e as Error).message}`);
+      parseErrors.push(`  satır ${lineNo}: ${(e as Error).message}`);
       continue;
     }
     if (!row.ts || typeof row.verdict !== 'string') {

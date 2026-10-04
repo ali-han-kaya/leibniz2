@@ -50,6 +50,7 @@ test_coverage_report.py
 test_dashboard_k17_exit_sync.py
 test_dashboard_next_contract.py
 test_dashboard_smoke.py
+test_design_token_collision.py
 test_design_token_contrast.py
 test_determinism_trend_badge.py
 test_dev_bootstrap.py
@@ -102,6 +103,7 @@ test_pptx_export.py
 test_precheck_advisory_contract.py
 test_precommit_log.py
 test_preview_findings_panel.py
+test_preview_mirror_imports.py
 test_preview_server.py
 test_preview_server_atomic.py
 test_readme_badges.py
@@ -150,6 +152,7 @@ test_trend_schedule_paths.py
 test_update_changelog_hook.py
 test_update_preview_sync_server.py
 test_validate_config_schema.py
+test_verdict_seal_css.py
 test_verification_chain_deck.py
 test_verify_checks.py
 test_verify_k_layers.py

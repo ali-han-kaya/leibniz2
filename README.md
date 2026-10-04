@@ -539,6 +539,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-03 | fix | (trend-db) Neon pooled/direct ayrimini Prisma 7'ye uyarla | [`923bfdc`](https://github.com/ali-han-kaya/leibniz2/commit/923bfdc) |
 | 2026-10-03 | fix | (dashboard-next) olu importleri sil, noUnused bayraklarini ac | [`097b683`](https://github.com/ali-han-kaya/leibniz2/commit/097b683) |
 | 2026-10-03 | fix | (trend-db) load.ts girdi dogrulama + graceful shutdown | [`ca118f9`](https://github.com/ali-han-kaya/leibniz2/commit/ca118f9) |
+| 2026-10-04 | fix | (trend-db) tsconfig + typescript ekle, prisma CLI'yi devDeps'e tasi | [`563d0c6`](https://github.com/ali-han-kaya/leibniz2/commit/563d0c6) |
 
 ### Regresyon notları
 

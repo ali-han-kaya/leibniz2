@@ -128,6 +128,18 @@ PREVIEW_FILES=(
   "preview_server.py|preview_server.py"
   "_daemonize.py|_daemonize.py"
   "preview_prestart.py|preview_prestart.py"
+  # Hook raporu seam'i — preview_server.py bu modülü import eder
+  # (dashboard finalize rotası). Mirror'da eksik kalırsa TCC/launchd
+  # rotası dashboard'u servis etmeden ModuleNotFoundError ile düşer.
+  "precommit_log.py|precommit_log.py"
+  # Deterministik trend badge üreticisi — serve_determinism_trend
+  # (lazy import, GUARD YOK): mirror'da eksikse /api/determinism-trend
+  # rotası 500 döner.
+  "determinism_trend_badge.py|determinism_trend_badge.py"
+  # Pattern drift denetleyicisi — finalize içinde lazy import, try/except
+  # ile korunur (panel sessizce düşer). Yine de mirror'da bulunmalı ki
+  # TCC/launchd rotasında panel boşalmasın.
+  "check_pattern_consistency.py|check_pattern_consistency.py"
 )
 
 # Branch protection görsel kılavuzu (adım 2, preview mirror): kaynak repo

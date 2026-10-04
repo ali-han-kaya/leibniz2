@@ -150,11 +150,17 @@
     /* CLS düzeltmesi (perf turu): seal "hidden" iken UA display:none uyguluyor,
        snapshot gelince hidden=false 64px kutuyu aniden akışa sokuyordu —
        header genişleyip MAIN'in tamamı kayıyordu (ölçülen tek-shift CLS +0.2555,
-       mobil 390px @4x CPU). Alanı baştan rezerve et: display yerine visibility,
-       basma animasyonunu hidden iken beklet. */
-    visibility:hidden;
+       mobil 390px @4x CPU). Alanı baştan rezerve et: gizliyken display:block
+       + visibility:hidden, basma animasyonunu hidden iken beklet.
+
+       DİKKAT: visibility:hidden TEMEL .seal kuralında olmamalı. Ölçülen
+       hata (2026-10-04): visibility temel kuraldaydı ve geri veren başka
+       kural yoktu; snapshot gelip hidden=false olsa bile hesaplanan
+       visibility "hidden" kalıyordu — yani mühür HİÇ görünmüyordu
+       (tarayıcıda ölçüldü: hidden=false sonrası visibility=hidden).
+       visibility artık YALNIZCA [hidden] durumunda uygulanır. */
     filter:drop-shadow(0 1px 4px rgba(0,0,0,.35)); }
-  .seal[hidden] { display:block; }
+  .seal[hidden] { display:block; visibility:hidden; }
   .seal[hidden] svg { animation-play-state:paused; }
   .seal svg { width:100%; height:100%; display:block;
     animation:seal-stamp .5s cubic-bezier(.2,1.6,.4,1) both;

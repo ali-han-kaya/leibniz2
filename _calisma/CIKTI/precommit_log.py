@@ -133,6 +133,12 @@ def _read_sidecar(path):
         raw = data.get("hooks") or []
     except (OSError, ValueError, AttributeError):
         return None
+    # Sidecar güvenilmeyen girdidir: JSON geçerli olsa da hooks bir
+    # sayı/boolean/string olabilir. list değilse TypeError yükseltip
+    # finalize'ı düşürürdü (yalnız OSError/ValueError/AttributeError
+    # yakalanıyordu) — sözleşme: bozuk sidecar -> None.
+    if not isinstance(raw, list):
+        return None
     hooks = []
     for h in raw:
         if isinstance(h, dict) and h.get("name"):
