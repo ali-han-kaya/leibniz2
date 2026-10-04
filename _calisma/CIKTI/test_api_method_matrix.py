@@ -251,5 +251,126 @@ class TestApiMethodMatrix(unittest.TestCase):
                                 f"POST {path} → 200: sözleşme-dışı POST-izin")
 
 
+
+class TestStateChangingPeerParity(unittest.TestCase):
+    """State-changing uclarda TCP-peer kapisi PARITE sozlesmesi.
+
+    /api/stop ve /api/run-now ayni ortak kapiyi cagirir. Blok tekrari yerine
+    `Handler._peer_gate` tek uygulama oldugu icin parite disiplinle degil
+    YAPISAL olarak garanti edilir; bu sinif o sozlesmeyi canli sokette
+    kanitlar.
+
+    Matrisin ana sinifi `trigger_run_now`'u STUB'lar (gercek handler calismaz),
+    boylece run-now'un kendi kapi hicbir zaman gercekten kosmuyordu. Buradaki
+    sunucu stub'sizdir: run-now'un kapisi ilk kez fiilen devrede.
+
+    Guvenli calisma: hicbir satir VERIFY_BUSY'ya ulasmaz. Peer-reddi 403
+    doner; peer gecse bile bearer 401 ile kesilir. Yani hicbir test gercek
+    bir verify kosumu baslatmaz.
+    """
+
+    STATE_CHANGING_POST = ("/api/stop", "/api/run-now")
+
+    @classmethod
+    def setUpClass(cls):
+        class _T(socketserver.ThreadingMixIn, HTTPServer):
+            daemon_threads = True
+        cls.server = _T(("127.0.0.1", 0), ps.Handler)
+        cls.thread = threading.Thread(target=cls.server.serve_forever,
+                                      daemon=True)
+        cls.thread.start()
+        cls._old_allowlist = ps.STOP_ALLOWLIST
+
+    @classmethod
+    def tearDownClass(cls):
+        ps.STOP_ALLOWLIST = cls._old_allowlist
+        cls.server.shutdown()
+        cls.server.server_close()
+        cls.thread.join(timeout=5)
+
+    def _post(self, path, headers=None):
+        conn = http.client.HTTPConnection(
+            "127.0.0.1", self.server.server_address[1], timeout=3)
+        try:
+            h = {"Content-Type": "application/json"}
+            h.update(headers or {})
+            conn.request("POST", path, body="{}", headers=h)
+            resp = conn.getresponse()
+            return resp.status, resp.read().decode("utf-8")
+        finally:
+            conn.close()
+
+    def test_both_state_changing_endpoints_delegate_to_shared_gate(self):
+        """Yapisal satir: her state-changing uc ortak kapiyi cagirir.
+
+        Kopyalanmis bir blok geri donerse asagidaki satir kirilir — parite
+        bir inceleme meselesi olmaktan cikar, derleme-zamani bir olgu olur.
+        """
+        src = (CIKTI / "preview_server.py").read_text(encoding="utf-8")
+        for name in ("def stop_server(self)", "def trigger_run_now(self)"):
+            start = src.index(name)
+            body = src[start:start + 900]
+            with self.subTest(handler=name):
+                self.assertIn("self._peer_gate()", body,
+                              "%s ortak kapiyi cagirmiyor" % name)
+        # Gate uygulamasi TEK yerde olmali.
+        self.assertEqual(src.count("def _peer_gate(self)"), 1)
+        self.assertEqual(
+            src.count("peer_error = _stop_peer_allowed"), 1,
+            "_stop_peer_allowed cagrisi kopyalanmis — tek uygulama kurali bozuldu")
+
+    def test_off_host_peer_denied_on_every_state_changing_endpoint(self):
+        """Disa-peer her iki ucta da 403 'forbidden peer' alir."""
+        ps.STOP_ALLOWLIST = frozenset({"192.0.2.9"})  # loopback listede degil
+        for path in self.STATE_CHANGING_POST:
+            with self.subTest(path=path):
+                status, body = self._post(path)
+                self.assertEqual(status, 403, "%s dis-peer'a kapali degil" % path)
+                self.assertIn("forbidden peer", body)
+
+    def test_run_now_peer_gate_precedes_auth(self):
+        """Guven sirasi: peer reddi bearer 401'den ONCE gelir.
+
+        Token tanimli ve bearer gonderilmedigi halde 403 'forbidden peer'
+        donuyorsa karar peer katmaninda verilmistir; auth katmanina hic
+        ulasilmamistir (401 cift sayilirdi).
+        """
+        ps.STOP_ALLOWLIST = frozenset({"192.0.2.9"})
+        old = os.environ.get("PREVIEW_RUN_NOW_TOKEN")
+        os.environ["PREVIEW_RUN_NOW_TOKEN"] = "gizli-token"
+        try:
+            status, body = self._post("/api/run-now")
+        finally:
+            if old is None:
+                os.environ.pop("PREVIEW_RUN_NOW_TOKEN", None)
+            else:
+                os.environ["PREVIEW_RUN_NOW_TOKEN"] = old
+        self.assertEqual(status, 403)
+        self.assertIn("forbidden peer", body)
+        self.assertNotIn("unauthorized", body)
+
+    def test_run_now_loopback_peer_reaches_auth_layer(self):
+        """Tersi yon: loopback-peer KAPIYI GECER ve auth katmanina ulasir.
+
+        403 yerine 401 almak, 403'lerin rastgele olmadigini ve kapinin
+        gercekten ayirt ettigini kanitlar. Bearer reddi verify'yi
+        tetiklemez — test yan etkisiz kalir.
+        """
+        ps.STOP_ALLOWLIST = ps.DEFAULT_STOP_ALLOWLIST  # loopback acik
+        old = os.environ.get("PREVIEW_RUN_NOW_TOKEN")
+        os.environ["PREVIEW_RUN_NOW_TOKEN"] = "gizli-token"
+        try:
+            status, body = self._post("/api/run-now")
+        finally:
+            if old is None:
+                os.environ.pop("PREVIEW_RUN_NOW_TOKEN", None)
+            else:
+                os.environ["PREVIEW_RUN_NOW_TOKEN"] = old
+        self.assertEqual(status, 401)
+        self.assertIn("unauthorized", body)
+        self.assertNotIn("forbidden peer", body)
+
+
+
 if __name__ == "__main__":
     unittest.main()

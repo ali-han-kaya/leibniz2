@@ -1559,15 +1559,30 @@ class Handler(BaseHTTPRequestHandler):
             self._send(status, json.dumps(payload),
                        content_type="application/json; charset=utf-8")
 
-    def stop_server(self):
-        """Yerel daemon'ı güvenli biçimde durdurur; GET ile tetiklenemez."""
-        # TCP-peer kapısı: Host/Origin'in aksine sahtelenemez; sandbox-dışı
-        # bind'ta bile dış-peer'ı /api/stop'tan uzak tutar (bind'dan bağımsız).
-        # Sahtelenemez katman önce değerlendirilir (güven-sırası).
+    def _peer_gate(self):
+        """Ortak TCP-peer kapısı — TÜM state-changing uçlar bunu çağırır.
+
+        Sahtelenemez katman (soket peer'ı) Host/Origin ve bearer'ın önünde
+        değerlendirilir. Karar bind adresinden değil bağlantıyı kimin yaptığından
+        gelir; bu yüzden sandbox-dışı bind'ta bile dış-peer dışarıda kalır.
+
+        Tek uygulama olma sebebi: /api/stop ve /api/run-now bu kapıyı
+        KOPYALAYARAK taşıyordu. Parite disiplinle değil yapısal olarak
+        garanti edilir — yeni bir state-changing uç da aynı yardımcıyı çağırır,
+        sapma mümkün olmaz.
+
+        Dönüş: True = reddedildi (403 gönderildi), False = geçti.
+        """
         peer_error = _stop_peer_allowed(self.client_address, STOP_ALLOWLIST)
         if peer_error:
             self._send(403, json.dumps({"error": peer_error}),
                        content_type="application/json; charset=utf-8")
+            return True
+        return False
+
+    def stop_server(self):
+        """Yerel daemon'ı güvenli biçimde durdurur; GET ile tetiklenemez."""
+        if self._peer_gate():
             return
         request_error = _trusted_request(self.headers)
         if request_error:
@@ -1593,12 +1608,9 @@ class Handler(BaseHTTPRequestHandler):
         yanlışlıkla silinmişti (serve_run_stdout ile yer değiştirdi) —
         geri yüklendi.
         """
-        # Peer-paritesi: state-changing uç, /api/stop ile aynı sahtelenemez
-        # TCP-peer kapısını taşır (güven-sırası: peer → trusted → auth).
-        peer_error = _stop_peer_allowed(self.client_address, STOP_ALLOWLIST)
-        if peer_error:
-            self._send(403, json.dumps({"error": peer_error}),
-                       content_type="application/json; charset=utf-8")
+        # Peer-paritesi: /api/stop ile AYNI ortak kapı (güven-sırası:
+        # peer → trusted → auth). Kopyalanmış blok yok — tek uygulama.
+        if self._peer_gate():
             return
         request_error = _trusted_request(self.headers)
         if request_error:

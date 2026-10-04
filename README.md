@@ -19,6 +19,7 @@ teslimini ve onu doğrulayan fail-closed araç zincirini içerir.
 | `_calisma/CIKTI/*.md` | Denetim raporları (M0 denetim, referans kanıt, sembolik ispat) |
 | `_calisma/lean_reduct/` | reduct-invariance lemmasının Lean 4 formalizasyonu (derlenmiş, exit 0) |
 | `_calisma/repack_delivery.py` · `sync_docs.py` | Zincir yeniden üretimi ve belge senkronu yardımcıları |
+| `docs/PREVIEW_STOP_ALLOWLIST.md` | `/api/stop` + `/api/run-now` TCP-peer kapısı — sandbox-dışı dağıtımda `PREVIEW_STOP_ALLOWLIST` env örneği ve güvenlik notu (varsayılan: yalnız loopback) |
 | `.pre-commit-config.yaml` | Commit öncesi fail-closed kapı |
 
 ## Skills
@@ -508,6 +509,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-25 | fix | resolve README changelog merge for PR #50 branch | [`2dd1476`](https://github.com/ali-han-kaya/leibniz2/commit/2dd1476) |
 | 2026-09-25 | refactor | (design) align vercel tokens with provider contract | [`34b6ea3`](https://github.com/ali-han-kaya/leibniz2/commit/34b6ea3) |
 | 2026-09-25 | fix | (ci) paginate live audit artifacts | [`a24c4db`](https://github.com/ali-han-kaya/leibniz2/commit/a24c4db) |
+| 2026-09-28 | feat | (design-system) GitHub site örnek seti + ADR-0001 pinokio launcher | [`2ef1821`](https://github.com/ali-han-kaya/leibniz2/commit/2ef1821) |
 
 ### Regresyon notları
 

@@ -83,7 +83,7 @@ gövdeleri her zaman bu tek anahtarlı zarftır; içerik tipi
 
 | Kapı | Kapsam | Reddi |
 |---|---|---|
-| TCP-peer | `POST /api/run-now`, `POST /api/stop` (`STOP_ALLOWLIST`) | `403 {"error": …}` |
+| TCP-peer | `POST /api/run-now`, `POST /api/stop` (`STOP_ALLOWLIST`; genişletme yalnız `PREVIEW_STOP_ALLOWLIST` env'i ile — bkz. [`PREVIEW_STOP_ALLOWLIST.md`](PREVIEW_STOP_ALLOWLIST.md)) | `403 {"error": …}` |
 | Host/Origin (DNS-rebinding) | `_API_GET_ROUTES` = `latest, sse, run_stream, history, refs_trend, trend, override_trend, determinism_trend, run_history, health, stop, run_now` | `403 {"error": …}` |
 | Bearer | yalnız `POST /api/run-now`, `PREVIEW_RUN_NOW_TOKEN` **set ise** | `401 {"error":"unauthorized"}` + `WWW-Authenticate: Bearer` |
 | Metot | `GET` ile `run-now`/`stop` | `405 {"error":"method not allowed"}` + `Allow: POST` |
