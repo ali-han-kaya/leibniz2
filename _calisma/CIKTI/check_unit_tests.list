@@ -11,6 +11,8 @@ test_audit_live_ci_sync.py
 test_audit_octokit_names.py
 test_audit_refs_trend.py
 test_budget_over_banner.py
+test_budget_over_detail.js
+test_budget_scan.js
 test_check_action_pins.py
 test_check_action_runtimes.py
 test_check_badge_endpoints.py
@@ -112,6 +114,7 @@ test_readme_skills.py
 test_record_determinism_trend.py
 test_refs_trend.py
 test_refs_trend_badge.py
+test_refs_trend_badge_node.js
 test_render_z3_slides.py
 test_repack_verify.py
 test_repro_artifact_sections_e2e.py
@@ -150,6 +153,7 @@ test_trend_db_contract.py
 test_trend_db_prisma_setup.py
 test_trend_record_pr_contract.py
 test_trend_schedule_paths.py
+test_trend_tooltip_dom.js
 test_update_changelog_hook.py
 test_update_preview_sync_server.py
 test_validate_config_schema.py
@@ -161,5 +165,6 @@ test_workflow_contract.py
 test_workflow_install_hardening.py
 test_workflow_timeouts.py
 test_workflow_triggers.py
+test_z3_scan.js
 test_z3_slide_gallery.py
 test_z3_slide_reproducibility.py

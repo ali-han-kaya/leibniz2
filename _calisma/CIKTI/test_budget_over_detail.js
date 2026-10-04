@@ -1,57 +1,40 @@
 #!/usr/bin/env node
-const fs = require('fs');
-const vm = require('vm');
+// budgetOverDetailRows — 30 satır tavanı, en yeni üstte, taşma sayacı.
+//
+// Kapsam: TEK saf fonksiyon. Sandbox preview_vm_sandbox.js'te ortak — burada
+// yalnızca incelediğimiz çıktıyı doğruluyoruz.
+//
+// NOT: bu dosya uzun süre preview.html'den inline <script> kazıyordu. Dashboard
+// kodu preview.js'e taşınınca regex hiç eşleşmedi ve test, HİÇBİR YERDE
+// koşulmadığı için sessizce ölü kaldı.
+'use strict';
+
 const assert = require('assert');
+const { loadPreview } = require('./preview_vm_sandbox.js');
 
-const html = fs.readFileSync(__dirname + '/preview.html', 'utf8');
-const script = html.match(/<script>\n"use strict";([\s\S]*?)<\/script>/);
-assert(script, 'inline dashboard script not found');
-
-const sandbox = {
-  console,
-  Date,
-  isFinite,
-  encodeURIComponent,
-  decodeURIComponent,
-  setTimeout,
-  setInterval: () => {},
-  fetch: () => Promise.resolve({ json: () => Promise.resolve([]) }),
-  EventSource: function () {
-    this.addEventListener = () => {};
-    this.close = () => {};
-  },
-  document: {
-    getElementById: () => ({
-      addEventListener: () => {},
-      classList: { toggle() {}, add() {}, remove() {} },
-    }),
-    querySelectorAll: () => [],
-  },
-  window: {},
-  navigator: {},
-};
-vm.createContext(sandbox);
-vm.runInContext('"use strict";\n' + script[1], sandbox);
+const { sandbox } = loadPreview();
+assert.strictEqual(
+  typeof sandbox.budgetOverDetailRows,
+  'function',
+  'budgetOverDetailRows preview.js içinde tanımlı değil'
+);
 
 const rows = Array.from({ length: 35 }, (_, i) => ({
   ts: `2026-08-01T00:${String(i).padStart(2, '0')}:00Z`,
   budget_usd: i + 1,
 }));
-sandbox.BUDGET_LIMIT = 10;
-const output = sandbox.budgetOverDetailRows(rows);
-const lines = output.split('\n');
-assert.strictEqual(
-  lines.length,
-  31,
-  'must render 30 rows plus overflow marker'
-);
-assert(lines[0].includes('$35.00'), 'newest run must be first');
-assert(lines[29].includes('$6.00'), '30th newest run must be last');
-assert(lines[30].includes('… +5 run daha'), 'overflow count must be accurate');
-assert(
-  !lines.some((line) => line.includes('$5.00')),
-  '31st row must be omitted'
-);
+const lines = sandbox.budgetOverDetailRows(rows).split('\n');
+
+const CASES = [
+  ['30 satır + taşma işareti', lines.length, 31],
+  ['en yeni üstte', lines[0].includes('$35.00'), true],
+  ['30. en yeni son satır', lines[29].includes('$6.00'), true],
+  ['taşma sayacı doğru', lines[30].includes('… +5 run daha'), true],
+  ['31. satır düşer', lines.some((l) => l.includes('$5.00')), false],
+];
+for (const [name, got, expected] of CASES) {
+  assert.strictEqual(got, expected, name);
+}
 console.log(
-  'budgetOverDetailRows: PASS — 30-row cap, newest-first, overflow count'
+  `budgetOverDetailRows: PASS — ${CASES.length} kural (30-row cap, newest-first, overflow count)`
 );

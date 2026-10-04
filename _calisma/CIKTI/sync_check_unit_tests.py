@@ -121,13 +121,21 @@ EXCLUDE = {
 
 
 def discover(directory=None):
-    """dizindeki test_*.py dosyalarını sıralı döndür (EXCLUDE hariç)."""
+    """dizindeki test_*.py VE test_*.js dosyalarını sıralı döndür (EXCLUDE hariç).
+
+    `.js` de kapsamda: dashboard/github-script testleri node ile koşar ve
+    HOOK_COVERAGE'de check-unit-tests'a yazılmıştı — ama keşif yalnız `.py`
+    gördüğü için manifest'e hiç girmiyor, dolayısıyla kapı onları sessizce
+    hiç koşmuyordu. Kapsam dışı bırakılmış bir test, koşmayan bir testtir.
+    """
     d = directory or CIKTI
     out = []
     if not os.path.isdir(d):
         return out
     for name in sorted(os.listdir(d)):
-        if name.startswith("test_") and name.endswith(".py") and name not in EXCLUDE:
+        if (name.startswith("test_")
+                and name.endswith((".py", ".js"))
+                and name not in EXCLUDE):
             out.append(name)
     return out
 

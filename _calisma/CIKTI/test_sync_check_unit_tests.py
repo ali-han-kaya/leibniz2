@@ -305,28 +305,35 @@ class TestRepoConsistency(unittest.TestCase):
             )
 
     def test_hook_pattern_matches_real_test_for_every_entry(self):
-        """check_unit_tests_hook.sh pattern'i her giriş için en az 1 dosya bulmalı.
+        """Her manifest girişi hook'un koşacağı GERÇEK bir dosyaya eşleşmeli.
 
-        Regresyon kapısı: hook `-p "$t.py"` kullanır (t = manifest girişi,
-        `.py` sıyrılır). Eski hata: manifest girişi zaten `.py`'liyken bir kez
-        daha `.py` ekleniyordu → `test_X.py.py` → 0 eşleşme. Python 3.9-3.11'de
-        boş discovery exit 0 döndüğü için hook SESSİZCE hiç test koşmadan
-        "PASS" diyordu; Python 3.12+ ise boş discovery'de exit 5 döndürür
-        (gh-136442) → CI'da 49/49 BAŞARISIZ. Bu test pattern'in her manifest
-        girişi için gerçek bir test dosyasıyla eşleştiğini sabitler.
+        Regresyon kapısı: hook uzantıya göre dağıtır — `.py` → `-p "$base.py"`,
+        `.js` → `node <giriş>`. Eski hata (çift uzantı): manifest girişi zaten
+        `.py`'liyken bir kez daha `.py` ekleniyordu → `test_X.py.py` → 0 eşleşme.
+        Python 3.9-3.11 boş discovery'de exit 0 döndürdüğü için hook SESSİZCE
+        hiç test koşmadan "PASS" diyordu; 3.12+ exit 5 döndürür (gh-136442).
+        `.js` için aynı sessizlik geçerliydi ve daha kötüsü vardı: dashboard
+        testleri manifest'e hiç girmiyordu, HOOK_COVERAGE onları
+        check-unit-tests'a yazmıştı, kapı da onları hiç koşmuyordu. Bu test her
+        girişin koşucusu tarafından gerçekten bulunacağını sabitler.
         """
         import fnmatch
 
         names = s.read_manifest()
         self.assertTrue(names, "manifest boş — hook hiçbir şey koşmaz")
-        files = [f for f in os.listdir(s.CIKTI) if f.endswith(".py")]
+        py_files = [f for f in os.listdir(s.CIKTI) if f.endswith(".py")]
+        js_files = [f for f in os.listdir(s.CIKTI) if f.endswith(".js")]
         for name in names:
-            base = name[:-3] if name.endswith(".py") else name
-            pattern = base + ".py"
+            if name.endswith(".js"):
+                pattern = name
+                found = name in js_files
+            else:
+                pattern = (name[:-3] if name.endswith(".py") else name) + ".py"
+                found = any(fnmatch.fnmatchcase(f, pattern) for f in py_files)
             self.assertTrue(
-                any(fnmatch.fnmatchcase(f, pattern) for f in files),
-                f"Hook pattern '{pattern}' hiçbir test dosyasıyla eşleşmiyor "
-                f"(çift uzantı/yanlış giriş) — kaynak: {name}",
+                found,
+                f"Hook koşucusu '{pattern}' için gerçek bir test dosyası "
+                f"bulamıyor (çift uzantı/yanlış giriş) — kaynak: {name}",
             )
 
 

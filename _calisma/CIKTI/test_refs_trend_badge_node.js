@@ -11,8 +11,10 @@
 const fs = require('fs');
 const path = require('path');
 
-// preview.html'den refsTrendBadge fonksiyonunu çıkar
-const previewPath = path.join(__dirname, 'preview.html');
+// refsTrendBadge preview.js'te yaşar; preview.html yalnız `<script src>` taşır.
+// Bu dosya preview.html'den çıkarmaya çalışıyordu — kod ayrılınca "bulunamadı"
+// diyerek sessizce ölü kaldı.
+const previewPath = path.join(__dirname, 'preview.js');
 const html = fs.readFileSync(previewPath, 'utf8');
 const fnMatch = html.match(/function refsTrendBadge\(rows\)\s*\{[\s\S]*?\n\}/);
 if (!fnMatch) {

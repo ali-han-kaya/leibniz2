@@ -33,33 +33,67 @@ if ! "$PY" "$SCRIPT_DIR/sync_check_unit_tests.py" --check >/dev/null; then
   exit 1
 fi
 
-# 2) Manifestten her test dosyasını koş.
+# 2) Manifestten her test dosyasını koş — UZANTIYA GÖRE.
 if [ ! -f "$MANIFEST" ]; then
   echo "HATA: check_unit_tests.list bulunamadı — sync çalıştırılamadı." >&2
   exit 1
 fi
 
+# Node yalnız `.js` girdisi varsa gerekli; yoksa hiç aranmaz (CI'da node
+# kurulu değilken python-only koşu bozulmamalı).
+NODE_BIN="${NODE:-$(command -v node 2>/dev/null || true)}"
+
 fails=0
 total=0
+py_total=0
+js_total=0
 while IFS= read -r t; do
   [ -z "$t" ] && continue
   case "$t" in \#*) continue ;; esac
   total=$((total + 1))
-  # Manifest girişleri `.py` uzantılıdır; pattern'e bir kez daha `.py`
-  # eklemek `test_X.py.py` üretir → 0 test eşleşir. Python 3.12+ boş
-  # discovery'de exit 5 döndürdüğünden hook CI'da 49/49 BAŞARISIZ olur;
-  # 3.9-3.11'de ise 0 testle "PASS" diye sessizce hiçbir şey koşmazdı.
-  # Uzantıyı sıyırıp canonical `-p "$t.py"` pattern'ini kullanıyoruz.
-  t="${t%.py}"
-  if ! "$PY" -m unittest discover -s _calisma/CIKTI -p "$t.py" >/dev/null 2>&1; then
-    echo "FAILED: $t" >&2
-    fails=$((fails + 1))
-  fi
+
+  case "$t" in
+    *.js)
+      js_total=$((js_total + 1))
+      # Bu dal YOKSA `.js` girdileri python yoluna düşer, pattern
+      # "test_x.js.py" olur, 0 test eşleşir ve Python 3.9 "OK" deyip
+      # sessizce hiçbir şey koşmadan geçerdi. Uzantı ayrımı bu yüzden zorunlu.
+      if [ -z "$NODE_BIN" ]; then
+        echo "FAILED: $t (node bulunamadı — .js testleri koşulamıyor)" >&2
+        fails=$((fails + 1))
+        continue
+      fi
+      if out="$("$NODE_BIN" "$SCRIPT_DIR/$t" 2>&1)"; then
+        # Koştuğunu GÖSTER: pre-commit çıktısında kanıt görünsün.
+        echo "  + node $t: $(printf '%s' "$out" | tail -n 1 | head -c 96)"
+      else
+        echo "FAILED: $t (node)" >&2
+        printf '%s\n' "$out" | tail -n 6 >&2
+        fails=$((fails + 1))
+      fi
+      ;;
+    *.py)
+      py_total=$((py_total + 1))
+      # Pattern'e bir kez daha `.py` eklemek `test_X.py.py` üretir → 0 test
+      # eşleşir. Python 3.12+ boş discovery'de exit 5 döndürdüğünden hook CI'da
+      # 49/49 BAŞARISIZ olur; 3.9-3.11'de ise 0 testle "PASS" diye sessizce
+      # hiçbir şey koşmazdı. Uzantıyı sıyırıp canonical `-p "$t.py"` kullanıyoruz.
+      base="${t%.py}"
+      if ! "$PY" -m unittest discover -s _calisma/CIKTI -p "$base.py" >/dev/null 2>&1; then
+        echo "FAILED: $t" >&2
+        fails=$((fails + 1))
+      fi
+      ;;
+    *)
+      echo "FAILED: $t (bilinmeyen uzantı — koşucu yok)" >&2
+      fails=$((fails + 1))
+      ;;
+  esac
 done < "$MANIFEST"
 
 if [ "$fails" -gt 0 ]; then
   echo "check-unit-tests: $fails/$total test dosyası BAŞARISIZ — commit bloke." >&2
   exit 1
 fi
-echo "check-unit-tests: $total test dosyası PASS."
+echo "check-unit-tests: $total test dosyası PASS ($py_total python, $js_total node)."
 exit 0
