@@ -6,14 +6,22 @@ izinli metot kümesini taşır; bu süit o tablodan TÜM metot-hücrelerini
 otomatik üretir ve gerçek HTTPServer üzerinde sabitler:
 
   200         metot izinli (SSE: 200 + text/event-stream, header-only prob)
-  405+Allow   yol biliniyor, GET reddi açık (_reject_method) — yalnız POST-only
-  404         do_GET/do_POST fallback — yol yok veya POST dağıtım-dışı (JSON)
-  501         BaseHTTPRequestHandler default — do_<METHOD> tanımsız
+  405+Allow   yol biliniyor, metot sözleşmede yok — Allow başlığı
+              API_CONTRACT'tan türer (GET-reddi açık uçta "POST", diğerinde
+              yolun tam izinli kümesi). Ortak yol: _method_not_allowed.
+  404         yol yok (GET/POST fallback ve _method_not_allowed) ya da POST
+              dağıtım-dışı (JSON)
   HEAD        bilinen yol → 200 (gövdesiz), bilinmeyen → 404
   /api/stop   POST izinli ama auth/ready-guard'lı → 403/503 (routing düzeyinde
-              POST dispatch'li: 404/501 ASLA değil)
+              POST dispatch'li: 404 ASLA değil)
 
-Yeni bir do_PUT/do_DELETE eklenirse matris 501 hücrelerinde KIRMIZI düşer —
+501 YOK: BaseHTTPRequestHandler'ın tanımsız do_<METHOD> varsayılanı kaldırıldı.
+Handler.__getattr__ her tanımsız metodu _method_not_allowed'a götürür, yani
+"sunucu yapmayı bilmiyor" (501) ile "yol var, metot yanlış" (405) artık
+ayrışmaz — istemci ikisini ayırt etmek zorunda kalmaz.
+
+Yeni bir do_<METHOD> gerçekten eklenecekse
+test_unsupported_methods_return_405_with_allow_everywhere KIRMIZI düşer —
 sözleşme değişikliği bilinçli yapılmak zorunda (fail-closed). Kaynak-testi
 (test_api_method_contract) tablo↔_route eşleşmesini pinler; bu süit ise
 DAVRANIŞI canlı sokette pinler. İkisi birlikte: tablo-drift ve davranış-drift
@@ -22,7 +30,7 @@ ikisi de pre-commit'te yakalanır.
 Sabitler (bu turun canlı-prob kanıtıyla eşleşir):
   GET /api/run-now  → 405, Allow: POST, {"error": "method not allowed"}
   POST /api/latest  → 404, {"error": "not found"}
-  PUT  /api/latest  → 501 (HTML, handler yok)
+  PUT  /api/latest  → 405, Allow: GET, {"error": "method not allowed"}
 """
 import json
 import os
@@ -45,7 +53,8 @@ from test_api_method_contract import LIVE_URLS  # noqa: E402
 
 # Matrisin taradığı metotlar (HEAD ayrı: gövdesiz sözleşmesi).
 METHODS = ("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "TRACE")
-# do_ handler'ı tanımsız → BaseHTTPRequestHandler 501 döndürür.
+# Sözleşmede olmayan metot: Handler.__getattr__ hepsini ortak 405 + Allow
+# yoluna götürür → BaseHTTPRequestHandler'ın 501'i artık hiç dönmez.
 UNSUPPORTED = frozenset({"PUT", "DELETE", "PATCH", "OPTIONS", "TRACE"})
 # State-changing uçlar: başka metotla ASLA tetiklenmemeli (sayaç-sabiti).
 STATE_CHANGING = {"/api/run-now", "/api/stop"}
@@ -70,7 +79,7 @@ def expected_for(path, method):
         return (405,)  # açık GET-reddi (POST-only uçlar)
     if method == "POST":
         return (404,)  # do_POST fallback — JSON "not found"
-    return (501,)  # UNSUPPORTED: do_<METHOD> tanımsız
+    return (405,)  # UNSUPPORTED: ortak _method_not_allowed → 405 + Allow
 
 
 class _ThreadedStubServer(HTTPServer):
@@ -176,8 +185,12 @@ class TestApiMethodMatrix(unittest.TestCase):
                                   f"{method} {url} → {status} "
                                   f"(beklenen {expected}); body={body[:120]!r}")
                     if status == 405:
-                        self.assertEqual(allow, "POST",
-                                         "405 hücresi Allow: POST taşımali")
+                        # Allow başlığı sözleşmeden türer: GET-reddi olan
+                        # POST-only uçta "POST", diğer hücrelerde yolun tam
+                        # izinli kümesi.
+                        self.assertEqual(allow, ", ".join(sorted(allowed)),
+                                         "405 hücresi sözleşmeden türeyen "
+                                         "Allow taşımalı")
                         payload = json.loads(body.decode("utf-8"))
                         self.assertEqual(payload.get("error"),
                                          "method not allowed")
@@ -203,37 +216,48 @@ class TestApiMethodMatrix(unittest.TestCase):
         self.assertEqual(status, 404)
 
     def test_unknown_path_full_method_row(self):
-        """Bilinmeyen /api/* satırı: GET/POST→404 JSON, diğerleri→501."""
-        path = "/api/unknown-matrix-row"
-        status, _, body = self._probe("GET", path)
-        self.assertEqual(status, 404)
-        self.assertEqual(json.loads(body.decode("utf-8")).get("error"),
-                         "not found")
-        status, _, body = self._probe("POST", path)
-        self.assertEqual(status, 404)
-        self.assertEqual(json.loads(body.decode("utf-8")).get("error"),
-                         "not found")
-        for method in sorted(UNSUPPORTED):
-            with self.subTest(method=method):
-                status, _, _ = self._probe(method, path)
-                self.assertEqual(status, 501)
+        """Bilinmeyen /api/* satırı: HER metot → 404 JSON.
 
-    def test_unsupported_methods_stay_501_everywhere(self):
-        """501 ayrımı tüm sözleşme-yollarında sabit — yeni do_PUT eklenirse kırmızı."""
+        405 "yol var, metot yanlış" demektir; yol yoksa 404'tür — metot ne
+        olursa olsun. Yani tanımsız metotlar bilinmeyen yolu 405'e değil 404'e
+        çevirmez (eski 501 hücreleri de buradaydı).
+        """
+        path = "/api/unknown-matrix-row"
+        for method in ("GET", "POST") + tuple(sorted(UNSUPPORTED)):
+            with self.subTest(method=method):
+                status, _, body = self._probe(method, path)
+                self.assertEqual(status, 404,
+                                 f"{method} {path} → {status} (404 beklenir)")
+                self.assertEqual(json.loads(body.decode("utf-8")).get("error"),
+                                 "not found")
+
+    def test_unsupported_methods_return_405_with_allow_everywhere(self):
+        """Sözleşme-dışı metot → 405 + Allow, hiçbir yolda 501 değil.
+
+        Yeni bir do_<METHOD> gerçekten eklenecekse burası kırmızıya düşer ve
+        sözleşmenin bilinçli güncellenmesini zorlar.
+        """
         for path in sorted(API_CONTRACT):
             url = LIVE_URLS[path]
+            allowed = ", ".join(sorted(API_CONTRACT[path]))
             for method in sorted(UNSUPPORTED):
                 with self.subTest(path=path, method=method):
-                    status, _, _ = self._probe(method, url)
-                    self.assertEqual(status, 501,
-                                     f"{method} {url} → {status}: do_{method} "
-                                     "eklendi mi? Sözleşmeyi bilinçli güncelle")
+                    status, allow, _ = self._probe(method, url)
+                    self.assertNotEqual(status, 501,
+                                        f"{method} {url} → 501 döndü: "
+                                        "sunucuda hiçbir metot 501 dönmemeli")
+                    self.assertEqual(status, 405,
+                                     f"{method} {url} → {status}")
+                    self.assertEqual(allow, allowed,
+                                     f"{method} {url}: Allow başlığı "
+                                     f"sözleşmeden türemedi ({allow!r} ≠ "
+                                     f"{allowed!r})")
 
     def test_state_changing_endpoints_not_triggerable_by_other_methods(self):
         """/api/run-now yalnızca stub'a ulaşabilmeli; diğer tüm metotlar tetiklemez.
 
         /api/stop dahil edilmez: gerçek stop_server() stub'sız daemon'ı
-        kapatır — routing reddi (405/404/501 hücreleri) matriste pinli.
+        kapatır — routing reddi (405/404 hücreleri) matriste pinli.
         """
         before = self.server.run_now_calls
         for method in ("GET", "PUT", "DELETE", "PATCH", "OPTIONS", "TRACE"):

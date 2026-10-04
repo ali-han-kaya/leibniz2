@@ -1277,6 +1277,31 @@ API_CONTRACT = {
 # kontrol edilir.
 SSE_PATHS = {"/api/run", "/api/run-stream"}
 
+# /api/* DIŞI yollar (dashboard, sw.js, slayt galerisi) sözleşmede değil —
+# yalnız GET/HEAD ile sunulurlar. 405'in Allow başlığı buradan da beslenir.
+STATIC_METHODS = frozenset({"GET", "HEAD"})
+
+# _route'un startswith ile eşleştirdiği iki prefix ucu.
+_PREFIX_ROUTES = ("/api/run-now", "/api/run-stdout")
+
+
+def allowed_methods(path):
+    """Yolun izinli metot kümesi; yol bilinmiyorsa None.
+
+    TEK KAYNAK API_CONTRACT'tır — 405 + Allow başlığı buradan türer, ikinci
+    bir listeden değil; sözleşmeye yeni yol eklenince Allow da evrilir.
+    Eşleştirme _route ile birebir aynıdır: iki uç startswith, gerisi tam
+    eşleşme. Yalnız _route tanıdığı yollara izin verilir; /api/* olmayan
+    statik yollar STATIC_METHODS'e düşer.
+    """
+    p = urllib.parse.urlparse(path).path
+    for route_path in _PREFIX_ROUTES:
+        if p.startswith(route_path):
+            return API_CONTRACT[route_path]
+    if p in API_CONTRACT:
+        return API_CONTRACT[p]
+    return STATIC_METHODS if _route(p) is not None else None
+
 
 def _route(path):
     """İstek yolunu query string'den arındırıp do_GET rotasını döndürür.
@@ -1412,6 +1437,44 @@ class Handler(BaseHTTPRequestHandler):
         self._send(status, json.dumps(payload),
                    content_type="application/json; charset=utf-8",
                    extra_headers={"Allow": "POST"})
+
+    def _method_not_allowed(self):
+        """405 + Allow — yol var, metot yanlış.
+
+        BaseHTTPRequestHandler'ın varsayılanı, tanımsız do_<METHOD> için 501
+        "Not Implemented" döner. Oysa 501 "sunucu bu isteği yapmayı bilmiyor"
+        demektir (RFC 9110 §15.6.2) — burada yol mevcut, yalnız metot yanlış;
+        doğru yanıt 405 + Allow'dır. İzinli küme allowed_methods() →
+        API_CONTRACT zincirinden gelir, yani davranış sözleşmeyle birlikte
+        evrilir; ikinci bir "hangi metotlar" listesi tutulmaz.
+
+        Bilinmeyen yol 404 kalır: 405 "yol var, metot yanlış" demektir.
+        """
+        allowed = allowed_methods(self.path)
+        if allowed is None:
+            status, payload = api_error(404, "not found")
+            self._send(status, json.dumps(payload),
+                       content_type="application/json; charset=utf-8")
+            return
+        status, payload = api_error(405, "method not allowed")
+        self._send(status, json.dumps(payload),
+                   content_type="application/json; charset=utf-8",
+                   extra_headers={"Allow": ", ".join(sorted(allowed))})
+
+    def __getattr__(self, name):
+        """Tanımsız do_<METHOD> → ortak _method_not_allowed (405 + Allow).
+
+        PUT/DELETE/OPTIONS/PATCH/TRACE ve gelecekteki her metot buradan geçer.
+        Ayri do_PUT/do_DELETE/do_OPTIONS takma adları KOYULMADI: __getattr__
+        zaten hepsini yakaladığı için onlar erişilemez (ölü kod) olurdu.
+        Tek mekanizma, tek doğruluk yolu — ve sunucuda hiçbir metot 501 dönmez.
+        Yeni bir do_<METHOD> gerçekten eklenecekse bu satırın ÖNÜNE yazılmalı
+        (bilinçli sözleşme değişikliği); test_unsupported_methods_stay_405
+        kırmızıya düşürür.
+        """
+        if name.startswith("do_"):
+            return self._method_not_allowed
+        raise AttributeError(name)
 
     def do_GET(self):
         # Query string'li istekler (cache-buster ?_t= / ?v=) da aynı rotaya
