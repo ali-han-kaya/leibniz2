@@ -41,6 +41,11 @@ def fake_repo(root):
     os.makedirs(guide, exist_ok=True)
     with open(os.path.join(guide, "guide.html"), "w", encoding="utf-8") as f:
         f.write("x\n")
+    # Yayınlanmış API referansı (Redoc) — /api-docs.html rotasının kaynağı
+    api_docs = os.path.join(root, "docs", "api")
+    os.makedirs(api_docs, exist_ok=True)
+    with open(os.path.join(api_docs, "index.html"), "w", encoding="utf-8") as f:
+        f.write("x\n")
     with open(os.path.join(root, "docs", "HOOK_ENV_MATRIX.md"), "w", encoding="utf-8") as f:
         f.write("x\n")
     # a11y same-origin axe bundle — sync PREVIEW_FILES ile mirror'a girer

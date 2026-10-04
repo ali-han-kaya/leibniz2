@@ -20,6 +20,7 @@ teslimini ve onu doğrulayan fail-closed araç zincirini içerir.
 | `_calisma/lean_reduct/` | reduct-invariance lemmasının Lean 4 formalizasyonu (derlenmiş, exit 0) |
 | `_calisma/repack_delivery.py` · `sync_docs.py` | Zincir yeniden üretimi ve belge senkronu yardımcıları |
 | `docs/PREVIEW_STOP_ALLOWLIST.md` | `/api/stop` + `/api/run-now` TCP-peer kapısı — sandbox-dışı dağıtımda `PREVIEW_STOP_ALLOWLIST` env örneği ve güvenlik notu (varsayılan: yalnız loopback) |
+| `docs/api/index.html` | Yayınlanmış OpenAPI referansı (Redoc CE, `openapi.json`dan üretilir) — preview sunucusunda `/api-docs.html` rotasıyla servis edilir |
 | `.pre-commit-config.yaml` | Commit öncesi fail-closed kapı |
 
 ## Skills
@@ -511,6 +512,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-25 | fix | (ci) paginate live audit artifacts | [`a24c4db`](https://github.com/ali-han-kaya/leibniz2/commit/a24c4db) |
 | 2026-09-28 | feat | (design-system) GitHub site örnek seti + ADR-0001 pinokio launcher | [`2ef1821`](https://github.com/ali-han-kaya/leibniz2/commit/2ef1821) |
 | 2026-10-05 | refactor | (preview) ortak TCP-peer kapisi + PREVIEW_STOP_ALLOWLIST dokumani | [`f70ce6e`](https://github.com/ali-han-kaya/leibniz2/commit/f70ce6e) |
+| 2026-10-05 | feat | (api) OpenAPI semasinda TCP-peer ve bearer yanitlarini belgele | [`817c9ac`](https://github.com/ali-han-kaya/leibniz2/commit/817c9ac) |
 
 ### Regresyon notları
 

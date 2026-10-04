@@ -112,6 +112,15 @@
 #                               Düzeltme: python3 _calisma/CIKTI/gen_openapi.py
 #                               (üretici saf + deterministik, anahtar-sıralı).
 #                               OFFLINE, stdlib-only, ~0.05s.
+#   23) check-openapi-docs  : gen_openapi_docs.py --check —
+#                               docs/api/index.html'yi canlı openapi.json'dan
+#                               yeniden üretip diskteki baytlarla karşılaştırır.
+#                               Neden ayrı kapı: şema bayatlığı (22) ile
+#                               DOKÜMAN bayatlığı farklı hatalardır — şema taze
+#                               ama sayfa eskiyse yayınlanan referans sessizce
+#                               yanlış yüzeyi gösterir ve commit'i yalnız şema
+#                               kapısı geçer. İkisi ayrı bloklar.
+#                               OFFLINE, stdlib-only, ~0.05s.
 # Herhangi bir P0/P1 bulgusu commit'i bloke eder (sıfır-dışı exit).
 #
 # Not: update-config TEK yazan hook'tur (config'i stage eder). Diğer kapılar
@@ -1016,3 +1025,25 @@ repos:
         stages: [pre-commit]
         verbose: true
 
+      - id: check-openapi-docs
+        name: "OpenAPI doküman (Redoc) drift kapısı (fail-closed)"
+        description: >-
+          gen_openapi_docs.py --check: docs/api/index.html'yi canlı
+          openapi.json'dan yeniden üretip DİSKTEKİ baytlarla karşılaştırır;
+          bayat veya eksikse exit 1. Bu sayfa yayınlanmış API referansıdır
+          (Redoc CE v2.0.0, sürüm sabitli CDN; şemanın kendisi sayfaya
+          gömülüdür) ve preview sunucusunda `/api-docs.html` rotasıyla
+          servis edilir. Desen kardeş kapı `check-openapi-drift` ile birebir
+          aynı; ayrı tutulur çünkü iki ayrı hatayı yakalar — şema bayatken
+          doküman taze görünebilir (üretim unutulmuş), doküman bayatken
+          şema taze görünebilir (sayfa yeniden yazılmamış). always_run:
+          kaynak sözleşme ya da üretici değişmeden de sayfa bayatlayabilir.
+          Düzeltme: python3 _calisma/CIKTI/gen_openapi_docs.py (üretici saf
+          + deterministik). Test: test_openapi_docs.py. OFFLINE,
+          stdlib-only, ~0.05s.
+        entry: python3 _calisma/CIKTI/gen_openapi_docs.py --check
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+        verbose: true

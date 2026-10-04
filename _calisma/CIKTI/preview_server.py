@@ -1373,6 +1373,11 @@ def _route(path):
         return "design_tokens"
     if p == "/guide.html":
         return "guide"
+    # Yayınlanmış API referansı (Redoc) — docs/api/index.html'den üretilir.
+    # /api/* DEĞİL: API_CONTRACT dışı statik yüzey, Host/Origin kapısına
+    # tabi değil (veri taşıyan GET uçlarıyla aynı gerekçe).
+    if p in ("/api-docs.html", "/api-docs"):
+        return "api_docs"
     if p == "/api/latest":
         return "latest"
     if p == "/api/run":
@@ -1508,6 +1513,8 @@ class Handler(BaseHTTPRequestHandler):
             self.serve_preview()
         elif route == "guide":
             self.serve_guide()
+        elif route == "api_docs":
+            self.serve_api_docs()
         elif route == "preview_js":
             self.serve_preview_js()
         elif route == "vendor_axe":
@@ -2015,6 +2022,26 @@ class Handler(BaseHTTPRequestHandler):
         path = os.path.join(PREVIEW_DIR, "guide.html")
         if not os.path.isfile(path):
             self._send(404, "404 — guide.html mirror'da yok "
+                             "(bash _calisma/CIKTI/sync_verify_mirror.sh)")
+            return
+        with open(path, encoding="utf-8") as f:
+            html = f.read()
+        self._send(200, html, content_type="text/html; charset=utf-8")
+
+    def serve_api_docs(self):
+        """Yayınlanmış OpenAPI referansı (Redoc CE).
+
+        Kaynak: docs/api/index.html — `gen_openapi_docs.py` çıktısı;
+        PREVIEW_DIR'a sync_verify_mirror.sh (GUIDE_FILES) ile `api-docs.html`
+        adıyla senkronlanır. Eksikse 404 (dashboard'ı etkilemez).
+
+        Neden ayrı dosya, `openapi.json` değil: tarayıcıya ham şema yerine
+        render'ı hazır sayfa sunulur; şemanın kendisi sayfaya gömülüdür ve
+        CDN'den yalnız Redoc bundle'ı (sürüm sabitli) çekilir.
+        """
+        path = os.path.join(PREVIEW_DIR, "api-docs.html")
+        if not os.path.isfile(path):
+            self._send(404, "404 — api-docs.html mirror'da yok "
                              "(bash _calisma/CIKTI/sync_verify_mirror.sh)")
             return
         with open(path, encoding="utf-8") as f:

@@ -88,6 +88,17 @@ gövdeleri her zaman bu tek anahtarlı zarftır; içerik tipi
 | Bearer | yalnız `POST /api/run-now`, `PREVIEW_RUN_NOW_TOKEN` **set ise** | `401 {"error":"unauthorized"}` + `WWW-Authenticate: Bearer` |
 | Metot | `GET` ile `run-now`/`stop` | `405 {"error":"method not allowed"}` + `Allow: POST` |
 
+## Yayınlanmış referans
+
+Aynı sözleşmenin etkileşimli hâli `docs/api/index.html` olarak üretilir
+(`gen_openapi_docs.py` → Redoc CE, sürüm sabitli CDN). Preview sunucusu
+onu `/api-docs.html` rotasıyla servis eder — `API_CONTRACT` dışı statik bir
+yüzeydir, dolayısıyla Host/Origin kapısına tabi değildir.
+
+İki ayrı drift kapısı bu zinciri ayrı ayrı bloklar: `check-openapi-drift`
+(`openapi.json` ↔ sözleşme) ve `check-openapi-docs` (sayfa ↔ şema).
+Yeniden üretim sırası: `gen_openapi.py` sonra `gen_openapi_docs.py`.
+
 `PREVIEW_RUN_NOW_TOKEN` tanımsızsa bearer kapısı devre dışıdır (yerel varsayılan).
 
 ### 2.4 Yol ve metot çözümü

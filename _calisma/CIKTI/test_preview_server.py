@@ -1398,6 +1398,21 @@ class TestRouteQueryParams(unittest.TestCase):
                          "run_history")
         self.assertEqual(ps._route("/api/run-history"), "run_history")
 
+    def test_api_docs_route_with_cache_buster(self):
+        """Yayınlanmış referans: query'den bağımsız statik rota.
+
+        /api-docs.html veri taşıyan bir API ucu DEĞİL — bu yüzden
+        API_CONTRACT'a girmiyor ve Host/Origin kapısına tabi değil; ama
+        cache-buster'ı 404'e düşürmemeli.
+        """
+        self.assertEqual(ps._route("/api-docs.html"), "api_docs")
+        self.assertEqual(ps._route("/api-docs.html?_t=1787692102715"), "api_docs")
+        self.assertEqual(ps._route("/api-docs"), "api_docs")
+
+    def test_api_docs_route_is_outside_host_gate(self):
+        """Kapı dışı olması bir tesadüf değil: sözleşme şemasını kirletmez."""
+        self.assertNotIn("api_docs", ps._API_GET_ROUTES)
+
     def test_sse_with_version_param(self):
         self.assertEqual(ps._route("/api/run?v=1787692088565"), "sse")
         self.assertEqual(ps._route("/api/run"), "sse")

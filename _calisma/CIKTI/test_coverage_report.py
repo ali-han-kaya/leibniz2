@@ -247,6 +247,7 @@ HOOK_COVERAGE = {
         "test_canvas_determinism.py",
         "test_determinism_trend_canvas.py",
         "test_incidental_banner.py",
+        "test_openapi_docs.py",
     ],
 }
 

@@ -163,6 +163,11 @@ HOOKS = [
     # çakışmayı engeller).
     ("check-openapi-drift", "OpenAPI schema drift gate (fail-closed)", 0, 0,
      [r"openapi\.json güncel"], [r"ŞEMA BAYAT"], 10),
+    # 28) check-openapi-docs: yayınlanmış Redoc sayfasının bayatlığı.
+    # Kural: yeşil "api-docs güncel (…)"; bayatlık "DOKÜMAN BAYAT" + rc=1
+    # (fail-closed — 22) kapıyla aynı yüz, farklı çıktı sözlüğü).
+    ("check-openapi-docs", "OpenAPI docs (Redoc) drift gate (fail-closed)",
+     0, 0, [r"api-docs güncel"], [r"DOKÜMAN BAYAT"], 10),
 
     # 22) commit-msg-style: commit mesaji noise denetimi (ozel — pre-commit run ile calismaz)
     # Bu hook yalnizca git commit sirasinda .git/COMMIT_EDITMSG uzerinde calisir.

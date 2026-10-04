@@ -35,6 +35,10 @@ SDE_RUNTIME = (
 )
 PREVIEW_RUNTIME = ("preview_server.py", "_daemonize.py", "preview_prestart.py", "sw.js")
 GUIDE_REL = "docs/branch-protection-guide/guide.html"
+# Yayınlanmış OpenAPI referansı (Redoc) — preview_server /api-docs.html
+# rotası PREVIEW_DIR/api-docs.html'i servis eder; sync GUIDE_FILES bloğu
+# mirror'a taşır. Kapsam tanımı bunu beklemeli (aynı desen: guide.html).
+API_DOCS_REL = "docs/api/index.html"
 DOC_REL = "docs/HOOK_ENV_MATRIX.md"
 # Determinism-trend versiyonlu verisi (dashboard endpoint'inin okuduğu dosya;
 # mirror'da determinism_trend.jsonl olarak düz adla yaşar).
@@ -119,6 +123,7 @@ def expected_repo_files(root, cikti, lean_src):
         expected.add("_calisma/CIKTI/" + name)
     expected.update("_calisma/CIKTI/" + n for n in PREVIEW_RUNTIME)
     expected.add(GUIDE_REL)
+    expected.add(API_DOCS_REL)
     expected.add(DOC_REL)
     expected.add(DETERMINISM_TREND_REL)
     expected.add(DESIGN_TOKENS_REL)

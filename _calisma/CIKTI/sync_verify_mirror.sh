@@ -178,6 +178,10 @@ PREVIEW_FILES=(
 # /guide.html rotasında PREVIEW_DIR/guide.html'den servis eder.
 GUIDE_FILES=(
   "docs/branch-protection-guide/guide.html|guide.html"
+  # Yayınlanmış API referansı — docs/api/index.html, gen_openapi_docs.py
+  # çıktısı (Redoc). preview_server /api-docs.html rotası PREVIEW_DIR'dan
+  # servis eder; kaynak repo kökünde olduğu için GUIDE_FILES bloğunda.
+  "docs/api/index.html|api-docs.html"
   # design-system token sheet — check_tokens.py tek-kaynak sözleşmesi:
   # preview.html /design-system/tokens.css import eder; sunucu bu rotayı
   # PREVIEW_DIR/design-system-tokens.css'ten servis eder (repo'daki tek
