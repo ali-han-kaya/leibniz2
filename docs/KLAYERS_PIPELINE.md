@@ -22,8 +22,26 @@ sessiz ve kötü yöne çalışır: bir yüzey kayıt dışı `UNREGISTERED` kov
 görmezse CI kırmızı derken o yüzey yeşil der. Verdict veride taşındığı için
 hangi alt küneyi gösterdikleri önemli olmaz.
 
-Kural: `run_verdict` elle güncellenmez — `presentation_order()` üzerinden
-türetilir, yani yüzey listeleriyle birlikte evrilir.
+## Kapı ile gösterim ayrı sorudur
+
+Bu ikisi karıştırılırsa kapı sessizce bozulur:
+
+| Soru                        | Cevap veren            | Kapsam            |
+| --------------------------- | ---------------------- | ----------------- |
+| Bu runda ne **gösterelim**? | `presentation_order()` | alt küme olabilir |
+| Bu run **bloklanır** mı?    | `run_verdict()`        | üreticinin tamamı |
+
+`RENDER_LAYERS` bir **gösterim** seçimidir (run summary hangi alt kümeyi
+basar). Kapı ona bakmaz; üreticinin sidecar'a yazdığı her katmana bakar.
+Kapı `presentation_order()` üzerinden gezseydi, `RENDER_LAYERS`'ın dışındaki
+her katman listeden düştüğü anda kapıdan sessizce çıkardı — K0, K15 ve
+K18-K21 tam olarak bu yüzden FAIL oldukları hâlde `run_status: PASS`
+basıyordu.
+
+Kural: `run_verdict` **hiçbir katman listesine bakmaz**; okuduğu tek şey
+sidecar'dır. Yeni katman eklemek onu güncellemez — üretici anahtarı yazar,
+kapı görür. Bir katmanı kapıdan düşürmenin tek yolu onu sidecar'dan
+çıkarmaktır, yani üreticinin kendisi.
 
 ## Yeni katman ekleme
 

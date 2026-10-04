@@ -139,6 +139,68 @@ SCENARIOS = [
         },
     ),
     (
+        "klayers: rozet listesinde olmayan katman FAIL → kapı kapalı, yorum yazılır",
+        "pr_status_comment.js",
+        {
+            "budget/index.json": json.dumps({
+                "runs": [{"source": "verify", "estimated_usd": 1.2,
+                          "limit": 30, "tokens_est": 400000}],
+                "method": "weighted"}),
+            "precommit_findings/PRECOMMIT_RAPORU.json": json.dumps({
+                "findings": [], "counts": {"hooks": 9, "passed": 9}}),
+            "k0_findings.json": json.dumps({"count": 0, "findings": []}),
+            "lineage_findings.json": json.dumps({"ok": True, "generations": []}),
+            # REGRESYON: K18 rozet listesinde DEĞİL. Kapı (run_status) FAIL
+            # derken yalnız listeyi sayan yüzey "hepsi PASS" deyip sessizce
+            # yorum yazmayabilirdi. Görünmeyen FAIL adıyla söylenmeli.
+            "klayers.json": json.dumps({
+                "run_status": "FAIL",
+                "layers": {
+                    "K1": {"status": "PASS", "label": "Dış zip sidecar"},
+                    "K2": {"status": "PASS", "label": "Klasör checksum"},
+                    "K18": {"status": "FAIL", "label": "Daemon HTTP smoke",
+                            "findings": [{"priority": "P1"}]}}}),
+            "k10_verdict.txt": "PASS",
+            "reproducibility/manifest.json": "{}",
+        },
+        None, [], [],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.listComments": 1},
+            "body_contains": {"issues.createComment": [
+                "K katmanları: kapı kapalı",
+                "K18: Daemon HTTP smoke"]},
+            "add_labels": [], "remove_labels": [],
+        },
+    ),
+    (
+        "klayers: run_status FAIL ama rozet alt kümesi temiz → sessiz kalınmaz",
+        "pr_status_comment.js",
+        {
+            "budget/index.json": json.dumps({
+                "runs": [{"source": "verify", "estimated_usd": 1.2,
+                          "limit": 30, "tokens_est": 400000}],
+                "method": "weighted"}),
+            "precommit_findings/PRECOMMIT_RAPORU.json": json.dumps({
+                "findings": [], "counts": {"hooks": 9, "passed": 9}}),
+            "k0_findings.json": json.dumps({"count": 0, "findings": []}),
+            "lineage_findings.json": json.dumps({"ok": True, "generations": []}),
+            "klayers.json": json.dumps({
+                "run_status": "FAIL",
+                "layers": {
+                    "K1": {"status": "PASS", "label": "Dış zip sidecar"}}}),
+            "k10_verdict.txt": "PASS",
+            "reproducibility/manifest.json": "{}",
+        },
+        None, [], [],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.listComments": 1},
+            "body_contains": {"issues.createComment": ["K katmanları:"]},
+            "add_labels": [], "remove_labels": [],
+        },
+    ),
+    (
         "pr_state_sync: bütçe OK + pre-commit temiz + K0/lineage/klayers → yorum yok",
         "pr_status_comment.js",
         {

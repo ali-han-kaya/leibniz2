@@ -12,7 +12,9 @@ testler üç şeyi sabitler:
     gerçek bir katman, OTHER_KEY bir katmanla çakışmıyor.
   - presentation_order: Other önce gelir, bozuk/boş kova yok sayılır,
     eksik K katmanı None olarak ÜRETİLİR (render "sidecar'da yok" basar).
-  - run_verdict: gösterilen katmanlardan biri FAIL ise FAIL.
+  - run_verdict: YAYINLANAN katmanlardan biri FAIL ise FAIL. Gösterim
+    listesine değil, üreticinin tam çıktısına bakar — bu ikisi ayrı
+    sorudur ve karıştırılırsa katmanlar sessizce kapıdan çıkar.
 
 stdlib unittest — tek dış bağımlılık yok.
 """
@@ -122,34 +124,117 @@ class TestRunVerdict(unittest.TestCase):
     def _layer(self, status="PASS"):
         return {"label": "L", "status": status, "ran": True, "findings": []}
 
+    def _payload(self):
+        """Üreticinin YAYINLADIĞI tam katman kümesi — RENDER_LAYERS değil.
+
+        Testler gerçek çıktı biçimini taklit etmeli; gösterim listesinden
+        yola çıkan bir test, kapının o listeden bağımsız olduğunu kanıtlayamaz.
+        """
+        return {k: self._layer() for k in kc.LAYER_LABELS}
+
     def test_all_pass(self):
-        layers = {k: self._layer() for k in kc.RENDER_LAYERS}
-        self.assertEqual(kc.run_verdict(layers), "PASS")
+        self.assertEqual(kc.run_verdict(self._payload()), "PASS")
 
     def test_declared_fail_blocks(self):
-        layers = {k: self._layer() for k in kc.RENDER_LAYERS}
+        layers = self._payload()
         layers["K3"] = self._layer("FAIL")
         self.assertEqual(kc.run_verdict(layers), "FAIL")
 
     def test_unregistered_fail_blocks(self):
         # Kayıt dışı P0 hiçbir K katmanına düşmez ama kapıyı kapatır —
         # dashboard'ın göremediği tek durumdu.
-        layers = {k: self._layer() for k in kc.RENDER_LAYERS}
+        layers = self._payload()
         layers[kc.OTHER_KEY] = self._layer("FAIL")
         self.assertEqual(kc.run_verdict(layers), "FAIL")
 
     def test_skip_does_not_block(self):
-        layers = {k: self._layer() for k in kc.RENDER_LAYERS}
+        layers = self._payload()
         layers["K10"] = self._layer("SKIP")
         self.assertEqual(kc.run_verdict(layers), "PASS")
 
     def test_malformed_other_does_not_crash(self):
-        layers = {k: self._layer() for k in kc.RENDER_LAYERS}
+        layers = self._payload()
         layers[kc.OTHER_KEY] = None
         self.assertEqual(kc.run_verdict(layers), "PASS")
 
     def test_empty_layers_pass(self):
         self.assertEqual(kc.run_verdict({}), "PASS")
+
+    def test_every_registered_layer_can_block(self):
+        # KURAL: LAYER_LABELS'teki hiçbir katman, hiçbir listeden düşerek
+        # kapıdan çıkamaz. Döngü kapının kendi listesine değil üreticinin
+        # tam çıktısına baktığını kanıtlar.
+        for key in kc.LAYER_LABELS:
+            layers = self._payload()
+            layers[key] = self._layer("FAIL")
+            self.assertEqual(kc.run_verdict(layers), "FAIL",
+                             f"{key} FAIL etti ama kapı PASS dedi")
+
+
+class TestGateIsNotADisplayList(unittest.TestCase):
+    """Kapı ile gösterim AYRI sorulardır.
+
+    RENDER_LAYERS run summary'nin hangi alt kümeyi basacağıdır; kapı onunla
+    ilgisi olmayan ayrı bir sorudur. İkisini birleştiren kapı, listeden
+    düşen her katmanı sessizce dışarıda bırakır.
+    """
+
+    def _layer(self, status="PASS"):
+        return {"label": "L", "status": status, "ran": True, "findings": []}
+
+    def _payload(self):
+        return {k: self._layer() for k in kc.LAYER_LABELS}
+
+    def test_layer_outside_render_set_still_blocks(self):
+        # REGRESYON: kapı presentation_order() üzerinden geziyordu; bu
+        # yüzden K0/K15/K18-K21 FAIL oldukları hâlde PASS basıyordu.
+        outside = sorted(set(kc.LAYER_LABELS) - set(kc.RENDER_LAYERS))
+        self.assertTrue(
+            outside,
+            "test anlamlı olsun diye en az bir katman render listesinin "
+            "dışında olmalı")
+        for key in outside:
+            layers = self._payload()
+            layers[key] = self._layer("FAIL")
+            self.assertEqual(kc.run_verdict(layers), "FAIL",
+                             f"{key} render listesinde değil ama kapıyı "
+                             f"kapatmalıydı")
+
+    def test_mutating_render_layers_does_not_move_the_gate(self):
+        layers = self._payload()
+        layers["K18"] = self._layer("FAIL")
+        before = kc.run_verdict(layers)
+        original = kc.RENDER_LAYERS
+        try:
+            kc.RENDER_LAYERS = []
+            self.assertEqual(kc.run_verdict(layers), before,
+                             "gösterim listesini boşaltmak verdict'i "
+                             "değiştirdi — kapı gösterime bağlı")
+            self.assertEqual(kc.presentation_order(layers), [],
+                             "gösterim listesi değiştiyse gösterim de "
+                             "değişmeli")
+        finally:
+            kc.RENDER_LAYERS = original
+
+    def test_gate_reads_payload_not_a_layer_list(self):
+        # İleri uyum: yeni üretici sürümü K99'u tanımlar, kapı bu kodu
+        # hiç güncellemeden onu görür.
+        layers = self._payload()
+        layers["K99"] = self._layer("FAIL")
+        self.assertEqual(kc.run_verdict(layers), "FAIL")
+
+    def test_gate_survives_malformed_buckets(self):
+        layers = self._payload()
+        layers["K7"] = self._layer("FAIL")
+        layers["junk"] = "not-a-dict"
+        layers[kc.OTHER_KEY] = None
+        self.assertEqual(kc.run_verdict(layers), "FAIL")
+
+    def test_non_dict_payload_does_not_crash(self):
+        # Bozuk girdi için fail-closed olan yer burası değil: boş/çöp
+        # girdide "FAIL eden katman yok" demek doğrudur, asıl koruma
+        # run_summary_klayers.status()'ın MISSING→FAIL ayrımıdır.
+        self.assertEqual(kc.run_verdict(None), "PASS")
 
 
 class TestPresentationOrder(unittest.TestCase):

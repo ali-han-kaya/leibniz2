@@ -109,30 +109,54 @@ RENDER_LAYERS = [
 
 # ---- Sözleşme üzerinde saf fonksiyonlar --------------------------------------
 
+# BURADA İKİ AYRI SORU VAR; KARISTIRILIRSA KAPI bozulur:
+#
+#   "Bu runda ne GÖSTERELİM?"   -> presentation_order()  · alt küme olabilir
+#   "Bu run BLOKLANIR mı?"      -> run_verdict()        · HEPSİ olmalı
+#
+# RENDER_LAYERS bir GÖSTERİM seçimidir (run summary hangi alt kümeyi basar).
+# Kapı onu kapsam dışı bırakır ve üreticinin YAYINLADIĞI her katmana bakar.
+
+
+def _entries(layers):
+    """(anahtar, katman) çiftleri — bozuk kovalar atlanır, sıra garantisi yok.
+
+    Gösterim ve kapı yollarının ortak normalizasyonu. Bozuk kova tüm
+    raporu düşürmemeli: consolidate_summary bölüm status()'larını
+    try/except'siz çağırır. Sözlük olmayan girdi de çökmez.
+    """
+    if not isinstance(layers, dict):
+        return []
+    return [(k, v) for k, v in layers.items() if isinstance(v, dict)]
+
+
 def presentation_order(layers):
     """Gösterilecek (anahtar, katman) çiftleri — Other önce, sonra K sırası.
 
-    Tüketicilerin TEK gezinti yolu: "hangi katmanlar önemli" sorusu bir
-    yerde durur. Boş kova (yok ya da {}) hiç üretilmez — Other bölümü
-    görünmez. Eksik K katmanı ATLANMAZ, None döner: render() onun için
-    "sidecar'da yok" basabilmeli.
+    Tüketicilerin TEK gezinti yolu: "hangi katmanlar önemli" sorusunun
+    GÖSTERİM tarafındaki tek cevabı. Boş kova (yok ya da {}) hiç
+    üretilmez — Other bölümü görünmez. Eksik K katmanı ATLANMAZ, None
+    döner: render() onun için "sidecar'da yok" basabilmeli.
     """
-    other = layers.get(OTHER_KEY)
-    # Bozuk kova tüm raporu düşürmemeli: consolidate_summary bölüm
-    # status()'larını try/except'siz çağırır. Yalnız sözlük olan kova kabul.
-    if not isinstance(other, dict):
-        other = None
+    buckets = dict(_entries(layers))
+    other = buckets.get(OTHER_KEY)
     rows = ([(OTHER_KEY, other)] if other else [])
-    return rows + [(key, layers.get(key)) for key in RENDER_LAYERS]
+    return rows + [(key, buckets.get(key)) for key in RENDER_LAYERS]
 
 
 def run_verdict(layers):
-    """'PASS' | 'FAIL' — bu run ne kadar bloklanır?
+    """'PASS' | 'FAIL' — bu run bloklanır mı?  ÜRETİCİNİN TAM ÇIKTI KÜMESİ.
 
-    Gösterilen katmanlardan biri FAIL ise kapı kapanır. Üretici bunu
-    sidecar'a `run_status` olarak yazar; tüketiciler okur.
+    Yayınlanan her katmana bakar: listede olsun olmasın, kayıtlı olsun
+    olmasın. RENDER_LAYERS'a BAKMAZ — o bir gösterim seçimidir. İkisi
+    birleşirse, o listeden düşen her katman sessizce kapıdan çıkar;
+    K0/K15/K18-K21 tam olarak bu yüzden FAIL oldukları hâlde PASS basıyordu.
+
+    Yeni katman eklenirken bu fonksiyon GÜNCELLENMEZ: üretici anahtarı
+    sidecar'a yazar, kapı onu görür. Bir katmanı kapıdan düşürmenin tek
+    yolu artık onu sidecar'dan çıkarmaktır — yani üreticinin kendisi.
     """
-    for _key, lyr in presentation_order(layers):
-        if lyr and lyr.get("status") == "FAIL":
+    for _key, lyr in _entries(layers):
+        if lyr.get("status") == "FAIL":
             return "FAIL"
     return "PASS"

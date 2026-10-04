@@ -262,6 +262,25 @@ if (klayers && klayers.layers) {
       `✅ **K katmanları: ${passCount} PASS**` +
       (skipCount > 0 ? `, ${skipCount} SKIP` : '');
   }
+  // Verdict FAIL ama gösterilen alt kümede FAIL yok → kırmızı FAIL, bu
+  // yüzeyin listesinde olmayan bir katmanda. Rozet yalnız listeyi saydığı
+  // için yeşil kalır ve yorum "her şey yolunda" gibi okunur; oysa kapı
+  // kapalı. Görünmeyen FAIL'i adıyla söyle — kapı veriden gelir, rozet
+  // yalnız GÖSTERİLEN alt kümeyi anlatır.
+  if (failCount === 0 && klayers.run_status === 'FAIL') {
+    const hidden = Object.keys(layers).filter(
+      (k) =>
+        !KLAYER_KEYS.includes(k) && layers[k] && layers[k].status === 'FAIL'
+    );
+    if (hidden.length > 0) {
+      kLayerBadge = '🔴 **K katmanları: kapı kapalı**';
+      for (const h of hidden) {
+        kLayerLines.push(
+          `- ❌ ${h}: ${layers[h].label || '?'} (bu yüzeyin listesinde değil)`
+        );
+      }
+    }
+  }
 } else {
   kLayerBadge = '⚠️ **K katmanları: sidecar bulunamadı**';
 }
@@ -328,13 +347,18 @@ const hasK0Findings = k0 && (k0.count || 0) > 0;
 const hasLineageFail = lineage && !lineage.ok;
 let hasKlayersFail = false;
 if (klayers && klayers.layers) {
-  for (const key of KLAYER_KEYS) {
-    const lyr = klayers.layers[key];
-    if (lyr && lyr.status === 'FAIL') {
-      hasKlayersFail = true;
-      break;
-    }
-  }
+  // Kapı, KLAYER_KEYS'ten DEĞIL üreticinin verdict'inden okunur
+  // (klayers_contract.run_verdict -> sidecar run_status). KLAYER_KEYS bir
+  // GÖSTERIM listesidir; kapı onun alt kümesiyse K0/K15/K18-K21 FAIL
+  // olduklari halde bu yorum sessizce hic yazilmazdi.
+  // run_status yoksa (eski sidecar) üreticinin YAYINLADIGI her katmana
+  // bakilir — Python'daki run_verdict ile aynı kural.
+  hasKlayersFail =
+    klayers.run_status !== undefined
+      ? klayers.run_status === 'FAIL'
+      : Object.keys(klayers.layers).some(
+          (k) => klayers.layers[k] && klayers.layers[k].status === 'FAIL'
+        );
 }
 const hasCommitMsgViolations = cm && (cm.violations || []).length > 0;
 const hasReproFindings =
