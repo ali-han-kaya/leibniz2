@@ -75,6 +75,71 @@ class TestOpenApiOnDisk(unittest.TestCase):
                          "üretin: python3 _calisma/CIKTI/gen_openapi.py")
 
 
+class TestOpenApiGateResponses(unittest.TestCase):
+    """State-changing uçların KAPI yanıtları şemada belgeli olmalı.
+
+    Boşluk (2026-10-04): /api/run-now handler'ı peer + Host/Origin reddinde
+    403, bearer reddinde 401 döner; şema yalnız 200/404/409 diyordu.
+    /api/stop'un 403'ü ise gerekçesiz "JSON yanıt" idi — üretilen şemayı
+    okuyan istemci 403'ün neden geldiğini bilmiyordu.
+
+    Kodeki `_peer_gate` tekliğinin şemadaki karşılığı: iki uç da AYNI 403
+    açıklamasını taşır, uç başına kopya yazılmaz.
+    """
+
+    def _post_responses(self, schema, path):
+        return schema["paths"][path]["post"]["responses"]
+
+    def test_both_state_changing_endpoints_document_peer_host_403(self):
+        schema = gen.generate()
+        for path in ("/api/stop", "/api/run-now"):
+            with self.subTest(path=path):
+                resp = self._post_responses(schema, path)
+                self.assertIn("403", resp, "%s 403'ü belgelemiyor" % path)
+                desc = resp["403"]["description"]
+                self.assertIn("forbidden peer", desc)
+                self.assertIn("forbidden host", desc)
+
+    def test_peer_host_403_is_not_generic(self):
+        """403 gerekçesiz 'JSON yanıt' olamaz — istemci nedeni bilmeli."""
+        schema = gen.generate()
+        for path in ("/api/stop", "/api/run-now"):
+            with self.subTest(path=path):
+                desc = self._post_responses(schema, path)["403"]["description"]
+                self.assertNotEqual(desc, "JSON yanıt",
+                                    "%s 403'ü yine gerekçesiz" % path)
+
+    def test_gate_403_description_is_shared_between_endpoints(self):
+        """Tek kaynak: iki uç aynı metni taşır (kopya yazılmaz)."""
+        schema = gen.generate()
+        stop = self._post_responses(schema, "/api/stop")["403"]["description"]
+        run = self._post_responses(schema, "/api/run-now")["403"]["description"]
+        self.assertEqual(stop, run,
+                         "gate 403 metni uçlar arasında ayrıştı")
+
+    def test_run_now_documents_conditional_bearer_401(self):
+        """Bearer yalnız run-now'da; şema bunu koşulla anlatmalı."""
+        schema = gen.generate()
+        self.assertIn("401", self._post_responses(schema, "/api/run-now"))
+        self.assertNotIn("401", self._post_responses(schema, "/api/stop"),
+                         "/api/stop bearer kapısı taşımaz")
+        desc = self._post_responses(schema, "/api/run-now")["401"]["description"]
+        self.assertIn("PREVIEW_RUN_NOW_TOKEN", desc)
+
+    def test_schema_responses_match_live_handler_gates(self):
+        """Şema, handler'daki gerçek kapı sırasını yansıtır.
+
+        Handler'da peer → Host/Origin → bearer sırası var; şema en azından
+        her katmanın dönebileceği durumu belgelemeli.
+        """
+        responses = self._post_responses(gen.generate(), "/api/run-now")
+        for code in ("200", "401", "403", "404", "409"):
+            self.assertIn(code, responses, "run-now %s belgelenmemiş" % code)
+        stop = self._post_responses(gen.generate(), "/api/stop")
+        for code in ("202", "403", "404", "503"):
+            self.assertIn(code, stop, "stop %s belgelenmemiş" % code)
+
+
 class TestOpenApiStructure(unittest.TestCase):
     """Yapısal invaryantlar + deprecation politika-sabiti."""
 

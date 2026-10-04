@@ -223,7 +223,7 @@
     },
     "/api/run-now": {
       "post": {
-        "description": "POST-only: GET → 405 + Allow: POST (tetikleme asla GET).",
+        "description": "POST-only: GET → 405 + Allow: POST (tetikleme asla GET). TCP-peer kapısı izinli-küme dışı kaynak 403 (PREVIEW_STOP_ALLOWLIST ile genişler); aynı kapı /api/stop ile ortaktır.",
         "operationId": "api_run-now_post",
         "responses": {
           "200": {
@@ -235,6 +235,26 @@
               }
             },
             "description": "JSON yanıt"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bearer reddi — yalnız PREVIEW_RUN_NOW_TOKEN tanımlıysa oluşur"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "TCP-peer kapısı (forbidden peer) veya Host/Origin kapısı (forbidden host) reddi"
           },
           "404": {
             "content": {
@@ -331,7 +351,7 @@
                 }
               }
             },
-            "description": "JSON yanıt"
+            "description": "TCP-peer kapısı (forbidden peer) veya Host/Origin kapısı (forbidden host) reddi"
           },
           "404": {
             "content": {

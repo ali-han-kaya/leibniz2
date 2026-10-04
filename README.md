@@ -510,6 +510,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-25 | refactor | (design) align vercel tokens with provider contract | [`34b6ea3`](https://github.com/ali-han-kaya/leibniz2/commit/34b6ea3) |
 | 2026-09-25 | fix | (ci) paginate live audit artifacts | [`a24c4db`](https://github.com/ali-han-kaya/leibniz2/commit/a24c4db) |
 | 2026-09-28 | feat | (design-system) GitHub site örnek seti + ADR-0001 pinokio launcher | [`2ef1821`](https://github.com/ali-han-kaya/leibniz2/commit/2ef1821) |
+| 2026-10-05 | refactor | (preview) ortak TCP-peer kapisi + PREVIEW_STOP_ALLOWLIST dokumani | [`f70ce6e`](https://github.com/ali-han-kaya/leibniz2/commit/f70ce6e) |
 
 ### Regresyon notları
 

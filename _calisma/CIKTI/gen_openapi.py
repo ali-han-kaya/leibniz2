@@ -33,10 +33,33 @@ HTTP_METHODS = frozenset({"get", "post", "put", "delete", "patch",
 JSON_RESP = {"description": "JSON yanıt",
              "content": {"application/json": {"schema": {"type": "object"}}}}
 
+# State-changing uçlar: ikisi de ortak TCP-peer kapısını (Handler._peer_gate)
+# ve Host/Origin katmanını aynı 403 ile döner. Uç başına kopya yazmak yerine
+# TEK küme — kodun _peer_gate tekliğiyle aynı gerekçe: sapma yapısal olarak
+# imkânsız olsun.
+STATE_CHANGING = frozenset({"/api/run-now", "/api/stop"})
+
+_PEER_HOST_RESP = {
+    "403": {"description": "TCP-peer kapısı (forbidden peer) veya "
+                           "Host/Origin kapısı (forbidden host) reddi",
+            "content": {"application/json": {"schema": {"type": "object"}}}},
+}
+
+# Bearer yalnız run-now'da ve yalnız PREVIEW_RUN_NOW_TOKEN tanımlıysa devrede;
+# tanımsızsa şemadaki bu yanıt "beklenen" değil, "mümkün" anlamına gelir.
+_BEARER_RESP = {
+    "401": {"description": "Bearer reddi — yalnız PREVIEW_RUN_NOW_TOKEN "
+                           "tanımlıysa oluşur",
+            "content": {"application/json": {"schema": {"type": "object"}}}},
+}
+
 # Endpoint-başına davranış-notları: 405/404/501 ayrımını OpenAPI'ye taşı.
 # Anahtar: sözleşme-yolu; değer: operasyon-düzeyi description ekleri.
 _BEHAVIOR = {
-    "/api/run-now": "POST-only: GET → 405 + Allow: POST (tetikleme asla GET).",
+    "/api/run-now": "POST-only: GET → 405 + Allow: POST (tetikleme asla GET). "
+                    "TCP-peer kapısı izinli-küme dışı kaynak 403 "
+                    "(PREVIEW_STOP_ALLOWLIST ile genişler); aynı kapı "
+                    "/api/stop ile ortaktır.",
     "/api/stop": "POST-only: GET → 405. Peer/Host kapıları: izinli-küme "
                  "dışı kaynak 403 (PREVIEW_STOP_ALLOWLIST ile genişler).",
     "/api/run": "SSE akışı: text/event-stream; bağlantı uzun ömürlü.",
@@ -69,11 +92,13 @@ def generate():
             else:
                 ok = "202" if path == "/api/stop" else "200"
                 op["responses"][ok] = dict(JSON_RESP)
-                if path == "/api/run-now" and method == "post":
-                    op["responses"]["409"] = dict(JSON_RESP)
-                if path == "/api/stop" and method == "post":
-                    op["responses"]["403"] = dict(JSON_RESP)
-                    op["responses"]["503"] = dict(JSON_RESP)
+                if path in STATE_CHANGING and method == "post":
+                    op["responses"].update(_PEER_HOST_RESP)
+                    if path == "/api/run-now":
+                        op["responses"]["409"] = dict(JSON_RESP)
+                        op["responses"].update(_BEARER_RESP)
+                    if path == "/api/stop":
+                        op["responses"]["503"] = dict(JSON_RESP)
                 op["responses"]["404"] = dict(JSON_RESP)
             item[method] = op
         paths[path] = item
