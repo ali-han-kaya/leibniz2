@@ -17,7 +17,8 @@ docs/determinism_trend/determinism_trend.jsonl'ı okur (satır-başına ölçüm
   - preview_server.py:        /api/determinism-trend route +
                               serve_determinism_trend handler +
                               DETERMINISM_TREND_PATH global + main() init
-  - test_api_method_contract.py: API_CONTRACT + ROUTE_TOKENS girdileri
+  - preview_server.py:        API_CONTRACT tablosu (_route'un yanında)
+  - test_api_method_contract.py: API_CONTRACT girdileri + tablo↔_route denetimi
 
 Sözleşme testi: test_determinism_trend_badge.py.
 Badge mantığının JS karşılığı determinismTrendBadge() ile birebir senkrondur.

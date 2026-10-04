@@ -339,7 +339,7 @@ def _compute_status_board():
     #    (klayers_contract.run_verdict → sidecar run_status). Bu dashboard
     #    KATMAN LİSTESİ TUTMAZ: listesinde kayıt dışı kova olmayınca aynı
     #    sidecar için CI "FAIL" derken burada "PASS" basıyordu. Alan yoksa
-    #    bilinmiyor (❓) — tahmin etmektense bilinmeyeni göstermek.
+    #    ⚠️ — tahmin etmektense bilinmeyeni göstermek.
     kl_ok = {"PASS": True, "FAIL": False}.get(LATEST.get("run_status"))
 
     parts = [
@@ -1133,8 +1133,9 @@ def _finalize_run(stdout, stderr, rc, duration, data, verify_dir=None):
             "z3_failed": z3_failed,
             "z3_total": z3_passed + z3_failed,
             "layers": data.get("layers"),
-            # Verdict üreticiden gelir (klayers_contract.run_verdict); yoksa
-            # _compute_status_board kendi listesine düşer.
+            # Verdict üreticiden gelir (klayers_contract.run_verdict). Alan
+            # yoksa _compute_status_board artık YORUM YAPMAZ, ⚠️ gösterir —
+            # kendi listesine düşen bir yol kalmadı.
             "run_status": data.get("run_status"),
             # K9 Lean: son run'un gerçek sonucu (stderr [K9] satırından)
             "lean_ok": lean_ok,
@@ -1241,6 +1242,40 @@ def verify_loop(verify_dir, interval, stop_event=None):
                                "verdict": "ERROR", "stderr": str(e),
                                "exit_code": 1})
         stop_event.wait(interval)
+
+
+# ---- /api/* sözleşmesi -------------------------------------------------------
+#
+# Her /api/* yolunun izin verilen HTTP metot kümesi. Tablo, onu uygulayan
+# _route'un YANINDA yaşar: sözleşmeyi bir test dosyası sahiplenirse tablo gerçek
+# üreticiden kopar ve "test yeşil, sunucu farklı" ayrışması sessizce başlar.
+# test_api_method_contract.py (tablo↔_route eşleşmesi) ve
+# test_api_method_matrix.py (canlı davranış) ikisini de buradan okur.
+#
+# Prefix/routed endpoint'ler normalleştirilmiş path ile temsil edilir:
+#   /api/run-now      → startswith("/api/run-now")
+#   /api/run-stdout   → startswith("/api/run-stdout")
+# Diğerleri tam eşleşme (==).
+API_CONTRACT = {
+    "/api/latest": {"GET"},
+    "/api/run": {"GET"},           # SSE — canlı stream (served by serve_sse)
+    "/api/run-now": {"POST"},      # state-changing: verify run tetikler
+    "/api/stop": {"POST"},         # state-changing: daemon'ı durdurur
+    "/api/run-stream": {"GET"},    # SSE — satır akışı
+    "/api/history": {"GET"},
+    "/api/refs-trend": {"GET"},
+    "/api/trend": {"GET"},         # merged history + refs-trend (one fetch)
+    "/api/override-trend": {"GET"},
+    "/api/determinism-trend": {"GET"},
+    "/api/run-history": {"GET"},
+    "/api/run-stdout": {"GET"},    # prefix — ?ts= ile
+    "/api/health": {"GET"},
+}
+
+# SSE endpoint'leri canlı prob'da sonsuz stream üretir — urlopen asılır. Kaynak
+# sözleşmesi üzerinden doğrulanır, canlı katmanda kısa header prob'u ile ayrıca
+# kontrol edilir.
+SSE_PATHS = {"/api/run", "/api/run-stream"}
 
 
 def _route(path):

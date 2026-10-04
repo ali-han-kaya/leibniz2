@@ -10,8 +10,10 @@ Kapsam:
     API_CONTRACT ile eşleşmeli
   - Canlı sözleşme: gerçek HTTPServer üzerinde GET/POST prob'ları (SSE hariç)
 
-Sözleşme tablosu tek kaynaktır; yeni endpoint eklenirse bu dosya + preview_server.py
-aynı commit'te güncellenmeli.
+TEK KAYNAK: API_CONTRACT ve SSE_PATHS artık preview_server.py'de, _route'un
+yanında durur. Bu dosya onları İÇE AKTARIR, tanımlamaz — tablo kayması ancak
+preview_server düşerse mümkündür. Yeni endpoint eklenirse tek yer değişir:
+preview_server.py.
 """
 import json
 import os
@@ -29,33 +31,12 @@ if str(CIKTI) not in sys.path:
 
 import preview_server as ps  # noqa: E402
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Tek kaynak: her /api/* yolunun izin verilen metot kümesi
-# ──────────────────────────────────────────────────────────────────────────────
-# Prefix/routed endpoint'ler normalleştirilmiş path ile temsil edilir:
-#   /api/run-now      → startswith("/api/run-now")
-#   /api/run-stdout   → startswith("/api/run-stdout")
-# Diğerleri tam eşleşme (==).
-API_CONTRACT = {
-    "/api/latest": {"GET"},
-    "/api/run": {"GET"},           # SSE — canlı stream (served by serve_sse)
-    "/api/run-now": {"POST"},      # state-changing: verify run tetikler
-    "/api/stop": {"POST"},         # state-changing: daemon'ı durdurur
-    "/api/run-stream": {"GET"},    # SSE — satır akışı
-    "/api/history": {"GET"},
-    "/api/refs-trend": {"GET"},
-    "/api/trend": {"GET"},         # merged history + refs-trend (one fetch)
-    "/api/override-trend": {"GET"},
-    "/api/determinism-trend": {"GET"},
-    "/api/run-history": {"GET"},
-    "/api/run-stdout": {"GET"},    # prefix — ?ts= ile
-    "/api/health": {"GET"},
-}
-
-# SSE endpoint'leri canlı prob'da sonsuz stream üretir — urlopen asılır.
-# Kaynak sözleşmesi üzerinden doğrulanır, canlı katmanda kısa header prob'u
-# ile ayrıca kontrol edilir.
-SSE_PATHS = {"/api/run", "/api/run-stream"}
+# ────────────────────────────────────────────────────────────────────────────
+# Sözleşme tablosu preview_server'da yaşar (API_CONTRACT + SSE_PATHS) — bu
+# dosyada YENIDEN tanımlanmaz. Tek kaynak, onu uygulayan koddur; buradaki görev
+# tablo↔_route eşleşmesini sabitlemek.
+# ────────────────────────────────────────────────────────────────────────────
+from preview_server import API_CONTRACT, SSE_PATHS  # noqa: E402,F401
 
 # Canlı prob'lar için gerçek URL'ler (prefix endpoint'ler query ile)
 LIVE_URLS = {

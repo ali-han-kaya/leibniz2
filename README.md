@@ -544,6 +544,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-04 | refactor | (verify) klayers.json sozlesmesi tek module, verdict veride | [`7bb8319`](https://github.com/ali-han-kaya/leibniz2/commit/7bb8319) |
 | 2026-10-04 | fix | (verify) kapi rozet listesinde olmayan katmanlari gormuyordu | [`bba9387`](https://github.com/ali-han-kaya/leibniz2/commit/bba9387) |
 | 2026-10-04 | fix | (ci) check-unit-tests zincirine node adimi eklendi | [`0a7ea5e`](https://github.com/ali-han-kaya/leibniz2/commit/0a7ea5e) |
+| 2026-10-04 | test | (api) /api/* metot matrisi + manifest senkronu | [`7ec8883`](https://github.com/ali-han-kaya/leibniz2/commit/7ec8883) |
 
 ### Regresyon notları
 

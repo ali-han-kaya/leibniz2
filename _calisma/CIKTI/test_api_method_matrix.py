@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """test_api_method_matrix.py — /api/* × HTTP-metot matrisi (otomatik, fail-closed).
 
-API_CONTRACT (test_api_method_contract tek-kaynağı) her /api/* yolu için
+API_CONTRACT (preview_server.py tek-kaynağı, _route'un yanında) her /api/* yolu için
 izinli metot kümesini taşır; bu süit o tablodan TÜM metot-hücrelerini
 otomatik üretir ve gerçek HTTPServer üzerinde sabitler:
 
@@ -40,7 +40,8 @@ if str(CIKTI) not in sys.path:
     sys.path.insert(0, str(CIKTI))
 
 import preview_server as ps  # noqa: E402
-from test_api_method_contract import API_CONTRACT, LIVE_URLS, SSE_PATHS  # noqa: E402
+from preview_server import API_CONTRACT, SSE_PATHS  # noqa: E402
+from test_api_method_contract import LIVE_URLS  # noqa: E402
 
 # Matrisin taradığı metotlar (HEAD ayrı: gövdesiz sözleşmesi).
 METHODS = ("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "TRACE")

@@ -120,8 +120,12 @@ class TestDashboardWiring(unittest.TestCase):
         self.assertIn('elif route == "det_trend":', src)
         self.assertIn('def serve_determinism_trend(self):', src)
         self.assertIn('DETERMINISM_TREND_PATH', src)
+        # API_CONTRACT tablosu artık preview_server.py'de, _route'un yanında —
+        # sözleşmeyi uygulayan kodun kendisi tek kaynaktır. Testler tabloyu
+        # İÇE AKTARIR; aşağıdaki iki satır yalnız test içi eşlemeleri
+        # (route token + canlı URL) doğrulamaya devam eder.
+        self.assertIn('"/api/determinism-trend": {"GET"},', src)
         contract = self._src("test_api_method_contract.py")
-        self.assertIn('"/api/determinism-trend": {"GET"},', contract)
         self.assertIn('"/api/determinism-trend": \'"det_trend"\'', contract)
         self.assertIn('"/api/determinism-trend": "/api/determinism-trend",',
                       contract)
