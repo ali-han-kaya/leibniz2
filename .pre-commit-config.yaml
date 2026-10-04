@@ -96,6 +96,22 @@
 #                               --only-upgrade, apt hijyeni, pip floors) —
 #                               Dockerfile stage'liyken ateşlenir
 #                               (değişim-farkında; always_run yok).
+#   22) check-openapi-drift   : gen_openapi.py --check — openapi.json'ı canlı
+#                               API_CONTRACT'ten yeniden üretip diskteki
+#                               baytlarla karşılaştırır; bayat/eksik → rc=1.
+#                               Neden kapı: şema ELLE düzenlenen bir sözleşme
+#                               değil, ÜRETİLEN bir çıktı — ama bayat kalırsa
+#                               dokümantasyon üreticinin aksini vaat eder ve
+#                               OpenAPI tüketicileri (client codegen, portal)
+#                               sessizce yanlış yüzeyi görür. Aynı desen kardeş
+#                               kapı check-skill-surface-inventory-doc
+#                               (gen_skill_surface_inventory.py --check).
+#                               always_run: kaynak sözleşme ya da üretici
+#                               değişmeden de şema bayatlayabilir; salt-okuma
+#                               kapısı olduğu için `files` bilinçli YOK.
+#                               Düzeltme: python3 _calisma/CIKTI/gen_openapi.py
+#                               (üretici saf + deterministik, anahtar-sıralı).
+#                               OFFLINE, stdlib-only, ~0.05s.
 # Herhangi bir P0/P1 bulgusu commit'i bloke eder (sıfır-dışı exit).
 #
 # Not: update-config TEK yazan hook'tur (config'i stage eder). Diğer kapılar
@@ -974,3 +990,29 @@ repos:
         pass_filenames: false
         stages: [pre-commit]
         verbose: true
+
+      - id: check-openapi-drift
+        name: "OpenAPI şema drift kapısı (fail-closed)"
+        description: >-
+          gen_openapi.py --check: openapi.json'ı canlı API_CONTRACT'ten
+          yeniden üretip DİSKTEKİ baytlarla karşılaştırır; bayat veya eksik
+          ise exit 1 ile commit'i bloklar. Neden kapı gerekiyor: şema elle
+          düzenlenen bir sözleşme değil, ÜRETİLEN bir çıktı; ama
+          yeniden-üretim atlanırsa dokümantasyon üreticinin aksini vaat eder
+          ve OpenAPI tüketicileri (client codegen, portal) sessizce yanlış
+          yüzeyi görür. Desen kardeş kapı `check-skill-surface-inventory-doc`
+          (gen_skill_surface_inventory.py --check) ile birebir aynıdır.
+          Trigger: always_run — kaynak sözleşme (test_api_method_contract.py)
+          ya da üretici değişmeden de şema bayatlayabilir; `files` bilinçli
+          YOK (salt-okuma kapısı; pre-commit'te `files` + `always_run`
+          birlikte anlamsızdır). Düzeltme komutu hata çıktısında yazılıdır:
+          python3 _calisma/CIKTI/gen_openapi.py. Test:
+          test_openapi_schema.py::TestOpenApiDriftGate (CLI rc sözleşmesi +
+          config kaydı). OFFLINE, stdlib-only, ~0.05s.
+        entry: python3 _calisma/CIKTI/gen_openapi.py --check
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+        verbose: true
+

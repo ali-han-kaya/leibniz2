@@ -156,6 +156,14 @@ HOOKS = [
     ("check-dockerfile-security-patching", "Dockerfile security-patching contract", 0, 0,
      [r"Passed"], [], 10),
 
+    # 27) check-openapi-drift: openapi.json bayatlık kapısı (--check, rc=1).
+    # Kural: yeşil yol "openapi.json güncel (N yol)" yazdırır; bayatlık
+    # "ŞEMA BAYAT" basıp rc=1 döner ve smoke FAIL üretir (fail-closed —
+    # yalnız geçerli çıktı kaydedilir, yasak desen drift cümlesiyle
+    # çakışmayı engeller).
+    ("check-openapi-drift", "OpenAPI schema drift gate (fail-closed)", 0, 0,
+     [r"openapi\.json güncel"], [r"ŞEMA BAYAT"], 10),
+
     # 22) commit-msg-style: commit mesaji noise denetimi (ozel — pre-commit run ile calismaz)
     # Bu hook yalnizca git commit sirasinda .git/COMMIT_EDITMSG uzerinde calisir.
     # Smoke'da ayri bir mock commit senaryosu ile test edilir.

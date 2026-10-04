@@ -13,9 +13,12 @@ Tek-kaynak zinciri: test_api_method_contract.API_CONTRACT → gen_openapi
      alanı yalnız politika-dokümanındaki iki-adım şablonla gelebilir
      (x-deprecated-since + x-sunset birlikte; tek başına yasak).
 """
+import contextlib
+import io
 import json
 import pathlib
 import sys
+import tempfile
 import unittest
 
 CIKTI = pathlib.Path(__file__).resolve().parent
@@ -138,6 +141,83 @@ class TestOpenApiGateResponses(unittest.TestCase):
         stop = self._post_responses(gen.generate(), "/api/stop")
         for code in ("202", "403", "404", "503"):
             self.assertIn(code, stop, "stop %s belgelenmemiş" % code)
+
+
+class TestOpenApiDriftGate(unittest.TestCase):
+    """`gen_openapi.py --check` CLI sözleşmesi + pre-commit kaydı.
+
+    `TestOpenApiOnDisk` aynı bayatlığı KARŞILAŞTIRMA düzeyinde doğrular;
+    buradaki sınıf kapının commit'i GERÇEKTEN blokladığı yüzü pinler:
+    --check sıfari (CLI sezi) + config kaydı.
+    """
+
+    CONFIG = CIKTI.parent.parent / ".pre-commit-config.yaml"
+    HOOK_ID = "check-openapi-drift"
+
+    def _hook_block(self) -> str:
+        text = self.CONFIG.read_text(encoding="utf-8")
+        needle = "- id: %s" % self.HOOK_ID
+        self.assertIn(needle, text,
+                      "%s .pre-commit-config.yaml'da tanımlı değil — "
+                      "bayatlık kapısı çalışmıyor" % self.HOOK_ID)
+        start = text.index(needle)
+        nxt = text.find("\n      - id:", start + 1)
+        return text[start:] if nxt == -1 else text[start:nxt]
+
+    def _run(self, *argv):
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = gen.main(list(argv))
+        return rc, buf.getvalue()
+
+    def test_check_passes_on_fresh_schema(self):
+        """Depodaki openapi.json güncelse kapı rc=0 döner."""
+        rc, out = self._run("--check", "--output", str(SCHEMA_PATH))
+        self.assertEqual(rc, 0, "kapı güncel şemada kırmızı: %r" % out)
+        self.assertIn("openapi.json güncel", out)
+
+    def test_check_fails_on_stale_schema(self):
+        """Bayat şema rc=1 + düzeltme komutu yazdırır (fail-closed)."""
+        with tempfile.TemporaryDirectory() as td:
+            stale = pathlib.Path(td) / "openapi.json"
+            spec = gen.generate()
+            spec["info"]["version"] = "0.0.1-bayat"
+            stale.write_text(json.dumps(spec, indent=2, ensure_ascii=False,
+                                        sort_keys=True) + "\n",
+                             encoding="utf-8")
+            rc, out = self._run("--check", "--output", str(stale))
+        self.assertEqual(rc, 1, "bayat şema geçti: %r" % out)
+        self.assertIn("ŞEMA BAYAT", out)
+        self.assertIn("gen_openapi.py", out,
+                      "düzeltme komutu çıktıda olmalı — kullanıcı ne "
+                      "yapacağını bilemez")
+
+    def test_check_fails_when_schema_missing(self):
+        """Eksik şema sessizce geçmez: rc=1 + üretim komutu."""
+        with tempfile.TemporaryDirectory() as td:
+            rc, out = self._run("--check", "--output",
+                                str(pathlib.Path(td) / "yok.json"))
+        self.assertEqual(rc, 1, "eksik şema geçti: %r" % out)
+        self.assertIn("ŞEMA YOK", out)
+
+    def test_generate_is_idempotent(self):
+        """Düzeltme komutu idempotent: üret → bayat olmaz."""
+        with tempfile.TemporaryDirectory() as td:
+            out_path = str(pathlib.Path(td) / "openapi.json")
+            rc, _ = self._run("--output", out_path)
+            self.assertEqual(rc, 0, "üretim komutu başarısız")
+            rc, out = self._run("--check", "--output", out_path)
+        self.assertEqual(rc, 0, "taze üretim bayat sayıldı: %r" % out)
+
+    def test_hook_registered_with_check_entry(self):
+        """Config kaydı: --check girişi + ağaç-geniş (always_run) tetikleme."""
+        block = self._hook_block()
+        self.assertIn("gen_openapi.py --check", block,
+                      "kapı --check girişiyle tanımlı olmalı")
+        self.assertIn("always_run: true", block,
+                      "bayatlık kaynak-sözleşmesiz de oluşabilir; kapı "
+                      "always_run olmazsa sadece yanlış dosyada koşar")
+        self.assertIn("pass_filenames: false", block)
 
 
 class TestOpenApiStructure(unittest.TestCase):
