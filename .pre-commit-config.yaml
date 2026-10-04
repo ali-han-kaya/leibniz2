@@ -265,6 +265,23 @@ repos:
         stages: [pre-commit]
         verbose: true
 
+      - id: check-lean-statements
+        name: Verify Lean statement contract + twin identity (fail-closed)
+        description: >-
+          8 teorem çekirdeğinin iki kopyası vardır: Content.lean (shim)
+          ve Leibniz2Reduct/Content.lean (lake build --wfail bunu
+          derler). Kapı, MAP.md STATEMENT CONTRACT ile imza uyumunu VE
+          iki kopyanın byte-eşitliğini denetler. Ölçüm (2026-10-03):
+          ayrışma sessiz kalıyordu — kütüphane kopyasına enjekte edilen
+          sapma check_lean_axioms, lake build ve verify_lean.sh
+          kapılarının dördü de yeşildi. Yalnız python3, ~0.1s.
+        entry: python3 _calisma/CIKTI/check_lean_statements.py
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
       - id: check-orchestration-stdin
         name: "Require closed stdin for opencode orchestration"
         description: >-

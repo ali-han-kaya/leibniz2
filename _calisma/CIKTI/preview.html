@@ -13,7 +13,9 @@
      sync_verify_mirror.sh GUIDE_FILES taşır). Inline :root var blokları
      kaldırıldı — check-design-tokens kapısı iki-kaynak drift'ini bloke eder.
      Aşağıdaki [data-theme="light"] kuralları yalnızca var TÜKETİR, tanımlamaz. */
-  :root[data-theme="light"] body { font-family:Georgia,"Times New Roman",serif; }
+  /* Type is theme-independent (2026-10-03): the judgment voice belongs to the
+     verdict and the seal, not to the whole page — a serif body hurt dense
+     telemetry legibility at 11–13px. */
   :root[data-theme="light"] header { box-shadow:0 2px 10px rgba(77,57,34,.08); }
   :root[data-theme="light"] .card, :root[data-theme="light"] th, :root[data-theme="light"] code,
   :root[data-theme="light"] pre, :root[data-theme="light"] .tip { box-shadow:0 3px 12px rgba(77,57,34,.07); }
@@ -94,6 +96,7 @@
   .rh-row:hover { background:rgba(88,166,255,.1); }
   .rh-row:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
   [role="button"]:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  button:focus-visible, a[href]:focus-visible, [tabindex]:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
   .rh-row:active { background:rgba(88,166,255,.2); }
   .rh-filter { display:flex; gap:4px; align-items:center; margin-bottom:4px; }
   .rh-filter button { background:var(--surface-raised); color:var(--muted); border:1px solid var(--border);
@@ -147,11 +150,17 @@
     /* CLS düzeltmesi (perf turu): seal "hidden" iken UA display:none uyguluyor,
        snapshot gelince hidden=false 64px kutuyu aniden akışa sokuyordu —
        header genişleyip MAIN'in tamamı kayıyordu (ölçülen tek-shift CLS +0.2555,
-       mobil 390px @4x CPU). Alanı baştan rezerve et: display yerine visibility,
-       basma animasyonunu hidden iken beklet. */
-    visibility:hidden;
+       mobil 390px @4x CPU). Alanı baştan rezerve et: gizliyken display:block
+       + visibility:hidden, basma animasyonunu hidden iken beklet.
+
+       DİKKAT: visibility:hidden TEMEL .seal kuralında olmamalı. Ölçülen
+       hata (2026-10-04): visibility temel kuraldaydı ve geri veren başka
+       kural yoktu; snapshot gelip hidden=false olsa bile hesaplanan
+       visibility "hidden" kalıyordu — yani mühür HİÇ görünmüyordu
+       (tarayıcıda ölçüldü: hidden=false sonrası visibility=hidden).
+       visibility artık YALNIZCA [hidden] durumunda uygulanır. */
     filter:drop-shadow(0 1px 4px rgba(0,0,0,.35)); }
-  .seal[hidden] { display:block; }
+  .seal[hidden] { display:block; visibility:hidden; }
   .seal[hidden] svg { animation-play-state:paused; }
   .seal svg { width:100%; height:100%; display:block;
     animation:seal-stamp .5s cubic-bezier(.2,1.6,.4,1) both;
@@ -210,29 +219,221 @@
 ::view-transition-new(snapshot) { animation: vt-fade-in 180ms ease; }
 @keyframes vt-fade-out { from { opacity:1; } to { opacity:0; } }
 @keyframes vt-fade-in  { from { opacity:0; } to { opacity:1; } }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   PRESENTATION LAYER — 2026-10-03
+
+   The dashboard is the printer's account of a book's proofing. The page has
+   exactly two materials: the DESK (the dark canvas, i.e. the apparatus that
+   records) and the PROOF SHEET (paper — the artefact being judged, carrying
+   the verdict, the seal and the register of checks). The Z3 plates are the
+   same stock as the sheet, which is what makes them belong here.
+
+   The palette is deliberately NOT restyled. The dark accents are asserted by
+   test_colorize_rules.py (112 tests), painted into <canvas>/<svg> as literal
+   hexes in preview.js, and cited with measured ratios in the a11y allowlist.
+   Re-toning them means rewriting a locked colour contract and its documented
+   a11y rationale — a separate, evidence-backed decision, not a styling pass.
+   Identity is carried by type, structure and the sheet instead. The sheet
+   adopts the already-measured LIGHT palette, so no new colour is invented:
+   every value below is one the contrast suite already certifies.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── The three voices ──────────────────────────────────────────────────────
+   judgment : --font-verdict — the verdict, the title, the seal. Used rarely.
+   clerk    : --font-sans    — dense telemetry, the working text.
+   wire     : --font-mono    — machine output, figures, folios, timestamps. */
+body { font: var(--text-base)/var(--lh-base) var(--font-sans); }
+h1 { font-family: var(--font-verdict); font-size: 26px; font-weight: 600;
+     line-height: 1.15; letter-spacing: .004em; }
+main { max-width: 1180px; padding: 22px 28px 8px; }
+
+/* Section titles are ledger eyebrows: a rule whose right end carries that
+   section's own freshness timestamp. A mono label plus a hairline, no boxes. */
+h2 { font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+     letter-spacing: .16em; text-transform: uppercase; color: var(--muted);
+     display: flex; align-items: baseline; gap: 10px;
+     margin: 0 0 10px; padding: 0 0 5px;
+     border-bottom: 1px solid var(--border); }
+h2 .ts { margin-left: auto; letter-spacing: 0; text-transform: none;
+         font-weight: 400; }
+section { margin-bottom: 28px; }
+
+.masthead { padding: 16px 28px 15px; border-bottom: 1px solid var(--border);
+            background: linear-gradient(180deg, var(--header-start),
+                                        var(--header-end));
+            display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.masthead h1 { flex: 1 1 300px; }
+.imprint { margin: 0 0 3px; font-family: var(--font-mono); font-size: 10px;
+           font-weight: 600; letter-spacing: .2em; text-transform: uppercase;
+           color: var(--muted); }
+
+/* ── The proof sheet (imza öğesi) ─────────────────────────────────────────
+   Tipped-in paper. In dark mode it is the one lit object on the desk; in
+   light mode it is the same sheet, framed. Its left edge is RUBRICATED by
+   the verdict — red for FAIL, green for PASS, plain ink while undecided.
+   That single rule is the page's one loud moment; everything else stays
+   quiet. Driven by :has() on the two existing verdict signals, so the state
+   needs no new markup and no JS change (graceful if :has() is unsupported). */
+.sheet { position: relative; display: flex; gap: 22px;
+         align-items: flex-start; margin: 0 0 30px; padding: 20px 24px 18px;
+         background: var(--paper); color: var(--paper-ink);
+         border: 1px solid #d6cbb9;
+         border-left: 4px solid var(--rubric, #8b7355);
+         border-radius: 2px;
+         box-shadow: 0 14px 34px rgba(0,0,0,.20);
+         /* the sheet is paper in BOTH themes: it adopts the measured light
+            palette verbatim, including the AA-checked --muted #655e56 */
+         --bg-sheet: var(--paper);
+         --fg: #292722;      --fg-dimmed: #56504a;  --muted: #655e56;
+         --ok: #1f6b33;      --warn: #7d5606;       --err: #a9271c;
+         --accent: #8b5e2b;  --budget: #5f3f8c;     --border: #cfc5b5;
+         --surface: #fffdf8; --surface-raised: #e9e1d3;
+         --code-bg: #e9e1d3; --on-accent: #fffdf8; }
+.sheet:has(#status-board.board-pass),
+.sheet:has(.seal-pass) { --rubric: #1f6b33; }
+.sheet:has(#status-board.board-fail),
+.sheet:has(.seal-fail) { --rubric: #a9271c; }
+.sheet-body { flex: 1 1 auto; min-width: 0; }
+.sheet-eyebrow { margin: 0 0 8px; font-family: var(--font-mono);
+                 font-size: 10px; font-weight: 600; letter-spacing: .2em;
+                 text-transform: uppercase; color: var(--accent);
+                 border: 0; padding: 0; display: block; }
+/* the verdict is the page's thesis, so it is set in the judgment voice */
+#status-board { font-family: var(--font-verdict); font-size: 25px;
+                line-height: 1.2; font-weight: 600; letter-spacing: .004em;
+                padding: 0 0 10px; color: #292722;
+                view-transition-name: status-board; }
+#status-board.board-pass { color: #1f6b33; }
+#status-board.board-fail { color: #a9271c; }
+.sheet .aside { font-family: var(--font-mono); font-size: 11px;
+                color: #56504a; padding: 0 0 4px; }
+.sheet .ts { color: #655e56; }
+.sheet #precommit-hooks { view-transition-name: precommit-hooks; }
+.sheet #k15-sidecar { view-transition-name: k15-sidecar; }
+.sheet #badges { view-transition-name: badges; }
+.sheet .badges { margin: 8px 0; }
+
+/* The seal is the sheet's signature: larger here than it was in the header,
+   and the only ornament on the page. Space is reserved (never display:none)
+   so the stamp never shifts layout when the first snapshot lands. */
+.sheet .seal { width: 104px; height: 104px; flex: 0 0 104px; margin-left: 0;
+               filter: drop-shadow(0 1px 3px rgba(0,0,0,.22)); }
+@media (max-width: 600px) {
+  .sheet { flex-direction: column-reverse; gap: 14px; padding: 16px; }
+  .sheet .seal { width: 76px; height: 76px; flex-basis: 76px; }
+}
+
+/* The plates keep their own printed head — it must not become a flex row
+   (the gallery's ::after rule draws the underline *below* the title). */
+.z3-gallery h2, .z3-lightbox h2 { display: block;
+                                  font-family: var(--font-verdict); }
+.z3-gallery h2 { border-bottom: 1px solid #cfc1ac; }
+
+/* ── The register: the 21 checks as folios, not pills ───────────────────── */
+#klayers-panel { display: flex; flex-wrap: wrap; gap: 5px;
+                 margin: 12px 0 0; padding-top: 11px;
+                 border-top: 1px dashed #cfc1ac;
+                 view-transition-name: klayers-panel; }
+#klayers-panel .badge { font-family: var(--font-mono); font-size: 10px;
+                        font-weight: 600; letter-spacing: .04em;
+                        padding: 2px 7px; border-radius: 3px;
+                        background: none; }
+#klayers-panel .badge.ok { background: rgba(31,107,51,.08); }
+#klayers-panel .badge.err { background: rgba(169,39,28,.08); }
+#klayers-panel .badge.warn { background: rgba(125,86,6,.08); }
+/* a failing folio is rubricated — one mark, not a blinking frame */
+#klayers-panel .badge.err { box-shadow: inset 3px 0 0 #a9271c; }
+/* keep the existing alarm animation wired (asserted by test_colorize_rules) */
+#klayers-panel .badge.fail-pulse { animation: failGlow 2s ease-in-out infinite; }
+
+/* ── The wire: the only live surface, set as machine output ─────────────── */
+/* `pre` had no family of its own, so it fell back to the UA's generic
+   monospace — the wire was not the same face as the figures. Bind it. */
+pre, .runstream { font-family: var(--font-mono); }
+.wire pre { background: var(--bg); border: 1px solid var(--border);
+            border-left: 3px solid var(--accent); border-radius: 3px; }
+.wire .zrow { margin: 2px 0 10px; }
+.wire .z3row { margin: 2px 0 10px; }
+
+/* ── The register of figures: ruled cells, not floating cards ───────────── */
+#metrics { gap: 0; border: 1px solid var(--border); border-radius: 3px;
+           overflow: hidden; background: var(--surface);
+           view-transition-name: metrics-grid; }
+#metrics .card { border: 0; border-right: 1px solid var(--border);
+                 border-bottom: 1px solid var(--border); border-radius: 0;
+                 padding: 10px 12px; }
+#metrics .card:last-child { border-right: 0; }
+.card .label { font-family: var(--font-mono); font-size: 10px;
+               letter-spacing: .13em; }
+.card .value { font-family: var(--font-mono); font-size: 17px;
+               font-weight: 600; font-variant-numeric: tabular-nums; }
+.card .sub { font-size: 10px; }
+
+/* ── Badges read as stamps: squared, ruled, uppercase ───────────────────── */
+.badge { border-radius: 3px; font-family: var(--font-mono);
+         letter-spacing: .04em; }
+.rh-over, .source-badge { border-radius: 3px; }
+
+/* ── Ruled registers instead of soft tables ─────────────────────────────── */
+th { font-family: var(--font-mono); font-size: 10px; letter-spacing: .12em;
+     text-transform: uppercase; }
+tbody tr:last-child td { border-bottom: 0; }
+code { border-radius: 2px; }
+
+.footer { font-family: var(--font-mono); font-size: 10px; letter-spacing: .06em;
+          padding: 16px 28px; }
 </style>
 </head>
 <body>
-<header>
-  <h1>Stoic-Hume V5 — Live CI Dashboard</h1>
-  <div id="verdict-seal" class="seal" hidden aria-hidden="true">
-    <svg viewBox="0 0 100 100">
-      <defs>
-        <path id="seal-arc-top" d="M 50,50 m -38,0 a 38,38 0 1,1 76,0" fill="none"></path>
-      </defs>
-      <circle class="seal-circle" cx="50" cy="50" r="45.5"></circle>
-      <circle class="seal-circle seal-circle-inner" cx="50" cy="50" r="25"></circle>
-      <text class="seal-ring"><textPath href="#seal-arc-top" startOffset="6%">VERIFIED</textPath></text>
-      <text class="seal-verdict" x="50" y="48" text-anchor="middle">VERIFIED</text>
-      <text class="seal-hash" x="50" y="60" text-anchor="middle"></text>
-    </svg>
+<header class="masthead">
+  <div style="flex:1 1 300px;min-width:0">
+    <p class="imprint">Stoic-Hume V5 · teslim denetimi</p>
+    <h1>Live CI Dashboard</h1>
   </div>
   <span id="live-dot" class="live-dot"></span>
-  <span id="live-status" class="ts">connecting…</span>
+  <span id="live-status" class="ts">bağlanıyor…</span>
   <button id="reconnect">reconnect</button>
   <button id="theme-toggle" type="button" aria-pressed="false" aria-label="Switch to light theme">light mode</button>
 </header>
 <main>
+  <!-- Kanıt sayfası (proof sheet): hüküm + mühür + K-katmanı sicili. Z3
+       levhalarıyla aynı kâğıt; tek "yüksek sesli" öğe soldaki rubrik.
+       Durum sinyalleri mevcut id'lerden gelir — yeni işaretleme/JS yok. -->
+  <section class="sheet" aria-labelledby="sheet-title">
+    <div class="sheet-body">
+      <h2 id="sheet-title" class="sheet-eyebrow">Teslim denetimi · kanıt sayfası</h2>
+      <div id="status-board">⏳ bekleniyor…</div>
+      <div id="precommit-hooks" class="aside"></div>
+      <div id="k15-sidecar" class="aside"></div>
+      <div class="badges" id="badges">
+        <span class="badge unknown">K8 Z3: ?</span>
+        <span class="badge unknown">K9 Lean: ?</span>
+        <span class="badge unknown">Beth 1953: ?</span>
+        <span class="badge unknown">refs: ?</span>
+        <span class="badge unknown" id="config-sync-badge">Schema Sync: ?</span>
+      </div>
+      <div id="config-sync-body" class="aside">⏳ Schema Sync bekleniyor…</div>
+      <div class="ts" id="cs-ts" style="margin-bottom:6px"></div>
+      <div id="lean-alert-container" style="padding:2px 0 4px 0"><span id="lean-alert" class="lean-alert hidden">⚠ K9 Lean: FAIL — ispat zinciri kırık</span></div>
+      <div id="klayers-panel">
+        <span class="muted">K-layers: bekleniyor…</span>
+      </div>
+    </div>
+    <div id="verdict-seal" class="seal" hidden aria-hidden="true">
+      <svg viewBox="0 0 100 100">
+        <defs>
+          <path id="seal-arc-top" d="M 50,50 m -38,0 a 38,38 0 1,1 76,0" fill="none"></path>
+        </defs>
+        <circle class="seal-circle" cx="50" cy="50" r="45.5"></circle>
+        <circle class="seal-circle seal-circle-inner" cx="50" cy="50" r="25"></circle>
+        <text class="seal-ring"><textPath href="#seal-arc-top" startOffset="6%">VERIFIED</textPath></text>
+        <text class="seal-verdict" x="50" y="48" text-anchor="middle">VERIFIED</text>
+        <text class="seal-hash" x="50" y="60" text-anchor="middle"></text>
+      </svg>
+    </div>
+  </section>
+
   <section id="z3-slide-gallery" class="z3-gallery" aria-labelledby="z3-gallery-title">
     <h2 id="z3-gallery-title">Z3 slayt galerisi</h2>
     <div id="z3-slides" class="z3-slides">
@@ -258,24 +459,47 @@
     <button type="button" id="z3-next" aria-label="Sonraki slayt">›</button>
     <button type="button" id="z3-close" aria-label="Büyütmeyi kapat">Kapat</button>
   </div>
-  <section>
-    <h2>Verification chain</h2>
-    <div id="status-board" style="font-size:15px;font-weight:600;padding:6px 0;letter-spacing:0.3px;color:var(--fg-dimmed);view-transition-name:status-board">⏳ bekleniyor…</div>
-    <div id="precommit-hooks" style="font-size:12px;color:var(--fg-dimmed);padding:2px 0 6px 0;view-transition-name:precommit-hooks"></div>
-    <div id="k15-sidecar" style="font-size:11px;color:var(--fg-dimmed);padding:0 0 4px 0;view-transition-name:k15-sidecar"></div>
-    <div class="badges" id="badges" style="view-transition-name:badges">
-      <span class="badge unknown">K8 Z3: ?</span>
-      <span class="badge unknown">K9 Lean: ?</span>
-      <span class="badge unknown">Beth 1953: ?</span>
-      <span class="badge unknown">refs: ?</span>
-      <span class="badge unknown" id="config-sync-badge">Schema Sync: ?</span>
+  <section class="wire">
+    <h2>Live run stream <span class="ts" id="stream-state">bağlanıyor…</span></h2>
+    <div class="z3row">
+      <span class="z3label">K8 Z3</span>
+      <div class="z3bar"><div id="z3-fill" class="z3fill"></div></div>
+      <span id="z3-count" class="z3count">0/12</span>
     </div>
-    <div id="config-sync-body" style="font-size:11px;color:var(--muted);padding:0 0 4px 0">⏳ Schema Sync bekleniyor…</div>
-    <div class="ts" id="cs-ts" style="margin-bottom:6px"></div>
-    <div id="lean-alert-container" style="padding:2px 0 4px 0"><span id="lean-alert" class="lean-alert hidden">⚠ K9 Lean: FAIL — ispat zinciri kırık</span></div>
-    <div id="klayers-panel" style="display:flex;flex-wrap:wrap;gap:4px;margin:4px 0 8px 0;font-size:11px;view-transition-name:klayers-panel">
-      <span class="muted">K-layers: bekleniyor…</span>
+    <div class="z3row">
+      <span class="z3label">Bütçe</span>
+      <div class="z3bar" style="position:relative">
+        <div id="budget-fill" class="z3fill"></div>
+        <div id="budget-limit-line" style="display:none;position:absolute;top:0;width:2px;height:100%;background:#d29922;left:100%" title="Limit: $30"></div>
+      </div>
+      <span id="budget-count" class="z3count">—</span>
+      <canvas id="budget-spark" width="180" height="20"
+              style="width:180px;height:20px;border-radius:3px;background:#21262d;border:1px solid var(--border);vertical-align:middle"
+              title="Son run'ların bütçe değerleri (yeşil=limit altı, kırmızı=aşım, turuncu kesikli=limit)"></canvas>
     </div>
+    <pre id="runstream" class="runstream" tabindex="0">—</pre>
+    <div class="ts" style="margin-top:4px;font-size:11px">
+      <span style="color:var(--err)">■ kırmızı = P0</span> ·
+      <span style="color:var(--warn)">■ sarı = P1</span> ·
+      <span style="color:var(--ok)">■ yeşil = PASS</span> ·
+      <span style="color:var(--muted)">■ gri = ayraç</span>
+    </div>
+  </section>
+
+  <section class="wire">
+    <h2>Live stdout (verify_delivery.py --full)</h2>
+    <div class="ts" style="margin-top:6px">
+      Renk: <span style="color:var(--ok)">■ yeşil = K8/SAT/PASS</span> ·
+      <span style="color:var(--budget)">■ mor = bütçe/BÜTÇE kalkanı</span> ·
+      <span style="color:var(--err)">■ kırmızı = hata/P0</span> ·
+      <span style="color:var(--warn)">■ sarı = P1/CLI override</span> ·
+      <span style="color:var(--muted)">■ gri = ayraç/K katmanı</span>
+    </div>
+    <pre id="stdout" tabindex="0">Waiting for first run…</pre>
+  </section>
+
+  <section aria-labelledby="ledger-title">
+    <h2 id="ledger-title">Run ledger</h2>
     <div class="grid" id="metrics" style="view-transition-name:metrics-grid">
       <div class="card"><div class="label">Verdict</div><div class="value" id="m-verdict">—</div><div class="sub" id="m-ts">no run yet</div></div>
       <div class="card"><div class="label">P0 / P1 findings</div><div class="value" id="m-p0p1">— / —</div><div class="sub">fail-closed gate</div></div>
@@ -355,33 +579,6 @@
   </section>
 
   <section>
-    <h2>Live run stream <span class="ts" id="stream-state">bağlanıyor…</span></h2>
-    <div class="z3row">
-      <span class="z3label">K8 Z3</span>
-      <div class="z3bar"><div id="z3-fill" class="z3fill"></div></div>
-      <span id="z3-count" class="z3count">0/12</span>
-    </div>
-    <div class="z3row">
-      <span class="z3label">Bütçe</span>
-      <div class="z3bar" style="position:relative">
-        <div id="budget-fill" class="z3fill"></div>
-        <div id="budget-limit-line" style="display:none;position:absolute;top:0;width:2px;height:100%;background:#d29922;left:100%" title="Limit: $30"></div>
-      </div>
-      <span id="budget-count" class="z3count">—</span>
-      <canvas id="budget-spark" width="180" height="20"
-              style="width:180px;height:20px;border-radius:3px;background:#21262d;border:1px solid var(--border);vertical-align:middle"
-              title="Son run'ların bütçe değerleri (yeşil=limit altı, kırmızı=aşım, turuncu kesikli=limit)"></canvas>
-    </div>
-    <pre id="runstream" class="runstream">—</pre>
-    <div class="ts" style="margin-top:4px;font-size:11px">
-      <span style="color:var(--err)">■ kırmızı = P0</span> ·
-      <span style="color:var(--warn)">■ sarı = P1</span> ·
-      <span style="color:var(--ok)">■ yeşil = PASS</span> ·
-      <span style="color:var(--muted)">■ gri = ayraç</span>
-    </div>
-  </section>
-
-  <section>
     <h2>Run history <span class="ts" id="run-history-count"></span></h2>
     <div class="rh-filter">
       <button data-f="all" onclick="setRhFilter('all')">all</button>
@@ -390,18 +587,6 @@
       <button data-f="P0" onclick="setRhFilter('P0')">P0</button>
     </div>
     <div id="run-history" style="max-height:240px;overflow-y:auto;font-size:12px;line-height:1.6"></div>
-  </section>
-
-  <section>
-    <h2>Live stdout (verify_delivery.py --full)</h2>
-    <div class="ts" style="margin-top:6px">
-      Renk: <span style="color:var(--ok)">■ yeşil = K8/SAT/PASS</span> ·
-      <span style="color:var(--budget)">■ mor = bütçe/BÜTÇE kalkanı</span> ·
-      <span style="color:var(--err)">■ kırmızı = hata/P0</span> ·
-      <span style="color:var(--warn)">■ sarı = P1/CLI override</span> ·
-      <span style="color:var(--muted)">■ gri = ayraç/K katmanı</span>
-    </div>
-    <pre id="stdout">Waiting for first run…</pre>
   </section>
 
   <section>

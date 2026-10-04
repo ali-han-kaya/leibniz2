@@ -30,9 +30,22 @@ logs/
 # CI/lab koşumlarında üretilen token mirror kopyası (preview_server
 # /design-system/tokens.css rotası; CI a11y-gate her koşumda taze kopyalar)
 _calisma/CIKTI/design-system-tokens.css
+# guide.html mirror kopyasi — kaynak docs/branch-protection-guide/guide.html;
+# preview_server /guide.html rotasini PREVIEW_DIR'dan servis eder, a11y job'u
+# `cp` ile buraya koyar. Uretilen dosya: commit edilmemeli (tokens ile ayni).
+_calisma/CIKTI/guide.html
 
 # frontend-design demo derlemesi (build_design_preview.py üretir)
 _calisma/CIKTI/design_preview.html
+
+# preview_server / consolidate_summary çalışma durumu: trend geçmişi, katman
+# özeti ve koşu günlükleri. Her koşumda yeniden üretilir; içlerine mutlak
+# yol (ör. /Users/<kullanıcı>/...) yazıldığı için değişim yüzeyinde
+# absolute-path kapısını da kırarlar — kaynak değil, runtime.
+_calisma/CIKTI/history.jsonl
+_calisma/CIKTI/history.jsonl.sha256
+_calisma/CIKTI/klayers.json
+_calisma/CIKTI/runs/
 
 # Oturum yüzeyleri (2026-09-18): bağımlılıklar ve üretilen artefaktlar kaynak-değil
 _calisma/mcp/.venv/
@@ -49,3 +62,8 @@ apps/dashboard-next/.next/
 
 # make build dirs (docs/Makefile.tectonic + docs/Makefile.texlive BUILD_DIR)
 .build/
+
+# planning-with-files: plan attestation = yerel SHA-256 kilidi, makine-özgü.
+# task_plan.md/findings.md/progress.md takip EDİLİR; bu kilit dosyası değil.
+.plan-attestation
+.planning/.active_plan

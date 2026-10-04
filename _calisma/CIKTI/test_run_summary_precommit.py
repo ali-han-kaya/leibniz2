@@ -25,9 +25,9 @@ JSON_CLEAN = {
     "verdict": "PASS",
     "role": "advisory",
     "hooks": [{"name": "Verify Stoic-Hume V5 delivery (fail-closed)",
-                "status": "Passed"},
+                "status": "Passed", "source": "log"},
                {"name": "Plist gate unit tests (exit 0/1/2)",
-                "status": "Passed"}],
+                "status": "Passed", "source": "log"}],
     "findings": [],
     "counts": {"hooks": 2, "passed": 2, "failed": 0, "p0": 0, "p1": 0},
 }
@@ -38,9 +38,9 @@ JSON_FINDINGS = {
     "verdict": "FAIL",
     "role": "advisory",
     "hooks": [{"name": "Verify Stoic-Hume V5 delivery (fail-closed)",
-                "status": "Passed"},
+                "status": "Passed", "source": "log"},
                {"name": "Plist gate unit tests (exit 0/1/2)",
-                "status": "Failed"}],
+                "status": "Failed", "source": "log"}],
     "findings": [{"priority": "P1",
                    "message": "Plist gate testi başarısız (test_plist_gate_exit)"},
                   {"priority": "P1",
@@ -188,7 +188,8 @@ class TestSchemaValidation(unittest.TestCase):
             self.skipTest("schema dosyası yok")
         bad = {"generated_at": "2026-01-01T00:00:00Z", "exit_code": 0,
                "verdict": "PASS", "role": "advisory",
-               "hooks": [{"name": "test", "status": "Invalid"}],
+               "hooks": [{"name": "test", "status": "Invalid",
+                          "source": "log"}],
                "findings": [],
                "counts": {"hooks": 1, "passed": 0, "failed": 1,
                           "p0": 0, "p1": 0}}

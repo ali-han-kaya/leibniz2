@@ -39,6 +39,8 @@ def status(path="klayers.json"):
     except (json.JSONDecodeError, OSError):
         return "FAIL"
     layers = data.get("layers", {})
+    if layers.get("UNREGISTERED", {}).get("status") == "FAIL":
+        return "FAIL"
     for key in RENDER_LAYERS:
         lyr = layers.get(key)
         if lyr and lyr.get("status") == "FAIL":
@@ -57,6 +59,16 @@ def render(sink, path="klayers.json"):
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
     layers = data.get("layers", {})
+
+    other = layers.get("UNREGISTERED")
+    if other:
+        findings = other.get("findings", [])
+        sink.write(f"## 🔴 Other {other.get('label', 'Unregistered findings')}: "
+                   f"{len(findings)} bulgu\n\n")
+        for finding in findings:
+            sink.write(f"- [{finding.get('priority', '?')}] "
+                       f"{finding.get('check', '?')}: {finding.get('issue', '?')}\n")
+        sink.write("\n")
 
     for key in RENDER_LAYERS:
         lyr = layers.get(key)

@@ -46,8 +46,10 @@ class TestConsolidateSummary(unittest.TestCase):
         (d / "logs" / "PRECOMMIT_RAPORU.json").write_text(
             json.dumps({"generated_at": "2026-08-20T12:00:00Z",
                         "exit_code": 0, "verdict": "PASS", "role": "advisory",
-                        "hooks": [{"name": "hook1", "status": "Passed"},
-                                   {"name": "hook2", "status": "Passed"}],
+                        "hooks": [{"name": "hook1", "status": "Passed",
+                                   "source": "log"},
+                                   {"name": "hook2", "status": "Passed",
+                                   "source": "log"}],
                         "findings": [],
                         "counts": {"hooks": 5, "passed": 5, "failed": 0,
                                    "p0": 0, "p1": 0}}), encoding="utf-8")
@@ -176,8 +178,10 @@ class TestConsolidateSummary(unittest.TestCase):
             (dd / "logs" / "PRECOMMIT_RAPORU.json").write_text(
                 json.dumps({"generated_at": "2026-08-20T12:00:00Z",
                             "exit_code": 1, "verdict": "FAIL", "role": "advisory",
-                            "hooks": [{"name": "hook1", "status": "Passed"},
-                                       {"name": "hook2", "status": "Failed"}],
+                            "hooks": [{"name": "hook1", "status": "Passed",
+                                       "source": "log"},
+                                       {"name": "hook2", "status": "Failed",
+                                       "source": "log"}],
                             "findings": [{"priority": "P1",
                                            "message": "bir bulgu"}],
                             "counts": {"hooks": 5, "passed": 4, "failed": 1,
@@ -541,8 +545,10 @@ class TestPrecommitAndK0Content(unittest.TestCase):
         default_pre = {
             "generated_at": "2026-08-20T12:00:00Z", "exit_code": 0,
             "verdict": "PASS", "role": "advisory",
-            "hooks": [{"name": "hook1", "status": "Passed"},
-                       {"name": "hook2", "status": "Failed"}],
+            "hooks": [{"name": "hook1", "status": "Passed",
+                       "source": "log"},
+                       {"name": "hook2", "status": "Failed",
+                       "source": "log"}],
             "findings": [],
             "counts": {"hooks": 5, "passed": 4, "failed": 1,
                        "p0": 0, "p1": 0},
@@ -600,7 +606,8 @@ class TestPrecommitAndK0Content(unittest.TestCase):
         pre = {
             "generated_at": "2026-08-20T12:00:00Z", "exit_code": 1,
             "verdict": "FAIL", "role": "advisory",
-            "hooks": [{"name": "hook1", "status": "Passed"}],
+            "hooks": [{"name": "hook1", "status": "Passed",
+                       "source": "log"}],
             "findings": [{"priority": "P1", "message": "check-python3-shell bulgu"},
                           {"priority": "P0", "message": "check-plist-drift başarısız"}],
             "counts": {"hooks": 5, "passed": 4, "failed": 1,
@@ -727,8 +734,10 @@ class TestFileSink(unittest.TestCase):
         (d / "logs" / "PRECOMMIT_RAPORU.json").write_text(
             json.dumps({"generated_at": "2026-08-20T12:00:00Z",
                         "exit_code": 0, "verdict": "PASS", "role": "advisory",
-                        "hooks": [{"name": "hook1", "status": "Passed"},
-                                   {"name": "hook2", "status": "Failed"}],
+                        "hooks": [{"name": "hook1", "status": "Passed",
+                                   "source": "log"},
+                                   {"name": "hook2", "status": "Failed",
+                                   "source": "log"}],
                         "findings": [],
                         "counts": {"hooks": 5, "passed": 4, "failed": 1,
                                    "p0": 0, "p1": 0}}), encoding="utf-8")

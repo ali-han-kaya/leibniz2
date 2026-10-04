@@ -1125,26 +1125,8 @@ class StatusBoardTests(unittest.TestCase):
             ps.SSE_CLIENTS.clear()
 
 
-    def test_precommit_hooks_parsed(self):
-        """Pre-commit hook parsed从 stderr'den."""
-        import preview_server as ps
-        stderr = (
-            "verify-delivery................................................Passed\n"
-            "z3-symbolic-proof..............................................Passed\n"
-            "lean-reduct-build..............................................Failed\n"
-        )
-        hooks = ps._parse_precommit_hooks(stderr)
-        self.assertEqual(len(hooks), 3)
-        self.assertEqual(hooks[0]["name"], "verify-delivery")
-        self.assertEqual(hooks[0]["status"], "Passed")
-        self.assertEqual(hooks[2]["name"], "lean-reduct-build")
-        self.assertEqual(hooks[2]["status"], "Failed")
-
-    def test_precommit_hooks_empty(self):
-        """Boş stderr'de hook listesi None (consistent with other parsers)."""
-        import preview_server as ps
-        hooks = ps._parse_precommit_hooks("")
-        self.assertIsNone(hooks)
+    # _parse_precommit_hooks ayrıştırma testleri taşındı:
+    # test_precommit_log.py (kayıt şekli + kaynak önceliği sözleşmesi).
 
     def test_precommit_hooks_in_latest(self):
         """LATEST dict'te precommit_hooks alanı olmalı."""

@@ -908,6 +908,21 @@ jobs:
       # `pipefail` + `--json`: çıktı hem log'a hem dosyaya yazılır, ama exit
       # kodu pipeline'ın ilk hatasını yansıtır (fail-closed).
 
+      # 8 teorem çekirdeğinin İKİ kopyası var: `Content.lean` (shim) ve
+      # `Leibniz2Reduct/Content.lean` (lake target'ı — `lake build --wfail`
+      # BUNU derler). Ayrışmaları sessiz kalıyordu: ölçüldü, kütüphane
+      # kopyasına enjekte edilen sapma check_lean_axioms, lake build ve
+      # verify_lean.sh kapılarında yeşil kaldı. Bu adım byte-eşitliği
+      # fail-closed denetler (ölçüm: 2026-10-03).
+      - name: Check Lean statement contract + twin identity (K9)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 _calisma/CIKTI/check_lean_statements.py \
+            --lean-file _calisma/lean_reduct/Content.lean \
+            --map _calisma/lean_reduct/MAP.md \
+            --twin-file _calisma/lean_reduct/Leibniz2Reduct/Content.lean
+
       - name: Build Lean lake proof (8 theorems)
         working-directory: _calisma/lean_reduct
         run: |
@@ -2966,6 +2981,76 @@ jobs:
   # bundle) ile /preview.html'i tarar, eşikleri a11y_gate_config.json'dan
   # alır. Fail-closed: sunucu/tarayıcı/checksum arızası FAIL — retry yok.
   # ============================================================
+  # R3 KAPANIŞI — CI-linux bağlamında Faz 3 kabulü (fail-closed).
+  #
+  # NEDEN AYRI BIR İŞ: §4 defterinin satır 6'sı (`092154a0…`) oluşturulduğu
+  # gün 5 bağımsız koşumda birebir tekrarlanmıştı; aynı tarif BUGÜN farklı
+  # sonuç veriyor (ölçüm 2026-10-02: CI vekili konteynerde kanonik hash
+  # `93e14fdd…`/SDE0, `ca3c5918…`/SDE1786924800 — satır 6 eşleşmiyor).
+  # Sapma yalnız pdflatex tarafında: defter pdfTeX 1.40.29 yazıyor, güncel
+  # apt TeXLive 1.40.25 veriyor. Tectonic tarafı birebir `ad8fca69…` çıktığı
+  # için sapma ölçüm ortamı değil MOTOR SÜRÜMÜ kaymasıdır.
+  #
+  # ÇÖZÜM: kabulü "ubuntu-latest" üzerinde değil, **digest-pini** bir
+  # konteynerde koşuyoruz. `runs-on: ubuntu-latest` apt TeXLive'ı
+  # güncelleştikçe hash kayar (ölçülmüş borç); digest + SDE sabiti ise
+  # tekrarlanabilir. Satır 8 bu bağlamın kanonik hash'idir.
+  texlive-accept:
+    name: TeXLive acceptance — CI-linux pinned (fail-closed)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    container:
+      # Ölçüldü 2026-10-02: bu digest = `docker pull ubuntu:24.04` çıktısı.
+      # apt TeXLive 2023/Debian (pdfTeX 1.40.25) buradan gelir.
+      image: ubuntu@sha256:a853f94d226358a79c740cfc7bce0c289748f3fe3488d921d038ccd752c61b60
+    # ÖLÇÜM 2026-10-03 (ilk gerçek CI koşumu): konteyner işlerinde GitHub'ın
+    # varsayılan shell'i `sh` (dash). Bu işin üç adımı da `set -euo pipefail`
+    # ile başlıyor; dash `-o pipefail` bilmediği için job 9 sn'de, HİÇBİR
+    # KAPI KOŞMADAN `Illegal option -o pipefail` ile düştü. Diğer işler
+    # container kullanmadığı için varsayılan bash'tır ve etkilenmez.
+    # `bash` imajda hazır (ubuntu:24.04); adımlar zaten bash sözdizimi
+    # (pipefail) varsayıyor, yani düzeltme yeni bir bağımlılık eklemiyor —
+    # yalnızca zaten beklenen shell'i açıkça bildiriyor.
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install make + pinned TeXLive packages
+        run: |
+          set -euo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            make texlive-latex-base texlive-latex-recommended cm-super python3 curl ca-certificates
+          pdflatex --version | head -1
+          python3 --version
+
+      # determinizm betiği İKİ moturu da zorunlu tutuyor; tectonic yoksa
+      # betik SKIP edip rapor üretmiyor ve make sessizce yeşile çıkıyordu
+      # (ölçüldü 2026-10-02). Aynı sürüm + digest, yerel ölçümle aynı ikili.
+      - name: Install tectonic (pinned, digest-verified)
+        run: |
+          set -euo pipefail
+          TECTONIC_VERSION="0.17.0"
+          TECTONIC_SHA256="8533d07f9ccbd7a65824b9e0459041bca34af1eb33daba48f59215593753a3b7"
+          curl -sL "https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%40${TECTONIC_VERSION}/tectonic-${TECTONIC_VERSION}-x86_64-unknown-linux-musl.tar.gz" -o /tmp/tectonic.tar.gz
+          echo "${TECTONIC_SHA256}  /tmp/tectonic.tar.gz" | sha256sum -c -
+          mkdir -p /tmp/tectonic-bin
+          tar -xzf /tmp/tectonic.tar.gz -C /tmp/tectonic-bin
+          mv /tmp/tectonic-bin/tectonic /usr/local/bin/tectonic
+          chmod +x /usr/local/bin/tectonic
+          tectonic --version
+
+      # SDE SABİTİ: teslim tarihi sabiti (2026-08-17T00:00:00Z). Kanonik
+      # hash SDE'ye bağlıdır; bu yüzden "hangi bağlam" satırı SDE'yi de
+      # taşır. Değiştirirsen §4 satır 8 yeniden ölçülmelidir.
+      - name: Run make accept (pinned context)
+        run: |
+          set -euo pipefail
+          SOURCE_DATE_EPOCH=1786924800 make -f docs/Makefile.texlive accept
+
   a11y-gate:
     name: A11y gate (axe-core, fail-closed)
     runs-on: ubuntu-latest
@@ -2989,6 +3074,63 @@ jobs:
       - name: Install Chromium
         run: playwright install --with-deps chromium
 
+      # OLCU 2026-10-03: bu job temiz clone'da history.jsonl YOKKEN
+      # basliyordu; pano trend yuzeyi hic cizilmiyor ve kapida taramiyor.
+      # Yerel Chromium olcumu (kapinin o anki davranisi vs. fetch cozulunun
+      # ardindan): #trend <text> node 0 -> 14, #trend-count "" -> "(4 run)",
+      # axe color-contrast 36 -> 43 node, trend'e ait node 0 -> 6. Yani 6
+      # GERCEK node kapidan gorusuyordu.
+      #
+      # IKI KOSUL BIRLIKTE gerekiyor:
+      #   1) tohumlama (bu adim) - aksi halde yuzey BOS,
+      #   2) hazir isareti (a11y_gate_config.json settle) - aksi halde kapi
+      #      `load` aninda tarar ve fetch'ler cozulmedigi icin ayni bosluk
+      #      korunur (Tohumlama TEK BASINA yetmez, olcum ustte).
+      #
+      # settle.timeout_ms = 180000 OLCUMDEN CIKTI, tahminden degil.
+      #
+      # OLCUM (yerel Chromium, 2026-10-03): isaretin gelme suresi IKI MODLU.
+      #   hizli mod : ~75-130 ms
+      #   yavas mod : 53.6 / 55.5 / 62.3 / 65.3 / 65.7 / 68.6 / 69.8 / 70.2 /
+      #               94.0 / 95.8 / 95.8 sn   (n=14 kosum, en kotu 95.8 sn)
+      # Yani 15 sn de 45 sn de bu bandin ICINDE kaliyordu ve kapi HAZIR
+      # sayfayi FAIL ediyordu (olculdu: ayni sayfa ayni veriyle 6 kosumun
+      # 5'i FAIL). 180 sn = olculen en kotunun ~1.9 kati.
+      #
+      # Bu gecikme ONCEDEN VARDI ve BU DEGISIKLIGIN URUNU DEGIL: ayni olcum
+      # HEAD preview.js ile birebir tekrarlandi (52.8 / 52.9 / 94.0 sn).
+      # Ayrica sunucu kaynakli da DEGIL -- sunucu her endpoint'i 1-4 ms'de
+      # yanitliyor (curl + sunucu-i-tarafi zaman damgasi: RECV 440 -> DONE
+      # 443 /api/trend), ama tarayicinin ANA THREAD'i kilitleniyor: ayni
+      # sunucudan servis edilen basit bir sayfa hic takilmazken (maxGap 52 ms)
+      # pano her kosumda 53-96 sn donuyor (setInterval kalp atisi ile
+      # olculdu). Kok neden pano/ortam tarafinda; bu PR'in konusu degil.
+      #
+      # NEDEN BEKLEMEK DOGRU (gevseme degil): isaret hic gelmezse kapi yine
+      # FAIL verir (fail-closed). Fazla beklemek yalnizca YANLIS FAIL'i
+      # pahalilastirir, yanlis PASS'i MUMKUN KILMAZ. Bedel: is basina en
+      # kotu +180 sn; job butcesi 20 dk, olculen CI suresi ise ~4 sn
+      # (seed 13:28:37 -> verdict 13:28:41), yani gercek kosumda bu tavan
+      # yakilmiyor.
+      #
+      # Isaretin kendisi sayacla uretilir ve `finally` ile kapatilir: render
+      # fonksiyonlarindan biri istisna atarsa (DOM elemani yok) hem eski
+      # then hem eski catch yolu atiyor, sayac 1'de asili kaliyor ve isaret
+      # hic yanmiyordu. Mutasyon kaniti: ayni kirik DOM'da eski kod
+      # pending=1/isaret yok, yeni kod pending=0/isaret var.
+      #
+      # Bu bir SAHTE VERI ureticisidir, olcum degil: amaci kapinin dolu
+      # yuzeyi taradigini kanitlamak. Gercek kosumun gecmisi (run-history
+      # artifact'i) BILEREK kullanilmaz: capraz-job artifact bagimliligi
+      # kapiyi kirilgan yapar. Uretici deterministiktir (saat/rastgelelik
+      # yok) -> ayni --rows ayni bayt.
+      - name: Seed deterministic trend history for a11y surface
+        run: |
+          python3 _calisma/CIKTI/seed_a11y_history.py \
+            --out _calisma/CIKTI/history.jsonl \
+            --rows 8
+          test "$(wc -l < _calisma/CIKTI/history.jsonl)" -eq 8
+
       - name: Start preview_server (fresh-clone-http pattern)
         run: |
           # /design-system/tokens.css rotası PREVIEW_DIR icindeki
@@ -2999,6 +3141,12 @@ jobs:
           # yapar; CI'da runner calisma alani mirror rolundedir. Tek kaynak:
           # design-system/tokens.css (check_tokens.py'in korudugu dosya).
           cp design-system/tokens.css _calisma/CIKTI/design-system-tokens.css
+          # /guide.html ayni sekilde PREVIEW_DIR mirror'indan servis edilir
+          # (preview_server.serve_guide; eksikse 404). a11y_gate_config.json
+          # /guide.html'i kapsama alir ve sayfa yuklenemezse kapı FAIL verir
+          # (fail-closed) — yani bu kopyi olmadan eklenen kapsam sessizce
+          # "tarandi" sanilir, gercekte hicbir sey taranmamis olur.
+          cp docs/branch-protection-guide/guide.html _calisma/CIKTI/guide.html
           port=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')
           echo "A11Y_PORT=$port" >> "$GITHUB_ENV"
           work=$RUNNER_TEMP/a11y-server

@@ -1,0 +1,43 @@
+{
+  // trend-db typecheck. Absent until 2026-10-04: the package shipped .ts
+  // sources with no TypeScript dependency and no tsconfig, so nothing here was
+  // ever typechecked (prisma-database-setup prerequisite: TypeScript 5.4.0+).
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "types": ["node"],
+
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["prisma.config.ts", "scripts/**/*.ts"],
+  // `generated/` is gitignored AND every Prisma 7 file in it ships
+  // `// @ts-nocheck`, so those files are never typechecked — verified by
+  // injecting a type error into generated/models/TrendRun.ts (tsc stayed
+  // green). Excluding them keeps them out of the root set only.
+  //
+  // CONSEQUENCE, stated plainly: this tsconfig does NOT detect client drift.
+  // Renaming a field in the generated model also stayed green, because
+  // `createMany` inputs are optional and the push site passes a variable, so
+  // excess-property checking never fires. Schema ↔ client ↔ loader drift is
+  // the job of _calisma/CIKTI/test_trend_db_contract.py (HISTORY_KEYS ↔
+  // schema ↔ loader), not of tsc.
+  //
+  // What this DOES catch: type/syntax errors and dead code in scripts/*.ts
+  // and prisma.config.ts (verified by mutation — both a TS2322 assignment
+  // error and a TS6133 unused local turn it red).
+  //
+  // No `paths` remap for @prisma/client — load.ts imports the runtime SUBPATH
+  // (`@prisma/client/runtime/client`), which a bare `"@prisma/client"` pattern
+  // never matches (verified with `tsc --traceResolution`).
+  "exclude": ["node_modules", "generated"]
+}

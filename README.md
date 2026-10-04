@@ -522,6 +522,24 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-02 | fix | (prettier) kapiyi degisim farkina cevir, testi hermetik kilitle | [`955c8a3`](https://github.com/ali-han-kaya/leibniz2/commit/955c8a3) |
 | 2026-10-02 | chore | (changelog) 0baa72f ve 955c8a3 satirlarini tabloya ekle | [`a63c996`](https://github.com/ali-han-kaya/leibniz2/commit/a63c996) |
 | 2026-10-02 | chore | (changelog) a63c996 satirini tabloya ekle | [`80d5801`](https://github.com/ali-han-kaya/leibniz2/commit/80d5801) |
+| 2026-10-02 | fix | (delivery) V5p repack - uretici ile gemideki paketi birlestir | [`8beca13`](https://github.com/ali-han-kaya/leibniz2/commit/8beca13) |
+| 2026-10-02 | docs | (audit) R6 turunu olcumle kapat - merge zinciri bitti | [`42b545a`](https://github.com/ali-han-kaya/leibniz2/commit/42b545a) |
+| 2026-10-02 | feat | (a11y) kapi iki yuzeye yay + sayfa-bazli esik + 44 ihlal | [`bcb963b`](https://github.com/ali-han-kaya/leibniz2/commit/bcb963b) |
+| 2026-10-03 | fix | (verify) kabul kapisi + 3 dashboard yuzeyi kontratla kilitlendi | [`aa474c3`](https://github.com/ali-han-kaya/leibniz2/commit/aa474c3) |
+| 2026-10-03 | fix | (a11y) kapi dolu trend yuzeyini tarasin, sayac finally ile kapansin | [`15abb40`](https://github.com/ali-han-kaya/leibniz2/commit/15abb40) |
+| 2026-10-03 | fix | (a11y) bekci varlik arasin, tavan olcume gore 180 sn | [`0715dfa`](https://github.com/ali-han-kaya/leibniz2/commit/0715dfa) |
+| 2026-10-03 | chore | (changelog) 0715dfa satirini tabloya ekle | [`4a68420`](https://github.com/ali-han-kaya/leibniz2/commit/4a68420) |
+| 2026-10-03 | feat | (design) kanit sayfasi kimligi - kagit ve masa, iki materyal | [`6adf365`](https://github.com/ali-han-kaya/leibniz2/commit/6adf365) |
+| 2026-10-03 | refactor | (precommit) hook kayitlarini precommit_log seam'ine tasi | [`5ee5555`](https://github.com/ali-han-kaya/leibniz2/commit/5ee5555) |
+| 2026-10-03 | fix | (tex) 7 overfull hbox sifirlandi - kernel + sutun butcesi | [`5a1a981`](https://github.com/ali-han-kaya/leibniz2/commit/5a1a981) |
+| 2026-10-03 | fix | (k9) lean twin identity kapisi - iki kopya ayrismasin | [`e27118f`](https://github.com/ali-han-kaya/leibniz2/commit/e27118f) |
+| 2026-10-03 | docs | (trend-db) canli Neon durumu - roller + kapi iddiasi | [`60f002e`](https://github.com/ali-han-kaya/leibniz2/commit/60f002e) |
+| 2026-10-03 | docs | (trend-db) TEHLIKE - migrate dev veri siler, gecmis repo'da kayip | [`448cbc1`](https://github.com/ali-han-kaya/leibniz2/commit/448cbc1) |
+| 2026-10-03 | feat | (trend-db) canli sema yedegi + migration gecmisi geri donus noktasi | [`287ccdf`](https://github.com/ali-han-kaya/leibniz2/commit/287ccdf) |
+| 2026-10-03 | fix | (trend-db) Neon pooled/direct ayrimini Prisma 7'ye uyarla | [`923bfdc`](https://github.com/ali-han-kaya/leibniz2/commit/923bfdc) |
+| 2026-10-03 | fix | (dashboard-next) olu importleri sil, noUnused bayraklarini ac | [`097b683`](https://github.com/ali-han-kaya/leibniz2/commit/097b683) |
+| 2026-10-03 | fix | (trend-db) load.ts girdi dogrulama + graceful shutdown | [`ca118f9`](https://github.com/ali-han-kaya/leibniz2/commit/ca118f9) |
+| 2026-10-04 | fix | (trend-db) tsconfig + typescript ekle, prisma CLI'yi devDeps'e tasi | [`563d0c6`](https://github.com/ali-han-kaya/leibniz2/commit/563d0c6) |
 
 ### Regresyon notları
 

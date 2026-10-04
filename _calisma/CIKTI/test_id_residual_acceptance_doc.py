@@ -31,6 +31,93 @@ DELIVERY_RAW = ("74b2cdbdb18fafbf5b3c87570c92f150"
                 "0e7580469bcf4295b09734116df0779f")
 DELIVERY_STRIPPED = ("50263bcf60f9ae176ac417f025bffbca"
                      "e4fd0ab6044566672827bee861f83732")
+# SDE sabitlenmiş CI-linux + yerel bağlamlar (2026-10-02 olçümü). Kanonik
+# hash SOURCE_DATE_EPOCH'a BAĞLIDIR; bu iki satır aynı SDE ile ölçüldü.
+PINNED_SDE = "1786924800"
+CI_PINNED = ("ca3c591805eff4cbae403a77cba9b873"
+             "4bf9c23ed42e766b937207e36a159573")
+LOCAL_PINNED = ("10d44856ba56c6f7335b7ed048f8359"
+                "5eb298999744f0c26cec022d52227e2db")
+CI_IMAGE_DIGEST = ("a853f94d226358a79c740cfc7bce0c28"
+                   "9748f3fe3488d921d038ccd752c61b60")
+
+MAKEFILE = ROOT / "docs" / "Makefile.texlive"
+WORKFLOW = ROOT / ".github" / "workflows" / "verify.yml"
+
+
+class TestSourceDateEpochContract(unittest.TestCase):
+    """`check`/`accept` de `pdf` ile AYNI epoch'u kullanmalı.
+
+    OLCUM 2026-10-02: `pdf` hedefi epoch'u ihraç ediyordu, `check`/`accept`
+    etmiyordu; determinizm betiği varsayılanına (`:-0`) düşüyordu. Sonuç:
+    kabul edilen PDF ile teslim edilen PDF FARKLI epoch ile derleniyordu
+    (pdf → 57c91a07…, check → 544516b0…). Ihraç geri alınırsa kabul yine
+    üretileni yargılamaz.
+    """
+
+    def setUp(self):
+        self.assertTrue(MAKEFILE.is_file(), "docs/Makefile.texlive yok")
+        self.text = MAKEFILE.read_text(encoding="utf-8")
+
+    def _check_recipe_env(self):
+        """check tarifinin ortam blogu (TEX_SOURCE → bash satırı)."""
+        start = self.text.index("TEX_SOURCE=")
+        return self.text[start:self.text.index('bash "$(DETERMINISM_SCRIPT)"', start)]
+
+    def test_check_recipe_exports_source_date_epoch(self):
+        env = self._check_recipe_env()
+        self.assertIn('SOURCE_DATE_EPOCH="$(SOURCE_DATE_EPOCH)"', env,
+                      "check/accept epoch'u ihraç etmiyor — kabul edilen byte'lar "
+                      "üretilen byte'lar değil")
+
+    def test_pdf_recipe_still_exports_epoch(self):
+        self.assertIn('SOURCE_DATE_EPOCH="$(SOURCE_DATE_EPOCH)"', self.text)
+
+
+class TestPinnedCiContext(unittest.TestCase):
+    """R3 kapanışı: CI-linux kabulü digest-pini bağlamda koşmalı.
+
+    OLCUM 2026-10-02: §4 satır 6 (`092154a0…`) oluşturulduğu gün birebir
+    tekrarlanıyordu; aynı tarif bugün farklı hash veriyor (pdfTeX 1.40.29 →
+    1.40.25). `runs-on: ubuntu-latest` üzerinde kabul koşmak aynı borcu
+    yeniden üretir — pin kaldırılırsa bu test kırmızıya döner.
+    """
+
+    def setUp(self):
+        self.assertTrue(WORKFLOW.is_file(), "verify.yml yok")
+        self.wf = WORKFLOW.read_text(encoding="utf-8")
+        self.assertTrue(REPORT.is_file())
+        self.doc = REPORT.read_text(encoding="utf-8")
+
+    def test_ci_job_runs_accept_in_pinned_container(self):
+        self.assertIn("texlive-accept:", self.wf)
+        self.assertIn("Makefile.texlive accept", self.wf)
+        self.assertIn(CI_IMAGE_DIGEST, self.wf,
+                      "CI kabulü digest-pini konteyner olmaktan çıktı — apt "
+                      "TeXLive sürüm kaymasına açık")
+
+    def test_ci_job_pins_source_date_epoch(self):
+        self.assertIn("SOURCE_DATE_EPOCH=%s make" % PINNED_SDE, self.wf,
+                      "CI kabulü SDE'yi sabitlemiyor — kanonik hash kayar")
+
+    def test_ledger_pins_both_contexts_with_full_hashes(self):
+        for h in (CI_PINNED, LOCAL_PINNED):
+            self.assertIn(h, self.doc, "SDE sabitli bağlam satırı eksik: %s…" % h[:8])
+
+    def test_ledger_rows_record_the_sde(self):
+        """Kanonik hash SDE'ye bağlı; satır SDE taşımıyorsa yeniden
+        üretilemez."""
+        for h in (CI_PINNED, LOCAL_PINNED):
+            row = next((ln for ln in self.doc.splitlines()
+                        if h[:16] in ln), None)
+            self.assertIsNotNone(row, "satır bulunamadı: %s…" % h[:8])
+            self.assertIn(PINNED_SDE, row, "satır SDE'yi taşımıyor")
+
+    def test_stale_ci_row_is_explained_not_deleted(self):
+        """Satır 6 üretilmiyor ama SİLİNMEDİ — protokol yeni bağlam → yeni
+        satır der; açıklama satırın yanında durmalı."""
+        self.assertIn("092154a0", self.doc)
+        self.assertIn("artık üretilmiyor", self.doc)
 
 
 class TestIdResidualAcceptanceDoc(unittest.TestCase):

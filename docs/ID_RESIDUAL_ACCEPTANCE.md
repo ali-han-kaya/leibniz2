@@ -62,6 +62,68 @@ hiçbir fark gizlenmez).
 | 5 | **teslim artefaktı** `TESLIM_V5_FINAL_2026-08-17/.../ingiliz_empirizmi_v3.pdf` | teslim öncesi derleme | SDE kaydı yok (derleme tarihi belgelenmemiş) | `74b2cdbdb18fafbf5b3c87570c92f1500e7580469bcf4295b09734116df0779f` (teslimde donmuş) | `d4f67e39fd0ef77e8f294ca2195bb1fc784716234d0675ab88a4fd8695263a6a` | 2026-10-01 K6-DETERM ölçümü — **bu satır K6-DETERM strict karşılaştırmasının okuduğu referanstır** (§6) |
 | 6 | **CI-linux** pdfTeX 3.141592653-2.6-1.40.29 (TeXLive, `ubuntu-latest` — apt `texlive-latex-base` + `texlive-latex-recommended` + `cm-super`, `/usr/bin/pdflatex`; tectonic 0.17.0 digest-pinned) | 1 | 0 | koşum-başına değişken (`/ID`); ham hash trend kaydında **tutulmaz** (yalnız kanonik saklanır) | `092154a0473e33c2c4d869e2123e36138612ff44f63f689437eeb8450b00fc06` | **determinism-trend CI** (`ubuntu-latest`): 5 bağımsız koşum 2026-09-20…09-28, `gate=PASS`, kanonik hash **birebir aynı**; kaynak `a9f34e05…` değişmedi |
 
+| 7 | pdfTeX 3.141592653-2.6 (TeX Live 2026/Homebrew, macOS) | 3 | **1786924800** (teslim sabiti) | koşum-başına değişken (`/ID`) | `10d44856ba56c6f7335b7ed048f83595eb298999744f0c26cec022d52227e2db` | `SOURCE_DATE_EPOCH=1786924800 make check` 2× bağımsız (2026-10-02) |
+| 8 | **CI-linux PİNLİ** pdfTeX 3.141592653-2.6-1.40.25 (TeX Live 2023/Debian, `ubuntu:24.04` **digest-pini**; apt `texlive-latex-base` + `texlive-latex-recommended` + `cm-super`; tectonic 0.17.0 musl **digest-pini** `8533d07f…`) | 3 | **1786924800** (teslim sabiti) | koşum-başına değişken (`/ID`) | `ca3c591805eff4cbae403a77cba9b8734bf9c23ed42e766b937207e36a159573` | CI vekili konteynerinde (tectonic kanonik hash birebir `ad8fca69…` = satır 1 → **vekil sadakati kanıtlandı**), `make accept` ×1 (2026-10-02) |
+
+### Satır 9–11: kaynak sürümü değişti (overfull hbox düzeltmesi, 2026-10-03)
+
+Satır 7 ve 8 **kaynak değişmeden önceki** `.tex`'i ölçer. 7 overfull
+hbox'un sıfırlanması için kaynak tipografik olarak düzeltildi
+(`\emergencystretch=1.5em`, `\allowbreak` kırılma noktaları, longtable
+sütun bütçesi); **hiçbir düzyazı değişmedi, sayfa sayısı 33'te kaldı.**
+Kanonik hash kaynak türevi olduğu için üç bağlamda da yeniden ölçüldü ve
+protokol gereği **yeni satır** açıldı (satır 7/8 silinmedi, üzerine yazılmadı):
+
+| # | Motor / sürüm | Geçiş | SDE | Ham (bilgi) | Kanonik (referans) | Ölçüm |
+|---|---|---|---|---|---|---|
+| 9 | pdfTeX 3.141592653-2.6 (TeX Live 2026/Homebrew, macOS) | 3 | 0 | koşum-başına değişken (`/ID`) | `5899be5d4fd20480b43492bc0900b09d255f53b5a4f9731ed079b7f12028c4a8` | `SOURCE_DATE_EPOCH=0 make check` 2× bağımsız, run1==run2, `verdict=PASS` (2026-10-03) |
+| 10 | pdfTeX 3.141592653-2.6 (TeX Live 2026/Homebrew, macOS) | 3 | **1786924800** (teslim sabiti) | koşum-başına değişken (`/ID`) | `73a3d417d0811314d60bf6e0428bb54e485e339bc31f606760e2de51269e15a2` | `SOURCE_DATE_EPOCH=1786924800 make check` 2× bağımsız, run1==run2, `verdict=PASS` (2026-10-03) |
+| 11 | **CI-linux PİNLİ** pdfTeX 3.141592653-2.6-1.40.25 (TeX Live 2023/Debian, `ubuntu@sha256:a853f94d…` **digest-pini**; satır 8 ile aynı apt paketleri + tectonic 0.17.0 musl digest-pini `8533d07f…`) | 3 | **1786924800** (teslim sabiti) | koşum-başına değişken (`/ID`) | `5c083474fbf14989ebb1736a6c0edecb1a4399740f4ae77989d6dc846d70a2c5` | CI vekili konteynerinde ölçüldü: `pdflatex --version` = `pdfTeX 3.141592653-2.6-1.40.25 (TeX Live 2023/Debian)`, `tectonic 0.17.0`; `make check` 2× bağımsız, run1==run2, `verdict=PASS` (2026-10-03) |
+
+Satır 8 → 11 karşılaştırması: motor **aynı** (1.40.25, aynı digest-pini,
+aynı paketler), yalnız kaynak değişti; kanonik hash `ca3c5918…` → `5c083474…`.
+Bu, hash kaynak-türevli olduğunun ve motor sürümü kaymasının (satır 6→8)
+ayrı bir olgu olduğunun doğrulamasıdır.
+
+Satır 5 **değişmedi**: teslim artefaktı PDF'i (tectonic ile derlenmiş,
+`74b2cdbd…` ham) dokunulmadı; K6-DETERM'in okuduğu referans hâlâ `d4f67e39…`.
+
+### Satır 6 artık üretilmiyor — ölçüm (2026-10-02)
+
+Satır 6 (`092154a0…`), oluşturulduğu gün 5 bağımsız koşumda birebir
+tekrarlanmıştı; ancak **aynı tarif bugün farklı sonuç veriyor**. CI vekili
+konteynerde (`ubuntu:24.04` + aynı apt paketleri + digest-pini tectonic)
+ölçüldü:
+
+| | kanonik hash | defter |
+|---|---|---|
+| tectonic | `ad8fca69d4e4a2e1…` | satır 1 → **birebir aynı** |
+| TeXLive | `ca3c5918…` (SDE 1786924800) / `93e14fdd…` (SDE 0) | satır 6 `092154a0…` → **farklı** |
+
+Sapma yalnız pdflatex tarafında ve **motor sürümünden**: defter 1.40.29
+yazıyor, güncel apt TeXLive **1.40.25** veriyor. Tectonic tarafının
+bit-özdeş çıkması, ölçümün ortam sapması değil **motor sürümü kayması**
+olduğunu kanıtlar. Satır 6 silinmedi — protokol gereği yeni bağlam **yeni
+satır** demektir (satır 8), üstüne yazılmaz.
+
+### `check`/`accept` SDE ihraç kusuru (2026-10-02 ölçümü, düzeltildi)
+
+`pdf` hedefi `SOURCE_DATE_EPOCH`'u motor ortamına **ihraç ediyordu**;
+`check`/`accept` ihraç etmiyordu, bu yüzden determinizm betiği kendi
+varsayılanına (`${SOURCE_DATE_EPOCH:-0}`) düşüyordu. Sonuç: **kabul edilen
+PDF ile teslim edilen PDF farklı SDE ile derleniyordu** — kabul edilen şey
+gönderilen şey değildi.
+
+| | `pdf` üretir | `check`/`accept` ölçerdi |
+|---|---|---|
+| düzeltme öncesi | SDE = HEAD → `57c91a07…` | SDE = 0 → `544516b0…` |
+| düzeltme sonrası | SDE = HEAD → `57c91a07…` | **SDE = HEAD → `57c91a07…`** |
+
+Kanonik hash SDE'ye bağlı olduğu için (`§4` başlangıç notu) kabul artık
+**üretilenin byte'larını** yargılıyor. Ölçüm: `SOURCE_DATE_EPOCH=12345`
+verildiğinde hash `544516b0…` → `95900f50…` değişiyor; yani ihraç gerçekten
+etkili.
+
 ### Satır 5 neden ayrı? (2026-10-01 ölçümü)
 
 Teslimdeki PDF, defterdeki dört ölçümün **hiçbirine** eşit değil:
