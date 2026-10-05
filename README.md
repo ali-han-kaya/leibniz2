@@ -567,6 +567,8 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-05 | feat | (ci) kirmizi kosumda RCA tablosunu PR yorumuna dusur | [`c2d749d`](https://github.com/ali-han-kaya/leibniz2/commit/c2d749d) |
 | 2026-10-05 | fix | (trend) kayıp-koruma adımını sandbox'ta yürüt | [`f578bed`](https://github.com/ali-han-kaya/leibniz2/commit/f578bed) |
 | 2026-10-05 | chore | (changelog) 7cb4db3 satirini tabloya ekle | [`c66cf87`](https://github.com/ali-han-kaya/leibniz2/commit/c66cf87) |
+| 2026-10-05 | style | (ci) rca_comment.js prettier bicimine uydur | [`9c27d78`](https://github.com/ali-han-kaya/leibniz2/commit/9c27d78) |
+| 2026-10-05 | chore | (changelog) RCA ve trend duzeltme satirlarini tabloya ekle | [`c3fc408`](https://github.com/ali-han-kaya/leibniz2/commit/c3fc408) |
 
 ### Regresyon notları
 
