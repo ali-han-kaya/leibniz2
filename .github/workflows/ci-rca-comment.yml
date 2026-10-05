@@ -88,10 +88,8 @@ jobs:
           echo "## ci-rca-comment" >> "$GITHUB_STEP_SUMMARY"
           echo "- kaynak koşum: #${{ github.event.workflow_run.id }} (${{ github.event.workflow_run.name }})" >> "$GITHUB_STEP_SUMMARY"
           if [ -f rca_failures.json ]; then
-            python3 - <<'EOF' >> "$GITHUB_STEP_SUMMARY"
-            import json, os
-            r = json.load(open("rca_failures.json"))
-            print("- verdict: %s (zorunlu %d / advisory %d)" % (
-                r["verdict"], r["required_failures"], r["advisory_failures"]))
-            EOF
+            # Bur-docdelimiter KULLANILMAZ: YAML block scalar gövdeyi girintili
+            # yazdığı için terminator sütun 0'a gelmez ve actionlint/shellcheck
+            # betiği ayrıştıramaz (SC1073/SC1072). Tek satırlık -c güvenli.
+            python3 -c "import json;r=json.load(open('rca_failures.json'));print('- verdict: %s (zorunlu %d / advisory %d)' % (r['verdict'],r['required_failures'],r['advisory_failures']))" >> "$GITHUB_STEP_SUMMARY"
           fi
