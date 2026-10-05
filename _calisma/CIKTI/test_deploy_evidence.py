@@ -59,13 +59,22 @@ def real_main_short():
     return proc.stdout.strip()
 
 
-def fake_git(main_sha="a" * 40, gap=0, ancestor=True):
-    """`git_runner` sözleşmesini taklit eden sahte git."""
+def fake_git(main_sha="a" * 40, gap=0, ancestor=True, subjects=None,
+             no_log=False):
+    """`git_runner` sözleşmesini taklit eden sahte git.
+
+    subjects: `head..main` arası commit başlıkları (None → git log yok,
+    rev-list sayımına düşülür).
+    """
     def _git(args):
         if args[0] == "rev-parse":
             return main_sha
         if args[:1] == ["merge-base"]:
             return "" if ancestor else None
+        if args[:1] == ["log"] and not no_log and subjects is not None:
+            return "\n".join(subjects)
+        if args[:1] == ["log"]:
+            return None
         if args[:1] == ["rev-list"]:
             return str(gap)
         return None
@@ -145,8 +154,30 @@ class TestHeadCoverage(unittest.TestCase):
         self.assertEqual(de.check_head_coverage(self.rows, fake_git(gap=2), 3), [])
 
     def test_gap_over_tolerance_is_violation(self):
-        out = de.check_head_coverage(self.rows, fake_git(gap=9), 3)
-        self.assertTrue(any("9 commit ileride" in v for v in out), out)
+        out = de.check_head_coverage(
+            self.rows, fake_git(subjects=["feat(x): a"] * 4), 3)
+        self.assertTrue(any("4 ANLAMLI commit ileride" in v for v in out), out)
+
+    def test_evidence_commits_do_not_widen_the_gap(self):
+        """docs(deploy)/chore commit'leri kaniti geriye götürmez — sayılmaz."""
+        subjects = ["chore(changelog): x satirini tabloya ekle",
+                    "docs(deploy): HEAD kosum satirini kanit-defterine ekle",
+                    "feat(ci): gercek is", "chore(changelog): y satirini tabloya ekle"]
+        self.assertEqual(
+            de.check_head_coverage(self.rows, fake_git(subjects=subjects), 3), [])
+        self.assertEqual(de.substantive_gap(fake_git(subjects=subjects),
+                                            "a" * 40, "b" * 40), 1)
+
+    def test_gap_falls_back_to_raw_count_when_log_unavailable(self):
+        self.assertEqual(de.substantive_gap(fake_git(gap=7, no_log=True),
+                                            "a" * 40, "b" * 40), 7)
+
+    def test_unmeasurable_gap_is_violation(self):
+        def broken(args):
+            return None
+        out = de.check_head_coverage(self.rows, broken, 3)
+        self.assertTrue(any("cozulemedi" in v or "olculemedi" in v
+                            for v in out), out)
 
     def test_non_ancestor_head_is_violation(self):
         out = de.check_head_coverage(self.rows, fake_git(ancestor=False), 3)
@@ -226,6 +257,53 @@ class TestRunReality(unittest.TestCase):
 
     def test_verify_rows_zero_disables_network(self):
         self.assertEqual(de.check_runs(self.rows, lambda rid: None, 0), [])
+
+    def test_fetch_error_is_unverifiable_not_drift(self):
+        """Geçici API hatası 'sonuç sapması' DEĞİLDİR — ayrı raporlanır."""
+        fetch = lambda rid: {"__fetch_error__": "transport"}
+        out = de.check_runs(self.rows, fetch, 1)
+        self.assertTrue(all("DOGRULANAMADI" in v for v in out), out)
+        self.assertFalse(any("sapmasi" in v for v in out), out)
+
+    def test_not_found_is_reported_as_missing_run(self):
+        fetch = lambda rid: {"__fetch_error__": "not_found"}
+        out = de.check_runs(self.rows, fetch, 1)
+        self.assertTrue(any("run yok" in v for v in out), out)
+
+
+class TestRunFetcherRetry(unittest.TestCase):
+    """gh_run_fetcher: geçici hata retry edilir, 404 ayrımı korunur."""
+
+    def _fetcher(self, responses, **kw):
+        calls = []
+
+        def runner(cmd, capture_output=None, text=None):
+            calls.append(cmd)
+            item = responses[min(len(calls) - 1, len(responses) - 1)]
+            return item
+        fetch = de.gh_run_fetcher("o/r", runner=runner, sleep=lambda s: None,
+                                  **kw)
+        return fetch, calls
+
+    def test_transient_error_is_retried_then_succeeds(self):
+        ok = de._Proc(0, stdout='{"conclusion": "success"}')
+        flaky = de._Proc(1, stderr="HTTP 502")
+        fetch, calls = self._fetcher([flaky, ok])
+        self.assertEqual(fetch("1")["conclusion"], "success")
+        self.assertEqual(len(calls), 2)
+
+    def test_not_found_is_not_retried_into_success_and_is_flagged(self):
+        missing = de._Proc(1, stderr="gh: Not Found (HTTP 404)")
+        fetch, calls = self._fetcher([missing])
+        data = fetch("1")
+        self.assertEqual(data.get("__fetch_error__"), "not_found")
+
+    def test_persistent_transport_error_reports_transport(self):
+        dead = de._Proc(1, stderr="connection reset")
+        fetch, calls = self._fetcher([dead], attempts=2)
+        data = fetch("1")
+        self.assertEqual(data.get("__fetch_error__"), "transport")
+        self.assertEqual(len(calls), 2)
 
 
 class TestRunChecksAndCli(unittest.TestCase):

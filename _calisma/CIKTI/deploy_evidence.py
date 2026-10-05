@@ -43,6 +43,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -61,6 +62,12 @@ KNOWN_CONCLUSIONS = ("success", "failure", "cancelled", "skipped",
 DEFAULT_MAX_HEAD_GAP = 3
 DEFAULT_MAX_AGE_DAYS = 21
 DEFAULT_VERIFY_ROWS = 2
+# Kanit satirini yazan commit'ler (docs(deploy), chore(changelog)) HEAD acigini
+# ARTIRMAZ — kaniti kaydeden adim ayni zamanda kanidin geride kaldigi adimdir.
+# Sayim bunlari disarida birakir; aksi halde her normal land→checks→main
+# dongusu (satir + changelog = 2 commit) kapiyi kirmiziya cevirirdi ve
+# gercek drift (kanit yazilmadan ilerleyen main) signalsiz kalsaydi.
+DEFAULT_GAP_EXEMPT = ("chore(changelog)", "docs(deploy)")
 
 
 @dataclass(frozen=True)
@@ -93,18 +100,47 @@ def git_runner(root: Path):
     return _git
 
 
-def gh_run_fetcher(repo: str):
-    """GitHub Actions run bilgisi (conclusion dahil) getirici."""
+class _Proc:
+    """subprocess.run sonucunun testte taklit edilebilir minimal surumu."""
+
+    def __init__(self, returncode, stdout="", stderr=""):
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+
+
+def gh_run_fetcher(repo: str, attempts: int = 3, runner=None, sleep=None):
+    """GitHub Actions run bilgisi (conclusion dahil) getirici — RETRY'LI.
+
+    Olcum ucu haftalik cron'da tek ateslik kirmiziya donusmemelidir: agir
+    bir API cagrisi (5xx / ag hatasi) "kanit bayat" demek DEGILDIR. Bu
+    yuzden gecici hatada `attempts` kez yeniden denenir; sonunda iki durum
+    AYRI reportlanir:
+      - HTTP 404 → run gercekten yok (defter bayat / run silinmis)
+      - diger    → DOGRULANAMADI (altyapi; yeniden calistirilmalı)
+    Ikisi de kirmizi verir (fail-closed), ama mesajlari farklidir: biri
+    "defteri tazele", digeri "gecici hata, tekrar kos".
+    """
+    runner = runner or subprocess.run
+    sleep = sleep or time.sleep
+
     def _fetch(run_id: str):
-        proc = subprocess.run(
-            ["gh", "api", f"repos/{repo}/actions/runs/{run_id}"],
-            capture_output=True, text=True)
-        if proc.returncode != 0:
-            return None
-        try:
-            return json.loads(proc.stdout)
-        except json.JSONDecodeError:
-            return None
+        error = "transport"
+        for attempt in range(attempts):
+            proc = runner(["gh", "api", f"repos/{repo}/actions/runs/{run_id}"],
+                          capture_output=True, text=True)
+            if proc.returncode == 0:
+                try:
+                    return json.loads(proc.stdout)
+                except json.JSONDecodeError:
+                    error = "parse"
+            else:
+                error = ("not_found"
+                         if "404" in (proc.stderr or "") + (proc.stdout or "")
+                         else "transport")
+            if attempt + 1 < attempts:
+                sleep(1)
+        return {"__fetch_error__": error}
     return _fetch
 
 
@@ -200,7 +236,33 @@ def parse_rows(text: str):
 # --------------------------------------------------------------------------
 # Freshness denetimleri
 # --------------------------------------------------------------------------
-def check_head_coverage(rows, git, max_gap: int):
+def substantive_gap(git, head: str, main_sha: str, exempt=DEFAULT_GAP_EXEMPT):
+    """`head`..`main` arasindaki ANLAMLI commit sayisi (None = olcum yok).
+
+    Kanit kaydi commit'leri (varsayilan: `chore(changelog)`, `docs(deploy)`)
+    sayilmaz: onlar kaniti geriye goturmez, tam olarak geride oldugunun
+    kaydidir. `git log` calismazsa ham commit sayisina dusulur.
+    """
+    span = "%s..%s" % (head, main_sha)
+    subjects = git(["log", "--format=%s", span])
+    if subjects is None:
+        raw = git(["rev-list", "--count", span])
+        try:
+            return int(raw) if raw is not None else None
+        except ValueError:
+            return None
+    count = 0
+    for line in subjects.splitlines():
+        subject = line.strip()
+        if not subject:
+            continue
+        if exempt and subject.startswith(exempt):
+            continue
+        count += 1
+    return count
+
+
+def check_head_coverage(rows, git, max_gap: int, exempt=DEFAULT_GAP_EXEMPT):
     """En yeni satir origin/main'i kapsiyor mu? (lag-one toleransi icinde)"""
     if not rows:
         return ["defterde satir yok — HEAD kapsami dogrulanamaz"]
@@ -215,14 +277,13 @@ def check_head_coverage(rows, git, max_gap: int):
     if git(["merge-base", "--is-ancestor", newest.head, main_sha]) is None:
         return ["en yeni satirin HEAD'i %s degil: %s main soyunda degil"
                 % (newest.head, main_sha[:7])]
-    gap_raw = git(["rev-list", "--count", "%s..%s" % (newest.head, main_sha)])
-    try:
-        gap = int(gap_raw) if gap_raw is not None else 0
-    except ValueError:
-        gap = 0
+    gap = substantive_gap(git, newest.head, main_sha, exempt)
+    if gap is None:
+        return ["HEAD acigi olculemedi (git log/rev-list basarisiz)"]
     if gap > max_gap:
         violations.append(
-            "en yeni satir %s, main %s'ten %d commit ileride (tolerans %d) — "
+            "en yeni satir %s, main %s'ten %d ANLAMLI commit ileride "
+            "(tolerans %d; kanit satiri/changelog commit'leri sayilmaz) — "
             "kanit guncel degil" % (newest.head, main_sha[:7], gap, max_gap))
     return violations
 
@@ -255,6 +316,14 @@ def check_runs(rows, fetch, verify_rows: int):
             if data is None:
                 violations.append("kosum #%s bulunamadi (satir %s) — kayit bayat"
                                   % (run_id, row.date))
+                continue
+            error = data.get("__fetch_error__")
+            if error:
+                violations.append(
+                    "kosum #%s DOGRULANAMADI (%s; satir %s) — kanit dogrulanmadi, "
+                    "gecici hata olabilir: kapı geçici hatada da kirmizidir"
+                    % (run_id, "run yok" if error == "not_found" else error,
+                       row.date))
                 continue
             actual = data.get("conclusion")
             if actual != label:

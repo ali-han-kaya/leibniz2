@@ -24,9 +24,9 @@ python3 _calisma/CIKTI/deploy_evidence.py --print   # satırları TSV olarak gö
 Dört denetim ekseni:
 
 - **Yapı** — başlık beklenen sütunlarda, her satır 6 hücre, tarih ISO, HEAD kısa-hex, koşum hücresi `<conclusion> #<run_id>`.
-- **HEAD kapsamı** — en yeni satır origin/main'in atası ve en fazla 3 commit geride (lag-one tasarımı: bir HEAD'in koşumları bitmeden kaydı yazılamaz, ondan sonraki commit'te yazılır).
+- **HEAD kapsamı** — en yeni satır origin/main'in atası ve en fazla **3 anlamlı commit** geride. Kanıt satırı ve changelog commit'leri (`docs(deploy)`, `chore(changelog)`) sayılmaz: onlar kanıtı geriye götürmez, tam olarak geride olduğunun kaydıdır. Sayım `origin/main`'e karşı yapılır.
 - **Yaş** — en yeni satır 21 günden eski değil (haftalık cron + iki haftalık tolerans), gelecek tarihli de olamaz.
-- **Koşum gerçekliği** — en yeni 2 satırdaki run id'ler GitHub'da var ve hücrede yazan sonuçla **birebir** aynı. Eski satırlar canlıya sorulmaz (log saklama süresi geçmişte yanlış kırmızı üretirdi).
+- **Koşum gerçekliği** — en yeni 2 satırdaki run id'ler GitHub'da var ve hücrede yazan sonuçla **birebir** aynı. Eski satırlar canlıya sorulmaz (log saklama süresi geçmişte yanlış kırmızı üretirdi). Geçici API hatası 3 kez yeniden denenir; hâlâ erişilemiyorsa `DOGRULANAMADI` (altyapı) ile `sapmasi` (kanıt yanlış) ayrı raporlanır — ikisi de kırmızı, ama farklı eylem gerektirir.
 
 **Kırmızı olduğunda:** en yeni HEAD'in dört koşumu bittikten sonra o HEAD için satır
 ekle — yaş, HEAD açığı ve sonuç sapması aynı eylemle kapanır. Sadece `BAYAT:` satırı
