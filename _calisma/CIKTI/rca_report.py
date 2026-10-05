@@ -97,6 +97,25 @@ RCA_TABLE = (
 )
 UNKNOWN = ("bilinmeyen desen — job log'una bak", "", "log'da ilk FAIL satırını oku")
 
+# Bir job ancak buradaki sonuçlardan biriyse yeşildir; DİĞER HER ŞEY kırmızıdır.
+# Fail-closed: GitHub yeni bir sonuç değeri eklediğinde tablo onu sessizce
+# yeşil saymasın.
+#
+# Neden liste yerine "kırmızılar": `conclusion == "failure"` filtresi fail-OPEN'dı.
+# Canlı koşuda yakalandı — docker-security işi `cancelled` olduğu için tablo
+# "verdict: clean | 0 / 0" yazdı, halbuki koşumun kendisi `failure` idi.
+# `cancelled` / `timed_out` / `startup_failure` / `action_required` hepsi kırmızı
+# işareti; hiçbiri yeşil sayılmaz. Boş sonuç ("") de yeşil DEĞİL: bitmemiş bir
+# iş, tamamlanmış bir koşumda anomaly'dir.
+BENIGN_CONCLUSIONS = {"success", "skipped", "neutral"}
+
+
+def is_red(conclusion) -> bool:
+    """Job sonucu kırmızı mı? Bilinmeyen/None → kırmızı (fail-closed)."""
+    if conclusion is None:
+        return True
+    return str(conclusion).strip().lower() not in BENIGN_CONCLUSIONS
+
 
 def rca_for(job_name: str):
     """Job adına göre (kök_neden, belge, önerilen_adım)."""
@@ -202,7 +221,7 @@ def build_rows(run_id: str, repo: str, workflow: str, required, jobs_window):
     required_hits = 0
     for job in jobs:
         conclusion = job.get("conclusion")
-        if conclusion != "failure":
+        if not is_red(conclusion):
             continue
         name = job.get("name") or "?"
         is_required = name in set(required) if required else None

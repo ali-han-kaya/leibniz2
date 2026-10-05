@@ -66,7 +66,7 @@ class TestSeverityFromProtection(unittest.TestCase):
         self.assertEqual(hits, 0)
         self.assertEqual(rows[0]["severity"], "unknown")
 
-    def test_non_failure_conclusions_are_ignored(self):
+    def test_benign_conclusions_are_ignored(self):
         with stub_jobs([
             {"name": "Commit-msg gate", "conclusion": "success"},
             {"name": "A11y gate (axe-core, fail-closed)", "conclusion": "skipped"},
@@ -76,6 +76,36 @@ class TestSeverityFromProtection(unittest.TestCase):
                                         ["Budget shield (aggregated)"], {})
         self.assertEqual([r["job"] for r in rows], ["Budget shield (aggregated)"])
         self.assertEqual(hits, 1)
+
+    def test_cancelled_job_is_red_not_clean(self):
+        """Canlı koşuda bulunan fail-OPEN: docker-security işleri `cancelled`
+        olduğu için tablo `conclusion == "failure"` filtresine takılıp
+        "verdict: clean | 0 / 0" yazdı. Koşumun kendisi `failure` idi."""
+        jobs = [
+            {"name": "Build and scan Docker image", "conclusion": "cancelled"},
+            {"name": "Local security smoke (script parity)",
+             "conclusion": "timed_out"},
+        ]
+        with stub_jobs(jobs):
+            rows, hits = rca.build_rows("1", "o/r", "docker-security", [], {})
+        self.assertEqual(len(rows), 2)
+        self.assertEqual([r["conclusion"] for r in rows],
+                         ["cancelled", "timed_out"])
+
+    def test_unknown_conclusion_is_red_fail_closed(self):
+        """GitHub yeni bir değer eklerse sessizce yeşil sayılmamalı."""
+        for concl in (None, "", "startup_failure", "action_required",
+                      "stale", "TAMAMEN_YENI_BIR_DEGER"):
+            self.assertTrue(rca.is_red(concl), concl)
+        for concl in ("success", "skipped", "neutral", "SUCCESS"):
+            self.assertFalse(rca.is_red(concl), concl)
+
+    def test_cancelled_required_job_blocks(self):
+        name = "Delivery verification — K1-K19 (single entry point)"
+        with stub_jobs([{"name": name, "conclusion": "cancelled"}]):
+            report = rca.build_report("1", "o/r", "wf", [name], {})
+        self.assertEqual(report["verdict"], "blocking")
+        self.assertEqual(report["required_failures"], 1)
 
 
 class TestVerdict(unittest.TestCase):
