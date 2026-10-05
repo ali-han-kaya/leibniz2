@@ -162,6 +162,64 @@ class TestRootCauseMapping(unittest.TestCase):
                                 f"{doc} tabloda ama depoda yok")
 
 
+class TestRequiredSource(unittest.TestCase):
+    """Önem listesi NEREDEN geldi — tablo bunu da söylemek zorunda.
+
+    Canlı branch protection okuması GITHUB_TOKEN'a verilemez; ilk canlı
+    koşuda liste boş döndü ve tablo required/advisory ayrımını sessizce
+    kaybetti. Bu testler o sessiz çöküşü kilitler.
+    """
+
+    def _stub_gh(self, returncode, stdout=""):
+        class P:
+            pass
+        p = P()
+        p.returncode = returncode
+        p.stdout = stdout
+        p.stderr = "denied"
+        return p
+
+    def test_live_protection_is_preferred(self):
+        import json as _json
+        payload = _json.dumps({"contexts": ["A", "B"]})
+        original = rca.subprocess.run
+        rca.subprocess.run = lambda *a, **k: self._stub_gh(0, payload)
+        try:
+            ctx, src = rca.required_contexts("o/r")
+        finally:
+            rca.subprocess.run = original
+        self.assertEqual(ctx, ["A", "B"])
+        self.assertEqual(src, "branch-protection")
+
+    def test_unreadable_protection_falls_back_to_workflow_names(self):
+        """CI'da API reddedilir → tablo ÇÖKMEMELİ, azalan doğrulukla devam
+        etmeli ve bunu etiketlemeli."""
+        original = rca.subprocess.run
+        rca.subprocess.run = lambda *a, **k: self._stub_gh(1, "")
+        try:
+            ctx, src = rca.required_contexts("o/r")
+        finally:
+            rca.subprocess.run = original
+        self.assertTrue(ctx, "fallback boş döndü — ayrım yine kaybolur")
+        self.assertIn("okunamad", src)
+        self.assertNotEqual(src, "branch-protection")
+
+    def test_fallback_contains_real_gate_job_names(self):
+        import status_checks as sc
+        ctx, src = rca.required_contexts("o/r")
+        self.assertIn("Delivery verification — K1-K19 (single entry point)", ctx)
+        self.assertIn("Delivery verification — K1-K19 (single entry point)",
+                      set(sc.gate_jobs().values()))
+
+    def test_render_states_the_source(self):
+        report = {"run_id": 1, "workflow": "wf", "verdict": "indeterminate",
+                  "required_failures": 0, "advisory_failures": 0, "rows": [],
+                  "required_source": "verify.yml job adları (canlı koruma okunamadı)"}
+        text = rca.render(report)
+        self.assertIn("önem listesi kaynağı:", text)
+        self.assertIn("okunamadı", text)
+
+
 class TestRender(unittest.TestCase):
     def test_render_includes_rows_and_verdict(self):
         report = {"run_id": 42, "workflow": "verify-delivery", "verdict": "blocking",

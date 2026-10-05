@@ -108,30 +108,53 @@ def rca_for(job_name: str):
 
 
 def required_contexts(repo: str):
-    """Branch protection'ın gerçek required context listesi (yoksa boş)."""
+    """Branch protection'ın gerçek required context listesi + KAYNAK.
+
+    Neden iki kaynak: GitHub'da branch protection okumak `administration`
+    izni ister ve GITHUB_TOKEN'a VERİLEMEZ. Yani bu kod CI'da (asıl
+    kullanıldığı yer) canlı API'yi okuyamaz ve liste boş döner — tablo
+    "required bilinmiyor" diye sessizce çöker. Bu ilk canlı koşuda görüldü
+    (docker-security run'ı: zorunlu 0 / advisory 0).
+
+    Bu yüzden: canlı API başarılıysa O esas kaynaktır; başarısızsa
+    `status_checks.gate_jobs()` kullanılır — o repo'nun TEK kaynağıdır
+    (verify.yml job `name:` alanlarından türetilir, admin istemez).
+    Dönen liste ve kaynak etiketi birlikte verilir ki tablo, ayrımın
+    nereden geldiğini de söylesin.
+    """
     proc = subprocess.run(
         ["gh", "api",
          f"repos/{repo}/branches/main/protection/required_status_checks"],
         capture_output=True, text=True)
-    if proc.returncode != 0:
-        return []
+    contexts = []
+    if proc.returncode == 0:
+        try:
+            data = json.loads(proc.stdout)
+        except json.JSONDecodeError:
+            data = {}
+        # Bu uç nokta contexts'i DÜZ liste döner; bazı sürümlerde
+        # required_status_checks.{checks[],contexts[]} içine sarar. İkisi de
+        # desteklenir.
+        rsc = data.get("required_status_checks") or {}
+        contexts = [c for c in (data.get("contexts") or []) if c]
+        contexts += [c.get("context") for c in (rsc.get("checks") or [])
+                     if c.get("context")]
+        contexts += [c for c in (rsc.get("contexts") or []) if c]
+    if contexts:
+        seen, uniq = set(), []
+        for c in contexts:
+            if c not in seen:
+                seen.add(c)
+                uniq.append(c)
+        return uniq, "branch-protection"
     try:
-        data = json.loads(proc.stdout)
-    except json.JSONDecodeError:
-        return []
-    # Bu uç nokta contexts'i DÜZ liste döner; bazı sürümlerde
-    # required_status_checks.{checks[],contexts[]} içine sarar. İkisi de
-    # desteklenir — liste boş dönerse "required bilinmiyor" (unknown).
-    rsc = data.get("required_status_checks") or {}
-    contexts = [c for c in (data.get("contexts") or []) if c]
-    contexts += [c.get("context") for c in (rsc.get("checks") or []) if c.get("context")]
-    contexts += [c for c in (rsc.get("contexts") or []) if c]
-    seen, uniq = set(), []
-    for c in contexts:
-        if c not in seen:
-            seen.add(c)
-            uniq.append(c)
-    return uniq
+        import status_checks as sc
+        derived = sorted(set(sc.gate_jobs().values()))
+    except Exception:
+        derived = []
+    if derived:
+        return derived, "verify.yml job adları (canlı koruma okunamadı)"
+    return [], "bilinmiyor"
 
 
 def run_window(repo: str, workflow: str, limit: int = 10):
@@ -183,7 +206,8 @@ def build_rows(run_id: str, repo: str, workflow: str, required, jobs_window):
     return rows, required_hits
 
 
-def build_report(run_id: str, repo: str, workflow: str, required, jobs_window):
+def build_report(run_id: str, repo: str, workflow: str, required, jobs_window,
+                 required_source: str = "bilinmiyor"):
     rows, required_hits = build_rows(run_id, repo, workflow, required, jobs_window)
     advisory = sum(1 for r in rows if r["severity"] == "advisory")
     unknown = sum(1 for r in rows if r["severity"] == "unknown")
@@ -209,6 +233,7 @@ def build_report(run_id: str, repo: str, workflow: str, required, jobs_window):
         "required_failures": required_hits,
         "advisory_failures": advisory,
         "unknown_severity": unknown,
+        "required_source": required_source,
         "verdict": verdict,
     }
 
@@ -219,7 +244,8 @@ def render(report) -> str:
            "verdict: %s | zorunlu kırmızı: %d | advisory kırmızı: %d"
            % (report["verdict"], report["required_failures"],
               report["advisory_failures"]),
-           ""]
+           "",
+           "önem listesi kaynağı: %s" % report.get("required_source", "bilinmiyor")]
     if report["verdict"] == "indeterminate":
         out.append("> **Önem ayrımı yapılamadı** — branch protection listesi "
                    "okunamadı, bu yüzden bu koşumun merge'i durdurup durdurmayacağı "
@@ -264,9 +290,10 @@ def main(argv=None) -> int:
             except json.JSONDecodeError:
                 pass
     try:
-        required = required_contexts(repo)
+        required, required_source = required_contexts(repo)
         window = run_window(repo, workflow) if workflow not in ("?", "") else {}
-        report = build_report(args.run_id, repo, workflow, required, window)
+        report = build_report(args.run_id, repo, workflow, required, window,
+                              required_source)
     except (RuntimeError, subprocess.CalledProcessError) as exc:
         print("HATA: run/veri alınamadı: %s" % exc, file=sys.stderr)
         return 1

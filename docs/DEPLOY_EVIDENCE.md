@@ -8,7 +8,21 @@
 | 2026-10-05 | f79992c | [failure #37309920285](https://github.com/ali-han-kaya/leibniz2/actions/runs/37309920285) | [failure #37309920425](https://github.com/ali-han-kaya/leibniz2/actions/runs/37309920425) | [success #37309920393](https://github.com/ali-han-kaya/leibniz2/actions/runs/37309920393) | [success #37297101317](https://github.com/ali-han-kaya/leibniz2/actions/runs/37297101317) |
 | 2026-10-05 | d566be2 | [failure #37317273752](https://github.com/ali-han-kaya/leibniz2/actions/runs/37317273752) | [failure #37317273825](https://github.com/ali-han-kaya/leibniz2/actions/runs/37317273825) | [success #37317273949](https://github.com/ali-han-kaya/leibniz2/actions/runs/37317273949) | [success #37297101317](https://github.com/ali-han-kaya/leibniz2/actions/runs/37297101317) |
 | 2026-10-05 | d21d3f1 | [failure #37324314290](https://github.com/ali-han-kaya/leibniz2/actions/runs/37324314290) | [failure #37324314309](https://github.com/ali-han-kaya/leibniz2/actions/runs/37324314309) | [success #37324315163](https://github.com/ali-han-kaya/leibniz2/actions/runs/37324315163) | [success #37324916028](https://github.com/ali-han-kaya/leibniz2/actions/runs/37324916028) |
+| 2026-10-05 | 0669254 | [failure #37359402781](https://github.com/ali-han-kaya/leibniz2/actions/runs/37359402781) | [failure #37359402752](https://github.com/ali-han-kaya/leibniz2/actions/runs/37359402752) | [success #37359402738](https://github.com/ali-han-kaya/leibniz2/actions/runs/37359402738) | [success #37324916028](https://github.com/ali-han-kaya/leibniz2/actions/runs/37324916028) |
 
+> Not (2026-10-05, 0669254): Bu satır **RCA yorum akışının** ilk canlı kanıtıdır.
+> Yeni `ci-rca-comment` workflow'u `docker-security` kırmızısı üzerine
+> `workflow_run` ile tetiklendi ve [`#37359533894`](https://github.com/ali-han-kaya/leibniz2/actions/runs/37359533894)
+> SUCCESS verdi: iki düşen job doğru kök neden + belgeyle sınıflandırıldı.
+> O koşuda tablo `indeterminate` üretti ve **bu bir hata olarak yakalandı**:
+> branch protection okumak `administration` izni ister, `GITHUB_TOKEN`'a
+> verilemez — yani CI'da canlı liste boş döner ve required/advisory ayrımı
+> sessizce kaybolur. Düzeltme: `status_checks.gate_jobs()` (verify.yml job
+> adlarından türetilen repo tek kaynağı) fallback olarak devreye alındı ve
+> tablo artık ayrımın kaynağını yazıyor. Ayrıca Summary adımındaki
+> here-doc, YAML girintisi yüzünden actionlint'i kırıyordu; `python3 -c`
+> ile değiştirildi.
+>
 > Not (2026-10-05): verify-delivery kırmızısı yalnızca **advisory** "Live CI doc↔GitHub sync audit" job'ından; diğer tüm job'lar yeşil. docker-security kırmızısı `libpcre2-8-0` **CVE-2026-103111** (düzeltme PR #82'de). Kapı kanıtı: aynı HEAD'de [`deploy-evidence` #37317331833](https://github.com/ali-han-kaya/leibniz2/actions/runs/37317331833) SUCCESS (`PASS: kanit-defteri taze`). **determinism-trend** hücresindeki [`#37324916028`](https://github.com/ali-han-kaya/leibniz2/actions/runs/37324916028) yeşil koşum, kayıt yolunun onarım kanıtıdır: bot dalındaki iki sıkışmış ölçüm (`tasinan kayit: 2`) kurtarıldı ve PR #83 auto-merge kuyruğuna alındı.
 
 ## Bayatlık kapısı (haftalık cron)
