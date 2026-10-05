@@ -559,6 +559,8 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-05 | chore | (changelog) 58a5c22 satirini tabloya ekle | [`36c07e0`](https://github.com/ali-han-kaya/leibniz2/commit/36c07e0) |
 | 2026-10-05 | docs | (deploy) d566be2 kosum satirini kanit-defterine ekle | [`ef2d960`](https://github.com/ali-han-kaya/leibniz2/commit/ef2d960) |
 | 2026-10-05 | chore | (changelog) 36c07e0 satirini tabloya ekle | [`adff289`](https://github.com/ali-han-kaya/leibniz2/commit/adff289) |
+| 2026-10-05 | fix | (trend) olcum kaybini onle — kayip korumasi + fail-closed PR yolu | [`84db33b`](https://github.com/ali-han-kaya/leibniz2/commit/84db33b) |
+| 2026-10-05 | chore | (changelog) ef2d960 satirini tabloya ekle | [`5bc50e0`](https://github.com/ali-han-kaya/leibniz2/commit/5bc50e0) |
 
 ### Regresyon notları
 
