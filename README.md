@@ -578,6 +578,13 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-05 | fix | (ci) iptal edilen job'i temiz sayma, tabloyu fail-closed yap | [`6d64cce`](https://github.com/ali-han-kaya/leibniz2/commit/6d64cce) |
 | 2026-10-05 | chore | (changelog) PyYAML yutma duzeltme satirini tabloya ekle | [`d01fbc1`](https://github.com/ali-han-kaya/leibniz2/commit/d01fbc1) |
 | 2026-10-05 | chore | (changelog) fail-closed tablo duzeltme satirini tabloya ekle | [`e2db1f4`](https://github.com/ali-han-kaya/leibniz2/commit/e2db1f4) |
+| 2026-10-06 | feat | (rca) prettier-lint, action-pins ve mirror-sync sinif-kanonlari | [`84b1cc9`](https://github.com/ali-han-kaya/leibniz2/commit/84b1cc9) |
+| 2026-10-06 | docs | (deploy) 9f94f09 icin kanit-defteri satiri ekle | [`11c76f9`](https://github.com/ali-han-kaya/leibniz2/commit/11c76f9) |
+| 2026-10-06 | docs | (recovery) yama klasorunun kokenini ve kanit sozlesmesini yaz | [`9f94f09`](https://github.com/ali-han-kaya/leibniz2/commit/9f94f09) |
+| 2026-10-06 | docs | (rc) bilinen kirmizilarin bekleyen setini tek tabloda topla | [`bf3ea64`](https://github.com/ali-han-kaya/leibniz2/commit/bf3ea64) |
+| 2026-10-06 | docs | (incident) INC-6 — iptal edilen isleri temiz sayan fail-open tablo | [`4fc9313`](https://github.com/ali-han-kaya/leibniz2/commit/4fc9313) |
+| 2026-10-06 | docs | (incident) INC-5 — PyYAML yokken sureci olduren SystemExit tuzagi | [`8201fbd`](https://github.com/ali-han-kaya/leibniz2/commit/8201fbd) |
+| 2026-10-05 | docs | (deploy) RCA duzeltmeleri icin kanit-defteri satiri ekle | [`1008538`](https://github.com/ali-han-kaya/leibniz2/commit/1008538) |
 
 ### Regresyon notları
 
