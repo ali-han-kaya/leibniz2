@@ -564,6 +564,9 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-05 | docs | (deploy) d21d3f1 kosum satirini kanit-defterine ekle | [`ca2d2e7`](https://github.com/ali-han-kaya/leibniz2/commit/ca2d2e7) |
 | 2026-10-05 | chore | (changelog) 84db33b satirini tabloya ekle | [`d21d3f1`](https://github.com/ali-han-kaya/leibniz2/commit/d21d3f1) |
 | 2026-10-05 | chore | (changelog) ca2d2e7 satirini tabloya ekle | [`7cb4db3`](https://github.com/ali-han-kaya/leibniz2/commit/7cb4db3) |
+| 2026-10-05 | feat | (ci) kirmizi kosumda RCA tablosunu PR yorumuna dusur | [`c2d749d`](https://github.com/ali-han-kaya/leibniz2/commit/c2d749d) |
+| 2026-10-05 | fix | (trend) kayıp-koruma adımını sandbox'ta yürüt | [`f578bed`](https://github.com/ali-han-kaya/leibniz2/commit/f578bed) |
+| 2026-10-05 | chore | (changelog) 7cb4db3 satirini tabloya ekle | [`c66cf87`](https://github.com/ali-han-kaya/leibniz2/commit/c66cf87) |
 
 ### Regresyon notları
 
