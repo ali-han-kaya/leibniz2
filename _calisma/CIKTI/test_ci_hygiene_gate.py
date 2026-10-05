@@ -28,7 +28,11 @@ ROOT = HERE.parent.parent
 WORKFLOWS = ROOT / ".github" / "workflows"
 GATE = HERE / "ci_hygiene_gate.py"
 
-import yaml
+try:
+    import yaml  # noqa: F401 — ci_hygiene_gate'in import-yüzeyi; yoksa SKIP
+    HAS_YAML = True
+except ImportError:
+    HAS_YAML = False
 
 
 def run_gate(workflows_dir):
@@ -42,6 +46,7 @@ def load(p):
     return yaml.safe_load(p.read_text(encoding="utf-8"))
 
 
+@unittest.skipUnless(HAS_YAML, "PyYAML yok — kapı import-yüzeyi koşulamaz (dürüst-SKIP)")
 class TestWorkflowHygieneInvariants(unittest.TestCase):
     """Repo yüzeyi: mevcut workflow'lar kapıyı geçmeli (regresyon-blokajı)."""
 
@@ -71,6 +76,7 @@ class TestWorkflowHygieneInvariants(unittest.TestCase):
                             f"{p.name}: concurrency.group boş")
 
 
+@unittest.skipUnless(HAS_YAML, "PyYAML yok — kapı import-yüzeyi koşulamaz (dürüst-SKIP)")
 class TestGateFailClosed(unittest.TestCase):
     """Kapı yüzeyi: her ihlal-tipi tek tek rc=1 üretmeli."""
 
