@@ -50,6 +50,7 @@ test_coverage_report.py
 test_dashboard_k17_exit_sync.py
 test_dashboard_next_contract.py
 test_dashboard_smoke.py
+test_deploy_evidence.py
 test_design_token_collision.py
 test_design_token_contrast.py
 test_determinism_trend_badge.py

@@ -7,3 +7,29 @@
 | 2026-10-05 | b1f5f1e | [failure #37272394821](https://github.com/ali-han-kaya/leibniz2/actions/runs/37272394821) | [failure #37272394862](https://github.com/ali-han-kaya/leibniz2/actions/runs/37272394862) | [success #37272394778](https://github.com/ali-han-kaya/leibniz2/actions/runs/37272394778) | [success #37297101317](https://github.com/ali-han-kaya/leibniz2/actions/runs/37297101317) |
 
 > Not (2026-10-05): verify-delivery kırmızısı yalnızca **advisory** "Live CI doc↔GitHub sync audit" job'ından; diğer tüm job'lar yeşil. docker-security kırmızısı `libpcre2-8-0` **CVE-2026-103111** (düzeltme PR #82'de).
+
+## Bayatlık kapısı (haftalık cron)
+
+Bu defter **elle yazılır**; tazeliği `deploy-evidence` workflow'unda fail-closed
+denetlenir. Cron `47 3 * * 1` — determinism-trend'in haftalık ölçümü
+(`17 3 * * 1`) bittikten SONRA: önce ölçüm kaydı (PR → main), sonra bu defterin
+o ölçümü değerlendirmesi. Sıralama `test_gated_schedules.py` içinde kıvidir.
+
+```bash
+python3 _calisma/CIKTI/deploy_evidence.py --check   # kapı (yerel)
+python3 _calisma/CIKTI/deploy_evidence.py --print   # satırları TSV olarak gör
+```
+
+Dört denetim ekseni:
+
+- **Yapı** — başlık beklenen sütunlarda, her satır 6 hücre, tarih ISO, HEAD kısa-hex, koşum hücresi `<conclusion> #<run_id>`.
+- **HEAD kapsamı** — en yeni satır origin/main'in atası ve en fazla 3 commit geride (lag-one tasarımı: bir HEAD'in koşumları bitmeden kaydı yazılamaz, ondan sonraki commit'te yazılır).
+- **Yaş** — en yeni satır 21 günden eski değil (haftalık cron + iki haftalık tolerans), gelecek tarihli de olamaz.
+- **Koşum gerçekliği** — en yeni 2 satırdaki run id'ler GitHub'da var ve hücrede yazan sonuçla **birebir** aynı. Eski satırlar canlıya sorulmaz (log saklama süresi geçmişte yanlış kırmızı üretirdi).
+
+**Kırmızı olduğunda:** en yeni HEAD'in dört koşumu bittikten sonra o HEAD için satır
+ekle — yaş, HEAD açığı ve sonuç sapması aynı eylemle kapanır. Sadece `BAYAT:` satırı
+yazan koşumları yeşile çevirmek kanıtı düzeltmez, yoksa eder.
+
+Çıkış kodları: **0** taze · **1** bayat kanit (job kırmızı) · **2** ölçülemez
+(defter yok, `gh` yok, owner/repo çözülemedi — kırmızı sayılır).
