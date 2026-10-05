@@ -563,6 +563,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-05 | chore | (changelog) ef2d960 satirini tabloya ekle | [`5bc50e0`](https://github.com/ali-han-kaya/leibniz2/commit/5bc50e0) |
 | 2026-10-05 | docs | (deploy) d21d3f1 kosum satirini kanit-defterine ekle | [`ca2d2e7`](https://github.com/ali-han-kaya/leibniz2/commit/ca2d2e7) |
 | 2026-10-05 | chore | (changelog) 84db33b satirini tabloya ekle | [`d21d3f1`](https://github.com/ali-han-kaya/leibniz2/commit/d21d3f1) |
+| 2026-10-05 | chore | (changelog) ca2d2e7 satirini tabloya ekle | [`7cb4db3`](https://github.com/ali-han-kaya/leibniz2/commit/7cb4db3) |
 
 ### Regresyon notları
 
