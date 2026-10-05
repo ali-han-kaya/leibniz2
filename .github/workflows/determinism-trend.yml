@@ -82,10 +82,21 @@ jobs:
           python3 _calisma/CIKTI/record_determinism_trend.py --check
 
       # Kayıt yolu: main'e bare push branch-protection'a (GH006) takılır
-      # (koşum 35580855610 kanıtı: deney+ölçüm PASS, push failure). Repo
-      # konvansiyonu gereği her şey PR duvarından geçer: bot-dalı + PR
-      # (açık PR varsa head güncellenir) + --auto merge (required checks
-      # yeşil olunca GitHub merge eder; gerekirse elle incelenir).
+      # (koşum 35580855610 kanıtı: deney+ölçüm PASS, push failure) → kayıt
+      # bot-dalı + PR yoluyla main'e iner.
+      #
+      # 2026-10-05 düzeltmesi — ölçümün DALDA KALIP KAYBOLMASI:
+      # `gh pr create` repo ayarı yüzünden yetkisiz (koşum 37297101317:
+      # "GraphQL: GitHub Actions is not permitted to create ..."). Eski adım
+      # bunu `|| echo` ile yutup 0 dönüyordu; sonuç: koşum YEŞİL, kayıt
+      # bot-dalında sıkışık (main 6 satır / dal 7 satır, 5 Ekim ölçümü
+      # main'de yok) ve sonraki `--force` push o ölçümü kalıcı olarak silerdi.
+      # İki düzeltme:
+      #   (1) KAYIP KORUMASI — dalda main'de olmayan kayıt varsa üstüne
+      #       yazılmaz; kayıtlar birleştirilir (sort -u, JSONL satırı tam
+      #       eşleşmesi) ve push onları da taşır.
+      #   (2) FAIL-CLOSED — PR yolu kurulamazsa adım 1 döner. "Ölçüm merge
+      #       yolunda değil" başarı değildir; sessiz kayıp olayın kendisidir.
       - name: Commit trend record
         env:
           TREND_BRANCH: chore/determinism-trend-record
@@ -94,28 +105,52 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docs/determinism_trend/determinism_trend.jsonl
+          RECORD="docs/determinism_trend/determinism_trend.jsonl"
+          git add "$RECORD"
           if git diff --cached --quiet; then
             echo "FAIL: --update ekleme yaptı ama stage boş — beklenmedik durum"
             exit 1
           fi
           git commit -m "chore: record weekly determinism trend measurement" -m "TeXLive+SDE experiment (two independent SDE runs) on ubuntu-latest with pinned tectonic 0.17.0 (release digest verified) and TeXLive pdflatex; canonical hashes appended to docs/determinism_trend/determinism_trend.jsonl." -m "Generated with GitHub Actions. Co-Authored-By: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
+
+          # (1) Kayıp koruması: bot dalında, main'de olmayan kayıt varsa
+          #     üstüne yazma — hepsini birleştirip aynı commit'te taşı
+          #     (trend_record_merge.py: JSONL satırı tam metin kimliktir).
+          if git fetch --depth=1 origin "$TREND_BRANCH" 2>/dev/null; then
+            git show "FETCH_HEAD:$RECORD" > /tmp/trend_branch.jsonl 2>/dev/null || true
+            python3 _calisma/CIKTI/trend_record_merge.py \
+              --branch-file /tmp/trend_branch.jsonl --record "$RECORD" | tee /tmp/merge.out
+            if grep -qv '^0$' /tmp/merge.out; then
+              echo "NOT: dalda main'de olmayan kayıt vardı; push onları da taşıyor (ölçüm kaybı koruması)"
+              git add "$RECORD"
+              if git diff --cached --quiet; then
+                echo "FAIL: kayıt birleştirme sonrası stage boş — beklenmedik durum"
+                exit 1
+              fi
+              git commit --amend --no-edit
+            fi
+          fi
           git push --force origin "HEAD:$TREND_BRANCH"
-          # PR yolu: Actions'a PR-oluşturma izni kapalıysa (repo ayarı) ölçüm
-          # yine bot dalında güvendedir; adım görünür yönergeyle yeşil biter
-          # (kayıp yok — koşum 35590265995 kanıtı: create GraphQL-blok).
+
+          # (2) Fail-closed: kayıt main'e girecek bir yol bulmadan yeşil çıkma.
           PR=$(gh pr list --head "$TREND_BRANCH" --state open --json number --jq '.[0].number // ""')
           if [ -z "$PR" ]; then
-            if gh pr create --base main --head "$TREND_BRANCH" --title "chore: weekly determinism trend record (bot)" --body "Automated weekly determinism trend measurement (linux baseline). Canonical hashes in docs/determinism_trend/determinism_trend.jsonl."; then
-              gh pr merge "$PR" --auto --merge || echo "(auto-merge kuyruğa alınamadı — PR açık kalır, elle incelenir)"
-            else
-              echo "NOT: bot-PR oluşturulamadı (repo ayarı Actions-PR'yi kapatmış olabilir)."
-              echo "Ölçüm bot dalında güvende: $TREND_BRANCH @ $(git rev-parse --short HEAD)"
-              echo "Elle PR: gh pr create --base main --head $TREND_BRANCH"
-            fi
-          else
-            gh pr comment "$PR" --body "New measurement appended (run ${GITHUB_RUN_ID:-unknown})."
+            gh pr create --base main --head "$TREND_BRANCH" --title "chore: weekly determinism trend record (bot)" --body "Automated weekly determinism trend measurement (linux baseline). Canonical hashes in docs/determinism_trend/determinism_trend.jsonl." || true
+            PR=$(gh pr list --head "$TREND_BRANCH" --state open --json number --jq '.[0].number // ""')
           fi
+          if [ -z "$PR" ]; then
+            echo "FAIL: trend kaydı için PR yolu kurulamadı — ölçüm main'e girmedi."
+            echo "      Sebep büyük olasılıkla repo ayarı: Settings → Actions →"
+            echo "      'Allow GitHub Actions to create and approve pull requests' kapalı."
+            echo "      Kayıt bot-dalında GÜVENDE ama merge bekliyor:"
+            echo "      gh pr create --base main --head $TREND_BRANCH"
+            echo "      gh pr merge <N> --auto"
+            exit 1
+          fi
+          gh pr merge "$PR" --auto --merge || {
+            echo "FAIL: auto-merge kuyruğa alınamadı (PR #$PR açık, kayıt merge bekliyor)"
+            exit 1
+          }
 
       # Fail-closed tamamlama: yeşil = deney PASS + uzlaşma OK + kayıt
       # işlendi. Kırmızı = deney fail-closed, uzlaşma ihlali ya da izin

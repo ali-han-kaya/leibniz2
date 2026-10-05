@@ -252,6 +252,7 @@ HOOK_COVERAGE = {
         "test_verdict_seal_css.py",
         "test_design_token_collision.py",
         "test_deploy_evidence.py",
+        "test_trend_record_merge.py",
     ],
 }
 
