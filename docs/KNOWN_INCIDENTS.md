@@ -248,3 +248,68 @@ yakalamaz; CI'da aynı ölüme düşülür.
 - `verdict: indeterminate | zorunlu 0 | advisory 0` (çelişki: koşum kırmızı,
   tablo temiz)
 - `import yaml` içeren herhangi bir opsiyonel yedek yol
+
+---
+
+## INC-6: İptal edilen işler "temiz" sayılıyor — RCA tablosu fail-open
+
+**Tarih:** 2026-10-05
+**Etkilenen run'lar:** docker-security [`37366666325`](https://github.com/ali-han-kaya/leibniz2/actions/runs/37366666325) (HEAD `d01fbc1`) = failure, işleri `cancelled` · RCA koşumu [`37368236936`](https://github.com/ali-han-kaya/leibniz2/actions/runs/37368236936) **`verdict: clean | zorunlu 0 | advisory 0`** yazdı
+**Düzeltme commit'i:** `6d64cce`
+**Durum:** ✅ Çözüldü — aynı koşum artık `advisory-only | 0 / 2` ve iki satır da listeleniyor
+**Kanıt zinciri:** yerel 23/23 test · land [`37374017355`](https://github.com/ali-han-kaya/leibniz2/actions/runs/37374017355) DV=success · main [`37377743878`](https://github.com/ali-han-kaya/leibniz2/actions/runs/37377743878) DV=success · canlı RCA [`37380698089`](https://github.com/ali-han-kaya/leibniz2/actions/runs/37380698089) her iki satırı da düşürdü · defter satırı `e2db1f4`
+
+### Belirti
+
+Koşumun kendisi `failure` iken RCA tablosu `verdict: clean` yazıyordu.
+Düşen iş yoktu — çünkü tablo hiç satır üretmiyordu. İncelenen koşumda
+`Build and scan Docker image` ve `Local security smoke (script parity)`
+işleri `cancelled` idi ve bu değer filtre dışına düşüyordu.
+
+### Kök neden
+
+`build_rows` içinde tek satırlık filtre:
+
+```python
+if conclusion != "failure":
+    continue
+```
+
+Bu **fail-open**. GitHub'ın `cancelled`, `timed_out`, `startup_failure`,
+`action_required` sonuçları ve gelecekteki bilinmeyen her değer sessizce
+yeşil sayılıyordu. "Düşen iş" tanımı gerçeklikle örtüşmüyordu: iptal edilen
+bir iş, koşumu kırmızıya yeter.
+
+### İlk deneme (yetersiz — kırmızı listesi)
+
+`conclusion in ("failure", "cancelled", …)` gibi bir **kırmızı listesi**
+eylenir; GitHub yeni bir değer eklediğinde o da sessizce yeşil kalır.
+Aynı hata sınıfı, yalnız biraz daha dar.
+
+### Kesin çözüm (`6d64cce`)
+
+Şart **tersine çevrildi** — fail-closed:
+
+```python
+BENIGN_CONCLUSIONS = {"success", "skipped", "neutral"}
+```
+
+Bir iş yalnız bu üç sonuçtan biriyse yeşildir; geri kalan her şey kırmızı.
+Boş sonuç (`""`) de yeşil değil: tamamlanmış bir koşumda bitmemiş bir iş
+anomalidir. `is_red(None)` de kırmızı.
+
+Etki: `required` bir iş iptal edildiğinde artık `verdict: blocking` çıkıyor.
+
+### Önlem
+
+- "Kırmızı olan ne?" listesi tutmak yerine "yeşil olan ne?" listesi tut.
+  Bilinmeyen değerler kırmızıya düşer, yeşile değil.
+- Tablo ile koşum **çeliştiğinde** (koşum `failure`, tablo `clean`) bu bir
+  veri hatası değil, bir **kapı** hatasıdır: tablonun kendi doğruluğu
+  sorgulanmalı.
+
+### Benzer olayların belirtileri
+
+- Koşum `failure`/`cancelled` iken `verdict: clean | zorunlu 0 | advisory 0`
+- Tabloda satır sayısı ile `jobs` API'sindeki kırmızı iş sayısı farklı
+- `conclusion == "…"` kalıbıyla yazılmış herhangi bir iş süzgeci
