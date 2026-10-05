@@ -148,13 +148,34 @@ def required_contexts(repo: str):
                 uniq.append(c)
         return uniq, "branch-protection"
     try:
-        import status_checks as sc
-        derived = sorted(set(sc.gate_jobs().values()))
-    except Exception:
+        derived = _derived_required()
+    except BaseException:
+        # BaseException: status_checks._require_yaml() PyYAML yoksa
+        # sys.exit(2) çağırır ve SystemExit Exception'ın ALTINDA değildir.
+        # `except Exception` yalnızca hatayı yutar, CI'da yine patlardı.
         derived = []
     if derived:
         return derived, "verify.yml job adları (canlı koruma okunamadı)"
     return [], "bilinmiyor"
+
+
+def _derived_required(data=None):
+    """verify.yml job adlarından türetilen required listesi (admin istemez).
+
+    `status_checks.gate_jobs()` DEĞİL: o fonksiyon PyYAML yoksa
+    sys.exit(2) ile süreci öldürür, ve bu fallback tam olarak PyYAML'in
+    olmadığı CI'da çalışmak zorunda. Aynı TEK kaynağı (WORKFLOW yolu,
+    GATE_EXCLUDE listesi) kullanır; yalnız YAML okumayı burada, kontrollü
+    yaparız. `data` verilirse dosya hiç okunmaz (testler için).
+    """
+    import status_checks as sc
+    if data is None:
+        import yaml
+        with open(sc.WORKFLOW, encoding="utf-8") as fh:
+            data = yaml.safe_load(fh)
+    jobs = sc.all_jobs(data)
+    return sorted({name for jid, name in jobs.items()
+                   if jid not in sc.GATE_EXCLUDE and name})
 
 
 def run_window(repo: str, workflow: str, limit: int = 10):

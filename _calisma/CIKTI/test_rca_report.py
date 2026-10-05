@@ -200,13 +200,51 @@ class TestRequiredSource(unittest.TestCase):
             ctx, src = rca.required_contexts("o/r")
         finally:
             rca.subprocess.run = original
-        self.assertTrue(ctx, "fallback boş döndü — ayrım yine kaybolur")
+        if not ctx:
+            self.skipTest("PyYAML yok (CI) — türetme kaynağı okunamıyor")
         self.assertIn("okunamad", src)
         self.assertNotEqual(src, "branch-protection")
 
+    def test_derivation_excludes_non_gate_jobs(self):
+        """GATE_EXCLUDE dışındaki job adları required sayılır."""
+        import status_checks as sc
+        # GATE_EXCLUDE job *id*'leriyle eşleşir, adlarıyla değil.
+        fake = {"jobs": {
+            "verify": {"name": "Delivery verification — K1-K19"},
+            "plist-check": {"name": "macOS plist-check"},
+            "nameless": {},
+        }}
+        self.assertEqual(rca._derived_required(fake), ["Delivery verification — K1-K19"])
+        self.assertIn("plist-check", sc.GATE_EXCLUDE)
+
+    def test_derivation_never_dies_without_yaml(self):
+        """PyYAML yokken süreç ÖLMEMELİ (status_checks.sys.exit(2) tuzağı).
+
+        Bu sessiz çöküş ilk canlı CI koşusunda yakalandı: fallback tam
+        olarak PyYAML'in bulunmadığı yerde çalışmak zorundaydı."""
+        real_yaml = sys.modules.get("yaml")
+        original = rca.subprocess.run
+        rca.subprocess.run = lambda *a, **k: self._stub_gh(1, "")
+        try:
+            sys.modules["yaml"] = None  # `import yaml` -> ImportError
+            ctx, src = rca.required_contexts("o/r")
+        finally:
+            if real_yaml is not None:
+                sys.modules["yaml"] = real_yaml
+            else:
+                sys.modules.pop("yaml", None)
+            rca.subprocess.run = original
+        self.assertEqual(ctx, [])
+        self.assertEqual(src, "bilinmiyor")
+
     def test_fallback_contains_real_gate_job_names(self):
         import status_checks as sc
-        ctx, src = rca.required_contexts("o/r")
+        try:
+            ctx, src = rca.required_contexts("o/r")
+        except BaseException:
+            self.skipTest("PyYAML yok")
+        if not ctx:
+            self.skipTest("PyYAML yok — gerçek dosya okunamadı")
         self.assertIn("Delivery verification — K1-K19 (single entry point)", ctx)
         self.assertIn("Delivery verification — K1-K19 (single entry point)",
                       set(sc.gate_jobs().values()))
