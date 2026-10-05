@@ -125,3 +125,66 @@ kullanıyordu.
 
 Tüm shell hook'ları POSIX dash uyumlu yeniden yazıldı; `actionlint` +
 `shellcheck` ile CI'da sürekli denetleniyor.
+
+---
+
+## INC-4: main push GH006 — "Repack determinism + verify" zorunlu kontrolü kırmızı
+
+**Tarih:** 2026-10-05
+**Etkilenen run'lar:** verify-delivery [`37257949738`](https://github.com/ali-han-kaya/leibniz2/actions/runs/37257949738) (pre-fix zincir, HEAD `b79b66e`) — `Repack determinism + verify (sidecar sync)` = failure
+**Push reddi:** `git push origin main:main` → `remote: error: GH006: Protected branch update failed`
+**Düzeltme commit'i:** `3f7f88f` (repack + registry resync, TEK commit)
+**Durum:** ✅ Çözüldü — `77d05e3`, `b1f5f1e`, `d566be2` main'e girdi; push artık geçiyor
+**Kök neden analizi:** `docs/RCA_REPACK_SIDECAR_DRIFT.md`
+
+### Belirti
+
+Yerel main (`b79b66e`, origin/main'in 14 commit ilerisi) doğrudan push
+edildiğinde GitHub reddetti:
+
+```
+remote: error: GH006: Protected branch update failed for refs/heads/main.
+remote: Required status check "Repack determinism + verify (sidecar sync)" is failing.
+```
+
+CI tarafındaki job log'u tek bir dosyada sapma gösteriyordu: teslim zip'inin
+içindeki `ingiliz_empirizmi_v3.tex` kopyası **76478 B**, depodaki kaynak ise
+**76846 B** — zip kendi kaynağından eskiydi. `Delivery verification — K1-K19`
+aynı koşumda yeşildi: yani sorun teslim mantığında değil, **artifact'ın
+kaynakla senkron olmamasında**ydi ve yalnız bu zorunlu kontrol onu yakalıyordu.
+
+### İlk deneme (yetersiz — tek katman onarım)
+
+Önce yalnız repack çalıştırılıp 6 artifact dosyası commit'lendi (`8b01dd3`,
+yerelde denendi). Bu, zincirin ikinci katmanını kırmızıya düşürdü: K14
+`check_zip_lineage_drift.py` "zip + `zip_lineage.json` + `cleanup_log.json`
+**aynı commit'te**" diye reddediyor — zip'i tazelemek kayıt defterlerini
+tazelemeyi gerektirir, ikisi ayrı commit'te kaybolur.
+
+### Kesin çözüm (`3f7f88f`)
+
+1. Kanonik repack yeniden üretildi → 6 dosya değişti
+   (`TESLIM_V5_FINAL…zip` 473464 → **473658 B**,
+   `TESLIM_KLASOR_V5…zip` 511887 → **512086 B**, iki `.sha256`, `MANIFEST.txt`,
+   `KLASOR_CHECKSUMLARI.sha256`)
+2. Aynı commit içinde registry resync: `zip_lineage.json` (yeni V5q nesli,
+   kanonik hash'ler) + `cleanup_log.json`
+3. Determinizm kanıtlandı: yerel repack'in ürettiği iç zip SHA-256'sı
+   `b37f45cf0860d3a9770cbf41994de4ca71e468e5701a678cb1aae9d65b677cc8`, CI'ın
+   beklediği hash ile **birebir aynı**; yerel `ci_replay` 2/2 zip
+   byte-identical, P0=0 / P1=0
+
+### Önlem
+
+- Push reddi artık "hangi zorunlu kontrol?" diye ayrı ayrı okunmuyor: GitHub
+  reddinde tek satır (`Required status check "…" is failing`) veriyor; o kontrol
+  doğrudan açılıp job log'una bakmak ~1 dakika.
+- `3f7f88f`'ten sonra main push üç turda da geçti (`77d05e3`, `b1f5f1e`,
+  `d566be2`) — required-check zinciri yeşil.
+
+### Benzer olayların belirtileri
+
+- `GH006: Protected branch update failed` + tek bir required check adı
+- Repack job'ında yalnız **bir** dosyada bayt içerik (kaynak ≠ zip kopyası)
+- Zip'i düzeltince `check_zip_lineage_drift.py` (K14) kırmızıya dönüyor
+- "Son repack ne zaman?" sorusunun cevabı, ilgili son TeX değişikliğinden eski
