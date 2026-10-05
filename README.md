@@ -556,6 +556,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-05 | docs | (rca) repack sidecar kaymasi kok neden analizi | [`58a5c22`](https://github.com/ali-han-kaya/leibniz2/commit/58a5c22) |
 | 2026-10-05 | docs | (incident) INC-4 — main push GH006 (Repack zorunlu kontrolü) | [`5bb0106`](https://github.com/ali-han-kaya/leibniz2/commit/5bb0106) |
 | 2026-10-05 | chore | (changelog) 270002a satirini tabloya ekle | [`d566be2`](https://github.com/ali-han-kaya/leibniz2/commit/d566be2) |
+| 2026-10-05 | chore | (changelog) 58a5c22 satirini tabloya ekle | [`36c07e0`](https://github.com/ali-han-kaya/leibniz2/commit/36c07e0) |
 
 ### Regresyon notları
 
