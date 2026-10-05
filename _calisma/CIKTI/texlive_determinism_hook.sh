@@ -6,7 +6,9 @@
 # ÖNCE (tectonic, tek derleme) / SONRA (TeXLive + SOURCE_DATE_EPOCH, 2
 # bağımsız derleme) hash karşılaştırması. SONRA'nın iki run'ı byte-farklıysa
 # deney exit 1 döner → commit BLOKE (tectonic→TeXLive göçü determinism
-# getirmedi). Rapor: docs/ci_simulate/texlive_determinism/ (git takipli).
+# getirmedi). Rapor: logs/texlive_determinism_report.txt — CI'da
+# precommit-logs artifact'ı (path: logs/) ile yayınlanır; kanıt hem dosyaya
+# hem stdout'a yazılır (artifact indirilmese de log'da görünür).
 #
 # Araç yoksa SKIP (exit 0) — kapı yalnızca araçların var olduğu ortamda
 # iddia üretir (check-lake-evidence deseni). Hafif K21 self-testi
