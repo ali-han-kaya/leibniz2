@@ -543,6 +543,8 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-04 | other | verify: surface unregistered P0/P1 as an Other layer | [`35a7940`](https://github.com/ali-han-kaya/leibniz2/commit/35a7940) |
 | 2026-09-22 | feat | (ci) CI hygiene gate - permissions, timeout, concurrency matrix | [`88e70d1`](https://github.com/ali-han-kaya/leibniz2/commit/88e70d1) |
 | 2026-09-22 | feat | (docker) PR-triggered Trivy scan with SARIF diff comment | [`5380ed0`](https://github.com/ali-han-kaya/leibniz2/commit/5380ed0) |
+| 2026-10-05 | fix | (docker) libpcre2 CVE-2026-103111 yamasi - floor 10.42-1+deb12u2 | [`a82ed61`](https://github.com/ali-han-kaya/leibniz2/commit/a82ed61) |
+| 2026-10-05 | chore | (changelog) 5380ed0 ve 88e70d1 satirlarini tabloya ekle, olu hashleri buda | [`c32e881`](https://github.com/ali-han-kaya/leibniz2/commit/c32e881) |
 
 ### Regresyon notları
 
