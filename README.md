@@ -542,6 +542,8 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-04 | fix | (trend-db) tsconfig + typescript ekle, prisma CLI'yi devDeps'e tasi | [`563d0c6`](https://github.com/ali-han-kaya/leibniz2/commit/563d0c6) |
 | 2026-10-05 | fix | (delivery) teslim zip'lerini tex duzeltmesiyle repack et | [`3f7f88f`](https://github.com/ali-han-kaya/leibniz2/commit/3f7f88f) |
 | 2026-10-04 | other | verify: surface unregistered P0/P1 as an Other layer | [`35a7940`](https://github.com/ali-han-kaya/leibniz2/commit/35a7940) |
+| 2026-10-05 | docs | (deploy) kanit-defterini geri getir, 77d05e3 kosum satirini ekle | [`70744ff`](https://github.com/ali-han-kaya/leibniz2/commit/70744ff) |
+| 2026-10-05 | chore | (changelog) 3f7f88f ve 35a7940 satirlarini tabloya ekle | [`77d05e3`](https://github.com/ali-han-kaya/leibniz2/commit/77d05e3) |
 
 ### Regresyon notları
 
