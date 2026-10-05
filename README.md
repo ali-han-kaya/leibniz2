@@ -551,6 +551,8 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-05 | chore | (changelog) e7315d7 satirini tabloya ekle | [`81b915d`](https://github.com/ali-han-kaya/leibniz2/commit/81b915d) |
 | 2026-10-05 | docs | (deploy) f79992c kosum satirini kanit-defterine ekle | [`4ec32af`](https://github.com/ali-han-kaya/leibniz2/commit/4ec32af) |
 | 2026-10-05 | chore | (changelog) 81b915d satirini tabloya ekle | [`91d2936`](https://github.com/ali-han-kaya/leibniz2/commit/91d2936) |
+| 2026-10-05 | chore | (changelog) 4ec32af satirini tabloya ekle | [`db54146`](https://github.com/ali-han-kaya/leibniz2/commit/db54146) |
+| 2026-10-05 | fix | (ci) kapi HEAD acigini ve API hatasini duzelt | [`270002a`](https://github.com/ali-han-kaya/leibniz2/commit/270002a) |
 
 ### Regresyon notları
 
