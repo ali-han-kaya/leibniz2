@@ -137,6 +137,11 @@ jobs:
           if [ -z "$PR" ]; then
             gh pr create --base main --head "$TREND_BRANCH" --title "chore: weekly determinism trend record (bot)" --body "Automated weekly determinism trend measurement (linux baseline). Canonical hashes in docs/determinism_trend/determinism_trend.jsonl." || true
             PR=$(gh pr list --head "$TREND_BRANCH" --state open --json number --jq '.[0].number // ""')
+          else
+            # PR zaten açıksa yenisini açma; sadece "yeni ölçüm düştü"
+            # sinyalini bırak ki insana görünür olsun (fail-closed
+            # değişikliğinde bu dal bilinçli olarak korundu).
+            gh pr comment "$PR" --body "New measurement appended (run ${GITHUB_RUN_ID:-unknown})."
           fi
           if [ -z "$PR" ]; then
             echo "FAIL: trend kaydı için PR yolu kurulamadı — ölçüm main'e girmedi."

@@ -72,6 +72,16 @@ class Sandbox:
         self.bin = self.dir / "bin"
         self.bin.mkdir()
         self.calls = self.dir / "calls.log"
+        # Workflow'un kayıp-koruma adımı GERÇEK trend_record_merge.py'yi
+        # çağırır. Sandbox yalnız git/gh'yi stub'lar; script'i kendisi
+        # sağlamazsa `python3: can't open file ...` ile adım düşer ve
+        # yol sözleşmesi testleri sessizce yanlış nedenle kırılır. Stub
+        # YAZMA: dosyayı depodan kopyala, böylece kayıp korumasının kendisi
+        # de uçtan uca sınanır.
+        cikti = self.dir / "_calisma" / "CIKTI"
+        cikti.mkdir(parents=True)
+        shutil.copy2(ROOT / "_calisma" / "CIKTI" / "trend_record_merge.py",
+                     cikti / "trend_record_merge.py")
         # stub git: gerçek git değil — çağrı günlüğüne yazar, `diff --cached`
         # çıkış kodu senaryoya göre belirlenir.
         # `git diff --cached --quiet`: 0 = fark yok (stage boş) -> workflow
@@ -86,9 +96,21 @@ class Sandbox:
         self._stub("gh",
                    '#!/bin/sh\n'
                    'echo "gh $*" >> "$CALLS"\n'
-                   'if [ "$2" = "list" ]; then echo "%s"; exit 0; fi\n'
+                   # `gh pr list` statik DEĞİLDİR: gerçekte pr create'dan
+                   # sonra çağrılan list yeni PR'ı döner. Workflow
+                   # fail-closed olduğu için bu geçişin modellenmesi şart —
+                   # statik stub her koşumda "hâlâ PR yok" deyip adımı
+                   # meşru olmayan bir kırmızıya düşürür (test kendi
+                   # varsayımını doğrulamış olurdu).
+                   'STATE="$(dirname "$CALLS")/gh_pr_created"\n'
+                   'if [ "$2" = "list" ]; then\n'
+                   '  if [ -f "$STATE" ]; then echo "1"; exit 0; fi\n'
+                   '  echo "%s"; exit 0\n'
+                   'fi\n'
                    'if [ "$2" = "create" ]; then\n'
-                   '  if [ "%d" = "1" ]; then echo "https://gh/pr/1"; exit 0; fi\n'
+                   '  if [ "%d" = "1" ]; then\n'
+                   '    touch "$STATE"; echo "https://gh/pr/1"; exit 0;\n'
+                   '  fi\n'
                    '  echo "GraphQL: Resource not accessible by integration" >&2\n'
                    '  exit 1\n'
                    'fi\n'
@@ -215,15 +237,22 @@ class TestPolicyFallbackPath(unittest.TestCase):
     def tearDown(self):
         self.sb.cleanup()
 
-    def test_step_stays_green_when_pr_create_is_blocked(self):
-        self.assertEqual(self.r.returncode, 0,
-                         "policy blokunda adım kırmızı — ölçüm kaybı: %s"
-                         % self.r.stderr[-300:])
+    def test_blocked_pr_create_fails_closed(self):
+        """PR yolu kurulamazsa adım KIRMIZIDIR.
 
-    def test_fallback_prints_manual_pr_instructions(self):
+        84db33b'de bilinçli olarak değişen sözleşme: eskiden `|| echo`
+        ile yutulup yeşil bitiyordu — kayıt bot dalında sıkışıp bir sonraki
+        --force push'ta siliniyordu (koşum 37297101317). "Ölçüm merge
+        yolunda değil" başarı değildir."""
+        self.assertEqual(self.r.returncode, 1,
+                         "PR yolu kurulamazken adım yeşil çıktı — ölçüm "
+                         "sessizce kaybolur: %s" % self.r.stderr[-300:])
+
+    def test_failure_prints_manual_pr_instructions(self):
+        """Kırmızı çıkarken insanın yapacağı yol yazılı kalmalı."""
         out = self.r.stdout
-        self.assertIn("bot-PR oluşturulamadı", out)
-        self.assertIn("bot dalında güvende", out)
+        self.assertIn("PR yolu kurulamadı", out)
+        self.assertIn("bot-dalında GÜVENDE", out)
         self.assertIn("gh pr create", out)
 
     def test_measurement_still_pushed_to_the_bot_branch(self):
@@ -263,11 +292,16 @@ class TestPrLifecyclePaths(unittest.TestCase):
         finally:
             sb.cleanup()
 
-    def test_auto_merge_failure_does_not_fail_the_step(self):
+    def test_auto_merge_failure_fails_closed(self):
+        """auto-merge kuyruğa alınamazsa da adım kırmızı (fail-closed).
+
+        Ölçüm PR'da açıkta bekliyorsa bu bir "başarı" değil, merge bekleyen
+        bir işdir; yeşil görünmemeli."""
         sb = Sandbox(gh_create_ok=True, gh_auto_ok=False)
         try:
             r = sb.run()
-            self.assertEqual(r.returncode, 0)
+            self.assertEqual(r.returncode, 1,
+                             "auto-merge başarısızken adım yeşil çıktı")
             self.assertIn("kuyruğa alınamadı", r.stdout)
         finally:
             sb.cleanup()
