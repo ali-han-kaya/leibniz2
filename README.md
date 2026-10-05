@@ -557,6 +557,8 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-05 | docs | (incident) INC-4 — main push GH006 (Repack zorunlu kontrolü) | [`5bb0106`](https://github.com/ali-han-kaya/leibniz2/commit/5bb0106) |
 | 2026-10-05 | chore | (changelog) 270002a satirini tabloya ekle | [`d566be2`](https://github.com/ali-han-kaya/leibniz2/commit/d566be2) |
 | 2026-10-05 | chore | (changelog) 58a5c22 satirini tabloya ekle | [`36c07e0`](https://github.com/ali-han-kaya/leibniz2/commit/36c07e0) |
+| 2026-10-05 | docs | (deploy) d566be2 kosum satirini kanit-defterine ekle | [`ef2d960`](https://github.com/ali-han-kaya/leibniz2/commit/ef2d960) |
+| 2026-10-05 | chore | (changelog) 36c07e0 satirini tabloya ekle | [`adff289`](https://github.com/ali-han-kaya/leibniz2/commit/adff289) |
 
 ### Regresyon notları
 
