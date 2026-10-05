@@ -545,6 +545,8 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-22 | feat | (docker) PR-triggered Trivy scan with SARIF diff comment | [`5380ed0`](https://github.com/ali-han-kaya/leibniz2/commit/5380ed0) |
 | 2026-10-05 | fix | (docker) libpcre2 CVE-2026-103111 yamasi - floor 10.42-1+deb12u2 | [`a82ed61`](https://github.com/ali-han-kaya/leibniz2/commit/a82ed61) |
 | 2026-10-05 | chore | (changelog) 5380ed0 ve 88e70d1 satirlarini tabloya ekle, olu hashleri buda | [`c32e881`](https://github.com/ali-han-kaya/leibniz2/commit/c32e881) |
+| 2026-10-05 | fix | (docker) Trivy SARIF severity kusuru - PR yorumu 12 yanlis HIGH uretiyordu | [`a33471e`](https://github.com/ali-han-kaya/leibniz2/commit/a33471e) |
+| 2026-10-05 | chore | (changelog) c32e881 ve a82ed61 satirlarini tabloya ekle | [`11e5fe5`](https://github.com/ali-han-kaya/leibniz2/commit/11e5fe5) |
 
 ### Regresyon notları
 
