@@ -100,10 +100,13 @@ RUN set -eux; \
 #   libpcre2-8-0: CVE-2026-86145 (OOB write) + CVE-2026-89161
 #     (pcre2_jit_match memory corruption) → floor 10.42-1+deb12u1
 #     (kanıt: 2026-09-16, trivy 0.74.0 yerel smoke + CI 35161423659
-#     before/after; 2026-09-17 desenle yeniden doğrulandı). Girdi
+#     before/after; 2026-09-17 desenle yeniden doğrulandı).
+#   libpcre2-8-0: + CVE-2026-103111 (crafted regex ile OOB write) →
+#     floor 10.42-1+deb12u2 (kanıt: 2026-10-05, CI docker-security run
+#     37257949777 — 1 HIGH, fixed 10.42-1+deb12u2). Girdi
 #     SECURITY_PATCH_PACKAGES default'unda yaşar — pasif kayıt, her
 #     build'de taze yama.
-ARG SECURITY_PATCH_PACKAGES="libpcre2-8-0=10.42-1+deb12u1"
+ARG SECURITY_PATCH_PACKAGES="libpcre2-8-0=10.42-1+deb12u2"
 RUN set -eux; \
     if [ "$(printf '%s' "$SECURITY_PATCH_PACKAGES" | tr -d '[:space:]')" = "" ]; then \
       echo "SECURITY_PATCH_PACKAGES empty — no targeted apt patch"; \

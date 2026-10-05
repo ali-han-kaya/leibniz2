@@ -6,10 +6,19 @@
 name: test-smoke
 on: [push]
 
+permissions:
+  contents: read
+
+concurrency:
+  # CI-hijyen: no-op bile olsa workflow hijyen matrisine tabidir.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   noop:
     name: smoke-noop
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: No-op
         run: echo "smoke test"

@@ -62,3 +62,8 @@ apps/dashboard-next/.next/
 
 # make build dirs (docs/Makefile.tectonic + docs/Makefile.texlive BUILD_DIR)
 .build/
+
+# planning-with-files: plan attestation = yerel SHA-256 kilidi, makine-özgü.
+# task_plan.md/findings.md/progress.md takip EDİLİR; bu kilit dosyası değil.
+.plan-attestation
+.planning/.active_plan

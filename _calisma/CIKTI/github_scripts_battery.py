@@ -57,6 +57,7 @@ def find_launchd_tool(tool, known_paths, path_env=None):
     return None
 
 MARKER_STATUS = "<!-- stoic-hume-v5-pr-status -->"
+MARKER_TRIVY = "<!-- trivy-sarif-pr-comment -->"
 MARKER_MANIFEST = "<!-- stoic-hume-v5-reproducibility-manifest -->"
 MARKER_CFGDIFF = "<!-- stoic-hume-v5-config-diff -->"
 MARKER_DRIFT = "<!-- stoic-hume-v5-config-drift -->"
@@ -1305,6 +1306,141 @@ SCENARIOS = [
                             "issues.createComment": 0},
             "target_ids": {"issues.deleteComment": [999]},
             "console_any": ["bayat yorum kaldırıldı"],
+        },
+    ),
+    # ── trivy_sarif_pr_comment.js (docker-security PR koşumu) ──────────────
+    (
+        "trivy: temiz tarama (results: []) → temiz yorum upsert, setFailed yok",
+        "trivy_sarif_pr_comment.js",
+        {"trivy.sarif": json.dumps({
+            "runs": [{"tool": {"driver": {"name": "Trivy",
+                                           "rules": []}},
+                      "results": []}]}),
+         "changed_files.txt": "README.md\n"},
+        None, [],
+        [{"id": 501, "body": "eski " + MARKER_TRIVY}],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.listComments": 1,
+                            "issues.updateComment": 1,
+                            "issues.createComment": 0},
+            "target_ids": {"issues.updateComment": [501]},
+            "body_contains": {"issues.updateComment": [
+                MARKER_TRIVY, "CRITICAL/HIGH bulgu yok"]},
+        },
+    ),
+    (
+        "trivy: CRITICAL bulgu → bulgu-tablosu + setFailed (fail-closed eşik)",
+        "trivy_sarif_pr_comment.js",
+        {"trivy.sarif": json.dumps({
+            "runs": [{"tool": {"driver": {
+                "name": "Trivy",
+                "rules": [{"id": "CVE-2024-0001",
+                           "shortDescription": {"text": "os-pkg vuln"}}]}},
+                "results": [{
+                    "ruleId": "CVE-2024-0001",
+                    "level": "error",
+                    "message": {"text": "libfoo 1.2 has CVE-2024-0001 "
+                                        "(fix: 1.3)"},
+                    "locations": [{"physicalLocation": {
+                        "artifactLocation": {
+                            "uri": "_calisma/CIKTI/base.c"}}}],
+                    "properties": {"severity": "CRITICAL"}}]}]}),
+         "changed_files.txt": "_calisma/CIKTI/base.c\nREADME.md\n"},
+        None, [], [],
+        {
+            "ok": True, "set_failed": True,
+            "call_counts": {"issues.createComment": 1},
+            "body_contains": {"issues.createComment": [
+                MARKER_TRIVY, "CVE-2024-0001", "CRITICAL",
+                "_calisma/CIKTI/base.c", "diff-içi: 1"]},
+        },
+    ),
+    (
+        "trivy: bozuk SARIF (runs boş) → setFailed, yanıltıcı yorum YOK",
+        "trivy_sarif_pr_comment.js",
+        {"trivy.sarif": "{\"runs\": []}"},
+        None, [], [],
+        {
+            "ok": True, "set_failed": True,
+            "call_counts": {"issues.createComment": 0,
+                            "issues.updateComment": 0},
+            "body_contains": {"issues.createComment": []},
+        },
+    ),
+    (
+        # Regresyon (2026-10-05 canlı PR #82 ölçümü): trivy-action@v0.35.0
+        # varsayılanı v0.69.3 SARIF'inde properties.severity YOK; seviye
+        # message.text gövdesinde "Severity: MEDIUM" satırında yaşıyor.
+        # Script bunu okumazsa MEDIUM'u default-deny ile HIGH sayar ve
+        # temiz taramayı kırmızıya çevirir (12 yanlış HIGH ölçüldü).
+        "trivy: v0.69.3 şeması — message 'Severity: MEDIUM', properties yok → temiz yorum, setFailed YOK",
+        "trivy_sarif_pr_comment.js",
+        {"trivy.sarif": json.dumps({
+            "runs": [{"tool": {"driver": {"name": "Trivy", "rules": []}},
+                      "results": [{
+                          "ruleId": "CVE-2025-8869",
+                          "level": "warning",
+                          "message": {"text":
+                              "Package: pip\nInstalled Version: 24.0\n"
+                              "Vulnerability CVE-2025-8869\nSeverity: MEDIUM\n"
+                              "Fixed Version: 25.3\n"},
+                          "locations": [{"physicalLocation": {
+                              "artifactLocation": {
+                                  "uri": "opt/venv/lib/python3.11/site-packages/"
+                                         "pip-24.0.dist-info/METADATA"}}}]}]}]}),
+         "changed_files.txt": "README.md\n"},
+        None, [], [],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.createComment": 1},
+            "body_contains": {"issues.createComment": [
+                MARKER_TRIVY, "CRITICAL/HIGH bulgu yok"]},
+        },
+    ),
+    (
+        # Aynı v0.69.3 şeması, bu kez gerçekten bloke eden seviye: message
+        # gövdesindeki "Severity: HIGH" okunmalı → bulgu tablosu + setFailed.
+        "trivy: v0.69.3 şeması — message 'Severity: HIGH' → setFailed",
+        "trivy_sarif_pr_comment.js",
+        {"trivy.sarif": json.dumps({
+            "runs": [{"tool": {"driver": {"name": "Trivy", "rules": []}},
+                      "results": [{
+                          "ruleId": "CVE-2026-103111",
+                          "level": "warning",
+                          "message": {"text":
+                              "Package: libpcre2-8-0\nInstalled Version: "
+                              "10.42-1+deb12u1\nVulnerability CVE-2026-103111\n"
+                              "Severity: HIGH\nFixed Version: 10.42-1+deb12u2\n"},
+                          "locations": [{"physicalLocation": {
+                              "artifactLocation": {"uri": "Dockerfile"}}}]}]}]}),
+         "changed_files.txt": "Dockerfile\n"},
+        None, [], [],
+        {
+            "ok": True, "set_failed": True,
+            "call_counts": {"issues.createComment": 1},
+            "body_contains": {"issues.createComment": [
+                MARKER_TRIVY, "CVE-2026-103111", "HIGH", "Dockerfile",
+                "diff-içi: 1"]},
+        },
+    ),
+    (
+        "trivy: seviye-yok sonucu default-deny (HIGH muamelesi) → setFailed",
+        "trivy_sarif_pr_comment.js",
+        {"trivy.sarif": json.dumps({
+            "runs": [{"tool": {"driver": {"name": "Trivy", "rules": []}},
+                      "results": [{
+                          "ruleId": "CVE-2024-0002",
+                          "message": {"text": "mystery finding"},
+                          "locations": [{"physicalLocation": {
+                              "artifactLocation": {"uri": "x.c"}}}]}]}]}),
+         "changed_files.txt": ""},
+        None, [], [],
+        {
+            "ok": True, "set_failed": True,
+            "call_counts": {"issues.createComment": 1},
+            "body_contains": {"issues.createComment": [
+                "CVE-2024-0002", "HIGH", "diff-dışı"]},
         },
     ),
 ]

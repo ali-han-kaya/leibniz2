@@ -1,4 +1,4 @@
-import { cva, type VariantProps } from 'class-variance-authority';
+import { cva } from 'class-variance-authority';
 import { getTrend } from '@/lib/preview';
 
 export const metadata = { title: 'Trend' };

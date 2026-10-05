@@ -161,6 +161,14 @@ jobs:
         shell: bash
         run: pip install Pillow
 
+      # ci_hygiene_gate.py (K-11c CI-hijyen kapısı) PyYAML ile workflow-matrisini
+      # parse eder; kurulu değilse test_ci_hygiene_gate import-patlar (K-11c
+      # loader-ERROR'u job'u düşürür). Repo-venv'de var — runner'da açık kur:
+      - name: Install PyYAML for unit tests
+        if: always()
+        shell: bash
+        run: pip install pyyaml
+
       - name: Run CIKTI unit tests (test_*.py)
         shell: bash
         run: |
@@ -907,6 +915,21 @@ jobs:
             --lean-dir _calisma/lean_reduct --json
       # `pipefail` + `--json`: çıktı hem log'a hem dosyaya yazılır, ama exit
       # kodu pipeline'ın ilk hatasını yansıtır (fail-closed).
+
+      # 8 teorem çekirdeğinin İKİ kopyası var: `Content.lean` (shim) ve
+      # `Leibniz2Reduct/Content.lean` (lake target'ı — `lake build --wfail`
+      # BUNU derler). Ayrışmaları sessiz kalıyordu: ölçüldü, kütüphane
+      # kopyasına enjekte edilen sapma check_lean_axioms, lake build ve
+      # verify_lean.sh kapılarında yeşil kaldı. Bu adım byte-eşitliği
+      # fail-closed denetler (ölçüm: 2026-10-03).
+      - name: Check Lean statement contract + twin identity (K9)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 _calisma/CIKTI/check_lean_statements.py \
+            --lean-file _calisma/lean_reduct/Content.lean \
+            --map _calisma/lean_reduct/MAP.md \
+            --twin-file _calisma/lean_reduct/Leibniz2Reduct/Content.lean
 
       - name: Build Lean lake proof (8 theorems)
         working-directory: _calisma/lean_reduct

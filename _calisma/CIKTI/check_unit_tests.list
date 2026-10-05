@@ -36,6 +36,7 @@ test_check_unit_tests_timing.py
 test_check_zip_lineage_drift.py
 test_ci_check_rate.py
 test_ci_failure_pattern.py
+test_ci_hygiene_gate.py
 test_ci_sidecar_wiring.py
 test_ci_stats.py
 test_classify_lean_error.py
@@ -48,7 +49,9 @@ test_coq_evidence_smoke.py
 test_coq_lake.py
 test_coverage_report.py
 test_dashboard_k17_exit_sync.py
+test_dashboard_next_contract.py
 test_dashboard_smoke.py
+test_design_token_collision.py
 test_design_token_contrast.py
 test_determinism_trend_badge.py
 test_dev_bootstrap.py
@@ -99,8 +102,9 @@ test_pdf_source_freshness.py
 test_plist_check_workflow.py
 test_pptx_export.py
 test_precheck_advisory_contract.py
-test_precommit_hooks_source.py
+test_precommit_log.py
 test_preview_findings_panel.py
+test_preview_mirror_imports.py
 test_preview_server.py
 test_preview_server_atomic.py
 test_readme_badges.py
@@ -141,12 +145,15 @@ test_test_coverage_report.py
 test_texlive_determinism_hook.py
 test_texlive_determinism_id_residual.py
 test_texlive_repro_documented.py
+test_trend_db_connection.py
 test_trend_db_contract.py
+test_trend_db_prisma_setup.py
 test_trend_record_pr_contract.py
 test_trend_schedule_paths.py
 test_update_changelog_hook.py
 test_update_preview_sync_server.py
 test_validate_config_schema.py
+test_verdict_seal_css.py
 test_verification_chain_deck.py
 test_verify_checks.py
 test_verify_k_layers.py

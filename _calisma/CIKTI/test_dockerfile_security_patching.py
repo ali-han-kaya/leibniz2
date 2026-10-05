@@ -183,9 +183,10 @@ class TestDockerfileSecurityPatching(unittest.TestCase):
     def test_patch_layer_present_with_cve_ledger_default(self):
         # ARG default'u floor girdisini taşır + defter CVE kimlikleriyle kayıtlı.
         self.assertIn("ARG SECURITY_PATCH_PACKAGES=", self._df)
-        self.assertIn("libpcre2-8-0=10.42-1+deb12u1", self._df)
+        self.assertIn("libpcre2-8-0=10.42-1+deb12u2", self._df)
         self.assertIn("CVE-2026-86145", self._df)
         self.assertIn("CVE-2026-89161", self._df)
+        self.assertIn("CVE-2026-103111", self._df)
 
     def test_targeted_only_upgrade_not_full_upgrade(self):
         # Yalnız etkilenen paket; genel upgrade/dist-upgrade yasak.
@@ -272,6 +273,8 @@ class TestDockerfileSecurityPatching(unittest.TestCase):
                       "libpcre2-8-0",
                       "CVE-2026-86145",
                       "10.42-1+deb12u1",
+                      "CVE-2026-103111",
+                      "10.42-1+deb12u2",
                       "docker_security_smoke.sh",
                       "Katkı sözleşmesi"):
             self.assertIn(token, self._doc,

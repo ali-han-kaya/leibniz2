@@ -527,6 +527,28 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-02 | feat | (a11y) kapi iki yuzeye yay + sayfa-bazli esik + 44 ihlal | [`bcb963b`](https://github.com/ali-han-kaya/leibniz2/commit/bcb963b) |
 | 2026-10-03 | fix | (verify) kabul kapisi + 3 dashboard yuzeyi kontratla kilitlendi | [`aa474c3`](https://github.com/ali-han-kaya/leibniz2/commit/aa474c3) |
 | 2026-10-03 | fix | (a11y) kapi dolu trend yuzeyini tarasin, sayac finally ile kapansin | [`15abb40`](https://github.com/ali-han-kaya/leibniz2/commit/15abb40) |
+| 2026-10-03 | fix | (a11y) bekci varlik arasin, tavan olcume gore 180 sn | [`0715dfa`](https://github.com/ali-han-kaya/leibniz2/commit/0715dfa) |
+| 2026-10-03 | chore | (changelog) 0715dfa satirini tabloya ekle | [`4a68420`](https://github.com/ali-han-kaya/leibniz2/commit/4a68420) |
+| 2026-10-03 | feat | (design) kanit sayfasi kimligi - kagit ve masa, iki materyal | [`6adf365`](https://github.com/ali-han-kaya/leibniz2/commit/6adf365) |
+| 2026-10-03 | refactor | (precommit) hook kayitlarini precommit_log seam'ine tasi | [`5ee5555`](https://github.com/ali-han-kaya/leibniz2/commit/5ee5555) |
+| 2026-10-03 | fix | (tex) 7 overfull hbox sifirlandi - kernel + sutun butcesi | [`5a1a981`](https://github.com/ali-han-kaya/leibniz2/commit/5a1a981) |
+| 2026-10-03 | fix | (k9) lean twin identity kapisi - iki kopya ayrismasin | [`e27118f`](https://github.com/ali-han-kaya/leibniz2/commit/e27118f) |
+| 2026-10-03 | docs | (trend-db) canli Neon durumu - roller + kapi iddiasi | [`60f002e`](https://github.com/ali-han-kaya/leibniz2/commit/60f002e) |
+| 2026-10-03 | docs | (trend-db) TEHLIKE - migrate dev veri siler, gecmis repo'da kayip | [`448cbc1`](https://github.com/ali-han-kaya/leibniz2/commit/448cbc1) |
+| 2026-10-03 | feat | (trend-db) canli sema yedegi + migration gecmisi geri donus noktasi | [`287ccdf`](https://github.com/ali-han-kaya/leibniz2/commit/287ccdf) |
+| 2026-10-03 | fix | (trend-db) Neon pooled/direct ayrimini Prisma 7'ye uyarla | [`923bfdc`](https://github.com/ali-han-kaya/leibniz2/commit/923bfdc) |
+| 2026-10-03 | fix | (dashboard-next) olu importleri sil, noUnused bayraklarini ac | [`097b683`](https://github.com/ali-han-kaya/leibniz2/commit/097b683) |
+| 2026-10-03 | fix | (trend-db) load.ts girdi dogrulama + graceful shutdown | [`ca118f9`](https://github.com/ali-han-kaya/leibniz2/commit/ca118f9) |
+| 2026-10-04 | fix | (trend-db) tsconfig + typescript ekle, prisma CLI'yi devDeps'e tasi | [`563d0c6`](https://github.com/ali-han-kaya/leibniz2/commit/563d0c6) |
+| 2026-10-04 | other | verify: surface unregistered P0/P1 as an Other layer | [`35a7940`](https://github.com/ali-han-kaya/leibniz2/commit/35a7940) |
+| 2026-09-22 | feat | (ci) CI hygiene gate - permissions, timeout, concurrency matrix | [`88e70d1`](https://github.com/ali-han-kaya/leibniz2/commit/88e70d1) |
+| 2026-09-22 | feat | (docker) PR-triggered Trivy scan with SARIF diff comment | [`5380ed0`](https://github.com/ali-han-kaya/leibniz2/commit/5380ed0) |
+| 2026-10-05 | fix | (docker) libpcre2 CVE-2026-103111 yamasi - floor 10.42-1+deb12u2 | [`a82ed61`](https://github.com/ali-han-kaya/leibniz2/commit/a82ed61) |
+| 2026-10-05 | chore | (changelog) 5380ed0 ve 88e70d1 satirlarini tabloya ekle, olu hashleri buda | [`c32e881`](https://github.com/ali-han-kaya/leibniz2/commit/c32e881) |
+| 2026-10-05 | fix | (docker) Trivy SARIF severity kusuru - PR yorumu 12 yanlis HIGH uretiyordu | [`a33471e`](https://github.com/ali-han-kaya/leibniz2/commit/a33471e) |
+| 2026-10-05 | chore | (changelog) c32e881 ve a82ed61 satirlarini tabloya ekle | [`11e5fe5`](https://github.com/ali-han-kaya/leibniz2/commit/11e5fe5) |
+| 2026-10-05 | chore | (changelog) a33471e satirini tabloya ekle | [`dc98fb0`](https://github.com/ali-han-kaya/leibniz2/commit/dc98fb0) |
+| 2026-10-05 | fix | (ci) runner'da PyYAML kur, hijyen testi durust-SKIP yapsin | [`e660640`](https://github.com/ali-han-kaya/leibniz2/commit/e660640) |
 
 ### Regresyon notları
 

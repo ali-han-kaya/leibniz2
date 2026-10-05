@@ -43,7 +43,7 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["name", "status"],
+        "required": ["name", "status", "source"],
         "properties": {
           "name": {
             "type": "string",
@@ -59,6 +59,11 @@
             "type": "string",
             "enum": ["Passed", "Failed"],
             "description": "Hook durumu"
+          },
+          "source": {
+            "type": "string",
+            "enum": ["stderr", "stdout", "sidecar", "log"],
+            "description": "Kayıtların okunduğu kaynak (precommit_log.collect önceliği: stderr -> stdout -> sidecar; rapor üreticisi her zaman 'log'). Teşhis kanıtı: hangi kaynak kazandı."
           }
         },
         "additionalProperties": false

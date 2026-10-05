@@ -39,6 +39,11 @@ from datetime import datetime, timezone
 import secrets
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+_HERE = os.path.dirname(os.path.abspath(__file__))
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
+import precommit_log  # noqa: E402  — hook raporu seam (tek kaynak kuralı)
+
 REQUEST_TIMEOUT_SECONDS = 30
 ALLOWED_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
@@ -906,20 +911,8 @@ def _write_override_report(verify_dir, report):
         sys.stderr.flush()
 
 
-_HOOK_RE = re.compile(r"^(.+?)\.{4,}(Passed|Failed)\s*$", re.M)
-
-
-def _parse_precommit_hooks(stderr):
-    """stderr'deki pre-commit hook satırlarından [{name, status}] çıkar.
-
-    pre-commit verbose çıktısı:
-      Verify Stoic-Hume V5 delivery (fail-closed)........................Passed
-    Satır Sonucu/Passed/Failed içeren her hook sonucunu yakalar.
-    """
-    hooks = []
-    for m in _HOOK_RE.finditer(stderr or ""):
-        hooks.append({"name": m.group(1).strip(), "status": m.group(2)})
-    return hooks or None
+# hook satırı ayrıştırma taşındı: precommit_log (bkz. modül docstring'i —
+# 2026-10-02 stdout/stderr asimetri ölçümü ve tek kaynak kuralı orada).
 
 
 def _refresh_precommit_hooks_bg(verify_dir):
@@ -980,9 +973,10 @@ def _refresh_precommit_hooks_bg(verify_dir):
                     f.write(f"{time.strftime('%H:%M:%S')} [precommit-bg] stderr_tail={result.stderr[-500:]}\n")
         except Exception:
             pass
-        # pre-commit verbose çıktısı stderr'de
-        output = result.stderr or result.stdout or ""
-        hooks = _parse_precommit_hooks(output)
+        # hook kayıtları: kaynak önceliği precommit_log.collect'de (taze
+        # çıktı yolu — eski sidecar bilerek denenmez, bu koşum veriyi üretir)
+        hooks = precommit_log.collect(
+            stderr=result.stderr, stdout=result.stdout)
         if hooks:
             with LOCK:
                 LATEST["precommit_hooks"] = hooks
@@ -1060,37 +1054,18 @@ def _finalize_run(stdout, stderr, rc, duration, data, verify_dir=None):
 
     z3_passed, z3_failed = _parse_z3_counts(stderr)
     lean_ok, lean_detail = _parse_lean_result(stderr)
-    # pre-commit hook sonuçlarını İKİ kaynaktan oku: önce stderr, sonra
-    # stdout. Ölçüldü 2026-10-02 (bu dosya, yerel venv + `pre_commit run
-    # --all-files`): 52 hook satırının TAMAMI stdout'ta, stderr 0 bayt —
-    # hook'lar başarısız olsa bile stderr boş kalıyor. Yalnız stderr'a
-    # bakan bu yol "⏳ hook verisi bekleniyor…" panelinde takılıyordu.
-    # Aynı dosyanın _refresh_precommit_hooks_bg'si zaten
-    # `result.stderr or result.stdout` kullanıyordu; iki yolun
-    # eşleşmemesi bu paneli tek başına bozuyordu.
-    precommit_hooks = _parse_precommit_hooks(stderr) or _parse_precommit_hooks(stdout)
-    # Fallback: PRECOMMIT_RAPORU.json sidecar'ı yoksa stdout da sessizse
-    # panel yine takılır — ama bu kez nedeni açıktır (sidecar yok).
-    if not precommit_hooks and verify_dir:
-        for candidate in (
-            os.path.join(verify_dir, "logs", "PRECOMMIT_RAPORU.json"),
-            os.path.join(os.path.dirname(verify_dir), "logs", "PRECOMMIT_RAPORU.json"),
-            os.path.join(os.getcwd(), "logs", "PRECOMMIT_RAPORU.json"),
-        ):
-            if os.path.isfile(candidate):
-                try:
-                    with open(candidate, encoding="utf-8") as f:
-                        rpt = json.load(f)
-                    hooks_raw = rpt.get("hooks") or []
-                    if isinstance(hooks_raw, list):
-                        precommit_hooks = [
-                            {"name": h.get("name", "?"), "status": h.get("status", "Unknown")}
-                            for h in hooks_raw if isinstance(h, dict)
-                        ] or None
-                except (OSError, ValueError, KeyError):
-                    pass
-                if precommit_hooks:
-                    break
+    # pre-commit hook kayıtları: tek toplayıcı, tek öncelik kuralı
+    # (stderr -> stdout -> sidecar). 2026-10-02 ölçümü ve iki-yol asimetrisi
+    # (52 satır stdout / 0 bayt stderr; panel takilmişti) precommit_log
+    # docstring'inde kanıt olarak taşındı. Sidecar adayları yalnızca bu
+    # finalize yolu içindir: yanıt yoksa panel nedeni açıktır (sidecar yok).
+    _sidecar_candidates = () if not verify_dir else (
+        os.path.join(verify_dir, "logs", "PRECOMMIT_RAPORU.json"),
+        os.path.join(os.path.dirname(verify_dir), "logs", "PRECOMMIT_RAPORU.json"),
+        os.path.join(os.getcwd(), "logs", "PRECOMMIT_RAPORU.json"),
+    )
+    precommit_hooks = precommit_log.collect(
+        stderr=stderr, stdout=stdout, sidecar_paths=_sidecar_candidates)
 
     # Soy hattı özeti: verify_delivery.py --json lineage.generations'dan
     # son nesil (current=true) bilgisini çıkarır — dashboard rozeti için.

@@ -200,8 +200,8 @@ function toggleBudgetOverDetail() {
   const open = det.style.display !== "none";
   det.style.display = open ? "none" : "block";
   if (caret) caret.textContent = open ? "▸" : "▾";
-  const banner = $("budget-over-banner");
-  if (banner) banner.setAttribute("aria-expanded", String(!open));
+  const toggle = $("budget-over-toggle");
+  if (toggle) toggle.setAttribute("aria-expanded", String(!open));
 }
 function updateBudgetOverBanner() {
   const el = $("budget-over-banner");
@@ -2099,6 +2099,17 @@ function renderKLayers(ls, z3p, z3t, z3f, leanOk, leanDetail) {
     return;
   }
   let html = "";
+  if (ls.UNREGISTERED) {
+    const layer = ls.UNREGISTERED;
+    html +=
+      '<span class="badge ' +
+      _cls(layer.status) +
+      '" title="' +
+      (layer.label || "Other checks") +
+      '">' +
+      _ico(layer.status) +
+      " Other</span>";
+  }
   for (const k of K_ALL) {
     const l = ls[k];
     if (!l) continue;

@@ -243,16 +243,36 @@ hiçbiri tahmin değil:
    koşul **ilk** kontrol olduğu için, gerçek bir CI arızasında log'un ilk
    satırı dokümanda karşılığı olmayan bir mesaj olur. K9 testi artık koşul
    **sayısını** script'ten türetip raporla karşılaştırıyor.
-4. **`severityOf()` varsayılanı PR #54'te — main'de değil.** Önce main'de
-   canlı bir borç sanıldı; ölçüm bunun tersini gösterdi.
-   `trivy_sarif_pr_comment.js` **yalnız** `origin/land/migration-gates-2026-09-30`
-   ve ayrı soydaki yerel `main`'de bulunuyor; `origin/main`'de hiç yok.
-   `origin/main`'in `image-scan` job'ı beş adımdan oluşuyor (Checkout, Buildx,
-   Build, Scan) — SARIF yorum adımı ve script **yok**. PR #54'teki
-   `severityOf()` satır 21–27'de eksik severity'yi `sev || "HIGH"` ile HIGH
-   sayıyor ve PR #54'te 25 yanlış HIGH engeli üretti. Yani canlı bir kusur
-   değil, **henüz düşmemiş kodun içinde** bir kusur: #54 merge edilmeden
-   önce düzeltilmeli, yoksa hatayla birlikte main'e iner.
+4. ~~**`severityOf()` varsayılanı PR #54'te — main'de değil.**~~ **KAPANDI
+   (2026-10-05, PR #82).** Önce main'de canlı bir borç sanıldı; ölçüm bunun
+   tersini gösterdi. `trivy_sarif_pr_comment.js` **yalnız**
+   `origin/land/migration-gates-2026-09-30` ve ayrı soydaki yerel `main`'de
+   bulunuyor; `origin/main`'de hiç yok. PR #54'teki `severityOf()` satır
+   21–27'de eksik severity'yi `sev || "HIGH"` ile HIGH sayıyor ve PR #54'te
+   25 yanlış HIGH engeli üretti. Yani canlı bir kusur değil, **henüz düşmemiş
+   kodun içinde** bir kusur: #54 merge edilmeden önce düzeltilmeli, yoksa
+   hatayla birlikte main'e iner.
+
+   **Canlı koşum öngörüyü doğruladı.** PR #82 (bu kodun gerçek PR koşumu,
+   2026-10-05) `docker-security` işinde tam bu sınıfı üretti: annotate adımı
+   `Trivy: 12 CRITICAL/HIGH bulgu` ile kırmızıya döndü — hepsi MEDIUM/LOW
+   `pip` bulgusuydu. İki bağımsız kök neden ölçüldü:
+
+   1. `trivy-action@v0.35.0` SARIF'te severity filtresini **kasten kaldırır**
+      (`entrypoint.sh`: `format=sarif` → `unset TRIVY_SEVERITY`, "Building
+      SARIF report with all severities"). Workflow `limit-severities-for-sarif:
+      true` vermediği için SARIF 12 MEDIUM/LOW taşıdı.
+   2. v0.69.3 SARIF şemasında `properties.severity` **yok**; seviye
+      `message.text` gövdesinde `Severity: MEDIUM` satırı olarak yaşıyor.
+      Script yalnız `properties.severity` baktığı için default-deny ile
+      hepsini HIGH saydı.
+
+   Düzeltme iki yüzeye birlikte indi: workflow'a `limit-severities-for-sarif:
+   true`, script'e message-gövdesi fallback'i (properties önce). Regresyon iki
+   battery senaryosuyla sabitlendi (v0.69.3 şeması: MEDIUM → temiz yorum,
+   HIGH → setFailed) + `TestTrivySarifSeverityContract` (4 pin testi). Yerel
+   kanıt: gerçek v0.69.3 SARIF'iyle script artık `✅ CRITICAL/HIGH bulgu yok`
+   üretiyor, `setFailed` yok; battery 64/64 PASS.
 5. **Yerel `main` ayrı soyda.** `cf838ed`, `origin/main`'den 157 commit ayrı ve
    hiçbiri remote'ta değil; PR #54 bu 153 commit'i land etmeye çalışıyor ve
    şu an `CONFLICTING`.

@@ -4,7 +4,8 @@ Bu doküman, base-image güncellemelerinin getirdiği CRITICAL/HIGH Trivy
 bulgularını **otomatik kapatan** güvenlik-yama deseninin referansıdır. Desen,
 2026-09-16'da `libpcre2-8-0` HIGH CVE çiftinde (CVE-2026-86145,
 CVE-2026-89161) doğdu ve 2026-09-17'de `SECURITY_PATCH_PACKAGES` build-arg
-ile genelleştirildi.
+ile genelleştirildi. 2026-10-05'te defter, aynı paketin yeni HIGH
+CVE'siyle (CVE-2026-103111 → floor 10.42-1+deb12u2) güncellendi.
 
 ## Kapalı döngü
 
@@ -417,7 +418,7 @@ engelliyor: sürüm ayrışırsa iki tarama farklı motorlarla döner ve
 
 | Paket | CVE'ler | Floor | Kanıt |
 |---|---|---|---|
-| libpcre2-8-0 | CVE-2026-86145 (OOB write), CVE-2026-89161 (pcre2_jit_match memory corruption) | 10.42-1+deb12u1 | 2026-09-16: yerel trivy 0.74.0 ilk koşumda 2 HIGH yakaladı → yama → 0 bulgu; CI koşum 35161423659 (13 Eylül kırmızı run'ı aynı CVE'lerle) before/after kanıtı. 2026-09-17: desenle yeniden doğrulandı (smoke PASS, 0 bulgu). |
+| libpcre2-8-0 | CVE-2026-86145 (OOB write), CVE-2026-89161 (pcre2_jit_match memory corruption), CVE-2026-103111 (crafted regex ile OOB write) | 10.42-1+deb12u2 | 2026-09-16: yerel trivy 0.74.0 ilk koşumda 2 HIGH yakaladı → floor 10.42-1+deb12u1 ile yama → 0 bulgu; CI koşum 35161423659 (13 Eylül kırmızı run'ı aynı CVE'lerle) before/after kanıtı. 2026-09-17: desenle yeniden doğrulandı (smoke PASS, 0 bulgu). 2026-10-05: CVE-2026-103111 (CI run 37257949777: 1 HIGH, fixed 10.42-1+deb12u2) → floor yükseltildi. |
 
 Yeni girdiler buraya ve Dockerfile'daki defter bloğuna eklenir.
 
