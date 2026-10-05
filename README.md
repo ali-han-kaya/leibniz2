@@ -573,6 +573,8 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-05 | chore | (changelog) prettier duzeltme satirini tabloya ekle | [`a121046`](https://github.com/ali-han-kaya/leibniz2/commit/a121046) |
 | 2026-10-05 | fix | (ci) onem listesinde canli koruma yoksa workflow adlarina dus | [`696944d`](https://github.com/ali-han-kaya/leibniz2/commit/696944d) |
 | 2026-10-05 | chore | (changelog) here-doc duzeltme satirini tabloya ekle | [`0669254`](https://github.com/ali-han-kaya/leibniz2/commit/0669254) |
+| 2026-10-05 | fix | (ci) PyYAML yokken turetilen onem listesini yut | [`9f0c9cb`](https://github.com/ali-han-kaya/leibniz2/commit/9f0c9cb) |
+| 2026-10-05 | chore | (changelog) onem kaynagi duzeltme satirini tabloya ekle | [`03a72ce`](https://github.com/ali-han-kaya/leibniz2/commit/03a72ce) |
 
 ### Regresyon notları
 
