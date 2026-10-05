@@ -10,8 +10,22 @@
 | 2026-10-05 | d21d3f1 | [failure #37324314290](https://github.com/ali-han-kaya/leibniz2/actions/runs/37324314290) | [failure #37324314309](https://github.com/ali-han-kaya/leibniz2/actions/runs/37324314309) | [success #37324315163](https://github.com/ali-han-kaya/leibniz2/actions/runs/37324315163) | [success #37324916028](https://github.com/ali-han-kaya/leibniz2/actions/runs/37324916028) |
 | 2026-10-05 | 0669254 | [failure #37359402781](https://github.com/ali-han-kaya/leibniz2/actions/runs/37359402781) | [failure #37359402752](https://github.com/ali-han-kaya/leibniz2/actions/runs/37359402752) | [success #37359402738](https://github.com/ali-han-kaya/leibniz2/actions/runs/37359402738) | [success #37324916028](https://github.com/ali-han-kaya/leibniz2/actions/runs/37324916028) |
 | 2026-10-05 | e2db1f4 | [failure #37377743878](https://github.com/ali-han-kaya/leibniz2/actions/runs/37377743878) | [failure #37377744058](https://github.com/ali-han-kaya/leibniz2/actions/runs/37377744058) | [success #37377743929](https://github.com/ali-han-kaya/leibniz2/actions/runs/37377743929) | [success #37324916028](https://github.com/ali-han-kaya/leibniz2/actions/runs/37324916028) |
+| 2026-10-05 | 9f94f09 | [failure #37385149781](https://github.com/ali-han-kaya/leibniz2/actions/runs/37385149781) | [failure #37385150253](https://github.com/ali-han-kaya/leibniz2/actions/runs/37385150253) | [success #37385150040](https://github.com/ali-han-kaya/leibniz2/actions/runs/37385150040) | [success #37324916028](https://github.com/ali-han-kaya/leibniz2/actions/runs/37324916028) |
 
-`e2db1f4` — RCA tablosunun iki canlı hatasının düzeltmesi.
+`9f94f09` — dört adet `docs(…)` commit'i: olay kaydı INC-5 + INC-6,
+bekleyen kırmızılar tablosu, recovery patch köken belgesi.
+
+`#37385149781` (verify-delivery) kırmızılığının tek kaynağı
+`test_deploy_evidence.test_cli_accepts_repo_ledger_offline`: dört commit
+**anlamlı** sayıldığı için defter bu HEAD'den 4 commit geride kaldı
+(tolerans 3). Bu satır tam da o açığı kapatıyor — yani kapı doğru
+çalıştı: kanıt satırı olmadan ilerlemeye izin vermedi. `Delivery
+verification — K1-K19`'ın kendisi o tek test dışında yeşildi.
+
+`#37385150253` (docker-security) — `libpcre2-8-0` CVE-2026-103111,
+PR #82'de bekliyor.
+
+### `e2db1f4`
 
 `#37377743878` (verify-delivery) yalnız `Live CI doc↔GitHub sync audit (advisory)`
 işinde kırmızı — o satır bu HEAD'de de daha önce de kırmızıydı. `Delivery
