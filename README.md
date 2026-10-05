@@ -547,6 +547,8 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-05 | chore | (changelog) 5380ed0 ve 88e70d1 satirlarini tabloya ekle, olu hashleri buda | [`c32e881`](https://github.com/ali-han-kaya/leibniz2/commit/c32e881) |
 | 2026-10-05 | fix | (docker) Trivy SARIF severity kusuru - PR yorumu 12 yanlis HIGH uretiyordu | [`a33471e`](https://github.com/ali-han-kaya/leibniz2/commit/a33471e) |
 | 2026-10-05 | chore | (changelog) c32e881 ve a82ed61 satirlarini tabloya ekle | [`11e5fe5`](https://github.com/ali-han-kaya/leibniz2/commit/11e5fe5) |
+| 2026-10-05 | chore | (changelog) a33471e satirini tabloya ekle | [`dc98fb0`](https://github.com/ali-han-kaya/leibniz2/commit/dc98fb0) |
+| 2026-10-05 | fix | (ci) runner'da PyYAML kur, hijyen testi durust-SKIP yapsin | [`e660640`](https://github.com/ali-han-kaya/leibniz2/commit/e660640) |
 
 ### Regresyon notları
 
