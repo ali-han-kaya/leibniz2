@@ -540,9 +540,9 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-03 | fix | (dashboard-next) olu importleri sil, noUnused bayraklarini ac | [`097b683`](https://github.com/ali-han-kaya/leibniz2/commit/097b683) |
 | 2026-10-03 | fix | (trend-db) load.ts girdi dogrulama + graceful shutdown | [`ca118f9`](https://github.com/ali-han-kaya/leibniz2/commit/ca118f9) |
 | 2026-10-04 | fix | (trend-db) tsconfig + typescript ekle, prisma CLI'yi devDeps'e tasi | [`563d0c6`](https://github.com/ali-han-kaya/leibniz2/commit/563d0c6) |
-| 2026-09-22 | feat | (api) OpenAPI 3.1 schema from API_CONTRACT + versioning policy | [`77a0832`](https://github.com/ali-han-kaya/leibniz2/commit/77a0832) |
 | 2026-10-04 | other | verify: surface unregistered P0/P1 as an Other layer | [`35a7940`](https://github.com/ali-han-kaya/leibniz2/commit/35a7940) |
-| 2026-09-22 | feat | (docker) PR-triggered Trivy scan with SARIF diff comment | [`097fffc`](https://github.com/ali-han-kaya/leibniz2/commit/097fffc) |
+| 2026-09-22 | feat | (ci) CI hygiene gate - permissions, timeout, concurrency matrix | [`88e70d1`](https://github.com/ali-han-kaya/leibniz2/commit/88e70d1) |
+| 2026-09-22 | feat | (docker) PR-triggered Trivy scan with SARIF diff comment | [`5380ed0`](https://github.com/ali-han-kaya/leibniz2/commit/5380ed0) |
 
 ### Regresyon notları
 
