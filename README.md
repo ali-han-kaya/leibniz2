@@ -577,6 +577,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-05 | chore | (changelog) onem kaynagi duzeltme satirini tabloya ekle | [`03a72ce`](https://github.com/ali-han-kaya/leibniz2/commit/03a72ce) |
 | 2026-10-05 | fix | (ci) iptal edilen job'i temiz sayma, tabloyu fail-closed yap | [`6d64cce`](https://github.com/ali-han-kaya/leibniz2/commit/6d64cce) |
 | 2026-10-05 | chore | (changelog) PyYAML yutma duzeltme satirini tabloya ekle | [`d01fbc1`](https://github.com/ali-han-kaya/leibniz2/commit/d01fbc1) |
+| 2026-10-05 | chore | (changelog) fail-closed tablo duzeltme satirini tabloya ekle | [`e2db1f4`](https://github.com/ali-han-kaya/leibniz2/commit/e2db1f4) |
 
 ### Regresyon notları
 

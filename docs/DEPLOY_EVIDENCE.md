@@ -9,6 +9,25 @@
 | 2026-10-05 | d566be2 | [failure #37317273752](https://github.com/ali-han-kaya/leibniz2/actions/runs/37317273752) | [failure #37317273825](https://github.com/ali-han-kaya/leibniz2/actions/runs/37317273825) | [success #37317273949](https://github.com/ali-han-kaya/leibniz2/actions/runs/37317273949) | [success #37297101317](https://github.com/ali-han-kaya/leibniz2/actions/runs/37297101317) |
 | 2026-10-05 | d21d3f1 | [failure #37324314290](https://github.com/ali-han-kaya/leibniz2/actions/runs/37324314290) | [failure #37324314309](https://github.com/ali-han-kaya/leibniz2/actions/runs/37324314309) | [success #37324315163](https://github.com/ali-han-kaya/leibniz2/actions/runs/37324315163) | [success #37324916028](https://github.com/ali-han-kaya/leibniz2/actions/runs/37324916028) |
 | 2026-10-05 | 0669254 | [failure #37359402781](https://github.com/ali-han-kaya/leibniz2/actions/runs/37359402781) | [failure #37359402752](https://github.com/ali-han-kaya/leibniz2/actions/runs/37359402752) | [success #37359402738](https://github.com/ali-han-kaya/leibniz2/actions/runs/37359402738) | [success #37324916028](https://github.com/ali-han-kaya/leibniz2/actions/runs/37324916028) |
+| 2026-10-05 | e2db1f4 | [failure #37377743878](https://github.com/ali-han-kaya/leibniz2/actions/runs/37377743878) | [failure #37377744058](https://github.com/ali-han-kaya/leibniz2/actions/runs/37377744058) | [success #37377743929](https://github.com/ali-han-kaya/leibniz2/actions/runs/37377743929) | [success #37324916028](https://github.com/ali-han-kaya/leibniz2/actions/runs/37324916028) |
+
+`e2db1f4` — RCA tablosunun iki canlı hatasının düzeltmesi.
+
+`#37377743878` (verify-delivery) yalnız `Live CI doc↔GitHub sync audit (advisory)`
+işinde kırmızı — o satır bu HEAD'de de daha önce de kırmızıydı. `Delivery
+verification — K1-K19 (single entry point)` **başarılı**; bu HEAD'de ilk kez
+PyYAML'sız CI'da required listesi türetiliyor ve süreç `SystemExit` ile ölmüyor.
+
+`#37377744058` (docker-security) kırmızılığı `Build and scan Docker image` +
+`Local security smoke (script parity)` işlerinden geliyor; ikisi de
+`libpcre2-8-0` **CVE-2026-103111** kaynaklı ve PR #82'de bekliyor.
+
+RCA yorum koşumu `#37377861604` (success): `docker-security` kırmızısını
+tabloya çevirdi. Düzeltmeden önce aynı koşum `verdict: clean | 0 / 0` yazıyordu
+ve iki işi de yok sayıyordu — `cancelled` sonucu `== "failure"` filtresine takılıyordu.
+Şimdi iki satır da düşüyor (`unknown` önem, `8/8` ve `9/9` tutarlı kırmızı) ve
+required listesi okunamadığı için verdict dürüstçe `indeterminate`: tablo
+"bloklar mı" sorusunu uydurmuyor.
 
 > Not (2026-10-05, 0669254): Bu satır **RCA yorum akışının** ilk canlı kanıtıdır.
 > Yeni `ci-rca-comment` workflow'u `docker-security` kırmızısı üzerine
