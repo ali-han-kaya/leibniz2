@@ -366,6 +366,11 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-11 | fix | (design) land token sheet and wire dashboard to single source | [`1a0b32c`](https://github.com/ali-han-kaya/leibniz2/commit/1a0b32c) |
 | 2026-09-12 | fix | (verify) dependency-closed delivery resync and mirror coverage set | [`831b941`](https://github.com/ali-han-kaya/leibniz2/commit/831b941) |
 | 2026-09-12 | chore | (repo) ignore generated deck renders and agent temp dirs | [`963f690`](https://github.com/ali-han-kaya/leibniz2/commit/963f690) |
+| 2026-09-12 | feat | (changelog) add safe stale-row pruning | [`4e27d0f`](https://github.com/ali-han-kaya/leibniz2/commit/4e27d0f) |
+| 2026-09-12 | docs | (verify) add the 43-site advisory coe audit table | [`5524362`](https://github.com/ali-han-kaya/leibniz2/commit/5524362) |
+| 2026-09-12 | test | (verify) pin gate sidecar wiring and advisory defensive reads | [`5e9426a`](https://github.com/ali-han-kaya/leibniz2/commit/5e9426a) |
+| 2026-09-13 | docs | (review) rebuild review compilation from current source (53pp) | [`512be11`](https://github.com/ali-han-kaya/leibniz2/commit/512be11) |
+| 2026-09-13 | fix | (verify) point V5m lineage row at the b69de33 repack commit | [`643b974`](https://github.com/ali-han-kaya/leibniz2/commit/643b974) |
 
 ### Regresyon notları
 
