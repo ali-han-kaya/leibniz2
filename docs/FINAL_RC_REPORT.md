@@ -69,6 +69,25 @@ Temiz kopya (`git clone` → `/tmp/leibniz2-final`, HEAD = `3918a04092279450e743
 
 ## Açık borçlar (FINAL kapısı öncesi)
 
+### Bekleyen kırmızılar — 2026-10-05 durumu
+
+Bu blok **kapanmamış** kırmızıların tek yerdeki kümesidir; her satırın kanıt
+zinciri `run id → nerede durduğu → sahibi` şeklindedir. Üstteki maddeler
+kapandı, aşağıdaki dört hâlâ açık.
+
+| # | Kırmızı | Kanıt | Sahibi / çıkış yolu |
+|---|---|---|---|
+| 1 | `docker-security` → `libpcre2-8-0` **CVE-2026-103111** | main [`37377744058`](https://github.com/ali-han-kaya/leibniz2/actions/runs/37377744058) = failure · jobs `Build and scan Docker image` + `Local security smoke (script parity)` | **PR #82** — `SECURITY_PATCH_PACKAGES` ile kapama hazır, merge bekliyor |
+| 2 | `Live CI doc↔GitHub sync audit (advisory)` | main [`37377743878`](https://github.com/ali-han-kaya/leibniz2/actions/runs/37377743878) = failure · advisory, required değil | Advisory — doküman↔GitHub senkronu; doküman tarafı yazıldıkça kapanır |
+| 3 | PR #83 determinism invariant kırılması | 3 test, kaynak-üretim değişikliğinden kaynaklanıyor | Ayrı iş — bu dalın kapsamında değil, dürüstçe açık bırakıldı |
+| 4 | `test_dashboard_playwright_smoke` (MIME) | yalnız yerelde kırmızı, CI'da koşmuyor | Yerel ortam sorunu — CI kanıtını etkilemez |
+
+**Bilerek yapılmayanlar:** 2 ve 4 numaralı kırmızıları "düzeltmek" için
+kapıyı gevşetmek kanıtı düzeltmez. 1 numaralı CVE'nin çözümü PR #82'de
+duruyor; bu defterde onun yerine yazılmaz.
+
+### Kapanan maddeler
+
 - ~~Gerçek GitHub Actions koşumu — push gerektirir, kullanıcı kararı~~
   **KAPANDI (2026-09-16):** `reword-working` dalı push edildi ve gerçek
   koşumlar izlendi. İlk push (73e94ce) 3 gizli CI borcunu surfaced etti ve
