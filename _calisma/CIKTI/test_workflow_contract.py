@@ -7,8 +7,9 @@ Bu meta-test:
   1. Üretici modüllerin (summary_pattern_drift, check_pattern_consistency,
      check_workflow_artifact_docs) kendi EXCLUDED/muafiyet attr'larının
      fixture ile BİREBİR aynı olduğunu doğrular — biri kaçarsa drift FAIL.
-  2. Lazy re-export'ların (ARTIFACT_JOBS, GATE_EXCLUDE) üretici
-     attr'larıyla özdeş olduğunu doğrular.
+  2. Tüketicilerin kümeleri KOPYALAMADIĞINI doğrular: lazy re-export
+     (ARTIFACT_JOBS ← gen_repro_manifest) ve burada tanımlı GATE_EXCLUDE
+     tüketicide (status_checks) AYNI nesne olmalı.
   3. Küme içi tutarlılığı pin'ler (DOC_ONLY ⊆ UPLOAD_EXCEPTIONS,
      merge-excluded kümesi ARTIFACT_JOBS ile kesişir vb.).
 
@@ -54,17 +55,21 @@ class TestProducersMatchFixture(unittest.TestCase):
                          "fixture'dan koptu")
 
 
-class TestLazyReExports(unittest.TestCase):
-    """ARTIFACT_JOBS / GATE_EXCLUDE re-export'ları üreticiyle özdeş."""
+class TestConsumerIdentity(unittest.TestCase):
+    """Tüketici kümeleri fixture'ın KENDİSİNİ taşır (kopya değil)."""
 
     def test_artifact_jobs_is_same_object(self):
         import gen_repro_manifest as grm
         self.assertIs(wc.ARTIFACT_JOBS, grm.ARTIFACT_JOBS)
 
     def test_gate_exclude_is_same_object(self):
+        # GATE_EXCLUDE workflow_contract'ta TANIMLI; status_checks onu
+        # içe aktarmalı — kendi kopyasını kurarsa karar iki yere dağılır.
         try:
             import status_checks as sc  # noqa: E402
-            self.assertIs(wc.GATE_EXCLUDE, sc.GATE_EXCLUDE)
+            self.assertIs(wc.GATE_EXCLUDE, sc.GATE_EXCLUDE,
+                          "status_checks.GATE_EXCLUDE kopya — tek kaynak "
+                          "workflow_contract.py'den içe aktarın")
         except SystemExit as e:
             # yaml yoksa status_checks import'u exit(2) — CI bare python'da
             # test suite'in BÜTÜNÜ (errors=1) ölmesin: bu prodült bir
@@ -95,7 +100,12 @@ class TestSetConsistency(unittest.TestCase):
         self.assertIsInstance(wc.DOC_ONLY_ADVISORY, frozenset)
         self.assertIsInstance(wc.UPLOAD_EXCEPTIONS, frozenset)
 
-    def test_dir_includes_lazy_names(self):
+    def test_gate_exclude_frozen(self):
+        # Required/advisory kararı tek kaynakta donuk kalmalı; bir tüketici
+        # kümeyi mutasyona uğratırsa (`.add`) kapı sessizce kayamaz.
+        self.assertIsInstance(wc.GATE_EXCLUDE, frozenset)
+
+    def test_dir_includes_contract_names(self):
         self.assertIn("ARTIFACT_JOBS", dir(wc))
         self.assertIn("GATE_EXCLUDE", dir(wc))
 

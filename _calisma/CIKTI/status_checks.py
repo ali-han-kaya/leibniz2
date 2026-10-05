@@ -50,44 +50,20 @@ except ImportError:  # pragma: no cover — stdlib-only runnerlarda yaml yok
 # CIKTI'dan da repo kökünden de koşabilsin).
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 WORKFLOW = str(_REPO_ROOT / ".github" / "workflows" / "verify.yml")
-# Required check OLMAYAN job'lar: PR-only/advisory (banner kapı olmasın).
-GATE_EXCLUDE = {
-    "manifest-comment",    # PR-only: yorum düşürme
-    "precheck",             # AŞAMA 0 advisory
-    "label-gate-p1",        # PR-only: P1 etiket opsiyonel blokaj (required DEĞİL)
-    "plist-check",          # macOS-advisory: push'ta çalışmaz
-    "mirror-check",         # macOS: sync sonrası K17 fail-closed (advisory)
-    "daemon-http",          # advisory: daemon-modu HTTP 200 smoke (advisory)
-    "fresh-clone-http",      # advisory: temiz clone + preview HTTP smoke
-    "audit-live-ci",        # advisory: doc↔GitHub senkron denetimi
-    "audit-refs-trend",     # advisory: refs-trend satırları ↔ kaynak denetimi
-    "override-trend",       # advisory: CLI override zaman serisi
-    "changelog-drift",      # advisory: gen_changelog --check drift bulguları
-    "pattern-drift",         # advisory: merge pattern ↔ ARTIFACT_JOBS drift
-    "budget-comment",        # PR-only: bütçe + pre-commit PR yorumu (bütçe kapısı ayrı job)
-    "lake-proof",            # ayrı-step K9 lake build (lean-toolchain v4.14.0);
-                             #   GitHub required kontrollerinde DEĞİL (advisory) —
-                             #   K9, verify job'unun --full içinde de koşar.
-}
-# Not: "label-gate" (Pre-commit P0 label gate) BİLEREK required check'tir —
-# precommit-p0 etiketi varken FAIL verip merge'i bloke eder; bu yüzden
-# GATE_EXCLUDE'da DEĞİL. 12'li required liste (2026-08-23): 9 eski gate +
-# commit-msg-gate (commit-msg ihlal blokajı — PR-only ama required),
-# config-sync (config snapshot ↔ CONFIG_BASENAMES üçlü senkron),
-# ci-simulate (yerel CI simülasyonu — full K1-K14 replay).
-# 27 job − 14 hariç = 13 required (fresh-clone-http dahil advisory).
-#
-# 2026-09-04 denetimi (job-id → karar, kanıt verify.yml + GitHub required set):
-#   reports          REQUIRED kalır — tüketilen precommit-logs artifact'ı
-#                    job içinde indirilir (coe=True), bundle repo-kaynaklı;
-#                    kriter: fail-open değil, tüketim bağlı.
-#   reproducibility  REQUIRED kalır — K10 bütünlük adımı (--verify-manifest)
-#                    set -e altında job'u düşürür (fail-closed uç); manifest
-#                    bundle'ı merge-blok kapıdır.
-#   refs-trend       REQUIRED kalır — koddan türeyen trend tablosu in-jobs
-#                    üretilir (artifact bağımlılığı yok), K6 trend zinciri.
-#   lake-proof       ADVISORY kalır (exclude'da) — ayrı-step K9 lake build;
-#                    K9, verify --full içinde bağımsız koşar (e30f8ea).
+
+# ── Tek kaynak: GATE_EXCLUDE (required check OLMAYAN job id'leri) ───────
+# Required-vs-advisory kararı ve her üyenin gerekçesi workflow_contract.py'de
+# yaşar (diğer sözleşme kümeleriyle aynı tek-kaynak kuralı). Burada kopya
+# taşımak yerine fixture'dan alınıyor; test_workflow_contract üretici ↔
+# fixture drift'ini commit anında yakalar. Önce düz import denenir: hem
+# script hem paket çağrısı aynı (sys.modules'daki tek) kümeye çözülsün.
+_CIKTI_DIR = str(pathlib.Path(__file__).resolve().parent)
+if _CIKTI_DIR not in sys.path:
+    sys.path.insert(0, _CIKTI_DIR)
+try:
+    from workflow_contract import GATE_EXCLUDE  # noqa: E402
+except ImportError:  # pragma: no cover — CIKTI sys.path'te değilse paket içi
+    from .workflow_contract import GATE_EXCLUDE  # noqa: E402
 
 
 def _require_yaml():

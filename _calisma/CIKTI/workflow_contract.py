@@ -12,9 +12,9 @@ Kural: bir küme burada bir kez tanımlanır, üretici modüller ve testler
 BURADAN içe aktarır. Drift'i yakalamak için test_workflow_contract.py
 hem bu kümeleri hem üreticilerin attr'larını çapraz doğrular.
 
-stdlib-only; yan etkisiz. Ağır tek kaynaklara (ARTIFACT_JOBS,
-GATE_EXCLUDE) PEP 562 __getattr__ ile lazy erişim sağlar — bu modülü
-import etmek PyYAML veya başka bir bağımlılık gerektirmez.
+stdlib-only; yan etkisiz. Ağır tek kaynağa (ARTIFACT_JOBS) PEP 562
+__getattr__ ile lazy erişim sağlar — bu modülü import etmek PyYAML veya
+başka bir bağımlılık gerektirmez.
 """
 import importlib
 
@@ -64,12 +64,59 @@ UPLOAD_EXCEPTIONS = frozenset({
 })
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Ağır tek kaynaklar: lazy re-export (modül import'u yan etkisiz kalır).
+# REQUIRED vs ADVISORY: required check OLMAYAN job id'leri (banner kapı
+# olmasın). status_checks.gate_jobs() bu kümeyi dışlar; required liste bu
+# yüzden workflow job'larından TÜRETİLİR. Her üyenin gerekçesi — "PR-only"
+# mi "advisory" mi olduğu ve hangi kanıta dayandığı — burada, kümenin
+# yanında yaşar: aynı karar iki dosyaya dağılıp ayrışmasın diye
+# status_checks.py kopya taşımaz, BURADAN içe aktarır (test_workflow_contract
+# drift'i commit anında yakalar). Karar bir POLICY değişikliğidir, test
+# düzeltmesi değil (bkz. skills/verify-chain).
+# ─────────────────────────────────────────────────────────────────────────────
+GATE_EXCLUDE = frozenset({
+    "manifest-comment",      # PR-only: yorum düşürme
+    "precheck",              # AŞAMA 0 advisory
+    "label-gate-p1",         # PR-only: P1 etiket opsiyonel blokaj (required DEĞİL)
+    "plist-check",           # macOS-advisory: push'ta çalışmaz
+    "mirror-check",          # macOS: sync sonrası K17 fail-closed (advisory)
+    "daemon-http",           # advisory: daemon-modu HTTP 200 smoke (advisory)
+    "fresh-clone-http",      # advisory: temiz clone + preview HTTP smoke
+    "audit-live-ci",         # advisory: doc↔GitHub senkron denetimi
+    "audit-refs-trend",      # advisory: refs-trend satırları ↔ kaynak denetimi
+    "override-trend",        # advisory: CLI override zaman serisi
+    "changelog-drift",       # advisory: gen_changelog --check drift bulguları
+    "pattern-drift",         # advisory: merge pattern ↔ ARTIFACT_JOBS drift
+    "budget-comment",        # PR-only: bütçe + pre-commit PR yorumu (bütçe kapısı ayrı job)
+    "lake-proof",            # ayrı-step K9 lake build (lean-toolchain v4.14.0);
+                             #   GitHub required kontrollerinde DEĞİL (advisory) —
+                             #   K9, verify job'unun --full içinde de koşar.
+})
+# Not: "label-gate" (Pre-commit P0 label gate) BİLEREK required check'tir —
+# precommit-p0 etiketi varken FAIL verip merge'i bloke eder; bu yüzden
+# GATE_EXCLUDE'da DEĞİL. 12'li required liste (2026-08-23): 9 eski gate +
+# commit-msg-gate (commit-msg ihlal blokajı — PR-only ama required),
+# config-sync (config snapshot ↔ CONFIG_BASENAMES üçlü senkron),
+# ci-simulate (yerel CI simülasyonu — full K1-K14 replay).
+# 27 job − 14 hariç = 13 required (fresh-clone-http dahil advisory).
+#
+# 2026-09-04 denetimi (job-id → karar, kanıt verify.yml + GitHub required set):
+#   reports          REQUIRED kalır — tüketilen precommit-logs artifact'ı
+#                    job içinde indirilir (coe=True), bundle repo-kaynaklı;
+#                    kriter: fail-open değil, tüketim bağlı.
+#   reproducibility  REQUIRED kalır — K10 bütünlük adımı (--verify-manifest)
+#                    set -e altında job'u düşürür (fail-closed uç); manifest
+#                    bundle'ı merge-blok kapıdır.
+#   refs-trend       REQUIRED kalır — koddan türeyen trend tablosu in-jobs
+#                    üretilir (artifact bağımlılığı yok), K6 trend zinciri.
+#   lake-proof       ADVISORY kalır (exclude'da) — ayrı-step K9 lake build;
+#                    K9, verify --full içinde bağımsız koşar (e30f8ea).
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Ağır tek kaynak: lazy re-export (modül import'u yan etkisiz kalır).
 #   ARTIFACT_JOBS  ← gen_repro_manifest (artifact → üreten job)
-#   GATE_EXCLUDE   ← status_checks      (required-olmayan job id'leri)
 # ─────────────────────────────────────────────────────────────────────────────
 
-_LAZY = {"ARTIFACT_JOBS": "gen_repro_manifest", "GATE_EXCLUDE": "status_checks"}
+_LAZY = {"ARTIFACT_JOBS": "gen_repro_manifest"}
 
 
 def __getattr__(name):  # PEP 562
