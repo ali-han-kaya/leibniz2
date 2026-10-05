@@ -188,3 +188,63 @@ tazelemeyi gerektirir, ikisi ayrı commit'te kaybolur.
 - Repack job'ında yalnız **bir** dosyada bayt içerik (kaynak ≠ zip kopyası)
 - Zip'i düzeltince `check_zip_lineage_drift.py` (K14) kırmızıya dönüyor
 - "Son repack ne zaman?" sorusunun cevabı, ilgili son TeX değişikliğinden eski
+
+---
+
+## INC-5: PyYAML yokken türetilen önem listesi süreci SystemExit ile öldürüyor
+
+**Tarih:** 2026-10-05
+**Etkilenen run'lar:** land `03a72ce` verify-delivery [`37361885622`](https://github.com/ali-han-kaya/leibniz2/actions/runs/37361885622) = failure (`FAILED (errors=2, skipped=109)`) — iki hata da `test_rca_report.TestRequiredSource` içinde `SystemExit: 2`
+**Düzeltme commit'i:** `9f0c9cb`
+**Durum:** ✅ Çözüldü — `e2db1f4`/`1008538` main'de; `Delivery verification — K1-K19` hem `e2db1f4` hem `1008538`'de yeşil
+**Kanıt zinciri:** yerel `python3 -m unittest test_rca_report` 23/23 · land [`37374017355`](https://github.com/ali-han-kaya/leibniz2/actions/runs/37374017355) DV=success · main [`37377743878`](https://github.com/ali-han-kaya/leibniz2/actions/runs/37377743878) DV=success · defter satırı `e2db1f4`
+
+### Belirti
+
+RCA tablosu `verdict: indeterminate | zorunlu 0 / advisory 0` yazıyordu —
+fallback devreye girdiğinde süreç ölüyor, tablo boş kalıyordu. Yerelde
+tekrarlanamıyordu; yalnız CI'da (PyYAML kurulu değil) çöküyordu.
+
+### Kök neden
+
+`GITHUB_TOKEN` branch protection okuyamaz: `administration` scope
+**grant edilemez**. Bu yüzden required listesi `verify.yml` job adlarından
+türetilir. Ama fallback `status_checks.gate_jobs()` çağırıyordu ve o fonksiyon
+PyYAML yoksa `_require_yaml()` üzerinden **`sys.exit(2)`** çağırır — tam da
+CI'da, yani fallback'in çalışmak zorunda olduğu tek yerde.
+
+Kritik ayrıntı: `SystemExit`, `Exception`'ın **altında değildir**. Dolayısıyla
+`except Exception` sarmalayıcısı onu yutmaz; süreç doğrudan ölür. Sarmalayıcı
+"hatayı yutuyor" izlenimi verirken gerçek davranış sürecin sonlanmasıydı.
+
+### İlk deneme (yetersiz — yalnız sarmalayıcı)
+
+`except Exception` eklemek hatayı görünmez yapar ama `SystemExit`'i
+yakalamaz; CI'da aynı ölüme düşülür.
+
+### Kesin çözüm (`9f0c9cb`)
+
+1. `gate_jobs()` yerine **`_derived_required(data=None)`**: aynı tek kaynağı
+   kullanır (`sc.WORKFLOW` yolu + `sc.GATE_EXCLUDE` listesi), ama YAML
+   okumayı kontrollü noktada yapar. `data` verilirse dosya hiç okunmaz.
+2. Çağrı **`except BaseException`** ile korunur — hem `SystemExit` hem
+   `ImportError` yutulur, `derived = []` ile `([], "bilinmiyor")` döner.
+3. Test: `sys.modules["yaml"] = None` ile gerçek alt süreçte `required_contexts`
+   patlamıyor, `([], "bilinmiyor")` dönüyor.
+
+### Önlem
+
+- `status_checks._require_yaml()` gibi **kitaplık katmanında `sys.exit`
+  çağıran** kod, bir üst katmandaki `except Exception` ile güvenli sanılır.
+  Sözleşmesi "listeyi döndür ya da öl" olan bir fonksiyon, opsiyonel
+  bağımlılıkla çağrılmamalı.
+- Degrade davranış **etiketli** dönmeli: `("…", "verify.yml job adları
+  (canlı koruma okunamadı)")` → tablo okura doğruluğu da söyler.
+
+### Benzer olayların belirtileri
+
+- Yalnız CI'da, yerelde asla görülmeyen `SystemExit: 2` / exit code 2
+- `HATA: PyYAML gerekli` stderr satırı + tablo satırının boş kalması
+- `verdict: indeterminate | zorunlu 0 | advisory 0` (çelişki: koşum kırmızı,
+  tablo temiz)
+- `import yaml` içeren herhangi bir opsiyonel yedek yol
