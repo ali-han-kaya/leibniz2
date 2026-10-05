@@ -64,6 +64,11 @@ jobs:
           format: sarif
           output: trivy.sarif
           severity: CRITICAL,HIGH
+          # trivy-action@v0.35.0 SARIF'te severity'yi KASTEN siler
+          # ("Building SARIF report with all severities") — bu input true
+          # olmadan SARIF tüm seviyeleri taşır ve yorum adımı MEDIUM/LOW'u
+          # da bulgu sayar (2026-10-05 canlı PR #82 ölçümü: 12 yanlış HIGH).
+          limit-severities-for-sarif: true
           ignore-unfixed: true
           exit-code: 1
 

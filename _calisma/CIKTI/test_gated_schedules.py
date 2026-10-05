@@ -130,6 +130,57 @@ class TestScheduleGateParity(unittest.TestCase):
                       "korumak")
 
 
+class TestTrivySarifSeverityContract(unittest.TestCase):
+    """Trivy SARIF adımı + yorum script'i seviye sözleşmesi (fail-closed).
+
+    Canlı ölçüm (2026-10-05, PR #82): trivy-action@v0.35.0 SARIF'te
+    severity'yi KASTEN siler; properties.severity olmadan yorum script'i
+    default-deny ile 12 MEDIUM/LOW bulguyu HIGH sayıp temiz taramayı
+    kırmızıya çevirdi. İki yüzey birlikte pinlenir:
+      1) workflow SARIF adımı `limit-severities-for-sarif: true` taşımalı,
+      2) script seviyeyi properties.severity ÖNCE, yoksa message
+         "Severity: X" satırından okumalı (v0.69.3 şeması).
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls._wf = (WORKFLOWS / "docker-security.yml").read_text(encoding="utf-8")
+        cls._js = (ROOT / "_calisma" / "CIKTI" / "github_scripts" /
+                   "trivy_sarif_pr_comment.js").read_text(encoding="utf-8")
+
+    def test_sarif_step_limits_severities(self):
+        body = step_body(self._wf, "Scan image with Trivy (SARIF)")
+        self.assertIsNotNone(body, "SARIF tarama adımı yok")
+        self.assertIn(
+            "limit-severities-for-sarif: true", body,
+            "SARIF adımı severity'yi sınırlamalı: trivy-action@v0.35.0 bu "
+            "input olmadan SARIF'te severity filtresini kaldırır ve tüm "
+            "seviyeler taranır (canlı ölçüm: 12 yanlış HIGH).")
+
+    def test_comment_script_reads_severity_from_message_text(self):
+        self.assertIn(
+            "Severity:", self._js,
+            "script message.text gövdesindeki 'Severity: X' satırını "
+            "okumalı (v0.69.3 SARIF şeması — properties.severity yok)")
+        self.assertRegex(
+            self._js,
+            r"match\(/\^Severity:\\s\*\(",
+            "message'tan seviye çıkaran regex beklenir")
+
+    def test_comment_script_keeps_properties_first(self):
+        # properties.severity ÖNCE okunmalı: eski şemada daha kesin kaynaktır.
+        i_prop = self._js.index("properties && result.properties.severity")
+        i_msg = self._js.index("Severity:\\s*([A-Za-z]+)")
+        self.assertLess(i_prop, i_msg,
+                        "properties.severity mesajdan önce okunmalı")
+
+    def test_comment_script_keeps_default_deny(self):
+        # Seviye hiçbir yerde yoksa hâlâ HIGH (sessiz geçiş yok).
+        self.assertIn(
+            'return m ? m[1].toUpperCase() : "HIGH";', self._js,
+            "seviye-yok default-deny (HIGH) korunmalı")
+
+
 class TestSkipIsNotEvidenceInCI(unittest.TestCase):
     """K5: trivy kurulu bir CI'da SKIP, kurulumun bozulduğunun işaretidir.
 

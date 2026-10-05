@@ -6,6 +6,8 @@
 //   • CRITICAL/HIGH bulgu   → bulgu-tablosu + diff-içi/diff-dışı damgası + setFailed
 //   • bozuk SARIF (runs:[]) → setFailed, yanıltıcı yorum YOK (fail-closed)
 //   • seviye-yok            → default-deny (HIGH muamelesi; sessiz geçiş yok)
+//   • seviye-kaynağı        → properties.severity ÖNCE, yoksa message
+//                             "Severity: X" satırı (v0.69.3 SARIF şeması)
 // Upsert marker: <!-- trivy-sarif-pr-comment --> (pr_status_comment.js deseni).
 // Çağrım: github-script adımı gövdeyi fs.readFileSync + eval(async-wrap) ile
 // koşar (manifest_comment.js ile aynı desen) — module.exports YOKTUR.
@@ -19,12 +21,19 @@ const CHANGED_PATH = "changed_files.txt";
 const BLOCKING = new Set(["CRITICAL", "HIGH"]);
 
 function severityOf(result) {
-  // Trivy SARIF'te gerçek seviye properties.severity'de; eksikse default-deny
-  // (HIGH) — 'error' seviyesi CRITICAL/HIGH'ı ayırt edemez, tahmin edilmez.
-  const sev = String(
+  // Trivy SARIF sürümden sürüme seviyeyi iki farklı yerde taşır:
+  //   • bazı sürümler: result.properties.severity ("CRITICAL"/"HIGH"/…)
+  //   • v0.69.3 (trivy-action@v0.35.0 varsayılanı): properties YOK; seviye
+  //     message.text gövdesinde "Severity: HIGH" satırı olarak yaşar.
+  // İkisi de okunur; ikisi de yoksa default-deny (HIGH) — 'error' seviyesi
+  // CRITICAL/HIGH'ı ayırt edemez, tahmin edilmez.
+  const propSev = String(
     (result.properties && result.properties.severity) || ""
   ).toUpperCase();
-  return sev || "HIGH";
+  if (propSev) return propSev;
+  const text = String((result.message && result.message.text) || "");
+  const m = text.match(/^Severity:\s*([A-Za-z]+)\s*$/m);
+  return m ? m[1].toUpperCase() : "HIGH";
 }
 
 function cell(text) {
