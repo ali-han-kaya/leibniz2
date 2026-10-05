@@ -107,6 +107,7 @@ test_preview_findings_panel.py
 test_preview_mirror_imports.py
 test_preview_server.py
 test_preview_server_atomic.py
+test_rca_report.py
 test_readme_badges.py
 test_readme_skills.py
 test_record_determinism_trend.py
