@@ -553,6 +553,9 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-05 | chore | (changelog) 81b915d satirini tabloya ekle | [`91d2936`](https://github.com/ali-han-kaya/leibniz2/commit/91d2936) |
 | 2026-10-05 | chore | (changelog) 4ec32af satirini tabloya ekle | [`db54146`](https://github.com/ali-han-kaya/leibniz2/commit/db54146) |
 | 2026-10-05 | fix | (ci) kapi HEAD acigini ve API hatasini duzelt | [`270002a`](https://github.com/ali-han-kaya/leibniz2/commit/270002a) |
+| 2026-10-05 | docs | (rca) repack sidecar kaymasi kok neden analizi | [`58a5c22`](https://github.com/ali-han-kaya/leibniz2/commit/58a5c22) |
+| 2026-10-05 | docs | (incident) INC-4 — main push GH006 (Repack zorunlu kontrolü) | [`5bb0106`](https://github.com/ali-han-kaya/leibniz2/commit/5bb0106) |
+| 2026-10-05 | chore | (changelog) 270002a satirini tabloya ekle | [`d566be2`](https://github.com/ali-han-kaya/leibniz2/commit/d566be2) |
 
 ### Regresyon notları
 
