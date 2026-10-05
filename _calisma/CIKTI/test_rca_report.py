@@ -163,6 +163,112 @@ class TestRootCauseMapping(unittest.TestCase):
             with self.subTest(job=job):
                 self.assertEqual(rca.rca_for(job)[1], doc)
 
+    def test_class_canons_match_job_name(self):
+        """Sınıf-kanonları job adından da bulunmalı.
+
+        Yalnız "Mirror sync check…" gerçek bir job adı; ikisi sentetik —
+        bugün bu sınıflar job olarak değil K-katmanı olarak yaşıyor. Sözleşme
+        "ad geçiyorsa kanon düşer", ve ileride ayrı job'a bölünürse de
+        aynı satır geçerli kalır.
+        """
+        cases = {
+            "Mirror sync check (macOS, fail-closed)":
+                "_calisma/CIKTI/sync_verify_mirror.sh",
+            "Action pin denetimi":
+                "_calisma/CIKTI/check_action_pins.py",
+            "prettier biçimlendirme kapısı":
+                "_calisma/CIKTI/check_prettier_format.py",
+        }
+        for job, doc in cases.items():
+            with self.subTest(job=job):
+                self.assertEqual(rca.rca_for(job)[1], doc)
+
+    def test_class_canons_match_failing_step_inside_generic_job(self):
+        """Asıl kritik yol: bu sınıflar birer job DEĞİL, K1-K19 job'unun
+        içindeki katmanlardır. Yalnız job adına bakmak onları asla bulamazdı
+        — hepsi genel "k1-k19" satırına düşerdi.
+
+        Aşağıdaki adım adları GERÇEK CI adım adlarıdır (run #37386666500'den
+        okundu) — uydurma değil. Uydurma adla test etmek tam da burada
+        yanıltırdı: "python3-shell" gerçek adıda tireli, "python3 shell"
+        değil.
+        """
+        job = "Delivery verification — K1-K19 (single entry point)"
+        cases = {
+            ("Lint all workflows with actionlint",):
+                "_calisma/CIKTI/check_prettier_format.py",
+            ("Lint shell hooks (shellcheck, POSIX/bash)",):
+                "_calisma/CIKTI/check_prettier_format.py",
+            ("Generate python3-shell findings (JSON sidecar)",):
+                "_calisma/CIKTI/check_prettier_format.py",
+        }
+        for steps, doc in cases.items():
+            with self.subTest(steps=steps):
+                self.assertEqual(rca.rca_for(job, steps)[1], doc)
+
+    def test_mirror_canon_reaches_from_mirror_job_and_steps(self):
+        """Mirror-sync sınıfı hem kendi job'undan hem de adım adlarından
+        erişilebilir (gerçek adım adları)."""
+        cases = {
+            ("Mirror sync check (macOS, fail-closed)", ()): None,
+            ("Mirror sync check (macOS, fail-closed)",
+             ("Run K17 --check-mirror (sync_verify_mirror.sh --check)",)): None,
+            ("Mirror sync check (macOS, fail-closed)",
+             ("Mirror coverage (--check-coverage, fail-closed)",)): None,
+            ("Mirror sync check (macOS, fail-closed)",
+             ("Sync preview + verify mirror (RUNNER_TEMP, adım 2+4)",)): None,
+        }
+        for (job, steps), _ in cases.items():
+            with self.subTest(steps=steps):
+                self.assertEqual(rca.rca_for(job, steps)[1],
+                                 "_calisma/CIKTI/sync_verify_mirror.sh")
+
+    def test_action_pins_canon_is_keyed_even_without_own_step(self):
+        """ÖLÇÜLEN SINIR: check_action_pins.py'nin AYRI bir CI adımı yok —
+        "Run pre-commit (advisory, all files, …)" paketinin ve K1-K19'un
+        içinde koşuyor. Bu yüzden bugün adım adından erişilemiyor ve satır
+        k1-k19'a düşüyor (bkz. bir sonraki test).
+
+        Anahtarlar yine de hook kimliğiyle duruyor: adım ileride ayrılırsa
+        kanon kendiliğinden devreye girer, tablo değişmez.
+        """
+        job = "Delivery verification — K1-K19 (single entry point)"
+        for step in ("K3 Action pin denetimi",
+                     "check-action-pins",
+                     "Run check_action_pins.py --workflow"):
+            with self.subTest(step=step):
+                self.assertEqual(rca.rca_for(job, (step,))[1],
+                                 "_calisma/CIKTI/check_action_pins.py")
+
+    def test_precommit_bundle_step_falls_back_to_k_layer_row(self):
+        """Pre-commit paketi düştüğünde hangi hook olduğunu adım adından
+        BİLEMEYİZ — uydurmak yerine genel k1-k19 satırı kalsın."""
+        job = "Delivery verification — K1-K19 (single entry point)"
+        self.assertEqual(
+            rca.rca_for(job, ("Run pre-commit (advisory, all files, "
+                              "show diff on failure)",))[1],
+            "run artifact: logs/unit_tests.log")
+
+    def test_generic_job_still_falls_back_to_k_layer_row(self):
+        """Adım sınıf-kanonuna çarpmıyorsa genel k1-k19 satırı kalır."""
+        job = "Delivery verification — K1-K19 (single entry point)"
+        self.assertEqual(rca.rca_for(job)[1], "run artifact: logs/unit_tests.log")
+        self.assertEqual(
+            rca.rca_for(job, ("Run CIKTI unit tests (test_*.py)",))[1],
+            "run artifact: logs/unit_tests.log")
+
+    def test_failing_step_names_skips_green_steps(self):
+        """Yalnız DÜŞEN adımlar sınıfa girmeli — yeşil adım yanıltır."""
+        job = {"steps": [
+            {"name": "Checkout", "conclusion": "success"},
+            {"name": "K3 Action pin denetimi", "conclusion": "cancelled"},
+            {"name": "Run K17 --check-mirror", "conclusion": "skipped"},
+            {"name": "Build", "conclusion": "failure"},
+        ]}
+        self.assertEqual(rca.failing_step_names(job),
+                         ("K3 Action pin denetimi", "Build"))
+        self.assertEqual(rca.failing_step_names({}), ())
+
     def test_unknown_job_gets_no_invented_cause(self):
         cause, doc, action = rca.rca_for("Tezcanlı yeni job")
         self.assertIn("bilinmeyen", cause)
@@ -178,6 +284,12 @@ class TestRootCauseMapping(unittest.TestCase):
         repoda olmadığı açıkça söylenmeli."""
         root = HERE.parents[1]
         for key, _cause, doc, _action in rca.RCA_TABLE:
+            # Anahtar dize ya da dize demeti olabilir (sınıf-kanonu).
+            for k in ((key,) if isinstance(key, str) else tuple(key)):
+                self.assertTrue(k.strip(), "boş anahtar: her şeyi eşleştirir")
+                self.assertEqual(k, k.lower(),
+                                 f"{k}: anahtar küçük harf olmalı, "
+                                 f"eşleşme lower() üzerinden yapılıyor")
             with self.subTest(job=key):
                 if doc.startswith("run artifact:"):
                     path = doc.split(":", 1)[1].strip()

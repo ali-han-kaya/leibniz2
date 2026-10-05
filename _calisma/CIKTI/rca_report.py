@@ -45,6 +45,27 @@ import ci_failure_pattern as cfp
 # işaretleri ("(INC-4)") metinde "bkz." ile verilir — çünkü yorumdaki tablo
 # kanıttır ve okur yolu açıp okuyabilmelidir; açılmayan bir yol kanıttan çok
 # yanıltıcıdır.
+#
+# ANAHTAR: tek dize YA DA dize demeti. Bir sınıf-kanonu birden fazla ada
+# düşüyorsa (job adı + o işin içindeki K-katmanı/adım adı) satır
+# çoğaltılmaz, anahtar demeti kullanılır. rca_for eşleştirmeyi hem job adına
+# hem de DÜŞEN adım adlarına yapar — çünkü "Action pin denetimi" (K3) ve
+# "Run K17 --check-mirror" birer job değil, K1-K19 job'unun İÇİNDEKİ
+# katmanlardır; yalnız job adına bakmak bu sınıfları asla bulamaz.
+#
+# SIRA ÖNEMLİ: somut sınıf-kanonları genel "k1-k19" satırından ÖNCE gelir.
+# Aynı anda hem job adı hem adım adı eşleştiğinde ilk eşleşen kazanır.
+#
+# ERİŞİLEBİLİRLİK NOTU (ölçüldü, 2026-10-06): "prettier/lint" ve
+# "mirror-sync" sınıfları gerçek adım adlarından erişilebilir —
+# "Lint all workflows with actionlint", "Lint shell hooks (shellcheck, …)",
+# "Generate python3-shell findings (…)" ve "Run K17 --check-mirror (…)",
+# "Mirror coverage (…)", "Sync preview + verify mirror (…)".
+# "action-pins" SINIFININ AYRI BİR ADIMI YOK: check_action_pins.py yalnızca
+# "Run pre-commit (advisory, all files, …)" paketinin ve K1-K19'un İÇİNDE
+# koşuyor. O durumda satır k1-k19'a düşer ve o noktadan sonra ayrım run
+# log'undan okunur (bkz. action). Anahtarlar hook kimliğiyle duruyor ki adım
+# ileride ayrılırsa satır kendiliğinden devreye girsin.
 RCA_TABLE = (
     (
         "live ci doc",
@@ -63,6 +84,31 @@ RCA_TABLE = (
         "commit başlığı/format kapısı ihlali",
         "_calisma/CIKTI/check_commit_messages.py",
         "check_commit_messages.py --range ile ihlali bul, başlığı yeniden yaz",
+    ),
+    (
+        ("prettier", "actionlint", "shellcheck", "python3-shell",
+         "lint shell", "lint all workflows"),
+        "kaynak biçim/statiğe aykırı — biçimlendirme-lint sınıfı kırmızı",
+        "_calisma/CIKTI/check_prettier_format.py",
+        "check_prettier_format.py --diff ile ihlali bul, npx prettier --write "
+        "ile düzelt; actionlint için bkz. _calisma/CIKTI/lint_actionlint.sh, "
+        "shellcheck için bkz. _calisma/CIKTI/check_python3_shell.py",
+    ),
+    (
+        ("action pin", "action-pin", "action_pins", "check-action-pins"),
+        "eylem sürümü sabitlenmemiş ya da pin kaynaktan sapmış — tedarik zinciri kapısı",
+        "_calisma/CIKTI/check_action_pins.py",
+        "check_action_pins.py --workflow ile sapmayı bul, pin'i bkz. "
+        "_calisma/CIKTI/action_pins.json içine işle; bu kapı K3 katmanı ve "
+        "bkz. .pre-commit-config.yaml içindeki check-action-pins hook'udur",
+    ),
+    (
+        ("mirror sync", "check-mirror", "mirror coverage", "verify mirror"),
+        "ayna ↔ kaynak senkronu koptu — artifact kaynakla aynı commit'te değil",
+        "_calisma/CIKTI/sync_verify_mirror.sh",
+        "sync_verify_mirror.sh --check ile kopan dosyayı bul, --force ile "
+        "senkronla ve kaynakla TEK commit'te üret; kapsam için "
+        "bkz. _calisma/CIKTI/check_mirror_coverage.py, K1 ve K17",
     ),
     (
         "k1-k19",
@@ -117,13 +163,37 @@ def is_red(conclusion) -> bool:
     return str(conclusion).strip().lower() not in BENIGN_CONCLUSIONS
 
 
-def rca_for(job_name: str):
-    """Job adına göre (kök_neden, belge, önerilen_adım)."""
-    low = job_name.lower()
+def rca_for(job_name: str, steps=()):
+    """Job adı + düşen adım adlarına göre (kök_neden, belge, önerilen_adım).
+
+    `steps` yalnız DÜŞEN işlerin adları olmalı. Neden job adı yetmiyor:
+    "Action pin denetimi" (K3) ve "Run K17 --check-mirror" birer job değil,
+    K1-K19 job'unun içindeki katmanlardır. Yalnız job adına bakmak bu
+    sınıfları hiç bulamaz, hepsi genel k1-k19 satırına düşerdi.
+
+    Tablo sırası kazanır: somut sınıf-kanonları genel satırdan önce gelir.
+    """
+    low = (job_name + " " + " ".join(steps)).lower()
     for key, cause, doc, action in RCA_TABLE:
-        if key in low:
+        keys = (key,) if isinstance(key, str) else tuple(key)
+        if any(k in low for k in keys):
             return cause, doc, action
     return UNKNOWN
+
+
+def failing_step_names(job) -> tuple:
+    """Job'un DÜŞEN adım adları (yeşil/benign adımlar hariç).
+
+    GitHub adımları job'tan bağımsız birer sonuç taşır; bir job kırmızıyken
+    içinde tek bir adım düşmüş olabilir ve kök neden tam orasıdır.
+    """
+    out = []
+    for st in (job.get("steps") or []):
+        if is_red(st.get("conclusion")):
+            name = (st.get("name") or "").strip()
+            if name:
+                out.append(name)
+    return tuple(out)
 
 
 def required_contexts(repo: str):
@@ -230,7 +300,7 @@ def build_rows(run_id: str, repo: str, workflow: str, required, jobs_window):
         pattern, detail = cfp.classify_job(
             name, jobs_window.get(name, {}).get("failures", 1),
             max(1, jobs_window.get(name, {}).get("window", 1)))
-        cause, doc, action = rca_for(name)
+        cause, doc, action = rca_for(name, failing_step_names(job))
         rows.append({
             "job": name,
             "conclusion": conclusion,
