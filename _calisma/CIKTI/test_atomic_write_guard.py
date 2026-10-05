@@ -7,8 +7,22 @@ if written with plain `open(path, "w")` + write.  The safe path is the
 same-directory `mkstemp` + `os.replace` helper (`_write_atomic`).
 
 This guard fails when any production module that writes a preview-served
-file uses `open(..., "w")` directly instead of delegating to its
-`_write_atomic` helper.  It is intentionally narrow:
+file uses a truncating write directly instead of delegating to its
+`_write_atomic` helper.  "Truncating" covers every in-place teardown of the
+destination, not just the builtin `open(..., "w")`:
+
+* `open(dest, "w")` / `open(dest, mode="w")`
+* `Path(dest).open("w")` and other `.open(<write mode>)` calls
+* `dest.write_text(...)` / `dest.write_bytes(...)`
+* `os.open(dest, ... O_TRUNC ...)`
+
+Out of scope by design: shell writers.  Shell redirects (`> dest`) cannot be
+reached by this AST pass, and the scripts that redirect preview filenames
+(`simulate_verify_job.sh`) do so inside a per-run simulation workspace
+(`SIM_DIR`), never the served preview directory — scanning them would only
+produce false positives.
+
+It is intentionally narrow:
 
 * Only production files (not test_*) are scanned.
 * Only writes whose enclosing scope mentions a preview-served indicator are
@@ -17,6 +31,8 @@ file uses `open(..., "w")` directly instead of delegating to its
 * Writes inside a function named `_write_atomic` are allowed (the helper
   itself uses `os.fdopen(fd, "w")`).
 """
+
+from __future__ import annotations
 
 import ast
 import pathlib
@@ -91,12 +107,73 @@ def _is_write_mode(call: ast.Call) -> bool:
     return False
 
 
+def _mode_is_write(call: ast.Call, index: int) -> bool:
+    """Return True if argument ``index`` (or ``mode=``) carries a write mode.
+
+    ``index`` differs by call style: the builtin is ``open(path, mode)``
+    (mode at 1) while the method form is ``Path.open(mode)`` (mode at 0).
+    """
+    if len(call.args) > index:
+        arg = call.args[index]
+        if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+            if "w" in arg.value:
+                return True
+    for kw in call.keywords:
+        if kw.arg == "mode" and isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, str):
+            if "w" in kw.value.value:
+                return True
+    return False
+
+
 def _is_open_call(node: ast.AST) -> bool:
     return (
         isinstance(node, ast.Call)
         and isinstance(getattr(node, "func", None), ast.Name)
         and getattr(node.func, "id", None) == "open"
     )
+
+
+def _dotted(node: ast.AST) -> str:
+    """Render a name/attribute chain: ``open``, ``os.open``, ``x.y.write_text``."""
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        base = _dotted(node.value)
+        return f"{base}.{node.attr}" if base else node.attr
+    return ""
+
+
+def _truncating_write(node: ast.Call) -> str | None:
+    """Classify a call that truncates its destination in place.
+
+    Returns a short mechanism label, or ``None`` when the call does not
+    truncate.  ``_write_atomic`` (same-dir mkstemp + os.replace) is the only
+    sanctioned path for preview-served files, so every label returned here is
+    a violation whenever the destination is preview-served.
+
+    Detection used to be limited to the builtin ``open(path, "w")`` call,
+    which left an easy bypass: ``Path(dest).write_text(...)`` truncates and
+    tears exactly the same way but scanned clean.  The alternative
+    truncating APIs are therefore classified too.
+    """
+    if _is_open_call(node) and _is_write_mode(node):
+        return "open(..., 'w')"
+    name = _dotted(node.func)
+    if name == "os.open":
+        # Only flag the truncating variant; O_APPEND / O_RDONLY are not
+        # in-place truncates of the destination.
+        try:
+            rendered = ast.unparse(node)
+        except Exception:  # pragma: no cover - defensive
+            rendered = ""
+        return "os.open(..., O_TRUNC)" if "O_TRUNC" in rendered else None
+    leaf = name.rsplit(".", 1)[-1]
+    # Method form: `Path.open("w")` puts the mode in the first position.
+    if leaf == "open" and (_mode_is_write(node, 0) or _mode_is_write(node, 1)):
+        return f"{name}(..., 'w')"
+    if leaf in ("write_text", "write_bytes"):
+        return f".{leaf}()"
+    return None
 
 
 class _Visitor(ast.NodeVisitor):
@@ -116,7 +193,8 @@ class _Visitor(ast.NodeVisitor):
         self.stack.pop()
 
     def visit_Call(self, node):
-        if _is_open_call(node) and _is_write_mode(node):
+        mechanism = _truncating_write(node)
+        if mechanism is not None:
             # Allow the helper itself.
             if self.stack and self.stack[-1].name == "_write_atomic":
                 pass
@@ -136,12 +214,12 @@ class _Visitor(ast.NodeVisitor):
                 # generic path via the function name.
                 if not is_preview and self.stack and self.stack[-1].name in PREVIEW_WRITER_FUNCS:
                     is_preview = True
-                    seg = seg or "open(path, 'w')"
+                    seg = seg or mechanism
                 if is_preview:
                     try:
-                        disp = ast.get_source_segment(self.source, node) or "open(...)"
+                        disp = ast.get_source_segment(self.source, node) or mechanism
                     except Exception:
-                        disp = "open(...)"
+                        disp = mechanism
                     self.violations.append((getattr(node, "lineno", 0), disp.strip()))
         self.generic_visit(node)
 
@@ -252,6 +330,58 @@ def tamper(m, out):
 '''
         tree = ast.parse(src)
         v = _Visitor(tree)
+        v.visit(tree)
+        self.assertEqual(v.violations, [])
+
+    def test_guard_catches_write_text_on_preview_path(self):
+        """`Path.write_text` truncates in place exactly like open(..., 'w')
+        and used to scan clean — the bypass this guard must not allow."""
+        src = '''import pathlib
+
+def persist_history(rec):
+    HISTORY_PATH = "history.jsonl"
+    pathlib.Path(HISTORY_PATH).write_text("hi", encoding="utf-8")
+'''
+        tree = ast.parse(src)
+        v = _Visitor(src)
+        v.visit(tree)
+        self.assertEqual(len(v.violations), 1, v.violations)
+        self.assertIn("write_text", v.violations[0][1])
+
+    def test_guard_catches_path_open_and_os_open_trunc(self):
+        """`Path.open('w')` ve `os.open(..., O_TRUNC)` de yerinde truncate eder."""
+        src = '''import os, pathlib
+
+def persist_history(rec):
+    HISTORY_PATH = "history.jsonl"
+    with pathlib.Path(HISTORY_PATH).open("w", encoding="utf-8") as f:
+        f.write("hi")
+
+def persist_override(rec):
+    OVERRIDE_TREND_PATH = "override-trend.json"
+    fd = os.open(OVERRIDE_TREND_PATH, os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
+    os.close(fd)
+'''
+        tree = ast.parse(src)
+        v = _Visitor(src)
+        v.visit(tree)
+        self.assertEqual(len(v.violations), 2, v.violations)
+        rendered = " ".join(seg for _, seg in v.violations)
+        self.assertIn("O_TRUNC", rendered)
+
+    def test_guard_ignores_append_only_and_non_preview_truncators(self):
+        """O_APPEND truncate ETMEZ; preview dışı write_text de flaglenmemeli."""
+        src = '''import os
+
+def write_done_sidecar(done_path, payload):
+    fd = os.open(done_path, os.O_WRONLY | os.O_CREAT | os.O_APPEND)
+    os.close(fd)
+
+def write_manifest(report):
+    report.write_text("manifest", encoding="utf-8")
+'''
+        tree = ast.parse(src)
+        v = _Visitor(src)
         v.visit(tree)
         self.assertEqual(v.violations, [])
 

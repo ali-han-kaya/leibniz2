@@ -214,6 +214,7 @@ HOOK_COVERAGE = {
         "test_budget_over_detail.js",
         "test_refs_trend_badge_node.js",
         "test_z3_scan.js",
+        "test_verify_job_checklist.py",
     ],
 }
 
