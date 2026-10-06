@@ -588,6 +588,8 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-06 | chore | (changelog) sinif-kanonlari satirini tabloya ekle | [`d33a09f`](https://github.com/ali-han-kaya/leibniz2/commit/d33a09f) |
 | 2026-10-06 | chore | (changelog) olay-kaydi + signum onarimi satirini tabloya ekle | [`3e3b074`](https://github.com/ali-han-kaya/leibniz2/commit/3e3b074) |
 | 2026-10-06 | feat | (server) yasam-dongusu olay-kaydi + signum imza onarimi | [`d60e64a`](https://github.com/ali-han-kaya/leibniz2/commit/d60e64a) |
+| 2026-10-06 | feat | (dashboard) yasam-dongusu paneli + /api/server-events ucu | [`78f0a86`](https://github.com/ali-han-kaya/leibniz2/commit/78f0a86) |
+| 2026-10-06 | chore | (changelog) d60e64a + 3e3b074 satirlarini tabloya ekle | [`4230048`](https://github.com/ali-han-kaya/leibniz2/commit/4230048) |
 
 ### Regresyon notları
 
