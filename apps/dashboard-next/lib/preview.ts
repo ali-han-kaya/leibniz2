@@ -52,3 +52,33 @@ export const getTrend = cache(
   (limit = 20): Promise<{ history: TrendRow[] }> =>
     getJson<{ history: TrendRow[] }>(`/api/trend?limit=${limit}`)
 );
+
+// Yaşam-döngüsü olay-kaydı (logs/server_events.jsonl) — bkz.
+// docs/SERVER_EVENT_LOG.md. `phase` pano için DEĞİL, sunucuda türetilir:
+// çökme kararı pid'ler arası sıraya bakar, tümevarım tek yerde yaşar
+// (preview_server._classify_lifecycle).
+export type LifecyclePhase =
+  | 'start'
+  | 'recovery'
+  | 'graceful'
+  | 'crash'
+  | 'unknown';
+
+export type ServerEvent = {
+  ts?: string;
+  event?: string;
+  pid?: number;
+  detail?: string;
+  phase: LifecyclePhase;
+};
+
+export type ServerEvents = {
+  events: ServerEvent[];
+  last_crash: ServerEvent | null;
+  last_recovery: ServerEvent | null;
+};
+
+export const getServerEvents = cache(
+  (limit = 12): Promise<ServerEvents> =>
+    getJson<ServerEvents>(`/api/server-events?limit=${limit}`)
+);

@@ -1283,6 +1283,8 @@ def _route(path):
         return "det_trend"
     if p == "/api/run-history":
         return "run_history"
+    if p == "/api/server-events":
+        return "server_events"
     if p.startswith("/api/run-stdout"):
         return "run_stdout"
     if p == "/api/health":
@@ -1415,6 +1417,8 @@ class Handler(BaseHTTPRequestHandler):
             self.serve_determinism_trend()
         elif route == "run_history":
             self.serve_run_history()
+        elif route == "server_events":
+            self.serve_server_events()
         elif route == "run_stdout":
             self.serve_run_stdout()
         elif route == "health":
@@ -1621,6 +1625,24 @@ class Handler(BaseHTTPRequestHandler):
                 refs_trend = {"error": "refs trend unavailable"}
         self._send(200, json.dumps({"history": history, "refs_trend": refs_trend},
                                    ensure_ascii=False, separators=(",", ":")),
+                   content_type="application/json; charset=utf-8")
+
+    def serve_server_events(self):
+        """Yaşam-döngüsü olay-kaydı + çökme/kurtarma özeti.
+
+        Pano buradan okur (bkz. apps/dashboard-next/app/LifecyclePanel.tsx).
+        `limit` query'si son-N satır; yoksa tam liste (dosya küçük — olay
+        başına ~150 bayt, günlük 100'lerce satır değil).
+        """
+        q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+        limit = None
+        try:
+            limit = int((q.get("limit") or [""])[0])
+        except ValueError:
+            limit = None
+        payload = _classify_lifecycle(_read_server_events(limit))
+        self._send(200, json.dumps(payload, ensure_ascii=False,
+                                   separators=(",", ":")),
                    content_type="application/json; charset=utf-8")
 
     def serve_override_trend(self):
@@ -1939,6 +1961,106 @@ def _lifecycle_event(event, detail=""):
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
     except OSError:
         pass
+
+
+def _classify_lifecycle(records):
+    """Olay-kaydını çökme/kurtarma özeti olarak yorumla (saf fonksiyon).
+
+    Sözleşme bkz. docs/SERVER_EVENT_LOG.md:
+      - `signal_exit` + hemen-ardından `shutdown` = normal graceful kapanış.
+      - Bir pid'in `start`'ından sonra ne `signal_exit` ne `shutdown` gelmiş
+        ve sonradan BAŞKA bir pid başlamışsa o süreç **sinyalsiz ölmüştür**
+        (çökme). Dosya bunu kalıcı olarak kanıtlar.
+      - `cache_loaded` = kurtarma: yeniden başlatma önbellekten son-run
+        durumunu geri yükledi.
+
+    Neden burada, panelde değil: çökme kararı tek satırlık bir renk tercihi
+    değil, kaydın BÜTÜNÜ üzerinden yapılan bir tümevarım (pid'ler arası
+    sıraya bakar). İki ayrı tüketici (pano + API) aynı sonuca varmalı —
+    tümevarım tek yerde yaşar.
+
+    Yorumlayıcı asla hata fırlatmaz: bozuk/eksik kayıt okuyucuyu düşürmez.
+    """
+    events, by_pid = [], {}
+    for rec in records or []:
+        if not isinstance(rec, dict):
+            continue
+        pid = rec.get("pid")
+        name = rec.get("event")
+        if not isinstance(name, str) or not name:
+            continue
+        events.append(rec)
+        if isinstance(pid, int):
+            by_pid.setdefault(pid, []).append(name)
+
+    # Sinyalsiz ölen pid'ler: start var, kapanış yok — ve sonradan başka
+    # bir pid başlamış (yoksa süreç hâlâ AYAKTA demektir).
+    pids = []
+    for rec in events:
+        pid = rec.get("pid")
+        if isinstance(pid, int) and pid not in pids:
+            pids.append(pid)
+    crashed = set()
+    for pid, names in by_pid.items():
+        if "start" not in names:
+            continue
+        if "shutdown" in names or "signal_exit" in names:
+            continue
+        if pid is not pids[-1]:
+            crashed.add(pid)
+
+    def _phase(rec):
+        name = rec.get("event")
+        if name == "start":
+            return "crash" if rec.get("pid") in crashed else "start"
+        if name == "cache_loaded":
+            return "recovery"
+        if name in ("signal_exit", "shutdown"):
+            return "graceful"
+        return "unknown"
+
+    out = []
+    for rec in events:
+        row = dict(rec)
+        row["phase"] = _phase(rec)
+        out.append(row)
+    out.reverse()  # en-yeni üstte — pano "son olaylar" der
+
+    def _last(phase):
+        for row in out:
+            if row.get("phase") == phase:
+                return row
+        return None
+
+    return {"events": out,
+            "last_crash": _last("crash"),
+            "last_recovery": _last("recovery")}
+
+
+def _read_server_events(limit=None):
+    """Olay-kaydını satır-satır oku; geçersiz satırı ATLA (dosyayı bozma).
+
+    Kayıt append-only ve yazıcı her hatayı yutuyor; okuyucu da aynı
+    toleransla çalışmalı — tek bozuk satır paneli düşürmemeli.
+    """
+    if not SERVER_EVENTS_PATH or not os.path.isfile(SERVER_EVENTS_PATH):
+        return []
+    rows = []
+    try:
+        with open(SERVER_EVENTS_PATH, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(rec, dict):
+                    rows.append(rec)
+    except OSError:
+        return []
+    return rows[-limit:] if limit and limit > 0 else rows
 
 
 def main():

@@ -232,5 +232,85 @@ class TestCrashRecoveryRealProcess(unittest.TestCase):
         self.assertEqual(ts, sorted(ts))
 
 
+class TestLifecycleSummary(unittest.TestCase):
+    """Çökme/kurtarma TÜMEVARIMI — pano buradan okuyor.
+
+    Karar renk tercihi değil, kaydın bütünü üzerinden pid'ler arası sıraya
+    bakar (bkz. docs/SERVER_EVENT_LOG.md). Tümevarım tek yerde yaşar diye
+    panelde değil preview_server._classify_lifecycle'da; bu testler o
+    sözleşmeyi pinler.
+    """
+
+    @staticmethod
+    def _rec(event, pid, detail=None, ts="2026-09-22T18:36:57.084381Z"):
+        r = {"ts": ts, "event": event, "pid": pid}
+        if detail is not None:
+            r["detail"] = detail
+        return r
+
+    def test_silent_death_is_a_crash(self):
+        """start var, kapanış yok, sonra BAŞKA pid başladı → çökme."""
+        recs = [self._rec("start", 1), self._rec("start", 2)]
+        out = ps._classify_lifecycle(recs)
+        self.assertIsNotNone(out["last_crash"])
+        self.assertEqual(out["last_crash"]["pid"], 1)
+        self.assertEqual(out["last_crash"]["phase"], "crash")
+
+    def test_still_running_last_process_is_not_a_crash(self):
+        """Tek pid ve kapanış yoksa süreç AYAKTADIR — çökme değil."""
+        out = ps._classify_lifecycle([self._rec("start", 7)])
+        self.assertIsNone(out["last_crash"])
+        self.assertEqual(out["events"][0]["phase"], "start")
+
+    def test_graceful_close_is_not_a_crash(self):
+        recs = [self._rec("start", 1), self._rec("signal_exit", 1,
+                                                 detail="signum=15"),
+                self._rec("shutdown", 1)]
+        out = ps._classify_lifecycle(recs)
+        self.assertIsNone(out["last_crash"])
+        self.assertEqual([r["phase"] for r in out["events"]],
+                         ["graceful", "graceful", "start"])
+
+    def test_recovery_is_cache_loaded(self):
+        recs = [self._rec("start", 1), self._rec("shutdown", 1),
+                self._rec("cache_loaded", 2, detail="verdict=PASS"),
+                self._rec("start", 2)]
+        out = ps._classify_lifecycle(recs)
+        self.assertIsNotNone(out["last_recovery"])
+        self.assertEqual(out["last_recovery"]["phase"], "recovery")
+        self.assertEqual(out["last_recovery"]["pid"], 2)
+
+    def test_events_are_newest_first(self):
+        recs = [self._rec("start", 1, ts="2026-09-22T18:36:56Z"),
+                self._rec("shutdown", 1, ts="2026-09-22T18:36:57Z")]
+        out = ps._classify_lifecycle(recs)
+        self.assertEqual([r["event"] for r in out["events"]],
+                         ["shutdown", "start"])
+
+    def test_garbage_records_never_break_the_classifier(self):
+        """Okuyucu bozuk kaydı ATLA ve devam et — pano tek satır yüzünden
+        düşmemeli (yazıcı da her hatayı yutuyor, aynı tolerans)."""
+        recs = [None, "düz metin", 42, {}, {"ts": "x"},
+                {"event": ""},
+                self._rec("start", 1),
+                {"ts": "y", "event": "start", "pid": "sayı-değil"}]
+        out = ps._classify_lifecycle(recs)
+        # 8 girdiden yalnız 2'si geçerli kayıt: adı olmayan/boş adlı
+        # ({} , {"ts":"x"}, {"event":""}) ve dizi-olmayanlar elenir;
+        # bozuk pid'li kayıt KALIR — gerçek veridir, yalnız pid'i okunmaz.
+        self.assertEqual(len(out["events"]), 2)
+        self.assertEqual([r["event"] for r in out["events"]],
+                         ["start", "start"])
+        self.assertIsNone(out["last_crash"])
+
+    def test_classifier_never_raises(self):
+        for bad in (None, [], [{}], ["x"], [{"event": 5, "pid": {}}]):
+            with self.subTest(bad=bad):
+                out = ps._classify_lifecycle(bad)
+                self.assertIn("events", out)
+                self.assertIn("last_crash", out)
+                self.assertIn("last_recovery", out)
+
+
 if __name__ == "__main__":
     unittest.main()
