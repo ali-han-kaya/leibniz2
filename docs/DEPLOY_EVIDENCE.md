@@ -11,6 +11,21 @@
 | 2026-10-05 | 0669254 | [failure #37359402781](https://github.com/ali-han-kaya/leibniz2/actions/runs/37359402781) | [failure #37359402752](https://github.com/ali-han-kaya/leibniz2/actions/runs/37359402752) | [success #37359402738](https://github.com/ali-han-kaya/leibniz2/actions/runs/37359402738) | [success #37324916028](https://github.com/ali-han-kaya/leibniz2/actions/runs/37324916028) |
 | 2026-10-05 | e2db1f4 | [failure #37377743878](https://github.com/ali-han-kaya/leibniz2/actions/runs/37377743878) | [failure #37377744058](https://github.com/ali-han-kaya/leibniz2/actions/runs/37377744058) | [success #37377743929](https://github.com/ali-han-kaya/leibniz2/actions/runs/37377743929) | [success #37324916028](https://github.com/ali-han-kaya/leibniz2/actions/runs/37324916028) |
 | 2026-10-05 | 9f94f09 | [failure #37385149781](https://github.com/ali-han-kaya/leibniz2/actions/runs/37385149781) | [failure #37385150253](https://github.com/ali-han-kaya/leibniz2/actions/runs/37385150253) | [success #37385150040](https://github.com/ali-han-kaya/leibniz2/actions/runs/37385150040) | [success #37324916028](https://github.com/ali-han-kaya/leibniz2/actions/runs/37324916028) |
+| 2026-10-06 | f3ebc30 | [failure #37397161525](https://github.com/ali-han-kaya/leibniz2/actions/runs/37397161525) | [failure #37397161744](https://github.com/ali-han-kaya/leibniz2/actions/runs/37397161744) | [success #37397161675](https://github.com/ali-han-kaya/leibniz2/actions/runs/37397161675) | [success #37324916028](https://github.com/ali-han-kaya/leibniz2/actions/runs/37324916028) |
+
+`f3ebc30` — dört **anlamlı** commit birikimi (`84b1cc9` RCA sınıf-kanonları,
+`d60e64a` olay-kaydı + signum onarımı, `78f0a86` yaşam-döngüsü paneli +
+`/api/server-events`, `cfaa0c9` olay-kaydı rotasyonu) toleransı (3) aştı; satır bu
+açığı kapatıyor — kapı tam olarak tasarlandığı gibi engelledi. `verify-delivery`
+kırmızısı **yalnız** `test_deploy_evidence.test_cli_accepts_repo_ledger_offline`
+(2843 testin tek FAIL'i) + bilinen advisory `Live CI doc↔GitHub sync audit`;
+`docker-security` kırmızısı `libpcre2-8-0` **CVE-2026-103111** (PR #82);
+`test-smoke` yeşil. `determinism-trend` hücresi son haftalık ölçümü taşır
+(`#37324916028`, sha `d21d3f1`) — cron bu HEAD'den sonra koşmadı.
+
+Bu turda rotasyon politikasının canlı kanıtı ayrıca alındı (150 B tavanlı gerçek
+daemon: 3 arşiv, 7 kayıt doğru kronolojik sırada, `last_crash: None` — sahte
+çökme yok); ayrıntı `docs/SERVER_EVENT_LOG.md`.
 
 `9f94f09` — dört adet `docs(…)` commit'i: olay kaydı INC-5 + INC-6,
 bekleyen kırmızılar tablosu, recovery patch köken belgesi.
