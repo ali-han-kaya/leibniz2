@@ -586,6 +586,8 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-06 | docs | (incident) INC-5 — PyYAML yokken sureci olduren SystemExit tuzagi | [`8201fbd`](https://github.com/ali-han-kaya/leibniz2/commit/8201fbd) |
 | 2026-10-05 | docs | (deploy) RCA duzeltmeleri icin kanit-defteri satiri ekle | [`1008538`](https://github.com/ali-han-kaya/leibniz2/commit/1008538) |
 | 2026-10-06 | chore | (changelog) sinif-kanonlari satirini tabloya ekle | [`d33a09f`](https://github.com/ali-han-kaya/leibniz2/commit/d33a09f) |
+| 2026-10-06 | chore | (changelog) olay-kaydi + signum onarimi satirini tabloya ekle | [`3e3b074`](https://github.com/ali-han-kaya/leibniz2/commit/3e3b074) |
+| 2026-10-06 | feat | (server) yasam-dongusu olay-kaydi + signum imza onarimi | [`d60e64a`](https://github.com/ali-han-kaya/leibniz2/commit/d60e64a) |
 
 ### Regresyon notları
 
