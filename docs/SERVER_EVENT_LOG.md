@@ -15,7 +15,8 @@ ilişkisi kaybolur. İlk olay-kaydı bu boşluğu kapatır:
 
 - Daemon'ın kendi std-akışına bağımlı değildir (doğrudan diske yazar).
 - Append-only: yeniden başlatmalar önceki kayıtları **asla ezmez**
-  (`history.jsonl` aksine HISTORY_MAX ile buda).
+  (`history.jsonl` aksine HISTORY_MAX ile buda). Boyut tavanı aşılınca dosya
+  arşive taşınır — silinmez (bkz. rotasyon politikası).
 - Telemetri servisi değildir: yazım her koşulda sessizce başarısız olabilir,
   sunucu-yüzeyi asla etkilenmez.
 
@@ -27,6 +28,9 @@ ilişkisi kaybolur. İlk olay-kaydı bu boşluğu kapatır:
 | Biçim | JSONL — her satır bağımsız JSON |
 | Yazar | `preview_server._lifecycle_event()` |
 | Yazım-semantiği | append (`"a"`); mevcut dosya truncate edilmez |
+| Arşiv | `PREVIEW_DIR/logs/archive/server_events-<UTC-stamp>.jsonl` |
+| Boyut tavanı | `SERVER_EVENTS_MAX_BYTES` = 256 KiB (aşılınca arşive taşınır) |
+| Arşiv tavanı | `SERVER_EVENTS_ARCHIVES_MAX` = 5 (en eski arşiv budanır) |
 
 Her satır: `{"ts": ISO-8601-UTC (Z), "event": str, "pid": int, "detail"?: str}`
 
@@ -72,9 +76,66 @@ Bu çıktı iki boşluğu gösterir: kanıt dış-dosyada tutuluyordu (daemon-d�
 yüzey) ve `signum` alanı aslında **frame nesnesi**ydi (aşağıda). Olay-kaydı
 her iki boşluğu da kapatır.
 
+## Rotasyon politikası (boyut tavanı + arşiv)
+
+Append-only kayıt sınırsız büyüyemez: aylarca yaşayan bir daemon tek dosyayı
+disk-şişmesine çevirir ve panelin okuduğu kuyruğu seyreltir. Politika iki
+global ile yönetilir (`preview_server.py`):
+
+| Karar | Kural | Neden |
+|---|---|---|
+| Tetik | geçerli dosya `SERVER_EVENTS_MAX_BYTES` (256 KiB) aşılınca | görünür tavan; daemon başına sabit disk maliyeti |
+| Eylem | dosya `logs/archive/server_events-<UTC-stamp>.jsonl` adına **`os.replace` ile taşınır** | rename atomiktir; truncate DEĞİL — append-only sözü bozulmaz |
+| Saklama | en yeni `SERVER_EVENTS_ARCHIVES_MAX` (5) arşiv; eskisi silinir | üst sınır ≈ 1.5 MiB (6 × 256 KiB) |
+| Ad sırası | sabit-genişlikli UTC stamp | lexicographic sıra = kronolojik sıra (budama + okuma bu sıraya güvenir) |
+| Okuma | `_read_server_events` **arşivler → geçerli dosya** sırasıyla okur | çökme kanıtı rotasyondan sonra da görünür kalır |
+
+### Neden "önce yaz, sonra döndür"
+
+Döndürme yazımdan SONRA çağrılır. Ters sıra (önce döndür, sonra yaz), tam o
+pencerede ölen sürecin yazılmakta olan kaydını yok ederdi — ve o kayıt çoğu
+kez `signal_exit`/`shutdown`'dır. Yani emniyet için eklenen mekanizma PANELDE
+SAHTE ÇÖKME üretirdi (kapanışı düşen süreç "sinyalsiz öldü" görünür). Kayıt
+önce diske iner, sonra taşınır: hiçbir olay rotasyon yüzünden kaybolmaz.
+
+### Neden tek dev kayıt döndürülmez
+
+Tek başına tavanı aşan bir kayıt (aşırı uzun `detail`) döndürülmez: aksi
+halde her yazım yeni bir arşiv doğurur, budama da onu bir sonraki yazımda
+silerek tüm geçmişi yok ederdi. Dev kayıt yerinde kalır; tavan ancak
+arkasına İKİNCİ satır gelince işler.
+
+### Canlı kanıt: rotasyon (2026-10-06)
+
+Gerçek daemon, tavan kanıt için 150 bayta çekilerek iki kez koşuldu
+(start → SIGTERM → yeniden başlatma). Dosya düzeni:
+
+```
+logs/server_events.jsonl                     72 B  (yalnız son kayıt)
+logs/archive/server_events-20261006T005017995887Z.jsonl   206 B
+logs/archive/server_events-20261006T005019098586Z.jsonl   210 B
+logs/archive/server_events-20261006T005019303146Z.jsonl   206 B
+```
+
+Geçerli dosya: son `shutdown`. Arşivlerde ise tüm çökme-öncesi durum:
+
+```jsonl
+{"event": "start",       "pid": 6319, "detail": "bind=127.0.0.1 port=18992"}
+{"event": "signal_exit", "pid": 6319, "detail": "signum=15"}
+{"event": "shutdown",    "pid": 6319}
+{"event": "cache_loaded", "pid": 6330, "detail": "verdict=FAIL ts=…"}
+{"event": "start",       "pid": 6330, "detail": "bind=127.0.0.1 port=18992"}
+{"event": "signal_exit", "pid": 6330, "detail": "signum=15"}
+```
+
+Okuyucu (`_read_server_events`, arşivler → geçerli) rotasyon SONRASI 7 kaydı
+doğru kronolojik sırayla döndürdü ve tümevarım **sahte çökme üretmedi**
+(`last_crash: None`, `last_recovery: recovery`). Yani: kayıt kaybolmadı,
+kanıt arşivde yaşadı, "önce yaz sonra döndür" kararı sahada doğrulandı.
+
 ## Sözleşme-süiti
 
-`_calisma/CIKTI/test_server_events.py` (8 test, hermetik, ~0.35s):
+`_calisma/CIKTI/test_server_events.py` (22 test, hermetik, ~0.4s):
 
 | Test | Sözleşme |
 |---|---|
@@ -86,6 +147,8 @@ her iki boşluğu da kapatır.
 | `test_01_start_recorded` | gerçek alt-süreç `start` yazar (pid eşleşmesi) |
 | `test_02_sigterm_writes_signal_exit` | SIGTERM → `signal_exit` kayıtta, `shutdown`'dan önce |
 | `test_03_restart_recovery_appends_start_cache_loaded` | kurtarma: ikinci süreç append yapar, ts-monoton |
+| `TestLifecycleSummary` (7 test) | çökme/kurtarma tümevarımı: sinyalsiz ölüm, graceful, recovery, sıra, garbage toleransı |
+| `TestServerEventRotation` (7 test) | tavan/arşiv/budama + kayıpsızlık; tek-dev-kayıt koruması; arşiv-içi çökme kanıtı; arşiv kurulamazsa yazım sürer |
 
 Canlı-testler preview_server.py'yi **stub verify-dir** ile koşar
 (`--interval 3600`): gerçek verify-zinciri koşulursa verify-loop thread'i
@@ -107,6 +170,9 @@ beri var olduğunu doğrular.
 tail -20 "$HOME/Library/Caches/com.freebuff/preview/logs/server_events.jsonl"
 # veya yerel PREVIEW_DIR'e göre:
 tail -20 _calisma/CIKTI/logs/server_events.jsonl
+# rotasyondan sonra eski kayıtlar arşivde yaşar:
+ls -1 _calisma/CIKTI/logs/archive/
+tail -20 _calisma/CIKTI/logs/archive/server_events-*.jsonl
 ```
 
 Satırlar ts-monoton; `signal_exit` + hemen-ardından `shutdown` normal

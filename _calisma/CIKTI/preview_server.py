@@ -166,6 +166,8 @@ HISTORY_PATH = None             # main()'de set edilir; JSONL trend dosyası
 HISTORY_MAX = 100               # disk'te tutulacak en son run sayısı
 RUNS_DIR = None                 # main()'de set edilir; run logları (stdout+stderr) dizini
 SERVER_EVENTS_PATH = None       # main()'de set edilir; yaşam-döngüsü olay-kaydı (append-only)
+SERVER_EVENTS_MAX_BYTES = 256 * 1024   # tek dosya tavanı — aşılırsa arşive taşınır
+SERVER_EVENTS_ARCHIVES_MAX = 5         # disk'te tutulacak en son arşiv sayısı
 RUN_LOG_MAX = 20                 # disk'te tutulacak + replay edilecek en son run sayısı
 SSE_POLL_TIMEOUT = 15            # SSE q.get(timeout=...) — keepalive periyodu (saniye)
 REFS_TREND_PATH = None           # main()'de set edilir; refs-trend.json yolu
@@ -1945,7 +1947,8 @@ def _lifecycle_event(event, detail=""):
 
     Telemetri servisi DEĞİL: hiçbir hata sunucu-yüzeyini düşürmez — her
     başarısızlık sessizce yutulur (yazılamaz dizin, bozuk mevcut dosya).
-    Append-only: mevcut dosya asla ezilmez/truncate edilmez.
+    Append-only: mevcut dosya asla ezilmez/truncate edilmez — tavan
+    aşıldığında dosya arşive TAŞINIR (bkz. _rotate_server_events); silinmez.
     """
     if not SERVER_EVENTS_PATH:
         return
@@ -1959,8 +1962,110 @@ def _lifecycle_event(event, detail=""):
             os.makedirs(d, exist_ok=True)
         with open(SERVER_EVENTS_PATH, "a", encoding="utf-8") as f:
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        _rotate_server_events()  # tavan aşıldıysa YAZIMDAN SONRA arşive taşı
     except OSError:
         pass
+
+
+# ── Olay-kaydı rotasyon politikası ──────────────────────────────────────────
+# Kayıt append-only'dir, ama sınırsız büyüyemez: aylarca yaşayan bir daemon
+# tek dosyayı disk-şişmesine çevirir ve panelin okuduğu kuyruğu seyreltir.
+# Politika: dosya SERVER_EVENTS_MAX_BYTES'i aşınca geçerli dosya `archive/`
+# altına TAŞINIR (rename — truncate DEĞİL) ve yenisi kendiliğinden açılır;
+# arşivler SERVER_EVENTS_ARCHIVES_MAX ile sınırlanır (en eski atılır).
+# Okuyucu arşivleri de tarar: çökme kanıtı rotasyondan sonra da görünür kalır.
+
+
+def _server_events_archive_dir():
+    """Arşiv dizini: geçerli kaydın kardeşi (`logs/archive`)."""
+    d = os.path.dirname(SERVER_EVENTS_PATH or "")
+    return os.path.join(d, "archive") if d else ""
+
+
+def _file_line_count(path):
+    """Dosyadaki satır sayısı (rotasyon kararının nadir kolu için)."""
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            return sum(1 for _ in f)
+    except OSError:
+        return 0
+
+
+def _prune_server_event_archives(archive_dir):
+    """Arşivleri SERVER_EVENTS_ARCHIVES_MAX ile sınırla (en eskiyi at)."""
+    try:
+        files = sorted(f for f in os.listdir(archive_dir)
+                       if f.startswith("server_events-") and f.endswith(".jsonl"))
+    except OSError:
+        return
+    while len(files) > SERVER_EVENTS_ARCHIVES_MAX:
+        try:
+            os.remove(os.path.join(archive_dir, files.pop(0)))
+        except OSError:
+            pass
+
+
+def _rotate_server_events():
+    """Tavan aşıldıysa geçerli kaydı arşive taşı; döner: bool (arşivlendi mi).
+
+    Sıra önemli: rotasyon YAZIMDAN SONRA çağrılır. Ters sıra (önce döndür,
+    sonra yaz) yazılmakta olan kaydı bir an "yok" bırakırdı; tam o anda
+    ölürsek kaybolan kayıt çoğu kez `signal_exit`/`shutdown` olurdu — yani
+    döndürme mekanizması PANELDE SAHTE ÇÖKME üretirdi. Kayıt önce diske iner,
+    sonra taşınır: hiçbir olay rotasyon yüzünden kaybolmaz.
+
+    Tek dev kayıt (tek başına tavanı aşan satır) döndürülmez: aksi halde her
+    yazımda bir arşiv doğar ve budama kısa sürede tüm geçmişi silerdi.
+
+    Arşiv adı `server_events-<UTC-stamp>.jsonl`; sabit-genişlikli stamp
+    sayesinde lexicographic sıra = kronolojik sıra (budama ve okuma bu sıraya
+    güvenir).
+    """
+    path = SERVER_EVENTS_PATH
+    archive_dir = _server_events_archive_dir()
+    if not path or not archive_dir or not os.path.isfile(path):
+        return False
+    try:
+        if os.path.getsize(path) <= SERVER_EVENTS_MAX_BYTES:
+            return False
+        if _file_line_count(path) <= 1:
+            return False
+        os.makedirs(archive_dir, exist_ok=True)
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+        dst = os.path.join(archive_dir, f"server_events-{stamp}.jsonl")
+        n = 1
+        while os.path.exists(dst):  # aynı mikrosaniye: çakışmayı kır
+            dst = os.path.join(archive_dir, f"server_events-{stamp}-{n}.jsonl")
+            n += 1
+        os.replace(path, dst)  # atomik: yarım dosya asla okunmaz
+        _prune_server_event_archives(archive_dir)
+        return True
+    except OSError:
+        return False  # telemetri: hata sunucu-yüzeyini düşürmez
+
+
+def _server_event_sources():
+    """Okuma kaynakları ESKİDEN-YENİYE: arşivler (stamp sıralı) → geçerli dosya.
+
+    Çökme tümevarımı (`_classify_lifecycle`) pid'ler arası sıraya bakar; bir
+    çökme kaydı arşivde kalmışsa panel onu göremezdi. Okuma bu yüzden tek
+    dosyayla sınırlı değildir — rotasyon kanıtı körleştirmez.
+    """
+    path = SERVER_EVENTS_PATH
+    if not path:
+        return []
+    sources = []
+    archive_dir = _server_events_archive_dir()
+    if archive_dir and os.path.isdir(archive_dir):
+        try:
+            for fn in sorted(os.listdir(archive_dir)):
+                if fn.startswith("server_events-") and fn.endswith(".jsonl"):
+                    sources.append(os.path.join(archive_dir, fn))
+        except OSError:
+            pass
+    if os.path.isfile(path):
+        sources.append(path)
+    return sources
 
 
 def _classify_lifecycle(records):
@@ -2040,26 +2145,28 @@ def _classify_lifecycle(records):
 def _read_server_events(limit=None):
     """Olay-kaydını satır-satır oku; geçersiz satırı ATLA (dosyayı bozma).
 
+    Kaynaklar `_server_event_sources()`: arşivler eskiden-yeniye, sonra
+    geçerli dosya — rotasyon çökme kanıtını görünmez kılmaz.
+
     Kayıt append-only ve yazıcı her hatayı yutuyor; okuyucu da aynı
     toleransla çalışmalı — tek bozuk satır paneli düşürmemeli.
     """
-    if not SERVER_EVENTS_PATH or not os.path.isfile(SERVER_EVENTS_PATH):
-        return []
     rows = []
-    try:
-        with open(SERVER_EVENTS_PATH, encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    rec = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if isinstance(rec, dict):
-                    rows.append(rec)
-    except OSError:
-        return []
+    for src in _server_event_sources():
+        try:
+            with open(src, encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        rec = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if isinstance(rec, dict):
+                        rows.append(rec)
+        except OSError:
+            continue  # bir kaynak okunamazsa kalanlarla devam et
     return rows[-limit:] if limit and limit > 0 else rows
 
 
