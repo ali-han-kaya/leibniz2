@@ -585,6 +585,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-06 | docs | (incident) INC-6 — iptal edilen isleri temiz sayan fail-open tablo | [`4fc9313`](https://github.com/ali-han-kaya/leibniz2/commit/4fc9313) |
 | 2026-10-06 | docs | (incident) INC-5 — PyYAML yokken sureci olduren SystemExit tuzagi | [`8201fbd`](https://github.com/ali-han-kaya/leibniz2/commit/8201fbd) |
 | 2026-10-05 | docs | (deploy) RCA duzeltmeleri icin kanit-defteri satiri ekle | [`1008538`](https://github.com/ali-han-kaya/leibniz2/commit/1008538) |
+| 2026-10-06 | chore | (changelog) sinif-kanonlari satirini tabloya ekle | [`d33a09f`](https://github.com/ali-han-kaya/leibniz2/commit/d33a09f) |
 
 ### Regresyon notları
 
