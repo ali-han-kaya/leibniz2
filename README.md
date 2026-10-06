@@ -592,6 +592,8 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-06 | chore | (changelog) d60e64a + 3e3b074 satirlarini tabloya ekle | [`4230048`](https://github.com/ali-han-kaya/leibniz2/commit/4230048) |
 | 2026-10-06 | feat | (server) olay-kaydi rotasyonu — boyut tavani + arsiv | [`cfaa0c9`](https://github.com/ali-han-kaya/leibniz2/commit/cfaa0c9) |
 | 2026-10-06 | chore | (changelog) 78f0a86 satirini tabloya ekle | [`63eca47`](https://github.com/ali-han-kaya/leibniz2/commit/63eca47) |
+| 2026-10-06 | docs | (deploy) f3ebc30 icin kanit-defteri satiri ekle | [`7a3ba80`](https://github.com/ali-han-kaya/leibniz2/commit/7a3ba80) |
+| 2026-10-06 | chore | (changelog) cfaa0c9 satirini tabloya ekle | [`f3ebc30`](https://github.com/ali-han-kaya/leibniz2/commit/f3ebc30) |
 
 ### Regresyon notları
 
