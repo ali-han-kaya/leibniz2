@@ -17,6 +17,12 @@ permissions:
   pull-requests: write
   actions: read
 
+concurrency:
+  # CI-hijyen: RCA yorum koşumları aynı anda çalışmasın (marker-upsert yarışı).
+  # cancel-in-progress YOK: her kırmızı koşumun yorumu düşmeli — iptal kanıt kaybı.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   rca:
     # Yalnız kırmızı koşumlarda çalışır; yeşilde bayat yorum temizlenmez

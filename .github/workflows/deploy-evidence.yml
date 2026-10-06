@@ -14,6 +14,12 @@ permissions:
   contents: read
   actions: read
 
+concurrency:
+  # CI-hijyen: haftalık kanıt-tazelik koşumu üst üste binemez; yeni koşum
+  # eskisini iptal eder (aynı kapı, aynı ölçüm — çift kayıt yok).
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   freshness:
     name: Deploy evidence freshness gate (fail-closed)
