@@ -1,0 +1,124 @@
+% ============================================================
+%  INCIDENTAL PROOF — THE PLATE BOOK
+%  Coffee-table assembly: frontispiece + plates 01-05 + colophon.
+%  Pages: 180x225mm (4:5), seven leaves. Same three-voice palette
+%  (paper/fathom/verm). Fonts: Big Shoulders + Geist Mono [OFL].
+%
+%  Build (deterministic; SOURCE_DATE_EPOCH fixes the PDF ID):
+%    SOURCE_DATE_EPOCH=1700000000 tectonic -X compile \
+%      incidental_proof_book.tex --outdir <outdir>
+%  Run from _calisma/CIKTI/canvas (fonts resolve via Path=).
+% ============================================================
+\documentclass[12pt]{article}
+\pagestyle{empty}
+\usepackage[margin=0pt,paperwidth=180mm,paperheight=225mm]{geometry}
+\usepackage{tikz}
+\usepackage{fontspec}
+\setmainfont{BigShoulders.ttf}[Path=]
+\setmonofont{GeistMono.ttf}[Path=]
+\usepackage{xcolor}
+\definecolor{paper}{HTML}{F2EBD9}
+\definecolor{fathom}{HTML}{1B2A41}
+\definecolor{verm}{HTML}{C1440E}
+\definecolor{fathom40}{HTML}{8E97A8}
+\definecolor{fathom25}{HTML}{B4BAC7}
+\definecolor{fathom12}{HTML}{D8DCE2}
+
+% ---- plate inclusion (full-bleed, one page each) -------------
+\newcommand{\platepage}[1]{%
+  \begin{tikzpicture}[remember picture,overlay, x=1mm, y=1mm]
+    \begin{scope}[shift={(current page.south west)}]
+      \node[anchor=south west, inner sep=0pt] at (0,0)
+        {\includegraphics[width=180mm,height=225mm]{#1}};
+    \end{scope}
+  \end{tikzpicture}%
+  \clearpage
+}
+
+\begin{document}
+
+% ============ LEAF 1 — FRONTISPIECE ==========================
+\begin{tikzpicture}[remember picture,overlay, x=1mm, y=1mm]
+  \begin{scope}[shift={(current page.south west)}]
+    \fill[paper] (0,0) rectangle (180,225);
+    % single vermilion hairline across the field of paper —
+    % the whole philosophy in one stroke: structure bent, once.
+    \draw[verm,line width=0.7pt] (24,148)
+      .. controls (70,148) and (104,146.4) .. (122,143)
+      .. controls (130,141.4) .. (156,142);
+    \draw[fathom,line width=0.9pt] (24,147.6) -- (156,147.6);
+    % witness tick at the bend
+    \draw[verm,line width=0.9pt] (122,141) -- (122,145);
+    \node[anchor=north, text=verm, font=\ttfamily\fontsize{4.8}{5.8}\selectfont]
+      at (122,140.4) {(122.0, 143.0)};
+
+    \node[anchor=north west, text=fathom, font=\fontsize{30}{32}\selectfont, align=left]
+      at (22,106) {INCIDENTAL\\ PROOF};
+    \node[anchor=north west, text=fathom40, font=\ttfamily\fontsize{6.4}{8.4}\selectfont, align=left]
+      at (22,72) {the geometry of verification\\
+                  the moment a claim stops being believed\\
+                  and starts being measured};
+    % archive corner: series + folio
+    \draw[fathom12,line width=0.5pt] (22,34) -- (158,34);
+    \node[anchor=north west, text=fathom40, font=\ttfamily\fontsize{5.4}{6.8}\selectfont]
+      at (22,31) {THE PLATE BOOK};
+    \node[anchor=north east, text=verm, font=\ttfamily\fontsize{5.4}{6.8}\selectfont]
+      at (158,31) {FOLIO I--V};
+  \end{scope}
+\end{tikzpicture}
+\clearpage
+
+% ============ LEAVES 2-6 — THE PLATES ========================
+\platepage{incidental_proof_canvas.pdf}%   plate 01 — survey of a bent claim
+\platepage{incidental_proof_plate02.pdf}%  plate 02 — a claim in elevation
+\platepage{incidental_proof_plate03.pdf}%  plate 03 — belief, filed
+\platepage{incidental_proof_plate04.pdf}%  plate 04 — a claim, resectioned
+\platepage{incidental_proof_plate05.pdf}%  plate 05 — a claim, closed
+
+% ============ LEAF 7 — COLOPHON ==============================
+\begin{tikzpicture}[remember picture,overlay, x=1mm, y=1mm]
+  \begin{scope}[shift={(current page.south west)}]
+    \fill[paper] (0,0) rectangle (180,225);
+    \node[anchor=north west, text=fathom, font=\fontsize{16}{19}\selectfont]
+      at (22,196) {COLOPHON};
+    \draw[fathom,line width=1.0pt] (22,188) -- (158,188);
+
+    % the five plates, listed like an archive index
+    \node[anchor=north west, text=fathom, font=\ttfamily\fontsize{6.6}{10.5}\selectfont]
+      at (22,178) {PLATE 01~~INCIDENTAL PROOF~~survey of a bent claim};
+    \node[anchor=north west, text=fathom, font=\ttfamily\fontsize{6.6}{10.5}\selectfont]
+      at (22,168) {PLATE 02~~THE RIDGE LINE~~a claim in elevation};
+    \node[anchor=north west, text=fathom, font=\ttfamily\fontsize{6.6}{10.5}\selectfont]
+      at (22,158) {PLATE 03~~LEDGER OF WITNESS~~belief, filed};
+    \node[anchor=north west, text=fathom, font=\ttfamily\fontsize{6.6}{10.5}\selectfont]
+      at (22,148) {PLATE 04~~THE MOVED POINT~~a claim, resectioned};
+    \node[anchor=north west, text=fathom, font=\ttfamily\fontsize{6.6}{10.5}\selectfont]
+      at (22,138) {PLATE 05~~THE TRAVERSE~~a claim, closed};
+
+    % the discipline, restated in three clauses
+    \node[anchor=north west, text=fathom40, font=\ttfamily\fontsize{5.8}{9.2}\selectfont]
+      at (22,120) {Three voices only: paper, fathom, vermilion.};
+    \node[anchor=north west, text=fathom40, font=\ttfamily\fontsize{5.8}{9.2}\selectfont]
+      at (22,111) {Vermilion never decorates; it testifies.};
+    \node[anchor=north west, text=fathom40, font=\ttfamily\fontsize{5.8}{9.2}\selectfont]
+      at (22,102) {The obstruction is never drawn. Only its effect.};
+
+    % production colophon (deterministic build note)
+    \draw[fathom12,line width=0.5pt] (22,84) -- (158,84);
+    \node[anchor=north west, text=fathom40, font=\ttfamily\fontsize{5.2}{8.0}\selectfont]
+      at (22,80) {Set in Big Shoulders and Geist Mono (SIL OFL).};
+    \node[anchor=north west, text=fathom40, font=\ttfamily\fontsize{5.2}{8.0}\selectfont]
+      at (22,71) {Composed in TikZ; fixed by SOURCE\_DATE\_EPOCH,};
+    \node[anchor=north west, text=fathom40, font=\ttfamily\fontsize{5.2}{8.0}\selectfont]
+      at (22,62) {two runs yield the same bytes.};
+    \node[anchor=north west, text=fathom25, font=\ttfamily\fontsize{5.2}{8.0}\selectfont]
+      at (22,49) {Leibniz2 verification series · 2026};
+
+    % closing vermilion tick — the book's own witness mark
+    \draw[verm,line width=0.9pt] (22,30) -- (22,36);
+    \node[anchor=west, text=verm, font=\ttfamily\fontsize{5.0}{6.2}\selectfont]
+      at (26,33) {end of folio};
+  \end{scope}
+\end{tikzpicture}
+
+\end{document}
