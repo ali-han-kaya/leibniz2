@@ -594,6 +594,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-06 | chore | (changelog) 78f0a86 satirini tabloya ekle | [`63eca47`](https://github.com/ali-han-kaya/leibniz2/commit/63eca47) |
 | 2026-10-06 | docs | (deploy) f3ebc30 icin kanit-defteri satiri ekle | [`7a3ba80`](https://github.com/ali-han-kaya/leibniz2/commit/7a3ba80) |
 | 2026-10-06 | chore | (changelog) cfaa0c9 satirini tabloya ekle | [`f3ebc30`](https://github.com/ali-han-kaya/leibniz2/commit/f3ebc30) |
+| 2026-10-07 | feat | (canvas) Incidental Proof plate-book — 6 tex + PDF | [`4ebb0f5`](https://github.com/ali-han-kaya/leibniz2/commit/4ebb0f5) |
 
 ### Regresyon notları
 

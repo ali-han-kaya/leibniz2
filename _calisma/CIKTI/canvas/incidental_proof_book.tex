@@ -1,7 +1,7 @@
 % ============================================================
 %  INCIDENTAL PROOF — THE PLATE BOOK
-%  Coffee-table assembly: frontispiece + plates 01-05 + colophon.
-%  Pages: 180x225mm (4:5), seven leaves. Same three-voice palette
+%  Coffee-table assembly: frontispiece + plates 01-04 + colophon.
+%  Pages: 180x225mm (4:5), six leaves. Same three-voice palette
 %  (paper/fathom/verm). Fonts: Big Shoulders + Geist Mono [OFL].
 %
 %  Build (deterministic; SOURCE_DATE_EPOCH fixes the PDF ID):
@@ -63,19 +63,18 @@
     \node[anchor=north west, text=fathom40, font=\ttfamily\fontsize{5.4}{6.8}\selectfont]
       at (22,31) {THE PLATE BOOK};
     \node[anchor=north east, text=verm, font=\ttfamily\fontsize{5.4}{6.8}\selectfont]
-      at (158,31) {FOLIO I--V};
+      at (158,31) {FOLIO I--IV};
   \end{scope}
 \end{tikzpicture}
 \clearpage
 
-% ============ LEAVES 2-6 — THE PLATES ========================
+% ============ LEAVES 2-5 — THE PLATES ========================
 \platepage{incidental_proof_canvas.pdf}%   plate 01 — survey of a bent claim
 \platepage{incidental_proof_plate02.pdf}%  plate 02 — a claim in elevation
 \platepage{incidental_proof_plate03.pdf}%  plate 03 — belief, filed
-\platepage{incidental_proof_plate04.pdf}%  plate 04 — a claim, resectioned
-\platepage{incidental_proof_plate05.pdf}%  plate 05 — a claim, closed
+\platepage{incidental_proof_plate04.pdf}%  plate 04 — the effect, entered
 
-% ============ LEAF 7 — COLOPHON ==============================
+% ============ LEAF 6 — COLOPHON ==============================
 \begin{tikzpicture}[remember picture,overlay, x=1mm, y=1mm]
   \begin{scope}[shift={(current page.south west)}]
     \fill[paper] (0,0) rectangle (180,225);
@@ -83,7 +82,7 @@
       at (22,196) {COLOPHON};
     \draw[fathom,line width=1.0pt] (22,188) -- (158,188);
 
-    % the five plates, listed like an archive index
+    % the four plates, listed like an archive index
     \node[anchor=north west, text=fathom, font=\ttfamily\fontsize{6.6}{10.5}\selectfont]
       at (22,178) {PLATE 01~~INCIDENTAL PROOF~~survey of a bent claim};
     \node[anchor=north west, text=fathom, font=\ttfamily\fontsize{6.6}{10.5}\selectfont]
@@ -91,9 +90,7 @@
     \node[anchor=north west, text=fathom, font=\ttfamily\fontsize{6.6}{10.5}\selectfont]
       at (22,158) {PLATE 03~~LEDGER OF WITNESS~~belief, filed};
     \node[anchor=north west, text=fathom, font=\ttfamily\fontsize{6.6}{10.5}\selectfont]
-      at (22,148) {PLATE 04~~THE MOVED POINT~~a claim, resectioned};
-    \node[anchor=north west, text=fathom, font=\ttfamily\fontsize{6.6}{10.5}\selectfont]
-      at (22,138) {PLATE 05~~THE TRAVERSE~~a claim, closed};
+      at (22,148) {PLATE 04~~THE CONTOUR LEDGER~~the effect, entered};
 
     % the discipline, restated in three clauses
     \node[anchor=north west, text=fathom40, font=\ttfamily\fontsize{5.8}{9.2}\selectfont]
