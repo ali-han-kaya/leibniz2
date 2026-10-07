@@ -81,10 +81,18 @@ make -f docs/Makefile.texlive pdf       # 3-geçişli derleme + Rerun=0 denetimi
 make -f docs/Makefile.texlive check     # 2×3-geçiş determinism deneyi (fail-closed)
 make -f docs/Makefile.texlive accept    # kanonik hash'i ID_RESIDUAL_ACCEPTANCE defterinde doğrular
 make -f docs/Makefile.texlive engineinfo  # motor kilidi + sözleşme sabitleri (CI log'u için)
+make -f docs/Makefile.texlive plate-book        # Incidental Proof levha kitabı (tectonic, ayrı SDE sabiti)
+make -f docs/Makefile.texlive plate-book-check  # levhalar+kitap: 2× bağımsız SDE koşumu (fail-closed)
 
 # tectonic — paralel yaşam, geri dönüş yolu
 make -f docs/Makefile.tectonic pdf
 ```
+
+Levha kitabı (Incidental Proof) ayrı bir aile sabiti taşır:
+`PLATE_BOOK_EPOCH ?= 1700000000`. Ayrıdır çünkü canvas ailesi
+fontspec/XeTeX sözleşmesiyle tectonic ile derlenir ve el yazmasının
+epoch'u bu PDF'leri yeniden damgalamamalıdır; `plate-book-check` kitabı ve
+derlediği dört levhayı kaynak-başına iki bağımsız koşumla sınar.
 
 Sözleşme: `SOURCE_DATE_EPOCH ?= git log -1 --format=%ct` (geçmiş commit'i
 yeniden üretme), `TEXINPUTS="$TEXDIR//:"`, `TEXMFOUTPUT`/`-output-directory`
@@ -595,6 +603,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-06 | docs | (deploy) f3ebc30 icin kanit-defteri satiri ekle | [`7a3ba80`](https://github.com/ali-han-kaya/leibniz2/commit/7a3ba80) |
 | 2026-10-06 | chore | (changelog) cfaa0c9 satirini tabloya ekle | [`f3ebc30`](https://github.com/ali-han-kaya/leibniz2/commit/f3ebc30) |
 | 2026-10-07 | feat | (canvas) Incidental Proof plate-book — 6 tex + PDF | [`4ebb0f5`](https://github.com/ali-han-kaya/leibniz2/commit/4ebb0f5) |
+| 2026-10-07 | feat | (canvas) levha 04 The Contour Ledger, kitap 6 yaprağa iner | [`e97843b`](https://github.com/ali-han-kaya/leibniz2/commit/e97843b) |
 
 ### Regresyon notları
 
