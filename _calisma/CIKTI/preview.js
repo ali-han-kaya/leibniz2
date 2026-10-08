@@ -1312,8 +1312,16 @@ function scanZ3(line) {
 }
 
 let streamLines = []; // renklendirilmiş HTML satırları (son STREAM_MAX)
+let streamDirty = false; // push'lar arası tek-DOM-yazımı (rAF ile birleştir)
 let liveFindings = []; // canlı akıştan toplanan P0/P1 satırları [{type, line}]
 const STREAM_MAX = 600; // son N run replay edilirken yeterli bağlam kalsın
+function flushStream() {
+  if (!streamDirty) return;
+  streamDirty = false;
+  const el = $("runstream");
+  el.innerHTML = streamLines.join("\n");
+  el.scrollTop = el.scrollHeight;
+}
 function connectStream() {
   const el = $("runstream"),
     st = $("stream-state");
@@ -1335,8 +1343,16 @@ function connectStream() {
     streamLines.push(mark + arrow + colorizeLine(line));
     if (streamLines.length > STREAM_MAX)
       streamLines = streamLines.slice(-STREAM_MAX);
-    el.innerHTML = streamLines.join("\n");
-    el.scrollTop = el.scrollHeight;
+    // Satır-başı innerHTML yerine rAF-birleşik yazım: replay 19k satır
+    // bağlantı-açılışında tek-frame'e iner (QA bulgusu F4, 2026-09-23 —
+    // satır-başı tam-DOM-serileştirme main-thread'i kilitliyordu).
+    // el, connectStream kapsamında kalır: replay-start/replay-end/end
+    // tek-seferlik yazımları doğrudan yapar; flushStream kendi
+    // $("runstream") çözümünü kullanır.
+    if (!streamDirty) {
+      streamDirty = true;
+      requestAnimationFrame(flushStream);
+    }
     // P0/P1 satırlarını canlı findings paneline ekle
     if (
       /^\[P0\]/.test(line) ||
