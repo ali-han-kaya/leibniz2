@@ -140,10 +140,15 @@ clean:
 # pdfTeX bu kaynagi DERLEYEMEZ (olculmustu; canvas kaynagi icin ayri deney
 # betigi tam bu yuzden var). plate-book hedefleri bu nedenle tectonic ile
 # kosar; motor pini tek kaynaktir ve CI'dadir (determinism-trend.yml
-# canvas-determinism job'i: surum + sha256 digest).
+# "Run canvas determinism experiment (plate-book, 5 kaynak)" adimi: surum +
+# sha256 digest — TEK tectonic kurulumu manuscript deneyiyle paylasilir;
+# adim tectonic KURMAZ, calistirir. Kaynak listesi adimin env
+# CANVAS_SOURCES'i asagidaki PLATE_SOURCES + PLATE_BOOK'i BIREBIR kopyalar;
+# iki liste test_trend_schedule_paths anti-drift kapisiyla kilitlenmistir).
 #
 # SDE AILE AYRIMI: el yazmasinin sabiti 1786924800; levha kitabinin sabiti
-# 1700000000 (workflow canvas-determinism job'i ve kanit raporlariyla ayni).
+# 1700000000 (workflow canvas olcum adimi ve kanit raporlariyla ayni;
+# ucu da test_record_determinism_trend ile kilitli).
 # PLATE_BOOK_EPOCH bilerek SOURCE_DATE_EPOCH'tan TURETILMEZ: aksi halde el
 # yazmasi epoch'u canvas PDF'lerini sessizce yeniden damgalar ve
 # commit'lenmis baytlar yeniden uretilemez (el yazmasinda 2026-10-02'de
