@@ -605,6 +605,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-07 | feat | (canvas) Incidental Proof plate-book — 6 tex + PDF | [`4ebb0f5`](https://github.com/ali-han-kaya/leibniz2/commit/4ebb0f5) |
 | 2026-10-07 | feat | (canvas) levha 04 The Contour Ledger, kitap 6 yaprağa iner | [`e97843b`](https://github.com/ali-han-kaya/leibniz2/commit/e97843b) |
 | 2026-10-07 | feat | (canvas) plate-book Makefile hedefleri + SDE determinizm kapisi | [`7fd1a59`](https://github.com/ali-han-kaya/leibniz2/commit/7fd1a59) |
+| 2026-10-08 | fix | (dashboard) mirror frontend deploy seti + stream rAF kilidi | [`9750828`](https://github.com/ali-han-kaya/leibniz2/commit/9750828) |
 
 ### Regresyon notları
 

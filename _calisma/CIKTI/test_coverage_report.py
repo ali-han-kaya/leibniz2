@@ -179,6 +179,7 @@ HOOK_COVERAGE = {
         "test_gen_publish_artifact_list.py",
         "test_gen_repro_manifest_e2e.py",
         "test_history_sources.py",
+        "test_incidental_banner.py",
         "test_k13_coverage_sync.py",
         "test_k9_lean_files_sync.py",
         "test_lean_override_snapshot.py",
