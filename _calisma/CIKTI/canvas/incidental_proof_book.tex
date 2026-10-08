@@ -94,27 +94,41 @@
 
     % the discipline, restated in three clauses
     \node[anchor=north west, text=fathom40, font=\ttfamily\fontsize{5.8}{9.2}\selectfont]
-      at (22,120) {Three voices only: paper, fathom, vermilion.};
+      at (22,130) {Three voices only: paper, fathom, vermilion.};
     \node[anchor=north west, text=fathom40, font=\ttfamily\fontsize{5.8}{9.2}\selectfont]
-      at (22,111) {Vermilion never decorates; it testifies.};
+      at (22,121) {Vermilion never decorates; it testifies.};
     \node[anchor=north west, text=fathom40, font=\ttfamily\fontsize{5.8}{9.2}\selectfont]
-      at (22,102) {The obstruction is never drawn. Only its effect.};
+      at (22,112) {The obstruction is never drawn. Only its effect.};
 
     % production colophon (deterministic build note)
-    \draw[fathom12,line width=0.5pt] (22,84) -- (158,84);
+    \draw[fathom12,line width=0.5pt] (22,96) -- (158,96);
     \node[anchor=north west, text=fathom40, font=\ttfamily\fontsize{5.2}{8.0}\selectfont]
-      at (22,80) {Set in Big Shoulders and Geist Mono (SIL OFL).};
+      at (22,92) {Set in Big Shoulders and Geist Mono (SIL OFL).};
     \node[anchor=north west, text=fathom40, font=\ttfamily\fontsize{5.2}{8.0}\selectfont]
-      at (22,71) {Composed in TikZ; fixed by SOURCE\_DATE\_EPOCH,};
+      at (22,83) {Composed in TikZ; fixed by SOURCE\_DATE\_EPOCH,};
     \node[anchor=north west, text=fathom40, font=\ttfamily\fontsize{5.2}{8.0}\selectfont]
-      at (22,62) {two runs yield the same bytes.};
+      at (22,74) {two runs yield the same bytes.};
     \node[anchor=north west, text=fathom25, font=\ttfamily\fontsize{5.2}{8.0}\selectfont]
-      at (22,49) {Leibniz2 verification series · 2026};
+      at (22,64) {Leibniz2 verification series · 2026};
+
+    % ============ SERIES RECORD ==================================
+    % Seri-kaydı bütünlüğü: baskı, serinin dijital üyesini adreslenebilir
+    % biçimde taşır. Banner tek kaynaktır (canvas/incidental_proof_banner.svg);
+    % dashboard onu .header-decor katmanına gömülü data-URI olarak taşır.
+    % Aşağıdaki sha256 o kaynağın bayt parmak izidir: test_incidental_banner.py
+    % bu kaydı diskteki baytlara kilitler (kaynak değişirse kayıt da yenilenir).
+    \draw[fathom12,line width=0.5pt] (22,55) -- (158,55);
+    \node[anchor=north west, text=fathom, font=\ttfamily\fontsize{5.2}{8.0}\selectfont]
+      at (22,51) {BANNER URL~~https://github.com/ali-han-kaya/leibniz2/blob/main/\_calisma/CIKTI/canvas/incidental\_proof\_banner.svg};
+    \node[anchor=north west, text=fathom40, font=\ttfamily\fontsize{5.2}{8.0}\selectfont]
+      at (22,43) {DASHBOARD~~/preview.html · .header-decor · embedded as data-URI};
+    \node[anchor=north west, text=fathom40, font=\ttfamily\fontsize{5.2}{8.0}\selectfont]
+      at (22,35) {BANNER SHA256~~3a34ae7a5d57aef51051a2bb6288fcfebe62cb67e95e8bf51855273723826f2e};
 
     % closing vermilion tick — the book's own witness mark
-    \draw[verm,line width=0.9pt] (22,30) -- (22,36);
+    \draw[verm,line width=0.9pt] (22,17) -- (22,23);
     \node[anchor=west, text=verm, font=\ttfamily\fontsize{5.0}{6.2}\selectfont]
-      at (26,33) {end of folio};
+      at (26,20) {end of folio};
   \end{scope}
 \end{tikzpicture}
 
