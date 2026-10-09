@@ -2972,6 +2972,10 @@ setInterval(() => {
 
 loadTrend();
 loadOverrideTrend();
+// determinizm paneli bu cagri olmadan hic guncellenmez (2026-10-09:
+// API 6 satir donerken badge "veri yok" — init yuzeyinde tanim var,
+// cagri yoktu; ayni anda sozlesme testi eklendi).
+loadDeterminismTrend();
 connectStream();
 // Run history filtresini başlat (all varsayılan)
 setRhFilter("all");
