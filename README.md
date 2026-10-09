@@ -598,6 +598,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-09 | feat | (vercel) preview statik frontend route'lari + .vercelignore | [`3b33661`](https://github.com/ali-han-kaya/leibniz2/commit/3b33661) |
 | 2026-10-09 | ci | aylik vercel-deploy-check job'i | [`85bc385`](https://github.com/ali-han-kaya/leibniz2/commit/85bc385) |
 | 2026-10-09 | fix | (vercel) vercelignore'a precommit_log zincir istisnasi | [`88cee44`](https://github.com/ali-han-kaya/leibniz2/commit/88cee44) |
+| 2026-10-09 | ci | (vercel) push'ta otomatik preview deploy fallback hatti | [`26d8ca4`](https://github.com/ali-han-kaya/leibniz2/commit/26d8ca4) |
 
 ### Regresyon notları
 

@@ -183,7 +183,7 @@ class TestDockerfileSecurityPatching(unittest.TestCase):
     def test_patch_layer_present_with_cve_ledger_default(self):
         # ARG default'u floor girdisini taşır + defter CVE kimlikleriyle kayıtlı.
         self.assertIn("ARG SECURITY_PATCH_PACKAGES=", self._df)
-        self.assertIn("libpcre2-8-0=10.42-1+deb12u1", self._df)
+        self.assertIn("libpcre2-8-0=10.42-1+deb12u2", self._df)
         self.assertIn("CVE-2026-86145", self._df)
         self.assertIn("CVE-2026-89161", self._df)
 
