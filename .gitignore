@@ -69,3 +69,8 @@ apps/dashboard-next/.next/
 .planning/.active_plan
 .vercel
 .env*
+
+# tarayici-QA arac zinciri (npm) bu dizin/symlink'leri olusturur
+# (sonu '/' olmayan kural: node_modules SYMLINK'i de yakalar —
+# 'beyond a symbolic link' tuzaği, 2026-10-09)
+node_modules

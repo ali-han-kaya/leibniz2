@@ -1341,7 +1341,7 @@ jobs:
         with:
           path: all_artifacts/
           merge-multiple: true
-          pattern: '{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,config,k0-findings,budget-verify,lineage-findings,klayers,unit-tests,action-runtimes,changelog-drift,ci-simulate}'
+          pattern: '{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,config,k0-findings,budget-verify,lineage-findings,klayers,unit-tests,action-runtimes,changelog-drift,ci-simulate,webkit-smoke}'
 
       - name: Download precommit-logs artifact (precommit-logs/ prefix)
         uses: actions/download-artifact@v7
@@ -2727,6 +2727,175 @@ jobs:
             preview_reload_report.json
           if-no-files-found: ignore
           retention-days: 30
+
+  # ──────────────────────────────────────────────────────────────────────
+  # WEBKIT-SMOKE (advisory) — Safari/WebKit-parite dashboard smoke.
+  #
+  # safedriver tabanlı WebKit koşumu (Chromium-only QA'nın parite kanıtı):
+  # Safari'de açılış + ana panel render (#status-board/#m-verdict/#badges,
+  # 2 tab, 13 galeri öğesi, 2 tabpanel, run-history) + sayfa-içi hata
+  # toplayıcıyla console-hata-yok. macOS runner'da Safari + safedriver
+  # mevcut; Remote Automation CI'da `sudo safedriver --enable` ile açılır.
+  # Statik katman her ortamda koşar — live katman safedriver yoksa SKIP
+  # (fail-closed değil; advisory: parite kanıtı macOS'te toplanır).
+  # ──────────────────────────────────────────────────────────────────────
+  webkit-smoke:
+    name: WebKit smoke (advisory, Safari/safedriver)
+    runs-on: macos-latest
+    timeout-minutes: 20
+    needs: [verify]
+    if: always()
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Enable Safari remote automation
+        run: |
+          sudo safedriver --enable 2>&1 | head -5 || true
+
+      - name: Run WebKit dashboard smoke
+        id: smoke
+        continue-on-error: true
+        run: |
+          set +e
+          python3 -m unittest -v _calisma.CIKTI.test_dashboard_webkit_smoke \
+            2>&1 | tee webkit_smoke_report.txt
+          rc=$?
+          set -e
+          echo "smoke_rc=$rc" >> "$GITHUB_OUTPUT"
+
+      - name: Write WebKit smoke to run summary
+        if: always()
+        run: |
+          {
+            echo "## WebKit smoke (advisory, Safari/safedriver)"
+            echo ""
+            echo "- smoke test: exit \`${{ steps.smoke.outputs.smoke_rc }}\`"
+            echo '```'
+            cat webkit_smoke_report.txt 2>/dev/null || echo '(rapor yok)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload WebKit smoke report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: webkit-smoke
+          path: webkit_smoke_report.txt
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # ──────────────────────────────────────────────────────────────────────
+  # DASHBOARD-SMOKE — dashboard etkileşim E2E (iki katman, tek job).
+  #
+  # Katman 1 (tarayıcısız, her ortamda fail-closed): preview.js'in GERÇEK
+  # kodu Node vm sandbox'ta koşar — trend hover → tooltip kablolaması
+  # (delegasyon), run-history filtreleri (all/PASS/FAIL/P0 + boş dal + satır
+  # tıklaması), Z3 lightbox (aç/kapat, ←/→, Escape, Tab odak tuzağı) ve
+  # tooltip/bütçe/refs-rozet DOM testleri.
+  # Katman 2 (Playwright/Chromium, CDP): aynı üç akış gerçek fare/klavye
+  # olaylarıyla. Test kendi preview_server.py'sini ve sentetik verisini
+  # geçici bir dizinde kurar — canlı ağaca/artefakta bağlı değildir, bu yüzden
+  # swap-baskısı altında ağır tek-süreç Electron/webview koşumu gerekmez.
+  #
+  # Bu job, CI_JOB_COVERAGE["dashboard-smoke"] kaydını GERÇEK kılar: kayıt
+  # var olmayan bir job'ı adlarken (fail-open ailesi) testler hiç koşmuyordu.
+  # Artifact üretmez (artifact↔doc↔ARTIFACT_JOBS sözleşmesine dokunmaz).
+  # ──────────────────────────────────────────────────────────────────────
+  dashboard-smoke:
+    name: Dashboard interaction E2E (node sandbox + Chromium CDP)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [verify]
+    if: always()
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      # Katman 1: tarayıcı GEREKMEZ (node runner'da hazır). Fail-closed:
+      # adım rc'si job'ı düşürür, SKIP diye yeşile dönemez.
+      - name: Node sandbox layer (browserless, fail-closed)
+        run: |
+          node _calisma/CIKTI/test_preview_interaction_dom.js
+          node _calisma/CIKTI/test_trend_tooltip_dom.js
+          node _calisma/CIKTI/test_budget_over_detail.js
+          node _calisma/CIKTI/test_refs_trend_badge_node.js
+
+      - name: Install pinned Playwright
+        run: pip install playwright==1.63.0
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-1.63.0
+
+      - name: Install Chromium
+        run: playwright install --with-deps chromium
+
+      # Banner runtime katmanı ekran-görüntüsünü Pillow ile çözer (min/max
+      # parlaklık → WCAG oranı); eksikse o sınıf SKIP eder, statik sınıflar
+      # yine koşar.
+      - name: Install Pillow (banner screenshot comparison)
+        run: pip install Pillow
+
+      # Kolofon (seri-kaydı) katmanı teslim edilen PDF'i pdftotext ile okur:
+      # kayıt gerçekten basılı sayfada mı sorusu ancak bu araç varken
+      # cevaplanır. Araç yoksa test SKIP eder, statik sözleşmeler yine koşar.
+      - name: Install pdftotext (colophon series-record layer)
+        run: bash _calisma/CIKTI/apt_install.sh poppler-utils
+
+      # Katman 2: kendi sunucusunu/sentetik verisini kuran hermetic E2E
+      # (hover tooltip, run-history filtreleri, lightbox + odak yönetimi).
+      # Tarayıcısız statik katman aynı dosyada koşar (InlineHandlerCsp...),
+      # bu yüzden bu adım hiçbir ortamda boş PASS olamaz.
+      - name: Interaction E2E (Chromium/CDP)
+        run: |
+          set -o pipefail
+          python3 -m unittest -v _calisma.CIKTI.test_preview_interaction_cdp \
+            2>&1 | tee dashboard_interaction_report.txt
+
+      # Mevcut dashboard smoke'u (SSE + CSP render + tema) — kaydın adını
+      # verdiği test de bu job'da gerçekten koşar.
+      - name: Dashboard render smoke (Playwright)
+        run: |
+          set -o pipefail
+          python3 -m unittest -v _calisma.CIKTI.test_dashboard_playwright_smoke \
+            2>&1 | tee -a dashboard_interaction_report.txt
+
+      # Banner: iki-temalı axe (dark/light sıfır ihlal) + ekran-görüntüsü
+      # karşılaştırması (tema gerçekten repaint ediyor; dekor katmanı
+      # görüntüde belirgin ama metin kontrastını değiştirmiyor).
+      - name: Banner two-theme axe + screenshot comparison
+        run: |
+          set -o pipefail
+          python3 -m unittest -v _calisma.CIKTI.test_incidental_banner \
+            2>&1 | tee -a dashboard_interaction_report.txt
+
+      - name: Write interaction E2E to run summary
+        if: always()
+        run: |
+          {
+            echo "## Dashboard interaction E2E"
+            echo ""
+            echo '```'
+            cat dashboard_interaction_report.txt 2>/dev/null || echo '(rapor yok)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # ──────────────────────────────────────────────────────────────────────
   # CI-SIMULATE (advisory) — publish_wrapper.sh --ci-simulate'ın CI karşılığı.

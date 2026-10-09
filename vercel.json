@@ -12,9 +12,26 @@
     }
   },
   "routes": [
-    { "src": "^/$", "dest": "/_calisma/CIKTI/preview.html" },
-    { "src": "^/preview\\.js$", "dest": "/_calisma/CIKTI/preview.js" },
-    { "src": "^/sw\\.js$", "dest": "/_calisma/CIKTI/sw.js" },
+    {
+      "src": "^/$",
+      "dest": "/_calisma/CIKTI/preview.html"
+    },
+    {
+      "src": "^/preview\\.html$",
+      "dest": "/_calisma/CIKTI/preview.html"
+    },
+    {
+      "src": "^/guide\\.html$",
+      "dest": "/docs/branch-protection-guide/guide.html"
+    },
+    {
+      "src": "^/preview\\.js$",
+      "dest": "/_calisma/CIKTI/preview.js"
+    },
+    {
+      "src": "^/sw\\.js$",
+      "dest": "/_calisma/CIKTI/sw.js"
+    },
     {
       "src": "^/design-system/stripe-theme\\.css$",
       "dest": "/design-system/stripe/theme.css"
