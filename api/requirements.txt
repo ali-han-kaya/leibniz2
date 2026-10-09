@@ -1,0 +1,3 @@
+# Vercel /api fonksiyonları stdlib-only (adaptör: json/os/re/urllib + repo
+# içi import'lar). Bu dosya Vercel'in Python-runtime dedüksiyonunu tetikler;
+# bağımlılık listesi bilinçli boş.
