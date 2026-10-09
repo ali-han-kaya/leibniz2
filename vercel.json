@@ -1,0 +1,27 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "git": {
+    "deploymentEnabled": {
+      "main": true,
+      "reword-working": true
+    }
+  },
+  "functions": {
+    "api/*.py": {
+      "excludeFiles": "{.worktrees/**,apps/**,_calisma/.venv_z3/**,_calisma/mcp/**,_calisma/pptx/**,.env,.env.local,.env*.local,.pytest_cache/**,logs/**}"
+    }
+  },
+  "routes": [
+    { "src": "^/$", "dest": "/_calisma/CIKTI/preview.html" },
+    { "src": "^/preview\\.js$", "dest": "/_calisma/CIKTI/preview.js" },
+    { "src": "^/sw\\.js$", "dest": "/_calisma/CIKTI/sw.js" },
+    {
+      "src": "^/design-system/stripe-theme\\.css$",
+      "dest": "/design-system/stripe/theme.css"
+    },
+    {
+      "src": "^/slides_z3/([A-Za-z0-9._-]+)$",
+      "dest": "/_calisma/CIKTI/slides_z3/$1"
+    }
+  ]
+}
