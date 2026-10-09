@@ -65,6 +65,9 @@ GATE_EXCLUDE = {
     "changelog-drift",      # advisory: gen_changelog --check drift bulguları
     "pattern-drift",         # advisory: merge pattern ↔ ARTIFACT_JOBS drift
     "budget-comment",        # PR-only: bütçe + pre-commit PR yorumu (bütçe kapısı ayrı job)
+    "dashboard-smoke",      # advisory: node-sandbox + Chromium etkileşim E2E
+                            #   (hover tooltip / run-history filtresi / lightbox);
+                            #   tarayıcısız katmanı her ortamda koşar, required değil.
     "lake-proof",            # ayrı-step K9 lake build (lean-toolchain v4.14.0);
                              #   GitHub required kontrollerinde DEĞİL (advisory) —
                              #   K9, verify job'unun --full içinde de koşar.

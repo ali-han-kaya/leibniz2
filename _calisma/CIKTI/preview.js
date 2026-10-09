@@ -583,7 +583,7 @@ function renderTrend(rows) {
   rows.forEach((r, i) => {
     const cx = x(i);
     parts.push(
-      `<rect x="${(cx - halfW).toFixed(2)}" y="${PT}" width="${(halfW * 2).toFixed(2)}" height="${ih}" fill="transparent" style="cursor:crosshair" onmousemove="showTrendTip(${i}, event)" onmouseleave="hideTrendTip()"/>`
+      `<rect x="${(cx - halfW).toFixed(2)}" y="${PT}" width="${(halfW * 2).toFixed(2)}" height="${ih}" fill="transparent" style="cursor:crosshair" data-tip-i="${i}"/>`
     );
   });
   // x ekseni zaman etiketleri (ilk/orta/son)
@@ -602,6 +602,7 @@ function renderTrend(rows) {
     );
   });
   svg.innerHTML = parts.join("");
+  wireChartTip(svg, showTrendTip);
   const last = rows[n - 1];
   const leanPct =
     last.lean_ok === true ? "100%" : last.lean_ok === false ? "0%" : "?";
@@ -681,6 +682,50 @@ function trendTipHeader(r) {
     "config  : " + (cfgBits.length ? cfgBits.join(" · ") : "—"),
   ];
 }
+// CSP uyumu (sunucu başlığı: script-src 'self' + nonce, 'unsafe-inline' YOK):
+// inline event handler'lar (`onmousemove="…"`) tarayıcıda BLOKLANIR. Grafik
+// hover'ı bu yüzden SVG üzerinde DELEGE edilir: hedef sütunlar `data-tip-i`
+// taşır, listener bir kez SVG'nin kendisine bağlanır ve innerHTML her
+// render'da yenilense de ayakta kalır.
+function wireChartTip(svg, tipFn) {
+  if (!svg || svg.__tipWired || typeof svg.addEventListener !== "function")
+    return;
+  svg.__tipWired = true;
+  svg.addEventListener("mousemove", (ev) => {
+    const t = ev.target;
+    if (!t || typeof t.getAttribute !== "function") return;
+    const i = t.getAttribute("data-tip-i");
+    if (i === null || i === "") return;
+    tipFn(Number(i), ev);
+  });
+  svg.addEventListener("mouseleave", hideTrendTip);
+}
+
+// Aynı CSP kuralı run-history satırları için: satırlar innerHTML ile yeniden
+// üretilir, bu yüzden tıklama/klavye `#run-history` üzerinde delege edilir
+// (satır başına inline onclick/onkeydown yok). Satırlar `data-ts` taşır.
+function wireRunHistoryRows() {
+  const el = $("run-history");
+  if (!el || el.__rowsWired || typeof el.addEventListener !== "function")
+    return;
+  el.__rowsWired = true;
+  const rowOf = (ev) => {
+    const t = ev.target;
+    return t && typeof t.closest === "function" ? t.closest(".rh-row") : null;
+  };
+  el.addEventListener("click", (ev) => {
+    const row = rowOf(ev);
+    if (row) loadRunStdout(row.getAttribute("data-ts"));
+  });
+  el.addEventListener("keydown", (ev) => {
+    if (ev.key !== "Enter" && ev.key !== " ") return;
+    const row = rowOf(ev);
+    if (!row) return;
+    ev.preventDefault();
+    loadRunStdout(row.getAttribute("data-ts"));
+  });
+}
+
 function showTrendTip(i, ev) {
   const r = trendCache[i];
   if (!r) return;
@@ -940,7 +985,7 @@ function renderRefsTrend(rows) {
   const rHalfW = Math.max(4, Math.min(10, rColW / 2));
   have.forEach((r, i) => {
     parts.push(
-      `<rect x="${(x(i) - rHalfW).toFixed(2)}" y="${PT}" width="${(rHalfW * 2).toFixed(2)}" height="${ih}" fill="transparent" style="cursor:crosshair" onmousemove="showRefsTrendTip(${i}, event)" onmouseleave="hideTrendTip()"/>`
+      `<rect x="${(x(i) - rHalfW).toFixed(2)}" y="${PT}" width="${(rHalfW * 2).toFixed(2)}" height="${ih}" fill="transparent" style="cursor:crosshair" data-tip-i="${i}"/>`
     );
   });
   // x ekseni zaman etiketleri (ilk/orta/son)
@@ -959,6 +1004,7 @@ function renderRefsTrend(rows) {
     );
   });
   svg.innerHTML = parts.join("");
+  wireChartTip(svg, showRefsTrendTip);
   const last = have[n - 1];
   const pct =
     last.refs_total > 0
@@ -1537,18 +1583,42 @@ function renderOverrideTrend(rows) {
 }
 
 // ─── TeX motor determinizm trend ─────────────────────────────────────────
-// Python karşılığı (determinism_trend_badge.badge) ile birebir senkron.
+// Python karşılığı (determinism_trend_badge) ile BİREBİR SENKRON: aşağıdaki
+// üç fonksiyonun metni determinism_trend_badge.JS_CODE ile bu dosyada birebir
+// aynıdır (test_determinism_trend_badge.py hem metin eşitliğini hem node
+// ile davranış eşitliğini kilitler).
+//
+// AİLELER: aynı jsonl iki bağımsız seri taşır (manuscript + canvas). Badge
+// aile BAŞINA son kayda bakar — `rows[-1]`e bakmak taze bir canvas satırı
+// için bayat/FAILED manuscript serisini yeşile boyardı (fail-open).
+function determinismTrendFamilyOf(row) {
+  return row && typeof row.family === "string" && row.family
+    ? row.family
+    : "manuscript";
+}
+
 function determinismTrendBadge(rows) {
-  if (!rows || !rows.length)
-    return { cls: "unknown", text: "determinizm: veri yok" };
-  const lastGate = rows[rows.length - 1].gate;
+  if (!rows || !rows.length) return { cls: "unknown", text: "determinizm: veri yok" };
   const n = rows.length;
-  if (lastGate === "PASS")
-    return { cls: "ok", text: "✓ DETERMİNİZM PASS · " + n + " ölçüm" };
-  return {
-    cls: "warn",
-    text: "⚠️ determinizm gate " + (lastGate || "?") + " · " + n + " ölçüm",
-  };
+  const lastOf = {};
+  rows.forEach((r) => { lastOf[determinismTrendFamilyOf(r)] = r; });
+  const fams = Object.keys(lastOf);
+  const bad = fams.filter((f) => lastOf[f].gate !== "PASS");
+  if (!bad.length) return { cls: "ok", text: "✓ DETERMİNİZM PASS · " + n + " ölçüm" };
+  if (fams.length === 1) {
+    const gate = lastOf[fams[0]].gate;
+    return { cls: "warn", text: "⚠️ determinizm gate " + (gate || "?") + " · " + n + " ölçüm" };
+  }
+  const detail = bad.map((f) => f + " " + (lastOf[f].gate || "?")).join(", ");
+  return { cls: "warn", text: "⚠️ determinizm gate " + detail + " · " + n + " ölçüm" };
+}
+
+function determinismTrendRowTitle(r) {
+  const bits = [String(r.date || "?"), String(r.platform || "?"), determinismTrendFamilyOf(r)];
+  if (r.texlive_canonical_sha256) bits.push("texlive " + String(r.texlive_canonical_sha256).slice(0, 8));
+  if (r.tectonic_canonical_sha256) bits.push("tectonic " + String(r.tectonic_canonical_sha256).slice(0, 8));
+  bits.push("gate " + (r.gate || "?"));
+  return bits.join(" · ");
 }
 
 function renderDeterminismTrend(rows) {
@@ -1576,17 +1646,16 @@ function renderDeterminismTrend(rows) {
       const n = have.length;
       have.forEach((r, i) => {
         const color = r.gate === "PASS" ? "#3fb950" : "#d29922";
-        const tex = String(r.texlive_canonical_sha256 || "").slice(0, 8);
-        const tec = String(r.tectonic_canonical_sha256 || "").slice(0, 8);
         parts.push(
           `<circle cx="${xAt(i, n).toFixed(1)}" cy="${H / 2}" r="5" fill="${color}">` +
-            `<title>${r.date} · ${r.platform} · texlive ${tex} · tectonic ${tec} · gate ${r.gate || "?"}</title></circle>`
+            `<title>${determinismTrendRowTitle(r)}</title></circle>`
         );
       });
       for (let i = 1; i < n; i++) {
         const a = have[i - 1],
           b2 = have[i];
         if (
+          determinismTrendFamilyOf(a) === determinismTrendFamilyOf(b2) &&
           a.texlive_canonical_sha256 === b2.texlive_canonical_sha256 &&
           a.tectonic_canonical_sha256 === b2.tectonic_canonical_sha256
         ) {
@@ -2355,10 +2424,11 @@ function renderHookEnvTrend(rows) {
   const rHalfW = Math.max(6, Math.min(16, rColW / 2));
   have.forEach((r, i) => {
     parts.push(
-      `<rect x="${(x(i) - rHalfW).toFixed(2)}" y="${PT}" width="${(rHalfW * 2).toFixed(2)}" height="${ih}" fill="transparent" style="cursor:crosshair" onmousemove="showHookEnvTrendTip(${i}, event)" onmouseleave="hideTrendTip()"/>`
+      `<rect x="${(x(i) - rHalfW).toFixed(2)}" y="${PT}" width="${(rHalfW * 2).toFixed(2)}" height="${ih}" fill="transparent" style="cursor:crosshair" data-tip-i="${i}"/>`
     );
   });
   svg.innerHTML = parts.join("\n");
+  wireChartTip(svg, showHookEnvTrendTip);
   if (legend) {
     // lejant: hangi sürüm hangi renkte (son gözlem + değişim sayısı)
     const seen = {};
@@ -2904,12 +2974,12 @@ function loadRunHistory(fromSSE = false) {
             ? r.ts.replace(/'/g, "\'").replace(/"/g, "&quot;")
             : "";
           return (
-            `<div class="rh-row" role="button" tabindex="0" data-ts="${tsAttr}" onclick="loadRunStdout('${tsAttr}')" ` +
-            `onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();loadRunStdout('${tsAttr}')}" ` +
+            `<div class="rh-row" role="button" tabindex="0" data-ts="${tsAttr}" ` +
             `title="Tıklayınca bu run'un stdout'u yüklenir">${text}</div>`
           );
         });
       el.innerHTML = lines.join("\n");
+      wireRunHistoryRows();
       return rows;
     })
     .catch(() => null)
@@ -2989,6 +3059,21 @@ setInterval(() => {
 loadTrend();
 loadOverrideTrend();
 connectStream();
+// CSP inline onclick'i bloklar → filtre butonları ve bütçe-aşım toggle'ı
+// burada addEventListener ile bağlanır (preview.html'de inline handler yok).
+document.querySelectorAll(".rh-filter button").forEach((b) => {
+  b.addEventListener("click", () => setRhFilter(b.dataset.f));
+});
+const budgetOverToggle = $("budget-over-toggle");
+if (budgetOverToggle) {
+  budgetOverToggle.addEventListener("click", toggleBudgetOverDetail);
+  budgetOverToggle.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      toggleBudgetOverDetail();
+    }
+  });
+}
 // Run history filtresini başlat (all varsayılan)
 setRhFilter("all");
 connect();
@@ -3008,30 +3093,43 @@ connect();
     "P5",
     "P5-note",
   ];
+  // Seri kapağı (series sekmesi) tek arşiv rotasyonuna dahildir.
+  const items = names.map((file) => ({ file, alt: file + " Z3 slaytı" }));
+  items.push({
+    file: "incidental_proof_book_cover-1",
+    alt: "Incidental Proof kitap kapağı — Leibniz2 verification series",
+  });
   const root = document.getElementById("z3-slides");
   const box = document.getElementById("z3-lightbox");
   const image = document.getElementById("z3-lightbox-image");
   let index = 0;
+  let opener = null;
   function src(i) {
-    return "/slides_z3/" + names[i] + ".png";
+    return "/slides_z3/" + items[i].file + ".png";
   }
   function show(i) {
-    index = (i + names.length) % names.length;
+    index = (i + items.length) % items.length;
     image.src = src(index);
-    image.alt = names[index] + " Z3 slaytı";
+    image.alt = items[index].alt;
   }
-  function open(i) {
+  function open(i, button) {
+    opener = button || null;
     show(i);
     box.hidden = false;
     document.getElementById("z3-close").focus();
   }
   function close() {
     box.hidden = true;
-    root.querySelector("button")?.focus();
+    // Odak açan öğeye döner (WCAG 2.4.3): seri sekmesinden açıldıysa seri
+    // düğmesine, Z3 slaytından açıldıysa o slaytın düğmesine.
+    (opener || root.querySelector("button"))?.focus();
+    opener = null;
   }
-  root.querySelectorAll(".z3-slide").forEach((button, i) => {
-    button.addEventListener("click", () => open(i));
-  });
+  document
+    .querySelectorAll("#z3-slide-gallery .z3-slide")
+    .forEach((button, i) => {
+      button.addEventListener("click", () => open(i, button));
+    });
   // Lightbox açıldığında Tab diyalogda kalır (WCAG 2.4.3): odak bir turda
   // kapat/önceki/sonraki butonları arasında döner, diyalog dışına sızmaz.
   box.addEventListener("keydown", (e) => {
@@ -3067,5 +3165,35 @@ connect();
     if (e.key === "Escape") close();
     else if (e.key === "ArrowLeft") show(index - 1);
     else if (e.key === "ArrowRight") show(index + 1);
+  });
+  // Galeri sekmeleri — WAI-ARIA tabs: roving tabindex, ok/Home/End tuşları.
+  const tabs = Array.from(
+    document.querySelectorAll("#z3-slide-gallery .z3-tab")
+  );
+  function selectTab(tab) {
+    tabs.forEach((t) => {
+      const on = t === tab;
+      t.setAttribute("aria-selected", on ? "true" : "false");
+      t.tabIndex = on ? 0 : -1;
+      const panel = document.getElementById(t.getAttribute("aria-controls"));
+      if (panel) panel.hidden = !on;
+    });
+    tab.focus();
+  }
+  tabs.forEach((tab) => {
+    tab.addEventListener("click", () => selectTab(tab));
+    tab.addEventListener("keydown", (e) => {
+      const i = tabs.indexOf(tab);
+      let next = null;
+      if (e.key === "ArrowRight") next = tabs[(i + 1) % tabs.length];
+      else if (e.key === "ArrowLeft")
+        next = tabs[(i - 1 + tabs.length) % tabs.length];
+      else if (e.key === "Home") next = tabs[0];
+      else if (e.key === "End") next = tabs[tabs.length - 1];
+      if (next) {
+        e.preventDefault();
+        selectTab(next);
+      }
+    });
   });
 })();

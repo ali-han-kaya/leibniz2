@@ -15,6 +15,7 @@ empty page that happened to load without errors.
 """
 
 import os
+import shutil
 import socket
 import subprocess
 import sys
@@ -28,6 +29,29 @@ except ImportError:  # CI runner'da playwright kurulu değilse SKIP (fail değil
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SERVER_SCRIPT = os.path.join(HERE, "preview_server.py")
+REPO_ROOT = os.path.dirname(os.path.dirname(HERE))
+TOKENS_SRC = os.path.join(REPO_ROOT, "design-system", "tokens.css")
+TOKENS_MIRROR = os.path.join(HERE, "design-system-tokens.css")
+
+
+def ensure_token_mirror():
+    """design-system/tokens.css'i PREVIEW_DIR mirror'ina kopyalar.
+
+    preview.html `/design-system/tokens.css` import eder; preview_server o
+    rotayi PREVIEW_DIR/design-system-tokens.css'ten servis eder (tek kaynak
+    <repo>/design-system/tokens.css). Mirror dosyasi .gitignore'da oldugu
+    icin taze checkout'ta yoktur: stil istegi 404 doner ve tarayici
+    "Refused to apply style ... MIME type" konsol hatasi basar — panel
+    stilsiz kalir. sync_verify_mirror.sh ve verify.yml a11y adimi ayni
+    kopyayi yapar; smoke testi kendi mirror'ini tamamlar.
+    """
+    if os.path.exists(TOKENS_MIRROR):
+        return
+    if not os.path.exists(TOKENS_SRC):
+        raise RuntimeError(
+            "design-system/tokens.css bulunamadi (%s) — mirror uretilemez"
+            % TOKENS_SRC)
+    shutil.copyfile(TOKENS_SRC, TOKENS_MIRROR)
 
 
 def free_port():
@@ -55,6 +79,7 @@ class DashboardSmokeTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        ensure_token_mirror()
         cls.PORT = free_port()
         cls.proc = subprocess.Popen(
             [sys.executable, SERVER_SCRIPT,

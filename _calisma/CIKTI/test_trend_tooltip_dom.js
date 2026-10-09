@@ -8,20 +8,20 @@
 // dışarıdan sandbox.X = ataması etki etmez).
 //
 // Kullanım: node test_trend_tooltip_dom.js
-"use strict";
-const vm = require("vm");
-const assert = require("assert");
+'use strict';
+const vm = require('vm');
+const assert = require('assert');
 
-const { loadPreview, makeElementStub } = require("./preview_vm_sandbox.js");
+const { loadPreview, makeElementStub } = require('./preview_vm_sandbox.js');
 
 const tip = makeElementStub({
-  innerHTML: "",
-  style: { display: "none", left: "", top: "" },
+  innerHTML: '',
+  style: { display: 'none', left: '', top: '' },
 });
 const sandbox = loadPreview({ tipElement: tip });
 
 const run = {
-  ts: "2026-08-28T12:00:00Z",
+  ts: '2026-08-28T12:00:00Z',
   budget_usd: 31,
   budget_limit: 30,
   duration_s: 2,
@@ -32,41 +32,41 @@ const run = {
 };
 sandbox.run = run;
 vm.runInContext(
-  "BUDGET_LIMIT = 30; trendCache = [run]; refsTrendCache = [run]",
+  'BUDGET_LIMIT = 30; trendCache = [run]; refsTrendCache = [run]',
   sandbox
 );
 sandbox.showTrendTip(0, { clientX: 10, clientY: 10 });
 assert(
-  tip.innerHTML.includes("tt-over"),
-  "showTrendTip must mark over-budget row"
+  tip.innerHTML.includes('tt-over'),
+  'showTrendTip must mark over-budget row'
 );
 assert(
-  tip.innerHTML.includes("limit $30"),
-  "showTrendTip must show the run limit"
+  tip.innerHTML.includes('limit $30'),
+  'showTrendTip must show the run limit'
 );
 sandbox.showRefsTrendTip(0, { clientX: 10, clientY: 10 });
 assert(
-  tip.innerHTML.includes("tt-over"),
-  "showRefsTrendTip must mark over-budget row"
+  tip.innerHTML.includes('tt-over'),
+  'showRefsTrendTip must mark over-budget row'
 );
 assert(
-  tip.innerHTML.includes("limit $30"),
-  "showRefsTrendTip must show the run limit"
+  tip.innerHTML.includes('limit $30'),
+  'showRefsTrendTip must show the run limit'
 );
 
 const safe = Object.assign({}, run, { budget_usd: 29 });
 sandbox.safe = safe;
-vm.runInContext("trendCache = [safe]; refsTrendCache = [safe]", sandbox);
+vm.runInContext('trendCache = [safe]; refsTrendCache = [safe]', sandbox);
 sandbox.showTrendTip(0, { clientX: 10, clientY: 10 });
 assert(
-  tip.innerHTML.includes("tt-under"),
-  "showTrendTip must mark under-budget row"
+  tip.innerHTML.includes('tt-under'),
+  'showTrendTip must mark under-budget row'
 );
 sandbox.showRefsTrendTip(0, { clientX: 10, clientY: 10 });
 assert(
-  tip.innerHTML.includes("tt-under"),
-  "showRefsTrendTip must mark under-budget row"
+  tip.innerHTML.includes('tt-under'),
+  'showRefsTrendTip must mark under-budget row'
 );
 console.log(
-  "trend tooltip DOM: PASS — showTrendTip/showRefsTrendTip over/under colors verified"
+  'trend tooltip DOM: PASS — showTrendTip/showRefsTrendTip over/under colors verified'
 );

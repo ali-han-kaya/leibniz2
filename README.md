@@ -606,6 +606,9 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-07 | feat | (canvas) levha 04 The Contour Ledger, kitap 6 yaprağa iner | [`e97843b`](https://github.com/ali-han-kaya/leibniz2/commit/e97843b) |
 | 2026-10-07 | feat | (canvas) plate-book Makefile hedefleri + SDE determinizm kapisi | [`7fd1a59`](https://github.com/ali-han-kaya/leibniz2/commit/7fd1a59) |
 | 2026-10-08 | fix | (dashboard) mirror frontend deploy seti + stream rAF kilidi | [`9750828`](https://github.com/ali-han-kaya/leibniz2/commit/9750828) |
+| 2026-10-08 | test | (canvas-determinism) 2 süit + Path-fix + batarya-sync | [`669bda7`](https://github.com/ali-han-kaya/leibniz2/commit/669bda7) |
+| 2026-10-08 | feat | (canvas) canvas-determinism job + 5-source matrix (apex) | [`04ed03e`](https://github.com/ali-han-kaya/leibniz2/commit/04ed03e) |
+| 2026-10-08 | feat | (canvas) Incidental Proof header banner (svg + gomme + test) | [`46933f3`](https://github.com/ali-han-kaya/leibniz2/commit/46933f3) |
 
 ### Regresyon notları
 
