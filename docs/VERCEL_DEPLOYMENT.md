@@ -227,24 +227,42 @@ test OK; `check_python3_shell` PASS (7 workflow / 251 adım);
 Not: workflow'lar HEAD'den koşar — job, commit + push edilmeden schedule'a
 girmez; ilk tetikleme `workflow_dispatch` ile elle yapılabilir.
 
-## 5. Git-push otomasyonu (repo-based) — kalan tek manuel adım
+## 5. Git-push otomasyonu — fallback hattı (2026-10-09, uygulandı)
 
-`vercel.json` → `git.deploymentEnabled: {"main": true, "reword-working":
-true}`: git-push'ta otomatik build (git-tek-gerçek ödemesi — çalışma-dizini
-kayması yok; `git archive HEAD` = 13.1MB, 250MB upload-sınırının çok altında).
+Orijinal tasarım native link üzerinedir: `vercel.json` →
+`git.deploymentEnabled: {"main": true, "reword-working": true}` — push'ta
+otomatik build (`git archive HEAD` = 13.1MB, upload-sınırının çok altında).
 
-Engel (hesap-düzeyi; CLI'dan çözülemez — 2 kez ölçüldü, 2026-09-23):
+**Native link engelli ve dashboard sessiz-şekilde başarısız** (2026-10-09'da
+yeniden ölçüldü; kanıt demeti 2026-09-23'tekinden geniş):
 
 ```
-vercel git connect https://github.com/ali-han-kaya/leibniz2 --yes
-→ Error: Failed to link ali-han-kaya/leibniz2. You need to add a Login
-  Connection to your GitHub account first. (400)
+vercel git connect → 400 "You need to add a Login Connection to your GitHub
+account first." (7 deneme; son 4'ü Authentication'dan disconnect +
+yeniden-authorize'dan sonra)
+GET /v9/projects/{id}/link → "Project Link not found." — dashboard connect
+akışı "Connected" göstermesine rağmen link hiç oluşmadı (26×10s senkron
+pencerede API'de iz yok; UI ile API çelişiyor).
+Repo tarafında da iz yok: webhook yok; son başarılı git-deploy 2026-09-24
+(34b6ea35 — protectionBypass'ın da kurulduğu dakika).
 ```
 
-Manuel adım (yalnız dashboard'tan): Vercel → **Account Settings → Login
-Methods & Connections → GitHub Login Connection** ekle; sonrasında aynı
-`vercel git connect` komutunu tekrar çalıştır (GitHub-uygulaması onayı
-istenebilir). Bu adımdan sonra her push otomatik preview üretir.
+**Fallback (CI-üzerinden otomatik preview):**
+`.github/workflows/vercel-preview-deploy.yml` — `main` hariç her push (ve
+`workflow_dispatch`) → `vercel link` + `vercel deploy` (secret
+`VERCEL_TOKEN`) → preview URL → **aylık `vercel-deploy-check` ile AYNI kapı
+script'i** (`check_vercel_deploy.py --base-url`) + `trend` /
+`determinism-trend` JSON sağlığı; hepsi fail-closed, URL
+`$GITHUB_STEP_SUMMARY`a yazılır. Kapı-paritesi (K1): lokal `--base-url`
+koşumu ile CI koşumu aynı kodu çalıştırır.
+
+Kurulum: vercel.com/account/settings/tokens → token oluştur → repo
+Settings → Secrets and variables → Actions → `VERCEL_TOKEN`. (API ile token
+üretilemiyor: `POST /v2/user/tokens` → "Cannot create tokens for this app".)
+
+Native link düzelirse (Authentication'da gerçek bağlantı + `vercel git
+connect` yeşil): fallback workflow KALDIRILMALI — iki hat aynı push'a iki
+preview üretir.
 
 ## 6. Sınırlar (dürüst notlar)
 

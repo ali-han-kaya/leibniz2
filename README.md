@@ -597,6 +597,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-09 | feat | (api) vercel dosya-tabanli adaptör — 4 uc handler | [`31d23c7`](https://github.com/ali-han-kaya/leibniz2/commit/31d23c7) |
 | 2026-10-09 | feat | (vercel) preview statik frontend route'lari + .vercelignore | [`3b33661`](https://github.com/ali-han-kaya/leibniz2/commit/3b33661) |
 | 2026-10-09 | ci | aylik vercel-deploy-check job'i | [`85bc385`](https://github.com/ali-han-kaya/leibniz2/commit/85bc385) |
+| 2026-10-09 | fix | (vercel) vercelignore'a precommit_log zincir istisnasi | [`88cee44`](https://github.com/ali-han-kaya/leibniz2/commit/88cee44) |
 
 ### Regresyon notları
 
