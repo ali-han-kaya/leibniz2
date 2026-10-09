@@ -275,6 +275,23 @@ Kurulum: vercel.com/account/settings/tokens → token oluştur → repo
 Settings → Secrets and variables → Actions → `VERCEL_TOKEN`. (API ile token
 üretilemiyor: `POST /v2/user/tokens` → "Cannot create tokens for this app".)
 
+**Proje env — `GITHUB_TOKEN` (2026-10-09):** `/api/run-history` GitHub
+Actions API'sini çağırır; token'sız anonim quota **60 istek/saat** ve
+Vercel'in paylasilan egress IP'lerinde tüm部署'larla ortaktır → ara sıra
+429/502. `api/_adapter.py:_fetch` `GITHUB_TOKEN` env varını görünce
+`Authorization: Bearer` ekler (5000/sa); yokken anonim kalır (public-repo
+fail-open). Sözleşme pini: `test_vercel_adapter` →
+`test_fetch_attaches_github_token_header` (token-varken başlık / yokken
+başlık-yok — her iki yön de). Proje env'leri `sarkis-env/leibniz2`'ye
+eklendi: **Production = Secret, Preview = sensitive** (API'nin
+geri-okunamayan tipi; `secret` yalnız CLI'nin adı, v9/v10 API'si400
+döner) — değerler asla repo'ya/disc'e yazılmadı (CLI stdin + API body ile
+aktarıldı). Değer kaynağı: yerel `gh` oturum token'ı; daraltmak için
+fine-grained, read-only `actions` PAT ile `vercel env rm` + yeniden
+eklenebilir. Geçersiz token GitHub'a401 döndürür → adaptör502 (fail-loud,
+sessiz-anonim yok). **Env değişiklikleri yalnız yeni deploy'larla geçerli
+olur** — eski preview URL'leri hâlâ anonim çağırır.
+
 Native link düzelirse (Authentication'da gerçek bağlantı + `vercel git
 connect` yeşil): fallback workflow KALDIRILMALI — iki hat aynı push'a iki
 preview üretir.

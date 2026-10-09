@@ -179,6 +179,51 @@ class TestVercelAdapterContract(unittest.TestCase):
             self.assertTrue(row["ts"])
             self.assertIn(row["verdict"], {"PASS", "FAIL", "?"})
 
+    def test_fetch_attaches_github_token_header(self):
+        # 4b) GITHUB_TOKEN env varken _fetch Authorization: Bearer basligi
+        # ekler — anonim GitHub quota 60 istek/saat ve Vercel'in paylasilan
+        # egress IP'lerinde digerleriyle ortak; token ile 5000/sa. Token
+        # YOKKEN anonim kalinir (public-repo fail-open), varken ASLA
+        # anonim gitmez. Vercel'e proje-env olarak eklendi (2026-10-09);
+        # env'siz deploy'da bu test hala yeşil kalir — canlı kanit
+        # workflow kapisi + burst olcumu (docs §5).
+        from http.server import BaseHTTPRequestHandler
+        seen = {}
+
+        class _H(BaseHTTPRequestHandler):
+            def do_GET(self):
+                seen["auth"] = self.headers.get("Authorization")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(b'{"workflow_runs": []}')
+
+            def log_message(self, *args):
+                pass
+
+        srv = ThreadingHTTPServer(("127.0.0.1", 0), _H)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        url = "http://127.0.0.1:%d/probe" % srv.server_address[1]
+        saved = os.environ.get("GITHUB_TOKEN")
+        try:
+            os.environ["GITHUB_TOKEN"] = "unit-test-token"
+            _adapter()._fetch(url)
+            self.assertEqual(
+                seen["auth"], "Bearer unit-test-token",
+                "token varken Authorization basligi gitmiyor — anonim "
+                "60/sa quota'ya dusulur")
+            os.environ.pop("GITHUB_TOKEN", None)
+            _adapter()._fetch(url)
+            self.assertIsNone(
+                seen["auth"],
+                "token yokken anonim istekte Authorization olmamali")
+        finally:
+            if saved is None:
+                os.environ.pop("GITHUB_TOKEN", None)
+            else:
+                os.environ["GITHUB_TOKEN"] = saved
+            srv.shutdown()
+
     def test_no_local_break_api_contract(self):
         # 5) no-local-break: yerel /api sözleşme-süitleri yeşil (api/
         #    dizini yerel root-mukayeselerine karışmamalı).
