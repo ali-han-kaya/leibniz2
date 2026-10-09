@@ -9,6 +9,9 @@ yazilmaz):
      duz-metin sozlesmesi),
   2) /api/run-history → JSON dizi + {ts, verdict} sema + verdict kumesi
      {PASS, FAIL, ?} — "200 + parse" yetmez, sema-parite de sinanir.
+  3) /slides_z3/P1-a.png → 200 + PNG magic (statik-upload kaniti;
+     .vercelignore dir-prune hatasi API'leri bozmadan yalnizca statik
+     agaci kesebilir — 2026-10-09: /slides_z3/* TÜM deploy'larda 404).
 
 Fail-closed: herhangi bir uc FAIL → exit 1 (sessiz PASS yok). Satir-raporu
 stdout'a; GITHUB_STEP_SUMMARY tanimliysa markdown ozet oraya da eklenir.
@@ -29,6 +32,7 @@ import urllib.request
 DEFAULT_BASE = "https://leibniz2.vercel.app"
 TIMEOUT_HEALTH = 20
 TIMEOUT_HISTORY = 30
+TIMEOUT_SLIDE = 30
 VERDICTS = {"PASS", "FAIL", "?"}
 
 
@@ -36,6 +40,12 @@ def _get(url, timeout):
     req = urllib.request.Request(url, headers={"Accept": "*/*"})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return r.status, r.read().decode("utf-8", "replace")
+
+
+def _get_bytes(url, timeout):
+    req = urllib.request.Request(url, headers={"Accept": "*/*"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return r.status, r.read()
 
 
 def check_health(base):
@@ -75,10 +85,24 @@ def check_run_history(base):
         len(rows), first.get("ts"), first["verdict"])
 
 
+def check_slide(base):
+    """/slides_z3/P1-a.png → (ok, mesaj); PNG magic ile statik-upload kaniti."""
+    try:
+        status, body = _get_bytes(base + "/slides_z3/P1-a.png", TIMEOUT_SLIDE)
+    except Exception as e:
+        return False, "ag/HTTP hatasi: %s" % e
+    if status != 200:
+        return False, "HTTP %s" % status
+    if not body.startswith(b"\x89PNG\r\n\x1a\n"):
+        return False, "PNG magic yok: %r" % body[:16]
+    return True, "PNG %d bayt" % len(body)
+
+
 def run(base):
     """Tum uc → (fail, satirlar)."""
     checks = (("api/health", check_health),
-              ("api/run-history", check_run_history))
+              ("api/run-history", check_run_history),
+              ("slides_z3/P1-a.png", check_slide))
     lines = []
     fail = 0
     for name, fn in checks:

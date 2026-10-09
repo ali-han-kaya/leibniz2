@@ -246,6 +246,148 @@ def _tracked():
     return files
 
 
+def _vercel_ignore_rules():
+    """.vercelignore satirlari (yorum/bos satir atlanir) — sirali."""
+    rules = []
+    for ln in (ROOT / ".vercelignore").read_text(encoding="utf-8").splitlines():
+        s = ln.strip()
+        if s and not s.startswith("#"):
+            rules.append(s)
+    return rules
+
+
+def _glob_to_regex(pattern):
+    """gitignore-glob -> tam-eslesme regex; `**/` onek her koku kapsar."""
+    prefix = ""
+    if pattern.startswith("**/"):
+        pattern = pattern[3:]
+        prefix = "(?:.*/)?"
+    out = []
+    i = 0
+    while i < len(pattern):
+        ch = pattern[i]
+        if pattern[i:i + 2] == "**":
+            out.append(".*")
+            i += 2
+        elif ch == "*":
+            out.append("[^/]*")
+            i += 1
+        elif ch == "?":
+            out.append("[^/]")
+            i += 1
+        else:
+            out.append(re.escape(ch))
+            i += 1
+    return "^" + prefix + "".join(out) + "$"
+
+
+def _vercel_pruned(relpath, rules=None):
+    """Vercel CLI 59.x upload prune karari (ignore@5 + readdirRecursive).
+
+    readdirRecursive her girisi SLASH'SIZ yol ile `ig.ignores()` ile test
+    eder; dizin "ignored" cikarsa TÜM alt-agaç prune edilir (cocuklar hic
+    denenmez). Son eslesen kural belirleyicidir; dir-only (sonu `/`) desen
+    slash'siz dizin yoluna ESLESEMEZ, yalnizca `desen/` oneki altindaki
+    yollara uyar. 2026-10-09 olcumleri (vercel 59.10 icindeki ignore@5):
+        rules=[blanket, '!dir/', '!dir/**']  -> dir: True (yanlis-prune)
+                                             -> dir/c.png: False
+    Yani git-semantik `_ignored()` "girer" derken upload dizin dugumunu
+    prune edebilir — bu model o sinari offline sinar; pini
+    test_model_matches_measured_ignore_pkg.
+    """
+    if rules is None:
+        rules = _vercel_ignore_rules()
+    ignored = False
+    for raw in rules:
+        negated = raw.startswith("!")
+        pat = raw[1:] if negated else raw
+        if pat.endswith("/"):
+            # dir-only: slash'siz DIZIN kendisine eslesmez, altindakilere uyar
+            hit = re.match(_glob_to_regex(pat + "**"), relpath) is not None
+        else:
+            hit = re.match(_glob_to_regex(pat), relpath) is not None
+        if hit:
+            ignored = not negated
+    return ignored
+
+
+def _vercel_pruned_ancestor(relpath):
+    """Upload'da dosyanin INMESINI engelleyen atas-dizin prune'i (yoksa None)."""
+    parts = relpath.split("/")
+    for i in range(1, len(parts)):
+        ancestor = "/".join(parts[:i])
+        if _vercel_pruned(ancestor):
+            return ancestor
+    return None
+
+
+class TestVercelUploadPruneSemantics(unittest.TestCase):
+    """Vercel upload prune semantigi — ignore@5 olcumlerine kilitli.
+
+    2026-10-09 arizasi: /slides_z3/* ve /design-system/stripe-theme.css
+    TÜM deploy'larda 404; git check-ignore temiz diyordu (takipli dosya
+    "girer"), ama Vercel upload'i atas dizini prune edip alt-agaçi dusuruyordu.
+    Bu sinif olcum-kilitli modelle bu sinari offline (agizsiz) sinar.
+    """
+
+    _MEASURED_OLD = [
+        "_calisma/CIKTI/**",
+        "!_calisma/CIKTI/slides_z3/",
+        "!_calisma/CIKTI/slides_z3/**",
+    ]
+    _MEASURED_FIXED = _MEASURED_OLD + ["!_calisma/CIKTI/slides_z3"]
+
+    def test_model_matches_measured_ignore_pkg(self):
+        self.assertTrue(_vercel_pruned(
+            "_calisma/CIKTI/slides_z3", self._MEASURED_OLD),
+            "olcum: eski kurallarla dizin prune (git bunu gormez)")
+        self.assertFalse(_vercel_pruned(
+            "_calisma/CIKTI/slides_z3/P1-a.png", self._MEASURED_OLD),
+            "olcum: dir-only negasyon cocuga ulasir")
+        self.assertFalse(_vercel_pruned(
+            "_calisma/CIKTI/slides_z3", self._MEASURED_FIXED),
+            "slash'siz negasyon dizin dugumunu kurtarmali")
+
+    def test_repo_ignore_file_keeps_static_dirs_reachable(self):
+        for rel in ("_calisma/CIKTI/slides_z3",
+                    "_calisma/CIKTI/slides_z3/P1-a.png",
+                    "design-system/stripe",
+                    "design-system/stripe/theme.css",
+                    "_calisma/CIKTI/preview.html",
+                    "_calisma/CIKTI/preview.js",
+                    "_calisma/CIKTI/sw.js",
+                    "design-system/tokens.css"):
+            self.assertFalse(
+                _vercel_pruned(rel),
+                "%s prune ediliyor — Vercel upload'unda yuklenmez" % rel)
+
+    def test_bundle_separation_still_holds_under_vercel_model(self):
+        for rel in (".env", ".env.local", "node_modules/x/index.js",
+                    "_calisma/pptx/sunum.pptx",
+                    "design-system/stripe/tokens.json",
+                    ".worktrees/x/y.py"):
+            self.assertTrue(
+                _vercel_pruned(rel),
+                "%s prune edilmiyor — bundle siser/sizar" % rel)
+
+    def test_every_static_asset_ancestor_is_reachable(self):
+        assets = [
+            "_calisma/CIKTI/preview.html",
+            "_calisma/CIKTI/preview.js",
+            "_calisma/CIKTI/sw.js",
+            "design-system/tokens.css",
+            "design-system/stripe/theme.css",
+        ]
+        assets += [str(p.relative_to(ROOT)) for p in sorted(
+            (ROOT / "_calisma/CIKTI" / "slides_z3").glob("*.png"))]
+        self.assertGreaterEqual(len(assets), 17, "varlik listesi bosaldi")
+        for rel in assets:
+            culprit = _vercel_pruned_ancestor(rel)
+            self.assertIsNone(
+                culprit,
+                "%s atas dizin prune: %s — deploy'da 404" % (rel, culprit))
+
+
 class TestVercelStaticFrontendContract(unittest.TestCase):
     """Statik-frontend sözleşmesi: / → preview.html, /preview.js, /sw.js,
     /design-system/*, /slides_z3/* AYNI deployment'da servis edilir;

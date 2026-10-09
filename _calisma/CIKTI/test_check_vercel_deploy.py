@@ -2,8 +2,9 @@
 """test_check_vercel_deploy.py — check_vercel_deploy kapisi sozlesmesi.
 
 Gerçek HTTP (ThreadingHTTPServer) ile: PASS senaryosu, bozuk-saglik,
-bozuk-sema (eksik alan / gecersiz verdict / JSON degil), uc-olu ve
-gecersiz-scheme — hepsi fail-closed (exit 1). Ag-dis: kendi sunucusu.
+bozuk-sema (eksik alan / gecersiz verdict / JSON degil), slayt-404,
+slayt-PNG-degil, uc-olu ve gecersiz-scheme — hepsi fail-closed (exit 1).
+Ag-dis: kendi sunucusu.
 """
 import contextlib
 import importlib.util
@@ -15,6 +16,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+PNG_DEFAULT = b"\x89PNG\r\n\x1a\n" + b"fixture-bytes"
 spec = importlib.util.spec_from_file_location(
     "check_vercel_deploy", HERE / "check_vercel_deploy.py")
 CVD = importlib.util.module_from_spec(spec)
@@ -24,6 +26,7 @@ spec.loader.exec_module(CVD)
 class _Handler(BaseHTTPRequestHandler):
     health_body = "ok"
     history_body = "[]"
+    slide_body = PNG_DEFAULT
 
     def do_GET(self):
         if self.path == "/api/health":
@@ -32,6 +35,13 @@ class _Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/run-history":
             body = self.history_body.encode()
             self.send_response(200)
+        elif self.path == "/slides_z3/P1-a.png":
+            if _Handler.slide_body is None:
+                body = b"not found"
+                self.send_response(404)
+            else:
+                body = _Handler.slide_body
+                self.send_response(200)
         else:
             body = b"not found"
             self.send_response(404)
@@ -55,15 +65,16 @@ class TestCheckVercelDeploy(unittest.TestCase):
     def tearDownClass(cls):
         cls.srv.shutdown()
 
-    def _serve(self, health, history):
+    def _serve(self, health, history, slide=PNG_DEFAULT):
         _Handler.health_body = health
         _Handler.history_body = history
+        _Handler.slide_body = slide
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             rc = CVD.main(["--base-url", self.base])
         return rc, buf.getvalue()
 
-    def test_pass_when_both_endpoints_healthy(self):
+    def test_pass_when_all_endpoints_healthy(self):
         rc, out = self._serve("ok", json.dumps(
             [{"ts": "2026-10-08T17:59:52Z", "verdict": "PASS"}]))
         self.assertEqual(rc, 0, out)
@@ -94,6 +105,20 @@ class TestCheckVercelDeploy(unittest.TestCase):
     def test_fail_when_history_empty_list(self):
         rc, out = self._serve("ok", "[]")
         self.assertEqual(rc, 1, out)
+
+    def test_fail_when_slide_missing(self):
+        # statik-upload 404 (.vercelignore dir-prune): API'ler yesilken
+        # kapinin REDDEDEBILMESI lazim (2026-10-09 arizasinin kendisi).
+        rc, out = self._serve("ok", json.dumps(
+            [{"ts": "x", "verdict": "PASS"}]), slide=None)
+        self.assertEqual(rc, 1, out)
+        self.assertIn("slides_z3/P1-a.png: **FAIL**", out)
+
+    def test_fail_when_slide_not_png(self):
+        rc, out = self._serve("ok", json.dumps(
+            [{"ts": "x", "verdict": "PASS"}]), slide=b"<html>oops</html>")
+        self.assertEqual(rc, 1, out)
+        self.assertIn("PNG magic yok", out)
 
     def test_fail_when_host_unreachable(self):
         buf = io.StringIO()

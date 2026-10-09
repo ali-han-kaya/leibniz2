@@ -209,20 +209,35 @@ akış YAML'da yeniden yazılmaz — job `actions/checkout@v7`
 `_calisma/CIKTI/check_vercel_deploy.py`'i bir `run:` adımında çağırır;
 aynı script lokalde `--base-url` ile birebir aynı kodu koşar. Uç
 kontrolleri script yapar (stdlib urllib — sağlık = `ok` düz-metin,
-run-history = JSON + şema-parite); bash gövdesi yalnız URL çözümü +
+run-history = JSON + şema-parite, slayt = 200 + PNG-magic statik-upload
+kanıtı); bash gövdesi yalnız URL çözümü +
 çağrı taşır (shellcheck `-s bash -S info`: 0 bulgu — SC2016 yüzeyi sıfır).
 
 Yerel kanıt (2026-10-09): kapı script'i üç senaryoda doğrudan koşuldu —
 canlı URL → `VERDICT: PASS` / RC=0 (health `ok`, run-history 15 satır, ilk
 `2026-10-08T17:59:52Z PASS`); ölü URL → RC=1 + `VERDICT: FAIL` + ağ
 hata-metni raporda; geçersiz şema → RC=1 (STEP_SUMMARY'ye FAIL satırıyla).
-`test_check_vercel_deploy` gerçek-HTTP test sunucusuyla 8 senaryo (PASS,
+`test_check_vercel_deploy` gerçek-HTTP test sunucusuyla 10 senaryo (PASS,
 bozuk-sağlık, eksik-şema, geçersiz-verdict, JSON-değil, boş-liste, uç-olu,
-geçersiz-şema — hepsi fail-closed). Kapılar yeşil: `test_gated_schedules`
+geçersiz-şema, slayt-404, slayt-PNG-değil — hepsi fail-closed). Kapılar yeşil: `test_gated_schedules`
 K1-K7 + gate testleri 46 test OK; workflow pili (contract/triggers/timeouts/
 install-hardening/action-pins/runtimes/actionlint-gate/python3-shell) 102
 test OK; `check_python3_shell` PASS (7 workflow / 251 adım);
 `summary_pattern_drift --json` PASS (stdout tek JSON).
+
+Statik-upload tuzağı (2026-10-09, düzeltildi): Vercel CLI 59.x upload
+tarayıcısı (`readdirRecursive`) her girişi **slash'sız** yol ile `ignore`
+paketine test eder; dizin "ignored" çıkarsa tüm alt ağaç prune edilir ve
+çocuklar hiç denenmez. Sonu `/` ile biten dir-only negasyon slash'sız dizin
+yoluna eşleşmez → `!_calisma/CIKTI/slides_z3/` tek başına dizini
+kurtaramıyordu; `/slides_z3/*` ve `/design-system/stripe-theme.css` **tüm**
+deploy'larda 404'tü (git `check-ignore` bunu temiz gösteriyordu — takip
+edilen dosya "girer" derken atas dizim prune ediliyordu: kapı yeşil, deploy
+kırmızı). Düzeltme: slash'siz negasyonlar (`!_calisma/CIKTI/slides_z3`,
+`!design-system/stripe`); offline model `test_vercel_adapter` →
+`TestVercelUploadPruneSemantics` ile ölçüm-kilitli; canlı kanıt kapıya üçüncü
+uç olarak eklendi (`/slides_z3/P1-a.png` → 200 + PNG magic — API'ler
+yeşilken statik ağaç prune edilirse kapı kırmızı).
 
 Not: workflow'lar HEAD'den koşar — job, commit + push edilmeden schedule'a
 girmez; ilk tetikleme `workflow_dispatch` ile elle yapılabilir.

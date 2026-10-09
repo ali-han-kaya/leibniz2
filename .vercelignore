@@ -39,12 +39,24 @@ _calisma/CIKTI/**
 !_calisma/CIKTI/sw.js
 !_calisma/CIKTI/slides_z3/
 !_calisma/CIKTI/slides_z3/**
+# Vercel CLI 59.x upload tarayicisi (readdirRecursive): her girisi
+# SLASH'SIZ yol ile `ignore` pkg'sine test eder; dizin "ignored" cikarsa
+# tum alt-agaç prune edilir ve cocuklar hic denenmez. Sonu `/` ile biten
+# dir-only desen slash'siz dizin yoluna ESLESEMEZ (olculdu 2026-10-09,
+# vercel 59.10 + ignore@5): ig.ignores('_calisma/CIKTI/slides_z3') -> true
+# (yanlis-prune -> /slides_z3/* TÜM deploy'larda 404). Slash'siz negasyon
+# dizin dugumunu de kurtarir — ikisi birlikte gereklidir; git
+# check-ignore bunu gormez (o yuzden eski kapiler yeşil kalmisti).
+!_calisma/CIKTI/slides_z3
 _calisma/ALI_KOMUT_TOOLKIT*/
 _calisma/REVIEW/
 apps/
 design-system/*
 !design-system/tokens.css
 !design-system/stripe/
+# ayni dir-prune tuzaği (yukaridaki slides_z3 notu): slash'siz negasyon
+# CLI-deploy'da theme.css'in yuklenebilir olmasini saglar.
+!design-system/stripe
 design-system/stripe/*
 !design-system/stripe/theme.css
 skills/
