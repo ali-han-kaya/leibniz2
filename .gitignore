@@ -67,3 +67,5 @@ apps/dashboard-next/.next/
 # task_plan.md/findings.md/progress.md takip EDİLİR; bu kilit dosyası değil.
 .plan-attestation
 .planning/.active_plan
+.vercel
+.env*

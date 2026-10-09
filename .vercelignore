@@ -28,6 +28,11 @@ _calisma/pptx/
 _calisma/pptx/**
 _calisma/CIKTI/**
 !_calisma/CIKTI/preview_server.py
+# preview_server import zinciri (module-level): preview_server.py sat.45
+# `import precommit_log` — stdlib-only (json,re); hariç tutulmazsa 3 uc
+# (trend/run-history/determinism-trend) import-hatasiyla 500 alir
+# (olculdu 2026-10-09: FUNCTION_INVOCATION_FAILED, health etkilenmez).
+!_calisma/CIKTI/precommit_log.py
 !_calisma/CIKTI/determinism_trend_badge.py
 !_calisma/CIKTI/preview.html
 !_calisma/CIKTI/preview.js

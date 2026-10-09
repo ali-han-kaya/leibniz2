@@ -380,6 +380,22 @@ class TestVercelStaticFrontendContract(unittest.TestCase):
         for rel in must_upload:
             self.assertFalse(_ignored(rel),
                              "%s dışlı — deploy'da eksik" % rel)
+        # İçe-aktarma zinciri sözleşmesi: bundle'a giren yerel modülün import
+        # ettiği kardeş modüller de upload'a girmeli (2026-10-09 kanıtı:
+        # preview_server sat.45 `import precommit_log` dışlandı → 3 uç
+        # ModuleNotFoundError ile FUNCTION_INVOCATION_FAILED, health etkisiz).
+        for rel in ("_calisma/CIKTI/preview_server.py",
+                    "_calisma/CIKTI/determinism_trend_badge.py"):
+            src = (ROOT / rel).read_text(encoding="utf-8")
+            cikti = ROOT / "_calisma" / "CIKTI"
+            for m in re.finditer(r"^(?:import|from)\s+([A-Za-z_]\w*)",
+                                 src, re.M):
+                sibling = cikti / (m.group(1) + ".py")
+                if sibling.exists():
+                    self.assertFalse(
+                        _ignored(sibling.relative_to(ROOT).as_posix()),
+                        "%s → %s import ediyor ama .vercelignore dışlı — "
+                        "deploy'da ModuleNotFoundError" % (rel, m.group(1)))
         # Dışarıda kalması gereken yüzey (bundle 250MB eşiği + sır-disiplini).
         must_exclude = [
             ".env",

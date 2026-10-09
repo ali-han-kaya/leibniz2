@@ -596,6 +596,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-06 | chore | (changelog) cfaa0c9 satirini tabloya ekle | [`f3ebc30`](https://github.com/ali-han-kaya/leibniz2/commit/f3ebc30) |
 | 2026-10-09 | feat | (api) vercel dosya-tabanli adaptör — 4 uc handler | [`31d23c7`](https://github.com/ali-han-kaya/leibniz2/commit/31d23c7) |
 | 2026-10-09 | feat | (vercel) preview statik frontend route'lari + .vercelignore | [`3b33661`](https://github.com/ali-han-kaya/leibniz2/commit/3b33661) |
+| 2026-10-09 | ci | aylik vercel-deploy-check job'i | [`85bc385`](https://github.com/ali-han-kaya/leibniz2/commit/85bc385) |
 
 ### Regresyon notları
 
