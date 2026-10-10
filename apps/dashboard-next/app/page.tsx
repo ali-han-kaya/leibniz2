@@ -1,5 +1,6 @@
 import { Suspense } from 'react';
 import VerdictCard from './VerdictCard';
+import LifecyclePanel from './LifecyclePanel';
 import Link from 'next/link';
 import { buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -14,6 +15,15 @@ export default function HomePage() {
         }
       >
         <VerdictCard />
+      </Suspense>
+
+      {/* Yaşam-döngüsü: çökme/kurtarma kanıtı — kendi Suspense sınırında akar */}
+      <Suspense
+        fallback={
+          <div className="h-44 animate-pulse rounded-lg border border-border bg-surface" />
+        }
+      >
+        <LifecyclePanel />
       </Suspense>
 
       <p className="text-sm text-muted">

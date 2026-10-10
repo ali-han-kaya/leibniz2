@@ -26,6 +26,57 @@ def record_step_text() -> str:
     return m.group(1)
 
 
+class TrendRecordLossProof(unittest.TestCase):
+    """Kayıp koruması + fail-closed merge yolu (koşum 37297101317 kanıtı).
+
+    5 Ekim koşumu YEŞİL bitti ama ölçüm main'e girmedi: `gh pr create`
+    repo ayarı yüzünden yetkisiz, adım bunu `|| echo` ile yutup 0 döndü.
+    Ölçüm bot dalında sıkıştı (main 6 / dal 7 satır) ve sonraki `--force`
+    push onu kalıcı olarak silecekti. İki sözleşme burada kilitleniyor.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls._body = record_step_text()
+
+    def test_branch_record_is_merged_not_overwritten(self):
+        """Dal kaydı üstüne yazılmaz; birleştirici çalıştırılır."""
+        self.assertIn("trend_record_merge.py", self._body,
+                      "kayıp koruması yok: dalda main'de olmayan ölçüm "
+                      "force-push ile kalıcı olarak silinir")
+        self.assertIn("--branch-file", self._body)
+
+    def test_merge_result_is_committed_with_the_measurement(self):
+        self.assertIn("git commit --amend --no-edit", self._body,
+                      "birleştirilen kayıt aynı commit'te taşınmazsa PR "
+                      "ölçümü içermez")
+
+    def test_missing_merge_path_is_fail_closed(self):
+        """PR kurulamazsa adım kırmızı: 'ölçüm merge yolunda değil' ≠ başarı."""
+        self.assertIn("FAIL: trend kaydı için PR yolu kurulamadı", self._body)
+        # PR yolu iki kez denenir (list → create → list); ikisi de boşsa çıkış 1
+        self.assertGreaterEqual(self._body.count("gh pr list"), 2)
+        no_pr = self._body.index("PR yolu kurulamadı")
+        tail = self._body[no_pr:no_pr + 700]
+        self.assertIn("exit 1", tail,
+                      "PR yoksa adım 0 dönmeli — bu, sessiz kayıp tam olarak "
+                      "5 Ekim'de yaşanan durumdu")
+
+    def test_auto_merge_failure_is_fail_closed(self):
+        m = re.search(r"gh pr merge.*?exit 1", self._body, re.S)
+        self.assertIsNotNone(
+            m, "auto-merge başarısızlığı sessizce yutuluyor — kayıt merge "
+               "beklerken koşum yeşil görünür")
+
+    def test_tolerant_success_claim_is_removed(self):
+        """Eski yorum 'ölçüm yine bot dalında güvende' diyordu — ölçüldü ki
+        YANLIŞ: kayıt main'e girmiyor ve sonraki push onu siliyor."""
+        self.assertNotIn("ölçüm yine bot dalında güvende", self._body)
+        self.assertNotIn("kayıp yok — koşum 35590265995", self._body,
+                         "bu gerekçe ölçümle çürütüldü (koşum 37297101317: "
+                         "kayıt bot dalında sıkıştı)")
+
+
 class TrendRecordPRContract(unittest.TestCase):
     def test_step_does_not_push_default_branch(self):
         body = record_step_text()

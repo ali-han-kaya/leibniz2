@@ -97,7 +97,7 @@ INTEGRATION_NOTE.md                            15347  724615c2f6e21afba975c12369
 internal_review_report.md                      28664  26196415ef8c4efd9e823a9eb83aca63
 original_manuscript.pdf                       117067  51d3492177253069975306ff1b10b60c
 README.md                                      10944  5d68d9e5c0b6069dbe1c03b33f57389d
-ingiliz_empirizmi_v3.tex                       76478  b7fa5be5aece3f975ec4ec1d89663aee
+ingiliz_empirizmi_v3.tex                       76846  3b394b109ac5f2ffc0a262946e1b2c47
 ingiliz_empirizmi_v3.pdf                      214760  81b191b1c57cbd944b46c5ea3fcbc8b7
 encoding_sensitivity_check.py                   5287  013d1e0f2752bc38b68cafdac6b18e22
 encoding_sensitivity_output.txt                 1239  ece0c79b00a5e4a16e5ea65acd5d8d13

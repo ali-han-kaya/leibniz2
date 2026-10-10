@@ -49,6 +49,7 @@ API_CONTRACT = {
     "/api/determinism-trend": {"GET"},
     "/api/run-history": {"GET"},
     "/api/run-stdout": {"GET"},    # prefix — ?ts= ile
+    "/api/server-events": {"GET"},  # yaşam-döngüsü olay-kaydı + çökme özeti
     "/api/health": {"GET"},
 }
 
@@ -69,6 +70,7 @@ LIVE_URLS = {
     "/api/determinism-trend": "/api/determinism-trend",
     "/api/run-history": "/api/run-history",
     "/api/run-stdout": "/api/run-stdout?ts=2024-01-01T00:00:00Z",
+    "/api/server-events": "/api/server-events?limit=3",
     "/api/health": "/api/health",
     # SSE path'ler canlıda ayrı test edilir (header-only)
     "/api/run": "/api/run",
@@ -124,6 +126,7 @@ class TestApiMethodContractSource(unittest.TestCase):
                 "/api/override-trend": '"override_trend"',
     "/api/determinism-trend": '"det_trend"',
                 "/api/run-history": '"run_history"',
+                "/api/server-events": '"server_events"',
                 "/api/run-stdout": '"run_stdout"',
                 "/api/health": '"health"',
             }[path]

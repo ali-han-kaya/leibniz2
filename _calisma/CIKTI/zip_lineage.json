@@ -85,6 +85,12 @@
       "note": "V5p: V5n düzeltme kaydı yayımlandı (repack_delivery.py MANIFEST başlığı, Faz 4 ölçümü) + repack Delivery (güncel kanonik)",
       "hash": "c205a02e26854e081f2effe1988d2feef7d3215443691a11c139056a373fdda5",
       "commit": null,
+      "current": false
+    },
+    {
+      "note": "V5q: 5a1a981 tex düzeltmesi (7 overfull hbox) sonrası repack (güncel kanonik)",
+      "hash": "541e59f21702db049d7326b4f5c2d6699fe84e1987c1601aa3565f5912f73c3d",
+      "commit": null,
       "current": true
     }
   ]
