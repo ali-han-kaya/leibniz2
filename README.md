@@ -555,7 +555,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-06 | feat | (a11y) battery gate + refs-index + health bridge | [`8179866`](https://github.com/ali-han-kaya/leibniz2/commit/8179866) |
 | 2026-10-06 | docs | (a11y) finalize a11y-gate implementation plan | [`4a05c7f`](https://github.com/ali-han-kaya/leibniz2/commit/4a05c7f) |
 | 2026-10-05 | chore | (changelog) 5380ed0 + 88e70d1 satirlarini tabloya ekle | [`0b2ca43`](https://github.com/ali-han-kaya/leibniz2/commit/0b2ca43) |
-| 2026-10-10 | docs | (deploy) cb6f607 icin kanit-defteri satiri ekle | [`522c055`](https://github.com/ali-han-kaya/leibniz2/commit/522c055) |
+| 2026-10-10 | docs | (deploy) cb6f607 icin kanit-defteri satiri ekle | [`83569aa`](https://github.com/ali-han-kaya/leibniz2/commit/83569aa) |
 
 ### Regresyon notları
 
