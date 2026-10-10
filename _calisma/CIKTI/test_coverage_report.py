@@ -253,6 +253,7 @@ HOOK_COVERAGE = {
         "test_preview_mirror_imports.py",
         "test_verdict_seal_css.py",
         "test_design_token_collision.py",
+        "test_ci_hygiene_gate.py",
         "test_deploy_evidence.py",
         "test_trend_record_merge.py",
         "test_rca_report.py",

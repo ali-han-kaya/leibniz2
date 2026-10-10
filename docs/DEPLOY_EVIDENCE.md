@@ -12,6 +12,16 @@
 | 2026-10-05 | e2db1f4 | [failure #37377743878](https://github.com/ali-han-kaya/leibniz2/actions/runs/37377743878) | [failure #37377744058](https://github.com/ali-han-kaya/leibniz2/actions/runs/37377744058) | [success #37377743929](https://github.com/ali-han-kaya/leibniz2/actions/runs/37377743929) | [success #37324916028](https://github.com/ali-han-kaya/leibniz2/actions/runs/37324916028) |
 | 2026-10-05 | 9f94f09 | [failure #37385149781](https://github.com/ali-han-kaya/leibniz2/actions/runs/37385149781) | [failure #37385150253](https://github.com/ali-han-kaya/leibniz2/actions/runs/37385150253) | [success #37385150040](https://github.com/ali-han-kaya/leibniz2/actions/runs/37385150040) | [success #37324916028](https://github.com/ali-han-kaya/leibniz2/actions/runs/37324916028) |
 | 2026-10-06 | f3ebc30 | [failure #37397161525](https://github.com/ali-han-kaya/leibniz2/actions/runs/37397161525) | [failure #37397161744](https://github.com/ali-han-kaya/leibniz2/actions/runs/37397161744) | [success #37397161675](https://github.com/ali-han-kaya/leibniz2/actions/runs/37397161675) | [success #37324916028](https://github.com/ali-han-kaya/leibniz2/actions/runs/37324916028) |
+| 2026-10-10 | 92f8315 | [failure #38009521880](https://github.com/ali-han-kaya/leibniz2/actions/runs/38009521880) | [failure #38009521828](https://github.com/ali-han-kaya/leibniz2/actions/runs/38009521828) | [success #38009521825](https://github.com/ali-han-kaya/leibniz2/actions/runs/38009521825) | [success #37324916028](https://github.com/ali-han-kaya/leibniz2/actions/runs/37324916028) |
+
+`92f8315` — plate-book (#84) inişi: `f3ebc30` satırının üstüne **9 anlamlı**
+commit geldi (8 plate-book commit'i + merge commit'i; tolerans 3) →
+`verify-delivery` kırmızısı **yalnız**
+`test_deploy_evidence.test_cli_accepts_repo_ledger_offline` (+ bilinen advisory
+`Live CI doc↔GitHub sync audit`); bu satır tam olarak o açığı kapatıyor.
+`docker-security` kırmızısı `libpcre2-8-0` **CVE-2026-103111** (PR #82);
+`test-smoke` yeşil. `determinism-trend` hücresi son haftalık ölçümü taşır
+(`#37324916028`, sha `d21d3f1`).
 
 `f3ebc30` — dört **anlamlı** commit birikimi (`84b1cc9` RCA sınıf-kanonları,
 `d60e64a` olay-kaydı + signum onarımı, `78f0a86` yaşam-döngüsü paneli +

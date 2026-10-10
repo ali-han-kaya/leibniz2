@@ -2,6 +2,11 @@ name: docker-security
 
 on:
   push:
+  pull_request:
+    # PR'lar aynı fail-closed Trivy gate'inden geçer; SARIF → PR-diff yorumu
+    # (trivy_sarif_pr_comment.js) bulguları değişen dosyalara haritalar.
+    # draft: true — kapı davranışı aynı; yorumlar draft aşamasında da
+    # upsert edilir (erkenden görünürlük, bayat-yorum yok — marker upsert).
   schedule:
     # Haftalık: her Pazartesi 03:43 UTC. Determinism-trend (03:17) ile bilinçli
     # çakışmaz. Yeni CVE'ler en çok hazırlıksız anda gelir — gating doc'unun
@@ -13,11 +18,23 @@ permissions:
   contents: read
   security-events: write
 
+concurrency:
+  # CI-hijyen: aynı PR'a ardışık push'lar eski taramayı iptal eder.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   image-scan:
     name: Build and scan Docker image
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Job-level daraltma: PR-yorum adımı (trivy_sarif_pr_comment.js)
+    # pull-requests: write gerektirir — workflow-bazı değildir, yalnız bu
+    # job'un tarama+yorum yüzeyine verilir (en-yetkili-olmayan).
+    permissions:
+      contents: read
+      pull-requests: write
+      security-events: write
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -35,14 +52,25 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Scan image with Trivy
+      # ── İki-adımlı Trivy: SARIF (yorum-kaynağı) + table (log-kanıtı) ──
+      # SARIF adımı continue-on-error: bulgu varsa exit 1 üretir ama koşum
+      # SARIF'i diskte bıraksın diye; GERÇEK kapı yorum-adımındaki
+      # core.setFailed'de yaşar (SARIF okunamazsa da kırmızı — fail-closed).
+      - name: Scan image with Trivy (SARIF)
+        uses: aquasecurity/trivy-action@v0.35.0
+        continue-on-error: true
+        with:
+          image-ref: leibniz2/verify-dashboard:${{ github.sha }}
+          format: sarif
+          output: trivy.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: 1
+
+      - name: Scan image with Trivy (table — log kanıtı)
         # v0.35.0: belgelenmiş güvenli sürüm (2026-03 tag-compromise sonrası
         # akıl sağlığı listesi). Mutable @master asla — pin kapısı da bloke eder.
-        # Tek adım: table format + exit-code 1 → bulgu varsa CVE tablosu
-        # log'da GÖRÜNÜR şekilde fail-closed. (SARIF split kaldırıldı: bu
-        # repo'da code scanning yok — upload hedefi yok; ayrıca SARIF adımı
-        # bulgusuz koşuda opak exit-1 hataları üretti. Zorlayıcı kapı
-        # exit-code 1'de yaşıyor, kanıt tabloda.)
+        # Zorlayıcı kapı exit-code 1'de; SARIF yorum-adımına kanıt taşır.
         uses: aquasecurity/trivy-action@v0.35.0
         with:
           image-ref: leibniz2/verify-dashboard:${{ github.sha }}
@@ -50,6 +78,26 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: 1
+
+      - name: Annotate PR with Trivy findings (fail-closed)
+        # always(): gate kırmızıyken de yorum DÜŞMELİ (bulgu-tablosu PR'a
+        # görünür kalmalı) — aksi halde kırmızı PR'da kanıt yok olur.
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const changed = await github.paginate(
+              github.rest.pulls.listFiles, {
+                owner: context.repo.owner, repo: context.repo.repo,
+                pull_number: context.issue.number, per_page: 100,
+              },
+              (resp) => resp.data.map((f) => f.filename));
+            require('fs').writeFileSync('changed_files.txt',
+              changed.join('\n'));
+            const sBody = fs.readFileSync(
+              '_calisma/CIKTI/github_scripts/trivy_sarif_pr_comment.js', 'utf8');
+            await eval(`(async () => {\n${sBody}\n})()`);
 
       # Docker Scout kaldırıldı: Scout, Docker entitlemansı gerektirir
       # ('user githubactions not entitled to use Docker Scout') — bu repoda
