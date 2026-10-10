@@ -73,6 +73,71 @@ jobs:
           echo '--- trend tail ---'
           tail -1 docs/determinism_trend/determinism_trend.jsonl
 
+      # Canvas ailesi (Incidental Proof) — MATRİS PARAMETRESİ = kaynak listesi
+      # (env CANVAS_SOURCES): BEŞ kaynak, her biri iki bağımsız SDE koşumu,
+      # TEK job'da beş ayrı rapor. `strategy.matrix` bilinçle KULLANILMADI:
+      # matris kaynak başına ayrı job açardı (dört-beş raporu tek trend
+      # kaydına bağlamak artifact toplama + ikinci push yarışı demek) —
+      # tek job'daki döngü tek tectonic kurulumunu ve sıralı `--check`'i korur.
+      #
+      # Trende GİREN TEK satır yine KİTAP (apex) raporundan gelir (tek satır
+      # sözleşmesi): kitap dört levhayı \includegraphics ile gömer, yani aileyi
+      # transitif kapsar. Diğer dört rapor kanıt katmanıdır: herhangi biri
+      # verdict=PASS değilse job kırmızıdır.
+      #
+      # Motor: yukarıdaki TEK tectonic kurulumunu paylaşır (sürüm + sha256
+      # digest tek kaynaktadır — Makefile'ın "motor pini tek kaynaktir" sözü);
+      # bu adım tectonic KURMAZ, yalnız çağırır. SDE aile SABİTİ bilinçli
+      # olarak yazılıdır (1700000000 = docs/Makefile.texlive PLATE_BOOK_EPOCH =
+      # canvas_determinism_test.sh varsayımı; üçü test_record_determinism_trend
+      # ile kilitli). SOURCE_DATE_EPOCH'tan türetilirse el yazması epoch'u
+      # levha PDF'lerini sessizce yeniden damgalar (Makefile'ın adlandırdığı risk).
+      #
+      # Kaynak listesi docs/Makefile.texlive PLATE_SOURCES + PLATE_BOOK ile
+      # BİREBİR aynı olmak zorunda (test_trend_schedule_paths anti-drift):
+      # Makefile'a kaynak eklenirse bu liste güncellenmezse kapı kırmızıya
+      # döner — iki yerde iki farklı aile listesi yaşayamaz.
+      - name: Run canvas determinism experiment (plate-book, 5 kaynak)
+        env:
+          CANVAS_SOURCES: >-
+            incidental_proof_canvas.tex
+            incidental_proof_plate02.tex
+            incidental_proof_plate03.tex
+            incidental_proof_plate04.tex
+            incidental_proof_book.tex
+        run: |
+          set -euo pipefail
+          for src in $CANVAS_SOURCES; do
+            echo "── canvas determinism: $src"
+            SOURCE_DATE_EPOCH="1700000000" \
+              TEX_SOURCE="_calisma/CIKTI/canvas/$src" \
+              TECTONIC_BIN="$(command -v tectonic)" \
+              bash _calisma/CIKTI/canvas_determinism_test.sh
+          done
+          echo '--- canvas evidence (kaynak başına bir rapor) ---'
+          # fail-closed "beş rapor" sözü: her kaynak için rapor VAR ve
+          # verdict=PASS. Harness ilk hatada zaten kırmızı döner; bu ikinci
+          # denetim "rapor hiç yazılmadı" (derleme düşerse) durumunu kapatır
+          # ve sözün kendisini adımın içinde görünür kılar.
+          for src in $CANVAS_SOURCES; do
+            report="docs/ci_simulate/canvas_determinism/${src%.tex}.determinism.txt"
+            test -f "$report" || { echo "FAIL: rapor yok: $report" >&2; exit 1; }
+            grep -q '^verdict=PASS' "$report" || { echo "FAIL: verdict PASS değil: $report" >&2; exit 1; }
+          done
+          grep -h -E '^(source|source_date_epoch|residual|verdict)=' \
+            docs/ci_simulate/canvas_determinism/*.determinism.txt
+
+      # İki ölçüm de AYNI koşumda, `--check` ADIMINDAN ÖNCE yapılır: tazelik
+      # ve platform kapsamı aile başına denetlendiği için sıralama sözleşmedir
+      # (bir aile tazelenmeden doğrulanırsa kendi kendine kırmızı) —
+      # test_trend_schedule_paths.py sırayı kilitler.
+      - name: Record canvas trend measurement
+        run: |
+          set -euo pipefail
+          python3 _calisma/CIKTI/record_determinism_trend.py --update --family canvas
+          echo '--- trend tail ---'
+          tail -1 docs/determinism_trend/determinism_trend.jsonl
+
       # Trend değişmezleri (fail-closed): tazelik + kaynak-uzlaşma (aynı
       # platform, değişmemiş kaynak → değişmemiş kanonik hash; ihlal = motor
       # determinizmi sapması → KIRMIZI) + platform kapsamı (darwin+linux).
@@ -111,7 +176,7 @@ jobs:
             echo "FAIL: --update ekleme yaptı ama stage boş — beklenmedik durum"
             exit 1
           fi
-          git commit -m "chore: record weekly determinism trend measurement" -m "TeXLive+SDE experiment (two independent SDE runs) on ubuntu-latest with pinned tectonic 0.17.0 (release digest verified) and TeXLive pdflatex; canonical hashes appended to docs/determinism_trend/determinism_trend.jsonl." -m "Generated with GitHub Actions. Co-Authored-By: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
+          git commit -m "chore: record weekly determinism trend measurement" -m "TeXLive+SDE experiment (two independent SDE runs) on ubuntu-latest with pinned tectonic 0.17.0 (release digest verified) and TeXLive pdflatex; plus the canvas family apex (plate-book) canonical hash from canvas_determinism_test.sh; canonical hashes appended to docs/determinism_trend/determinism_trend.jsonl." -m "Generated with GitHub Actions. Co-Authored-By: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
 
           # (1) Kayıp koruması: bot dalında, main'de olmayan kayıt varsa
           #     üstüne yazma — hepsini birleştirip aynı commit'te taşı
@@ -135,7 +200,7 @@ jobs:
           # (2) Fail-closed: kayıt main'e girecek bir yol bulmadan yeşil çıkma.
           PR=$(gh pr list --head "$TREND_BRANCH" --state open --json number --jq '.[0].number // ""')
           if [ -z "$PR" ]; then
-            gh pr create --base main --head "$TREND_BRANCH" --title "chore: weekly determinism trend record (bot)" --body "Automated weekly determinism trend measurement (linux baseline). Canonical hashes in docs/determinism_trend/determinism_trend.jsonl." || true
+            gh pr create --base main --head "$TREND_BRANCH" --title "chore: weekly determinism trend record (bot)" --body "Automated weekly determinism trend measurement (linux baseline; families: manuscript tectonic+TeXLive and canvas plate-book — 5 sources measured, apex hash recorded). Canonical hashes in docs/determinism_trend/determinism_trend.jsonl." || true
             PR=$(gh pr list --head "$TREND_BRANCH" --state open --json number --jq '.[0].number // ""')
           else
             # PR zaten açıksa yenisini açma; sadece "yeni ölçüm düştü"

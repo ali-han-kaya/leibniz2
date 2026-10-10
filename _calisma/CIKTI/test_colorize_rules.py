@@ -686,9 +686,13 @@ class TestRunHistoryClickToLoad(unittest.TestCase):
         self.assertIn('class="rh-row"', self._html)
         self.assertIn('data-ts=', self._html)
 
-    def test_rows_have_onclick_handler(self):
-        """onclick="loadRunStdout('...')" çağrısı var."""
-        self.assertIn('onclick="loadRunStdout', self._html)
+    def test_rows_use_delegated_click(self):
+        """Satır tıklaması #run-history üzerinde delege edilir (CSP: inline yok)."""
+        self.assertIn("function wireRunHistoryRows()", self._html)
+        self.assertIn('el.addEventListener("click", (ev) => {', self._html)
+        self.assertIn('loadRunStdout(row.getAttribute("data-ts"))', self._html)
+        self.assertNotIn('onclick="loadRunStdout', self._html)
+
     def test_load_run_stdout_function_exists(self):
         """loadRunStdout(ts) fonksiyonu tanımlı."""
         self.assertIn("function loadRunStdout(ts)", self._html)
@@ -728,9 +732,14 @@ class TestRunHistoryFilter(unittest.TestCase):
         self.assertIn('data-f="P0"', self._html)
 
     def test_filter_bar_exists(self):
-        """rh-filter div'i var."""
+        """rh-filter div'i var; butonlar addEventListener ile bağlanır."""
         self.assertIn('class="rh-filter"', self._html)
-        self.assertIn('onclick="setRhFilter', self._html)
+        self.assertIn(
+            'document.querySelectorAll(".rh-filter button").forEach', self._html)
+        self.assertIn(
+            'b.addEventListener("click", () => setRhFilter(b.dataset.f))',
+            self._html)
+        self.assertNotIn('onclick="setRhFilter', self._html)
 
     def test_filter_var_declared(self):
         """let rhFilter = "all" değişkeni tanımlı."""

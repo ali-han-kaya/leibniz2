@@ -20,6 +20,15 @@ ama koşum yeşil kalır. Bu test o yolları simüle ederek pinler.
 Ayrıca fail-closed: `--update` hiçbir şey eklemediyse stage boş kalır ve
 adım 1 ile düşer (sessiz yeşil ölçüm yok).
 
+2026-10-08 — AİLELER: koşum artık canvas ailesini de ölçüp kaydeder
+(canvas_determinism_test.sh → `--update --family canvas`). Kaynak MATRİSİ
+step `env.CANVAS_SOURCES` listesidir (beş kaynak, tek job'da beş rapor;
+`strategy.matrix` yerine döngü — tek job sözü). Eklenen sözleşmeler
+(TestCanvasFamilyWiring): her adım mevcut ve SIRALI (iki ölçüm de `--check`
+öncesinde — tazelik sıralamadan gelmeli), canvas adımı aile SDE sabitini
+(1700000000) açıkça verir, tectonic kurulumu TEK adımda kalır (Makefile'ın
+"motor pini tek kaynaktir" sözü).
+
 Simülasyon: step'in `run:` betiği YAML'dan ÇIKARILIR ve geçici bir git
 repo'sunda stub `git`/`gh` ile gerçekten koşturulur. Betiği kopyalamak
 değil, workflow'taki metni çalıştırmak esastır — kopyalanırsa workflow
@@ -305,6 +314,202 @@ class TestPrLifecyclePaths(unittest.TestCase):
             self.assertIn("kuyruğa alınamadı", r.stdout)
         finally:
             sb.cleanup()
+
+
+class TestCanvasFamilyWiring(unittest.TestCase):
+    """Pazartesi koşumu canvas ailesini de ölçer, kaydeder, doğrular."""
+
+    ORDER = ["Run determinism experiment (two independent SDE runs)",
+             "Record trend measurement",
+             "Run canvas determinism experiment (plate-book, 5 kaynak)",
+             "Record canvas trend measurement",
+             "Validate trend invariants"]
+    CANVAS_SOURCES = ["incidental_proof_canvas.tex",
+                      "incidental_proof_plate02.tex",
+                      "incidental_proof_plate03.tex",
+                      "incidental_proof_plate04.tex",
+                      "incidental_proof_book.tex"]
+
+    @classmethod
+    def setUpClass(cls):
+        data = load_yaml()
+        cls.steps = [st.get("name") for job in data["jobs"].values()
+                     for st in job.get("steps", [])]
+        cls.text = WORKFLOW.read_text(encoding="utf-8")
+
+    def test_steps_exist_and_keep_record_before_check(self):
+        # Sıralama SÖZLEŞMEDİR: iki ailenin tazelliği kendi eklenen satırına
+        # bağlıdır; `--check` bir aile tazelenmeden koşarsa kendi kendine
+        # kırmızı olur (ve canvas linux kaydı CI'dan gelir).
+        for name in self.ORDER:
+            self.assertIn(name, self.steps, "step yok: %s" % name)
+        idx = [self.steps.index(n) for n in self.ORDER]
+        self.assertEqual(idx, sorted(idx),
+                         "step sırası değişti: %r" % self.steps)
+
+    def test_canvas_experiment_runs_the_harness_with_family_epoch(self):
+        script, _env = step_script(
+            "Run canvas determinism experiment (plate-book, 5 kaynak)")
+        self.assertIn("canvas_determinism_test.sh", script)
+        # Aile SDE sabiti bilinçli yazılı: SOURCE_DATE_EPOCH'tan türümez
+        # (el yazması epoch'u levha PDF'lerini sessizce yeniden damgalar).
+        self.assertIn('SOURCE_DATE_EPOCH="1700000000"', script)
+        # Rapor yolu recorder'ın okuduğu yere yazılır (CANVAS_REPORT).
+        self.assertIn("canvas_determinism", script)
+
+    def test_source_matrix_is_env_parameter_and_loops(self):
+        # Matris parametresi env'dedir; run onu DÖNGÜyle işler (strategy.matrix
+        # yok: o kaynak başına ayrı job açardı — "tek job'da rapor" sözü kırılırdı).
+        script, env = step_script(
+            "Run canvas determinism experiment (plate-book, 5 kaynak)")
+        listed = env.get("CANVAS_SOURCES", "").split()
+        self.assertEqual(listed, self.CANVAS_SOURCES, "matris listesi")
+        self.assertIn("for src in $CANVAS_SOURCES", script)
+        self.assertIn('TEX_SOURCE="_calisma/CIKTI/canvas/$src"', script)
+        # Yapısal kilit: metin taraması yerine PARSED YAML — yorumlarda
+        # "strategy.matrix" geçebilir (neden kullanılmadığı yazılıdır);
+        # önemli olan hiçbir job'ın strategy/matris'e dağıtılmaması.
+        for job_name, job in load_yaml()["jobs"].items():
+            self.assertNotIn(
+                "strategy", job,
+                "job %r matris işi: 'tek job\'da beş rapor' sözü kırılırdı"
+                % job_name)
+
+    def test_five_reports_are_fail_closed(self):
+        # "Beş rapor" sözü adımın İÇİNDE denetlenir: her kaynak için rapor
+        # dosyası var + verdict=PASS; yoksa job kırmızı.
+        script, _env = step_script(
+            "Run canvas determinism experiment (plate-book, 5 kaynak)")
+        self.assertIn('test -f "$report"', script)
+        self.assertIn("verdict=PASS", script)
+        self.assertIn("rapor yok", script)
+        self.assertIn("${src%.tex}.determinism.txt", script)
+
+    def test_canvas_step_loop_actually_runs_harness_for_every_source(self):
+        """Davranışsal: adımın `run` betiği GERÇEKTE koşturulur (stub harness).
+
+        Metin varsayımları döngüyü bağlamaz (kanıtlandı: döngü silinince test
+        yeşil kalıyordu). Bu test betiği scratch bir repo-kökünde çalıştırır:
+        harness yerine stub, PATH'e dummy tectonic → 5 çağrı, doğru sıra,
+        SDE aile sabiti, 5 rapor. Hiçbir dış araç gerekmez.
+        """
+        script, env = step_script(
+            "Run canvas determinism experiment (plate-book, 5 kaynak)")
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            canvas_dir = root / "_calisma" / "CIKTI" / "canvas"
+            canvas_dir.mkdir(parents=True)
+            for src in self.CANVAS_SOURCES:
+                (canvas_dir / src).write_text("% stub kaynak\n", encoding="utf-8")
+            log = root / "calls.log"
+            stub = root / "_calisma" / "CIKTI" / "canvas_determinism_test.sh"
+            stub.write_text(
+                "#!/usr/bin/env bash\n"
+                "set -euo pipefail\n"
+                "stem=$(basename \"${TEX_SOURCE%.tex}\")\n"
+                "printf '%s %s\\n' \"$stem\" \"$SOURCE_DATE_EPOCH\" >> \"$LOG\"\n"
+                "mkdir -p docs/ci_simulate/canvas_determinism\n"
+                "printf 'source=%s\\nsource_date_epoch=%s\\nverdict=PASS\\n'" +
+                " \"$TEX_SOURCE\" \"$SOURCE_DATE_EPOCH\"" +
+                " > \"docs/ci_simulate/canvas_determinism/$stem.determinism.txt\"\n",
+                encoding="utf-8")
+            stub.chmod(0o755)
+            bin_dir = root / "bin"
+            bin_dir.mkdir()
+            dummy = bin_dir / "tectonic"
+            dummy.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            dummy.chmod(0o755)
+
+            run_env = dict(os.environ)
+            run_env.update({k: str(v) for k, v in (env or {}).items()})
+            run_env["PATH"] = "%s:%s" % (bin_dir, run_env.get("PATH", ""))
+            run_env["LOG"] = str(log)
+            r = subprocess.run(["bash", "-c", script], cwd=str(root),
+                               env=run_env, capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0,
+                             "adım düştü:\n" + r.stdout[-1200:] + r.stderr[-1200:])
+            calls = [ln.split() for ln in
+                     log.read_text(encoding="utf-8").splitlines() if ln]
+            self.assertEqual([c[0] for c in calls],
+                             [src[:-4] for src in self.CANVAS_SOURCES],
+                             "harness çağrısı kapsamı/sırası")
+            self.assertTrue(all(c[1] == "1700000000" for c in calls),
+                            "her çağrı aile SDE sabitiyle: %r" % calls)
+            reports = sorted(x.name for x in
+                             (root / "docs" / "ci_simulate" /
+                              "canvas_determinism").glob("*.determinism.txt"))
+            self.assertEqual(len(reports), 5, reports)
+
+    def test_missing_report_fails_the_step(self):
+        """"Beş rapor" sözü fail-closed: bir rapor hiç yazılmazsa adım düşer.
+
+        Harness derleme hatasında raporu hiç yazmaz (döngü ilk hatada zaten
+        kırmızı döner); burada ikinci denetimin kendisi sınanır — son kaynağın
+        raporu üretilmezse `test -f` yakalamalı.
+        """
+        script, env = step_script(
+            "Run canvas determinism experiment (plate-book, 5 kaynak)")
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            canvas_dir = root / "_calisma" / "CIKTI" / "canvas"
+            canvas_dir.mkdir(parents=True)
+            for src in self.CANVAS_SOURCES:
+                (canvas_dir / src).write_text("% stub kaynak\n", encoding="utf-8")
+            stub = root / "_calisma" / "CIKTI" / "canvas_determinism_test.sh"
+            stub.write_text(
+                "#!/usr/bin/env bash\n"
+                "set -euo pipefail\n"
+                "stem=$(basename \"${TEX_SOURCE%.tex}\")\n"
+                "if [ \"$stem\" = \"incidental_proof_book\" ]; then exit 0; fi\n"
+                "mkdir -p docs/ci_simulate/canvas_determinism\n"
+                "printf 'source=%s\\nverdict=PASS\\n' \"$TEX_SOURCE\"" +
+                " > \"docs/ci_simulate/canvas_determinism/$stem.determinism.txt\"\n",
+                encoding="utf-8")
+            stub.chmod(0o755)
+            bin_dir = root / "bin"
+            bin_dir.mkdir()
+            dummy = bin_dir / "tectonic"
+            dummy.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            dummy.chmod(0o755)
+            run_env = dict(os.environ)
+            run_env.update({k: str(v) for k, v in (env or {}).items()})
+            run_env["PATH"] = "%s:%s" % (bin_dir, run_env.get("PATH", ""))
+            r = subprocess.run(["bash", "-c", script], cwd=str(root),
+                               env=run_env, capture_output=True, text=True)
+            self.assertNotEqual(r.returncode, 0,
+                                "rapor eksiken adım yeşil kaldı")
+            self.assertIn("rapor yok", r.stdout + r.stderr)
+
+    def test_source_list_matches_makefile_single_source_of_truth(self):
+        # Anti-drift: CI listesi = Makefile PLATE_SOURCES + PLATE_BOOK.
+        # Makefile'a kaynak eklenir, bu liste unutulursa KIRMIZI (iki ayrı
+        # aile listesi yaşayamaz); aynı sınıf risk SDE sabiti için de kilitli.
+        mk = (ROOT / "docs" / "Makefile.texlive").read_text(encoding="utf-8")
+        make_names = sorted(set(re.findall(
+            r"incidental_proof_\w+\.tex", mk)))
+        self.assertEqual(make_names, sorted(self.CANVAS_SOURCES), make_names)
+        _script, env = step_script(
+            "Run canvas determinism experiment (plate-book, 5 kaynak)")
+        self.assertEqual(sorted(env.get("CANVAS_SOURCES", "").split()),
+                         make_names)
+
+    def test_canvas_record_uses_family_flag(self):
+        script, _env = step_script("Record canvas trend measurement")
+        self.assertIn("record_determinism_trend.py", script)
+        self.assertIn("--update --family canvas", script)
+
+    def test_single_tectonic_install_is_shared(self):
+        # Makefile sözü: "motor pini tek kaynaktir ve CI'dadir". İkinci bir
+        # tectonic kurulumu/pini eklenirse ya da canvas adımı kendisi kurarsa
+        # kırmızı — pin tek kaynaktan sarsılır.
+        self.assertEqual(self.text.count('TECTONIC_SHA256="'), 1)
+        installers = [n for n in self.steps
+                      if n and n.startswith("Install tectonic")]
+        self.assertEqual(len(installers), 1, installers)
+        script, _env = step_script(
+            "Run canvas determinism experiment (plate-book, 5 kaynak)")
+        for bad in ("curl ", "apt-get", "tar -x"):
+            self.assertNotIn(bad, script)
 
 
 if __name__ == "__main__":

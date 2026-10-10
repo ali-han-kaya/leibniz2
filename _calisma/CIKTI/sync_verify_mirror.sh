@@ -129,6 +129,21 @@ PREVIEW_FILES=(
   "preview_server.py|preview_server.py"
   "_daemonize.py|_daemonize.py"
   "preview_prestart.py|preview_prestart.py"
+  # Dashboard frontend deploy seti: preview_server.py /preview.js'i HER
+  # İSTEKTE PREVIEW_DIR'den okur; burada bayat kalırsa daemon ESKİ JS'i
+  # servis eder (inline onmousemove-handler'lı eski-sürüm kopyası —
+  # QA bulgusu F3, 2026-09-23; tooltip-delegasyonu boş). sw.js de aynı
+  # sette: preview.js onu kaydeder; mirror'da yoksa kayıt 404 alır ve
+  # webview'deki ESKİ SW kontrolü sonsuza dek elinde tutar (güncelleme-
+  # çekimi hep 404 → skipWaiting asla çalışmaz) — dashboard gömülü-
+  # webview'de asılı kalır (QA bulgusu F2, 2026-09-23).
+  # DİKKAT: preview.html burada TAŞINMAZ — mirror-yazarı update_preview.sh
+  # build()'dir (build-stamp enjekte eder; stamp zamanlı olduğundan raw
+  # kaynağıyla byte-farklı). sync RAW kopyalayıp üstüne yazsaydı hem
+  # build'i ezerdi hem --check'i kalıcı-BAYAT'a düşürürdü (F3-fix
+  # ilk-denenme, 2026-09-23; bootstrap-idempotence süitiyle kanıtlandı).
+  "preview.js|preview.js"
+  "sw.js|sw.js"
   # Hook raporu seam'i — preview_server.py bu modülü import eder
   # (dashboard finalize rotası). Mirror'da eksik kalırsa TCC/launchd
   # rotası dashboard'u servis etmeden ModuleNotFoundError ile düşer.
