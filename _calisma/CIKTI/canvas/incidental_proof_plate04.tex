@@ -1,0 +1,137 @@
+% ============================================================
+%  INCIDENTAL PROOF — plate 04  (the contour ledger)
+%  Canvas: 180x225mm (4:5), three-voice palette (paper/fathom/verm)
+%  Fonts: Big Shoulders (display) + Geist Mono (labels)  [OFL]
+%  Frame: origin = page south-west, y grows upward. All mm.
+%  Subject: the third plate-type — only the obstruction's effect
+%  is drawn. Fifteen ledger entries, each one a contour line;
+%  every entry bends around a hill that is never inked. The
+%  ledger keeps account of the deflection and of nothing else:
+%  the crest entry (C-07) seals 6.4 mm, the cause stays unrecorded.
+% ============================================================
+\documentclass[12pt]{article}
+\pagestyle{empty}
+\usepackage[margin=0pt,paperwidth=180mm,paperheight=225mm]{geometry}
+\usepackage{tikz}
+\usepackage{fontspec}
+\setmainfont{BigShoulders.ttf}[Path=]
+\setmonofont{GeistMono.ttf}[Path=]
+\usepackage{xcolor}
+\definecolor{paper}{HTML}{F2EBD9}
+\definecolor{fathom}{HTML}{1B2A41}
+\definecolor{verm}{HTML}{C1440E}
+\definecolor{fathom40}{HTML}{8E97A8}
+\definecolor{fathom25}{HTML}{B4BAC7}
+\definecolor{fathom12}{HTML}{D8DCE2}
+
+\begin{document}
+\begin{tikzpicture}[remember picture,overlay, x=1mm, y=1mm]
+  \begin{scope}[shift={(current page.south west)}]
+    % ---- paper ground ---------------------------------------
+    \fill[paper] (0,0) rectangle (180,225);
+
+    % ============ THE CONTOUR LEDGER (upper 2/3) ==============
+    % 15 entries, one contour line each. The ledger's frame is
+    % machine-straight (columns, base rule); the entries bend
+    % around the unseen crest at x=86 — amplitude falls off with
+    % distance from it, so the deflection is nested and the hill
+    % itself never appears. Entries nearest the crest are inked
+    % heavier: that is the doubt the deflection induced.
+    \begin{scope}[shift={(10,84)}]
+      \def\W{160} \def\H{96} \def\A{6.4}
+      % the ledger is bounded by its own first and last entries: no
+      % separate frame rule shares their y (a doubled line reads as a
+      % printing fault, not as a frame).
+      % column rules: entry (0-28), deflection (28-104), seal (104-116)
+      \foreach \xx in {28,104,116}{%
+        \draw[fathom25,line width=0.5pt] (\xx,0) -- (\xx,\H);}
+      % the fifteen entries: contour lines nested around the crest
+      \foreach \i in {0,...,14}{%
+        \pgfmathsetmacro{\yy}{\i*\H/14}%
+        \pgfmathsetmacro{\dd}{\A*(1-abs(\i-7)/7)}%
+        \pgfmathtruncatemacro{\dist}{abs(\i-7)}%
+        \ifnum\i=0
+          \def\rowcol{fathom}\def\rowlw{0.8pt}%
+        \else\ifnum\i=14
+          \def\rowcol{fathom}\def\rowlw{0.8pt}%
+        \else\ifcase\dist
+          \def\rowcol{verm}\def\rowlw{1.1pt}%
+        \or
+          \def\rowcol{fathom40}\def\rowlw{0.6pt}%
+        \or
+          \def\rowcol{fathom40}\def\rowlw{0.6pt}%
+        \else
+          \def\rowcol{fathom}\def\rowlw{0.4pt}%
+        \fi\fi\fi
+        \draw[\rowcol,line width=\rowlw] (0,\yy)
+          .. controls (30,\yy+0.12*\dd) and (54,\yy+0.62*\dd) .. (86,\yy+\dd)
+          .. controls (106,\yy+0.78*\dd) and (134,\yy+0.22*\dd) .. (\W,\yy);
+      }
+      % witness: the crest entry, sealed (vermilion)
+      \pgfmathsetmacro{\apexY}{7*\H/14+\A}%
+      \draw[verm,line width=0.9pt] (86,\apexY-2.4) -- (86,\apexY+2.4);
+      \node[anchor=north, text=verm, font=\ttfamily\fontsize{5.2}{6}\selectfont]
+        at (86,\apexY-3.6) {(86.0, 6.4)};
+      % the seal column is not decorative: the crest entry carries its
+      % seal and its measured deflection; the other fourteen carry none.
+      \draw[verm,line width=0.9pt] (108,45.8) -- (112,50.2);
+      \node[anchor=west, text=verm, font=\ttfamily\fontsize{5.0}{6}\selectfont]
+        at (118.5,48.0) {6.4};
+      % archive ticks, left edge
+      \foreach \i/\t in {0/{C-00}, 7/{C-07}, 14/{C-14}}{%
+        \pgfmathsetmacro{\yy}{\i*\H/14}%
+        \draw[fathom40,line width=0.5pt] (-2.6,\yy) -- (0,\yy);
+        \ifnum\i=7
+          \node[anchor=east, text=verm, font=\ttfamily\fontsize{4.6}{5.6}\selectfont]
+            at (-3.6,\yy) {\t};
+        \else
+          \node[anchor=east, text=fathom40, font=\ttfamily\fontsize{4.6}{5.6}\selectfont]
+            at (-3.6,\yy) {\t};
+        \fi}
+      % column headers (engraver's line)
+      \node[anchor=south west, text=fathom40, font=\ttfamily\fontsize{4.6}{5.6}\selectfont]
+        at (0,\H+2.0) {ENTRY};
+      \node[anchor=south, text=fathom40, font=\ttfamily\fontsize{4.6}{5.6}\selectfont]
+        at (66,\H+2.0) {DEFLECTION FROM THE UNSEEN};
+      \node[anchor=south west, text=verm, font=\ttfamily\fontsize{4.6}{5.6}\selectfont]
+        at (104,\H+2.0) {SEAL};
+      % row-count annotation
+      \node[anchor=north west, text=fathom40, font=\ttfamily\fontsize{5.0}{6}\selectfont]
+        at (0,-4.2) {15 CONTOUR ENTRIES / 1 SEALED};
+    \end{scope}
+
+    % rotated margin annotation
+    \node[anchor=south west, text=fathom25, font=\ttfamily\fontsize{5.0}{6}\selectfont,
+          rotate=90] at (6.6,164) {FIELD 04 — CONTOUR LEDGER, 15 ENTRIES, CREST UNSEEN};
+
+    % ============ DEFLECTION LEDGER (lower third) =============
+    % The effect, entered as numbers: one bar per contour entry,
+    % length = that entry's measured deflection. The cause has no
+    % column here; only its shadow does.
+    \begin{scope}[shift={(10,34)}]
+      \def\W{160} \def\slotW{10.6667} \def\maxH{30}
+      \draw[fathom,line width=0.8pt] (0,0) -- (\W,0);
+      \foreach \i in {0,...,14}{%
+        \pgfmathsetmacro{\xx}{(\i+0.5)*\slotW-1.1}%
+        \pgfmathsetmacro{\dist}{abs(\i-7)}%
+        \pgfmathsetmacro{\hh}{1.0+(\maxH-1.0)*(1-\dist/7)}%
+        \ifnum\i=7
+          \fill[verm] (\xx,0) rectangle ++(2.2,\hh);%
+        \else
+          \fill[fathom] (\xx,0) rectangle ++(2.2,\hh);%
+        \fi}
+      \node[anchor=south, text=verm, font=\ttfamily\fontsize{4.6}{5.6}\selectfont]
+        at ({7.5*\slotW},{\maxH+1.6}) {(6.4)};
+      \node[anchor=north west, text=fathom40, font=\ttfamily\fontsize{5.0}{6}\selectfont]
+        at (0,-4.2) {15 DEFLECTIONS / CREST 6.4 MM / CAUSE UNRECORDED};
+    \end{scope}
+
+    % ---- title block ------------------------------------------
+    \draw[fathom,line width=1.4pt] (10,24) -- (170,24);
+    \node[anchor=north west, text=fathom, font=\fontsize{22}{24}\selectfont]
+      at (9.6,22.2) {THE CONTOUR LEDGER};
+    \node[anchor=west, text=fathom40, font=\ttfamily\fontsize{5.6}{7}\selectfont]
+      at (104,17.4) {PLATE 04 / THE EFFECT, ENTERED};
+  \end{scope}
+\end{tikzpicture}
+\end{document}

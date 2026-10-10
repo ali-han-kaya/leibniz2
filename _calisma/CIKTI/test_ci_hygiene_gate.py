@@ -15,6 +15,7 @@ Kapı betiği ci_hygiene_gate.py aynı kuralları hook/CI yüzeyinde koşar:
 rc 0=PASS, 1=FAIL(≥1 ihlal), 2=kullanım/ortam hatası — sessiz-PASS yok.
 """
 import pathlib
+import re
 import subprocess
 import sys
 import tempfile
@@ -28,7 +29,16 @@ ROOT = HERE.parent.parent
 WORKFLOWS = ROOT / ".github" / "workflows"
 GATE = HERE / "ci_hygiene_gate.py"
 
-import yaml
+# Kapı (ci_hygiene_gate.py) PyYAML yoksa rc=2 verir (dürüst ortam hatası,
+# sessiz-PASS yok). Bu dosya bu yüzden İKİ katmanlıdır: yaml VARSA kapıyı
+# gerçekten koşturan davranış testleri, yaml YOKSA (ör. CI) metin-tabanlı
+# statik katman koşar — dosya PyYAML'sız ortamda da KIRMIZI olabilir.
+try:
+    import yaml
+    HAVE_YAML = True
+except ImportError:  # pragma: no cover — ortama bağlı
+    yaml = None
+    HAVE_YAML = False
 
 
 def run_gate(workflows_dir):
@@ -42,6 +52,7 @@ def load(p):
     return yaml.safe_load(p.read_text(encoding="utf-8"))
 
 
+@unittest.skipUnless(HAVE_YAML, "PyYAML gerekli — kapı rc=2 verir")
 class TestWorkflowHygieneInvariants(unittest.TestCase):
     """Repo yüzeyi: mevcut workflow'lar kapıyı geçmeli (regresyon-blokajı)."""
 
@@ -71,6 +82,7 @@ class TestWorkflowHygieneInvariants(unittest.TestCase):
                             f"{p.name}: concurrency.group boş")
 
 
+@unittest.skipUnless(HAVE_YAML, "PyYAML gerekli — kapı rc=2 verir")
 class TestGateFailClosed(unittest.TestCase):
     """Kapı yüzeyi: her ihlal-tipi tek tek rc=1 üretmeli."""
 
@@ -141,6 +153,60 @@ class TestGateFailClosed(unittest.TestCase):
     def test_missing_dir_is_usage_error(self):
         r = run_gate(_TMP / "yok-boyle-dizin-xyz")
         self.assertEqual(r.returncode, 2)
+
+
+class TestStaticTextLayer(unittest.TestCase):
+    """PyYAML'sız ortamda da koşan metin katmanı (fail-closed).
+
+    Kapı yaml'sız rc=2 verir; bu sınıf üç kuralın VARLIĞINI dosya metninden
+    doğrular. Davranış testlerinden daha zayıftır (int aralığı/bool ayrımı
+    yapmaz) ama her ortamda koşar: workflow'lardan biri permissions/concurrency/
+    job-timeout kaybederse bu katman KIRMIZI olur — tüm-skip değildir.
+    """
+
+    JOB = re.compile(r"^  [A-Za-z0-9_-]+:\s*$")
+
+    def test_every_workflow_has_top_level_permissions(self):
+        for p in sorted(WORKFLOWS.glob("*.yml")):
+            lines = p.read_text(encoding="utf-8").splitlines()
+            self.assertTrue(
+                any(ln.startswith("permissions:") for ln in lines),
+                f"{p.name}: top-level permissions yok")
+
+    def test_every_workflow_has_concurrency_group(self):
+        for p in sorted(WORKFLOWS.glob("*.yml")):
+            lines = p.read_text(encoding="utf-8").splitlines()
+            i = next((n for n, ln in enumerate(lines)
+                      if ln.startswith("concurrency:")), None)
+            self.assertIsNotNone(i, f"{p.name}: top-level concurrency yok")
+            group = ""
+            for ln in lines[i + 1:]:
+                if not ln.startswith((" ", "\t")):
+                    break
+                if ln.strip().startswith("group:"):
+                    group = ln.split(":", 1)[1].strip()
+                    break
+            self.assertTrue(group, f"{p.name}: concurrency.group yok/boş")
+
+    def test_every_job_declares_timeout_minutes(self):
+        for p in sorted(WORKFLOWS.glob("*.yml")):
+            lines = p.read_text(encoding="utf-8").splitlines()
+            j = next((n for n, ln in enumerate(lines)
+                      if ln.startswith("jobs:")), None)
+            self.assertIsNotNone(j, f"{p.name}: jobs yok")
+            starts = [n for n in range(j + 1, len(lines))
+                      if self.JOB.match(lines[n])]
+            self.assertTrue(starts, f"{p.name}: job yok")
+            for start in starts:
+                body = []
+                for ln in lines[start + 1:]:
+                    if self.JOB.match(ln) or (ln and not ln.startswith((" ", "\t"))):
+                        break
+                    body.append(ln)
+                jid = lines[start].strip()
+                self.assertTrue(
+                    any(ln.strip().startswith("timeout-minutes:") for ln in body),
+                    f"{p.name}:{jid}: timeout-minutes yok")
 
 
 if __name__ == "__main__":

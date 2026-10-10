@@ -20,7 +20,15 @@ docs/determinism_trend/determinism_trend.jsonl'ı okur (satır-başına ölçüm
   - test_api_method_contract.py: API_CONTRACT + ROUTE_TOKENS girdileri
 
 Sözleşme testi: test_determinism_trend_badge.py.
-Badge mantığının JS karşılığı determinismTrendBadge() ile birebir senkrondur.
+Badge mantığının JS karşılığı determinismTrendBadge() ile birebir senkrondur
+(aynı dosyada `determinismTrendFamilyOf` yardımcısıyla; test, JS davranışını
+node ile Python çıktısıyla birebir karşılaştırır).
+
+AİLELER (2026-10-08): aynı jsonl iki bağımsız seri taşır (manuscript + canvas).
+Badge AİLE BAŞINA son kayda bakar: `rows[-1]`e bakmak, taze bir canvas
+satırı için BAYAT/FAILED manuscript serisini yeşile boyardı — fail-open
+regresyon testi bunu kilitler. Zincir (aynı-hash çizgisi) ve tooltip de aile ayrımı
+yapar: aileler arası çizgi anlamsızdır.
 
 stdlib only — OFFLINE.
 """
@@ -34,6 +42,13 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 CIKTI = os.path.join(ROOT, "_calisma", "CIKTI")
 TREND = os.path.join(ROOT, "docs", "determinism_trend", "determinism_trend.jsonl")
 DEFAULT_OUT_DIR = os.path.join(ROOT, "determinism-trend")
+
+# Aileler — record_determinism_trend.py ile AYNI değer (jsonl tek, iki seri).
+# Bağımsız tanımlı: modül stdlib-only ve bağımsız import edilir; davranış
+# eşitliği test_determinism_trend_badge.py kilitler.
+FAMILY_MANUSCRIPT = "manuscript"
+FAMILY_CANVAS = "canvas"
+FAMILIES = (FAMILY_MANUSCRIPT, FAMILY_CANVAS)
 
 SHA_PREFIX_LEN = 8          # tooltip/badge'de gösterilecek hash öneki
 SVG_W, SVG_H, PAD = 1160, 90, 24
@@ -59,25 +74,55 @@ def rows_from(path):
     return rows
 
 
+def family_of(row):
+    """Satırın ailesi; alan yoksa/boşsa manuscript (geriye dönük okuma).
+
+    record_determinism_trend.family_of ile AYNI kural (oradaki sabitlerle
+    bağımsız; davranış eşitliği test_determinism_trend_badge kilitler).
+    """
+    fam = row.get("family") if isinstance(row, dict) else None
+    return fam if isinstance(fam, str) and fam else FAMILY_MANUSCRIPT
+
+
 def badge(rows):
-    """rows → {cls, text}. Son ölçüm PASS ise yeşil (toplam ölçüm sayısıyla);
-    değilse amber. JS karşılığı determinismTrendBadge() ile senkron."""
+    """rows → {cls, text}. AİLE BAŞINA son kayda bakılır: iki seri tek dosyada
+    yaşadığı için taze/temiz bir aile, diğer ailenin kırmızısını kapatamaz.
+
+    Tek ailede metin biçimi eskisiyle birebir aynı (sözleşme sabiti); çok
+    ailede ihlal eden aile(ler) adıyla yazılır. Sayım toplam ölçüm sayısıdır.
+    JS karşılığı determinismTrendBadge() ile senkron.
+    """
     if not rows:
         return {"cls": "unknown", "text": "determinizm: veri yok"}
-    last_gate = rows[-1].get("gate")
     n = len(rows)
-    if last_gate == "PASS":
+    last_of = {}
+    for r in rows:
+        last_of[family_of(r)] = r
+    fams = list(last_of)
+    bad = [f for f in fams if last_of[f].get("gate") != "PASS"]
+    if not bad:
         return {"cls": "ok", "text": "✓ DETERMİNİZM PASS · %d ölçüm" % n}
+    if len(fams) == 1:
+        gate = last_of[fams[0]].get("gate")
+        return {"cls": "warn",
+                "text": "⚠️ determinizm gate %s · %d ölçüm" % (gate or "?", n)}
+    detail = ", ".join("%s %s" % (f, last_of[f].get("gate") or "?")
+                       for f in bad)
     return {"cls": "warn",
-            "text": "⚠️ determinizm gate %s · %d ölçüm" % (last_gate or "?", n)}
+            "text": "⚠️ determinizm gate %s · %d ölçüm" % (detail, n)}
 
 
 def _row_title(r):
-    tex = str(r.get("texlive_canonical_sha256", ""))[:SHA_PREFIX_LEN]
-    tec = str(r.get("tectonic_canonical_sha256", ""))[:SHA_PREFIX_LEN]
-    return "%s · %s · texlive %s · tectonic %s · gate %s" % (
-        r.get("date", "?"), r.get("platform", "?"), tex, tec,
-        r.get("gate", "?"))
+    # Aile etiketi + yalnız TAŞINAN hash'ler: canvas satırında texlive bacağı
+    # yoktur (boş "texlive  ·" yazmak yanlış bilgidir).
+    bits = [str(r.get("date") or "?"), str(r.get("platform") or "?"),
+            family_of(r)]
+    for key, label in (("texlive_canonical_sha256", "texlive"),
+                       ("tectonic_canonical_sha256", "tectonic")):
+        if r.get(key):
+            bits.append("%s %s" % (label, str(r[key])[:SHA_PREFIX_LEN]))
+    bits.append("gate %s" % (r.get("gate") or "?"))
+    return " · ".join(bits)
 
 
 def _x(i, n):
@@ -106,7 +151,8 @@ def svg(rows):
                 % (_x(i, n), SVG_H // 2, color, _row_title(r)))
         for i in range(1, n):
             a, b = have[i - 1], have[i]
-            if (a.get("texlive_canonical_sha256") == b.get("texlive_canonical_sha256")
+            if (family_of(a) == family_of(b)
+                    and a.get("texlive_canonical_sha256") == b.get("texlive_canonical_sha256")
                     and a.get("tectonic_canonical_sha256")
                     == b.get("tectonic_canonical_sha256")):
                 parts.append('<line x1="%.1f" y1="%d" x2="%.1f" y2="%d" '
@@ -151,13 +197,42 @@ HTML_SECTION = '''  <section>
 
 JS_CODE = '''
 // ─── TeX motor determinizm trend ─────────────────────────────────────────
-// Python karşılığı (determinism_trend_badge.badge) ile birebir senkron.
+// Python karşılığı (determinism_trend_badge) ile BİREBİR SENKRON: aşağıdaki
+// üç fonksiyonun metni determinism_trend_badge.JS_CODE ile bu dosyada birebir
+// aynıdır (test_determinism_trend_badge.py hem metin eşitliğini hem node
+// ile davranış eşitliğini kilitler).
+//
+// AİLELER: aynı jsonl iki bağımsız seri taşır (manuscript + canvas). Badge
+// aile BAŞINA son kayda bakar — `rows[-1]`e bakmak taze bir canvas satırı
+// için bayat/FAILED manuscript serisini yeşile boyardı (fail-open).
+function determinismTrendFamilyOf(row) {
+  return row && typeof row.family === "string" && row.family
+    ? row.family
+    : "manuscript";
+}
+
 function determinismTrendBadge(rows) {
   if (!rows || !rows.length) return { cls: "unknown", text: "determinizm: veri yok" };
-  const lastGate = rows[rows.length - 1].gate;
   const n = rows.length;
-  if (lastGate === "PASS") return { cls: "ok", text: "✓ DETERMİNİZM PASS · " + n + " ölçüm" };
-  return { cls: "warn", text: "⚠️ determinizm gate " + (lastGate || "?") + " · " + n + " ölçüm" };
+  const lastOf = {};
+  rows.forEach((r) => { lastOf[determinismTrendFamilyOf(r)] = r; });
+  const fams = Object.keys(lastOf);
+  const bad = fams.filter((f) => lastOf[f].gate !== "PASS");
+  if (!bad.length) return { cls: "ok", text: "✓ DETERMİNİZM PASS · " + n + " ölçüm" };
+  if (fams.length === 1) {
+    const gate = lastOf[fams[0]].gate;
+    return { cls: "warn", text: "⚠️ determinizm gate " + (gate || "?") + " · " + n + " ölçüm" };
+  }
+  const detail = bad.map((f) => f + " " + (lastOf[f].gate || "?")).join(", ");
+  return { cls: "warn", text: "⚠️ determinizm gate " + detail + " · " + n + " ölçüm" };
+}
+
+function determinismTrendRowTitle(r) {
+  const bits = [String(r.date || "?"), String(r.platform || "?"), determinismTrendFamilyOf(r)];
+  if (r.texlive_canonical_sha256) bits.push("texlive " + String(r.texlive_canonical_sha256).slice(0, 8));
+  if (r.tectonic_canonical_sha256) bits.push("tectonic " + String(r.tectonic_canonical_sha256).slice(0, 8));
+  bits.push("gate " + (r.gate || "?"));
+  return bits.join(" · ");
 }
 
 function renderDeterminismTrend(rows) {
@@ -180,15 +255,18 @@ function renderDeterminismTrend(rows) {
       const n = have.length;
       have.forEach((r, i) => {
         const color = r.gate === "PASS" ? "#3fb950" : "#d29922";
-        const tex = String(r.texlive_canonical_sha256 || "").slice(0, 8);
-        const tec = String(r.tectonic_canonical_sha256 || "").slice(0, 8);
-        parts.push(`<circle cx="${xAt(i, n).toFixed(1)}" cy="${H / 2}" r="5" fill="${color}">` +
-          `<title>${r.date} · ${r.platform} · texlive ${tex} · tectonic ${tec} · gate ${r.gate || "?"}</title></circle>`);
+        parts.push(
+          `<circle cx="${xAt(i, n).toFixed(1)}" cy="${H / 2}" r="5" fill="${color}">` +
+            `<title>${determinismTrendRowTitle(r)}</title></circle>`
+        );
       });
       for (let i = 1; i < n; i++) {
         const a = have[i - 1], b2 = have[i];
-        if (a.texlive_canonical_sha256 === b2.texlive_canonical_sha256 &&
-            a.tectonic_canonical_sha256 === b2.tectonic_canonical_sha256) {
+        if (
+          determinismTrendFamilyOf(a) === determinismTrendFamilyOf(b2) &&
+          a.texlive_canonical_sha256 === b2.texlive_canonical_sha256 &&
+          a.tectonic_canonical_sha256 === b2.tectonic_canonical_sha256
+        ) {
           parts.push(`<line x1="${xAt(i - 1, n).toFixed(1)}" y1="${H / 2}" x2="${xAt(i, n).toFixed(1)}" y2="${H / 2}" stroke="#3fb950" stroke-width="2"/>`);
         }
       }

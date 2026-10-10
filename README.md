@@ -81,10 +81,18 @@ make -f docs/Makefile.texlive pdf       # 3-geçişli derleme + Rerun=0 denetimi
 make -f docs/Makefile.texlive check     # 2×3-geçiş determinism deneyi (fail-closed)
 make -f docs/Makefile.texlive accept    # kanonik hash'i ID_RESIDUAL_ACCEPTANCE defterinde doğrular
 make -f docs/Makefile.texlive engineinfo  # motor kilidi + sözleşme sabitleri (CI log'u için)
+make -f docs/Makefile.texlive plate-book        # Incidental Proof levha kitabı (tectonic, ayrı SDE sabiti)
+make -f docs/Makefile.texlive plate-book-check  # levhalar+kitap: 2× bağımsız SDE koşumu (fail-closed)
 
 # tectonic — paralel yaşam, geri dönüş yolu
 make -f docs/Makefile.tectonic pdf
 ```
+
+Levha kitabı (Incidental Proof) ayrı bir aile sabiti taşır:
+`PLATE_BOOK_EPOCH ?= 1700000000`. Ayrıdır çünkü canvas ailesi
+fontspec/XeTeX sözleşmesiyle tectonic ile derlenir ve el yazmasının
+epoch'u bu PDF'leri yeniden damgalamamalıdır; `plate-book-check` kitabı ve
+derlediği dört levhayı kaynak-başına iki bağımsız koşumla sınar.
 
 Sözleşme: `SOURCE_DATE_EPOCH ?= git log -1 --format=%ct` (geçmiş commit'i
 yeniden üretme), `TEXINPUTS="$TEXDIR//:"`, `TEXMFOUTPUT`/`-output-directory`
@@ -543,7 +551,10 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-04 | other | verify: surface unregistered P0/P1 as an Other layer | [`35a7940`](https://github.com/ali-han-kaya/leibniz2/commit/35a7940) |
 | 2026-09-22 | feat | (ci) CI hygiene gate - permissions, timeout, concurrency matrix | [`88e70d1`](https://github.com/ali-han-kaya/leibniz2/commit/88e70d1) |
 | 2026-09-22 | feat | (docker) PR-triggered Trivy scan with SARIF diff comment | [`5380ed0`](https://github.com/ali-han-kaya/leibniz2/commit/5380ed0) |
-| 2026-10-05 | chore | (changelog) 5380ed0 ve 88e70d1 satirlarini tabloya ekle, olu hashleri buda | [`c32e881`](https://github.com/ali-han-kaya/leibniz2/commit/c32e881) |
+| 2026-10-06 | feat | (a11y) add /api/a11y bridge + verdict panel | [`54ffe31`](https://github.com/ali-han-kaya/leibniz2/commit/54ffe31) |
+| 2026-10-06 | feat | (a11y) battery gate + refs-index + health bridge | [`8179866`](https://github.com/ali-han-kaya/leibniz2/commit/8179866) |
+| 2026-10-06 | docs | (a11y) finalize a11y-gate implementation plan | [`4a05c7f`](https://github.com/ali-han-kaya/leibniz2/commit/4a05c7f) |
+| 2026-10-05 | chore | (changelog) 5380ed0 + 88e70d1 satirlarini tabloya ekle | [`0b2ca43`](https://github.com/ali-han-kaya/leibniz2/commit/0b2ca43) |
 
 ### Regresyon notları
 

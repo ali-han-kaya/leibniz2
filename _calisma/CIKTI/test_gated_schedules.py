@@ -62,6 +62,10 @@ GATE_SCRIPTS = (
     "docker_security_smoke.sh",
     "texlive_determinism_test.sh",
     "verify_delivery.py",
+    # 2026-10-05: kanit-defteri bayatlik kapisi (deploy_evidence.py --check).
+    # Beyaz liste K1'in "bu bir kapi script'idir" tanimidir; yeni kapi buraya
+    # yazilmadan schedule'lı workflow "kapi cagrirmiyor" sayilir.
+    "deploy_evidence.py",
 )
 
 
@@ -128,6 +132,110 @@ class TestScheduleGateParity(unittest.TestCase):
                       "script'in SKIP sözleşmesi hâlâ belgelenmeli: triviysiz "
                       "yerel makinelerde doğru davranış, kurulumu değil betiği "
                       "korumak")
+
+
+def cron_minute_of_week(expression: str) -> int:
+    """`M H * * D` cron ifadesini haftanin dakikasina cevir (0=Pazartesi 00:00).
+
+    Cron'da gun alani 0=Pazar..6=Cumartesi; Python'da weekday() 0=Pazartesi..
+    6=Pazar → (D + 6) % 7 ile aynı tabana indirgenir. Bu olcum olmadan
+    "cron daha sonra" iddiası saat:dakika metnine bakmakla yapılır; haftanın
+    başına kaydırılmış bir karşılaştırma sessizce YANLIŞ sıralama üretir.
+    """
+    fields = expression.split()
+    if len(fields) != 5:
+        raise ValueError("5 alanlı cron beklenir: %r" % expression)
+    minute, hour = int(fields[0]), int(fields[1])
+    if fields[2] != "*" or fields[3] != "*":
+        raise ValueError("haftalık cron beklenir (gün/ay alanı '*'): %r" % expression)
+    weekday = int(fields[4])
+    return ((weekday + 6) % 7) * 24 * 60 + hour * 60 + minute
+
+
+class TestDeployEvidenceCronOrder(unittest.TestCase):
+    """K6: kanit-defteri kapısı determinism-trend cron'unun ARDINDAN koşar.
+
+    Sıralama, kargonun kendisine ait: haftalık trend ölçümü önce kaydedilir
+    (determinism-trend job'ı PR açar → main'e girer), KANIT-DEFTERİ kapısı
+    sonra o ölçümü değerlendirir. Ters sıra, kapının yeni ölçümü görmeden
+    "geçerli" demesine yol açar — sessiz kanıt kaybı.
+    """
+
+    TREND = WORKFLOWS / "determinism-trend.yml"
+    GATE = WORKFLOWS / "deploy-evidence.yml"
+
+    @classmethod
+    def setUpClass(cls):
+        cls._trend = cls.TREND.read_text(encoding="utf-8")
+        cls._gate = cls.GATE.read_text(encoding="utf-8")
+
+    def _cron(self, text):
+        m = re.search(r'^\s*- cron:\s*"([^"]+)"', text, re.M)
+        self.assertIsNotNone(m, "cron ifadesi yok")
+        return m.group(1)
+
+    def test_gate_workflow_exists_with_schedule(self):
+        self.assertTrue(self.GATE.is_file(),
+                        "deploy-evidence.yml yok — haftalik kanit-defteri kapisi "
+                        "cron'suz tamamlanamaz")
+        self.assertRegex(self._cron(self._gate), r"^\d+ \d+ \* \* \d+$")
+
+    def test_gate_cron_is_after_determinism_trend_cron(self):
+        trend = cron_minute_of_week(self._cron(self._trend))
+        gate = cron_minute_of_week(self._cron(self._gate))
+        self.assertGreater(
+            gate, trend,
+            "kanit-defteri capisi determinism-trend cron'undan SONRA olmali "
+            "(trend: %s, kapi: %s)" % (self._cron(self._trend), self._cron(self._gate)))
+
+    def test_gate_cron_leaves_room_for_the_trend_job(self):
+        """Aralık yalnız 'daha sonra' değil, ÖLÇÜLEBİLİR bir boşluk olmalı.
+
+        1 dakikalık fark kâğıt üstünde sıralı ama pratikte çakışır: trend
+        job'ı TeXLive kurulumu + iki SDE koşumu + PR akışıyla dakikalarca
+        sürer; aynı dakikaya düşen kapı eski kanıtı görür.
+        """
+        trend = cron_minute_of_week(self._cron(self._trend))
+        gate = cron_minute_of_week(self._cron(self._gate))
+        self.assertGreaterEqual(gate - trend, 15,
+                                "capı trend'den en az 15 dakika sonra olmali "
+                                "(fark %d dakika)" % (gate - trend))
+
+    def test_gate_script_is_called_via_run_step(self):
+        """K2 paralitesi: kapı bir `run:` adımında çağrılır (uses: değil).
+
+        Çağrı `run: |` bloğunun İKİNCİ satırında olabilir; bu yüzden
+        satır-bazlı `run:` taraması yerine kapsayıcı ADIM bloğu incelenir
+        (satır-bazlı tarama çok satırlı run bloklarını kaçırır ve kırmızı
+        üretir — ölçtüğümüz kargonun kendisi böyle yazılı).
+        """
+        blocks = re.split(r"\n(?=\s*- name:)", self._gate)
+        callers = [b for b in blocks if "deploy_evidence.py" in b]
+        self.assertTrue(callers,
+                        "deploy-evidence.yml: kapı script'i hiç çağrılmıyor")
+        for block in callers:
+            self.assertRegex(block, r"\brun:",
+                             "kapı script'i `run:` adımında çağrılmalı "
+                             "(action'lar script'i substitute edemez)")
+            self.assertNotIn("uses:", block,
+                             "kapı adımı `uses:` içermemeli — script'i "
+                             "substitute eden action kırıntısı")
+
+    def test_gate_step_is_fail_closed(self):
+        """Bayat kanıt → KIRMIZI: continue-on-error/|| true kaçağı olmamalı."""
+        body = step_body(self._gate, "Evidence freshness gate (fail-closed)")
+        self.assertIsNotNone(body, "kapı adımı yok")
+        self.assertNotIn("continue-on-error", body)
+        self.assertNotIn("|| true", body)
+        self.assertIn("set -euo pipefail", body,
+                      "pipefail olmadan `| tee` hata kodunu yutar — kirmizi "
+                      "olmasi gereken kosum yesil gorunur")
+
+    def test_gate_uses_full_history_checkout(self):
+        """Shallow clone'da merge-base/rev-list ölçümü çalışmaz → sessiz yeşil."""
+        self.assertIn("fetch-depth: 0", self._gate,
+                      "kanıt-defteri kapısı tam geçmişle çalışmalı "
+                      "(fetch-depth: 0); shallow clone HEAD kapsamını göremez")
 
 
 class TestSkipIsNotEvidenceInCI(unittest.TestCase):

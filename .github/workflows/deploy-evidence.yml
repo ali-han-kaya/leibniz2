@@ -1,0 +1,58 @@
+name: deploy-evidence
+
+on:
+  schedule:
+    # Haftalik: her Pazartesi 03:47 UTC. determinism-trend'in cron'u
+    # (determinism-trend.yml, `17 3 * * 1`) BITTIGINDE calisir — ayni Pazartesi,
+    # 30 dakika sonra. Siralama kasitlidir: trend olcumu kaydi (PR -> main)
+    # once guncellensin, kanit-defteri kapisi SONRA o olcumu degerlendirsin.
+    # test_gated_schedules.py::TestDeployEvidenceCronOrder bu sirayi kiviler.
+    - cron: "47 3 * * 1"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  # CI-hijyen: haftalik kanit-defteri kosumu elle tetikleme ile cakismasin.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  freshness:
+    name: Deploy evidence freshness gate (fail-closed)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # fetch-depth: 0 ZORUNLU — kapı `git merge-base --is-ancestor` ve
+      # `git rev-list --count <kayit>..origin/main` ile "kayit ne kadar geride"
+      # olcuyor. Shallow clone'da gecmis yok → yalnizca HEAD gelir → kapı
+      # hicbir zaman gercek boslugu goremez (sessiz yesil = kanit kaybi).
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      # Fail-closed: bayat kanit (yapı / HEAD kapsamı / yaş / koşum sonucu
+      # sapması) → exit 1 → job KIRMIZI. exit 2 (defter yok, gh yok) de
+      # kirmizidir: olcum yapilamayan kapı yesil sayilmaz.
+      - name: Evidence freshness gate (fail-closed)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 _calisma/CIKTI/deploy_evidence.py --check \
+            --repo "$GITHUB_REPOSITORY" | tee /tmp/deploy_evidence.log
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## deploy-evidence" >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/deploy_evidence.log >> "$GITHUB_STEP_SUMMARY" 2>/dev/null \
+            || echo "(kapı çıktısı yok — aşağıdaki adıma bak)" >> "$GITHUB_STEP_SUMMARY"
