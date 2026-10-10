@@ -92,7 +92,7 @@ Levha kitabı (Incidental Proof) ayrı bir aile sabiti taşır:
 `PLATE_BOOK_EPOCH ?= 1700000000`. Ayrıdır çünkü canvas ailesi
 fontspec/XeTeX sözleşmesiyle tectonic ile derlenir ve el yazmasının
 epoch'u bu PDF'leri yeniden damgalamamalıdır; `plate-book-check` kitabı ve
-derlediği dört levhayı kaynak-başına iki bağımsız koşumla sınar.
+derlediği beş levhayı kaynak-başına iki bağımsız koşumla sınar.
 
 Sözleşme: `SOURCE_DATE_EPOCH ?= git log -1 --format=%ct` (geçmiş commit'i
 yeniden üretme), `TEXINPUTS="$TEXDIR//:"`, `TEXMFOUTPUT`/`-output-directory`
@@ -617,6 +617,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-08 | feat | (canvas) Incidental Proof header banner (svg + gomme + test) | [`46933f3`](https://github.com/ali-han-kaya/leibniz2/commit/46933f3) |
 | 2026-10-10 | chore | (changelog) olu hash satirini canli HEAD ile hizala | [`95e2f1a`](https://github.com/ali-han-kaya/leibniz2/commit/95e2f1a) |
 | 2026-10-10 | feat | (vercel) serverless /api adaptörü + git-push preview hattı | [`1f21528`](https://github.com/ali-han-kaya/leibniz2/commit/1f21528) |
+| 2026-10-10 | chore | (changelog) 1f21528 satirini tabloya ekle | [`3b4bed3`](https://github.com/ali-han-kaya/leibniz2/commit/3b4bed3) |
 
 ### Regresyon notları
 

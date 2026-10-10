@@ -42,7 +42,7 @@ TECTONIC_MAKEFILE = ROOT / "docs" / "Makefile.tectonic"
 CANVAS_SCRIPT = ROOT / "_calisma" / "CIKTI" / "canvas_determinism_test.sh"
 PLATE_STEMS = ("incidental_proof_canvas", "incidental_proof_plate02",
                "incidental_proof_plate03", "incidental_proof_plate04",
-               "incidental_proof_book")
+               "incidental_proof_plate05", "incidental_proof_book")
 
 TEX = "\\documentclass{article}\\begin{document}x\\end{document}\n"
 
@@ -274,7 +274,7 @@ def _stub_plate_tectonic(mode: str, counter: str, epoch_log: str,
         r'base=$(basename -- "${src:-sample.tex}" .tex)',
         r'if [ "$base" = "incidental_proof_book" ]; then',
         r'  vis=0',
-        r'  for p in incidental_proof_canvas incidental_proof_plate02 incidental_proof_plate03 incidental_proof_plate04; do',
+        r'  for p in incidental_proof_canvas incidental_proof_plate02 incidental_proof_plate03 incidental_proof_plate04 incidental_proof_plate05; do',
         r'    [ -f "$(dirname "$src")/$p.pdf" ] && vis=$((vis + 1))',
         r'  done',
         r'  printf "plates_visible_to_book=%s\n" "$vis" >> "@ORD@"',
@@ -411,22 +411,22 @@ class TestMakefileTexlivePlateBook(unittest.TestCase):
     def test_build_compiles_all_sources_and_copies_canonical(self):
         res = self._plate("plate-book")
         self.assertEqual(res["rc"], 0, res["out"])
-        self.assertEqual(res["counter"], "5", "5 kaynak = 4 levha + kitap")
+        self.assertEqual(res["counter"], "6", "6 kaynak = 5 levha + kitap")
         self.assertTrue(all(res["built"].values()), f"BUILD_DIR eksik: {res['built']}")
         self.assertTrue(all(res["canonical"].values()),
                         f"kanonik levha yolu eksik: {res['canonical']}")
-        self.assertIn("plates=4", res["out"])
+        self.assertIn("plates=5", res["out"])
         self.assertIn("source_date_epoch=1700000000", res["out"])
         self.assertIn("sha256=", res["out"])
 
     def test_book_is_compiled_after_plates_are_copied(self):
         # Kanonik dizinde onceden PDF YOKKEN (taze durum) kitap derlenirken
-        # dort levhanin da kanonik yolda olmasi gerekir; aksi halde kitap
+        # bes levhanin da kanonik yolda olmasi gerekir; aksi halde kitap
         # onceki nesil (ya da hic) levhayi gomer. Eski "derle-hepsini sonra
         # kopyala" sirasi bu testte vis=0 verir.
         res = self._plate("plate-book")
         self.assertEqual(res["rc"], 0, res["out"])
-        self.assertIn("plates_visible_to_book=4", res["order"], res["order"])
+        self.assertIn("plates_visible_to_book=5", res["order"], res["order"])
 
     def test_build_fails_closed_without_tectonic(self):
         res = self._plate("plate-book", tectonic="/nonexistent/tectonic")
@@ -439,10 +439,10 @@ class TestMakefileTexlivePlateBook(unittest.TestCase):
         # PDF ile üretilen PDF farklı epoch'ta derlenir.
         res = self._plate("plate-book-check", env_extra={"SOURCE_DATE_EPOCH": "999"})
         self.assertEqual(res["rc"], 0, res["out"])
-        self.assertEqual(res["counter"], "10", "5 kaynak × 2 koşum")
+        self.assertEqual(res["counter"], "12", "6 kaynak × 2 koşum")
         self.assertEqual(res["epochs"], ["sde=1700000000"],
                          f"aile sabiti ihraç edilmedi: {res['epochs']}")
-        self.assertEqual(len(res["reports"]), 5, res["reports"].keys())
+        self.assertEqual(len(res["reports"]), 6, res["reports"].keys())
         for name, body in res["reports"].items():
             self.assertIn("verdict=PASS", body, name)
         self.assertIn("verdict=PASS", res["out"])

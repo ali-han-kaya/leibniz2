@@ -80,15 +80,15 @@ jobs:
           tail -1 docs/determinism_trend/determinism_trend.jsonl
 
       # Canvas ailesi (Incidental Proof) — MATRİS PARAMETRESİ = kaynak listesi
-      # (env CANVAS_SOURCES): BEŞ kaynak, her biri iki bağımsız SDE koşumu,
-      # TEK job'da beş ayrı rapor. `strategy.matrix` bilinçle KULLANILMADI:
-      # matris kaynak başına ayrı job açardı (dört-beş raporu tek trend
+      # (env CANVAS_SOURCES): ALTI kaynak, her biri iki bağımsız SDE koşumu,
+      # TEK job'da altı ayrı rapor. `strategy.matrix` bilinçle KULLANILMADI:
+      # matris kaynak başına ayrı job açardı (beş-altı raporu tek trend
       # kaydına bağlamak artifact toplama + ikinci push yarışı demek) —
       # tek job'daki döngü tek tectonic kurulumunu ve sıralı `--check`'i korur.
       #
       # Trende GİREN TEK satır yine KİTAP (apex) raporundan gelir (tek satır
-      # sözleşmesi): kitap dört levhayı \includegraphics ile gömer, yani aileyi
-      # transitif kapsar. Diğer dört rapor kanıt katmanıdır: herhangi biri
+      # sözleşmesi): kitap beş levhayı \includegraphics ile gömer, yani aileyi
+      # transitif kapsar. Diğer beş rapor kanıt katmanıdır: herhangi biri
       # verdict=PASS değilse job kırmızıdır.
       #
       # Motor: yukarıdaki TEK tectonic kurulumunu paylaşır (sürüm + sha256
@@ -103,13 +103,14 @@ jobs:
       # BİREBİR aynı olmak zorunda (test_trend_schedule_paths anti-drift):
       # Makefile'a kaynak eklenirse bu liste güncellenmezse kapı kırmızıya
       # döner — iki yerde iki farklı aile listesi yaşayamaz.
-      - name: Run canvas determinism experiment (plate-book, 5 kaynak)
+      - name: Run canvas determinism experiment (plate-book, 6 kaynak)
         env:
           CANVAS_SOURCES: >-
             incidental_proof_canvas.tex
             incidental_proof_plate02.tex
             incidental_proof_plate03.tex
             incidental_proof_plate04.tex
+            incidental_proof_plate05.tex
             incidental_proof_book.tex
         run: |
           set -euo pipefail
@@ -121,7 +122,7 @@ jobs:
               bash _calisma/CIKTI/canvas_determinism_test.sh
           done
           echo '--- canvas evidence (kaynak başına bir rapor) ---'
-          # fail-closed "beş rapor" sözü: her kaynak için rapor VAR ve
+          # fail-closed "altı rapor" sözü: her kaynak için rapor VAR ve
           # verdict=PASS. Harness ilk hatada zaten kırmızı döner; bu ikinci
           # denetim "rapor hiç yazılmadı" (derleme düşerse) durumunu kapatır
           # ve sözün kendisini adımın içinde görünür kılar.
