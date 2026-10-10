@@ -8,8 +8,10 @@ Ağ/gh çağrıları yok — unit-test CI'da koşar.
 """
 import io
 import json
+import os
 import pathlib
 import re
+import shutil
 import sys
 import tempfile
 import unittest
@@ -496,6 +498,56 @@ class TestMainFailClosed(unittest.TestCase):
         with mock.patch.object(sys, "stderr", new=io.StringIO()):
             rc = als.main(["--doc", "/nonexistent/doc.md"])
         self.assertEqual(rc, 2)
+
+
+class TestRunArtifactsPagination(unittest.TestCase):
+    """`gh api` sayfalaması: 30'dan fazla artifact varsa TÜMÜ okunmalı.
+
+    `gh api` bu uç noktada varsayılan 30 öğe döndürür; sayfa-1 patronu
+    31.+ artifact'ı gizler ve denetim onu "canlıda yok" sanıp sahte drift
+    üretir (2026-10-10: docx-report eklenince run 32 artifact'a çıktı ve
+    `pattern-drift` missing raporlandı, oysa yüklenmişti).
+
+    Bilinçli olarak GERÇEK `get_run_artifacts` çağrısını sahte bir `gh` ile
+    sınar: bu dosyadaki diğer testler `get_run_artifacts`'ı mock'ladığı için
+    sayfalama hatasını göremezdi — hatanın görünmez kalmasının nedeni buydu.
+    """
+
+    def _fake_gh(self, page1, total):
+        """Sayfa-1'de `page1`, `--paginate` ile `total` ad döndüren sahte gh."""
+        d = tempfile.mkdtemp(prefix="fake-gh-")
+        script = pathlib.Path(d) / "gh"
+        script.write_text(
+            "#!/usr/bin/env python3\n"
+            "import sys\n"
+            f"names = ['art-' + str(i).zfill(2) for i in range(1, {total} + 1)]\n"
+            f"page = names if '--paginate' in sys.argv else names[:{page1}]\n"
+            "print('\\n'.join(page))\n",
+            encoding="utf-8",
+        )
+        script.chmod(0o755)
+        return d
+
+    def _call_with_fake_gh(self, page1, total):
+        d = self._fake_gh(page1, total)
+        try:
+            env = {"PATH": d + os.pathsep + os.environ.get("PATH", "")}
+            with mock.patch.dict(os.environ, env):
+                return als.get_run_artifacts("o/r", "1")
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_artifacts_beyond_first_page_are_read(self):
+        got = self._call_with_fake_gh(page1=30, total=32)
+        self.assertEqual(
+            len(got), 32,
+            f"sayfa-1 kesmesi: yalnızca {len(got)} ad okundu ({got})",
+        )
+        self.assertIn("art-32", got, "son artifact (gerçek: pattern-drift) gizlenmiş")
+
+    def test_exactly_one_page_still_works(self):
+        got = self._call_with_fake_gh(page1=30, total=7)
+        self.assertEqual(got, [f"art-{i:02d}" for i in range(1, 8)])
 
 
 if __name__ == "__main__":

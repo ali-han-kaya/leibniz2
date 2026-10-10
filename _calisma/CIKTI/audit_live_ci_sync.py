@@ -204,7 +204,15 @@ def get_run_jobs(repo, run_id):
 
 
 def get_run_artifacts(repo, run_id):
-    out = run_gh(["gh", "api",
+    """Run'daki TÜM artifact adları — sayfalama ZORUNLU.
+
+    Bu uç noktada `gh api` varsayılan olarak 30 öğe döndürür; artifact sayısı
+    30'u aştığında 31.+ artifact'lar "canlıda yok" sanılır ve denetim SAHTE
+    drift (verdict: FAIL) üretir. 2026-10-10: docx-report eklenince run 32
+    artifact'a çıktı ve 30'luk ilk sayfadan düşen `pattern-drift` `missing`
+    olarak raporlandı — oysa artifact yüklenmişti (job logu: 196 B).
+    """
+    out = run_gh(["gh", "api", "--paginate",
                   f"repos/{repo}/actions/runs/{run_id}/artifacts",
                   "-q", ".artifacts[].name"])
     return [n for n in (line.strip() for line in out.splitlines()) if n]
