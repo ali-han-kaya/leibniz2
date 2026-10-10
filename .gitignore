@@ -50,6 +50,9 @@ _calisma/CIKTI/runs/
 # Oturum yüzeyleri (2026-09-18): bağımlılıklar ve üretilen artefaktlar kaynak-değil
 _calisma/mcp/.venv/
 _calisma/pptx/node_modules/
+# docx jeneratörü (markdown → .docx): bağımlılıklar ve üretilen çıktı repoda tutulmaz
+_calisma/docx/node_modules/
+_calisma/docx/out/
 _calisma/pptx/verification_chain.pptx
 apps/trend-db/node_modules/
 apps/trend-db/.env

@@ -1341,7 +1341,7 @@ jobs:
         with:
           path: all_artifacts/
           merge-multiple: true
-          pattern: '{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,config,k0-findings,budget-verify,lineage-findings,klayers,unit-tests,action-runtimes,changelog-drift,ci-simulate,webkit-smoke}'
+          pattern: '{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,config,k0-findings,budget-verify,lineage-findings,klayers,unit-tests,action-runtimes,changelog-drift,ci-simulate,webkit-smoke,docx-report}'
 
       - name: Download precommit-logs artifact (precommit-logs/ prefix)
         uses: actions/download-artifact@v7
@@ -3644,4 +3644,122 @@ jobs:
             bootstrap_smoke.txt
             fresh_clone_check_report.txt
           if-no-files-found: ignore
+          retention-days: 30
+
+  # ── DOCX EXPORT ───────────────────────────────────────────────────────────
+  # _calisma/docx/make_docx.js markdown'u gerçek .docx'e çevirir; üretilen
+  # belge `docx-report` artifact'ı olarak yayınlanır. Doğrulama byte-identity
+  # DEĞİL: docx paketi core.xml tarihlerini kendi zamanından üretir — iki
+  # koşum arasındaki TEK fark `dcterms:created/modified` (ölçüldü 2026-09-24;
+  # 2026-10-10'da yeniden ölçüldü: aynı SDE ile iki koşum bayt-eşit DEĞİL,
+  # tek fark docProps/core.xml'in duvar-saati damgası — SOURCE_DATE_EPOCH bu
+  # iki alanı SABİTLEMİYOR, bu yüzden hash kapı olamaz).
+  # Onun yerine belgeyi GERÇEK bir ofis motoru açar (LibreOffice headless
+  # `--convert-to txt`) ve beklenen tanık metin aranır. Belge "var ama
+  # açılmıyor" olabilir; zip+XML tutarlılığını ancak motor kanıtlar.
+  #
+  # FAIL-CLOSED — tarihsel advisory sürümden BİLİNÇLİ sapma: 43e4824'te bu
+  # job `continue-on-error: true` idi; LibreOffice kontrolü düşse de koşum
+  # yeşil kalıyordu. AGENTS.md'nin fail-open ailesi tam olarak budur: kayıt
+  # var, icra yok → yeşil. Burada soffice yoksa / dönüşüm başarısızsa /
+  # tanık metin eksikse / evidence'ta `verdict=PASS` yoksa / artifact
+  # üretilemezse JOB KIRMIZI olur. Kontrol script'i ortam hatasını (soffice
+  # yok) ayrı exit koduyla bildirir — "araç yok" sessiz SKIP değildir.
+  #
+  # Required set DEĞİŞMEZ: `docx-export` GATE_EXCLUDE'dadır (status_checks.py).
+  # Required'a almak branch-protection UI değişikliği gerektirir — bu iş
+  # yalnızca "kendi içinde fail-closed" hale getirir.
+  docx-export:
+    name: Docx export (LibreOffice check, fail-closed)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Install generator dependencies (npm ci)
+        run: npm ci --prefix _calisma/docx --no-audit --no-fund
+
+      # Parser sözleşmesi (12 kontrol): üretimden ÖNCE koşar — jeneratörün
+      # kendi iddiaları (başlık terfi, bölüm birleştirme) test edilmiş olur.
+      - name: Generator self-test (parser contract)
+        run: node _calisma/docx/make_docx.js --self-test
+
+      - name: Build docx (SOURCE_DATE_EPOCH pinned)
+        run: |
+          set -euo pipefail
+          SOURCE_DATE_EPOCH=1700000000 node _calisma/docx/make_docx.js \
+            | tee docx_build.txt
+          # İki raporu tek Word dosyasında birleştir (bölüm kırılımlı):
+          # FINAL_RC_REPORT + FULL_SCOPE_AUDIT; ikinci rapor yeni sayfada başlar.
+          SOURCE_DATE_EPOCH=1700000000 node _calisma/docx/make_docx.js \
+            --in docs/FINAL_RC_REPORT.md \
+            --in docs/FULL_SCOPE_AUDIT_2026-09-17.md \
+            | tee docx_build_combined.txt
+
+      # writer-only: headless dönüşüm için tam masaüstü gerekmez. Kurulum
+      # AÇIKtır — runner imajına güvenilmez; kurulum başarısızsa adım kırmızı.
+      - name: Install LibreOffice (writer only)
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends libreoffice-writer
+          command -v soffice || command -v libreoffice
+
+      - name: LibreOffice check (opens + text witness)
+        run: |
+          set -euo pipefail
+          bash _calisma/docx/check_docx_libreoffice.sh \
+            _calisma/docx/out/final_rc_report.docx \
+            "Final Release Candidate Report" | tee docx_libreoffice_check.txt
+          # Birleşik belge: iki raporun başlık tanığı da aranır.
+          bash _calisma/docx/check_docx_libreoffice.sh \
+            _calisma/docx/out/combined_report.docx \
+            "Final Release Candidate Report" "Tam Kapsam Denetim Raporu" \
+            | tee docx_libreoffice_check_combined.txt
+          # KANIT ZORUNLU: boş/eksik kanıt yeşil sayılmaz (all-skip ≠ PASS).
+          for f in docx_libreoffice_check.txt \
+                   docx_libreoffice_check_combined.txt; do
+            grep -q '^verdict=PASS$' "$f" \
+              || { echo "::error::$f içinde verdict=PASS yok"; exit 1; }
+            grep -q '^libreoffice=' "$f" \
+              || { echo "::error::$f motor yolunu yazmadı"; exit 1; }
+          done
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## docx-export"
+            echo '```'
+            for f in docx_build.txt docx_build_combined.txt \
+                     docx_libreoffice_check.txt \
+                     docx_libreoffice_check_combined.txt; do
+              cat "$f" 2>/dev/null || echo "($f yok)"
+            done
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # if-no-files-found: error — artifact yoksa job kırmızı ("ürün yok ama
+      # yeşil" olmaz); tarihsel sürümde `ignore` idi.
+      - name: Upload docx artifact
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: docx-report
+          path: |
+            _calisma/docx/out/final_rc_report.docx
+            _calisma/docx/out/combined_report.docx
+            docx_build.txt
+            docx_build_combined.txt
+            docx_libreoffice_check.txt
+            docx_libreoffice_check_combined.txt
+          if-no-files-found: error
           retention-days: 30

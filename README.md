@@ -618,6 +618,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-10 | chore | (changelog) olu hash satirini canli HEAD ile hizala | [`95e2f1a`](https://github.com/ali-han-kaya/leibniz2/commit/95e2f1a) |
 | 2026-10-10 | feat | (vercel) serverless /api adaptörü + git-push preview hattı | [`1f21528`](https://github.com/ali-han-kaya/leibniz2/commit/1f21528) |
 | 2026-10-10 | chore | (changelog) 1f21528 satirini tabloya ekle | [`3b4bed3`](https://github.com/ali-han-kaya/leibniz2/commit/3b4bed3) |
+| 2026-10-10 | feat | (canvas) plate book 7 yaprak — plate05 ölçüme ve kitaba girdi | [`728ac5d`](https://github.com/ali-han-kaya/leibniz2/commit/728ac5d) |
 
 ### Regresyon notları
 

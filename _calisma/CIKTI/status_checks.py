@@ -63,6 +63,12 @@ GATE_EXCLUDE = {
     "audit-refs-trend",     # advisory: refs-trend satırları ↔ kaynak denetimi
     "override-trend",       # advisory: CLI override zaman serisi
     "changelog-drift",      # advisory: gen_changelog --check drift bulguları
+    "docx-export",           # required DEĞİL: docx üretimi + LibreOffice
+                            #   açılabilirlik kontrolü (required set'i
+                            #   değiştirmemek bilinçli — required'a almak
+                            #   branch-protection UI değişikliği gerektirir).
+                            #   NOT: job KENDİ İÇİNDE fail-closed'dır (kanıt
+                            #   yoksa kırmızı); "advisory" = required değil.
     "pattern-drift",         # advisory: merge pattern ↔ ARTIFACT_JOBS drift
     "budget-comment",        # PR-only: bütçe + pre-commit PR yorumu (bütçe kapısı ayrı job)
     "dashboard-smoke",      # advisory: node-sandbox + Chromium etkileşim E2E

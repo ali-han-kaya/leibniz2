@@ -81,6 +81,9 @@ ARTIFACT_JOBS = {
     "ci-simulate": "ci-simulate",
     "reproducibility": "reproducibility",
     "webkit-smoke": "webkit-smoke",
+    # docx jeneratörü (_calisma/docx/make_docx.js) çıktısı — üreten job
+    # `docx-export` (LibreOffice açılabilirlik + tanık metin kontrolü).
+    "docx-report": "docx-export",
 }
 
 # Config artifact'ının bilinen dosya ADLARI (basename). Config dosyaları

@@ -69,12 +69,12 @@ class TestGateJobs(unittest.TestCase):
                          "Action runtime check (node24)")
 
     def test_count_matches_workflow_minus_excludes(self):
-        # 30 job − 14 hariç = 16 required aday (tek kaynak: workflow;
+        # 31 job − 15 hariç = 16 required aday (tek kaynak: workflow;
         # 15 -> 16: webkit-smoke — protection contexts == gate_jobs).
         # Hariç: manifest-comment, precheck, label-gate-p1, plist-check,
         #        mirror-check, daemon-http, fresh-clone-http, audit-live-ci,
-        #        audit-refs-trend, override-trend, changelog-drift, pattern-drift,
-        #        budget-comment, lake-proof
+        #        audit-refs-trend, override-trend, changelog-drift, docx-export,
+        #        pattern-drift, budget-comment, lake-proof
         self.assertEqual(len(sc.gate_jobs()), 16)
 
     def test_gate_jobs_exact_set_includes_label_gate(self):

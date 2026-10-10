@@ -575,7 +575,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 --exit-status` + artifact listesi; sonuç `SONUÇ: PASS/FAIL` olarak loglanır
 (dry-run'da yalnızca önizlenir).
 
-**Job kategorileri (31 job = 14 required + 14 advisory + 3 PR-only):**
+**Job kategorileri (32 job = 14 required + 15 advisory + 3 PR-only):**
 
 > **Kural:** Branch protection **yalnızca A kategorisindeki** job'ları required check olarak
 > kabul eder. B (advisory) job'ları push'ta çalışır ama required değildir;
@@ -613,6 +613,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 | 24 | B | Preview reload smoke (advisory, macOS) | — preview restart + endpoint smoke (advisory) |
 | 25 | B | K9 Lake proof (Lean 4.14.0) | ✅ success — ayrı-step lake build --wfail (lean-toolchain v4.14.0); K9 ayrıca verify job'unun `--full` içinde de koşar (required DEĞİL) |
 | 26 | B | Fresh-clone HTTP smoke (advisory) | — temiz clone'dan preview_server.py başlatılır; `/api/health` + `/api/latest` curl ile doğrulanır |
+| 31 | B | Docx export (LibreOffice check, fail-closed) | — `_calisma/docx/make_docx.js`: markdown → gerçek .docx (tek rapor + FINAL_RC_REPORT↔FULL_SCOPE_AUDIT birleşik belge); artifact `docx-report`; doğrulama byte-identity DEĞİL — LibreOffice headless dönüşümü + tanık metin (docx paketi `core.xml` tarihlerini kendi zamanından üretir: iki koşum arasındaki tek fark `dcterms:created/modified`, ölçüldü 2026-09-24). **Required DEĞİL ama kendi içinde fail-closed**: soffice yok / dönüşüm başarısız / tanık metin eksik / kanıtta `verdict=PASS` yok / artifact yok → job KIRMIZI (tarihsel `continue-on-error: true` sürümü yeşil kalıyordu — bilinçli sapma) |
 | 29 | B | Dashboard interaction E2E (node sandbox + Chromium CDP) | — `dashboard-smoke` (2026-10-08): tarayıcısız node/vm katmanı (hover tooltip, run-history filtreleri, lightbox odak yönetimi) + hermetic Playwright/CDP katmanı (kendi sunucusu + sentetik verisi); tarayıcısız katman her ortamda kırmızıya dönebilir |
 | 30 | B | WebKit smoke (advisory, Safari/safedriver) | — macOS runner'da safedriver/WebKit ile dashboard smoke; `webkit_smoke_report.txt` step-summary'ye + `webkit-smoke` artifact'a — advisory (main branch-protection contexts'ine de eklendi) |
 | | **C — PR-only (push'ta çalışmaz, PR'da çalışır)** | | |
@@ -621,7 +622,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 | 27 | D | Manifest PR comment | — skipped (PR'da çalışır) |
 | 28 | D | Budget status PR comment | — bütçe + pre-commit PR yorumu; job-level PR-only, push'ta tamamen skipped (bütçe kapısı ayrı `budget` job'ında kalır) |
 
-**Artifact listesi (31):**
+**Artifact listesi (32):**
 - `unit-tests` (CIKTI birim test logu — `test_*.py` glob'u)
 - `verify-report` (tek log: K1-K14 + pre-commit bölümü + .sha256)
 - `action-runtimes` (her action'ın runs.using denetimi JSON — node24 kapısı)
@@ -651,6 +652,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 - `pattern-drift` (merge pattern ↔ ARTIFACT_JOBS tutarlılık denetimi — advisory, run summary'ye yazılır)
 - `preview-reload-smoke` (preview sunucu restart + endpoint smoke testi — advisory, macOS)
 - `webkit-smoke` (WebKit dashboard smoke raporu `webkit_smoke_report.txt` — advisory, macOS safedriver; step-summary'ye yazılır, artifact `if: always()`)
+- `docx-report` (docx-export job'unun ürünü: `make_docx.js` çıktısı `final_rc_report.docx` + `combined_report.docx` + build key=value logları + LibreOffice açılabilirlik/tanık metin raporları (`verdict=PASS` + `libreoffice=` satırları) — required değil, ama job kendi içinde fail-closed; artifact eksikse yükleme de kırmızı)
 - `a11y-report` (a11y-gate raporu: **sayfa başına** axe sonuçları + config echo + verdict — fail-closed kapı; `blocking/warn/allowlisted/incomplete/incomplete_allowlisted` özeti. Kapsam `a11y_gate_config.json` → `pages`: `/preview.html` + `/guide.html`. Bir sayfa 404/5xx verirse kapı FAIL eder — kapsam genişletilmiş gibi görünüp taranmamış sayfa kalmaz)
 
 **Not:** Kapı artık `verify_delivery.py --full`'dur (K1-K14, fail-closed) ve yeşildir —
