@@ -72,7 +72,7 @@ FAMILIES = (FAMILY_MANUSCRIPT, FAMILY_CANVAS)
 # Canvas (Incidental Proof) kanıt raporu — üretici:
 # _calisma/CIKTI/canvas_determinism_test.sh (docs/Makefile.texlive
 # `plate-book-check` her kaynak için çağırır). Trende giren satır KİTAP
-# (apex) raporundan gelir: kitap dört levhayı gömer, yani kanonik hash'i
+# (apex) raporundan gelir: kitap beş levhayı gömer, yani kanonik hash'i
 # aileyi transitif kapsar.
 CANVAS_APEX_STEM = "incidental_proof_book"
 CANVAS_REPORT = os.path.join(ROOT, "docs", "ci_simulate", "canvas_determinism",

@@ -16,7 +16,7 @@ data-URI ile gömülü dekoratif-katmanı. Dört sözleşmeyi sabitler:
      (dark ≤ .18, light ≤ .25) — metin-kontrastını düşürmez; ayrıca
      banner-SVG'nin vermilion'u tek (testifies-only) kalır.
 
-  4) SERİ-KAYDI (kolofon): plate-book'un kolofon yaprağı (LEAF 6) banner'ı
+  4) SERİ-KAYDI (kolofon): plate-book'un kolofon yaprağı (LEAF 7) banner'ı
      adreslenebilir biçimde taşır — main'e bağlı depo URL'si, dashboard
      entegrasyon kaydı (/preview.html · .header-decor · data-URI) ve kaynağın
      sha256 parmak izi; kayıt DİSKE bağlıdır (drift = kırmızı) ve teslim
@@ -164,7 +164,7 @@ class TestBannerVermilionDiscipline(unittest.TestCase):
 BOOK_TEX = os.path.join(HERE, "canvas", "incidental_proof_book.tex")
 BOOK_PDF = os.path.join(HERE, "canvas", "incidental_proof_book.pdf")
 REPO_SLUG = "ali-han-kaya/leibniz2"
-COLOPHON_LEAF = 6  # altı yapraklı kitapta kolofon yaprağı
+COLOPHON_LEAF = 7  # yedi yapraklı kitapta kolofon yaprağı
 
 
 class TestSeriesRecordColophon(unittest.TestCase):
@@ -174,9 +174,9 @@ class TestSeriesRecordColophon(unittest.TestCase):
         self.tex = _read(BOOK_TEX)
 
     def _colophon(self):
-        """LEAF 6 (kolofon) yaprağının tex gövdesini döndürür."""
-        m = re.search(r"% =+ LEAF 6 — COLOPHON.*?\\end\{tikzpicture\}", self.tex, re.S)
-        self.assertIsNotNone(m, "kolofon yaprağı (LEAF 6) bulunamadı")
+        """LEAF 7 (kolofon) yaprağının tex gövdesini döndürür."""
+        m = re.search(r"% =+ LEAF 7 — COLOPHON.*?\\end\{tikzpicture\}", self.tex, re.S)
+        self.assertIsNotNone(m, "kolofon yaprağı (LEAF 7) bulunamadı")
         return m.group(0)
 
     def _record(self):
