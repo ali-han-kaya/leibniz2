@@ -18,8 +18,10 @@ genişletilmiş gibi görünmez.
 Çıkış kodları: 0 = PASS · 1 = FAIL (fail-closed koşul dahil) · 2 = kullanım/
 ortam hatası (argparse, playwright kurulu değil).
 
-Rapor yüzeyleri (spec §Reporting): stdout (verdict + sayfa satırları) ve
-a11y_report.json (CI artifact). Üçüncü yüzey (job summary) CI job'ının.
+Rapor yüzeyleri (spec §Reporting): stdout (verdict + sayfa satırları),
+a11y_report.json (CI artifact; makine-okur üst düzey `verdict` alanı taşır —
+süreç taramayı bitirmeden düşerse rapor FAIL okunur) ve job summary
+(GITHUB_STEP_SUMMARY; raporu salt-okur render eden CI adımı).
 """
 
 import argparse
@@ -408,8 +410,12 @@ def main(argv=None):
                     help="rapor JSON yolu (CI artifact)")
     args = ap.parse_args(argv)
 
+    # `verdict` VARSAYILAN FAIL: süreç taramayı tamamlamadan düşerse (config/
+    # axe/sayfa arızası) rapor FAIL okunur — "alan yok" ile "geçti" karışmaz.
+    # Yalnızca tamamlanmış bir taramanın gerçek verdict'i üzerine yazar.
     report = {"base_url": args.base_url, "config": None,
-              "pages": [], "violations": [], "summary": {}, "error": None}
+              "pages": [], "violations": [], "summary": {}, "error": None,
+              "verdict": "FAIL"}
 
     def fail(code):
         with open(args.output, "w", encoding="utf-8") as f:
@@ -483,6 +489,7 @@ def main(argv=None):
     report["summary"] = _summary(report["violations"])
     verdict = ("FAIL" if any(p["verdict"] != "PASS" for p in report["pages"])
                else "PASS")
+    report["verdict"] = verdict  # tamamlanmış tarama varsayılan FAIL'i ezer
 
     print("verdict: %s" % verdict)
     for p in report["pages"]:

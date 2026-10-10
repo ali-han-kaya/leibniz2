@@ -620,6 +620,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-10 | chore | (changelog) 1f21528 satirini tabloya ekle | [`3b4bed3`](https://github.com/ali-han-kaya/leibniz2/commit/3b4bed3) |
 | 2026-10-10 | feat | (canvas) plate book 7 yaprak — plate05 ölçüme ve kitaba girdi | [`728ac5d`](https://github.com/ali-han-kaya/leibniz2/commit/728ac5d) |
 | 2026-10-10 | feat | (ci) docx export job — LibreOffice kontrolü fail-closed | [`5d75ecd`](https://github.com/ali-han-kaya/leibniz2/commit/5d75ecd) |
+| 2026-10-10 | fix | (ci) audit artifact listesini sayfala (sahte pattern-drift FAIL'i) | [`96e07c8`](https://github.com/ali-han-kaya/leibniz2/commit/96e07c8) |
 
 ### Regresyon notları
 

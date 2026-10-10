@@ -3359,6 +3359,43 @@ jobs:
             --base-url "http://127.0.0.1:$A11Y_PORT" \
             --output a11y_report.json
 
+      # Üçüncü rapor yüzeyi (spec §Reporting-3): raporu salt-okur render eder.
+      # if: always() — kapı kırılımında da özet üretilir; rapor yoksa bu AÇIKÇA
+      # yazılır (sessiz boş özet "hepsi atlandı" görünümü üretmez).
+      - name: Write a11y job summary
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PYEOF'
+          import json, os, pathlib
+          report = pathlib.Path("a11y_report.json")
+          lines = ["## a11y-gate özeti"]
+          if report.exists():
+              data = json.loads(report.read_text(encoding="utf-8"))
+              lines.append("verdict: **%s**" % data.get("verdict", "BILINMIYOR"))
+              summary = data.get("summary") or {}
+              lines += ["", "| seviye | sayı |", "|---|---|"]
+              for key in ("blocking", "warn", "allowlisted", "incomplete",
+                          "incomplete_allowlisted"):
+                  lines.append("| %s | %s |" % (key, summary.get(key, 0)))
+              for page in data.get("pages", []):
+                  err = " (hata: %s)" % page["error"] if page.get("error") else ""
+                  lines.append("- `%s` → **%s**%s"
+                               % (page.get("path", "?"), page.get("verdict"), err))
+              for row in data.get("violations", []):
+                  allow = (" (allowlisted: %s düğüm)" % row["allowlisted_nodes"]
+                           if row.get("allowlisted_nodes") else "")
+                  lines.append("- `%s` %s → %s, %s düğüm%s"
+                               % (row.get("rule", "?"), row.get("impact") or "-",
+                                  row.get("level"), row.get("nodes"), allow))
+              if data.get("error"):
+                  lines.append("- hata: %s" % data["error"])
+          else:
+              lines.append("a11y_report.json üretilmedi — gate adımına bak.")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as f:
+              f.write("\n".join(lines) + "\n")
+          PYEOF
+
       - name: Upload a11y report
         if: always()
         uses: actions/upload-artifact@v6
