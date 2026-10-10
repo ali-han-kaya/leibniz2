@@ -616,6 +616,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-08 | feat | (canvas) canvas-determinism job + 5-source matrix (apex) | [`04ed03e`](https://github.com/ali-han-kaya/leibniz2/commit/04ed03e) |
 | 2026-10-08 | feat | (canvas) Incidental Proof header banner (svg + gomme + test) | [`46933f3`](https://github.com/ali-han-kaya/leibniz2/commit/46933f3) |
 | 2026-10-10 | chore | (changelog) olu hash satirini canli HEAD ile hizala | [`95e2f1a`](https://github.com/ali-han-kaya/leibniz2/commit/95e2f1a) |
+| 2026-10-10 | feat | (vercel) serverless /api adaptörü + git-push preview hattı | [`1f21528`](https://github.com/ali-han-kaya/leibniz2/commit/1f21528) |
 
 ### Regresyon notları
 
