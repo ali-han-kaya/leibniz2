@@ -453,6 +453,25 @@ class PreviewJsSettleContractTests(unittest.TestCase):
         page = [p for p in cfg["pages"] if p["path"] == "/preview.html"][0]
         self.assertEqual(page["settle"]["attribute"], dashed)
 
+    def test_init_invokes_every_counted_loader(self):
+        """Yükleyici tanimi degil, init CAGRISI sinyali yakalar.
+
+        2026-10-09 kaniti: loadDeterminismTrend() hicbir zaman
+        cagril-mamis — panel sonsuza dek "veri yok" (Vercel'de canli
+        gozlemlendi: API 6 satir donerken badge hic yanmadi, fonksiyon
+        elle cagrilinca aninda render etti). Sayac sozlesmesi yalniz
+        CAGRILAN yukleyicileri sayar; hic cagrilmayan yuzey kapidan
+        sessiz gecer (all-skip ailesi) — yuzey ile cagri ayni anda
+        sabitlenmeli.
+        """
+        for func in ("loadTrend", "loadOverrideTrend",
+                     "loadDeterminismTrend"):
+            with self.subTest(func=func):
+                self.assertRegex(
+                    self.src,
+                    r"(?m)^%s\(\);" % func,
+                    "%s init'de top-level cagrilmiyor" % func)
+
     def test_every_data_fetch_is_counted(self):
         """Uc fetch ucu da sayilir: sayilmayan fetch, isaretin once
         yanmasi demektir (kapı yarim yuzeyi tarar)."""

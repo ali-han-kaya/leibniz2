@@ -33,6 +33,7 @@ test_check_python3_shell.py
 test_check_repro_manifest_hook.py
 test_check_sde_determinism.py
 test_check_unit_tests_timing.py
+test_check_vercel_deploy.py
 test_check_zip_lineage_drift.py
 test_ci_check_rate.py
 test_ci_failure_pattern.py
@@ -160,6 +161,7 @@ test_trend_schedule_paths.py
 test_update_changelog_hook.py
 test_update_preview_sync_server.py
 test_validate_config_schema.py
+test_vercel_adapter.py
 test_verdict_seal_css.py
 test_verification_chain_deck.py
 test_verify_checks.py

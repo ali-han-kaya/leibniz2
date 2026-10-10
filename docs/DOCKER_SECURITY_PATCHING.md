@@ -417,7 +417,7 @@ engelliyor: sürüm ayrışırsa iki tarama farklı motorlarla döner ve
 
 | Paket | CVE'ler | Floor | Kanıt |
 |---|---|---|---|
-| libpcre2-8-0 | CVE-2026-86145 (OOB write), CVE-2026-89161 (pcre2_jit_match memory corruption) | 10.42-1+deb12u1 | 2026-09-16: yerel trivy 0.74.0 ilk koşumda 2 HIGH yakaladı → yama → 0 bulgu; CI koşum 35161423659 (13 Eylül kırmızı run'ı aynı CVE'lerle) before/after kanıtı. 2026-09-17: desenle yeniden doğrulandı (smoke PASS, 0 bulgu). |
+| libpcre2-8-0 | CVE-2026-86145 (OOB write), CVE-2026-89161 (pcre2_jit_match memory corruption) | 10.42-1+deb12u2 (önc. 10.42-1+deb12u1) | 2026-09-16: yerel trivy 0.74.0 ilk koşumda 2 HIGH yakaladı → yama → 0 bulgu; CI koşum 35161423659 (13 Eylül kırmızı run'ı aynı CVE'lerle) before/after kanıtı. 2026-09-17: desenle yeniden doğrulandı (smoke PASS, 0 bulgu). 2026-10-09 ROTASYON: Debian u1'i depodan çekti (E: Version '10.42-1+deb12u1' ... was not found → apt 100) — docker-security + audit_live_ci_sync kırmızısının kök nedeni; u2'ye taşındı (aday: apt-cache policy, bookworm-security). |
 
 Yeni girdiler buraya ve Dockerfile'daki defter bloğuna eklenir.
 

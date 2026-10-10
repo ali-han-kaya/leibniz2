@@ -258,6 +258,8 @@ HOOK_COVERAGE = {
         "test_trend_record_merge.py",
         "test_rca_report.py",
         "test_server_events.py",
+        "test_vercel_adapter.py",
+        "test_check_vercel_deploy.py",
         "test_dashboard_webkit_smoke.py",
         "test_preview_stream_batching.py",
     ],
