@@ -66,6 +66,10 @@ GATE_SCRIPTS = (
     # Beyaz liste K1'in "bu bir kapi script'idir" tanimidir; yeni kapi buraya
     # yazilmadan schedule'lı workflow "kapi cagrirmiyor" sayilir.
     "deploy_evidence.py",
+    # 2026-10-09: vercel-deploy-check.yml'in aylik HTTP kapisi (canli deploy
+    # sagligi + run-history; fail-closed). Ayni beyaz liste kurali: akis
+    # YAML'da yeniden yazilmaz, bu script bir run: adiminda cagrilir.
+    "check_vercel_deploy.py",
 )
 
 

@@ -556,6 +556,66 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-06 | docs | (a11y) finalize a11y-gate implementation plan | [`4a05c7f`](https://github.com/ali-han-kaya/leibniz2/commit/4a05c7f) |
 | 2026-10-05 | chore | (changelog) 5380ed0 + 88e70d1 satirlarini tabloya ekle | [`0b2ca43`](https://github.com/ali-han-kaya/leibniz2/commit/0b2ca43) |
 | 2026-10-10 | docs | (deploy) cb6f607 icin kanit-defteri satiri ekle | [`83569aa`](https://github.com/ali-han-kaya/leibniz2/commit/83569aa) |
+| 2026-10-05 | docs | (deploy) kanit-defterini geri getir, 77d05e3 kosum satirini ekle | [`70744ff`](https://github.com/ali-han-kaya/leibniz2/commit/70744ff) |
+| 2026-10-05 | chore | (changelog) 3f7f88f ve 35a7940 satirlarini tabloya ekle | [`77d05e3`](https://github.com/ali-han-kaya/leibniz2/commit/77d05e3) |
+| 2026-10-05 | docs | (deploy) b1f5f1e kosum satirini kanit-defterine ekle | [`93bc2a9`](https://github.com/ali-han-kaya/leibniz2/commit/93bc2a9) |
+| 2026-10-05 | chore | (changelog) 70744ff satirini tabloya ekle | [`b1f5f1e`](https://github.com/ali-han-kaya/leibniz2/commit/b1f5f1e) |
+| 2026-10-05 | feat | (ci) kanit-defteri bayatlik kapisi + haftalik deploy-evidence job | [`e7315d7`](https://github.com/ali-han-kaya/leibniz2/commit/e7315d7) |
+| 2026-10-05 | chore | (changelog) 93bc2a9 satirini tabloya ekle | [`f79992c`](https://github.com/ali-han-kaya/leibniz2/commit/f79992c) |
+| 2026-10-05 | chore | (changelog) e7315d7 satirini tabloya ekle | [`81b915d`](https://github.com/ali-han-kaya/leibniz2/commit/81b915d) |
+| 2026-10-05 | docs | (deploy) f79992c kosum satirini kanit-defterine ekle | [`4ec32af`](https://github.com/ali-han-kaya/leibniz2/commit/4ec32af) |
+| 2026-10-05 | chore | (changelog) 81b915d satirini tabloya ekle | [`91d2936`](https://github.com/ali-han-kaya/leibniz2/commit/91d2936) |
+| 2026-10-05 | chore | (changelog) 4ec32af satirini tabloya ekle | [`db54146`](https://github.com/ali-han-kaya/leibniz2/commit/db54146) |
+| 2026-10-05 | fix | (ci) kapi HEAD acigini ve API hatasini duzelt | [`270002a`](https://github.com/ali-han-kaya/leibniz2/commit/270002a) |
+| 2026-10-05 | docs | (rca) repack sidecar kaymasi kok neden analizi | [`58a5c22`](https://github.com/ali-han-kaya/leibniz2/commit/58a5c22) |
+| 2026-10-05 | docs | (incident) INC-4 — main push GH006 (Repack zorunlu kontrolü) | [`5bb0106`](https://github.com/ali-han-kaya/leibniz2/commit/5bb0106) |
+| 2026-10-05 | chore | (changelog) 270002a satirini tabloya ekle | [`d566be2`](https://github.com/ali-han-kaya/leibniz2/commit/d566be2) |
+| 2026-10-05 | chore | (changelog) 58a5c22 satirini tabloya ekle | [`36c07e0`](https://github.com/ali-han-kaya/leibniz2/commit/36c07e0) |
+| 2026-10-05 | docs | (deploy) d566be2 kosum satirini kanit-defterine ekle | [`ef2d960`](https://github.com/ali-han-kaya/leibniz2/commit/ef2d960) |
+| 2026-10-05 | chore | (changelog) 36c07e0 satirini tabloya ekle | [`adff289`](https://github.com/ali-han-kaya/leibniz2/commit/adff289) |
+| 2026-10-05 | fix | (trend) olcum kaybini onle — kayip korumasi + fail-closed PR yolu | [`84db33b`](https://github.com/ali-han-kaya/leibniz2/commit/84db33b) |
+| 2026-10-05 | chore | (changelog) ef2d960 satirini tabloya ekle | [`5bc50e0`](https://github.com/ali-han-kaya/leibniz2/commit/5bc50e0) |
+| 2026-10-05 | docs | (deploy) d21d3f1 kosum satirini kanit-defterine ekle | [`ca2d2e7`](https://github.com/ali-han-kaya/leibniz2/commit/ca2d2e7) |
+| 2026-10-05 | chore | (changelog) 84db33b satirini tabloya ekle | [`d21d3f1`](https://github.com/ali-han-kaya/leibniz2/commit/d21d3f1) |
+| 2026-10-05 | chore | (changelog) ca2d2e7 satirini tabloya ekle | [`7cb4db3`](https://github.com/ali-han-kaya/leibniz2/commit/7cb4db3) |
+| 2026-10-05 | feat | (ci) kirmizi kosumda RCA tablosunu PR yorumuna dusur | [`c2d749d`](https://github.com/ali-han-kaya/leibniz2/commit/c2d749d) |
+| 2026-10-05 | fix | (trend) kayıp-koruma adımını sandbox'ta yürüt | [`f578bed`](https://github.com/ali-han-kaya/leibniz2/commit/f578bed) |
+| 2026-10-05 | chore | (changelog) 7cb4db3 satirini tabloya ekle | [`c66cf87`](https://github.com/ali-han-kaya/leibniz2/commit/c66cf87) |
+| 2026-10-05 | style | (ci) rca_comment.js prettier bicimine uydur | [`9c27d78`](https://github.com/ali-han-kaya/leibniz2/commit/9c27d78) |
+| 2026-10-05 | chore | (changelog) RCA ve trend duzeltme satirlarini tabloya ekle | [`c3fc408`](https://github.com/ali-han-kaya/leibniz2/commit/c3fc408) |
+| 2026-10-05 | fix | (ci) Summary adiminda here-doc yerine python3 -c | [`9b6186f`](https://github.com/ali-han-kaya/leibniz2/commit/9b6186f) |
+| 2026-10-05 | chore | (changelog) prettier duzeltme satirini tabloya ekle | [`a121046`](https://github.com/ali-han-kaya/leibniz2/commit/a121046) |
+| 2026-10-05 | fix | (ci) onem listesinde canli koruma yoksa workflow adlarina dus | [`696944d`](https://github.com/ali-han-kaya/leibniz2/commit/696944d) |
+| 2026-10-05 | chore | (changelog) here-doc duzeltme satirini tabloya ekle | [`0669254`](https://github.com/ali-han-kaya/leibniz2/commit/0669254) |
+| 2026-10-05 | fix | (ci) PyYAML yokken turetilen onem listesini yut | [`9f0c9cb`](https://github.com/ali-han-kaya/leibniz2/commit/9f0c9cb) |
+| 2026-10-05 | chore | (changelog) onem kaynagi duzeltme satirini tabloya ekle | [`03a72ce`](https://github.com/ali-han-kaya/leibniz2/commit/03a72ce) |
+| 2026-10-05 | fix | (ci) iptal edilen job'i temiz sayma, tabloyu fail-closed yap | [`6d64cce`](https://github.com/ali-han-kaya/leibniz2/commit/6d64cce) |
+| 2026-10-05 | chore | (changelog) PyYAML yutma duzeltme satirini tabloya ekle | [`d01fbc1`](https://github.com/ali-han-kaya/leibniz2/commit/d01fbc1) |
+| 2026-10-05 | chore | (changelog) fail-closed tablo duzeltme satirini tabloya ekle | [`e2db1f4`](https://github.com/ali-han-kaya/leibniz2/commit/e2db1f4) |
+| 2026-10-06 | feat | (rca) prettier-lint, action-pins ve mirror-sync sinif-kanonlari | [`84b1cc9`](https://github.com/ali-han-kaya/leibniz2/commit/84b1cc9) |
+| 2026-10-06 | docs | (deploy) 9f94f09 icin kanit-defteri satiri ekle | [`11c76f9`](https://github.com/ali-han-kaya/leibniz2/commit/11c76f9) |
+| 2026-10-06 | docs | (recovery) yama klasorunun kokenini ve kanit sozlesmesini yaz | [`9f94f09`](https://github.com/ali-han-kaya/leibniz2/commit/9f94f09) |
+| 2026-10-06 | docs | (rc) bilinen kirmizilarin bekleyen setini tek tabloda topla | [`bf3ea64`](https://github.com/ali-han-kaya/leibniz2/commit/bf3ea64) |
+| 2026-10-06 | docs | (incident) INC-6 — iptal edilen isleri temiz sayan fail-open tablo | [`4fc9313`](https://github.com/ali-han-kaya/leibniz2/commit/4fc9313) |
+| 2026-10-06 | docs | (incident) INC-5 — PyYAML yokken sureci olduren SystemExit tuzagi | [`8201fbd`](https://github.com/ali-han-kaya/leibniz2/commit/8201fbd) |
+| 2026-10-05 | docs | (deploy) RCA duzeltmeleri icin kanit-defteri satiri ekle | [`1008538`](https://github.com/ali-han-kaya/leibniz2/commit/1008538) |
+| 2026-10-06 | chore | (changelog) sinif-kanonlari satirini tabloya ekle | [`d33a09f`](https://github.com/ali-han-kaya/leibniz2/commit/d33a09f) |
+| 2026-10-06 | chore | (changelog) olay-kaydi + signum onarimi satirini tabloya ekle | [`3e3b074`](https://github.com/ali-han-kaya/leibniz2/commit/3e3b074) |
+| 2026-10-06 | feat | (server) yasam-dongusu olay-kaydi + signum imza onarimi | [`d60e64a`](https://github.com/ali-han-kaya/leibniz2/commit/d60e64a) |
+| 2026-10-06 | feat | (dashboard) yasam-dongusu paneli + /api/server-events ucu | [`78f0a86`](https://github.com/ali-han-kaya/leibniz2/commit/78f0a86) |
+| 2026-10-06 | chore | (changelog) d60e64a + 3e3b074 satirlarini tabloya ekle | [`4230048`](https://github.com/ali-han-kaya/leibniz2/commit/4230048) |
+| 2026-10-06 | feat | (server) olay-kaydi rotasyonu — boyut tavani + arsiv | [`cfaa0c9`](https://github.com/ali-han-kaya/leibniz2/commit/cfaa0c9) |
+| 2026-10-06 | chore | (changelog) 78f0a86 satirini tabloya ekle | [`63eca47`](https://github.com/ali-han-kaya/leibniz2/commit/63eca47) |
+| 2026-10-06 | docs | (deploy) f3ebc30 icin kanit-defteri satiri ekle | [`7a3ba80`](https://github.com/ali-han-kaya/leibniz2/commit/7a3ba80) |
+| 2026-10-06 | chore | (changelog) cfaa0c9 satirini tabloya ekle | [`f3ebc30`](https://github.com/ali-han-kaya/leibniz2/commit/f3ebc30) |
+| 2026-10-07 | feat | (canvas) Incidental Proof plate-book — 6 tex + PDF | [`4ebb0f5`](https://github.com/ali-han-kaya/leibniz2/commit/4ebb0f5) |
+| 2026-10-07 | feat | (canvas) levha 04 The Contour Ledger, kitap 6 yaprağa iner | [`e97843b`](https://github.com/ali-han-kaya/leibniz2/commit/e97843b) |
+| 2026-10-07 | feat | (canvas) plate-book Makefile hedefleri + SDE determinizm kapisi | [`7fd1a59`](https://github.com/ali-han-kaya/leibniz2/commit/7fd1a59) |
+| 2026-10-08 | fix | (dashboard) mirror frontend deploy seti + stream rAF kilidi | [`9750828`](https://github.com/ali-han-kaya/leibniz2/commit/9750828) |
+| 2026-10-08 | test | (canvas-determinism) 2 süit + Path-fix + batarya-sync | [`669bda7`](https://github.com/ali-han-kaya/leibniz2/commit/669bda7) |
+| 2026-10-08 | feat | (canvas) canvas-determinism job + 5-source matrix (apex) | [`04ed03e`](https://github.com/ali-han-kaya/leibniz2/commit/04ed03e) |
+| 2026-10-08 | feat | (canvas) Incidental Proof header banner (svg + gomme + test) | [`46933f3`](https://github.com/ali-han-kaya/leibniz2/commit/46933f3) |
+| 2026-10-10 | chore | (changelog) olu hash satirini canli HEAD ile hizala | [`95e2f1a`](https://github.com/ali-han-kaya/leibniz2/commit/95e2f1a) |
 
 ### Regresyon notları
 
