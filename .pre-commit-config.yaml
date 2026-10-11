@@ -108,6 +108,15 @@
 #                               Dockerfile'ları da eşler; süit, kapsam
 #                               dışı Dockerfile eklenmesini fail-closed
 #                               reddeder.
+#   22) check-verify-jobs-map  : verify.yml `needs`-DAG diyagramının
+#                               (docs/superpowers/specs/2026-09-24-verify-jobs-map.excalidraw)
+#                               TAZELİĞİNİ zorlar — gen_verify_jobs_map.py
+#                               --check diyagramı yeniden üretir ve committed
+#                               dosyayla BAYT karşılaştırır; verify.yml veya
+#                               PUBLISH_SCENARIO job tablosu değişir de
+#                               diyagram yeniden üretilmezse commit bloke
+#                               (fail-closed, read-only). Ölçüm imkânsızsa
+#                               (PyYAML/kaynak yok) rc=2 — sessiz PASS yok.
 # Herhangi bir P0/P1 bulgusu commit'i bloke eder (sıfır-dışı exit).
 #
 # Not: ÜÇ yazan hook vardır: update-config (config'i paket içeriğiyle
@@ -134,6 +143,7 @@
 #   pre-commit run check-dashboard-typecheck
 #   pre-commit run check-docker-security-smoke
 #   pre-commit run check-dockerfile-security-patching
+#   pre-commit run check-verify-jobs-map
 #
 # Bu üç yazan hariç hook'lar read-only'dir: dosya değiştirmez, yalnızca
 # doğrular (fail-closed). update-config config'i paket içeriğiyle,
@@ -1043,6 +1053,34 @@ repos:
         entry: python3 -m unittest _calisma.CIKTI.test_dockerfile_security_patching
         language: system
         files: (^|/)Dockerfile$
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
+      - id: check-verify-jobs-map
+        name: "verify.yml jobs-map diagram freshness (fail-closed)"
+        description: >-
+          docs/superpowers/specs/gen_verify_jobs_map.py --check: verify.yml
+          `needs`-DAG diyagramını (docs/superpowers/specs/2026-09-24-verify-jobs-map.excalidraw)
+          YENİDEN ÜRETİR ve diske yazmadan committed dosyayla BAYT
+          karşılaştırır. verify.yml veya PUBLISH_SCENARIO job tablosu
+          değişir de diyagram yeniden üretilmezse commit BLOKE edilir: bayat
+          diyagram yanlış DAG gösterir (üretilmiş artefaktın elle yazılmış
+          kopyası gibi sessizce çürür). READ-ONLY: yazmaz; düzeltme
+          geliştiricide (`python3 docs/superpowers/specs/gen_verify_jobs_map.py`
+          + `git add`). Değişim-farkında: yalnız dört yol stage'liyken koşar
+          (verify.yml, PUBLISH_SCENARIO.md, üretici, diyagram). Ölçüm
+          imkânsızsa (PyYAML yok / kaynak yok) rc=2 — kapı kör kalır ama
+          sessiz PASS üretmez; kaynak↔doc isim kümesi ayrışırsa rc=1.
+          OFFLINE, ~0.1s.
+        # venv-guard (check-coverage-report deseni): üretici PyYAML ister;
+        # sistem python3'ünde yoksa kapı sahte rc=2 verir. Repo venv'i
+        # (fresh_clone_setup: yaml içerir) varsa onunla koş.
+        entry: bash -c 'PY=python3; [ -x _calisma/.venv_z3/bin/python ] &&
+          PY=_calisma/.venv_z3/bin/python; exec "$PY"
+          docs/superpowers/specs/gen_verify_jobs_map.py --check'
+        language: system
+        files: ^(\.github/workflows/verify\.yml|docs/PUBLISH_SCENARIO\.md|docs/superpowers/specs/gen_verify_jobs_map\.py|docs/superpowers/specs/2026-09-24-verify-jobs-map\.excalidraw)$
         pass_filenames: false
         stages: [pre-commit]
         verbose: true
