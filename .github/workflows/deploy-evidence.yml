@@ -14,6 +14,11 @@ permissions:
   contents: read
   actions: read
 
+concurrency:
+  # CI-hijyen: haftalik kanit-defteri kosumu elle tetikleme ile cakismasin.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   freshness:
     name: Deploy evidence freshness gate (fail-closed)

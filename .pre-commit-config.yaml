@@ -198,6 +198,18 @@ repos:
         language: system
         always_run: true
         pass_filenames: false
+
+      - id: check-ci-hygiene
+        name: CI hygiene (permissions + timeout + concurrency)
+        description: >-
+          Tüm workflow'larda top-level `permissions:` haritası, her job'da
+          `timeout-minutes` (1..120 int; bool reddi) ve top-level
+          `concurrency.group` (non-empty) var mı denetler; eksikse commit
+          bloke (fail-closed, rc=1). PyYAML yoksa rc=2 — sessiz-PASS yok.
+        entry: python3 _calisma/CIKTI/ci_hygiene_gate.py --workflow .github/workflows
+        language: system
+        always_run: true
+        pass_filenames: false
         stages: [pre-commit]
         verbose: true
 
@@ -839,6 +851,30 @@ repos:
           computeZ3Status; reset/summary/control ayrıştırma + bar durumu).
           ~0.3s.
         entry: node _calisma/CIKTI/test_budget_scan.js && node _calisma/CIKTI/test_z3_scan.js
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+        verbose: true
+
+      - id: check-preview-interaction-node
+        name: "Verify dashboard interaction layer (hover/filter/lightbox, Node)"
+        description: >-
+          preview.js'in ETKİLEŞİM katmanı Node vm sandbox'ında (tarayıcısız)
+          koşulur: trend hover → tooltip (SVG delegasyonu, `data-tip-i` +
+          konum + mouseleave), run-history filtreleri (all/PASS/FAIL/P0, boş
+          dal, satır tıklaması) ve Z3 lightbox (aç/kapat, ←/→, Escape, Tab
+          odak tuzağı + odak dönüşü). Ayrıca tooltip/bütçe/refs-rozet node
+          testleri. Gerçek fare/klavye koşumu Playwright katmanındadır
+          (test_preview_interaction_cdp.py → CI `dashboard-smoke` job'u); bu
+          hook tarayıcı GEREKTİRMEZ. Hedefler .js olduğu için manifest'e
+          (check_unit_tests.list) girmezler — kapsam beyanı bu hook'tadır.
+          ~0.5s.
+        entry: >-
+          node _calisma/CIKTI/test_preview_interaction_dom.js &&
+          node _calisma/CIKTI/test_trend_tooltip_dom.js &&
+          node _calisma/CIKTI/test_budget_over_detail.js &&
+          node _calisma/CIKTI/test_refs_trend_badge_node.js
         language: system
         pass_filenames: false
         always_run: true

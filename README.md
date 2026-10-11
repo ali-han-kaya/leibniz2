@@ -81,10 +81,18 @@ make -f docs/Makefile.texlive pdf       # 3-geçişli derleme + Rerun=0 denetimi
 make -f docs/Makefile.texlive check     # 2×3-geçiş determinism deneyi (fail-closed)
 make -f docs/Makefile.texlive accept    # kanonik hash'i ID_RESIDUAL_ACCEPTANCE defterinde doğrular
 make -f docs/Makefile.texlive engineinfo  # motor kilidi + sözleşme sabitleri (CI log'u için)
+make -f docs/Makefile.texlive plate-book        # Incidental Proof levha kitabı (tectonic, ayrı SDE sabiti)
+make -f docs/Makefile.texlive plate-book-check  # levhalar+kitap: 2× bağımsız SDE koşumu (fail-closed)
 
 # tectonic — paralel yaşam, geri dönüş yolu
 make -f docs/Makefile.tectonic pdf
 ```
+
+Levha kitabı (Incidental Proof) ayrı bir aile sabiti taşır:
+`PLATE_BOOK_EPOCH ?= 1700000000`. Ayrıdır çünkü canvas ailesi
+fontspec/XeTeX sözleşmesiyle tectonic ile derlenir ve el yazmasının
+epoch'u bu PDF'leri yeniden damgalamamalıdır; `plate-book-check` kitabı ve
+derlediği dört levhayı kaynak-başına iki bağımsız koşumla sınar.
 
 Sözleşme: `SOURCE_DATE_EPOCH ?= git log -1 --format=%ct` (geçmiş commit'i
 yeniden üretme), `TEXINPUTS="$TEXDIR//:"`, `TEXMFOUTPUT`/`-output-directory`
@@ -540,8 +548,14 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-03 | fix | (dashboard-next) olu importleri sil, noUnused bayraklarini ac | [`097b683`](https://github.com/ali-han-kaya/leibniz2/commit/097b683) |
 | 2026-10-03 | fix | (trend-db) load.ts girdi dogrulama + graceful shutdown | [`ca118f9`](https://github.com/ali-han-kaya/leibniz2/commit/ca118f9) |
 | 2026-10-04 | fix | (trend-db) tsconfig + typescript ekle, prisma CLI'yi devDeps'e tasi | [`563d0c6`](https://github.com/ali-han-kaya/leibniz2/commit/563d0c6) |
-| 2026-10-05 | fix | (delivery) teslim zip'lerini tex duzeltmesiyle repack et | [`3f7f88f`](https://github.com/ali-han-kaya/leibniz2/commit/3f7f88f) |
 | 2026-10-04 | other | verify: surface unregistered P0/P1 as an Other layer | [`35a7940`](https://github.com/ali-han-kaya/leibniz2/commit/35a7940) |
+| 2026-09-22 | feat | (ci) CI hygiene gate - permissions, timeout, concurrency matrix | [`88e70d1`](https://github.com/ali-han-kaya/leibniz2/commit/88e70d1) |
+| 2026-09-22 | feat | (docker) PR-triggered Trivy scan with SARIF diff comment | [`5380ed0`](https://github.com/ali-han-kaya/leibniz2/commit/5380ed0) |
+| 2026-10-06 | feat | (a11y) add /api/a11y bridge + verdict panel | [`54ffe31`](https://github.com/ali-han-kaya/leibniz2/commit/54ffe31) |
+| 2026-10-06 | feat | (a11y) battery gate + refs-index + health bridge | [`8179866`](https://github.com/ali-han-kaya/leibniz2/commit/8179866) |
+| 2026-10-06 | docs | (a11y) finalize a11y-gate implementation plan | [`4a05c7f`](https://github.com/ali-han-kaya/leibniz2/commit/4a05c7f) |
+| 2026-10-05 | chore | (changelog) 5380ed0 + 88e70d1 satirlarini tabloya ekle | [`0b2ca43`](https://github.com/ali-han-kaya/leibniz2/commit/0b2ca43) |
+| 2026-10-10 | docs | (deploy) cb6f607 icin kanit-defteri satiri ekle | [`83569aa`](https://github.com/ali-han-kaya/leibniz2/commit/83569aa) |
 | 2026-10-05 | docs | (deploy) kanit-defterini geri getir, 77d05e3 kosum satirini ekle | [`70744ff`](https://github.com/ali-han-kaya/leibniz2/commit/70744ff) |
 | 2026-10-05 | chore | (changelog) 3f7f88f ve 35a7940 satirlarini tabloya ekle | [`77d05e3`](https://github.com/ali-han-kaya/leibniz2/commit/77d05e3) |
 | 2026-10-05 | docs | (deploy) b1f5f1e kosum satirini kanit-defterine ekle | [`93bc2a9`](https://github.com/ali-han-kaya/leibniz2/commit/93bc2a9) |
@@ -592,6 +606,19 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-06 | chore | (changelog) d60e64a + 3e3b074 satirlarini tabloya ekle | [`4230048`](https://github.com/ali-han-kaya/leibniz2/commit/4230048) |
 | 2026-10-06 | feat | (server) olay-kaydi rotasyonu — boyut tavani + arsiv | [`cfaa0c9`](https://github.com/ali-han-kaya/leibniz2/commit/cfaa0c9) |
 | 2026-10-06 | chore | (changelog) 78f0a86 satirini tabloya ekle | [`63eca47`](https://github.com/ali-han-kaya/leibniz2/commit/63eca47) |
+| 2026-10-06 | docs | (deploy) f3ebc30 icin kanit-defteri satiri ekle | [`7a3ba80`](https://github.com/ali-han-kaya/leibniz2/commit/7a3ba80) |
+| 2026-10-06 | chore | (changelog) cfaa0c9 satirini tabloya ekle | [`f3ebc30`](https://github.com/ali-han-kaya/leibniz2/commit/f3ebc30) |
+| 2026-10-07 | feat | (canvas) Incidental Proof plate-book — 6 tex + PDF | [`4ebb0f5`](https://github.com/ali-han-kaya/leibniz2/commit/4ebb0f5) |
+| 2026-10-07 | feat | (canvas) levha 04 The Contour Ledger, kitap 6 yaprağa iner | [`e97843b`](https://github.com/ali-han-kaya/leibniz2/commit/e97843b) |
+| 2026-10-07 | feat | (canvas) plate-book Makefile hedefleri + SDE determinizm kapisi | [`7fd1a59`](https://github.com/ali-han-kaya/leibniz2/commit/7fd1a59) |
+| 2026-10-08 | fix | (dashboard) mirror frontend deploy seti + stream rAF kilidi | [`9750828`](https://github.com/ali-han-kaya/leibniz2/commit/9750828) |
+| 2026-10-08 | test | (canvas-determinism) 2 süit + Path-fix + batarya-sync | [`669bda7`](https://github.com/ali-han-kaya/leibniz2/commit/669bda7) |
+| 2026-10-08 | feat | (canvas) canvas-determinism job + 5-source matrix (apex) | [`04ed03e`](https://github.com/ali-han-kaya/leibniz2/commit/04ed03e) |
+| 2026-10-08 | feat | (canvas) Incidental Proof header banner (svg + gomme + test) | [`46933f3`](https://github.com/ali-han-kaya/leibniz2/commit/46933f3) |
+| 2026-10-10 | chore | (changelog) olu hash satirini canli HEAD ile hizala | [`95e2f1a`](https://github.com/ali-han-kaya/leibniz2/commit/95e2f1a) |
+| 2026-10-10 | feat | (vercel) serverless /api adaptörü + git-push preview hattı | [`1f21528`](https://github.com/ali-han-kaya/leibniz2/commit/1f21528) |
+| 2026-10-11 | ci | (precommit) verify.yml jobs-map tazelik kapisi | [`e07d94f`](https://github.com/ali-han-kaya/leibniz2/commit/e07d94f) |
+| 2026-10-11 | docs | (specs) verify.yml jobs-map ureticisi + diyagram artefakti | [`eee89ff`](https://github.com/ali-han-kaya/leibniz2/commit/eee89ff) |
 
 ### Regresyon notları
 

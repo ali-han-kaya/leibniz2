@@ -1,0 +1,81 @@
+name: vercel-preview-deploy
+
+# Native git-connect engelli (Login Connection 400 — docs/VERCEL_DEPLOYMENT.md
+# §Fallback hattı): push, Vercel'in kendi git entegrasyonu yerine CI'dan
+# `vercel deploy` ile preview üretir. Doğrulama, aylık vercel-deploy-check ile
+# AYNI kapı script'ini (check_vercel_deploy.py) yeni preview'a karşı koşar —
+# kapı-paritesi (K1); ayrıca trend/determinism-trend JSON sağlığı eklenir.
+on:
+  push:
+    branches-ignore:
+      - main
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  # CI-hijyen: ref başına tek koşum; üst üste binen push'lar eskisini iptal eder.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    name: Preview deploy + 4 /api ucu (fail-closed)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Vercel CLI (pinli surum)
+        run: |
+          set -euo pipefail
+          npm install --global vercel@59.10.0
+          vercel --version
+
+      - name: Proje linkle (non-interactive)
+        run: |
+          set -euo pipefail
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "::error::VERCEL_TOKEN secret tanimli degil (repo Settings > Secrets)"
+            exit 1
+          fi
+          vercel link --project leibniz2 --scope sarkis-env --yes
+
+      - name: Preview deploy
+        id: deploy
+        run: |
+          set -euo pipefail
+          out=$(vercel deploy --yes 2>&1)
+          printf '%s\n' "$out"
+          url=$(printf '%s\n' "$out" | grep -E 'Preview +https://' \
+            | grep -oE 'https://[a-z0-9][a-z0-9.-]*\.vercel\.app' | head -n 1)
+          if [ -z "$url" ]; then
+            echo "::error::Preview URL cozulemedi"
+            exit 1
+          fi
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "Preview: $url" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 4 /api ucu dogrulama (fail-closed)
+        env:
+          BASE_URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          set -euo pipefail
+          python3 _calisma/CIKTI/check_vercel_deploy.py --base-url "$BASE_URL"
+          for ep in trend determinism-trend; do
+            code=$(curl -s -m 30 -o "/tmp/$ep.json" -w '%{http_code}' \
+              "$BASE_URL/api/$ep")
+            if [ "$code" != "200" ]; then
+              echo "::error::/api/$ep HTTP $code"
+              exit 1
+            fi
+            if ! python3 -m json.tool "/tmp/$ep.json" > /dev/null; then
+              echo "::error::/api/$ep gecerli JSON degil"
+              exit 1
+            fi
+          done
+          echo "4 /api ucu YESIL: $BASE_URL" >> "$GITHUB_STEP_SUMMARY"

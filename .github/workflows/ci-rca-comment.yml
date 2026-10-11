@@ -17,6 +17,12 @@ permissions:
   pull-requests: write
   actions: read
 
+concurrency:
+  # CI-hijyen: ayni ref'te ust uste binen RCA yazimlari tek siraya iner
+  # (workflow_run tetikli; eski kosum iptal edilir).
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   rca:
     # Yalnız kırmızı koşumlarda çalışır; yeşilde bayat yorum temizlenmez

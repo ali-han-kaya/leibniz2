@@ -1123,8 +1123,22 @@ class TestReadmeChangelogScope(unittest.TestCase):
                 capture_output=True, text=True, check=False, cwd=repo)
             if probe.returncode != 0:
                 return None
+            refs = ["origin/main", "HEAD"]
+            # Merge commit ÖNCESİ pre-commit: HEAD hâlâ öncesi olduğundan
+            # tabloya merge ile GİREN canlı commit'ler (tablo satırları
+            # update-changelog hook'unun işi) erişim setinde kalır ve her
+            # PR/merge-commit yapay olarak kırmızı olurdu. Guard'ın amacı
+            # rewrite sonrası ölü hash yakalamak; MERGE_HEAD de canlıysa
+            # (rewrite sonrası eski hash MERGE_HEAD'te de olmaz) aynı koruma
+            # sürer — kapsam gevşemesi değil, merge-commit yanlış-negatif
+            # düzeltmesi (fail-closed kalır).
+            merge_head = subprocess.run(
+                ["git", "rev-parse", "--verify", "--quiet", "MERGE_HEAD"],
+                capture_output=True, text=True, check=False, cwd=repo)
+            if merge_head.returncode == 0:
+                refs.append("MERGE_HEAD")
             log = subprocess.run(
-                ["git", "log", "--format=%h", "origin/main", "HEAD"],
+                ["git", "log", "--format=%h"] + refs,
                 capture_output=True, text=True, check=True, cwd=repo)
         except (subprocess.CalledProcessError, FileNotFoundError):
             return None

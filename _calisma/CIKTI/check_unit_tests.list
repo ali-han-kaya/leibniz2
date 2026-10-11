@@ -33,10 +33,12 @@ test_check_python3_shell.py
 test_check_repro_manifest_hook.py
 test_check_sde_determinism.py
 test_check_unit_tests_timing.py
+test_check_vercel_deploy.py
 test_check_verify_jobs_map.py
 test_check_zip_lineage_drift.py
 test_ci_check_rate.py
 test_ci_failure_pattern.py
+test_ci_hygiene_gate.py
 test_ci_sidecar_wiring.py
 test_ci_stats.py
 test_classify_lean_error.py
@@ -51,6 +53,7 @@ test_coverage_report.py
 test_dashboard_k17_exit_sync.py
 test_dashboard_next_contract.py
 test_dashboard_smoke.py
+test_dashboard_webkit_smoke.py
 test_deploy_evidence.py
 test_design_token_collision.py
 test_design_token_contrast.py
@@ -79,6 +82,7 @@ test_gen_repro_manifest_e2e.py
 test_github_scripts.py
 test_history_sources.py
 test_id_residual_acceptance_doc.py
+test_incidental_banner.py
 test_incremental_doc_sync.py
 test_k13_coverage_sync.py
 test_k6_determ_canonical.py
@@ -108,6 +112,7 @@ test_preview_findings_panel.py
 test_preview_mirror_imports.py
 test_preview_server.py
 test_preview_server_atomic.py
+test_preview_stream_batching.py
 test_rca_report.py
 test_readme_badges.py
 test_readme_skills.py
@@ -157,6 +162,7 @@ test_trend_schedule_paths.py
 test_update_changelog_hook.py
 test_update_preview_sync_server.py
 test_validate_config_schema.py
+test_vercel_adapter.py
 test_verdict_seal_css.py
 test_verification_chain_deck.py
 test_verify_checks.py
