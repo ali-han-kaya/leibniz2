@@ -161,6 +161,18 @@ jobs:
         shell: bash
         run: pip install Pillow
 
+      # `gen_verify_jobs_map.py` (verify.yml job diyagramı tazelik kapısı)
+      # verify.yml'i PyYAML ile ayrıştırır; yaml yoksa FAIL-CLOSED rc=2 verir
+      # ("kapı kör; sessiz PASS yok"). Testi SKIP'e çevirmek kapıyı CI'da
+      # sessizleştirirdi (ölçüldü: PR #88 ilk koşumunda `test_check_verify_
+      # jobs_map` 7 testle kırmızı düştü ve verify job'unun TEK failure adımı
+      # buydu; kök neden ortamda PyYAML yokluğuydu). Bu yüzden bağımlılık
+      # burada KURULUR — jsonschema/Pillow adımlarıyla aynı desen.
+      - name: Install PyYAML for unit tests
+        if: always()
+        shell: bash
+        run: pip install pyyaml
+
       - name: Run CIKTI unit tests (test_*.py)
         shell: bash
         run: |
