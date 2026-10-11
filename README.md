@@ -618,6 +618,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-09 | feat | (vercel) GITHUB_TOKEN proje-env — run-history anonim rate-limit'ten cikis | [`12027fd`](https://github.com/ali-han-kaya/leibniz2/commit/12027fd) |
 | 2026-10-09 | fix | (vercel) .vercelignore dir-prune — /slides_z3/* tum deploy'larda 404 | [`7777691`](https://github.com/ali-han-kaya/leibniz2/commit/7777691) |
 | 2026-10-09 | fix | (preview) determinizm paneli init'de yuklenmiyordu | [`4be148c`](https://github.com/ali-han-kaya/leibniz2/commit/4be148c) |
+| 2026-10-09 | fix | (a11y) preview a11y tarama duzeltmeleri + webkit-smoke gate hizasi | [`2604d8b`](https://github.com/ali-han-kaya/leibniz2/commit/2604d8b) |
 
 ### Regresyon notları
 
