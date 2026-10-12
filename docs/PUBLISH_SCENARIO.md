@@ -212,7 +212,7 @@ git push origin main
 RUN_ID=$(gh run list --limit 1 --json databaseId -q '.[0].databaseId')
 gh run watch $RUN_ID --exit-status
 
-# 4) Son durum + artifact'lar (27 adet — doc listesi; canlı run'da 28,
+# 4) Son durum + artifact'lar (38 adet — doc listesi; canlı run'da 39,
 #    audit-live-ci meta-denetçinin kendi artifact'ı dahil)
 gh run view $RUN_ID --json jobs --jq '.jobs[] | "\(.name)\t\(.conclusion)"'
 gh api "repos/ali-han-kaya/leibniz2/actions/runs/$RUN_ID/artifacts" \
@@ -566,8 +566,8 @@ gh run list --limit 3 --json databaseId,status,conclusion,name
 RUN_ID=$(gh run list --limit 1 --json databaseId -q '.[0].databaseId')
 gh run watch $RUN_ID --exit-status
 
-# (c) Artifact'ları kontrol et (22 adet olmalı — liste aşağıda; canlı run'da
-#     23, audit-live-ci meta-denetçinin kendi artifact'ı dahil)
+# (c) Artifact'ları kontrol et (38 adet olmalı — liste aşağıda; canlı run'da
+#     39, audit-live-ci meta-denetçinin kendi artifact'ı dahil)
 gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_bytes) B)"'
 ```
 
@@ -621,7 +621,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 | 27 | D | Manifest PR comment | — skipped (PR'da çalışır) |
 | 28 | D | Budget status PR comment | — bütçe + pre-commit PR yorumu; job-level PR-only, push'ta tamamen skipped (bütçe kapısı ayrı `budget` job'ında kalır) |
 
-**Artifact listesi (31):**
+**Artifact listesi (38):**
 - `unit-tests` (CIKTI birim test logu — `test_*.py` glob'u)
 - `verify-report` (tek log: K1-K14 + pre-commit bölümü + .sha256)
 - `action-runtimes` (her action'ın runs.using denetimi JSON — node24 kapısı)
@@ -651,7 +651,10 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 - `pattern-drift` (merge pattern ↔ ARTIFACT_JOBS tutarlılık denetimi — advisory, run summary'ye yazılır)
 - `preview-reload-smoke` (preview sunucu restart + endpoint smoke testi — advisory, macOS)
 - `webkit-smoke` (WebKit dashboard smoke raporu `webkit_smoke_report.txt` — advisory, macOS safedriver; step-summary'ye yazılır, artifact `if: always()`)
-- `a11y-report` (a11y-gate raporu: **sayfa başına** axe sonuçları + config echo + verdict — fail-closed kapı; `blocking/warn/allowlisted/incomplete/incomplete_allowlisted` özeti. Kapsam `a11y_gate_config.json` → `pages`: `/preview.html` + `/guide.html`. Bir sayfa 404/5xx verirse kapı FAIL eder — kapsam genişletilmiş gibi görünüp taranmamış sayfa kalmaz)
+- `a11y-report-dark` + `a11y-report-light` (dashboard'ın koyu/açık tema a11y-gate raporları: axe sonuçları + config echo + verdict — fail-closed kapı; blocking/warn/allowlisted/incomplete özeti)
+- `a11y-guide-report-dark` + `a11y-guide-report-light` (Branch protection görsel kılavuzunun koyu/açık tema `/guide.html` a11y-gate raporları: witness + DOM tema doğrulamalı, aynı fail-closed özet sözleşmesi)
+- `a11y-landing-report-dark` + `a11y-landing-report-light` (Landing'in koyu/açık tema `/landing.html` a11y-gate raporları: generated witness + DOM tema doğrulamalı, aynı fail-closed özet sözleşmesi)
+- `lighthouse-dashboard-dark` + `lighthouse-dashboard-light` (dashboard'ın koyu/açık temada Lighthouse 13.5.0 accessibility-only JSON raporları: sorgu ile tema witness'ı + 1.0 skor kapısı)
 
 **Not:** Kapı artık `verify_delivery.py --full`'dur (K1-K14, fail-closed) ve yeşildir —
 Beth 1953 / Fosl 1998 gibi referans düzeltmeleri V5h'te yapıldı; Kalan çevrimdışı
