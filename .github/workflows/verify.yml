@@ -3236,81 +3236,48 @@ jobs:
     name: A11y gate (axe-core, fail-closed)
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    needs: [verify]
+    strategy:
+      fail-fast: false
+      matrix:
+        theme: [dark, light]
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Download verified run snapshot
+        uses: actions/download-artifact@v7
+        with:
+          name: run-history
+          path: run-history/
+
       - name: Install pinned Playwright
-        run: pip install playwright==1.63.0
+        run: pip install -r _calisma/requirements-z3.txt
 
       - name: Cache Playwright browsers
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-1.63.0
+          # Cache anahtarı da TEK KAYNAKTAN türer: sürüm bump'ı cache'i de
+          # geçersiz kılar, elle "1.63.0" yazılmış ikinci bir kopya olmaz.
+          key: playwright-${{ hashFiles('_calisma/requirements-z3.txt') }}
 
       - name: Install Chromium
         run: playwright install --with-deps chromium
 
-      # OLCU 2026-10-03: bu job temiz clone'da history.jsonl YOKKEN
-      # basliyordu; pano trend yuzeyi hic cizilmiyor ve kapida taramiyor.
-      # Yerel Chromium olcumu (kapinin o anki davranisi vs. fetch cozulunun
-      # ardindan): #trend <text> node 0 -> 14, #trend-count "" -> "(4 run)",
-      # axe color-contrast 36 -> 43 node, trend'e ait node 0 -> 6. Yani 6
-      # GERCEK node kapidan gorusuyordu.
-      #
-      # IKI KOSUL BIRLIKTE gerekiyor:
-      #   1) tohumlama (bu adim) - aksi halde yuzey BOS,
-      #   2) hazir isareti (a11y_gate_config.json settle) - aksi halde kapi
-      #      `load` aninda tarar ve fetch'ler cozulmedigi icin ayni bosluk
-      #      korunur (Tohumlama TEK BASINA yetmez, olcum ustte).
-      #
-      # settle.timeout_ms = 180000 OLCUMDEN CIKTI, tahminden degil.
-      #
-      # OLCUM (yerel Chromium, 2026-10-03): isaretin gelme suresi IKI MODLU.
-      #   hizli mod : ~75-130 ms
-      #   yavas mod : 53.6 / 55.5 / 62.3 / 65.3 / 65.7 / 68.6 / 69.8 / 70.2 /
-      #               94.0 / 95.8 / 95.8 sn   (n=14 kosum, en kotu 95.8 sn)
-      # Yani 15 sn de 45 sn de bu bandin ICINDE kaliyordu ve kapi HAZIR
-      # sayfayi FAIL ediyordu (olculdu: ayni sayfa ayni veriyle 6 kosumun
-      # 5'i FAIL). 180 sn = olculen en kotunun ~1.9 kati.
-      #
-      # Bu gecikme ONCEDEN VARDI ve BU DEGISIKLIGIN URUNU DEGIL: ayni olcum
-      # HEAD preview.js ile birebir tekrarlandi (52.8 / 52.9 / 94.0 sn).
-      # Ayrica sunucu kaynakli da DEGIL -- sunucu her endpoint'i 1-4 ms'de
-      # yanitliyor (curl + sunucu-i-tarafi zaman damgasi: RECV 440 -> DONE
-      # 443 /api/trend), ama tarayicinin ANA THREAD'i kilitleniyor: ayni
-      # sunucudan servis edilen basit bir sayfa hic takilmazken (maxGap 52 ms)
-      # pano her kosumda 53-96 sn donuyor (setInterval kalp atisi ile
-      # olculdu). Kok neden pano/ortam tarafinda; bu PR'in konusu degil.
-      #
-      # NEDEN BEKLEMEK DOGRU (gevseme degil): isaret hic gelmezse kapi yine
-      # FAIL verir (fail-closed). Fazla beklemek yalnizca YANLIS FAIL'i
-      # pahalilastirir, yanlis PASS'i MUMKUN KILMAZ. Bedel: is basina en
-      # kotu +180 sn; job butcesi 20 dk, olculen CI suresi ise ~4 sn
-      # (seed 13:28:37 -> verdict 13:28:41), yani gercek kosumda bu tavan
-      # yakilmiyor.
-      #
-      # Isaretin kendisi sayacla uretilir ve `finally` ile kapatilir: render
-      # fonksiyonlarindan biri istisna atarsa (DOM elemani yok) hem eski
-      # then hem eski catch yolu atiyor, sayac 1'de asili kaliyor ve isaret
-      # hic yanmiyordu. Mutasyon kaniti: ayni kirik DOM'da eski kod
-      # pending=1/isaret yok, yeni kod pending=0/isaret var.
-      #
-      # Bu bir SAHTE VERI ureticisidir, olcum degil: amaci kapinin dolu
-      # yuzeyi taradigini kanitlamak. Gercek kosumun gecmisi (run-history
-      # artifact'i) BILEREK kullanilmaz: capraz-job artifact bagimliligi
-      # kapiyi kirilgan yapar. Uretici deterministiktir (saat/rastgelelik
-      # yok) -> ayni --rows ayni bayt.
-      - name: Seed deterministic trend history for a11y surface
+      - name: Resolve Chromium for Lighthouse
+        shell: bash
         run: |
-          python3 _calisma/CIKTI/seed_a11y_history.py \
-            --out _calisma/CIKTI/history.jsonl \
-            --rows 8
-          test "$(wc -l < _calisma/CIKTI/history.jsonl)" -eq 8
+          chrome_path="$(python3 -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()')"
+          test -x "$chrome_path"
+          echo "CHROME_PATH=$chrome_path" >> "$GITHUB_ENV"
 
       - name: Start preview_server (fresh-clone-http pattern)
         run: |
@@ -3322,12 +3289,27 @@ jobs:
           # yapar; CI'da runner calisma alani mirror rolundedir. Tek kaynak:
           # design-system/tokens.css (check_tokens.py'in korudugu dosya).
           cp design-system/tokens.css _calisma/CIKTI/design-system-tokens.css
-          # /guide.html ayni sekilde PREVIEW_DIR mirror'indan servis edilir
-          # (preview_server.serve_guide; eksikse 404). a11y_gate_config.json
-          # /guide.html'i kapsama alir ve sayfa yuklenemezse kapı FAIL verir
-          # (fail-closed) — yani bu kopyi olmadan eklenen kapsam sessizce
-          # "tarandi" sanilir, gercekte hicbir sey taranmamis olur.
+          # Guide kaynağı docs/ altındadır; preview_server /guide.html
+          # rotası PREVIEW_DIR'den servis eder. CI runner'ı mirror rolünü
+          # üstlendiği için aynı tek kaynağı çalışma alanına kopyalarız.
           cp docs/branch-protection-guide/guide.html _calisma/CIKTI/guide.html
+          # Landing, verify job'ının aynı koşumundan taşınan history
+          # artifact'ıyla üretilir; preview_server aynı artifact'ı
+          # snapshot-only modda servis eder. Böylece hash donmuq PDF kaydından
+          # değil, CI koşumunun doğrulanmış /api/latest snapshot'ından gelir.
+          python3 - run-history/history.jsonl <<'PY'
+          import hashlib
+          import pathlib
+          import sys
+          path = pathlib.Path(sys.argv[1])
+          sidecar = pathlib.Path(str(path) + ".sha256")
+          if not path.is_file() or not sidecar.is_file():
+              raise SystemExit("run-history artifact/sidecar eksik")
+          expected = sidecar.read_text(encoding="utf-8").split()[0].lower()
+          actual = hashlib.sha256(path.read_bytes()).hexdigest()
+          if expected != actual:
+              raise SystemExit("run-history SHA-256 sidecar uyuşmuyor")
+          PY
           port=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')
           echo "A11Y_PORT=$port" >> "$GITHUB_ENV"
           work=$RUNNER_TEMP/a11y-server
@@ -3346,7 +3328,8 @@ jobs:
               "--preview-dir", "_calisma/CIKTI",
               "--bind", "127.0.0.1",
               "--port", port,
-              "--interval", "3600",
+              "--snapshot-file", "run-history/history.jsonl",
+              "--no-verify",
           ])
           PYEOF
           ready=0
@@ -3364,28 +3347,226 @@ jobs:
             exit 1
           fi
           grep -Fx 'ok' "$work/health.txt"
+          curl --fail --silent --show-error --max-time 5 \
+            "http://127.0.0.1:$port/api/latest" > "$work/latest.json"
+          python3 - "$work/latest.json" <<'PY'
+          import json
+          import sys
 
-      - name: Run a11y gate
+          with open(sys.argv[1], encoding="utf-8") as f:
+              latest = json.load(f)
+          if (latest.get("verdict") != "PASS" or
+                  latest.get("exit_code") != 0 or
+                  latest.get("cached") is True or
+                  not latest.get("ts")):
+              raise SystemExit("preview snapshot PASS/0/fresh değil")
+          print("Landing snapshot source: PASS (ts=%s raw=%s)" % (
+              latest.get("ts"), latest.get("raw_sha256")))
+          PY
+          python3 _calisma/landing/build_landing.py \
+            --snapshot-url "http://127.0.0.1:$port/api/latest" \
+            --hash-field raw \
+            --wait-seconds 5 \
+            --poll-seconds 1 \
+            --output _calisma/CIKTI/landing.html \
+            --assets-dir _calisma/CIKTI/landing/assets
+          cp _calisma/landing/landing_src.html _calisma/CIKTI/landing-src.html
+          curl --fail --silent --show-error --max-time 5 \
+            "http://127.0.0.1:$port/landing.html" \
+            | grep -F 'teslim anına kadar.'
+          curl --fail --silent --show-error --max-time 5 \
+            "http://127.0.0.1:$port/landing/assets/P1-a.png" \
+            --output /dev/null
+
+      - name: Run a11y gate — dashboard
         run: |
           python3 _calisma/CIKTI/a11y_gate.py \
             --base-url "http://127.0.0.1:$A11Y_PORT" \
-            --output a11y_report.json
+            --page /preview.html \
+            --theme "${{ matrix.theme }}" \
+            --output "a11y_dashboard_${{ matrix.theme }}.json"
+
+      - name: Run a11y gate — guide
+        if: always()
+        run: |
+          python3 _calisma/CIKTI/a11y_gate.py \
+            --base-url "http://127.0.0.1:$A11Y_PORT" \
+            --page /guide.html \
+            --theme "${{ matrix.theme }}" \
+            --output "a11y_guide_${{ matrix.theme }}.json"
+
+      - name: Run a11y gate — landing
+        if: always()
+        run: |
+          python3 _calisma/CIKTI/a11y_gate.py \
+            --base-url "http://127.0.0.1:$A11Y_PORT" \
+            --page /landing.html \
+            --theme "${{ matrix.theme }}" \
+            --output "a11y_landing_${{ matrix.theme }}.json"
+
+      - name: Run Lighthouse accessibility — dashboard
+        if: always()
+        env:
+          A11Y_THEME: ${{ matrix.theme }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          report="lighthouse_dashboard_${A11Y_THEME}.json"
+          url="http://127.0.0.1:${A11Y_PORT}/preview.html?theme=${A11Y_THEME}"
+          npx --yes lighthouse@13.5.0 "$url" \
+            --only-categories=accessibility \
+            --form-factor=desktop \
+            --output=json \
+            --output-path="$report" \
+            --chrome-flags="--headless --no-sandbox --disable-background-timer-throttling" \
+            --throttling-method=provided \
+            --max-wait-for-load=10000 \
+            --disable-full-page-screenshot \
+            --quiet
+          python3 - "$report" "$A11Y_THEME" <<'PY'
+          import json
+          import pathlib
+          import sys
+          from urllib.parse import parse_qs, urlparse
+
+          report = pathlib.Path(sys.argv[1])
+          expected_theme = sys.argv[2]
+          if not report.is_file():
+              raise SystemExit("Lighthouse raporu üretilmedi: %s" % report)
+          data = json.loads(report.read_text(encoding="utf-8"))
+          requested = urlparse(data.get("requestedUrl", ""))
+          query_theme = parse_qs(requested.query).get("theme", [None])[0]
+          if query_theme != expected_theme:
+              raise SystemExit("Lighthouse tema witness uyuşmazlığı: %r != %r" % (
+                  query_theme, expected_theme))
+          score = (data.get("categories", {}).get("accessibility", {})
+                   .get("score"))
+          # Category score is the fail-closed contract. Individual zero-score
+          # experimental/manual audits stay visible in the artifact and log.
+          if score != 1:
+              raise SystemExit("Lighthouse accessibility score PASS değil: %r" % score)
+          failed = [key for key, audit in data.get("audits", {}).items()
+                    if audit.get("score") == 0]
+          print("Lighthouse accessibility: PASS (score=1.0; zero-score audits: %s)" %
+                (", ".join(failed) if failed else "none"))
+          PY
+
+      - name: Write a11y job summary
+        if: always()
+        env:
+          A11Y_THEME: ${{ matrix.theme }}
+        shell: bash
+        run: |
+          # Her matrix child'ı kendi temasında üç raporu salt-okur render
+          # eder. Guide ve landing if: always() ile çalıştığı için dashboard
+          # FAIL olsa bile diğer raporlar ve özet kaybolmaz.
+          #
+          # İNCOMPLETE KANITI: özet YALNIZ allowlist'le eşleşen incomplete
+          # düğümlerin hedefini ve outer HTML kanıtını gösterir (allowlist'siz
+          # düğümler gizlenmez, artifact'ta kalır: a11y_gate raporundaki
+          # node_targets/node_html). Seçim kuralı a11y_gate ile tek kaynak:
+          # a11y_gate.allowlisted_node_indices. Kanıt SAYFADAN gelen
+          # güvenilmez metindir; a11y_summary onu içeriğinden uzun bir kod
+          # çitine alır ve kesme/atlama sınırlarını görünür yazar.
+          python3 - <<'PY'
+          import json, os, pathlib, sys
+          sys.path.insert(0, "_calisma/CIKTI")
+          from a11y_summary import render_allowlist_error, render_report
+          theme = os.environ["A11Y_THEME"]
+          # Allowlist aynı dosyadan okunur; okunamazsa sessiz boş özet
+          # üretmek yerine görünür bir uyarı satırı yazılır.
+          allowlist, allowlist_error = [], None
+          try:
+              with open("_calisma/CIKTI/a11y_gate_config.json", encoding="utf-8") as handle:
+                  allowlist = json.load(handle)["allowlist"]
+          except (OSError, ValueError, KeyError, TypeError) as exc:
+              allowlist_error = exc
+          reports = [
+              ("Dashboard", pathlib.Path("a11y_dashboard_%s.json" % theme)),
+              ("Branch protection guide", pathlib.Path("a11y_guide_%s.json" % theme)),
+              ("Landing", pathlib.Path("a11y_landing_%s.json" % theme)),
+          ]
+          lines = [
+              "## a11y-gate özeti (%s)" % theme,
+              "",
+              "| sayfa | verdict | blocking / warn / allowlisted / incomplete |",
+              "|---|---|---|",
+          ]
+          for label, report in reports:
+              if not report.exists():
+                  lines.append("| %s | — | rapor üretilmedi |" % label)
+                  continue
+              data = json.loads(report.read_text(encoding="utf-8"))
+              s = data.get("summary") or {}
+              lines.append("| %s | **%s** | %s / %s / %s / %s |" % (
+                  label, data.get("verdict", "BILINMIYOR"),
+                  s.get("blocking", 0), s.get("warn", 0),
+                  s.get("allowlisted", 0), s.get("incomplete", 0)))
+              for v in data.get("violations", []):
+                  extra = " (allowlisted: %s düğüm)" % v["allowlisted_nodes"] \
+                      if v.get("allowlisted_nodes") else ""
+                  lines.append("- `%s` %s → %s, %s düğüm%s" % (
+                      v.get("rule", "?"), v.get("impact") or "-",
+                      v.get("level"), v.get("nodes"), extra))
+              if data.get("error"):
+                  lines.append("- hata: %s" % data["error"])
+              if allowlist_error is None:
+                  lines.extend(render_report(data, allowlist, label))
+          if allowlist_error is not None:
+              lines.append(render_allowlist_error(allowlist_error))
+          lighthouse = pathlib.Path("lighthouse_dashboard_%s.json" % theme)
+          if lighthouse.exists():
+              try:
+                  lighthouse_data = json.loads(lighthouse.read_text(encoding="utf-8"))
+                  lighthouse_score = (lighthouse_data.get("categories", {})
+                                       .get("accessibility", {}).get("score"))
+                  lines.append("- Lighthouse dashboard accessibility: **%s** (score: %s)" % (
+                      "PASS" if lighthouse_score == 1 else "FAIL",
+                      lighthouse_score if lighthouse_score is not None else "unknown"))
+              except (OSError, ValueError, TypeError) as exc:
+                  lines.append("- Lighthouse dashboard accessibility: **FAIL** (%s)" % exc)
+          else:
+              lines.append("- Lighthouse dashboard accessibility: **FAIL** (rapor üretilmedi)")
+          pathlib.Path(os.environ["GITHUB_STEP_SUMMARY"]).write_text(
+              "\n".join(lines) + "\n", encoding="utf-8")
+          PY
 
       - name: Upload a11y report
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: a11y-report
-          path: a11y_report.json
+          name: a11y-report-${{ matrix.theme }}
+          path: a11y_dashboard_${{ matrix.theme }}.json
           if-no-files-found: ignore
           retention-days: 30
 
-  # CHANGELOG DRIFT CHECK (advisory) — gen_changelog.py --check'i CI'da koşar
-  # ve drift bulgularını run summary'ye yazar. Advisory: changelog tabloları
-  # (README/PUBLISH_SCENARIO) tasarım gereği HEAD'in bir commit gerisinde
-  # kalabilir (bir commit'in satırı sonraki commit'te eklenir) — bu yüzden
-  # drift BLOKE ETMEZ, her push'ta görünür kılınır (continue-on-error).
-  # GATE_EXCLUDE'da — required check sayısı 12'de sabit kalır.
+      - name: Upload guide a11y report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: a11y-guide-report-${{ matrix.theme }}
+          path: a11y_guide_${{ matrix.theme }}.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Upload landing a11y report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: a11y-landing-report-${{ matrix.theme }}
+          path: a11y_landing_${{ matrix.theme }}.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Upload Lighthouse dashboard report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: lighthouse-dashboard-${{ matrix.theme }}
+          path: lighthouse_dashboard_${{ matrix.theme }}.json
+          if-no-files-found: ignore
+          retention-days: 30
+
   changelog-drift:
     name: Changelog drift check (advisory)
     runs-on: ubuntu-latest

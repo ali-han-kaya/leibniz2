@@ -1265,6 +1265,10 @@ def _route(path):
         return "design_tokens"
     if p == "/guide.html":
         return "guide"
+    if p == "/landing.html":
+        return "landing"
+    if p.startswith("/landing/assets/"):
+        return "landing_assets"
     if p == "/api/latest":
         return "latest"
     if p == "/api/run":
@@ -1285,6 +1289,8 @@ def _route(path):
         return "det_trend"
     if p == "/api/run-history":
         return "run_history"
+    if p == "/api/a11y":
+        return "a11y"
     if p == "/api/server-events":
         return "server_events"
     if p.startswith("/api/run-stdout"):
@@ -1393,6 +1399,10 @@ class Handler(BaseHTTPRequestHandler):
             self.serve_preview()
         elif route == "guide":
             self.serve_guide()
+        elif route == "landing":
+            self.serve_landing()
+        elif route == "landing_assets":
+            self.serve_landing_assets()
         elif route == "preview_js":
             self.serve_preview_js()
         elif route == "design_tokens":
@@ -1425,6 +1435,8 @@ class Handler(BaseHTTPRequestHandler):
             self.serve_run_stdout()
         elif route == "health":
             self._send(200, "ok")
+        elif route == "a11y":
+            self.serve_a11y()
         elif route == "slides":
             self.serve_slides()
         elif route is None and urllib.parse.urlparse(self.path).path.startswith("/api/"):
@@ -1583,6 +1595,15 @@ class Handler(BaseHTTPRequestHandler):
                     STREAM_CLIENTS.remove(q)
                 except ValueError:
                     pass
+
+    def serve_a11y(self):
+        """a11y-gate artifact'larından verdict/summary özeti (panel yükü).
+
+        Ham axe payload'ı bilerek dışarı vermez: yalnız verdict + özet
+        sayıları. Artifact yoksa 200 + available=false (panel "kanıt yok").
+        """
+        self._send(200, json.dumps(load_a11y_reports(), ensure_ascii=False),
+                   content_type="application/json; charset=utf-8")
 
     def serve_history(self):
         """Return the dashboard projection of the recent history rows."""
@@ -1870,6 +1891,56 @@ class Handler(BaseHTTPRequestHandler):
         with open(path, encoding="utf-8") as f:
             html = f.read()
         self._send(200, html, content_type="text/html; charset=utf-8")
+
+    def serve_landing(self):
+        """Serve the generated landing page from PREVIEW_DIR.
+
+        CI stages the generated ``landing.html`` and its PNG assets beside
+        the preview mirror.  The source file is authored for the repository
+        landing directory, so rewrite only the two served-root-relative
+        prefixes here; the on-disk artifact remains directly usable too.
+        Missing output is a fail-closed 404 rather than an empty page.
+        """
+        path = os.path.join(PREVIEW_DIR, "landing.html")
+        if not os.path.isfile(path):
+            self._send(404, "404 — landing.html mirror'da yok")
+            return
+        with open(path, encoding="utf-8") as f:
+            html = f.read()
+        html = html.replace('href="../CIKTI/preview.html"',
+                            'href="/preview.html"')
+        html = html.replace('src="assets/', 'src="/landing/assets/')
+        self._send(200, html, content_type="text/html; charset=utf-8")
+
+    def serve_landing_assets(self):
+        """Serve staged landing PNGs with the same path/symlink guards as slides."""
+        request_path = urllib.parse.urlparse(self.path).path
+        name = request_path[len("/landing/assets/"):]
+        if (not name or "/" in name or name.startswith(".") or
+                not name.lower().endswith(".png") or
+                not re.fullmatch(r"[A-Za-z0-9._-]+", name)):
+            self._send(404, "404 not found")
+            return
+        base = os.path.realpath(os.path.join(PREVIEW_DIR, "landing", "assets"))
+        full = os.path.join(PREVIEW_DIR, "landing", "assets", name)
+        try:
+            real = os.path.realpath(full)
+            if os.path.commonpath([real, base]) != base:
+                self._send(404, "404 not found")
+                return
+        except ValueError:
+            self._send(404, "404 not found")
+            return
+        if not os.path.isfile(full):
+            self._send(404, "404 not found")
+            return
+        try:
+            with open(full, "rb") as f:
+                data = f.read()
+        except OSError:
+            self._send(404, "404 not found")
+            return
+        self._send(200, data, content_type="image/png")
 
     def serve_latest(self):
         self._send(200, json.dumps(snapshot_dict(), ensure_ascii=False,
@@ -2170,6 +2241,202 @@ def _read_server_events(limit=None):
     return rows[-limit:] if limit and limit > 0 else rows
 
 
+# ── a11y-gate artifact'ları → dashboard paneli (verdict + summary) ────────────
+# a11y_gate.py her sayfa×tema için `a11y_<page>_<theme>.json` yazar; verify.yml
+# bunları artifact olarak yükler. Panel YALNIZ verdict + summary okur: raporun
+# `raw` alanı tüm axe payload'ıdır (MB mertebesinde) ve tarayıcıya taşınmaz —
+# pano tek satırda okunacak yüzey, ham payload değil.
+A11Y_PAGES = ("dashboard", "guide", "landing")
+A11Y_THEMES = ("dark", "light")
+A11Y_SUMMARY_KEYS = ("blocking", "warn", "allowlisted", "incomplete")
+# Rapor tavanı: raw payload şişebilir; okumak yerine gerekçeli hata döner
+# (sessiz kırpma = kanıt kaybı).
+A11Y_MAX_BYTES = 4 * 1024 * 1024
+
+
+def a11y_artifact_name(page, theme):
+    """verify.yml'in yazdığı artifact dosya adı — tek kaynak burada."""
+    return "a11y_%s_%s.json" % (page, theme)
+
+
+def _a11y_candidates(name):
+    """Artifact'ın olabileceği konumlar (refs-trend aday deseninin aynısı).
+
+    CI'da repo kökü, yerel koşumda preview-dir olabilir; ikisini de dener.
+    PREVIEW_DIR main()'de atanır → import anında yoksa aday listesine girmez.
+
+    `gh run download` / `actions/download-artifact` artifact başına BİR ALT
+    DİZİN açtığı için `a11y-reports/<artifact>/a11y_<sayfa>_<tema>.json`
+    düzeni de aranır (sıralı — hangisinin önce okunacağı belli olsun).
+    """
+    roots = [os.path.join(REPO_ROOT, "a11y-reports"), REPO_ROOT]
+    # Alt dizin taraması YALNIZ a11y-reports köklerinde: REPO_ROOT'un tamamı
+    # taranırsa artifact yoksa bile her istekte tüm repo dizinlenir.
+    nested = [roots[0]]
+    preview_dir = globals().get("PREVIEW_DIR")
+    if preview_dir:
+        nested.append(os.path.join(preview_dir, "a11y-reports"))
+        roots.append(preview_dir)
+    cands = [os.path.join(root, name) for root in roots]
+    for root in nested:
+        try:
+            subs = sorted(os.listdir(root))
+        except OSError:
+            continue
+        cands.extend(os.path.join(root, sub, name) for sub in subs)
+    return cands
+
+
+def a11y_report_entry(path, page, theme):
+    """Tek artifact → kompakt panel satırı.
+
+    Hata durumunda `verdict` None kalır, `error` gerekçeyi taşır: panel yeşile
+    değil "kanıt okunamadı"ya düşer (fail-closed — ölçülmeyen PASS yok).
+    """
+    entry = {"page": page, "theme": theme, "verdict": None, "summary": {},
+             "error": None, "file": os.path.basename(path)}
+    try:
+        size = os.path.getsize(path)
+    except OSError as exc:
+        entry["error"] = "istatistik okunamadı: %s" % exc
+        return entry
+    if size > A11Y_MAX_BYTES:
+        entry["error"] = "rapor tavanı aşıldı: %d bayt" % size
+        return entry
+    try:
+        with open(path, encoding="utf-8") as f:
+            raw = json.load(f)
+    except (OSError, ValueError) as exc:
+        entry["error"] = "rapor okunamadı: %s" % exc
+        return entry
+    if not isinstance(raw, dict):
+        entry["error"] = "rapor JSON sözlük değil"
+        return entry
+    summary = raw.get("summary") or {}
+    entry["verdict"] = raw.get("verdict")
+    entry["summary"] = {k: summary.get(k, 0) for k in A11Y_SUMMARY_KEYS}
+    entry["error"] = raw.get("error")
+    return entry
+
+
+def load_a11y_reports():
+    """Bulunan tüm a11y artifact'larından panel yükünü üret.
+
+    Hiç artifact yoksa available=False + gerekçe döner. Bulunanların verdict'i
+    None olabilir (okunamadı) — bu durum da PASS sayılmaz.
+    """
+    reports = []
+    for page in A11Y_PAGES:
+        for theme in A11Y_THEMES:
+            name = a11y_artifact_name(page, theme)
+            for cand in _a11y_candidates(name):
+                if os.path.isfile(cand):
+                    reports.append(a11y_report_entry(cand, page, theme))
+                    break
+    return {
+        "available": bool(reports),
+        "reports": reports,
+        "note": None if reports else "a11y artifact bulunamadı (%s) — kanıt yok"
+                % a11y_artifact_name("<page>", "<theme>"),
+    }
+
+
+def _validate_snapshot_file_snapshot(value):
+    """CI snapshot sözleşmesini server başlamadan fail-closed doğrula."""
+    if not isinstance(value, dict):
+        raise ValueError("snapshot JSON object değil")
+    if value.get("verdict") != "PASS" or value.get("exit_code") != 0:
+        raise ValueError("snapshot tamamlanmış PASS/0 değil")
+    if not isinstance(value.get("ts"), str) or not value["ts"].strip():
+        raise ValueError("snapshot ts boş")
+    nested = value.get("pdf_hash")
+    nested = nested if isinstance(nested, dict) else {}
+    for field in ("raw_sha256", "stripped_sha256"):
+        name = field.removesuffix("_sha256")
+        values = [sha for sha in (value.get(field), nested.get(name))
+                  if sha is not None]
+        if not values or any(
+                not isinstance(sha, str) or
+                not re.fullmatch(r"[0-9a-fA-F]{64}", sha)
+                for sha in values):
+            raise ValueError("snapshot %s 64 hex değil" % field)
+        if len({sha.lower() for sha in values}) != 1:
+            raise ValueError("snapshot %s alanları çelişkili" % field)
+    for field in ("p0", "p1"):
+        if value.get(field) is not None and value[field] != 0:
+            raise ValueError("snapshot %s sıfır değil" % field)
+    if value.get("cached") is True:
+        raise ValueError("snapshot cached")
+    return value
+
+
+def _read_snapshot_file(path):
+    """Snapshot JSON/JSONL dosyasını fail-closed oku ve son kaydı doğrula.
+
+    CI preview_server'ı `verify` job'ının aynı koşumdan ürettiği history
+    artifact'ıyla, yeni full verify çalıştırmadan besler. Sidecar yoksa veya
+    hash'ı uyuşmazsa dosya güvenilmez sayılır. Bozuk JSONL satırları yok sayılmaz;
+    böylece kısmi/eskimiş bir kayıt PASS gibi sunulamaz.
+    """
+    if not path or not os.path.isfile(path):
+        raise ValueError("snapshot dosyası yok: %s" % path)
+    real = os.path.realpath(path)
+    sidecar = real + ".sha256"
+    if not os.path.isfile(sidecar):
+        raise ValueError("snapshot SHA-256 sidecar yok: %s" % sidecar)
+    try:
+        with open(real, "rb") as f:
+            raw = f.read()
+        with open(sidecar, encoding="utf-8") as f:
+            sidecar_text = f.read().strip()
+    except OSError as exc:
+        raise ValueError("snapshot/sidecar okunamadı: %s" % exc) from exc
+    expected = sidecar_text.split(None, 1)[0].lower() if sidecar_text else ""
+    actual = hashlib.sha256(raw).hexdigest()
+    if not re.fullmatch(r"[0-9a-f]{64}", expected) or expected != actual:
+        raise ValueError("snapshot SHA-256 sidecar uyuşmuyor: %s" % sidecar)
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValueError("snapshot UTF-8 değil: %s" % real) from exc
+    try:
+        value = json.loads(text)
+    except json.JSONDecodeError as first_error:
+        records = []
+        for line_no, line in enumerate(text.splitlines(), 1):
+            if not line.strip():
+                continue
+            try:
+                records.append(json.loads(line))
+            except json.JSONDecodeError as exc:
+                raise ValueError(
+                    "snapshot JSONL satırı geçersiz (%d): %s" %
+                    (line_no, exc)) from exc
+        if not records:
+            raise ValueError("snapshot JSON/JSONL kaydı yok: %s" % real) \
+                from first_error
+        value = records[-1]
+    if not isinstance(value, dict):
+        raise ValueError("snapshot JSON object değil: %s" % real)
+    return value
+
+
+def load_snapshot_file(path):
+    """Doğrulanmış snapshot kaydını LATEST'e snapshot-only mod için yükle.
+
+    `cached` bilinçli olarak False'tır: kaynak, aynı CI koşumunun artifact'ıdır;
+    preview_server'ın eski disk cache'ini (`load_cached_latest`) yeniden kullanmaz.
+    """
+    value = _validate_snapshot_file_snapshot(_read_snapshot_file(path))
+    with LOCK:
+        for key, item in value.items():
+            if key in LATEST and key != "cached":
+                LATEST[key] = item
+        LATEST["cached"] = False
+        LATEST["status_board"] = _compute_status_board()
+    return dict(value)
+
+
 def main():
     global PREVIEW_DIR, VERIFY_DIR, HISTORY_PATH, RUNS_DIR, RUN_LOG_MAX, REFS_TREND_PATH
     global SERVER_EVENTS_PATH, OVERRIDE_TREND_PATH, DETERMINISM_TREND_PATH
@@ -2195,7 +2462,16 @@ def main():
     ap.add_argument("--replay-runs", type=int, default=RUN_LOG_MAX,
                     help="/api/run-stream'de replay edilecek + disk'te "
                          "tutulacak son run sayısı")
+    ap.add_argument("--snapshot-file",
+                    help="tamamlanmış verify JSON/JSONL + .sha256; "
+                         "snapshot-only mod")
+    ap.add_argument("--no-verify", action="store_true",
+                    help="periyodik verify döngüsünü başlatma")
     args = ap.parse_args()
+    if args.snapshot_file and not args.no_verify:
+        ap.error("--snapshot-file için --no-verify zorunludur")
+    if args.no_verify and not args.snapshot_file:
+        ap.error("--no-verify için --snapshot-file zorunludur")
 
     PREVIEW_DIR = os.path.abspath(args.preview_dir)
     VERIFY_DIR = os.path.abspath(args.dir)
@@ -2236,9 +2512,19 @@ def main():
               f"sunucu yine de başlatılıyor ama /preview.html 404 döner",
               file=sys.stderr)
 
-    if not os.path.isfile(os.path.join(VERIFY_DIR, "verify_delivery.py")):
+    if not args.no_verify and not os.path.isfile(
+            os.path.join(VERIFY_DIR, "verify_delivery.py")):
         print(f"HATA: {VERIFY_DIR}/verify_delivery.py yok", file=sys.stderr)
         sys.exit(2)
+
+    # Snapshot-only mod (CI): aynı koşumun doğrulanmış history artifact'ı
+    # LATEST'e yüklenir; periyodik verify döngüsü başlatılmaz.
+    if args.snapshot_file:
+        try:
+            load_snapshot_file(os.path.abspath(args.snapshot_file))
+        except ValueError as exc:
+            print("HATA: snapshot reddedildi: %s" % exc, file=sys.stderr)
+            sys.exit(2)
 
     # Sinyal yakalama — neden öldüğümüzü görelim
     import signal
@@ -2252,28 +2538,30 @@ def main():
 
     # Restart sonrası ilk verify bitene dek /api/latest UNKNOWN göstermesin:
     # önbelleklenmiş son run durumunu (runs/ veya history.jsonl) yükle.
-    with LOCK:
-        if load_cached_latest():
-            sys.stderr.write(
-                "[main] önbelleklenmiş son run yüklendi: "
-                f"verdict={LATEST['verdict']} ts={LATEST['ts']}\n")
-            _lifecycle_event(
-                "cache_loaded",
-                detail=f"verdict={LATEST['verdict']} ts={LATEST['ts']}")
-        else:
-            sys.stderr.write(
-                "[main] önbellek yok — /api/latest ilk verify bitene dek "
-                "UNKNOWN\n")
-        sys.stderr.flush()
+    if not args.no_verify:
+        with LOCK:
+            if load_cached_latest():
+                sys.stderr.write(
+                    "[main] önbelleklenmiş son run yüklendi: "
+                    f"verdict={LATEST['verdict']} ts={LATEST['ts']}\n")
+                _lifecycle_event(
+                    "cache_loaded",
+                    detail=f"verdict={LATEST['verdict']} ts={LATEST['ts']}")
+            else:
+                sys.stderr.write(
+                    "[main] önbellek yok — /api/latest ilk verify bitene dek "
+                    "UNKNOWN\n")
+            sys.stderr.flush()
 
     # Arka plan thread: periyodik verify çalıştırma
     global SERVER, STOP_EVENT
     stop_event = threading.Event()
     STOP_EVENT = stop_event
-    t = threading.Thread(target=verify_loop,
-                         args=(VERIFY_DIR, args.interval, stop_event),
-                         daemon=True, name="verify-loop")
-    t.start()
+    if not args.no_verify:
+        t = threading.Thread(target=verify_loop,
+                             args=(VERIFY_DIR, args.interval, stop_event),
+                             daemon=True, name="verify-loop")
+        t.start()
 
     srv = ThreadingHTTPServer((args.bind, args.port), Handler)
     SERVER = srv
