@@ -267,6 +267,7 @@ HOOK_COVERAGE = {
         "test_dashboard_webkit_smoke.py",
         "test_preview_stream_batching.py",
         "test_check_verify_jobs_map.py",
+        "test_verdict_seal_contrast.py",
     ],
 }
 
