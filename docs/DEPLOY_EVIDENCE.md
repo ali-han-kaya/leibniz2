@@ -2,6 +2,7 @@
 
 | Tarih | HEAD (origin/main) | verify-delivery | docker-security | test-smoke | determinism-trend |
 |---|---|---|---|---|---|
+| 2026-09-20 | 53b07ac | [success #35494568527](https://github.com/ali-han-kaya/leibniz2/actions/runs/35494568527) | [success #35494568488](https://github.com/ali-han-kaya/leibniz2/actions/runs/35494568488) | [success #35494568555](https://github.com/ali-han-kaya/leibniz2/actions/runs/35494568555) | [success #35525014352](https://github.com/ali-han-kaya/leibniz2/actions/runs/35525014352) |
 | 2026-09-22 | da58b14 | [success #35593197353](https://github.com/ali-han-kaya/leibniz2/actions/runs/35593197353) | [success #35593197488](https://github.com/ali-han-kaya/leibniz2/actions/runs/35593197488) | [success #35593197727](https://github.com/ali-han-kaya/leibniz2/actions/runs/35593197727) | [failure #35580855610](https://github.com/ali-han-kaya/leibniz2/actions/runs/35580855610) |
 | 2026-10-05 | 77d05e3 | [failure #37270510556](https://github.com/ali-han-kaya/leibniz2/actions/runs/37270510556) | [failure #37270510666](https://github.com/ali-han-kaya/leibniz2/actions/runs/37270510666) | [success #37270510649](https://github.com/ali-han-kaya/leibniz2/actions/runs/37270510649) | [success #37242819374](https://github.com/ali-han-kaya/leibniz2/actions/runs/37242819374) |
 | 2026-10-05 | b1f5f1e | [failure #37272394821](https://github.com/ali-han-kaya/leibniz2/actions/runs/37272394821) | [failure #37272394862](https://github.com/ali-han-kaya/leibniz2/actions/runs/37272394862) | [success #37272394778](https://github.com/ali-han-kaya/leibniz2/actions/runs/37272394778) | [success #37297101317](https://github.com/ali-han-kaya/leibniz2/actions/runs/37297101317) |
@@ -112,6 +113,24 @@ required listesi okunamadığı için verdict dürüstçe `indeterminate`: tablo
 > ile değiştirildi.
 >
 > Not (2026-10-05): verify-delivery kırmızısı yalnızca **advisory** "Live CI doc↔GitHub sync audit" job'ından; diğer tüm job'lar yeşil. docker-security kırmızısı `libpcre2-8-0` **CVE-2026-103111** (düzeltme PR #82'de). Kapı kanıtı: aynı HEAD'de [`deploy-evidence` #37317331833](https://github.com/ali-han-kaya/leibniz2/actions/runs/37317331833) SUCCESS (`PASS: kanit-defteri taze`). **determinism-trend** hücresindeki [`#37324916028`](https://github.com/ali-han-kaya/leibniz2/actions/runs/37324916028) yeşil koşum, kayıt yolunun onarım kanıtıdır: bot dalındaki iki sıkışmış ölçüm (`tasinan kayit: 2`) kurtarıldı ve PR #83 auto-merge kuyruğuna alındı.
+
+`53b07ac` — **geriye dönük doldurma** (kayıt: 2026-10-12): PR #50
+(`reword-working`) inişinin HEAD'i. Defter bu inişten SONRA başladı (en eski
+satır `da58b14`, 2026-09-22), yani 2026-09-20 inişi hiç kaydedilmemişti; bu
+satır o boşluğu kapatıyor ve **yeni bir bayatlık penceresi açmıyor** (en yeni
+satır değişmiyor). Dört hücrenin dördü de kayıt sırasında canlı doğrulandı:
+`verify-delivery`, `docker-security`, `test-smoke` üçü de `53b07ac` HEAD'inde
+success; `determinism-trend` hücresi o inişin penceresindeki ölçümü taşır
+(`#35525014352`, sha `3cabbff` = PR #50'in head'i, `workflow_dispatch`) —
+kural gereği determinism hücresi HEAD sha'sıyla eşleşmek zorunda değil.
+
+Bu inişin içindeki çakışma çözümü ayrıca denetlendi (2026-10-12): PR dalına
+push edilen tek merge commit'i `7c09956` (2026-09-17, `origin/main` →
+`reword-working`) 22 dosyada çakışma çözdü; dosya-bazlı kararlar
+`MERGE_DECISION_reword-working_to_main.md` §4 tablosuyla örtüşüyor, tek sapma
+(REVIEW PDF + sha256 çifti) bugün **moot** (`shasum -c` OK) ve denetimde
+onarılacak bir kayıp bulunmadı — ayrıntı + yeniden koşturulabilir komutlar:
+aynı dokümanın §7'si.
 
 ## Bayatlık kapısı (haftalık cron)
 
