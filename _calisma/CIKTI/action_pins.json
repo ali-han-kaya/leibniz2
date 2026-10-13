@@ -1,9 +1,9 @@
 {
-  "actions/cache": 5,
+  "actions/cache": 6,
   "actions/checkout": 7,
   "actions/download-artifact": 7,
   "actions/github-script": 8,
-  "actions/setup-python": 6,
+  "actions/setup-python": 7,
   "actions/upload-artifact": 6,
   "aquasecurity/trivy-action": 0,
   "docker/build-push-action": 6,
