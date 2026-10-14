@@ -4,17 +4,23 @@
 
 pre-commit hook'u: action_pins.json'daki minimum major sürümleri denetler.
 Bir action daha ESKİ bir major'a düşürülürse (ör. actions/checkout@v7 → v6)
-commit'i BLOKE eder. Lokal ve OFFLINE'dir — ağ çağrısı ve PyYAML YOKTUR
-(yalnızca stdlib + hafif regex ile workflow'daki `uses:` satırları okunur).
-Ağ bağımlısı node24 runtime denetimi (check_action_runtimes.py) CI'da ayrı
-koşar; bu hook onun commit-öncesi, hızlı tamamlayıcısıdır.
+commit'i BLOKE eder. Varsayılan çalışma OFFLINE'dir — ağ çağrısı ve PyYAML
+YOKTUR (yalnızca stdlib + hafif regex ile workflow'daki `uses:` satırları
+okunur). CI için `--latest` opt-in olarak GitHub stable `vN` tag'lerinden
+en yüksek major'u çeker; geride kalan action'ları ve API hatalarını yalnız
+ADVISORY raporlar, pin kapısının exit kodunu değiştirmez.
 
-Kurallar (fail-closed):
+Kurallar (pin gate fail-closed):
   - action pin'li VE major < pin   → FAIL  (downgrade — commit bloke edilir)
   - action pin'siz (yeni action)    → FAIL  (pin zorunlu; --update ile ekle)
   - action pin'li VE major == pin  → PASS
   - action pin'li VE major > pin   → WARN  (pin yükseltilebilir — --update)
   - lokal action (./...)            → SKIP  (markette değil)
+
+Latest-major advisory (yalnız `--latest`):
+  - upstream stable major > workflow major → ADVISORY (current major geride)
+  - upstream major eşit / workflow ahead    → PASS (bilgi amaçlı raporlanır)
+  - API/ağ/stable-tag doğrulama hatası     → ADVISORY (erişilemedi; exit etkisiz)
 
 Kullanım:
   python3 check_action_pins.py                       # .github/workflows/ altındaki tüm YAML (exit 0/1)
@@ -22,9 +28,11 @@ Kullanım:
   python3 check_action_pins.py --workflow .github/workflows   # dizin → tüm YAML
   python3 check_action_pins.py --update        # mevcut major'ları pin dosyasına yaz
   python3 check_action_pins.py --bump          # WARN (upgrade) pin'lerini otomatik yükselt
+  python3 check_action_pins.py --latest --json --out action_pins_latest.json
   python3 check_action_pins.py --json          # makine-okur JSON
 
-Exit: 0 = pin'ler karşılandı; 1 = FAIL var (downgrade/pin'siz); 2 = kullanım hatası.
+Exit: 0 = pin'ler karşılandı (latest advisory tek başına başarısız yapmaz);
+1 = FAIL var (downgrade/pin'siz); 2 = kullanım hatası.
 
 --workflow bir DOSYA veya DİZİN olabilir: dizin verilirse içindeki tüm
 *.yml/*.yaml dosyaları (sıralı) denetlenir; bulgular tek kümede toplanır ve
@@ -44,9 +52,16 @@ import pathlib
 import re
 import sys
 import tempfile
+import time
+import urllib.error
+import urllib.request
 
 DEFAULT_WORKFLOW = ".github/workflows"
 DEFAULT_PINS = "_calisma/CIKTI/action_pins.json"
+_LATEST_TAGS_URL = "https://api.github.com/repos/{repository}/tags?per_page=100"
+_LATEST_HTTP_TIMEOUT = 15
+_LATEST_RETRIES = 2
+_USER_AGENT = "check_action_pins.py (Leibniz CI latest-major advisory)"
 
 # Yalnızca kendi satırında `uses:` anahtarı olan satırlar yakalanır; hem
 # `- uses: ...` (liste öğesi) hem `        uses: ...` (ayrı satır) biçimini
@@ -105,6 +120,179 @@ def split_action(action):
     m = _REF_RE.match(ref or "")
     major = int(m.group(1)) if m else None
     return owner_repo, ref, major
+
+
+def _repository_root(owner_repo):
+    """Marketplace action owner_repo → GitHub repository (owner/repo).
+
+    Monorepo içindeki reuse action (`owner/repo/path@ref`) API'de owner/repo
+    deposuna gider. Lokal veya geçersiz action'lar None döner.
+    """
+    parts = (owner_repo or "").split("/")
+    if len(parts) < 2 or not parts[0] or not parts[1]:
+        return None
+    return "/".join(parts[:2])
+
+
+def parse_latest_major(tags):
+    """GitHub tags JSON listesinden en yüksek kararlı semver major'u.
+
+    `vN`, `vN.N` ve `vN.N.N` kabul edilir. Pre-release (`v8-beta.0`),
+    major dışı ve dört bileşenli tag'ler yok sayılır. Tag bulunamazsa None.
+    """
+    if not isinstance(tags, list):
+        raise ValueError("GitHub tags yanıtı JSON listesi değil")
+    majors = []
+    for item in tags:
+        name = item.get("name") if isinstance(item, dict) else None
+        match = _REF_RE.fullmatch(name or "")
+        if match:
+            majors.append(int(match.group(1)))
+    return max(majors) if majors else None
+
+
+def fetch_latest_major(owner_repo, timeout=_LATEST_HTTP_TIMEOUT,
+                       retries=_LATEST_RETRIES):
+    """owner/repo → (en yüksek stable major | None, hata | None).
+
+    GitHub API'ye istek atar; hata mesajına token veya secret eklemez. Advisory
+    katmanı bu hataları exit 1'e çevirmez.
+    """
+    repository = _repository_root(owner_repo)
+    if repository is None:
+        return None, "owner/repo action adresi geçersiz"
+    url = _LATEST_TAGS_URL.format(repository=repository)
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": _USER_AGENT,
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    token = os.environ.get("GITHUB_TOKEN", "").strip()
+    if token:
+        headers["Authorization"] = "Bearer " + token
+    last_error = None
+    for attempt in range(retries):
+        request = urllib.request.Request(url, headers=headers)
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                payload = json.load(response)
+            latest = parse_latest_major(payload)
+            if latest is None:
+                return None, "stable vN tag bulunamadı"
+            return latest, None
+        except urllib.error.HTTPError as exc:
+            last_error = "GitHub API HTTP %s" % exc.code
+            if exc.code in (401, 403, 404):
+                break
+        except urllib.error.URLError as exc:
+            last_error = "GitHub API ağ hatası: %s" % exc.reason
+        except (ValueError, TypeError, json.JSONDecodeError) as exc:
+            last_error = "GitHub tags yanıtı okunamadı: %s" % exc
+            break
+        except Exception as exc:  # advisory: beklenmeyen ağ/sayfa hatası
+            last_error = "GitHub API hatası: %s: %s" % (type(exc).__name__, exc)
+        if attempt < retries - 1:
+            time.sleep(1.0 * (attempt + 1))
+    return None, last_error or "GitHub API erişilemedi"
+
+
+def build_latest_major_report(workflow_texts, fetcher=None):
+    """Tüm workflow kullanımları için advisory latest-major raporu üret.
+
+    Aynı action/ref çifti workflow'lar arasında gruplanır; aynı repository
+    yalnız bir kez sorgulanır. Geride kalanlar `deviations`, erişilemeyenler
+    `errors` altında tutulur. Hiçbir durum core pin exit kodunu değiştirmez.
+    """
+    fetcher = fetcher or fetch_latest_major
+    usages = {}
+    repositories = set()
+    for workflow, text in sorted(workflow_texts.items()):
+        for action in extract_uses(text):
+            if action.startswith("./") or action.startswith("../"):
+                continue
+            owner_repo, ref, major = split_action(action)
+            repository = _repository_root(owner_repo)
+            if repository is None or major is None:
+                continue
+            key = (action, major)
+            usages.setdefault(key, {
+                "action": action,
+                "repository": repository,
+                "ref": ref,
+                "current_major": major,
+                "workflows": set(),
+            })["workflows"].add(workflow)
+            repositories.add(repository)
+
+    latest_by_repository = {}
+    for repository in sorted(repositories):
+        latest_by_repository[repository] = fetcher(repository)
+
+    rows = []
+    errors = []
+    reported_error_repositories = set()
+    for key in sorted(usages):
+        usage = usages[key]
+        repository = usage["repository"]
+        latest, error = latest_by_repository[repository]
+        current = usage["current_major"]
+        if error:
+            status = "unavailable"
+            if repository not in reported_error_repositories:
+                errors.append({"repository": repository, "error": error})
+                reported_error_repositories.add(repository)
+        elif current < latest:
+            status = "behind"
+        elif current == latest:
+            status = "current"
+        else:
+            status = "ahead"
+        row = {
+            "action": usage["action"],
+            "repository": repository,
+            "ref": usage["ref"],
+            "current_major": current,
+            "latest_major": latest,
+            "gap": max(0, latest - current) if latest is not None else None,
+            "status": status,
+            "workflows": sorted(usage["workflows"]),
+        }
+        rows.append(row)
+
+    counts = {
+        "total": len(rows),
+        "current": sum(r["status"] == "current" for r in rows),
+        "behind": sum(r["status"] == "behind" for r in rows),
+        "ahead": sum(r["status"] == "ahead" for r in rows),
+        "unavailable": sum(r["status"] == "unavailable" for r in rows),
+    }
+    return {
+        "verdict": "ADVISORY" if counts["behind"] or counts["unavailable"] else "PASS",
+        "source": "GitHub stable vN tags (max major)",
+        "summary": counts,
+        "deviations": [r for r in rows if r["status"] == "behind"],
+        "errors": errors,
+        "actions": rows,
+    }
+
+
+def _write_json_atomic(path, payload):
+    """JSON payload'u aynı dizinde atomik olarak yaz."""
+    directory = os.path.dirname(os.path.abspath(path)) or "."
+    os.makedirs(directory, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(
+        dir=directory, prefix=os.path.basename(path) + ".tmp.")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            json.dump(payload, stream, indent=2, ensure_ascii=False)
+            stream.write("\n")
+        os.replace(temporary, path)
+    except BaseException:
+        try:
+            os.unlink(temporary)
+        except OSError:
+            pass
+        raise
 
 
 def load_pins(path):
@@ -214,7 +402,16 @@ def main(argv=None):
                          "(mevcut pin'leri korur, yeni action eklemez, asla düşürmez)")
     ap.add_argument("--json", action="store_true",
                     help="makine-okur JSON çıktısı")
+    ap.add_argument("--latest", action="store_true",
+                    help="GitHub stable vN tag'lerinden latest-major advisory "
+                         "raporu üret (ağ; exit kodunu değiştirmez)")
+    ap.add_argument("--out",
+                    help="makine-okur raporu bu dosyaya atomik yaz")
     args = ap.parse_args(argv)
+    if args.latest and (args.update or args.bump):
+        print("HATA: --latest, --update/--bump ile birlikte kullanılamaz",
+              file=sys.stderr)
+        return 2
 
     wf_texts = _read_workflows(args.workflow)
     if wf_texts is None:
@@ -305,10 +502,30 @@ def main(argv=None):
         return 0
     fails = [f for f in findings if f["verdict"] == "FAIL"]
     warns = [f for f in findings if f["verdict"] == "WARN"]
+    report = {
+        "workflow": args.workflow,
+        "pins": pins,
+        "summary": {
+            "pass": sum(f["verdict"] == "PASS" for f in findings),
+            "fail": len(fails),
+            "warn": len(warns),
+            "skip": sum(f["verdict"] == "SKIP" for f in findings),
+        },
+        "findings": findings,
+    }
+    if args.latest:
+        report["latest_major"] = build_latest_major_report(wf_texts)
+
+    if args.out:
+        try:
+            _write_json_atomic(args.out, report)
+        except OSError as exc:
+            print("HATA: rapor yazılamadı (%s): %s" % (args.out, exc),
+                  file=sys.stderr)
+            return 2
 
     if args.json:
-        print(json.dumps({"workflow": args.workflow, "pins": pins,
-                          "findings": findings}, indent=2, ensure_ascii=False))
+        print(json.dumps(report, indent=2, ensure_ascii=False))
     else:
         print(f"Action pin denetimi (kaynak: {args.workflow})")
         for f in findings:
@@ -316,14 +533,32 @@ def main(argv=None):
                    "SKIP": "SKIP"}[f["verdict"]]
             print(f"  [{tag}] {f['action']:<28} {f['note']}")
         print(f"\nSONUÇ: {'FAIL' if fails else 'PASS'} — "
-              f"{sum(1 for f in findings if f['verdict'] == 'PASS')} PASS, "
+              f"{report['summary']['pass']} PASS, "
               f"{len(fails)} FAIL, {len(warns)} WARN, "
-              f"{sum(1 for f in findings if f['verdict'] == 'SKIP')} SKIP")
+              f"{report['summary']['skip']} SKIP")
         if warns:
             print("Not: WARN bloke etmez; pin'i yükseltmek için `--update` çalıştırın.")
         if fails:
             print("Downgrade/pin'siz action commit'i bloke eder. "
                   "Gerekirse `--update` ile pin'i yeniden üret (önce sürümü doğrula).")
+        if args.latest:
+            latest = report["latest_major"]
+            summary = latest["summary"]
+            print("\nLatest major advisory (bloke etmez):")
+            print("  SONUÇ: %s — %d action; %d current, %d behind, "
+                  "%d ahead, %d unavailable" % (
+                      latest["verdict"], summary["total"], summary["current"],
+                      summary["behind"], summary["ahead"],
+                      summary["unavailable"]))
+            for row in latest["deviations"]:
+                print("  [BEHIND] %s: v%d (latest v%d; gap %d)" % (
+                    row["action"], row["current_major"], row["latest_major"],
+                    row["latest_major"] - row["current_major"]))
+            for error in latest["errors"]:
+                print("  [UNAVAILABLE] %s: %s" % (
+                    error["repository"], error["error"]))
+            if not latest["deviations"] and not latest["errors"]:
+                print("  Tüm workflow action'ları en güncel stable major'da.")
 
     return 1 if fails else 0
 

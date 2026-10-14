@@ -54,6 +54,9 @@ python3 -m unittest discover -s _calisma/CIKTI -p "test_*.py"
 # workflow sözdizimi + action pinleri + runtime gate
 bash _calisma/CIKTI/lint_actionlint.sh
 python3 _calisma/CIKTI/check_action_pins.py
+# CI advisory eşdeğeri: upstream stable major'ları karşılaştırır,
+# geride kalanları JSON raporuna yazar; tek başına exit 1 üretmez.
+python3 _calisma/CIKTI/check_action_pins.py --latest --json --out /tmp/action_pins_latest.json
 python3 _calisma/CIKTI/check_action_runtimes.py
 ```
 
