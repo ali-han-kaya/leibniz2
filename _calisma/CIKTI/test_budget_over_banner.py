@@ -61,8 +61,14 @@ class TestBudgetOverBannerElement(unittest.TestCase):
 
     def test_banner_clickable_expandable(self):
         # Şerit tıklanabilir; özet + caret + gizli detay bölümü içerir.
-        self.assertIn('data-act="budget-toggle"', self.html)
+        # CSP inline handler'ı bloklar → tıklama/klavye addEventListener ile
+        # bağlanır (preview.html'de inline onclick yok).
         self.assertIn("cursor:pointer", self.html)
+        self.assertRegex(
+            self.html, r'addEventListener\("click",\s*toggleBudgetOverDetail\)')
+        self.assertRegex(
+            self.html, r'addEventListener\("keydown",\s*\(e\)\s*=>\s*\{')
+        self.assertNotIn("onclick=\"toggleBudgetOverDetail()\"", self.html)
         self.assertIn('id="budget-over-summary"', self.html)
         self.assertIn('id="budget-over-caret"', self.html)
         m = re.search(r'<div id="budget-over-detail" style="([^"]*)"',
@@ -87,6 +93,9 @@ class TestBudgetOverBannerElement(unittest.TestCase):
         tbody = t.group(0)
         self.assertIn("det.style.display = open ? \"none\" : \"block\"", tbody)
         self.assertIn("caret.textContent = open ? \"▸\" : \"▾\"", tbody)
+        self.assertIn('const toggle = $("budget-over-toggle");', tbody)
+        self.assertIn('if (toggle) toggle.setAttribute("aria-expanded", String(!open));', tbody)
+        self.assertNotIn('const banner = $("budget-over-banner");', tbody)
 
 
 class TestBudgetOverBannerLogic(unittest.TestCase):

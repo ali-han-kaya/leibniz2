@@ -86,6 +86,7 @@ FILES=(
   "github_scripts/manifest_comment.js|github_scripts/manifest_comment.js"
   "github_scripts/unit_test_failure_comment.js|github_scripts/unit_test_failure_comment.js"
   "github_scripts/pr_status_comment.js|github_scripts/pr_status_comment.js"
+  "github_scripts/rca_comment.js|github_scripts/rca_comment.js"
   "github_scripts/tum_sapmalar_comment.js|github_scripts/tum_sapmalar_comment.js"
   "github_scripts/run_summary_status.js|github_scripts/run_summary_status.js"
   # Run-summary modülleri — K0-K13 ayrı-step sidecar özetleri + konsolidatör.
@@ -171,6 +172,33 @@ PREVIEW_FILES=(
   # determinism-trend endpoint handler'ının importu (PREVIEW_DIR'den
   # çözülür — QA bulgusu F1, 2026-09-21)
   "determinism_trend_badge.py|determinism_trend_badge.py"
+  # Dashboard frontend deploy seti: preview_server.py /preview.js'i HER
+  # İSTEKTE PREVIEW_DIR'den okur; burada bayat kalırsa daemon ESKİ JS'i
+  # servis eder (inline onmousemove-handler'lı eski-sürüm kopyası —
+  # QA bulgusu F3, 2026-09-23; tooltip-delegasyonu boş). sw.js de aynı
+  # sette: preview.js onu kaydeder; mirror'da yoksa kayıt 404 alır ve
+  # webview'deki ESKİ SW kontrolü sonsuza dek elinde tutar (güncelleme-
+  # çekimi hep 404 → skipWaiting asla çalışmaz) — dashboard gömülü-
+  # webview'de asılı kalır (QA bulgusu F2, 2026-09-23).
+  # DİKKAT: preview.html burada TAŞINMAZ — mirror-yazarı update_preview.sh
+  # build()'dir (build-stamp enjekte eder; stamp zamanlı olduğundan raw
+  # kaynağıyla byte-farklı). sync RAW kopyalayıp üstüne yazsaydı hem
+  # build'i ezerdi hem --check'i kalıcı-BAYAT'a düşürürdü (F3-fix
+  # ilk-denenme, 2026-09-23; bootstrap-idempotence süitiyle kanıtlandı).
+  "preview.js|preview.js"
+  "sw.js|sw.js"
+  # Hook raporu seam'i — preview_server.py bu modülü import eder
+  # (dashboard finalize rotası). Mirror'da eksik kalırsa TCC/launchd
+  # rotası dashboard'u servis etmeden ModuleNotFoundError ile düşer.
+  "precommit_log.py|precommit_log.py"
+  # Deterministik trend badge üreticisi — serve_determinism_trend
+  # (lazy import, GUARD YOK): mirror'da eksikse /api/determinism-trend
+  # rotası 500 döner.
+  "determinism_trend_badge.py|determinism_trend_badge.py"
+  # Pattern drift denetleyicisi — finalize içinde lazy import, try/except
+  # ile korunur (panel sessizce düşer). Yine de mirror'da bulunmalı ki
+  # TCC/launchd rotasında panel boşalmasın.
+  "check_pattern_consistency.py|check_pattern_consistency.py"
 )
 
 # Branch protection görsel kılavuzu (adım 2, preview mirror): kaynak repo

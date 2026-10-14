@@ -65,6 +65,7 @@ ADVISORY_SCRIPTS = {
     "config_drift_comment.js",
     "manifest_comment.js",
     "pr_status_comment.js",
+    "rca_comment.js",
     "run_summary_status.js",
     "sync_labels.js",
     "tum_sapmalar_comment.js",

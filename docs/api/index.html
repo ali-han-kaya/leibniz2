@@ -32,7 +32,7 @@
   <div id="redoc"></div>
 
 <footer class="fallback meta" aria-label="üretim kanıtı">
-  <p>Üretilen dosya — kaynak: <code>_calisma/CIKTI/openapi.json</code> · Redoc CE v2.0.0 (sürüm sabitli CDN) · şema sha256 <code>54fa3292d403a883</code>. Yeniden üret: <code>python3 _calisma/CIKTI/gen_openapi_docs.py</code></p>
+  <p>Üretilen dosya — kaynak: <code>_calisma/CIKTI/openapi.json</code> · Redoc CE v2.0.0 (sürüm sabitli CDN) · şema sha256 <code>871afc52b2f0a7a8</code>. Yeniden üret: <code>python3 _calisma/CIKTI/gen_openapi_docs.py</code></p>
 </footer>
 </main>
 <script id="openapi-spec" type="application/json">
@@ -364,6 +364,34 @@
           }
         },
         "summary": "GET /api/run-stream"
+      }
+    },
+    "/api/server-events": {
+      "get": {
+        "operationId": "api_server-events_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "JSON yanıt"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "JSON yanıt"
+          }
+        },
+        "summary": "GET /api/server-events"
       }
     },
     "/api/stop": {

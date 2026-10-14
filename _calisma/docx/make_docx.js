@@ -28,11 +28,11 @@
  * Olculen davranis README'de (docs/PUBLISH_SCENARIO.md) yazilidir — bu yuzden
  * CI byte-identity degil, LibreOffice ile acilabilirlik dogrular.
  */
-"use strict";
+'use strict';
 
-const fs = require("fs");
-const path = require("path");
-const crypto = require("crypto");
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
 const {
   Document,
   Packer,
@@ -45,11 +45,11 @@ const {
   WidthType,
   AlignmentType,
   SectionType,
-} = require("docx");
+} = require('docx');
 
-const ROOT = path.resolve(__dirname, "..", "..");
-const DEFAULT_IN = path.join(ROOT, "docs", "FINAL_RC_REPORT.md");
-const DEFAULT_OUT = path.join(__dirname, "out", "final_rc_report.docx");
+const ROOT = path.resolve(__dirname, '..', '..');
+const DEFAULT_IN = path.join(ROOT, 'docs', 'FINAL_RC_REPORT.md');
+const DEFAULT_OUT = path.join(__dirname, 'out', 'final_rc_report.docx');
 // SDE verilmezse sabit bir epoch: uretim duvar-saatine bagli olmasin.
 const SOURCE_DATE_EPOCH = Number(process.env.SOURCE_DATE_EPOCH || 1700000000);
 
@@ -66,34 +66,34 @@ function inlineRuns(text, opts = {}) {
       runs.push(new TextRun({ text: text.slice(last, m.index), ...opts }));
     }
     const tok = m[0];
-    if (tok.startsWith("**")) {
+    if (tok.startsWith('**')) {
       runs.push(new TextRun({ text: tok.slice(2, -2), bold: true, ...opts }));
     } else {
       runs.push(
-        new TextRun({ text: tok.slice(1, -1), font: "Consolas", ...opts })
+        new TextRun({ text: tok.slice(1, -1), font: 'Consolas', ...opts })
       );
     }
     last = m.index + tok.length;
   }
   if (last < text.length)
     runs.push(new TextRun({ text: text.slice(last), ...opts }));
-  return runs.length ? runs : [new TextRun({ text: "", ...opts })];
+  return runs.length ? runs : [new TextRun({ text: '', ...opts })];
 }
 
 function splitRow(line) {
   return line
-    .replace(/^\s*\|/, "")
-    .replace(/\|\s*$/, "")
-    .split("|")
+    .replace(/^\s*\|/, '')
+    .replace(/\|\s*$/, '')
+    .split('|')
     .map((c) => c.trim());
 }
 
 const isTableSep = (line) =>
-  /^\s*\|?[\s:-]*\|[\s:|-]*$/.test(line) && line.includes("-");
+  /^\s*\|?[\s:-]*\|[\s:|-]*$/.test(line) && line.includes('-');
 
 /** Markdown'u blok listesine ayirir: {kind, ...}. Saf ve deterministik. */
 function parseMarkdown(md) {
-  const lines = md.replace(/\r\n/g, "\n").split("\n");
+  const lines = md.replace(/\r\n/g, '\n').split('\n');
   const blocks = [];
   let i = 0;
   while (i < lines.length) {
@@ -107,12 +107,12 @@ function parseMarkdown(md) {
       i++;
       while (i < lines.length && !/^```/.test(lines[i])) body.push(lines[i++]);
       i++; // kapanis
-      blocks.push({ kind: "code", text: body.join("\n") });
+      blocks.push({ kind: 'code', text: body.join('\n') });
       continue;
     }
     const h = line.match(/^(#{1,6})\s+(.*)$/);
     if (h) {
-      blocks.push({ kind: "heading", level: h[1].length, text: h[2].trim() });
+      blocks.push({ kind: 'heading', level: h[1].length, text: h[2].trim() });
       i++;
       continue;
     }
@@ -120,17 +120,17 @@ function parseMarkdown(md) {
       /^\s*([-*_])\s*\1\s*\1[\s-*_]*$/.test(line) ||
       /^-{3,}\s*$/.test(line)
     ) {
-      blocks.push({ kind: "hr" });
+      blocks.push({ kind: 'hr' });
       i++;
       continue;
     }
     if (/^\s*>/.test(line)) {
       const body = [];
       while (i < lines.length && /^\s*>/.test(lines[i])) {
-        body.push(lines[i].replace(/^\s*>\s?/, ""));
+        body.push(lines[i].replace(/^\s*>\s?/, ''));
         i++;
       }
-      blocks.push({ kind: "quote", text: body.join(" ") });
+      blocks.push({ kind: 'quote', text: body.join(' ') });
       continue;
     }
     if (
@@ -143,7 +143,7 @@ function parseMarkdown(md) {
       i += 2;
       while (i < lines.length && /^\s*\|/.test(lines[i]))
         rows.push(splitRow(lines[i++]));
-      blocks.push({ kind: "table", header, rows });
+      blocks.push({ kind: 'table', header, rows });
       continue;
     }
     const b = line.match(/^\s*[-*]\s+(.*)$/);
@@ -155,7 +155,7 @@ function parseMarkdown(md) {
         items.push(mm[1]);
         i++;
       }
-      blocks.push({ kind: "bullets", items });
+      blocks.push({ kind: 'bullets', items });
       continue;
     }
     const n = line.match(/^\s*\d+[.)]\s+(.*)$/);
@@ -167,7 +167,7 @@ function parseMarkdown(md) {
         items.push(mm[1]);
         i++;
       }
-      blocks.push({ kind: "numbers", items });
+      blocks.push({ kind: 'numbers', items });
       continue;
     }
     const para = [line.trim()];
@@ -180,7 +180,7 @@ function parseMarkdown(md) {
       para.push(lines[i].trim());
       i++;
     }
-    blocks.push({ kind: "paragraph", text: para.join(" ") });
+    blocks.push({ kind: 'paragraph', text: para.join(' ') });
   }
   return blocks;
 }
@@ -204,28 +204,28 @@ function cell(text, bold) {
 
 function blockToDocx(blk) {
   switch (blk.kind) {
-    case "heading":
+    case 'heading':
       return [
         new Paragraph({
           children: inlineRuns(blk.text),
           heading: HEADING_LEVELS[blk.level - 1],
         }),
       ];
-    case "paragraph":
+    case 'paragraph':
       return [new Paragraph({ children: inlineRuns(blk.text) })];
-    case "bullets":
+    case 'bullets':
       return blk.items.map(
         (t) => new Paragraph({ children: inlineRuns(t), bullet: { level: 0 } })
       );
-    case "numbers":
+    case 'numbers':
       return blk.items.map(
         (t) =>
           new Paragraph({
             children: inlineRuns(t),
-            numbering: { reference: "num-list", level: 0 },
+            numbering: { reference: 'num-list', level: 0 },
           })
       );
-    case "quote":
+    case 'quote':
       return [
         new Paragraph({
           children: inlineRuns(blk.text),
@@ -233,23 +233,23 @@ function blockToDocx(blk) {
           alignment: AlignmentType.LEFT,
         }),
       ];
-    case "code":
-      return blk.text.split("\n").map(
+    case 'code':
+      return blk.text.split('\n').map(
         (t) =>
           new Paragraph({
             children: [
-              new TextRun({ text: t || " ", font: "Consolas", size: 18 }),
+              new TextRun({ text: t || ' ', font: 'Consolas', size: 18 }),
             ],
           })
       );
-    case "hr":
+    case 'hr':
       return [
         new Paragraph({
-          text: "",
-          border: { bottom: { style: "single", size: 6, space: 1 } },
+          text: '',
+          border: { bottom: { style: 'single', size: 6, space: 1 } },
         }),
       ];
-    case "table":
+    case 'table':
       return [
         new Table({
           width: { size: 100, type: WidthType.PERCENTAGE },
@@ -276,7 +276,7 @@ function blockToDocx(blk) {
  */
 function promoteHeadingBlocks(blocks) {
   return blocks.map((b) =>
-    b.kind === "heading"
+    b.kind === 'heading'
       ? { ...b, level: Math.min(b.level + 1, HEADING_LEVELS.length) }
       : b
   );
@@ -299,19 +299,19 @@ function buildSectionsDocument(parts, meta) {
     numbering: {
       config: [
         {
-          reference: "num-list",
+          reference: 'num-list',
           levels: [
             {
               level: 0,
-              format: "decimal",
-              text: "%1.",
+              format: 'decimal',
+              text: '%1.',
               alignment: AlignmentType.START,
             },
           ],
         },
       ],
     },
-    styles: { default: { document: { run: { font: "Calibri", size: 22 } } } },
+    styles: { default: { document: { run: { font: 'Calibri', size: 22 } } } },
     sections,
   });
 }
@@ -334,77 +334,77 @@ function selfTest() {
   };
 
   const md = [
-    "# Baslik",
-    "",
-    "Bir **kalin** ve `kod` paragrafi.",
-    "",
-    "| A | B |",
-    "|---|---|",
-    "| 1 | 2 |",
-    "",
-    "- madde bir",
-    "- madde iki",
-    "",
-    "1. birinci",
-    "2. ikinci",
-    "",
-    "```",
-    "echo x",
-    "```",
-    "",
-    "> alinti",
-  ].join("\n");
+    '# Baslik',
+    '',
+    'Bir **kalin** ve `kod` paragrafi.',
+    '',
+    '| A | B |',
+    '|---|---|',
+    '| 1 | 2 |',
+    '',
+    '- madde bir',
+    '- madde iki',
+    '',
+    '1. birinci',
+    '2. ikinci',
+    '',
+    '```',
+    'echo x',
+    '```',
+    '',
+    '> alinti',
+  ].join('\n');
 
   const b = parseMarkdown(md);
   eq(
-    "blok turleri",
+    'blok turleri',
     b.map((x) => x.kind),
-    ["heading", "paragraph", "table", "bullets", "numbers", "code", "quote"]
+    ['heading', 'paragraph', 'table', 'bullets', 'numbers', 'code', 'quote']
   );
-  eq("baslik seviyesi", b[0].level, 1);
-  eq("tablo basligi", b[2].header, ["A", "B"]);
-  eq("tablo satiri", b[2].rows, [["1", "2"]]);
-  eq("madde sayisi", b[3].items.length, 2);
-  eq("numarali sayisi", b[4].items.length, 2);
-  eq("kod govdesi", b[5].text, "echo x");
-  eq("alinti", b[6].text, "alinti");
+  eq('baslik seviyesi', b[0].level, 1);
+  eq('tablo basligi', b[2].header, ['A', 'B']);
+  eq('tablo satiri', b[2].rows, [['1', '2']]);
+  eq('madde sayisi', b[3].items.length, 2);
+  eq('numarali sayisi', b[4].items.length, 2);
+  eq('kod govdesi', b[5].text, 'echo x');
+  eq('alinti', b[6].text, 'alinti');
 
   // Ayni girdi ayni bloklari uretmeli (parser determinizmi).
-  eq("parser determinist", parseMarkdown(md), b);
+  eq('parser determinist', parseMarkdown(md), b);
 
   // Satir ici ayristirma: bold + code ayri TextRun'lar.
-  const runs = inlineRuns("a **b** `c`");
-  eq("inline run sayisi", runs.length, 4);
+  const runs = inlineRuns('a **b** `c`');
+  eq('inline run sayisi', runs.length, 4);
 
   // Coklu kaynak: baslik terfisi (h1→h2, h6 tavani asamaz, paragraf dokunulmaz).
   const promoted = promoteHeadingBlocks([
-    { kind: "heading", level: 1, text: "A" },
-    { kind: "heading", level: 6, text: "B" },
-    { kind: "paragraph", text: "x" },
+    { kind: 'heading', level: 1, text: 'A' },
+    { kind: 'heading', level: 6, text: 'B' },
+    { kind: 'paragraph', text: 'x' },
   ]);
   eq(
-    "baslik terfisi",
+    'baslik terfisi',
     promoted.map((x) => [x.kind, x.level ?? 0]),
     [
-      ["heading", 2],
-      ["heading", 6],
-      ["paragraph", 0],
+      ['heading', 2],
+      ['heading', 6],
+      ['paragraph', 0],
     ]
   );
 
   // Coklu kaynak birlesimi: part sirasi korunur, bloklar kaybolmaz.
-  const p1 = parseMarkdown("# Bir\n\nmetin");
-  const p2 = parseMarkdown("# Iki\n\n| A |\n|---|\n| 1 |");
+  const p1 = parseMarkdown('# Bir\n\nmetin');
+  const p2 = parseMarkdown('# Iki\n\n| A |\n|---|\n| 1 |');
   const parts = [{ blocks: p1 }, { blocks: p2 }];
   eq(
-    "coklu bolum birlesimi",
+    'coklu bolum birlesimi',
     parts.flatMap((p) => p.blocks).map((x) => x.kind),
-    ["heading", "paragraph", "heading", "table"]
+    ['heading', 'paragraph', 'heading', 'table']
   );
 
   if (fails.length) {
     for (const f of fails) console.error(`self-test FAIL: ${f}`);
-    console.log("self-test=FAIL");
+    console.log('self-test=FAIL');
     return 1;
   }
   console.log(`self-test=PASS checks=${checks}`);
@@ -416,12 +416,12 @@ function selfTest() {
 function parseArgs(argv) {
   const args = { in: [], out: null, selfTest: false };
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === "--in") args.in.push(path.resolve(argv[++i]));
-    else if (argv[i] === "--out") args.out = path.resolve(argv[++i]);
-    else if (argv[i] === "--self-test") args.selfTest = true;
-    else if (argv[i] === "--help" || argv[i] === "-h") {
+    if (argv[i] === '--in') args.in.push(path.resolve(argv[++i]));
+    else if (argv[i] === '--out') args.out = path.resolve(argv[++i]);
+    else if (argv[i] === '--self-test') args.selfTest = true;
+    else if (argv[i] === '--help' || argv[i] === '-h') {
       console.log(
-        "kullanim: node make_docx.js [--in <md>]... [--out <docx>] [--self-test]"
+        'kullanim: node make_docx.js [--in <md>]... [--out <docx>] [--self-test]'
       );
       process.exit(0);
     } else {
@@ -433,7 +433,7 @@ function parseArgs(argv) {
   if (!args.out) {
     args.out =
       args.in.length > 1
-        ? path.join(__dirname, "out", "combined_report.docx")
+        ? path.join(__dirname, 'out', 'combined_report.docx')
         : DEFAULT_OUT;
   }
   return args;
@@ -449,7 +449,7 @@ async function main() {
       console.error(`HATA: kaynak bulunamadi: ${src}`);
       process.exit(1);
     }
-    parts.push({ path: src, md: fs.readFileSync(src, "utf8") });
+    parts.push({ path: src, md: fs.readFileSync(src, 'utf8') });
   }
 
   const allBlocks = [];
@@ -460,16 +460,16 @@ async function main() {
   });
 
   const firstHeading = parts[0].blocks.find(
-    (x) => x.kind === "heading" && x.level === 1
+    (x) => x.kind === 'heading' && x.level === 1
   );
   const stamp = new Date(SOURCE_DATE_EPOCH * 1000).toISOString();
-  const relSources = parts.map((p) => path.relative(ROOT, p.path)).join(",");
+  const relSources = parts.map((p) => path.relative(ROOT, p.path)).join(',');
   const buf = await Packer.toBuffer(
     buildSectionsDocument(parts, {
-      creator: "leibniz2 docx-export",
+      creator: 'leibniz2 docx-export',
       title: firstHeading
         ? firstHeading.text
-        : path.basename(parts[0].path, ".md"),
+        : path.basename(parts[0].path, '.md'),
       description: `${relSources} — SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH} (${stamp})`,
     })
   );
@@ -477,7 +477,7 @@ async function main() {
   fs.mkdirSync(path.dirname(args.out), { recursive: true });
   fs.writeFileSync(args.out, buf);
 
-  const sha = crypto.createHash("sha256").update(buf).digest("hex");
+  const sha = crypto.createHash('sha256').update(buf).digest('hex');
   const counts = allBlocks.reduce((a, x) => {
     a[x.kind] = (a[x.kind] || 0) + 1;
     return a;
@@ -491,7 +491,7 @@ async function main() {
   console.log(
     `blocks=${allBlocks.length} headings=${counts.heading || 0} tables=${counts.table || 0}`
   );
-  console.log("verdict=OK");
+  console.log('verdict=OK');
   return 0;
 }
 

@@ -177,11 +177,12 @@ haftada** görünür.
   kaynağı `fontspec` + yerel font kullanır ve **pdfTeX zinciri onu derleyemez**
   (engine-stratification bulgusu). Ama kanonik-`/ID` fallback'i, SDE semantiği ve
   `verdict=PASS|FAIL` dili iki betikte **aynı sözleşmedir** — pinned testler
-  (`test_canvas_determinism.py`, `test_determinism_trend_canvas.py`) bunu
+  (`test_canvas_determinism.py`, `test_record_determinism_trend.py`) bunu
   tek-sözleşme olarak tutar.
 - **Motor sürümü tek kaynaktır**: CI'daki tectonic pini (sürüm + sha256 digest)
-  iki job'da birebir aynıdır ve test bunu pinler; sürüm yükseltmesi iki job'ı
-  **birlikte** değiştirmek zorundadır.
+  tek yerde kurulur; canvas adımı bu kurulumu paylaşır
+  (`test_trend_schedule_paths` pinler). Sürüm yükseltmesi iki adımı
+  **birlikte** etkiler.
 
 ## 10. Reddedilen alternatifler (ve neden)
 
@@ -216,7 +217,7 @@ haftada** görünür.
 | SDE varsayılanı (`git log -1 --format=%ct`) | `docs/Makefile.texlive`, `docs/Makefile.tectonic` |
 | Kırılım ölçümleri + hash geçiş defteri | `docs/ID_RESIDUAL_ACCEPTANCE.md` |
 | Trend kaydı + üç değişmez | `record_determinism_trend.py`, `docs/determinism_trend/` |
-| Haftalık CI kanıtı | `.github/workflows/determinism-trend.yml` (`canvas-determinism` job'ı) |
+| Haftalık CI kanıtı | `.github/workflows/determinism-trend.yml` (`record` job'ı — canvas adımı) |
 | Saha dersi (dışa dönük) | `skills/reproducible-pdf-build/SKILL.md` |
 | Göç kararlarının tamamı | `docs/TEXLIVE_MIGRATION_PLAN.md` |
 

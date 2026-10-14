@@ -69,6 +69,25 @@ Temiz kopya (`git clone` → `/tmp/leibniz2-final`, HEAD = `3918a04092279450e743
 
 ## Açık borçlar (FINAL kapısı öncesi)
 
+### Bekleyen kırmızılar — 2026-10-05 durumu
+
+Bu blok **kapanmamış** kırmızıların tek yerdeki kümesidir; her satırın kanıt
+zinciri `run id → nerede durduğu → sahibi` şeklindedir. Üstteki maddeler
+kapandı, aşağıdaki dört hâlâ açık.
+
+| # | Kırmızı | Kanıt | Sahibi / çıkış yolu |
+|---|---|---|---|
+| 1 | `docker-security` → `libpcre2-8-0` **CVE-2026-103111** | main [`37377744058`](https://github.com/ali-han-kaya/leibniz2/actions/runs/37377744058) = failure · jobs `Build and scan Docker image` + `Local security smoke (script parity)` | **PR #82** — `SECURITY_PATCH_PACKAGES` ile kapama hazır, merge bekliyor |
+| 2 | `Live CI doc↔GitHub sync audit (advisory)` | main [`37377743878`](https://github.com/ali-han-kaya/leibniz2/actions/runs/37377743878) = failure · advisory, required değil | Advisory — doküman↔GitHub senkronu; doküman tarafı yazıldıkça kapanır |
+| 3 | PR #83 determinism invariant kırılması | 3 test, kaynak-üretim değişikliğinden kaynaklanıyor | Ayrı iş — bu dalın kapsamında değil, dürüstçe açık bırakıldı |
+| 4 | `test_dashboard_playwright_smoke` (MIME) | yalnız yerelde kırmızı, CI'da koşmuyor | Yerel ortam sorunu — CI kanıtını etkilemez |
+
+**Bilerek yapılmayanlar:** 2 ve 4 numaralı kırmızıları "düzeltmek" için
+kapıyı gevşetmek kanıtı düzeltmez. 1 numaralı CVE'nin çözümü PR #82'de
+duruyor; bu defterde onun yerine yazılmaz.
+
+### Kapanan maddeler
+
 - ~~Gerçek GitHub Actions koşumu — push gerektirir, kullanıcı kararı~~
   **KAPANDI (2026-09-16):** `reword-working` dalı push edildi ve gerçek
   koşumlar izlendi. İlk push (73e94ce) 3 gizli CI borcunu surfaced etti ve
@@ -135,6 +154,29 @@ Bu oturumun yeni kapıları CI'da da yeşil: `test_sync_lifecycle` (subprocess
 yaşam-döngüsü regresyonu; batarya 144 dosya / check-unit-tests 159) ve
 48h-guard-kaldırılmış trend-kayıt yolu (bayat rapor tarihiyle kaydolur;
 tazelik iddiası `--check`'te). Kapanış main'e PR #52 merge'iyle gelir.
+
+**2026-09-20 haftalık determinizm ölçümü — linux baseline (bot commit):**
+`determinism-trend.yml`'in schedule koşumu `--update` ile linux ölçümünü
+yazdı ve `github-actions[bot]` bunu commit'ledi: **`fcb14f7`**
+*"chore: record weekly determinism trend measurement"* (2026-09-20 17:11 UTC,
+ubuntu-latest, pinned tectonic 0.17.0 + TeXLive pdflatex, iki bağımsız SDE
+koşumu; ebeveyn `3cabbff`). Eklenen **linux baseline** kaydı:
+
+| alan | değer |
+|---|---|
+| date / platform | `2026-09-20` / `linux` |
+| source_sha256 | `a9f34e05…` (darwin baseline ile **aynı kaynak**) |
+| tectonic_canonical_sha256 | `ad8fca69…` |
+| texlive_canonical_sha256 | `092154a0…` |
+| gate / sde / source_mtime | `PASS` / `0` / `1789924232` |
+
+tectonic kanonik hash'i darwin baseline'ıyla (`ad8fca69…`) birebir eşit →
+çapraz-platform determinizm kanıtı; TeXLive kanonik hash'i platforma bağlı
+(linux `092154a0…` vs darwin `a75c3409…`) ve `--check` bunu ihlal saymaz
+(yalnız bilgilendirici `_cross_platform_note`). Bot-commit zinciri ölçümü
+insan müdahalesi olmadan kaydeder. Not: `fcb14f7` main'in birinci-ebeveyn
+zincirinde **değildir** (`land/migration-gates-2026-09-30` uçlarında);
+main'e inen aynı-gün bot kayıtları `b5126f9` ve `6fe7c86`'dır.
 
 ## Karar
 

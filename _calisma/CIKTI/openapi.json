@@ -328,6 +328,34 @@
         "summary": "GET /api/run-stream"
       }
     },
+    "/api/server-events": {
+      "get": {
+        "operationId": "api_server-events_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "JSON yanıt"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "JSON yanıt"
+          }
+        },
+        "summary": "GET /api/server-events"
+      }
+    },
     "/api/stop": {
       "post": {
         "description": "POST-only: GET → 405. Peer/Host kapıları: izinli-küme dışı kaynak 403 (PREVIEW_STOP_ALLOWLIST ile genişler).",

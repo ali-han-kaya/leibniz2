@@ -43,9 +43,14 @@
 #                               commit-msg stage'inde; CI --all-files'ta ÇALIŞMAZ.
 #   11) check-changelog-sync  : README.md ve docs/PUBLISH_SCENARIO.md'deki
 #                               changelog tablolarını git log ile senkron eder
-#                               (drift varsa --update + stage — update-config
-#                               deseni; commit'in kendi hash'i ancak sonraki
-#                               commit'te bilinir, bu yüzden auto-sync yapar).
+#                               (drift varsa --update + stage — ikinci yazan
+#                               hook). Tablo commit hash'iyle anahtarlanır ve
+#                               hash ancak commit OLUŞTUKTAN SONRA bilinir:
+#                               tablolar her commit'ten sonra tam olarak BİR
+#                               commit geridedir (gecikmeli/lag-one değişmezi —
+#                               test_update_changelog_hook.py ile ölçülüp
+#                               sabitlenir). Saf okuma kapısı bu yüzden imkânsız:
+#                               bloklayacak satırın hash'i henüz yok.
 #   12) check-dryrun-summary  : publish_wrapper.sh `--dry-run-summary`
 #                               regresyon kapısı — gen_dryrun_summary
 #                               fonksiyonunu gerçek kaynaktan ayıklayıp örnek
@@ -87,7 +92,10 @@
 #   20) check-docker-security-smoke: docker_security_smoke.sh (build + Trivy
 #                               gate + canlı sağlık) — Dockerfile stage'liyken
 #                               ateşlenir (tam build dakikalar sürer; her
-#                               committe değil surface'te). SKIP-farkında:
+#                               committe değil surface'te). files:
+#                               (^|/)Dockerfile$ — kök ve kök altı eşlenir,
+#                               Dockerfile.md/.bak gibi belgeler değil.
+#                               SKIP-farkında:
 #                               docker/trivy/colima yoksa script exit 0 SKIP
 #                               üretir (ortam-yok ≠ kod-bozuk); bulgu varsa
 #                               rc=1 fail-closed bloke eder.
@@ -121,10 +129,27 @@
 #                               yanlış yüzeyi gösterir ve commit'i yalnız şema
 #                               kapısı geçer. İkisi ayrı bloklar.
 #                               OFFLINE, stdlib-only, ~0.05s.
+#                               files: (^|/)Dockerfile$ — kök dışı
+#                               Dockerfile'ları da eşler; süit, kapsam
+#                               dışı Dockerfile eklenmesini fail-closed
+#                               reddeder.
+#   22) check-verify-jobs-map  : verify.yml `needs`-DAG diyagramının
+#                               (docs/superpowers/specs/2026-09-24-verify-jobs-map.excalidraw)
+#                               TAZELİĞİNİ zorlar — gen_verify_jobs_map.py
+#                               --check diyagramı yeniden üretir ve committed
+#                               dosyayla BAYT karşılaştırır; verify.yml veya
+#                               PUBLISH_SCENARIO job tablosu değişir de
+#                               diyagram yeniden üretilmezse commit bloke
+#                               (fail-closed, read-only). Ölçüm imkânsızsa
+#                               (PyYAML/kaynak yok) rc=2 — sessiz PASS yok.
 # Herhangi bir P0/P1 bulgusu commit'i bloke eder (sıfır-dışı exit).
 #
-# Not: update-config TEK yazan hook'tur (config'i stage eder). Diğer kapılar
-# read-only'dir: dosya değiştirmez, yalnızca doğrular (fail-closed).
+# Not: ÜÇ yazan hook vardır: update-config (config'i paket içeriğiyle
+# senkronlar + stage eder), check-changelog-sync (changelog tablolarını git
+# log ile senkronlar + stage eder) ve check-skills-index (README skills
+# tablosunu skills/*/SKILL.md frontmatter'ından üretir + stage eder).
+# Diğer kapılar read-only'dir: dosya değiştirmez, yalnızca doğrular
+# (fail-closed). Yazar kümesi testle sabitlidir (test_update_changelog_hook.py).
 #
 # Manuel çalıştırma:
 #   pre-commit run --all-files
@@ -143,9 +168,15 @@
 #   pre-commit run check-dashboard-typecheck
 #   pre-commit run check-docker-security-smoke
 #   pre-commit run check-dockerfile-security-patching
+#   pre-commit run check-verify-jobs-map
 #
-# update-config hariç hook'lar read-only'dir: dosya değiştirmez, yalnızca
-# doğrular (fail-closed). update-config, config'i paket içeriğiyle senkron eder.
+# Bu üç yazan hariç hook'lar read-only'dir: dosya değiştirmez, yalnızca
+# doğrular (fail-closed). update-config config'i paket içeriğiyle,
+# check-changelog-sync changelog tablolarını git log ile,
+# check-skills-index README skills tablosunu SKILL.md frontmatter'ından
+# senkronlar; her biri yalnızca kendi hedefini stage eder (gecikmeli
+# changelog yazımı için `chore(changelog): <hash> satırını tabloya ekle`
+# konvansiyonu geçerlidir).
 repos:
   - repo: local
     hooks:
@@ -281,6 +312,23 @@ repos:
         stages: [pre-commit]
         verbose: true
 
+      - id: check-lean-statements
+        name: Verify Lean statement contract + twin identity (fail-closed)
+        description: >-
+          8 teorem çekirdeğinin iki kopyası vardır: Content.lean (shim)
+          ve Leibniz2Reduct/Content.lean (lake build --wfail bunu
+          derler). Kapı, MAP.md STATEMENT CONTRACT ile imza uyumunu VE
+          iki kopyanın byte-eşitliğini denetler. Ölçüm (2026-10-03):
+          ayrışma sessiz kalıyordu — kütüphane kopyasına enjekte edilen
+          sapma check_lean_axioms, lake build ve verify_lean.sh
+          kapılarının dördü de yeşildi. Yalnız python3, ~0.1s.
+        entry: python3 _calisma/CIKTI/check_lean_statements.py
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
       - id: check-orchestration-stdin
         name: "Require closed stdin for opencode orchestration"
         description: >-
@@ -399,11 +447,21 @@ repos:
         verbose: true
 
       - id: check-skills-index
-        name: "Verify README skills index ↔ skills/"
+        name: "Sync README skills index ↔ skills/ (auto-sync + verify)"
         description: >-
-          skills/*/SKILL.md dosyalarının her biri README Skills tablosunda
-          bulunmalı; README'deki bayat skill satırları da fail-closed yakalanır.
-        entry: python3 _calisma/CIKTI/check_skills_index.py
+          sync_skills_index.py — README "## Skills" tablosunun YAZARI.
+          Satır kümesini skills/*/SKILL.md frontmatter'ından türetir; blok
+          işaretçileri (skills-index:start/end) arasındaki tabloyu üretip
+          README'i stage eder. Var olan İNSAN özetleri ve satır sırası
+          korunur (gen_changelog --update deseni): yalnızca yeni skill
+          eklenir, silinen skill satırı düşer. Hook --verify koşar: önce
+          --update, sonra --check — yakınsamazsa (bozuk frontmatter,
+          name≠dizin adı, blok dışı satır, eksik işaretçi) commit BLOKE.
+          Elle denetim (fail-closed, CI yüzeyi): python3
+          _calisma/CIKTI/sync_skills_index.py --check. Bu repo'nun ÜÇÜNCÜ
+          yazan hook'udur (update-config ve check-changelog-sync ile
+          birlikte — D2 yazar-kümesi değişmezi, testle sabitli).
+        entry: python3 _calisma/CIKTI/sync_skills_index.py --verify
         language: system
         always_run: true
         pass_filenames: false
@@ -478,19 +536,39 @@ repos:
         verbose: true
 
       - id: check-prettier-format
-        name: "Prettier format check on staged JS/TS/JSON (fail-closed)"
+        name: "Prettier format check on the CHANGE SURFACE (fail-closed)"
         description: >-
-          setup-pre-commit zincir-uyarlaması (Husky yerine): stage'li
-          js/jsx/ts/tsx/json dosyalarında prettier --check. READ-ONLY:
-          yazmaz, fail-closed bloke eder; düzeltme geliştiricide
-          `npx prettier --ignore-unknown --write <dosyalar>`. package-lock.json
-          exclude. Prettier bulunamazsa (apps/dashboard-next/node_modules
-          kurulu değil) SKIP — ortam-bağımlı kapı ortam yoksa bloke etmez.
-          Konfigürasyon: repo-kökü .prettierrc (skill-defaults). OFFLINE.
-        entry: python3 _calisma/CIKTI/check_prettier_format.py
+          setup-pre-commit zincir-uyarlaması (Husky yerinde). Yüzey artık
+          `files:` filtresi (yalnız O AN stage'li) DEĞİL, değişim farkıdır:
+          (stage'li dosyalar) ∪ (merge-base..HEAD arası değişen dosyalar).
+          Ölçülen kök neden: stage yalnız commit anını görür, dalın önceki
+          commit'inden gelen bozuk dosya sessizce geçerdi. --base ile taban
+          değiştirilebilir (varsayılan origin/main, yoksa HEAD~1).
+          READ-ONLY: yazmaz, fail-closed. Düzeltme:
+          `npx prettier --ignore-unknown --write <dosyalar>`. Prettier yoksa
+          SKIP. Konfigürasyon: repo-kökü .prettierrc. OFFLINE.
+        entry: python3 _calisma/CIKTI/check_prettier_format.py --diff
         language: system
-        files: \.(js|jsx|ts|tsx|json)$
-        exclude: package-lock\.json$
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
+      # --diff yüzeyi dalın DEĞİŞTİRDİĞİ dosyaları görür; dalın hiç
+      # dokunmadığı ama çürümüş bir dosyayı görmez. Borcun toplam sıfır
+      # kalmasını garanti eden tek kapı bu olduğu için ayrı duruyor.
+      - id: check-prettier-format-all
+        name: "Prettier format check across the WHOLE tree (fail-closed)"
+        description: >-
+          Stage filtresinin göremediği biçim borcunu fail-closed yakalar:
+          git ls-files üzerinden tüm js/jsx/ts/tsx/json denetlenir.
+          .prettierignore kod/veri ayrımını uygular (vendor/ üçüncü taraf
+          minified; design-system/vercel/*.json makine çıkarımı veri).
+          Prettier yoksa SKIP. Düzeltme: npx prettier --write. OFFLINE.
+        entry: python3 _calisma/CIKTI/check_prettier_format.py --all
+        language: system
+        always_run: true
+        pass_filenames: false
         stages: [pre-commit]
         verbose: true
 
@@ -727,10 +805,15 @@ repos:
           update_changelog_hook.sh: README.md ve docs/PUBLISH_SCENARIO.md'deki
           changelog tablolarını git log ile senkron eder. Drift varsa
           gen_changelog.py --update ile tabloları günceller ve stage eder
-          (update-config deseni). Check-only bir kapı olamaz: commit'in kendi
-          hash'i ancak commit oluştuktan sonra bilinir — bu yüzden auto-sync
-          yapar, kapı hiç kırılmaz. Mevcut insan özetleri korunur; yalnızca
-          yeni commit'ler eklenir.
+          (ikinci yazan hook; update-config birincidir). Gecikmeli (lag-one)
+          yazar: tablo commit hash'iyle anahtarlanır, hash ancak commit
+          oluştuktan sonra bilinir — bu yüzden tablo her commit'ten sonra tam
+          olarak bir commit geridedir ve bu hook O SATIRI BİR SONRAKİ commit'e
+          ekler. Saf okuma kapısı (+remedy) bu tabloda imkânsızdır: bloklayacak
+          satırın hash'i henüz var olmaz; bu yüzden auto-sync yapar, kapı hiç
+          kırılmaz. Elle remedy (okuma tarafı): python3
+          _calisma/CIKTI/gen_changelog.py --update. Mevcut insan özetleri
+          korunur; yalnızca yeni commit'ler eklenir.
         entry: bash _calisma/CIKTI/update_changelog_hook.sh
         language: system
         pass_filenames: false
@@ -793,6 +876,30 @@ repos:
           computeZ3Status; reset/summary/control ayrıştırma + bar durumu).
           ~0.3s.
         entry: node _calisma/CIKTI/test_budget_scan.js && node _calisma/CIKTI/test_z3_scan.js
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+        verbose: true
+
+      - id: check-preview-interaction-node
+        name: "Verify dashboard interaction layer (hover/filter/lightbox, Node)"
+        description: >-
+          preview.js'in ETKİLEŞİM katmanı Node vm sandbox'ında (tarayıcısız)
+          koşulur: trend hover → tooltip (SVG delegasyonu, `data-tip-i` +
+          konum + mouseleave), run-history filtreleri (all/PASS/FAIL/P0, boş
+          dal, satır tıklaması) ve Z3 lightbox (aç/kapat, ←/→, Escape, Tab
+          odak tuzağı + odak dönüşü). Ayrıca tooltip/bütçe/refs-rozet node
+          testleri. Gerçek fare/klavye koşumu Playwright katmanındadır
+          (test_preview_interaction_cdp.py → CI `dashboard-smoke` job'u); bu
+          hook tarayıcı GEREKTİRMEZ. Hedefler .js olduğu için manifest'e
+          (check_unit_tests.list) girmezler — kapsam beyanı bu hook'tadır.
+          ~0.5s.
+        entry: >-
+          node _calisma/CIKTI/test_preview_interaction_dom.js &&
+          node _calisma/CIKTI/test_trend_tooltip_dom.js &&
+          node _calisma/CIKTI/test_budget_over_detail.js &&
+          node _calisma/CIKTI/test_refs_trend_badge_node.js
         language: system
         pass_filenames: false
         always_run: true
@@ -901,13 +1008,18 @@ repos:
         name: "Unit tests for new gates (fail-closed manifest)"
         description: >-
           check_unit_tests_hook.sh: önce sync_check_unit_tests.py --check ile
-          manifest↔disk + HOOK_COVERAGE tutarlılığını DOĞRULAR — drift varsa
-          commit BLOKE (remedy: sync --update; hook YAZMAZ — tek yazan hook
-          update-config kalır). Ardından manifest listesindeki HER test
-          dosyasını koşar (fail-closed — herhangi bir başarısızlık commit'i
-          bloke eder). Ortam-bağımlı testler (launchctl/daemon/canlı
-          sunucu/ağ) EXCLUDE setiyle çıkarılır ve CI job'larında ayrı
-          koşulur. Liste tek kaynak: diskteki test_*.py dosyaları;
+          manifest↔disk + HOOK_COVERAGE + EXCLUDE↔CI-job/hook bağlamasını
+          DOĞRULAR — drift varsa commit BLOKE (remedy: sync --update; hook
+          YAZMAZ — repo'da üç yazan hook var: update-config,
+          check-changelog-sync, check-skills-index). Ardından manifest
+          listesindeki HER test dosyasını koşar (fail-closed — herhangi bir
+          başarısızlık commit'i bloke eder). Ortam-bağımlı testler
+          (launchctl/daemon/canlı sunucu/ağ) EXCLUDE setiyle çıkarılır; her
+          birinin koşma yeri (CI job id'si ya da hook id) EXCLUDE_CI_JOBS /
+          EXCLUDE_HOOKS sözlüklerinde AÇIKÇA bildirilir ve varlığı
+          doğrulanır — bir EXCLUDE girdisinin hedefi yoksa ya da hedefi
+          yeniden adlandırılmışsa kapı kırılır (sessiz kapsam kaybı).
+          Liste tek kaynak: diskteki test_*.py dosyaları;
           PyYAML/jsonschema bağımlılığı yok.
         entry: bash _calisma/CIKTI/check_unit_tests_hook.sh
         language: system
@@ -972,13 +1084,16 @@ repos:
           + Trivy gate (CRITICAL,HIGH, --ignore-unfixed) + canlı /api/health
           + HEALTHCHECK. Trigger: Dockerfile stage'liyken
           (check-dashboard-typecheck örüntüsü — tam build dakikalar sürer,
-          her committe değil surface'te koşar). SKIP-farkında: docker/trivy
+          her committe değil surface'te koşar). files: (^|/)Dockerfile$
+          kök ve kök altı Dockerfile'ı eşler; yalnız adı Dockerfile olan
+          dosyayı tetikler, Dockerfile.md/.bak belgeleri tetiklemez.
+          SKIP-farkında: docker/trivy
           yok veya colima daemon sağlanamazsa script exit 0 SKIP üretir
           (ortam-yok ≠ kod-bozuk; sebebini kanıt dosyasına yazar); build
           hatası / Trivy bulgusu / sağlık ihlali rc=1 → fail-closed bloke.
         entry: bash _calisma/CIKTI/docker_security_smoke.sh
         language: system
-        files: Dockerfile
+        files: (^|/)Dockerfile$
         stages: [pre-commit]
         verbose: true
 
@@ -992,10 +1107,41 @@ repos:
           bookworm dağıtım pini, pip floor deseni. Değişim-farkında
           tetikleme: yalnızca Dockerfile stage'liyken koşar (always_run
           yok — nedensel sinyal korunur); desen bozulursa commit bloke.
+          Kapsam: (^|/)Dockerfile$ KÖK DIŞI Dockerfile'ları da eşler —
+          kapsam dışı Dockerfile sessizce eklenirse sözleşme onu
+          yakalamaz, bu yüzden süit keşif guard'ı fail-closed durur.
           OFFLINE, stdlib-only, ~0.05s.
         entry: python3 -m unittest _calisma.CIKTI.test_dockerfile_security_patching
         language: system
-        files: ^Dockerfile$
+        files: (^|/)Dockerfile$
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
+      - id: check-verify-jobs-map
+        name: "verify.yml jobs-map diagram freshness (fail-closed)"
+        description: >-
+          docs/superpowers/specs/gen_verify_jobs_map.py --check: verify.yml
+          `needs`-DAG diyagramını (docs/superpowers/specs/2026-09-24-verify-jobs-map.excalidraw)
+          YENİDEN ÜRETİR ve diske yazmadan committed dosyayla BAYT
+          karşılaştırır. verify.yml veya PUBLISH_SCENARIO job tablosu
+          değişir de diyagram yeniden üretilmezse commit BLOKE edilir: bayat
+          diyagram yanlış DAG gösterir (üretilmiş artefaktın elle yazılmış
+          kopyası gibi sessizce çürür). READ-ONLY: yazmaz; düzeltme
+          geliştiricide (`python3 docs/superpowers/specs/gen_verify_jobs_map.py`
+          + `git add`). Değişim-farkında: yalnız dört yol stage'liyken koşar
+          (verify.yml, PUBLISH_SCENARIO.md, üretici, diyagram). Ölçüm
+          imkânsızsa (PyYAML yok / kaynak yok) rc=2 — kapı kör kalır ama
+          sessiz PASS üretmez; kaynak↔doc isim kümesi ayrışırsa rc=1.
+          OFFLINE, ~0.1s.
+        # venv-guard (check-coverage-report deseni): üretici PyYAML ister;
+        # sistem python3'ünde yoksa kapı sahte rc=2 verir. Repo venv'i
+        # (fresh_clone_setup: yaml içerir) varsa onunla koş.
+        entry: bash -c 'PY=python3; [ -x _calisma/.venv_z3/bin/python ] &&
+          PY=_calisma/.venv_z3/bin/python; exec "$PY"
+          docs/superpowers/specs/gen_verify_jobs_map.py --check'
+        language: system
+        files: ^(\.github/workflows/verify\.yml|docs/PUBLISH_SCENARIO\.md|docs/superpowers/specs/gen_verify_jobs_map\.py|docs/superpowers/specs/2026-09-24-verify-jobs-map\.excalidraw)$
         pass_filenames: false
         stages: [pre-commit]
         verbose: true

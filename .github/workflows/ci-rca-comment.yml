@@ -1,0 +1,101 @@
+name: ci-rca-comment
+
+on:
+  # "Workflow-failure webhook": bu repo'da PR koşumu reddedildiğinde
+  # (workflow_run event'i) RCA tablosu PR'a otomatik yorum olarak düşer.
+  # Tetikleyici workflow_run'dır — PR'ın kendisi değil — çünkü kırmızı olan
+  # koşumun HANGİ PR'a ait olduğu payload'da `pull_requests` ile gelir.
+  workflow_run:
+    workflows:
+      - verify-delivery
+      - docker-security
+      - determinism-trend
+    types: [completed]
+
+permissions:
+  contents: read
+  pull-requests: write
+  actions: read
+
+concurrency:
+  # CI-hijyen: ayni ref'te ust uste binen RCA yazimlari tek siraya iner
+  # (workflow_run tetikli; eski kosum iptal edilir).
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rca:
+    # Yalnız kırmızı koşumlarda çalışır; yeşilde bayat yorum temizlenmez
+    # (temizlik, aynı PR'ın bir sonraki kırmızı koşumunda yapılır).
+    if: github.event.workflow_run.conclusion == 'failure'
+    name: RCA table (auto PR comment)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # RCA betiği (sınıflandırma) + github_scripts betiği (render/upsert)
+      # depodan gelir — script gövdesi workflow'a kopyalanmaz (tek kaynak).
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      # Sınıflandırma: düşen job → (required/advisory, desen, RCA belgesi).
+      # Advisory kelimesine GÜVENİLMEZ; branch protection listesi okunur.
+      - name: Build RCA report
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 _calisma/CIKTI/rca_report.py \
+            --run-id "${{ github.event.workflow_run.id }}" \
+            --workflow "${{ github.event.workflow_run.name }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --out rca_failures.json
+          echo '--- RCA ---'
+          cat rca_failures.json
+
+      # Hedef PR: push/schedule koşumlarında PR YOKTUR — o durumda yorum
+      # düşülmez (defter zaten run id'yi kaydeder) ve job yeşil biter.
+      - name: Resolve target PR
+        id: pr
+        env:
+          PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
+        run: |
+          set -euo pipefail
+          if [ -z "$PR_NUMBER" ]; then
+            echo "NOT: koşum bir PR'a ait değil (push/schedule) — yorum düşülmez."
+            echo "     Kanıt zaten docs/DEPLOY_EVIDENCE.md'de kayıtlı."
+            echo "number=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "PR #$PR_NUMBER"
+          echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+
+      # Render + upsert: github_scripts deseni (tek marker, idempotent).
+      # github-script@v8 `scriptPath` DESTEKLEMEZ; repo deseni gövdeyi eval
+      # ile çalıştırır (tum_sapmalar_comment.js ile aynı yol) — betik
+      # gövdesi workflow'a KOPYALANMAZ, dosyadan okunur (tek kaynak).
+      - name: Upsert RCA comment
+        if: steps.pr.outputs.number != ''
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('_calisma/CIKTI/github_scripts/rca_comment.js', 'utf8');
+            await eval(`(async () => {\n${body}\n})()`);
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## ci-rca-comment" >> "$GITHUB_STEP_SUMMARY"
+          echo "- kaynak koşum: #${{ github.event.workflow_run.id }} (${{ github.event.workflow_run.name }})" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f rca_failures.json ]; then
+            # Bur-docdelimiter KULLANILMAZ: YAML block scalar gövdeyi girintili
+            # yazdığı için terminator sütun 0'a gelmez ve actionlint/shellcheck
+            # betiği ayrıştıramaz (SC1073/SC1072). Tek satırlık -c güvenli.
+            python3 -c "import json;r=json.load(open('rca_failures.json'));print('- verdict: %s (zorunlu %d / advisory %d)' % (r['verdict'],r['required_failures'],r['advisory_failures']))" >> "$GITHUB_STEP_SUMMARY"
+          fi

@@ -1,18 +1,18 @@
-import type { Metadata } from "next";
-import Link from "next/link";
-import "./globals.css";
-import { Geist } from "next/font/google";
-import { cn } from "@/lib/utils";
+import type { Metadata } from 'next';
+import Link from 'next/link';
+import './globals.css';
+import { Geist } from 'next/font/google';
+import { cn } from '@/lib/utils';
 
-const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
+const geist = Geist({ subsets: ['latin'], variable: '--font-sans' });
 
 export const metadata: Metadata = {
   title: {
-    default: "Stoic-Hume V5 — Doğrulama Panosu",
-    template: "%s | Stoic-Hume V5",
+    default: 'Stoic-Hume V5 — Doğrulama Panosu',
+    template: '%s | Stoic-Hume V5',
   },
   description:
-    "2307 test, K1–K19 doğrulama katmanı ve Lean/Z3 ispat kanallarının canlı özeti.",
+    '2307 test, K1–K19 doğrulama katmanı ve Lean/Z3 ispat kanallarının canlı özeti.',
 };
 
 export default function RootLayout({
@@ -24,7 +24,7 @@ export default function RootLayout({
     <html
       lang="tr"
       suppressHydrationWarning
-      className={cn("font-sans", geist.variable)}
+      className={cn('font-sans', geist.variable)}
     >
       <body className="min-h-screen bg-bg text-fg antialiased">
         <header className="border-b border-border px-8 py-4">

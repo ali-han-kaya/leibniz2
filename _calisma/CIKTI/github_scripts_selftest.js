@@ -24,7 +24,9 @@ const vm = require('vm');
 
 const [scriptPath, fixtureDir] = process.argv.slice(2);
 if (!scriptPath || !fixtureDir) {
-  process.stderr.write('kullanım: node github_scripts_selftest.js <script> <fixtureDir>\n');
+  process.stderr.write(
+    'kullanım: node github_scripts_selftest.js <script> <fixtureDir>\n'
+  );
   process.exit(2);
 }
 process.chdir(fixtureDir);
@@ -45,9 +47,9 @@ const comments = loadJson('mock_comments.json', []);
 const repoLabels = loadJson('mock_repo_labels.json', []);
 const ctx = loadJson('mock_context.json', null);
 
-const calls = [];          // her REST çağrısı: {fn, args}
-const setFailed = [];      // core.setFailed mesajları
-const consoleLines = [];   // yakalanan console çıktısı
+const calls = []; // her REST çağrısı: {fn, args}
+const setFailed = []; // core.setFailed mesajları
+const consoleLines = []; // yakalanan console çıktısı
 
 const record = (fn) => async (args) => {
   calls.push({ fn, args: args || {} });
@@ -97,7 +99,7 @@ const context = Object.assign(
       repository: { html_url: 'https://github.com/mock-owner/mock-repo' },
     },
   },
-  ctx || {},
+  ctx || {}
 );
 
 const scriptBody = fs.readFileSync(scriptPath, 'utf8');
@@ -143,11 +145,17 @@ const timer = setTimeout(() => {
 try {
   vm.runInContext(wrapped, sandbox, { filename: path.basename(scriptPath) })
     .then(() => finish(base))
-    .catch((e) => finish(Object.assign({}, base, {
-      ok: false,
-      error: String((e && e.stack) || e),
-    })));
+    .catch((e) =>
+      finish(
+        Object.assign({}, base, {
+          ok: false,
+          error: String((e && e.stack) || e),
+        })
+      )
+    );
 } catch (e) {
   // Senkron hata (ör. söz dizimi) — promise üretilemeden patladı.
-  finish(Object.assign({}, base, { ok: false, error: String((e && e.stack) || e) }));
+  finish(
+    Object.assign({}, base, { ok: false, error: String((e && e.stack) || e) })
+  );
 }

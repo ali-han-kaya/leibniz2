@@ -11,8 +11,8 @@ sabitlenir (gerçek TeX derlemesi yapılmaz):
      determinizm ihlali sayılmaz (texlive zinciri sözleşmesi).
   3) Tamper fail-closed: içerik farkı kanonik fallback'i atlatabilmez →
      residual=content, verdict=FAIL, rc=1.
-  4) SKIP sözleşmesi (K3): tectonic yok → exit 0 + SKIP satırı (cron job'ı
-     runner araçlarıyla uyumlu; sessiz kanıt kaybı yok).
+  4) Motor-yok fail-closed: tectonic yok → FAIL satırı + exit 2 (kanıt
+     üretilemiyorsa yeşil dönülmez; main sözleşmesi 04ed03e).
   5) SDE env-sızdırma: SOURCE_DATE_EPOCH alt-sürece exportlanır (stub bunu
      görmüyorsa exit 9 → deney rc=1; motor güncel zamanı gömer diyen ölçülmüş
      sapmaya karşı fail-closed).
@@ -134,11 +134,16 @@ class TestCanvasDeterminism(unittest.TestCase):
             kv(res["report"], "residual").startswith("/ID"),
             "yalnız-/ID sapması residual=/ID olmalı",
         )
-        self.assertEqual(kv(res["report"], "tectonic_canonical_run1_sha256"),
-                         kv(res["report"], "tectonic_canonical_run2_sha256"),
+        # Sözleşme (main 04ed03e): kanonik hash'ler `tectonic_run*_sha256`,
+        # ham hash'ler `tectonic_raw_run*_sha256`, /ID biçimi `id_form`.
+        self.assertEqual(kv(res["report"], "tectonic_run1_sha256"),
+                         kv(res["report"], "tectonic_run2_sha256"),
                          "yalnız /ID farklı: kanonik hash'ler eşit olmalı")
-        self.assertNotEqual(kv(res["report"], "tectonic_run1_id"),
-                            kv(res["report"], "tectonic_run2_id"))
+        # Ham hash'ler FARKLI olmalı: aksi halde /ID yolu hiç koşmamış
+        # olurdu (mutation kanıtı — iddia boşa düşmesin).
+        self.assertNotEqual(kv(res["report"], "tectonic_raw_run1_sha256"),
+                            kv(res["report"], "tectonic_raw_run2_sha256"))
+        self.assertEqual(kv(res["report"], "id_form"), "id_found")
 
     def test_content_difference_fails_closed(self):
         # run2 gövdesi farklı → kanonik fallback kurtaramaz → FAIL rc=1.
@@ -148,15 +153,15 @@ class TestCanvasDeterminism(unittest.TestCase):
         self.assertEqual(kv(res["report"], "verdict"), "FAIL")
         self.assertEqual(kv(res["report"], "residual"), "content")
 
-    def test_missing_tectonic_skips(self):
-        # K3 SKIP sözleşmesi: tectonic yok → exit 0, SKIP görünür. PATH
-        # daraltılır (homebrew'daki gerçek tectonic görünmesin; SKIP yolu
-        # sha256sum'a varmadan biter).
+    def test_missing_tectonic_fails_with_exit_2(self):
+        # Motor-yok fail-closed (main sözleşmesi): tectonic yok → FAIL
+        # mesajı + exit 2. PATH daraltılır (homebrew'daki gerçek tectonic
+        # görünmesin).
         res = run_experiment({"SOURCE_DATE_EPOCH": "1700000000",
                               "PATH": "/usr/bin:/bin"},
                              provide_tectonic=False)
-        self.assertEqual(res["rc"], 0, res["out"])
-        self.assertIn("SKIP", res["out"])
+        self.assertEqual(res["rc"], 2, res["out"])
+        self.assertIn("tectonic bulunamad", res["out"])
 
     def test_sde_exported_to_subprocess(self):
         # SDE env-sızdırma: stub SDE=1700000000 görmüyorsa exit 9 → deney

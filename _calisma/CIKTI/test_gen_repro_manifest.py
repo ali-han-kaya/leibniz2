@@ -1498,12 +1498,27 @@ class TestFlattenedConfigMerge(unittest.TestCase):
 
 
 
-# verify.yml reproducibility merge pattern'inin güncel hali — pattern
-# testlerinde ortak kaynak (tekrarlanan tam literal yerine).
-CURRENT_MERGE_PATTERN = ("'{verify-report,budget,reports,refs-online,run-history,"
-                          "config-drift,repack-verify,config,k0-findings,budget-verify,"
-                          "lineage-findings,klayers,unit-tests,action-runtimes,"
-                          "changelog-drift,ci-simulate,docx-report}'")
+# verify.yml reproducibility merge pattern'i — pattern testlerinde ortak
+# kaynak. Sabit literal DEĞİL, workflow'dan okunur: literal bir kez
+# bayatlarsa `wf.replace(...)` hiçbir şeyi değiştirmez ve mutation testleri
+# sessizce boş assertion'a düşer (yeşil ama sahte).
+WORKFLOW_PATH = CIKTI.parents[1] / ".github" / "workflows" / "verify.yml"
+
+
+def _current_merge_pattern() -> str:
+    """verify.yml'deki kanonik (merge-multiple'lı) brace pattern'i.
+
+    check_pattern_consistency._read_merge_pattern ile aynı tanım: kanonik
+    pattern, `merge-multiple: true` ile ardışık olandır.
+    """
+    m = re.search(r"merge-multiple:\s*true\s*\n\s*pattern:\s*('\{[^}]+\}')",
+                  WORKFLOW_PATH.read_text(encoding="utf-8"))
+    if m is None:
+        raise AssertionError("verify.yml'de merge-multiple brace pattern yok")
+    return m.group(1)
+
+
+CURRENT_MERGE_PATTERN = _current_merge_pattern()
 
 
 class TestCheckPatternConsistency(unittest.TestCase):
@@ -1530,11 +1545,12 @@ class TestCheckPatternConsistency(unittest.TestCase):
     def test_missing_artifact_detected(self):
         import check_pattern_consistency as cpc
         wf = (pathlib.Path(cpc.DEFAULT_WORKFLOW).read_text(encoding="utf-8"))
-        # budget-verify'ı pattern'den çıkar
-        wf = wf.replace(
-            "'{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,config,k0-findings,budget-verify,lineage-findings,klayers,unit-tests,action-runtimes,changelog-drift,ci-simulate,docx-report}'",
-            "'{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,k0-findings,lineage-findings,klayers,unit-tests,action-runtimes}'",
-        )
+        # budget-verify'i pattern'den çıkar (literal kopyası yok — tek kaynak
+        # CURRENT_MERGE_PATTERN; literal bayatlarsa replace sessizce no-op kalırdı).
+        without = "{" + ",".join(
+            i for i in CURRENT_MERGE_PATTERN.strip("'{}").split(",")
+            if i != "budget-verify") + "}"
+        wf = wf.replace(CURRENT_MERGE_PATTERN, "'" + without + "'")
         errors, _ = self._run_check(wf)
         self.assertTrue(any("budget-verify" in e for e in errors))
         self.assertTrue(any("Eksik" in e for e in errors))
@@ -1571,7 +1587,7 @@ class TestCheckPatternConsistency(unittest.TestCase):
         wf = (pathlib.Path(cpc.DEFAULT_WORKFLOW).read_text(encoding="utf-8"))
         wf = wf.replace(
             CURRENT_MERGE_PATTERN,
-            "'{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,k0-findings,lineage-findings,klayers,unit-tests,action-runtimes}'",
+            "'{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,k0-findings,lineage-findings,klayers,unit-tests,action-runtimes,changelog-drift,ci-simulate,webkit-smoke}'",
         )
         tmp = pathlib.Path("/tmp") / f"test_fix_{os.getpid()}"
         tmp.mkdir(exist_ok=True)

@@ -259,3 +259,53 @@ Admin bypass: `gh pr merge --admin` ile koruma atlanabilir, ancak
 | test_combined_scenario_shares_comment_list FAIL | ⚠️ flaky (CI-only) | Yerelde yeşilse güven, yeniden push |
 | pre-commit exit 127 | ⚠️ advisory (atlanır) | Görmezden gel, bir sonraki run'da düzelir |
 | `gh push origin main` red | ℹ️ beklenen | PR aç, CI bekle, merge et |
+
+---
+
+## 8. Dal hijyeni — superseded yerel dallar (2026-10-01)
+
+**Amaç:** "bekleyen iş" sanılan yerel dalların main'e göre **net etkisini**
+ölçmek. Yöntem iki uçlu/üç uçlu diff değil, **merge sonucunun ağacı**:
+
+```bash
+TREE=$(git merge-tree --write-tree origin/main <dal> | head -1)
+git diff --stat origin/main "$TREE"     # boşsa merge HİÇBİR ŞEY değiştirmiyor
+```
+
+İki uçlu diff (`origin/main..<dal>`) ve `git cherry` yanıltıcıdır: 249 commit
+bayat bir dal, main'in sonradan eklediği satırları "silme" gibi gösterir;
+patch-id'ler farklı olduğu için eşdeğer içerik `+` görünür. Karar yalnız
+merge ağacı farkıyla verilir.
+
+### 8.1 Silinen: `land/post-42-chain` (net etki 0)
+
+| Ölçüm | Değer |
+|---|---|
+| Konum | geride 249, ileride 2 (`f4ed8d7`, `1a66163`) |
+| Merge ağacı vs main | **boş fark** — 0 dosya, 0 satır, çakışma yok |
+| Dosya bazında | `check_review_freshness.py` + `test_check_review_freshness.py`: main ile birebir aynı |
+| `.dockerignore` | merge sonucu main'in sürümü (dal onu geriye çekmiyor) |
+
+İçeriği main'de üç commit'le zaten var:
+
+| Dalın niyeti | Main'deki karşılığı |
+|---|---|
+| host z3 venv'i imaj bağlamı dışında tut | `f70779c` |
+| build-context pariteti (`.worktrees`, `**/node_modules`, `**/.next`) | `cfa33d9` |
+| tazelik zamanını dosyanın kendi deposundan çöz (`GIT_DIR`) | `16d4e06` |
+
+**Eylem:** dal push edilmedi ve PR açılmadı (0 dosya değişikliği gösteren PR
+sinyal değil gürültü olurdu; merge'i de içeriksiz bir merge commit'i eklerdi).
+Yerel dal ve worktree'si silindi. `land/post42-residual` zaten main'in atasıdır
+(ileride 0) — içeriği kayıp değil.
+
+### 8.2 Tarama anlık görüntüsü (2026-10-01, `origin/main` = `593b65a`)
+
+| Sınıf | Dallar |
+|---|---|
+| Tamamen superseded (net etki 0) | `land/post-42-chain` (+2) |
+| Çakışmasız, gerçek içerik | `fix/texlive-output-write-boundary` (+2), `test/faz2-engine-guard` (+1), `docs/faz0-1-closure` (+2), `docs/r4-audit-evidence` (+1), `codex/ci-cache6-setup-python7-20260925` (+1) |
+| Çakışmalı (bayat soy) | `pr/bf506c0` (+210), `main` (+157), `land/migration-gates-2026-09-30` (+153), `archive/main-pre-cleanup-20260930` (+144), `fix/venv-less-unittest-discover` (+128), `feat/github-site-sample` (+48), `fix/live-ci-audit-retry` (+47), `feat/plist-info-line` (+20), `hygiene/advisory-env-artifacts` (+4), `docs/coe-audit-table` (+2) |
+
+**Kural:** "bekleyen iş" iddiası bir dala bağlanmadan önce yukarıdaki merge
+ölçümü yapılır; net etki 0 ise iş **yoktur** — envanter düzeltilir, PR açılmaz.

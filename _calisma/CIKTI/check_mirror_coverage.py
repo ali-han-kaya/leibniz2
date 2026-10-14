@@ -33,7 +33,15 @@ SDE_RUNTIME = (
     "_calisma/sde_experiment/sde_determinism_experiment.py",
     "_calisma/sde_experiment/sde_determinism_output.txt",
 )
-PREVIEW_RUNTIME = ("preview_server.py", "_daemonize.py", "preview_prestart.py", "sw.js")
+# precommit_log.py: preview_server.py bu modülü import eder (hook raporu
+# seam'i). PREVIEW_MIRROR'da bulunmazsa launchd/TCC rotası dashboard'u
+# servis etmeden ModuleNotFoundError ile düşer.
+# determinism_trend_badge.py: /api/determinism-trend lazy import (guard
+# yok) — eksikse rota 500 döner. check_pattern_consistency.py: finalize
+# lazy import (guard'lu) — eksikse drift paneli sessizce boşalır.
+PREVIEW_RUNTIME = ("preview_server.py", "_daemonize.py", "preview_prestart.py", "sw.js",
+                   "precommit_log.py", "determinism_trend_badge.py",
+                   "check_pattern_consistency.py")
 GUIDE_REL = "docs/branch-protection-guide/guide.html"
 # Yayınlanmış OpenAPI referansı (Redoc) — preview_server /api-docs.html
 # rotası PREVIEW_DIR/api-docs.html'i servis eder; sync GUIDE_FILES bloğu

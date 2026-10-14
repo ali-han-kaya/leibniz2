@@ -200,8 +200,6 @@ function toggleBudgetOverDetail() {
   const open = det.style.display !== "none";
   det.style.display = open ? "none" : "block";
   if (caret) caret.textContent = open ? "▸" : "▾";
-  // aria-expanded role=button üzerinde yaşamalı (ekran-okuyucu sözleşmesi);
-  // banner'a yazmak erişilebilirlik-ağacında görünmez.
   const toggle = $("budget-over-toggle");
   if (toggle) toggle.setAttribute("aria-expanded", String(!open));
 }
@@ -277,15 +275,27 @@ function renderVerdictSeal(d) {
   const hash = sealHashFromSnapshot(d);
   if (!hash) {
     seal.hidden = true;
+    // Gizlenirken eski yazi/stamp DOM'da kalmasin: bir sonraki snapshot
+    // guncellemeden once DOM denetiminde bayat "VERIFIED" gorunur.
+    const staleStamp = seal.querySelector(".seal-hash");
+    if (staleStamp) staleStamp.textContent = "";
+    const staleWord = seal.querySelector(".seal-verdict");
+    if (staleWord) staleWord.textContent = "";
     return;
   }
   const ok = (d.verdict || "").toUpperCase() === "PASS";
   seal.hidden = false;
   seal.classList.toggle("seal-pass", ok);
   seal.classList.toggle("seal-fail", !ok);
+  // Yazi verdict'TEN turer. Sabit "VERIFIED" yazisi FAIL koşumunda da
+  // basliyordu — renk degisiyordu ama metin "VERIFIED" diyordu, yani
+  // header bir basarisizligi dogrular gibi gosteriyordu. Merkez `<text>`
+  // hic guncellenmedigi icin hep o kaliyordu.
+  const word = ok ? "VERIFIED" : "NOT VERIFIED";
   const tp = seal.querySelector("textPath");
-  if (tp)
-    tp.textContent = "VERIFIED • " + hash.slice(0, 12).toUpperCase() + " •";
+  if (tp) tp.textContent = word + " • " + hash.slice(0, 12).toUpperCase() + " •";
+  const verdictText = seal.querySelector(".seal-verdict");
+  if (verdictText) verdictText.textContent = word;
   const stamp = seal.querySelector(".seal-hash");
   if (stamp) stamp.textContent = hash.slice(0, 6).toUpperCase() + "…";
 }
@@ -573,7 +583,7 @@ function renderTrend(rows) {
   rows.forEach((r, i) => {
     const cx = x(i);
     parts.push(
-      `<rect x="${(cx - halfW).toFixed(2)}" y="${PT}" width="${(halfW * 2).toFixed(2)}" height="${ih}" fill="transparent" style="cursor:crosshair" data-tip="trend" data-i="${i}"/>`
+      `<rect x="${(cx - halfW).toFixed(2)}" y="${PT}" width="${(halfW * 2).toFixed(2)}" height="${ih}" fill="transparent" style="cursor:crosshair" data-tip-i="${i}"/>`
     );
   });
   // x ekseni zaman etiketleri (ilk/orta/son)
@@ -592,6 +602,7 @@ function renderTrend(rows) {
     );
   });
   svg.innerHTML = parts.join("");
+  wireChartTip(svg, showTrendTip);
   const last = rows[n - 1];
   const leanPct =
     last.lean_ok === true ? "100%" : last.lean_ok === false ? "0%" : "?";
@@ -671,6 +682,50 @@ function trendTipHeader(r) {
     "config  : " + (cfgBits.length ? cfgBits.join(" · ") : "—"),
   ];
 }
+// CSP uyumu (sunucu başlığı: script-src 'self' + nonce, 'unsafe-inline' YOK):
+// inline event handler'lar (`onmousemove="…"`) tarayıcıda BLOKLANIR. Grafik
+// hover'ı bu yüzden SVG üzerinde DELEGE edilir: hedef sütunlar `data-tip-i`
+// taşır, listener bir kez SVG'nin kendisine bağlanır ve innerHTML her
+// render'da yenilense de ayakta kalır.
+function wireChartTip(svg, tipFn) {
+  if (!svg || svg.__tipWired || typeof svg.addEventListener !== "function")
+    return;
+  svg.__tipWired = true;
+  svg.addEventListener("mousemove", (ev) => {
+    const t = ev.target;
+    if (!t || typeof t.getAttribute !== "function") return;
+    const i = t.getAttribute("data-tip-i");
+    if (i === null || i === "") return;
+    tipFn(Number(i), ev);
+  });
+  svg.addEventListener("mouseleave", hideTrendTip);
+}
+
+// Aynı CSP kuralı run-history satırları için: satırlar innerHTML ile yeniden
+// üretilir, bu yüzden tıklama/klavye `#run-history` üzerinde delege edilir
+// (satır başına inline onclick/onkeydown yok). Satırlar `data-ts` taşır.
+function wireRunHistoryRows() {
+  const el = $("run-history");
+  if (!el || el.__rowsWired || typeof el.addEventListener !== "function")
+    return;
+  el.__rowsWired = true;
+  const rowOf = (ev) => {
+    const t = ev.target;
+    return t && typeof t.closest === "function" ? t.closest(".rh-row") : null;
+  };
+  el.addEventListener("click", (ev) => {
+    const row = rowOf(ev);
+    if (row) loadRunStdout(row.getAttribute("data-ts"));
+  });
+  el.addEventListener("keydown", (ev) => {
+    if (ev.key !== "Enter" && ev.key !== " ") return;
+    const row = rowOf(ev);
+    if (!row) return;
+    ev.preventDefault();
+    loadRunStdout(row.getAttribute("data-ts"));
+  });
+}
+
 function showTrendTip(i, ev) {
   const r = trendCache[i];
   if (!r) return;
@@ -930,7 +985,7 @@ function renderRefsTrend(rows) {
   const rHalfW = Math.max(4, Math.min(10, rColW / 2));
   have.forEach((r, i) => {
     parts.push(
-      `<rect x="${(x(i) - rHalfW).toFixed(2)}" y="${PT}" width="${(rHalfW * 2).toFixed(2)}" height="${ih}" fill="transparent" style="cursor:crosshair" data-tip="refs" data-i="${i}"/>`
+      `<rect x="${(x(i) - rHalfW).toFixed(2)}" y="${PT}" width="${(rHalfW * 2).toFixed(2)}" height="${ih}" fill="transparent" style="cursor:crosshair" data-tip-i="${i}"/>`
     );
   });
   // x ekseni zaman etiketleri (ilk/orta/son)
@@ -949,6 +1004,7 @@ function renderRefsTrend(rows) {
     );
   });
   svg.innerHTML = parts.join("");
+  wireChartTip(svg, showRefsTrendTip);
   const last = have[n - 1];
   const pct =
     last.refs_total > 0
@@ -1313,7 +1369,8 @@ function flushStream() {
   el.scrollTop = el.scrollHeight;
 }
 function connectStream() {
-  const st = $("stream-state");
+  const el = $("runstream"),
+    st = $("stream-state");
   if (runStreamES) runStreamES.close();
   runStreamES = new EventSource(
     "/api/run-stream?v=" + (window.BUILD_TS || Date.now())
@@ -1335,6 +1392,9 @@ function connectStream() {
     // Satır-başı innerHTML yerine rAF-birleşik yazım: replay 19k satır
     // bağlantı-açılışında tek-frame'e iner (QA bulgusu F4, 2026-09-23 —
     // satır-başı tam-DOM-serileştirme main-thread'i kilitliyordu).
+    // el, connectStream kapsamında kalır: replay-start/replay-end/end
+    // tek-seferlik yazımları doğrudan yapar; flushStream kendi
+    // $("runstream") çözümünü kullanır.
     if (!streamDirty) {
       streamDirty = true;
       requestAnimationFrame(flushStream);
@@ -1523,18 +1583,42 @@ function renderOverrideTrend(rows) {
 }
 
 // ─── TeX motor determinizm trend ─────────────────────────────────────────
-// Python karşılığı (determinism_trend_badge.badge) ile birebir senkron.
+// Python karşılığı (determinism_trend_badge) ile BİREBİR SENKRON: aşağıdaki
+// üç fonksiyonun metni determinism_trend_badge.JS_CODE ile bu dosyada birebir
+// aynıdır (test_determinism_trend_badge.py hem metin eşitliğini hem node
+// ile davranış eşitliğini kilitler).
+//
+// AİLELER: aynı jsonl iki bağımsız seri taşır (manuscript + canvas). Badge
+// aile BAŞINA son kayda bakar — `rows[-1]`e bakmak taze bir canvas satırı
+// için bayat/FAILED manuscript serisini yeşile boyardı (fail-open).
+function determinismTrendFamilyOf(row) {
+  return row && typeof row.family === "string" && row.family
+    ? row.family
+    : "manuscript";
+}
+
 function determinismTrendBadge(rows) {
-  if (!rows || !rows.length)
-    return { cls: "unknown", text: "determinizm: veri yok" };
-  const lastGate = rows[rows.length - 1].gate;
+  if (!rows || !rows.length) return { cls: "unknown", text: "determinizm: veri yok" };
   const n = rows.length;
-  if (lastGate === "PASS")
-    return { cls: "ok", text: "✓ DETERMİNİZM PASS · " + n + " ölçüm" };
-  return {
-    cls: "warn",
-    text: "⚠️ determinizm gate " + (lastGate || "?") + " · " + n + " ölçüm",
-  };
+  const lastOf = {};
+  rows.forEach((r) => { lastOf[determinismTrendFamilyOf(r)] = r; });
+  const fams = Object.keys(lastOf);
+  const bad = fams.filter((f) => lastOf[f].gate !== "PASS");
+  if (!bad.length) return { cls: "ok", text: "✓ DETERMİNİZM PASS · " + n + " ölçüm" };
+  if (fams.length === 1) {
+    const gate = lastOf[fams[0]].gate;
+    return { cls: "warn", text: "⚠️ determinizm gate " + (gate || "?") + " · " + n + " ölçüm" };
+  }
+  const detail = bad.map((f) => f + " " + (lastOf[f].gate || "?")).join(", ");
+  return { cls: "warn", text: "⚠️ determinizm gate " + detail + " · " + n + " ölçüm" };
+}
+
+function determinismTrendRowTitle(r) {
+  const bits = [String(r.date || "?"), String(r.platform || "?"), determinismTrendFamilyOf(r)];
+  if (r.texlive_canonical_sha256) bits.push("texlive " + String(r.texlive_canonical_sha256).slice(0, 8));
+  if (r.tectonic_canonical_sha256) bits.push("tectonic " + String(r.tectonic_canonical_sha256).slice(0, 8));
+  bits.push("gate " + (r.gate || "?"));
+  return bits.join(" · ");
 }
 
 function renderDeterminismTrend(rows) {
@@ -1562,17 +1646,16 @@ function renderDeterminismTrend(rows) {
       const n = have.length;
       have.forEach((r, i) => {
         const color = r.gate === "PASS" ? "#3fb950" : "#d29922";
-        const tex = String(r.texlive_canonical_sha256 || "").slice(0, 8);
-        const tec = String(r.tectonic_canonical_sha256 || "").slice(0, 8);
         parts.push(
           `<circle cx="${xAt(i, n).toFixed(1)}" cy="${H / 2}" r="5" fill="${color}">` +
-            `<title>${r.date} · ${r.platform} · texlive ${tex} · tectonic ${tec} · gate ${r.gate || "?"}</title></circle>`
+            `<title>${determinismTrendRowTitle(r)}</title></circle>`
         );
       });
       for (let i = 1; i < n; i++) {
         const a = have[i - 1],
           b2 = have[i];
         if (
+          determinismTrendFamilyOf(a) === determinismTrendFamilyOf(b2) &&
           a.texlive_canonical_sha256 === b2.texlive_canonical_sha256 &&
           a.tectonic_canonical_sha256 === b2.tectonic_canonical_sha256
         ) {
@@ -1586,24 +1669,59 @@ function renderDeterminismTrend(rows) {
   }
 }
 
+// ─── A11Y SETTLE SÖZLEŞMESİ ──────────────────────────────────────────────
+// Tarama öncesi "pano hazır" işareti. ÖLÇÜM 2026-10-03 (yerel Chromium):
+// a11y kapısı `load` anında axe.run() çağırıyor, fetch'ler çözülmemişti;
+// #trend 0 <text> node veriyordu (axe 36 node / trend 0), çözülünce 43 node
+// / trend 6 — yani 6 gerçek node kapıdan görünmezdi. `networkidle` çözüm
+// değil: iki EventSource açık kaldığı için 2 s'de TIMEOUT veriyordu.
+// İşaret yalnız İLK sakinleşmede yazılır: sonraki fetch'ler (canlı run
+// akışı) işareti geri almaz — kapı ilk durumun yüzeyini tarar.
+// Sıfır tabanlı sayaç: fazla end çağrısı "hazır" işaretini yanlışlıkla
+// erken yakmaz.
+//
+// sayaç `finally` ile kapatılır, `then`/`catch` gövdesinin sonuyla DEĞİL:
+// render fonksiyonlarından biri istisna atarsa (DOM elemanı yok, veri
+// şekli bozuk) `catch` de aynı render'ı tekrar çağırıp yine atar ve
+// sayaç 1'de asılı kalır -> işaret hiç yanmaz -> kapı taradığı yüzeyi
+// göstermeden FAIL verir. `finally` bu hata sınıfının tamamını kapatır:
+// render patlasa da sayaç düşer, yüzey yine de taranır.
+let _scanPending = 0;
+
+function scanPendingBegin() {
+  _scanPending += 1;
+}
+
+function scanPendingEnd() {
+  _scanPending = Math.max(0, _scanPending - 1);
+  document.body.dataset.scanPending = String(_scanPending);
+  if (_scanPending === 0) {
+    document.body.dataset.scanReady = "1";
+  }
+}
+
 function loadDeterminismTrend() {
+  scanPendingBegin();
   fetch("/api/determinism-trend")
     .then((r) => r.json())
     .then((data) => {
       const rows = Array.isArray(data) ? data : (data && data.rows) || [];
       renderDeterminismTrend(rows);
     })
-    .catch(() => renderDeterminismTrend([]));
+    .catch(() => renderDeterminismTrend([]))
+    .finally(() => scanPendingEnd());
 }
 
 function loadOverrideTrend() {
+  scanPendingBegin();
   fetch("/api/override-trend")
     .then((r) => r.json())
     .then((data) => {
       const rows = Array.isArray(data) ? data : (data && data.rows) || [];
       renderOverrideTrend(rows);
     })
-    .catch(() => renderOverrideTrend([]));
+    .catch(() => renderOverrideTrend([]))
+    .finally(() => scanPendingEnd());
 }
 
 function loadTrend(force) {
@@ -1619,6 +1737,7 @@ function loadTrend(force) {
     return;
   }
   _trendFetchAt = now;
+  scanPendingBegin();
   fetch("/api/trend")
     .then((r) => r.json())
     .then((data) => {
@@ -1636,8 +1755,10 @@ function loadTrend(force) {
       if (dbRows.length) renderRefsTrendDurationBudget(dbRows);
     })
     .catch((err) => {
-      $("trend-legend").textContent = "trend yüklenemedi: " + err;
-    });
+      const el = $("trend-legend");
+      if (el) el.textContent = "trend yüklenemedi: " + err;
+    })
+    .finally(() => scanPendingEnd());
 }
 
 // ---- Budget breakdown (ratios + type_bytes) ----
@@ -2063,6 +2184,17 @@ function renderKLayers(ls, z3p, z3t, z3f, leanOk, leanDetail) {
     return;
   }
   let html = "";
+  if (ls.UNREGISTERED) {
+    const layer = ls.UNREGISTERED;
+    html +=
+      '<span class="badge ' +
+      _cls(layer.status) +
+      '" title="' +
+      (layer.label || "Other checks") +
+      '">' +
+      _ico(layer.status) +
+      " Other</span>";
+  }
   for (const k of K_ALL) {
     const l = ls[k];
     if (!l) continue;
@@ -2292,10 +2424,11 @@ function renderHookEnvTrend(rows) {
   const rHalfW = Math.max(6, Math.min(16, rColW / 2));
   have.forEach((r, i) => {
     parts.push(
-      `<rect x="${(x(i) - rHalfW).toFixed(2)}" y="${PT}" width="${(rHalfW * 2).toFixed(2)}" height="${ih}" fill="transparent" style="cursor:crosshair" data-tip="hookenv" data-i="${i}"/>`
+      `<rect x="${(x(i) - rHalfW).toFixed(2)}" y="${PT}" width="${(rHalfW * 2).toFixed(2)}" height="${ih}" fill="transparent" style="cursor:crosshair" data-tip-i="${i}"/>`
     );
   });
   svg.innerHTML = parts.join("\n");
+  wireChartTip(svg, showHookEnvTrendTip);
   if (legend) {
     // lejant: hangi sürüm hangi renkte (son gözlem + değişim sayısı)
     const seen = {};
@@ -2541,7 +2674,14 @@ function applySnapshotInner(d) {
 
   // Top-level badges
   const badges = $("badges");
+  // `innerHTML = ""` statik #config-sync-badge'i de yok ediyordu: rozet
+  // satırından düşüp yalnız altındaki gövde satırında metin olarak
+  // kalıyordu (rozetsiz "Schema Sync" — metin binişmesi). Statik rozeti
+  // ayrı tutup yalnız JS'in ürettiği rozetleri temizle; renderConfigSync
+  // bunu fonksiyonun başında doldurmuş olduğu için metin/sınıf korunur.
+  const csBadge = document.getElementById("config-sync-badge");
   badges.innerHTML = "";
+  if (csBadge) badges.appendChild(csBadge);
   const addBadge = (cls, text) => {
     const s = document.createElement("span");
     s.className = "badge " + cls;
@@ -2834,11 +2974,12 @@ function loadRunHistory(fromSSE = false) {
             ? r.ts.replace(/'/g, "\'").replace(/"/g, "&quot;")
             : "";
           return (
-            `<div class="rh-row" role="button" tabindex="0" data-ts="${tsAttr}" data-act="load-stdout" ` +
+            `<div class="rh-row" role="button" tabindex="0" data-ts="${tsAttr}" ` +
             `title="Tıklayınca bu run'un stdout'u yüklenir">${text}</div>`
           );
         });
       el.innerHTML = lines.join("\n");
+      wireRunHistoryRows();
       return rows;
     })
     .catch(() => null)
@@ -2903,44 +3044,6 @@ function connect() {
   };
 }
 
-// ---- CSP-uyumlu event-delegation (inline onclick/onkeydown YOK) ----
-// CSP script-src 'self' + nonce içerir; inline öznitelik-handler'lar
-// tarayıcıda bloklanır. Tıklanabilir/hover yüzeyleri data-act/data-tip
-// taşıyıp tek document/SVG-düzeyi dinleyiciye delege edilir.
-const KEY_ACTIVATORS = new Set(["budget-toggle", "load-stdout"]);
-document.addEventListener("click", (ev) => {
-  const t = ev.target.closest("[data-act]");
-  if (!t) return;
-  if (t.dataset.act === "budget-toggle") toggleBudgetOverDetail();
-  else if (t.dataset.act === "rh-filter") setRhFilter(t.dataset.f);
-  else if (t.dataset.act === "load-stdout") loadRunStdout(t.dataset.ts);
-});
-// role=button div'ler için klavye-aktivasyon (gerçek button'lar native).
-document.addEventListener("keydown", (ev) => {
-  if (ev.key !== "Enter" && ev.key !== " ") return;
-  const t = ev.target.closest("[data-act]");
-  if (!t || !KEY_ACTIVATORS.has(t.dataset.act)) return;
-  ev.preventDefault();
-  if (t.dataset.act === "budget-toggle") toggleBudgetOverDetail();
-  else if (t.dataset.act === "load-stdout") loadRunStdout(t.dataset.ts);
-});
-// Trend/refs/hookenv SVG hover hit-alanları: rect'ler data-tip+data-i
-// taşır; mousemove/mouseleave SVG düzeyinde dinlenir (template başına
-// inline handler yok — CSP-uyumlu).
-for (const [svgId, tipName] of Object.entries({
-  trend: "showTrendTip",
-  "refs-trend": "showRefsTrendTip",
-  "he-trend": "showHookEnvTrendTip",
-})) {
-  const svg = document.getElementById(svgId);
-  if (!svg) continue;
-  svg.addEventListener("mousemove", (ev) => {
-    const r = ev.target.closest("rect[data-tip]");
-    if (r) window[tipName](+r.dataset.i, ev);
-  });
-  svg.addEventListener("mouseleave", hideTrendTip);
-}
-
 $("reconnect").addEventListener("click", connect);
 $("theme-toggle").addEventListener("click", () => {
   setTheme(
@@ -2955,7 +3058,26 @@ setInterval(() => {
 
 loadTrend();
 loadOverrideTrend();
+// determinizm paneli bu cagri olmadan hic guncellenmez (2026-10-09:
+// API 6 satir donerken badge "veri yok" — init yuzeyinde tanim var,
+// cagri yoktu; ayni anda sozlesme testi eklendi).
+loadDeterminismTrend();
 connectStream();
+// CSP inline onclick'i bloklar → filtre butonları ve bütçe-aşım toggle'ı
+// burada addEventListener ile bağlanır (preview.html'de inline handler yok).
+document.querySelectorAll(".rh-filter button").forEach((b) => {
+  b.addEventListener("click", () => setRhFilter(b.dataset.f));
+});
+const budgetOverToggle = $("budget-over-toggle");
+if (budgetOverToggle) {
+  budgetOverToggle.addEventListener("click", toggleBudgetOverDetail);
+  budgetOverToggle.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      toggleBudgetOverDetail();
+    }
+  });
+}
 // Run history filtresini başlat (all varsayılan)
 setRhFilter("all");
 connect();
@@ -2975,30 +3097,43 @@ connect();
     "P5",
     "P5-note",
   ];
+  // Seri kapağı (series sekmesi) tek arşiv rotasyonuna dahildir.
+  const items = names.map((file) => ({ file, alt: file + " Z3 slaytı" }));
+  items.push({
+    file: "incidental_proof_book_cover-1",
+    alt: "Incidental Proof kitap kapağı — Leibniz2 verification series",
+  });
   const root = document.getElementById("z3-slides");
   const box = document.getElementById("z3-lightbox");
   const image = document.getElementById("z3-lightbox-image");
   let index = 0;
+  let opener = null;
   function src(i) {
-    return "/slides_z3/" + names[i] + ".png";
+    return "/slides_z3/" + items[i].file + ".png";
   }
   function show(i) {
-    index = (i + names.length) % names.length;
+    index = (i + items.length) % items.length;
     image.src = src(index);
-    image.alt = names[index] + " Z3 slaytı";
+    image.alt = items[index].alt;
   }
-  function open(i) {
+  function open(i, button) {
+    opener = button || null;
     show(i);
     box.hidden = false;
     document.getElementById("z3-close").focus();
   }
   function close() {
     box.hidden = true;
-    root.querySelector("button")?.focus();
+    // Odak açan öğeye döner (WCAG 2.4.3): seri sekmesinden açıldıysa seri
+    // düğmesine, Z3 slaytından açıldıysa o slaytın düğmesine.
+    (opener || root.querySelector("button"))?.focus();
+    opener = null;
   }
-  root.querySelectorAll(".z3-slide").forEach((button, i) => {
-    button.addEventListener("click", () => open(i));
-  });
+  document
+    .querySelectorAll("#z3-slide-gallery .z3-slide")
+    .forEach((button, i) => {
+      button.addEventListener("click", () => open(i, button));
+    });
   // Lightbox açıldığında Tab diyalogda kalır (WCAG 2.4.3): odak bir turda
   // kapat/önceki/sonraki butonları arasında döner, diyalog dışına sızmaz.
   box.addEventListener("keydown", (e) => {
@@ -3034,5 +3169,35 @@ connect();
     if (e.key === "Escape") close();
     else if (e.key === "ArrowLeft") show(index - 1);
     else if (e.key === "ArrowRight") show(index + 1);
+  });
+  // Galeri sekmeleri — WAI-ARIA tabs: roving tabindex, ok/Home/End tuşları.
+  const tabs = Array.from(
+    document.querySelectorAll("#z3-slide-gallery .z3-tab")
+  );
+  function selectTab(tab) {
+    tabs.forEach((t) => {
+      const on = t === tab;
+      t.setAttribute("aria-selected", on ? "true" : "false");
+      t.tabIndex = on ? 0 : -1;
+      const panel = document.getElementById(t.getAttribute("aria-controls"));
+      if (panel) panel.hidden = !on;
+    });
+    tab.focus();
+  }
+  tabs.forEach((tab) => {
+    tab.addEventListener("click", () => selectTab(tab));
+    tab.addEventListener("keydown", (e) => {
+      const i = tabs.indexOf(tab);
+      let next = null;
+      if (e.key === "ArrowRight") next = tabs[(i + 1) % tabs.length];
+      else if (e.key === "ArrowLeft")
+        next = tabs[(i - 1 + tabs.length) % tabs.length];
+      else if (e.key === "Home") next = tabs[0];
+      else if (e.key === "End") next = tabs[tabs.length - 1];
+      if (next) {
+        e.preventDefault();
+        selectTab(next);
+      }
+    });
   });
 })();

@@ -83,6 +83,7 @@ ARTIFACT_JOBS = {
     # docx jeneratoru (_calisma/docx/make_docx.js) cikitisi — ureten job
     # advisory `docx-export` (LibreOffice acilabilirlik kontrolu).
     "docx-report": "docx-export",
+    "webkit-smoke": "webkit-smoke",
 }
 
 # Config artifact'ının bilinen dosya ADLARI (basename). Config dosyaları

@@ -98,12 +98,17 @@ RUN set -eux; \
 #
 # CVE-defteri (artan süre — desen 2026-09-16 pcre2 düzeltmesiyle doğdu):
 #   libpcre2-8-0: CVE-2026-86145 (OOB write) + CVE-2026-89161
-#     (pcre2_jit_match memory corruption) → floor 10.42-1+deb12u1
+#     (pcre2_jit_match memory corruption) → floor 10.42-1+deb12u2
 #     (kanıt: 2026-09-16, trivy 0.74.0 yerel smoke + CI 35161423659
-#     before/after; 2026-09-17 desenle yeniden doğrulandı). Girdi
-#     SECURITY_PATCH_PACKAGES default'unda yaşar — pasif kayıt, her
-#     build'de taze yama.
-ARG SECURITY_PATCH_PACKAGES="libpcre2-8-0=10.42-1+deb12u1"
+#     before/after; 2026-09-17 desenle yeniden doğrulandı. 2026-10-09
+#     ROTASYON: Debian u1'i bookworm-security deposundan çekti —
+#     tam-sürüm pin "not found" → apt 100 → docker-security +
+#     audit_live_ci_sync 2 gündür repo-geneli kırmızı; u2'ye taşındı.
+#     DERS: tam-sürüm pin'ler upstream güvenlik-sürümü yayınında çöker —
+#     pin rotasyonu defter + sözleşme testiyle birlikte güncellenir).
+#     Girdi SECURITY_PATCH_PACKAGES default'unda yaşar — pasif kayıt,
+#     her build'de taze yama.
+ARG SECURITY_PATCH_PACKAGES="libpcre2-8-0=10.42-1+deb12u2"
 RUN set -eux; \
     if [ "$(printf '%s' "$SECURITY_PATCH_PACKAGES" | tr -d '[:space:]')" = "" ]; then \
       echo "SECURITY_PATCH_PACKAGES empty — no targeted apt patch"; \

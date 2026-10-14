@@ -127,3 +127,8 @@ Bütçe-değişmezleri korunur: hibrit-yol da `REFERENCE_AUDIT_BUDGET_S=260` ve
 2. **Semantic ranker:** Faz 2'de A/B gerekli mi — 64-doc'ta kazanç marjinal olabilir.
 3. Bu tasarım, Azure'daki Container Apps planından (`.azure/deployment-plan.md`)
    bağımsız ama uyumlu: dağıtılırsa endpoint/secret managed-identity'ye terfi eder.
+# Azure Search Refs Design
+- Üretici: gen_refs_index.py -> refs-index.json
+- Mock senkron süiti: test_beta_battery_gate.py
+- Artifakt: _calisma/CIKTI/refs-index.json
+- Health bridge: /api/health + /api/a11y -> dashboard panel

@@ -83,14 +83,28 @@ class TestSdeDocumentationSync(unittest.TestCase):
         text = skill.read_text(encoding="utf-8")
         self.assertIn("tectonic", text.lower())
         self.assertIn("SOURCE_DATE_EPOCH", text)
-        # Ölçülmüş gerçek 1: SDE pdfTeX'in trailer /ID'sini sabitlemez.
-        self.assertIn("does **not** stabilize pdfTeX's trailer `/ID`", text)
-        # Ölçülmüş gerçek 2: SDE ile tectonic byte-stable.
-        self.assertIn("**does** honor `SOURCE_DATE_EPOCH`", text)
-        # Çürütülmüş iddialar geri dönmesin.
-        self.assertNotIn("does not honor `SOURCE_DATE_EPOCH`", text)
+        self.assertIn("does not honor `SOURCE_DATE_EPOCH`", text)
         self.assertNotIn("tectonic` is byte-deterministic", text)
         self.assertNotIn("emit stable `/CreationDate` and\n  `/ID`", text)
+
+    def test_skill_does_not_claim_sde_stabilizes_pdf_id(self):
+        # Faz 4 ölçümü: pdfTeX SDE=0 olsa bile her koşumda rastgele
+        # trailer /ID yazar. SKILL.md'nin "SDE /ID'yi sabitler" tarzı
+        # iddiası yanlıştı ve düzeltildi — tersi kanıtlanmışken geri
+        # gelmesi sessizce yanlış öğreti olur.
+        skill = ROOT / "skills" / "reproducible-pdf-build" / "SKILL.md"
+        text = skill.read_text(encoding="utf-8")
+        self.assertNotIn("stable `/CreationDate` and\n  `/ID`", text)
+        self.assertIn("random", text.lower())
+
+    def test_skill_points_strict_gate_at_canonical_not_qpdf(self):
+        # Strict karşılaştırma qpdf-stripped'a geri bağlanırsa kapı her
+        # koşumda yanlış pozitif üretir (ölçüm: 3 koşum → 3 hash).
+        skill = ROOT / "skills" / "reproducible-pdf-build" / "SKILL.md"
+        text = skill.read_text(encoding="utf-8")
+        self.assertIn("/ID`-canonical", text)
+        self.assertIn("--no-strict-determinism", text)
+        self.assertNotIn("gate\n  should stay OFF", text)
 
     def test_pending_sde_record_cannot_be_present_as_proof(self):
         candidates = [

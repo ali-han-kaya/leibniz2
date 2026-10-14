@@ -9,6 +9,9 @@ Sözleşme (fail-closed):
   * Değişmiş imza (kod ≠ contract) → drift.
   * Fazla teorem (kodda var, contract'ta yok) → drift.
   * Contract bölümü yoksa → drift (MAP.md makine-okunur kalmalı).
+  * Ayna bütünlüğü: shim (`Content.lean`) ile lake target kopyası
+    (`Leibniz2Reduct/Content.lean`) byte-eşit olmalı; ayrışma → drift
+    (sözleşme kapısı derlenmeyen dosyayı doğrulardı).
   * main(): 0 uyumlu / 1 drift / 2 hata; --json şeması; --exit-0 advisory.
 """
 import json
@@ -140,10 +143,21 @@ class TestCheckStatements(unittest.TestCase):
 
 class TestMain(unittest.TestCase):
     def _run(self, tmp, *args):
+        # Geçici dizinde lake target kopyasını da üret: ayna denetimi
+        # varsayılan olarak açık olduğundan, sözleşme-tekdüze testleri de
+        # gerçekçi biçimde (iki kopya eşit) çalışsın.
+        os.makedirs(os.path.join(tmp, "Leibniz2Reduct"), exist_ok=True)
+        shim = os.path.join(tmp, "Content.lean")
+        if os.path.isfile(shim):
+            with open(shim, encoding="utf-8") as f:
+                body = f.read()
+            write(tmp, os.path.join("Leibniz2Reduct", "Content.lean"), body)
         return subprocess.run(
             [sys.executable, os.path.join(HERE, "check_lean_statements.py"),
-             "--lean-file", os.path.join(tmp, "Content.lean"),
-             "--map", os.path.join(tmp, "MAP.md"), *args],
+             "--lean-file", shim,
+             "--map", os.path.join(tmp, "MAP.md"),
+             "--twin-file", os.path.join(tmp, "Leibniz2Reduct", "Content.lean"),
+             *args],
             capture_output=True, text=True, timeout=60)
 
     def test_match_exit_0(self):
@@ -183,6 +197,111 @@ class TestMain(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="stmt-") as tmp:
             r = self._run(tmp)
             self.assertEqual(r.returncode, 2)
+
+
+class TestCheckTwin(unittest.TestCase):
+    """Ayna bütünlüğü: iki kopya byte-eşit olmalı (fail-closed)."""
+
+    def _write_pair(self, tmp, shim_text, twin_text):
+        os.makedirs(os.path.join(tmp, "Leibniz2Reduct"), exist_ok=True)
+        s = write(tmp, "Content.lean", shim_text)
+        t = write(tmp, os.path.join("Leibniz2Reduct", "Content.lean"), twin_text)
+        return s, t
+
+    def test_identical_copies_pass(self):
+        with tempfile.TemporaryDirectory(prefix="twin-") as tmp:
+            s, t = self._write_pair(tmp, LEAN, LEAN)
+            ok, findings = cls.check_twin(s, t)
+            self.assertTrue(ok, findings)
+            self.assertEqual(findings, [])
+
+    def test_drift_is_fail_closed(self):
+        # Ölçülen boşluk: lake target kopyasına eklenen teorem diğer
+        # kapıların DÖRDÜNÜ de yeşil bırakıyordu.
+        with tempfile.TemporaryDirectory(prefix="twin-") as tmp:
+            s, t = self._write_pair(tmp, LEAN, LEAN + "\ntheorem drift : True := by trivial\n")
+            ok, findings = cls.check_twin(s, t)
+            self.assertFalse(ok)
+            self.assertEqual(findings[0]["kind"], "twin_drift")
+
+    def test_drift_detected_in_either_direction(self):
+        with tempfile.TemporaryDirectory(prefix="twin-") as tmp:
+            s, t = self._write_pair(tmp, LEAN + "\n-- shim tarafı\n", LEAN)
+            ok, _ = cls.check_twin(s, t)
+            self.assertFalse(ok, "shim tarafındaki sapma da yakalanmalı")
+
+    def test_whitespace_only_difference_is_drift(self):
+        # Bayt eşitliği aranır: satır sonu/boşluk farkı da sessiz kaynak
+        # ayrışması yaratır, bu yüzden drift sayılır.
+        with tempfile.TemporaryDirectory(prefix="twin-") as tmp:
+            s, t = self._write_pair(tmp, LEAN, LEAN + "\n")
+            ok, findings = cls.check_twin(s, t)
+            self.assertFalse(ok)
+            self.assertEqual(findings[0]["kind"], "twin_drift")
+
+    def test_missing_twin_is_fail_closed_not_silent(self):
+        with tempfile.TemporaryDirectory(prefix="twin-") as tmp:
+            s = write(tmp, "Content.lean", LEAN)
+            missing = os.path.join(tmp, "yok", "Content.lean")
+            ok, findings = cls.check_twin(s, missing)
+            self.assertFalse(ok)
+            self.assertEqual(findings[0]["kind"], "twin_unreadable")
+
+    def test_real_repo_copies_are_byte_identical(self):
+        base = os.path.join(HERE, "..", "lean_reduct")
+        ok, findings = cls.check_twin(
+            os.path.join(base, "Content.lean"),
+            os.path.join(base, "Leibniz2Reduct", "Content.lean"))
+        self.assertTrue(ok, findings)
+
+
+class TestTwinWiring(unittest.TestCase):
+    def test_main_fails_closed_on_twin_drift(self):
+        with tempfile.TemporaryDirectory(prefix="twin-") as tmp:
+            write(tmp, "Content.lean", LEAN)
+            write(tmp, "MAP.md", CONTRACT)
+            os.makedirs(os.path.join(tmp, "Leibniz2Reduct"), exist_ok=True)
+            write(tmp, os.path.join("Leibniz2Reduct", "Content.lean"),
+                  LEAN + "\ntheorem drift : True := by trivial\n")
+            r = subprocess.run(
+                [sys.executable, os.path.join(HERE, "check_lean_statements.py"),
+                 "--lean-file", os.path.join(tmp, "Content.lean"),
+                 "--map", os.path.join(tmp, "MAP.md"),
+                 "--twin-file", os.path.join(tmp, "Leibniz2Reduct", "Content.lean")],
+                capture_output=True, text=True, timeout=60)
+            self.assertEqual(r.returncode, 1, r.stdout)
+            self.assertIn("TWIN_DRIFT", r.stdout)
+
+    def test_no_twin_flag_skips_the_check(self):
+        with tempfile.TemporaryDirectory(prefix="twin-") as tmp:
+            write(tmp, "Content.lean", LEAN)
+            write(tmp, "MAP.md", CONTRACT)
+            r = subprocess.run(
+                [sys.executable, os.path.join(HERE, "check_lean_statements.py"),
+                 "--lean-file", os.path.join(tmp, "Content.lean"),
+                 "--map", os.path.join(tmp, "MAP.md"), "--no-twin", "--json"],
+                capture_output=True, text=True, timeout=60)
+            self.assertEqual(r.returncode, 0, r.stdout)
+            d = json.loads(r.stdout)
+            self.assertIsNone(d["twin_state"])
+
+    def test_json_reports_twin_state(self):
+        with tempfile.TemporaryDirectory(prefix="twin-") as tmp:
+            write(tmp, "Content.lean", LEAN)
+            write(tmp, "MAP.md", CONTRACT)
+            os.makedirs(os.path.join(tmp, "Leibniz2Reduct"), exist_ok=True)
+            write(tmp, os.path.join("Leibniz2Reduct", "Content.lean"), LEAN)
+            r = subprocess.run(
+                [sys.executable, os.path.join(HERE, "check_lean_statements.py"),
+                 "--lean-file", os.path.join(tmp, "Content.lean"),
+                 "--map", os.path.join(tmp, "MAP.md"),
+                 "--twin-file", os.path.join(tmp, "Leibniz2Reduct", "Content.lean"),
+                 "--json"],
+                capture_output=True, text=True, timeout=60)
+            self.assertEqual(r.returncode, 0, r.stdout)
+            d = json.loads(r.stdout)
+            self.assertEqual(d["twin_state"], "PASS")
+            self.assertTrue(d["ok"])
 
 
 class TestK9Wiring(unittest.TestCase):
