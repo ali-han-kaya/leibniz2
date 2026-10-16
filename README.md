@@ -621,6 +621,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-11 | docs | (specs) verify.yml jobs-map ureticisi + diyagram artefakti | [`eee89ff`](https://github.com/ali-han-kaya/leibniz2/commit/eee89ff) |
 | 2026-10-11 | ci | (verify) unit-test ortamina PyYAML kur (jobs-map kapisi) | [`b73c8c6`](https://github.com/ali-han-kaya/leibniz2/commit/b73c8c6) |
 | 2026-10-11 | docs | (deploy) 337e73f icin kanit-defteri satiri ekle | [`5979c5b`](https://github.com/ali-han-kaya/leibniz2/commit/5979c5b) |
+| 2026-10-16 | ci | (precommit) LaTeX yuzey kapisi (fail-closed) ekle | [`d8df9af`](https://github.com/ali-han-kaya/leibniz2/commit/d8df9af) |
 
 ### Regresyon notları
 

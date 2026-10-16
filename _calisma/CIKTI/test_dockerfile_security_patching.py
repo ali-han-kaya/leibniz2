@@ -280,6 +280,179 @@ class TestDockerfileSecurityPatching(unittest.TestCase):
         self.assertIn("docs/DOCKER_SECURITY_PATCHING.md", self._df)
 
 
+# ── 8) PIP CACHE MOUNT sözleşmesi — mount ile --no-cache-dir aynı satırda ─
+# Ayrıştırıcı mantıksal RUN BLOĞU okur (devam satırları `\\` ile birleşir):
+# mount bayrağı RUN başlığında, pip satırı bloğun ilerisinde ayrı bir
+# satırdadır — "aynı pip satırı" iddiası satır-başı aramayla kanıtlanamaz.
+# Yorum satırları yok sayılır: Dockerfile yorumu --no-cache-dir ve RUN
+# --mount kalıplarını insan-açıklaması olarak içerir (bulgu üretmez).
+PIP_CMD_RE = re.compile(r"\bpip3?\s+(?:install|download|wheel)\b")
+PIP_MOUNT = "--mount=type=cache,target=/root/.cache/pip"
+PIP_NO_CACHE_FLAG = "--no-cache-dir"
+PIP_LINE_COUNT = 3  # gerçek ağaçtaki pip satırı sayısı (vakumluluk çıpası)
+PIP_MOUNT_COUNT = 2  # mount taşıyan yorum-dışı satır (builder + runtime) —
+                     # mount VARLIK çıpası: pip tespiti gevşese/kaçak yazım
+                     # (satır sonuyla bölünmüş pip çağrısı) kaçsa bile mount'un kendisi bu
+                     # sayaçla kilitli kalır (pip_cache_violations'tan bağımsız).
+PIP_CACHE_DISABLED_FORMS = (PIP_NO_CACHE_FLAG, "PIP_NO_CACHE_DIR")
+                     # yokluk çift-form çıpası: flag + env eşdeğeri —
+                     # `ENV PIP_NO_CACHE_DIR=1` de cache'i kapatır ve
+                     # PIP_CMD_RE+flag aramasının GÖRMEYECEĞİ tek kaçak yoldur.
+
+
+def run_blocks(text):
+    """[(ilk_satır_no, blok_metni)] — yorum/boş satır atlanmış RUN blokları."""
+    lines = text.splitlines()
+    blocks = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if line.lstrip().startswith("#") or not line.strip():
+            i += 1
+            continue
+        if line.startswith("RUN ") or line.startswith("RUN\t"):
+            first = i + 1
+            parts = [line]
+            while parts[-1].rstrip().endswith("\\"):
+                i += 1
+                if i >= len(lines):
+                    break
+                parts.append(lines[i])
+            blocks.append((first, "\n".join(parts)))
+        i += 1
+    return blocks
+
+
+def pip_cache_violations(text):
+    """[(satır_no, gerekçe)] — pip cache mount sözleşmesi ihlalleri.
+
+    (a) pip satırı kendi RUN bloğunda PIP_MOUNT taşımalı,
+    (b) pip satırı PIP_NO_CACHE_FLAG taşıyamaz (mount'ü boşa çıkarır),
+    (c) pip satırı RUN bloğu dışındaysa mount doğrulanamaz → ihlal.
+    """
+    lines = text.splitlines()
+    viols = []
+    in_block = set()
+    for first, block in run_blocks(text):
+        block_lines = block.splitlines()
+        in_block.update(range(first, first + len(block_lines)))
+        pip_here = [(first + k, ln) for k, ln in enumerate(block_lines)
+                    if PIP_CMD_RE.search(ln)]
+        if not pip_here:
+            continue
+        if PIP_MOUNT not in block:
+            viols.append((pip_here[0][0],
+                          "pip satırı cache mount'suz RUN bloğunda"))
+        for no, ln in pip_here:
+            if PIP_NO_CACHE_FLAG in ln:
+                viols.append((no, "pip satırı --no-cache-dir taşıyor "
+                                  "(mount boşa çıkar)"))
+    for no, ln in enumerate(lines, 1):
+        if not ln.strip() or ln.lstrip().startswith("#"):
+            continue
+        if PIP_CMD_RE.search(ln) and no not in in_block:
+            viols.append((no, "pip satırı RUN bloğu dışında — mount "
+                              "doğrulanamaz"))
+    return viols
+
+
+# Negatif/düzeltme fixture'ları — iddiaları boşta bırakmaz: yorum satırı
+# bilerek '--no-cache-dir' + 'pip install' + mount kalıbını birden içerir
+# (yorum filtresi kırılırsa iki test de kırmızıya döner).
+FIXTURE_CLEAN = "\n".join([
+    "# syntax=docker/dockerfile:1",
+    "# ornek (yalniz aciklama): RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked pip install --no-cache-dir x",
+    "FROM python:3.11-slim-bookworm AS builder",
+    "RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \\\\\n    set -eux; \\\\\n    apt-get update; \\\\\n    pip install z3-solver; \\\\\n    rm -rf /var/lib/apt/lists/*",
+    "",
+])
+FIXTURE_COMMENT_ONLY = "\n".join([
+    "# ornek: RUN --mount=type=cache,target=/root/.cache/pip pip install --no-cache-dir x",
+    "FROM python:3.11-slim-bookworm",
+    "RUN set -eux; apt-get update",
+    "",
+])
+FIXTURE_NO_CACHE_DIR = FIXTURE_CLEAN.replace(
+    "pip install z3-solver", "pip install --no-cache-dir z3-solver")
+FIXTURE_NO_MOUNT = FIXTURE_CLEAN.replace(
+    "RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \\\\\n"
+    "    set -eux", "RUN set -eux")
+
+
+class TestPipCacheMountContract(unittest.TestCase):
+    """8) Aynı pip satırlarında: cache mount VAR, --no-cache-dir YOK."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._df = DOCKERFILE.read_text(encoding="utf-8")
+
+    def test_scanner_sees_every_pip_line(self):
+        # Vakumluluk çıpası: ayrıştırıcı gerçek ağaçtaki TÜM pip
+        # satırlarını görmeli — kaybolan satır sessiz "kör yeşil" üretir.
+        raw = [ln for ln in self._df.splitlines()
+               if ln.strip() and not ln.lstrip().startswith("#")
+                and PIP_CMD_RE.search(ln)]
+        seen = [ln for _, block in run_blocks(self._df)
+                for ln in block.splitlines() if PIP_CMD_RE.search(ln)]
+        self.assertEqual(len(seen), len(raw),
+                         "ayrıştırıcı pip satırı kaçırdı: "
+                         f"ham {len(raw)}, blokta {len(seen)}")
+        self.assertEqual(len(raw), PIP_LINE_COUNT,
+                         "pip satırı sayısı değişti — mount sözleşmesini "
+                         "yeniden değerlendir (yeni satır mount'lu mu?); "
+                         "PIP_LINE_COUNT çıpasını güncelle")
+
+    def test_real_tree_mount_on_pip_lines_without_no_cache_dir(self):
+        viols = pip_cache_violations(self._df)
+        self.assertEqual(viols, [],
+                         f"pip cache mount sözleşmesi ihlali: {viols}")
+
+    def test_real_tree_cache_disabled_forms_absent_anywhere(self):
+        # Yokluk çıpası, ayrıştırıcıdan BAĞIMSIZ: yokluğu yalnız tespit
+        # edilen pip satırlarına bağlansaydı kaçak yazım yeşil kalırdı
+        # (örn. satır sonuyla bölünmüş pip çağrısı veya `PIP_NO_CACHE_DIR=1` env-formu).
+        # Yokluk tüm yorum-dışı yüzeyde çivilenir; yorum satırı insan
+        # açıklaması olarak --no-cache-dir içerir (yok sayılmaz → kör kırmızı yok).
+        bad = [(no, ln.strip()) for no, ln in
+               enumerate(self._df.splitlines(), 1)
+               if ln.strip() and not ln.lstrip().startswith("#")
+               and any(form in ln for form in PIP_CACHE_DISABLED_FORMS)]
+        self.assertEqual(bad, [],
+                         f"pip cache'i kapatan bayrak/yordam var: {bad}")
+
+    def test_real_tree_mount_count_pinned(self):
+        # Varlık çıpası (yukarıdaki yokluğun simetriği): mount sayısı
+        # yorum-dışı satırda birebir sabit — mount silinirse/kayarsa
+        # pip tespiti ne yaparsa yapsın bu test kırmızıya döner.
+        n = [no for no, ln in enumerate(self._df.splitlines(), 1)
+             if ln.strip() and not ln.lstrip().startswith("#")
+             and PIP_MOUNT in ln]
+        self.assertEqual(len(n), PIP_MOUNT_COUNT,
+                         "cache mount satırı sayısı değişti — pip cache "
+                         f"sözleşmesini yeniden değerlendir: {n}")
+
+    def test_fixture_mounted_clean_block_passes(self):
+        self.assertEqual(pip_cache_violations(FIXTURE_CLEAN), [])
+
+    def test_fixture_comment_prose_is_not_a_violation(self):
+        self.assertEqual(pip_cache_violations(FIXTURE_COMMENT_ONLY), [])
+
+    def test_fixture_no_cache_dir_on_mounted_pip_line_is_caught(self):
+        viols = pip_cache_violations(FIXTURE_NO_CACHE_DIR)
+        self.assertEqual(len(viols), 1, viols)
+        self.assertIn(PIP_NO_CACHE_FLAG, viols[0][1])
+
+    def test_fixture_missing_mount_is_caught(self):
+        viols = pip_cache_violations(FIXTURE_NO_MOUNT)
+        self.assertEqual(len(viols), 1, viols)
+        self.assertIn("mount", viols[0][1])
+
+
+# ── 9) .dockerignore LAKE sözleşmesi ───────────────────────────────────────
+# Docker .dockerignore eşleşmesinin bu depo desen kümesi için modeli:
+# bare desen yalnız context KOKUNDA eşleşir, `**/x` her derinlikte, ve bir
+# dizin desenle eşleşirse altındaki her şey de hariçtir. Model yalnız bu
+# testteki yollar için geçerli (glob-* dallanması depoda kullanılmıyor).
 class TestNpmSecurityLayerContract(unittest.TestCase):
     """npm katmanı: context hijyeni + `overrides`/lock floor sözleşmesi.
 
