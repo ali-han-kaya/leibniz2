@@ -69,13 +69,15 @@ class TestGateJobs(unittest.TestCase):
                          "Action runtime check (node24)")
 
     def test_count_matches_workflow_minus_excludes(self):
-        # 30 job − 14 hariç = 16 required aday (tek kaynak: workflow;
-        # 15 -> 16: webkit-smoke — protection contexts == gate_jobs).
+        # 32 job − 17 hariç = 15 required aday (tek kaynak: workflow).
+        # 2026-10-18: canlı protection 15 context istiyor — dashboard-smoke
+        # REQUIRED, macOS advisory ikilisi required DEĞİL (16 -> 15).
         # Hariç: manifest-comment, precheck, label-gate-p1, plist-check,
         #        mirror-check, daemon-http, fresh-clone-http, audit-live-ci,
-        #        audit-refs-trend, override-trend, changelog-drift, pattern-drift,
-        #        budget-comment, lake-proof
-        self.assertEqual(len(sc.gate_jobs()), 16)
+        #        audit-refs-trend, override-trend, changelog-drift, docx-export,
+        #        pattern-drift, budget-comment, lake-proof,
+        #        preview-reload-smoke, webkit-smoke
+        self.assertEqual(len(sc.gate_jobs()), 15)
 
     def test_gate_jobs_exact_set_includes_label_gate(self):
         """gate_jobs() tam id kümesini birebir sabitler (fail-closed).
@@ -102,10 +104,10 @@ class TestGateJobs(unittest.TestCase):
                 "config-sync",
                 "repack-verify",
                 "refs-trend",
-                "preview-reload-smoke",
                 "ci-simulate",
                 "a11y-gate",
-                "texlive-accept", "webkit-smoke",
+                "texlive-accept",
+                "dashboard-smoke",
             },
         )
         # label-gate P0 kapısı required aday olmalı (özel vurgu).

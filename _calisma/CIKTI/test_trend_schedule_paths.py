@@ -22,7 +22,7 @@ adım 1 ile düşer (sessiz yeşil ölçüm yok).
 
 2026-10-08 — AİLELER: koşum artık canvas ailesini de ölçüp kaydeder
 (canvas_determinism_test.sh → `--update --family canvas`). Kaynak MATRİSİ
-step `env.CANVAS_SOURCES` listesidir (beş kaynak, tek job'da beş rapor;
+step `env.CANVAS_SOURCES` listesidir (altı kaynak, tek job'da altı rapor;
 `strategy.matrix` yerine döngü — tek job sözü). Eklenen sözleşmeler
 (TestCanvasFamilyWiring): her adım mevcut ve SIRALI (iki ölçüm de `--check`
 öncesinde — tazelik sıralamadan gelmeli), canvas adımı aile SDE sabitini
@@ -321,13 +321,14 @@ class TestCanvasFamilyWiring(unittest.TestCase):
 
     ORDER = ["Run determinism experiment (two independent SDE runs)",
              "Record trend measurement",
-             "Run canvas determinism experiment (plate-book, 5 kaynak)",
+             "Run canvas determinism experiment (plate-book, 6 kaynak)",
              "Record canvas trend measurement",
              "Validate trend invariants"]
     CANVAS_SOURCES = ["incidental_proof_canvas.tex",
                       "incidental_proof_plate02.tex",
                       "incidental_proof_plate03.tex",
                       "incidental_proof_plate04.tex",
+                      "incidental_proof_plate05.tex",
                       "incidental_proof_book.tex"]
 
     @classmethod
@@ -349,7 +350,7 @@ class TestCanvasFamilyWiring(unittest.TestCase):
 
     def test_canvas_experiment_runs_the_harness_with_family_epoch(self):
         script, _env = step_script(
-            "Run canvas determinism experiment (plate-book, 5 kaynak)")
+            "Run canvas determinism experiment (plate-book, 6 kaynak)")
         self.assertIn("canvas_determinism_test.sh", script)
         # Aile SDE sabiti bilinçli yazılı: SOURCE_DATE_EPOCH'tan türümez
         # (el yazması epoch'u levha PDF'lerini sessizce yeniden damgalar).
@@ -361,7 +362,7 @@ class TestCanvasFamilyWiring(unittest.TestCase):
         # Matris parametresi env'dedir; run onu DÖNGÜyle işler (strategy.matrix
         # yok: o kaynak başına ayrı job açardı — "tek job'da rapor" sözü kırılırdı).
         script, env = step_script(
-            "Run canvas determinism experiment (plate-book, 5 kaynak)")
+            "Run canvas determinism experiment (plate-book, 6 kaynak)")
         listed = env.get("CANVAS_SOURCES", "").split()
         self.assertEqual(listed, self.CANVAS_SOURCES, "matris listesi")
         self.assertIn("for src in $CANVAS_SOURCES", script)
@@ -372,14 +373,14 @@ class TestCanvasFamilyWiring(unittest.TestCase):
         for job_name, job in load_yaml()["jobs"].items():
             self.assertNotIn(
                 "strategy", job,
-                "job %r matris işi: 'tek job\'da beş rapor' sözü kırılırdı"
+                "job %r matris işi: 'tek job\'da altı rapor' sözü kırılırdı"
                 % job_name)
 
-    def test_five_reports_are_fail_closed(self):
-        # "Beş rapor" sözü adımın İÇİNDE denetlenir: her kaynak için rapor
+    def test_six_reports_are_fail_closed(self):
+        # "Altı rapor" sözü adımın İÇİNDE denetlenir: her kaynak için rapor
         # dosyası var + verdict=PASS; yoksa job kırmızı.
         script, _env = step_script(
-            "Run canvas determinism experiment (plate-book, 5 kaynak)")
+            "Run canvas determinism experiment (plate-book, 6 kaynak)")
         self.assertIn('test -f "$report"', script)
         self.assertIn("verdict=PASS", script)
         self.assertIn("rapor yok", script)
@@ -390,11 +391,11 @@ class TestCanvasFamilyWiring(unittest.TestCase):
 
         Metin varsayımları döngüyü bağlamaz (kanıtlandı: döngü silinince test
         yeşil kalıyordu). Bu test betiği scratch bir repo-kökünde çalıştırır:
-        harness yerine stub, PATH'e dummy tectonic → 5 çağrı, doğru sıra,
-        SDE aile sabiti, 5 rapor. Hiçbir dış araç gerekmez.
+        harness yerine stub, PATH'e dummy tectonic → 6 çağrı, doğru sıra,
+        SDE aile sabiti, 6 rapor. Hiçbir dış araç gerekmez.
         """
         script, env = step_script(
-            "Run canvas determinism experiment (plate-book, 5 kaynak)")
+            "Run canvas determinism experiment (plate-book, 6 kaynak)")
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             canvas_dir = root / "_calisma" / "CIKTI" / "canvas"
@@ -438,17 +439,17 @@ class TestCanvasFamilyWiring(unittest.TestCase):
             reports = sorted(x.name for x in
                              (root / "docs" / "ci_simulate" /
                               "canvas_determinism").glob("*.determinism.txt"))
-            self.assertEqual(len(reports), 5, reports)
+            self.assertEqual(len(reports), 6, reports)
 
     def test_missing_report_fails_the_step(self):
-        """"Beş rapor" sözü fail-closed: bir rapor hiç yazılmazsa adım düşer.
+        """"Altı rapor" sözü fail-closed: bir rapor hiç yazılmazsa adım düşer.
 
         Harness derleme hatasında raporu hiç yazmaz (döngü ilk hatada zaten
         kırmızı döner); burada ikinci denetimin kendisi sınanır — son kaynağın
         raporu üretilmezse `test -f` yakalamalı.
         """
         script, env = step_script(
-            "Run canvas determinism experiment (plate-book, 5 kaynak)")
+            "Run canvas determinism experiment (plate-book, 6 kaynak)")
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             canvas_dir = root / "_calisma" / "CIKTI" / "canvas"
@@ -489,9 +490,33 @@ class TestCanvasFamilyWiring(unittest.TestCase):
             r"incidental_proof_\w+\.tex", mk)))
         self.assertEqual(make_names, sorted(self.CANVAS_SOURCES), make_names)
         _script, env = step_script(
-            "Run canvas determinism experiment (plate-book, 5 kaynak)")
+            "Run canvas determinism experiment (plate-book, 6 kaynak)")
         self.assertEqual(sorted(env.get("CANVAS_SOURCES", "").split()),
                          make_names)
+
+    def test_book_embeds_every_measured_plate_and_keeps_seven_leaves(self):
+        """Apex iddiası KANITLANIR: kitap her ölçülen levhayı gömer (aileyi
+        transitif kapsar) ve yaprak sayısı sözleşmedir — frontispiece + beş
+        levha + kolofon = YEDİ yaprak. Levha listesi CANVAS_SOURCES'ten
+        türetilir: kitap sessizce bir levhayı düşürürse (ya da listeye levha
+        eklenip kitap güncellenmezse) kapı kırmızıya döner; "transitif kapsama"
+        yorumda kalmaz, ölçülür."""
+        canvas_dir = ROOT / "_calisma" / "CIKTI" / "canvas"
+        book = (canvas_dir / "incidental_proof_book.tex").read_text(
+            encoding="utf-8")
+        embedded = re.findall(r"\\platepage\{([^}]+)\}", book)
+        plates = [src for src in self.CANVAS_SOURCES
+                  if src != "incidental_proof_book.tex"]
+        self.assertEqual(embedded, [src[:-4] + ".pdf" for src in plates],
+                         "kitabın gömdüğü levhalar ölçülen matristen farklı")
+        for pdf in embedded:
+            self.assertTrue((canvas_dir / pdf).is_file(),
+                            "kanonik levha PDF'i yok: %s" % pdf)
+        # frontispiece + levhalar + kolofon (yaprak sözleşmesi = 7)
+        self.assertEqual(1 + len(embedded) + 1, 7,
+                         "yaprak sayısı yediye bağlı: %d levha" % len(embedded))
+        self.assertIn("LEAF 7 — COLOPHON", book)
+        self.assertIn("FOLIO I--V", book)
 
     def test_canvas_record_uses_family_flag(self):
         script, _env = step_script("Record canvas trend measurement")
@@ -507,7 +532,7 @@ class TestCanvasFamilyWiring(unittest.TestCase):
                       if n and n.startswith("Install tectonic")]
         self.assertEqual(len(installers), 1, installers)
         script, _env = step_script(
-            "Run canvas determinism experiment (plate-book, 5 kaynak)")
+            "Run canvas determinism experiment (plate-book, 6 kaynak)")
         for bad in ("curl ", "apt-get", "tar -x"):
             self.assertNotIn(bad, script)
 

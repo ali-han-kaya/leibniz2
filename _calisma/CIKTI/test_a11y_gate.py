@@ -313,6 +313,30 @@ class MultiPageTests(unittest.TestCase):
         self.assertEqual(self.scanned, ["/preview.html", "/guide.html"])
         self.assertEqual(rc, 0)
 
+    # -- rapor verdict alani (job summary yuzeyi bunu okur) ---------------
+
+    def test_report_verdict_defaults_to_fail_before_any_scan(self):
+        """Erken cikis raporu yazar ama hic sayfa taramaz: verdict VARSAYILAN
+        FAIL kalmali — boylece 'alan yok' ile 'gecti' karismaz."""
+        rc, report, _out = self.run_gate({"pages": []}, self.ok_connect())
+        self.assertEqual(rc, 1)
+        self.assertEqual(report["verdict"], "FAIL")
+
+    def test_report_verdict_becomes_pass_after_completed_scan(self):
+        cfg = self.cfg([{"path": "/preview.html"}])
+        rc, report, _out = self.run_gate(cfg, self.ok_connect())
+        self.assertEqual(rc, 0)
+        self.assertEqual(report["verdict"], "PASS",
+                         "tamamlanmis temiz tarama varsayilan FAIL'i cevirmeli")
+
+    def test_report_verdict_tracks_blocking_findings(self):
+        cfg = self.cfg([{"path": "/preview.html"}])
+        rc, report, _out = self.run_gate(
+            cfg, self.ok_connect({"violations": [axe_v("r1", "critical")],
+                                  "incomplete": []}))
+        self.assertEqual(rc, 1)
+        self.assertEqual(report["verdict"], "FAIL")
+
     def test_page_outside_config_is_not_scanned(self):
         """Kapsam config'te ilan edilir; koddan gizli sayfa taranmaz."""
         cfg = self.cfg([{"path": "/preview.html"}])
@@ -600,7 +624,11 @@ class PageConfigValidationTests(unittest.TestCase):
 # degisirse tuketici sessizce bozulur; bu sinif onu kirmiziya cevirir.
 # KAPSAM:anahtarlar birebir (EKLEME de SILMA da kirmizi), tip kapali kume,
 # ve asagidaki butunluk esitsizligi.
-REPORT_KEYS = {"base_url", "config", "pages", "violations", "summary", "error"}
+# `verdict`: fail-closed makine-okur alan (VARSAYILAN FAIL; yalniz tamamlanmis
+# taramadan sonra gercek deger). Job summary adimi ve dis tuketiciler bunu
+# okur — sema sozlesmesine 2026-10-10'da bilerek eklendi.
+REPORT_KEYS = {"base_url", "config", "pages", "violations", "summary", "error",
+               "verdict"}
 PAGE_KEYS = {"path", "url", "verdict", "error", "violations", "summary",
              "raw", "settle"}
 SUMMARY_KEYS = {
@@ -1004,6 +1032,51 @@ class GateContractTests(unittest.TestCase):
         self.assertEqual(report["violations"][0]["reasons"], ["kayitli borc"])
         self.assertEqual(report["summary"]["allowlisted"], 1)
         self.assertIn("ALLOWLISTED", out)  # borç raporda görünür
+
+
+class A11ySummarySurfaceTests(unittest.TestCase):
+    """Ucuncu rapor yuzeyi (job summary) verify.yml'de gercekten var mi?
+
+    Statik katman: tarayici/Playwright gerektirmez, her ortamda kosar. Adim
+    silinirse, `if: always()` kaybolursa (kirilimda ozet uretilmez) veya adim
+    gate'ten ONCE gelirse burasi KIRMIZI olur — sessizce kaybolan yuzey olmaz.
+    """
+
+    WORKFLOW = os.path.normpath(os.path.join(
+        SCRIPT_DIR, "..", "..", ".github", "workflows", "verify.yml"))
+
+    def _a11y_job_block(self):
+        with open(self.WORKFLOW, encoding="utf-8") as f:
+            text = f.read()
+        start = text.index("\n  a11y-gate:")
+        body = text[start + 1:].splitlines()
+        out = [body[0]]
+        for line in body[1:]:
+            # Bir sonraki top-level job anahtari tam iki boslukla baslar.
+            if line.startswith("  ") and not line.startswith("   "):
+                break
+            out.append(line)
+        return "\n".join(out)
+
+    def test_gate_job_writes_a_step_summary_surface(self):
+        seg = self._a11y_job_block()
+        self.assertIn("GITHUB_STEP_SUMMARY", seg,
+                      "a11y-gate job'inda ozet yuzeyi yok")
+
+    def test_summary_step_is_always_and_reads_the_report(self):
+        seg = self._a11y_job_block()
+        marker = "      - name: Write a11y job summary"
+        self.assertIn(marker, seg, "ozet adimi adi degismis veya silinmis")
+        step = seg.split(marker, 1)[1].split("\n      - name:", 1)[0]
+        self.assertIn("if: always()", step,
+                      "kirilimda da ozet uretilmeli (if: always() yok)")
+        self.assertIn("a11y_report.json", step, "ozet adimi raporu okumuyor")
+
+    def test_summary_step_runs_after_the_gate(self):
+        seg = self._a11y_job_block()
+        self.assertLess(seg.index("- name: Run a11y gate"),
+                        seg.index("- name: Write a11y job summary"),
+                        "ozet adimi gate'ten once geliyor")
 
 
 if __name__ == "__main__":

@@ -63,11 +63,20 @@ GATE_EXCLUDE = {
     "audit-refs-trend",     # advisory: refs-trend satırları ↔ kaynak denetimi
     "override-trend",       # advisory: CLI override zaman serisi
     "changelog-drift",      # advisory: gen_changelog --check drift bulguları
+    "docx-export",           # required DEĞİL: docx üretimi + LibreOffice
+                            #   açılabilirlik kontrolü (required set'i
+                            #   değiştirmemek bilinçli — required'a almak
+                            #   branch-protection UI değişikliği gerektirir).
+                            #   NOT: job KENDİ İÇİNDE fail-closed'dır (kanıt
+                            #   yoksa kırmızı); "advisory" = required değil.
     "pattern-drift",         # advisory: merge pattern ↔ ARTIFACT_JOBS drift
     "budget-comment",        # PR-only: bütçe + pre-commit PR yorumu (bütçe kapısı ayrı job)
-    "dashboard-smoke",      # advisory: node-sandbox + Chromium etkileşim E2E
-                            #   (hover tooltip / run-history filtresi / lightbox);
-                            #   tarayıcısız katmanı her ortamda koşar, required değil.
+    # 2026-10-18 hizalaması (ölçüm: canlı branch protection 15 context):
+    # "Dashboard interaction E2E" REQUIRED, iki macOS smoke job'u required
+    # DEĞİL. Aksi hâlde check-status-check-names her committe kırmızı kalır
+    # (temiz HEAD'de de aynı — drift merge'den bağımsız).
+    "preview-reload-smoke",  # advisory, macOS: protection'da required değil
+    "webkit-smoke",          # advisory, macOS: protection'da required değil
     "lake-proof",            # ayrı-step K9 lake build (lean-toolchain v4.14.0);
                              #   GitHub required kontrollerinde DEĞİL (advisory) —
                              #   K9, verify job'unun --full içinde de koşar.

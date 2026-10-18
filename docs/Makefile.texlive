@@ -140,7 +140,7 @@ clean:
 # pdfTeX bu kaynagi DERLEYEMEZ (olculmustu; canvas kaynagi icin ayri deney
 # betigi tam bu yuzden var). plate-book hedefleri bu nedenle tectonic ile
 # kosar; motor pini tek kaynaktir ve CI'dadir (determinism-trend.yml
-# "Run canvas determinism experiment (plate-book, 5 kaynak)" adimi: surum +
+# "Run canvas determinism experiment (plate-book, 6 kaynak)" adimi: surum +
 # sha256 digest — TEK tectonic kurulumu manuscript deneyiyle paylasilir;
 # adim tectonic KURMAZ, calistirir. Kaynak listesi adimin env
 # CANVAS_SOURCES'i asagidaki PLATE_SOURCES + PLATE_BOOK'i BIREBIR kopyalar;
@@ -168,7 +168,8 @@ PLATE_BOOK := $(PLATE_DIR)/incidental_proof_book.tex
 PLATE_SOURCES := $(PLATE_DIR)/incidental_proof_canvas.tex \
                  $(PLATE_DIR)/incidental_proof_plate02.tex \
                  $(PLATE_DIR)/incidental_proof_plate03.tex \
-                 $(PLATE_DIR)/incidental_proof_plate04.tex
+                 $(PLATE_DIR)/incidental_proof_plate04.tex \
+                 $(PLATE_DIR)/incidental_proof_plate05.tex
 PLATE_BUILD_DIR ?= $(ROOT)/.build/plate-book
 PLATE_BOOK_EPOCH ?= 1700000000
 PLATE_TECTONIC ?= tectonic
@@ -204,7 +205,7 @@ plate-book:
 # Determinizm kapisi: kaynak basina 2 BAGIMSIZ SDE kosumu + kanonik
 # karsilastirma, tek kaynak = canvas_determinism_test.sh (hash cikarimi
 # burada TEKRARLANMAZ). verdict=PASS yoksa hedef fail-closed duser; hicbir
-# kaynak atlanmaz (kitap + derledigimiz dort levha).
+# kaynak atlanmaz (kitap + derledigimiz bes levha).
 plate-book-check:
 	@command -v "$(PLATE_TECTONIC)" >/dev/null 2>&1 || { echo "ERROR: tectonic not found (PLATE_TECTONIC= veya PATH)" >&2; exit 2; }
 	@test -f "$(PLATE_DETERMINISM_SCRIPT)" || { echo "ERROR: canvas deney betigi yok: $(PLATE_DETERMINISM_SCRIPT) - plate-book determinizm kapisi fail-closed" >&2; exit 1; }

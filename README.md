@@ -92,7 +92,7 @@ Levha kitabı (Incidental Proof) ayrı bir aile sabiti taşır:
 `PLATE_BOOK_EPOCH ?= 1700000000`. Ayrıdır çünkü canvas ailesi
 fontspec/XeTeX sözleşmesiyle tectonic ile derlenir ve el yazmasının
 epoch'u bu PDF'leri yeniden damgalamamalıdır; `plate-book-check` kitabı ve
-derlediği dört levhayı kaynak-başına iki bağımsız koşumla sınar.
+derlediği beş levhayı kaynak-başına iki bağımsız koşumla sınar.
 
 Sözleşme: `SOURCE_DATE_EPOCH ?= git log -1 --format=%ct` (geçmiş commit'i
 yeniden üretme), `TEXINPUTS="$TEXDIR//:"`, `TEXMFOUTPUT`/`-output-directory`
@@ -617,11 +617,17 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-08 | feat | (canvas) Incidental Proof header banner (svg + gomme + test) | [`46933f3`](https://github.com/ali-han-kaya/leibniz2/commit/46933f3) |
 | 2026-10-10 | chore | (changelog) olu hash satirini canli HEAD ile hizala | [`95e2f1a`](https://github.com/ali-han-kaya/leibniz2/commit/95e2f1a) |
 | 2026-10-10 | feat | (vercel) serverless /api adaptörü + git-push preview hattı | [`1f21528`](https://github.com/ali-han-kaya/leibniz2/commit/1f21528) |
+| 2026-10-10 | chore | (changelog) 1f21528 satirini tabloya ekle | [`3b4bed3`](https://github.com/ali-han-kaya/leibniz2/commit/3b4bed3) |
+| 2026-10-10 | feat | (canvas) plate book 7 yaprak — plate05 ölçüme ve kitaba girdi | [`728ac5d`](https://github.com/ali-han-kaya/leibniz2/commit/728ac5d) |
+| 2026-10-10 | feat | (ci) docx export job — LibreOffice kontrolü fail-closed | [`5d75ecd`](https://github.com/ali-han-kaya/leibniz2/commit/5d75ecd) |
+| 2026-10-10 | fix | (ci) audit artifact listesini sayfala (sahte pattern-drift FAIL'i) | [`96e07c8`](https://github.com/ali-han-kaya/leibniz2/commit/96e07c8) |
 | 2026-10-11 | ci | (precommit) verify.yml jobs-map tazelik kapisi | [`e07d94f`](https://github.com/ali-han-kaya/leibniz2/commit/e07d94f) |
 | 2026-10-11 | docs | (specs) verify.yml jobs-map ureticisi + diyagram artefakti | [`eee89ff`](https://github.com/ali-han-kaya/leibniz2/commit/eee89ff) |
 | 2026-10-11 | ci | (verify) unit-test ortamina PyYAML kur (jobs-map kapisi) | [`b73c8c6`](https://github.com/ali-han-kaya/leibniz2/commit/b73c8c6) |
 | 2026-10-11 | docs | (deploy) 337e73f icin kanit-defteri satiri ekle | [`5979c5b`](https://github.com/ali-han-kaya/leibniz2/commit/5979c5b) |
 | 2026-10-16 | ci | (precommit) LaTeX yuzey kapisi (fail-closed) ekle | [`d8df9af`](https://github.com/ali-han-kaya/leibniz2/commit/d8df9af) |
+| 2026-10-18 | other | prisma(trend-db): migration dizinini ve README'yi ekle | [`45838d9`](https://github.com/ali-han-kaya/leibniz2/commit/45838d9) |
+| 2026-10-16 | build | (docker) pip ve apt icin cache mount etkinlestir | [`3c92c65`](https://github.com/ali-han-kaya/leibniz2/commit/3c92c65) |
 
 ### Regresyon notları
 
