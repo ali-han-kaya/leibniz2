@@ -1,0 +1,68 @@
+/*
+ * design-system/vercel/theme.css — GENERATED, DO NOT EDIT.
+ *
+ * Vercel adapter tema varyantı: `:root[data-theme="vercel"]` altında
+ * pano/landing'in repo semantik yuvalarını (`--bg`, `--fg`, `--accent`, …)
+ * design-system/vercel/tokens.css aynasındaki token'lara bağlar.
+ *
+ * Üretici: scripts/generate_vercel_theme.py
+ *   python3 design-system/vercel/scripts/generate_vercel_theme.py
+ *   python3 design-system/vercel/scripts/generate_vercel_theme.py --check
+ *
+ * İçerik: (1) SLOT_MAP'in referans verdiği token'ların transitif kapanışı
+ * aynadan birebir, (2) 32 yuvanın 28'i bağlı, 4'i İLAN
+ * EDİLMİŞ İSTİSNA (bu yuvalar tanımlanmaz — taban paletten gelir):
+ *   - --ok: Vercel yakalamasında success tonu yok
+ *   - --warn: Vercel yakalamasında warning tonu yok
+ *   - --tint-ok-bg: success tint kaynağı yok (--ok ile aynı istisna)
+ *   - --tint-warn-bg: warning tint kaynağı yok (--warn ile aynı istisna)
+ * Kaynak: vercel/README.md ("Tema varyantı"). Elle düzenleme drift sayılır:
+ * check-design-tokens contract 9 fail-closed bloke eder (yeniden üret →
+ * commit et).
+ */
+
+
+:root[data-theme="vercel"] {
+  /* ── ön-koşullar (ayna: vercel/tokens.css, birebir) ── */
+  --color-background-100: hsla(0, 0%, 100%, 1);
+  --color-gray-1000: hsla(0, 0%, 9%, 1);
+  --color-gray-200: hsla(0, 0%, 92%, 1);
+  --color-gray-300: hsla(0, 0%, 90%, 1);
+  --color-gray-800: hsla(0, 0%, 49%, 1);
+  --color-gray-900: hsla(0, 0%, 30%, 1);
+  --color-gray-alpha-400: #00000014;
+  --develop-text: #0a72ef;
+  --geist-console-text-color-default: #000;
+  --preview-text: #de1d8d;
+  --ship-text: #ff5b4f;
+
+  /* ── repo semantiği → Vercel (ilan edilmiş istisnalar hariç) ── */
+  --bg: var(--color-background-100);
+  --fg: var(--color-gray-1000);
+  --muted: var(--color-gray-900);
+  --fg-dimmed: color-mix(in srgb, var(--color-gray-800) 88%, black);
+  --border: var(--color-gray-300);
+  --accent: var(--develop-text);
+  --on-accent: var(--color-background-100);
+  --err: color-mix(in srgb, var(--ship-text) 80%, black);
+  --budget: var(--preview-text);
+  --surface: var(--color-gray-200);
+  --surface-1: var(--color-gray-200);
+  --surface-2: var(--color-gray-300);
+  --surface-raised: var(--color-gray-300);
+  --code-bg: var(--color-gray-200);
+  --header-start: var(--color-background-100);
+  --header-end: var(--color-gray-200);
+  --paper: var(--color-background-100);
+  --paper-ink: var(--color-gray-1000);
+  --tint-err-bg: color-mix(in srgb, var(--ship-text) 15%, transparent);
+  --tint-err-bg-strong: color-mix(in srgb, var(--ship-text) 12%, transparent);
+  --tint-err-bg-weak: color-mix(in srgb, var(--ship-text) 10%, transparent);
+  --tint-budget-bg: color-mix(in srgb, var(--preview-text) 12%, transparent);
+  --tint-accent-bg: color-mix(in srgb, var(--develop-text) 15%, transparent);
+  --tint-accent-hover: color-mix(in srgb, var(--develop-text) 10%, transparent);
+  --tint-accent-active: color-mix(in srgb, var(--develop-text) 20%, transparent);
+  --tint-unknown-bg: var(--color-gray-alpha-400);
+  --shadow-tip: 0 8px 24px color-mix(in srgb, var(--geist-console-text-color-default) 18%, transparent);
+  --backdrop-lightbox: color-mix(in srgb, var(--geist-console-text-color-default) 92%, transparent);
+}

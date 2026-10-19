@@ -1,0 +1,37 @@
+# Python bağımlılıklarının TEK KAYNAĞI.
+#
+# Bu dosya `pip install -r` ile doğrudan kullanılabilir (bölüm işaretleri
+# yorumdur, pip'e zarar vermez). Üç tüketici buradan okur:
+#
+#   1) _calisma/dev_bootstrap.sh         → venv + tarayıcı katmanı
+#   2) .github/workflows/verify.yml      → pip install -r
+#   3) _calisma/CIKTI/test_dev_bootstrap.py → sözleşme testleri
+#
+# SÜRÜM BUMP = BU DOSYADA TEK SATIR. `test_dev_bootstrap.py` içindeki
+# "sürüm başka yerde sabitlenmiş mi" kapısı, repo'nun geri kalanında
+# kalan her `paket==sürüm` kopyasını kırmızıya düşürür.
+#
+# Sürümler neden bu değerler? Ölçülen eşleme: venv satırları bu checkout'un
+# yeşil venv'inin `pip freeze` çıktısıdır; tarayıcı pini CI'ın (ubuntu, py3.12)
+# kurduğu sürümle aynıdır.
+#
+# [venv] — dev_bootstrap.sh `PINS` + `check_venv_z3`'in birebir eşitlik
+# aradığı satırlar. CI'da da aynı dosyadan kurulur; sapma olursa yerel ve
+# CI aynı anda kırılır (sessiz iki sürüm hattı oluşmaz).
+z3-solver==5.1.0.0
+PyYAML==6.0.3
+pre_commit==4.3.0
+jsonschema==4.25.1
+pillow==11.3.0
+#
+# [browser] — dev_bootstrap.sh `BROWSER_PIN`. Bu satır IŞLEVSEL olarak
+# denetlenir (`check_browsers`: gerçekten bir chromium açılabiliyor mu), sürüm
+# eşitliği zorunlu DEĞİL: Python 3.9'da 1.60.0 kurulabilir ve çalışır, üstü
+# zaten "kurulu" sayılır. Bu yüzden venv satırlarıyla aynı muameleye sokulmaz.
+#
+# Not (Python 3.9 / eski yorumlayıcı): playwright 1.61+ `requires_python
+# >=3.10` istiyor. 3.9'da kurulumu açıkça geçersiz kılmak isteyenler:
+#   LEIBNIZ2_BROWSER_PIN=playwright==1.60.0 bash _calisma/dev_bootstrap.sh
+# Bu, CI ile ayrışır; script uyarı basar. Önerilen çözüm PATH'te >=3.10 bir
+# python3 kullanmaktır (CI 3.12 çalıştırıyor).
+playwright==1.63.0

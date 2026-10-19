@@ -1,0 +1,14 @@
+{
+  "format": "landing-provenance/1",
+  "hash_field": "raw",
+  "landing_sha256": "d6940c9e7de11f2db5781ad9f3858976bcf9ac4bafe9a12a1eb1f8956dfeb012",
+  "plates": {
+    "P1-a.png": "d43127cc247ff52361ef9326cb992934da4f593e00be846d55e00d6fd8855b79",
+    "P2.png": "f999f644937cb71033a0adfdd5023b3d68c5c38688ba7dfe2e237c58ed080705",
+    "P3-a.png": "d7b06ac6bfe7f8b7ec1a5e1b1634ecb598b4f54f35c5411c33375d883c442cd1"
+  },
+  "snapshot_hash": "74b2cdbdb18fafbf5b3c87570c92f1500e7580469bcf4295b09734116df0779f",
+  "snapshot_ts": "1970-01-01T00:00:00Z",
+  "snapshot_verdict": "PASS",
+  "theme": "dark"
+}

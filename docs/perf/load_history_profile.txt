@@ -1,0 +1,16 @@
+# komut: python3 docs/perf/profile_load_history.py   (rc=0; stdout birebir)
+== load_history profile ==
+tarih      : 2026-10-18T18:21:34Z
+python     : 3.9.6 (macOS-27.0.1-arm64-arm-64bit)
+rota/istek : /api/history · 15 istek × 3 tur
+kaynak     : ~/Library/Caches/com.freebuff/preview/history.jsonl · 249890 B · 100 dosya satırı → 100 dönen satır (HISTORY_MAX=100)
+sha256     : 3cc47413ef3640cc8fa53fdc29bef5e9ff3353184e6025552cc4bf6b434df6c8
+
+mod         medyan_ms     ort_ms ilk_istek_ms      cum_s   json.loads
+cache-on        0.729      0.747        0.768     0.0118            0
+cache-off       2.391      2.578        2.929     0.0391         1500
+
+delta      : do_GET cumtime -69.8% · medyan -69.5%
+doğruluk   : yanıt gövdeleri iki modda birebir aynı: EVET
+
+JSON: {"delta": {"do_get_cum_pct": -69.8, "median_pct": -69.5}, "generated_at": "2026-10-18T18:21:34Z", "history": {"bytes": 249890, "file_rows": 100, "history_max": 100, "path": "~/Library/Caches/com.freebuff/preview/history.jsonl", "returned_rows": 100, "sha256": "3cc47413ef3640cc8fa53fdc29bef5e9ff3353184e6025552cc4bf6b434df6c8"}, "modes": {"cache_off": {"do_get_cum_s": 0.0391, "do_get_mean_ms": 2.606, "first_request_ms": 2.929, "json_loads": 1500, "mean_ms": 2.578, "median_ms": 2.391, "payload_bytes": 70847, "total_s": 0.116}, "cache_on": {"do_get_cum_s": 0.0118, "do_get_mean_ms": 0.785, "first_request_ms": 0.768, "json_loads": 0, "mean_ms": 0.747, "median_ms": 0.729, "payload_bytes": 70847, "total_s": 0.0336}}, "payloads_identical": true, "platform": "macOS-27.0.1-arm64-arm-64bit", "python": "3.9.6", "requests": 15, "rounds": 3, "route": "/api/history"}

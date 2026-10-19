@@ -1,0 +1,88 @@
+name: token-delivery
+
+# token_delivery.py exit-code kontrati — air-gapped, fail-closed.
+#   rc=0 PASS / rc=1 LEAK / rc=2 VACUITY / rc=3 ENV
+#
+# Ayrık workflow (verify.yml sahipliği başka işlerle karışmasın diye):
+# bu dosya doc job tablosunu (PUBLISH_SCENARIO ↔ verify.yml), artifact
+# kontratlarını ve branch-protection required set'ini ETKİLEMEZ —
+# upload-artifact YOKTUR, schedule YOKTUR, required check adı DEĞİLDİR.
+#
+# DIKKAT: elle dispatch ana dala yapılmamalı — audit-live-ci (advisory)
+# en son main run'ını inceler; PR/dal koşumları bu denetimi etkilemez.
+#
+# Air-gap iki katmanda: (1) token_delivery.py socket katmanını kapatır
+# (ag cagrisi -> istisna -> rc=3, kodla zorlanmis); (2) bu adimlarda pip
+# kurulumu/ag erisimi YOKTUR — yalnizca runner'in kendi python'u + stdlib.
+
+on:
+  pull_request:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  # CI-hijyen K3: aynı ref'te üst üste binen koşumlar eski koşumu iptal eder.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  token-contract:
+    name: Token delivery contract (air-gapped)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      # Adım 1 — ana kontrat: gizleme AÇIK, 120 tohum × 45 olay kampanyası.
+      # Beklenen rc=0; LEAK(1)/VACUITY(2)/ENV(3) her biri adımı kırmızı
+      # yapar (fail-closed: hiçbir hata yolu yeşil değil).
+      - name: Air-gapped property check (token never in any observable surface)
+        run: |
+          set -euo pipefail
+          rc=0
+          python3 _calisma/CIKTI/token_delivery.py --json --out token_delivery_report.json || rc=$?
+          if [ "$rc" -ne 0 ]; then
+            echo "FAIL: token_delivery rc=$rc (0 PASS / 1 LEAK / 2 VACUITY / 3 ENV)"
+            cat token_delivery_report.json 2>/dev/null || true
+            exit 1
+          fi
+          echo "PASS: gorevli token hicbir gozlemlenebilir yuzeyde gecmedi"
+
+      # Adım 2 — MUTASYON CANARY: gizleme KAPALI ayni kampanya rc=1 donmek
+      # ZORUNDA. rc=0 donerse fuzzer/probe vakuumdur (kapinin gozu kopmustur)
+      # -> adim kirmizi; baska bir rc donerse kontratin kendisi kiriktir.
+      - name: Mutation canary (redaction off must be detected as LEAK)
+        run: |
+          set -euo pipefail
+          rc=0
+          python3 _calisma/CIKTI/token_delivery.py --redact off || rc=$?
+          if [ "$rc" -ne 1 ]; then
+            echo "FAIL: canary rc=$rc (1 beklenirdi - fuzzer vakuum veya kontrat kirik)"
+            exit 1
+          fi
+          echo "canary OK: gizleme kapaliyken leke yakalandi (rc=1)"
+
+      - name: Contract summary
+        if: always()
+        run: |
+          {
+            echo "## token-delivery contract"
+            echo ""
+            echo "- Air-gap: socket katmani token_delivery.py icinde kapatildi (ag cagrisi -> rc=3)."
+            echo "- Ana kosum: gizleme ACIK, token hicbir yuzeyde gecmemeli (rc=0)."
+            echo "- Mutasyon canary: gizleme KAPALI rc=1 donmeli (vakluk kaniti)."
+            if [ -f token_delivery_report.json ]; then
+              echo "- Rapor (ana kosum):"
+              echo '```json'
+              cat token_delivery_report.json
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

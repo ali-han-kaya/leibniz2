@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LeibnizChain — doğrulama zinciri (tarayıcı içi)</title>
+    <!--
+      CSP notu: preview sunucusu `script-src 'self' 'nonce-…'` uygular.
+      Burada INLINE script yoktur — oynatma paketi harici dosyadan yüklenir
+      (`/video/player.js`), veri adresi `data-src` niteliğiyle taşınır.
+      `data-*` nitelikleri script değildir; nonce gerekmez.
+    -->
+    <link rel="stylesheet" href="/video/player.css" />
+  </head>
+  <body>
+    <header class="bar">
+      <h1>LeibnizChain</h1>
+      <p>
+        1280×720 · 30 fps · 760 kare · 25,33 sn — kanonik teslim zincirinin altı
+        sahneli anlatımı. Boşluk oynatır, çift tıkla tam ekran.
+      </p>
+    </header>
+    <!-- data-src: oynatma veriyi preview sunucusundan çeker (staticFile render'a özgü) -->
+    <div id="root" data-src="/video/leibniz.json"></div>
+    <script src="/video/player.js" defer></script>
+  </body>
+</html>

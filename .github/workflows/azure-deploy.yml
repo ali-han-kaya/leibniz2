@@ -1,0 +1,176 @@
+name: azure-deploy
+
+on:
+  # Yalnız elle tetikleme (push/pull_request YOK). Gerekçe üç katmanlı:
+  #  1) .azure/deployment-plan.md §5: "az login + abonelik onayı kullanıcıdan
+  #     ASLA varsayma" — provision aboneliğe yazan bir eylemdir.
+  #  2) Plan Status=Draft ve lint BCP037'si deploy-engeli (kanıt:
+  #     docs/ci_simulate/azure_validate/bicep_validation.txt) — otomatik
+  #     tetikleme fail-closed değil, kırmızı bir dağıtım üretir.
+  #  3) what-if modu yazmaz ama yine de bilinçli seçilir: varsayılan
+  #     davranış YAZAN değil, ÖĞRETEN olmalıdır.
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "what-if (yazmaz) | deploy (provision + deploy)"
+        required: true
+        default: what-if
+        type: choice
+        options: [what-if, deploy]
+      confirm:
+        description: "deploy için abonelik id'sini harf harf yaz (onay kapısı)"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+  # OIDC-federe kimliğin TEK gerekliliği: id-token. Depoda, runner'da,
+  # secret store'da Azure SIRA yoktur (service-principal secret = 0 adet) —
+  # jeton federasyon credential'i üzerinden değiş-tokuş edilir.
+  id-token: write
+
+concurrency:
+  # Deploy'lar birbirinin üstüne binmemeli: cancel-in-progress YANLIŞ —
+  # koşan bir revision'ı yarıda kesmek /app/state'i tutarsız bırakır.
+  # docker-security.yml tersini ister (tarama ucuz, tekrarı doğru); burası
+  # YAZICI bir iş — iptal değil, SIRAYA alınır.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: OIDC-federe provision + Container Apps deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # Job-level tekrar: en-yetkili-olmayan yüzey (docker-security.yml deseni).
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      # Üçü de repo VARIABLE (sır değil) — Settings → Variables.
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      DEPLOY_ACTION: ${{ inputs.action }}
+      DEPLOY_CONFIRM: ${{ inputs.confirm }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: OIDC girdi ön-koşulu (fail-closed)
+        # Eksik girdiyle azd login yarım kurulur ve deploy yanlış aboneliğe
+        # gider; ölçülmemiş bir kimlikle dağıtım yapmaktansa dur.
+        run: |
+          set -euo pipefail
+          missing=""
+          for name in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID; do
+            if [ -z "${!name:-}" ]; then
+              missing="${missing} ${name}"
+            fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Eksik OIDC girdisi:${missing} — repo Settings → Variables"
+            exit 1
+          fi
+          echo "OIDC girdileri tam: tenant=${AZURE_TENANT_ID} sub=${AZURE_SUBSCRIPTION_ID}"
+
+      - name: azure/login (OIDC — sır yok)
+        # az CLI tarafı: azd, az'nin token önbelleğini kullanmaz.
+        uses: azure/login@v2
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: azd auth login (OIDC)
+        # azd kendi jeton önbelleğini tutar; aynı federasyon credential'ini
+        # kullanır ama ARI login ister. azd ubuntu-latest runner'ında hazırdır.
+        run: |
+          set -euo pipefail
+          azd auth login \
+            --client-id "$AZURE_CLIENT_ID" \
+            --tenant-id "$AZURE_TENANT_ID" \
+            --subscription-id "$AZURE_SUBSCRIPTION_ID"
+
+      - name: Deploy onayı (hesap-özgü, fail-closed)
+        # "deploy" seçildiyse abonelik id'si harf harf yazılmak zorunda:
+        # operatörün HANGİ aboneliğe dokunacağını kendisi doğrular; yanlış
+        # aboneliğe provision, prod'a dokunmaktır.
+        if: env.DEPLOY_ACTION == 'deploy'
+        run: |
+          set -euo pipefail
+          if [ "$DEPLOY_CONFIRM" != "$AZURE_SUBSCRIPTION_ID" ]; then
+            echo "::error::Onay yok: confirm alanı abonelik id'siyle birebir eşleşmeli"
+            exit 1
+          fi
+          echo "Onaylandı: subscription=$AZURE_SUBSCRIPTION_ID"
+
+      - name: what-if (provision önizleme — HİÇBİR ŞEY YAZMAZ)
+        # Statik lint'in KAPATAMADIĞI yer burası: aynı bicep, aynı parametre,
+        # ARM'den değişiklik öngörüsü, yazma yok. BCP037 gerçekten reddediliyor
+        # mu burada görünür (elle doldurulan "Validation Proof" değil).
+        if: env.DEPLOY_ACTION == 'what-if'
+        run: azd provision --preview --no-prompt
+
+      - name: provision (bicep → ARM)
+        # azure.yaml + infra/main.bicep tek-kaynak; azd provision bunları
+        # azd env'ine yazar (AZURE_RESOURCE_GROUP, ACA_ENDPOINT vb.).
+        if: env.DEPLOY_ACTION == 'deploy'
+        run: azd provision --no-prompt
+
+      - name: deploy (imaj → ACR → Container Apps revision)
+        # İmaj docker-security.yml gate'inden geçer (Trivy CRITICAL/HIGH,
+        # exit-code 1); burada yalnız push + revision değişimi yapılır.
+        # /app/state Azure Files'te: yeniden-dağıtımda korunur.
+        if: env.DEPLOY_ACTION == 'deploy'
+        run: azd deploy --no-prompt
+
+      - name: Kaynak-sağlığı kanıtı (deploy_evidence.py ile AYNI uc)
+        # Aynı ARM ucu: Microsoft.ResourceHealth/availabilityStatuses/current.
+        # _calisma/CIKTI/deploy_evidence.py'nin azure-health kolonu da bu
+        # okumayı kullanır — iki yüz birbirini doğrulayabilir. Okunamazsa
+        # veya Available değilse job KIRMIZI (sessiz yeşil yok).
+        if: always() && env.DEPLOY_ACTION == 'deploy'
+        env:
+          APP_NAME: app-verify-dashboard   # infra/main.bicep: app-${name}
+          HEALTH_API: "2022-10-01"
+        run: |
+          set -euo pipefail
+          rg="$(azd env get-value AZURE_RESOURCE_GROUP 2>/dev/null || true)"
+          if [ -z "$rg" ]; then
+            echo "::error::azd resource-group okunamadı — provision koşmamış mı?"
+            exit 1
+          fi
+          url="https://management.azure.com/subscriptions/${AZURE_SUBSCRIPTION_ID}/resourceGroups/${rg}/providers/Microsoft.App/containerApps/${APP_NAME}/providers/Microsoft.ResourceHealth/availabilityStatuses/current?api-version=${HEALTH_API}"
+          state=""
+          # Yeni revision propagasyonu yavaştır: 6×15s tekrar, sonra karar.
+          # Tek seferde "Degraded" görüp kırmızılamak gürültü; hiç okunamazsa
+          # da kırmızı (fail-closed).
+          for attempt in 1 2 3 4 5 6; do
+            state="$(az rest --method get --url "$url" \
+              --query properties.availabilityState -o tsv 2>/dev/null || true)"
+            if [ "$state" = "Available" ]; then
+              break
+            fi
+            echo "attempt ${attempt}: availabilityState=${state:-okunamadi} — 15s sonra tekrar"
+            sleep 15
+          done
+          fqdn="$(az containerapp show --name "$APP_NAME" --resource-group "$rg" \
+            --query properties.configuration.ingress.fqdn -o tsv 2>/dev/null || true)"
+          {
+            echo "## Azure deploy kanıtı"
+            echo
+            echo "| Parametre | Değer |"
+            echo "|---|---|"
+            echo "| Abonelik | \`${AZURE_SUBSCRIPTION_ID}\` |"
+            echo "| Resource group | \`${rg}\` |"
+            echo "| Container App | \`${APP_NAME}\` |"
+            echo "| availabilityState | **${state:-okunamadi}** |"
+            echo "| Endpoint | \`${fqdn:-okunamadi}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$state" != "Available" ]; then
+            echo "::error::Container App sağlığı '${state:-okunamadi}' — Available değil"
+            exit 1
+          fi
+          echo "availabilityState=Available"

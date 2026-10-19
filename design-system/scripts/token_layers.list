@@ -1,0 +1,57 @@
+# design-system/scripts/token_layers.list — token katman roster'ı (TEK KAYNAK).
+#
+# check_token_conflicts.py bu dosyayı okur: bir dosyanın ROLÜNÜ ve taramaya
+# girip girmediğini buradan öğrenir. Rol kayıtlı değilse ve dosya token
+# TANIMLIYORSA kapı fail-closed durur (sessiz kapsam kaybı yasağı).
+#
+# Biçim (boşluk-ayrımlı):  <rol>  <yol|glob>  [gerekçe]
+#   İlk eşleşen satır kazanır; glob'lar fnmatch ile çözülür.
+#
+# Roller ve kapının onlar için aradığı sözleşme:
+#   canonical  : sayfa/app ölçeğinde yüklenen katman; aynı kapsamda başka
+#                katmanla AYNI adı FARKLI değerle tanımlayamaz (K2).
+#                (design-system/tokens.css, design-system/tailwind.css)
+#   bridge     : marka @theme köprüsü; K2'ye girer (ön-ek/ayrıklık disiplini
+#                ayrıca check_mirror_bridges.py B3'te).
+#   variant    : :root[data-theme="…"] kapsamlı varyant; yalnız KENDİ kapsamı
+#                içinde tanım yapabilir (K3 — kapsam sızıntısı global çakışma).
+#   consumer   : tüketen yüzey; kendi yuva eşlemesini :root'ta kurabilir ama
+#                kanonik bir adı FARKLI değerle gölgeleyemez (K6).
+#   copy       : kanonik paletin ÜRETİLMİŞ kopyası; :root + light kümeleri
+#                tokens.css ile ad/adet/değer olarak BİREBİR olmalı (K4 —
+#                elle düzenleme ya da kaynak yenilemesi = sessiz drift).
+#   capture    : ham yakalama / üretim girdisi; taranmaz (K5 muafiyeti).
+#                Gerekçe ZORUNLUDUR.
+#
+# Kapsam: design-system/**/*.css, apps/dashboard-next/app/globals.css,
+# _calisma/CIKTI/preview.html ve _calisma/landing/*.html taranır. Token
+# tanımı taşıyan her dosya ya burada ya da gerekçeli bir `capture` satırında
+# olmalıdır.
+
+# ── kanonik katman (kök palet) ─────────────────────────────────────────────
+canonical  design-system/tokens.css            kök palet: :root (koyu) + :root[data-theme="light"]
+canonical  design-system/tailwind.css          üretilmiş Tailwind v4 köprüsü (generate_tailwind.py)
+
+# ── marka @theme köprüleri (ön-ekli; check_mirror_bridges.py B3/B4) ────────
+bridge     design-system/stripe/tailwind.css
+bridge     design-system/linear/tailwind.css
+bridge     design-system/primer/tailwind.css
+bridge     design-system/vercel/tailwind.css
+
+# ── tema varyantları (kapsamlı; check_tokens.py contract 9) ────────────────
+variant    design-system/stripe/theme.css      :root[data-theme="stripe"]
+variant    design-system/vercel/theme.css      :root[data-theme="vercel"]
+
+# ── tüketici yüzeyleri (tanım değil, referans) ─────────────────────────────
+consumer   apps/dashboard-next/app/globals.css uygulama: köprüyü import eder, kendi @theme inline eşlemesini kurar
+consumer   _calisma/CIKTI/preview.html         dashboard preview: tema döngüsü + kapsamlı kurallar
+consumer   _calisma/landing/landing_src.html   landing kaynağı (link ile tüketir)
+
+# ── üretilmiş kopya (kanonik paletin birebir kopyası olmalı) ───────────────
+copy       _calisma/landing/landing.html       build_landing.py çıktısı; :root/light kümesi tokens.css ile birebir (K4)
+
+# ── ham yakalamalar (üretim girdisi; hiç import edilmez) ───────────────────
+capture    design-system/*/raw.css             ham cisim yakalaması — extract-design-system çıktısı
+capture    design-system/*/tokens.css          marka aynası — köprü üzerinden tüketilir; check_<marka>_tokens.py pinler
+capture    design-system/*/tokens.json         ayna veri katmanı (aynı checker'ın denetlediği makine-okunur kopya)
+capture    design-system/github/*.css          ayrı sözleşme: check_github_tokens.py (dark 304 + light 258) — brand_mirrors.list'te `exempt:`

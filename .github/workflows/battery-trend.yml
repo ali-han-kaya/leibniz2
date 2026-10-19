@@ -1,0 +1,97 @@
+name: battery-trend
+
+on:
+  schedule:
+    # Haftalık: her Pazartesi 04:41 UTC. Mevcut cron'lar farklı dakikada
+    # (determinism 03:17, docker-security 03:43, protection-drift 03:53,
+    # prettier 04:07) — gated-schedules K7 (aynı-cron yasağı) ihlal edilmez.
+    - cron: "41 4 * * 1"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  # CI-hijyen: aynı ref'te üst üste binen koşumlar (elle-tetikleme + cron
+  # çakışması) eski koşumu iptal eder — trend kaydı bir-bir yazılır.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  record:
+    name: Time unittest battery and record trend
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      # Zamanlayıcı: verify.yml "Run CIKTI unit tests" adımıyla AYNI keşif
+      # komutunu koşar (SCOPE tek kaynak — test_record_battery_trend iki
+      # dosyayı karşılıklı pinler). Playwright bu job'da kurulmadığından
+      # ilgili testler SKIP olur; tests sayacı kayıtta görünür (kayıp değil,
+      # bilgi). KIRMIZI batarya --update'i düşürür (fail-closed): ölçülmüş
+      # ama kırmızı süre trende girmez, job kırmızı kalır — verify.yml
+      # unit adımının sinyaliyle aynı doğruluk.
+      - name: Time battery and record trend
+        run: |
+          set -euo pipefail
+          python3 _calisma/CIKTI/record_battery_trend.py --update
+          echo '--- trend tail ---'
+          tail -1 docs/battery_trend/battery_trend.jsonl
+
+      # Trend değişmezleri (fail-closed): gençlik (7 gün) + yapısal
+      # (0 < süre <= 7200s, tests >= 1, son satır scope = kanonik).
+      # Medyan sapması / test-sayısı kayması bilgilendirici nottur.
+      - name: Validate trend invariants
+        run: |
+          set -euo pipefail
+          python3 _calisma/CIKTI/record_battery_trend.py --check
+
+      # Kayıt yolu determinism-trend ile aynı desen: main'e bare push
+      # branch-protection'a (GH006) takılır → bot-dalı + PR + --auto merge
+      # (required checks yeşil olunca GitHub merge eder).
+      - name: Commit trend record
+        env:
+          TREND_BRANCH: chore/battery-trend-record
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/battery_trend/battery_trend.jsonl
+          if git diff --cached --quiet; then
+            echo "FAIL: --update ekleme yaptı ama stage boş — beklenmedik durum"
+            exit 1
+          fi
+          git commit -m "chore: record weekly battery trend measurement" -m "Timed unittest battery (discover _calisma/CIKTI test_*.py) on ubuntu-latest; wall duration appended to docs/battery_trend/battery_trend.jsonl." -m "Generated with GitHub Actions. Co-Authored-By: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
+          git push --force origin "HEAD:$TREND_BRANCH"
+          # PR yolu: Actions'a PR-oluşturma izni kapalıysa ölçüm yine bot
+          # dalında güvendedir; adım görünür yönergeyle yeşil biter.
+          PR=$(gh pr list --head "$TREND_BRANCH" --state open --json number --jq '.[0].number // ""')
+          if [ -z "$PR" ]; then
+            if gh pr create --base main --head "$TREND_BRANCH" --title "chore: weekly battery trend record (bot)" --body "Automated weekly battery duration measurement (linux baseline). Measurements in docs/battery_trend/battery_trend.jsonl."; then
+              gh pr merge "$TREND_BRANCH" --auto --merge || echo "(auto-merge kuyruğa alınamadı — PR açık kalır, elle incelenir)"
+            else
+              echo "NOT: bot-PR oluşturulamadı (repo ayarı Actions-PR'yi kapatmış olabilir)."
+              echo "Ölçüm bot dalında güvende: $TREND_BRANCH @ $(git rev-parse --short HEAD)"
+              echo "Elle PR: gh pr create --base main --head $TREND_BRANCH"
+            fi
+          else
+            gh pr comment "$PR" --body "New measurement appended (run ${GITHUB_RUN_ID:-unknown})."
+          fi
+
+      # Fail-closed tamamlama: yeşil = ölçüm eklendi + değişmezler OK +
+      # kayıt işlendi. Öncesi düşerse özet yine yazılır (kayıp görünür).
+      - name: Summary
+        if: always()
+        run: |
+          echo "## battery-trend" >> "$GITHUB_STEP_SUMMARY"
+          tail -1 docs/battery_trend/battery_trend.jsonl >> "$GITHUB_STEP_SUMMARY" \
+            || echo "(trend kaydı yok)" >> "$GITHUB_STEP_SUMMARY"

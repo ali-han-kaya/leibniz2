@@ -1,0 +1,311 @@
+# gate_registry.yaml — TEK beyan: doğrulama zincirindeki her kapı bir satır.
+#
+# Bu dosya bir DEKLARASYONdur, türetim değil: `check_gate_registry.py` iki
+# yönü de denetler —
+#   kayıt → gerçek : burada adı geçen her kapı gerçekten var mı (phantom yok)
+#   gerçek → kayıt : gerçek her kapı burada adlandırılmış mı (kapsamsız yok)
+# ve alanları türetimle karşılaştırır:
+#   ci_jobs.*.severity  ← GATE_EXCLUDE + `if:` (verify.yml)
+#   ci_jobs.*.platform  ← runs-on (ubuntu→linux, macos→macos)
+#   hooks.*.stage       ← .pre-commit-config.yaml `stages:` (yoksa pre-commit)
+#   layers.*.label      ← verify_delivery.py LAYER_LABELS
+#   layers.*.blocking   ← _CORE_LAYERS üyeliği (--full'da her zaman koşar)
+#
+# Kural: kapı eklenince/silinince bu dosya da değişir; kapı fail-closed'dır.
+# Doğrulama (salt-okunur, hiçbir şey yazmaz):
+#   python3 _calisma/CIKTI/check_gate_registry.py [--json]
+# Faz 1 kapsamı: yalnız denetim. Üretim (CI/manifest/doküman) sonraki fazdadır.
+version: 1
+ci_jobs:
+  verify:
+    severity: required
+    platform: linux
+  lake-proof:
+    severity: advisory
+    platform: linux
+  action-runtimes:
+    severity: required
+    platform: linux
+  budget:
+    severity: required
+    platform: linux
+  budget-comment:
+    severity: pr_only
+    platform: linux
+  label-gate:
+    severity: required
+    platform: linux
+  label-gate-p1:
+    severity: pr_only
+    platform: linux
+  commit-msg-gate:
+    severity: required
+    platform: linux
+  reports:
+    severity: required
+    platform: linux
+  reproducibility:
+    severity: required
+    platform: linux
+  manifest-comment:
+    severity: pr_only
+    platform: linux
+  config-drift:
+    severity: required
+    platform: linux
+  config-sync:
+    severity: required
+    platform: linux
+  repack-verify:
+    severity: required
+    platform: linux
+  refs-trend:
+    severity: required
+    platform: linux
+  audit-refs-trend:
+    severity: advisory
+    platform: linux
+  override-trend:
+    severity: advisory
+    platform: linux
+  audit-live-ci:
+    severity: advisory
+    platform: linux
+  precheck:
+    severity: advisory
+    platform: linux
+  plist-check:
+    severity: advisory
+    platform: macos
+  daemon-http:
+    severity: advisory
+    platform: macos
+  preview-reload-smoke:
+    severity: advisory
+    platform: macos
+  webkit-smoke:
+    severity: advisory
+    platform: macos
+  dashboard-smoke:
+    severity: required
+    platform: linux
+  ci-simulate:
+    severity: required
+    platform: linux
+  fresh-clone-http:
+    severity: advisory
+    platform: linux
+  texlive-accept:
+    severity: required
+    platform: linux
+  a11y-gate:
+    severity: required
+    platform: linux
+  changelog-drift:
+    severity: advisory
+    platform: linux
+  pattern-drift:
+    severity: advisory
+    platform: linux
+  shuffle-audit:
+    severity: advisory
+    platform: linux
+    note: test sıra bağımlılığı/sızıntı denetimi (manifest − shuffle_audit.exclude);
+      required DEĞİL — kalıcı kırmızı/ortam dosyaları kapsam dışında tutulur ve
+      bulgular artifact olarak yayınlanır, merge'i bloke etmez.
+  mirror-check:
+    severity: advisory
+    platform: macos
+hooks:
+  update-config:
+    stage: pre-commit
+  verify-delivery:
+    stage: pre-commit
+  check-action-pins:
+    stage: pre-commit
+  check-ci-hygiene:
+    stage: pre-commit
+  check-python3-shell:
+    stage: pre-commit
+  check-latex-surface:
+    stage: pre-commit
+  check-absolute-paths:
+    stage: pre-commit
+  actionlint:
+    stage: pre-commit
+  verify-delivery-symbolic:
+    stage: pre-commit
+  verify-delivery-lean:
+    stage: pre-commit
+  check-lean-statements:
+    stage: pre-commit
+  check-orchestration-stdin:
+    stage: pre-commit
+  check-lake-evidence:
+    stage: pre-commit
+  check-status-check-names:
+    stage: pre-commit
+  check-status-check-doc-sync:
+    stage: pre-commit
+  check-config-sync:
+    stage: pre-commit
+  check-fallback-evidence:
+    stage: pre-commit
+  check-refs-table-sync:
+    stage: pre-commit
+  # ID kalıntısı kabul defteri (§4) ↔ donmuş kayıt senkronu: defter satırının
+  # ham + metadata-stripped (+ varsa kanonik) hash'leri sidecar'la birebir
+  # eşleşmeli. Drift = determinizm kanıtı sessizce yanlış → commit bloke.
+  check-id-residual-doc-sync:
+    stage: pre-commit
+  check-bibliography-sync:
+    stage: pre-commit
+  check-skills-index:
+    stage: pre-commit
+  check-workflow-artifact-docs:
+    stage: pre-commit
+  check-doc-artifact-sync:
+    stage: pre-commit
+  check-doc-job-sync:
+    stage: pre-commit
+  check-mirror-coverage:
+    stage: pre-commit
+  check-prettier-format:
+    stage: pre-commit
+  check-prettier-format-all:
+    stage: pre-commit
+  check-dashboard-typecheck:
+    stage: pre-commit
+  check-plist-drift:
+    stage: pre-commit
+  check-repro-manifest:
+    stage: pre-commit
+  check-pattern-consistency:
+    stage: pre-commit
+  verify-delivery-github-scripts:
+    stage: pre-commit
+  check-repro-manifest-e2e:
+    stage: pre-commit
+  check-repro-artifact-sections-e2e:
+    stage: pre-commit
+  verify-delivery-repro-manifest:
+    stage: pre-commit
+  verify-delivery-sde:
+    stage: pre-commit
+  check-reproducible-pdf-skill:
+    stage: pre-commit
+  check-z3-slide-sync:
+    stage: pre-commit
+  texlive-repro-documented:
+    stage: pre-commit
+  texlive-determinism:
+    stage: pre-commit
+  shellcheck-hooks:
+    stage: pre-commit
+  check-changelog-sync:
+    stage: pre-commit
+  check-full-publish-doc-sync:
+    stage: pre-commit
+  check-dryrun-summary:
+    stage: pre-commit
+  check-colorize-rules:
+    stage: pre-commit
+  check-budget-scan:
+    stage: pre-commit
+  check-preview-interaction-node:
+    stage: pre-commit
+  check-coverage-report:
+    stage: pre-commit
+  check-review-freshness:
+    stage: pre-commit
+  check-zip-lineage-drift:
+    stage: pre-commit
+  check-hook-env-matrix:
+    stage: pre-commit
+  check-design-tokens:
+    stage: pre-commit
+  extract-unstaged-deps:
+    stage: pre-commit
+  check-unit-tests:
+    stage: pre-commit
+  shuffle-audit:
+    stage: pre-commit
+  audit-octokit-names:
+    stage: pre-commit
+  commit-msg-style:
+    stage: commit-msg
+  check-precommit-orphans:
+    stage: pre-commit
+  check-docker-security-smoke:
+    stage: pre-commit
+  check-dockerfile-security-patching:
+    stage: pre-commit
+  check-verify-jobs-map:
+    stage: pre-commit
+layers:
+  K0:
+    label: Bayat zip taraması
+    blocking: true
+  K1:
+    label: Dış zip sidecar
+    blocking: true
+  K2:
+    label: Klasör checksum
+    blocking: true
+  K3:
+    label: İç zip sidecar
+    blocking: true
+  K4:
+    label: Manifest 19/19
+    blocking: true
+  K5:
+    label: Script byte-for-byte
+    blocking: true
+  K6:
+    label: İçerik (PDF + referans + skill reuse)
+    blocking: true
+  K7:
+    label: Hijyen (secret/artefakt)
+    blocking: true
+  K8:
+    label: Z3 sembolik ispat
+    blocking: false
+  K9:
+    label: Lean statement gate + reduct-invariance çekirdek
+    blocking: false
+  K10:
+    label: Manifest digest
+    blocking: false
+  K11:
+    label: Config drift
+    blocking: false
+  K12:
+    label: Plist şablon
+    blocking: false
+  K13:
+    label: Repro self-test
+    blocking: false
+  K14:
+    label: Cleanup kaydı
+    blocking: false
+  K15:
+    label: History sidecar
+    blocking: false
+  K16:
+    label: GScripts self-test
+    blocking: false
+  K17:
+    label: Mirror sync
+    blocking: false
+  K18:
+    label: Daemon HTTP smoke
+    blocking: false
+  K19:
+    label: Coq reduct-invariance (8 teorem)
+    blocking: false
+  K20:
+    label: Launchctl durum
+    blocking: false
+  K21:
+    label: SDE determinism guard
+    blocking: false

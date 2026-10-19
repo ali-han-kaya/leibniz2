@@ -1,0 +1,2731 @@
+{
+  "url": "https://github.com/",
+  "extractedAt": "2026-10-11T12:04:25.744Z",
+  "theme": "light",
+  "siteName": "GitHub",
+  "captureNote": "Extracted with dembrandt/lib/extractors.js extractBranding (same code path as raw.json, playwright-core 1.63.0, Chrome Headless Shell 153, 1920x1080) with the page's data-color-mode attribute pinned to \"light\" — the attribute GitHub's own theme switcher flips, because github.com serves dark to logged-out visitors and the CLI exposes no light switch.",
+  "pageState": {
+    "dataColorMode": "light",
+    "bgColorDefault": "#fff",
+    "fgColorDefault": "#1f2328",
+    "prefersDark": false,
+    "computedCustomProperties": 1990
+  },
+  "logo": {
+    "source": "svg",
+    "url": "https://github.com/",
+    "width": 32,
+    "height": 32,
+    "safeZone": {
+      "top": 0,
+      "right": 0,
+      "bottom": 0,
+      "left": 0
+    },
+    "background": "rgb(13, 17, 23)"
+  },
+  "favicons": [
+    {
+      "type": "fluid-icon",
+      "url": "https://github.com/fluidicon.png",
+      "sizes": null
+    },
+    {
+      "type": "mask-icon",
+      "url": "https://github.githubassets.com/assets/pinned-octocat-093da3e6fa40.svg",
+      "sizes": null
+    },
+    {
+      "type": "alternate icon",
+      "url": "https://github.githubassets.com/favicons/favicon.png",
+      "sizes": null
+    },
+    {
+      "type": "icon",
+      "url": "https://github.githubassets.com/favicons/favicon.svg",
+      "sizes": null
+    },
+    {
+      "type": "og:image",
+      "url": "https://images.ctfassets.net/8aevphvgewt8/4pe4eOtUJ0ARpZRE4fNekf/f52b1f9c52f059a33170229883731ed0/GH-Homepage-Universe-img.png",
+      "sizes": null
+    },
+    {
+      "type": "twitter:image",
+      "url": "https://images.ctfassets.net/8aevphvgewt8/4pe4eOtUJ0ARpZRE4fNekf/f52b1f9c52f059a33170229883731ed0/GH-Homepage-Universe-img.png",
+      "sizes": null
+    },
+    {
+      "type": "favicon.ico",
+      "url": "https://github.com/favicon.ico",
+      "sizes": null
+    }
+  ],
+  "colors": {
+    "semantic": {
+      "secondary": "rgba(0, 0, 0, 0)",
+      "primary": "rgb(255, 255, 255)"
+    },
+    "palette": [
+      {
+        "color": "rgb(255, 255, 255)",
+        "normalized": "#ffffff",
+        "count": 1528,
+        "confidence": "high",
+        "sources": [
+          "logged-out",
+          "lp-introhero",
+          "ctaform"
+        ],
+        "lch": "lch(100% 0 158.2)",
+        "oklch": "oklch(100% 0 89.88)"
+      },
+      {
+        "color": "rgb(164, 174, 166)",
+        "normalized": "#a4aea6",
+        "count": 194,
+        "confidence": "high",
+        "sources": [],
+        "lch": "lch(70.12% 5.81 150.17)",
+        "oklch": "oklch(74.05% 0.016 151.68)"
+      },
+      {
+        "color": "rgb(33, 38, 45)",
+        "normalized": "#21262d",
+        "count": 26,
+        "confidence": "high",
+        "sources": [],
+        "lch": "lch(14.95% 5.36 267.07)",
+        "oklch": "oklch(26.66% 0.015 256.8)"
+      },
+      {
+        "color": "rgba(0, 0, 0, 0.01)",
+        "normalized": "#000000",
+        "count": 19,
+        "confidence": "high",
+        "sources": [],
+        "lch": "lch(0% 0 0)",
+        "oklch": "oklch(0% 0 0)"
+      }
+    ],
+    "cssVariables": {
+      "--diffBlob-hunkNum-bgColor-rest": {
+        "value": "#b6e3ff",
+        "lch": "lch(88.02% 20.09 245.68)",
+        "oklch": "oklch(89.34% 0.061 235.67)"
+      },
+      "--display-lime-bgColor-muted": {
+        "value": "#e3f2b5",
+        "lch": "lch(93.09% 31.6 118.14)",
+        "oklch": "oklch(93.51% 0.081 119.2)"
+      },
+      "--data-yellow-color-emphasis": {
+        "value": "#b88700",
+        "lch": "lch(59.45% 65.3 81.93)",
+        "oklch": "oklch(65.38% 0.134 82.78)"
+      },
+      "--label-orange-bgColor-hover": {
+        "value": "#fecfaa",
+        "lch": "lch(86.31% 27.2 64.97)",
+        "oklch": "oklch(88.63% 0.072 59.88)"
+      },
+      "--brand-Label-color-green-blue-start": {
+        "value": "#08872b",
+        "lch": "lch(48.95% 64.01 141.92)",
+        "oklch": "oklch(54.34% 0.163 145.98)"
+      },
+      "--brand-color-text-muted": {
+        "value": "#58635b",
+        "lch": "lch(40.82% 6.73 152.49)",
+        "oklch": "oklch(48.76% 0.019 154.07)"
+      },
+      "--display-cyan-bgColor-emphasis": {
+        "value": "#007b94",
+        "lch": "lch(47.37% 29.02 228.12)",
+        "oklch": "oklch(53.84% 0.097 218.62)"
+      },
+      "--brand-Icon-color-coral": {
+        "value": "#e13f1b",
+        "lch": "lch(51.44% 82.21 42.24)",
+        "oklch": "oklch(60.46% 0.204 33.55)"
+      },
+      "--brand-control-checkbox-fg-checked-disabled": {
+        "value": "#fff",
+        "lch": "lch(100% 0 158.2)",
+        "oklch": "oklch(100% 0 89.88)"
+      },
+      "--progressBar-bgColor-neutral": {
+        "value": "#59636e",
+        "lch": "lch(41.49% 7.61 260.52)",
+        "oklch": "oklch(49.51% 0.022 250.78)"
+      },
+      "--buttonKeybindingHint-invisible-bgColor-active": {
+        "value": "#818b9826",
+        "lch": "lch(57.46% 8.19 264.19 / 0.14901960784313725)",
+        "oklch": "oklch(63.29% 0.023 254.97 / 0.14901960784313725)"
+      },
+      "--prettylights-syntax-carriageReturn-bg": {
+        "value": "#cf222e",
+        "lch": "lch(45.1% 75.34 31.08)",
+        "oklch": "oklch(55.17% 0.205 24.53)"
+      },
+      "--brand-Tabs-item-underline-rest": {
+        "value": "#000",
+        "lch": "lch(0% 0 0)",
+        "oklch": "oklch(0% 0 0)"
+      },
+      "--button-invisible-bgColor-disabled": {
+        "value": "#fff0"
+      },
+      "--base-color-scale-teal-4": {
+        "value": "#23b1ae",
+        "lch": "lch(65.64% 36.68 193.83)",
+        "oklch": "oklch(69.05% 0.112 192.62)"
+      },
+      "--brand-Testimonial-quoteMarkColor-pink-blue-end": {
+        "value": "#0377ff",
+        "lch": "lch(52.32% 78.71 288.13)",
+        "oklch": "oklch(59.69% 0.221 258.15)"
+      },
+      "--brand-TextCursorAnimation-cursor-deleteColor": {
+        "value": "#3094ff",
+        "lch": "lch(60.8% 61.72 278.22)",
+        "oklch": "oklch(66.4% 0.182 253.68)"
+      },
+      "--brand-Icon-color-lemon": {
+        "value": "#a98906",
+        "lch": "lch(58.36% 62.17 88.8)",
+        "oklch": "oklch(64.16% 0.13 92.01)"
+      },
+      "--base-color-scale-yellow-1": {
+        "value": "#ffe777",
+        "lch": "lch(91.57% 57.07 95.5)",
+        "oklch": "oklch(92.55% 0.135 97.46)"
+      },
+      "--color-prettylights-syntax-meta-diff-range": {
+        "value": "#8250df",
+        "lch": "lch(46.72% 83.58 308.17)",
+        "oklch": "oklch(56.31% 0.207 294.97)"
+      },
+      "--contribution-halloween-bgColor-2": {
+        "value": "#ffd642",
+        "lch": "lch(86.87% 73.79 90.04)",
+        "oklch": "oklch(88.69% 0.162 92.77)"
+      },
+      "--color-ansi-yellow-bright": {
+        "value": "#633c01",
+        "lch": "lch(29.13% 40.69 71.77)",
+        "oklch": "oklch(39.37% 0.085 68.93)"
+      },
+      "--brand-Testimonial-quoteMarkColor-indigo": {
+        "value": "#4956e5",
+        "lch": "lch(43.84% 84.37 298.7)",
+        "oklch": "oklch(53.21% 0.214 272.71)"
+      },
+      "--bgColor-open-muted": {
+        "value": "#dafbe1",
+        "lch": "lch(95.72% 17.83 150.06)",
+        "oklch": "oklch(95.74% 0.049 151.63)"
+      },
+      "--bgColor-open-emphasis": {
+        "value": "#1f883d",
+        "lch": "lch(49.78% 55.8 145.24)",
+        "oklch": "oklch(55.17% 0.145 148.22)"
+      },
+      "--brand-Accordion-toggle-color-end": {
+        "value": "#0d6731",
+        "lch": "lch(37.86% 44.6 148.23)",
+        "oklch": "oklch(45.15% 0.117 150.69)"
+      },
+      "--color-prettylights-syntax-variable": {
+        "value": "#953800",
+        "lch": "lch(36.4% 60.39 52.24)",
+        "oklch": "oklch(46.57% 0.137 43.35)"
+      },
+      "--base-color-scale-pink-5": {
+        "value": "#ef2aa4",
+        "lch": "lch(54.75% 81.23 347.3)",
+        "oklch": "oklch(64.28% 0.247 349.08)"
+      },
+      "--brand-Label-color-yellow": {
+        "value": "#be7d00",
+        "lch": "lch(57.67% 66.12 74.75)",
+        "oklch": "oklch(64.15% 0.137 72.9)"
+      },
+      "--base-color-scale-indigo-4": {
+        "value": "#6b7bef",
+        "lch": "lch(55.61% 66.17 293.97)",
+        "oklch": "oklch(62.76% 0.173 274.4)"
+      },
+      "--brand-Label-color-red-orange-end": {
+        "value": "#b85b06",
+        "lch": "lch(49.12% 65.7 59.51)",
+        "oklch": "oklch(57.37% 0.144 52.67)"
+      },
+      "--brand-Label-color-teal": {
+        "value": "#197b7b",
+        "lch": "lch(46.71% 27.36 196.56)",
+        "oklch": "oklch(53.08% 0.084 194.91)"
+      },
+      "--data-pine-color-emphasis": {
+        "value": "#167e53",
+        "lch": "lch(46.6% 41.99 158.23)",
+        "oklch": "oklch(52.62% 0.113 159.6)"
+      },
+      "--button-outline-bgColor-hover": {
+        "value": "#0969da",
+        "lch": "lch(45.94% 67.23 286.58)",
+        "oklch": "oklch(53.99% 0.191 257.48)"
+      },
+      "--base-color-scale-yellow-9": {
+        "value": "#471f00",
+        "lch": "lch(17.08% 30.52 56.25)",
+        "oklch": "oklch(29.15% 0.074 53.17)"
+      },
+      "--bgColor-draft-muted": {
+        "value": "#818b981f",
+        "lch": "lch(57.46% 8.19 264.19 / 0.12156862745098039)",
+        "oklch": "oklch(63.29% 0.023 254.97 / 0.12156862745098039)"
+      },
+      "--label-orange-bgColor-rest": {
+        "value": "#ffe7d1",
+        "lch": "lch(93.02% 14.49 70.85)",
+        "oklch": "oklch(94.17% 0.039 64.86)"
+      },
+      "--base-color-scale-pink-7": {
+        "value": "#952866",
+        "lch": "lch(35.73% 51.58 348.32)",
+        "oklch": "oklch(46.66% 0.157 349.98)"
+      },
+      "--contribution-winter-bgColor-4": {
+        "value": "#0a3069",
+        "lch": "lch(20.82% 38.61 286.9)",
+        "oklch": "oklch(32.1% 0.108 259.11)"
+      },
+      "--label-pink-bgColor-hover": {
+        "value": "#fdc9e2",
+        "lch": "lch(86.08% 22.91 346.58)",
+        "oklch": "oklch(88.86% 0.067 348.06)"
+      },
+      "--base-color-scale-lime-3": {
+        "value": "#d1f441",
+        "lch": "lch(91.07% 83.83 113.59)",
+        "oklch": "oklch(91.16% 0.197 120.32)"
+      },
+      "--base-color-scale-lemon-6": {
+        "value": "#806803",
+        "lch": "lch(44.94% 50.98 89.36)",
+        "oklch": "oklch(52.56% 0.107 92.74)"
+      },
+      "--label-lime-bgColor-active": {
+        "value": "#9bd039",
+        "lch": "lch(77.5% 75.77 120.6)",
+        "oklch": "oklch(79.3% 0.183 127.26)"
+      },
+      "--button-danger-bgColor-active": {
+        "value": "#a40e26",
+        "lch": "lch(34.7% 63.84 27.76)",
+        "oklch": "oklch(45.91% 0.178 21.87)"
+      },
+      "--base-color-scale-yellow-3": {
+        "value": "#fabf21",
+        "lch": "lch(80.57% 78.27 83.65)",
+        "oklch": "oklch(83.57% 0.165 84.99)"
+      },
+      "--display-gray-bgColor-emphasis": {
+        "value": "#647182",
+        "lch": "lch(47.15% 11.01 265.58)",
+        "oklch": "oklch(54.39% 0.031 255.19)"
+      },
+      "--control-checked-bgColor-active": {
+        "value": "#0757ba",
+        "lch": "lch(38.56% 60.7 287.36)",
+        "oklch": "oklch(47.61% 0.171 257.99)"
+      },
+      "--display-green-bgColor-emphasis": {
+        "value": "#2c8141",
+        "lch": "lch(47.77% 48.5 145.76)",
+        "oklch": "oklch(53.62% 0.127 148.44)"
+      },
+      "--brand-Accordion-toggle-color-red": {
+        "value": "#cf2230",
+        "lch": "lch(45.12% 74.82 30.32)",
+        "oklch": "oklch(55.2% 0.205 23.98)"
+      },
+      "--base-color-scale-purple-5": {
+        "value": "#8534f3",
+        "lch": "lch(44.11% 107.19 310.7)",
+        "oklch": "oklch(55.02% 0.258 295.66)"
+      },
+      "--base-color-scale-orange-3": {
+        "value": "#f08a3a",
+        "lch": "lch(67.29% 66.15 60.1)",
+        "oklch": "oklch(73.02% 0.154 54.92)"
+      },
+      "--base-color-scale-yellow-2": {
+        "value": "#ffd743",
+        "lch": "lch(87.13% 73.68 90.4)",
+        "oklch": "oklch(88.9% 0.162 93.2)"
+      },
+      "--base-color-scale-teal-8": {
+        "value": "#083d3d",
+        "lch": "lch(22.74% 16.83 196.57)",
+        "oklch": "oklch(32.8% 0.052 194.92)"
+      },
+      "--contribution-default-bgColor-2": {
+        "value": "#4ac26b",
+        "lch": "lch(70.24% 62.45 147.01)",
+        "oklch": "oklch(72.57% 0.164 149.45)"
+      },
+      "--prettylights-syntax-markup-ignored-bg": {
+        "value": "#0550ae",
+        "lch": "lch(35.64% 58.39 287.78)",
+        "oklch": "oklch(45.09% 0.164 258.18)"
+      },
+      "--base-color-scale-pink-1": {
+        "value": "#ffc9f2",
+        "lch": "lch(86.72% 28.68 333.41)",
+        "oklch": "oklch(89.55% 0.081 334.93)"
+      },
+      "--display-lemon-bgColor-emphasis": {
+        "value": "#866e04",
+        "lch": "lch(47.27% 52.75 89.97)",
+        "oklch": "oklch(54.56% 0.111 93.54)"
+      },
+      "--selection-bgColor": {
+        "value": "#0969da33",
+        "lch": "lch(45.94% 67.23 286.58 / 0.2)",
+        "oklch": "oklch(53.99% 0.191 257.48 / 0.2)"
+      },
+      "--codeMirror-selection-bgColor": {
+        "value": "#54aeff66",
+        "lch": "lch(69.02% 48.02 267.7 / 0.4)",
+        "oklch": "oklch(73.11% 0.146 248.34 / 0.4)"
+      },
+      "--base-color-scale-pink-8": {
+        "value": "#651643",
+        "lch": "lch(22.82% 39.68 348.65)",
+        "oklch": "oklch(35.06% 0.121 350.29)"
+      },
+      "--color-prettylights-syntax-markup-inserted-text": {
+        "value": "#116329",
+        "lch": "lch(36.37% 45.46 145)",
+        "oklch": "oklch(43.91% 0.118 148.07)"
+      },
+      "--controlTrack-bgColor-disabled": {
+        "value": "#818b98",
+        "lch": "lch(57.46% 8.19 264.19)",
+        "oklch": "oklch(63.29% 0.023 254.97)"
+      },
+      "--brand-Token-bgColor-hover-outline": {
+        "value": "#0000000f",
+        "lch": "lch(0% 0 0 / 0.058823529411764705)",
+        "oklch": "oklch(0% 0 0 / 0.058823529411764705)"
+      },
+      "--base-color-scale-lemon-2": {
+        "value": "#f2da3b",
+        "lch": "lch(86.67% 75.93 95.89)",
+        "oklch": "oklch(88.25% 0.168 100.25)"
+      },
+      "--brand-Label-color-lime": {
+        "value": "#92c219",
+        "lch": "lch(72.74% 78.83 118.09)",
+        "oklch": "oklch(75.24% 0.185 125.83)"
+      },
+      "--base-color-scale-coral-8": {
+        "value": "#801e0f",
+        "lch": "lch(28.26% 53.23 39.79)",
+        "oklch": "oklch(39.72% 0.135 31.64)"
+      },
+      "--label-lemon-bgColor-rest": {
+        "value": "#f7eea1",
+        "lch": "lch(93.23% 39.25 101.82)",
+        "oklch": "oklch(93.88% 0.097 102.38)"
+      },
+      "--label-olive-bgColor-rest": {
+        "value": "#f0f0ad",
+        "lch": "lch(93.39% 34.06 107.46)",
+        "oklch": "oklch(93.94% 0.086 107.94)"
+      },
+      "--base-color-scale-teal-2": {
+        "value": "#6ee5dc",
+        "lch": "lch(84.23% 36.12 189.35)",
+        "oklch": "oklch(85.09% 0.108 188.71)"
+      },
+      "--data-orange-color-emphasis": {
+        "value": "#eb670f",
+        "lch": "lch(59.35% 80.67 54)",
+        "oklch": "oklch(66.73% 0.183 46)"
+      },
+      "--data-plum-color-emphasis": {
+        "value": "#a830e8",
+        "lch": "lch(47.32% 101.65 316.77)",
+        "oklch": "oklch(57.95% 0.258 309.98)"
+      },
+      "--base-color-scale-orange-1": {
+        "value": "#fcceab",
+        "lch": "lch(85.9% 26.15 64.17)",
+        "oklch": "oklch(88.27% 0.07 58.96)"
+      },
+      "--base-color-scale-indigo-2": {
+        "value": "#b3c1fd",
+        "lch": "lch(78.93% 32.22 285.17)",
+        "oklch": "oklch(82.14% 0.086 274.19)"
+      },
+      "--label-olive-bgColor-hover": {
+        "value": "#dbe170",
+        "lch": "lch(87.04% 56.73 107.91)",
+        "oklch": "oklch(88.22% 0.137 111.62)"
+      },
+      "--display-orange-bgColor-emphasis": {
+        "value": "#b8500f",
+        "lch": "lch(46.93% 65.79 53.55)",
+        "oklch": "oklch(55.71% 0.151 45.78)"
+      },
+      "--label-plum-bgColor-hover": {
+        "value": "#f0cdfe",
+        "lch": "lch(86.67% 28.45 317.01)",
+        "oklch": "oklch(89.31% 0.076 316.27)"
+      },
+      "--diffBlob-deletionNum-bgColor": {
+        "value": "#ffcecb",
+        "lch": "lch(86.86% 18.64 25.57)",
+        "oklch": "oklch(89.31% 0.056 22.34)"
+      },
+      "--base-color-scale-green-3": {
+        "value": "#5fed83",
+        "lch": "lch(84.3% 72.55 146.44)",
+        "oklch": "oklch(84.41% 0.191 148.95)"
+      },
+      "--base-color-scale-pink-2": {
+        "value": "#f67ed2",
+        "lch": "lch(68.88% 60.4 338.12)",
+        "oklch": "oklch(75.43% 0.176 339.92)"
+      },
+      "--base-color-scale-blue-6": {
+        "value": "#0055d5",
+        "lch": "lch(40.08% 77.19 292.87)",
+        "oklch": "oklch(49.41% 0.209 260.64)"
+      },
+      "--label-red-bgColor-hover": {
+        "value": "#fecdcd",
+        "lch": "lch(86.58% 18.47 20.82)",
+        "oklch": "oklch(89.08% 0.056 18.25)"
+      },
+      "--brand-Testimonial-quoteMarkBackground-purple-red": {
+        "value": "#f0e5ff",
+        "lch": "lch(92.48% 14.02 306.84)",
+        "oklch": "oklch(93.83% 0.037 304.78)"
+      },
+      "--buttonKeybindingHint-danger-bgColor-active": {
+        "value": "#1f232866",
+        "lch": "lch(13.51% 3.97 263.72 / 0.4)",
+        "oklch": "oklch(25.42% 0.011 254.04 / 0.4)"
+      },
+      "--brand-color-neutral-emphasis": {
+        "value": "#77827a",
+        "lch": "lch(53.27% 6.41 152.66)",
+        "oklch": "oklch(59.5% 0.018 154.23)"
+      },
+      "--bgColor-attention-emphasis": {
+        "value": "#9a6700",
+        "lch": "lch(47.72% 56.66 76.28)",
+        "oklch": "oklch(55.42% 0.117 75.01)"
+      },
+      "--base-color-scale-indigo-1": {
+        "value": "#d4dbff",
+        "lch": "lch(87.91% 18.89 284.65)",
+        "oklch": "oklch(89.75% 0.05 276.67)"
+      },
+      "--brand-button-subtle-bgColor-rest": {
+        "value": "#00000003",
+        "lch": "lch(0% 0 0 / 0.011764705882352941)",
+        "oklch": "oklch(0% 0 0 / 0.011764705882352941)"
+      },
+      "--contribution-default-bgColor-1": {
+        "value": "#aceebb",
+        "lch": "lch(88.69% 35.67 149.37)",
+        "oklch": "oklch(89.15% 0.096 151.11)"
+      },
+      "--color-mktg-btn-shadow-outline": {
+        "value": "#00000026 0 0 0 1px inset"
+      },
+      "--data-gray-color-emphasis": {
+        "value": "#808fa3",
+        "lch": "lch(58.86% 12.38 265.84)",
+        "oklch": "oklch(64.49% 0.035 255.64)"
+      },
+      "--base-color-scale-green-9": {
+        "value": "#0d3024",
+        "lch": "lch(17.12% 16.68 166.1)",
+        "oklch": "oklch(27.97% 0.046 167.17)"
+      },
+      "--base-color-scale-purple-7": {
+        "value": "#43179e",
+        "lch": "lch(24.56% 82.03 308.71)",
+        "oklch": "oklch(37.34% 0.193 287.44)"
+      },
+      "--base-color-scale-teal-1": {
+        "value": "#a4efe8",
+        "lch": "lch(89.6% 24.84 189.28)",
+        "oklch": "oklch(90.12% 0.075 188.58)"
+      },
+      "--base-color-scale-orange-7": {
+        "value": "#703100",
+        "lch": "lch(28.49% 46.85 57.27)",
+        "oklch": "oklch(39.3% 0.104 49.96)"
+      },
+      "--highlight-neutral-bgColor": {
+        "value": "#fff8c5",
+        "lch": "lch(96.99% 26 102.3)",
+        "oklch": "oklch(97.21% 0.066 101.01)"
+      },
+      "--label-coral-bgColor-hover": {
+        "value": "#fecebe",
+        "lch": "lch(86.47% 20.48 44.5)",
+        "oklch": "oklch(88.89% 0.059 39.25)"
+      },
+      "--contribution-halloween-bgColor-1": {
+        "value": "#f0db3d",
+        "lch": "lch(86.76% 75.45 96.9)",
+        "oklch": "oklch(88.28% 0.167 101.4)"
+      },
+      "--buttonCounter-danger-bgColor-hover": {
+        "value": "#fff3"
+      },
+      "--base-color-scale-coral-3": {
+        "value": "#ff7b56",
+        "lch": "lch(66.6% 64.55 42.47)",
+        "oklch": "oklch(73% 0.17 36.55)"
+      },
+      "--brand-FrostedGlassVFX-bgColor": {
+        "value": "#ffffffb3",
+        "lch": "lch(100% 0 158.2 / 0.7019607843137254)",
+        "oklch": "oklch(100% 0 89.88 / 0.7019607843137254)"
+      },
+      "--base-color-scale-teal-3": {
+        "value": "#39dad2",
+        "lch": "lch(79.42% 42.44 190.64)",
+        "oklch": "oklch(80.72% 0.128 189.87)"
+      },
+      "--base-color-scale-red-7": {
+        "value": "#860620",
+        "lch": "lch(27.59% 54.8 25.61)",
+        "oklch": "oklch(39.51% 0.155 20.24)"
+      },
+      "--color-prettylights-syntax-brackethighlighter-unmatched": {
+        "value": "#82071e",
+        "lch": "lch(26.72% 53.61 26.3)",
+        "oklch": "oklch(38.7% 0.151 20.77)"
+      },
+      "--progressBar-bgColor-severe": {
+        "value": "#bc4c00",
+        "lch": "lch(46.79% 71.03 53.37)",
+        "oklch": "oklch(55.72% 0.16 44.72)"
+      },
+      "--label-lemon-bgColor-active": {
+        "value": "#d8bd0e",
+        "lch": "lch(76.7% 76.9 93.95)",
+        "oklch": "oklch(79.73% 0.163 98.67)"
+      },
+      "--buttonKeybindingHint-primary-bgColor-disabled": {
+        "value": "#002d111a",
+        "lch": "lch(15.05% 26.71 148.77 / 0.10196078431372549)",
+        "oklch": "oklch(26% 0.07 151.09 / 0.10196078431372549)"
+      },
+      "--display-purple-bgColor-emphasis": {
+        "value": "#894ceb",
+        "lch": "lch(47.6% 91.77 309.29)",
+        "oklch": "oklch(57.38% 0.226 296.08)"
+      },
+      "--base-color-scale-blue-9": {
+        "value": "#001c4d",
+        "lch": "lch(11.73% 35.36 290.9)",
+        "oklch": "oklch(24.34% 0.097 259.61)"
+      },
+      "--base-color-scale-red-9": {
+        "value": "#420011",
+        "lch": "lch(10.55% 32.47 16.21)",
+        "oklch": "oklch(24.12% 0.096 13.97)"
+      },
+      "--label-green-bgColor-hover": {
+        "value": "#9ceda0",
+        "lch": "lch(87.08% 49.65 143.25)",
+        "oklch": "oklch(87.47% 0.132 145.49)"
+      },
+      "--data-purple-color-muted": {
+        "value": "#f1e5ff",
+        "lch": "lch(92.56% 14.12 308.19)",
+        "oklch": "oklch(93.91% 0.037 306.42)"
+      },
+      "--base-color-scale-lime-2": {
+        "value": "#dcfa67",
+        "lch": "lch(93.7% 72.01 114.39)",
+        "oklch": "oklch(93.54% 0.174 119.62)"
+      },
+      "--base-color-scale-green-8": {
+        "value": "#0e4a2e",
+        "lch": "lch(27.26% 28.73 156.45)",
+        "oklch": "oklch(36.39% 0.077 157.93)"
+      },
+      "--label-cyan-bgColor-rest": {
+        "value": "#bdf4ff",
+        "lch": "lch(92.9% 18.5 216.31)",
+        "oklch": "oklch(93.31% 0.058 211.23)"
+      },
+      "--buttonKeybindingHint-danger-bgColor-hover": {
+        "value": "#1f232833",
+        "lch": "lch(13.51% 3.97 263.72 / 0.2)",
+        "oklch": "oklch(25.42% 0.011 254.04 / 0.2)"
+      },
+      "--base-color-scale-teal-6": {
+        "value": "#136061",
+        "lch": "lch(36.68% 22.61 198.2)",
+        "oklch": "oklch(44.61% 0.07 196.27)"
+      },
+      "--data-green-color-emphasis": {
+        "value": "#30a147",
+        "lch": "lch(58.58% 63 143.5)",
+        "oklch": "oklch(62.6% 0.163 146.76)"
+      },
+      "--base-color-scale-yellow-7": {
+        "value": "#824800",
+        "lch": "lch(36.71% 50.57 66.36)",
+        "oklch": "oklch(46.19% 0.107 61.44)"
+      },
+      "--label-coral-bgColor-active": {
+        "value": "#fcab92",
+        "lch": "lch(77.22% 36.67 42.91)",
+        "oklch": "oklch(81.38% 0.102 37.89)"
+      },
+      "--color-prettylights-syntax-markup-list": {
+        "value": "#3b2300",
+        "lch": "lch(16.17% 25.15 71.11)",
+        "oklch": "oklch(28.03% 0.06 71.49)"
+      },
+      "--data-teal-color-muted": {
+        "value": "#c7f5ef",
+        "lch": "lch(93.31% 15.96 187.13)",
+        "oklch": "oklch(93.64% 0.048 186.66)"
+      },
+      "--base-color-scale-lime-9": {
+        "value": "#182c01",
+        "lch": "lch(15.48% 27.35 127.42)",
+        "oklch": "oklch(26.58% 0.072 131.47)"
+      },
+      "--brand-color-text-link-pressed": {
+        "value": "#002f7a",
+        "lch": "lch(21.72% 50.02 291.93)",
+        "oklch": "oklch(33.17% 0.136 260.16)"
+      },
+      "--base-color-scale-red-8": {
+        "value": "#730019",
+        "lch": "lch(22.71% 50.04 25.52)",
+        "oklch": "oklch(35.14% 0.141 20.06)"
+      },
+      "--brand-VideoPlayer-closedCaption-text-bgColor": {
+        "value": "#000000bf",
+        "lch": "lch(0% 0 0 / 0.7490196078431373)",
+        "oklch": "oklch(0% 0 0 / 0.7490196078431373)"
+      },
+      "--brand-color-success-muted": {
+        "value": "#8cf2a699",
+        "lch": "lch(87.89% 53.35 148.83 / 0.6)",
+        "oklch": "oklch(87.96% 0.143 150.78 / 0.6)"
+      },
+      "--base-color-scale-purple-4": {
+        "value": "#9f51fa",
+        "lch": "lch(52.01% 96.09 311.34)",
+        "oklch": "oklch(61.43% 0.239 300.62)"
+      },
+      "--display-green-bgColor-muted": {
+        "value": "#caf7ca",
+        "lch": "lch(93.16% 28.37 143.28)",
+        "oklch": "oklch(93.29% 0.076 144.94)"
+      },
+      "--color-workflow-card-header-shadow": {
+        "value": "#0000"
+      },
+      "--brand-color-neutral-muted": {
+        "value": "#c4ccc6fe",
+        "lch": "lch(81.29% 4.35 152.09 / 0.996078431372549)",
+        "oklch": "oklch(83.73% 0.012 153.63 / 0.996078431372549)"
+      },
+      "--color-ansi-green-bright": {
+        "value": "#1a7f37",
+        "lch": "lch(46.54% 53.98 144.99)",
+        "oklch": "oklch(52.44% 0.14 148.04)"
+      },
+      "--base-color-scale-lime-1": {
+        "value": "#e8fc97",
+        "lch": "lch(95.59% 50.98 115.16)",
+        "oklch": "oklch(95.43% 0.127 118.04)"
+      },
+      "--base-color-scale-indigo-9": {
+        "value": "#12144f",
+        "lch": "lch(10.51% 42.35 300.81)",
+        "oklch": "oklch(23.75% 0.105 273.51)"
+      },
+      "--label-indigo-bgColor-active": {
+        "value": "#b1b9fb",
+        "lch": "lch(76.68% 35.5 289.33)",
+        "oklch": "oklch(80.33% 0.094 278.71)"
+      },
+      "--data-plum-color-muted": {
+        "value": "#f8e5ff",
+        "lch": "lch(93.11% 15.02 317.13)",
+        "oklch": "oklch(94.48% 0.04 317)"
+      },
+      "--prettylights-syntax-invalid-illegal-text": {
+        "value": "#d1242f",
+        "lch": "lch(45.67% 75.52 31.14)",
+        "oklch": "oklch(55.67% 0.206 24.61)"
+      },
+      "--label-teal-bgColor-hover": {
+        "value": "#89ebe1",
+        "lch": "lch(87.08% 31.47 187.66)",
+        "oklch": "oklch(87.7% 0.094 187.19)"
+      },
+      "--base-color-scale-orange-9": {
+        "value": "#471700",
+        "lch": "lch(15.24% 31.66 46.77)",
+        "oklch": "oklch(27.74% 0.081 43.84)"
+      },
+      "--skeletonLoader-bgColor": {
+        "value": "#818b981a",
+        "lch": "lch(57.46% 8.19 264.19 / 0.10196078431372549)",
+        "oklch": "oklch(63.29% 0.023 254.97 / 0.10196078431372549)"
+      },
+      "--label-pine-bgColor-rest": {
+        "value": "#bff8db",
+        "lch": "lch(93.16% 25.01 161.12)",
+        "oklch": "oklch(93.24% 0.07 162.56)"
+      },
+      "--color-marketing-icon-primary": {
+        "value": "#218bff",
+        "lch": "lch(58.04% 66.84 281.36)",
+        "oklch": "oklch(64.18% 0.195 254.98)"
+      },
+      "--data-auburn-color-emphasis": {
+        "value": "#9d615c",
+        "lch": "lch(47.61% 27.14 28.94)",
+        "oklch": "oklch(55.74% 0.079 25.06)"
+      },
+      "--data-yellow-color-muted": {
+        "value": "#ffec9e",
+        "lch": "lch(93.33% 40.39 96.13)",
+        "oklch": "oklch(94.1% 0.099 96.11)"
+      },
+      "--label-purple-bgColor-active": {
+        "value": "#d1b1fc",
+        "lch": "lch(77.3% 41.79 308.09)",
+        "oklch": "oklch(81.44% 0.109 303.63)"
+      },
+      "--label-cyan-bgColor-active": {
+        "value": "#00d0fa",
+        "lch": "lch(77.29% 42.91 229.24)",
+        "oklch": "oklch(79.27% 0.144 219.39)"
+      },
+      "--brand-button-subtle-bgColor-hover": {
+        "value": "#0000001e",
+        "lch": "lch(0% 0 0 / 0.11764705882352941)",
+        "oklch": "oklch(0% 0 0 / 0.11764705882352941)"
+      },
+      "--base-color-scale-purple-1": {
+        "value": "#dbbffd",
+        "lch": "lch(81.52% 34.39 308.62)",
+        "oklch": "oklch(84.9% 0.09 305.14)"
+      },
+      "--base-color-scale-purple-9": {
+        "value": "#160048",
+        "lch": "lch(5.77% 50.44 308.8)",
+        "oklch": "oklch(20.11% 0.118 284.28)"
+      },
+      "--brand-Testimonial-quoteMarkBackground-lime": {
+        "value": "#f3fec8",
+        "lch": "lch(97.68% 27.62 116.68)",
+        "oklch": "oklch(97.55% 0.071 117.08)"
+      },
+      "--base-color-scale-purple-2": {
+        "value": "#c898fd",
+        "lch": "lch(70.75% 57.25 310.3)",
+        "oklch": "oklch(76.28% 0.148 305.03)"
+      },
+      "--data-blue-color-emphasis": {
+        "value": "#006edb",
+        "lch": "lch(47.32% 64.79 284.38)",
+        "oklch": "oklch(55.05% 0.187 255.82)"
+      },
+      "--base-color-scale-red-3": {
+        "value": "#ff8182",
+        "lch": "lch(68.44% 52.65 24.57)",
+        "oklch": "oklch(74.63% 0.154 20.96)"
+      },
+      "--base-color-scale-blue-1": {
+        "value": "#bcecff",
+        "lch": "lch(90.73% 18.06 231.81)",
+        "oklch": "oklch(91.58% 0.056 224.01)"
+      },
+      "--base-color-scale-pink-3": {
+        "value": "#ff80d2",
+        "lch": "lch(70.42% 61.18 340.88)",
+        "oklch": "oklch(76.83% 0.18 342.73)"
+      },
+      "--base-color-scale-coral-9": {
+        "value": "#500a00",
+        "lch": "lch(15.08% 38.81 36.83)",
+        "oklch": "oklch(27.98% 0.103 33.11)"
+      },
+      "--base-color-scale-lemon-0": {
+        "value": "#fdf5b3",
+        "lch": "lch(95.77% 33.59 102.25)",
+        "oklch": "oklch(96.1% 0.084 102)"
+      },
+      "--data-pink-color-emphasis": {
+        "value": "#ce2c85",
+        "lch": "lch(47.78% 68.55 351.2)",
+        "oklch": "oklch(57.76% 0.21 352.61)"
+      },
+      "--brand-Label-color-green-blue-purple-2": {
+        "value": "#096bde",
+        "lch": "lch(46.77% 68.19 286.59)",
+        "oklch": "oklch(54.72% 0.193 257.48)"
+      },
+      "--buttonCounter-outline-bgColor-rest": {
+        "value": "#0969da1a",
+        "lch": "lch(45.94% 67.23 286.58 / 0.10196078431372549)",
+        "oklch": "oklch(53.99% 0.191 257.48 / 0.10196078431372549)"
+      },
+      "--base-color-scale-coral-7": {
+        "value": "#a22710",
+        "lch": "lch(36.31% 65.16 41.27)",
+        "oklch": "oklch(46.97% 0.163 32.53)"
+      },
+      "--overlay-backdrop-bgColor": {
+        "value": "#c8d1da66",
+        "lch": "lch(83.41% 5.66 256.48 / 0.4)",
+        "oklch": "oklch(85.65% 0.016 248.01 / 0.4)"
+      },
+      "--label-purple-bgColor-hover": {
+        "value": "#e6d2fe",
+        "lch": "lch(87.03% 24.14 308.32)",
+        "oklch": "oklch(89.39% 0.063 305.72)"
+      },
+      "--prettylights-syntax-markup-changed-bg": {
+        "value": "#ffd8b5",
+        "lch": "lch(88.79% 23.92 68.94)",
+        "oklch": "oklch(90.66% 0.063 63.8)"
+      },
+      "--base-color-scale-lime-7": {
+        "value": "#425e13",
+        "lch": "lch(36.39% 43.47 121.54)",
+        "oklch": "oklch(44.39% 0.105 128.3)"
+      },
+      "--base-color-scale-pink-9": {
+        "value": "#3d0a28",
+        "lch": "lch(11.71% 28.28 347.28)",
+        "oklch": "oklch(25.02% 0.086 349.03)"
+      },
+      "--base-color-scale-lime-4": {
+        "value": "#b2de28",
+        "lch": "lch(82.84% 84.09 115.89)",
+        "oklch": "oklch(83.96% 0.197 123.35)"
+      },
+      "--base-color-scale-lime-6": {
+        "value": "#698e17",
+        "lch": "lch(54.46% 61 119.07)",
+        "oklch": "oklch(59.74% 0.145 126.47)"
+      },
+      "--buttonCounter-danger-bgColor-rest": {
+        "value": "#cf222e1a",
+        "lch": "lch(45.1% 75.34 31.08 / 0.10196078431372549)",
+        "oklch": "oklch(55.17% 0.205 24.53 / 0.10196078431372549)"
+      },
+      "--base-color-scale-indigo-3": {
+        "value": "#8e9df7",
+        "lch": "lch(66.96% 49.71 290.12)",
+        "oklch": "oklch(72.15% 0.132 275.41)"
+      },
+      "--base-color-scale-coral-1": {
+        "value": "#ffcab8",
+        "lch": "lch(85.49% 22.92 44.82)",
+        "oklch": "oklch(88.1% 0.065 39.59)"
+      },
+      "--base-color-scale-red-6": {
+        "value": "#ae0b29",
+        "lch": "lch(36.75% 67.13 27.28)",
+        "oklch": "oklch(47.8% 0.187 21.46)"
+      },
+      "--base-color-scale-pink-4": {
+        "value": "#ff4ac0",
+        "lch": "lch(61.63% 80.91 343.24)",
+        "oklch": "oklch(70.13% 0.243 345.18)"
+      },
+      "--display-lime-bgColor-emphasis": {
+        "value": "#527a29",
+        "lch": "lch(46.81% 47.9 126.14)",
+        "oklch": "oklch(53.19% 0.119 131.71)"
+      },
+      "--data-teal-color-emphasis": {
+        "value": "#179b9b",
+        "lch": "lch(58.03% 33.38 196.47)",
+        "oklch": "oklch(62.62% 0.103 194.85)"
+      },
+      "--base-color-scale-lime-8": {
+        "value": "#2c440b",
+        "lch": "lch(25.84% 35.35 123.44)",
+        "oklch": "oklch(35.42% 0.086 130.13)"
+      },
+      "--display-brown-bgColor-emphasis": {
+        "value": "#856d4c",
+        "lch": "lch(47.55% 22.49 77.99)",
+        "oklch": "oklch(54.96% 0.056 75.01)"
+      },
+      "--label-olive-bgColor-active": {
+        "value": "#b9c832",
+        "lch": "lch(77.19% 71.79 108.83)",
+        "oklch": "oklch(79.55% 0.165 115.32)"
+      },
+      "--color-ansi-cyan-bright": {
+        "value": "#3192aa",
+        "lch": "lch(56.2% 28.74 226.21)",
+        "oklch": "oklch(61.44% 0.094 217.77)"
+      },
+      "--brand-color-success-subtle": {
+        "value": "#bfffd1",
+        "lch": "lch(94.82% 32.8 151.58)",
+        "oklch": "oklch(94.5% 0.089 153.23)"
+      },
+      "--color-ansi-cyan": {
+        "value": "#1b7c83",
+        "lch": "lch(47.35% 26.59 205.82)",
+        "oklch": "oklch(53.7% 0.084 202.4)"
+      },
+      "--display-red-bgColor-emphasis": {
+        "value": "#df0c24",
+        "lch": "lch(47.08% 86.06 33.41)",
+        "oklch": "oklch(57.18% 0.228 25.59)"
+      },
+      "--label-brown-bgColor-hover": {
+        "value": "#dfd7c8",
+        "lch": "lch(86.24% 8.38 88.65)",
+        "oklch": "oklch(88.15% 0.022 83.26)"
+      },
+      "--base-color-scale-orange-2": {
+        "value": "#f4a876",
+        "lch": "lch(75.17% 43.37 58.55)",
+        "oklch": "oklch(79.44% 0.111 53.78)"
+      },
+      "--base-color-scale-coral-2": {
+        "value": "#ffa387",
+        "lch": "lch(75.58% 42.34 42.76)",
+        "oklch": "oklch(80.12% 0.117 37.69)"
+      },
+      "--base-color-scale-lemon-3": {
+        "value": "#e1c50f",
+        "lch": "lch(79.6% 79.33 93.97)",
+        "oklch": "oklch(82.23% 0.168 98.7)"
+      },
+      "--label-green-bgColor-active": {
+        "value": "#54d961",
+        "lch": "lch(77.5% 76.97 141.51)",
+        "oklch": "oklch(78.58% 0.199 145.04)"
+      },
+      "--base-color-scale-lemon-1": {
+        "value": "#f5e36b",
+        "lch": "lch(89.59% 60.34 98.01)",
+        "oklch": "oklch(90.74% 0.141 100.87)"
+      },
+      "--buttonKeybindingHint-primary-bgColor-rest": {
+        "value": "#002d1133",
+        "lch": "lch(15.05% 26.71 148.77 / 0.2)",
+        "oklch": "oklch(26% 0.07 151.09 / 0.2)"
+      },
+      "--base-color-scale-lemon-8": {
+        "value": "#413200",
+        "lch": "lch(21.6% 30.37 87.37)",
+        "oklch": "oklch(32.47% 0.066 90.35)"
+      },
+      "--label-pine-bgColor-active": {
+        "value": "#1dd781",
+        "lch": "lch(76.34% 69.4 153.88)",
+        "oklch": "oklch(77.49% 0.184 155.59)"
+      },
+      "--base-color-scale-indigo-6": {
+        "value": "#2d3dd7",
+        "lch": "lch(35.6% 92.89 301.03)",
+        "oklch": "oklch(46.46% 0.231 269.31)"
+      },
+      "--base-color-scale-blue-3": {
+        "value": "#5fb9ff",
+        "lch": "lch(72.46% 43.01 261.65)",
+        "oklch": "oklch(75.93% 0.133 244.36)"
+      },
+      "--label-auburn-bgColor-active": {
+        "value": "#d4b7b5",
+        "lch": "lch(76.8% 11.16 25.79)",
+        "oklch": "oklch(80.38% 0.034 22.56)"
+      },
+      "--base-color-scale-orange-4": {
+        "value": "#da7210",
+        "lch": "lch(58.96% 72.76 60.9)",
+        "oklch": "oklch(65.93% 0.16 54.65)"
+      },
+      "--base-color-scale-lemon-4": {
+        "value": "#c7a60b",
+        "lch": "lch(69.07% 70.71 90.62)",
+        "oklch": "oklch(73.32% 0.149 94.38)"
+      },
+      "--button-primary-bgColor-disabled": {
+        "value": "#95d8a6",
+        "lch": "lch(80.88% 36.12 150.01)",
+        "oklch": "oklch(82.4% 0.098 151.76)"
+      },
+      "--display-yellow-bgColor-emphasis": {
+        "value": "#946a00",
+        "lch": "lch(47.76% 55.44 80.75)",
+        "oklch": "oklch(55.29% 0.114 81.17)"
+      },
+      "--contribution-winter-bgColor-2": {
+        "value": "#54aeff",
+        "lch": "lch(69.02% 48.02 267.7)",
+        "oklch": "oklch(73.11% 0.146 248.34)"
+      },
+      "--label-plum-bgColor-active": {
+        "value": "#e2a7fb",
+        "lch": "lch(76.54% 49.19 317.26)",
+        "oklch": "oklch(81.21% 0.131 315.52)"
+      },
+      "--control-checked-bgColor-hover": {
+        "value": "#0860ca",
+        "lch": "lch(42.28% 63.98 286.94)",
+        "oklch": "oklch(50.83% 0.181 257.72)"
+      },
+      "--base-color-scale-purple-8": {
+        "value": "#26115f",
+        "lch": "lch(13.47% 53.11 307.23)",
+        "oklch": "oklch(26.85% 0.127 286.57)"
+      },
+      "--base-color-scale-purple-6": {
+        "value": "#6619e1",
+        "lch": "lch(35.9% 110.37 309.88)",
+        "oklch": "oklch(48.07% 0.258 289.43)"
+      },
+      "--base-color-scale-lemon-9": {
+        "value": "#322400",
+        "lch": "lch(15.17% 22.4 83.73)",
+        "oklch": "oklch(26.96% 0.055 86.64)"
+      },
+      "--bgColor-sponsors-emphasis": {
+        "value": "#bf3989",
+        "lch": "lch(46.73% 61.97 346.23)",
+        "oklch": "oklch(56.55% 0.187 348.03)"
+      },
+      "--base-color-scale-green-2": {
+        "value": "#8cf2a6",
+        "lch": "lch(87.89% 53.35 148.83)",
+        "oklch": "oklch(87.96% 0.143 150.78)"
+      },
+      "--base-color-scale-orange-6": {
+        "value": "#954502",
+        "lch": "lch(38.99% 57.25 57.97)",
+        "oklch": "oklch(48.53% 0.126 50.61)"
+      },
+      "--label-red-bgColor-active": {
+        "value": "#fda5a7",
+        "lch": "lch(76.43% 35.05 20.9)",
+        "oklch": "oklch(80.93% 0.105 18.14)"
+      },
+      "--buttonCounter-danger-bgColor-disabled": {
+        "value": "#cf222e0d",
+        "lch": "lch(45.1% 75.34 31.08 / 0.050980392156862744)",
+        "oklch": "oklch(55.17% 0.205 24.53 / 0.050980392156862744)"
+      },
+      "--base-color-scale-red-4": {
+        "value": "#fa4549",
+        "lch": "lch(57.14% 78.44 30.11)",
+        "oklch": "oklch(65.68% 0.217 24.44)"
+      },
+      "--base-color-scale-indigo-7": {
+        "value": "#262dae",
+        "lch": "lch(27.69% 80.79 301.9)",
+        "oklch": "oklch(39.46% 0.199 270.65)"
+      },
+      "--brand-color-success-emphasis": {
+        "value": "#0fbf3e",
+        "lch": "lch(67.81% 83.46 141.53)",
+        "oklch": "oklch(70.1% 0.213 145.72)"
+      },
+      "--base-color-scale-lemon-7": {
+        "value": "#614d01",
+        "lch": "lch(33.67% 41.85 88.35)",
+        "oklch": "oklch(42.87% 0.087 91.44)"
+      },
+      "--brand-color-neutral-subtle": {
+        "value": "#e4ebe6fe",
+        "lch": "lch(92.41% 3.61 153.52 / 0.996078431372549)",
+        "oklch": "oklch(93.34% 0.01 155.09 / 0.996078431372549)"
+      },
+      "--brand-Card-background-overlay": {
+        "value": "#f2f5f333",
+        "lch": "lch(96.27% 1.48 155.58 / 0.2)",
+        "oklch": "oklch(96.73% 0.004 157.18 / 0.2)"
+      },
+      "--base-color-scale-coral-4": {
+        "value": "#fe4c25",
+        "lch": "lch(58.4% 88.13 41.97)",
+        "oklch": "oklch(66.64% 0.22 33.61)"
+      },
+      "--label-blue-bgColor-hover": {
+        "value": "#ade1ff",
+        "lch": "lch(86.97% 22.19 243.95)",
+        "oklch": "oklch(88.38% 0.068 233.84)"
+      },
+      "--brand-button-subtle-bgColor-active": {
+        "value": "#00000036",
+        "lch": "lch(0% 0 0 / 0.21176470588235294)",
+        "oklch": "oklch(0% 0 0 / 0.21176470588235294)"
+      },
+      "--data-coral-color-emphasis": {
+        "value": "#d43511",
+        "lch": "lch(47.74% 81.55 42.58)",
+        "oklch": "oklch(57.24% 0.2 33.31)"
+      },
+      "--label-lime-bgColor-hover": {
+        "value": "#c7e580",
+        "lch": "lch(86.87% 52.49 119.14)",
+        "oklch": "oklch(87.79% 0.132 122.68)"
+      },
+      "--display-indigo-bgColor-emphasis": {
+        "value": "#5a61e7",
+        "lch": "lch(47.61% 78.24 298.21)",
+        "oklch": "oklch(56.32% 0.199 275.69)"
+      },
+      "--base-color-scale-coral-6": {
+        "value": "#c53211",
+        "lch": "lch(44.51% 76.45 42.48)",
+        "oklch": "oklch(54.32% 0.188 33.37)"
+      },
+      "--color-ansi-yellow": {
+        "value": "#4d2d00",
+        "lch": "lch(21.78% 32.94 70.38)",
+        "oklch": "oklch(32.98% 0.072 68.31)"
+      },
+      "--base-color-scale-yellow-4": {
+        "value": "#db9d00",
+        "lch": "lch(68.88% 74.03 80.07)",
+        "oklch": "oklch(73.64% 0.152 80.23)"
+      },
+      "--base-color-scale-purple-3": {
+        "value": "#b870ff",
+        "lch": "lch(60.78% 81.66 312.04)",
+        "oklch": "oklch(68.51% 0.208 304.74)"
+      },
+      "--base-color-scale-yellow-8": {
+        "value": "#653200",
+        "lch": "lch(26.87% 42.21 62.09)",
+        "oklch": "oklch(37.69% 0.092 56.33)"
+      },
+      "--color-ansi-magenta-bright": {
+        "value": "#a475f9",
+        "lch": "lch(59.39% 75.25 307.52)",
+        "oklch": "oklch(66.9% 0.19 297.44)"
+      },
+      "--color-prettylights-syntax-entity": {
+        "value": "#6639ba",
+        "lch": "lch(36.55% 77.88 308.46)",
+        "oklch": "oklch(47.43% 0.191 293.84)"
+      },
+      "--base-color-scale-yellow-6": {
+        "value": "#a06100",
+        "lch": "lch(47.01% 58.35 70.37)",
+        "oklch": "oklch(55.04% 0.122 66.87)"
+      },
+      "--avatarStack-fade-bgColor-default": {
+        "value": "#c8d1da",
+        "lch": "lch(83.41% 5.66 256.48)",
+        "oklch": "oklch(85.65% 0.016 248.01)"
+      },
+      "--label-indigo-bgColor-hover": {
+        "value": "#d2d7fe",
+        "lch": "lch(86.73% 20.46 287.22)",
+        "oklch": "oklch(88.78% 0.054 279.48)"
+      },
+      "--color-bg-discussions-row-emoji-box": {
+        "value": "#d1d5da80",
+        "lch": "lch(85.1% 2.97 261.71 / 0.5019607843137255)",
+        "oklch": "oklch(87.14% 0.008 253.86 / 0.5019607843137255)"
+      },
+      "--label-teal-bgColor-active": {
+        "value": "#22d3c7",
+        "lch": "lch(76.71% 44.18 187.79)",
+        "oklch": "oklch(78.31% 0.132 187.39)"
+      },
+      "--display-teal-bgColor-emphasis": {
+        "value": "#127e81",
+        "lch": "lch(47.8% 28.2 200.2)",
+        "oklch": "oklch(54% 0.088 197.91)"
+      },
+      "--label-cyan-bgColor-hover": {
+        "value": "#7ae9ff",
+        "lch": "lch(86.82% 33.04 218.13)",
+        "oklch": "oklch(87.62% 0.106 212.16)"
+      },
+      "--button-primary-bgColor-active": {
+        "value": "#197935",
+        "lch": "lch(44.43% 51.67 145.24)",
+        "oklch": "oklch(50.68% 0.134 148.23)"
+      },
+      "--label-orange-bgColor-active": {
+        "value": "#fbaf74",
+        "lch": "lch(77.54% 46.49 62.36)",
+        "oklch": "oklch(81.44% 0.117 58)"
+      },
+      "--base-color-scale-teal-7": {
+        "value": "#024b4d",
+        "lch": "lch(28.33% 20.15 200.21)",
+        "oklch": "oklch(37.5% 0.063 197.92)"
+      },
+      "--reactionButton-selected-bgColor-hover": {
+        "value": "#caecff",
+        "lch": "lch(91.58% 14.66 241.16)",
+        "oklch": "oklch(92.46% 0.044 232.39)"
+      },
+      "--label-pink-bgColor-active": {
+        "value": "#f8a5cf",
+        "lch": "lch(76.91% 37.51 346.54)",
+        "oklch": "oklch(81.52% 0.11 348.1)"
+      },
+      "--base-color-scale-blue-2": {
+        "value": "#8dd6ff",
+        "lch": "lch(82.36% 29.73 245.68)",
+        "oklch": "oklch(84.29% 0.093 234.03)"
+      },
+      "--contribution-halloween-bgColor-3": {
+        "value": "#f68c41",
+        "lch": "lch(68.56% 65.65 58.16)",
+        "oklch": "oklch(74.18% 0.156 52.79)"
+      },
+      "--label-pine-bgColor-hover": {
+        "value": "#80efb9",
+        "lch": "lch(86.91% 46.93 159.52)",
+        "oklch": "oklch(87.15% 0.129 160.91)"
+      },
+      "--data-olive-color-emphasis": {
+        "value": "#64762d",
+        "lch": "lch(46.78% 41.4 116.31)",
+        "oklch": "oklch(53.49% 0.101 121.55)"
+      },
+      "--button-primary-bgColor-hover": {
+        "value": "#1c8139",
+        "lch": "lch(47.29% 54.02 145.18)",
+        "oklch": "oklch(53.08% 0.14 148.17)"
+      },
+      "--base-color-scale-red-2": {
+        "value": "#ffaba8",
+        "lch": "lch(78% 33.62 25.01)",
+        "oklch": "oklch(82.2% 0.1 21.7)"
+      },
+      "--base-color-scale-orange-8": {
+        "value": "#5c2300",
+        "lch": "lch(21.86% 40.1 52.65)",
+        "oklch": "oklch(33.55% 0.094 46.24)"
+      },
+      "--base-color-scale-pink-6": {
+        "value": "#ca2186",
+        "lch": "lch(46.14% 70.9 348.9)",
+        "oklch": "oklch(56.44% 0.217 350.56)"
+      },
+      "--label-blue-bgColor-active": {
+        "value": "#75c8ff",
+        "lch": "lch(77.46% 36.18 253.62)",
+        "oklch": "oklch(80.12% 0.113 239.3)"
+      },
+      "--buttonCounter-outline-bgColor-disabled": {
+        "value": "#0969da0d",
+        "lch": "lch(45.94% 67.23 286.58 / 0.050980392156862744)",
+        "oklch": "oklch(53.99% 0.191 257.48 / 0.050980392156862744)"
+      },
+      "--brand-Grid-column-bgColor-overlay": {
+        "value": "#fb51544d",
+        "lch": "lch(59.01% 73.53 28.8 / 0.30196078431372547)",
+        "oklch": "oklch(67.15% 0.206 23.69 / 0.30196078431372547)"
+      },
+      "--brand-color-danger-muted": {
+        "value": "#ffaba899",
+        "lch": "lch(78% 33.62 25.01 / 0.6)",
+        "oklch": "oklch(82.2% 0.1 21.7 / 0.6)"
+      },
+      "--brand-Label-color-green-blue-purple-1": {
+        "value": "#000aff",
+        "lch": "lch(32.78% 132.28 305.97)",
+        "oklch": "oklch(45.52% 0.311 264.1)"
+      },
+      "--base-color-scale-indigo-8": {
+        "value": "#212183",
+        "lch": "lch(20.24% 64.44 302.28)",
+        "oklch": "oklch(32.7% 0.158 273.37)"
+      },
+      "--label-yellow-bgColor-active": {
+        "value": "#ebb400",
+        "lch": "lch(76.26% 79.13 84.54)",
+        "oklch": "oklch(79.81% 0.163 86.35)"
+      },
+      "--base-color-scale-green-4": {
+        "value": "#23ea57",
+        "lch": "lch(81.78% 93.59 142.47)",
+        "oklch": "oklch(81.84% 0.24 146.3)"
+      },
+      "--control-danger-bgColor-active": {
+        "value": "#ffebe966",
+        "lch": "lch(94.55% 7.29 27.95 / 0.4)",
+        "oklch": "oklch(95.55% 0.022 24.44 / 0.4)"
+      },
+      "--contribution-default-bgColor-3": {
+        "value": "#2da44e",
+        "lch": "lch(59.58% 62.16 145.53)",
+        "oklch": "oklch(63.43% 0.162 148.39)"
+      },
+      "--base-color-scale-blue-7": {
+        "value": "#0040a7",
+        "lch": "lch(30.53% 65.03 293.25)",
+        "oklch": "oklch(41.03% 0.175 260.83)"
+      }
+    },
+    "_raw": [
+      {
+        "color": "rgb(255, 255, 255)",
+        "normalized": "#ffffff",
+        "count": 1528
+      },
+      {
+        "color": "rgb(31, 35, 40)",
+        "normalized": "#1f2328",
+        "count": 22
+      },
+      {
+        "color": "rgba(0, 0, 0, 0.01)",
+        "normalized": "#000000",
+        "count": 19
+      },
+      {
+        "color": "rgb(240, 246, 252)",
+        "normalized": "#f0f6fc",
+        "count": 18
+      },
+      {
+        "color": "rgb(162, 218, 255)",
+        "normalized": "#a2daff",
+        "count": 226
+      },
+      {
+        "color": "rgb(164, 174, 166)",
+        "normalized": "#a4aea6",
+        "count": 194
+      },
+      {
+        "color": "rgb(33, 38, 45)",
+        "normalized": "#21262d",
+        "count": 26
+      }
+    ]
+  },
+  "typography": {
+    "styles": [
+      {
+        "context": "heading-1",
+        "family": "Mona Sans",
+        "fallbacks": "MonaSansFallback, -apple-system, system-ui, Segoe UI, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji",
+        "size": "64px (4.00rem)",
+        "weight": 425,
+        "lineHeight": "1.08",
+        "spacing": "-2.24px",
+        "transform": null
+      },
+      {
+        "context": "heading-1",
+        "family": "Mona Sans",
+        "fallbacks": "MonaSansFallback, -apple-system, system-ui, Segoe UI, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji",
+        "size": "48px (3.00rem)",
+        "weight": 800,
+        "lineHeight": "1.00",
+        "spacing": null,
+        "transform": null
+      },
+      {
+        "context": "heading-1",
+        "family": "Mona Sans",
+        "fallbacks": "MonaSansFallback, -apple-system, system-ui, Segoe UI, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji",
+        "size": "48px (3.00rem)",
+        "weight": 440,
+        "lineHeight": "1.18",
+        "spacing": null,
+        "transform": null
+      },
+      {
+        "context": "heading-1",
+        "family": "Mona Sans",
+        "fallbacks": "MonaSansFallback, -apple-system, system-ui, Segoe UI, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji",
+        "size": "40px (2.50rem)",
+        "weight": 460,
+        "lineHeight": "1.20",
+        "spacing": null,
+        "transform": null
+      },
+      {
+        "context": "heading-1",
+        "family": "Mona Sans",
+        "fallbacks": "MonaSansFallback, -apple-system, system-ui, Segoe UI, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji",
+        "size": "40px (2.50rem)",
+        "weight": 500,
+        "lineHeight": "1.30",
+        "spacing": null,
+        "transform": null
+      },
+      {
+        "context": "heading-1",
+        "family": "Mona Sans VF",
+        "fallbacks": "-apple-system, system-ui, Segoe UI, Noto Sans Backtick Fix, Noto Sans, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji",
+        "size": "24px (1.50rem)",
+        "weight": 600,
+        "lineHeight": "1.50",
+        "spacing": null,
+        "transform": null
+      },
+      {
+        "context": "heading-1",
+        "family": "Mona Sans",
+        "fallbacks": "MonaSansFallback, -apple-system, system-ui, Segoe UI, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji",
+        "size": "24px (1.50rem)",
+        "weight": 600,
+        "lineHeight": "1.50",
+        "spacing": null,
+        "transform": null
+      },
+      {
+        "context": "heading-1",
+        "family": "Mona Sans",
+        "fallbacks": "MonaSansFallback, -apple-system, system-ui, Segoe UI, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji",
+        "size": "22px (1.38rem)",
+        "weight": 400,
+        "lineHeight": "1.40",
+        "spacing": "0.24px",
+        "transform": null
+      },
+      {
+        "context": "heading-1",
+        "family": "Mona Sans",
+        "fallbacks": "MonaSansFallback, -apple-system, system-ui, Segoe UI, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji",
+        "size": "22px (1.38rem)",
+        "weight": 600,
+        "lineHeight": "1.40",
+        "spacing": null,
+        "transform": null
+      },
+      {
+        "context": "heading-1",
+        "family": "Mona Sans",
+        "fallbacks": "MonaSansFallback, -apple-system, system-ui, Segoe UI, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji",
+        "size": "22px (1.38rem)",
+        "weight": 400,
+        "lineHeight": "1.40",
+        "spacing": null,
+        "transform": null
+      },
+      {
+        "context": "heading-1",
+        "family": "Mona Sans",
+        "fallbacks": "MonaSansFallback, -apple-system, system-ui, Segoe UI, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji",
+        "size": "22px (1.38rem)",
+        "weight": 480,
+        "lineHeight": "1.40",
+        "spacing": null,
+        "transform": null
+      },
+      {
+        "context": "heading-1",
+        "family": "Mona Sans",
+        "fallbacks": "MonaSansFallback, -apple-system, system-ui, Segoe UI, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji",
+        "size": "22px (1.38rem)",
+        "weight": 425,
+        "lineHeight": "1.20",
+        "spacing": null,
+        "transform": null
+      },
+      {
+        "context": "heading-1",
+        "family": "Mona Sans",
+        "fallbacks": "MonaSansFallback, -apple-system, system-ui, Segoe UI, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji",
+        "size": "18px (1.13rem)",
+        "weight": 400,
+        "lineHeight": "1.50",
+        "spacing": "0.18px",
+        "transform": null
+      },
+      {
+        "context": "heading-1",
+        "family": "Mona Sans VF",
+        "fallbacks": "-apple-system, system-ui, Segoe UI, Noto Sans Backtick Fix, Noto Sans, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji",
+        "size": "16px (1.00rem)",
+        "weight": 400,
+        "lineHeight": "1.50",
+        "spacing": null,
+        "transform": null
+      },
+      {
+        "context": "link",
+        "family": "Mona Sans VF",
+        "fallbacks": "-apple-system, system-ui, Segoe UI, Noto Sans Backtick Fix, Noto Sans, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji",
+        "size": "16px (1.00rem)",
+        "weight": 400,
+        "lineHeight": "1.50",
+        "spacing": null,
+        "transform": null
+      },
+      {
+        "context": "button",
+        "family": "Mona Sans",
+        "fallbacks": "MonaSansFallback, -apple-system, system-ui, Segoe UI, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji",
+        "size": "16px (1.00rem)",
+        "weight": 500,
+        "lineHeight": "1.50",
+        "spacing": "0.24px",
+        "transform": null
+      },
+      {
+        "context": "link",
+        "family": "Mona Sans",
+        "fallbacks": "MonaSansFallback, -apple-system, system-ui, Segoe UI, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji",
+        "size": "16px (1.00rem)",
+        "weight": 500,
+        "lineHeight": "1.50",
+        "spacing": "0.24px",
+        "transform": null
+      },
+      {
+        "context": "button",
+        "family": "Mona Sans VF",
+        "fallbacks": "-apple-system, system-ui, Segoe UI, Noto Sans Backtick Fix, Noto Sans, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji",
+        "size": "16px (1.00rem)",
+        "weight": 400,
+        "lineHeight": "1.50",
+        "spacing": null,
+        "transform": null
+      },
+      {
+        "context": "heading-1",
+        "family": "Mona Sans",
+        "fallbacks": "MonaSansFallback, -apple-system, system-ui, Segoe UI, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji",
+        "size": "16px (1.00rem)",
+        "weight": 500,
+        "lineHeight": "1.50",
+        "spacing": "0.16px",
+        "transform": null
+      },
+      {
+        "context": "heading-1",
+        "family": "Mona Sans",
+        "fallbacks": "MonaSansFallback, -apple-system, system-ui, Segoe UI, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji",
+        "size": "16px (1.00rem)",
+        "weight": 500,
+        "lineHeight": "1.50",
+        "spacing": "0.24px",
+        "transform": null
+      },
+      {
+        "context": "heading-1",
+        "family": "Mona Sans",
+        "fallbacks": "MonaSansFallback, -apple-system, system-ui, Segoe UI, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji",
+        "size": "16px (1.00rem)",
+        "weight": 400,
+        "lineHeight": "1.50",
+        "spacing": "0.24px",
+        "transform": null
+      },
+      {
+        "context": "heading-1",
+        "family": "Mona Sans Mono",
+        "fallbacks": null,
+        "size": "16px (1.00rem)",
+        "weight": 400,
+        "lineHeight": "1.50",
+        "spacing": "0.24px",
+        "transform": "uppercase"
+      },
+      {
+        "context": "heading-1",
+        "family": "Mona Sans",
+        "fallbacks": "MonaSansFallback, -apple-system, system-ui, Segoe UI, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji",
+        "size": "16px (1.00rem)",
+        "weight": 600,
+        "lineHeight": "1.50",
+        "spacing": "0.24px",
+        "transform": null
+      },
+      {
+        "context": "link",
+        "family": "Mona Sans VF",
+        "fallbacks": "-apple-system, system-ui, Segoe UI, Noto Sans Backtick Fix, Noto Sans, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji",
+        "size": "14px (0.88rem)",
+        "weight": 400,
+        "lineHeight": "1.50",
+        "spacing": null,
+        "transform": null
+      },
+      {
+        "context": "caption",
+        "family": "Mona Sans VF",
+        "fallbacks": "-apple-system, system-ui, Segoe UI, Noto Sans Backtick Fix, Noto Sans, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji",
+        "size": "14px (0.88rem)",
+        "weight": 400,
+        "lineHeight": "1.50",
+        "spacing": null,
+        "transform": null
+      },
+      {
+        "context": "caption",
+        "family": "Mona Sans",
+        "fallbacks": "MonaSansFallback, -apple-system, system-ui, Segoe UI, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji",
+        "size": "14px (0.88rem)",
+        "weight": 500,
+        "lineHeight": "1.50",
+        "spacing": "0.21px",
+        "transform": null
+      },
+      {
+        "context": "button",
+        "family": "Mona Sans VF",
+        "fallbacks": "-apple-system, system-ui, Segoe UI, Noto Sans Backtick Fix, Noto Sans, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji",
+        "size": "14px (0.88rem)",
+        "weight": 500,
+        "lineHeight": "1.50",
+        "spacing": null,
+        "transform": null
+      },
+      {
+        "context": "caption",
+        "family": "Mona Sans",
+        "fallbacks": "MonaSansFallback, -apple-system, system-ui, Segoe UI, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji",
+        "size": "14px (0.88rem)",
+        "weight": 400,
+        "lineHeight": "1.50",
+        "spacing": null,
+        "transform": null
+      },
+      {
+        "context": "button",
+        "family": "Mona Sans",
+        "fallbacks": "MonaSansFallback, -apple-system, system-ui, Segoe UI, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji",
+        "size": "14px (0.88rem)",
+        "weight": 400,
+        "lineHeight": "1.50",
+        "spacing": null,
+        "transform": null
+      },
+      {
+        "context": "button",
+        "family": "Mona Sans VF",
+        "fallbacks": "-apple-system, system-ui, Segoe UI, Noto Sans Backtick Fix, Noto Sans, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji",
+        "size": "14px (0.88rem)",
+        "weight": 400,
+        "lineHeight": "1.50",
+        "spacing": null,
+        "transform": null
+      },
+      {
+        "context": "caption",
+        "family": "Mona Sans Mono",
+        "fallbacks": null,
+        "size": "14px (0.88rem)",
+        "weight": 400,
+        "lineHeight": "1.50",
+        "spacing": "0.21px",
+        "transform": "uppercase"
+      },
+      {
+        "context": "link",
+        "family": "Mona Sans",
+        "fallbacks": "MonaSansFallback, -apple-system, system-ui, Segoe UI, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji",
+        "size": "14px (0.88rem)",
+        "weight": 400,
+        "lineHeight": "1.00",
+        "spacing": "0.18px",
+        "transform": null
+      },
+      {
+        "context": "caption",
+        "family": "Mona Sans",
+        "fallbacks": "MonaSansFallback, -apple-system, system-ui, Segoe UI, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji",
+        "size": "14px (0.88rem)",
+        "weight": 400,
+        "lineHeight": "1.50",
+        "spacing": "0.21px",
+        "transform": null
+      },
+      {
+        "context": "link",
+        "family": "Mona Sans",
+        "fallbacks": "MonaSansFallback, -apple-system, system-ui, Segoe UI, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji",
+        "size": "14px (0.88rem)",
+        "weight": 400,
+        "lineHeight": "1.50",
+        "spacing": "0.21px",
+        "transform": null
+      },
+      {
+        "context": "link",
+        "family": "Mona Sans",
+        "fallbacks": "MonaSansFallback, -apple-system, system-ui, Segoe UI, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji",
+        "size": "14px (0.88rem)",
+        "weight": 400,
+        "lineHeight": "1.50",
+        "spacing": null,
+        "transform": null
+      },
+      {
+        "context": "caption",
+        "family": "Mona Sans Mono",
+        "fallbacks": null,
+        "size": "14px (0.88rem)",
+        "weight": 480,
+        "lineHeight": "1.50",
+        "spacing": null,
+        "transform": "uppercase"
+      },
+      {
+        "context": "link",
+        "family": "Mona Sans Mono",
+        "fallbacks": null,
+        "size": "12px (0.75rem)",
+        "weight": 500,
+        "lineHeight": "1.50",
+        "spacing": null,
+        "transform": "uppercase"
+      },
+      {
+        "context": "button",
+        "family": "Mona Sans Mono",
+        "fallbacks": null,
+        "size": "12px (0.75rem)",
+        "weight": 500,
+        "lineHeight": "1.50",
+        "spacing": null,
+        "transform": "uppercase"
+      }
+    ],
+    "sources": {
+      "googleFonts": [],
+      "adobeFonts": false,
+      "variableFonts": false
+    }
+  },
+  "spacing": {
+    "scaleType": "8px",
+    "commonValues": [
+      {
+        "px": "1px",
+        "rem": "0.06rem",
+        "count": 6,
+        "numericValue": 1
+      },
+      {
+        "px": "2px",
+        "rem": "0.13rem",
+        "count": 5,
+        "numericValue": 2
+      },
+      {
+        "px": "2.1px",
+        "rem": "0.13rem",
+        "count": 54,
+        "numericValue": 2.1
+      },
+      {
+        "px": "2.4px",
+        "rem": "0.15rem",
+        "count": 60,
+        "numericValue": 2.4
+      },
+      {
+        "px": "3px",
+        "rem": "0.19rem",
+        "count": 4,
+        "numericValue": 3
+      },
+      {
+        "px": "3.5px",
+        "rem": "0.22rem",
+        "count": 8,
+        "numericValue": 3.5
+      },
+      {
+        "px": "4px",
+        "rem": "0.25rem",
+        "count": 22,
+        "numericValue": 4
+      },
+      {
+        "px": "6px",
+        "rem": "0.38rem",
+        "count": 8,
+        "numericValue": 6
+      },
+      {
+        "px": "8px",
+        "rem": "0.50rem",
+        "count": 38,
+        "numericValue": 8
+      },
+      {
+        "px": "10px",
+        "rem": "0.63rem",
+        "count": 4,
+        "numericValue": 10
+      },
+      {
+        "px": "16px",
+        "rem": "1.00rem",
+        "count": 15,
+        "numericValue": 16
+      },
+      {
+        "px": "20px",
+        "rem": "1.25rem",
+        "count": 14,
+        "numericValue": 20
+      },
+      {
+        "px": "24px",
+        "rem": "1.50rem",
+        "count": 20,
+        "numericValue": 24
+      },
+      {
+        "px": "32px",
+        "rem": "2.00rem",
+        "count": 19,
+        "numericValue": 32
+      },
+      {
+        "px": "40px",
+        "rem": "2.50rem",
+        "count": 7,
+        "numericValue": 40
+      },
+      {
+        "px": "48px",
+        "rem": "3.00rem",
+        "count": 4,
+        "numericValue": 48
+      },
+      {
+        "px": "64px",
+        "rem": "4.00rem",
+        "count": 15,
+        "numericValue": 64
+      },
+      {
+        "px": "80px",
+        "rem": "5.00rem",
+        "count": 3,
+        "numericValue": 80
+      },
+      {
+        "px": "96px",
+        "rem": "6.00rem",
+        "count": 6,
+        "numericValue": 96
+      },
+      {
+        "px": "384px",
+        "rem": "24.00rem",
+        "count": 6,
+        "numericValue": 384
+      }
+    ]
+  },
+  "borderRadius": {
+    "values": [
+      {
+        "value": "4px",
+        "count": 1,
+        "elements": [
+          "kbd"
+        ],
+        "confidence": "low",
+        "numericValue": 4
+      },
+      {
+        "value": "6px",
+        "count": 19,
+        "elements": [
+          "span",
+          "a",
+          "Search or jump to, type / to search",
+          "button",
+          "tooltip"
+        ],
+        "confidence": "high",
+        "numericValue": 6
+      },
+      {
+        "value": "8px",
+        "count": 15,
+        "elements": [
+          "span",
+          "div",
+          "input",
+          "image"
+        ],
+        "confidence": "high",
+        "numericValue": 8
+      },
+      {
+        "value": "12px 12px 0px 0px",
+        "count": 1,
+        "elements": [
+          "video"
+        ],
+        "confidence": "low",
+        "numericValue": 12
+      },
+      {
+        "value": "12px",
+        "count": 5,
+        "elements": [
+          "li"
+        ],
+        "confidence": "medium",
+        "numericValue": 12
+      },
+      {
+        "value": "16px",
+        "count": 2,
+        "elements": [
+          "video",
+          "img"
+        ],
+        "confidence": "low",
+        "numericValue": 16
+      },
+      {
+        "value": "16px 0px 0px",
+        "count": 6,
+        "elements": [
+          "div",
+          "img"
+        ],
+        "confidence": "medium",
+        "numericValue": 16
+      },
+      {
+        "value": "16px 16px 0px 0px",
+        "count": 1,
+        "elements": [
+          "img"
+        ],
+        "confidence": "low",
+        "numericValue": 16
+      },
+      {
+        "value": "24px 24px 0px 0px",
+        "count": 5,
+        "elements": [
+          "div"
+        ],
+        "confidence": "medium",
+        "numericValue": 24
+      },
+      {
+        "value": "24px",
+        "count": 2,
+        "elements": [
+          "div"
+        ],
+        "confidence": "low",
+        "numericValue": 24
+      },
+      {
+        "value": "48px",
+        "count": 1,
+        "elements": [
+          "Pause animation"
+        ],
+        "confidence": "low",
+        "numericValue": 48
+      },
+      {
+        "value": "60px",
+        "count": 12,
+        "elements": [
+          "tablist",
+          "div",
+          "tab"
+        ],
+        "confidence": "high",
+        "numericValue": 60
+      },
+      {
+        "value": "9999.01px",
+        "count": 1,
+        "elements": [
+          "div"
+        ],
+        "confidence": "low",
+        "numericValue": 9999.01
+      },
+      {
+        "value": "50%",
+        "count": 3,
+        "elements": [
+          "div",
+          "Back to top"
+        ],
+        "confidence": "low",
+        "numericValue": 50
+      }
+    ]
+  },
+  "borders": {
+    "combinations": [
+      {
+        "width": "0px 0px 1px",
+        "style": "none none solid",
+        "color": "rgb(255, 255, 255)",
+        "count": 20,
+        "elements": [
+          "div"
+        ],
+        "confidence": "high"
+      },
+      {
+        "width": "0px 1px 0px 0px",
+        "style": "none solid none none",
+        "color": "rgb(255, 255, 255)",
+        "count": 9,
+        "elements": [
+          "div"
+        ],
+        "confidence": "medium"
+      },
+      {
+        "width": "1px 0px 0px",
+        "style": "solid none none",
+        "color": "rgb(25, 31, 27)",
+        "count": 5,
+        "elements": [
+          "nav",
+          "div"
+        ],
+        "confidence": "medium"
+      },
+      {
+        "width": "1px",
+        "style": "solid",
+        "color": "rgba(255, 255, 255, 0.06)",
+        "count": 4,
+        "elements": [
+          "a",
+          "button"
+        ],
+        "confidence": "medium"
+      },
+      {
+        "width": "1px",
+        "style": "solid",
+        "color": "rgb(255, 255, 255)",
+        "count": 4,
+        "elements": [
+          "div",
+          "a"
+        ],
+        "confidence": "medium"
+      },
+      {
+        "width": "0px 1px",
+        "style": "solid",
+        "color": "rgb(33, 38, 45)",
+        "count": 4,
+        "elements": [
+          "div"
+        ],
+        "confidence": "medium"
+      },
+      {
+        "width": "1px",
+        "style": "solid",
+        "color": "rgb(38, 44, 40)",
+        "count": 3,
+        "elements": [
+          "a",
+          "button"
+        ],
+        "confidence": "low"
+      },
+      {
+        "width": "1px 1px 0px",
+        "style": "solid",
+        "color": "rgba(255, 255, 255, 0.6)",
+        "count": 3,
+        "elements": [
+          "div"
+        ],
+        "confidence": "low"
+      },
+      {
+        "width": "1px 0px 0px 1px",
+        "style": "solid none none solid",
+        "color": "rgba(72, 79, 88, 0.5)",
+        "count": 3,
+        "elements": [
+          "div"
+        ],
+        "confidence": "low"
+      },
+      {
+        "width": "1px",
+        "style": "solid",
+        "color": "rgba(255, 255, 255, 0.3)",
+        "count": 3,
+        "elements": [
+          "div"
+        ],
+        "confidence": "low"
+      },
+      {
+        "width": "1px",
+        "style": "solid",
+        "color": "rgb(72, 79, 88)",
+        "count": 2,
+        "elements": [
+          "tablist"
+        ],
+        "confidence": "low"
+      },
+      {
+        "width": "1px 1px 0px",
+        "style": "solid solid none",
+        "color": "rgba(255, 255, 255, 0.1)",
+        "count": 2,
+        "elements": [
+          "div"
+        ],
+        "confidence": "low"
+      },
+      {
+        "width": "0px 0px 0px 1px",
+        "style": "none none none solid",
+        "color": "rgb(255, 255, 255)",
+        "count": 1,
+        "elements": [
+          "div"
+        ],
+        "confidence": "low"
+      },
+      {
+        "width": "1px",
+        "style": "solid",
+        "color": "rgb(53, 61, 55)",
+        "count": 1,
+        "elements": [
+          "kbd"
+        ],
+        "confidence": "low"
+      },
+      {
+        "width": "1px 0px",
+        "style": "solid",
+        "color": "rgba(212, 167, 44, 0.4)",
+        "count": 1,
+        "elements": [
+          "div"
+        ],
+        "confidence": "low"
+      },
+      {
+        "width": "1px 1px 0px",
+        "style": "solid solid none",
+        "color": "rgb(140, 147, 251)",
+        "count": 1,
+        "elements": [
+          "div"
+        ],
+        "confidence": "low"
+      },
+      {
+        "width": "1px",
+        "style": "solid",
+        "color": "rgb(25, 31, 27)",
+        "count": 1,
+        "elements": [
+          "button"
+        ],
+        "confidence": "low"
+      },
+      {
+        "width": "1px",
+        "style": "solid",
+        "color": "rgba(255, 255, 255, 0.1)",
+        "count": 1,
+        "elements": [
+          "div"
+        ],
+        "confidence": "low"
+      },
+      {
+        "width": "0px 0px 1px",
+        "style": "none none solid",
+        "color": "rgb(128, 128, 128)",
+        "count": 1,
+        "elements": [
+          "hr"
+        ],
+        "confidence": "low"
+      },
+      {
+        "width": "0px 0px 1px 1px",
+        "style": "none none solid solid",
+        "color": "rgb(128, 128, 128)",
+        "count": 1,
+        "elements": [
+          "hr"
+        ],
+        "confidence": "low"
+      },
+      {
+        "width": "1px",
+        "style": "solid",
+        "color": "rgba(255, 255, 255, 0.15)",
+        "count": 1,
+        "elements": [
+          "a"
+        ],
+        "confidence": "low"
+      },
+      {
+        "width": "2px 0px 0px",
+        "style": "solid none none",
+        "color": "rgb(95, 237, 131)",
+        "count": 1,
+        "elements": [
+          "contentinfo"
+        ],
+        "confidence": "low"
+      },
+      {
+        "width": "1px",
+        "style": "solid",
+        "color": "rgba(255, 129, 130, 0.4)",
+        "count": 1,
+        "elements": [
+          "div"
+        ],
+        "confidence": "low"
+      },
+      {
+        "width": "1px",
+        "style": "solid",
+        "color": "rgb(209, 217, 224)",
+        "count": 1,
+        "elements": [
+          "div"
+        ],
+        "confidence": "low"
+      }
+    ]
+  },
+  "shadows": [
+    {
+      "shadow": "rgb(61, 68, 77) 0px 0px 0px 1px, rgba(1, 4, 9, 0.4) 0px 6px 12px -3px, rgba(1, 4, 9, 0.4) 0px 6px 18px 0px",
+      "count": 5,
+      "confidence": "medium"
+    },
+    {
+      "shadow": "rgb(25, 31, 27) 0px -1px 0px 0px inset",
+      "count": 1,
+      "confidence": "low"
+    }
+  ],
+  "components": {
+    "buttons": [
+      {
+        "states": {
+          "default": {
+            "backgroundColor": "rgba(0, 0, 0, 0.01)",
+            "color": "rgb(255, 255, 255)",
+            "padding": "1px 12px",
+            "borderRadius": "6px",
+            "border": "1px solid rgb(38, 44, 40)",
+            "boxShadow": "none",
+            "outline": "rgb(255, 255, 255) none 3px",
+            "transform": "none",
+            "opacity": "1"
+          },
+          "hover": {
+            "color": "var(--brand-color-text-default)",
+            "backgroundColor": "var(--bgColor-accent-emphasis)",
+            "opacity": "1"
+          },
+          "active": {
+            "boxShadow": "none",
+            "outline": "2px solid var(--focus-outlineColor,var(--color-accent-fg))",
+            "backgroundColor": "var(--bgColor-accent-emphasis)",
+            "color": "var(--fgColor-onEmphasis)",
+            "opacity": "1"
+          },
+          "focus": {
+            "boxShadow": "none",
+            "outline": "2px solid var(--brand-color-focus,currentColor)",
+            "border": "0px",
+            "opacity": "1"
+          }
+        },
+        "fontWeight": "400",
+        "fontSize": "16px",
+        "classes": "Primer_Brand__Button-module__Button___scH9Z Primer",
+        "confidence": "high"
+      },
+      {
+        "states": {
+          "default": {
+            "backgroundColor": "rgba(255, 255, 255, 0.12)",
+            "color": "rgb(255, 255, 255)",
+            "padding": "0px 12px",
+            "borderRadius": "6px",
+            "border": "1px solid rgba(255, 255, 255, 0.06)",
+            "boxShadow": "none",
+            "outline": "rgb(255, 255, 255) none 3px",
+            "transform": "none",
+            "opacity": "1"
+          },
+          "hover": {
+            "backgroundColor": "rgba(255, 255, 255, 0.04)",
+            "color": "var(--brand-color-text-default)",
+            "boxShadow": "rgba(106, 115, 125, 0.3) 0px 1px 3px",
+            "outline": "none",
+            "transform": "scale(0.9)",
+            "opacity": "1",
+            "border": "var(--borderWidth-thin,max(var(--borderWidth-thin), .0625rem)) solid var(--control-bgColor-hover)"
+          },
+          "active": {
+            "backgroundColor": "rgba(255, 255, 255, 0.04)",
+            "boxShadow": "inset 0 0 0 var(--borderWidth-thin) var(--control-transparent-borderColor-active,var(--color-action-list-item-default-active-border))",
+            "color": "var(--fgColor-onEmphasis)",
+            "outline": "none",
+            "opacity": "0.4"
+          },
+          "focus": {
+            "boxShadow": "none",
+            "outline": "var(--brand-borderWidth-thick) solid var(--brand-color-focus,currentColor)",
+            "backgroundColor": "rgba(255, 255, 255, 0.04)",
+            "border": "var(--borderWidth-thin,max(var(--borderWidth-thin), .0625rem)) solid var(--control-bgColor-hover)",
+            "color": "var(--brand-color-text-muted)",
+            "opacity": "1",
+            "transform": "translate(var(--base-size-16), calc(-1 * var(--base-size-8))) scale(.8)"
+          }
+        },
+        "fontWeight": "400",
+        "fontSize": "16px",
+        "classes": "Primer_Brand__Button-module__Button___scH9Z Primer",
+        "confidence": "medium"
+      },
+      {
+        "states": {
+          "default": {
+            "backgroundColor": "rgb(8, 135, 43)",
+            "color": "rgb(255, 255, 255)",
+            "padding": "6px 20px",
+            "borderRadius": "6px",
+            "border": "1px solid rgba(0, 0, 0, 0)",
+            "boxShadow": "none",
+            "outline": "rgb(255, 255, 255) none 3px",
+            "transform": "none",
+            "opacity": "1"
+          },
+          "hover": {
+            "color": "var(--brand-color-text-default)",
+            "backgroundColor": "var(--bgColor-accent-emphasis)",
+            "opacity": "1"
+          },
+          "active": {
+            "boxShadow": "none",
+            "outline": "2px solid var(--focus-outlineColor,var(--color-accent-fg))",
+            "backgroundColor": "var(--bgColor-accent-emphasis)",
+            "color": "var(--fgColor-onEmphasis)",
+            "opacity": "1"
+          },
+          "focus": {
+            "boxShadow": "none",
+            "outline": "2px solid var(--brand-color-focus,currentColor)",
+            "border": "0px",
+            "opacity": "1"
+          }
+        },
+        "fontWeight": "400",
+        "fontSize": "14px",
+        "classes": "Primer_Brand__Button-module__Button___scH9Z Primer",
+        "confidence": "high"
+      },
+      {
+        "states": {
+          "default": {
+            "backgroundColor": "rgb(9, 13, 10)",
+            "color": "rgb(255, 255, 255)",
+            "padding": "0px",
+            "borderRadius": "48px",
+            "border": "1px solid rgb(25, 31, 27)",
+            "boxShadow": "none",
+            "outline": "rgb(255, 255, 255) none 3px",
+            "transform": "none",
+            "opacity": "1"
+          },
+          "hover": {
+            "color": "var(--brand-color-text-default)",
+            "backgroundColor": "var(--bgColor-accent-emphasis)",
+            "opacity": "1"
+          },
+          "active": {
+            "boxShadow": "none",
+            "outline": "2px solid var(--focus-outlineColor,var(--color-accent-fg))",
+            "backgroundColor": "var(--bgColor-accent-emphasis)",
+            "color": "var(--fgColor-onEmphasis)",
+            "opacity": "1"
+          },
+          "focus": {
+            "boxShadow": "none",
+            "outline": "2px solid var(--brand-color-focus,currentColor)",
+            "border": "0px",
+            "opacity": "1"
+          }
+        },
+        "fontWeight": "400",
+        "fontSize": "14px",
+        "classes": "Primer_Brand__LogoSuite-module__LogoSuite__logobar",
+        "confidence": "high"
+      }
+    ],
+    "inputs": {
+      "text": [
+        {
+          "specificType": "email",
+          "states": {
+            "default": {
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "color": "rgb(0, 0, 0)",
+              "border": "0px none rgb(0, 0, 0)",
+              "borderRadius": "8px",
+              "padding": "18px 12px 0px 18px",
+              "boxShadow": "none",
+              "outline": "rgb(0, 0, 0) none 3px"
+            },
+            "focus": {
+              "backgroundColor": "var(--bgColor-default)",
+              "borderColor": "var(--brand-color-error-fg)",
+              "boxShadow": "0 0 0 1px var(--brand-color-error-fg)",
+              "outline": "none",
+              "border": "0px",
+              "color": "var(--fgColor-muted)"
+            }
+          }
+        }
+      ],
+      "checkbox": [],
+      "radio": [],
+      "select": []
+    },
+    "links": [
+      {
+        "color": "rgb(255, 255, 255)",
+        "textDecoration": "none",
+        "fontWeight": "400",
+        "states": {
+          "default": {
+            "color": "rgb(255, 255, 255)",
+            "textDecoration": "none"
+          },
+          "hover": {
+            "textDecoration": "none",
+            "color": "var(--fgColor-accent)"
+          }
+        }
+      },
+      {
+        "color": "rgb(162, 218, 255)",
+        "textDecoration": "none",
+        "fontWeight": "400",
+        "states": {
+          "default": {
+            "color": "rgb(162, 218, 255)",
+            "textDecoration": "underline 1px rgb(162, 218, 255)"
+          },
+          "hover": {
+            "textDecoration": "none",
+            "color": "var(--fgColor-accent)"
+          }
+        }
+      },
+      {
+        "color": "rgb(164, 174, 166)",
+        "textDecoration": "none",
+        "fontWeight": "500",
+        "states": {
+          "default": {
+            "color": "rgb(164, 174, 166)",
+            "textDecoration": "none"
+          },
+          "hover": {
+            "textDecoration": "underline",
+            "color": "var(--brand-color-text-default)"
+          }
+        }
+      }
+    ],
+    "badges": {
+      "all": [],
+      "byVariant": {
+        "error": [],
+        "warning": [],
+        "success": [],
+        "info": [],
+        "neutral": []
+      }
+    }
+  },
+  "breakpoints": [
+    {
+      "px": "2px"
+    },
+    {
+      "px": "98px"
+    },
+    {
+      "px": "320px"
+    },
+    {
+      "px": "360px"
+    },
+    {
+      "px": "380px"
+    },
+    {
+      "px": "400px"
+    },
+    {
+      "px": "408px"
+    },
+    {
+      "px": "420px"
+    },
+    {
+      "px": "460px"
+    },
+    {
+      "px": "479px"
+    },
+    {
+      "px": "500px"
+    },
+    {
+      "px": "543px"
+    },
+    {
+      "px": "544px"
+    },
+    {
+      "px": "600px"
+    },
+    {
+      "px": "639px"
+    },
+    {
+      "px": "767px"
+    },
+    {
+      "px": "768px"
+    },
+    {
+      "px": "800px"
+    },
+    {
+      "px": "802px"
+    },
+    {
+      "px": "803px"
+    },
+    {
+      "px": "840px"
+    },
+    {
+      "px": "875px"
+    },
+    {
+      "px": "876px"
+    },
+    {
+      "px": "980px"
+    },
+    {
+      "px": "1011px"
+    },
+    {
+      "px": "1012px"
+    },
+    {
+      "px": "1028px"
+    },
+    {
+      "px": "1029px"
+    },
+    {
+      "px": "1150px"
+    },
+    {
+      "px": "1200px"
+    },
+    {
+      "px": "1279px"
+    },
+    {
+      "px": "1280px"
+    },
+    {
+      "px": "1299px"
+    },
+    {
+      "px": "1300px"
+    },
+    {
+      "px": "1320px"
+    },
+    {
+      "px": "1400px"
+    },
+    {
+      "px": "1600px"
+    },
+    {
+      "px": "1602px"
+    },
+    {
+      "px": "1728px"
+    }
+  ],
+  "iconSystem": [
+    {
+      "name": "SVG Icons",
+      "type": "svg"
+    }
+  ],
+  "frameworks": [
+    {
+      "name": "PrimeReact/Vue/NG",
+      "confidence": "high",
+      "evidence": "296 Prime components"
+    },
+    {
+      "name": "Element Plus/UI",
+      "confidence": "high",
+      "evidence": "22 el- components"
+    }
+  ]
+}

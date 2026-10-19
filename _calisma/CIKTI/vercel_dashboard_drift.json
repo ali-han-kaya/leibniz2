@@ -1,0 +1,366 @@
+{
+  "categories": {
+    "counts": {
+      "color": 32,
+      "composition": 9,
+      "font_family": 3,
+      "font_size": 7,
+      "layout": 5,
+      "letter_spacing": 1,
+      "line_height": 2,
+      "motion": 9,
+      "radius": 8,
+      "spacing": 10
+    },
+    "labels": {
+      "color": "Renk, tint ve yüzey/effect",
+      "composition": "Composition shorthand",
+      "font_family": "Font family",
+      "font_size": "Font size",
+      "layout": "Layout",
+      "letter_spacing": "Letter spacing",
+      "line_height": "Line height",
+      "motion": "Motion",
+      "radius": "Radius",
+      "spacing": "Spacing"
+    },
+    "uncategorized": []
+  },
+  "dashboard_base_tokens": [
+    "--accent",
+    "--backdrop-lightbox",
+    "--badge-padding",
+    "--badge-radius",
+    "--bg",
+    "--border",
+    "--budget",
+    "--button-padding",
+    "--card-bg",
+    "--card-border",
+    "--card-padding",
+    "--card-radius",
+    "--code-bg",
+    "--dur-fade",
+    "--dur-fast",
+    "--dur-glow",
+    "--dur-mid",
+    "--dur-pulse",
+    "--dur-shake",
+    "--dur-slow",
+    "--ease",
+    "--ease-in-out",
+    "--err",
+    "--fg",
+    "--fg-dimmed",
+    "--font-mono",
+    "--font-sans",
+    "--font-verdict",
+    "--grid-gap",
+    "--grid-min",
+    "--header-end",
+    "--header-start",
+    "--lh-base",
+    "--lh-tight",
+    "--ls-caps",
+    "--main-max-width",
+    "--muted",
+    "--ok",
+    "--on-accent",
+    "--paper",
+    "--paper-ink",
+    "--pre-padding",
+    "--radius-1",
+    "--radius-2",
+    "--radius-3",
+    "--radius-4",
+    "--radius-5",
+    "--radius-6",
+    "--radius-7",
+    "--radius-full",
+    "--shadow-tip",
+    "--space-1",
+    "--space-10",
+    "--space-2",
+    "--space-3",
+    "--space-4",
+    "--space-5",
+    "--space-6",
+    "--space-7",
+    "--space-8",
+    "--space-9",
+    "--surface",
+    "--surface-1",
+    "--surface-2",
+    "--surface-raised",
+    "--table-cell-padding",
+    "--text-2xs",
+    "--text-base",
+    "--text-lg",
+    "--text-md",
+    "--text-sm",
+    "--text-xl",
+    "--text-xs",
+    "--tint-accent-active",
+    "--tint-accent-bg",
+    "--tint-accent-hover",
+    "--tint-budget-bg",
+    "--tint-err-bg",
+    "--tint-err-bg-strong",
+    "--tint-err-bg-weak",
+    "--tint-ok-bg",
+    "--tint-unknown-bg",
+    "--tint-warn-bg",
+    "--warn",
+    "--z3-grid-gap",
+    "--z3-grid-min"
+  ],
+  "dashboard_light_overrides": [
+    "--accent",
+    "--bg",
+    "--border",
+    "--budget",
+    "--code-bg",
+    "--err",
+    "--fg",
+    "--fg-dimmed",
+    "--header-end",
+    "--header-start",
+    "--muted",
+    "--ok",
+    "--on-accent",
+    "--paper",
+    "--paper-ink",
+    "--surface",
+    "--surface-1",
+    "--surface-2",
+    "--surface-raised",
+    "--warn"
+  ],
+  "findings": [
+    {
+      "detail": {
+        "dashboard_theme": "dark default + light override",
+        "vercel_theme": "light-only"
+      },
+      "id": "theme-crossing",
+      "message": "Vercel yakalaması yalnız light; dashboard varsayılanı dark + light override. Renk rolleri light override'lar üzerinden okunur.",
+      "severity": "info"
+    },
+    {
+      "detail": {
+        "exact_matches": 0,
+        "rows": []
+      },
+      "id": "value-reuse",
+      "message": "Vercel değerlerinden dashboard değeriyle BİREBİR aynı olanlar (ad bazlı çakışma olmadan değer kimliği).",
+      "severity": "info"
+    }
+  ],
+  "generated_by": "design-system/scripts/report_vercel_dashboard_drift.py",
+  "nearest_role": [
+    {
+      "difference": "Dashboard saf beyaz değil; hafif sıcak kâğıt zemin kullanıyor.",
+      "nearest_dashboard_role": "Light `--surface` / `--paper`: `#fffdf8`",
+      "vercel": "--color-background-100",
+      "vercel_value": "hsla(0, 0%, 100%, 1)"
+    },
+    {
+      "difference": "Yakın parlaklık; Vercel nötr gri, dashboard sıcak gri.",
+      "nearest_dashboard_role": "Light `--surface-raised`: `#e9e1d3`",
+      "vercel": "--color-gray-200",
+      "vercel_value": "hsla(0, 0%, 92%, 1)"
+    },
+    {
+      "difference": "Aynı nötr/sıcak ton farkı.",
+      "nearest_dashboard_role": "Light `--surface-raised`: `#e9e1d3`",
+      "vercel": "--color-gray-300",
+      "vercel_value": "hsla(0, 0%, 90%, 1)"
+    },
+    {
+      "difference": "Dashboard çizgisi daha koyu ve sıcak.",
+      "nearest_dashboard_role": "Light `--border`: `#cfc5b5`",
+      "vercel": "--color-gray-500",
+      "vercel_value": "hsla(0, 0%, 79%, 1)"
+    },
+    {
+      "difference": "Tek bir karşılığı yok.",
+      "nearest_dashboard_role": "Light `--border` / `--muted` arası",
+      "vercel": "--color-gray-600",
+      "vercel_value": "hsla(0, 0%, 66%, 1)"
+    },
+    {
+      "difference": "Dashboard daha koyu ve sıcak.",
+      "nearest_dashboard_role": "Light `--muted`: `#70695f`",
+      "vercel": "--color-gray-700",
+      "vercel_value": "hsla(0, 0%, 56%, 1)"
+    },
+    {
+      "difference": "Nötr gri ile sıcak metin grisi farklı.",
+      "nearest_dashboard_role": "Light `--muted`: `#70695f`",
+      "vercel": "--color-gray-800",
+      "vercel_value": "hsla(0, 0%, 49%, 1)"
+    },
+    {
+      "difference": "Dashboard metni daha koyu ve sıcak.",
+      "nearest_dashboard_role": "Light `--fg`: `#292722`",
+      "vercel": "--color-gray-900",
+      "vercel_value": "hsla(0, 0%, 30%, 1)"
+    },
+    {
+      "difference": "En yakın koyu nötr ton; yine de değer ve ton farklı.",
+      "nearest_dashboard_role": "Light `--fg`: `#292722`",
+      "vercel": "--color-gray-1000",
+      "vercel_value": "hsla(0, 0%, 9%, 1)"
+    },
+    {
+      "difference": "Status tint'leri semantik; genel alpha border'ın karşılığı değil.",
+      "nearest_dashboard_role": "Dashboard'da yarı saydam nötr sınır token'ı yok",
+      "vercel": "--color-gray-alpha-400",
+      "vercel_value": "#00000014"
+    },
+    {
+      "difference": "Anlam yakın; Vercel canlı üretim kırmızısı, light theme metin kontrastı daha koyu.",
+      "nearest_dashboard_role": "`--err`: dark `#ff7b72`, light `#b42318`",
+      "vercel": "--ship-text",
+      "vercel_value": "#ff5b4f"
+    },
+    {
+      "difference": "Dark temada mavi yakın; light temada dashboard accent kahverengi.",
+      "nearest_dashboard_role": "`--accent`: dark `#58a6ff`, light `#8b5e2b`",
+      "vercel": "--develop-text",
+      "vercel_value": "#0a72ef"
+    },
+    {
+      "difference": "Mor/pink ailesi yakın; semantik ve değer farklı.",
+      "nearest_dashboard_role": "`--budget`: dark `#bc8cff`, light `#7650a8`",
+      "vercel": "--preview-text",
+      "vercel_value": "#de1d8d"
+    },
+    {
+      "difference": "Console default'ı doğrudan dashboard foreground/background token'ı değil.",
+      "nearest_dashboard_role": "Light `--fg`: `#292722`; dark `--bg`: `#0e1116`",
+      "vercel": "--geist-console-text-color-default",
+      "vercel_value": "#000"
+    },
+    {
+      "difference": "Blue semantiği korunur; dashboard light accent'i mavi değil.",
+      "nearest_dashboard_role": "Dark `--accent`: `#58a6ff`",
+      "vercel": "--geist-console-text-color-blue",
+      "vercel_value": "#0070f3"
+    },
+    {
+      "difference": "Aile yakın; token görevi farklı.",
+      "nearest_dashboard_role": "Light `--budget`: `#7650a8`",
+      "vercel": "--geist-console-text-color-purple",
+      "vercel_value": "#7928ca"
+    },
+    {
+      "difference": "Dashboard'da doğrudan pink semantic karşılığı yok.",
+      "nearest_dashboard_role": "Light `--budget` / Vercel `--preview-text` ailesi",
+      "vercel": "--geist-console-text-color-pink",
+      "vercel_value": "#eb367f"
+    },
+    {
+      "difference": "Nötr açık seçim yüzeyi; dashboard seçimleri mevcut tint/hover sözleşmesine bağlı.",
+      "nearest_dashboard_role": "Light `--surface` / `--surface-raised`",
+      "vercel": "--geist-selection-text-color",
+      "vercel_value": "hsla(0, 0%, 95%, 1)"
+    },
+    {
+      "difference": "Light temada doğrudan focus token'ı yok; `--accent` eşlemesi hue'yu brown'a çevirir.",
+      "nearest_dashboard_role": "Dark `--accent`: `#58a6ff`",
+      "vercel": "--ds-focus-color",
+      "vercel_value": "hsla(212, 100%, 48%, 1)"
+    }
+  ],
+  "overlap": {
+    "dashboard_only_count": 86,
+    "distinct_css_names": 105,
+    "exact_value_matches": [],
+    "shared_name_value_conflicts": [],
+    "shared_names": [],
+    "vercel_only": [
+      "--color-background-100",
+      "--color-gray-1000",
+      "--color-gray-200",
+      "--color-gray-300",
+      "--color-gray-500",
+      "--color-gray-600",
+      "--color-gray-700",
+      "--color-gray-800",
+      "--color-gray-900",
+      "--color-gray-alpha-400",
+      "--develop-text",
+      "--ds-focus-color",
+      "--geist-console-text-color-blue",
+      "--geist-console-text-color-default",
+      "--geist-console-text-color-pink",
+      "--geist-console-text-color-purple",
+      "--geist-selection-text-color",
+      "--preview-text",
+      "--ship-text"
+    ]
+  },
+  "schema": "vercel-dashboard-drift/1",
+  "sources": {
+    "consumers": [
+      {
+        "imports_vercel": true,
+        "path": "_calisma/CIKTI/preview.html"
+      },
+      {
+        "imports_vercel": false,
+        "path": "apps/dashboard-next/app/globals.css"
+      }
+    ],
+    "dashboard": {
+      "base_count": 86,
+      "captured": "2026-09-02",
+      "css": "design-system/tokens.css",
+      "json": "design-system/tokens.json",
+      "json_color_count": 20,
+      "light_override_count": 20,
+      "theme": "dark default + light override"
+    },
+    "vercel": {
+      "count": 19,
+      "css": "design-system/vercel/tokens.css",
+      "extractedAt": "2026-09-18T07:40:02.722Z",
+      "group_counts": {
+        "color": 10,
+        "develop": 1,
+        "ds": 1,
+        "geist": 5,
+        "preview": 1,
+        "ship": 1
+      },
+      "json": "design-system/vercel/tokens.json",
+      "page": "https://vercel.com/",
+      "raw": "design-system/vercel/raw.json",
+      "theme": "light-only",
+      "tool": "npx extract-design-system@0.1.11 (dembrandt 0.7.0, playwright-core 1.63.0, Chrome Headless Shell 153)"
+    }
+  },
+  "status": "ok",
+  "vercel_tokens": [
+    "--color-background-100",
+    "--color-gray-1000",
+    "--color-gray-200",
+    "--color-gray-300",
+    "--color-gray-500",
+    "--color-gray-600",
+    "--color-gray-700",
+    "--color-gray-800",
+    "--color-gray-900",
+    "--color-gray-alpha-400",
+    "--develop-text",
+    "--ds-focus-color",
+    "--geist-console-text-color-blue",
+    "--geist-console-text-color-default",
+    "--geist-console-text-color-pink",
+    "--geist-console-text-color-purple",
+    "--geist-selection-text-color",
+    "--preview-text",
+    "--ship-text"
+  ]
+}

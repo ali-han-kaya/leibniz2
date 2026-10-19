@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "preview_contract.schema.json",
+  "title": "preview_server <-> dashboard-next tel sözleşmesi",
+  "description": "Tek doğruluk kaynağı. preview_server çıktısı (/api/latest, /api/trend) ve dashboard-next tipleri (lib/preview-contract.generated.ts) bu şemadan türer. Alanlar tüketicinin okuduğu kümedir; ek alanlar serbesttir (JSON Schema varsayılanı) ve TS tipi yalnız bildirilen alanları listeler. Her alan opsiyoneldir ve null olabilir: preview yolu JSON null, DB yolu undefined üretir.",
+  "$defs": {
+    "Latest": {
+      "description": "GET /api/latest: son koşumun özeti (LATEST'in panonun okuduğu alt kümesi).",
+      "type": "object",
+      "properties": {
+        "verdict": { "description": "PASS / FAIL / UNKNOWN …", "type": ["string", "null"] },
+        "ts": { "description": "Koşum zaman damgası (ISO 8601).", "type": ["string", "null"] },
+        "p0": { "type": ["integer", "null"] },
+        "p1": { "type": ["integer", "null"] },
+        "stripped_sha256": { "type": ["string", "null"] },
+        "z3_passed": { "type": ["integer", "null"] },
+        "z3_total": { "type": ["integer", "null"] },
+        "z3_failed": { "type": ["integer", "null"] },
+        "budget_usd": { "description": "Koşumun kullandığı bütçe (USD).", "type": ["number", "null"] },
+        "budget_limit": { "description": "Koşumun etkin bütçe limiti (USD).", "type": ["number", "null"] }
+      }
+    },
+    "HistoryRow": {
+      "description": "history.jsonl satırının panoya projeksiyonu (preview_server HISTORY_DASHBOARD_KEYS). Her iki yolda (preview + DB) aynı şekil.",
+      "type": "object",
+      "properties": {
+        "ts": { "type": ["string", "null"] },
+        "verdict": { "type": ["string", "null"] },
+        "p0": { "type": ["integer", "null"] },
+        "p1": { "type": ["integer", "null"] },
+        "duration_s": { "type": ["number", "null"] },
+        "budget_usd": { "type": ["number", "null"] },
+        "budget_limit": { "type": ["number", "null"] },
+        "budget_method": { "type": ["string", "null"] },
+        "refs_verified": { "type": ["integer", "null"] },
+        "refs_total": { "type": ["integer", "null"] },
+        "refs_mismatch": { "type": ["integer", "null"] },
+        "refs_by_source": { "type": ["object", "null"] },
+        "hook_env": { "type": ["object", "null"] },
+        "z3_passed": { "type": ["integer", "null"] },
+        "z3_failed": { "type": ["integer", "null"] },
+        "z3_total": { "type": ["integer", "null"] },
+        "lean_ok": { "type": ["boolean", "null"] },
+        "lean_detail": { "type": ["string", "null"] },
+        "cli_override_count": { "type": ["integer", "null"] }
+      }
+    },
+    "TrendResponse": {
+      "description": "GET /api/trend?limit=N: pencerelenmiş geçmiş + refs-trend gövdesi.",
+      "type": "object",
+      "required": ["history"],
+      "properties": {
+        "history": { "type": "array", "items": { "$ref": "#/$defs/HistoryRow" } },
+        "limit": { "description": "Uygulanan pencere; penceresiz çağrıda yok.", "type": ["integer", "null"] },
+        "refs_trend": { "type": ["object", "null"] }
+      }
+    }
+  }
+}
