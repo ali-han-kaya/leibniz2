@@ -1,361 +1,296 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""test_deploy_evidence.py — kanit-defteri bayatlık kapısının sözleşme testleri.
+"""test_deploy_evidence.py — deploy_evidence.py sözleşme-süiti.
 
-Kapsam: dört denetim ekseni (yapı / HEAD kapsamı / yaş / koşum gerçekliği) ve
-CLI çıkış kodları. Canlı ağ YOK — `fetch_run` ve `git` sahte (fake) nesnelerle
-değiştirilir; böylece testler hangi koşulun hangi ihlali ürettiğini izole eder.
-Repo'nun GERÇEK defteri de yapısal denetime sokulur (bugün yeşil olmalı —
-aksi halde kapi işlevsiz kalmış demektir).
+Kalıcı dağıtım-kanıtı defteri (docs/DEPLOY_EVIDENCE.md) sözleşmesi:
+
+  1) collect: her çekirdek workflow (verify/docker-security/test-smoke/
+     determinism-trend) için main-dalındaki son koşum haritalanır;
+     koşum-yok "koşum-yok" ile dürüstçe raporlanır.
+  2) append: defter append-only — mevcut satırlar asla ezilmez; başlık/
+     ayraç kolon-seti bu betiğin sözleşmesidir, eskimişse tazelenir.
+  3) azure: resource-health tek kolonu (collect_azure, az rest) — okunamayan
+     her durum açık damgayla yazılır (az-yok/rg-yok/oturum-yok/kaynak-yok/
+     hata); sessiz-PASS yok. azure_proven gerçek okumayı damgadan ayırır.
+  4) --check bayat-kanıt koruması: son satırın HEAD'i mevcut origin/main
+     ucuyla aynıysa rc=0, farklıysa rc=1 (fail-closed); --require-azure
+     ayrıca son satırda gerçek Azure okuması şart koşar.
+  5) rc-kontratı: 0 güncel/eklendi, 1 bayat/eksik-azure, 2 kullanım/ortam.
 """
-import datetime as dt
-import pathlib
-import subprocess
-import sys
-import unittest
 
-HERE = pathlib.Path(__file__).resolve().parent
-ROOT = HERE.parents[1]
-sys.path.insert(0, str(HERE))
+import contextlib
+import io
+import os
+import sys
+import tempfile
+import unittest
+from unittest import mock
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+if HERE not in sys.path:
+    sys.path.insert(0, HERE)
 
 import deploy_evidence as de  # noqa: E402
 
-LEDGER = ROOT / "docs" / "DEPLOY_EVIDENCE.md"
-LINK = "https://github.com/o/r/actions/runs/%s"
+# Defterin gemideki (2026-09-22 öncesi) kolon-seti: migration'ı kanıtlar.
+OLD_HEADERS = ("| Tarih | HEAD (origin/main) | verify-delivery |"
+               " docker-security | test-smoke | determinism-trend |")
+OLD_SEP = "|---|---|---|---|---|---|"
+
+APP_ID = ("/subscriptions/s1/resourceGroups/rg-x/providers/Microsoft.App/"
+          "containerApps/app-verify-dashboard")
 
 
-def ledger_text(rows):
-    """Test fixture'ı: satırlar (tarih, head, [(conclusion, run_id), ...]).
+class TestCollect(unittest.TestCase):
+    def test_collect_maps_latest_runs_per_workflow(self):
+        def fake_gh(argv):
+            joined = " ".join(argv)
+            if "commits/main" in joined:
+                # gh --jq .sha çıktısı bare JSON-string'tir (dict değil)
+                return 0, de.json.dumps("a" * 40)
+            if "run" in argv and "list" in argv:
+                wf = argv[argv.index("--workflow") + 1]
+                data = {
+                    "verify.yml": [{"databaseId": 1, "conclusion": "success",
+                                    "headSha": "a" * 40, "url": "u1"}],
+                    "docker-security.yml": [{"databaseId": 2,
+                                             "conclusion": "success",
+                                             "headSha": "a" * 40,
+                                             "url": "u2"}],
+                }
+                return 0, de.json.dumps(data.get(wf, []))
+            return 1, "unexpected"
+        ev, err = de.collect("main", fake_gh)
+        self.assertEqual(err, "")
+        self.assertEqual(ev["sha"], "a" * 40)
+        self.assertEqual(ev["runs"]["verify.yml"]["databaseId"], 1)
+        self.assertIsNone(ev["runs"]["test-smoke.yml"])  # dürüst yok-bildirimi
 
-    Hucre degerinin string olmasi halinde RAW yazilir — bozuk hucre bicimini
-    test etmek icin (orn. "[success] #1", "yesil") fixture kendi hucresini
-    kurabilir.
-    """
-    out = ["## Kanit-defteri", "",
-           "| " + " | ".join(de.EXPECTED_HEADER) + " |",
-           "|" + "---|" * len(de.EXPECTED_HEADER)]
-    for date, head, runs in rows:
-        cells = [date, head]
-        for run in runs:
-            if isinstance(run, str):
-                cells.append(run)
-            else:
-                lbl, rid = run
-                cells.append("[%s #%s](%s)" % (lbl, rid, LINK % rid))
-        out.append("| " + " | ".join(cells) + " |")
-    return "\n".join(out) + "\n"
+    def test_collect_gh_failure_is_usage_error(self):
+        rc, msg = de.collect("main", lambda a: (1, "boom"))
+        self.assertIsNone(rc)
+        self.assertIn("boom", msg)
 
-
-def real_main_short():
-    """Yerel main'in kisa sha'sı (yoksa test atlanır) — CLI testleri gerçek
-    git'e bağlı olduğundan fixture HEAD'i main soyunda olmalı."""
-    proc = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "--short",
-                           "origin/main"], capture_output=True, text=True)
-    if proc.returncode != 0:
-        proc = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "--short",
-                               "main"], capture_output=True, text=True)
-    if proc.returncode != 0:
-        return None
-    return proc.stdout.strip()
-
-
-def fake_git(main_sha="a" * 40, gap=0, ancestor=True, subjects=None,
-             no_log=False):
-    """`git_runner` sözleşmesini taklit eden sahte git.
-
-    subjects: `head..main` arası commit başlıkları (None → git log yok,
-    rev-list sayımına düşülür).
-    """
-    def _git(args):
-        if args[0] == "rev-parse":
-            return main_sha
-        if args[:1] == ["merge-base"]:
-            return "" if ancestor else None
-        if args[:1] == ["log"] and not no_log and subjects is not None:
-            return "\n".join(subjects)
-        if args[:1] == ["log"]:
-            return None
-        if args[:1] == ["rev-list"]:
-            return str(gap)
-        return None
-    return _git
+    def test_collect_accepts_bare_hex_sha(self):
+        """Gerçek-gh şekli: --jq .sha çıktısı bare-hex (JSON-değil)."""
+        def fake_gh(argv):
+            if "commits/main" in " ".join(argv):
+                return 0, "a" * 40  # bare-hex, tırnaksız
+            return 0, "[]"
+        ev, err = de.collect("main", fake_gh)
+        self.assertEqual(err, "")
+        self.assertEqual(ev["sha"], "a" * 40)
 
 
-class TestParseStructure(unittest.TestCase):
-    def test_real_ledger_parses_clean(self):
-        rows, violations = de.parse_rows(LEDGER.read_text(encoding="utf-8"))
-        self.assertEqual(violations, [])
-        self.assertTrue(rows)
-        for row in rows:
-            self.assertEqual(len(row.runs), len(de.EXPECTED_HEADER) - 2)
+class TestAzureHealth(unittest.TestCase):
+    """Azure kolonu: gerçek okuma linkli; her arıza açık damga (sessiz-PASS yok)."""
 
-    def test_missing_table_is_violation(self):
-        _, violations = de.parse_rows("# bos\n")
-        self.assertTrue(any("tablo basligi" in v for v in violations))
+    def _az(self, payload, rc=0):
+        def fake(argv):
+            if argv[:2] == ["rest", "--method"]:
+                return rc, payload
+            return 1, "unexpected"
+        return fake
 
-    def test_wrong_header_is_violation(self):
-        text = ledger_text([("2026-10-05", "abc1234", [("success", "1")] * 4)])
-        text = text.replace("| test-smoke |", "| baska |")
-        _, violations = de.parse_rows(text)
-        self.assertTrue(any("baslik" in v for v in violations))
+    def _no_login(self):
+        def fake(argv):
+            if argv[:2] == ["account", "show"]:
+                return 1, "ERROR: Please run 'az login' to setup account."
+            return 1, "unexpected"
+        return fake
 
-    def test_bad_date_is_violation(self):
-        text = ledger_text([("05.10.2026", "abc1234", [("success", "1")] * 4)])
-        _, violations = de.parse_rows(text)
-        self.assertTrue(any("tarih ISO" in v for v in violations))
+    def test_available_maps_state_to_portal_link(self):
+        payload = de.json.dumps({"id": APP_ID,
+                                 "properties": {"availabilityState": "Available"}})
+        ev = de.collect_azure(self._az(payload), "rg-x", subscription="s1")
+        self.assertEqual(ev["state"], "Available")
+        self.assertIn("portal.azure.com/#resource" + APP_ID, ev["cell"])
+        self.assertTrue(de.azure_proven(ev["cell"]))
 
-    def test_non_hex_head_is_violation(self):
-        text = ledger_text([("2026-10-05", "ZZZZZZZ", [("success", "1")] * 4)])
-        _, violations = de.parse_rows(text)
-        self.assertTrue(any("kisa-hex" in v for v in violations))
+    def test_missing_resource_group_is_marked_not_measured(self):
+        ev = de.collect_azure(self._az("{}"), "  ", subscription="s1")
+        self.assertEqual(ev["cell"], "rg-yok")
+        self.assertFalse(de.azure_proven(ev["cell"]))
 
-    def test_bad_run_cell_is_violation(self):
-        text = ledger_text([("2026-10-05", "abc1234", ["yesil"] * 4)])
-        _, violations = de.parse_rows(text)
-        self.assertTrue(any("bicimi yanlis" in v for v in violations), violations)
+    def test_no_login_is_marked_with_reason(self):
+        with mock.patch.dict(os.environ, {"AZURE_SUBSCRIPTION_ID": ""}):
+            ev = de.collect_azure(self._no_login(), "rg-x")
+        self.assertEqual(ev["cell"], "oturum-yok")
+        self.assertIn("az login", ev["note"])
+        self.assertFalse(de.azure_proven(ev["cell"]))
 
-    def test_unknown_conclusion_is_reported_per_cell(self):
-        text = ledger_text([("2026-10-05", "abc1234", [("yesildi", "1")] * 4)])
-        _, violations = de.parse_rows(text)
-        self.assertEqual(len(violations), 4)
+    def test_subscription_from_env_skips_account_show(self):
+        def fake(argv):
+            self.assertNotEqual(argv[:2], ["account", "show"])
+            if argv[:2] == ["rest", "--method"]:
+                return 0, de.json.dumps({"id": APP_ID, "properties": {
+                    "availabilityState": "Degraded"}})
+            return 1, "unexpected"
+        with mock.patch.dict(os.environ, {"AZURE_SUBSCRIPTION_ID": "env-sub"}):
+            ev = de.collect_azure(fake, "rg-x")
+        self.assertEqual(ev["state"], "Degraded")
 
-    def test_unknown_conclusion_is_violation(self):
-        text = ledger_text([("2026-10-05", "abc1234", [("yesil", "1")] * 4)])
-        _, violations = de.parse_rows(text)
-        self.assertTrue(any("bilinmeyen conclusion" in v for v in violations))
+    def test_not_found_is_marked_resource_missing(self):
+        ev = de.collect_azure(self._az("ERROR: (ResourceNotFound) ...", rc=1),
+                              "rg-x", subscription="s1")
+        self.assertEqual(ev["cell"], "kaynak-yok")
+        self.assertFalse(de.azure_proven(ev["cell"]))
 
-    def test_duplicate_head_is_violation(self):
-        text = ledger_text([("2026-10-05", "abc1234", [("success", "1")] * 4),
-                            ("2026-10-06", "abc1234", [("success", "2")] * 4)])
-        _, violations = de.parse_rows(text)
-        self.assertTrue(any("birden fazla satirda" in v for v in violations))
+    def test_other_error_is_marked_with_note(self):
+        ev = de.collect_azure(self._az("ERROR: network unreachable", rc=1),
+                              "rg-x", subscription="s1")
+        self.assertEqual(ev["cell"], "hata")
+        self.assertIn("network", ev["note"])
 
-    def test_backwards_date_is_violation(self):
-        text = ledger_text([("2026-10-06", "abc1234", [("success", "1")] * 4),
-                            ("2026-10-05", "def5678", [("success", "2")] * 4)])
-        _, violations = de.parse_rows(text)
-        self.assertTrue(any("geriye gidiyor" in v for v in violations))
+    def test_unparsable_payload_is_marked(self):
+        ev = de.collect_azure(self._az("not-json"), "rg-x", subscription="s1")
+        self.assertEqual(ev["cell"], "hata")
 
-    def test_violation_reports_markdown_line_number(self):
-        text = ledger_text([("2026-10-05", "abc1234", [("success", "1")] * 4),
-                            ("2026-10-06", "def5678", [("yesildi", "2")] * 4)])
-        _, violations = de.parse_rows(text)
-        # baslik 3. satir, ayirici 4. satir, ilk veri satiri 5, ikinci 6
-        self.assertTrue(any(v.startswith("satir 6:") for v in violations),
-                        violations)
+    def test_missing_state_field_is_marked(self):
+        ev = de.collect_azure(self._az(de.json.dumps({"id": APP_ID})),
+                              "rg-x", subscription="s1")
+        self.assertEqual(ev["cell"], "hata")
 
+    def test_azure_proven_separates_reads_from_markers(self):
+        self.assertTrue(de.azure_proven("[Available](https://x)"))
+        self.assertTrue(de.azure_proven("Available"))
+        for marker in de.AZURE_MARKERS:
+            self.assertFalse(de.azure_proven(marker), marker)
 
-class TestHeadCoverage(unittest.TestCase):
-    def setUp(self):
-        self.rows, _ = de.parse_rows(
-            ledger_text([("2026-10-05", "abc1234", [("success", "1")] * 4)]))
+    def test_empty_cell_is_not_proof(self):
+        """Boş hücre sessiz-PASS olamaz (kolon-öncesi satırlar)."""
+        self.assertFalse(de.azure_proven(""))
+        self.assertFalse(de.azure_proven("   "))
 
-    def test_within_gap_is_ok(self):
-        self.assertEqual(de.check_head_coverage(self.rows, fake_git(gap=2), 3), [])
-
-    def test_gap_over_tolerance_is_violation(self):
-        out = de.check_head_coverage(
-            self.rows, fake_git(subjects=["feat(x): a"] * 4), 3)
-        self.assertTrue(any("4 ANLAMLI commit ileride" in v for v in out), out)
-
-    def test_evidence_commits_do_not_widen_the_gap(self):
-        """docs(deploy)/chore commit'leri kaniti geriye götürmez — sayılmaz."""
-        subjects = ["chore(changelog): x satirini tabloya ekle",
-                    "docs(deploy): HEAD kosum satirini kanit-defterine ekle",
-                    "feat(ci): gercek is", "chore(changelog): y satirini tabloya ekle"]
-        self.assertEqual(
-            de.check_head_coverage(self.rows, fake_git(subjects=subjects), 3), [])
-        self.assertEqual(de.substantive_gap(fake_git(subjects=subjects),
-                                            "a" * 40, "b" * 40), 1)
-
-    def test_gap_falls_back_to_raw_count_when_log_unavailable(self):
-        self.assertEqual(de.substantive_gap(fake_git(gap=7, no_log=True),
-                                            "a" * 40, "b" * 40), 7)
-
-    def test_unmeasurable_gap_is_violation(self):
-        def broken(args):
-            return None
-        out = de.check_head_coverage(self.rows, broken, 3)
-        self.assertTrue(any("cozulemedi" in v or "olculemedi" in v
-                            for v in out), out)
-
-    def test_non_ancestor_head_is_violation(self):
-        out = de.check_head_coverage(self.rows, fake_git(ancestor=False), 3)
-        self.assertTrue(any("main soyunda degil" in v for v in out), out)
-
-    def test_empty_ledger_is_violation(self):
-        out = de.check_head_coverage([], fake_git(), 3)
-        self.assertTrue(any("satir yok" in v for v in out), out)
-
-    def test_unresolvable_main_is_violation(self):
-        def broken(args):
-            return None
-        out = de.check_head_coverage(self.rows, broken, 3)
-        self.assertTrue(any("cozulemedi" in v for v in out), out)
-
-
-class TestAge(unittest.TestCase):
-    today = dt.date(2026, 10, 20)
-
-    def _rows(self, date):
-        return de.parse_rows(
-            ledger_text([(date, "abc1234", [("success", "1")] * 4)]))
-
-    def test_fresh_row_is_ok(self):
-        rows, _ = self._rows("2026-10-05")
-        self.assertEqual(de.check_age(rows, self.today, 21), [])
-
-    def test_old_row_is_violation(self):
-        rows, _ = self._rows("2026-09-01")
-        out = de.check_age(rows, self.today, 21)
-        self.assertTrue(any("49 gun eski" in v for v in out), out)
-
-    def test_future_date_is_violation(self):
-        rows, _ = self._rows("2026-12-01")
-        out = de.check_age(rows, self.today, 21)
-        self.assertTrue(any("gelecek tarihli" in v for v in out), out)
-
-    def test_empty_ledger_is_violation(self):
-        out = de.check_age([], self.today, 21)
-        self.assertTrue(any("satir yok" in v for v in out), out)
-
-
-class TestRunReality(unittest.TestCase):
-    def setUp(self):
-        self.rows, _ = de.parse_rows(ledger_text([
-            ("2026-10-01", "aaa1111", [("success", "11")] * 4),
-            ("2026-10-05", "bbb2222", [("failure", "21"), ("success", "22"),
-                                       ("success", "23"), ("success", "24")]),
-        ]))
-
-    def test_matching_conclusions_pass(self):
-        live = {"21": "failure", "22": "success", "23": "success", "24": "success"}
-        fetch = lambda rid: ({"conclusion": live[rid]} if rid in live else None)
-        self.assertEqual(de.check_runs(self.rows, fetch, 1), [])
-
-    def test_conclusion_drift_is_violation(self):
-        live = {"21": "success", "22": "success", "23": "success", "24": "success"}
-        fetch = lambda rid: {"conclusion": live[rid]}
-        out = de.check_runs(self.rows, fetch, 1)
-        self.assertTrue(any("sapmasi" in v and "#21" in v for v in out), out)
-
-    def test_missing_run_is_violation(self):
-        out = de.check_runs(self.rows, lambda rid: None, 1)
-        self.assertEqual(len(out), 4)
-        self.assertTrue(all("bulunamadi" in v for v in out), out)
-
-    def test_only_newest_rows_are_queried(self):
-        """Eski satırlar canlıya sorulmaz (saklama süresi → yanlış kırmızı)."""
+    def test_collect_azure_requests_resource_health_endpoint(self):
         seen = []
 
-        def spy(rid):
-            seen.append(rid)
-            return {"conclusion": "success"}
-        de.check_runs(self.rows, spy, 1)
-        self.assertEqual(sorted(seen), ["21", "22", "23", "24"])
-        self.assertNotIn("11", seen)
-
-    def test_verify_rows_zero_disables_network(self):
-        self.assertEqual(de.check_runs(self.rows, lambda rid: None, 0), [])
-
-    def test_fetch_error_is_unverifiable_not_drift(self):
-        """Geçici API hatası 'sonuç sapması' DEĞİLDİR — ayrı raporlanır."""
-        fetch = lambda rid: {"__fetch_error__": "transport"}
-        out = de.check_runs(self.rows, fetch, 1)
-        self.assertTrue(all("DOGRULANAMADI" in v for v in out), out)
-        self.assertFalse(any("sapmasi" in v for v in out), out)
-
-    def test_not_found_is_reported_as_missing_run(self):
-        fetch = lambda rid: {"__fetch_error__": "not_found"}
-        out = de.check_runs(self.rows, fetch, 1)
-        self.assertTrue(any("run yok" in v for v in out), out)
+        def fake(argv):
+            seen.append(" ".join(argv))
+            return 0, de.json.dumps({"id": APP_ID,
+                                     "properties": {
+                                         "availabilityState": "Available"}})
+        de.collect_azure(fake, "rg-x", subscription="s1")
+        self.assertEqual(len(seen), 1)
+        self.assertIn("Microsoft.ResourceHealth/availabilityStatuses/current",
+                      seen[0])
+        self.assertIn("api-version=" + de.AZURE_HEALTH_API, seen[0])
+        self.assertIn(de.AZURE_APP, seen[0])
 
 
-class TestRunFetcherRetry(unittest.TestCase):
-    """gh_run_fetcher: geçici hata retry edilir, 404 ayrımı korunur."""
+class TestLedger(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="dep_ev_")
+        self.path = os.path.join(self.tmp, "DEPLOY_EVIDENCE.md")
+        with open(self.path, "w", encoding="utf-8") as f:
+            f.write("# Defter\n\n## Kanıt-defteri\n\n" + OLD_HEADERS +
+                    "\n" + OLD_SEP + "\n")
 
-    def _fetcher(self, responses, **kw):
-        calls = []
+    def _rows(self):
+        with open(self.path, encoding="utf-8") as f:
+            return [ln for ln in f if ln.startswith("| 2")]
 
-        def runner(cmd, capture_output=None, text=None):
-            calls.append(cmd)
-            item = responses[min(len(calls) - 1, len(responses) - 1)]
-            return item
-        fetch = de.gh_run_fetcher("o/r", runner=runner, sleep=lambda s: None,
-                                  **kw)
-        return fetch, calls
+    def test_append_adds_row_and_keeps_old(self):
+        ev = {"sha": "a" * 40, "runs": {"verify.yml": {
+            "databaseId": 1, "conclusion": "success", "url": "u1"}}}
+        de.append_entry(self.path, "2026-09-22", ev)
+        de.append_entry(self.path, "2026-09-23", ev)
+        rows = self._rows()
+        self.assertEqual(len(rows), 2)  # append-only: eski satır duruyor
+        self.assertIn("u1", rows[-1])
+        self.assertIn("a" * 7, rows[-1])
 
-    def test_transient_error_is_retried_then_succeeds(self):
-        ok = de._Proc(0, stdout='{"conclusion": "success"}')
-        flaky = de._Proc(1, stderr="HTTP 502")
-        fetch, calls = self._fetcher([flaky, ok])
-        self.assertEqual(fetch("1")["conclusion"], "success")
-        self.assertEqual(len(calls), 2)
+    def test_last_sha_parse(self):
+        ev = {"sha": "b" * 40, "runs": {}}
+        de.append_entry(self.path, "2026-09-22", ev)
+        # Defter-satırı 7-haneli kısa-SHA tutar (--check karşılaştırması)
+        self.assertEqual(de.last_sha(self.path), "b" * 7)
+        self.assertEqual(de.last_sha(os.path.join(self.tmp, "yok.md")), "")
 
-    def test_not_found_is_not_retried_into_success_and_is_flagged(self):
-        missing = de._Proc(1, stderr="gh: Not Found (HTTP 404)")
-        fetch, calls = self._fetcher([missing])
-        data = fetch("1")
-        self.assertEqual(data.get("__fetch_error__"), "not_found")
+    def test_append_migrates_old_header_to_new_column_set(self):
+        de.append_entry(self.path, "2026-09-22", {"sha": "c" * 40, "runs": {}})
+        with open(self.path, encoding="utf-8") as f:
+            lines = f.read().splitlines()
+        self.assertIn(de.LEDGER_HEADERS, lines)
+        self.assertIn(de.LEDGER_SEP, lines)
+        self.assertNotIn(OLD_HEADERS, lines)
+        self.assertEqual(lines.count(de.LEDGER_HEADERS), 1)
 
-    def test_persistent_transport_error_reports_transport(self):
-        dead = de._Proc(1, stderr="connection reset")
-        fetch, calls = self._fetcher([dead], attempts=2)
-        data = fetch("1")
-        self.assertEqual(data.get("__fetch_error__"), "transport")
-        self.assertEqual(len(calls), 2)
+    def test_append_writes_azure_cell(self):
+        ev = {"sha": "d" * 40, "runs": {},
+              "azure": {"cell": "[Available](https://portal.azure.com/#resource/x)",
+                        "state": "Available"}}
+        de.append_entry(self.path, "2026-10-06", ev)
+        row = self._rows()[-1]
+        self.assertTrue(row.rstrip().endswith("[Available](https://portal.azure.com/#resource/x) |"))
+        self.assertTrue(de.azure_proven(de.last_cell(self.path)))
+
+    def test_append_without_azure_is_honest_not_silent(self):
+        de.append_entry(self.path, "2026-09-22", {"sha": "e" * 40, "runs": {}})
+        self.assertEqual(de.last_cell(self.path), "ölçülmedi")
+        self.assertFalse(de.azure_proven(de.last_cell(self.path)))
+
+    def test_last_cell_empty_for_missing_file(self):
+        self.assertEqual(de.last_cell(os.path.join(self.tmp, "yok.md")), "")
+
+    def test_last_cell_rejects_pre_column_row(self):
+        """Eski 6-kolonlu satırın son hücresi azure-health SAYILMAZ."""
+        with open(self.path, "a", encoding="utf-8") as f:
+            f.write("| 2026-09-22 | da58b14 | [success #1](u1) | [success #2](u2)"
+                    " | [success #3](u3) | [failure #4](u4) |\n")
+        self.assertEqual(de.LEDGER_COLUMNS, 7)
+        self.assertEqual(de.last_cell(self.path), "")
+        self.assertFalse(de.azure_proven(de.last_cell(self.path)))
 
 
-class TestRunChecksAndCli(unittest.TestCase):
-    def _env(self, live=None, gap=1, today=None):
-        return de.Env(git=fake_git(gap=gap),
-                      fetch_run=(live or {}).get,
-                      today=today or dt.date(2026, 10, 20))
+class TestCheckGate(unittest.TestCase):
+    """--check kapıları: tazelik + --require-azure kanıt şartı (fail-closed)."""
 
-    def test_offline_run_skips_live_but_keeps_structure(self):
-        import tempfile
-        text = ledger_text([("2026-10-05", "abc1234", [("success", "1")] * 4)])
-        with tempfile.TemporaryDirectory() as tmp:
-            path = pathlib.Path(tmp) / "DEPLOY_EVIDENCE.md"
-            path.write_text(text, encoding="utf-8")
-            rows, violations = de.run_checks(
-                path, self._env(), 3, 21, 2, network=False)
-            self.assertEqual(violations, [])
-            self.assertEqual(len(rows), 1)
+    SHA = "f" * 40
 
-    def test_cli_exit_zero_when_fresh(self):
-        head = real_main_short()
-        if not head:
-            self.skipTest("main cozulemedi (git gecmişi yok)")
-        import tempfile
-        today = dt.datetime.now(dt.timezone.utc).date().isoformat()
-        text = ledger_text([(today, head, [("success", "1")] * 4)])
-        with tempfile.TemporaryDirectory() as tmp:
-            path = pathlib.Path(tmp) / "ledger.md"
-            path.write_text(text, encoding="utf-8")
-            rc = de.main(["--check", "--no-network", "--ledger", str(path)])
-            self.assertEqual(rc, 0)
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="dep_ev_check_")
+        self.ledger = os.path.join(self.tmp, "DEPLOY_EVIDENCE.md")
+        self._saved = (de.LEDGER, de.GH)
+        de.LEDGER, de.GH = self.ledger, self._gh
 
-    def test_cli_exit_one_when_stale(self):
-        head = real_main_short()
-        if not head:
-            self.skipTest("main cozulemedi (git gecmişi yok)")
-        import tempfile
-        text = ledger_text([("2020-01-01", head, [("success", "1")] * 4)])
-        with tempfile.TemporaryDirectory() as tmp:
-            path = pathlib.Path(tmp) / "ledger.md"
-            path.write_text(text, encoding="utf-8")
-            rc = de.main(["--check", "--no-network", "--ledger", str(path)])
-            self.assertEqual(rc, 1)
+    def tearDown(self):
+        de.LEDGER, de.GH = self._saved
 
-    def test_cli_accepts_repo_ledger_offline(self):
-        """Repo'nun gercek defteri offline kapidan geçer (kendi bütünlüğü)."""
-        rc = de.main(["--check", "--no-network", "--ledger", str(LEDGER)])
+    def _gh(self, argv):
+        if "commits/main" in " ".join(argv):
+            return 0, self.SHA
+        return 0, "[]"
+
+    def _ledger(self, azure_cell):
+        with open(self.ledger, "w", encoding="utf-8") as f:
+            f.write("## Kanıt-defteri\n\n" + de.LEDGER_HEADERS + "\n" +
+                    de.LEDGER_SEP + "\n")
+            f.write(f"| 2026-10-06 | {self.SHA[:7]} | koşum-yok | koşum-yok |"
+                    f" koşum-yok | koşum-yok | {azure_cell} |\n")
+
+    def _run(self, argv):
+        buf = io.StringIO()
+        with mock.patch.object(de.shutil, "which", return_value="/usr/bin/gh"):
+            with contextlib.redirect_stdout(buf):
+                rc = de.main(argv)
+        return rc, buf.getvalue()
+
+    def test_fresh_ledger_with_azure_proof_passes(self):
+        self._ledger("[Available](https://portal.azure.com/#resource/x)")
+        rc, out = self._run(["--check", "--require-azure"])
         self.assertEqual(rc, 0)
+        self.assertIn("GUNCEL", out)
 
-    def test_missing_ledger_is_error_exit_two(self):
-        rc = de.main(["--check", "--no-network", "--ledger", "/nonexistent/x.md"])
-        self.assertEqual(rc, 2)
+    def test_fresh_ledger_with_marker_fails_required_azure(self):
+        self._ledger("oturum-yok")
+        rc, out = self._run(["--check", "--require-azure"])
+        self.assertEqual(rc, 1)
+        self.assertIn("AZURE-KANITI-YOK", out)
+
+    def test_marker_allowed_without_require_flag(self):
+        self._ledger("oturum-yok")
+        rc, _ = self._run(["--check"])
+        self.assertEqual(rc, 0)
 
 
 if __name__ == "__main__":

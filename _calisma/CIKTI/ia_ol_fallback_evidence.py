@@ -151,6 +151,11 @@ def collect_evidence(keys=None, offline=False):
     IA → HathiTrust → LoC → WorldCat → OpenLibrary → Google Books; kaynak
     ve gerçek API yanıtı özetiyle döner. offline=True → deterministik mock.
     Her sonuca loc_url (LoC kayıt bağlantısı) eklenir.
+
+    verify_delivery'nin run-içi sorgu→yanıt önbelleğini PAYLAŞIR:
+    `run_reference_audit` içinden çağrıldığında 5 kaynağın IA + fallback
+    zinciri ana döngüde zaten koştuğu için ikinci kez ağa çıkmaz.
+
     Döndürür: [{key, verdict, source, detail, loc_url, lccn}, ...]
     """
     if keys is None:
@@ -209,6 +214,9 @@ def main():
 
     keys = ([k.strip() for k in args.keys.split(",") if k.strip()]
             if args.keys else None)
+    # Tek başına CLI koşumu = bir run: aynı süreçte ikinci bir çağrıda
+    # önceki run'ın yanıtları sızmasın (run-içi önbellek kapsamı).
+    vd.reset_http_cache()
     try:
         results = collect_evidence(keys, offline=args.offline)
     except KeyError as e:

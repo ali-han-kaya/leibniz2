@@ -102,17 +102,25 @@ class TestLabelGateContracts(unittest.TestCase):
     # ── Guardrails ─────────────────────────────────────────────────────────
 
     def test_p0_no_unexpected_labels(self):
-        """label_gate.js yalnızca precommit-p0 etiketini kontrol etmeli."""
+        """label_gate.js yalnızca precommit-p0 etiketini kontrol etmeli.
+
+        TIRNAK DUYARSIZ: eski desen `l.name === '…'` (tek tırnak) arıyordu ve
+        tek tırnaklı YAZIM STİLİNE bağlıydı. Prettier bu repo'da çift tırnak +
+        parantez + satır kaydırma uyguluyor; yani test, kapının DAVRANIŞINI
+        değil dosyanın O GÜNDELİK biçimini ölçüyordu. Grandfather drift
+        `prettier --write` ile kapatılınca bu iki test kırıldı — kapı değil,
+        testin kendisi. Desen artık her iki tırnak stilini de kabul eder.
+        """
         # label_gate.js 'some(l => l.name ===' kalıbını kullanmalı
-        match = re.search(r"l\.name\s*===\s*'([^']+)'", self.p0)
+        match = re.search(r"""l\.name\s*===\s*(['"`])([^'"`]+)\1""", self.p0)
         self.assertIsNotNone(match, "JS label name match pattern bulunamadı")
-        self.assertEqual(match.group(1), "precommit-p0")
+        self.assertEqual(match.group(2), "precommit-p0")
 
     def test_p1_no_unexpected_labels(self):
         """label_gate_p1.js yalnızca precommit-p1 etiketini kontrol etmeli."""
-        match = re.search(r"l\.name\s*===\s*'([^']+)'", self.p1)
+        match = re.search(r"""l\.name\s*===\s*(['"`])([^'"`]+)\1""", self.p1)
         self.assertIsNotNone(match, "JS label name match pattern bulunamadı")
-        self.assertEqual(match.group(1), "precommit-p1")
+        self.assertEqual(match.group(2), "precommit-p1")
 
 
 class TestWorkflowLabelGateJobs(unittest.TestCase):

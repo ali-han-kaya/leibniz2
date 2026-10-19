@@ -4,15 +4,19 @@
 #
 # texlive_determinism_test.sh'i koşar: ingiliz_empirizmi_v3.tex üzerinde
 # ÖNCE (tectonic, tek derleme) / SONRA (TeXLive + SOURCE_DATE_EPOCH, 2
-# bağımsız derleme) hash karşılaştırması. Sonra'nın iki run'ı içerik
-# düzeyinde farklıysa deney exit 1 döner → commit BLOKE. Bilinen istisna:
+# bağımsız derleme × 3 geçiş — Faz 4 re-baseline'ı) hash karşılaştırması.
+# Sonra'nın iki run'ı içerik düzeyinde farklıysa deney exit 1 döner → commit
+# BLOKE; çok-geçişte son log'da 'Rerun to get' kalırsa da FAIL (hizalama
+# iddiası üretilemez). Bilinen istisna:
 # pdfTeX SDE+FORCE_SOURCE_DATE ile bile her koşumda RASTGELE trailer /ID
 # üretir; test betiği kalıntının yalnız /ID olduğunu kanonik (/ID nötrlenmiş
 # hash) karşılaştırmayla KANITLAR ve residual=/ID olarak raporlar — bu
 # durum PASS sayılır, çünkü /ID harici tüm baytlar birebir aynıdır.
-# Rapor: docs/ci_simulate/texlive_determinism/ (gitignore altında, yerel
-# kanıt; git takipli değildir — kanıt her ortamda aynı betikle yeniden
-# üretilir).
+# Rapor: logs/texlive_determinism_report.txt — CI'da precommit-logs
+# artifact'ı (path: logs/) ile yayınlanır; kanıt hem dosyaya hem stdout'a
+# yazılır (artifact indirilmese de log'da görünür). Eski varsayılan yol
+# gitignore altındaydı ve hiçbir upload kapsamında değildi, yani PASS kanıtı
+# hiçbir yerde görünmüyordu.
 #
 # Araç yoksa SKIP (exit 0) — kapı yalnızca araçların var olduğu ortamda
 # iddia üretir (check-lake-evidence deseni). Hafif K21 self-testi

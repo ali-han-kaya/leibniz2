@@ -29,8 +29,8 @@ sys.path.insert(0, HERE)
 import preview_prestart as pp  # noqa: E402
 
 PREVIEW_NAMES = ("preview_server.py", "_daemonize.py", "preview.html", "preview.js")
-VERIFY_NAMES = ("verify_delivery.py", "verify_delivery.config.json",
-                "daemon_http_test.py")
+VERIFY_NAMES = ("verify_delivery.py", "id_canonical.py",
+                "verify_delivery.config.json", "daemon_http_test.py")
 
 VALID_PY = "x = 1\n"
 VALID_HTML = "<html><body>preview</body></html>\n"

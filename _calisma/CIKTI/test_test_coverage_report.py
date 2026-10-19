@@ -4,6 +4,7 @@ Test edilen:
 - build_hook_map: check-unit-tests en büyük, check-plist-drift 2 dosya
 - build_ci_job_map: verify ve ci-simulate ALL
 - detect_gaps: coverage_report + preview_reload_smoke exempt
+- uncovered_failures: CHECK_EXEMPT TEK TARAFLI (muaf dosya kapsanmasa da geçer)
 - render_markdown: başlık, tablo, gap section
 - --check exit 0 (bilinen exempt'lerle)
 """
@@ -98,14 +99,18 @@ class TestDetectGaps(unittest.TestCase):
         cls.hmap = tcr.build_hook_map(tcr.HOOK_COVERAGE, cls.files)
 
     def test_exempt_files_not_flagged_as_zero_tests(self):
-        """Standalone smoke script'leri exempt — --check FAIL etmez."""
+        """Muafiyet sözleşmesi: keşfedilen her dosya ya bir hook'ta ya
+        CHECK_EXEMPT'te olmalı — --check tam olarak bunu ister.
+
+        Muafiyet kümesi TEK KAYNAK'tan (modül düzeyi CHECK_EXEMPT) okunur.
+        Eskiden burada elle kopyalanmış bir liste vardı; kopya sürüklenince
+        (test_dashboard_csp_nonce.py CHECK_EXEMPT'e eklendi ama kopyaya
+        eklenmedi) süit kırmızıya düştü — kopya invariant'ı değil, kopyanın
+        kendisi bozuluyordu.
+        """
         gaps = tcr.detect_gaps(self.files, self.hmap)
-        exempt = {"test_coverage_report.py", "test_preview_reload_smoke.py",
-                  "test_all_hooks_smoke.py", "test_dashboard_playwright_smoke.py",
-                  "test_dashboard_webkit_smoke.py",
-                  "test_preview_interaction_cdp.py",
-                  "test_preview_stream_batching.py"}
-        actual_uncovered = set(gaps["not_covered_by_any_hook"]) - exempt
+        actual_uncovered = set(gaps["not_covered_by_any_hook"]) \
+            - set(tcr.CHECK_EXEMPT)
         self.assertEqual(actual_uncovered, set(),
                          f"Unexpected uncovered: {actual_uncovered}")
 
@@ -139,6 +144,44 @@ class TestRenderMarkdown(unittest.TestCase):
     def test_has_gaps_section(self):
         md = tcr.render_markdown(self.report)
         self.assertIn("Gaps", md)
+
+
+class TestCheckExemptContract(unittest.TestCase):
+    """CHECK_EXEMPT TEK TARAFLI bir izindir: muaf dosya kapsanmasa da geçer.
+
+    Kapı yalnız "kapsanmayan VE muaf olmayan" dosyayı FAIL eder; muaf bir
+    dosyanın kapsanmasını da kapsanmamasını da şart koşmaz. Kural enjekte
+    edilmiş raporlarla çivilenir: repo durumundan (dolayısıyla ağacın temiz
+    ya da kirli olmasından) bağımsız olarak aynı sonucu verir.
+    """
+
+    @staticmethod
+    def _report(*uncovered):
+        return {"gaps": {"not_covered_by_any_hook": list(uncovered)}}
+
+    def test_exempt_file_may_be_uncovered(self):
+        self.assertEqual(
+            tcr.uncovered_failures(self._report("smoke.py"),
+                                   exempt={"smoke.py"}),
+            [],
+            "muaf dosya kapsanmadığı için FAIL etmemeli (tek taraflı izin)")
+
+    def test_missing_exemption_is_still_a_failure(self):
+        self.assertEqual(
+            tcr.uncovered_failures(self._report("smoke.py", "plain.py"),
+                                   exempt={"smoke.py"}),
+            ["plain.py"],
+            "muaf OLMAYAN kapsamsız dosya hâlâ FAIL olmalı (kapı zayıflamadı)")
+
+    def test_exemption_is_not_a_requirement(self):
+        # Tek taraflılık: muaf dosya kapsanıyorsa da sorun yok — ters yön aranmaz.
+        self.assertEqual(
+            tcr.uncovered_failures(self._report(), exempt={"covered.py"}), [])
+
+    def test_default_exemption_set_is_check_exempt(self):
+        name = "test_preview_reload_smoke.py"
+        self.assertIn(name, tcr.CHECK_EXEMPT)
+        self.assertEqual(tcr.uncovered_failures(self._report(name)), [])
 
 
 class TestCheckMode(unittest.TestCase):

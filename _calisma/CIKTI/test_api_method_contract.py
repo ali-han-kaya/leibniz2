@@ -47,9 +47,9 @@ API_CONTRACT = {
     "/api/trend": {"GET"},         # merged history + refs-trend (one fetch)
     "/api/override-trend": {"GET"},
     "/api/determinism-trend": {"GET"},
+    "/api/a11y": {"GET"},           # a11y-gate artifact → verdict/summary
     "/api/run-history": {"GET"},
     "/api/run-stdout": {"GET"},    # prefix — ?ts= ile
-    "/api/server-events": {"GET"},  # yaşam-döngüsü olay-kaydı + çökme özeti
     "/api/health": {"GET"},
 }
 
@@ -68,9 +68,9 @@ LIVE_URLS = {
     "/api/trend": "/api/trend",
     "/api/override-trend": "/api/override-trend",
     "/api/determinism-trend": "/api/determinism-trend",
+    "/api/a11y": "/api/a11y",
     "/api/run-history": "/api/run-history",
     "/api/run-stdout": "/api/run-stdout?ts=2024-01-01T00:00:00Z",
-    "/api/server-events": "/api/server-events?limit=3",
     "/api/health": "/api/health",
     # SSE path'ler canlıda ayrı test edilir (header-only)
     "/api/run": "/api/run",
@@ -125,8 +125,8 @@ class TestApiMethodContractSource(unittest.TestCase):
                 "/api/trend": '"trend"',
                 "/api/override-trend": '"override_trend"',
     "/api/determinism-trend": '"det_trend"',
+                "/api/a11y": '"a11y"',
                 "/api/run-history": '"run_history"',
-                "/api/server-events": '"server_events"',
                 "/api/run-stdout": '"run_stdout"',
                 "/api/health": '"health"',
             }[path]

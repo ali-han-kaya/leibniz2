@@ -75,8 +75,8 @@ Doğrulama zinciri (Katman 0..19):
                Internet Archive / Perseus çevrimiçi denetimi
   K7  Hijyen   secret/anahtar + artefakt taraması
   K8  İspat    Z3 sembolik ispat (--symbolic-proof; z3-solver gerektirir)
-  K9  Lean     Lean 4 reduct-invariance tümevarımsal kanıt + 8 teoremli Sınır
-               İspatı çekirdeği lake build --wfail (--lean-proof; lean+lake gerektirir)
+  K9  Lean     Lean 4 reduct-invariance kanıtı + Content.lean/LaTeX statement
+               envanter kapısı + lake build --wfail (--lean-proof; lean+lake gerektirir)
   K10 Manifest gen_repro_manifest.py çıktısı manifest.json'daki her dosyanın
                SHA-256'sını gerçek dosyayla karşılaştır + config.combined_sha256'ı
                config.files'tan YENİDEN hesaplayıp doğrula + effective_config.json'
@@ -157,7 +157,7 @@ import classify_lean_error as _cle  # noqa: E402
 import github_scripts_battery as _battery  # noqa: E402
 import check_lean_axioms as _lean_axioms  # noqa: E402
 import check_lean_statements as _lean_statements  # noqa: E402
-import pdf_id_canonical as _idcanon  # noqa: E402
+import id_canonical as _idc  # noqa: E402  (K6-DETERM tek kaynak)
 
 _LAUNCHD_NODE_PATHS = _battery.NODE_KNOWN_PATHS
 _LAUNCHD_PDFINFO_PATHS = _battery.PDFINFO_KNOWN_PATHS
@@ -178,16 +178,18 @@ EXPECTED_PAGES = 33
 DEFAULT_BUDGET_RATIOS = {"text": 3, "pdf": 8, "archive": 12, "binary": 20}
 PDF_METADATA_SIDECAR = "ingiliz_empirizmi_v3.pdf.metadata.sha256"
 PDF_RAW_SIDECAR = "ingiliz_empirizmi_v3.pdf.sha256"
-# Faz 4: K6-DETERM'in strict karşılaştırması SABİT DEĞİL — kabul
-# raporunun hash geçiş defterinden okunur (docs/ID_RESIDUAL_ACCEPTANCE.md
-# §4). Tek kaynak burada: hash'i hem kod hem doküman taşımaz, kod defteri
-# okur; defter satırı silinirse gate kırmızıya düşer (drift görünür).
-PDF_CANONICAL_LEDGER = os.path.join(
-    os.path.dirname(_HERE), "..", "docs", "ID_RESIDUAL_ACCEPTANCE.md")
+# K6-DETERM (Faz 4): determinizm referansı /ID-kanonik hash'tir; strict modda
+# bu hash kabul defterinde kayıtlı olmalıdır (motor geçişi/yeniden paketleme
+# bilinçli defter satırı ister). Normalizasyon + defter çözümlemesi TEK
+# KAYNAK: id_canonical.py (repack_delivery.py ve check_zip_lineage_drift.py
+# aynı modülü kullanır).
+ID_RESIDUAL_LEDGER_DOC = _idc.LEDGER_DOC
 SYMBOLIC_PROOF_SCRIPT = "symbolic_proof_z3.py"
 LEAN_PROOF_SCRIPT = "../lean_reduct/ReductInvariance.lean"
-# K9 ek kapısı: 8 teoremli Sınır İspatı çekirdeği (Content.lean) lake projesi.
-# lake build --wfail, lean-toolchain v4.14.0 ile fail-closed derlenir.
+# K9 statement gate canonical sourceları (MAP.md yalnız legacy Z3 eşlemesidir).
+LEAN_STATEMENT_LEAN = "Content.lean"
+LEAN_STATEMENT_LATEX = "Content.lean.tex"
+# K9 lake projesi ve statement gate aynı Lean kaynak kökünü kullanır.
 LEAN_REDUCT_DIR = "../lean_reduct"
 
 
@@ -237,7 +239,7 @@ LAYER_LABELS = {
     "K6": "İçerik (PDF + referans + skill reuse)",
     "K7": "Hijyen (secret/artefakt)",
     "K8": "Z3 sembolik ispat",
-    "K9": "Lean reduct-invariance + 8 teorem çekirdek",
+    "K9": "Lean statement gate + reduct-invariance çekirdek",
     "K10": "Manifest digest",
     "K11": "Config drift",
     "K12": "Plist şablon",
@@ -274,7 +276,8 @@ _OPTIONAL_LAYERS = {
 }
 
 
-def build_layers_summary(args, findings):
+def build_layers_summary(args, findings, core_source=None,
+                         core_verdict_path=None):
     """findings listesini K-katmanına göre gruplayıp sıralı özet üret.
 
     Döndürür {layer: {label, status, ran, findings}}. status:
@@ -282,6 +285,10 @@ def build_layers_summary(args, findings):
       - FAIL: katman koştu, en az bir P0/P1 bulgu var
       - SKIP: katman bu run'da koşmadı (bayrak verilmedi; ör. K10 verify
         job'unda değil reproducibility job'unda, K12 yalnızca macOS)
+
+    `core_source="reused"` ise K0-K7 satırlarına `source` alanı eklenir: o
+    katmanlar bu run'da KOŞMADI, aynı ağaç için doğrulanmış çekirdek
+    verdict'inden replay edildi — rapor bunu PASS gibi gizlemez.
     """
     by_layer = {}
     unregistered = []
@@ -307,8 +314,12 @@ def build_layers_summary(args, findings):
         fl = [f for f in by_layer.get(layer, [])
               if f.get("priority") in ("P0", "P1")]
         status = "FAIL" if fl else ("PASS" if ran else "SKIP")
-        layers[layer] = {"label": LAYER_LABELS[layer], "status": status,
-                         "ran": ran, "findings": fl}
+        entry = {"label": LAYER_LABELS[layer], "status": status,
+                 "ran": ran, "findings": fl}
+        if layer in _CORE_LAYERS and core_source and core_source != "ran":
+            entry["source"] = core_source
+            entry["core_verdict"] = core_verdict_path
+        layers[layer] = entry
     if unregistered:
         layers["UNREGISTERED"] = {
             "label": "Unregistered findings",
@@ -317,6 +328,71 @@ def build_layers_summary(args, findings):
             "findings": unregistered,
         }
     return layers
+
+# ---- Ağır katman süre ölçümü (K6/K8/K9) ----
+# "Hangi ağır katman ne kadar sürdü" sorusunu tek bakışta yanıtlar; sohbet
+# turunda pahalı kapıları atlamaya mı yoksa koşmaya mı karar vermek için
+# ölçülmüş veri verir (tahmin değil). Ölçüm duvar saati (monotonic). K6/K8'de
+# fazlar AYRIK aralıklardır (satır = fazların toplamı); K9 ayrıca gerçek
+# duvar saatini "toplam" fazıyla kaydeder — çift sayım yok.
+HEAVY_LAYER_TIMING_KEYS = ("K6", "K8", "K9")
+# Katmanın tüm duvar saatini taşıyan faz adı: alt faz toplamıyla çift
+# sayılmaması için satır süresi bundan alınır (K9).
+_TIMING_TOTAL_PHASE = "toplam"
+
+
+def _timing_add(timings, layer, phase, t0, now=None):
+    """Bir fazın süresini kaydet: now (yoksa şimdi) − t0, saniye.
+
+    now yalnız testlerde sabit değer geçirmek içindir.
+    """
+    end = time.monotonic() if now is None else now
+    timings.setdefault(layer, []).append(
+        {"phase": phase, "seconds": round(max(0.0, end - t0), 3)})
+
+
+def build_layer_timings(timings):
+    """Ham {katman: [faz...]} kaydını sabit sıralı tablo satırlarına çevir.
+
+    Yalnız KOŞAN katmanlar satır alır (kayıt yok = satır yok); böylece
+    tablo, o run'da gerçekten ölçülen maliyeti gösterir. Bir katman
+    "toplam" fazı kaydettiyse (K9: alt fazlar + aradaki yapıştırıcı iş)
+    satır süresi odur — alt fazlar yalnız kırılım olarak listelenir; aksi
+    halde süre ayrık fazların toplamıdır.
+    """
+    rows = []
+    for layer in HEAVY_LAYER_TIMING_KEYS:
+        phases = timings.get(layer) or []
+        if not phases:
+            continue
+        total = next((p["seconds"] for p in phases
+                      if p["phase"] == _TIMING_TOTAL_PHASE), None)
+        detail_phases = [p for p in phases
+                         if p["phase"] != _TIMING_TOTAL_PHASE]
+        rows.append({
+            "layer": layer,
+            "label": LAYER_LABELS.get(layer, layer),
+            "seconds": (round(total, 3) if total is not None
+                        else round(sum(p["seconds"] for p in detail_phases), 3)),
+            "phases": [dict(p) for p in detail_phases],
+        })
+    return rows
+
+
+def format_layer_timing_table(rows):
+    """Süre satırlarını hizalı, insan-okunur tabloya çevir (boşsa [])."""
+    if not rows:
+        return []
+    label_w = max(len(r["label"]) for r in rows)
+    lines = ["Ağır katman süreleri (duvar saati):"]
+    for r in rows:
+        detail = " · ".join(
+            "%s %.2fs" % (p["phase"], p["seconds"]) for p in r["phases"])
+        lines.append("  %-3s %-*s %7.2fs  (%s)"
+                     % (r["layer"], label_w, r["label"], r["seconds"],
+                        detail))
+    return lines
+
 
 # ---- K6 referans denetimi (CrossRef/SEP çevrimiçi, --check-references) ----
 # Kaynak: REFERANS_KANIT_DENETIMI.md (2026-08-17, 64/64 denetimi).
@@ -763,12 +839,69 @@ def _write_atomic(path, data, append=False):
         raise
 
 
+# ---- Run-içi hash önbelleği ------------------------------------------
+# Aynı süreçte aynı dosya birden çok kez hash'lenir. GERÇEK ağaçta ölçülen
+# (2026-10-19, bu teslim): dış zip 4× (çekirdek kimliği + K1 sidecar + soy
+# hattı + cleanup kaydı), iç zip 2× (K2 klasör checksum listesi + K3 sidecar).
+#   * düz koşum (--dir): 14 hash / 2.00 MB istendi → 1.53 MB okundu
+#   * --strict-determinism --check-lineage --check-cleanup --core-verdict-out:
+#     22 hash / 4.07 MB istendi → 2.06 MB okundu (~%49 daha az okuma)
+# Not: teslim PDF'i bu ağaçta sha256_file'dan TEK kez geçiyor (KLASOR_
+# CHECKSUMLARI'nın 10 girdisi arasında PDF yok); canonical_pdf_sha256 ise
+# normalize edilmiş baytları hash'ler — düz bir tekrar değil.
+#
+# Önbellek SÜREÇ-YERELDİR ve dosyanın kimliğine bağlıdır: (st_dev, st_ino,
+# st_size, st_mtime_ns, st_ctime_ns). Dosya değişirse/replace edilirse girdi
+# kendiliğinden geçersizleşir — "eski hash'i taze san" yolu YOK. Diske
+# hiçbir şey yazılmaz; `sha256_file` sözleşmesi (aynı bayt → aynı digest)
+# değişmez ve hash'ler yine dosyadan okunarak hesaplanır (ilk okumada).
+_HASH_CACHE = {}                       # kimlik → hexdigest
+_HASH_STATS = {"hits": 0, "misses": 0, "bytes_read": 0}
+
+
+def reset_hash_cache():
+    """Önbelleği boşalt (testler / uzun ömürlü süreçler için)."""
+    _HASH_CACHE.clear()
+    _HASH_STATS.update({"hits": 0, "misses": 0, "bytes_read": 0})
+
+
+def hash_cache_stats():
+    """Ölçüm: kaç hash diskten okundu (miss), kaç tanesi önbellekten geldi."""
+    return dict(_HASH_STATS, entries=len(_HASH_CACHE))
+
+
+def _file_identity(path):
+    st = os.stat(path)
+    return (st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns, st.st_ctime_ns)
+
+
 def sha256_file(path):
+    """Dosyanın sha256'sı — aynı süreçte tekrar sorulursa önbellekten.
+
+    Kimlik alınamazsa (ör. dosya yok) önbellek devre dışıdır: open() kendi
+    OSError'ını fırlatır, davranış eski haliyle birebir aynı kalır.
+    """
+    try:
+        key = _file_identity(path)
+    except OSError:
+        key = None
+    if key is not None:
+        cached = _HASH_CACHE.get(key)
+        if cached is not None:
+            _HASH_STATS["hits"] += 1
+            return cached
     h = hashlib.sha256()
+    read = 0
     with open(path, "rb") as f:
         for chunk in iter(lambda: f.read(65536), b""):
             h.update(chunk)
-    return h.hexdigest()
+            read += len(chunk)
+    digest = h.hexdigest()
+    if key is not None:
+        _HASH_CACHE[key] = digest
+        _HASH_STATS["misses"] += 1
+        _HASH_STATS["bytes_read"] += read
+    return digest
 
 
 def md5_file(path):
@@ -970,11 +1103,84 @@ def _http_get(url, timeout=REFERENCE_HTTP_TIMEOUT,
     raise last  # pragma: no cover — yukarıdaki raise'lar her yolu kapatır
 
 
+# ── Sorgu→yanıt önbelleği (BİR run içinde) ────────────────────────────────
+# Aynı URL — dolayısıyla aynı IA/OL sorgusu ve aynı fallback zinciri — bir
+# run'da ikinci kez ağa çıkmaz. Ölçüm (run_reference_audit, mock ağ): 177
+# HTTP çağrısının 129'u farklı; 48'i tekrar. Tekrarların kaynağı: (a) aynı
+# title sorgusunu paylaşan iki farklı ref (ör. Beauchamp 1999 / Hume 1748),
+# (b) §6'daki ia_ol_fallback_evidence ikinci geçişi (5 kaynağın IA + fallback
+# zinciri ana döngüde zaten koştu).
+#
+# Sözleşme sınırları:
+#   * Yalnız BAŞARILI JSON yanıtları saklanır. Hata/retry/backoff yolu
+#     değişmez: sahip thread hata verirse bekleyenler yeniden dener (negatif
+#     önbellek YOK — başarısız sorgu yanlışlıkla UNVERIFIED'a sabitlenmez).
+#   * Bütçe davranışı değişmez: `REFERENCE_AUDIT_BUDGET_S` kapısı hâlâ
+#     run_task içinde, ağ çağrısından ÖNCE; önbellek o kapıyı atlamaz.
+#   * Kapsam BİR run'dır: run_reference_audit başta temizler → daemon
+#     döngüsünde önceki run'ın bayat yanıtı sızmaz.
+#   * Eşzamanlı havuz (REFERENCE_POOL_SIZE) için single-flight: aynı URL'i
+#     aynı anda isteyen ilk thread sahibi olur, diğerleri sonucu bekler.
+_HTTP_JSON_CACHE = {}
+_HTTP_JSON_INFLIGHT = {}
+_HTTP_JSON_LOCK = threading.Lock()
+_HTTP_JSON_HITS = 0
+
+
+def reset_http_cache():
+    """Run başına önbelleği temizler (daemon'da çağrılar arası izolasyon).
+
+    Uçuştaki (in-flight) bir istek varsa bekleyenler kilitlenmesin: önce
+    event'ler set edilir, sonra tablo temizlenir — bekleyenler döngüde
+    yeniden sahip olur ve isteği kendisi yapar.
+    """
+    global _HTTP_JSON_HITS
+    with _HTTP_JSON_LOCK:
+        for ev in _HTTP_JSON_INFLIGHT.values():
+            ev.set()
+        _HTTP_JSON_INFLIGHT.clear()
+        _HTTP_JSON_CACHE.clear()
+        _HTTP_JSON_HITS = 0
+
+
+def http_cache_stats():
+    """Ölçüm/teşhis: {entries, hits} — ağ çağrısı yapmaz."""
+    with _HTTP_JSON_LOCK:
+        return {"entries": len(_HTTP_JSON_CACHE), "hits": _HTTP_JSON_HITS}
+
+
 def _http_json(url, timeout=REFERENCE_HTTP_TIMEOUT,
                retries=REFERENCE_HTTP_RETRIES):
-    """GET + JSON decode (_http_get üzerinden; timeout + retry dahil)."""
-    return json.loads(_http_get(url, timeout=timeout,
-                                retries=retries).decode("utf-8", "replace"))
+    """GET + JSON decode (timeout + retry dahil) — run-içi tek istek garantisi.
+
+    Aynı URL için başarılı yanıt bir kez çekilir; sonraki çağrılar önbellekten
+    döner. Hata yolu önbelleklenmez (yeniden denenebilir kalır).
+    """
+    global _HTTP_JSON_HITS
+    while True:
+        with _HTTP_JSON_LOCK:
+            if url in _HTTP_JSON_CACHE:
+                _HTTP_JSON_HITS += 1
+                return _HTTP_JSON_CACHE[url]
+            ev = _HTTP_JSON_INFLIGHT.get(url)
+            if ev is None:
+                ev = threading.Event()
+                _HTTP_JSON_INFLIGHT[url] = ev
+                break          # bu thread yanıtı çekecek
+        ev.wait()              # sahip bitirdi (başarılıysa cache'te, değilse tekrar dene)
+    try:
+        data = json.loads(_http_get(url, timeout=timeout,
+                                    retries=retries).decode("utf-8", "replace"))
+    except BaseException:
+        with _HTTP_JSON_LOCK:
+            _HTTP_JSON_INFLIGHT.pop(url, None)
+            ev.set()
+        raise
+    with _HTTP_JSON_LOCK:
+        _HTTP_JSON_CACHE[url] = data
+        _HTTP_JSON_INFLIGHT.pop(url, None)
+        ev.set()
+    return data
 
 
 def crossref_check(ref):
@@ -1568,6 +1774,9 @@ def run_reference_audit(tex_text, add, quiet=False):
     # bir havuzda PARALEL koşulur (REFERENCE_POOL_SIZE) — böylece rate-limit
     # edilen OpenLibrary (~8 sn/çağrı) tek başına bütçeyi bitirip kalan
     # kaynakları (IA/Perseus) budget-skip'e düşürmez.
+    # Run-içi sorgu→yanıt önbelleği: aynı IA/OL sorgusu ve fallback zinciri
+    # bu run'da ikinci kez ağa çıkmaz (bütçe kapısı aşağıda, değişmedi).
+    reset_http_cache()
     deadline = time.monotonic() + REFERENCE_AUDIT_BUDGET_S
 
     # 1) .tex'te varlık (çevrimdışı, deterministik)
@@ -1796,82 +2005,85 @@ def check_pdf_skill_reuse(add):
     return True, detail
 
 
-def canonical_pdf_hashes(pdf_path):
-    """PDF'in /ID-kanonik SHA-256'sını hesapla (Faz 4 karşılaştırma yüzeyi).
+def canonical_pdf_sha256(pdf_path):
+    """PDF'in `/ID`-nötrlenmiş SHA-256'si — determinizm REFERANSI (Faz 4).
 
-    Neden qpdf değil: `qpdf --remove-metadata` KENDİSİ nondeterministik —
-    aynı teslim PDF'inde 3 koşum 3 farklı hash üretti (ölçüldü 2026-10-01:
-    2042ba8b…, 7f9125d0…, c9b9890d…; hiçbiri sidecar'daki 50263bcf… ile
-    eşleşmedi). Yani stripped hash üzerine kurulu bir strict kapı her
-    koşumda yanlış pozitif üretir — bu yüzden strict karşılaştırma
-    metadata-stripped'a UYGULANMAZ (docs/ID_RESIDUAL_ACCEPTANCE.md §2, §6).
-
-    Kanonik yüzey pdfTeX'in tek kalıntısını (/ID) nötrler; içerik
-    birebir aynıysa kanonik hash eşittir. Uygulama tek kaynaktır:
-    pdf_id_canonical.py (shell determinism betiği de aynısını okur).
-
-    Döndürür: (canonical_sha256, id_found). Okunamazsa (None, False)."""
-    return _idcanon.canonical_sha256_path(pdf_path)
-
-
-def k6_canonical_finding(pdf_path, ledger=None, strict=True,
-                         ledger_path=PDF_CANONICAL_LEDGER):
-    """K6-DETERM strict kararı — SAF fonksiyon (test edilebilir yüzey).
-
-    Kanonik hash (pdfTeX'in tek kalıntısı /ID nötrlü) kabul defterindeki
-    "Kanonik (referans)" sütunuyla karşılaştırılır. Döner:
-        (bulgu_metni | None, kanıt_dict)
-    Bulgu None ise kapı yeşildir; defter yoksa/boşsa da None DÖNMEZ —
-    "kapı yok" hiçbir koşulda yeşil sayılmaz (fail-closed).
+    Uygulama TEK KAYNAKta: `id_canonical.py` (repack + K14 kapısı da aynı
+    normalizasyonu kullanır). pdfTeX SOURCE_DATE_EPOCH ile bile her koşumda
+    rastgele `/ID` üretir; nötrleme içerik farkını GİZLEMEZ, desen yoksa ham
+    hash döner (fail-safe), dosya okunamazsa None.
     """
-    canonical_h, id_found = canonical_pdf_hashes(pdf_path)
-    if ledger is None:
-        ledger = ledger_canonical_hashes(ledger_path)
-    evidence = {"canonical": canonical_h,
-                "canonical_id_found": id_found,
-                "canonical_ledger_size": len(ledger),
-                "canonical_accepted": False}
-    if not canonical_h or not strict:
-        return None, evidence
-    if not ledger:
-        return ("kanonik kabul defteri okunamadı/boş: %s (hash: %s…)"
-                % (ledger_path, canonical_h[:16]), evidence)
-    if canonical_h not in ledger:
-        return ("kanonik hash kabul defterinde yok (strict): actual=%s… "
-                "id_found=%s — motor/SDE bağlamı değiştiyse "
-                "`make -f docs/Makefile.texlive accept` ile bilinçli "
-                "defter satırı ekle (docs/ID_RESIDUAL_ACCEPTANCE.md §4)"
-                % (canonical_h[:16], id_found), evidence)
-    evidence["canonical_accepted"] = True
-    return None, evidence
+    return _idc.canonical_pdf_sha256(pdf_path)
 
 
-def ledger_canonical_hashes(ledger_path=PDF_CANONICAL_LEDGER):
-    """Kabul raporundaki ölçülmüş TAM kanonik hash kümesi (Faz 4 bağı).
+def resolve_id_residual_ledger(path=None):
+    """Kabul defteri referansını çöz → (tokens, error, source).
 
-    Yalnız "Kanonik (referans)" sütunu okunur: ham/sidecar sütunları
-    teslim kanıtıdır, karşılaştırma yüzeyi değildir. Kısaltılmış önekler
-    (`47681218…`) kümede olmaz — kabul yalnız ölçülmüş tam hash ile
-    verilir. Defter okunamazsa küme boş döner ve çağıran taraf bunu P1'e
-    çevirir (fail-closed, sessiz geçiş yok).
+    Aday sırası (id_canonical.ledger_candidates): `ID_RESIDUAL_LEDGER` env →
+    `<repo>/docs/ID_RESIDUAL_ACCEPTANCE.md` → script yanındaki düz mirror
+    kopyası. Hiçbiri okunamazsa boş küme + hata metni; strict mod bunu
+    fail-closed P1'e çevirir (referanssız determinizm iddiası üretilmez).
     """
-    try:
-        with open(ledger_path, encoding="utf-8") as fh:
-            return _idcanon.ledger_canonical_hashes(fh.read())
-    except OSError:
-        return set()
+    return _idc.ledger_tokens(path)
+
+
+def id_residual_ledger_tokens(path=None):
+    """(tokens, error) — resolve_id_residual_ledger'ın iki-değerli biçimi."""
+    tokens, error, _source = resolve_id_residual_ledger(path)
+    return tokens, error
+
+
+def k6_determ_verdict(strict, canonical, ledger_tokens, ledger_error="",
+                      sidecar_canonical=None):
+    """K6-DETERM karar fonksiyonu (saf — testler doğrudan çağırır).
+
+    Döndürür: (ok, priority, detail). ok=False ise (priority, detail) ile
+    bulgu üretilir. Kural (Faz 4): determinizm referansı `/ID`-kanonik
+    hash'tır; strict modda bu hash kabul defterinde KAYITLI olmalıdır —
+    motor geçişi/yeniden paketleme bilinçli defter satırı ister, aksi
+    halde sessiz drift. `sidecar_canonical` verilmişse (repack'in yazdığı
+    `# canonical:` satırı) teslim PDF'iyle birebir aynı olmalıdır — iki
+    taraf ayrı düşerse yenileme/senkron eksik demektir.
+    """
+    if canonical is None:
+        if strict:
+            return (False, "P1",
+                    "teslim PDF'i okunamadı — kanonik hash hesaplanamadı "
+                    "(determinizm iddiası doğrulanamaz)")
+        return True, None, "kanonik hash hesaplanamadı (PDF okunamadı)"
+    if sidecar_canonical and sidecar_canonical != canonical:
+        if strict:
+            return (False, "P1",
+                    f"sidecar kanonik referansı teslim PDF'iyle uyuşmuyor: "
+                    f"sidecar={sidecar_canonical[:16]}… "
+                    f"pdf={canonical[:16]}… — repack/"
+                    f"sidecar yenilemesi gerekli")
+        return (True, None,
+                f"sidecar kanonik={sidecar_canonical[:16]}… ↔ pdf "
+                f"canonical={canonical[:16]}… (bilgi)")
+    if not strict:
+        return (True, None,
+                f"canonical={canonical[:16]}… (bilgi; strict modda defterle "
+                f"karşılaştırılır)")
+    if ledger_error:
+        return False, "P1", f"kabul defteri okunamadı: {ledger_error}"
+    if canonical not in ledger_tokens:
+        return (False, "P1",
+                f"teslim PDF'inin /ID-kanonik hash'i kabul defterinde yok: "
+                f"canonical={canonical[:16]}… — bilinçli yenileme gerekli "
+                f"(make -f docs/Makefile.texlive accept LEDGER=update)")
+    return True, None, f"canonical={canonical[:16]}… kabul defterinde kayıtlı"
 
 
 def qpdf_check_determinism(pdf_path):
-    """PDF'in metadata-stripped SHA-256 hash'ini hesapla (BİLGİ amaçlı ölçüm).
+    """Ham + metadata-stripped SHA-256 (BİLGİ amaçlı build determinism ölçümü).
 
-    qpdf --remove-metadata ile volatile alanlar (/Info, /ID, /CreationDate)
-    temizlenir. qpdf yoksa (None, None) döner — bu durumda kontrol atlanır.
-    Döndürür: (raw_sha256, stripped_sha256) veya (raw_sha256, None).
-
-    ÖLÇÜM (2026-10-01): bu değer kararsızdır (aynı girdi → 3 koşumda 3
-    farklı hash). Bu yüzden yalnız rapor/İnfo olarak tutulur; strict
-    karşılaştırma canonical_pdf_hashes() üzerinden yapılır."""
+    qpdf --remove-metadata ile /Info temizlenir ama qpdf 12.4.0'ın KENDİSİ
+    nondeterministiktir: aynı girdi 3 koşumda 3 farklı çıktı verir (ölçüldü
+    2026-09-30, bu makinede). Bu yüzden stripped hash karşılaştırması strict
+    kapı OLAMAZ (her koşumda yapay "drift"); referans `/ID`-kanonik hash'tır
+    (canonical_pdf_sha256). qpdf yoksa (raw, None) döner.
+    Döndürür: (raw_sha256, stripped_sha256) veya (raw_sha256, None)."""
     raw = sha256_file(pdf_path)
     qpdf = "qpdf"
     for candidate in ("qpdf", "/opt/homebrew/bin/qpdf"):
@@ -2060,7 +2272,7 @@ def _lean_compiler_available():
 
 
 def run_lake_build(lake_path, project_dir, lean_only=False):
-    """K9 ek kapısı: 8 teoremli Sınır İspatı çekirdeğini lake ile derler.
+    """K9 lake kapısı: Lean kaynak çekirdeğini lake ile derler.
 
     Fail-closed: (a) lean-toolchain v4.14.0 olmalı (uyuşmaz/yok → FAIL),
     (b) `lake clean` ve (c) `lake build --wfail` başarılı olmalı. Elan shim
@@ -2102,7 +2314,7 @@ def run_lake_build(lake_path, project_dir, lean_only=False):
         return False, "lake build zaman aşımı (>600s — toolchain indirme dahil)"
     out = (r.stdout or "") + (r.stderr or "")
     if r.returncode == 0:
-        return True, "lake build --wfail: 8 teorem PASS (v4.14.0)"
+        return True, "lake build --wfail: Lean core PASS (v4.14.0)"
     tail = [l.strip() for l in out.splitlines() if l.strip()][-3:]
     detail = " | ".join(tail) if tail else f"exit={r.returncode}"
     detail = f"lake build hatası: {detail}"
@@ -2330,21 +2542,9 @@ def _scan_lean_dir(lean_dir):
     return _lean_axioms.scan_lean_dir(lean_dir)
 
 
-def _check_statements(lean_file, map_file):
-    """K9 statement-safety kapısı — tek kaynak check_lean_statements.py."""
-    return _lean_statements.check_statements(lean_file, map_file)
-
-
-def _check_twin(lean_file, twin_file):
-    """K9 twin-bütünlük kapısı — tek kaynak check_lean_statements.check_twin.
-
-    Sözleşme kapısı (Content.lean shim) ile lake target kopyası
-    (Leibniz2Reduct/Content.lean) aynı anda kaynaktır. Ayrışırlarsa
-    K9-LAKE BAYAT kopyayı derlerken sözleşme kapısı YENİ olanı
-    doğrular — yani K9 PASS iken derlenmeyen bir dosya doğrulanmış
-    olur. Bu yüzden kapı K9 teslim yolunda da fail-closed çalışır.
-    """
-    return _lean_statements.check_twin(lean_file, twin_file)
+def _check_statements(lean_file, latex_file):
+    """K9 LaTeX↔Lean statement gate — tek kaynak check_lean_statements.py."""
+    return _lean_statements.check_statements(lean_file, latex_file)
 
 
 def write_json_sidecar(path, report, detail="not run"):
@@ -4037,6 +4237,79 @@ def check_mirror_sync(add, auto_sync=False):
     return False, detail, rc, txt, dict(empty_meta, before_exit=rc)
 
 
+def check_protection_drift(add, protection, expected=None):
+    """Haftalık branch-protection drift denetimi → P1 (fail-closed).
+
+    NEDEN AYRI BİR YOL (ölçüldü 2026-09-30): `status_checks.py --gh` aynı
+    karşılaştırmayı yapar ama CI'da KOŞAMAZ — branch protection okumak admin
+    izni ister ve `administration` scope'u Actions `permissions:` bloğunda
+    GEÇERSİZDİR (actionlint v1.7.7: "unknown permission scope
+    administration"). Eklenirse workflow PARSE HATASIYLA 0 JOB üretir.
+    Bu yüzden okuma yetkisi `PROTECTION_PAT` secret'ından gelir; secret
+    yoksa çağıran denetimi hiç başlatmaz (yanlış-P1 gürültüsü olmasın).
+
+    ÖNEMLİ AYRIM: `status_checks.merge_block_smoke` alanların VARLIĞINI
+    ölçer (strict=false doğrudan-push depoları için geçerlidir). BURADA
+    DEĞER ölçülür: bu depo PR-akışlıdır (canlı koruma doğrudan push'u
+    GH006 ile reddeder), dolayısıyla `strict=true` beklenir ve kapanması
+    gerçek bir P1'dir.
+
+    I/O YAPMAZ: `protection` nesnesi dışarıdan verilir (test edilebilirlik).
+    `expected` None ise yalnızca ayarlar denetlenir, ad listesi atlanır.
+
+    Döner: (ok, detail). ok=False → P1 bulgusu üretildi.
+    """
+    if not isinstance(protection, dict) or not protection:
+        # Okunamadı ≠ temiz. Çağıran taraf bunu SKIP olarak raporlar.
+        return True, "protection nesnesi boş/okunamadı — atlandı"
+
+    sc = protection.get("required_status_checks") or {}
+    configured = sc.get("contexts") or []
+    if not isinstance(configured, list):
+        configured = []
+    admins = (protection.get("enforce_admins") or {}).get("enabled")
+    fp = (protection.get("allow_force_pushes") or {}).get("enabled")
+    dele = (protection.get("allow_deletions") or {}).get("enabled")
+    strict = sc.get("strict")
+
+    drift = []
+    if expected is not None:
+        exp, conf = set(expected), set(configured)
+        missing, extra = sorted(exp - conf), sorted(conf - exp)
+        if missing:
+            drift.append(("ADLAR-EKSIK", "required check listesi",
+                          "GitHub'da eksik: %s" % missing))
+        if extra:
+            drift.append(("ADLAR-FAZLA", "required check listesi",
+                          "workflow'da olmayan: %s" % extra))
+    if admins is not True:
+        drift.append(("ENFORCE-ADMINS", "admin bypass",
+                      "enforce_admins.enabled=%r — True beklenir" % (admins,)))
+    if fp is not False:
+        drift.append(("FORCE-PUSH", "force push",
+                      "allow_force_pushes.enabled=%r — False beklenir "
+                      "(non-fast-forward geçmiş yeniden yazımı)" % (fp,)))
+    if dele is not False:
+        drift.append(("DELETIONS", "dal silme",
+                      "allow_deletions.enabled=%r — False beklenir" % (dele,)))
+    if strict is not True:
+        drift.append(("STRICT", "up-to-date kuralı",
+                      "required_status_checks.strict=%r — True beklenir "
+                      "(kapalıyken bayat PR dalı merge edilebilir)" % (strict,)))
+
+    live = ("canlı: required=%d strict=%r enforce_admins=%r "
+            "force_pushes=%r deletions=%r"
+            % (len(configured), strict, admins, fp, dele))
+    for cid, check, issue in drift:
+        add("P1", "PROT-%s" % cid, "branch protection — %s" % check,
+            issue, live)
+    if drift:
+        return False, "%d drift: %s" % (len(drift),
+                                         ", ".join(c[0] for c in drift))
+    return True, ("temiz (%d required check, strict=True, admin bypass kapalı, "
+                  "force-push/deletions kapalı)" % len(configured))
+
+
 def check_daemon_smoke(add, out_path=None):
     """K18: daemon_http_test.py end-to-end daemon smoke (fail-closed).
 
@@ -4233,10 +4506,15 @@ def check_launchd_status(add):
     return all_ok, detail, profiles_info
 
 
-def _run_quiet(cmd, timeout=10):
-    """Kısa bir komutu çalıştır, ilk satırı döndür (yoksa/hata → None)."""
+def _run_quiet(cmd, timeout=10, env=None):
+    """Kısa bir komutu çalıştır, ilk satırı döndür (yoksa/hata → None).
+
+    `env` verilirse subprocess o ortamla çalışır (tamamı değiştirilir, miras
+    alınmaz) — bkz. probe_tool_versions'daki ELAN_TOOLCHAIN katmanı.
+    """
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout,
+                           env=env)
     except (OSError, subprocess.TimeoutExpired):
         return None
     out = (r.stdout or r.stderr or "").strip()
@@ -4244,12 +4522,69 @@ def _run_quiet(cmd, timeout=10):
 
 
 def _resolve_lean():
-    """lean'i PATH'ten, /opt/homebrew/bin'den veya ~/.elan/bin'den bul."""
+    """lean'i bul — ÖNCE proje pin'indeki kurulu toolchain binary'si, SON çare shim.
+
+    NEDEN BÖYLE (14 Eki 2026 krizi — 789 dosya, 77 GiB):
+      elan shim'leri (/opt/homebrew/bin/lean, ~/.elan/bin/lean) hangi
+      toolchain'i kullanacağını şu sırayla çözer:
+        1) cwd içindeki lean-toolchain dosyası
+        2) settings.toml'daki default_toolchain
+      probe_tool_versions() `cwd` VERMEZ (bkz. _run_quiet). Yani 1. adım her
+      zaman ATLANIR. Default 'stable' ise elan her çağrıda kurulmamış son
+      sürüme çözülür ve indirme başlatır; indirme 10 sn timeout'a takılınca
+      yarım .zstd dosyası ~/.elan/tmp'de kalır ve elan onu TEMİZLEMEZ.
+      30 sn'lik verify_loop her turda aynı şeyi tekrarlar → disk dolar.
+      (Ayrıca default 'stable' elan'ı yeniden kurunca geri gelir.)
+      Bu yüzden shim'e hiç uğramadan, pin'li toolchain'in doğrudan binary
+      yolunu döndürüyoruz — elan hiç devreye girmez, indirme imkânsız.
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    tc_file = os.path.normpath(
+        os.path.join(here, LEAN_REDUCT_DIR, "lean-toolchain"))
+    try:
+        with open(tc_file, encoding="utf-8") as fh:
+            tc = fh.read().strip()
+    except OSError:
+        tc = ""
+    if tc:
+        # elan dizin adı dönüşümü (verify_lean.sh ile birebir aynı):
+        #   leanprover/lean4:v4.14.0  ->  leanprover--lean4---v4.14.0
+        slug = tc.replace(":", "---").replace("/", "-")
+        slug = slug.replace("leanprover-", "leanprover--", 1)
+        pinned = os.path.join(
+            os.path.expanduser("~"), ".elan", "toolchains", slug, "bin", "lean")
+        if os.path.isfile(pinned):
+            return pinned
+    # pin yoksa / okunamazsa / binary kurulu değilse: eski davranış (shim)
     for candidate in ["lean", "/opt/homebrew/bin/lean",
                       os.path.expanduser("~/.elan/bin/lean")]:
         if shutil.which(candidate) or os.path.isfile(candidate):
             return candidate
     return "lean"
+
+
+def _lean_toolchain_env():
+    """lean-toolchain pin'ini ELAN_TOOLCHAIN olarak veren ortam dict'i.
+
+    KATMAN 2 (yedek savunma): _resolve_lean pin'li binary'ye doğrudan gider
+    (katman 1). Ama pin yoksa veya binary silinirse shim'e düşülür. O durumda
+    bile elan 'stable' kanalına çözüp indirme başlatmasın diye ELAN_TOOLCHAIN
+    sabitlenir — ölçüldü: env değişkeni default'u ezer (14 Eki 2026). Pin
+    okunamazsa None döner ve mevcut davranış aynen korunur.
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    tc_file = os.path.normpath(
+        os.path.join(here, LEAN_REDUCT_DIR, "lean-toolchain"))
+    try:
+        with open(tc_file, encoding="utf-8") as fh:
+            tc = fh.read().strip()
+    except OSError:
+        return None
+    if not tc:
+        return None
+    env = dict(os.environ)
+    env["ELAN_TOOLCHAIN"] = tc
+    return env
 
 
 def _resolve_precommit():
@@ -4275,7 +4610,8 @@ def probe_tool_versions():
     versions = {"python": platform.python_version()}
     versions["z3"] = _run_quiet([sys.executable, "-c",
                                  "import z3; print(z3.get_version_string())"])
-    versions["lean"] = _run_quiet([_resolve_lean(), "--version"])
+    versions["lean"] = _run_quiet([_resolve_lean(), "--version"],
+                                  env=_lean_toolchain_env())
     versions["pre_commit"] = _run_quiet([_resolve_precommit(), "--version"])
     versions["pdfinfo"] = _run_quiet(["pdfinfo", "-v"])
     versions["qpdf"] = _run_quiet(["qpdf", "--version"])
@@ -4502,20 +4838,554 @@ def check_k0(directory, args, add):
     return records
 
 
+# ---- Çekirdek verdict'i (K0-K7) — "aynı ağaç için tekrar koşma" -----------
+# Katman-özel çağrılar (K10 --verify-manifest, K12 --check-plist, K13
+# --check-repro-manifest, K15 --check-history, K17 --check-mirror, K21
+# --check-sde …) çekirdeği KOŞMAK ZORUNDA DEĞİLDİR: çekirdek aynı ağaç için#     bir kez doğrulanmişsa (`--full` ya da herhangi bir çekirdek koşumu +
+#     `--core-verdict-out`), katman çağrısı o kaydı `--reuse-core-verdict` ile
+#     OKUR ve K0-K7'yi HİÇ koşmaz. Yol verilmezse kayıt <git-dir>/
+#     verify_core_verdict.json'dur (worktree başına ayrı; asla commit edilmez).
+#
+# FAIL-CLOSED SÖZLEŞMESİ (tasarım gereği):
+#   * Kayıt, çekirdeğin GİRDİLERİNİN kriptografik kimliğine bağlanır: dış
+#     zip (sha256+boyut) + dış sidecar + başıboş zip kümesi (K0'ın gördüğü
+#     her zip) + config dosyası + kabul defteri + çekirdek kodunun parmak
+#     izi (verify_delivery.py + id_canonical.py) + python/pdfinfo/qpdf
+#     sürümleri. Kimlik tutmuyorsa kayıt
+#     KULLANILMAZ ve çekirdek yeniden koşar — "doğrulanmış say" yolu YOK.
+#   * Kayıt FAIL diyorsa bulgular AYNEN replay edilir: reuse bir FAIL'i
+#     PASS'a çeviremez (ters yön de fail-closed).
+#   * İstenen çekirdek seçenekleri (--check-references / --strict-determinism
+#     / --k0-toolkit-tolerant) kayıtta kapsanmıyorsa kayıt kullanılmaz.
+#   * Kullanılamayan kayıt SESSİZCE yutulmaz: gerekçe stderr'e + run
+#     raporuna (`core_verdict.rejected_reason`, INFO bulgu) yazılır.
+#   * Kayıt bir GÜVEN SINIRI DEĞİLDİR: onu üreten de aynı ağaçta koşan bu
+#     doğrulayıcıdır; amaç aynı girdiler için ikinci kez hesaplamamaktır.
+CORE_VERDICT_SCHEMA = "core-verdict/1"
+CORE_VERDICT_ENV = "VERIFY_CORE_VERDICT"
+CORE_VERDICT_DEFAULT_NAME = "verify_core_verdict.json"
+_CORE_OPTION_FLAGS = (
+    ("check_references", "--check-references"),
+    ("strict_determinism", "--strict-determinism"),
+    ("k0_toolkit_tolerant", "--k0-toolkit-tolerant"),
+)
+
+
+def core_env_probe():
+    """Çekirdeğin GİRDİSİ olan ortam: python + PDF araç sürümleri (advisory)."""
+    return {
+        "python": platform.python_version(),
+        "pdfinfo": _run_quiet(["pdfinfo", "-v"]),
+        "qpdf": _run_quiet(["qpdf", "--version"]),
+    }
+
+
+CORE_CODE_FILES = ("verify_delivery.py", "id_canonical.py")
+
+
+def core_tool_sha256():
+    """Çekirdek mantığını taşıyan DOSYALARIN birleşik sha256'sı.
+
+    Kayıt bu parmak izine bağlanır. Tek dosya (verify_delivery.py) yetmez:
+    K6-DETERM'in `/ID`-kanonik PDF hash'i `id_canonical.py`'de hesaplanır;
+    o dosya değişip doğrulayıcı aynı kalırsa çekirdek verdict'i BAŞKA bir
+    mantıkla üretilmiş olurdu. Ad + içerik sırayla hash'e girer (sıra sabit).
+    Eksik/okunamayan dosya → None (kimlik doğrulanamaz, fail-closed).
+    """
+    h = hashlib.sha256()
+    base = os.path.dirname(os.path.abspath(__file__))
+    for name in CORE_CODE_FILES:
+        try:
+            with open(os.path.join(base, name), "rb") as fh:
+                blob = fh.read()
+        except OSError:
+            return None
+        h.update(name.encode("utf-8") + b"\0" + blob + b"\0")
+    return h.hexdigest()
+
+
+def core_ledger_identity():
+    """K6-DETERM girdisi: çözülen kabul defterinin yolu + sha256 (yoksa None)."""
+    for cand in _idc.ledger_candidates():
+        if os.path.isfile(cand):
+            try:
+                return {"path": os.path.abspath(cand),
+                        "sha256": sha256_file(cand)}
+            except OSError:
+                return None
+    return None
+
+
+def core_tree_identity(d, args, cfg_path=None):
+    """Çekirdeğin girdilerinin kimliği (digest'in ham malzemesi).
+
+    Eksik girdi de kimliğin parçasıdır (None) — "yok" ile "boş" ayrılır;
+    K0'ın gördüğü başıboş zip kümesi de dahildir, çünkü K0 bulguları o
+    kümenin fonksiyonudur. Taranamayan durum (`None`) kimliği geçersiz kılar.
+    """
+    kzip = os.path.join(d, KLASOR_ZIP)
+    kside = kzip + ".sha256"
+    ident = {"dir": d, "zip": None, "zip_sidecar_sha256": None,
+             "stray_zips": [], "config": None, "ledger": core_ledger_identity()}
+    if os.path.isfile(kzip):
+        ident["zip"] = {"name": KLASOR_ZIP, "size": os.path.getsize(kzip),
+                        "sha256": sha256_file(kzip)}
+    if os.path.isfile(kside):
+        ident["zip_sidecar_sha256"] = sha256_file(kside)
+    tolerant = bool(getattr(args, "k0_toolkit_tolerant", False))
+    try:
+        records = scan_stale_zips(os.path.dirname(d),
+                                  skip_dirs=k0_skip_dirs(d, tolerant))
+    except OSError:
+        ident["stray_zips"] = None      # taranamadı → kimlik doğrulanamaz
+    else:
+        ident["stray_zips"] = sorted(
+            ({"rel": r["rel"], "sha256": r["sha256"]} for r in records),
+            key=lambda r: r["rel"])
+    if cfg_path and os.path.isfile(cfg_path):
+        ident["config"] = {"path": os.path.abspath(cfg_path),
+                           "sha256": sha256_file(cfg_path)}
+    return ident
+
+
+def core_tree_digest(ident):
+    """Kimliğin kanonik JSON'u üzerinden sha256 (girdi sırası önemsizdir)."""
+    blob = json.dumps(ident, sort_keys=True, ensure_ascii=False,
+                      separators=(",", ":"))
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def core_verdict_record(args, d, cfg_path, core_state, findings):
+    """Çekirdek (K0-K7) verdict kaydı — `--core-verdict-out` çıktısı."""
+    core_findings = [dict(f) for f in findings
+                     if f.get("id", "").split("-")[0] in _CORE_LAYERS]
+    p0 = sum(1 for f in core_findings if f["priority"] == "P0")
+    p1 = sum(1 for f in core_findings if f["priority"] == "P1")
+    ident = core_tree_identity(d, args, cfg_path)
+    return {
+        "schema": CORE_VERDICT_SCHEMA,
+        "tool": "verify_delivery.py K0-K7 çekirdeği",
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "tool_sha256": core_tool_sha256(),
+        "env": core_env_probe(),
+        "dir": d,
+        "options": {attr: bool(getattr(args, attr, False))
+                    for attr, _label in _CORE_OPTION_FLAGS},
+        "verdict": "FAIL" if (p0 or p1) else "PASS",
+        "counts": {"P0": p0, "P1": p1},
+        "findings": core_findings,
+        "pages": core_state.get("pages"),
+        "refs": core_state.get("refs"),
+        "pdf_meta_report": core_state.get("pdf_meta_report"),
+        "total_bytes": core_state.get("total_bytes"),
+        "type_bytes": core_state.get("type_bytes"),
+        "skill_reuse": core_state.get("skill_reuse"),
+        "refs_online": core_state.get("online_refs") or [],
+        "tree": ident,
+        "tree_digest": core_tree_digest(ident),
+    }
+
+
+def core_verdict_default_path():
+    """Varsayılan kayıt yolu: $VERIFY_CORE_VERDICT → <git-dir>/…json → None.
+
+    Git dizini ağaca özgüdür ve ASLA commit edilmez (worktree başına ayrı
+    kayıt). Yol çözülemezse çağıran çekirdeği koşar (fail-closed).
+    """
+    env = os.environ.get(CORE_VERDICT_ENV)
+    if env:
+        return env
+    try:
+        r = subprocess.run(["git", "rev-parse", "--absolute-git-dir"],
+                           capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if r.returncode == 0 and r.stdout.strip():
+        return os.path.join(r.stdout.strip(), CORE_VERDICT_DEFAULT_NAME)
+    return None
+
+
+def load_core_verdict(path, args, d, cfg_path, tool_sha=None, env_probe=None):
+    """Kaydı yükle + doğrula. Döndürür (record|None, reason).
+
+    None dönerse çağıran çekirdeği YENİDEN KOŞAR; reason her durumda
+    raporlanır (sessiz yutma yok).
+    """
+    if not path:
+        return None, ("verdict yolu çözülemedi ($%s veya git dizini)"
+                      % CORE_VERDICT_ENV)
+    if not os.path.isfile(path):
+        return None, "verdict dosyası yok: %s" % path
+    try:
+        with open(path, encoding="utf-8") as fh:
+            rec = json.load(fh)
+    except (OSError, ValueError) as e:
+        return None, "verdict okunamadı/JSON bozuk: %s" % e
+    if not isinstance(rec, dict) or rec.get("schema") != CORE_VERDICT_SCHEMA:
+        return None, "şema uyuşmuyor (beklenen %s)" % CORE_VERDICT_SCHEMA
+    tool_sha = core_tool_sha256() if tool_sha is None else tool_sha
+    if not tool_sha or rec.get("tool_sha256") != tool_sha:
+        return None, "doğrulayıcı (verify_delivery.py) kayıttan sonra değişmiş"
+    if os.path.abspath(rec.get("dir") or "") != d:
+        return None, ("farklı ağaç: kayıt %r için, bu run %r için"
+                      % (rec.get("dir"), d))
+    label = dict(_CORE_OPTION_FLAGS)
+    wanted = {attr for attr, _label in _CORE_OPTION_FLAGS
+              if bool(getattr(args, attr, False))}
+    covered = {k for k, v in (rec.get("options") or {}).items() if v}
+    missing = sorted(wanted - covered)
+    if missing:
+        return None, ("kayıt istenen çekirdek seçeneklerini kapsamıyor: %s"
+                      % ", ".join(label.get(m, m) for m in missing))
+    env_probe = core_env_probe() if env_probe is None else env_probe
+    recorded_env = rec.get("env") or {}
+    env_diff = [k for k in env_probe
+                if recorded_env.get(k) != env_probe.get(k)]
+    if env_diff:
+        return None, ("ortam kayıttan sonra değişmiş (%s): python/pdfinfo/qpdf "
+                      "sürümü çekirdek girdisidir" % ", ".join(sorted(env_diff)))
+    ident = core_tree_identity(d, args, cfg_path)
+    if core_tree_digest(ident) != rec.get("tree_digest"):
+        return None, ("ağaç kayıttan sonra değişmiş (zip/sidecar/başıboş zip/"
+                      "config/defter girdileri farklı)")
+    return rec, "ok"
+
+
+def core_state_from_verdict(rec, add):
+    """Kayıttan çekirdek durumunu kur; bulguları AYNEN replay et.
+
+    Replay bir "özet" değildir: kayıttaki her bulgu (P0/P1/INFO) yeniden
+    eklenir — reuse bir FAIL'i PASS'a çeviremez.
+    """
+    for f in rec.get("findings") or []:
+        add(f.get("priority", "INFO"), f.get("id", "CORE-VERDICT"),
+            f.get("check", "çekirdek verdict"), f.get("issue", ""),
+            f.get("evidence", ""))
+    return {
+        "pages": rec.get("pages"),
+        "refs": rec.get("refs"),
+        "pdf_meta_report": rec.get("pdf_meta_report"),
+        "total_bytes": rec.get("total_bytes") or 0,
+        "type_bytes": rec.get("type_bytes") or {},
+        "online_refs": rec.get("refs_online") or [],
+        "layer_timings": {},
+        "skill_reuse": rec.get("skill_reuse") or {"ok": None, "detail": None},
+    }
+
+
+def run_core_k0_k1(args, d, kzip, kside, add):
+    """Çekirdek K0 (bayat zip taraması) + K1 (dış zip sidecar).
+
+    main()'den BİREBİR taşındı (satırlar değişmedi). Çekirdek verdict'i
+    yeniden kullanılıyorsa bu fonksiyon hiç çağrılmaz — bkz.
+    --reuse-core-verdict; K0 sidecar'ı (--k0-out) bu yüzden reuse ile
+    birleştirilemez (çıktısı üretilemezdi).
+    """
+    # ---- K0: bayat zip taraması (recursive) ----
+    # Kanonik teslim yalnızca CIKTI/'da olmalı. _calisma/ altındaki HER zip
+    # (alt dizinler dahil — repack ara ürünleri TESLIM/ ve V5_ICERIK/ altında,
+    # kökteki başıboş kopyalar) "başıboş/bayat kopya" riskidir: yanlışlıkla
+    # dağıtılabilir/commit edilebilir. İstisnalar: CIKTI (kanonik kopya),
+    # TOOLKIT (toolkit'in kendi çalışma kopyası; kanonik iCloud'da), .venv_z3
+    # + gizli dizinler (ortam). repack_delivery.py kendi transient ara
+    # ürününü (OUTER_SRC içindeki iç zip) build sonrası siler — yani normal
+    # repack akışı K0'ı yeşil bırakır; kalan her zip gerçek bayat kopyadır.
+    parent = os.path.dirname(d)
+    # Kanonik dizin (--dir'in kendi adı) HER ZAMAN atlanır: repo'da "CIKTI",
+    # TCC-safe mirror'da "verify" — aksi halde mirror kendi zip'lerini bayat
+    # kopya sanar (K0 false-P1). Kural tek kaynakta: k0_skip_dirs().
+    k0_skip = k0_skip_dirs(d, args.k0_toolkit_tolerant)
+    k0_records = scan_stale_zips(parent, skip_dirs=k0_skip)
+    k0_findings = []  # P1 (fail-closed) — run summary sidecar'ı
+    for f in k0_records:
+        rel = f["rel"]
+        issue = f"CIKTI dışında zip bulundu: {rel}"
+        if args.k0_toolkit_tolerant and is_toolkit_rel(rel):
+            # toolkit-tolerant: TOOLKIT/ kopyası INFO — fail-closed DEĞİL.
+            add("INFO", "K0-TOOLKIT", "K0 bayat zip",
+                issue + " (toolkit-tolerant — P1 değil INFO)",
+                f"{f['sha256']}  {os.path.join(parent, rel)}")
+            continue
+        # Kök düzeyindeki başıboş kopya için hint: TOOLKIT/
+        # K0'ın skip kümesindedir — oraya taşınırsa P1 otomatik
+        # düşer (kanonik kopya CIKTI/ + toolkit kopyası
+        # TOOLKIT/ ayrışır). Alt dizindeki (repack ara ürünü)
+        # ziplere bu hint verilmez — repack onları kendi siler.
+        if os.path.dirname(rel) == "":
+            issue += (" — ipucu: kök zip'i `TOOLKIT/` dizinine "
+                      "taşıyabilirsin (K0 atlar; P1 giderilir)")
+        k0_findings.append(f)
+        add("P1", "K0-STALE", "K0 bayat zip", issue,
+            f"{f['sha256']}  {os.path.join(parent, rel)}")
+    if args.k0_out:
+        try:
+            with open(args.k0_out, "w", encoding="utf-8") as kf:
+                json.dump({"count": len(k0_findings), "findings": k0_findings},
+                          kf, indent=2, ensure_ascii=False)
+            if not args.json:
+                print(f"[K0] bulgu sidecar'ı yazıldı: {args.k0_out} "
+                      f"({len(k0_findings)} bayat zip)")
+        except OSError as e:
+            add("P1", "K0-OUT", "K0 sidecar", f"yazılamadı: {args.k0_out}", str(e))
+
+    # ---- K1: dış zip sidecar ----
+    want = None
+    if os.path.isfile(kside):
+        got = sha256_file(kzip)
+        want = parse_sha256sums(kside).get(KLASOR_ZIP)
+        if want and got == want:
+            pass  # OK
+        elif want:
+            add("P0", "K1-SIDECAR", "K1 dış zip", "dış zip hash uyuşmuyor",
+                f"expected={want} actual={got}")
+        else:
+            add("P0", "K1-SIDECAR", "K1 dış zip", "sidecar okunamadı/parse edilemedi")
+    else:
+        add("P0", "K1-SIDECAR", "K1 dış zip", "sidecar yok", kside)
+
+
+def run_core_k2_k7(args, d, kzip, kside, add):
+    """Çekirdek K2-K7 (klasör checksum → hijyen taraması).
+
+    main()'den BİREBİR taşındı (satırlar değişmedi); ürettiği durum
+    sözlükle döner: pages, refs, pdf_meta_report, total_bytes,
+    type_bytes, online_refs, layer_timings, skill_reuse.
+    """
+    tmp = tempfile.mkdtemp(prefix="verify_delivery_")
+    pages = refs = pdf_meta_report = None
+    online_refs = []  # K6 çevrimiçi denetim sonuçları (VERSION JSON kaynağı)
+    layer_timings = {}  # ağır katman faz süreleri (K6/K8/K9)
+    total_bytes = 0
+    skill_reuse_ok = skill_reuse_detail = None
+    try:
+        with zipfile.ZipFile(kzip) as z:
+            z.extractall(tmp)
+        kdir = os.path.join(tmp, KLASOR_DIR)
+
+        # ---- K2: klasör checksum ----
+        kc = os.path.join(kdir, "KLASOR_CHECKSUMLARI.sha256")
+        if os.path.isfile(kc):
+            expected = parse_sha256sums(kc)
+            ok = bad = 0
+            for rel, want in expected.items():
+                p = os.path.join(kdir, rel)
+                if os.path.isfile(p) and sha256_file(p) == want:
+                    ok += 1
+                else:
+                    bad += 1
+                    add("P0", "K2-FOLDER", "K2 klasör", f"dosya uyuşmuyor: {rel}")
+            if bad == 0:
+                pass
+            if not expected:
+                add("P0", "K2-FOLDER", "K2 klasör", "KLASOR_CHECKSUMLARI boş")
+        else:
+            add("P0", "K2-FOLDER", "K2 klasör", "KLASOR_CHECKSUMLARI.sha256 yok")
+
+        izip = os.path.join(kdir, IC_ZIP)
+        iside = izip + ".sha256"
+
+        # ---- K3: iç zip sidecar ----
+        if os.path.isfile(iside):
+            igot = sha256_file(izip)
+            iwant = parse_sha256sums(iside).get(IC_ZIP)
+            if iwant and igot == iwant:
+                pass
+            elif iwant:
+                add("P0", "K3-SIDECAR", "K3 iç zip", "iç zip hash uyuşmuyor",
+                    f"expected={iwant} actual={igot}")
+            else:
+                add("P0", "K3-SIDECAR", "K3 iç zip", "iç sidecar okunamadı")
+        else:
+            add("P0", "K3-SIDECAR", "K3 iç zip", "iç sidecar yok", iside)
+
+        try:
+            with zipfile.ZipFile(izip) as z:
+                z.extractall(tmp)
+        except (zipfile.BadZipFile, OSError) as e:
+            add("P0", "K3-ZIP", "K3 iç zip", "iç zip açılamıyor (bozuk)", str(e))
+            pkg = None
+        else:
+            pkg = os.path.join(tmp, PKG_REL)
+
+        if pkg is not None and not os.path.isdir(pkg):
+            add("P0", "K4-MANIFEST", "K4 manifest", "paket dizini bulunamadı", pkg)
+            pkg = None
+
+        # bütçe kalkanı için içerik toplam baytı + dosya tipi kırılımı
+        # (iç zip içeriği; tek kaynak: compute_type_bytes — gen_config.py da
+        # aynı fonksiyonu kullanır, sınıflandırma drift'i olmaz).
+        ic_root = os.path.join(tmp, IC_ZIP[:-4])
+        type_bytes, total_bytes = compute_type_bytes(ic_root)
+
+        # ---- K4: manifest 18/18 ----
+        mf = os.path.join(pkg, "MANIFEST.txt") if pkg else None
+        if mf and os.path.isfile(mf):
+            exp = parse_manifest(mf)
+            ok = 0
+            for fn, want in exp.items():
+                p = os.path.join(pkg, fn)
+                if os.path.isfile(p) and md5_file(p) == want:
+                    ok += 1
+                else:
+                    add("P0", "K4-MANIFEST", "K4 manifest", f"MD5 uyuşmuyor: {fn}")
+            if ok != EXPECTED_MANIFEST:
+                add("P0", "K4-MANIFEST", "K4 manifest",
+                    f"manifest {ok}/{EXPECTED_MANIFEST}")
+        else:
+            add("P0", "K4-MANIFEST", "K4 manifest", "MANIFEST.txt yok")
+
+        # ---- K5: 3 script byte-for-byte ----
+        py = sys.executable
+        for script, frozen in SCRIPTS:
+            if pkg is None:
+                add("P0", "K5-SCRIPT", f"K5 {script}", "paket çıkarılamadığı için atlandı")
+                continue
+            sp = os.path.join(pkg, script)
+            fp = os.path.join(pkg, frozen)
+            rc, out = run_script(py, sp)
+            if rc != 0:
+                add("P0", "K5-SCRIPT", f"K5 {script}", "script çalışmadı",
+                    f"exit={rc}")
+                continue
+            if not os.path.isfile(fp):
+                add("P0", "K5-SCRIPT", f"K5 {script}", "donmuş çıktı yok", frozen)
+                continue
+            if out != open(fp, "rb").read():
+                add("P0", "K5-SCRIPT", f"K5 {script}",
+                    "donmuş çıktıyla byte-for-byte UYUŞMUYOR")
+            else:
+                pass  # byte-for-byte OK
+
+        # ---- K6: içerik (PDF sayfası + 64 referans) ----
+        t_k6 = time.monotonic()
+        if pkg is None:
+            add("P0", "K6-REFS", "K6 içerik", "paket çıkarılamadığı için atlandı")
+        pdf = os.path.join(pkg, "ingiliz_empirizmi_v3.pdf") if pkg else None
+        pages = pdf_pages(pdf) if pdf and os.path.isfile(pdf) else None
+        if pages is not None and pages != EXPECTED_PAGES:
+            add("P0", "K6-PAGES", "K6 içerik", f"PDF {pages} sayfa (beklenen {EXPECTED_PAGES})")
+        tex = os.path.join(pkg, "ingiliz_empirizmi_v3.tex") if pkg else None
+        refs = count_references(tex) if tex and os.path.isfile(tex) else None
+        if refs is not None and refs != EXPECTED_REFS:
+            add("P0", "K6-REFS", "K6 içerik", f"References {refs} (beklenen {EXPECTED_REFS})")
+
+        # ---- K6-DETERM: /ID-kanonik hash (build determinism REFERANSI) ----
+        # Ölçüm (2026-09-30, Faz 4): pdfTeX SDE ile deterministiktir; tek
+        # kalıntı trailer /ID'dir (docs/ID_RESIDUAL_ACCEPTANCE.md §1-2).
+        # qpdf --remove-metadata'ın KENDİSİ nondeterministiktir (aynı girdi
+        # 3 koşum → 3 farklı çıktı, ölçüldü) — bu yüzden metadata-stripped
+        # hash yalnız BİLGİdir, strict kapı onun üzerine kurulamaz. Strict
+        # referans /ID-kanonik hash'tir ve kabul defterinde kayıtlı olmalıdır:
+        # motor geçişi/yeniden paketleme bilinçli defter satırı gerektirir.
+        pdf_meta_report = None
+        if pdf and os.path.isfile(pdf):
+            raw_h, stripped_h = qpdf_check_determinism(pdf)
+            canonical_h = canonical_pdf_sha256(pdf)
+            strict = bool(getattr(args, "strict_determinism", False))
+            ledger_tokens, ledger_error, ledger_src = resolve_id_residual_ledger()
+            sidecar_path = os.path.join(pkg, PDF_METADATA_SIDECAR)
+            sidecar_canon = _idc.sidecar_canonical(sidecar_path)
+            skills_ok, skill_reuse_detail = check_pdf_skill_reuse(add)
+            determ_ok, determ_pri, determ_detail = k6_determ_verdict(
+                strict, canonical_h, ledger_tokens, ledger_error,
+                sidecar_canonical=sidecar_canon)
+            pdf_meta_report = {
+                "raw": raw_h, "stripped": stripped_h, "canonical": canonical_h,
+                "sidecar_canonical": sidecar_canon,
+                "strict": strict,
+                "ledger": ID_RESIDUAL_LEDGER_DOC,
+                "ledger_source": ledger_src,
+                "in_ledger": _idc.has_canonical(canonical_h, ledger_tokens),
+                "check": determ_detail,
+                "skill_reuse": {"ok": skills_ok,
+                                "detail": skill_reuse_detail}}
+            if not determ_ok:
+                add(determ_pri, "K6-DETERM", "K6 build determinism",
+                    determ_detail, f"{ID_RESIDUAL_LEDGER_DOC}")
+            if stripped_h:
+                expected_stripped = None
+                if os.path.isfile(sidecar_path):
+                    with open(sidecar_path, encoding="utf-8",
+                              errors="replace") as sf:
+                        for line in sf:
+                            parts = line.split()
+                            if len(parts) == 2 and "metadata" in parts[1]:
+                                expected_stripped = parts[0]
+                                break
+                    if expected_stripped:
+                        pdf_meta_report["expected_stripped"] = expected_stripped
+                        pdf_meta_report["stripped_drift_info"] = (
+                            stripped_h != expected_stripped)
+                        pdf_meta_report["stripped_note"] = (
+                            "metadata-stripped hash qpdf'nin kendi rastgele "
+                            "/ID'sini taşır (3 koşum → 3 hash); karşılaştırma "
+                            "yalnız bilgidir, P1 üretmez")
+
+        _timing_add(layer_timings, "K6", "içerik+determinism", t_k6)
+
+        # ---- K6+: referans denetimi (CrossRef/SEP/OpenLibrary çevrimiçi) ----
+        # Sonuçlar online_refs'e toplanır; --refs-out ile her run'ın kaç
+        # referansı çevrimiçi doğruladığını izleyen VERSION JSON'a yazılır.
+        if args.check_references:
+            t_refs = time.monotonic()
+            if tex and os.path.isfile(tex):
+                tex_text = open(tex, encoding="utf-8", errors="ignore").read()
+                online_refs = run_reference_audit(tex_text, add, quiet=args.json)
+            else:
+                add("P0", "K6-REF", "K6 referans",
+                    ".tex okunamadı, çevrimiçi denetim atlandı")
+            _timing_add(layer_timings, "K6", "referans denetimi", t_refs)
+
+        # ---- K7: hijyen + secret ----
+        for root, dirs, files in os.walk(tmp):
+            dirs[:] = [x for x in dirs if x != ".git"]
+            for fn in files:
+                p = os.path.join(root, fn)
+                rel = os.path.relpath(p, tmp).replace(os.sep, "/")
+                if any(re.search(pat, rel) for pat in HIGIENE_PATTERNS):
+                    add("P1", "K7-HYG", "K7 hijyen", f"artefakt kalıntısı: {rel}")
+                ext = os.path.splitext(fn)[1].lower()
+                if ext in SKIP_SECRET_EXT or os.path.getsize(p) > 2_000_000:
+                    continue
+                try:
+                    txt = open(p, encoding="utf-8", errors="ignore").read()
+                except OSError:
+                    continue
+                for pat in SECRET_PATTERNS:
+                    m = re.search(pat, txt, re.IGNORECASE)
+                    if m:
+                        add("P0", "K7-SECRET", "K7 secret",
+                            f"şüpheli anahtar: {rel}", m.group(0)[:32])
+
+    except (zipfile.BadZipFile, OSError) as e:
+        add("P0", "K2-ZIP", "K2 klasör", "dış zip açılamıyor (bozuk)", str(e))
+    finally:
+        import shutil
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    return {
+        "pages": pages,
+        "refs": refs,
+        "pdf_meta_report": pdf_meta_report,
+        "total_bytes": total_bytes,
+        "type_bytes": type_bytes,
+        "online_refs": online_refs,
+        "layer_timings": layer_timings,
+        "skill_reuse": {"ok": skill_reuse_ok, "detail": skill_reuse_detail},
+    }
+
 def main():
     t0 = time.time()  # run duvar saati (history.jsonl duration_s için)
+    # "Run-içi" sözleşmesi: her run soğuk başlar (uzun ömürlü bir süreçte
+    # main() birden çok kez çağrılırsa önceki run'ın girdileri taşınmaz).
+    reset_hash_cache()
     ap = argparse.ArgumentParser()
     ap.add_argument("--dir", default=os.path.dirname(os.path.abspath(__file__)))
     ap.add_argument("--json", action="store_true")
-    ap.add_argument("--strict-determinism", dest="strict_determinism",
-                    action="store_true", default=True,
-                    help="K6-DETERM (VARSAYILAN AÇIK): PDF /ID-kanonik hash'ini "
-                         "kabul raporunun hash geçiş defteriyle karşılaştır; "
-                         "defterde yoksa P1 (fail-closed)")
-    ap.add_argument("--no-strict-determinism", dest="strict_determinism",
-                    action="store_false",
-                    help="K6-DETERM kanonik karşılaştırmasını kapat (yalnız "
-                         "teşhis/eski karşılaştırma; kabul raporu §6)")
+    ap.add_argument("--strict-determinism", action="store_true",
+                    help="K6-DETERM: teslim PDF'inin /ID-kanonik hash'i kabul "
+                         "defterinde (docs/ID_RESIDUAL_ACCEPTANCE.md) kayıtlı "
+                         "değilse P1 üret (Faz 4 semantiği)")
     ap.add_argument("--budget", type=float, default=None,
                     help="Bütçe kalkanı: tahmini USD üretim maliyeti "
                          "(token ≈ bytes/4; $3/M token + $0.55; v3_verify.py H4). "
@@ -4645,6 +5515,23 @@ def main():
  action="store_true",
                     help="K20: launchctl list + plutil lint + HTTP 200 "
                          "doğrulaması (macOS'a özgü, --full'a dahil değil)")
+    ap.add_argument("--core-verdict-out", nargs="?", const=True, default=None,
+                    metavar="PATH",
+                    help="Çekirdek (K0-K7) verdict kaydını PATH'e yaz; yol "
+                         "verilmezse <git-dir>/%s. Aynı ağaçta koşan "
+                         "katman-özel çağrılar (K10/K12/K13/K15/"
+                         % CORE_VERDICT_DEFAULT_NAME +
+                         "K17/K21 …) bu kaydı --reuse-core-verdict ile kullanır "
+                         "ve çekirdeği tekrar koşmaz (fail-closed: kayıt girdi "
+                         "kimliğine bağlıdır, FAIL replay edilir)")
+    ap.add_argument("--reuse-core-verdict", nargs="?", const=True, default=None,
+                    metavar="PATH",
+                    help="Çekirdek verdict'ini PATH'ten oku ve K0-K7'yi KOŞMA "
+                         "(yol verilmezse $%s ya da <git-dir>/%s). "
+                         "Kayıt doğrulanamazsa (farklı ağaç/ortam/araç, eksik "
+                         "seçenek kapsamı) çekirdek yeniden koşar ve gerekçe "
+                         "rapora yazılır."
+                         % (CORE_VERDICT_ENV, CORE_VERDICT_DEFAULT_NAME))
     ap.add_argument("--full", action="store_true",
                     help="Tüm katmanları tek komutla koş: --check-references + "
                          "--symbolic-proof + --lean-proof + --check-lineage + "
@@ -4799,68 +5686,61 @@ def main():
         print(f"FAIL: {KLASOR_ZIP} bulunamadı ({d})")
         return 2
 
-    # ---- K0: bayat zip taraması (recursive) ----
-    # Kanonik teslim yalnızca CIKTI/'da olmalı. _calisma/ altındaki HER zip
-    # (alt dizinler dahil — repack ara ürünleri TESLIM/ ve V5_ICERIK/ altında,
-    # kökteki başıboş kopyalar) "başıboş/bayat kopya" riskidir: yanlışlıkla
-    # dağıtılabilir/commit edilebilir. İstisnalar: CIKTI (kanonik kopya),
-    # TOOLKIT (toolkit'in kendi çalışma kopyası; kanonik iCloud'da), .venv_z3
-    # + gizli dizinler (ortam). repack_delivery.py kendi transient ara
-    # ürününü (OUTER_SRC içindeki iç zip) build sonrası siler — yani normal
-    # repack akışı K0'ı yeşil bırakır; kalan her zip gerçek bayat kopyadır.
-    parent = os.path.dirname(d)
-    # Kanonik dizin (--dir'in kendi adı) HER ZAMAN atlanır: repo'da "CIKTI",
-    # TCC-safe mirror'da "verify" — aksi halde mirror kendi zip'lerini bayat
-    # kopya sanar (K0 false-P1). Kural tek kaynakta: k0_skip_dirs().
-    k0_skip = k0_skip_dirs(d, args.k0_toolkit_tolerant)
-    k0_records = scan_stale_zips(parent, skip_dirs=k0_skip)
-    k0_findings = []  # P1 (fail-closed) — run summary sidecar'ı
-    for f in k0_records:
-        rel = f["rel"]
-        issue = f"CIKTI dışında zip bulundu: {rel}"
-        if args.k0_toolkit_tolerant and is_toolkit_rel(rel):
-            # toolkit-tolerant: TOOLKIT/ kopyası INFO — fail-closed DEĞİL.
-            add("INFO", "K0-TOOLKIT", "K0 bayat zip",
-                issue + " (toolkit-tolerant — P1 değil INFO)",
-                f"{f['sha256']}  {os.path.join(parent, rel)}")
-            continue
-        # Kök düzeyindeki başıboş kopya için hint: TOOLKIT/
-        # K0'ın skip kümesindedir — oraya taşınırsa P1 otomatik
-        # düşer (kanonik kopya CIKTI/ + toolkit kopyası
-        # TOOLKIT/ ayrışır). Alt dizindeki (repack ara ürünü)
-        # ziplere bu hint verilmez — repack onları kendi siler.
-        if os.path.dirname(rel) == "":
-            issue += (" — ipucu: kök zip'i `TOOLKIT/` dizinine "
-                      "taşıyabilirsin (K0 atlar; P1 giderilir)")
-        k0_findings.append(f)
-        add("P1", "K0-STALE", "K0 bayat zip", issue,
-            f"{f['sha256']}  {os.path.join(parent, rel)}")
-    if args.k0_out:
-        try:
-            with open(args.k0_out, "w", encoding="utf-8") as kf:
-                json.dump({"count": len(k0_findings), "findings": k0_findings},
-                          kf, indent=2, ensure_ascii=False)
-            if not args.json:
-                print(f"[K0] bulgu sidecar'ı yazıldı: {args.k0_out} "
-                      f"({len(k0_findings)} bayat zip)")
-        except OSError as e:
-            add("P1", "K0-OUT", "K0 sidecar", f"yazılamadı: {args.k0_out}", str(e))
-
-    # ---- K1: dış zip sidecar ----
-    want = None
-    if os.path.isfile(kside):
-        got = sha256_file(kzip)
-        want = parse_sha256sums(kside).get(KLASOR_ZIP)
-        if want and got == want:
-            pass  # OK
-        elif want:
-            add("P0", "K1-SIDECAR", "K1 dış zip", "dış zip hash uyuşmuyor",
-                f"expected={want} actual={got}")
+    # ---- Çekirdek verdict'i yeniden kullanımı (K0-K7 tekrar koşmasın) ----
+    # Katman-özel bir çağrı (--check-plist/--check-history/--check-mirror …)
+    # çekirdeği zaten doğrulanmış bulduysa kaydı okur ve K0-K7'yi koşmaz.
+    # Kayıt doğrulanamazsa çekirdek YENİDEN KOŞAR; gerekçe sessizce yutulmaz
+    # (stderr + rapor + INFO bulgu). Fail-closed: yalnız PASS/FAIL verdict'i
+    # AYNEN replay edilir, asla "doğrulanmış sayılmış" bir varsayım üretilmez.
+    core_state = None
+    core_verdict_info = {"source": "ran", "path": None,
+                         "requested": bool(args.reuse_core_verdict),
+                         "rejected_reason": None,
+                         "tree_digest": None, "generated_at": None}
+    if args.reuse_core_verdict:
+        if args.core_verdict_out:
+            print("HATA: --core-verdict-out ile --reuse-core-verdict birlikte "
+                  "kullanılamaz (reuse çekirdeği koşmaz, yeni kayıt üretemez)",
+                  file=sys.stderr)
+            return 2
+        for flag, val in (("--k0-out", args.k0_out),
+                          ("--refs-out", args.refs_out)):
+            if val:
+                print(f"HATA: --reuse-core-verdict çekirdeği koşmadığı için "
+                      f"{flag} üretilemez (ikisi birlikte kullanılamaz)",
+                      file=sys.stderr)
+                return 2
+        req = args.reuse_core_verdict
+        vpath = req if isinstance(req, str) and req is not True \
+            else core_verdict_default_path()
+        rec, reason = load_core_verdict(vpath, args, d, cfg_path)
+        if rec is not None:
+            core_state = core_state_from_verdict(rec, add)
+            core_verdict_info.update(
+                {"source": "reused", "path": os.path.abspath(vpath),
+                 "tree_digest": rec.get("tree_digest"),
+                 "generated_at": rec.get("generated_at"),
+                 "verdict": rec.get("verdict")})
+            print(f"[CORE] K0-K7 çekirdek verdict'i yeniden kullanıldı: {vpath} "
+                  f"(verdict={rec.get('verdict')}, üretim={rec.get('generated_at')}, "
+                  f"digest={str(rec.get('tree_digest'))[:16]}…) — çekirdek "
+                  f"TEKRAR KOŞMADI",
+                  file=(sys.stderr if args.json else sys.stdout))
         else:
-            add("P0", "K1-SIDECAR", "K1 dış zip", "sidecar okunamadı/parse edilemedi")
-    else:
-        add("P0", "K1-SIDECAR", "K1 dış zip", "sidecar yok", kside)
+            core_verdict_info["path"] = (os.path.abspath(vpath)
+                                         if vpath else None)
+            core_verdict_info["rejected_reason"] = reason
+            add("INFO", "CORE-VERDICT", "Çekirdek verdict'i",
+                f"yeniden kullanılamadı ({reason}) — çekirdek yeniden koşuldu",
+                vpath or "")
+            print(f"[CORE] verdict kullanılamadı: {reason} — çekirdek yeniden "
+                  f"koşuluyor (fail-closed: doğrulanmamış kayıt kullanılmaz)",
+                  file=sys.stderr)
 
+
+    # ---- Çekirdek K0-K1 (reuse edilirse KOŞMAZ) ----
+    if core_state is None:
+        run_core_k0_k1(args, d, kzip, kside, add)
     # ---- Soy hattı (zip_lineage.json — M0 §10 ile tek kaynak) ----
     lineage_report = None
     if args.check_lineage:
@@ -4937,216 +5817,48 @@ def main():
                 print(f"[K15] history sidecar: aranacak dosya bulunamadı "
                       f"(candidates: {candidates!r}) — atlandı")
 
-    tmp = tempfile.mkdtemp(prefix="verify_delivery_")
-    pages = refs = pdf_meta_report = None
-    online_refs = []  # K6 çevrimiçi denetim sonuçları (VERSION JSON kaynağı)
-    total_bytes = 0
-    try:
-        with zipfile.ZipFile(kzip) as z:
-            z.extractall(tmp)
-        kdir = os.path.join(tmp, KLASOR_DIR)
+    # ---- Çekirdek K2-K7 (reuse edilirse KOŞMAZ) ----
+    if core_state is None:
+        core_state = run_core_k2_k7(args, d, kzip, kside, add)
 
-        # ---- K2: klasör checksum ----
-        kc = os.path.join(kdir, "KLASOR_CHECKSUMLARI.sha256")
-        if os.path.isfile(kc):
-            expected = parse_sha256sums(kc)
-            ok = bad = 0
-            for rel, want in expected.items():
-                p = os.path.join(kdir, rel)
-                if os.path.isfile(p) and sha256_file(p) == want:
-                    ok += 1
-                else:
-                    bad += 1
-                    add("P0", "K2-FOLDER", "K2 klasör", f"dosya uyuşmuyor: {rel}")
-            if bad == 0:
-                pass
-            if not expected:
-                add("P0", "K2-FOLDER", "K2 klasör", "KLASOR_CHECKSUMLARI boş")
+    # ---- Çekirdek verdict kaydı (--core-verdict-out) ----
+    # Yalnız çekirdek GERÇEKTEN koştuysa yazılır (reuse yolu yeni kayıt
+    # üretmez; yukarıda reddedilir) — kayıt "koşumun kanıtı"dır.
+    if args.core_verdict_out:
+        cv_path = args.core_verdict_out
+        if cv_path is True:
+            cv_path = core_verdict_default_path()
+        if not cv_path:
+            # Yol isteğe bağlı olarak çözülemedi (env yok + git yok): sessizce
+            # "yazıldı" sayma; ama kapıyı da çekirdek yüzünden düşürme.
+            add("P1", "CORE-VERDICT-OUT", "Çekirdek verdict kaydı",
+                "yazılacak yol çözülemedi ($%s ya da git dizini yok)"
+                % CORE_VERDICT_ENV)
         else:
-            add("P0", "K2-FOLDER", "K2 klasör", "KLASOR_CHECKSUMLARI.sha256 yok")
-
-        izip = os.path.join(kdir, IC_ZIP)
-        iside = izip + ".sha256"
-
-        # ---- K3: iç zip sidecar ----
-        if os.path.isfile(iside):
-            igot = sha256_file(izip)
-            iwant = parse_sha256sums(iside).get(IC_ZIP)
-            if iwant and igot == iwant:
-                pass
-            elif iwant:
-                add("P0", "K3-SIDECAR", "K3 iç zip", "iç zip hash uyuşmuyor",
-                    f"expected={iwant} actual={igot}")
-            else:
-                add("P0", "K3-SIDECAR", "K3 iç zip", "iç sidecar okunamadı")
-        else:
-            add("P0", "K3-SIDECAR", "K3 iç zip", "iç sidecar yok", iside)
-
-        try:
-            with zipfile.ZipFile(izip) as z:
-                z.extractall(tmp)
-        except (zipfile.BadZipFile, OSError) as e:
-            add("P0", "K3-ZIP", "K3 iç zip", "iç zip açılamıyor (bozuk)", str(e))
-            pkg = None
-        else:
-            pkg = os.path.join(tmp, PKG_REL)
-
-        if pkg is not None and not os.path.isdir(pkg):
-            add("P0", "K4-MANIFEST", "K4 manifest", "paket dizini bulunamadı", pkg)
-            pkg = None
-
-        # bütçe kalkanı için içerik toplam baytı + dosya tipi kırılımı
-        # (iç zip içeriği; tek kaynak: compute_type_bytes — gen_config.py da
-        # aynı fonksiyonu kullanır, sınıflandırma drift'i olmaz).
-        ic_root = os.path.join(tmp, IC_ZIP[:-4])
-        type_bytes, total_bytes = compute_type_bytes(ic_root)
-
-        # ---- K4: manifest 18/18 ----
-        mf = os.path.join(pkg, "MANIFEST.txt") if pkg else None
-        if mf and os.path.isfile(mf):
-            exp = parse_manifest(mf)
-            ok = 0
-            for fn, want in exp.items():
-                p = os.path.join(pkg, fn)
-                if os.path.isfile(p) and md5_file(p) == want:
-                    ok += 1
-                else:
-                    add("P0", "K4-MANIFEST", "K4 manifest", f"MD5 uyuşmuyor: {fn}")
-            if ok != EXPECTED_MANIFEST:
-                add("P0", "K4-MANIFEST", "K4 manifest",
-                    f"manifest {ok}/{EXPECTED_MANIFEST}")
-        else:
-            add("P0", "K4-MANIFEST", "K4 manifest", "MANIFEST.txt yok")
-
-        # ---- K5: 3 script byte-for-byte ----
-        py = sys.executable
-        for script, frozen in SCRIPTS:
-            if pkg is None:
-                add("P0", "K5-SCRIPT", f"K5 {script}", "paket çıkarılamadığı için atlandı")
-                continue
-            sp = os.path.join(pkg, script)
-            fp = os.path.join(pkg, frozen)
-            rc, out = run_script(py, sp)
-            if rc != 0:
-                add("P0", "K5-SCRIPT", f"K5 {script}", "script çalışmadı",
-                    f"exit={rc}")
-                continue
-            if not os.path.isfile(fp):
-                add("P0", "K5-SCRIPT", f"K5 {script}", "donmuş çıktı yok", frozen)
-                continue
-            if out != open(fp, "rb").read():
-                add("P0", "K5-SCRIPT", f"K5 {script}",
-                    "donmuş çıktıyla byte-for-byte UYUŞMUYOR")
-            else:
-                pass  # byte-for-byte OK
-
-        # ---- K6: içerik (PDF sayfası + 64 referans) ----
-        if pkg is None:
-            add("P0", "K6-REFS", "K6 içerik", "paket çıkarılamadığı için atlandı")
-        pdf = os.path.join(pkg, "ingiliz_empirizmi_v3.pdf") if pkg else None
-        pages = pdf_pages(pdf) if pdf and os.path.isfile(pdf) else None
-        if pages is not None and pages != EXPECTED_PAGES:
-            add("P0", "K6-PAGES", "K6 içerik", f"PDF {pages} sayfa (beklenen {EXPECTED_PAGES})")
-        tex = os.path.join(pkg, "ingiliz_empirizmi_v3.tex") if pkg else None
-        refs = count_references(tex) if tex and os.path.isfile(tex) else None
-        if refs is not None and refs != EXPECTED_REFS:
-            add("P0", "K6-REFS", "K6 içerik", f"References {refs} (beklenen {EXPECTED_REFS})")
-
-        # ---- K6-DETERM: PDF /ID-kanonik hash (build determinism kapısı) ----
-        # Faz 4, ölçümle düzeltildi. ESKİ YORUM YANLIŞTI: "tectonic
-        # non-deterministic olduğundan strict kapalı". Gerçek: motor
-        # SOURCE_DATE_EPOCH ile deterministiktir; tek kalıntı pdfTeX'in
-        # trailer /ID çiftidir (docs/ID_RESIDUAL_ACCEPTANCE.md §1-2) ve
-        # kanonik görünümde nötrlenir. Ölçüm: aynı motor, aynı kaynak,
-        # aynı SDE → kanonik hash ×2 bağımsız koşumda birebir aynı
-        # (make -f docs/Makefile.texlive check; bugün SDE=0 ile iki kez
-        # yeniden üretildi: 544516b0…).
-        #
-        # İKİ ayrı yüzey, ikisi de raporlanır:
-        #   (a) stripped (qpdf --remove-metadata) → YALNIZ BİLGİ. qpdf'in
-        #       kendisi nondeterministik (aynı dosyada 3 koşum → 3 hash),
-        #       yani strict buna uygulanırsa kapı her koşumda yanlış
-        #       pozitive düşer. Ölçülen yanlış pozitif üretici.
-        #   (b) canonical (/ID nötrlü) → STRICT. Kabul raporunun §4 hash
-        #       geçiş defteriyle karşılaştırılır: hash defterde yoksa
-        #       P1 (fail-closed) ve çıkış yolu `make accept` yazılır.
-        #       Hash'i kod değil doküman taşır → iki gerçeklik olmaz.
-        pdf_meta_report = None
-        if pdf and os.path.isfile(pdf):
-            raw_h, stripped_h = qpdf_check_determinism(pdf)
-            finding, canonical_evidence = k6_canonical_finding(
-                pdf, strict=getattr(args, "strict_determinism", True))
-            skill_reuse_ok, skill_reuse_detail = check_pdf_skill_reuse(add)
-            pdf_meta_report = {"raw": raw_h, "stripped": stripped_h,
-                               "strict": getattr(args, "strict_determinism", True),
-                               "skill_reuse": {"ok": skill_reuse_ok,
-                                               "detail": skill_reuse_detail}}
-            pdf_meta_report.update(canonical_evidence)
-            if stripped_h:
-                sidecar_path = os.path.join(pkg, PDF_METADATA_SIDECAR)
-                if os.path.isfile(sidecar_path):
-                    # Yukarıdaki karmaşık extract'i basitleştir:
-                    expected_stripped = None
-                    with open(sidecar_path) as sf:
-                        for line in sf:
-                            parts = line.split()
-                            if len(parts) == 2 and "metadata" in parts[1]:
-                                expected_stripped = parts[0]
-                                break
-                    pdf_meta_report["expected_stripped"] = expected_stripped
-                    pdf_meta_report["drift"] = (
-                        expected_stripped is not None
-                        and stripped_h != expected_stripped)
-                    # Sadece BİLGİ: stripped hash qpdf kaynaklı
-                    # kararsızdır, strict karşılaştırmaya giremez
-                    # (ölçüm: 3 koşum → 3 farklı hash).
-                    if pdf_meta_report["drift"]:
-                        pdf_meta_report["drift_gated"] = False
-            # Strict karşılaştırma: kanonik hash ↔ kabul defteri.
-            if finding:
-                add("P1", "K6-DETERM", "K6 build determinism", finding)
-
-        # ---- K6+: referans denetimi (CrossRef/SEP/OpenLibrary çevrimiçi) ----
-        # Sonuçlar online_refs'e toplanır; --refs-out ile her run'ın kaç
-        # referansı çevrimiçi doğruladığını izleyen VERSION JSON'a yazılır.
-        if args.check_references:
-            if tex and os.path.isfile(tex):
-                tex_text = open(tex, encoding="utf-8", errors="ignore").read()
-                online_refs = run_reference_audit(tex_text, add, quiet=args.json)
-            else:
-                add("P0", "K6-REF", "K6 referans",
-                    ".tex okunamadı, çevrimiçi denetim atlandı")
-
-        # ---- K7: hijyen + secret ----
-        for root, dirs, files in os.walk(tmp):
-            dirs[:] = [x for x in dirs if x != ".git"]
-            for fn in files:
-                p = os.path.join(root, fn)
-                rel = os.path.relpath(p, tmp).replace(os.sep, "/")
-                if any(re.search(pat, rel) for pat in HIGIENE_PATTERNS):
-                    add("P1", "K7-HYG", "K7 hijyen", f"artefakt kalıntısı: {rel}")
-                ext = os.path.splitext(fn)[1].lower()
-                if ext in SKIP_SECRET_EXT or os.path.getsize(p) > 2_000_000:
-                    continue
-                try:
-                    txt = open(p, encoding="utf-8", errors="ignore").read()
-                except OSError:
-                    continue
-                for pat in SECRET_PATTERNS:
-                    m = re.search(pat, txt, re.IGNORECASE)
-                    if m:
-                        add("P0", "K7-SECRET", "K7 secret",
-                            f"şüpheli anahtar: {rel}", m.group(0)[:32])
-
-    except (zipfile.BadZipFile, OSError) as e:
-        add("P0", "K2-ZIP", "K2 klasör", "dış zip açılamıyor (bozuk)", str(e))
-    finally:
-        import shutil
-        shutil.rmtree(tmp, ignore_errors=True)
-
+            try:
+                record = core_verdict_record(args, d, cfg_path, core_state,
+                                             findings)
+                _write_atomic(cv_path,
+                              json.dumps(record, indent=2, ensure_ascii=False))
+                print(f"[CORE] çekirdek verdict kaydı yazıldı: "
+                      f"{cv_path} (verdict={record['verdict']}, "
+                      f"digest={record['tree_digest'][:16]}…)",
+                      file=(sys.stderr if args.json else sys.stdout))
+            except OSError as e:
+                add("P1", "CORE-VERDICT-OUT", "Çekirdek verdict kaydı",
+                    f"yazılamadı: {cv_path}", str(e))
+    pages = core_state["pages"]
+    refs = core_state["refs"]
+    pdf_meta_report = core_state["pdf_meta_report"]
+    total_bytes = core_state["total_bytes"]
+    type_bytes = core_state["type_bytes"]
+    online_refs = core_state["online_refs"]
+    layer_timings = core_state["layer_timings"]
+    skill_reuse = core_state["skill_reuse"]
     # ---- K8: sembolik ispat (Z3, isteğe bağlı) ----
     z3_passed = z3_failed = None   # koşulmadıysa None (history/trend '?' gösterir)
     if args.symbolic_proof:
+        t_z3 = time.monotonic()
         sp = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                           SYMBOLIC_PROOF_SCRIPT)
         if not os.path.isfile(sp):
@@ -5157,75 +5869,91 @@ def main():
                 print(f"[K8] sembolik ispat (Z3): {'PASS' if ok else 'FAIL'} — {detail}")
             if not ok:
                 add("P0", "K8-Z3", "K8 sembolik ispat", detail)
+        _timing_add(layer_timings, "K8", "Z3", t_z3)
 
     lean_ok = None
     lean_detail = None
-    # ---- K9: Lean 4 reduct-invariance + 8 teorem çekirdek (isteğe bağlı) ----
+    # ---- K9: Lean statement gate + reduct-invariance + lake (isteğe bağlı) ----
     if args.lean_proof:
+        t_k9 = time.monotonic()
+        reduct_dir = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), LEAN_REDUCT_DIR)
+        statement_lean = os.path.join(reduct_dir, LEAN_STATEMENT_LEAN)
+        statement_latex = os.path.join(reduct_dir, LEAN_STATEMENT_LATEX)
+        t_stmt = time.monotonic()
+        statement_ok, statement_findings = _check_statements(
+            statement_lean, statement_latex)
+        _timing_add(layer_timings, "K9", "statement gate", t_stmt)
+        if statement_ok:
+            statement_detail = "Content.lean ↔ Content.lean.tex envanteri uyumlu"
+        else:
+            statement_detail = "; ".join(
+                f"{item.get('kind', 'source')}: {item.get('detail', '')}"
+                for item in statement_findings)
+            add("P0", "K9-STMNT", "K9 LaTeX statement gate", statement_detail)
+        statement_line = (
+            f"[K9] Lean statement gate: {'PASS' if statement_ok else 'FAIL'} — "
+            f"{statement_detail}")
+        if not args.json:
+            print(statement_line)
+        else:
+            print(statement_line, file=sys.stderr)
+
+        t_proof = time.monotonic()
         lp = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                           LEAN_PROOF_SCRIPT)
         # lean + lake'i PATH'ten, /opt/homebrew/bin'den veya ~/.elan/bin'den bul
         lean_cmd = find_tool("lean")
         if not os.path.isfile(lp):
-            add("P0", "K9-LEAN", "K9 Lean ispatı", f"{LEAN_PROOF_SCRIPT} yok", lp)
+            proof_ok = False
+            proof_detail = f"{LEAN_PROOF_SCRIPT} yok: {lp}"
+            add("P0", "K9-LEAN", "K9 Lean ispatı", proof_detail)
         else:
-            ok, detail = run_lean_proof(lean_cmd, lp)
-            # ── K9 ek kapısı: 8 teoremli Sınır İspatı çekirdeği ──
-            # lake build --wfail, lean-toolchain v4.14.0 (fail-closed).
-            # --full / --lean-proof ile otomatik koşar; lake yoksa P0.
-            reduct_dir = os.path.join(
-                os.path.dirname(os.path.abspath(__file__)), LEAN_REDUCT_DIR)
-            lakefile = os.path.join(reduct_dir, "lakefile.toml")
-            if os.path.isfile(lakefile):
-                # K9-TWIN: lake target kopyası sözleşme shim'i ile
-                # byte-eşit mi? Ayrışma K9-LAKE'nin BAYAT kopyayı
-                # derlemesine yol açar — build'den ÖNCE fail-closed.
-                shim = os.path.join(reduct_dir, "Content.lean")
-                twin = os.path.join(reduct_dir, "Leibniz2Reduct", "Content.lean")
-                twin_ok, twin_findings = _check_twin(shim, twin)
-                if not twin_ok:
-                    detail_txt = "; ".join(
-                        f.get("detail", str(f)) for f in twin_findings)
-                    add("P0", "K9-TWIN", "K9 twin bütünlüğü", detail_txt)
-                    print(f"[K9] twin bütünlüğü: FAIL — {detail_txt}",
-                          file=sys.stderr)
-                lake_cmd = find_tool("lake")
-                lake_ok, lake_detail = run_lake_build(
-                    lake_cmd, reduct_dir,
-                    lean_only=getattr(args, "lean_only", False))
-                lake_state = ("SKIP" if lake_ok is None
-                              else ("PASS" if lake_ok else "FAIL"))
-                lake_line = (f"[K9] Lean reduct (8 teorem, lake build --wfail): "
-                             f"{lake_state} — {lake_detail}")
-                if args.json:
-                    print(lake_line, file=sys.stderr)
-                else:
-                    print(lake_line)
-                if lake_ok is False:
-                    add("P0", "K9-LAKE", "K9 Lean çekirdeği", lake_detail)
-                # twin drift K9'u fail-closed düşürür (build'den bağımsız)
-                ok = ok and twin_ok
+            proof_ok, proof_detail = run_lean_proof(lean_cmd, lp)
+        _timing_add(layer_timings, "K9", "Lean ispatı", t_proof)
+
+        # lake build --wfail, lean-toolchain v4.14.0 (fail-closed).
+        # --full / --lean-proof ile otomatik koşar; lake yoksa P0.
+        t_lake = time.monotonic()
+        lakefile = os.path.join(reduct_dir, "lakefile.toml")
+        if os.path.isfile(lakefile):
+            lake_cmd = find_tool("lake")
+            lake_ok, lake_detail = run_lake_build(
+                lake_cmd, reduct_dir,
+                lean_only=getattr(args, "lean_only", False))
+            lake_state = ("SKIP" if lake_ok is None
+                          else ("PASS" if lake_ok else "FAIL"))
+            lake_line = (f"[K9] Lean core (lake build --wfail): "
+                         f"{lake_state} — {lake_detail}")
+            if args.json:
+                print(lake_line, file=sys.stderr)
             else:
-                lake_ok, lake_detail = False, f"lake projesi yok: {reduct_dir}"
+                print(lake_line)
+            if lake_ok is False:
                 add("P0", "K9-LAKE", "K9 Lean çekirdeği", lake_detail)
-            # K9 genel: İKİ kapı da geçmeli (fail-closed) — dashboard rozeti
-            # ve history lean_ok bu birleşimi taşır. SKIP (None) nötrdür:
-            # yalnızca --lean-only + lean-derleyicisi-yok ortamında oluşur.
-            ok = ok and (lake_ok is not False)
-            if lake_detail:
-                detail = f"{detail} · {lake_detail}"
-            lean_ok = ok
-            lean_detail = detail
-            k9_line = f"[K9] Lean 4 reduct-invariance: {'PASS' if ok else 'FAIL'} — {detail}"
-            if not args.json:
-                print(k9_line)
-            else:
-                # --json modunda stdout yalnızca JSON olmalı; K9 sonucu
-                # dashboard'un gerçek rozet için stderr'e relay edilir
-                # (preview_server._parse_lean_result bunu ayrıştırır).
-                print(k9_line, file=sys.stderr)
-            if not ok:
-                add("P0", "K9-LEAN", "K9 Lean ispatı", detail)
+        else:
+            lake_ok, lake_detail = False, f"lake projesi yok: {reduct_dir}"
+            add("P0", "K9-LAKE", "K9 Lean çekirdeği", lake_detail)
+        _timing_add(layer_timings, "K9", "lake build", t_lake)
+
+        # K9 genel: statement gate ∧ proof ∧ lake. SKIP (None) yalnız
+        # --lean-only + derleyicisi-yok ortamında nötrdür.
+        ok = statement_ok and proof_ok and (lake_ok is not False)
+        detail = " · ".join(
+            part for part in (proof_detail, statement_detail, lake_detail) if part)
+        lean_ok = ok
+        lean_detail = detail
+        k9_line = f"[K9] Lean 4 reduct-invariance: {'PASS' if ok else 'FAIL'} — {detail}"
+        if not args.json:
+            print(k9_line)
+        else:
+            # --json modunda stdout yalnızca JSON olmalı; K9 sonucu
+            # dashboard'un gerçek rozet için stderr'e relay edilir
+            # (preview_server._parse_lean_result bunu ayrıştırır).
+            print(k9_line, file=sys.stderr)
+        if not ok:
+            add("P0", "K9-LEAN", "K9 Lean ispatı", detail)
+        _timing_add(layer_timings, "K9", _TIMING_TOTAL_PHASE, t_k9)
 
     # ---- K19: Coq reduct-invariance (--coq-proof, isteğe bağlı) ----
     # Content.v çekirdeğini coqtop -compile ile fail-closed derler. coqtop
@@ -5570,8 +6298,11 @@ def main():
         #     config yoksa varsayılan oranlar kullanılır.
         ratios = {k: (cfg.get("budget_ratios") or {}).get(k, v)
                   for k, v in DEFAULT_BUDGET_RATIOS.items()}
+        # Kayıttan replay edilen `type_bytes` eksik anahtar taşıyabilir
+        # (kurcalanmış/kırpılmış kayıt) — KeyError çekirdek verdict'ini
+        # çökertmek yerine eksik tip 0 bayt sayılır.
         weighted_tokens = sum(
-            type_bytes[k] // ratios[k] for k in ratios)
+            type_bytes.get(k, 0) // ratios[k] for k in ratios)
         weighted_cost = round(weighted_tokens / 1_000_000 * 3.0, 2) + 0.55
 
         # Karar: hangi yöntem kullanılsın?
@@ -5694,6 +6425,11 @@ def main():
     # halde gereksiz subprocess probe yapma (verify'yi hızlandır).
     hook_env = probe_tool_versions() if (args.json or args.history_out) else None
 
+    # Ağır katman süre tablosu: hem --json çıktısında (makine-okunur) hem
+    # insan-okunur sonda basılır. --json modunda tablo stderr'e gider,
+    # stdout tek JSON belgesi kalır.
+    layer_timing_rows = build_layer_timings(layer_timings)
+
     out = {
         "tool": "verify_delivery.py (Stoic-Hume V5 fail-closed CI)",
         "date": datetime.now(timezone.utc).isoformat(),
@@ -5705,8 +6441,7 @@ def main():
         "config": effective_config,
         "budget": budget_report,
         "pdf_hash": pdf_meta_report,
-        "pdf_skill_reuse": ({"ok": skill_reuse_ok, "detail": skill_reuse_detail}
-                             if 'skill_reuse_ok' in locals() else None),
+        "pdf_skill_reuse": skill_reuse,
         "references_online": refs_online_report,
         "hook_env": hook_env,
         "manifest_digest": manifest_digest_report,
@@ -5723,8 +6458,16 @@ def main():
         "history_sidecar": history_sidecar_report,
         # Per-katman PASS/FAIL/SKIP — dashboard'un "K1-K7" rozeti bunu
         # gerçek veriden türetir (genel verdict değil); --klayers-out
-        # sidecar'ı ile aynı build_layers_summary kaynağı.
-        "layers": build_layers_summary(args, findings),
+        # sidecar'ı ile aynı build_layers_summary kaynağı. Çekirdek
+        # verdict'i yeniden kullanıldıysa K0-K7 satırları `source:
+        # reused` alır (koşmadılar — PASS gibi gizlenmez).
+        "layers": build_layers_summary(args, findings,
+                                       core_source=core_verdict_info["source"],
+                                       core_verdict_path=core_verdict_info["path"]),
+        # Çekirdek verdict'i kaynağı: ran | reused (+ yol, digest, gerekçe).
+        "core_verdict": core_verdict_info,
+        # Ağır katman (K6/K8/K9) faz süreleri — yalnız o run'da koşanlar.
+        "layer_timings": layer_timing_rows,
     }
 
     # ---- K-katman özeti sidecar (run summary için) ----
@@ -5733,7 +6476,10 @@ def main():
     # için run_summary_klayers.py tarafından okunur.
     if args.klayers_out:
         try:
-            klayers = build_layers_summary(args, findings)
+            klayers = build_layers_summary(
+                args, findings,
+                core_source=core_verdict_info["source"],
+                core_verdict_path=core_verdict_info["path"])
             klayers_payload = json.dumps(
                 {"verdict": verdict,
                  "counts": {"P0": p0, "P1": p1},
@@ -5765,6 +6511,9 @@ def main():
               file=(sys.stderr if args.json else None))
 
     if args.json:
+        # Süre tablosu stdout'u bozmaz: --json tek JSON belgesi sözleşmesi.
+        for line in format_layer_timing_table(layer_timing_rows):
+            print(line, file=sys.stderr)
         print(json.dumps(out, indent=2, ensure_ascii=False))
     else:
         print("=== Stoic-Hume V5 teslim doğrulaması ===")
@@ -5784,7 +6533,11 @@ def main():
                   + (f" (unverified={u}, mismatch={m})" if u or m else ""))
         if pdf_meta_report and pdf_meta_report.get("stripped"):
             print(f"PDF hash: raw={pdf_meta_report['raw'][:16]}… "
-                  f"metadata-stripped={pdf_meta_report['stripped'][:16]}…")
+                  f"metadata-stripped={pdf_meta_report['stripped'][:16]}… "
+                  f"canonical(/ID-nötr)="
+                  f"{(pdf_meta_report.get('canonical') or '?')[:16]}…")
+            if pdf_meta_report.get("check"):
+                print(f"K6-DETERM: {pdf_meta_report['check']}")
         if args.verify_manifest:
             print(f"K10 manifest digest: {'PASS' if manifest_ok else 'FAIL'}")
         if cleanup_report:
@@ -5811,6 +6564,8 @@ def main():
                   f"CrossRef {ror['by_source'].get('crossref', 0)} + "
                   f"SEP {ror['by_source'].get('sep', 0)} + "
                   f"OpenLibrary {ror['by_source'].get('openlibrary', 0)})")
+        for line in format_layer_timing_table(layer_timing_rows):
+            print(line)
     # ---- Run-history sidecar (history.jsonl — CI reproducibility) ----
     # preview_server.py'nin HISTORY_KEYS formatıyla birebir. CI'da verify
     # sonrası artifact'a yüklenir; reproducibility job'ı (gen_repro_manifest.py)
@@ -5856,6 +6611,13 @@ def main():
             print(f"HATA: history sidecar yazılamadı ({args.history_out}): {e}",
                   file=sys.stderr)
             return 1
+
+    # Run-içi hash önbelleği ölçümü: opt-in (stderr), rapor şeması değişmez.
+    if os.environ.get("VERIFY_HASH_STATS"):
+        hs = hash_cache_stats()
+        print(f"[HASH] {hs['hits']} isabet / {hs['misses']} disk okuması, "
+              f"{hs['bytes_read']} bayt okundu ({hs['entries']} girdi)",
+              file=sys.stderr)
 
     return 0 if verdict == "PASS" else 1
 

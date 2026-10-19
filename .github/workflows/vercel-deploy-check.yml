@@ -2,14 +2,17 @@ name: vercel-deploy-check
 
 on:
   schedule:
-    # Aylık: her ayın 1'i 05:23 UTC. Diğer cron'lar haftalık ve farklı
-    # dakikada (K7: test_gated_schedules — iki scheduled workflow aynı
-    # cron'u paylaşmaz).
+    # Aylık: her ayın 1'i 05:23 UTC — canlı Vercel deployment'ının /api
+    # adaptörünü repo-DIŞI bir uçtan doğrular. CI yeşilliği burada
+    # yetmez: deploy kendi kendine kırılabilir (statik route, fonksiyon
+    # 404'ü, hesap/limit), bu job tam olarak o sınıfı yakalar.
+    # Fail-closed: tek bir başarısız uç job'ı kırmızıya çeker; PASS/FAIL
+    # özeti $GITHUB_STEP_SUMMARY'a yazılır (sessiz PASS yok).
     - cron: "23 5 1 * *"
   workflow_dispatch:
     inputs:
       base_url:
-        description: "Doğrulanacak deployment kökü (boşsa repo variable / canlı alias)"
+        description: "Doğrulanacak deployment kökü (boşsa vars.VERCEL_PREVIEW_URL, o da yoksa canlı alias)"
         required: false
         default: ""
 
@@ -17,33 +20,32 @@ permissions:
   contents: read
 
 concurrency:
-  # CI-hijyen: elle-tetikleme + cron çakışması eski koşumu iptal eder.
+  # CI-hijyen: elle-tetikleme + cron çakışması tek koşumda birleşir
+  # (eski koşum iptal) — rapor bir-bir yazılır.
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   deploy-check:
-    name: Vercel deploy /api saglik + run-history (fail-closed)
+    name: Vercel canlı doğrulama — health + run-history
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      # K1 kapı-paritesi (test_gated_schedules): schedule'lı iş akış, akışı
-      # YAML'da yeniden yazmaz — repo kapı script'ini çağırır; aynı script
-      # lokalde --base-url ile birebir aynı kodu koşar.
+      # K1/K2 parity (test_gated_schedules): schedule'lı workflow repo
+      # kapı scriptini çağırır — akış YAML'da yeniden yazılmaz; aynı
+      # script lokalde `--base-url` ile birebir koşturulur (cron'un
+      # yerel karşılığı; GATE_SCRIPTS kaydı).
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Vercel deploy /api dogrulama (fail-closed)
+      - name: Canlı /api doğrulama (fail-closed gate script)
         env:
           INPUT_URL: ${{ github.event.inputs.base_url }}
           VAR_URL: ${{ vars.VERCEL_PREVIEW_URL }}
         run: |
           set -euo pipefail
           # URL çözümü: elle-girdi > repo variable > bilinen canlı alias.
-          # (Aykırı: "vercel link" hesap-düzeyinde 400 — sabit preview alias'ı
-          # yok; değişken = elle girilen preview URL.) Şema denetimi + iki uç
-          # (health "ok" düz-metin; run-history JSON + ts/verdict şema +
-          # verdict kümesi) kapı script'inin içindedir: exit 1 = fail-closed,
-          # STEP_SUMMARY her koşumda script tarafından yazılır (sessiz PASS yok).
+          # (`vercel link` hesap-düzeyinde 400 ile engelli olduğu için
+          # sabit preview aliası yok; değişken = elle girilen preview URL.)
           BASE_URL="${INPUT_URL:-${VAR_URL:-https://leibniz2.vercel.app}}"
           python3 _calisma/CIKTI/check_vercel_deploy.py --base-url "$BASE_URL"

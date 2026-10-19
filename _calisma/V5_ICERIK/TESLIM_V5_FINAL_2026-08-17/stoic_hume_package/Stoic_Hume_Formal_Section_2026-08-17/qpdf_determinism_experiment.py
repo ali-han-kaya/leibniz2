@@ -34,6 +34,15 @@ Two modes:
                                      VARIES run to run — that is the
                                      experiment itself.
 
+Frozen record v2 (2026-09-26) adds a VERSION-TRACKING section: the same
+experiment re-run on today's qpdf, so the finding is not tied to the
+2026-08-18 toolchain. The version-tracking numbers are BAKED-IN CONSTANTS,
+never computed at print time: the default mode must stay stdlib-only and
+byte-stable (K5 compares it byte-for-byte), so a runtime `qpdf --version`
+call or a wall-clock date would make the record drift every day. Adding a
+new measurement = edit VERSION_TRACKING, then regenerate the output file
+with the command the record itself prints.
+
 Run:    python3 qpdf_determinism_experiment.py            (frozen record)
         python3 qpdf_determinism_experiment.py --rerun 5  (live experiment)
 Requires: qpdf only for --rerun mode; default mode is stdlib-only.
@@ -57,6 +66,23 @@ HISTORICAL_RUNS = [("b090ac01", 1), ("429984da", 2), ("509a47a6", 3)]
 HISTORICAL_RAW_PREFIX = "e7b0bc0b"
 FROZEN_TS = "2026-08-18"
 
+# v2 (2026-09-26) SÜRÜM İZLEME — aynı deney, farklı qpdf sürümleri.
+# Amaç: "qpdf kırık" hükmünün bir araç sürümüne bağlı olmadığını göstermek.
+# 2026-08-18 koşumunda qpdf sürümü kayda geçmemişti (bilinçli boşluk —
+# sürüm bilinmediği için "kayıtsız" yazıldı; uydurulmadı).
+#
+# DİSİPLİN: bu blok SABİTTİR. Varsayılan mod stdlib-only ve byte-stabil
+# olmak zorunda (K5 byte-for-byte karşılaştırır). Buraya çalışma anında
+# `qpdf --version` çağrısı ya da `date.today()` koymak kaydı HER GÜN
+# kaydırır ve K5'i kırardı. Yeni ölçüm eklemek = elle bu listeye satır
+# ekle + aşağıdaki komutla çıktıyı yeniden üret.
+VERSION_TRACKING = [
+    ("2026-08-18", "kayıtsız", "e7b0bc0b", 3, 3,
+     ["b090ac01", "429984da", "509a47a6"]),
+    ("2026-09-26", "12.4.0", "74b2cdbd", 5, 5,
+     ["c086cdab", "4fe4275b", "22898321", "4efa9262", "77a95c44"]),
+]
+
 
 def sha256_file(p):
     h = hashlib.sha256()
@@ -72,7 +98,7 @@ def report_record(pdf_path):
         print(f"HATA: PDF yok: {pdf_path}")
         return 2
     raw = sha256_file(pdf_path)
-    print("qpdf determinism experiment — frozen record (V5l, %s)" % FROZEN_TS)
+    print("qpdf determinism experiment — frozen record v2 (V5l, %s + sürüm izleme)" % FROZEN_TS)
     print("=" * 68)
     print("input PDF      : %s" % os.path.basename(pdf_path))
     print("raw SHA-256    : %s   (on-disk PDF'ten hesaplanır)" % raw)
@@ -86,6 +112,19 @@ def report_record(pdf_path):
     print("verdict        : NON-DETERMINISTIC — metadata-stripped SHA-256")
     print("                 serbestçe yeniden hesaplanamaz; repack sidecar'ı")
     print("                 yalnızca raw hash değişince yeniden üretir (V5l fix).")
+    print("=" * 68)
+    print("SÜRÜM İZLEME (v2) — aynı komut, farklı qpdf sürümleri")
+    for date, ver, raw_pfx, n, distinct, hashes in VERSION_TRACKING:
+        print("  %s  qpdf %-9s  %d rerun → %d/%d farklı  NON-DETERMINISTIC"
+              % (date, ver, n, distinct, n))
+        print("              stripped: %s" % "  ".join(h + "…" for h in hashes))
+        print("              raw PDF  : %s…" % raw_pfx)
+    print("okuma        : iki ayrı qpdf sürümü, iki ayrı koşu serisi, AYNI hüküm —")
+    print("               bulgu araç sürümünden bağımsızdır; repack'in")
+    print("               sidecar-reuse düzeltmesi (V5l fix) her iki sürümde de")
+    print("               zorunludur. Yeni sürüm eklerken: qpdf --version'ı")
+    print("               NOT AL, --rerun N çalıştır, hash'leri VERSION_TRACKING")
+    print("               satırına yaz.")
     print("=" * 68)
     print("Bu dosya donmuş kayıttır (K5 byte-for-byte). Yukarıdaki raw SHA-256")
     print("kayıttakinden farklıysa (PDF yeniden derlendi) kaydı yeniden üretin:")

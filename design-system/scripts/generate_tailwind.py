@@ -91,17 +91,22 @@ def render() -> str:
             elif name == "--backdrop-lightbox":
                 tw = "--color-backdrop-lightbox"
             add("color", f"  {tw}: var({name});")
-        elif name in ("--font-sans", "--font-mono"):
+        elif name.startswith("--font-"):
+            # TÜM ses aileleri köprüye girer (sans/mono/verdict …). Tek tek
+            # saymak, `--font-verdict` gibi bir rol eklendiğinde utility'nin
+            # (`font-verdict`) sessizce yok olması demekti.
             add("font", f"  {name}: var({name});")
         elif name.startswith("--text-"):
             add("text", f"  {name}: var({name});")
-        elif name in ("--lh-base", "--lh-tight"):
+        elif name.startswith("--lh-"):
             # Tailwind v4 canonical is --leading-* ; keep --lh-* alias for var(--lh-*) compat
-            tw = name.replace("--lh-", "--leading-")
+            tw = "--leading-" + name[len("--lh-"):]
             add("text", f"  {tw}: var({name});")
             add("text", f"  {name}: var({name});")
-        elif name == "--ls-caps":
-            add("text", f"  --tracking-caps: var({name});")
+        elif name.startswith("--ls-"):
+            # Harf aralığı rolleri: --ls-label → tracking-label
+            tw = "--tracking-" + name[len("--ls-"):]
+            add("text", f"  {tw}: var({name});")
             add("text", f"  {name}: var({name});")
         elif name.startswith("--radius-"):
             add("radius", f"  {name}: var({name});")

@@ -1,8 +1,19 @@
 # VCS / toolchain noise
 .git
 .gitignore
+
+# Lean toolchain build artifacts (host-generated, never runtime input).
+# NOT: aynı sızıntı sınıfı (.venv/notu): bare `.lake` yalnız context
+# KOKUNDA eşleşir — `_calisma/lean_reduct/.lake` (ölçüldü: 552K,
+# build/lib + build/ir) imaja sızıyordu (eski .dockerignore ile build
+# edilen imajda /app/_calisma/lean_reduct/.lake yaşıyordu; CI'da .lake
+# olmadığı için görünmüyordu — yerel/CI build'i ayrışıyordu). `**/` ile
+# her derinlikte hariç tut. Sözleşme: test_dockerfile_security_patching.py
+# (TestDockerignoreContract).
 .lake
 .lake-cache
+**/.lake
+**/.lake-cache
 
 # Virtualenvs and bytecode (never ship the host's, even if present)
 # NOT: bare isimler yalnız context kökünde eşleşir. `_calisma/.venv_z3`

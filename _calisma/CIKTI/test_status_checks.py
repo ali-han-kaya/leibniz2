@@ -63,19 +63,24 @@ class TestGateJobs(unittest.TestCase):
         self.assertIn("config-sync", gates)          # required: üçlü senkron kapısı
         self.assertNotIn("audit-refs-trend", gates)  # advisory denetim
         self.assertNotIn("changelog-drift", gates)   # advisory: changelog drift
+        self.assertIn("dashboard-smoke", gates)      # dashboard-next yüzeyi
+        self.assertNotIn("webkit-smoke", gates)      # macOS Safari advisory
+        self.assertNotIn("preview-reload-smoke", gates)  # macOS advisory
         # Node 24 yükseltmesiyle eklenen job required aday olmalı.
         self.assertIn("action-runtimes", gates)
         self.assertEqual(gates["action-runtimes"],
                          "Action runtime check (node24)")
+        # TeXLive kabulü: `make accept` hash'i ledger'a uymazsa merge durur
+        # (R3 — teslim PDF'i ile kabul edilen PDF'in aynı byte olması).
+        self.assertIn("texlive-accept", gates)
 
     def test_count_matches_workflow_minus_excludes(self):
-        # 30 job − 14 hariç = 16 required aday (tek kaynak: workflow;
-        # 15 -> 16: webkit-smoke — protection contexts == gate_jobs).
+        # 31 job − 16 hariç = 15 required aday (tek kaynak: workflow).
         # Hariç: manifest-comment, precheck, label-gate-p1, plist-check,
         #        mirror-check, daemon-http, fresh-clone-http, audit-live-ci,
         #        audit-refs-trend, override-trend, changelog-drift, pattern-drift,
-        #        budget-comment, lake-proof
-        self.assertEqual(len(sc.gate_jobs()), 16)
+        #        budget-comment, lake-proof, webkit-smoke, preview-reload-smoke
+        self.assertEqual(len(sc.gate_jobs()), 15)
 
     def test_gate_jobs_exact_set_includes_label_gate(self):
         """gate_jobs() tam id kümesini birebir sabitler (fail-closed).
@@ -85,8 +90,9 @@ class TestGateJobs(unittest.TestCase):
         senkron kararı insana bırakılır (yanlış-PASS yok). label-gate
         BİLEREK bu kümededir: P0 label kapısı required'dır.
 
-        NOT: Kapsam 14 değil 15'tir — 14, a11y-gate eklenmeden önceki
-        sayıydı; texlive-accept (R3 kabulü) ile 15'e büyüdü.
+        Kapsam 15'tir: 13 çekirdek A kapısı + texlive-accept + dashboard-smoke.
+        macOS advisory sınıfı (webkit-smoke, preview-reload-smoke) bu kümede
+        DEĞİLDİR — ikisinin de job adı "advisory" der.
         """
         self.assertEqual(
             set(sc.gate_jobs()),
@@ -102,12 +108,14 @@ class TestGateJobs(unittest.TestCase):
                 "config-sync",
                 "repack-verify",
                 "refs-trend",
-                "preview-reload-smoke",
+                "dashboard-smoke",
                 "ci-simulate",
                 "a11y-gate",
-                "texlive-accept", "webkit-smoke",
+                "texlive-accept",
             },
         )
+        self.assertEqual(sc.gate_jobs()["dashboard-smoke"],
+                         "Dashboard interaction E2E (node sandbox + Chromium CDP)")
         # label-gate P0 kapısı required aday olmalı (özel vurgu).
         self.assertIn("label-gate", sc.gate_jobs())
         self.assertEqual(sc.gate_jobs()["label-gate"],
@@ -217,8 +225,54 @@ class TestMergeBlockSmoke(unittest.TestCase):
 
     def test_labels_distinguish_merge_block(self):
         labels = [l for (l, _ok, _n) in sc.merge_block_smoke({})]
-        self.assertIn("required_status_checks.strict", labels)
+        strict = [l for l in labels
+                  if l.startswith("required_status_checks.strict")]
+        self.assertEqual(len(strict), 1, labels)
+        # Etiket NE ölçüldüğünü yazmak zorunda: smoke değeri DEĞİL, alanın
+        # varlığını ölçer. Bu açıklama düşerse çıktı yine "strict zorunlu"
+        # diye yanlış okunur — o yüzden sözleşmeye bağlı.
+        self.assertIn("alan TANIMLI", strict[0],
+                      "strict etiketi ölçülen şeyi (varlık, değer değil) "
+                      "söylemeli")
         self.assertIn("enforce_admins.enabled (admin bypass kapalı)", labels)
+
+    def test_strict_smoke_measures_presence_not_value(self):
+        """`strict: false` smoke'ta PASS eder — bilinçli, ama SESSİZ değil.
+
+        Canlı API (2026-09-30): bu depoda strict=true, enforce_admins=true,
+        force-push/deletions=false. Koruma doğrudan push'u reddediyor
+        (GH006), yani strict burada gerçekten true olmalı — ama smoke'un
+        işi o değeri denetlemek DEĞİL (strict=false doğrudan-push akışı olan
+        depolar için geçerlidir). Açıkta kalan risk, canlı değer bloğunun
+        bunu raporlamasıyla kapatılır.
+        """
+        r = sc.evaluate_protection(["a"], _protection(["a"], strict=False))
+        self.assertTrue(r["enforcement_ok"],
+                        "değer değil varlık ölçülür — strict=false PASS etmeli")
+        live = {f["label"]: f for f in r["live"]}
+        self.assertIs(live["required_status_checks.strict"]["value"], False)
+        self.assertIn("KAPALI", live["required_status_checks.strict"]["meaning"],
+                      "canlı değer bloğu strict=false'i açıkça KAPALI demeli")
+
+    def test_live_facts_report_real_values(self):
+        """Canlı değerler smoke'tan AYRI: gerçek ayarı anlamıyla basar."""
+        prot = _protection(["a"], strict=True, enforce_admins=True,
+                           force_pushes=False, deletions=False)
+        facts = {f["label"]: f for f in sc.evaluate_protection(["a"], prot)["live"]}
+        self.assertIs(facts["required_status_checks.strict"]["value"], True)
+        self.assertIn("GÜNCEL", facts["required_status_checks.strict"]["meaning"])
+        self.assertIs(facts["allow_force_pushes.enabled"]["value"], False)
+        # Ölçülen şey geçmişin yeniden yazılabilirliği; fast-forward'ın
+        # serbest olduğu metinde AÇIKÇA yazmalı (yanıltıcı genelleme olmasın).
+        self.assertIn("fast-forward", facts["allow_force_pushes.enabled"]["meaning"])
+
+    def test_missing_strict_field_is_reported_as_absent(self):
+        """Alan hiç yoksa canlı blok bunu 'alan yok' der — 0/False taklidi yok."""
+        prot = _protection(["a"])
+        prot["required_status_checks"].pop("strict")
+        facts = {f["label"]: f for f in sc.evaluate_protection(["a"], prot)["live"]}
+        self.assertIsNone(facts["required_status_checks.strict"]["value"])
+        self.assertIn("yok", facts["required_status_checks.strict"]["meaning"])
 
 
 @unittest.skipUnless(HAVE_YAML, "PyYAML gerekli")
@@ -253,7 +307,11 @@ class TestEvaluateProtection(unittest.TestCase):
         self.assertFalse(r["enforcement_ok"])
 
     def test_strict_false_is_valid_for_direct_push(self):
-        # strict=False: push izni var, PR-only engeli yok — geçerli.
+        # strict=false, DOĞRUDAN-PUSH'a izin veren depolar için geçerlidir:
+        # "PR dalı güncel olmalı" kuralı anlamsızdır çünkü PR akışı yoktur.
+        # Bu, BU deponun durumu DEĞİLDİR: canlı koruma doğrudan push'u
+        # reddediyor (GH006) ve strict=true. Test bir yapılandırma SINIFINI
+        # ölçer, deponun anlık halini iddia etmez.
         r = sc.evaluate_protection(["a"], _protection(["a"], strict=False))
         self.assertTrue(r["names_ok"])
         self.assertTrue(r["enforcement_ok"])

@@ -102,113 +102,7 @@ def _ctx(issue=1, run=42):
 #   add_labels      [str]|None  issues.addLabels'e geçilen etiketler
 #   remove_labels   [str]|None  issues.removeLabel'e geçilen etiket adları
 #   console_any     [str]       console çıktısında en az birinde geçmeli
-RCA_INPUT = "rca_failures.json"
-
-
-def _rca_report(verdict="blocking", rows=None, run_id=37325226206):
-    """rca_report.py çıktısının JSON biçimi (battery fixture'ı)."""
-    return json.dumps({
-        "run_id": run_id,
-        "workflow": "verify-delivery",
-        "repo": "mock-owner/mock-repo",
-        "verdict": verdict,
-        "required_failures": sum(1 for r in (rows or []) if r["severity"] == "required"),
-        "advisory_failures": sum(1 for r in (rows or []) if r["severity"] == "advisory"),
-        "rows": rows or [],
-    }, ensure_ascii=False)
-
-
-RCA_ROW_REQUIRED = {
-    "job": "Delivery verification — K1-K19 (single entry point)",
-    "conclusion": "failure", "severity": "required", "pattern": "deterministic",
-    "pattern_detail": "8/10 FAIL", "root_cause": "K katmanı kırmızı",
-    "rca_doc": "logs/unit_tests.log",
-    "action": "log'daki FAIL: test_ satırlarını oku",
-    "evidence": REPO_URL + "/actions/runs/37325226206",
-}
-RCA_ROW_ADVISORY = {
-    "job": "Live CI doc↔GitHub sync audit (advisory)",
-    "conclusion": "failure", "severity": "advisory", "pattern": "deterministic",
-    "pattern_detail": "10/10 FAIL",
-    "root_cause": "doc listesi canlıyla eşleşmiyor",
-    "rca_doc": "docs/PUBLISH_SCENARIO.md",
-    "action": "eksik/fazla adı doc'a işle",
-    "evidence": REPO_URL + "/actions/runs/37325226206",
-}
-
-
 SCENARIOS = [
-    # ── rca_comment.js ──────────────────────────────────────────────────────
-    (
-        "rca: zorunlu kırmızı → bloklayan RCA tablosu yorumu oluşur",
-        "rca_comment.js",
-        {RCA_INPUT: _rca_report("blocking", [RCA_ROW_REQUIRED, RCA_ROW_ADVISORY])},
-        None, [], [],
-        {
-            "ok": True, "set_failed": False,
-            "call_counts": {"issues.listComments": 1, "issues.createComment": 1},
-            "body_contains": {"issues.createComment": [
-                "<!-- ci-rca -->",
-                "merge'i **bloklayan** kırmızı",
-                "🔴 required",
-                "🟡 advisory",
-                "Delivery verification",
-                "logs/unit_tests.log",
-            ]},
-            "console_any": ["RCA yorumu oluşturuldu"],
-        },
-    ),
-    (
-        "rca: yalnız advisory kırmızı → merge'i durdurmaz uyarısı",
-        "rca_comment.js",
-        {RCA_INPUT: _rca_report("advisory-only", [RCA_ROW_ADVISORY])},
-        None, [], [],
-        {
-            "ok": True, "set_failed": False,
-            "call_counts": {"issues.createComment": 1},
-            "body_contains": {"issues.createComment": [
-                "yalnız **advisory** kırmızı",
-                "merge'i durdurmaz",
-            ]},
-            "console_any": ["RCA yorumu oluşturuldu"],
-        },
-    ),
-    (
-        "rca: mevcut marker yorumu → upsert (yeni yorum açılmaz)",
-        "rca_comment.js",
-        {RCA_INPUT: _rca_report("blocking", [RCA_ROW_REQUIRED])},
-        None, [], [{"id": 555, "body": "eski" + chr(10) + "<!-- ci-rca -->"}],
-        {
-            "ok": True, "set_failed": False,
-            "call_counts": {"issues.updateComment": 1, "issues.createComment": 0},
-            "target_ids": {"issues.updateComment": [555]},
-            "console_any": ["comment_id=555"],
-        },
-    ),
-    (
-        "rca: düşen job yok → bayat marker yorumu silinir (state-sync)",
-        "rca_comment.js",
-        {RCA_INPUT: _rca_report("clean", [])},
-        None, [], [{"id": 777, "body": "bayat" + chr(10) + "<!-- ci-rca -->"}],
-        {
-            "ok": True, "set_failed": False,
-            "call_counts": {"issues.deleteComment": 1, "issues.createComment": 0},
-            "target_ids": {"issues.deleteComment": [777]},
-            "console_any": ["1 bayat yorum temizlendi"],
-        },
-    ),
-    (
-        "rca: girdi dosyası yok → yorum yok, hata da yok (sessiz geçiş)",
-        "rca_comment.js",
-        {},
-        None, [], [],
-        {
-            "ok": True, "set_failed": False,
-            "call_counts": {"issues.listComments": 1, "issues.createComment": 0},
-            "console_any": ["0 bayat yorum temizlendi"],
-        },
-    ),
-
     # ── pr_status_comment.js ────────────────────────────────────────────────
     (
         "pr_state_sync: bütçe OK + pre-commit temiz + K0/lineage/klayers → yorum yok",
@@ -269,6 +163,39 @@ SCENARIOS = [
             "call_counts": {"issues.listComments": 1},
             "delete_comments": [400],
             "console_any": ["Bulgular çözüldü — bayat yorum kaldırıldı"],
+            "add_labels": [], "remove_labels": [],
+        },
+    ),
+    (
+        "pr_status: kayıtsız katman P0 → Other bulgusu yorumda görünür",
+        "pr_status_comment.js",
+        {
+            "budget/index.json": json.dumps({
+                "runs": [{"source": "verify", "estimated_usd": 1.2,
+                          "limit": 30, "tokens_est": 400000}],
+                "method": "weighted"}),
+            "precommit_findings/PRECOMMIT_RAPORU.json": json.dumps({
+                "findings": [], "counts": {"hooks": 9, "passed": 9}}),
+            "k0_findings.json": json.dumps({"count": 0, "findings": []}),
+            "lineage_findings.json": json.dumps({"ok": True, "generations": []}),
+            "klayers.json": json.dumps({"layers": {
+                "K1": {"status": "PASS", "label": "manifest"},
+                "UNREGISTERED": {
+                    "label": "Unregistered findings", "status": "FAIL",
+                    "findings": [{"priority": "P0", "check": "LINEAGE-CUR",
+                                  "issue": "generation drift"}]}}}),
+            "k10_verdict.txt": "PASS",
+            "reproducibility/manifest.json": "{}",
+        },
+        None, [],
+        [{"id": 444, "body": "old " + MARKER_STATUS}],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.updateComment": 1},
+            "target_ids": {"issues.updateComment": [444]},
+            "body_contains": {"issues.updateComment": [
+                "K katmanları: 1 FAIL", "Other: Unregistered findings",
+                "LINEAGE-CUR: generation drift", MARKER_STATUS]},
             "add_labels": [], "remove_labels": [],
         },
     ),

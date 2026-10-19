@@ -6,15 +6,15 @@ zincirinin verdict'ini, trendini ve koşum günlüklerini doğal dilde sorabilsi
 
 ## Ne yapar
 
-| Araç | Uç | Döndürür |
-|---|---|---|
-| `leibniz2_latest` | `/api/latest` | Son koşum verdict snapshot'ı (verdict, P0/P1, Z3, bütçe, stripped_sha256) |
-| `leibniz2_trend` | `/api/trend?limit=N` | Son N koşumun trend kayıtları |
-| `leibniz2_history` | `/api/history?limit=N` | Snapshot/verdict geçmişi |
-| `leibniz2_refs_trend` | `/api/refs-trend?limit=N` | K6-REF referans-denetim trendi |
-| `leibniz2_run_history` | `/api/run-history?limit=N` | Koşum kimlikleri ve sonuçları |
-| `leibniz2_run_stdout` | `/api/run-stdout[?run=ID]` | Belirli koşumun ham stdout günlüğü |
-| `leibniz2_health` | `/api/health` | Sunucu sağlığı / altyapı doğrulaması |
+| Araç                   | Uç                         | Döndürür                                                                                        |
+| ---------------------- | -------------------------- | ----------------------------------------------------------------------------------------------- |
+| `leibniz2_latest`      | `/api/latest`              | Son koşum verdict snapshot'ı (verdict, P0/P1, Z3, bütçe, stripped_sha256)                       |
+| `leibniz2_trend`       | `/api/trend?limit=N`       | Son N koşumun trend kayıtları                                                                   |
+| `leibniz2_history`     | `/api/history?limit=N`     | Snapshot/verdict geçmişi                                                                        |
+| `leibniz2_refs_trend`  | `/api/refs-trend?limit=N`  | K6-REF referans-denetim trendi                                                                  |
+| `leibniz2_run_history` | `/api/run-history?limit=N` | Koşum kimlikleri (`ts`, eski→yeni) ve sonuçları                                                 |
+| `leibniz2_run_stdout`  | `/api/run-stdout?ts=<ISO>` | Belirli (ya da en yeni) koşumun ham stdout/stderr günlüğü; `ts` boşsa run-history'nin son kaydı |
+| `leibniz2_health`      | `/api/health`              | Sunucu sağlığı / altyapı doğrulaması                                                            |
 
 **Kapsam bilinçli salt-okuma:** `run-now`/`stop` (state-changing, POST-only) uçları
 LLM'e açılmaz — bir asistan doğrulama koşumu tetikleyemez, yalnız okur.
@@ -27,8 +27,8 @@ python3.11 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 ```
 
-`mcp` SDK **`<2` pinn** (FastMCP yüzeyi 2.x'te `MCPServer`'a göç etti;
-bkz. migration guide). Sunucu skill-rehberindeki v1 desenini izler.
+`mcp` SDK **`>=2,<3` pinn** (FastMCP yüzeyi 2.x'te `MCPServer`'a göç etti;
+`server.py` `mcp.server.mcpserver.MCPServer` kullanır, bkz. migration guide).
 
 ## Sunucuyu başlatma (önkoşul)
 
@@ -62,9 +62,12 @@ payload'u döndürür (başlatma komutunu önerir).
 _calisma/mcp/.venv/bin/python _calisma/mcp/smoke_mcp.py
 ```
 
-Üç senaryo: (A) mock sunucuya karşı gerçek MCP stdio istemcisiyle
-`list_tools` + araç çağrıları, (B) `limit` parametresinin Pydantic
-doğrulaması, (C) kapalı-sunucu actioned-hata sözleşmesi.
+İki senaryo: (A) gerçek MCP stdio istemcisiyle `list_tools` + **yedi aracın
+hepsi** (varsayılan: sözleşmeye sadık mock sunucu; her yanıtın payload şeması
+doğrulanır, `?ts=` kaçırma ve `?run=` reddi dâhil), (B) kapalı-sunucu
+actioned-hata sözleşmesi. `MCP_SMOKE_BASE_URL=http://127.0.0.1:PORT`
+verilirse senaryo A mock yerine **gerçek** `preview_server`'a karşı koşar
+(değer yerine şekil iddiaları).
 
 ## Değerlendirme (Faz 4)
 

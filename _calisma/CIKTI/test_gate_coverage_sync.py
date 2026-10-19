@@ -35,25 +35,26 @@ class TestGateCoverageSync(unittest.TestCase):
         cls.ci_map = coverage.build_ci_job_map(coverage.CI_JOB_COVERAGE, cls.test_files)
 
     def test_required_gate_set_is_explicit_and_stable(self):
-        self.assertEqual(len(self.gates), 16)
+        # dashboard-smoke, dashboard-next yüzeyinin GERÇEK required kapısıdır;
+        # macOS advisory'ler (webkit-smoke, preview-reload-smoke) kümede değil.
+        self.assertEqual(len(self.gates), 15)
         self.assertEqual(set(self.gates), {
             "verify", "action-runtimes", "budget", "label-gate",
             "commit-msg-gate", "reports", "reproducibility", "config-drift",
-            "config-sync", "repack-verify", "refs-trend",
-            "preview-reload-smoke", "ci-simulate", "a11y-gate",
-            "texlive-accept", "webkit-smoke",
+            "config-sync", "repack-verify", "refs-trend", "dashboard-smoke",
+            "ci-simulate", "a11y-gate", "texlive-accept",
         })
 
     def test_every_required_gate_has_ci_coverage_or_is_explicit_aggregate(self):
         # CI_JOB_COVERAGE is intentionally a partial map: verify and
         # ci-simulate discover the complete suite; the other required jobs are
         # represented by their dedicated pre-commit hook coverage.
-        aggregate = {"verify", "ci-simulate", "all-hooks-smoke"}
+        aggregate = {"verify", "ci-simulate"}
         dedicated = {"action-runtimes", "budget", "label-gate", "commit-msg-gate",
                      "config-drift", "config-sync", "coverage-report-ci",
-                     "repack-verify", "preview-reload-smoke", "reports",
+                     "repack-verify", "dashboard-smoke", "reports",
                      "reproducibility", "refs-trend", "a11y-gate",
-                     "texlive-accept", "webkit-smoke"}
+                     "texlive-accept"}
         missing = sorted(set(self.gates) - aggregate - dedicated)
         self.assertEqual(missing, [], f"required gate coverage missing: {missing}")
 
@@ -68,6 +69,29 @@ class TestGateCoverageSync(unittest.TestCase):
         missing = sorted(jid for jid, hook in expected.items()
                          if jid not in self.gates or hook not in self.hooks)
         self.assertEqual(missing, [], f"required hook coverage missing: {missing}")
+
+    def test_ci_job_records_name_real_jobs(self):
+        # Phantom kayıt fail-open'dur (kayıt var, koşum yok — kaldırılan
+        # `dashboard-smoke`/`coq-proof` kayıtlarıyla aynı aile):
+        # CI_JOB_COVERAGE anahtarlarının tümü verify.yml'de GERÇEK job
+        # olmalı.
+        jobs = sc.all_jobs()
+        phantom = sorted(jid for jid in coverage.CI_JOB_COVERAGE
+                         if jid not in jobs)
+        self.assertEqual(phantom, [], f"phantom CI job kaydı: {phantom}")
+
+    def test_standalone_smokes_name_real_jobs_and_files(self):
+        # TEST_DIR dışı smoke'lar (unittest discover görmez) yine de gerçek
+        # job + mevcut dosya ile kayıtlı olmalı — `verify` job'ı MCP
+        # smoke'unu fail-closed koşar.
+        jobs = sc.all_jobs()
+        for jid, files in coverage.CI_STANDALONE_SMOKES.items():
+            self.assertIn(jid, jobs, f"phantom CI job kaydı: {jid}")
+            for f in files:
+                self.assertTrue((coverage.REPO_ROOT / f).is_file(),
+                                f"kayıtlı smoke dosyası yok: {f}")
+        self.assertIn("_calisma/mcp/smoke_mcp.py",
+                      coverage.CI_STANDALONE_SMOKES.get("verify", []))
 
     def test_gate_coverage_is_not_empty(self):
         empty = sorted(jid for jid in self.gates

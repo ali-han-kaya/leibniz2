@@ -54,6 +54,36 @@ HOOK_COVERAGE = {
 }
 '''
 
+# sync kapısı artık ÜÇÜNCÜ hedefi de denetler: artımlı seçimin glob kapsamı
+# (ulaşılamayan test + stale glob). Bu yüzden "senkron" bir sandbox ağacı
+# yalnız manifest + HOOK_COVERAGE değil, kapsam API'sini de sunmalıdır.
+# Stok modül gerçek modülle AYNI sözleşmeyi sunar; sandbox'ta her test
+# ALWAYS_RUN'dır (diskte gerçek kaynak dosya yoktur).
+SCOPE_TEMPLATE = '''
+
+ALWAYS_RUN = frozenset({tests!r})
+TEST_SOURCE_GLOBS = {{}}
+
+
+def _manifest():
+    import os as _os
+    _here = _os.path.dirname(_os.path.abspath(__file__))
+    with open(_os.path.join(_here, "check_unit_tests.list"), encoding="utf-8") as _fh:
+        return [ln.strip() for ln in _fh if ln.strip() and not ln.lstrip().startswith("#")]
+
+
+def reachable():
+    _m = _manifest()
+    _always = [t for t in _m if t in ALWAYS_RUN]
+    return {{"manifest": _m, "always": _always,
+            "reactive": [t for t in _m if t not in ALWAYS_RUN],
+            "unreachable": [t for t in _m if t not in ALWAYS_RUN]}}
+
+
+def stale_globs():
+    return []
+'''
+
 
 def _write_coverage(path, entries):
     lines = "".join('        "%s",\n' % e for e in entries)
@@ -84,6 +114,7 @@ class Sandbox:
         _write_coverage(self.cov, [])
         with open(self.cov, "a", encoding="utf-8") as f:
             f.write(STUB_TEST_BODY)
+            f.write(SCOPE_TEMPLATE.format(tests=BASE3))
 
     @property
     def cikti(self):

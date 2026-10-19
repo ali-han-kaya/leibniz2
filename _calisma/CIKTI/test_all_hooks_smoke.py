@@ -156,6 +156,12 @@ HOOKS = [
     ("check-dockerfile-security-patching", "Dockerfile security-patching contract", 0, 0,
      [r"Passed"], [], 10),
 
+    # 27) check-precommit-inventory: doküman envanteri ↔ config hook kümesi.
+    # ADVISORY: bayat envanterde uyarı basar ama rc=0 kalır ("Passed") —
+    # bu yüzden smoke'ta da rc=0 beklenir. --all-files dosya desenini eşler.
+    ("check-precommit-inventory", "Pre-commit doc inventory <-> config hook set", 0, 0,
+     [r"Passed"], [r"SONUÇ: FAIL"], 10),
+
     # 22) commit-msg-style: commit mesaji noise denetimi (ozel — pre-commit run ile calismaz)
     # Bu hook yalnizca git commit sirasinda .git/COMMIT_EDITMSG uzerinde calisir.
     # Smoke'da ayri bir mock commit senaryosu ile test edilir.

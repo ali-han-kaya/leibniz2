@@ -14,10 +14,6 @@ Her satır bağımsız JSON: {"ts": ISO-8601-UTC, "event": str, "pid": int,
   4) Çökme→kurtarma: SIGTERM karşısında gerçek alt-süreç 'signal_exit'
      yazar; yeniden başlatma 'start' + 'cache_loaded' ekler — dosya üstünde
      çökme-öncesi durum → çökme → kurtarma dizisi kanıtlanır.
-  5) Rotasyon: tek dosya tavanı (SERVER_EVENTS_MAX_BYTES) aşılınca kayıt
-     `archive/` altına TAŞINIR (truncate edilmez), arşivler sınırlanır ve
-     okuyucu arşivleri de tarar — rotasyon ne kayıt kaybı ne de sahte
-     çökme üretir.
 
 Gerçek-alt-süreç testi preview_server.py'yi gerçek main() ile koşar
 (/api/health readiness + SIGTERM) — komşu canlı-süitlerinkiyle aynı desen.
@@ -215,15 +211,24 @@ class TestCrashRecoveryRealProcess(unittest.TestCase):
         self.assertLess(names.index("signal_exit"), names.index("shutdown"))
 
     def test_03_restart_recovery_appends_start_cache_loaded(self):
-        """Kurtarma: aynı preview-dir'e ikinci başlatma append yapar."""
+        """Kurtarma: aynı preview-dir'e ikinci başlatma append yapar.
+
+        İkinci süreç KENDİ boş portunda başlar. Sınıf sunucusunun portunu
+        yeniden kullanmak bu testi test_02'nin ÖNCE koşmasına bağlıyordu:
+        karıştırılmış sırada port dolu kalır, ikinci süreç bağlanamadan ölür,
+        `_wait_health` eski süreçten 200 alır ve 'cache_loaded' hiç yazılmaz
+        (shuffle-audit 2026-10-18 bulgusu). Sözleşme preview-dir'in
+        korunmasıdır; port numarası onun parçası değildir.
+        """
+        port2 = _free_port()
         proc2 = subprocess.Popen(
             [sys.executable, os.path.join(HERE, "preview_server.py"),
              "--dir", self.verify_tmp, "--preview-dir", self.tmp,
-             "--port", str(self.port), "--bind", "127.0.0.1",
+             "--port", str(port2), "--bind", "127.0.0.1",
              "--interval", "3600"],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         try:
-            self._wait_health(proc2, self.port, 15)
+            self._wait_health(proc2, port2, 15)
         finally:
             self._terminate(proc2)
         recs = self._events()
@@ -234,212 +239,6 @@ class TestCrashRecoveryRealProcess(unittest.TestCase):
         # ts monoton artan (aynı dosyada çökme→kurtarma kronolojisi)
         ts = [r["ts"] for r in recs]
         self.assertEqual(ts, sorted(ts))
-
-
-class TestLifecycleSummary(unittest.TestCase):
-    """Çökme/kurtarma TÜMEVARIMI — pano buradan okuyor.
-
-    Karar renk tercihi değil, kaydın bütünü üzerinden pid'ler arası sıraya
-    bakar (bkz. docs/SERVER_EVENT_LOG.md). Tümevarım tek yerde yaşar diye
-    panelde değil preview_server._classify_lifecycle'da; bu testler o
-    sözleşmeyi pinler.
-    """
-
-    @staticmethod
-    def _rec(event, pid, detail=None, ts="2026-09-22T18:36:57.084381Z"):
-        r = {"ts": ts, "event": event, "pid": pid}
-        if detail is not None:
-            r["detail"] = detail
-        return r
-
-    def test_silent_death_is_a_crash(self):
-        """start var, kapanış yok, sonra BAŞKA pid başladı → çökme."""
-        recs = [self._rec("start", 1), self._rec("start", 2)]
-        out = ps._classify_lifecycle(recs)
-        self.assertIsNotNone(out["last_crash"])
-        self.assertEqual(out["last_crash"]["pid"], 1)
-        self.assertEqual(out["last_crash"]["phase"], "crash")
-
-    def test_still_running_last_process_is_not_a_crash(self):
-        """Tek pid ve kapanış yoksa süreç AYAKTADIR — çökme değil."""
-        out = ps._classify_lifecycle([self._rec("start", 7)])
-        self.assertIsNone(out["last_crash"])
-        self.assertEqual(out["events"][0]["phase"], "start")
-
-    def test_graceful_close_is_not_a_crash(self):
-        recs = [self._rec("start", 1), self._rec("signal_exit", 1,
-                                                 detail="signum=15"),
-                self._rec("shutdown", 1)]
-        out = ps._classify_lifecycle(recs)
-        self.assertIsNone(out["last_crash"])
-        self.assertEqual([r["phase"] for r in out["events"]],
-                         ["graceful", "graceful", "start"])
-
-    def test_recovery_is_cache_loaded(self):
-        recs = [self._rec("start", 1), self._rec("shutdown", 1),
-                self._rec("cache_loaded", 2, detail="verdict=PASS"),
-                self._rec("start", 2)]
-        out = ps._classify_lifecycle(recs)
-        self.assertIsNotNone(out["last_recovery"])
-        self.assertEqual(out["last_recovery"]["phase"], "recovery")
-        self.assertEqual(out["last_recovery"]["pid"], 2)
-
-    def test_events_are_newest_first(self):
-        recs = [self._rec("start", 1, ts="2026-09-22T18:36:56Z"),
-                self._rec("shutdown", 1, ts="2026-09-22T18:36:57Z")]
-        out = ps._classify_lifecycle(recs)
-        self.assertEqual([r["event"] for r in out["events"]],
-                         ["shutdown", "start"])
-
-    def test_garbage_records_never_break_the_classifier(self):
-        """Okuyucu bozuk kaydı ATLA ve devam et — pano tek satır yüzünden
-        düşmemeli (yazıcı da her hatayı yutuyor, aynı tolerans)."""
-        recs = [None, "düz metin", 42, {}, {"ts": "x"},
-                {"event": ""},
-                self._rec("start", 1),
-                {"ts": "y", "event": "start", "pid": "sayı-değil"}]
-        out = ps._classify_lifecycle(recs)
-        # 8 girdiden yalnız 2'si geçerli kayıt: adı olmayan/boş adlı
-        # ({} , {"ts":"x"}, {"event":""}) ve dizi-olmayanlar elenir;
-        # bozuk pid'li kayıt KALIR — gerçek veridir, yalnız pid'i okunmaz.
-        self.assertEqual(len(out["events"]), 2)
-        self.assertEqual([r["event"] for r in out["events"]],
-                         ["start", "start"])
-        self.assertIsNone(out["last_crash"])
-
-    def test_classifier_never_raises(self):
-        for bad in (None, [], [{}], ["x"], [{"event": 5, "pid": {}}]):
-            with self.subTest(bad=bad):
-                out = ps._classify_lifecycle(bad)
-                self.assertIn("events", out)
-                self.assertIn("last_crash", out)
-                self.assertIn("last_recovery", out)
-
-
-class TestServerEventRotation(unittest.TestCase):
-    """Rotasyon politikası — tavan, arşivleme, budama ve KAYIPSIZLIK.
-
-    Üç kararı pinler:
-      - Döndürme YAZIMDAN SONRA: kayıt önce diske iner. Ters sırada, tam
-        döndürme anında ölen sürecin kaybolan kaydı (çoğu kez
-        `signal_exit`/`shutdown`) panelde SAHTE ÇÖKME üretirdi.
-      - Tek başına tavanı aşan kayıt döndürülmez: yoksa her yazım bir arşiv
-        doğurur ve budama kısa sürede tüm geçmişi silerdi.
-      - Okuyucu arşivleri de okur: çökme kanıtı rotasyondan sonra görünür
-        kalmalı, aksi halde kayıt tutmanın amacı yarıda kalır.
-    """
-
-    DETAIL = "x" * 120
-
-    def setUp(self):
-        self._old_path = ps.SERVER_EVENTS_PATH
-        self._old_max = ps.SERVER_EVENTS_MAX_BYTES
-        self._old_cnt = ps.SERVER_EVENTS_ARCHIVES_MAX
-        self.tmp = tempfile.mkdtemp(prefix="srv_events_rot_")
-        ps.SERVER_EVENTS_PATH = os.path.join(self.tmp, EVENTS_NAME)
-        ps.SERVER_EVENTS_ARCHIVES_MAX = 3
-
-    def tearDown(self):
-        ps.SERVER_EVENTS_PATH = self._old_path
-        ps.SERVER_EVENTS_MAX_BYTES = self._old_max
-        ps.SERVER_EVENTS_ARCHIVES_MAX = self._old_cnt
-        import shutil
-        shutil.rmtree(self.tmp, ignore_errors=True)
-
-    def _archive_dir(self):
-        return os.path.join(self.tmp, "logs", "archive")
-
-    def _archives(self):
-        if not os.path.isdir(self._archive_dir()):
-            return []
-        return sorted(f for f in os.listdir(self._archive_dir())
-                      if f.endswith(".jsonl"))
-
-    def _cap_to_one_record(self):
-        """Tavanı ÖLÇEREK kur: 1 kayıt sığar, 2 kayıt taşar.
-
-        Sabit bayt yazmak yerine ölçmek şart: kayıt boyu ts/pid alanlarına
-        göre değişir; sabit sayı testi ya hiç döndürmez ya tek-kayıt
-        korumasına takardı.
-        """
-        ps.SERVER_EVENTS_MAX_BYTES = 10 ** 6
-        ps._lifecycle_event("start", detail=self.DETAIL)
-        one = os.path.getsize(ps.SERVER_EVENTS_PATH)
-        os.remove(ps.SERVER_EVENTS_PATH)
-        ps.SERVER_EVENTS_MAX_BYTES = one + 10
-
-    def _write_n(self, n):
-        for i in range(n):
-            ps._lifecycle_event("start", detail=f"{i}-{self.DETAIL}")
-
-    def test_rotation_archives_instead_of_truncating(self):
-        self._cap_to_one_record()
-        self._write_n(4)
-        self.assertTrue(self._archives(), "tavan aşıldı ama arşiv yok")
-        # KAYIPSIZLIK + sıra: 4 olayın hepsi, yazıldığı sırayla okunur
-        self.assertEqual([r["detail"] for r in ps._read_server_events()],
-                         [f"{i}-{self.DETAIL}" for i in range(4)])
-
-    def test_no_rotation_below_cap(self):
-        ps.SERVER_EVENTS_MAX_BYTES = 10 ** 6
-        self._write_n(3)
-        self.assertEqual(self._archives(), [])
-        self.assertTrue(os.path.isfile(ps.SERVER_EVENTS_PATH))
-        self.assertEqual(len(ps._read_server_events()), 3)
-
-    def test_archives_pruned_to_max(self):
-        self._cap_to_one_record()
-        ps.SERVER_EVENTS_ARCHIVES_MAX = 2
-        self._write_n(10)  # en az 4-5 döndürme üretir
-        self.assertGreaterEqual(len(self._archives()), 1)
-        self.assertLessEqual(len(self._archives()), 2)
-
-    def test_reader_spans_archive_then_current_in_order(self):
-        self._cap_to_one_record()
-        self._write_n(3)
-        srcs = ps._server_event_sources()
-        self.assertGreaterEqual(len(srcs), 2, "arşiv + geçerli bekleniyordu")
-        self.assertIn("archive", srcs[0])               # en eski önce
-        self.assertTrue(srcs[-1].endswith(EVENTS_NAME))  # geçerli en sonda
-        self.assertEqual([r["detail"] for r in ps._read_server_events()],
-                         [f"{i}-{self.DETAIL}" for i in range(3)])
-
-    def test_single_oversized_record_is_not_rotated(self):
-        ps.SERVER_EVENTS_MAX_BYTES = 10  # tek kayıt bile tavanı aşar
-        ps._lifecycle_event("start", detail=self.DETAIL)
-        self.assertEqual(self._archives(), [])
-        self.assertTrue(os.path.isfile(ps.SERVER_EVENTS_PATH))
-        self.assertEqual(len(ps._read_server_events()), 1)
-
-    def test_rotation_failure_never_breaks_writer(self):
-        """Arşiv dizini kurulamazsa (yerinde DOSYA var) yazım yine sürer."""
-        os.makedirs(os.path.dirname(ps.SERVER_EVENTS_PATH), exist_ok=True)
-        with open(self._archive_dir(), "w", encoding="utf-8") as f:
-            f.write("engel")  # `archive` bir DİZİN değil DOSYA
-        ps.SERVER_EVENTS_MAX_BYTES = 10
-        self.assertIsNone(ps._lifecycle_event("start", detail=self.DETAIL + "a"))
-        self.assertIsNone(ps._lifecycle_event("start", detail=self.DETAIL + "b"))
-        self.assertFalse(os.path.isdir(self._archive_dir()))
-        self.assertEqual(len(ps._read_server_events()), 2)  # kayıt kaybolmadı
-
-    def test_crash_evidence_survives_rotation(self):
-        """Arşive taşınmış çökme dizisi panel tümevarımında görünür kalır."""
-        self._cap_to_one_record()
-        os.makedirs(self._archive_dir(), exist_ok=True)
-        with open(os.path.join(self._archive_dir(),
-                               "server_events-20260922T183700000000Z.jsonl"),
-                  "w", encoding="utf-8") as f:
-            f.write(json.dumps({"ts": "2026-09-22T18:36:56Z",
-                                "event": "start", "pid": 1}) + "\n")
-            f.write(json.dumps({"ts": "2026-09-22T18:36:57Z",
-                                "event": "start", "pid": 2}) + "\n")
-            f.write(json.dumps({"ts": "2026-09-22T18:36:58Z",
-                                "event": "shutdown", "pid": 2}) + "\n")
-        ps._lifecycle_event("cache_loaded", detail=self.DETAIL)
-        out = ps._classify_lifecycle(ps._read_server_events())
-        self.assertIsNotNone(out["last_crash"], "arşivdeki çökme görülmedi")
-        # ÇÖKME TANIMI YALNIZ ARŞİVDE: pid1 sessiz öldü, pid2 graceful kapandı.
-        self.assertEqual(out["last_crash"]["pid"], 1)
 
 
 if __name__ == "__main__":

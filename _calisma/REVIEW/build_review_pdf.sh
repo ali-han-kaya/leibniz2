@@ -5,6 +5,8 @@
 #   ./build_review_pdf.sh                          # merged PDF only (default)
 #   ./build_review_pdf.sh --with-pages             # + 9 PNGs pp 4-12 + index.html under _calisma/REVIEW/pages/
 #   ./build_review_pdf.sh --pages-only             # only PNG gallery (requires existing merged sources or built PDF)
+#   ./build_review_pdf.sh --deterministic-id       # explicit alias — determinism is ALWAYS on
+#                                                  # (qpdf --deterministic-id is unconditional)
 #   ./build_review_pdf.sh --help
 #
 # Inputs (all tracked, no generation except separator.pdf from separator.tex):
@@ -12,12 +14,24 @@
 #   _calisma/V5_ICERIK/.../original_manuscript.pdf     (19 pp)
 #   _calisma/REVIEW/separator.tex → separator.pdf     (1 p, tectonic, SOURCE_DATE_EPOCH)
 # Output:
-#   _calisma/REVIEW/Stoic_Hume_Review_Compilation_2026-08-17.pdf  (53 pp = 33+1+19, Title/Author via qpdf fixup)
+#   _calisma/REVIEW/Stoic_Hume_Review_Compilation_2026-08-17.pdf  (53 pp = 33+1+19; Title/Author
+#     fixup is BEST-EFFORT — qpdf 12 QDF round-trip exits 3 "success with warnings" and the
+#     plain merge (no /Info) is kept so the bytes stay deterministic)
 #   _calisma/REVIEW/pages/{p004…p012}_*.png + index.html          (--with-pages only)
 #
 # Reproducibility: separator.pdf uses SOURCE_DATE_EPOCH (default: git log -1 --format=%ct),
-# qpdf --empty --pages is deterministic, pdftoppm -r 300 -png is deterministic (RGB, no timestamps),
-# and the Title/Author fixup is a single qpdf JSON-update pass. No exiftool post-processing.
+# qpdf --empty --pages is deterministic once its /ID is pinned (--deterministic-id),
+# pdftoppm -r 300 -png is deterministic (RGB, no timestamps), and the Title/Author
+# fixup is a single byte-preserving QDF text patch (best-effort, see below).
+# No exiftool post-processing.
+#
+# BYTE determinism: every qpdf call that writes the DELIVERABLE passes
+# `--deterministic-id`. Without it qpdf derives the trailer /ID from the output
+# filename plus the clock, and since the merge goes through a random `mktemp`
+# name, two consecutive runs of this script produced different bytes
+# (measured 2026-10-18: c0282e7f… vs 9c6a9827…, same inputs). With
+# --deterministic-id the /ID is derived from the content, so `bash
+# build_review_pdf.sh` twice yields the identical SHA-256 that the sidecar pins.
 set -euo pipefail
 
 WITH_PAGES=0
@@ -26,8 +40,11 @@ for arg in "$@"; do
   case "$arg" in
     --with-pages) WITH_PAGES=1 ;;
     --pages-only) PAGES_ONLY=1; WITH_PAGES=1 ;;
+    # Determinizm varsayılan ve koşulsuz: bayrak yalnızca açıkça isteyen
+    # çağıranlar için kabul edilir (sessiz yutma değil, belgelenmiş no-op).
+    --deterministic-id) : ;;
     --help|-h)
-      sed -n '2,40p' "$0" | sed 's/^# //;s/^#//'
+      sed -n '2,34p' "$0" | sed 's/^# //;s/^#//'
       exit 0
       ;;
     *) echo "Unknown arg: $arg (try --help)" >&2; exit 2 ;;
@@ -80,16 +97,26 @@ build_merged_pdf() {
   local tmp_merged
   tmp_merged="$(mktemp -t review-merged.XXXXXX.pdf)"
   trap 'rm -f "$tmp_merged" "${tmp_merged}.qdf" 2>/dev/null || true' EXIT
-  qpdf --empty --pages "$SRC_REVISED" "$SEP_PDF" "$SRC_ORIGINAL" -- "$tmp_merged"
+  # --deterministic-id: content-derived /ID (not filename+clock) — bu bayrak
+  # olmadan $tmp_merged'in rastgele mktemp adı çıktı baytlarına sızıyordu.
+  qpdf --deterministic-id --empty --pages "$SRC_REVISED" "$SEP_PDF" "$SRC_ORIGINAL" -- "$tmp_merged"
 
   # Fix up Title/Author/Subject: qpdf --empty inherits Info from first input (ingiliz),
   # but the Review Compilation needs its own "— Review Compilation" suffix. When ingiliz
   # has empty Title (pre-hypersetup PDF on disk), the merged QDF has no /Info at all —
   # we must create it. Uses Python stdlib + qpdf --qdf text edit (no exiftool, deterministic).
   python3 - "$tmp_merged" "$OUT_PDF" << 'PY'
-import re, subprocess, sys, pathlib, tempfile, shutil
+import os, re, subprocess, sys, pathlib, tempfile, shutil
 src = pathlib.Path(sys.argv[1])
 dst = pathlib.Path(sys.argv[2])
+
+
+def emit(source):
+    """Teslim PDF'ini yaz. copy2 mktemp'in 0600 modunu taşır — tracked
+    artefaktın modu 0644 olmalı, bu yüzden açıkça düzeltilir (determinizm
+    baytlarla sınırlı değil: aynı checkout aynı modu vermeli)."""
+    shutil.copy2(source, dst)
+    os.chmod(dst, 0o644)
 title = "The Limits of Formal Methods \u2014 Review Compilation"
 subject = "Review copy: revised manuscript (Part I, pp. 1-33), separator (p. 34), original manuscript (Part II, pp. 35-53)"
 author = "Empirisizm"
@@ -98,9 +125,14 @@ with tempfile.NamedTemporaryFile(suffix=".qdf", delete=False) as tf:
 try:
     r = subprocess.run(["qpdf", "--qdf", str(src), qdf], capture_output=True, text=True, timeout=30)
     if r.returncode != 0:
-        shutil.copy2(src, dst)
+        emit(src)
         sys.exit(0)
-    t = pathlib.Path(qdf).read_text(encoding="utf-8", errors="ignore")
+    # QDF is NOT UTF-8 text: embedded font streams carry raw latin-1 bytes.
+    # Reading it as utf-8/errors=ignore and writing utf-8 back silently drops
+    # every non-ASCII byte — measured: 408295 B -> 366197 B and text corruption
+    # ("Biçimsel" -> "Biimsel", "Catuşkot.i" -> "Catukot . i"). latin-1 is
+    # byte-preserving, and the patched regions are pure ASCII.
+    t = pathlib.Path(qdf).read_text(encoding="latin-1")
     orig = t
 
     def esc_paren(s):
@@ -135,14 +167,38 @@ try:
         t = t.replace("trailer <<", "trailer <<\n  /Info " + str(new_obj) + " 0 R", 1)
 
     if t != orig:
-        pathlib.Path(qdf).write_text(t, encoding="utf-8")
-        r2 = subprocess.run(["qpdf", qdf, str(dst)], capture_output=True, text=True, timeout=30)
+        # Byte-exact round-trip: latin-1 (see above) and strict, so a patch that
+        # cannot be represented in the QDF's byte space is REFUSED instead of
+        # silently re-encoded. Info values carry U+2014 (em dash), which is not
+        # latin-1, so today this declines and the plain deterministic merge is
+        # kept — same artifact as before, now with no corruption path.
+        try:
+            pathlib.Path(qdf).write_text(t, encoding="latin-1")
+            patched = True
+        except UnicodeEncodeError:
+            patched = False
+        if not patched:
+            sys.stderr.write(
+                "Title/Author fixup skipped (QDF patch not latin-1 representable) "
+                "— plain deterministic merge kept\n")
+            emit(src)
+            sys.exit(0)
+        # --deterministic-id: bu çağrı DELIVERABLE'ı yazar; /ID burada sabitlenir.
+        r2 = subprocess.run(["qpdf", "--deterministic-id", qdf, str(dst)],
+                            capture_output=True, text=True, timeout=30)
         if r2.returncode != 0:
-            # QDF patch produced invalid PDF — fall back to plain merged (no Title)
-            sys.stderr.write(f"qpdf re-linearize failed: {r2.stderr[:300]}\n")
-            shutil.copy2(src, dst)
+            # QDF patch applied to an already-valid file still exits non-zero
+            # (qpdf 12.4: rc=3 "success with warnings"); we keep the plain merge
+            # so the bytes stay exactly those of the deterministic merge step.
+            sys.stderr.write(
+                "qpdf re-linearize failed (rc=%d) — Title/Author fixup skipped, "
+                "plain deterministic merge kept\n%s\n"
+                % (r2.returncode, (r2.stderr or "").strip().splitlines()[-1] if r2.stderr else ""))
+            emit(src)
+        else:
+            os.chmod(dst, 0o644)
     else:
-        shutil.copy2(src, dst)
+        emit(src)
 finally:
     try: pathlib.Path(qdf).unlink()
     except: pass

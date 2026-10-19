@@ -57,7 +57,15 @@ model TrendRun {
   cliOverrides       Json? @map("cli_overrides")
   hookEnv            Json? @map("hook_env")
   precommitHooks     Json? @map("precommit_hooks")
-  statusBoard        Json? @map("status_board")
+  statusBoard        Json?    @map("status_board")
+  // K0-K21 katman haritası (anahtar → {label,status,ran,findings[]}).
+  // Kaynak: verify_delivery.py `--klayers-out` / preview_server LATEST.layers.
+  // Neden JSON: okuma daima "koşumun tam fotoğrafı" — katman başına satır
+  // açmak her koşumda 22 satır kopyalar ve dashboard tek satır okuyor. Alt
+  // kırılım (`layers->'K14'->>'status'`) JSONB operatörüyle sorgulanabilir.
+  layers             Json?    @map("layers")
+  // P0/P1 bulgu AYRINTISI ([{id,priority,check,issue,evidence}]) — sayı
+  // (p0/p1) ile ayrıntı aynı satırda; pano ikisini birlikte gösterir.
   findings           Json?
   auditRefsTrend     String? @map("audit_refs_trend")
   flakyCount         Int? @map("flaky_count")
@@ -75,6 +83,23 @@ model TrendRun {
   // Kayıt: hash'i hesaba kat
   sourceRowSha256    String? @map("source_row_sha256") @unique
 
+  // query-composite-indexes: eşitlik kolonu (verdict) önce, aralık/sıralama
+  // kolonu (ts) sonra — "severity'e göre filtrele, en yeniden eskiye" okuması.
   @@index([verdict, ts(sort: Desc)])
+
+  // PARTIAL + COVERING indeksler şemada İFADE EDİLEMEZ: Prisma 7.10 `@@index`
+  // yalnız sort/length/type alır; `include:`/`where:` → "error: No such
+  // argument ... Validation Error Count: 3" (ölçüldü). Bu yüzden raw SQL
+  // migration'da yaşarlar ve adları burada aynalanır — drift'i
+  // `_calisma/CIKTI/test_trend_db_index_contract.py` kapıya bağlar:
+  //   20260927194500_trend_runs_query_indexes/migration.sql
+  //     • trend_runs_ts_cover_idx      (ts) INCLUDE (verdict, p0, p1,
+  //                                    duration_s, budget_usd, z3_total)
+  //       → ts-sıralı dar select'lerde index-only scan
+  //     • trend_runs_fail_ts_cover_idx (ts DESC) INCLUDE (p0, p1, z3_total)
+  //                                    WHERE verdict = 'FAIL'
+  //       → yalnız-FAIL ucu; FAIL azınlık (%13) olduğu için indeks küçük kalır
+  // Gerekçe, reddedilenler ve devreye girme eşiği: apps/trend-db/README.md
+  // ("Sorgu indeksleri") + docs/TREND_CHART_READ_PATH.md §4.
   @@map("trend_runs")
 }

@@ -1500,7 +1500,11 @@ class TestFlattenedConfigMerge(unittest.TestCase):
 
 # verify.yml reproducibility merge pattern'inin güncel hali — pattern
 # testlerinde ortak kaynak (tekrarlanan tam literal yerine).
-CURRENT_MERGE_PATTERN = "'{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,config,k0-findings,budget-verify,lineage-findings,klayers,unit-tests,action-runtimes,changelog-drift,ci-simulate,webkit-smoke}'"
+CURRENT_MERGE_PATTERN = ("'{action-runtimes,budget,budget-verify,changelog-drift,"
+                          "ci-simulate,cls-budget,cls-trend,config,config-drift,"
+                          "docx-report,k0-findings,klayers,lean-lake-build-log,"
+                          "lineage-findings,refs-online,repack-verify,reports,"
+                          "run-history,unit-tests,verify-report}'")
 
 
 class TestCheckPatternConsistency(unittest.TestCase):
@@ -1529,8 +1533,8 @@ class TestCheckPatternConsistency(unittest.TestCase):
         wf = (pathlib.Path(cpc.DEFAULT_WORKFLOW).read_text(encoding="utf-8"))
         # budget-verify'ı pattern'den çıkar
         wf = wf.replace(
-            "'{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,config,k0-findings,budget-verify,lineage-findings,klayers,unit-tests,action-runtimes,changelog-drift,ci-simulate,webkit-smoke}'",
-            "'{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,k0-findings,lineage-findings,klayers,unit-tests,action-runtimes,changelog-drift,ci-simulate,webkit-smoke}'",
+            CURRENT_MERGE_PATTERN,
+            "'{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,k0-findings,lineage-findings,klayers,unit-tests,action-runtimes}'",
         )
         errors, _ = self._run_check(wf)
         self.assertTrue(any("budget-verify" in e for e in errors))
@@ -1568,7 +1572,7 @@ class TestCheckPatternConsistency(unittest.TestCase):
         wf = (pathlib.Path(cpc.DEFAULT_WORKFLOW).read_text(encoding="utf-8"))
         wf = wf.replace(
             CURRENT_MERGE_PATTERN,
-            "'{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,k0-findings,lineage-findings,klayers,unit-tests,action-runtimes,changelog-drift,ci-simulate,webkit-smoke}'",
+            "'{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,k0-findings,lineage-findings,klayers,unit-tests,action-runtimes}'",
         )
         tmp = pathlib.Path("/tmp") / f"test_fix_{os.getpid()}"
         tmp.mkdir(exist_ok=True)
@@ -1606,6 +1610,29 @@ class TestCheckPatternConsistency(unittest.TestCase):
         self.assertEqual(added, set())  # hiçbir şey eklenmedi
         # Dosya değişmedi (idempotent)
         self.assertEqual(wf_path.stat().st_mtime, mtime_before)
+
+    def test_fix_removes_extra_artifact(self):
+        """--fix fazla (ARTIFACT_JOBS'da olmayan) artifact'ı pattern'den atar.
+
+        Regresyon: `current_set | missing - extra` Python'da
+        `current_set | (missing - extra)` diye ayrışıyordu; fix "güncellendi"
+        deyip fazlalığı bırakıyor, check yine FAIL veriyordu.
+        """
+        import check_pattern_consistency as cpc
+        wf = (pathlib.Path(cpc.DEFAULT_WORKFLOW).read_text(encoding="utf-8"))
+        wf = wf.replace(
+            CURRENT_MERGE_PATTERN,
+            CURRENT_MERGE_PATTERN[:-2] + ",fake-artifact}'",
+        )
+        self.assertIn("fake-artifact", wf)
+        tmp = pathlib.Path("/tmp") / f"test_fix_extra_{os.getpid()}"
+        tmp.mkdir(exist_ok=True)
+        wf_path = tmp / "verify.yml"
+        wf_path.write_text(wf, encoding="utf-8")
+
+        cpc.fix(str(wf_path))
+        self.assertEqual(cpc.check(str(wf_path)), [])
+        self.assertNotIn("fake-artifact", wf_path.read_text(encoding="utf-8"))
 
     def test_fix_no_pattern_returns_error(self):
         """Pattern yoksa fix hata döner."""

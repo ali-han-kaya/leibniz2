@@ -208,7 +208,8 @@ class TestCiSidecarWiring(unittest.TestCase):
         with open(os.path.join(HERE, "github_scripts",
                                "pr_status_comment.js"), encoding="utf-8") as fh:
             script = fh.read()
-        derived = set(re.findall(r"const\s+\w+_PATH\s*=\s*'([^']+)'", script))
+        m = re.findall(r"const\s+\w+_PATH\s*=\s*(?:'([^']+)'|\"([^\"]+)\")", script)
+        derived = {a or b for a, b in m}
         table = {p for p, _, _ in PR_STATUS_INPUTS}
         self.assertEqual(derived, table,
                          "PR_STATUS_INPUTS tablosu script _PATH sabitlerinden "
@@ -248,7 +249,8 @@ class TestCiSidecarWiring(unittest.TestCase):
         # manifest_comment.js: const path = 'reproducibility/manifest.txt'
         # + const cliPath = 'reproducibility/cli_overrides_version.json'
         # + k10_verdict.txt (k10 Badge)
-        derived = set(re.findall(r"'(reproducibility/[^']+)'", script))
+        derived = {m for m in re.findall(r"['\"](reproducibility/[^'\"]+)",
+                                          script)}
         if "k10_verdict.txt" in script:
             derived.add("k10_verdict.txt")
         table = {p for p, _, _ in MANIFEST_COMMENT_INPUTS}
@@ -286,7 +288,8 @@ class TestCiSidecarWiring(unittest.TestCase):
         with open(os.path.join(HERE, "github_scripts",
                                "config_diff_comment.js"), encoding="utf-8") as fh:
             script = fh.read()
-        derived = set(re.findall(r"'(reproducibility/[^']+)'", script))
+        derived = {m for m in re.findall(r"['\"](reproducibility/[^'\"]+)",
+                                          script)}
         table = {p for p, _, _ in CONFIG_DIFF_INPUTS}
         self.assertEqual(derived, table,
                          "CONFIG_DIFF_INPUTS tablosu script sabitinden drift'li "

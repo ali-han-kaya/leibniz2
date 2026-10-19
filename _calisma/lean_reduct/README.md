@@ -35,6 +35,22 @@ Bu dosya merkez tezi **ispatlamaz**, minimal makine-kontrollü bir model üzerin
 
 Same: illustrative, not formalization of Stoa/Hume. World is poorest model (inductive actual ≃ Unit). 8 theorems machine-checked, Mathlib-free, Injective defined locally, proved by cases. Representational-loss result, not existence proof.
 
+## Statement source / K9 gate
+
+`Content.lean.tex`, `Content.lean` içindeki tüm `theorem`/`lemma` ifadeleri için
+makine-okunur LaTeX sözleşmesidir. Her theorem/lemma environment'inde bir
+`\label{lean:...}` ve tam olarak bir `leanstatement` bulunur. Gate, isim listesini
+veya sekizlik bir sabit sayıyı taşımaz; inventory drift, unbound/duplicate label,
+parse hatası ve ifade değişikliğinde fail-closed `P0` üretir.
+
+`MAP.md` yalnız Z3↔Lean isim eşlemesini tutar; statement kaynağı değildir.
+
+Kapıyı doğrudan çalıştırmak için:
+
+```bash
+python3 _calisma/CIKTI/check_lean_statements.py
+```
+
 ## Build
 
 ```bash

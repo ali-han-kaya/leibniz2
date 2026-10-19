@@ -4,19 +4,19 @@
 // renk ve açıklamanın eşleştiğini doğrular. Eksik/yanlış → core.setFailed().
 // sync_labels.js ile karıştırılmamalı: bu script SADECE doğrular, oluşturmaz/güncellemez.
 
-const fs = require('fs');
-const DEFINITIONS_PATH = '_calisma/CIKTI/label_definitions.json';
+const fs = require("fs");
+const DEFINITIONS_PATH = "_calisma/CIKTI/label_definitions.json";
 
 if (!fs.existsSync(DEFINITIONS_PATH)) {
-  core.setFailed('label_definitions.json bulunamadı');
+  core.setFailed("label_definitions.json bulunamadı");
   return;
 }
 
-const defs = JSON.parse(fs.readFileSync(DEFINITIONS_PATH, 'utf8'));
+const defs = JSON.parse(fs.readFileSync(DEFINITIONS_PATH, "utf8"));
 const expected = defs.labels || [];
 
 if (!expected.length) {
-  console.log('label_definitions.json boş — doğrulama atlandı');
+  console.log("label_definitions.json boş — doğrulama atlandı");
   return;
 }
 
@@ -39,7 +39,7 @@ for (const def of expected) {
   }
 
   const colorMatch = existing.color === def.color;
-  const descMatch = (existing.description || '') === (def.description || '');
+  const descMatch = (existing.description || "") === (def.description || "");
 
   if (!colorMatch) {
     errors.push(
@@ -50,7 +50,7 @@ for (const def of expected) {
   if (!descMatch) {
     errors.push(
       `❌ ${def.name}: açıklama uyuşmuyor (beklenen: "${def.description}", ` +
-        `gerçek: "${existing.description || ''}")`
+        `gerçek: "${existing.description || ""}")`
     );
   }
 

@@ -45,6 +45,9 @@ import time
 REQUIRED_PREVIEW = ("preview_server.py", "_daemonize.py", "preview.html", "preview.js")
 REQUIRED_VERIFY = (
     "verify_delivery.py",
+    # K6-DETERM /ID-kanonik çekirdeği — verify_delivery.py import eder;
+    # eksikse tüm K-zinciri import hatasıyla düşer (Faz 4).
+    "id_canonical.py",
     "verify_delivery.config.json",
     "daemon_http_test.py",
 )

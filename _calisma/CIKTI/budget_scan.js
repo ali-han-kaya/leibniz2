@@ -3,7 +3,7 @@
 // Preview.html'deki [BÜTÇE] satır ayrıştırma + progress bar hesaplaması
 // DOM'dan arındırılmış saf fonksiyonlar olarak. Node ile doğrudan test
 // edilebilir (preview.html window objesi yok).
-'use strict';
+"use strict";
 
 // ── Yardımcı ────────────────────────────────────────────────────────────────
 function fmtLimit(v) {
@@ -37,39 +37,39 @@ function computeBudgetStatus(est, limit) {
     return {
       pct: 0,
       over: false,
-      barClass: 'z3fill budget',
-      cntClass: 'z3count',
-      text: '—',
+      barClass: "z3fill budget",
+      cntClass: "z3count",
+      text: "—",
     };
   }
   const pct = Math.min(100, Math.round((est / limit) * 100));
   const over = est > limit;
-  const barClass = over ? 'z3fill err' : 'z3fill budget';
-  const cntClass = over ? 'z3count' : 'z3count ok';
+  const barClass = over ? "z3fill err" : "z3fill budget";
+  const cntClass = over ? "z3count" : "z3count ok";
   const text =
-    '$' +
+    "$" +
     est.toFixed(2) +
-    ' / $' +
+    " / $" +
     limit.toFixed(2) +
-    ' (' +
+    " (" +
     pct +
-    '%)' +
-    (over ? ' · AŞIM' : '');
+    "%)" +
+    (over ? " · AŞIM" : "");
   return { pct, over, barClass, cntClass, text };
 }
 
 // ── 3) Tooltip notu (budgetLimitNote saf karşılığı) ──
 // v: değer (null/NaN olabilir), limit: bütçe sınırı
 function budgetLimitNote(v, limit) {
-  if (v == null || !isFinite(v) || limit == null || !isFinite(limit)) return '';
-  const lim = '$' + fmtLimit(limit);
+  if (v == null || !isFinite(v) || limit == null || !isFinite(limit)) return "";
+  const lim = "$" + fmtLimit(limit);
   return v > limit
-    ? ' (limit ' + lim + ' üstünde — AŞIM)'
-    : ' (limit ' + lim + ' altında)';
+    ? " (limit " + lim + " üstünde — AŞIM)"
+    : " (limit " + lim + " altında)";
 }
 
 // ── Dışa aktarım (Node/browser uyumlu) ─────────────────────────────────────
-if (typeof module !== 'undefined' && module.exports) {
+if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     parseBudgetLine,
     computeBudgetStatus,

@@ -1,75 +1,63 @@
-import { cva } from 'class-variance-authority';
-import { getTrend } from '@/lib/preview';
+import { ViewTransition } from "react";
 
-export const metadata = { title: 'Trend' };
+import PanelAutoRefresh from "@/components/PanelAutoRefresh";
+import PanelBoundary from "@/components/PanelBoundary";
+import RefsTrendPanel from "@/components/RefsTrendPanel";
+import RunComparePanel from "@/components/RunComparePanel";
+import { panelStack } from "@/components/panel-style";
+import RunsTableData from "@/components/RunsTableData";
 
-// patterns-explicit-variants: hucre-rengi kararlari (p0>0 kirmizi, p1>0 sari)
-// cva-variant'ta — sira-bileseninde ternary-degil. Renkler repo-token'lari.
-const cellVariants = cva('py-2', {
-  variants: {
-    tone: {
-      neutral: '',
-      error: 'text-err',
-      warn: 'text-warn',
-      muted: 'text-muted',
-    },
-  },
-  defaultVariants: { tone: 'neutral' },
-});
+export const metadata = { title: "Trend" };
 
-export default async function TrendPage() {
-  const { history } = await getTrend(20);
-  // /api/trend limit'i yok sayar (full-list sözleşmesi) — pencereyi tüketici
-  // kısar: en-yeni 20, en-yeni üstte ("Son 20 Koşum" başlık-sözleşmesi).
-  const rows = history.slice(-20).reverse();
+// Trend penceresi her koşumda büyür; build anında dondurulamaz (app/page.tsx
+// ile aynı gerekçe — DB kaynağında `no-store` fetch sinyali yok).
+export const dynamic = "force-dynamic";
 
+// Pencere sözleşmesi: 20 koşum. Sayfa artık veri ÇEKMEZ — her panel kendi
+// verisini kendi server component'inde çeker (`RunComparePanel`,
+// `RefsTrendPanel`, `RunsTableData`). Neden: sayfa gövdesinde `await` olsaydı
+// kaynak hatası PanelBoundary'ler kurulmadan oluşur ve üç panoyu birden
+// düşürürdü. `getTrendBundle` cache'li olduğu için üç çağrı tek yanıtı
+// paylaşır; pencere kırpması JSX'te literal (20) durur.
+
+// <ViewTransition> YALIN sarmalayıcı (default crossfade): / <-> /trend
+// yanal geçişi TARAFSIZDIR — transitionTypes (slide yönü) KULLANILMAZ.
+export default function TrendPage() {
+  // Her sunucu turunda değişen anahtar: kaynak düştüğünde hata kartında
+  // kalan sınır, TAZE veri geldiğinde kendini toparlar (yapışkan hata
+  // yok). Aynı turdaki üç sınır aynı anahtarı paylaşır.
+  const renderKey = Date.now();
   return (
-    <section className="rounded-lg border border-border bg-surface p-6">
-      <h2 className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted">
-        Son 20 Koşum
-      </h2>
-      {history.length === 0 ? (
-        <p className="mt-4 text-sm text-muted">
-          henüz veri yok — ilk run bekleniyor
-        </p>
-      ) : (
-        <table className="mt-4 w-full font-mono text-sm">
-          <thead>
-            <tr className="border-b border-border text-left text-[10px] tracking-[0.14em] text-muted">
-              <th className="py-2">ZAMAN</th>
-              <th className="py-2">P0</th>
-              <th className="py-2">P1</th>
-              <th className="py-2">SÜRE</th>
-              <th className="py-2">Z3</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r, i) => (
-              <tr key={i} className="border-b border-surface-raised">
-                <td className="py-2 text-muted">{r.ts ?? '—'}</td>
-                <td
-                  className={cellVariants({
-                    tone: (r.p0 ?? 0) > 0 ? 'error' : 'neutral',
-                  })}
-                >
-                  {r.p0 ?? '—'}
-                </td>
-                <td
-                  className={cellVariants({
-                    tone: (r.p1 ?? 0) > 0 ? 'warn' : 'neutral',
-                  })}
-                >
-                  {r.p1 ?? '—'}
-                </td>
-                <td className={cellVariants()}>
-                  {r.duration_s != null ? `${r.duration_s}s` : '—'}
-                </td>
-                <td className={cellVariants()}>{r.z3_total ?? '—'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </section>
+    <ViewTransition>
+      {/* Tek tazeleyici üç paneli de kapsar: SSE yeni koşum yayınladığında
+          ya da görünür sekme aralığı dolduğunda rota RSC'si tazelenir.
+          Sayfa yeniden yüklenmez — tablo kendi SSE aboneliğini ve satır
+          penceresini korur (E2E: `performance.timeOrigin` sabit kalır). */}
+      <PanelAutoRefresh>
+        <div className={panelStack()}>
+          <PanelBoundary
+            resetKey={renderKey}
+            title="Koşum tablosu yüklenemedi"
+            hint="kaynak: trend_runs (Neon) veya preview_server; diğer paneller etkilenmez."
+          >
+            <RunsTableData title="Son 20 Koşum" limit={20} />
+          </PanelBoundary>
+          <PanelBoundary
+            resetKey={renderKey}
+            title="Koşum karşılaştırması yüklenemedi"
+            hint="süre/bütçe penceresi okunamadı; tablo ve refs grafiği etkilenmez."
+          >
+            <RunComparePanel limit={20} />
+          </PanelBoundary>
+          <PanelBoundary
+            resetKey={renderKey}
+            title="Refs grafiği yüklenemedi"
+            hint="referans serisi okunamadı; tablo ve karşılaştırma etkilenmez."
+          >
+            <RefsTrendPanel limit={20} />
+          </PanelBoundary>
+        </div>
+      </PanelAutoRefresh>
+    </ViewTransition>
   );
 }

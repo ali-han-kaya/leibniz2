@@ -68,14 +68,10 @@
   --backdrop-lightbox: rgba(0, 0, 0, .9);
 
   /* ── font ── */
-  /* Üç ses (2026-10-03): kâtip (dense UI), tel (makine çıktısı), hüküm.
-     Hepsi bu makinede ÖLÇÜLEREK mevcut bulundu (canvas genişlik ölçümü):
-     Iowan Old Style, Palatino, Georgia, Avenir Next, Menlo. */
-  --font-sans: "Avenir Next", Avenir, "Helvetica Neue", -apple-system,
-               BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI",
+               Helvetica, Arial, sans-serif;
   --font-mono: "SF Mono", Menlo, Consolas, monospace;
-  --font-verdict: "Iowan Old Style", Palatino, Georgia,
-                  "Times New Roman", serif; /* karar/hüküm sesi — Georgia'nın daha kitabi kardeşi */
+  --font-verdict: Georgia, "Iowan Old Style", "Times New Roman", serif; /* karar/hüküm sesi — açık-tema kimliğinden */
 
   --text-2xs: 10px;
   --text-xs: 11px;
@@ -84,10 +80,17 @@
   --text-base: 14px;
   --text-lg: 18px;
   --text-xl: 20px;
+  --text-display: 48px;        /* pano hükmü (PASS/FAIL) — önce çağrı yerinde text-5xl idi */
 
   --lh-base: 1.5;
   --lh-tight: 1.4;
+  --lh-display: 1;             /* hüküm satırı: 48px/1 — kart yüksekliği oynamaz */
   --ls-caps: 0.05em;
+  /* Pano etiket sesleri. Bir zamanlar çağrı yerlerinde `tracking-[0.22em]`
+     gibi arbitrary değerlerdi; rol adı taşıdıkları için artık buradadırlar. */
+  --ls-label: 0.22em;          /* bölüm etiketi (PanelCardTitle) */
+  --ls-data: 0.14em;           /* veri etiketi + marka (microLabel / brandMark) */
+  --ls-chrome: 0.12em;         /* nav ve dipnot (kabuk sesi) */
 
   /* ── space ── */
   --space-1: 4px;
@@ -139,18 +142,27 @@
   --table-cell-padding: var(--space-2) var(--space-4);
   --pre-padding: var(--space-5);
   --button-padding: var(--space-2) var(--space-6);
+
+  /* ── panel scale (semantic roles) ──
+     Pano yüzeyinin YERLEŞİM sabitleri. Değerler yukarıdaki sayısal ölçeğe
+     bağlanır (tek kaynak); bileşenler bu adları tüketir, ham piksel yazmaz.
+       gutter       : header/main/footer yatay çeperi
+       section-gap  : kartlar arası dikey ritim
+       block-gap    : kart İÇİNDE bloklar arası (grafik → tablo …)
+       tight-gap    : etiket ↔ değer (başlık satırı, rozet grubu)
+       table-cell   : hücre dolgusu — YATAY ucu kart dolgusuyla aynıdır,
+                      böylece tablo metni kart başlığıyla hizalanır (bleed). */
+  --panel-gutter: var(--space-8);              /* 20px */
+  --panel-section-gap: var(--space-7);         /* 18px */
+  --panel-block-gap: var(--space-5);           /* 12px */
+  --panel-tight-gap: var(--space-2);           /* 6px */
+  --panel-table-cell: var(--space-2) var(--card-padding); /* 6px 14px */
 }
 
 :root[data-theme="light"] {
   --bg: #f3efe7;
   --fg: #292722;
-  /* #70695f -> #655e56 (2026-10-02): #70695f, acik temanin KOYU yuzeylerinde
-     AA 4.5:1'in ALTINDA kaldi — surface-raised/code-bg #e9e1d3 uzerinde 4.17:1,
-     header gradient ucu #ede5d8 uzerinde 4.34:1. #live-status (.ts, 11px) tam
-     da bu header gradyaninda oturuyor. OLCUM (WCAG 2.x relative luminance,
-     en kotu yuzeye karsi): #655e56 -> en kotu 4.92:1 (+0.42 pay).
-     Doygunluk/aile korunur; koyu tema --muted'i degismedi (5.26:1 gecerli). */
-  --muted: #655e56;
+  --muted: #70695f;
   --fg-dimmed: #56504a;      /* light: #f3efe7 bg üzerinde AA 4.5:1+ */
   --accent: #8b5e2b;
   --ok: #287a3d;
@@ -208,20 +220,30 @@
   /* ── font ── */
   --font-mono: var(--font-mono);
   --font-sans: var(--font-sans);
+  --font-verdict: var(--font-verdict);
   /* ── text ── */
   --leading-base: var(--lh-base);
+  --leading-display: var(--lh-display);
   --leading-tight: var(--lh-tight);
   --lh-base: var(--lh-base);
+  --lh-display: var(--lh-display);
   --lh-tight: var(--lh-tight);
   --ls-caps: var(--ls-caps);
+  --ls-chrome: var(--ls-chrome);
+  --ls-data: var(--ls-data);
+  --ls-label: var(--ls-label);
   --text-2xs: var(--text-2xs);
   --text-base: var(--text-base);
+  --text-display: var(--text-display);
   --text-lg: var(--text-lg);
   --text-md: var(--text-md);
   --text-sm: var(--text-sm);
   --text-xl: var(--text-xl);
   --text-xs: var(--text-xs);
   --tracking-caps: var(--ls-caps);
+  --tracking-chrome: var(--ls-chrome);
+  --tracking-data: var(--ls-data);
+  --tracking-label: var(--ls-label);
   /* ── radius ── */
   --radius-1: var(--radius-1);
   --radius-2: var(--radius-2);

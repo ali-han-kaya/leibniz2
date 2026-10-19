@@ -581,6 +581,10 @@ class TestLeanFailPulse(unittest.TestCase):
         self.assertIn('kcls += " fail-pulse"', self._html)
         self.assertIn('k === "K9" && leanOk === false', self._html)
 
+    def test_unregistered_layer_is_visible_in_dashboard_panel(self):
+        self.assertIn('if (ls.UNREGISTERED)', self._html)
+        self.assertIn('" Other</span>"', self._html)
+
     def test_lean_alert_shown_hidden_in_updatelatest(self):
         """updateLatest: lean_ok===true → hidden, ===false → visible + detail."""
         self.assertIn('la.classList.add("hidden")', self._html)
@@ -686,13 +690,12 @@ class TestRunHistoryClickToLoad(unittest.TestCase):
         self.assertIn('class="rh-row"', self._html)
         self.assertIn('data-ts=', self._html)
 
-    def test_rows_use_delegated_click(self):
-        """Satır tıklaması #run-history üzerinde delege edilir (CSP: inline yok)."""
-        self.assertIn("function wireRunHistoryRows()", self._html)
-        self.assertIn('el.addEventListener("click", (ev) => {', self._html)
-        self.assertIn('loadRunStdout(row.getAttribute("data-ts"))', self._html)
+    def test_rows_have_onclick_handler(self):
+        """rh-row'lar data-act=load-stdout taşır (CSP-uyumlu delegation)."""
+        self.assertIn('data-act="load-stdout"', self._html)
+        # Inline öznitelik-handler CSP script-src tarafından bloklanır —
+        # geri-dönüş yasak (regresyon-koruma).
         self.assertNotIn('onclick="loadRunStdout', self._html)
-
     def test_load_run_stdout_function_exists(self):
         """loadRunStdout(ts) fonksiyonu tanımlı."""
         self.assertIn("function loadRunStdout(ts)", self._html)
@@ -732,14 +735,12 @@ class TestRunHistoryFilter(unittest.TestCase):
         self.assertIn('data-f="P0"', self._html)
 
     def test_filter_bar_exists(self):
-        """rh-filter div'i var; butonlar addEventListener ile bağlanır."""
+        """rh-filter div'i var."""
         self.assertIn('class="rh-filter"', self._html)
-        self.assertIn(
-            'document.querySelectorAll(".rh-filter button").forEach', self._html)
-        self.assertIn(
-            'b.addEventListener("click", () => setRhFilter(b.dataset.f))',
-            self._html)
-        self.assertNotIn('onclick="setRhFilter', self._html)
+        # CSP-uyumlu delegation: butonlar data-act taşır, document-düzeyi
+        # click-dinleyici setRhFilter'a delege eder.
+        self.assertIn('data-act="rh-filter"', self._html)
+        self.assertIn('setRhFilter(t.dataset.f)', self._html)
 
     def test_filter_var_declared(self):
         """let rhFilter = "all" değişkeni tanımlı."""
@@ -888,9 +889,16 @@ class TestServiceWorkerRegistration(unittest.TestCase):
         self.assertIn("self.clients.claim()", self._sw)
 
     def test_fetch_no_cache_in_sw_js(self):
-        """sw.js fetch handler'i no-cache zorlar."""
+        """sw.js fetch handler'i no-cache zorlar.
+
+        TIRNAK DUYARSIZ: eski assertion `cache: 'no-cache'` (tek tırnak)ydi ve
+        dosyanın gündelik yazım biçimine bağlıydı. Prettier bu repo'da çift
+        tırnak uyguluyor; grandfather drift `prettier --write` ile kapanınca
+        test kırıldı. Ölçmek istediğimiz şey tarz değil, fetch SEÇENEĞİ:
+        cache anahtarı 'no-cache' değerine eşit mi.
+        """
         self.assertIsNotNone(self._sw, "sw.js bulunamadi")
-        self.assertIn("cache: 'no-cache'", self._sw)
+        self.assertRegex(self._sw, r"""cache\s*:\s*(['"`])no-cache\1""")
 
     def test_api_endpoints_bypass_cache_in_sw_js(self):
         """sw.js /api/* endpoint'leri icin network-first, cache atlanir."""

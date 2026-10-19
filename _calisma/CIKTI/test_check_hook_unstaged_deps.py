@@ -139,6 +139,10 @@ class TestVerifyDeliveryHook(unittest.TestCase):
                       vd_hook.DEPS)
         self.assertIn("_calisma/CIKTI/TESLIM_V5_FINAL_2026-08-17.zip",
                       vd_hook.DEPS)
+        # Faz 4: strict determinizm kapısı bu iki kaynağa bağlıdır
+        # (kanonik çekirdek + kabul defteri) — ikisi de izlenmeli.
+        self.assertIn("_calisma/CIKTI/id_canonical.py", vd_hook.DEPS)
+        self.assertIn("docs/ID_RESIDUAL_ACCEPTANCE.md", vd_hook.DEPS)
 
     def test_unstaged_deps_passed_to_shared(self):
         args = {}
@@ -196,6 +200,10 @@ class TestVerifyDeliveryHook(unittest.TestCase):
         self.assertTrue(gate[1].endswith("verify_delivery.py"))
         self.assertIn("--dir", gate)
         self.assertIn("_calisma/CIKTI", gate)
+        # Faz 4: hook strict determinizmi ETKİN koşar — K6-DETERM teslim
+        # PDF'inin /ID-kanonik hash'ini kabul defterinde arar. Bu bayrak
+        # düşerse kapı sessizce bilgi moduna döner (regresyon).
+        self.assertIn("--strict-determinism", gate)
 
     def test_main_strict_blocks_on_dirty(self):
         """--strict + kirli deps → exit 2, asıl kapı KOŞMAZ."""

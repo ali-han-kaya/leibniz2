@@ -7,14 +7,24 @@ renderVerdictSeal'in durum geçişlerini gerçek applySnapshotInner üzerinden
 sınar (mock sunucu değil, gerçek kaynak fonksiyon + gerçek DOM).
 
 Çıktı: _calisma/CIKTI/design_preview.html (üretilmiş — commit dışı).
+İsteğe bağlı argümanla başka bir yola da yazılabilir (kapı temp dizin
+kullanır; yerel kopyaya dokunmaz).
 """
 import json
 import pathlib
 import re
+import sys
 
 HERE = pathlib.Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
-OUT = HERE / "design_preview.html"
+# Çıktı yolu geçersiz kılınabilir. Neden: `design_preview.html` commit dışı
+# (gitignore) ve taze klonda YOK; yerel kopyaya bağlı bir denetim taze
+# klonda boşlukta kalıyordu. Kapı (test_preview_server.py →
+# InlineEventHandlerContractTests) artifact'ı geçici dizine üretip
+# KENDİSİ denetler, böylece üretim sonrası doğan nitelik handler'ı da
+# yakalanır. Kullanım: python3 build_design_preview.py [ÇIKTI_YOLU]
+OUT = (pathlib.Path(sys.argv[1]) if len(sys.argv) > 1
+       else HERE / "design_preview.html")
 
 html = (HERE / "preview.html").read_text(encoding="utf-8")
 js = (HERE / "preview.js").read_text(encoding="utf-8")

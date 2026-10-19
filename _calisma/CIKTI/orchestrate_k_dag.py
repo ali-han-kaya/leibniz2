@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """K1-K12 task DAG orchestration — opencode worker'ları ile (fail-closed).
 
+K5→K11 is the CI handoff chain: the Lean project reaches K9 through an
+explicit ``lake clean && lake build --wfail`` task, and K10/K11 cannot start
+until that task passes.  The same command is exposed as a standalone GitHub
+Actions step.
+
 Her DAG düğümü (K1..K12) bir "worker task"tır. Orkestratör:
   1. task'ın gerçek komutunu çalıştırır (script_rc = zemin gerçeği),
   2. çıktıyı opencode worker'a (non-interactive `run`, stdin kapalı) gönderir;
@@ -45,15 +50,15 @@ TASKS = [
     ("K5",  "Doc↔workflow senkronu",
      "python3 _calisma/CIKTI/check_doc_wrapper_sync.py", []),
     ("K6",  "Referans kanıtı (refs)",
-     "python3 _calisma/CIKTI/audit_refs_trend.py --offline", []),
-    ("K7",  "Lean reduct çekirdeği",
-     "grep -n '^theorem' _calisma/lean_reduct/Content.lean", []),
+     "python3 _calisma/CIKTI/audit_refs_trend.py --offline", ["K5"]),
+    ("K7",  "Lean reduct kaynak/ifade ön-kapısı",
+     "python3 _calisma/CIKTI/check_lean_statements.py", ["K6"]),
     ("K8",  "Z3 sembolik ispat",
      "python3 _calisma/CIKTI/symbolic_proof_z3.py --check", ["K7"]),
-    ("K9",  "Lean ispat (lake build)",
-     "python3 _calisma/CIKTI/verify_delivery.py --check-lean-proof", ["K8"]),
+    ("K9",  "Lean lake build (ayrı adım)",
+     "sh _calisma/CIKTI/verify_lean_lake.sh", ["K8"]),
     ("K10", "Reproducibility manifest",
-     "python3 _calisma/CIKTI/verify_delivery.py --verify-manifest", ["K1", "K5"]),
+     "python3 _calisma/CIKTI/verify_delivery.py --verify-manifest", ["K1", "K5", "K9"]),
     ("K11", "Soy hattı (lineage)",
      "python3 _calisma/CIKTI/verify_delivery.py --check-lineage", ["K10"]),
     ("K12", "Plist drift kapısı",

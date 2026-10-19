@@ -19,6 +19,7 @@ içe aktarır; bu test ayrışıyı commit anında yakalar.
 stdlib unittest — import-only, hızlı (<0.5s).
 """
 import pathlib
+import re
 import sys
 import unittest
 
@@ -52,6 +53,97 @@ class TestProducersMatchFixture(unittest.TestCase):
                          set(wc.UPLOAD_EXCEPTIONS),
                          "check_workflow_artifact_docs muafiyet kümesi "
                          "fixture'dan koptu")
+
+
+class TestArtifactDocMatrixExpansion(unittest.TestCase):
+    def test_matrix_artifact_names_expand_to_documented_children(self):
+        import check_workflow_artifact_docs as cwad
+        text = """
+jobs:
+  a11y-gate:
+    strategy:
+      matrix:
+        theme: [dark, light]
+    steps:
+      - name: Upload dashboard
+        with:
+          name: a11y-report-${{ matrix.theme }}
+      - name: Upload guide
+        with:
+          name: a11y-guide-report-${{ matrix.theme }}
+      - name: Upload landing
+        with:
+          name: a11y-landing-report-${{ matrix.theme }}
+      - name: Upload Lighthouse dashboard
+        with:
+          name: lighthouse-dashboard-${{ matrix.theme }}
+"""
+        self.assertEqual(cwad.workflow_artifacts(text), [
+            "a11y-report-dark", "a11y-report-light",
+            "a11y-guide-report-dark", "a11y-guide-report-light",
+            "a11y-landing-report-dark", "a11y-landing-report-light",
+            "lighthouse-dashboard-dark", "lighthouse-dashboard-light",
+        ])
+
+    def test_shell_env_alias_expands_via_matrix(self):
+        import check_workflow_artifact_docs as cwad
+        text = """
+jobs:
+  a11y-gate:
+    strategy:
+      matrix:
+        theme: [dark, light]
+    steps:
+      - name: Upload CLS budget report
+        if: always()
+        env:
+          A11Y_THEME: ${{ matrix.theme }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: cls-budget-${A11Y_THEME}
+"""
+        self.assertEqual(cwad.workflow_artifacts(text), [
+            "cls-budget-dark", "cls-budget-light",
+        ])
+
+    def test_theme_gated_step_expands_to_allowed_child_only(self):
+        import check_workflow_artifact_docs as cwad
+        text = """
+jobs:
+  a11y-gate:
+    strategy:
+      matrix:
+        theme: [dark, light]
+    steps:
+      - name: Upload capture gate report
+        if: always() && matrix.theme == 'dark'
+        env:
+          A11Y_THEME: ${{ matrix.theme }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: capture-gate-${A11Y_THEME}
+"""
+        self.assertEqual(cwad.workflow_artifacts(text), ["capture-gate-dark"])
+
+    def test_real_capture_step_resolves_to_dark_only(self):
+        import check_workflow_artifact_docs as cwad
+        text = cwad.WORKFLOW.read_text(encoding="utf-8")
+        matrix_values = cwad._matrix_values(text)
+        start = text.index("- name: Run capture gate")
+        end = text.index("\n      - name:", start)
+        block = text[start:end]
+        m = re.search(r'CAPTURE_REPORT_PATH="([^"]+)"', block)
+        self.assertIsNotNone(m, "capture adımında CAPTURE_REPORT_PATH yok")
+        names = cwad.expand_names(
+            m.group(1), matrix_values,
+            cwad._step_env_aliases(block),
+            cwad._step_theme_gate(block, matrix_values))
+        self.assertEqual(names, ["capture_gate_dark.json"])
+
+    def test_repository_artifact_contracts_stay_synchronized(self):
+        import check_workflow_artifact_docs as cwad
+        _workflow, _doc, errors = cwad.check()
+        self.assertEqual(errors, [])
 
 
 class TestLazyReExports(unittest.TestCase):

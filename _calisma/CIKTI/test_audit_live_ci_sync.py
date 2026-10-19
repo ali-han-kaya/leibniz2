@@ -105,6 +105,55 @@ class TestCompare(unittest.TestCase):
         self.assertTrue(r["ok"])
 
 
+class TestArtifactPagination(unittest.TestCase):
+    def test_requests_enough_artifact_page_for_current_runs(self):
+        with mock.patch.object(als, "run_gh", return_value="unit-tests") as run_gh:
+            self.assertEqual(als.get_run_artifacts("o/r", 7), ["unit-tests"])
+        args = run_gh.call_args.args[0]
+        self.assertEqual(
+            args[2],
+            "repos/o/r/actions/runs/7/artifacts?per_page=100",
+        )
+
+
+class TestVisibilityRetry(unittest.TestCase):
+    def test_polls_until_expected_jobs_and_artifacts_are_visible(self):
+        with mock.patch.object(als, "get_run_jobs",
+                               side_effect=[["A"], ["A", "B"]]), \
+             mock.patch.object(als, "get_run_artifacts",
+                               side_effect=[["x"], ["x", "y"]]), \
+             mock.patch.object(als.time, "monotonic",
+                               side_effect=[0.0, 0.0, 1.0]), \
+             mock.patch.object(als.time, "sleep") as sleep:
+            snapshot = als.wait_for_visible_run(
+                "o/r", 7, ["A", "B"], ["x", "y"],
+                timeout_seconds=30, interval_seconds=2)
+        self.assertEqual(snapshot["jobs"], ["A", "B"])
+        self.assertEqual(snapshot["artifacts"], ["x", "y"])
+        self.assertEqual(snapshot["visibility"], {
+            "attempts": 2,
+            "waited_seconds": 1.0,
+            "timed_out": False,
+            "missing_jobs": [],
+            "missing_artifacts": [],
+        })
+        sleep.assert_called_once_with(2.0)
+
+    def test_returns_last_snapshot_when_bounded_wait_expires(self):
+        with mock.patch.object(als, "get_run_jobs", return_value=["A"]), \
+             mock.patch.object(als, "get_run_artifacts", return_value=["x"]), \
+             mock.patch.object(als.time, "monotonic",
+                               side_effect=[0.0, 31.0]), \
+             mock.patch.object(als.time, "sleep") as sleep:
+            snapshot = als.wait_for_visible_run(
+                "o/r", 7, ["A", "B"], ["x", "y"],
+                timeout_seconds=30, interval_seconds=2)
+        self.assertTrue(snapshot["visibility"]["timed_out"])
+        self.assertEqual(snapshot["visibility"]["missing_jobs"], ["B"])
+        self.assertEqual(snapshot["visibility"]["missing_artifacts"], ["y"])
+        sleep.assert_not_called()
+
+
 class TestExtractWorkflowUploadNames(unittest.TestCase):
     def test_extracts_name_from_upload_block(self):
         wf = ("      - name: Upload log\n"
@@ -127,6 +176,20 @@ class TestExtractWorkflowUploadNames(unittest.TestCase):
             "          path: y\n")
         self.assertEqual(als.extract_workflow_upload_names(wf),
                          ["b-art", "a-art"])
+
+    def test_matrix_artifact_names_expand_to_child_values(self):
+        wf = ("      - name: Upload landing\n"
+              "        uses: actions/upload-artifact@v6\n"
+              "        if: always()\n"
+              "        with:\n"
+              "          name: a11y-landing-report-${{ matrix.theme }}\n"
+              "          path: a11y_landing_${{ matrix.theme }}.json\n")
+        # Matrix tanımı extractor'ın girdi metninde bulunmalıdır.
+        wf = "    matrix:\n      theme: [dark, light]\n" + wf
+        self.assertEqual(
+            als.extract_workflow_upload_names(wf),
+            ["a11y-landing-report-dark", "a11y-landing-report-light"],
+        )
 
     def test_non_upload_artifact_ignored(self):
         wf = ("      - name: Download\n"
@@ -496,6 +559,55 @@ class TestMainFailClosed(unittest.TestCase):
         with mock.patch.object(sys, "stderr", new=io.StringIO()):
             rc = als.main(["--doc", "/nonexistent/doc.md"])
         self.assertEqual(rc, 2)
+
+
+class TestBranchScopedFailurePattern(unittest.TestCase):
+    """failure_pattern window'u denetlenen run'ın branch'ine scope'lanmalı.
+
+    Branch'siz (branch=None) pencere feat push fail'lerini main audit'ine
+    taşır ve main deterministik FAIL üretir (main UNSTABLE yanlışı).
+    Branch-scoped pencere (branch=main) yalnızca main run'larını sayar.
+    """
+
+    def test_main_verdict_pass_when_only_feat_has_failures(self):
+        # main run 34533974871 (doc PASS) ama global pencere feat fail'leri
+        # içeriyorsa combined FAIL olurdu; branch=main ile PASS kalmalı.
+        doc_text = als.REPO_ROOT.joinpath("docs/PUBLISH_SCENARIO.md").read_text(encoding="utf-8")
+        doc_artifacts = als.parse_doc_artifacts(doc_text)
+        doc_jobs = [n for (_c, n) in als.parse_doc_jobs(doc_text)]
+        live_jobs = list(dict.fromkeys(doc_jobs + [als.SELF_JOB]))
+        live = list(dict.fromkeys(doc_artifacts + [als.SELF_ARTIFACT]))
+        with tempfile.TemporaryDirectory() as td:
+            doc = pathlib.Path(td) / "PUBLISH_SCENARIO.md"
+            doc.write_text(doc_text, encoding="utf-8")
+            buf = io.StringIO()
+            # list_runs(branch=main) yalnızca main run'ları döner, bu yüzden
+            # kızım pencere deterministik içermez (feat fail'leri hariç).
+            fake_runs_main = [
+                {"databaseId": 34533974871, "status": "completed", "conclusion": "failure"},
+                {"databaseId": 34533974893, "status": "completed", "conclusion": "success"},
+            ]
+            def fake_list_runs(repo, branch, limit):
+                self.assertEqual(branch, "main", "failure_pattern window must be branch-scoped")
+                return fake_runs_main
+            def fake_list_jobs(repo, rid):
+                if rid == 34533974871:
+                    return [{"name": als.SELF_JOB, "conclusion": "failure"}]
+                return [{"name": als.SELF_JOB, "conclusion": "success"}]
+            with mock.patch.object(als, "get_repo", return_value="o/r"), \
+                    mock.patch.object(als, "get_run_head_branch", return_value="main"), \
+                    mock.patch.object(als, "get_latest_run", return_value={"databaseId": 34533974871, "headSha": "e6572d1"}), \
+                    mock.patch.object(als, "get_run_jobs", return_value=live_jobs), \
+                    mock.patch.object(als, "get_run_artifacts", return_value=live), \
+                    mock.patch("ci_failure_pattern.list_runs", side_effect=fake_list_runs), \
+                    mock.patch("ci_failure_pattern.list_jobs", side_effect=fake_list_jobs), \
+                    mock.patch.object(als, "get_run_job_conclusions", return_value={}), \
+                    mock.patch.object(sys, "stdout", new=buf):
+                rc = als.main(["--doc", str(doc), "--json", "--with-failure-pattern"])
+            d = json.loads(buf.getvalue())
+        self.assertEqual(rc, 0, d)
+        self.assertEqual(d["verdict"], "PASS")
+        self.assertEqual(d["failure_pattern"]["categories"]["deterministic"], [])
 
 
 if __name__ == "__main__":

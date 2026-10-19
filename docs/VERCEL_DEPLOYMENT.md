@@ -123,6 +123,7 @@ yolları yerel-uzayla aynı olduğu için **JS-değişikliği GEREKMEZ**.
 | `/sw.js` | `_calisma/CIKTI/sw.js` | route (preview.js register eder; 404 → JS `.catch` ile zarfsız devam) |
 | `/design-system/tokens.css` | `design-system/tokens.css` | route YOK — URL == dosya-yolu (filesystem servisi) |
 | `/design-system/stripe-theme.css` | `design-system/stripe/theme.css` | route (yerel mirror kopyası git'te yok) |
+| `/design-system/vercel-theme.css` | `design-system/vercel/theme.css` | route (dashboard adapter varyantı; üretilmiş, git'te yok) |
 | `/slides_z3/<ad>` | `_calisma/CIKTI/slides_z3/<ad>` | route + `$1` (ad sınıfı `[A-Za-z0-9._-]+`) |
 | `/api/*` | `api/*.py` | **hiçbir route'a yakalanmaz** → dosya-tabanlı fonksiyon |
 
@@ -133,14 +134,17 @@ Kurallar — süit `TestVercelStaticFrontendContract` (3 test) bunları sabitler
   `/api/*`'i statik-HTML'e çökerdi → adaptör atlanır, JS değişmeden kırılır.
 - `.vercelignore` negasyonları (upload'a giren çekirdek):
   `preview.html` / `preview.js` / `sw.js`, `slides_z3/**`,
-  `design-system/tokens.css`, `design-system/stripe/theme.css`, tüm
+  `design-system/tokens.css`, `design-system/stripe/theme.css`,
+  `design-system/vercel/theme.css`, tüm
   `api/*.py` + `docs/determinism_trend/determinism_trend.jsonl`.
-  Dışarıda kalan: `design-system/*` geri kalanı (primer vb.) + stripe
+  Dışarıda kalan: `design-system/*` geri kalanı (primer vb.) + stripe/vercel
   altındaki token/script yüzeyi → bundle küçük kalır.
-- `design-system/stripe/theme.css` **üretilmiş/takipsiz** dosyadır:
-  CLI-deploy worktree'den yükler; git-push ağacında yoksa
-  stripe-tema-varyantı 404 (yerel mirror da aynı biçimde 404) —
-  varsayılan-koyu tema `tokens.css`'ten etkilenmez.
+- `design-system/{stripe,vercel}/theme.css` **üretilmiş/takipsiz**
+  dosyalardır (`stripe/scripts/generate_stripe_theme.py`,
+  `vercel/scripts/generate_vercel_theme.py`): CLI-deploy worktree'den yükler;
+  git-push ağacında yoksa ilgili tema-varyantı 404 (yerel mirror da aynı
+  biçimde 404) — varsayılan-koyu tema `tokens.css`'ten etkilenmez; dashboard
+  adapter varyantı `?theme=vercel` (tema döngüsünün son adımı) rotasıdır.
 
 Bilinçli degradasyonlar — JS'in `.catch`'leri zarif düşer (görsel hata
 değil), HATA sayılmasın:
@@ -209,92 +213,42 @@ akış YAML'da yeniden yazılmaz — job `actions/checkout@v7`
 `_calisma/CIKTI/check_vercel_deploy.py`'i bir `run:` adımında çağırır;
 aynı script lokalde `--base-url` ile birebir aynı kodu koşar. Uç
 kontrolleri script yapar (stdlib urllib — sağlık = `ok` düz-metin,
-run-history = JSON + şema-parite, slayt = 200 + PNG-magic statik-upload
-kanıtı); bash gövdesi yalnız URL çözümü +
+run-history = JSON + şema-parite); bash gövdesi yalnız URL çözümü +
 çağrı taşır (shellcheck `-s bash -S info`: 0 bulgu — SC2016 yüzeyi sıfır).
 
 Yerel kanıt (2026-10-09): kapı script'i üç senaryoda doğrudan koşuldu —
 canlı URL → `VERDICT: PASS` / RC=0 (health `ok`, run-history 15 satır, ilk
 `2026-10-08T17:59:52Z PASS`); ölü URL → RC=1 + `VERDICT: FAIL` + ağ
 hata-metni raporda; geçersiz şema → RC=1 (STEP_SUMMARY'ye FAIL satırıyla).
-`test_check_vercel_deploy` gerçek-HTTP test sunucusuyla 10 senaryo (PASS,
+`test_check_vercel_deploy` gerçek-HTTP test sunucusuyla 8 senaryo (PASS,
 bozuk-sağlık, eksik-şema, geçersiz-verdict, JSON-değil, boş-liste, uç-olu,
-geçersiz-şema, slayt-404, slayt-PNG-değil — hepsi fail-closed). Kapılar yeşil: `test_gated_schedules`
+geçersiz-şema — hepsi fail-closed). Kapılar yeşil: `test_gated_schedules`
 K1-K7 + gate testleri 46 test OK; workflow pili (contract/triggers/timeouts/
 install-hardening/action-pins/runtimes/actionlint-gate/python3-shell) 102
 test OK; `check_python3_shell` PASS (7 workflow / 251 adım);
 `summary_pattern_drift --json` PASS (stdout tek JSON).
 
-Statik-upload tuzağı (2026-10-09, düzeltildi): Vercel CLI 59.x upload
-tarayıcısı (`readdirRecursive`) her girişi **slash'sız** yol ile `ignore`
-paketine test eder; dizin "ignored" çıkarsa tüm alt ağaç prune edilir ve
-çocuklar hiç denenmez. Sonu `/` ile biten dir-only negasyon slash'sız dizin
-yoluna eşleşmez → `!_calisma/CIKTI/slides_z3/` tek başına dizini
-kurtaramıyordu; `/slides_z3/*` ve `/design-system/stripe-theme.css` **tüm**
-deploy'larda 404'tü (git `check-ignore` bunu temiz gösteriyordu — takip
-edilen dosya "girer" derken atas dizim prune ediliyordu: kapı yeşil, deploy
-kırmızı). Düzeltme: slash'siz negasyonlar (`!_calisma/CIKTI/slides_z3`,
-`!design-system/stripe`); offline model `test_vercel_adapter` →
-`TestVercelUploadPruneSemantics` ile ölçüm-kilitli; canlı kanıt kapıya üçüncü
-uç olarak eklendi (`/slides_z3/P1-a.png` → 200 + PNG magic — API'ler
-yeşilken statik ağaç prune edilirse kapı kırmızı).
-
 Not: workflow'lar HEAD'den koşar — job, commit + push edilmeden schedule'a
 girmez; ilk tetikleme `workflow_dispatch` ile elle yapılabilir.
 
-## 5. Git-push otomasyonu — fallback hattı (2026-10-09, uygulandı)
+## 5. Git-push otomasyonu (repo-based) — kalan tek manuel adım
 
-Orijinal tasarım native link üzerinedir: `vercel.json` →
-`git.deploymentEnabled: {"main": true, "reword-working": true}` — push'ta
-otomatik build (`git archive HEAD` = 13.1MB, upload-sınırının çok altında).
+`vercel.json` → `git.deploymentEnabled: {"main": true, "reword-working":
+true}`: git-push'ta otomatik build (git-tek-gerçek ödemesi — çalışma-dizini
+kayması yok; `git archive HEAD` = 13.1MB, 250MB upload-sınırının çok altında).
 
-**Native link engelli ve dashboard sessiz-şekilde başarısız** (2026-10-09'da
-yeniden ölçüldü; kanıt demeti 2026-09-23'tekinden geniş):
+Engel (hesap-düzeyi; CLI'dan çözülemez — 2 kez ölçüldü, 2026-09-23):
 
 ```
-vercel git connect → 400 "You need to add a Login Connection to your GitHub
-account first." (7 deneme; son 4'ü Authentication'dan disconnect +
-yeniden-authorize'dan sonra)
-GET /v9/projects/{id}/link → "Project Link not found." — dashboard connect
-akışı "Connected" göstermesine rağmen link hiç oluşmadı (26×10s senkron
-pencerede API'de iz yok; UI ile API çelişiyor).
-Repo tarafında da iz yok: webhook yok; son başarılı git-deploy 2026-09-24
-(34b6ea35 — protectionBypass'ın da kurulduğu dakika).
+vercel git connect https://github.com/ali-han-kaya/leibniz2 --yes
+→ Error: Failed to link ali-han-kaya/leibniz2. You need to add a Login
+  Connection to your GitHub account first. (400)
 ```
 
-**Fallback (CI-üzerinden otomatik preview):**
-`.github/workflows/vercel-preview-deploy.yml` — `main` hariç her push (ve
-`workflow_dispatch`) → `vercel link` + `vercel deploy` (secret
-`VERCEL_TOKEN`) → preview URL → **aylık `vercel-deploy-check` ile AYNI kapı
-script'i** (`check_vercel_deploy.py --base-url`) + `trend` /
-`determinism-trend` JSON sağlığı; hepsi fail-closed, URL
-`$GITHUB_STEP_SUMMARY`a yazılır. Kapı-paritesi (K1): lokal `--base-url`
-koşumu ile CI koşumu aynı kodu çalıştırır.
-
-Kurulum: vercel.com/account/settings/tokens → token oluştur → repo
-Settings → Secrets and variables → Actions → `VERCEL_TOKEN`. (API ile token
-üretilemiyor: `POST /v2/user/tokens` → "Cannot create tokens for this app".)
-
-**Proje env — `GITHUB_TOKEN` (2026-10-09):** `/api/run-history` GitHub
-Actions API'sini çağırır; token'sız anonim quota **60 istek/saat** ve
-Vercel'in paylasilan egress IP'lerinde tüm部署'larla ortaktır → ara sıra
-429/502. `api/_adapter.py:_fetch` `GITHUB_TOKEN` env varını görünce
-`Authorization: Bearer` ekler (5000/sa); yokken anonim kalır (public-repo
-fail-open). Sözleşme pini: `test_vercel_adapter` →
-`test_fetch_attaches_github_token_header` (token-varken başlık / yokken
-başlık-yok — her iki yön de). Proje env'leri `sarkis-env/leibniz2`'ye
-eklendi: **Production = Secret, Preview = sensitive** (API'nin
-geri-okunamayan tipi; `secret` yalnız CLI'nin adı, v9/v10 API'si400
-döner) — değerler asla repo'ya/disc'e yazılmadı (CLI stdin + API body ile
-aktarıldı). Değer kaynağı: yerel `gh` oturum token'ı; daraltmak için
-fine-grained, read-only `actions` PAT ile `vercel env rm` + yeniden
-eklenebilir. Geçersiz token GitHub'a401 döndürür → adaptör502 (fail-loud,
-sessiz-anonim yok). **Env değişiklikleri yalnız yeni deploy'larla geçerli
-olur** — eski preview URL'leri hâlâ anonim çağırır.
-
-Native link düzelirse (Authentication'da gerçek bağlantı + `vercel git
-connect` yeşil): fallback workflow KALDIRILMALI — iki hat aynı push'a iki
-preview üretir.
+Manuel adım (yalnız dashboard'tan): Vercel → **Account Settings → Login
+Methods & Connections → GitHub Login Connection** ekle; sonrasında aynı
+`vercel git connect` komutunu tekrar çalıştır (GitHub-uygulaması onayı
+istenebilir). Bu adımdan sonra her push otomatik preview üretir.
 
 ## 6. Sınırlar (dürüst notlar)
 

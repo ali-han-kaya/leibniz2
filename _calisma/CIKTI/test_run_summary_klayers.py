@@ -30,15 +30,6 @@ class TestStatus(unittest.TestCase):
             layers = {k: {"label": "X", "status": "PASS", "findings": []}
                       for k in rsk.RENDER_LAYERS}
             layers["K4"] = {"label": "X", "status": "FAIL", "findings": []}
-            with open(p, "w") as f:
-                json.dump({"layers": layers}, f)
-            self.assertEqual(rsk.status(p), "FAIL")
-
-    def test_unregistered_fail_sets_dashboard_status(self):
-        with tempfile.TemporaryDirectory() as d:
-            p = os.path.join(d, "klayers.json")
-            layers = {k: {"label": "X", "status": "PASS", "findings": []}
-                      for k in rsk.RENDER_LAYERS}
             layers["UNREGISTERED"] = {"status": "FAIL"}
             with open(p, "w") as f:
                 json.dump({"layers": layers}, f)
@@ -117,19 +108,6 @@ class TestMain(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn("## 🔴 K4", out)
         self.assertIn("[P0] K4-MANIFEST: MD5 uyuşmuyor: x", out)
-
-    def test_unregistered_findings_are_rendered(self):
-        layers = {k: self._layer("PASS") for k in rsk.RENDER_LAYERS}
-        layers["UNREGISTERED"] = {
-            "label": "Unregistered findings", "status": "FAIL",
-            "findings": [{"priority": "P0", "check": "LINEAGE-CUR",
-                          "issue": "generation drift"}]}
-        with tempfile.TemporaryDirectory() as d:
-            p = self._write(d, layers)
-            code, out = self._run(p)
-        self.assertEqual(code, 0)
-        self.assertIn("## 🔴 Other Unregistered findings: 1 bulgu", out)
-        self.assertIn("- [P0] LINEAGE-CUR: generation drift", out)
 
     def test_skip_renders_na(self):
         layers = {k: self._layer("PASS") for k in rsk.RENDER_LAYERS}

@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { createRoot } from 'react-dom/client';
-import './styles.css';
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { createRoot } from "react-dom/client";
+import "./styles.css";
 
 type Json = Record<string, any>;
 type Run = {
@@ -20,24 +20,24 @@ type Run = {
 };
 
 const api = async <T,>(path: string, init?: RequestInit): Promise<T> => {
-  const response = await fetch(path, { cache: 'no-store', ...init });
+  const response = await fetch(path, { cache: "no-store", ...init });
   if (!response.ok)
     throw new Error(`${response.status} ${response.statusText}`);
   return response.json() as Promise<T>;
 };
-const n = (value: unknown, fallback = '—') =>
-  value === null || value === undefined || value === ''
+const n = (value: unknown, fallback = "—") =>
+  value === null || value === undefined || value === ""
     ? fallback
     : String(value);
 const date = (value?: string) =>
-  value ? new Date(value).toLocaleString('tr-TR') : 'henüz çalıştırılmadı';
+  value ? new Date(value).toLocaleString("tr-TR") : "henüz çalıştırılmadı";
 
 function Badge({
   label,
-  state = 'neutral',
+  state = "neutral",
 }: {
   label: string;
-  state?: 'ok' | 'fail' | 'warn' | 'neutral';
+  state?: "ok" | "fail" | "warn" | "neutral";
 }) {
   return <span className={`badge ${state}`}>{label}</span>;
 }
@@ -63,23 +63,23 @@ function App() {
   const [history, setHistory] = useState<Run[]>([]);
   const [connected, setConnected] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [theme, setTheme] = useState(
-    () => localStorage.getItem('dashboard-theme') || 'dark'
+    () => localStorage.getItem("dashboard-theme") || "dark"
   );
   const [selected, setSelected] = useState<Run | null>(null);
 
   const refresh = useCallback(async () => {
     try {
       const [current, rows] = await Promise.all([
-        api<Json>('/api/latest'),
-        api<Run[]>('/api/run-history'),
+        api<Json>("/api/latest"),
+        api<Run[]>("/api/run-history"),
       ]);
       setLatest(current);
       setHistory(rows);
-      setError('');
+      setError("");
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'API bağlantısı kurulamadı');
+      setError(e instanceof Error ? e.message : "API bağlantısı kurulamadı");
     }
   }, []);
   useEffect(() => {
@@ -89,8 +89,8 @@ function App() {
   }, [refresh]);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    localStorage.setItem('dashboard-theme', theme);
-    const source = new EventSource('/api/run');
+    localStorage.setItem("dashboard-theme", theme);
+    const source = new EventSource("/api/run");
     source.onopen = () => setConnected(true);
     source.onmessage = (event) => {
       try {
@@ -107,34 +107,34 @@ function App() {
 
   const run = async () => {
     setLoading(true);
-    setError('');
+    setError("");
     try {
-      await api('/api/run-now', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      await api("/api/run-now", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
       });
       await refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Çalıştırma başarısız');
+      setError(e instanceof Error ? e.message : "Çalıştırma başarısız");
     } finally {
       setLoading(false);
     }
   };
   const stop = async () => {
     try {
-      await api('/api/stop', { method: 'POST' });
+      await api("/api/stop", { method: "POST" });
       setConnected(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Sunucu durdurulamadı');
+      setError(e instanceof Error ? e.message : "Sunucu durdurulamadı");
     }
   };
-  const verdict = latest?.verdict || 'UNKNOWN';
+  const verdict = latest?.verdict || "UNKNOWN";
   const status =
-    verdict === 'PASS'
-      ? 'ok'
-      : verdict === 'FAIL' || verdict === 'ERROR'
-        ? 'fail'
-        : 'warn';
+    verdict === "PASS"
+      ? "ok"
+      : verdict === "FAIL" || verdict === "ERROR"
+        ? "fail"
+        : "warn";
   const p0 = latest?.p0 ?? latest?.findings?.p0;
   const p1 = latest?.p1 ?? latest?.findings?.p1;
   const budget = latest?.budget || {};
@@ -157,17 +157,17 @@ function App() {
           </p>
         </div>
         <div className="actions">
-          <span className={`live ${connected ? 'online' : ''}`}>
-            ● {connected ? 'canlı' : 'bağlantı bekleniyor'}
+          <span className={`live ${connected ? "online" : ""}`}>
+            ● {connected ? "canlı" : "bağlantı bekleniyor"}
           </span>
           <button
-            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
             className="ghost"
           >
-            {theme === 'dark' ? '☼ Açık tema' : '☾ Koyu tema'}
+            {theme === "dark" ? "☼ Açık tema" : "☾ Koyu tema"}
           </button>
           <button onClick={run} disabled={loading}>
-            {loading ? 'Çalışıyor…' : 'Şimdi doğrula'}
+            {loading ? "Çalışıyor…" : "Şimdi doğrula"}
           </button>
           <button onClick={stop} className="danger ghost">
             Sunucuyu durdur
@@ -186,20 +186,20 @@ function App() {
             <p className="muted">{date(latest?.ts)}</p>
           </div>
           <div className="badges">
-            <Badge label={`P0 ${n(p0, '0')}`} state={p0 ? 'fail' : 'ok'} />
-            <Badge label={`P1 ${n(p1, '0')}`} state={p1 ? 'warn' : 'ok'} />
+            <Badge label={`P0 ${n(p0, "0")}`} state={p0 ? "fail" : "ok"} />
+            <Badge label={`P1 ${n(p1, "0")}`} state={p1 ? "warn" : "ok"} />
             <Badge
-              label={`K8 Z3 ${n(latest?.z3_passed, '?')}/${n(latest?.z3_total, '?')}`}
+              label={`K8 Z3 ${n(latest?.z3_passed, "?")}/${n(latest?.z3_total, "?")}`}
               state="neutral"
             />
             <Badge
-              label={`K9 Lean ${latest?.lean_ok === true ? 'PASS' : latest?.lean_ok === false ? 'FAIL' : '?'}`}
+              label={`K9 Lean ${latest?.lean_ok === true ? "PASS" : latest?.lean_ok === false ? "FAIL" : "?"}`}
               state={
                 latest?.lean_ok === false
-                  ? 'fail'
+                  ? "fail"
                   : latest?.lean_ok === true
-                    ? 'ok'
-                    : 'neutral'
+                    ? "ok"
+                    : "neutral"
               }
             />
           </div>
@@ -210,7 +210,7 @@ function App() {
             value={
               latest?.duration_s != null
                 ? `${latest.duration_s.toFixed?.(1) ?? latest.duration_s}s`
-                : '—'
+                : "—"
             }
             detail="verify_delivery --full"
           />
@@ -221,10 +221,10 @@ function App() {
                 ? `$${Number(budget.usd).toFixed(2)}`
                 : latest?.budget_usd != null
                   ? `$${Number(latest.budget_usd).toFixed(2)}`
-                  : '—'
+                  : "—"
             }
             detail={
-              budget.limit ? `limit $${budget.limit}` : 'limit bilinmiyor'
+              budget.limit ? `limit $${budget.limit}` : "limit bilinmiyor"
             }
           />
           <Metric
@@ -249,13 +249,13 @@ function App() {
                 layerList.map((layer: any, i: number) => (
                   <Badge
                     key={i}
-                    label={`${layer.id || `K${i + 1}`} ${layer.verdict || layer.status || '?'}`}
+                    label={`${layer.id || `K${i + 1}`} ${layer.verdict || layer.status || "?"}`}
                     state={
-                      (layer.verdict || layer.status) === 'PASS'
-                        ? 'ok'
-                        : (layer.verdict || layer.status) === 'FAIL'
-                          ? 'fail'
-                          : 'neutral'
+                      (layer.verdict || layer.status) === "PASS"
+                        ? "ok"
+                        : (layer.verdict || layer.status) === "FAIL"
+                          ? "fail"
+                          : "neutral"
                     }
                   />
                 ))
@@ -268,7 +268,7 @@ function App() {
             <div className="section-head">
               <h2>Durum tahtası</h2>
               <span className="muted">
-                {latest?.status_board?.ts ? date(latest.status_board.ts) : ''}
+                {latest?.status_board?.ts ? date(latest.status_board.ts) : ""}
               </span>
             </div>
             <p className={`board ${status}`}>
@@ -310,26 +310,26 @@ function App() {
                           <Badge
                             label={n(item.verdict)}
                             state={
-                              item.verdict === 'PASS'
-                                ? 'ok'
-                                : item.verdict === 'FAIL'
-                                  ? 'fail'
-                                  : 'neutral'
+                              item.verdict === "PASS"
+                                ? "ok"
+                                : item.verdict === "FAIL"
+                                  ? "fail"
+                                  : "neutral"
                             }
                           />
                         </td>
                         <td>
-                          {n(item.p0, '0')} / {n(item.p1, '0')}
+                          {n(item.p0, "0")} / {n(item.p1, "0")}
                         </td>
                         <td>
                           {item.duration_s != null
                             ? `${item.duration_s}s`
-                            : '—'}
+                            : "—"}
                         </td>
                         <td>
                           {item.budget_usd != null
                             ? `$${item.budget_usd}`
-                            : '—'}
+                            : "—"}
                         </td>
                         <td>{n(item.pdf_pages)}</td>
                       </tr>
@@ -358,10 +358,10 @@ function App() {
         )}
       </main>
       <footer>
-        Fail-closed doğrulama · API: /api/latest · SSE: /api/run ·{' '}
-        {latest?.commit_sha ? `SHA ${latest.commit_sha}` : 'SHA bekleniyor'}
+        Fail-closed doğrulama · API: /api/latest · SSE: /api/run ·{" "}
+        {latest?.commit_sha ? `SHA ${latest.commit_sha}` : "SHA bekleniyor"}
       </footer>
     </div>
   );
 }
-createRoot(document.getElementById('root')!).render(<App />);
+createRoot(document.getElementById("root")!).render(<App />);

@@ -8,6 +8,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github" / "workflows" / "verify.yml"
 SLOW_STEPS = (
     "Run pre-commit",
+    "Run Lean lake build",
     "Download remaining artifacts",
     "Run live CI audit",
 )
@@ -33,7 +34,10 @@ class WorkflowTimeoutTests(unittest.TestCase):
     def test_k9_lake_build_uses_fifteen_minute_job_timeout(self):
         block = re.search(r"^  lake-proof:\n(.*?)(?=^  \w|\Z)", self.text, re.M | re.S).group(1)
         self.assertIn("    timeout-minutes: 15", block)
-        self.assertIn("lake build --wfail", block)
+        self.assertIn("verify_lean_lake.sh", block)
+        self.assertIn("lake build --wfail", (
+            ROOT / "_calisma" / "CIKTI" / "verify_lean_lake.sh"
+        ).read_text(encoding="utf-8"))
 
     def test_expensive_steps_have_step_timeout(self):
         for marker in SLOW_STEPS:

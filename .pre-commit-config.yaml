@@ -86,12 +86,17 @@
 #                               bağımlı kapı ortam yoksa bloke etmez.
 #                               (setup-pre-commit zincir-uyarlaması: Husky
 #                               yerine bu zincir; tek hooksPath, bypass yok.)
-#   18) check-dashboard-typecheck: apps/dashboard-next tsc --noEmit kapısı
-#                               (READ-ONLY, emit yok). node_modules/tsconfig
-#                               yoksa SKIP; tip-hatası commit'i bloke eder.
-#   19) check-precommit-orphans : ~/.cache/pre-commit'te 24s+ eski patch-
-#                               kalıntısı (yetim-stash) commit'i bloke eder;
-#                               taze (<24s) kurtarma-penceresinde serbest.
+#   18) check-dashboard-typecheck: apps/dashboard-next tsc --noEmit +
+#                               tip-testleri + `npm run build` (CI dashboard-smoke
+#                               ile aynı sıra: Prisma generate + artefakt
+#                               assert'leri + next build). READ-ONLY: emit yok;
+#                               Next'in yeniden yazdığı tracked dosyalar geri
+#                               alınır. node_modules/tsconfig/next/trend-db
+#                               bağımlılıkları yoksa SKIP; tip/generate/build
+#                               hatası commit'i bloke eder.
+#   19) check-precommit-orphans : ~/.cache/pre-commit'te 7g+ eski patch-
+#                               kalıntısı (yetim-stash) CI'da bloke eder,
+#                               yerelde uyarır; taze (<7g) pencere içinde.
 #   20) check-docker-security-smoke: docker_security_smoke.sh (build + Trivy
 #                               gate + canlı sağlık) — Dockerfile stage'liyken
 #                               ateşlenir (tam build dakikalar sürer; her
@@ -373,6 +378,37 @@ repos:
         stages: [pre-commit]
         verbose: true
 
+      - id: check-status-check-doc-sync
+        name: "Publish docs' check counts ↔ status_checks derivation (fail-closed)"
+        description: >-
+          PUBLISH_SCENARIO.md ile docs/branch-protection-guide/ içindeki ELLE
+          yazılmış required/advisory/PR-only check SAYILARINI status_checks.py
+          türetimine bağlar (tek kaynak: GATE_EXCLUDE + verify.yml job
+          `name:`leri). Fail-closed sözleşmeler: her beyan yeri TAM OLARAK bir
+          kez eşleşmeli (0 eşleşme = beyan kayboldu → sessiz kapsam kaybı),
+          sayılar türetimle birebir olmalı, required ad LİSTELERİ (bash
+          bloğu, numaralı web-UI listesi, guide.html onay kutuları) ve
+          "required DEĞİL PR-only" job id listesi küme olarak eşleşmeli —
+          "15 sayısı + 12 ad" gibi iç tutarsızlık operatörü eksik check
+          seçmeye götürürdü. Tarihli run kayıtları ve K katman aralıkları
+          EXCLUSIONS'da gerekçesiyle kapsam dışıdır; testleri o gerekçelerin
+          hâlâ geçerli olduğunu denetler. Değişim-farkında: yalnız iki doküman,
+          branch-protection-guide, verify.yml veya türetim sözleşmesi
+          (status_checks/workflow_contract) değişince koşar. Ölçüm imkânsızsa
+          (PyYAML yok / dosya yok) rc=2 — sessiz PASS yok. OFFLINE, ~0.2s.
+          Test: test_check_status_check_doc_sync.py
+        # venv-guard (check-status-check-names/check-doc-job-sync deseni):
+        # türetim PyYAML ister; sistem python3'ünde yoksa kapı sahte rc=2 verir.
+        entry: bash -c 'PY=python3; [ -x _calisma/.venv_z3/bin/python ] &&
+          PY=_calisma/.venv_z3/bin/python; exec "$PY"
+          _calisma/CIKTI/check_status_check_doc_sync.py'
+        language: system
+        files: >-
+          ^(docs/PUBLISH_SCENARIO\.md|docs/branch-protection-guide/.*|\.github/workflows/verify\.yml|_calisma/CIKTI/(status_checks|workflow_contract|check_status_check_doc_sync)\.py)$
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
       - id: check-config-sync
         name: "Verify workflow config snapshot ↔ CONFIG_BASENAMES sync"
         description: >-
@@ -413,6 +449,25 @@ repos:
           eklenmez (veya tersi) → sessiz kapsam kaybı → commit bloke edilir.
           OFFLINE, stdlib-only, ~0.05s.
         entry: python3 _calisma/CIKTI/check_refs_table_sync.py
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
+      - id: check-id-residual-doc-sync
+        name: "Verify ID residual §4 ledger ↔ frozen record (fail-closed)"
+        description: >-
+          check_id_residual_doc_sync.py: docs/ID_RESIDUAL_ACCEPTANCE.md §4
+          "Teslim sidecar'ı geçiş kaydı" satırındaki ham + metadata-stripped
+          hash'leri donmuş kayıtla (ingiliz_empirizmi_v3.pdf.metadata.sha256 —
+          ilk veri satırı `<stripped>` ve `# raw:` satırı) birebir
+          karşılaştırır; kayıtta `# canonical:` varsa kanonik hücreyi de
+          pinler (yoksa NOT). Drift: sidecar yenilenir defter satırı eski
+          kalır (veya tersi) → determinizm kanıtı sessizce yanlış olur →
+          commit bloke edilir. Sütun sırası başlıktan okunur; defter/satır/
+          hücre eksikse fail-closed. OFFLINE, stdlib-only, ~0.02s.
+        entry: python3 _calisma/CIKTI/check_id_residual_doc_sync.py
         language: system
         always_run: true
         pass_filenames: false
@@ -566,16 +621,24 @@ repos:
         verbose: true
 
       - id: check-dashboard-typecheck
-        name: "TypeScript typecheck for apps/dashboard-next (tsc --noEmit)"
+        name: "Typecheck + build for apps/dashboard-next (tsc --noEmit + next build)"
         description: >-
           setup-pre-commit zincir-uyarlaması (Husky yerine): dashboard-next
-          projesinde tsc --noEmit. READ-ONLY: emit yok, dosya yazmaz.
-          node_modules veya tsconfig yoksa SKIP (ortam-bağımlı kapı ortam
-          yoksa bloke etmez); tip-hatası varsa fail-closed bloke eder.
-          Yalnızca dashboard-next dosyaları stage'liyken koşar. OFFLINE.
+          projesinde tsc --noEmit + tip-testleri + `npm run build` (CI'ın
+          dashboard-smoke job'ıyla AYNI komut). Build'den ÖNCE CI sırası
+          birebir işler: Prisma istemcisi yok/bayatsa `prisma generate`
+          (yer tutucu DATABASE_URL) + CI'ın artefakt assert'leri (5 dosya +
+          imza). Tracked-READ-ONLY: tsc emit yok; build .next üretir
+          (ignored) ama Next'in yeniden yazdığı next-env.d.ts/tsconfig.json
+          build sonrası geri alınır.
+          node_modules/tsconfig/next ya da trend-db bağımlılıkları yoksa
+          SKIP (ortam-bağımlı kapı ortam yoksa bloke etmez); tip, generate
+          doğrulaması veya build hatası fail-closed bloke eder.
+          Yalnızca dashboard-next dosyaları (ve Prisma şeması/config'i)
+          stage'liyken koşar. OFFLINE.
         entry: bash _calisma/CIKTI/check_dashboard_typecheck.sh
         language: system
-        files: ^apps/dashboard-next/.*\.(ts|tsx|js|json)$
+        files: ^apps/dashboard-next/.*\.(ts|tsx|js|jsx|mjs|cjs|css|json)$|^apps/trend-db/(prisma/schema\.prisma|prisma\.config\.ts)$
         stages: [pre-commit]
         verbose: true
 
@@ -712,8 +775,11 @@ repos:
           etkili); girdi sırası değişimi algılanmalı. Bu üçü ihlal edilirse
           P0 → commit bloke edilir (tekrarlanabilir üretim sözleşmesi her
           commit'te doğrulanır). stdlib-only (zipfile/hashlib/time), OFFLINE,
-          saniyeler sürer; --full'a dahildir.
-        entry: python3 _calisma/CIKTI/verify_delivery.py --dir _calisma/CIKTI --check-sde
+          saniyeler sürer; --full'a dahildir. REUSE: çekirdek (K0-K7) bu
+          commit penceresinde verify-delivery hook'u tarafından zaten
+          doğrulandıysa `--core-verdict-out` kaydı okunur ve çekirdek TEKRAR
+          koşmaz; kayıt yok/geçersizse çekirdek koşar (fail-closed).
+        entry: python3 _calisma/CIKTI/verify_delivery.py --dir _calisma/CIKTI --check-sde --reuse-core-verdict
         language: system
         always_run: true
         pass_filenames: false
@@ -767,7 +833,8 @@ repos:
           ÖNCE (tectonic, tek derleme) / SONRA (TeXLive + SOURCE_DATE_EPOCH,
           2 bağımsız derleme) hash karşılaştırması. SONRA'nın iki run'ı
           byte-farklıysa deney exit 1 → commit bloke (fail-closed: göç
-          determinism getirmedi). Rapor .freebuff/sim/ altına yazılır.
+          determinism getirmedi). Rapor logs/texlive_determinism_report.txt
+          altına yazılır (CI'da precommit-logs artefaktıyla yayınlanır).
           tectonic + TeXLive pdflatex kurulu DEĞİLSE SKIP (exit 0) — kapı
           yalnızca araçların var olduğu ortamda iddia üretir
           (check-lake-evidence deseni); K21 --check-sde her ortamda koşar.
@@ -997,6 +1064,27 @@ repos:
         stages: [pre-commit]
         verbose: true
 
+      - id: check-bootstrap-toolchain
+        name: "Toolchain completeness (dev_bootstrap.sh --check, fail-closed)"
+        description: >-
+          check_bootstrap_toolchain.py: `dev_bootstrap.sh --check`'i YALNIZ
+          `--check` ile koşar ve sonucu üç duruma ayırır — rc=0 PASS, rc=1
+          BLOKE (ilk eksik unit + kopyala-yapıştır kurtarma komutu), diğer
+          rc / script yok / timeout KÖR KAPI (rc=2; "eksik" DENMEZ). Amaç:
+          gitignored araç-kutuları (venv_z3, pptx/node_modules,
+          dashboard-next/node_modules) taze checkout'ta commit zincirini
+          module-import çökmesiyle kırar; bu kapı onu test hatası gibi
+          görünmeden ÖNCE adıyla söyler. Ölçer, KURMAZ (kurulum commit'e
+          gömülemez). always_run: araç-kümesi bozukken dokunulmayan bir
+          dosyaya yapılan commit kapıyı atlatmasın. OFFLINE değil — yerel
+          venv/node_modules varlığını denetler, ağ kullanmaz.
+        entry: python3 _calisma/CIKTI/check_bootstrap_toolchain.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+        verbose: true
+
       - id: check-unit-tests
         name: "Unit tests for new gates (fail-closed manifest)"
         description: >-
@@ -1018,6 +1106,28 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+        stages: [pre-commit]
+        verbose: true
+
+      - id: shuffle-audit
+        name: "Test order independence (shuffle audit, changed test files)"
+        description: >-
+          shuffle_audit_hook.sh: yalnız DEĞİŞEN test dosyalarını denetler —
+          her dosya kendi alt süreçte alfabetik taban + karıştırılmış sıra
+          karşılaştırmasıyla koşar; YALNIZ karışık sırada kırılan test bulgudur
+          (fail-closed; exit 1). Tohum listesi SHUFFLE_AUDIT_SEEDS (vars. 42),
+          duvar-saati bütçesi SHUFFLE_AUDIT_BUDGET (vars. 180s; tükenme =
+          bulgu), alt süreç tavanı SHUFFLE_AUDIT_TIMEOUT. Bulgu JSON'u
+          logs/shuffle_audit.json'a yazılır (gitignored). Değişen test dosyası
+          SHUFFLE_AUDIT_MAX_FILES'ı (vars. 15) aşarsa denetim SESSİZCE
+          kırpılmaz — yüksek sesle atlanır ve tam kapsamı CI'daki
+          `shuffle-audit` job'una bırakır (manifest − shuffle_audit.exclude).
+          Ortam-bağımlı/kalıcı kırmızı dosyalar dışlama listesindedir; yeni
+          test dosyaları otomatik kapsamdadır.
+        entry: bash _calisma/CIKTI/shuffle_audit_hook.sh
+        language: system
+        files: ^_calisma/CIKTI/test_.*\.py$
+        pass_filenames: true
         stages: [pre-commit]
         verbose: true
 
@@ -1055,13 +1165,14 @@ repos:
       - id: check-precommit-orphans
         name: check-precommit-orphans — pre-commit patch-kalıntısı kapısı (fail-closed)
         description: >-
-          ~/.cache/pre-commit'te 24s+ eski patch-kalıntısı (yetim-stash)
-          varsa commit'i BLOKE eder. Kök-neden (systematic-debugging turu,
-          2026-09-19): pre-commit patch dosyalarını asla silmez; pencere-içi
-          süreç-ölümü ağacı sessizce revert eder ve delta yalnız patch'te
-          kalır. Taze patch (<24s) kurtarma-penceresi içindedir ve
-          cezalandırılmaz. Test: test_check_precommit_orphans.py (6
-          sözleşme, PRE_COMMIT_HOME-fixture üzerinden).
+          ~/.cache/pre-commit'te 7 günden eski patch-kalıntısı (yetim-stash)
+          varsa CI'da commit'i BLOKE eder, yerelde aynı bulguyu UYARI olarak
+          basar (--mode auto: CI/GITHUB_ACTIONS işareti belirler). Kök-neden
+          (systematic-debugging turu, 2026-09-19): pre-commit patch
+          dosyalarını asla silmez; pencere-içi süreç-ölümü ağacı sessizce
+          revert eder ve delta yalnız patch'te kalır. Taze patch (<7g)
+          kurtarma-penceresi içindedir ve cezalandırılmaz. Test:
+          test_check_precommit_orphans.py (PRE_COMMIT_HOME-fixture).
         entry: python3 _calisma/CIKTI/check_precommit_orphans.py
         language: system
         pass_filenames: false

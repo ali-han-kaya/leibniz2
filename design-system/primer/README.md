@@ -9,6 +9,12 @@ Values are copied **verbatim** — no remapping, no renaming, no rounding.
 - `tokens.json` — structured tokens, grouped by first segment (`base`, `brand`, `bgColor`, `fgColor`, `borderColor`, `control`, `button`, `text`, …). Single source of truth for tooling. Includes `source` with page + exact asset URLs and extraction note.
 - `tokens.css` — flat `:root` drop-in with all 2051 tokens grouped and sorted. `@import "design-system/primer/tokens.css";` then use `var(--…)` directly.
 - `raw.css` — concatenated verbatim source stylesheets (1.2 MB, 30 `_next/static/chunks/*.css` files) for audit/diff. Not for import — `tokens.css` is the curated subset.
+- `tailwind.css` — **GENERATED** Tailwind v4 `@theme` köprüsü: 1500 yuva
+  (`bg-primer-brand-color-text-default`, `rounded-primer-borderradius-full`,
+  `ease-primer-base-easing-ease`, …; 551 token kapsam dışı, gerekçeleri
+  dosyanın sonundaki sayım bloğunda). Üretici
+  `design-system/scripts/generate_mirror_tailwind.py`, kapı
+  `check_mirror_bridges.py`.
 
 ## Source
 
@@ -68,4 +74,6 @@ Re-fetch the 30 chunk URLs from the live page (they are content-hashed, so URLs 
 ```bash
 python3 design-system/primer/scripts/check_primer_tokens.py
 # OK — 2051 tokens verbatim against raw.css
+python3 design-system/scripts/generate_mirror_tailwind.py --check
+# OK — 4/4 marka köprüsü jeneratörle birebir (… primer 1500/2051 yuva …)
 ```

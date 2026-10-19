@@ -76,6 +76,20 @@ class TestTaskMap(unittest.TestCase):
                 seen.add(t["id"])
         self.assertEqual(len(seen), 12)
 
+    def test_k5_k11_is_a_sequential_chain_with_separate_lake_step(self):
+        tasks = okd.task_map()
+        chain = ["K5", "K6", "K7", "K8", "K9", "K10", "K11"]
+        for previous, current in zip(chain, chain[1:]):
+            self.assertIn(previous, tasks[current]["deps"],
+                          "%s -> %s bağımlılığı eksik" % (previous, current))
+        self.assertEqual(tasks["K9"]["command"],
+                         "sh _calisma/CIKTI/verify_lean_lake.sh")
+        self.assertIn("lake build --wfail",
+                      pathlib.Path(__file__).resolve().parent.joinpath(
+                          "verify_lean_lake.sh").read_text(
+                          encoding="utf-8"))
+        self.assertIn("K9", tasks["K10"]["deps"])
+
 
 ORIG_TASKS = list(okd.TASKS)
 
@@ -117,11 +131,13 @@ class TestMockFlow(unittest.TestCase):
 
     def test_dep_blocked_task_skipped(self):
         # K7 komutunu bilerek bozuk yap; K8 (K7'ye bağımlı) SKIP olmalı.
+        # K5/K6 zincir önkoşullarını geçir, böylece test K7'nin kendi
+        # failure'ını izole eder.
         for i, (tid, label, _cmd, deps) in enumerate(okd.TASKS):
-            if tid in ("K7", "K8"):
-                cmd = "false" if tid == "K7" else "echo ok"
-                okd.TASKS[i] = (tid, label, cmd, deps)
-        tm = okd.task_map()
+            if tid in ("K5", "K6", "K8"):
+                okd.TASKS[i] = (tid, label, "echo ok", deps)
+            elif tid == "K7":
+                okd.TASKS[i] = (tid, label, "false", deps)
         rc, rep = _run_main(str(self.wt), str(self.done))
         self.assertEqual(rc, 1)
         self.assertEqual(rep["tasks"]["K7"]["status"], "FAIL")

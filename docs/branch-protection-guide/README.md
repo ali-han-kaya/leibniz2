@@ -3,7 +3,7 @@
 [`docs/PUBLISH_SCENARIO.md`](../PUBLISH_SCENARIO.md) AŞAMA 1 (b) "Branch
 protection — web UI adım adım" bölümünün görsel karşılığı. GitHub'ın
 `Settings → Branches → Add branch protection rule` akışının her adımını
-sırayla gösterir (9 required check için).
+sırayla gösterir (15 required check için).
 
 > **Önemli şeffaflık notu:** Bu görseller GitHub arayüzünün **birebir
 > reprodüksiyonudur** — canlı ekran görüntüsü DEĞİL. Ayarlar sayfaları
@@ -31,7 +31,7 @@ Kural yalnızca `main` için; "All branches" seçeneğini kullanma.
 ![ADIM 3 — PR review](step-03-pr-review.png)
 
 ### 4 — Require status checks to pass before merging ✓
-Arama kutusuna 9 check adını tek tek yazıp seç (`status_checks.py --json`
+Arama kutusuna 15 check adını tek tek yazıp seç (`status_checks.py --json`
 çıktısı — tek kaynak) ve **"Require branches to be up to date before
 merging" (strict)** ✓ işaretle.
 
@@ -49,7 +49,7 @@ Tüm ayarlar tamam; **Create** ile kaydet.
 ![ADIM 6 — Create](step-06-create.png)
 
 ### 7 — Kural oluştu
-Listede `main` kuralı: "9 status checks · 1 approving review".
+Listede `main` kuralı: "15 status checks · 1 approving review".
 
 ![ADIM 7 — Result](step-07-result.png)
 
@@ -57,7 +57,7 @@ Listede `main` kuralı: "9 status checks · 1 approving review".
 ```bash
 python3 _calisma/CIKTI/status_checks.py --gh
 ```
-9 check + merge engeli smoke → `SONUÇ: PASS` (workflow ↔ GitHub birebir).
+15 check + merge engeli smoke → `SONUÇ: PASS` (workflow ↔ GitHub birebir).
 
 ![ADIM 8 — Terminal doğrulama](step-08-verify-terminal.png)
 
@@ -70,5 +70,7 @@ _calisma/.venv_z3/bin/python docs/branch-protection-guide/render_screens.py
 ```
 
 `guide.html` değişince scripti tekrar koş — PNG'ler aynı boyutlarda yeniden
-yazılır. Playwright yalnızca bu görsel kılavuzu üretmek içindir; CI zincirinde
-**kullanılmaz** (birim testler + verify_delivery stdlib-only kalır).
+yazılır. CI'da `render_screens.py` **çalıştırılmaz**; a11y-gate yalnızca aynı
+tek kaynak `guide.html` dosyasını mirror'a alıp headless Chromium + axe-core ile
+tarar. Bu iki kullanım farklıdır: PNG yeniden üretimi manuel, erişilebilirlik
+kapısı ise her CI push'unda otomatiktir.

@@ -347,8 +347,14 @@ jobs:
           # strict — bayrak burada AÇIKÇA geçer ki sözleşme ölçülebilir olsun:
           # varsayılan çevrilirse kapı sessizce kapanmasın. Yerel karşılığı
           # `verify_delivery_hook.py` (pre-commit verify-delivery hook'u).
+          # --core-verdict-out (yolsuz → <git-dir>/verify_core_verdict.json):
+          # çekirdek (K0-K7) verdict'i bu job'daki katman-özel adımlarca
+          # (K13/K12) --reuse-core-verdict ile okunur — aynı ağaç için K0-K7
+          # İKİNCİ kez koşmaz. Kayıt girdi kimliğine bağlıdır; tutmazsa
+          # katman adımı çekirdeği koşar (fail-closed, gerekçe loglanır).
           python3 _calisma/CIKTI/verify_delivery.py --dir _calisma/CIKTI --full \
             --strict-determinism \
+            --core-verdict-out \
             --budget-out budget_verify.json \
             --config-out effective_config.json \
             --refs-out references_online.json \
@@ -444,7 +450,8 @@ jobs:
         run: |
           mkdir -p logs
           if python3 _calisma/CIKTI/verify_delivery.py --dir _calisma/CIKTI \
-             --check-repro-manifest > logs/k13_repro_manifest.log 2>&1; then
+             --check-repro-manifest --reuse-core-verdict \
+             > logs/k13_repro_manifest.log 2>&1; then
             status=0
           else
             status=$?
@@ -504,7 +511,8 @@ jobs:
         run: |
           mkdir -p logs
           if python3 _calisma/CIKTI/verify_delivery.py --dir _calisma/CIKTI \
-             --check-plist > logs/k12_repro_manifest.log 2>&1; then
+             --check-plist --reuse-core-verdict \
+             > logs/k12_repro_manifest.log 2>&1; then
             status=0
           else
             status=$?
@@ -938,21 +946,57 @@ jobs:
       # kopyasına enjekte edilen sapma check_lean_axioms, lake build ve
       # verify_lean.sh kapılarında yeşil kaldı. Bu adım byte-eşitliği
       # fail-closed denetler (ölçüm: 2026-10-03).
-      - name: Check Lean statement contract + twin identity (K9)
+      # K9'un SIRA iddiası: önce İFADE sözleşmesi (Lean ↔ LaTeX envanteri +
+      # ikiz kopya), sonra DERLEME. Ters sırada bir sapma derleme
+      # gürültüsünün içinde kaybolur; bu yüzden kapı, build'den önce durur.
+      - name: Check Lean LaTeX statement contract (K9)
         shell: bash
         run: |
           set -euo pipefail
+          # --latex-file: Content.lean.tex envanteri Lean dosyasıyla birebir
+          # eşleşmeli (K9-STMNT). MAP.md legacy Z3↔Lean eşlemesidir ve bu
+          # kapının girdisi DEĞİLDİR (kapı yalnız iki dosyayı karşılaştırır).
           python3 _calisma/CIKTI/check_lean_statements.py \
             --lean-file _calisma/lean_reduct/Content.lean \
-            --map _calisma/lean_reduct/MAP.md \
-            --twin-file _calisma/lean_reduct/Leibniz2Reduct/Content.lean
+            --latex-file _calisma/lean_reduct/Content.lean.tex
 
-      - name: Build Lean lake proof (8 theorems)
-        working-directory: _calisma/lean_reduct
+      # lake build TEK KAYNAKTAN: orchestration DAG'ı ve yerel kurtarma
+      # komutu da `verify_lean_lake.sh` çağırır. Inline `lake build --wfail`
+      # kopyası, --wfail birinde düşerse diğerinde sessizce yeşil kalırdı.
+      - name: Run Lean lake build (K5-K11 separate step)
+        timeout-minutes: 10
+        shell: bash
         run: |
+          set -euo pipefail
           export PATH="$HOME/.elan/bin:$PATH"
-          lake clean
-          lake build --wfail
+          sh _calisma/CIKTI/verify_lean_lake.sh 2>&1 | tee lean_lake_build.log
+
+      # K9 envanteri: Lean↔LaTeX statement sözleşmesi + canonical kâğıt
+      # etiketleri. Drift'te exit 1 (fail-closed); rapor her durumda saklanır.
+      - name: Publish statement inventory (K9 + canonical paper)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 _calisma/CIKTI/gen_statement_inventory.py \
+            --out-dir statement-inventory
+
+      - name: Upload Lean lake build log (K9)
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: lean-lake-build-log
+          path: lean_lake_build.log
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload statement inventory
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: statement-inventory
+          path: statement-inventory/
+          if-no-files-found: error
+          retention-days: 30
 
   action-runtimes:
     name: Action runtime check (node24)
@@ -1365,7 +1409,7 @@ jobs:
         with:
           path: all_artifacts/
           merge-multiple: true
-          pattern: '{verify-report,budget,reports,refs-online,run-history,config-drift,repack-verify,config,k0-findings,budget-verify,lineage-findings,klayers,unit-tests,action-runtimes,changelog-drift,ci-simulate,webkit-smoke}'
+          pattern: '{action-runtimes,budget,budget-verify,changelog-drift,ci-simulate,cls-budget,cls-trend,config,config-drift,docx-report,k0-findings,klayers,lean-lake-build-log,lineage-findings,refs-online,repack-verify,reports,run-history,unit-tests,verify-report}'
 
       - name: Download precommit-logs artifact (precommit-logs/ prefix)
         uses: actions/download-artifact@v7
@@ -1528,7 +1572,8 @@ jobs:
         shell: bash
         run: |
           python3 _calisma/CIKTI/verify_delivery.py \
-            --verify-manifest reproducibility/manifest.json
+            --verify-manifest reproducibility/manifest.json \
+            --reuse-core-verdict
 
   # ──────────────────────────────────────────────────────────────────────
   # MANIFEST PR COMMENT
@@ -1792,6 +1837,9 @@ jobs:
           name: config-drift
           path: config-drift/
           if-no-files-found: error
+          # `ci_hygiene_gate.py` sözleşmesi: her upload `retention-days`
+          # bildirir — yoksa GitHub'ın 90 gün varsayılanı sessizce uygulanır.
+          retention-days: 30
 
   # ──────────────────────────────────────────────────────────────────────
   # CONFIG ↔ CONFIG_BASENAMES SENKRON DENETİMİ
@@ -2581,6 +2629,7 @@ jobs:
           fi
           python3 _calisma/CIKTI/verify_delivery.py \
             --check-history daemon_history.jsonl \
+            --reuse-core-verdict \
             2>&1 | tee k15_report.txt
           rc=${PIPESTATUS[0]}
           set -e
@@ -2842,13 +2891,193 @@ jobs:
     permissions:
       contents: read
     steps:
+      # fetch-depth: 0 — aşağıdaki prettier kapısı DEĞİŞİM YÜZEYİNİ
+      # (merge-base...HEAD) hesaplar. Sığ checkout'ta origin/<base> ve
+      # HEAD~1 yoktur; kapı yüzeyi bilemez ve sessizce boş- küme sanardı
+      # (yalnız bu job için; diğer job'lar varsayılan sığlıkta kalır).
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Setup Python
         uses: actions/setup-python@v6
         with:
           python-version: '3.12'
+
+      # ─── dashboard-next (Next.js) — derleme ─────────────────────────────
+      # `CI_JOB_COVERAGE['dashboard-smoke']` kaydının karşılığı budur: dört
+      # Next süiti (yüzey smoke, istek-başı dedup, canlı akış, panel/akış
+      # bağımsızlığı) BURADA gerçekten koşar. Önceden kayıt `dashboard-next`
+      # adlı VAR OLMAYAN bir job'ı gösteriyordu (fail-open'ın kardeşi: kayıt
+      # var, koşum yok) — o yüzden bu adımlar mevcut, gerçek job'a eklendi.
+      # Node sürümü prettier-drift.yml ile aynı (22). npm cache'i iki
+      # lockfile'ı da kapsar: trend-db kurulumu Prisma CLI içindir.
+      - name: Set up Node (dashboard-next + trend-db)
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            apps/dashboard-next/package-lock.json
+            apps/trend-db/package-lock.json
+
+      # Prisma sürümü KİLİT dosyasından, kurulumdan ÖNCE okunur: cache anahtarı
+      # `^7.10.0` aralığına değil, gerçekten kurulacak CLI sürümüne bağlanır.
+      - name: Resolve Prisma version (lockfile)
+        id: prisma-version
+        run: |
+          set -euo pipefail
+          VERSION=$(node -p "require('./apps/trend-db/package-lock.json').packages['node_modules/prisma'].version")
+          test -n "$VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      # `generated/` git'te YOK (üretilen artefakt). Anahtar tam-eşleşmedir:
+      # schema veya generator config değişince restore edilmez; restore-keys
+      # bilinçli olarak YOK — eski istemci yeni şemayla derlenmemeli.
+      - name: Cache generated Prisma client (schema + Prisma version)
+        id: prisma-client-cache
+        uses: actions/cache@v5
+        with:
+          path: apps/trend-db/generated
+          key: prisma-client-v1-${{ runner.os }}-${{ steps.prisma-version.outputs.version }}-${{ hashFiles('apps/trend-db/prisma/schema.prisma', 'apps/trend-db/prisma.config.ts') }}
+
+      - name: Install dashboard-next deps
+        run: npm ci --prefix apps/dashboard-next
+
+      # ── Prettier kapisi (CHANGE SURFACE, fail-closed) ─────────────────
+      # pre-commit `check-prettier-format` hook'u prettier KURULU DEGILSE
+      # SKIP eder: ortam-bagimli kapi yerelde commit'i bloke etmesin. Bu
+      # SKIP yalniz YEREL advisory'dir — CI'da "olculmedi" demek olur ve
+      # sessiz yesil kabul edilemez. Bu adim ayni yuzeyi (merge-base...
+      # HEAD degisimi, hook'un --diff moduyla parite) npm ci'nin kurdugu
+      # AYNI prettier surumuyle, SKIP ihtimali olmadan denetler.
+      #
+      # TUM AGAC BILEREK BURADA DEGIL: committed ref'te 47 takipli dosya
+      # bicim-disi (olculdu); bunu required job'a baglamak her PR'i eski
+      # borc yuzunden bloke ederdi. Eski borcun kapisi haftalik
+      # `prettier-drift` job'idir; buradaki kapi YENI drift'i bloke eder.
+      #
+      # KAPSAM DESENI = script'in INCLUDED_SUFFIXES/EXCLUDED_NAMES'i
+      # (.js/.jsx/.ts/.tsx/.json, package-lock.json haric). Ikisi ayrisirsa
+      # `test_workflow_contract` denetler — kopya sessizce suruklenemez.
+      #
+      # NEDEN AYRICA "OK (N dosya)" ARANIR: `--require-prettier` yalniz
+      # "prettier yok" halini kapatir. Kapi surumu verilen dosyalari yok
+      # sayarsa (olculdu: HEAD'deki check_prettier_format.py) cikti
+      # "SKIP" olur ve rc=0 donerdi — adim yine sessizce yesil kalirdi.
+      # Beklenen tam cumle aranir; olcum yoksa veya dosya sayisi tutmazsa
+      # KIRMIZI.
+      - name: Prettier format check — change surface (fail-closed)
+        run: |
+          set -uo pipefail
+          prettier=apps/dashboard-next/node_modules/.bin/prettier
+          if [ ! -x "$prettier" ]; then
+            echo "::error::npm ci sonrasi prettier ikilisi yok ($prettier) — kapi olcemez" >&2
+            exit 1
+          fi
+
+          # PR: hedef dal. Push: onceki commit. Ilk commit: tum takipli.
+          range=""
+          if [ -n "${GITHUB_BASE_REF:-}" ]; then
+            if ! git rev-parse -q --verify "origin/$GITHUB_BASE_REF" >/dev/null; then
+              echo "::error::PR taban ref'i yok (origin/$GITHUB_BASE_REF) — yuzey hesaplanamaz; fetch-depth:0 gerekir" >&2
+              exit 1
+            fi
+            range="origin/$GITHUB_BASE_REF...HEAD"
+          elif git rev-parse -q --verify "HEAD~1" >/dev/null 2>&1; then
+            range="HEAD~1...HEAD"
+          fi
+
+          # -z + NUL okuma: yollarda bosluk/ASCII-disi karakter olabilir
+          # (`git ls-files` quoting'e guvenmeyiz). `mapfile` bash 4+
+          # gerektirdigi icin tasinabilir while-read kullanilir.
+          changed=()
+          if [ -n "$range" ]; then
+            while IFS= read -r -d '' p; do changed+=("$p"); done \
+              < <(git diff --name-only -z --diff-filter=ACMR "$range")
+            echo "prettier: degisim yuzeyi $range (${#changed[@]} yol)"
+          else
+            while IFS= read -r -d '' p; do changed+=("$p"); done \
+              < <(git ls-files -z)
+            echo "prettier: taban ref yok (ilk commit) — yuzey tum takipli dosyalar"
+          fi
+
+          # Bos dizi guard'i: bash < 4.4'te `set -u` altinda "${arr[@]}"
+          # tanimsiz sayilir; bos yuzeyde adim yanlislikla kirmizi olmasin.
+          files=()
+          if [ "${#changed[@]}" -gt 0 ]; then
+            for f in "${changed[@]}"; do
+              case "$f" in
+                *.js|*.jsx|*.ts|*.tsx|*.json) ;;
+                *) continue ;;
+              esac
+              if [ "$(basename "$f")" = "package-lock.json" ]; then
+                continue
+              fi
+              [ -f "$f" ] && files+=("$f")
+            done
+          fi
+
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "prettier: degisim yuzeyinde bicimlendirilebilir dosya yok — hüküm yok (0 dosya)"
+            exit 0
+          fi
+
+          rc=0
+          out=$(python3 _calisma/CIKTI/check_prettier_format.py \
+                  --require-prettier "${files[@]}" 2>&1) || rc=$?
+          printf '%s\n' "$out"
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::prettier kapisi rc=$rc ile dondu (${#files[@]} dosya)" >&2
+            exit "$rc"
+          fi
+          expected="check-prettier-format: OK (${#files[@]} dosya)"
+          if ! printf '%s\n' "$out" | grep -qxF "$expected"; then
+            echo "::error::prettier kapisi OLCUM YAPMADI — beklenen: '$expected' (SKIP/eksik sayim fail-closed)" >&2
+            exit 1
+          fi
+
+      # Prisma CLI + runtime: `next build`, generated/client.ts'i TS kaynağı
+      # olarak derler ve import zinciri trend-db/node_modules'tan
+      # `@prisma/client`'ı çözer. Yer tutucu URL kimlik taşımaz, generate
+      # bağlanmaz (`prisma.config.ts` env'i zorunlu tuttuğu için gerekli).
+      - name: Install trend-db deps (Prisma CLI)
+        env:
+          DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci?sslmode=disable
+        run: npm ci --prefix apps/trend-db
+
+      - name: Generate Prisma client (cache miss)
+        if: steps.prisma-client-cache.outputs.cache-hit != 'true'
+        working-directory: apps/trend-db
+        env:
+          DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci?sslmode=disable
+        run: npx prisma generate
+
+      # Cache hit olsa bile artefaktın GERÇEKTEN orada olduğunu doğrula:
+      # boş/yarım cache `next build`'e sessizce geçemez.
+      - name: Verify generated Prisma client
+        run: |
+          set -euo pipefail
+          test -s apps/trend-db/generated/client.ts
+          test -s apps/trend-db/generated/internal/class.ts
+          test -s apps/trend-db/generated/enums.ts
+          test "$(find apps/trend-db/generated -type f | wc -l)" -ge 5
+          grep -q "code generated by Prisma" apps/trend-db/generated/client.ts
+          echo "Prisma client: $(wc -c < apps/trend-db/generated/client.ts) bayt client.ts (cache-hit=${{ steps.prisma-client-cache.outputs.cache-hit }})"
+
+      # `next start` derlenmiş `.next` ister; süitlerin tamamı bu derlemeye
+      # bağlı (yoksa SKIP edip sessiz yeşil üretirlerdi).
+      - name: Build dashboard-next
+        run: npm run build --prefix apps/dashboard-next
+
+      # İstek-başı dedup: SAYAN upstream + `next start`, TARAYICI YOK →
+      # Chromium kurulumundan ÖNCE, derlemenin hemen arkasında (hızlı sinyal).
+      - name: Next request-dedup contract (browserless)
+        run: |
+          set -o pipefail
+          python3 -m unittest -v _calisma.CIKTI.test_dashboard_next_request_dedup \
+            2>&1 | tee -a dashboard_interaction_report.txt
 
       # Katman 1: tarayıcı GEREKMEZ (node runner'da hazır). Fail-closed:
       # adım rc'si job'ı düşürür, SKIP diye yeşile dönemez.
@@ -2870,6 +3099,23 @@ jobs:
 
       - name: Install Chromium
         run: playwright install --with-deps chromium
+
+      # ─── dashboard-next CANLI süitleri (derleme + Chromium hazır) ───────
+      # Üçü de kendi upstream'ini ve kendi `next start`'ını kurar; hiçbiri
+      # başka bir adımın bıraktığı sunucuya bağımlı değil.
+      #   * surface_smoke  : açık/koyu tema + UI sözleşmeleri (canlı)
+      #   * live_stream    : SSE ile yenilenmeden güncelleme + retry + auto-refresh
+      #   * panel_isolation: kaynak/akış arızası diğer panelleri düşürmemeli
+      # Eksik ortam (derleme/Chromium) SKIP'e düşer; bu job ikisini de
+      # kurduğu için burada SKIP icra kaçağı olur.
+      - name: Next live suites (surface, live stream, panel isolation)
+        run: |
+          set -o pipefail
+          python3 -m unittest -v \
+            _calisma.CIKTI.test_dashboard_next_surface_smoke \
+            _calisma.CIKTI.test_dashboard_next_live_stream \
+            _calisma.CIKTI.test_dashboard_panel_isolation \
+            2>&1 | tee -a dashboard_interaction_report.txt
 
       # Banner runtime katmanı ekran-görüntüsünü Pillow ile çözer (min/max
       # parlaklık → WCAG oranı); eksikse o sınıf SKIP eder, statik sınıflar
@@ -2900,6 +3146,27 @@ jobs:
           set -o pipefail
           python3 -m unittest -v _calisma.CIKTI.test_dashboard_playwright_smoke \
             2>&1 | tee -a dashboard_interaction_report.txt
+
+      # CSP + nonce smoke'u: yayın yüzeyinin nonce'lu CSP başlığı gerçek
+      # Chromium'da HİÇ `securitypolicyviolation` üretmiyor, enjekte edilen
+      # inline script nonce'u sayesinde gerçekten çalışıyor VE negatif
+      # kontrol olarak nonce'suz inline script bloklanıyor (yani "ihlal yok"
+      # iddiası CSP'nin yokluğundan gelmiyor). Playwright + Chromium bu
+      # job'da kurulu; yine de süit SKIP'e düşerse adım KIRMIZI olur —
+      # "keşfedildi ama koşmadı" fail-open'ı burada kapanır.
+      - name: Dashboard CSP+nonce smoke (Playwright)
+        run: |
+          set -euo pipefail
+          report=$(mktemp)
+          python3 -m unittest -v _calisma.CIKTI.test_dashboard_csp_nonce \
+            2>&1 | tee "$report" | tee -a dashboard_interaction_report.txt
+          # unittest'in özet satırı SKIP'i "OK (skipped=N)" olarak yazar;
+          # tek satırlık --verbose çıktısında bu satır tek ayırt edici işarettir.
+          if grep -qE '^OK \(skipped=[1-9]' "$report"; then
+            echo "::error::CSP+nonce smoke SKIP etti — bu job Playwright/Chromium kurmak zorunda" >&2
+            exit 1
+          fi
+          grep -qE '^OK($| \()' "$report"
 
       # Banner: iki-temalı axe (dark/light sıfır ihlal) + ekran-görüntüsü
       # karşılaştırması (tema gerçekten repaint ediyor; dekor katmanı
@@ -3248,6 +3515,10 @@ jobs:
     name: A11y gate (axe-core, fail-closed)
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        theme: [dark, light]
     steps:
       - uses: actions/checkout@v7
 
@@ -3381,15 +3652,419 @@ jobs:
         run: |
           python3 _calisma/CIKTI/a11y_gate.py \
             --base-url "http://127.0.0.1:$A11Y_PORT" \
+            --theme "${{ matrix.theme }}" \
             --output a11y_report.json
+
+      # PREVIEW-1 regresyonu (docs/KNOWN_INCIDENTS.md): sayfa kare üretmeyi
+      # bırakırsa `preview_screenshot` "produced no frames" ile düşer. Bu
+      # adım aynı canlı preview_server üzerinde kare boşluğunu ve PNG
+      # yakalanabilirliğini ölçer; CAPTURE_GATE_REQUIRE_LIVE=1 ile skip
+      # PASS sayılmaz. Rapor dark koşumunda saklanır (artifact: capture-gate-dark).
+      - name: Run capture gate — dashboard (frames + PNG)
+        if: always() && matrix.theme == 'dark'
+        run: |
+          set -euo pipefail
+          : "${A11Y_PORT:?a11y-gate preview_server portu yok}"
+          CAPTURE_REPORT_PATH="capture_gate_dark.json" \
+          CAPTURE_GATE_REQUIRE_LIVE=1 \
+          DASHBOARD_BASE_URL="http://127.0.0.1:${A11Y_PORT}" \
+            python3 _calisma/CIKTI/test_preview_screenshot_gate.py
+
+      # CLS bütçe kapısı (CLS < 0.1) — YENİ bir sunucu açmaz; yukarıda
+      # başlatılan CANLI preview_server'ı kullanır (DASHBOARD_BASE_URL).
+      # Makine-okunur rapor `cls_budget.json`'a yazılır ve resmî artifact
+      # olarak yüklenir (`cls-budget`): ARTIFACT_JOBS → reproducibility
+      # manifest'i onu SHA-256 ile sabitler; merge pattern'e de girer.
+      #
+      # Kapı FAIL ederse adım kırmızı kalır (unittest rc), AMA özet yine
+      # basılır: "hangi tema, hangi bütçe" sorusu log'dan okunabilsin.
+      # Rapor yazılmadıysa sessizce devam etmek yok — ::error:: + exit 1.
+      - name: Run CLS budget gate — dashboard (CLS < 0.1)
+        if: matrix.theme == 'dark'
+        run: |
+          set -uo pipefail
+          : "${A11Y_PORT:?a11y-gate preview_server portu yok}"
+          export DASHBOARD_BASE_URL="http://127.0.0.1:${A11Y_PORT}"
+          export CLS_REPORT_PATH=cls_budget.json
+          rc=0
+          python3 -m unittest -v _calisma.CIKTI.test_dashboard_cls_budget || rc=$?
+          test -s cls_budget.json || {
+            echo "::error::CLS raporu yazılmadı (cls_budget.json yok veya boş)" >&2
+            exit 1
+          }
+          python3 - <<'PY'
+          import json
+          import sys
+
+          with open("cls_budget.json", encoding="utf-8") as f:
+              report = json.load(f)
+          if report.get("verdict") not in ("PASS", "FAIL"):
+              sys.exit("cls_budget.json: verdict alanı yok/geçersiz")
+          themes = report.get("themes") or {}
+          # Boş themes + PASS = boş iddia: hiçbir tema ölçülmemişse artifact
+          # "yeşil" görünmemeli (fail-closed).
+          if not themes:
+              sys.exit("cls_budget.json: themes boş — ölçüm yok")
+          for name, data in sorted(themes.items()):
+              if (data or {}).get("verdict") not in ("PASS", "FAIL"):
+                  sys.exit("cls_budget.json: %s için verdict geçersiz" % name)
+          print("CLS raporu: bütçe=%s · karar=%s · temalar=%s" % (
+              report.get("budget"), report.get("verdict"),
+              ",".join(sorted(themes))))
+          PY
+          # Doğrulayıcının rc'si YUTULMAZ: `set -u` (`-e` yok) altında
+          # ardından gelen `exit "$rc"` yalnız unittest rc'sini taşır; rapor
+          # şeması bozuksa adım sessizce yeşil kalırdı.
+          vrc=$?
+          if [ "$vrc" -ne 0 ]; then
+            echo "::error::cls_budget.json doğrulanamadı (rc=$vrc)" >&2
+            exit 1
+          fi
+          exit "$rc"
+
+      # if-no-files-found: error → raporun yokluğu sessiz PASS değil, kırmızı.
+      - name: Upload CLS budget report
+        if: always() && matrix.theme == 'dark'
+        uses: actions/upload-artifact@v6
+        with:
+          name: cls-budget
+          path: cls_budget.json
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Upload a11y report
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: a11y-report
+          name: a11y-report-${{ matrix.theme }}
           path: a11y_report.json
           if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Upload capture gate report
+        if: always() && matrix.theme == 'dark'
+        uses: actions/upload-artifact@v6
+        with:
+          name: capture-gate-dark
+          path: capture_gate_dark.json
+          if-no-files-found: error
+          retention-days: 30
+
+  # ──────────────────────────────────────────────────────────────────────
+  # CLS TREND — bütçe-ALTI regresyon kapısı (refs-trend deseni).
+  #
+  # `a11y-gate` CLS'i 0.1 bütçesine karşı ölçer; bütçenin ALTINDA kalan bir
+  # sıçrama (0.0001 → 0.09) o kapıdan YEŞİL geçer. `cls_trend.py` son N
+  # `cls-budget` artifact'ını API'den toplar (GITHUB_TOKEN + `actions: read`),
+  # tema başına medyan taban kurar ve GÖRELİ eşik (+%20) ile MUTLAK taban
+  # (0.005) BİRLİKTE aşılırsa exit 1 verir → job KIRMIZI. Aynı koşumda
+  # koşum geçmişini `cls-trend.jsonl` olarak da yazar.
+  #
+  # Fail-closed: bu run'ın kendi `cls-budget` artifact'ı yoksa (a11y-gate
+  # ölçümden önce düştüyse) verdict ERROR → kırmızı; eski bir run'ı "güncel"
+  # sayıp bayat PASS üretmez.
+  #
+  # `GATE_EXCLUDE`'da: API'ye bağlı bir job required check yapılırsa geçici
+  # API/hız-sınırı hatası merge'i bloke eder (refs-trend ile aynı gerekçe).
+  # Regresyon yine görünür ve kırmızıdır; required'a almak için
+  # GATE_EXCLUDE'dan çıkarıp GitHub branch protection context'ini ekleyin.
+  # ──────────────────────────────────────────────────────────────────────
+  cls-trend:
+    name: CLS budget trend across runs (sub-budget regression gate)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [a11y-gate]
+    # a11y-gate kırmızı olsa bile trend/geçmiş görünür kalsın.
+    if: always()
+    permissions:
+      contents: read
+      actions: read    # artifact listeleme + zip indirme
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      # API hatası → hiçbir dosya yazılmaz, exit 1 (fail-closed).
+      # Regresyon → dosyalar yazılır, exit 1 → job kırmızı.
+      - name: Build CLS trend + regression gate
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: |
+          python3 _calisma/CIKTI/cls_trend.py \
+            --repo "$GITHUB_REPOSITORY" \
+            --out-dir cls-trend \
+            --max-artifacts 50 \
+            --summary
+
+      # Adım düşse de tanı dosyaları (varsa) saklanır.
+      - name: Upload CLS trend
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: cls-trend
+          path: cls-trend/
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # ──────────────────────────────────────────────────────────────────────
+  # NATIVE PPTX EXPORT (advisory) — `test_pptx_export` süitinin NODE KURULU
+  # karşılığı.
+  #
+  # Süit, deck'lerin NATIVE (görsel gömmeden) kurulduğunu zip yapısından
+  # doğrular: 5 slayt + 5 not, `ppt/media/` BOŞ, her `srgbClr` yalnız
+  # `design-system/tokens.json` paletinde, tüm şekiller 10 × 5.625 inç
+  # kanvas içinde, slayt metni gerçek run'lardan (aranabilir) oluşur.
+  #
+  # NEDEN AYRI JOB: yerelde node ya da `_calisma/pptx/node_modules` yoksa
+  # iki test (yapı + işaret özgüllüğü) SKIP eder — SKIP, PASS gibi görünür
+  # (fail-open). Bu job ortamı KURAR ve SKIP'i KIRMIZI sayar. Deck'ler
+  # koşumdan ÖNCE silinir: "üretim bu job'da oldu" iddiası koşulsuz kalır.
+  #
+  # `GATE_EXCLUDE`'da (advisory): pptx yapı kapısı teslim PDF zincirinin
+  # parçası değil; required yapmak GitHub branch-protection context'i
+  # gerektirir. Ürün yine artefakt: `.pptx` dosyaları 30 gün saklanır.
+  # ──────────────────────────────────────────────────────────────────────
+  docx-export:
+    name: Docx export (LibreOffice check, fail-closed)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Install generator dependencies (npm ci)
+        run: npm ci --prefix _calisma/docx --no-audit --no-fund
+
+      # Parser sözleşmesi (12 kontrol): üretimden ÖNCE koşar — jeneratörün
+      # kendi iddiaları (başlık terfi, bölüm birleştirme) test edilmiş olur.
+      - name: Generator self-test (parser contract)
+        run: node _calisma/docx/make_docx.js --self-test
+
+      - name: Build docx (SOURCE_DATE_EPOCH pinned)
+        run: |
+          set -euo pipefail
+          SOURCE_DATE_EPOCH=1700000000 node _calisma/docx/make_docx.js \
+            | tee docx_build.txt
+          # İki raporu tek Word dosyasında birleştir (bölüm kırılımlı):
+          # FINAL_RC_REPORT + FULL_SCOPE_AUDIT; ikinci rapor yeni sayfada başlar.
+          SOURCE_DATE_EPOCH=1700000000 node _calisma/docx/make_docx.js \
+            --in docs/FINAL_RC_REPORT.md \
+            --in docs/FULL_SCOPE_AUDIT_2026-09-17.md \
+            | tee docx_build_combined.txt
+
+      # writer-only: headless dönüşüm için tam masaüstü gerekmez. Kurulum
+      # AÇIKtır — runner imajına güvenilmez; kurulum başarısızsa adım kırmızı.
+      - name: Install LibreOffice (writer only)
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends libreoffice-writer
+          command -v soffice || command -v libreoffice
+
+      - name: LibreOffice check (opens + text witness)
+        run: |
+          set -euo pipefail
+          bash _calisma/docx/check_docx_libreoffice.sh \
+            _calisma/docx/out/final_rc_report.docx \
+            "Final Release Candidate Report" | tee docx_libreoffice_check.txt
+          # Birleşik belge: iki raporun başlık tanığı da aranır.
+          bash _calisma/docx/check_docx_libreoffice.sh \
+            _calisma/docx/out/combined_report.docx \
+            "Final Release Candidate Report" "Tam Kapsam Denetim Raporu" \
+            | tee docx_libreoffice_check_combined.txt
+          # KANIT ZORUNLU: boş/eksik kanıt yeşil sayılmaz (all-skip ≠ PASS).
+          for f in docx_libreoffice_check.txt \
+                   docx_libreoffice_check_combined.txt; do
+            grep -q '^verdict=PASS$' "$f" \
+              || { echo "::error::$f içinde verdict=PASS yok"; exit 1; }
+            grep -q '^libreoffice=' "$f" \
+              || { echo "::error::$f motor yolunu yazmadı"; exit 1; }
+          done
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## docx-export"
+            echo '```'
+            for f in docx_build.txt docx_build_combined.txt \
+                     docx_libreoffice_check.txt \
+                     docx_libreoffice_check_combined.txt; do
+              cat "$f" 2>/dev/null || echo "($f yok)"
+            done
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # if-no-files-found: error — artifact yoksa job kırmızı ("ürün yok ama
+      # yeşil" olmaz); tarihsel sürümde `ignore` idi.
+      - name: Upload docx artifact
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: docx-report
+          path: |
+            _calisma/docx/out/final_rc_report.docx
+            _calisma/docx/out/combined_report.docx
+            docx_build.txt
+            docx_build_combined.txt
+            docx_libreoffice_check.txt
+            docx_libreoffice_check_combined.txt
+          if-no-files-found: error
+          retention-days: 30
+
+  pptx-export:
+    name: Native pptx export (advisory)
+    runs-on: ubuntu-latest
+    # LibreOffice Impress kurulumu (~300-500 MB apt) + üç deck'in headless
+    # açılışı; eski 15 dk bütçesi bu adımla sınırdaydı.
+    timeout-minutes: 30
+    needs: [verify]
+    if: always()
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      # Node sürümü dashboard-smoke/prettier-drift ile aynı (22). Cache
+      # anahtarı `_calisma/pptx/package-lock.json` — pptxgenjs pinleri.
+      - name: Set up Node (pptxgenjs)
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: _calisma/pptx/package-lock.json
+
+      - name: Install pptx deps (pptxgenjs)
+        run: npm ci --prefix _calisma/pptx
+
+      # README bootstrap'ının `--check` kapısının aynısı: çözümlenemeyen
+      # modül süiti SKIP'e düşürürdü; burada KIRMIZI.
+      - name: Verify pptxgenjs resolves
+        working-directory: _calisma/pptx
+        run: |
+          set -euo pipefail
+          node -e "console.log('pptxgenjs ' + require.resolve('pptxgenjs'))"
+
+      # Bayat çıktı taze sanılmasın: süit mtime ile tazelese de bu adım
+      # "deck bu koşumda üretildi" iddiasını koşulsuz kılar.
+      - name: Remove any stale decks
+        run: rm -f _calisma/pptx/*.pptx
+
+      - name: Native pptx contract (fail-closed, no SKIP)
+        run: |
+          set -euo pipefail
+          report=$(mktemp)
+          python3 -m unittest -v _calisma.CIKTI.test_pptx_export \
+            2>&1 | tee "$report" | tee pptx_report.txt
+          # SKIP = icra kaçağı: bu job node + pptxgenjs kurmak zorunda.
+          if grep -qE '^OK \(skipped=[1-9]' "$report"; then
+            echo "::error::pptx süiti SKIP etti — node/pptxgenjs bu job'da kurulu olmalı" >&2
+            exit 1
+          fi
+          grep -qE '^OK($| \()' "$report"
+
+      # Ürün kanıtı: üç deck, boş olmayan, gerçek ZIP ve 5 slayt. Süit
+      # dosya adlarını zaten çiviliyor; bu adım artefaktın YÜKLENEBİLİR
+      # olduğunu doğrular (eksik/bozuk dosya sessizce yüklenmez).
+      - name: Verify decks are real pptx archives
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          import zipfile
+
+          decks = ("verification_chain", "architecture_deepening", "pdf_repro_findings")
+          for deck in decks:
+              path = os.path.join("_calisma", "pptx", deck + ".pptx")
+              if not os.path.isfile(path) or os.path.getsize(path) == 0:
+                  raise SystemExit("FAIL: %s yok ya da boş" % path)
+              with open(path, "rb") as fh:
+                  if fh.read(4) != b"PK\x03\x04":
+                      raise SystemExit("FAIL: %s ZIP değil" % path)
+              with zipfile.ZipFile(path) as z:
+                  slides = [n for n in z.namelist()
+                            if n.startswith("ppt/slides/slide") and n.endswith(".xml")]
+              if len(slides) != 5:
+                  raise SystemExit("FAIL: %s → %d slayt (5 beklenir)" % (path, len(slides)))
+              print("%s: %d bayt · %d slayt" % (path, os.path.getsize(path), len(slides)))
+          PY
+
+      # ─── HEADLESS SUNUM SMOKE ───────────────────────────────────────
+      # Paket geçerli olabilir ama dosya bir sunum uygulamasında
+      # AÇILMAYABİLİR (pptxgenjs ilişkileri bozuksa importer sessizce
+      # eksik sayfa açar). `soffice --headless` deck'i PDF'e render eder,
+      # `pdftotext` metin katmanını dışa aktarır; 5 sayfa + deck'e özgü
+      # tanık metinler aranır. Eksik araç exit 2'dir ve bu adımı KIRMIZI
+      # yapar — "araç yok" sessiz yeşile dönmez.
+      - name: Install LibreOffice Impress + pdftotext
+        run: bash _calisma/CIKTI/apt_install.sh libreoffice-impress poppler-utils
+
+      - name: Headless open + text-layer export (fail-closed)
+        run: |
+          set -o pipefail
+          python3 _calisma/CIKTI/pptx_open_smoke.py \
+            --dir _calisma/pptx \
+            --text-out pptx_text \
+            --json-out pptx_text/report.json \
+            2>&1 | tee pptx_open_smoke.txt
+          rc=${PIPESTATUS[0]}
+          # 0 PASS · 1 FAIL (deck açılmadı/metin eksik) · 2 ORTAM (araç yok)
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::headless pptx smoke rc=$rc (1=deck/metin, 2=ortam)" >&2
+            exit "$rc"
+          fi
+          grep -q '^verdict=PASS' pptx_open_smoke.txt
+
+      - name: Write pptx export to run summary
+        if: always()
+        run: |
+          {
+            echo "## Native pptx export (advisory)"
+            echo ""
+            echo '```'
+            cat pptx_report.txt 2>/dev/null || echo '(rapor yok)'
+            echo '```'
+            echo ""
+            echo "### Headless open + metin katmanı"
+            echo ""
+            echo '```'
+            cat pptx_open_smoke.txt 2>/dev/null || echo '(rapor yok)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Üretilen deck'ler + dışa aktarılan metin katmanı artefakt (30 gün —
+      # tanı sınıfı). `pptx_text/` her deck için `.txt` + makine-okunur
+      # `report.json` (sayfa/metin baytı/eksik tanık) taşır.
+      - name: Upload native decks + text layer
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: pptx-decks
+          path: |
+            _calisma/pptx/*.pptx
+            pptx_report.txt
+            pptx_open_smoke.txt
+            pptx_text/
+          if-no-files-found: warn
           retention-days: 30
 
   # CHANGELOG DRIFT CHECK (advisory) — gen_changelog.py --check'i CI'da koşar
@@ -3499,6 +4174,114 @@ jobs:
           name: pattern-drift
           path: pattern_drift.txt
           if-no-files-found: ignore
+          retention-days: 30
+
+  # ════════════════════════════════════════════════════════════════════
+  # SHUFFLE AUDIT (advisory) — test SIRA BAĞIMLILIĞI / sızıntı denetimi
+  #
+  # `verify` job'unun birim-test adımı her dosyayı alfabetik sırayla koşar;
+  # sıra sabit olduğu için bir testin ÖNCEKİ testin bıraktığı duruma
+  # yaslanması yapısal olarak görünmez. `shuffle_tests.py` her dosyayı kendi
+  # alt sürecinde alfabetik taban + karıştırılmış sıra ile karşılaştırır;
+  # yalnız karışık sırada kırılan test bulgudur (fail-closed; exit 1).
+  #
+  # Kapsam: `check_unit_tests.list` − `shuffle_audit.exclude` (kalıcı
+  # kırmızı/oynak dosyalar + >10 s tarayıcı/canlı yüzeyleri — gerekçeler
+  # dışlama dosyasının içinde). Yeni test dosyaları otomatik kapsamdadır;
+  # dışlama failliği fail-closed (kapsamda olmayan girdi → exit 2).
+  #
+  # Tohum listesi (42,7,13) ve duvar-saati bütçesi (2400 s) AÇIKÇA verilir —
+  # tekrarlanabilirlik sözleşmesi (aynı tohum → aynı sıra → aynı
+  # order_sha256) log'dan okunabilsin. Bütçe tükenmesi BULGUDUR: kırpılmış
+  # denetim "temiz" sayılmaz. Bulgu JSON'u `logs/shuffle_audit.json` →
+  # `shuffle-audit` artifact'ı (30 gün, tanı sınıfı).
+  #
+  # `GATE_EXCLUDE`'da (advisory): dışlama listesi bakımı ve ağaç durumu bu
+  # kapıyı kırmızı tutabilir; sinyal görünür kalır, merge bloke olmaz.
+  # ════════════════════════════════════════════════════════════════════
+  shuffle-audit:
+    name: Shuffle audit (test order independence, advisory)
+    runs-on: ubuntu-latest
+    # Ölçüm (2026-10-18, bu ağaç): kapsam 189 dosya, 4 geçiş = 756 koşum /
+    # 10.032 test; sakin makinede 536 s. Aynı kapsam eşzamanlı yük altında
+    # 1500 s'de 165 dosyada tükendi (24 dosya denetlenmedi → 'budget' bulgusu).
+    # Bütçe 2400 s bu yükü ve daha yavaş runner'ı kapsar; bir GÜVENCEdir,
+    # hedef değil: kırpılmak yerine tamamlanmalı. Tavan 50 dk (2400 + kurulum +
+    # rapor/artifact adımları 3000 s'ye sığar).
+    timeout-minutes: 50
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      # Sarmalayıcı: manifest − shuffle_audit.exclude, 3 tohum + taban,
+      # bütçe 2400 s. rc≠0 → job kırmızı (advisory; merge bloke etmez).
+      - name: Run shuffle audit (manifest minus exclude)
+        env:
+          SHUFFLE_AUDIT_SEEDS: "42,7,13"
+          SHUFFLE_AUDIT_BUDGET: "2400"
+          SHUFFLE_AUDIT_OUT: logs/shuffle_audit.json
+        run: bash _calisma/CIKTI/shuffle_audit_hook.sh --full
+
+      # Bulgular run summary'ye de düşer: kırmızı job'ın nedeni tek ekranda
+      # okunabilsin (artifact indirmeye gerek kalmadan).
+      - name: Write shuffle audit to run summary
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          import os
+
+          path = "logs/shuffle_audit.json"
+          print("## Shuffle audit (test order independence, advisory)")
+          print()
+          if not os.path.isfile(path):
+              print("bulgu JSON yazılmadı: %s" % path)
+              raise SystemExit(0)
+          with open(path, encoding="utf-8") as fh:
+              report = json.load(fh)
+          totals = report.get("totals") or {}
+          findings = report.get("findings") or []
+          print("- kapsam: `%s` · dosya: %s · dışlanan: %s" % (
+              report.get("scope"), totals.get("files"),
+              len(report.get("excluded") or [])))
+          print("- tohumlar: %s · koşum: %s · test: %s · SKIP: %s · süre: %ss" % (
+              report.get("seeds"), len(totals.get("runs") or []),
+              totals.get("tests"), totals.get("skipped"),
+              totals.get("duration_s")))
+          print("- bütçe: %ss (tükendi: %s)" % (
+              totals.get("budget_s"), totals.get("budget_exhausted")))
+          print("- bulgu: **%d**" % len(findings))
+          print()
+          print("```")
+          for f in findings[:20]:
+              line = "[%s] %s" % (f.get("kind"), f.get("file"))
+              if f.get("test"):
+                  line += " :: %s" % f["test"]
+              print(line)
+              if f.get("detail"):
+                  print("    %s" % f["detail"])
+          if len(findings) > 20:
+              print("... (%d bulgu daha; tamamı artifact'ta)" % (len(findings) - 20))
+          print("```")
+          PY
+
+      # if-no-files-found: error → bulgu JSON'u üretilemezse (araç çöktü,
+      # kapsam çözülemedi) sessiz PASS yok: job kırmızı.
+      - name: Upload shuffle audit findings
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: shuffle-audit
+          path: logs/shuffle_audit.json
+          if-no-files-found: error
           retention-days: 30
 
   # MIRROR SYNC CHECK (macOS, fail-closed) — sync_verify_mirror.sh --check
@@ -3620,6 +4403,7 @@ jobs:
           set -euo pipefail
           python3 _calisma/CIKTI/verify_delivery.py --check-mirror \
             --mirror-out mirror_report.json \
+            --reuse-core-verdict \
             2>&1 | tee -a mirror_check_report.txt
           rc=${PIPESTATUS[0]}
           echo "rc=$rc" >> "$GITHUB_OUTPUT"

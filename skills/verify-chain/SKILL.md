@@ -151,12 +151,24 @@ shellcheck-hooks               # POSIX/bash lint of hook scripts
 check-changelog-sync           # git log ↔ docs changelog auto-sync
 check-dryrun-summary           # publish_wrapper --dry-run-summary regression
 check-colorize-rules           # dashboard colorizeLine regex regression
+check-bootstrap-toolchain      # dev_bootstrap.sh --check: toolset completeness (blind-not-fail)
 check-unit-tests               # battery of unit test files (venv python)
+shuffle-audit                  # changed test files: order-dependence audit (fail-closed)
+check-id-residual-doc-sync     # ID_RESIDUAL_ACCEPTANCE §4 ↔ frozen record
 commit-msg-style               # commit-msg stage: title rules
 ```
 
 Rules that keep the chain honest:
 
+- **Hash once per run**: `sha256_file` is run-scoped cached, keyed on the file
+  identity `(st_dev, st_ino, st_size, st_mtime_ns, st_ctime_ns)` — not on the
+  path. A delivery hashes its outer zip 3-4× (core identity, K1, lineage,
+  cleanup) and its inner zip 2× (K2 checksums, K3 sidecar); on the real tree
+  that was 4.07 MB of reads for 2.06 MB of content. Replacement/rewrite changes
+  the identity, so a stale digest cannot be returned. Measured gain: the
+  avoided reads cost ~0.3-0.8 ms on a 1.5 MB delivery (1.85 GB/s, page cache
+  hot) — a linear win that only matters for large deliveries, not a visible
+  speedup. `VERIFY_HASH_STATS=1` prints hits/misses/bytes on stderr.
 - **Only one writing hook** (`update-config` stages the synced config). All
   other gates are read-only: they verify, never modify.
 - **Unit tests run in pre-commit** (`check-unit-tests` + per-gate hooks) so a
@@ -164,6 +176,39 @@ Rules that keep the chain honest:
 - **Optional tools degrade honestly**: `node` absent → K16 P0 (fail-closed,
   no silent skip); venv python absent → tests SKIP (documented, CI still
   runs the full suite).
+
+### Reusing the core verdict (K0-K7 runs once per tree)
+
+Every invocation of `verify_delivery.py` runs the K0-K7 core, so a
+layer-specific call (`--check-plist`, `--check-repro-manifest`,
+`--check-history`, `--check-mirror`, `--verify-manifest`, `--check-sde`) used
+to repeat it — including K6's online reference audit (61 refs, ~35 s).
+
+- Producer: `--core-verdict-out [PATH]` writes the core verdict; bare writes
+  `<git-dir>/verify_core_verdict.json` (per-worktree, never committed).
+- Consumer: `--reuse-core-verdict [PATH]` reads that record and does **not**
+  run K0-K7. Bare resolves `$VERIFY_CORE_VERDICT` → `<git-dir>/…json`.
+- Fail-closed binding: the record is tied to the core's **inputs** — outer zip
+  (sha256+size), its sidecar, the stale-zip set K0 sees, the config, the
+  acceptance ledger, the core code fingerprint (`verify_delivery.py` +
+  `id_canonical.py`), and `python`/`pdfinfo`/`qpdf` versions — plus the option
+  coverage (`--check-references`/`--strict-determinism`/`--k0-toolkit-tolerant`).
+  A strict record covers a non-strict request, never the reverse.
+- A FAIL record replays its findings verbatim: reuse cannot turn FAIL into
+  PASS. A rejected record is never swallowed — the reason goes to stderr, the
+  run report (`core_verdict.rejected_reason`) and an INFO finding, and the
+  core runs anyway.
+- Honesty in the report: `core_verdict.source` is `ran` or `reused`, and reused
+  K0-K7 rows in `layers` carry `source: reused` + `core_verdict` (path) — a
+  skipped core is never rendered as if it had run.
+- `--reuse-core-verdict` is refused together with `--k0-out`/`--refs-out` and
+  `--core-verdict-out` (the core did not run, so those outputs cannot exist).
+
+Wiring: the `--full` CI step and the local `verify-delivery` hook pass
+`--core-verdict-out`, so same-job/same-window layer calls reuse it. The K10,
+K12, K13, K15 and K17 steps pass `--reuse-core-verdict`; in a job with no
+record (fresh checkout, no prior core run) they fall back to running the core,
+which is why the reuse is an optimisation, not a claim that the core never runs.
 
 ### Wiring into GitHub Actions (verify.yml)
 

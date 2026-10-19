@@ -27,7 +27,8 @@ bayt-akışı farklıdır. Ölçülen tek fark bu trailer `/ID` satırıdır;
 | pdfTeX 3-geçiş pipeline, 2 bağımsız koşum (SDE=0) | kanonik `544516b0d9d2f4c12b05b512b79b31ad238e82d3ca3aff81166a6bac1914f597` ×2 birebir aynı (`make -f docs/Makefile.texlive check` kabul değeri) |
 | tectonic 0.17.0 (SDE=0), bağlamlar arası | ham hash kararlı: `ad8fca69…` (kararlı olduğundan raw = kanonik) |
 | qpdf 12.4.0 `--static-id` | girdi `/ID`'sini korur; kalıntıyı gideremez (skill donmuş bulgusu + bu makinede tekrar ölçüldü) |
-| qpdf 12.4.0 `--remove-metadata` | kendisi nondeterministik (V5l: aynı girdi 3 koşum 3 farklı çıktı `b090ac01…`/`429984da…`/`509a47a6…`) — kalıntıyı gideremez |
+| qpdf 12.4.0 `--remove-metadata` | kendisi nondeterministik (V5l: aynı girdi 3 koşum 3 farklı çıktı `b090ac01…`/`429984da…`/`509a47a6…`; 2026-09-30'da teslim PDF'i üzerinde YENİDEN ölçüldü: `38fc668c…`/`747334c4…`/`0de3124d…`; aynı gün `verify_delivery.py` koşumu 4. farklı değeri üretti: `de8be5a0…`) — kalıntıyı gideremez |
+| Teslim PDF'inin kanonik hash'i (2026-09-30) | `/ID` nötrlenince 3× ölçümde birebir aynı: `d4f67e39fd0ef77e8f294ca2195bb1fc784716234d0675ab88a4fd8695263a6a` (ham `74b2cdbd…` koşum/araç bağımlı değil) |
 
 Kanonikleştirme uygulaması: `canonical_sha` —
 `_calisma/CIKTI/texlive_determinism_test.sh` (`/ID` çiftini
@@ -51,236 +52,100 @@ hiçbir fark gizlenmez).
 > kanonik hash **SDE'ye bağlıdır** — defter satırları SDE bağlamını taşır.
 > Yeni bağlam (CI, font paketi) → **yeni satır**; eskisinin üzerine asla
 > yazma (Faz 6 çıkış yolu: `make accept` yeni hash'i görünce defterde
-> arar, yoksa fail-closed eder).
+> arar, yoksa fail-closed eder). Satırlar **elle yazılmaz**: ölçülen
+> alanlardan `make -f docs/Makefile.texlive accept LEDGER=update`
+> (yani `_calisma/CIKTI/gen_id_residual_acceptance.py`) üretir.
 
 | # | Motor / sürüm | Geçiş | SDE | Ham (bilgi) | Kanonik (referans) | Ölçüm |
 |---|---|---|---|---|---|---|
 | 1 | tectonic 0.17.0 | 1 | 0 | `ad8fca69d4e4a2e1d67e497c8a7449f22c8564f5e9b3790d0b6f85d90d318e1b` (bağlamlar arası kararlı; raw = kanonik) | `ad8fca69d4e4a2e1d67e497c8a7449f22c8564f5e9b3790d0b6f85d90d318e1b` | ci_simulate + trend baseline (darwin, 2026-09-17) |
 | 2 | tectonic 0.17.0 | 3-geçiş pipeline | 0 | — (plan probe'u) | `47681218…` (plan-donmuş önek) | planın probe'ları (2026-09-17) |
 | 3 | pdfTeX 3.141592653-2.6-1.40.29 (TeX Live 2026/Homebrew) | 1 | 0 | koşum-başına değişken (`da868c13…`/`014bed9a…`) | `a75c340911801273b38be6ffb51a34820764b8f812d528dd2705d64117f1aa00` | ci_simulate 2× koşum + trend baseline |
-| 4 | pdfTeX 3.141592653-2.6-1.40.29 | 3 | 0 | koşum-başken değişken (`/ID`) | `544516b0d9d2f4c12b05b512b79b31ad238e82d3ca3aff81166a6bac1914f597` | `make check` 2× bağımsız koşum (Faz 1 kabul; 2026-09-20 tekrar ×2) |
-| 5 | **teslim artefaktı** `TESLIM_V5_FINAL_2026-08-17/.../ingiliz_empirizmi_v3.pdf` | teslim öncesi derleme | SDE kaydı yok (derleme tarihi belgelenmemiş) | `74b2cdbdb18fafbf5b3c87570c92f1500e7580469bcf4295b09734116df0779f` (teslimde donmuş) | `d4f67e39fd0ef77e8f294ca2195bb1fc784716234d0675ab88a4fd8695263a6a` | 2026-10-01 K6-DETERM ölçümü — **bu satır K6-DETERM strict karşılaştırmasının okuduğu referanstır** (§6) |
-| 6 | **CI-linux** pdfTeX 3.141592653-2.6-1.40.29 (TeXLive, `ubuntu-latest` — apt `texlive-latex-base` + `texlive-latex-recommended` + `cm-super`, `/usr/bin/pdflatex`; tectonic 0.17.0 digest-pinned) | 1 | 0 | koşum-başına değişken (`/ID`); ham hash trend kaydında **tutulmaz** (yalnız kanonik saklanır) | `092154a0473e33c2c4d869e2123e36138612ff44f63f689437eeb8450b00fc06` | **determinism-trend CI** (`ubuntu-latest`): 5 bağımsız koşum 2026-09-20…09-28, `gate=PASS`, kanonik hash **birebir aynı**; kaynak `a9f34e05…` değişmedi |
-
-| 7 | pdfTeX 3.141592653-2.6 (TeX Live 2026/Homebrew, macOS) | 3 | **1786924800** (teslim sabiti) | koşum-başına değişken (`/ID`) | `10d44856ba56c6f7335b7ed048f83595eb298999744f0c26cec022d52227e2db` | `SOURCE_DATE_EPOCH=1786924800 make check` 2× bağımsız (2026-10-02) |
-| 8 | **CI-linux PİNLİ** pdfTeX 3.141592653-2.6-1.40.25 (TeX Live 2023/Debian, `ubuntu:24.04` **digest-pini**; apt `texlive-latex-base` + `texlive-latex-recommended` + `cm-super`; tectonic 0.17.0 musl **digest-pini** `8533d07f…`) | 3 | **1786924800** (teslim sabiti) | koşum-başına değişken (`/ID`) | `ca3c591805eff4cbae403a77cba9b8734bf9c23ed42e766b937207e36a159573` | CI vekili konteynerinde (tectonic kanonik hash birebir `ad8fca69…` = satır 1 → **vekil sadakati kanıtlandı**), `make accept` ×1 (2026-10-02) |
-
-### Satır 9–11: kaynak sürümü değişti (overfull hbox düzeltmesi, 2026-10-03)
-
-Satır 7 ve 8 **kaynak değişmeden önceki** `.tex`'i ölçer. 7 overfull
-hbox'un sıfırlanması için kaynak tipografik olarak düzeltildi
-(`\emergencystretch=1.5em`, `\allowbreak` kırılma noktaları, longtable
-sütun bütçesi); **hiçbir düzyazı değişmedi, sayfa sayısı 33'te kaldı.**
-Kanonik hash kaynak türevi olduğu için üç bağlamda da yeniden ölçüldü ve
-protokol gereği **yeni satır** açıldı (satır 7/8 silinmedi, üzerine yazılmadı):
-
-| # | Motor / sürüm | Geçiş | SDE | Ham (bilgi) | Kanonik (referans) | Ölçüm |
-|---|---|---|---|---|---|---|
-| 9 | pdfTeX 3.141592653-2.6 (TeX Live 2026/Homebrew, macOS) | 3 | 0 | koşum-başına değişken (`/ID`) | `5899be5d4fd20480b43492bc0900b09d255f53b5a4f9731ed079b7f12028c4a8` | `SOURCE_DATE_EPOCH=0 make check` 2× bağımsız, run1==run2, `verdict=PASS` (2026-10-03) |
-| 10 | pdfTeX 3.141592653-2.6 (TeX Live 2026/Homebrew, macOS) | 3 | **1786924800** (teslim sabiti) | koşum-başına değişken (`/ID`) | `73a3d417d0811314d60bf6e0428bb54e485e339bc31f606760e2de51269e15a2` | `SOURCE_DATE_EPOCH=1786924800 make check` 2× bağımsız, run1==run2, `verdict=PASS` (2026-10-03) |
-| 11 | **CI-linux PİNLİ** pdfTeX 3.141592653-2.6-1.40.25 (TeX Live 2023/Debian, `ubuntu@sha256:a853f94d…` **digest-pini**; satır 8 ile aynı apt paketleri + tectonic 0.17.0 musl digest-pini `8533d07f…`) | 3 | **1786924800** (teslim sabiti) | koşum-başına değişken (`/ID`) | `5c083474fbf14989ebb1736a6c0edecb1a4399740f4ae77989d6dc846d70a2c5` | CI vekili konteynerinde ölçüldü: `pdflatex --version` = `pdfTeX 3.141592653-2.6-1.40.25 (TeX Live 2023/Debian)`, `tectonic 0.17.0`; `make check` 2× bağımsız, run1==run2, `verdict=PASS` (2026-10-03) |
-
-Satır 8 → 11 karşılaştırması: motor **aynı** (1.40.25, aynı digest-pini,
-aynı paketler), yalnız kaynak değişti; kanonik hash `ca3c5918…` → `5c083474…`.
-Bu, hash kaynak-türevli olduğunun ve motor sürümü kaymasının (satır 6→8)
-ayrı bir olgu olduğunun doğrulamasıdır.
-
-Satır 5 **değişmedi**: teslim artefaktı PDF'i (tectonic ile derlenmiş,
-`74b2cdbd…` ham) dokunulmadı; K6-DETERM'in okuduğu referans hâlâ `d4f67e39…`.
-
-### Satır 6 artık üretilmiyor — ölçüm (2026-10-02)
-
-Satır 6 (`092154a0…`), oluşturulduğu gün 5 bağımsız koşumda birebir
-tekrarlanmıştı; ancak **aynı tarif bugün farklı sonuç veriyor**. CI vekili
-konteynerde (`ubuntu:24.04` + aynı apt paketleri + digest-pini tectonic)
-ölçüldü:
-
-| | kanonik hash | defter |
-|---|---|---|
-| tectonic | `ad8fca69d4e4a2e1…` | satır 1 → **birebir aynı** |
-| TeXLive | `ca3c5918…` (SDE 1786924800) / `93e14fdd…` (SDE 0) | satır 6 `092154a0…` → **farklı** |
-
-Sapma yalnız pdflatex tarafında ve **motor sürümünden**: defter 1.40.29
-yazıyor, güncel apt TeXLive **1.40.25** veriyor. Tectonic tarafının
-bit-özdeş çıkması, ölçümün ortam sapması değil **motor sürümü kayması**
-olduğunu kanıtlar. Satır 6 silinmedi — protokol gereği yeni bağlam **yeni
-satır** demektir (satır 8), üstüne yazılmaz.
-
-### `check`/`accept` SDE ihraç kusuru (2026-10-02 ölçümü, düzeltildi)
-
-`pdf` hedefi `SOURCE_DATE_EPOCH`'u motor ortamına **ihraç ediyordu**;
-`check`/`accept` ihraç etmiyordu, bu yüzden determinizm betiği kendi
-varsayılanına (`${SOURCE_DATE_EPOCH:-0}`) düşüyordu. Sonuç: **kabul edilen
-PDF ile teslim edilen PDF farklı SDE ile derleniyordu** — kabul edilen şey
-gönderilen şey değildi.
-
-| | `pdf` üretir | `check`/`accept` ölçerdi |
-|---|---|---|
-| düzeltme öncesi | SDE = HEAD → `57c91a07…` | SDE = 0 → `544516b0…` |
-| düzeltme sonrası | SDE = HEAD → `57c91a07…` | **SDE = HEAD → `57c91a07…`** |
-
-Kanonik hash SDE'ye bağlı olduğu için (`§4` başlangıç notu) kabul artık
-**üretilenin byte'larını** yargılıyor. Ölçüm: `SOURCE_DATE_EPOCH=12345`
-verildiğinde hash `544516b0…` → `95900f50…` değişiyor; yani ihraç gerçekten
-etkili.
-
-### Satır 5 neden ayrı? (2026-10-01 ölçümü)
-
-Teslimdeki PDF, defterdeki dört ölçümün **hiçbirine** eşit değil:
-kanonik hash'i `d4f67e39…`, yani ne tectonic 1-geçiş (`ad8fca69…`) ne
-tectonic 3-geçiş (`47681218…` önek) ne pdfTeX 1-geçiş (`a75c3409…`) ne
-de pdfTeX 3-geçiş (`544516b0…`). Defter protokolü gereği (yeni bağlam →
-**yeni satır**, eskisinin üzerine yazma) teslim artefaktı kendi satırını
-aldı; üstüne yazılmadı.
-
-Aynı gün pdfTeX 3-geçiş satırı da yeniden doğrulandı:
-`SOURCE_DATE_EPOCH=0 make -f docs/Makefile.texlive check` → iki bağımsız
-koşumun kanonik hash'i `544516b0…` (birebir aynı), `residual=/ID`,
-`verdict=PASS`. Yani satır 4 hâlâ üretilebilir; teslim PDF'i yalnızca
-**henüz TeXLive ile yeniden derlenmemiş** bir artefakt (aşağıdaki
-"TeXLive-era teslim" satırı hâlâ `—`).
-
-Bu ikisi birbirine bağlı: teslim yeniden derlendiğinde satır 5'in hash'i
-kaybolacak değil — kanonik hash değişecek ve o değişim **bilinçli** olarak
-yeni bir satır + sidecar yenilemesi olacak (aşağıdaki protokol).
-
-### Satır 6 neden ayrı? (CI-linux bağlamı — 2026-10-02)
-
-Protokol: “Yeni bağlam (CI, font paketi) → **yeni satır**; eskisinin üzerine
-asla yazma.” CI-linux tam olarak yeni bir bağlamdır: kaynak ve SDE **aynı**,
-ama derleme ortamı farklı (ubuntu-latest apt TeXLive ↔ yerel Homebrew TeX
-Live 2026). Font/ligatür/hinting farkı nedeniyle kanonik hash'ler eşit
-olmak zorunda değildir — §3 kural 3'ün platform karşılığı. Ölçülen ayrım
-şu, ve ilginç olan **asimetrik** olması:
-
-| Bacak | darwin (Homebrew) | CI (ubuntu-latest) | Sonuç |
-|---|---|---|---|
-| tectonic 0.17.0 | `ad8fca69…` | `ad8fca69…` | platformlar arası **aynı** — tectonic çıktısı platformdan bağımsız |
-| pdfTeX (1 geçiş) | `a75c3409…` (satır 3) | `092154a0…` (satır 6) | **farklı** — TeXLive/font paketi farkı |
-
-Ölçümün kaynağı: `docs/determinism_trend/determinism_trend.jsonl` —
-`determinism-trend` CI işinin (`ubuntu-latest`, haftalık cron +
-`workflow_dispatch`) yazdığı **sürümlü** kayıtlar. **5 bağımsız linux
-koşumu** (2026-09-20 ×2, 09-21 ×2, 09-28) kanonik hash'i `092154a0…`
-olarak birebir aynı üretti; her biri `gate=PASS` ve kaynak
-(`source_sha256` = `a9f34e05…`) bu arada değişmedi. Tek koşum determinizm
-kanıtı olmadığı için birden fazla koşum beklenir.
-
-**Geçiş bağlamı notu (varsayıma düşmemek için):** bu kayıtlar
-`texlive_determinism_test.sh`'in `DETERMINISM_PASSES` varsayılanı **1**
-iken alındı. Trend kaydı `passes` alanını taşımadığı için bu, kod +
-çapraz kayıt eşleşmesiyle kuruldu: aynı dönemin darwin trend kaydı
-(`a75c3409…`) 1-geçiş olan satır 3 ile **birebir aynıdır**; aynı betik aynı
-dönemde 1-geçişteydi. 3-geçiş (Faz 4 re-baseline) bir **farklı** bağlamdır:
-CI'da 3-geçiş ölçüldüğünde `092154a0…` değil **yeni** bir hash çıkar ve
-protokol gereği **kendi satırını** alır — satır 6'nın üzerine yazılmaz.
-
-Bu satırın işlevi: `make -f docs/Makefile.texlive accept` (Faz 6 çıkış
-yolu) artık bir CI runner'ında üretilmiş bir PDF'in kanonik hash'ini
-bulabileceği bir yer var. Satır 5 **korunur** ve hâlâ K6-DETERM strict'in
-okuduğu tek teslim referansıdır; CI satırı teslim PDF'ini kabul ettirmez.
-
-Bu satır kanıtla bağlıdır: `test_k6_determ_canonical.py::TestCiLinuxLedgerRow`
-satırı okunan CI kaydıyla karşılaştırır — kayıt ile defter ayrışırsa
-(ör. trend dosyası yeniden ölçülür, hash değişir) kapı kırmızıya döner.
+| 4 | pdfTeX 3.141592653-2.6-1.40.29 | 3 | 0 | koşum-başına değişken (`/ID`) | `544516b0d9d2f4c12b05b512b79b31ad238e82d3ca3aff81166a6bac1914f597` | `make check` 2× bağımsız koşum (Faz 1 kabul; 2026-09-20 tekrar ×2) |
 
 ### Teslim sidecar'ı geçiş kaydı (`PDF_METADATA_SIDECAR` deseni)
 
-| Dönem | Ham PDF (bilgi) | Metadata-stripped | Durum |
-|---|---|---|---|
-| tectonic-era teslim (V5l; mevcut) | `74b2cdbdb18fafbf5b3c87570c92f1500e7580469bcf4295b09734116df0779f` | `50263bcf60f9ae176ac417f025bffbcae4fd0ab6044566672827bee861f83732` | yanındaki sidecar: `ingiliz_empirizmi_v3.pdf.metadata.sha256` |
-| TeXLive-era teslim | — (Faz 4 repack akışı kanıtlayınca buraya yazılır) | — | beklemede (bilinçli yenileme) |
+| Dönem | Ham PDF (bilgi) | Metadata-stripped | Kanonik `/ID`-nötr (referans) | Durum |
+|---|---|---|---|---|
+| tectonic-era teslim (V5l; mevcut) | `74b2cdbdb18fafbf5b3c87570c92f1500e7580469bcf4295b09734116df0779f` | `50263bcf60f9ae176ac417f025bffbcae4fd0ab6044566672827bee861f83732` | `d4f67e39fd0ef77e8f294ca2195bb1fc784716234d0675ab88a4fd8695263a6a` | yanındaki sidecar: `ingiliz_empirizmi_v3.pdf.metadata.sha256`; kanonik referans 2026-09-30'da 3× ölçüldü (kararlı) |
+| TeXLive-era teslim | — (Faz 4 repack akışı kanıtlayınca buraya yazılır) | — | — | beklemede (bilinçli yenileme) |
+
+Kanonik kolon **strict kapının referansıdır**: `verify_delivery.py
+--strict-determinism`, teslim PDF'inin `/ID`-kanonik hash'ini bu defterde
+arar; bulamazsa P1 verir ve `make -f docs/Makefile.texlive accept
+LEDGER=update` ile bilinçli yenileme ister.
+
+Defter çözümlemesi + `/ID` normalizasyonu **ortak çekirdektedir**
+(`_calisma/CIKTI/id_canonical.py`): aday sırası `ID_RESIDUAL_LEDGER` env →
+`<repo>/docs/ID_RESIDUAL_ACCEPTANCE.md` → script yanındaki mirror kopyası.
+`verify_delivery.py`, `_calisma/repack_delivery.py` ve K14
+(`check_zip_lineage_drift.py`) aynı modülü kullanır (kopya regex/defter
+yoktur). Motor geçişi/yeniden paketleme bu satırı **güncellemeden** geçemez
+(Faz 4): repack yeni kanoniği yazmadan önce defterde arar (fail-closed),
+K14 de commit anında sidecar `# canonical:` referansını defterle
+karşılaştırır.
 
 ## 5. Etki ve yenileme protokolü
 
+- **Motor geçişi hash ikilisi (eski → yeni):** tectonic (0.17.0) tek-geçiş
+  `ad8fca69…` / 3-geçiş `47681218…` → TeXLive/pdfTeX tek-geçiş
+  `a75c3409…` / 3-geçiş `544516b0…`. Kanonik eşitlik beklenmez (§3); ikili
+  yalnız defterde kayıtlıdır, hata olarak raporlanmaz.
 - zip/zip_lineage ve `PDF_METADATA_SIDECAR` desenindeki ham-PDF hash'i
   motor değişiminde değişir → motor geçişi **tek seferlik bilinçli
   sidecar yenilemesi** ile işaretlenir. V5l kuralı zaten bunu güvenli
   kılar: repack sidecar'ı yalnız ham hash değişince yeniler; bu kola
-  yalnız geçiş dokunur.
+  yalnız geçiş dokunur. Yenilemede sidecar artık **dört satır** taşır:
+  `<stripped>  …` + `# raw:` + **`# canonical:`** (determinizm referansı) +
+  **`# renewal: <tarih> — gerekçe`**. `repack_delivery.py` yeni kanoniği
+  yazmadan ÖNCE `check_ledger_entry` ile defterde arar; kayıtlı değilse
+  fail-closed durur (exit 1) — önce `accept LEDGER=update` koşmalıdır. Bu
+  sidecar sözleşmesi `verify_delivery.py` K6-DETERM (sidecar ↔ PDF kanoniği
+  uyuşmazsa strict'te P1) ve K14 kapısıyla birlikte kapanır.
 - `make -f docs/Makefile.texlive accept`: önce `check`'i koşturur (taze
-  2× koşum kanıtı), sonra kanonik hash'i §4 defterinde arar. Defterde
-  yoksa fail-closed: yeni bağlam → deftere bilinçli satır eklenir,
-  sahte kabul üretilmez.
+  2× bağımsız 3-geçiş ölçümü), sonra kanıtı **gerçek üreticiye** verir:
+  `_calisma/CIKTI/gen_id_residual_acceptance.py` raporu ayrıştırır
+  (verdict=PASS + rerun=0 ×2 + run1=run2), kanonik hash'i §4 defterinde
+  arar. Defterde yoksa fail-closed — sahte kabul üretilmez. Yeni bağlam
+  için satır ÖLÇÜLEN alanlardan **`LEDGER=update`** ile üretilir; defter
+  satırı elle yazılmaz.
 
-## 6. Faz 4 uygulaması: `--strict-determinism` semantiği (2026-10-01)
+## 6. Faz 4 — `--strict-determinism` semantiği (UYGULANDI 2026-09-30)
 
-**Eski gerekçe yanlıştı.** MANIFEST V5k ve K6-DETERM yorumu “tectonic
-0.17.0 byte-deterministic değildir, bu yüzden strict kapalı” diyordu.
-Ölçüm bunu tersine çevirdi:
+`verify_delivery.py` K6-DETERM artık **`/ID`-kanonik hash** üzerine
+kuruludur (`canonical_pdf_sha256` = `/ID` çiftini `<0…0>`'a indirgeyen
+SHA-256; desen yoksa ham hash — fail-safe):
 
-| İddia (eski) | Ölçüm (2026-10-01) |
-|---|---|
-| motor non-deterministic | motor `SOURCE_DATE_EPOCH` ile **deterministik**; aynı kaynak + aynı SDE → kanonik hash iki bağımsız koşumda birebir aynı (`544516b0…`, `make check` SDE=0) |
-| belirsizlik metadata-stripped hash’te | belirsizlik **pdfTeX trailer `/ID`**’de; kanonik görünümde nötrleniyor (§1-2) |
-| strict, metadata-stripped hash’e açılabilir | **hayır** — `qpdf --remove-metadata` **kendisi** nondeterministik: aynı teslim PDF’inde 3 koşum → `2042ba8b…` / `7f9125d0…` / `c9b9890d…`, hiçbiri sidecar’daki `50263bcf…` ile eşleşmedi. Strict buna uygulansaydı kapı **her koşumda yanlış pozitif** üretirdi |
-
-**Uygulanan sözleşme (Faz 4):**
-
-1. K6-DETERM iki yüzeyi ayrı raporlar:
-   - `stripped` (qpdf) → **yalnız BİLGİ**. Kararsız olduğu ölçüldüğü için
-     strict karşılaştırmaya **giremez**.
-   - `canonical` (`/ID` nötrlü) → **strict**. Uygulama tek kaynaktır
-     (`_calisma/CIKTI/pdf_id_canonical.py`); shell determinism betiği de
-     aynı modülü okur — regex’in iki kopyası iki gerçeklik yaratırdı.
-2. Strict karşılaştırma **bu defterin §4 tablosunun “Kanonik (referans)”
-   sütununa** karşı yapılır. Hash’i kod değil doküman taşır; kısaltılmış
-   önekler (`47681218…`) kabul edilmez, yalnız ölçülmüş tam 64-hex.
-3. **Varsayılan açık**: `--strict-determinism` default `True`;
-   `--no-strict-determinism` ile kapatılır (yalnız teşhis).
-4. Hash defterde yoksa **P1 (fail-closed)** + çıkış yolu yazılır:
-   `make -f docs/Makefile.texlive accept`. Defter okunamaz/boşsa da P1 —
-   “kapı yok” hiçbir koşulda yeşil sayılmaz.
-
-Bugün teslim artefaktı `d4f67e39…` = §4 satır 5 → kapı yeşil. Teslim
-yeniden derlenirse hash değişir ve kapı **kırmızıya düşerek** zorunlu
-“bilinçli yeni satır + sidecar yenilemesi” adımına sokar; sessizce
-geçmez.
-
-### Borç ÖDENDİ: `MANIFEST.txt` V5n kaydını yayımladı (Faz 4 → V5p repack)
-
-**Borç 2026-10-02'de ödendi.** Önceki durum: `_calisma/V5_ICERIK/…/MANIFEST.txt`
-V5k'nın “informational by default (--strict-determinism OFF) … must not be
-enabled” metnini taşıyordu ve **V5k en son okunan satır** olduğu için
-yayınlanan pakette kapının güncel sözleşmesiyle çelişen bir ifade
-kalıyordu.
-
-V5n kaydı `e3651c1`'de `repack_delivery.py`'ye eklendi ama gemideki paket
-yeniden üretilmedi. Ölçüm: CI'ın `Repack determinism + verify (sidecar
-sync)` kapısı bu yüzden **kırıktı** — üretici yeni `MANIFEST.txt` üretiyor,
-commit'lenen dosya eskiyi taşıyordu (P0 değil, doğrudan byte-identical
-ihlali; `git diff` boş değildi). Yani “bir sonraki repack” bir *olay*
-değil, CI'ın **her push'ta koşan** fail-closed kapısıydı; borç fiilen
-sistemde zaten ödenmeyi zorunlu kılıyordu.
-
-Kapatıldı: `repack_delivery.py --verify` çalıştırıldı (V5p repack), üretilen
-`MANIFEST.txt` artık V5k'yı **tarihsel kayıt olarak koruyor** ve ondan
-**sonra** V5n düzeltmesini yayımlıyor. Kayıt defterleri aynı commit'te
-senkronlandı: `zip_lineage.json` V5p nesli (`current=true`) +
-`cleanup_log.json` kanonik hash'leri.
-
-| | eski (V5o) | yeni (V5p) |
-|---|---|---|
-| dış zip | `afd6aec0bfa6…` | `c205a02e2685…` |
-| iç zip | `e30ae632e05a…` | `fba120ce808b…` |
-
-Teslim PDF'i **değişmedi**: canonical `d4f67e39…` (§4 satır 5) korunur,
-PDF raw hash'i `74b2cdbd…` aynen ödüldü (metadata sidecar reuse). Değişen
-yalnızca MANIFEST başlığı ve onu içeren zip/sidecar zinciri — teslimin
-**kimliği** değil, **paketin içindeki açıklaması**.
-
-**Sevk yüzeyi notu (insan adımı):** teslim zip/sidecar'ları hazırlanmış
-bir yükleme yüzeyine (Dropbox taşıma birimi) bağlı. Yenilenen zip'ler
-taşıma birimine **yeniden kopyalanmalıdır**; hash'ler artık
-`c205a02e…`/`fba120ce…`. Bu, kod tarafında otomatikleştirilemez.
-
-TeXLive-era yeniden derleme bundan hâlâ ayrı ve bilinçli bir yenileme
-adımıdır (§4 “TeXLive-era teslim” satırı).
-
-Bu kaydın **sessiz kalamaması** testle sabitlendi:
-`test_k6_determ_canonical.py::test_shipped_manifest_debt_cannot_stay_silent`
-— gemideki `MANIFEST.txt` bayat metni taşıdığı sürece bu kaydın varlığını
-zorlar. Yani borç ya kayıtlıdır ya da repack'te gider; ortası yoktur.
+- **Bilgi (default):** ham, metadata-stripped ve kanonik hash'ler
+  raporlanır; P1 üretilmez. `--json` çıktısında `pdf_hash.canonical`.
+- **Strict (`--strict-determinism`):** kanonik hash §4 defterinde kayıtlı
+  değilse **P1** + remedy (`make … accept LEDGER=update`); defter
+  okunamıyorsa ya da PDF okunamıyorsa fail-closed P1 (referanssız
+  determinizm iddiası üretilmez).
+- **metadata-stripped hash artık P1 nedeni DEĞİL.** Eski yorum "tectonic
+  non-deterministic olduğundan strict karşılaştırma her repack'te yanlış
+  pozitif üretir" idi; ölçüm bu teşhisi düzeltir: (a) motor SDE ile
+  deterministiktir, tek kalıntı `/ID`'dir (§1-2); (b) qpdf
+  `--remove-metadata`'nın **kendisi** nondeterministiktir (§2 tablosu:
+  aynı girdi 3 koşum → 3 farklı hash `38fc668c…`/`747334c4…`/`0de3124d…`).
+  Yani stripped hash karşılaştırması her koşumda tanım gereği "drift"
+  verir — karar buna bağlanamaz, yalnız bilgi olarak raporlanır.
+- Bu bölümün eski sözü ("strict mod `/ID`-kanonik karşılaştırmaya
+  bağlanır; karşılaştırma §4 defterindeki kanonik referansa karşı
+  yapılır") yerine getirildi ve bayrak artık **ETKİN** (Faz 4, 2026-09-30):
+  pre-commit `verify_delivery_hook.py` iç çağrısı ile CI `verify.yml`
+  `--full` adımı `--strict-determinism` ile koşar. MANIFEST V5k'nin
+  çekincesi (metadata-stripped karşılaştırması her repack'te yanlış
+  pozitif üretir) artık geçersizdir: strict karşılaştırma **kararlı
+  `/ID`-kanonik hash** üzerindedir ve bu hash §4 defterinde kayıtlıdır —
+  teslim PDF'i hâlâ tectonic-era (üstteki satır 1) olsa da strict geçer.
+  V5k notu üretilmiş `MANIFEST.txt` içinde tarihsel kayıt olarak durur
+  (teslim zip hash'i sabit kalsın diye dosya değiştirilmez).
+- **Sidecar ↔ PDF kanonik uyuşmazlığı** strict modda **P1**'dir: repack'in
+  yazdığı `# canonical:` satırı (sidecar) teslim PDF'inden yeniden
+  hesaplanan kanonikle aynı olmalıdır — ayrı düşerse yenileme/senkron eksik
+  demektir. `# canonical:` satırı yoksa (henüz yenilenmemiş tectonic-era
+  sidecar) yalnız bilgi düzeyinde raporlanır (K14 de INFO verir).
 
 ## 7. Geri dönüş (Faz 7)
 

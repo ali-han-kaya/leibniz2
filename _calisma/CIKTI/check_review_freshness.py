@@ -15,8 +15,15 @@ Teslim zincirinin determinizm deseninin REVIEW aynası:
      repack_delivery.verify_sidecars genesis; check_pdf_source_freshness sadece
      mtime bakardı, bu kapı içerik hash'ini de doğrular).
   3) Ayıklama (repro): REVIEW PDF'i kaynaklardan deterministik olarak yeniden
-     üretilebilir olmalı — tasarımsal iddia (build_review_pdf.sh: tectonic +
-     qpdf + SOURCE_DATE_EPOCH). Kapı yalnızca mtime + sidecar hash ile yetinmez;
+     üretilebilir olmalı — tasarımsal iddia (build_review_pdf.sh: LaTeX derleme
+     + qpdf + SOURCE_DATE_EPOCH). Determinizm BAYT düzeyindedir: qpdf yalnızca
+     `--deterministic-id` ile sabit /ID üretir; bayraksız hâlde /ID çıktıya ve
+     saate bağlıdır ve birleşim rastgele mktemp adından geçtiği için iki koşum
+     farklı bayt verir (ölçüldü 2026-10-18: c0282e7f… ≠ 9c6a9827…; bayrakla
+     40ca1730… = 3/3 koşum + farklı TMPDIR). Kapı MOTORDAN BAĞIMSIZDIR: bugün tectonic
+     üretiyor, TeXLive/pdflatex'e geçilse de bu denetim aynen geçerlidir
+     (denetlenen şey çıktı sözleşmesidir: SDE + hash + birleşim). Kapı yalnızca
+     mtime + sidecar hash ile yetinmez;
      gerekirse REVIEW'i --verify modunda gerçekte de qpdf merge'i tetikleyerek
      doğrulamak için build_review_pdf.sh --help gibi araçları kullanabilir
      (bu script minimal ve offline kalır; repro gerçekte CI'da build_review_pdf.sh
@@ -32,7 +39,8 @@ Tazelik stratejisi (fresh-clone-safe, zayıflatmadan):
     gizlenemez; mtime hilesiyle gizlenen içerik drift'i de sidecar hash
     karşılaştırmasıyla yakalanır.
   - SDE env override: SOURCE_DATE_EPOCH ortam değişkeni ayarlıysa REVIEW
-    efektif zamanı olarak kullanılır (tectonic determinism ile aynı).
+    efektif zamanı olarak kullanılır (derleme determinizmi ile aynı;
+    motor-agnostik — tectonic ya da TeXLive fark etmez).
 
 Kullanım:
   python3 check_review_freshness.py                          # denetle

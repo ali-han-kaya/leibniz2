@@ -16,6 +16,9 @@ Tek dosyalık Python HTTP sunucusu (stdlib-only):
   - /api/stop → yerel daemon'ı (POST, localhost-only) kontrollü durdurur
   - /api/latest  → en son çalıştırmanın JSON özeti (P0/P1, SONUÇ, bütçe, vs.)
                    + tam references_online raporu (verified/total, by_source)
+  - /api/a11y    → a11y-gate artifact'larından verdict/summary özeti (dashboard'ın
+                   küçük erişilebilirlik paneli). Artifact yoksa available=false
+                   döner — panel "kanıt yok"a düşer, sahte PASS üretmez.
 
 Çalıştırma:
   /usr/bin/python3 preview_server.py --dir /path/to/_calisma/CIKTI
@@ -26,9 +29,13 @@ Tek dosyalık Python HTTP sunucusu (stdlib-only):
 import argparse
 import hashlib
 import hmac
+import ipaddress
 import json
+import math
 import os
+import queue
 import re
+import signal
 import subprocess
 import sys
 import tempfile
@@ -39,12 +46,29 @@ from datetime import datetime, timezone
 import secrets
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-if _HERE not in sys.path:
-    sys.path.insert(0, _HERE)
-import precommit_log  # noqa: E402  — hook raporu seam (tek kaynak kuralı)
+# history.jsonl → Neon `trend_runs` otomatik senkronu (kardeş modül).
+# İçe aktarma başarısız olsa bile dashboard ayakta kalır; ama bu GİZLENMEZ:
+# /api/trend-sync `state="failed"`, `reason="import-error"` döner (mirror
+# kopyasında trend_db_sync.py eksikse neden görünür kalır).
+try:
+    from . import trend_db_sync as _trend_db_sync
+    TREND_SYNC_IMPORT_ERROR = None
+except Exception as _sync_import_exc:  # paket-dışı (script) çalıştırma
+    try:
+        import trend_db_sync as _trend_db_sync
+        TREND_SYNC_IMPORT_ERROR = None
+    except Exception:
+        _trend_db_sync = None
+        TREND_SYNC_IMPORT_ERROR = "%s: %s" % (
+            type(_sync_import_exc).__name__, _sync_import_exc)
 
 REQUEST_TIMEOUT_SECONDS = 30
+# verify_delivery.py --full için duvar-saati üst sınırı. Sabit 300 s yüklü
+# makinede yanlış TIMEOUT üretiyordu; main() --verify-timeout ile değiştirir.
+VERIFY_TIMEOUT_SECONDS = 300
+# Zaman aşımında ve normal çıkışta okuyucu thread'lerini bu kadar bekle; torun
+# süreç pipe'ı açık tutsa bile join sonsuza asılı kalmaz.
+VERIFY_JOIN_GRACE_SECONDS = 5
 ALLOWED_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
 # CSP nonce — serve_preview'in enjekte ettiği build-damga inline script'i
@@ -53,6 +77,57 @@ ALLOWED_HOSTS = {"127.0.0.1", "localhost", "::1"}
 BUILD_TS_NONCE = secrets.token_urlsafe(16)
 SERVER = None
 STOP_EVENT = None
+
+# /api/stop TCP-peer izin-kümesi: default yalnız loopback. Sandbox-dışı
+# ortamlarda (0.0.0.0 bind, konteyner, tünel) dış-peer'lar /api/stop'a
+# erişemez; genişletme yalnız PREVIEW_STOP_ALLOWLIST ile (geçersiz girdi
+# düşülür — kapı asla genişlemez).
+DEFAULT_STOP_ALLOWLIST = frozenset({"127.0.0.1", "::1"})
+
+# Import-time default: main() env ile genişletene kadar yalnız loopback.
+# (Unit-prob'lar main()'i koşmadan Handler'ı kurar — global burada var olmalı.)
+STOP_ALLOWLIST = DEFAULT_STOP_ALLOWLIST
+_STOP_HOSTS_ENV = "PREVIEW_STOP_ALLOWLIST"
+
+
+def load_stop_allowlist(env_value):
+    """PREVIEW_STOP_ALLOWLIST değerini izin-kümesine çevirir.
+
+    Virgülle ayrılmış IP listesi; geçersiz girdiler düşülür, kalan küme
+    default'a EKLENİR (loopback operatörü her zaman geçerli — typo'lu env
+    yerel-kilitleme yapamaz), geçerli-kalan boşsa yalnız default döner.
+    """
+    if not env_value:
+        return DEFAULT_STOP_ALLOWLIST
+    allowed = set()
+    for token in env_value.split(","):
+        token = token.strip()
+        if not token:
+            continue
+        try:
+            allowed.add(str(ipaddress.ip_address(token)))
+        except ValueError:
+            continue  # geçersiz girdi: düşür (kapı asla genişlemez)
+    return frozenset(allowed | DEFAULT_STOP_ALLOWLIST)
+
+
+def _stop_peer_allowed(peer, allowlist=None):
+    """TCP-peer adresi izin-kümesinde değilse gerekçe, izinliyse None.
+
+    Sahtelenemez katman: karar soket-peer'ına bakar (Host/Origin'in
+    aksine istemci-kontrolünde değil). IPv4-mapped IPv6 canonical'lanır;
+    ayrıştırılamayan peer deny (fail-closed).
+    """
+    allowed = DEFAULT_STOP_ALLOWLIST if allowlist is None else allowlist
+    try:
+        addr = ipaddress.ip_address(str(peer[0]))
+    except ValueError:
+        return "forbidden peer"
+    if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped:
+        addr = addr.ipv4_mapped
+    if str(addr) not in allowed:
+        return "forbidden peer"
+    return None
 
 
 def _trusted_request(headers):
@@ -71,9 +146,33 @@ def api_error(status, message):
     return status, {"error": message}
 
 
+# GET-API route kümesi: DNS-rebinding kapısı bunlara uygulanır (do_GET).
+# Statik varlıklar (sw/preview/guide/preview_js/design_tokens/slides) veri
+# taşımaz — kapı dışı. /api/health yerel-monitör için düşük-duyarlı.
+_API_GET_ROUTES = frozenset({
+    "latest", "sse", "run_stream", "history", "refs_trend", "trend",
+    "override_trend", "determinism_trend", "run_history", "health",
+    "stop", "run_now", "a11y", "trend_sync",
+})
+
+
 ROOT = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(os.path.dirname(ROOT))
 DEFAULT_PREVIEW_DIR = os.path.expanduser("~/Library/Caches/com.freebuff/preview")
+
+# LeibnizChain tarayici-ici oynatma paketi. `npm run build:player` ciktisi;
+# yeniden uretilebilir oldugu icin repoda tutulmaz (.gitignore) ve PREVIEW_DIR
+# mirror'indan BAGIMSIZDIR — CI'da da repo checkout'undan servis edilir.
+VIDEO_DIST = os.path.join(REPO_ROOT, "_calisma", "video", "dist")
+
+# /video/* altinda servis edilebilecek dosyalar — ACIK ALLOWLIST. Yol kacisi
+# (../) ve dizin listelemesi bu yuzden yapilandirilamaz: adi listede olmayan
+# her sey 404.
+VIDEO_ASSETS = {
+    "player.js": "text/javascript; charset=utf-8",
+    "player.css": "text/css; charset=utf-8",
+    "leibniz.json": "application/json; charset=utf-8",
+}
 
 
 def _find_python(verify_dir):
@@ -164,12 +263,31 @@ VERIFY_BUSY = threading.Lock()  # aynı anda yalnızca bir verify koşsun (loop 
 VERIFY_DIR = None               # main()'de set edilir; /api/run-now handler'ı kullanır
 HISTORY_PATH = None             # main()'de set edilir; JSONL trend dosyası
 HISTORY_MAX = 100               # disk'te tutulacak en son run sayısı
+# Otomatik history→Neon senkron işçisi (main() kurar; testlerde None kalır).
+TREND_SYNC = None
+# /api/trend?limit=N penceresi. Sınırlar dashboard-next SSE tüneliyle BİREBİR
+# aynıdır (apps/dashboard-next/app/api/events/route.ts): tünel `Math.trunc` ile
+# kırpar, 1..200 aralığına sıkıştırır, sayı değilse 20'ye düşer. Aynı değer
+# tünolden geçse doğrudan geldiğinde de aynı davranmalıdır — iki katman ayrı
+# kural uygularsa pencere "hangi katmana göre?" belirsizliği doğar.
+# Sürüklenmeye karşı `test_preview_server.py` iki katmanın sabitlerini birlikte
+# denetler.
+TREND_LIMIT_MAX = 200
+TREND_LIMIT_FALLBACK = 20
 RUNS_DIR = None                 # main()'de set edilir; run logları (stdout+stderr) dizini
 SERVER_EVENTS_PATH = None       # main()'de set edilir; yaşam-döngüsü olay-kaydı (append-only)
-SERVER_EVENTS_MAX_BYTES = 256 * 1024   # tek dosya tavanı — aşılırsa arşive taşınır
-SERVER_EVENTS_ARCHIVES_MAX = 5         # disk'te tutulacak en son arşiv sayısı
 RUN_LOG_MAX = 20                 # disk'te tutulacak + replay edilecek en son run sayısı
 SSE_POLL_TIMEOUT = 15            # SSE q.get(timeout=...) — keepalive periyodu (saniye)
+# ─── SSE kaynak tavanları ────────────────────────────────────────────────
+# Her SSE bağlantısı ThreadingHTTPServer'da bir iş parçacığı tutar; sınırsız
+# istemci (çökmüş sekmeler, yarı-kapalı TCP, EventSource yeniden-denemeleri)
+# thread sızıntısına dönüşür. Tavan KANAL BAŞINADIR (/api/run ve
+# /api/run-stream ayrı sayılır): biri dolunca diğeri aç kalmasın.
+SSE_MAX_CLIENTS = 8              # kanal başına eşzamanlı SSE istemci tavanı (0 = sınırsız)
+# Olay almayan (yalnız keepalive gören) bağlantının ömrü. Keepalive ömrü
+# UZATMAZ — aksi halde yarı-kapalı TCP hiç tahliye edilemezdi. 0 = kapalı.
+SSE_IDLE_TIMEOUT = 300           # saniye
+SSE_RETRY_HINT_MS = 60000        # evicted sonrası EventSource yeniden-deneme aralığı
 REFS_TREND_PATH = None           # main()'de set edilir; refs-trend.json yolu
 OVERRIDE_TREND_PATH = None       # main()'de set edilir; override-trend.json yolu
 DETERMINISM_TREND_PATH = None    # main()'de set edilir; determinism_trend.jsonl yolu
@@ -189,7 +307,10 @@ HISTORY_KEYS = ("ts", "verdict", "p0", "p1", "duration_s", "duration_pct_warn", 
                 "z3_total", "lean_ok", "lean_detail", "lean_override",
                 "lean_source", "cli_override_count",
                 "lineage_ok", "lineage_count", "history_sidecar_sha256",
-                "findings", "audit_refs_trend", "pattern_drift", "pattern_drift_detail",
+                # K0-K21 per-katman haritası: kalıcı arşive (trend_runs.layers)
+                # yazılır. Geniş alan olduğu için `/api/trend` projeksiyonunda
+                # (HISTORY_DASHBOARD_KEYS) YOK — trend grafiği şişmez.
+                "layers", "findings", "audit_refs_trend", "pattern_drift", "pattern_drift_detail",
                 "flaky_count", "deterministic_count")
 
 # This is deliberately narrower than HISTORY_KEYS: /api/history is consumed by
@@ -416,9 +537,162 @@ def persist_history(rec):
         _write_atomic(HISTORY_PATH + ".sha256", f"{digest}  history.jsonl\n")
         # LATEST'a sidecar hash'ini yaz (dashboard /api/latest-visible).
         LATEST["history_sidecar_sha256"] = digest
+        # Otomatik arşiv senkronu: yeni koşum diske yazıldı → kısa debounce
+        # sonrası `trend_runs`a yükle. `request()` bloklamaz, istisna
+        # fırlatmaz ve LOCK altında yalnız bir bayrak set eder.
+        if TREND_SYNC is not None:
+            TREND_SYNC.request(digest)
     except OSError as e:
         sys.stderr.write(f"[history] yazılamadı: {e}\n")
         sys.stderr.flush()
+
+
+def drain_writer_lock(timeout=None):
+    """Kapanışta uçuştaki yazımı BİTİR; yenisinin başlamasını engelle.
+
+    `persist_history` history.jsonl ile .sha256 sidecar'ını İKİ ayrı atomik
+    yazımla yazar. SIGTERM tam bu ikisinin ARASINA gelirse diskte
+    yeni-history + eski-sidecar kalır — K15 P1 hash uyuşmazlığı, CI'daki
+    daemon-http kırmızısının kök-nedeni (3cabbff).
+
+    LOCK'u sınırlı süreyle ALIP BIRAKMAK aktif yazımın tamamlanmasını
+    bekler; bırakıldığı anda yeni yazım başlayabilir, bu yüzden çağıran
+    taraf bu noktadan önce yeni turu durdurmuş olmalı (stop_event).
+
+    Döner: True = drain edildi (kilit alındı), False = timeout.
+    Timeout'ta bile dönülür: kapanış ASILI KALMAMALI — bozuk disk,
+    asla bitmeyen bir çıkıştan iyidir.
+    """
+    if timeout is None:
+        timeout = REQUEST_TIMEOUT_SECONDS
+    acquired = LOCK.acquire(timeout=timeout)
+    if acquired:
+        LOCK.release()
+    return acquired
+
+
+def _lifecycle_event(event, detail=""):
+    """Sunucu yaşam-döngüsü olayını kalıcı kayda yaz (append-only JSONL).
+
+    Konum: PREVIEW_DIR/logs/server_events.jsonl (gitignore'da — logs/ zaten
+    öyle). Amaç: daemon çökme/kurtarma olaylarının stdout-stderr akışından
+    bağımsız, yeniden-başlatmalara dayanıklı kaydı (disk-kanıtı) — daemon
+    stdout'u /dev/null'a dup2'lenmişken bile iz bırakır.
+
+    Telemetri servisi DEĞİL: hiçbir hata sunucu-yüzeyini düşürmez — her
+    başarısızlık sessizce yutulur (yazılamaz dizin, bozuk mevcut dosya).
+    Append-only: mevcut dosya asla ezilmez/truncate edilmez.
+    """
+    if not SERVER_EVENTS_PATH:
+        return
+    try:
+        rec = {"ts": datetime.now(timezone.utc).isoformat().replace(
+            "+00:00", "Z"), "event": event, "pid": os.getpid()}
+        if detail:
+            rec["detail"] = detail
+        d = os.path.dirname(SERVER_EVENTS_PATH)
+        if d:
+            os.makedirs(d, exist_ok=True)
+        with open(SERVER_EVENTS_PATH, "a", encoding="utf-8") as f:
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    except OSError:
+        pass
+
+
+def _read_snapshot_file(path):
+    """Snapshot JSON/JSONL dosyasını fail-closed oku ve son kaydı doğrula.
+
+    CI preview_server'ı `verify` job'ının aynı koşumdan ürettiği history
+    artifact'ıyla, yeni full verify çalıştırmadan besler. Sidecar yoksa veya
+    hash'ı uyuşmazsa dosya güvenilmez sayılır. Bozuk JSONL satırları yok sayılmaz;
+    böylece kısmi/eskimiş bir kayıt PASS gibi sunulamaz.
+    """
+    if not path or not os.path.isfile(path):
+        raise ValueError("snapshot dosyası yok: %s" % path)
+    real = os.path.realpath(path)
+    sidecar = real + ".sha256"
+    if not os.path.isfile(sidecar):
+        raise ValueError("snapshot SHA-256 sidecar yok: %s" % sidecar)
+    try:
+        with open(real, "rb") as f:
+            raw = f.read()
+        with open(sidecar, encoding="utf-8") as f:
+            sidecar_text = f.read().strip()
+    except OSError as exc:
+        raise ValueError("snapshot/sidecar okunamadı: %s" % exc) from exc
+    expected = sidecar_text.split(None, 1)[0].lower() if sidecar_text else ""
+    actual = hashlib.sha256(raw).hexdigest()
+    if not re.fullmatch(r"[0-9a-f]{64}", expected) or expected != actual:
+        raise ValueError("snapshot SHA-256 sidecar uyuşmuyor: %s" % sidecar)
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValueError("snapshot UTF-8 değil: %s" % real) from exc
+    try:
+        value = json.loads(text)
+    except json.JSONDecodeError as first_error:
+        records = []
+        for line_no, line in enumerate(text.splitlines(), 1):
+            if not line.strip():
+                continue
+            try:
+                records.append(json.loads(line))
+            except json.JSONDecodeError as exc:
+                raise ValueError(
+                    "snapshot JSONL satırı geçersiz (%d): %s" %
+                    (line_no, exc)) from exc
+        if not records:
+            raise ValueError("snapshot JSON/JSONL kaydı yok: %s" % real) \
+                from first_error
+        value = records[-1]
+    if not isinstance(value, dict):
+        raise ValueError("snapshot JSON object değil: %s" % real)
+    return value
+
+
+def _validate_snapshot_file_snapshot(value):
+    """CI snapshot sözleşmesini server başlamadan fail-closed doğrula."""
+    if not isinstance(value, dict):
+        raise ValueError("snapshot JSON object değil")
+    if value.get("verdict") != "PASS" or value.get("exit_code") != 0:
+        raise ValueError("snapshot tamamlanmış PASS/0 değil")
+    if not isinstance(value.get("ts"), str) or not value["ts"].strip():
+        raise ValueError("snapshot ts boş")
+    nested = value.get("pdf_hash")
+    nested = nested if isinstance(nested, dict) else {}
+    for field in ("raw_sha256", "stripped_sha256"):
+        name = field.removesuffix("_sha256")
+        values = [sha for sha in (value.get(field), nested.get(name))
+                  if sha is not None]
+        if not values or any(
+                not isinstance(sha, str) or
+                not re.fullmatch(r"[0-9a-fA-F]{64}", sha)
+                for sha in values):
+            raise ValueError("snapshot %s 64 hex değil" % field)
+        if len({sha.lower() for sha in values}) != 1:
+            raise ValueError("snapshot %s alanları çelişkili" % field)
+    for field in ("p0", "p1"):
+        if value.get(field) is not None and value[field] != 0:
+            raise ValueError("snapshot %s sıfır değil" % field)
+    if value.get("cached") is True:
+        raise ValueError("snapshot cached")
+    return value
+
+
+def load_snapshot_file(path):
+    """Doğrulanmış snapshot kaydını LATEST'e snapshot-only mod için yükle.
+
+    `cached` bilinçli olarak False'tır: kaynak, aynı CI koşumunun artifact'ıdır;
+    preview_server'ın eski disk cache'ini (`load_cached_latest`) yeniden kullanmaz.
+    """
+    value = _validate_snapshot_file_snapshot(_read_snapshot_file(path))
+    with LOCK:
+        for key, item in value.items():
+            if key in LATEST and key != "cached":
+                LATEST[key] = item
+        LATEST["cached"] = False
+        LATEST["status_board"] = _compute_status_board()
+    return dict(value)
 
 
 def load_cached_latest():
@@ -509,6 +783,87 @@ def load_history():
     return list(out)
 
 
+def parse_query_param(path, name, default=None):
+    """`path` sorgu dizesinden TEK parametre (mevcut `?ts=` deseniyle aynı).
+
+    Boş değer (`?limit=`) yok sayılır → `default` döner; yani "boş sınır"
+    "penceresiz" demektir, 0 demek DEĞİLDİR. Modül düzeyinde tanımlı ki
+    handler'a bağlı olmadan (ve testlerde sahte handler ile) sınanabilsin.
+    """
+    parsed = urllib.parse.urlparse(path or "")
+    values = urllib.parse.parse_qs(parsed.query).get(name)
+    return values[0] if values else default
+
+
+def parse_trend_limit(raw):
+    """`?limit=` ham değerini pencereye çevirir. None = penceresiz (tüm geçmiş).
+
+    Kırpma kuralı `apps/dashboard-next/app/api/events/route.ts` ile aynıdır:
+    tüm sayılar tıma doğru atılır (`Math.trunc`), 1..200 aralığına sıkıştırılır,
+    sayıya çevrilemeyen değer TREND_LIMIT_FALLBACK'e düşer.
+
+    Neden 400 değil: bu bir OKUMA ucu. Bozuk sorgu parametresi hata sayfası
+    değil, TANIMLI bir pencere üretir — `preview.js` parametresiz çağırır,
+    MCP her zaman gönderir, arada bir yerde bozulmuş bir değer 500 üretirse
+    pano sessizce boş kalır. Pencere zaten sınırlı olduğu için "hata"
+    göstermenin bir güvenlik kazancı yok.
+    """
+    if raw is None:
+        return None
+    try:
+        # Math.trunc gibi davran: "5.9" → 5 (int("5.9") ValueError verirdi ve
+        # tünelle AYRIŞIRDI). float("inf") int()'te ValueError değil
+        # OverflowError verir — üçü de yakalanmalı.
+        value = int(float(str(raw).strip()))
+    except (TypeError, ValueError, OverflowError):
+        return TREND_LIMIT_FALLBACK
+    return min(max(value, 1), TREND_LIMIT_MAX)
+
+
+def window_tail(rows, limit):
+    """`rows`'un EN YENİ `limit` kaydı — SIRA KORUNARAK (eski → yeni).
+
+    Sıra sözleşmesi: `load_history()` kronolojik döner (en eski başta —
+    `test_serve_history_compact_content` 09:00 → 10:00 diye sıralıyor).
+    Dolayısıyla "son N" = `rows[-limit:]`; `rows[:limit]` EN ESKİ N'yi
+    döndürürdü ve pencere istenenin tersini yapardı.
+    """
+    if limit is None or not isinstance(rows, list):
+        return rows
+    return rows[-limit:]
+
+
+def window_refs_trend(payload, limit):
+    """refs_trend yarısına AYNI pencereyi uygular (yalnız satır listeleri).
+
+    Neden gerekiyor: `/api/trend` gövdesi İKİ zaman serisini birleştirir ve
+    `preview.js` ikisini yan yana basar (refs-trend + duration/budget grafiği).
+    Yalnız `history` kırpılırsa gövdenin iki yarısı FARKLI zaman aralıklarını
+    anlatır; aynı ekranda iki ayrı "son" görünür.
+
+    Dokunulmayanlar:
+      * Satır listesi olmayan payload'lar ve hata nesnesi (`{"error": ...}`)
+        — refs-trend.json okunamazsa 200 içinde hata döner, kırpma onu bozmaz.
+      * `summary` / `totals` / `warnings`: bunlar refs_trend.py'nin TÜM
+        artifact üzerindeki hesabıdır. Burada yeniden hesaplamak ikinci bir
+        doğruluk kaynağı doğururdu. Pencere gövdede `limit` alanıyla
+        bildirildiği için "özet 100 koşumu, satırlar 20'yi anlatıyor" farkı
+        tüketicide GİZLİ kalmaz.
+    """
+    if limit is None or not isinstance(payload, dict):
+        return payload
+    out = dict(payload)
+    if isinstance(out.get("rows"), list):
+        out["rows"] = window_tail(out["rows"], limit)
+    duration_budget = out.get("duration_budget")
+    if isinstance(duration_budget, dict) \
+            and isinstance(duration_budget.get("rows"), list):
+        duration_budget = dict(duration_budget)
+        duration_budget["rows"] = window_tail(duration_budget["rows"], limit)
+        out["duration_budget"] = duration_budget
+    return out
+
+
 def _prune_run_logs():
     """RUNS_DIR'deki run loglarını RUN_LOG_MAX ile sınırla (en eskiyi at)."""
     try:
@@ -586,20 +941,47 @@ def run_verify(verify_dir, budget_usd=None, budget_method=None):
         VERIFY_BUSY.release()
 
 
+def _offer_latest(q, msg):
+    """Kuyruğa en yeni mesajı koy — ASLA bloklamaz; doluysa EN ESKİYİ düşürür.
+
+    SSE kuyrukları canlı akış içindir ve tavanlıdır (`Queue(maxsize=…)`).
+    Tavan dolarken iki yanlış davranış var:
+      • blocking `put` → çağıran taraf (finalize, LOCK altında) süresiz
+        bekler; yarı-kapalı/yavaş bir istemci tüm sunucuyu dondurur.
+      • düz `put_nowait` → doldukça YENİ mesaj düşer, istemci eski durumda
+        kalır (bu, `_broadcast_stream`'in söz verdiği "eski satırlar düşer"
+        kuralının tersidir).
+
+    Bu yardımcı tavanı korur, en eskiyi atar, en yeniyi yazar. Kuyruk yine
+    doluysa (başka bir thread araya girdi) False döner — çağıran beklemez.
+    """
+    try:
+        q.put_nowait(msg)
+        return True
+    except queue.Full:
+        pass
+    try:
+        q.get_nowait()          # en eski
+    except queue.Empty:
+        pass
+    try:
+        q.put_nowait(msg)       # en yeni
+        return True
+    except queue.Full:
+        return False
+
+
 def _broadcast_stream(tag, line):
     """Bir satırı /api/run-stream client'larına gönder (blocking değil).
 
     tag: "stdout" | "stderr". Kuyruk doluysa en yeni satırlar önemli
-    olduğundan eski satırlar düşer (put_nowait).
+    olduğundan ESKİ satırlar düşer (`_offer_latest`; tavan korunur).
     """
     msg = json.dumps({"stream": tag, "line": line}, ensure_ascii=False)
     with LOCK:
         clients = list(STREAM_CLIENTS)
     for q in clients:
-        try:
-            q.put_nowait(msg)
-        except Exception:
-            pass
+        _offer_latest(q, msg)
 
 
 def _broadcast_run_end(rec):
@@ -608,10 +990,66 @@ def _broadcast_run_end(rec):
     with LOCK:
         clients = list(STREAM_CLIENTS)
     for q in clients:
-        try:
-            q.put_nowait(msg)
-        except Exception:
-            pass
+        _offer_latest(q, msg)
+
+
+def _register_sse_client(clients, q, initial_payload):
+    """SSE client'ını kanala kaydet ve ilk yükü üret (tek LOCK bloğu).
+
+    Kayıt ile ilk yük aynı kilit altında üretilir: araya giren bir broadcast
+    ilk olaydan ÖNCE kuyruğa düşerse istemci yeni durumu eski bir `update`
+    ile geri sarardı. Tavan (`SSE_MAX_CLIENTS`, kanal başına) doluysa kayıt
+    yapılmaz ve `(None, False)` döner — çağıran 503 ile reddeder.
+    """
+    with LOCK:
+        if SSE_MAX_CLIENTS > 0 and len(clients) >= SSE_MAX_CLIENTS:
+            return None, False
+        clients.append(q)
+        return initial_payload(), True
+
+
+def _reject_sse_client(handler, channel):
+    """Tavan dolu: 503 + Retry-After. Sessiz bekletme yok (EventSource görür)."""
+    body = json.dumps({"error": "too many SSE clients", "channel": channel,
+                       "limit": SSE_MAX_CLIENTS},
+                      ensure_ascii=False, separators=(",", ":"))
+    handler.send_response(503)
+    handler.send_header("Content-Type", "application/json; charset=utf-8")
+    handler.send_header("Cache-Control", "no-store")
+    handler.send_header("Content-Length", str(len(body.encode("utf-8"))))
+    handler.send_header("Retry-After", "30")
+    handler.end_headers()
+    handler.wfile.write(body.encode("utf-8"))
+    handler.wfile.flush()
+
+
+def _sse_evict(handler, channel, idle_s):
+    """Boşta kalan SSE bağlantısını bildirerek kapat (çağıran döngüden çıkar).
+
+    `retry:` alanı tarayıcının yeniden-deneme aralığını yükseltir; istemci
+    `evicted` olayıyla nedenini görür. Handler döner, soket kapanır,
+    `finally` kaydı siler.
+
+    Not: SSE yanıtının kendi `Connection: keep-alive` başlığı
+    `send_header` içinde `close_connection`'ı False yapar; bayrağı burada
+    elle kapatmazsak handler ikinci bir isteği beklerken soketi/thread'i
+    açık tutar — yani tahliye thread'i serbest bırakmaz.
+    """
+    payload = json.dumps({"stream": "evicted", "channel": channel,
+                          "reason": "idle-timeout", "idle_s": int(idle_s)},
+                         ensure_ascii=False, separators=(",", ":"))
+    handler.wfile.write(f"retry: {SSE_RETRY_HINT_MS}\n\n".encode())
+    handler.wfile.write(f"event: evicted\ndata: {payload}\n\n".encode())
+    handler.wfile.flush()
+    handler.close_connection = True
+
+
+def _sse_idle_exceeded(last_event, now=None):
+    """Son gerçek olaydan bu yana `SSE_IDLE_TIMEOUT` aşıldı mı (0 = kapalı)."""
+    if SSE_IDLE_TIMEOUT <= 0:
+        return False
+    now = time.monotonic() if now is None else now
+    return (now - last_event) >= SSE_IDLE_TIMEOUT
 
 
 def build_replay_events(ts, verdict, stdout, stderr, p0=None, p1=None,
@@ -701,6 +1139,39 @@ def _build_verify_cmd(py, verify_dir, budget_usd=None, budget_method=None,
     return cmd
 
 
+def _positive_seconds(raw):
+    """argparse tipi: pozitif ve sonlu saniye; diğer değerler reddedilir."""
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        raise argparse.ArgumentTypeError("sayı bekleniyor: %r" % (raw,))
+    if not math.isfinite(value) or value <= 0:
+        raise argparse.ArgumentTypeError(
+            "pozitif ve sonlu saniye bekleniyor: %r" % (raw,))
+    return value
+
+
+def _kill_verify_tree(p):
+    """Zaman aşımında verify süreç ağacını (lider + torunlar) öldür.
+
+    Child start_new_session ile kendi oturumunda koşar; killpg torunlara da
+    (pre-commit hook'ları, z3/lean) ulaşır. Yalnız p.kill() torunları ayakta
+    bırakır; onlar pipe'ı açık tutunca okuyucu thread'leri asılı kalır.
+    killpg yoksa (ör. Windows) p.kill() kullanılır.
+    """
+    try:
+        os.killpg(p.pid, signal.SIGKILL)
+    except (OSError, AttributeError):
+        try:
+            p.kill()
+        except OSError:
+            pass
+    try:
+        p.wait(timeout=VERIFY_JOIN_GRACE_SECONDS)
+    except subprocess.TimeoutExpired:
+        pass
+
+
 def _run_verify_locked(verify_dir, budget_usd=None, budget_method=None,
                        preview_dir=None):
     """verify_delivery.py --full komutunu çalıştır, sonucu LATEST'e yaz + broadcast.
@@ -727,7 +1198,8 @@ def _run_verify_locked(verify_dir, budget_usd=None, budget_method=None,
         env = dict(os.environ)
         env["PYTHONUNBUFFERED"] = "1"
         p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                             text=True, bufsize=1, cwd=verify_dir, env=env)
+                             text=True, bufsize=1, cwd=verify_dir, env=env,
+                             start_new_session=True)
     except OSError as e:
         stdout, stderr, rc = "", f"başlatılamadı: {e}", 127
         duration = round(time.monotonic() - t0, 2)
@@ -750,23 +1222,24 @@ def _run_verify_locked(verify_dir, budget_usd=None, budget_method=None,
             except Exception:
                 pass
 
-    t_out = threading.Thread(target=_drain, args=(p.stdout, out_chunks, "stdout"))
-    t_err = threading.Thread(target=_drain, args=(p.stderr, err_chunks, "stderr"))
+    timeout_s = VERIFY_TIMEOUT_SECONDS
+    t_out = threading.Thread(target=_drain, daemon=True,
+                             args=(p.stdout, out_chunks, "stdout"))
+    t_err = threading.Thread(target=_drain, daemon=True,
+                             args=(p.stderr, err_chunks, "stderr"))
     t_out.start(); t_err.start()
     try:
-        rc = p.wait(timeout=300)
+        rc = p.wait(timeout=timeout_s)
     except subprocess.TimeoutExpired:
         timed_out = True
-        try:
-            p.kill()
-            p.wait()
-        except Exception:
-            pass
-    t_out.join(); t_err.join()
+        _kill_verify_tree(p)
+    # Torun süreçler pipe'ı açık tutabilir: drain'i sınırlı bekle, asılı kalma.
+    t_out.join(VERIFY_JOIN_GRACE_SECONDS)
+    t_err.join(VERIFY_JOIN_GRACE_SECONDS)
     stdout = "".join(out_chunks)
     stderr = "".join(err_chunks)
     if timed_out:
-        stderr = (stderr + "\nTIMEOUT (>300s)").strip()
+        stderr = (stderr + f"\nTIMEOUT (>{timeout_s:g}s)").strip()
         rc = 124
     duration = round(time.monotonic() - t0, 2)
     _finalize_run(stdout, stderr, rc, duration, None, verify_dir)
@@ -914,8 +1387,20 @@ def _write_override_report(verify_dir, report):
         sys.stderr.flush()
 
 
-# hook satırı ayrıştırma taşındı: precommit_log (bkz. modül docstring'i —
-# 2026-10-02 stdout/stderr asimetri ölçümü ve tek kaynak kuralı orada).
+_HOOK_RE = re.compile(r"^(.+?)\.{4,}(Passed|Failed)\s*$", re.M)
+
+
+def _parse_precommit_hooks(stderr):
+    """stderr'deki pre-commit hook satırlarından [{name, status}] çıkar.
+
+    pre-commit verbose çıktısı:
+      Verify Stoic-Hume V5 delivery (fail-closed)........................Passed
+    Satır Sonucu/Passed/Failed içeren her hook sonucunu yakalar.
+    """
+    hooks = []
+    for m in _HOOK_RE.finditer(stderr or ""):
+        hooks.append({"name": m.group(1).strip(), "status": m.group(2)})
+    return hooks or None
 
 
 def _refresh_precommit_hooks_bg(verify_dir):
@@ -976,23 +1461,20 @@ def _refresh_precommit_hooks_bg(verify_dir):
                     f.write(f"{time.strftime('%H:%M:%S')} [precommit-bg] stderr_tail={result.stderr[-500:]}\n")
         except Exception:
             pass
-        # hook kayıtları: kaynak önceliği precommit_log.collect'de (taze
-        # çıktı yolu — eski sidecar bilerek denenmez, bu koşum veriyi üretir)
-        hooks = precommit_log.collect(
-            stderr=result.stderr, stdout=result.stdout)
+        # pre-commit verbose çıktısı stderr'de
+        output = result.stderr or result.stdout or ""
+        hooks = _parse_precommit_hooks(output)
         if hooks:
             with LOCK:
                 LATEST["precommit_hooks"] = hooks
                 LATEST["status_board"] = _compute_status_board()
             # SSE broadcast
+            patch_msg = json.dumps({
+                "precommit_hooks": hooks,
+                "status_board": _compute_status_board(),
+            }, ensure_ascii=False)
             for q in list(SSE_CLIENTS):
-                try:
-                    q.put_nowait(json.dumps({
-                        "precommit_hooks": hooks,
-                        "status_board": _compute_status_board(),
-                    }, ensure_ascii=False))
-                except Exception:
-                    pass
+                _offer_latest(q, patch_msg)
     except Exception as e:
         # Debug: arka plan hatasını dosyaya yaz
         try:
@@ -1057,18 +1539,29 @@ def _finalize_run(stdout, stderr, rc, duration, data, verify_dir=None):
 
     z3_passed, z3_failed = _parse_z3_counts(stderr)
     lean_ok, lean_detail = _parse_lean_result(stderr)
-    # pre-commit hook kayıtları: tek toplayıcı, tek öncelik kuralı
-    # (stderr -> stdout -> sidecar). 2026-10-02 ölçümü ve iki-yol asimetrisi
-    # (52 satır stdout / 0 bayt stderr; panel takilmişti) precommit_log
-    # docstring'inde kanıt olarak taşındı. Sidecar adayları yalnızca bu
-    # finalize yolu içindir: yanıt yoksa panel nedeni açıktır (sidecar yok).
-    _sidecar_candidates = () if not verify_dir else (
-        os.path.join(verify_dir, "logs", "PRECOMMIT_RAPORU.json"),
-        os.path.join(os.path.dirname(verify_dir), "logs", "PRECOMMIT_RAPORU.json"),
-        os.path.join(os.getcwd(), "logs", "PRECOMMIT_RAPORU.json"),
-    )
-    precommit_hooks = precommit_log.collect(
-        stderr=stderr, stdout=stdout, sidecar_paths=_sidecar_candidates)
+    precommit_hooks = _parse_precommit_hooks(stderr)
+    # Fallback: CI'da stderr pre-commit çıktısı üretir, yerel run'larda boş
+    # olabilir. PRECOMMIT_RAPORU.json sidecar'ından okumayı dene.
+    if not precommit_hooks and verify_dir:
+        for candidate in (
+            os.path.join(verify_dir, "logs", "PRECOMMIT_RAPORU.json"),
+            os.path.join(os.path.dirname(verify_dir), "logs", "PRECOMMIT_RAPORU.json"),
+            os.path.join(os.getcwd(), "logs", "PRECOMMIT_RAPORU.json"),
+        ):
+            if os.path.isfile(candidate):
+                try:
+                    with open(candidate, encoding="utf-8") as f:
+                        rpt = json.load(f)
+                    hooks_raw = rpt.get("hooks") or []
+                    if isinstance(hooks_raw, list):
+                        precommit_hooks = [
+                            {"name": h.get("name", "?"), "status": h.get("status", "Unknown")}
+                            for h in hooks_raw if isinstance(h, dict)
+                        ] or None
+                except (OSError, ValueError, KeyError):
+                    pass
+                if precommit_hooks:
+                    break
 
     # Soy hattı özeti: verify_delivery.py --json lineage.generations'dan
     # son nesil (current=true) bilgisini çıkarır — dashboard rozeti için.
@@ -1217,11 +1710,11 @@ def _finalize_run(stdout, stderr, rc, duration, data, verify_dir=None):
         # stdout/stderr'in tamamı yalnızca run logunda tutulur.
         snapshot = json.dumps(_public_snapshot(LATEST),
                               ensure_ascii=False, separators=(",", ":"))
+        # Blocking `put` DEĞİL: LOCK altında bekleyen bir put, kuyruğu dolan
+        # (yavaş/yarı-kapalı) tek bir istemcinin tüm sunucuyu dondurmasına
+        # izin verirdi; canlı kanalda en yeni snapshot eskiyi düşürür.
         for q in SSE_CLIENTS:
-            try:
-                q.put(snapshot)
-            except Exception:
-                pass
+            _offer_latest(q, snapshot)
         persist_history(rec)
     persist_run_log(full_rec)  # stdout/stderr dahil — son N run replay için
     _broadcast_run_end(rec)
@@ -1261,10 +1754,20 @@ def _route(path):
         return "preview"
     if p == "/preview.js":
         return "preview_js"
+    if p == "/vendor/axe.min.js":
+        return "vendor_axe"
     if p == "/design-system/tokens.css":
         return "design_tokens"
+    if p == "/design-system/stripe-theme.css":
+        return "design_tokens_stripe"
+    if p == "/design-system/vercel-theme.css":
+        return "design_tokens_vercel"
     if p == "/guide.html":
         return "guide"
+    if p == "/landing.html":
+        return "landing"
+    if p.startswith("/landing/assets/"):
+        return "landing_assets"
     if p == "/api/latest":
         return "latest"
     if p == "/api/run":
@@ -1285,17 +1788,127 @@ def _route(path):
         return "det_trend"
     if p == "/api/run-history":
         return "run_history"
-    if p == "/api/server-events":
-        return "server_events"
     if p.startswith("/api/run-stdout"):
         return "run_stdout"
     if p == "/api/health":
         return "health"
+    if p == "/api/a11y":
+        return "a11y"
+    if p == "/api/trend-sync":
+        return "trend_sync"
     if p == "/api/stop":
         return "stop"
     if p.startswith("/slides_z3/"):
         return "slides"
+    if p == "/api/equations":
+        return "equations_api"
+    if p.startswith("/equations/"):
+        return "equations_asset"
+    if p == "/video.html":
+        return "video"
+    if p.startswith("/video/"):
+        return "video_asset"
     return None
+
+
+# ── a11y-gate artifact'ları → dashboard paneli (verdict + summary) ────────────
+# a11y_gate.py her sayfa×tema için `a11y_<page>_<theme>.json` yazar; verify.yml
+# bunları artifact olarak yükler. Panel YALNIZ verdict + summary okur: raporun
+# `raw` alanı tüm axe payload'ıdır (MB mertebesinde) ve tarayıcıya taşınmaz —
+# pano tek satırda okunacak yüzey, ham payload değil.
+A11Y_PAGES = ("dashboard", "guide", "landing")
+A11Y_THEMES = ("dark", "light")
+A11Y_SUMMARY_KEYS = ("blocking", "warn", "allowlisted", "incomplete")
+# Rapor tavanı: raw payload şişebilir; okumak yerine gerekçeli hata döner
+# (sessiz kırpma = kanıt kaybı).
+A11Y_MAX_BYTES = 4 * 1024 * 1024
+
+
+def a11y_artifact_name(page, theme):
+    """verify.yml'in yazdığı artifact dosya adı — tek kaynak burada."""
+    return "a11y_%s_%s.json" % (page, theme)
+
+
+def _a11y_candidates(name):
+    """Artifact'ın olabileceği konumlar (refs-trend aday deseninin aynısı).
+
+    CI'da repo kökü, yerel koşumda preview-dir olabilir; ikisini de dener.
+    PREVIEW_DIR main()'de atanır → import anında yoksa aday listesine girmez.
+
+    `gh run download` / `actions/download-artifact` artifact başına BİR ALT
+    DİZİN açtığı için `a11y-reports/<artifact>/a11y_<sayfa>_<tema>.json`
+    düzeni de aranır (sıralı — hangisinin önce okunacağı belli olsun).
+    """
+    roots = [os.path.join(REPO_ROOT, "a11y-reports"), REPO_ROOT]
+    # Alt dizin taraması YALNIZ a11y-reports köklerinde: REPO_ROOT'un tamamı
+    # taranırsa artifact yoksa bile her istekte tüm repo dizinlenir.
+    nested = [roots[0]]
+    preview_dir = globals().get("PREVIEW_DIR")
+    if preview_dir:
+        nested.append(os.path.join(preview_dir, "a11y-reports"))
+        roots.append(preview_dir)
+    cands = [os.path.join(root, name) for root in roots]
+    for root in nested:
+        try:
+            subs = sorted(os.listdir(root))
+        except OSError:
+            continue
+        cands.extend(os.path.join(root, sub, name) for sub in subs)
+    return cands
+
+
+def a11y_report_entry(path, page, theme):
+    """Tek artifact → kompakt panel satırı.
+
+    Hata durumunda `verdict` None kalır, `error` gerekçeyi taşır: panel yeşile
+    değil "kanıt okunamadı"ya düşer (fail-closed — ölçülmeyen PASS yok).
+    """
+    entry = {"page": page, "theme": theme, "verdict": None, "summary": {},
+             "error": None, "file": os.path.basename(path)}
+    try:
+        size = os.path.getsize(path)
+    except OSError as exc:
+        entry["error"] = "istatistik okunamadı: %s" % exc
+        return entry
+    if size > A11Y_MAX_BYTES:
+        entry["error"] = "rapor tavanı aşıldı: %d bayt" % size
+        return entry
+    try:
+        with open(path, encoding="utf-8") as f:
+            raw = json.load(f)
+    except (OSError, ValueError) as exc:
+        entry["error"] = "rapor okunamadı: %s" % exc
+        return entry
+    if not isinstance(raw, dict):
+        entry["error"] = "rapor JSON sözlük değil"
+        return entry
+    summary = raw.get("summary") or {}
+    entry["verdict"] = raw.get("verdict")
+    entry["summary"] = {k: summary.get(k, 0) for k in A11Y_SUMMARY_KEYS}
+    entry["error"] = raw.get("error")
+    return entry
+
+
+def load_a11y_reports():
+    """Bulunan tüm a11y artifact'larından panel yükünü üret.
+
+    Hiç artifact yoksa available=False + gerekçe döner. Bulunanların verdict'i
+    None olabilir (okunamadı) — bu durum da PASS sayılmaz.
+    """
+    reports = []
+    for page in A11Y_PAGES:
+        for theme in A11Y_THEMES:
+            name = a11y_artifact_name(page, theme)
+            for cand in _a11y_candidates(name):
+                if os.path.isfile(cand):
+                    reports.append(a11y_report_entry(cand, page, theme))
+                    break
+    return {
+        "available": bool(reports),
+        "reports": reports,
+        "note": None if reports else "a11y artifact bulunamadı (%s) — kanıt yok"
+                % a11y_artifact_name("<page>", "<theme>"),
+    }
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -1387,16 +2000,35 @@ class Handler(BaseHTTPRequestHandler):
         # Query string'li istekler (cache-buster ?_t= / ?v=) da aynı rotaya
         # düşer — bkz. _route().
         route = _route(self.path)
+        # DNS-rebinding kapısı: /api/* GET'leri de Host/Origin kurallarına
+        # tabidir (POST-uçlarla aynı ALLOWED_HOSTS). Statik varlıklar ve
+        # do_HEAD kapı dışı — veri-taşımayan yüzeyler.
+        if route in _API_GET_ROUTES:
+            request_error = _trusted_request(self.headers)
+            if request_error:
+                self._send(403, json.dumps({"error": request_error}),
+                           content_type="application/json; charset=utf-8")
+                return
         if route == "sw":
             self.serve_sw()
         elif route == "preview":
             self.serve_preview()
         elif route == "guide":
             self.serve_guide()
+        elif route == "landing":
+            self.serve_landing()
+        elif route == "landing_assets":
+            self.serve_landing_assets()
         elif route == "preview_js":
             self.serve_preview_js()
+        elif route == "vendor_axe":
+            self.serve_vendor_axe()
         elif route == "design_tokens":
             self.serve_design_tokens()
+        elif route == "design_tokens_stripe":
+            self.serve_stripe_theme()
+        elif route == "design_tokens_vercel":
+            self.serve_vercel_theme()
         elif route == "latest":
             self.serve_latest()
         elif route == "sse":
@@ -1419,14 +2051,24 @@ class Handler(BaseHTTPRequestHandler):
             self.serve_determinism_trend()
         elif route == "run_history":
             self.serve_run_history()
-        elif route == "server_events":
-            self.serve_server_events()
         elif route == "run_stdout":
             self.serve_run_stdout()
         elif route == "health":
             self._send(200, "ok")
+        elif route == "a11y":
+            self.serve_a11y()
+        elif route == "trend_sync":
+            self.serve_trend_sync()
         elif route == "slides":
             self.serve_slides()
+        elif route == "equations_api":
+            self.serve_equations_api()
+        elif route == "equations_asset":
+            self.serve_equations_asset()
+        elif route == "video":
+            self.serve_video()
+        elif route == "video_asset":
+            self.serve_video_asset()
         elif route is None and urllib.parse.urlparse(self.path).path.startswith("/api/"):
             status, payload = api_error(404, "not found")
             self._send(status, json.dumps(payload),
@@ -1446,6 +2088,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def stop_server(self):
         """Yerel daemon'ı güvenli biçimde durdurur; GET ile tetiklenemez."""
+        # TCP-peer kapısı: Host/Origin'in aksine sahtelenemez; sandbox-dışı
+        # bind'ta bile dış-peer'ı /api/stop'tan uzak tutar (bind'dan bağımsız).
+        # Sahtelenemez katman önce değerlendirilir (güven-sırası).
+        peer_error = _stop_peer_allowed(self.client_address, STOP_ALLOWLIST)
+        if peer_error:
+            self._send(403, json.dumps({"error": peer_error}),
+                       content_type="application/json; charset=utf-8")
+            return
         request_error = _trusted_request(self.headers)
         if request_error:
             self._send(403, json.dumps({"error": request_error}),
@@ -1470,20 +2120,34 @@ class Handler(BaseHTTPRequestHandler):
         yanlışlıkla silinmişti (serve_run_stdout ile yer değiştirdi) —
         geri yüklendi.
         """
+        # Peer-paritesi: state-changing uç, /api/stop ile aynı sahtelenemez
+        # TCP-peer kapısını taşır (güven-sırası: peer → trusted → auth).
+        peer_error = _stop_peer_allowed(self.client_address, STOP_ALLOWLIST)
+        if peer_error:
+            self._send(403, json.dumps({"error": peer_error}),
+                       content_type="application/json; charset=utf-8")
+            return
         request_error = _trusted_request(self.headers)
         if request_error:
             self._send(403, json.dumps({"error": request_error}),
                        content_type="application/json; charset=utf-8")
             return
         expected = os.environ.get("PREVIEW_RUN_NOW_TOKEN")
-        if expected:
-            authorization = self.headers.get("Authorization", "")
-            scheme, _, token = authorization.partition(" ")
-            if scheme != "Bearer" or not hmac.compare_digest(token, expected):
-                self._send(401, json.dumps({"error": "unauthorized"}),
-                           content_type="application/json; charset=utf-8",
-                           extra_headers={"WWW-Authenticate": "Bearer"})
-                return
+        if not expected:
+            # tokensız-mod: /api/run-now /api/run-stream /api/stop'i hiçbir
+            # koşulda açma → fail-closed. localhost+trusted dışında (G1) ve
+            # peer dışında (G2) zaten 403; token yoksa da bunun üstüne 401.
+            self._send(401, json.dumps({"error": "unauthorized"}),
+                       content_type="application/json; charset=utf-8",
+                       extra_headers={"WWW-Authenticate": "Bearer"})
+            return
+        authorization = self.headers.get("Authorization", "")
+        scheme, _, token = authorization.partition(" ")
+        if scheme != "Bearer" or not hmac.compare_digest(token, expected):
+            self._send(401, json.dumps({"error": "unauthorized"}),
+                       content_type="application/json; charset=utf-8",
+                       extra_headers={"WWW-Authenticate": "Bearer"})
+            return
         ts = datetime.now(timezone.utc).isoformat()
         if not VERIFY_BUSY.acquire(blocking=False):
             self._send(409,
@@ -1544,7 +2208,24 @@ class Handler(BaseHTTPRequestHandler):
         Bağlantı anında SON N run'un logları geriye dönük akıtılır (her run
         replay-start/end arasında), böylece sayfa açıldığında kutu boş kalmaz:
         önce son N run'un satırları, sonra canlı satırlar gelir.
+
+        Kaynak tavanı: `SSE_MAX_CLIENTS` (kanal başına) doluysa 503 +
+        `Retry-After`. Boşta kalan bağlantı `SSE_IDLE_TIMEOUT` sonunda
+        `evicted` olayıyla kapatılır; keepalive ömrü uzatmaz.
         """
+        import queue
+        q = queue.Queue(maxsize=512)
+        # Bağlantı anında mevcut durumu bildir + son run'u replay için
+        # snapshot'la (canlı satırlar queue'da birikir, önce replay gider).
+        info, registered = _register_sse_client(
+            STREAM_CLIENTS, q,
+            lambda: json.dumps({"stream": "info",
+                                "ts": LATEST["ts"],
+                                "verdict": LATEST["verdict"]},
+                               ensure_ascii=False))
+        if not registered:
+            _reject_sse_client(self, "run-stream")
+            return
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
@@ -1552,29 +2233,26 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("X-Accel-Buffering", "no")
         self.end_headers()
 
-        import queue
-        q = queue.Queue(maxsize=512)
-        with LOCK:
-            STREAM_CLIENTS.append(q)
-            # Bağlantı anında mevcut durumu bildir + son run'u replay için
-            # snapshot'la (canlı satırlar queue'da birikir, önce replay gider).
-            info = json.dumps({"stream": "info",
-                               "ts": LATEST["ts"],
-                               "verdict": LATEST["verdict"]},
-                              ensure_ascii=False)
         replay_records = load_run_logs(RUN_LOG_MAX)
         try:
             self.wfile.write(f"event: info\ndata: {info}\n\n".encode())
             self.wfile.flush()
             self._replay_runs(replay_records)
+            # Replay gerçek trafiktir: boşta sayacı replay bittikten sonra başlar.
+            last_event = time.monotonic()
             while True:
                 try:
                     msg = q.get(timeout=SSE_POLL_TIMEOUT)
                     self.wfile.write(f"event: {json.loads(msg)['stream']}\ndata: {msg}\n\n".encode())
                     self.wfile.flush()
+                    last_event = time.monotonic()
                 except queue.Empty:
                     self.wfile.write(b": keepalive\n\n")
                     self.wfile.flush()
+                    now = time.monotonic()
+                    if _sse_idle_exceeded(last_event, now):
+                        _sse_evict(self, "run-stream", now - last_event)
+                        return
         except (BrokenPipeError, ConnectionResetError):
             pass
         finally:
@@ -1583,6 +2261,14 @@ class Handler(BaseHTTPRequestHandler):
                     STREAM_CLIENTS.remove(q)
                 except ValueError:
                     pass
+
+    def _query(self, name, default=None):
+        """`self.path` sorgu dizesinden TEK parametre (mevcut `?ts=` deseniyle aynı).
+
+        Boş değer (`?limit=`) yok sayılır → `default` döner; yani
+        "boş sınır" "penceresiz" demektir, 0 demek DEĞİLDİR.
+        """
+        return parse_query_param(getattr(self, "path", ""), name, default)
 
     def serve_history(self):
         """Return the dashboard projection of the recent history rows."""
@@ -1608,15 +2294,48 @@ class Handler(BaseHTTPRequestHandler):
         self._send(200, json.dumps(data, ensure_ascii=False),
                    content_type="application/json; charset=utf-8")
 
+    def serve_trend_sync(self):
+        """Otomatik history → Neon `trend_runs` senkronunun durumu.
+
+        `state` daima dolu: idle|synced|up-to-date|skipped|failed|disabled.
+        `skipped`/`failed` `ok=false` taşır; "henüz yüklenmedi" ile
+        "yüklendi" ayırt edilebilsin (sessiz PASS yok).
+        """
+        if TREND_SYNC is not None:
+            payload = TREND_SYNC.status()
+        elif TREND_SYNC_IMPORT_ERROR:
+            payload = {"state": "failed", "ok": False,
+                       "reason": "import-error",
+                       "detail": TREND_SYNC_IMPORT_ERROR}
+        else:
+            payload = {"state": "disabled", "ok": False,
+                       "reason": "sync-not-started"}
+        self._send(200, json.dumps(payload, ensure_ascii=False),
+                   content_type="application/json; charset=utf-8")
+
     def serve_trend(self):
         """Merged trend: {history, refs_trend} in one round-trip.
 
         history = dashboard-projected history.jsonl rows (same as /api/history).
         refs_trend = refs-trend.json payload or {rows: [], duration_budget: {rows: []}} fallback.
         Errors in refs_trend surface as {error: ...} inside refs_trend field (200 outer).
+
+        Query: ?limit=N → EN YENİ N koşum (penceresiz çağrıda tüm geçmiş, eski
+        davranış). Neden sunucu tarafı: parametre zaten sözleşmenin parçasıydı
+        ve iki canlı tüketici onu gönderiyordu — MCP `leibniz2_trend`
+        (`_calisma/mcp/server.py`, README'de "?limit=N → Son N koşum" olarak
+        belgeli) ve dashboard-next `getTrend` (`/api/trend?limit=20`).
+        Parametre yok sayıldığı için ikisi de İSTEDİKLERİ PENCEREYİ ALAMIYORDU
+        (ölçüldü: 100 kayda kadar tam geçmiş dönüyordu).
+        Pencere `history`ye VE refs_trend'in satır listelerine BİRLİKTE
+        uygulanır (bkz. `window_refs_trend`); uygulanan pencere gövdede
+        `limit` alanıyla bildirilir.
         """
-        history = [_project_history_record(record) for record in load_history()
-                   if isinstance(record, dict)]
+        limit = parse_trend_limit(
+            parse_query_param(getattr(self, "path", ""), "limit"))
+        history = window_tail(
+            [_project_history_record(record) for record in load_history()
+             if isinstance(record, dict)], limit)
         if not REFS_TREND_PATH or not os.path.isfile(REFS_TREND_PATH):
             refs_trend = {"rows": [], "duration_budget": {"rows": []}}
         else:
@@ -1625,25 +2344,14 @@ class Handler(BaseHTTPRequestHandler):
                     refs_trend = json.load(f)
             except (json.JSONDecodeError, OSError):
                 refs_trend = {"error": "refs trend unavailable"}
-        self._send(200, json.dumps({"history": history, "refs_trend": refs_trend},
-                                   ensure_ascii=False, separators=(",", ":")),
-                   content_type="application/json; charset=utf-8")
-
-    def serve_server_events(self):
-        """Yaşam-döngüsü olay-kaydı + çökme/kurtarma özeti.
-
-        Pano buradan okur (bkz. apps/dashboard-next/app/LifecyclePanel.tsx).
-        `limit` query'si son-N satır; yoksa tam liste (dosya küçük — olay
-        başına ~150 bayt, günlük 100'lerce satır değil).
-        """
-        q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
-        limit = None
-        try:
-            limit = int((q.get("limit") or [""])[0])
-        except ValueError:
-            limit = None
-        payload = _classify_lifecycle(_read_server_events(limit))
-        self._send(200, json.dumps(payload, ensure_ascii=False,
+        body = {"history": history,
+                "refs_trend": window_refs_trend(refs_trend, limit)}
+        if limit is not None:
+            # Pencere uygulandığını gövde kendisi söyler: özet alanları
+            # pencerelenmediği için tüketicinin "bu N satırlık bir pencere"
+            # ile "tüm artifact" farkını görebilmesi gerekir.
+            body["limit"] = limit
+        self._send(200, json.dumps(body, ensure_ascii=False,
                                    separators=(",", ":")),
                    content_type="application/json; charset=utf-8")
 
@@ -1700,6 +2408,15 @@ class Handler(BaseHTTPRequestHandler):
         self._send(200, json.dumps(summaries, ensure_ascii=False),
                    content_type="application/json; charset=utf-8")
 
+    def serve_a11y(self):
+        """a11y-gate artifact'larından verdict/summary özeti (panel yükü).
+
+        Ham axe payload'ı bilerek dışarı vermez: yalnız verdict + özet
+        sayıları. Artifact yoksa 200 + available=false (panel "kanıt yok").
+        """
+        self._send(200, json.dumps(load_a11y_reports(), ensure_ascii=False),
+                   content_type="application/json; charset=utf-8")
+
     def serve_run_stdout(self):
         """Belirli bir run'un tam stdout'unu döndür (run history satırı tıklanınca).
 
@@ -1743,6 +2460,13 @@ class Handler(BaseHTTPRequestHandler):
         fallback'ine düşer (davranış aynı).
         """
         preview_path = os.path.join(PREVIEW_DIR, "preview.html")
+        if not os.path.isfile(preview_path):
+            # Fail-closed: mirror'da HTML yoksa 404 — çıplak open() daemon-
+            # thread'ini öldürür ve istemci "empty reply" alır (ölçüldü:
+            # verify-mirror preview-server'ı, 2026-09-24).
+            self._send(404, "404 — preview.html mirror'da yok "
+                             "(bash update_preview.sh)")
+            return
         with open(preview_path, encoding="utf-8") as f:
             html = f.read()
         try:
@@ -1755,6 +2479,75 @@ class Handler(BaseHTTPRequestHandler):
             f'<script nonce="{BUILD_TS_NONCE}">window.BUILD_TS={ts};</script>',
             1)
         self._send(200, html, content_type="text/html; charset=utf-8")
+
+    def _equation_gallery_dir(self):
+        """equation_gallery dizini — slides_z3 ile aynı PREVIEW_DIR deseni."""
+        return os.path.join(PREVIEW_DIR, "equation_gallery")
+
+    def serve_equations_api(self):
+        """Denklem galerisi manifest'i — /api/equations (JSON, no-store).
+
+        render_equation_gallery.py'nin manifest.json'ı dashboard'a denklem
+        envanterini taşır (id/başlık/anchor/satır aralığı/PNG boyutu/SHA-256).
+        Dosya yoksa/okunamazsa 404 — galeri istemcisi hatayı yüzey'e yazar,
+        boş listeyle PASS gibi görünmez.
+        """
+        full = os.path.join(self._equation_gallery_dir(), "manifest.json")
+        if not os.path.isfile(full):
+            self._send(404, "404 not found")
+            return
+        try:
+            with open(full, encoding="utf-8") as handle:
+                data = json.load(handle)
+        except (OSError, ValueError):
+            self._send(500, "equation manifest unreadable")
+            return
+        self._send(200, json.dumps(data, ensure_ascii=False),
+                   content_type="application/json; charset=utf-8")
+
+    def serve_equations_asset(self):
+        """Denklem galerisi PNG'leri — /equations/<ad>.png (slides guard'ları).
+
+        Tek path segment, yalnız `.png`, güvenli karakterler, realpath alt-sınırlı
+        guard — slides_z3 servisiyle birebir aynı sanitizasyon sözleşmesi.
+        """
+        path = urllib.parse.urlparse(self.path).path
+        name = path[len("/equations/"):]
+        if not name or "/" in name or name.startswith("."):
+            self._send(404, "404 not found")
+            return
+        if not name.lower().endswith(".png"):
+            self._send(404, "404 not found")
+            return
+        if not re.fullmatch(r"[A-Za-z0-9._-]+", name):
+            self._send(404, "404 not found")
+            return
+        base_dir = self._equation_gallery_dir()
+        full = os.path.join(base_dir, name)
+        try:
+            real = os.path.realpath(full)
+            base = os.path.realpath(base_dir)
+            if os.path.commonpath([real, base]) != base:
+                self._send(404, "404 not found")
+                return
+        except ValueError:
+            self._send(404, "404 not found")
+            return
+        if not os.path.isfile(full):
+            self._send(404, "404 not found")
+            return
+        try:
+            with open(full, "rb") as handle:
+                data = handle.read()
+        except OSError:
+            self._send(404, "404 not found")
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "image/png")
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.end_headers()
+        self.wfile.write(data)
 
     def serve_slides(self):
         """Z3 slide PNG'leri — PREVIEW_DIR/slides_z3/ altından statik servis.
@@ -1805,6 +2598,55 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def serve_video(self):
+        """LeibnizChain oynatma sayfasi — VIDEO_DIST/player.html.
+
+        Remotion Studio DEGIL: Studio ayri bir sunucu + webpack dev-cache ile
+        gelir ve arac tarafindan surekli olarak oldurulur. @remotion/player
+        butun yuzeyi TEK statik dosyaya toplar; burada yalnizca o paket, sayfa
+        kabugu ve uretilen veri servis edilir.
+
+        Cikti yoksa 404 (fail-closed) — bos sayfa degil, ne yapilacagini
+        soyleyen mesaj doner: `npm run build:player`.
+        """
+        page = os.path.join(VIDEO_DIST, "player.html")
+        if not os.path.isfile(page):
+            self._send(
+                404,
+                "404 — LeibnizChain player paketi yok. "
+                "Uret: cd _calisma/video && npm ci && npm run build:player",
+            )
+            return
+        try:
+            with open(page, encoding="utf-8") as f:
+                html = f.read()
+        except OSError:
+            self._send(404, "404 — player.html okunamadi")
+            return
+        self._send(200, html, content_type="text/html; charset=utf-8")
+
+    def serve_video_asset(self):
+        """`/video/<ad>` — yalnizca VIDEO_ASSETS allowlist'indeki dosyalar.
+
+    Allowlist oldugu icin yol kacisi (`..`), dizin listelemesi ve dis uzantilar
+    yapilandirilamaz. player.js metin/javascript olarak servis edilir; sayfa
+    CSP'si `script-src 'self'` oldugu icin bu dosya zaten izin kapsaminda
+    (dis origin degil).
+        """
+        name = urllib.parse.urlparse(self.path).path[len("/video/"):]
+        content_type = VIDEO_ASSETS.get(name)
+        if content_type is None:
+            self._send(404, "404 not found")
+            return
+        full = os.path.join(VIDEO_DIST, name)
+        try:
+            with open(full, "rb") as f:
+                data = f.read()
+        except OSError:
+            self._send(404, "404 not found")
+            return
+        self._send(200, data, content_type=content_type)
+
     def serve_preview_js(self):
         """preview.js — dashboard JS (preview.html'den ayrılmış dış dosya).
 
@@ -1821,6 +2663,25 @@ class Handler(BaseHTTPRequestHandler):
             js = f.read()
         self._send(200, js, content_type="application/javascript; charset=utf-8")
 
+    def serve_vendor_axe(self):
+        """vendor/axe.min.js — a11y-gate'in same-origin axe-bundle'ı.
+
+        CSP script-src 'self' + nonce: dış enjeksiyon yok; gate, bundle'ı
+        sayfa-içinden 'self'ten yükletir (<script src>) — eski add_script_tag
+        enjeksiyon-yolu yalnız CSP-bypass yedeği. Bundle PREVIEW_DIR/vendor/
+        altında (sync_verify_mirror.sh taşır; checksum-kapısı repo-kaynağını
+        pinler). Kaynak yoksa 404 (fail-closed: sessiz boş-skript yok).
+        """
+        path = os.path.join(PREVIEW_DIR, "vendor", "axe.min.js")
+        if not os.path.isfile(path):
+            self._send(404, "404 — vendor/axe.min.js mirror'da yok "
+                             "(bash sync_verify_mirror.sh)")
+            return
+        with open(path, "rb") as f:
+            data = f.read()
+        self._send(200, data,
+                   content_type="application/javascript; charset=utf-8")
+
     def serve_design_tokens(self):
         """design-system/tokens.css — dashboard token sheet (tek stil kaynağı).
 
@@ -1833,6 +2694,45 @@ class Handler(BaseHTTPRequestHandler):
         if not os.path.isfile(path):
             self._send(404, "404 — design-system/tokens.css mirror'da yok "
                             "(bash update_preview.sh --force)")
+            return
+        with open(path, encoding="utf-8") as f:
+            css = f.read()
+        self._send(200, css, content_type="text/css; charset=utf-8")
+
+    def serve_stripe_theme(self):
+        """design-system/stripe/theme.css — Stripe HDS tema varyantı.
+
+        Kaynak: <repo>/design-system/stripe/theme.css (GENERATED;
+        generate_stripe_theme.py). check_tokens.py contract 9 bu dosyayı
+        jeneratörle birebir + `:root[data-theme="stripe"]` kapsamlı olarak
+        doğrular. sync_verify_mirror.sh bunu mirror PREVIEW_DIR'e
+        design-system-stripe-theme.css adıyla taşır; mirror'da yoksa 404
+        (fail-closed — varyant sayfasız kalır, koyu palete sessiz düşmez).
+        """
+        path = os.path.join(PREVIEW_DIR, "design-system-stripe-theme.css")
+        if not os.path.isfile(path):
+            self._send(404, "404 — design-system/stripe/theme.css mirror'da "
+                            "yok (bash update_preview.sh --force)")
+            return
+        with open(path, encoding="utf-8") as f:
+            css = f.read()
+        self._send(200, css, content_type="text/css; charset=utf-8")
+
+    def serve_vercel_theme(self):
+        """design-system/vercel/theme.css — Vercel adapter tema varyantı.
+
+        Kaynak: <repo>/design-system/vercel/theme.css (GENERATED;
+        generate_vercel_theme.py). check_tokens.py contract 9 bu dosyayı
+        jeneratörle birebir + `:root[data-theme="vercel"]` kapsamlı olarak
+        doğrular (32 yuvanın 4'ü ilan edilmiş istisna). sync_verify_mirror.sh
+        bunu mirror PREVIEW_DIR'e design-system-vercel-theme.css adıyla
+        taşır; mirror'da yoksa 404 (fail-closed — varyant sayfasız kalır,
+        taban palete sessiz düşmez).
+        """
+        path = os.path.join(PREVIEW_DIR, "design-system-vercel-theme.css")
+        if not os.path.isfile(path):
+            self._send(404, "404 — design-system/vercel/theme.css mirror'da "
+                            "yok (bash update_preview.sh --force)")
             return
         with open(path, encoding="utf-8") as f:
             css = f.read()
@@ -1871,13 +2771,78 @@ class Handler(BaseHTTPRequestHandler):
             html = f.read()
         self._send(200, html, content_type="text/html; charset=utf-8")
 
+    def serve_landing(self):
+        """Serve the generated landing page from PREVIEW_DIR.
+
+        CI stages the generated ``landing.html`` and its PNG assets beside
+        the preview mirror.  The source file is authored for the repository
+        landing directory, so rewrite only the two served-root-relative
+        prefixes here; the on-disk artifact remains directly usable too.
+        Missing output is a fail-closed 404 rather than an empty page.
+        """
+        path = os.path.join(PREVIEW_DIR, "landing.html")
+        if not os.path.isfile(path):
+            self._send(404, "404 — landing.html mirror'da yok")
+            return
+        with open(path, encoding="utf-8") as f:
+            html = f.read()
+        html = html.replace('href="../CIKTI/preview.html"',
+                            'href="/preview.html"')
+        html = html.replace('src="assets/', 'src="/landing/assets/')
+        self._send(200, html, content_type="text/html; charset=utf-8")
+
+    def serve_landing_assets(self):
+        """Serve staged landing PNGs with the same path/symlink guards as slides."""
+        request_path = urllib.parse.urlparse(self.path).path
+        name = request_path[len("/landing/assets/"):]
+        if (not name or "/" in name or name.startswith(".") or
+                not name.lower().endswith(".png") or
+                not re.fullmatch(r"[A-Za-z0-9._-]+", name)):
+            self._send(404, "404 not found")
+            return
+        base = os.path.realpath(os.path.join(PREVIEW_DIR, "landing", "assets"))
+        full = os.path.join(PREVIEW_DIR, "landing", "assets", name)
+        try:
+            real = os.path.realpath(full)
+            if os.path.commonpath([real, base]) != base:
+                self._send(404, "404 not found")
+                return
+        except ValueError:
+            self._send(404, "404 not found")
+            return
+        if not os.path.isfile(full):
+            self._send(404, "404 not found")
+            return
+        try:
+            with open(full, "rb") as f:
+                data = f.read()
+        except OSError:
+            self._send(404, "404 not found")
+            return
+        self._send(200, data, content_type="image/png")
+
     def serve_latest(self):
         self._send(200, json.dumps(snapshot_dict(), ensure_ascii=False,
                                    separators=(",", ":")),
                    content_type="application/json; charset=utf-8")
 
     def serve_sse(self):
-        """Server-Sent Events: her LATEST güncellemesini broadcast et."""
+        """Server-Sent Events: her LATEST güncellemesini broadcast et.
+
+        Kaynak tavanı: `SSE_MAX_CLIENTS` (kanal başına) doluysa 503 +
+        `Retry-After`. Boşta (olaysız) bağlantı `SSE_IDLE_TIMEOUT` sonunda
+        `evicted` olayıyla kapatılır; keepalive tek başına ömrü uzatmaz.
+        """
+        import queue
+        q = queue.Queue(maxsize=64)
+        # Bağlantı anında /api/latest ile aynı türetilmiş alanları gönder.
+        snapshot, registered = _register_sse_client(
+            SSE_CLIENTS, q,
+            lambda: json.dumps(_public_snapshot(LATEST),
+                               ensure_ascii=False, separators=(",", ":")))
+        if not registered:
+            _reject_sse_client(self, "run")
+            return
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
@@ -1885,28 +2850,25 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("X-Accel-Buffering", "no")  # nginx proxy uyumluluğu
         self.end_headers()
 
-        import queue
-        q = queue.Queue(maxsize=64)
-        with LOCK:
-            SSE_CLIENTS.append(q)
-            # Bağlantı anında /api/latest ile aynı türetilmiş alanları gönder.
-            snapshot = json.dumps(_public_snapshot(LATEST),
-                                  ensure_ascii=False, separators=(",", ":"))
         try:
             self.wfile.write(f"event: snapshot\ndata: {snapshot}\n\n".encode())
             self.wfile.flush()
             # Periyodik yorum (SSE keepalive)
-            last_keep = time.monotonic()
+            last_event = time.monotonic()
             while True:
                 try:
                     msg = q.get(timeout=SSE_POLL_TIMEOUT)
                     self.wfile.write(f"event: update\ndata: {msg}\n\n".encode())
                     self.wfile.flush()
+                    last_event = time.monotonic()
                 except queue.Empty:
-                    # keepalive yorumu
+                    # keepalive yorumu — canlılık sinyali, ÖMÜR DEĞİL.
                     self.wfile.write(b": keepalive\n\n")
                     self.wfile.flush()
-                    last_keep = time.monotonic()
+                    now = time.monotonic()
+                    if _sse_idle_exceeded(last_event, now):
+                        _sse_evict(self, "run", now - last_event)
+                        return
         except (BrokenPipeError, ConnectionResetError):
             pass
         finally:
@@ -1937,241 +2899,9 @@ def redirect_stdio_to_devnull():
             os.close(devnull)
 
 
-def _lifecycle_event(event, detail=""):
-    """Sunucu yaşam-döngüsü olayını kalıcı kayda yaz (append-only JSONL).
-
-    Konum: PREVIEW_DIR/logs/server_events.jsonl (gitignore'da — logs/ zaten
-    öyle). Amaç: daemon çökme/kurtarma olaylarının stdout-stderr akışından
-    bağımsız, yeniden-başlatmalara dayanıklı kaydı (disk-kanıtı) — daemon
-    stdout'u /dev/null'a dup2'lenmişken bile iz bırakır.
-
-    Telemetri servisi DEĞİL: hiçbir hata sunucu-yüzeyini düşürmez — her
-    başarısızlık sessizce yutulur (yazılamaz dizin, bozuk mevcut dosya).
-    Append-only: mevcut dosya asla ezilmez/truncate edilmez — tavan
-    aşıldığında dosya arşive TAŞINIR (bkz. _rotate_server_events); silinmez.
-    """
-    if not SERVER_EVENTS_PATH:
-        return
-    try:
-        rec = {"ts": datetime.now(timezone.utc).isoformat().replace(
-            "+00:00", "Z"), "event": event, "pid": os.getpid()}
-        if detail:
-            rec["detail"] = detail
-        d = os.path.dirname(SERVER_EVENTS_PATH)
-        if d:
-            os.makedirs(d, exist_ok=True)
-        with open(SERVER_EVENTS_PATH, "a", encoding="utf-8") as f:
-            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
-        _rotate_server_events()  # tavan aşıldıysa YAZIMDAN SONRA arşive taşı
-    except OSError:
-        pass
-
-
-# ── Olay-kaydı rotasyon politikası ──────────────────────────────────────────
-# Kayıt append-only'dir, ama sınırsız büyüyemez: aylarca yaşayan bir daemon
-# tek dosyayı disk-şişmesine çevirir ve panelin okuduğu kuyruğu seyreltir.
-# Politika: dosya SERVER_EVENTS_MAX_BYTES'i aşınca geçerli dosya `archive/`
-# altına TAŞINIR (rename — truncate DEĞİL) ve yenisi kendiliğinden açılır;
-# arşivler SERVER_EVENTS_ARCHIVES_MAX ile sınırlanır (en eski atılır).
-# Okuyucu arşivleri de tarar: çökme kanıtı rotasyondan sonra da görünür kalır.
-
-
-def _server_events_archive_dir():
-    """Arşiv dizini: geçerli kaydın kardeşi (`logs/archive`)."""
-    d = os.path.dirname(SERVER_EVENTS_PATH or "")
-    return os.path.join(d, "archive") if d else ""
-
-
-def _file_line_count(path):
-    """Dosyadaki satır sayısı (rotasyon kararının nadir kolu için)."""
-    try:
-        with open(path, encoding="utf-8", errors="replace") as f:
-            return sum(1 for _ in f)
-    except OSError:
-        return 0
-
-
-def _prune_server_event_archives(archive_dir):
-    """Arşivleri SERVER_EVENTS_ARCHIVES_MAX ile sınırla (en eskiyi at)."""
-    try:
-        files = sorted(f for f in os.listdir(archive_dir)
-                       if f.startswith("server_events-") and f.endswith(".jsonl"))
-    except OSError:
-        return
-    while len(files) > SERVER_EVENTS_ARCHIVES_MAX:
-        try:
-            os.remove(os.path.join(archive_dir, files.pop(0)))
-        except OSError:
-            pass
-
-
-def _rotate_server_events():
-    """Tavan aşıldıysa geçerli kaydı arşive taşı; döner: bool (arşivlendi mi).
-
-    Sıra önemli: rotasyon YAZIMDAN SONRA çağrılır. Ters sıra (önce döndür,
-    sonra yaz) yazılmakta olan kaydı bir an "yok" bırakırdı; tam o anda
-    ölürsek kaybolan kayıt çoğu kez `signal_exit`/`shutdown` olurdu — yani
-    döndürme mekanizması PANELDE SAHTE ÇÖKME üretirdi. Kayıt önce diske iner,
-    sonra taşınır: hiçbir olay rotasyon yüzünden kaybolmaz.
-
-    Tek dev kayıt (tek başına tavanı aşan satır) döndürülmez: aksi halde her
-    yazımda bir arşiv doğar ve budama kısa sürede tüm geçmişi silerdi.
-
-    Arşiv adı `server_events-<UTC-stamp>.jsonl`; sabit-genişlikli stamp
-    sayesinde lexicographic sıra = kronolojik sıra (budama ve okuma bu sıraya
-    güvenir).
-    """
-    path = SERVER_EVENTS_PATH
-    archive_dir = _server_events_archive_dir()
-    if not path or not archive_dir or not os.path.isfile(path):
-        return False
-    try:
-        if os.path.getsize(path) <= SERVER_EVENTS_MAX_BYTES:
-            return False
-        if _file_line_count(path) <= 1:
-            return False
-        os.makedirs(archive_dir, exist_ok=True)
-        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
-        dst = os.path.join(archive_dir, f"server_events-{stamp}.jsonl")
-        n = 1
-        while os.path.exists(dst):  # aynı mikrosaniye: çakışmayı kır
-            dst = os.path.join(archive_dir, f"server_events-{stamp}-{n}.jsonl")
-            n += 1
-        os.replace(path, dst)  # atomik: yarım dosya asla okunmaz
-        _prune_server_event_archives(archive_dir)
-        return True
-    except OSError:
-        return False  # telemetri: hata sunucu-yüzeyini düşürmez
-
-
-def _server_event_sources():
-    """Okuma kaynakları ESKİDEN-YENİYE: arşivler (stamp sıralı) → geçerli dosya.
-
-    Çökme tümevarımı (`_classify_lifecycle`) pid'ler arası sıraya bakar; bir
-    çökme kaydı arşivde kalmışsa panel onu göremezdi. Okuma bu yüzden tek
-    dosyayla sınırlı değildir — rotasyon kanıtı körleştirmez.
-    """
-    path = SERVER_EVENTS_PATH
-    if not path:
-        return []
-    sources = []
-    archive_dir = _server_events_archive_dir()
-    if archive_dir and os.path.isdir(archive_dir):
-        try:
-            for fn in sorted(os.listdir(archive_dir)):
-                if fn.startswith("server_events-") and fn.endswith(".jsonl"):
-                    sources.append(os.path.join(archive_dir, fn))
-        except OSError:
-            pass
-    if os.path.isfile(path):
-        sources.append(path)
-    return sources
-
-
-def _classify_lifecycle(records):
-    """Olay-kaydını çökme/kurtarma özeti olarak yorumla (saf fonksiyon).
-
-    Sözleşme bkz. docs/SERVER_EVENT_LOG.md:
-      - `signal_exit` + hemen-ardından `shutdown` = normal graceful kapanış.
-      - Bir pid'in `start`'ından sonra ne `signal_exit` ne `shutdown` gelmiş
-        ve sonradan BAŞKA bir pid başlamışsa o süreç **sinyalsiz ölmüştür**
-        (çökme). Dosya bunu kalıcı olarak kanıtlar.
-      - `cache_loaded` = kurtarma: yeniden başlatma önbellekten son-run
-        durumunu geri yükledi.
-
-    Neden burada, panelde değil: çökme kararı tek satırlık bir renk tercihi
-    değil, kaydın BÜTÜNÜ üzerinden yapılan bir tümevarım (pid'ler arası
-    sıraya bakar). İki ayrı tüketici (pano + API) aynı sonuca varmalı —
-    tümevarım tek yerde yaşar.
-
-    Yorumlayıcı asla hata fırlatmaz: bozuk/eksik kayıt okuyucuyu düşürmez.
-    """
-    events, by_pid = [], {}
-    for rec in records or []:
-        if not isinstance(rec, dict):
-            continue
-        pid = rec.get("pid")
-        name = rec.get("event")
-        if not isinstance(name, str) or not name:
-            continue
-        events.append(rec)
-        if isinstance(pid, int):
-            by_pid.setdefault(pid, []).append(name)
-
-    # Sinyalsiz ölen pid'ler: start var, kapanış yok — ve sonradan başka
-    # bir pid başlamış (yoksa süreç hâlâ AYAKTA demektir).
-    pids = []
-    for rec in events:
-        pid = rec.get("pid")
-        if isinstance(pid, int) and pid not in pids:
-            pids.append(pid)
-    crashed = set()
-    for pid, names in by_pid.items():
-        if "start" not in names:
-            continue
-        if "shutdown" in names or "signal_exit" in names:
-            continue
-        if pid is not pids[-1]:
-            crashed.add(pid)
-
-    def _phase(rec):
-        name = rec.get("event")
-        if name == "start":
-            return "crash" if rec.get("pid") in crashed else "start"
-        if name == "cache_loaded":
-            return "recovery"
-        if name in ("signal_exit", "shutdown"):
-            return "graceful"
-        return "unknown"
-
-    out = []
-    for rec in events:
-        row = dict(rec)
-        row["phase"] = _phase(rec)
-        out.append(row)
-    out.reverse()  # en-yeni üstte — pano "son olaylar" der
-
-    def _last(phase):
-        for row in out:
-            if row.get("phase") == phase:
-                return row
-        return None
-
-    return {"events": out,
-            "last_crash": _last("crash"),
-            "last_recovery": _last("recovery")}
-
-
-def _read_server_events(limit=None):
-    """Olay-kaydını satır-satır oku; geçersiz satırı ATLA (dosyayı bozma).
-
-    Kaynaklar `_server_event_sources()`: arşivler eskiden-yeniye, sonra
-    geçerli dosya — rotasyon çökme kanıtını görünmez kılmaz.
-
-    Kayıt append-only ve yazıcı her hatayı yutuyor; okuyucu da aynı
-    toleransla çalışmalı — tek bozuk satır paneli düşürmemeli.
-    """
-    rows = []
-    for src in _server_event_sources():
-        try:
-            with open(src, encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        rec = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    if isinstance(rec, dict):
-                        rows.append(rec)
-        except OSError:
-            continue  # bir kaynak okunamazsa kalanlarla devam et
-    return rows[-limit:] if limit and limit > 0 else rows
-
-
 def main():
     global PREVIEW_DIR, VERIFY_DIR, HISTORY_PATH, RUNS_DIR, RUN_LOG_MAX, REFS_TREND_PATH
+    global VERIFY_TIMEOUT_SECONDS, TREND_SYNC
     global SERVER_EVENTS_PATH, OVERRIDE_TREND_PATH, DETERMINISM_TREND_PATH
     # Daemon modunda: yeni process group + session oluştur (tamamen detach).
     # Bu, parent shell exit ettiğinde SIGHUP/SIGTERM almamızı engeller.
@@ -2195,7 +2925,20 @@ def main():
     ap.add_argument("--replay-runs", type=int, default=RUN_LOG_MAX,
                     help="/api/run-stream'de replay edilecek + disk'te "
                          "tutulacak son run sayısı")
+    ap.add_argument("--snapshot-file",
+                    help="tamamlanmış verify JSON/JSONL + .sha256; "
+                         "snapshot-only mod")
+    ap.add_argument("--no-verify", action="store_true",
+                    help="periyodik verify döngüsünü başlatma")
+    ap.add_argument("--verify-timeout", type=_positive_seconds,
+                    default=VERIFY_TIMEOUT_SECONDS,
+                    help="verify_delivery.py --full için üst süre (saniye, "
+                         "varsayılan 300); yüklü makinede uzun koşular için artırın")
     args = ap.parse_args()
+    if args.snapshot_file and not args.no_verify:
+        ap.error("--snapshot-file için --no-verify zorunludur")
+    if args.no_verify and not args.snapshot_file:
+        ap.error("--no-verify için --snapshot-file zorunludur")
 
     PREVIEW_DIR = os.path.abspath(args.preview_dir)
     VERIFY_DIR = os.path.abspath(args.dir)
@@ -2204,6 +2947,29 @@ def main():
     SERVER_EVENTS_PATH = os.path.join(PREVIEW_DIR, "logs",
                                       "server_events.jsonl")
     RUN_LOG_MAX = args.replay_runs
+    VERIFY_TIMEOUT_SECONDS = args.verify_timeout
+
+    # Otomatik history→Neon senkronu (yalnız GERÇEK verify döngüsünde).
+    # `--no-verify` snapshot replay / test daemon'ı sentetik koşumları canlı
+    # arşive yazmamalı — o modda işçi hiç kurulmaz.
+    if not args.no_verify and _trend_db_sync is not None and \
+            os.environ.get(_trend_db_sync.ENV_ENABLE, "1") != "0":
+        try:
+            _debounce = float(os.environ.get(_trend_db_sync.ENV_DEBOUNCE) or
+                              _trend_db_sync.DEFAULT_DEBOUNCE_SECONDS)
+            _sync_timeout = float(os.environ.get(_trend_db_sync.ENV_TIMEOUT) or
+                                  _trend_db_sync.DEFAULT_TIMEOUT_SECONDS)
+        except ValueError:
+            _debounce = _trend_db_sync.DEFAULT_DEBOUNCE_SECONDS
+            _sync_timeout = _trend_db_sync.DEFAULT_TIMEOUT_SECONDS
+        TREND_SYNC = _trend_db_sync.HistorySync(
+            HISTORY_PATH, preview_dir=PREVIEW_DIR,
+            loader_dir=os.environ.get(_trend_db_sync.ENV_DIR) or None,
+            debounce=_debounce, timeout=_sync_timeout, repo_root=REPO_ROOT)
+        sys.stderr.write(
+            "[main] trend-db sync: yükleyici=%s debounce=%.1fs\n" %
+            (TREND_SYNC.loader_dir or "otomatik-keşif", _debounce))
+        sys.stderr.flush()
     # refs-trend.json: CI artifact'ı repo kökünde (refs-trend/refs-trend.json);
     # yerel kurulumda preview-dir'de de olabilir (nested veya flat).
     _rt_candidate = os.path.join(REPO_ROOT, "refs-trend", "refs-trend.json")
@@ -2223,10 +2989,14 @@ def main():
     OVERRIDE_TREND_PATH = _ot_candidate if os.path.isfile(_ot_candidate) else None
 
     # determinism_trend.jsonl: versiyonlu trend verisi
-    # (record_determinism_trend.py üreticisi).
+    # (record_determinism_trend.py üreticisi). Mirror-runtime'da repo-doküman
+    # yolu yoktur; sync_verify_mirror.sh dosyayı PREVIEW_DIR'e düz adla
+    # düşer (QA bulgusu F1, 2026-09-21) — ikinci aday orası.
     _dt_candidate = os.path.join(REPO_ROOT, "docs",
                                  "determinism_trend",
                                  "determinism_trend.jsonl")
+    if not os.path.isfile(_dt_candidate):
+        _dt_candidate = os.path.join(PREVIEW_DIR, "determinism_trend.jsonl")
     DETERMINISM_TREND_PATH = (_dt_candidate
                               if os.path.isfile(_dt_candidate)
                               else None)
@@ -2236,9 +3006,17 @@ def main():
               f"sunucu yine de başlatılıyor ama /preview.html 404 döner",
               file=sys.stderr)
 
-    if not os.path.isfile(os.path.join(VERIFY_DIR, "verify_delivery.py")):
+    if not args.no_verify and not os.path.isfile(
+            os.path.join(VERIFY_DIR, "verify_delivery.py")):
         print(f"HATA: {VERIFY_DIR}/verify_delivery.py yok", file=sys.stderr)
         sys.exit(2)
+
+    if args.snapshot_file:
+        try:
+            load_snapshot_file(os.path.abspath(args.snapshot_file))
+        except ValueError as exc:
+            print("HATA: snapshot reddedildi: %s" % exc, file=sys.stderr)
+            sys.exit(2)
 
     # Sinyal yakalama — neden öldüğümüzü görelim
     import signal
@@ -2252,53 +3030,89 @@ def main():
 
     # Restart sonrası ilk verify bitene dek /api/latest UNKNOWN göstermesin:
     # önbelleklenmiş son run durumunu (runs/ veya history.jsonl) yükle.
-    with LOCK:
-        if load_cached_latest():
-            sys.stderr.write(
-                "[main] önbelleklenmiş son run yüklendi: "
-                f"verdict={LATEST['verdict']} ts={LATEST['ts']}\n")
-            _lifecycle_event(
-                "cache_loaded",
-                detail=f"verdict={LATEST['verdict']} ts={LATEST['ts']}")
-        else:
-            sys.stderr.write(
-                "[main] önbellek yok — /api/latest ilk verify bitene dek "
-                "UNKNOWN\n")
-        sys.stderr.flush()
+    # Snapshot-only modda aynı koşum artifact'ı doğrulandı; disk cache tekrar
+    # yüklenmez ve periyodik pahalı verify başlatılmaz.
+    if not args.no_verify:
+        with LOCK:
+            if load_cached_latest():
+                sys.stderr.write(
+                    "[main] önbelleklenmiş son run yüklendi: "
+                    f"verdict={LATEST['verdict']} ts={LATEST['ts']}\n")
+                _lifecycle_event(
+                    "cache_loaded",
+                    detail=f"verdict={LATEST['verdict']} ts={LATEST['ts']}")
+            else:
+                sys.stderr.write(
+                    "[main] önbellek yok — /api/latest ilk verify bitene dek "
+                    "UNKNOWN\n")
+            sys.stderr.flush()
 
     # Arka plan thread: periyodik verify çalıştırma
-    global SERVER, STOP_EVENT
+    global SERVER, STOP_EVENT, STOP_ALLOWLIST
     stop_event = threading.Event()
     STOP_EVENT = stop_event
-    t = threading.Thread(target=verify_loop,
-                         args=(VERIFY_DIR, args.interval, stop_event),
-                         daemon=True, name="verify-loop")
-    t.start()
+    STOP_ALLOWLIST = load_stop_allowlist(
+        os.environ.get(_STOP_HOSTS_ENV))
+    t = None
+    if not args.no_verify:
+        t = threading.Thread(target=verify_loop,
+                             args=(VERIFY_DIR, args.interval, stop_event),
+                             daemon=True, name="verify-loop")
+        # .start() BİLEREK aşağıda, try/finally'nin İÇİNDE çağrılır.
+        # Ölçülen yarış (2026-09-30, 4-eşzamanlı): yazıcı thread burada,
+        # kapanış drain'i kurulmadan ÖNCE başlarsa SIGTERM tam o pencerede
+        # gelirse süreç finally'siz ölür ve history.jsonl yazılıp sidecar
+        # yazılmadan çıkılır (K15 P1 — `3cabbff`'in kapatmaya çalıştığı
+        # uyuşmazlığın ta kendisi). Değişmez: **yazıcı çalışabiliyorsa
+        # drain de kuruludur.**
+    else:
+        sys.stderr.write(
+            "[main] snapshot-only: verify loop kapalı, ts=%s\n" %
+            LATEST["ts"])
+        sys.stderr.flush()
 
     srv = ThreadingHTTPServer((args.bind, args.port), Handler)
     SERVER = srv
     _lifecycle_event("start", detail=f"bind={args.bind} port={args.port}")
     sys.stderr.write(f"[main] preview_server: serving {PREVIEW_DIR} on http://{args.bind}:{args.port}\n")
-    sys.stderr.write(f"[main] preview_server: verify loop interval={args.interval}s, dir={VERIFY_DIR}\n")
+    if args.no_verify:
+        sys.stderr.write("[main] preview_server: snapshot-only, verify loop kapalı\n")
+    else:
+        sys.stderr.write(f"[main] preview_server: verify loop interval={args.interval}s, dir={VERIFY_DIR}\n")
     sys.stderr.write(f"[main] PID={os.getpid()} PGID={os.getpgrp()}\n")
     sys.stderr.flush()
+    # `serving`: serve_forever GERÇEKTEN başladı mı? BaseServer.shutdown(),
+    # serve_forever'ın kendi finally'sında set edilen bir event'i bekler;
+    # serve_forever hiç girmediyse shutdown() SONSUZA KADAR bekler. Yazıcı
+    # thread'i erken başlatabilmek için try'yi serve_forever'dan önce açmak
+    # zorundayız, dolayısıyla bu ayrımı açıkça tutmak gerekiyor.
+    serving = False
     try:
+        if t is not None:
+            t.start()
+        if TREND_SYNC is not None:
+            # Açılış telafisi: önceki oturumda yüklenmemiş/değişmiş history
+            # varsa ilk turda yakalanır (digest aynıysa hiç koşmaz).
+            TREND_SYNC.start()
+            TREND_SYNC.request()
+        serving = True
         srv.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
         stop_event.set()
-        t.join(timeout=REQUEST_TIMEOUT_SECONDS)
-        srv.shutdown()
-        srv.server_close()
-        # K15 yarışı kapanışı: run'ın son yazım fazı (persist_history) LOCK
-        # altında history.jsonl ve .sha256 sidecar'ını İKİ ayrı atomik yazımla
-        # yazar; daemon-thread çıkışta yarım kalırsa diskte yeni-history +
-        # eski-sidecar kalır (K15 P1: hash uyuşmazlığı — CI'da daemon-http
-        # kırmızısının kök-nedeni). LOCK'u sınırlı süreyle alıp bırakmak:
-        # aktif yazım biter, yeni yazım başlayamaz.
-        if LOCK.acquire(timeout=REQUEST_TIMEOUT_SECONDS):
-            LOCK.release()
+        if t is not None:
+            t.join(timeout=REQUEST_TIMEOUT_SECONDS)
+        if serving:
+            srv.shutdown()
+            srv.server_close()
+        # K15 yarışı kapanışı: uçuştaki persist_history'nin bitmesini bekle
+        # (history.jsonl + sidecar iki ayrı atomik yazım; araya giren SIGTERM
+        # diskte uyuşmayan çift bırakır). Mantık `drain_writer_lock`'ta —
+        # sözleşmesi test edilebilsin diye dışarı alındı.
+        drain_writer_lock()
+        if TREND_SYNC is not None:
+            TREND_SYNC.stop()
         _lifecycle_event("shutdown")
 
 

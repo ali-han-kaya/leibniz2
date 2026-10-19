@@ -1,6 +1,6 @@
-const fs = require('fs');
-const path = 'reproducibility/config/config-diff.json';
-const MARKER = '<!-- stoic-hume-v5-config-diff -->';
+const fs = require("fs");
+const path = "reproducibility/config/config-diff.json";
+const MARKER = "<!-- stoic-hume-v5-config-diff -->";
 
 const listComments = async () => {
   const { data } = await github.rest.issues.listComments({
@@ -16,7 +16,7 @@ const listComments = async () => {
 // tek başına koşulursa kendi listComments çağrısına düşer — iki yol aynı
 // create/update/delete davranışını üretir.
 const getExisting = async () => {
-  if (typeof EXISTING_COMMENTS !== 'undefined' && EXISTING_COMMENTS)
+  if (typeof EXISTING_COMMENTS !== "undefined" && EXISTING_COMMENTS)
     return EXISTING_COMMENTS;
   return await listComments();
 };
@@ -42,14 +42,14 @@ const cleanupStale = async (why) => {
 if (!fs.existsSync(path)) {
   // config-diff.json yok — bu run'da bulgu üretilmedi; dosya yokluğu da
   // "bulgu yok" sayılır (state-sync: bayat yorumu temizle).
-  await cleanupStale('config-diff.json yok');
+  await cleanupStale("config-diff.json yok");
   return;
 }
-const diff = JSON.parse(fs.readFileSync(path, 'utf8'));
+const diff = JSON.parse(fs.readFileSync(path, "utf8"));
 const diffs = diff.differences || [];
 
 if (diffs.length === 0) {
-  await cleanupStale('config-diff fark yok');
+  await cleanupStale("config-diff fark yok");
   return;
 }
 
@@ -60,16 +60,16 @@ const lines = diffs.map(
 );
 const runUrl = `${context.payload.repository.html_url}/actions/runs/${context.runId}`;
 const body = [
-  '## ⚙️ Config diff (raw vs effective)',
-  '',
+  "## ⚙️ Config diff (raw vs effective)",
+  "",
   ...lines,
-  '',
+  "",
   "> Advisory: bloke etmez; bloke eden kapı config-drift job'ıdır.",
   `> Detay: [run #${context.runId}](${runUrl})`,
-  '',
+  "",
   MARKER,
 ]
-  .join('\n')
+  .join("\n")
   .trim();
 
 const existing2 = await getExisting();
@@ -89,5 +89,5 @@ if (found) {
     repo: context.repo.repo,
     body,
   });
-  console.log('config-diff yorumu oluşturuldu');
+  console.log("config-diff yorumu oluşturuldu");
 }

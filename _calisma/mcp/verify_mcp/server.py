@@ -19,6 +19,7 @@ none of them triggers a verification run or mutates any state.
 from __future__ import annotations
 
 import argparse
+import asyncio
 import contextlib
 import io
 import json
@@ -28,7 +29,7 @@ import sys
 from enum import Enum
 from typing import Annotated, Any, Dict, List, Literal, Optional
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 from pydantic import Field
 
 # ---------------------------------------------------------------------------
@@ -47,7 +48,7 @@ CIKTI_DIR = os.path.join(REPO_ROOT, "_calisma", "CIKTI")
 sys.path.insert(0, CIKTI_DIR)
 import check_mirror_coverage as cmc  # noqa: E402
 
-mcp = FastMCP("verify_mcp")
+mcp = MCPServer("verify_mcp")
 
 # Resolved at startup by main(); overridable by tests.
 PREVIEW_DIR: Optional[str] = None
@@ -643,7 +644,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
 
     if args.list_tools:
-        for name in sorted(mcp._tool_manager._tools):
+        for name in sorted(t.name for t in asyncio.run(mcp.list_tools())):
             print(name)
         return 0
 

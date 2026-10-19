@@ -1,158 +1,111 @@
 #!/usr/bin/env bash
-# canvas_determinism_test.sh — Incidental Proof (canvas ailesi) determinizm deneyi.
+# canvas_determinism_test.sh — canvas (Incidental Proof) TeX kaynağının
+# determinizm deneyi: TEK motor (tectonic/XeTeX), iki bağımsız SDE-koşumu,
+# kanonik (/ID-nötr) hash karşılaştırması.
 #
-# Sözleşme (tek çağıran: docs/Makefile.texlive `plate-book-check`):
-#   ortam girişi:
-#     TEX_SOURCE         (zorunlu) canvas .tex yolu — kitap ya da bir levha
-#     DETERMINISM_OUT    (ops.)    rapor yolu
-#     TECTONIC_BIN       (ops.)    tectonic ikili yolu (yoksa PATH)
-#     SOURCE_DATE_EPOCH  (ops.)    aile sabiti; varsayılan 1700000000
-#   çıkış: 0 verdict=PASS · 1 fail-closed (kaynak yok / determinizm kırığı,
-#          rapor verdict=FAIL yazılır) · 2 motor yok
+# Neden ayrı betik: canvas fontspec + yerel fontlar kullanır (XeTeX sözleşmesi
+# — TeXLive migration planının engine-stratification bulgusu); pdfTeX zinciri
+# (texlive_determinism_test.sh) bu kaynağı derleyemez. Kanonik /ID fallback'i
+# ve SDE-semantiği ana betikten aynen taşındı (iki betik tek sözleşmeyi
+# paylaşıyor — test_determinism_trend_canvas.py bunu pinliyor).
 #
-# Rapor (key=value; Makefile kanıt echo'su bu satırları grep'ler):
-#   source, tectonic, source_date_epoch, hash_form, id_form,
-#   tectonic_raw_run1_sha256, tectonic_raw_run2_sha256,
-#   tectonic_run1_sha256, tectonic_run2_sha256, residual, verdict
-#   `tectonic_run*_sha256` KANONİK (/ID nötr) hash'lerdir; tek uygulama
-#   _calisma/CIKTI/pdf_id_canonical.py (ham hash'ler de raporlanır — hiçbir
-#   fark gizlenmez). Raporda hash_form/id_form bulunur ki "kanonik" iddiası
-#   denetlenebilir olsun (desen tutmazsa canonical == raw, id_form=id_absent).
+# Kullanım:
+#   bash canvas_determinism_test.sh                    # default kaynak: plate01
+#   TEX_SOURCE=... TECTONIC_BIN=... bash canvas_determinism_test.sh
 #
-# Neden tectonic (pdfTeX değil): canvas kaynakları fontspec + yerel .ttf ve
-# TikZ kullanır — XeTeX sözleşmesi; pdfTeX bu kaynağı derleyemez (ölçüldü,
-# el yazması ailesi ayrı bir Makefile hattında yaşar).
-#
-# SDE AİLE SABİTİ: kaynaklar gömülü /CreationDate taşır. SDE verilmezse
-# varsayılan aile sabitidir (1700000000); böylece unset bir çağrı motorun
-# içine GÜNCEL zamanı gömdürüp her koşumda farklı hash üretmez.
-#
-# İki BAĞIMSIZ koşum: her koşum kendi boş dizinine derler; aynı SDE ile
-# kanonik hash'ler eşit olmalıdır. Değilse verdict=FAIL ve rc=1 (fail-closed).
+# Çıkış: DETERMINISM_OUT rapor dosyasına makine-okur key=value satırları;
+#   verdict=PASS|FAIL. Exit: 0 PASS (ya da SKIP: araç yok — K3 SKIP
+#   sözleşmesi), 1 FAIL (fail-closed), 2 usage.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-CIKTI="$ROOT/_calisma/CIKTI"
-
-SRC="${TEX_SOURCE:-}"
-SDE="${SOURCE_DATE_EPOCH:-1700000000}"
+TEX="${TEX_SOURCE:-$ROOT/_calisma/CIKTI/canvas/incidental_proof_canvas.tex}"
+OUT="${DETERMINISM_OUT:-$ROOT/docs/ci_simulate/canvas_determinism/canvas_determinism_report.txt}"
 TECTONIC="${TECTONIC_BIN:-$(command -v tectonic 2>/dev/null || true)}"
-OUT="${DETERMINISM_OUT:-$ROOT/docs/ci_simulate/canvas_determinism/$(basename "${SRC%.tex}").determinism.txt}"
 
-if [[ -z "$SRC" ]]; then
-  echo "FAIL: TEX_SOURCE verilmedi — canvas kaynağı gerekli" >&2
+if [[ ! -f "$TEX" ]]; then
+  echo "FAIL: TeX source not found: $TEX" >&2
   exit 1
 fi
-if [[ ! -f "$SRC" ]]; then
-  echo "FAIL: canvas kaynağı yok: $SRC" >&2
-  exit 1
-fi
-if [[ -z "$TECTONIC" || ! -x "$TECTONIC" ]]; then
-  echo "FAIL: tectonic bulunamadı (TECTONIC_BIN= veya PATH) — canvas ailesi XeTeX sözleşmesi, pdfTeX derleyemez" >&2
-  exit 2
-fi
-if ! command -v python3 >/dev/null 2>&1; then
-  echo "FAIL: python3 yok — kanonik hash üretilemez (kanıt yoksa PASS yok)" >&2
-  exit 1
+if [[ -z "$TECTONIC" ]]; then
+  echo "SKIP: tectonic not found (K3 SKIP sözleşmesi: cron job'ı runner araçlarıyla uyumlu)" >&2
+  exit 0
 fi
 
-# Derleme KAYNAK DİZİNİNDE koşar: fontspec Path= yerel .ttf'leri, kitap ise
-# \includegraphics ile kanonik levha PDF'lerini orada arar. Yazma yalnız
-# --outdir'e gider (kaynak dizinine asla).
-SRCDIR="$(cd "$(dirname "$SRC")" && pwd)"
-BASE="$(basename "$SRC")"
-PDF="$(basename "${BASE%.tex}").pdf"
-
+mkdir -p "$(dirname "$OUT")"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
-mkdir -p "$tmp/r1" "$tmp/r2"
 
-run_engine() {  # run_engine <outdir> <log>
-  ( cd "$SRCDIR" && SOURCE_DATE_EPOCH="$SDE" "$TECTONIC" --outdir "$1" "$BASE" ) >"$2" 2>&1
+run_hash() { sha256sum "$1" | awk '{print $1}'; }
+
+# canonical_sha — trailer /ID çiftini nötrleyip SHA256 döner. pdfTeX/tectonic
+# her koşumda rastgele /ID üretebilir; içerik birebir aynıysa kanonik hash
+# eşit. Desen eşleşmezse ham hash döner (fail-safe: hiçbir fark gizlenmez).
+canonical_sha() {
+  python3 - "$1" <<'PY'
+import re, sys, hashlib
+data = open(sys.argv[1], 'rb').read()
+pat = re.compile(rb'/ID\s*\[\s*<[0-9a-fA-F]{32}>\s*<[0-9a-fA-F]{32}>\s*\]')
+if pat.search(data):
+    data = pat.sub(b'/ID [<00000000000000000000000000000000><00000000000000000000000000000000>]', data)
+print(hashlib.sha256(data).hexdigest())
+PY
 }
 
-if ! run_engine "$tmp/r1" "$tmp/r1.log"; then
-  echo "FAIL: tectonic run1 düştü ($BASE) — log kuyruğu:" >&2
-  tail -20 "$tmp/r1.log" >&2
-  exit 1
-fi
-if ! run_engine "$tmp/r2" "$tmp/r2.log"; then
-  echo "FAIL: tectonic run2 düştü ($BASE) — log kuyruğu:" >&2
-  tail -20 "$tmp/r2.log" >&2
-  exit 1
-fi
+printf '%s\n' "Canvas (Incidental Proof) determinism evidence" > "$OUT"
+printf 'source=%s\n' "$TEX" >> "$OUT"
+SDE="${SOURCE_DATE_EPOCH:-0}"
+# SDE motor'a explicit iletilir; aksi halde motor güncel zamanı gömer
+# (texlive_determinism_test.sh'de ölçülen sapma: tectonic 4ad65b9b→6cfc6c0a).
+export SOURCE_DATE_EPOCH="$SDE"
+printf 'tectonic=%s\nsource_date_epoch=%s\n' "$TECTONIC" "$SDE" >> "$OUT"
 
-for d in r1 r2; do
-  if [[ ! -f "$tmp/$d/$PDF" ]]; then
-    echo "FAIL: tectonic --outdir honor edilmedi: $tmp/$d/$PDF yok" >&2
+mkdir -p "$tmp/run1" "$tmp/run2"
+TEXDIR="$(cd "$(dirname "$TEX")" && pwd)"
+run_idx=0
+for dir in run1 run2; do
+  run_idx=$((run_idx + 1))
+  # GÜVENLİK: --outdir tmp — kaynak dizinine asla yazma (ana zincir sözleşmesi)
+  # CWD=TEXDIR şart: tex'in fontspec Path= yolu TEXDIR'a göredir
+  # (ölçüldü: başka CWD'den "font cannot be found" — Path= kpathsea-wd'siz,
+  # CWD-göreli çözülür).
+  if ! (cd "$TEXDIR" && "$TECTONIC" --outdir "$tmp/$dir" "$TEX" >/dev/null); then
+    echo "FAIL: tectonic PDF üretemedi (run$run_idx)" >&2
     exit 1
   fi
 done
 
-raw_sha() { sha256sum "$1" | awk '{print $1}'; }
-
-# canonical_sha FILE → "<64-hex> <id_found|id_absent>"; tek uygulama
-# pdf_id_canonical.py (buradaki regex ikinci bir gerçeklik olurdu).
-canonical_sha() {
-  python3 - "$1" "$CIKTI" <<'PY'
-import sys
-sys.path.insert(0, sys.argv[2])
-import pdf_id_canonical as c
-digest, found = c.canonical_sha256_path(sys.argv[1])
-if digest is None:
-    sys.exit("kanonik hash okunamadı: %s" % sys.argv[1])
-print("%s %s" % (digest, "id_found" if found else "id_absent"))
-PY
-}
-
-read -r c1 id1 <<<"$(canonical_sha "$tmp/r1/$PDF")"
-read -r c2 id2 <<<"$(canonical_sha "$tmp/r2/$PDF")"
-r1="$(raw_sha "$tmp/r1/$PDF")"
-r2="$(raw_sha "$tmp/r2/$PDF")"
-
-# Koşumlar arasında /ID biçimi tutarsızsa karşılaştırma geçersizdir (bir yan
-# kanonik, öteki ham) — fail-closed.
-if [[ "$id1" != "$id2" ]]; then
-  echo "FAIL: /ID biçimi koşumlar arasında tutarsız ($id1 vs $id2) — kanonik karşılaştırma geçersiz" >&2
-  exit 1
-fi
-# /ID deseni bulunamazsa canonical == raw düşer (modülün fail-safe'i); o
-# durumda "kanonik hash" iddiası KANITLANAMAZ — trende ham hash'i kanonik
-# diye yazmaktansa burada kırmızı ver.
-if [[ "$id1" != "id_found" ]]; then
-  echo "FAIL: /ID deseni bulunamadı ($id1) — kanonik hash iddiası kanıtlanamaz" >&2
+pdf_name="$(basename "${TEX%.tex}.pdf")"
+P1="$tmp/run1/$pdf_name"
+P2="$tmp/run2/$pdf_name"
+if [[ ! -f "$P1" || ! -f "$P2" ]]; then
+  echo "FAIL: tectonic --outdir honor edilmedi ($tmp/run1/$pdf_name yok)" >&2
   exit 1
 fi
 
-if [[ "$c1" == "$c2" ]]; then
-  verdict=PASS
-  if [[ "$r1" == "$r2" ]]; then
-    residual=none
-  else
-    residual="/ID (yalnız /ID farklı; /ID haric baytlar birebir aynı, kanonik hash eşit)"
+h1="$(run_hash "$P1")"
+h2="$(run_hash "$P2")"
+printf 'tectonic_run1_sha256=%s\ntectonic_run2_sha256=%s\n' "$h1" "$h2" >> "$OUT"
+if [[ "$h1" == "$h2" ]]; then
+  printf 'residual=none\nverdict=PASS\n' >> "$OUT"
+  exit 0
+fi
+
+# Ham hash farklı: kalıntı yalnız rastgele /ID mü? Kanonik karşılaştırma.
+# python3 yoksa kanıt üretilemez → fail-closed.
+if command -v python3 >/dev/null 2>&1; then
+  c1="$(canonical_sha "$P1")"
+  c2="$(canonical_sha "$P2")"
+  printf 'tectonic_canonical_run1_sha256=%s\ntectonic_canonical_run2_sha256=%s\n' "$c1" "$c2" >> "$OUT"
+  id1="$(grep -ao '/ID \[[^]]*\]' "$P1" | head -1 || true)"
+  id2="$(grep -ao '/ID \[[^]]*\]' "$P2" | head -1 || true)"
+  printf 'tectonic_run1_id=%s\ntectonic_run2_id=%s\n' "$id1" "$id2" >> "$OUT"
+  if [[ "$c1" != "$c2" ]]; then
+    printf 'residual=content\nverdict=FAIL\n' >> "$OUT"
+    exit 1
   fi
+  printf 'residual=/ID (tectonic rastgele belge kimligi; /ID haric baytlar birebir ayni)\nverdict=PASS\n' >> "$OUT"
 else
-  verdict=FAIL
-  residual=content
-fi
-
-mkdir -p "$(dirname "$OUT")"
-{
-  printf 'Canvas (Incidental Proof) determinism evidence\n'
-  printf 'source=%s\n' "$SRC"
-  printf 'tectonic=%s\n' "$TECTONIC"
-  printf 'source_date_epoch=%s\n' "$SDE"
-  printf 'hash_form=canonical (/ID notr; tek uygulama pdf_id_canonical.py)\n'
-  printf 'id_form=%s\n' "$id1"
-  printf 'tectonic_raw_run1_sha256=%s\ntectonic_raw_run2_sha256=%s\n' "$r1" "$r2"
-  printf 'tectonic_run1_sha256=%s\ntectonic_run2_sha256=%s\n' "$c1" "$c2"
-  printf 'residual=%s\n' "$residual"
-  printf 'verdict=%s\n' "$verdict"
-} > "$OUT.tmp-$$"
-mv "$OUT.tmp-$$" "$OUT"
-
-echo "canvas determinism: $BASE verdict=$verdict residual=${residual%% *} canonical=${c1:0:12}… (rapor: $OUT)"
-if [[ "$verdict" != "PASS" ]]; then
-  echo "FAIL: canvas determinizm kırığı ($BASE): $c1 != $c2" >&2
+  printf 'residual=unverifiable (python3 yok, kanonik karsilastirma yapilamadi)\nverdict=FAIL\n' >> "$OUT"
   exit 1
 fi

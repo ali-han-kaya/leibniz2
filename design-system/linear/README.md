@@ -9,6 +9,13 @@ Values are copied **verbatim** — no remapping, no renaming, no rounding.
 - `tokens.json` — structured tokens, grouped by first segment (`color`, `title`, `text`, `font`, `radius`, `ease`, `layer`, `editor`, …). Single source of truth for tooling. Includes `source` with page + exact asset URLs and extraction note.
 - `tokens.css` — flat `:root` drop-in with all 398 tokens grouped and sorted. `@import "design-system/linear/tokens.css";` then use `var(--…)` directly.
 - `raw.css` — concatenated verbatim source stylesheets (335 kB, 54 `static.linear.app/web/_next/static/css/*.css` files) for audit/diff. Not for import — `tokens.css` is the curated subset (internal `--sx-*` excluded).
+- `tailwind.css` — **GENERATED** Tailwind v4 `@theme` köprüsü: 168 yuva
+  (`bg-linear-bg-panel`, `text-linear-accent`, `rounded-linear-12`,
+  `font-linear-regular`, `ease-linear-in-quad`). Üretici
+  `design-system/scripts/generate_mirror_tailwind.py`, kapı
+  `check_mirror_bridges.py`. Köprünün var oluş sebebi: Linear'ın `--color-*`
+  adları ön-eksiz üretilseydi kök paletin `bg-bg`/`bg-accent` utility'lerini
+  gölgelerdi.
 
 ## Source
 
@@ -71,4 +78,6 @@ Re-fetch the 54 chunk URLs from the live page (they are content-hashed, so URLs 
 ```bash
 python3 design-system/linear/scripts/check_linear_tokens.py
 # OK — 398 Linear tokens verbatim against raw.css
+python3 design-system/scripts/generate_mirror_tailwind.py --check
+# OK — 4/4 marka köprüsü jeneratörle birebir (… linear 168/398 yuva …)
 ```

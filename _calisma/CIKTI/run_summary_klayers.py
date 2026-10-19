@@ -62,10 +62,9 @@ def render(sink, path="klayers.json"):
 
     other = layers.get("UNREGISTERED")
     if other:
-        findings = other.get("findings", [])
         sink.write(f"## 🔴 Other {other.get('label', 'Unregistered findings')}: "
-                   f"{len(findings)} bulgu\n\n")
-        for finding in findings:
+                   f"{len(other.get('findings', []))} bulgu\n\n")
+        for finding in other.get("findings", []):
             sink.write(f"- [{finding.get('priority', '?')}] "
                        f"{finding.get('check', '?')}: {finding.get('issue', '?')}\n")
         sink.write("\n")

@@ -131,11 +131,7 @@
         "normalized": "#171717",
         "count": 301,
         "confidence": "high",
-        "sources": [
-          "root",
-          "peer",
-          "cursor-pointer"
-        ],
+        "sources": ["root", "peer", "cursor-pointer"],
         "lch": "lch(7.74% 0 158.2)",
         "oklch": "oklch(20.46% 0 89.88)"
       },
@@ -144,10 +140,7 @@
         "normalized": "#4d4d4d",
         "count": 186,
         "confidence": "high",
-        "sources": [
-          "group",
-          "flex"
-        ],
+        "sources": ["group", "flex"],
         "lch": "lch(32.75% 0 158.2)",
         "oklch": "oklch(42.02% 0 89.88)"
       },
@@ -156,9 +149,7 @@
         "normalized": "#8f8f8f",
         "count": 28,
         "confidence": "high",
-        "sources": [
-          "group/agent-view-trigger"
-        ],
+        "sources": ["group/agent-view-trigger"],
         "lch": "lch(59.4% 0 158.2)",
         "oklch": "oklch(65% 0 89.88)"
       },
@@ -167,10 +158,7 @@
         "normalized": "#ffffff",
         "count": 22,
         "confidence": "high",
-        "sources": [
-          "outline-none",
-          "fides-banner-button"
-        ],
+        "sources": ["outline-none", "fides-banner-button"],
         "lch": "lch(100% 0 158.2)",
         "oklch": "oklch(100% 0 89.88)"
       },
@@ -179,9 +167,7 @@
         "normalized": "lab",
         "count": 14,
         "confidence": "medium",
-        "sources": [
-          "pointer-events-none"
-        ]
+        "sources": ["pointer-events-none"]
       }
     ],
     "cssVariables": {
@@ -654,91 +640,63 @@
       {
         "value": "0px 0px 0px 1px",
         "count": 1,
-        "elements": [
-          "div"
-        ],
+        "elements": ["div"],
         "confidence": "low",
         "numericValue": 0
       },
       {
         "value": "0px 8px 8px 0px",
         "count": 1,
-        "elements": [
-          "div"
-        ],
+        "elements": ["div"],
         "confidence": "low",
         "numericValue": 0
       },
       {
         "value": "4px",
         "count": 1,
-        "elements": [
-          "View as AI agent"
-        ],
+        "elements": ["View as AI agent"],
         "confidence": "low",
         "numericValue": 4
       },
       {
         "value": "6px",
         "count": 61,
-        "elements": [
-          "a",
-          "menuitem",
-          "span",
-          "link",
-          "button"
-        ],
+        "elements": ["a", "menuitem", "span", "link", "button"],
         "confidence": "high",
         "numericValue": 6
       },
       {
         "value": "8px",
         "count": 3,
-        "elements": [
-          "link"
-        ],
+        "elements": ["link"],
         "confidence": "low",
         "numericValue": 8
       },
       {
         "value": "12px",
         "count": 3,
-        "elements": [
-          "menu",
-          "document"
-        ],
+        "elements": ["menu", "document"],
         "confidence": "low",
         "numericValue": 12
       },
       {
         "value": "128px",
         "count": 7,
-        "elements": [
-          "span",
-          "button"
-        ],
+        "elements": ["span", "button"],
         "confidence": "medium",
         "numericValue": 128
       },
       {
         "value": "3.35544e+07px",
         "count": 26,
-        "elements": [
-          "img",
-          "link",
-          "div",
-          "Onboard your agent",
-          "span"
-        ],
+        "elements": ["img", "link", "div", "Onboard your agent", "span"],
         "confidence": "high",
         "numericValue": 33554400
       },
       {
         "value": "100%",
         "count": 1,
-        "elements": [
-          "div"
-        ],
+        "elements": ["div"],
         "confidence": "low",
         "numericValue": 100
       }
@@ -751,10 +709,7 @@
         "style": "solid",
         "color": "rgba(0, 0, 0, 0.08)",
         "count": 7,
-        "elements": [
-          "menu",
-          "span"
-        ],
+        "elements": ["menu", "span"],
         "confidence": "medium"
       },
       {
@@ -762,10 +717,7 @@
         "style": "solid",
         "color": "rgb(235, 235, 235)",
         "count": 5,
-        "elements": [
-          "div",
-          "button"
-        ],
+        "elements": ["div", "button"],
         "confidence": "medium"
       },
       {
@@ -773,10 +725,7 @@
         "style": "solid",
         "color": "rgb(235, 235, 235)",
         "count": 4,
-        "elements": [
-          "hr",
-          "modal"
-        ],
+        "elements": ["hr", "modal"],
         "confidence": "medium"
       },
       {
@@ -784,9 +733,7 @@
         "style": "solid",
         "color": "rgb(235, 235, 235)",
         "count": 3,
-        "elements": [
-          "div"
-        ],
+        "elements": ["div"],
         "confidence": "low"
       },
       {
@@ -794,10 +741,7 @@
         "style": "solid",
         "color": "rgba(0, 0, 0, 0.08)",
         "count": 2,
-        "elements": [
-          "div",
-          "hr"
-        ],
+        "elements": ["div", "hr"],
         "confidence": "low"
       }
     ]

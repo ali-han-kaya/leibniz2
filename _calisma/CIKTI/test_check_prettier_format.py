@@ -1,362 +1,284 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""test_check_prettier_format.py — Prettier kapısının sözleşmesi.
+"""test_check_prettier_format.py — prettier kapısının SÖZLEŞMESİ.
 
-Ölçülen kök neden: kapı `files:` filtresiyle **yalnız stage'li** dosyayı
-denetler. Hiç yeniden stage olmayan dosyalar (github_scripts, apps/*,
-design-system) sessizce biçimden düştü; `origin/main`'de 40 dosya borçluydu
-ve borç ancak tüm ağaç taranınca göründü. Sözleşme:
-  1) --all modu: git ls-files üzerinden TÜM uygun dosyayı denetler
-  2) package-lock.json muaf (mevcut hook exclude sözleşmesi)
-  3) .prettierignore muafiyeti: vendor/ (3. parti minified) ve
-     design-system/vercel/*.json (makine çıkarımı VERİ anlık görüntüsü)
-  4) --all, borç varsa exit 1 (fail-closed), temiz ağaçta exit 0
-  5) prettier yoksa SKIP (exit 0) — ortam-bağımlı kapı ortam yoksa bloklamaz
+Kapı iki farklı çağırana hizmet ediyor ve ikisinin davranışı ZIT olmalı:
 
-OFFLINE, stdlib-only. Gerçek prettier ÇALIŞTIRILMAZ: dosya listesi ve
-muaffiyet mantığı saf fonksiyonlardan doğrulanır.
+  * pre-commit (`check-prettier-format`): ortam-bağımlı. Prettier yoksa
+    SKIP (rc=0) — ortamı olmayan bir geliştiriciyi bloke etmemeli.
+  * haftalık `prettier-drift.yml` (--all-tracked --require-prettier):
+    fail-closed. Prettier yoksa rc=2 — kurulmamış bir CI job'ı yeşil
+    görünüp HİÇBİR ŞEY ölçmemeli.
+
+Bu ayrım test edilmezse tek bir semantik sürüklenme ("ikisi de SKIP olsun")
+hapşırıkla değil, ancak aylar sonra job'ın hep yeşil olduğu fark edilerek
+anlaşılır. Ayrıca kapsamın hook'un `files:`/`exclude:` filtresiyle aynı
+kalması gerekir: kapsam sessizce daralırsa tarama yapar görünür ama
+dosyaları atlar.
+
+Testler ÇEVRİMDIŞI ve ortamdan bağımsızdır: sahte prettier ikilisi kullanılır,
+gerçek prettier'ın kurulu olması GEREKMEZ (CI'da node_modules yok).
 """
 import contextlib
+import io
 import json
 import os
 import pathlib
+import stat
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
-ROOT = pathlib.Path(__file__).resolve().parents[2]
-GATE = ROOT / "_calisma" / "CIKTI" / "check_prettier_format.py"
-sys.path.insert(0, str(GATE.parent))
+HERE = pathlib.Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
 
-import check_prettier_format as gate  # noqa: E402
+import check_prettier_format as cpf  # noqa: E402
 
-# `git commit`, pre-commit hook'una GIT_DIR + GIT_INDEX_FILE export EDER
-# (git'in local_repo_env'i — ölçüldü: <common>/.git/worktrees/<wt> ve
-# .../worktrees/<wt>/index). Alt süreçler bunu MİRAS ALIR ve
-# `git -C <geçici depo>` çağrıları çalıştırıldıkları depoyu değil,
-# o değişkenlerin işaret ettiği depoyu kullanır. Test bu yüzden kendi
-# git ortamını SIFIRLAR; aksi hâlde batarya yalnız `git commit` içinde
-# kırılır — ölçülen ayrım: `pre-commit run` PASS, `git commit` FAIL.
-_GIT_IDENTITY = {
-    "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.invalid",
-    "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.invalid",
-}
-
-
-def hermetic_git_env():
-    """GIT_* mirası olmayan, yalnız commit kimliği taşıyan ortam."""
-    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
-    env.update(_GIT_IDENTITY)
-    return env
+# Sahte prettier: FAKE_PW_RC ile çıkış kodu, her argüman için `[warn]` basar.
+FAKE_PRETTIER = r'''#!/usr/bin/env python3
+import os, sys
+rc = int(os.environ.get("FAKE_PW_RC", "0"))
+paths = [a for a in sys.argv[1:] if not a.startswith("-")]
+if rc != 0:
+    for p in paths:
+        sys.stderr.write("[warn] %s\n" % p)
+    sys.stderr.write("[warn] Code style issues found in %d files. Run "
+                     "Prettier with --write to fix.\n" % len(paths))
+    sys.exit(rc)
+print("All matched files use Prettier code style!")
+'''
 
 
-@contextlib.contextmanager
-def scrubbed_git_env():
-    """Süreç ortamından TÜM GIT_* değişkenlerini süreli kaldırır."""
-    saved = {k: v for k, v in os.environ.items() if k.startswith("GIT_")}
-    for k in saved:
-        del os.environ[k]
-    try:
-        yield
-    finally:
-        for k in [k for k in os.environ if k.startswith("GIT_")]:
-            del os.environ[k]
-        os.environ.update(saved)
+def _write_fake_prettier(td):
+    p = pathlib.Path(td) / "fake_prettier"
+    p.write_text(FAKE_PRETTIER, encoding="utf-8")
+    p.chmod(p.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    return p
 
 
-class TestExtensionFilter(unittest.TestCase):
-    """Hangi dosyalar kapsama girer (hook'un `files:` sözleşmesi)."""
-
-    def test_js_ts_json_included(self):
-        for f in ("a.js", "a.jsx", "a.ts", "a.tsx", "apps/x/a.json"):
-            self.assertTrue(gate.matches_glob(f), f"{f} kapsamda olmalı")
-
-    def test_other_extensions_excluded(self):
-        for f in ("a.py", "a.html", "a.css", "a.sh", "a.md", "a.yml"):
-            self.assertFalse(gate.matches_glob(f), f"{f} kapsam DIŞIDA olmalı")
-
-    def test_package_lock_excluded(self):
-        # Hook `exclude: package-lock\.json$` — kilit dosyaları biçimlendirilmez.
-        self.assertFalse(gate.matches_glob("apps/x/package-lock.json"))
-
-    def test_node_modules_never_scanned(self):
-        # node_modules prettier'ın kendi çıktısıdır; taramaya girmemeli.
-        self.assertFalse(gate.matches_glob("apps/x/node_modules/lib/a.js"))
-
-    def test_nested_package_lock_excluded(self):
-        self.assertFalse(
-            gate.matches_glob("_calisma/pptx/package-lock.json"))
-
-
-class TestIgnoreFile(unittest.TestCase):
-    """.prettierignore muafiyetleri — kod/veri ayrımı."""
+class TrackedTargetsTests(unittest.TestCase):
+    """`--all-tracked` kapsamı = hook'un files:/exclude: filtresiyle AYNI."""
 
     def setUp(self):
-        self.ignore = (ROOT / ".prettierignore")
-        self.text = self.ignore.read_text(encoding="utf-8") \
-            if self.ignore.exists() else ""
+        self._td = tempfile.TemporaryDirectory()
+        self.repo = pathlib.Path(self._td.name)
+        self.addCleanup(self._td.cleanup)
+        subprocess.run(["git", "init", "-q"], cwd=str(self.repo), check=True)
 
-    def test_ignore_file_exists(self):
-        self.assertTrue(self.ignore.exists(),
-                        "muafiyet listesi yoksa kod/veri ayrımı belirsiz")
+    def _add(self, *names):
+        for name in names:
+            p = self.repo / name
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text("x\n", encoding="utf-8")
+        subprocess.run(["git", "add", "-A"], cwd=str(self.repo), check=True)
 
-    def test_vendor_is_excluded_with_reason(self):
-        # axe.min.js 3. parti (MPL-2.0) minified dosya: prettier 2x büyütür
-        # (ölçüm: 553446 -> 1022724 bayt) ve diff okunamaz olur.
-        self.assertRegex(self.text, r"vendor/",
-                         "3. parti vendor muaf olmalı")
+    def test_only_js_ts_json_are_in_scope(self):
+        self._add("a.js", "b.tsx", "c.json", "d.ts", "e.jsx",
+                  "skip.py", "skip.md", "skip.yml", "skip.css")
+        got = cpf.tracked_targets(self.repo)
+        self.assertEqual(got, ["a.js", "b.tsx", "c.json", "d.ts", "e.jsx"],
+                         "kapsam hook'un files: filtresinden kaydı")
 
-    def test_extracted_vercel_data_excluded(self):
-        # design-system/vercel/*.json harici siteden MAKİNE ÇIKARIMI veri
-        # anlık görüntüsü ("extractor": "dembrandt") — kaynak kod değil.
-        self.assertRegex(self.text, r"design-system/vercel/")
+    def test_package_lock_is_excluded_but_a_real_lock_file_is_not_proof(self):
+        """package-lock.json hariç; ama dosya GERÇEKTEN orada olmalı.
 
-    def test_patcher_owned_runtime_asset_excluded(self):
-        # preview.js dashboard'ın çalışma-zamanı betiği ve
-        # determinism_trend_badge.py --update-preview tarafından idempotent
-        # yamalanır. Patcher ÇİFT tırnaklı JS üretir, .prettierrc singleQuote:
-        # true ister → prettier --write sonrası patcher yeniden yamalar ve
-        # kapı tekrar FAIL eder (ölçülen çift yönlü çekişme).
-        self.assertRegex(self.text, r"preview\.js",
-                         "patcher'a ait varlık muaf olmalı")
-
-    def test_patcher_owned_exclusion_has_reason(self):
-        self.assertRegex(
-            self.text, r"(?is)preview\.js.*(?:patcher|yama)",
-            "preview.js muafiyeti gerekçesiyle yazılmalı")
-
-    def test_patcher_output_is_not_prettier_reformattable(self):
-        # Canlı çelişki kanıtı: patcher'ın yazdığı JS, prettier'ın singleQuote
-        # kuralına aykırıdır. Bu dosyayı kapsama almak kapıyı sürekli FAIL
-        # ederdi — yani muafiyet keyfidir, stil tercihi değil.
-        patcher = (ROOT / "_calisma" / "CIKTI" /
-                   "determinism_trend_badge.py")
-        if not patcher.is_file():
-            self.skipTest("patcher yok — SKIP")
-        src = patcher.read_text(encoding="utf-8")
-        self.assertIn('$("det-trend-badge")', src,
-                      "patcher çift tırnaklı JS üretiyor (ölçülen çatışma)")
-
-    def test_ignore_file_documents_reason_not_just_pattern(self):
-        # Desen listesi yeterli değil: NEDEN yazılı olmalı (borcun
-        # yeniden doğmaması için bağlam gerekir).
-        self.assertRegex(self.text, r"(?m)^#\s+\S",
-                         "gerekçe satırı olmalı")
-
-
-class TestAllModeCollectsTree(unittest.TestCase):
-    """--all: tüm ağacı toplar, yalnız stage'e bakmaz."""
-
-    def test_all_mode_collects_from_git_ls_files(self):
-        src = GATE.read_text(encoding="utf-8")
-        self.assertIn("--all", src, "--all modu tanımlı olmalı")
-        self.assertIn("ls-files", src,
-                      "ağaç taraması git ls-files üzerinden olmalı "
-                      "(untracked çürümeye bırakılmamalı)")
-
-    def test_all_mode_is_hook_wired(self):
-        cfg = (ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8")
-        self.assertIn("check-prettier-format-all", cfg,
-                      "all-files kapısı pre-commit'e bağlı olmalı")
-        # always_run + pass_filenames:false = her commit'te ağacı tarar
-        m = cfg.split("- id: check-prettier-format-all", 1)
-        self.assertEqual(len(m), 2, "hook kaydı bulunamadı")
-        block = m[1].split("\n      - id:", 1)[0]
-        self.assertIn("always_run: true", block)
-        self.assertIn("pass_filenames: false", block)
-        self.assertIn("--all", block)
-
-    def test_hook_uses_venv_guard(self):
-        # check_prettier_format.py prettier binary'sini dashboard-next
-        # node_modules'tan bulur; sistem python3'ü yeterli (stdlib-only).
-        cfg = (ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8")
-        block = cfg.split("- id: check-prettier-format-all", 1)[1]
-        block = block.split("\n      - id:", 1)[0]
-        self.assertIn("check_prettier_format.py", block)
-        self.assertIn("--all", block)
-
-
-class TestGateIsStdlibOnly(unittest.TestCase):
-    def test_no_third_party_import(self):
-        src = GATE.read_text(encoding="utf-8")
-        for banned in ("import yaml", "import requests", "import black"):
-            self.assertNotIn(banned, src, f"kapı stdlib-only olmalı: {banned}")
-
-    def test_prettier_path_points_at_dashboard_node_modules(self):
-        self.assertTrue(str(gate.PRETTIER).endswith(
-            "apps/dashboard-next/node_modules/.bin/prettier"))
-
-
-class TestDiffModeCollectsBranchSurface(unittest.TestCase):
-    """--diff: değişim farkı yüzeyi, yalnız stage değil.
-
-    Ölçülen boşluk: `files:` filtresi yalnız O AN stage'li dosyayı görür.
-    Dalın önceki commit'inde bozulmuş ama şu anda stage'lenmemiş bir dosya
-    sessizce geçer. --diff yüzeyi genişletir:
-
-        U ∪ B = (şu an stage'li) ∪ (merge-base..HEAD arası değişen)
-
-    Birlestirme iki yönlüdür: stage commit anını, dal farkı commit'leri
-    kapsar. Gerçek bir temp git deposunda ölçülür (mock yok).
-    """
-
-    @classmethod
-    def setUpClass(cls):
-        import subprocess as sp
-        cls.tmp = tempfile.mkdtemp(prefix="prettier-diff-")
-        # GIT_* ortamı TAMAMEN sıfırlanmalı. `git commit`, pre-commit
-        # hook'una GIT_DIR + GIT_INDEX_FILE export EDER (ölçüldü:
-        # .git/worktrees/<wt> ve .git/worktrees/<wt>/index) ve alt süreçler
-        # bunu miras alır; `git -C tmp …` çalıştırıldığı depoyu değil o
-        # değişkenlerin işaret ettiği depoyu kullanır. Sızarsa kurulum
-        # GERÇEK repo üzerinde koşar: add -A leibniz2'nin bütün ağacını
-        # izole indekse yazar, `git diff --cached` 63 dosyalık gerçek yüzeyi
-        # döner ve fixture iddiaları (kept.js dışarıda kalmalı) yanlış yere
-        # bağlanır. Test bu yüzden hangi ortamda koşarsa koşsun aynı depoyu
-        # görmek zorundadır: yalnız commit kimliği taşınır.
-        env = hermetic_git_env()
-
-        def run(*args):
-            return sp.run(["git", "-C", cls.tmp] + list(args), env=env,
-                          capture_output=True, text=True, timeout=30)
-
-        run("init", "-q", "-b", "main")
-        # base commit: kept.js base'den sonra HİÇ değişmeyecek (dokunulmamış
-        # temiz referans); staged.js ve touched.js temiz başlar.
-        for f in ("kept.js", "staged.js", "touched.js"):
-            with open(os.path.join(cls.tmp, f), "w") as fh:
-                fh.write("const a = 1;\n")
-        run("add", "-A")
-        run("commit", "-qm", "base")
-        # feature commit: (a) boz dosya ekle — commit anında stage OLMAYACAK,
-        # (b) touched.js'i değiştir. kept.js bilerek dokunulmaz.
-        with open(os.path.join(cls.tmp, "borrowed.js"), "w") as fh:
-            fh.write("const b=2\n")
-        with open(os.path.join(cls.tmp, "touched.js"), "w") as fh:
-            fh.write("const a = 2;\n")
-        run("add", "-A")
-        run("commit", "-qm", "feature: debt + change")
-        # çalışma ağacında SADECE staged.js değişik (borrowed.js dokunulmadı)
-        with open(os.path.join(cls.tmp, "staged.js"), "w") as fh:
-            fh.write("const a = 3;\n")
-        run("add", "staged.js")
-        cls.run_git = staticmethod(run)
-
-    def _collect(self, base="HEAD~1"):
-        import importlib
-        gate = importlib.import_module("check_prettier_format")
-        orig = gate.REPO
-        gate.REPO = pathlib.Path(self.tmp)
-        # gate._git_lines os.environ'u miras alır. Ambient GIT_DIR alt süreci
-        # geçici depodan GERÇEK repoya yönlendirir (fark hesabı yanlış yerde
-        # koşar, git hatayla boş döner); GIT_INDEX_FILE ise indeksin hangi
-        # dosyayı okuyacağını değiştirir. İkisi de temizlenir: git yalnız
-        # REPO'yu keşfeder, yani geçici deponun kendi .git'ini.
-        try:
-            with scrubbed_git_env():
-                return set(gate.collect_diff_files(base))
-        finally:
-            gate.REPO = orig
-
-    def test_diff_mode_includes_files_changed_on_branch(self):
-        self.assertIn("borrowed.js", self._collect(),
-                      "onceki commit'te degisen dosya --diff yuzeyinde olmali")
-
-    def test_diff_mode_includes_touched_file(self):
-        self.assertIn("touched.js", self._collect(),
-                      "feature commit'inde degisen dosya kapsamda olmali")
-
-    def test_diff_mode_includes_staged_file(self):
-        self.assertIn("staged.js", self._collect(),
-                      "su an stage'li dosya da kapsamda olmali")
-
-    def test_diff_mode_excludes_untouched_clean_file(self):
-        self.assertNotIn("kept.js", self._collect(),
-                         "bu dosya base'den beri ayni -> kapsam disi")
-
-    def test_diff_mode_is_deterministic(self):
-        self.assertEqual(self._collect(), self._collect(),
-                         "iki tarama ayni sonucu vermeli")
-
-    def test_diff_mode_on_empty_diff_returns_empty(self):
-        # Index'i boşalt: stage tarafı katkısız kalsın, yalnız dal farkı
-        # (HEAD...HEAD = boş) ölçülsün.
-        self.run_git("reset", "-q")
-        try:
-            self.assertEqual(self._collect(base="HEAD"), set(),
-                             "HEAD..HEAD farki bos olmali")
-        finally:
-            self.run_git("add", "staged.js")
-
-    def test_diff_mode_respects_prettierignore(self):
-        # Muaf desen kapsam dışı kalmalı (kod/veri ayrımı bozulmaz).
-        ignore = os.path.join(self.tmp, ".prettierignore")
-        with open(ignore, "w") as fh:
-            fh.write("borrowed.js\n")
-        try:
-            self.assertNotIn("borrowed.js", self._collect())
-        finally:
-            os.remove(ignore)
-
-    def test_collect_is_immune_to_ambient_git_env(self):
-        """Ölçülen kırılma: `git commit` hook ortamı GIT_DIR/GIT_INDEX_FILE
-        export eder; bunlar miras alınırsa fark hesabı GERÇEK repo üzerinde
-        koşar ve temp deponun yüzeyi hiç görünmez. Kanıt: ambient GIT_DIR'yi
-        KASITLI olarak geçersiz bir değere ayarla — temp deponun yüzeyi yine
-        de doğru dönmeli. Miras alınan kod burada kırılır, temizlenen kod
-        geçer.
+        Aksi hâlde test vacuous olurdu (dışlama hiçbir şey yapmıyor olabilirdi).
         """
-        ambient = {
-            "GIT_DIR": os.path.join(self.tmp, "..", "yok-boyle-bir-depo"),
-            "GIT_INDEX_FILE": os.path.join(self.tmp, ".yanlis-indeks"),
-        }
-        saved = {k: os.environ.get(k) for k in ambient}
-        os.environ.update(ambient)
-        try:
-            got = self._collect()
-        finally:
-            for k, v in saved.items():
-                if v is None:
-                    os.environ.pop(k, None)
-                else:
-                    os.environ[k] = v
-        self.assertIn("borrowed.js", got,
-                      "ambient GIT_DIR temp deponun yuzeyini gostermemeli")
-        self.assertIn("staged.js", got, "stage'li dosya da gorunmeli")
-        self.assertNotIn("kept.js", got, "dokunulmamis temiz dosya disarida")
+        self._add("package-lock.json", "other-lock.json")
+        self.assertTrue((self.repo / "package-lock.json").is_file())
+        got = cpf.tracked_targets(self.repo)
+        self.assertNotIn("package-lock.json", got)
+        self.assertIn("other-lock.json", got)
 
-    def test_hook_is_diff_aware_and_always_runs(self):
-        cfg = (ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8")
-        block = cfg.split("- id: check-prettier-format\n", 1)[1]
-        block = block.split("\n      - id:", 1)[0]
-        self.assertIn("--diff", block, "ana hook --diff kullanmali")
-        self.assertIn("always_run: true", block, "hook her commit'te kosmali")
-        self.assertIn("pass_filenames: false", block,
-                      "dosya listesi pre-commit'ten degil kapidan gelmeli")
+    def test_nested_paths_are_relative_and_unsorted_input_is_sorted(self):
+        self._add("z/z.js", "a/a.js")
+        self.assertEqual(cpf.tracked_targets(self.repo), ["a/a.js", "z/z.js"])
 
-    def test_diff_mode_exists_in_gate_source(self):
-        src = GATE.read_text(encoding="utf-8")
-        self.assertIn("def collect_diff_files", src)
-        self.assertIn("--diff", src)
+    def test_non_ascii_names_survive_unescaped(self):
+        """`git ls-files -z`: quotePath açıkken düz `ls-files` adı kaçışlar.
+
+        Kaçışlanmış bir ad `is_file()`/prettier çağrısında var olmayan bir
+        yola dönüşür ve dosya sessizce taranmaz.
+        """
+        self._add("gölge-thumb.js")
+        self.assertEqual(cpf.tracked_targets(self.repo), ["gölge-thumb.js"])
+
+    def test_brute_scope_matches_the_hook_filter(self):
+        """Kapsam deseni hook'unkinden türetilmeli (tek kaynak iddiası)."""
+        self.assertEqual(cpf.INCLUDED_SUFFIXES,
+                         (".js", ".jsx", ".ts", ".tsx", ".json"))
+        self.assertEqual(cpf.EXCLUDED_NAMES, ("package-lock.json",))
 
 
-class TestRealTreeIsClean(unittest.TestCase):
-    """GERÇEK ağaç: --all denetiminde borç kalmamalı.
+class ResolvePrettierTests(unittest.TestCase):
+    def test_env_override_wins(self):
+        with tempfile.TemporaryDirectory() as td:
+            fake = _write_fake_prettier(td)
+            self.assertEqual(cpf.resolve_prettier({"PRETTIER_BIN": str(fake)}),
+                             fake)
 
-    Bu, listenin kendisi: --all modu eklendikten ve ağaç biçimlendirildikten
-    sonra gerçek repoda exit 0 vermelidir. Prettier binary'si yoksa SKIP
-    (ortam-bağımlı kapı ortam yoksa bloklamaz).
-    """
+    def test_missing_override_yields_none_not_fallback(self):
+        """Var olmayan bir override, repo varsayılanına DÜŞMEZ.
 
-    def test_real_tree_has_no_prettier_debt(self):
-        if not gate.PRETTIER.is_file():
-            self.skipTest("prettier yok (node_modules kurulu değil) — SKIP")
-        files = gate.collect_all_files()
-        self.assertGreater(len(files), 0, "ağaç taraması boş döndü")
-        rc = gate.main(["--all"])
-        self.assertEqual(rc, 0,
-                         "gerçek ağaçta biçim borcu kaldı — --all FAIL")
+        Düşseydi CI'da yanlış kurulum sessizce yerel ikiliyle 'doğrulanır'
+        ve pin kaydı anlamsızlaşırdı.
+        """
+        self.assertIsNone(cpf.resolve_prettier({"PRETTIER_BIN": "/nonexistent"}))
+
+    def test_blank_override_is_ignored(self):
+        with tempfile.TemporaryDirectory() as td:
+            fake = _write_fake_prettier(td)
+            got = cpf.resolve_prettier({"PRETTIER_BIN": "   "})
+            self.assertTrue(got is None or got == cpf.PRETTIER)
+
+
+class MainModeTests(unittest.TestCase):
+    """İki çağıranın ZIT davranışı: SKIP (hook) vs fail-closed (CI)."""
+
+    def setUp(self):
+        self._td = tempfile.TemporaryDirectory()
+        self.td = pathlib.Path(self._td.name)
+        self.addCleanup(self._td.cleanup)
+        self.fake = _write_fake_prettier(self.td)
+        self.target = self.td / "drift.js"
+        self.target.write_text("let x=1\n", encoding="utf-8")
+
+    def _run(self, argv, rc=0, env=None):
+        base = {"PRETTIER_BIN": str(self.fake), "FAKE_PW_RC": str(rc)}
+        base.update(env or {})
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.dict(os.environ, base, clear=False):
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                code = cpf.main(argv)
+        return code, out.getvalue(), err.getvalue()
+
+    # ---- hook semantiği -----------------------------------------------------
+    def test_missing_prettier_skips_in_hook_mode(self):
+        code, out, _ = self._run(["drift.js"], env={"PRETTIER_BIN": "/nonexistent"})
+        self.assertEqual(code, 0, "hook modu ortam yokken bloke etmemeli")
+        self.assertIn("SKIP", out)
+
+    def test_no_files_skips(self):
+        code, out, _ = self._run(["/nonexistent/dosya.js"])
+        self.assertEqual(code, 0)
+        self.assertIn("SKIP", out)
+
+    def test_clean_file_passes(self):
+        code, out, _ = self._run([str(self.target)], rc=0)
+        self.assertEqual(code, 0)
+        self.assertIn("OK", out)
+
+    def test_drifting_file_fails_and_is_named(self):
+        code, out, _ = self._run([str(self.target)], rc=1)
+        self.assertEqual(code, 1)
+        self.assertIn(self.target.name, out,
+                      "biçim-uyumsuz dosya adı raporlanmalı")
+
+    def test_summary_line_is_not_reported_as_a_file(self):
+        """`Code style issues found in N files…` bir DOSYA DEĞİL.
+
+        Bu filtre olmasa kapı 'sorunlu dosya' diye prettier'ın özet satırını
+        listeler ve sayı uydururdu.
+        """
+        code, out, _ = self._run([str(self.target)], rc=1)
+        self.assertEqual(code, 1)
+        self.assertNotIn("Code style issues", out)
+
+    # ---- CI semantiği -------------------------------------------------------
+    def test_require_prettier_is_fail_closed(self):
+        code, _, err = self._run(["--all-tracked", "--require-prettier"],
+                                 env={"PRETTIER_BIN": "/nonexistent"})
+        self.assertEqual(code, 2,
+                         "prettier kurulmadan CI job'ı yeşil görünmemeli")
+        self.assertIn("fail-closed", err)
+
+    def test_require_prettier_is_not_a_no_op_when_prettier_exists(self):
+        """Bayrak, prettier VARSA sonucu değiştirmemeli (aksi hâlde her hafta
+        kırmızı üretir ve kimse bakmaz)."""
+        with mock.patch.object(cpf, "tracked_targets", return_value=["drift.js"]):
+            with mock.patch.dict(os.environ, {"FAKE_PW_RC": "0"}, clear=False):
+                code, out, _ = self._run(["--all-tracked", "--require-prettier"],
+                                         rc=0)
+        self.assertEqual(code, 0)
+        self.assertIn("OK", out)
+
+    def test_empty_all_tracked_is_fail_closed(self):
+        """Takipli liste boş dönerse '0 dosya temiz' DEMEK YASAK.
+
+        (git okunamadı / desen bozuldu demektir; sessiz yeşil olurdu.)
+        """
+        with mock.patch.object(cpf, "tracked_targets", return_value=[]):
+            code, _, err = self._run(["--all-tracked"])
+        self.assertEqual(code, 2)
+        self.assertIn("BOŞ", err)
+
+    def test_all_tracked_covers_files_the_hook_would_never_see(self):
+        """Asıl amaç: dokunulmayan bir dosya da taranmalı.
+
+        `tracked_targets`'ın döndürdüğü her dosya prettier'a gider — yani
+        'commit edilmiş ama hiç dokunulmamış' dosya artık görünmez değil.
+        """
+        seen = []
+
+        def spy(prettier, files, repo=None):
+            seen.extend(files)
+            return 0, []
+
+        with mock.patch.object(cpf, "tracked_targets",
+                               return_value=["untouched/a.js", "untouched/b.ts"]):
+            with mock.patch.object(cpf, "run_check", side_effect=spy):
+                code, _, _ = self._run(["--all-tracked"])
+        self.assertEqual(code, 0)
+        self.assertEqual(seen, ["untouched/a.js", "untouched/b.ts"])
+
+
+class WorkflowWiringTests(unittest.TestCase):
+    """Job, kapıyı gerçekten ve doğru bayraklarla çağırıyor mu (statik)."""
+
+    def setUp(self):
+        self.wf = (cpf.REPO / ".github" / "workflows"
+                   / "prettier-drift.yml")
+        if not self.wf.is_file():
+            self.skipTest("prettier-drift.yml yok")
+
+    def test_job_is_scheduled_weekly_and_manual(self):
+        text = self.wf.read_text(encoding="utf-8")
+        self.assertIn("schedule:", text)
+        self.assertIn("workflow_dispatch:", text)
+
+    def test_job_invokes_the_gate_with_both_flags(self):
+        text = self.wf.read_text(encoding="utf-8")
+        self.assertIn("check_prettier_format.py", text)
+        self.assertIn("--all-tracked", text)
+        self.assertIn("--require-prettier", text)
+
+    def test_prettier_version_comes_from_the_lockfile(self):
+        """Sürüm elle yazılırsa ikinci bir kopya doğar ve kayar."""
+        text = self.wf.read_text(encoding="utf-8")
+        self.assertIn("package-lock.json", text)
+        lock = (cpf.REPO / "apps" / "dashboard-next" / "package-lock.json")
+        if lock.is_file():
+            data = json.loads(lock.read_text(encoding="utf-8"))
+            ver = data.get("packages", {}).get("node_modules/prettier", {}) \
+                      .get("version")
+            self.assertTrue(ver, "lock'ta prettier girdisi olmalı")
+            self.assertIn("node_modules/prettier", text,
+                          "workflow lock'taki girdiyi okumuyor")
+
+    def test_ignore_file_exists_for_the_vendor_exclusion(self):
+        """Muafiyet `.prettierignore`'dan gelir (tek kaynak).
+
+        Prettier onu hem glob hem AÇIK argüman için uygular — yani hook ile
+        CI aynı muafiyeti görür; kapı içine ikinci bir liste gömülmez.
+        """
+        ign = cpf.REPO / ".prettierignore"
+        self.assertTrue(ign.is_file(), ".prettierignore yok")
+        text = ign.read_text(encoding="utf-8")
+        self.assertIn("_calisma/CIKTI/vendor/axe.min.js", text)
+        # Gerekçe yazılı olmalı: gerekçesiz muafiyet sessiz kapsam kaybıdır.
+        self.assertIn("sha256", text)
 
 
 if __name__ == "__main__":

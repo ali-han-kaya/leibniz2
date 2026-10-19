@@ -27,7 +27,10 @@ Notlar:
   K9 ön-kapılarını (sorry/axiom taraması, aksiyom analizi) çalıştırır. İkisi
   farklı sürümler olabilir — matrix her ikisini de ayırır.
 - **`z3` tek kaynak:** K8'i koşan yorumlayıcı `sys.executable`'dır (`.venv_z3`);
-  sürümü bu süreçten prob edilir.
+  sürümü bu süreçten prob edilir. pip pini'nin **tek kaynağı**
+  `_calisma/requirements-z3.txt` `[venv]` bölümüdür — burada yazmaz, çünkü
+  gözlenen sürüm (prob çıktısı) ile kurulu sürüm (pin) farklı metinlerdir;
+  ikisini eşitlemek kaynağı gölgelerdi.
 - **Eksik araç → `None`** (advisory): probe hata vermez; matrix yine de yapısal
   denetimden geçer (satır kalır, değer "yok").
 - CI'da lean/qpdf/pre-commit kurulu olmadığı için "Son gözlem (CI ubuntu)"

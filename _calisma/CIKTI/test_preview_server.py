@@ -12,18 +12,22 @@ Kapsam:
 stdlib `unittest` kullanır — ek bağımlılık yok. CI'da:
     python3 -m unittest discover -s _calisma/CIKTI -p "test_preview_server.py" -v
 """
+import argparse
 import hashlib
+import signal
 import io
 import json
 import os
 import pathlib
 import queue
+import re
 import subprocess
 import sys
 import tempfile
 import threading
 import time
 import unittest
+from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
@@ -68,6 +72,34 @@ def _capture_fake():
     return _Fake()
 
 
+# ---- LATEST / modül alanı izolasyonu (geri yükleme framework'e ait) ----
+# Kod LATEST'i yerinde günceller (`LATEST[k] = v`), asla yeniden bağlamaz;
+# bu yüzden patch.dict gerçek bir yedek/geri-yükleme sağlar. Elle yedek +
+# tearDown deseni setUp'ın devamında patlar/atlarsa kaçabiliyordu.
+def _patch_latest(test, *, clear=False, values=None):
+    """ps.LATEST'i patch.dict ile izole et; geri yükleme framework'e ait."""
+    patcher = mock.patch.dict(ps.LATEST, dict(values or {}), clear=clear)
+    with ps.LOCK:
+        patcher.start()
+    test.addCleanup(_stop_patcher_under_lock, patcher)
+    return patcher
+
+
+def _patch_attr(test, name, value):
+    """preview_server modül alanını patch.object ile değiştir (geri yükleme
+    framework'e ait)."""
+    patcher = mock.patch.object(ps, name, value)
+    patcher.start()
+    test.addCleanup(patcher.stop)
+    return patcher
+
+
+def _stop_patcher_under_lock(patcher):
+    """patch.dict geri yüklemesini kilit altında çalıştırır (tearDown yok)."""
+    with ps.LOCK:
+        patcher.stop()
+
+
 class DurationPctWarnTests(unittest.TestCase):
     def test_snapshot_dict_carries_duration_pct_warn(self):
         old = ps.LATEST.get("duration_pct_warn")
@@ -89,18 +121,18 @@ class CachedLatestTests(unittest.TestCase):
 
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
-        self._old_runs, self._old_path = ps.RUNS_DIR, ps.HISTORY_PATH
-        self._old_latest = dict(ps.LATEST)
-        ps.RUNS_DIR = os.path.join(self._tmp.name, "runs")
-        ps.HISTORY_PATH = os.path.join(self._tmp.name, "history.jsonl")
-        # Asgari LATEST şeması (loader'ın kopyalayacağı alanlar).
-        ps.LATEST = {"ts": None, "verdict": "UNKNOWN", "stdout": "",
-                     "stderr": "", "p0": 0, "p1": 0, "cached": False}
-
-    def tearDown(self):
-        ps.RUNS_DIR, ps.HISTORY_PATH = self._old_runs, self._old_path
-        ps.LATEST = self._old_latest
-        self._tmp.cleanup()
+        self.addCleanup(self._tmp.cleanup)
+        # Geçici dizinler ve LATEST: elle yedek + tearDown yerine framework
+        # (patch.object / patch.dict). LIFO addCleanup sayesinde yamalar tmp
+        # silinmeden ÖNCE geri alınır.
+        _patch_attr(self, "RUNS_DIR", os.path.join(self._tmp.name, "runs"))
+        _patch_attr(self, "HISTORY_PATH",
+                    os.path.join(self._tmp.name, "history.jsonl"))
+        # Asgari LATEST şeması (loader'ın kopyalayacağı alanlar) — rebinding
+        # yok: patch.dict(clear=True) yerinde kurar ve test bitince geri alır.
+        _patch_latest(self, clear=True, values={
+            "ts": None, "verdict": "UNKNOWN", "stdout": "",
+            "stderr": "", "p0": 0, "p1": 0, "cached": False})
 
     def _write_run_log(self, rec):
         os.makedirs(ps.RUNS_DIR, exist_ok=True)
@@ -158,19 +190,123 @@ class CachedLatestTests(unittest.TestCase):
         self.assertEqual(ps.LATEST["verdict"], "PASS")
 
 
+class SnapshotFileTests(unittest.TestCase):
+    """CI artifact'ından aynı-origin snapshot-only preview_server modu."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        # Geri yükleme framework'e ait: patch.dict test bitince (hata/skip
+        # dahil) LATEST'in orijinal içeriğini yerine koyar.
+        _patch_latest(self)
+
+    def _write_snapshot(self, rec, *, sidecar=True, corrupt_sidecar=False):
+        root = pathlib.Path(self._tmp.name)
+        path = root / "history.jsonl"
+        raw = (json.dumps(rec, ensure_ascii=False) + "\n").encode("utf-8")
+        path.write_bytes(raw)
+        if sidecar:
+            digest = hashlib.sha256(raw).hexdigest()
+            if corrupt_sidecar:
+                digest = "0" * 64
+            (root / "history.jsonl.sha256").write_text(
+                digest + "  history.jsonl\n", encoding="utf-8")
+        return str(path)
+
+    def test_valid_jsonl_last_record_populates_latest(self):
+        first = _rec("2026-09-25T10:00:00Z", exit_code=1,
+                     raw_sha256="a" * 64, stripped_sha256="b" * 64)
+        last = _rec("2026-09-25T11:00:00Z", exit_code=0,
+                    raw_sha256="c" * 64, stripped_sha256="d" * 64)
+        path = pathlib.Path(self._tmp.name) / "history.jsonl"
+        raw = (json.dumps(first) + "\n" + json.dumps(last) + "\n").encode()
+        path.write_bytes(raw)
+        (path.parent / "history.jsonl.sha256").write_text(
+            hashlib.sha256(raw).hexdigest() + "  history.jsonl\n",
+            encoding="utf-8")
+        loaded = ps.load_snapshot_file(str(path))
+        self.assertEqual(loaded["ts"], last["ts"])
+        self.assertEqual(ps.snapshot_dict()["raw_sha256"], "c" * 64)
+        self.assertFalse(ps.snapshot_dict()["cached"])
+
+    def test_json_object_is_supported(self):
+        path = self._write_snapshot(_rec(
+            "2026-09-25T12:00:00Z", exit_code=0,
+            raw_sha256="a" * 64, stripped_sha256="b" * 64))
+        self.assertEqual(ps.load_snapshot_file(path)["verdict"], "PASS")
+
+    def test_nested_hash_conflict_is_rejected(self):
+        rec = _rec("t", exit_code=0, raw_sha256="a" * 64,
+                   stripped_sha256="b" * 64,
+                   pdf_hash={"raw": "c" * 64, "stripped": "b" * 64})
+        path = self._write_snapshot(rec)
+        with self.assertRaisesRegex(ValueError, "çelişkili"):
+            ps.load_snapshot_file(path)
+
+    def test_missing_or_mismatched_sidecar_fails_closed(self):
+        rec = _rec("2026-09-25T12:00:00Z", exit_code=0,
+                   raw_sha256="a" * 64, stripped_sha256="b" * 64)
+        missing = self._write_snapshot(rec, sidecar=False)
+        with self.assertRaisesRegex(ValueError, "sidecar yok"):
+            ps.load_snapshot_file(missing)
+        # Aynı path'i yeniden yazıp digest'i bilerek boz.
+        root = pathlib.Path(self._tmp.name)
+        path = root / "history.jsonl"
+        (root / "history.jsonl.sha256").write_text(
+            "0" * 64 + "  history.jsonl\n", encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "uyuşmuyor"):
+            ps.load_snapshot_file(str(path))
+
+    def test_invalid_verdict_hash_or_cached_fails_closed(self):
+        cases = (
+            _rec("t", verdict="FAIL", exit_code=0,
+                 raw_sha256="a" * 64, stripped_sha256="b" * 64),
+            _rec("t", exit_code=1, raw_sha256="a" * 64,
+                 stripped_sha256="b" * 64),
+            _rec("t", exit_code=0, raw_sha256="bad",
+                 stripped_sha256="b" * 64),
+            _rec("t", exit_code=0, raw_sha256="a" * 64,
+                 stripped_sha256="b" * 64, cached=True),
+        )
+        for rec in cases:
+            with self.subTest(rec=rec):
+                path = self._write_snapshot(rec)
+                with self.assertRaises(ValueError):
+                    ps.load_snapshot_file(path)
+
+    def test_corrupt_jsonl_line_is_not_silently_skipped(self):
+        root = pathlib.Path(self._tmp.name)
+        path = root / "history.jsonl"
+        raw = b'{"ts":"t","verdict":"PASS","exit_code":0}\nnot-json\n'
+        path.write_bytes(raw)
+        (root / "history.jsonl.sha256").write_text(
+            hashlib.sha256(raw).hexdigest() + "  history.jsonl\n",
+            encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "JSONL satırı"):
+            ps.load_snapshot_file(str(path))
+
+    def test_cli_requires_explicit_snapshot_only_pair(self):
+        source = pathlib.Path(ps.__file__).read_text(encoding="utf-8")
+        self.assertIn('ap.add_argument("--snapshot-file"', source)
+        self.assertIn('ap.add_argument("--no-verify", action="store_true"',
+                      source)
+        self.assertIn('if args.snapshot_file and not args.no_verify:', source)
+        self.assertIn('if args.no_verify and not args.snapshot_file:', source)
+        self.assertIn("if not args.no_verify:\n        t = threading.Thread",
+                      source)
+
+
 class PersistHistoryTests(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
         self._path = os.path.join(self._tmp.name, "history.jsonl")
-        self._old_path = ps.HISTORY_PATH
-        self._old_max = ps.HISTORY_MAX
-        ps.HISTORY_PATH = self._path
-        ps.HISTORY_MAX = 3
-
-    def tearDown(self):
-        ps.HISTORY_PATH = self._old_path
-        ps.HISTORY_MAX = self._old_max
-        self._tmp.cleanup()
+        # persist_history LATEST'e de yazar (history_sidecar_sha256) — elle
+        # yedek/tearDown yetmiyordu: shuffle-audit 6 LATEST sızıntısı buldu.
+        # Geri yükleme framework'e ait (patch.dict + patch.object).
+        _patch_latest(self)
+        _patch_attr(self, "HISTORY_PATH", self._path)
+        _patch_attr(self, "HISTORY_MAX", 3)
 
     def test_persist_appends_and_load_returns_in_order(self):
         ps.persist_history(_rec("2026-01-01T00:00:00Z"))
@@ -662,18 +798,11 @@ class HookEnvTrendPlumbingTests(unittest.TestCase):
         self.assertIn("renderHookEnvTrend(rows)", self.html)
 
     def test_hover_hit_area_wired(self):
-        # Hover tooltip'i bant vuruş alanlarına bağlı olmalı. CSP inline
-        # handler'ı bloklar (script-src 'self' 'nonce-…'), bu yüzden he-trend
-        # vuruş alanları `data-tip-i` taşır ve SVG üzerinde delege edilir.
-        # Bölge renderHookEnvTrend'e kısıtlanır: başka bir grafiğin
-        # (trend/refs-trend) kablosu bu paneli yeşile çevirmemeli.
-        start = self.html.index("function renderHookEnvTrend(rows) {")
-        end = self.html.index("\nfunction ", start + 1)
-        block = self.html[start:end]
-        self.assertIn('data-tip-i="${i}"', block)
-        self.assertIn("wireChartTip(svg, showHookEnvTrendTip);", block)
-        self.assertNotIn("onmousemove=", block)
-        self.assertNotIn("onmouseleave=", block)
+        # Hover tooltip'i bant vuruş alanlarına bağlı olmalı — CSP-uyumlu
+        # delegation: rect data-tip+data-i taşır, SVG-düzeyi dinleyici
+        # showHookEnvTrendTip'e delege eder.
+        self.assertIn('data-tip="hookenv"', self.html)
+        self.assertIn('"he-trend": "showHookEnvTrendTip"', self.html)
 
 
 class BudgetLimitPlumbingTests(unittest.TestCase):
@@ -712,6 +841,11 @@ class CliOverridesPlumbingTests(unittest.TestCase):
     LATEST dict'ini bütünüyle döndürdüğü için slot oraya otomatik girer.
     """
 
+    def setUp(self):
+        # Slotu elle None'a çekmek önceki değeri geri getirmiyordu; geri
+        # yükleme framework'e ait (patch.dict).
+        _patch_latest(self)
+
     def test_latest_has_cli_overrides_slot(self):
         self.assertIn("cli_overrides", ps.LATEST)
 
@@ -721,10 +855,7 @@ class CliOverridesPlumbingTests(unittest.TestCase):
         ov = {"budget": {"cli_given": True, "file_value": 30.0,
                          "effective": 25.0, "override": True}}
         ps.LATEST["cli_overrides"] = ov
-        try:
-            self.assertEqual(ps.LATEST["cli_overrides"], ov)
-        finally:
-            ps.LATEST["cli_overrides"] = None
+        self.assertEqual(ps.LATEST["cli_overrides"], ov)
 
     def test_override_count_scalar_in_history_keys(self):
         # Skaler sayaç trend'e (history.jsonl) gider; tam dict oraya DEĞİL —
@@ -739,28 +870,30 @@ class CliOverridesPlumbingTests(unittest.TestCase):
                          "effective": 25.0},
               "budget_method": {"override": False}}
         ps.LATEST["cli_overrides"] = ov
-        try:
-            snap = {k: ps.LATEST[k] for k in ps.HISTORY_KEYS}
-            snap["cli_overrides"] = ps.LATEST["cli_overrides"]
-            self.assertEqual(snap["cli_overrides"], ov)
-            # skaler sayaç hesabı (_finalize_run satırıyla aynı): override=true
-            # anahtar sayısı — trend'e temiz int olarak gider.
-            n = sum(1 for v in (ps.LATEST.get("cli_overrides") or {}).values()
-                    if (v or {}).get("override"))
-            self.assertEqual(n, 1)
-            self.assertIn("cli_override_count", snap)
-        finally:
-            ps.LATEST["cli_overrides"] = None
+        snap = {k: ps.LATEST[k] for k in ps.HISTORY_KEYS}
+        snap["cli_overrides"] = ps.LATEST["cli_overrides"]
+        self.assertEqual(snap["cli_overrides"], ov)
+        # skaler sayaç hesabı (_finalize_run satırıyla aynı): override=true
+        # anahtar sayısı — trend'e temiz int olarak gider.
+        n = sum(1 for v in (ps.LATEST.get("cli_overrides") or {}).values()
+                if (v or {}).get("override"))
+        self.assertEqual(n, 1)
+        self.assertIn("cli_override_count", snap)
 
 
 class LayersPlumbingTests(unittest.TestCase):
-    """layers (K0-K17) veri hattı: LATEST slotu → /api/latest + SSE snapshot.
+    """layers (K0-K21) veri hattı: LATEST → /api/latest, SSE ve history.jsonl.
 
     verify_delivery.py --json çıktısındaki layers (build_layers_summary çıktısı)
     _finalize_run'da LATEST['layers']'a taşınır; dashboard renderKLayers
     buradan beslenir. /api/latest (serve_latest) LATEST dict'ini bütünüyle
-    döndürdüğü için layers oraya otomatik girer. SSE connect snapshot'ı da
-    layers'ı ayrıca taşır (HISTORY_KEYS dışı olduğundan elle eklenir).
+    döndürdüğü için layers oraya otomatik girer.
+
+    HISTORY_KEYS (2026-10-17): layers artık kalıcı arşive de yazılır —
+    history.jsonl satırı → apps/trend-db load.ts → trend_runs.layers.
+    Trend GRAFİĞİ şişmesin diye `/api/trend` projeksiyonu
+    (HISTORY_DASHBOARD_KEYS) bu alanı DIŞLAR; geniş alan yalnız kalıcı
+    satırda ve /api/latest'te durur.
     """
 
     def test_latest_has_layers_slot(self):
@@ -770,10 +903,12 @@ class LayersPlumbingTests(unittest.TestCase):
         # Başlangıçta None — renderKLayers 'bekleniyor' gösterir.
         self.assertIsNone(ps.LATEST["layers"])
 
-    def test_layers_not_in_history_keys(self):
-        # layers K0-K17 full dict'tir, history.jsonl'e SKALER olarak
-        # girmez (trend grafiğinde per-layer değil verdict/P0/P1 izlenir).
-        self.assertNotIn("layers", ps.HISTORY_KEYS)
+    def test_layers_in_history_keys(self):
+        # Kalıcı arşiv sözleşmesi: layers history.jsonl satırına girer ki
+        # trend_runs.layers dolsun (DB'deki /layers görünümünün kaynağı).
+        self.assertIn("layers", ps.HISTORY_KEYS)
+        # Ama dar dashboard projeksiyonuna GİRMEZ — trend yanıtı büyümesin.
+        self.assertNotIn("layers", ps.HISTORY_DASHBOARD_KEYS)
 
     def test_latest_dict_carries_layers(self):
         # /api/latest (serve_latest) LATEST dict'ini bütünüyle döndürür —
@@ -793,8 +928,8 @@ class LayersPlumbingTests(unittest.TestCase):
                   "K8": {"label": "Z3", "status": "PASS", "ran": True}}
         ps.LATEST["layers"] = layers
         try:
+            # Elle ekleme YOK: HISTORY_KEYS üyeliği tek başına taşımalı.
             snap = {k: ps.LATEST[k] for k in ps.HISTORY_KEYS}
-            snap["layers"] = ps.LATEST["layers"]
             self.assertEqual(snap["layers"], layers)
             # K8 status check
             self.assertEqual(snap["layers"]["K8"]["status"], "PASS")
@@ -806,7 +941,6 @@ class LayersPlumbingTests(unittest.TestCase):
         ps.LATEST["layers"] = None
         try:
             snap = {k: ps.LATEST[k] for k in ps.HISTORY_KEYS}
-            snap["layers"] = ps.LATEST["layers"]
             self.assertIsNone(snap["layers"])
         finally:
             ps.LATEST["layers"] = None
@@ -947,6 +1081,12 @@ class LineageSummaryTests(unittest.TestCase):
     ayrıştırıp LATEST'e yazması ve SSE snapshot'ına taşıması.
     """
 
+    def setUp(self):
+        # _finalize_run LATEST'i (lineage_summary/lineage_ok/lineage_count…)
+        # toptan yazar; geri yükleme framework'e ait — shuffle-audit bu
+        # sınıfta 4 LATEST sızıntısı ölçtü.
+        _patch_latest(self)
+
     def test_lineage_ok_in_latest_and_history_keys(self):
         """lineage_summary LATEST'te var, lineage_ok/lineage_count HISTORY_KEYS'te."""
         import preview_server as ps
@@ -1035,16 +1175,12 @@ class StatusBoardTests(unittest.TestCase):
     def setUp(self):
         # İzolasyon: testler LATEST.update ile layers/p0/budget yazıyor;
         # restore etmeyen test, sonraki testlere sızardı (shuffle-audit
-        # kanıtı: LATEST['layers'] sızıntısı). Tam-dict yedek + geri yükleme.
-        import preview_server as ps
-        with ps.LOCK:
-            self._latest_backup = dict(ps.LATEST)
-
-    def tearDown(self):
-        import preview_server as ps
-        with ps.LOCK:
-            ps.LATEST.clear()
-            ps.LATEST.update(self._latest_backup)
+        # kanıtı: LATEST['layers'] sızıntısı). Geri yüklemeyi framework'e
+        # devret: patch.dict + addCleanup, test BİTİNCE (hata/skip dahil)
+        # LATEST'i yerine koyar — elle yedek + tearDown, setUp'un devamında
+        # patlama/atlama olursa kaçabiliyordu. Kilit disiplini korunur:
+        # yedek de geri yükleme de ps.LOCK altında.
+        _patch_latest(self)
 
     def test_all_pass(self):
         """Tüm alanlar PASS ise 5 ✅ üretmeli."""
@@ -1134,8 +1270,26 @@ class StatusBoardTests(unittest.TestCase):
             ps.SSE_CLIENTS.clear()
 
 
-    # _parse_precommit_hooks ayrıştırma testleri taşındı:
-    # test_precommit_log.py (kayıt şekli + kaynak önceliği sözleşmesi).
+    def test_precommit_hooks_parsed(self):
+        """Pre-commit hook parsed从 stderr'den."""
+        import preview_server as ps
+        stderr = (
+            "verify-delivery................................................Passed\n"
+            "z3-symbolic-proof..............................................Passed\n"
+            "lean-reduct-build..............................................Failed\n"
+        )
+        hooks = ps._parse_precommit_hooks(stderr)
+        self.assertEqual(len(hooks), 3)
+        self.assertEqual(hooks[0]["name"], "verify-delivery")
+        self.assertEqual(hooks[0]["status"], "Passed")
+        self.assertEqual(hooks[2]["name"], "lean-reduct-build")
+        self.assertEqual(hooks[2]["status"], "Failed")
+
+    def test_precommit_hooks_empty(self):
+        """Boş stderr'de hook listesi None (consistent with other parsers)."""
+        import preview_server as ps
+        hooks = ps._parse_precommit_hooks("")
+        self.assertIsNone(hooks)
 
     def test_precommit_hooks_in_latest(self):
         """LATEST dict'te precommit_hooks alanı olmalı."""
@@ -1185,6 +1339,14 @@ class OverrideReportTests(unittest.TestCase):
     denetim izi + CI daemon-http artifact'ı için.
     """
 
+    def setUp(self):
+        # _finalize_run LATEST'e override_report/cli_overrides yazar; arka plan
+        # hook tazelemesi de testte kapalı. İkisi de framework tarafından
+        # geri alınır (shuffle-audit: 2 LATEST sızıntısı).
+        _patch_latest(self)
+        _patch_attr(self, "_refresh_precommit_hooks_bg",
+                    lambda *a, **k: None)
+
     def test_collect_override_lines_and_struct(self):
         """Ham satırlar + yapısal kayıtlar tek raporda birleşir."""
         import preview_server as ps
@@ -1222,58 +1384,48 @@ class OverrideReportTests(unittest.TestCase):
     def test_finalize_writes_override_report_sidecar(self):
         """_finalize_run verify_dir/logs/OVERRIDE_RAPORU.json yazar."""
         import preview_server as ps
-        orig = ps._refresh_precommit_hooks_bg
-        ps._refresh_precommit_hooks_bg = lambda *a, **k: None  # noqa: E731
-        try:
-            with tempfile.TemporaryDirectory(prefix="ovr-rpt-") as d:
-                stdout = json.dumps({
-                    "verdict": "FAIL", "counts": {"P0": 0, "P1": 1},
-                    "config": {"cli_overrides": {
-                        "budget": {"override": True, "file_value": 30.0,
-                                   "effective": 25.0},
-                    }}},
-                    ensure_ascii=False)
-                stderr = "  [CLI override] budget: 30.0 → 25.0 (CLI verildi)\n"
-                ps._finalize_run(stdout, stderr, 1, 1.0, data=None,
-                                 verify_dir=d)
-                path = os.path.join(d, "logs", "OVERRIDE_RAPORU.json")
-                self.assertTrue(os.path.isfile(path))
-                with open(path, encoding="utf-8") as f:
-                    rpt = json.load(f)
-                self.assertEqual(rpt["role"], "override-run")
-                self.assertEqual(rpt["override_count"], 1)
-                self.assertEqual(rpt["exit_code"], 1)
-                self.assertEqual(rpt["verdict"], "FAIL")
-                self.assertEqual(len(rpt["lines"]), 1)
-                self.assertIn("budget", rpt["lines"][0])
-                # LATEST slotu da dolmalı (dashboard /api/latest görünürlüğü)
-                with ps.LOCK:
-                    self.assertIsNotNone(ps.LATEST.get("override_report"))
-                    self.assertEqual(
-                        ps.LATEST["override_report"]["override_count"], 1)
-        finally:
-            ps._refresh_precommit_hooks_bg = orig
+        with tempfile.TemporaryDirectory(prefix="ovr-rpt-") as d:
+            stdout = json.dumps({
+                "verdict": "FAIL", "counts": {"P0": 0, "P1": 1},
+                "config": {"cli_overrides": {
+                    "budget": {"override": True, "file_value": 30.0,
+                               "effective": 25.0},
+                }}},
+                ensure_ascii=False)
+            stderr = "  [CLI override] budget: 30.0 → 25.0 (CLI verildi)\n"
+            ps._finalize_run(stdout, stderr, 1, 1.0, data=None,
+                             verify_dir=d)
+            path = os.path.join(d, "logs", "OVERRIDE_RAPORU.json")
+            self.assertTrue(os.path.isfile(path))
+            with open(path, encoding="utf-8") as f:
+                rpt = json.load(f)
+            self.assertEqual(rpt["role"], "override-run")
+            self.assertEqual(rpt["override_count"], 1)
+            self.assertEqual(rpt["exit_code"], 1)
+            self.assertEqual(rpt["verdict"], "FAIL")
+            self.assertEqual(len(rpt["lines"]), 1)
+            self.assertIn("budget", rpt["lines"][0])
+            # LATEST slotu da dolmalı (dashboard /api/latest görünürlüğü)
+            with ps.LOCK:
+                self.assertIsNotNone(ps.LATEST.get("override_report"))
+                self.assertEqual(
+                    ps.LATEST["override_report"]["override_count"], 1)
 
     def test_finalize_plain_run_writes_empty_report(self):
         """Override'sız run da rapor yazar (override_count=0) — 'yok' kanıtı."""
         import preview_server as ps
-        orig = ps._refresh_precommit_hooks_bg
-        ps._refresh_precommit_hooks_bg = lambda *a, **k: None  # noqa: E731
-        try:
-            with tempfile.TemporaryDirectory(prefix="ovr-rpt-") as d:
-                stdout = json.dumps({"verdict": "PASS",
-                                     "counts": {"P0": 0, "P1": 0}},
-                                    ensure_ascii=False)
-                ps._finalize_run(stdout, "", 0, 1.0, data=None, verify_dir=d)
-                path = os.path.join(d, "logs", "OVERRIDE_RAPORU.json")
-                self.assertTrue(os.path.isfile(path))
-                with open(path, encoding="utf-8") as f:
-                    rpt = json.load(f)
-                self.assertEqual(rpt["override_count"], 0)
-                self.assertEqual(rpt["lines"], [])
-                self.assertEqual(rpt["verdict"], "PASS")
-        finally:
-            ps._refresh_precommit_hooks_bg = orig
+        with tempfile.TemporaryDirectory(prefix="ovr-rpt-") as d:
+            stdout = json.dumps({"verdict": "PASS",
+                                 "counts": {"P0": 0, "P1": 0}},
+                                ensure_ascii=False)
+            ps._finalize_run(stdout, "", 0, 1.0, data=None, verify_dir=d)
+            path = os.path.join(d, "logs", "OVERRIDE_RAPORU.json")
+            self.assertTrue(os.path.isfile(path))
+            with open(path, encoding="utf-8") as f:
+                rpt = json.load(f)
+            self.assertEqual(rpt["override_count"], 0)
+            self.assertEqual(rpt["lines"], [])
+            self.assertEqual(rpt["verdict"], "PASS")
 
 
 class TestReplayRefsAndPages(unittest.TestCase):
@@ -1404,6 +1556,7 @@ class TestRouteQueryParams(unittest.TestCase):
         self.assertEqual(ps._route("/"), "preview")
         # Candidate 3: dashboard JS dış dosyada — kendi rotasını kullanır.
         self.assertEqual(ps._route("/preview.js"), "preview_js")
+        self.assertEqual(ps._route("/vendor/axe.min.js"), "vendor_axe")
         self.assertEqual(ps._route("/preview.js?v=123"), "preview_js")
 
     def test_unknown_paths_are_none(self):
@@ -1419,6 +1572,62 @@ class TestRouteQueryParams(unittest.TestCase):
         self.assertIsNone(ps._route("/design-system/other.css"))
         self.assertIsNone(ps._route("/design-system/"))
 
+    def test_stripe_theme_route(self):
+        # Stripe HDS tema varyantı (GENERATED) — preview.js tema döngüsünün
+        # `stripe` adımı bu rotadan stil alır; mirror'da yoksa 404 (fail-closed).
+        self.assertEqual(ps._route("/design-system/stripe-theme.css"),
+                         "design_tokens_stripe")
+        self.assertEqual(ps._route("/design-system/stripe-theme.css?v=9"),
+                         "design_tokens_stripe")
+        self.assertIsNone(ps._route("/design-system/stripe-theme"))
+
+    def test_vercel_theme_route(self):
+        # Vercel adapter tema varyantı (GENERATED) — preview.js tema döngüsünün
+        # `vercel` adımı bu rotadan stil alır; mirror'da yoksa 404 (fail-closed).
+        self.assertEqual(ps._route("/design-system/vercel-theme.css"),
+                         "design_tokens_vercel")
+        self.assertEqual(ps._route("/design-system/vercel-theme.css?v=9"),
+                         "design_tokens_vercel")
+        self.assertIsNone(ps._route("/design-system/vercel-theme"))
+
+    def test_landing_routes_are_query_safe_and_asset_scoped(self):
+        self.assertEqual(ps._route("/landing.html"), "landing")
+        self.assertEqual(ps._route("/landing.html?theme=light"), "landing")
+        self.assertEqual(ps._route("/landing/assets/P1-a.png"), "landing_assets")
+        self.assertEqual(ps._route("/landing/assets/../secret"), "landing_assets")
+        self.assertIsNone(ps._route("/landing/other.png"))
+
+    def test_landing_handler_adapts_repo_relative_links_and_assets(self):
+        old_dir = getattr(ps, "PREVIEW_DIR", None)
+        with tempfile.TemporaryDirectory(prefix="landing-route-") as work:
+            root = pathlib.Path(work)
+            (root / "landing" / "assets").mkdir(parents=True)
+            (root / "landing.html").write_text(
+                '<a href="../CIKTI/preview.html">Pano</a>'
+                '<img src="assets/P1-a.png">', encoding="utf-8")
+            (root / "landing" / "assets" / "P1-a.png").write_bytes(b"png")
+            ps.PREVIEW_DIR = work
+            handler = object.__new__(ps.Handler)
+            sent = []
+            handler._send = lambda status, body, content_type="", extra_headers=None: sent.append(
+                (status, body, content_type))
+            try:
+                ps.Handler.serve_landing(handler)
+                self.assertEqual(sent[-1][0], 200)
+                self.assertIn('href="/preview.html"', sent[-1][1])
+                self.assertIn('src="/landing/assets/P1-a.png"', sent[-1][1])
+
+                handler.path = "/landing/assets/P1-a.png"
+                ps.Handler.serve_landing_assets(handler)
+                self.assertEqual(sent[-1][0], 200)
+                self.assertEqual(sent[-1][1], b"png")
+                self.assertEqual(sent[-1][2], "image/png")
+            finally:
+                if old_dir is None:
+                    del ps.PREVIEW_DIR
+                else:
+                    ps.PREVIEW_DIR = old_dir
+
     def test_run_now_rejects_untrusted_host(self):
         old_token = os.environ.get("PREVIEW_RUN_NOW_TOKEN")
         old_busy = ps.VERIFY_BUSY
@@ -1428,6 +1637,7 @@ class TestRouteQueryParams(unittest.TestCase):
             handler = object.__new__(ps.Handler)
             sent = []
             handler.path = "/api/run-now"
+            handler.client_address = ("127.0.0.1", 55555)
             handler.headers = {"Authorization": "Bearer secret-token", "Host": "evil.example"}
             handler._send = lambda status, body, content_type="", extra_headers=None: sent.append((status, body, extra_headers))
             handler.trigger_run_now()
@@ -1441,21 +1651,31 @@ class TestRouteQueryParams(unittest.TestCase):
                 os.environ["PREVIEW_RUN_NOW_TOKEN"] = old_token
 
     def test_run_now_returns_409_when_busy(self):
+        # Fail-closed: token yoksa 401 döner, meşgul kontrolüne hiç varılmaz.
+        # Bu test meşgul yolunu sınar, bu yüzden geçerli token gönderir.
         old_busy = ps.VERIFY_BUSY
+        old_token = os.environ.get("PREVIEW_RUN_NOW_TOKEN")
         try:
+            os.environ["PREVIEW_RUN_NOW_TOKEN"] = "secret-token"
             lock = __import__("threading").Lock()
             lock.acquire()
             ps.VERIFY_BUSY = lock
             handler = object.__new__(ps.Handler)
             sent = []
             handler.path = "/api/run-now"
-            handler.headers = {"Host": "127.0.0.1:8000"}
+            handler.client_address = ("127.0.0.1", 55555)
+            handler.headers = {"Host": "127.0.0.1:8000",
+                               "Authorization": "Bearer secret-token"}
             handler._send = lambda status, body, content_type="", extra_headers=None: sent.append((status, body, extra_headers))
             handler.trigger_run_now()
             self.assertEqual(sent[0][0], 409)
             self.assertEqual(json.loads(sent[0][1])["status"], "already_running")
         finally:
             ps.VERIFY_BUSY = old_busy
+            if old_token is None:
+                os.environ.pop("PREVIEW_RUN_NOW_TOKEN", None)
+            else:
+                os.environ["PREVIEW_RUN_NOW_TOKEN"] = old_token
 
     def test_run_now_rejects_untrusted_origin(self):
         old_token = os.environ.get("PREVIEW_RUN_NOW_TOKEN")
@@ -1464,6 +1684,7 @@ class TestRouteQueryParams(unittest.TestCase):
             handler = object.__new__(ps.Handler)
             sent = []
             handler.path = "/api/run-now"
+            handler.client_address = ("127.0.0.1", 55555)
             handler.headers = {"Authorization": "Bearer secret-token", "Host": "127.0.0.1:8000", "Origin": "https://evil.example"}
             handler._send = lambda status, body, content_type="", extra_headers=None: sent.append((status, body, extra_headers))
             handler.trigger_run_now()
@@ -1484,6 +1705,7 @@ class TestRouteQueryParams(unittest.TestCase):
             handler = object.__new__(ps.Handler)
             sent = []
             handler.path = "/api/run-now"
+            handler.client_address = ("127.0.0.1", 55555)
             handler._send = lambda status, body, content_type="", extra_headers=None: sent.append((status, body, extra_headers))
             handler.headers = {"Host": "127.0.0.1:8000"}
             handler.trigger_run_now()
@@ -1507,6 +1729,7 @@ class TestRouteQueryParams(unittest.TestCase):
             handler = object.__new__(ps.Handler)
             sent = []
             handler.path = "/api/run-now"
+            handler.client_address = ("127.0.0.1", 55555)
             handler._send = lambda status, body, content_type="", extra_headers=None: sent.append((status, body, extra_headers))
             handler.headers = {"Host": "127.0.0.1:8000", "Authorization": "Bearer secret-token"}
             original = ps.run_verify
@@ -1662,44 +1885,35 @@ class TestServeHistoryTrendCompact(unittest.TestCase):
         self.assertEqual(json.loads(body), {"error": "refs trend unavailable"})
 
     def test_serve_latest_is_compact(self):
-        old = ps.LATEST
-        ps.LATEST = {"ts": "2026-08-23T09:00:00Z", "verdict": "PASS",
-                     "p0": 0, "p1": 0, "stdout": "", "stderr": "",
-                     "hook_env": None, "cached": False}
-        try:
-            fake = self._capture()
-            ps.Handler.serve_latest(fake)
-            self.assertNotIn("\n", fake.sent[1])
-        finally:
-            ps.LATEST = old
+        _patch_latest(self, clear=True, values={
+            "ts": "2026-08-23T09:00:00Z", "verdict": "PASS",
+            "p0": 0, "p1": 0, "stdout": "", "stderr": "",
+            "hook_env": None, "cached": False})
+        fake = self._capture()
+        ps.Handler.serve_latest(fake)
+        self.assertNotIn("\n", fake.sent[1])
 
     def test_serve_latest_compact_content(self):
-        old = ps.LATEST
-        ps.LATEST = {"ts": "2026-08-23T09:00:00Z", "verdict": "PASS",
-                     "p0": 0, "p1": 0,
-                     "stdout": "Satır 1\nSatır 2\nSONUÇ: PASS",
-                     "stderr": "K8 Z3: PASS\n", "hook_env": None,
-                     "cached": False}
-        try:
-            d, _ = self._serve(ps.Handler.serve_latest)
-            self.assertEqual(d["verdict"], "PASS")
-            self.assertIn("Satır 2", d["stdout_short"])
-        finally:
-            ps.LATEST = old
+        _patch_latest(self, clear=True, values={
+            "ts": "2026-08-23T09:00:00Z", "verdict": "PASS",
+            "p0": 0, "p1": 0,
+            "stdout": "Satır 1\nSatır 2\nSONUÇ: PASS",
+            "stderr": "K8 Z3: PASS\n", "hook_env": None,
+            "cached": False})
+        d, _ = self._serve(ps.Handler.serve_latest)
+        self.assertEqual(d["verdict"], "PASS")
+        self.assertIn("Satır 2", d["stdout_short"])
 
     def test_serve_latest_empty_state(self):
-        old = ps.LATEST
-        ps.LATEST = {"ts": "", "verdict": "INIT",
-                     "p0": 0, "p1": 0, "stdout": "", "stderr": "",
-                     "hook_env": None, "cached": False}
-        try:
-            d, _ = self._serve(ps.Handler.serve_latest)
-            self.assertEqual(d["verdict"], "INIT")
-            self.assertNotIn("stdout", d)
-            self.assertNotIn("stderr", d)
-            self.assertEqual(d["stdout_short"], "")
-        finally:
-            ps.LATEST = old
+        _patch_latest(self, clear=True, values={
+            "ts": "", "verdict": "INIT",
+            "p0": 0, "p1": 0, "stdout": "", "stderr": "",
+            "hook_env": None, "cached": False})
+        d, _ = self._serve(ps.Handler.serve_latest)
+        self.assertEqual(d["verdict"], "INIT")
+        self.assertNotIn("stdout", d)
+        self.assertNotIn("stderr", d)
+        self.assertEqual(d["stdout_short"], "")
 
     def test_serve_run_history_empty_logs(self):
         old = ps.RUNS_DIR
@@ -1760,6 +1974,628 @@ class TestServeHistoryTrendCompact(unittest.TestCase):
             self.assertNotIn(": ", body)
         finally:
             ps.RUNS_DIR = old
+
+
+class TestTrendLimitWindow(unittest.TestCase):
+    """`/api/trend?limit=N` — sunucu tarafı pencere sözleşmesi.
+
+    Neden ayrı kapı: `?limit=` zaten BELGELENMİŞ bir sözleşmeydi ve iki canlı
+    tüketici onu gönderiyordu (MCP `leibniz2_trend`, dashboard-next
+    `getTrend` → `/api/trend?limit=20`) ama sunucu parametreyi tamamen yok
+    sayıyordu — istenen pencere sessizce gelmiyordu (ölçüldü 2026-09-28).
+
+    Kırılan iki ayrı sessiz hata:
+      * kırpma YOK  → tüketicinin istediği N yerine 100 kaytın TAMAMı döner;
+      * YANLIŞ UÇ  → `rows[:limit]` EN ESKİ N'yi döndürür, "son N" olmaz.
+    İkisi de HTTP 200 döner, ölçülebilir tek fark: satır SAYISI ve SIRASI.
+    """
+
+    ROWS = 5
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self._old_hist, self._old_rt = ps.HISTORY_PATH, ps.REFS_TREND_PATH
+        ps.HISTORY_PATH = os.path.join(self._tmp.name, "history.jsonl")
+        ps.REFS_TREND_PATH = os.path.join(self._tmp.name, "refs-trend.json")
+        # Önbellek sıfırla: load_history() mtime_ns+boyut ile anahtarlıyor,
+        # testler aynı dosya yolunu paylaşıyor.
+        ps._history_cache = (None, [])
+
+    def tearDown(self):
+        ps.HISTORY_PATH, ps.REFS_TREND_PATH = self._old_hist, self._old_rt
+        ps._history_cache = (None, [])
+        self._tmp.cleanup()
+
+    # ── fixture yazıcıları ───────────────────────────────────────────
+    def _write_history(self, count=None):
+        count = self.ROWS if count is None else count
+        with open(ps.HISTORY_PATH, "w", encoding="utf-8") as f:
+            for i in range(count):
+                f.write(json.dumps({
+                    "ts": "2026-08-23T%02d:00:00Z" % (9 + i),
+                    "verdict": "PASS", "p0": 0, "p1": 0,
+                }, ensure_ascii=False) + "\n")
+        ps._history_cache = (None, [])
+
+    def _write_refs_trend(self, count=None):
+        count = self.ROWS if count is None else count
+        rows = [{"date": "2026-08-%02d" % (20 + i), "run_id": 100 + i,
+                 "duration_s": float(i)} for i in range(count)]
+        with open(ps.REFS_TREND_PATH, "w", encoding="utf-8") as f:
+            json.dump({"generated": "2026-08-25T00:00:00Z",
+                       "rows": list(rows),
+                       "duration_budget": {"rows": list(rows),
+                                           "summary": {"run_count": count}}},
+                      f, ensure_ascii=False)
+
+    def _capture(self):
+        class _FakeHandler:
+            def __init__(self):
+                self.sent = None
+
+            def _send(self, status, body,
+                      content_type="text/plain; charset=utf-8",
+                      extra_headers=None):
+                self.sent = (status, body, content_type)
+
+        return _FakeHandler()
+
+    def _serve(self, path):
+        fake = self._capture()
+        fake.path = path
+        ps.Handler.serve_trend(fake)
+        status, body, ctype = fake.sent
+        self.assertEqual(status, 200)
+        self.assertIn("application/json", ctype)
+        return json.loads(body)
+
+    def _history_ts(self, data):
+        return [r["ts"] for r in data["history"]]
+
+    # ── sözleşme ─────────────────────────────────────────────────────
+    def test_limit_windows_history_to_the_newest_rows_in_order(self):
+        self._write_history()
+        data = self._serve("/api/trend?limit=2")
+        # 09,10,11,12,13 yazıldı → "son 2" = 12,13 (ESKİDEN YENİYE, sıra bozulmaz)
+        self.assertEqual(self._history_ts(data), ["2026-08-23T12:00:00Z",
+                                                  "2026-08-23T13:00:00Z"])
+        self.assertEqual(data["limit"], 2)
+
+    def test_limit_larger_than_history_returns_everything(self):
+        self._write_history()
+        data = self._serve("/api/trend?limit=500")
+        self.assertEqual(len(data["history"]), self.ROWS,
+                         "pencere geçmişten büyükse HER ŞEY dönmeli")
+
+    def test_absent_limit_keeps_the_whole_history(self):
+        """Geriye uyum: parametresiz çağrı ESKİ davranışı korur.
+
+        `preview.js` `/api/trend`'i parametresiz çağırır; parametre zorunlu
+        olsaydı pano boşalırdı.
+        """
+        self._write_history()
+        data = self._serve("/api/trend")
+        self.assertEqual(len(data["history"]), self.ROWS)
+        self.assertNotIn("limit", data,
+                         "pencere uygulanmadıysa gövde `limit` bildirmemeli "
+                         "(tüketici 'tüm geçmiş' sanmalı)")
+
+    def test_blank_limit_is_not_a_limit(self):
+        """`?limit=` boş değer = penceresiz, 0 DEĞİL (0 → 1'e kırpılırdı)."""
+        self._write_history()
+        data = self._serve("/api/trend?limit=")
+        self.assertEqual(len(data["history"]), self.ROWS)
+        self.assertNotIn("limit", data)
+
+    # ── "refs_trend ile tutarlı pencere" ─────────────────────────────
+    def test_limit_windows_both_halves_of_the_merged_response(self):
+        """Gövdenin İKİ yarısı AYNI pencereyi anlatmalı.
+
+        `preview.js` refs-trend ve duration/budget grafiğini yan yana basar;
+        yalnız history kırpılırsa ekranda iki ayrı "son" görünür.
+        """
+        self._write_history()
+        self._write_refs_trend()
+        data = self._serve("/api/trend?limit=2")
+        refs = data["refs_trend"]
+        # 20..24 yazıldı → "son 2" = 23,24 (refs_trend.py satırları history
+        # sırasını korur: `build_duration_budget` history_rows'u sırayla gezer)
+        self.assertEqual([r["date"] for r in refs["rows"]],
+                         ["2026-08-23", "2026-08-24"],
+                         "refs_trend.rows pencerelenmedi")
+        self.assertEqual([r["date"] for r in refs["duration_budget"]["rows"]],
+                         ["2026-08-23", "2026-08-24"],
+                         "duration_budget.rows pencerelenmedi")
+        # Özet TÜM artifact'i anlatır; pencerelenmez ama GİZLİ de kalmaz.
+        self.assertEqual(refs["duration_budget"]["summary"]["run_count"],
+                         self.ROWS, "özet refs_trend.py'nin hesabıdır")
+
+    def test_limit_preserves_the_error_shape_of_refs_trend(self):
+        """refs-trend.json okunamazsa hata nesnesi bozulmadan kalır."""
+        self._write_history()
+        with open(ps.REFS_TREND_PATH, "w", encoding="utf-8") as f:
+            f.write("{not json")
+        data = self._serve("/api/trend?limit=2")
+        self.assertEqual(data["refs_trend"],
+                         {"error": "refs trend unavailable"})
+        self.assertEqual(len(data["history"]), 2, "history yine pencerelendi")
+
+    def test_limit_tolerates_refs_trend_without_row_lists(self):
+        """Satır listesi olmayan refs_trend payload'ı çökmez."""
+        self._write_history()
+        with open(ps.REFS_TREND_PATH, "w", encoding="utf-8") as f:
+            json.dump({"generated": "x", "repo": "o/r"}, f)
+        data = self._serve("/api/trend?limit=2")
+        self.assertEqual(data["refs_trend"], {"generated": "x", "repo": "o/r"})
+
+    # ── kırpma sınırları ─────────────────────────────────────────────
+    def test_limit_clamping_matches_the_sse_tunnel(self):
+        """Sınırlar `route.ts` ile aynı olmalı (0→1, dev→200, bozuk→20).
+
+        Boş değer (`:limit=`) listede YOK: o "penceresiz" demek (ayrı test),
+        kırpma değil — tünel de boş değeri `Number.isFinite("")` → false
+        görür ama sunucu tarafında `parse_qs` boş değeri zaten düşürür.
+        """
+        self._write_history(count=1)
+        for raw, expected in (("0", 1), ("-3", 1), ("9999", 200),
+                              ("abc", ps.TREND_LIMIT_FALLBACK),
+                              ("5.9", 5)):
+            with self.subTest(limit=raw):
+                data = self._serve("/api/trend?limit=" + raw)
+                self.assertEqual(data["limit"], expected,
+                                 "?limit=%s → %s bekleniyordu"
+                                 % (raw, expected))
+                self.assertLessEqual(len(data["history"]), expected)
+
+    def test_truncation_does_not_diverge_from_the_tunnel(self):
+        """Tünel `Math.trunc` kırpar; sunucu da öyle kırpmalı.
+
+        `int("5.9")` ValueError verir ve bozuk değer gibi 20'ye düşerdi —
+        yani iki katman AYRI pencere üretirdi. `float` + `int` bunu `Math.trunc`
+        ile aynı yapar.
+        """
+        self.assertEqual(ps.parse_trend_limit("5.9"), 5)
+        self.assertEqual(ps.parse_trend_limit("5"), 5)
+        for raw in ("inf", "-inf", "nan", "abc", "1e400"):
+            with self.subTest(raw=raw):
+                self.assertEqual(ps.parse_trend_limit(raw),
+                                 ps.TREND_LIMIT_FALLBACK,
+                                 "sayıya çevrilemeyen değer tanımlı yedek "
+                                 "pencereye düşmeli")
+
+    def test_clamp_constants_match_the_next_tunnel(self):
+        """İki katmanın sabitleri SÜRÜKLENMESİN (cross-layer drift guard).
+
+        `route.ts` pencereyi `Math.min(Math.max(Math.trunc(rawLimit), 1), 200)`
+        ile kırpar ve sayı değilse 20'ye düşürür. Sunucu tarafı aynı sayıyı
+        kabul etmiyorsa aynı istek tünolden geçerken ve doğrudan gelirken
+        FARKLI pencere üretir — hangisi doğru olduğu belirsizleşir.
+        """
+        route = os.path.join(ps.REPO_ROOT, "apps", "dashboard-next", "app",
+                             "api", "events", "route.ts")
+        with open(route, encoding="utf-8") as f:
+            source = f.read()
+        self.assertIn("Math.min(Math.max(Math.trunc(rawLimit), 1), %d)"
+                      % ps.TREND_LIMIT_MAX, source,
+                      "route.ts tavanı değişti: preview_server "
+                      "TREND_LIMIT_MAX ile eşitlenmeli")
+        self.assertIn(": %d;" % ps.TREND_LIMIT_FALLBACK, source,
+                      "route.ts yedeği değişti: preview_server "
+                      "TREND_LIMIT_FALLBACK ile eşitlenmeli")
+
+    def test_window_tail_keeps_order_and_is_a_noop_without_limit(self):
+        rows = [{"n": i} for i in range(5)]
+        self.assertEqual(ps.window_tail(rows, 2), [{"n": 3}, {"n": 4}])
+        self.assertEqual(ps.window_tail(rows, None), rows)
+        self.assertEqual(ps.window_tail(rows, 99), rows)
+        self.assertIs(ps.window_tail("satır değil", 2), "satır değil",
+                      "liste olmayan girdi dokunulmadan dönmeli")
+
+
+class InlineEventHandlerContractTests(unittest.TestCase):
+    """VERIFY-001 regresyon kapısı: satır içi event-handler NITELIĞI olmayacak.
+
+    Neden ayrı kapı: CSP `script-src 'self' + nonce` altında `<script>`
+    blogunu zaten ayrı bir test denetliyor, ama **nitelik** handler'lar
+    (`onclick="…"`, `onmousemove="…"`) nonce kapsamına GİRMEZ — tarayıcı
+    sessizce reddeder ve düğme/hover ölü kalır. VERIFY-001 tam olarak bu
+    sessiz kayıptı; düzeltme `2fee44f`'te (data-act/data-taşıyıcı + delege
+    dinleyici) yapıldı, ama o düzeltmeyi KİMSİ koruyacak bir kapı yoktu.
+    """
+
+    # Nitelik adı, '=', sonra alıntı. `data-*` tutmaz (`-` lookbehind'da
+    # yasak), `connection=` gibi kelimeler de eşleşmez (ön ek `on` değil).
+    # Önceki sürüm `\s` ön eki istiyordu; sayaç artık metnin BAŞINDAKİ
+    # `onclick="…"` parçasını da görür (`(?<![\w-])`).
+    INLINE_HANDLER = re.compile(r"""(?<![\w-])on[a-z]+\s*=\s*["']""",
+                                re.IGNORECASE)
+
+    @classmethod
+    def _count_inline_handlers(cls, text):
+        """TEK sayaç: metindeki inline event-handler niteliği eşleşmeleri.
+
+        Tüm testler bu fonksiyonu kullanır ki "sayaç sıfır değilse FAIL"
+        kuralı tek yerde yaşasın; ayrı ayrı regex kopyaları sürüklenmesin.
+        """
+        return cls.INLINE_HANDLER.findall(text)
+
+    def _scan(self, label, text):
+        hits = self._count_inline_handlers(text)
+        self.assertEqual(
+            len(hits), 0,
+            "%s içinde %d satır içi event-handler bulundu: %s — CSP altında "
+            "bu handler'lar ÇALIŞMAZ (nonce niteliklere uygulanmaz). "
+            "data-* taşıyıcı + addEventListener delege et." % (label, len(hits), hits[:6]),
+        )
+
+    def test_preview_html_has_no_inline_event_handlers(self):
+        self._scan("preview.html", _preview_html())
+
+    def test_preview_js_emits_no_inline_event_handlers(self):
+        """preview.js şablonları ürettikleri işaretlemeyi de denetlenir.
+
+        SVG hit-alanları JS ile `svg.innerHTML` üzerinden yazıldığı için
+        yalnız HTML dosyasını denetlemek yetmezdi — asıl VERIFY-001 yeri
+        burasıydı.
+        """
+        self._scan("preview.js", _preview_js())
+
+    def _generate_artifact(self, dest: pathlib.Path) -> str:
+        """Artifact'ı GEÇİCİ bir yola üret ve içeriğini döndür.
+
+        Neden üreticiyi çağırıyoruz: `design_preview.html` commit dışı
+        (gitignore) ve taze klonda YOK. Ölçüldü (2026-09-27): dosya yoksa
+        yalnız yerel kopyaya bakan denetim `skipTest` ile atlanıyordu,
+        yani demo yüzeyinin VERIFY-001 koruması taze klonda BOŞLUKTA
+        kalıyordu — `2fee44f`'ten önceki 14 inline handler'lı bayat kopya
+        senaryosu sessizce geri dönebilirdi. Üretici 0.04 sn sürdüğü için
+        "taze klonda da" yanıtlamak bedava; ayrıca üretim SONRASI doğan
+        nitelik handler'ını da yakalar (kaynak temiz olsa bile).
+        """
+        proc = subprocess.run(
+            [sys.executable, str(pathlib.Path(HERE) / "build_design_preview.py"),
+             str(dest)],
+            capture_output=True, text=True, check=False, cwd=HERE,
+        )
+        self.assertEqual(
+            proc.returncode, 0,
+            "build_design_preview.py başarısız: %s" % proc.stderr[-400:],
+        )
+        return dest.read_text(encoding="utf-8")
+
+    def test_generated_artifact_has_no_inline_event_handlers(self):
+        """ÜRETİLEN demo artifact'ı da CSP altında çalışır durumda mı?
+
+        Kaynak temiz olmak yetmez: demo dosyası preview.js'i satır içi
+        `<script>` olarak gömüyor, dolayısıyla üretim sonrası ortaya
+        çıkabilecek bir nitelik handler'ı kaynakta hiç görünmez.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            html = self._generate_artifact(
+                pathlib.Path(tmp) / "design_preview.html")
+        self.assertGreater(len(html), 50_000,
+                           "artifact beklenmedik derecede küçük: %d bayt"
+                           % len(html))
+        self._scan("üretilen design_preview.html", html)
+        # Nitelik handler yokken hover tooltip ancak delege yoluyla
+        # çalışır; ikisinin de artifact'a girdiğini doğrula.
+        self.assertIn("addEventListener", html)
+        self.assertIn("data-tip", html)
+
+    def test_local_artifact_is_not_stale(self):
+        """İnceleme/demo kopyası bayat mı?
+
+        Bulgu (findings.md): artifact `2fee44f`'ten ÖNCE üretilmişti —
+        düzeltilmiş kaynağa rağmen incelemede 14 inline handler'lı ölü UI
+        gösteriyordu. Üretim deterministik ölçüldü (iki koşu birebir aynı,
+        153 766 bayt), yani "bayat mı" sorusu her koşuda yanıtlanabilir.
+        """
+        built = pathlib.Path(HERE, "design_preview.html")
+        if not built.is_file():
+            self.skipTest(
+                "design_preview.html yok (commit dışı) — yerel kopya "
+                "denetlenemez; ÜRETİCİ yukarıdaki testte denetleniyor")
+        with tempfile.TemporaryDirectory() as tmp:
+            fresh = self._generate_artifact(
+                pathlib.Path(tmp) / "design_preview.html")
+        self.assertEqual(
+            built.read_text(encoding="utf-8"), fresh,
+            "Yerel design_preview.html BAYAT — düzeltilmiş kaynaktan gelmiyor, "
+            "yani inceleme yüzeyi ölü UI gösterebilir. Çözüm: python3 "
+            "_calisma/CIKTI/build_design_preview.py")
+
+    def test_guard_itself_detects_a_known_violation(self):
+        """Kapının kendisi bozulursa (regex köreleşirse) sessizce geçmesin.
+
+        Düzeltme ÖNCESİ gerçek satırlar (2fee44f^): 3 onmousemove +
+        3 onmouseleave + 1 onclick. Aynı desen sentetik olarak üretilip
+        eşleştiği doğrulanır.
+        """
+        historical = (
+            '<rect fill="transparent" onmousemove="showRefsTrendTip(0, event)"'
+            ' onmouseleave="hideTrendTip()"/>'
+            '<button onclick="setRhFilter(\'PASS\')">PASS</button>'
+        )
+        self.assertEqual(len(self._count_inline_handlers(historical)), 3)
+        # Metnin BAŞINDAKİ handler de sayılmalı (eski `\s` öneki kaçırırdı).
+        self.assertEqual(
+            len(self._count_inline_handlers('onload="boot()"')), 1)
+        # `data-onclick=…` gibi data-* nitelikleri handler DEĞİL.
+        self.assertEqual(
+            len(self._count_inline_handlers(' data-onclick="x"',)), 0)
+        self.assertEqual(self._count_inline_handlers(_preview_js()), [])
+
+    # ── Sunulan yüzey sayacı (fail-closed) ──────────────────────────────
+    def _served_page_surfaces(self):
+        """PREVIEW_DIR'den tarayıcıya servis edilebilen SAYFA yüzeyleri.
+
+        Sabit bir dosya listesi yerine dizindeki gerçek `.html` kümesi
+        okunur: yeni bir sayfa eklenirse kapıya KENDİLİĞİNDEN girer, yani
+        kapsam dışında kalan bir yüzey oluşamaz. `preview.js` her sayfaya
+        gömülü tek betik olduğu için ayrıca eklenir; üretilen
+        `design_preview.html` her koşuda üreticiden gelir (commit dışı
+        kopya bayat olabilir).
+        """
+        surfaces = {}
+        for path in sorted(pathlib.Path(HERE).glob("*.html")):
+            surfaces[path.name] = path.read_text(encoding="utf-8")
+        surfaces["preview.js"] = _preview_js()
+        with tempfile.TemporaryDirectory() as tmp:
+            surfaces["üretilen design_preview.html"] = self._generate_artifact(
+                pathlib.Path(tmp) / "design_preview.html")
+        return surfaces
+
+    def test_inline_handler_counter_is_zero_across_served_surfaces(self):
+        """TEK KAPI: servis edilen her yüzeyde inline-handler sayacı 0.
+
+        Önceki testler dosyaları tek tek sabit bir listeyle denetliyordu;
+        listeye girmeyen yeni bir sayfa sessizce kapsam dışı kalabilirdi.
+        Burada kapsam diskteki gerçek yüzey kümesidir ve ölçülen şey tek
+        bir SAYAÇTIR: `sayac != 0` → FAIL.
+
+        Boş kanıt da FAIL: üretici çağrılamazsa ya da dizinde beklenenden
+        az yüzey bulunursa "0 handler" sonucu anlamsız olurdu (AGENTS.md:
+        her testin atlandığı bir süit geçen süitten ayırt edilemez).
+        """
+        surfaces = self._served_page_surfaces()
+        self.assertGreaterEqual(
+            len(surfaces), 4,
+            "taranan yüzey sayısı beklenenden az (%d): %s" % (
+                len(surfaces), sorted(surfaces)))
+        for required in ("preview.html", "preview.js",
+                         "üretilen design_preview.html"):
+            self.assertIn(required, surfaces)
+        self.assertGreater(len(surfaces["preview.html"]), 10_000,
+                           "preview.html beklenmedik derecede küçük")
+        total = 0
+        offenders = {}
+        for name, text in surfaces.items():
+            hits = self._count_inline_handlers(text)
+            total += len(hits)
+            if hits:
+                offenders[name] = hits[:5]
+        self.assertEqual(
+            total, 0,
+            "inline-event-handler sayacı %d (sıfır olmalı) — CSP altında bu "
+            "handler'lar SESSİZCE ölür. Yüzeyler: %r" % (total, offenders))
+
+    def test_csp_script_src_does_not_allow_inline_handlers(self):
+        """'unsafe-inline' script-src'a sızarsa kapı sessizce işsiz kalır.
+
+        VERIFY-001'in diğer yol gösterilmişti: "script-hash ekle". Hash,
+        yalnız HARİCİ script'leri kapsar; nitelik handler'lar yine ölür.
+        Bu yüzden CSP'nin sıkı kaldığı da kilitlenir.
+
+        Kaynak metin değil, SUNUCUNUN GERÇEKTEN GÖNDERDİĞİ başlık denetlenir
+        (dosyada CSP benzeri bir yorum satırına takılıp yeşile yanmasın).
+        """
+        csp = None
+        for name, value in ps.Handler._SECURITY_HEADERS:
+            if name == "Content-Security-Policy":
+                csp = value
+        self.assertIsNotNone(csp, "CSP başlığı tanımlı değil")
+        script_src = re.search(r"script-src[^;]*", csp).group(0)
+        self.assertIn("'self'", script_src)
+        self.assertIn("'nonce-", script_src)
+        self.assertNotIn("unsafe-inline", script_src)
+        self.assertNotIn("unsafe-eval", script_src)
+        # style-src gevşek kalmalı: inline style="..." kullanımı mevcut.
+        self.assertIn("style-src 'self' 'unsafe-inline'", csp)
+
+    def test_all_three_hover_surfaces_are_delegated(self):
+        """Üç trend yüzeyi de data-tip taşır ve delege haritasında adı vardır.
+
+        Yarım düzeltme (sadece refs) VERIFY-001'in yarısını çözer: aynı
+        desen trend ve hook-env grafiklerinde de vardı.
+        """
+        js = _preview_js()
+        for svg_id, tip_name in (
+            ("trend", "showTrendTip"),
+            ("refs-trend", "showRefsTrendTip"),
+            ("he-trend", "showHookEnvTrendTip"),
+        ):
+            self.assertIn('id="%s"' % svg_id, _preview_html())
+            # Harita anahtarı JS'te tırnaksız da yazılabilir (trend: "…").
+            self.assertRegex(
+                js, r"""(?m)^\s*["']?%s["']?\s*:\s*["']%s["']""" % (
+                    re.escape(svg_id), tip_name),
+                "%s yüzeyi delege haritasında yok" % svg_id,
+            )
+        for tip_key in ('data-tip="trend"', 'data-tip="refs"',
+                        'data-tip="hookenv"'):
+            self.assertIn(tip_key, js, "%s taşıyıcısı yok" % tip_key)
+        # Delege çağrısı indeksi DOM'dan okur (statik değer gömmez).
+        self.assertIn("window[tipName](+r.dataset.i, ev)", js)
+        self.assertIn('addEventListener("mouseleave", hideTrendTip)', js)
+
+
+class EscapeHtmlContractTests(unittest.TestCase):
+    """Kaçırma NİTELİK bağlamını da kapatmalı — statik sözleşme.
+
+    `escapeHTML` metin bağlamı için `& < >` ile yeterlidir; ama aynı
+    fonksiyon `title="…"`, `class="…"`, `data-ts="…"` içinde de kullanılıyor.
+    Orada tırnak kaçırmadan veri niteliği kapatıp yeni nitelik enjekte
+    edebilir (ölçülen açık: `lean_detail` ve `run.source`). Tarayıcı
+    kanıtı `test_preview_escaping.py`'de; bu sınıtar tarayıcısız ortamda
+    da kırılmayı yakalar.
+    """
+
+    # Veri türetli, serbest biçimli alanlar: sunucudan gelen dizgiler.
+    DATA_FIELD = re.compile(r"\b(?:r|d|h|f|v|b|k|item|rec|row|it|o)\.[a-z_]+")
+    # Zararsız: ölçek/eksen fonksiyonları ve sayıya bağlı biçimlendirme.
+    # Yalnız SAYI üretenler. Hepsi aritmetik:
+    #   x = PL + (n === 1 ? iw/2 : (iw*i)/(n-1))            (x, xAt)
+    #   yP = PT + ih - (ih * (v||0)) / maxP                  (yP, yD, yB, yZ, yL, y)
+    #   fmtLimit/fmtTs/fmtDuration/fmtBytes/fmtVal: girdi dizgiyse
+    #   ya sabit ("—") döner ya da isFinite() elemesiyle sayıya iner.
+    # Zararsız girdi ALANI: kabul edilen veri nitelik değerine girmez,
+    # tırnak işareti hiçbir yolla sonuca taşınamaz.
+    SCALE_HELPERS = ("x", "xAt", "yP", "yD", "yB", "yZ", "yL", "y",
+                     "fmtLimit", "fmtTs", "fmtDuration", "fmtBytes", "fmtVal")
+    SAFE_EXPR = re.compile(
+        r"^(?:" + "|".join(SCALE_HELPERS) + r")\(|\.toFixed\(|\.join\(")
+    TEMPLATE_SLOT = re.compile(r"\$\{([^{}]*)\}")
+
+    @classmethod
+    def _template_pools(cls, js):
+        """TÜM template literal havuzları (kaçışlı backtick yok sayar)."""
+        pools, i = [], 0
+        while i < len(js):
+            if js[i] == "`":
+                j = i + 1
+                while j < len(js):
+                    if js[j] == "\\":
+                        j += 2
+                        continue
+                    if js[j] == "`":
+                        break
+                    j += 1
+                pools.append((i, js[i:j + 1]))
+                i = j + 1
+            else:
+                i += 1
+        return pools
+
+    @classmethod
+    def _attr_sinks(cls, js):
+        """(satır, ifade) — NİTELİK değeri içindeki kaçışsız veri yuvaları.
+
+        SATIR tabanlı tarama yetmez: `title="x ${…}` açılışı ile kapanış
+        tırnağı ayrı satırlarda olduğunda hiçbir satırda `="…"` kalıbı
+        oluşmaz ve ihlal görünmez. Bu yüzden havuz metni kendi içinde
+        taranır (çok satırlı şablonlar dahil).
+        """
+        offenders = []
+        for start, body in cls._template_pools(js):
+            for m in re.finditer(r"\$\{", body):
+                depth, k = 1, m.end()
+                while k < len(body) and depth:
+                    if body[k] == "\\":
+                        k += 2
+                        continue
+                    if body.startswith("${", k):
+                        depth += 1
+                        k += 2
+                        continue
+                    if body[k] == "}":
+                        depth -= 1
+                    k += 1
+                expr = body[m.end():k - 1].strip()
+                # Nitelik değeri içinde miyiz? `="…` açılışından sonra, kapanış
+                # tırnağı görmeden → evet.
+                if not re.search(r'=\s*"[^"]*$', body[:m.end()]):
+                    continue
+                if not expr or "escapeHTML(" in expr:
+                    continue
+                if not cls.DATA_FIELD.search(expr) or cls.SAFE_EXPR.search(expr):
+                    continue
+                offenders.append(
+                    "%d: ${%s}" % (js.count("\n", 0, start) + 1, expr))
+        return offenders
+
+    def test_escape_html_covers_ampersand_angle_brackets_and_quotes(self):
+        js = _preview_js()
+        body = re.search(
+            r"function escapeHTML\(s\)\s*\{(.*?)\n\}", js, re.S).group(1)
+        for needle, why in (
+            ("&amp;", "&"), ("&lt;", "<"), ("&gt;", ">"),
+            ("&quot;", '"'), ("&#39;", "'"),
+        ):
+            self.assertIn(needle, body,
+                          "escapeHTML %s karakterini kaçırmıyor — %s"
+                          % (why, "nitelik bağlamı kırılır"))
+        # & ÖNCE kaçırılmalı: sıra tersine dönerse kendi kaçışımız bozulur.
+        self.assertLess(body.index("&amp;"), body.index("&lt;"))
+
+    def test_no_unescaped_data_reaches_attribute_context(self):
+        """Nitelik değeri içine kaçışsız veri interpolasyonu olmasın.
+
+        TÜM template literal havuzları taranır (çok satırlı şablonlar dahil):
+        `="…${expr}…"` kalıbında `expr` veri türetliyse (r.ts, h.name,
+        f.message …) ve escapeHTML/ölçek/sayı biçimi değilse → fail-closed.
+        """
+        offenders = self._attr_sinks(_preview_js())
+        self.assertEqual(
+            offenders, [],
+            "NİTELİK bağlamında kaçışsız veri interpolasyonu — tırnak kaçır:\n  "
+            + "\n  ".join(offenders))
+
+    def test_attr_sink_scanner_sees_across_line_breaks(self):
+        """Tarayıcının KENDİSİ: tarayıcı satır kıran bir ihlali kaçırmamalı.
+
+        Satır tabanlı tarama bu vakada 0 bulur (kapanış tırnağı ayrı
+        satırda, hiçbir satırda `="…"` kalıbı oluşmaz). Havuz tabanlı
+        tarama bulmalı — yoksa kapı sessizce körleşir.
+        """
+        evil = 'const EVIL = `<span title="x ${r.source}\n"></span>`;'
+        self.assertEqual(
+            self._attr_sinks(evil), ["1: ${r.source}"],
+            "havuz taramasi satir kirilmis niteligi gormuyor — "
+            "guard korrelmis/korelasyonmis olamaz")
+
+    def test_scale_helper_allowlist_has_no_dead_entries(self):
+        """Güvenli sayılan yardımcılar gerçekten tanımlı olmalı.
+
+        Ölü bir ad (silinmiş fonksiyon) listede kalırsa, ileride aynı adla
+        yazılan KAÇIŞSIZ bir interpolasyonı yanlışlıkla güvenli sayar.
+        """
+        js = _preview_js()
+        dead = [n for n in self.SCALE_HELPERS
+                if not re.search(r"\b%s\s*(?:=|\()" % re.escape(n), js)]
+        self.assertEqual(dead, [], "ölü yardımcı adı: " + ", ".join(dead))
+
+    SINKS = (
+        ('const ld = r.lean_detail ? " \u2014 " + escapeHTML(r.lean_detail)',
+         'title="Lean FAIL${ld}" ka\u00e7\u0131\u015fs\u0131z \u2014 lean_detail t\u0131rnak i\u00e7erebilir'),
+        ('const srcBadge = escapeHTML(r.source || "daemon")',
+         'class="source-badge ${srcBadge}" ka\u00e7\u0131\u015fs\u0131z'),
+        ('const tsAttr = r.ts ? escapeHTML(r.ts) : ""',
+         "data-ts elle ka\u00e7\u0131r\u0131l\u0131yor \u2014 tek yol escapeHTML olmal\u0131"),
+    )
+
+    def test_known_attribute_sinks_are_escaped(self):
+        """Ölçülen üç açık yuva hep kaçırılmalı (satır kaymasına dayanıklı).
+
+        assertIn tüm dosyayı hata mesajına döktüğü için varlık denetimi
+        yapılıp mesaj sabit tutulur — 3000 satır gürültü olmasın.
+        """
+        js = _preview_js()
+        missing = [why for needle, why in self.SINKS if needle not in js]
+        self.assertEqual(
+            missing, [], "kaçırılmamış nitelik yuvası:\n  " + "\n  ".join(missing))
+
+    def test_escaping_never_runs_on_markup_fragments(self):
+        """Kaçırma HTML PARÇASI üzerinde kullanılmamalı (etiketleri öldürürdü).
+
+        Kaçırılması gerekenler metin/nitelik değerleridir; `<b>` gibi
+        parçalar önceden kurulmuş HTML'dir ve kaçırılırsa görünmez olur.
+        """
+        for lineno, line in enumerate(_preview_js().split("\n"), 1):
+            for e in self.TEMPLATE_SLOT.finditer(line):
+                expr = e.group(1).strip()
+                if expr.startswith("escapeHTML(") and re.search(r"<[a-z/]", expr):
+                    self.fail("satır %d: escapeHTML bir HTML parçasına uygulanmış "
+                              "— %s" % (lineno, expr))
 
 
 class ExternalScriptContractTests(unittest.TestCase):
@@ -1910,12 +2746,16 @@ class SSEHandlerThreadTests(unittest.TestCase):
                 self.wfile = outer._wfile()
                 self.headers = {}
                 self.status = None
+                self.headers_sent = []
+                # Gerçek handler'da SSE yanıtının `Connection: keep-alive`
+                # başlığı bunu False yapar; tahliye True'ya çevirmeli.
+                self.close_connection = False
 
             def send_response(self, code):
                 self.status = code
 
             def send_header(self, key, value):
-                pass
+                self.headers_sent.append((key, value))
 
             def end_headers(self):
                 pass
@@ -2074,6 +2914,321 @@ class SSEHandlerThreadTests(unittest.TestCase):
         self._broken.set()
         self._thread.join(timeout=5)
         self.assertEqual(ps.STREAM_CLIENTS, [])
+
+    # ─── Kaynak tavanı + boşta tahliye ────────────────────────────────
+
+    def _init_latest(self):
+        self._patch("LATEST", {"ts": "", "verdict": "INIT", "p0": 0, "p1": 0,
+                               "stdout": "", "stderr": "", "hook_env": None,
+                               "cached": False})
+
+    def test_sse_rejects_when_client_cap_reached(self):
+        """Tavan dolu: 503 + Retry-After, istemci kaydedilmez, akış açılmaz."""
+        self._patch("SSE_MAX_CLIENTS", 1)
+        self._init_latest()
+        sentinel = queue.Queue()
+        with ps.LOCK:
+            ps.SSE_CLIENTS.append(sentinel)
+        h = self._run(ps.Handler.serve_sse)
+        self._thread.join(timeout=5)
+        self.assertFalse(self._thread.is_alive())
+        self.assertEqual(h.status, 503)
+        self.assertIn(("Retry-After", "30"), h.headers_sent)
+        body = json.loads(self._raw())
+        self.assertEqual(body["error"], "too many SSE clients")
+        self.assertEqual(body["channel"], "run")
+        self.assertEqual(body["limit"], 1)
+        # Ret edilen bağlantı hiçbir event yazmadı; kanalda yalnız sentinel var.
+        self.assertNotIn("event: snapshot", self._raw())
+        with ps.LOCK:
+            self.assertEqual(ps.SSE_CLIENTS, [sentinel])
+
+    def test_run_stream_rejects_when_client_cap_reached(self):
+        """Aynı tavan satır akışında da geçerli (kanal başına sayılır)."""
+        self._patch("SSE_MAX_CLIENTS", 1)
+        self._patch("RUNS_DIR", None)
+        self._init_latest()
+        sentinel = queue.Queue()
+        with ps.LOCK:
+            ps.STREAM_CLIENTS.append(sentinel)
+        h = self._run(ps.Handler.serve_run_stream)
+        self._thread.join(timeout=5)
+        self.assertFalse(self._thread.is_alive())
+        self.assertEqual(h.status, 503)
+        body = json.loads(self._raw())
+        self.assertEqual(body["channel"], "run-stream")
+        self.assertNotIn("event: info", self._raw())
+        with ps.LOCK:
+            self.assertEqual(ps.STREAM_CLIENTS, [sentinel])
+
+    def test_cap_is_per_channel(self):
+        """`/api/run` doluyken `/api/run-stream` hâlâ kabul edilir."""
+        self._patch("SSE_MAX_CLIENTS", 1)
+        self._patch("RUNS_DIR", None)
+        self._init_latest()
+        with ps.LOCK:
+            ps.SSE_CLIENTS.append(queue.Queue())
+        self._run(ps.Handler.serve_run_stream)
+        self.assertTrue(self._wait_for(lambda b: b"event: info" in b))
+        self.assertEqual(len(ps.STREAM_CLIENTS), 1)
+        self._broken.set()
+        self._thread.join(timeout=5)
+        self.assertEqual(ps.STREAM_CLIENTS, [])
+
+    def test_sse_evicts_idle_client_despite_keepalives(self):
+        """Olaysız bağlantı tahliye edilir; keepalive ömrü UZATMAZ."""
+        self._patch("SSE_IDLE_TIMEOUT", 0.2)
+        self._init_latest()
+        h = self._run(ps.Handler.serve_sse)
+        self.assertTrue(self._wait_for(lambda b: b"event: snapshot" in b))
+        self.assertTrue(self._wait_for(lambda b: b"event: evicted" in b))
+        self._thread.join(timeout=5)
+        self.assertFalse(self._thread.is_alive())
+        raw = self._raw()
+        self.assertGreaterEqual(raw.count(": keepalive"), 2)
+        self.assertIn("retry: 60000", raw)
+        ev = json.loads(next(d for n, d in self._frames() if n == "evicted"))
+        self.assertEqual(ev["reason"], "idle-timeout")
+        self.assertEqual(ev["channel"], "run")
+        self.assertIsInstance(ev["idle_s"], int)
+        self.assertLess(ev["idle_s"], 5)   # tavan 0.2s; gerçek olay yok
+        # Tahliye soketi de kapatmalı: aksi halde handler keep-alive
+        # döngüsünde ikinci isteği bekler ve thread serbest kalmaz.
+        self.assertTrue(h.close_connection)
+        with ps.LOCK:
+            self.assertEqual(ps.SSE_CLIENTS, [])
+
+    def test_run_stream_evicts_idle_client(self):
+        self._patch("SSE_IDLE_TIMEOUT", 0.2)
+        self._patch("RUNS_DIR", None)
+        self._init_latest()
+        self._run(ps.Handler.serve_run_stream)
+        self.assertTrue(self._wait_for(lambda b: b"event: info" in b))
+        self.assertTrue(self._wait_for(lambda b: b"event: evicted" in b))
+        self._thread.join(timeout=5)
+        self.assertFalse(self._thread.is_alive())
+        ev = json.loads(next(d for n, d in self._frames() if n == "evicted"))
+        self.assertEqual(ev["channel"], "run-stream")
+        with ps.LOCK:
+            self.assertEqual(ps.STREAM_CLIENTS, [])
+
+    def test_run_stream_keeps_newest_lines_when_queue_full(self):
+        """Yavaş istemcide kuyruk dolarken kalan pencere = SON satırlar.
+
+        İstemci yazma yolunda bloke edilir (gerçek yavaş/yarı-kapalı istemci
+        davranışı); flood kuyruğu doldurur. Serbest bırakıldığında istemciye
+        YALNIZ en yeni `maxsize` satır gider, en eskiler düşer. Düz
+        `put_nowait` davranışında bu ters olurdu: yeni satırlar düşer, eski
+        pencere kalırdı (`_broadcast_stream` yorumunun söz verdiği kural).
+        """
+        self._patch("RUNS_DIR", None)
+        self._init_latest()
+        gate = threading.Event()
+        outer = self
+
+        class _BlockingWfile:
+            def write(inner, b):
+                gate.wait(timeout=5.0)      # yavaş istemci: yazma bloke
+                with outer._buf_lock:
+                    if outer._broken.is_set():
+                        raise BrokenPipeError("client gone")
+                    outer._buf.write(b)
+
+            def flush(inner):
+                pass
+
+        h = self._fake_handler()
+        h.wfile = _BlockingWfile()
+        t = threading.Thread(target=ps.Handler.serve_run_stream,
+                             args=(h,), daemon=True)
+        self._thread = t
+        t.start()
+        # Kayıt ilk yazımdan ÖNCE yapılır (serve_run_stream: register → info).
+        deadline = time.time() + 5
+        while time.time() < deadline and not ps.STREAM_CLIENTS:
+            time.sleep(0.005)
+        self.assertEqual(len(ps.STREAM_CLIENTS), 1,
+                         "handler kaydolmadı (test kurulumu bozuk)")
+        stream_max = ps.STREAM_CLIENTS[0].maxsize
+        n = stream_max + 40
+        for i in range(n):
+            ps._broadcast_stream("stdout", "satır %d" % i)
+        self.assertEqual(ps.STREAM_CLIENTS[0].qsize(), stream_max,
+                         "flood kuyruğu doldurmadı (test kurulumu bozuk)")
+        gate.set()
+        last = ("satır %d" % (n - 1)).encode()
+        self.assertTrue(self._wait_for(lambda b: last in b, timeout=10.0),
+                        "en yeni satır istemciye ulaşmadı")
+        lines = [json.loads(d)["line"] for ev, d in self._frames()
+                 if ev == "stdout"]
+        self.assertEqual(lines,
+                         ["satır %d" % i for i in range(n - stream_max, n)],
+                         "istemciye yanlış pencere ulaştı")
+        self.assertNotIn("satır 0", lines)
+        self._broken.set()
+        t.join(timeout=5)
+        self.assertEqual(ps.STREAM_CLIENTS, [])
+
+    def test_live_event_resets_idle_deadline(self):
+        """Gerçek olay sayacı sıfırlar: tahliye olaydan ~tavan sonra gelir."""
+        self._patch("SSE_IDLE_TIMEOUT", 1.0)
+        self._init_latest()
+        self._run(ps.Handler.serve_sse)
+        self.assertTrue(self._wait_for(lambda b: b"event: snapshot" in b))
+        time.sleep(0.4)          # tavanın altında kal
+        sent_at = time.monotonic()
+        ps.SSE_CLIENTS[0].put(json.dumps({"stream": "update"}))
+        self.assertTrue(self._wait_for(lambda b: b"event: evicted" in b,
+                                       timeout=5.0))
+        evicted_at = time.monotonic()
+        self._thread.join(timeout=5)
+        # Sayaç sıfırlanmasaydı tahliye bağlantı başlangıcında (0.4s önce)
+        # tetiklenirdi → olaydan sonraki süre ~0.6s değil ~0.2s olurdu.
+        self.assertGreaterEqual(evicted_at - sent_at, 0.9)
+        self.assertTrue(any(n == "update" for n, _ in self._frames()))
+
+    def test_idle_check_semantics(self):
+        """Sınır tam tavanda; 0 = tahliye kapalı."""
+        self._patch("SSE_IDLE_TIMEOUT", 10.0)
+        self.assertFalse(ps._sse_idle_exceeded(100.0, now=109.9))
+        self.assertTrue(ps._sse_idle_exceeded(100.0, now=110.0))
+        self._patch("SSE_IDLE_TIMEOUT", 0)
+        self.assertFalse(ps._sse_idle_exceeded(0.0, now=10 ** 9))
+
+    def test_register_sse_client_cap_payload_and_unlimited(self):
+        """Kayıt+ilk-yük birlikte; tavan 0 = sınırsız."""
+        self._patch("SSE_MAX_CLIENTS", 1)
+        with ps.LOCK:
+            ps.SSE_CLIENTS.append(queue.Queue())
+        q = queue.Queue()
+        self.assertEqual(ps._register_sse_client(ps.SSE_CLIENTS, q,
+                                                 lambda: "ilk"),
+                         (None, False))
+        with ps.LOCK:
+            self.assertEqual(len(ps.SSE_CLIENTS), 1)
+            ps.SSE_CLIENTS.clear()
+        self.assertEqual(ps._register_sse_client(ps.SSE_CLIENTS, q,
+                                                 lambda: "ilk"),
+                         ("ilk", True))
+        self.assertIs(ps.SSE_CLIENTS[0], q)
+        # 0 = sınırsız: tavan kontrolü atlanır.
+        self._patch("SSE_MAX_CLIENTS", 0)
+        with ps.LOCK:
+            ps.SSE_CLIENTS.clear()
+        for _ in range(20):
+            self.assertTrue(ps._register_sse_client(
+                ps.SSE_CLIENTS, queue.Queue(), lambda: "x")[1])
+        self.assertEqual(len(ps.SSE_CLIENTS), 20)
+
+
+class VerifyTimeoutTests(unittest.TestCase):
+    """_run_verify_locked zaman aşımı: yapılandırılabilir süre + süreç ağacı öldürme.
+
+    Gerçek alt süreçle koşar; yalnız komut kurulumu ve _finalize_run (disk yan
+    etkisi) taklit edilir. p.kill() (yalnız lider) veya sınırsız join geri
+    konursa grandchild testi kırmızıya düşer.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        old = ps.VERIFY_TIMEOUT_SECONDS
+        self.addCleanup(setattr, ps, "VERIFY_TIMEOUT_SECONDS", old)
+
+    def _run(self, script, timeout):
+        captured = {}
+
+        def fake_finalize(stdout, stderr, rc, duration, data, verify_dir):
+            captured.update(stdout=stdout, stderr=stderr, rc=rc)
+
+        ps.VERIFY_TIMEOUT_SECONDS = timeout
+        with mock.patch.object(ps, "_find_python", return_value=sys.executable), \
+                mock.patch.object(ps, "_build_verify_cmd",
+                                  return_value=[sys.executable, "-c", script]), \
+                mock.patch.object(ps, "_finalize_run", side_effect=fake_finalize):
+            started = time.monotonic()
+            ps._run_verify_locked(self._tmp.name)
+            captured["elapsed"] = time.monotonic() - started
+        return captured
+
+    def _assert_dead(self, pid, wait_s=5.0):
+        deadline = time.monotonic() + wait_s
+        while time.monotonic() < deadline:
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                return
+            time.sleep(0.1)
+        self.fail(f"torun süreç zaman aşımından sonra hâlâ yaşıyor: pid={pid}")
+
+    def test_default_timeout_is_300_seconds(self):
+        self.assertEqual(ps.VERIFY_TIMEOUT_SECONDS, 300)
+
+    def test_positive_seconds_accepts_only_positive_finite(self):
+        self.assertEqual(ps._positive_seconds("2.5"), 2.5)
+        for bad in ("0", "-1", "nan", "inf", "-inf", "abc", ""):
+            with self.subTest(value=bad):
+                with self.assertRaises(argparse.ArgumentTypeError):
+                    ps._positive_seconds(bad)
+
+    def test_configured_timeout_is_enforced_and_reported(self):
+        out = self._run("import time; time.sleep(120)", timeout=1)
+        self.assertEqual(out["rc"], 124)
+        self.assertTrue(out["stderr"].endswith("TIMEOUT (>1s)"), out["stderr"])
+        self.assertLess(out["elapsed"], 60)
+
+    def test_normal_run_keeps_output_and_exit_code(self):
+        out = self._run("print('hello')", timeout=30)
+        self.assertEqual(out["rc"], 0)
+        self.assertIn("hello", out["stdout"])
+        self.assertNotIn("TIMEOUT", out["stderr"])
+
+    def test_timeout_kills_grandchild_holding_pipes(self):
+        """Torun pipe'ı açık tutsa da okuyucular asılmamalı; torun öldürülmeli."""
+        pid_file = os.path.join(self._tmp.name, "grandchild.pid")
+        script = (
+            "import subprocess, sys, time\n"
+            "g = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(120)'])\n"
+            f"with open({pid_file!r}, 'w') as fh:\n"
+            "    fh.write(str(g.pid))\n"
+            "time.sleep(120)\n"
+        )
+        out = self._run(script, timeout=10)
+        self.assertEqual(out["rc"], 124)
+        self.assertLess(out["elapsed"], 60,
+                        "okuyucu thread torun pipe'ı yüzünden asıldı")
+        with open(pid_file, encoding="utf-8") as fh:
+            self._assert_dead(int(fh.read()))
+
+    def test_detached_grandchild_cannot_block_normal_exit(self):
+        """Torun kendi oturumuna geçip pipe'ı tutarsa normal çıkışta da join asılmamalı.
+
+        Grup-öldürme yolu bu torunu yakalayamaz; bu yüzden join sınırı ayrıca
+        sınanır. Sınır yoksa çağrı ~120 s sürer.
+        """
+        pid_file = os.path.join(self._tmp.name, "detached.pid")
+        script = (
+            "import subprocess, sys\n"
+            "g = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(120)'],"
+            " start_new_session=True)\n"
+            f"with open({pid_file!r}, 'w') as fh:\n"
+            "    fh.write(str(g.pid))\n"
+            "print('done')\n"
+        )
+        out = self._run(script, timeout=60)
+        with open(pid_file, encoding="utf-8") as fh:
+            pid = int(fh.read())
+
+        def _kill_quietly():
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except OSError:
+                pass
+        self.addCleanup(_kill_quietly)
+        self.assertEqual(out["rc"], 0)
+        self.assertIn("done", out["stdout"])
+        self.assertLess(out["elapsed"], 60,
+                        "bağımsız torun pipe'ı yüzünden join asıldı")
 
 
 if __name__ == "__main__":

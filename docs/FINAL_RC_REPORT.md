@@ -4,7 +4,43 @@
 
 **Tarih:** 2026-09-16 (derin denetim turu güncellemesi)  
 **Dal:** `reword-working`  
-**Durum:** `RC — yerel kapılar yeşil; FINAL için temiz kopya + CI kanıtı bekliyor`
+**Durum:** `RC — yerel kapılar yeşil; FINAL için temiz kopya + CI kanıtı bekliyor`  
+**Güncelleme (2026-10-06):** uzak `main` / `reword-working` durumu ölçüldü — aşağıdaki §Uzak dal durumu
+
+## Uzak dal durumu (2026-10-06 ölçümü)
+
+Ölçüm kaynağı: `git ls-remote origin` (otoriter), yerel remote-tracking ile
+birebir karşılaştırıldı; diverjans `git rev-list --left-right --count
+origin/main...origin/reword-working`, ortak ata `git merge-base`.
+
+| Dal | Uzak HEAD | Son commit (+0200) | Tarih | Karşı dal'a göre |
+|---|---|---|---|---|
+| `main` | `7a3ba80` | `docs(deploy): f3ebc30 icin kanit-defteri satiri ekle` | 2026-10-06 03:20:50 | `reword-working`'den **53 commit ileride** |
+| `reword-working` | `a9518ea` | `feat(a11y): add /api/a11y bridge + verdict panel` | 2026-10-06 12:22:02 | `main`'den **6 commit ileride** |
+
+- **İlişki: ayrışmış.** Ortak ata `b79b66e` (2026-10-04, `main: merge
+  design/preview-scrutiny-ledger into main`). Her iki tarafta da benzersiz
+  commit var → iki yön de fast-forward **değil**; kapanış yolu merge veya
+  rebase (+ PR).
+- **Yerel remote-tracking ≡ uzak:** `origin/main` = `7a3ba80` ve
+  `origin/reword-working` = `a9518ea`, `ls-remote` ile birebir aynı (fetch
+  drift'i yok).
+- **`reword-working`'e özgü 6 commit (eski → yeni):**
+
+| # | SHA | Mesaj |
+|---|---|---|
+| 1 | `5380ed0` | feat(docker): PR-triggered Trivy scan with SARIF diff comment |
+| 2 | `88e70d1` | feat(ci): CI hygiene gate - permissions, timeout, concurrency matrix |
+| 3 | `c32e881` | chore(changelog): 5380ed0 ve 88e70d1 satirlarini tabloya ekle, olu hashleri buda |
+| 4 | `efc42cc` | docs(a11y): finalize a11y-gate implementation plan |
+| 5 | `311936a` | feat(a11y): battery gate + refs-index + health bridge |
+| 6 | `a9518ea` | feat(a11y): add /api/a11y bridge + verdict panel |
+
+- **Uzakta olmayan yerel commit (pending, bu rapor yazıldığı an):** `c2e5a1d`
+  `docs(refs): Azure Search Refs Faz 0 tasarim dokumani` — cerrahi worktree
+  `/tmp/rw_push`'te detached HEAD'de duruyor, **push edilmedi** (erişimi `/tmp`
+  temizliğine bağlı → push edilene kadar kırılgan). Push edilirse uzak
+  `reword-working` 7 commit'e çıkar.
 
 ## Derin denetimde bulunan ve kapatılan P0'lar
 
@@ -47,7 +83,7 @@ kaynağın kopyası istenirse kopya verilir — özet "kaynak" diye etiketlenmez
 | `verify_delivery.py --check-launchd` (K20, bu turda canlı onarıldı) | PASS — birincil PID canlı HTTP 200; yedek BILGI (steady-state'te yüklü değil, kontrat) |
 | fresh_clone_setup.sh --check-ci ×4 | PASS ×4 (ilk koşum sync sonrası tek seferlik bayatlık yarışı, kararlı RC=0) |
 | TeXLive+SDE determinism deneyi (`texlive_determinism_hook.sh`) | PASS — SKIP kapatıldı: gerçek pdfTeX 3.141592653-2.6-1.40.29 (TeX Live 2026/Homebrew) + tectonic 0.17.0; iki bağımsız SDE koşumunda tek kalıntı pdfTeX'in rastgele trailer `/ID`'si (64 bayt), `/ID` harici baytlar birebir aynı (kanonik hash `a75c3409…` — oturumlar arası 3 bağımsız ölçümde birebir kararlı). Düzeltme: SDE artık tectonic ayağına da export ediliyor; düzeltme sonrası tectonic PDF'i de bağlamlar arası birebir aynı (`ad8fca69…`) |
-| Docker/Trivy güvenlik iş akışı (gerçek daemon ile yerel smoke) | PASS — colima start (Docker 29.5.2, amd64 emülasyon) → image `--platform linux/amd64` build OK (~100 MB); Trivy 0.74.0 gate'i CI parametreleriyle (CRITICAL,HIGH, ignore-unfixed, exit-code 1) **İLK KOŞUMDA 2 HIGH BULGU YAKALADI** (libpcre2-8-0: CVE-2026-86145 + CVE-2026-89161, bookworm 12.15 tabanı) → Dockerfile targeted `--only-upgrade libpcre2-8-0` yaması → **gate 0 bulgu ile yeşil**. Canlı smoke: compose `running healthy` (HEALTHCHECK HTTP 200, restarts=0) + ayrılmış rastgele port üzerinden host→konteyner `/api/health` HTTP 200 `ok` (host 8000 portu Freebuff önizleme sunucusu tarafından meşgul olduğundan kanıt bağlantı noktası bağımsız portla verildi). **2026-09-17 desen genelleştirmesi:** apt yama katmanı `SECURITY_PATCH_PACKAGES` ARG'sine bağlandı (CVE-defteri Dockerfile'da işlenmiş kalıcı kayıt; boş arg → yama yok; `dpkg-query` kanıt satırı yalın paket adıyla — `pkg=sürüm` sözdizimi canlı build'de patladı, sed ile kırpılır), kapalı döngü + katkı sözleşmesi `docs/DOCKER_SECURITY_PATCHING.md`'de dokümante edildi, desen sözleşme testiyle sabitlendi (`test_dockerfile_security_patching.py`, 7 test) ve değiştirilmiş Dockerfile canlı smoke ile yeniden doğrulandı (yama log kanıtı `libpcre2-8-0 10.42-1+deb12u1`, trivy 0 bulgu, health 200/healthy, verdict=PASS) **2026-09-20 taze canlı koşum — Docker SKIP notu KAPANDI:** `docker_security_smoke.sh` ilk koşumda Trivy gate 4 bulgu yakaladı (fail-closed doğru çalıştı): postcss ×2 (CVE-2026-45623 + CVE-2026-73646) + sharp ×2 (GHSA-f88m-g3jw-g9cj, GHSA-rgj7-g3m4-5g8c) — kök neden: `.worktrees/` bağlam sızıntısı (linked worktree'nin bayat lock'u: postcss 8.4.31, sharp 0.34.5; bare ignore yalnız kök düzeyini yakalar — venv olayının aynı sınıfı; CI'da `.worktrees`/`node_modules` olmadığından CI yeşil kalıyordu) + GERÇEK bulgu `next 15.5.4` (GHSA-mwv6-3258-q52c + GHSA-q4gf-8mx6-v5v3, fixed 15.5.15). Düzeltmeler: `.dockerignore` +`.worktrees`/`**/node_modules`/`**/.next` (yerel≡CI bağlam eşitliği geri geldi), `overrides` (postcss ^8.5.18 → 8.5.28, sharp ^0.35.4 → 0.35.4), `next 15.5.15` + lockfile. İkinci koşum: **trivy_findings=0 (Clean), container_health=healthy, verdict=PASS, smoke rc=0** (kanıt: `docs/ci_simulate/docker_security_smoke/docker_security_smoke_report.txt` — gitignored yerel kanıt; kalıcı kayıt bu satır). Dashboard `tsc --noEmit` rc=0 + `next build` rc=0. SKIP bundan böyle yalnız araç-yokluğu sözleşmesi (docker/trivy/colima yokken exit 0 + gerekçe); canlı koşum kanıtı günceldir |
+| Docker/Trivy güvenlik iş akışı (gerçek daemon ile yerel smoke) | PASS — colima start (Docker 29.5.2, amd64 emülasyon) → image `--platform linux/amd64` build OK (~100 MB); Trivy 0.74.0 gate'i CI parametreleriyle (CRITICAL,HIGH, ignore-unfixed, exit-code 1) **İLK KOŞUMDA 2 HIGH BULGU YAKALADI** (libpcre2-8-0: CVE-2026-86145 + CVE-2026-89161, bookworm 12.15 tabanı) → Dockerfile targeted `--only-upgrade libpcre2-8-0` yaması → **gate 0 bulgu ile yeşil**. Canlı smoke: compose `running healthy` (HEALTHCHECK HTTP 200, restarts=0) + ayrılmış rastgele port üzerinden host→konteyner `/api/health` HTTP 200 `ok` (host 8000 portu Freebuff önizleme sunucusu tarafından meşgul olduğundan kanıt bağlantı noktası bağımsız portla verildi). **2026-09-17 desen genelleştirmesi:** apt yama katmanı `SECURITY_PATCH_PACKAGES` ARG'sine bağlandı (CVE-defteri Dockerfile'da işlenmiş kalıcı kayıt; boş arg → yama yok; `dpkg-query` kanıt satırı yalın paket adıyla — `pkg=sürüm` sözdizimi canlı build'de patladı, sed ile kırpılır), kapalı döngü + katkı sözleşmesi `docs/DOCKER_SECURITY_PATCHING.md`'de dokümante edildi, desen sözleşme testiyle sabitlendi (`test_dockerfile_security_patching.py`, 7 test) ve değiştirilmiş Dockerfile canlı smoke ile yeniden doğrulandı (yama log kanıtı `libpcre2-8-0 10.42-1+deb12u1`, trivy 0 bulgu, health 200/healthy, verdict=PASS) **2026-09-20 taze canlı koşum — Docker SKIP notu KAPANDI:** `docker_security_smoke.sh` ilk koşumda Trivy gate 4 bulgu yakaladı (fail-closed doğru çalıştı): postcss ×2 (CVE-2026-45623 + CVE-2026-73646) + sharp ×2 (GHSA-f88m-g3jw-g9cj, GHSA-rgj7-g3m4-5g8c) — kök neden: `.worktrees/` bağlam sızıntısı (linked worktree'nin bayat lock'u: postcss 8.4.31, sharp 0.34.5; bare ignore yalnız kök düzeyini yakalar — venv olayının aynı sınıfı; CI'da `.worktrees`/`node_modules` olmadığından CI yeşil kalıyordu) + GERÇEK bulgu `next 15.5.4` (GHSA-mwv6-3258-q52c + GHSA-q4gf-8mx6-v5v3, fixed 15.5.15). Düzeltmeler: `.dockerignore` +`.worktrees`/`**/node_modules`/`**/.next` (yerel≡CI bağlam eşitliği geri geldi), `overrides` (postcss ^8.5.18 → 8.5.28, sharp ^0.35.4 → 0.35.4), `next 15.5.15` + lockfile. İkinci koşum: **trivy_findings=0 (Clean), container_health=healthy, verdict=PASS, smoke rc=0** (kanıt: `docs/ci_simulate/docker_security_smoke/docker_security_smoke_report.txt` — gitignored yerel kanıt; kalıcı kayıt bu satır). Dashboard `tsc --noEmit` rc=0 + `next build` rc=0. SKIP bundan böyle yalnız araç-yokluğu sözleşmesi (docker/trivy/colima yokken exit 0 + gerekçe); canlı koşum kanıtı günceldir. **2026-10-16 taze canlı koşum (floor-geçmişi olayı):** ilk koşum fail-closed **KIRMIZI** — `libpcre2-8-0=10.42-1+deb12u1` Debian pool'undan düştüğü için build `E: Version '10.42-1+deb12u1' for 'libpcre2-8-0' was not found` (rc=100) ile kırıldı; `apt-cache policy` bookworm-security adayını **10.42-1+deb12u2** (Installed/Candidate) olarak doğruladı → Dockerfile ARG floor + CVE-defteri (floor-geçmişi) + `docs/DOCKER_SECURITY_PATCHING.md` defter satırı güncellendi. İkinci koşum **PASS (smoke rc=0)**: yama kanıtı `dpkg-query` → `libpcre2-8-0 10.42-1+deb12u2`, trivy 0.74.0 **trivy_findings=0 (Clean)**, `health_http=200` + `health_body=ok` + `container_health=healthy`, `verdict=PASS`; `test_dockerfile_security_patching.py` **15/15** (floor'un u1'e geri alınmasıyla kırmızıya döndüğü mutasyon koşumuyla kanıtlandı) (kanıt: `docs/ci_simulate/docker_security_smoke/docker_security_smoke_report.txt` — gitignored yerel kanıt; kalıcı kayıt bu satır) |
 
 ## Aday commit + temiz kopya kabulü (2026-09-16)
 
@@ -68,25 +104,6 @@ Temiz kopya (`git clone` → `/tmp/leibniz2-final`, HEAD = `3918a04092279450e743
 | MCP testleri | 26/26 OK |
 
 ## Açık borçlar (FINAL kapısı öncesi)
-
-### Bekleyen kırmızılar — 2026-10-05 durumu
-
-Bu blok **kapanmamış** kırmızıların tek yerdeki kümesidir; her satırın kanıt
-zinciri `run id → nerede durduğu → sahibi` şeklindedir. Üstteki maddeler
-kapandı, aşağıdaki dört hâlâ açık.
-
-| # | Kırmızı | Kanıt | Sahibi / çıkış yolu |
-|---|---|---|---|
-| 1 | `docker-security` → `libpcre2-8-0` **CVE-2026-103111** | main [`37377744058`](https://github.com/ali-han-kaya/leibniz2/actions/runs/37377744058) = failure · jobs `Build and scan Docker image` + `Local security smoke (script parity)` | **PR #82** — `SECURITY_PATCH_PACKAGES` ile kapama hazır, merge bekliyor |
-| 2 | `Live CI doc↔GitHub sync audit (advisory)` | main [`37377743878`](https://github.com/ali-han-kaya/leibniz2/actions/runs/37377743878) = failure · advisory, required değil | Advisory — doküman↔GitHub senkronu; doküman tarafı yazıldıkça kapanır |
-| 3 | PR #83 determinism invariant kırılması | 3 test, kaynak-üretim değişikliğinden kaynaklanıyor | Ayrı iş — bu dalın kapsamında değil, dürüstçe açık bırakıldı |
-| 4 | `test_dashboard_playwright_smoke` (MIME) | yalnız yerelde kırmızı, CI'da koşmuyor | Yerel ortam sorunu — CI kanıtını etkilemez |
-
-**Bilerek yapılmayanlar:** 2 ve 4 numaralı kırmızıları "düzeltmek" için
-kapıyı gevşetmek kanıtı düzeltmez. 1 numaralı CVE'nin çözümü PR #82'de
-duruyor; bu defterde onun yerine yazılmaz.
-
-### Kapanan maddeler
 
 - ~~Gerçek GitHub Actions koşumu — push gerektirir, kullanıcı kararı~~
   **KAPANDI (2026-09-16):** `reword-working` dalı push edildi ve gerçek
@@ -154,29 +171,6 @@ Bu oturumun yeni kapıları CI'da da yeşil: `test_sync_lifecycle` (subprocess
 yaşam-döngüsü regresyonu; batarya 144 dosya / check-unit-tests 159) ve
 48h-guard-kaldırılmış trend-kayıt yolu (bayat rapor tarihiyle kaydolur;
 tazelik iddiası `--check`'te). Kapanış main'e PR #52 merge'iyle gelir.
-
-**2026-09-20 haftalık determinizm ölçümü — linux baseline (bot commit):**
-`determinism-trend.yml`'in schedule koşumu `--update` ile linux ölçümünü
-yazdı ve `github-actions[bot]` bunu commit'ledi: **`fcb14f7`**
-*"chore: record weekly determinism trend measurement"* (2026-09-20 17:11 UTC,
-ubuntu-latest, pinned tectonic 0.17.0 + TeXLive pdflatex, iki bağımsız SDE
-koşumu; ebeveyn `3cabbff`). Eklenen **linux baseline** kaydı:
-
-| alan | değer |
-|---|---|
-| date / platform | `2026-09-20` / `linux` |
-| source_sha256 | `a9f34e05…` (darwin baseline ile **aynı kaynak**) |
-| tectonic_canonical_sha256 | `ad8fca69…` |
-| texlive_canonical_sha256 | `092154a0…` |
-| gate / sde / source_mtime | `PASS` / `0` / `1789924232` |
-
-tectonic kanonik hash'i darwin baseline'ıyla (`ad8fca69…`) birebir eşit →
-çapraz-platform determinizm kanıtı; TeXLive kanonik hash'i platforma bağlı
-(linux `092154a0…` vs darwin `a75c3409…`) ve `--check` bunu ihlal saymaz
-(yalnız bilgilendirici `_cross_platform_note`). Bot-commit zinciri ölçümü
-insan müdahalesi olmadan kaydeder. Not: `fcb14f7` main'in birinci-ebeveyn
-zincirinde **değildir** (`land/migration-gates-2026-09-30` uçlarında);
-main'e inen aynı-gün bot kayıtları `b5126f9` ve `6fe7c86`'dır.
 
 ## Karar
 

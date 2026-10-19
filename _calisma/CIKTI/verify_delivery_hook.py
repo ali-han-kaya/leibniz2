@@ -20,16 +20,9 @@ Davranış:
      staged+unstaged) → uyarı listesine girer; yalnızca staged ('M ') temizdir.
   2. Uyarı varsa net bir blok basılır (advisory).
   3. Asıl kapı koşulur: verify_delivery.py --dir _calisma/CIKTI
-     --strict-determinism. Exit kodu korunur.
-
-Faz 4 bağlamı — DEPS listesi neden kanonik çekirdeği ve kabul defterini de
-kapsar: K6-DETERM'in strict karşılaştırması (a) `pdf_id_canonical.py` ile
-`/ID`-nötr hash'i hesaplar ve (b) referansı `docs/ID_RESIDUAL_ACCEPTANCE.md`
-§4 tablosundan okur. İkisi de stage'lenmemişse hook, commit'lenenden FARKLI
-çekirdek ve FARKLI defter karşısında yeşil verebilir — DEPS'in var oluş
-nedeni tam olarak bu sınıf kaymadir. K6-DETERM'in varsayılanı zaten strict
-olsa da bayrak AÇIKÇA geçirilir: sözleşme varsayılana değil ilana
-dayanmalı; varsayılan çevrildiğinde kapı sessizce kapanmasın.
+     --strict-determinism (Faz 4: determinizm referansı /ID-kanonik hash'tir
+     ve kabul defterinde kayıtlı olmalıdır — defter `ID_RESIDUAL_LEDGER` env
+     ile ya da repo/mirror kopyasıyla çözülür). Exit kodu korunur.
 """
 import pathlib
 import subprocess
@@ -43,8 +36,11 @@ import hook_unstaged_deps as hud  # noqa: E402
 # Hook'un test ettiği ve commit'in içeriğini belirleyen bağımlılıklar.
 DEPS = [
     "_calisma/CIKTI/verify_delivery.py",                  # test edilen doğrulayıcı
-    "_calisma/CIKTI/pdf_id_canonical.py",                 # K6-DETERM /ID-kanonik çekirdeği
-    "docs/ID_RESIDUAL_ACCEPTANCE.md",                     # kabul defteri (§4 kanonik referans)
+    # K6-DETERM /ID-kanonik çekirdeği + kabul defteri (determinizm
+    # referansının TEK kaynağı). İkisi de stage edilmemişse strict kapı
+    # commit edilecek sürümden FARKLI bir referansla koşardı.
+    "_calisma/CIKTI/id_canonical.py",
+    "docs/ID_RESIDUAL_ACCEPTANCE.md",
     "_calisma/CIKTI/verify_delivery.config.json",         # denetlenen config
     "_calisma/CIKTI/verify_delivery.config.schema.json",  # config şeması
     "_calisma/CIKTI/TESLIM_KLASOR_V5_2026-08-17.zip",     # K1 girdisi
@@ -68,12 +64,20 @@ def main(argv=None):
             # Fail-closed: stage edilen sürümle aynı içerik test edilemez.
             return hud.block_strict("verify-delivery", dirty)
         hud.print_warning("verify-delivery", dirty)
-    # Asıl kapı: --strict-determinism AÇIKÇA geçer (varsayılan zaten True;
-    # sözleşme ölçülebilir olsun — ilan bayrağa değil varsayılana
-    # bağlanırsa bir gün çevrildiğinde kapı sessizce kapanır).
+    # Asıl kapı: Faz 4'te strict determinizm AÇIK — K6-DETERM teslim PDF'inin
+    # /ID-kanonik hash'ini kabul defterinde (docs/ID_RESIDUAL_ACCEPTANCE.md)
+    # arar. Referans kayıtlı değilse P1 ile bloklar (defter = tek kaynak;
+    # motor geçişi/yeniden paketleme bilinçli defter satırı ister).
+    # `--core-verdict-out` (yolsuz → <git-dir>/verify_core_verdict.json):
+    # bu hook çekirdeği (K0-K7) KOŞAR; kaydı yazar ki aynı commit penceresinde
+    # koşan katman hook'ları (verify-delivery-sde, --check-github-scripts …)
+    # `--reuse-core-verdict` ile çekirdeği TEKRAR koşmasın. Kayıt girdi
+    # kimliğine bağlıdır: ağaç/ortam/kod değişirse katman hook'u çekirdeği
+    # yeniden koşar (fail-closed).
     r = subprocess.run(
         [sys.executable, str(CIKTI / "verify_delivery.py"),
-         "--dir", "_calisma/CIKTI", "--strict-determinism"])
+         "--dir", "_calisma/CIKTI", "--strict-determinism",
+         "--core-verdict-out"])
     return r.returncode
 
 

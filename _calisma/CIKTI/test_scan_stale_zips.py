@@ -158,7 +158,7 @@ class TestToolkitTolerant(unittest.TestCase):
         self.assertEqual(tolerant_rels,
                          ["TESLIM/stale.zip", "TOOLKIT/toolkit.zip"])
 
-    def test_build_layers_summary_info_not_fail(self):
+    def test_build_layers_summary_buckets_unregistered_p0(self):
         args = types.SimpleNamespace(
             symbolic_proof=False, lean_proof=False, verify_manifest=None,
             check_config_drift=False, check_plist=False,
@@ -166,29 +166,17 @@ class TestToolkitTolerant(unittest.TestCase):
             check_history=None, check_github_scripts=False,
             check_mirror=False, check_daemon=False, check_launchd=False,
             coq_proof=False, check_sde=False)
-        findings = [{"id": "K0-TOOLKIT", "priority": "INFO",
-                     "check": "K0-TOOLKIT", "issue": "toolkit", "evidence": ""}]
+        findings = [
+            {"id": "K0-TOOLKIT", "priority": "INFO",
+             "check": "K0-TOOLKIT", "issue": "toolkit", "evidence": ""},
+            {"id": "LINEAGE-CUR", "priority": "P0",
+             "check": "Soy hattı", "issue": "current generation drift"},
+        ]
         layers = vd.build_layers_summary(args, findings)
         self.assertEqual(layers["K0"]["status"], "PASS")
         self.assertEqual(layers["K0"]["findings"], [])
-
-    def test_unregistered_findings_are_visible_in_summary(self):
-        args = types.SimpleNamespace(
-            symbolic_proof=False, lean_proof=False, verify_manifest=None,
-            check_config_drift=False, check_plist=False,
-            check_repro_manifest=False, check_cleanup=False,
-            check_history=None, check_github_scripts=False,
-            check_mirror=False, check_daemon=False, check_launchd=False,
-            coq_proof=False, check_sde=False)
-        finding = {"id": "LINEAGE-CUR", "priority": "P0",
-                   "check": "Soy hattı", "issue": "current generation drift"}
-
-        layers = vd.build_layers_summary(args, [finding])
-
-        self.assertIn("UNREGISTERED", layers)
         self.assertEqual(layers["UNREGISTERED"]["status"], "FAIL")
-        self.assertEqual(layers["UNREGISTERED"]["findings"], [finding])
-        self.assertEqual(layers["K0"]["status"], "PASS")
+        self.assertEqual(layers["UNREGISTERED"]["findings"], [findings[1]])
 
 
 if __name__ == "__main__":

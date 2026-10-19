@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 """consolidate_summary.py — verify job run summary'sini TEK kaynaktan üret.
 
-verify.yml'deki 5 ayrı "— run summary" adımının yerine tek giriş noktası:
-önce tek satırlık bir durum panosu (5 ikon: pre-commit + K0 + bütçe + soy hattı + K katmanları ✅/🔴),
-sonra pre-commit + K0 + bütçe + soy hattı + K katmanları bölümlerini AYNI
+verify.yml'deki 5 ayrı "— run summary" adımlarının yerine tek giriş noktası:
+önce tek satırlık bir durum panosu (tüm SECTIONS: pre-commit + K0 + bütçe + soy hattı + K katmanları + K9 lake build + K12 + K13 — ✅/🔴/⚠️),
+sonra aynı bölümleri AYNI
 GITHUB_STEP_SUMMARY'ye sırayla yazar. Her bölümün render mantığı ve panoya
 giren durum özeti ilgili run_summary_*.py modülündedir (tek kaynak — bu
 script yalnızca sıralar ve tek bir sink açar).
 
 Varsayılan sidecar yolları (verify job çalışma dizini = repo kökü):
   logs/PRECOMMIT_RAPORU.json, k0_findings.json, budget_verify.json,
-  lineage_findings.json, klayers.json
+  lineage_findings.json, klayers.json, lean_lake_build.log,
+  logs/k13_repro_manifest.json, logs/k12_repro_manifest.json
 
 Opsiyonel override (yerel test/alternatif dizinler için):
   consolidate_summary.py --budget budget/index.json --k0 /tmp/k0.json ...
@@ -25,6 +26,7 @@ import run_summary_budget as _budget
 import run_summary_k0 as _k0
 import run_summary_k13 as _k13
 import run_summary_k12 as _k12
+import run_summary_k9 as _k9
 import run_summary_klayers as _klayers
 import run_summary_lineage as _lineage
 import run_summary_precommit as _precommit
@@ -37,6 +39,7 @@ DEFAULT_PATHS = {
     "budget": "budget_verify.json",
     "lineage": "lineage_findings.json",
     "klayers": "klayers.json",
+    "k9": "lean_lake_build.log",
     "k13": "logs/k13_repro_manifest.json",
     "k12": "logs/k12_repro_manifest.json",
 }
@@ -49,6 +52,7 @@ SECTIONS = [
     ("budget", "Bütçe", _budget.render, _budget.status),
     ("lineage", "Soy hattı", _lineage.render, _lineage.status),
     ("klayers", "K katmanları", _klayers.render, _klayers.status),
+    ("k9", "K9 lake build", _k9.render, _k9.status),
     ("k12", "K12 plist", _k12.render, _k12.status),
     ("k13", "K13 ayrı-step", _k13.render, _k13.status),
 ]

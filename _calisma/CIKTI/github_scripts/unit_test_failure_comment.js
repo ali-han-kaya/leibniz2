@@ -1,17 +1,17 @@
 // unit_test_failure_comment.js — unit_tests.log'dan FAIL/ERROR satırlarını ayrıştırıp PR yorumu üretir.
 // verify.yml'deki inline github-script adımının yerine kullanılır (async eval wraptest).
-const fs = require('fs');
+const fs = require("fs");
 
-const marker = '<!-- unit-test-failures -->';
+const marker = "<!-- unit-test-failures -->";
 
 module.exports = async ({ github, context }) => {
-  let log = '';
+  let log = "";
   try {
-    log = fs.readFileSync('unit_tests.log', 'utf8');
+    log = fs.readFileSync("unit_tests.log", "utf8");
   } catch {}
   if (!log) return;
 
-  const lines = log.split('\n');
+  const lines = log.split("\n");
   const failures = [];
   for (let i = 0; i < lines.length; i++) {
     const m = lines[i].match(/^(\S+) \(\S+\) \.\.\. (FAIL|ERROR)$/);
@@ -24,22 +24,22 @@ module.exports = async ({ github, context }) => {
       failures.push({
         test: m[1],
         status: m[2],
-        detail: detail.join('\n').trim().slice(0, 300),
+        detail: detail.join("\n").trim().slice(0, 300),
       });
     }
   }
   if (!failures.length) return;
 
-  const p0 = failures.filter((f) => f.status === 'ERROR');
-  const p1 = failures.filter((f) => f.status === 'FAIL');
+  const p0 = failures.filter((f) => f.status === "ERROR");
+  const p1 = failures.filter((f) => f.status === "FAIL");
   let body = `## 🧪 Unit Test Düşenler\n\n`;
   body += `**${failures.length}** düşen test (ERROR: ${p0.length}, FAIL: ${p1.length})\n\n`;
   body += `| Durum | Test | Detay |\n|-------|------|-------|\n`;
   for (const f of failures) {
-    const icon = f.status === 'ERROR' ? '🔴' : '🟡';
-    const det = (f.detail.split('\n')[0] || '—')
+    const icon = f.status === "ERROR" ? "🔴" : "🟡";
+    const det = (f.detail.split("\n")[0] || "—")
       .slice(0, 80)
-      .replace(/\|/g, '\\|');
+      .replace(/\|/g, "\\|");
     body += `| ${icon} ${f.status} | \`${f.test}\` | ${det} |\n`;
   }
   body += `\n<details><summary>Log excerpt</summary>\n\n\`\`\`\n${log.slice(-2000)}\n\`\`\`\n</details>`;
@@ -57,14 +57,14 @@ module.exports = async ({ github, context }) => {
       owner: context.repo.owner,
       repo: context.repo.repo,
       comment_id: existing.id,
-      body: marker + '\n' + body,
+      body: marker + "\n" + body,
     });
   } else {
     await github.rest.issues.createComment({
       owner: context.repo.owner,
       repo: context.repo.repo,
       issue_number: context.issue.number,
-      body: marker + '\n' + body,
+      body: marker + "\n" + body,
     });
   }
 };

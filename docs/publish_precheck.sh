@@ -207,7 +207,7 @@ else
   SMOKE_BEFORE="$(git rev-parse HEAD)"
   # Chicken-and-egg: changelog tabloları TASARIM gereği HEAD'in bir commit
   # gerisindedir (bir commit'in satırı ancak SONRAKİ commit'te eklenir). Bu
-  # yüzden smoke commit'i pre-commit sırasında changelog hook'unun --update
+  # yüzden smoke commit'i pre-commit sırasında changelog hook'unun --prune
   # ile tabloları değiştirip stage etmesine yol açar; o mutasyon reset ile
   # atılır ama smoke'u hermetic olmayan kılar (hook'lar arası etkileşim +
   # pre-commit'in "files were modified by this hook" riski). Smoke'u yeşil ve

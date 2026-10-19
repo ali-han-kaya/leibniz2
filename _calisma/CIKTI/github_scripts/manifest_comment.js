@@ -1,29 +1,29 @@
-const fs = require('fs');
-const path = 'reproducibility/manifest.txt';
+const fs = require("fs");
+const path = "reproducibility/manifest.txt";
 if (!fs.existsSync(path)) {
-  console.log('manifest.txt yok — yorum atlanıyor');
+  console.log("manifest.txt yok — yorum atlanıyor");
   return;
 }
-const manifest = fs.readFileSync(path, 'utf8');
+const manifest = fs.readFileSync(path, "utf8");
 
 // run_id/sha/ref üst bilgilerini ayrıştır (manifest başlığı)
 const meta = {};
-for (const line of manifest.split('\n')) {
+for (const line of manifest.split("\n")) {
   const m = line.match(/^(github_\w+):\s+(.+)$/);
   if (m) meta[m[1]] = m[2];
 }
 
-const MARKER = '<!-- stoic-hume-v5-reproducibility-manifest -->';
+const MARKER = "<!-- stoic-hume-v5-reproducibility-manifest -->";
 
 // K10 bundle bütünlüğü rozeti (önceki adım k10_verdict.txt yazdı)
-const k10 = fs.existsSync('k10_verdict.txt')
-  ? fs.readFileSync('k10_verdict.txt', 'utf8').trim()
-  : 'N/A';
+const k10 = fs.existsSync("k10_verdict.txt")
+  ? fs.readFileSync("k10_verdict.txt", "utf8").trim()
+  : "N/A";
 const k10Badge =
-  k10 === 'PASS'
-    ? '✅ **K10 manifest digest: PASS**'
-    : k10 === 'FAIL'
-      ? '❌ **K10 manifest digest: FAIL**'
+  k10 === "PASS"
+    ? "✅ **K10 manifest digest: PASS**"
+    : k10 === "FAIL"
+      ? "❌ **K10 manifest digest: FAIL**"
       : `⚠️ **K10 manifest digest: ${k10}**`;
 
 // CLI override uyarısı — budget artifact'ındaki cli_overrides_version.json
@@ -34,12 +34,12 @@ const k10Badge =
 //   - K10 PASS + override → ayrı advisory satır: "CLI override aktif"
 // Display format: config_drift_comment.js ile senkron (JSON.stringify; sayılar
 //   ve string'ler için tutarlı).
-const cliPath = 'reproducibility/cli_overrides_version.json';
+const cliPath = "reproducibility/cli_overrides_version.json";
 let cliOverrideRows = [];
 let hasCliOverride = false;
 if (fs.existsSync(cliPath)) {
   try {
-    const cli = JSON.parse(fs.readFileSync(cliPath, 'utf8'));
+    const cli = JSON.parse(fs.readFileSync(cliPath, "utf8"));
     if (cli.warning && Array.isArray(cli.overrides) && cli.overrides.length) {
       hasCliOverride = true;
       // config_drift_comment.js + pr_status_comment.js ile AYNI format:
@@ -55,47 +55,47 @@ if (fs.existsSync(cliPath)) {
   }
 }
 
-const code = '```text\n' + manifest + '\n```';
+const code = "```text\n" + manifest + "\n```";
 
 // K10 FAIL + override = tek blok (override K10 başarısızlığının olası
 // nedeni olabilir — pr_status_comment.js'in bütçe aşımı + CLI override
 // birleşik bloğuyla aynı desen). K10 PASS + override = ayrı advisory.
 let extraLines = [];
-if (k10 !== 'PASS' && hasCliOverride) {
+if (k10 !== "PASS" && hasCliOverride) {
   extraLines = [
-    '',
-    '### ⚠️ K10 manifest digest başarısız — CLI override olası neden',
-    '',
-    'Bütçe kalkanı dosya config değeriyle DEĞİL CLI değeriyle koştu',
-    '(tekrarlanabilirlik sapması, K10 manifest uyuşmazlığının olası nedeni):',
-    '',
+    "",
+    "### ⚠️ K10 manifest digest başarısız — CLI override olası neden",
+    "",
+    "Bütçe kalkanı dosya config değeriyle DEĞİL CLI değeriyle koştu",
+    "(tekrarlanabilirlik sapması, K10 manifest uyuşmazlığının olası nedeni):",
+    "",
     ...cliOverrideRows,
   ];
 } else if (hasCliOverride) {
   extraLines = [
-    '',
-    '### 🔧 CLI override aktif (tekrarlanabilirlik sapması)',
-    '',
+    "",
+    "### 🔧 CLI override aktif (tekrarlanabilirlik sapması)",
+    "",
     ...cliOverrideRows,
   ];
 }
 
 const body = [
-  '## 📦 Reproducibility manifest (SHA-256)',
-  '',
+  "## 📦 Reproducibility manifest (SHA-256)",
+  "",
   k10Badge,
-  '',
-  'Bu run için üretilen tüm artifact dosyalarının bütünlük özeti:',
-  '',
+  "",
+  "Bu run için üretilen tüm artifact dosyalarının bütünlük özeti:",
+  "",
   code,
   ...extraLines,
   meta.github_run_id
     ? `> Run: [${meta.github_run_id}](${context.payload.repository.html_url}/actions/runs/${meta.github_run_id})`
-    : '',
-  '',
+    : "",
+  "",
   MARKER,
 ]
-  .join('\n')
+  .join("\n")
   .trim();
 
 // Tek yorum güncelle (upsert): marker'lı mevcut yorumu bul, varsa
@@ -107,7 +107,7 @@ const body = [
 // kullanım) kendi listComments çağrısına düşer; iki yol da aynı upsert
 // davranışını üretir (mock'lar ve gerçek CI aynı sözleşmeyi doğrular).
 const existing =
-  typeof EXISTING_COMMENTS !== 'undefined' && EXISTING_COMMENTS
+  typeof EXISTING_COMMENTS !== "undefined" && EXISTING_COMMENTS
     ? { data: EXISTING_COMMENTS }
     : await github.rest.issues.listComments({
         issue_number: context.issue.number,
@@ -132,5 +132,5 @@ if (found) {
     repo: context.repo.repo,
     body,
   });
-  console.log('Yeni yorum oluşturuldu (marker bulunamadı)');
+  console.log("Yeni yorum oluşturuldu (marker bulunamadı)");
 }

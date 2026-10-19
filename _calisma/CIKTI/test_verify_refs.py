@@ -7,9 +7,11 @@ _http_json'u mock'layarak eşleşme mantığını (title + creator, aksan-duyars
 ağsız ve deterministik doğrular. Ayrıca _fold'un aksan katlama davranışını
 test eder. stdlib unittest — ek bağımlılık yok.
 """
+import collections
 import io
 import pathlib
 import sys
+import threading
 import time
 import unittest
 import urllib.error
@@ -994,6 +996,147 @@ class TestFallbackEvidenceSection(unittest.TestCase):
                 tex, lambda *a, **k: None, quiet=True)
         # 61 ana sonuç, fallback yok (exception → SKIP)
         self.assertEqual(len(results), 61)
+
+
+class TestHttpQueryCache(unittest.TestCase):
+    """Sorgu→yanıt önbelleği: aynı URL bir run'da tek kez ağa çıkar."""
+
+    def setUp(self):
+        vd.reset_http_cache()
+
+    def tearDown(self):
+        vd.reset_http_cache()
+
+    def test_same_url_single_network_call(self):
+        calls = []
+
+        def get(url, timeout=None, retries=None):
+            calls.append(url)
+            return b'{"ok": true}'
+
+        with mock.patch.object(vd, "_http_get", side_effect=get):
+            first = vd._http_json("https://example.test/sorgu")
+            second = vd._http_json("https://example.test/sorgu")
+        self.assertEqual(calls, ["https://example.test/sorgu"])
+        self.assertEqual(first, {"ok": True})
+        self.assertEqual(first, second)
+        self.assertEqual(vd.http_cache_stats(), {"entries": 1, "hits": 1})
+
+    def test_failure_is_not_cached(self):
+        """Hata yolu önbelleklenmez: ikinci çağrı yeniden dener (verdict
+        yanlışlıkla UNVERIFIED'a sabitlenmez)."""
+        calls = []
+
+        def get(url, timeout=None, retries=None):
+            calls.append(url)
+            if len(calls) == 1:
+                raise RuntimeError("ağ koptu")
+            return b'{"ok": true}'
+
+        with mock.patch.object(vd, "_http_get", side_effect=get):
+            with self.assertRaises(RuntimeError):
+                vd._http_json("https://example.test/x")
+            self.assertEqual(vd._http_json("https://example.test/x"),
+                             {"ok": True})
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(vd.http_cache_stats()["entries"], 1)
+
+    def test_reset_clears_entries_and_hits(self):
+        with mock.patch.object(vd, "_http_get", return_value=b"{}"):
+            vd._http_json("https://example.test/a")
+            vd._http_json("https://example.test/a")
+        self.assertEqual(vd.http_cache_stats(), {"entries": 1, "hits": 1})
+        vd.reset_http_cache()
+        self.assertEqual(vd.http_cache_stats(), {"entries": 0, "hits": 0})
+
+    def test_concurrent_same_url_single_flight(self):
+        """Havuzdaki eşzamanlı görevler aynı URL'i PAYLAŞIR: tek ağ çağrısı."""
+        calls = []
+        gate = threading.Event()
+
+        def get(url, timeout=None, retries=None):
+            calls.append(url)
+            gate.wait(5)          # sahip yanıtı geciktirsin → bekleyenler oluşsun
+            return b'{"ok": true}'
+
+        out = []
+
+        def worker():
+            out.append(vd._http_json("https://example.test/c"))
+
+        with mock.patch.object(vd, "_http_get", side_effect=get):
+            threads = [threading.Thread(target=worker) for _ in range(4)]
+            for t in threads:
+                t.start()
+            time.sleep(0.05)
+            gate.set()
+            for t in threads:
+                t.join(5)
+        self.assertEqual(calls, ["https://example.test/c"])
+        self.assertEqual(out, [{"ok": True}] * 4)
+
+
+class TestRunQueryCacheEndToEnd(unittest.TestCase):
+    """Gerçek run: hiçbir URL iki kez ağa çıkmaz (5 fallback kaynağının §6
+    ikinci geçişi dahil) — ama bütçe kapısı ağdan ÖNCE kalır."""
+
+    def setUp(self):
+        vd.reset_http_cache()
+
+    def tearDown(self):
+        vd.reset_http_cache()
+
+    @staticmethod
+    def _body(url):
+        if "advancedsearch.php" in url:
+            return b'{"response": {"docs": []}}'
+        if "openlibrary.org/search.json" in url:
+            return b'{"docs": []}'
+        if "googleapis.com/books" in url:
+            return b'{"items": []}'
+        if "crossref.org/works" in url:
+            return b'{"message": {}}'
+        if "hdl.handle.net" in url:
+            return b'{"responseCode": 0, "values": []}'
+        return b"{}"
+
+    def test_no_url_fetched_twice_in_one_run(self):
+        calls = []
+
+        def get(url, timeout=None, retries=None):
+            calls.append(url)
+            return self._body(url)
+
+        with mock.patch.object(vd, "_http_get", side_effect=get), \
+                mock.patch.object(vd, "_ol_retry",
+                                  side_effect=lambda fn, ref: fn(ref)):
+            vd.run_reference_audit("", lambda *a, **k: None, quiet=True)
+
+        dup = [u for u, n in collections.Counter(calls).items() if n > 1]
+        self.assertEqual(dup, [],
+                         f"aynı sorgu iki kez ağa çıktı: {dup[:3]}")
+        self.assertGreater(vd.http_cache_stats()["hits"], 0,
+                           "ikinci geçiş önbellekten dönmeliydi")
+
+    def test_budget_gate_still_precedes_network(self):
+        """Bütçe tükenmişse önbellek dolu olsa bile ağ çağrısı ve PASS yok."""
+        calls = []
+
+        def get(url, timeout=None, retries=None):
+            calls.append(url)
+            return b'{}'
+
+        with mock.patch.object(vd, "REFERENCE_AUDIT_BUDGET_S", 0), \
+                mock.patch.object(vd, "_http_get", side_effect=get), \
+                mock.patch("ia_ol_fallback_evidence.collect_evidence",
+                          return_value=[]):
+            results = vd.run_reference_audit(
+                "", lambda *a, **k: None, quiet=True)
+        main = [r for r in results if not r.get("fallback_section")]
+        self.assertEqual(len(main), 61)
+        self.assertTrue(all(r["verdict"] == "UNVERIFIED" for r in main))
+        self.assertTrue(all("bütçesi aşıldı" in r["detail"] for r in main))
+        self.assertEqual(calls, [])
 
 
 if __name__ == "__main__":

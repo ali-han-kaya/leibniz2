@@ -2,7 +2,7 @@
 
 > **Diátaxis: How-to guide** — Problem-yönelimli. Amacı: CI'da kırmızı almadan
 > *önce*, deponun kendi kapılarını lokalde aynı parametrelerle koşmak.
-> Öğretici değil (yeni-gelen için bkz. README "Doğrulama" bölümü), referans da
+> Öğretici değil (yeni-gelen için bkz. [`FIRST_RUN_TUTORIAL.md`](FIRST_RUN_TUTORIAL.md)), referans da
 > değil (kapı satır-içi sözlüğü için bkz. `docs/HOOK_ENV_MATRIX.md`).
 
 ## 0. Ön koşullar
@@ -23,10 +23,25 @@ Commit'ten önce tek kapıyı koşmak için:
 python3 _calisma/CIKTI/verify_delivery.py
 ```
 
-Çıktının son satırı kapı dilidir: `verdict: PASS` ya da `verdict: FAIL` +
-bulgular. Bu, CI'daki K1–K14 zincirinin lokal koşumudur (env bağımsız,
-stdlib-only). Bütçe/referans gibi ağ gerektiren modüller parametreyle
-açılır (`--budget 30`, `--refs-out …`); varsayılan koşum offline'dır.
+Karar satırı kapı dilidir: `SONUÇ: PASS` ya da `SONUÇ: FAIL` + bulgular
+(`--json` modunda `verdict` alanı). Bu, CI'daki K1–K14 zincirinin lokal
+koşumudur (env bağımsız, stdlib-only). Bütçe/referans gibi ağ gerektiren
+modüller parametreyle açılır (`--budget 30`, `--refs-out …`); varsayılan
+koşum offline'dır.
+
+Ağır katmanların maliyeti tahmin edilmez, ölçülür: koşum sonunda K6
+(referans denetimi), K8 (Z3) ve K9 (Lean) için duvar-saati tablosu basılır
+(ör. 2026-10-17 ölçümü: K6 çevrimiçi denetimi 50.1 s, K9 toplam 1.8 s):
+
+```
+Ağır katman süreleri (duvar saati):
+  K6  İçerik (PDF + referans + skill reuse)   50.20s  (içerik+determinism 0.10s · referans denetimi 50.10s)
+```
+
+Yalnız o run'da koşan katman satır alır (atlanan katman tabloda yok).
+`--json` modunda tablo stderr'e gider — stdout tek JSON belgesi kalır — ve
+yine JSON gövdesindeki `layer_timings` alanında makine-okunur bulunur.
+Hangi pahalı kapıyı atlayabileceğinize karar vermek için bu ölçüme bakın.
 
 ## 2. Tam zincir — pre-commit'i commit'e kadar koşmak
 
@@ -43,6 +58,20 @@ kapının kırıldığını söyler. Düzeltip aynı komutu tekrarlayın.
 (Not: bazı kapılar dosyaları otomatik düzenler — "Files were modified by this
 hook" uyarısı alırsanız dosyaları tekrar `git add` edip commit'i yineleyin.)
 
+Birden fazla kapı aynı commit'te kırmızıysa sahipliği **elle eşleştirmeyin**:
+
+```bash
+python3 _calisma/CIKTI/precommit_doctor.py
+```
+
+Doctor commit yüzeyini (stage'li dosyalar) read-only koşar — stage/stash/edit
+YOK — ve her kırmızı kapıyı onu kıran işlenmemiş değişikliğe kanıtıyla bağlar:
+önce hook'un kendi çıktısındaki dosya adı, sonra daraltan `files` deseni,
+ikisi de yoksa kapı `sahipsiz` raporlanır (uydurma yok). `--hook <id>` tek
+kapıyı koşar, `--all-changes` "bunu stage etsem kırmızıya döner mi"
+önizlemesini ekler, `--json` stdout'ta tek JSON doküman basar. Koşum sırasında
+bir hook dosya değiştirirse doctor bunu `yan_etkiler` bölümünde raporlar.
+
 ## 3. CI'ı lokal simüle etmek
 
 CI'da koşan işin aynısını lokalde üretmek için iki araç vardır:
@@ -54,6 +83,9 @@ python3 -m unittest discover -s _calisma/CIKTI -p "test_*.py"
 # workflow sözdizimi + action pinleri + runtime gate
 bash _calisma/CIKTI/lint_actionlint.sh
 python3 _calisma/CIKTI/check_action_pins.py
+# CI advisory eşdeğeri: upstream stable major'ları karşılaştırır,
+# geride kalanları JSON raporuna yazar; tek başına exit 1 üretmez.
+python3 _calisma/CIKTI/check_action_pins.py --latest --json --out /tmp/action_pins_latest.json
 python3 _calisma/CIKTI/check_action_runtimes.py
 ```
 
@@ -74,6 +106,7 @@ python3 _calisma/CIKTI/sync_check_unit_tests.py --check   # rc=0 gerekli
 | `sync --check` rc=1: "YENİ keşfedilen test dosyası" | Yeni `test_*.py` listeye alınmamış | `sync_check_unit_tests.py --update` |
 | `verify-delivery` FAIL: K-bağımsız bulgu | ZIP/PDF/manifest gerçek veri sorunu | `verdict` satırındaki K-koduyla ilgili bölümü `docs/FINAL_RC_REPORT.md`'de arayın |
 | actionlint FAIL: workflow sözdizimi | `.github/workflows/*.yml` düzenlendi | `bash _calisma/CIKTI/lint_actionlint.sh` çıktısındaki satırı düzeltin |
+| Aynı commit'te birden fazla kapı kırmızı — hangi değişiklik hangi kapıyı kırıyor belirsiz | Atfın elle izlenmesi (uzun detour) | `python3 _calisma/CIKTI/precommit_doctor.py` — her kırmızı kapının sahibini kanıtıyla listeler (evren = stage'li dosyalar; `--json` tek doküman; exit 0/1/2) |
 
 ## 5. Kapı tablosu (başvuru)
 

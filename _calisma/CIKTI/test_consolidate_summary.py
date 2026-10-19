@@ -46,10 +46,8 @@ class TestConsolidateSummary(unittest.TestCase):
         (d / "logs" / "PRECOMMIT_RAPORU.json").write_text(
             json.dumps({"generated_at": "2026-08-20T12:00:00Z",
                         "exit_code": 0, "verdict": "PASS", "role": "advisory",
-                        "hooks": [{"name": "hook1", "status": "Passed",
-                                   "source": "log"},
-                                   {"name": "hook2", "status": "Passed",
-                                   "source": "log"}],
+                        "hooks": [{"name": "hook1", "status": "Passed"},
+                                   {"name": "hook2", "status": "Passed"}],
                         "findings": [],
                         "counts": {"hooks": 5, "passed": 5, "failed": 0,
                                    "p0": 0, "p1": 0}}), encoding="utf-8")
@@ -87,12 +85,18 @@ class TestConsolidateSummary(unittest.TestCase):
                         "scenarios": [{"name": "eksik-dosya", "status": "PASS"},
                                        {"name": "bozuk-hash", "status": "PASS"}]}),
             encoding="utf-8")
+        # K9 lake build logu (verify_lean_lake.sh tee çıktısı — tek kaynak).
+        (d / "lean_lake_build.log").write_text(
+            "[K9-LAKE] START — lake clean && lake build --wfail\n"
+            "[K9-LAKE] PASS — Lean project build completed\n",
+            encoding="utf-8")
         return {
             "precommit": d / "logs" / "PRECOMMIT_RAPORU.json",
             "k0": d / "k0_findings.json",
             "budget": d / "budget_verify.json",
             "lineage": d / "lineage_findings.json",
             "klayers": d / "klayers.json",
+            "k9": d / "lean_lake_build.log",
             "k12": d / "logs" / "k12_repro_manifest.json",
             "k13": d / "logs" / "k13_repro_manifest.json",
         }
@@ -102,16 +106,17 @@ class TestConsolidateSummary(unittest.TestCase):
             paths = self._sidecars(d)
             code, out = self._run(paths)
         self.assertEqual(code, 0)
-        # Durum panosu en üstte, tek satırda, altı ✅ ile (K13 ayrı-step dahil).
+        # Durum panosu en üstte, tek satırında, K9 lake build dahil ✅ ile.
         self.assertTrue(
-            out.startswith("## 📊 Durum panosu: Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅ · K12 plist ✅ · K13 ayrı-step ✅\n"),
-            repr(out[:160]))
+            out.startswith("## 📊 Durum panosu: Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅ · K9 lake build ✅ · K12 plist ✅ · K13 ayrı-step ✅\n"),
+            repr(out[:200]))
         headers = [
             "## ✅ Pre-commit: bulgu yok",
             "## ✅ K0 bayat zip: temiz",
             "## ✅ Bütçe kalkanı: limit içinde",
             "## ✅ Soy hattı (zip_lineage.json): 1 nesil doğrulandı",
             "## ✅ K1 X: PASS",
+            "## ✅ K9 lake build: PASS",
             "## ✅ K13 repro-manifest: PASS",
         ]
         last = -1
@@ -130,16 +135,20 @@ class TestConsolidateSummary(unittest.TestCase):
             paths = {k: dd / f"{k}.json" for k in
                      ("k0", "budget", "lineage", "klayers")}
             paths["precommit"] = dd / "logs" / "PRECOMMIT_RAPORU.json"
+            # K9 log'u da tmp içinde (yok) — varsayılan yol çalışma dizinine
+            # bağımlı olmasın (test determinizmi).
+            paths["k9"] = dd / "lean_lake_build.log"
             code, out = self._run(paths)
         self.assertEqual(code, 0)
         # Panoda eksik sidecar ⚠️ olarak görünür (tek satır korunur).
         self.assertTrue(out.startswith(
-            "## 📊 Durum panosu: Pre-commit ⚠️ · K0 ⚠️ · Bütçe ⚠️ · Soy hattı ⚠️ · K katmanları ⚠️ · K12 plist ⚠️ · K13 ayrı-step ⚠️\n"),
-            repr(out[:160]))
+            "## 📊 Durum panosu: Pre-commit ⚠️ · K0 ⚠️ · Bütçe ⚠️ · Soy hattı ⚠️ · K katmanları ⚠️ · K9 lake build ⚠️ · K12 plist ⚠️ · K13 ayrı-step ⚠️\n"),
+            repr(out[:200]))
         self.assertIn("Pre-commit: rapor bulunamadı", out)
         self.assertIn("K0 bayat zip: sidecar bulunamadı", out)
         self.assertIn("Bütçe kalkanı: sidecar bulunamadı", out)
         self.assertIn("Soy hattı: sidecar bulunamadı", out)
+        self.assertIn("K9 lake build: log bulunamadı", out)
 
     def test_github_step_summary_file_sink_fallback(self):
         # GITHUB_STEP_SUMMARY env'i set iken main() çıktıyı STDOUT'a değil
@@ -164,8 +173,8 @@ class TestConsolidateSummary(unittest.TestCase):
             self.assertNotIn("Durum panosu", buf.getvalue())
             file_txt = summary_file.read_text(encoding="utf-8")
             self.assertTrue(file_txt.startswith(
-                "## 📊 Durum panosu: Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅ · K12 plist ✅ · K13 ayrı-step ✅\n"),
-                repr(file_txt[:160]))
+                "## 📊 Durum panosu: Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅ · K9 lake build ✅ · K12 plist ✅ · K13 ayrı-step ✅\n"),
+                repr(file_txt[:200]))
             for h in ("## ✅ Pre-commit: bulgu yok",
                       "## ✅ K0 bayat zip: temiz",
                       "## ✅ Bütçe kalkanı: limit içinde"):
@@ -178,10 +187,8 @@ class TestConsolidateSummary(unittest.TestCase):
             (dd / "logs" / "PRECOMMIT_RAPORU.json").write_text(
                 json.dumps({"generated_at": "2026-08-20T12:00:00Z",
                             "exit_code": 1, "verdict": "FAIL", "role": "advisory",
-                            "hooks": [{"name": "hook1", "status": "Passed",
-                                       "source": "log"},
-                                       {"name": "hook2", "status": "Failed",
-                                       "source": "log"}],
+                            "hooks": [{"name": "hook1", "status": "Passed"},
+                                       {"name": "hook2", "status": "Failed"}],
                             "findings": [{"priority": "P1",
                                            "message": "bir bulgu"}],
                             "counts": {"hooks": 5, "passed": 4, "failed": 1,
@@ -206,6 +213,7 @@ class TestConsolidateSummary(unittest.TestCase):
                 "budget": dd / "budget_verify.json",
                 "lineage": dd / "lineage_findings.json",
                 "klayers": dd / "klayers.json",
+                "k9": dd / "lean_lake_build.log",
             }
             code, out = self._run(paths)
         self.assertEqual(code, 0)
@@ -545,10 +553,8 @@ class TestPrecommitAndK0Content(unittest.TestCase):
         default_pre = {
             "generated_at": "2026-08-20T12:00:00Z", "exit_code": 0,
             "verdict": "PASS", "role": "advisory",
-            "hooks": [{"name": "hook1", "status": "Passed",
-                       "source": "log"},
-                       {"name": "hook2", "status": "Failed",
-                       "source": "log"}],
+            "hooks": [{"name": "hook1", "status": "Passed"},
+                       {"name": "hook2", "status": "Failed"}],
             "findings": [],
             "counts": {"hooks": 5, "passed": 4, "failed": 1,
                        "p0": 0, "p1": 0},
@@ -606,8 +612,7 @@ class TestPrecommitAndK0Content(unittest.TestCase):
         pre = {
             "generated_at": "2026-08-20T12:00:00Z", "exit_code": 1,
             "verdict": "FAIL", "role": "advisory",
-            "hooks": [{"name": "hook1", "status": "Passed",
-                       "source": "log"}],
+            "hooks": [{"name": "hook1", "status": "Passed"}],
             "findings": [{"priority": "P1", "message": "check-python3-shell bulgu"},
                           {"priority": "P0", "message": "check-plist-drift başarısız"}],
             "counts": {"hooks": 5, "passed": 4, "failed": 1,
@@ -734,10 +739,8 @@ class TestFileSink(unittest.TestCase):
         (d / "logs" / "PRECOMMIT_RAPORU.json").write_text(
             json.dumps({"generated_at": "2026-08-20T12:00:00Z",
                         "exit_code": 0, "verdict": "PASS", "role": "advisory",
-                        "hooks": [{"name": "hook1", "status": "Passed",
-                                   "source": "log"},
-                                   {"name": "hook2", "status": "Failed",
-                                   "source": "log"}],
+                        "hooks": [{"name": "hook1", "status": "Passed"},
+                                   {"name": "hook2", "status": "Failed"}],
                         "findings": [],
                         "counts": {"hooks": 5, "passed": 4, "failed": 1,
                                    "p0": 0, "p1": 0}}), encoding="utf-8")
@@ -760,6 +763,9 @@ class TestFileSink(unittest.TestCase):
             "budget": d / "budget_verify.json",
             "lineage": d / "lineage_findings.json",
             "klayers": d / "klayers.json",
+            # K9 log'u bu senaryoda bilinçli YOK (⚠️ akışı); varsayılan
+            # CWD-yolu yerine açık(tmp) yol — test determinizmi.
+            "k9": d / "lean_lake_build.log",
         }
 
     def test_file_sink_matches_stdout(self):
@@ -778,7 +784,7 @@ class TestFileSink(unittest.TestCase):
         # sondaki yeni satırları eşitle (içerik birebir aynı olmalı).
         self.assertEqual(file_content.rstrip("\n"), stdout_body.rstrip("\n"))
         # Satır bazlı: kritik satırlar dosyada da var.
-        self.assertIn("## 📊 Durum panosu: Pre-commit ✅ · K0 🔴 · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅ · K12 plist ⚠️ · K13 ayrı-step ⚠️\n",
+        self.assertIn("## 📊 Durum panosu: Pre-commit ✅ · K0 🔴 · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅ · K9 lake build ⚠️ · K12 plist ⚠️ · K13 ayrı-step ⚠️\n",
                       file_content)
         self.assertIn("> Hook'lar: `hook1` :white_check_mark: | `hook2` :x:\n",
                       file_content)

@@ -1,34 +1,21 @@
 #!/usr/bin/env bash
 # =============================================================================
 # update_changelog_hook.sh — pre-commit hook: changelog tablolarını git log ile
-# senkron eder (gen_changelog.py --update) ve değiştiyse stage eder.
+# senkron eder (gen_changelog.py --prune) ve değiştiyse stage eder.
 #
-# Rol: changelog TABLOSUNUN yazarı. Repo'da üç yazan hook vardır
-# (update-config, check-changelog-sync, check-skills-index); bu hook
-# tabloların yazarıdır, config/README yazmaz. Gecikmeli (lag-one) yazma
-# zorunludur:
-#
-#   ÖLÇÜM (test_update_changelog_hook.py, gerçek gen_changelog + gerçek hook):
-#   tablo commit hash'iyle anahtarlanır; hash ancak commit OLUŞTUKTAN SONRA
-#   bilinir. --check (find_missing_commits) "tablodaki en yeni satırdan daha
-#   yeni" commit'leri eksik sayar. Bu ikisi birleşince tablo, HER commit'ten
-#   sonra tam olarak BİR commit geride kalır: okuma tarafı HEAD'i eksik sayar.
-#   Dolayısıyla saf okuma kapısı + remedy YAPISAL OLARAK İMKÂNSIZDIR — bloklayan
-#   satırın hash'i henüz var olmaz (remedy, aynı commit'te uygulanamaz).
-#   Ölçüm: /tmp kanıtı yok; test her koşumda yeniden ölçer (tam-1-commit).
-#
-#   Changelog tablosunun modeli iki yazandır:
-#     (1) BU hook: commit içinde eksik satırı onarır ve stage eder (yazar-1),
-#     (2) `chore(changelog): <hash> satırını tabloya ekle` commit'i: kaydı
-#         ayrı bir yazı olarak kapatır (yazar-2).
-#   Elle remedy (okuma tarafı): python3 gen_changelog.py --update.
+# Neden: her yeni commit, changelog tablosuna bir satır ekler. Ama commit'in
+# kendi hash'i ancak commit OLUŞTUKTAN SONRA bilinir — bu yüzden "check-only"
+# bir kapı (--check) her zaman bir commit geride kalır ve sonraki commit'i
+# haksız yere BLOKE EDER (chicken-and-egg). update-config deseni gibi bu hook
+# da --prune ile tabloları senkron eder ve değiştiyse stage eder — böylece
+# kapı hiç kırılmaz, tablolar her zaman HEAD'e kadar güncel olur.
 #
 # Sıralama: .pre-commit-config.yaml'da commit-msg-style'den ÖNCE tanımlıdır;
 # her commit'te koşar (always_run).
 #
 # Exit kodları:
 #   0 = tablolar güncel (dokunmadı) VEYA güncellendi + stage edildi (commit devam)
-#   1 = gen_changelog --update başarısız (bloke)
+#   1 = gen_changelog --prune başarısız (bloke)
 # =============================================================================
 set -euo pipefail
 
@@ -49,9 +36,11 @@ if [ "$rc" -eq 0 ]; then
   exit 0
 fi
 
-# DRIFT: git log'da tablolardan daha yeni commit'ler var → --update ile senkron et.
-python3 "$SCRIPT_DIR/gen_changelog.py" --update >/dev/null 2>&1 || {
-  echo "HATA: gen_changelog --update başarısız — changelog güncellenemedi." >&2
+# DRIFT: eksik veya stale satırlar var → --prune ile güvenli biçimde senkron et.
+# --prune hem eksik commit satırlarını ekler hem de git log'da bulunmayan
+# (rewrite/rebase artığı) stale satırları temizler.
+python3 "$SCRIPT_DIR/gen_changelog.py" --prune >/dev/null 2>&1 || {
+  echo "HATA: gen_changelog --prune başarısız — changelog güncellenemedi." >&2
   exit 1
 }
 

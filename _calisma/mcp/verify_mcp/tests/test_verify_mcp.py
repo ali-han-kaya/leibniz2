@@ -4,7 +4,7 @@
 
 Three layers:
   1. Data-layer tests: record loading, summary curation, layer parsing.
-  2. Tool tests: call the FastMCP tool functions directly against a fake
+  2. Tool tests: call the MCPServer tool functions directly against a fake
      preview dir (no MCP handshake), covering json and markdown formats.
   3. stdio smoke test: spawn the server binary and drive a real JSON-RPC
      session (initialize -> tools/list -> tools/call) over newline-delimited

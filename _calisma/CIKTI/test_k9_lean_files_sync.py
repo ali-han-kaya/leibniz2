@@ -14,6 +14,8 @@ class K9LeanFileSourceSyncTests(unittest.TestCase):
         self.assertIn("--sync-lean-files", SYNC)
         self.assertIn("sync_lean_files.py", SYNC)
         self.assertIn('"ReductInvariance.lean|ReductInvariance.lean"', SYNC)
+        self.assertIn('"Content.lean.tex|Content.lean.tex"', SYNC)
+        self.assertIn("check_lean_statements.py", SYNC)
 
     def test_sync_mode_is_exposed_and_rebuilds_block(self):
         self.assertIn("--sync-lean-files", SYNC)

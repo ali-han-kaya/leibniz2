@@ -113,8 +113,11 @@ def fix(workflow_path: str = None):
     if not missing and not extra:
         return set(), []  # zaten güncel
 
-    # Yeni sıralı liste: mevcut + eksik - fazla (deterministic sorted)
-    new_items = sorted(current_set | missing - extra)
+    # Yeni sıralı liste: (mevcut + eksik) - fazla (deterministic sorted).
+    # Parantez şart: `current_set | missing - extra` Python'da
+    # `current_set | (missing - extra)` diye ayrışır ve fazlalığı (ör. kaldırılmış
+    # webkit-smoke) pattern'de BIRAKIR — fix "güncellendi" derken drift sürer.
+    new_items = sorted((current_set | missing) - extra)
     # Duplike temizliği: sıralanmış listede zaten sorun olmaz ama emin olalım
     seen = set()
     deduped = []

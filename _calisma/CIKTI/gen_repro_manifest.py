@@ -73,14 +73,36 @@ ARTIFACT_JOBS = {
     "precheck-report": "precheck",
     "action-runtimes": "action-runtimes",
     "python3-shell": "verify",
+    # K9 lake build logu (verify_lean_lake.sh tee çıktısı) — verify işinin
+    # `Upload Lean lake build log (K9)` adımı üretir; run summary K9 lake
+    # build bölümü (run_summary_k9.py) bu logu okur. Merge pattern'e girer
+    # (summary_pattern_drift beklenen kümesi ARTIFACT_JOBS - EXCLUDED).
+    "lean-lake-build-log": "verify",
     "plist-check": "plist-check",
     "mirror-check": "mirror-check",
     "daemon-http": "daemon-http",
     "audit-refs-trend": "audit-refs-trend",
     "changelog-drift": "changelog-drift",
     "ci-simulate": "ci-simulate",
+    # Dashboard CLS bütçe raporu (cls_budget.json) — üreten job `a11y-gate`
+    # (aynı canlı preview_server üzerinde ölçer; ayrı sunucu açmaz).
+    # Merge pattern'e GİRER: "CLS < 0.1" iddiası teslim kanıtının parçası,
+    # manifest bütçeyi ve tema başına kararı SHA-256 ile sabitler.
+    "cls-budget": "a11y-gate",
+    # CLS trendi: `cls-budget` artifact'larından run'lar arası seri +
+    # bütçe-altı regresyon kararı (cls_trend.py). Üreten job `cls-trend`.
+    # Manifest koşum geçmişini (`cls-trend.jsonl`) ve regresyon kararını
+    # SHA-256 ile sabitler; merge pattern'e girer.
+    "cls-trend": "cls-trend",
     "reproducibility": "reproducibility",
-    "webkit-smoke": "webkit-smoke",
+    # docx jeneratoru (_calisma/docx/make_docx.js) cikitisi — ureten job
+    # advisory `docx-export` (LibreOffice acilabilirlik kontrolu).
+    "docx-report": "docx-export",
+    # Statement envanteri yayini (K9 + canonical kâğıt kapilari) — ureten
+    # job `lake-proof`. Merge pattern'e GIRMEZ: lake-proof verify ile paralel
+    # advisory is; bundle'a girmesi needs grafigini Lean kurulumuna baglar
+    # (workflow_contract.MERGE_PATTERN_EXCLUDED — drift kapilari senkron tutar).
+    "statement-inventory": "lake-proof",
 }
 
 # Config artifact'ının bilinen dosya ADLARI (basename). Config dosyaları
