@@ -72,8 +72,12 @@ def sha256(p):
 
 
 def write_manifest():
-    core_lines = sum(1 for _ in open(os.path.join(PKG, "core_section.tex"), encoding="utf-8", errors="ignore"))
-    spec_lines = sum(1 for _ in open(os.path.join(PKG, "L0_Lplus_spec.md"), encoding="utf-8", errors="ignore"))
+    with open(os.path.join(PKG, "core_section.tex"),
+              encoding="utf-8", errors="ignore") as f:
+        core_lines = sum(1 for _ in f)
+    with open(os.path.join(PKG, "L0_Lplus_spec.md"),
+              encoding="utf-8", errors="ignore") as f:
+        spec_lines = sum(1 for _ in f)
     header = (
         "# MANIFEST — Stoic_Hume_Formal_Section_2026-08-17\n"
         "# Generated: 2026-08-17 (added revised manuscript ingiliz_empirizmi_v3.tex/.pdf after INTEGRATION_NOTE)\n"
@@ -323,10 +327,11 @@ def main():
     # Mevcut sidecar'daki ham hash'i oku (varsa); PDF değişmediyse qpdf'i atla.
     cached_raw = None
     if os.path.isfile(pdf_sidecar):
-        for line in open(pdf_sidecar, encoding="utf-8", errors="ignore"):
-            if line.startswith("# raw:"):
-                cached_raw = line.split()[2]
-                break
+        with open(pdf_sidecar, encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                if line.startswith("# raw:"):
+                    cached_raw = line.split()[2]
+                    break
     qpdf = None
     for cand in (shutil.which("qpdf"), "/opt/homebrew/bin/qpdf"):
         if cand and os.path.isfile(cand):
