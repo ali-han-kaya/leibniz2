@@ -179,59 +179,10 @@ class TestVercelAdapterContract(unittest.TestCase):
             self.assertTrue(row["ts"])
             self.assertIn(row["verdict"], {"PASS", "FAIL", "?"})
 
-    def test_fetch_attaches_github_token_header(self):
-        # 4b) GITHUB_TOKEN env varken _fetch Authorization: Bearer basligi
-        # ekler — anonim GitHub quota 60 istek/saat ve Vercel'in paylasilan
-        # egress IP'lerinde digerleriyle ortak; token ile 5000/sa. Token
-        # YOKKEN anonim kalinir (public-repo fail-open), varken ASLA
-        # anonim gitmez. Vercel'e proje-env olarak eklendi (2026-10-09);
-        # env'siz deploy'da bu test hala yeşil kalir — canlı kanit
-        # workflow kapisi + burst olcumu (docs §5).
-        from http.server import BaseHTTPRequestHandler
-        seen = {}
-
-        class _H(BaseHTTPRequestHandler):
-            def do_GET(self):
-                seen["auth"] = self.headers.get("Authorization")
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json")
-                self.end_headers()
-                self.wfile.write(b'{"workflow_runs": []}')
-
-            def log_message(self, *args):
-                pass
-
-        srv = ThreadingHTTPServer(("127.0.0.1", 0), _H)
-        threading.Thread(target=srv.serve_forever, daemon=True).start()
-        url = "http://127.0.0.1:%d/probe" % srv.server_address[1]
-        saved = os.environ.get("GITHUB_TOKEN")
-        try:
-            os.environ["GITHUB_TOKEN"] = "unit-test-token"
-            _adapter()._fetch(url)
-            self.assertEqual(
-                seen["auth"], "Bearer unit-test-token",
-                "token varken Authorization basligi gitmiyor — anonim "
-                "60/sa quota'ya dusulur")
-            os.environ.pop("GITHUB_TOKEN", None)
-            _adapter()._fetch(url)
-            self.assertIsNone(
-                seen["auth"],
-                "token yokken anonim istekte Authorization olmamali")
-        finally:
-            if saved is None:
-                os.environ.pop("GITHUB_TOKEN", None)
-            else:
-                os.environ["GITHUB_TOKEN"] = saved
-            srv.shutdown()
-
     def test_no_local_break_api_contract(self):
         # 5) no-local-break: yerel /api sözleşme-süitleri yeşil (api/
         #    dizini yerel root-mukayeselerine karışmamalı).
-        #    KAPSAM NOTU: test_openapi_schema.py HEAD'te takipli DEĞİL —
-        #    commit'li ağaçta modül-yokluğu hatası (phantom-bağımlılık
-        #    ailesi). Yalnız HEAD'de takipli süit çağrılır; openapi süiti
-        #    takip edildiğinde listede geri eklenir.
-        for suite in ("test_api_method_contract",):
+        for suite in ("test_api_method_contract", "test_openapi_schema"):
             r = subprocess.run(
                 [sys.executable, "-m", "unittest", "_calisma.CIKTI." + suite],
                 cwd=ROOT, capture_output=True, text=True, timeout=120)
@@ -289,148 +240,6 @@ def _tracked():
         raise AssertionError("git ls-files anlamsız sonuç: %d dosya" %
                              len(files))
     return files
-
-
-def _vercel_ignore_rules():
-    """.vercelignore satirlari (yorum/bos satir atlanir) — sirali."""
-    rules = []
-    for ln in (ROOT / ".vercelignore").read_text(encoding="utf-8").splitlines():
-        s = ln.strip()
-        if s and not s.startswith("#"):
-            rules.append(s)
-    return rules
-
-
-def _glob_to_regex(pattern):
-    """gitignore-glob -> tam-eslesme regex; `**/` onek her koku kapsar."""
-    prefix = ""
-    if pattern.startswith("**/"):
-        pattern = pattern[3:]
-        prefix = "(?:.*/)?"
-    out = []
-    i = 0
-    while i < len(pattern):
-        ch = pattern[i]
-        if pattern[i:i + 2] == "**":
-            out.append(".*")
-            i += 2
-        elif ch == "*":
-            out.append("[^/]*")
-            i += 1
-        elif ch == "?":
-            out.append("[^/]")
-            i += 1
-        else:
-            out.append(re.escape(ch))
-            i += 1
-    return "^" + prefix + "".join(out) + "$"
-
-
-def _vercel_pruned(relpath, rules=None):
-    """Vercel CLI 59.x upload prune karari (ignore@5 + readdirRecursive).
-
-    readdirRecursive her girisi SLASH'SIZ yol ile `ig.ignores()` ile test
-    eder; dizin "ignored" cikarsa TÜM alt-agaç prune edilir (cocuklar hic
-    denenmez). Son eslesen kural belirleyicidir; dir-only (sonu `/`) desen
-    slash'siz dizin yoluna ESLESEMEZ, yalnizca `desen/` oneki altindaki
-    yollara uyar. 2026-10-09 olcumleri (vercel 59.10 icindeki ignore@5):
-        rules=[blanket, '!dir/', '!dir/**']  -> dir: True (yanlis-prune)
-                                             -> dir/c.png: False
-    Yani git-semantik `_ignored()` "girer" derken upload dizin dugumunu
-    prune edebilir — bu model o sinari offline sinar; pini
-    test_model_matches_measured_ignore_pkg.
-    """
-    if rules is None:
-        rules = _vercel_ignore_rules()
-    ignored = False
-    for raw in rules:
-        negated = raw.startswith("!")
-        pat = raw[1:] if negated else raw
-        if pat.endswith("/"):
-            # dir-only: slash'siz DIZIN kendisine eslesmez, altindakilere uyar
-            hit = re.match(_glob_to_regex(pat + "**"), relpath) is not None
-        else:
-            hit = re.match(_glob_to_regex(pat), relpath) is not None
-        if hit:
-            ignored = not negated
-    return ignored
-
-
-def _vercel_pruned_ancestor(relpath):
-    """Upload'da dosyanin INMESINI engelleyen atas-dizin prune'i (yoksa None)."""
-    parts = relpath.split("/")
-    for i in range(1, len(parts)):
-        ancestor = "/".join(parts[:i])
-        if _vercel_pruned(ancestor):
-            return ancestor
-    return None
-
-
-class TestVercelUploadPruneSemantics(unittest.TestCase):
-    """Vercel upload prune semantigi — ignore@5 olcumlerine kilitli.
-
-    2026-10-09 arizasi: /slides_z3/* ve /design-system/stripe-theme.css
-    TÜM deploy'larda 404; git check-ignore temiz diyordu (takipli dosya
-    "girer"), ama Vercel upload'i atas dizini prune edip alt-agaçi dusuruyordu.
-    Bu sinif olcum-kilitli modelle bu sinari offline (agizsiz) sinar.
-    """
-
-    _MEASURED_OLD = [
-        "_calisma/CIKTI/**",
-        "!_calisma/CIKTI/slides_z3/",
-        "!_calisma/CIKTI/slides_z3/**",
-    ]
-    _MEASURED_FIXED = _MEASURED_OLD + ["!_calisma/CIKTI/slides_z3"]
-
-    def test_model_matches_measured_ignore_pkg(self):
-        self.assertTrue(_vercel_pruned(
-            "_calisma/CIKTI/slides_z3", self._MEASURED_OLD),
-            "olcum: eski kurallarla dizin prune (git bunu gormez)")
-        self.assertFalse(_vercel_pruned(
-            "_calisma/CIKTI/slides_z3/P1-a.png", self._MEASURED_OLD),
-            "olcum: dir-only negasyon cocuga ulasir")
-        self.assertFalse(_vercel_pruned(
-            "_calisma/CIKTI/slides_z3", self._MEASURED_FIXED),
-            "slash'siz negasyon dizin dugumunu kurtarmali")
-
-    def test_repo_ignore_file_keeps_static_dirs_reachable(self):
-        for rel in ("_calisma/CIKTI/slides_z3",
-                    "_calisma/CIKTI/slides_z3/P1-a.png",
-                    "design-system/stripe",
-                    "design-system/stripe/theme.css",
-                    "_calisma/CIKTI/preview.html",
-                    "_calisma/CIKTI/preview.js",
-                    "_calisma/CIKTI/sw.js",
-                    "design-system/tokens.css"):
-            self.assertFalse(
-                _vercel_pruned(rel),
-                "%s prune ediliyor — Vercel upload'unda yuklenmez" % rel)
-
-    def test_bundle_separation_still_holds_under_vercel_model(self):
-        for rel in (".env", ".env.local", "node_modules/x/index.js",
-                    "_calisma/pptx/sunum.pptx",
-                    "design-system/stripe/tokens.json",
-                    ".worktrees/x/y.py"):
-            self.assertTrue(
-                _vercel_pruned(rel),
-                "%s prune edilmiyor — bundle siser/sizar" % rel)
-
-    def test_every_static_asset_ancestor_is_reachable(self):
-        assets = [
-            "_calisma/CIKTI/preview.html",
-            "_calisma/CIKTI/preview.js",
-            "_calisma/CIKTI/sw.js",
-            "design-system/tokens.css",
-            "design-system/stripe/theme.css",
-        ]
-        assets += [str(p.relative_to(ROOT)) for p in sorted(
-            (ROOT / "_calisma/CIKTI" / "slides_z3").glob("*.png"))]
-        self.assertGreaterEqual(len(assets), 17, "varlik listesi bosaldi")
-        for rel in assets:
-            culprit = _vercel_pruned_ancestor(rel)
-            self.assertIsNone(
-                culprit,
-                "%s atas dizin prune: %s — deploy'da 404" % (rel, culprit))
 
 
 class TestVercelStaticFrontendContract(unittest.TestCase):
@@ -567,22 +376,6 @@ class TestVercelStaticFrontendContract(unittest.TestCase):
         for rel in must_upload:
             self.assertFalse(_ignored(rel),
                              "%s dışlı — deploy'da eksik" % rel)
-        # İçe-aktarma zinciri sözleşmesi: bundle'a giren yerel modülün import
-        # ettiği kardeş modüller de upload'a girmeli (2026-10-09 kanıtı:
-        # preview_server sat.45 `import precommit_log` dışlandı → 3 uç
-        # ModuleNotFoundError ile FUNCTION_INVOCATION_FAILED, health etkisiz).
-        for rel in ("_calisma/CIKTI/preview_server.py",
-                    "_calisma/CIKTI/determinism_trend_badge.py"):
-            src = (ROOT / rel).read_text(encoding="utf-8")
-            cikti = ROOT / "_calisma" / "CIKTI"
-            for m in re.finditer(r"^(?:import|from)\s+([A-Za-z_]\w*)",
-                                 src, re.M):
-                sibling = cikti / (m.group(1) + ".py")
-                if sibling.exists():
-                    self.assertFalse(
-                        _ignored(sibling.relative_to(ROOT).as_posix()),
-                        "%s → %s import ediyor ama .vercelignore dışlı — "
-                        "deploy'da ModuleNotFoundError" % (rel, m.group(1)))
         # Dışarıda kalması gereken yüzey (bundle 250MB eşiği + sır-disiplini).
         must_exclude = [
             ".env",

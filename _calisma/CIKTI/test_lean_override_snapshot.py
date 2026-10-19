@@ -5,12 +5,38 @@ import pathlib
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import preview_server as ps
 
 
+def _patch_latest(test):
+    """ps.LATEST'i TAM-dict yedek/geri yükleme ile izole et.
+
+    `_finalize_run` LATEST'i bütünüyle yazar (verdict/counts/layers/…); yalnız
+    lean_override/lean_source'u geri almak yetmiyordu — flat watch
+    (`--scope flat --watch preview_server:LATEST`) bu sınıfı sızıntı kaynağı
+    olarak adlandırdı. patch.dict girişte tüm sözlüğün kopyasını alır,
+    çıkışta temizleyip kopyayı geri yazar (eklenen anahtarlar da gider);
+    geri yükleme addCleanup'a bağlıdır, setUp'ın devamı patlasa bile kaçmaz.
+    """
+    patcher = mock.patch.dict(ps.LATEST)
+    with ps.LOCK:
+        patcher.start()
+
+    def _stop():
+        with ps.LOCK:
+            patcher.stop()
+
+    test.addCleanup(_stop)
+    return patcher
+
+
 class LeanOverrideSnapshotTests(unittest.TestCase):
+    def setUp(self):
+        _patch_latest(self)
+
     def test_finalize_exposes_lean_override_and_source(self):
         old = {k: ps.LATEST.get(k) for k in ("lean_override", "lean_source")}
         try:

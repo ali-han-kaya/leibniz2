@@ -41,7 +41,7 @@ Lean'de iki teorem:
 | L₀ sözdizimi | `Formula` — 9 atom + 5 Boole + 6 sıralı niceleyici (20 kurucu) | değişkenler `Nat` ad-uzayı |
 | doyum | `Realize : Formula → Env → Prop` (Tarski) | yalnızca L₀ sembollerine başvurur |
 | "özdeş reduct" | `L0Agree M1 M2` — 9 yüklemin noktasal `↔` eşitliği | extensional doğruluk kavramı |
-| L⁺ zenginleşmesi | **bilinçli olarak yok** | `Realize` hiçbir L⁺ sembolüne başvurmadığı için zenginleşme L₀-doğruluğunu etkileyemez; lemma L₀-reduct'e indirgenir |
+| L⁺ zenginleşmesi | ana mock'ta **bilinçli olarak yok**; §5.1'de ikinci zenginleşme (`Vivid`, `Familiar`) gerçekten eklenir | `Realize` hiçbir L⁺ sembolüne başvurmadığı için zenginleşme L₀-doğruluğunu etkileyemez; lemma L₀-reduct'e indirgenir |
 
 ## 3. Kanıt yapısı
 
@@ -82,6 +82,35 @@ $ echo $?
 
 Kurulum: `elan` + `leanprover/lean4:stable` (v4.33.0), Homebrew `elan-init`
 üzerinden; proje-içi değil ama standart `~/.elan` kurulumu, sudo yok.
+
+## 5.1. Gerçek reduct senaryosu — L⁺ genişlemeleri (M₁⁺, M₂⁺ ∈ 𝒦)
+
+Dosyanın ikinci yarısı, kağıdın lemmasının tam durumunu (`L⁺`-genişlemeleri,
+özdeş `L₀`-reduct) makine-denetime tabi tutar:
+
+| Öğe | Formalizasyon | Not |
+|---|---|---|
+| L⁺ imza | `LPlusStructure extends L0Structure`: `Vivid : Imp → Prop`, `Familiar : Ep → Cont → Prop` | ikinci zenginleşme, ikisi de L₀-dışı |
+| reduct izdüşümü | `LPlusStructure.reduct : LPlusStructure → L0Structure` (`toL0Structure`) | unutkan funktor |
+| iki mock genişleme | `mockPlusOne = mockPlus True True True`, `mockPlusTwo = mockPlus True False False` | L₀'da birebir aynı, L⁺'da zıt |
+| L⁺ ayrışma tanıkları | `mockPlus_disagree`, `mockPlus_disagree_familiar` | senaryo boş değil: `Vivid` birinde doğru diğerinde yanlış |
+| invariance | `mock_plus_reduct_invariance` (açık formüller), `mock_plus_reduct_invariance_sentences` (cümleler) | `reduct_invariance`'ın reduct'lere uygulanması |
+| reduct'lerde doğruluk | `mock_plus_reduct_truth` | mock cümlesi iki reduct'te de doğru |
+| regresyon ağı | `mockPlus_reduct_shared_L0` (`rfl` pin), `mockPlus_models_differ`, `mockPlus_vivid_not_preserved`, `mockPlus_familiar_not_preserved` + 4 `example` (atomik, nicelikli, yanlışlanan, cümle) | dosya içi pozitif/negatif senaryolar; biri kırılırsa dosya derlenmez (fail-closed). Negatiflerin pozitif karşılıkları (`=` / `↔` iddiaları) `error` ile reddedilir — boş teorem yok |
+| karşılaştırma (keskinlik) | `mockModelThree = mockModel False`; `mockModelOne_vs_Three_ex` (`∃`), `mockModelOne_vs_Three_all` (`∀`) + üçlü `example` (L⁺-çifti hemfikir, L₀-farklı model ayrışır) | `L0Agree` hipotezi gerekli: reduct'ler farklıysa aynı nicelikli formül ayırt eder. Ters iddialar `error` ile reddedilir — ayrışma modele bağlı, formüle değil |
+
+```text
+mockPlusL0Agree : L0Agree mockPlusOne.reduct mockPlusTwo.reduct
+mockPlus_disagree : mockPlusOne.Vivid MockImp.i0 ∧ ¬mockPlusTwo.Vivid MockImp.i0
+mock_plus_reduct_invariance_sentences (φ : Formula) :
+  (∀ (e : Env MockImp MockCont MockEp), Realize mockPlusOne.reduct φ e) ↔
+    ∀ (e : Env MockImp MockCont MockEp), Realize mockPlusTwo.reduct φ e
+```
+
+Boş-olmama (non-vacuity) kontrolü: `example : mockPlusTwo.Vivid .i0` iddiası
+`error: unsolved goals` ile reddedilir (exit 1) — L⁺ farkı gerçektir, dolayısıyla
+invariance teoremi önemsiz değildir. Aynı `lean ReductInvariance.lean` koşumu,
+exit 0.
 
 **Sürüm notu (V5l/V5m, 2026-08-18):** bu ispat içerik hakkındadır;
 tectonic/qpdf byte-non-determinizminin PDF/zip tekrarlanabilirliğine getirdiği

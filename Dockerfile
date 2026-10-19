@@ -46,42 +46,18 @@ ARG PYTHON_SECURITY_PATCH_PACKAGES
 # Tuzaka-notu (canlı build'de ölçüldü): unquoted $VAR genişlemesi floor'lardaki
 # '>' karakterini shell REDIRECT'ine çevirir — floor yutulur, pip bare sürüm
 # kurar. Güvenli form: QUOTED genişleme satır başına floor yazıp -r dosyası.
-# PIP CACHE MOUNT (build cache derinleştirme — hijyen değişmeden):
-#   RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked
-# Kural: cache mount ile --no-cache-dir BİRLİKTE kullanılamaz — pip
-# --no-cache-dir ile cache'i kapatır, mount boşa çıkar. Bu yüzden
-# --no-cache-dir aşağıdaki pip satırlarından KALDIRILDI.
-# Hijyen değişmedi: BuildKit cache mount'u KATMANA yazmaz (ephemeral,
-# image'a girmez) → imaj katman yüzeyi, Trivy tarama yüzeyi ve imaj
-# boyutu DEĞİŞMEZ; --no-cache-dir'in sağladığı "imajda pip cache
-# kalıntısı yok" garantisinin yerini bu mount alır. Cache yalnız
-# indirilen wheel/indeks dosyalarını tutar (kimlik bilgisi içermez,
-# repo'ya yazılmaz).
-# Derinleştirme kazancı: pip katmanı PYTHON_SECURITY_PATCH_PACKAGES
-# ARG'si (her CVE floor yükseltmesi) veya base image değiştiğinde
-# invalide olur; mount o invalidasyonda indirmeyi yeniden kullanır —
-# yani güvenlik yaması döngüsü bedava indirme yapar.
-# id verilmediği için mount id'si target yoludur → builder ve runtime
-# stage'leri AYNI pip cache'ini paylaşır (runtime'daki setuptools/wheel
-# floor yükseltmesi builder'ın indirdiği wheel'i tekrar kullanır).
-# sharing=locked: eşzamanlı build'ler aynı HTTP cache'e yazmasın
-# (cache bozulma guard'ı).
-# Ön koşul: BuildKit builder. Legacy (BuildKit'siz) builder'da
-# `--mount` parse hatası verir; satır 1'deki syntax direktifi frontend'i
-# sabitler, CI'da buildx (docker/build-push-action@v6) BuildKit kullanır.
-RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
-    set -eux; \
+RUN set -eux; \
     python -m venv /opt/venv; \
     if [ "$(printf '%s' "$PYTHON_SECURITY_PATCH_PACKAGES" | tr -d '[:space:]')" = "" ]; then \
       echo "PYTHON_SECURITY_PATCH_PACKAGES empty — no targeted pip patch"; \
     else \
       printf '%s\n' "$PYTHON_SECURITY_PATCH_PACKAGES" | tr ' ' '\n' > /tmp/pip_security_reqs.txt; \
-      /opt/venv/bin/pip install --upgrade -r /tmp/pip_security_reqs.txt; \
+      /opt/venv/bin/pip install --no-cache-dir --upgrade -r /tmp/pip_security_reqs.txt; \
       /opt/venv/bin/pip show \
         $(printf '%s\n' "$PYTHON_SECURITY_PATCH_PACKAGES" | tr ' ' '\n' | sed 's/[><=!~].*//') \
         | grep -E '^(Name|Version):'; \
     fi; \
-    /opt/venv/bin/pip install z3-solver
+    /opt/venv/bin/pip install --no-cache-dir z3-solver
 
 FROM python:3.11-slim-bookworm AS runtime
 
@@ -89,15 +65,12 @@ FROM python:3.11-slim-bookworm AS runtime
 # yamalanır — gate'in tetiklediği yamalar bu aşamada uygulanır (guard/kanıt
 # builder stage'iyle özdeş; bare ARG global default'u miras alır).
 ARG PYTHON_SECURITY_PATCH_PACKAGES
-# Aynı pip cache mount deseni (builder ile paylaşılan cache id'si:
-# target yolu varsayılan id'dir) — bkz. yukarıdaki mount yorum bloğu.
-RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
-    set -eux; \
+RUN set -eux; \
     if [ "$(printf '%s' "$PYTHON_SECURITY_PATCH_PACKAGES" | tr -d '[:space:]')" = "" ]; then \
       echo "PYTHON_SECURITY_PATCH_PACKAGES empty — no targeted pip patch"; \
     else \
       printf '%s\n' "$PYTHON_SECURITY_PATCH_PACKAGES" | tr ' ' '\n' > /tmp/pip_security_reqs.txt; \
-      pip install --upgrade -r /tmp/pip_security_reqs.txt; \
+      pip install --no-cache-dir --upgrade -r /tmp/pip_security_reqs.txt; \
       pip show \
         $(printf '%s\n' "$PYTHON_SECURITY_PATCH_PACKAGES" | tr ' ' '\n' | sed 's/[><=!~].*//') \
         | grep -E '^(Name|Version):'; \
@@ -125,19 +98,13 @@ RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
 #
 # CVE-defteri (artan süre — desen 2026-09-16 pcre2 düzeltmesiyle doğdu):
 #   libpcre2-8-0: CVE-2026-86145 (OOB write) + CVE-2026-89161
-#     (pcre2_jit_match memory corruption) → floor 10.42-1+deb12u2
+#     (pcre2_jit_match memory corruption) → floor 10.42-1+deb12u1
 #     (kanıt: 2026-09-16, trivy 0.74.0 yerel smoke + CI 35161423659
-#     before/after; 2026-09-17 desenle yeniden doğrulandı. 2026-10-09
-#     ROTASYON: Debian u1'i bookworm-security deposundan çekti —
-#     tam-sürüm pin "not found" → apt 100 → docker-security +
-#     audit_live_ci_sync 2 gündür repo-geneli kırmızı; u2'ye taşındı.
-#     DERS: tam-sürüm pin'ler upstream güvenlik-sürümü yayınında çöker —
-#     pin rotasyonu defter + sözleşme testiyle birlikte güncellenir).
-#     Girdi SECURITY_PATCH_PACKAGES default'unda yaşar — pasif kayıt,
-#     her build'de taze yama.
-ARG SECURITY_PATCH_PACKAGES="libpcre2-8-0=10.42-1+deb12u2"
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    set -eux; \
+#     before/after; 2026-09-17 desenle yeniden doğrulandı). Girdi
+#     SECURITY_PATCH_PACKAGES default'unda yaşar — pasif kayıt, her
+#     build'de taze yama.
+ARG SECURITY_PATCH_PACKAGES="libpcre2-8-0=10.42-1+deb12u1"
+RUN set -eux; \
     if [ "$(printf '%s' "$SECURITY_PATCH_PACKAGES" | tr -d '[:space:]')" = "" ]; then \
       echo "SECURITY_PATCH_PACKAGES empty — no targeted apt patch"; \
     else \

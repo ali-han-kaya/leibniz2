@@ -262,50 +262,172 @@ Admin bypass: `gh pr merge --admin` ile koruma atlanabilir, ancak
 
 ---
 
-## 8. Dal hijyeni — superseded yerel dallar (2026-10-01)
+## 8. Ref envanteri (stale inventory) — 2026-09-12
 
-**Amaç:** "bekleyen iş" sanılan yerel dalların main'e göre **net etkisini**
-ölçmek. Yöntem iki uçlu/üç uçlu diff değil, **merge sonucunun ağacı**:
+History rewrite'ları (reword + force-push) ve taşınan worktree'lerden kalan
+ulaşılamaz nesnelerin sayımı. Amaç: `git gc` öncesi/sonrası durumu tek yerde
+kayıtlı tutmak — sonraki temizlik turu bu sayılarla karşılaştırılır.
+
+**Yöntem (yeniden üretilebilir):**
 
 ```bash
-TREE=$(git merge-tree --write-tree origin/main <dal> | head -1)
-git diff --stat origin/main "$TREE"     # boşsa merge HİÇBİR ŞEY değiştirmiyor
+git fsck --no-reflogs --dangling        # dangling commit/blob/tree sayımı
+git worktree list; git branch -a; git stash list
+git count-objects -vH; du -sh .git
+git reflog expire --expire-unreachable=now --all   # yalnız ULAŞILAMAZ girdiler
+git gc --prune=now
 ```
 
-İki uçlu diff (`origin/main..<dal>`) ve `git cherry` yanıltıcıdır: 249 commit
-bayat bir dal, main'in sonradan eklediği satırları "silme" gibi gösterir;
-patch-id'ler farklı olduğu için eşdeğer içerik `+` görünür. Karar yalnız
-merge ağacı farkıyla verilir.
+`--expire-unreachable` bilinçli: erişilebilir commit'lerin reflog geçmişi
+(undo ağı) korunur, yalnız ulaşılamaz girdiler düşer.
 
-### 8.1 Silinen: `land/post-42-chain` (net etki 0)
+| Ölçüm | Önce | Sonra |
+|---|---|---|
+| dangling commit | 159 | **0** |
+| dangling blob | 35 | **0** |
+| dangling tree | (tam sayım saklanmadı) | **0** |
+| loose object (boyut) | 6826 (116.30 MiB) | 0 (0 B) |
+| pack (boyut) | 2 pack (6.97 MiB) | 1 pack (6.88 MiB) |
+| `.git` dizin boyutu | 128 MiB | **11 MiB** |
+| reflog girdisi | 178 | 118 |
 
-| Ölçüm | Değer |
-|---|---|
-| Konum | geride 249, ileride 2 (`f4ed8d7`, `1a66163`) |
-| Merge ağacı vs main | **boş fark** — 0 dosya, 0 satır, çakışma yok |
-| Dosya bazında | `check_review_freshness.py` + `test_check_review_freshness.py`: main ile birebir aynı |
-| `.dockerignore` | merge sonucu main'in sürümü (dal onu geriye çekmiyor) |
+### 8.1 Kaynaklanan içerik kaybı doğrulaması
 
-İçeriği main'de üç commit'le zaten var:
+`gc` öncesi ulaşılamaz nesnelerdeki **120 benzersiz blob** (6.51 MiB) tek tek
+çıkarıldı. Bunların dağıldığı 64 yolun:
 
-| Dalın niyeti | Main'deki karşılığı |
-|---|---|
-| host z3 venv'i imaj bağlamı dışında tut | `f70779c` |
-| build-context pariteti (`.worktrees`, `**/node_modules`, `**/.next`) | `cfa33d9` |
-| tazelik zamanını dosyanın kendi deposundan çöz (`GIT_DIR`) | `16d4e06` |
+- **40'ı HEAD'de hâlâ var olan dosyaların eski revizyonları** (rewrite artığı):
+  README 18, PUBLISH_SCENARIO 12, verify.yml 8, check_unit_tests.list 7,
+  eski teslim zip'leri + sha256 sidecar'ları, eski PDF/qpdf kayıtları.
+- **23'ü artık gitignore'da** (`.gitignore` satır 5: `docs/ci_simulate/`) olan
+  CI-simülasyon çıktıları — koşularak yeniden üretilir.
+- **1'i** `_calisma/CIKTI/test-hook-dummy.txt` (6 bayt, hook denemesi artığı).
 
-**Eylem:** dal push edilmedi ve PR açılmadı (0 dosya değişikliği gösteren PR
-sinyal değil gürültü olurdu; merge'i de içeriksiz bir merge commit'i eklerdi).
-Yerel dal ve worktree'si silindi. `land/post42-residual` zaten main'in atasıdır
-(ileride 0) — içeriği kayıp değil.
+**Hedefli doğrulama — kurtarılan iki zincir:**
+`.github/workflows/docker-security.yml`, `Dockerfile` ve `design-system/**`
+yollarında **benzersiz blob sayısı 0**. İki bağımsız yöntemle doğrulandı:
+(1) bu yollardaki her blob refs'ten erişilebilir (blob-hash kümesi testi),
+(2) ilgili dangling commit'lerin (`52c87cb`, `031f7f4`, `d4f095e`, `4ec2706`)
+bu yollardaki içeriği HEAD'de mevcut (yol-yol `rev-parse` karşılaştırması).
 
-### 8.2 Tarama anlık görüntüsü (2026-10-01, `origin/main` = `593b65a`)
+**Kanıt arşivi (silmeden önce alındı):**
+`/tmp/leibniz2-dangling-salvage-20260912.tar.gz` — 3.7 MiB, sha256
+`4ae0a92d16d51b39e700ca5193c928df694be5bf1f18a4b3f7db56fdf8731d2f`.
+İçerik: 120 blob + `MANIFEST.json` (blob → yol → kaynak dangling commit →
+sha256 → boyut). `/tmp` kalıcı değildir; saklanacaksa repoya/arşive taşınmalı.
 
-| Sınıf | Dallar |
-|---|---|
-| Tamamen superseded (net etki 0) | `land/post-42-chain` (+2) |
-| Çakışmasız, gerçek içerik | `fix/texlive-output-write-boundary` (+2), `test/faz2-engine-guard` (+1), `docs/faz0-1-closure` (+2), `docs/r4-audit-evidence` (+1), `codex/ci-cache6-setup-python7-20260925` (+1) |
-| Çakışmalı (bayat soy) | `pr/bf506c0` (+210), `main` (+157), `land/migration-gates-2026-09-30` (+153), `archive/main-pre-cleanup-20260930` (+144), `fix/venv-less-unittest-discover` (+128), `feat/github-site-sample` (+48), `fix/live-ci-audit-retry` (+47), `feat/plist-info-line` (+20), `hygiene/advisory-env-artifacts` (+4), `docs/coe-audit-table` (+2) |
+### 8.2 Kalan envanter (orphan-ref süpürmesi sonrası)
 
-**Kural:** "bekleyen iş" iddiası bir dala bağlanmadan önce yukarıdaki merge
-ölçümü yapılır; net etki 0 ise iş **yoktur** — envanter düzeltilir, PR açılmaz.
+| Öğe | Adet | Durum |
+|---|---|---|
+| `backup/*` ref'leri | 6 → 1 | Yalnız `backup/orphan-pre-reword-33e9b8a` kaldı: **benzersiz kurtarılabilir içerik** taşıyor (§8.4) |
+| stash | 2 → 1 | `stash@{0}` korundu (`refs/stash` = `7d58b5d`; reflog girdisi `git stash store` ile geri yazıldı). `stash@{1}` ("stale-audit wiring") yalnız reflog'la ayakta kalıyordu: `--expire-unreachable` onu düşürdü, commit'i prune edildi — **içeriği arşivde** (`d7343f0`: 3 benzersiz blob) |
+| harici worktree | 2 | `/private/tmp/followup` (`feat/plist-info-line-followup`), `/private/tmp/wt224` (detached `224dcd7`) |
+| yerel-only branch | 2 → 1 | `pr/bf506c0` kaldı: 84 benzersiz yol taşıyan ayrı bir eski hat (ayrıca `origin/pr/bf506c0`'da mevcut). `feat/compact-json`, `rewrite-preview-test` silindi (0 ahead) |
+
+### 8.3 Yan etki: `--expire-unreachable` stash reflog'unu da kapsar
+
+`refs/stash` bir reflog-ref'idir; `--expire-unreachable=now --all` bu reflog'u da
+işler, dolayısıyla **@{0} dışındaki stash girdileri düşer** (bu turda stash
+listesi boşaldı). @{0}'ın commit'i `refs/stash` ref korumasında olduğu için
+nesnesi duruyordu; liste `git stash store 7d58b5d` ile aynı sha'ya geri yazıldı.
+Bir sonraki temizlikte stash'ler korunacaksa refine yalnız ref'ler üzerinde
+koşturulmalı (`git reflog expire --expire-unreachable=now refs/heads/<b>` gibi)
+veya stash'ler önce `git stash push` ile yeniden yazılmalı.
+
+### 8.4 Orphan-ref süpürmesi — 2026-09-12
+
+Kriter: **ref'i sil, ancak ve ancak hiçbir yerde bulunmayan kurtarılabilir içerik
+yoksa.** Ölçüm, `git rev-list --objects <ref> --not main feat/plist-info-line
+feat/plist-info-line-followup` ile her ref'in spine'a göre benzersiz nesnelerini
+çıkarıp yol-yol HEAD ile karşılaştırarak yapıldı.
+
+**Silinen 9 ref — üç sınıf:**
+
+| Ref | Sınıf | Gerekçe |
+|---|---|---|
+| `backup/orig-091635c-73chars` | yalnız commit | Reword öncesi aynı ağaç; 4 commit, **0 benzersiz yol** |
+| `backup/orig-b5e74dc-91chars` | yalnız commit | Aynı; 1 commit, 0 benzersiz yol |
+| `backup/reword-091635c-56chars` | yalnız commit | Aynı; 4 commit, 0 benzersiz yol |
+| `backup/reword-b5e74dc-57chars` | yalnız commit | Aynı; 1 commit, 0 benzersiz yol |
+| `backup/self-loop-a345284` | tamamen birleşik | Spine'a göre **0 commit ahead** |
+| `feat/compact-json` | tamamen birleşik | 0 commit ahead |
+| `rewrite-preview-test` | tamamen birleşik | 0 commit ahead |
+| `refs/original/HEAD` | eskimiş taslak | 12 commit; benzersiz blob'lar yalnız `preview_server.py` + `test_preview_server.py`'nin **eski** hali. HEAD `_write_atomic`/`SSE_POLL_TIMEOUT`/`OVERRIDE_TREND_PATH` içeriyor, bu ref içermiyor; test dosyası 90 KB vs 72 KB |
+| `feat/compact-json-patch` | eskimiş taslak | Aynı iki dosyanın daha eski hali; ayrıca `origin/feat/compact-json-patch`'te duruyor |
+
+`refs/original/HEAD` ve `feat/compact-json-patch`'in "HEAD'de yok" görünen 13
+yolu `_calisma/slides_z3/**` idi; bunlar `_calisma/CIKTI/slides_z3/**`'a
+**taşınmış** ve 13 dosyanın **13'ünde blob hash'i birebir aynı** — kayıp yok.
+
+**Korunan ref ve gerekçesi:** `backup/orphan-pre-reword-33e9b8a` (`33e9b8a`) —
+tek başına benzersiz içerik taşıyan ref:
+
+- `_calisma/CIKTI/update_preview.sh` (`43adbac8`, +27 satır): `--no-mirror` /
+  `--no-html` bayraklarını `--bootstrap`'dan **önce** verildiğinde de işleyen
+  üst-seviye `case` dalı. HEAD bu sırayı işlemiyor (`bootstrap_all "${@:2}"`
+  yalnız sonraki argümanları geçirir; `--no-mirror` doğrudan `${1:-build}` olur
+  ve `ERR bilinmeyen mod` + `exit 2` ile düşer).
+- `_calisma/CIKTI/test_check_bootstrap_start_smoke.py` (`8c895433`, +26 satır):
+  `test_leading_flags_before_bootstrap` — bu sıra için regresyon testi.
+
+İki blob da HEAD'de **ve** çalışma ağacında yok (çalışma ağacı hash'leri
+`cbf8adc6` / `76cee799`, yani HEAD ile aynı). Bu yüzden ref silinmedi.
+
+**Geri alma ağı:** silinen tüm tip SHA'ları
+`/tmp/leibniz2-refs-sweep-manifest-20260912.txt` (sha256 `3687d826…`) içinde;
+nesneler `gc --prune` koşmadığı için hâlâ nesne veritabanında. Geri alma:
+`git branch <ad> <sha>`.
+
+**Not:** Job/artifact doc-senkron kapıları (`test_doc_job_sync`,
+`test_doc_artifact_sync`, `check_workflow_artifact_docs`) yalnız
+`docs/PUBLISH_SCENARIO.md`'yi ayrıştırır; bu bölüm onları etkilemez.
+
+---
+
+## 9. Dal hijyeni — `reword-working` ve `texlive-faz-1-3` (2026-09-30)
+
+İki dal için merge/silme kanıtı tek yerde. Ölçümler yeniden üretilebilir
+(`git branch --merged main`, `git rev-list --count main..<ref>`,
+`git merge-base --is-ancestor <p> main`, `git cherry main <ref>`).
+
+| Dal | Silme | Kanıt | Kayıp |
+|---|---|---|---|
+| `reword-working` | **önceden silinmiş** (yerel ref yok, `git ls-remote --heads origin reword-working` boş) | `008b1aa` "Merge branch 'reword-working'" iki ebeveynli (`32c1a44` + `a24c4db`); 2. ebeveyn `a24c4db` ∈ main; `main..008b1aa` = **0** | **0** — tüm içerik main'de |
+| `texlive-faz-1-3` | **yerel ref silindi** 2026-09-30 (`git branch -d` → `was 69ab9a9`); `origin/texlive-faz-1-3` (`23a6ece`) + PR #52 **korundu** | yerel dal origin'e göre **0 ahead** (4 behind) → silme kayıpsız; git uyarısı "merged to origin, not to HEAD" beklenen | **0** (yerel) — özgün içerik origin'de + aşağıdaki §9.1'de |
+
+**Kapsam kararı:** `texlive-faz-1-3` main'e **merge'lenmemiş**
+(`main..origin/texlive-faz-1-3` = 5 commit; PR #52 OPEN/CONFLICTING).
+Bu yüzden yalnız yerel ref silindi; origin dalı ve PR bilinçli olarak
+dokunulmadı. `git branch texlive-faz-1-3 origin/texlive-faz-1-3` ile
+anında geri gelir.
+
+### 9.1 Korunan tek kanıt — dala özgün 3 trend satırı
+
+`git cherry main origin/texlive-faz-1-3` üç commit'i patch-benzersiz buluyor
+(`6fe7c86`, `b5126f9`, `23a6ece` — hepsi `chore: record weekly determinism
+trend measurement`). Satır-içerik karşılaştırması bu üç satırın
+`docs/determinism_trend/determinism_trend.jsonl` main kopyasında **YOK**
+olduğunu doğruluyor (main'deki aynı tarihli satırlar farklı
+`source_mtime` → ayrı koşumlar). Satırlar buraya eksiksiz kopyalanır;
+origin ref'i bir gün yetim kalsa bile veri defterde:
+
+```jsonl
+{"date": "2026-09-20", "gate": "PASS", "platform": "linux", "sde": 0, "source_mtime": 1789921258, "source_sha256": "a9f34e05a8fb98dc3d2a411e9766d453c598ae7ce5c7461154ba74588d00e64f", "tectonic_bin": "/usr/local/bin/tectonic", "tectonic_canonical_sha256": "ad8fca69d4e4a2e1d67e497c8a7449f22c8564f5e9b3790d0b6f85d90d318e1b", "texlive_bin": "/usr/bin/pdflatex", "texlive_canonical_sha256": "092154a0473e33c2c4d869e2123e36138612ff44f63f689437eeb8450b00fc06"}
+{"date": "2026-09-20", "gate": "PASS", "platform": "linux", "sde": 0, "source_mtime": 1789922229, "source_sha256": "a9f34e05a8fb98dc3d2a411e9766d453c598ae7ce5c7461154ba74588d00e64f", "tectonic_bin": "/usr/local/bin/tectonic", "tectonic_canonical_sha256": "ad8fca69d4e4a2e1d67e497c8a7449f22c8564f5e9b3790d0b6f85d90d318e1b", "texlive_bin": "/usr/bin/pdflatex", "texlive_canonical_sha256": "092154a0473e33c2c4d869e2123e36138612ff44f63f689437eeb8450b00fc06"}
+{"date": "2026-09-21", "gate": "PASS", "platform": "linux", "sde": 0, "source_mtime": 1789978980, "source_sha256": "a9f34e05a8fb98dc3d2a411e9766d453c598ae7ce5c7461154ba74588d00e64f", "tectonic_bin": "/usr/local/bin/tectonic", "tectonic_canonical_sha256": "ad8fca69d4e4a2e1d67e497c8a7449f22c8564f5e9b3790d0b6f85d90d318e1b", "texlive_bin": "/usr/bin/pdflatex", "texlive_canonical_sha256": "092154a0473e33c2c4d869e2123e36138612ff44f63f689437eeb8450b00fc06"}
+```
+
+Geri alma yolları (iki bağımsız):
+
+```bash
+git branch texlive-faz-1-3 origin/texlive-faz-1-3   # origin ref'i duruyor
+git branch <ad> 23a6ece                             # origin ref'i de silinse
+```
+
+**Not:** Bu üç satır trend dosyasına main'e **elle eklenmedi** — trend
+kapısı (`record_determinism_trend.py --check`) uzlaşma-zamanını kaynak
+SHA + platform + geçiş modu ile kovalar; CI koşumu olan linux satırları
+ayrı bir baz oluşturur, splice edilmez. İhtiyaç doğarsa dal ref'inden
+`git show origin/texlive-faz-1-3:docs/determinism_trend/determinism_trend.jsonl`
+ile alınır.

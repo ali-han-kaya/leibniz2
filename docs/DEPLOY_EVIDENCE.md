@@ -12,46 +12,6 @@
 | 2026-10-05 | e2db1f4 | [failure #37377743878](https://github.com/ali-han-kaya/leibniz2/actions/runs/37377743878) | [failure #37377744058](https://github.com/ali-han-kaya/leibniz2/actions/runs/37377744058) | [success #37377743929](https://github.com/ali-han-kaya/leibniz2/actions/runs/37377743929) | [success #37324916028](https://github.com/ali-han-kaya/leibniz2/actions/runs/37324916028) |
 | 2026-10-05 | 9f94f09 | [failure #37385149781](https://github.com/ali-han-kaya/leibniz2/actions/runs/37385149781) | [failure #37385150253](https://github.com/ali-han-kaya/leibniz2/actions/runs/37385150253) | [success #37385150040](https://github.com/ali-han-kaya/leibniz2/actions/runs/37385150040) | [success #37324916028](https://github.com/ali-han-kaya/leibniz2/actions/runs/37324916028) |
 | 2026-10-06 | f3ebc30 | [failure #37397161525](https://github.com/ali-han-kaya/leibniz2/actions/runs/37397161525) | [failure #37397161744](https://github.com/ali-han-kaya/leibniz2/actions/runs/37397161744) | [success #37397161675](https://github.com/ali-han-kaya/leibniz2/actions/runs/37397161675) | [success #37324916028](https://github.com/ali-han-kaya/leibniz2/actions/runs/37324916028) |
-| 2026-10-10 | 92f8315 | [failure #38009521880](https://github.com/ali-han-kaya/leibniz2/actions/runs/38009521880) | [failure #38009521828](https://github.com/ali-han-kaya/leibniz2/actions/runs/38009521828) | [success #38009521825](https://github.com/ali-han-kaya/leibniz2/actions/runs/38009521825) | [success #37324916028](https://github.com/ali-han-kaya/leibniz2/actions/runs/37324916028) |
-| 2026-10-10 | cb6f607 | [failure #38014906773](https://github.com/ali-han-kaya/leibniz2/actions/runs/38014906773) | [failure #38014906725](https://github.com/ali-han-kaya/leibniz2/actions/runs/38014906725) | [success #38014906718](https://github.com/ali-han-kaya/leibniz2/actions/runs/38014906718) | [success #37324916028](https://github.com/ali-han-kaya/leibniz2/actions/runs/37324916028) |
-| 2026-10-11 | 337e73f | [failure #38142793917](https://github.com/ali-han-kaya/leibniz2/actions/runs/38142793917) | [success #38142793885](https://github.com/ali-han-kaya/leibniz2/actions/runs/38142793885) | [success #38142793977](https://github.com/ali-han-kaya/leibniz2/actions/runs/38142793977) | [success #38062084791](https://github.com/ali-han-kaya/leibniz2/actions/runs/38062084791) |
-
-`337e73f` — PR #88 (`land/jobs-map-gate-20261011`) inişi: `cb6f607`
-satırının üstüne **8 anlamlı** commit geldi (upstream PR #86-#87 zinciri:
-`76ba8f7`, `1f21528`, `fff6843` + jobs-map kapısı zinciri: `eee89ff`,
-`e07d94f`, `bc02cd2`, `b73c8c6`, `337e73f`; tolerans 3) → `verify-delivery`
-kırmızısı **yalnız** `test_deploy_evidence.test_cli_accepts_repo_ledger_offline`
-(CIKTI bataryası 2984 test, 1 failure); bu satır tam olarak o açığı kapatıyor.
-Kapı tasarlandığı gibi davrandı: kanıt satırı yazılmadan ilerleyen main
-sessizce yeşile dönmedi. `docker-security` ve `test-smoke` bu HEAD'de yeşil;
-bilinen advisory `Live CI doc↔GitHub sync audit` kırmızısı sürüyor — failure
-penceresindeki `vercel-preview-deploy` "Proje linkle" adımı `VERCEL_TOKEN`a
-`sarkis-env` hesabı erişimi olmadığı için düşüyor (`branches-ignore: main`, yani
-main'e inmez). `determinism-trend` hücresi son main ölçümünü taşır
-(`#38062084791`, sha `fff6843`).
-
-`cb6f607` — `reword-working` (#85) inişi: `92f8315` satırının üstüne **7
-anlamlı** commit geldi (6 dal commit'i + iki merge commit'i; tolerans 3) →
-`verify-delivery` kırmızısı **yalnız**
-`test_deploy_evidence.test_cli_accepts_repo_ledger_offline` (CIKTI bataryası
-2931 test, 1 failure); bu satır tam olarak o açığı kapatıyor. PR #85'in iki
-zorunlu kırmızısı bu inişle kapandı: `Commit-msg gate` (80 karakterlik `c32e881`
-başlığı rebase ile `0b2ca43`'e indirildi) ve `Delivery verification` bataryasının
-*modül yükleyememesi* (`test_ci_hygiene_gate.py` modül düzeyinde `import yaml`;
-CI verify job'u PyYAML kurmuyor) → korumalı import + yaml'sız statik metin
-katmanı; aynı koşumda dokuzuncu adım artık yeşil. `docker-security` kırmızısı
-bilinen advisory `libpcre2-8-0` **CVE-2026-103111** (PR #82); `test-smoke` yeşil.
-`determinism-trend` hücresi son main koşumunu taşır (`#37324916028`): bu workflow
-`workflow_dispatch` olduğu için `cb6f607` adına koşum yoktur.
-
-`92f8315` — plate-book (#84) inişi: `f3ebc30` satırının üstüne **9 anlamlı**
-commit geldi (8 plate-book commit'i + merge commit'i; tolerans 3) →
-`verify-delivery` kırmızısı **yalnız**
-`test_deploy_evidence.test_cli_accepts_repo_ledger_offline` (+ bilinen advisory
-`Live CI doc↔GitHub sync audit`); bu satır tam olarak o açığı kapatıyor.
-`docker-security` kırmızısı `libpcre2-8-0` **CVE-2026-103111** (PR #82);
-`test-smoke` yeşil. `determinism-trend` hücresi son haftalık ölçümü taşır
-(`#37324916028`, sha `d21d3f1`).
 
 `f3ebc30` — dört **anlamlı** commit birikimi (`84b1cc9` RCA sınıf-kanonları,
 `d60e64a` olay-kaydı + signum onarımı, `78f0a86` yaşam-döngüsü paneli +

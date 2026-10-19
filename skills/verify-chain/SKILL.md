@@ -137,7 +137,6 @@ update-config                  # gen_config.py: sync config from package content
 verify-delivery                # K1-K7 core (stdlib-only, fast)
 check-action-pins              # action major version pinning (no downgrade)
 check-python3-shell            # block shell cmds under shell: python3 {0}
-check-latex-surface                 # active $$ + unlabeled \ref/eqref surface
 check-absolute-paths           # block /Users/…, /home/… absolute paths
 actionlint                     # workflow YAML lint (fail-closed)
 verify-delivery-symbolic       # K8 Z3

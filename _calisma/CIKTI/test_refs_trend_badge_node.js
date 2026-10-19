@@ -1,26 +1,34 @@
 #!/usr/bin/env node
-// test_refs_trend_badge_node.js — preview.js refsTrendBadge() Node testi.
+// test_refs_trend_badge_node.js — refsTrendBadge() Node birim testi.
 //
-// preview.js'teki refsTrendBadge() fonksiyonunu Node ortamında çalıştırır
-// ve test_refs_trend_badge.py ile aynı senaryoları doğrular.
+// preview.html'deki refsTrendBadge() fonksiyonunu Node ortamında
+// çalıştırır ve test_refs_trend_badge.py ile aynı senaryoları doğrular.
 // Çıktı: JSON {ok, passed, failed, results: [{name, input, expected, actual, pass}]}
-//
-// Mimari not: script inline'dan preview.js'e taşındı (IIFE). Test, ortak
-// vm-sandbox yardımcısıyla TAM preview.js'i yükleyip sandbox içinden
-// fonksiyonu çağırır — regex ile fonksiyon koparmak yerine.
 //
 // Kullanım: node test_refs_trend_badge_node.js
 'use strict';
 
-const { loadPreview } = require('./preview_vm_sandbox.js');
-const sandbox = loadPreview();
-const refsTrendBadge = sandbox.refsTrendBadge;
-if (typeof refsTrendBadge !== 'function') {
+const fs = require('fs');
+const path = require('path');
+
+// preview.html'den refsTrendBadge fonksiyonunu çıkar
+const previewPath = path.join(__dirname, 'preview.html');
+const html = fs.readFileSync(previewPath, 'utf8');
+const fnMatch = html.match(/function refsTrendBadge\(rows\)\s*\{[\s\S]*?\n\}/);
+if (!fnMatch) {
   process.stdout.write(
     JSON.stringify({ ok: false, error: 'refsTrendBadge bulunamadı' })
   );
   process.exit(1);
 }
+// Fonksiyonu eval ile tanımla (global scope'a)
+const fnBody = fnMatch[0];
+const fn = new Function(
+  'rows',
+  fnBody.replace('function refsTrendBadge(rows)', '')
+);
+// Global olarak tanımla
+globalThis.refsTrendBadge = fn;
 
 // ── Test senaryoları ──────────────────────────────────────────────────────
 function row(v, t) {
@@ -90,7 +98,7 @@ let passed = 0,
 const results = [];
 
 for (const t of tests) {
-  const actual = sandbox.refsTrendBadge(t.input);
+  const actual = refsTrendBadge(t.input);
   const ok = actual.cls === t.expected.cls && actual.text === t.expected.text;
   if (ok) passed++;
   else failed++;

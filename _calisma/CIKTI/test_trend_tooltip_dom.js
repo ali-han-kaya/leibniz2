@@ -1,25 +1,45 @@
 #!/usr/bin/env node
-// test_trend_tooltip_dom.js — preview.js showTrendTip/showRefsTrendTip DOM testi.
-//
-// Mimari not: dashboard script'i inline'dan preview.js'e taşındı (IIFE +
-// üst-seviye `let` state). Test, preview.js'i ortak vm-sandbox yardımcısı
-//yla yükler; tip element'ini sandbox'a enjekte eder, trend/refs cache ve
-// BUDGET_LIMIT sandbox içinde koşan vm-koduyla yazılır (lexical `let`'e
-// dışarıdan sandbox.X = ataması etki etmez).
-//
-// Kullanım: node test_trend_tooltip_dom.js
-'use strict';
+const fs = require('fs');
 const vm = require('vm');
 const assert = require('assert');
-
-const { loadPreview, makeElementStub } = require('./preview_vm_sandbox.js');
-
-const tip = makeElementStub({
+const html = fs.readFileSync(__dirname + '/preview.html', 'utf8');
+const match = html.match(/<script>\n"use strict";([\s\S]*?)<\/script>/);
+assert(match, 'inline dashboard script not found');
+const tip = {
   innerHTML: '',
   style: { display: 'none', left: '', top: '' },
-});
-const sandbox = loadPreview({ tipElement: tip });
-
+  offsetWidth: 100,
+  offsetHeight: 50,
+};
+const sandbox = {
+  console,
+  Date,
+  isFinite,
+  encodeURIComponent,
+  decodeURIComponent,
+  setTimeout,
+  setInterval: () => {},
+  fetch: () => Promise.resolve({ json: () => Promise.resolve([]) }),
+  EventSource: function () {
+    this.addEventListener = () => {};
+    this.close = () => {};
+  },
+  navigator: {},
+  window: { innerWidth: 1200, innerHeight: 800 },
+  document: {
+    getElementById: (id) =>
+      id === 'tip'
+        ? tip
+        : {
+            addEventListener: () => {},
+            classList: { toggle() {}, add() {}, remove() {} },
+          },
+    querySelectorAll: () => [],
+    addEventListener: () => {},
+  },
+};
+vm.createContext(sandbox);
+vm.runInContext('"use strict";\n' + match[1], sandbox);
 const run = {
   ts: '2026-08-28T12:00:00Z',
   budget_usd: 31,
@@ -30,11 +50,8 @@ const run = {
   z3_passed: 12,
   z3_total: 12,
 };
-sandbox.run = run;
-vm.runInContext(
-  'BUDGET_LIMIT = 30; trendCache = [run]; refsTrendCache = [run]',
-  sandbox
-);
+vm.runInContext('BUDGET_LIMIT = 30', sandbox);
+sandbox.trendCache = [run];
 sandbox.showTrendTip(0, { clientX: 10, clientY: 10 });
 assert(
   tip.innerHTML.includes('tt-over'),
@@ -44,6 +61,7 @@ assert(
   tip.innerHTML.includes('limit $30'),
   'showTrendTip must show the run limit'
 );
+sandbox.refsTrendCache = [run];
 sandbox.showRefsTrendTip(0, { clientX: 10, clientY: 10 });
 assert(
   tip.innerHTML.includes('tt-over'),
@@ -53,15 +71,14 @@ assert(
   tip.innerHTML.includes('limit $30'),
   'showRefsTrendTip must show the run limit'
 );
-
 const safe = Object.assign({}, run, { budget_usd: 29 });
-sandbox.safe = safe;
-vm.runInContext('trendCache = [safe]; refsTrendCache = [safe]', sandbox);
+sandbox.trendCache = [safe];
 sandbox.showTrendTip(0, { clientX: 10, clientY: 10 });
 assert(
   tip.innerHTML.includes('tt-under'),
   'showTrendTip must mark under-budget row'
 );
+sandbox.refsTrendCache = [safe];
 sandbox.showRefsTrendTip(0, { clientX: 10, clientY: 10 });
 assert(
   tip.innerHTML.includes('tt-under'),
