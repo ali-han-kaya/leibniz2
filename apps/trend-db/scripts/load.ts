@@ -33,11 +33,15 @@ const DEFAULT_SOURCE = path.join(
 );
 
 const sourcePath = process.argv[2] ?? DEFAULT_SOURCE;
+
+const dryRun = process.argv.includes('--dry-run');
 if (!process.env.DATABASE_URL) {
-  console.error(
-    'DATABASE_URL yok — .env veya ortam değişkeni olarak pooled URL ver'
-  );
-  process.exit(1);
+  if (!dryRun) {
+    console.error(
+      'DATABASE_URL yok — .env veya ortam değişkeni olarak pooled URL ver'
+    );
+    process.exit(1);
+  }
 }
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
