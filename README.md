@@ -628,6 +628,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-16 | ci | (precommit) LaTeX yuzey kapisi (fail-closed) ekle | [`d8df9af`](https://github.com/ali-han-kaya/leibniz2/commit/d8df9af) |
 | 2026-10-18 | other | prisma(trend-db): migration dizinini ve README'yi ekle | [`45838d9`](https://github.com/ali-han-kaya/leibniz2/commit/45838d9) |
 | 2026-10-16 | build | (docker) pip ve apt icin cache mount etkinlestir | [`3c92c65`](https://github.com/ali-han-kaya/leibniz2/commit/3c92c65) |
+| 2026-10-21 | feat | add --dry-run flag to load.ts for trend-db history loading | [`3bd5589`](https://github.com/ali-han-kaya/leibniz2/commit/3bd5589) |
 
 ### Regresyon notları
 
