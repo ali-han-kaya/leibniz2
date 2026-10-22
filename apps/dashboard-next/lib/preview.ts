@@ -18,9 +18,13 @@ export type Latest = {
   p0?: number;
   p1?: number;
   stripped_sha256?: string;
+  z3_passed?: number;
+  z3_total?: number;
+  z3_failed?: number;
   z3?: { pass?: number; total?: number };
   budget_usd?: number;
   budget_limit?: number;
+  layers?: Record<string, unknown>;
 };
 
 export type TrendRow = {
@@ -30,6 +34,16 @@ export type TrendRow = {
   duration_s?: number;
   budget_usd?: number;
   z3_total?: number;
+};
+
+export type LayersResult = {
+  ok: boolean;
+  source: string;
+  reason?: string;
+  ts?: string;
+  verdict?: string;
+  layers?: Record<string, unknown>;
+  findings?: any[];
 };
 
 async function getJson<T>(path: string): Promise<T> {
@@ -53,6 +67,11 @@ export const getTrend = cache(
     getJson<{ history: TrendRow[] }>(`/api/trend?limit=${limit}`)
 );
 
+export const getTrendBundle = cache(
+  (limit = 20): Promise<{ history: TrendRow[]; refs: RefsRow[]; compare: CompareRow[] }> =>
+    getJson<{ history: TrendRow[]; refs: RefsRow[]; compare: CompareRow[] }>(`/api/trend?limit=${limit}`)
+);
+
 // Yaşam-döngüsü olay-kaydı (logs/server_events.jsonl) — bkz.
 // docs/SERVER_EVENT_LOG.md. `phase` pano için DEĞİL, sunucuda türetilir:
 // çökme kararı pid'ler arası sıraya bakar, tümevarım tek yerde yaşar
@@ -63,6 +82,42 @@ export type LifecyclePhase =
   | 'graceful'
   | 'crash'
   | 'unknown';
+
+// Layers — /api/latest.layers verisi.
+export const getLayers = cache(
+  (): Promise<{ ok: boolean; reason?: string; verdict?: string; layers: Record<string, unknown>; findings: any[]; source: string; ts?: string }> =>
+    getJson<{ ok: boolean; reason?: string; verdict?: string; layers: Record<string, unknown>; findings: any[]; source: string; ts?: string }>('/api/latest/layers')
+);
+
+export type CompareRow = {
+  ts: string;
+  duration_s?: number;
+  budget_usd?: number;
+  budget?: number | null;
+  budget_limit?: number | null;
+  p0: number;
+  p1: number;
+  z3?: number | null;
+  z3_total?: number;
+  verdict: string | null;
+};
+
+export type RefsRow = {
+  ts: string;
+  refs_verified: number | undefined;
+  refs_total: number | undefined;
+  refs_mismatch?: number;
+  refs?: Record<string, string>;
+  refs_by_source?: unknown;
+};
+
+// Kaynak seçimi: TREND_SOURCE (db | preview) değerini döndürür.
+export const trendSource = (): "db" | "preview" => {
+  const source = process.env.TREND_SOURCE ?? (typeof process.env.DATABASE_URL !== "undefined" && process.env.DATABASE_URL ? "db" : "preview");
+  return ([
+    "db", "preview"
+  ].includes(source) ? source : "preview") as "db" | "preview";
+};
 
 export type ServerEvent = {
   ts?: string;

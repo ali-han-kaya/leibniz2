@@ -1293,6 +1293,8 @@ def _route(path):
         return "health"
     if p == "/api/stop":
         return "stop"
+    if p == "/api/mobile-status":
+        return "mobile_status"
     if p.startswith("/slides_z3/"):
         return "slides"
     return None
@@ -1425,6 +1427,8 @@ class Handler(BaseHTTPRequestHandler):
             self.serve_run_stdout()
         elif route == "health":
             self._send(200, "ok")
+        elif route == "mobile_status":
+            self._send(200, json.dumps({"status": "ok", "message": "Mobile surface is operational"}))
         elif route == "slides":
             self.serve_slides()
         elif route is None and urllib.parse.urlparse(self.path).path.startswith("/api/"):
@@ -1439,6 +1443,8 @@ class Handler(BaseHTTPRequestHandler):
             self.trigger_run_now()
         elif self.path.startswith("/api/stop"):
             self.stop_server()
+        elif self.path == "/api/mobile-status":
+            self._reject_method()
         else:
             status, payload = api_error(404, "not found")
             self._send(status, json.dumps(payload),

@@ -909,7 +909,34 @@ jobs:
   # Job kendi action'larını da denetler (checkout/setup-python/upload-artifact
   # dahil) — self-checking. `needs` yok: verify ile PARALEL koşar, böylece
   # deprecated action hatası ~11 dk'lık verify'ı beklemeden erken görünür.
-  # ──────────────────────────────────────────────────────────────────────
+  # ──────────────────────────────────────────────────────────────────────  verify-k-chain:
+    name: "Delivery verification — K1-K19 (full K-layer sweep)"
+    runs-on: "ubuntu-latest"
+    timeout-minutes: "60"
+    steps:
+      - name: Quarantine and cleanup
+        run: |
+          set -euo pipefail
+          # Clean up any leftover verification artifacts
+          rm -f logs/latex_surface_findings.json
+          rm -f budget_verify.json
+          rm -f effective_config.json
+          rm -f references_online.json
+          rm -f history.jsonl
+          rm -f k0_findings.json
+          rm -f lineage_findings.json
+          rm -f klayers.json
+          # Remove temporary files from verification run
+          rm -f /tmp/actionlint*
+          # Clean up any cache artifacts
+          rm -rf ~/.cache/pip/*
+          echo "Quarantine and cleanup complete"
+      - name: Check LaTeX surface (fail-closed)
+      - name: Install pdfinfo (poppler-utils) + qpdf (K6-DETERM)
+      - name: Install Z3 (K8)
+      - name: Install Lean 4 (K9)
+      - name: Run full verification (K1-K19, single entry point)
+
   lake-proof:
     name: K9 Lake proof (Lean 4.14.0)
     runs-on: ubuntu-latest

@@ -4546,7 +4546,7 @@ def main():
     ap.add_argument("--klayers-out", default=None,
                     help="K-katman (K0-K14) PASS/FAIL/SKIP özetini ayrı bir JSON'a "
                          "yaz — verify job'unun run summary'sinde K1-K10 bölümlerini "
-                         "üretmek için")
+                         "üretmek için. Varsayılan: preview_server.py'nin klayers.json ")
     ap.add_argument("--history-out", default=None,
                     help="Run özetini JSONL kaydı olarak yaz (preview_server.py "
                          "history.jsonl formatıyla birebir) — CI'da verify sonrası "
@@ -5730,22 +5730,22 @@ def main():
     # ---- K-katman özeti sidecar (run summary için) ----
     # findings tek kaynağından K0-K17'nin PASS/FAIL/SKIP durumunu türetir;
     # verify job'unun GITHUB_STEP_SUMMARY'sinde K1-K10 bölümlerini üretmek
-    # için run_summary_klayers.py tarafından okunur.
-    if args.klayers_out:
-        try:
-            klayers = build_layers_summary(args, findings)
-            klayers_payload = json.dumps(
-                {"verdict": verdict,
-                 "counts": {"P0": p0, "P1": p1},
-                 "layers": klayers},
-                indent=2, ensure_ascii=False)
-            _write_atomic(args.klayers_out, klayers_payload)
-            if not args.json:
-                print(f"[SUMMARY] K-katman özeti yazıldı: {args.klayers_out} "
-                      f"({sum(1 for l in klayers.values() if l['status'] == 'FAIL')} FAIL)")
-        except OSError as e:
-            add("P1", "SUMMARY-OUT", "Summary sidecar",
-                f"yazılamadı: {args.klayers_out}", str(e))
+    # Klayers out yolu: args'dan veya preview varsayılanı
+    klayers_out = args.klayers_out or os.path.join(os.path.expanduser("~/Library/Caches/com.freebuff/preview"), "klayers.json")
+    try:
+        klayers = build_layers_summary(args, findings)
+        klayers_payload = json.dumps(
+            {"verdict": verdict,
+             "counts": {"P0": p0, "P1": p1},
+             "layers": klayers},
+            indent=2, ensure_ascii=False)
+        _write_atomic(klayers_out, klayers_payload)
+        if not args.json:
+            print(f"[SUMMARY] K-katman özeti yazıldı: {klayers_out} "
+                  f"({sum(1 for l in klayers.values() if l['status'] == 'FAIL')} FAIL)")
+    except OSError as e:
+        add("P1", "SUMMARY-OUT", "Summary sidecar",
+            f"yazılamadı: {klayers_out}", str(e))
 
     # CLI override uyarıları + bütçe özeti: HER İKİ modda da dashboard'un
     # canlı akışına gider. --json modunda stdout yalnızca JSON olmalı; bu

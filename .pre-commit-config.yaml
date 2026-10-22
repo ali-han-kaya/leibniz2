@@ -633,6 +633,21 @@ repos:
         stages: [pre-commit]
         verbose: true
 
+      - id: check-recovery-patches-index
+        name: "Verify recovery_patches INDEX integrity"
+        description: >-
+          check_recovery_patches_index.py — _calisma/CIKTI/recovery_patches_INDEX.json
+          SHA-256 fingerprints ve affected-files mapping'ini denetler.
+          Drift: SHA-256 çamurları veya dosya kaydı tutarsızlığı.
+          Fail-closed (--strict): bayatlıkta exit 1; advisory modda uyarı,
+          commit bloke edilmez.
+        entry: python3 _calisma/CIKTI/check_recovery_patches_index.py
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
       - id: verify-delivery-github-scripts
         name: "Verify github-scripts self-test (K16, fail-closed)"
         description: >-

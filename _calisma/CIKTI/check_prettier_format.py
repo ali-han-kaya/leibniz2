@@ -30,7 +30,7 @@ REPO = Path(__file__).resolve().parent.parent.parent
 PRETTIER = REPO / "apps" / "dashboard-next" / "node_modules" / ".bin" / "prettier"
 
 # Hook `files: \.(js|jsx|ts|tsx|json)$` sözleşmesi + package-lock exclude.
-_SUFFIXES = (".js", ".jsx", ".ts", ".tsx", ".json")
+_SUFFIXES = (".js", ".jsx", ".ts", ".tsx", ".json", ".mjs")
 
 
 def matches_glob(path):

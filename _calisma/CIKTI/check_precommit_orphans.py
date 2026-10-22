@@ -20,6 +20,7 @@ Sözleşme (tdd turu, seam = kapı CLI'si):
 import hashlib
 import os
 import pathlib
+import shutil
 import sys
 import time
 
@@ -33,6 +34,10 @@ def cache_dir() -> pathlib.Path:
 
 
 def main() -> int:
+    recover = "--recover" in sys.argv
+    argv = [a for a in sys.argv if a != "--recover"]
+    sys.argv = argv
+
     base = cache_dir()
     now = time.time()
     orphans = []
@@ -43,6 +48,7 @@ def main() -> int:
                 orphans.append((p, age_h))
 
     if not orphans:
+        print("No orphan patches found.")
         return 0
 
     # Bilinen-olay parmak-izleri: arşivdeki patch'lerin sha256'sı ile
@@ -52,22 +58,59 @@ def main() -> int:
         for a in ARCHIVE.glob("patch*"):
             known[hashlib.sha256(a.read_bytes()).hexdigest()] = a.name
 
-    print("PRE-COMMIT PATCH ORPHANS (kurtarma-penceresi dışı kalıntı):")
-    for p, age_h in sorted(orphans, key=lambda x: -x[1]):
-        print(f"  {p.name}: {age_h:.1f}h eski")
-        h = hashlib.sha256(p.read_bytes()).hexdigest()
-        if h in known:
-            print(
-                f"    KNOWN-INCIDENT: içerik {known[h]} ile birebir aynı "
-                "(2026-09-18 revert olayı). Kurtarma: `git apply <patch>` "
-                f"ile geri-uygula (arsiv: {ARCHIVE})."
-            )
-    print(
-        "recovery: her patch, bir koşumun unstaged deltasidir (revert-olayi "
-        "kanitidir, dis-aktor degil). Gerekmiyorsa sil; olay-arsivi icin "
-        "_calisma/CIKTI/recovery_patches_20260918/ desenini izle."
-    )
-    return 1
+    if recover:
+        # --recover modu: yetimleri validate et, recoverable'ları arşivle
+        print("PRE-COMMIT PATCH RECOVERY MODE:")
+        recovered = 0
+        unrecoverable = []
+        for p, age_h in sorted(orphans, key=lambda x: -x[1]):
+            print(f"  Processing {p.name}: {age_h:.1f}h eski")
+            h = hashlib.sha256(p.read_bytes()).hexdigest()
+            if h in known:
+                # Bilişincan eşleşme: otomatik olarak arşivle
+                archive_path = ARCHIVE / p.name
+                shutil.copy2(str(p), str(archive_path))
+                print(
+                    f"    RECOVERED: içerik {known[h]} ile birebir aynı -- "
+                    f"arsivlenmiştir: {archive_path}"
+                )
+                recovered += 1
+            else:
+                unrecoverable.append((p, age_h, h))
+                print(
+                    f"    UNRECOVERABLE: içerik NEW/changed -- "
+                    f"cannot auto-archive, investigate manually."
+                )
+        print(
+            f"Recovery complete: {recovered} recovered, "
+            f"{len(unrecoverable)} unrecoverable."
+        )
+        if unrecoverable:
+            return 1
+        return 0
+    else:
+        # Normal mod: sadece raporla
+        print("PRE-COMMIT PATCH ORPHANS (kurtarma-penceresi dışı kalıntı):")
+        for p, age_h in sorted(orphans, key=lambda x: -x[1]):
+            print(f"  {p.name}: {age_h:.1f}h eski")
+            h = hashlib.sha256(p.read_bytes()).hexdigest()
+            if h in known:
+                print(
+                    f"    KNOWN-INCIDENT: içerik {known[h]} ile birebir aynı "
+                    "(2026-09-18 revert olayı). Kurtarma: `git apply <patch>` "
+                    f"ile geri-uygula (arsiv: {ARCHIVE})."
+                )
+            else:
+                print(
+                    f"    UNKNOWN: içerik NOT in archive -- "
+                    "investigate manually if needed."
+                )
+        print(
+            "recovery: her patch, bir koşumun unstaged deltasidir (revert-olayi "
+            "kanitidir, dis-aktor degil). Gerekmiyorsa sil; olay-arsivi icin "
+            "_calisma/CIKTI/recovery_patches_20260918/ desenini izle."
+        )
+        return 1
 
 
 if __name__ == "__main__":

@@ -2,6 +2,7 @@
 <html lang="tr">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
@@ -404,6 +405,22 @@ code { border-radius: 2px; }
 </style>
 </head>
 <body>
+
+/* ==== MOBILE SAFE-AREA & 44PT TOUCH TARGET ADDED 2026-10-04 ==== */
+/* Safe-area padding via CSS env() — applies when browser supports it */
+@supports (padding: env(safe-area-inset-top)) {
+  html { padding-top: env(safe-area-inset-top);
+         padding-bottom: env(safe-area-inset-bottom);
+         padding-left: env(safe-area-inset-left);
+         padding-right: env(safe-area-inset-right); }
+  body { margin: 0; min-height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+         min-width: calc(100vw - env(safe-area-inset-left) - env(safe-area-inset-right)); }
+}
+/* Minimum 44px touch target: buttons, nav controls, and interactive badges */
+button, [role="button"], .badge, .z3-tab, .rh-filter button { min-height: 44px; min-width: 44px; }
+.touch-min { min-height: 44px; min-width: 44px; }
+/* Prevent iOS bounce scrolling on main content */
+main { overflow-scrolling: touch; }
 <header class="masthead">
   <div class="header-decor" aria-hidden="true"></div>
   <div style="flex:1 1 300px;min-width:0">

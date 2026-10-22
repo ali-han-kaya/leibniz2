@@ -265,6 +265,16 @@ def classify_violations(axe_results, cfg, page_path=None):
 
     for v in axe_results.get("violations", []):
         impact = v.get("impact")
+        # touch-target-size çakışmaz: 44pt minimum dokunsal hedef ASOS kuralı
+        # fail-closed: touch-target-size her zaman blocking, allowlist'e maruz kalmaz
+        if v.get("id") == "touch-target-size":
+            level = "blocking"
+            row = {"rule": v.get("id", "?"), "impact": impact,
+                   "level": level, "nodes": len(v.get("nodes", []))}
+            if "reasons" in v:
+                row["reasons"] = v["reasons"]
+            rows.append(row)
+            continue
         reasons, remaining = _allowlisted_nodes(v, cfg["allowlist"], page_path)
         if remaining == 0 and reasons:
             rows.append({"rule": v.get("id", "?"), "impact": impact,

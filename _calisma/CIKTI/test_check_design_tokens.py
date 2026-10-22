@@ -6,6 +6,7 @@ Contracts:
 - tokens.css :root + light block mirror tokens.json (tints included)
 - check_tokens.py is ~0.05s and stdlib-only
 """
+
 import pathlib
 import re
 import shutil
@@ -20,12 +21,10 @@ HTML = REPO / "_calisma" / "CIKTI" / "preview.html"
 CSS = REPO / "design-system" / "tokens.css"
 SCRIPT = REPO / "design-system" / "scripts" / "check_tokens.py"
 
-
 def run_check_copy(tmp_script: pathlib.Path):
     return subprocess.run(
         [sys.executable, str(tmp_script)],
         capture_output=True, text=True, timeout=10)
-
 
 def _tmp_repo() -> pathlib.Path:
     td = pathlib.Path(tempfile.mkdtemp())
@@ -51,7 +50,7 @@ class TestDesignTokensGate(unittest.TestCase):
         td = _tmp_repo()
         try:
             tmp_script = td / "design-system" / "scripts" / "check_tokens.py"
-            drift_html = text.replace("<style>", "<style>\n  :root { --bg: #000; }", 1)
+            drift_html = text.replace("<style>", "<style\n  :root { --bg: #000; }", 1)
             (td / "_calisma" / "CIKTI" / "preview.html").write_text(drift_html, encoding="utf-8")
             r = run_check_copy(tmp_script)
             self.assertNotEqual(r.returncode, 0)
@@ -102,6 +101,36 @@ class TestDesignTokensGate(unittest.TestCase):
         text = HTML.read_text(encoding="utf-8")
         self.assertNotRegex(text, r"<style>.*?:root\s*\{[^}]*--bg", msg="inline :root --bg shadows import")
         self.assertIn("design-system/tokens.css", text)
+
+    # NEW CONTRACT 6b: dashboard-next globals.css must import tailwindcss
+    # before the design-system bridge import (no shadowing/reordering)
+    def test_dashboard_next_tailwind_before_bridge(self):
+        # Run the base check first to ensure repo passes
+        r = subprocess.run([sys.executable, str(SCRIPT)], capture_output=True, text=True, timeout=10)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("OK", r.stdout)
+
+        # Now verify the import ordering constraint
+        next_globals = REPO / "apps" / "dashboard-next" / "app" / "globals.css"
+        self.assertTrue(next_globals.exists(), "globals.css should exist")
+        next_text = next_globals.read_text(encoding="utf-8")
+
+        # Find the tailwindcss import and the design-system/tailwind.css import
+        tailwind_import = re.search(r'@import\s+"[^"]*tailwindcss"', next_text)
+        bridge_import = re.search(r'@import\s+"[^"]*design-system/tailwind\.css"', next_text)
+
+        # Both imports must be present
+        self.assertIsNotNone(tailwind_import,
+            "dashboard-next/app/globals.css must import tailwindcss first")
+        self.assertIsNotNone(bridge_import,
+            "dashboard-next/app/globals.css must import design-system/tailwind.css")
+
+        # tailwindcss import must come BEFORE design-system/tailwind.css import
+        tailwind_pos = tailwind_import.start()
+        bridge_pos = bridge_import.start()
+        self.assertLess(tailwind_pos, bridge_pos,
+            "tailwindcss import must precede design-system/tailwind.css import "
+            "in dashboard-next/app/globals.css (no shadowing/reordering)")
 
 
 if __name__ == "__main__":
