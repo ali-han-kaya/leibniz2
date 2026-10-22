@@ -77,3 +77,6 @@ apps/dashboard-next/.next/
 # (sonu '/' olmayan kural: node_modules SYMLINK'i de yakalar —
 # 'beyond a symbolic link' tuzaği, 2026-10-09)
 node_modules
+progress.md
+queue_tam.md
+ARSIV-leibniz2/
