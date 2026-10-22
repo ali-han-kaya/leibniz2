@@ -548,3 +548,28 @@ machine-state and can drift.
   `~/.pinokio`.** The skill's literal `~/.pinokio/bin/...` paths do not exist;
   following them verbatim yields a false "pterm unavailable". `access.host`
   (192.168.2.227) was stale — EHOSTUNREACH while pterm itself worked fine.
+
+## Pre-Ref Check — source ref availability
+
+- Target: nonexistent_branch (SHA: nonexistent_branch)
+- Local branches with commits outside target: 65
+- Status: BRANCHES_LISTED (use the branch with most commits outside target)
+- Recommended: Use the first branch listed (most commits outside target)
+## Pre-Ref Check — source ref availability
+
+- Target: main (SHA: 5e6ea1bf71b6caf767b349c6b7cd3294bd690624)
+- Local branches with commits outside target: 64
+- Status: BRANCHES_LISTED (use the branch with most commits outside target)
+- Recommended: Use the first branch listed (most commits outside target)
+## Pre-Ref Check — source ref availability
+
+- Target: nonexistent (SHA: nonexistent)
+- Local branches with commits outside target: 65
+- Status: BRANCHES_LISTED (use the branch with most commits outside target)
+- Recommended: Use the first branch listed (most commits outside target)
+## Pre-Ref Check — source ref availability
+
+- Target: main (SHA: 5e6ea1bf71b6caf767b349c6b7cd3294bd690624)
+- Local branches with commits outside target: 64
+- Status: BRANCHES_LISTED (use the branch with most commits outside target)
+- Recommended: Use the first branch listed (most commits outside target)
