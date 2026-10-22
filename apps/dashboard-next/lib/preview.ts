@@ -49,8 +49,8 @@ export const getLatest = cache(
 );
 
 export const getTrend = cache(
-  (limit = 20): Promise<{ history: TrendRow[] }> =>
-    getJson<{ history: TrendRow[] }>(`/api/trend?limit=${limit}`)
+  (limit = 20): Promise<{ history: TrendRow[]; window: number }> =>
+    getJson<{ history: TrendRow[]; window: number }>(`/api/trend?limit=${limit}`)
 );
 
 // Yaşam-döngüsü olay-kaydı (logs/server_events.jsonl) — bkz.

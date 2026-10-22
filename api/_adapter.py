@@ -144,10 +144,35 @@ def api_run_history():
 
 
 def api_trend():
-    """Yerel serve_trend birebir: history + refs_trend tek round-trip;
-    git-dışı veri yokken yerel dosya-yok fallback'i (aynı şekil)."""
+    """Yerel serve_trend birebir: history + refs_trend tek round-trip.
+
+    ?limit=N sorgusu uygulanır: sadece son N kayıt döner.
+    limit yoksa full-list sözleşmesi korunur (tüm history).
+    ?fields=ts,p0,p1,duration_s,z3_total,budget_usd,budget_limit sorgusu:
+        sadece istenen alanlar döner; dashboard render eder sadece bunlar.
+    """
+    limit = None
+    # ?limit=N query param'ini parse et
+    path = os.environ.get("REQUEST_URI", "")
+    m = re.search(r"[?&]limit=(\d+)", path)
+    if m:
+        limit = int(m.group(1))
+    
+    # ?fields=... query param'ini parse et
+    fields = None
+    m2 = re.search(r"[?&]fields=([^&]+)", path)
+    if m2:
+        fields = [f.strip() for f in m2.group(1).split(",")]
+    
     history = [_project_history_record(rec) for rec in load_history()
                if isinstance(rec, dict)]
+    # limit uygulanırsa son N kaydı al
+    if limit is not None:
+        history = history[-limit:]
+    # fields filtresi: sadece istenen alanlar
+    if fields:
+        field_set = set(fields)
+        history = [_filter_history_row(rec, field_set) for rec in history]
     refs_path = os.path.join(REPO_ROOT, "_calisma/CIKTI/refs_trend.json")
     if not os.path.isfile(refs_path):
         refs_trend = {"rows": [], "duration_budget": {"rows": []}}
@@ -159,6 +184,19 @@ def api_trend():
         except (OSError, ValueError):
             refs_trend = {"error": "refs trend unavailable"}
     return jresp({"history": history, "refs_trend": refs_trend})
+
+
+def _filter_history_row(rec: dict, field_set: set) -> dict:
+    """Belirtilen field_set'e göre history kaydını filtrele.
+    Sadece istenen alanlar tutulur; eksik alanlar None olur."""
+    result = {}
+    for field in field_set:
+        if field in rec:
+            result[field] = rec[field]
+        else:
+            result[field] = None
+    return result
+
 
 
 def api_determinism_trend():

@@ -18,15 +18,15 @@ const cellVariants = cva('py-2', {
 });
 
 export default async function TrendPage() {
-  const { history } = await getTrend(20);
-  // /api/trend limit'i yok sayar (full-list sözleşmesi) — pencereyi tüketici
-  // kısar: en-yeni 20, en-yeni üstte ("Son 20 Koşum" başlık-sözleşmesi).
-  const rows = history.slice(-20).reverse();
+  const { history, window } = await getTrend(20);
+  // ?limit=N uygulanırsa son N kaydı al; aksi sürde full-list sözleşmesi
+  // korunur. Pencereyi etiketle: "Son N Koşum".
+  const rows = history.slice(-window).reverse();
 
   return (
     <section className="rounded-lg border border-border bg-surface p-6">
       <h2 className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted">
-        Son 20 Koşum
+        Son {window} Koşum
       </h2>
       {history.length === 0 ? (
         <p className="mt-4 text-sm text-muted">
