@@ -2188,6 +2188,8 @@ def main():
                     help="verify_delivery.py'nin bulunduğu dizin")
     ap.add_argument("--preview-dir", default=DEFAULT_PREVIEW_DIR,
                     help="preview.html'ın bulunduğu dizin (TCC-safe olmalı)")
+    ap.add_argument("--runtime-dir", default=None,
+                    help="sunucunun YAZDIĞI dosyaların kökü (history.jsonl, runs/, logs/, klayers.json, trend_sync.json); varsayılan --preview-dir ile aynı. Okuma yolları --preview-dir'den servis edilmeye devam eder — testler gerçek paketi okurken yazımı geçici")
     ap.add_argument("--port", type=int, default=8000)
     ap.add_argument("--bind", default="127.0.0.1")
     ap.add_argument("--interval", type=int, default=60,
@@ -2199,9 +2201,20 @@ def main():
 
     PREVIEW_DIR = os.path.abspath(args.preview_dir)
     VERIFY_DIR = os.path.abspath(args.dir)
-    HISTORY_PATH = os.path.join(PREVIEW_DIR, "history.jsonl")
-    RUNS_DIR = os.path.join(PREVIEW_DIR, "runs")
-    SERVER_EVENTS_PATH = os.path.join(PREVIEW_DIR, "logs",
+    # Yazım kökü: --runtime-dir verilmediyse PREVIEW_DIR (üretim davranışı
+    # DEĞİŞMEZ). Fail-closed: dizin oluşturulamıyorsa sessizce yazmaya
+    # çalışmak yerine başlatmayı reddet — yanlış yola yazan bir sunucu
+    # "çalışıyor" görünüp kanıtı ağaca bırakırdı.
+    RUNTIME_DIR = os.path.abspath(args.runtime_dir or args.preview_dir)
+    try:
+        os.makedirs(RUNTIME_DIR, exist_ok=True)
+    except OSError as exc:
+        print("HATA: runtime-dir oluşturulamadı: %s (%s)"
+              % (RUNTIME_DIR, exc), file=sys.stderr)
+        sys.exit(2)
+    HISTORY_PATH = os.path.join(RUNTIME_DIR, "history.jsonl")
+    RUNS_DIR = os.path.join(RUNTIME_DIR, "runs")
+    SERVER_EVENTS_PATH = os.path.join(RUNTIME_DIR, "logs",
                                       "server_events.jsonl")
     RUN_LOG_MAX = args.replay_runs
     # refs-trend.json: CI artifact'ı repo kökünde (refs-trend/refs-trend.json);
