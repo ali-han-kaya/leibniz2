@@ -1,3 +1,5 @@
+.freebuff/*
+!.freebuff/project-id
 # Oynatma sırasında değişen yapay ürünler (derlenmeleri tekrar üretebilir)
 _calisma/architecture_deepening_deck/
 _calisma/pdf_repro_findings_deck/
