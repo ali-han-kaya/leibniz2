@@ -70,6 +70,10 @@ GATE_SCRIPTS = (
     # sagligi + run-history; fail-closed). Ayni beyaz liste kurali: akis
     # YAML'da yeniden yazilmaz, bu script bir run: adiminda cagrilir.
     "check_vercel_deploy.py",
+    # 2026-10-23: haftalik branch-protection drift kapisi (protection-drift.yml).
+    # Ayni beyaz liste kurali: akis YAML'da yeniden yazilmaz, bu script bir
+    # run: adiminda cagrilir; secret yoksa denetim baslamaz (yanlis-P1 yok).
+    "check_protection_drift.py",
 )
 
 
