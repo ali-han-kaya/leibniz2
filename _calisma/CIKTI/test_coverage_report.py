@@ -74,6 +74,10 @@ HOOK_COVERAGE = {
     "check-skills-index":       ["test_skills_index.py", "test_readme_skills.py"],
     "check-design-tokens":      ["test_check_design_tokens.py"],
     "check-reproducible-pdf-skill": ["test_reproducible_pdf_skill.py"],
+    # verify.yml jobs-map diyagramı tazelik kapısı (üretici --check,
+    # fail-closed): testi tazelik/bayat/ölçüm-imkânsız ayrımını ve config
+    # `files:` teli dört yolu da kapsıyor mu sözleşmesini çiviler.
+    "check-verify-jobs-map":    ["test_check_verify_jobs_map.py"],
     "check-unit-tests": [
         "test_workflow_install_hardening.py",
         "test_verify_refs.py",
@@ -262,6 +266,7 @@ HOOK_COVERAGE = {
         "test_check_vercel_deploy.py",
         "test_dashboard_webkit_smoke.py",
         "test_preview_stream_batching.py",
+        "test_check_verify_jobs_map.py",
     ],
 }
 
