@@ -1,0 +1,46 @@
+# .prettierignore — Prettier kapsamı Dışı (kod/veri ayrımı)
+#
+# Gerekçe: Prettier KAYNAK KODU biçimlendirir, üretilmiş/çıkarılmış VERİYİ
+# değil. Aşağıdaki desenler bilinçli muafiyettir; her biri ölçülmüştür.
+#
+# Kapsam dışı bırakılan dosyalar `check-prettier-format-all` (--all) ve
+# normal `check-prettier-format` kapılarının BİRİSİNDE de denetlenmez.
+
+# --- Üçüncü taraf, minified dağıtım ---------------------------------------
+# axe v4.10.3 — © 2015-2025 Deque Systems, MPL-2.0. Satın alınmış minified
+# dağıtım; prettier ile biçimlenince 553.446 -> 1.022.724 bayta çıkar
+# (ölçüm, prettier 3.6.2) ve diff insan tarafından okunamaz olur. Kaynak
+# haritası upstream'te kalır; yeniden üretim `vendor/README.md` yoludur.
+_calisma/CIKTI/vendor/
+
+# --- Makine çıkarımı VERİ anlık görüntüleri -------------------------------
+# design-system/vercel/*.json vercel.com'dan `dembrandt` çıkarıcısıyla alınmış
+# ham token anlık görüntüsüdür ("source": {"url": ..., "extractor":
+# "dembrandt"}). Kaynak kod DEĞİLDİR: yeniden biçimlemek ölçüm değerlerini
+# değiştirmez, yalnızca çıkarım çıktısını gürültüyle bozar. Doğrulama
+# check_primer_tokens.py / check_linear_tokens.py / check_stripe_tokens.py
+# ile değer üzerinden yapılır.
+design-system/vercel/
+
+# --- Yama aracının SAHİBİ olduğu çalışma-zamanı varlığı -------------------
+# _calisma/CIKTI/preview.js dashboard'ın çalışma-zamanı betiğidir ve
+# determinism_trend_badge.py --update-preview tarafından idempotent olarak
+# yamalanır. Patcher çift tırnaklı JS üretir ($("det-trend-badge")),
+# .prettierrc ise singleQuote: true ister — ölçülen çatışma: prettier
+# --write sonrası patcher yeniden yamalar ve kapı tekrar FAIL eder
+# (bidirectional tug-of-war). Metnin biçimini üreten araç patcher'dır;
+# prettier metne dokunmamalıdır. _patch_once çapaları (`function
+# loadOverrideTrend() {`) biçimlemede sağ kalır (ölçüldü), yani asıl
+# kırılma çapada değil tırnak kuralındadır.
+_calisma/CIKTI/preview.js
+
+# --- Bağımlılık kilitleri ---------------------------------------------------
+# Üretilmiş kilit dosyaları; hook `exclude` sözleşmesiyle de zaten dışarıda
+# ama --all taramasında da açıkça dışlanır.
+package-lock.json
+
+# --- Derleme/üretim ağaçları ----------------------------------------------
+node_modules/
+.next/
+dist/
+build/

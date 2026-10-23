@@ -19,7 +19,15 @@ RUNTIME_REQUIRED = (
     "run_summary_lineage.py", "run_summary_precommit.py", "run_summary_refs_trend.py",
     "consolidate_summary.py",
 )
-PREVIEW_RUNTIME = ("preview_server.py", "_daemonize.py", "preview_prestart.py", "sw.js")
+# precommit_log.py: preview_server.py bu modülü import eder (hook raporu
+# seam'i). PREVIEW_MIRROR'da bulunmazsa launchd/TCC rotası dashboard'u
+# servis etmeden ModuleNotFoundError ile düşer.
+# determinism_trend_badge.py: /api/determinism-trend lazy import (guard
+# yok) — eksikse rota 500 döner. check_pattern_consistency.py: finalize
+# lazy import (guard'lu) — eksikse drift paneli sessizce boşalır.
+PREVIEW_RUNTIME = ("preview_server.py", "_daemonize.py", "preview_prestart.py", "sw.js",
+                   "precommit_log.py", "determinism_trend_badge.py",
+                   "check_pattern_consistency.py")
 GUIDE_REL = "docs/branch-protection-guide/guide.html"
 DOC_REL = "docs/HOOK_ENV_MATRIX.md"
 # design-system token sheet — preview.html /design-system/tokens.css import

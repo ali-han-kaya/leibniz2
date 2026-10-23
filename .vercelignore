@@ -1,0 +1,68 @@
+# Vercel deploy upload/bundle dışlamaları (leibniz2).
+# @vercel/python builder'ı fonksiyon-bundle'ını workPath'ten `**` glob'u ile
+# kurar — git-dışı ağır dizinler (.worktrees, build-artifacts, venv'ler)
+# bundle'a girer ve 250MB Lambda eşiğini aşar (ölçüldü: 397.62MB, 2026-09-23;
+# aynı yapi küçük-izole-depo'da fonksiyon-çıktısı üretti: /tmp/vercel_iso2).
+# API-fonksiyonlarının yalnız gerçek-kaynaklarına ihtiyacı var:
+#   api/*.py, preview_server.py + determinism_trend_badge.py (import),
+#   docs/determinism_trend/determinism_trend.jsonl (canlı-veri).
+# Frontend statik (vercel.json routes — URL ↔ dosya-yolu farklı olanlar
+# route ile köprülenir, aynı-yol olanlar dosyadan doğrudan servis edilir):
+#   / → _calisma/CIKTI/preview.html      (route)
+#   /preview.js                          (route)
+#   /sw.js → _calisma/CIKTI/sw.js        (route — preview.js kaydeder)
+#   /design-system/stripe-theme.css
+#     → design-system/stripe/theme.css   (route — mirror kopya git'te yok)
+#   /slides_z3/* → _calisma/CIKTI/slides_z3/*  (route, $1 yakalama)
+#   /design-system/tokens.css            (route GEREKMEZ — dosya-yolu
+#     URL ile birebir; yalnız dışlama-listesinden hariç tutulmalı).
+# env-dosyaları bundle'a ASLA girmez (sır-disiplini).
+.env.local
+.env*.local
+.env
+.worktrees/
+.worktrees/**
+_calisma/mcp/
+_calisma/mcp/**
+_calisma/pptx/
+_calisma/pptx/**
+_calisma/CIKTI/**
+!_calisma/CIKTI/preview_server.py
+# preview_server import zinciri (module-level): preview_server.py sat.45
+# `import precommit_log` — stdlib-only (json,re); hariç tutulmazsa 3 uc
+# (trend/run-history/determinism-trend) import-hatasiyla 500 alir
+# (olculdu 2026-10-09: FUNCTION_INVOCATION_FAILED, health etkilenmez).
+!_calisma/CIKTI/precommit_log.py
+!_calisma/CIKTI/determinism_trend_badge.py
+!_calisma/CIKTI/preview.html
+!_calisma/CIKTI/preview.js
+!_calisma/CIKTI/sw.js
+!_calisma/CIKTI/slides_z3/
+!_calisma/CIKTI/slides_z3/**
+# Vercel CLI 59.x upload tarayicisi (readdirRecursive): her girisi
+# SLASH'SIZ yol ile `ignore` pkg'sine test eder; dizin "ignored" cikarsa
+# tum alt-agaç prune edilir ve cocuklar hic denenmez. Sonu `/` ile biten
+# dir-only desen slash'siz dizin yoluna ESLESEMEZ (olculdu 2026-10-09,
+# vercel 59.10 + ignore@5): ig.ignores('_calisma/CIKTI/slides_z3') -> true
+# (yanlis-prune -> /slides_z3/* TÜM deploy'larda 404). Slash'siz negasyon
+# dizin dugumunu de kurtarir — ikisi birlikte gereklidir; git
+# check-ignore bunu gormez (o yuzden eski kapiler yeşil kalmisti).
+!_calisma/CIKTI/slides_z3
+_calisma/ALI_KOMUT_TOOLKIT*/
+_calisma/REVIEW/
+apps/
+design-system/*
+!design-system/tokens.css
+!design-system/stripe/
+# ayni dir-prune tuzaği (yukaridaki slides_z3 notu): slash'siz negasyon
+# CLI-deploy'da theme.css'in yuklenebilir olmasini saglar.
+!design-system/stripe
+design-system/stripe/*
+!design-system/stripe/theme.css
+skills/
+infra/
+.github/
+node_modules/
+**/node_modules/**
+**/.venv/
+**/venv/

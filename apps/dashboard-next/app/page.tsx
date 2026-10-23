@@ -1,8 +1,9 @@
-import { Suspense } from "react";
-import VerdictCard from "./VerdictCard";
-import Link from "next/link";
-import { buttonVariants } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { Suspense } from 'react';
+import VerdictCard from './VerdictCard';
+import LifecyclePanel from './LifecyclePanel';
+import Link from 'next/link';
+import { buttonVariants } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 export default function HomePage() {
   return (
@@ -16,17 +17,26 @@ export default function HomePage() {
         <VerdictCard />
       </Suspense>
 
+      {/* Yaşam-döngüsü: çökme/kurtarma kanıtı — kendi Suspense sınırında akar */}
+      <Suspense
+        fallback={
+          <div className="h-44 animate-pulse rounded-lg border border-border bg-surface" />
+        }
+      >
+        <LifecyclePanel />
+      </Suspense>
+
       <p className="text-sm text-muted">
-        Trend görünümü:{" "}
+        Trend görünümü:{' '}
         <Link
-          className={cn(buttonVariants({ variant: "ghost" }), "text-accent")}
+          className={cn(buttonVariants({ variant: 'ghost' }), 'text-accent')}
           href="/trend"
         >
           /trend
-        </Link>{" "}
-        · Canlı pano:{" "}
+        </Link>{' '}
+        · Canlı pano:{' '}
         <a
-          className={cn(buttonVariants({ variant: "ghost" }), "text-accent")}
+          className={cn(buttonVariants({ variant: 'ghost' }), 'text-accent')}
           href="http://127.0.0.1:8000/preview.html"
         >
           preview.html

@@ -57,6 +57,7 @@ def find_launchd_tool(tool, known_paths, path_env=None):
     return None
 
 MARKER_STATUS = "<!-- stoic-hume-v5-pr-status -->"
+MARKER_TRIVY = "<!-- trivy-sarif-pr-comment -->"
 MARKER_MANIFEST = "<!-- stoic-hume-v5-reproducibility-manifest -->"
 MARKER_CFGDIFF = "<!-- stoic-hume-v5-config-diff -->"
 MARKER_DRIFT = "<!-- stoic-hume-v5-config-drift -->"
@@ -101,7 +102,113 @@ def _ctx(issue=1, run=42):
 #   add_labels      [str]|None  issues.addLabels'e geçilen etiketler
 #   remove_labels   [str]|None  issues.removeLabel'e geçilen etiket adları
 #   console_any     [str]       console çıktısında en az birinde geçmeli
+RCA_INPUT = "rca_failures.json"
+
+
+def _rca_report(verdict="blocking", rows=None, run_id=37325226206):
+    """rca_report.py çıktısının JSON biçimi (battery fixture'ı)."""
+    return json.dumps({
+        "run_id": run_id,
+        "workflow": "verify-delivery",
+        "repo": "mock-owner/mock-repo",
+        "verdict": verdict,
+        "required_failures": sum(1 for r in (rows or []) if r["severity"] == "required"),
+        "advisory_failures": sum(1 for r in (rows or []) if r["severity"] == "advisory"),
+        "rows": rows or [],
+    }, ensure_ascii=False)
+
+
+RCA_ROW_REQUIRED = {
+    "job": "Delivery verification — K1-K19 (single entry point)",
+    "conclusion": "failure", "severity": "required", "pattern": "deterministic",
+    "pattern_detail": "8/10 FAIL", "root_cause": "K katmanı kırmızı",
+    "rca_doc": "logs/unit_tests.log",
+    "action": "log'daki FAIL: test_ satırlarını oku",
+    "evidence": REPO_URL + "/actions/runs/37325226206",
+}
+RCA_ROW_ADVISORY = {
+    "job": "Live CI doc↔GitHub sync audit (advisory)",
+    "conclusion": "failure", "severity": "advisory", "pattern": "deterministic",
+    "pattern_detail": "10/10 FAIL",
+    "root_cause": "doc listesi canlıyla eşleşmiyor",
+    "rca_doc": "docs/PUBLISH_SCENARIO.md",
+    "action": "eksik/fazla adı doc'a işle",
+    "evidence": REPO_URL + "/actions/runs/37325226206",
+}
+
+
 SCENARIOS = [
+    # ── rca_comment.js ──────────────────────────────────────────────────────
+    (
+        "rca: zorunlu kırmızı → bloklayan RCA tablosu yorumu oluşur",
+        "rca_comment.js",
+        {RCA_INPUT: _rca_report("blocking", [RCA_ROW_REQUIRED, RCA_ROW_ADVISORY])},
+        None, [], [],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.listComments": 1, "issues.createComment": 1},
+            "body_contains": {"issues.createComment": [
+                "<!-- ci-rca -->",
+                "merge'i **bloklayan** kırmızı",
+                "🔴 required",
+                "🟡 advisory",
+                "Delivery verification",
+                "logs/unit_tests.log",
+            ]},
+            "console_any": ["RCA yorumu oluşturuldu"],
+        },
+    ),
+    (
+        "rca: yalnız advisory kırmızı → merge'i durdurmaz uyarısı",
+        "rca_comment.js",
+        {RCA_INPUT: _rca_report("advisory-only", [RCA_ROW_ADVISORY])},
+        None, [], [],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.createComment": 1},
+            "body_contains": {"issues.createComment": [
+                "yalnız **advisory** kırmızı",
+                "merge'i durdurmaz",
+            ]},
+            "console_any": ["RCA yorumu oluşturuldu"],
+        },
+    ),
+    (
+        "rca: mevcut marker yorumu → upsert (yeni yorum açılmaz)",
+        "rca_comment.js",
+        {RCA_INPUT: _rca_report("blocking", [RCA_ROW_REQUIRED])},
+        None, [], [{"id": 555, "body": "eski" + chr(10) + "<!-- ci-rca -->"}],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.updateComment": 1, "issues.createComment": 0},
+            "target_ids": {"issues.updateComment": [555]},
+            "console_any": ["comment_id=555"],
+        },
+    ),
+    (
+        "rca: düşen job yok → bayat marker yorumu silinir (state-sync)",
+        "rca_comment.js",
+        {RCA_INPUT: _rca_report("clean", [])},
+        None, [], [{"id": 777, "body": "bayat" + chr(10) + "<!-- ci-rca -->"}],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.deleteComment": 1, "issues.createComment": 0},
+            "target_ids": {"issues.deleteComment": [777]},
+            "console_any": ["1 bayat yorum temizlendi"],
+        },
+    ),
+    (
+        "rca: girdi dosyası yok → yorum yok, hata da yok (sessiz geçiş)",
+        "rca_comment.js",
+        {},
+        None, [], [],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.listComments": 1, "issues.createComment": 0},
+            "console_any": ["0 bayat yorum temizlendi"],
+        },
+    ),
+
     # ── pr_status_comment.js ────────────────────────────────────────────────
     (
         "pr_state_sync: bütçe OK + pre-commit temiz + K0/lineage/klayers → yorum yok",
@@ -1305,6 +1412,85 @@ SCENARIOS = [
                             "issues.createComment": 0},
             "target_ids": {"issues.deleteComment": [999]},
             "console_any": ["bayat yorum kaldırıldı"],
+        },
+    ),
+    # ── trivy_sarif_pr_comment.js (docker-security PR koşumu) ──────────────
+    (
+        "trivy: temiz tarama (results: []) → temiz yorum upsert, setFailed yok",
+        "trivy_sarif_pr_comment.js",
+        {"trivy.sarif": json.dumps({
+            "runs": [{"tool": {"driver": {"name": "Trivy",
+                                           "rules": []}},
+                      "results": []}]}),
+         "changed_files.txt": "README.md\n"},
+        None, [],
+        [{"id": 501, "body": "eski " + MARKER_TRIVY}],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.listComments": 1,
+                            "issues.updateComment": 1,
+                            "issues.createComment": 0},
+            "target_ids": {"issues.updateComment": [501]},
+            "body_contains": {"issues.updateComment": [
+                MARKER_TRIVY, "CRITICAL/HIGH bulgu yok"]},
+        },
+    ),
+    (
+        "trivy: CRITICAL bulgu → bulgu-tablosu + setFailed (fail-closed eşik)",
+        "trivy_sarif_pr_comment.js",
+        {"trivy.sarif": json.dumps({
+            "runs": [{"tool": {"driver": {
+                "name": "Trivy",
+                "rules": [{"id": "CVE-2024-0001",
+                           "shortDescription": {"text": "os-pkg vuln"}}]}},
+                "results": [{
+                    "ruleId": "CVE-2024-0001",
+                    "level": "error",
+                    "message": {"text": "libfoo 1.2 has CVE-2024-0001 "
+                                        "(fix: 1.3)"},
+                    "locations": [{"physicalLocation": {
+                        "artifactLocation": {
+                            "uri": "_calisma/CIKTI/base.c"}}}],
+                    "properties": {"severity": "CRITICAL"}}]}]}),
+         "changed_files.txt": "_calisma/CIKTI/base.c\nREADME.md\n"},
+        None, [], [],
+        {
+            "ok": True, "set_failed": True,
+            "call_counts": {"issues.createComment": 1},
+            "body_contains": {"issues.createComment": [
+                MARKER_TRIVY, "CVE-2024-0001", "CRITICAL",
+                "_calisma/CIKTI/base.c", "diff-içi: 1"]},
+        },
+    ),
+    (
+        "trivy: bozuk SARIF (runs boş) → setFailed, yanıltıcı yorum YOK",
+        "trivy_sarif_pr_comment.js",
+        {"trivy.sarif": "{\"runs\": []}"},
+        None, [], [],
+        {
+            "ok": True, "set_failed": True,
+            "call_counts": {"issues.createComment": 0,
+                            "issues.updateComment": 0},
+            "body_contains": {"issues.createComment": []},
+        },
+    ),
+    (
+        "trivy: seviye-yok sonucu default-deny (HIGH muamelesi) → setFailed",
+        "trivy_sarif_pr_comment.js",
+        {"trivy.sarif": json.dumps({
+            "runs": [{"tool": {"driver": {"name": "Trivy", "rules": []}},
+                      "results": [{
+                          "ruleId": "CVE-2024-0002",
+                          "message": {"text": "mystery finding"},
+                          "locations": [{"physicalLocation": {
+                              "artifactLocation": {"uri": "x.c"}}}]}]}]}),
+         "changed_files.txt": ""},
+        None, [], [],
+        {
+            "ok": True, "set_failed": True,
+            "call_counts": {"issues.createComment": 1},
+            "body_contains": {"issues.createComment": [
+                "CVE-2024-0002", "HIGH", "diff-dışı"]},
         },
     ),
 ]
