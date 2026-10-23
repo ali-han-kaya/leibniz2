@@ -312,6 +312,26 @@ class TestCheckRequiredPresence(unittest.TestCase):
                          [("python3-shell", "doc"), ("python3-shell", "live")])
 
 
+class TestRunArtifactsPagination(unittest.TestCase):
+    """gh api sayfa boyutu regresyonu: 30+ artifact'ta kuyruk düşmemeli."""
+
+    def test_requests_paginated_artifact_list(self):
+        # gh api varsayılanı per_page=30; 31. artifact (precheck-report)
+        # --paginate olmadan ilk sayfada gelmez → audit yanlış "eksik" der.
+        seen = {}
+
+        def fake_run_gh(cmd):
+            seen["cmd"] = cmd
+            return "\n".join(f"art-{i}" for i in range(31))
+
+        with mock.patch.object(als, "run_gh", side_effect=fake_run_gh):
+            arts = als.get_run_artifacts("o/r", 42)
+
+        self.assertIn("--paginate", seen["cmd"])
+        self.assertEqual(len(arts), 31)
+        self.assertEqual(arts[-1], "art-30")
+
+
 class TestSkippedUpstreamVsDrift(unittest.TestCase):
     """Yeni kapı: 'job skipped because upstream failed' ≠ true doc↔live drift.
 
