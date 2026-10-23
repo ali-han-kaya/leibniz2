@@ -413,6 +413,29 @@ def persist_history(rec):
         sys.stderr.flush()
 
 
+def drain_writer_lock(timeout=None):
+    """Kapanışta uçuştaki yazımı BİTİR; yenisinin başlamasını engelle.
+
+    `persist_history` history.jsonl ile .sha256 sidecar'ını İKİ ayrı atomik
+    yazımla yazar. SIGTERM tam bu ikisinin ARASINA gelirse diskte
+    yeni-history + eski-sidecar kalır — K15 P1 hash uyuşmazlığı.
+
+    LOCK'u sınırlı süreyle alıp bırakmak aktif yazımın tamamlanmasını
+    bekler; bırakıldığı anda yeni yazım başlayabilir, bu yüzden çağıran
+    taraf (main) bu noktadan önce yeni turu durdurmuş olmalı (stop_event).
+
+    Döner: True = drain edildi (kilit alındı), False = timeout.
+    Timeout'ta bile dönülür: kapanış ASILI KALMAMALI — bozuk disk,
+    asla bitmeyen bir çıkıştan iyidir.
+    """
+    if timeout is None:
+        timeout = REQUEST_TIMEOUT_SECONDS
+    if LOCK.acquire(timeout=timeout):
+        LOCK.release()
+        return True
+    return False
+
+
 def load_cached_latest():
     """Restart sonrası ilk verify döngüsü tamamlanana dek /api/latest'in
     UNKNOWN göstermemesini sağlar: disk'teki en son run kaydını LATEST'e
@@ -2043,14 +2066,10 @@ def main():
         t.join(timeout=REQUEST_TIMEOUT_SECONDS)
         srv.shutdown()
         srv.server_close()
-        # K15 yarışı kapanışı: run'ın son yazım fazı (persist_history) LOCK
-        # altında history.jsonl ve .sha256 sidecar'ını İKİ ayrı atomik yazımla
-        # yazar; daemon-thread çıkışta yarım kalırsa diskte yeni-history +
-        # eski-sidecar kalır (K15 P1: hash uyuşmazlığı — CI'da daemon-http
-        # kırmızısının kök-nedeni). LOCK'u sınırlı süreyle alıp bırakmak:
-        # aktif yazım biter, yeni yazım başlayamaz.
-        if LOCK.acquire(timeout=REQUEST_TIMEOUT_SECONDS):
-            LOCK.release()
+        # K15 yarışı kapanışı: uçuştaki persist_history'nin bitmesini bekle
+        # (history.jsonl yazıldı, .sha256 sidecar yazılmadan çıkılırsa hash
+        # uyuşmazlığı — CI'daki daemon-http kırmızısının kök-nedeni).
+        drain_writer_lock()
 
 
 if __name__ == "__main__":

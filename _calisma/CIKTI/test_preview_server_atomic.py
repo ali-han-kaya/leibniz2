@@ -7,6 +7,7 @@ yazıcı çakışırsa yarı-yazılmış dosyayı hedefe taşır; temizliksiz tm
 kalıntı bırakır.
 """
 
+import hashlib
 import json
 import os
 import pathlib
@@ -14,6 +15,7 @@ import sys
 import tempfile
 import threading
 import unittest
+from unittest import mock
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import preview_server as ps
@@ -185,6 +187,128 @@ class ConcurrentWriteStressTests(unittest.TestCase):
             # Hiçbir .tmp kalıntısı kalmamalı (her yazım unique tmp + replace).
             leftovers = [n for n in os.listdir(td) if n != "hammer.json"]
             self.assertEqual(leftovers, [], f"tmp kalıntısı: {leftovers}")
+
+
+class SigtermMidWriteRegressionTests(unittest.TestCase):
+    """SIGTERM iki-yazım penceresine düşerse K15 hash uyuşmazlığı doğar.
+
+    `persist_history` history.jsonl'i ve .sha256 sidecar'ını İKİ ayrı atomik
+    yazımla üretir. Sinyal tam aralarına gelirse diskte yeni-history +
+    eski-sidecar kalır; verify_delivery --check-history (K15) bunu P1 görür.
+    Kapanış drain'i (`drain_writer_lock`) uçuştaki yazımı bitirip öyle
+    çıkar. Bu sınıf üç yönü pinler:
+
+      1. pencere GERÇEKTEN tutarsız (drain'in neden yük taşıdığı),
+      2. drain uçuştaki yazımı BEKLER (beklemezse test kırmızı),
+      3. drain main()'in kapanış yoluna BAĞLI (tanımlı ama çağrısız olamaz).
+
+    Zamanlama piyangosuna bırakılmaz: `_write_atomic` kapılı bir sarmalayıcıyla
+    değiştirilir, yazıcı thread tam pencerede durdurulur.
+    """
+
+    def setUp(self):
+        self._old_history = ps.HISTORY_PATH
+        self._td = tempfile.TemporaryDirectory()
+        self.addCleanup(self._td.cleanup)
+        ps.HISTORY_PATH = os.path.join(self._td.name, "history.jsonl")
+        self.addCleanup(setattr, ps, "HISTORY_PATH", self._old_history)
+
+    def _sidecar_digest(self):
+        history = pathlib.Path(ps.HISTORY_PATH).read_text(encoding="utf-8")
+        sidecar = pathlib.Path(ps.HISTORY_PATH + ".sha256").read_text(
+            encoding="utf-8")
+        return (history, sidecar,
+                "%s  history.jsonl\n" % hashlib.sha256(
+                    history.encode("utf-8")).hexdigest())
+
+    def _assert_pair_consistent(self):
+        _history, sidecar, expected = self._sidecar_digest()
+        self.assertEqual(sidecar, expected,
+                         "history.jsonl ile .sha256 sidecar uyuşmuyor (K15 P1)")
+
+    def test_window_between_the_two_writes_is_really_inconsistent(self):
+        """Kanıt: pencere gerçek — yalnız history yazılıp çıkılırsa çift bozuk."""
+        ps.persist_history(_rec("2026-01-01T00:00:00Z"))
+        self._assert_pair_consistent()
+        # Yazımın İLK yarısı tamamlandı, sidecar henüz yazılmadı (SIGTERM).
+        history = pathlib.Path(ps.HISTORY_PATH).read_text(encoding="utf-8")
+        ps._write_atomic(ps.HISTORY_PATH,
+                         history + json.dumps(
+                             _rec("2026-01-01T00:00:01Z")) + "\n")
+        _h, sidecar, expected = self._sidecar_digest()
+        self.assertNotEqual(sidecar, expected,
+                            "pencere tutarsız değilse bu test vakum olurdu")
+
+    def test_drain_blocks_until_inflight_persist_finishes(self):
+        ps.persist_history(_rec("2026-01-01T00:00:00Z"))
+        self._assert_pair_consistent()
+
+        history_written = threading.Event()
+        release = threading.Event()
+        real_write = ps._write_atomic
+
+        def gated(path, data, keep_tmp=False):
+            result = real_write(path, data, keep_tmp=keep_tmp)
+            if (os.path.abspath(path) == os.path.abspath(ps.HISTORY_PATH)
+                    and not history_written.is_set()):
+                history_written.set()
+                release.wait(timeout=20)  # SIGTERM burada: sidecar henüz yok
+            return result
+
+        errors = []
+
+        def writer():
+            try:
+                with ps.LOCK:
+                    ps.persist_history(_rec("2026-01-01T00:00:01Z"))
+            except BaseException as exc:  # noqa: BLE001 - thread'e taşınır
+                errors.append(exc)
+
+        drain_done = threading.Event()
+        outcome = {}
+
+        def drain():
+            outcome["drained"] = ps.drain_writer_lock(timeout=20)
+            drain_done.set()
+
+        with mock.patch.object(ps, "_write_atomic", side_effect=gated):
+            w = threading.Thread(target=writer, daemon=True)
+            w.start()
+            self.assertTrue(history_written.wait(timeout=10),
+                            "yazıcı ölçüm penceresine girmedi")
+            d = threading.Thread(target=drain, daemon=True)
+            d.start()
+            try:
+                self.assertFalse(
+                    drain_done.wait(0.3),
+                    "drain, uçuştaki yazımı beklemeden döndü — K15 yarışı "
+                    "açık (sidecar eski kalır)")
+            finally:
+                release.set()
+                w.join(timeout=20)
+                d.join(timeout=20)
+
+        self.assertEqual(errors, [], "yazıcı thread hata verdi: %r" % errors)
+        self.assertFalse(w.is_alive(), "yazıcı thread asılı kaldı")
+        self.assertTrue(drain_done.is_set(), "drain asılı kaldı")
+        self.assertTrue(outcome.get("drained"), "drain kilidi alamadı")
+        self._assert_pair_consistent()
+
+    def test_drain_times_out_instead_of_hanging_shutdown(self):
+        """Kilit hiç bırakılmazsa drain döner: kapanış ASILI KALMAZ."""
+        self.assertTrue(ps.LOCK.acquire(timeout=5))
+        try:
+            self.assertFalse(ps.drain_writer_lock(timeout=0.2),
+                             "kilit tutulurken drain timeout dönmeli")
+        finally:
+            ps.LOCK.release()
+
+    def test_main_calls_the_drain_before_exit(self):
+        src = pathlib.Path(ps.__file__).resolve().read_text(encoding="utf-8")
+        self.assertIn("drain_writer_lock()", src,
+                      "main() kapanışta drain çağırmıyor — regresyon")
+        self.assertGreaterEqual(src.count("drain_writer_lock("), 2,
+                                "drain yalnız tanımlı, çağrısı yok")
 
 
 if __name__ == "__main__":
