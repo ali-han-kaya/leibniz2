@@ -377,6 +377,192 @@ def _write_atomic(path, data, keep_tmp=False):
     return tmp if keep_tmp else None
 
 
+HISTORY_JOURNAL_SUFFIX = ".pending"
+
+
+def _fsync_dir(directory):
+    """Dizin girdisini diske indir (rename'in kalıcı olması için).
+
+    Bazı dosya sistemleri dizinde fsync'i reddeder (EINVAL); bu bir yazım
+    hatası DEĞİLDİR — en iyi çaba, yutulur.
+    """
+    try:
+        fd = os.open(directory, os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(fd)
+    except OSError:
+        pass
+    finally:
+        os.close(fd)
+
+
+def _write_atomic_durable(path, data):
+    """`_write_atomic` + içerik ve dizin fsync'i (yalnız commit journal'ı).
+
+    Hard-kill protokolünde journal, history'den ÖNCE kalıcı olmalı: aksi
+    hâlde güç kaybında "yeni history ama journal yok" durumu doğar ve
+    yarısı yazılmış commit kanıtsız kalır. history/sidecar için fsync'e
+    gerek yok — süreç ölümünde page cache yaşar; güç kaybında ise ya eski
+    çift ya da journal'ın tarif ettiği çift görülür.
+    """
+    directory = os.path.dirname(os.path.abspath(path)) or "."
+    fd, tmp = tempfile.mkstemp(dir=directory,
+                               prefix=os.path.basename(path) + ".tmp.")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(data)
+            f.flush()
+            try:
+                os.fsync(f.fileno())
+            except OSError:
+                # Bazı dosya sistemleri fsync'i reddeder; kalıcılık zayıflar
+                # ama yazım engellenmez (best-effort, journal yine atomik).
+                pass
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+    _fsync_dir(directory)
+
+
+def _sha256_file(path):
+    """Dosyanın SHA-256'sı; yoksa/okunamıyorsa None."""
+    try:
+        h = hashlib.sha256()
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(65536), b""):
+                h.update(chunk)
+        return h.hexdigest()
+    except OSError:
+        return None
+
+
+def _read_sidecar_digest(history_path):
+    """`.sha256` sidecar'ının ilk token'ı (hex); yoksa/bozuksa None."""
+    try:
+        with open(history_path + ".sha256", encoding="utf-8") as f:
+            raw = f.read().strip()
+    except OSError:
+        return None
+    first = raw.split()[0] if raw else ""
+    return first.lower() if len(first) == 64 else None
+
+
+def reconcile_history_pair(history_path=None):
+    """SIGKILL penceresini commit-journal'ından onar (çağıran LOCK tutmalı).
+
+    `persist_history` history.jsonl'i ve sidecar'ı iki ayrı atomik yazımla
+    üretir; iki dosyalı bir yayında bu pencere POSIX'te kapatılamaz (tek
+    rename iki dosyayı birlikte değiştiremez). Bu yüzden pencere KAYIT
+    altına alınır: journal, history yayınından ÖNCE kalıcı yazılır ve
+    sidecar yayınından SONRA silinir. Yarıda ölen her süreç geride
+    "hangi geçişin uçuşta olduğunu" KANITLAYAN bir journal bırakır.
+
+    Fail-closed sınır: onarım YALNIZ journal'daki digest'lerden biri
+    diskteki history ile birebir eşleşiyorsa yapılır. Journal yoksa ya da
+    digest'ler tutmuyorsa (başka yazıcı: backfill / fetch_live_data.sh)
+    dosyalara DOKUNULMAZ — K15 kararı verir. Böylece bu fonksiyon
+    "history'yi kim değiştirdi" denetimini zayıflatmaz.
+
+    Durumlar:
+      absent   — journal yok (temiz kapanış / hiç yazım olmadı)
+      clean    — journal vardı, çift zaten tutarlıydı; journal silindi
+      repaired — history yayınlanmış, sidecar gerideydi; sidecar yazıldı
+      aborted  — history hiç yayınlanmamış (journal fazlalığı silindi)
+      foreign  — digest'ler tutmuyor; dosyalar korunur, journal silinir
+      invalid  — journal okunamadı; dosyalar korunur, journal silinir
+    """
+    path = history_path or HISTORY_PATH
+    if not path:
+        return "absent"
+    journal = path + HISTORY_JOURNAL_SUFFIX
+    if not os.path.isfile(journal):
+        return "absent"
+    try:
+        with open(journal, encoding="utf-8") as f:
+            state = json.load(f)
+        intended = str(state.get("intended") or "").lower()
+        prev = (str(state["prev"]).lower() if state.get("prev") else None)
+        named = state.get("history")
+    except (OSError, ValueError, TypeError):
+        _unlink_quiet(journal)
+        return "invalid"
+    if named and named != os.path.basename(path):
+        _unlink_quiet(journal)
+        return "foreign"
+
+    current = _sha256_file(path)
+    if current is not None and intended and current == intended:
+        if _read_sidecar_digest(path) == current:
+            _unlink_quiet(journal)
+            return "clean"
+        _write_atomic(path + ".sha256",
+                      "%s  %s\n" % (current, os.path.basename(path)))
+        _unlink_quiet(journal)
+        return "repaired"
+    if current is None or (prev and current == prev):
+        # history yayını hiç olmadı: diskteki çift eski ve tutarlı kaldı.
+        _unlink_quiet(journal)
+        return "aborted"
+    # Ne "intended" ne "prev": araya başka bir yazıcı girdi. Kanıt yok →
+    # dokunma; journal'ı bırakmak sonsuza dek yanlış alarm üretirdi.
+    _unlink_quiet(journal)
+    return "foreign"
+
+
+def _unlink_quiet(path):
+    try:
+        os.unlink(path)
+    except OSError:
+        pass
+
+
+def repair_history_sidecar(history_path=None):
+    """BOOT onarımı: history ↔ sidecar uyuşmazsa sidecar'ı history'den üret.
+
+    `reconcile_history_pair` yalnız journal'ın KANITLADIĞI geçişleri onarır;
+    kanıtsız bir uyuşmazlık (journal'sız kalmış yarı yazım, araya giren
+    backfill/fetch, elle düzenleme) boot'ta öylece kalırdı. Sunucu açılışında
+    sidecar TÜREVDİR: yetkili kaynak atomik replace edilen history.jsonl'dir,
+    yani digest her zaman ondan yeniden hesaplanabilir.
+
+    Bu yüzden boot'ta son bir kapanış yolu vardır: history varsa ve sidecar
+    onunla eşleşmiyorsa sidecar yeniden yazılır. Eski digest stderr'e
+    yazılır — onarım SESSİZ DEĞİLDİR; git ise eski sidecar'ı zaten taşır.
+
+    Sınırlar:
+      - Yalnız boot'ta çağrılır (main); `persist_history` ve K15
+        çağırmaz — her yazımda onarım denetimi zayıflatırdı.
+      - history yoksa dokunulmaz (\"henüz run yok\") — K15 de atlar.
+      - K15 fail-closed kalır: boot onarımı çalışmadan önceki uyuşmazlık
+        kapıda P1 üretmeye devam eder.
+
+    Döner: \"repaired\" | \"consistent\" | \"no-history\".
+    """
+    path = history_path or HISTORY_PATH
+    if not path or not os.path.isfile(path):
+        return "no-history"
+    digest = _sha256_file(path)
+    if digest is None:
+        return "no-history"
+    recorded = _read_sidecar_digest(path)
+    if recorded == digest:
+        return "consistent"
+    _write_atomic(path + ".sha256",
+                  "%s  %s\n" % (digest, os.path.basename(path)))
+    sys.stderr.write(
+        "[history] sidecar BOOT onarımı: %s… (eski=%s…, history'den "
+        "yeniden üretildi)\n"
+        % (digest[:12], (recorded or "yok/bozuk")[:12]))
+    sys.stderr.flush()
+    return "repaired"
+
+
 def persist_history(rec):
     """Bir run kaydını JSONL dosyasına append et; HISTORY_MAX ile sınırla.
 
@@ -387,12 +573,19 @@ def persist_history(rec):
     Her yazımda history.jsonl.sha256 sidecar'ı da atomik üretilir (içeriğin
     tam SHA-256'sı, sha256sum formatında) — verify_delivery.py --check-history
     (K15) bu sidecar'ı fail-closed doğrular.
+
+    Hard-kill güvenliği: iki yazımın arası journal'lanır (bkz.
+    `reconcile_history_pair`). SIGKILL penceresine düşerse diskte yeni
+    history + eski sidecar + journal kalır; bir sonraki `persist_history`
+    ya da sunucu açılışı çifti KANITLA onarır. Yazımdan önce de reconcile
+    koşar: yarıda kalmış önceki commit, yeni satırın üstüne binmez.
     """
     if not HISTORY_PATH:
         return
     if not rec.get("ts"):
         return
     try:
+        reconcile_history_pair(HISTORY_PATH)
         lines = []
         if os.path.isfile(HISTORY_PATH):
             with open(HISTORY_PATH, encoding="utf-8") as f:
@@ -402,10 +595,22 @@ def persist_history(rec):
         if len(lines) > HISTORY_MAX:
             lines = lines[-HISTORY_MAX:]
         content = "\n".join(lines) + "\n"
+        digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
+        # Commit journal'ı history'den ÖNCE ve KALICI: pencerede ölürsek
+        # hangi digest'in uçuşta olduğunu kanıtlayan tek kayıt budur.
+        journal = HISTORY_PATH + HISTORY_JOURNAL_SUFFIX
+        _write_atomic_durable(journal, json.dumps({
+            "version": 1,
+            "history": os.path.basename(HISTORY_PATH),
+            "prev": _sha256_file(HISTORY_PATH),
+            "intended": digest,
+            "pid": os.getpid(),
+        }, ensure_ascii=False))
         _write_atomic(HISTORY_PATH, content)
         # Yanına .sha256 sidecar'ı yaz (K15 doğrulaması + reproducibility).
-        digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
         _write_atomic(HISTORY_PATH + ".sha256", f"{digest}  history.jsonl\n")
+        # Commit tamam: journal artık kanıt değil, kalıntı.
+        _unlink_quiet(journal)
         # LATEST'a sidecar hash'ini yaz (dashboard /api/latest-visible).
         LATEST["history_sidecar_sha256"] = digest
     except OSError as e:
@@ -418,7 +623,9 @@ def drain_writer_lock(timeout=None):
 
     `persist_history` history.jsonl ile .sha256 sidecar'ını İKİ ayrı atomik
     yazımla yazar. SIGTERM tam bu ikisinin ARASINA gelirse diskte
-    yeni-history + eski-sidecar kalır — K15 P1 hash uyuşmazlığı.
+    yeni-history + eski-sidecar kalır — K15 P1 hash uyuşmazlığı. SIGKILL'de
+    drain şansı yoktur; o pencereyi `reconcile_history_pair` (commit
+    journal'ı) kapatır.
 
     LOCK'u sınırlı süreyle alıp bırakmak aktif yazımın tamamlanmasını
     bekler; bırakıldığı anda yeni yazım başlayabilir, bu yüzden çağıran
@@ -2032,6 +2239,21 @@ def main():
     # Restart sonrası ilk verify bitene dek /api/latest UNKNOWN göstermesin:
     # önbelleklenmiş son run durumunu (runs/ veya history.jsonl) yükle.
     with LOCK:
+        # Hard-kill artığı: yarıda kalmış history↔sidecar commit'ini KANITLA
+        # onar (journal). Temiz kapanışta "absent" döner, sessiz kalır.
+        rec_status = reconcile_history_pair(HISTORY_PATH)
+        if rec_status in ("repaired", "foreign", "invalid"):
+            sys.stderr.write(
+                f"[main] history çifti uzlaştırıldı: {rec_status}\n")
+            sys.stderr.flush()
+        # Boot kapanışı: kanıtsız kalmış uyuşmazlıkta da sidecar'ı history'den
+        # yeniden üret (yetkili kaynak history). Yalnız burada — her yazımda
+        # değil; K15 fail-closed sözleşmesi değişmez.
+        boot_status = repair_history_sidecar(HISTORY_PATH)
+        if boot_status == "repaired":
+            sys.stderr.write(
+                "[main] history sidecar boot onarımı uygulandı\n")
+            sys.stderr.flush()
         if load_cached_latest():
             sys.stderr.write(
                 "[main] önbelleklenmiş son run yüklendi: "
