@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       base_url:
-        description: "Doğrulanacak deployment kökü (boşsa repo variable / canlı alias)"
+        description: "Doğrulanacak deployment kökü (boşsa repo variable → en güncel READY preview)"
         required: false
         default: ""
 
@@ -33,17 +33,39 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Vercel deploy /api dogrulama (fail-closed)
+      - name: En guncel preview URL'ini coz (fail-closed)
+        id: preview
         env:
           INPUT_URL: ${{ github.event.inputs.base_url }}
           VAR_URL: ${{ vars.VERCEL_PREVIEW_URL }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
         run: |
           set -euo pipefail
-          # URL çözümü: elle-girdi > repo variable > bilinen canlı alias.
-          # (Aykırı: "vercel link" hesap-düzeyinde 400 — sabit preview alias'ı
-          # yok; değişken = elle girilen preview URL.) Şema denetimi + iki uç
-          # (health "ok" düz-metin; run-history JSON + ts/verdict şema +
-          # verdict kümesi) kapı script'inin içindedir: exit 1 = fail-closed,
-          # STEP_SUMMARY her koşumda script tarafından yazılır (sessiz PASS yok).
-          BASE_URL="${INPUT_URL:-${VAR_URL:-https://leibniz2.vercel.app}}"
+          # URL çözümü: elle-girdi > repo variable > EN GÜNCEL READY preview.
+          # Üretim alias'ına DÜŞÜLMEZ: bu iş canlı preview'ı denetler; sessizce
+          # prod'a kaymak kapıyı yanlış yüzeye bağlardı (2026-10-24 kararı).
+          # (git-connect 400 → sabit preview alias'ı yok; bu yüzden URL Vercel
+          # API'sinden çözülür.) Çözücü READY + production-dışı ilk deployment'ı
+          # alır; API hatası/READY yok → exit≠0 → bu adım kırmızı olur.
+          BASE_URL="${INPUT_URL:-${VAR_URL:-}}"
+          if [ -z "$BASE_URL" ]; then
+            BASE_URL="$(python3 _calisma/CIKTI/vercel_latest_preview.py \
+              --project-id "${VERCEL_PROJECT_ID:-prj_VOVl5odaNOAU9i4B3rMc8xIFC0yd}")" || {
+              echo "::error::en güncel preview URL cozulemedi (VERCEL_TOKEN/VERCEL_PROJECT_ID)"
+              exit 1
+            }
+          fi
+          echo "base_url=$BASE_URL" >> "$GITHUB_OUTPUT"
+          echo "Denetlenen kok: $BASE_URL" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Vercel deploy /api dogrulama (fail-closed)
+        env:
+          BASE_URL: ${{ steps.preview.outputs.base_url }}
+        run: |
+          set -euo pipefail
+          # Şema denetimi + iki uç (health "ok" düz-metin; run-history JSON +
+          # ts/verdict şema + verdict kümesi) kapı script'inin içindedir:
+          # exit 1 = fail-closed, STEP_SUMMARY her koşumda script tarafından
+          # yazılır (sessiz PASS yok).
           python3 _calisma/CIKTI/check_vercel_deploy.py --base-url "$BASE_URL"
