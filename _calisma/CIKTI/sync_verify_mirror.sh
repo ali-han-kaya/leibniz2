@@ -54,6 +54,12 @@ FILES=(
   "gen_repro_manifest.py|gen_repro_manifest.py"
   "gen_config.py|gen_config.py"
   "cleanup_log.json|cleanup_log.json"
+  # K6-DETERM /ID-kanonik çekirdeği: verify_delivery.py `pdf_id_canonical`
+  # modülünü import eder; defter çözümleme yardımcıları `id_canonical`'da
+  # TEK kaynaktır. Mirror'da eksikse verify_delivery import aşamasında
+  # çöker (launchd rotasında tüm kapılar P0) — bu yüzden runtime sayılır.
+  "pdf_id_canonical.py|pdf_id_canonical.py"
+  "id_canonical.py|id_canonical.py"
   "github_scripts_battery.py|github_scripts_battery.py"
   "github_scripts_selftest.js|github_scripts_selftest.js"
   "daemon_http_test.py|daemon_http_test.py"
@@ -84,12 +90,14 @@ FILES=(
   "github_scripts/rca_comment.js|github_scripts/rca_comment.js"
   "github_scripts/tum_sapmalar_comment.js|github_scripts/tum_sapmalar_comment.js"
   "github_scripts/run_summary_status.js|github_scripts/run_summary_status.js"
+  "github_scripts/video_render_comment.js|github_scripts/video_render_comment.js"
   # Run-summary modülleri — K0-K13 ayrı-step sidecar özetleri + konsolidatör.
   # Dashboard durum-panosu/consolidate_summary.py bunları mirror'da okur;
   # mirror'da eksik kalırsa launchd rotasında panel boşalır.
   "run_summary_budget.py|run_summary_budget.py"
   "run_summary_changelog.py|run_summary_changelog.py"
   "run_summary_k0.py|run_summary_k0.py"
+  "run_summary_k9.py|run_summary_k9.py"
   "run_summary_k12.py|run_summary_k12.py"
   "run_summary_k13.py|run_summary_k13.py"
   "run_summary_klayers.py|run_summary_klayers.py"
@@ -176,6 +184,16 @@ GUIDE_FILES=(
   "docs/HOOK_ENV_MATRIX.md|HOOK_ENV_MATRIX.md"
 )
 
+# Verify mirror kabul defteri (K6-DETERM): kaynak repo köküne göre, dest
+# MIRROR_DIR'a DÜZ adla. id_canonical.py defter çözümlemesinde 3. sıra
+# `<script dizini>/ID_RESIDUAL_ACCEPTANCE.md`'dir (TCC-safe mirror drop);
+# ad id_canonical.LEDGER_FLAT_NAME ile birebir eşleşmeli. Defter mirror'da
+# bayat kalırsa strict K6 kabul kümesi repo'dan ayrışır (yanlış P1 ya da
+# yanlış yeşil) — bu yüzden defter de mirror sözleşmesinin parçasıdır.
+LEDGER_FILES=(
+  "docs/ID_RESIDUAL_ACCEPTANCE.md|ID_RESIDUAL_ACCEPTANCE.md"
+)
+
 say() { printf '%s\n' "$*"; }
 err() { printf 'HATA: %s\n' "$*" >&2; }
 
@@ -214,6 +232,13 @@ validate_sources() {
       rc=1
     fi
   done < <(printf '%s\n' "${GUIDE_FILES[@]}")
+  while IFS='|' read -r src dst; do
+    [ -n "$src" ] || continue
+    if [ ! -f "$ROOT/$src" ]; then
+      err "kaynak yok: $ROOT/$src (ledger)"
+      rc=1
+    fi
+  done < <(printf '%s\n' "${LEDGER_FILES[@]}")
   return "$rc"
 }
 
@@ -295,6 +320,13 @@ run_sync() {
     [ "$st" = "GÜNCELLENDİ" ] && SYNC_CHANGED=$((SYNC_CHANGED + 1))
     say "$st: preview/$dst (guide)"
   done < <(printf '%s\n' "${GUIDE_FILES[@]}")
+  while IFS='|' read -r src dst; do
+    [ -n "$src" ] || continue
+    SYNC_TOTAL=$((SYNC_TOTAL + 1))
+    st="$(sync_one "$ROOT/$src" "$MIRROR_DIR/$dst" "$mode")"
+    [ "$st" = "GÜNCELLENDİ" ] && SYNC_CHANGED=$((SYNC_CHANGED + 1))
+    say "$st: $dst (ledger)"
+  done < <(printf '%s\n' "${LEDGER_FILES[@]}")
   say "ÖZET: $SYNC_TOTAL dosya, $SYNC_CHANGED güncellendi · git $(git_short)"
 }
 
@@ -337,6 +369,15 @@ run_check() {
       stale=1
     fi
   done < <(printf '%s\n' "${GUIDE_FILES[@]}")
+  while IFS='|' read -r src dst; do
+    [ -n "$src" ] || continue
+    if same_file "$ROOT/$src" "$MIRROR_DIR/$dst"; then
+      say "GÜNCEL: $dst (ledger)"
+    else
+      say "BAYAT/EKSİK: $dst (ledger)"
+      stale=1
+    fi
+  done < <(printf '%s\n' "${LEDGER_FILES[@]}")
   return "$stale"
 }
 
@@ -364,6 +405,10 @@ run_list() {
     [ -n "$src" ] || continue
     say "$ROOT/$src -> $PREVIEW_MIRROR/$dst (guide)"
   done < <(printf '%s\n' "${GUIDE_FILES[@]}")
+  while IFS='|' read -r src dst; do
+    [ -n "$src" ] || continue
+    say "$ROOT/$src -> $MIRROR_DIR/$dst (ledger)"
+  done < <(printf '%s\n' "${LEDGER_FILES[@]}")
 }
 
 usage() {
