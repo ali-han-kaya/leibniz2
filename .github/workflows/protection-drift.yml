@@ -1,0 +1,74 @@
+name: protection-drift
+
+# Haftalık branch-protection drift denetimi (P1 → kırmızı).
+#
+# NEDEN AYRI WORKFLOW ve NEDEN GITHUB_TOKEN YETMİYOR: branch protection
+# okumak admin izni ister ve `administration` scope'u Actions
+# `permissions:` bloğunda GEÇERSİZDİR (ölçüldü 2026-09-30, actionlint
+# v1.7.7: "unknown permission scope administration"). Buraya eklenirse
+# workflow PARSE HATASIYLA 0 JOB üretir — yani bu dosya kendini öldürür.
+# Bu yüzden okuma yetkisi `PROTECTION_PAT` secret'ından gelir.
+#
+# Secret kurulmadıysa script SKIP eder (rc=0, bulgu yok) — kasıtlı:
+# her hafta yanlış-P1 gürültüsü üretmek yerine neyin eksik olduğunu yazar.
+# Secret VAR ama okuma başarısız olursa (süresi geçmiş token) rc=2 ile
+# KIRMIZI döner: aksi hâlde kapı sessizce ölürdü.
+
+on:
+  schedule:
+    # Haftalık: her Pazartesi 03:53 UTC. Dakikalar BİLİNÇLİ ayrık:
+    # determinism-trend 03:17, docker-security 03:43, protection-drift 03:53,
+    # prettier-drift 04:07.
+    # Ölçülen düzeltme (2026-09-30): bu job ilk eklendiğinde
+    # docker-security.yml ile AYNI `43 3 * * 1`'i almıştı; iki haftalık
+    # koşum aynı dakikada runner kuyruğunda birbirini geciktirir ve zamanlama
+    # kanıtını bulanıklaştırır. `test_gated_schedules` K7 artık çakışmayı
+    # fail-closed yasaklıyor.
+    - cron: "53 3 * * 1"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  drift:
+    name: Branch protection drift (haftalık, P1)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      # status_checks.gate_jobs() verify.yml'i ayrıştırır (aynı bağımlılık).
+      - name: Install pinned Python dependencies
+        run: pip install -r _calisma/requirements-z3.txt
+
+      - name: Branch protection drift denetimi (P1)
+        env:
+          # Yalnızca bu secret admin yetkisi taşır; GITHUB_TOKEN burada
+          # işe yaramaz (yukarıdaki nota bakın).
+          PROTECTION_PAT: ${{ secrets.PROTECTION_PAT }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -o pipefail
+          mkdir -p .freebuff
+          python3 _calisma/CIKTI/check_protection_drift.py --json \
+            | tee .freebuff/protection_drift.json
+
+      - name: Upload drift raporu
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: protection-drift
+          path: .freebuff/protection_drift.json
+          if-no-files-found: warn
+          retention-days: 90

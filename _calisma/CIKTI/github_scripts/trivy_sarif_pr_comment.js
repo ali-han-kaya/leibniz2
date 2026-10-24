@@ -18,13 +18,23 @@ const SARIF_PATH = 'trivy.sarif';
 const CHANGED_PATH = 'changed_files.txt';
 const BLOCKING = new Set(['CRITICAL', 'HIGH']);
 
+const SEVERITIES = new Set(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN']);
+
 function severityOf(result) {
-  // Trivy SARIF'te gerçek seviye properties.severity'de; eksikse default-deny
-  // (HIGH) — 'error' seviyesi CRITICAL/HIGH'ı ayırt edemez, tahmin edilmez.
-  const sev = String(
+  // Önce properties.severity (fixture/test sözleşmesi); yoksa mesajdaki
+  // "Severity: MEDIUM" (GERÇEK Trivy SARIF'i — canlı PR koşumunda ölçüldü:
+  // properties.severity taşınmıyor, tüm sonuçlar HIGH sanılıyordu).
+  // İkisi de yoksa default-deny (HIGH) — 'error' seviyesi CRITICAL/HIGH'ı
+  // ayırt edemez, tahmin edilmez.
+  const direct = String(
     (result.properties && result.properties.severity) || ''
-  ).toUpperCase();
-  return sev || 'HIGH';
+  ).trim().toUpperCase();
+  if (SEVERITIES.has(direct)) return direct;
+  const text = String((result.message && result.message.text) || '');
+  const m = /Severity:\s*([A-Za-z]+)/.exec(text);
+  const parsed = m ? m[1].toUpperCase() : '';
+  if (SEVERITIES.has(parsed)) return parsed;
+  return 'HIGH';
 }
 
 function cell(text) {

@@ -15,6 +15,21 @@
 | 2026-10-10 | 92f8315 | [failure #38009521880](https://github.com/ali-han-kaya/leibniz2/actions/runs/38009521880) | [failure #38009521828](https://github.com/ali-han-kaya/leibniz2/actions/runs/38009521828) | [success #38009521825](https://github.com/ali-han-kaya/leibniz2/actions/runs/38009521825) | [success #37324916028](https://github.com/ali-han-kaya/leibniz2/actions/runs/37324916028) |
 | 2026-10-10 | cb6f607 | [failure #38014906773](https://github.com/ali-han-kaya/leibniz2/actions/runs/38014906773) | [failure #38014906725](https://github.com/ali-han-kaya/leibniz2/actions/runs/38014906725) | [success #38014906718](https://github.com/ali-han-kaya/leibniz2/actions/runs/38014906718) | [success #37324916028](https://github.com/ali-han-kaya/leibniz2/actions/runs/37324916028) |
 | 2026-10-11 | 337e73f | [failure #38142793917](https://github.com/ali-han-kaya/leibniz2/actions/runs/38142793917) | [success #38142793885](https://github.com/ali-han-kaya/leibniz2/actions/runs/38142793885) | [success #38142793977](https://github.com/ali-han-kaya/leibniz2/actions/runs/38142793977) | [success #38062084791](https://github.com/ali-han-kaya/leibniz2/actions/runs/38062084791) |
+| 2026-10-23 | a75d166 | [failure #40038972623](https://github.com/ali-han-kaya/leibniz2/actions/runs/40038972623) | [success #40038972640](https://github.com/ali-han-kaya/leibniz2/actions/runs/40038972640) | [success #40038972619](https://github.com/ali-han-kaya/leibniz2/actions/runs/40038972619) | [success #39226471244](https://github.com/ali-han-kaya/leibniz2/actions/runs/39226471244) |
+
+`a75d166` — PR #98 (`fix/restore-freebuff-id-clean`) inişi: `337e73f`
+satırının üstüne **14 anlamlı** commit geldi (freebuff project-id kalıcılığı,
+docker yama build-arg'larının CI'ya bağlanması, audit artifact sayfalaması,
+gerçek Trivy SARIF severity ayrıştırması ve haftalık protection-drift kapısı;
+tolerans 3) → `verify-delivery` kırmızısı **yalnız**
+`test_deploy_evidence.test_cli_accepts_repo_ledger_offline` (CIKTI bataryası
+3051 test, 1 failure); bu satır tam olarak o açığı kapatıyor. Kapı tasarlandığı
+gibi davrandı: kanıt satırı yazılmadan ilerleyen main sessizce yeşile dönmedi.
+`docker-security` ve `test-smoke` bu HEAD'de yeşil; bilinen advisory
+`Live CI doc↔GitHub sync audit` kırmızısı sürüyor — failure penceresindeki
+`vercel-preview-deploy` "Proje linkle" adımı `VERCEL_TOKEN`ın hedef hesaba
+erişimi olmadığı için düşüyor (main'e inmez). `determinism-trend` hücresi son
+main ölçümünü taşır (`#39226471244`, sha `344767dc`).
 
 `337e73f` — PR #88 (`land/jobs-map-gate-20261011`) inişi: `cb6f607`
 satırının üstüne **8 anlamlı** commit geldi (upstream PR #86-#87 zinciri:
