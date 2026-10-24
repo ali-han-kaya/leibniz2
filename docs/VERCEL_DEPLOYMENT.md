@@ -201,9 +201,14 @@ deployment'ın /api uçlarını kapı script'iyle doğrular (`cron: "23 5 1 * *"
 Fail-closed: herhangi bir uç FAIL → job kırmızı (`exit 1`); Base/UTC
 künyesi + PASS/FAIL satırları **her** koşumda `$GITHUB_STEP_SUMMARY`'a
 yazılır (sessiz PASS yok). URL çözümü: `base_url` girdisi →
-`vars.VERCEL_PREVIEW_URL` → `https://leibniz2.vercel.app` (git-connect
-400 engeli nedeniyle sabit preview alias'ı yok; preview URL'i repo
-variable'ı ile verilir). K1 kapı-paritesi (`test_gated_schedules`):
+`vars.VERCEL_PREVIEW_URL` → **en güncel READY preview**
+(`_calisma/CIKTI/vercel_latest_preview.py`; Vercel API `v6/deployments`,
+production-dışı + `readyState=READY` ilk kayıt). Üretim alias'ına
+**düşülmez** — bu kapı preview yüzeyini denetler; çözüm başarısızsa adım
+kırmızı (fail-closed) ve denetlenen kök `$GITHUB_STEP_SUMMARY`'a yazılır.
+git-connect 400 engeli yüzünden sabit preview alias'ı yok; bu yüzden URL
+her koşumda API'den çözülür (`vars.VERCEL_PROJECT_ID` ile proje
+override edilebilir). K1 kapı-paritesi (`test_gated_schedules`):
 akış YAML'da yeniden yazılmaz — job `actions/checkout@v7`
 (`action_pins.json`'da kayıtlı major 7) ile iner ve
 `_calisma/CIKTI/check_vercel_deploy.py`'i bir `run:` adımında çağırır;
