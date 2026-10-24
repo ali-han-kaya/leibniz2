@@ -135,8 +135,12 @@
   --muted: #655e56;
   --fg-dimmed: #56504a;      /* light: #f3efe7 bg üzerinde AA 4.5:1+ */
   --accent: #8b5e2b;
-  --ok: #287a3d;
-  --warn: #996b08;
+  /* 2026-10-24: #287a3d/#996b08 rozet tint'i uzerinde (#d8e7d0/#f8eed8)
+     4.13/4.08:1 ile AA 4.5'in altinda kaliyordu (Lighthouse light
+     taramasi). Karttaki .sheet zaten olculmus degerleri tasiyordu;
+     token'lar ayni degere hizalandi — tint uzerinde 5.65/5.68:1. */
+  --ok: #1f6b33;
+  --warn: #7d5606;
   --err: #b42318;
   --border: #cfc5b5;
   --budget: #7650a8;

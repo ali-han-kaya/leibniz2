@@ -867,5 +867,87 @@ class TestWorkflowSummaryStep(unittest.TestCase):
         self.assertIn("path: lighthouse_dashboard_${{ matrix.theme }}.json", upload)
 
 
+def _luminance(color):
+    """WCAG 2.x relative luminance — '#' öneki zorunlu."""
+    channels = [int(color.lstrip("#")[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+    linear = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+              for c in channels]
+    return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+
+def _contrast_ratio(fg, bg):
+    hi, lo = sorted((_luminance(fg), _luminance(bg)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def _blend_over(rgba, base):
+    """rgba tint'i opak token zemini üzerine bindir (tarayıcı kompoziti)."""
+    r, g, b, alpha = rgba
+    base_channels = [int(base.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4)]
+    mixed = [round(alpha * c + (1 - alpha) * base_c)
+             for c, base_c in zip((r, g, b), base_channels)]
+    return "#%02x%02x%02x" % tuple(mixed)
+
+
+class TestLightThemeContrast(unittest.TestCase):
+    """Light tema AA sözleşmesi (Lighthouse a11y skoru = 1.0).
+
+    axe bu düğümlerde color-contrast'ı "incomplete" bırakır; ölçümü
+    Lighthouse yapar. Bu yüzden token/tint çiftleri burada doğrudan
+    WCAG oranıyla pinlenir: rozet metni tint zemininde >= 4.5:1.
+    """
+
+    def setUp(self):
+        with open(os.path.join(REPO_ROOT, "design-system", "tokens.css"),
+                  encoding="utf-8") as f:
+            self.tokens_css = f.read()
+        with open(os.path.join(SCRIPT_DIR, "preview.html"), encoding="utf-8") as f:
+            self.html = f.read()
+        block = re.search(r':root\[data-theme="light"\]\s*\{(.*?)\}',
+                          self.tokens_css, re.S).group(1)
+        self.light = {name: value.strip().split()[0] for name, value
+                      in re.findall(r"(--[\w-]+)\s*:\s*([^;]+);", block)}
+
+    def _badge_tint(self, badge_class):
+        rule = re.search(r"\n  \.%s\s*\{([^}]*)\}" % badge_class, self.html)
+        self.assertIsNotNone(rule, ".%s rozet kuralı yok" % badge_class)
+        rgba = re.search(
+            r"rgba\((\d+),(\d+),(\d+),([\d.]+)\)", rule.group(1))
+        self.assertIsNotNone(rgba, ".%s tint'i rgba değil" % badge_class)
+        return tuple(float(v) for v in rgba.groups())
+
+    def test_badge_text_meets_aa_on_light_tint(self):
+        for badge_class, token in (("ok", "--ok"), ("warn", "--warn")):
+            r, g, b, alpha = self._badge_tint(badge_class)
+            surface = _blend_over((r, g, b, alpha), self.light["--surface"])
+            ratio = _contrast_ratio(self.light[token], surface)
+            self.assertGreaterEqual(
+                ratio, 4.5,
+                "%s (%s) %s tint zemininde %.2f:1 — AA 4.5 altı"
+                % (badge_class, self.light[token], surface, ratio))
+
+    def test_light_theme_does_not_override_component_button_color(self):
+        # `:root[data-theme="light"] button { color }` (0,2,1 özgüllük) .z3-tab
+        # gibi bileşen butonlarının kendi rengini ezip 1.2:1 üretti.
+        self.assertNotRegex(
+            self.html,
+            r':root\[data-theme="light"\]\s+button\s*\{[^}]*color\s*:')
+
+    def test_z3_tab_keeps_aa_contrast(self):
+        rule = re.search(r"\n  \.z3-tab \{([^}]*)\}", self.html)
+        self.assertIsNotNone(rule, ".z3-tab kuralı yok")
+        color = re.search(r"color:(#[0-9a-fA-F]{6})", rule.group(1)).group(1)
+        background = re.search(
+            r"background:(#[0-9a-fA-F]{6})", rule.group(1)).group(1)
+        self.assertGreaterEqual(_contrast_ratio(color, background), 4.5)
+
+    def test_theme_toggle_name_contains_visible_label(self):
+        # label-content-name-mismatch: görünen metin erişilebilir adda olmalı.
+        with open(os.path.join(SCRIPT_DIR, "preview.js"), encoding="utf-8") as f:
+            source = f.read()
+        self.assertIn("`Switch theme — current: ${THEME_LABELS[next]}`", source)
+        self.assertIn('aria-label="Switch to light mode">light mode<', self.html)
+
+
 if __name__ == "__main__":
     unittest.main()

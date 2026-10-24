@@ -27,7 +27,11 @@ function setTheme(theme, persist = true) {
   if (toggle) {
     const light = next === "light";
     toggle.setAttribute("aria-pressed", String(light));
-    toggle.setAttribute("aria-label", `Switch theme — current: ${next}`);
+    // Gorunen etiket ("light mode"/"dark mode") erisilebilir adda
+    // AYNEN bulunmali; aksi halde axe/Lighthouse
+    // label-content-name-mismatch verir.
+    toggle.setAttribute("aria-label",
+      `Switch theme — current: ${THEME_LABELS[next]}`);
     toggle.textContent = THEME_LABELS[next];
   }
   if (persist) {
