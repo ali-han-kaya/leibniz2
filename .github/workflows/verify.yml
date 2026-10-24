@@ -1609,6 +1609,10 @@ jobs:
       #   uyarı yorumu KALDIRILIR (yanıltıcı kalmaz). Advisory: bloke etmez;
       #   bloke eden kapı config-drift.
       - name: Upsert manifest + config-diff PR comments (tek adım, paylaşılan yorum listesi)
+        # ADVISORY (yorum yan fayda): bloke eden kapı config-drift.
+        # Kota/403 API arızası yorumu atlar ama job'u kırmızıya
+        # çevirmez — yorum bir sonraki run'da upsert edilir.
+        continue-on-error: true
         uses: actions/github-script@v8
         with:
           script: |
@@ -1978,6 +1982,9 @@ jobs:
       # Son 100 refs-online + run-history artifact'ını API'den çekip iki trend
       # üretir: çevrimiçi referans doğrulama + duration/budget zaman serisi.
       # Token yoksa script `gh api`'ye düşer; CI'da GITHUB_TOKEN kullanılır.
+      # --max-downloads: her zip indirmesi bir API çağrısıdır; kurulum
+      # kotası tükenirse REQUIRED kapı kırmızıya düşüyordu. En yeni 25
+      # artifact işlenir (trend derinliği 25 run), liste 100'de kalır.
       - name: Build refs trend table
         continue-on-error: true
         env:
@@ -1987,7 +1994,8 @@ jobs:
           python3 _calisma/CIKTI/refs_trend.py \
             --repo "$GITHUB_REPOSITORY" \
             --out-dir refs-trend \
-            --max-artifacts 100
+            --max-artifacts 100 \
+            --max-downloads 25
 
       # Trend tablosunu run summary'ye de yaz — her push'ta son durum görünsün.
       # refs_trend.py tek kaynak; bu adım yalnızca refs-trend.md'yi taşır.
@@ -2006,6 +2014,17 @@ jobs:
             echo "REFS-TREND P0: refs-trend.md üretilmedi — trend tablosuz" \
                  "required kapı PASS edemez (fail-closed)" >&2
             exit 1
+          fi
+          # Kota tükenmesi (403/429) kod/veri regresyonu DEĞİLDİR ve
+          # refs_trend.py bunu md'ye makine-okur KARAR olarak yazar.
+          # Bu durumda kör PASS vermeyiz: job uyarı ile geçer, karar run
+          # summary + artifact'ta görünür; kota sıfırlanınca rerun tabloyu
+          # doldurur. Diğer tüm hata yolları fail-closed kalır.
+          if grep -q "VERDICT: INDETERMINATE-QUOTA" refs-trend/refs-trend.md; then
+            echo "::warning title=refs-trend quota::GitHub API kotası tükendi —" \
+                 "trend bu run'da ÜRETİLEMEDİ (INDETERMINATE-QUOTA);" \
+                 "kod regresyonu değil, kota sıfırlanınca rerun edin."
+            exit 0
           fi
 
       - name: Upload refs trend
@@ -2043,6 +2062,9 @@ jobs:
           python-version: '3.12'
 
       - name: Download refs-trend artifact
+        # refs-trend advisory: kota nedeniyle artifact yoksa indirme
+        # adımı audit job’unu kırmızıya çevirmemeli (audit de advisory).
+        continue-on-error: true
         uses: actions/download-artifact@v7
         with:
           name: refs-trend
@@ -2060,7 +2082,7 @@ jobs:
           python3 _calisma/CIKTI/audit_refs_trend.py \
             --repo "$GITHUB_REPOSITORY" \
             --trend-json refs-trend/refs-trend.json \
-            --max-artifacts 100 --json \
+            --max-artifacts 100 --max-downloads 25 --json \
             > audit_refs_trend.json 2>&1 || true
           cat audit_refs_trend.json
 
@@ -2166,6 +2188,10 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Run live CI audit (audit_live_ci_sync.py)
+        # ADVISORY: job required DEĞİL; adım da job'u kırmızıya
+        # çevirmemeli (kota/403 ortam hatası PR'da yanlış-kırmızı
+        # üretiyordu). Bulgular artifact + summary'de görünür.
+        continue-on-error: true
         timeout-minutes: 15
         shell: bash
         env:

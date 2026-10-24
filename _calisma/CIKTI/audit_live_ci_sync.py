@@ -38,6 +38,7 @@ Kullanım:
   2 — çalışma hatası (doc yok, gh yok, run bulunamadı)
 """
 import argparse
+import time
 import json
 import os
 import pathlib
@@ -206,23 +207,56 @@ def parse_doc_artifacts(doc_text):
 # upstream-skipped mi yoksa gerçek drift mi olduğu sınıflanır.
 
 # ── Canlı GitHub ─────────────────────────────────────────────────────────
+# Geçici/kota hataları: hemen, 3s sonra, 8s sonra yeniden dene.
+RETRY_DELAYS = (0, 3, 8)
+# Yalnız GEÇİCİ hatalarda yeniden denenir — gerçek bir "bulunamadı"
+# hatasını üç kez beklemek raporu yavaşlatmaktan başka işe yaramaz.
+RETRYABLE_HINTS = (
+    "rate limit",          # 403 "API rate limit exceeded for installation"
+    "secondary rate",
+    "abuse detection",
+    "http 429",
+    "http 500",
+    "http 502",
+    "http 503",
+    "http 504",
+    "timed out",
+    "timeout",
+    "connection reset",
+    "temporarily unavailable",
+    "could not resolve host",
+)
+
+
 def run_gh(args):
-    """`gh` çözümlemesiyle argv kurar ve çalıştırır.
+    """`gh` çözümlemesiyle argv kurar, çalıştırır ve geçici hatalarda dener.
 
     SÖZLEŞME: `args` PROGRAM ADI İÇERMEZ — executable'ı `resolve_gh()` verir.
     Ölçülen hata: çağıranlar `run_gh(["gh", "api", …])` diyordu ve çözümleyici
     de program adını öne ekledi → CI'da `gh gh api …` → "unknown command \"gh\"
     for \"gh\"" , denetim exit 2 ile düşüyordu. Savunmacı katman: başta "gh"
     varsa düşürülür, böylece iki çağrı biçimi de aynı executable'a gider.
+
+    Retry: kurulum API kotası (403 "API rate limit exceeded for installation")
+    veya geçici 5xx/ağ hatasında RETRY_DELAYS kadar yeniden denenir; sonunda
+    hata AÇIKÇA yükselir (sessiz boş rapor yok).
     """
     argv = [a for a in args]
     if argv and argv[0] == "gh":
         argv = argv[1:]
-    r = subprocess.run([resolve_gh()] + argv, capture_output=True,
-                       text=True)
-    if r.returncode != 0:
-        raise RuntimeError((r.stderr or r.stdout).strip())
-    return r.stdout.strip()
+    last = ""
+    for delay in RETRY_DELAYS:
+        if delay:
+            time.sleep(delay)
+        r = subprocess.run([resolve_gh()] + argv, capture_output=True,
+                           text=True)
+        if r.returncode == 0:
+            return r.stdout.strip()
+        last = (r.stderr or r.stdout).strip()
+        low = last.lower()
+        if not any(h in low for h in RETRYABLE_HINTS):
+            raise RuntimeError(last)
+    raise RuntimeError(last)
 
 
 def get_repo():
