@@ -487,11 +487,43 @@ class TestCiLinuxLedgerRow(unittest.TestCase):
                 out.append((rec, h))
         return out
 
+    def _current_ci_group(self):
+        """(source_sha256, [(rec, hash)]) — en GÜNCEL CI-linux kaynak grubu.
+
+        Kanonik hash KAYNAK-TÜREVLİDİR (`/ID` nötrlenir, gövde edilmez):
+        kaynak sürümü değişince hash serbest kalır, sabit kalmaz. Bu yüzden
+        "CI kanonik hash'i" tek bir sabit değil, **içinde bulunulan kaynak
+        sürümünün** ölçümüdür; eski sürümlerin değerleri defterde tarih
+        olarak durur (protokol: yeni kaynak → yeni satır, üzerine yazma yok).
+        """
+        recs = self._platform_canonicals("linux")
+        if not recs:
+            return None, []
+        src = recs[-1][0].get("source_sha256")
+        return src, [r for r in recs if r[0].get("source_sha256") == src]
+
+    def _current_ci_hash(self):
+        """Güncel kaynak sürümünün TEK kanonik hash'i (grup içinde sabit)."""
+        src, group = self._current_ci_group()
+        if not group:
+            self.skipTest("trend kaydında linux ölçümü yok — SKIP")
+        hashes = {h for _r, h in group}
+        self.assertEqual(
+            len(hashes), 1,
+            "aynı kaynakta (source_sha256=%s…) CI-linux kanonik hash'i "
+            "DEĞİŞMEMELİ: %s" % (str(src)[:12], sorted(hashes)))
+        return sorted(hashes)[0]
+
     def _ledger_data_rows(self):
-        """§4 defter tablosunun veri satırları (başlık + ayraç hariç).
+        """§4 defter bölümündeki tüm defter tablolarının veri satırları.
 
         Bölüm hedeflenir: belgede §2'de de bir tablo var, ilk `|` satırını
-        yakalamak yanlış tabloyu getirirdi.
+        yakalamak yanlış tabloyu getirirdi. Bölüm **birden çok tabloya**
+        yayılır (kaynak sürümü değiştikçe yeni satır blokları açılıyor —
+        satır 7–8, 9–11, 12–13); yalnız ilk tabloyu okumak güncel satırı
+        görmezden gelip sahte-kırmızı üretirdi. Defter başlığı aynı olan
+        bloklar birleştirilir; §4 içindeki farklı şekilli yardımcı tablolar
+        (`| | kanonik hash | defter |`) defter sayılmaz.
         """
         lines = LEDGER.read_text(encoding="utf-8").splitlines()
         start = None
@@ -500,20 +532,31 @@ class TestCiLinuxLedgerRow(unittest.TestCase):
                 start = i + 1
                 break
         self.assertIsNotNone(start, "§4 defter bölümü bulunamadı")
-        rows, header = [], None
+        blocks, block = [], []
         for line in lines[start:]:
             s = line.strip()
-            if not s.startswith("|"):
-                if rows:
-                    break
-                continue
-            cells = [c.strip() for c in s.strip("|").split("|")]
-            if all(set(c) <= set("-: ") for c in cells if c):
-                continue
-            if header is None:
-                header = cells
-                continue
-            rows.append(cells)
+            if s.startswith("|"):
+                block.append(s)
+            elif block:
+                blocks.append(block)
+                block = []
+        if block:
+            blocks.append(block)
+
+        header, rows = None, []
+        for block in blocks:
+            cells = [[c.strip() for c in s.strip("|").split("|")] for s in block]
+            if not any("kanonik" in c.lower() for c in cells[0]):
+                continue  # yardımcı/başka tablo — defter satırı değil
+            for row in cells:
+                if all(set(c) <= set("-: ") for c in row if c):
+                    continue
+                if header is None:
+                    header = row
+                    continue
+                if row == header:
+                    continue  # yinelenen başlık (yeni blok)
+                rows.append(row)
         return header, rows
 
     def _canonical_column(self):
@@ -527,21 +570,33 @@ class TestCiLinuxLedgerRow(unittest.TestCase):
         recs = self._platform_canonicals("linux")
         if not recs:
             self.skipTest("trend kaydında linux ölçümü yok — SKIP")
-        distinct = {h for _, h in recs}
-        self.assertEqual(len(distinct), 1,
-                         "CI-linux kanonik hash koşumlar arasında DEĞİŞMEMELİ: "
-                         "%s" % sorted(distinct))
-        self.assertGreaterEqual(len(recs), 2,
-                                "tek koşum determinizm kanıtı değildir")
+
+        # Determinizm İDDİASI kaynak-bazlıdır: aynı `source_sha256` + aynı
+        # platform → aynı kanonik hash. Farklı kaynak sürümleri arasında
+        # hash'in değişmesi BEKLENİR (kanonik hash `/ID`'yi nötrler, gövdeyi
+        # değil) — global tek-hash iddiası kaynak değişince yanlış-kırmızı
+        # üretirdi. Trend kaydedicisi de tam bu kuralı uygular
+        # (record_determinism_trend.py: "kaynak-uzlaşma").
+        groups = {}
+        for rec, h in recs:
+            groups.setdefault(rec.get("source_sha256"), set()).add(h)
+        for src, hashes in groups.items():
+            self.assertEqual(
+                len(hashes), 1,
+                "aynı kaynakta (source_sha256=%s…) kanonik hash değişmiş: %s"
+                % (str(src)[:12], sorted(hashes)))
+        self.assertTrue(
+            any(len([1 for r, _h in recs
+                     if r.get("source_sha256") == src]) >= 2
+                for src in groups),
+            "hiçbir kaynak sürümünde ≥2 bağımsız koşum yok — tek koşum "
+            "determinizm kanıtı değildir")
         for rec, _h in recs:
             self.assertEqual(rec.get("gate"), "PASS",
                              "kaydedilen CI koşumu PASS olmalı")
 
     def test_ledger_row_equals_the_measured_ci_hash(self):
-        recs = self._platform_canonicals("linux")
-        if not recs:
-            self.skipTest("trend kaydında linux ölçümü yok — SKIP")
-        measured = sorted({h for _, h in recs})[0]
+        measured = self._current_ci_hash()
         col = self._canonical_column()
         found = [cells for cells in self._ledger_data_rows()[1]
                  if col < len(cells) and measured in cells[col]]
@@ -554,10 +609,7 @@ class TestCiLinuxLedgerRow(unittest.TestCase):
         # `ledger_canonical_hashes` tarafından okunabilmeli (yani “Kanonik”
         # sütununda TAM 64-hex olmalı) — aksi hâlde `make accept` bu
         # bağlamı hiçbir zaman kabul edemez.
-        recs = self._platform_canonicals("linux")
-        if not recs:
-            self.skipTest("trend kaydında linux ölçümü yok — SKIP")
-        measured = sorted({h for _, h in recs})[0]
+        measured = self._current_ci_hash()
         accepted = load_module("pdf_id_canonical").ledger_canonical_hashes(
             LEDGER.read_text(encoding="utf-8"))
         self.assertIn(measured, accepted,
@@ -566,10 +618,7 @@ class TestCiLinuxLedgerRow(unittest.TestCase):
     def test_ci_linux_row_is_appended_not_an_overwrite(self):
         # “Eskisinin üzerine asla yazma”: önceki satırların kanonik
         # hash'leri aynen durmalı, CI-linux ayrı bir satır olmalı.
-        recs = self._platform_canonicals("linux")
-        if not recs:
-            self.skipTest("trend kaydında linux ölçümü yok — SKIP")
-        measured = sorted({h for _, h in recs})[0]
+        measured = self._current_ci_hash()
         col = self._canonical_column()
         rows = self._ledger_data_rows()[1]
         hashes = []
@@ -595,11 +644,21 @@ class TestCiLinuxLedgerRow(unittest.TestCase):
         darwin = self._platform_canonicals("darwin")
         if not linux or not darwin:
             self.skipTest("iki platform da ölçülmemiş — SKIP")
-        lh = sorted({h for _, h in linux})[0]
-        dh = sorted({h for _, h in darwin})[0]
+        # Karşılaştırma AYNI kaynak sürümü için anlamlıdır; farklı
+        # `source_sha256` farklı hash üretir ve bu bir sapma değildir.
+        common = ({r.get("source_sha256") for r, _h in linux}
+                  & {r.get("source_sha256") for r, _h in darwin})
+        if not common:
+            self.skipTest("iki platformda ölçülmüş ortak kaynak yok — SKIP")
+        src = sorted(common)[-1]
+        lh = sorted({h for r, h in linux
+                     if r.get("source_sha256") == src})[0]
+        dh = sorted({h for r, h in darwin
+                     if r.get("source_sha256") == src})[0]
         self.assertNotEqual(lh, dh,
                             "CI-linux ve darwin pdfTeX kanonik hash'i farklı "
-                            "olmalı (farklı font/TeXLive paketi)")
+                            "olmalı (farklı font/TeXLive paketi): %s…"
+                            % str(src)[:12])
 
     def test_tectonic_canonical_is_platform_stable(self):
         # Ölçülen asimetri: ayrışan bacak pdfTeX'tir, tectonic değil —
@@ -611,25 +670,39 @@ class TestCiLinuxLedgerRow(unittest.TestCase):
         darwin = self._platform_canonicals("darwin")
         if not linux or not darwin:
             self.skipTest("iki platform da ölçülmemiş — SKIP")
-        lt = {r.get("tectonic_canonical_sha256") for r, _h in linux}
-        dt = {r.get("tectonic_canonical_sha256") for r, _h in darwin}
-        self.assertEqual(lt, dt,
-                         "tectonic kanonik hash'i platformlar arası "
-                         "değişmemeli (ölçümde öyle)")
-        self.assertEqual(lt, {TECTONIC_SINGLE},
-                         "tectonic kanonik hash'i satır 1 ile aynı olmalı")
+        # Kararlılık iddiası kaynak + motor sürümü sabitken geçerlidir:
+        # aynı `source_sha256` iki platformda da ölçüldüyse tectonic
+        # kanonik hash'i EŞİT olmalı. Farklı kaynaklar karşılaştırılmaz.
+        common = ({r.get("source_sha256") for r, _h in linux}
+                  & {r.get("source_sha256") for r, _h in darwin})
+        if not common:
+            self.skipTest("iki platformda ölçülmüş ortak kaynak yok — SKIP")
+        for src in sorted(common):
+            lt = {r.get("tectonic_canonical_sha256") for r, _h in linux
+                  if r.get("source_sha256") == src}
+            dt = {r.get("tectonic_canonical_sha256") for r, _h in darwin
+                  if r.get("source_sha256") == src}
+            self.assertEqual(
+                lt, dt,
+                "tectonic kanonik hash'i platformlar arası değişmemeli "
+                "(kaynak %s…)" % str(src)[:12])
+        # Baseline kaynak için satır 1 ile birebir aynı olmalı.
+        if any(str(src).startswith("a9f34e05") for src in common):
+            lt = {r.get("tectonic_canonical_sha256") for r, _h in linux
+                  if str(r.get("source_sha256", "")).startswith("a9f34e05")}
+            self.assertEqual(lt, {TECTONIC_SINGLE},
+                             "baseline kaynakta tectonic hash'i satır 1 "
+                             "ile aynı olmalı")
 
     def test_ci_linux_row_carries_platform_and_sde_context(self):
         # Protokol: “defter satırları SDE bağlamını taşır”. Satır
         # platformu ve SDE'yi açıkça belirtmeli — kanonik hash SDE'ye
         # bağlıdır, bağlam yazılmazsa satır ileride yanlış okunur.
-        recs = self._platform_canonicals("linux")
-        if not recs:
-            self.skipTest("trend kaydında linux ölçümü yok — SKIP")
-        measured = sorted({h for _, h in recs})[0]
+        measured = self._current_ci_hash()
         col = self._canonical_column()
         rows = [cells for cells in self._ledger_data_rows()[1]
                 if col < len(cells) and measured in cells[col]]
+        self.assertTrue(rows, "güncel CI hash'i defterde satırsız")
         joined = " ".join(rows[0])
         self.assertRegex(joined, r"linux|ubuntu",
                          "satır platformu (linux/ubuntu) belirtmeli")
@@ -640,10 +713,7 @@ class TestCiLinuxLedgerRow(unittest.TestCase):
         # “Satır 5 neden ayrı?” geleneği: ayrı satırın gerekçesi yazılı
         # olmalı, yoksa protokol uygulanmış görünür ama anlaşılmaz.
         text = LEDGER.read_text(encoding="utf-8")
-        recs = self._platform_canonicals("linux")
-        if not recs:
-            self.skipTest("trend kaydında linux ölçümü yok — SKIP")
-        measured = sorted({h for _, h in recs})[0]
+        measured = self._current_ci_hash()
         self.assertIn(measured, text)
         self.assertRegex(text, r"(?i)CI[- ]linux",
                          "CI-linux bağlamı raporda adıyla anılmalı")
@@ -674,13 +744,26 @@ class TestFaz5DocumentationTruth(unittest.TestCase):
             self.assertIn(h, text,
                           "%s kanonik hash'i belgede olmalı (ölçülmüş veri)"
                           % label)
+        # CI-linux tarafında belge TÜM tarihsel ölçümleri taşımaz: kanonik
+        # hash kaynak-türevlidir, kaynak her değiştiğinde belgeye yeni hash
+        # yazmak ikinci bir kaynak yaratır. Tek kaynak kuralı: belge deftere
+        # işaret eder, hash'ler defterde durur — defterin güncelliğini ise
+        # TestCiLinuxLedgerRow.* kapısı zorlar.
+        self.assertIn("ID_RESIDUAL_ACCEPTANCE", text,
+                      "belge kanonik hash'ler için deftere işaret etmeli")
+        ledger = LEDGER.read_text(encoding="utf-8")
         recs = [json.loads(l) for l in TREND.read_text(
             encoding="utf-8").splitlines() if l.strip()]
-        ci = {r.get("texlive_canonical_sha256") for r in recs
-              if r.get("platform") == "linux"}
-        for h in ci:
-            self.assertIn(h, text,
-                          "CI-linux kanonik hash'i de belgede olmalı")
+        linux = [r for r in recs if r.get("platform") == "linux"]
+        if linux:
+            src = linux[-1].get("source_sha256")
+            current = {r.get("texlive_canonical_sha256") for r in linux
+                       if r.get("source_sha256") == src}
+            for h in current:
+                self.assertIn(
+                    h, ledger,
+                    "güncel CI-linux kanonik hash'i (kaynak %s…) defterde "
+                    "yok" % str(src)[:12])
 
     def test_pipeline_doc_does_not_claim_texlive_is_absent(self):
         text = PIPELINE.read_text(encoding="utf-8")
