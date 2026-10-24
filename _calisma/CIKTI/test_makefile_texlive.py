@@ -477,8 +477,11 @@ class TestAcceptLedgerRealEngines(unittest.TestCase):
                              "accept defter onayından sonra tracked OUTPUT yazmalı")
         self.assertEqual(written, artifact_bytes,
                          "yazılan teslim PDF'i doğrulanmış artefaktın baytları olmalı")
-        self.assertTrue(_canonical_bytes(written).startswith("544516b0"),
-                        "yazılan PDF kanonik hash'i defter satırı 4 ile başlamalı")
+        # Kaynak-türevli kabul satırı GÜNCEL defter satırıdır (satır 9);
+        # satır 4 kaynak öncesi ölçüm olarak kasıtlı korunur ve bu testte
+        # yazılan artefaktın kanonik hash'i olamaz.
+        self.assertTrue(_canonical_bytes(written).startswith("5899be5d"),
+                        "yazılan PDF kanonik hash'i defter satırı 9 ile başlamalı")
 
 
 
