@@ -37,6 +37,7 @@ test_check_unit_tests_timing.py
 test_check_vercel_deploy.py
 test_check_verify_jobs_map.py
 test_check_zip_lineage_drift.py
+test_ci_advisory_env.py
 test_ci_check_rate.py
 test_ci_failure_pattern.py
 test_ci_hygiene_gate.py
