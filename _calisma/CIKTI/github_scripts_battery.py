@@ -654,6 +654,44 @@ SCENARIOS = [
          "set_failed_contains": ["precommit-p0 etiketi var — P0 bulgusu"],
         },
     ),
+    # ── Kota dayanıklılığı: olay yükü önce (REST çağrısı yok), REST
+    # hatasında fail-closed. Kurulum kotası tükendiğinde REQUIRED kapı
+    # yanlış-kırmızıya düşmesin; etiket durumu bilinmiyorsa PASS verilmez.
+    (
+        "label_gate: etiketler olay yükünde → REST çağrısı YOK (kota dostu)",
+        "label_gate.js",
+        {}, {"payload": {"pull_request": {"labels": [{"name": "bug"}]}}},
+        None, None,
+        {"ok": True, "set_failed": False,
+         "call_counts": {"issues.listLabelsOnIssue": 0},
+         "console_any": ["precommit-p0 etiketi yok — P0 label gate PASS"]},
+    ),
+    (
+        "label_gate: yükte precommit-p0 var → setFailed, REST çağrısı YOK",
+        "label_gate.js",
+        {}, {"payload": {"pull_request": {"labels": [{"name": "precommit-p0"}]}}},
+        None, None,
+        {"ok": True, "set_failed": True,
+         "call_counts": {"issues.listLabelsOnIssue": 0},
+         "set_failed_contains": ["precommit-p0 etiketi var — P0 bulgusu"]},
+    ),
+    (
+        "label_gate: yük boş dizi → PASS (etiket yok bilgisi yükte)",
+        "label_gate.js",
+        {}, {"payload": {"pull_request": {"labels": []}}}, None, None,
+        {"ok": True, "set_failed": False,
+         "call_counts": {"issues.listLabelsOnIssue": 0},
+         "console_any": ["precommit-p0 etiketi yok — P0 label gate PASS"]},
+    ),
+    (
+        "label_gate: REST 403 (kota) + yükte etiket yok → FAIL-CLOSED setFailed",
+        "label_gate.js",
+        {"mock_api_error.json": '{"fn": "issues.listLabelsOnIssue", "message": "HTTP 403: API rate limit exceeded for installation"}'},
+        None, None, None,
+        {"ok": True, "set_failed": True,
+         "call_counts": {"issues.listLabelsOnIssue": 1},
+         "set_failed_contains": ["FAIL-CLOSED", "rate limit"]},
+    ),
 
     # ── label_gate_p1.js ──────────────────────────────────────────────────────
     (
@@ -673,6 +711,24 @@ SCENARIOS = [
             "call_counts": {"issues.listLabelsOnIssue": 1},
             "set_failed_contains": ["precommit-p1 etiketi var — P1 bulgusu"],
         },
+    ),
+    (
+        "label_gate_p1: etiketler olay yükünde → REST çağrısı YOK",
+        "label_gate_p1.js",
+        {}, {"payload": {"pull_request": {"labels": [{"name": "precommit-p1"}]}}},
+        None, None,
+        {"ok": True, "set_failed": True,
+         "call_counts": {"issues.listLabelsOnIssue": 0},
+         "set_failed_contains": ["precommit-p1 etiketi var — P1 bulgusu"]},
+    ),
+    (
+        "label_gate_p1: REST 403 (kota) → FAIL-CLOSED setFailed",
+        "label_gate_p1.js",
+        {"mock_api_error.json": '{"fn": "issues.listLabelsOnIssue", "message": "HTTP 403: API rate limit exceeded for installation"}'},
+        None, None, None,
+        {"ok": True, "set_failed": True,
+         "call_counts": {"issues.listLabelsOnIssue": 1},
+         "set_failed_contains": ["FAIL-CLOSED"]},
     ),
 
     # ── commit_msg_gate.js ──────────────────────────────────────────────────
@@ -1546,6 +1602,31 @@ SCENARIOS = [
             "body_contains": {"issues.createComment": [
                 "CVE-2024-0002", "HIGH", "diff-dışı"]},
         },
+    ),
+    # ── Kota dayanıklılığı: PR yorumu yan fayda, kapı kararı yerel SARIF'ten
+    (
+        "trivy: kota 403 (yorum düşmez) + temiz tarama → setFailed YOK",
+        "trivy_sarif_pr_comment.js",
+        {"trivy.sarif": '{"runs": [{"tool": {"driver": {"name": "Trivy", "rules": []}}, "results": []}]}',
+         "changed_files.txt": "README.md\n",
+         "mock_api_error.json": '{"fn": "issues.listComments", "message": "API rate limit exceeded for installation"}',
+         },
+        None, [], [],
+        {"ok": True, "set_failed": False,
+         "call_counts": {"issues.listComments": 1, "issues.createComment": 0},
+         "console_any": ["Trivy temiz — CRITICAL/HIGH bulgu yok"]},
+    ),
+    (
+        "trivy: kota 403 (yorum düşmez) + CRITICAL → setFailed yine verilir",
+        "trivy_sarif_pr_comment.js",
+        {"trivy.sarif": '{"runs": [{"tool": {"driver": {"name": "Trivy", "rules": [{"id": "CVE-2024-0001", "shortDescription": {"text": "os-pkg vuln"}}]}}, "results": [{"ruleId": "CVE-2024-0001", "level": "error", "message": {"text": "libfoo 1.2 has CVE-2024-0001"}, "locations": [{"physicalLocation": {"artifactLocation": {"uri": "Dockerfile"}, "region": {"startLine": 3}}}]}]}]}',
+         "changed_files.txt": "Dockerfile\n",
+         "mock_api_error.json": '{"fn": "issues.listComments", "message": "API rate limit exceeded for installation"}',
+         },
+        None, [], [],
+        {"ok": True, "set_failed": True,
+         "call_counts": {"issues.listComments": 1},
+         "set_failed_contains": ["CRITICAL/HIGH bulgu", "gate kırmızı"]},
     ),
 ]
 

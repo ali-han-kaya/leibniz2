@@ -46,6 +46,18 @@ const labels = loadJson('mock_labels.json', []);
 const comments = loadJson('mock_comments.json', []);
 const repoLabels = loadJson('mock_repo_labels.json', []);
 const ctx = loadJson('mock_context.json', null);
+// mock_api_error.json = {"fn": "issues.listLabelsOnIssue", "message": "..."}
+// → o REST fonksiyonu, gerçek bir 403/5xx gibi throw eder. Fail-closed
+// davranışını (PASS veremem) gerçek kod yolunda sınamak için.
+const apiError = loadJson('mock_api_error.json', null);
+function maybeThrow(fn) {
+  if (!apiError) return;
+  // fn: tek ad veya ad dizisi ("issues.listComments" gibi)
+  const names = Array.isArray(apiError.fn) ? apiError.fn : [apiError.fn];
+  if (names.includes(fn)) {
+    throw new Error(apiError.message || 'HTTP 403: API rate limit exceeded');
+  }
+}
 
 const calls = []; // her REST çağrısı: {fn, args}
 const setFailed = []; // core.setFailed mesajları
@@ -61,16 +73,26 @@ const github = {
     issues: {
       listLabelsOnIssue: async (a) => {
         calls.push({ fn: 'issues.listLabelsOnIssue', args: a || {} });
+        maybeThrow('issues.listLabelsOnIssue');
         return { data: labels };
       },
       listComments: async (a) => {
         calls.push({ fn: 'issues.listComments', args: a || {} });
+        maybeThrow('issues.listComments');
         return { data: comments };
       },
       addLabels: record('issues.addLabels'),
       removeLabel: record('issues.removeLabel'),
-      createComment: record('issues.createComment'),
-      updateComment: record('issues.updateComment'),
+      createComment: async (a) => {
+        calls.push({ fn: 'issues.createComment', args: a || {} });
+        maybeThrow('issues.createComment');
+        return { data: undefined };
+      },
+      updateComment: async (a) => {
+        calls.push({ fn: 'issues.updateComment', args: a || {} });
+        maybeThrow('issues.updateComment');
+        return { data: undefined };
+      },
       deleteComment: record('issues.deleteComment'),
       listLabelsForRepo: async (a) => {
         calls.push({ fn: 'issues.listLabelsForRepo', args: a || {} });
