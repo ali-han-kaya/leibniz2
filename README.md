@@ -644,6 +644,15 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-23 | fix | freebuff project-id kalici, update'de kaybolmasin | [`c0c006a8`](https://github.com/ali-han-kaya/leibniz2/commit/c0c006a8) |
 | 2026-10-23 | fix | (dev) bootstrap fails closed on missing or out-of-sync npm locks | [`689232b9`](https://github.com/ali-han-kaya/leibniz2/commit/689232b9) |
 | 2026-10-11 | docs | (deploy) 337e73f icin kanit-defteri satiri ekle | [`5979c5b0`](https://github.com/ali-han-kaya/leibniz2/commit/5979c5b0) |
+| 2026-10-24 | fix | (a11y) light temada AA kontrastini ve tema etiketini duzelt | [`1d76f2bf`](https://github.com/ali-han-kaya/leibniz2/commit/1d76f2bf) |
+| 2026-10-24 | fix | (ci) Lighthouse tema taramasini masaustu emulasyonuna hizala | [`2da29300`](https://github.com/ali-han-kaya/leibniz2/commit/2da29300) |
+| 2026-10-24 | fix | (a11y) witness eslesmesi harf buyuklugune takilmasin | [`e6113c81`](https://github.com/ali-han-kaya/leibniz2/commit/e6113c81) |
+| 2026-10-24 | fix | (preview) snapshot dogrulayicisi gercek CI kaydini kabul etsin | [`e14cdd41`](https://github.com/ali-han-kaya/leibniz2/commit/e14cdd41) |
+| 2026-10-24 | fix | (ci) a11y-gate playwright kurulumunu calisan pine bagla | [`db9b2012`](https://github.com/ali-han-kaya/leibniz2/commit/db9b2012) |
+| 2026-10-24 | fix | (a11y) preview.html cift id ve kaybolan log yuzeylerini geri getir | [`d2e482b0`](https://github.com/ali-han-kaya/leibniz2/commit/d2e482b0) |
+| 2026-10-24 | docs | (deploy) e6f1e9c6 kanit satiri (#106) | [`777b0ea7`](https://github.com/ali-han-kaya/leibniz2/commit/777b0ea7) |
+| 2026-10-24 | docs | (changelog) PR #75 squash sonrasi olu hash satirlarini duzelt | [`4362a98e`](https://github.com/ali-han-kaya/leibniz2/commit/4362a98e) |
+| 2026-10-24 | test | (k6) yeni kaynak surumu icin defter satirlari ve tam §4 taramasi | [`2b93e0b1`](https://github.com/ali-han-kaya/leibniz2/commit/2b93e0b1) |
 
 ### Regresyon notları
 

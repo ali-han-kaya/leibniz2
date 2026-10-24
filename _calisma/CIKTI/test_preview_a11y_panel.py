@@ -342,7 +342,9 @@ class TestPreviewSync(unittest.TestCase):
         for page in ps.A11Y_PAGES:
             for theme in ps.A11Y_THEMES:
                 name = ps.a11y_artifact_name(page, theme)
-                self.assertIn(name.replace(theme, "${{ matrix.theme }}"), yml,
+                # Tek job iki temayı döngüde tarar; artifact adları artık
+                # şablonda değil, doğrudan üretim adımında yazılır.
+                self.assertIn(name, yml,
                               "verify.yml %s üretmiyor — panel verisiz kalır"
                               % name)
 

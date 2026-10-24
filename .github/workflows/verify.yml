@@ -3263,10 +3263,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: [verify]
-    strategy:
-      fail-fast: false
-      matrix:
-        theme: [dark, light]
+    # Tek job, iki tema DÖNGÜSÜ. Branch protection'daki zorunlu check adı
+    # "A11y gate (axe-core, fail-closed)" tekil kalmalı: GitHub matrix
+    # job'larında check adına " (dark)"/" (light)" eklediği için şartlı ad
+    # hiç raporlanmıyor ve PR kalıcı olarak BLOCKED oluyordu (2026-10-24).
+    # Tarama adımı içinde koşar; ad + artifact sözleşmeleri değişmez.
     steps:
       - uses: actions/checkout@v7
 
@@ -3410,52 +3411,69 @@ jobs:
             --output /dev/null
 
       - name: Run a11y gate — dashboard
+        shell: bash
         run: |
-          python3 _calisma/CIKTI/a11y_gate.py \
-            --base-url "http://127.0.0.1:$A11Y_PORT" \
-            --page /preview.html \
-            --theme "${{ matrix.theme }}" \
-            --output "a11y_dashboard_${{ matrix.theme }}.json"
+          # Her iki tema ayrı koşulur; hata job'ı kırmızıya çevirir ama
+          # diğer temanın kanıtı da toplanır (fail-closed + tam kanıt).
+          rc=0
+          for theme in dark light; do
+            python3 _calisma/CIKTI/a11y_gate.py \
+              --base-url "http://127.0.0.1:$A11Y_PORT" \
+              --page /preview.html \
+              --theme "$theme" \
+              --output "a11y_dashboard_${theme}.json" || rc=1
+          done
+          exit $rc
 
       - name: Run a11y gate — guide
         if: always()
+        shell: bash
         run: |
-          python3 _calisma/CIKTI/a11y_gate.py \
-            --base-url "http://127.0.0.1:$A11Y_PORT" \
-            --page /guide.html \
-            --theme "${{ matrix.theme }}" \
-            --output "a11y_guide_${{ matrix.theme }}.json"
+          rc=0
+          for theme in dark light; do
+            python3 _calisma/CIKTI/a11y_gate.py \
+              --base-url "http://127.0.0.1:$A11Y_PORT" \
+              --page /guide.html \
+              --theme "$theme" \
+              --output "a11y_guide_${theme}.json" || rc=1
+          done
+          exit $rc
 
       - name: Run a11y gate — landing
         if: always()
+        shell: bash
         run: |
-          python3 _calisma/CIKTI/a11y_gate.py \
-            --base-url "http://127.0.0.1:$A11Y_PORT" \
-            --page /landing.html \
-            --theme "${{ matrix.theme }}" \
-            --output "a11y_landing_${{ matrix.theme }}.json"
+          rc=0
+          for theme in dark light; do
+            python3 _calisma/CIKTI/a11y_gate.py \
+              --base-url "http://127.0.0.1:$A11Y_PORT" \
+              --page /landing.html \
+              --theme "$theme" \
+              --output "a11y_landing_${theme}.json" || rc=1
+          done
+          exit $rc
 
       - name: Run Lighthouse accessibility — dashboard
         if: always()
-        env:
-          A11Y_THEME: ${{ matrix.theme }}
         shell: bash
         run: |
-          set -euo pipefail
-          report="lighthouse_dashboard_${A11Y_THEME}.json"
-          url="http://127.0.0.1:${A11Y_PORT}/preview.html?theme=${A11Y_THEME}"
-          npx --yes lighthouse@13.5.0 "$url" \
-            --only-categories=accessibility \
-            --preset=desktop \
-            --screenEmulation.mobile=false \
-            --output=json \
-            --output-path="$report" \
-            --chrome-flags="--headless --no-sandbox --disable-background-timer-throttling" \
-            --throttling-method=provided \
-            --max-wait-for-load=10000 \
-            --disable-full-page-screenshot \
-            --quiet
-          python3 - "$report" "$A11Y_THEME" <<'PY'
+          set -uo pipefail
+          scan_theme() {
+            local theme="$1"
+            local report="lighthouse_dashboard_${theme}.json"
+            local url="http://127.0.0.1:${A11Y_PORT}/preview.html?theme=${theme}"
+            npx --yes lighthouse@13.5.0 "$url" \
+              --only-categories=accessibility \
+              --preset=desktop \
+              --screenEmulation.mobile=false \
+              --output=json \
+              --output-path="$report" \
+              --chrome-flags="--headless --no-sandbox --disable-background-timer-throttling" \
+              --throttling-method=provided \
+              --max-wait-for-load=10000 \
+              --disable-full-page-screenshot \
+              --quiet || return 1
+            python3 - "$report" "$theme" <<'PY'
           import json
           import pathlib
           import sys
@@ -3482,16 +3500,23 @@ jobs:
           print("Lighthouse accessibility: PASS (score=1.0; zero-score audits: %s)" %
                 (", ".join(failed) if failed else "none"))
           PY
+          }
+          rc=0
+          for theme in dark light; do
+            scan_theme "$theme" || rc=1
+          done
+          exit $rc
 
       - name: Write a11y job summary
         if: always()
         env:
-          A11Y_THEME: ${{ matrix.theme }}
+          A11Y_THEMES: "dark light"
         shell: bash
         run: |
-          # Her matrix child'ı kendi temasında üç raporu salt-okur render
-          # eder. Guide ve landing if: always() ile çalıştığı için dashboard
-          # FAIL olsa bile diğer raporlar ve özet kaybolmaz.
+          # Her iki tema için üç rapor salt-okur render edilir; tek adımda
+          # iki bölüm GITHUB_STEP_SUMMARY'ye yazılır. Guide ve landing
+          # if: always() ile çalıştığı için dashboard FAIL olsa bile diğer
+          # raporlar ve özet kaybolmaz.
           #
           # İNCOMPLETE KANITI: özet YALNIZ allowlist'le eşleşen incomplete
           # düğümlerin hedefini ve outer HTML kanıtını gösterir (allowlist'siz
@@ -3504,100 +3529,150 @@ jobs:
           import json, os, pathlib, sys
           sys.path.insert(0, "_calisma/CIKTI")
           from a11y_summary import render_allowlist_error, render_report
-          theme = os.environ["A11Y_THEME"]
-          # Allowlist aynı dosyadan okunur; okunamazsa sessiz boş özet
-          # üretmek yerine görünür bir uyarı satırı yazılır.
+
+          # A11Y_THEMES adım env'inden gelir (tek job, iki tema döngüsü); tema
+          # beyaz listesi a11y_gate.VALID_THEMES ile aynı kümedir.
+          themes = os.environ["A11Y_THEMES"].split()
+          # Allowlist aynı dosyadan okunur; okunamazsa sessiz boş özet üretmek
+          # yerine görünür bir uyarı satırı yazılır.
           allowlist, allowlist_error = [], None
           try:
               with open("_calisma/CIKTI/a11y_gate_config.json", encoding="utf-8") as handle:
                   allowlist = json.load(handle)["allowlist"]
           except (OSError, ValueError, KeyError, TypeError) as exc:
               allowlist_error = exc
-          reports = [
-              ("Dashboard", pathlib.Path("a11y_dashboard_%s.json" % theme)),
-              ("Branch protection guide", pathlib.Path("a11y_guide_%s.json" % theme)),
-              ("Landing", pathlib.Path("a11y_landing_%s.json" % theme)),
-          ]
-          lines = [
-              "## a11y-gate özeti (%s)" % theme,
-              "",
-              "| sayfa | verdict | blocking / warn / allowlisted / incomplete |",
-              "|---|---|---|",
-          ]
-          for label, report in reports:
-              if not report.exists():
-                  lines.append("| %s | — | rapor üretilmedi |" % label)
-                  continue
-              data = json.loads(report.read_text(encoding="utf-8"))
-              s = data.get("summary") or {}
-              lines.append("| %s | **%s** | %s / %s / %s / %s |" % (
-                  label, data.get("verdict", "BILINMIYOR"),
-                  s.get("blocking", 0), s.get("warn", 0),
-                  s.get("allowlisted", 0), s.get("incomplete", 0)))
-              for v in data.get("violations", []):
-                  extra = " (allowlisted: %s düğüm)" % v["allowlisted_nodes"] \
-                      if v.get("allowlisted_nodes") else ""
-                  lines.append("- `%s` %s → %s, %s düğüm%s" % (
-                      v.get("rule", "?"), v.get("impact") or "-",
-                      v.get("level"), v.get("nodes"), extra))
-              if data.get("error"):
-                  lines.append("- hata: %s" % data["error"])
-              if allowlist_error is None:
-                  lines.extend(render_report(data, allowlist, label))
-          if allowlist_error is not None:
-              lines.append(render_allowlist_error(allowlist_error))
-          lighthouse = pathlib.Path("lighthouse_dashboard_%s.json" % theme)
-          if lighthouse.exists():
-              try:
-                  lighthouse_data = json.loads(lighthouse.read_text(encoding="utf-8"))
-                  lighthouse_score = (lighthouse_data.get("categories", {})
-                                       .get("accessibility", {}).get("score"))
-                  lines.append("- Lighthouse dashboard accessibility: **%s** (score: %s)" % (
-                      "PASS" if lighthouse_score == 1 else "FAIL",
-                      lighthouse_score if lighthouse_score is not None else "unknown"))
-              except (OSError, ValueError, TypeError) as exc:
-                  lines.append("- Lighthouse dashboard accessibility: **FAIL** (%s)" % exc)
-          else:
-              lines.append("- Lighthouse dashboard accessibility: **FAIL** (rapor üretilmedi)")
+
+
+          def summary_lines(theme):
+              reports = [
+                  ("Dashboard", pathlib.Path("a11y_dashboard_%s.json" % theme)),
+                  ("Branch protection guide", pathlib.Path("a11y_guide_%s.json" % theme)),
+                  ("Landing", pathlib.Path("a11y_landing_%s.json" % theme)),
+              ]
+              lines = [
+                  "## a11y-gate özeti (%s)" % theme,
+                  "",
+                  "| sayfa | verdict | blocking / warn / allowlisted / incomplete |",
+                  "|---|---|---|",
+              ]
+              for label, report in reports:
+                  if not report.exists():
+                      lines.append("| %s | — | rapor üretilmedi |" % label)
+                      continue
+                  data = json.loads(report.read_text(encoding="utf-8"))
+                  summary = data.get("summary") or {}
+                  lines.append("| %s | **%s** | %s / %s / %s / %s |" % (
+                      label, data.get("verdict", "BILINMIYOR"),
+                      summary.get("blocking", 0), summary.get("warn", 0),
+                      summary.get("allowlisted", 0), summary.get("incomplete", 0)))
+                  for v in data.get("violations", []):
+                      extra = " (allowlisted: %s düğüm)" % v["allowlisted_nodes"] \
+                          if v.get("allowlisted_nodes") else ""
+                      lines.append("- `%s` %s → %s, %s düğüm%s" % (
+                          v.get("rule", "?"), v.get("impact") or "-",
+                          v.get("level"), v.get("nodes"), extra))
+                  if data.get("error"):
+                      lines.append("- hata: %s" % data["error"])
+                  if allowlist_error is None:
+                      lines.extend(render_report(data, allowlist, label))
+              if allowlist_error is not None:
+                  lines.append(render_allowlist_error(allowlist_error))
+              lighthouse = pathlib.Path("lighthouse_dashboard_%s.json" % theme)
+              if lighthouse.exists():
+                  try:
+                      lighthouse_data = json.loads(lighthouse.read_text(encoding="utf-8"))
+                      lighthouse_score = (lighthouse_data.get("categories", {})
+                                          .get("accessibility", {}).get("score"))
+                      lines.append(
+                          "- Lighthouse dashboard accessibility: **%s** (score: %s)" % (
+                              "PASS" if lighthouse_score == 1 else "FAIL",
+                              lighthouse_score if lighthouse_score is not None else "unknown"))
+                  except (OSError, ValueError, TypeError) as exc:
+                      lines.append("- Lighthouse dashboard accessibility: **FAIL** (%s)" % exc)
+              else:
+                  lines.append("- Lighthouse dashboard accessibility: **FAIL** (rapor üretilmedi)")
+              return lines
+
+
+          lines = []
+          for theme in themes:
+              lines.extend(summary_lines(theme))
           pathlib.Path(os.environ["GITHUB_STEP_SUMMARY"]).write_text(
               "\n".join(lines) + "\n", encoding="utf-8")
           PY
 
-      - name: Upload a11y report
+      - name: Upload a11y report (dark)
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: a11y-report-${{ matrix.theme }}
-          path: a11y_dashboard_${{ matrix.theme }}.json
+          name: a11y-report-dark
+          path: a11y_dashboard_dark.json
           if-no-files-found: ignore
           retention-days: 30
 
-      - name: Upload guide a11y report
+      - name: Upload guide a11y report (dark)
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: a11y-guide-report-${{ matrix.theme }}
-          path: a11y_guide_${{ matrix.theme }}.json
+          name: a11y-guide-report-dark
+          path: a11y_guide_dark.json
           if-no-files-found: ignore
           retention-days: 30
 
-      - name: Upload landing a11y report
+      - name: Upload landing a11y report (dark)
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: a11y-landing-report-${{ matrix.theme }}
-          path: a11y_landing_${{ matrix.theme }}.json
+          name: a11y-landing-report-dark
+          path: a11y_landing_dark.json
           if-no-files-found: ignore
           retention-days: 30
 
-      - name: Upload Lighthouse dashboard report
+      - name: Upload Lighthouse dashboard report (dark)
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: lighthouse-dashboard-${{ matrix.theme }}
-          path: lighthouse_dashboard_${{ matrix.theme }}.json
+          name: lighthouse-dashboard-dark
+          path: lighthouse_dashboard_dark.json
           if-no-files-found: ignore
           retention-days: 30
+
+      - name: Upload a11y report (light)
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: a11y-report-light
+          path: a11y_dashboard_light.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Upload guide a11y report (light)
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: a11y-guide-report-light
+          path: a11y_guide_light.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Upload landing a11y report (light)
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: a11y-landing-report-light
+          path: a11y_landing_light.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Upload Lighthouse dashboard report (light)
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: lighthouse-dashboard-light
+          path: lighthouse_dashboard_light.json
+          if-no-files-found: ignore
+          retention-days: 30
+
 
   changelog-drift:
     name: Changelog drift check (advisory)

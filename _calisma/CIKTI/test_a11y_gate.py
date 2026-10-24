@@ -810,9 +810,9 @@ class TestWorkflowSummaryStep(unittest.TestCase):
             block,
         )
         self.assertIn("--page /preview.html", block)
-        self.assertIn('--output "a11y_dashboard_${{ matrix.theme }}.json"', block)
+        self.assertIn('--output "a11y_dashboard_${theme}.json"', block)
         self.assertIn("--page /guide.html", block)
-        self.assertIn('--output "a11y_guide_${{ matrix.theme }}.json"', block)
+        self.assertIn('--output "a11y_guide_${theme}.json"', block)
         self.assertIn("python3 _calisma/landing/build_landing.py", block)
         self.assertIn('--snapshot-url "http://127.0.0.1:$port/api/latest"',
                       block)
@@ -821,9 +821,13 @@ class TestWorkflowSummaryStep(unittest.TestCase):
         self.assertIn("--assets-dir _calisma/CIKTI/landing/assets", block)
         self.assertNotIn("qpdf_determinism_output", block)
         self.assertIn("--page /landing.html", block)
-        self.assertIn('--output "a11y_landing_${{ matrix.theme }}.json"', block)
-        self.assertIn("matrix:", block)
-        self.assertIn("theme: [dark, light]", block)
+        self.assertIn('--output "a11y_landing_${theme}.json"', block)
+        # Şartlı check adı tekil kalmalı: GitHub matrix job'ında check adına
+        # " (dark)"/" (light)" ekler → "A11y gate (axe-core, fail-closed)"
+        # hiç raporlanmaz ve PR kalıcı BLOCKED olur (2026-10-24).
+        self.assertNotIn("${{ matrix.", block)
+        self.assertNotIn("strategy:", block)
+        self.assertIn("for theme in dark light", block)
         for step_name in ("guide", "landing"):
             step = block.split("- name: Run a11y gate — %s" % step_name, 1)[1]
             step = step.split("- name:", 1)[0]
@@ -831,17 +835,17 @@ class TestWorkflowSummaryStep(unittest.TestCase):
 
     def test_landing_report_has_theme_suffixed_artifact(self):
         block = self._a11y_block()
-        upload = block.split("- name: Upload landing a11y report", 1)[1]
-        self.assertIn("name: a11y-landing-report-${{ matrix.theme }}", upload)
-        self.assertIn("path: a11y_landing_${{ matrix.theme }}.json", upload)
+        for theme in ("dark", "light"):
+            self.assertIn("name: a11y-landing-report-%s" % theme, block)
+            self.assertIn("path: a11y_landing_%s.json" % theme, block)
 
     def test_guide_report_has_theme_suffixed_artifact(self):
         block = self._a11y_block()
-        upload = block.split("- name: Upload guide a11y report", 1)[1]
-        self.assertIn("name: a11y-guide-report-${{ matrix.theme }}", upload)
-        self.assertIn("path: a11y_guide_${{ matrix.theme }}.json", upload)
+        for theme in ("dark", "light"):
+            self.assertIn("name: a11y-guide-report-%s" % theme, block)
+            self.assertIn("path: a11y_guide_%s.json" % theme, block)
 
-    def test_lighthouse_dashboard_scan_is_theme_matrix_fail_closed(self):
+    def test_lighthouse_dashboard_scan_is_theme_loop_fail_closed(self):
         block = self._a11y_block()
         self.assertIn("actions/setup-node@v7", block)
         self.assertIn("Resolve Chromium for Lighthouse", block)
@@ -853,7 +857,7 @@ class TestWorkflowSummaryStep(unittest.TestCase):
         self.assertIn("--preset=desktop", block)
         self.assertIn("--screenEmulation.mobile=false", block)
         self.assertNotIn("--form-factor=desktop", block)
-        self.assertIn("?theme=${A11Y_THEME}", block)
+        self.assertIn("?theme=${theme}", block)
         self.assertIn('score != 1', block)
         self.assertIn("Lighthouse accessibility score PASS değil", block)
         step = block.split("- name: Run Lighthouse accessibility — dashboard", 1)[1]
@@ -862,9 +866,9 @@ class TestWorkflowSummaryStep(unittest.TestCase):
 
     def test_lighthouse_report_has_theme_suffixed_artifact(self):
         block = self._a11y_block()
-        upload = block.split("- name: Upload Lighthouse dashboard report", 1)[1]
-        self.assertIn("name: lighthouse-dashboard-${{ matrix.theme }}", upload)
-        self.assertIn("path: lighthouse_dashboard_${{ matrix.theme }}.json", upload)
+        for theme in ("dark", "light"):
+            self.assertIn("name: lighthouse-dashboard-%s" % theme, block)
+            self.assertIn("path: lighthouse_dashboard_%s.json" % theme, block)
 
 
 def _luminance(color):
