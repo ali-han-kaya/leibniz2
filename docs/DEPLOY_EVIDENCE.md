@@ -16,6 +16,17 @@
 | 2026-10-10 | cb6f607 | [failure #38014906773](https://github.com/ali-han-kaya/leibniz2/actions/runs/38014906773) | [failure #38014906725](https://github.com/ali-han-kaya/leibniz2/actions/runs/38014906725) | [success #38014906718](https://github.com/ali-han-kaya/leibniz2/actions/runs/38014906718) | [success #37324916028](https://github.com/ali-han-kaya/leibniz2/actions/runs/37324916028) |
 | 2026-10-11 | 337e73f | [failure #38142793917](https://github.com/ali-han-kaya/leibniz2/actions/runs/38142793917) | [success #38142793885](https://github.com/ali-han-kaya/leibniz2/actions/runs/38142793885) | [success #38142793977](https://github.com/ali-han-kaya/leibniz2/actions/runs/38142793977) | [success #38062084791](https://github.com/ali-han-kaya/leibniz2/actions/runs/38062084791) |
 | 2026-10-23 | a75d166 | [failure #40038972623](https://github.com/ali-han-kaya/leibniz2/actions/runs/40038972623) | [success #40038972640](https://github.com/ali-han-kaya/leibniz2/actions/runs/40038972640) | [success #40038972619](https://github.com/ali-han-kaya/leibniz2/actions/runs/40038972619) | [success #39226471244](https://github.com/ali-han-kaya/leibniz2/actions/runs/39226471244) |
+| 2026-10-24 | 84e5b0b | [failure #40050753159](https://github.com/ali-han-kaya/leibniz2/actions/runs/40050753159) | [success #40050753136](https://github.com/ali-han-kaya/leibniz2/actions/runs/40050753136) | [success #40050753162](https://github.com/ali-han-kaya/leibniz2/actions/runs/40050753162) | [success #39226471244](https://github.com/ali-han-kaya/leibniz2/actions/runs/39226471244) |
+
+`84e5b0b` — PR #101 (`slice/plist-mirror-gates`) inişi: `a75d166` satırının
+üstüne **4 anlamlı** commit geldi (`697f0d46` golden↔mirror senkronu,
+`e4bed595` video_render_comment.js'in advisory sınıfı, PR #101 merge'ü ve
+`bcc1ed4b`/`ec587e98` kanıt satırı zinciri; tolerans 3) → `verify-delivery`
+kırmızısı **yalnız** `test_deploy_evidence.test_cli_accepts_repo_ledger_offline`;
+bu satır tam olarak o açığı kapatıyor. `docker-security` ve `test-smoke` aynı
+HEAD'de yeşil; `determinism-trend` hücresi son main ölçümünü taşır
+(`#39226471244`, sha `344767dc`) — bu workflow `workflow_dispatch` olduğu için
+`84e5b0b` adına koşum yoktur.
 
 `a75d166` — PR #98 (`fix/restore-freebuff-id-clean`) inişi: `337e73f`
 satırının üstüne **14 anlamlı** commit geldi (freebuff project-id kalıcılığı,
