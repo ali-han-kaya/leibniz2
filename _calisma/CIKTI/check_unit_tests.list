@@ -165,6 +165,7 @@ test_update_changelog_hook.py
 test_update_preview_sync_server.py
 test_validate_config_schema.py
 test_vercel_adapter.py
+test_vercel_latest_preview.py
 test_verdict_seal_css.py
 test_verification_chain_deck.py
 test_verify_checks.py
