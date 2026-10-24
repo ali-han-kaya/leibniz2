@@ -19,6 +19,19 @@
 | 2026-10-23 | a75d166 | [failure #40038972623](https://github.com/ali-han-kaya/leibniz2/actions/runs/40038972623) | [success #40038972640](https://github.com/ali-han-kaya/leibniz2/actions/runs/40038972640) | [success #40038972619](https://github.com/ali-han-kaya/leibniz2/actions/runs/40038972619) | [success #39226471244](https://github.com/ali-han-kaya/leibniz2/actions/runs/39226471244) |
 | 2026-10-24 | 84e5b0b | [failure #40050753159](https://github.com/ali-han-kaya/leibniz2/actions/runs/40050753159) | [success #40050753136](https://github.com/ali-han-kaya/leibniz2/actions/runs/40050753136) | [success #40050753162](https://github.com/ali-han-kaya/leibniz2/actions/runs/40050753162) | [success #39226471244](https://github.com/ali-han-kaya/leibniz2/actions/runs/39226471244) |
 | 2026-10-24 | e6f1e9c6 | [failure #40072376535](https://github.com/ali-han-kaya/leibniz2/actions/runs/40072376535) | [success #40072376529](https://github.com/ali-han-kaya/leibniz2/actions/runs/40072376529) | [success #40072376545](https://github.com/ali-han-kaya/leibniz2/actions/runs/40072376545) | [success #39226471244](https://github.com/ali-han-kaya/leibniz2/actions/runs/39226471244) |
+| 2026-10-24 | 843284cc | [failure #40125253039](https://github.com/ali-han-kaya/leibniz2/actions/runs/40125253039) | [success #40125253000](https://github.com/ali-han-kaya/leibniz2/actions/runs/40125253000) | [success #40125253010](https://github.com/ali-han-kaya/leibniz2/actions/runs/40125253010) | [success #39226471244](https://github.com/ali-han-kaya/leibniz2/actions/runs/39226471244) |
+
+`843284cc` — PR #108 (`fix/changelog-prune-dead-hashes`) inişi: `e6f1e9c6`
+satırının üstüne **4 anlamlı** commit geldi (PR #55 squash'ı `76bcb7d5`,
+PR #108 squash'ı `843284cc` ve aradaki sync/kanıt zinciri; tolerans 3) →
+`verify-delivery` kırmızısı **önce** `test_gen_changelog` (README changelog'unda
+3 ölü hash), PR #108 ile kapanınca **şimdi** yalnız
+`test_deploy_evidence.test_cli_accepts_repo_ledger_offline` (CIKTI bataryası
+3118 test, 1 failure); bu satır tam olarak o açığı kapatıyor. `docker-security`
+ve `test-smoke` bu HEAD'de yeşil. `determinism-trend` hücresi son main
+ölçümünü taşır (`#39226471244`, sha `344767dc`) — bu workflow
+`workflow_dispatch` olduğu için `843284cc` adına koşum yoktur.
+
 
 `e6f1e9c6` — PR #83 (`chore/determinism-trend-record`) inişi: `84e5b0b`
 satırının üstüne **15 anlamlı** commit geldi (haftalık trend kaydı, PR #103/#104
