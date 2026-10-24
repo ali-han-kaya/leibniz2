@@ -242,12 +242,24 @@ def decide_verdict(rows):
 
 # ----------------------------------------------------------------- scan
 
+def _witness_key(text):
+    """Witness karşılaştırma anahtarı: boşluklar tek, büyük/küçük harf nötr.
+
+    `inner_text()` RENDER edilmiş metni verir; sayfa tipografisi başlıkları
+    CSS `text-transform: uppercase` ile büyütüyor (ölçüm: body'de
+    "TESLİM DENETİMİ · KANIT SAYFASI", config'te "Teslim denetimi · kanıt
+    sayfası"). Harf büyüklüğü bir tipografi kararıdır, sayfanın kimliği
+    değil; witness "doğru sayfa render edildi mi" sorusunu yanıtlar.
+    """
+    return " ".join(str(text).split()).casefold()
+
+
 def _verify_witness(page, witness):
     """Render edilen gerçek sayfa witness'ı taşımalı; aksi halde FAIL."""
     if not witness:
         raise ValueError("sayfa witness metni zorunlu")
-    body_text = page.locator("body").inner_text()
-    if witness not in body_text:
+    body_text = _witness_key(page.locator("body").inner_text())
+    if _witness_key(witness) not in body_text:
         raise ValueError("sayfa witness metni bulunamadı: %s" % witness)
 
 

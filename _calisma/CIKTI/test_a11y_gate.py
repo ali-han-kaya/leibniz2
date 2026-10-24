@@ -283,11 +283,40 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(
             [(entry["path"], entry["witness"]) for entry in cfg["pages"]],
             [
-                ("/preview.html", "Stoic-Hume V5 — Live CI Dashboard"),
+                ("/preview.html", "Live CI Dashboard"),
                 ("/guide.html", "Ayarlar → Branches — kural listesi boş"),
                 ("/landing.html", "teslim anına kadar."),
             ],
         )
+
+    def test_witness_match_is_case_insensitive(self):
+        """CSS `text-transform: uppercase` witness'ı kırmızıya düşürmemeli.
+
+        Ölçüm (CI + yerel): preview.html body'sinde başlıklar UPPERCASE
+        render ediliyor (`inner_text()` = "LIVE CI DASHBOARD"), config ise
+        okunur biçimiyle yazıyor. Harf büyüklüğü tipografidir; witness
+        "doğru sayfa render edildi mi" sorusunu yanıtlar.
+        """
+
+        class _Body:
+            def __init__(self, text):
+                self._text = text
+
+            def inner_text(self):
+                return self._text
+
+        class _Page:
+            def __init__(self, text):
+                self._body = _Body(text)
+
+            def locator(self, _selector):
+                return self._body
+
+        a11y_gate._verify_witness(_Page("LIVE CI DASHBOARD\n⏳ bekleniyor…"),
+                                  "Live CI Dashboard")
+        with self.assertRaises(ValueError):
+            a11y_gate._verify_witness(_Page("başka sayfa"),
+                                      "Live CI Dashboard")
 
     def test_repo_config_allowlists_actual_svg_seal_targets_with_reason(self):
         cfg = a11y_gate.load_config(

@@ -22,7 +22,7 @@
   "pages": [
     {
       "path": "/preview.html",
-      "witness": "Stoic-Hume V5 — Live CI Dashboard"
+      "witness": "Live CI Dashboard"
     },
     {
       "path": "/guide.html",
