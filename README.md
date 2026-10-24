@@ -479,9 +479,6 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-09-21 | fix | (ci) trend record via bot branch + PR (protection wall) | [`fa1809b`](https://github.com/ali-han-kaya/leibniz2/commit/fa1809b) |
 | 2026-09-21 | chore | record weekly determinism trend measurement | [`3f043bc`](https://github.com/ali-han-kaya/leibniz2/commit/3f043bc) |
 | 2026-09-21 | fix | (ci) trend PR step policy-aware (Actions PR-permission off) | [`c78dc67`](https://github.com/ali-han-kaya/leibniz2/commit/c78dc67) |
-| 2026-09-30 | fix | (ci) üç advisory adımın ortam sözleşmesi | [`a931853`](https://github.com/ali-han-kaya/leibniz2/commit/a931853) |
-| 2026-09-30 | fix | (ci) gh çözümlemesi çift program adı üretiyordu | [`07e883e`](https://github.com/ali-han-kaya/leibniz2/commit/07e883e) |
-| 2026-09-30 | fix | (ci) üç advisory adımın ortam sözleşmesi (venv, GH_TOKEN, errexit) | [`9d1eabc`](https://github.com/ali-han-kaya/leibniz2/commit/9d1eabc) |
 | 2026-09-30 | chore | (changelog) 5280500 ve cfa33d9 satirlarini tabloya ekle | [`f194e89`](https://github.com/ali-han-kaya/leibniz2/commit/f194e89) |
 | 2026-09-30 | docs | (docker) npm katmanı kapalı döngüsü + kontrat testi | [`4e7d758`](https://github.com/ali-han-kaya/leibniz2/commit/4e7d758) |
 | 2026-09-30 | chore | (changelog) 4e7d758 satirini tabloya ekle | [`e89165b`](https://github.com/ali-han-kaya/leibniz2/commit/e89165b) |
@@ -647,6 +644,12 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-23 | fix | freebuff project-id kalici, update'de kaybolmasin | [`c0c006a8`](https://github.com/ali-han-kaya/leibniz2/commit/c0c006a8) |
 | 2026-10-23 | fix | (dev) bootstrap fails closed on missing or out-of-sync npm locks | [`689232b9`](https://github.com/ali-han-kaya/leibniz2/commit/689232b9) |
 | 2026-10-11 | docs | (deploy) 337e73f icin kanit-defteri satiri ekle | [`5979c5b0`](https://github.com/ali-han-kaya/leibniz2/commit/5979c5b0) |
+| 2026-10-24 | fix | (ci) advisory adımların ortam sözleşmesi (gh çözümleme, actions kapsamı, erre... | [`76bcb7d5`](https://github.com/ali-han-kaya/leibniz2/commit/76bcb7d5) |
+| 2026-10-24 | fix | (ci) verify push tetigini main ile sinirla (cift kosum duzeltmesi) (#107) | [`50d4a191`](https://github.com/ali-han-kaya/leibniz2/commit/50d4a191) |
+| 2026-10-24 | test | (a11y) verdict mührü kontrast sözleşmesi (AA, mutasyon kanıtlı) (#91) | [`a1c453ee`](https://github.com/ali-han-kaya/leibniz2/commit/a1c453ee) |
+| 2026-10-24 | docs | (deploy) e6f1e9c6 kanit satiri (#106) | [`777b0ea7`](https://github.com/ali-han-kaya/leibniz2/commit/777b0ea7) |
+| 2026-10-24 | docs | (changelog) PR #75 squash sonrasi olu hash satirlarini duzelt | [`4362a98e`](https://github.com/ali-han-kaya/leibniz2/commit/4362a98e) |
+| 2026-10-24 | test | (k6) yeni kaynak surumu icin defter satirlari ve tam §4 taramasi | [`2b93e0b1`](https://github.com/ali-han-kaya/leibniz2/commit/2b93e0b1) |
 
 ### Regresyon notları
 
