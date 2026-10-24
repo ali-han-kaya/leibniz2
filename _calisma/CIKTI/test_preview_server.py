@@ -2076,5 +2076,50 @@ class SSEHandlerThreadTests(unittest.TestCase):
         self.assertEqual(ps.STREAM_CLIENTS, [])
 
 
+class SnapshotFileValidationContractTest(unittest.TestCase):
+    """`--snapshot-file` sözleşmesi: gerçek CI kaydı kabul edilmeli.
+
+    CI'da ölçüldü (`run-history/history.jsonl`):
+    `"stripped_sha256": null` — PDF metin-çıkarma adımı koşmadığında
+    verify_delivery bu alanı None yazar. Alan zorunlu tutulduğu için
+    a11y-gate işi preview_server'ı hiç başlatamıyordu (fail-closed
+    "snapshot stripped_sha256 64 hex değil" → "preview_server did not
+    become ready"). Alan artık isteğe bağlı; VARSA doğrulanır.
+    """
+
+    RAW = ("74b2cdbdb18fafbf5b3c87570c92f1500e7580469bcf4295b09734116df0779f")
+
+    def _row(self, **kw):
+        rec = {"ts": "2026-10-24T14:31:00+00:00", "verdict": "PASS",
+               "exit_code": 0, "p0": 0, "p1": 0,
+               "raw_sha256": self.RAW, "stripped_sha256": None}
+        rec.update(kw)
+        return rec
+
+    def test_stripped_null_is_accepted(self):
+        # CI'nın gerçek kaydı: stripped yok, raw var → kabul (istisna yok).
+        ps._validate_snapshot_file_snapshot(self._row())
+
+    def test_nested_only_stripped_is_accepted(self):
+        ps._validate_snapshot_file_snapshot(
+            self._row(pdf_hash={"stripped": "c" * 64}))
+
+    def test_malformed_stripped_is_rejected(self):
+        with self.assertRaises(ValueError):
+            ps._validate_snapshot_file_snapshot(
+                self._row(stripped_sha256="abc"))
+
+    def test_missing_raw_is_rejected(self):
+        with self.assertRaises(ValueError):
+            ps._validate_snapshot_file_snapshot(
+                self._row(raw_sha256=None))
+
+    def test_conflicting_stripped_values_are_rejected(self):
+        with self.assertRaises(ValueError):
+            ps._validate_snapshot_file_snapshot(
+                self._row(stripped_sha256="a" * 64,
+                          pdf_hash={"stripped": "b" * 64}))
+
+
 if __name__ == "__main__":
     unittest.main()

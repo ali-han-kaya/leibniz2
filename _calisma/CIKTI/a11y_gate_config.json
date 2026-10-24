@@ -2,28 +2,35 @@
   "blocking": ["critical", "serious"],
   "warn": ["moderate", "minor"],
   "incomplete": "report-only",
+  "allowlist": [
+    {
+      "rule": "color-contrast",
+      "target": "#seal-ring-path",
+      "reason": "SVG verdict mühründeki dairesel VERIFIED/hash metni kasıtlı bir imza katmanıdır; axe bu metnin gerçek SVG yüzeyi arka planını çözemediği için color-contrast sonucu incomplete olarak raporlanır. Gerekçeli allowlist yalnız bu bilinen metin düğümünü kapsar; token renkleri ve erişilebilir metin anlamı korunur."
+    },
+    {
+      "rule": "color-contrast",
+      "target": ".seal-verdict",
+      "reason": "SVG verdict mühründeki merkezi VERIFIED metni kasıtlı bir imza katmanıdır; axe bu metnin gerçek SVG yüzeyi arka planını çözemediği için color-contrast sonucu incomplete olarak raporlanır. Gerekçeli allowlist yalnız bu bilinen metin düğümünü kapsar; token renkleri ve erişilebilir metin anlamı korunur."
+    },
+    {
+      "rule": "color-contrast",
+      "target": ".seal-hash",
+      "reason": "SVG verdict mühründeki kısa hash metni kasıtlı bir imza katmanıdır; axe bu metnin gerçek SVG yüzeyi arka planını çözemediği için color-contrast sonucu incomplete olarak raporlanır. Gerekçeli allowlist yalnız bu bilinen metin düğümünü kapsar; token renkleri ve erişilebilir metin anlamı korunur."
+    }
+  ],
   "pages": [
     {
       "path": "/preview.html",
-      "settle": { "attribute": "scan-ready", "timeout_ms": 180000 }
+      "witness": "Live CI Dashboard"
     },
     {
       "path": "/guide.html",
-      "settle": null
-    }
-  ],
-  "allowlist": [
-    {
-      "page": "/preview.html",
-      "rule": "color-contrast",
-      "target": "h1",
-      "reason": "axe header gradyani (linear-gradient) uzerinde efektif arka plan rengini cozemedigi icin 'incomplete' uretiyor (bgColor=None, contrastRatio=0) — ihlal degil. Elle olcum (WCAG 1.4.3, en-kotu gradyan ucu): koyu tema --fg 14.64:1 / --muted 5.62:1, acik tema 11.94:1 / 5.11:1; AA 4.5:1 gecer. Kontrast sozlesmesi test_design_token_contrast.py ile mutasyon kanitli kilitlendi (2026-10-02)."
+      "witness": "Ayarlar → Branches — kural listesi boş"
     },
     {
-      "page": "/preview.html",
-      "rule": "color-contrast",
-      "target": "#live-status",
-      "reason": "axe header gradyani (linear-gradient) uzerinde efektif arka plan rengini cozemedigi icin 'incomplete' uretiyor (bgColor=None, contrastRatio=0) — ihlal degil. Elle olcum (WCAG 1.4.3, en-kotu gradyan ucu): koyu tema --fg 14.64:1 / --muted 5.62:1, acik tema 11.94:1 / 5.11:1; AA 4.5:1 gecer. Kontrast sozlesmesi test_design_token_contrast.py ile mutasyon kanitli kilitlendi (2026-10-02)."
+      "path": "/landing.html",
+      "witness": "teslim anına kadar."
     }
   ]
 }

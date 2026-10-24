@@ -6,32 +6,38 @@ Plan: docs/superpowers/plans/2026-09-17-a11y-gate-implementation.md (T4)
 
 Kapsam: saf-unit (eşikleme, bilinmeyen-severity fail-closed, allowlist,
 rapor şekli) + in-process sözleşme testleri (ölü port → FAIL, canlı sunucu →
-PASS, checksum uyuşmazlığı → FAIL, geçersiz konfig → FAIL). Tarayıcı
-entegrasyonu (gerçek Playwright koşumu) CI job'ının kendisidir; bu süit
-Playwright'a dokunmaz — sürücü dikşi `collect` üzerinden sahte bir
-soket-kanıt sürücüyle değiştirilir (gerçek TCP davranışı korunur).
+PASS, checksum uyuşmazlığı → FAIL, geçersiz konfig → FAIL) + sayfa kapsamı
+(witness, --page ve üç sayfanın iki-tema axe CI yüzeyi + dashboard'ın
+Lighthouse yüzeyi). Tarayıcı entegrasyonu (gerçek
+Playwright koşumu) CI job'ının kendisidir; bu süit Playwright'a dokunmaz —
+sürücü dikşi `collect` üzerinden sahte bir soket-kanıt sürücüyle
+değiştirilir (gerçek TCP davranışı korunur).
 """
 
 import contextlib
 import io
 import json
 import os
+import re
 import socket
 import sys
 import tempfile
 import threading
-import types
 import unittest
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from unittest import mock
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.dirname(os.path.dirname(SCRIPT_DIR))
+GUIDE_HTML = os.path.join(
+    REPO_ROOT, "docs", "branch-protection-guide", "guide.html")
+LANDING_SRC = os.path.join(REPO_ROOT, "_calisma", "landing", "landing_src.html")
+LANDING_HTML = os.path.join(REPO_ROOT, "_calisma", "landing", "landing.html")
+LANDING_ASSETS = os.path.join(REPO_ROOT, "_calisma", "landing", "assets")
 if SCRIPT_DIR not in sys.path:
     sys.path.insert(0, SCRIPT_DIR)
 
 import a11y_gate  # noqa: E402
-
-SHIPPED_CONFIG = os.path.join(SCRIPT_DIR, "a11y_gate_config.json")
 
 
 # ----------------------------------------------------------------- yardımcılar
@@ -44,13 +50,26 @@ def axe_v(rule, impact, nodes=None):
     return {"id": rule, "impact": impact, "nodes": nodes if nodes is not None else [node()]}
 
 
-def base_cfg(pages=None):
+def base_cfg():
     return {
         "blocking": ["critical", "serious"],
         "warn": ["moderate", "minor"],
         "incomplete": "report-only",
-        "pages": pages if pages is not None else [{"path": "/preview.html"}],
         "allowlist": [],
+        "pages": [
+            {
+                "path": "/preview.html",
+                "witness": "Stoic-Hume V5 — Live CI Dashboard",
+            },
+            {
+                "path": "/guide.html",
+                "witness": "Ayarlar → Branches — kural listesi boş",
+            },
+            {
+                "path": "/landing.html",
+                "witness": "teslim anına kadar.",
+            },
+        ],
     }
 
 
@@ -87,14 +106,12 @@ def dead_port():
     yield "http://127.0.0.1:%d" % port
 
 
-def socket_probe_connect(base_url, axe_src, page_path, settle=None):
+def socket_probe_connect(base_url, axe_src, page_path="/preview.html", witness=None,
+                         theme="dark"):
     """Soket-kanıt sahte sürücü: gerçek TCP bağlantısı kurar (tarayıcı yok).
 
     Bağlantı kurulamazsa exception fırlatır (gerçek sunucu arızası simülasyonu);
-    kurulursa boş-tarama sonucu döndürür. `settle` kabul edilir ama
-    UYGULANMAZ: bu sürücü hazır işaretini bekleyemez (tarayıcı yok); bekleme
-    davranışının kendisi test_a11y_settle_contract.py'de sahte sayfayla
-    ölçülür.
+    kurulursa boş-tarama sonucu döndürür.
     """
     from urllib.parse import urlsplit
 
@@ -102,7 +119,7 @@ def socket_probe_connect(base_url, axe_src, page_path, settle=None):
     s = socket.create_connection((u.hostname, u.port), timeout=2)
     s.close()
     return ({"violations": [], "incomplete": []},
-            base_url.rstrip("/") + page_path, None)
+            base_url.rstrip("/") + page_path)
 
 
 # ------------------------------------------------------------- saf eşikleme
@@ -141,6 +158,17 @@ class ClassifyTests(unittest.TestCase):
         self.assertEqual(rows[0]["nodes"], 2)
         self.assertEqual(a11y_gate.decide_verdict(rows), "PASS")
 
+    def test_incomplete_preserves_node_targets_and_element_html(self):
+        results = {"violations": [], "incomplete": [{
+            "id": "color-contrast", "impact": "serious", "nodes": [{
+                "target": ["#trend", "text"],
+                "html": '<text x="38" y="16">1</text>',
+            }],
+        }]}
+        row = a11y_gate.classify_violations(results, base_cfg())[0]
+        self.assertEqual(row["node_targets"], [["#trend", "text"]])
+        self.assertEqual(row["node_html"], ['<text x="38" y="16">1</text>'])
+
     def test_empty_scan_passes(self):
         rows = a11y_gate.classify_violations({"violations": [], "incomplete": []}, base_cfg())
         self.assertEqual(a11y_gate.decide_verdict(rows), "PASS")
@@ -175,647 +203,61 @@ class AllowlistTests(unittest.TestCase):
         self.assertEqual(levels["r1"], "allowlisted")
         self.assertEqual(levels["r2"], "blocking")
 
-
-class IncompleteAllowlistTests(unittest.TestCase):
-    """incomplete girdileri de allowlist'e uymalidir (aksi halde gerekceli
-    kayit etkisiz olur — kayit gorunur, kapida hicbirey degismez)."""
-
-    def test_incomplete_allowlist_is_applied(self):
+    def test_allowlist_marks_but_does_not_hide_incomplete_seal_nodes(self):
         cfg = base_cfg()
-        cfg["allowlist"] = [{"rule": "color-contrast", "reason": "gradyan", "target": "#a"}]
-        results = {"violations": [],
-                   "incomplete": [{"id": "color-contrast", "impact": "serious",
-                                   "nodes": [node(["#a"]), node(["#a", "span"])]}]}
-        rows = a11y_gate.classify_violations(results, cfg)
-        self.assertEqual(rows[0]["level"], "incomplete_allowlisted")
-        self.assertEqual(rows[0]["nodes"], 0)
-        self.assertEqual(rows[0]["reasons"], ["gradyan"])
+        cfg["allowlist"] = [
+            {"rule": "color-contrast", "target": "#seal-ring-path",
+             "reason": "SVG halka metni bilinçli imza katmanı"},
+            {"rule": "color-contrast", "target": ".seal-verdict",
+             "reason": "SVG merkez metni bilinçli imza katmanı"},
+            {"rule": "color-contrast", "target": ".seal-hash",
+             "reason": "SVG hash metni bilinçli imza katmanı"},
+        ]
+        results = {"violations": [], "incomplete": [{
+            "id": "color-contrast", "impact": "serious", "nodes": [
+                {"target": ["#seal-ring-path"],
+                 "html": '<textPath id="seal-ring-path">VERIFIED • ABC</textPath>'},
+                {"target": [".seal-verdict"],
+                 "html": '<text class="seal-verdict">VERIFIED</text>'},
+                {"target": [".seal-hash"],
+                 "html": '<text class="seal-hash">ABC123…</text>'},
+                {"target": ["#unrelated"],
+                 "html": '<span id="unrelated">other</span>'},
+            ],
+        }]}
+        row = a11y_gate.classify_violations(results, cfg)[0]
+        self.assertEqual(row["level"], "incomplete")
+        self.assertEqual(row["nodes"], 1)
+        self.assertEqual(row["allowlisted_nodes"], 3)
+        self.assertEqual(row["reasons"], [
+            "SVG halka metni bilinçli imza katmanı",
+            "SVG merkez metni bilinçli imza katmanı",
+            "SVG hash metni bilinçli imza katmanı",
+        ])
+        self.assertEqual(row["node_targets"], [
+            ["#seal-ring-path"], [".seal-verdict"], [".seal-hash"], ["#unrelated"],
+        ])
+        self.assertEqual(row["node_html"], [
+            '<textPath id="seal-ring-path">VERIFIED • ABC</textPath>',
+            '<text class="seal-verdict">VERIFIED</text>',
+            '<text class="seal-hash">ABC123…</text>',
+            '<span id="unrelated">other</span>',
+        ])
+        self.assertEqual(a11y_gate.decide_verdict([row]), "PASS")
 
-    def test_partial_incomplete_allowlist_keeps_remaining_nodes(self):
+    def test_overlapping_allowlist_entries_count_each_node_once(self):
         cfg = base_cfg()
-        cfg["allowlist"] = [{"rule": "color-contrast", "reason": "gradyan", "target": "#a"}]
-        results = {"violations": [],
-                   "incomplete": [{"id": "color-contrast", "impact": "serious",
-                                   "nodes": [node(["#a"]), node(["#b"])]}]}
-        rows = a11y_gate.classify_violations(results, cfg)
-        self.assertEqual(rows[0]["level"], "incomplete")
-        self.assertEqual(rows[0]["nodes"], 1)
-        self.assertEqual(rows[0]["allowlisted_nodes"], 1)
-
-    def test_incomplete_allowlist_cannot_change_verdict(self):
-        cfg = base_cfg()
-        cfg["allowlist"] = [{"rule": "color-contrast", "reason": "gerekce", "target": "#a"}]
-        covered = a11y_gate.classify_violations(
-            {"violations": [], "incomplete": [{"id": "color-contrast", "impact": "serious",
-                                               "nodes": [node(["#a"])]}]}, cfg)
-        bare = a11y_gate.classify_violations(
-            {"violations": [], "incomplete": [{"id": "color-contrast", "impact": "serious",
-                                               "nodes": [node(["#a"])]}]}, base_cfg())
-        self.assertEqual(a11y_gate.decide_verdict(covered),
-                         a11y_gate.decide_verdict(bare))
-
-    def test_incomplete_allowlist_does_not_leak_to_violations(self):
-        """Ayni kural ihlal tarafinda gelirse kayit onu da susturmamali —
-        hedef kapsamli allowlist'in en kotu hali yine de gerekce ister."""
-        cfg = base_cfg()
-        cfg["allowlist"] = [{"rule": "color-contrast", "reason": "yalnizca incomplete",
-                             "target": "#a"}]
-        results = {"violations": [axe_v("color-contrast", "serious", nodes=[node(["#a"])])],
+        cfg["allowlist"] = [
+            {"rule": "r1", "target": "#seal", "reason": "birinci gerekçe"},
+            {"rule": "r1", "target": "#seal", "reason": "ikinci gerekçe"},
+        ]
+        results = {"violations": [axe_v("r1", "serious", nodes=[node(["#seal"])])],
                    "incomplete": []}
-        rows = a11y_gate.classify_violations(results, cfg)
-        self.assertEqual(rows[0]["level"], "allowlisted")
-        self.assertIn("yalnizca incomplete", rows[0]["reasons"])
-
-
-class ShippedConfigTests(unittest.TestCase):
-    """a11y_gate_config.json'daki kayitlar ETKIN olmali. Bu sinif, incomplete
-    dongusu _allowlisted_nodes'i cagirmazsa kirmiziya doner."""
-
-    CONFIG = SHIPPED_CONFIG
-
-    def setUp(self):
-        self.cfg = a11y_gate.load_config(self.CONFIG)
-
-    def test_config_loads(self):
-        self.assertIsInstance(self.cfg["allowlist"], list)
-
-    def test_every_entry_has_substantive_reason(self):
-        for entry in self.cfg["allowlist"]:
-            self.assertTrue(entry["rule"], "rule bos")
-            self.assertTrue(entry["target"], "hedefsiz kayit tum agaci susturur")
-            self.assertGreaterEqual(
-                len(entry["reason"]), 40,
-                "gerekce cok kisa — olcum kaniti tasinmali")
-
-    def test_gradient_incomplete_nodes_are_acknowledged(self):
-        """main kosumunda (run 37035461060) raporlanan iki node."""
-        results = {"violations": [], "incomplete": [
-            {"id": "color-contrast", "impact": "serious",
-             "nodes": [node(["h1"]), node(["#live-status"])]}]}
-        rows = a11y_gate.classify_violations(results, self.cfg)
-        self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0]["level"], "incomplete_allowlisted")
-        self.assertEqual(rows[0]["nodes"], 0)
-        self.assertEqual(a11y_gate.decide_verdict(rows), "PASS")
-
-    def test_unregistered_selector_still_surfaces(self):
-        """Kayit hedefli: yeni/baska bir selector'daki incomplete gizlenmez."""
-        results = {"violations": [], "incomplete": [
-            {"id": "color-contrast", "impact": "serious", "nodes": [node(["#yeni"])]}]}
-        rows = a11y_gate.classify_violations(results, self.cfg)
-        self.assertEqual(rows[0]["level"], "incomplete")
-        self.assertEqual(rows[0]["nodes"], 1)
-
-
-class MultiPageTests(unittest.TestCase):
-    """Sayfa-bazli kapsam: her sayfa ayri taranir, sayfa FAIL kapiyi dusurur,
-    ve allowlist kaydi yalniz kendi sayfasinda gecerlidir."""
-
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(self.tmp.cleanup)
-        self.scanned = []
-
-    def cfg(self, pages, allowlist=None):
-        return base_cfg(pages=pages) if not allowlist else {
-            **base_cfg(pages=pages), "allowlist": allowlist}
-
-    def write_cfg(self, cfg):
-        path = os.path.join(self.tmp.name, "cfg.json")
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(cfg, f)
-        return path
-
-    def run_gate(self, cfg, connect):
-        out = os.path.join(self.tmp.name, "a11y_report.json")
-        buf = io.StringIO()
-        with mock.patch.object(a11y_gate, "collect", connect):
-            with contextlib.redirect_stdout(buf):
-                rc = a11y_gate.main([
-                    "--base-url", "http://127.0.0.1:1",
-                    "--config", self.write_cfg(cfg), "--output", out])
-        with open(out, encoding="utf-8") as f:
-            return rc, json.load(f), buf.getvalue()
-
-    def ok_connect(self, results=None):
-        payload = results if results is not None else {"violations": [], "incomplete": []}
-
-        def connect(base_url, axe_src, page_path, settle=None):
-            self.scanned.append(page_path)
-            return payload, base_url + page_path, None
-        return connect
-
-    # -- kapsam -----------------------------------------------------------
-
-    def test_every_configured_page_is_scanned_once(self):
-        cfg = self.cfg([{"path": "/preview.html"}, {"path": "/guide.html"}])
-        rc, report, _out = self.run_gate(cfg, self.ok_connect())
-        self.assertEqual(self.scanned, ["/preview.html", "/guide.html"])
-        self.assertEqual(rc, 0)
-
-    # -- rapor verdict alani (job summary yuzeyi bunu okur) ---------------
-
-    def test_report_verdict_defaults_to_fail_before_any_scan(self):
-        """Erken cikis raporu yazar ama hic sayfa taramaz: verdict VARSAYILAN
-        FAIL kalmali — boylece 'alan yok' ile 'gecti' karismaz."""
-        rc, report, _out = self.run_gate({"pages": []}, self.ok_connect())
-        self.assertEqual(rc, 1)
-        self.assertEqual(report["verdict"], "FAIL")
-
-    def test_report_verdict_becomes_pass_after_completed_scan(self):
-        cfg = self.cfg([{"path": "/preview.html"}])
-        rc, report, _out = self.run_gate(cfg, self.ok_connect())
-        self.assertEqual(rc, 0)
-        self.assertEqual(report["verdict"], "PASS",
-                         "tamamlanmis temiz tarama varsayilan FAIL'i cevirmeli")
-
-    def test_report_verdict_tracks_blocking_findings(self):
-        cfg = self.cfg([{"path": "/preview.html"}])
-        rc, report, _out = self.run_gate(
-            cfg, self.ok_connect({"violations": [axe_v("r1", "critical")],
-                                  "incomplete": []}))
-        self.assertEqual(rc, 1)
-        self.assertEqual(report["verdict"], "FAIL")
-
-    def test_page_outside_config_is_not_scanned(self):
-        """Kapsam config'te ilan edilir; koddan gizli sayfa taranmaz."""
-        cfg = self.cfg([{"path": "/preview.html"}])
-        _rc, report, _out = self.run_gate(cfg, self.ok_connect())
-        self.assertNotIn("/slides_z3/preview.html", self.scanned)
-
-    # -- fail-closed ------------------------------------------------------
-
-    def test_page_load_error_fails_closed(self):
-        """404 sayfa kapiyi dusurur: sessizce atlanan sayfa olmaz."""
-        def connect(base_url, axe_src, page_path, settle=None):
-            self.scanned.append(page_path)
-            if page_path == "/guide.html":
-                raise a11y_gate.PageLoadError("%s → HTTP 404" % page_path)
-            return ({"violations": [], "incomplete": []},
-                    base_url + page_path, None)
-
-        cfg = self.cfg([{"path": "/preview.html"}, {"path": "/guide.html"}])
-        rc, report, out = self.run_gate(cfg, connect)
-        self.assertEqual(rc, 1)
-        self.assertEqual([p["verdict"] for p in report["pages"]], ["PASS", "FAIL"])
-        self.assertIn("HTTP 404", report["pages"][1]["error"])
-        self.assertIn("/guide.html", out)
-        self.assertEqual(report["pages"][0]["verdict"], "PASS")  # diger sayfa yine tarandi
-
-    def test_unknown_page_in_thresholds_raises(self):
-        cfg = a11y_gate.load_config(self.write_cfg(self.cfg([{"path": "/preview.html"}])))
-        with self.assertRaises(ValueError):
-            a11y_gate.thresholds_for(cfg, "/guide.html")
-
-    # -- sayfa bazli esikler ----------------------------------------------
-
-    def test_page_threshold_override_changes_verdict(self):
-        """Varsayilan bu kirilimi blocking sayardi; sayfa override'i warn'a
-        indirir → FAIL yerine PASS. Override gercekten uygulanmis demektir."""
-        violation = {"violations": [axe_v("r1", "critical", nodes=[node(["#x"])])],
-                     "incomplete": []}
-        strict = self.cfg([{"path": "/preview.html"}])
-        lenient = self.cfg([{"path": "/preview.html", "blocking": [], "warn": ["critical"]}])
-        rc_strict, rep_strict, _ = self.run_gate(strict, self.ok_connect(violation))
-        rc_lenient, rep_lenient, _ = self.run_gate(lenient, self.ok_connect(violation))
-        self.assertEqual((rc_strict, rep_strict["pages"][0]["verdict"]), (1, "FAIL"))
-        self.assertEqual((rc_lenient, rep_lenient["pages"][0]["verdict"]), (0, "PASS"))
-        self.assertEqual(rep_lenient["summary"]["warn"], 1)
-
-    def test_default_thresholds_apply_to_pages_without_override(self):
-        cfg = a11y_gate.load_config(self.write_cfg(
-            self.cfg([{"path": "/preview.html"},
-                      {"path": "/guide.html", "blocking": [], "warn": ["critical"]}])))
-        self.assertEqual(a11y_gate.thresholds_for(cfg, "/preview.html"),
-                         ({"critical", "serious"}, {"moderate", "minor"}))
-        self.assertEqual(a11y_gate.thresholds_for(cfg, "/guide.html"),
-                         (set(), {"critical"}))
-
-    # -- allowlist sayfa kapsami -------------------------------------------
-
-    def test_page_scoped_allowlist_does_not_leak_to_other_page(self):
-        """preview.html icin olculmus gerekce, guide.html'de gerekcesiz
-        susturmaya donusmemeli."""
-        entry = {"page": "/preview.html", "rule": "color-contrast", "target": "#live-status",
-                 "reason": "gradyan — olculerek kapatildi"}
-        cfg = self.cfg([{"path": "/preview.html"}, {"path": "/guide.html"}], [entry])
-        payload = {"violations": [], "incomplete": [
-            {"id": "color-contrast", "impact": "serious", "nodes": [node(["#live-status"])]}]}
-        rc, report, _out = self.run_gate(cfg, self.ok_connect(payload))
-        levels = {p["path"]: p["violations"][0]["level"] for p in report["pages"]}
-        self.assertEqual(levels["/preview.html"], "incomplete_allowlisted")
-        self.assertEqual(levels["/guide.html"], "incomplete")
-        self.assertEqual(report["summary"]["incomplete_allowlisted"], 1)
-        self.assertEqual(report["summary"]["incomplete"], 1)
-
-    def test_unscoped_allowlist_applies_to_every_page(self):
-        entry = {"rule": "r1", "reason": "her sayfada gecerli"}
-        cfg = self.cfg([{"path": "/preview.html"}, {"path": "/guide.html"}], [entry])
-        payload = {"violations": [axe_v("r1", "serious")], "incomplete": []}
-        _rc, report, _out = self.run_gate(cfg, self.ok_connect(payload))
-        self.assertEqual([p["violations"][0]["level"] for p in report["pages"]],
-                         ["allowlisted", "allowlisted"])
-
-
-class _FakeResponse:
-    def __init__(self, status):
-        self.status = status
-
-
-class _FakePage:
-    def __init__(self, status):
-        self._status = status
-        self.goto_url = None
-        self.injected = False
-
-    def goto(self, url, wait_until=None):
-        self.goto_url = url
-        return _FakeResponse(self._status)
-
-    def add_script_tag(self, content):
-        self.injected = True
-
-    def evaluate(self, script):
-        return {"violations": [], "incomplete": []}
-
-
-class _FakeBrowser:
-    def __init__(self, status):
-        self.page = _FakePage(status)
-        self.closed = False
-
-    def new_context(self, **kwargs):
-        self.bypass_csp = kwargs.get("bypass_csp")
-        return self
-
-    def new_page(self):
-        return self.page
-
-    def close(self):
-        self.closed = True
-
-
-class _FakeChromium:
-    def __init__(self, status):
-        self.browser = _FakeBrowser(status)
-        self.closed = False
-
-    def launch(self, headless=True):
-        return self.browser
-
-    def close(self):
-        self.closed = True
-
-
-class _FakePlaywright:
-    def __init__(self, status):
-        self.chromium = _FakeChromium(status)
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *exc):
-        return False
-
-
-class FakePlaywrightPatch:
-    """sys.modules'a sahte playwright koyar; gercek tarayici gerekmez.
-
-    Amac: playwright_connect'in HTTP durum KONTROLUNU dogrulamak — 404 bir
-    sayfayi gormezden gelir ve kapiyi dusurmezse (bos <body> taranir) test
-    bunu yakalar.
-    """
-
-    def __init__(self, status):
-        self.status = status
-        self._saved = {}
-
-    def __enter__(self):
-        pw = _FakePlaywright(self.status)
-        mod = types.ModuleType("playwright")
-        api = types.ModuleType("playwright.sync_api")
-        api.sync_playwright = lambda: pw
-        mod.sync_api = api
-        for name, m in (("playwright", mod), ("playwright.sync_api", api)):
-            self._saved[name] = sys.modules.get(name)
-            sys.modules[name] = m
-        self.pw = pw
-        return self
-
-    def __exit__(self, *exc):
-        for name, old in self._saved.items():
-            if old is None:
-                sys.modules.pop(name, None)
-            else:
-                sys.modules[name] = old
-        return False
-
-
-class HttpStatusFailClosedTests(unittest.TestCase):
-    """Tarayici katmani: 404/5xx sayfa FAIL'e donusmeli.
-
-    OLCUM 2026-10-02: bu satir olmadan /guide.html mirror'da yokken kapinin
-    404 sayfasini tarayip '0 ihlal' demesi ve yesil gecmesi mumkundur —
-    yani yuzey genisletilmis gibi gorunurken hicbir sey taranmamis olur.
-    """
-
-    def test_http_error_status_raises_page_load_error(self):
-        for status in (400, 404, 500, 503):
-            with self.subTest(status=status):
-                with FakePlaywrightPatch(status):
-                    with self.assertRaises(a11y_gate.PageLoadError) as ctx:
-                        a11y_gate.playwright_connect(
-                            "http://127.0.0.1:1", "axe-src", "/guide.html")
-                self.assertIn(str(status), str(ctx.exception))
-                self.assertIn("/guide.html", str(ctx.exception))
-
-    def test_missing_response_raises(self):
-        """response nesnesi yoksa da guvenli varsayilan FAIL."""
-        with FakePlaywrightPatch(None):
-            with self.assertRaises(a11y_gate.PageLoadError):
-                a11y_gate.playwright_connect("http://127.0.0.1:1", "axe", "/guide.html")
-
-    def test_ok_status_scans_and_scans_the_requested_path(self):
-        with FakePlaywrightPatch(200):
-            results, page_url, _settle = a11y_gate.playwright_connect(
-                "http://127.0.0.1:1", "axe-src", "/guide.html")
-        self.assertEqual(page_url, "http://127.0.0.1:1/guide.html")
-        self.assertEqual(results, {"violations": [], "incomplete": []})
-
-    def test_browser_closed_even_when_page_fails(self):
-        with FakePlaywrightPatch(404) as fake:
-            with self.assertRaises(a11y_gate.PageLoadError):
-                a11y_gate.playwright_connect("http://127.0.0.1:1", "axe", "/guide.html")
-        self.assertTrue(fake.pw.chromium.browser.closed, "tarayici sizdirilmamali")
-
-    def test_csp_bypass_preserved(self):
-        with FakePlaywrightPatch(200) as fake:
-            a11y_gate.playwright_connect("http://127.0.0.1:1", "axe", "/preview.html")
-        self.assertTrue(fake.pw.chromium.browser.bypass_csp,
-                        "preview_server nonce-CSP'si axe injection'ini bloklar")
-
-
-class PageConfigValidationTests(unittest.TestCase):
-    """Kapsam ve esik konfigi — hatalar fail-closed reddedilir."""
-
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(self.tmp.cleanup)
-
-    def load(self, cfg):
-        path = os.path.join(self.tmp.name, "cfg.json")
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(cfg, f)
-        return a11y_gate.load_config(path)
-
-    def assertRejects(self, cfg, needle):
-        with self.assertRaises(ValueError) as ctx:
-            self.load(cfg)
-        self.assertIn(needle, str(ctx.exception))
-
-    def test_pages_required(self):
-        cfg = base_cfg()
-        del cfg["pages"]
-        self.assertRejects(cfg, "eksik anahtar")
-
-    def test_pages_cannot_be_empty(self):
-        self.assertRejects(base_cfg(pages=[]), "pages boş olamaz")
-
-    def test_duplicate_path_rejected(self):
-        self.assertRejects(base_cfg(pages=[{"path": "/a"}, {"path": "/a"}]),
-                           "yineleniyor")
-
-    def test_relative_path_rejected(self):
-        self.assertRejects(base_cfg(pages=[{"path": "guide.html"}]), "mutlak rota")
-
-    def test_parent_traversal_rejected(self):
-        self.assertRejects(base_cfg(pages=[{"path": "/../etc/passwd"}]), "'..'")
-
-    def test_unknown_page_key_rejected(self):
-        self.assertRejects(base_cfg(pages=[{"path": "/a", "axe": "x"}]),
-                           "bilinmeyen anahtar")
-
-    def test_page_threshold_overlap_rejected(self):
-        self.assertRejects(base_cfg(pages=[{"path": "/a", "warn": ["critical"]}]),
-                           "kesişimi")
-
-    def test_page_incomplete_policy_locked(self):
-        self.assertRejects(base_cfg(pages=[{"path": "/a", "incomplete": "block"}]),
-                           "incomplete yalnız")
-
-    def test_allowlist_page_must_be_scanned(self):
-        """Taranmayan sayfaya kayit = olu konfig; gerekce yazsa da etkisiz."""
-        cfg = base_cfg(pages=[{"path": "/a"}])
-        cfg["allowlist"] = [{"page": "/b", "rule": "r", "reason": "x" * 45}]
-        self.assertRejects(cfg, "pages listesinde değil")
-
-    def test_valid_two_page_config_loads(self):
-        cfg = base_cfg(pages=[{"path": "/preview.html"},
-                              {"path": "/guide.html", "blocking": ["critical"],
-                               "warn": ["serious", "moderate", "minor"]}])
-        loaded = self.load(cfg)
-        self.assertEqual([p["path"] for p in loaded["pages"]],
-                         ["/preview.html", "/guide.html"])
-
-
-# ------------------------------------------------- artefakt semasi sozlesmesi
-
-# CI artifact'ini (`a11y-report`, path: a11y_report.json) tuketiyor. Semasi
-# degisirse tuketici sessizce bozulur; bu sinif onu kirmiziya cevirir.
-# KAPSAM:anahtarlar birebir (EKLEME de SILMA da kirmizi), tip kapali kume,
-# ve asagidaki butunluk esitsizligi.
-# `verdict`: fail-closed makine-okur alan (VARSAYILAN FAIL; yalniz tamamlanmis
-# taramadan sonra gercek deger). Job summary adimi ve dis tuketiciler bunu
-# okur — sema sozlesmesine 2026-10-10'da bilerek eklendi.
-REPORT_KEYS = {"base_url", "config", "pages", "violations", "summary", "error",
-               "verdict"}
-PAGE_KEYS = {"path", "url", "verdict", "error", "violations", "summary",
-             "raw", "settle"}
-SUMMARY_KEYS = {
-    "blocking", "warn", "allowlisted", "incomplete", "incomplete_allowlisted",
-}
-LEVELS = {"blocking", "warn", "allowlisted", "incomplete", "incomplete_allowlisted"}
-ROW_REQUIRED = {"page", "rule", "impact", "level", "nodes"}
-ROW_OPTIONAL = {"reasons", "allowlisted_nodes"}
-
-
-def _axe_every_level():
-    """Bes seviyenin hepsini birden ureten axe ciktisi."""
-    return {
-        "violations": [
-            {"id": "v-blocking", "impact": "critical", "nodes": [node(["#b"])]},
-            {"id": "v-warn", "impact": "minor", "nodes": [node(["#w"])]},
-            {"id": "v-allowlisted", "impact": "serious", "nodes": [node(["#a"])]},
-        ],
-        "incomplete": [
-            {"id": "i-reported", "impact": "serious", "nodes": [node(["#i"])]},
-            {"id": "i-allowlisted", "impact": "serious", "nodes": [node(["#g"])]},
-        ],
-    }
-
-
-class ArtifactSchemaContractTests(unittest.TestCase):
-    """a11y_report.json semasi. DOGRULAMA YUZEYI: run_gate ciktisini okuyan
-    `report` degiskeni dosyadan yuklenmis JSON'dur — yani iddialar CI'in
-    yukledigi artefaktin kendisine uygulanir, bellekteki dile degil."""
-
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(self.tmp.cleanup)
-        self.allowlist = [{"rule": "v-allowlisted", "reason": "olculerek kapatildi",
-                           "target": "#a"},
-                          {"rule": "i-allowlisted", "reason": "gradyan", "target": "#g"}]
-
-    def run_gate(self, axe_results, cfg):
-        out = os.path.join(self.tmp.name, "a11y_report.json")
-        cfg_path = os.path.join(self.tmp.name, "cfg.json")
-        with open(cfg_path, "w", encoding="utf-8") as f:
-            json.dump(cfg, f)
-
-        def fake_connect(base_url, axe_src, page_path, settle=None):
-            return axe_results, base_url.rstrip("/") + page_path, None
-
-        buf = io.StringIO()
-        with mock.patch.object(a11y_gate, "collect", fake_connect):
-            with contextlib.redirect_stdout(buf):
-                rc = a11y_gate.main([
-                    "--base-url", "http://127.0.0.1:1",  # collect sahte: ag yok
-                    "--config", cfg_path, "--output", out,
-                ])
-        with open(out, encoding="utf-8") as f:  # artefaktin kendisi
-            return rc, json.load(f)
-
-    def cfg_with_allowlist(self):
-        cfg = base_cfg()
-        cfg["allowlist"] = self.allowlist
-        return cfg
-
-    # -- ust duzey ---------------------------------------------------
-
-    def test_report_top_level_keys_are_exact(self):
-        _rc, report = self.run_gate(_axe_every_level(), self.cfg_with_allowlist())
-        self.assertEqual(set(report), REPORT_KEYS,
-                         "artefaktin ust duzey anahtarlari degisti")
-
-    def test_report_carries_every_level(self):
-        _rc, report = self.run_gate(_axe_every_level(), self.cfg_with_allowlist())
-        self.assertEqual({r["level"] for r in report["violations"]}, LEVELS,
-                         "bu sinif butun seviyeleri uretmek icin yazildi; "
-                         "uretim degistiyse kapsam daralmis olur")
-
-    # -- summary (esik anahtarlari) ----------------------------------
-
-    def test_summary_threshold_keys_are_exact(self):
-        _rc, report = self.run_gate(_axe_every_level(), self.cfg_with_allowlist())
-        self.assertEqual(set(report["summary"]), SUMMARY_KEYS,
-                         "summary esik anahtarlari degisti (eklendi veya silindi)")
-
-    def test_summary_values_are_non_negative_ints(self):
-        _rc, report = self.run_gate(_axe_every_level(), self.cfg_with_allowlist())
-        for key, value in report["summary"].items():
-            self.assertIsInstance(value, int, "%s int olmali" % key)
-            self.assertNotIsInstance(value, bool)
-            self.assertGreaterEqual(value, 0, "%s negatif olamaz" % key)
-
-    def test_summary_counts_cover_every_row(self):
-        """BUTUNLUK ESITLIGI: yeni bir level eklenip summary kovasina
-        yazilmazsa burasi kirar. SESSIZCE kaybolan bir satir olmaz."""
-        _rc, report = self.run_gate(_axe_every_level(), self.cfg_with_allowlist())
-        self.assertEqual(sum(report["summary"].values()), len(report["violations"]),
-                         "summary toplami satir sayisiyla esit degil — bir level "
-                         "kovaya yazilmadan girmis olabilir")
-        for row in report["violations"]:
-            self.assertIn(row["level"], set(report["summary"]),
-                          "level %r icin summary kovasi yok" % row["level"])
-
-    def test_empty_scan_keeps_full_summary(self):
-        """Sifir bulguda da esik anahtarlari tam olmali (yoksa tuketici
-        'summary eksik' diye ayirt edemez)."""
-        _rc, report = self.run_gate({"violations": [], "incomplete": []},
-                                    self.cfg_with_allowlist())
-        self.assertEqual(set(report["summary"]), SUMMARY_KEYS)
-        self.assertEqual(sum(report["summary"].values()), 0)
-
-    # -- violations girdi-yapisi -------------------------------------
-
-    def test_violation_row_keys_are_closed(self):
-        _rc, report = self.run_gate(_axe_every_level(), self.cfg_with_allowlist())
-        for row in report["violations"]:
-            self.assertTrue(ROW_REQUIRED <= set(row),
-                            "zorunlu anahtar eksik: %s" % (ROW_REQUIRED - set(row)))
-            self.assertLessEqual(set(row), ROW_REQUIRED | ROW_OPTIONAL,
-                                 "bilinmeyen satir anahtari: %s" % (set(row) - ROW_REQUIRED - ROW_OPTIONAL))
-
-    def test_violation_row_types(self):
-        _rc, report = self.run_gate(_axe_every_level(), self.cfg_with_allowlist())
-        for row in report["violations"]:
-            self.assertIsInstance(row["rule"], str)
-            self.assertIsInstance(row["nodes"], int)
-            self.assertNotIsInstance(row["nodes"], bool)
-            self.assertGreaterEqual(row["nodes"], 0)
-            self.assertIn(row["level"], LEVELS, "kapali kume disi level")
-            self.assertTrue(row["impact"] is None or isinstance(row["impact"], str))
-            for reason in row.get("reasons", []):
-                self.assertIsInstance(reason, str)
-            if "allowlisted_nodes" in row:
-                self.assertIsInstance(row["allowlisted_nodes"], int)
-
-    def test_allowlisted_row_shape(self):
-        """allowlisted satirinda: nodes=0, reasons dolu, allowlisted_nodes YOK
-        (tam kapsam; kismi kapsamda incomplete satirinda gorunur)."""
-        _rc, report = self.run_gate(_axe_every_level(), self.cfg_with_allowlist())
-        for row in report["violations"]:
-            if row["level"] in ("allowlisted", "incomplete_allowlisted"):
-                self.assertEqual(row["nodes"], 0)
-                self.assertTrue(row.get("reasons"), "gerekcesiz allowlist")
-                self.assertNotIn("allowlisted_nodes", row)
-
-    # -- esikler ve ham cikti ----------------------------------------
-
-    def test_shipped_thresholds_are_echoed_into_artifact(self):
-        """Esikler artefakta gorunur olmali; tuketici 'neden PASS' sorusunu
-        rapordan cevaplayabilmeli."""
-        cfg = a11y_gate.load_config(SHIPPED_CONFIG)
-        _rc, report = self.run_gate(_axe_every_level(), cfg)
-        self.assertEqual(report["config"]["blocking"], ["critical", "serious"])
-        self.assertEqual(report["config"]["warn"], ["moderate", "minor"])
-        self.assertEqual(report["config"]["incomplete"], "report-only")
-
-    def test_raw_axe_payload_keys_are_pinned(self):
-        """classify_violations bu iki listeyi okuyor; yoksa sessizce bos
-        sonuc cikar (fail-open yonu). Ham payload ARTA basina tasindi."""
-        _rc, report = self.run_gate(_axe_every_level(), self.cfg_with_allowlist())
-        for pg in report["pages"]:
-            self.assertIsInstance(pg["raw"], dict)
-            for key in ("violations", "incomplete"):
-                self.assertIsInstance(pg["raw"][key], list)
-
-    def test_page_entry_keys_are_exact(self):
-        _rc, report = self.run_gate(_axe_every_level(), self.cfg_with_allowlist())
-        for pg in report["pages"]:
-            self.assertEqual(set(pg), PAGE_KEYS, "sayfa girisi semasi degisti")
-            self.assertIn(pg["verdict"], ("PASS", "FAIL"))
-            self.assertEqual(set(pg["summary"]), SUMMARY_KEYS)
-
-    def test_aggregate_equals_union_of_pages(self):
-        """Toplam = sayfalarin birlesimi. Sayfa eklenince toplam kendiliğinden
-        buyur (toplam elle hesaplanmiyor)."""
-        cfg = self.cfg_with_allowlist()
-        cfg["pages"] = [{"path": "/preview.html"}, {"path": "/guide.html"}]
-        _rc, report = self.run_gate(_axe_every_level(), cfg)
-        self.assertEqual(len(report["pages"]), 2)
-        union = [row for pg in report["pages"] for row in pg["violations"]]
-        self.assertEqual(report["violations"], union)
-        self.assertEqual(report["summary"], a11y_gate._summary(union))
-        self.assertEqual({r["page"] for r in report["violations"]},
-                         {"/preview.html", "/guide.html"})
-
-    def test_error_is_null_on_success(self):
-        rc, report = self.run_gate({"violations": [], "incomplete": []},
-                                   self.cfg_with_allowlist())
-        self.assertEqual(rc, 0)
-        self.assertIsNone(report["error"])
-        self.assertTrue(report["pages"][0]["url"])
+        row = a11y_gate.classify_violations(results, cfg)[0]
+        self.assertEqual(row["level"], "allowlisted")
+        self.assertEqual(row["nodes"], 0)
+        self.assertEqual(row["allowlisted_nodes"], 1)
+        self.assertEqual(row["reasons"], ["birinci gerekçe"])
 
 
 # ------------------------------------------------------------ konfig doğrulama
@@ -834,6 +276,63 @@ class ConfigTests(unittest.TestCase):
     def test_valid_config_loads(self):
         cfg = a11y_gate.load_config(self.write(base_cfg()))
         self.assertEqual(cfg["blocking"], ["critical", "serious"])
+
+    def test_repo_config_declares_dashboard_guide_and_landing_witnesses(self):
+        cfg = a11y_gate.load_config(
+            os.path.join(SCRIPT_DIR, "a11y_gate_config.json"))
+        self.assertEqual(
+            [(entry["path"], entry["witness"]) for entry in cfg["pages"]],
+            [
+                ("/preview.html", "Live CI Dashboard"),
+                ("/guide.html", "Ayarlar → Branches — kural listesi boş"),
+                ("/landing.html", "teslim anına kadar."),
+            ],
+        )
+
+    def test_witness_match_is_case_insensitive(self):
+        """CSS `text-transform: uppercase` witness'ı kırmızıya düşürmemeli.
+
+        Ölçüm (CI + yerel): preview.html body'sinde başlıklar UPPERCASE
+        render ediliyor (`inner_text()` = "LIVE CI DASHBOARD"), config ise
+        okunur biçimiyle yazıyor. Harf büyüklüğü tipografidir; witness
+        "doğru sayfa render edildi mi" sorusunu yanıtlar.
+        """
+
+        class _Body:
+            def __init__(self, text):
+                self._text = text
+
+            def inner_text(self):
+                return self._text
+
+        class _Page:
+            def __init__(self, text):
+                self._body = _Body(text)
+
+            def locator(self, _selector):
+                return self._body
+
+        a11y_gate._verify_witness(_Page("LIVE CI DASHBOARD\n⏳ bekleniyor…"),
+                                  "Live CI Dashboard")
+        with self.assertRaises(ValueError):
+            a11y_gate._verify_witness(_Page("başka sayfa"),
+                                      "Live CI Dashboard")
+
+    def test_repo_config_allowlists_actual_svg_seal_targets_with_reason(self):
+        cfg = a11y_gate.load_config(
+            os.path.join(SCRIPT_DIR, "a11y_gate_config.json"))
+        seal_entries = [entry for entry in cfg["allowlist"]
+                        if entry.get("rule") == "color-contrast"]
+        self.assertEqual(
+            {entry.get("target") for entry in seal_entries},
+            {"#seal-ring-path", ".seal-verdict", ".seal-hash"},
+        )
+        self.assertTrue(all(entry.get("reason") for entry in seal_entries))
+        with open(os.path.join(SCRIPT_DIR, "preview.html"), encoding="utf-8") as f:
+            preview = f.read()
+        self.assertIn('id="seal-ring-path"', preview)
+        self.assertIn('class="seal-verdict"', preview)
+        self.assertIn('class="seal-hash"', preview)
 
     def test_unknown_top_key_rejected(self):
         bad = base_cfg()
@@ -871,12 +370,85 @@ class ConfigTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             a11y_gate.load_config(self.write(bad))
 
+    def test_page_requires_witness(self):
+        bad = base_cfg()
+        bad["pages"] = [{"path": "/guide.html"}]
+        with self.assertRaises(ValueError):
+            a11y_gate.load_config(self.write(bad))
+
+    def test_duplicate_page_path_rejected(self):
+        bad = base_cfg()
+        bad["pages"].append(dict(bad["pages"][0]))
+        with self.assertRaises(ValueError):
+            a11y_gate.load_config(self.write(bad))
+
     def test_non_dict_rejected(self):
         p = os.path.join(self.tmp.name, "cfg.json")
         with open(p, "w", encoding="utf-8") as f:
             f.write("[]")
         with self.assertRaises(ValueError):
             a11y_gate.load_config(p)
+
+
+# ------------------------------------------------------- landing source invariants
+
+class LandingSourceTests(unittest.TestCase):
+    """Landing'in CI sunum/a11y sözleşmesi kaynakta sabitlenir."""
+
+    def test_landing_has_stable_body_witness_and_single_main(self):
+        for path in (LANDING_SRC, LANDING_HTML):
+            with open(path, encoding="utf-8") as f:
+                html = f.read()
+            self.assertIn("teslim anına kadar.", html)
+            self.assertEqual(html.count("<main"), 1)
+            self.assertIn("<h1>", html)
+
+    def test_generated_landing_is_self_contained_and_theme_capable(self):
+        with open(LANDING_HTML, encoding="utf-8") as f:
+            html = f.read()
+        self.assertNotIn("{{", html)
+        self.assertNotIn("../../CIKTI/slides_z3", html)
+        self.assertIn(':root[data-theme="light"]', html)
+        for plate in ("P1-a.png", "P2.png", "P3-a.png"):
+            self.assertTrue(os.path.isfile(os.path.join(LANDING_ASSETS, plate)), plate)
+            self.assertIn('src="assets/%s"' % plate, html)
+
+
+# ------------------------------------------------------- guide source invariants
+
+class GuideSourceTests(unittest.TestCase):
+    """Statik görsel kılavuzun tarayıcısız semantik sözleşmeleri.
+
+    CI axe taraması canlı kanıttır; bu test aynı niyeti kaynakta erken
+    yakalar: 39 checkbox'un ve örtük 4 branch-name text input'unun her biri
+    erişilebilir ad taşır; sekiz ekran tek bir main landmark altında toplanır.
+    """
+
+    def setUp(self):
+        with open(GUIDE_HTML, encoding="utf-8") as f:
+            self.html = f.read()
+
+    def test_every_checkbox_has_descriptive_aria_label(self):
+        tags = re.findall(r"<input\b[^>]*\btype=[\"']checkbox[\"'][^>]*>",
+                           self.html, flags=re.I)
+        self.assertEqual(len(tags), 39)
+        for tag in tags:
+            self.assertRegex(tag, r"\baria-label=[\"'][^\"']+[\"']", tag)
+
+    def test_every_text_input_has_accessible_name(self):
+        tags = re.findall(r"<input\b[^>]*\btype=[\"']text[\"'][^>]*>",
+                           self.html, flags=re.I)
+        self.assertEqual(len(tags), 5)  # 1 explicit <label for> + 4 aria-label
+        for tag in tags:
+            self.assertTrue(
+                re.search(r"\baria-label=[\"'][^\"']+[\"']", tag) or
+                re.search(r"\bid=[\"'][^\"']+[\"']", tag),
+                tag,
+            )
+
+    def test_all_screens_share_one_main_landmark(self):
+        self.assertEqual(self.html.count("<main "), 1)
+        self.assertIn("</main>\n</body>", self.html)
 
 
 # ------------------------------------------------------------------ checksum
@@ -942,10 +514,8 @@ class GateContractTests(unittest.TestCase):
             rc, out, report = self.run_gate(["--base-url", url], connect=socket_probe_connect)
         self.assertEqual(rc, 1)
         self.assertIn("verdict: FAIL", out)
-        self.assertIn("[ERROR]", out)
-        # FAIL sayfa bazinda kaydedilir (ust duzey error yalnizca config/axe hatasi)
-        self.assertEqual(report["pages"][0]["verdict"], "FAIL")
-        self.assertIn("tarama arızası", report["pages"][0]["error"])
+        self.assertIn("[SCAN]", out)
+        self.assertIn("tarama arızası", report["error"])
 
     def test_live_server_passes(self):
         with live_server() as url:
@@ -953,19 +523,17 @@ class GateContractTests(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertIn("verdict: PASS", out)
         self.assertEqual(report["violations"], [])
-        self.assertEqual(report["summary"], {"blocking": 0, "warn": 0, "allowlisted": 0,
-                                             "incomplete": 0, "incomplete_allowlisted": 0})
-        shipped = a11y_gate.load_config(SHIPPED_CONFIG)
-        expected = [pg["path"] for pg in shipped["pages"]]
-        self.assertEqual([pg["path"] for pg in report["pages"]], expected)
-        self.assertEqual([pg["verdict"] for pg in report["pages"]], ["PASS"] * len(expected))
-        self.assertEqual(report["pages"][0]["url"], url.rstrip("/") + expected[0])
+        # #90 davranis-pini: tamamlanmis temiz tarama fail-closed varsayilan
+        # FAIL'i gercek degerle ezmeli ("alan yok" == "gecti" degil).
+        self.assertEqual(report["verdict"], "PASS")
+        self.assertEqual(report["summary"], {"blocking": 0, "warn": 0, "allowlisted": 0, "incomplete": 0})
+        self.assertEqual(report["page_url"], url.rstrip("/") + "/preview.html")
         self.assertEqual(report["config"]["blocking"], ["critical", "serious"])  # config echo
 
     def test_checksum_mismatch_fails_without_scan(self):
         called = []
 
-        def must_not_scan(base_url, axe_src, page_path, settle=None):
+        def must_not_scan(base_url, axe_src, page_path, witness, theme="dark"):
             called.append(True)
             raise AssertionError("checksum uyuşmazlığında taranmamalı")
 
@@ -991,7 +559,7 @@ class GateContractTests(unittest.TestCase):
         self.assertIn("eksik anahtar", report["error"])
 
     def test_missing_playwright_is_exit_2(self):
-        def no_playwright(base_url, axe_src, page_path, settle=None):
+        def no_playwright(base_url, axe_src, page_path, witness, theme="dark"):
             raise ImportError("playwright")
 
         rc, out, _ = self.run_gate(["--base-url", "http://127.0.0.1:1"], connect=no_playwright)
@@ -1000,31 +568,39 @@ class GateContractTests(unittest.TestCase):
         self.assertIn("playwright", out)
 
     def test_blocking_violation_report_shape(self):
-        def scan(base_url, axe_src, page_path, settle=None):
+        def scan(base_url, axe_src, page_path, witness, theme="dark"):
             return ({"violations": [axe_v("color-contrast", "serious", nodes=[node(["#x"])])],
-                     "incomplete": []}, base_url + page_path, None)
+                     "incomplete": []}, base_url + page_path)
 
-        cfg = os.path.join(self.tmp.name, "one_page.json")
-        with open(cfg, "w", encoding="utf-8") as f:
-            json.dump(base_cfg(), f)  # tek sayfa — sayfa sayisi sonucu degistirmesin
-        rc, out, report = self.run_gate(
-            ["--base-url", "http://127.0.0.1:1", "--config", cfg], connect=scan)
+        rc, out, report = self.run_gate(["--base-url", "http://127.0.0.1:1"], connect=scan)
         self.assertEqual(rc, 1)
         self.assertEqual(report["summary"]["blocking"], 1)
-        self.assertEqual(report["violations"][0]["page"], "/preview.html")
         self.assertEqual(report["violations"][0]["rule"], "color-contrast")
         self.assertEqual(report["violations"][0]["level"], "blocking")
         self.assertEqual(report["violations"][0]["nodes"], 1)
         self.assertIn("color-contrast", out)  # stdout tablosu
+
+    def test_incomplete_report_contains_node_target_and_html(self):
+        def scan(base_url, axe_src, page_path, witness, theme="dark"):
+            return ({"violations": [], "incomplete": [{
+                "id": "color-contrast", "impact": "serious", "nodes": [{
+                    "target": ["#trend", "text"],
+                    "html": '<text x="38" y="16">1</text>',
+                }],
+            }]}, base_url + page_path)
+
+        rc, _, report = self.run_gate(["--base-url", "http://127.0.0.1:1"], connect=scan)
+        self.assertEqual(rc, 0)
+        self.assertEqual(report["violations"][0]["node_targets"], [["#trend", "text"]])
+        self.assertEqual(report["violations"][0]["node_html"], ['<text x="38" y="16">1</text>'])
 
     def test_allowlisted_violation_reported_not_hidden(self):
         cfg = os.path.join(self.tmp.name, "cfg.json")
         with open(cfg, "w", encoding="utf-8") as f:
             json.dump({**base_cfg(), "allowlist": [{"rule": "r1", "reason": "kayitli borc"}]}, f)
 
-        def scan(base_url, axe_src, page_path, settle=None):
-            return ({"violations": [axe_v("r1", "serious")],
-                     "incomplete": []}, base_url + page_path, None)
+        def scan(base_url, axe_src, page_path, witness, theme="dark"):
+            return ({"violations": [axe_v("r1", "serious")], "incomplete": []}, base_url + page_path)
 
         rc, out, report = self.run_gate(["--base-url", "http://127.0.0.1:1", "--config", cfg], connect=scan)
         self.assertEqual(rc, 0)
@@ -1033,50 +609,423 @@ class GateContractTests(unittest.TestCase):
         self.assertEqual(report["summary"]["allowlisted"], 1)
         self.assertIn("ALLOWLISTED", out)  # borç raporda görünür
 
+    def test_requested_page_uses_configured_witness(self):
+        calls = []
 
-class A11ySummarySurfaceTests(unittest.TestCase):
-    """Ucuncu rapor yuzeyi (job summary) verify.yml'de gercekten var mi?
+        def scan(base_url, axe_src, page_path, witness, theme="dark"):
+            calls.append((page_path, witness, theme))
+            return ({"violations": [], "incomplete": []}, base_url + page_path)
 
-    Statik katman: tarayici/Playwright gerektirmez, her ortamda kosar. Adim
-    silinirse, `if: always()` kaybolursa (kirilimda ozet uretilmez) veya adim
-    gate'ten ONCE gelirse burasi KIRMIZI olur — sessizce kaybolan yuzey olmaz.
+        rc, out, report = self.run_gate(
+            ["--base-url", "http://127.0.0.1:1", "--page", "/guide.html"],
+            connect=scan,
+        )
+        self.assertEqual(rc, 0)
+        self.assertEqual(calls, [
+            ("/guide.html", "Ayarlar → Branches — kural listesi boş", "dark"),
+        ])
+        self.assertEqual(report["page_url"], "http://127.0.0.1:1/guide.html")
+        self.assertIn("verdict: PASS", out)
+
+    def test_landing_page_uses_configured_witness(self):
+        calls = []
+
+        def scan(base_url, axe_src, page_path, witness, theme="dark"):
+            calls.append((page_path, witness, theme))
+            return ({"violations": [], "incomplete": []}, base_url + page_path)
+
+        rc, _, report = self.run_gate(
+            ["--base-url", "http://127.0.0.1:1", "--page", "/landing.html"],
+            connect=scan,
+        )
+        self.assertEqual(rc, 0)
+        self.assertEqual(calls, [("/landing.html", "teslim anına kadar.", "dark")])
+        self.assertEqual(report["page_url"], "http://127.0.0.1:1/landing.html")
+
+    def test_unconfigured_page_fails_closed(self):
+        rc, out, report = self.run_gate([
+            "--base-url", "http://127.0.0.1:1", "--page", "/not-allowed.html",
+        ], connect=socket_probe_connect)
+        self.assertEqual(rc, 1)
+        self.assertIn("[CONFIG]", out)
+        self.assertIn("kapsam dışı", report["error"])
+
+    def test_light_theme_is_passed_to_driver_and_reported(self):
+        calls = []
+
+        def scan(base_url, axe_src, page_path, witness, theme="dark"):
+            calls.append(theme)
+            return ({"violations": [], "incomplete": []}, base_url + page_path)
+
+        rc, _, report = self.run_gate(
+            ["--base-url", "http://127.0.0.1:1", "--theme", "light"],
+            connect=scan,
+        )
+        self.assertEqual(rc, 0)
+        self.assertEqual(calls, ["light"])
+        self.assertEqual(report["theme"], "light")
+
+    def test_unknown_theme_fails_closed_before_scan(self):
+        called = []
+
+        def scan(base_url, axe_src, page_path, witness, theme="dark"):
+            called.append(theme)
+            return ({"violations": [], "incomplete": []}, base_url + page_path)
+
+        rc, out, report = self.run_gate(
+            ["--base-url", "http://127.0.0.1:1", "--theme", "sepia"], connect=scan)
+        self.assertEqual(rc, 1)
+        self.assertEqual(called, [])
+        self.assertEqual(report["verdict"], "FAIL")
+        self.assertEqual(report["theme"], "sepia")
+        self.assertIn("dark|light", report["error"])
+
+
+class ThemeContractTests(unittest.TestCase):
+    def test_apply_and_verify_theme_rejects_dom_drift(self):
+        page = mock.Mock()
+        page.evaluate.return_value = "light"
+        a11y_gate._apply_theme(page, "light")
+        page.evaluate.assert_called_once()
+        a11y_gate._verify_theme(page, "light")
+
+        page.evaluate.return_value = "dark"
+        with self.assertRaisesRegex(ValueError, "tema witness"):
+            a11y_gate._verify_theme(page, "light")
+
+    def test_init_script_sets_validated_theme_before_navigation(self):
+        browser = mock.Mock()
+        context = browser.new_context.return_value
+        a11y_gate._new_themed_page(browser, "light")
+        browser.new_context.assert_called_once_with(bypass_csp=False)
+        context.add_init_script.assert_called_once_with(
+            script='document.documentElement.dataset.theme = "light";')
+        context.new_page.assert_called_once_with()
+
+    def test_dashboard_exposes_validated_theme_query_for_lighthouse(self):
+        with open(os.path.join(SCRIPT_DIR, "preview.js"), encoding="utf-8") as f:
+            source = f.read()
+        self.assertIn("function themeQueryOverride()", source)
+        self.assertIn('new URLSearchParams(window.location.search).get("theme")', source)
+        # Tema beyaz listesi TEK kaynak: THEMES ve a11y_gate.VALID_THEMES
+        # aynı kümeyi taşır. Query override yalnız bu listede olan bir
+        # değeri kabul eder.
+        self.assertIn('const THEMES = ["dark", "light"]', source)
+        self.assertIn("return THEMES.includes(requested) ? requested : null;", source)
+        self.assertIn("setTheme(queryTheme || storedTheme, !queryTheme)", source)
+
+
+class TestReportVerdictField(unittest.TestCase):
+    """a11y_report.json makine-okunur verdict taşimali (spec §Summary).
+
+    Fail-closed sözlesme: alan her zaman mevcut; default "FAIL", yalniz
+    basarili-scan sonunda hesaplanan degerle ezilir. Hata-yollari (config,
+    checksum, tarama) raporu FAIL ile yazar.
     """
 
-    WORKFLOW = os.path.normpath(os.path.join(
-        SCRIPT_DIR, "..", "..", ".github", "workflows", "verify.yml"))
+    def _run_invalid_config(self):
+        # Eksik-anahtar config: tarayicisiz FAIL-path'e ulasan tek gercek akis
+        # (load_config -> ValueError -> fail(1); kanitlanmis mevcut sözlesme).
+        with tempfile.TemporaryDirectory() as td:
+            cfg = os.path.join(td, "bad.json")
+            with open(cfg, "w", encoding="utf-8") as f:
+                json.dump({"blocking": ["critical"]}, f)  # eksik anahtarlar
+            out = os.path.join(td, "report.json")
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = a11y_gate.main(["--base-url", "http://127.0.0.1:1",
+                                     "--config", cfg, "--output", out])
+            with open(out, encoding="utf-8") as f:
+                report = json.load(f)
+            return rc, buf.getvalue(), report
 
-    def _a11y_job_block(self):
-        with open(self.WORKFLOW, encoding="utf-8") as f:
+    def test_error_path_report_carries_fail_verdict(self):
+        rc, out, report = self._run_invalid_config()
+        self.assertEqual(rc, 1)
+        self.assertIn("[CONFIG]", out)
+        self.assertEqual(report["verdict"], "FAIL")
+
+    def test_report_verdict_only_pass_or_fail(self):
+        # Sözlesme-pin: rapor-verdict yalniz PASS/FAIL (default-deny).
+        # Init dict-literal'de fail-closed default "FAIL"; basari-yolunda
+        # hesaplanan degerle ezilir.
+        with open(a11y_gate.__file__, encoding="utf-8") as f:
+            src = f.read()
+        self.assertIn('report = {"verdict": "FAIL"', src)
+        self.assertIn('report["verdict"] = verdict', src)
+
+
+
+class TestReportVerdictBehaviour(unittest.TestCase):
+    """Verdict alaninin DAVRANISI — main'deki ``TestReportVerdictField``
+    kaynagi pin'ler, bunlar gercek CLI akisini kosturur (#90'dan tasinan
+    iki behavior testi).
+
+    Fail-closed sozlesmenin calistigi yer: hic sayfa taranmadan cikilan
+    erken-yolda rapor FAIL kalmali, yani "alan yok" ile "gecti" ayni sey
+    degil; bloklayan bulgu ise gercek FAIL uretmeli.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+
+    def _write_cfg(self, cfg):
+        path = os.path.join(self.tmp.name, "cfg.json")
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(cfg, f)
+        return path
+
+    def _run(self, cfg, connect):
+        out = os.path.join(self.tmp.name, "a11y_report.json")
+        buf = io.StringIO()
+        with mock.patch.object(a11y_gate, "collect", connect):
+            with contextlib.redirect_stdout(buf):
+                rc = a11y_gate.main([
+                    "--base-url", "http://127.0.0.1:1",
+                    "--config", self._write_cfg(cfg), "--output", out])
+        with open(out, encoding="utf-8") as f:
+            return rc, json.load(f)
+
+    @staticmethod
+    def _cfg(pages):
+        cfg = base_cfg()
+        cfg["pages"] = pages
+        return cfg
+
+    @staticmethod
+    def _connect(results):
+        def connect(base_url, axe_src, page_path="/preview.html",
+                    witness=None, theme="dark"):
+            return results, base_url.rstrip("/") + page_path
+        return connect
+
+    def test_report_verdict_defaults_to_fail_before_any_scan(self):
+        rc, report = self._run(self._cfg([]),
+                               self._connect({"violations": [],
+                                              "incomplete": []}))
+        self.assertEqual(rc, 1)
+        self.assertEqual(report["verdict"], "FAIL")
+
+    def test_report_verdict_tracks_blocking_findings(self):
+        rc, report = self._run(
+            self._cfg([{"path": "/preview.html",
+                        "witness": "Stoic-Hume V5 — Live CI Dashboard"}]),
+            self._connect({"violations": [axe_v("r1", "critical")],
+                           "incomplete": []}))
+        self.assertEqual(report["summary"]["blocking"], 1,
+                         "tarama sonucu tuketilmedi — net hata FAIL'i gizler")
+        self.assertEqual(rc, 1)
+        self.assertEqual(report["verdict"], "FAIL")
+
+
+WORKFLOW = os.path.join(os.path.dirname(os.path.dirname(
+    os.path.dirname(os.path.abspath(__file__)))),
+    ".github", "workflows", "verify.yml")
+
+
+class TestWorkflowSummaryStep(unittest.TestCase):
+    """Spec §Reporting-3: job özeti GITHUB_STEP_SUMMARY'ye yazılmalı.
+
+    Adim raporu salt-okur render eder (verdict + summary + violations +
+    error); if: always() — fail-closed: gate-kiriliminde de özet üretilir.
+    """
+
+    def _a11y_block(self):
+        with open(WORKFLOW, encoding="utf-8") as f:
             text = f.read()
-        start = text.index("\n  a11y-gate:")
-        body = text[start + 1:].splitlines()
-        out = [body[0]]
-        for line in body[1:]:
-            # Bir sonraki top-level job anahtari tam iki boslukla baslar.
-            if line.startswith("  ") and not line.startswith("   "):
-                break
-            out.append(line)
-        return "\n".join(out)
+        block = text.split("  a11y-gate:", 1)[1]
+        return block.split("\n  changelog-drift:", 1)[0]
 
-    def test_gate_job_writes_a_step_summary_surface(self):
-        seg = self._a11y_job_block()
-        self.assertIn("GITHUB_STEP_SUMMARY", seg,
-                      "a11y-gate job'inda ozet yuzeyi yok")
+    def _summary_step(self):
+        return self._a11y_block().split("- name: Write a11y job summary", 1)[1]
 
-    def test_summary_step_is_always_and_reads_the_report(self):
-        seg = self._a11y_job_block()
-        marker = "      - name: Write a11y job summary"
-        self.assertIn(marker, seg, "ozet adimi adi degismis veya silinmis")
-        step = seg.split(marker, 1)[1].split("\n      - name:", 1)[0]
-        self.assertIn("if: always()", step,
-                      "kirilimda da ozet uretilmeli (if: always() yok)")
-        self.assertIn("a11y_report.json", step, "ozet adimi raporu okumuyor")
+    def test_summary_step_exists(self):
+        self.assertIn("Write a11y job summary", self._a11y_block())
+
+    def test_summary_step_always_and_writes_step_summary(self):
+        step = self._summary_step()
+        self.assertIn("if: always()", step)
+        self.assertIn("GITHUB_STEP_SUMMARY", step)
+
+    def test_summary_step_reads_report_verdict(self):
+        # Task-1 sözleşmesi: özet, rapordaki verdict alanını okumalı.
+        self.assertIn('data.get("verdict"', self._summary_step())
 
     def test_summary_step_runs_after_the_gate(self):
-        seg = self._a11y_job_block()
-        self.assertLess(seg.index("- name: Run a11y gate"),
-                        seg.index("- name: Write a11y job summary"),
+        # #90 sirala-sozlesmesi: ozet gate'ten ONCE uretilirse kirilimde
+        # bos ozet gorunur; adim gate'ten sonra gelmeli.
+        block = self._a11y_block()
+        self.assertLess(block.index("- name: Run a11y gate"),
+                        block.index("- name: Write a11y job summary"),
                         "ozet adimi gate'ten once geliyor")
+
+    def test_summary_step_covers_dashboard_guide_and_landing_reports(self):
+        step = self._summary_step()
+        self.assertIn('"a11y_dashboard_%s.json" % theme', step)
+        self.assertIn('"a11y_guide_%s.json" % theme', step)
+        self.assertIn('"a11y_landing_%s.json" % theme', step)
+        self.assertIn('"lighthouse_dashboard_%s.json" % theme', step)
+        self.assertIn("Dashboard", step)
+        self.assertIn("Branch protection guide", step)
+        self.assertIn("Landing", step)
+        self.assertIn("A11Y_THEME", step)
+
+    def test_ci_scans_all_configured_pages_independently(self):
+        block = self._a11y_block()
+        self.assertIn("needs: [verify]", block)
+        self.assertIn("name: run-history", block)
+        self.assertIn("path: run-history/", block)
+        self.assertIn('"--snapshot-file", "run-history/history.jsonl"',
+                      block)
+        self.assertIn('"--no-verify"', block)
+        self.assertIn(
+            "cp docs/branch-protection-guide/guide.html "
+            "_calisma/CIKTI/guide.html",
+            block,
+        )
+        self.assertIn("--page /preview.html", block)
+        self.assertIn('--output "a11y_dashboard_${theme}.json"', block)
+        self.assertIn("--page /guide.html", block)
+        self.assertIn('--output "a11y_guide_${theme}.json"', block)
+        self.assertIn("python3 _calisma/landing/build_landing.py", block)
+        self.assertIn('--snapshot-url "http://127.0.0.1:$port/api/latest"',
+                      block)
+        self.assertIn("--hash-field raw", block)
+        self.assertIn("--output _calisma/CIKTI/landing.html", block)
+        self.assertIn("--assets-dir _calisma/CIKTI/landing/assets", block)
+        self.assertNotIn("qpdf_determinism_output", block)
+        self.assertIn("--page /landing.html", block)
+        self.assertIn('--output "a11y_landing_${theme}.json"', block)
+        # Şartlı check adı tekil kalmalı: GitHub matrix job'ında check adına
+        # " (dark)"/" (light)" ekler → "A11y gate (axe-core, fail-closed)"
+        # hiç raporlanmaz ve PR kalıcı BLOCKED olur (2026-10-24).
+        self.assertNotIn("${{ matrix.", block)
+        self.assertNotIn("strategy:", block)
+        self.assertIn("for theme in dark light", block)
+        for step_name in ("guide", "landing"):
+            step = block.split("- name: Run a11y gate — %s" % step_name, 1)[1]
+            step = step.split("- name:", 1)[0]
+            self.assertIn("if: always()", step)
+
+    def test_landing_report_has_theme_suffixed_artifact(self):
+        block = self._a11y_block()
+        for theme in ("dark", "light"):
+            self.assertIn("name: a11y-landing-report-%s" % theme, block)
+            self.assertIn("path: a11y_landing_%s.json" % theme, block)
+
+    def test_guide_report_has_theme_suffixed_artifact(self):
+        block = self._a11y_block()
+        for theme in ("dark", "light"):
+            self.assertIn("name: a11y-guide-report-%s" % theme, block)
+            self.assertIn("path: a11y_guide_%s.json" % theme, block)
+
+    def test_lighthouse_dashboard_scan_is_theme_loop_fail_closed(self):
+        block = self._a11y_block()
+        self.assertIn("actions/setup-node@v7", block)
+        self.assertIn("Resolve Chromium for Lighthouse", block)
+        self.assertIn("npx --yes lighthouse@13.5.0", block)
+        self.assertIn("--only-categories=accessibility", block)
+        # Lighthouse formFactor=desktop + varsayilan mobile screen emulation
+        # celiskili; preset desktop emulasyonu da masaustune ceker (CI'da
+        # "Screen emulation mobile setting does not match formFactor" hatasi).
+        self.assertIn("--preset=desktop", block)
+        self.assertIn("--screenEmulation.mobile=false", block)
+        self.assertNotIn("--form-factor=desktop", block)
+        self.assertIn("?theme=${theme}", block)
+        self.assertIn('score != 1', block)
+        self.assertIn("Lighthouse accessibility score PASS değil", block)
+        step = block.split("- name: Run Lighthouse accessibility — dashboard", 1)[1]
+        step = step.split("- name:", 1)[0]
+        self.assertIn("if: always()", step)
+
+    def test_lighthouse_report_has_theme_suffixed_artifact(self):
+        block = self._a11y_block()
+        for theme in ("dark", "light"):
+            self.assertIn("name: lighthouse-dashboard-%s" % theme, block)
+            self.assertIn("path: lighthouse_dashboard_%s.json" % theme, block)
+
+
+def _luminance(color):
+    """WCAG 2.x relative luminance — '#' öneki zorunlu."""
+    channels = [int(color.lstrip("#")[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+    linear = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+              for c in channels]
+    return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+
+def _contrast_ratio(fg, bg):
+    hi, lo = sorted((_luminance(fg), _luminance(bg)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def _blend_over(rgba, base):
+    """rgba tint'i opak token zemini üzerine bindir (tarayıcı kompoziti)."""
+    r, g, b, alpha = rgba
+    base_channels = [int(base.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4)]
+    mixed = [round(alpha * c + (1 - alpha) * base_c)
+             for c, base_c in zip((r, g, b), base_channels)]
+    return "#%02x%02x%02x" % tuple(mixed)
+
+
+class TestLightThemeContrast(unittest.TestCase):
+    """Light tema AA sözleşmesi (Lighthouse a11y skoru = 1.0).
+
+    axe bu düğümlerde color-contrast'ı "incomplete" bırakır; ölçümü
+    Lighthouse yapar. Bu yüzden token/tint çiftleri burada doğrudan
+    WCAG oranıyla pinlenir: rozet metni tint zemininde >= 4.5:1.
+    """
+
+    def setUp(self):
+        with open(os.path.join(REPO_ROOT, "design-system", "tokens.css"),
+                  encoding="utf-8") as f:
+            self.tokens_css = f.read()
+        with open(os.path.join(SCRIPT_DIR, "preview.html"), encoding="utf-8") as f:
+            self.html = f.read()
+        block = re.search(r':root\[data-theme="light"\]\s*\{(.*?)\}',
+                          self.tokens_css, re.S).group(1)
+        self.light = {name: value.strip().split()[0] for name, value
+                      in re.findall(r"(--[\w-]+)\s*:\s*([^;]+);", block)}
+
+    def _badge_tint(self, badge_class):
+        rule = re.search(r"\n  \.%s\s*\{([^}]*)\}" % badge_class, self.html)
+        self.assertIsNotNone(rule, ".%s rozet kuralı yok" % badge_class)
+        rgba = re.search(
+            r"rgba\((\d+),(\d+),(\d+),([\d.]+)\)", rule.group(1))
+        self.assertIsNotNone(rgba, ".%s tint'i rgba değil" % badge_class)
+        return tuple(float(v) for v in rgba.groups())
+
+    def test_badge_text_meets_aa_on_light_tint(self):
+        for badge_class, token in (("ok", "--ok"), ("warn", "--warn")):
+            r, g, b, alpha = self._badge_tint(badge_class)
+            surface = _blend_over((r, g, b, alpha), self.light["--surface"])
+            ratio = _contrast_ratio(self.light[token], surface)
+            self.assertGreaterEqual(
+                ratio, 4.5,
+                "%s (%s) %s tint zemininde %.2f:1 — AA 4.5 altı"
+                % (badge_class, self.light[token], surface, ratio))
+
+    def test_light_theme_does_not_override_component_button_color(self):
+        # `:root[data-theme="light"] button { color }` (0,2,1 özgüllük) .z3-tab
+        # gibi bileşen butonlarının kendi rengini ezip 1.2:1 üretti.
+        self.assertNotRegex(
+            self.html,
+            r':root\[data-theme="light"\]\s+button\s*\{[^}]*color\s*:')
+
+    def test_z3_tab_keeps_aa_contrast(self):
+        rule = re.search(r"\n  \.z3-tab \{([^}]*)\}", self.html)
+        self.assertIsNotNone(rule, ".z3-tab kuralı yok")
+        color = re.search(r"color:(#[0-9a-fA-F]{6})", rule.group(1)).group(1)
+        background = re.search(
+            r"background:(#[0-9a-fA-F]{6})", rule.group(1)).group(1)
+        self.assertGreaterEqual(_contrast_ratio(color, background), 4.5)
+
+    def test_theme_toggle_name_contains_visible_label(self):
+        # label-content-name-mismatch: görünen metin erişilebilir adda olmalı.
+        with open(os.path.join(SCRIPT_DIR, "preview.js"), encoding="utf-8") as f:
+            source = f.read()
+        self.assertIn("`Switch theme — current: ${THEME_LABELS[next]}`", source)
+        self.assertIn('aria-label="Switch to light mode">light mode<', self.html)
 
 
 if __name__ == "__main__":

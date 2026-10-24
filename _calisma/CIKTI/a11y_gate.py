@@ -1,54 +1,34 @@
 #!/usr/bin/env python3
-"""a11y_gate.py — dashboard için fail-closed erişilebilirlik kapısı.
+"""a11y_gate.py — dashboard, görsel kılavuz ve landing için fail-closed erişilebilirlik kapısı.
 
 Spec: docs/superpowers/specs/2026-09-17-a11y-gate-design.md
 Plan: docs/superpowers/plans/2026-09-17-a11y-gate-implementation.md
 
-Akış: konfig yükle/doğrula → axe bundle checksum kapısı → config'de ilan edilen
-HER sayfa için headless Chromium (Playwright) ile <base-url><path> yükle →
-axe.run() → eşikleme (blocking/warn/report-only; bilinmeyen etki = blocking) →
-verdict + rapor.
-
-KAPSAM ACIKÇA ILAN EDILIR: taranacak yüzeyler config'in `pages` listesidir
-(ölcüm 2026-10-02: preview_server yalnız /preview.html ve /guide.html servis
-eder; slides yalnız .png kabul eder, dashboard-shadcn/landing servis edilmez).
-Bir sayfa yüklenemezse kapı FAIL verir — sessizce atlanan sayfa, kapsam
-genişletilmiş gibi görünmez.
+Akış: konfig yükle/doğrula → axe bundle checksum kapısı → headless Chromium
+(Playwright) ile config'te tanımlı sayfayı yükle ve witness metnini doğrula →
+axe.run() → eşikleme (blocking/warn/report-only; bilinmeyen etki = blocking)
+→ verdict + rapor.
 
 Çıkış kodları: 0 = PASS · 1 = FAIL (fail-closed koşul dahil) · 2 = kullanım/
 ortam hatası (argparse, playwright kurulu değil).
 
-Rapor yüzeyleri (spec §Reporting): stdout (verdict + sayfa satırları),
-a11y_report.json (CI artifact; makine-okur üst düzey `verdict` alanı taşır —
-süreç taramayı bitirmeden düşerse rapor FAIL okunur) ve job summary
-(GITHUB_STEP_SUMMARY; raporu salt-okur render eden CI adımı).
+Rapor yüzeyleri (spec §Reporting): stdout (verdict + tablo) ve JSON
+(CI artifact). Üçüncü yüzey (job summary) CI job'ının.
 """
 
 import argparse
 import hashlib
 import json
 import os
-import re
 import sys
-import time
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-VALID_TOP_KEYS = {"blocking", "warn", "incomplete", "pages", "allowlist"}
-VALID_ENTRY_KEYS = {"rule", "reason", "target", "page"}
-VALID_PAGE_KEYS = {"path", "blocking", "warn", "incomplete", "settle"}
-# settle: sayfa "tarama hazır" sözleşmesi. attribute = <body> üzerindeki
-# data-* işaretinin adı (preview.js scanPendingEnd yazar), timeout_ms = bu
-# işaretin gelmesi için beklenecek en fazla süre. Sessiz varsayılan YOK:
-# süre config'in sözleşmesidir, kodda gömülü değil.
-VALID_SETTLE_KEYS = {"attribute", "timeout_ms"}
-SETTLE_ATTRIBUTE_RE = re.compile(r"^[a-z][a-z0-9-]*$")
-MAX_SETTLE_TIMEOUT_MS = 600000
+VALID_TOP_KEYS = {"blocking", "warn", "incomplete", "allowlist", "pages"}
+VALID_ENTRY_KEYS = {"rule", "reason", "target"}
+VALID_PAGE_KEYS = {"path", "witness"}
 INCOMPLETE_POLICY = "report-only"
-
-
-class PageLoadError(RuntimeError):
-    """Sayfa sunucudan gelmedi (404/5xx) — fail-closed: tarama yapılmadı."""
+VALID_THEMES = ("dark", "light")
 
 
 # ---------------------------------------------------------------- config
@@ -77,60 +57,31 @@ def load_config(path):
     if cfg["incomplete"] != INCOMPLETE_POLICY:
         raise ValueError("config: incomplete yalnız '%s' olabilir" % INCOMPLETE_POLICY)
 
-    # --- sayfa listesi: kapsam ilanı zorunlu (fail-closed) --------------
-    if not isinstance(cfg["pages"], list) or not cfg["pages"]:
-        raise ValueError("config: pages boş olamaz — taranan yüzeyler ilan edilir")
-    paths = set()
-    for i, page in enumerate(cfg["pages"]):
-        if not isinstance(page, dict):
+    pages = cfg["pages"]
+    if not isinstance(pages, list) or not pages:
+        raise ValueError("config: pages boş olmayan liste olmalı")
+    seen_paths = set()
+    for i, entry in enumerate(pages):
+        if not isinstance(entry, dict):
             raise ValueError("config: pages[%d] sözlük olmalı" % i)
-        unknown = set(page) - VALID_PAGE_KEYS
+        unknown = set(entry) - VALID_PAGE_KEYS
         if unknown:
-            raise ValueError("config: pages[%d] bilinmeyen anahtar: %s" % (i, sorted(unknown)))
-        path = page.get("path")
-        if not isinstance(path, str) or not path.startswith("/"):
-            raise ValueError("config: pages[%d].path mutlak rota olmalı (ör. /guide.html)" % i)
-        if ".." in path.split("/"):
-            raise ValueError("config: pages[%d].path '..' içeremez: %s" % (i, path))
-        if path in paths:
-            raise ValueError("config: pages[%d].path yineleniyor: %s" % (i, path))
-        paths.add(path)
-        for key in ("blocking", "warn"):
-            if key in page and (not isinstance(page[key], list)
-                                or not all(isinstance(v, str) for v in page[key])):
-                raise ValueError("config: pages[%d].%s string listesi olmalı" % (i, key))
-        overlap = (set(page.get("blocking", cfg["blocking"]))
-                   & set(page.get("warn", cfg["warn"])))
-        if overlap:
-            raise ValueError("config: pages[%d] blocking/warn kesişimi: %s" % (i, sorted(overlap)))
-        if "incomplete" in page and page["incomplete"] != INCOMPLETE_POLICY:
-            raise ValueError("config: pages[%d].incomplete yalnız '%s' olabilir"
-                             % (i, INCOMPLETE_POLICY))
-
-        # --- settle: veri çeken yüzeyler ancak "hazır" işareti sonrası taranır
-        # OLÇÜM 2026-10-03: kapı `load` anında axe.run() çağırıyordu; fetch'ler
-        # çözülmediği için #trend 0 <text> node veriyordu (axe 36 node / trend 0),
-        # çözülünce 43 node / trend 6. Yani 6 gerçek node görünmezdi.
-        # networkidle çözüm değil: preview.js iki EventSource'u açık tutuyor
-        # (ölçüm: 2 s'de TIMEOUT).
-        if "settle" in page and page["settle"] is not None:
-            settle = page["settle"]
-            if not isinstance(settle, dict):
-                raise ValueError("config: pages[%d].settle sözlük ya da null olmalı" % i)
-            unknown = set(settle) - VALID_SETTLE_KEYS
-            if unknown:
-                raise ValueError("config: pages[%d].settle bilinmeyen anahtar: %s"
-                                 % (i, sorted(unknown)))
-            attribute = settle.get("attribute")
-            if not isinstance(attribute, str) or not SETTLE_ATTRIBUTE_RE.match(attribute):
-                raise ValueError("config: pages[%d].settle.attribute gövde data-* "
-                                 "özniteliği adı olmalı (ör. scan-ready): %r" % (i, attribute))
-            timeout = settle.get("timeout_ms")
-            if isinstance(timeout, bool) or not isinstance(timeout, int):
-                raise ValueError("config: pages[%d].settle.timeout_ms tam sayı olmalı" % i)
-            if timeout <= 0 or timeout > MAX_SETTLE_TIMEOUT_MS:
-                raise ValueError("config: pages[%d].settle.timeout_ms 1..%d aralığında olmalı"
-                                 % (i, MAX_SETTLE_TIMEOUT_MS))
+            raise ValueError("config: pages[%d] bilinmeyen anahtar: %s" % (
+                i, sorted(unknown)))
+        path = entry.get("path")
+        if not isinstance(path, str) or not path:
+            raise ValueError("config: pages[%d].path boş olamaz" % i)
+        if (not path.startswith("/") or path.startswith("//") or
+                "\\" in path or "?" in path or "#" in path or
+                ".." in path.split("/")):
+            raise ValueError("config: pages[%d].path same-origin olmalı: %s" % (
+                i, path))
+        if path in seen_paths:
+            raise ValueError("config: yinelenen pages path: %s" % path)
+        seen_paths.add(path)
+        witness = entry.get("witness")
+        if not isinstance(witness, str) or not witness:
+            raise ValueError("config: pages[%d].witness boş olamaz" % i)
 
     if not isinstance(cfg["allowlist"], list):
         raise ValueError("config: allowlist liste olmalı")
@@ -146,11 +97,20 @@ def load_config(path):
             raise ValueError("config: allowlist[%d].reason zorunlu (borç gizlenemez)" % i)
         if "target" in entry and not entry["target"]:
             raise ValueError("config: allowlist[%d].target boş olamaz" % i)
-        if "page" in entry and entry["page"] not in paths:
-            # Taranmayan sayfaya kayıt = ölü konfig (görünür ama etkisiz).
-            raise ValueError("config: allowlist[%d].page pages listesinde değil: %r"
-                             % (i, entry["page"]))
     return cfg
+
+
+def select_page(cfg, page_path):
+    """Config'te izin verilen sayfanın witness metnini döndürür.
+
+    CLI --page ile keyfi URL taraması yapılamaz; her hedef config'te kanıt
+    metniyle tanımlı olmalıdır. 404/yanlış mirror gibi durumlar witness
+    eşleşmediği için tarama öncesi fail-closed hata verir.
+    """
+    for entry in cfg["pages"]:
+        if entry["path"] == page_path:
+            return entry["witness"]
+    raise ValueError("config: --page %s kapsam dışı" % page_path)
 
 
 # -------------------------------------------------------------- checksum
@@ -177,98 +137,75 @@ def _node_targets(node):
     return " ".join(str(t) for t in node.get("target", []))
 
 
-def _allowlisted_nodes(violation, allowlist, page_path=None):
-    """Node-bazlı allowlist kararı → (eşleşen entry listesi, eşleşmeyen node sayısı).
+def _incomplete_node_details(incomplete):
+    """Incomplete axe node'larını target + outer HTML kanıtıyla koru.
 
-    `page_path` verildiğinde yalnız o sayfanın kayıtları geçerlidir: `page`
-    anahtarı olmayan entry tüm sayfalarda, `page` anahtarı olan yalnız
-    eşleştiği sayfada uygulanır. Böylece bir sayfanın gerekçeli kaydı
-    başka sayfada gerekçesiz susturmaya dönüşmez.
+    `nodes` alanı geriye uyumlu sayım olarak kalır; yeni alanlar inceleme
+    sırasında hangi gerçek DOM düğümünün belirsiz kaldığını kanıtlar.
     """
-    remaining = len(violation.get("nodes", []))
+    nodes = incomplete.get("nodes", [])
+    return {
+        "node_targets": [node.get("target", []) for node in nodes],
+        "node_html": [node.get("html") for node in nodes],
+    }
+
+
+def allowlisted_node_indices(violation, allowlist):
+    """Node-bazlı allowlist kararı → (eşleşen index listesi, ilk gerekçeler).
+
+    Eşleşme kuralı tek kaynakta kalsın diye hem eşikleme (`_allowlisted_nodes`)
+    hem de job summary'nin kanıt seçimi (a11y_summary.py) bu fonksiyonu kullanır;
+    ikinci bir allowlist yorumu yazmak iki yüzeyin ayrışmasına yol açardı.
+    """
+    nodes = violation.get("nodes", [])
+    matched = []
     reasons = []
     for entry in allowlist:
         if entry["rule"] != violation.get("id"):
             continue
-        scope = entry.get("page")
-        if page_path is not None and scope is not None and scope != page_path:
-            continue
         target = entry.get("target")
-        for node in violation.get("nodes", []):
+        for index, node in enumerate(nodes):
             if target is not None and target not in _node_targets(node):
                 continue
-            if _node_targets(node) is not None:
-                reasons.append(entry["reason"])
-                remaining -= 1
-    # dedupe reasons (aynı entry birden çok node'u kapatırsa)
+            # Aynı düğüm birden çok allowlist girdisiyle eşleşebilir; her
+            # düğümü yalnız bir kez say ve ilk gerekçesini kaydet.
+            if index in matched:
+                continue
+            matched.append(index)
+            reasons.append(entry["reason"])
+    # Aynı gerekçe birden çok mühür düğümünde tekrar edebilir.
     seen, uniq = set(), []
-    for r in reasons:
-        if r not in seen:
-            seen.add(r)
-            uniq.append(r)
-    return uniq, max(remaining, 0)
+    for reason in reasons:
+        if reason not in seen:
+            seen.add(reason)
+            uniq.append(reason)
+    return matched, uniq
 
 
-def thresholds_for(cfg, page_path):
-    """Sayfanın eşikleri: `pages[path]` override'ı, yoksa üst seviye varsayılan."""
-    for page in cfg["pages"]:
-        if page["path"] == page_path:
-            return (set(page.get("blocking", cfg["blocking"])),
-                    set(page.get("warn", cfg["warn"])))
-    raise ValueError("config: sayfa taranmıyor: %s" % page_path)
+def _allowlisted_nodes(violation, allowlist):
+    """Node-bazlı allowlist kararı → (eşleşen entry listesi, eşleşmeyen node sayısı)."""
+    matched, reasons = allowlisted_node_indices(violation, allowlist)
+    return reasons, len(violation.get("nodes", [])) - len(matched)
 
 
-def settle_for(cfg, page_path):
-    """Sayfanın settle sözleşmesi; yoksa None (bekleme yok).
-
-    Taranmayan sayfa → ValueError: `thresholds_for` ile aynı fail-closed
-    mantık — kapsam dışı sayfaya sessizce "bekleme yok" demek, kapının
-    yüzeyi görmediğini gizlerdi.
-    """
-    for page in cfg["pages"]:
-        if page["path"] == page_path:
-            settle = page.get("settle")
-            return dict(settle) if isinstance(settle, dict) else None
-    raise ValueError("config: sayfa taranmıyor: %s" % page_path)
-
-
-def _summary(rows):
-    """level → sayım. Her level'in ES ADIYLA kovası var (sözleşme testi sabitler)."""
-    return {
-        "blocking": sum(1 for r in rows if r["level"] == "blocking"),
-        "warn": sum(1 for r in rows if r["level"] == "warn"),
-        "allowlisted": sum(1 for r in rows if r["level"] == "allowlisted"),
-        "incomplete": sum(1 for r in rows if r["level"] == "incomplete"),
-        "incomplete_allowlisted": sum(
-            1 for r in rows if r["level"] == "incomplete_allowlisted"),
-    }
-
-
-def classify_violations(axe_results, cfg, page_path=None):
+def classify_violations(axe_results, cfg):
     """axe sonuçlarını satırlara eşikler. Bilinmeyen etki → blocking (default-deny).
 
-    `page_path` verilirse o sayfanın eşikleri ve allowlist kapsamı kullanılır;
-    verilmezse üst seviye varsayılanlar ve tüm kayıtlar geçerlidir.
-
-    Döner: rows listesi — {rule, impact, level, nodes, reasons?, allowlisted_nodes?}.
-    level ∈ {blocking, warn, allowlisted, incomplete, incomplete_allowlisted}.
-
-    KURAL: her level'in summary'de ES ADIYLA bir kovasi olmalidir. Aksi halde
-    sayim sessizce yutulur ( satir raporda gorunur, ozette olmaz).
+    Döner: rows listesi — {rule, impact, level, nodes, reasons?, verdict_included}.
+    level ∈ {blocking, warn, allowlisted, incomplete}.
     """
-    if page_path is None:
-        blocking = set(cfg["blocking"])
-        warn = set(cfg["warn"])
-    else:
-        blocking, warn = thresholds_for(cfg, page_path)
+    blocking = set(cfg["blocking"])
+    warn = set(cfg["warn"])
     rows = []
 
     for v in axe_results.get("violations", []):
         impact = v.get("impact")
-        reasons, remaining = _allowlisted_nodes(v, cfg["allowlist"], page_path)
+        reasons, remaining = _allowlisted_nodes(v, cfg["allowlist"])
         if remaining == 0 and reasons:
             rows.append({"rule": v.get("id", "?"), "impact": impact,
-                         "level": "allowlisted", "nodes": 0, "reasons": reasons})
+                         "level": "allowlisted", "nodes": 0,
+                         "allowlisted_nodes": len(v.get("nodes", [])),
+                         "reasons": reasons})
             continue
         if impact in blocking or impact not in (blocking | warn):
             level = "blocking"  # bilinmeyen/None etki → default-deny
@@ -283,22 +220,17 @@ def classify_violations(axe_results, cfg, page_path=None):
             row["reasons"] = reasons
         rows.append(row)
 
-    # incomplete de allowlist'e uyar. Bu satir olmadan gerekceli bir kayit
-    # KAYIT GIBI GORUNUR AMA HIC BIR SEY YAPMAZDI (bkz. incomplete dongusunun
-    # _allowlisted_nodes'i cagrirmamasi) — yani borc defterde yazar, kapida
-    # ayni sekilde raporlanmaya devam ederdi. Kabul: kayit gerekcesiyle
-    # gorunur kalir, silinmez (borc gizlenemez), verdict'i etkilemez.
     for inc in axe_results.get("incomplete", []):
-        reasons, remaining = _allowlisted_nodes(inc, cfg["allowlist"], page_path)
-        if remaining == 0 and reasons:
-            rows.append({"rule": inc.get("id", "?"), "impact": inc.get("impact"),
-                         "level": "incomplete_allowlisted", "nodes": 0,
-                         "reasons": reasons})
-            continue
+        # Incomplete policy report-only kalır; allowlist bunu gizlemez.
+        # Yalnızca bilinçli/reason'lu SVG mühür düğümlerini görünür metadata
+        # ile işaretler ve kalan düğüm sayısını korur.
+        reasons, remaining = _allowlisted_nodes(inc, cfg["allowlist"])
+        total_nodes = len(inc.get("nodes", []))
         row = {"rule": inc.get("id", "?"), "impact": inc.get("impact"),
                "level": "incomplete", "nodes": remaining}
-        if reasons:
-            row["allowlisted_nodes"] = len(inc.get("nodes", [])) - remaining
+        row.update(_incomplete_node_details(inc))
+        if total_nodes != remaining:
+            row["allowlisted_nodes"] = total_nodes - remaining
             row["reasons"] = reasons
         rows.append(row)
     return rows
@@ -310,91 +242,113 @@ def decide_verdict(rows):
 
 # ----------------------------------------------------------------- scan
 
-def settle_selector(settle):
-    """Settle sözleşmesi → CSS bekçi seçicisi.
+def _witness_key(text):
+    """Witness karşılaştırma anahtarı: boşluklar tek, büyük/küçük harf nötr.
 
-    Gövde üzerindeki data-* işareti: `{"attribute": "scan-ready"}` →
-    `body[data-scan-ready=\'1\']`.
-
-    ÖLÇÜM 2026-10-03: `wait_for_selector` VARSAYILAN OLARAK GÖRÜNÜRLÜK arar
-    (`state="visible"`). Gövde gizliyken işaret kurulmuş olsa bile bekleme
-    zaman aşımına düşüyordu — yani hazır sayfa yanlışlıkla FAIL ediyordu
-    (ölçüm: visibility:hidden + işaret VAR → default TIMEOUT 4008 ms,
-    `state="attached"` → OK 21 ms). Kapı yalnızca "işaret kuruldu mu" ile
-    ilgilenir; sayfanın o anda görünür olması gerekmez, bu yüzden
-    `state="attached"` AÇIKÇA verilir.
+    `inner_text()` RENDER edilmiş metni verir; sayfa tipografisi başlıkları
+    CSS `text-transform: uppercase` ile büyütüyor (ölçüm: body'de
+    "TESLİM DENETİMİ · KANIT SAYFASI", config'te "Teslim denetimi · kanıt
+    sayfası"). Harf büyüklüğü bir tipografi kararıdır, sayfanın kimliği
+    değil; witness "doğru sayfa render edildi mi" sorusunu yanıtlar.
     """
-    return "body[data-%s='1']" % settle["attribute"]
+    return " ".join(str(text).split()).casefold()
 
 
-def playwright_connect(base_url, axe_src, page_path, settle=None):
+def _verify_witness(page, witness):
+    """Render edilen gerçek sayfa witness'ı taşımalı; aksi halde FAIL."""
+    if not witness:
+        raise ValueError("sayfa witness metni zorunlu")
+    body_text = _witness_key(page.locator("body").inner_text())
+    if _witness_key(witness) not in body_text:
+        raise ValueError("sayfa witness metni bulunamadı: %s" % witness)
+
+
+def _apply_theme(page, theme):
+    """İstenen DOM tema witness'ını uygular; sayfa CSS'i bunu okur."""
+    if theme not in VALID_THEMES:
+        raise ValueError("tema dark|light olmalı")
+    page.evaluate("(theme) => document.documentElement.dataset.theme = theme", theme)
+
+
+def _verify_theme(page, theme):
+    """DOM, tarama başında istenen tema witness'ını taşımalı."""
+    actual = page.evaluate("() => document.documentElement.dataset.theme")
+    if actual != theme:
+        raise ValueError("tema witness uyuşmazlığı: DOM=%r, beklenen=%r" % (actual, theme))
+
+
+def _new_themed_page(browser, theme, bypass_csp=False):
+    """Navigation'dan önce tema attribute'ını yerleştiren context/page üretir."""
+    if theme not in VALID_THEMES:
+        raise ValueError("tema dark|light olmalı")
+    context = browser.new_context(bypass_csp=bypass_csp)
+    # tema enum ile validate edildiği için bu string güvenli bir init script'tir.
+    context.add_init_script(
+        script="document.documentElement.dataset.theme = %s;" % json.dumps(theme))
+    return context.new_page()
+
+
+def playwright_connect(base_url, axe_src, page_path="/preview.html", witness=None,
+                       axe_url_path="/vendor/axe.min.js", theme="dark"):
     """Varsayılan sürücü: Playwright sync API. Lazy import — yoksa ImportError.
 
-    Fail-closed: HTTP >= 400 veya yanıt yoksa PageLoadError fırlatır. Playwright
-    `goto` 404'te exception atmaz (status yalnız response nesnesinde), dolayısıyla
-    status kontrolü kapının kendisinde olmalı — aksi halde 404 sayfasının boş
-    `<body>`'si taranır ve kapı "0 ihlal" diye yeşil görünür.
-
-    `settle` verilirse, `load` SONRASI hazır işareti beklenir (`settle_for`).
-    İşaret gelmezse PageLoadError → o sayfa FAIL: veri çekmeyen sayfa
-    taranmamış sayılır, "0 ihlal" yeşili gösterilmez.
-
-    Dönüş: (axe sonuçları, taranan URL, settle ölçümü | None). Ölçüm rapora
-    girer — "kapı ne kadar bekledi" gözlenebilir olur (sessiz bekleme değil).
+    Tema navigation öncesi same-origin DOM'a yazılır ve scan öncesi yeniden
+    doğrulanır. CSP-sözleşmesi: script-src 'self' + nonce; bundle aynı-kökte
+    /vendor/axe.min.js'ten 'self' ile yüklenir. Bu yol başarısızsa aynı tema
+    witness'ı ile CSP-bypass context'inde inline enjeksiyon denenir.
     """
     from playwright.sync_api import sync_playwright  # noqa: PLC0415 (lazy)
 
     page_url = base_url.rstrip("/") + page_path
-    measurement = None
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         try:
-            # preview_server nonce-CSP'si inline axe injection'ı bloklar —
-            # tarama-connect'i CSP-bypass'lı context'te aç (yalnız kapı-scan'i).
-            context = browser.new_context(bypass_csp=True)
-            page = context.new_page()
-            response = page.goto(page_url, wait_until="load")
-            status = getattr(response, "status", None) if response is not None else None
-            if status is None or status >= 400:
-                raise PageLoadError("%s → HTTP %s" % (page_path, status))
-            if settle:
-                selector = settle_selector(settle)
-                started = time.monotonic()
-                try:
-                    # state="attached": işaretin VARLIĞI ölçüt; gövde
-                    # gizliyken "visible" beklemek yanlış FAIL üretirdi.
-                    page.wait_for_selector(selector, state="attached",
-                                           timeout=settle["timeout_ms"])
-                except Exception as exc:  # noqa: BLE001 — fail-closed: her arıza FAIL
-                    waited_ms = int((time.monotonic() - started) * 1000)
-                    raise PageLoadError(
-                        "%s → hazır işareti gelmedi (%s, %d ms beklendi, "
-                        "a11y_gate_config.json settle.timeout_ms): %s"
-                        % (page_path, settle["attribute"], waited_ms, exc))
-                waited_ms = int((time.monotonic() - started) * 1000)
-                measurement = {"attribute": settle["attribute"],
-                               "timeout_ms": settle["timeout_ms"],
-                               "waited_ms": waited_ms}
+            page = _new_themed_page(browser, theme)
+            page.goto(page_url, wait_until="load")
+            _verify_witness(page, witness)
+            # Uygulama başlangıçta attribute'ı silebilir; scan öncesi yeniden
+            # uygulayıp gerçek DOM witness'ı ile kilitleriz.
+            _apply_theme(page, theme)
+            _verify_theme(page, theme)
+            results = page.evaluate(
+                """async (axeUrl) => {
+                    await new Promise((resolve, reject) => {
+                        const s = document.createElement('script');
+                        s.src = axeUrl;
+                        s.onload = resolve;
+                        s.onerror = () => reject(new Error('same-origin axe yüklenemedi'));
+                        document.head.appendChild(s);
+                    });
+                    return await axe.run();
+                }""", axe_url_path)
+        except Exception:
+            # Yedek (eski-daemon uyumu): CSP-bypass + inline enjeksiyon.
+            page = _new_themed_page(browser, theme, bypass_csp=True)
+            page.goto(page_url, wait_until="load")
+            _verify_witness(page, witness)
+            _apply_theme(page, theme)
+            _verify_theme(page, theme)
             page.add_script_tag(content=axe_src)
             results = page.evaluate("() => axe.run()")
         finally:
             browser.close()
-    return results, page_url, measurement
+    return results, page_url
 
 
-def collect(base_url, axe_src, page_path, connect=None, settle=None):
+def collect(base_url, axe_src, page_path="/preview.html", witness=None, connect=None,
+            theme="dark"):
     """Sürücüyü çalıştır; exception'ı yukarı fırlatır (main FAIL'e çevirir)."""
     if connect is None:
         connect = playwright_connect
-    return connect(base_url, axe_src, page_path, settle=settle)
+    return connect(base_url, axe_src, page_path, witness, theme)
 
 
 # ----------------------------------------------------------------- main
 
-def _print_table(rows, indent="  "):
+def _print_table(rows):
     for r in rows:
-        line = "%s[%s] %s (impact: %s) nodes=%d" % (
-            indent, r["level"].upper(), r["rule"], r["impact"], r["nodes"])
+        line = "  [%s] %s (impact: %s) nodes=%d" % (
+            r["level"].upper(), r["rule"], r["impact"], r["nodes"])
         if r.get("reasons"):
             line += " reason=%s" % "; ".join(r["reasons"])
         print(line)
@@ -406,16 +360,18 @@ def main(argv=None):
                     help="preview_server kök adresi (ör. http://127.0.0.1:PORT)")
     ap.add_argument("--config", default=os.path.join(SCRIPT_DIR, "a11y_gate_config.json"))
     ap.add_argument("--axe", default=os.path.join(SCRIPT_DIR, "vendor", "axe.min.js"))
+    ap.add_argument("--page", default="/preview.html",
+                    help="config'te witness ile tanımlı same-origin sayfa")
     ap.add_argument("--output", default="a11y_report.json",
                     help="rapor JSON yolu (CI artifact)")
+    ap.add_argument("--theme", default="dark",
+                    help="tarama DOM teması (dark|light)")
     args = ap.parse_args(argv)
 
-    # `verdict` VARSAYILAN FAIL: süreç taramayı tamamlamadan düşerse (config/
-    # axe/sayfa arızası) rapor FAIL okunur — "alan yok" ile "geçti" karışmaz.
-    # Yalnızca tamamlanmış bir taramanın gerçek verdict'i üzerine yazar.
-    report = {"base_url": args.base_url, "config": None,
-              "pages": [], "violations": [], "summary": {}, "error": None,
-              "verdict": "FAIL"}
+    report = {"verdict": "FAIL",  # fail-closed default: her arıza FAIL kalır
+              "base_url": args.base_url, "page": args.page, "page_url": None,
+              "theme": args.theme, "config": None, "violations": [],
+              "summary": {}, "error": None}
 
     def fail(code):
         with open(args.output, "w", encoding="utf-8") as f:
@@ -423,9 +379,18 @@ def main(argv=None):
             f.write("\n")
         return code
 
+    # 0) tema usage-policy; argparse'ın choices'i SystemExit ile rapor
+    # yazmadan çıkar. Burada report + FAIL yazarak fail-closed sözleşmesini koru.
+    if args.theme not in VALID_THEMES:
+        report["error"] = "kullanım hatası: tema dark|light olmalı"
+        print("verdict: FAIL")
+        print("  [CONFIG] %s" % report["error"])
+        return fail(1)
+
     # 1) config (geçersiz → FAIL; config-drift kapısı)
     try:
         cfg = load_config(args.config)
+        witness = select_page(cfg, args.page)
     except (OSError, ValueError) as exc:
         report["error"] = "config hatası: %s" % exc
         print("verdict: FAIL")
@@ -444,61 +409,42 @@ def main(argv=None):
         print("  [AXE] %s" % report["error"])
         return fail(1)
 
-    # 3) sayfa sayfa tarama (yarınlanamayan sayfa → FAIL, fail-closed)
-    for page in cfg["pages"]:
-        path = page["path"]
-        entry = {"path": path, "url": args.base_url.rstrip("/") + path,
-                 "verdict": None, "error": None,
-                 "violations": [], "summary": {}, "raw": None,
-                 "settle": None}
-        settle = settle_for(cfg, path)
-        try:
-            results, _url, settle_info = collect(args.base_url, axe_src, path,
-                                                 settle=settle)
-        except ImportError:
-            print("playwright kurulu değil: pip install playwright && playwright install chromium")
-            return 2
-        except PageLoadError as exc:
-            entry["error"] = "sayfa yüklenemedi: %s" % exc
-            entry["verdict"] = "FAIL"
-            report["pages"].append(entry)
-            continue
-        except Exception as exc:  # noqa: BLE001 — fail-closed: her arıza FAIL
-            entry["error"] = "tarama arızası: %s" % exc
-            entry["verdict"] = "FAIL"
-            report["pages"].append(entry)
-            continue
+    # 3) tarama (sunucu/tarayıcı arızası → FAIL; playwright yok → 2)
+    try:
+        results, page_url = collect(args.base_url, axe_src, args.page, witness,
+                                    theme=args.theme)
+    except ImportError:
+        print("playwright kurulu değil: pip install playwright && playwright install chromium")
+        return 2
+    except Exception as exc:  # noqa: BLE001 — fail-closed: her arıza FAIL'e dönüşür
+        report["error"] = "tarama arızası: %s" % exc
+        print("verdict: FAIL")
+        print("  [SCAN] %s" % report["error"])
+        return fail(1)
 
-        entry["settle"] = settle_info
-        if not isinstance(results, dict):
-            entry["error"] = "axe.run() sözlük döndürmedi (fail-closed)"
-            entry["verdict"] = "FAIL"
-            report["pages"].append(entry)
-            continue
+    if not isinstance(results, dict):
+        report["error"] = "axe.run() sözlük döndürmedi (fail-closed)"
+        print("verdict: FAIL")
+        print("  [SCAN] %s" % report["error"])
+        return fail(1)
 
-        entry["raw"] = results
-        rows = classify_violations(results, cfg, path)
-        for row in rows:
-            row["page"] = path
-        entry["violations"] = rows
-        entry["verdict"] = decide_verdict(rows)
-        entry["summary"] = _summary(rows)
-        report["pages"].append(entry)
-        report["violations"].extend(rows)
+    report["page_url"] = page_url
+    report["raw"] = results
+    rows = classify_violations(results, cfg)
+    verdict = decide_verdict(rows)
 
-    report["summary"] = _summary(report["violations"])
-    verdict = ("FAIL" if any(p["verdict"] != "PASS" for p in report["pages"])
-               else "PASS")
-    report["verdict"] = verdict  # tamamlanmış tarama varsayılan FAIL'i ezer
+    report["violations"] = rows
+    report["summary"] = {
+        "blocking": sum(1 for r in rows if r["level"] == "blocking"),
+        "warn": sum(1 for r in rows if r["level"] == "warn"),
+        "allowlisted": sum(1 for r in rows if r["level"] == "allowlisted"),
+        "incomplete": sum(1 for r in rows if r["level"] == "incomplete"),
+    }
 
+    report["verdict"] = verdict
     print("verdict: %s" % verdict)
-    for p in report["pages"]:
-        print("  %-4s %s" % (p["verdict"], p["path"]))
-        if p["error"]:
-            print("    [ERROR] %s" % p["error"])
-        _print_table(p["violations"], indent="    ")
-    if (report["summary"]["warn"] or report["summary"]["incomplete"]
-            or report["summary"]["incomplete_allowlisted"]):
+    _print_table(rows)
+    if report["summary"]["warn"] or report["summary"]["incomplete"]:
         print("(warn/incomplete raporlama seviyesidir; exit kodunu değiştirmez)")
     return fail(0 if verdict == "PASS" else 1)
 

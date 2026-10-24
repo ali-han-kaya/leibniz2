@@ -153,16 +153,12 @@
   --muted: #655e56;
   --fg-dimmed: #56504a;      /* light: #f3efe7 bg üzerinde AA 4.5:1+ */
   --accent: #8b5e2b;
-  --ok: #1f6b33;      /* #287a3d -> #1f6b33 (2026-10-09): acik temada
-     det/refs-trend-badge (ok-bg tint zemini #d8e7d0) 4.13:1 —
-     axe color-contrast SERIOUS, AA 4.5 alti. OLCUM (WCAG 2.x relative
-     luminance): #1f6b33 -> #d8e7d0 5.07 · #f3efe7 5.71 · raised #e9e1d3 5.04.
-     Koyu tema --ok degismedi (3fb950); rgb(31,107,51) klayers tint'iyle aile. */
-  --warn: #7d5606;    /* #996b08 -> #7d5606 (2026-10-09): acik temada
-     .warn badge #f8eed8 zeminde 4.08, .wire .ts #f3efe7 uzerinde 4.10 — axe
-     color-contrast SERIOUS, ikisi de AA alti. OLCUM (WCAG 2.x): #7d5606 ->
-     #f8eed8 5.68 · #f3efe7 5.71 · raised #e9e1d3 5.05. Koyu tema --warn
-     degismedi (d29922); rgb(125,86,6) klayers tint'leriyle aile. */
+  /* 2026-10-24: #287a3d/#996b08 rozet tint'i uzerinde (#d8e7d0/#f8eed8)
+     4.13/4.08:1 ile AA 4.5'in altinda kaliyordu (Lighthouse light
+     taramasi). Karttaki .sheet zaten olculmus degerleri tasiyordu;
+     token'lar ayni degere hizalandi — tint uzerinde 5.65/5.68:1. */
+  --ok: #1f6b33;
+  --warn: #7d5606;
   --err: #b42318;
   --border: #cfc5b5;
   --budget: #7650a8;
