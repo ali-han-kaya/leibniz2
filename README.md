@@ -77,9 +77,9 @@ devam ederken ikisi de yaşar (TEXLIVE_MIGRATION_PLAN.md):
 
 ```bash
 # TeXLive (pdfTeX) — göç hedefi; Faz 1 kabul kanıtı: kanonik hash 544516b0…
-make -f docs/Makefile.texlive pdf       # 3-geçişli derleme + Rerun=0 denetimi
+make -f docs/Makefile.texlive pdf       # 3-geçişli derleme + Rerun=0 denetimi (yalnız BUILD_DIR'a yazar)
 make -f docs/Makefile.texlive check     # 2×3-geçiş determinism deneyi (fail-closed)
-make -f docs/Makefile.texlive accept    # kanonik hash'i ID_RESIDUAL_ACCEPTANCE defterinde doğrular
+make -f docs/Makefile.texlive accept    # defter onayı + kanonik eşleşme → TRACKED teslim PDF'ine tek yazım yolu
 make -f docs/Makefile.texlive engineinfo  # motor kilidi + sözleşme sabitleri (CI log'u için)
 make -f docs/Makefile.texlive plate-book        # Incidental Proof levha kitabı (tectonic, ayrı SDE sabiti)
 make -f docs/Makefile.texlive plate-book-check  # levhalar+kitap: 2× bağımsız SDE koşumu (fail-closed)
@@ -99,6 +99,11 @@ yeniden üretme), `TEXINPUTS="$TEXDIR//:"`, `TEXMFOUTPUT`/`-output-directory`
 BUILD_DIR'a (kaynak dizinine asla yazma), `PASSES ?= 3` + son-geçiş
 `Rerun to get`=0 (fail-closed). Motor sürüm kilidi: pdfTeX
 3.141592653-2.6 (TeX Live 2026) — `engineinfo` ile kanıtlanır.
+
+**Yazım sınırı:** yerel derleme (`pdf`) teslim artefaktına dokunmaz — çıktı
+yalnız `BUILD_DIR`'a gider. Tracked teslim PDF'ini (`OUTPUT`) yalnız `accept`
+yazar: defter onayı + taze artefaktın kanonik hash eşleşmesi şarttır, yazım
+atomiktir (tmp + rename) ve öncesi/sonrası sha256 penceresi basılır.
 
 ## _calisma/lean_reduct — Sınır İspatı Çekirdeği (illüstratif, Mathlib-free)
 
@@ -519,6 +524,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-01 | chore | (changelog) 7076cdc satirini tabloya ekle | [`1020317`](https://github.com/ali-han-kaya/leibniz2/commit/1020317) |
 | 2026-10-01 | fix | (texlive) K6-DETERM'i /ID-kanonik kabul defterine bagla (Faz 4) | [`7f1a3c6`](https://github.com/ali-han-kaya/leibniz2/commit/7f1a3c6) |
 | 2026-10-01 | chore | (changelog) 7f1a3c6 satirini tabloya ekle | [`e08ef41`](https://github.com/ali-han-kaya/leibniz2/commit/e08ef41) |
+| 2026-10-01 | fix | (texlive) pdf teslim PDF'ini ezmiyor; yazım yalnız accept onaylı | [`a7ef958`](https://github.com/ali-han-kaya/leibniz2/commit/a7ef958) |
 | 2026-10-01 | docs | (history) superseded dal kaydı — post-42-chain net etki 0 | [`0df0f6f`](https://github.com/ali-han-kaya/leibniz2/commit/0df0f6f) |
 | 2026-10-01 | chore | (changelog) 0df0f6f satirini tabloya ekle | [`3780537`](https://github.com/ali-han-kaya/leibniz2/commit/3780537) |
 | 2026-10-01 | ci | (docker) yama build-arg'ları CI build'lerine de bağlandı | [`e4d5518`](https://github.com/ali-han-kaya/leibniz2/commit/e4d5518) |
