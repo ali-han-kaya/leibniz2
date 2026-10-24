@@ -523,6 +523,9 @@ class GateContractTests(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertIn("verdict: PASS", out)
         self.assertEqual(report["violations"], [])
+        # #90 davranis-pini: tamamlanmis temiz tarama fail-closed varsayilan
+        # FAIL'i gercek degerle ezmeli ("alan yok" == "gecti" degil).
+        self.assertEqual(report["verdict"], "PASS")
         self.assertEqual(report["summary"], {"blocking": 0, "warn": 0, "allowlisted": 0, "incomplete": 0})
         self.assertEqual(report["page_url"], url.rstrip("/") + "/preview.html")
         self.assertEqual(report["config"]["blocking"], ["critical", "serious"])  # config echo
@@ -752,6 +755,70 @@ class TestReportVerdictField(unittest.TestCase):
         self.assertIn('report["verdict"] = verdict', src)
 
 
+
+class TestReportVerdictBehaviour(unittest.TestCase):
+    """Verdict alaninin DAVRANISI — main'deki ``TestReportVerdictField``
+    kaynagi pin'ler, bunlar gercek CLI akisini kosturur (#90'dan tasinan
+    iki behavior testi).
+
+    Fail-closed sozlesmenin calistigi yer: hic sayfa taranmadan cikilan
+    erken-yolda rapor FAIL kalmali, yani "alan yok" ile "gecti" ayni sey
+    degil; bloklayan bulgu ise gercek FAIL uretmeli.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+
+    def _write_cfg(self, cfg):
+        path = os.path.join(self.tmp.name, "cfg.json")
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(cfg, f)
+        return path
+
+    def _run(self, cfg, connect):
+        out = os.path.join(self.tmp.name, "a11y_report.json")
+        buf = io.StringIO()
+        with mock.patch.object(a11y_gate, "collect", connect):
+            with contextlib.redirect_stdout(buf):
+                rc = a11y_gate.main([
+                    "--base-url", "http://127.0.0.1:1",
+                    "--config", self._write_cfg(cfg), "--output", out])
+        with open(out, encoding="utf-8") as f:
+            return rc, json.load(f)
+
+    @staticmethod
+    def _cfg(pages):
+        cfg = base_cfg()
+        cfg["pages"] = pages
+        return cfg
+
+    @staticmethod
+    def _connect(results):
+        def connect(base_url, axe_src, page_path="/preview.html",
+                    witness=None, theme="dark"):
+            return results, base_url.rstrip("/") + page_path
+        return connect
+
+    def test_report_verdict_defaults_to_fail_before_any_scan(self):
+        rc, report = self._run(self._cfg([]),
+                               self._connect({"violations": [],
+                                              "incomplete": []}))
+        self.assertEqual(rc, 1)
+        self.assertEqual(report["verdict"], "FAIL")
+
+    def test_report_verdict_tracks_blocking_findings(self):
+        rc, report = self._run(
+            self._cfg([{"path": "/preview.html",
+                        "witness": "Stoic-Hume V5 — Live CI Dashboard"}]),
+            self._connect({"violations": [axe_v("r1", "critical")],
+                           "incomplete": []}))
+        self.assertEqual(report["summary"]["blocking"], 1,
+                         "tarama sonucu tuketilmedi — net hata FAIL'i gizler")
+        self.assertEqual(rc, 1)
+        self.assertEqual(report["verdict"], "FAIL")
+
+
 WORKFLOW = os.path.join(os.path.dirname(os.path.dirname(
     os.path.dirname(os.path.abspath(__file__)))),
     ".github", "workflows", "verify.yml")
@@ -784,6 +851,14 @@ class TestWorkflowSummaryStep(unittest.TestCase):
     def test_summary_step_reads_report_verdict(self):
         # Task-1 sözleşmesi: özet, rapordaki verdict alanını okumalı.
         self.assertIn('data.get("verdict"', self._summary_step())
+
+    def test_summary_step_runs_after_the_gate(self):
+        # #90 sirala-sozlesmesi: ozet gate'ten ONCE uretilirse kirilimde
+        # bos ozet gorunur; adim gate'ten sonra gelmeli.
+        block = self._a11y_block()
+        self.assertLess(block.index("- name: Run a11y gate"),
+                        block.index("- name: Write a11y job summary"),
+                        "ozet adimi gate'ten once geliyor")
 
     def test_summary_step_covers_dashboard_guide_and_landing_reports(self):
         step = self._summary_step()

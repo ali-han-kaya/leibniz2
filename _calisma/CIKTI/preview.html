@@ -27,6 +27,24 @@
   :root[data-theme="light"] .rh-filter button.active { color:var(--fg); }
   :root[data-theme="light"] .footer { background:var(--surface-raised); }
   :root[data-theme="light"] .z3-gallery { background:var(--paper); color:var(--paper-ink); }
+  /* Light-tema grafik metinleri (2026-10-09): preview.js eksen/seri
+     etiketlerini koyu-palet sabit hex ile yazar. Koyu temada hepsi AA
+     (5.27-8.93:1 — kapinin taradigi durum), acik zeminde 1.90-3.23:1’e dusup
+     GERCEK ihlal olur; axe bu SVG <text>leri imgNode/shortTextContent ile
+     "incomplete" sayip karar veremez (boldugumuz 24 dugum). CSS, SVG
+     presentation attribute’unu ezer (ozellik=0); JS’e dokunmadan her iki
+     tema da AA’da kalir. En kotu acik zemin: --surface #fffdf8. */
+  :root[data-theme="light"] text[fill="#8b949e"] { fill:var(--muted); } /* 3.03 -> 6.28 */
+  :root[data-theme="light"] text[fill="#58a6ff"] { fill:#0969da; }      /* 2.48 -> 5.11 */
+  :root[data-theme="light"] text[fill="#bc8cff"] { fill:#8250df; }      /* 2.48 -> 4.96 */
+  :root[data-theme="light"] text[fill="#ffa657"] { fill:#bc4c00; }      /* 1.90 -> 4.95 */
+  :root[data-theme="light"] text[fill="#e055d2"] { fill:#bf3989; }      /* 3.23 -> 4.96 */
+  :root[data-theme="light"] text[fill="#3fb950"] { fill:#1a7f37; }      /* 2.50 -> 5.00 */
+  :root[data-theme="light"] text[fill="#f85149"] { fill:#cf222e; }      /* 3.30 -> 5.27 */
+  /* z3 galeri sekmesi: light buton kurali (color:var(--on-accent)) secilmemis
+     sekmeyi de boyuyor; zemin #efe7d8 acik -> 1.2:1 (axe SERIOUS,
+     #z3-tab-series). Secili sekme koyu zeminli (#2b2926) — ona dokunulmaz. */
+  :root[data-theme="light"] .z3-tab:not([aria-selected="true"]) { color:#5b4a35; } /* 1.2 -> 6.90 */
   * { box-sizing:border-box; }
   body { margin:0; font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",
          Helvetica,Arial,sans-serif; background:var(--bg); color:var(--fg); }
