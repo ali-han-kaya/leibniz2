@@ -847,6 +847,12 @@ class TestWorkflowSummaryStep(unittest.TestCase):
         self.assertIn("Resolve Chromium for Lighthouse", block)
         self.assertIn("npx --yes lighthouse@13.5.0", block)
         self.assertIn("--only-categories=accessibility", block)
+        # Lighthouse formFactor=desktop + varsayilan mobile screen emulation
+        # celiskili; preset desktop emulasyonu da masaustune ceker (CI'da
+        # "Screen emulation mobile setting does not match formFactor" hatasi).
+        self.assertIn("--preset=desktop", block)
+        self.assertIn("--screenEmulation.mobile=false", block)
+        self.assertNotIn("--form-factor=desktop", block)
         self.assertIn("?theme=${A11Y_THEME}", block)
         self.assertIn('score != 1', block)
         self.assertIn("Lighthouse accessibility score PASS değil", block)
