@@ -105,3 +105,47 @@ Dosya başına iki yönlü ölçüm (`git diff origin/main HEAD`, `^−`=main'e 
 - [ ] Merge push'ı sonrası 3/3 workflow success kanıtı alınır.
 - Commit başlığı önerisi: `merge: land reword-working (verify chain RC, CI
   debt fixes, determinism evidence) preserving main-side independent fixes`
+
+## 7. Uygulama doğrulaması (denetim: 2026-10-12)
+
+Karar (2026-09-17) ile **uygulanan çakışma çözümü** karşılaştırıldı. Ölçülen
+merge commit'i: `7c09956` — `Merge remote-tracking branch 'origin/main' into
+reword-working`, 2026-09-17; PR #50 dalına push edilen **tek** merge commit'i.
+Ebeveynler `352a615` (dal) ve `a4aa981` (origin/main); commit mesajı 22 çakışan
+dosyayı listeler. Ölçüm yeniden koşturulabilir:
+
+```bash
+M=7c09956; A=$(git rev-parse "$M^1"); B=$(git rev-parse "$M^2")
+git log -1 --format=%B "$M"      # çakışan 22 dosyanın listesi
+# her çakışan yol için üç blob'u karşılaştır: A:$p, B:$p, M:$p (ve main:$p)
+#   A == M ve B != M  -> dal tarafı kazandı
+#   B == M ve A != M  -> main tarafı kazandı
+#   A != M ve B != M  -> elle birleştirildi
+```
+
+### 7.1 Sınıflandırma
+
+| Sınıf | Yol | §4 kararı | Uyum |
+|---|---|---|---|
+| Dal tarafı kazandı (`A == M`) | 11 | "dal" / "3-way" | ✅ (main'in pcre2 yaması dalda eşdeğeriyle; `actionlint_gate.py`'da dalın fail-closed severity fix'i main'in fail-open sürümünün önünde; plist golden'da dalın drift'siz sürümü) |
+| Main tarafı kazandı (`B == M`) | 9 | "main" / "3-way" | ✅ (`check_review_freshness.py` + testi, `test_check_bootstrap_start_smoke.py`, `.dockerignore`; `verify_mcp/*` farkı yalnız K21↔K22 doküman satırı) |
+| Elle birleştirildi | 2 | "3-way birleşim" | ✅ (`update_preview.sh` arg-order + dal dokunuşları; `README.md`) |
+
+Bugün hâlâ dal blob'unu taşıyan 5 yol (`main == M != B`) var — bu, §4'ün
+"dal" kararlarının sonradan sessizce geri alınmadığını gösterir.
+
+### 7.2 Tek sapma — ve neden moot
+
+§2/§4 REVIEW PDF çifti için "dal sürümü kalsın" demişti; uygulanan çözüm
+main'in çiftini tuttu (`_calisma/REVIEW/Stoic_Hume_Review_Compilation_2026-08-17.pdf`
+ve `.sha256`: `B == M`). Bugün **moot**: main'de `shasum -a 256 -c` OK,
+dosya+sidecar tutarlı ve ikisi de sonraki inişlerde yeniden üretildi (bugünkü
+blob'lar `81046b2` / `c8b941c`).
+
+### 7.3 Sonuç
+
+Denetimde **onarılacak bir kayıp bulunmadı**: 22 çakışmanın dosya-bazlı
+çözümü §4 tablosuyla örtüşüyor, tek karar sapması (PDF çifti) doğrulanabilir
+şekilde aşılmış durumda. Kayıt amacı, main'e giren bu çakışma çözümünü karar
+dokümanıyla **kanıtla** bağlamaktır — yeniden ölçüm için §7'nin başındaki
+komutlar yeterlidir.
