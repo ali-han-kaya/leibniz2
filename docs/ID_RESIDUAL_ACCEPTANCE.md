@@ -85,6 +85,19 @@ aynı paketler), yalnız kaynak değişti; kanonik hash `ca3c5918…` → `5c083
 Bu, hash kaynak-türevli olduğunun ve motor sürümü kaymasının (satır 6→8)
 ayrı bir olgu olduğunun doğrulamasıdır.
 
+### Satır 12–13: kaynak sürümü değişti (`source_sha256` = `6d93ca75…`)
+
+Defter satırları 6 ve 9–11'in ölçtüğü `.tex` sürümü, 2026-10-05 öncesinde
+yeniden üretildi: `source_sha256` `a9f34e05…` → `6d93ca75…`. Kanonik hash
+kaynak-türevli olduğundan (satır 8 → 11 dersinin aynısı) CI-linux
+ölçümleri **yenilendi**; protokol gereği **yeni satır** açıldı, önceki
+satırlar silinmedi/üzerine yazılmadı.
+
+| # | Motor / sürüm | Geçiş | SDE | Ham (bilgi) | Kanonik (referans) | Ölçüm |
+|---|---|---|---|---|---|---|
+| 12 | **CI-linux** pdfTeX 3.141592653-2.6-1.40.29 (TeXLive, `ubuntu-latest` — satır 6 ile aynı apt paket seti; tectonic 0.17.0 digest-pini) | 1 | 0 | koşum-başına değişken (`/ID`); ham hash trend kaydında tutulmaz | `baa15f0d4a30fcfd2ed1c1c95c8b969476d1824ede9643e6a776401e63c57608` | **determinism-trend CI**: 2026-10-05 (×3), 2026-10-08 (×2), 2026-10-10 (×2) → 7 bağımsız koşum, hepsi `gate=PASS`, kanonik hash birebir aynı; kaynak `6d93ca75…` |
+| 13 | tectonic 0.17.0 (**CI-linux**, `/usr/local/bin/tectonic`, digest-pini) | 1 | 0 | raw = kanonik (trailer `/ID` nötr) | `20510ff0f6a8f835ad633a7787dac617f4d0eeaf939790854c366a8d2c79e23d` | **determinism-trend CI**, aynı 7 koşum (2026-10-05…10-10), `gate=PASS`; kaynak `6d93ca75…`. Satır 1'den farkı kaynaktır; aynı kaynak darwin'de ölçülmediği için çapraz-platform eşitliği bu satırda iddia edilmez. |
+
 Satır 5 **değişmedi**: teslim artefaktı PDF'i (tectonic ile derlenmiş,
 `74b2cdbd…` ham) dokunulmadı; K6-DETERM'in okuduğu referans hâlâ `d4f67e39…`.
 
