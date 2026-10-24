@@ -270,6 +270,7 @@ HOOK_COVERAGE = {
         "test_check_verify_jobs_map.py",
         "test_check_protection_drift.py",
         "test_vercel_latest_preview.py",
+        "test_ci_advisory_env.py",
         "test_verdict_seal_contrast.py",
         "test_ci_rate_limit_resilience.py",
     ],
