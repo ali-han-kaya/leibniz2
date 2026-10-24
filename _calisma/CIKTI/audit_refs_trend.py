@@ -504,6 +504,10 @@ def main(argv=None):
     ap.add_argument("--max-artifacts", type=int, default=100,
                     help="kaynak olarak işlenecek refs-online artifact sayısı "
                          "(trend üretimiyle aynı pencere; varsayılan 100)")
+    ap.add_argument("--max-downloads", type=int,
+                    default=rt.DEFAULT_MAX_DOWNLOADS,
+                    help="en fazla zip indirmesi (her indirme bir API "
+                         "çağrısıdır; varsayılan trend üretimiyle aynı)")
     ap.add_argument("--offline", action="store_true",
                     help="Kaynak artifact'ları GitHub API'den değil, "
                          "--artifacts-dir altından oku (çevrimdışı tekrarlanabilir)")
@@ -519,6 +523,20 @@ def main(argv=None):
     except RuntimeError as e:
         print(f"HATA: {e}", file=sys.stderr)
         return 2
+
+    # Kota nedeniyle trend ÜRETİLEMEDİYSE denetlenecek satır yoktur:
+    # boş tabloyu "drift" ya da "PASS" diye yorumlamak yanıltıcı olur.
+    if str(trend.get("verdict", "")) == "INDETERMINATE-QUOTA":
+        msg = ("trend INDETERMINATE-QUOTA — GitHub API kotası tükendi, "
+               "denetlenecek satır yok (bu run için audit atlandı)")
+        if args.json:
+            print(json.dumps({"verdict": "INDETERMINATE-QUOTA",
+                              "ok": None, "findings": [],
+                              "note": msg}, ensure_ascii=False))
+        else:
+            print(f"  {msg}")
+        print(f"  ({msg})", file=sys.stderr)
+        return 0
 
     # Kaynak raporları topla: {run_id_str: references_online.json}.
     source_reports = {}
@@ -591,7 +609,8 @@ def main(argv=None):
             print(f"HATA: refs-online artifact listelenemedi — {e}", file=sys.stderr)
             return 2
 
-        for a in artifacts:
+        # İndirme bütçesi: her zip bir API çağrısı (kota koruması).
+        for a in artifacts[-args.max_downloads:]:
             aid = a["id"]
             rid = (a.get("workflow_run") or {}).get("id")
             if rid is None:
