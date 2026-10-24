@@ -3284,16 +3284,21 @@ jobs:
           name: run-history
           path: run-history/
 
+      # Depo tek kaynak: playwright==1.63.0 pini (kardes a11y/plist isleriyle
+      # ayni). Burada `-r _calisma/requirements-z3.txt` deniyordu; o dosya
+      # depoda hic yok (ne main'de ne dalda) → kurulum adimi dusuyor ve
+      # fail-closed kapi "playwright kurulu degil" ile kirmizi oluyordu.
       - name: Install pinned Playwright
-        run: pip install -r _calisma/requirements-z3.txt
+        run: pip install playwright==1.63.0
 
       - name: Cache Playwright browsers
         uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
-          # Cache anahtarı da TEK KAYNAKTAN türer: sürüm bump'ı cache'i de
-          # geçersiz kılar, elle "1.63.0" yazılmış ikinci bir kopya olmaz.
-          key: playwright-${{ hashFiles('_calisma/requirements-z3.txt') }}
+          # Cache anahtarı pinden türer: sürüm bump'ı cache'i de geçersiz
+          # kılar. (Eskiden hashFiles('_calisma/requirements-z3.txt') idi;
+          # o dosya depoda yok → anahtar sabit boş kalıyordu.)
+          key: playwright-1.63.0
 
       - name: Install Chromium
         run: playwright install --with-deps chromium
