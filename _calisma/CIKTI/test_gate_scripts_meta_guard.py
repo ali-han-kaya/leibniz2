@@ -70,6 +70,7 @@ ADVISORY_SCRIPTS = {
     "sync_labels.js",
     "tum_sapmalar_comment.js",
     "unit_test_failure_comment.js",
+    "video_render_comment.js",
 }
 
 
