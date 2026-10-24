@@ -631,7 +631,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-11 | ci | (precommit) verify.yml jobs-map tazelik kapisi | [`e07d94f`](https://github.com/ali-han-kaya/leibniz2/commit/e07d94f) |
 | 2026-10-11 | docs | (specs) verify.yml jobs-map ureticisi + diyagram artefakti | [`eee89ff`](https://github.com/ali-han-kaya/leibniz2/commit/eee89ff) |
 | 2026-10-11 | ci | (verify) unit-test ortamina PyYAML kur (jobs-map kapisi) | [`b73c8c6`](https://github.com/ali-han-kaya/leibniz2/commit/b73c8c6) |
-| 2026-10-24 | docs | (deploy) 84e5b0b icin kanit-defteri satiri | [`150d1d85`](https://github.com/ali-han-kaya/leibniz2/commit/150d1d85) |
+| 2026-10-24 | docs | (deploy) 84e5b0b icin kanit-defteri satiri | [`e6ecf75e`](https://github.com/ali-han-kaya/leibniz2/commit/e6ecf75e) |
 | 2026-10-24 | test | (gate) video_render_comment.js advisory sinifina ekle | [`e4bed595`](https://github.com/ali-han-kaya/leibniz2/commit/e4bed595) |
 | 2026-10-24 | fix | (plist) golden kapısını ve mirror listesini senkronla | [`697f0d46`](https://github.com/ali-han-kaya/leibniz2/commit/697f0d46) |
 | 2026-10-24 | docs | (deploy) #98 inisi icin kanit-defteri satiri | [`bcc1ed4b`](https://github.com/ali-han-kaya/leibniz2/commit/bcc1ed4b) |
