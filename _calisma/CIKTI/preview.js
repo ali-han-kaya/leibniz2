@@ -11,29 +11,55 @@ if ("serviceWorker" in navigator) {
 }
 const $ = (id) => document.getElementById(id);
 
-function setTheme(theme) {
-  const light = theme === "light";
-  document.documentElement.dataset.theme = light ? "light" : "dark";
+// Tema kumesi: dark (varsayilan) · light. Toggle bu sirada doner; CI
+// (a11y_gate --theme / Lighthouse ?theme=) yalniz bu iki degeri kabul eder
+// — a11y_gate.VALID_THEMES ile ayni kume.
+const THEMES = ["dark", "light"];
+const THEME_LABELS = {
+  dark: "dark mode",
+  light: "light mode",
+};
+
+function setTheme(theme, persist = true) {
+  const next = THEMES.includes(theme) ? theme : "dark";
+  document.documentElement.dataset.theme = next;
   const toggle = $("theme-toggle");
   if (toggle) {
+    const light = next === "light";
     toggle.setAttribute("aria-pressed", String(light));
-    toggle.setAttribute(
-      "aria-label",
-      light ? "Switch to dark theme" : "Switch to light theme"
-    );
-    toggle.textContent = light ? "dark mode" : "light mode";
+    // Gorunen etiket ("light mode"/"dark mode") erisilebilir adda
+    // AYNEN bulunmali; aksi halde axe/Lighthouse
+    // label-content-name-mismatch verir.
+    toggle.setAttribute("aria-label",
+      `Switch theme — current: ${THEME_LABELS[next]}`);
+    toggle.textContent = THEME_LABELS[next];
   }
-  try {
-    localStorage.setItem("dashboard-theme", light ? "light" : "dark");
-  } catch (e) {}
+  if (persist) {
+    try {
+      localStorage.setItem("dashboard-theme", next);
+    } catch (e) {}
+  }
 }
 
+// Lighthouse cannot seed localStorage before navigation. A validated query
+// override gives CI a deterministic scan theme without changing the user's
+// stored preference; normal navigation continues to use localStorage.
+function themeQueryOverride() {
+  try {
+    const requested = new URLSearchParams(window.location.search).get("theme");
+    return THEMES.includes(requested) ? requested : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+const queryTheme = themeQueryOverride();
 try {
-  setTheme(
-    localStorage.getItem("dashboard-theme") === "light" ? "light" : "dark"
-  );
+  const stored = localStorage.getItem("dashboard-theme");
+  const storedTheme = THEMES.includes(stored) ? stored : "dark";
+  setTheme(queryTheme || storedTheme, !queryTheme);
 } catch (e) {
-  setTheme("dark");
+  setTheme(queryTheme || "dark", !queryTheme);
 }
 
 // View Transitions API (Chromium 111+, Safari 18+): subtle cross-fade
@@ -2227,6 +2253,90 @@ function renderKLayers(ls, z3p, z3t, z3f, leanOk, leanDetail) {
   panel.innerHTML = html || '<span class="muted">K-layers: veri yok</span>';
 }
 
+// ---- a11y-gate paneli (CI artifact JSON → verdict + özet sayıları) ----
+// Tek veri kaynağı `/api/a11y` (preview_server.load_a11y_reports): artifact'ın
+// HAM axe payload'ı bilerek dışarı verilmez, panel yalnız verdict + dört özet
+// sayısını görür. Fail-closed: artifact yoksa ya da okunamıyorsa rozet yeşil
+// DEĞİL "kanıt yok"a düşer — ölçülmemiş PASS yok.
+const A11Y_PAGE_LABELS = {
+  dashboard: "dash",
+  guide: "guide",
+  landing: "landing",
+};
+const A11Y_SUMMARY_KEYS = ["blocking", "warn", "allowlisted", "incomplete"];
+
+function renderA11y(data) {
+  const panel = $("a11y-panel");
+  const ts = $("a11y-ts");
+  if (!panel) return;
+  const reports = (data && data.reports) || [];
+  if (!reports.length) {
+    panel.innerHTML =
+      '<span class="badge warn">· a11y-gate: kanıt yok</span>';
+    if (ts)
+      ts.textContent =
+        (data && data.note) || "a11y artifact bulunamadı — kanıt yok";
+    return;
+  }
+  panel.innerHTML = reports
+    .map((r) => {
+      // st null ise _cls → "warn", _ico → "·": okunamayan rapor asla yeşil olmaz.
+      const st = r.verdict;
+      const s = r.summary || {};
+      const counts = A11Y_SUMMARY_KEYS.map(
+        (k) => k + " " + (s[k] || 0)
+      ).join(" · ");
+      const label = escapeHTML(
+        (A11Y_PAGE_LABELS[r.page] || r.page) + "/" + r.theme
+      );
+      // Nitelik bağlamı: tırnak kaçırılmadan kapatılıp yeni nitelik enjekte
+      // edilemez (lean_detail/source ile aynı gerekçe).
+      const tip = escapeHTML(
+        (r.file || "?") +
+          " · " +
+          (st || "rapor okunamadı") +
+          " · " +
+          counts +
+          (r.error ? " · hata: " + r.error : "")
+      );
+      return (
+        '<span class="badge ' +
+        _cls(st) +
+        '" title="' +
+        tip +
+        '">' +
+        _ico(st) +
+        " " +
+        label +
+        "</span>"
+      );
+    })
+    .join("");
+  if (ts) {
+    const blocking = reports.reduce(
+      (acc, r) => acc + ((r.summary && r.summary.blocking) || 0),
+      0
+    );
+    ts.textContent =
+      reports.length +
+      " a11y raporu · blocking " +
+      blocking +
+      " · kaynak a11y_<sayfa>_<tema>.json (CI artifact)";
+  }
+}
+
+function loadA11y() {
+  // a11y paneli de tarama yüzeyidir: artefakt fetch'i çözülmeden axe.run()
+  // çağrılırsa panel "kanıt yok" durumunda taranır, gerçek verdict düğümleri
+  // kapıdan görünmez. Sayaç `finally` ile kapanır (yukarıdaki sözleşme).
+  scanPendingBegin();
+  fetch("/api/a11y?_t=" + Date.now())
+    .then((r) => r.json())
+    .then(renderA11y)
+    .catch(() => renderA11y(null))
+    .finally(() => scanPendingEnd());
+}
+
 // ---- Hook env sürümleri (zaman serisi: python/z3/lean/…) ----
 const HOOK_TOOLS = ["python", "z3", "lean", "pre_commit", "pdfinfo", "qpdf"];
 const HOOK_LABELS = {
@@ -3020,6 +3130,8 @@ function connect() {
       reconnectDelay = 1000; // reset backoff on success
       // Run history'yi de güncelle (yeni run snapshot'ı gelince)
       loadRunHistory(true);
+      // a11y-gate artifact'ları yeni run'la değişebilir (CI artifact'ı)
+      loadA11y();
     } catch (err) {
       console.error("snapshot parse", err);
     }
@@ -3032,6 +3144,8 @@ function connect() {
       lastTs = Date.now();
       // Run history'yi de güncelle (yeni run update'i gelince)
       loadRunHistory(true);
+      // a11y-gate artifact'ları yeni run'la değişebilir (CI artifact'ı)
+      loadA11y();
     } catch (err) {
       console.error("update parse", err);
     }
@@ -3044,11 +3158,32 @@ function connect() {
   };
 }
 
+// ---- CSP-uyumlu event-delegation (inline onclick/onkeydown YOK) ----
+// CSP script-src 'self' + nonce içerir; inline öznitelik-handler'lar
+// tarayıcıda bloklanır. Tıklanabilir/hover yüzeyleri data-act/data-tip
+// taşıyıp tek document/SVG-düzeyi dinleyiciye delege edilir.
+const KEY_ACTIVATORS = new Set(["budget-toggle", "load-stdout"]);
+document.addEventListener("click", (ev) => {
+  const t = ev.target.closest("[data-act]");
+  if (!t) return;
+  if (t.dataset.act === "budget-toggle") toggleBudgetOverDetail();
+  else if (t.dataset.act === "rh-filter") setRhFilter(t.dataset.f);
+  else if (t.dataset.act === "load-stdout") loadRunStdout(t.dataset.ts);
+});
+// role=button div'ler için klavye-aktivasyon (gerçek button'lar native).
+document.addEventListener("keydown", (ev) => {
+  if (ev.key !== "Enter" && ev.key !== " ") return;
+  const t = ev.target.closest("[data-act]");
+  if (!t || !KEY_ACTIVATORS.has(t.dataset.act)) return;
+  ev.preventDefault();
+  if (t.dataset.act === "budget-toggle") toggleBudgetOverDetail();
+  else if (t.dataset.act === "load-stdout") loadRunStdout(t.dataset.ts);
+});
 $("reconnect").addEventListener("click", connect);
 $("theme-toggle").addEventListener("click", () => {
-  setTheme(
-    document.documentElement.dataset.theme === "light" ? "dark" : "light"
-  );
+  const current = document.documentElement.dataset.theme || "dark";
+  const index = THEMES.indexOf(current);
+  setTheme(THEMES[(index + 1) % THEMES.length]);
 });
 
 // staleness watchdog: 90s boyunca güncelleme yoksa "stale" göster
@@ -3062,6 +3197,7 @@ loadOverrideTrend();
 // API 6 satir donerken badge "veri yok" — init yuzeyinde tanim var,
 // cagri yoktu; ayni anda sozlesme testi eklendi).
 loadDeterminismTrend();
+loadA11y();
 connectStream();
 // CSP inline onclick'i bloklar → filtre butonları ve bütçe-aşım toggle'ı
 // burada addEventListener ile bağlanır (preview.html'de inline handler yok).
