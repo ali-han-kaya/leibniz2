@@ -84,7 +84,7 @@ class TestCheck(unittest.TestCase):
         self.assertFalse(error)
         self.assertTrue(drift)
         self.assertEqual(results[0]["verdict"], "DRIFT")
-        # İçerik farkı = diğer golden drift'i → P1 (advisory).
+        # İçerik farkı (bayat) → P1 — o da FAIL-CLOSED'dır (exit 1).
         self.assertEqual(results[0]["priority"], "P1")
 
     def test_drift_on_missing_rendered(self):
@@ -99,7 +99,7 @@ class TestCheck(unittest.TestCase):
         self.assertTrue(drift)
         missing = [r for r in results if r["label"] == "com.freebuff.preview-server.plist"]
         self.assertEqual(missing[0]["verdict"], "DRIFT")
-        # Eksik profil = diğer golden drift'i → P1 (advisory).
+        # Eksik profil → P1 — o da FAIL-CLOSED'dır (exit 1).
         self.assertEqual(missing[0]["priority"], "P1")
 
     def test_drift_on_extra_rendered(self):
@@ -137,7 +137,8 @@ class TestCheck(unittest.TestCase):
         # (burada render geçersiz → DRIFT); içerik farkı da ayrıca yakalanır.
         self.assertFalse(error)
         self.assertTrue(drift)
-        # Yapısal geçersizlik de P1 (advisory) — yalnızca fazla-profil P0'dır.
+        # Yapısal geçersizlik de P1'dir — yalnızca fazla-profil P0'dır;
+        # ikisi de fail-closed (exit 1), yalnızca tanı etiketi farklıdır.
         invalids = [r for r in results if r["verdict"] == "DRIFT"]
         self.assertTrue(invalids)
         self.assertTrue(all(r["priority"] == "P1" for r in invalids))

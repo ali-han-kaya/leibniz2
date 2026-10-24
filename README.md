@@ -521,6 +521,9 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-01 | chore | (changelog) 7f1a3c6 satirini tabloya ekle | [`e08ef41`](https://github.com/ali-han-kaya/leibniz2/commit/e08ef41) |
 | 2026-10-01 | docs | (history) superseded dal kaydı — post-42-chain net etki 0 | [`0df0f6f`](https://github.com/ali-han-kaya/leibniz2/commit/0df0f6f) |
 | 2026-10-01 | chore | (changelog) 0df0f6f satirini tabloya ekle | [`3780537`](https://github.com/ali-han-kaya/leibniz2/commit/3780537) |
+| 2026-10-01 | ci | (docker) yama build-arg'ları CI build'lerine de bağlandı | [`e4d5518`](https://github.com/ali-han-kaya/leibniz2/commit/e4d5518) |
+| 2026-10-01 | chore | (changelog) e4d5518 satirini tabloya ekle | [`f06ecf3`](https://github.com/ali-han-kaya/leibniz2/commit/f06ecf3) |
+| 2026-10-01 | test | (docker) yama ARG sözleşmesi tek parametrik tabloya indi | [`4e6a853`](https://github.com/ali-han-kaya/leibniz2/commit/4e6a853) |
 | 2026-10-02 | style | (prettier) 4 CI betigini formatla ve singleQuote hizala | [`0baec71`](https://github.com/ali-han-kaya/leibniz2/commit/0baec71) |
 | 2026-10-02 | docs | (final-rc) linux baseline (fcb14f7) bot-commit kaydini isle | [`3a3cbf3`](https://github.com/ali-han-kaya/leibniz2/commit/3a3cbf3) |
 | 2026-10-02 | feat | (k6) strict determinizmi kapilara bagla, bayat yorumu olc | [`e3651c1`](https://github.com/ali-han-kaya/leibniz2/commit/e3651c1) |
