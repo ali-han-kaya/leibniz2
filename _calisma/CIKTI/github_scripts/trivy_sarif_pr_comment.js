@@ -114,27 +114,40 @@ try {
       'Çözüm: yamalı base-image / pkg yükseltmesi (DOCKER_SECURITY_PATCHING.md).\n';
   }
 
-  const { data: comments } = await github.rest.issues.listComments({
-    owner: context.repo.owner,
-    repo: context.repo.repo,
-    issue_number: context.issue.number,
-    per_page: 100,
-  });
-  const existing = comments.find((c) => c.body && c.body.includes(MARKER));
-  if (existing) {
-    await github.rest.issues.updateComment({
-      owner: context.repo.owner,
-      repo: context.repo.repo,
-      comment_id: existing.id,
-      body,
-    });
-  } else {
-    await github.rest.issues.createComment({
+  // PR yorumu YAN FAYDADIR: kapı kararı yerel SARIF'ten verildi. Yorum
+  // upsert'i API kotası (403 "API rate limit exceeded for installation")
+  // gibi bir arızaya takılırsa gate'i kırmızıya çevirmeyiz — ama sessizce
+  // yutmayız da (core.warning). Gerçek bulgu varsa setFailed aşağıda,
+  // yorumdan BAĞIMSIZ olarak verilir.
+  let commentError = null;
+  try {
+    const { data: comments } = await github.rest.issues.listComments({
       owner: context.repo.owner,
       repo: context.repo.repo,
       issue_number: context.issue.number,
-      body,
+      per_page: 100,
     });
+    const existing = comments.find((c) => c.body && c.body.includes(MARKER));
+    if (existing) {
+      await github.rest.issues.updateComment({
+        owner: context.repo.owner,
+        repo: context.repo.repo,
+        comment_id: existing.id,
+        body,
+      });
+    } else {
+      await github.rest.issues.createComment({
+        owner: context.repo.owner,
+        repo: context.repo.repo,
+        issue_number: context.issue.number,
+        body,
+      });
+    }
+  } catch (err) {
+    commentError = err && err.message ? err.message : String(err);
+    core.warning(
+      'Trivy PR yorumu düşülemedi (yan fayda atlandı): ' + commentError
+    );
   }
 
   if (blocking.length) {
@@ -150,9 +163,12 @@ try {
     console.log('Trivy temiz — CRITICAL/HIGH bulgu yok');
   }
 } catch (err) {
-  // Okunamaz/çözümlenemez SARIF dahil her arıza fail-closed: yanlış "temiz"
-  // sinyali asla üretme, yorum düşürmeden gate'i kırmızıya çevir.
+  // Okunamaz/çözümlenemez SARIF = yerel arıza: bulgu-yokluğu
+  // İSPAT EDİLEMEZ → fail-closed (yanlış "temiz" yorumu da atılmaz).
+  // API/yorum hataları buraya DÜŞMEZ (yukarıda yan-fayda olarak
+  // ele alınır) — böylece kota, tarama sonucunu maskelemez.
   core.setFailed(
-    'SARIF yorumlanamadı: ' + (err && err.message ? err.message : err)
+    'SARIF okunamadı/çözümlenemedi: ' +
+      (err && err.message ? err.message : err)
   );
 }

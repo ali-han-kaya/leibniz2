@@ -25,8 +25,14 @@ Kullanım:
   GITHUB_TOKEN=... python3 _calisma/CIKTI/refs_trend.py --repo owner/name \\
       --out-dir refs-trend [--max-artifacts 100]
 
-Çıkış kodları: 0 her zaman (veri yoksa boş tablo + not; API hatası → 1,
-advisory job continue-on-error ile tolere eder).
+Çıkış kodları:
+  0 — tablo üretildi (veri yoksa boş tablo + not)
+  1 — beklenmeyen hata (artifact listelenemedi vb.)
+  3 — INDETERMINATE-QUOTA: GitHub API kotası tükendi (403/429 +
+      `x-ratelimit-remaining: 0`). Bu bir kod/veri regresyonu DEĞİLDİR:
+      refs-trend.md'ye bu karar yazılır, CI kapısı uyarı verip geçer —
+      tablo boş diye sessiz PASS de sayılmaz (fail-closed ama fail-quiet
+      değil).
 """
 import argparse
 import datetime
@@ -36,6 +42,8 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
+import urllib.error
 import urllib.request
 import zipfile
 
@@ -153,17 +161,81 @@ class _NoAuthRedirect(urllib.request.HTTPRedirectHandler):
         return new
 
 
-def api_get(path, token, binary=False):
-    """GitHub API GET. Token varsa urllib, yoksa `gh api` (yerel auth)."""
+class RateLimited(RuntimeError):
+    """GitHub API kota tükenmesi (403/429 + rate-limit sinyali).
+
+    Kota tükenmesi ortam kısıtıdır, kod hatası değil; ama "veri yok" ile
+    karıştırılırsa trend sessizce boş kalır. Çağıran bunu ayrı yakalar ve
+    INDETERMINATE olarak raporlar (fail-closed, fail-quiet değil).
+    """
+
+
+RETRY_STATUS = (429, 500, 502, 503, 504)
+# 3 deneme: hemen, 2s sonra, 5s sonra. Son gecikme 0 = "bir daha denemeden
+# yükselt" (döngü sonu). Böylece geçici 5xx/429 ağ hatası tek başına bir
+# artifact'ı düşürmez.
+RETRY_DELAYS = (0, 2, 5)
+
+
+def _is_rate_limited(code, headers, body):
+    """403/429 yanıtı kota kaynaklı mı (yanıt gövdesi/başlığı ile)?"""
+    if code not in (403, 429):
+        return False
+    remaining = (headers or {}).get("x-ratelimit-remaining")
+    if remaining is not None and str(remaining).strip() == "0":
+        return True
+    text = body or b""
+    if isinstance(text, bytes):
+        text = text.decode("utf-8", "replace")
+    low = text.lower()
+    if "rate limit" in low or "secondary rate limit" in low:
+        return True
+    return code == 429
+
+
+def _http_get(req, binary):
+    opener = urllib.request.build_opener(_NoAuthRedirect)
+    with opener.open(req, timeout=60) as r:
+        data = r.read()
+    return data if binary else json.loads(data.decode("utf-8"))
+
+
+def api_get(path, token, binary=False, delays=RETRY_DELAYS):
+    """GitHub API GET. Token varsa urllib, yoksa `gh api` (yerel auth).
+
+    Geçici hatalar (429/5xx/ağ) `delays` kadar yeniden denenir; kota
+    tükenmesi (403 + rate-limit) YenidenDenenmez — `RateLimited` yükselir.
+    """
     if token:
         req = urllib.request.Request(f"{API}{path}")
         req.add_header("Authorization", f"Bearer {token}")
         req.add_header("User-Agent", "refs-trend")
-        # Redirect'te Authorization'ı düşür (Azure blob 401'inin kökü).
-        opener = urllib.request.build_opener(_NoAuthRedirect)
-        with opener.open(req, timeout=60) as r:
-            data = r.read()
-        return data if binary else json.loads(data.decode("utf-8"))
+        for i, delay in enumerate(delays):
+            last = i == len(delays) - 1
+            if delay:
+                time.sleep(delay)
+            try:
+                return _http_get(req, binary)
+            except urllib.error.HTTPError as e:
+                body = b""
+                try:
+                    body = e.read()
+                except Exception:
+                    pass
+                if _is_rate_limited(e.code, e.headers, body):
+                    raise RateLimited(
+                        f"HTTP {e.code}: GitHub API kotası tükendi "
+                        f"({(e.headers or {}).get('x-ratelimit-remaining')!r} "
+                        f"kalan)") from e
+                if e.code in RETRY_STATUS and not last:
+                    continue
+                detail = body.decode("utf-8", "replace")[:300] if body else ""
+                raise RuntimeError(f"HTTP {e.code}: {detail}".strip()) from e
+            except (urllib.error.URLError, TimeoutError, OSError) as e:
+                if last:
+                    raise
+                continue
+        raise RuntimeError(f"GET {path}: yeniden denemeler tükendi")
     cmd = ["gh", "api", path]
     r = subprocess.run(cmd, capture_output=True, text=not binary)
     if r.returncode != 0:
@@ -603,13 +675,70 @@ def build_coverage_transition_summary(rows):
     return out
 
 
+QUOTA_MARKER = "VERDICT: INDETERMINATE-QUOTA"
+# Her zip indirmesi bir API çağrısıdır (kurulum kotası 5000/saat, DEPLOY
+# ve diğer artifact indirmeleriyle paylaşılır) — varsayılan bütçe tek
+# kaynak buradadır; workflow aynı değeri açıkça geçer (CLI senkron testi).
+DEFAULT_MAX_DOWNLOADS = 25
+
+
+def write_quota_degraded(out_dir, repo, generated, detail):
+    """API kotası tükendiğinde boş tablo yerine KARAR yazan md+json üretir.
+
+    Eski davranış (sadece exit 1 + dosya yok) iki yönlü yanıltıcıydı:
+    sessizce "trend tablosu yok" ile "kota var" ayırt edilemiyordu.
+    """
+    md_path = os.path.join(out_dir, "refs-trend.md")
+    lines = [
+        "# Çevrimiçi Referans Doğrulama Trendi (refs-online)",
+        "",
+        f"- **Repo:** {repo}",
+        f"- **Üretim:** refs_trend.py — {generated}",
+        f"- **{QUOTA_MARKER}**",
+        "",
+        "GitHub API kotası bu run'da tükendi (`HTTP 403/429` +",
+        "`x-ratelimit-remaining: 0`). Trend tablosu **üretilemedi**; bu bir",
+        "kod/veri regresyonu değil, ortam kısıtıdır. Boş tablo diye sessiz",
+        "PASS de sayılmaz — karar burada açıkça yazılır ve CI kapısı uyarı",
+        "vererek geçer; kota sıfırlandığında iş yeniden koşulunca tablo",
+        "dolar.",
+        "",
+        f"- **Ayrıntı:** `{detail}`",
+        "",
+        "```",
+        f"{QUOTA_MARKER}",
+        "```",
+        "",
+    ]
+    _write_atomic(md_path, "\n".join(lines))
+    summary = {
+        "generated": generated,
+        "repo": repo,
+        "verdict": "INDETERMINATE-QUOTA",
+        "run_count": 0,
+        "rows": [],
+        "totals": {"verified": 0, "total_online": 0},
+        "duration_budget": build_duration_budget([]),
+        "unverified_series": None,
+        "error": detail,
+    }
+    _write_atomic(os.path.join(out_dir, "refs-trend.json"),
+                   json.dumps(summary, indent=2, ensure_ascii=False))
+    return md_path
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--repo", required=True, help="owner/name")
     ap.add_argument("--out-dir", default="refs-trend")
     ap.add_argument("--max-artifacts", type=int, default=100,
-                    help="işlenecek en fazla artifact (varsayılan 100)")
+                    help="listelenecek en fazla artifact (varsayılan 100)")
+    ap.add_argument("--max-downloads", type=int,
+                    default=DEFAULT_MAX_DOWNLOADS,
+                    help="artifact başına en fazla zip indirmesi "
+                         "(varsayılan %(default)s; GitHub API kotasını "
+                         "korur — her indirme bir API çağrısıdır)")
     args = ap.parse_args()
 
     token = os.environ.get("GITHUB_TOKEN", "")
@@ -619,6 +748,12 @@ def main():
     try:
         artifacts = fetch_refs_online_artifacts(args.repo, token,
                                                 args.max_artifacts)
+    except RateLimited as e:
+        md_path = write_quota_degraded(args.out_dir, args.repo, generated, str(e))
+        print(f"HATA: refs-online artifact listelenemedi — {e}\n"
+              f"  → {QUOTA_MARKER}: {md_path} (exit 3; CI kapısı uyarı verir)",
+              file=sys.stderr)
+        sys.exit(3)
     except Exception as e:
         print(f"HATA: refs-online artifact listelenemedi — {e}", file=sys.stderr)
         sys.exit(1)
@@ -627,18 +762,32 @@ def main():
         hist_artifacts = fetch_artifacts_by_name(args.repo, token,
                                                  "run-history",
                                                  args.max_artifacts)
+    except RateLimited as e:
+        print(f"  (run-history listelenemedi — kota: {e}; "
+              "duration/budget trendi boş)", file=sys.stderr)
+        hist_artifacts = []
     except Exception as e:
         print(f"  (run-history listelenemedi — {e}; duration/budget trendi boş)",
               file=sys.stderr)
         hist_artifacts = []
 
+    # İndirme kotası: her zip bir API çağrısı — en yeni --max-downloads
+    # artifact'ı işle (trend derinliği düşer, kota korunur).
+    artifacts = artifacts[-args.max_downloads:]
+    hist_artifacts = hist_artifacts[-args.max_downloads:]
+
     rows = []
+    quota_hit = False
     for a in artifacts:
         aid = a["id"]
         try:
             blob = api_get(f"/repos/{args.repo}/actions/artifacts/{aid}/zip",
                            token, binary=True)
             rep = parse_report(blob)
+        except RateLimited as e:
+            print(f"  (kota: {e} — kalan artifact'lar atlandı)", file=sys.stderr)
+            quota_hit = True
+            break
         except Exception as e:
             print(f"  (atlandı: artifact {aid} ({a.get('created_at')}) — {e})",
                   file=sys.stderr)
@@ -663,6 +812,11 @@ def main():
             blob = api_get(f"/repos/{args.repo}/actions/artifacts/{aid}/zip",
                            token, binary=True)
             rec = parse_history_record(blob)
+        except RateLimited as e:
+            print(f"  (kota: {e} — kalan run-history artifact'ları atlandı)",
+                  file=sys.stderr)
+            quota_hit = True
+            break
         except Exception as e:
             print(f"  (atlandı: run-history artifact {aid} "
                   f"({a.get('created_at')}) — {e})", file=sys.stderr)
@@ -697,6 +851,13 @@ def main():
         f"- **Repo:** {args.repo}",
         "",
     ]
+    if quota_hit:
+        lines += [
+            f"> ⚠️ **{QUOTA_MARKER} (kısmi)** — GitHub API kotası bu run'da",
+            "> tükendi; tablo, indirilebilen artifact'larla sınırlıdır.",
+            "> Eksik satırlar kota sıfırlanınca yeniden koşuda dolar.",
+            "",
+        ]
     if not rows:
         lines += [
             "## Veri yok",
