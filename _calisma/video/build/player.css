@@ -1,0 +1,115 @@
+/* Sayfa kabuğu — oynatmanın kendi stilleri React inline style ile gelir. */
+:root {
+  color-scheme: dark;
+  --bg: #0b0f14;
+  --panel: #111823;
+  --panel-raised: #1b2634;
+  --line: #253041;
+  --text: #e6edf3;
+  --dim: #8b9aab;
+  /* Odak/aktif vurgu: koyu zeminde beyaz metne yakın kontrast (~9:1). */
+  --focus: #7cc4ff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 24px;
+  background: var(--bg);
+  color: var(--text);
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
+}
+
+.bar {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  padding: 16px 20px;
+  margin: 0 0 20px;
+}
+
+.bar h1 {
+  margin: 0;
+  font-size: 20px;
+  letter-spacing: -0.2px;
+}
+
+.bar p {
+  margin: 8px 0 0;
+  color: var(--dim);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+#root {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  padding: 16px;
+  min-height: 200px;
+}
+
+/* ---------------------------------------------------------- oynatıcı ---
+   Kontrol çubuğu OPAK zemin taşır: video karesinin üstüne binen yarı
+   saydam katman axe'in color-contrast hesabını "incomplete" yapıyordu
+   (bgColor=null). Opak panel + açık metin rengi ile oran ölçülebilir.
+   Odak halkası 2px + 2px offset: UA'nın 1px `auto` outline'ı koyu zeminde
+   WCAG 2.4.11 için çok inceydi (ölçüldü: rgb(153,200,255) auto 1px). */
+
+.lc-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  margin-top: 8px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.lc-controls__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.lc-controls__button:hover {
+  background: var(--panel-raised);
+}
+
+.lc-controls__seek {
+  flex: 1;
+  min-width: 120px;
+  height: 28px;
+  margin: 0;
+  accent-color: var(--focus);
+  cursor: pointer;
+}
+
+.lc-controls__time {
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  color: var(--text);
+  min-width: 84px;
+  text-align: right;
+}
+
+.lc-controls__button:focus-visible,
+.lc-controls__seek:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
