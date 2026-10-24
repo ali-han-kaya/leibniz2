@@ -34,23 +34,11 @@
 #   verify_delivery.py --check-references now exits 0.
 # V5i (2026-08-17): PDF build determinism (K6-DETERM) added. qpdf --remove-metadata
 #   computes metadata-stripped SHA-256 (qpdf 12.4.0); sidecar stored alongside
-#   the PDF (ingiliz_empirizmi_v3.pdf.metadata.sha256). KNOWN LIMITATION:
-#   tectonic 0.17.0 byte-deterministic değildir — ardışık derleme farklı
-#   metadata-stripped hash üretir. Bu nedenle --strict-determinism bayrağı
-#   varsayılan kapalıdır; drift bilgi amaçlı raporlanır (P0/P1 yok). TeXLive
-#   + SOURCE_DATE_EPOCH geçişi determinism'i sağlayabilir (henüz değil).
+#   the PDF (ingiliz_empirizmi_v3.pdf.metadata.sha256).
 # V5j (2026-08-17): bibliographic fixes — Popkin 1952 reprint pages 133-148
 #   corrected to 133-147; Priest 2018 full subtitle restored ('An Essay on
 #   Buddhist Metaphysics and the Catuskoti'). Reference audit KUCUK NOTs
 #   closed; all REFERENCE_KNOWN entries now DUZELTILDI (INFO only).
-# V5k (2026-08-18): KNOWN LIMITATION — tectonic non-determinism. The manuscript
-#   PDF is still compiled with tectonic 0.17.0, which is NOT byte-deterministic:
-#   consecutive builds of the same .tex produce different byte streams, hence
-#   different metadata-stripped SHA-256 hashes. Therefore K6-DETERM is
-#   informational by default (--strict-determinism OFF) and must not be enabled
-#   until the build migrates to TeXLive + SOURCE_DATE_EPOCH (TEXMFOUTPUT). This
-#   limits build reproducibility only — NOT the logical content (K1-K5, K8, K9
-#   unaffected).
 # V5l (2026-08-18): REPACK DETERMINISM — qpdf non-determinism experiment +
 #   fix. EXPERIMENT: qpdf --remove-metadata is NOT deterministic — the same
 #   input PDF produced 3 different outputs in 3 runs (b090ac01…, 429984da…,

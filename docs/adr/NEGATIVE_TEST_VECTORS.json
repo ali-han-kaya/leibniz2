@@ -1,0 +1,301 @@
+{
+  "schema": "freebuff.negative-test-vectors/v1",
+  "generated": "2026-10-15",
+  "status": "CANONICAL — UNWIRED",
+  "note": "Bu dosya, docs/adr/ altindaki bes ADR'nin olumsuz test vektorlerinin TEK KAYNAKLI makine-okunur contract'idir. Hicbir CLI/kapi bu dosyayi henüz okumuyor; 'wired: true' vektorler ayni davranisi dogrulayan mevcut unittest'i adlandirir (assertion testin icinde tekrarlanir), 'wired: false' vektorler HICBIR testte yoktur (taslak). 'tracked' alani test dosyasinin git ls-files ile commit'li olup olmadigini isaretler: tracked:false olanlar CI'da (HEAD checkout) calismaz, yalnizca local battery'de gorunur. Vektor beklemeleri bu oturumda olculmus/gozlemlenmis davranisi yazdigini iddia eder; kanit alani 'mutation Mx' ise bilincli bozma ile kirmiziya, geri alimla yesile cevrilmistir. OZEL NOT (LTX): check_latex_surface.py script'i, test dosyasi, pre-commit hook baglantisi ve verify.yml adimi da HEAD'de yok — kapinin dort parcasi da bu worktree'dedir ve birlikte commit edilmelidir; tek basina baglanti veya tek basina script fresh clone'da fail-closed kirilir.",
+  "vectors": [
+    {
+      "id": "LTX-01",
+      "adr": "docs/adr/ADR_LATEX_SURFACE_GRAPH_SCOPING.md",
+      "subject": "check_latex_surface:scan_surface",
+      "scenario": "Ayni input grafiği icinde iki \\label{...} ayni anahtari tanir",
+      "expect": { "exit": 1, "findings": ">=1", "where": "ikinci tanim" },
+      "wired": true,
+      "test": "_calisma.CIKTI.test_check_latex_surface.TestLatexSurface.test_duplicate_label_within_one_graph_is_finding",
+      "tracked": false,
+      "status": "mutation-proven (local only)",
+      "evidence": "M1: dup tanimi eklenince gate rc>0; kaldirilinca rc=0"
+    },
+    {
+      "id": "LTX-02",
+      "adr": "docs/adr/ADR_LATEX_SURFACE_GRAPH_SCOPING.md",
+      "subject": "check_latex_surface:scan_surface",
+      "scenario": "Tek dosyanin icinde ayni anahtar iki kez tanimli (satir 3)",
+      "expect": { "exit": 1, "findings": ">=1", "line": 3 },
+      "wired": true,
+      "test": "_calisma.CIKTI.test_check_latex_surface.TestLatexSurface.test_duplicate_label_in_same_file_is_finding",
+      "tracked": false,
+      "status": "green (local only)"
+    },
+    {
+      "id": "LTX-03",
+      "adr": "docs/adr/ADR_LATEX_SURFACE_GRAPH_SCOPING.md",
+      "subject": "check_latex_surface:scan_surface",
+      "scenario": "Manuskript kopyalari arasinda (tekrar-pdf-ve-typo) ayni anahtar farkli grafiklerde",
+      "expect": { "exit": 0, "findings": 0 },
+      "wired": true,
+      "test": "_calisma.CIKTI.test_check_latex_surface.TestLatexSurface.test_duplicate_label_across_manuscript_copies_is_scoped_out",
+      "tracked": false,
+      "status": "mutation-proven (local only)",
+      "evidence": "M3: kopya eslestirilince rc=0 + 0 bulgu"
+    },
+    {
+      "id": "LTX-04",
+      "adr": "docs/adr/ADR_LATEX_SURFACE_GRAPH_SCOPING.md",
+      "subject": "check_latex_surface:scan_surface",
+      "scenario": "Cozulmeyen \\input{ad deneme} + yorum satirindaki \\input/\\ref",
+      "expect": {
+        "exit": 1,
+        "kind": "input_missing",
+        "note": "yorum satirlari bulgu uretmez"
+      },
+      "wired": true,
+      "test": "_calisma.CIKTI.test_check_latex_surface.TestLatexSurface.test_unresolved_input_is_finding_but_existing_and_commented_are_not",
+      "tracked": false,
+      "status": "mutation-proven (local only)",
+      "evidence": "M2: var olmayan input eklenince gate rc>0"
+    },
+    {
+      "id": "LTX-05",
+      "adr": "docs/adr/ADR_LATEX_SURFACE_GRAPH_SCOPING.md",
+      "subject": "check_latex_surface:scan_surface",
+      "scenario": "Makro hedefli \\input (\\makro{sec:report}) — hedef cozulemez",
+      "expect": {
+        "exit": 1,
+        "kind": "input_missing",
+        "note": "makro; fail-closed"
+      },
+      "wired": true,
+      "test": "_calisma.CIKTI.test_check_latex_surface.TestLatexSurface.test_macro_input_target_is_flagged_fail_closed",
+      "tracked": false,
+      "status": "mutation-proven (local only)",
+      "evidence": "M4: makro hedefi eklenince gate rc>0"
+    },
+    {
+      "id": "LTX-06",
+      "adr": "docs/adr/ADR_LATEX_SURFACE_GRAPH_SCOPING.md",
+      "subject": "check_latex_surface:main (CLI)",
+      "scenario": "CLI cikis kodlari ve --json ciktisi sozlesmesi",
+      "expect": {
+        "exit": "0 temiz / 1 bulgu",
+        "json": "gecerli bulgu listesi"
+      },
+      "wired": true,
+      "test": "_calisma.CIKTI.test_check_latex_surface.TestLatexSurface.test_cli_exit_codes_and_json",
+      "tracked": false,
+      "status": "green (local only)"
+    },
+    {
+      "id": "K9-01",
+      "adr": "docs/adr/ADR_K9_LAKE_LOG_CONTRACT.md",
+      "subject": "run_summary_k9:status/render",
+      "scenario": "lake log '[K9-LAKE] PASS' kapsulu icerir",
+      "expect": { "exit": 0, "status": "PASS" },
+      "wired": true,
+      "test": "_calisma.CIKTI.test_run_summary_k9.test_status_pass_fail_missing",
+      "tracked": false,
+      "status": "green (local only)"
+    },
+    {
+      "id": "K9-02",
+      "adr": "docs/adr/ADR_K9_LAKE_LOG_CONTRACT.md",
+      "subject": "run_summary_k9:status/render",
+      "scenario": "lake log '[K9-LAKE] FAIL' kapsulu icerir",
+      "expect": { "exit": 1, "status": "FAIL" },
+      "wired": true,
+      "test": "_calisma.CIKTI.test_run_summary_k9.test_status_pass_fail_missing",
+      "tracked": false,
+      "status": "green (local only)"
+    },
+    {
+      "id": "K9-03",
+      "adr": "docs/adr/ADR_K9_LAKE_LOG_CONTRACT.md",
+      "subject": "run_summary_k9:status",
+      "scenario": "Kismi log — yalnizca '[K9-LAKE] START' (hukum yok)",
+      "expect": { "status": "FAIL (fail-closed)", "note": "PASS yorulmaz" },
+      "wired": true,
+      "test": "_calisma.CIKTI.test_run_summary_k9.test_status_partial_log_is_fail_closed",
+      "tracked": false,
+      "status": "green (local only)"
+    },
+    {
+      "id": "K9-04",
+      "adr": "docs/adr/ADR_K9_LAKE_LOG_CONTRACT.md",
+      "subject": "run_summary_k9:status/render",
+      "scenario": "Yan dosya/log hic yok (verify job'u kostu mu?)",
+      "expect": {
+        "exit": 0,
+        "status": "MISSING",
+        "note": "advisory, kapi kirmiziya cevmez"
+      },
+      "wired": true,
+      "test": "_calisma.CIKTI.test_run_summary_k9.test_render_missing_is_advisory",
+      "tracked": false,
+      "status": "green (local only)"
+    },
+    {
+      "id": "K9-05",
+      "adr": "docs/adr/ADR_K9_LAKE_LOG_CONTRACT.md",
+      "subject": "summary_pattern_drift:main",
+      "scenario": "merge pattern'den bir ARTIFACT_JOBS kaydi dusuk (kapsam disi hariç)",
+      "expect": {
+        "exit": 1,
+        "verdict": "DRIFT",
+        "stdout": "tek JSON (--json)",
+        "stderr": "sonuc"
+      },
+      "wired": true,
+      "test": "_calisma.CIKTI.test_summary_pattern_drift",
+      "tracked": true,
+      "status": "green"
+    },
+    {
+      "id": "K9-06",
+      "adr": "docs/adr/ADR_K9_LAKE_LOG_CONTRACT.md",
+      "subject": "check_workflow_artifact_docs:main",
+      "scenario": "workflow upload-artifact adi PUBLISH_SCENARIO listesinde veya ARTIFACT_JOBS'ta yok",
+      "expect": {
+        "exit": 1,
+        "stdout": "senkron sayilari",
+        "stderr": "FAIL satirlari"
+      },
+      "wired": true,
+      "test": "_calisma.CIKTI.test_doc_artifact_sync",
+      "tracked": true,
+      "status": "green"
+    },
+    {
+      "id": "PDF-01",
+      "adr": "docs/adr/ADR_PDF_PER_PAGE_DETERMINISM.md",
+      "subject": "qpdf canonical + hibrit SOURCE_DATE_EPOCH (mevcut prosedur)",
+      "scenario": "Iki build arasinda yalnizca ham /ID farkediyor, sayfa icerikleri ayni",
+      "expect": {
+        "exit": 0,
+        "residual": "/ID",
+        "note": "kanonik karsilastirma esit"
+      },
+      "wired": true,
+      "test": "_calisma.CIKTI.test_canvas_determinism.test_id_only_difference_canonical_pass",
+      "tracked": false,
+      "status": "green (local only)"
+    },
+    {
+      "id": "PDF-02",
+      "adr": "docs/adr/ADR_PDF_PER_PAGE_DETERMINISM.md",
+      "subject": "qpdf canonical (mevcut prosedur)",
+      "scenario": "Sayfa icerigi farki kanonik karsilastirmayi gecemez",
+      "expect": { "exit": 1, "residual": "content", "note": "fail-closed" },
+      "wired": true,
+      "test": "_calisma.CIKTI.test_canvas_determinism.test_content_difference_fails_closed",
+      "tracked": false,
+      "status": "green (local only)"
+    },
+    {
+      "id": "PDF-03",
+      "adr": "docs/adr/ADR_PDF_PER_PAGE_DETERMINISM.md",
+      "subject": "per-page hash omurgasi (HENÜZ YOK)",
+      "scenario": "N. sayfa hash'i iki ardışik build'de farkli",
+      "expect": { "exit": 1, "report": "aday sayfa numaralari" },
+      "wired": false,
+      "test": null,
+      "tracked": null,
+      "status": "draft",
+      "note": "ADR per-page determinizmi prosedur olarak kararlastirir; otomatik harness yoktur (mevcut gate yalnizca butun-dosya canonical). Bu vektor ileride per-page CLI/ic test icin kanonik bekleyistir."
+    },
+    {
+      "id": "COV-01",
+      "adr": "docs/adr/ADR_COVERAGE_DISCOVERY_TRACKED_ONLY.md",
+      "subject": "coverage_report:_tracked_test_names (mevcut kod)",
+      "scenario": "Worktree'de commit edilmemis (untracked) test dosyasi var",
+      "expect": {
+        "note": "kesif sonucu tam olarak commit'li agacla ayni; untracked dosya sayilmaz"
+      },
+      "wired": false,
+      "test": null,
+      "tracked": null,
+      "status": "draft",
+      "note": "Mevcut 4 kesif/uye testi yalnizca mevcut agac outcome'larini pin'ler; 'untracked dislanir' davranisini ayrica test eden yok."
+    },
+    {
+      "id": "COV-02",
+      "adr": "docs/adr/ADR_COVERAGE_DISCOVERY_TRACKED_ONLY.md",
+      "subject": "coverage_report:_tracked_test_names (mevcut kod)",
+      "scenario": "git komutu calisamiyor (repo yok / git yok)",
+      "expect": {
+        "note": "glob fallback'a duser; kesif sifirlanmaz, crash yok"
+      },
+      "wired": false,
+      "test": null,
+      "tracked": null,
+      "status": "draft",
+      "note": "Hiçbir test git-hata yolunu kapsamaz (AGENTS.md: mevcut 4 test sadece mevcut agac)."
+    },
+    {
+      "id": "COV-03",
+      "adr": "docs/adr/ADR_COVERAGE_DISCOVERY_TRACKED_ONLY.md",
+      "subject": "coverage_report:main --check",
+      "scenario": "Check modunda testi olmayan dosya acikta kalir",
+      "expect": { "exit": 1 },
+      "wired": true,
+      "test": "_calisma.CIKTI.test_test_coverage_report.TestCheckMode",
+      "tracked": true,
+      "status": "green"
+    },
+    {
+      "id": "EQ-01",
+      "adr": "docs/adr/ADR_DASHBOARD_EQUATIONS_TAB.md",
+      "subject": "preview.html/preview.js/preview_server.py (denklem galerisi)",
+      "scenario": "Sekme sozlesmesi: tablist esitleme, paneller etiketli, denklem paneli varsayilan gizli, manifest 16 kart, sunucu rotalari mevcut",
+      "expect": { "exit": 1, "note": "sözleşme ihlali kirmizi" },
+      "wired": true,
+      "test": "_calisma.CIKTI.test_equation_gallery_tab (TestAriaTabsWiring, TestManifestIntegrity, TestClientAndServerWiring, TestTokenDiscipline)",
+      "tracked": false,
+      "status": "green (local only)"
+    },
+    {
+      "id": "EQ-02",
+      "adr": "docs/adr/ADR_DASHBOARD_EQUATIONS_TAB.md",
+      "subject": "preview.js (inline handler yasagi)",
+      "scenario": "HTML/JS'e satir ici event handler enjekte edilir",
+      "expect": { "exit": 1 },
+      "wired": true,
+      "test": "_calisma.CIKTI.test_preview_screenshot_gate.InlineEventHandlerContractTests + test_equation_gallery_tab.test_js_has_no_inline_event_handlers",
+      "tracked": false,
+      "status": "green (local only)"
+    },
+    {
+      "id": "EQ-03",
+      "adr": "docs/adr/ADR_DASHBOARD_EQUATIONS_TAB.md",
+      "subject": "equations tab hover durumu (axe color-contrast)",
+      "scenario": "Kart basligi :hover rengi WCAG AA'yi duser",
+      "expect": { "exit": 1, "note": "axe color-contrast + hover" },
+      "wired": false,
+      "test": null,
+      "tracked": null,
+      "status": "draft",
+      "note": "Hiçbir gate hover durumunu basmaz; ADR'de kabul edilmis eksik. Ayrica check_tokens (10s timeout) ile gercek gate (5s) sure farki kirmizi üretir — kapsam ADR'de tartisildi."
+    },
+    {
+      "id": "EQ-04",
+      "adr": "docs/adr/ADR_DASHBOARD_EQUATIONS_TAB.md",
+      "subject": "a11y gate (light theme)",
+      "scenario": "Acik temada sekme/kart metni AA kontrastini duser",
+      "expect": {
+        "exit": 1,
+        "note": "sayfa seviyesi; sekme-spesifik ayirimi yok"
+      },
+      "wired": false,
+      "test": null,
+      "tracked": null,
+      "status": "draft (kismen kapsali)",
+      "note": "a11y gate light renk kontrastini sayfa seviyesinde yakalar; denklem sekmesine ozgun vektor yok."
+    }
+  ],
+  "totals": {
+    "vectors": 22,
+    "wired": 17,
+    "draft": 5,
+    "wired_tracked_ci": 3,
+    "wired_untracked_local_only": 14
+  }
+}

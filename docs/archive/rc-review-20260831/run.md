@@ -1,5 +1,9 @@
 # Stoic-Hume V5 preview — run doc
 
+<!-- Arşiv: çalışma tarihi 2026-08-31, depoya alındı 2026-09-27. Makineye özgü
+     `/Users/<kullanıcı>/…` yolları taşınabilir karşılıklarına (`~…`, `<repo>…`)
+     normalize edildi; içerik dışında bir şey değişmedi (check-absolute-paths). -->
+
 ## What this is
 A live SSE-streaming CI dashboard at http://127.0.0.1:8000/preview.html.
 `preview_server.py` runs `verify_delivery.py --full` every 60 s, parses the
@@ -232,7 +236,7 @@ rm -f $HOME/Library/Logs/com.freebuff/preview-server.log
 | venv z3 python | `~/Library/Caches/com.freebuff/venv_z3/` | mirror of project's `.venv_z3` (z3-solver) |
 | Server logs | `~/Library/Logs/com.freebuff/preview-server.log` | standard log dir |
 | Run history | `~/Library/Caches/com.freebuff/preview/history.jsonl` | JSONL, last 100 runs; written atomically per run (P0/P1 trend) |
-| Project source | `/Users/alikaya/Desktop/leibniz2/_calisma/CIKTI/` | authoring only; verifier reads the MIRROR below in the launchd route |
+| Project source | `<repo>/_calisma/CIKTI/` | authoring only; verifier reads the MIRROR below in the launchd route |
 | Verify mirror | `~/Library/Caches/com.freebuff/verify/` | TCC-safe `--dir` for launchd: verify_delivery.py + config + schema + symbolic_proof_z3.py + zips + lineage + lean_reduct/ |
 
 ## Known pitfalls (this session's lessons)
@@ -241,7 +245,7 @@ rm -f $HOME/Library/Logs/com.freebuff/preview-server.log
    `launchctl asuser`. The agent's process tree inherits a TCC context
    that the asuser call doesn't fully bypass. The agent can read
    `~/Library/Caches/com.freebuff/` and `~/Library/Logs/com.freebuff/`
-   but NOT `/Users/alikaya/Desktop/leibniz2/...`.
+   but NOT `<repo>/...`.
 
 2. **`nohup <cmd> > log 2>&1 &` from run_terminal_command is reaped**
    when the parent shell exits. `nohup` ignores SIGHUP, but the
@@ -273,7 +277,7 @@ rm -f $HOME/Library/Logs/com.freebuff/preview-server.log
    at 300 s); `/api/latest` stays `UNKNOWN` until it finishes.
 
 8. **launchd `submit` log path must stay out of TCC-protected dirs** —
-   a redirect to `/Users/alikaya/Desktop/leibniz2/.freebuff/...` fails
+   a redirect to `<repo>/.freebuff/...` fails
    with EPERM and the job exits 1 with an EMPTY log. Use
    `~/Library/Logs/com.freebuff/` or `/tmp` for launchd-spawned output.
 
@@ -291,8 +295,3 @@ rm -f $HOME/Library/Logs/com.freebuff/preview-server.log
     The refs check verdicts are network-dependent: `verified/total`
     (e.g. 46/54) and P1s from UNVERIFIED refs vary per run — the
     dashboard reflects the latest completed run honestly.
-    **Stale `preview.html`/`preview.js` is a DIFFERENT seam**: steps 4
-    do NOT touch the preview/ mirror copies (they sync the verify
-    mirror only). Re-run step 5 (`update_preview.sh --bootstrap`) —
-    it rebuilds the token-injected HTML into preview/ in place and
-    the running server picks it up on the next request (no restart).

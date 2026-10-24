@@ -1,0 +1,10 @@
+# check_security_browser.list — OTOMATİK ÜRETİM (`gen_security_roster.py --write`).
+# ELLE YAZMA: üyelik test dosyasındaki `# SECURITY-TIER: <tier>` işaretinden
+# gelir. Yeni güvenlik süiti = dosyana işaret koy, bu dosya kendiliğinden
+# güncellenir (`--check` drift'i bloklar). Gerekçe: findings.md VERIFY-001.
+test_dashboard_budget_rh_filters.py
+test_dashboard_keyboard_nav.py
+test_design_preview_hover_csp.py
+test_preview_escaping.py
+test_preview_hover_tooltip.py
+test_preview_uncovered_surface.py

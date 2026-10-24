@@ -4,6 +4,8 @@ repack_delivery.py — Stoic-Hume V5 teslim zincirini deterministik yeniden pake
 
 iff skop düzeltmesi sonrası (core_section.tex + L0_Lplus_spec.md + PDF) çağrılır.
 Sıra:
+  0) sidecar (build determinism proxy) — V5l reuse kuralı + Faz 4: motor
+     geçişinde yenileme KANONİK DEFTERE bağlıdır (defterde yoksa yazmaz, exit 1)
   1) MANIFEST.txt'i yeniden üretir (18 dosya MD5 + boyut; başlık güncellenir)
   2) iç zip  TESLIM_V5_FINAL_2026-08-17.zip   (V5_ICERIK/TESLIM_V5_FINAL_2026-08-17/)
   3) iç sidecar + KLASOR_CHECKSUMLARI.sha256
@@ -26,6 +28,9 @@ import hashlib
 import os
 import re
 import shutil
+import subprocess
+import sys
+import tempfile
 import zipfile
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -72,8 +77,12 @@ def sha256(p):
 
 
 def write_manifest():
-    core_lines = sum(1 for _ in open(os.path.join(PKG, "core_section.tex"), encoding="utf-8", errors="ignore"))
-    spec_lines = sum(1 for _ in open(os.path.join(PKG, "L0_Lplus_spec.md"), encoding="utf-8", errors="ignore"))
+    with open(os.path.join(PKG, "core_section.tex"),
+              encoding="utf-8", errors="ignore") as f:
+        core_lines = sum(1 for _ in f)
+    with open(os.path.join(PKG, "L0_Lplus_spec.md"),
+              encoding="utf-8", errors="ignore") as f:
+        spec_lines = sum(1 for _ in f)
     header = (
         "# MANIFEST — Stoic_Hume_Formal_Section_2026-08-17\n"
         "# Generated: 2026-08-17 (added revised manuscript ingiliz_empirizmi_v3.tex/.pdf after INTEGRATION_NOTE)\n"
@@ -111,23 +120,11 @@ def write_manifest():
         "#   verify_delivery.py --check-references now exits 0.\n"
         "# V5i (2026-08-17): PDF build determinism (K6-DETERM) added. qpdf --remove-metadata\n"
         "#   computes metadata-stripped SHA-256 (qpdf 12.4.0); sidecar stored alongside\n"
-        "#   the PDF (ingiliz_empirizmi_v3.pdf.metadata.sha256). KNOWN LIMITATION:\n"
-        "#   tectonic 0.17.0 byte-deterministic değildir — ardışık derleme farklı\n"
-        "#   metadata-stripped hash üretir. Bu nedenle --strict-determinism bayrağı\n"
-        "#   varsayılan kapalıdır; drift bilgi amaçlı raporlanır (P0/P1 yok). TeXLive\n"
-        "#   + SOURCE_DATE_EPOCH geçişi determinism'i sağlayabilir (henüz değil).\n"
+        "#   the PDF (ingiliz_empirizmi_v3.pdf.metadata.sha256).\n"
         "# V5j (2026-08-17): bibliographic fixes — Popkin 1952 reprint pages 133-148\n"
         "#   corrected to 133-147; Priest 2018 full subtitle restored ('An Essay on\n"
         "#   Buddhist Metaphysics and the Catuskoti'). Reference audit KUCUK NOTs\n"
         "#   closed; all REFERENCE_KNOWN entries now DUZELTILDI (INFO only).\n"
-        "# V5k (2026-08-18): KNOWN LIMITATION — tectonic non-determinism. The manuscript\n"
-        "#   PDF is still compiled with tectonic 0.17.0, which is NOT byte-deterministic:\n"
-        "#   consecutive builds of the same .tex produce different byte streams, hence\n"
-        "#   different metadata-stripped SHA-256 hashes. Therefore K6-DETERM is\n"
-        "#   informational by default (--strict-determinism OFF) and must not be enabled\n"
-        "#   until the build migrates to TeXLive + SOURCE_DATE_EPOCH (TEXMFOUTPUT). This\n"
-        "#   limits build reproducibility only — NOT the logical content (K1-K5, K8, K9\n"
-        "#   unaffected).\n"
         "# V5l (2026-08-18): REPACK DETERMINISM — qpdf non-determinism experiment +\n"
         "#   fix. EXPERIMENT: qpdf --remove-metadata is NOT deterministic — the same\n"
         "#   input PDF produced 3 different outputs in 3 runs (b090ac01…, 429984da…,\n"
@@ -297,6 +294,202 @@ def sync_config():
     return False
 
 
+# ---------------------------------------------------------------------------
+# Faz 4 — motor geçişinde sidecar yenilemesi KANONİK DEFTERE BAĞLI (fail-closed)
+#
+# `docs/ID_RESIDUAL_ACCEPTANCE.md` §5 yenileme protokolü: PDF'in ham hash'i
+# motor değişiminde değişir, bu yüzden sidecar TEK SEFERLİK bilinçli olarak
+# yenilenir. Faz 4 o yenilemeyi deftere bağlar:
+#
+#   * yeni `/ID`-kanonik hash ÖLÇÜLÜR (tek uygulama: pdf_id_canonical.py),
+#   * defterin "Kanonik (referans)" sütununda YOKSA sidecar YAZILMAZ ve repack
+#     exit 1 verir — çıkış yolu `make -f docs/Makefile.texlive accept`,
+#   * kabul edilirse sidecar üç satır olur: stripped + `# raw:` + `# canonical:`.
+#
+# Böylece "motor değişti" kaydı ile "defter kabul etti" kaydı AYNI anda
+# oluşur; iki taraf tek taraflı kalamaz (repack determinizm kapısı).
+LEDGER_ENV = "ID_RESIDUAL_LEDGER"
+LEDGER_REL = os.path.join("..", "docs", "ID_RESIDUAL_ACCEPTANCE.md")
+SIDECAR_CANONICAL = "# canonical:"
+
+
+def _canonical_modules():
+    """`(pdf_id_canonical, id_canonical)` — tembel import.
+
+    Ağaç kopyalarında (test sandbox'ları, kısmi checkout) CIKTI modülleri
+    bulunmayabilir; o zaman `(None, None)` döner ve çağıran fail-closed karar
+    verir. Dosya varlığı sys.modules kirlenmesini de önler: yarım ağaçta
+    `id_canonical` import edilip gerçek modülü gölgelemez.
+    """
+    pdf_mod = os.path.join(CIKTI, "pdf_id_canonical.py")
+    id_mod = os.path.join(CIKTI, "id_canonical.py")
+    if not (os.path.isfile(pdf_mod) and os.path.isfile(id_mod)):
+        return None, None
+    if CIKTI not in sys.path:
+        sys.path.insert(0, CIKTI)
+    import id_canonical  # noqa: PLC0415  (tembel: sandbox ağaçlarında yok)
+    import pdf_id_canonical  # noqa: PLC0415
+    return pdf_id_canonical, id_canonical
+
+
+def ledger_candidates(ledger_paths=None):
+    """Defter adayları: açık liste → env → repo docs (§4 tek kaynak)."""
+    if ledger_paths is not None:
+        return [str(p) for p in ledger_paths]
+    out = []
+    env = os.environ.get(LEDGER_ENV)
+    if env:
+        out.append(env)
+    out.append(os.path.abspath(os.path.join(ROOT, LEDGER_REL)))
+    return out
+
+
+def resolve_ledger(ledger_paths=None):
+    """İlk var olan defter yolu (yoksa None)."""
+    for path in ledger_candidates(ledger_paths):
+        if os.path.isfile(path):
+            return path
+    return None
+
+
+def ledger_canonicals(ledger_path):
+    """Defterin Kanonik sütunundaki TAM 64-hex küme (K6 ile aynı ayrıştırıcı)."""
+    pdf_mod, _ic = _canonical_modules()
+    if pdf_mod is None:
+        raise RuntimeError("kanonik modül yok: _calisma/CIKTI/pdf_id_canonical.py")
+    with open(ledger_path, encoding="utf-8", errors="replace") as fh:
+        return pdf_mod.ledger_canonical_hashes(fh.read())
+
+
+def measure_canonical(pdf_path):
+    """`(canonical_sha256 | None, id_found)` — tek uygulama üzerinden."""
+    pdf_mod, _ic = _canonical_modules()
+    if pdf_mod is None:
+        return None, False
+    return pdf_mod.canonical_sha256_path(pdf_path)
+
+
+def _cached_raw(sidecar_path):
+    """Sidecar'daki `# raw:` hash'i (yoksa None)."""
+    if not os.path.isfile(sidecar_path):
+        return None
+    with open(sidecar_path, encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            if line.startswith("# raw:"):
+                parts = line.split()
+                return parts[2] if len(parts) >= 3 else None
+    return None
+
+
+def renew_sidecar(pdf_path, sidecar_path, stripped_sha, raw_sha,
+                  ledger_paths=None):
+    """Motor geçişi: sidecar'ı yenile VE kanonik deftere bağla (fail-closed).
+
+    Döndürür `(ok, detail)`. `ok=False` iken sidecar'a HİÇ yazılmaz —
+    yarım/bağsız kayıt bırakmak, kaydın defterle çelişmesine yol açardı.
+    """
+    pdf_mod, _ic = _canonical_modules()
+    if pdf_mod is None:
+        return False, ("kanonik çekirdek yok (_calisma/CIKTI/pdf_id_canonical.py) "
+                       "— sidecar defter bağı kurulamaz")
+    ledger = resolve_ledger(ledger_paths)
+    if ledger is None:
+        return False, ("kanonik kabul defteri yok (aranan: %s) — motor geçişi "
+                       "defter satırı olmadan yenilenemez"
+                       % ", ".join(ledger_candidates(ledger_paths)))
+    canonical, id_found = pdf_mod.canonical_sha256_path(pdf_path)
+    if not canonical:
+        return False, "kanonik hash ölçülemedi: %s" % pdf_path
+    accepted = ledger_canonicals(ledger)
+    if not accepted:
+        return False, "kanonik kabul defteri okunamadı/boş: %s" % ledger
+    if canonical not in accepted:
+        return False, ("yeni kanonik hash defterde YOK (strict): %s… — bilinçli "
+                       "kabul için `make -f docs/Makefile.texlive accept` ile "
+                       "deftere satır ekle (docs/ID_RESIDUAL_ACCEPTANCE.md "
+                       "§4/§6)" % canonical[:16])
+    name = os.path.basename(pdf_path)
+    with open(sidecar_path, "w", encoding="utf-8") as fh:
+        fh.write("%s  %s.metadata\n" % (stripped_sha, name))
+        fh.write("# raw: %s  %s\n" % (raw_sha, name))
+        fh.write("%s %s  %s\n" % (SIDECAR_CANONICAL, canonical, name))
+    return True, ("sidecar yenilendi ve deftere bağlandı: canonical=%s… "
+                  "id_found=%s" % (canonical[:16], id_found))
+
+
+def sidecar_binding_problem(pdf_path, sidecar_path, ledger_paths=None):
+    """Reuse yolunda mevcut kaydın PDF ve defterle tutarlılığı.
+
+    `# canonical:` yoksa None döner: tectonic-era kayıt iki satırdır ve §6
+    bunu bilgi düzeyi sayar. Defter yoksa da None (kısmi ağaç); yenileme
+    yolunda eksik defter zaten fail-closed'dır.
+    """
+    _pdf_mod, ic_mod = _canonical_modules()
+    if ic_mod is None:
+        return None
+    canonical = ic_mod.sidecar_canonical(str(sidecar_path))
+    if not canonical:
+        return None
+    ledger = resolve_ledger(ledger_paths)
+    if ledger is None:
+        return None
+    if canonical not in ledger_canonicals(ledger):
+        return ("sidecar kanonik hash defterde yok: %s… (%s)"
+                % (canonical[:16], ledger))
+    measured, _found = measure_canonical(pdf_path)
+    if measured and measured != canonical:
+        return ("sidecar kanonik hash PDF ile uyuşmuyor: kayıt=%s… ölçülen=%s…"
+                % (canonical[:16], measured[:16]))
+    return None
+
+
+def _find_qpdf():
+    for cand in (shutil.which("qpdf"), "/opt/homebrew/bin/qpdf"):
+        if cand and os.path.isfile(cand):
+            return cand
+    return None
+
+
+def _strip_metadata(qpdf, src, dst):
+    subprocess.run([qpdf, "--remove-metadata", src, dst],
+                   capture_output=True, timeout=60)
+    return os.path.isfile(dst)
+
+
+def sync_metadata_sidecar(pdf_path, sidecar_path, ledger_paths=None, strip=None):
+    """Adım 0: V5l reuse kuralı + Faz 4 defter bağı; `(ok, detail)` döner.
+
+    `strip` yalnız test içindir: `(src, dst) -> bool`. Verilmezse qpdf
+    `--remove-metadata` kullanılır; qpdf yoksa ve yenileme gerekiyorsa
+    fail-closed (sidecar bayat kalamaz).
+    """
+    if not os.path.isfile(pdf_path):
+        return True, "PDF yok — sidecar adımı atlandı"
+    raw_hash = sha256(pdf_path)
+    if _cached_raw(sidecar_path) == raw_hash:
+        problem = sidecar_binding_problem(pdf_path, sidecar_path, ledger_paths)
+        if problem:
+            return False, problem
+        return True, ("metadata sidecar reuse — PDF raw hash değişmedi: %s…"
+                      % raw_hash[:12])
+    if strip is None:
+        qpdf = _find_qpdf()
+        if qpdf is None:
+            return False, ("PDF ham hash'i değişti ama qpdf yok — sidecar "
+                           "yenilenemedi; kanonik defter bağı kurulamaz")
+        strip = lambda src, dst, _q=qpdf: _strip_metadata(_q, src, dst)  # noqa: E731
+    fd, tmp = tempfile.mkstemp(suffix=".pdf")
+    os.close(fd)
+    try:
+        if not strip(pdf_path, tmp):
+            return False, "metadata stripping başarısız — sidecar yenilenmedi"
+        return renew_sidecar(pdf_path, sidecar_path, sha256(tmp), raw_hash,
+                             ledger_paths)
+    finally:
+        if os.path.isfile(tmp):
+            os.unlink(tmp)
+
+
 def main():
     ap = argparse.ArgumentParser(
         description="Stoic-Hume V5 teslim zincirini deterministik yeniden paketler.",
@@ -311,43 +504,20 @@ def main():
 
     # 0) PDF metadata-stripped hash sidecar (build determinism proxy).
     #    build_zip'dan ÖNCE yapılır (çünkü MANIFEST.txt sidecar'ı listeler).
-    #    DETERMİNİZM: qpdf --remove-metadata aynı PDF üzerinde farklı byte'lar
-    #    üretir (non-deterministic). Bu yüzden sidecar yalnızca PDF'in ham
-    #    SHA-256'sı DEĞİŞTİĞİNDE yeniden üretilir; PDF aynıysa mevcut sidecar
-    #    korunur. Böylece ardışık repack'ler byte-identical zip üretir ve
-    #    sidecar gerçekten "senkron" kalır (hash gürültüden arındırılır).
-    import subprocess as _sp, tempfile as _tf
+    #    V5l kuralı: sidecar yalnızca PDF'in ham SHA-256'sı DEĞİŞTİĞİNDE
+    #    (motor geçişi) yenilenir; qpdf'in kendi kararsızlığı pakete hash
+    #    gürültüsü eklemesin. Faz 4: o yenileme KANONİK DEFTERE BAĞLIDIR —
+    #    yeni `/ID`-kanonik hash defterde yoksa sidecar YAZILMAZ ve repack
+    #    exit 1 verir (bkz. sync_metadata_sidecar / renew_sidecar).
     pdf = os.path.join(PKG, "ingiliz_empirizmi_v3.pdf")
     pdf_sidecar = os.path.join(PKG, "ingiliz_empirizmi_v3.pdf.metadata.sha256")
-    raw_hash = sha256(pdf) if os.path.isfile(pdf) else None
-    # Mevcut sidecar'daki ham hash'i oku (varsa); PDF değişmediyse qpdf'i atla.
-    cached_raw = None
-    if os.path.isfile(pdf_sidecar):
-        for line in open(pdf_sidecar, encoding="utf-8", errors="ignore"):
-            if line.startswith("# raw:"):
-                cached_raw = line.split()[2]
-                break
-    qpdf = None
-    for cand in (shutil.which("qpdf"), "/opt/homebrew/bin/qpdf"):
-        if cand and os.path.isfile(cand):
-            qpdf = cand
-            break
-    if qpdf and raw_hash and cached_raw == raw_hash:
-        print(f"  (metadata sidecar reuse — PDF raw hash değişmedi: {raw_hash[:12]}…)")
-    elif qpdf and raw_hash:
-        with _tf.NamedTemporaryFile(suffix=".pdf", delete=False) as _t:
-            _tmp = _t.name
-        _sp.run([qpdf, "--remove-metadata", pdf, _tmp],
-                       capture_output=True, timeout=60)
-        if os.path.isfile(_tmp):
-            with open(pdf_sidecar, "w", encoding="utf-8") as f:
-                f.write(f"{sha256(_tmp)}  ingiliz_empirizmi_v3.pdf.metadata\n")
-                f.write(f"# raw: {raw_hash}  ingiliz_empirizmi_v3.pdf\n")
-            os.unlink(_tmp)
-        else:
-            print(f"  UYARI: qpdf başarısız, sidecar oluşturulmadı")
-    elif not qpdf:
-        print(f"  UYARI: qpdf bulunamadı, sidecar oluşturulmadı")
+    ok_sidecar, sidecar_detail = sync_metadata_sidecar(pdf, pdf_sidecar)
+    if not ok_sidecar:
+        print(f"  HATA: {sidecar_detail}")
+        print("  repack DURDURULDU — yarım paket/sidecar yazılmadı "
+              "(fail-closed: motor geçişi defter kabulü olmadan ilerlemez)")
+        return 1
+    print(f"  {sidecar_detail}")
 
     write_manifest()
 

@@ -76,14 +76,14 @@
       "current": false
     },
     {
-      "note": "V5o: K5 frozen-record regen (raw 74b2cdbd) + repack Delivery",
+      "note": "V5o: K5 frozen-record regen (raw 74b2cdbd) + repack Delivery (güncel kanonik)",
       "hash": "afd6aec0bfa6b8d2162e386503031d8b3644a6fd2b4c9d07173b708bfb56645b",
       "commit": null,
       "current": false
     },
     {
-      "note": "V5p: V5n düzeltme kaydı yayımlandı (repack_delivery.py MANIFEST başlığı, Faz 4 ölçümü) + repack Delivery (güncel kanonik)",
-      "hash": "c205a02e26854e081f2effe1988d2feef7d3215443691a11c139056a373fdda5",
+      "note": "V5p: MANIFEST stale --strict-determinism caveat removed (Faz 4) + repack",
+      "hash": "27d4bd22b39bf3823b06f0d32cccf1f94c8f3b8bdefd48c57e5815bdaf455f51",
       "commit": null,
       "current": false
     },

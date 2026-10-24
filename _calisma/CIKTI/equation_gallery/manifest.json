@@ -1,0 +1,187 @@
+{
+  "schema": 1,
+  "source": "_calisma/V5_ICERIK/TESLIM_V5_FINAL_2026-08-17/stoic_hume_package/Stoic_Hume_Formal_Section_2026-08-17/core_section.tex",
+  "source_sha256": "741b8d49dcba773612ecd4d62fd2548d0f8bdcd2f96154c346e25ccac6c85b3f",
+  "dpi": 300,
+  "border": 4,
+  "with_label": false,
+  "complete": true,
+  "equations": [
+    {
+      "id": "l0-sorts",
+      "title": "L0: the three core sorts",
+      "anchor": "I \\quad\\text{(impressions)}",
+      "source_lines": [58, 62],
+      "body_sha256": "afe2698e7d433de53baac9cd85bb504686670960e95ee66ac3f18279a3919e01",
+      "png": "l0-sorts.png",
+      "png_sha256": "6a2e5ebce7697b94964265953054a658ab6663546091f7e740751644ad7c970f",
+      "pixel_width": 1770,
+      "pixel_height": 75
+    },
+    {
+      "id": "stoic-skeleton",
+      "title": "Stoic minimal dependency skeleton (S)",
+      "anchor": "\\tag{S}",
+      "source_lines": [123, 137],
+      "body_sha256": "b9050c36a52dada4ea96ac2644e2c16f5d0d0e2560cf2b285d708c24e853d4f3",
+      "png": "stoic-skeleton.png",
+      "png_sha256": "fed3b7634d7962ba2e57b2f5f52cc8c11715a0c9729cd493d46278d6a4542852",
+      "pixel_width": 1333,
+      "pixel_height": 108
+    },
+    {
+      "id": "mechanism-m0a",
+      "title": "Humean mechanism constraint M0a",
+      "anchor": "\\tag{M$_{0a}$}",
+      "source_lines": [155, 159],
+      "body_sha256": "99ac7f761a462a1edada4cc81f72b5783cb1d4b06f794bf6925ab2e517d79dcc",
+      "png": "mechanism-m0a.png",
+      "png_sha256": "d19295dcfec8c8247b602d346f645d57603ebf30723a62204ac59f2b202d17d0",
+      "pixel_width": 643,
+      "pixel_height": 83
+    },
+    {
+      "id": "mechanism-m0b",
+      "title": "Humean mechanism constraint M0b",
+      "anchor": "\\tag{M$_{0b}$}",
+      "source_lines": [160, 164],
+      "body_sha256": "42fcbf5e9c30c73bfb3455723d63e8320b2a558358b8c1e06506b788ef76f9bb",
+      "png": "mechanism-m0b.png",
+      "png_sha256": "41f2b9c3ba853b0b044c19208e94d9016b791f9d05146fe6faca34a7ad5ec418",
+      "pixel_width": 598,
+      "pixel_height": 83
+    },
+    {
+      "id": "hume-exclusion",
+      "title": "Strong exclusion reconstruction (H-I)",
+      "anchor": "\\tag{H-I}",
+      "source_lines": [174, 183],
+      "body_sha256": "53e4e9caeaf5fb284214ad77734f22223f2cff4dc123eed9c119da61b8d49e6b",
+      "png": "hume-exclusion.png",
+      "png_sha256": "64365f14a5d8c51b57c172fa502c0e74405155b21cea3204920a06be3d96503a",
+      "pixel_width": 821,
+      "pixel_height": 83
+    },
+    {
+      "id": "direct-attachment",
+      "title": "Direct-attachment reading (T1)",
+      "anchor": "\\tag{T$_1$}",
+      "source_lines": [201, 209],
+      "body_sha256": "72ba8911127d346bb0b103d998f6ccbe81b095a14d2094173162648f8cfafada",
+      "png": "direct-attachment.png",
+      "png_sha256": "25808dd631e2c79644c71f125b4002a06d2befbd902b19cbb388f7205d621b53",
+      "pixel_width": 647,
+      "pixel_height": 83
+    },
+    {
+      "id": "strength-valid",
+      "title": "Proposition 1: valid entailment",
+      "anchor": "T_2\\land M_0 \\models T_1",
+      "source_lines": [224, 226],
+      "body_sha256": "e1f9a256e28ac4a5dfa664b2d6a6f81d19da21bece9c17fd6f158e55b6854ddd",
+      "png": "strength-valid.png",
+      "png_sha256": "59a037e22ac6f05d85a94dcbda3a4ae1af00f15d9e88a88b27b1038215b43e0c",
+      "pixel_width": 295,
+      "pixel_height": 75
+    },
+    {
+      "id": "strength-counterexample",
+      "title": "Proposition 1: separating countermodel",
+      "anchor": "T_1\\land M_0 \\not\\models T_2",
+      "source_lines": [228, 230],
+      "body_sha256": "023846a8fcb670efb954560850c0ae262836a91ad94a22ccd27a5be51bef12ec",
+      "png": "strength-counterexample.png",
+      "png_sha256": "28107af624363e60b60161a464169cf2716a596f1f04cd4f1a9cc0d8bf37227f",
+      "pixel_width": 295,
+      "pixel_height": 75
+    },
+    {
+      "id": "bridge-axiom",
+      "title": "Bridge axiom B0",
+      "anchor": "\\tag{B$_0$}",
+      "source_lines": [266, 274],
+      "body_sha256": "5af84cf7c492d34b55b2a93c33d3bb9ba7263fa6f94b4c3737026c20b3e975fa",
+      "png": "bridge-axiom.png",
+      "png_sha256": "ec43f8e299a88851de7567f31a165450c26f09c407914e39cc490456559ac7e0",
+      "pixel_width": 852,
+      "pixel_height": 83
+    },
+    {
+      "id": "bridge-collapse",
+      "title": "Proposition 1: bridge collapse",
+      "anchor": "T_1\\land B_0 \\models T_2",
+      "source_lines": [282, 284],
+      "body_sha256": "7ca089c0b55adf467d0b1e24344eeb25a7d1fdd39b17cb42605b9092d0013619",
+      "png": "bridge-collapse.png",
+      "png_sha256": "c81eb54c37cf24d03cf3531dfe69009efa6a1af994dd8b17ddd7c6d259e4cd65",
+      "pixel_width": 287,
+      "pixel_height": 75
+    },
+    {
+      "id": "reification-bridges",
+      "title": "Reification bridge axioms O1-O3",
+      "anchor": "\\operatorname{Obtains}(\\operatorname{custFact}(b))",
+      "source_lines": [369, 376],
+      "body_sha256": "841c8edae64a15979c66ca9b942621b4a9ac14491681b8db2c368a17ee9e8e73",
+      "png": "reification-bridges.png",
+      "png_sha256": "afd998b0750a84758bca549faccccdeaf59d81e77bf29b1129690b2fffab0d48",
+      "pixel_width": 1028,
+      "pixel_height": 208
+    },
+    {
+      "id": "grounding-atom",
+      "title": "The grounding atom (G)",
+      "anchor": "\\tag{G}",
+      "source_lines": [383, 387],
+      "body_sha256": "862680acdf1ee7312874cdbc671410f9d6e404a0a3c9fdc1848938346269bd13",
+      "png": "grounding-atom.png",
+      "png_sha256": "f9a0f7dc834972f50b3ae8fa5f09048df69fc92cbb326d25c941e0a4d62cc596",
+      "pixel_width": 645,
+      "pixel_height": 83
+    },
+    {
+      "id": "language-enrichment",
+      "title": "The enriched language L+",
+      "anchor": "L^+ \\;=\\; L_0",
+      "source_lines": [404, 410],
+      "body_sha256": "08ffa925bc51a62bfda4f399ebd420b53375b81330714f9a75fe3aaf252e5eb9",
+      "png": "language-enrichment.png",
+      "png_sha256": "4cb3662a8c674a8a54b88c539b3309be98df114b9891484dcf1cf48ceb1e8f15",
+      "pixel_width": 960,
+      "pixel_height": 79
+    },
+    {
+      "id": "underdetermination",
+      "title": "Underdetermination witness",
+      "anchor": "\\mathcal M_1^+\\models",
+      "source_lines": [465, 471],
+      "body_sha256": "0b2a7b0c8f37b3ca7f41aee18820b9a0b60fd8f2079eea972bc046f2908e10ad",
+      "png": "underdetermination.png",
+      "png_sha256": "84b1cfda07aa3666f676f5fe53f2f11e6c6232c6d1d01042701e1f2da5464271",
+      "pixel_width": 1607,
+      "pixel_height": 83
+    },
+    {
+      "id": "definability-failure",
+      "title": "Implicit definability failure",
+      "anchor": "\\theta(b,c)\\leftrightarrow",
+      "source_lines": [505, 512],
+      "body_sha256": "23c136dbfcd5d6851465145b3ede447e6a30476ea4e61d9588ed812be1071896",
+      "png": "definability-failure.png",
+      "png_sha256": "068c5cd02fced748bb406e3da47897eebd6ce436291d06cc0a820bcd201876a9",
+      "pixel_width": 1071,
+      "pixel_height": 83
+    },
+    {
+      "id": "enrichment-pair",
+      "title": "Two enrichments with one reduct",
+      "anchor": "\\mathcal M_1^+=\\langle\\mathcal M,\\,G_1\\rangle",
+      "source_lines": [478, 481],
+      "body_sha256": "aa169c46a97771ecd1e6dfa5eb6b9b23851a737aac614c383e5d09db02a0c167",
+      "png": "enrichment-pair.png",
+      "png_sha256": "55d3e2b3012ee8cd2c0f5e5a38806bea813f3ba9643102b18305ad218168e122",
+      "pixel_width": 729,
+      "pixel_height": 80
+    }
+  ]
+}

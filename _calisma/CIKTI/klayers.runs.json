@@ -1,0 +1,439 @@
+{
+  "runs": [
+    {
+      "run_id": "38008761215",
+      "created_at": "2026-10-10T00:22:23Z",
+      "klayers": {
+        "verdict": "PASS",
+        "counts": {
+          "P0": 0,
+          "P1": 0
+        },
+        "layers": {
+          "K0": {
+            "label": "Bayat zip taraması",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K1": {
+            "label": "Dış zip sidecar",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K2": {
+            "label": "Klasör checksum",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K3": {
+            "label": "İç zip sidecar",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K4": {
+            "label": "Manifest 19/19",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K5": {
+            "label": "Script byte-for-byte",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K6": {
+            "label": "İçerik (PDF + referans + skill reuse)",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K7": {
+            "label": "Hijyen (secret/artefakt)",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K8": {
+            "label": "Z3 sembolik ispat",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K9": {
+            "label": "Lean reduct-invariance + 8 teorem çekirdek",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K10": {
+            "label": "Manifest digest",
+            "status": "SKIP",
+            "ran": false,
+            "findings": []
+          },
+          "K11": {
+            "label": "Config drift",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K12": {
+            "label": "Plist şablon",
+            "status": "SKIP",
+            "ran": false,
+            "findings": []
+          },
+          "K13": {
+            "label": "Repro self-test",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K14": {
+            "label": "Cleanup kaydı",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K15": {
+            "label": "History sidecar",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K16": {
+            "label": "GScripts self-test",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K17": {
+            "label": "Mirror sync",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K18": {
+            "label": "Daemon HTTP smoke",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K19": {
+            "label": "Coq reduct-invariance (8 teorem)",
+            "status": "SKIP",
+            "ran": false,
+            "findings": []
+          },
+          "K20": {
+            "label": "Launchctl durum",
+            "status": "SKIP",
+            "ran": false,
+            "findings": []
+          },
+          "K21": {
+            "label": "SDE determinism guard",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          }
+        }
+      }
+    },
+    {
+      "run_id": "38058249876",
+      "created_at": "2026-10-10T14:05:37Z",
+      "klayers": {
+        "verdict": "PASS",
+        "counts": {
+          "P0": 0,
+          "P1": 0
+        },
+        "layers": {
+          "K0": {
+            "label": "Bayat zip taraması",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K1": {
+            "label": "Dış zip sidecar",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K2": {
+            "label": "Klasör checksum",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K3": {
+            "label": "İç zip sidecar",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K4": {
+            "label": "Manifest 19/19",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K5": {
+            "label": "Script byte-for-byte",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K6": {
+            "label": "İçerik (PDF + referans + skill reuse)",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K7": {
+            "label": "Hijyen (secret/artefakt)",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K8": {
+            "label": "Z3 sembolik ispat",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K9": {
+            "label": "Lean reduct-invariance + 8 teorem çekirdek",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K10": {
+            "label": "Manifest digest",
+            "status": "SKIP",
+            "ran": false,
+            "findings": []
+          },
+          "K11": {
+            "label": "Config drift",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K12": {
+            "label": "Plist şablon",
+            "status": "SKIP",
+            "ran": false,
+            "findings": []
+          },
+          "K13": {
+            "label": "Repro self-test",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K14": {
+            "label": "Cleanup kaydı",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K15": {
+            "label": "History sidecar",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K16": {
+            "label": "GScripts self-test",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K17": {
+            "label": "Mirror sync",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K18": {
+            "label": "Daemon HTTP smoke",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K19": {
+            "label": "Coq reduct-invariance (8 teorem)",
+            "status": "SKIP",
+            "ran": false,
+            "findings": []
+          },
+          "K20": {
+            "label": "Launchctl durum",
+            "status": "SKIP",
+            "ran": false,
+            "findings": []
+          },
+          "K21": {
+            "label": "SDE determinism guard",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          }
+        }
+      }
+    },
+    {
+      "run_id": "38145293619",
+      "created_at": "2026-10-11T13:58:23Z",
+      "klayers": {
+        "verdict": "PASS",
+        "counts": {
+          "P0": 0,
+          "P1": 0
+        },
+        "layers": {
+          "K0": {
+            "label": "Bayat zip taraması",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K1": {
+            "label": "Dış zip sidecar",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K2": {
+            "label": "Klasör checksum",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K3": {
+            "label": "İç zip sidecar",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K4": {
+            "label": "Manifest 19/19",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K5": {
+            "label": "Script byte-for-byte",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K6": {
+            "label": "İçerik (PDF + referans + skill reuse)",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K7": {
+            "label": "Hijyen (secret/artefakt)",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K8": {
+            "label": "Z3 sembolik ispat",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K9": {
+            "label": "Lean reduct-invariance + 8 teorem çekirdek",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K10": {
+            "label": "Manifest digest",
+            "status": "SKIP",
+            "ran": false,
+            "findings": []
+          },
+          "K11": {
+            "label": "Config drift",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K12": {
+            "label": "Plist şablon",
+            "status": "SKIP",
+            "ran": false,
+            "findings": []
+          },
+          "K13": {
+            "label": "Repro self-test",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K14": {
+            "label": "Cleanup kaydı",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K15": {
+            "label": "History sidecar",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K16": {
+            "label": "GScripts self-test",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K17": {
+            "label": "Mirror sync",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K18": {
+            "label": "Daemon HTTP smoke",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          },
+          "K19": {
+            "label": "Coq reduct-invariance (8 teorem)",
+            "status": "SKIP",
+            "ran": false,
+            "findings": []
+          },
+          "K20": {
+            "label": "Launchctl durum",
+            "status": "SKIP",
+            "ran": false,
+            "findings": []
+          },
+          "K21": {
+            "label": "SDE determinism guard",
+            "status": "PASS",
+            "ran": true,
+            "findings": []
+          }
+        }
+      }
+    }
+  ]
+}

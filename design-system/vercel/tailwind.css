@@ -1,0 +1,82 @@
+/*
+ * design-system/vercel/tailwind.css — GENERATED, DO NOT EDIT.
+ *
+ * vercel marka aynasının Tailwind CSS v4 `@theme` köprüsü.
+ * Tek doğru kaynak: design-system/vercel/tokens.css
+ *
+ * Üretici: scripts/generate_mirror_tailwind.py
+ *   python3 design-system/scripts/generate_mirror_tailwind.py          # üret
+ *   python3 design-system/scripts/generate_mirror_tailwind.py --check   # drift
+ * Kapı: scripts/check_mirror_bridges.py (pre-commit: check-mirror-bridges).
+ *
+ * Sözleşmeler (kapı fail-closed doğrular):
+ *   1. TEMEL PALET DOKUNULMAZ — ön-koşullar `<marka>-` ön-ekli,
+ *      @theme anahtarları `<namespace>-<marka>-*`. `bg-bg`/`text-fg` gibi
+ *      kök utility'ler bu dosya import edildiğinde DEĞİŞMEZ.
+ *   2. LİTERAL YOK — her @theme değeri `var(<marka>-…)`; değerin kendisi
+ *      aynadan birebir gelir (yalnız ayna-içi var() referansları ön-eklenir).
+ *   3. SESSİZ KAYIP YOK — aliases + skipped = aynadaki token sayısı; kapsam
+ *      dışı sınıflar aşağıdaki sayım bloğunda gerekçesiyle listelenir.
+ *
+ * Kullanım:
+ *   @import "tailwindcss";
+ *   @import "./design-system/vercel/tailwind.css";
+ *   → bg-vercel-…  text-vercel-…  border-vercel-…  rounded-vercel-…
+ */
+
+
+/* ── ön-koşullar (ayna: vercel/tokens.css, birebir) ── */
+:root {
+  --vercel-color-background-100: hsla(0, 0%, 100%, 1);
+  --vercel-color-gray-1000: hsla(0, 0%, 9%, 1);
+  --vercel-color-gray-200: hsla(0, 0%, 92%, 1);
+  --vercel-color-gray-300: hsla(0, 0%, 90%, 1);
+  --vercel-color-gray-500: hsla(0, 0%, 79%, 1);
+  --vercel-color-gray-600: hsla(0, 0%, 66%, 1);
+  --vercel-color-gray-700: hsla(0, 0%, 56%, 1);
+  --vercel-color-gray-800: hsla(0, 0%, 49%, 1);
+  --vercel-color-gray-900: hsla(0, 0%, 30%, 1);
+  --vercel-color-gray-alpha-400: #00000014;
+  --vercel-develop-text: #0a72ef;
+  --vercel-ds-focus-color: hsla(212, 100%, 48%, 1);
+  --vercel-geist-console-text-color-blue: #0070f3;
+  --vercel-geist-console-text-color-default: #000;
+  --vercel-geist-console-text-color-pink: #eb367f;
+  --vercel-geist-console-text-color-purple: #7928ca;
+  --vercel-geist-selection-text-color: hsla(0, 0%, 95%, 1);
+  --vercel-preview-text: #de1d8d;
+  --vercel-ship-text: #ff5b4f;
+}
+
+@theme {
+  /* ── color (19) ── */
+  --color-vercel-background-100: var(--vercel-color-background-100);
+  --color-vercel-develop-text: var(--vercel-develop-text);
+  --color-vercel-ds-focus-color: var(--vercel-ds-focus-color);
+  --color-vercel-geist-console-text-color-blue: var(--vercel-geist-console-text-color-blue);
+  --color-vercel-geist-console-text-color-default: var(--vercel-geist-console-text-color-default);
+  --color-vercel-geist-console-text-color-pink: var(--vercel-geist-console-text-color-pink);
+  --color-vercel-geist-console-text-color-purple: var(--vercel-geist-console-text-color-purple);
+  --color-vercel-geist-selection-text-color: var(--vercel-geist-selection-text-color);
+  --color-vercel-gray-1000: var(--vercel-color-gray-1000);
+  --color-vercel-gray-200: var(--vercel-color-gray-200);
+  --color-vercel-gray-300: var(--vercel-color-gray-300);
+  --color-vercel-gray-500: var(--vercel-color-gray-500);
+  --color-vercel-gray-600: var(--vercel-color-gray-600);
+  --color-vercel-gray-700: var(--vercel-color-gray-700);
+  --color-vercel-gray-800: var(--vercel-color-gray-800);
+  --color-vercel-gray-900: var(--vercel-color-gray-900);
+  --color-vercel-gray-alpha-400: var(--vercel-color-gray-alpha-400);
+  --color-vercel-preview-text: var(--vercel-preview-text);
+  --color-vercel-ship-text: var(--vercel-ship-text);
+}
+
+/*
+ * ── sayımlar (kapı bunları kilitler) ──
+ *   tokens=19
+ *   aliases=19
+ *   preconditions=19
+ *   skipped=0
+ *   external_refs=0
+ *   collisions=0
+ */

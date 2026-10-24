@@ -1,0 +1,12 @@
+# check_security_posture.list — OTOMATİK ÜRETİM (`gen_security_roster.py --write`).
+# ELLE YAZMA: üyelik test dosyasındaki `# SECURITY-TIER: <tier>` işaretinden
+# gelir. Yeni güvenlik süiti = dosyana işaret koy, bu dosya kendiliğinden
+# güncellenir (`--check` drift'i bloklar). Gerekçe: findings.md VERIFY-001.
+test_csp_directives.py
+test_dashboard_csp_nonce.py
+test_local_security_surface.py
+test_preview_inline_handler_gate.py
+test_preview_video_player.py
+test_security_header_matrix.py
+test_security_headers.py
+test_static_isolation.py

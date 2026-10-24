@@ -25,8 +25,30 @@ class PlistWorkflowContractTests(unittest.TestCase):
         self.assertLess(self.job.index("Self-heal extra plist drift (P0)"),
                         self.job.index("Fail plist-check on P0 finding"))
 
-    def test_p1_remains_advisory(self):
-        self.assertIn("K12 P1 drift: advisory (P0 yok)", self.job)
+    def test_p1_fails_closed(self):
+        """P1 (bayat/eksik/geçersiz) ADVISORY değil: adım exit 1 eder.
+
+        Sinyal post-self-heal sidecar'ından okunur — `fail_closed`
+        (= has_p0 or has_p1) — böylece P0 temizliği P1'i maskelemez. Sidecar
+        okunamazsa adım 1'in rc'si yedek fail-closed sinyaldir.
+        """
+        self.assertIn("Fail plist-check on P1 finding", self.job)
+        self.assertIn("plist_drift_golden.json", self.job)
+        self.assertIn('d.get("fail_closed")', self.job)
+        self.assertIn('DRIFT_RC', self.job)
+        self.assertIn("exit 1", self.job)
+        # Advisory rapor satırı kaldırıldı — P1 sessizce geçemez.
+        self.assertNotIn("P1 drift: advisory", self.job)
+        self.assertNotIn("Write plist P1 advisory note", self.job)
+        # P1 adımı P0 adımından SONRA koşar (tanı sırası korunur).
+        self.assertLess(self.job.index("Fail plist-check on P0 finding"),
+                        self.job.index("Fail plist-check on P1 finding"))
+
+    def test_p1_step_is_not_continue_on_error(self):
+        """P1 adımı continue-on-error taşımaz (fail-closed)."""
+        start = self.job.index("Fail plist-check on P1 finding")
+        header = self.job[start:].split("- name:")[0]
+        self.assertNotIn("continue-on-error", header)
 
     def test_k12_scenario_sidecar_step_in_verify_job(self):
         """K13 deseni: verify job'ı [K12-SCENARIO] satırını ayrıştırıp

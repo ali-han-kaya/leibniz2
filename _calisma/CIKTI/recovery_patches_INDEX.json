@@ -1,0 +1,439 @@
+{
+  "recovery_patches": [
+    {
+      "name": "patch1789754982-84993",
+      "sha256": "083a4d73c1b1ac8996dc3ff4f9e6056835443b0f1ffb0a546087b8929cf22def",
+      "md5": "55b6de3486a83cd48e9f696f76f946c6",
+      "size": 38721,
+      "touched_files": [
+        ".gitignore",
+        "_calisma/CIKTI/check_unit_tests.list",
+        "_calisma/CIKTI/preview.html",
+        "_calisma/CIKTI/preview_server.py",
+        "_calisma/CIKTI/test_coordinator_loop.py",
+        "_calisma/CIKTI/test_preview_server.py",
+        "_calisma/CIKTI/test_z3_slide_gallery.py",
+        "findings.md",
+        "progress.md",
+        "task_plan.md"
+      ]
+    },
+    {
+      "name": "patch1789755439-10960",
+      "sha256": "245ef03018f7bbe8c48700205569d61057ba31325e62dbe1674f5a7e7cb82bba",
+      "md5": "d65761af0bf19bf332927771cd89cec0",
+      "size": 17818,
+      "touched_files": [
+        ".gitignore",
+        "_calisma/CIKTI/check_unit_tests.list",
+        "_calisma/CIKTI/preview.html",
+        "_calisma/CIKTI/preview_server.py",
+        "_calisma/CIKTI/test_coordinator_loop.py",
+        "_calisma/CIKTI/test_preview_server.py",
+        "_calisma/CIKTI/test_z3_slide_gallery.py"
+      ]
+    },
+    {
+      "name": "patch1789897413-28484",
+      "sha256": "b646814ee1eee9bce8521ebbb72701e9ec29addb4b73d47a0a77e9c249f9cece",
+      "md5": "7aadcc7f30a12d8d8c0fceb34420a2f6",
+      "size": 15103,
+      "touched_files": [
+        ".gitignore",
+        "_calisma/CIKTI/check_unit_tests.list",
+        "_calisma/CIKTI/test_coverage_report.py",
+        "_calisma/CIKTI/test_texlive_determinism_id_residual.py",
+        "_calisma/CIKTI/texlive_determinism_test.sh"
+      ]
+    },
+    {
+      "name": "patch1789909413-1402",
+      "sha256": "ae741b76ed486c9f3ed0df3407d693c5b24d8da60ef57c9c24bc8e25de8acfb6",
+      "md5": "78c756e61ca646cf7f0853e86e28a233",
+      "size": 822,
+      "touched_files": [
+        "README.md"
+      ]
+    },
+    {
+      "name": "patch1789909683-18782",
+      "sha256": "4a7371850c763305acf96445fa0c689bc664e107eb4ae145d98338e971861363",
+      "md5": "109dcd1540c1ac766633afc205ea4c29",
+      "size": 42206,
+      "touched_files": [
+        ".dockerignore",
+        "apps/dashboard-next/package-lock.json",
+        "apps/dashboard-next/package.json",
+        "docs/FINAL_RC_REPORT.md"
+      ]
+    },
+    {
+      "name": "patch1789916847-96734",
+      "sha256": "f1a87512e20f30ecb047534b0d76425c2928ab4ee160e5a066295aef402cba04",
+      "md5": "8648c837c6b7e261c53fce7805078e4b",
+      "size": 5005,
+      "touched_files": [
+        "README.md",
+        "_calisma/CIKTI/test_makefile_texlive.py",
+        "docs/Makefile.texlive"
+      ]
+    },
+    {
+      "name": "patch1789916985-14247",
+      "sha256": "fccaceb321403afb4713b3739b9bdf87917348083e31d344aa94e1b793429f09",
+      "md5": "22e8d57a7a5e086a8fbcbb481c333d9d",
+      "size": 5005,
+      "touched_files": [
+        "README.md",
+        "_calisma/CIKTI/test_makefile_texlive.py",
+        "docs/Makefile.texlive"
+      ]
+    },
+    {
+      "name": "patch1789977384-81024",
+      "sha256": "5e0e7a1209ff939d1d43befac715ace1e29385905b03725376f012d21d98322a",
+      "md5": "b8b19156df3c84ac8c939330efa66370",
+      "size": 14131,
+      "touched_files": [
+        "_calisma/CIKTI/ci_full_discover_drift_guard.py",
+        "_calisma/CIKTI/sync_check_unit_tests.py",
+        "_calisma/CIKTI/test_sync_check_unit_tests.py",
+        "docs/FINAL_RC_REPORT.md"
+      ]
+    },
+    {
+      "name": "patch1790251095-22809",
+      "sha256": "713ce49f4a0bad5f5a3470bcae0a9a7d57ea6647a6e7e17933e612d08122b9c9",
+      "md5": "095e3b6473d5884b77bcd4ad0519adc0",
+      "size": 3517,
+      "touched_files": [
+        ".gitignore",
+        "_calisma/CIKTI/preview.js",
+        "_calisma/CIKTI/sync_verify_mirror.sh"
+      ]
+    },
+    {
+      "name": "patch1790270868-20085",
+      "sha256": "a474015a165fc68befe8d929af594bde78a6a496eb24ad5f9ca345aade457541",
+      "md5": "a768bfba2a0efccdbb3e02a16d65377f",
+      "size": 14901,
+      "touched_files": [
+        "_calisma/CIKTI/a11y_gate.py",
+        "_calisma/CIKTI/preview.html",
+        "_calisma/CIKTI/preview_server.py",
+        "_calisma/CIKTI/record_determinism_trend.py",
+        "_calisma/CIKTI/sync_verify_mirror.sh",
+        "_calisma/CIKTI/test_preview_server.py",
+        "_calisma/CIKTI/test_reproducible_pdf_skill.py",
+        "docs/RUN_DASHBOARD.md",
+        "skills/reproducible-pdf-build/SKILL.md"
+      ]
+    },
+    {
+      "name": "patch1790271096-39410",
+      "sha256": "b88685ae6d01c1d49c9eb0185d7c51bc1661980e47148f543b7009cf23857fbe",
+      "md5": "24237eb6f361309c706236fb04c870e6",
+      "size": 13857,
+      "touched_files": [
+        "_calisma/CIKTI/a11y_gate.py",
+        "_calisma/CIKTI/preview.html",
+        "_calisma/CIKTI/preview_server.py",
+        "_calisma/CIKTI/record_determinism_trend.py",
+        "_calisma/CIKTI/sync_verify_mirror.sh",
+        "_calisma/CIKTI/test_preview_server.py",
+        "_calisma/CIKTI/test_reproducible_pdf_skill.py",
+        "skills/reproducible-pdf-build/SKILL.md"
+      ]
+    },
+    {
+      "name": "patch1790271533-77816",
+      "sha256": "514f8868428359e658b0dec41b849757c5c552da89269091321fae7ee8e0d8e3",
+      "md5": "651363b9eb1b31cdef48c6dec56d97ca",
+      "size": 7428,
+      "touched_files": [
+        "_calisma/CIKTI/a11y_gate.py",
+        "_calisma/CIKTI/preview.html",
+        "_calisma/CIKTI/preview_server.py",
+        "_calisma/CIKTI/sync_verify_mirror.sh",
+        "_calisma/CIKTI/test_preview_server.py"
+      ]
+    },
+    {
+      "name": "patch1790288282-67431",
+      "sha256": "f443385920f76f0a56aeb26cc97e252e3fbfb6bf6735d05c81b4c5ec6664a6ad",
+      "md5": "7faeab25e85434798ce1717823315a6c",
+      "size": 11952,
+      "touched_files": [
+        "_calisma/CIKTI/preview.html",
+        "_calisma/CIKTI/test_incidental_banner.py"
+      ]
+    },
+    {
+      "name": "patch1790353042-99930",
+      "sha256": "9dc9a9515a69ba85f5c1f95da620a35055a00eb41caf65a7d97814f5cbe81db6",
+      "md5": "1e4df77e6f2b1c17352f88b1fbe7ade1",
+      "size": 256316,
+      "touched_files": [
+        ".github/workflows/determinism-trend.yml",
+        ".github/workflows/verify.yml",
+        ".gitignore",
+        "_calisma/CIKTI/a11y_gate.py",
+        "_calisma/CIKTI/a11y_gate_config.json",
+        "_calisma/CIKTI/action_pins.json",
+        "_calisma/CIKTI/audit_live_ci_sync.py",
+        "_calisma/CIKTI/canvas/incidental_proof_plate02.pdf",
+        "_calisma/CIKTI/check_action_pins.py",
+        "_calisma/CIKTI/check_lean_statements.py",
+        "_calisma/CIKTI/check_mirror_coverage.py",
+        "_calisma/CIKTI/check_unit_tests.list",
+        "_calisma/CIKTI/check_workflow_artifact_docs.py",
+        "_calisma/CIKTI/fresh_clone_setup.sh",
+        "_calisma/CIKTI/orchestrate_k_dag.py",
+        "_calisma/CIKTI/preview.html",
+        "_calisma/CIKTI/preview.js",
+        "_calisma/CIKTI/preview_server.py",
+        "_calisma/CIKTI/start_preview.sh",
+        "_calisma/CIKTI/sync_lean_files.py",
+        "_calisma/CIKTI/sync_verify_mirror.sh",
+        "_calisma/CIKTI/test_a11y_gate.py",
+        "_calisma/CIKTI/test_audit_live_ci_sync.py",
+        "_calisma/CIKTI/test_check_action_pins.py",
+        "_calisma/CIKTI/test_check_lean_statements.py",
+        "_calisma/CIKTI/test_check_mirror_coverage.py",
+        "_calisma/CIKTI/test_coverage_report.py",
+        "_calisma/CIKTI/test_dashboard_playwright_smoke.py",
+        "_calisma/CIKTI/test_fresh_clone_setup.py",
+        "_calisma/CIKTI/test_k9_lean_files_sync.py",
+        "_calisma/CIKTI/test_lean_lake.py",
+        "_calisma/CIKTI/test_orchestrate_k_dag.py",
+        "_calisma/CIKTI/test_preview_server.py",
+        "_calisma/CIKTI/test_workflow_contract.py",
+        "_calisma/CIKTI/test_workflow_timeouts.py",
+        "_calisma/CIKTI/update_preview.sh",
+        "_calisma/CIKTI/verify_delivery.py",
+        "_calisma/CIKTI/workflow_contract.py",
+        "_calisma/landing/build_landing.py",
+        "_calisma/lean_reduct/MAP.md",
+        "_calisma/lean_reduct/README.md",
+        "_calisma/lean_reduct/ReductInvariance.lean",
+        "design-system/vercel/README.md",
+        "docs/CI_READINESS_CHECKLIST.md",
+        "docs/FIRST_RUN_TUTORIAL.md",
+        "docs/KNOWN_INCIDENTS.md",
+        "docs/LOCAL_VERIFICATION_HOWTO.md",
+        "docs/RUN_DASHBOARD.md",
+        "docs/branch-protection-guide/guide.html",
+        "docs/superpowers/plans/2026-09-17-a11y-gate-implementation.md",
+        "docs/superpowers/specs/2026-09-17-a11y-gate-design.md"
+      ]
+    },
+    {
+      "name": "patch1790438744-58091",
+      "sha256": "8a95cc06683cf9ffaa2024d4fc2efe3624635be51978cd002802d886f94169bd",
+      "md5": "b8b49eae5566ef297d05d7e8b2dc05fa",
+      "size": 2420,
+      "touched_files": [
+        "_calisma/CIKTI/canvas/incidental_proof_plate02.pdf"
+      ]
+    },
+    {
+      "name": "patch1790441266-34622",
+      "sha256": "a395823574657fc33f2e2e38f07d2fe4860db56ce85bf24dd9b311fd56a92292",
+      "md5": "434f28463bbb6f494039091e2c4aa616",
+      "size": 4747,
+      "touched_files": [
+        "README.md",
+        "_calisma/CIKTI/canvas/incidental_proof_plate02.pdf",
+        "design-system/vercel/README.md"
+      ]
+    },
+    {
+      "name": "patch1790445693-95502",
+      "sha256": "c14b869923061ebff1367c8635553dfd14cc0fd12ad35f277b4312abdfc07fb1",
+      "md5": "f1c2b002a029d81f4488f45bf676bb4e",
+      "size": 185694,
+      "touched_files": [
+        "_calisma/CIKTI/TESLIM_KLASOR_V5_2026-08-17.zip",
+        "_calisma/CIKTI/TESLIM_KLASOR_V5_2026-08-17.zip.sha256",
+        "_calisma/CIKTI/TESLIM_V5_FINAL_2026-08-17.zip",
+        "_calisma/CIKTI/TESLIM_V5_FINAL_2026-08-17.zip.sha256",
+        "_calisma/TESLIM/Stoic-Hume-Final-V5_2026-08-17/KLASOR_CHECKSUMLARI.sha256",
+        "_calisma/V5_ICERIK/TESLIM_V5_FINAL_2026-08-17/stoic_hume_package/Stoic_Hume_Formal_Section_2026-08-17/MANIFEST.txt",
+        "_calisma/V5_ICERIK/TESLIM_V5_FINAL_2026-08-17/stoic_hume_package/Stoic_Hume_Formal_Section_2026-08-17/qpdf_determinism_experiment.py",
+        "_calisma/V5_ICERIK/TESLIM_V5_FINAL_2026-08-17/stoic_hume_package/Stoic_Hume_Formal_Section_2026-08-17/qpdf_determinism_output.txt"
+      ]
+    },
+    {
+      "name": "patch1790473294-15456",
+      "sha256": "51ff1e021eb053f5098a2a913f3c6492b3541f5ccd7e6faa03700bd5263413f9",
+      "md5": "7a1ed9fb9519db61909f04b86d38d5a0",
+      "size": 47985,
+      "touched_files": [
+        "_calisma/CIKTI/audit_live_ci_sync.py",
+        "_calisma/CIKTI/check_unit_tests.list",
+        "_calisma/CIKTI/status_checks.py",
+        "_calisma/CIKTI/test_atomic_write_guard.py",
+        "_calisma/CIKTI/test_audit_live_ci_sync.py",
+        "_calisma/CIKTI/test_sidecar_guarantee.py",
+        "_calisma/CIKTI/test_texlive_repro_documented.py",
+        "_calisma/CIKTI/texlive_determinism_hook.sh",
+        "_calisma/CIKTI/texlive_determinism_test.sh",
+        "_calisma/CIKTI/workflow_contract.py",
+        "docs/HISTORY_CLEANUP.md",
+        "docs/PUBLISH_SCENARIO.md",
+        "docs/publish_precheck.sh",
+        "skills/verify-chain/SKILL.md"
+      ]
+    },
+    {
+      "name": "patch1790474169-42397",
+      "sha256": "794951263a2056b53354fb35a98ed20955019fa8fb9fb74feb247eb387a13dac",
+      "md5": "ad5946dc8434a3ef5a56a52b138559b4",
+      "size": 47538,
+      "touched_files": [
+        "_calisma/CIKTI/audit_live_ci_sync.py",
+        "_calisma/CIKTI/status_checks.py",
+        "_calisma/CIKTI/test_atomic_write_guard.py",
+        "_calisma/CIKTI/test_audit_live_ci_sync.py",
+        "_calisma/CIKTI/test_sidecar_guarantee.py",
+        "_calisma/CIKTI/test_texlive_repro_documented.py",
+        "_calisma/CIKTI/texlive_determinism_hook.sh",
+        "_calisma/CIKTI/texlive_determinism_test.sh",
+        "_calisma/CIKTI/workflow_contract.py",
+        "docs/HISTORY_CLEANUP.md",
+        "docs/PUBLISH_SCENARIO.md",
+        "docs/publish_precheck.sh",
+        "skills/verify-chain/SKILL.md"
+      ]
+    },
+    {
+      "name": "patch1790474548-62535",
+      "sha256": "a065e57ea550ae9630f654a524eb1f0f8f68745412955029816a9e2d9f7821ee",
+      "md5": "b22207171288e9c73b9ba77063907e14",
+      "size": 37782,
+      "touched_files": [
+        "_calisma/CIKTI/audit_live_ci_sync.py",
+        "_calisma/CIKTI/status_checks.py",
+        "_calisma/CIKTI/test_atomic_write_guard.py",
+        "_calisma/CIKTI/test_audit_live_ci_sync.py",
+        "_calisma/CIKTI/test_sidecar_guarantee.py",
+        "_calisma/CIKTI/workflow_contract.py",
+        "docs/HISTORY_CLEANUP.md",
+        "docs/PUBLISH_SCENARIO.md",
+        "docs/publish_precheck.sh",
+        "skills/verify-chain/SKILL.md"
+      ]
+    },
+    {
+      "name": "patch1790475353-8775",
+      "sha256": "6ee498e7a4e7de6d9797da5b1d505e0f4991adb79aaba07ccbd4aab0ad43ac92",
+      "md5": "247811b726bb3edd254dfe86cc225e5a",
+      "size": 64325,
+      "touched_files": [
+        ".github/workflows/verify.yml",
+        "README.md",
+        "_calisma/CIKTI/audit_live_ci_sync.py",
+        "_calisma/CIKTI/status_checks.py",
+        "_calisma/CIKTI/test_advisory_coe_surfacing.py",
+        "_calisma/CIKTI/test_atomic_write_guard.py",
+        "_calisma/CIKTI/test_audit_live_ci_sync.py",
+        "_calisma/CIKTI/test_sidecar_guarantee.py",
+        "_calisma/CIKTI/test_texlive_repro_documented.py",
+        "_calisma/CIKTI/texlive_determinism_hook.sh",
+        "_calisma/CIKTI/texlive_determinism_test.sh",
+        "_calisma/CIKTI/workflow_contract.py",
+        "docs/HISTORY_CLEANUP.md",
+        "docs/PUBLISH_SCENARIO.md",
+        "docs/publish_precheck.sh",
+        "skills/verify-chain/SKILL.md"
+      ]
+    },
+    {
+      "name": "patch1790484557-55606",
+      "sha256": "6250f613b48d1858c24155281fc80f2960ee878249936b7bf8439d65558b9a2f",
+      "md5": "7bf9e0dad3820ce80dc3d5995a088f8d",
+      "size": 17192,
+      "touched_files": [
+        "_calisma/CIKTI/check_unit_tests.list",
+        "_calisma/CIKTI/test_check_design_tokens.py",
+        "_calisma/CIKTI/test_coverage_report.py",
+        "_calisma/CIKTI/test_surface_cwv_report.py",
+        "design-system/scripts/check_tokens.py"
+      ]
+    },
+    {
+      "name": "patch1790484861-62494",
+      "sha256": "622f21e2083c0ed474e4ab0ae6c6eef0960f007c053cbffa3d442d36c6226047",
+      "md5": "dbc066e078e28db9f2bf643d7d3fbce2",
+      "size": 15489,
+      "touched_files": [
+        "_calisma/CIKTI/test_check_design_tokens.py",
+        "_calisma/CIKTI/test_surface_cwv_report.py",
+        "design-system/scripts/check_tokens.py"
+      ]
+    },
+    {
+      "name": "patch1790485592-83937",
+      "sha256": "d98695428a1973a722ef968c6d10b0f55048ec97f055e3b90fc1aaaddeafad8d",
+      "md5": "c2193a6a43524d09bc0e603250ca55bc",
+      "size": 40229,
+      "touched_files": [
+        "_calisma/CIKTI/test_check_design_tokens.py",
+        "_calisma/CIKTI/test_surface_cwv_report.py",
+        "apps/dashboard-next/app/(panel)/@trend/loading.tsx",
+        "apps/dashboard-next/app/(panel)/@verdict/loading.tsx",
+        "apps/dashboard-next/app/VerdictCard.tsx",
+        "apps/dashboard-next/app/error.tsx",
+        "apps/dashboard-next/app/globals.css",
+        "apps/dashboard-next/app/layout.tsx",
+        "apps/dashboard-next/components/RunsTable.tsx",
+        "design-system/scripts/check_tokens.py"
+      ]
+    },
+    {
+      "name": "patch1790487215-5164",
+      "sha256": "0a715ade9b087abdf3d69a0c8b7ebfd95426f7977f158c3c08f4b2663473ae6c",
+      "md5": "2d04d36d88be80369931299add6b409d",
+      "size": 13936,
+      "touched_files": [
+        "_calisma/CIKTI/test_check_design_tokens.py",
+        "design-system/scripts/check_tokens.py"
+      ]
+    },
+    {
+      "name": "patch1790527577-24105",
+      "sha256": "13329c954db8d3f06d6b0ab290d6b02ef3dd9eb00e2469ad5ccbda290fa840ba",
+      "md5": "040794834ee96b8b874a7982c3bba916",
+      "size": 5741,
+      "touched_files": [
+        "_calisma/CIKTI/check_unit_tests.list",
+        "_calisma/CIKTI/test_coverage_report.py",
+        "apps/trend-db/prisma/schema.prisma",
+        "docs/TREND_CHART_READ_PATH.md"
+      ]
+    },
+    {
+      "name": "patch1790527912-44775",
+      "sha256": "71c7147d77f0ef2e6443fdc9edcc2737a96b4e791b53c812e3af75ac9b7ebe85",
+      "md5": "cb555d935b0dbd6aa045d926f7791021",
+      "size": 5715,
+      "touched_files": [
+        "_calisma/CIKTI/check_unit_tests.list",
+        "_calisma/CIKTI/test_coverage_report.py",
+        "apps/trend-db/prisma/schema.prisma",
+        "docs/TREND_CHART_READ_PATH.md"
+      ]
+    },
+    {
+      "name": "patch1790530135-13343",
+      "sha256": "761fc4330d8e262ccb4633de5ad00d062edbff064e4d5b1b9494258844901754",
+      "md5": "5dfe3e47171fe4e7df73da4b0631756e",
+      "size": 11170,
+      "touched_files": [
+        ".github/workflows/verify.yml",
+        "_calisma/CIKTI/check_security_browser.list",
+        "_calisma/CIKTI/test_dashboard_keyboard_nav.py"
+      ]
+    }
+  ]
+}

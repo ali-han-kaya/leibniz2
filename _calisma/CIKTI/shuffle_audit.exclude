@@ -1,0 +1,78 @@
+# shuffle_audit.exclude — shuffle-audit KAPI KAPSAMI dışlamaları (fail-closed)
+#
+# Neden: shuffle-audit manifest'in TAMAMINI koşarsa bu ağaçta gün 1'de
+# kırmızıdır — 34 dosya sıradan bağımsız nedenlerle zaten kırmızı, 2 dosya
+# hiç yüklenemiyor, 9 dosya tarayıcı/canlı yüzey olduğu için >10 s. Sürekli
+# kırmızı bir kapı sinyal üretmez (gürültüye dönüşür), bu yüzden bunlar
+# BİLİNÇLİ olarak kapsam dışında tutulur.
+#
+# SÖZLEŞME (shuffle_tests.py --exclude-from):
+#   - Girdiler dosya ADIDIR (manifest girdisiyle aynı alfabe).
+#   - Kapsamda olmayan girdi exit 2'dir: bir test yeniden adlandırılırsa
+#     dışlama sessizce kaybolmaz, liste bakımı zorunlu kalır.
+#   - Dışlama bir İZLEYİCİ listesidir: yeni test dosyaları OTOMATİK olarak
+#     kapsamdadır (allowlist değildir).
+#   - Kalan kapsam boş olamaz (test_shuffle_tests pinler).
+#
+# Dışlanan bir dosya düzeltilince satırı BURADAN SİLİN — aksi halde kapı o
+# dosyayı sessizce denetlemez.
+
+# ── (1) Yüklenemeyen modüller (takipsiz fixture'lar; NameError) ────────────
+# 2026-10-18 taraması: her iki dosya da bu worktree'de takipsiz (??) ve
+# test toplama aşamasında düşüyor. Takip edilip düzeltilince satırı silin.
+test_beta_battery_gate.py
+test_local_security_surface.py
+
+# ── (2) Alfabetik tabanda da kırmızı (sıradan bağımsız) ────────────────────
+# 4/4 koşumda aynı kümeyle kırmızı; kök neden bu worktree'nin birikmiş
+# durumu (AGENTS.md: tam discovery temiz merge kapısı değildir). Bunlar
+# düzeltildikçe satırları silinir.
+test_a11y_gate.py
+test_advisory_coe_surfacing.py
+test_api_method_contract.py
+test_audit_live_ci_sync.py
+test_brand_mirror_gate.py
+test_check_action_pins.py
+test_check_design_tokens.py
+test_check_gate_registry.py
+test_check_landing_repro.py
+test_check_precommit_inventory.py
+test_check_seal_hash.py
+test_check_skill_surfaces.py
+test_check_token_conflicts.py
+test_ci_artifact_retention.py
+test_dashboard_next_battery_smoke.py
+test_dashboard_next_style_gates.py
+test_dev_bootstrap.py
+test_dockerfile_security_patching.py
+test_gate_coverage_sync.py
+test_gen_skill_surface_inventory.py
+test_k13_coverage_sync.py
+test_mirror_bridges.py
+test_pip_cache_reuse_smoke.py
+test_precommit_doctor.py
+test_preview_a11y_panel.py
+test_preview_contract.py
+test_preview_screenshot_gate.py
+test_preview_server.py
+test_security_cron_schedule.py
+test_security_header_matrix.py
+test_texlive_repro_documented.py
+test_vercel_adapter.py
+test_vercel_dashboard_drift.py
+test_vercel_theme.py
+test_workflow_contract.py
+
+# ── (3) Tarayıcı/canlı yüzey >10 s (kendi süiti/job'u var) ─────────────────
+# Ölçüldü (2026-10-18, aynı ağaç): bu dosyalar tek geçişte 10-554 s;
+# 4 geçişlik CI bütçesini tek başlarına aşarlar. Kendi süitlerinde ve
+# a11y-gate/dashboard-smoke job'larında koşuyorlar.
+test_dashboard_budget_rh_filters.py
+test_dashboard_cls_budget.py
+test_dashboard_keyboard_nav.py
+test_mirror_check.py
+test_preview_escaping.py
+test_preview_hover_tooltip.py
+test_select_affected_tests.py
+test_surface_cwv_report.py
+test_z3_slide_reproducibility.py

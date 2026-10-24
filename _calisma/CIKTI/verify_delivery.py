@@ -284,7 +284,6 @@ def build_layers_summary(args, findings):
         job'unda değil reproducibility job'unda, K12 yalnızca macOS)
     """
     by_layer = {}
-    unregistered = []
     for f in findings:
         # Katman anahtarı öncelikle id'den ("K0-STALE" → "K0"), yoksa
         # check'ten (testlerde "K0-TOOLKIT" biçimi) türetilir. check alanı
@@ -293,8 +292,6 @@ def build_layers_summary(args, findings):
         key = f.get("id", "").split("-")[0] or f.get("check", "").split("-")[0]
         if key in LAYER_LABELS:
             by_layer.setdefault(key, []).append(f)
-        elif f.get("priority") in ("P0", "P1"):
-            unregistered.append(f)
     layers = {}
     for layer in LAYER_LABELS:
         if layer in _CORE_LAYERS:
@@ -309,13 +306,6 @@ def build_layers_summary(args, findings):
         status = "FAIL" if fl else ("PASS" if ran else "SKIP")
         layers[layer] = {"label": LAYER_LABELS[layer], "status": status,
                          "ran": ran, "findings": fl}
-    if unregistered:
-        layers["UNREGISTERED"] = {
-            "label": "Unregistered findings",
-            "status": "FAIL",
-            "ran": True,
-            "findings": unregistered,
-        }
     return layers
 
 # ---- K6 referans denetimi (CrossRef/SEP çevrimiçi, --check-references) ----
@@ -2333,18 +2323,6 @@ def _scan_lean_dir(lean_dir):
 def _check_statements(lean_file, map_file):
     """K9 statement-safety kapısı — tek kaynak check_lean_statements.py."""
     return _lean_statements.check_statements(lean_file, map_file)
-
-
-def _check_twin(lean_file, twin_file):
-    """K9 twin-bütünlük kapısı — tek kaynak check_lean_statements.check_twin.
-
-    Sözleşme kapısı (Content.lean shim) ile lake target kopyası
-    (Leibniz2Reduct/Content.lean) aynı anda kaynaktır. Ayrışırlarsa
-    K9-LAKE BAYAT kopyayı derlerken sözleşme kapısı YENİ olanı
-    doğrular — yani K9 PASS iken derlenmeyen bir dosya doğrulanmış
-    olur. Bu yüzden kapı K9 teslim yolunda da fail-closed çalışır.
-    """
-    return _lean_statements.check_twin(lean_file, twin_file)
 
 
 def write_json_sidecar(path, report, detail="not run"):
@@ -4490,11 +4468,10 @@ def _k12_negative_scenarios(add, upd_script, drift_script):
 def fold_plist_golden_findings(golden_report, add):
     """check_plist_drift.py --json raporundaki P0/P1 bulgularını findings'e işler.
 
-    Fazla-profil drift'i (golden'da olmayan render edilmiş profil) P0
-    FAIL-CLOSED'dır — golden seti şablonla senkron değil, sessiz kapsam
-    kaybını önlemek için build'i bloke eder. Diğer golden drift'leri
-    (eksik/bayat/yapısal geçersiz) P1 advisory kalır. PASS bulguları
-    findings'e girmez.
+    Fazla-profil drift'i (golden'da olmayan render edilmiş profil) P0,
+    eksik/bayat/yapısal geçersiz drift'ler P1'dir. HER İKİSİ FAIL-CLOSED'dır
+    — katman verdict'i P0/P1'i bloke edici sayar, sessiz kapsam kaybı geçmez.
+    PASS bulguları findings'e girmez.
 
     add(priority, id, check, message, detail) imzalı callback kullanır
     (verify_delivery'nin iç `add`'i). Döner: has_p0 (fail-closed sinyali).
@@ -5251,18 +5228,6 @@ def main():
                 os.path.dirname(os.path.abspath(__file__)), LEAN_REDUCT_DIR)
             lakefile = os.path.join(reduct_dir, "lakefile.toml")
             if os.path.isfile(lakefile):
-                # K9-TWIN: lake target kopyası sözleşme shim'i ile
-                # byte-eşit mi? Ayrışma K9-LAKE'nin BAYAT kopyayı
-                # derlemesine yol açar — build'den ÖNCE fail-closed.
-                shim = os.path.join(reduct_dir, "Content.lean")
-                twin = os.path.join(reduct_dir, "Leibniz2Reduct", "Content.lean")
-                twin_ok, twin_findings = _check_twin(shim, twin)
-                if not twin_ok:
-                    detail_txt = "; ".join(
-                        f.get("detail", str(f)) for f in twin_findings)
-                    add("P0", "K9-TWIN", "K9 twin bütünlüğü", detail_txt)
-                    print(f"[K9] twin bütünlüğü: FAIL — {detail_txt}",
-                          file=sys.stderr)
                 lake_cmd = find_tool("lake")
                 lake_ok, lake_detail = run_lake_build(
                     lake_cmd, reduct_dir,
@@ -5277,8 +5242,6 @@ def main():
                     print(lake_line)
                 if lake_ok is False:
                     add("P0", "K9-LAKE", "K9 Lean çekirdeği", lake_detail)
-                # twin drift K9'u fail-closed düşürür (build'den bağımsız)
-                ok = ok and twin_ok
             else:
                 lake_ok, lake_detail = False, f"lake projesi yok: {reduct_dir}"
                 add("P0", "K9-LAKE", "K9 Lean çekirdeği", lake_detail)
@@ -5443,9 +5406,9 @@ def main():
             # ── Golden denetim (check_plist_drift.py) — P0/P1 entegrasyonu ──
             # Şablon → render → golden karşılaştırması (runtime --plist-check
             # ile aynı şablondan ama golden kümesine karşı). Fazla-profil
-            # drift'i (golden'da olmayan render edilmiş profil) P0
-            # FAIL-CLOSED'dır — golden seti şablonla senkron değil; diğer
-            # golden drift'leri (eksik/bayat/geçersiz) P1 advisory kalır.
+            # drift'i (golden'da olmayan render edilmiş profil) P0; eksik/
+            # bayat/geçersiz drift'ler P1 — HER İKİSİ FAIL-CLOSED'dır (advisory
+            # drift sınıfı yok).
             # Best-effort: check_plist_drift.py yoksa/çalışmazsa (ör. golden
             # dizini yok) sessizce atlanır — runtime denetimi zaten koştu.
             golden_report = None

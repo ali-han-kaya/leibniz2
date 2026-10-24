@@ -1,0 +1,224 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "preview_contract.schema.json",
+  "title": "preview_server <-> dashboard-next tel s\u00f6zle\u015fmesi",
+  "description": "Tek do\u011fruluk kayna\u011f\u0131. preview_server \u00e7\u0131kt\u0131s\u0131 (/api/latest, /api/trend) ve dashboard-next tipleri (lib/preview-contract.generated.ts) bu \u015femadan t\u00fcrer. Alanlar t\u00fcketicinin okudu\u011fu k\u00fcmedir; ek alanlar serbesttir (JSON Schema varsay\u0131lan\u0131) ve TS tipi yaln\u0131z bildirilen alanlar\u0131 listeler. Her alan opsiyoneldir ve null olabilir: preview yolu JSON null, DB yolu undefined \u00fcretir.",
+  "$defs": {
+    "Latest": {
+      "description": "GET /api/latest: son ko\u015fumun \u00f6zeti (LATEST'in panonun okudu\u011fu alt k\u00fcmesi).",
+      "type": "object",
+      "properties": {
+        "verdict": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ts": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "p0": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "p1": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "stripped_sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "z3_passed": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "z3_total": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "z3_failed": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "budget_usd": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Ko\u015fumun kulland\u0131\u011f\u0131 b\u00fct\u00e7e (USD)."
+        },
+        "budget_limit": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Ko\u015fumun etkin b\u00fct\u00e7e limiti (USD)."
+        }
+      }
+    },
+    "HistoryRow": {
+      "description": "history.jsonl sat\u0131r\u0131n\u0131n panoya projeksiyonu (preview_server HISTORY_DASHBOARD_KEYS). Her iki yolda (preview + DB) ayn\u0131 \u015fekil.",
+      "type": "object",
+      "properties": {
+        "ts": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verdict": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "p0": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "p1": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "duration_s": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "budget_usd": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "budget_limit": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "budget_method": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "refs_verified": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "refs_total": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "refs_mismatch": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "refs_by_source": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "hook_env": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "z3_passed": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "z3_failed": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "z3_total": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "lean_ok": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "lean_detail": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cli_override_count": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      }
+    },
+    "TrendResponse": {
+      "description": "GET /api/trend?limit=N: pencerelenmi\u015f ge\u00e7mi\u015f + refs-trend g\u00f6vdesi.",
+      "type": "object",
+      "required": [
+        "history"
+      ],
+      "properties": {
+        "history": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/HistoryRow"
+          }
+        },
+        "limit": {
+          "description": "Uygulanan pencere; penceresiz \u00e7a\u011fr\u0131da yok.",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "refs_trend": {
+          "type": [
+            "object",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}

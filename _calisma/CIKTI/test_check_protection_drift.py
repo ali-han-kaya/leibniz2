@@ -222,6 +222,188 @@ class VerifyDeliveryVocabularyTests(unittest.TestCase):
         self.assertEqual(got, [])
 
 
+class _GhRecorder:
+    """Sahte `gh`: liste döner, yazma çağrılarını kaydeder, seçili verb'ler patlar."""
+
+    def __init__(self, issues=(), fail=()):
+        self.calls = []
+        self.issues = list(issues)
+        self.fail = set(fail)
+
+    def __call__(self, args, token):
+        self.calls.append(list(args))
+        verb = args[1] if len(args) > 1 else ""
+        if verb in self.fail:
+            return None, "gh: boom"
+        if verb == "list":
+            return json.dumps(self.issues), None
+        return "", None
+
+    def verbs(self):
+        return [c[1] for c in self.calls if len(c) > 1]
+
+
+def _drift_payload():
+    return {
+        "status": "FAIL", "repo": "owner/name", "branch": "main",
+        "expected_checks": 2, "detail": "2 fark",
+        "p1": [{"id": "PROT-STRICT", "priority": "P1",
+                "check": "strict", "issue": "strict kapalı",
+                "evidence": "strict=false"}],
+    }
+
+
+class AlertStickyIssueTests(unittest.TestCase):
+    """Kırmızı koşum = alert: tek issue açılır/güncellenir, temizde kapanır."""
+
+    URL = "https://github.com/owner/name/actions/runs/42"
+
+    def test_drift_creates_one_sticky_issue_with_findings(self):
+        gh = _GhRecorder()
+        with mock.patch.object(cpd, "_gh_call", side_effect=gh):
+            self.assertEqual(cpd.send_alert(_drift_payload(), token="t",
+                                            url=self.URL), "created")
+        create = [c for c in gh.calls if c[1] == "create"]
+        self.assertEqual(len(create), 1, "tek issue açılmalı")
+        self.assertIn(cpd.ALERT_TITLE, create[0])
+        body = create[0][create[0].index("--body") + 1]
+        self.assertIn(cpd.ALERT_MARKER, body)
+        self.assertIn("PROT-STRICT", body)
+        self.assertIn("strict=false", body)
+        self.assertIn(self.URL, body)
+
+    def test_existing_issue_is_updated_not_duplicated(self):
+        gh = _GhRecorder(issues=[{"number": 7, "title": cpd.ALERT_TITLE}])
+        with mock.patch.object(cpd, "_gh_call", side_effect=gh):
+            self.assertEqual(cpd.send_alert(_drift_payload(), token="t"),
+                             "updated")
+        self.assertNotIn("create", gh.verbs(), "haftalık issue çoğalması")
+        edit = [c for c in gh.calls if c[1] == "edit"]
+        self.assertEqual(edit[0][2], "7")
+
+    def test_clean_run_closes_the_open_alert(self):
+        gh = _GhRecorder(issues=[{"number": 7, "title": cpd.ALERT_TITLE}])
+        payload = {"status": "PASS", "repo": "owner/name", "branch": "main",
+                   "expected_checks": 2, "detail": "temiz", "p1": []}
+        with mock.patch.object(cpd, "_gh_call", side_effect=gh):
+            self.assertEqual(cpd.send_alert(payload, token="t", url=self.URL),
+                             "closed")
+        self.assertEqual(gh.verbs(), ["list", "close"])
+
+    def test_clean_run_without_alert_is_a_noop(self):
+        gh = _GhRecorder()
+        payload = {"status": "PASS", "repo": "owner/name", "branch": "main",
+                   "p1": []}
+        with mock.patch.object(cpd, "_gh_call", side_effect=gh):
+            self.assertEqual(cpd.send_alert(payload, token="t"), "noop")
+        self.assertEqual(gh.verbs(), ["list"], "temiz koşum yazma yapmamalı")
+
+    def test_skip_never_touches_issues(self):
+        gh = _GhRecorder()
+        with mock.patch.object(cpd, "_gh_call", side_effect=gh):
+            self.assertEqual(cpd.send_alert({"status": "SKIP"}, token="t"),
+                             "noop")
+        self.assertEqual(gh.calls, [], "SKIP alert üretmemeli (sözleşme)")
+
+    def test_missing_alert_token_is_an_error_not_a_silent_pass(self):
+        with mock.patch.dict(os.environ, {}, clear=False):
+            for name in cpd.ALERT_TOKEN_ENVS:
+                os.environ.pop(name, None)
+            result = cpd.send_alert(_drift_payload())
+        self.assertTrue(result.startswith("error:"), result)
+        self.assertIn("alert token yok", result)
+
+    def test_unreadable_issue_list_is_reported(self):
+        gh = _GhRecorder(fail=("list",))
+        with mock.patch.object(cpd, "_gh_call", side_effect=gh):
+            result = cpd.send_alert(_drift_payload(), token="t")
+        self.assertTrue(result.startswith("error:"), result)
+
+    def test_failed_create_is_reported(self):
+        gh = _GhRecorder(fail=("create",))
+        with mock.patch.object(cpd, "_gh_call", side_effect=gh):
+            result = cpd.send_alert(_drift_payload(), token="t")
+        self.assertIn("issue açılamadı", result)
+
+    def test_unverifiable_status_is_alerted(self):
+        gh = _GhRecorder()
+        payload = {"status": "UNVERIFIABLE", "repo": "owner/name",
+                   "branch": "main", "p1": [],
+                   "message": "DOĞRULANAMADI — token"}
+        with mock.patch.object(cpd, "_gh_call", side_effect=gh):
+            self.assertEqual(cpd.send_alert(payload, token="t"), "created")
+        body = [c for c in gh.calls if c[1] == "create"][0]
+        self.assertIn("UNVERIFIABLE", " ".join(body))
+
+
+class AlertWiringTests(unittest.TestCase):
+    """main() --alert bağlaması: rc değişmez, JSON tek doküman kalır."""
+
+    def _with_alert(self, protection, alert_result, argv=("--json", "--alert")):
+        with mock.patch.object(cpd, "send_alert",
+                               return_value=alert_result) as alert:
+            rc, payload, err = _run(protection, argv=argv)
+        return rc, payload, err, alert
+
+    def test_drift_calls_alert_and_stays_red(self):
+        rc, payload, _err, alert = self._with_alert(
+            _protection(strict=False), "created")
+        self.assertEqual(rc, 1, "alert rc'yi yeşile çevirmemeli")
+        self.assertEqual(payload["status"], "FAIL")
+        self.assertTrue(alert.called)
+        self.assertEqual(alert.call_args.args[0]["status"], "FAIL")
+
+    def test_clean_run_closes_and_stays_green(self):
+        rc, payload, _err, alert = self._with_alert(_protection(), "noop")
+        self.assertEqual(rc, 0)
+        self.assertEqual(payload["status"], "PASS")
+        self.assertTrue(alert.called)
+
+    def test_unverifiable_alerts_and_stays_rc2(self):
+        rc, payload, _err, alert = self._with_alert(
+            (None, "HTTP 403"), "created")
+        self.assertEqual(rc, 2)
+        self.assertEqual(payload["status"], "UNVERIFIABLE")
+        self.assertEqual(alert.call_args.args[0]["status"], "UNVERIFIABLE")
+
+    def test_skip_does_not_alert(self):
+        with mock.patch.object(cpd, "send_alert") as alert:
+            rc, payload, _err = _run(_protection(), token=None,
+                                     argv=("--json", "--alert"))
+        self.assertEqual(rc, 0)
+        self.assertEqual(payload["status"], "SKIP")
+        alert.assert_not_called()
+
+    def test_without_flag_no_alert(self):
+        with mock.patch.object(cpd, "send_alert") as alert:
+            rc, _payload, _err = _run(_protection(strict=False))
+        self.assertEqual(rc, 1)
+        alert.assert_not_called()
+
+    def test_alert_failure_is_annotated_but_rc_unchanged(self):
+        rc, _payload, err, _alert = self._with_alert(
+            _protection(strict=False), "error: issue açılamadı: boom")
+        self.assertEqual(rc, 1, "alert hatası drift sonucunu gizlememeli")
+        self.assertIn("::error::", err)
+        self.assertIn("issue açılamadı", err)
+
+    def test_clean_run_close_failure_is_only_a_warning(self):
+        """Temiz koşumda kapanmayan issue: `error` değil `warning` (rc=0)."""
+        rc, payload, err, _alert = self._with_alert(
+            _protection(), "error: issue kapatılamadı: boom")
+        self.assertEqual(rc, 0, "alert hatası temiz sonucu kırmızıya çevirmemeli")
+        self.assertEqual(payload["status"], "PASS")
+        self.assertIn("::warning::", err)
+        self.assertNotIn("::error::", err)
+
+    def test_json_stdout_stays_one_document(self):
+        rc, payload, err, _alert = self._with_alert(
+            _protection(strict=False), "created")
+        self.assertEqual(rc, 1)
+        self.assertIsInstance(payload, dict, "stdout tek JSON dokümanı olmalı")
+        self.assertIn("[alert] created", err)
+
+
 class WorkflowAndReadOnlyTests(unittest.TestCase):
     """Yapısal: geçersiz scope geri gelmesin, kapı salt-okunur kalsın."""
 
@@ -246,6 +428,16 @@ class WorkflowAndReadOnlyTests(unittest.TestCase):
         self.assertIn("check_protection_drift.py", text)
         self.assertIn("secrets.PROTECTION_PAT", text,
                       "okuma yetkisi secret'tan gelmeli")
+
+    def test_scheduled_workflow_alerts(self):
+        """Scheduled koşum drift'i issue'ya çevirir (kırmızı run'a ek olarak)."""
+        text = (WORKFLOWS / "protection-drift.yml").read_text(encoding="utf-8")
+        self.assertIn("--alert", text, "workflow alert modunu açmıyor")
+        self.assertIn("issues: write", text,
+                      "alert issue'su için izin yok")
+        self.assertIn("ALERT_GH_TOKEN", text,
+                      "alert token'ı adım ortamına geçirilmiyor")
+        self.assertNotIn("administration:", text)
 
     def test_gate_is_read_only(self):
         """Kapı API'ye YAZMAZ (yalnızca GET) — korumayı değiştirme yetkisi yok."""

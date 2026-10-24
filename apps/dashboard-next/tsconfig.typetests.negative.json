@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.typetests.json",
+  "include": ["next-env.d.ts", "test-d/stripped/**/*.ts"],
+  "exclude": ["node_modules"]
+}

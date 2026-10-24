@@ -1,0 +1,103 @@
+diff --git a/README.md b/README.md
+index bcb708c..05e2302 100644
+--- a/README.md
++++ b/README.md
+@@ -65,6 +65,28 @@ bash _calisma/dev_bootstrap.sh --check   # fail-closed doğrulama (rc=0/1)
+ Pinler `docs/HOOK_ENV_MATRIX.md` ile tek-kaynaklıdır; `--check` eksik araçta
+ rc=1 ile düşer (fail-closed).
+ 
++## PDF üretimi — iki motor paralel yaşam (tectonic ↔ TeXLive)
++
++Deterministik PDF üretimi iki Makefile ile yapılır; motor geçişi
++devam ederken ikisi de yaşar (TEXLIVE_MIGRATION_PLAN.md):
++
++```bash
++# TeXLive (pdfTeX) — göç hedefi; Faz 1 kabul kanıtı: kanonik hash 544516b0…
++make -f docs/Makefile.texlive pdf       # 3-geçişli derleme + Rerun=0 denetimi
++make -f docs/Makefile.texlive check     # 2×3-geçiş determinism deneyi (fail-closed)
++make -f docs/Makefile.texlive accept    # kanonik hash'i ID_RESIDUAL_ACCEPTANCE defterinde doğrular
++make -f docs/Makefile.texlive engineinfo  # motor kilidi + sözleşme sabitleri (CI log'u için)
++
++# tectonic — paralel yaşam, geri dönüş yolu
++make -f docs/Makefile.tectonic pdf
++```
++
++Sözleşme: `SOURCE_DATE_EPOCH ?= git log -1 --format=%ct` (geçmiş commit'i
++yeniden üretme), `TEXINPUTS="$TEXDIR//:"`, `TEXMFOUTPUT`/`-output-directory`
++BUILD_DIR'a (kaynak dizinine asla yazma), `PASSES ?= 3` + son-geçiş
++`Rerun to get`=0 (fail-closed). Motor sürüm kilidi: pdfTeX
++3.141592653-2.6 (TeX Live 2026) — `engineinfo` ile kanıtlanır.
++
+ ## _calisma/lean_reduct — Sınır İspatı Çekirdeği (illüstratif, Mathlib-free)
+ 
+ Bu modül Stoa/Hume formalizasyonu **DEĞİLDİR**. İspatlanan: 4 forget
+diff --git a/_calisma/CIKTI/test_makefile_texlive.py b/_calisma/CIKTI/test_makefile_texlive.py
+index b40a485..909ef9f 100644
+--- a/_calisma/CIKTI/test_makefile_texlive.py
++++ b/_calisma/CIKTI/test_makefile_texlive.py
+@@ -85,6 +85,31 @@ STUB_TECTONIC = (
+ )
+ 
+ 
++class TestMakefileTexlivePhase0(unittest.TestCase):
++    """Faz 0 sözleşme sabitleri: motor-kilidi dokümantasyonu + paralel yaşam."""
++
++    def test_engineinfo_target_contract(self):
++        # Motor sürüm kilidi: `make engineinfo` pdfTeX/TeXLive sürümünü ve
++        # sözleşme sabitlerini yazdırır (CI log'u için makine-okur satırlar).
++        mk = MAKEFILE.read_text(encoding="utf-8")
++        self.assertIn("engineinfo:", mk, "engineinfo target'ı yok")
++        self.assertIn(".PHONY: all pdf check accept clean engineinfo", mk)
++        self.assertIn("$(PDBIN) -version", mk)
++        self.assertIn("pdtex_version=", mk)
++        self.assertIn("texinputs_contract=", mk)
++        self.assertIn("texmfoutput_contract=", mk)
++        self.assertIn("output_dir_contract=-output-directory", mk)
++        self.assertIn("engine_lock=pdfTeX 3.141592653-2.6", mk)
++
++    def test_readme_documents_parallel_life(self):
++        # Paralel yaşam dokümantasyonu (plan Faz 1): README'de her iki
++        # Makefile yan yana — motor geçiş rotası + geri dönüş yolu.
++        readme = (ROOT / "README.md").read_text(encoding="utf-8")
++        self.assertIn("docs/Makefile.texlive", readme)
++        self.assertIn("docs/Makefile.tectonic", readme)
++        self.assertIn("engineinfo", readme)
++
++
+ class TestMakefileTexliveStructural(unittest.TestCase):
+     def test_tectonic_twin_still_present(self):
+         # Paralel yaşam: geri dönüş yolu (plan Faz 1).
+diff --git a/docs/Makefile.texlive b/docs/Makefile.texlive
+index dea3e3c..c8bb252 100644
+--- a/docs/Makefile.texlive
++++ b/docs/Makefile.texlive
+@@ -31,15 +31,28 @@ STEM := $(TEXBASE:.tex=)
+ BUILD_DIR ?= $(ROOT)/.build/texlive
+ SOURCE_DATE_EPOCH ?= $(shell git -C "$(ROOT)" log -1 --format=%ct 2>/dev/null || printf '0')
+ PDFlatex ?= pdflatex
++PDBIN := $(shell command -v $(PDFlatex) 2>/dev/null)
+ PASSES ?= 3
+ DETERMINISM_SCRIPT := $(abspath $(ROOT)/_calisma/CIKTI/texlive_determinism_test.sh)
+ ACCEPT_DOC := $(ROOT)/docs/ID_RESIDUAL_ACCEPTANCE.md
+ REPORT := $(BUILD_DIR)/determinism_report.txt
+ 
+-.PHONY: all pdf check accept clean
++.PHONY: all pdf check accept clean engineinfo
+ 
+ all: pdf
+ 
++# Faz 0 motor kilidi + sözleşme sabitleri (plan §Faz 0): sürüm çıktısı
++# makine-okur pdtex_version= satırıyla log'a düşer (CI'da kanıt kalır).
++engineinfo:
++	@command -v "$(PDFlatex)" >/dev/null 2>&1 || { echo "ERROR: pdflatex not found (PDFlatex= veya PATH)" >&2; exit 2; }
++	@$(PDBIN) -version | head -1 | sed 's/^/pdtex_version=/'
++	@echo "engine_lock=pdfTeX 3.141592653-2.6 (TeX Live 2026; plan Faz 0 motor kilidi)"
++	@echo "texinputs_contract=TEXINPUTS=$(TEXDIR)//: (input bağımlılıkları: core_section)"
++	@echo "texmfoutput_contract=TEXMFOUTPUT=$(BUILD_DIR)"
++	@echo "output_dir_contract=-output-directory=$(BUILD_DIR) — kaynak dizinine ASLA yazma"
++	@echo "source_date_epoch=$(SOURCE_DATE_EPOCH)"
++	@echo "passes=$(PASSES)"
++
+ pdf:
+ 	@command -v "$(PDFlatex)" >/dev/null 2>&1 || { echo "ERROR: pdflatex not found (PDFlatex= veya PATH)" >&2; exit 2; }
+ 	@test -f "$(SOURCE)" || { echo "ERROR: TeX source not found: $(SOURCE)" >&2; exit 1; }

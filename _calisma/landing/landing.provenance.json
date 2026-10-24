@@ -1,0 +1,16 @@
+{
+  "format": "landing-provenance/1",
+  "frozen_record_name": "ingiliz_empirizmi_v3.pdf",
+  "hash_field": "raw",
+  "landing_sha256": "99ad5e650798871a1ea65bd9f77bbf058862887b3881605f239658c8e8876ec0",
+  "plates": {
+    "P1-a.png": "d43127cc247ff52361ef9326cb992934da4f593e00be846d55e00d6fd8855b79",
+    "P2.png": "f999f644937cb71033a0adfdd5023b3d68c5c38688ba7dfe2e237c58ed080705",
+    "P3-a.png": "d7b06ac6bfe7f8b7ec1a5e1b1634ecb598b4f54f35c5411c33375d883c442cd1"
+  },
+  "seal_source": "frozen-record",
+  "snapshot_hash": "74b2cdbdb18fafbf5b3c87570c92f1500e7580469bcf4295b09734116df0779f",
+  "snapshot_ts": null,
+  "snapshot_verdict": null,
+  "theme": "dark"
+}

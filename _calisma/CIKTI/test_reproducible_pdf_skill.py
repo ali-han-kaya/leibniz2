@@ -13,7 +13,7 @@ skills/reproducible-pdf-build/SKILL.md prosedürünü MOCK qpdf + mock PDF
   3) OPSİYONEL ARAÇ: qpdf yoksa skip (fail değil).
 
 Senkron testleri gerçek _calisma/repack_delivery.py kaynağını okuyup:
-- reuse koşulunun (cached_raw == raw_hash) metinsel varlığını,
+- reuse koşulunun (`_cached_raw(sidecar_path) == raw_hash`) metinsel varlığını,
 - sidecar formatının (satır 1: `<stripped>  <name>.metadata`,
   satır 2: `# raw: <raw>  <name>`) birebir eşleştiğini,
 - karar fonksiyonunun (read_cached_raw line.split()[2]) repack ile aynı
@@ -68,15 +68,31 @@ cat "$2" > "$out"
 
 
 class TestSdeDocumentationSync(unittest.TestCase):
-    """SKILL.md'nin tectonic + SDE bulgusunu gerçek deney kanıtıyla eşleştirir."""
+    """SKILL.md'nin tectonic yorumu ÖLÇÜMLE eşleşmeli — iki yönlü kapı.
 
-    def test_skill_does_not_claim_tectonic_sde_determinism(self):
+    Ölçüm (`docs/ID_RESIDUAL_ACCEPTANCE.md` §2, `docs/FULL_SCOPE_AUDIT_2026-09-17.md` §2):
+    `SOURCE_DATE_EPOCH` tectonic ayağına export edilmediği için hash oturumlar
+    arası kaydı (`4ad65b9b…` → `6cfc6c0a…`); export düzeltildikten sonra tectonic
+    0.17.0 çıktısı `ad8fca69…` ile bağlamlar arası birebir aynı. Yani "motor
+    non-deterministik" teşhisi YANLIŞTI. Belge o teşhisi geri getiremez, ve
+    onu çürüten ölçüm izlerini kaybedemez — aksi halde sözleşme kanıtsız kalır.
+    """
+
+    def test_skill_matches_measured_tectonic_attribution(self):
         skill = ROOT / "skills" / "reproducible-pdf-build" / "SKILL.md"
         text = skill.read_text(encoding="utf-8")
         self.assertIn("tectonic", text.lower())
         self.assertIn("SOURCE_DATE_EPOCH", text)
-        self.assertIn("does not honor `SOURCE_DATE_EPOCH`", text)
-        self.assertNotIn("tectonic` is byte-deterministic", text)
+        for measured in ("4ad65b9b", "6cfc6c0a", "ad8fca69"):
+            self.assertIn(measured, text,
+                          "ölçüm izi belgeden düşmüş: %s" % measured)
+        # Çürütülen iddialar geri dönemez.
+        self.assertNotIn("does not honor `SOURCE_DATE_EPOCH`", text)
+        self.assertNotIn("NOT byte-deterministic", text)
+        self.assertNotIn("Compiler-level (tectonic 0.17.0)", text)
+        # Strict yüzey /ID-kanonik + kabul defteri olmalı.
+        self.assertIn("/ID`-canonical", text)
+        self.assertIn("acceptance ledger", text)
 
     def test_skill_does_not_claim_sde_stabilizes_pdf_id(self):
         # Faz 4 ölçümü: pdfTeX SDE=0 olsa bile her koşumda rastgele
@@ -299,15 +315,18 @@ class TestSyncAgainstRepackDelivery(unittest.TestCase):
         cls.td.cleanup()
 
     def test_reuse_condition_present_in_source(self):
-        """repack_delivery.py, reuse koşulunu (cached_raw == raw_hash) içerir."""
-        self.assertIn("cached_raw == raw_hash", self.src)
+        """repack_delivery.py, reuse koşulunu (`_cached_raw(...) == raw_hash`) içerir."""
+        self.assertIn("_cached_raw(sidecar_path) == raw_hash", self.src)
         self.assertIn("# raw:", self.src)
 
     def test_sidecar_format_matches(self):
         """Sidecar formatı birebir: satır 1 stripped + name.metadata, satır 2 # raw."""
-        # repack'in yazdığı satırlar
-        self.assertIn('f.write(f"{sha256(_tmp)}  ingiliz_empirizmi_v3.pdf.metadata', self.src)
-        self.assertIn('f.write(f"# raw: {raw_hash}  ingiliz_empirizmi_v3.pdf', self.src)
+        # repack'in yazdığı satırlar (yenileme yolu: renew_sidecar)
+        self.assertIn('fh.write("%s  %s.metadata\\n" % (stripped_sha, name))',
+                      self.src)
+        self.assertIn('fh.write("# raw: %s  %s\\n" % (raw_sha, name))', self.src)
+        # `name` PDF dosya adıdır (`.pdf` içerir) — sidecar adı `x.pdf.metadata`.
+        self.assertIn("name = os.path.basename(pdf_path)", self.src)
         # helper'ın yazdığı format (repack ile birebir: name .pdf içerir)
         with tempfile.TemporaryDirectory() as td:
             sidecar = pathlib.Path(td, "x.pdf.metadata.sha256")

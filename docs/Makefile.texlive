@@ -17,9 +17,14 @@
 # kopyalar — kaynak dizinine ASLA yazılmaz. check, deney betiğini
 # DETERMINISM_PASSES=$(PASSES) ile delege eder: 2 bağımsız 3-geçişli koşum
 # + /ID-kanonik hash karşılaştırması + rerun=0 denetimi.
-# accept: Faz 3 — check'i koşturur, kanonik hash'i kabul raporunun hash
-# geçiş defterinde (docs/ID_RESIDUAL_ACCEPTANCE.md §4) arar; yoksa
-# fail-closed (yeni bağlam → bilinçli defter satırı, Faz 6 çıkış yolu).
+# accept: Faz 3 — check'i koşturur, sonra kabul kanıtını GERÇEK ÜRETİCİYE
+# (_calisma/CIKTI/gen_id_residual_acceptance.py) delege eder: rapor ayrıştırılır
+# (verdict=PASS + 2× rerun=0 + run1=run2), kanonik hash kabul raporunun hash
+# geçiş defterinde (docs/ID_RESIDUAL_ACCEPTANCE.md §4) aranır. Yoksa
+# fail-closed (yeni bağlam → bilinçli defter satırı, Faz 6 çıkış yolu):
+#   make -f docs/Makefile.texlive accept LEDGER=update
+# defter satırını ELLE yazmaz — ölçülen alanlardan üretip §4 tablosuna ekler.
+# Varsayılan LEDGER=check salt-okunur; defter satırı asla kendiliğinden değişmez.
 # Makefile.tectonic paralel yaşamlı kalır (geri dönüş yolu).
 #
 # SOURCE_DATE_EPOCH SÖZLEŞMESİ (2026-10-02 ölçümü): `pdf` hedefi epoch'u
@@ -57,8 +62,14 @@ PDFlatex ?= pdflatex
 PDBIN := $(shell command -v $(PDFlatex) 2>/dev/null)
 PASSES ?= 3
 DETERMINISM_SCRIPT := $(abspath $(ROOT)/_calisma/CIKTI/texlive_determinism_test.sh)
-ACCEPT_DOC := $(ROOT)/docs/ID_RESIDUAL_ACCEPTANCE.md
+ACCEPT_GEN := $(abspath $(ROOT)/_calisma/CIKTI/gen_id_residual_acceptance.py)
+ACCEPT_DOC ?= $(ROOT)/docs/ID_RESIDUAL_ACCEPTANCE.md
 REPORT := $(BUILD_DIR)/determinism_report.txt
+PYTHON ?= python3
+# check = salt-okunur defter araması; update = ölçülen alandan satır üret (bilinçli)
+LEDGER ?= check
+# Defter satırının 'Motor / sürüm' hücresi; boşsa pdflatex -version'dan okunur.
+PDFLATEX_VERSION ?=
 
 .PHONY: all pdf check accept clean engineinfo plate-book plate-book-check plate-book-clean
 
@@ -116,18 +127,21 @@ check:
 	@grep -E '^(passes|source_date_epoch|texlive_canonical_run1_sha256|texlive_canonical_run2_sha256|residual|verdict)=' "$(REPORT)"
 
 accept: check
-	@CANON=$$(sed -n 's/^texlive_canonical_run1_sha256=//p' "$(REPORT)"); \
-	 test -n "$$CANON" || { echo "ERROR: raporda kanonik hash yok" >&2; exit 1; }; \
-	 if grep -q "$$CANON" "$(ACCEPT_DOC)"; then \
-	   echo "── Faz 3 kabul ──"; \
-	   echo "KABUL: kanonik hash kabul raporunun hash geçiş defterinde"; \
-	   echo "canon=$$CANON"; \
-	 else \
-	   echo "ERROR: kanonik hash kabul raporunun hash geçiş defterinde yok: $$CANON" >&2; \
-	   echo "       Yeni bağlam (CI/font paketi) ise docs/ID_RESIDUAL_ACCEPTANCE.md" >&2; \
-	   echo "       defterine bu ikiliyi bilinçli ekle (Faz 6 çıkış yolu), sonra tekrar koş." >&2; \
-	   exit 1; \
-	 fi
+	@test -f "$(ACCEPT_GEN)" || { echo "ERROR: kabul üreticisi yok: $(ACCEPT_GEN)" >&2; exit 2; }
+	@test -f "$(REPORT)" || { echo "ERROR: determinism raporu yok: $(REPORT) — önce check" >&2; exit 2; }
+	@test -f "$(ACCEPT_DOC)" || { echo "ERROR: kabul raporu yok: $(ACCEPT_DOC)" >&2; exit 2; }
+	@mode='$(LEDGER)'; \
+	 case "$$mode" in \
+	   ''|check) flag='' ;; \
+	   update) flag='--update' ;; \
+	   *) echo "ERROR: LEDGER=check|update olmalı (verilen: $$mode)" >&2; exit 2 ;; \
+	 esac; \
+	 label='$(PDFLATEX_VERSION)'; \
+	 if [ -z "$$label" ] && [ -x "$(PDBIN)" ]; then \
+	   label="$$("$(PDBIN)" -version 2>/dev/null | head -1)"; \
+	 fi; \
+	 "$(PYTHON)" "$(ACCEPT_GEN)" --report "$(REPORT)" --doc "$(ACCEPT_DOC)" \
+	   --engine-label "$$label" $$flag
 
 clean:
 	rm -rf "$(BUILD_DIR)"

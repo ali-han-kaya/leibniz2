@@ -53,15 +53,29 @@ farklarının kabul raporuyla belgelenmesi.
 
 ## Faz 2 — Hook geçişi
 
-- [ ] `texlive_determinism_hook.sh` birincil kapı olur: TeXLive+python3
+- [x] `texlive_determinism_hook.sh` birincil kapı olur: TeXLive+python3
   varken SKIP **yok** (bu makinede ölçüldü: PASS); tectonic ayağı bilgi
   amaçlı ikincil kalır. Verdict semantiği zaten dürüst: ham farklı +
   kanonik eşit + `residual=/ID` → PASS; kanonik farklı → FAIL.
-- [ ] `texlive_determinism_test.sh`'e **3-geçiş modu** eklenir (mevcut
+  **Ölçüldü (2026-10-23, bu makine):** `tectonic`
+  `/opt/homebrew/bin/tectonic` + `pdflatex` `/opt/homebrew/bin/pdflatex`
+  keşfedildi → SKIP yok, hook `rc=0`, `verdict=PASS`. Tek-geçiş koşumu:
+  ham hash'ler farklı (`96b74d01…` / `fd2cd0f7…`), kanonik hash ikisinde
+  de `a75c3409…`, `residual=/ID`. Rapor:
+  `docs/ci_simulate/texlive_determinism/texlive_determinism_report.txt`.
+- [x] `texlive_determinism_test.sh`'e **3-geçiş modu** eklenir (mevcut
   tek-geçiş deneyi K6 hizalama gerçeğini yakalamaz); stub testleri
   (test_texlive_determinism_hook, test_texlive_determinism_id_residual)
   yeni akışa uyarlanır; `check-unit-tests` manifest + HOOK_COVERAGE
   senkronu yenilenir.
+  **Ölçüldü (2026-10-23):** `DETERMINISM_PASSES=3` → `verdict=PASS`; her
+  iki koşumda `rerun_left=0`, kanonik hash ×2 `544516b0…` (Faz 1
+  baseline'ı ile aynı), ham hash'ler farklı (`40c72921…` / `de4bcdce…`),
+  `residual=/ID`. Stub süiti yeşil (12 test, 1 skip:
+  `test_skip_when_texlive_discovery_empty` — makinede TeXLive kurulu
+  olduğu için beklendiği gibi atlanıyor); iki dosya da
+  `check_unit_tests.list`'te ve kapsam raporunun "uncovered" listesinde
+  değil.
 - [ ] `render_z3_slides.py` zaten `pdflatex → latex → tectonic` sırasını
   deniyor — koruyucu test eklenir: motor seçimi log'da görünür ve
   pdflatex varken tectonic'e düşmez.

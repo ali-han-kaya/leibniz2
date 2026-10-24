@@ -1,0 +1,95 @@
+diff --git a/README.md b/README.md
+index da2a7a1..ca47c5f 100644
+--- a/README.md
++++ b/README.md
+@@ -540,6 +540,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
+ | 2026-09-26 | feat | (ci) action major advisory katmanı | [`d90c5b9`](https://github.com/ali-han-kaya/leibniz2/commit/d90c5b9) |
+ | 2026-09-26 | refactor | (lean) K9 lake build'i tek kaynaklı wrapper'a taşı | [`a088982`](https://github.com/ali-han-kaya/leibniz2/commit/a088982) |
+ | 2026-09-26 | feat | (latex-surface) tracked .tex yüzeyi için fail-closed kapı | [`e9466bd`](https://github.com/ali-han-kaya/leibniz2/commit/e9466bd) |
++| 2026-09-26 | docs | (preview) history önbelleği ve CSP nonce sözleşmesini belgele | [`103fb7d`](https://github.com/ali-han-kaya/leibniz2/commit/103fb7d) |
+ 
+ ### Regresyon notları
+ 
+diff --git a/_calisma/CIKTI/canvas/incidental_proof_plate02.pdf b/_calisma/CIKTI/canvas/incidental_proof_plate02.pdf
+index 8594f3b2d0c293fd2b42f327d2d9cf6467af0b4c..848d3e8777baa58e5805ef44f3f86adc87aca8b0 100644
+GIT binary patch
+delta 829
+zcmV-D1H$~oPsC5Ks3U)G+AtJ-->>l7Ko#{@;+UyI0<yNz#8v@orKWjE6E{Q(ag>+}
+z{{5~)is(wGR+<GE`=0yZdyY*BBFI5<h&ZB*!52~KAcmOZA&NK`h=NUcNFaw3L|r7P
+zKrWJkBZ-C*>=IEbDFVF11iHAuQ(fqKQN@XZ&;-r#r7jKZUs8W?Y}Xvn@Mko_H?>X{
+z%7pmFzr;(mH8@zunVRmW$$ko=(dY{VsIsT3&K?0A8>8wH`|3GQ)ck7F0p_aFn>tYq
+zqNL5V+*JzDnf<9%Y3u>*{uC;LWfKnVvhzNG8?bLI82`xACgd#!&s3Vn6TJ;>XqS?6
+z<{-hnbJ@91YZZSRUH6Pij4tz}Zx5Gl5>@xM>2qGCPwOpu=#g{!(C_cjxi0<KsGk3g
+z5ymNn4l>Fa84&UnKK*^*wxpNJ+ajm2i3^>9Ipi{AQbdjjnd3wr3z^3wZy0hyB1)W)
+zF*l-Agxt;oP#(+@X6i)I;nbEPyx2UNHhSROwKXt2i5q{_T7&CxaDRJtrSitibg2h(
+zm2HZ+Zhd{#Bz0cF@vTJK4hQ~X*BG@9$|v1YlYwKs>y1<WsQUO<ovJ!7vtEz_5xLp*
+zA%9gBYHevEAPxTx2|{e3rM?RMSzO^4>=9qDv*U4-v@{dqV!Le@12%N=0!q0>(u3Yr
+z*DB9e9cX|2oZaQAS+%)ru!*I3Ks_$efDeIU*8!v}BOE}}^JH9Rg+hQW;;ca)1l|>@
+zWvSGSx*&Ei0<p=E9E}m2$cFzJuhsj#v|UqBnK;~=%e+u<DZBe}nlQUVKETxXGSMmY
+z{Lsh2b=RachD_RC2(cIYQvU`C>r^4i|CRc*Rwioq!R_q+Y?5b-mEIJ<bTe44^74&V
+z<p0wObqKz*uT>ZE^P+**>_{`z=``cABh6UMK{9ZcjwQo9a3e0LWe9H~5%jcV#7W7V
+z7_TJrZc97KF!GmV82yA~-i`hd$;da7ak|uh09an}Et8EVEJ8RiH#sn5Wi~QmIbu0A
+zVL3H8Ffm~?Ffn2_I5;*rIbl9LI50OkFl1#mGGaMmIW=K9H8?OaVKgu?Vm3H9HaR(A
+Hllvygjxdqz
+
+delta 829
+zcmV-D1H$~oPsC5Ks3U(*+b|S;->>l7TA|{v#BnB6sci;C6B}wfkO+AQiAf`+ag?}-
+z{`+00p(>+HAkAv)+V|WK-*aqA5J3)-KH`Wn246&_gBW6thbZD)APP3&A%PrD5OtBD
+z0=Y;EjwJFW*d?M=QUrL133PUbXS&qQqE1o;p$VGfb6pwOKc|1-*sVFB;m>%CuN$2%
+zl!@?laE_Pi+2C-U<Z8B?rn@PO$Kx*$pw1ubCVv2MVvK4k9H^%vRr8B!516Y~Z<<uK
+zh>|YTa$74v=k}*jm9Yo3`!lErmTlzQW$(QQw_x8`F#b_wZNxhazEW9{O!aeQL%Wom
+zG6xCnoyy*Q)~J8P=w@J4YIIekLwmSvld5L$oIMqF_PBmV_XBcD?}x)3y3kdS7&QpK
+zF~S7#87Gnx#z%yFh0kyoxGU+U@~+5PVv<tlV2-$qm=v)iBIY=;$0FwO*z+S!NKA<n
+zG3LgUiiq1;0Lp_|!c3hw-k;hsgcq9!(?t&hyS4^~r%8XSI%{}23GZ%BE>zK)D_!Z)
+zT;-cGX*%CPwP{n-aC|F~uESxl*tSNk!|G9Y)a2mUYzLD}Kd2%8)nuwEs(cV;Kty4-
+zL&#s(rCM8>2uLHiMS>6;XsIv4;3}!{3-*Ao*V*x;O*@(iak1UDixKl(yns?}ko2H;
+z^`$EERS$ofJmt4VW>#G;8*FMR9#M}=G~zx`>^gvSWsE~;dXY}5yi^FVWs<kZgTUKT
+zbu3l7RcFKwMj$rv$-x-IiEQ|v$y&YNOWQRCm5KemIWI~Dm$JVv#|g7L<O587uTq^s
+z&-Z;CUG`1N63C?Og%CTjFZFMbu+9{s{9mb$Yh`MB7v5amolJ{-vC^9om~KbQRZ+ds
+ziu`|Cp$@^f_O<FGeqJ>2njL6{I=yCGcAy!H*-HlQ(xGIS2X4d#wfOKR5<!nkMjVyQ
+zk?~40@3yp;3?qL@hS5(*=H2KYk&JvJ8K+PE2c=T+J(G<lEJ8UsW;J3nG-WnnIAURA
+zHZd_YGcq}1WM(olH8V41G%`LsIXPxEVly;lHeonoVPiHiF*GwWIbvjHGBPzYGi5X~
+Hllvyg8~%zx
+
+diff --git a/design-system/vercel/README.md b/design-system/vercel/README.md
+index dcd897b..014828c 100644
+--- a/design-system/vercel/README.md
++++ b/design-system/vercel/README.md
+@@ -66,17 +66,31 @@ The extractor is evidence tooling, not a repo runtime dependency. Preserve
+ `raw.json`; update `tokens.json` and `tokens.css` from its
+ `colors.cssVariables` map without remapping, renaming, or rounding.
+ 
+-## Using
++## How to use
++
++`tokens.css` is the only file needed at runtime. Import it once in the global
++stylesheet, then reference the original custom-property names:
+ 
+ ```css
+ @import "design-system/vercel/tokens.css";
+-.ink   { color: var(--color-gray-1000); }
+-.link  { color: var(--geist-console-text-color-blue); } /* #0070f3 */
+-.accent{ color: var(--ship-text); }                      /* #ff5b4f */
++
++.cta {
++  color: var(--develop-text);
++  border-color: var(--color-gray-500);
++}
++
++.selected { background: var(--geist-selection-text-color); }
++
++.focus-ring:focus-visible {
++  outline: 2px solid var(--ds-focus-color);
++}
+ ```
+ 
+-Fonts expect **GeistSans / Geist Mono**; load them through the consuming
+-project's font pipeline or fall back to platform system stacks.
++With Tailwind, use arbitrary values such as
++`text-[var(--develop-text)]` and `bg-[var(--color-background-100)]`. Do not
++copy values from `raw.json` at runtime or rename the variables. The capture is
++color-only: load **GeistSans / Geist Mono** separately if the consuming project
++needs them, or use platform fallbacks.
+ 
+ ## Limits
+ 

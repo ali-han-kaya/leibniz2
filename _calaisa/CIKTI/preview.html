@@ -1,0 +1,714 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>Stoic-Hume V5 — Live CI Dashboard</title>
+<link rel="stylesheet" href="/design-system/tokens.css?v=1">
+<style>
+/* Mobile safe-area support — all edges respect env(safe-area-inset-*) */
+@supports (padding: env(safe-area-inset-top)) {
+  html { padding-top: env(safe-area-inset-top);
+         padding-bottom: env(safe-area-inset-bottom);
+         padding-left: env(safe-area-inset-left);
+         padding-right: env(safe-area-inset-right); }
+  body { margin: 0; min-height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+         min-width: calc(100vw - env(safe-area-inset-left) - env(safe-area-inset-right)); }
+}
+
+/* 44pt touch-target minimum — shrink-to-fit for small buttons, expand tiny ones */
+.touch-min { min-height: 44px; min-width: 44px; }
+.-touch-min * { -webkit-tap-highlight-color: transparent; }
+
+/* Prevent iOS overscroll bounce on <main> */
+main { overflow-scrolling: touch; }
+
+/* Token tek kaynağı: design-system/tokens.css — /design-system/tokens.css
+     rotasından servis edilir (PREVIEW_DIR/design-system-tokens.css kopyası;
+     sync_verify_mirror.sh GUIDE_FILES taşır). Inline :root var blokları
+     kaldırıldı — check-design-tokens kapısı iki-kaynak drift'ini bloke eder.
+     Aşağıdaki [data-theme=\"light\"] kuralları yalnızca var TÜKETİR, tanımlamaz. */]
+/* Type is theme-independent (2026-10-03): the judgment voice belongs to the
+     verdict and the seal, not to the whole page — a serif body hurt dense
+     telemetry legibility at 11–13px. */
+:root[data-theme="light"] header { box-shadow:0 2px 10px rgba(77,57,34,.08); }
+:root[data-theme="light"] .card, :root[data-theme="light"] th, :root[data-theme="light"] code,
+:root[data-theme="light"] pre, :root[data-theme="light"] .tip { box-shadow:0 3px 12px rgba(77,57,34,.07); }
+:root[data-theme="light"] .card, :root[data-theme="light"] th, :root[data-theme="light"] code,
+:root[data-theme="light"] pre, :root[data-theme="light"] .rh-filter button,
+:root[data-theme="light"] .z3bar { background:var(--surface); }
+:root[data-theme="light"] button { color:var(--on-accent); }
+:root[data-theme="light"] .rh-filter button { color:var(--muted); }
+:root[data-theme="light"] .rh-filter button.active { color:var(--fg); }
+:root[data-theme="light"] .footer { background:var(--surface-raised); }
+:root[data-theme="light"] .z3-gallery { background:var(--paper); color:var(--paper-ink); }
+* { box-sizing:border-box; }
+body { margin:0; font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; background:var(--bg); color:var(--fg); }
+header { padding:18px 28px; border-bottom:1px solid var(--border);
+         background:linear-gradient(180deg,var(--header-start),var(--header-end));
+         display:flex; align-items:center; gap:18px; flex-wrap:wrap; }
+h1 { margin:0; font-size:20px; flex:1; font-family:var(--font-verdict);
+     font-weight:600; letter-spacing:.01em; }
+.live-dot { width:10px; height:10px; border-radius:50%; background:var(--err);
+          display:inline-block; box-shadow:0 0 8px currentColor;
+          transition: background-color 0.4s, box-shadow 0.4s; }
+.live-dot.connected { background:var(--ok); animation: pulse 1.6s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+@keyframes failShake { 0%,100%{transform:translateX(0)} 15%{transform:translateX(-3px)}
+  30%{transform:translateX(3px)} 45%{transform:translateX(-2px)} 60%{transform:translateX(2px)}
+  75%{transform:translateX(-1px) } }
+@keyframes failGlow { 0%,100%{box-shadow:0 0 6px var(--err);border-color:var(--err)}
+  50%{box-shadow:0 0 18px var(--err);border-color:var(--err) } }
+.live-dot.warn { background:var(--warn); }
+.badge.fail-pulse { animation: failShake 0.5s ease-in-out 3, failGlow 2s ease-in-out infinite; }
+.lean-alert { display:inline-flex; align-items:center; gap:6px; padding:4px 10px;
+    border-radius:6px; font-size:12px; font-weight:600; color:var(--err);
+    background:rgba(248,81,73,.12); border:1px solid var(--err);
+    animation: failGlow 2s ease-in-out infinite; }
+.lean-alert.hidden { display:none; }
+main { padding:20px 28px; max-width:1080px; margin:0 auto; }
+section { margin-bottom:24px; }
+h2 { font-size:14px; border-bottom:1px solid var(--border); padding-bottom:4px;
+     text-transform:uppercase; letter-spacing:0.05em; color:var(--muted); }
+.badges { display:flex; flex-wrap:wrap; gap:8px; margin:10px 0; }
+.badge { display:inline-block; padding:4px 10px; border-radius:12px;
+        font-size:12px; font-weight:600; }
+.ok   { background:rgba(63,185,80,.15); color:var(--ok); border:1px solid var(--ok); }
+.warn { background:rgba(210,153,34,.15); color:var(--warn); border:1px solid var(--warn); }
+.err  { background:rgba(248,81,73,.15); color:var(--err); border:1px solid var(--err); }
+.budget { background:rgba(188,140,255,.12); color:var(--budget); border:1px solid var(--budget); }
+.info { background:rgba(88,166,255,.15); color:var(--accent); border:1px solid var(--accent); }
+.unknown { background:rgba(139,148,158,.15); color:var(--muted); border:1px solid var(--muted); }
+.grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; }
+.card { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:14px; }
+.card .label { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:0.05em; }
+.card .value { font-size:18px; font-weight:600; font-family:"SF Mono",monospace; margin-top:4px; }
+.card .sub { color:var(--muted); font-size:11px; margin-top:4px; }
+.source-card { padding:10px 12px; min-width:100px; }
+.source-card .label { margin-bottom:2px; }
+.source-card .value { font-size:15px; }
+table { width:100%; border-collapse:collapse; font-size:13px; }
+th, td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--border); }
+th { color:var(--muted); font-weight:600; background:var(--surface); }
+code { font-family:"SF Mono",Menlo,Consolas,monospace; background:var(--code-bg);
+     padding:2px 6px; border-radius:4x; font-size:12px; word-break:break-all; }
+pre { background:var(--code-bg); border:1px solid var(--border); border-radius:6px;
+    padding:12px; overflow:auto; font-size:11px; line-height:1.4;
+    max-height:420px; margin:0; white-space:pre-wrap; }
+.rh-over { display:inline-block; padding:0 6px; border-radius:8px;
+          background:var(--err); color:#fff; font-size:10px; font-weight:700;
+          border:1px solid var(--err); margin-left:6px; }
+.source-badge { display:inline-block; padding:0 6px; border-radius:8px;
+                font-size:10px; font-weight:700; border:1px solid;
+                margin-left:6px; vertical-align:1px; }
+.source-badge.smoke { color:var(--accent); border-color:var(--accent);
+                      background:rgba(88,166,255,.12); }
+.source-badge.daemon { color:var(--budget); border-color:var(--budget);
+                        background:rgba(188,140,255,.12); }
+.rh-row { cursor:pointer; padding:1px 4px; border-radius:3px;
+          min-height:24px; box-sizing:border-box; transition:background 0.15s; }
+.rh-row:hover { background:rgba(88,166,255,.1); }
+.rh-row:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+[role="button"]:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+button:focus-visible, a[href]:focus-visible, [tabindex]:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+.rh-row:active { background:rgba(88,166,255,.2); }
+.rh-filter { display:flex; gap:4px; align-items:center; margin-bottom:4px; }
+.rh-filter button { background:var(--surface-raised); color:var(--muted); border:1px solid var(--border);
+    padding:2px 8px; border-radius:4px; cursor:pointer; font-size:11px; font-weight:600;
+    min-height:24px; min-width:24px; }
+/* WCAG 2.5.8 hedef boyutu (AA) */
+.rh-filter button.active { color:#fff; border-color:var(--accent); background:rgba(88,166,255,.15); }
+.rh-filter button.active[data-f="all"] { border-color:var(--muted); }
+.rh-filter button.active[data-f="PASS"] { border-color:var(--ok); color:var(--ok); background:rgba(63,185,80,.15); }
+.rh-filter button.active[data-f="FAIL"] { border-color:var(--err); color:var(--err); background:rgba(248,81,73,.15); }
+.rh-filter button.active[data-f="P0"] { border-color:var(--err); color:var(--err); background:rgba(248,81,73,.1); }
+pre .err { color:var(--err); }
+pre .ok  { color:var(--ok); }
+pre .muted { color:var(--muted); }
+pre .warn { color:var(--warn); }
+pre .budget { color:var(--budget); }
+.ref-list { list-style:none; padding:0; margin:0; max-height:340px; overflow:auto; }
+.ref-list li { padding:4px 0; border-bottom:1px solid var(--border); display:flex;
+               align-items:center; gap:8px; font-size:13px; }
+.ref-list li:last-child { border-bottom:0; }
+.runstream { max-height:180px; font-size:11px; }
+.z3row { display:flex; align-items:center; gap:10px; margin:8px 0 6px; }
+.z3label { color:var(--muted); font-size:11px; text-transform:uppercase;
+           letter-spacing:0.05em; font-weight:600; }
+.z3bar { flex:1; max-width:320px; height:8px; background:#21262d;
+         border:1px solid var(--border); border-radius:5px; overflow:hidden; }
+.z3fill { height:100%; width:0%; background:var(--accent);
+          transition: width 0.3s; border-radius:4px; }
+.z3fill.ok { background:var(--ok); }
+.z3fill.err { background:var(--err); }
+.z3fill.budget { background:var(--budget); }
+.z3count { font-family:"SF Mono",monospace; font-size:12px; color:var(--muted); }
+.z3count.ok { color:var(--ok); font-weight:600; }
+.ts { color:var(--muted); font-size:11px; font-family:"SF Mono",monospace; }
+.tip { position:fixed; z-index:9999; pointer-events:none; background:var(--surface);
+     border:1px solid var(--border); border-radius:6px; padding:8px 10px;
+     font-size:12px; line-height:1.5; color:var(--fg);
+     box-shadow:0 8px 24px rgba(0,0,0,.5); max-width:300px;
+     white-space:pre; display:none; }
+.tip .tt-over { color:var(--err); font-weight:600; }
+.tip .tt-under { color:var(--ok); }
+a { color:var(--accent); text-decoration:none; }
+a:hover { text-decoration:underline; }
+button { background:var(--accent); color:var(--on-accent); border:0; padding:6px 14px;
+         border-radius:6px; cursor:pointer; font-size:12px; font-weight:600; }
+button:hover { opacity:0.85; }
+button:disabled { opacity:0.5; cursor:not-allowed; }
+
+/* ── Verdict seal (noter mührü) — imza öğesi ──
+     Halkadaki dairesel metin koşumun deterministik PDF hash'idir:
+     süs değil, mühür. Renkler + fontlar tamamen token katmanından. */
+.seal { width:64px; height:64px; flex:0 0 64px; margin-left:14px;
+    filter:drop-shadow(0 1px 4px rgba(0,0,0,.35); }
+.seal[hidden] { display:block; visibility:hidden; }
+.seal[hidden] svg { animation-play-state:paused; }
+.seal svg { width:100%; height:100%; display:block;
+   animation:seal-stamp .5s cubic-bezier(.2,1.6,.4,1) both;
+   transform-origin:50% 50%; }
+.seal-circle { fill:rgba(88,166,255,.06); stroke:var(--muted); stroke-width:1.2; }
+.seal-circle-inner { fill:none; stroke:var(--muted); stroke-width:.6; }
+.seal-ring { font-family:var(--font-mono); font-size:8.6px; font-weight:600;
+   letter-spacing:.14em; fill:var(--muted); }
+.seal-verdict { font-family:var(--font-verdict); font-size:10.5px; font-weight:700;
+   letter-spacing:.06em; fill:var(--muted); }
+.seal-hash { font-family:var(--font-mono); font-size:6.5px; font-weight:600;
+   letter-spacing:.12em; fill:var(--fg-dimmed); }
+.seal-pass .seal-verdict { fill:var(--ok); }
+.seal-pass .seal-circle { stroke:var(--ok); fill:rgba(63,185,80,.07); }
+.seal-fail .seal-verdict { fill:var(--err); }
+.seal-fail .seal-circle { stroke:var(--err); fill:rgba(248,81,73,.08); }
+@keyframes seal-stamp {
+  0% { transform:scale(1.8) rotate(-8deg); opacity:0; }
+  60% { opacity:1; }
+  100% { transform:scale(1) rotate(0deg); opacity:1; }
+}
+@media (max-width:600px) { .seal { width:48px; height:48px; flex-basis:48px; } }
+#status-board.board-pass { color:var(--ok); }
+#status-board.board-fail { color:var(--err); }
+.footer { padding:14px 28px; border-top:1px solid var(--border);
+          color:var(--muted); font-size:11px; text-align:center; }
+.z3-gallery { position:relative; margin:34px 0 28px; padding:28px 24px 24px; background:#f4efe5; color:#2b2926; border:1px solid #d6cbb9; border-radius:2px; box-shadow:0 16px 40px rgba(0,0,0,.18), inset 0 0 0 8px #ebe3d4; }
+.z3-gallery::before { content:"Z3 / twelve propositions"; display:block; color:#8b7355; font:11px/1.2 "SF Mono",monospace; letter-spacing:.16em; text-transform:uppercase; margin-bottom:8px; }
+.z3-gallery h2 { color:#2b2926; border-bottom:1px solid #cfc1ac; font-family:Georgia,"Times New Roman",serif; font-size:22px; font-weight:400; letter-spacing:.01em; text-transform:none; padding-bottom:12px; margin:0 0 18px; }
+.z3-gallery h2::after { content:""; display:block; width:42px; border-bottom:2px solid #b8874a; margin-top:10px; }
+.z3-tabs { display:flex; flex-wrap:wrap; gap:8px; margin:0 0 18px; }
+.z3-tab { appearance:none; font:11px/1.2 "SF Mono",monospace; letter-spacing:.14em; text-transform:uppercase; padding:7px 14px; background:#efe7d8; color:#5b4a35; border:1px solid #d6cbb9; border-radius:1px; cursor:pointer; transition:background .2s ease, color .2s ease, border-color .2s ease; }
+.z3-tab[aria-selected="true"] { background:#2b2926; color:#f4efe5; border-color:#2b2926; box-shadow:0 4px 10px rgba(65,48,30,.2); }
+.z3-tab:hover, .z3-tab:focus-visible { outline:2px solid #b8874a; outline-offset:2px; }
+.z3-slides { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:18px; }
+.z3-slide { appearance:none; width:100%; cursor:zoom-in; text-align:left; background:#fffdf8; color:#2b2926; border:1px solid #d6cbb9; padding:10px 10px 28px; border-radius:1px; box-shadow:0 5px 12px rgba(65,48,30,.12); transform:rotate(-.35deg); transition:transform .2s ease, box-shadow .2s ease; }
+.z3-slide:nth-child(2n) { transform:rotate(.45deg); }
+.z3-slide:nth-child(3n) { transform:rotate(-.15deg); }
+.z3-slide:hover, .z3-slide:focus-visible { transform:translateY(-4px) rotate(0deg); box-shadow:0 12px 22px rgba(65,48,30,.2); outline:2px solid #b8874a; outline-offset:3px; }
+.z3-slide img { display:block; width:100%; height:auto; border:1px solid #e2d7c6; }
+.z3-lightbox { position:fixed; inset:0; z-index:1000; background:rgba(24,20,16,.96); display:flex; align-items:center; justify-content:center; gap:20px; padding:72px 24px 32px; }
+.z3-lightbox[hidden] { display:none; }
+.z3-lightbox::before { content:"Z3 / ARCHIVE LIGHTBOX"; position:absolute; top:28px; left:32px; color:#c9b18e; font:11px/1.2 "SF Mono",monospace; letter-spacing:.16em; }
+.z3-lightbox img { max-width:82vw; max-height:78vh; padding:12px; background:#fffdf8; border:1px solid #d6cbb9; box-shadow:0 18px 60px rgba(0,0,0,.5); }
+.z3-lightbox button { font-size:2rem; padding:.25em .5em; cursor:pointer; }
+.z3-lightbox h2 { position:absolute; top:48px; left:32px; color:#f4efe5; border:0; font:20px Georgia,"Times New Roman",serif; text-transform:none; letter-spacing:0; }
+.z3-lightbox #z3-close { position:absolute; top:24px; right:28px; font-size:12px; background:transparent; border:1px solid #c9b18e; color:#f4efe5; }
+.z3-lightbox #z3-prev, .z3-lightbox #z3-next { background:rgba(255,253,248,.1); border:1px solid #8b7355; color:#f4efe5; }
+@media (max-width:600px) { .z3-gallery { padding:22px 16px 18px; } .z3-slides { grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; } .z3-lightbox { gap:8px; padding-left:8px; padding-right:8px; } .z3-lightbox img { max-width:72vw; } }
+
+/* --- View Transitions: subtle panel fade on SSE snapshot-driven updates --- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+::view-transition-old(snapshot) { animation: vt-fade-out 180ms ease; }
+::view-transition-new(snapshot) { animation: vt-fade-in 180ms ease; }
+@keyframes vt-fade-out { from { opacity:1; } to { opacity:0; } }
+@keyframes vt-fade-in  { from { opacity:0; } to { opacity:1; } }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   PRESENTATION LAYER — 2026-10-03
+
+   The dashboard is the printer's account of a book's proofing. The page has
+   exactly two materials: the DESK (the dark canvas, i.e. the apparatus that
+   records) and the PROOF SHEET (paper — the artefact being judged, carrying
+   the verdict, the seal and the register of checks). The Z3 plates are the
+   same stock as the sheet, which is what makes them belong here.
+
+   The palette is deliberately NOT restyled. The dark accents are asserted by
+   test_colorize_rules.py (112 tests), painted into <canvas>/<svg> as literal
+   hexes in preview.js, and cited with measured ratios in the a11y allowlist.
+   Re-toning them means rewriting a locked colour contract and its documented
+   a11y rationale — a separate, evidence-backed decision, not a styling pass.
+   Identity is carried by type, structure and the sheet instead. The sheet
+   adopts the already-measured LIGHT palette, so no new colour is invented:
+   every value below is one the contrast suite already certifies.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+/* ── The three voices ──────────────────────────────────────────────────────
+   judgment : --font-verdict — the verdict, the title, the seal. Used rarely.
+   clerk    : --font-sans    — dense telemetry, the working text.
+   wire     : --font-mono    — machine output, figures, folios, timestamps. */
+body { font: var(--text-base)/var(--lh-base) var(--font-sans); }
+h1 { font-family: var(--font-verdict); font-size: 26px; font-weight: 600;
+     line-height: 1.15; letter-spacing: .004em; }
+main { max-width: 1180px; padding: 22px 28px 8px; }
+
+/* Section titles are ledger eyebrows: a rule whose right end carries that
+   section's own freshness timestamp. A mono label plus a hairline, no boxes. */
+h2 { font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+     letter-spacing: .16em; text-transform: uppercase; color: var(--muted);
+     display: flex; align-items: baseline; gap: 10px;
+     margin: 0 0 10px; padding: 0 0 5px;
+     border-bottom: 1px solid var(--border); }
+h2 .ts { margin-left: auto; letter-spacing: 0; text-transform: none;
+         font-weight: 400; }
+section { margin-bottom: 28px; }
+
+.masthead { padding: 16px 28px 15px; border-bottom: 1px solid var(--border);
+            background: linear-gradient(180deg, var(--header-start),
+                                        var(--header-end));
+            display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+
+/* ── Incidental Proof arşiv-katmanı ──────────────────────────────────────
+   Dekoratif doku: gerçek bir aria-hidden DOM düğümü (pseudo-katman değil —
+   a11y color-contrast çözümü pseudo-element zeminini belirsiz sayıyordu).
+   data-URI, canvas/incidental_proof_banner.svg'in birebir base64'üdür;
+   tek-kaynak zinciri test_incidental_banner.py ile sabitlenir. */
+.header-decor { position: absolute; top: 0; bottom: 0; right: 0; width: 30%;
+                pointer-events:none;
+                background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNDQwIDE2MCIgcHJlc2VydmVBc3BlY3RSYXRpbz0ieE1pZFlNaWQgc2xpY2UiPgo8ZyBmaWxsPSJub25lIiBzdHJva2UtbGluZWNhcD0icm91bmQiPgo8cmVjdCB3aWR0aD0iMTQ0MCIgaGVpZ2h0PSIxNjAiIGZpbGw9IiNGMkVCRDkiIG9wYWNpdHk9IjAuMDUiLz4KPHBhdGggZD0iTTAsMTAuMCBDMTIwLDkuNyAyNDAsOS40IDM2MCw5LjUgQzQ4MCw5LjcgNTYwLDkuOSA2NDAsMTAuMyBDNzYwLDEwLjggODQwLDExLjEgOTQwLDExLjMgQzk2MCwxMS4xIDk3MiwxMC41IDk4MCwxMC4wIEM5ODgsMTAuNSAxMDAwLDExLjEgMTAyMCwxMS4zIEMxMTIwLDExLjEgMTMwMCxMC40IDE0NDAsMTAuMiIgc3Ryb2tlPSIjOEU5N0E4IiBzdHJva2Utd2lkdGg9IjAuNiIgb3BhY2l0eT0iMC4zMCIvPgo8cGF0aCBkPSJNMCwyMi4wIEMxMjAsMjEuNSAyNDAsMjEuMCAzNjAsMjEuMiBDNDgwLDIxLjUgNTYwLDIxLjggNjQwLDIyLjUgQzc2MCwyMy4zIDg0MCwyMy44IDk0MCwyNC4xIEM5NjAsMjMuOCA5NzIsMjIuOCA5ODAsMjIuMCBDOTg4LDIyLjggMTAwMCwyMy44IDEwMjAsMjQuMSBDMTEyMCwyMy44IDEzMDAsMjIuNiAxNDQwLDIyLjMiIHN0cm9rZT0iI0I0QkFDNyIgc3Ryb2tlLXdpZHRoPSIwLjYiIG9wYWNpdHk9IjAuMzAiLz4KPHBhdGggZD0iTTAsMzQuMCBDMTIwLDMzLjMgMjQwLDMyLjcgMzYwLDMyLjkgQzQ4MCwzMy4zIDU2MCwzMy44IDY0MCwzNC43IEM3NjAsMzUuOCA4NDAsMzYuNSA5NDAsMzYuOSBDOTYwLDM2LjUgOTcyLDM1LjEgOTgwLDM0LjAgQzk4OCwzNS4xIDEwMDAsMzYuNSAxMDIwLDM2LjkgQzExMjAsMzYuNSAxMzAwLDM0LjkgMTQ0MCwzNC40IiBzdHJva2U9IiNCNEJBQzciIHN0cm9rZS13aWR0aD0iMC42IiBvcGFjaXR5PSIwLjMwIi8+CjxwYXRoIGQ9Ik0wLDQ2LjAgQzEyMCw0NS4xIDI0MCw0NC4zIDM2MCw0NC42IEM0ODAsNDUuMSA1NjAsNDUuNyA2NDAsNDYuOSBDNzYwLDQ4LjMgODQwLDQ5LjEgOTQwLDQ5LjcgQzk2MCw0OS4xIDk3Miw0Ny40IDk4MCw0Ni4wIEM5ODgsNDcuNCAxMDAwLDQ5LjEgMTAyMCw0OS43IEMxMTIwLDQ5LjEgMTMwMCw0Ny4xIDE0NDAsNDYuNiIgc3Ryb2tlPSIjOEU5N0E4IiBzdHJva2Utd2lkdGg9IjAuNiIgb3BhY2l0eT0iMC4zMCIvPgo8cGF0aCBkPSJNMCw1OC4wIEMxMjAsNTcuMCAyNDAsNTUuAzNjAsNTYuMyBDNDgwLDU3LjAgNTYwLDU3LjcgNjQwLDU5LjAgQzc2MCw2MC44IDg0MCw2MS44IDk0MCw2Mi41IEM5NjAsNjEuOCA5NzIsNTkuNyA5ODAsNTguMCBDOTg4LDU5LjcgMTAwMCw2MS44IDEwMjAsNjIuNSBDMTEyMCw2MS44IDEzMDAsNTkuNCAxNDQwLDU4LjciIHN0cm9rZT0iI0I0QkFDNyIgc3Ryb2tlLXdpZHRoPSIwLjYiIG9wYWNpdHk9IjAuMzAiLz4KPHBhdGggZD0iTTk4MCw5MC44IEw5ODAsOTcuMiIgc3Ryb2tlPSIjQzE0NDBFIiBzdHJva2Utd2lkdGg9IjEuNCIvPgo8Y2lyY2xlIGN4PSI5ODAiIGN5PSI5NC4wIiByPSIxLjUiIGZpbGw9IiNDMTQ0MEUiLz4KPHBhdGggZD0iTTAsMTAuMCBMNiwxMC4wIiBzdHJva2U9IiM4RTk3QTgiIHN0cm9rZS13aWR0aD0iMC43IiBvcGFjaXR5PSIwLjU1Ii8+CjxwYXRoIGQ9Ik0wLDgyLjAgTDYsODIuMCIgc3Ryb2tlPSIjOEU5N0E4IiBzdHJva2Utd2lkdGg9IjAuNyIgb3BhY2l0eT0iMC41NSIvPgo8cGF0aCBkPSJNMCwxNDIuMCBMNiwxNDIuMCIgc3Ryb2tlPSIjOEU5N0E4IiBzdHJva2Utd2lkdGg9IjAuNyIgb3BhY2l0eT0iMC41NSIvPgo8L2c+PC9zdmc+\");                background-size: cover; background-position: center right; opacity: .14; mix-blend-mode: luminosity; }
+:root[data-theme="light"] .header-decor { opacity: .22; mix-blend-mode: multiply; }
+header { position:relative; }
+header > * { position:relative; z-index:1; }
+header > .header-decor { z-index:0; }
+.masthead h1 { flex: 1 1 300px; }
+.imprint { margin: 0 0 3px; font-family: var(--font-mono); font-size: 10px;
+           font-weight: 600; letter-spacing: .2em; text-transform: uppercase;
+           color: var(--muted); }
+
+/* ── The proof sheet (imza öğesi) ─────────────────────────────────────────
+   Tipped-in paper. In dark mode it is the one lit object on the desk; in
+   light mode it is the same sheet, framed. Its left edge is RUBRICATED by
+   the verdict — red for FAIL, green for PASS, plain ink while undecided.
+   That single rule is the page's one loud moment; everything else stays
+   quiet. Driven by :has() on the two existing verdict signals, so the state
+   needs no new markup and no JS change (graceful if :has() is unsupported). */
+.sheet { position: relative; display: flex; gap: 22px;
+         align-items: flex-start; margin: 0 0 30px; padding: 20px 24px 18px;
+         background: var(--paper); color: var(--paper-ink);
+         border: 1px solid #d6cbb9;
+         border-left: 4px solid var(--rubric, #8b7355);
+         border-radius: 2px;
+         box-shadow: 0 14px 34px rgba(0,0,0,.20);
+         --bg-sheet: var(--paper);
+         --fg: #292722;      --fg-dimmed: #56504a;  --muted: #655e56;
+         --ok: #1f6b33;      --warn: #7d5606;       --err: #a9271c;
+         --accent: #8b5e2b;  --budget: #5f3f8c;     --border: #cfc5b5;
+         --surface: #fffdf8; --surface-raised: #e9e1d3;
+         --code-bg: #e9e1d3; --on-accent: #fffdf8; }
+.sheet:has(#status-board.board-pass),
+.sheet:has(.seal-pass) { --rubric: #1f6b33; }
+.sheet:has(#status-board.board-fail),
+.sheet:has(.seal-fail) { --rubric: #a9271c; }
+.sheet-body { flex: 1 1 auto; min-width: 0; }
+.sheet-eyebrow { margin: 0 0 8px; font-family: var(--font-mono);
+                 font-size: 10px; font-weight: 600; letter-spacing: .2em;
+                 text-transform: uppercase; color: var(--accent);
+                 border: 0; padding: 0; display: block; }
+#status-board { font-family: var(--font-verdict); font-size: 25px;
+                line-height: 1.2; font-weight: 600; letter-spacing: .004em;
+                padding: 0 0 10px; color: #292722;
+                view-transition-name: status-board; }
+#status-board.board-pass { color: #1f6b33; }
+#status-board.board-fail { color: #a9271c; }
+.sheet .aside { font-family: var(--font-mono); font-size: 11px;
+                color: #56504a; padding: 0 0 4px; }
+.sheet .ts { color: #655e56; }
+.sheet #precommit-hooks { view-transition-name: precommit-hooks; }
+.sheet #k15-sidecar { view-transition-name: k15-sidecar; }
+.sheet #badges { view-transition-name: badges; }
+.sheet .badges { margin: 8px 0; }
+
+/* the seal is the sheet's signature: larger here than it was in the header,
+   and the only ornament on the page. Space is reserved (never display:none)
+   so the stamp never shifts layout when the first snapshot lands. */
+.sheet .seal { width: 104px; height: 104px; flex: 0 0 104px; margin-left: 0;
+               filter: drop-shadow(0 1px 3px rgba(0,0,0,.22)); }
+@media (max-width: 600px) {
+  .sheet { flex-direction: column-reverse; gap: 14px; padding: 16px; }
+  .sheet .seal { width: 76px; height: 76px; flex-basis: 76px; }
+}
+
+/* The plates keep their own printed head — it must not become a flex row
+   (the gallery's ::after rule draws the underline *below* the title). */
+.z3-gallery h2, .z3-lightbox h2 { display: block;
+                                  font-family: var(--font-verdict); }
+.z3-gallery h2 { border-bottom: 1px solid #cfc1ac; }
+
+/* ── The register: the 21 checks as folios, not pills ───────────────────── */
+#klayers-panel { display: flex; flex-wrap: wrap; gap: 5px;
+                 margin: 12px 0 0; padding-top: 11px;
+                 border-top: 1px dashed #cfc1ac;
+                 view-transition-name: klayers-panel; }
+#klayers-panel .badge { font-family: var(--font-mono); font-size: 10px;
+                        font-weight: 600; letter-spacing: .04em;
+                        padding: 2px 7px; border-radius: 3px;
+                        background: none; }
+#klayers-panel .badge.ok { background: rgba(31,107,51,.08); }
+#klayers-panel .badge.err { background: rgba(169,39,28,.08); }
+#klayers-panel .badge.warn { background: rgba(125,86,6,.08); }
+#klayers-panel .badge.err { box-shadow: inset 3px 0 0 #a9271c; }
+#klayers-panel .badge.fail-pulse { animation: failGlow 2s ease-in-out infinite; }
+
+/* ── The wire: the only live surface, set as machine output ─────────────── */
+pre, .runstream { font-family: var(--font-mono); }
+.wire pre { background: var(--bg); border: 1px solid var(--border);
+            border-left: 3px solid var(--accent); border-radius: 3px; }
+.wire .zrow { margin: 2px 0 10px; }
+.wire .z3row { margin: 2px 0 10px; }
+
+/* ── The register of figures: ruled cells, not floating cards ───────────── */
+#metrics { gap: 0; border: 1px solid var(--border); border-radius: 3px;
+           overflow: hidden; background: var(--surface);
+           view-transition-name: metrics-grid; }
+#metrics .card { border: 0; border-right: 1px solid var(--border);
+                 border-bottom: 1px solid var(--border); border-radius: 0;
+                 padding: 10px 12px; }
+#metrics .card:last-child { border-right: 0; }
+.card .label { font-family: var(--font-mono); font-size: 10px;
+               letter-spacing: .13em; }
+.card .value { font-family: var(--font-mono); font-size: 17px;
+               font-weight: 600; font-variant-numeric: tabular-nums; }
+.card .sub { font-size: 10px; }
+
+/* ── Badges read as stamps: squared, ruled, uppercase ───────────────────── */
+.badge { border-radius: 3px; font-family: var(--font-mono);
+         letter-spacing: .04em; }
+.rh-over, .source-badge { border-radius: 3px; }
+
+/* ── Ruled registers instead of soft tables ─────────────────────────────── */
+th { font-family: var(--font-mono); font-size: 10px; letter-spacing: .12em;
+     text-transform: uppercase; }
+tbody tr:last-child td { border-bottom: 0; }
+code { border-radius: 2px; }
+
+.footer { font-family: var(--font-mono); font-size: 10px; letter-spacing: .06em;
+          padding: 16px 28px; }
+
+/* ==== MOBILE SAFE-AREA & 44PT TOUCH TARGET ADDED 2026-10-04 ==== */
+/* Safe-area padding via CSS env() — applies when browser supports it */
+@supports (padding: env(safe-area-inset-top)) {
+  html { padding-top: env(safe-area-inset-top);
+         padding-bottom: env(safe-area-inset-bottom);
+         padding-left: env(safe-area-inset-left);
+         padding-right: env(safe-area-inset-right); }
+  body { margin: 0; min-height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+         min-width: calc(100vw - env(safe-area-inset-left) - env(safe-area-inset-right)); }
+}
+/* Minimum 44px touch target: buttons, nav controls, and interactive badges */
+button, [role="button"], .badge, .z3-tab, .rh-filter button { min-height: 44px; min-width: 44px; }
+.touch-min { min-height: 44px; min-width: 44px; }
+/* Prevent iOS bounce scrolling on main content */
+main { overflow-scrolling: touch; }
+</style>
+</head>
+<body>
+<header class="masthead">
+  <div class="header-decor" aria-hidden="true"></div>
+  <div style="flex:1 1 300px;min-width:0">
+    <p class="imprint">Stoic-Hume V5 · teslim denetimi</p>
+    <h1>Live CI Dashboard</h1>
+  </div>
+  <span id="live-dot" class="live-dot"></span>
+  <span id="live-status" class="ts">bağlanıyor…</span>
+  <button id="reconnect">reconnect</button>
+  <button id="theme-toggle" type="button" aria-pressed="false" aria-label="Switch to light theme">light mode</button>
+</header>
+<main>
+  <!-- Kanıt sayfası (proof sheet): hüküm + mühür + K-katmanı sicili. Z3
+       levhalarıyla aynı kâğıt; tek "yüksek sesli" öğe soldaki rubrik.
+       Durum sinyalleri mevcut id'lerden gelir — yeni işaretleme/JS yok. -->
+  <section class="sheet" aria-labelledby="sheet-title">
+    <div class="sheet-body">
+      <h2 id="sheet-title" class="sheet-eyebrow">Teslim denetimi · kanıt sayfası</h2>
+      <div id="status-board">⏳ bekleniyor…</div>
+      <div id="precommit-hooks" class="aside"></div>
+      <div id="k15-sidecar" class="aside"></div>
+      <div class="badges" id="badges">
+        <span class="badge unknown">K8 Z3: ?</span>
+        <span class="badge unknown">K9 Lean: ?</span>
+        <span class="badge unknown">Beth 1953: ?</span>
+        <span class="badge unknown">refs: ?</span>
+        <span class="badge unknown" id="config-sync-badge">Schema Sync: ?</span>
+      </div>
+      <div id="config-sync-body" class="aside">⏳ Schema Sync bekleniyor…</div>
+      <div class="ts" id="cs-ts" style="margin-bottom:6px"></div>
+      <div id="lean-alert-container" style="padding:2px 0 4px 0"><span id="lean-alert" class="lean-alert hidden">⚠ K9 Lean: FAIL — ispat zinciri kırık</span></div>
+      <div id="klayers-panel">
+        <span class="muted">K-layers: bekleniyor…</span>
+      </div>
+    </div>
+    <div id="verdict-seal" class="seal" hidden aria-hidden="true">
+      <svg viewBox="0 0 100 100">
+        <defs>
+          <path id="seal-arc-top" d="M 50,50 m -38,0 a 38,38 0 1,1 76,0" fill="none"></path>
+        </defs>
+        <circle class="seal-circle" cx="50" cy="50" r="45.5"></circle>
+        <circle class="seal-circle seal-circle-inner" cx="50" cy="50" r="25"></circle>
+        <text class="seal-ring"><textPath href="#seal-arc-top" startOffset="6%">VERIFIED</textPath></text>
+        <text class="seal-verdict" x="50" y="48" text-anchor="middle">VERIFIED</text>
+        <text class="seal-hash" x="50" y="60" text-anchor="middle"></text>
+      </svg>
+    </div>
+  </section>
+
+  <section id="z3-slide-gallery" class="z3-gallery" aria-labelledby="z3-gallery-title">
+    <h2 id="z3-gallery-title">Z3 slayt galerisi</h2>
+    <div class="z3-tabs" role="tablist" aria-label="Galeri sekmeleri">
+      <button type="button" class="z3-tab" role="tab" id="z3-tab-slides" aria-selected="true" aria-controls="z3-slides">Z3 slaytları</button>
+      <button type="button" class="z3-tab" role="tab" id="z3-tab-series" aria-selected="false" aria-controls="z3-panel-series" tabindex="-1">series</button>
+    </div>
+    <div id="z3-slides" class="z3-slides" role="tabpanel" aria-labelledby="z3-tab-slides">
+      <button type="button" class="z3-slide" aria-label="P1-a slaydını büyüt"><img src="/slides_z3/P1-a.png" alt="P1-a Z3 slaytı" width="305" height="75" loading="lazy"></button>
+      <button type="button" class="z3-slide" aria-label="P1-b slaydını büyüt"><img src="/slides_z3/P1-b.png" alt="P1-b Z3 slaytı" width="273" height="69" loading="lazy"></button>
+      <button type="button" class="z3-slide" aria-label="P2 slaydını büyüt"><img src="/slides_z3/P2.png" alt="P2 Z3 slaytı" width="367" height="75" loading="lazy"></button>
+      <button type="button" class="z3-slide" aria-label="P3-a slaydını büyüt"><img src="/slides_z3/P3-a.png" alt="P3-a Z3 slaytı" width="311" height="75" loading="lazy"></button>
+      <button type="button" class="z3-slide" aria-label="P3-b slaydını büyüt"><img src="/slides_z3/P3-b.png" alt="P3-b Z3 slaytı" width="311" height="75" loading="lazy"></button>
+      <button type="button" class="z3-slide" aria-label="P4-a slaydını büyüt"><img src="/slides_z3/P4-a.png" alt="P4-a Z3 slaytı" width="416" height="75" loading="lazy"></button>
+      <button type="button" class="z3-slide" aria-label="P4-b slaydını büyüt"><img src="/slides_z3/P4-b.png" alt="P4-b Z3 slaytı" width="416" height="75" loading="lazy"></button>
+      <button type="button" class="z3-slide" aria-label="P4-c slaydını büyüt"><img src="/slides_z3/P4-c.png" alt="P4-c Z3 slaytı" width="171" height="68" loading="lazy"></button>
+      <button type="button" class="z3-slide" aria-label="P4-d slaydını büyüt"><img src="/slides_z3/P4-d.png" alt="P4-d Z3 slaytı" width="700" height="75" loading="lazy"></button>
+      <button type="button" class="z3-slide" aria-label="P4-e slaydını büyüt"><img src="/slides_z3/P4-e.png" alt="P4-e Z3 slaytı" width="190" height="68" loading="lazy"></button>
+      <button type="button" class="z3-slide" aria-label="P5 slaydını büyüt"><img src="/slides_z3/P5.png" alt="P5 Z3 slaytı" width="919" height="75" loading="lazy"></button>
+      <button type="button" class="z3-slide" aria-label="P5-note slaydını büyüt"><img src="/slides_z3/P5-note.png" alt="P5-note Z3 slaytı" width="575" height="75" loading="lazy"></button>
+    </div>
+    <div id="z3-panel-series" class="z3-slides" role="tabpanel" aria-labelledby="z3-tab-series" hidden>
+      <button type="button" class="z3-slide" aria-label="Seri kapağını büyüt"><img src="/slides_z3/incidental_proof_book_cover-1.png" alt="Incidental Proof kitap kapağı — Leibniz2 verification series" width="681" height="851" loading="lazy"></button>
+    </div>
+  </section>
+  <div id="z3-lightbox" class="z3-lightbox" hidden role="dialog" aria-modal="true" aria-labelledby="z3-lightbox-title">
+    <h2 id="z3-lightbox-title">Z3 slayt önizleme</h2>
+    <p class="ts" style="position:absolute;top:78px;left:32px;color:#c9b18e">← → gezin · Esc kapat</p>
+    <button type="button" id="z3-prev" aria-label="Önceki slayt">‹</button>
+    <img id="z3-lightbox-image" alt="" />
+    <button type="button" id="z3-next" aria-label="Sonraki slayt">›</button>
+    <button type="button" id="z3-close" aria-label="Büyütmeyi kapat">Kapat</button>
+  </div>
+  <div class="wire">
+    <h2>Live run stream <span class="ts" id="stream-state">bağlanıyor…</span></h2>
+    <div class="z3row">
+      <span class="z3label">K8 Z3</span>
+      <div class="z3bar"><div id="z3-fill" class="z3fill"></div></div>
+      <span id="z3-count" class="z3count">0/12</span>
+    </div>
+    <div class="z3row">
+      <span class="z3label">Bütçe</span>
+      <div class="z3bar" style="position:relative">
+        <div id="budget-fill" class="z3fill"></div>
+        <div id="budget-limit-line" style="display:none;position:absolute;top:0;width:2px;height:100%;background:#d29922;left:100%"" title="Limit: $30"></div>
+      </div>
+      <span id="budget-count" class="z3count">—</span>
+      <canvas id="budget-spark" width="180" height="20"
+              style="width:180px;height:20px;border-radius:3px;background:#21262d;border:1px solid var(--border);vertical-align:middle"
+              title="Son run'ların bütçe değerleri (yeşil=limit altı, kırmızı=aşım, turuncu kesikli=limit)"></canvas>
+    </div>
+    <pre id="runstream" class="runstream" tabindex="0">—</pre>
+    <div class="ts" style="margin-top:4px;font-size:11px">
+      <span style="color:var(--err)">■ kırmızı = P0</span> ·
+      <span style="color:var(--warn)">■ sarı = P1</span> ·
+      <span style="color:var(--ok)">■ yeşil = PASS</span> ·
+      <span style="color:var(--muted)">■ gri = ayraç</span>
+    </div>
+  </div>
+
+  <section aria-labelledby="ledger-title">
+    <h2 id="ledger-title">Run ledger</h2>
+    <div class="grid" id="metrics" style="view-transition-name:metrics-grid">
+      <div class="card"><div class="label">Verdict</div><div class="value" id="m-verdict">—</div><div class="sub" id="m-ts">no run yet</div></div>
+      <div class="card"><div class="label">P0 / P1 findings</div><div class="value" id="m-p0p1">— / —</div><div class="sub">fail-closed gate</div></div>
+      <div class="card"><div class="label">Run duration</div><div class="value" id="m-dur">—</div><div class="sub">verify_delivery.py --full</div><div id="duration-pct-warn" aria-live="polite"></div></div>
+      <div class="card"><div class="label">Budget (universal)</div><div class="value" id="m-budget">—</div><div class="sub" id="m-budget-sub">limit —</div></div>
+      <div class="card"><div class="label">Budget ratios</div><div class="value" id="m-br" style="font-size:12px">—</div><div class="sub">bytes/token · text/pdf/archive/binary</div></div>
+      <div class="card"><div class="label">Type bytes</div><div class="value" id="m-tb" style="font-size:12px">—</div><div class="sub" id="m-tb-sub">iç zip kırılımı</div></div>
+      <div class="card"><div class="label">PDF pages</div><div class="value" id="m-pages">—</div><div class="sub">expected 33</div></div>
+      <div class="card"><div class="label">Reference count</div><div class="value" id="m-refs">—</div><div class="sub">64 expected</div></div>
+      <div class="card"><div class="label">PDF metadata-stripped</div><div class="value" id="m-meta" style="font-size:11px">—</div><div class="sub" id="m-meta-sub">qpdf</div></div>
+    </div>
+    <div id="findings-panel" style="margin-top:8px;view-transition-name:findings-panel"></div>
+  </section>
+
+  <section>
+    <h2>CLI override <span class="ts" id="cov-ts"></span></h2>
+    <div class="card" style="padding:12px" id="cov-body">
+      <div class="muted">veri bekleniyor…</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Mirror sync (K17) <span class="ts" id="mirror-ts"></span></h2>
+    <div class="card" style="padding:12px" id="mirror-body">
+      <div class="muted">veri bekleniyor…</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Pattern drift <span class="ts" id="pattern-drift-ts"></span></h2>
+    <div class="card" style="padding:12px" id="pattern-drift-body">
+      <div class="muted">veri bekleniyor…</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>CLI override trend <span class="ts" id="ovr-trend-ts"></span></h2>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap">
+      <span class="badge unknown" id="ovr-trend-badge">override: veri yok</span>
+      <span class="muted" id="ovr-trend-legend" style="font-size:11px"></span>
+    </div>
+    <div class="card" style="padding:8px">
+      <svg id="ovr-trend" viewBox="0 0 1160 120" width="100%" height="120" role="img"
+           aria-label="CLI override zaman serisi grafiği"></svg>
+    </div>
+  </section>
+
+  <section>
+    <h2>TeX motor determinizm trend <span class="ts" id="det-trend-ts"></span></h2>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap">
+      <span class="badge unknown" id="det-trend-badge">determinizm: veri yok</span>
+      <span class="muted" id="det-trend-legend" style="font-size:11px">nokta = ölçüm (yeşil PASS, amber gate-sorun) · çizgi = aynı-hash zinciri</span>
+    </div>
+    <div class="card" style="padding:8px">
+      <svg id="det-trend" viewBox="0 0 1160 90" width="100%" height="90" role="img"
+           aria-label="TeX motor determinizm trend grafiği"></svg>
+    </div>
+  </section>
+
+  <section>
+    <h2>P0 / P1 trend — son 100 run <span class="ts" id="trend-count"></span></h2>
+    <div id="budget-over-banner" class="err" role="alert"
+         style="display:none;margin:6px 0 2px;padding:6px 10px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">
+      <span id="budget-over-toggle" role="button" tabindex="0" aria-expanded="false"
+            title="Aşım yapan run'ları göster/gizle">
+      <span id="budget-over-summary"></span><span class="ts" id="budget-over-caret" style="margin-left:6px">▸</span>
+      </span>
+      <div id="budget-over-detail" style="display:none;margin-top:6px;font-weight:400;font-family:'SF Mono',monospace;font-size:11px;line-height:1.6;white-space:pre"></div>
+    </div>
+    <div class="card" style="padding:10px">
+      <svg id="trend" viewBox="0 0 1160 240" width="100%" height="240" role="img"
+           aria-label="P0/P1 + duration + budget zaman serisi grafiği"></svg>
+      <div class="ts" id="trend-legend" style="margin-top:6px">yükleniyor…</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Run history <span class="ts" id="run-history-count"></span></h2>
+    <div class="rh-filter">
+      <button data-f="all">all</button>
+      <button data-f="PASS">PASS</button>
+      <button data-f="FAIL">FAIL</button>
+      <button data-f="P0">P0</button>
+    </div>
+    <div id="run-history" style="max-height:240px;overflow-y:auto;font-size:12px;line-height:1.6"></div>
+  </section>
+
+  <section>
+    <h2>Reference verification (CrossRef / SEP / OpenLibrary)</h2>
+    <ul class="ref-list" id="refs" tabindex="0">
+      <li class="muted">no data</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Online reference stats <span class="ts" id="ro-ts"></span></h2>
+    <div class="grid" id="ro-metrics">
+      <div class="card"><div class="label">Verified / total</div><div class="value" id="ro-vt">—</div><div class="sub">çevrimiçi denetlenebilir referanslar</div></div>
+      <div class="card"><div class="label">Unverified</div><div class="value" id="ro-unv">—</div><div class="sub">çevrimdışı / bulunamadı</div></div>
+      <div class="card"><div class="label">Mismatch</div><div class="value" id="ro-mis">—</div><div class="sub">yanlış eşleşme (P1)</div></div>
+      <div class="card"><div class="label">Coverage</div><div class="value" id="ro-cov">—</div><div class="sub">verified / total yüzdesi</div></div>
+    </div>
+    <div class="grid" id="ro-source-cards"></div>
+    <div class="card" style="padding:12px" id="ro-sources">
+      <div class="muted">veri bekleniyor…</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Reference verification trend <span class="ts" id="refs-trend-count"></span>
+      <span class="badge unknown" id="refs-trend-badge">tam kapsam: veri yok</span></h2>
+    <div class="card" style="padding:10px">
+      <svg id="refs-trend" viewBox="0 0 1160 240" width="100%" height="240" role="img"
+           aria-label="verified/total zaman serisi grafiği"></svg>
+      <div class="ts" id="refs-trend-legend" style="margin-top:6px">yükleniyor…</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Config diff (raw vs effective) <span class="ts" id="cd-ts"></span></h2>
+    <div class="card" style="padding:12px" id="cd-body">
+      <div class="muted">veri bekleniyor…</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Hook env sürümleri <span class="ts" id="he-ts"></span></h2>
+    <div class="card" style="padding:12px" id="he-body">
+      <div class="muted">veri bekleniyor…</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Env drift (matrix ↔ son run) <span class="ts" id="he-matrix-ts"></span></h2>
+    <div class="card" style="padding:12px" id="he-matrix">
+      <div class="muted">veri bekleniyor…</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Hook env sürüm trendi (zaman serisi)</h2>
+    <div class="card" style="padding:10px">
+      <svg id="he-trend" viewBox="0 0 1160 240" width="100%" height="240" role="img"
+           aria-label="araç sürümlerinin run-run zaman serisi (her satır bir araç)"></svg>
+      <div class="ts" id="he-trend-legend" style="margin-top:6px">yükleniyor…</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Artifacts</h2>
+    <table>
+      <thead><tr><th>File</th><th>Size</th><th>SHA-256 (kısa)</th></tr></thead>
+      <tbody>
+        <tr><td><code>TESLIM_KLASOR_V5_2026-08-17.zip</code></td><td>508 KB</td><td><code>0ef74cae…</code></td></tr>
+        <tr><td><code>TESLIM_V5_FINAL_2026-08-17.zip</code></td><td>464 KB</td><td><code>1e5161e2…</code></td></tr>
+        <tr><td><code>ingiliz_empirizmi_v3.pdf</code></td><td>214 KB</td><td><code id="pdf-hash">—</code></td></tr>
+        <tr><td><code>ingiliz_empirizmi_v3.tex</code></td><td>≈ 47 KB</td><td>—</td></tr>
+        <tr><td><code>core_section.tex</code> (formal core, V5g)</td><td>—</td><td>—</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>CI / pre-commit gates</h2>
+    <table>
+      <thead><tr><th>Layer</th><th>Where</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td>GitHub Actions</td><td><code>.github/workflows/verify.yml</code></td><td>4 job (verify · symbolic · lean · reports)</td></tr>
+        <tr><td>Pre-commit hook</td><td><code>.pre-commit-config.yaml</code></td><td>3 hook (verify-delivery · verify-delivery-symbolic · verify-delivery-lean)</td></tr>
+        <tr><td>Single-command gate</td><td><code>verify_delivery.py --full</code></td><td>K1-K14 + CrossRef/SEP + bütçe</td></tr>
+      </tbody>
+    </table>
+  </section>
+</main>
+<footer class="footer">
+  Fail-closed CI gate · P0 = paket kırılır · P1 = düzeltilebilir bulgu · PASS = (P0=0 ∧ P1=0) · SSE stream via <code>/api/run</code>
+</footer>
+<div id="tip" class="tip" aria-hidden="true"></div>
+
+<script data-build-ts></script>
+<script src="preview.js"></script>
+</body>
+</html>
