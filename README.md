@@ -631,6 +631,20 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-11 | ci | (precommit) verify.yml jobs-map tazelik kapisi | [`e07d94f`](https://github.com/ali-han-kaya/leibniz2/commit/e07d94f) |
 | 2026-10-11 | docs | (specs) verify.yml jobs-map ureticisi + diyagram artefakti | [`eee89ff`](https://github.com/ali-han-kaya/leibniz2/commit/eee89ff) |
 | 2026-10-11 | ci | (verify) unit-test ortamina PyYAML kur (jobs-map kapisi) | [`b73c8c6`](https://github.com/ali-han-kaya/leibniz2/commit/b73c8c6) |
+| 2026-10-24 | docs | (deploy) 84e5b0b icin kanit-defteri satiri | [`150d1d85`](https://github.com/ali-han-kaya/leibniz2/commit/150d1d85) |
+| 2026-10-24 | test | (gate) video_render_comment.js advisory sinifina ekle | [`e4bed595`](https://github.com/ali-han-kaya/leibniz2/commit/e4bed595) |
+| 2026-10-24 | fix | (plist) golden kapısını ve mirror listesini senkronla | [`697f0d46`](https://github.com/ali-han-kaya/leibniz2/commit/697f0d46) |
+| 2026-10-24 | docs | (deploy) #98 inisi icin kanit-defteri satiri | [`bcc1ed4b`](https://github.com/ali-han-kaya/leibniz2/commit/bcc1ed4b) |
+| 2026-10-24 | fix | (ci) protection-drift kapisi schedule paritesine kaydedildi | [`242bcdbd`](https://github.com/ali-han-kaya/leibniz2/commit/242bcdbd) |
+| 2026-10-23 | ci | (checks) protection drift kapisi PR dalina baglandi | [`bc6840bf`](https://github.com/ali-han-kaya/leibniz2/commit/bc6840bf) |
+| 2026-10-23 | fix | (ci) artifact sayfalamasi + gercek Trivy severity ayristirma | [`1a52dec3`](https://github.com/ali-han-kaya/leibniz2/commit/1a52dec3) |
+| 2026-10-23 | feat | (video) video unit kaynaklarini commit'le (bootstrap kapisi) | [`723902ea`](https://github.com/ali-han-kaya/leibniz2/commit/723902ea) |
+| 2026-10-23 | fix | (checks) PR akisinda strict kapaliyi yakala | [`bc05473a`](https://github.com/ali-han-kaya/leibniz2/commit/bc05473a) |
+| 2026-10-23 | fix | (server) SIGKILL yazim yarisini journal ile onar | [`864d69d2`](https://github.com/ali-han-kaya/leibniz2/commit/864d69d2) |
+| 2026-10-23 | test | (server) SIGTERM yazim yarisi icin K15 tutarlilik testi | [`1b3f5591`](https://github.com/ali-han-kaya/leibniz2/commit/1b3f5591) |
+| 2026-10-23 | fix | freebuff project-id kalici, update'de kaybolmasin | [`c0c006a8`](https://github.com/ali-han-kaya/leibniz2/commit/c0c006a8) |
+| 2026-10-23 | fix | (dev) bootstrap fails closed on missing or out-of-sync npm locks | [`689232b9`](https://github.com/ali-han-kaya/leibniz2/commit/689232b9) |
+| 2026-10-11 | docs | (deploy) 337e73f icin kanit-defteri satiri ekle | [`5979c5b0`](https://github.com/ali-han-kaya/leibniz2/commit/5979c5b0) |
 
 ### Regresyon notları
 
