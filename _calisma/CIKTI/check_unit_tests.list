@@ -29,6 +29,7 @@ test_check_mirror_coverage.py
 test_check_orchestration_stdin.py
 test_check_precommit_orphans.py
 test_check_prettier_format.py
+test_check_protection_drift.py
 test_check_python3_shell.py
 test_check_repro_manifest_hook.py
 test_check_sde_determinism.py
@@ -61,6 +62,7 @@ test_determinism_trend_badge.py
 test_dev_bootstrap.py
 test_diff_config_artifacts.py
 test_doc_job_sync.py
+test_docker_patch_build_args.py
 test_docker_security_smoke.py
 test_dockerfile_security_patching.py
 test_duration_pct_config.py

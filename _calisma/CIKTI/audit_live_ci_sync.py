@@ -205,8 +205,11 @@ def get_run_jobs(repo, run_id):
 
 
 def get_run_artifacts(repo, run_id):
-    out = run_gh(["gh", "api",
-                  f"repos/{repo}/actions/runs/{run_id}/artifacts?per_page=100",
+    # --paginate ZORUNLU: gh api varsayılan sayfa boyutu 30'dur ve artifact
+    # sayısı 30'u aştığında (precheck-report 31. sırada) kuyruk sessizce
+    # düşer — audit "doc'ta var, canlıda yok" diye yanlış drift verir.
+    out = run_gh(["gh", "api", "--paginate",
+                  f"repos/{repo}/actions/runs/{run_id}/artifacts",
                   "-q", ".artifacts[].name"])
     return [n for n in (line.strip() for line in out.splitlines()) if n]
 

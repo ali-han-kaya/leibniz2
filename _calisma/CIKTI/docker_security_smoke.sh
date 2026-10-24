@@ -80,9 +80,25 @@ if [[ -z "$PLATFORM" ]]; then
 elif [[ "$PLATFORM" == "native" ]]; then
   PLATFORM=""
 fi
-build_args=(build -t "$IMAGE_TAG" "$ROOT")
-[[ -n "$PLATFORM" ]] && build_args=(build --platform "$PLATFORM" -t "$IMAGE_TAG" "$ROOT")
+build_args=(build -t "$IMAGE_TAG")
+[[ -n "$PLATFORM" ]] && build_args=(build --platform "$PLATFORM" -t "$IMAGE_TAG")
+
+# Yama katmanı build-arg'ları: CI image-scan build'i ile AYNI override kapısı —
+# tek çözümleyici docker_patch_build_args.sh (floor'lar Dockerfile ARG'ından
+# okunur; SECURITY_PATCH_PACKAGES / PYTHON_SECURITY_PATCH_PACKAGES doluysa o
+# kazanır, boşsa default taşınır). Çözümleyici hata verirse fail-closed:
+# floorsuz build sessizce yapılmaz (process substitution rc'yi yutmaz).
+if ! patch_flags="$(bash "$ROOT/_calisma/CIKTI/docker_patch_build_args.sh" --flags)"; then
+  fail "yama build-arg'ları çözümlenemedi (fail-closed: floorsuz build yok)"
+fi
+while IFS= read -r flag; do
+  [ -n "$flag" ] || continue
+  build_args+=("$flag")
+done <<< "$patch_flags"
+build_args+=("$ROOT")
+
 log "platform=${PLATFORM:-native}"
+log "patch_build_args=$(printf '%s ' $patch_flags)"
 if ! docker "${build_args[@]}" >> "$OUT" 2>&1; then
   fail "docker build başarısız (ayrıntı kanıt dosyasında: $OUT)"
 fi

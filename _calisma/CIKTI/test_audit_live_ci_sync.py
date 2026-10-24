@@ -105,17 +105,6 @@ class TestCompare(unittest.TestCase):
         self.assertTrue(r["ok"])
 
 
-class TestArtifactPagination(unittest.TestCase):
-    def test_requests_enough_artifact_page_for_current_runs(self):
-        with mock.patch.object(als, "run_gh", return_value="unit-tests") as run_gh:
-            self.assertEqual(als.get_run_artifacts("o/r", 7), ["unit-tests"])
-        args = run_gh.call_args.args[0]
-        self.assertEqual(
-            args[2],
-            "repos/o/r/actions/runs/7/artifacts?per_page=100",
-        )
-
-
 class TestVisibilityRetry(unittest.TestCase):
     def test_polls_until_expected_jobs_and_artifacts_are_visible(self):
         with mock.patch.object(als, "get_run_jobs",
@@ -359,6 +348,26 @@ class TestCheckRequiredPresence(unittest.TestCase):
     def test_missing_in_both(self):
         self.assertEqual(als.check_required_presence(["a"], ["a"]),
                          [("python3-shell", "doc"), ("python3-shell", "live")])
+
+
+class TestRunArtifactsPagination(unittest.TestCase):
+    """gh api sayfa boyutu regresyonu: 30+ artifact'ta kuyruk düşmemeli."""
+
+    def test_requests_paginated_artifact_list(self):
+        # gh api varsayılanı per_page=30; 31. artifact (precheck-report)
+        # --paginate olmadan ilk sayfada gelmez → audit yanlış "eksik" der.
+        seen = {}
+
+        def fake_run_gh(cmd):
+            seen["cmd"] = cmd
+            return "\n".join(f"art-{i}" for i in range(31))
+
+        with mock.patch.object(als, "run_gh", side_effect=fake_run_gh):
+            arts = als.get_run_artifacts("o/r", 42)
+
+        self.assertIn("--paginate", seen["cmd"])
+        self.assertEqual(len(arts), 31)
+        self.assertEqual(arts[-1], "art-30")
 
 
 class TestSkippedUpstreamVsDrift(unittest.TestCase):

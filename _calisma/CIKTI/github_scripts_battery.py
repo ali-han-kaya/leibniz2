@@ -1463,6 +1463,60 @@ SCENARIOS = [
         },
     ),
     (
+        # GERÇEK Trivy SARIF şekli: properties.severity YOK, seviye
+        # message.text içinde. MEDIUM/LOW bloklamamalı (canlı PR'da 13
+        # MEDIUM/LOW bulgu HIGH sanılıp gate kırmızı oluyordu).
+        "trivy: gerçek SARIF (message Severity: MEDIUM) → bloklamaz",
+        "trivy_sarif_pr_comment.js",
+        {"trivy.sarif": json.dumps({
+            "runs": [{"tool": {"driver": {"name": "Trivy", "rules": []}},
+                      "results": [{
+                          "ruleId": "CVE-2025-8869",
+                          "level": "error",
+                          "message": {"text": "Package: pip\nInstalled "
+                                             "Version: 24.0\nVulnerability "
+                                             "CVE-2025-8869\nSeverity: MEDIUM\n"
+                                             "Fixed Version: 25.3\n"},
+                          "locations": [{"physicalLocation": {
+                              "artifactLocation": {
+                                  "uri": "opt/venv/lib/python3.11/"
+                                         "site-packages/pip-24.0.dist-info/"
+                                         "METADATA"}}}]}]}]}),
+         "changed_files.txt": "README.md\n"},
+        None, [], [],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.createComment": 1},
+            "body_contains": {"issues.createComment": [
+                MARKER_TRIVY, "CRITICAL/HIGH bulgu yok"]},
+        },
+    ),
+    (
+        "trivy: gerçek SARIF (message Severity: HIGH) → setFailed",
+        "trivy_sarif_pr_comment.js",
+        {"trivy.sarif": json.dumps({
+            "runs": [{"tool": {"driver": {"name": "Trivy", "rules": []}},
+                      "results": [{
+                          "ruleId": "CVE-2024-9999",
+                          "level": "error",
+                          "message": {"text": "Package: libfoo\nInstalled "
+                                             "Version: 1.0\nVulnerability "
+                                             "CVE-2024-9999\nSeverity: HIGH\n"
+                                             "Fixed Version: 1.1\n"},
+                          "locations": [{"physicalLocation": {
+                              "artifactLocation": {
+                                  "uri": "debian/libfoo"}}}]}]}]}),
+         "changed_files.txt": ""},
+        None, [], [],
+        {
+            "ok": True, "set_failed": True,
+            "call_counts": {"issues.createComment": 1},
+            "body_contains": {"issues.createComment": [
+                MARKER_TRIVY, "CVE-2024-9999", "HIGH", "diff-dışı",
+                "diff-içi: 0"]},
+        },
+    ),
+    (
         "trivy: bozuk SARIF (runs boş) → setFailed, yanıltıcı yorum YOK",
         "trivy_sarif_pr_comment.js",
         {"trivy.sarif": "{\"runs\": []}"},
