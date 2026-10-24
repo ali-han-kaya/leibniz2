@@ -4,8 +4,8 @@
 update_preview.sh'in yerleşik şablonunu (plist_default_template) kanonik bir
 HOME ile render eder, çıktıyı commit'li golden plist'lerle karşılaştırır ve
 plutil/plistlib ile yapısal geçerliliğini doğrular. Böylece şablondaki bir
-değişiklik (port/path/KeepAlive/ProgramArguments) CI'da advisory bir drift
-sinyali olarak yakalanır.
+değişiklik (port/path/KeepAlive/ProgramArguments) CI'da ve pre-commit'te
+FAIL-CLOSED bir drift kapısı olarak yakalanır (advisory drift sınıfı yoktur).
 
 Kanonik HOME = /Users/ci (portable; gerçek kullanıcı yolu golden'a gömülmez).
 Render, update_preview.sh --plist-force <render-home> ile YAPILIR (tek kaynak);
@@ -17,10 +17,15 @@ Exit kodu:
   1 = drift (bayat/golden'dan farklı/geçersiz/eksik/fazla)
   2 = hata (script yok, render başarısız, golden dizini yok)
 
-Drift önceliği (results[].priority + has_p0/has_p1):
-  P0 = fail-closed: fazla-profil (golden'da olmayan render edilmiş profil) —
-       golden seti şablonla senkron değil, build'i BLOKE eder.
-  P1 = advisory: diğer drift'ler (eksik/bayat/yapısal geçersiz).Kullanım:
+Drift önceliği (results[].priority + has_p0/has_p1/fail_closed):
+  P0 = fazla-profil: golden'da olmayan render edilmiş profil — golden seti
+       şablonla senkron değil.
+  P1 = eksik / bayat / yapısal geçersiz plist.
+  HER İKİ öncelik FAIL-CLOSED'dır: `fail_closed` = has_p0 or has_p1 → exit 1.
+  P1 daha önce advisory sayılıyordu; artık bayat/eksik/geçersiz plist de
+  build'i ve commit'i bloke eder (sessiz kapsam/uyum kaybını önlemek için).
+
+Kullanım:
   check_plist_drift.py [--script PATH] [--golden-dir DIR]
                        [--canonical-home PATH] [--render-home DIR]
                        [--remove-extra] [--json]
@@ -73,12 +78,14 @@ def check(render_home, golden_dir, canonical_home):
       drift   = True ise en az bir profil golden'dan farklı
       error   = True ise denetim koşulamadı (exit 2)
 
-    priority öncelik sınıfıdır:
-      P0 — fail-closed: fazla-profil drift'i (golden'da olmayan render edilmiş
-           profil). Golden seti şablonla senkron DEĞİL demektir — şablon yeni
-           bir profil üretiyor ama commit'li golden'ı yok. Sessiz kapsam
-           kaybını önlemek için build'i BLOKE eder.
-      P1 — advisory: diğer drift'ler (eksik/bayat/yapısal geçersiz).
+    priority öncelik sınıfıdır (her ikisi de fail-closed):
+      P0 — fazla-profil drift'i (golden'da olmayan render edilmiş profil).
+           Golden seti şablonla senkron DEĞİL demektir — şablon yeni bir
+           profil üretiyor ama commit'li golden'ı yok. Sessiz kapsam kaybını
+           önlemek için build'i BLOKE eder.
+      P1 — eksik/bayat/yapısal geçersiz plist. Daha önce advisory sayılıyordu;
+           artık o da build'i BLOKE eder (gerçek kurulum golden'dan sapmış
+           demektir, sessizce geçilmez).
       None — PASS.
     """
     results = []
@@ -131,8 +138,8 @@ def check(render_home, golden_dir, canonical_home):
                         "detail": "golden ile birebir + geçerli"})
 
     # Golden'da olmayan fazladan render edilmiş plist var mı? (beklenmedik profil)
-    # Fazla-profil drift'i P0 (fail-closed): golden seti şablonla senkron değil.
-    # Diğer drift'ler (eksik/bayat/geçersiz) P1 (advisory) kalır.
+    # Fazla-profil drift'i P0; eksik/bayat/geçersiz P1'dir — ikisi de
+    # fail-closed'dır (advisory sınıf yok), yalnızca tanı etiketi farklıdır.
     for name in rendered_files:
         if name not in golden_files:
             drift = True
@@ -235,12 +242,15 @@ def main(argv=None):
                 results, drift, error = check(render_home, args.golden_dir,
                                               args.canonical_home)
 
-        # Fazla-profil drift'i P0 (fail-closed); diğer drift'ler P1 (advisory).
+        # Fazla-profil P0, eksik/bayat/geçersiz P1 — HER İKİSİ fail-closed.
+        # `fail_closed` alanı tüketicilere (CI adımı, hook) tek sinyal verir:
+        # has_p0 or has_p1. Exit kodu da bununla birebir hizalıdır (drift → 1).
         has_p0 = any(r.get("priority") == "P0" for r in results)
         has_p1 = any(r.get("priority") == "P1" for r in results)
         report = {"ok": not drift, "drift": drift,
                   "canonical_home": args.canonical_home,
                   "has_p0": has_p0, "has_p1": has_p1,
+                  "fail_closed": has_p0 or has_p1,
                   "remove_extra": args.remove_extra,
                   "removed_extra": removed_extra,
                   "remove_failed": remove_failed,
@@ -259,7 +269,8 @@ def main(argv=None):
                     mark = r.get("priority") or "DRIFT"
                 print(f"[{mark}] {r['label']} — {r['detail']}")
             if drift:
-                print(f"SONUÇ: DRIFT TESPİT EDİLDİ (P0={int(has_p0)}, P1={int(has_p1)})")
+                print(f"SONUÇ: DRIFT TESPİT EDİLDİ — FAIL-CLOSED "
+                      f"(P0={int(has_p0)}, P1={int(has_p1)})")
             else:
                 print("SONUÇ: TÜMÜ PASS")
         return 1 if drift else 0
