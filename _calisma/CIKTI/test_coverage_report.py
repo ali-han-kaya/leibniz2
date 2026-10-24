@@ -55,6 +55,7 @@ HOOK_COVERAGE = {
     "check-repro-manifest":    ["test_gen_repro_manifest.py"],
     "check-dryrun-summary":    ["test_dryrun_summary.py"],
     "check-colorize-rules":    ["test_colorize_rules.py"],
+    "check-preview-interaction-node": ["test_preview_interaction_dom.js"],
     "check-budget-scan":       ["test_budget_scan.js"],
     "verify-delivery-repro-manifest": ["test_verify_manifest_sidecar.py"],
     "verify-delivery-github-scripts": ["test_github_scripts_battery.py"],
@@ -64,6 +65,7 @@ HOOK_COVERAGE = {
     "check-pattern-consistency": ["test_gen_repro_manifest.py"],
     "check-config-sync":       ["test_check_config_sync.py"],
     "check-lake-evidence":     ["test_lake_evidence_smoke.py"],
+    "check-lean-statements":   ["test_check_lean_statements.py"],
     "check-refs-table-sync":   ["test_check_refs_table_sync.py"],
     "check-bibliography-sync": ["test_check_bibliography_sync.py"],
     "check-review-freshness":  ["test_check_review_freshness.py"],
@@ -72,7 +74,10 @@ HOOK_COVERAGE = {
     "check-skills-index":       ["test_skills_index.py", "test_readme_skills.py"],
     "check-design-tokens":      ["test_check_design_tokens.py"],
     "check-reproducible-pdf-skill": ["test_reproducible_pdf_skill.py"],
-    "check-changelog-sync":    ["test_update_changelog_hook.py", "test_gen_changelog.py"],
+    # verify.yml jobs-map diyagramı tazelik kapısı (üretici --check,
+    # fail-closed): testi tazelik/bayat/ölçüm-imkânsız ayrımını ve config
+    # `files:` teli dört yolu da kapsıyor mu sözleşmesini çiviler.
+    "check-verify-jobs-map":    ["test_check_verify_jobs_map.py"],
     "check-unit-tests": [
         "test_workflow_install_hardening.py",
         "test_verify_refs.py",
@@ -179,6 +184,7 @@ HOOK_COVERAGE = {
         "test_gen_publish_artifact_list.py",
         "test_gen_repro_manifest_e2e.py",
         "test_history_sources.py",
+        "test_incidental_banner.py",
         "test_k13_coverage_sync.py",
         "test_k9_lean_files_sync.py",
         "test_lean_override_snapshot.py",
@@ -232,7 +238,39 @@ HOOK_COVERAGE = {
         "test_id_residual_acceptance_doc.py",
         "test_makefile_texlive.py",
         "test_trend_record_pr_contract.py",
-        "test_ci_advisory_env.py",],
+        "test_gen_changelog.py",
+        "test_update_changelog_hook.py",
+        "test_sync_skills_index.py",
+        "test_determinism_trend_badge.py",
+        "test_gated_schedules.py",
+        "test_sync_lifecycle.py",
+        "test_k6_determ_canonical.py",
+        "test_docker_patch_build_args.py",
+        "test_check_prettier_format.py",
+        "test_design_token_contrast.py",
+        "test_security_cron_schedule.py",
+        "test_trend_schedule_paths.py",
+        "test_a11y_settle_contract.py",
+        "test_precommit_log.py",
+        "test_trend_db_connection.py",
+        "test_dashboard_next_contract.py",
+        "test_trend_db_prisma_setup.py",
+        "test_preview_mirror_imports.py",
+        "test_verdict_seal_css.py",
+        "test_design_token_collision.py",
+        "test_ci_hygiene_gate.py",
+        "test_deploy_evidence.py",
+        "test_trend_record_merge.py",
+        "test_rca_report.py",
+        "test_server_events.py",
+        "test_vercel_adapter.py",
+        "test_check_vercel_deploy.py",
+        "test_dashboard_webkit_smoke.py",
+        "test_preview_stream_batching.py",
+        "test_check_verify_jobs_map.py",
+        "test_check_protection_drift.py",
+        "test_ci_advisory_env.py",
+    ],
 }
 
 # verify.yml CI job'ları → kapsadığı test dosyaları
@@ -244,7 +282,11 @@ CI_JOB_COVERAGE = {
     ],
     "preview-reload-smoke": ["test_preview_reload_smoke.py"],
     "a11y-gate": ["test_a11y_gate.py"],
-    "dashboard-smoke": ["test_dashboard_playwright_smoke.py"],
+    # make accept (hash ledger) — epoch ihracı + CI-linux/yerel kayıtları
+    "texlive-accept": ["test_id_residual_acceptance_doc.py"],
+    "dashboard-smoke": ["test_dashboard_playwright_smoke.py",
+                        "test_preview_interaction_cdp.py"],
+    "webkit-smoke": ["test_dashboard_webkit_smoke.py"],
     "daemon-http": ["test_daemon_http.py"],
     "plist-check": ["test_plist_gate_exit.py", "test_gen_plist_golden.py"],
     "coq-proof": ["test_coq_lake.py"],
@@ -492,6 +534,9 @@ def main(argv=None):
         "test_all_hooks_smoke.py",       # standalone smoke: tum hook'lari kosar
         "test_budget_scan.js",          # JS-only, ayrı Node hook'unda
         "test_dashboard_playwright_smoke.py",  # standalone Playwright smoke (Chromium ~10s) — CI'da ayrı job
+        "test_dashboard_webkit_smoke.py",  # standalone WebKit smoke — CI `webkit-smoke` job'u (macOS safedriver)
+        "test_preview_interaction_cdp.py",  # standalone Playwright/CDP katmanı — CI `dashboard-smoke` job'u
+        "test_preview_stream_batching.py",  # standalone stream-batching smoke (offline, browser'sız) — CI discover + yerel
         "test_refs_trend_badge_node.js", # standalone JS smoke (Node-only assertion), dokümante bilinçlileşti
     })
     if args.check:

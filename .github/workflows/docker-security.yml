@@ -2,23 +2,77 @@ name: docker-security
 
 on:
   push:
-  workflow_dispatch: {}  # CVE tazelemesi gibi olaylarda elle tetikleme
+  pull_request:
+    # PR'lar aynı fail-closed Trivy gate'inden geçer; SARIF → PR-diff yorumu
+    # (trivy_sarif_pr_comment.js) bulguları değişen dosyalara haritalar.
+    # draft: true — kapı davranışı aynı; yorumlar draft aşamasında da
+    # upsert edilir (erkenden görünürlük, bayat-yorum yok — marker upsert).
+  schedule:
+    # Haftalık: her Pazartesi 03:43 UTC. Determinism-trend (03:17) ile bilinçli
+    # çakışmaz. Yeni CVE'ler en çok hazırlıksız anda gelir — gating doc'unun
+    # "Trivy gate kırmızı" döngüsünün CI bacağı haftalık kendi başına koşar.
+    - cron: "43 3 * * 1"
+  workflow_dispatch:
+    # CVE tazelemesi gibi olaylarda elle tetikleme + build-arg override'ı.
+    # Boş bırakılırsa repo değişkeni (vars.), o da yoksa Dockerfile ARG
+    # default'u kullanılır — tek çözümleyici: _calisma/CIKTI/docker_patch_build_args.sh
+    inputs:
+      security_patch_packages:
+        description: "SECURITY_PATCH_PACKAGES (apt floor'ları; boş → vars. → Dockerfile default)"
+        required: false
+        type: string
+      python_security_patch_packages:
+        description: "PYTHON_SECURITY_PATCH_PACKAGES (pip floor'ları; boş → vars. → Dockerfile default)"
+        required: false
+        type: string
 
 permissions:
   contents: read
   security-events: write
+
+env:
+  # Build-arg override kanalı (tek yer): dispatch input > repo değişkeni.
+  # Burada değer YALNIZ dolu geldiğinde kullanılır; çözümleyici boş değeri
+  # "override yok" sayıp Dockerfile default'unu taşır (boş string'e çevirmek
+  # yama katmanını sessizce kapatırdı: empty-guard "yama yok" derdi).
+  PATCH_ARG_APT_OVERRIDE: ${{ github.event.inputs.security_patch_packages || vars.SECURITY_PATCH_PACKAGES }}
+  PATCH_ARG_PY_OVERRIDE: ${{ github.event.inputs.python_security_patch_packages || vars.PYTHON_SECURITY_PATCH_PACKAGES }}
+
+concurrency:
+  # CI-hijyen: aynı PR'a ardışık push'lar eski taramayı iptal eder.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   image-scan:
     name: Build and scan Docker image
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Job-level daraltma: PR-yorum adımı (trivy_sarif_pr_comment.js)
+    # pull-requests: write gerektirir — workflow-bazı değildir, yalnız bu
+    # job'un tarama+yorum yüzeyine verilir (en-yetkili-olmayan).
+    permissions:
+      contents: read
+      pull-requests: write
+      security-events: write
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
+      # Tek çözümleyici: floor'lar Dockerfile ARG'larından okunur, override
+      # (dispatch input / repo değişkeni) doluysa o kazanır. Default yoksa
+      # adım kırmızı — sessizce floorsuz build yapılmaz.
+      - name: Resolve patch build-args (Dockerfile defaults + override)
+        id: patch_args
+        env:
+          SECURITY_PATCH_PACKAGES: ${{ env.PATCH_ARG_APT_OVERRIDE }}
+          PYTHON_SECURITY_PATCH_PACKAGES: ${{ env.PATCH_ARG_PY_OVERRIDE }}
+        run: |
+          set -euo pipefail
+          bash _calisma/CIKTI/docker_patch_build_args.sh --github-output >> "$GITHUB_OUTPUT"
 
       - name: Build image
         uses: docker/build-push-action@v6
@@ -27,17 +81,33 @@ jobs:
           file: ./Dockerfile
           load: true
           tags: leibniz2/verify-dashboard:${{ github.sha }}
+          # Yama katmanı build-arg'ları: yerel build ile AYNI kapı (aynı
+          # çözümleyici) — CI'da vars./dispatch override'ı buradan geçer.
+          build-args: |
+            SECURITY_PATCH_PACKAGES=${{ steps.patch_args.outputs.apt }}
+            PYTHON_SECURITY_PATCH_PACKAGES=${{ steps.patch_args.outputs.python }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Scan image with Trivy
+      # ── İki-adımlı Trivy: SARIF (yorum-kaynağı) + table (log-kanıtı) ──
+      # SARIF adımı continue-on-error: bulgu varsa exit 1 üretir ama koşum
+      # SARIF'i diskte bıraksın diye; GERÇEK kapı yorum-adımındaki
+      # core.setFailed'de yaşar (SARIF okunamazsa da kırmızı — fail-closed).
+      - name: Scan image with Trivy (SARIF)
+        uses: aquasecurity/trivy-action@v0.35.0
+        continue-on-error: true
+        with:
+          image-ref: leibniz2/verify-dashboard:${{ github.sha }}
+          format: sarif
+          output: trivy.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: 1
+
+      - name: Scan image with Trivy (table — log kanıtı)
         # v0.35.0: belgelenmiş güvenli sürüm (2026-03 tag-compromise sonrası
         # akıl sağlığı listesi). Mutable @master asla — pin kapısı da bloke eder.
-        # Tek adım: table format + exit-code 1 → bulgu varsa CVE tablosu
-        # log'da GÖRÜNÜR şekilde fail-closed. (SARIF split kaldırıldı: bu
-        # repo'da code scanning yok — upload hedefi yok; ayrıca SARIF adımı
-        # bulgusuz koşuda opak exit-1 hataları üretti. Zorlayıcı kapı
-        # exit-code 1'de yaşıyor, kanıt tabloda.)
+        # Zorlayıcı kapı exit-code 1'de; SARIF yorum-adımına kanıt taşır.
         uses: aquasecurity/trivy-action@v0.35.0
         with:
           image-ref: leibniz2/verify-dashboard:${{ github.sha }}
@@ -46,8 +116,96 @@ jobs:
           ignore-unfixed: true
           exit-code: 1
 
+      - name: Annotate PR with Trivy findings (fail-closed)
+        # always(): gate kırmızıyken de yorum DÜŞMELİ (bulgu-tablosu PR'a
+        # görünür kalmalı) — aksi halde kırmızı PR'da kanıt yok olur.
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const changed = await github.paginate(
+              github.rest.pulls.listFiles, {
+                owner: context.repo.owner, repo: context.repo.repo,
+                pull_number: context.issue.number, per_page: 100,
+              },
+              (resp) => resp.data.map((f) => f.filename));
+            require('fs').writeFileSync('changed_files.txt',
+              changed.join('\n'));
+            const sBody = fs.readFileSync(
+              '_calisma/CIKTI/github_scripts/trivy_sarif_pr_comment.js', 'utf8');
+            await eval(`(async () => {\n${sBody}\n})()`);
+
       # Docker Scout kaldırıldı: Scout, Docker entitlemansı gerektirir
       # ('user githubactions not entitled to use Docker Scout') — bu repoda
       # kimse yok ve adım hiçbir koşuda geçemezdi. Zorlayıcı CVE taraması
       # yukarıdaki Trivy gate'te yaşıyor (CRITICAL/HIGH, exit-code 1).
       # (SARIF upload da kaldırıldı: code scanning hedefi yok.)
+
+  smoke:
+    name: Local security smoke (script parity)
+    runs-on: ubuntu-latest
+    # Gerçek koşum: cold build + Trivy DB indirmesi + scan + health. 20 dk
+    # yalnızca SKIP koşumu için ayrılmıştı; image-scan aynı build+scan'i
+    # 20 dk'de bitiriyor, smoke buna health zincirini ekliyor → 30 dk.
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # TRİVY KURULUMU — cron'un asıl amacı gerçek koşum kanıtı üretmek.
+      # Önceden ubuntu-latest'te trivy yoktu; script'in "araç yok → exit 0
+      # SKIP" sözleşmesi job'u haftalık SKIP'e düşürüyordu: yeşil ama
+      # kanıtsız. K3'ün ikinci dalı ("runner'a trivy kuran satır") devreye
+      # alındı. Sürüm, image-scan job'ının kullandığı trivy-action@v0.35.0
+      # varsayılanıyla AYNI (v0.69.3): iki job tek motorla tarar, böylece
+      # smoke'un fail-closed kapısı image-scan ile çelişemez. URL + sürüm +
+      # sha256 üçü de pin'li (action yerine run adımı — repo kurulum
+      # konvansiyonu: actionlint/elan/pip/apt hepsi run adımında).
+      - name: Install Trivy (pinned + sha256)
+        env:
+          TRIVY_VERSION: "0.69.3"
+          TRIVY_SHA256: "1816b632dfe529869c740c0913e36bd1629cb7688bd5634f4a858c1d57c88b75"
+        run: |
+          set -euo pipefail
+          url="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          curl -sSfL "$url" -o /tmp/trivy.tgz
+          echo "${TRIVY_SHA256}  /tmp/trivy.tgz" | sha256sum -c -
+          sudo tar -C /usr/local/bin -xzf /tmp/trivy.tgz trivy
+          trivy --version
+
+      # SKIP kuralı runner araçlarıyla uyumlu KALIR: script araç yoksa exit 0
+      # SKIP üretir (yerel makineler bu yolun canlı örneğidir). Ama CI'da
+      # trivy kurulu olduğu için SKIP artık "ortam yok" değil, **kurulum
+      # sessizce bozuldu** demektir — aşağıdaki assert adımı onu kırmızıya
+      # çevirir. Yani SKIP görünürlüğü korunur, üstelik artık gürültü de
+      # değildir.
+      - name: Run local security smoke (SKIP-aware)
+        run: bash _calisma/CIKTI/docker_security_smoke.sh
+        env:
+          DOCKER_SMOKE_OUT: docs/ci_simulate/docker_security_smoke/docker_security_smoke_report.txt
+          # Smoke build'i de aynı override kapısından geçer (script çözümleyiciyi
+          # çağırır; env boşsa Dockerfile default'u taşınır).
+          SECURITY_PATCH_PACKAGES: ${{ env.PATCH_ARG_APT_OVERRIDE }}
+          PYTHON_SECURITY_PATCH_PACKAGES: ${{ env.PATCH_ARG_PY_OVERRIDE }}
+
+      # fail-closed: kanıt, kanıt satırlarıdır. Trivy kurulu bir CI'da
+      # verdict=PASS yoksa koşum gerçekleşmemiştir (SKIP ya da erken çıkış).
+      # Adım varsayılan `if: success()` ile çalışır: smoke FAIL olduysa
+      # zaten job kırmızıdır, assert yalnızca SKIP/sessiz-çıkış yolunu kapatır.
+      - name: Assert real run (SKIP is not evidence in CI)
+        run: |
+          set -euo pipefail
+          report=docs/ci_simulate/docker_security_smoke/docker_security_smoke_report.txt
+          if ! grep -qx 'verdict=PASS' "$report" 2>/dev/null; then
+            echo "FAIL: smoke gerçek koşum üretmedi — verdict=PASS yok (SKIP mi, erken çıkış mı?)" >&2
+            cat "$report" 2>/dev/null || echo "(kanıt dosyası yok)" >&2
+            exit 1
+          fi
+          echo "OK: verdict=PASS — gerçek koşum kanıtı"
+
+      - name: Show smoke evidence
+        if: always()
+        run: |
+          cat docs/ci_simulate/docker_security_smoke/docker_security_smoke_report.txt 2>/dev/null \
+            || echo "(smoke kanıt dosyası yok — SKIP koşumunda üretilmez)"

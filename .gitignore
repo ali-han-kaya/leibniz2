@@ -1,3 +1,5 @@
+.freebuff/*
+!.freebuff/project-id
 # Oynatma sırasında değişen yapay ürünler (derlenmeleri tekrar üretebilir)
 _calisma/architecture_deepening_deck/
 _calisma/pdf_repro_findings_deck/
@@ -30,22 +32,55 @@ logs/
 # CI/lab koşumlarında üretilen token mirror kopyası (preview_server
 # /design-system/tokens.css rotası; CI a11y-gate her koşumda taze kopyalar)
 _calisma/CIKTI/design-system-tokens.css
+# guide.html mirror kopyasi — kaynak docs/branch-protection-guide/guide.html;
+# preview_server /guide.html rotasini PREVIEW_DIR'dan servis eder, a11y job'u
+# `cp` ile buraya koyar. Uretilen dosya: commit edilmemeli (tokens ile ayni).
+_calisma/CIKTI/guide.html
 
 # frontend-design demo derlemesi (build_design_preview.py üretir)
 _calisma/CIKTI/design_preview.html
+
+# preview_server / consolidate_summary çalışma durumu: trend geçmişi, katman
+# özeti ve koşu günlükleri. Her koşumda yeniden üretilir; içlerine mutlak
+# yol (ör. /Users/<kullanıcı>/...) yazıldığı için değişim yüzeyinde
+# absolute-path kapısını da kırarlar — kaynak değil, runtime.
+_calisma/CIKTI/history.jsonl
+_calisma/CIKTI/history.jsonl.sha256
+_calisma/CIKTI/klayers.json
+_calisma/CIKTI/runs/
 
 # Oturum yüzeyleri (2026-09-18): bağımlılıklar ve üretilen artefaktlar kaynak-değil
 _calisma/mcp/.venv/
 _calisma/pptx/node_modules/
 _calisma/pptx/verification_chain.pptx
+# video unit (2026-10-23): kaynak trackli, kurulum/derleme artefaktlari degil.
+_calisma/video/node_modules/
+_calisma/video/dist/
+_calisma/video/out/
 apps/trend-db/node_modules/
 apps/trend-db/.env
 apps/trend-db/generated/
 apps/dashboard-next/node_modules/
 apps/dashboard-next/.next/
 
+# Vercel/Next uretim ciktilari (kaynak-degil; kazara agaca girmemeli)
+.vercel/
+/.next/
+
 # isolated worktrees (using-git-worktrees skill)
 .worktrees/
 
 # make build dirs (docs/Makefile.tectonic + docs/Makefile.texlive BUILD_DIR)
 .build/
+
+# planning-with-files: plan attestation = yerel SHA-256 kilidi, makine-özgü.
+# task_plan.md/findings.md/progress.md takip EDİLİR; bu kilit dosyası değil.
+.plan-attestation
+.planning/.active_plan
+.vercel
+.env*
+
+# tarayici-QA arac zinciri (npm) bu dizin/symlink'leri olusturur
+# (sonu '/' olmayan kural: node_modules SYMLINK'i de yakalar —
+# 'beyond a symbolic link' tuzaği, 2026-10-09)
+node_modules

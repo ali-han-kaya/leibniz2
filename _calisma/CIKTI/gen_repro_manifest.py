@@ -80,6 +80,7 @@ ARTIFACT_JOBS = {
     "changelog-drift": "changelog-drift",
     "ci-simulate": "ci-simulate",
     "reproducibility": "reproducibility",
+    "webkit-smoke": "webkit-smoke",
 }
 
 # Config artifact'ının bilinen dosya ADLARI (basename). Config dosyaları

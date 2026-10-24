@@ -61,8 +61,14 @@ class TestBudgetOverBannerElement(unittest.TestCase):
 
     def test_banner_clickable_expandable(self):
         # Şerit tıklanabilir; özet + caret + gizli detay bölümü içerir.
-        self.assertIn("onclick=\"toggleBudgetOverDetail()\"", self.html)
+        # CSP inline handler'ı bloklar → tıklama/klavye addEventListener ile
+        # bağlanır (preview.html'de inline onclick yok).
         self.assertIn("cursor:pointer", self.html)
+        self.assertRegex(
+            self.html, r'addEventListener\("click",\s*toggleBudgetOverDetail\)')
+        self.assertRegex(
+            self.html, r'addEventListener\("keydown",\s*\(e\)\s*=>\s*\{')
+        self.assertNotIn("onclick=\"toggleBudgetOverDetail()\"", self.html)
         self.assertIn('id="budget-over-summary"', self.html)
         self.assertIn('id="budget-over-caret"', self.html)
         m = re.search(r'<div id="budget-over-detail" style="([^"]*)"',
@@ -87,6 +93,9 @@ class TestBudgetOverBannerElement(unittest.TestCase):
         tbody = t.group(0)
         self.assertIn("det.style.display = open ? \"none\" : \"block\"", tbody)
         self.assertIn("caret.textContent = open ? \"▸\" : \"▾\"", tbody)
+        self.assertIn('const toggle = $("budget-over-toggle");', tbody)
+        self.assertIn('if (toggle) toggle.setAttribute("aria-expanded", String(!open));', tbody)
+        self.assertNotIn('const banner = $("budget-over-banner");', tbody)
 
 
 class TestBudgetOverBannerLogic(unittest.TestCase):
@@ -135,7 +144,7 @@ class TestBudgetOverBannerLogic(unittest.TestCase):
 
     def test_detail_built_and_collapsed_each_update(self):
         # Detay her güncellemede yeniden yazılır ve kapalı başlar.
-        self.assertIn("det.innerHTML = budgetOverDetailRows(over)", self.body)
+        self.assertRegex(self.body, r"det\.innerHTML\s*=\s*\n?\s*budgetOverDetailRows\(over\)")
         self.assertIn("det.style.display = \"none\";", self.body)
         self.assertIn("budgetOverRuns = over;", self.body)
 
@@ -179,7 +188,7 @@ class TestTrendTooltipBudgetNote(unittest.TestCase):
         self.assertIn("budgetLimitNote(r.budget_usd, lim)", body)
         self.assertIn("budgetTipColor(r.budget_usd, lim)", body)
         self.assertIn("runBudgetLimit(r)", body)
-        self.assertIn(r'class=\"', body)
+        self.assertRegex(body, r"class=[\"']")
 
     def test_budget_tip_color_over_under(self):
         # budgetTipColor: aşım tt-over (kırmızı), altında tt-under (yeşil),

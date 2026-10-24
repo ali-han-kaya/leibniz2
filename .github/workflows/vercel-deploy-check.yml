@@ -1,0 +1,49 @@
+name: vercel-deploy-check
+
+on:
+  schedule:
+    # Aylık: her ayın 1'i 05:23 UTC. Diğer cron'lar haftalık ve farklı
+    # dakikada (K7: test_gated_schedules — iki scheduled workflow aynı
+    # cron'u paylaşmaz).
+    - cron: "23 5 1 * *"
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Doğrulanacak deployment kökü (boşsa repo variable / canlı alias)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  # CI-hijyen: elle-tetikleme + cron çakışması eski koşumu iptal eder.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy-check:
+    name: Vercel deploy /api saglik + run-history (fail-closed)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # K1 kapı-paritesi (test_gated_schedules): schedule'lı iş akış, akışı
+      # YAML'da yeniden yazmaz — repo kapı script'ini çağırır; aynı script
+      # lokalde --base-url ile birebir aynı kodu koşar.
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Vercel deploy /api dogrulama (fail-closed)
+        env:
+          INPUT_URL: ${{ github.event.inputs.base_url }}
+          VAR_URL: ${{ vars.VERCEL_PREVIEW_URL }}
+        run: |
+          set -euo pipefail
+          # URL çözümü: elle-girdi > repo variable > bilinen canlı alias.
+          # (Aykırı: "vercel link" hesap-düzeyinde 400 — sabit preview alias'ı
+          # yok; değişken = elle girilen preview URL.) Şema denetimi + iki uç
+          # (health "ok" düz-metin; run-history JSON + ts/verdict şema +
+          # verdict kümesi) kapı script'inin içindedir: exit 1 = fail-closed,
+          # STEP_SUMMARY her koşumda script tarafından yazılır (sessiz PASS yok).
+          BASE_URL="${INPUT_URL:-${VAR_URL:-https://leibniz2.vercel.app}}"
+          python3 _calisma/CIKTI/check_vercel_deploy.py --base-url "$BASE_URL"

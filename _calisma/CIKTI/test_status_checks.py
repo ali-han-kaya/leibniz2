@@ -35,7 +35,8 @@ if HAVE_YAML:
 
 
 def _protection(contexts=None, strict=True, enforce_admins=True,
-                force_pushes=False, deletions=False):
+                force_pushes=False, deletions=False, pr_reviews=False):
+    """Koruma nesnesi. `pr_reviews=True` → PR zorunlu (strict uygulanır)."""
     return {
         "required_status_checks": {
             "contexts": contexts or [],
@@ -44,6 +45,8 @@ def _protection(contexts=None, strict=True, enforce_admins=True,
         "enforce_admins": {"enabled": enforce_admins},
         "allow_force_pushes": {"enabled": force_pushes},
         "allow_deletions": {"enabled": deletions},
+        "required_pull_request_reviews": (
+            {"required_approving_review_count": 1} if pr_reviews else None),
     }
 
 
@@ -69,12 +72,13 @@ class TestGateJobs(unittest.TestCase):
                          "Action runtime check (node24)")
 
     def test_count_matches_workflow_minus_excludes(self):
-        # 28 job − 14 hariç = 14 required aday (tek kaynak: workflow).
+        # 30 job − 14 hariç = 16 required aday (tek kaynak: workflow;
+        # 15 -> 16: webkit-smoke — protection contexts == gate_jobs).
         # Hariç: manifest-comment, precheck, label-gate-p1, plist-check,
         #        mirror-check, daemon-http, fresh-clone-http, audit-live-ci,
         #        audit-refs-trend, override-trend, changelog-drift, pattern-drift,
         #        budget-comment, lake-proof
-        self.assertEqual(len(sc.gate_jobs()), 14)
+        self.assertEqual(len(sc.gate_jobs()), 16)
 
     def test_gate_jobs_exact_set_includes_label_gate(self):
         """gate_jobs() tam id kümesini birebir sabitler (fail-closed).
@@ -84,8 +88,8 @@ class TestGateJobs(unittest.TestCase):
         senkron kararı insana bırakılır (yanlış-PASS yok). label-gate
         BİLEREK bu kümededir: P0 label kapısı required'dır.
 
-        NOT: Kapsam 13 değil 14'tür — 13, a11y-gate eklenmeden önceki sayıydı;
-        a11y-gate (2026-09-17) ile 14'e büyüdü.
+        NOT: Kapsam 14 değil 15'tir — 14, a11y-gate eklenmeden önceki
+        sayıydı; texlive-accept (R3 kabulü) ile 15'e büyüdü.
         """
         self.assertEqual(
             set(sc.gate_jobs()),
@@ -104,6 +108,7 @@ class TestGateJobs(unittest.TestCase):
                 "preview-reload-smoke",
                 "ci-simulate",
                 "a11y-gate",
+                "texlive-accept", "webkit-smoke",
             },
         )
         # label-gate P0 kapısı required aday olmalı (özel vurgu).
@@ -193,20 +198,57 @@ class TestAdvisoryContract(unittest.TestCase):
 
 @unittest.skipUnless(HAVE_YAML, "PyYAML gerekli")
 class TestMergeBlockSmoke(unittest.TestCase):
+    def _row(self, smoke, label="required_status_checks.strict"):
+        return next(r for r in smoke if r[0] == label)
+
     def test_all_pass_when_fully_enforced(self):
         smoke = sc.merge_block_smoke(
             _protection(["a"], strict=True, enforce_admins=True,
-                        force_pushes=False, deletions=False))
+                        force_pushes=False, deletions=False, pr_reviews=True))
         self.assertTrue(all(ok for (_l, ok, _n) in smoke))
         self.assertEqual(len(smoke), 4)
 
     def test_all_fail_when_bypass_open(self):
         # strict eksik + diğer bypass'lar açık → tümü FAIL.
         prot = _protection(["a"], enforce_admins=False,
-                           force_pushes=True, deletions=True)
+                           force_pushes=True, deletions=True, pr_reviews=True)
         prot["required_status_checks"]["strict"] = None
         smoke = sc.merge_block_smoke(prot)
         self.assertFalse(any(ok for (_l, ok, _n) in smoke))
+
+    def test_strict_off_is_red_when_pr_required(self):
+        """Asıl açık: strict=False PR-akışında FAIL etmeli (varlık yetmez)."""
+        smoke = sc.merge_block_smoke(_protection(["a"], strict=False,
+                                                 pr_reviews=True))
+        label, ok, note = self._row(smoke)
+        self.assertFalse(ok, "strict kapalı PR-akışında yakalanmalı")
+        self.assertIn("strict kapalı", note)
+
+    def test_strict_off_is_green_for_direct_push(self):
+        """Direct-push: PR dalı yok → strict yok/False meşru, kırmızıya düşmez."""
+        for strict in (False, None):
+            smoke = sc.merge_block_smoke(_protection(["a"], strict=strict))
+            label, ok, note = self._row(smoke)
+            self.assertTrue(ok, "direct-push %r: %s" % (strict, note))
+            self.assertIn("direct-push", note)
+
+    def test_pr_flow_override_beats_inference(self):
+        # Akışı bilen çağıran tahmini ezer: reviews yok ama pr_flow=True.
+        label, ok, _n = self._row(sc.merge_block_smoke(
+            _protection(["a"], strict=False), pr_flow=True))
+        self.assertFalse(ok)
+        # reviews var ama pr_flow=False → strict uygulanmaz.
+        label, ok, _n = self._row(sc.merge_block_smoke(
+            _protection(["a"], strict=False, pr_reviews=True), pr_flow=False))
+        self.assertTrue(ok)
+
+    def test_missing_status_checks_still_fails_closed(self):
+        # required_status_checks hiç yok: strict'in uygulanabilirliği kanıtsız.
+        prot = _protection(["a"], pr_reviews=True)
+        prot["required_status_checks"] = None
+        label, ok, note = self._row(sc.merge_block_smoke(prot))
+        self.assertFalse(ok)
+        self.assertIn("required_status_checks yok", note)
 
     def test_empty_protection_fails_closed(self):
         # Alanlar eksikse enforcement KANITLANAMAZ → FAIL (yanlış PASS yok).
@@ -242,19 +284,39 @@ class TestEvaluateProtection(unittest.TestCase):
         self.assertEqual(r["extra"], ["b"])
 
     def test_enforcement_fail_when_strict_missing(self):
-        # strict alan tanımlı değilse enforcement FAIL.
-        r = sc.evaluate_protection(["a"], {"required_status_checks": {"contexts": ["a"]},
-                                             "enforce_admins": {"enabled": True},
-                                             "allow_force_pushes": {"enabled": False},
-                                             "allow_deletions": {"enabled": False}})
+        # PR-akışında strict alan tanımlı değilse enforcement FAIL.
+        r = sc.evaluate_protection(["a"], {
+            "required_status_checks": {"contexts": ["a"]},
+            "enforce_admins": {"enabled": True},
+            "allow_force_pushes": {"enabled": False},
+            "allow_deletions": {"enabled": False},
+            "required_pull_request_reviews": {"required_approving_review_count": 1},
+        })
         self.assertTrue(r["names_ok"])
         self.assertFalse(r["enforcement_ok"])
+        self.assertIs(r["pr_flow"], True)
 
     def test_strict_false_is_valid_for_direct_push(self):
-        # strict=False: push izni var, PR-only engeli yok — geçerli.
+        # strict=False: PR yolu yok — doğrudan push akışında geçerli.
         r = sc.evaluate_protection(["a"], _protection(["a"], strict=False))
         self.assertTrue(r["names_ok"])
         self.assertTrue(r["enforcement_ok"])
+        self.assertIs(r["pr_flow"], False)
+
+    def test_strict_false_is_invalid_for_pr_flow(self):
+        # Aynı koruma PR zorunluyken: strict kapalı → enforcement FAIL.
+        r = sc.evaluate_protection(
+            ["a"], _protection(["a"], strict=False, pr_reviews=True))
+        self.assertTrue(r["names_ok"])
+        self.assertFalse(r["enforcement_ok"])
+        self.assertIs(r["pr_flow"], True)
+
+    def test_pr_flow_override_in_evaluate(self):
+        # reviews yok ama akış PR: açık override ile strict yakalanır.
+        r = sc.evaluate_protection(["a"], _protection(["a"], strict=False),
+                                   pr_flow=True)
+        self.assertFalse(r["enforcement_ok"])
+        self.assertIs(r["pr_flow"], True)
 
     def test_null_contexts_treated_as_empty(self):
         p = _protection(None)
@@ -294,6 +356,41 @@ class TestGhIntegration(unittest.TestCase):
             with self.assertRaises(SystemExit) as cm:
                 sc.main(["--gh", "--repo", "owner/name"])
         self.assertEqual(cm.exception.code, 1)
+
+    def test_gh_strict_off_with_pr_flow_exits_1(self):
+        """Regresyon: PR-akışlı repoda strict kapatılınca --gh KIRMIZI olmalı."""
+        checks = list(sc.gate_jobs().values())
+        bad = _protection(checks, strict=False, pr_reviews=True)
+        buf = io.StringIO()
+        with mock.patch.object(sc, "run_gh", return_value=json.dumps(bad)), \
+                mock.patch.object(sys, "stdout", new=buf):
+            with self.assertRaises(SystemExit) as cm:
+                sc.main(["--gh", "--repo", "owner/name", "--json"])
+        self.assertEqual(cm.exception.code, 1)
+        d = json.loads(buf.getvalue())
+        self.assertEqual(d["verdict"], "FAIL")
+        self.assertIs(d["pr_flow"], True)
+        row = next(r for r in d["smoke"]
+                   if r["label"] == "required_status_checks.strict")
+        self.assertFalse(row["ok"])
+        self.assertIn("strict kapalı", row["note"])
+
+    def test_gh_direct_push_repo_without_strict_passes(self):
+        """Aynı ayar direct-push deposunda yeşil kalmalı (yanlış-kırmızı yok)."""
+        checks = list(sc.gate_jobs().values())
+        ok = _protection(checks, strict=False)  # reviews yok → direct-push
+        buf = io.StringIO()
+        with mock.patch.object(sc, "run_gh", return_value=json.dumps(ok)), \
+                mock.patch.object(sys, "stdout", new=buf):
+            rc = sc.main(["--gh", "--repo", "owner/name", "--json"])
+        self.assertIsNone(rc)
+        d = json.loads(buf.getvalue())
+        self.assertEqual(d["verdict"], "PASS")
+        self.assertIs(d["pr_flow"], False)
+        row = next(r for r in d["smoke"]
+                   if r["label"] == "required_status_checks.strict")
+        self.assertTrue(row["ok"])
+        self.assertIn("direct-push", row["note"])
 
     def test_no_protection_exits_1(self):
         # run_gh RuntimeError → "branch protection kurulu değil" → exit 1 (fail-closed).

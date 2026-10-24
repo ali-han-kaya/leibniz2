@@ -13,13 +13,24 @@ RUNTIME_REQUIRED = (
     "daemon_http_test.py", "preview.html", "preview.js", "fresh_clone_setup.sh", "test_fresh_clone_setup.py",
     "update_preview.sh", "check_unit_tests.list", "check_unit_tests_hook.sh", "sync_check_unit_tests.py",
     "lake_evidence_hook.sh", "test_lake_evidence_smoke.py", "render_z3_slides.py", "test_render_z3_slides.py",
+    # K6-DETERM kanonik çekirdeği: verify_delivery.py import eder (pdf_id_canonical),
+    # defter çözümlemesi id_canonical'da tek kaynak.
+    "pdf_id_canonical.py", "id_canonical.py",
     # Run-summary modülleri + konsolidatör (K13 ayrı-step sidecar özetleri)
     "run_summary_budget.py", "run_summary_changelog.py", "run_summary_k0.py",
-    "run_summary_k12.py", "run_summary_k13.py", "run_summary_klayers.py",
+    "run_summary_k9.py", "run_summary_k12.py", "run_summary_k13.py", "run_summary_klayers.py",
     "run_summary_lineage.py", "run_summary_precommit.py", "run_summary_refs_trend.py",
     "consolidate_summary.py",
 )
-PREVIEW_RUNTIME = ("preview_server.py", "_daemonize.py", "preview_prestart.py", "sw.js")
+# precommit_log.py: preview_server.py bu modülü import eder (hook raporu
+# seam'i). PREVIEW_MIRROR'da bulunmazsa launchd/TCC rotası dashboard'u
+# servis etmeden ModuleNotFoundError ile düşer.
+# determinism_trend_badge.py: /api/determinism-trend lazy import (guard
+# yok) — eksikse rota 500 döner. check_pattern_consistency.py: finalize
+# lazy import (guard'lu) — eksikse drift paneli sessizce boşalır.
+PREVIEW_RUNTIME = ("preview_server.py", "_daemonize.py", "preview_prestart.py", "sw.js",
+                   "precommit_log.py", "determinism_trend_badge.py",
+                   "check_pattern_consistency.py")
 GUIDE_REL = "docs/branch-protection-guide/guide.html"
 DOC_REL = "docs/HOOK_ENV_MATRIX.md"
 # design-system token sheet — preview.html /design-system/tokens.css import
@@ -28,6 +39,11 @@ DOC_REL = "docs/HOOK_ENV_MATRIX.md"
 # <repo>/design-system/tokens.css — kapsam tanımı bunu beklemeli (yoksa
 # fail-closed coverage CI'da "BEKLENMEYEN: design-system/tokens.css" ile kırılır).
 DESIGN_TOKENS_REL = "design-system/tokens.css"
+# K6-DETERM kabul defteri — sync_verify_mirror.sh LEDGER_FILES bloğu bunu
+# MIRROR_DIR'a düz adla (ID_RESIDUAL_ACCEPTANCE.md) bırakır; kaynak repo
+# kökündeki docs/ dosyasıdır. Kapsam tanımı beklemeli, yoksa fail-closed
+# coverage "BEKLENMEYEN: docs/ID_RESIDUAL_ACCEPTANCE.md" ile kırılır.
+LEDGER_REL = "docs/ID_RESIDUAL_ACCEPTANCE.md"
 
 
 def run_list(script):
@@ -97,6 +113,7 @@ def expected_repo_files(root, cikti, lean_src):
     expected.add(GUIDE_REL)
     expected.add(DOC_REL)
     expected.add(DESIGN_TOKENS_REL)
+    expected.add(LEDGER_REL)
     if os.path.isdir(lean_src):
         for directory, dirs, files in os.walk(lean_src):
             dirs[:] = [d for d in dirs if d != ".lake"]

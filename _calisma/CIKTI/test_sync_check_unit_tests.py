@@ -22,6 +22,8 @@ stdlib only, OFFLINE — geçici dizinlerle izole çalışır.
 
 import os
 import re
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -201,25 +203,61 @@ class TestHookCoverageSync(unittest.TestCase):
         finally:
             td.cleanup()
 
-    def test_drift_guard_can_still_parse_regenerated_block(self):
-        """Yeniden yazılan blok, ci_full_discover_drift_guard'ın statik parse'
-       ıyla okunabilir olmalı (format kontratı)."""
+    def test_regenerated_block_is_ast_round_trip(self):
+        """Yeniden yazılan blok, AST tabanlı okuyucuyla birebir geri okunmalı
+        (yazım-sonrası read == entries sözleşmesi)."""
         entries = ["test_a.py", "test_b.py"]
         td, cov = self._env(entries, ("test_new.py",))
         try:
             s.run_update(stage=False, directory=td.name,
                          manifest=os.path.join(td.name, "mf.list"), coverage=cov)
-            src = open(cov, encoding="utf-8").read()
-            i = src.find('"check-unit-tests":')
-            j = src.find("],", i)
-            self.assertGreater(i, 0)
-            self.assertGreater(j, i)
-            import re as _re
-            found = _re.findall(r'"([^"]+\.py)"', src[i:j + 1])
-            self.assertIn("test_new.py", found)
-            self.assertIn("test_a.py", found)
+            self.assertEqual(
+                s.read_hook_coverage(cov),
+                ["test_a.py", "test_b.py", "test_new.py"])
         finally:
             td.cleanup()
+
+    def test_reader_is_span_heuristic_free(self):
+        """KIRILMA-TUZAĞI: blok-içi yorum ']," taşıyorsa span sezgisi kırılır;
+        AST tabanlı okuma/yazım bu durumda da doğru çalışmalı (bkz. ölçülen
+        2026-09-21 boşluğu: ci_full_discover_drift_guard.py satır 129)."""
+        td = tempfile.TemporaryDirectory()
+        try:
+            cov = os.path.join(td.name, "coverage_report.py")
+            with open(cov, "w", encoding="utf-8") as f:
+                f.write(
+                    "HOOK_COVERAGE = {\n"
+                    '    "other-hook": ["test_other.py"],\n'
+                    '    "check-unit-tests": [\n'
+                    '        # 2026-09-21 boşluğu: ci_full_discover_drift_guard.py\n'
+                    '        # ... sorusunun cevabı ], tam burada — tuzak\n'
+                    '        "test_a.py",\n'
+                    '        "test_b.py",],\n'
+                    "}\n")
+            open(os.path.join(td.name, "test_a.py"), "w").close()
+            open(os.path.join(td.name, "test_b.py"), "w").close()
+            open(os.path.join(td.name, "test_c.py"), "w").close()
+            # Okuma: eski span sezgisi gövdeyi yorumdaki '],'-da kırpıp boş
+            # gövde okur; AST tabanlı okuma gerçek girdileri döndürmeli.
+            self.assertEqual(s.read_hook_coverage(cov),
+                             ["test_a.py", "test_b.py"])
+            # Yazım da sağlam kalmalı (parite: read(update(read)) = yazılan).
+            s.run_update(stage=False, directory=td.name,
+                         manifest=os.path.join(td.name, "mf.list"),
+                         coverage=cov)
+            self.assertEqual(s.read_hook_coverage(cov),
+                             ["test_a.py", "test_b.py", "test_c.py"])
+        finally:
+            td.cleanup()
+
+    def test_guard_reader_matches_sync_reader_on_real_repo(self):
+        """Parite kapısı: ci_full_discover_drift_guard'ın HOOK_COVERAGE okuması,
+        sync aracının okumasıyla gerçek repoda birebir aynı olmalı (guard
+        yalnız .py ister; sync .js girdilerini de taşır — py-only küme)."""
+        import ci_full_discover_drift_guard as g
+        self.assertEqual(
+            g.read_hook_coverage_check_unit_tests(),
+            {e for e in s.read_hook_coverage() if e.endswith(".py")})
 
     def test_real_repo_hook_coverage_covers_discovery(self):
         """Gerçek repo regresyon kapısı: keşif, tüm hook listelerinin
@@ -290,6 +328,284 @@ class TestRepoConsistency(unittest.TestCase):
                 f"Hook pattern '{pattern}' hiçbir test dosyasıyla eşleşmiyor "
                 f"(çift uzantı/yanlış giriş) — kaynak: {name}",
             )
+
+
+HOOK_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                           "check_unit_tests_hook.sh")
+STUB_TEST_BODY = ("import unittest\n\n\nclass T(unittest.TestCase):\n"
+                  "    def test_ok(self):\n        pass\n")
+# Gerçek repoda olduğu gibi: test_coverage_report.py kendisi keşfedilen
+# bir test dosyasıdır (manifest girişli) — HOOK bloğu + test gövdesi.
+COV_FILE = "test_coverage_report.py"
+BASE = ["test_a.py", "test_b.py", COV_FILE]
+
+
+class TestHookEntryFailClosed(unittest.TestCase):
+    """check_unit_tests_hook.sh artık drift'i BLOKLAR (sessiz auto-fix değil).
+
+    Ölçülen boşluk: hook daha önce `sync --update >/dev/null || true`
+    çalıştırıyordu — (1) documented 'yalnız bir yazan hook' invariant'ını
+    çiğniyordu, (2) senkron hatalarını yutuyordu, (3) drift'i sessizce
+    düzeltip stage'liyordu. Yeni sözleşme: hook fail-closed --check
+    koşturur; drift → commit bloke + remedy (sync --update)."""
+
+    def _sandbox(self, disk, manifest, coverage):
+        """Gerçek hook + gerçek sync-aracıyla izole repo kökü kurar."""
+        td = tempfile.TemporaryDirectory()
+        cikti = os.path.join(td.name, "_calisma", "CIKTI")
+        os.makedirs(cikti)
+        shutil.copy(os.path.abspath(s.__file__), cikti)
+        shutil.copy(HOOK_SCRIPT, cikti)
+        for t in disk:
+            with open(os.path.join(cikti, t), "w", encoding="utf-8") as f:
+                f.write(STUB_TEST_BODY)
+        cov = os.path.join(cikti, COV_FILE)
+        _write_coverage(cov, coverage)
+        with open(cov, "a", encoding="utf-8") as f:
+            f.write(STUB_TEST_BODY)
+        s.write_manifest(manifest, os.path.join(cikti, "check_unit_tests.list"))
+        return td, cikti
+
+    def _run_hook(self, cikti):
+        return subprocess.run(
+            ["bash", os.path.join(cikti, "check_unit_tests_hook.sh")],
+            capture_output=True, text=True,
+            cwd=os.path.dirname(os.path.dirname(cikti)))
+
+    def test_hook_blocks_when_new_test_missing_from_manifest(self):
+        td, cikti = self._sandbox(
+            disk=BASE + ["test_c.py"],
+            manifest=BASE,
+            coverage=BASE)
+        try:
+            r = self._run_hook(cikti)
+            self.assertNotEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertIn("--update", r.stderr, "remedy komutu gösterilmeli")
+            # Okuma-hook invariantı: drift BLOKLANIR, sessizce DÜZELTİLMEZ.
+            self.assertEqual(
+                s.read_manifest(os.path.join(cikti, "check_unit_tests.list")),
+                BASE)
+        finally:
+            td.cleanup()
+
+    def test_hook_blocks_when_hook_coverage_missing_entry(self):
+        td, cikti = self._sandbox(
+            disk=BASE,
+            manifest=BASE,
+            coverage=["test_a.py", "test_b.py"])
+        try:
+            r = self._run_hook(cikti)
+            self.assertNotEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertIn("HOOK_COVERAGE", r.stderr)
+        finally:
+            td.cleanup()
+
+    def test_hook_passes_and_is_read_only_on_synced_tree(self):
+        td, cikti = self._sandbox(disk=BASE, manifest=BASE, coverage=BASE)
+        try:
+            mf = os.path.join(cikti, "check_unit_tests.list")
+            cov = os.path.join(cikti, COV_FILE)
+            r = self._run_hook(cikti)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertIn("PASS", r.stdout)
+            self.assertEqual(s.read_manifest(mf), BASE)
+            self.assertEqual(s.read_hook_coverage(cov), BASE)
+        finally:
+            td.cleanup()
+
+
+class TestExcludeCiBindingGate(unittest.TestCase):
+    """EXCLUDE ↔ CI-job/hook BAĞLAMA kapısı (sync --check'in üçüncü hedefi).
+
+    Ölçülen boşluk (2026-09-30): EXCLUDE'lanan test pre-commit manifest'inde
+    koşmaz; "CI'da X job'ında koşar" iddiası YALNIZCA yorumlarda yaşıyordu.
+    Doğrulanan işaretler:
+      * `ci_full_discover_drift_guard.py` (tam discover emniyet ağı) repo'da
+        HİÇBİR yere bağlı değil (workflow/pre-commit/manifest: 0 eşleşme)
+        → "CI her şeyi koşar" sözleşmesinin makinesel garantisi yok.
+      * CI'da `verify` job'ı full discover koşuyor
+        (`unittest discover -p "test_*.py"`) — yani var olan koşma yolu bu.
+    Yani EXCLUDE'a yeni bir test ekleyen kişi onun HİÇBİR YERDE koşmadığını
+    fark edemiyor. Bu kapı: (1) her EXCLUDE girdisi bir hedefe bağlı olmalı,
+    (2) bildirilen hedef GERÇEKTEN var olmalı, (3) ters/stale bağ olmamalı,
+    (4) full-discover sözleşmesi ölçülebilir kalmalı. Hepsi fail-closed.
+    """
+
+    WORKFLOW = (
+        "name: t\non: [push]\njobs:\n"
+        "  alpha:\n    name: Alpha job\n    steps:\n"
+        "      - name: Run tests\n        run: |\n"
+        '          python3 -m unittest discover -s _calisma/CIKTI -p "test_*.py"\n'
+    )
+    CONFIG = "repos:\n  - hooks:\n      - id: gate-x\n        name: x\n"
+
+    def _surfaces(self, workflow=WORKFLOW, config=CONFIG):
+        td = tempfile.mkdtemp()
+        wf = os.path.join(td, "workflows")
+        os.makedirs(wf)
+        with open(os.path.join(wf, "verify.yml"), "w") as fh:
+            fh.write(workflow)
+        cfg = os.path.join(td, ".pre-commit-config.yaml")
+        with open(cfg, "w") as fh:
+            fh.write(config)
+        return td, wf, cfg
+
+    def _gate(self, wf, cfg, **kw):
+        return s.run_check_exclude_binding(workflows_dir=wf, config_path=cfg, **kw)
+
+    def test_gate_passes_when_every_exclude_has_existing_home(self):
+        td, wf, cfg = self._surfaces()
+        try:
+            rc = self._gate(wf, cfg, exclude={"test_a.py"},
+                            ci_jobs={"test_a.py": "alpha"}, hooks={})
+            self.assertEqual(rc, 0, "tam bağlı küme bloklanmamalı")
+        finally:
+            shutil.rmtree(td)
+
+    def test_gate_blocks_exclude_without_any_home(self):
+        # Kapının özü: manifest'te koşmayan testin bir koşma YERİ olmalı.
+        td, wf, cfg = self._surfaces()
+        try:
+            rc = self._gate(wf, cfg, exclude={"test_a.py"}, ci_jobs={}, hooks={})
+            self.assertEqual(rc, 1, "bağsız EXCLUDE girdisi bloklanmalı")
+        finally:
+            shutil.rmtree(td)
+
+    def test_gate_blocks_dangling_ci_job(self):
+        # Job yeniden adlandırıldı/silindi → bağ boşlukta kalmasın.
+        td, wf, cfg = self._surfaces()
+        try:
+            rc = self._gate(wf, cfg, exclude={"test_a.py"},
+                            ci_jobs={"test_a.py": "ghost-job"}, hooks={})
+            self.assertEqual(rc, 1, "var olmayan job id'si bloklanmalı")
+        finally:
+            shutil.rmtree(td)
+
+    def test_gate_blocks_dangling_hook(self):
+        td, wf, cfg = self._surfaces()
+        try:
+            rc = self._gate(wf, cfg, exclude={"test_b.py"}, ci_jobs={},
+                            hooks={"test_b.py": "gate-yok"})
+            self.assertEqual(rc, 1, "var olmayan hook id'si bloklanmalı")
+        finally:
+            shutil.rmtree(td)
+
+    def test_gate_blocks_stale_binding_for_non_excluded_test(self):
+        # Ters yön: EXCLUDE'da olmayan teste bağlama bildirilemez.
+        td, wf, cfg = self._surfaces()
+        try:
+            rc = self._gate(wf, cfg, exclude=set(),
+                            ci_jobs={"test_ghost.py": "alpha"}, hooks={})
+            self.assertEqual(rc, 1, "EXCLUDE dışı stale bağ bloklanmalı")
+        finally:
+            shutil.rmtree(td)
+
+    def test_gate_blocks_double_binding(self):
+        td, wf, cfg = self._surfaces()
+        try:
+            rc = self._gate(wf, cfg, exclude={"test_a.py"},
+                            ci_jobs={"test_a.py": "alpha"},
+                            hooks={"test_a.py": "gate-x"})
+            self.assertEqual(rc, 1, "çift bağlama (belirsizlik) bloklanmalı")
+        finally:
+            shutil.rmtree(td)
+
+    def test_gate_is_fail_closed_when_workflow_surface_missing(self):
+        # KÖR KAPI: yüzey okunamıyorsa "bağlar sağlam" sayılamaz.
+        td, _wf, cfg = self._surfaces()
+        try:
+            rc = self._gate(os.path.join(td, "yok"), cfg,
+                            exclude={"test_a.py"},
+                            ci_jobs={"test_a.py": "alpha"}, hooks={})
+            self.assertEqual(rc, 1, "okunamayan yüzeyde kapı kör geçmemeli")
+        finally:
+            shutil.rmtree(td)
+
+    def test_gate_blocks_when_full_discover_sentinel_disappears(self):
+        # "CI her şeyi koşar" vaadi ölçülebilir olmalı: full discover satırı
+        # workflow'larda yoksa EXCLUDE'lu testlerin koşma yeri kalmamıştır.
+        td, wf, cfg = self._surfaces(
+            workflow=("name: t\non: [push]\njobs:\n  alpha:\n"
+                      "    steps:\n      - name: x\n        run: true\n"))
+        try:
+            rc = self._gate(wf, cfg, exclude={"test_a.py"},
+                            ci_jobs={"test_a.py": "alpha"}, hooks={})
+            self.assertEqual(rc, 1, "full-discover sentinel yoksa bloklanmalı")
+        finally:
+            shutil.rmtree(td)
+
+    def test_gate_is_skipped_in_fully_isolated_run(self):
+        # Tam izole koşum (check_unit_tests_hook.sh'nin sandbox kopyası):
+        # repo yüzeyi YOK → kapı "kapsam dışı" der, bloklamaz. Doğrulanacak
+        # yüzey bulunmadığında kör FAIL de üretmek yanlış olur (sandbox
+        # sözleşmesi: izole koşumda hook yeşil kalmalı).
+        td = tempfile.mkdtemp()
+        try:
+            rc = self._gate(os.path.join(td, "yok"), os.path.join(td, "yok.yaml"),
+                            exclude={"test_a.py"},
+                            ci_jobs={"test_a.py": "alpha"}, hooks={})
+            self.assertEqual(rc, 0, "tam izole koşumda kapı kapsam dışı olmalı")
+        finally:
+            shutil.rmtree(td)
+
+    def test_gate_blocks_partial_surface(self):
+        # Kısmi yüzey (config var, workflow yok) → ölçülemeyen bağlama
+        # "temiz" sayılamaz: fail-closed.
+        td = tempfile.mkdtemp()
+        cfg = os.path.join(td, "cfg.yaml")
+        with open(cfg, "w") as fh:
+            fh.write(self.CONFIG)
+        try:
+            rc = self._gate(os.path.join(td, "yok-wf"), cfg,
+                            exclude={"test_a.py"},
+                            ci_jobs={"test_a.py": "alpha"}, hooks={})
+            self.assertEqual(rc, 1, "kısmi yüzeyde kör PASS üretilmemeli")
+        finally:
+            shutil.rmtree(td)
+
+    def test_real_repo_every_exclude_entry_declares_a_home(self):
+        # Regresyon kapısı: yeni EXCLUDE girdisi bağlama bildirmeden eklenemez.
+        rc = s.run_check_exclude_binding()
+        self.assertEqual(rc, 0, "gerçek repo EXCLUDE↔hedef bağları temiz olmalı")
+
+    def test_real_repo_declared_targets_exist(self):
+        missing_jobs = sorted({j for j in s.EXCLUDE_CI_JOBS.values()
+                               if j not in s.workflow_ci_tokens()})
+        missing_hooks = sorted({h for h in s.EXCLUDE_HOOKS.values()
+                                if h not in s.precommit_hook_ids()})
+        self.assertEqual(missing_jobs, [], f"EXCLUDE, var olmayan CI job'a bağlı: {missing_jobs}")
+        self.assertEqual(missing_hooks, [], f"EXCLUDE, var olmayan hook'a bağlı: {missing_hooks}")
+
+    def test_real_repo_ci_runs_full_discover(self):
+        # EXCLUDE sözleşmesinin makinesel kanıtı: full discover hâlâ koşuyor.
+        blobs = s.read_workflows_text()
+        self.assertTrue(any(s.FULL_DISCOVER_SENTINEL in b for b in blobs),
+                        "CI full discover satırı kayboldu — EXCLUDE vaadi ölçülemez")
+
+    def test_run_check_wires_binding_gate_and_skips_it_when_isolated(self):
+        # (a) bağlama: --check yolunda kapı gerçekten çağrılıyor
+        orig = s.run_check_exclude_binding
+        s.run_check_exclude_binding = lambda **kw: 1
+        try:
+            rc = s.run_check()
+        finally:
+            s.run_check_exclude_binding = orig
+        self.assertEqual(rc, 1, "binding gate run_check'e bağlı değil (sessiz kör kapı)")
+
+        # (b) izolasyon: --dir ile geçici dizin koşumunda repo-geneli kapı çalışmaz
+        calls = []
+
+        def _spy(**kw):
+            calls.append(kw)
+            return 0
+
+        with tempfile.TemporaryDirectory() as td:
+            s.run_check_exclude_binding = _spy
+            try:
+                s.run_check(directory=td, manifest=os.path.join(td, "m.list"))
+            finally:
+                s.run_check_exclude_binding = orig
+        self.assertEqual(calls, [], "izole koşumda repo-geneli kapı çalışmamalı")
 
 
 if __name__ == "__main__":

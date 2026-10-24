@@ -20,17 +20,62 @@ Kapsanan dallar:
                      README/PUBLISH stage edilir, ℹ️ mesajı, exit 0
   gen_changelog hata → --update exit 1 → "HATA: ..." stderr + exit 1 (bloke)
 
+İKİNCİ KATMAN — TestChangelogTwoWriterInvariant: changelog'in "iki yazan"
+değişmezini ölçümle sabitler (aşağıya bak).
+
 stdlib unittest — ek bağımlılık yok.
 """
 import os
 import pathlib
+import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
 CIKTI = pathlib.Path(__file__).resolve().parent
+REPO_ROOT = CIKTI.parents[1]
 REAL_HOOK = CIKTI / "update_changelog_hook.sh"
+REAL_GEN = CIKTI / "gen_changelog.py"
+PRECOMMIT_CONFIG = REPO_ROOT / ".pre-commit-config.yaml"
+UNIT_TESTS_HOOK = CIKTI / "check_unit_tests_hook.sh"
+
+# Sandbox izolasyonu: `git commit` pre-commit hook'larına GIT_INDEX_FILE
+# (pre-commit bunu MUTLAK bir geçici dosyaya yönlendirir) verir. Bu değişken
+# temizlenmezse sandbox'taki `git add -A`, cwd=sandbox olmasına rağmen CANLI
+# repo'nun index'ini yazar: `git add -A` worktree kökünü index'e göre
+# farklılaştırıp tüm canlı girdileri düşürür ve sandbox'ın 4 dosyasını yazar
+# (ölçüldü: 613 → 4 girdi, merge commit'i çökertti). Aynı desen
+# check_review_freshness.py'de de kullanılıyor.
+_GIT_ENV_STRIP = frozenset(
+    {"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY",
+     "GIT_COMMON_DIR"}
+)
+
+
+def sandbox_env(extra=None):
+    """Git deposu işaretçilerini temizlenmiş ortam (sandbox için fail-closed)."""
+    env = {k: v for k, v in os.environ.items() if k not in _GIT_ENV_STRIP}
+    if extra:
+        env.update(extra)
+    return env
+
+
+def norm(text):
+    """Karşılaştırma öncesi normalleştirme.
+
+    Yalnız Türkçe büyük "İ" tuzağı giderilir: Unicode'da `\u0130.lower()`
+    "i" + U+0307 (birleşen nokta) üretir ve assertIn sessizce tutmaz. Diğer
+    diyakritikler KORUNUR — "üç yazan" gibi ifadeler ASCII'ye indirgenirse
+    kıyas anlamsızlaşır.
+    """
+    return text.replace("\u0130", "i").replace("\u0307", "").lower()
+
+# Ölçülen yazar kümesi (origin/main): stage eden (yazan) hook betiği olanlar
+# tam olarak BU ÜÇÜ. check-skills-index 2026-09-30'da yazara dönüştü
+# (README skills tablosu auto-sync) — küme genişledi, beyan da genişledi.
+DECLARED_WRITERS = ("update-config", "check-changelog-sync", "check-skills-index")
 
 MOCK_GEN_CHANGELOG = """#!/usr/bin/env python3
 # Mock gen_changelog.py — gerçek git log/table mantığı yerine env ile yönlendirilir.
@@ -84,20 +129,18 @@ class UpdateChangelogHookTest(unittest.TestCase):
 
     def _git(self, *args):
         subprocess.run(["git", *args], cwd=str(self.tmp), check=True,
-                       capture_output=True, text=True)
+                       capture_output=True, text=True, env=sandbox_env())
 
     def _run_hook(self, env=None):
-        full_env = dict(os.environ)
-        if env:
-            full_env.update(env)
         return subprocess.run(
             ["bash", str(self.tmp / "_calisma" / "CIKTI" / "update_changelog_hook.sh")],
-            cwd=str(self.tmp), env=full_env, capture_output=True, text=True)
+            cwd=str(self.tmp), env=sandbox_env(env), capture_output=True, text=True)
 
     def _porcelain(self):
         return subprocess.run(
             ["git", "status", "--porcelain"], cwd=str(self.tmp),
-            capture_output=True, text=True, check=True).stdout
+            capture_output=True, text=True, check=True,
+            env=sandbox_env()).stdout
 
     def test_no_drift_exits_0_without_touching(self):
         # --check exit 0 → hook dokunmadan exit 0; ℹ️ mesajı yok, stage yok.
@@ -118,7 +161,8 @@ class UpdateChangelogHookTest(unittest.TestCase):
         self.assertIn("changelog tabloları git log'a göre güncellendi", r.stdout)
         staged = subprocess.run(
             ["git", "diff", "--cached", "--name-only"], cwd=str(self.tmp),
-            capture_output=True, text=True, check=True).stdout.splitlines()
+            capture_output=True, text=True, check=True,
+            env=sandbox_env()).stdout.splitlines()
         self.assertIn("README.md", staged)
         self.assertIn("docs/PUBLISH_SCENARIO.md", staged)
         # Mock güncellemesi gerçekten dosyalara işlendi.
@@ -149,6 +193,257 @@ class UpdateChangelogHookTest(unittest.TestCase):
         self.assertEqual(r.returncode, 1)
         self.assertIn("HATA: gen_changelog --update başarısız", r.stderr)
         self.assertEqual(self._porcelain(), "")
+
+
+class TestChangelogTwoWriterInvariant(unittest.TestCase):
+    """"İki yazan" değişmezini ölçümle sabitler.
+
+    Arka plan (ölçülmüş, iddia değil): changelog tablosu commit HASH'İYLE
+    anahtarlanır ve bir commit'in kendi hash'i ancak o commit OLUŞTUKTAN
+    SONRA bilinir. `gen_changelog.py --check` (find_missing_commits) ise
+    "tablodaki en yeni satırdan DAHA YENİ commit'ler"i eksik sayar. Bu
+    ikisi birleşince yapısal bir olgu çıkar: TABL0, HER commit'ten sonra
+    tam olarak BİR commit geridedir — gecikmesi bir commit'in satırını
+    yazması, o satır ancak bir sonraki commit'te oluşabileceği için.
+
+    Ölçüm (geçici git repo + GERÇEK gen_changelog.py CLI'si + GERÇEK hook):
+      1) hook (yazar) çalışır → eksik satırı ekler, README.md'yi stage eder,
+         exit 0 → commit geçer (yazarın commit içi adımı).
+      2) o commit'ten sonra `--check` KIRMIZIDIR ve eksik olarak TAM OLARAK
+         HEAD'in hash'ini listeler → saf okuma kapısı HER commit'i bloklardı.
+      3) bir sonraki commit'te hook aynı onarımı yapar → döngü kapanır,
+         gecikme yine tam bir commit'te kalır.
+
+    Sonuç: saf okuma-hook + remedy bu tabloda YAPISAL OLARAK İMKÂNSIZDIR —
+    bloklayan satırın hash'i henüz var olmaz. Doğru model İKİ YAZAN'dır:
+      (1) commit içinde onarım yazan `check-changelog-sync`,
+      (2) gecikmeli (lag-one) kayıt yazan
+          `chore(changelog): <hash> satırını tabloya ekle` commit'i.
+
+    Ayrıca beyan↔gerçek eşleşmesi sabitlenir: config'te "TEK yazan" diyen
+    satır yanlıştır (ölçüldü: iki hook betiği de `git add` yapıyor) ve
+    değişmezin metni üç yerde de (config başlığı, yazar hook'u, kapı
+    sarmalayıcısı) yazılı olmalıdır.
+    """
+
+    SANDBOX_README = "\n".join([
+        "# sandbox",
+        "",
+        "## Değişiklik Geçmişi",
+        "",
+        "| Tarih | Kategori | Değişiklik | Commit |",
+        "|---|---|---|---|",
+        "",
+    ])
+    SANDBOX_PUBLISH = "\n".join([
+        "# sandbox publish",
+        "",
+        "## Değişiklik Geçmişi",
+        "",
+        "Changelog tek kaynağı README.md'dir; burada tablo tutulmaz.",
+        "",
+    ])
+
+    def setUp(self):
+        self.tmp = pathlib.Path(tempfile.mkdtemp(prefix="changelog_invariant_"))
+        self._git("init", "-q")
+        self._git("config", "user.email", "test@example.com")
+        self._git("config", "user.name", "test")
+        (self.tmp / "README.md").write_text(self.SANDBOX_README, encoding="utf-8")
+        (self.tmp / "docs").mkdir()
+        (self.tmp / "docs" / "PUBLISH_SCENARIO.md").write_text(
+            self.SANDBOX_PUBLISH, encoding="utf-8")
+        self._commit("feat: tablo baslangici")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _git(self, *args):
+        r = subprocess.run(["git", *args], cwd=str(self.tmp), check=False,
+                           capture_output=True, text=True, env=sandbox_env())
+        self.assertEqual(r.returncode, 0,
+                         "git %s: %s%s" % (" ".join(args), r.stderr, r.stdout))
+        return r
+
+    def _commit(self, msg):
+        self._git("add", "-A")
+        self._git("commit", "-q", "-m", msg)
+
+    def _gen(self, *args):
+        return subprocess.run(
+            [sys.executable, str(REAL_GEN), *args], cwd=str(self.tmp),
+            capture_output=True, text=True, env=sandbox_env())
+
+    # ── davranış kanıtı ────────────────────────────────────────────────
+    def _run_real_hook(self):
+        """Gerçek hook betiğini sandbox'ta koşur (gerçek gen_changelog ile).
+
+        Hook kendi dizininden (SCRIPT_DIR) gen_changelog.py'i bulur; ikisi de
+        sandbox'a kopyalanır → hiçbir yerde canlı repo'ya dokunulmaz.
+        """
+        cikti = self.tmp / "_calisma" / "CIKTI"
+        cikti.mkdir(parents=True, exist_ok=True)
+        shutil.copy(REAL_HOOK, cikti / "update_changelog_hook.sh")
+        shutil.copy(REAL_GEN, cikti / "gen_changelog.py")
+        return subprocess.run(
+            ["bash", str(cikti / "update_changelog_hook.sh")],
+            cwd=str(self.tmp), capture_output=True, text=True,
+            env=sandbox_env())
+
+    def _head_full(self):
+        return self._git("rev-parse", "HEAD").stdout.strip()
+
+    def _assert_missing_is_exactly_head(self, check):
+        """Eksik kümesi TAM OLARAK HEAD'dir (kısaltma uzunluğu önemsiz)."""
+        missing = self._missing_hashes(check)
+        self.assertEqual(len(missing), 1,
+                         "gecikme tam BİR commit olmalı: %s" % missing)
+        self.assertTrue(
+            self._head_full().startswith(missing[0]),
+            "eksik satır HEAD olmalı: %s != %s" % (missing[0], self._head_full()))
+
+    def _missing_hashes(self, check):
+        return [ln.strip().lstrip("+").strip()
+                for ln in check.stdout.splitlines()
+                if ln.strip().startswith("+ ")]
+
+    def test_writer_closes_the_loop_and_lag_is_exactly_one_commit(self):
+        """Yazar commit içinde onarır; gecikme tam bir commit'te sabit kalır.
+
+        Ölçülen üç eylem tek testte: hook onarımı → stage → commit, sonra
+        okuma tarafının TAM HEAD'i eksik saydığı, sonra bir sonraki commit'te
+        hook'un kapatıp tekrar bir commit'e indirdiği.
+        """
+        # 1) Yazar (check-changelog-sync) çalışır: onarır + stage eder, exit 0.
+        hook = self._run_real_hook()
+        self.assertEqual(hook.returncode, 0, hook.stderr)
+        staged = self._git("diff", "--cached", "--name-only").stdout.split()
+        self.assertIn("README.md", staged,
+                      "yazar hook README tablosunu stage etmeli: " + hook.stdout)
+
+        # 2) O commit geçer → okuma tarafı tam olarak HEAD'i eksik sayar.
+        self._commit("feat: yazar tarafindan onarildi")
+        check = self._gen("--check")
+        self.assertEqual(check.returncode, 1,
+                         "gecikme bir commit → okuma tarafı kırmızı: " + check.stdout)
+        self._assert_missing_is_exactly_head(check)
+
+        # 3) Bir sonraki commit'te yazar aynı onarımı yapar → döngü kapanır.
+        hook = self._run_real_hook()
+        self.assertEqual(hook.returncode, 0, hook.stderr)
+        self.assertIn("README.md",
+                      self._git("diff", "--cached", "--name-only").stdout.split())
+        self._commit("feat: ikinci onarim")
+        check = self._gen("--check")
+        self._assert_missing_is_exactly_head(check)
+
+    # ── beyan ↔ gerçek ──────────────────────────────────────────────────
+    def _hook_blocks(self):
+        text = PRECOMMIT_CONFIG.read_text(encoding="utf-8")
+        blocks = re.split(r"\n      - id: ", text)[1:]
+        out = {}
+        for b in blocks:
+            hook_id = b.split("\n", 1)[0].strip()
+            m = re.search(r"^\s+entry:\s*(.+)$", b, re.M)
+            out[hook_id] = m.group(1).strip() if m else ""
+        return out
+
+    def test_declared_writers_match_scripts_that_stage(self):
+        """Stage eden hook betikleri tam olarak beyan edilen yazarlardır.
+
+        KAPSAM NOTU: yazarlık stage komutuyla ölçülür (`git add`, kabuk
+        biçimi ya da python listesi). `git update-index` gibi başka komut ya
+        da entry'si betik olmayan (python inline) bir yazar bu denetimi
+        görmez. Ölçüm bilinçli olarak dar: config'in kendi `entry`
+        betiklerini tarar, hook listesini değil.
+        Yeni bir yazar eklendiğinde (check-skills-index böyle oldu) hem
+        DECLARED_WRITERS hem config başlığındaki beyan güncellenmelidir.
+        """
+        blocks = self._hook_blocks()
+        writers = set()
+        for hook_id, entry in blocks.items():
+            for script in re.findall(r"_calisma/CIKTI/[A-Za-z0-9_.\-]+", entry):
+                path = REPO_ROOT / script
+                if not path.exists():
+                    continue
+                body = path.read_text(encoding="utf-8", errors="replace")
+                # Hem kabuk `git add ...` hem python listesi ["git", "add"]
+                # biçimini yakalar (ölçüldü: sync_skills_index.py ikisini de
+                # kullanabiliyor; yalnız ilkini aramak sessizce kaçırırdı).
+                if re.search(r"\bgit\s+add\b|\[\s*[\"\']git[\"\']\s*,\s*[\"\']add[\"\']",
+                             body):
+                    writers.add(hook_id)
+        self.assertEqual(
+            writers, set(DECLARED_WRITERS),
+            "yazar kümesi beyanla uyuşmuyor: yeni bir yazan hook eklendiyse "
+            "config başlığındaki yazar beyanı da güncellenmeli")
+
+    def _comment_blocks(self, text):
+        """Yorum satırlarını boş satırla ayrılmış paragraflara gruplar."""
+        blocks, current = [], []
+        for line in text.splitlines():
+            if line.lstrip().startswith("#"):
+                current.append(line)
+            elif not line.strip():
+                if current:
+                    blocks.append("\n".join(current))
+                    current = []
+            else:
+                if current:
+                    blocks.append("\n".join(current))
+                    current = []
+        if current:
+            blocks.append("\n".join(current))
+        return blocks
+
+    def test_config_header_declares_every_writer(self):
+        """Config başlığındaki yazar beyanı 'tek yazan' YANLIŞINI taşımaz.
+
+        Ölçüm: stage eden hook betiği olanlar tam olarak DECLARED_WRITERS
+        → beyan paragrafının HEPSİNİ sayması gerekir; satır kaydırması
+        denetimi bozmaz (paragraf bazlı). Ayrıca hiçbir yerde "tek yazan"
+        iddiası kalmamalı.
+        """
+        header = PRECOMMIT_CONFIG.read_text(encoding="utf-8").split("repos:", 1)[0]
+        self.assertNotIn("tek yazan", header.lower())
+        declaration = [b for b in self._comment_blocks(header) if "yazan" in b.lower()]
+        self.assertTrue(declaration, "başlıkta yazar beyanı yok")
+        for block in declaration:
+            for hook_id in DECLARED_WRITERS:
+                self.assertIn(
+                    hook_id, block,
+                    "yazar beyanı %s hook'unu saymıyor: %s"
+                    % (hook_id, block[:120]))
+
+    def test_lag_one_invariant_is_documented_in_all_three_sources(self):
+        """Gecikmeli yazma değişmezi üç yerde de açıkça yazılıdır."""
+        config_text = PRECOMMIT_CONFIG.read_text(encoding="utf-8")
+        for label, text in (
+            (".pre-commit-config.yaml", config_text),
+            ("update_changelog_hook.sh",
+             REAL_HOOK.read_text(encoding="utf-8")),
+            ("check_unit_tests_hook.sh",
+             UNIT_TESTS_HOOK.read_text(encoding="utf-8")),
+        ):
+            self.assertIn("gecikmeli", norm(text),
+                          "%s: 'gecikmeli' (lag-one) değişmezi yazılı değil" % label)
+        # Yazar kimliği config + kapı sarmalayıcısında yazılı olmalı ve
+        # "İKİ yazan" gibi bayat bir sayı taşımamalı.
+        for label, text in ((".pre-commit-config.yaml", config_text),
+                            ("check_unit_tests_hook.sh",
+                             UNIT_TESTS_HOOK.read_text(encoding="utf-8"))):
+            self.assertIn("üç yazan", norm(text),
+                          "%s: yazar kümesi beyanı yok" % label)
+            self.assertNotIn("iki yazan", norm(text),
+                             "%s: bayat iki-yazan sayısı kalmamalı" % label)
+
+    def test_writer_hook_ids_still_point_at_writer_scripts(self):
+        """Yazar hook id'leri yeniden adlandırılırsa yazarlık sessizce kaybolmaz."""
+        blocks = self._hook_blocks()
+        self.assertEqual(blocks.get("update-config"),
+                         "bash _calisma/CIKTI/update_config_hook.sh")
+        self.assertEqual(blocks.get("check-changelog-sync"),
+                         "bash _calisma/CIKTI/update_changelog_hook.sh")
 
 
 if __name__ == "__main__":

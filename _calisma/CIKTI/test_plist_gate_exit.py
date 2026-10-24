@@ -12,8 +12,13 @@ DOKUNMAZ, bu yüzden Linux CI'da da çalışır):
 
   2) check_plist_drift.py main() (golden drift kapısı):
        0 = PASS   (render golden ile birebir + geçerli)
-       1 = drift  (render golden'dan farklı)
+       1 = drift  (P0 fazla-profil VEYA P1 bayat/eksik/geçersiz — FAIL-CLOSED)
        2 = hata   (script/golden yok, render başarısız)
+
+Hattın tamamı fail-closed'dır: P1 artık advisory DEĞİL. Bu dosya
+check-plist-drift pre-commit hook'unun koştuğu hedeftir — aşağıdaki
+TestP1FailClosed ve TestHookFailClosed sınıfları P1'in exit 1'e ve hook'un
+nonzero dönüşüne bağlandığını sabitler.
 """
 import contextlib
 import io
@@ -428,12 +433,13 @@ class TestK12NegativeScenarios(unittest.TestCase):
 
 
 class TestK12GoldenFoldPriorities(unittest.TestCase):
-    """K12 golden denetim katlama öncelikleri (fail-closed P0 / advisory P1).
+    """K12 golden denetim katlama öncelikleri (P0 ve P1 — ikisi de fail-closed).
 
     fold_plist_golden_findings: check_plist_drift.py --json raporunu K12
-    findings'ine işler. Fazla-profil drift'i (golden'da olmayan render
-    edilmiş profil) P0 FAIL-CLOSED olmalı; diğer golden drift'leri P1
-    advisory kalır; PASS findings'e girmez; has_p0 sinyali döner.
+    findings'ine işler. Fazla-profil drift'i P0; bayat/eksik/geçersiz
+    drift'ler P1 olarak eklenir. verify_delivery katman verdict'i P0/P1'in
+    TAMAMINI bloke edici sayar ("yalnızca P0/P1 fail-closed sayılır") — bu
+    yüzden P1 de build'i kırar. PASS findings'e girmez; has_p0 sinyali döner.
     """
 
     def _add(self, findings):
@@ -462,14 +468,18 @@ class TestK12GoldenFoldPriorities(unittest.TestCase):
         # PASS bulgusu findings'e GİRMEZ.
         self.assertEqual(len(findings), 1)
 
-    def test_other_golden_drift_is_p1_advisory(self):
+    def test_other_golden_drift_is_p1_fail_closed(self):
+        """P1 bulgusu findings'e girer — katman verdict'i onu da bloke eder."""
         findings = []
-        report = {"has_p0": False, "has_p1": True, "results": [
+        report = {"has_p0": False, "has_p1": True, "fail_closed": True,
+                  "results": [
             {"label": "com.freebuff.preview-leibniz2.plist", "verdict": "DRIFT",
              "priority": "P1", "detail": "render edilmedi (eksik)"},
         ]}
+        # has_p0 yalnızca fazla-profil sinyalidir; P1 için ayrı bulgu eklenir
+        # ve verify_delivery P0/P1'in ikisini de FAIL sayar.
         has_p0 = fold_plist_golden_findings(report, self._add(findings))
-        self.assertFalse(has_p0, "P1-only has_p0=False dönmeli (advisory)")
+        self.assertFalse(has_p0, "P1-only has_p0=False dönmeli")
         p1s = [f for f in findings if f["priority"] == "P1"]
         self.assertEqual(len(p1s), 1)
         self.assertEqual(p1s[0]["id"], "K12-PLIST-GOLDEN")
@@ -480,6 +490,152 @@ class TestK12GoldenFoldPriorities(unittest.TestCase):
         self.assertFalse(fold_plist_golden_findings(None, self._add(findings)))
         self.assertFalse(fold_plist_golden_findings({}, self._add(findings)))
         self.assertEqual(findings, [])
+
+
+class TestP1FailClosed(unittest.TestCase):
+    """P1 (bayat/eksik/geçersiz) artık ADVISORY değil — EXIT 1.
+
+    Üç P1 türü de gerçek `main()` yolundan koşulur; JSON sidecar'ında
+    `fail_closed=true` + `has_p1=true` + `has_p0=false` beklenir (exit 1).
+    Bayat/eksik türleri gerçek `update_preview.sh` render'ıyla (e2e), geçersiz
+    tür sahte render ile (içerik golden'a eşit ama plist bozuk) üretilir.
+    """
+
+    VALID = ("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+             "<plist version=\"1.0\"><dict>\n"
+             "<key>Label</key><string>com.freebuff.preview-leibniz2</string>\n"
+             "</dict></plist>\n")
+
+    def _run_json(self, home, golden, fake_render=None):
+        """main(--json) koş, (rc, sidecar) döndür; render gerekirse sahtele."""
+        import check_plist_drift as cpd
+        from unittest import mock
+        render_home = os.path.join(home, "render-home")
+        argv = ["--json", "--render-home", render_home,
+                "--golden-dir", golden]
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            if fake_render is None:
+                rc = cpd.main(argv)
+            else:
+                with mock.patch.object(cpd, "run_render",
+                                       side_effect=fake_render):
+                    rc = cpd.main(argv)
+        lines = buf.getvalue().strip().splitlines()
+        self.assertTrue(lines, "JSON çıktısı boş")
+        return rc, json.loads(lines[-1])
+
+    def _assert_p1_fail_closed(self, rc, d, detail_fragment):
+        self.assertEqual(rc, 1, d)
+        self.assertTrue(d["drift"], d)
+        self.assertFalse(d["has_p0"], d)
+        self.assertTrue(d["has_p1"], d)
+        self.assertTrue(d["fail_closed"], d)
+        p1s = [r for r in d["results"] if r["priority"] == "P1"]
+        self.assertTrue(p1s, d)
+        self.assertTrue(any(detail_fragment in r["detail"] for r in p1s), p1s)
+        self.assertFalse([r for r in d["results"] if r["priority"] == "P0"])
+
+    def test_bayat_p1_exit_1_fail_closed(self):
+        """Golden içeriği değişmiş (bayat) → P1, exit 1, fail_closed."""
+        with tempfile.TemporaryDirectory(prefix="plist-p1-bayat-") as home:
+            golden = os.path.join(home, "tampered-golden")
+            shutil.copytree(GOLDEN_DIR, golden)
+            victim = os.path.join(golden, "com.freebuff.preview-leibniz2.plist")
+            with open(victim, "w", encoding="utf-8") as f:
+                f.write("<dict><key>Label</key><string>BAYAT</string></dict>")
+            rc, d = self._run_json(home, golden)
+        self._assert_p1_fail_closed(rc, d, "golden'dan farklı")
+
+    def test_eksik_p1_exit_1_fail_closed(self):
+        """Golden'da olup render edilmeyen profil (eksik) → P1, exit 1."""
+        with tempfile.TemporaryDirectory(prefix="plist-p1-eksik-") as home:
+            golden = os.path.join(home, "extra-golden")
+            shutil.copytree(GOLDEN_DIR, golden)
+            with open(os.path.join(golden, "com.example.missing.plist"), "w",
+                      encoding="utf-8") as f:
+                f.write(self.VALID)
+            rc, d = self._run_json(home, golden)
+        self._assert_p1_fail_closed(rc, d, "eksik")
+
+    def test_gecersiz_p1_exit_1_fail_closed(self):
+        """İçerik golden ile aynı ama plist yapısal geçersiz → P1, exit 1."""
+        broken = self.VALID.replace("</dict></plist>\n", "</dict>\n")
+
+        def fake_render(script, render_home):
+            la = os.path.join(render_home, "Library", "LaunchAgents")
+            os.makedirs(la, exist_ok=True)
+            with open(os.path.join(la, "com.freebuff.preview-leibniz2.plist"),
+                      "w", encoding="utf-8") as f:
+                f.write(broken)
+            return 0, ""
+
+        with tempfile.TemporaryDirectory(prefix="plist-p1-gecersiz-") as home:
+            golden = os.path.join(home, "golden")
+            os.makedirs(golden)
+            with open(os.path.join(golden, "com.freebuff.preview-leibniz2.plist"),
+                      "w", encoding="utf-8") as f:
+                f.write(broken)
+            rc, d = self._run_json(home, golden, fake_render=fake_render)
+        self._assert_p1_fail_closed(rc, d, "yapısal geçersiz")
+
+
+class TestHookFailClosed(unittest.TestCase):
+    """check_plist_drift_hook.py: kapının P1 kontratı kırılırsa hook FAIL.
+
+    Hook, gate test dosyasını koşar ve unittest rc'sini DÖNÜŞ KODU olarak
+    aynen iletir — tek bir fail-closed testi kırıldığında pre-commit BLOKE
+    olur; PASS durumunda özet stderr'de `[PLIST-SUMMARY] ... PASS` yazar.
+    Test hedefi geçici bir PASS/FAIL dosyasına yönlendirilir (gerçek süitte
+    özyineleme yok).
+    """
+
+    def _run_hook(self, source):
+        """Hook'u geçici bir test modülüne yönlendirip koş (gerçek rc iletişimi).
+
+        Hedef modül adıyla verilir + PYTHONPATH geçici dizini kapsar: alt
+        süreç `python -m unittest <modül>` koşar; hook'un TEST değişkenini
+        değiştirmek dışında hiçbir şey taklit edilmez.
+        """
+        import check_plist_drift_hook as hook
+        from unittest import mock
+        with tempfile.TemporaryDirectory(prefix="plist-hook-") as tmp:
+            with open(os.path.join(tmp, "plist_hook_probe.py"), "w",
+                      encoding="utf-8") as f:
+                f.write(source)
+            out, err = io.StringIO(), io.StringIO()
+            old = os.environ.get("PYTHONPATH")
+            os.environ["PYTHONPATH"] = (tmp + os.pathsep + old) if old else tmp
+            try:
+                with mock.patch.object(hook, "TEST", "plist_hook_probe"), \
+                        contextlib.redirect_stdout(out), \
+                        contextlib.redirect_stderr(err):
+                    rc = hook.main([])
+            finally:
+                if old is None:
+                    os.environ.pop("PYTHONPATH", None)
+                else:
+                    os.environ["PYTHONPATH"] = old
+        return rc, out.getvalue(), err.getvalue()
+
+    def test_hook_propagates_p1_contract_failure(self):
+        rc, out, err = self._run_hook(
+            "import unittest\n"
+            "class T(unittest.TestCase):\n"
+            "    def test_p1_fail_closed(self):\n"
+            "        self.fail('P1 fail-closed kontratı kırıldı')\n")
+        self.assertEqual(rc, 1, out + err)
+        self.assertIn("[PLIST-SUMMARY] check-plist-drift FAIL", err)
+        self.assertIn("Ran 1 test", out)
+
+    def test_hook_reports_pass_when_gate_tests_pass(self):
+        rc, out, err = self._run_hook(
+            "import unittest\n"
+            "class T(unittest.TestCase):\n"
+            "    def test_ok(self):\n"
+            "        self.assertTrue(True)\n")
+        self.assertEqual(rc, 0, out + err)
+        self.assertIn("[PLIST-SUMMARY] check-plist-drift PASS", err)
 
 
 class TestBootstrapAll(unittest.TestCase):

@@ -662,9 +662,18 @@ class HookEnvTrendPlumbingTests(unittest.TestCase):
         self.assertIn("renderHookEnvTrend(rows)", self.html)
 
     def test_hover_hit_area_wired(self):
-        # Hover tooltip'i bant vuruş alanlarına bağlı olmalı.
-        self.assertIn("onmousemove=\"showHookEnvTrendTip(", self.html)
-        self.assertIn("onmouseleave=\"hideTrendTip()", self.html)
+        # Hover tooltip'i bant vuruş alanlarına bağlı olmalı. CSP inline
+        # handler'ı bloklar (script-src 'self' 'nonce-…'), bu yüzden he-trend
+        # vuruş alanları `data-tip-i` taşır ve SVG üzerinde delege edilir.
+        # Bölge renderHookEnvTrend'e kısıtlanır: başka bir grafiğin
+        # (trend/refs-trend) kablosu bu paneli yeşile çevirmemeli.
+        start = self.html.index("function renderHookEnvTrend(rows) {")
+        end = self.html.index("\nfunction ", start + 1)
+        block = self.html[start:end]
+        self.assertIn('data-tip-i="${i}"', block)
+        self.assertIn("wireChartTip(svg, showHookEnvTrendTip);", block)
+        self.assertNotIn("onmousemove=", block)
+        self.assertNotIn("onmouseleave=", block)
 
 
 class BudgetLimitPlumbingTests(unittest.TestCase):
@@ -1125,26 +1134,8 @@ class StatusBoardTests(unittest.TestCase):
             ps.SSE_CLIENTS.clear()
 
 
-    def test_precommit_hooks_parsed(self):
-        """Pre-commit hook parsed从 stderr'den."""
-        import preview_server as ps
-        stderr = (
-            "verify-delivery................................................Passed\n"
-            "z3-symbolic-proof..............................................Passed\n"
-            "lean-reduct-build..............................................Failed\n"
-        )
-        hooks = ps._parse_precommit_hooks(stderr)
-        self.assertEqual(len(hooks), 3)
-        self.assertEqual(hooks[0]["name"], "verify-delivery")
-        self.assertEqual(hooks[0]["status"], "Passed")
-        self.assertEqual(hooks[2]["name"], "lean-reduct-build")
-        self.assertEqual(hooks[2]["status"], "Failed")
-
-    def test_precommit_hooks_empty(self):
-        """Boş stderr'de hook listesi None (consistent with other parsers)."""
-        import preview_server as ps
-        hooks = ps._parse_precommit_hooks("")
-        self.assertIsNone(hooks)
+    # _parse_precommit_hooks ayrıştırma testleri taşındı:
+    # test_precommit_log.py (kayıt şekli + kaynak önceliği sözleşmesi).
 
     def test_precommit_hooks_in_latest(self):
         """LATEST dict'te precommit_hooks alanı olmalı."""
@@ -1794,7 +1785,7 @@ class ExternalScriptContractTests(unittest.TestCase):
         js = _preview_js()
         self.assertIn("function colorizeLine(line)", js)
         self.assertIn("function renderHookEnvTrend(rows)", js)
-        self.assertIn("navigator.serviceWorker.register('/sw.js'", js)
+        self.assertRegex(js, r"navigator\.serviceWorker\s*\.register\(\"/sw\.js\"")
 
     def _patch_preview_dir(self, value):
         """PREVIEW_DIR yalnızca main()'de tanımlanır; test için module'a bağla."""

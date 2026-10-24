@@ -40,11 +40,16 @@ function parseZ3Line(line) {
 //   aksi halde        → nötr sınıflar
 // total <= 0          → pct 0 (sıfır-bölme koruması; text yine geçerli).
 function computeZ3Status(seen, passed, failed, total) {
-  const pct = total > 0 ? Math.round(seen / total * 100) : 0;
-  let barClass = 'z3fill', cntClass = 'z3count';
+  const pct = total > 0 ? Math.round((seen / total) * 100) : 0;
+  let barClass = 'z3fill',
+    cntClass = 'z3count';
   if (failed > 0) barClass = 'z3fill err';
-  else if (passed === total) { barClass = 'z3fill ok'; cntClass = 'z3count ok'; }
-  const text = passed + '/' + total + (failed > 0 ? ' · ' + failed + ' FAIL' : '');
+  else if (passed === total) {
+    barClass = 'z3fill ok';
+    cntClass = 'z3count ok';
+  }
+  const text =
+    passed + '/' + total + (failed > 0 ? ' · ' + failed + ' FAIL' : '');
   return { pct, barClass, cntClass, text };
 }
 

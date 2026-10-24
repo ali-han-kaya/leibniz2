@@ -27,6 +27,10 @@
 %      pdflatex ingiliz_empirizmi_v3.tex   (run twice for refs)
 % =====================================================================
 \documentclass[11pt]{article}
+% Typography: emergency stretch for narrow columns + long identifiers.
+% Kernel feature (LaTeX2e), no package dependency (CI installs only
+% texlive-latex-base/recommended) — fixes margin overflow, not looseness.
+\setlength{\emergencystretch}{1.5em}
 \usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
 \usepackage{amsmath,amssymb,amsthm}
@@ -292,7 +296,7 @@ computationally (script \texttt{encoding\_sensitivity\_check.py} in
 the reproducibility package; frozen output
 \texttt{encoding\_sensitivity\_output.txt}). The test enumerates,
 over the finite Boolean fragment, every base assignment
-$E=(Kat,Veridical,SourceMatch,FalseSource(i))$ and every modal
+$E=(Kat,\allowbreak Veridical,\allowbreak SourceMatch,\allowbreak FalseSource(i))$ and every modal
 resource $(R(i,i),R(i,j),FalseSource(j))$, and asks, for each
 encoding, whether the modal content $M$ is fixed by $E$ alone. The
 outcome is encoding-sensitive in degree, robust in existence:
@@ -422,7 +426,7 @@ T8 & E1/E2 comparison complete: representability vs.\ adequacy
 & $\checkmark$\\
 T9 & Sensitivity test across $L_0^A$, $L_0^B$ performed
 & \S\ref{sec:encoding-sensitivity}; script
-\texttt{encoding\_sensitivity\_check.py}
+\texttt{encoding\_sensitivity\_}\allowbreak\texttt{check.py}
 & $\checkmark$\\
 T10 & Machine verification separated from proof
 & \S\ref{sec:verification}: the scripts are reproducibility
@@ -1087,7 +1091,7 @@ applied in a deliberately anachronistic, analytic sense.
 \label{sec:appendix}
 
 \begin{center}
-\begin{longtable}{p{0.20\linewidth} p{0.45\linewidth} p{0.28\linewidth}}
+\begin{longtable}{p{0.20\linewidth} p{0.44\linewidth} >{\raggedright\arraybackslash}p{0.28\linewidth}}
 \hline
 \textbf{Term} & \textbf{Definition} & \textbf{Source} \\
 \hline
@@ -1223,7 +1227,7 @@ vol.~1. Leipzig: Teubner, 1905.
 \section*{Provenance Table}
 
 \begin{center}
-\begin{longtable}{p{0.14\linewidth} p{0.48\linewidth} p{0.32\linewidth}}
+\begin{longtable}{p{0.14\linewidth} p{0.46\linewidth} >{\raggedright\arraybackslash}p{0.32\linewidth}}
 \hline
 \textbf{\S} & \textbf{Claim} & \textbf{Source} \\
 \hline

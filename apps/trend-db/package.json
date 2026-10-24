@@ -7,14 +7,20 @@
     "load": "tsx scripts/load.ts",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "db:generate": "prisma generate",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.10.0",
     "dotenv": "^18.0.0",
     "pg": "^8.23.0",
-    "prisma": "^7.10.0",
     "tsx": "^4.23.13"
+  },
+  "devDependencies": {
+    "@types/node": "^24.7.0",
+    "prisma": "^7.10.0",
+    "typescript": "^5.9.3"
   }
 }

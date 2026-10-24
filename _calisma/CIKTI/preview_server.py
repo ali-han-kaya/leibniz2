@@ -39,6 +39,11 @@ from datetime import datetime, timezone
 import secrets
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+_HERE = os.path.dirname(os.path.abspath(__file__))
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
+import precommit_log  # noqa: E402  — hook raporu seam (tek kaynak kuralı)
+
 REQUEST_TIMEOUT_SECONDS = 30
 ALLOWED_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
@@ -160,10 +165,14 @@ VERIFY_DIR = None               # main()'de set edilir; /api/run-now handler'ı 
 HISTORY_PATH = None             # main()'de set edilir; JSONL trend dosyası
 HISTORY_MAX = 100               # disk'te tutulacak en son run sayısı
 RUNS_DIR = None                 # main()'de set edilir; run logları (stdout+stderr) dizini
+SERVER_EVENTS_PATH = None       # main()'de set edilir; yaşam-döngüsü olay-kaydı (append-only)
+SERVER_EVENTS_MAX_BYTES = 256 * 1024   # tek dosya tavanı — aşılırsa arşive taşınır
+SERVER_EVENTS_ARCHIVES_MAX = 5         # disk'te tutulacak en son arşiv sayısı
 RUN_LOG_MAX = 20                 # disk'te tutulacak + replay edilecek en son run sayısı
 SSE_POLL_TIMEOUT = 15            # SSE q.get(timeout=...) — keepalive periyodu (saniye)
 REFS_TREND_PATH = None           # main()'de set edilir; refs-trend.json yolu
 OVERRIDE_TREND_PATH = None       # main()'de set edilir; override-trend.json yolu
+DETERMINISM_TREND_PATH = None    # main()'de set edilir; determinism_trend.jsonl yolu
 # Matris doc'u tek kaynaktır. Sunucu TCC-safe mirror'dan koştuğunda (launchd
 # GUI agent'ı repo'yu okuyamaz) doc kopyası preview mirror'a senkronlanır
 # (sync_verify_mirror.sh) ve ROOT'un yanına düşer; yerel dev/test ise repo
@@ -376,6 +385,192 @@ def _write_atomic(path, data, keep_tmp=False):
     return tmp if keep_tmp else None
 
 
+HISTORY_JOURNAL_SUFFIX = ".pending"
+
+
+def _fsync_dir(directory):
+    """Dizin girdisini diske indir (rename'in kalıcı olması için).
+
+    Bazı dosya sistemleri dizinde fsync'i reddeder (EINVAL); bu bir yazım
+    hatası DEĞİLDİR — en iyi çaba, yutulur.
+    """
+    try:
+        fd = os.open(directory, os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(fd)
+    except OSError:
+        pass
+    finally:
+        os.close(fd)
+
+
+def _write_atomic_durable(path, data):
+    """`_write_atomic` + içerik ve dizin fsync'i (yalnız commit journal'ı).
+
+    Hard-kill protokolünde journal, history'den ÖNCE kalıcı olmalı: aksi
+    hâlde güç kaybında "yeni history ama journal yok" durumu doğar ve
+    yarısı yazılmış commit kanıtsız kalır. history/sidecar için fsync'e
+    gerek yok — süreç ölümünde page cache yaşar; güç kaybında ise ya eski
+    çift ya da journal'ın tarif ettiği çift görülür.
+    """
+    directory = os.path.dirname(os.path.abspath(path)) or "."
+    fd, tmp = tempfile.mkstemp(dir=directory,
+                               prefix=os.path.basename(path) + ".tmp.")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(data)
+            f.flush()
+            try:
+                os.fsync(f.fileno())
+            except OSError:
+                # Bazı dosya sistemleri fsync'i reddeder; kalıcılık zayıflar
+                # ama yazım engellenmez (best-effort, journal yine atomik).
+                pass
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+    _fsync_dir(directory)
+
+
+def _sha256_file(path):
+    """Dosyanın SHA-256'sı; yoksa/okunamıyorsa None."""
+    try:
+        h = hashlib.sha256()
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(65536), b""):
+                h.update(chunk)
+        return h.hexdigest()
+    except OSError:
+        return None
+
+
+def _read_sidecar_digest(history_path):
+    """`.sha256` sidecar'ının ilk token'ı (hex); yoksa/bozuksa None."""
+    try:
+        with open(history_path + ".sha256", encoding="utf-8") as f:
+            raw = f.read().strip()
+    except OSError:
+        return None
+    first = raw.split()[0] if raw else ""
+    return first.lower() if len(first) == 64 else None
+
+
+def reconcile_history_pair(history_path=None):
+    """SIGKILL penceresini commit-journal'ından onar (çağıran LOCK tutmalı).
+
+    `persist_history` history.jsonl'i ve sidecar'ı iki ayrı atomik yazımla
+    üretir; iki dosyalı bir yayında bu pencere POSIX'te kapatılamaz (tek
+    rename iki dosyayı birlikte değiştiremez). Bu yüzden pencere KAYIT
+    altına alınır: journal, history yayınından ÖNCE kalıcı yazılır ve
+    sidecar yayınından SONRA silinir. Yarıda ölen her süreç geride
+    "hangi geçişin uçuşta olduğunu" KANITLAYAN bir journal bırakır.
+
+    Fail-closed sınır: onarım YALNIZ journal'daki digest'lerden biri
+    diskteki history ile birebir eşleşiyorsa yapılır. Journal yoksa ya da
+    digest'ler tutmuyorsa (başka yazıcı: backfill / fetch_live_data.sh)
+    dosyalara DOKUNULMAZ — K15 kararı verir. Böylece bu fonksiyon
+    "history'yi kim değiştirdi" denetimini zayıflatmaz.
+
+    Durumlar:
+      absent   — journal yok (temiz kapanış / hiç yazım olmadı)
+      clean    — journal vardı, çift zaten tutarlıydı; journal silindi
+      repaired — history yayınlanmış, sidecar gerideydi; sidecar yazıldı
+      aborted  — history hiç yayınlanmamış (journal fazlalığı silindi)
+      foreign  — digest'ler tutmuyor; dosyalar korunur, journal silinir
+      invalid  — journal okunamadı; dosyalar korunur, journal silinir
+    """
+    path = history_path or HISTORY_PATH
+    if not path:
+        return "absent"
+    journal = path + HISTORY_JOURNAL_SUFFIX
+    if not os.path.isfile(journal):
+        return "absent"
+    try:
+        with open(journal, encoding="utf-8") as f:
+            state = json.load(f)
+        intended = str(state.get("intended") or "").lower()
+        prev = (str(state["prev"]).lower() if state.get("prev") else None)
+        named = state.get("history")
+    except (OSError, ValueError, TypeError):
+        _unlink_quiet(journal)
+        return "invalid"
+    if named and named != os.path.basename(path):
+        _unlink_quiet(journal)
+        return "foreign"
+
+    current = _sha256_file(path)
+    if current is not None and intended and current == intended:
+        if _read_sidecar_digest(path) == current:
+            _unlink_quiet(journal)
+            return "clean"
+        _write_atomic(path + ".sha256",
+                      "%s  %s\n" % (current, os.path.basename(path)))
+        _unlink_quiet(journal)
+        return "repaired"
+    if current is None or (prev and current == prev):
+        # history yayını hiç olmadı: diskteki çift eski ve tutarlı kaldı.
+        _unlink_quiet(journal)
+        return "aborted"
+    # Ne "intended" ne "prev": araya başka bir yazıcı girdi. Kanıt yok →
+    # dokunma; journal'ı bırakmak sonsuza dek yanlış alarm üretirdi.
+    _unlink_quiet(journal)
+    return "foreign"
+
+
+def _unlink_quiet(path):
+    try:
+        os.unlink(path)
+    except OSError:
+        pass
+
+
+def repair_history_sidecar(history_path=None):
+    """BOOT onarımı: history ↔ sidecar uyuşmazsa sidecar'ı history'den üret.
+
+    `reconcile_history_pair` yalnız journal'ın KANITLADIĞI geçişleri onarır;
+    kanıtsız bir uyuşmazlık (journal'sız kalmış yarı yazım, araya giren
+    backfill/fetch, elle düzenleme) boot'ta öylece kalırdı. Sunucu açılışında
+    sidecar TÜREVDİR: yetkili kaynak atomik replace edilen history.jsonl'dir,
+    yani digest her zaman ondan yeniden hesaplanabilir.
+
+    Bu yüzden boot'ta son bir kapanış yolu vardır: history varsa ve sidecar
+    onunla eşleşmiyorsa sidecar yeniden yazılır. Eski digest stderr'e
+    yazılır — onarım SESSİZ DEĞİLDİR; git ise eski sidecar'ı zaten taşır.
+
+    Sınırlar:
+      - Yalnız boot'ta çağrılır (main); `persist_history` ve K15
+        çağırmaz — her yazımda onarım denetimi zayıflatırdı.
+      - history yoksa dokunulmaz (\"henüz run yok\") — K15 de atlar.
+      - K15 fail-closed kalır: boot onarımı çalışmadan önceki uyuşmazlık
+        kapıda P1 üretmeye devam eder.
+
+    Döner: \"repaired\" | \"consistent\" | \"no-history\".
+    """
+    path = history_path or HISTORY_PATH
+    if not path or not os.path.isfile(path):
+        return "no-history"
+    digest = _sha256_file(path)
+    if digest is None:
+        return "no-history"
+    recorded = _read_sidecar_digest(path)
+    if recorded == digest:
+        return "consistent"
+    _write_atomic(path + ".sha256",
+                  "%s  %s\n" % (digest, os.path.basename(path)))
+    sys.stderr.write(
+        "[history] sidecar BOOT onarımı: %s… (eski=%s…, history'den "
+        "yeniden üretildi)\n"
+        % (digest[:12], (recorded or "yok/bozuk")[:12]))
+    sys.stderr.flush()
+    return "repaired"
+
+
 def persist_history(rec):
     """Bir run kaydını JSONL dosyasına append et; HISTORY_MAX ile sınırla.
 
@@ -386,12 +581,19 @@ def persist_history(rec):
     Her yazımda history.jsonl.sha256 sidecar'ı da atomik üretilir (içeriğin
     tam SHA-256'sı, sha256sum formatında) — verify_delivery.py --check-history
     (K15) bu sidecar'ı fail-closed doğrular.
+
+    Hard-kill güvenliği: iki yazımın arası journal'lanır (bkz.
+    `reconcile_history_pair`). SIGKILL penceresine düşerse diskte yeni
+    history + eski sidecar + journal kalır; bir sonraki `persist_history`
+    ya da sunucu açılışı çifti KANITLA onarır. Yazımdan önce de reconcile
+    koşar: yarıda kalmış önceki commit, yeni satırın üstüne binmez.
     """
     if not HISTORY_PATH:
         return
     if not rec.get("ts"):
         return
     try:
+        reconcile_history_pair(HISTORY_PATH)
         lines = []
         if os.path.isfile(HISTORY_PATH):
             with open(HISTORY_PATH, encoding="utf-8") as f:
@@ -401,15 +603,52 @@ def persist_history(rec):
         if len(lines) > HISTORY_MAX:
             lines = lines[-HISTORY_MAX:]
         content = "\n".join(lines) + "\n"
+        digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
+        # Commit journal'ı history'den ÖNCE ve KALICI: pencerede ölürsek
+        # hangi digest'in uçuşta olduğunu kanıtlayan tek kayıt budur.
+        journal = HISTORY_PATH + HISTORY_JOURNAL_SUFFIX
+        _write_atomic_durable(journal, json.dumps({
+            "version": 1,
+            "history": os.path.basename(HISTORY_PATH),
+            "prev": _sha256_file(HISTORY_PATH),
+            "intended": digest,
+            "pid": os.getpid(),
+        }, ensure_ascii=False))
         _write_atomic(HISTORY_PATH, content)
         # Yanına .sha256 sidecar'ı yaz (K15 doğrulaması + reproducibility).
-        digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
         _write_atomic(HISTORY_PATH + ".sha256", f"{digest}  history.jsonl\n")
+        # Commit tamam: journal artık kanıt değil, kalıntı.
+        _unlink_quiet(journal)
         # LATEST'a sidecar hash'ini yaz (dashboard /api/latest-visible).
         LATEST["history_sidecar_sha256"] = digest
     except OSError as e:
         sys.stderr.write(f"[history] yazılamadı: {e}\n")
         sys.stderr.flush()
+
+
+def drain_writer_lock(timeout=None):
+    """Kapanışta uçuştaki yazımı BİTİR; yenisinin başlamasını engelle.
+
+    `persist_history` history.jsonl ile .sha256 sidecar'ını İKİ ayrı atomik
+    yazımla yazar. SIGTERM tam bu ikisinin ARASINA gelirse diskte
+    yeni-history + eski-sidecar kalır — K15 P1 hash uyuşmazlığı. SIGKILL'de
+    drain şansı yoktur; o pencereyi `reconcile_history_pair` (commit
+    journal'ı) kapatır.
+
+    LOCK'u sınırlı süreyle alıp bırakmak aktif yazımın tamamlanmasını
+    bekler; bırakıldığı anda yeni yazım başlayabilir, bu yüzden çağıran
+    taraf (main) bu noktadan önce yeni turu durdurmuş olmalı (stop_event).
+
+    Döner: True = drain edildi (kilit alındı), False = timeout.
+    Timeout'ta bile dönülür: kapanış ASILI KALMAMALI — bozuk disk,
+    asla bitmeyen bir çıkıştan iyidir.
+    """
+    if timeout is None:
+        timeout = REQUEST_TIMEOUT_SECONDS
+    if LOCK.acquire(timeout=timeout):
+        LOCK.release()
+        return True
+    return False
 
 
 def load_cached_latest():
@@ -905,20 +1144,8 @@ def _write_override_report(verify_dir, report):
         sys.stderr.flush()
 
 
-_HOOK_RE = re.compile(r"^(.+?)\.{4,}(Passed|Failed)\s*$", re.M)
-
-
-def _parse_precommit_hooks(stderr):
-    """stderr'deki pre-commit hook satırlarından [{name, status}] çıkar.
-
-    pre-commit verbose çıktısı:
-      Verify Stoic-Hume V5 delivery (fail-closed)........................Passed
-    Satır Sonucu/Passed/Failed içeren her hook sonucunu yakalar.
-    """
-    hooks = []
-    for m in _HOOK_RE.finditer(stderr or ""):
-        hooks.append({"name": m.group(1).strip(), "status": m.group(2)})
-    return hooks or None
+# hook satırı ayrıştırma taşındı: precommit_log (bkz. modül docstring'i —
+# 2026-10-02 stdout/stderr asimetri ölçümü ve tek kaynak kuralı orada).
 
 
 def _refresh_precommit_hooks_bg(verify_dir):
@@ -979,9 +1206,10 @@ def _refresh_precommit_hooks_bg(verify_dir):
                     f.write(f"{time.strftime('%H:%M:%S')} [precommit-bg] stderr_tail={result.stderr[-500:]}\n")
         except Exception:
             pass
-        # pre-commit verbose çıktısı stderr'de
-        output = result.stderr or result.stdout or ""
-        hooks = _parse_precommit_hooks(output)
+        # hook kayıtları: kaynak önceliği precommit_log.collect'de (taze
+        # çıktı yolu — eski sidecar bilerek denenmez, bu koşum veriyi üretir)
+        hooks = precommit_log.collect(
+            stderr=result.stderr, stdout=result.stdout)
         if hooks:
             with LOCK:
                 LATEST["precommit_hooks"] = hooks
@@ -1059,29 +1287,18 @@ def _finalize_run(stdout, stderr, rc, duration, data, verify_dir=None):
 
     z3_passed, z3_failed = _parse_z3_counts(stderr)
     lean_ok, lean_detail = _parse_lean_result(stderr)
-    precommit_hooks = _parse_precommit_hooks(stderr)
-    # Fallback: CI'da stderr pre-commit çıktısı üretir, yerel run'larda boş
-    # olabilir. PRECOMMIT_RAPORU.json sidecar'ından okumayı dene.
-    if not precommit_hooks and verify_dir:
-        for candidate in (
-            os.path.join(verify_dir, "logs", "PRECOMMIT_RAPORU.json"),
-            os.path.join(os.path.dirname(verify_dir), "logs", "PRECOMMIT_RAPORU.json"),
-            os.path.join(os.getcwd(), "logs", "PRECOMMIT_RAPORU.json"),
-        ):
-            if os.path.isfile(candidate):
-                try:
-                    with open(candidate, encoding="utf-8") as f:
-                        rpt = json.load(f)
-                    hooks_raw = rpt.get("hooks") or []
-                    if isinstance(hooks_raw, list):
-                        precommit_hooks = [
-                            {"name": h.get("name", "?"), "status": h.get("status", "Unknown")}
-                            for h in hooks_raw if isinstance(h, dict)
-                        ] or None
-                except (OSError, ValueError, KeyError):
-                    pass
-                if precommit_hooks:
-                    break
+    # pre-commit hook kayıtları: tek toplayıcı, tek öncelik kuralı
+    # (stderr -> stdout -> sidecar). 2026-10-02 ölçümü ve iki-yol asimetrisi
+    # (52 satır stdout / 0 bayt stderr; panel takilmişti) precommit_log
+    # docstring'inde kanıt olarak taşındı. Sidecar adayları yalnızca bu
+    # finalize yolu içindir: yanıt yoksa panel nedeni açıktır (sidecar yok).
+    _sidecar_candidates = () if not verify_dir else (
+        os.path.join(verify_dir, "logs", "PRECOMMIT_RAPORU.json"),
+        os.path.join(os.path.dirname(verify_dir), "logs", "PRECOMMIT_RAPORU.json"),
+        os.path.join(os.getcwd(), "logs", "PRECOMMIT_RAPORU.json"),
+    )
+    precommit_hooks = precommit_log.collect(
+        stderr=stderr, stdout=stdout, sidecar_paths=_sidecar_candidates)
 
     # Soy hattı özeti: verify_delivery.py --json lineage.generations'dan
     # son nesil (current=true) bilgisini çıkarır — dashboard rozeti için.
@@ -1294,8 +1511,12 @@ def _route(path):
         return "trend"
     if p == "/api/override-trend":
         return "override_trend"
+    if p == "/api/determinism-trend":
+        return "det_trend"
     if p == "/api/run-history":
         return "run_history"
+    if p == "/api/server-events":
+        return "server_events"
     if p.startswith("/api/run-stdout"):
         return "run_stdout"
     if p == "/api/health":
@@ -1424,8 +1645,12 @@ class Handler(BaseHTTPRequestHandler):
             self.serve_trend()
         elif route == "override_trend":
             self.serve_override_trend()
+        elif route == "det_trend":
+            self.serve_determinism_trend()
         elif route == "run_history":
             self.serve_run_history()
+        elif route == "server_events":
+            self.serve_server_events()
         elif route == "run_stdout":
             self.serve_run_stdout()
         elif route == "health":
@@ -1634,6 +1859,24 @@ class Handler(BaseHTTPRequestHandler):
                                    ensure_ascii=False, separators=(",", ":")),
                    content_type="application/json; charset=utf-8")
 
+    def serve_server_events(self):
+        """Yaşam-döngüsü olay-kaydı + çökme/kurtarma özeti.
+
+        Pano buradan okur (bkz. apps/dashboard-next/app/LifecyclePanel.tsx).
+        `limit` query'si son-N satır; yoksa tam liste (dosya küçük — olay
+        başına ~150 bayt, günlük 100'lerce satır değil).
+        """
+        q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+        limit = None
+        try:
+            limit = int((q.get("limit") or [""])[0])
+        except ValueError:
+            limit = None
+        payload = _classify_lifecycle(_read_server_events(limit))
+        self._send(200, json.dumps(payload, ensure_ascii=False,
+                                   separators=(",", ":")),
+                   content_type="application/json; charset=utf-8")
+
     def serve_override_trend(self):
         """override-trend.json'u compact JSON olarak döndür (CLI override
         zaman serisi — override_trend.py üreticisinin çıktısı)."""
@@ -1649,6 +1892,17 @@ class Handler(BaseHTTPRequestHandler):
                        content_type="application/json; charset=utf-8")
             return
         self._send(200, json.dumps(data, ensure_ascii=False),
+                   content_type="application/json; charset=utf-8")
+
+    def serve_determinism_trend(self):
+        """determinism_trend.jsonl'ı badge'li satırlarla döndür (TeX motor
+        determinizm trend paneli — determinism_trend_badge.py üreticisi)."""
+        import determinism_trend_badge as dtb
+        rows = dtb.rows_from(DETERMINISM_TREND_PATH) or []
+        enriched = [dict(r, badge=dtb.badge([r])) for r in rows]
+        self._send(200, json.dumps({"badge": dtb.badge(rows),
+                                    "rows": enriched},
+                                   ensure_ascii=False),
                    content_type="application/json; charset=utf-8")
 
     def serve_run_history(self):
@@ -1913,8 +2167,242 @@ def redirect_stdio_to_devnull():
             os.close(devnull)
 
 
+def _lifecycle_event(event, detail=""):
+    """Sunucu yaşam-döngüsü olayını kalıcı kayda yaz (append-only JSONL).
+
+    Konum: PREVIEW_DIR/logs/server_events.jsonl (gitignore'da — logs/ zaten
+    öyle). Amaç: daemon çökme/kurtarma olaylarının stdout-stderr akışından
+    bağımsız, yeniden-başlatmalara dayanıklı kaydı (disk-kanıtı) — daemon
+    stdout'u /dev/null'a dup2'lenmişken bile iz bırakır.
+
+    Telemetri servisi DEĞİL: hiçbir hata sunucu-yüzeyini düşürmez — her
+    başarısızlık sessizce yutulur (yazılamaz dizin, bozuk mevcut dosya).
+    Append-only: mevcut dosya asla ezilmez/truncate edilmez — tavan
+    aşıldığında dosya arşive TAŞINIR (bkz. _rotate_server_events); silinmez.
+    """
+    if not SERVER_EVENTS_PATH:
+        return
+    try:
+        rec = {"ts": datetime.now(timezone.utc).isoformat().replace(
+            "+00:00", "Z"), "event": event, "pid": os.getpid()}
+        if detail:
+            rec["detail"] = detail
+        d = os.path.dirname(SERVER_EVENTS_PATH)
+        if d:
+            os.makedirs(d, exist_ok=True)
+        with open(SERVER_EVENTS_PATH, "a", encoding="utf-8") as f:
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        _rotate_server_events()  # tavan aşıldıysa YAZIMDAN SONRA arşive taşı
+    except OSError:
+        pass
+
+
+# ── Olay-kaydı rotasyon politikası ──────────────────────────────────────────
+# Kayıt append-only'dir, ama sınırsız büyüyemez: aylarca yaşayan bir daemon
+# tek dosyayı disk-şişmesine çevirir ve panelin okuduğu kuyruğu seyreltir.
+# Politika: dosya SERVER_EVENTS_MAX_BYTES'i aşınca geçerli dosya `archive/`
+# altına TAŞINIR (rename — truncate DEĞİL) ve yenisi kendiliğinden açılır;
+# arşivler SERVER_EVENTS_ARCHIVES_MAX ile sınırlanır (en eski atılır).
+# Okuyucu arşivleri de tarar: çökme kanıtı rotasyondan sonra da görünür kalır.
+
+
+def _server_events_archive_dir():
+    """Arşiv dizini: geçerli kaydın kardeşi (`logs/archive`)."""
+    d = os.path.dirname(SERVER_EVENTS_PATH or "")
+    return os.path.join(d, "archive") if d else ""
+
+
+def _file_line_count(path):
+    """Dosyadaki satır sayısı (rotasyon kararının nadir kolu için)."""
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            return sum(1 for _ in f)
+    except OSError:
+        return 0
+
+
+def _prune_server_event_archives(archive_dir):
+    """Arşivleri SERVER_EVENTS_ARCHIVES_MAX ile sınırla (en eskiyi at)."""
+    try:
+        files = sorted(f for f in os.listdir(archive_dir)
+                       if f.startswith("server_events-") and f.endswith(".jsonl"))
+    except OSError:
+        return
+    while len(files) > SERVER_EVENTS_ARCHIVES_MAX:
+        try:
+            os.remove(os.path.join(archive_dir, files.pop(0)))
+        except OSError:
+            pass
+
+
+def _rotate_server_events():
+    """Tavan aşıldıysa geçerli kaydı arşive taşı; döner: bool (arşivlendi mi).
+
+    Sıra önemli: rotasyon YAZIMDAN SONRA çağrılır. Ters sıra (önce döndür,
+    sonra yaz) yazılmakta olan kaydı bir an "yok" bırakırdı; tam o anda
+    ölürsek kaybolan kayıt çoğu kez `signal_exit`/`shutdown` olurdu — yani
+    döndürme mekanizması PANELDE SAHTE ÇÖKME üretirdi. Kayıt önce diske iner,
+    sonra taşınır: hiçbir olay rotasyon yüzünden kaybolmaz.
+
+    Tek dev kayıt (tek başına tavanı aşan satır) döndürülmez: aksi halde her
+    yazımda bir arşiv doğar ve budama kısa sürede tüm geçmişi silerdi.
+
+    Arşiv adı `server_events-<UTC-stamp>.jsonl`; sabit-genişlikli stamp
+    sayesinde lexicographic sıra = kronolojik sıra (budama ve okuma bu sıraya
+    güvenir).
+    """
+    path = SERVER_EVENTS_PATH
+    archive_dir = _server_events_archive_dir()
+    if not path or not archive_dir or not os.path.isfile(path):
+        return False
+    try:
+        if os.path.getsize(path) <= SERVER_EVENTS_MAX_BYTES:
+            return False
+        if _file_line_count(path) <= 1:
+            return False
+        os.makedirs(archive_dir, exist_ok=True)
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+        dst = os.path.join(archive_dir, f"server_events-{stamp}.jsonl")
+        n = 1
+        while os.path.exists(dst):  # aynı mikrosaniye: çakışmayı kır
+            dst = os.path.join(archive_dir, f"server_events-{stamp}-{n}.jsonl")
+            n += 1
+        os.replace(path, dst)  # atomik: yarım dosya asla okunmaz
+        _prune_server_event_archives(archive_dir)
+        return True
+    except OSError:
+        return False  # telemetri: hata sunucu-yüzeyini düşürmez
+
+
+def _server_event_sources():
+    """Okuma kaynakları ESKİDEN-YENİYE: arşivler (stamp sıralı) → geçerli dosya.
+
+    Çökme tümevarımı (`_classify_lifecycle`) pid'ler arası sıraya bakar; bir
+    çökme kaydı arşivde kalmışsa panel onu göremezdi. Okuma bu yüzden tek
+    dosyayla sınırlı değildir — rotasyon kanıtı körleştirmez.
+    """
+    path = SERVER_EVENTS_PATH
+    if not path:
+        return []
+    sources = []
+    archive_dir = _server_events_archive_dir()
+    if archive_dir and os.path.isdir(archive_dir):
+        try:
+            for fn in sorted(os.listdir(archive_dir)):
+                if fn.startswith("server_events-") and fn.endswith(".jsonl"):
+                    sources.append(os.path.join(archive_dir, fn))
+        except OSError:
+            pass
+    if os.path.isfile(path):
+        sources.append(path)
+    return sources
+
+
+def _classify_lifecycle(records):
+    """Olay-kaydını çökme/kurtarma özeti olarak yorumla (saf fonksiyon).
+
+    Sözleşme bkz. docs/SERVER_EVENT_LOG.md:
+      - `signal_exit` + hemen-ardından `shutdown` = normal graceful kapanış.
+      - Bir pid'in `start`'ından sonra ne `signal_exit` ne `shutdown` gelmiş
+        ve sonradan BAŞKA bir pid başlamışsa o süreç **sinyalsiz ölmüştür**
+        (çökme). Dosya bunu kalıcı olarak kanıtlar.
+      - `cache_loaded` = kurtarma: yeniden başlatma önbellekten son-run
+        durumunu geri yükledi.
+
+    Neden burada, panelde değil: çökme kararı tek satırlık bir renk tercihi
+    değil, kaydın BÜTÜNÜ üzerinden yapılan bir tümevarım (pid'ler arası
+    sıraya bakar). İki ayrı tüketici (pano + API) aynı sonuca varmalı —
+    tümevarım tek yerde yaşar.
+
+    Yorumlayıcı asla hata fırlatmaz: bozuk/eksik kayıt okuyucuyu düşürmez.
+    """
+    events, by_pid = [], {}
+    for rec in records or []:
+        if not isinstance(rec, dict):
+            continue
+        pid = rec.get("pid")
+        name = rec.get("event")
+        if not isinstance(name, str) or not name:
+            continue
+        events.append(rec)
+        if isinstance(pid, int):
+            by_pid.setdefault(pid, []).append(name)
+
+    # Sinyalsiz ölen pid'ler: start var, kapanış yok — ve sonradan başka
+    # bir pid başlamış (yoksa süreç hâlâ AYAKTA demektir).
+    pids = []
+    for rec in events:
+        pid = rec.get("pid")
+        if isinstance(pid, int) and pid not in pids:
+            pids.append(pid)
+    crashed = set()
+    for pid, names in by_pid.items():
+        if "start" not in names:
+            continue
+        if "shutdown" in names or "signal_exit" in names:
+            continue
+        if pid is not pids[-1]:
+            crashed.add(pid)
+
+    def _phase(rec):
+        name = rec.get("event")
+        if name == "start":
+            return "crash" if rec.get("pid") in crashed else "start"
+        if name == "cache_loaded":
+            return "recovery"
+        if name in ("signal_exit", "shutdown"):
+            return "graceful"
+        return "unknown"
+
+    out = []
+    for rec in events:
+        row = dict(rec)
+        row["phase"] = _phase(rec)
+        out.append(row)
+    out.reverse()  # en-yeni üstte — pano "son olaylar" der
+
+    def _last(phase):
+        for row in out:
+            if row.get("phase") == phase:
+                return row
+        return None
+
+    return {"events": out,
+            "last_crash": _last("crash"),
+            "last_recovery": _last("recovery")}
+
+
+def _read_server_events(limit=None):
+    """Olay-kaydını satır-satır oku; geçersiz satırı ATLA (dosyayı bozma).
+
+    Kaynaklar `_server_event_sources()`: arşivler eskiden-yeniye, sonra
+    geçerli dosya — rotasyon çökme kanıtını görünmez kılmaz.
+
+    Kayıt append-only ve yazıcı her hatayı yutuyor; okuyucu da aynı
+    toleransla çalışmalı — tek bozuk satır paneli düşürmemeli.
+    """
+    rows = []
+    for src in _server_event_sources():
+        try:
+            with open(src, encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        rec = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if isinstance(rec, dict):
+                        rows.append(rec)
+        except OSError:
+            continue  # bir kaynak okunamazsa kalanlarla devam et
+    return rows[-limit:] if limit and limit > 0 else rows
+
+
 def main():
     global PREVIEW_DIR, VERIFY_DIR, HISTORY_PATH, RUNS_DIR, RUN_LOG_MAX, REFS_TREND_PATH
+    global SERVER_EVENTS_PATH, OVERRIDE_TREND_PATH, DETERMINISM_TREND_PATH
     # Daemon modunda: yeni process group + session oluştur (tamamen detach).
     # Bu, parent shell exit ettiğinde SIGHUP/SIGTERM almamızı engeller.
     if os.environ.get("PREVIEW_DAEMON") == "1":
@@ -1943,6 +2431,8 @@ def main():
     VERIFY_DIR = os.path.abspath(args.dir)
     HISTORY_PATH = os.path.join(PREVIEW_DIR, "history.jsonl")
     RUNS_DIR = os.path.join(PREVIEW_DIR, "runs")
+    SERVER_EVENTS_PATH = os.path.join(PREVIEW_DIR, "logs",
+                                      "server_events.jsonl")
     RUN_LOG_MAX = args.replay_runs
     # refs-trend.json: CI artifact'ı repo kökünde (refs-trend/refs-trend.json);
     # yerel kurulumda preview-dir'de de olabilir (nested veya flat).
@@ -1962,6 +2452,15 @@ def main():
         _ot_candidate = os.path.join(PREVIEW_DIR, "override-trend.json")
     OVERRIDE_TREND_PATH = _ot_candidate if os.path.isfile(_ot_candidate) else None
 
+    # determinism_trend.jsonl: versiyonlu trend verisi
+    # (record_determinism_trend.py üreticisi).
+    _dt_candidate = os.path.join(REPO_ROOT, "docs",
+                                 "determinism_trend",
+                                 "determinism_trend.jsonl")
+    DETERMINISM_TREND_PATH = (_dt_candidate
+                              if os.path.isfile(_dt_candidate)
+                              else None)
+
     if not os.path.isfile(os.path.join(PREVIEW_DIR, "preview.html")):
         print(f"UYARI: {PREVIEW_DIR}/preview.html bulunamadı; "
               f"sunucu yine de başlatılıyor ama /preview.html 404 döner",
@@ -1973,9 +2472,10 @@ def main():
 
     # Sinyal yakalama — neden öldüğümüzü görelim
     import signal
-    def _sig(term_frame, signum):
+    def _sig(signum, frame):
         sys.stderr.write(f"\n[main] SIGTERM/SIGINT received ({signum}), exiting\n")
         sys.stderr.flush()
+        _lifecycle_event("signal_exit", detail=f"signum={signum}")
         sys.exit(143)
     signal.signal(signal.SIGTERM, _sig)
     signal.signal(signal.SIGINT, _sig)
@@ -1983,10 +2483,28 @@ def main():
     # Restart sonrası ilk verify bitene dek /api/latest UNKNOWN göstermesin:
     # önbelleklenmiş son run durumunu (runs/ veya history.jsonl) yükle.
     with LOCK:
+        # Hard-kill artığı: yarıda kalmış history↔sidecar commit'ini KANITLA
+        # onar (journal). Temiz kapanışta "absent" döner, sessiz kalır.
+        rec_status = reconcile_history_pair(HISTORY_PATH)
+        if rec_status in ("repaired", "foreign", "invalid"):
+            sys.stderr.write(
+                f"[main] history çifti uzlaştırıldı: {rec_status}\n")
+            sys.stderr.flush()
+        # Boot kapanışı: kanıtsız kalmış uyuşmazlıkta da sidecar'ı history'den
+        # yeniden üret (yetkili kaynak history). Yalnız burada — her yazımda
+        # değil; K15 fail-closed sözleşmesi değişmez.
+        boot_status = repair_history_sidecar(HISTORY_PATH)
+        if boot_status == "repaired":
+            sys.stderr.write(
+                "[main] history sidecar boot onarımı uygulandı\n")
+            sys.stderr.flush()
         if load_cached_latest():
             sys.stderr.write(
                 "[main] önbelleklenmiş son run yüklendi: "
                 f"verdict={LATEST['verdict']} ts={LATEST['ts']}\n")
+            _lifecycle_event(
+                "cache_loaded",
+                detail=f"verdict={LATEST['verdict']} ts={LATEST['ts']}")
         else:
             sys.stderr.write(
                 "[main] önbellek yok — /api/latest ilk verify bitene dek "
@@ -2004,6 +2522,7 @@ def main():
 
     srv = ThreadingHTTPServer((args.bind, args.port), Handler)
     SERVER = srv
+    _lifecycle_event("start", detail=f"bind={args.bind} port={args.port}")
     sys.stderr.write(f"[main] preview_server: serving {PREVIEW_DIR} on http://{args.bind}:{args.port}\n")
     sys.stderr.write(f"[main] preview_server: verify loop interval={args.interval}s, dir={VERIFY_DIR}\n")
     sys.stderr.write(f"[main] PID={os.getpid()} PGID={os.getpgrp()}\n")
@@ -2017,14 +2536,11 @@ def main():
         t.join(timeout=REQUEST_TIMEOUT_SECONDS)
         srv.shutdown()
         srv.server_close()
-        # K15 yarışı kapanışı: run'ın son yazım fazı (persist_history) LOCK
-        # altında history.jsonl ve .sha256 sidecar'ını İKİ ayrı atomik yazımla
-        # yazar; daemon-thread çıkışta yarım kalırsa diskte yeni-history +
-        # eski-sidecar kalır (K15 P1: hash uyuşmazlığı — CI'da daemon-http
-        # kırmızısının kök-nedeni). LOCK'u sınırlı süreyle alıp bırakmak:
-        # aktif yazım biter, yeni yazım başlayamaz.
-        if LOCK.acquire(timeout=REQUEST_TIMEOUT_SECONDS):
-            LOCK.release()
+        # K15 yarışı kapanışı: uçuştaki persist_history'nin bitmesini bekle
+        # (history.jsonl yazıldı, .sha256 sidecar yazılmadan çıkılırsa hash
+        # uyuşmazlığı — CI'daki daemon-http kırmızısının kök-nedeni).
+        drain_writer_lock()
+        _lifecycle_event("shutdown")
 
 
 if __name__ == "__main__":
