@@ -13,29 +13,29 @@
  * Kullanım: DATABASE_URL=... npm run load -- [history.jsonl yolu]
  * Varsayılan yol: TCC-mirror (~/Library/Caches/com.freebuff/preview/history.jsonl)
  */
-import "dotenv/config";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import crypto from "node:crypto";
-import { Prisma, PrismaClient } from "../generated/client";
-import type * as runtime from "@prisma/client/runtime/client";
-import type { TrendRunCreateManyInput } from "../generated/models";
-import { PrismaPg } from "@prisma/adapter-pg";
+import 'dotenv/config';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import { Prisma, PrismaClient } from '../generated/client';
+import type * as runtime from '@prisma/client/runtime/client';
+import type { TrendRunCreateManyInput } from '../generated/models';
+import { PrismaPg } from '@prisma/adapter-pg';
 
 const DEFAULT_SOURCE = path.join(
   os.homedir(),
-  "Library",
-  "Caches",
-  "com.freebuff",
-  "preview",
-  "history.jsonl"
+  'Library',
+  'Caches',
+  'com.freebuff',
+  'preview',
+  'history.jsonl'
 );
 
 const sourcePath = process.argv[2] ?? DEFAULT_SOURCE;
 if (!process.env.DATABASE_URL) {
   console.error(
-    "DATABASE_URL yok — .env veya ortam değişkeni olarak pooled URL ver"
+    'DATABASE_URL yok — .env veya ortam değişkeni olarak pooled URL ver'
   );
   process.exit(1);
 }
@@ -46,7 +46,7 @@ const prisma = new PrismaClient({ adapter });
 type Row = Record<string, unknown>;
 
 function rowHash(row: Row): string {
-  return crypto.createHash("sha256").update(JSON.stringify(row)).digest("hex");
+  return crypto.createHash('sha256').update(JSON.stringify(row)).digest('hex');
 }
 
 function tsToDate(ts: unknown): Date {
@@ -54,29 +54,29 @@ function tsToDate(ts: unknown): Date {
 }
 
 function num(v: unknown): number | null {
-  return typeof v === "number" ? v : null;
+  return typeof v === 'number' ? v : null;
 }
 
 function str(v: unknown): string | null {
-  return typeof v === "string" && v.length > 0 ? v : null;
+  return typeof v === 'string' && v.length > 0 ? v : null;
 }
 
 function bool(v: unknown): boolean | null {
-  return typeof v === "boolean" ? v : null;
+  return typeof v === 'boolean' ? v : null;
 }
 
 function isJsonInput(v: unknown): boolean {
   if (
-    typeof v === "string" ||
-    typeof v === "number" ||
-    typeof v === "boolean"
+    typeof v === 'string' ||
+    typeof v === 'number' ||
+    typeof v === 'boolean'
   ) {
     return true;
   }
   if (Array.isArray(v)) {
     return v.every((x) => x === null || isJsonInput(x));
   }
-  if (typeof v === "object" && v !== null) {
+  if (typeof v === 'object' && v !== null) {
     return Object.values(v).every((x) => x === null || isJsonInput(x));
   }
   return false;
@@ -99,7 +99,7 @@ function json(
     return Prisma.DbNull;
   }
   if (!isJsonInput(v)) {
-    const kind = Array.isArray(v) ? "array" : typeof v;
+    const kind = Array.isArray(v) ? 'array' : typeof v;
     throw new Error(
       `JSON olmayan değer (kind=${kind}) — Prisma InputJsonValue sözleşmesi dışı`
     );
@@ -108,17 +108,46 @@ function json(
 }
 
 async function main() {
+  // Girdi dogrulama (skill nodejs-backend-patterns: "Validate input").
+  // Ölçülen: eksik dosyada ham ENOENT yığını + `at Object.readFileSync`
+  // basılıyordu — kullanıcı ne yapacağını göremiyordu.
+  if (!fs.existsSync(sourcePath)) {
+    throw new Error(
+      `kaynak bulunamadı: ${sourcePath}\n` +
+        `  · varsayılan yol TCC-mirror: ${DEFAULT_SOURCE}\n` +
+        `  · preview_server çalışıyor mu: python3 _calisma/CIKTI/preview_server.py ` +
+        `--preview-dir ${path.dirname(sourcePath)} --port 8000`
+    );
+  }
+
   const lines = fs
-    .readFileSync(sourcePath, "utf-8")
-    .split("\n")
-    .filter((l) => l.trim().length > 0);
+    .readFileSync(sourcePath, 'utf-8')
+    .split('\n')
+    // Boş satırları at ama FİZİKSEL satır numarasını koru: hata
+    // mesajı "satır N" diyor, N dosyadaki gerçek satır olmalı.
+    // (Filtrelenmiş dizi üzerinden saymak, boş satır içeren bir
+    // dosyada yanlış satır bildiriyordu.)
+    .map((text, i) => ({ text, lineNo: i + 1 }))
+    .filter((l) => l.text.trim().length > 0);
   console.log(`kaynak: ${sourcePath} (${lines.length} satır)`);
 
   let skipped = 0;
   const pending: TrendRunCreateManyInput[] = [];
-  for (const line of lines) {
-    const row: Row = JSON.parse(line);
-    if (!row.ts || typeof row.verdict !== "string") {
+  // Bozuk satır TÜM yüklemeyi düşürüyordu ve hata hangi satır olduğunu
+  // söylemiyordu (ölçülen: "SyntaxError ... at position 45", satır no yok).
+  // Bozuk satırları fail-closed olarak TOPLANIR: sessizce atlamak bir koşumu
+  // sessizce kaybettirir (history.jsonl.sha256 sidecar'ı bunu yakalamaz),
+  // ama hepsini tek seferde, satır numarasıyla bildirmek eyleme dönüşür.
+  const parseErrors: string[] = [];
+  for (const { text: line, lineNo } of lines) {
+    let row: Row;
+    try {
+      row = JSON.parse(line) as Row;
+    } catch (e) {
+      parseErrors.push(`  satır ${lineNo}: ${(e as Error).message}`);
+      continue;
+    }
+    if (!row.ts || typeof row.verdict !== 'string') {
       skipped += 1;
       continue;
     }
@@ -168,6 +197,18 @@ async function main() {
     };
     pending.push(data);
   }
+  // Fail-closed: bir satır bile bozuksa HİÇBİR kayıt yazılmaz. Bu denetim
+  // yazma döngüsünden ÖNCE olmalı — sonra olursa "kayıt yüklenmedi" der
+  // ama arada yazmış olur.
+  if (parseErrors.length > 0) {
+    throw new Error(
+      `${parseErrors.length} satır JSON olarak çözümlenemedi — hiçbir kayıt yüklenmedi:\n` +
+        parseErrors.slice(0, 10).join('\n') +
+        (parseErrors.length > 10
+          ? `\n  … ve ${parseErrors.length - 10} tane daha`
+          : '')
+    );
+  }
   // Tek createMany/dilim = tek round-trip (skill: data-batch-inserts,
   // 10-50x). skipDuplicates → ON CONFLICT DO NOTHING: aynı kaynak-tekrarı
   // (source_row_sha256) VE aynı ts çakışması sessizce atlanır.
@@ -186,8 +227,25 @@ async function main() {
   await prisma.$disconnect();
 }
 
+// Graceful shutdown (skill: "Handle graceful shutdown: clean up resources").
+// Ölçülen: SIGINT/SIGTERM'de bağlantı açık kalıyordu — pg havuzu sokete
+// düşmedi, Node süreç kapanışını zorladı.
+let shuttingDown = false;
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+  process.on(signal, () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.error(`\n${signal} alındı — bağlantı kapatılıyor…`);
+    prisma.$disconnect().finally(() => process.exit(1));
+  });
+}
+
 main().catch(async (e) => {
-  console.error(e);
+  // Ham yığın yerine mesaj: stack yalnız DEBUG_LOAD_STACK=1 istenirse.
+  console.error(e instanceof Error ? e.message : String(e));
+  if (process.env.DEBUG_LOAD_STACK === '1' && e instanceof Error) {
+    console.error(e.stack);
+  }
   await prisma.$disconnect();
   process.exit(1);
 });

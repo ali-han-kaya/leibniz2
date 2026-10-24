@@ -16,19 +16,37 @@ indirgenir; yorumlar atlanır). MAP.md'deki sözleşme aynı formatta:
 
 Frozen liste MAP.md'de TEK KAYNAKTIR; bu script yalnızca doğrular.
 
-Exit: 0 = uyumlu / 1 = drift (eksik/fazla/değişmiş teorem) / 2 = hata.
+AYNA BÜTÜNLÜĞÜ (2026-10-03 ölçümü): 8 teorem çekirdeği İKİ kopyada
+duruyor — `Content.lean` (shim; bu kapı ve `lean Content.lean` bunu okur)
+ve `Leibniz2Reduct/Content.lean` (lake target'ı; `lake build --wfail`
+BUNU derler). `lakefile.toml` srcDir="." düzeninde yalnızca kitaplık
+adı altındaki modülleri derdiği için shim lake target'ı DEĞİLDİR. İki
+kopya byte-eşit olmadığında sözleşme kapısı derlenmeyen dosyayı
+doğrular, derlenen dosya ise denetimsiz kalır — ÖLÇÜLDÜ: kütüphane
+kopyasına enjekte edilen bir sapma `check_lean_statements`,
+`check_lean_axioms`, `lake build --wfail` ve `verify_lean.sh`
+kapılarının DÖRDÜ DE yeşil kaldı. Bu yüzden ayna özdeşliği de
+fail-closed denetlenir.
+
+Exit: 0 = uyumlu / 1 = drift (eksik/fazla/değişmiş teorem ya da ayna
+sapması) / 2 = hata.
 Kullanım:
-    python3 check_lean_statements.py [--lean-file PATH] [--map PATH] [--json]
+    python3 check_lean_statements.py [--lean-file PATH] [--map PATH]
+                                     [--twin-file PATH] [--no-twin] [--json]
 """
 import argparse
+import hashlib
 import json
 import os
 import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_LEAN = os.path.normpath(os.path.join(HERE, "..", "lean_reduct", "Content.lean"))
-DEFAULT_MAP = os.path.normpath(os.path.join(HERE, "..", "lean_reduct", "MAP.md"))
+LEAN_DIR = os.path.normpath(os.path.join(HERE, "..", "lean_reduct"))
+DEFAULT_LEAN = os.path.join(LEAN_DIR, "Content.lean")
+DEFAULT_MAP = os.path.join(LEAN_DIR, "MAP.md")
+# lake build'ın derlediği ikinci kopya (shim'in aynası).
+DEFAULT_TWIN = os.path.join(LEAN_DIR, "Leibniz2Reduct", "Content.lean")
 
 # STATEMENT CONTRACT başlığı (MAP.md'deki makine-okunur bölüm).
 CONTRACT_HEADER = "## STATEMENT CONTRACT"
@@ -127,6 +145,33 @@ def parse_contract(map_text):
     return contract
 
 
+def check_twin(lean_file, twin_file):
+    """Shim ile lake target kopyası byte-eşit mi? Döndürür (ok, findings).
+
+    İki kopya aynı anda kaynak olduğu için ayrışmaları sessizce iki
+    farklı kaynak gerçeği yaratır: sözleşme kapısı birini, lake build
+    diğerini derler. Bayt eşitliği aranır (satır sonu/boşluk farkı da
+    drift sayılır — kaynaklar birebir aynı olmalıdır).
+    """
+    findings = []
+    digests = {}
+    for label, path in (("shim", lean_file), ("twin", twin_file)):
+        try:
+            with open(path, "rb") as f:
+                digests[label] = hashlib.sha256(f.read()).hexdigest()
+        except OSError as e:
+            return False, [{"kind": "twin_unreadable", "name": label,
+                            "detail": f"{label} okunamadı: {path} ({e})"}]
+    if digests["shim"] != digests["twin"]:
+        findings.append({
+            "kind": "twin_drift", "name": "Content.lean",
+            "detail": (f"shim ve lake target kopyası byte-eşit değil — "
+                       f"sözleşme kapısı derlenmeyen dosyayı doğruluyor\n"
+                       f"  shim ({lean_file}): {digests['shim']}\n"
+                       f"  twin ({twin_file}): {digests['twin']}")})
+    return not findings, findings
+
+
 def check_statements(lean_file, map_file):
     """İmzaları karşılaştır. Döndürür (ok: bool, findings: list[dict])."""
     findings = []
@@ -164,6 +209,10 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--lean-file", default=DEFAULT_LEAN)
     ap.add_argument("--map", default=DEFAULT_MAP)
+    ap.add_argument("--twin-file", default=DEFAULT_TWIN,
+                    help="lake target kopyası (shim ile byte-eşit olmalı)")
+    ap.add_argument("--no-twin", action="store_true",
+                    help="ayna bütünlüğü denetimini atla (test/alt-kopya)")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--exit-0", action="store_true",
                     help="drift olsa bile exit 0 (advisory)")
@@ -174,10 +223,18 @@ def main(argv=None):
         return 2
 
     ok, findings = check_statements(args.lean_file, args.map)
+    twin_state = None
+    if not args.no_twin:
+        twin_ok, twin_findings = check_twin(args.lean_file, args.twin_file)
+        twin_state = "PASS" if twin_ok else "FAIL"
+        findings = findings + twin_findings
+        ok = ok and twin_ok
     if args.json:
         print(json.dumps({"ok": ok, "findings": findings,
                           "lean_file": args.lean_file,
-                          "map_file": args.map}, ensure_ascii=False))
+                          "map_file": args.map,
+                          "twin_file": None if args.no_twin else args.twin_file,
+                          "twin_state": twin_state}, ensure_ascii=False))
     else:
         print(f"check-lean-statements: {args.lean_file}")
         for f in findings:
@@ -186,6 +243,9 @@ def main(argv=None):
             print(f"SONUÇ: {len(findings)} drift — fail-closed")
         else:
             print("SONUÇ: uyumlu — 8 teorem imzası MAP.md sözleşmesiyle birebir")
+        if twin_state is not None:
+            print(f"AYNA: {twin_state} — shim ile lake target kopyası "
+                  f"{'byte-eşit' if twin_state == 'PASS' else 'AYRIŞTI'}")
     if findings and not args.exit_0:
         return 1
     return 0

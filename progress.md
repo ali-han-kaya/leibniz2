@@ -101,3 +101,22 @@
 - commit d1cbfb2: apps surfaces (dashboard-next, trend-db, landing, mcp, pptx) + contract tests
 - 2 stash-window retries diagnosed; unstaged-delta rule enforced
 - Next: .worktrees/work/2026-09-19 from HEAD, setup, baseline battery
+
+## 2026-10-03/04 — design/preview-scrutiny-ledger session (11 commits, unpushed)
+- Branch `design/preview-scrutiny-ledger`, 11 commits ahead of origin/main, none pushed.
+- Latex: 7 overfull hbox → 0 (5a1a981). Lean: twin-identity gate `check_twin()`
+  in check_lean_statements.py (e27118f). precommit_log seam (5ee5555).
+- Neon: live-state doc correction (60f002e), `migrate dev` data-loss warning
+  (448cbc1), restore-proven backup with 3 migration checksums (287ccdf).
+- Prisma 7 pooled/direct fix (923bfdc) — 10 gates, mutation-verified.
+- dashboard-next dead code (097b683) — 10 gates; flags on; tsc clean.
+- load.ts hardening (ca118f9).
+- Battery progression: 156 → 157 → 158 test files, all PASS.
+
+## 2026-10-04 — planning-with-files activation
+- Plan files found but ~2 weeks STALE (branch reword-working, Phase 4 stuck
+  in_progress). session-catchup.py: no unsynced context. All three files were
+  clean against HEAD before editing.
+- Marked Phase 4 SUPERSEDED (items resolved/dropped; VERIFY-001 deferred),
+  added Phases 5–9 reflecting real branch state, wrote Next Step, and logged
+  this session's environment blockers in the Errors table.

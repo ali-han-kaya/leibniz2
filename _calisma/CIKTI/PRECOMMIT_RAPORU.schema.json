@@ -4,7 +4,15 @@
   "title": "PRECOMMIT_RAPORU.json",
   "description": "Pre-commit denetim raporu sidecar'ı (gen_precommit_report.py üretir, run_summary_precommit.py tüketir).",
   "type": "object",
-  "required": ["generated_at", "exit_code", "verdict", "role", "hooks", "findings", "counts"],
+  "required": [
+    "generated_at",
+    "exit_code",
+    "verdict",
+    "role",
+    "hooks",
+    "findings",
+    "counts"
+  ],
   "properties": {
     "generated_at": {
       "type": "string",
@@ -35,7 +43,7 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["name", "status"],
+        "required": ["name", "status", "source"],
         "properties": {
           "name": {
             "type": "string",
@@ -51,6 +59,11 @@
             "type": "string",
             "enum": ["Passed", "Failed"],
             "description": "Hook durumu"
+          },
+          "source": {
+            "type": "string",
+            "enum": ["stderr", "stdout", "sidecar", "log"],
+            "description": "Kayıtların okunduğu kaynak (precommit_log.collect önceliği: stderr -> stdout -> sidecar; rapor üreticisi her zaman 'log'). Teşhis kanıtı: hangi kaynak kazandı."
           }
         },
         "additionalProperties": false

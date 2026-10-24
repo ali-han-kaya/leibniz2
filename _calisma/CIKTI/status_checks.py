@@ -12,6 +12,11 @@ PR-merge engeli smoke koşar: required_status_checks.strict, enforce_admins,
 allow_force_pushes/allow_deletions — bunlar eksikse merge gerçekten BLOKE
 edilmez (fail-closed; doğru check adlarına rağmen kapı açık kalabilir).
 
+strict YALNIZCA PR akışında değer olarak zorunludur: `required_pull_request_
+reviews` doluysa `strict=false` FAIL'dir (bayat PR dalı merge edilebilir).
+Doğrudan-push depolarında PR dalı olmadığı için strict uygulanmaz — orada
+`strict=false` (ya da alanın yokluğu) yanlış-kırmızı üretmez.
+
 Kullanım:
   python3 _calisma/CIKTI/status_checks.py                  # beklenen adlar
   python3 _calisma/CIKTI/status_checks.py --gh             # GitHub ile doğrula
@@ -65,6 +70,9 @@ GATE_EXCLUDE = {
     "changelog-drift",      # advisory: gen_changelog --check drift bulguları
     "pattern-drift",         # advisory: merge pattern ↔ ARTIFACT_JOBS drift
     "budget-comment",        # PR-only: bütçe + pre-commit PR yorumu (bütçe kapısı ayrı job)
+    "dashboard-smoke",      # advisory: node-sandbox + Chromium etkileşim E2E
+                            #   (hover tooltip / run-history filtresi / lightbox);
+                            #   tarayıcısız katmanı her ortamda koşar, required değil.
     "lake-proof",            # ayrı-step K9 lake build (lean-toolchain v4.14.0);
                              #   GitHub required kontrollerinde DEĞİL (advisory) —
                              #   K9, verify job'unun --full içinde de koşar.
@@ -202,21 +210,66 @@ def run_gh(args):
     return r.stdout.strip()
 
 
-def merge_block_smoke(protection):
+def pr_flow_enabled(protection, override=None):
+    """Depo PR-akışlı mı? (strict yalnızca bu yolda anlam taşır)
+
+    Sinyal `required_pull_request_reviews`: GitHub'da "Require a pull request
+    before merging" AÇIKken boş olmayan bir nesne döner (0 onay bile olsa),
+    KAPALIYKEN `null`. `override` (True/False) verilirse tahmin yerine o
+    kullanılır — akışı bilen çağıran kararı sabitleyebilir.
+    """
+    if override is not None:
+        return bool(override)
+    return bool(protection.get("required_pull_request_reviews"))
+
+
+def _strict_probe(protection, pr_flow=None):
+    """strict satırı: PR-akışında DEĞER, direct-push'ta uygulanabilirlik.
+
+    NEDEN KOŞULLU (ölçüldü 2026-08-21, düzeltildi 2026-10-23): `strict=False`
+    doğrudan-push depolarında MEŞRUDUR — PR dalı yok, "base'in gerisinde"
+    durumu doğmaz; required check'ler push anında denetlenir. Ama PR-akışlı
+    bir depoda strict kapalıysa bayat dal yeşil check'lerle merge edilebilir;
+    "alan var mı" ölçmek bunu kaçırıyordu. Bu yüzden değer yalnızca PR
+    akışında zorunlu: `required_status_checks` hiç yoksa yine fail-closed.
+    """
+    if not protection.get("required_status_checks"):
+        return (False,
+                "required_status_checks yok — up-to-date kuralı "
+                "doğrulanamaz")
+    sc = protection.get("required_status_checks")
+    strict = sc.get("strict")
+    if not pr_flow_enabled(protection, pr_flow):
+        return (True,
+                "PR zorunlu değil (direct-push) — strict uygulanmaz; "
+                "bayat-dal riski yok")
+    if strict is True:
+        return True, ""
+    if strict is False:
+        return (False,
+                "strict kapalı — base'in gerisindeki PR dalı up-to-date "
+                "kontrolü olmadan merge edilebilir")
+    return (False,
+            "strict tanımlı değil — up-to-date zorunluluğu ayarlanmamış")
+
+
+def merge_block_smoke(protection, pr_flow=None):
     """Koruma nesnesinden PR-merge engeli enforcement alanlarını denetle.
 
     `required_status_checks.contexts` birebir doğru olsa bile aşağıdakiler
     kapalıysa merge butonu gerçekten BLOKE ETMEZ. Her alan için
     (label, ok, failure_note) döner; ok=False → o koruma eksik (fail-closed).
+
+    `pr_flow`: None → `required_pull_request_reviews`'tan türetilir; True/False
+    verilirse repo akışı hakkındaki bu bilgi tahmini ezer (direct-push
+    depoları strict=False ile yanlış-kırmızıya düşmesin).
     """
-    sc = protection.get("required_status_checks") or {}
+    strict_ok, strict_note = _strict_probe(protection, pr_flow)
     admins = protection.get("enforce_admins") or {}
     fp = protection.get("allow_force_pushes") or {}
     dele = protection.get("allow_deletions") or {}
     return [
-        ("required_status_checks.strict",
-         sc.get("strict") is not None,
-         "strict tanımlı değil — up-to-date zorunluluğu ayarlanmamış"),
+        ("required_status_checks.strict", strict_ok, strict_note),
         ("enforce_admins.enabled (admin bypass kapalı)",
          admins.get("enabled") is True,
          "admin bypass açık — koruma bypass edilebilir"),
@@ -229,12 +282,14 @@ def merge_block_smoke(protection):
     ]
 
 
-def evaluate_protection(expected, protection):
+def evaluate_protection(expected, protection, pr_flow=None):
     """expected (check adları) ile tam koruma nesnesini karşılaştır.
 
-    Döndürür: {names_ok, missing, extra, configured, smoke, enforcement_ok}.
-    names_ok (check adı eşleşmesi) ve enforcement_ok (merge engeli smoke)
-    AYRI bayraklar — her ikisi de geçmeli (fail-closed).
+    Döndürür: {names_ok, missing, extra, configured, smoke, enforcement_ok,
+    pr_flow}. names_ok (check adı eşleşmesi) ve enforcement_ok (merge engeli
+    smoke) AYRI bayraklar — her ikisi de geçmeli (fail-closed).
+
+    `pr_flow` smoke'a aynen geçer (None → koruma nesnesinden türetilir).
     """
     sc = protection.get("required_status_checks") or {}
     configured = sc.get("contexts") or []
@@ -243,7 +298,7 @@ def evaluate_protection(expected, protection):
     exp, conf = set(expected), set(configured)
     missing = sorted(exp - conf)
     extra = sorted(conf - exp)
-    smoke = merge_block_smoke(protection)
+    smoke = merge_block_smoke(protection, pr_flow=pr_flow)
     enforcement_ok = all(ok for (_label, ok, _note) in smoke)
     return {
         "names_ok": not missing and not extra,
@@ -252,6 +307,7 @@ def evaluate_protection(expected, protection):
         "configured": sorted(conf),
         "smoke": smoke,
         "enforcement_ok": enforcement_ok,
+        "pr_flow": pr_flow_enabled(protection, pr_flow),
     }
 
 
@@ -332,6 +388,9 @@ def main(argv=None):
         "configured": [],
         "enforcement_ok": None,
         "smoke": [],
+        # Strict'in uygulanabilirliğini belirleyen akış (koruma okunamadıysa
+        # bilinmiyor): True = PR zorunlu, False = direct-push.
+        "pr_flow": None,
         "verdict": "ERROR",
         "warning": None,
         # Advisory kontratı OFFLINE hesaplanır (workflow YAML'ından) —
@@ -389,6 +448,7 @@ def main(argv=None):
         "extra": result["extra"],
         "configured": result["configured"],
         "enforcement_ok": result["enforcement_ok"],
+        "pr_flow": result["pr_flow"],
         "smoke": smoke_json,
         "verdict": verdict,
     })
@@ -408,9 +468,12 @@ def main(argv=None):
 
     # ── PR-merge engeli smoke (koruma ayarları) ──
     print("\n── PR-merge engeli smoke (koruma ayarları) ──")
+    print(f"  akış: {'PR zorunlu (strict uygulanır)' if result['pr_flow'] else 'direct-push (strict uygulanmaz)'}")
     for label, ok, note in result["smoke"]:
+        # Not PASS'te de basılır: direct-push'ta strict satırının neden
+        # yeşil olduğu (uygulanmaz) görünür kalsın.
         print(f"  [{'PASS' if ok else 'FAIL'}] {label}"
-              + ("" if ok else f" — {note}"))
+              + (f" — {note}" if note else ""))
 
     if result["names_ok"] and result["enforcement_ok"]:
         print(f"\nSONUÇ: PASS — {len(result['configured'])} check birebir "

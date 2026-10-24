@@ -1,0 +1,3965 @@
+{
+  "meta": {
+    "repo": "leibniz2",
+    "composition": "LeibnizChain",
+    "width": 1280,
+    "height": 720,
+    "fps": 30,
+    "frames": 760,
+    "duration_s": 25.33,
+    "reconstruction": "yeniden inşa: kaynak proje /tmp temizliginde kayboldu; spesifikasyon findings.md:70-75 ve recovery_patches_20260918/patch1789754982-84993:540-549"
+  },
+  "runs": [
+    {
+      "n": 1,
+      "ts": "2026-09-29 15:42:12",
+      "day": "2026-09-29",
+      "verdict": "FAIL",
+      "duration_s": 2.04,
+      "findings": 0,
+      "exit_code": -15,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 0,
+      "z3_total": 0,
+      "overrides": 0,
+      "board": "Pre-commit ⚠️ · K0 ✅ · Bütçe ⚠️ · Soy hattı ⚠️ · K katmanları ⚠️",
+      "layers": {},
+      "telemetry_reported": 3
+    },
+    {
+      "n": 2,
+      "ts": "2026-09-29 17:02:07",
+      "day": "2026-09-29",
+      "verdict": "FAIL",
+      "duration_s": 300.05,
+      "findings": 0,
+      "exit_code": 124,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 0,
+      "z3_total": 0,
+      "overrides": 0,
+      "board": "Pre-commit ⚠️ · K0 ✅ · Bütçe ⚠️ · Soy hattı ⚠️ · K katmanları ⚠️",
+      "layers": {},
+      "telemetry_reported": 3
+    },
+    {
+      "n": 3,
+      "ts": "2026-09-29 18:26:47",
+      "day": "2026-09-29",
+      "verdict": "FAIL",
+      "duration_s": 300.03,
+      "findings": 0,
+      "exit_code": 124,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 0,
+      "z3_total": 0,
+      "overrides": 0,
+      "board": "Pre-commit ⚠️ · K0 ✅ · Bütçe ⚠️ · Soy hattı ⚠️ · K katmanları ⚠️",
+      "layers": {},
+      "telemetry_reported": 3
+    },
+    {
+      "n": 4,
+      "ts": "2026-09-29 22:32:42",
+      "day": "2026-09-29",
+      "verdict": "FAIL",
+      "duration_s": 300.02,
+      "findings": 0,
+      "exit_code": 124,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 0,
+      "z3_total": 0,
+      "overrides": 0,
+      "board": "Pre-commit ⚠️ · K0 ✅ · Bütçe ⚠️ · Soy hattı ⚠️ · K katmanları ⚠️",
+      "layers": {},
+      "telemetry_reported": 3
+    },
+    {
+      "n": 5,
+      "ts": "2026-09-29 23:33:54",
+      "day": "2026-09-29",
+      "verdict": "FAIL",
+      "duration_s": 3.62,
+      "findings": 0,
+      "exit_code": -15,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 0,
+      "z3_total": 0,
+      "overrides": 0,
+      "board": "Pre-commit ⚠️ · K0 ✅ · Bütçe ⚠️ · Soy hattı ⚠️ · K katmanları ⚠️",
+      "layers": {},
+      "telemetry_reported": 3
+    },
+    {
+      "n": 6,
+      "ts": "2026-09-29 23:44:18",
+      "day": "2026-09-29",
+      "verdict": "FAIL",
+      "duration_s": 300.01,
+      "findings": 0,
+      "exit_code": 124,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 0,
+      "z3_total": 0,
+      "overrides": 0,
+      "board": "Pre-commit ⚠️ · K0 ✅ · Bütçe ⚠️ · Soy hattı ⚠️ · K katmanları ⚠️",
+      "layers": {},
+      "telemetry_reported": 3
+    },
+    {
+      "n": 7,
+      "ts": "2026-09-30 01:47:33",
+      "day": "2026-09-30",
+      "verdict": "FAIL",
+      "duration_s": 2.16,
+      "findings": 0,
+      "exit_code": -15,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 0,
+      "z3_total": 0,
+      "overrides": 0,
+      "board": "Pre-commit ⚠️ · K0 ✅ · Bütçe ⚠️ · Soy hattı ⚠️ · K katmanları ⚠️",
+      "layers": {},
+      "telemetry_reported": 3
+    },
+    {
+      "n": 8,
+      "ts": "2026-09-30 02:24:06",
+      "day": "2026-09-30",
+      "verdict": "PASS",
+      "duration_s": 195.0,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 9,
+      "ts": "2026-09-30 03:56:07",
+      "day": "2026-09-30",
+      "verdict": "PASS",
+      "duration_s": 122.6,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 10,
+      "ts": "2026-09-30 05:16:16",
+      "day": "2026-09-30",
+      "verdict": "PASS",
+      "duration_s": 197.07,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 11,
+      "ts": "2026-09-30 06:35:12",
+      "day": "2026-09-30",
+      "verdict": "PASS",
+      "duration_s": 151.03,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 12,
+      "ts": "2026-09-30 08:03:38",
+      "day": "2026-09-30",
+      "verdict": "PASS",
+      "duration_s": 134.3,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 13,
+      "ts": "2026-09-30 09:09:47",
+      "day": "2026-09-30",
+      "verdict": "FAIL",
+      "duration_s": 2.52,
+      "findings": 0,
+      "exit_code": -15,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 0,
+      "z3_total": 0,
+      "overrides": 0,
+      "board": "Pre-commit ⚠️ · K0 ✅ · Bütçe ⚠️ · Soy hattı ⚠️ · K katmanları ⚠️",
+      "layers": {},
+      "telemetry_reported": 3
+    },
+    {
+      "n": 14,
+      "ts": "2026-09-30 09:09:47",
+      "day": "2026-09-30",
+      "verdict": "FAIL",
+      "duration_s": 8.81,
+      "findings": 0,
+      "exit_code": -15,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 0,
+      "z3_total": 0,
+      "overrides": 0,
+      "board": "Pre-commit ⚠️ · K0 ✅ · Bütçe ⚠️ · Soy hattı ⚠️ · K katmanları ⚠️",
+      "layers": {},
+      "telemetry_reported": 3
+    },
+    {
+      "n": 15,
+      "ts": "2026-09-30 09:09:47",
+      "day": "2026-09-30",
+      "verdict": "FAIL",
+      "duration_s": 3.65,
+      "findings": 0,
+      "exit_code": -15,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 0,
+      "z3_total": 0,
+      "overrides": 0,
+      "board": "Pre-commit ⚠️ · K0 ✅ · Bütçe ⚠️ · Soy hattı ⚠️ · K katmanları ⚠️",
+      "layers": {},
+      "telemetry_reported": 3
+    },
+    {
+      "n": 16,
+      "ts": "2026-09-30 09:15:51",
+      "day": "2026-09-30",
+      "verdict": "FAIL",
+      "duration_s": 300.01,
+      "findings": 0,
+      "exit_code": 124,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 0,
+      "z3_total": 0,
+      "overrides": 0,
+      "board": "Pre-commit ⚠️ · K0 ✅ · Bütçe ⚠️ · Soy hattı ⚠️ · K katmanları ⚠️",
+      "layers": {},
+      "telemetry_reported": 3
+    },
+    {
+      "n": 17,
+      "ts": "2026-09-30 10:29:16",
+      "day": "2026-09-30",
+      "verdict": "FAIL",
+      "duration_s": 300.01,
+      "findings": 0,
+      "exit_code": 124,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 0,
+      "z3_total": 0,
+      "overrides": 0,
+      "board": "Pre-commit ⚠️ · K0 ✅ · Bütçe ⚠️ · Soy hattı ⚠️ · K katmanları ⚠️",
+      "layers": {},
+      "telemetry_reported": 3
+    },
+    {
+      "n": 18,
+      "ts": "2026-09-30 11:43:09",
+      "day": "2026-09-30",
+      "verdict": "FAIL",
+      "duration_s": 300.02,
+      "findings": 0,
+      "exit_code": 124,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 0,
+      "z3_total": 0,
+      "overrides": 0,
+      "board": "Pre-commit ⚠️ · K0 ✅ · Bütçe ⚠️ · Soy hattı ⚠️ · K katmanları ⚠️",
+      "layers": {},
+      "telemetry_reported": 3
+    },
+    {
+      "n": 19,
+      "ts": "2026-09-30 13:58:08",
+      "day": "2026-09-30",
+      "verdict": "FAIL",
+      "duration_s": 300.03,
+      "findings": 0,
+      "exit_code": 124,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 0,
+      "z3_total": 0,
+      "overrides": 0,
+      "board": "Pre-commit ⚠️ · K0 ✅ · Bütçe ⚠️ · Soy hattı ⚠️ · K katmanları ⚠️",
+      "layers": {},
+      "telemetry_reported": 3
+    },
+    {
+      "n": 20,
+      "ts": "2026-09-30 15:30:05",
+      "day": "2026-09-30",
+      "verdict": "FAIL",
+      "duration_s": 70.57,
+      "findings": 1,
+      "exit_code": 1,
+      "p0": 0,
+      "p1": 1,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit 🔴 · K0 🔴 · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 21,
+      "ts": "2026-09-30 16:35:05",
+      "day": "2026-09-30",
+      "verdict": "FAIL",
+      "duration_s": 300.03,
+      "findings": 0,
+      "exit_code": 124,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 0,
+      "z3_total": 0,
+      "overrides": 0,
+      "board": "Pre-commit ⚠️ · K0 ✅ · Bütçe ⚠️ · Soy hattı ⚠️ · K katmanları ⚠️",
+      "layers": {},
+      "telemetry_reported": 3
+    },
+    {
+      "n": 22,
+      "ts": "2026-09-30 17:40:05",
+      "day": "2026-09-30",
+      "verdict": "FAIL",
+      "duration_s": 300.02,
+      "findings": 0,
+      "exit_code": 124,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ⚠️ · K0 ✅ · Bütçe ⚠️ · Soy hattı ⚠️ · K katmanları ⚠️",
+      "layers": {},
+      "telemetry_reported": 3
+    },
+    {
+      "n": 23,
+      "ts": "2026-09-30 18:41:34",
+      "day": "2026-09-30",
+      "verdict": "PASS",
+      "duration_s": 89.03,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "DRIFT",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 24,
+      "ts": "2026-09-30 19:42:36",
+      "day": "2026-09-30",
+      "verdict": "FAIL",
+      "duration_s": 61.82,
+      "findings": 1,
+      "exit_code": 1,
+      "p0": 0,
+      "p1": 1,
+      "drift": "DRIFT",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 🔴 · Bütçe ✅ · Soy hattı ✅ · K katmanları 🔴",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 25,
+      "ts": "2026-09-30 20:43:25",
+      "day": "2026-09-30",
+      "verdict": "PASS",
+      "duration_s": 48.74,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "DRIFT",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 26,
+      "ts": "2026-09-30 21:44:18",
+      "day": "2026-09-30",
+      "verdict": "PASS",
+      "duration_s": 52.82,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 27,
+      "ts": "2026-09-30 23:07:23",
+      "day": "2026-09-30",
+      "verdict": "PASS",
+      "duration_s": 47.9,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 28,
+      "ts": "2026-10-01 00:28:04",
+      "day": "2026-10-01",
+      "verdict": "PASS",
+      "duration_s": 63.93,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 29,
+      "ts": "2026-10-01 01:54:25",
+      "day": "2026-10-01",
+      "verdict": "PASS",
+      "duration_s": 96.28,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 30,
+      "ts": "2026-10-01 03:24:07",
+      "day": "2026-10-01",
+      "verdict": "PASS",
+      "duration_s": 87.38,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 31,
+      "ts": "2026-10-01 04:25:26",
+      "day": "2026-10-01",
+      "verdict": "PASS",
+      "duration_s": 78.44,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 32,
+      "ts": "2026-10-01 06:47:18",
+      "day": "2026-10-01",
+      "verdict": "PASS",
+      "duration_s": 46.74,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 33,
+      "ts": "2026-10-01 09:12:48",
+      "day": "2026-10-01",
+      "verdict": "PASS",
+      "duration_s": 77.99,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 34,
+      "ts": "2026-10-01 10:14:09",
+      "day": "2026-10-01",
+      "verdict": "PASS",
+      "duration_s": 80.92,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 35,
+      "ts": "2026-10-01 11:32:05",
+      "day": "2026-10-01",
+      "verdict": "PASS",
+      "duration_s": 77.8,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 36,
+      "ts": "2026-10-01 12:57:59",
+      "day": "2026-10-01",
+      "verdict": "PASS",
+      "duration_s": 49.24,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 37,
+      "ts": "2026-10-01 14:22:06",
+      "day": "2026-10-01",
+      "verdict": "PASS",
+      "duration_s": 80.48,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 38,
+      "ts": "2026-10-01 15:23:30",
+      "day": "2026-10-01",
+      "verdict": "PASS",
+      "duration_s": 84.0,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 39,
+      "ts": "2026-10-01 16:24:17",
+      "day": "2026-10-01",
+      "verdict": "PASS",
+      "duration_s": 47.27,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 40,
+      "ts": "2026-10-01 17:25:05",
+      "day": "2026-10-01",
+      "verdict": "PASS",
+      "duration_s": 47.56,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 41,
+      "ts": "2026-10-01 18:25:56",
+      "day": "2026-10-01",
+      "verdict": "PASS",
+      "duration_s": 50.69,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 42,
+      "ts": "2026-10-01 19:26:44",
+      "day": "2026-10-01",
+      "verdict": "PASS",
+      "duration_s": 48.82,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 43,
+      "ts": "2026-10-01 20:27:29",
+      "day": "2026-10-01",
+      "verdict": "PASS",
+      "duration_s": 44.65,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 44,
+      "ts": "2026-10-01 21:28:17",
+      "day": "2026-10-01",
+      "verdict": "PASS",
+      "duration_s": 47.14,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 45,
+      "ts": "2026-10-01 22:29:05",
+      "day": "2026-10-01",
+      "verdict": "PASS",
+      "duration_s": 48.46,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 46,
+      "ts": "2026-10-01 23:29:50",
+      "day": "2026-10-01",
+      "verdict": "PASS",
+      "duration_s": 44.91,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 47,
+      "ts": "2026-10-02 00:30:37",
+      "day": "2026-10-02",
+      "verdict": "PASS",
+      "duration_s": 46.46,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 48,
+      "ts": "2026-10-02 02:14:22",
+      "day": "2026-10-02",
+      "verdict": "FAIL",
+      "duration_s": 300.02,
+      "findings": 0,
+      "exit_code": 124,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 0,
+      "z3_total": 0,
+      "overrides": 0,
+      "board": "Pre-commit ⚠️ · K0 ✅ · Bütçe ⚠️ · Soy hattı ⚠️ · K katmanları ⚠️",
+      "layers": {},
+      "telemetry_reported": 3
+    },
+    {
+      "n": 49,
+      "ts": "2026-10-02 03:36:48",
+      "day": "2026-10-02",
+      "verdict": "PASS",
+      "duration_s": 46.64,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 50,
+      "ts": "2026-10-02 04:37:34",
+      "day": "2026-10-02",
+      "verdict": "PASS",
+      "duration_s": 46.57,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 51,
+      "ts": "2026-10-02 05:38:54",
+      "day": "2026-10-02",
+      "verdict": "PASS",
+      "duration_s": 79.31,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 52,
+      "ts": "2026-10-02 06:39:50",
+      "day": "2026-10-02",
+      "verdict": "PASS",
+      "duration_s": 56.17,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 53,
+      "ts": "2026-10-02 08:03:36",
+      "day": "2026-10-02",
+      "verdict": "PASS",
+      "duration_s": 47.16,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 54,
+      "ts": "2026-10-02 09:14:35",
+      "day": "2026-10-02",
+      "verdict": "PASS",
+      "duration_s": 78.66,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 55,
+      "ts": "2026-10-02 10:37:13",
+      "day": "2026-10-02",
+      "verdict": "PASS",
+      "duration_s": 46.19,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 56,
+      "ts": "2026-10-02 11:38:09",
+      "day": "2026-10-02",
+      "verdict": "PASS",
+      "duration_s": 49.34,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 57,
+      "ts": "2026-10-02 12:57:48",
+      "day": "2026-10-02",
+      "verdict": "PASS",
+      "duration_s": 58.7,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 58,
+      "ts": "2026-10-02 14:29:10",
+      "day": "2026-10-02",
+      "verdict": "PASS",
+      "duration_s": 51.11,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 59,
+      "ts": "2026-10-02 16:09:58",
+      "day": "2026-10-02",
+      "verdict": "PASS",
+      "duration_s": 47.56,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 60,
+      "ts": "2026-10-02 17:10:45",
+      "day": "2026-10-02",
+      "verdict": "PASS",
+      "duration_s": 47.4,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 61,
+      "ts": "2026-10-02 18:11:31",
+      "day": "2026-10-02",
+      "verdict": "PASS",
+      "duration_s": 45.42,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 62,
+      "ts": "2026-10-02 19:12:17",
+      "day": "2026-10-02",
+      "verdict": "PASS",
+      "duration_s": 46.76,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 63,
+      "ts": "2026-10-02 20:13:03",
+      "day": "2026-10-02",
+      "verdict": "PASS",
+      "duration_s": 45.55,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 64,
+      "ts": "2026-10-02 21:13:51",
+      "day": "2026-10-02",
+      "verdict": "PASS",
+      "duration_s": 48.06,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 65,
+      "ts": "2026-10-02 22:14:41",
+      "day": "2026-10-02",
+      "verdict": "PASS",
+      "duration_s": 49.52,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 66,
+      "ts": "2026-10-02 23:53:30",
+      "day": "2026-10-02",
+      "verdict": "PASS",
+      "duration_s": 45.97,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 67,
+      "ts": "2026-10-03 02:52:19",
+      "day": "2026-10-03",
+      "verdict": "PASS",
+      "duration_s": 48.66,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 68,
+      "ts": "2026-10-03 05:18:21",
+      "day": "2026-10-03",
+      "verdict": "PASS",
+      "duration_s": 47.99,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 69,
+      "ts": "2026-10-03 06:37:27",
+      "day": "2026-10-03",
+      "verdict": "PASS",
+      "duration_s": 45.91,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 70,
+      "ts": "2026-10-03 11:19:20",
+      "day": "2026-10-03",
+      "verdict": "PASS",
+      "duration_s": 47.01,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 71,
+      "ts": "2026-10-03 12:21:52",
+      "day": "2026-10-03",
+      "verdict": "PASS",
+      "duration_s": 73.24,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 72,
+      "ts": "2026-10-03 13:22:41",
+      "day": "2026-10-03",
+      "verdict": "PASS",
+      "duration_s": 48.66,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 73,
+      "ts": "2026-10-03 14:23:32",
+      "day": "2026-10-03",
+      "verdict": "PASS",
+      "duration_s": 51.62,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 74,
+      "ts": "2026-10-03 15:26:08",
+      "day": "2026-10-03",
+      "verdict": "PASS",
+      "duration_s": 47.78,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 75,
+      "ts": "2026-10-03 16:33:50",
+      "day": "2026-10-03",
+      "verdict": "PASS",
+      "duration_s": 46.0,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 76,
+      "ts": "2026-10-03 17:38:49",
+      "day": "2026-10-03",
+      "verdict": "PASS",
+      "duration_s": 48.3,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 77,
+      "ts": "2026-10-03 18:39:39",
+      "day": "2026-10-03",
+      "verdict": "PASS",
+      "duration_s": 49.63,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 78,
+      "ts": "2026-10-03 19:40:32",
+      "day": "2026-10-03",
+      "verdict": "PASS",
+      "duration_s": 52.94,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {},
+      "telemetry_reported": 9
+    },
+    {
+      "n": 79,
+      "ts": "2026-10-03 20:41:26",
+      "day": "2026-10-03",
+      "verdict": "PASS",
+      "duration_s": 54.16,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {
+        "K0": "PASS",
+        "K1": "PASS",
+        "K2": "PASS",
+        "K3": "PASS",
+        "K4": "PASS",
+        "K5": "PASS",
+        "K6": "PASS",
+        "K7": "PASS",
+        "K8": "PASS",
+        "K9": "PASS",
+        "K10": "SKIP",
+        "K11": "PASS",
+        "K12": "SKIP",
+        "K13": "PASS",
+        "K14": "PASS",
+        "K15": "PASS",
+        "K16": "PASS",
+        "K17": "PASS",
+        "K18": "PASS",
+        "K19": "SKIP",
+        "K20": "SKIP",
+        "K21": "PASS"
+      },
+      "telemetry_reported": 9
+    },
+    {
+      "n": 80,
+      "ts": "2026-10-03 22:18:39",
+      "day": "2026-10-03",
+      "verdict": "PASS",
+      "duration_s": 48.09,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {
+        "K0": "PASS",
+        "K1": "PASS",
+        "K2": "PASS",
+        "K3": "PASS",
+        "K4": "PASS",
+        "K5": "PASS",
+        "K6": "PASS",
+        "K7": "PASS",
+        "K8": "PASS",
+        "K9": "PASS",
+        "K10": "SKIP",
+        "K11": "PASS",
+        "K12": "SKIP",
+        "K13": "PASS",
+        "K14": "PASS",
+        "K15": "PASS",
+        "K16": "PASS",
+        "K17": "PASS",
+        "K18": "PASS",
+        "K19": "SKIP",
+        "K20": "SKIP",
+        "K21": "PASS"
+      },
+      "telemetry_reported": 9
+    },
+    {
+      "n": 81,
+      "ts": "2026-10-03 23:19:29",
+      "day": "2026-10-03",
+      "verdict": "PASS",
+      "duration_s": 49.86,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {
+        "K0": "PASS",
+        "K1": "PASS",
+        "K2": "PASS",
+        "K3": "PASS",
+        "K4": "PASS",
+        "K5": "PASS",
+        "K6": "PASS",
+        "K7": "PASS",
+        "K8": "PASS",
+        "K9": "PASS",
+        "K10": "SKIP",
+        "K11": "PASS",
+        "K12": "SKIP",
+        "K13": "PASS",
+        "K14": "PASS",
+        "K15": "PASS",
+        "K16": "PASS",
+        "K17": "PASS",
+        "K18": "PASS",
+        "K19": "SKIP",
+        "K20": "SKIP",
+        "K21": "PASS"
+      },
+      "telemetry_reported": 9
+    },
+    {
+      "n": 82,
+      "ts": "2026-10-04 00:20:34",
+      "day": "2026-10-04",
+      "verdict": "PASS",
+      "duration_s": 65.32,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {
+        "K0": "PASS",
+        "K1": "PASS",
+        "K2": "PASS",
+        "K3": "PASS",
+        "K4": "PASS",
+        "K5": "PASS",
+        "K6": "PASS",
+        "K7": "PASS",
+        "K8": "PASS",
+        "K9": "PASS",
+        "K10": "SKIP",
+        "K11": "PASS",
+        "K12": "SKIP",
+        "K13": "PASS",
+        "K14": "PASS",
+        "K15": "PASS",
+        "K16": "PASS",
+        "K17": "PASS",
+        "K18": "PASS",
+        "K19": "SKIP",
+        "K20": "SKIP",
+        "K21": "PASS"
+      },
+      "telemetry_reported": 9
+    },
+    {
+      "n": 83,
+      "ts": "2026-10-04 01:21:30",
+      "day": "2026-10-04",
+      "verdict": "PASS",
+      "duration_s": 55.86,
+      "findings": 0,
+      "exit_code": 0,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 ✅ · Bütçe ✅ · Soy hattı ✅ · K katmanları ✅",
+      "layers": {
+        "K0": "PASS",
+        "K1": "PASS",
+        "K2": "PASS",
+        "K3": "PASS",
+        "K4": "PASS",
+        "K5": "PASS",
+        "K6": "PASS",
+        "K7": "PASS",
+        "K8": "PASS",
+        "K9": "PASS",
+        "K10": "SKIP",
+        "K11": "PASS",
+        "K12": "SKIP",
+        "K13": "PASS",
+        "K14": "PASS",
+        "K15": "PASS",
+        "K16": "PASS",
+        "K17": "PASS",
+        "K18": "PASS",
+        "K19": "SKIP",
+        "K20": "SKIP",
+        "K21": "PASS"
+      },
+      "telemetry_reported": 9
+    },
+    {
+      "n": 84,
+      "ts": "2026-10-04 02:22:18",
+      "day": "2026-10-04",
+      "verdict": "FAIL",
+      "duration_s": 47.66,
+      "findings": 1,
+      "exit_code": 1,
+      "p0": 1,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 🔴 · Bütçe ✅ · Soy hattı ✅ · K katmanları 🔴",
+      "layers": {
+        "K0": "PASS",
+        "K1": "PASS",
+        "K2": "PASS",
+        "K3": "PASS",
+        "K4": "PASS",
+        "K5": "PASS",
+        "K6": "PASS",
+        "K7": "PASS",
+        "K8": "PASS",
+        "K9": "PASS",
+        "K10": "SKIP",
+        "K11": "PASS",
+        "K12": "SKIP",
+        "K13": "PASS",
+        "K14": "PASS",
+        "K15": "PASS",
+        "K16": "FAIL",
+        "K17": "PASS",
+        "K18": "PASS",
+        "K19": "SKIP",
+        "K20": "SKIP",
+        "K21": "PASS"
+      },
+      "telemetry_reported": 9
+    },
+    {
+      "n": 85,
+      "ts": "2026-10-04 03:23:06",
+      "day": "2026-10-04",
+      "verdict": "FAIL",
+      "duration_s": 48.09,
+      "findings": 1,
+      "exit_code": 1,
+      "p0": 1,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 🔴 · Bütçe ✅ · Soy hattı ✅ · K katmanları 🔴",
+      "layers": {
+        "K0": "PASS",
+        "K1": "PASS",
+        "K2": "PASS",
+        "K3": "PASS",
+        "K4": "PASS",
+        "K5": "PASS",
+        "K6": "PASS",
+        "K7": "PASS",
+        "K8": "PASS",
+        "K9": "PASS",
+        "K10": "SKIP",
+        "K11": "PASS",
+        "K12": "SKIP",
+        "K13": "PASS",
+        "K14": "PASS",
+        "K15": "PASS",
+        "K16": "FAIL",
+        "K17": "PASS",
+        "K18": "PASS",
+        "K19": "SKIP",
+        "K20": "SKIP",
+        "K21": "PASS"
+      },
+      "telemetry_reported": 9
+    },
+    {
+      "n": 86,
+      "ts": "2026-10-04 04:24:05",
+      "day": "2026-10-04",
+      "verdict": "FAIL",
+      "duration_s": 58.8,
+      "findings": 1,
+      "exit_code": 1,
+      "p0": 1,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 🔴 · Bütçe ✅ · Soy hattı ✅ · K katmanları 🔴",
+      "layers": {
+        "K0": "PASS",
+        "K1": "PASS",
+        "K2": "PASS",
+        "K3": "PASS",
+        "K4": "PASS",
+        "K5": "PASS",
+        "K6": "PASS",
+        "K7": "PASS",
+        "K8": "PASS",
+        "K9": "PASS",
+        "K10": "SKIP",
+        "K11": "PASS",
+        "K12": "SKIP",
+        "K13": "PASS",
+        "K14": "PASS",
+        "K15": "PASS",
+        "K16": "FAIL",
+        "K17": "PASS",
+        "K18": "PASS",
+        "K19": "SKIP",
+        "K20": "SKIP",
+        "K21": "PASS"
+      },
+      "telemetry_reported": 9
+    },
+    {
+      "n": 87,
+      "ts": "2026-10-04 05:49:44",
+      "day": "2026-10-04",
+      "verdict": "FAIL",
+      "duration_s": 46.51,
+      "findings": 1,
+      "exit_code": 1,
+      "p0": 1,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 🔴 · Bütçe ✅ · Soy hattı ✅ · K katmanları 🔴",
+      "layers": {
+        "K0": "PASS",
+        "K1": "PASS",
+        "K2": "PASS",
+        "K3": "PASS",
+        "K4": "PASS",
+        "K5": "PASS",
+        "K6": "PASS",
+        "K7": "PASS",
+        "K8": "PASS",
+        "K9": "PASS",
+        "K10": "SKIP",
+        "K11": "PASS",
+        "K12": "SKIP",
+        "K13": "PASS",
+        "K14": "PASS",
+        "K15": "PASS",
+        "K16": "FAIL",
+        "K17": "PASS",
+        "K18": "PASS",
+        "K19": "SKIP",
+        "K20": "SKIP",
+        "K21": "PASS"
+      },
+      "telemetry_reported": 9
+    },
+    {
+      "n": 88,
+      "ts": "2026-10-04 07:06:11",
+      "day": "2026-10-04",
+      "verdict": "FAIL",
+      "duration_s": 50.57,
+      "findings": 1,
+      "exit_code": 1,
+      "p0": 1,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 🔴 · Bütçe ✅ · Soy hattı ✅ · K katmanları 🔴",
+      "layers": {
+        "K0": "PASS",
+        "K1": "PASS",
+        "K2": "PASS",
+        "K3": "PASS",
+        "K4": "PASS",
+        "K5": "PASS",
+        "K6": "PASS",
+        "K7": "PASS",
+        "K8": "PASS",
+        "K9": "PASS",
+        "K10": "SKIP",
+        "K11": "PASS",
+        "K12": "SKIP",
+        "K13": "PASS",
+        "K14": "PASS",
+        "K15": "PASS",
+        "K16": "FAIL",
+        "K17": "PASS",
+        "K18": "PASS",
+        "K19": "SKIP",
+        "K20": "SKIP",
+        "K21": "PASS"
+      },
+      "telemetry_reported": 9
+    },
+    {
+      "n": 89,
+      "ts": "2026-10-04 11:29:00",
+      "day": "2026-10-04",
+      "verdict": "FAIL",
+      "duration_s": 79.4,
+      "findings": 1,
+      "exit_code": 1,
+      "p0": 1,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 🔴 · Bütçe ✅ · Soy hattı ✅ · K katmanları 🔴",
+      "layers": {
+        "K0": "PASS",
+        "K1": "PASS",
+        "K2": "PASS",
+        "K3": "PASS",
+        "K4": "PASS",
+        "K5": "PASS",
+        "K6": "PASS",
+        "K7": "PASS",
+        "K8": "PASS",
+        "K9": "PASS",
+        "K10": "SKIP",
+        "K11": "PASS",
+        "K12": "SKIP",
+        "K13": "PASS",
+        "K14": "PASS",
+        "K15": "PASS",
+        "K16": "FAIL",
+        "K17": "PASS",
+        "K18": "PASS",
+        "K19": "SKIP",
+        "K20": "SKIP",
+        "K21": "PASS"
+      },
+      "telemetry_reported": 9
+    },
+    {
+      "n": 90,
+      "ts": "2026-10-04 12:29:47",
+      "day": "2026-10-04",
+      "verdict": "FAIL",
+      "duration_s": 47.8,
+      "findings": 1,
+      "exit_code": 1,
+      "p0": 1,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 🔴 · Bütçe ✅ · Soy hattı ✅ · K katmanları 🔴",
+      "layers": {
+        "K0": "PASS",
+        "K1": "PASS",
+        "K2": "PASS",
+        "K3": "PASS",
+        "K4": "PASS",
+        "K5": "PASS",
+        "K6": "PASS",
+        "K7": "PASS",
+        "K8": "PASS",
+        "K9": "PASS",
+        "K10": "SKIP",
+        "K11": "PASS",
+        "K12": "SKIP",
+        "K13": "PASS",
+        "K14": "PASS",
+        "K15": "PASS",
+        "K16": "FAIL",
+        "K17": "PASS",
+        "K18": "PASS",
+        "K19": "SKIP",
+        "K20": "SKIP",
+        "K21": "PASS"
+      },
+      "telemetry_reported": 9
+    },
+    {
+      "n": 91,
+      "ts": "2026-10-04 13:38:14",
+      "day": "2026-10-04",
+      "verdict": "FAIL",
+      "duration_s": 47.39,
+      "findings": 1,
+      "exit_code": 1,
+      "p0": 1,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 🔴 · Bütçe ✅ · Soy hattı ✅ · K katmanları 🔴",
+      "layers": {
+        "K0": "PASS",
+        "K1": "PASS",
+        "K2": "PASS",
+        "K3": "PASS",
+        "K4": "PASS",
+        "K5": "PASS",
+        "K6": "PASS",
+        "K7": "PASS",
+        "K8": "PASS",
+        "K9": "PASS",
+        "K10": "SKIP",
+        "K11": "PASS",
+        "K12": "SKIP",
+        "K13": "PASS",
+        "K14": "PASS",
+        "K15": "PASS",
+        "K16": "FAIL",
+        "K17": "PASS",
+        "K18": "PASS",
+        "K19": "SKIP",
+        "K20": "SKIP",
+        "K21": "PASS"
+      },
+      "telemetry_reported": 9
+    },
+    {
+      "n": 92,
+      "ts": "2026-10-04 15:04:00",
+      "day": "2026-10-04",
+      "verdict": "FAIL",
+      "duration_s": 48.94,
+      "findings": 1,
+      "exit_code": 1,
+      "p0": 1,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 🔴 · Bütçe ✅ · Soy hattı ✅ · K katmanları 🔴",
+      "layers": {
+        "K0": "PASS",
+        "K1": "PASS",
+        "K2": "PASS",
+        "K3": "PASS",
+        "K4": "PASS",
+        "K5": "PASS",
+        "K6": "PASS",
+        "K7": "PASS",
+        "K8": "PASS",
+        "K9": "PASS",
+        "K10": "SKIP",
+        "K11": "PASS",
+        "K12": "SKIP",
+        "K13": "PASS",
+        "K14": "PASS",
+        "K15": "PASS",
+        "K16": "FAIL",
+        "K17": "PASS",
+        "K18": "PASS",
+        "K19": "SKIP",
+        "K20": "SKIP",
+        "K21": "PASS"
+      },
+      "telemetry_reported": 9
+    },
+    {
+      "n": 93,
+      "ts": "2026-10-04 17:08:07",
+      "day": "2026-10-04",
+      "verdict": "FAIL",
+      "duration_s": 47.77,
+      "findings": 1,
+      "exit_code": 1,
+      "p0": 1,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 🔴 · Bütçe ✅ · Soy hattı ✅ · K katmanları 🔴",
+      "layers": {
+        "K0": "PASS",
+        "K1": "PASS",
+        "K2": "PASS",
+        "K3": "PASS",
+        "K4": "PASS",
+        "K5": "PASS",
+        "K6": "PASS",
+        "K7": "PASS",
+        "K8": "PASS",
+        "K9": "PASS",
+        "K10": "SKIP",
+        "K11": "PASS",
+        "K12": "SKIP",
+        "K13": "PASS",
+        "K14": "PASS",
+        "K15": "PASS",
+        "K16": "FAIL",
+        "K17": "PASS",
+        "K18": "PASS",
+        "K19": "SKIP",
+        "K20": "SKIP",
+        "K21": "PASS"
+      },
+      "telemetry_reported": 9
+    },
+    {
+      "n": 94,
+      "ts": "2026-10-04 18:50:11",
+      "day": "2026-10-04",
+      "verdict": "FAIL",
+      "duration_s": 49.24,
+      "findings": 1,
+      "exit_code": 1,
+      "p0": 1,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 🔴 · Bütçe ✅ · Soy hattı ✅ · K katmanları 🔴",
+      "layers": {
+        "K0": "PASS",
+        "K1": "PASS",
+        "K2": "PASS",
+        "K3": "PASS",
+        "K4": "PASS",
+        "K5": "PASS",
+        "K6": "PASS",
+        "K7": "PASS",
+        "K8": "PASS",
+        "K9": "PASS",
+        "K10": "SKIP",
+        "K11": "PASS",
+        "K12": "SKIP",
+        "K13": "PASS",
+        "K14": "PASS",
+        "K15": "PASS",
+        "K16": "FAIL",
+        "K17": "PASS",
+        "K18": "PASS",
+        "K19": "SKIP",
+        "K20": "SKIP",
+        "K21": "PASS"
+      },
+      "telemetry_reported": 9
+    },
+    {
+      "n": 95,
+      "ts": "2026-10-04 19:51:48",
+      "day": "2026-10-04",
+      "verdict": "FAIL",
+      "duration_s": 48.99,
+      "findings": 1,
+      "exit_code": 1,
+      "p0": 1,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 🔴 · Bütçe ✅ · Soy hattı ✅ · K katmanları 🔴",
+      "layers": {
+        "K0": "PASS",
+        "K1": "PASS",
+        "K2": "PASS",
+        "K3": "PASS",
+        "K4": "PASS",
+        "K5": "PASS",
+        "K6": "PASS",
+        "K7": "PASS",
+        "K8": "PASS",
+        "K9": "PASS",
+        "K10": "SKIP",
+        "K11": "PASS",
+        "K12": "SKIP",
+        "K13": "PASS",
+        "K14": "PASS",
+        "K15": "PASS",
+        "K16": "FAIL",
+        "K17": "PASS",
+        "K18": "PASS",
+        "K19": "SKIP",
+        "K20": "SKIP",
+        "K21": "PASS"
+      },
+      "telemetry_reported": 9
+    },
+    {
+      "n": 96,
+      "ts": "2026-10-06 02:52:24",
+      "day": "2026-10-06",
+      "verdict": "FAIL",
+      "duration_s": 6.02,
+      "findings": 0,
+      "exit_code": -15,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 0,
+      "z3_total": 0,
+      "overrides": 0,
+      "board": "Pre-commit ⚠️ · K0 ✅ · Bütçe ⚠️ · Soy hattı ⚠️ · K katmanları ⚠️",
+      "layers": {},
+      "telemetry_reported": 3
+    },
+    {
+      "n": 97,
+      "ts": "2026-10-06 02:54:11",
+      "day": "2026-10-06",
+      "verdict": "FAIL",
+      "duration_s": 45.48,
+      "findings": 2,
+      "exit_code": 1,
+      "p0": 1,
+      "p1": 1,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 🔴 · Bütçe ✅ · Soy hattı ✅ · K katmanları 🔴",
+      "layers": {
+        "K0": "PASS",
+        "K1": "PASS",
+        "K2": "PASS",
+        "K3": "PASS",
+        "K4": "PASS",
+        "K5": "PASS",
+        "K6": "PASS",
+        "K7": "PASS",
+        "K8": "PASS",
+        "K9": "PASS",
+        "K10": "SKIP",
+        "K11": "PASS",
+        "K12": "SKIP",
+        "K13": "PASS",
+        "K14": "PASS",
+        "K15": "PASS",
+        "K16": "FAIL",
+        "K17": "FAIL",
+        "K18": "PASS",
+        "K19": "SKIP",
+        "K20": "SKIP",
+        "K21": "PASS"
+      },
+      "telemetry_reported": 9
+    },
+    {
+      "n": 98,
+      "ts": "2026-10-06 03:22:47",
+      "day": "2026-10-06",
+      "verdict": "FAIL",
+      "duration_s": 47.76,
+      "findings": 2,
+      "exit_code": 1,
+      "p0": 1,
+      "p1": 1,
+      "drift": "PASS",
+      "z3_passed": 12,
+      "z3_total": 12,
+      "overrides": 0,
+      "board": "Pre-commit ✅ · K0 🔴 · Bütçe ✅ · Soy hattı ✅ · K katmanları 🔴",
+      "layers": {
+        "K0": "PASS",
+        "K1": "PASS",
+        "K2": "PASS",
+        "K3": "PASS",
+        "K4": "PASS",
+        "K5": "PASS",
+        "K6": "PASS",
+        "K7": "PASS",
+        "K8": "PASS",
+        "K9": "PASS",
+        "K10": "SKIP",
+        "K11": "PASS",
+        "K12": "SKIP",
+        "K13": "PASS",
+        "K14": "PASS",
+        "K15": "PASS",
+        "K16": "FAIL",
+        "K17": "FAIL",
+        "K18": "PASS",
+        "K19": "SKIP",
+        "K20": "SKIP",
+        "K21": "PASS"
+      },
+      "telemetry_reported": 9
+    },
+    {
+      "n": 99,
+      "ts": "2026-10-22 03:44:38",
+      "day": "2026-10-22",
+      "verdict": "FAIL",
+      "duration_s": 9.97,
+      "findings": 0,
+      "exit_code": -15,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 0,
+      "z3_total": 0,
+      "overrides": 0,
+      "board": "Pre-commit ⚠️ · K0 ✅ · Bütçe ⚠️ · Soy hattı ⚠️ · K katmanları ⚠️",
+      "layers": {},
+      "telemetry_reported": 3
+    },
+    {
+      "n": 100,
+      "ts": "2026-10-22 06:41:26",
+      "day": "2026-10-22",
+      "verdict": "FAIL",
+      "duration_s": 2.94,
+      "findings": 0,
+      "exit_code": -15,
+      "p0": 0,
+      "p1": 0,
+      "drift": "PASS",
+      "z3_passed": 0,
+      "z3_total": 0,
+      "overrides": 0,
+      "board": "Pre-commit ⚠️ · K0 ✅ · Bütçe ⚠️ · Soy hattı ⚠️ · K katmanları ⚠️",
+      "layers": {},
+      "telemetry_reported": 3
+    }
+  ],
+  "run_span": {
+    "count": 100,
+    "verdicts": {
+      "FAIL": 36,
+      "PASS": 64
+    },
+    "exits": [
+      {
+        "code": -15,
+        "count": 9,
+        "signal": "SIGTERM"
+      },
+      {
+        "code": 0,
+        "count": 64,
+        "signal": null
+      },
+      {
+        "code": 1,
+        "count": 16,
+        "signal": null
+      },
+      {
+        "code": 124,
+        "count": 11,
+        "signal": null
+      }
+    ],
+    "drift": {
+      "DRIFT": 3,
+      "PASS": 97
+    },
+    "data_missing": false,
+    "first": "2026-09-29",
+    "last": "2026-10-22",
+    "severity": {
+      "p0": 14,
+      "p1": 4,
+      "findings": 18,
+      "z3_passed": 972,
+      "z3_total": 972,
+      "overrides": 0
+    },
+    "max_duration_s": 300.05,
+    "telemetry": {
+      "columns": 12,
+      "reported": [
+        "lean_ok",
+        "lineage_count",
+        "lineage_ok",
+        "refs_mismatch",
+        "refs_total",
+        "refs_verified",
+        "z3_failed",
+        "z3_passed",
+        "z3_total"
+      ],
+      "unreported": [
+        "deterministic_count",
+        "flaky_count",
+        "precommit_hooks"
+      ],
+      "min_per_run": 3,
+      "max_per_run": 9
+    },
+    "board": [
+      {
+        "label": "Pre-commit",
+        "state": "WARN",
+        "mark": "⚠"
+      },
+      {
+        "label": "K0",
+        "state": "PASS",
+        "mark": "✅"
+      },
+      {
+        "label": "Bütçe",
+        "state": "WARN",
+        "mark": "⚠"
+      },
+      {
+        "label": "Soy hattı",
+        "state": "WARN",
+        "mark": "⚠"
+      },
+      {
+        "label": "K katmanları",
+        "state": "WARN",
+        "mark": "⚠"
+      }
+    ],
+    "board_raw": "Pre-commit ⚠️ · K0 ✅ · Bütçe ⚠️ · Soy hattı ⚠️ · K katmanları ⚠️",
+    "board_agreement": {
+      "distinct": 4,
+      "of_runs": 100
+    }
+  },
+  "evidence": [
+    {
+      "label": "Test suite",
+      "value": "2323 OK",
+      "sub": "skipped=12",
+      "ok": true
+    },
+    {
+      "label": "a11y gate",
+      "value": "PASS",
+      "sub": "axe + 28 kural",
+      "ok": true
+    },
+    {
+      "label": "Seal hash",
+      "value": "74b2cdbd…",
+      "sub": "delivery raw sha256",
+      "ok": true
+    },
+    {
+      "label": "RC probe",
+      "value": "9/9",
+      "sub": "release candidate",
+      "ok": true
+    }
+  ],
+  "gates": {
+    "range": "K0 – K15",
+    "core": [
+      "K0",
+      "K1",
+      "K2",
+      "K3",
+      "K4",
+      "K5",
+      "K6",
+      "K7"
+    ],
+    "all": [
+      "K0",
+      "K1",
+      "K2",
+      "K3",
+      "K4",
+      "K5",
+      "K6",
+      "K7",
+      "K8",
+      "K9",
+      "K10",
+      "K11",
+      "K12",
+      "K13",
+      "K14",
+      "K15"
+    ],
+    "names": {
+      "K0": "Bayat zip taraması",
+      "K1": "Dış zip sidecar",
+      "K2": "Klasör checksum",
+      "K3": "İç zip sidecar",
+      "K4": "Manifest 19/19",
+      "K5": "Script byte-for-byte",
+      "K6": "İçerik (PDF + referans + skill reuse)",
+      "K7": "Hijyen (secret/artefakt)",
+      "K8": "Z3 sembolik ispat",
+      "K9": "Lean reduct-invariance + 8 teorem çekirdek",
+      "K10": "Manifest digest",
+      "K11": "Config drift",
+      "K12": "Plist şablon",
+      "K13": "Repro self-test",
+      "K14": "Cleanup kaydı",
+      "K15": "History sidecar"
+    },
+    "verdict": {
+      "ok": 1,
+      "warn": 4,
+      "other": 0
+    },
+    "board": [
+      {
+        "label": "Pre-commit",
+        "state": "WARN",
+        "mark": "⚠"
+      },
+      {
+        "label": "K0",
+        "state": "PASS",
+        "mark": "✅"
+      },
+      {
+        "label": "Bütçe",
+        "state": "WARN",
+        "mark": "⚠"
+      },
+      {
+        "label": "Soy hattı",
+        "state": "WARN",
+        "mark": "⚠"
+      },
+      {
+        "label": "K katmanları",
+        "state": "WARN",
+        "mark": "⚠"
+      }
+    ],
+    "board_raw": "Pre-commit ⚠️ · K0 ✅ · Bütçe ⚠️ · Soy hattı ⚠️ · K katmanları ⚠️",
+    "statuses": [
+      {
+        "id": "K0",
+        "label": "Bayat zip taraması",
+        "status": "PASS",
+        "from": "board"
+      },
+      {
+        "id": "K1",
+        "label": "Dış zip sidecar",
+        "status": "MISSING",
+        "from": null
+      },
+      {
+        "id": "K2",
+        "label": "Klasör checksum",
+        "status": "MISSING",
+        "from": null
+      },
+      {
+        "id": "K3",
+        "label": "İç zip sidecar",
+        "status": "MISSING",
+        "from": null
+      },
+      {
+        "id": "K4",
+        "label": "Manifest",
+        "status": "MISSING",
+        "from": null
+      },
+      {
+        "id": "K5",
+        "label": "Script byte-for-byte",
+        "status": "MISSING",
+        "from": null
+      },
+      {
+        "id": "K6",
+        "label": "İçerik",
+        "status": "MISSING",
+        "from": null
+      },
+      {
+        "id": "K7",
+        "label": "Hijyen",
+        "status": "MISSING",
+        "from": null
+      },
+      {
+        "id": "K8",
+        "label": "Z3 sembolik ispat",
+        "status": "MISSING",
+        "from": null
+      },
+      {
+        "id": "K9",
+        "label": "Lean reduct-invariance",
+        "status": "MISSING",
+        "from": null
+      },
+      {
+        "id": "K10",
+        "label": "Manifest digest",
+        "status": "MISSING",
+        "from": null
+      },
+      {
+        "id": "K11",
+        "label": "Config drift",
+        "status": "MISSING",
+        "from": null
+      },
+      {
+        "id": "K12",
+        "label": "Plist şablon",
+        "status": "MISSING",
+        "from": null
+      },
+      {
+        "id": "K13",
+        "label": "Repro self-test",
+        "status": "MISSING",
+        "from": null
+      },
+      {
+        "id": "K14",
+        "label": "Cleanup kaydı",
+        "status": "MISSING",
+        "from": null
+      },
+      {
+        "id": "K15",
+        "label": "History sidecar",
+        "status": "MISSING",
+        "from": null
+      }
+    ],
+    "ok_ids": [
+      "K0"
+    ],
+    "group_warn": [
+      "Pre-commit",
+      "Bütçe",
+      "Soy hattı",
+      "K katmanları"
+    ],
+    "break": {
+      "kind": "signal",
+      "exit_code": -15,
+      "signal": "SIGTERM",
+      "runs": 9,
+      "of_runs": 100,
+      "share_pct": 9.0,
+      "telemetry_reported": 9,
+      "telemetry_columns": 12,
+      "by_gate": {
+        "K0": {
+          "pass": 98,
+          "fail": 2,
+          "skip": 0,
+          "warn": 0,
+          "missing": 0
+        },
+        "K1": {
+          "pass": 19,
+          "fail": 0,
+          "skip": 0,
+          "warn": 0,
+          "missing": 81
+        },
+        "K2": {
+          "pass": 19,
+          "fail": 0,
+          "skip": 0,
+          "warn": 0,
+          "missing": 81
+        },
+        "K3": {
+          "pass": 19,
+          "fail": 0,
+          "skip": 0,
+          "warn": 0,
+          "missing": 81
+        },
+        "K4": {
+          "pass": 19,
+          "fail": 0,
+          "skip": 0,
+          "warn": 0,
+          "missing": 81
+        },
+        "K5": {
+          "pass": 19,
+          "fail": 0,
+          "skip": 0,
+          "warn": 0,
+          "missing": 81
+        },
+        "K6": {
+          "pass": 19,
+          "fail": 0,
+          "skip": 0,
+          "warn": 0,
+          "missing": 81
+        },
+        "K7": {
+          "pass": 19,
+          "fail": 0,
+          "skip": 0,
+          "warn": 0,
+          "missing": 81
+        },
+        "K8": {
+          "pass": 19,
+          "fail": 0,
+          "skip": 0,
+          "warn": 0,
+          "missing": 81
+        },
+        "K9": {
+          "pass": 19,
+          "fail": 0,
+          "skip": 0,
+          "warn": 0,
+          "missing": 81
+        },
+        "K10": {
+          "pass": 0,
+          "fail": 0,
+          "skip": 19,
+          "warn": 0,
+          "missing": 81
+        },
+        "K11": {
+          "pass": 19,
+          "fail": 0,
+          "skip": 0,
+          "warn": 0,
+          "missing": 81
+        },
+        "K12": {
+          "pass": 0,
+          "fail": 0,
+          "skip": 19,
+          "warn": 0,
+          "missing": 81
+        },
+        "K13": {
+          "pass": 19,
+          "fail": 0,
+          "skip": 0,
+          "warn": 0,
+          "missing": 81
+        },
+        "K14": {
+          "pass": 19,
+          "fail": 0,
+          "skip": 0,
+          "warn": 0,
+          "missing": 81
+        },
+        "K15": {
+          "pass": 19,
+          "fail": 0,
+          "skip": 0,
+          "warn": 0,
+          "missing": 81
+        }
+      },
+      "latest": {
+        "n": 100,
+        "ts": "2026-10-22 06:41:26",
+        "exit_code": -15,
+        "signal": "SIGTERM",
+        "gates": [
+          {
+            "id": "K0",
+            "label": "Bayat zip taraması",
+            "status": "PASS",
+            "from": "board"
+          },
+          {
+            "id": "K1",
+            "label": "Dış zip sidecar",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K2",
+            "label": "Klasör checksum",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K3",
+            "label": "İç zip sidecar",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K4",
+            "label": "Manifest",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K5",
+            "label": "Script byte-for-byte",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K6",
+            "label": "İçerik",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K7",
+            "label": "Hijyen",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K8",
+            "label": "Z3 sembolik ispat",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K9",
+            "label": "Lean reduct-invariance",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K10",
+            "label": "Manifest digest",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K11",
+            "label": "Config drift",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K12",
+            "label": "Plist şablon",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K13",
+            "label": "Repro self-test",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K14",
+            "label": "Cleanup kaydı",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K15",
+            "label": "History sidecar",
+            "status": "MISSING",
+            "from": null
+          }
+        ],
+        "failed": [],
+        "outside": [],
+        "outside_failed": [],
+        "reported": 1,
+        "layers_reported": false
+      },
+      "newest": {
+        "n": 100,
+        "ts": "2026-10-22 06:41:26",
+        "exit_code": -15,
+        "signal": "SIGTERM",
+        "reported": 1
+      },
+      "latest_is_newest": true,
+      "p0": 14,
+      "p1": 4,
+      "max_duration_s": 300.05
+    }
+  },
+  "gate_chain": {
+    "source": "_calisma/CIKTI/klayers.runs.json",
+    "runs": [
+      {
+        "run_id": "38008761215",
+        "created_at": "2026-10-10T00:22:23Z",
+        "verdict": "PASS",
+        "layers": [
+          {
+            "id": "K0",
+            "label": "Bayat zip taraması",
+            "status": "PASS",
+            "ran": true,
+            "findings": 0
+          },
+          {
+            "id": "K1",
+            "label": "Dış zip sidecar",
+            "status": "PASS",
+            "ran": true,
+            "findings": 0
+          },
+          {
+            "id": "K2",
+            "label": "Klasör checksum",
+            "status": "PASS",
+            "ran": true,
+            "findings": 0
+          },
+          {
+            "id": "K3",
+            "label": "İç zip sidecar",
+            "status": "PASS",
+            "ran": true,
+            "findings": 0
+          },
+          {
+            "id": "K4",
+            "label": "Manifest 19/19",
+            "status": "PASS",
+            "ran": true,
+            "findings": 0
+          },
+          {
+            "id": "K5",
+            "label": "Script byte-for-byte",
+            "status": "PASS",
+            "ran": true,
+            "findings": 0
+          },
+          {
+            "id": "K6",
+            "label": "İçerik (PDF + referans + skill reuse)",
+            "status": "PASS",
+            "ran": true,
+            "findings": 0
+          },
+          {
+            "id": "K7",
+            "label": "Hijyen (secret/artefakt)",
+            "status": "PASS",
+            "ran": true,
+            "findings": 0
+          },
+          {
+            "id": "K8",
+            "label": "Z3 sembolik ispat",
+            "status": "PASS",
+            "ran": true,
+            "findings": 0
+          },
+          {
+            "id": "K9",
+            "label": "Lean reduct-invariance + 8 teorem çekirdek",
+            "status": "PASS",
+            "ran": true,
+            "findings": 0
+          },
+          {
+            "id": "K10",
+            "label": "Manifest digest",
+            "status": "SKIP",
+            "ran": false,
+            "findings": 0
+          },
+          {
+            "id": "K11",
+            "label": "Config drift",
+            "status": "PASS",
+            "ran": true,
+            "findings": 0
+          },
+          {
+            "id": "K12",
+            "label": "Plist şablon",
+            "status": "SKIP",
+            "ran": false,
+            "findings": 0
+          },
+          {
+            "id": "K13",
+            "label": "Repro self-test",
+            "status": "PASS",
+            "ran": true,
+            "findings": 0
+          },
+          {
+            "id": "K14",
+            "label": "Cleanup kaydı",
+            "status": "PASS",
+            "ran": true,
+            "findings": 0
+          },
+          {
+            "id": "K15",
+            "label": "History sidecar",
+            "status": "PASS",
+            "ran": true,
+            "findings": 0
+          }
+        ],
+        "counts": {
+          "pass": 14,
+          "fail": 0,
+          "skip": 2,
+          "missing": 0
+        }
+      },
+      {
+        "run_id": "38058249876",
+        "created_at": "2026-10-10T14:05:37Z",
+        "verdict": "PASS",
+        "layers": [
+          {
+            "id": "K0",
+            "label": "Bayat zip taraması",
+            "status": "PASS",
+            "ran": true,
+            "findings": 0
+          },
+          {
+            "id": "K1",
+            "label": "Dış zip sidecar",
+            "status": "PASS",
+            "ran": true,
+            "findings": 0
+          },
+          {
+            "id": "K2",
+            "label": "Klasör checksum",
+            "status": "PASS",
+            "ran": true,
+            "findings": 0
+          },
+          {
+            "id": "K3",
+            "label": "İç zip sidecar",
+            "status": "PASS",
+            "ran": true,
+            "findings": 0
+          },
+          {
+            "id": "K4",
+            "label": "Manifest 19/19",
+            "status": "PASS",
+            "ran": true,
+            "findings": 0
+          },
+          {
+            "id": "K5",
+            "label": "Script byte-for-byte",
+            "status": "PASS",
+            "ran": true,
+            "findings": 0
+          },
+          {
+            "id": "K6",
+            "label": "İçerik (PDF + referans + skill reuse)",
+            "status": "PASS",
+            "ran": true,
+            "findings": 0
+          },
+          {
+            "id": "K7",
+            "label": "Hijyen (secret/artefakt)",
+            "status": "PASS",
+            "ran": true,
+            "findings": 0
+          },
+          {
+            "id": "K8",
+            "label": "Z3 sembolik ispat",
+            "status": "PASS",
+            "ran": true,
+            "findings": 0
+          },
+          {
+            "id": "K9",
+            "label": "Lean reduct-invariance + 8 teorem çekirdek",
+            "status": "PASS",
+            "ran": true,
+            "findings": 0
+          },
+          {
+            "id": "K10",
+            "label": "Manifest digest",
+            "status": "SKIP",
+            "ran": false,
+            "findings": 0
+          },
+          {
+            "id": "K11",
+            "label": "Config drift",
+            "status": "PASS",
+            "ran": true,
+            "findings": 0
+          },
+          {
+            "id": "K12",
+            "label": "Plist şablon",
+            "status": "SKIP",
+            "ran": false,
+            "findings": 0
+          },
+          {
+            "id": "K13",
+            "label": "Repro self-test",
+            "status": "PASS",
+            "ran": true,
+            "findings": 0
+          },
+          {
+            "id": "K14",
+            "label": "Cleanup kaydı",
+            "status": "PASS",
+            "ran": true,
+            "findings": 0
+          },
+          {
+            "id": "K15",
+            "label": "History sidecar",
+            "status": "PASS",
+            "ran": true,
+            "findings": 0
+          }
+        ],
+        "counts": {
+          "pass": 14,
+          "fail": 0,
+          "skip": 2,
+          "missing": 0
+        }
+      },
+      {
+        "run_id": "38145293619",
+        "created_at": "2026-10-11T13:58:23Z",
+        "verdict": "PASS",
+        "layers": [
+          {
+            "id": "K0",
+            "label": "Bayat zip taraması",
+            "status": "PASS",
+            "ran": true,
+            "findings": 0
+          },
+          {
+            "id": "K1",
+            "label": "Dış zip sidecar",
+            "status": "PASS",
+            "ran": true,
+            "findings": 0
+          },
+          {
+            "id": "K2",
+            "label": "Klasör checksum",
+            "status": "PASS",
+            "ran": true,
+            "findings": 0
+          },
+          {
+            "id": "K3",
+            "label": "İç zip sidecar",
+            "status": "PASS",
+            "ran": true,
+            "findings": 0
+          },
+          {
+            "id": "K4",
+            "label": "Manifest 19/19",
+            "status": "PASS",
+            "ran": true,
+            "findings": 0
+          },
+          {
+            "id": "K5",
+            "label": "Script byte-for-byte",
+            "status": "PASS",
+            "ran": true,
+            "findings": 0
+          },
+          {
+            "id": "K6",
+            "label": "İçerik (PDF + referans + skill reuse)",
+            "status": "PASS",
+            "ran": true,
+            "findings": 0
+          },
+          {
+            "id": "K7",
+            "label": "Hijyen (secret/artefakt)",
+            "status": "PASS",
+            "ran": true,
+            "findings": 0
+          },
+          {
+            "id": "K8",
+            "label": "Z3 sembolik ispat",
+            "status": "PASS",
+            "ran": true,
+            "findings": 0
+          },
+          {
+            "id": "K9",
+            "label": "Lean reduct-invariance + 8 teorem çekirdek",
+            "status": "PASS",
+            "ran": true,
+            "findings": 0
+          },
+          {
+            "id": "K10",
+            "label": "Manifest digest",
+            "status": "SKIP",
+            "ran": false,
+            "findings": 0
+          },
+          {
+            "id": "K11",
+            "label": "Config drift",
+            "status": "PASS",
+            "ran": true,
+            "findings": 0
+          },
+          {
+            "id": "K12",
+            "label": "Plist şablon",
+            "status": "SKIP",
+            "ran": false,
+            "findings": 0
+          },
+          {
+            "id": "K13",
+            "label": "Repro self-test",
+            "status": "PASS",
+            "ran": true,
+            "findings": 0
+          },
+          {
+            "id": "K14",
+            "label": "Cleanup kaydı",
+            "status": "PASS",
+            "ran": true,
+            "findings": 0
+          },
+          {
+            "id": "K15",
+            "label": "History sidecar",
+            "status": "PASS",
+            "ran": true,
+            "findings": 0
+          }
+        ],
+        "counts": {
+          "pass": 14,
+          "fail": 0,
+          "skip": 2,
+          "missing": 0
+        }
+      }
+    ],
+    "run_count": 3,
+    "data_missing": false,
+    "complete": true
+  },
+  "gate_history": {
+    "source": "_calisma/CIKTI/history.jsonl",
+    "composition": "GateChainRuns",
+    "frames": 630,
+    "fps": 30,
+    "width": 1280,
+    "height": 720,
+    "intro_frames": 45,
+    "per_run_frames": 90,
+    "outro_frames": 45,
+    "run_capacity": 6,
+    "gate_count": 16,
+    "runs": [
+      {
+        "n": 95,
+        "ts": "2026-10-04 19:51:48",
+        "day": "2026-10-04",
+        "verdict": "FAIL",
+        "exit_code": 1,
+        "duration_s": 48.99,
+        "gates": [
+          {
+            "id": "K0",
+            "label": "Bayat zip taraması",
+            "status": "PASS",
+            "from": "layers"
+          },
+          {
+            "id": "K1",
+            "label": "Dış zip sidecar",
+            "status": "PASS",
+            "from": "layers"
+          },
+          {
+            "id": "K2",
+            "label": "Klasör checksum",
+            "status": "PASS",
+            "from": "layers"
+          },
+          {
+            "id": "K3",
+            "label": "İç zip sidecar",
+            "status": "PASS",
+            "from": "layers"
+          },
+          {
+            "id": "K4",
+            "label": "Manifest",
+            "status": "PASS",
+            "from": "layers"
+          },
+          {
+            "id": "K5",
+            "label": "Script byte-for-byte",
+            "status": "PASS",
+            "from": "layers"
+          },
+          {
+            "id": "K6",
+            "label": "İçerik",
+            "status": "PASS",
+            "from": "layers"
+          },
+          {
+            "id": "K7",
+            "label": "Hijyen",
+            "status": "PASS",
+            "from": "layers"
+          },
+          {
+            "id": "K8",
+            "label": "Z3 sembolik ispat",
+            "status": "PASS",
+            "from": "layers"
+          },
+          {
+            "id": "K9",
+            "label": "Lean reduct-invariance",
+            "status": "PASS",
+            "from": "layers"
+          },
+          {
+            "id": "K10",
+            "label": "Manifest digest",
+            "status": "SKIP",
+            "from": "layers"
+          },
+          {
+            "id": "K11",
+            "label": "Config drift",
+            "status": "PASS",
+            "from": "layers"
+          },
+          {
+            "id": "K12",
+            "label": "Plist şablon",
+            "status": "SKIP",
+            "from": "layers"
+          },
+          {
+            "id": "K13",
+            "label": "Repro self-test",
+            "status": "PASS",
+            "from": "layers"
+          },
+          {
+            "id": "K14",
+            "label": "Cleanup kaydı",
+            "status": "PASS",
+            "from": "layers"
+          },
+          {
+            "id": "K15",
+            "label": "History sidecar",
+            "status": "PASS",
+            "from": "layers"
+          }
+        ],
+        "reported": 16,
+        "missing": 0,
+        "outside": [
+          {
+            "id": "K16",
+            "status": "FAIL"
+          },
+          {
+            "id": "K17",
+            "status": "PASS"
+          },
+          {
+            "id": "K18",
+            "status": "PASS"
+          },
+          {
+            "id": "K19",
+            "status": "SKIP"
+          },
+          {
+            "id": "K20",
+            "status": "SKIP"
+          },
+          {
+            "id": "K21",
+            "status": "PASS"
+          }
+        ],
+        "layers_reported": true,
+        "board_raw": "Pre-commit ✅ · K0 🔴 · Bütçe ✅ · Soy hattı ✅ · K katmanları 🔴",
+        "board_group_state": "FAIL"
+      },
+      {
+        "n": 96,
+        "ts": "2026-10-06 02:52:24",
+        "day": "2026-10-06",
+        "verdict": "FAIL",
+        "exit_code": -15,
+        "duration_s": 6.02,
+        "gates": [
+          {
+            "id": "K0",
+            "label": "Bayat zip taraması",
+            "status": "PASS",
+            "from": "board"
+          },
+          {
+            "id": "K1",
+            "label": "Dış zip sidecar",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K2",
+            "label": "Klasör checksum",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K3",
+            "label": "İç zip sidecar",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K4",
+            "label": "Manifest",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K5",
+            "label": "Script byte-for-byte",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K6",
+            "label": "İçerik",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K7",
+            "label": "Hijyen",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K8",
+            "label": "Z3 sembolik ispat",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K9",
+            "label": "Lean reduct-invariance",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K10",
+            "label": "Manifest digest",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K11",
+            "label": "Config drift",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K12",
+            "label": "Plist şablon",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K13",
+            "label": "Repro self-test",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K14",
+            "label": "Cleanup kaydı",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K15",
+            "label": "History sidecar",
+            "status": "MISSING",
+            "from": null
+          }
+        ],
+        "reported": 1,
+        "missing": 15,
+        "outside": [],
+        "layers_reported": false,
+        "board_raw": "Pre-commit ⚠️ · K0 ✅ · Bütçe ⚠️ · Soy hattı ⚠️ · K katmanları ⚠️",
+        "board_group_state": "WARN"
+      },
+      {
+        "n": 97,
+        "ts": "2026-10-06 02:54:11",
+        "day": "2026-10-06",
+        "verdict": "FAIL",
+        "exit_code": 1,
+        "duration_s": 45.48,
+        "gates": [
+          {
+            "id": "K0",
+            "label": "Bayat zip taraması",
+            "status": "PASS",
+            "from": "layers"
+          },
+          {
+            "id": "K1",
+            "label": "Dış zip sidecar",
+            "status": "PASS",
+            "from": "layers"
+          },
+          {
+            "id": "K2",
+            "label": "Klasör checksum",
+            "status": "PASS",
+            "from": "layers"
+          },
+          {
+            "id": "K3",
+            "label": "İç zip sidecar",
+            "status": "PASS",
+            "from": "layers"
+          },
+          {
+            "id": "K4",
+            "label": "Manifest",
+            "status": "PASS",
+            "from": "layers"
+          },
+          {
+            "id": "K5",
+            "label": "Script byte-for-byte",
+            "status": "PASS",
+            "from": "layers"
+          },
+          {
+            "id": "K6",
+            "label": "İçerik",
+            "status": "PASS",
+            "from": "layers"
+          },
+          {
+            "id": "K7",
+            "label": "Hijyen",
+            "status": "PASS",
+            "from": "layers"
+          },
+          {
+            "id": "K8",
+            "label": "Z3 sembolik ispat",
+            "status": "PASS",
+            "from": "layers"
+          },
+          {
+            "id": "K9",
+            "label": "Lean reduct-invariance",
+            "status": "PASS",
+            "from": "layers"
+          },
+          {
+            "id": "K10",
+            "label": "Manifest digest",
+            "status": "SKIP",
+            "from": "layers"
+          },
+          {
+            "id": "K11",
+            "label": "Config drift",
+            "status": "PASS",
+            "from": "layers"
+          },
+          {
+            "id": "K12",
+            "label": "Plist şablon",
+            "status": "SKIP",
+            "from": "layers"
+          },
+          {
+            "id": "K13",
+            "label": "Repro self-test",
+            "status": "PASS",
+            "from": "layers"
+          },
+          {
+            "id": "K14",
+            "label": "Cleanup kaydı",
+            "status": "PASS",
+            "from": "layers"
+          },
+          {
+            "id": "K15",
+            "label": "History sidecar",
+            "status": "PASS",
+            "from": "layers"
+          }
+        ],
+        "reported": 16,
+        "missing": 0,
+        "outside": [
+          {
+            "id": "K16",
+            "status": "FAIL"
+          },
+          {
+            "id": "K17",
+            "status": "FAIL"
+          },
+          {
+            "id": "K18",
+            "status": "PASS"
+          },
+          {
+            "id": "K19",
+            "status": "SKIP"
+          },
+          {
+            "id": "K20",
+            "status": "SKIP"
+          },
+          {
+            "id": "K21",
+            "status": "PASS"
+          }
+        ],
+        "layers_reported": true,
+        "board_raw": "Pre-commit ✅ · K0 🔴 · Bütçe ✅ · Soy hattı ✅ · K katmanları 🔴",
+        "board_group_state": "FAIL"
+      },
+      {
+        "n": 98,
+        "ts": "2026-10-06 03:22:47",
+        "day": "2026-10-06",
+        "verdict": "FAIL",
+        "exit_code": 1,
+        "duration_s": 47.76,
+        "gates": [
+          {
+            "id": "K0",
+            "label": "Bayat zip taraması",
+            "status": "PASS",
+            "from": "layers"
+          },
+          {
+            "id": "K1",
+            "label": "Dış zip sidecar",
+            "status": "PASS",
+            "from": "layers"
+          },
+          {
+            "id": "K2",
+            "label": "Klasör checksum",
+            "status": "PASS",
+            "from": "layers"
+          },
+          {
+            "id": "K3",
+            "label": "İç zip sidecar",
+            "status": "PASS",
+            "from": "layers"
+          },
+          {
+            "id": "K4",
+            "label": "Manifest",
+            "status": "PASS",
+            "from": "layers"
+          },
+          {
+            "id": "K5",
+            "label": "Script byte-for-byte",
+            "status": "PASS",
+            "from": "layers"
+          },
+          {
+            "id": "K6",
+            "label": "İçerik",
+            "status": "PASS",
+            "from": "layers"
+          },
+          {
+            "id": "K7",
+            "label": "Hijyen",
+            "status": "PASS",
+            "from": "layers"
+          },
+          {
+            "id": "K8",
+            "label": "Z3 sembolik ispat",
+            "status": "PASS",
+            "from": "layers"
+          },
+          {
+            "id": "K9",
+            "label": "Lean reduct-invariance",
+            "status": "PASS",
+            "from": "layers"
+          },
+          {
+            "id": "K10",
+            "label": "Manifest digest",
+            "status": "SKIP",
+            "from": "layers"
+          },
+          {
+            "id": "K11",
+            "label": "Config drift",
+            "status": "PASS",
+            "from": "layers"
+          },
+          {
+            "id": "K12",
+            "label": "Plist şablon",
+            "status": "SKIP",
+            "from": "layers"
+          },
+          {
+            "id": "K13",
+            "label": "Repro self-test",
+            "status": "PASS",
+            "from": "layers"
+          },
+          {
+            "id": "K14",
+            "label": "Cleanup kaydı",
+            "status": "PASS",
+            "from": "layers"
+          },
+          {
+            "id": "K15",
+            "label": "History sidecar",
+            "status": "PASS",
+            "from": "layers"
+          }
+        ],
+        "reported": 16,
+        "missing": 0,
+        "outside": [
+          {
+            "id": "K16",
+            "status": "FAIL"
+          },
+          {
+            "id": "K17",
+            "status": "FAIL"
+          },
+          {
+            "id": "K18",
+            "status": "PASS"
+          },
+          {
+            "id": "K19",
+            "status": "SKIP"
+          },
+          {
+            "id": "K20",
+            "status": "SKIP"
+          },
+          {
+            "id": "K21",
+            "status": "PASS"
+          }
+        ],
+        "layers_reported": true,
+        "board_raw": "Pre-commit ✅ · K0 🔴 · Bütçe ✅ · Soy hattı ✅ · K katmanları 🔴",
+        "board_group_state": "FAIL"
+      },
+      {
+        "n": 99,
+        "ts": "2026-10-22 03:44:38",
+        "day": "2026-10-22",
+        "verdict": "FAIL",
+        "exit_code": -15,
+        "duration_s": 9.97,
+        "gates": [
+          {
+            "id": "K0",
+            "label": "Bayat zip taraması",
+            "status": "PASS",
+            "from": "board"
+          },
+          {
+            "id": "K1",
+            "label": "Dış zip sidecar",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K2",
+            "label": "Klasör checksum",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K3",
+            "label": "İç zip sidecar",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K4",
+            "label": "Manifest",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K5",
+            "label": "Script byte-for-byte",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K6",
+            "label": "İçerik",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K7",
+            "label": "Hijyen",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K8",
+            "label": "Z3 sembolik ispat",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K9",
+            "label": "Lean reduct-invariance",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K10",
+            "label": "Manifest digest",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K11",
+            "label": "Config drift",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K12",
+            "label": "Plist şablon",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K13",
+            "label": "Repro self-test",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K14",
+            "label": "Cleanup kaydı",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K15",
+            "label": "History sidecar",
+            "status": "MISSING",
+            "from": null
+          }
+        ],
+        "reported": 1,
+        "missing": 15,
+        "outside": [],
+        "layers_reported": false,
+        "board_raw": "Pre-commit ⚠️ · K0 ✅ · Bütçe ⚠️ · Soy hattı ⚠️ · K katmanları ⚠️",
+        "board_group_state": "WARN"
+      },
+      {
+        "n": 100,
+        "ts": "2026-10-22 06:41:26",
+        "day": "2026-10-22",
+        "verdict": "FAIL",
+        "exit_code": -15,
+        "duration_s": 2.94,
+        "gates": [
+          {
+            "id": "K0",
+            "label": "Bayat zip taraması",
+            "status": "PASS",
+            "from": "board"
+          },
+          {
+            "id": "K1",
+            "label": "Dış zip sidecar",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K2",
+            "label": "Klasör checksum",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K3",
+            "label": "İç zip sidecar",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K4",
+            "label": "Manifest",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K5",
+            "label": "Script byte-for-byte",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K6",
+            "label": "İçerik",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K7",
+            "label": "Hijyen",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K8",
+            "label": "Z3 sembolik ispat",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K9",
+            "label": "Lean reduct-invariance",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K10",
+            "label": "Manifest digest",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K11",
+            "label": "Config drift",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K12",
+            "label": "Plist şablon",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K13",
+            "label": "Repro self-test",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K14",
+            "label": "Cleanup kaydı",
+            "status": "MISSING",
+            "from": null
+          },
+          {
+            "id": "K15",
+            "label": "History sidecar",
+            "status": "MISSING",
+            "from": null
+          }
+        ],
+        "reported": 1,
+        "missing": 15,
+        "outside": [],
+        "layers_reported": false,
+        "board_raw": "Pre-commit ⚠️ · K0 ✅ · Bütçe ⚠️ · Soy hattı ⚠️ · K katmanları ⚠️",
+        "board_group_state": "WARN"
+      }
+    ],
+    "run_count": 6,
+    "data_missing": false,
+    "totals": {
+      "reported": 51,
+      "missing": 45,
+      "cells": 96
+    }
+  },
+  "seal": {
+    "delivery_raw": "74b2cdbdb18fafbf5b3c87570c92f1500e7580469bcf4295b09734116df0779f",
+    "delivery_stripped": "50263bcf60f9ae176ac417f025bffbcae4fd0ab6044566672827bee861f83732",
+    "pdftex_3pass": "544516b0d9d2f4c12b05b512b79b31ad238e82d3ca3aff81166a6bac1914f597"
+  }
+}

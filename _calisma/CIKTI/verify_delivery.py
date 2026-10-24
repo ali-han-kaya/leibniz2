@@ -284,6 +284,7 @@ def build_layers_summary(args, findings):
         job'unda değil reproducibility job'unda, K12 yalnızca macOS)
     """
     by_layer = {}
+    unregistered = []
     for f in findings:
         # Katman anahtarı öncelikle id'den ("K0-STALE" → "K0"), yoksa
         # check'ten (testlerde "K0-TOOLKIT" biçimi) türetilir. check alanı
@@ -292,6 +293,8 @@ def build_layers_summary(args, findings):
         key = f.get("id", "").split("-")[0] or f.get("check", "").split("-")[0]
         if key in LAYER_LABELS:
             by_layer.setdefault(key, []).append(f)
+        elif f.get("priority") in ("P0", "P1"):
+            unregistered.append(f)
     layers = {}
     for layer in LAYER_LABELS:
         if layer in _CORE_LAYERS:
@@ -306,6 +309,13 @@ def build_layers_summary(args, findings):
         status = "FAIL" if fl else ("PASS" if ran else "SKIP")
         layers[layer] = {"label": LAYER_LABELS[layer], "status": status,
                          "ran": ran, "findings": fl}
+    if unregistered:
+        layers["UNREGISTERED"] = {
+            "label": "Unregistered findings",
+            "status": "FAIL",
+            "ran": True,
+            "findings": unregistered,
+        }
     return layers
 
 # ---- K6 referans denetimi (CrossRef/SEP çevrimiçi, --check-references) ----
@@ -2325,6 +2335,18 @@ def _check_statements(lean_file, map_file):
     return _lean_statements.check_statements(lean_file, map_file)
 
 
+def _check_twin(lean_file, twin_file):
+    """K9 twin-bütünlük kapısı — tek kaynak check_lean_statements.check_twin.
+
+    Sözleşme kapısı (Content.lean shim) ile lake target kopyası
+    (Leibniz2Reduct/Content.lean) aynı anda kaynaktır. Ayrışırlarsa
+    K9-LAKE BAYAT kopyayı derlerken sözleşme kapısı YENİ olanı
+    doğrular — yani K9 PASS iken derlenmeyen bir dosya doğrulanmış
+    olur. Bu yüzden kapı K9 teslim yolunda da fail-closed çalışır.
+    """
+    return _lean_statements.check_twin(lean_file, twin_file)
+
+
 def write_json_sidecar(path, report, detail="not run"):
     """JSON sidecar'ı HER ZAMAN yaz; report None ise dürüst placeholder
     ({"ok": false, "detail": <detail>}) — yanlış PASS yok, dosya eksikliği yok.
@@ -4015,6 +4037,80 @@ def check_mirror_sync(add, auto_sync=False):
     return False, detail, rc, txt, dict(empty_meta, before_exit=rc)
 
 
+def check_protection_drift(add, protection, expected=None):
+    """Haftalık branch-protection drift denetimi → P1 (fail-closed).
+
+    NEDEN AYRI BİR YOL (ölçüldü 2026-09-30): `status_checks.py --gh` aynı
+    karşılaştırmayı yapar ama CI'da KOŞAMAZ — branch protection okumak admin
+    izni ister ve `administration` scope'u Actions `permissions:` bloğunda
+    GEÇERSİZDİR (actionlint v1.7.7: "unknown permission scope
+    administration"). Eklenirse workflow PARSE HATASIYLA 0 JOB üretir.
+    Bu yüzden okuma yetkisi `PROTECTION_PAT` secret'ından gelir; secret
+    yoksa çağıran denetimi hiç başlatmaz (yanlış-P1 gürültüsü olmasın).
+
+    ÖNEMLİ AYRIM: `status_checks.merge_block_smoke` strict'i yalnızca PR
+    akışında DEĞER olarak ölçer (`required_pull_request_reviews` dolu);
+    direct-push depolarında strict uygulanmaz ve yeşil kalır. BURADA ise
+    koşulsuz DEĞER ölçülür: bu depo PR-akışlıdır (canlı koruma doğrudan
+    push'u GH006 ile reddeder), dolayısıyla `strict=true` beklenir ve
+    kapanması gerçek bir P1'dir.
+
+    I/O YAPMAZ: `protection` nesnesi dışarıdan verilir (test edilebilirlik).
+    `expected` None ise yalnızca ayarlar denetlenir, ad listesi atlanır.
+
+    Döner: (ok, detail). ok=False → P1 bulgusu üretildi.
+    """
+    if not isinstance(protection, dict) or not protection:
+        # Okunamadı ≠ temiz. Çağıran taraf bunu SKIP olarak raporlar.
+        return True, "protection nesnesi boş/okunamadı — atlandı"
+
+    sc = protection.get("required_status_checks") or {}
+    configured = sc.get("contexts") or []
+    if not isinstance(configured, list):
+        configured = []
+    admins = (protection.get("enforce_admins") or {}).get("enabled")
+    fp = (protection.get("allow_force_pushes") or {}).get("enabled")
+    dele = (protection.get("allow_deletions") or {}).get("enabled")
+    strict = sc.get("strict")
+
+    drift = []
+    if expected is not None:
+        exp, conf = set(expected), set(configured)
+        missing, extra = sorted(exp - conf), sorted(conf - exp)
+        if missing:
+            drift.append(("ADLAR-EKSIK", "required check listesi",
+                          "GitHub'da eksik: %s" % missing))
+        if extra:
+            drift.append(("ADLAR-FAZLA", "required check listesi",
+                          "workflow'da olmayan: %s" % extra))
+    if admins is not True:
+        drift.append(("ENFORCE-ADMINS", "admin bypass",
+                      "enforce_admins.enabled=%r — True beklenir" % (admins,)))
+    if fp is not False:
+        drift.append(("FORCE-PUSH", "force push",
+                      "allow_force_pushes.enabled=%r — False beklenir "
+                      "(non-fast-forward geçmiş yeniden yazımı)" % (fp,)))
+    if dele is not False:
+        drift.append(("DELETIONS", "dal silme",
+                      "allow_deletions.enabled=%r — False beklenir" % (dele,)))
+    if strict is not True:
+        drift.append(("STRICT", "up-to-date kuralı",
+                      "required_status_checks.strict=%r — True beklenir "
+                      "(kapalıyken bayat PR dalı merge edilebilir)" % (strict,)))
+
+    live = ("canlı: required=%d strict=%r enforce_admins=%r "
+            "force_pushes=%r deletions=%r"
+            % (len(configured), strict, admins, fp, dele))
+    for cid, check, issue in drift:
+        add("P1", "PROT-%s" % cid, "branch protection — %s" % check,
+            issue, live)
+    if drift:
+        return False, "%d drift: %s" % (len(drift),
+                                         ", ".join(c[0] for c in drift))
+    return True, ("temiz (%d required check, strict=True, admin bypass kapalı, "
+                  "force-push/deletions kapalı)" % len(configured))
+
+
 def check_daemon_smoke(add, out_path=None):
     """K18: daemon_http_test.py end-to-end daemon smoke (fail-closed).
 
@@ -5155,6 +5251,18 @@ def main():
                 os.path.dirname(os.path.abspath(__file__)), LEAN_REDUCT_DIR)
             lakefile = os.path.join(reduct_dir, "lakefile.toml")
             if os.path.isfile(lakefile):
+                # K9-TWIN: lake target kopyası sözleşme shim'i ile
+                # byte-eşit mi? Ayrışma K9-LAKE'nin BAYAT kopyayı
+                # derlemesine yol açar — build'den ÖNCE fail-closed.
+                shim = os.path.join(reduct_dir, "Content.lean")
+                twin = os.path.join(reduct_dir, "Leibniz2Reduct", "Content.lean")
+                twin_ok, twin_findings = _check_twin(shim, twin)
+                if not twin_ok:
+                    detail_txt = "; ".join(
+                        f.get("detail", str(f)) for f in twin_findings)
+                    add("P0", "K9-TWIN", "K9 twin bütünlüğü", detail_txt)
+                    print(f"[K9] twin bütünlüğü: FAIL — {detail_txt}",
+                          file=sys.stderr)
                 lake_cmd = find_tool("lake")
                 lake_ok, lake_detail = run_lake_build(
                     lake_cmd, reduct_dir,
@@ -5169,6 +5277,8 @@ def main():
                     print(lake_line)
                 if lake_ok is False:
                     add("P0", "K9-LAKE", "K9 Lean çekirdeği", lake_detail)
+                # twin drift K9'u fail-closed düşürür (build'den bağımsız)
+                ok = ok and twin_ok
             else:
                 lake_ok, lake_detail = False, f"lake projesi yok: {reduct_dir}"
                 add("P0", "K9-LAKE", "K9 Lean çekirdeği", lake_detail)

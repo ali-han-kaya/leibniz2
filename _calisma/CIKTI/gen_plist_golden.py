@@ -23,7 +23,7 @@ Exit kodu:
   1 = drift — golden'lar güncellendi (git stage et)
   2 = hata (render başarısız)
 
-CI'da kullanım (drift saptama, advisory):
+CI'da kullanım (drift saptama, fail-closed — P0/P1 ikisi de bloke eder):
   python3 gen_plist_golden.py --dry-run && echo "golden güncel" || echo "DRIFT — golden bayat"
 """
 

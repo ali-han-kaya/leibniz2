@@ -113,6 +113,15 @@ Aynı üç kural üç katmanda da geçerli (npm karşılıkları parantez içind
    ARG mekanizmasına da uygulanır: floor'lar ARG default'unda yaşar (tek
    kopya — CVE-defteri), empty-guard net "yama yok" kanıtı verir, kurulum
    kanıtı build log'una yazılır.
+4. **Override kapısı her build yolunda aynıdır** — CI `docker-security`
+   image-scan build'i ve smoke build'i (yerel/CI) tek çözümleyiciden geçer:
+   `_calisma/CIKTI/docker_patch_build_args.sh`. Floor'lar **Dockerfile
+   ARG'larından** okunur (workflow'da ikinci kopya yok → drift imkânsız);
+   `SECURITY_PATCH_PACKAGES` / `PYTHON_SECURITY_PATCH_PACKAGES` doluysa o
+   kazanır (CI kanalı: `workflow_dispatch` input'u → repo değişkeni
+   `vars.*`). Boş override "yama katmanını kapat" demek **değildir**
+   (empty-guard zaten "yama yok" kanıtı verir) — bu yüzden boş değer
+   default'u asla ezmez, default okunamazsa build fail-closed durur.
 
 ## npm katmanı: context hijyeni + `overrides` deseni
 
@@ -417,7 +426,7 @@ engelliyor: sürüm ayrışırsa iki tarama farklı motorlarla döner ve
 
 | Paket | CVE'ler | Floor | Kanıt |
 |---|---|---|---|
-| libpcre2-8-0 | CVE-2026-86145 (OOB write), CVE-2026-89161 (pcre2_jit_match memory corruption) | 10.42-1+deb12u1 | 2026-09-16: yerel trivy 0.74.0 ilk koşumda 2 HIGH yakaladı → yama → 0 bulgu; CI koşum 35161423659 (13 Eylül kırmızı run'ı aynı CVE'lerle) before/after kanıtı. 2026-09-17: desenle yeniden doğrulandı (smoke PASS, 0 bulgu). |
+| libpcre2-8-0 | CVE-2026-86145 (OOB write), CVE-2026-89161 (pcre2_jit_match memory corruption) | 10.42-1+deb12u2 (önc. 10.42-1+deb12u1) | 2026-09-16: yerel trivy 0.74.0 ilk koşumda 2 HIGH yakaladı → yama → 0 bulgu; CI koşum 35161423659 (13 Eylül kırmızı run'ı aynı CVE'lerle) before/after kanıtı. 2026-09-17: desenle yeniden doğrulandı (smoke PASS, 0 bulgu). 2026-10-09 ROTASYON: Debian u1'i depodan çekti (E: Version '10.42-1+deb12u1' ... was not found → apt 100) — docker-security + audit_live_ci_sync kırmızısının kök nedeni; u2'ye taşındı (aday: apt-cache policy, bookworm-security). |
 
 Yeni girdiler buraya ve Dockerfile'daki defter bloğuna eklenir.
 

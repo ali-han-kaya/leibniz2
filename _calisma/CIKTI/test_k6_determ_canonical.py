@@ -24,6 +24,7 @@ stdlib-only, OFFLINE. Python 3.9 uyumlu.
 """
 import ast
 import hashlib
+import json
 import os
 import re
 import subprocess
@@ -38,6 +39,27 @@ SKILL = ROOT / "skills" / "reproducible-pdf-build" / "SKILL.md"
 SHELL_SCRIPT = CIKTI / "texlive_determinism_test.sh"
 VERIFY = CIKTI / "verify_delivery.py"
 MODULE = CIKTI / "pdf_id_canonical.py"
+HOOK = CIKTI / "verify_delivery_hook.py"
+WORKFLOW = ROOT / ".github" / "workflows" / "verify.yml"
+REPACK = ROOT / "_calisma" / "repack_delivery.py"
+SHIPPED_MANIFEST = (ROOT / "_calisma" / "V5_ICERIK"
+                    / "TESLIM_V5_FINAL_2026-08-17" / "stoic_hume_package"
+                    / "Stoic_Hume_Formal_Section_2026-08-17" / "MANIFEST.txt")
+TREND = ROOT / "docs" / "determinism_trend" / "determinism_trend.jsonl"
+PIPELINE = ROOT / "docs" / "TEX_RENDER_PIPELINE.md"
+SLIDES = CIKTI / "render_z3_slides.py"
+
+# §4 defterinin önceki satırları — “üzerine yazma” protokolünü ölçmek için
+# (test_id_residual_acceptance_doc.py ile aynı değerler, tek kaynak değil:
+# burada satır KAYBI'nı yakalamak için gerekiyor).
+TECTONIC_SINGLE = ("ad8fca69d4e4a2e1d67e497c8a7449f22"
+                   "c8564f5e9b3790d0b6f85d90d318e1b")
+PDFTEX_SINGLE = ("a75c340911801273b38be6ffb51a3482"
+                 "0764b8f812d528dd2705d64117f1aa00")
+PDFTEX_3PASS = ("544516b0d9d2f4c12b05b512b79b31ad"
+                "238e82d3ca3aff81166a6bac1914f597")
+DELIVERY_CANONICAL = ("d4f67e39fd0ef77e8f294ca2195bb1fc"
+                      "784716234d0675ab88a4fd8695263a6a")
 
 PDF = (ROOT / "_calisma" / "V5_ICERIK" / "TESLIM_V5_FINAL_2026-08-17"
        / "stoic_hume_package" / "Stoic_Hume_Formal_Section_2026-08-17"
@@ -315,6 +337,403 @@ class TestPhase4DocumentationTruth(unittest.TestCase):
         text = VERIFY.read_text(encoding="utf-8")
         self.assertNotIn("tectonic non-deterministic olduğundan", text,
                          "ölçümle çürütülmüş gerekçe kodda kalmamalı")
+
+
+class TestStrictDeterminismIsWired(unittest.TestCase):
+    """F) Uygulanan çekirdek KAPILARA BAĞLANMIŞ olmalı.
+
+    Ölçülen boşluk: `verify_delivery.py` K6-DETERM'i kanonik hash'e
+    bağlamış ve strict'i varsayılan açmış (2026-10-01), ama BAĞLAYAN
+    yüzeyler sözleşmeyi ilan etmiyordu:
+      - pre-commit `verify_delivery_hook.py` kapıyı `--strict-determinism`
+        OLMADAN koşuyordu ve fail-closed DEPS listesinde ne kanonik
+        çekirdek (`pdf_id_canonical.py`) ne de kabul defteri vardı →
+        hook, commit'lenenden farklı bir çekirdek/defter doğrulayabilirdi
+        (DEPS'in var oluş nedeni tam olarak bu).
+      - `.github/workflows/verify.yml` hiçbir yerde `--strict-determinism`
+        demiyordu → sözleşme yalnız bir varsayılana dayanıyordu; bir
+        varsayılan çevrildiğinde kapı sessizce kapanırdı.
+    """
+
+    def test_precommit_hook_runs_the_gate_with_strict_determinism(self):
+        # Davranışsal: hook'un gerçekten ne koştuğunu ölç, kaynak
+        # metnine bakma. subprocess.run geçici olarak yakalanır (kapı
+        # koşulmaz), DEPS ön-kontrolü boşaltılır (ağaç durumundan bağımsız).
+        from unittest import mock
+
+        hook = load_module("verify_delivery_hook")
+        seen = {}
+
+        class _Done:
+            returncode = 0
+
+        def fake_run(argv, *a, **kw):
+            seen["argv"] = list(argv)
+            return _Done()
+
+        with mock.patch.object(hook.subprocess, "run", fake_run), \
+                mock.patch.object(hook, "unstaged_deps", lambda: {}):
+            rc = hook.main([])
+
+        self.assertEqual(rc, 0, "kapı çıkış kodu korunmali")
+        argv = seen.get("argv") or []
+        self.assertTrue(argv, "hook kapıyı hiç koşmadı")
+        self.assertTrue(any(a.endswith("verify_delivery.py") for a in argv),
+                        "argv'da verify_delivery.py yok: %s" % (argv,))
+        self.assertIn("--strict-determinism", argv,
+                      "pre-commit kapısı strict'i açıkça ilan etmeli; "
+                      "varsayılana güvenmek, varsayılan çevrilirse "
+                      "sessizce kapanır")
+
+    def test_hook_deps_cover_canonical_core_and_ledger(self):
+        hook = load_module("verify_delivery_hook")
+        deps = hook.DEPS
+        self.assertTrue(any(d.endswith("pdf_id_canonical.py") for d in deps),
+                        "kanonik çekirdek DEPS'te olmalı: strict karşılaştırması "
+                        "bu modülü kullanıyor")
+        self.assertTrue(
+            any(d.endswith("ID_RESIDUAL_ACCEPTANCE.md") for d in deps),
+            "kabul defteri DEPS'te olmalı: referansı O dosya taşıyor")
+
+    def test_hook_deps_ledger_is_the_file_the_gate_actually_reads(self):
+        # Yalnız "defter DEPS'te" yetmez: kapının okuduĞU dosya ile
+        # DEPS'in koruduğu dosya aynı olmalı. Ayrışırsa DEPS'te başka bir
+        # yol durur, hook yanlış dosyanın temizliğini denetler ve gerçek
+        # defterin stage'lenmemiş olması sessizce geçer.
+        vd = load_module("verify_delivery")
+        hook = load_module("verify_delivery_hook")
+        reads = os.path.relpath(
+            os.path.realpath(vd.PDF_CANONICAL_LEDGER), str(ROOT))
+        self.assertIn(reads, hook.DEPS,
+                      "kapının okuduğu defter DEPS listesinde aynı yolla "
+                      "bulunmalı (ölçülen: %s)" % reads)
+
+    def test_ci_declares_strict_determinism_on_the_full_gate(self):
+        text = WORKFLOW.read_text(encoding="utf-8")
+        # `--full` geçen satırdan başlayıp backslash ile devam eden tüm
+        # komut bloğunu birleştir: bayrak bir sonraki satıra da kayabilir.
+        lines = text.splitlines()
+        start = next((i for i, ln in enumerate(lines)
+                      if "verify_delivery.py" in ln and "--full" in ln
+                      and not ln.lstrip().startswith("#")), None)
+        self.assertIsNotNone(start, "CI'da --full kapı adımı bulunamadı")
+        block = [lines[start]]
+        for ln in lines[start + 1:]:
+            if not block[-1].rstrip().endswith("\\"):
+                break
+            block.append(ln)
+        command = "\n".join(block)
+        self.assertIn("--strict-determinism", command,
+                      "CI --full adımı strict'i ilan etmeli")
+        self.assertNotIn("--no-strict-determinism", text,
+                         "CI kapatma bayrağını kullanmamalı (teşhis bayrağı)")
+
+    def test_repack_generator_corrects_the_refuted_tectonic_claim(self):
+        # Bayat yorumun KAYDI tarihsel kayıt olarak korunur (V5k metni
+        # silinmez — teslim tarihçesi yeniden yazılmaz), ama ÜRETİCİ onu
+        # çürüten yeni bir kayıt yayımlar ve bu kayıt DAHA SONRA gelir:
+        # okuyucu en son satırı güncel sözleşme olarak görür.
+        src = REPACK.read_text(encoding="utf-8")
+        self.assertIn("must not be enabled", src,
+                      "V5k tarihsel kaydı korunmalı")
+        self.assertIn("# V5n", src,
+                      "üretici ölçümle çürütülmüş gerekçeyi düzelten kaydı "
+                      "yayımlamalı")
+        self.assertGreater(src.index("# V5n"), src.index("must not be enabled"),
+                           "düzeltme kaydı, çürüttüğü kayıttan SONRA "
+                           "gelmeli (yoksa en son okunan yanlış olur)")
+
+    def test_shipped_manifest_debt_cannot_stay_silent(self):
+        # Gemideki MANIFEST.txt V5k metnini taşır ve taşımaya devam eder
+        # (düzeltme bir sonraki repack'ta sevk edilir — teslim hash'i
+        # bugün değişmez). Bu BİR BORÇTUR; defterde yazmıyorsa kimse
+        # göremez, yani sessiz kalırsa kapı fail-closed ihlali olur.
+        if not SHIPPED_MANIFEST.is_file():
+            self.skipTest("gemideki MANIFEST yok — SKIP")
+        shipped = SHIPPED_MANIFEST.read_text(encoding="utf-8")
+        if "must not be enabled" not in shipped:
+            self.skipTest("gemideki MANIFEST bayat metni taşımıyor — borç yok")
+        text = LEDGER.read_text(encoding="utf-8")
+        self.assertIn("MANIFEST.txt", text,
+                      "gemideki MANIFEST'in bayat yorumu defterde kayıtlı "
+                      "olmalı (sessiz borç olmasın)")
+        self.assertIn("V5k", text,
+                      "borç kaydı, çürütülen kaydı (V5k) adıyla belirtilmeli")
+
+
+class TestCiLinuxLedgerRow(unittest.TestCase):
+    """G) CI-linux bağlamı defterde kendi satırıyla durmalı (protokol).
+
+    Rapurun kendi protokolü (§4): “Yeni bağlam (CI, font paketi) → **yeni
+    satır**; eskisinin üzerine asla yazma.” CI-linux tam olarak yeni bir
+    bağlam: aynı kaynak, aynı SDE, ama farklı TeXLive/font paketi → farklı
+    kanonik hash. O yüzden satır 3'ün (darwin) üzerine yazılmaz, AYRI satır
+    alır.
+
+    Satırın değeri SABİT bir metin değil: `docs/determinism_trend/
+    determinism_trend.jsonl` içindeki determinism-trend CI kayıtlarından
+    gelir. Buradaki testler satırı o kayda bağlar — yani “defterde yazılı”
+    ile “CI'da ölçülmüş” ayrışırsa kapı kırmızıya döner.
+    """
+
+    def _platform_canonicals(self, platform):
+        out = []
+        for line in TREND.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            rec = json.loads(line)
+            h = rec.get("texlive_canonical_sha256")
+            if rec.get("platform") == platform and h:
+                out.append((rec, h))
+        return out
+
+    def _ledger_data_rows(self):
+        """§4 defter tablosunun veri satırları (başlık + ayraç hariç).
+
+        Bölüm hedeflenir: belgede §2'de de bir tablo var, ilk `|` satırını
+        yakalamak yanlış tabloyu getirirdi.
+        """
+        lines = LEDGER.read_text(encoding="utf-8").splitlines()
+        start = None
+        for i, line in enumerate(lines):
+            if line.startswith("## 4."):
+                start = i + 1
+                break
+        self.assertIsNotNone(start, "§4 defter bölümü bulunamadı")
+        rows, header = [], None
+        for line in lines[start:]:
+            s = line.strip()
+            if not s.startswith("|"):
+                if rows:
+                    break
+                continue
+            cells = [c.strip() for c in s.strip("|").split("|")]
+            if all(set(c) <= set("-: ") for c in cells if c):
+                continue
+            if header is None:
+                header = cells
+                continue
+            rows.append(cells)
+        return header, rows
+
+    def _canonical_column(self):
+        header, _ = self._ledger_data_rows()
+        self.assertIsNotNone(header, "§4 tablosu bulunamadı")
+        idx = [i for i, c in enumerate(header) if "kanonik" in c.lower()]
+        self.assertTrue(idx, "defterde 'Kanonik' sütunu yok")
+        return idx[0]
+
+    def test_ci_linux_hash_is_stable_across_independent_ci_runs(self):
+        recs = self._platform_canonicals("linux")
+        if not recs:
+            self.skipTest("trend kaydında linux ölçümü yok — SKIP")
+        distinct = {h for _, h in recs}
+        self.assertEqual(len(distinct), 1,
+                         "CI-linux kanonik hash koşumlar arasında DEĞİŞMEMELİ: "
+                         "%s" % sorted(distinct))
+        self.assertGreaterEqual(len(recs), 2,
+                                "tek koşum determinizm kanıtı değildir")
+        for rec, _h in recs:
+            self.assertEqual(rec.get("gate"), "PASS",
+                             "kaydedilen CI koşumu PASS olmalı")
+
+    def test_ledger_row_equals_the_measured_ci_hash(self):
+        recs = self._platform_canonicals("linux")
+        if not recs:
+            self.skipTest("trend kaydında linux ölçümü yok — SKIP")
+        measured = sorted({h for _, h in recs})[0]
+        col = self._canonical_column()
+        found = [cells for cells in self._ledger_data_rows()[1]
+                 if col < len(cells) and measured in cells[col]]
+        self.assertTrue(found,
+                        "CI-linux kanonik hash'i (%s…) defterde kendi "
+                        "satırıyla olmalı" % measured[:12])
+
+    def test_ci_linux_row_is_a_full_hash_accepted_by_the_parser(self):
+        # Protokol: kısaltılmış önek kabul edilmez. Satır gerçekten
+        # `ledger_canonical_hashes` tarafından okunabilmeli (yani “Kanonik”
+        # sütununda TAM 64-hex olmalı) — aksi hâlde `make accept` bu
+        # bağlamı hiçbir zaman kabul edemez.
+        recs = self._platform_canonicals("linux")
+        if not recs:
+            self.skipTest("trend kaydında linux ölçümü yok — SKIP")
+        measured = sorted({h for _, h in recs})[0]
+        accepted = load_module("pdf_id_canonical").ledger_canonical_hashes(
+            LEDGER.read_text(encoding="utf-8"))
+        self.assertIn(measured, accepted,
+                      "CI-linux hash'i tam 64-hex olarak kabul edilmeli")
+
+    def test_ci_linux_row_is_appended_not_an_overwrite(self):
+        # “Eskisinin üzerine asla yazma”: önceki satırların kanonik
+        # hash'leri aynen durmalı, CI-linux ayrı bir satır olmalı.
+        recs = self._platform_canonicals("linux")
+        if not recs:
+            self.skipTest("trend kaydında linux ölçümü yok — SKIP")
+        measured = sorted({h for _, h in recs})[0]
+        col = self._canonical_column()
+        rows = self._ledger_data_rows()[1]
+        hashes = []
+        for cells in rows:
+            if col < len(cells):
+                hashes.extend(re.findall(r"\b[0-9a-f]{64}\b", cells[col]))
+        for previous in (TECTONIC_SINGLE, PDFTEX_SINGLE, PDFTEX_3PASS,
+                         DELIVERY_CANONICAL):
+            self.assertIn(previous, hashes,
+                          "önceki satır (%s…) silinmiş/üzerine yazılmış "
+                          "olamaz — protokol yeni satır ister"
+                          % previous[:12])
+        self.assertEqual(hashes.count(measured), 1,
+                         "CI-linux hash'i tam bir kez ve ayrı satırda "
+                         "bulunmalı")
+
+    def test_ci_linux_context_is_distinct_from_darwin(self):
+        # Satır 3 (darwin/Homebrew) ile CI-linux (ubuntu-latest/apt) farklı
+        # paket seti → pdfTeX kanonik hash'i farklı olmalı. Aynı olsaydı ya
+        # ölçüm hatası ya da kopyala-yapıştır hatası olurdu; protokol de
+        # çapraz-platform eşitliği beklemiyor (§3 kural 3).
+        linux = self._platform_canonicals("linux")
+        darwin = self._platform_canonicals("darwin")
+        if not linux or not darwin:
+            self.skipTest("iki platform da ölçülmemiş — SKIP")
+        lh = sorted({h for _, h in linux})[0]
+        dh = sorted({h for _, h in darwin})[0]
+        self.assertNotEqual(lh, dh,
+                            "CI-linux ve darwin pdfTeX kanonik hash'i farklı "
+                            "olmalı (farklı font/TeXLive paketi)")
+
+    def test_tectonic_canonical_is_platform_stable(self):
+        # Ölçülen asimetri: ayrışan bacak pdfTeX'tir, tectonic değil —
+        # tectonic 0.17.0 çıktısı platformdan bağımsız. Satır 1 zaten tek
+        # bir tectonic satırı taşır; linux de aynı hash'i veriyorsa
+        # platform başına ikinci tectonic satırı AÇILMAMALI (yeni bağlam
+        # yok, ölçüm aynı).
+        linux = self._platform_canonicals("linux")
+        darwin = self._platform_canonicals("darwin")
+        if not linux or not darwin:
+            self.skipTest("iki platform da ölçülmemiş — SKIP")
+        lt = {r.get("tectonic_canonical_sha256") for r, _h in linux}
+        dt = {r.get("tectonic_canonical_sha256") for r, _h in darwin}
+        self.assertEqual(lt, dt,
+                         "tectonic kanonik hash'i platformlar arası "
+                         "değişmemeli (ölçümde öyle)")
+        self.assertEqual(lt, {TECTONIC_SINGLE},
+                         "tectonic kanonik hash'i satır 1 ile aynı olmalı")
+
+    def test_ci_linux_row_carries_platform_and_sde_context(self):
+        # Protokol: “defter satırları SDE bağlamını taşır”. Satır
+        # platformu ve SDE'yi açıkça belirtmeli — kanonik hash SDE'ye
+        # bağlıdır, bağlam yazılmazsa satır ileride yanlış okunur.
+        recs = self._platform_canonicals("linux")
+        if not recs:
+            self.skipTest("trend kaydında linux ölçümü yok — SKIP")
+        measured = sorted({h for _, h in recs})[0]
+        col = self._canonical_column()
+        rows = [cells for cells in self._ledger_data_rows()[1]
+                if col < len(cells) and measured in cells[col]]
+        joined = " ".join(rows[0])
+        self.assertRegex(joined, r"linux|ubuntu",
+                         "satır platformu (linux/ubuntu) belirtmeli")
+        self.assertTrue(any(ch.isdigit() for ch in joined),
+                        "satır SDE/geçiş bağlamını bir sayıyla taşımalı")
+
+    def test_ci_linux_row_has_a_rationale_in_the_report(self):
+        # “Satır 5 neden ayrı?” geleneği: ayrı satırın gerekçesi yazılı
+        # olmalı, yoksa protokol uygulanmış görünür ama anlaşılmaz.
+        text = LEDGER.read_text(encoding="utf-8")
+        recs = self._platform_canonicals("linux")
+        if not recs:
+            self.skipTest("trend kaydında linux ölçümü yok — SKIP")
+        measured = sorted({h for _, h in recs})[0]
+        self.assertIn(measured, text)
+        self.assertRegex(text, r"(?i)CI[- ]linux",
+                         "CI-linux bağlamı raporda adıyla anılmalı")
+        self.assertIn("determinism-trend", text,
+                      "satırın ölçüm kaynağı (determinism-trend CI) "
+                      "adıyla yazılmalı")
+
+
+class TestFaz5DocumentationTruth(unittest.TestCase):
+    """H) Dokümantasyon ÖLÇÜLMÜŞ durumu anlatmalı (Faz 5 kapanışı).
+
+    Ölçülen boşluk: `docs/TEX_RENDER_PIPELINE.md` ve
+    `skills/reproducible-pdf-build/SKILL.md` TeXLive'nin **yok** olduğu bir
+    çağın anlatısını taşıyordu. Oysa bugün (2026-10-02) ölçülen durum:
+      - TeXLive kurulu (Homebrew TeX Live 2026) ve iki motor da ölçülmüş,
+      - `render_z3_slides.py` motoru `pdflatex → latex → tectonic` sırasıyla
+        seçiyor; bu makinede `find_tex_engine()` = **pdflatex** (tectonic
+        değil), PNG yolu `convert` (pdftoppm değil),
+      - tüm kanonik hash'ler kabul defterinde.
+    Belge kodu ve ölçümü anlatmıyorsa okuyucu yanlış pipeline'ı kopyalar.
+    """
+
+    def test_pipeline_doc_carries_the_measured_canonical_hashes(self):
+        text = PIPELINE.read_text(encoding="utf-8")
+        for h, label in ((TECTONIC_SINGLE, "tectonic"),
+                         (PDFTEX_SINGLE, "pdfTeX tek-geçiş (darwin)"),
+                         (PDFTEX_3PASS, "pdfTeX 3-geçiş (darwin)")):
+            self.assertIn(h, text,
+                          "%s kanonik hash'i belgede olmalı (ölçülmüş veri)"
+                          % label)
+        recs = [json.loads(l) for l in TREND.read_text(
+            encoding="utf-8").splitlines() if l.strip()]
+        ci = {r.get("texlive_canonical_sha256") for r in recs
+              if r.get("platform") == "linux"}
+        for h in ci:
+            self.assertIn(h, text,
+                          "CI-linux kanonik hash'i de belgede olmalı")
+
+    def test_pipeline_doc_does_not_claim_texlive_is_absent(self):
+        text = PIPELINE.read_text(encoding="utf-8")
+        for stale in ("TeXLive bağımlılığı olmayan", "TeXLive'siz, doğrulanmış"):
+            self.assertNotIn(stale, text,
+                             "açılış tezi artık doğru değil (TeXLive kurulu "
+                             "ve ölçüldü): %r" % stale)
+
+    def test_pipeline_doc_engine_order_matches_the_renderer(self):
+        src = SLIDES.read_text(encoding="utf-8")
+        m = re.search(r"def find_tex_engine\(\).*?for cand in \(([^)]*)\):",
+                      src, re.S)
+        self.assertIsNotNone(m, "find_tex_engine aday listesi bulunamadı")
+        order = [c.strip().strip("\"'") for c in m.group(1).split(",")]
+        self.assertEqual(order, ["pdflatex", "latex", "tectonic"],
+                         "motor aday sırası değişti — belgeyi de güncelle")
+        text = PIPELINE.read_text(encoding="utf-8")
+        self.assertIn("`pdflatex` → `latex` → `tectonic`", text,
+                      "belge motor çözümleme sırasını kodla aynı yazmalı")
+
+    def test_pipeline_doc_names_the_resolved_engine_and_png_path(self):
+        text = PIPELINE.read_text(encoding="utf-8")
+        self.assertRegex(text, r"(?i)find_tex_engine\(\)",
+                         "belge hangi motorun SEÇİLDİĞİNİ ölçümle yazmalı "
+                         "(tahmin değil)")
+        self.assertIn("pdflatex", text)
+
+    def test_pipeline_doc_links_the_acceptance_ledger(self):
+        text = PIPELINE.read_text(encoding="utf-8")
+        self.assertIn("ID_RESIDUAL_ACCEPTANCE", text,
+                      "belge kanonik hash'lerin tek kaynağına bağlanmalı")
+
+    def test_skill_marks_the_migration_completed_with_a_reference(self):
+        text = SKILL.read_text(encoding="utf-8")
+        self.assertRegex(text, r"(?i)migration[^\n]{0,40}completed"
+                              r"|completed[^\n]{0,40}migration",
+                         "SKILL.md göçü 'future' olarak değil tamamlanmış "
+                         "olarak işaretlemeli")
+        self.assertIn("ID_RESIDUAL_ACCEPTANCE", text,
+                      "SKILL.md /ID kabul raporuna referans vermeli")
+
+    def test_skill_no_longer_teaches_tectonic_as_nondeterministic(self):
+        # Ölçümle çürütülen alan dersi: tectonic 0.17.0 bu ölçümde byte-KARARLI
+        # (ham = kanonik, iki platformda aynı). Derleyici düzeyindeki
+        # kararsızlık pdfTeX'in rastgele trailer /ID'idir. SKILL.md bunu
+        # "ölçümle çürütüldü" diye işaretlemeli.
+        text = SKILL.read_text(encoding="utf-8")
+        self.assertNotIn("is NOT byte-deterministic: consecutive builds",
+                         text,
+                         "ölçümle çürütülmüş iddia olduğu gibi kalmamalı")
+        self.assertIn("tectonic", text)
+        self.assertRegex(text, r"(?i)(çürüt|superseded|ölçümle)",
+                         "SKILL.md çürütmeyi açıkça işaretlemeli")
 
 
 if __name__ == "__main__":
