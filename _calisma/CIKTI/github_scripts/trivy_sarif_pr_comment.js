@@ -41,6 +41,40 @@ function cell(text) {
   return String(text).slice(0, 120).replace(/\|/g, '\\|').replace(/\n/g, ' ');
 }
 
+async function upsertCommentQuiet(body) {
+  // Yan fayda adımı: API/ kota arızası gate kararını ETKİLEMEZ (karar
+  // yerel SARIF'ten verilir) ama sessizce yutulmaz — uyarı + hata metni.
+  try {
+    const { data: comments } = await github.rest.issues.listComments({
+      owner: context.repo.owner,
+      repo: context.repo.repo,
+      issue_number: context.issue.number,
+      per_page: 100,
+    });
+    const existing = comments.find((c) => c.body && c.body.includes(MARKER));
+    if (existing) {
+      await github.rest.issues.updateComment({
+        owner: context.repo.owner,
+        repo: context.repo.repo,
+        comment_id: existing.id,
+        body,
+      });
+    } else {
+      await github.rest.issues.createComment({
+        owner: context.repo.owner,
+        repo: context.repo.repo,
+        issue_number: context.issue.number,
+        body,
+      });
+    }
+    return null;
+  } catch (err) {
+    const msg = err && err.message ? err.message : String(err);
+    core.warning('Trivy PR yorumu düşülemedi (yan fayda atlandı): ' + msg);
+    return msg;
+  }
+}
+
 try {
   const raw = fs.readFileSync(SARIF_PATH, 'utf8');
   const sarif = JSON.parse(raw);
@@ -114,41 +148,11 @@ try {
       'Çözüm: yamalı base-image / pkg yükseltmesi (DOCKER_SECURITY_PATCHING.md).\n';
   }
 
-  // PR yorumu YAN FAYDADIR: kapı kararı yerel SARIF'ten verildi. Yorum
-  // upsert'i API kotası (403 "API rate limit exceeded for installation")
-  // gibi bir arızaya takılırsa gate'i kırmızıya çevirmeyiz — ama sessizce
-  // yutmayız da (core.warning). Gerçek bulgu varsa setFailed aşağıda,
-  // yorumdan BAĞIMSIZ olarak verilir.
-  let commentError = null;
-  try {
-    const { data: comments } = await github.rest.issues.listComments({
-      owner: context.repo.owner,
-      repo: context.repo.repo,
-      issue_number: context.issue.number,
-      per_page: 100,
-    });
-    const existing = comments.find((c) => c.body && c.body.includes(MARKER));
-    if (existing) {
-      await github.rest.issues.updateComment({
-        owner: context.repo.owner,
-        repo: context.repo.repo,
-        comment_id: existing.id,
-        body,
-      });
-    } else {
-      await github.rest.issues.createComment({
-        owner: context.repo.owner,
-        repo: context.repo.repo,
-        issue_number: context.issue.number,
-        body,
-      });
-    }
-  } catch (err) {
-    commentError = err && err.message ? err.message : String(err);
-    core.warning(
-      'Trivy PR yorumu düşülemedi (yan fayda atlandı): ' + commentError
-    );
-  }
+  // PR yorumu YAN FAYDADIR; kapı kararı yerel SARIF'ten verildi.
+  // upsertCommentQuiet: API arızasında (403 kota / ağ) yalnız uyarır ve
+  // hata metnini DÖNDÜRÜR — hata gizlenmez, ama tarama sonucunu da
+  // maskelemez. Gerçek bulgu varsa setFailed aşağıda, yorumdan BAĞIMSIZ.
+  const commentError = await upsertCommentQuiet(body);
 
   if (blocking.length) {
     core.setFailed(
