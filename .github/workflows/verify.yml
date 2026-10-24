@@ -1,7 +1,8 @@
 name: verify-delivery
 
 # Stoic-Hume V5 tesliminin fail-closed doğrulama kapısı.
-# Her push ve pull_request'te çalışır; manuel tetikleme için workflow_dispatch.
+# main push'ında ve her pull_request'te çalışır; manuel tetikleme için
+# workflow_dispatch.
 #
 # TEK GİRİŞ NOKTASI: verify job'u, `verify_delivery.py --full` ile
 #   K1-K7 (manifest/checksum/script/PDF/referans) +
@@ -42,6 +43,17 @@ name: verify-delivery
 
 on:
   push:
+    # ÇİFT KOŞUM DÜZELTMESİ (2026-10-24): push her dala açıkken bir PR
+    # push'unda push + pull_request İKİ tam verify-delivery koşumu
+    # üretiyor ve PR-only job'lar (budget/manifest comment, commit-msg ve
+    # P0/P1 label gate) push koşumunda `if: == 'pull_request'` nedeniyle
+    # skipped kalıyordu → GitHub her PR'da "Some checks were not
+    # successful" uyarısı gösteriyordu. Push kapısı main ile sınırlandırıldı:
+    # PR'lar tek koşumda (pull_request) yeşil geçer, checks listesi yarıya
+    # iner. Branch protection'ın 15 required check'ının TAMAMI pull_request
+    # koşumunda üretilir (eksik yok — sözleşmeyi test_workflow_triggers
+    # ve test_status_checks korur).
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
