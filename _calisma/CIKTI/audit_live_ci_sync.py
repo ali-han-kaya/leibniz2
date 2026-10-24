@@ -38,6 +38,7 @@ Kullanım:
   2 — çalışma hatası (doc yok, gh yok, run bulunamadı)
 """
 import argparse
+import time
 import json
 import pathlib
 
@@ -175,11 +176,47 @@ def parse_doc_artifacts(doc_text):
 # upstream-skipped mi yoksa gerçek drift mi olduğu sınıflanır.
 
 # ── Canlı GitHub ─────────────────────────────────────────────────────────
+# Geçici/kota hataları: hemen, 3s sonra, 8s sonra yeniden dene.
+RETRY_DELAYS = (0, 3, 8)
+# Yalnız GEÇİCİ hatalarda yeniden denenir — gerçek bir "bulunamadı"
+# hatasını üç kez beklemek raporu yavaşlatmaktan başka işe yaramaz.
+RETRYABLE_HINTS = (
+    "rate limit",          # 403 "API rate limit exceeded for installation"
+    "secondary rate",
+    "abuse detection",
+    "http 429",
+    "http 500",
+    "http 502",
+    "http 503",
+    "http 504",
+    "timed out",
+    "timeout",
+    "connection reset",
+    "temporarily unavailable",
+    "could not resolve host",
+)
+
+
 def run_gh(args):
-    r = subprocess.run(args, capture_output=True, text=True)
-    if r.returncode != 0:
-        raise RuntimeError((r.stderr or r.stdout).strip())
-    return r.stdout.strip()
+    """gh CLI çağrısı; geçici/kota hatalarında sınırlı yeniden deneme.
+
+    audit job'u advisory ve REQUIRED DEĞİL; kurulum kotası tükendiğinde
+    (403 "API rate limit exceeded for installation") audit'in veri çekmesi
+    tek denemeyle düşüyordu. Üç deneme sonrası hata AÇIKÇA yükselir —
+    sessiz boş rapor yok.
+    """
+    last = ""
+    for delay in RETRY_DELAYS:
+        if delay:
+            time.sleep(delay)
+        r = subprocess.run(args, capture_output=True, text=True)
+        if r.returncode == 0:
+            return r.stdout.strip()
+        last = (r.stderr or r.stdout).strip()
+        low = last.lower()
+        if not any(h in low for h in RETRYABLE_HINTS):
+            raise RuntimeError(last)
+    raise RuntimeError(last)
 
 
 def get_repo():
