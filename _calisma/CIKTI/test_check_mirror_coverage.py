@@ -43,6 +43,11 @@ def fake_repo(root):
         f.write("x\n")
     with open(os.path.join(root, "docs", "HOOK_ENV_MATRIX.md"), "w", encoding="utf-8") as f:
         f.write("x\n")
+    # K6-DETERM kabul defteri — LEDGER_FILES bloğunun kaynağı (repo kökü);
+    # mirror'a düz adla düşer, kapsam tanımı beklemeli (yoksa BAYAT).
+    with open(os.path.join(root, cmc.LEDGER_REL), "w",
+              encoding="utf-8") as f:
+        f.write("x\n")
     # design-system token sheet — sync_verify_mirror.sh GUIDE_FILES ile
     # mirror'lar; kapsam tanımı bunu beklenen runtime kümesine almalı (CI'da
     # "BEKLENMEYEN: design-system/tokens.css" regresyonu).

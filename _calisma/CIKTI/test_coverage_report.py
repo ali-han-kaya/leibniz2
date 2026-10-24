@@ -245,6 +245,7 @@ HOOK_COVERAGE = {
         "test_gated_schedules.py",
         "test_sync_lifecycle.py",
         "test_k6_determ_canonical.py",
+        "test_docker_patch_build_args.py",
         "test_check_prettier_format.py",
         "test_design_token_contrast.py",
         "test_security_cron_schedule.py",
@@ -267,6 +268,7 @@ HOOK_COVERAGE = {
         "test_dashboard_webkit_smoke.py",
         "test_preview_stream_batching.py",
         "test_check_verify_jobs_map.py",
+        "test_check_protection_drift.py",
     ],
 }
 
