@@ -663,6 +663,10 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-24 | docs | (deploy) 843284cc kanit satirini ekle (bayatlik kapisi) (#109) | [`ca94563c`](https://github.com/ali-han-kaya/leibniz2/commit/ca94563c) |
 | 2026-10-24 | fix | (changelog) olu hash satirlarini prune et (main'deki kirmizi kapali) (#108) | [`843284cc`](https://github.com/ali-han-kaya/leibniz2/commit/843284cc) |
 | 2026-10-25 | ci | (plist) P1 plist drift kapisini ayri fail-closed job'a al (#116) | [`865de95f`](https://github.com/ali-han-kaya/leibniz2/commit/865de95f) |
+| 2026-10-25 | docs | (deploy) 0f6a9bb8 kanit satirini deftere ekle (#121) | [`ebe7940a`](https://github.com/ali-han-kaya/leibniz2/commit/ebe7940a) |
+| 2026-10-25 | docs | (deploy) 865de95f kanit satiri (#120) | [`0f6a9bb8`](https://github.com/ali-han-kaya/leibniz2/commit/0f6a9bb8) |
+| 2026-10-25 | ci | (plist) plist-p1 canli required sette — turetim hizalandi (#119) | [`6e750548`](https://github.com/ali-han-kaya/leibniz2/commit/6e750548) |
+| 2026-10-25 | ci | (vercel) sabit preview alias'i aylik denetimin hedefi yap (#118) | [`7bdbd76d`](https://github.com/ali-han-kaya/leibniz2/commit/7bdbd76d) |
 
 ### Regresyon notları
 
