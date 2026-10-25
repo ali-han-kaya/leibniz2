@@ -25,6 +25,43 @@
 | 2026-10-25 | ac0dcfb4 | [success #40158081378](https://github.com/ali-han-kaya/leibniz2/actions/runs/40158081378) | [success #40158081340](https://github.com/ali-han-kaya/leibniz2/actions/runs/40158081340) | [success #40158081344](https://github.com/ali-han-kaya/leibniz2/actions/runs/40158081344) | [success #39226471244](https://github.com/ali-han-kaya/leibniz2/actions/runs/39226471244) |
 | 2026-10-25 | 865de95f | [failure #40166763530](https://github.com/ali-han-kaya/leibniz2/actions/runs/40166763530) | [success #40166763478](https://github.com/ali-han-kaya/leibniz2/actions/runs/40166763478) | [success #40166763477](https://github.com/ali-han-kaya/leibniz2/actions/runs/40166763477) | [success #39226471244](https://github.com/ali-han-kaya/leibniz2/actions/runs/39226471244) |
 | 2026-10-25 | 0f6a9bb8 | [success #40187870000](https://github.com/ali-han-kaya/leibniz2/actions/runs/40187870000) | [success #40187870069](https://github.com/ali-han-kaya/leibniz2/actions/runs/40187870069) | [success #40187869999](https://github.com/ali-han-kaya/leibniz2/actions/runs/40187869999) | [success #40161574012](https://github.com/ali-han-kaya/leibniz2/actions/runs/40161574012) |
+| 2026-10-25 | 9657090d | [success #40215426067](https://github.com/ali-han-kaya/leibniz2/actions/runs/40215426067) | [success #40215426043](https://github.com/ali-han-kaya/leibniz2/actions/runs/40215426043) | [success #40215426046](https://github.com/ali-han-kaya/leibniz2/actions/runs/40215426046) | [success #40161574012](https://github.com/ali-han-kaya/leibniz2/actions/runs/40161574012) |
+| 2026-10-25 | 42d618da | [success #40231742647](https://github.com/ali-han-kaya/leibniz2/actions/runs/40231742647) | [success #40231742728](https://github.com/ali-han-kaya/leibniz2/actions/runs/40231742728) | [success #40231742671](https://github.com/ali-han-kaya/leibniz2/actions/runs/40231742671) | [success #40161574012](https://github.com/ali-han-kaya/leibniz2/actions/runs/40161574012) |
+
+`42d618da` — PR #127 (`docs(vercel): token scope'u, scope-not-accessible
+teshisi ve rotasyon`) squash'ı: `9657090d` satırının üstüne **2 anlamlı**
+commit geldi (`942118e7` ci(smoke) + bu squash; `5fd7533c` `docs(deploy)` →
+`DEFAULT_GAP_EXEMPT`; uyarı 2/3'tü) → bu satır boşluğu **0**'a çekiyor:
+`substantive_gap(42d618da, main)` = 0 (satırı yazan commit de `docs(deploy)`
+→ exempt). Hücreler `event=push`, `headSha=42d618da`: `verify-delivery`
+#40231742647, `docker-security` #40231742728, `test-smoke` #40231742671 (üçü
+de success, 2026-10-25'te API'den canlı doğrulandı); `determinism-trend`
+hücresi son main ölçümünü taşır (#40161574012, `headSha=d782734a` success —
+haftalık ölçüm, bu HEAD adına ayrıca koşum yoktur). DİKKAT:
+`verify-delivery` #40231742647 iki altyapı rerun'ı ile yeşillendi — attempt 1
+`test_run_history_schema_parity` → `HTTP 403 rate limit exceeded`
+(AGENTS.md sınıflandırması: altyapı → rerun), attempt 2 rerun ortamında
+`A11y gate` artifact/sidecar önkoşulunda düştü, attempt 3 tam rerun success.
+Satır gerçeği yazar: bu HEAD'in ilk denemeleri kırmızıydı, nihai kanıt success.
+
+`9657090d` — PR #115 (`chore: weekly determinism trend record (bot)`) inişi:
+`0f6a9bb8` satırının üstüne **7 anlamlı** commit geldi (PR #116-#121 merge
+zinciri, `chore(deps)`/`chore(bootstrap)` ve bot trend kaydı; tolerans 3) →
+`verify-delivery` kırmızısı **yalnız**
+`test_deploy_evidence.test_cli_accepts_repo_ledger_offline` (CIKTI bataryasının
+tek FAIL'i); bu satır tam olarak o açığı kapatıyor:
+`substantive_gap(9657090d, main)` = **0**. DİKKAT: `9657090d`,
+`app/github-actions`'ın `GITHUB_TOKEN` ile merge ettiği PR'dir; GitHub kuralı
+gereği bu push yeni workflow tetiklemedi (o HEAD'te yalnızca `workflow_run`
+tetikli `ci-rca-comment` koştu) — `push` koşumu **yoktur**. Hücreler bir önceki
+gerçek push HEAD'i `66336644`'ün 2026-10-25'te API'den canlı doğrulanmış
+koşumlarını taşır: `verify-delivery` #40215426067, `docker-security`
+#40215426043, `test-smoke` #40215426046 (üçü de success, `headSha=66336644`,
+`event=push`); `determinism-trend` hücresi son main ölçümünü taşır (#40161574012,
+success). Taşıma deseni `determinism-trend` hücresinin desenidir ve satır bunu
+açıkça yazar: `push` koşumu olmayan HEAD, boşluğu kapatma sıçraması olarak
+kullanılmaz. Satırı yazan commit `docs(deploy)` → `DEFAULT_GAP_EXEMPT`
+olduğundan boşluk yeniden genişlemez.
 
 `865de95f` — PR #116 (`ci(plist): P1 plist drift kapisini ayri fail-closed
 job'a al`) squash inişi: `ac0dcfb4` satırının üstüne **anlamlı** commit olarak

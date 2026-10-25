@@ -1,7 +1,7 @@
-import React from "react";
-import { interpolate, useCurrentFrame } from "remotion";
-import type { BoardItem, GateRun, GateStatus, LeibnizData, Run } from "./data";
-import { Mono, palette, Reveal, Sans, stage } from "./ui";
+import React from 'react';
+import { interpolate, useCurrentFrame } from 'remotion';
+import type { BoardItem, GateRun, GateStatus, LeibnizData, Run } from './data';
+import { Mono, palette, Reveal, Sans, stage } from './ui';
 
 /** Shared scene shell: background wash, fixed bottom progress hairline. */
 const Shell: React.FC<{
@@ -16,28 +16,28 @@ const Shell: React.FC<{
   const fadeInFactor =
     fadeIn > 0
       ? interpolate(f, [0, fadeIn], [0, 1], {
-          extrapolateLeft: "clamp",
-          extrapolateRight: "clamp",
+          extrapolateLeft: 'clamp',
+          extrapolateRight: 'clamp',
         })
       : 1;
   const alpha =
     fadeInFactor *
     interpolate(f, [lengthInFrames - fade, lengthInFrames], [1, 0], {
-      extrapolateLeft: "clamp",
-      extrapolateRight: "clamp",
+      extrapolateLeft: 'clamp',
+      extrapolateRight: 'clamp',
     });
 
   return (
     <div
       style={{
-        width: "100%",
-        height: "100%",
+        width: '100%',
+        height: '100%',
         backgroundColor: palette.bg,
         backgroundImage: `linear-gradient(180deg, ${palette.bg} 0%, ${palette.bgSoft} 100%)`,
-        display: "flex",
-        flexDirection: "column",
-        padding: "58px 80px 64px",
-        boxSizing: "border-box",
+        display: 'flex',
+        flexDirection: 'column',
+        padding: '58px 80px 64px',
+        boxSizing: 'border-box',
         opacity: alpha,
         fontFeatureSettings: '"tnum" 1',
       }}
@@ -45,7 +45,7 @@ const Shell: React.FC<{
       {children}
       <div
         style={{
-          position: "absolute",
+          position: 'absolute',
           left: 80,
           right: 80,
           bottom: 46,
@@ -84,81 +84,81 @@ const TRACK_W = 452;
 
 /** verdict metnine göre renk: koşu satırı ile dağılım çubuğu aynı rengi paylaşır. */
 const verdictColor = (v: string) =>
-  v === "PASS" ? palette.accent2 : v === "FAIL" ? palette.bad : palette.warn;
+  v === 'PASS' ? palette.accent2 : v === 'FAIL' ? palette.bad : palette.warn;
 
 /** Negatif çıkış kodu, sürecin sinyalle öldürüldüğü anlamına gelir (-15 = SIGTERM). */
 const isSignalExit = (code: number | null) => code !== null && code < 0;
 
-const stateColor = (s: BoardItem["state"]) =>
-  s === "PASS"
+const stateColor = (s: BoardItem['state']) =>
+  s === 'PASS'
     ? palette.accent2
-    : s === "WARN"
+    : s === 'WARN'
       ? palette.warn
-      : s === "FAIL"
+      : s === 'FAIL'
         ? palette.bad
         : palette.faint;
 
-const stateGlyph = (s: BoardItem["state"]) =>
-  s === "PASS" ? "✓" : s === "WARN" ? "⚠" : s === "FAIL" ? "✕" : "?";
+const stateGlyph = (s: BoardItem['state']) =>
+  s === 'PASS' ? '✓' : s === 'WARN' ? '⚠' : s === 'FAIL' ? '✕' : '?';
 
 /** Gerçek K katmanı durumu: SKIP "koşmadı"dır, FAIL değildir. */
 const gateColor = (s: GateStatus) =>
-  s === "PASS"
+  s === 'PASS'
     ? palette.accent2
-    : s === "FAIL"
+    : s === 'FAIL'
       ? palette.bad
-      : s === "SKIP"
+      : s === 'SKIP'
         ? palette.warn
         : palette.faint;
 
 /** history satırındaki kapı durumu (WARN taşır) için renk. */
 const historyGateColor = (s: string) =>
-  s === "PASS"
+  s === 'PASS'
     ? palette.accent2
-    : s === "FAIL"
+    : s === 'FAIL'
       ? palette.bad
-      : s === "WARN"
+      : s === 'WARN'
         ? palette.warn
-        : s === "SKIP"
+        : s === 'SKIP'
           ? palette.faint
           : palette.line;
 
 const gateGlyph = (s: GateStatus) =>
-  s === "PASS" ? "✓" : s === "FAIL" ? "✕" : s === "SKIP" ? "–" : "?";
+  s === 'PASS' ? '✓' : s === 'FAIL' ? '✕' : s === 'SKIP' ? '–' : '?';
 
-const gateToBoardState = (s: GateStatus): BoardItem["state"] =>
-  s === "PASS"
-    ? "PASS"
-    : s === "FAIL"
-      ? "FAIL"
-      : s === "SKIP"
-        ? "WARN"
-        : "UNKNOWN";
+const gateToBoardState = (s: GateStatus): BoardItem['state'] =>
+  s === 'PASS'
+    ? 'PASS'
+    : s === 'FAIL'
+      ? 'FAIL'
+      : s === 'SKIP'
+        ? 'WARN'
+        : 'UNKNOWN';
 
 const gateTag = (s: GateStatus) =>
-  s === "PASS"
-    ? "GEÇTİ"
-    : s === "FAIL"
-      ? "KALDI"
-      : s === "SKIP"
-        ? "KOŞMADI"
-        : "KAYIT YOK";
+  s === 'PASS'
+    ? 'GEÇTİ'
+    : s === 'FAIL'
+      ? 'KALDI'
+      : s === 'SKIP'
+        ? 'KOŞMADI'
+        : 'KAYIT YOK';
 
 const runStamp = (run: GateRun | undefined) => {
-  if (!run) return "klayers raporu yok";
+  if (!run) return 'klayers raporu yok';
   const at = run.created_at
-    ? run.created_at.replace("T", " ").replace("Z", "")
-    : "zaman yok";
-  return `${run.run_id ? `verify #${run.run_id}` : "yerel klayers.json"} · ${at}`;
+    ? run.created_at.replace('T', ' ').replace('Z', '')
+    : 'zaman yok';
+  return `${run.run_id ? `verify #${run.run_id}` : 'yerel klayers.json'} · ${at}`;
 };
 
 /** {FAIL: 7} + toplam 7 → "FAIL 7/7"; sentinel (toplam 0) → "—". */
 const tally = (rec: Record<string, number>, total: number) =>
   total === 0
-    ? "—"
+    ? '—'
     : Object.entries(rec)
         .map(([k, v]) => `${k} ${v}/${total}`)
-        .join(" · ");
+        .join(' · ');
 
 type BarSegment = { key: string; count: number; color: string };
 
@@ -182,8 +182,8 @@ const StackBar: React.FC<{
   return (
     <div
       style={{
-        display: "flex",
-        alignItems: "center",
+        display: 'flex',
+        alignItems: 'center',
         gap: 18,
         marginBottom: 11,
       }}
@@ -197,7 +197,7 @@ const StackBar: React.FC<{
         style={{
           width: TRACK_W,
           height: 22,
-          position: "relative",
+          position: 'relative',
           backgroundColor: palette.bgSoft,
           flexShrink: 0,
         }}
@@ -211,21 +211,21 @@ const StackBar: React.FC<{
             <div
               key={s.key}
               style={{
-                position: "absolute",
+                position: 'absolute',
                 left: `${left * 100}%`,
                 top: 0,
                 bottom: 0,
                 width: `${share * 100}%`,
-                overflow: "hidden",
+                overflow: 'hidden',
               }}
             >
               <div
                 style={{
-                  position: "absolute",
+                  position: 'absolute',
                   left: 0,
                   top: 0,
                   bottom: 0,
-                  width: p > 0 ? `${100 / p}%` : "0%",
+                  width: p > 0 ? `${100 / p}%` : '0%',
                   backgroundColor: s.color,
                   opacity: 0.9,
                 }}
@@ -236,7 +236,7 @@ const StackBar: React.FC<{
         {total === 0 ? (
           <div
             style={{
-              position: "absolute",
+              position: 'absolute',
               inset: 0,
               border: `1px solid ${palette.line}`,
             }}
@@ -252,22 +252,22 @@ const StackBar: React.FC<{
 
 /** 0–100% cetveli — çubukların altına, aynı hizada. */
 const Ruler: React.FC = () => (
-  <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
+  <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
     <div style={{ width: 100, flexShrink: 0 }} />
-    <div style={{ width: TRACK_W, position: "relative", height: 14 }}>
+    <div style={{ width: TRACK_W, position: 'relative', height: 14 }}>
       {[0, 25, 50, 75, 100].map((t) => (
         <div
           key={t}
           style={{
-            position: "absolute",
+            position: 'absolute',
             left: `${t}%`,
             top: 0,
             transform:
               t === 0
-                ? "none"
+                ? 'none'
                 : t === 100
-                  ? "translateX(-100%)"
-                  : "translateX(-50%)",
+                  ? 'translateX(-100%)'
+                  : 'translateX(-50%)',
           }}
         >
           <Mono size={10} color={palette.faint}>
@@ -280,7 +280,7 @@ const Ruler: React.FC = () => (
 );
 
 /** status_board kalemi rozeti. */
-const Chip: React.FC<{ label: string; state: BoardItem["state"] }> = ({
+const Chip: React.FC<{ label: string; state: BoardItem['state'] }> = ({
   label,
   state,
 }) => {
@@ -290,9 +290,9 @@ const Chip: React.FC<{ label: string; state: BoardItem["state"] }> = ({
       style={{
         border: `1px solid ${c}`,
         backgroundColor: palette.bgSoft,
-        padding: "5px 11px",
-        display: "flex",
-        alignItems: "center",
+        padding: '5px 11px',
+        display: 'flex',
+        alignItems: 'center',
         gap: 7,
       }}
     >
@@ -315,10 +315,10 @@ export const Title: React.FC<{ data: LeibnizData; lengthInFrames: number }> = ({
   const m = data.meta;
 
   const stats = [
-    { k: "ÇÖZÜNÜRLÜK", v: `${m.width}×${m.height}` },
-    { k: "KARE HIZI", v: `${m.fps} fps` },
-    { k: "UZUNLUK", v: `${m.frames} kare` },
-    { k: "SÜRE", v: `${m.duration_s.toFixed(2)} sn` },
+    { k: 'ÇÖZÜNÜRLÜK', v: `${m.width}×${m.height}` },
+    { k: 'KARE HIZI', v: `${m.fps} fps` },
+    { k: 'UZUNLUK', v: `${m.frames} kare` },
+    { k: 'SÜRE', v: `${m.duration_s.toFixed(2)} sn` },
   ];
 
   return (
@@ -326,9 +326,9 @@ export const Title: React.FC<{ data: LeibnizData; lengthInFrames: number }> = ({
       <div
         style={{
           flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
         }}
       >
         {/* Visible on frame 0 — the file must not open on an empty black card. */}
@@ -339,7 +339,7 @@ export const Title: React.FC<{ data: LeibnizData; lengthInFrames: number }> = ({
         <Reveal p={stage(f, 6, 18)} distance={26}>
           <div
             style={{
-              fontFamily: "system-ui, -apple-system, sans-serif",
+              fontFamily: 'system-ui, -apple-system, sans-serif',
               fontSize: 88,
               fontWeight: 700,
               color: palette.text,
@@ -356,7 +356,7 @@ export const Title: React.FC<{ data: LeibnizData; lengthInFrames: number }> = ({
         <Reveal p={stage(f, 14, 18)} distance={20}>
           <div
             style={{
-              fontFamily: "system-ui, -apple-system, sans-serif",
+              fontFamily: 'system-ui, -apple-system, sans-serif',
               fontSize: 30,
               fontWeight: 400,
               color: palette.dim,
@@ -374,7 +374,7 @@ export const Title: React.FC<{ data: LeibnizData; lengthInFrames: number }> = ({
         </Reveal>
         <div style={{ height: 30 }} />
 
-        <div style={{ display: "flex", gap: 52 }}>
+        <div style={{ display: 'flex', gap: 52 }}>
           {stats.map((item, i) => (
             <Reveal key={item.k} p={stage(f, 28 + i * 7, 14)} distance={14}>
               <Sans size={13} color={palette.faint} letter={1.8}>
@@ -416,15 +416,15 @@ const RunRow: React.FC<{
   return (
     <div
       style={{
-        display: "flex",
-        alignItems: "center",
+        display: 'flex',
+        alignItems: 'center',
         gap: 18,
         marginBottom: 10,
       }}
     >
       <div style={{ width: 24 }}>
         <Mono size={14} color={palette.faint}>
-          {String(run.n).padStart(2, "0")}
+          {String(run.n).padStart(2, '0')}
         </Mono>
       </div>
       <div style={{ width: 96 }}>
@@ -435,18 +435,18 @@ const RunRow: React.FC<{
       {/* Her sütun KENDI genişliğinde: süre etiketi mutlak konumlanırsa
           verdict sütununa biner ve iki satıra sarar (ölçüldü: 250. kare). */}
       <div
-        style={{ width: 340, height: 16, position: "relative", flexShrink: 0 }}
+        style={{ width: 340, height: 16, position: 'relative', flexShrink: 0 }}
       >
         <div
           style={{
-            position: "absolute",
+            position: 'absolute',
             inset: 0,
             backgroundColor: palette.bgSoft,
           }}
         />
         <div
           style={{
-            position: "absolute",
+            position: 'absolute',
             left: 0,
             top: 0,
             bottom: 0,
@@ -456,7 +456,7 @@ const RunRow: React.FC<{
         />
         <div
           style={{
-            position: "absolute",
+            position: 'absolute',
             left: 0,
             top: 0,
             bottom: 0,
@@ -468,7 +468,7 @@ const RunRow: React.FC<{
       </div>
       <div style={{ width: 70 }}>
         <Mono size={14} color={palette.dim}>
-          {run.duration_s !== null ? `${run.duration_s.toFixed(2)} s` : "—"}
+          {run.duration_s !== null ? `${run.duration_s.toFixed(2)} s` : '—'}
         </Mono>
       </div>
       <div style={{ width: 48 }}>
@@ -479,7 +479,7 @@ const RunRow: React.FC<{
       <div style={{ width: 54 }}>
         <Mono size={14} color={signal ? palette.bad : palette.dim}>
           {run.exit_code === null
-            ? "—"
+            ? '—'
             : signal
               ? `−${Math.abs(run.exit_code)}`
               : String(run.exit_code)}
@@ -530,32 +530,32 @@ export const Timeline: React.FC<{
 
   const exitTrail =
     total === 0
-      ? "—"
+      ? '—'
       : span.exits
           .map(
             (e) =>
-              `${e.code === null ? "?" : e.code < 0 ? `−${Math.abs(e.code)}` : e.code}` +
-              `${e.signal ? ` ${e.signal}` : ""} ${e.count}/${total}`
+              `${e.code === null ? '?' : e.code < 0 ? `−${Math.abs(e.code)}` : e.code}` +
+              `${e.signal ? ` ${e.signal}` : ''} ${e.count}/${total}`
           )
-          .join(" · ");
+          .join(' · ');
   const signalExit = span.exits.find((e) => isSignalExit(e.code));
 
   // Tek sonuçlu dağılımda grafik tek renkli olur; bu bir görsel hata değil,
   // verinin kendisi. Not bunu açıkça söyler ve yeşil koşu UYDURMAZ.
   const note = span.data_missing
-    ? "veri yok (temiz klon / CI) — dağılım iskeleti doğrulandı"
+    ? 'veri yok (temiz klon / CI) — dağılım iskeleti doğrulandı'
     : verdictKeys.length === 1
-      ? `tek sonuçlu dağılım: ${total}/${total} koşu ${verdictKeys[0]} — P0=P1=0, bulgu yok; hepsi exit=${signalExit?.code ?? "?"} (${signalExit?.signal ?? "sinyal yok"}) ile kesildi, geçen koşu KAYIT YOK.`
+      ? `tek sonuçlu dağılım: ${total}/${total} koşu ${verdictKeys[0]} — P0=P1=0, bulgu yok; hepsi exit=${signalExit?.code ?? '?'} (${signalExit?.signal ?? 'sinyal yok'}) ile kesildi, geçen koşu KAYIT YOK.`
       : `toplam ${sev.findings} bulgu · P0=${sev.p0} P1=${sev.p1} · sapma ${tally(span.drift, total)}`;
 
   const metrics = [
-    { k: "P0", v: `${sev.p0}` },
-    { k: "P1", v: `${sev.p1}` },
-    { k: "BULGU", v: `${sev.findings}` },
-    { k: "SAPMA", v: tally(span.drift, total) },
-    { k: "Z3", v: `${sev.z3_passed}/${sev.z3_total}` },
+    { k: 'P0', v: `${sev.p0}` },
+    { k: 'P1', v: `${sev.p1}` },
+    { k: 'BULGU', v: `${sev.findings}` },
+    { k: 'SAPMA', v: tally(span.drift, total) },
+    { k: 'Z3', v: `${sev.z3_passed}/${sev.z3_total}` },
     {
-      k: "KAPI TELEMETRISI",
+      k: 'KAPI TELEMETRISI',
       v: `${span.telemetry.reported.length}/${span.telemetry.columns}`,
     },
   ];
@@ -572,13 +572,13 @@ export const Timeline: React.FC<{
       <div style={{ height: 10 }} />
       <Reveal p={stage(f, 12, 16)}>
         <Mono size={16} color={palette.dim}>
-          _calisma/CIKTI/history.jsonl ·{" "}
+          _calisma/CIKTI/history.jsonl ·{' '}
           {span.data_missing
-            ? "veri yok (temiz klon / CI)"
+            ? 'veri yok (temiz klon / CI)'
             : `${span.count} kayıt · ${span.first} → ${span.last}` +
               (shownRuns.length < data.runs.length
                 ? ` · son ${shownRuns.length} koşu`
-                : "")}
+                : '')}
         </Mono>
       </Reveal>
 
@@ -592,7 +592,7 @@ export const Timeline: React.FC<{
 
       <div
         style={{
-          marginTop: "auto",
+          marginTop: 'auto',
           borderTop: `1px solid ${palette.line}`,
           paddingTop: 18,
         }}
@@ -624,11 +624,11 @@ export const Timeline: React.FC<{
         </Reveal>
 
         <Reveal p={stage(f, 136, 16)}>
-          <div style={{ display: "flex", gap: 26, marginTop: 18 }}>
+          <div style={{ display: 'flex', gap: 26, marginTop: 18 }}>
             {metrics.map((m) => (
               <div
                 key={m.k}
-                style={{ display: "flex", alignItems: "baseline", gap: 8 }}
+                style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}
               >
                 <Sans size={11} color={palette.faint} letter={1.4}>
                   {m.k}
@@ -646,8 +646,8 @@ export const Timeline: React.FC<{
             <div
               style={{
                 marginTop: 16,
-                display: "flex",
-                alignItems: "center",
+                display: 'flex',
+                alignItems: 'center',
                 gap: 12,
               }}
             >
@@ -656,15 +656,15 @@ export const Timeline: React.FC<{
               </Sans>
               <Mono size={12} color={palette.dim}>
                 #{data.gates.break.latest.n} {data.gates.break.latest.ts}
-                {" · "}
+                {' · '}
                 {`exit ${data.gates.break.latest.exit_code}`}
                 {data.gates.break.latest.signal
                   ? ` (${data.gates.break.latest.signal})`
-                  : ""}
-                {" · "}
+                  : ''}
+                {' · '}
                 {data.gates.break.latest.reported}/16 kapı raporlu
               </Mono>
-              <div style={{ display: "flex", gap: 3 }}>
+              <div style={{ display: 'flex', gap: 3 }}>
                 {data.gates.break.latest.gates.map((gate) => (
                   <div
                     key={gate.id}
@@ -687,13 +687,13 @@ export const Timeline: React.FC<{
                 }
               >
                 {data.gates.break.latest.failed.length
-                  ? `FAIL: ${data.gates.break.latest.failed.join(" ")}`
+                  ? `FAIL: ${data.gates.break.latest.failed.join(' ')}`
                   : data.gates.break.latest.outside_failed.length
-                    ? `K0–K15 temiz · kapsam dışı FAIL: ${data.gates.break.latest.outside_failed.join(" ")}`
+                    ? `K0–K15 temiz · kapsam dışı FAIL: ${data.gates.break.latest.outside_failed.join(' ')}`
                     : `FAIL kapı yok · kaynak: ${
                         data.gates.break.latest.layers_reported
-                          ? "layers"
-                          : "status_board"
+                          ? 'layers'
+                          : 'status_board'
                       }`}
               </Mono>
             </div>
@@ -705,7 +705,7 @@ export const Timeline: React.FC<{
                     `exit ${data.gates.break.newest.exit_code}` +
                     (data.gates.break.newest.signal
                       ? ` (${data.gates.break.newest.signal})`
-                      : "") +
+                      : '') +
                     ` · ${data.gates.break.newest.reported}/16 kapı raporlu`}
                 </Mono>
               </div>
@@ -744,9 +744,9 @@ export const Evidence: React.FC<{
 
       <div
         style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gridAutoRows: "1fr",
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gridAutoRows: '1fr',
           gap: 24,
           flex: 1,
           minHeight: 0,
@@ -761,11 +761,11 @@ export const Evidence: React.FC<{
               border: `1px solid ${palette.line}`,
               borderLeft: `3px solid ${card.ok ? palette.accent2 : palette.warn}`,
               backgroundColor: palette.bgSoft,
-              padding: "26px 30px",
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "center",
-              boxSizing: "border-box",
+              padding: '26px 30px',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              boxSizing: 'border-box',
             }}
           >
             <Sans size={14} color={palette.faint} letter={2}>
@@ -813,7 +813,7 @@ export const GateChain: React.FC<{
     g.all.map((id) => ({
       id,
       label: g.names[id],
-      status: "MISSING" as GateStatus,
+      status: 'MISSING' as GateStatus,
       ran: false,
       findings: 0,
     }));
@@ -826,16 +826,16 @@ export const GateChain: React.FC<{
 
   // Bu sahne yalnız klayers kaydını konuşur: yerel history.jsonl'ın
   // status_board'u BAŞKA bir koşuya ait olabilir, karıştırılmaz.
-  const k0 = layers.find((layer) => layer.id === "K0");
-  const k0State = gateToBoardState(k0?.status ?? "MISSING");
-  const aggregateState: BoardItem["state"] =
+  const k0 = layers.find((layer) => layer.id === 'K0');
+  const k0State = gateToBoardState(k0?.status ?? 'MISSING');
+  const aggregateState: BoardItem['state'] =
     counts.fail > 0
-      ? "FAIL"
+      ? 'FAIL'
       : counts.missing > 0
-        ? "UNKNOWN"
+        ? 'UNKNOWN'
         : counts.skip > 0
-          ? "WARN"
-          : "PASS";
+          ? 'WARN'
+          : 'PASS';
 
   // Zincir soldan sağa tarar: her düğüm kendi GERÇEK durumuyla yanar.
   const revealStart = 12;
@@ -854,18 +854,18 @@ export const GateChain: React.FC<{
       <div style={{ height: 10 }} />
       <div
         style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "flex-end",
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-end',
         }}
       >
         <Reveal p={stage(f, 6, 16)}>
           <Heading>Kapı zinciri K0–K15</Heading>
         </Reveal>
         <Reveal p={stage(f, 10, 14)}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <Mono size={10} color={palette.faint} letter={1.4}>
-              KOŞU {runCount > 0 ? `${runIndex + 1}/${runCount}` : "YOK"}
+              KOŞU {runCount > 0 ? `${runIndex + 1}/${runCount}` : 'YOK'}
             </Mono>
             {shown.map((r, i) => (
               <div
@@ -886,22 +886,22 @@ export const GateChain: React.FC<{
         <Mono size={13} color={palette.dim}>
           {runCount > 0
             ? `klayers.json · son ${runCount} koşu · her düğüm gerçek PASS / FAIL / SKIP`
-            : "klayers.json · canlı koşu verisi yok"}
+            : 'klayers.json · canlı koşu verisi yok'}
         </Mono>
       </Reveal>
 
       <div
         style={{
           marginTop: 16,
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "baseline",
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'baseline',
         }}
       >
         <Mono size={10} color={palette.faint}>
           {data.gate_chain.data_missing
-            ? "K KATMANI RAPORU YOK — 16 KAPI KAYIT YOK"
-            : `16/16 KAPI · ${data.gate_chain.complete ? "TAM KAYIT" : "EKSİK KAYIT"}`}
+            ? 'K KATMANI RAPORU YOK — 16 KAPI KAYIT YOK'
+            : `16/16 KAPI · ${data.gate_chain.complete ? 'TAM KAYIT' : 'EKSİK KAYIT'}`}
         </Mono>
         <Mono size={10} color={palette.accent}>
           {runStamp(run)}
@@ -913,8 +913,8 @@ export const GateChain: React.FC<{
           <div
             key={ri}
             style={{
-              display: "flex",
-              alignItems: "stretch",
+              display: 'flex',
+              alignItems: 'stretch',
               marginBottom: ri < rows.length - 1 ? 10 : 0,
             }}
           >
@@ -929,14 +929,14 @@ export const GateChain: React.FC<{
                     <div
                       style={{
                         width: 12,
-                        display: "flex",
-                        alignItems: "center",
+                        display: 'flex',
+                        alignItems: 'center',
                         flexShrink: 0,
                       }}
                     >
                       <div
                         style={{
-                          width: "100%",
+                          width: '100%',
                           height: 2,
                           backgroundColor: idx <= active ? color : palette.line,
                           opacity: idx <= active ? 0.85 : 0.55,
@@ -957,19 +957,19 @@ export const GateChain: React.FC<{
                         border: `1px solid ${isActive ? color : palette.line}`,
                         borderTop: `2px solid ${p > 0.55 ? color : palette.line}`,
                         backgroundColor: palette.bgSoft,
-                        padding: "8px 9px 7px",
-                        boxSizing: "border-box",
-                        display: "flex",
-                        flexDirection: "column",
-                        opacity: layer.status === "MISSING" ? 0.62 : 1,
+                        padding: '8px 9px 7px',
+                        boxSizing: 'border-box',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        opacity: layer.status === 'MISSING' ? 0.62 : 1,
                         boxShadow: isActive ? `0 0 18px ${color}22` : undefined,
                       }}
                     >
                       <div
                         style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
                         }}
                       >
                         <Mono size={16} color={palette.text} weight={600}>
@@ -979,7 +979,7 @@ export const GateChain: React.FC<{
                           size={13}
                           color={p > 0.55 ? color : palette.faint}
                         >
-                          {p > 0.55 ? gateGlyph(layer.status) : ""}
+                          {p > 0.55 ? gateGlyph(layer.status) : ''}
                         </Mono>
                       </div>
                       <div style={{ height: 4 }} />
@@ -991,7 +991,7 @@ export const GateChain: React.FC<{
                           lineHeight: 1.2,
                           color: palette.dim,
                           height: 22,
-                          overflow: "hidden",
+                          overflow: 'hidden',
                         }}
                       >
                         {layer.label}
@@ -1002,10 +1002,10 @@ export const GateChain: React.FC<{
                         color={p > 0.55 ? color : palette.faint}
                         letter={0.8}
                       >
-                        {p > 0.55 ? gateTag(layer.status) : ""}
+                        {p > 0.55 ? gateTag(layer.status) : ''}
                         {p > 0.55 && layer.findings > 0
                           ? ` +${layer.findings}`
-                          : ""}
+                          : ''}
                       </Mono>
                     </div>
                   </Reveal>
@@ -1019,12 +1019,12 @@ export const GateChain: React.FC<{
       <div
         style={{
           marginTop: 12,
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "baseline",
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'baseline',
         }}
       >
-        <div style={{ display: "flex", alignItems: "baseline", gap: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 14 }}>
           <Mono
             size={18}
             weight={600}
@@ -1049,10 +1049,10 @@ export const GateChain: React.FC<{
       <Reveal p={stage(f, 164, 16)}>
         <div
           style={{
-            display: "flex",
-            alignItems: "center",
+            display: 'flex',
+            alignItems: 'center',
             gap: 8,
-            flexWrap: "wrap",
+            flexWrap: 'wrap',
             marginTop: 10,
           }}
         >
@@ -1062,7 +1062,7 @@ export const GateChain: React.FC<{
           <Chip label="K0" state={k0State} />
           <Chip label="K katmanları" state={aggregateState} />
           <Mono size={10} color={palette.faint}>
-            {run?.verdict ? `verdict ${run.verdict}` : "verdict yok"} ·
+            {run?.verdict ? `verdict ${run.verdict}` : 'verdict yok'} ·
             klayers.json
           </Mono>
         </div>
@@ -1070,7 +1070,7 @@ export const GateChain: React.FC<{
 
       {runCount > 0 ? (
         <Reveal p={stage(f, 176, 16)}>
-          <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+          <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
             {shown.map((r, i) => {
               const activeRun = i === runIndex;
               const total =
@@ -1079,63 +1079,63 @@ export const GateChain: React.FC<{
                 r.counts.skip +
                 r.counts.missing;
               const share = (n: number) =>
-                total > 0 ? `${(100 * n) / total}%` : "0%";
+                total > 0 ? `${(100 * n) / total}%` : '0%';
               return (
                 <div
                   key={r.run_id ?? i}
                   style={{
                     flex: 1,
                     border: `1px solid ${activeRun ? palette.accent : palette.line}`,
-                    backgroundColor: activeRun ? palette.bgSoft : "transparent",
-                    padding: "8px 11px",
+                    backgroundColor: activeRun ? palette.bgSoft : 'transparent',
+                    padding: '8px 11px',
                   }}
                 >
                   <div
                     style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "baseline",
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'baseline',
                     }}
                   >
                     <Mono
                       size={10}
                       color={activeRun ? palette.text : palette.faint}
                     >
-                      {r.run_id ? `verify #${r.run_id}` : "yerel klayers"}
+                      {r.run_id ? `verify #${r.run_id}` : 'yerel klayers'}
                     </Mono>
                     <Mono
                       size={9}
                       color={
-                        r.verdict === "PASS"
+                        r.verdict === 'PASS'
                           ? palette.accent2
-                          : r.verdict === "FAIL"
+                          : r.verdict === 'FAIL'
                             ? palette.bad
                             : palette.faint
                       }
                     >
-                      {r.verdict ?? "?"}
+                      {r.verdict ?? '?'}
                     </Mono>
                   </div>
                   <div style={{ height: 5 }} />
                   <div
-                    style={{ display: "flex", alignItems: "baseline", gap: 9 }}
+                    style={{ display: 'flex', alignItems: 'baseline', gap: 9 }}
                   >
                     <Mono size={17} color={palette.accent2} weight={600}>
                       {r.counts.pass} ✓
                     </Mono>
                     <Mono size={10} color={palette.dim}>
-                      {r.counts.fail} ✕ · {r.counts.skip} KOŞMADI ·{" "}
+                      {r.counts.fail} ✕ · {r.counts.skip} KOŞMADI ·{' '}
                       {r.counts.missing} KAYIT YOK
                     </Mono>
                   </div>
                   <div style={{ height: 6 }} />
                   <div
                     style={{
-                      display: "flex",
+                      display: 'flex',
                       height: 3,
-                      width: "100%",
+                      width: '100%',
                       backgroundColor: palette.line,
-                      overflow: "hidden",
+                      overflow: 'hidden',
                     }}
                   >
                     <div
@@ -1183,8 +1183,8 @@ const HashRow: React.FC<{
   const p = stage(frame, 14 + offset * 15, 16);
   const reveal = Math.floor(
     interpolate(p, [0, 1], [0, value.length], {
-      extrapolateLeft: "clamp",
-      extrapolateRight: "clamp",
+      extrapolateLeft: 'clamp',
+      extrapolateRight: 'clamp',
     })
   );
 
@@ -1194,12 +1194,12 @@ const HashRow: React.FC<{
         {label.toUpperCase()}
       </Sans>
       <div style={{ height: 10 }} />
-      <div style={{ display: "flex", flexWrap: "wrap", width: 1100 }}>
-        {value.split("").map((ch, i) => (
+      <div style={{ display: 'flex', flexWrap: 'wrap', width: 1100 }}>
+        {value.split('').map((ch, i) => (
           <span
             key={i}
             style={{
-              fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
               fontSize: 22,
               color: i < reveal ? palette.text : palette.line,
               width: 17.2,
@@ -1271,17 +1271,17 @@ export const Closing: React.FC<{
   return (
     <div
       style={{
-        width: "100%",
-        height: "100%",
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "center",
-        alignItems: "center",
+        width: '100%',
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'center',
         backgroundColor: palette.bg,
         backgroundImage: `radial-gradient(circle at 50% 45%, ${palette.bgSoft} 0%, ${palette.bg} 72%)`,
         opacity: interpolate(f, [0, 12], [0, 1], {
-          extrapolateLeft: "clamp",
-          extrapolateRight: "clamp",
+          extrapolateLeft: 'clamp',
+          extrapolateRight: 'clamp',
         }),
       }}
     >
@@ -1291,7 +1291,7 @@ export const Closing: React.FC<{
       <div style={{ height: 26 }} />
       <div
         style={{
-          fontFamily: "system-ui, -apple-system, sans-serif",
+          fontFamily: 'system-ui, -apple-system, sans-serif',
           fontSize: 56,
           fontWeight: 700,
           color: palette.text,
@@ -1302,7 +1302,7 @@ export const Closing: React.FC<{
       </div>
       <div style={{ height: 20 }} />
       <Mono size={18} color={palette.dim}>
-        {data.meta.width}×{data.meta.height} · {data.meta.fps} fps ·{" "}
+        {data.meta.width}×{data.meta.height} · {data.meta.fps} fps ·{' '}
         {data.meta.frames} kare · {data.meta.duration_s.toFixed(2)} sn
       </Mono>
       <div style={{ height: 40 }} />
