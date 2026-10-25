@@ -25,6 +25,7 @@
 | 2026-10-25 | ac0dcfb4 | [success #40158081378](https://github.com/ali-han-kaya/leibniz2/actions/runs/40158081378) | [success #40158081340](https://github.com/ali-han-kaya/leibniz2/actions/runs/40158081340) | [success #40158081344](https://github.com/ali-han-kaya/leibniz2/actions/runs/40158081344) | [success #39226471244](https://github.com/ali-han-kaya/leibniz2/actions/runs/39226471244) |
 | 2026-10-25 | 865de95f | [failure #40166763530](https://github.com/ali-han-kaya/leibniz2/actions/runs/40166763530) | [success #40166763478](https://github.com/ali-han-kaya/leibniz2/actions/runs/40166763478) | [success #40166763477](https://github.com/ali-han-kaya/leibniz2/actions/runs/40166763477) | [success #39226471244](https://github.com/ali-han-kaya/leibniz2/actions/runs/39226471244) |
 | 2026-10-25 | 0f6a9bb8 | [success #40187870000](https://github.com/ali-han-kaya/leibniz2/actions/runs/40187870000) | [success #40187870069](https://github.com/ali-han-kaya/leibniz2/actions/runs/40187870069) | [success #40187869999](https://github.com/ali-han-kaya/leibniz2/actions/runs/40187869999) | [success #40161574012](https://github.com/ali-han-kaya/leibniz2/actions/runs/40161574012) |
+| 2026-10-25 | ebe7940a | [success #40189881889](https://github.com/ali-han-kaya/leibniz2/actions/runs/40189881889) | [success #40189881952](https://github.com/ali-han-kaya/leibniz2/actions/runs/40189881952) | [success #40189881929](https://github.com/ali-han-kaya/leibniz2/actions/runs/40189881929) | [success #40161574012](https://github.com/ali-han-kaya/leibniz2/actions/runs/40161574012) |
 | 2026-10-25 | 9657090d | [success #40215426067](https://github.com/ali-han-kaya/leibniz2/actions/runs/40215426067) | [success #40215426043](https://github.com/ali-han-kaya/leibniz2/actions/runs/40215426043) | [success #40215426046](https://github.com/ali-han-kaya/leibniz2/actions/runs/40215426046) | [success #40161574012](https://github.com/ali-han-kaya/leibniz2/actions/runs/40161574012) |
 | 2026-10-25 | 42d618da | [success #40231742647](https://github.com/ali-han-kaya/leibniz2/actions/runs/40231742647) | [success #40231742728](https://github.com/ali-han-kaya/leibniz2/actions/runs/40231742728) | [success #40231742671](https://github.com/ali-han-kaya/leibniz2/actions/runs/40231742671) | [success #40161574012](https://github.com/ali-han-kaya/leibniz2/actions/runs/40161574012) |
 
@@ -75,6 +76,18 @@ yazar. Düzeltme ayrı dilimde: dead row prune'u (heal_changelog / #117-#118);
 `docker-security` #40166763478 ve `test-smoke` #40166763477 success, üçü de
 `headSha=865de95f`, `event=push`. `determinism-trend` hücresi son main
 ölçümünü taşır (#39226471244).
+
+`ebe7940a` — PR #121 (`docs(deploy): 0f6a9bb8 kanit satirini deftere ekle`)
+squash'ı: kendi push koşumları 2026-10-25T11:40:55Z'de üçü de success
+(`event=push`, `headSha=ebe7940a`): `verify-delivery` #40189881889,
+`docker-security` #40189881952, `test-smoke` #40189881929 — hücreler
+API'den okunan canlı conclusion'larla birebir. `determinism-trend` hücresi
+son main ölçümünü taşır (#40161574012, `headSha=d782734a` success — bu
+HEAD adına ayrıca koşum yoktur, workflow `workflow_dispatch`/haftalıktır).
+Satır kronolojiye göre `0f6a9bb8` ile `9657090d` arasına girildi: en yeni
+satır `42d618da` kalır → HEAD boşluğu (≤3) ve canlı doğrulanan son 2 satır
+değişmez. Bu commit `docs(deploy)` → kendisi `DEFAULT_GAP_EXEMPT`.
+
 
 `0f6a9bb8` — PR #120 (`docs(deploy): 865de95f kanit satiri`) -- kaniti
 HEAD'in kendisine tasiyan satir; boylece `substantive_gap(0f6a9bb8, main)` =
