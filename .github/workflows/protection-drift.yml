@@ -57,9 +57,17 @@ jobs:
         with:
           python-version: "3.11"
 
-      # status_checks.gate_jobs() verify.yml'i ayrıştırır (aynı bağımlılık).
-      - name: Install pinned Python dependencies
-        run: pip install -r _calisma/requirements-z3.txt
+      # KURULUM ADIMI YOK — bilerek. Burada `-r _calisma/requirements-z3.txt`
+      # deniyordu; o dosya main'de hiç commit edilmedi (yalnız `ci/boot-gate-ci`
+      # ve `fix/restore-freebuff-id` dallarında), dolayısıyla adım
+      # "Could not open requirements file" ile düşüyor ve KAPI HİÇ KOŞMUYORDU
+      # (run 40161575769). verify.yml aynı tuzağı 2026-10-24'te satır-içi pinle
+      # kapatmıştı; burada bağımlılık yalnız token yokken de gerekmeyen PyYAML.
+      #
+      # DİKKAT: token YOKKEN script SKIP eder (rc=0) ve `status_checks.gate_jobs()`
+      # çağrılmaz — stdlib yeter. PROTECTION_PAT secret'ı EKLENİRSE bu yol
+      # gate_jobs()'a girer ve PyYAML ister (yoksa rc=2, fail-closed kırmızı).
+      # O gün buraya `pip install PyYAML==6.0.3` (dev_bootstrap.sh PINS) eklenmeli.
 
       - name: Branch protection drift denetimi (P1) + alert
         env:
