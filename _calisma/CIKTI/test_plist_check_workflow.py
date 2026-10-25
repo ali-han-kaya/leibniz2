@@ -77,11 +77,13 @@ class PlistP1FailClosedJobTests(unittest.TestCase):
         self.assertIn("PLIST-P1: PASS", self.job)
         self.assertIn("fail_closed", self.job)
 
-    def test_job_excluded_from_derived_required_set(self):
+    def test_job_is_in_derived_required_set(self):
+        """2026-10-25: canlı branch protection'a eklendi → türetimde de
+        required olmalı (EXCLUDE'da kalmak derived↔live drift üretirdi)."""
         sys.path.insert(0, str(ROOT / "_calisma" / "CIKTI"))
         import status_checks  # noqa: E402 — yol kurulduktan sonra
-        self.assertIn("plist-p1", status_checks.GATE_EXCLUDE)
-        self.assertNotIn("plist-p1", status_checks.gate_jobs())
+        self.assertNotIn("plist-p1", status_checks.GATE_EXCLUDE)
+        self.assertIn("plist-p1", status_checks.gate_jobs())
 
     def test_macos_advisory_job_points_at_blocking_gate(self):
         self.assertIn("blokaj plist-p1 job'ında", self.text)
