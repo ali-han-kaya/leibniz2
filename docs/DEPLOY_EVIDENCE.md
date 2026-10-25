@@ -23,6 +23,20 @@
 | 2026-10-25 | ffea1084 | [failure #40144190460](https://github.com/ali-han-kaya/leibniz2/actions/runs/40144190460) | [success #40144190522](https://github.com/ali-han-kaya/leibniz2/actions/runs/40144190522) | [success #40144190466](https://github.com/ali-han-kaya/leibniz2/actions/runs/40144190466) | [success #39226471244](https://github.com/ali-han-kaya/leibniz2/actions/runs/39226471244) |
 | 2026-10-25 | 930c41ad | [success #40146360577](https://github.com/ali-han-kaya/leibniz2/actions/runs/40146360577) | [success #40146360585](https://github.com/ali-han-kaya/leibniz2/actions/runs/40146360585) | [success #40146360587](https://github.com/ali-han-kaya/leibniz2/actions/runs/40146360587) | [success #39226471244](https://github.com/ali-han-kaya/leibniz2/actions/runs/39226471244) |
 | 2026-10-25 | ac0dcfb4 | [success #40158081378](https://github.com/ali-han-kaya/leibniz2/actions/runs/40158081378) | [success #40158081340](https://github.com/ali-han-kaya/leibniz2/actions/runs/40158081340) | [success #40158081344](https://github.com/ali-han-kaya/leibniz2/actions/runs/40158081344) | [success #39226471244](https://github.com/ali-han-kaya/leibniz2/actions/runs/39226471244) |
+| 2026-10-25 | 865de95f | [failure #40166763530](https://github.com/ali-han-kaya/leibniz2/actions/runs/40166763530) | [success #40166763478](https://github.com/ali-han-kaya/leibniz2/actions/runs/40166763478) | [success #40166763477](https://github.com/ali-han-kaya/leibniz2/actions/runs/40166763477) | [success #39226471244](https://github.com/ali-han-kaya/leibniz2/actions/runs/39226471244) |
+
+`865de95f` — PR #116 (`ci(plist): P1 plist drift kapisini ayri fail-closed
+job'a al`) squash inişi: `ac0dcfb4` satırının üstüne **anlamlı** commit olarak
+yalnız bu merge gelir (`d782734a` satırı `docs(deploy)` → `DEFAULT_GAP_EXEMPT`),
+yani boşluk 1/3. `verify-delivery` hücresi **failure**'dır (#40166763530) ve
+kök neden squash merge'in kendisidir: README changelog tablosu PR'ın kendi
+commit'ini (`74926cec`) gösteriyordu, squash sonrası o hash ulaşılamaz hale
+geldi ve `test_every_readme_changelog_hash_resolves_to_live_commit` kırmızıya
+döndü (AGENTS.md'deki bilinen tuzak). Satır bunu GİZLEMEZ — defter gerçeği
+yazar. Düzeltme ayrı dilimde: dead row prune'u (heal_changelog / #117-#118);
+`docker-security` #40166763478 ve `test-smoke` #40166763477 success, üçü de
+`headSha=865de95f`, `event=push`. `determinism-trend` hücresi son main
+ölçümünü taşır (#39226471244).
 
 `ac0dcfb4` — PR #113 (`feat(evidence): kanit boslugu uyari kademesi`) inişi:
 `930c41ad` satırının üstüne **üç anlamlı** commit geldi (PR #111 `ab13126d`,
