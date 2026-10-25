@@ -20,6 +20,22 @@
 | 2026-10-24 | 84e5b0b | [failure #40050753159](https://github.com/ali-han-kaya/leibniz2/actions/runs/40050753159) | [success #40050753136](https://github.com/ali-han-kaya/leibniz2/actions/runs/40050753136) | [success #40050753162](https://github.com/ali-han-kaya/leibniz2/actions/runs/40050753162) | [success #39226471244](https://github.com/ali-han-kaya/leibniz2/actions/runs/39226471244) |
 | 2026-10-24 | e6f1e9c6 | [failure #40072376535](https://github.com/ali-han-kaya/leibniz2/actions/runs/40072376535) | [success #40072376529](https://github.com/ali-han-kaya/leibniz2/actions/runs/40072376529) | [success #40072376545](https://github.com/ali-han-kaya/leibniz2/actions/runs/40072376545) | [success #39226471244](https://github.com/ali-han-kaya/leibniz2/actions/runs/39226471244) |
 | 2026-10-24 | 843284cc | [failure #40125253039](https://github.com/ali-han-kaya/leibniz2/actions/runs/40125253039) | [success #40125253000](https://github.com/ali-han-kaya/leibniz2/actions/runs/40125253000) | [success #40125253010](https://github.com/ali-han-kaya/leibniz2/actions/runs/40125253010) | [success #39226471244](https://github.com/ali-han-kaya/leibniz2/actions/runs/39226471244) |
+| 2026-10-25 | ffea1084 | [failure #40144190460](https://github.com/ali-han-kaya/leibniz2/actions/runs/40144190460) | [success #40144190522](https://github.com/ali-han-kaya/leibniz2/actions/runs/40144190522) | [success #40144190466](https://github.com/ali-han-kaya/leibniz2/actions/runs/40144190466) | [success #39226471244](https://github.com/ali-han-kaya/leibniz2/actions/runs/39226471244) |
+
+`ffea1084` — PR #90 (`fix/a11y-carryover`) inişi: `843284cc` satırının üstüne
+**4 anlamlı** commit geldi (PR #102 `69974276` feat(vercel), PR #95 `5b65e143`
+fix(ci), PR #93 `0f1f2c78` feat(ci) ve PR #90 `ffea1084`; `ca94563c`/`b6f548ae`
+`docs(deploy)` olduğundan sayılmadı; tolerans 3) → `verify-delivery` kırmızısı
+**yalnız** `test_deploy_evidence.test_cli_accepts_repo_ledger_offline`
+(CIKTI bataryası 115 testin tek FAIL'i; `test_gen_changelog` 72 test OK);
+bu satır tam olarak o açığı kapatıyor. `docker-security` ve `test-smoke` bu
+HEAD'de yeşil. `determinism-trend` hücresi son main ölçümünü taşır
+(`#39226471244`, sha `344767dc`) — bu workflow `workflow_dispatch` olduğu için
+`ffea1084` adına koşum yoktur. Not: #90 main ile çakışıyordu; çözümde
+`verify.yml`/`a11y_gate.py`/CSS main'e (#93) bırakıldı, #90'a özgü 4 davranış
+testi main'in yeni iskeletine taşındı ve squash'tan ölecek `1f449e3` changelog
+satırı silindi (ölü-hash kapısı yeşil kaldı).
+
 
 `843284cc` — PR #108 (`fix/changelog-prune-dead-hashes`) inişi: `e6f1e9c6`
 satırının üstüne **4 anlamlı** commit geldi (PR #55 squash'ı `76bcb7d5`,
