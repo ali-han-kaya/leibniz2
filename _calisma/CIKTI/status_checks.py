@@ -61,6 +61,11 @@ GATE_EXCLUDE = {
     "precheck",             # AŞAMA 0 advisory
     "label-gate-p1",        # PR-only: P1 etiket opsiyonel blokaj (required DEĞİL)
     "plist-check",          # macOS-advisory: push'ta çalışmaz
+    "plist-p1",             # fail-closed P1 kapısı (Linux) ama canlı
+                            #   required sette HENÜZ yok: job her push'ta
+                            #   kırmızıya dönebilir, required'a alınması
+                            #   branch-protection adımıdır (protected set
+                            #   ile türetim drift'e düşmesin diye excluded).
     "mirror-check",         # macOS: sync sonrası K17 fail-closed (advisory)
     "daemon-http",          # advisory: daemon-modu HTTP 200 smoke (advisory)
     "fresh-clone-http",      # advisory: temiz clone + preview HTTP smoke
