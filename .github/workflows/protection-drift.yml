@@ -57,17 +57,18 @@ jobs:
         with:
           python-version: "3.11"
 
-      # KURULUM ADIMI YOK — bilerek. Burada `-r _calisma/requirements-z3.txt`
-      # deniyordu; o dosya main'de hiç commit edilmedi (yalnız `ci/boot-gate-ci`
-      # ve `fix/restore-freebuff-id` dallarında), dolayısıyla adım
-      # "Could not open requirements file" ile düşüyor ve KAPI HİÇ KOŞMUYORDU
-      # (run 40161575769). verify.yml aynı tuzağı 2026-10-24'te satır-içi pinle
-      # kapatmıştı; burada bağımlılık yalnız token yokken de gerekmeyen PyYAML.
+      # PyYAML — PROTECTION_PAT KURULDU (2026-10-25): kapı artık SKIP değil,
+      # her koşumda korumayı okur → `status_checks.gate_jobs()` (verify.yml
+      # ayrıştırma) her koşumda çağrılır ve PyYAML ZORUNLU. Yoksa script
+      # fail-closed rc=2 verir ve kapı ölürdü.
       #
-      # DİKKAT: token YOKKEN script SKIP eder (rc=0) ve `status_checks.gate_jobs()`
-      # çağrılmaz — stdlib yeter. PROTECTION_PAT secret'ı EKLENİRSE bu yol
-      # gate_jobs()'a girer ve PyYAML ister (yoksa rc=2, fail-closed kırmızı).
-      # O gün buraya `pip install PyYAML==6.0.3` (dev_bootstrap.sh PINS) eklenmeli.
+      # NEDEN `-r _calisma/requirements-z3.txt` DEĞİL: o dosya main'de hiç
+      # commit edilmediği için eski adım "Could not open requirements file"
+      # ile düşüyor ve KAPI HİÇ KOŞMUYORDU (run 40161575769). Tek gerçek
+      # bağımlılık PyYAML; pin dev_bootstrap.sh PINS ile aynı (verify.yml de
+      # aynı pini kullanır).
+      - name: Install PyYAML (status_checks dependency)
+        run: pip install PyYAML==6.0.3
 
       - name: Branch protection drift denetimi (P1) + alert
         env:
