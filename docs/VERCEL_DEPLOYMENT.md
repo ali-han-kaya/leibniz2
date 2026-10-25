@@ -206,9 +206,35 @@ yazılır (sessiz PASS yok). URL çözümü: `base_url` girdisi →
 production-dışı + `readyState=READY` ilk kayıt). Üretim alias'ına
 **düşülmez** — bu kapı preview yüzeyini denetler; çözüm başarısızsa adım
 kırmızı (fail-closed) ve denetlenen kök `$GITHUB_STEP_SUMMARY`'a yazılır.
-git-connect 400 engeli yüzünden sabit preview alias'ı yok; bu yüzden URL
-her koşumda API'den çözülür (`vars.VERCEL_PROJECT_ID` ile proje
-override edilebilir). K1 kapı-paritesi (`test_gated_schedules`):
+
+### Sabit preview alias'ı (`leibniz2-preview.vercel.app`)
+
+2026-10-25'ten itibaren çözüm tek bir sabit ada dayanır:
+`vars.VERCEL_PREVIEW_URL = https://leibniz2-preview.vercel.app`. Alias, her
+preview deploy'unda `vercel-preview-deploy.yml`'in "Sabit preview alias"
+adımında yeni deployment'a yönlendirilir; alias `/api/health` 200 dönmezse o
+job kırmızı olur — aylık kapı eski bir deployment'ı "preview sağlıklı" diye
+raporlayamaz (sessiz bayat alias yok).
+
+- **Semantik:** alias **son preview deployment**'ı gösterir; branch ayrımı
+  yoktur. Bir PR dalının deploy'u alias'ı ilerletir — kapı bilinçli olarak
+  "en son yayınlanan preview yüzeyi"ni denetler.
+- `vars.VERCEL_PROJECT_ID = prj_VOVl5odaNOAU9i4B3rMc8xIFC0yd` (2026-10-25'te
+  ayarlandı; hardcoded fallback'e bağımlılık kalktı) yalnız fallback çözücü
+  (`vercel_latest_preview.py`) için gereklidir; normal yolda API'ye hiç
+  gidilmez.
+- **Ölçüm (2026-10-25):** `vercel alias set` + `check_vercel_deploy.py
+  --base-url https://leibniz2-preview.vercel.app` → `VERDICT: PASS`
+  (health `ok`, run-history 15 satır, slayt PNG 5131 bayt); ardından
+  `vercel-deploy-check` `workflow_dispatch` koşumu **success**, logda
+  `VERDICT: PASS — https://leibniz2-preview.vercel.app` (repo variable yolu
+  kullanıldı; API çözücü devreye girmedi).
+- **Neden alias:** git-connect 400 nedeniyle Vercel'in kendi branch alias'ı
+  (`leibniz2-git-<branch>-…vercel.app`) oluşmuyor; `leibniz2.vercel.app` ve
+  `leibniz2-sarkis-env.vercel.app` ise 2026-09-23 prod deployment'ına bağlı
+  (prod yüzeyi — bu kapı onlara bağlanmaz, prod fallback yasağı sürer).
+
+K1 kapı-paritesi (`test_gated_schedules`):
 akış YAML'da yeniden yazılmaz — job `actions/checkout@v7`
 (`action_pins.json`'da kayıtlı major 7) ile iner ve
 `_calisma/CIKTI/check_vercel_deploy.py`'i bir `run:` adımında çağırır;

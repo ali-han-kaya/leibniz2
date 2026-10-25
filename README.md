@@ -662,7 +662,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-24 | feat | (vercel) aylık deploy-check en güncel preview'ı denetler (#102) | [`69974276`](https://github.com/ali-han-kaya/leibniz2/commit/69974276) |
 | 2026-10-24 | docs | (deploy) 843284cc kanit satirini ekle (bayatlik kapisi) (#109) | [`ca94563c`](https://github.com/ali-han-kaya/leibniz2/commit/ca94563c) |
 | 2026-10-24 | fix | (changelog) olu hash satirlarini prune et (main'deki kirmizi kapali) (#108) | [`843284cc`](https://github.com/ali-han-kaya/leibniz2/commit/843284cc) |
-| 2026-10-25 | ci | (plist) P1 plist drift kapisini ayri fail-closed job'a al | [`74926cec`](https://github.com/ali-han-kaya/leibniz2/commit/74926cec) |
+| 2026-10-25 | ci | (plist) P1 plist drift kapisini ayri fail-closed job'a al (#116) | [`865de95f`](https://github.com/ali-han-kaya/leibniz2/commit/865de95f) |
 
 ### Regresyon notları
 

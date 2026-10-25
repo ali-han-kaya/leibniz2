@@ -131,5 +131,60 @@ class TestCheckVercelDeploy(unittest.TestCase):
         self.assertEqual(rc, 1)
 
 
+class TestStablePreviewAliasContract(unittest.TestCase):
+    """Sabit preview alias sözleşmesi (2026-10-25).
+
+    Aylık `vercel-deploy-check` artık Vercel API'sine bağlı kalmadan TEK bir
+    sabit adı denetler (`vars.VERCEL_PREVIEW_URL` =
+    `https://leibniz2-preview.vercel.app`). Bu, ancak alias her preview
+    deploy'unda ilerletilirse anlamlıdır; ilerletilmezse kapı eski bir
+    deployment'ı "preview sağlıklı" diye raporlar (sessiz yanlış-PASS).
+    """
+
+    ROOT = HERE.parent.parent
+    ALIAS = "leibniz2-preview.vercel.app"
+
+    def _text(self, workflow):
+        return (self.ROOT / ".github" / "workflows" / workflow).read_text(
+            encoding="utf-8")
+
+    def test_preview_deploy_advances_alias_after_deploy(self):
+        text = self._text("vercel-preview-deploy.yml")
+        self.assertIn(f"vercel alias set \"$PREVIEW_URL\" {self.ALIAS}", text)
+        deploy = text.index("- name: Preview deploy")
+        alias = text.index("- name: Sabit preview alias")
+        verify = text.index("- name: 4 /api ucu dogrulama")
+        self.assertLess(deploy, alias,
+                        "alias adımı deploy'dan ÖNCE çalışıyor (URL henüz yok)")
+        self.assertLess(alias, verify,
+                        "alias adımı /api doğrulamasından sonra (geç kalmış)")
+
+    def test_alias_step_is_fail_closed(self):
+        text = self._text("vercel-preview-deploy.yml")
+        start = text.index("- name: Sabit preview alias")
+        end = text.index("- name: 4 /api ucu dogrulama", start)
+        step = text[start:end]
+        self.assertIn("set -euo pipefail", step)
+        self.assertNotIn("continue-on-error", step,
+                         "alias kapısı advisory'e düşürülmüş")
+        self.assertIn("exit 1", step,
+                      "alias /api/health 200 dönmezse job kırılmalı")
+        self.assertIn("/api/health", step)
+
+    def test_monthly_check_reads_variable_and_never_falls_back_to_prod(self):
+        text = self._text("vercel-deploy-check.yml")
+        self.assertIn("vars.VERCEL_PREVIEW_URL", text)
+        self.assertNotIn("https://leibniz2.vercel.app", text,
+                         "prod alias'ı fallback olarak gömülmüş "
+                         "(2026-10-24 prod-fallback yasağı)")
+
+    def test_docs_name_the_same_alias(self):
+        doc = (self.ROOT / "docs" / "VERCEL_DEPLOYMENT.md").read_text(
+            encoding="utf-8")
+        self.assertIn(self.ALIAS, doc,
+                      "sabit alias dokümanda geçmiyor (doc↔workflow drift)")
+        self.assertIn("vars.VERCEL_PREVIEW_URL", doc)
+
+
 if __name__ == "__main__":
     unittest.main()
