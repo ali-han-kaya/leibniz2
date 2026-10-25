@@ -40,8 +40,8 @@ class TestGateCoverageSync(unittest.TestCase):
             "verify", "action-runtimes", "budget", "label-gate",
             "commit-msg-gate", "reports", "reproducibility", "config-drift",
             "config-sync", "repack-verify", "refs-trend",
-            "preview-reload-smoke", "ci-simulate", "a11y-gate",
-            "texlive-accept", "webkit-smoke",
+            "dashboard-smoke", "ci-simulate", "a11y-gate",
+            "texlive-accept", "plist-p1",
         })
 
     def test_every_required_gate_has_ci_coverage_or_is_explicit_aggregate(self):
@@ -51,9 +51,9 @@ class TestGateCoverageSync(unittest.TestCase):
         aggregate = {"verify", "ci-simulate", "all-hooks-smoke"}
         dedicated = {"action-runtimes", "budget", "label-gate", "commit-msg-gate",
                      "config-drift", "config-sync", "coverage-report-ci",
-                     "repack-verify", "preview-reload-smoke", "reports",
+                     "repack-verify", "plist-p1", "reports",
                      "reproducibility", "refs-trend", "a11y-gate",
-                     "texlive-accept", "webkit-smoke"}
+                     "texlive-accept", "dashboard-smoke"}
         missing = sorted(set(self.gates) - aggregate - dedicated)
         self.assertEqual(missing, [], f"required gate coverage missing: {missing}")
 
@@ -71,7 +71,7 @@ class TestGateCoverageSync(unittest.TestCase):
 
     def test_gate_coverage_is_not_empty(self):
         empty = sorted(jid for jid in self.gates
-                       if jid in self.ci_map and jid not in {"preview-reload-smoke"}
+                       if jid in self.ci_map and jid not in {"plist-p1"}
                        and not self.ci_map[jid]["test_count"])
         self.assertEqual(empty, [], f"required gates have no discovered tests: {empty}")
 

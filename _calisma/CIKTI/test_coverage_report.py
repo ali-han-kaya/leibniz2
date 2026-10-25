@@ -294,6 +294,8 @@ CI_JOB_COVERAGE = {
     "webkit-smoke": ["test_dashboard_webkit_smoke.py"],
     "daemon-http": ["test_daemon_http.py"],
     "plist-check": ["test_plist_gate_exit.py", "test_gen_plist_golden.py"],
+    # plist-p1 (Linux, fail-closed): workflow sozlesmesi + kapinin exit kodlari
+    "plist-p1": ["test_plist_check_workflow.py", "test_plist_gate_exit.py"],
     "coq-proof": ["test_coq_lake.py"],
     "ci-simulate": ["ALL"],
 }
