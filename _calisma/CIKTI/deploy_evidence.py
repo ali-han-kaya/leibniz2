@@ -24,15 +24,29 @@ fail-closed dogrular:
      Kosumun head_sha'si HEAD ile esitlenmez: determinism-trend satirlari o
      an guncel olan OLCEK olcum kosumunu da yazabilir.
 
+UYARI KADEMESI (--warn-head-gap, varsayilan 2 = max_head_gap - 1):
+  `--max-head-gap` (3) bir TOLERANSTIR; gap 3'te main hala YESIL, ama
+  SIRADAKI anlamli merge gap'i 4 yapar ve kapi kirmiziya doner. Bu yuzden
+  uyari iki kademelidir ve haftalik kosumu beklemez:
+      gap >= 2 → "toleransa yaklasiyor"
+      gap >= 3 → "SINIRDA: siradaki anlamli merge main'i kirmizi yapar"
+  Uyari ihLAL DEGILDIR: exit kodunu degistirmez, yalnizca stderr'e
+  (JSON'da "warnings") yazilir. `--gap-warn` modu bu kademeyi tek basina
+  olcer (ag YOK, gh YOK) ve pre-commit'te her commit'te gorunur —
+  "on-merge" uyari yuzeyi budur. Bu mod ASLA bloke etmez (bkz. asagisi).
+
 Kullanim:
   python3 _calisma/CIKTI/deploy_evidence.py --check           # kapi (fail-closed)
   python3 _calisma/CIKTI/deploy_evidence.py --print           # satirlari dok
   python3 _calisma/CIKTI/deploy_evidence.py --check --no-network
+  python3 _calisma/CIKTI/deploy_evidence.py --gap-warn        # yalniz uyari (OFFLINE)
 
 Cikis kodlari:
   0 — defter taze ve tutarli
   1 — BAYAT KANIT (yapi / HEAD kapsami / yas / kosum sonucu sapmasi)
   2 — calisma hatasi (defter yok, git veya gh yok)
+  --gap-warn her durumda 0 ile cikar: olculemeyen bir uyari yuzeyi commit'i
+  kilitlememelidir; fail-closed yargi haftalik deploy-evidence kosumundadir.
 """
 from __future__ import annotations
 
@@ -68,6 +82,11 @@ DEFAULT_VERIFY_ROWS = 2
 # dongusu (satir + changelog = 2 commit) kapiyi kirmiziya cevirirdi ve
 # gercek drift (kanit yazilmadan ilerleyen main) signalsiz kalsaydi.
 DEFAULT_GAP_EXEMPT = ("chore(changelog)", "docs(deploy)")
+# Uyari kademesi: gap 3'te main yesil kalir, bir sonraki ANLAMLI merge
+# (gap 4) kapiyi kirmiziya cevirir. Uyariyi bir ADIM ONCE baslatiriz;
+# boylece "siradaki merge main'i kirmizi yapar" bilgisi merge'ten once
+# gorulur (haftalik cron'u beklemek "3'ten sonra" demek olurdu).
+DEFAULT_WARN_HEAD_GAP = DEFAULT_MAX_HEAD_GAP - 1
 
 
 @dataclass(frozen=True)
@@ -262,30 +281,73 @@ def substantive_gap(git, head: str, main_sha: str, exempt=DEFAULT_GAP_EXEMPT):
     return count
 
 
-def check_head_coverage(rows, git, max_gap: int, exempt=DEFAULT_GAP_EXEMPT):
-    """En yeni satir origin/main'i kapsiyor mu? (lag-one toleransi icinde)"""
+def measure_head_gap(rows, git, exempt=DEFAULT_GAP_EXEMPT):
+    """(gap, main_sha, hata) — kanit boslugunun TEK olcum noktasi.
+
+    Fail-closed kapi (`check_head_coverage`) ile uyari yuzeyi
+    (`gap_warnings`) AYNI olcumu kullanmak zorundadir: iki yol ayrisirsa
+    uyari yanlis sey soyler (orn. "2 kaldi" derken merge main'i kirmizi yapar).
+    `hata` metni kapinin ihlal mesajidir — testler bu sozlesmeyi kivilar.
+    """
     if not rows:
-        return ["defterde satir yok — HEAD kapsami dogrulanamaz"]
-    violations = []
+        return None, None, "defterde satir yok — HEAD kapsami dogrulanamaz"
     newest = rows[-1]
+    main_sha = None
     for ref in ("origin/main", "main"):
         main_sha = git(["rev-parse", ref])
         if main_sha:
             break
-    else:
-        return ["origin/main cozulemedi (git rev-parse basarisiz)"]
+    if not main_sha:
+        return None, None, "origin/main cozulemedi (git rev-parse basarisiz)"
     if git(["merge-base", "--is-ancestor", newest.head, main_sha]) is None:
-        return ["en yeni satirin HEAD'i %s degil: %s main soyunda degil"
-                % (newest.head, main_sha[:7])]
+        return None, main_sha, ("en yeni satirin HEAD'i %s degil: %s main soyunda "
+                                "degil" % (newest.head, main_sha[:7]))
     gap = substantive_gap(git, newest.head, main_sha, exempt)
     if gap is None:
-        return ["HEAD acigi olculemedi (git log/rev-list basarisiz)"]
+        return None, main_sha, "HEAD acigi olculemedi (git log/rev-list basarisiz)"
+    return gap, main_sha, None
+
+
+def check_head_coverage(rows, git, max_gap: int, exempt=DEFAULT_GAP_EXEMPT):
+    """En yeni satir origin/main'i kapsiyor mu? (lag-one toleransi icinde)"""
+    if not rows:
+        return ["defterde satir yok — HEAD kapsami dogrulanamaz"]
+    gap, main_sha, error = measure_head_gap(rows, git, exempt)
+    if error:
+        return [error]
     if gap > max_gap:
-        violations.append(
-            "en yeni satir %s, main %s'ten %d ANLAMLI commit ileride "
-            "(tolerans %d; kanit satiri/changelog commit'leri sayilmaz) — "
-            "kanit guncel degil" % (newest.head, main_sha[:7], gap, max_gap))
-    return violations
+        return ["en yeni satir %s, main %s'ten %d ANLAMLI commit ileride "
+                "(tolerans %d; kanit satiri/changelog commit'leri sayilmaz) — "
+                "kanit guncel degil" % (rows[-1].head, main_sha[:7], gap, max_gap)]
+    return []
+
+
+def gap_warnings(rows, git, max_gap: int, warn_gap: int,
+                 exempt=DEFAULT_GAP_EXEMPT):
+    """Toleransa YAKLASMA uyarilari — IHLAL DEGIL (exit kodu etkilenmez).
+
+    - `warn_gap <= 0` → uyari kapali (opt-out).
+    - gap > max_gap  → uyari URETILMEZ: o durumda kapi zaten ihlal veriyor;
+      ayni bulgu iki kez raporlanmaz.
+    - Olculemeyen bosluk → tek satir NOT (sessiz yesil yok, ama bloke de yok).
+    """
+    if warn_gap <= 0:
+        return []
+    gap, _main_sha, error = measure_head_gap(rows, git, exempt)
+    if error:
+        return ["kanit boslugu olculemedi (%s) — kanit-defteri elle dogrulanmali"
+                % error]
+    if gap > max_gap:
+        return []
+    if gap >= max_gap:
+        return ["kanit boslugu %d/%d — SINIRDA: siradaki anlamli merge main'i "
+                "kirmizi yapar; once kanit satiri (docs(deploy)) ekleyin"
+                % (gap, max_gap)]
+    if gap >= warn_gap:
+        return ["kanit boslugu %d/%d — toleransa yaklasiyor: %d anlamli commit "
+                "daha main'i kirmizi yapar"
+                % (gap, max_gap, max_gap - gap + 1)]
+    return []
 
 
 def check_age(rows, today: dt.date, max_age_days: int):
@@ -361,6 +423,11 @@ def build_parser():
     p.add_argument("--no-network", action="store_true",
                    help="canlı koşum doğrulamasını atlar (offline)")
     p.add_argument("--max-head-gap", type=int, default=DEFAULT_MAX_HEAD_GAP)
+    p.add_argument("--warn-head-gap", type=int, default=DEFAULT_WARN_HEAD_GAP,
+                   help="toleransa yaklasma uyari esigi (0 = kapali; "
+                        "varsayilan %d)" % DEFAULT_WARN_HEAD_GAP)
+    p.add_argument("--gap-warn", dest="gap_warn", action="store_true",
+                   help="yalniz bosluk uyarisi (OFFLINE; asla bloke etmez)")
     p.add_argument("--max-age-days", type=int, default=DEFAULT_MAX_AGE_DAYS)
     p.add_argument("--verify-rows", type=int, default=DEFAULT_VERIFY_ROWS,
                    help="canlıya sorulan en yeni satır sayısı (0 = hiç)")
@@ -370,15 +437,49 @@ def build_parser():
     return p
 
 
+def gap_warn_mode(args, git) -> int:
+    """`--gap-warn`: yalniz uyari kademesi — ag YOK, gh YOK, ASLA BLOKE YOK.
+
+    On-merge yuzeyi: pre-commit'te her commit'te kosar, toleransa yaklasma
+    gorunur olur ("siradaki merge main'i kirmizi yapar"). Cikis kodu DAIMA
+    0'dir: bir uyari yuzeyi commit'i kilitlememelidir — fail-closed yargi
+    haftalik `deploy-evidence` kosumundadir. Defter yoksa sessiz doner
+    (uyarilacak kayit yok); defter varsa ama bosluk olculemiyorsa bunu NOT
+    olarak yazar (sessiz yesil yok).
+    """
+    try:
+        text = args.ledger.read_text(encoding="utf-8")
+    except OSError:
+        return 0
+    try:
+        rows, _violations = parse_rows(text)
+    except Exception as exc:  # bozuk defter (orn. gecersiz ISO tarih) uyari
+        # yuzeyini KILITLEMEMELIDIR: ayristirma hatasi yapi ihlalidir ve onu
+        # fail-closed kapi (`--check`) raporlar, pre-commit degil.
+        print("UYARI: kanit-defteri ayristirilamadi (%s)" % exc, file=sys.stderr)
+        return 0
+    warnings = gap_warnings(rows, git, args.max_head_gap, args.warn_head_gap)
+    if args.as_json:
+        gap, _main_sha, error = measure_head_gap(rows, git)
+        print(json.dumps({"gap": gap, "error": error, "warnings": warnings},
+                         ensure_ascii=False))
+    else:
+        for item in warnings:
+            print("UYARI: %s" % item, file=sys.stderr)
+    return 0
+
+
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
+    root = REPO_ROOT
+    git = git_runner(root)
+    if args.gap_warn:
+        return gap_warn_mode(args, git)
     network = not args.no_network
     if network and not shutil.which("gh"):
         print("hata: gh bulunamadi (canli kosum dogrulamasi icin gerekli; "
               "--no-network ile atlanabilir)", file=sys.stderr)
         return 2
-    root = REPO_ROOT
-    git = git_runner(root)
     today = dt.datetime.now(dt.timezone.utc).date()
     repo = args.repo or detect_repo(root, git)
     if network and not repo:
@@ -399,13 +500,19 @@ def main(argv=None) -> int:
                             ["%s #%s" % (lbl, rid) for lbl, rid in row.runs]))
         if not args.as_json:
             return 0
+    # Uyari kademesi: ihlal DEGIL (exit kodu degismez) — toleransa yaklasma
+    # merge'ten ONCE gorunsun diye --check ciktisina da eklenir.
+    warnings = gap_warnings(rows, git, args.max_head_gap, args.warn_head_gap)
     if args.as_json:
         print(json.dumps({"rows": len(rows), "violations": violations,
+                          "warnings": warnings,
                           "verdict": "FAIL" if violations else "PASS"},
                          ensure_ascii=False, indent=2))
     else:
         for item in violations:
             print("BAYAT: %s" % item)
+        for item in warnings:
+            print("UYARI: %s" % item, file=sys.stderr)
         if not violations:
             print("PASS: kanit-defteri taze (%d satir, en yeni %s)"
                   % (len(rows), rows[-1].date if rows else "-"))

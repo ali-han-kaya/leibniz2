@@ -358,5 +358,141 @@ class TestRunChecksAndCli(unittest.TestCase):
         self.assertEqual(rc, 2)
 
 
+class TestGapWarnings(unittest.TestCase):
+    """Toleransa YAKLASMA uyarisi — ihlal degil, ozel bir sinyal.
+
+    `--max-head-gap 3` kirmizi degil TOLERANSTIR: gap 3'te main yesil, sıradaki
+    anlamli merge gap'i 4 yapar ve kapi kirmiziya doner. Uyari tam bu ani
+    merge'ten ONCE haber verir.
+    """
+
+    def setUp(self):
+        self.rows, _ = de.parse_rows(
+            ledger_text([("2026-10-05", "abc1234", [("success", "1")] * 4)]))
+
+    def test_no_warning_below_threshold(self):
+        self.assertEqual(de.gap_warnings(self.rows, fake_git(gap=1), 3, 2), [])
+
+    def test_approaching_warning_counts_merges_left(self):
+        out = de.gap_warnings(self.rows, fake_git(gap=2), 3, 2)
+        self.assertEqual(len(out), 1, out)
+        self.assertIn("yaklasiyor", out[0])
+        # gap 2 → 3 serbest, 4 kirmizi: iki anlamli merge kaldi.
+        self.assertIn("2 anlamli commit", out[0])
+
+    def test_at_limit_warning_says_next_merge_turns_red(self):
+        out = de.gap_warnings(self.rows, fake_git(gap=3), 3, 2)
+        self.assertEqual(len(out), 1, out)
+        self.assertIn("SINIRDA", out[0])
+        self.assertIn("kirmizi", out[0])
+
+    def test_violation_is_not_double_reported(self):
+        """gap > tolerans ise kapi zaten ihlal veriyor — uyari tekrarlamaz."""
+        self.assertEqual(de.gap_warnings(self.rows, fake_git(gap=4), 3, 2), [])
+
+    def test_zero_threshold_disables_warning(self):
+        self.assertEqual(de.gap_warnings(self.rows, fake_git(gap=3), 3, 0), [])
+
+    def test_unmeasurable_gap_is_noted_not_silent(self):
+        out = de.gap_warnings(self.rows, fake_git(ancestor=False), 3, 2)
+        self.assertEqual(len(out), 1, out)
+        self.assertIn("olculemedi", out[0])
+
+    def test_evidence_commits_do_not_trigger_warning(self):
+        subjects = ["docs(deploy): satir ekle",
+                    "chore(changelog): satir ekle",
+                    "feat(ci): gercek is"]
+        self.assertEqual(
+            de.gap_warnings(self.rows, fake_git(subjects=subjects), 3, 2), [])
+
+    def test_warning_does_not_change_the_verdict(self):
+        """Uyari ile ihlal AYRIdir: gap 2 → uyari VAR, ihlal YOK."""
+        git = fake_git(gap=2)
+        self.assertEqual(de.check_head_coverage(self.rows, git, 3), [])
+        self.assertTrue(de.gap_warnings(self.rows, git, 3, 2))
+
+
+class TestGapWarnCli(unittest.TestCase):
+    """`--gap-warn` on-merge uyari yuzeyi: ag/gh yok, ASLA bloke yok (rc 0)."""
+
+    def test_missing_ledger_is_silent_zero(self):
+        rc = de.main(["--gap-warn", "--ledger", "/nonexistent/x.md"])
+        self.assertEqual(rc, 0)
+
+    def test_real_ledger_returns_zero(self):
+        rc = de.main(["--gap-warn", "--ledger", str(LEDGER)])
+        self.assertEqual(rc, 0, "--gap-warn commit'i kilitlememeli")
+
+    def test_malformed_ledger_is_noted_and_returns_zero(self):
+        """Bozuk defter (gecersiz ISO tarih) uyari yuzeyini KILITLEMEMELI.
+
+        Ayristirma hatasi bir YAPI ihlalidir; onu fail-closed kapi (`--check`)
+        raporlar. Pre-commit hook'u bu yuzden traceback yerine NOT yazar.
+        """
+        import tempfile
+        text = ledger_text([("2026-13-40", "abc1234", [("success", "1")] * 4)])
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "ledger.md"
+            path.write_text(text, encoding="utf-8")
+            self.assertEqual(de.main(["--gap-warn", "--ledger", str(path)]), 0)
+
+    def test_stale_ledger_still_returns_zero(self):
+        """Bayat defter BAYAT: kapi ayri kosar; uyari yuzeyi bloke etmez."""
+        import tempfile
+        text = ledger_text([("2020-01-01", "abc1234", [("success", "1")] * 4)])
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "ledger.md"
+            path.write_text(text, encoding="utf-8")
+            self.assertEqual(de.main(["--gap-warn", "--ledger", str(path)]), 0)
+
+    def test_json_mode_reports_gap(self):
+        import contextlib
+        import io
+        import json as _json
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = de.main(["--gap-warn", "--json", "--ledger", str(LEDGER)])
+        self.assertEqual(rc, 0)
+        payload = _json.loads(buf.getvalue())
+        self.assertIn("gap", payload)
+        self.assertIn("warnings", payload)
+
+    def test_check_json_includes_warnings_key(self):
+        import contextlib
+        import io
+        import json as _json
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            de.main(["--check", "--no-network", "--json", "--ledger", str(LEDGER)])
+        self.assertIn("warnings", _json.loads(buf.getvalue()))
+
+
+class TestGapWarnHookWiring(unittest.TestCase):
+    """Uyari ancak hook bagliysa ise yarar — baglanti sozlesmesi kivilir."""
+
+    CONFIG = ROOT / ".pre-commit-config.yaml"
+
+    def _block(self, hook_id):
+        text = self.CONFIG.read_text(encoding="utf-8")
+        start = text.index("- id: %s" % hook_id)
+        rest = text[start + len(hook_id):]
+        end = rest.find("\n      - id: ")
+        return rest[:end if end != -1 else len(rest)]
+
+    def test_hook_is_registered_as_advisory_and_visible(self):
+        block = self._block("evidence-gap-warn")
+        self.assertIn("deploy_evidence.py --gap-warn", block)
+        self.assertIn("always_run: true", block)
+        self.assertIn("pass_filenames: false", block)
+        self.assertIn("stages: [pre-commit]", block)
+        # verbose: true olmadan pre-commit uyariyi YESIL hook'ta gostermez.
+        self.assertIn("verbose: true", block)
+
+    def test_hook_cannot_block_a_commit(self):
+        """Uyari yuzeyi fail-open: bloke eden bir cagri (--check) baglanmamali."""
+        block = self._block("evidence-gap-warn")
+        self.assertNotIn("--check", block)
+
+
 if __name__ == "__main__":
     unittest.main()
