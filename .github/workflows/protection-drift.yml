@@ -13,6 +13,13 @@ name: protection-drift
 # her hafta yanlış-P1 gürültüsü üretmek yerine neyin eksik olduğunu yazar.
 # Secret VAR ama okuma başarısız olursa (süresi geçmiş token) rc=2 ile
 # KIRMIZI döner: aksi hâlde kapı sessizce ölürdü.
+#
+# ALERT: kırmızı koşum tek başına kimseye ulaşmayabilir (GitHub scheduled
+# failure bildirimi kullanıcı ayarına bağlı). `--alert` bu yüzden
+# `[protection-drift]` başlıklı TEK bir sticky issue'yu açar/günceller ve
+# temiz koşumda kapatır. Issue yazımı GITHUB_TOKEN ile yapılır
+# (`issues: write`); KORUMA okuması hâlâ PROTECTION_PAT'ten gelir ve kapı
+# API'ye yazmaz.
 
 on:
   schedule:
@@ -29,6 +36,8 @@ on:
 
 permissions:
   contents: read
+  # Yalnız sticky alert issue'su için; branch protection'a YAZMA yok.
+  issues: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -52,16 +61,18 @@ jobs:
       - name: Install pinned Python dependencies
         run: pip install -r _calisma/requirements-z3.txt
 
-      - name: Branch protection drift denetimi (P1)
+      - name: Branch protection drift denetimi (P1) + alert
         env:
           # Yalnızca bu secret admin yetkisi taşır; GITHUB_TOKEN burada
           # işe yaramaz (yukarıdaki nota bakın).
           PROTECTION_PAT: ${{ secrets.PROTECTION_PAT }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          # Alert issue'su için repo token'ı (permissions: issues: write).
+          ALERT_GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -o pipefail
           mkdir -p .freebuff
-          python3 _calisma/CIKTI/check_protection_drift.py --json \
+          python3 _calisma/CIKTI/check_protection_drift.py --json --alert \
             | tee .freebuff/protection_drift.json
 
       - name: Upload drift raporu
