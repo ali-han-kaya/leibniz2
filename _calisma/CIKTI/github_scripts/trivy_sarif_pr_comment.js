@@ -26,9 +26,9 @@ function severityOf(result) {
   // properties.severity taşınmıyor, tüm sonuçlar HIGH sanılıyordu).
   // İkisi de yoksa default-deny (HIGH) — 'error' seviyesi CRITICAL/HIGH'ı
   // ayırt edemez, tahmin edilmez.
-  const direct = String(
-    (result.properties && result.properties.severity) || ''
-  ).trim().toUpperCase();
+  const direct = String((result.properties && result.properties.severity) || '')
+    .trim()
+    .toUpperCase();
   if (SEVERITIES.has(direct)) return direct;
   const text = String((result.message && result.message.text) || '');
   const m = /Severity:\s*([A-Za-z]+)/.exec(text);
@@ -172,7 +172,6 @@ try {
   // API/yorum hataları buraya DÜŞMEZ (yukarıda yan-fayda olarak
   // ele alınır) — böylece kota, tarama sonucunu maskelemez.
   core.setFailed(
-    'SARIF okunamadı/çözümlenemedi: ' +
-      (err && err.message ? err.message : err)
+    'SARIF okunamadı/çözümlenemedi: ' + (err && err.message ? err.message : err)
   );
 }

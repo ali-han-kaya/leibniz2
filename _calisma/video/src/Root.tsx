@@ -1,7 +1,7 @@
-import React from "react";
-import { Composition } from "remotion";
-import { LeibnizChain } from "./LeibnizChain";
-import { GateChainRuns } from "./GateChainRuns";
+import React from 'react';
+import { Composition } from 'remotion';
+import { LeibnizChain } from './LeibnizChain';
+import { GateChainRuns } from './GateChainRuns';
 
 /**
  * İki kompozisyon, tek sahne ağacı kaynağı:

@@ -1,18 +1,18 @@
-import React from "react";
+import React from 'react';
 import {
   AbsoluteFill,
   interpolate,
   useCurrentFrame,
   useVideoConfig,
-} from "remotion";
+} from 'remotion';
 import type {
   GateHistory,
   GateHistoryGate,
   GateHistoryRun,
   GateHistoryStatus,
-} from "./data";
-import { Mono, palette, Reveal, Sans, stage } from "./ui";
-import { useLeibnizData } from "./useLeibnizData";
+} from './data';
+import { Mono, palette, Reveal, Sans, stage } from './ui';
+import { useLeibnizData } from './useLeibnizData';
 
 /**
  * İkinci kompozisyon: GateChainRuns (K0–K15, koşu koşu).
@@ -33,22 +33,22 @@ import { useLeibnizData } from "./useLeibnizData";
  */
 
 const STATUS_TEXT: Record<GateHistoryStatus, string> = {
-  PASS: "GEÇTİ",
-  FAIL: "KALDI",
-  SKIP: "KOŞMADI",
-  WARN: "UYARI",
-  MISSING: "KAYIT YOK",
+  PASS: 'GEÇTİ',
+  FAIL: 'KALDI',
+  SKIP: 'KOŞMADI',
+  WARN: 'UYARI',
+  MISSING: 'KAYIT YOK',
 };
 
 const statusColor = (status: GateHistoryStatus): string => {
   switch (status) {
-    case "PASS":
+    case 'PASS':
       return palette.accent2;
-    case "FAIL":
+    case 'FAIL':
       return palette.bad;
-    case "SKIP":
+    case 'SKIP':
       return palette.faint;
-    case "WARN":
+    case 'WARN':
       return palette.warn;
     default:
       return palette.line;
@@ -61,8 +61,8 @@ const StatusChip: React.FC<{ status: GateHistoryStatus; size?: number }> = ({
 }) => (
   <div
     style={{
-      display: "inline-flex",
-      alignItems: "center",
+      display: 'inline-flex',
+      alignItems: 'center',
       gap: 6,
     }}
   >
@@ -76,7 +76,7 @@ const StatusChip: React.FC<{ status: GateHistoryStatus; size?: number }> = ({
     />
     <Mono
       size={size}
-      color={status === "MISSING" ? palette.faint : statusColor(status)}
+      color={status === 'MISSING' ? palette.faint : statusColor(status)}
       letter={1.2}
     >
       {STATUS_TEXT[status]}
@@ -90,16 +90,16 @@ const Shell: React.FC<{
 }> = ({ children, frames }) => {
   const f = useCurrentFrame();
   const alpha = interpolate(f, [0, 6], [0, 1], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
   });
   return (
     <AbsoluteFill
       style={{
         backgroundColor: palette.bg,
         backgroundImage: `linear-gradient(180deg, ${palette.bg} 0%, ${palette.bgSoft} 100%)`,
-        padding: "52px 76px 58px",
-        boxSizing: "border-box",
+        padding: '52px 76px 58px',
+        boxSizing: 'border-box',
         opacity: alpha,
         fontFeatureSettings: '"tnum" 1',
       }}
@@ -107,7 +107,7 @@ const Shell: React.FC<{
       {children}
       <div
         style={{
-          position: "absolute",
+          position: 'absolute',
           left: 76,
           right: 76,
           bottom: 40,
@@ -128,12 +128,12 @@ const Shell: React.FC<{
 };
 
 const Legend: React.FC = () => (
-  <div style={{ display: "flex", gap: 26, alignItems: "center" }}>
-    {(["PASS", "WARN", "FAIL", "SKIP", "MISSING"] as GateHistoryStatus[]).map(
+  <div style={{ display: 'flex', gap: 26, alignItems: 'center' }}>
+    {(['PASS', 'WARN', 'FAIL', 'SKIP', 'MISSING'] as GateHistoryStatus[]).map(
       (status) => (
         <div
           key={status}
-          style={{ display: "flex", alignItems: "center", gap: 7 }}
+          style={{ display: 'flex', alignItems: 'center', gap: 7 }}
         >
           <div
             style={{
@@ -142,8 +142,8 @@ const Legend: React.FC = () => (
               borderRadius: 9,
               backgroundColor: statusColor(status),
               border:
-                status === "MISSING" ? `1px solid ${palette.faint}` : "none",
-              boxSizing: "border-box",
+                status === 'MISSING' ? `1px solid ${palette.faint}` : 'none',
+              boxSizing: 'border-box',
             }}
           />
           <Mono size={11} color={palette.dim} letter={1}>
@@ -162,23 +162,23 @@ const GateTile: React.FC<{
 }> = ({ gate, local, index }) => {
   const p = stage(local, 6 + index * 3.4, 8);
   const color = statusColor(gate.status);
-  const missing = gate.status === "MISSING";
+  const missing = gate.status === 'MISSING';
   return (
     <Reveal p={p} distance={12} style={{ flex: 1 }}>
       <div
         style={{
           border: `1px solid ${missing ? palette.line : color}`,
           borderRadius: 6,
-          padding: "12px 12px 10px",
-          backgroundColor: missing ? "transparent" : `${color}14`,
+          padding: '12px 12px 10px',
+          backgroundColor: missing ? 'transparent' : `${color}14`,
           minHeight: 92,
-          boxSizing: "border-box",
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "space-between",
+          boxSizing: 'border-box',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
         }}
       >
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
           <Sans
             size={18}
             weight={650}
@@ -187,11 +187,11 @@ const GateTile: React.FC<{
             {gate.id}
           </Sans>
           <Mono size={9} color={palette.faint} letter={1}>
-            {gate.from === "layers"
-              ? "LAYERS"
-              : gate.from === "board"
-                ? "BOARD"
-                : "—"}
+            {gate.from === 'layers'
+              ? 'LAYERS'
+              : gate.from === 'board'
+                ? 'BOARD'
+                : '—'}
           </Mono>
         </div>
         <Mono size={10} color={palette.dim} letter={0.6}>
@@ -204,7 +204,7 @@ const GateTile: React.FC<{
 };
 
 const RunRow: React.FC<{ run: GateHistoryRun }> = ({ run }) => (
-  <div style={{ display: "flex", gap: 8 }}>
+  <div style={{ display: 'flex', gap: 8 }}>
     {run.gates.map((gate) => (
       <div key={gate.id} style={{ flex: 1 }}>
         <div
@@ -212,7 +212,7 @@ const RunRow: React.FC<{ run: GateHistoryRun }> = ({ run }) => (
             height: 5,
             borderRadius: 5,
             backgroundColor: statusColor(gate.status),
-            opacity: gate.status === "MISSING" ? 0.35 : 1,
+            opacity: gate.status === 'MISSING' ? 0.35 : 1,
           }}
         />
       </div>
@@ -223,7 +223,7 @@ const RunRow: React.FC<{ run: GateHistoryRun }> = ({ run }) => (
 const Intro: React.FC<{ gh: GateHistory }> = ({ gh }) => {
   const f = useCurrentFrame();
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <Reveal p={stage(f, 2, 14)}>
         <Sans size={15} color={palette.accent} letter={3.6} weight={600}>
           KOMPOZİSYON 2 · KAPI ZİNCİRİ
@@ -243,7 +243,7 @@ const Intro: React.FC<{ gh: GateHistory }> = ({ gh }) => {
       </Reveal>
       <div style={{ height: 34 }} />
       <Reveal p={stage(f, 24, 16)}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <Mono size={14} color={palette.dim}>
             her kapı YALNIZ o koşunun kendi kaydıyla çizilir
           </Mono>
@@ -262,7 +262,7 @@ const Outro: React.FC<{ gh: GateHistory }> = ({ gh }) => {
   const f = useCurrentFrame();
   const { totals, run_count: runCount, gate_count: gateCount } = gh;
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <Reveal p={stage(f, 2, 14)}>
         <Sans size={15} color={palette.accent} letter={3.6} weight={600}>
           KAYIT KAPSAMI
@@ -334,17 +334,17 @@ export const GateChainRuns: React.FC<{ dataUrl?: string }> = ({ dataUrl }) => {
         <Outro gh={gh} />
       ) : run ? (
         <div
-          style={{ display: "flex", flexDirection: "column", height: "100%" }}
+          style={{ display: 'flex', flexDirection: 'column', height: '100%' }}
         >
           <div
             style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "flex-end",
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'flex-end',
             }}
           >
             <Reveal p={stage(local, 0, 10)}>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <Sans size={13} color={palette.accent} letter={3} weight={600}>
                   KOŞU {runIndex + 1}/{runs.length}
                 </Sans>
@@ -354,20 +354,20 @@ export const GateChainRuns: React.FC<{ dataUrl?: string }> = ({ dataUrl }) => {
               </div>
             </Reveal>
             <Reveal p={stage(local, 2, 10)}>
-              <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
                 <Mono size={12} color={palette.faint} letter={1.2}>
                   {run.layers_reported
-                    ? "LAYERS KAYDI VAR"
-                    : "LAYERS KAYDI YOK"}
+                    ? 'LAYERS KAYDI VAR'
+                    : 'LAYERS KAYDI YOK'}
                 </Mono>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Mono size={12} color={palette.faint} letter={1.2}>
                     VERDICT
                   </Mono>
                   <Mono
                     size={16}
                     color={
-                      run.verdict === "PASS" ? palette.accent2 : palette.bad
+                      run.verdict === 'PASS' ? palette.accent2 : palette.bad
                     }
                   >
                     {run.verdict}
@@ -381,7 +381,7 @@ export const GateChainRuns: React.FC<{ dataUrl?: string }> = ({ dataUrl }) => {
           {rows.map((row, rowIndex) => (
             <div
               key={rowIndex}
-              style={{ display: "flex", gap: 8, marginBottom: 10 }}
+              style={{ display: 'flex', gap: 8, marginBottom: 10 }}
             >
               {row.map((gate, index) => (
                 <GateTile
@@ -401,29 +401,29 @@ export const GateChainRuns: React.FC<{ dataUrl?: string }> = ({ dataUrl }) => {
           <div style={{ height: 12 }} />
           <div
             style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
             }}
           >
             <Mono size={12} color={palette.dim}>
-              RAPORLANAN {run.reported}/{run.gates.length} · KAYIT YOK{" "}
+              RAPORLANAN {run.reported}/{run.gates.length} · KAYIT YOK{' '}
               {run.missing}
             </Mono>
             <Mono size={11} color={palette.faint}>
               {run.board_group_state
                 ? `grup sinyali: ${run.board_group_state}`
-                : "grup sinyali: yok"}
+                : 'grup sinyali: yok'}
             </Mono>
           </div>
         </div>
       ) : (
         <div
           style={{
-            display: "flex",
-            flexDirection: "column",
-            height: "100%",
-            justifyContent: "center",
+            display: 'flex',
+            flexDirection: 'column',
+            height: '100%',
+            justifyContent: 'center',
             gap: 18,
           }}
         >
