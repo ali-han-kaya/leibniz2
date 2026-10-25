@@ -25,6 +25,26 @@
 | 2026-10-25 | ac0dcfb4 | [success #40158081378](https://github.com/ali-han-kaya/leibniz2/actions/runs/40158081378) | [success #40158081340](https://github.com/ali-han-kaya/leibniz2/actions/runs/40158081340) | [success #40158081344](https://github.com/ali-han-kaya/leibniz2/actions/runs/40158081344) | [success #39226471244](https://github.com/ali-han-kaya/leibniz2/actions/runs/39226471244) |
 | 2026-10-25 | 865de95f | [failure #40166763530](https://github.com/ali-han-kaya/leibniz2/actions/runs/40166763530) | [success #40166763478](https://github.com/ali-han-kaya/leibniz2/actions/runs/40166763478) | [success #40166763477](https://github.com/ali-han-kaya/leibniz2/actions/runs/40166763477) | [success #39226471244](https://github.com/ali-han-kaya/leibniz2/actions/runs/39226471244) |
 | 2026-10-25 | 0f6a9bb8 | [success #40187870000](https://github.com/ali-han-kaya/leibniz2/actions/runs/40187870000) | [success #40187870069](https://github.com/ali-han-kaya/leibniz2/actions/runs/40187870069) | [success #40187869999](https://github.com/ali-han-kaya/leibniz2/actions/runs/40187869999) | [success #40161574012](https://github.com/ali-han-kaya/leibniz2/actions/runs/40161574012) |
+| 2026-10-25 | 9657090d | [success #40215426067](https://github.com/ali-han-kaya/leibniz2/actions/runs/40215426067) | [success #40215426043](https://github.com/ali-han-kaya/leibniz2/actions/runs/40215426043) | [success #40215426046](https://github.com/ali-han-kaya/leibniz2/actions/runs/40215426046) | [success #40161574012](https://github.com/ali-han-kaya/leibniz2/actions/runs/40161574012) |
+
+`9657090d` — PR #115 (`chore: weekly determinism trend record (bot)`) inişi:
+`0f6a9bb8` satırının üstüne **7 anlamlı** commit geldi (PR #116-#121 merge
+zinciri, `chore(deps)`/`chore(bootstrap)` ve bot trend kaydı; tolerans 3) →
+`verify-delivery` kırmızısı **yalnız**
+`test_deploy_evidence.test_cli_accepts_repo_ledger_offline` (CIKTI bataryasının
+tek FAIL'i); bu satır tam olarak o açığı kapatıyor:
+`substantive_gap(9657090d, main)` = **0**. DİKKAT: `9657090d`,
+`app/github-actions`'ın `GITHUB_TOKEN` ile merge ettiği PR'dir; GitHub kuralı
+gereği bu push yeni workflow tetiklemedi (o HEAD'te yalnızca `workflow_run`
+tetikli `ci-rca-comment` koştu) — `push` koşumu **yoktur**. Hücreler bir önceki
+gerçek push HEAD'i `66336644`'ün 2026-10-25'te API'den canlı doğrulanmış
+koşumlarını taşır: `verify-delivery` #40215426067, `docker-security`
+#40215426043, `test-smoke` #40215426046 (üçü de success, `headSha=66336644`,
+`event=push`); `determinism-trend` hücresi son main ölçümünü taşır (#40161574012,
+success). Taşıma deseni `determinism-trend` hücresinin desenidir ve satır bunu
+açıkça yazar: `push` koşumu olmayan HEAD, boşluğu kapatma sıçraması olarak
+kullanılmaz. Satırı yazan commit `docs(deploy)` → `DEFAULT_GAP_EXEMPT`
+olduğundan boşluk yeniden genişlemez.
 
 `865de95f` — PR #116 (`ci(plist): P1 plist drift kapisini ayri fail-closed
 job'a al`) squash inişi: `ac0dcfb4` satırının üstüne **anlamlı** commit olarak
