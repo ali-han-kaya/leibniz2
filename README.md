@@ -667,6 +667,15 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-25 | docs | (deploy) 865de95f kanit satiri (#120) | [`0f6a9bb8`](https://github.com/ali-han-kaya/leibniz2/commit/0f6a9bb8) |
 | 2026-10-25 | ci | (plist) plist-p1 canli required sette — turetim hizalandi (#119) | [`6e750548`](https://github.com/ali-han-kaya/leibniz2/commit/6e750548) |
 | 2026-10-25 | ci | (vercel) sabit preview alias'i aylik denetimin hedefi yap (#118) | [`7bdbd76d`](https://github.com/ali-han-kaya/leibniz2/commit/7bdbd76d) |
+| 2026-10-25 | docs | (deploy) 42d618da kanit satirini deftere ekle (#130) | [`35c5e298`](https://github.com/ali-han-kaya/leibniz2/commit/35c5e298) |
+| 2026-10-25 | docs | (vercel) token scope'u, scope-not-accessible teshisi ve rotasyon (#127) | [`42d618da`](https://github.com/ali-han-kaya/leibniz2/commit/42d618da) |
+| 2026-10-25 | ci | (smoke) test-smoke'a workflow_dispatch fallback'i ekle (#129) | [`942118e7`](https://github.com/ali-han-kaya/leibniz2/commit/942118e7) |
+| 2026-10-25 | docs | (deploy) 9657090d kanit satirini deftere ekle (#128) | [`5fd7533c`](https://github.com/ali-han-kaya/leibniz2/commit/5fd7533c) |
+| 2026-10-25 | fix | (trend) olcum satirlarini sozlüksel siraya diz (canvas once) | [`f4c76f0d`](https://github.com/ali-han-kaya/leibniz2/commit/f4c76f0d) |
+| 2026-10-25 | test | (ci) kill-mid-window bataryasini eksik modulleriyle ekle (#126) | [`66336644`](https://github.com/ali-han-kaya/leibniz2/commit/66336644) |
+| 2026-10-25 | test | (sync) checkpoint the tree-reconciliation work that is green (#124) | [`056da049`](https://github.com/ali-han-kaya/leibniz2/commit/056da049) |
+| 2026-10-25 | chore | (format) video ve github_scripts prettier reformati (#122) | [`684cf5eb`](https://github.com/ali-han-kaya/leibniz2/commit/684cf5eb) |
+| 2026-10-25 | chore | (changelog) README tablosuna son 4 merge satirini ekle | [`15c3f922`](https://github.com/ali-han-kaya/leibniz2/commit/15c3f922) |
 
 ### Regresyon notları
 
