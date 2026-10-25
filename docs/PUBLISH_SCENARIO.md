@@ -575,7 +575,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 --exit-status` + artifact listesi; sonuç `SONUÇ: PASS/FAIL` olarak loglanır
 (dry-run'da yalnızca önizlenir).
 
-**Job kategorileri (31 job = 14 required + 14 advisory + 3 PR-only):**
+**Job kategorileri (32 job = 14 required + 15 advisory + 3 PR-only):**
 
 > **Kural:** Branch protection **yalnızca A kategorisindeki** job'ları required check olarak
 > kabul eder. B (advisory) job'ları push'ta çalışır ama required değildir;
@@ -600,7 +600,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 | 12 | A | CI-SIMULATE (advisory) | — simülasyon replay kapısı: status_checks + simulate_verify_job (2026-08-23) |
 | 13 | A | A11y gate (axe-core, fail-closed) | — a11y-gate (2026-09-17): headless Chromium + sha256 pinli vendor axe-core ile /preview.html taraması; preview_server health-poll (30×1s) ile başlatılır; blocking/warn/allowlist = a11y_gate_config.json; sunucu/tarayıcı/checksum arızası FAIL (retry yok) |
 | 14 | A | TeXLive acceptance — CI-linux pinned (fail-closed) | — texlive-accept (2026-10-02): `make accept` hash'i docs/ID_RESIDUAL_ACCEPTANCE.md ledger'ında yoksa FAIL → merge bloke; ubuntu:24.04 digest-pini konteynerde her iki motor (tectonic 0.17.0 digest-pini + TeXLive 2025 apt) ve sabit SOURCE_DATE_EPOCH (1786924800) ile koşar |
-| | **B — Advisory (12; push'ta çalışır, required değil)** | | |
+| | **B — Advisory (15; push'ta çalışır, required değil)** | | |
 | 15 | B | Publish precheck (AŞAMA 0, advisory) | ✅ success (9s) — AŞAMA 0 kapıları otomatik denetlenir |
 | 16 | B | Plist drift check (macOS, advisory) | ✅ success (11s) — K12, macOS-runner'lı; negatif smoke: bozuk-plist + eksik-golden yakalanmalı (YAKALANMADI → fail-closed) |
 | 17 | B | Mirror sync check (macOS, fail-closed) | ✅ success (12s) — K17, sync sonrası GÜNCEL |
@@ -615,6 +615,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 | 26 | B | Fresh-clone HTTP smoke (advisory) | — temiz clone'dan preview_server.py başlatılır; `/api/health` + `/api/latest` curl ile doğrulanır |
 | 29 | B | Dashboard interaction E2E (node sandbox + Chromium CDP) | — `dashboard-smoke` (2026-10-08): tarayıcısız node/vm katmanı (hover tooltip, run-history filtreleri, lightbox odak yönetimi) + hermetic Playwright/CDP katmanı (kendi sunucusu + sentetik verisi); tarayıcısız katman her ortamda kırmızıya dönebilir |
 | 30 | B | WebKit smoke (advisory, Safari/safedriver) | — macOS runner'da safedriver/WebKit ile dashboard smoke; `webkit_smoke_report.txt` step-summary'ye + `webkit-smoke` artifact'a — advisory (main branch-protection contexts'ine de eklendi) |
+| 31 | B | Plist P1 drift gate (fail-closed, Linux) | — `check_plist_drift.py --json` P0/P1'de exit 1 (continue-on-error YOK) ubuntu-latest'te koşar; macOS `plist-check` advisory job'ından bağımsız GERÇEK P1 blokajı, ancak canlı required sette henüz yok (branch-protection adımı — `status_checks.GATE_EXCLUDE`) |
 | | **C — PR-only (push'ta çalışmaz, PR'da çalışır)** | | |
 | 27 | C | Pre-commit P1 label gate (optional) | — skipped (push'ta çalışmaz) |
 | | **D — PR-only (yorum/etiket düşürme)** | | |

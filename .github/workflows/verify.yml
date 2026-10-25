@@ -2577,6 +2577,7 @@ jobs:
         continue-on-error: true
         run: |
           echo "K12 P1 drift: advisory (P0 yok)"
+          echo "  blokaj plist-p1 job'ında (Linux, fail-closed) — bu adım yalnız raporlar"
 
       # Her iki sinyali run summary'ye yaz (durum + çıktı).
       - name: Write plist drift to run summary
@@ -2601,6 +2602,73 @@ jobs:
             plist_report.json
           if-no-files-found: ignore
           retention-days: 30
+
+  # ──────────────────────────────────────────────────────────────────────
+  # PLIST P1 GATE (fail-closed, Linux) — P1 drift (eksik / bayat / yapısal
+  # geçersiz plist) ARTIK ADVISORY DEĞİL. check_plist_drift.py
+  # `fail_closed = has_p0 or has_p1` ile drift'te exit 1 döner; macOS
+  # `plist-check` job'ı plutil/LaunchAgents bağımlılığı yüzünden advisory
+  # kalır, bu job aynı kapıyı Linux'ta koşar (update_preview.sh
+  # --plist-force saf bash; plutil yoksa plistlib fallback) ve exit kodunu
+  # DOĞRUDAN job sonucuna çevirir — continue-on-error YOKTUR (sessiz
+  # advisory sınıfı bilinçli olarak yoktur).
+  #
+  # Not (branch protection): job fail-closed'dır ama canlı required
+  # kontroller arasında HENÜZ değildir (status_checks.GATE_EXCLUDE →
+  # "plist-p1"). Required'a alınması operatörün branch-protection adımıdır;
+  # workflow dosyası değiştiren PR'lar için token scope'u:
+  # docs/CI_GATE_TRIAGE.md → "Workflow dosyası değiştiren PR'lar".
+  plist-p1:
+    name: Plist P1 drift gate (fail-closed, Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [verify]
+    if: always()
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      # Render → normalize → golden diff. Kapının KENDİ exit kodu job'ı
+      # belirler: 1 = drift (P0 fazla profil / P1 eksik-bayat-geçersiz),
+      # 2 = koşulamadı (script/golden/render yok). İkisi de kırmızıdır.
+      - name: Run plist golden drift gate (P0+P1 fail-closed)
+        id: gate
+        run: |
+          set +e
+          python3 _calisma/CIKTI/check_plist_drift.py --json \
+            > plist_p1_report.json 2> plist_p1_stderr.txt
+          rc=$?
+          set -e
+          cat plist_p1_stderr.txt || true
+          python3 -c 'import json; d=json.load(open("plist_p1_report.json",encoding="utf-8")); print("PLIST-P1 has_p0=%s has_p1=%s fail_closed=%s" % (d.get("has_p0"), d.get("has_p1"), d.get("fail_closed")))' \
+            || echo "PLIST-P1: rapor JSON okunamadı — fail-closed"
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          if [ "$rc" -ne 0 ]; then
+            echo "PLIST-P1: drift kapısı exit $rc — P0/P1 fail-closed (advisory'e düşmez)"
+            exit "$rc"
+          fi
+          echo "PLIST-P1: PASS — şablon ↔ golden birebir"
+
+      # Run summary her durumda yazılır (tanı için; sonucu belirlemez).
+      - name: Write plist P1 gate to run summary
+        if: always()
+        run: |
+          {
+            echo "## Plist P1 drift gate (Linux, fail-closed)"
+            echo ""
+            echo "- drift gate exit: \`${{ steps.gate.outputs.rc }}\`"
+            echo ""
+            echo '```json'
+            cat plist_p1_report.json 2>/dev/null || echo "{}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # ──────────────────────────────────────────────────────────────────────
   # DAEMON MODE HTTP 200 (advisory) — preview_server.py'nin daemon dalını

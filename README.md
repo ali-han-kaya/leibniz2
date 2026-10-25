@@ -650,6 +650,19 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-24 | docs | (deploy) e6f1e9c6 kanit satiri (#106) | [`777b0ea7`](https://github.com/ali-han-kaya/leibniz2/commit/777b0ea7) |
 | 2026-10-24 | docs | (changelog) PR #75 squash sonrasi olu hash satirlarini duzelt | [`4362a98e`](https://github.com/ali-han-kaya/leibniz2/commit/4362a98e) |
 | 2026-10-24 | test | (k6) yeni kaynak surumu icin defter satirlari ve tam §4 taramasi | [`2b93e0b1`](https://github.com/ali-han-kaya/leibniz2/commit/2b93e0b1) |
+| 2026-10-25 | docs | (deploy) 930c41ad + ac0dcfb4 kanit satirlari (#114) | [`d782734a`](https://github.com/ali-han-kaya/leibniz2/commit/d782734a) |
+| 2026-10-25 | feat | (evidence) kanit boslugu uyari kademesi (on-merge, bloklamaz) (#113) | [`ac0dcfb4`](https://github.com/ali-han-kaya/leibniz2/commit/ac0dcfb4) |
+| 2026-10-25 | ci | (changelog) heal dead hashes after squash merges (bot PR) (#112) | [`22aac1ce`](https://github.com/ali-han-kaya/leibniz2/commit/22aac1ce) |
+| 2026-10-25 | other | Fix/a11y carryover 20261011 (#111) | [`ab13126d`](https://github.com/ali-han-kaya/leibniz2/commit/ab13126d) |
+| 2026-10-25 | docs | (deploy) ffea1084 kanit satirini ekle (bayatlik kapisi) (#110) | [`930c41ad`](https://github.com/ali-han-kaya/leibniz2/commit/930c41ad) |
+| 2026-10-25 | fix | (a11y) a11y-gate ozet yuzeyi + makine-okur verdict, acik tema kontrast (#90) | [`ffea1084`](https://github.com/ali-han-kaya/leibniz2/commit/ffea1084) |
+| 2026-10-24 | feat | (ci) a11y-gate tema matrisi + witness + job summary (#93) | [`0f1f2c78`](https://github.com/ali-han-kaya/leibniz2/commit/0f1f2c78) |
+| 2026-10-24 | docs | (deploy) PR #50 inişi için kanıt satırı + çakışma çözümü denetimi (#92) | [`b6f548ae`](https://github.com/ali-han-kaya/leibniz2/commit/b6f548ae) |
+| 2026-10-24 | fix | (ci) paginate live audit artifacts (#95) | [`5b65e143`](https://github.com/ali-han-kaya/leibniz2/commit/5b65e143) |
+| 2026-10-24 | feat | (vercel) aylık deploy-check en güncel preview'ı denetler (#102) | [`69974276`](https://github.com/ali-han-kaya/leibniz2/commit/69974276) |
+| 2026-10-24 | docs | (deploy) 843284cc kanit satirini ekle (bayatlik kapisi) (#109) | [`ca94563c`](https://github.com/ali-han-kaya/leibniz2/commit/ca94563c) |
+| 2026-10-24 | fix | (changelog) olu hash satirlarini prune et (main'deki kirmizi kapali) (#108) | [`843284cc`](https://github.com/ali-han-kaya/leibniz2/commit/843284cc) |
+| 2026-10-25 | ci | (plist) P1 plist drift kapisini ayri fail-closed job'a al | [`74926cec`](https://github.com/ali-han-kaya/leibniz2/commit/74926cec) |
 
 ### Regresyon notları
 

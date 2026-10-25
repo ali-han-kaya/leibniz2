@@ -135,3 +135,34 @@ resolve paths against `git rev-parse --show-toplevel` (see the scan above).
   loudly at the install step instead of surfacing as a distant K-layer P1.
 - Make `refs_trend.py` write `refs-trend.json` atomically (`tmp` +
   `os.replace`), mirroring the history sidecar pattern.
+
+## Workflow dosyası değiştiren PR'lar: `workflow` scope'u ne zaman gerekir
+
+`.github/workflows/` altındaki bir dosyayı değiştirmek, taşıma yoluna göre
+FARKLI yetki ister — bu ayrımı karıştırmak "yetki hatasını kod hatası sanma"
+ile sonuçlanır:
+
+| Yol | `workflow` scope'u | Ölçülen davranış |
+|---|---|---|
+| SSH anahtarıyla `git push` | **GEREKMEZ** | `gho_` token scope'ları `admin:public_key, gist, read:org, repo` (workflow YOK) iken `git push` workflow dosyasıyla başarılı |
+| HTTPS + PAT/OAuth token ile `git push` | Gerekir | scope yoksa push reddedilir: `refusing to allow a Personal Access Token to create or update workflow` |
+| GitHub API ile workflow dosyası yazma (`gh api .../contents/.github/workflows/...`, Contents/Git Data API, bot commit'leri) | Gerekir | `Resource not accessible by integration` / 403 |
+
+Bu depo SSH ile push ediyor (`gh auth status` → `Git operations protocol:
+ssh`), bu yüzden workflow değiştiren PR'lar normal akışla gönderilebilir.
+Ama API üzerinden workflow dosyasına dokunan otomasyon (bot dalı + PR üreten
+changelog/evidence işleri) için scope şart:
+
+```bash
+gh auth status                              # Scopes satırını kontrol et
+gh auth refresh -h github.com -s workflow   # eksikse ekle (tarayıcı onayı ister)
+```
+
+- Classic PAT: `workflow` kutusu işaretli olmalı.
+- Fine-grained PAT: "Workflows: Read and write".
+- `main` branch-protected'tır: doğrudan push `GH006` ile döner; değişiklik
+  dal + PR ile gönderilir.
+
+Ölçülmüş örnek: `plist-p1` job'ını (P1 plist drift kapısı) ekleyen dilim
+`verify.yml`'e dokunur; SSH ile push edildi, API tabanlı bir workflow yazımı
+aynı token'la reddedilirdi.
