@@ -1,17 +1,17 @@
-import React from "react";
-import { Easing, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
+import React from 'react';
+import { Easing, interpolate, useCurrentFrame, useVideoConfig } from 'remotion';
 
 export const palette = {
-  bg: "#0B0F14",
-  bgSoft: "#111823",
-  line: "#1E2A38",
-  text: "#E6EDF3",
-  dim: "#8B9AAB",
-  faint: "#4A5A6B",
-  accent: "#5EC8D8",
-  accent2: "#9AD1A4",
-  warn: "#E0B354",
-  bad: "#D98A7B",
+  bg: '#0B0F14',
+  bgSoft: '#111823',
+  line: '#1E2A38',
+  text: '#E6EDF3',
+  dim: '#8B9AAB',
+  faint: '#4A5A6B',
+  accent: '#5EC8D8',
+  accent2: '#9AD1A4',
+  warn: '#E0B354',
+  bad: '#D98A7B',
 };
 
 export const ease = Easing.bezier(0.42, 0, 0.18, 1);
@@ -19,8 +19,8 @@ export const ease = Easing.bezier(0.42, 0, 0.18, 1);
 /** 0 -> 1 across the first `span` frames, eased, for staged reveals. */
 export const stage = (frame: number, start: number, span = 14) =>
   interpolate(frame, [start, start + span], [0, 1], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
     easing: ease,
   });
 
@@ -35,14 +35,14 @@ export const sceneAlpha = (
     [lengthInFrames - fade, lengthInFrames],
     [1, 0],
     {
-      extrapolateLeft: "clamp",
-      extrapolateRight: "clamp",
+      extrapolateLeft: 'clamp',
+      extrapolateRight: 'clamp',
       easing: ease,
     }
   );
   const inn = interpolate(frame, [0, fade], [0, 1], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
     easing: ease,
   });
   return Math.min(inn, out);
@@ -137,26 +137,26 @@ export const Slide: React.FC<{
   return (
     <div
       style={{
-        width: "100%",
-        height: "100%",
+        width: '100%',
+        height: '100%',
         backgroundColor: palette.bg,
         opacity: alpha,
-        display: "flex",
-        flexDirection: "column",
-        padding: "64px 80px",
-        boxSizing: "border-box",
+        display: 'flex',
+        flexDirection: 'column',
+        padding: '64px 80px',
+        boxSizing: 'border-box',
         fontFeatureSettings: '"tnum" 1',
       }}
     >
       <div
         style={{
-          position: "absolute",
+          position: 'absolute',
           inset: 0,
           backgroundImage: `linear-gradient(180deg, ${palette.bg} 0%, ${palette.bgSoft} 100%)`,
           zIndex: -1,
         }}
       />
-      <div style={{ display: "flex", justifyContent: "space-between" }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
         <Sans size={16} color={palette.faint} letter={2.4}>
           {kicker}
         </Sans>
@@ -164,7 +164,7 @@ export const Slide: React.FC<{
           {t.toFixed(2)}s / {(760 / fps).toFixed(2)}s
         </Mono>
       </div>
-      <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
         {children}
       </div>
     </div>

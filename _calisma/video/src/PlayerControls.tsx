@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import type { PlayerRef } from "@remotion/player";
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import type { PlayerRef } from '@remotion/player';
 
 /**
  * Tarayıcı-içi oynatıcının kendi kontrol çubuğu.
@@ -115,7 +115,7 @@ export const formatTime = (frame: number, fps: number) => {
   const totalSeconds = Math.floor(frame / fps);
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
-  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
 };
 
 type Props = {
@@ -150,21 +150,21 @@ export const PlayerControls: React.FC<Props> = ({
     const onFullscreen = (e: { detail: { isFullscreen: boolean } }) =>
       setFullscreen(e.detail.isFullscreen);
 
-    ref.addEventListener("timeupdate", onTime);
-    ref.addEventListener("seeked", onTime);
-    ref.addEventListener("play", onPlay);
-    ref.addEventListener("pause", onPause);
-    ref.addEventListener("ended", onPause);
-    ref.addEventListener("mutechange", onMute);
-    ref.addEventListener("fullscreenchange", onFullscreen);
+    ref.addEventListener('timeupdate', onTime);
+    ref.addEventListener('seeked', onTime);
+    ref.addEventListener('play', onPlay);
+    ref.addEventListener('pause', onPause);
+    ref.addEventListener('ended', onPause);
+    ref.addEventListener('mutechange', onMute);
+    ref.addEventListener('fullscreenchange', onFullscreen);
     return () => {
-      ref.removeEventListener("timeupdate", onTime);
-      ref.removeEventListener("seeked", onTime);
-      ref.removeEventListener("play", onPlay);
-      ref.removeEventListener("pause", onPause);
-      ref.removeEventListener("ended", onPause);
-      ref.removeEventListener("mutechange", onMute);
-      ref.removeEventListener("fullscreenchange", onFullscreen);
+      ref.removeEventListener('timeupdate', onTime);
+      ref.removeEventListener('seeked', onTime);
+      ref.removeEventListener('play', onPlay);
+      ref.removeEventListener('pause', onPause);
+      ref.removeEventListener('ended', onPause);
+      ref.removeEventListener('mutechange', onMute);
+      ref.removeEventListener('fullscreenchange', onFullscreen);
     };
   }, [playerRef]);
 
@@ -213,7 +213,7 @@ export const PlayerControls: React.FC<Props> = ({
       <button
         type="button"
         className="lc-controls__button"
-        aria-label={playing ? "Duraklat" : "Oynat"}
+        aria-label={playing ? 'Duraklat' : 'Oynat'}
         onClick={togglePlay}
       >
         {playing ? <PauseIcon /> : <PlayIcon />}
@@ -238,7 +238,7 @@ export const PlayerControls: React.FC<Props> = ({
       <button
         type="button"
         className="lc-controls__button"
-        aria-label={muted ? "Sesi aç" : "Sesi kapat"}
+        aria-label={muted ? 'Sesi aç' : 'Sesi kapat'}
         aria-pressed={muted}
         onClick={toggleMute}
       >
@@ -248,7 +248,7 @@ export const PlayerControls: React.FC<Props> = ({
       <button
         type="button"
         className="lc-controls__button"
-        aria-label={fullscreen ? "Tam ekrandan çık" : "Tam ekran"}
+        aria-label={fullscreen ? 'Tam ekrandan çık' : 'Tam ekran'}
         aria-pressed={fullscreen}
         onClick={toggleFullscreen}
       >

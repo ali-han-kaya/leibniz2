@@ -1,7 +1,7 @@
-import React from "react";
-import { AbsoluteFill, Sequence } from "remotion";
-import { Closing, Evidence, GateChain, Seal, Timeline, Title } from "./scenes";
-import { useLeibnizData } from "./useLeibnizData"; /**
+import React from 'react';
+import { AbsoluteFill, Sequence } from 'remotion';
+import { Closing, Evidence, GateChain, Seal, Timeline, Title } from './scenes';
+import { useLeibnizData } from './useLeibnizData'; /**
  * Kare butcesi: 760 kare @ 30 fps = 25.33 sn.
  *  1 Title     0-89    (90f)
  *  2 Timeline  90-289  (200f)  verdict/çıkış kodu dagilim grafigi
@@ -23,11 +23,11 @@ export const LeibnizChainView: React.FC<{ dataUrl?: string }> = ({
   const data = useLeibnizData(dataUrl);
 
   if (!data) {
-    return <AbsoluteFill style={{ backgroundColor: "#0B0F14" }} />;
+    return <AbsoluteFill style={{ backgroundColor: '#0B0F14' }} />;
   }
 
   return (
-    <AbsoluteFill style={{ backgroundColor: "#0B0F14" }}>
+    <AbsoluteFill style={{ backgroundColor: '#0B0F14' }}>
       <Sequence from={0} durationInFrames={90} name="1 · Title">
         <Title data={data} lengthInFrames={90} />
       </Sequence>
