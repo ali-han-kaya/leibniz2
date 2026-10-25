@@ -1,0 +1,124 @@
+name: changelog-heal
+
+# ────────────────────────────────────────────────────────────────────────────
+# SQUASH-MERGE ARTIGI ÖLÜ CHANGELOG HASH'LERİNİ OTOMATİK TEMİZLER
+#
+# Sorun (ölçüldü): changelog satırı commit hash'iyle anahtarlanır ve
+# update_changelog_hook.sh satırı DALIN kendi commit'i için yazar. Squash-merge
+# o commit'i main geçmişinden düşürür → satır ölü hash olur ve
+# test_every_readme_changelog_hash_resolves_to_live_commit kırmızıya döner.
+# PR #55, #90, #93 ve #108'de aynı kırmızı elle prune edildi; bu workflow o
+# döngüyü kapatır: main'e her inişte ölçer, ölü satır varsa prune eder ve
+# bot dalı + PR (auto-merge) ile geri indirir.
+#
+# Kayıt yolu: main branch-protection'lıdır; bare push GH006 ile reddedilir
+# (determinism-trend ile aynı kanıtlanmış yol — bot dalı + PR + --auto merge).
+#
+# Fail-closed: ölçüm yapılamıyorsa (origin/main yok / git erişilemedi) iş
+# KIRMIZI biter — sessiz "temiz" yok. Ölü satır bulunamazsa hiçbir şey yazılmaz.
+# ────────────────────────────────────────────────────────────────────────────
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: changelog-heal-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  heal:
+    name: Heal dead changelog hashes (bot PR)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Reachability ölçümü tam geçmiş ister (origin/main ∪ HEAD).
+      - name: Checkout (full history)
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      # rc'yi ÇIKIŞ KODU olarak kullanmayız: exit 1 = "ölü satır var", yani
+      # normal durum — adımı kırmızı yaparsa sonraki adımlar (varsayılan
+      # `if: success()`) atlanır ve iyileştirme hiç çalışmaz. Yalnız "ölçülemedi"
+      # job'ı kırmızı yapar; her durumda adım 0 ile biter, karar `outputs.rc`.
+      - name: Measure dead changelog hashes
+        id: probe
+        run: |
+          set +e
+          python3 _calisma/CIKTI/heal_changelog.py --check
+          rc=$?
+          set -e
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          if [ "$rc" -eq 2 ]; then
+            echo "FAIL: ölü hash ölçülemedi (origin/main yok veya git erişilemedi)" >&2
+            exit 1
+          fi
+          if [ "$rc" -ne 0 ] && [ "$rc" -ne 1 ]; then
+            echo "FAIL: beklenmeyen çıkış kodu $rc" >&2
+            exit 1
+          fi
+          if [ "$rc" -eq 0 ]; then
+            echo "PASS: changelog temiz — yazılacak bir şey yok"
+          fi
+          exit 0
+
+      - name: Prune dead rows
+        if: steps.probe.outputs.rc == '1'
+        run: python3 _calisma/CIKTI/heal_changelog.py --apply
+
+      - name: Commit to bot branch and open PR
+        if: steps.probe.outputs.rc == '1'
+        env:
+          HEAL_BRANCH: chore/changelog-heal
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- README.md; then
+            echo "FAIL: --apply ölü satır bildirdi ama README değişmedi" >&2
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$HEAL_BRANCH"
+          git add README.md
+          {
+            echo 'chore(changelog): olu hash satirlarini prune et (bot)'
+            echo ''
+            echo 'Squash-merge dal commitini main gecmisinden dusurur; changelog satiri'
+            echo 'o commit e bagliydi -> olu hash. Bu commit gen_changelog.py --prune ciktisidir.'
+          } > /tmp/heal_msg.txt
+          git commit -F /tmp/heal_msg.txt
+          git push --force origin "HEAD:$HEAL_BRANCH"
+          PR=$(gh pr list --head "$HEAL_BRANCH" --state open --json number --jq '.[0].number // ""')
+          if [ -z "$PR" ]; then
+            gh pr create --base main --head "$HEAL_BRANCH" \
+              --title "chore(changelog): olu hash satirlarini prune et (bot)" \
+              --body 'Otomatik: squash-merge artığı ölü changelog satırları gen_changelog.py --prune ile temizlendi. Kapı (test_every_readme_changelog_hash_resolves_to_live_commit) bu PR ile yeşile döner.'
+            PR=$(gh pr list --head "$HEAL_BRANCH" --state open --json number --jq '.[0].number // ""')
+          fi
+          if [ -z "$PR" ]; then
+            echo "FAIL: bot PR açılamadı (Actions'a PR izni kapalı olabilir)" >&2
+            exit 1
+          fi
+          gh pr merge "$PR" --auto --merge || echo "(auto-merge kuyruğa alınamadı — PR açık kalır, elle incelenir)"
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## changelog-heal"
+            echo ""
+            echo "- ölçüm exit: \`${{ steps.probe.outputs.rc }}\`"
+            echo "- 0 = temiz · 1 = ölü satır bulundu (prune + bot PR) · 2 = ölçülemedi (kırmızı)"
+          } >> "$GITHUB_STEP_SUMMARY"

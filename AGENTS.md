@@ -25,6 +25,7 @@
 - Port 8000 hosts Freebuff's own preview server (survives process reaping; serves `/api/latest`, `/api/trend`, `preview.html` with live data) — reuse it for dashboard E2E, never kill it.
 - `/api/trend` ignores its `limit` query param by design (full-list contract, "same as /api/history"); consumers must window client-side (trend page: `slice(-20).reverse()`).
 - The shellcheck gate (`shellcheck_hooks.sh`) lints an explicit HOOKS list only (verify_lean, commit_msg_hook, update_config_hook); new repo shell scripts are not auto-covered — add hook scripts to that list.
+- Squash merges delete the branch commit, so a README changelog row bound to it becomes a dead hash. `.github/workflows/changelog-heal.yml` heals this on every push to main: `_calisma/CIKTI/heal_changelog.py --check` uses the same reachability contract as the gate (`origin/main` ∪ `HEAD`), then `--prune`s dead rows into a `chore/changelog-heal` bot branch + PR with auto-merge (main is branch-protected, so a bare push returns GH006). An unmeasurable run (no `origin/main`) is red, not a silent pass; `python3 _calisma/CIKTI/heal_changelog.py --apply` is the local equivalent.
 - Executed plan docs live in `docs/superpowers/plans/` and keep their checkboxes unchecked (repo convention even for completed plans).
 
 ## Tooling quirks

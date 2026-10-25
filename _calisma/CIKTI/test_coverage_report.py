@@ -274,6 +274,7 @@ HOOK_COVERAGE = {
         "test_ci_advisory_env.py",
         "test_verdict_seal_contrast.py",
         "test_ci_rate_limit_resilience.py",
+        "test_changelog_heal.py",
     ],
 }
 
