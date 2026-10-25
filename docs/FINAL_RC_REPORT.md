@@ -86,6 +86,27 @@ kapandı, aşağıdaki dört hâlâ açık.
 kapıyı gevşetmek kanıtı düzeltmez. 1 numaralı CVE'nin çözümü PR #82'de
 duruyor; bu defterde onun yerine yazılmaz.
 
+### 2026-10-25 oturum denetimi — DONE/OPEN (yukarıdaki 4 satırın güncel hâli)
+
+Yukarıdaki tablo 2026-10-05 fotoğrafıdır; aşağısı bu turda **ölçülen** durum.
+Aynı numaraları kullanır, eski satırları silmez.
+
+| # | Verdict | Kanıt (2026-10-25) |
+|---|---|---|
+| 1 | **DONE** | `docker-security` main'de **success**: `684cf5eb` (2026-10-25T14:55Z), `ebe7940a` (11:40Z), `0f6a9bb8` (11:12Z) — `gh run list --workflow docker-security.yml --branch main`. Düzeltme **PR #82 üzerinden gelmedi** (PR KAPALI, `mergedAt=null`); libpcre2 CVE'si başka bir değişiklikle kapandı ve kapı bugün yeşil. |
+| 2 | **DONE** | En güncel main verify koşumu [`40204523463`](https://github.com/ali-han-kaya/leibniz2/actions/runs/40204523463) içinde `Live CI doc↔GitHub sync audit (advisory)` = **success** (aynı koşumda `Mirror sync`, `Refs-trend audit`, `Config sync` de success). |
+| 3 | **DONE** | PR #83 **MERGED** (2026-10-24T06:59:39Z), merge commit `e6f1e9c6` = "chore: weekly determinism trend record (bot)". |
+| 4 | **OPEN** | Yerel-only MIME kırmızısı; CI'da koşmuyor. Bu turda ele alınmadı, ölçüm yenilenmedi. |
+
+**Denetimde kapanan ek borçlar (bu defterdeki FINAL kapısı için):** plist P1
+kapısı canlı required sette (#116 → `865de95f`; 16 context, `strict: true`),
+türetim↔canlı hizalı (#119 → `6e750548`), kanıt-defteri boşluğu **0**
+(`0f6a9bb8` satırı, `deploy_evidence.py --check` PASS), ölü changelog hash'i
+kapalı (#118 → `7bdbd76d`; `test_gen_changelog` 72/72 OK), prettier borcu
+kapalı (#122 → `684cf5eb`; `check_prettier_format --all` OK). **Açık:** eksik
+4 changelog satırı (PR #123) ve yerel ağaç uzlaşması
+(`docs/YEREL_AGAC_UZLASMA_PLANI.md` §8).
+
 ### Kapanan maddeler
 
 - ~~Gerçek GitHub Actions koşumu — push gerektirir, kullanıcı kararı~~

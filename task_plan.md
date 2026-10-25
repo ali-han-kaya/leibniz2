@@ -9,6 +9,30 @@ this branch's work. Read Phases 5+ for current state; treat Phase 4 as history,
 not as an open work queue. `session-catchup.py` reported no unsynced context,
 and all three plan files were clean against HEAD before this edit.
 
+## AUDIT VERDICT (2026-10-25) — Phase 9 DONE/OPEN, kanıtlı
+Bu blok 2026-10-25 oturum denetiminin sonucudur. **Aşağıdaki eski metin tarih
+olarak kalır**; açık sanılan maddelerin bir kısmı bu turda kapandı, bir kısmı
+ise ölçümle yeniden tanımlandı. Hiçbir satır "tahminle" DONE yapılmadı.
+
+| Madde | Verdict | Kanıt (ölçüm) |
+|---|---|---|
+| 9(b) `ca118f9` README satırı landı mı | **DONE** | `git show origin/main:README.md` → satır var: `2026-10-03 \| fix \| (trend-db) load.ts girdi dogrulama + graceful shutdown \| ca118f9`. Tablo ayrıca `test_gen_changelog` ile 72/72 OK (ölü hash yok). |
+| 9(a) Migration history onarımı | **OPEN — yeniden tanımlandı** | `git ls-tree -r origin/main apps/trend-db` çıktısında `prisma/migrations/` **yok**; `git log -- apps/trend-db/prisma/migrations` **boş** → migration dosyaları main'e hiç commit edilmemiş. "Tek baseline vs üç dosya" seçeneği depoda karşılıksız; önce migration'ların depoda mı DB'de mi yaşayacağı kararı gerekli. |
+| 9(c) `trend_service`/`trend_anon` rolcanlogin | **OPEN** | Denetimde DB'ye bağlanılmadı; canlı rol durumu ölçülmedi (uydurulmadı). Kullanıcı ertelemesi sürüyor. |
+| 9(d) `trend_runs_daily` PK yok | **OPEN** | `origin/main:apps/trend-db/prisma/schema.prisma` içinde model **hâlâ yok** (yalnız `@@map("trend_runs")`); hand-managed durum sürüyor. |
+| 9(e) Orca TCC `~/Desktop` engeli | **OPEN** | Ortam engeli; bu oturumda giderilmedi ve Orca hiç kullanılmadı. |
+
+**Ek olarak bu oturumda kapanan, planlarda açık görünen işler:**
+- plist P1 kapısı main'de + **canlı required check** (16 context, `strict: true`,
+  `enforce_admins: true`) — PR #116 → `865de95f`; türetim hizalaması #119 →
+  `6e750548` (`status_checks --gh` → `names_ok: true`, extra/missing boş).
+- Kanıt-defteri boşluğu **0**: `0f6a9bb8` satırı #121 ile; `deploy_evidence.py
+  --check` → PASS (23 satır).
+- README changelog ölü-hash borcu: #118 → `7bdbd76d` (ölü `74926cec` → `865de95f`);
+  eksik 4 satır için PR **#123 açık** (advisory `--check` main'de 4 → 1'e iner).
+- Prettier borcu: #122 → `684cf5eb` (13 kaynak dosya + üretilen video verisi
+  `.prettierignore`'da); `check_prettier_format --all` → OK (88 dosya).
+
 ## RECOVERY NOTE (2026-09-18, pre-commit tour) — ROOT CAUSE CORRECTED 2026-09-19
 Working-tree tracked modifications from this session were REVERTED to HEAD
 ~2026-09-18 20:09 (only tracked files hit — untracked surfaces intact,
