@@ -4,7 +4,15 @@
 # No-op job, GitHub'un boş workflow'u geçersiz saymasını engelleyen
 # doğruluk shim'idir.
 name: test-smoke
-on: [push]
+on:
+  push:
+  # BOT BİRLEŞTİRME FALLBACK'İ (2026-10-25): `app/github-actions`'ın
+  # GITHUB_TOKEN ile yaptığı merge'ler push tetiklemez (GitHub kuralı —
+  # 9657090d'de üç kanıt workflow'u da koşmadı). Elle tam tetikleme:
+  # `gh workflow run test-smoke.yml --ref main`. verify-delivery ve
+  # docker-security'de `workflow_dispatch` zaten vardı; bu satır üçlemeyi
+  # bot-merge senaryosunda da eksiksiz kılar (AGENTS.md kanıt hücreleri).
+  workflow_dispatch:
 
 permissions:
   contents: read
