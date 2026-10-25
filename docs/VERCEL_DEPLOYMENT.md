@@ -306,6 +306,79 @@ Kurulum: vercel.com/account/settings/tokens → token oluştur → repo
 Settings → Secrets and variables → Actions → `VERCEL_TOKEN`. (API ile token
 üretilemiyor: `POST /v2/user/tokens` → "Cannot create tokens for this app".)
 
+### Token — hangi hesap, hangi scope (2026-10-25 ölçümü)
+
+Token'ı **`sarkis-env` takımının üyesi olan hesaptan** oluştur ve token'ı o
+takıma kapsamla. Proje `sarkis-env/leibniz2` altında; workflow sabit olarak
+`--project leibniz2 --scope sarkis-env` kullanıyor.
+
+| Adım | Değer |
+|---|---|
+| Hesap | `sarkis-env` üyesi (owner/member) olan Vercel kullanıcısı |
+| Scope | `sarkis-env` · **All Projects** (daraltmak istersen yalnız `leibniz2`) |
+| Secret | repo → Settings → Secrets and variables → Actions → `VERCEL_TOKEN` |
+| Hedef | `✓ Linked sarkis-env/leibniz2` |
+
+**Neden:** `--scope` yetki **vermez, seçer**. Erişimi token'ın kapsamı belirler;
+Vercel üç kapsam tanır — Full Account (kişisel + üye olunan takımlar), Team
+(tek takım), Project (tek proje; kullanıcı/takım uçlarına erişemez)
+([access tokens](https://vercel.com/docs/accounts/access-tokens)). Token'ı
+oluşturan hesap takımın üyesi değilse link adımı, token doğru olsa bile düşer.
+
+### `scope-not-accessible` — belirti → teşhis
+
+Düşen adımın logu birebir şu iki satırı verir:
+
+```
+Error: You do not have access to the specified account
+Learn More: https://err.sh/vercel/scope-not-accessible
+```
+
+Resmî açıklama ([vercel/vercel errors](https://github.com/vercel/vercel/blob/main/errors/scope-not-accessible.md)):
+`--scope` ile verilen takımın **üyesi değilsin**, sahibi olmadığın bir kullanıcı
+hesabını gösterdin ya da token geçersiz/süresi geçmiş. Ayırt etme tablosu:
+
+| Belirti | Anlamı | Kontrol |
+|---|---|---|
+| `scope-not-accessible` | scope üyeliği yok / token geçersiz | `vercel switch` çıktısında o scope **yok** → takım üyeliği |
+| HTTP **401** | token geçersiz veya süresi dolmuş | `GET /v2/user` |
+| HTTP **403** | token geçerli, kapsamı yetmiyor | `GET /v2/teams`, `GET /v10/projects?teamId=…` |
+| `Project not found` | yanlış proje adı/ID'si veya yanlış takım | `--project` / `VERCEL_PROJECT_ID` eşleşmesi |
+| `No project linked` | `.vercel/` bağı yok ve ID'ler verilmemiş | `vercel link` ya da iki ID ortam değişkeni |
+
+Doğrulama — token'ı loga **yazmadan**:
+
+```bash
+vercel whoami && vercel teams ls && vercel switch
+curl -s -o /dev/null -w '%{http_code}\n' \
+  -H "Authorization: Bearer $VERCEL_TOKEN" https://api.vercel.com/v2/teams
+# 200: kapsam görünüyor · 403: kapsam yetmiyor · 401: token ölü
+```
+
+### Rotasyon — tam sıra
+
+1. Doğru hesapta yeni token: Scope = `sarkis-env`, All Projects (veya yalnız
+   `leibniz2`).
+2. `gh secret set VERCEL_TOKEN` — değer stdin'den verilir; chat'e, commit'e,
+   loga yazılmaz.
+3. `gh workflow run vercel-preview-deploy.yml --ref main` — link adımı kapsamı
+   da sınar (`main` push'a kapalı ama `workflow_dispatch` ile koşar).
+4. Logda `✓ Linked sarkis-env/leibniz2` ve `VERDICT: PASS` görülmeli.
+   Rotasyonun indiğini doğrula:
+   `gh api repos/<owner>/<repo>/actions/secrets --jq '.secrets[]|select(.name=="VERCEL_TOKEN").updated_at'`.
+
+**Tarihsel kayıt (bu bölümün nedeni):** 2026-10-24 00:16 koşumu
+(`40044149599`) tam bu hatayla düştü — token vardı ama `sarkis-env`'e erişimi
+yoktu. Aynı gece 00:40'ta secret doğru kapsamlı token'la değiştirildi; sonraki
+16/16 koşum ve `main` ref'inde elle tetiklenen `40211379655` yeşil. Yani sorun
+"Vercel hesap ayarı bekliyor" değil, **token'ın kapsamıydı**; belirtiyi
+`scope-not-accessible` olarak okumak teşhisi tek adımda verir.
+
+**Not:** workflow `--scope` sabitini kullanıyor; `vars.VERCEL_PROJECT_ID` yalnız
+aylık `vercel-deploy-check` içindir. Env-var moduna geçilirse `VERCEL_ORG_ID` +
+`VERCEL_PROJECT_ID` birlikte gerekir — bu **erişim sağlamaz**, yalnız `link`
+adımını kaldırır.
+
 **Proje env — `GITHUB_TOKEN` (2026-10-09):** `/api/run-history` GitHub
 Actions API'sini çağırır; token'sız anonim quota **60 istek/saat** ve
 Vercel'in paylasilan egress IP'lerinde tüm部署'larla ortaktır → ara sıra
