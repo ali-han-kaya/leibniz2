@@ -21,6 +21,22 @@
 | 2026-10-24 | e6f1e9c6 | [failure #40072376535](https://github.com/ali-han-kaya/leibniz2/actions/runs/40072376535) | [success #40072376529](https://github.com/ali-han-kaya/leibniz2/actions/runs/40072376529) | [success #40072376545](https://github.com/ali-han-kaya/leibniz2/actions/runs/40072376545) | [success #39226471244](https://github.com/ali-han-kaya/leibniz2/actions/runs/39226471244) |
 | 2026-10-24 | 843284cc | [failure #40125253039](https://github.com/ali-han-kaya/leibniz2/actions/runs/40125253039) | [success #40125253000](https://github.com/ali-han-kaya/leibniz2/actions/runs/40125253000) | [success #40125253010](https://github.com/ali-han-kaya/leibniz2/actions/runs/40125253010) | [success #39226471244](https://github.com/ali-han-kaya/leibniz2/actions/runs/39226471244) |
 | 2026-10-25 | ffea1084 | [failure #40144190460](https://github.com/ali-han-kaya/leibniz2/actions/runs/40144190460) | [success #40144190522](https://github.com/ali-han-kaya/leibniz2/actions/runs/40144190522) | [success #40144190466](https://github.com/ali-han-kaya/leibniz2/actions/runs/40144190466) | [success #39226471244](https://github.com/ali-han-kaya/leibniz2/actions/runs/39226471244) |
+| 2026-10-25 | 930c41ad | [success #40146360577](https://github.com/ali-han-kaya/leibniz2/actions/runs/40146360577) | [success #40146360585](https://github.com/ali-han-kaya/leibniz2/actions/runs/40146360585) | [success #40146360587](https://github.com/ali-han-kaya/leibniz2/actions/runs/40146360587) | [success #39226471244](https://github.com/ali-han-kaya/leibniz2/actions/runs/39226471244) |
+
+`930c41ad` — PR #110 (`docs(deploy): ffea1084 kanit satirini ekle`) inişi:
+`ffea1084` satırının üstüne **anlamlı** commit gelmedi (`ffea1084..930c41ad`
+aralığında yalnız bu `docs(deploy)` commit'i var; `DEFAULT_GAP_EXEMPT`), yani
+defter yazıldığında boşluk 0 / tolerans 3. Bu HEAD'in üç hücresi canlı koşumdur
+ve hepsi success: `verify-delivery` #40146360577 (önceki satırın işaretlediği
+kırmızı bu HEAD'de yeşile döndü), `docker-security` #40146360585, `test-smoke`
+#40146360587. `determinism-trend` hücresi son main ölçümünü taşır
+(`#39226471244`, sha `344767dc`) — workflow haftalık/`workflow_dispatch`
+olduğu için `930c41ad` adına koşum yoktur. Satır yazıldığında boşluk 0'dı
+(`ffea1084..930c41ad` aralığında anlamlı commit yok). Bu satır yalnız
+`930c41ad`'i kapsar: main ilerledikçe araya giren anlamlı merge'ler boşluğu
+büyütür ve güncel değer `deploy_evidence.py --check` / `--gap-warn` ile
+ÖLÇÜLÜR, burada sabitlenmez. Boşluğu yeniden 0'a çekmek, o anki main HEAD'i
+adına yazılacak yeni bir kanıt satırının işidir.
 
 `ffea1084` — PR #90 (`fix/a11y-carryover`) inişi: `843284cc` satırının üstüne
 **4 anlamlı** commit geldi (PR #102 `69974276` feat(vercel), PR #95 `5b65e143`
