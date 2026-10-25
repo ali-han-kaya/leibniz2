@@ -11,6 +11,7 @@ test_audit_live_ci_sync.py
 test_audit_octokit_names.py
 test_audit_refs_trend.py
 test_budget_over_banner.py
+test_changelog_heal.py
 test_check_action_pins.py
 test_check_action_runtimes.py
 test_check_badge_endpoints.py
