@@ -213,6 +213,24 @@ repos:
         stages: [pre-commit]
         verbose: true
 
+      - id: evidence-gap-warn
+        name: Warn when deploy-evidence gap nears tolerance
+        description: >-
+          docs/DEPLOY_EVIDENCE.md'nin en yeni satırı origin/main'in kaç ANLAMLI
+          commit gerisinde? Tolerans (3) kırmızı DEĞİL sınırdır: gap 3'te main
+          yeşil, sıradaki anlamlı merge onu kırmızı yapar. Bu hook tam o anı
+          önceden haber verir — gap 2 → "toleransa yaklaşıyor", gap 3 →
+          "SINIRDA: sıradaki anlamlı merge main'i kırmızı yapar". UYARIDIR,
+          BLOKE ETMEZ (fail-closed yargı haftalık deploy-evidence koşumunda);
+          `docs(deploy)`/`chore(changelog)` commit'leri sayılmaz. OFFLINE, ~ms
+          (ağ/gh yok). Kapatmak için: --warn-head-gap 0.
+        entry: python3 _calisma/CIKTI/deploy_evidence.py --gap-warn
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
       - id: check-python3-shell
         name: "Block shell commands under shell: python3 {0}"
         description: >-

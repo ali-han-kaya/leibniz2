@@ -225,3 +225,28 @@ yazan koşumları yeşile çevirmek kanıtı düzeltmez, yoksa eder.
 
 Çıkış kodları: **0** taze · **1** bayat kanit (job kırmızı) · **2** ölçülemez
 (defter yok, `gh` yok, owner/repo çözülemedi — kırmızı sayılır).
+
+## Uyarı kademesi (ön-merge)
+
+Tolerans (3) kırmızı değil **sınırdır**: gap 3'te main yeşil, sıradaki anlamlı
+merge gap'i 4 yapar ve kapı kırmızıya döner. Haftalık cron bunu ancak *sonradan*
+söyler; bu yüzden aynı ölçüm bir **ön-merge uyarı yüzeyi** olarak her commit'te
+koşar (pre-commit `evidence-gap-warn`, OFFLINE — ağ/`gh` yok):
+
+```bash
+python3 _calisma/CIKTI/deploy_evidence.py --gap-warn   # yalnız uyarı (rc daima 0)
+```
+
+Bu bölümde **tablo yok** (bilinçli): defterin ayrıştırıcısı dosyadaki her markdown
+tablosunu satır sayar, ikinci bir tablo sahte kanıt satırı üretir.
+
+- **gap 0–1** → sessiz; kanıt güncel.
+- **gap 2** → `UYARI: kanit boslugu 2/3 — toleransa yaklasiyor: 2 anlamli commit daha main'i kirmizi yapar` (iki merge kaldı).
+- **gap 3** → `UYARI: kanit boslugu 3/3 — SINIRDA: siradaki anlamli merge main'i kirmizi yapar` (bir merge kaldı).
+- **gap > 3** → uyarı susar; `--check` zaten `BAYAT:` veriyor — aynı bulgu iki kez raporlanmaz.
+
+Uyarı **ihlal değildir**: `--check` çıkış kodunu değiştirmez, JSON'da `warnings`
+alanında görünür. `--gap-warn` her durumda **0** döner (ölçülemezse
+`UYARI: kanit boslugu olculemedi (...)` yazar) — bir uyarı yüzeyi commit'i
+kilitlememelidir; fail-closed yargı haftalık `deploy-evidence` koşumundadır.
+Eşik `--warn-head-gap` (varsayılan 2 = `--max-head-gap` − 1); `0` ile kapatılır.
