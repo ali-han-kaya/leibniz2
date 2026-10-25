@@ -5,6 +5,13 @@ name: vercel-preview-deploy
 # `vercel deploy` ile preview üretir. Doğrulama, aylık vercel-deploy-check ile
 # AYNI kapı script'ini (check_vercel_deploy.py) yeni preview'a karşı koşar —
 # kapı-paritesi (K1); ayrıca trend/determinism-trend JSON sağlığı eklenir.
+#
+# Sabit preview alias'ı: her deploy'dan sonra `leibniz2-preview.vercel.app`
+# yeni deployment'a yönlendirilir ve alias'ın /api/health'i 200 dönmesi
+# beklenir. Aylık `vercel-deploy-check` bu sabit adı denetler
+# (vars.VERCEL_PREVIEW_URL) — Vercel API'sine/token'a bağlı kalmaz. Alias
+# güncellenemezse bu job kırmızı olur: sessiz bayat alias, aylık kapının eski
+# bir deployment'ı "preview sağlıklı" diye raporlaması demektir.
 on:
   push:
     branches-ignore:
@@ -59,6 +66,30 @@ jobs:
           fi
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "Preview: $url" >> "$GITHUB_STEP_SUMMARY"
+
+      # Sabit alias'ı ilerlet (repo variable VERCEL_PREVIEW_URL ile birebir
+      # aynı ad). Alias propagation'ı kısa bir poll ile doğrulanır; 200
+      # görülmezse job KIRILIR (bayat alias = sessiz yanlış-PASS riski).
+      - name: Sabit preview alias (leibniz2-preview.vercel.app)
+        env:
+          PREVIEW_URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          set -euo pipefail
+          vercel alias set "$PREVIEW_URL" leibniz2-preview.vercel.app \
+            --scope sarkis-env
+          code=""
+          for _ in 1 2 3 4 5; do
+            code=$(curl -s -m 15 -o /dev/null -w '%{http_code}' \
+              https://leibniz2-preview.vercel.app/api/health || true)
+            [ "$code" = "200" ] && break
+            sleep 3
+          done
+          if [ "$code" != "200" ]; then
+            echo "::error::alias /api/health HTTP ${code:-yok} (alias yayilmadi)"
+            exit 1
+          fi
+          echo "Alias: https://leibniz2-preview.vercel.app -> $PREVIEW_URL" \
+            >> "$GITHUB_STEP_SUMMARY"
 
       - name: 4 /api ucu dogrulama (fail-closed)
         env:
