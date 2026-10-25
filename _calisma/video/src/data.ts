@@ -33,7 +33,7 @@ export type Run = {
 export type BoardItem = {
   label: string;
   /** UNKNOWN = tanınmayan işaret; sahne onu PASS saymaz. */
-  state: "PASS" | "WARN" | "FAIL" | "UNKNOWN";
+  state: 'PASS' | 'WARN' | 'FAIL' | 'UNKNOWN';
   mark: string;
 };
 
@@ -45,7 +45,7 @@ export type Evidence = {
 };
 
 /** klayers.json'daki gerçek K katmanı durumu. MISSING = rapor yok. */
-export type GateStatus = "PASS" | "FAIL" | "SKIP" | "MISSING";
+export type GateStatus = 'PASS' | 'FAIL' | 'SKIP' | 'MISSING';
 
 export type GateLayer = {
   id: string;
@@ -64,14 +64,14 @@ export type GateRun = {
 };
 
 /** GateChainRuns kapısının durumu. MISSING = bu koşunun kaydı yok — PASS DEĞİL. */
-export type GateHistoryStatus = "PASS" | "FAIL" | "SKIP" | "WARN" | "MISSING";
+export type GateHistoryStatus = 'PASS' | 'FAIL' | 'SKIP' | 'WARN' | 'MISSING';
 
 export type GateHistoryGate = {
   id: string;
   label: string;
   status: GateHistoryStatus;
   /** kanıt kaynağı: koşu-başına `layers` haritası | status_board | yok */
-  from: "layers" | "board" | null;
+  from: 'layers' | 'board' | null;
 };
 
 /** Tek bir history.jsonl koşusunun 16 kapılık gerçek durumu. */
@@ -90,7 +90,7 @@ export type GateHistoryRun = {
   layers_reported: boolean;
   board_raw: string;
   /** "K katmanları ⚠️" gibi grup sinyali; kapı kimliği değildir */
-  board_group_state: "PASS" | "WARN" | "FAIL" | "UNKNOWN" | null;
+  board_group_state: 'PASS' | 'WARN' | 'FAIL' | 'UNKNOWN' | null;
 };
 
 export type GateHistory = {
@@ -187,7 +187,7 @@ export type LeibnizData = {
     statuses: GateHistoryGate[];
     /** koşuların sinyalle kesilme dökümü — uydurulmaz, history.jsonl'dan */
     break: {
-      kind: "signal" | "none" | "no_data";
+      kind: 'signal' | 'none' | 'no_data';
       exit_code: number | null;
       signal: string | null;
       runs: number;

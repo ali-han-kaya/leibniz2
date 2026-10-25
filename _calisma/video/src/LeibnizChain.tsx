@@ -1,5 +1,5 @@
-import React from "react";
-import { LeibnizChainView } from "./LeibnizChainView";
+import React from 'react';
+import { LeibnizChainView } from './LeibnizChainView';
 
 /**
  * Render giris noktasi. Sahne agaci LeibnizChainView'da yasar; boylece

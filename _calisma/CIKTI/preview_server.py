@@ -571,6 +571,35 @@ def repair_history_sidecar(history_path=None):
     return "repaired"
 
 
+VALID_LAYER_STATUSES = ("PASS", "FAIL", "SKIP")
+
+
+def _normalize_layers(raw):
+    """`layers` haritası → {K#: {"status": "PASS"|"FAIL"|"SKIP", ...}}.
+
+    Arşive yazan/onaran tüm yollar bu tek kapıyı kullanır: bilinmeyen durum
+    ("???", "UNKNOWN") ATILIR — bilinmeyen bir katman olduğundan iyi
+    gösterilmez; küçük harfli durum ("pass") büyük harfe çevrilir. Girdi
+    sözlük değilse boş harita döner.
+    """
+    if not isinstance(raw, dict):
+        return {}
+    out = {}
+    for gate, entry in raw.items():
+        if not isinstance(entry, dict):
+            continue
+        status = entry.get("status")
+        if not isinstance(status, str):
+            continue
+        status = status.strip().upper()
+        if status not in VALID_LAYER_STATUSES:
+            continue
+        clean = dict(entry)
+        clean["status"] = status
+        out[str(gate)] = clean
+    return out
+
+
 def persist_history(rec):
     """Bir run kaydını JSONL dosyasına append et; HISTORY_MAX ile sınırla.
 

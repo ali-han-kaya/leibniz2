@@ -22,6 +22,16 @@ _calisma/CIKTI/vendor/
 # ile değer üzerinden yapılır.
 design-system/vercel/
 
+# --- Üretilen VERİ anlık görüntüsü (video) -------------------------------
+# _calisma/video/public/data/leibniz.json `make_data.py` tarafından üretilir;
+# tek yazım biçimi json.dumps(indent=2, ensure_ascii=False). Ölçülen çatışma:
+# prettier dosyayı yeniden biçimler, `npm run data` / render hattı bir sonraki
+# üretimde json.dumps biçimine geri döndürür ve kök `--all` taraması kırmızıya
+# döner (bidirectional tug-of-war). Biçimi üreten araç make_data.py'dir;
+# video paketinin kendi .prettierignore'u da aynı yolu (public/data/) zaten
+# dışlar. Değer denetimi JSON içeriği üzerinden yapılır (make_data.py).
+_calisma/video/public/data/
+
 # --- Yama aracının SAHİBİ olduğu çalışma-zamanı varlığı -------------------
 # _calisma/CIKTI/preview.js dashboard'ın çalışma-zamanı betiğidir ve
 # determinism_trend_badge.py --update-preview tarafından idempotent olarak

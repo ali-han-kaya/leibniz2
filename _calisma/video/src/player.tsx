@@ -1,9 +1,9 @@
-import React from "react";
-import { createRoot } from "react-dom/client";
-import { Player } from "@remotion/player";
-import type { PlayerRef } from "@remotion/player";
-import { LeibnizChainView } from "./LeibnizChainView";
-import { PlayerControls } from "./PlayerControls";
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import { Player } from '@remotion/player';
+import type { PlayerRef } from '@remotion/player';
+import { LeibnizChainView } from './LeibnizChainView';
+import { PlayerControls } from './PlayerControls';
 
 /**
  * Tarayici-ici oynatma giris noktasi (@remotion/player).
@@ -24,15 +24,15 @@ import { PlayerControls } from "./PlayerControls";
  * Turkce adlar, durum bildiren `aria-pressed`, `aria-valuetext`'li konum
  * kaydiricisi ve player.css'teki 2px odak halkasi.
  */
-const mount = document.getElementById("root");
+const mount = document.getElementById('root');
 
 if (!mount) {
   // Sessiz bos sayfa yerine gorunur hata: mount noktasi sayfa sozlesmesinin
   // parcasidir (build/player.html ile eslesmezse burada durur).
   document.body.textContent =
-    "LeibnizChain player: #root bulunamadi — player.html sayfasi bozulmus.";
+    'LeibnizChain player: #root bulunamadi — player.html sayfasi bozulmus.';
 } else {
-  const dataUrl = mount.getAttribute("data-src") ?? undefined;
+  const dataUrl = mount.getAttribute('data-src') ?? undefined;
 
   const PlayerSurface: React.FC = () => {
     const playerRef = React.useRef<PlayerRef>(null);
@@ -49,7 +49,7 @@ if (!mount) {
           fps={30}
           compositionWidth={1280}
           compositionHeight={720}
-          style={{ width: "100%", maxWidth: 1280 }}
+          style={{ width: '100%', maxWidth: 1280 }}
           controls={false}
           loop
           clickToPlay
@@ -66,10 +66,10 @@ if (!mount) {
     <React.StrictMode>
       <div
         style={{
-          backgroundColor: "#0B0F14",
+          backgroundColor: '#0B0F14',
           padding: 24,
           fontFamily: 'system-ui, -apple-system, "Segoe UI", sans-serif',
-          color: "#E6EDF3",
+          color: '#E6EDF3',
         }}
       >
         <PlayerSurface />

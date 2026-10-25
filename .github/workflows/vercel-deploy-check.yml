@@ -45,9 +45,11 @@ jobs:
           # URL çözümü: elle-girdi > repo variable > EN GÜNCEL READY preview.
           # Üretim alias'ına DÜŞÜLMEZ: bu iş canlı preview'ı denetler; sessizce
           # prod'a kaymak kapıyı yanlış yüzeye bağlardı (2026-10-24 kararı).
-          # (git-connect 400 → sabit preview alias'ı yok; bu yüzden URL Vercel
-          # API'sinden çözülür.) Çözücü READY + production-dışı ilk deployment'ı
-          # alır; API hatası/READY yok → exit≠0 → bu adım kırmızı olur.
+          # Sabit preview alias'ı (2026-10-25): vars.VERCEL_PREVIEW_URL =
+          # https://leibniz2-preview.vercel.app — vercel-preview-deploy.yml her
+          # deploy'da alias'ı ilerletir, yani normal yolda Vercel API'sine hiç
+          # gidilmez. Fallback çözücü (no alias) READY + production-dışı ilk
+          # deployment'ı alır; API hatası/READY yok → exit≠0 → adım kırmızı.
           BASE_URL="${INPUT_URL:-${VAR_URL:-}}"
           if [ -z "$BASE_URL" ]; then
             BASE_URL="$(python3 _calisma/CIKTI/vercel_latest_preview.py \

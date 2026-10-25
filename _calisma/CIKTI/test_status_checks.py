@@ -66,18 +66,25 @@ class TestGateJobs(unittest.TestCase):
         self.assertIn("config-sync", gates)          # required: üçlü senkron kapısı
         self.assertNotIn("audit-refs-trend", gates)  # advisory denetim
         self.assertNotIn("changelog-drift", gates)   # advisory: changelog drift
+        # 2026-10-25: macOS smoke'ları adlarında "advisory" taşır ve canlı
+        # protected sette YOK; dashboard-smoke ise canlı protected sette var
+        # ve fail-closed koşar → required.
+        self.assertNotIn("preview-reload-smoke", gates)
+        self.assertNotIn("webkit-smoke", gates)
+        self.assertIn("dashboard-smoke", gates)
         # Node 24 yükseltmesiyle eklenen job required aday olmalı.
         self.assertIn("action-runtimes", gates)
         self.assertEqual(gates["action-runtimes"],
                          "Action runtime check (node24)")
 
     def test_count_matches_workflow_minus_excludes(self):
-        # 30 job − 14 hariç = 16 required aday (tek kaynak: workflow;
-        # 15 -> 16: webkit-smoke — protection contexts == gate_jobs).
-        # Hariç: manifest-comment, precheck, label-gate-p1, plist-check,
-        #        mirror-check, daemon-http, fresh-clone-http, audit-live-ci,
-        #        audit-refs-trend, override-trend, changelog-drift, pattern-drift,
-        #        budget-comment, lake-proof
+        # 32 job − 16 hariç = 16 required (tek kaynak: workflow).
+        # 2026-10-25: webkit-smoke ve preview-reload-smoke adlarında "advisory"
+        # taşıdıkları ve canlı protected sette olmadıkları için exclude edildi;
+        # dashboard-smoke ve plist-p1 canlı protected sette required oldukları
+        # için required kümededir. Türetilen 16 ad canlı branch protection
+        # context listesiyle birebir aynı
+        # (ölçüm: `gh api .../branches/main/protection/required_status_checks`).
         self.assertEqual(len(sc.gate_jobs()), 16)
 
     def test_gate_jobs_exact_set_includes_label_gate(self):
@@ -105,10 +112,11 @@ class TestGateJobs(unittest.TestCase):
                 "config-sync",
                 "repack-verify",
                 "refs-trend",
-                "preview-reload-smoke",
+                "dashboard-smoke",
+                "plist-p1",
                 "ci-simulate",
                 "a11y-gate",
-                "texlive-accept", "webkit-smoke",
+                "texlive-accept",
             },
         )
         # label-gate P0 kapısı required aday olmalı (özel vurgu).

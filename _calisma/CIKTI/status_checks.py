@@ -70,13 +70,23 @@ GATE_EXCLUDE = {
     "changelog-drift",      # advisory: gen_changelog --check drift bulguları
     "pattern-drift",         # advisory: merge pattern ↔ ARTIFACT_JOBS drift
     "budget-comment",        # PR-only: bütçe + pre-commit PR yorumu (bütçe kapısı ayrı job)
-    "dashboard-smoke",      # advisory: node-sandbox + Chromium etkileşim E2E
-                            #   (hover tooltip / run-history filtresi / lightbox);
-                            #   tarayıcısız katmanı her ortamda koşar, required değil.
+    "preview-reload-smoke",  # advisory: job adı "Preview reload smoke (advisory, macOS)";
+                             #   macOS-only tarayıcı smoke'u — canlı protected sette YOK.
+    "webkit-smoke",          # advisory: job adı "WebKit smoke (advisory, Safari/safedriver)";
+                             #   macOS safedriver smoke'u — canlı protected sette YOK.
     "lake-proof",            # ayrı-step K9 lake build (lean-toolchain v4.14.0);
                              #   GitHub required kontrollerinde DEĞİL (advisory) —
                              #   K9, verify job'unun --full içinde de koşar.
 }
+# NOT (2026-10-25): `dashboard-smoke` ("Dashboard interaction E2E (node sandbox
+# + Chromium CDP)") EXCLUDE'dan ÇIKARILDI — canlı branch protection bu adı
+# required olarak tutuyor ve job fail-closed koşar (node katmanı tarayıcısız
+# her ortamda, Chromium katmanı CDP). `preview-reload-smoke` ve `webkit-smoke`
+# ise adlarında "advisory" taşıyan macOS-only smoke'lar; canlı protected
+# sette yoklar, bu yüzden artık EXCLUDE'dalar. `plist-p1` (P1 plist drift
+# kapısı, Linux) ise canlı protected sette REQUIRED'dır — bu yüzden
+# EXCLUDE'da DEĞİL. Böylece türetilen required küme canlı koruma ile
+# birebir: 32 job − 16 exclude = 16 required.
 # Not: "label-gate" (Pre-commit P0 label gate) BİLEREK required check'tir —
 # precommit-p0 etiketi varken FAIL verip merge'i bloke eder; bu yüzden
 # GATE_EXCLUDE'da DEĞİL. 12'li required liste (2026-08-23): 9 eski gate +

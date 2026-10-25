@@ -1,11 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState } from 'react';
 import {
   cancelRender,
   continueRender,
   delayRender,
   staticFile,
-} from "remotion";
-import type { LeibnizData } from "./data";
+} from 'remotion';
+import type { LeibnizData } from './data';
 
 /**
  * delayRender + fetch: veri dosyasi ilk kareyi bekletir, hicbir sahne yari
@@ -17,8 +17,8 @@ import type { LeibnizData } from "./data";
  */
 export const useLeibnizData = (url?: string): LeibnizData | null => {
   const [data, setData] = useState<LeibnizData | null>(null);
-  const [handle] = useState(() => delayRender("leibniz-data"));
-  const source = url ?? staticFile("data/leibniz.json");
+  const [handle] = useState(() => delayRender('leibniz-data'));
+  const source = url ?? staticFile('data/leibniz.json');
 
   useEffect(() => {
     let cancelled = false;

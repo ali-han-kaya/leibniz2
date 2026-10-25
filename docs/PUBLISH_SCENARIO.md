@@ -575,7 +575,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 --exit-status` + artifact listesi; sonuç `SONUÇ: PASS/FAIL` olarak loglanır
 (dry-run'da yalnızca önizlenir).
 
-**Job kategorileri (31 job = 14 required + 14 advisory + 3 PR-only):**
+**Job kategorileri (32 job = 15 required + 14 advisory + 3 PR-only):**
 
 > **Kural:** Branch protection **yalnızca A kategorisindeki** job'ları required check olarak
 > kabul eder. B (advisory) job'ları push'ta çalışır ama required değildir;
@@ -585,7 +585,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 
 | # | Kategori | Job | Son durum |
 |---|---|---|---|
-| | **A — Required (14; merge bloke)** | | |
+| | **A — Required (15; merge bloke)** | | |
 | 1 | A | Delivery verification — K1-K19 (single entry point) | ✅ success (4m21s) — K0-K7 + K8 (Z3) + K9 (Lean) + K11 + K13 + K14 + K15 + K16 + K17 + K18 + K19 tek komutta (`--full`); pre-commit advisory bölüm |
 | 2 | A | Action runtime check (node24) | ✅ success (9s) — her `uses:` action'ın `runs.using=node24` olduğu doğrulanır |
 | 3 | A | Budget shield (aggregated) | ✅ success (7s) — limit içinde (sidecar birleştirildi) |
@@ -600,7 +600,8 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 | 12 | A | CI-SIMULATE (advisory) | — simülasyon replay kapısı: status_checks + simulate_verify_job (2026-08-23) |
 | 13 | A | A11y gate (axe-core, fail-closed) | — a11y-gate (2026-09-17): headless Chromium + sha256 pinli vendor axe-core ile /preview.html taraması; preview_server health-poll (30×1s) ile başlatılır; blocking/warn/allowlist = a11y_gate_config.json; sunucu/tarayıcı/checksum arızası FAIL (retry yok) |
 | 14 | A | TeXLive acceptance — CI-linux pinned (fail-closed) | — texlive-accept (2026-10-02): `make accept` hash'i docs/ID_RESIDUAL_ACCEPTANCE.md ledger'ında yoksa FAIL → merge bloke; ubuntu:24.04 digest-pini konteynerde her iki motor (tectonic 0.17.0 digest-pini + TeXLive 2025 apt) ve sabit SOURCE_DATE_EPOCH (1786924800) ile koşar |
-| | **B — Advisory (12; push'ta çalışır, required değil)** | | |
+| 15 | A | Plist P1 drift gate (fail-closed, Linux) | — `check_plist_drift.py --json` P0/P1'de exit 1 (continue-on-error YOK) ubuntu-latest'te koşar; macOS `plist-check` advisory job'ından bağımsız GERÇEK P1 blokajı — canlı branch protection'da REQUIRED (`status_checks.GATE_EXCLUDE` dışında) |
+| | **B — Advisory (14; push'ta çalışır, required değil)** | | |
 | 15 | B | Publish precheck (AŞAMA 0, advisory) | ✅ success (9s) — AŞAMA 0 kapıları otomatik denetlenir |
 | 16 | B | Plist drift check (macOS, advisory) | ✅ success (11s) — K12, macOS-runner'lı; negatif smoke: bozuk-plist + eksik-golden yakalanmalı (YAKALANMADI → fail-closed) |
 | 17 | B | Mirror sync check (macOS, fail-closed) | ✅ success (12s) — K17, sync sonrası GÜNCEL |

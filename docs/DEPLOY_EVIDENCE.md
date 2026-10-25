@@ -23,6 +23,35 @@
 | 2026-10-25 | ffea1084 | [failure #40144190460](https://github.com/ali-han-kaya/leibniz2/actions/runs/40144190460) | [success #40144190522](https://github.com/ali-han-kaya/leibniz2/actions/runs/40144190522) | [success #40144190466](https://github.com/ali-han-kaya/leibniz2/actions/runs/40144190466) | [success #39226471244](https://github.com/ali-han-kaya/leibniz2/actions/runs/39226471244) |
 | 2026-10-25 | 930c41ad | [success #40146360577](https://github.com/ali-han-kaya/leibniz2/actions/runs/40146360577) | [success #40146360585](https://github.com/ali-han-kaya/leibniz2/actions/runs/40146360585) | [success #40146360587](https://github.com/ali-han-kaya/leibniz2/actions/runs/40146360587) | [success #39226471244](https://github.com/ali-han-kaya/leibniz2/actions/runs/39226471244) |
 | 2026-10-25 | ac0dcfb4 | [success #40158081378](https://github.com/ali-han-kaya/leibniz2/actions/runs/40158081378) | [success #40158081340](https://github.com/ali-han-kaya/leibniz2/actions/runs/40158081340) | [success #40158081344](https://github.com/ali-han-kaya/leibniz2/actions/runs/40158081344) | [success #39226471244](https://github.com/ali-han-kaya/leibniz2/actions/runs/39226471244) |
+| 2026-10-25 | 865de95f | [failure #40166763530](https://github.com/ali-han-kaya/leibniz2/actions/runs/40166763530) | [success #40166763478](https://github.com/ali-han-kaya/leibniz2/actions/runs/40166763478) | [success #40166763477](https://github.com/ali-han-kaya/leibniz2/actions/runs/40166763477) | [success #39226471244](https://github.com/ali-han-kaya/leibniz2/actions/runs/39226471244) |
+| 2026-10-25 | 0f6a9bb8 | [success #40187870000](https://github.com/ali-han-kaya/leibniz2/actions/runs/40187870000) | [success #40187870069](https://github.com/ali-han-kaya/leibniz2/actions/runs/40187870069) | [success #40187869999](https://github.com/ali-han-kaya/leibniz2/actions/runs/40187869999) | [success #40161574012](https://github.com/ali-han-kaya/leibniz2/actions/runs/40161574012) |
+
+`865de95f` — PR #116 (`ci(plist): P1 plist drift kapisini ayri fail-closed
+job'a al`) squash inişi: `ac0dcfb4` satırının üstüne **anlamlı** commit olarak
+yalnız bu merge gelir (`d782734a` satırı `docs(deploy)` → `DEFAULT_GAP_EXEMPT`),
+yani boşluk 1/3. `verify-delivery` hücresi **failure**'dır (#40166763530) ve
+kök neden squash merge'in kendisidir: README changelog tablosu PR'ın kendi
+commit'ini (`74926cec`) gösteriyordu, squash sonrası o hash ulaşılamaz hale
+geldi ve `test_every_readme_changelog_hash_resolves_to_live_commit` kırmızıya
+döndü (AGENTS.md'deki bilinen tuzak). Satır bunu GİZLEMEZ — defter gerçeği
+yazar. Düzeltme ayrı dilimde: dead row prune'u (heal_changelog / #117-#118);
+`docker-security` #40166763478 ve `test-smoke` #40166763477 success, üçü de
+`headSha=865de95f`, `event=push`. `determinism-trend` hücresi son main
+ölçümünü taşır (#39226471244).
+
+`0f6a9bb8` — PR #120 (`docs(deploy): 865de95f kanit satiri`) -- kaniti
+HEAD'in kendisine tasiyan satir; boylece `substantive_gap(0f6a9bb8, main)` =
+**0** (satiri yazan commit `docs(deploy)` -> `DEFAULT_GAP_EXEMPT`, kendisi
+sayilmaz). `865de95f` satirinin ustune iki ANLAMLI merge geldi ve ikisi de
+`0f6a9bb8`'in on kosulu: `7bdbd76d` (PR #118 `ci(vercel)` + README'deki olu
+`74926cec` hash'ini `865de95f` ile degistirme) ve `6e750548` (PR #119
+`ci(plist)` turetim<->canli hizalama: `plist-p1` EXCLUDE'dan cikti). Dolu
+gap 2 idi; bu satir onu 0'a cekiyor. Hucelerin hepsi `headSha=0f6a9bb8`,
+`event=push` ve **success**: `verify-delivery` #40187870000 (PR #116'dan
+kalan kirmizi #118 ile kapandi), `docker-security` #40187870069,
+`test-smoke` #40187869999. `determinism-trend` hucresi son olcek
+olcumunu tasir (#40161574012, `headSha=d782734a` success) —
+determinism-trend satirlari o an guncel olan olcum kosumunu yazabilir.
 
 `ac0dcfb4` — PR #113 (`feat(evidence): kanit boslugu uyari kademesi`) inişi:
 `930c41ad` satırının üstüne **üç anlamlı** commit geldi (PR #111 `ab13126d`,
