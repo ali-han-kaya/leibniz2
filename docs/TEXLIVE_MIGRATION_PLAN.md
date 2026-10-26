@@ -136,16 +136,33 @@ farklarının kabul raporuyla belgelenmesi.
 
 ## Faz 6 — CI geçişi
 
-- [ ] `verify.yml`: determinism adımına TeXLive kurulumu
+- [x] `verify.yml`: determinism adımına TeXLive kurulumu
   (`texlive-latex-recommended texlive-latex-extra texlive-fonts-recommended`
   — kaynak paketin font/kitaplık ihtiyacına göre ayarlanır) +
   `TEXLIVE_BIN` ile deney koşumu; beklenen: CI'da kanonik hash
   `544516b0…` (font paketleri aynıysa) — **eşleşmezse** Faz 3 kabul
   raporu CI'ya özgü hash ikilisiyle genişletilir (ölçmeden varsayma).
-- [ ] Dockerfile dokunulmaz (dashboard konteyneri TeX taşımıyor);
+  **Uygulandı (2026-10-26):** commit `e6ad499d` — verify job'una üç adım
+  (Install TeXLive + pinned tectonic 0.17.0/digest + `make -f
+  docs/Makefile.texlive check`). Paket seti taslaktan R3 ölçümüne göre
+  ayarlandı: `texlive-latex-base texlive-latex-recommended cm-super`
+  (determinism-trend/texlive-accept ile aynı kanonik bağlam; ekstra/
+  fonts-recommended bu kaynak için gereksiz). Ölçülen: SDE=1786924800,
+  passes=3, rerun_left=0×2, verdict=PASS, kanonik `5c083474…` ×2 bağımsız
+  koşum, **defter eşleşmesi=true** (§4'te kayıtlı — taslağın beklediği
+  `544516b0…` 2026-09-17 yerel probuydu; CI'da ölçülen kanonik defterde
+  zaten var, defter genişletmesi gerekmedi). Kanıt: verify-delivery run
+  40394093190 (Faz 6 adımları success).
+- [x] Dockerfile dokunulmaz (dashboard konteyneri TeX taşımıyor);
   docker-security Trivy gate'i etkilenmez.
-- [ ] Kabul: 3 workflow (test-smoke, docker-security, verify-delivery)
+  **Doğrulandı (2026-10-26):** Faz 6 diff'i yalnız verify.yml (+55 satır);
+  docker-security koşumu success (run 40394092135). Not: main'deki
+  libssl3 (CVE-2026-84782) Trivy kırmızısı Dockerfile'a dokunmadan repo
+  değişkeni `SECURITY_PATCH_PACKAGES` floor'uyla onarıldı.
+- [x] Kabul: 3 workflow (test-smoke, docker-security, verify-delivery)
   success — gerçek koşum kanıtıyla.
+  **Kanıt (2026-10-26, `e6ad499d`):** test-smoke run 40394092276 ✅ ·
+  docker-security run 40394092135 ✅ · verify-delivery run 40394093190 ✅.
 
 ## Faz 7 — Geri dönüş planı
 
