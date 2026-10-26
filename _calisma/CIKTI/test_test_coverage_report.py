@@ -104,6 +104,7 @@ class TestDetectGaps(unittest.TestCase):
                   "test_all_hooks_smoke.py", "test_dashboard_playwright_smoke.py",
                   "test_dashboard_webkit_smoke.py",
                   "test_preview_interaction_cdp.py",
+                  "test_dashboard_keyboard_nav.py",
                   "test_preview_stream_batching.py"}
         actual_uncovered = set(gaps["not_covered_by_any_hook"]) - exempt
         self.assertEqual(actual_uncovered, set(),

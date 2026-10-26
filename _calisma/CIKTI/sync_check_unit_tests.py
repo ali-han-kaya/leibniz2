@@ -126,6 +126,14 @@ EXCLUDE = {
     # full discover Playwright kurulu olmadan çalıştığı için test CI'da SKIP'e
     # düşer (ortam-yok ≠ kod-bozuk sözleşmesi) — ölçüldü 2026-09-30.
     "test_dashboard_playwright_smoke.py",
+
+    # Klavye-gezinme E2E'si: 26 testi Playwright/Chromium ister ve kendi
+    # preview_server.py'sini kurar (~105s) — pre-commit bütçesinin
+    # tamamından büyük. Koşma yeri: CI `dashboard-smoke` job'u
+    # (CI_JOB_COVERAGE kaydı aynı commit'te). Tarayıcısız guard sınıfları da
+    # bu dosyada olduğu için dosya bütün olarak job'a taşınır; Playwright
+    # yoksa o sınıflar SKIP eder, guard'lar koşar.
+    "test_dashboard_keyboard_nav.py",
 }
 
 
@@ -366,6 +374,8 @@ EXCLUDE_CI_JOBS = {
     # Hermetic etkileşim E2E'si (hover tooltip / filtre / lightbox): kendi
     # sunucusunu + sentetik verisini kurar, Chromium ister → ayrı job.
     "test_preview_interaction_cdp.py":       "dashboard-smoke",
+    # Klavye-gezinme E2E'si: aynı job'ın "Keyboard navigation E2E" adımı.
+    "test_dashboard_keyboard_nav.py":        "dashboard-smoke",
     # Özel job'ı olmayanlar — koşma yeri `verify` job'ının tam discover
     # adımıdır (`unittest discover -p "test_*.py"`, verify.yml). Yorumlardaki
     # "CI" imaları buraya bağlanır; sentinel satırı kaybolursa (denetim 4)
