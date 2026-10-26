@@ -1,17 +1,21 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """test_changelog_heal.py — squash-merge'in bıraktığı ÖLÜ changelog hash
-döngüsünün kapandığını doğrular.
+döngüsünün ve yapısal LAG-ONE eksiğinin kapandığını doğrular.
 
-Sözleşme üç parçalıdır ve üçü birlikte anlamlıdır:
+Sözleşme dört parçalıdır ve dördü birlikte anlamlıdır:
   1. `heal_changelog.py` ölü satırı GATE ile aynı ölçütle bulur
      (`origin/main` ∪ `HEAD` erişilebilirliği) ve ölçemezse sessiz "temiz"
      demez (exit 2).
-  2. `.github/workflows/changelog-heal.yml` main'e her inişte ölçer, ölü satır
-     varsa prune eder — main branch-protection'lı olduğu için çıktı bot dalı +
-     PR (auto-merge) ile döner, bare push ile DEĞİL.
-  3. Prune gerçekten tabloyu temizler (uçtan uca: README yazılır, ölü satır
-     gider, canlı satır kalır).
+  2. `heal_changelog.py` eksik (lag-one) satırı `gen_changelog`
+     `find_missing_commits` sözleşmesiyle bulur ve `--apply` bunu `--prune` ile
+     ekler; heal botunun kendi commit'i (`chore(changelog): [bot]`) META
+     sayılır — yoksa her bot PR'ı yeni bir eksik üretir (sonsuz döngü).
+  3. `.github/workflows/changelog-heal.yml` main'e her inişte ölçer, ölü/eksik
+     satır varsa prune+append eder — main branch-protection'lı olduğu için
+     çıktı bot dalı + PR (auto-merge) ile döner, bare push ile DEĞİL.
+  4. Prune/append gerçekten tabloyu düzeltir (uçtan uca: README yazılır, ölü
+     satır gider, canlı/eksik satır doğru yere gelir).
 
 Ölçüm gerçek bir geçici git deposunda yapılır — mock yok.
 """
@@ -136,6 +140,10 @@ class DeadHashMeasurementTests(unittest.TestCase):
             readme = repo / "README.md"
             live = _commit(repo, readme, _readme([]), "feat: init")
             _set_origin_main(repo)
+            # Tablo temiz olmalı: satırı olmayan commit de "eksik" sayılır
+            # (lag-one ölçümü), bu yüzden canlı satır yazılır.
+            readme.write_text(_readme([
+                "| 2026-10-01 | feat | init | `%s` |" % live]), encoding="utf-8")
             self.assertEqual(hc.main(["--check", "--repo", str(repo)]), 0)
             readme.write_text(_readme([
                 "| 2026-10-02 | fix | ölü satır | `%s` |" % FAKE]), encoding="utf-8")
@@ -157,6 +165,83 @@ class DeadHashMeasurementTests(unittest.TestCase):
             text = readme.read_text(encoding="utf-8")
             self.assertNotIn(FAKE, text)
             self.assertIn(live, text)
+
+
+class MissingRowTests(unittest.TestCase):
+    """heal_changelog.missing_hashes + --apply append — lag-one kapanışı."""
+
+    def test_missing_row_after_newest_table_row_is_reported(self):
+        """Tablodaki en yeni satırdan SONRA gelen commit eksik sayılır.
+
+        Gerçek lag-one: tabloyu yazan hook satırı commit'ten önce üretir, yani
+        en yeni commit her zaman tablonun bir adım önündedir.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            repo = _init_repo(td)
+            readme = repo / "README.md"
+            first = _commit(repo, readme, _readme([]), "feat: birinci")
+            head = _commit(repo, readme, _readme([]) + "\nx\n", "fix: ikinci")
+            _set_origin_main(repo)
+            readme.write_text(_readme([
+                "| 2026-10-01 | feat | birinci | `%s` |" % first]), encoding="utf-8")
+            self.assertEqual(hc.missing_hashes(repo, readme), [head])
+            self.assertEqual(hc.main(["--check", "--repo", str(repo)]), 1)
+
+    def test_apply_appends_missing_row_end_to_end(self):
+        """--apply: gen_changelog --prune eksik satırı ekler, --check 0'a düşer."""
+        with tempfile.TemporaryDirectory() as td:
+            repo = _init_repo(td)
+            readme = repo / "README.md"
+            first = _commit(repo, readme, _readme([]), "feat: birinci")
+            head = _commit(repo, readme, _readme([]) + "\nx\n", "fix: ikinci")
+            _set_origin_main(repo)
+            readme.write_text(_readme([
+                "| 2026-10-01 | feat | birinci | `%s` |" % first]), encoding="utf-8")
+            rc = hc.main(["--apply", "--repo", str(repo), "--json"])
+            self.assertEqual(rc, 0, "append sonrası hâlâ eksik satır var")
+            text = readme.read_text(encoding="utf-8")
+            self.assertIn(head, text)
+            self.assertIn(first, text)  # canlı satır korunur
+            self.assertEqual(hc.main(["--check", "--repo", str(repo)]), 0)
+
+    def test_bot_meta_commit_does_not_reopen_the_loop(self):
+        """Heal botunun kendi commit'i eksik sayılmamalı — döngü kırıcı.
+
+        Gerçek akış: bot PR'ı merge olur, main'e `chore(changelog): [bot]`
+        commit'i iner. O commit kendi satırını taşıyamaz. META sayılmazsa heal
+        her push'ta yeni bir eksik görüp sonsuza dek PR açar.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            repo = _init_repo(td)
+            readme = repo / "README.md"
+            first = _commit(repo, readme, _readme([]), "feat: birinci")
+            _commit(repo, readme, _readme([
+                "| 2026-10-01 | feat | birinci | `%s` |" % first]),
+                "chore(changelog): [bot] olu hash prune + eksik satir ekle")
+            _set_origin_main(repo)
+            self.assertEqual(hc.missing_hashes(repo, readme), [])
+            self.assertEqual(hc.main(["--check", "--repo", str(repo)]), 0)
+
+    def test_dead_and_missing_are_measured_together(self):
+        """Tek turda hem ölü satır silinir hem eksik satır eklenir."""
+        with tempfile.TemporaryDirectory() as td:
+            repo = _init_repo(td)
+            readme = repo / "README.md"
+            live = _commit(repo, readme, _readme([]), "feat: canlı")
+            head = _commit(repo, readme, _readme([]) + "\nx\n", "fix: yeni")
+            _set_origin_main(repo)
+            readme.write_text(_readme([
+                "| 2026-10-01 | feat | canlı satır | `%s` |" % live,
+                "| 2026-10-02 | fix | ölü satır | `%s` |" % FAKE,
+            ]), encoding="utf-8")
+            self.assertEqual(hc.dead_hashes(repo, readme), [FAKE])
+            self.assertEqual(hc.missing_hashes(repo, readme), [head])
+            rc = hc.main(["--apply", "--repo", str(repo), "--json"])
+            self.assertEqual(rc, 0)
+            text = readme.read_text(encoding="utf-8")
+            self.assertNotIn(FAKE, text)
+            self.assertIn(live, text)
+            self.assertIn(head, text)
 
 
 class HealWorkflowContractTests(unittest.TestCase):
@@ -208,14 +293,34 @@ class HealWorkflowContractTests(unittest.TestCase):
         probe = next(s for s in steps if s.get("id") == "probe")
         self.assertTrue(probe["run"].rstrip().endswith("exit 0"),
                         "probe adımı 0 ile kapanmıyor — rc=1 job'ı kırar")
-        apply = next(s for s in steps if s.get("name") == "Prune dead rows")
+        apply = next(s for s in steps
+                     if s.get("name") == "Heal changelog rows (prune + append)")
         self.assertNotIn("continue-on-error", apply)
 
-    def test_apply_only_when_dead_rows_found(self):
+    def test_apply_only_when_drift_found(self):
+        """rc=1 hem ölü hem eksik satırı kapsar; tek --apply ikisini de düzeltir."""
         steps = self.doc["jobs"]["heal"]["steps"]
-        apply = next(s for s in steps if s.get("name") == "Prune dead rows")
+        apply = next(s for s in steps
+                     if s.get("name") == "Heal changelog rows (prune + append)")
         self.assertIn("steps.probe.outputs.rc == '1'", apply["if"])
         self.assertIn("heal_changelog.py --apply", apply["run"])
+
+    def test_probe_measures_missing_rows_too(self):
+        """Ölçüm yalnız ölü satırı değil eksik (lag-one) satırı da raporlar."""
+        steps = self.doc["jobs"]["heal"]["steps"]
+        probe = next(s for s in steps if s.get("id") == "probe")
+        self.assertIn("dead + missing rows", probe["name"])
+
+    def test_bot_commit_carries_meta_prefix(self):
+        """Döngü kırıcının sözleşmesi: commit subject `chore(changelog): [bot]`.
+
+        `gen_changelog.find_missing_commits` bu prefix'i META sayar; workflow
+        başka bir subject yazarsa heal kendi commit'ini eksik görüp sonsuz PR
+        açar. Prefix `chore(changelog)` olduğu için kanıt-boşluğu muafiyeti de
+        korunur (`deploy_evidence.DEFAULT_GAP_EXEMPT`).
+        """
+        self.assertIn("chore(changelog): [bot]", self.text)
+        self.assertIn("git commit -F /tmp/heal_msg.txt", self.text)
 
     def test_commit_goes_to_bot_branch_not_bare_main(self):
         """main branch-protection'lı: bare push GH006; kayıt yolu bot dalı + PR."""

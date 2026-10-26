@@ -114,10 +114,25 @@ class CommitInfo(NamedTuple):
     description: str
 
 
-def _run_git(args: list[str]) -> str:
-    """git komutunu çalıştır, çıktıyı döndür."""
+# Heal botunun kendi commit'leri META commit'lerdir: satiri ancak commit
+# OLUSTUKTAN SONRA yazilabilir; hash'i kendi satirinda asla bulunamaz. Bunlari
+# missing-drift'e saymak changelog-heal'i her turda yeni bir bot PR'i acmaya
+# zorlar (sonsuz dongu). deploy_evidence.DEFAULT_GAP_EXEMPT ile ayni gerekce:
+# kaydi yazan adim, kaydin geride kaldigi adimdir. Marker = subject prefix'i;
+# `chore(changelog)` ile basladigi icin kanit-boslugu muafiyeti de korunur.
+META_COMMIT_PREFIX = "chore(changelog): [bot]"
+
+
+def is_meta_commit(commit: CommitInfo) -> bool:
+    """Heal botunun meta commit'i mi? (kendi changelog satirini tasiyamaz)"""
+    return commit.subject.startswith(META_COMMIT_PREFIX)
+
+
+def _run_git(args: list[str], repo: str | Path | None = None) -> str:
+    """git komutunu çalıştır, çıktıyı döndür (repo verilirse orada)."""
     result = subprocess.run(
         ["git"] + args,
+        cwd=str(repo) if repo else None,
         capture_output=True,
         text=True,
         check=True,
@@ -253,13 +268,18 @@ def link_file_changelog(
     return converted, total
 
 
-def get_git_log(limit: int | None = None) -> list[CommitInfo]:
-    """git log'dan commit listesi al (yeniden eskiye)."""
+def get_git_log(limit: int | None = None,
+                repo: str | Path | None = None) -> list[CommitInfo]:
+    """git log'dan commit listesi al (yeniden eskiye).
+
+    `repo` verilirse git orada koşar (varsayılan: çağıranın cwd'si) — heal
+    gibi başka bir checkout'u ölçen çağırıcılar için.
+    """
     fmt = "%H|%h|%aI|%s"
     args = ["log", "--no-merges", f"--format={fmt}"]
     if limit:
         args.append(f"-{limit}")
-    raw = _run_git(args)
+    raw = _run_git(args, repo=repo)
     if not raw:
         return []
 
@@ -449,15 +469,23 @@ def find_missing_commits(
     kilometre taşları. Bu yüzden yalnızca tablodaki en yeni tarihten SONRA
     gelen commit'leri ekler; geçmişteki eksik commit'leri (bilinçli olarak
     seçilmemiş) drift olarak raporlamaz.
+
+    META commit'ler (heal botunun `chore(changelog): [bot]` commit'leri) hesaba
+    KATILMAZ: satırları ancak commit oluştuktan sonra yazılabildiği için kendi
+    hash'lerini asla taşıyamazlar; katılırsa heal her turda yeniden PR açar.
     """
+    # META commit'leri her iki uçta da (yeni-commit taraması + eksik listesi)
+    # dışla; tabloda böyle bir satır kalırsa stale sayımı `find_stale_hashes`
+    # tarafından tam listeden yapılmaya devam eder.
+    commits = [ci for ci in git_commits if not is_meta_commit(ci)]
     if not existing_hashes:
         # Tablo boş → tüm commit'ler "yeni" (ama yine de limit'e saygılı)
-        return list(git_commits)
+        return list(commits)
 
     # Tablodaki en yeni commit'in tarihini bul
-    # git_commits descending (yeni→eski), existing_hashes içindeki ilk eşleşmeyi bul
+    # commits descending (yeni→eski), existing_hashes içindeki ilk eşleşmeyi bul
     newest_idx = None
-    for i, ci in enumerate(git_commits):
+    for i, ci in enumerate(commits):
         if ci.short_hash[:7] in existing_hashes:
             newest_idx = i
             break
@@ -468,7 +496,7 @@ def find_missing_commits(
         return []
 
     # newest_idx'den ÖNCEki commit'ler = tablodaki en yeni commit'ten daha yeni
-    return git_commits[:newest_idx]
+    return commits[:newest_idx]
 
 
 def find_stale_hashes(
