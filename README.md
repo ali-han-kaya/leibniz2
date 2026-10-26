@@ -680,7 +680,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-26 | docs | (deploy) 376dc2da ve 142b52dd kanit satirlarini deftere ekle (#133) | [`20e4aa50`](https://github.com/ali-han-kaya/leibniz2/commit/20e4aa50) |
 | 2026-10-26 | fix | (ci) drop missing requirements file from protection-drift (#125) | [`142b52dd`](https://github.com/ali-han-kaya/leibniz2/commit/142b52dd) |
 | 2026-10-26 | chore | (changelog) main guncellemesiyle tabloyu 35c5e298'a tazele | [`1f64d750`](https://github.com/ali-han-kaya/leibniz2/commit/1f64d750) |
-| 2026-10-26 | feat | (changelog) heal bot lag-one eksik satirini da ekler | [`6d6b63fa`](https://github.com/ali-han-kaya/leibniz2/commit/6d6b63fa) |
+| 2026-10-26 | feat | (changelog) heal bot lag-one eksik satirini da ekler (#135) | [`7d04e9d`](https://github.com/ali-han-kaya/leibniz2/commit/7d04e9d) |
 
 ### Regresyon notları
 
