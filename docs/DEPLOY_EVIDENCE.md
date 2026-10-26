@@ -27,6 +27,8 @@
 | 2026-10-25 | 0f6a9bb8 | [success #40187870000](https://github.com/ali-han-kaya/leibniz2/actions/runs/40187870000) | [success #40187870069](https://github.com/ali-han-kaya/leibniz2/actions/runs/40187870069) | [success #40187869999](https://github.com/ali-han-kaya/leibniz2/actions/runs/40187869999) | [success #40161574012](https://github.com/ali-han-kaya/leibniz2/actions/runs/40161574012) |
 | 2026-10-25 | 9657090d | [success #40215426067](https://github.com/ali-han-kaya/leibniz2/actions/runs/40215426067) | [success #40215426043](https://github.com/ali-han-kaya/leibniz2/actions/runs/40215426043) | [success #40215426046](https://github.com/ali-han-kaya/leibniz2/actions/runs/40215426046) | [success #40161574012](https://github.com/ali-han-kaya/leibniz2/actions/runs/40161574012) |
 | 2026-10-25 | 42d618da | [success #40231742647](https://github.com/ali-han-kaya/leibniz2/actions/runs/40231742647) | [success #40231742728](https://github.com/ali-han-kaya/leibniz2/actions/runs/40231742728) | [success #40231742671](https://github.com/ali-han-kaya/leibniz2/actions/runs/40231742671) | [success #40161574012](https://github.com/ali-han-kaya/leibniz2/actions/runs/40161574012) |
+| 2026-10-26 | 376dc2da | [success #40245145315](https://github.com/ali-han-kaya/leibniz2/actions/runs/40245145315) | [success #40245145303](https://github.com/ali-han-kaya/leibniz2/actions/runs/40245145303) | [success #40245145330](https://github.com/ali-han-kaya/leibniz2/actions/runs/40245145330) | [success #40161574012](https://github.com/ali-han-kaya/leibniz2/actions/runs/40161574012) |
+| 2026-10-26 | 142b52dd | [success #40248068443](https://github.com/ali-han-kaya/leibniz2/actions/runs/40248068443) | [success #40248068525](https://github.com/ali-han-kaya/leibniz2/actions/runs/40248068525) | [success #40248068405](https://github.com/ali-han-kaya/leibniz2/actions/runs/40248068405) | [success #40161574012](https://github.com/ali-han-kaya/leibniz2/actions/runs/40161574012) |
 
 `42d618da` — PR #127 (`docs(vercel): token scope'u, scope-not-accessible
 teshisi ve rotasyon`) squash'ı: `9657090d` satırının üstüne **2 anlamlı**
@@ -43,6 +45,23 @@ haftalık ölçüm, bu HEAD adına ayrıca koşum yoktur). DİKKAT:
 (AGENTS.md sınıflandırması: altyapı → rerun), attempt 2 rerun ortamında
 `A11y gate` artifact/sidecar önkoşulunda düştü, attempt 3 tam rerun success.
 Satır gerçeği yazar: bu HEAD'in ilk denemeleri kırmızıydı, nihai kanıt success.
+
+`376dc2da` (PR #123, `chore(changelog)`) ve `142b52dd` (PR #125, `fix(ci)`):
+`42d618da` satırının üstüne main'e inen iki merge. Uyarı 2/3'tü —
+`substantive_gap(42d618da, main)` = 2 (`92125bf9` merge + `142b52dd`;
+`35c5e298`, `1f64d750`, `376dc2da` prefix'leri `DEFAULT_GAP_EXEMPT`).
+En yeni satır artık `142b52dd` olduğu için gap **0**; `376dc2da` satırı
+arada kalan gerçek main HEAD'ini kayda geçirir. Hücreler `event=push`:
+`376dc2da` → `verify-delivery` #40245145315, `docker-security` #40245145303,
+`test-smoke` #40245145330; `142b52dd` → #40248068443, #40248068525,
+#40248068405 (hepsi success, 2026-10-26'da API'den canlı okundu).
+`determinism-trend` hücresi iki satırda da son main ölçümünü taşır
+(#40161574012, `headSha=d782734a` success — haftalık ölçüm, bu HEAD'ler
+adına ayrıca koşum yoktur). `92125bf9` bilinçli olarak satırsızdır:
+`chore/changelog-sync` dalı içinde `origin/main`'i birleştiren bir merge'dir,
+main HEAD'i olarak push edilmediği için `headSha=92125bf9` hiçbir koşum
+yoktur — ona satır yazmak kanıt uydurmak olurdu. Bu yüzden kapanış
+`142b52dd` satırıyla yapıldı (gap 2 → 0).
 
 `9657090d` — PR #115 (`chore: weekly determinism trend record (bot)`) inişi:
 `0f6a9bb8` satırının üstüne **7 anlamlı** commit geldi (PR #116-#121 merge
