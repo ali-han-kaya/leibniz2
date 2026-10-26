@@ -684,6 +684,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-26 | fix | (changelog) heal bot PR'inda gerekli check'leri tetikle (#139) | [`e74a118`](https://github.com/ali-han-kaya/leibniz2/commit/e74a118) |
 | 2026-10-26 | chore | (changelog) olu hash temizligi + merge satiri (#137) | [`23ebc43`](https://github.com/ali-han-kaya/leibniz2/commit/23ebc43) |
 | 2026-10-26 | fix | (changelog) heal bot PR kosumlarini onayla, dispatch yerine (#140) | [`8a62c96`](https://github.com/ali-han-kaya/leibniz2/commit/8a62c96) |
+| 2026-10-26 | fix | (changelog) approve yalniz bu commit'in kosumlarini onaylasin (#142) | [`65b4529`](https://github.com/ali-han-kaya/leibniz2/commit/65b4529) |
 
 ### Regresyon notları
 
