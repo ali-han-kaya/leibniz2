@@ -35,8 +35,8 @@ on:
 permissions:
   contents: write
   pull-requests: write
-  # Bot dalında required check'leri `gh workflow run` ile tetiklemek için
-  # (GITHUB_TOKEN push'ları workflow tetiklemez — aşağıdaki dispatch adımı).
+  # Bot PR'ının `action_required` koşumlarını onaylamak için
+  # (onaysız hiçbir check raporlanmaz — aşağıdaki approve adımı).
   actions: write
 
 concurrency:
@@ -128,17 +128,30 @@ jobs:
           gh pr merge "$PR" --auto --merge \
             --subject "chore(changelog): [bot] changelog satirlarini tazele" \
             || echo "(auto-merge kuyruğa alınamadı — PR açık kalır, elle incelenir)"
-          # GITHUB_TOKEN ile açılan dalda GitHub workflow'ları ÇALIŞTIRMAZ
-          # (sonsuz döngü koruması): PR'a hiç check raporlanmaz, required
-          # context'ler hiç oluşmaz ve `--auto` sonsuza dek BLOCKED kalır
-          # (ölçüldü: PR #136 → 0 check, merge imkânsız). workflow_dispatch bu
-          # kısıtlamanın dışındadır; zorunlu context'leri üreten verify.yml bot
-          # dalı için elle tetiklenir. Tetikleme başarısızsa job KIRMIZI —
-          # "PR açtım" tek başına yeterli değil.
-          if ! gh workflow run verify.yml --ref "$HEAL_BRANCH"; then
-            echo "FAIL: verify.yml bot dalında tetiklenemedi — required check'ler oluşmaz, auto-merge ilerlemez" >&2
+          # GITHUB_TOKEN ile açılan PR'da pull_request workflow'ları
+          # `action_required` (onay bekliyor) olarak doğar: hiçbir check
+          # raporlanmaz, required context'ler oluşmaz, `--auto` sonsuza dek
+          # BLOCKED kalır (ölçüldü: PR #136 ve #138 — 0 check). Onaylamak
+          # check'leri PR'a BAĞLAR (ölçüldü: onay sonrası #138 checks=10);
+          # workflow_dispatch ise ayrı bir koşum üretir ve PR'a bağlanmaz.
+          # Onaylanacak koşum PR açıldıktan birkaç saniye sonra görünür.
+          approved=0
+          for _ in 1 2 3 4 5 6; do
+            ids=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?branch=$HEAL_BRANCH&per_page=20" \
+                  --jq '.workflow_runs[] | select(.conclusion=="action_required") | .id')
+            for id in $ids; do
+              if gh api -X POST "repos/$GITHUB_REPOSITORY/actions/runs/$id/approve" >/dev/null; then
+                approved=$((approved + 1))
+              fi
+            done
+            [ "$approved" -gt 0 ] && break
+            sleep 10
+          done
+          if [ "$approved" -eq 0 ]; then
+            echo "FAIL: bot PR'inda onay bekleyen kosum yok — check'ler raporlanmaz, auto-merge ilerlemez" >&2
             exit 1
           fi
+          echo "Onaylanan kosum: $approved"
 
       - name: Summary
         if: always()
