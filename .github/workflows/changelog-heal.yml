@@ -35,6 +35,9 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  # Bot dalında required check'leri `gh workflow run` ile tetiklemek için
+  # (GITHUB_TOKEN push'ları workflow tetiklemez — aşağıdaki dispatch adımı).
+  actions: write
 
 concurrency:
   group: changelog-heal-${{ github.ref }}
@@ -125,6 +128,17 @@ jobs:
           gh pr merge "$PR" --auto --merge \
             --subject "chore(changelog): [bot] changelog satirlarini tazele" \
             || echo "(auto-merge kuyruğa alınamadı — PR açık kalır, elle incelenir)"
+          # GITHUB_TOKEN ile açılan dalda GitHub workflow'ları ÇALIŞTIRMAZ
+          # (sonsuz döngü koruması): PR'a hiç check raporlanmaz, required
+          # context'ler hiç oluşmaz ve `--auto` sonsuza dek BLOCKED kalır
+          # (ölçüldü: PR #136 → 0 check, merge imkânsız). workflow_dispatch bu
+          # kısıtlamanın dışındadır; zorunlu context'leri üreten verify.yml bot
+          # dalı için elle tetiklenir. Tetikleme başarısızsa job KIRMIZI —
+          # "PR açtım" tek başına yeterli değil.
+          if ! gh workflow run verify.yml --ref "$HEAL_BRANCH"; then
+            echo "FAIL: verify.yml bot dalında tetiklenemedi — required check'ler oluşmaz, auto-merge ilerlemez" >&2
+            exit 1
+          fi
 
       - name: Summary
         if: always()
