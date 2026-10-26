@@ -281,7 +281,7 @@ class HealWorkflowContractTests(unittest.TestCase):
         """
         text = self.text
         self.assertIn("/actions/runs/$id/approve", text)
-        self.assertIn('select(.conclusion=="action_required")', text)
+        self.assertIn("action_required", text)
         # Dispatch yanlış çözümdü: PR'a bağlanmaz, boşa koşum üretir.
         self.assertNotIn("gh workflow run", text)
         # Onay, PR açıldıktan SONRA.
@@ -290,6 +290,10 @@ class HealWorkflowContractTests(unittest.TestCase):
         # Onaylanacak koşum yoksa sessiz kalınmaz: satır kırmızı biter.
         idx = text.index("/actions/runs/$id/approve")
         self.assertIn("exit 1", text[idx:idx + 900])
+        # Yalnız BU commit'in koşumları: dal filtresi bayat koşumları onaylar
+        # ve yeni PR check'siz kalır (ölçüldü: #141).
+        self.assertIn("SHA=$(git rev-parse HEAD)", text)
+        self.assertIn("head_sha==" , text)
 
     def test_full_history_fetch_required_for_reachability(self):
         steps = self.doc["jobs"]["heal"]["steps"]
