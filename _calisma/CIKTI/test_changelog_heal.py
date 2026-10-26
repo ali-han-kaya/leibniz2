@@ -269,22 +269,27 @@ class HealWorkflowContractTests(unittest.TestCase):
         # Bot dalında check tetiklemek için `gh workflow run` -> actions: write.
         self.assertEqual(perms["actions"], "write")
 
-    def test_bot_pr_checks_are_dispatched(self):
-        """Bot PR'ı check'siz kalmasın: verify.yml dispatch edilir.
+    def test_bot_pr_runs_are_approved(self):
+        """Bot PR'ının koşumları ONAYLANIR — yoksa check hiç raporlanmaz.
 
-        Ölçüldü (PR #136): `GITHUB_TOKEN` ile açılan dalda push-event
-        workflow'ları KOŞMAZ → 0 check → required context'ler yok →
-        `--auto` sonsuza dek BLOCKED. `workflow_dispatch` muaf olduğundan
-        zorunlu context'leri üreten verify.yml bot dalı için tetiklenir.
+        Ölçüldü (#136, #138): `GITHUB_TOKEN` ile açılan PR'da pull_request
+        koşumları `action_required` (onay bekliyor) doğar → 0 check →
+        required context'ler yok → `--auto` sonsuza dek BLOCKED. Onaylamak
+        check'leri PR'a BAĞLAR (#138: onay sonrası checks=10);
+        `workflow_dispatch` ise PR'a bağlanmayan ayrı bir koşum üretir, bu
+        yüzden kullanılmaz.
         """
         text = self.text
-        self.assertIn('gh workflow run verify.yml --ref "$HEAL_BRANCH"', text)
-        # Dispatch, PR açıldıktan/auto-merge kurulduktan SONRA olmalı.
-        self.assertGreater(text.index("gh workflow run verify.yml"),
+        self.assertIn("/actions/runs/$id/approve", text)
+        self.assertIn('select(.conclusion=="action_required")', text)
+        # Dispatch yanlış çözümdü: PR'a bağlanmaz, boşa koşum üretir.
+        self.assertNotIn("gh workflow run", text)
+        # Onay, PR açıldıktan SONRA.
+        self.assertGreater(text.index("/actions/runs/$id/approve"),
                            text.index("gh pr create"))
-        # Tetiklenemezse sessiz kalınmaz: satır kırmızı biter.
-        idx = text.index("gh workflow run verify.yml")
-        self.assertIn("exit 1", text[idx:idx + 400])
+        # Onaylanacak koşum yoksa sessiz kalınmaz: satır kırmızı biter.
+        idx = text.index("/actions/runs/$id/approve")
+        self.assertIn("exit 1", text[idx:idx + 900])
 
     def test_full_history_fetch_required_for_reachability(self):
         steps = self.doc["jobs"]["heal"]["steps"]
