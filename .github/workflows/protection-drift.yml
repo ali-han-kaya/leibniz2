@@ -57,9 +57,18 @@ jobs:
         with:
           python-version: "3.11"
 
-      # status_checks.gate_jobs() verify.yml'i ayrıştırır (aynı bağımlılık).
-      - name: Install pinned Python dependencies
-        run: pip install -r _calisma/requirements-z3.txt
+      # PyYAML — PROTECTION_PAT KURULDU (2026-10-25): kapı artık SKIP değil,
+      # her koşumda korumayı okur → `status_checks.gate_jobs()` (verify.yml
+      # ayrıştırma) her koşumda çağrılır ve PyYAML ZORUNLU. Yoksa script
+      # fail-closed rc=2 verir ve kapı ölürdü.
+      #
+      # NEDEN `-r _calisma/requirements-z3.txt` DEĞİL: o dosya main'de hiç
+      # commit edilmediği için eski adım "Could not open requirements file"
+      # ile düşüyor ve KAPI HİÇ KOŞMUYORDU (run 40161575769). Tek gerçek
+      # bağımlılık PyYAML; pin dev_bootstrap.sh PINS ile aynı (verify.yml de
+      # aynı pini kullanır).
+      - name: Install PyYAML (status_checks dependency)
+        run: pip install PyYAML==6.0.3
 
       - name: Branch protection drift denetimi (P1) + alert
         env:
