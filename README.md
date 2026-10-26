@@ -681,6 +681,8 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-26 | fix | (ci) drop missing requirements file from protection-drift (#125) | [`142b52dd`](https://github.com/ali-han-kaya/leibniz2/commit/142b52dd) |
 | 2026-10-26 | chore | (changelog) main guncellemesiyle tabloyu 35c5e298'a tazele | [`1f64d750`](https://github.com/ali-han-kaya/leibniz2/commit/1f64d750) |
 | 2026-10-26 | feat | (changelog) heal bot lag-one eksik satirini da ekler (#135) | [`7d04e9d2`](https://github.com/ali-han-kaya/leibniz2/commit/7d04e9d2) |
+| 2026-10-26 | fix | (changelog) heal bot PR'inda gerekli check'leri tetikle (#139) | [`e74a118`](https://github.com/ali-han-kaya/leibniz2/commit/e74a118) |
+| 2026-10-26 | chore | (changelog) olu hash temizligi + merge satiri (#137) | [`23ebc43`](https://github.com/ali-han-kaya/leibniz2/commit/23ebc43) |
 
 ### Regresyon notları
 
