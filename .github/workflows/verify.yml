@@ -320,6 +320,61 @@ jobs:
         if: always()
         run: bash _calisma/CIKTI/apt_install.sh poppler-utils qpdf
 
+      # ── Faz 6 — CI geçişi (docs/TEXLIVE_MIGRATION_PLAN.md §Faz 6) ──────
+      # Determinism adımı (K6-DETERM bağlamı): deney bu işte TEXLIVE_BIN ile
+      # koşar. Paket seti plan taslağında "recommended + extra +
+      # fonts-recommended" idi ("kaynak ihtiyacına göre ayarlanır"); R3
+      # ölçümü (2026-10-02) ve determinism-trend/texlive-accept işleri bu
+      # kaynak için kanıtlanmış seti gösterdi: base + recommended + cm-super
+      # (cm-super ŞART: T1 fontenc'siz mktexpk METAFONT bitmap'i her koşumda
+      # hash kaydırır — determinism-trend.yml ölçümü). Aynı set = kabul
+      # defteri §4 satır 8 ile AYNI kanonik bağlam (ölçmeden varsayma yok;
+      # eşleşmezse Faz 6 çıkış yolu: defter CI-özel ikiliyle genişletilir).
+      # Dockerfile dokunulmaz (Faz 6): dashboard konteyneri TeX taşımaz,
+      # Trivy güvenlik kapısını etkilemez.
+      - name: Install TeXLive (Faz 6 — determinism experiment)
+        if: always()
+        run: bash _calisma/CIKTI/apt_install.sh --no-install-recommends texlive-latex-base texlive-latex-recommended cm-super
+
+      # Deney betiği İKİ moturu de zorunlu tutar (tek motor → SKIP + rapor
+      # yok → make check fail-closed düşerdi). Pini trend/accept ile aynı
+      # (0.17.0 musl + sha256 digest — tedarik-zinciri pini).
+      - name: Install tectonic (Faz 6, pinned + digest-verified)
+        if: always()
+        run: |
+          set -euo pipefail
+          TECTONIC_VERSION="0.17.0"
+          TECTONIC_SHA256="8533d07f9ccbd7a65824b9e0459041bca34af1eb33daba48f59215593753a3b7"
+          curl -sL "https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%40${TECTONIC_VERSION}/tectonic-${TECTONIC_VERSION}-x86_64-unknown-linux-musl.tar.gz" -o /tmp/tectonic.tar.gz
+          echo "${TECTONIC_SHA256}  /tmp/tectonic.tar.gz" | sha256sum -c -
+          mkdir -p /tmp/tectonic-bin
+          tar -xzf /tmp/tectonic.tar.gz -C /tmp/tectonic-bin
+          sudo install -m 0755 /tmp/tectonic-bin/tectonic /usr/local/bin/tectonic
+          tectonic --version
+
+      # Deney = make check (tek giriş noktası, Faz 0/3 sözleşmesi): 2 bağımsız
+      # 3-geçiş SDE koşumu + /ID-kanonik karşılaştırma + verdict=PASS ve
+      # rerun=0 grepleri. TEXLIVE_BIN make içinde pdflatex konumundan türetilir;
+      # SDE teslim sabiti (1786924800) Makefile default'u — accept bağlamıyla
+      # aynı epoch. Defter karşılaştırması BİLGİ amaçlıdır: fail-closed ledger
+      # kapısı texlive-accept işinin `make accept` adımındadır; eşleşmezse Faz 6
+      # çıkış yolu docs/ID_RESIDUAL_ACCEPTANCE.md §4 defterinin bilinçli
+      # genişletilmesidir (ölçmeden varsayma yok).
+      - name: Run TeXLive determinism experiment (Faz 6, TEXLIVE_BIN)
+        if: always()
+        run: |
+          set -euo pipefail
+          make -f docs/Makefile.texlive check
+          echo '--- determinism evidence (Faz 6) ---'
+          cat .build/texlive/determinism_report.txt
+          CANON="$(sed -n 's/^texlive_canonical_run1_sha256=//p' .build/texlive/determinism_report.txt)"
+          test -n "$CANON" || { echo "ERROR: raporda kanonik hash yok (Faz 6)" >&2; exit 1; }
+          if grep -q "$CANON" docs/ID_RESIDUAL_ACCEPTANCE.md; then
+            echo "ledger_match=true canon=$CANON"
+          else
+            echo "ledger_match=false canon=$CANON — Faz 6 çıkış yolu: docs/ID_RESIDUAL_ACCEPTANCE.md §4 defteri CI-özel ikiliyle bilinçli genişletilir"
+          fi
+
       # K8: Z3 sembolik ispat. Yerel ispatla aynı sürüm (tekrarlanabilirlik).
       - name: Install Z3 (K8)
         if: always()
