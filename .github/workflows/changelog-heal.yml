@@ -1,21 +1,30 @@
 name: changelog-heal
 
 # ────────────────────────────────────────────────────────────────────────────
-# SQUASH-MERGE ARTIGI ÖLÜ CHANGELOG HASH'LERİNİ OTOMATİK TEMİZLER
+# CHANGELOG'U OTOMATİK İYİLEŞTİRİR: ÖLÜ HASH PRUNE + EKSİK (LAG-ONE) SATIR EKLE
 #
-# Sorun (ölçüldü): changelog satırı commit hash'iyle anahtarlanır ve
+# Sorun 1 (ölçüldü): changelog satırı commit hash'iyle anahtarlanır ve
 # update_changelog_hook.sh satırı DALIN kendi commit'i için yazar. Squash-merge
 # o commit'i main geçmişinden düşürür → satır ölü hash olur ve
 # test_every_readme_changelog_hash_resolves_to_live_commit kırmızıya döner.
-# PR #55, #90, #93 ve #108'de aynı kırmızı elle prune edildi; bu workflow o
-# döngüyü kapatır: main'e her inişte ölçer, ölü satır varsa prune eder ve
-# bot dalı + PR (auto-merge) ile geri indirir.
+# PR #55, #90, #93 ve #108'de aynı kırmızı elle prune edildi.
+#
+# Sorun 2 (yapısal lag-one): tablo her commit'ten sonra bir commit geride kalır
+# (hash ancak commit oluştuktan sonra bilinir). Bu gecikme elle
+# `gen_changelog.py --update` + chore(changelog) PR'ı ile kapatılıyordu (PR #123);
+# bu workflow aynı adımı otomatikleştirir: eksik satır varsa ekler.
 #
 # Kayıt yolu: main branch-protection'lıdır; bare push GH006 ile reddedilir
 # (determinism-trend ile aynı kanıtlanmış yol — bot dalı + PR + --auto merge).
 #
+# Döngü kırıcı: bot commit'i `chore(changelog): [bot]` prefix'i ile yazılır;
+# gen_changelog.find_missing_commits bu META commit'leri eksik saymaz. Aksi
+# halde bot PR'ı her turda yeni bir eksik commit üretir (sonsuz PR döngüsü).
+# Prefix `chore(changelog)` ile başladığı için kanıt-boşluğu muafiyeti korunur.
+#
 # Fail-closed: ölçüm yapılamıyorsa (origin/main yok / git erişilemedi) iş
-# KIRMIZI biter — sessiz "temiz" yok. Ölü satır bulunamazsa hiçbir şey yazılmaz.
+# KIRMIZI biter — sessiz "temiz" yok. Eklenecek/silinecek satır yoksa hiçbir
+# şey yazılmaz.
 # ────────────────────────────────────────────────────────────────────────────
 
 on:
@@ -52,7 +61,7 @@ jobs:
       # normal durum — adımı kırmızı yaparsa sonraki adımlar (varsayılan
       # `if: success()`) atlanır ve iyileştirme hiç çalışmaz. Yalnız "ölçülemedi"
       # job'ı kırmızı yapar; her durumda adım 0 ile biter, karar `outputs.rc`.
-      - name: Measure dead changelog hashes
+      - name: Measure changelog drift (dead + missing rows)
         id: probe
         run: |
           set +e
@@ -61,7 +70,7 @@ jobs:
           set -e
           echo "rc=$rc" >> "$GITHUB_OUTPUT"
           if [ "$rc" -eq 2 ]; then
-            echo "FAIL: ölü hash ölçülemedi (origin/main yok veya git erişilemedi)" >&2
+            echo "FAIL: changelog ölçülemedi (origin/main yok veya git erişilemedi)" >&2
             exit 1
           fi
           if [ "$rc" -ne 0 ] && [ "$rc" -ne 1 ]; then
@@ -73,7 +82,7 @@ jobs:
           fi
           exit 0
 
-      - name: Prune dead rows
+      - name: Heal changelog rows (prune + append)
         if: steps.probe.outputs.rc == '1'
         run: python3 _calisma/CIKTI/heal_changelog.py --apply
 
@@ -85,7 +94,7 @@ jobs:
         run: |
           set -euo pipefail
           if git diff --quiet -- README.md; then
-            echo "FAIL: --apply ölü satır bildirdi ama README değişmedi" >&2
+            echo "FAIL: --apply ölü/eksik satır bildirdi ama README değişmedi" >&2
             exit 1
           fi
           git config user.name "github-actions[bot]"
@@ -93,25 +102,29 @@ jobs:
           git switch -c "$HEAL_BRANCH"
           git add README.md
           {
-            echo 'chore(changelog): olu hash satirlarini prune et (bot)'
+            echo 'chore(changelog): [bot] olu hash prune + eksik satir ekle'
             echo ''
-            echo 'Squash-merge dal commitini main gecmisinden dusurur; changelog satiri'
-            echo 'o commit e bagliydi -> olu hash. Bu commit gen_changelog.py --prune ciktisidir.'
+            echo 'Olü satir: squash-merge dal commitini main gecmisinden dusurur.'
+            echo 'Eksik satir: tablo her commit ten bir commit geride kalir (lag-one).'
+            echo 'Bu commit gen_changelog.py --prune ciktisidir; [bot] prefix i META'
+            echo 'commit sayilir ve eksik-satir olcumune katilmaz (dongu kirici).'
           } > /tmp/heal_msg.txt
           git commit -F /tmp/heal_msg.txt
           git push --force origin "HEAD:$HEAL_BRANCH"
           PR=$(gh pr list --head "$HEAL_BRANCH" --state open --json number --jq '.[0].number // ""')
           if [ -z "$PR" ]; then
             gh pr create --base main --head "$HEAL_BRANCH" \
-              --title "chore(changelog): olu hash satirlarini prune et (bot)" \
-              --body 'Otomatik: squash-merge artığı ölü changelog satırları gen_changelog.py --prune ile temizlendi. Kapı (test_every_readme_changelog_hash_resolves_to_live_commit) bu PR ile yeşile döner.'
+              --title "chore(changelog): [bot] olu hash prune + eksik satir ekle" \
+              --body 'Otomatik: gen_changelog.py --prune ile ölü hash satırları silindi ve tabloda eksik kalan (lag-one) satırlar eklendi. [bot] prefix i META commit sayılır; eksik-satır ölçümüne katılmaz.'
             PR=$(gh pr list --head "$HEAL_BRANCH" --state open --json number --jq '.[0].number // ""')
           fi
           if [ -z "$PR" ]; then
             echo "FAIL: bot PR açılamadı (Actions'a PR izni kapalı olabilir)" >&2
             exit 1
           fi
-          gh pr merge "$PR" --auto --merge || echo "(auto-merge kuyruğa alınamadı — PR açık kalır, elle incelenir)"
+          gh pr merge "$PR" --auto --merge \
+            --subject "chore(changelog): [bot] changelog satirlarini tazele" \
+            || echo "(auto-merge kuyruğa alınamadı — PR açık kalır, elle incelenir)"
 
       - name: Summary
         if: always()
@@ -120,5 +133,5 @@ jobs:
             echo "## changelog-heal"
             echo ""
             echo "- ölçüm exit: \`${{ steps.probe.outputs.rc }}\`"
-            echo "- 0 = temiz · 1 = ölü satır bulundu (prune + bot PR) · 2 = ölçülemedi (kırmızı)"
+            echo "- 0 = temiz · 1 = ölü ve/veya eksik satır bulundu (prune/append + bot PR) · 2 = ölçülemedi (kırmızı)"
           } >> "$GITHUB_STEP_SUMMARY"

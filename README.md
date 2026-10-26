@@ -676,6 +676,11 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-25 | test | (sync) checkpoint the tree-reconciliation work that is green (#124) | [`056da049`](https://github.com/ali-han-kaya/leibniz2/commit/056da049) |
 | 2026-10-25 | chore | (format) video ve github_scripts prettier reformati (#122) | [`684cf5eb`](https://github.com/ali-han-kaya/leibniz2/commit/684cf5eb) |
 | 2026-10-25 | chore | (changelog) README tablosuna son 4 merge satirini ekle | [`15c3f922`](https://github.com/ali-han-kaya/leibniz2/commit/15c3f922) |
+| 2026-10-26 | feat | (changelog) heal bot lag-one eksik satirini da ekler | [`ebaadd9c`](https://github.com/ali-han-kaya/leibniz2/commit/ebaadd9c) |
+| 2026-10-26 | docs | (deploy) 7bdbd76d kanit satirini deftere ekle (#134) | [`5b2268e9`](https://github.com/ali-han-kaya/leibniz2/commit/5b2268e9) |
+| 2026-10-26 | docs | (deploy) 376dc2da ve 142b52dd kanit satirlarini deftere ekle (#133) | [`20e4aa50`](https://github.com/ali-han-kaya/leibniz2/commit/20e4aa50) |
+| 2026-10-26 | fix | (ci) drop missing requirements file from protection-drift (#125) | [`142b52dd`](https://github.com/ali-han-kaya/leibniz2/commit/142b52dd) |
+| 2026-10-26 | chore | (changelog) main guncellemesiyle tabloyu 35c5e298'a tazele | [`1f64d750`](https://github.com/ali-han-kaya/leibniz2/commit/1f64d750) |
 
 ### Regresyon notları
 
