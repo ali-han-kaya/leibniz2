@@ -97,10 +97,12 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # ── İki-adımlı Trivy: SARIF (yorum-kaynağı) + table (log-kanıtı) ──
-      # SARIF adımı continue-on-error: bulgu varsa exit 1 üretir ama koşum
-      # SARIF'i diskte bıraksın diye; GERÇEK kapı yorum-adımındaki
-      # core.setFailed'de yaşar (SARIF okunamazsa da kırmızı — fail-closed).
+      # ── Üç bacak: table (ZORLAYICI) + SARIF (yorum girdisi) + yorum (rapor) ──
+      # SARIF adımı tolerate: bulgu varsa exit 1 üretir ama koşum SARIF'i
+      # diskte bıraksın diye. GERÇEK kapı aşağıdaki table adımıdır
+      # (exit-code 1, tolerate YOK) — CI renginin TEK kaynağı odur; yorum
+      # script'i ise raporlama bacağıdır (aşağıda, tolerate).
+      # Sözleşme: test_docker_security_smoke.TestTableAndCommentLegContract.
       - name: Scan image with Trivy (SARIF)
         uses: aquasecurity/trivy-action@v0.35.0
         continue-on-error: true
@@ -117,7 +119,8 @@ jobs:
       - name: Scan image with Trivy (table — log kanıtı)
         # v0.35.0: belgelenmiş güvenli sürüm (2026-03 tag-compromise sonrası
         # akıl sağlığı listesi). Mutable @master asla — pin kapısı da bloke eder.
-        # Zorlayıcı kapı exit-code 1'de; SARIF yorum-adımına kanıt taşır.
+        # Zorlayıcı BACAK: exit-code 1 ve tolerate YOK — job renginin tek
+        # kaynağı bu adımdır; SARIF yorum-adımına kanıt taşır.
         uses: aquasecurity/trivy-action@v0.35.0
         with:
           image-ref: leibniz2/verify-dashboard:${{ github.sha }}
@@ -127,12 +130,20 @@ jobs:
           ignore-unfixed: ${{ env.TRIVY_GATE_IGNORE_UNFIXED }}
           exit-code: 1
 
-      - name: Annotate PR with Trivy findings (fail-closed)
+      - name: Annotate PR with Trivy findings (report-only)
+        # RAPOR bacağı (2026-10-27 regresyon sözleşmesi): script setFailed
+        # ile bulgu/bozuk-SARIF gürültüsünü adımı kırmızı işaretleterek
+        # duyurmaya devam eder, ama continue-on-error: true → tablo bacağı
+        # temizken bu adım CI'yı kırmızıya DÜŞÜREMEZ. Ölçülen olay: PR #54
+        # (run 36734468880) — tabela success (0 kapı-seviyesi bulgu), yorum
+        # 25 sahte-blokaj bildirip job'ı kırmızıya çevirdi. Sözleşme:
+        # test_docker_security_smoke.TestTableAndCommentLegContract.
         # always(): gate kırmızıyken de yorum DÜŞMELİ (bulgu-tablosu PR'a
         # görünür kalmalı) — aksi halde kırmızı PR'da kanıt yok olur.
         # Kapı eşiği script'e ad-elle verilmez: workflow-env (TRIVY_GATE_*)
         # her adıma otomatik aktarılır, script process.env'ten okur.
         if: always() && github.event_name == 'pull_request'
+        continue-on-error: true
         uses: actions/github-script@v8
         with:
           script: |

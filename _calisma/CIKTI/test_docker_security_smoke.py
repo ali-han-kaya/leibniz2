@@ -267,5 +267,77 @@ class TestTrivyCommentGateWiring(unittest.TestCase):
         self.assertIn("pull_request", on_block)
 
 
+@unittest.skipUnless(HAVE_YAML, "PyYAML gerekli (docker-security.yml ayrıştırma)")
+class TestTableAndCommentLegContract(unittest.TestCase):
+    """İki-bacak regresyon kapısı: tablo temizken yorum CI'yı kırmızıya düşüremez.
+
+    Ölçülen olay (PR #54, run 36734468880): zorlayıcı tabela bacağı
+    `success` (0 kapı-seviyesi bulgu) olduğu hâlde PR yorum script'i
+    sahte-blokaj üretip setFailed verdi ve job CI'da kırmızıya döndü.
+    İki bacağın rolü yapısal olarak pin'lenir:
+
+      * `Scan image with Trivy (table)` = ZORLAYICI bacak: exit-code 1 ve
+        tolerate YOK — CI renginin TEK kaynağı (anti-weakening: rengi
+        "yeşiltmek" için bu adıma tolerate eklenemez).
+      * `Annotate PR with Trivy findings` = RAPOR bacağı: script setFailed
+        ile bloklamayı duyurmaya devam eder, ama `continue-on-error: true`
+        sayesinde tablo temizken CI'yı kırmızıya DÜŞÜREMEZ. Garanti
+        script'te değil workflow'dadır — script fail-closed raporu korunur.
+      * SARIF taraması tolerate: yalnız yorum girdisi üretir.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.wf = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+        cls.src = PR_COMMENT.read_text(encoding="utf-8")
+
+    @staticmethod
+    def _step(job, marker):
+        for step in job["steps"]:
+            if marker in str(step.get("name", "")):
+                return step
+        return None
+
+    def test_table_leg_is_sole_enforcer(self):
+        # Zorlayıcı bacak tolerate EDİLEMEZ; diğer iki bacak tolerate.
+        job = self.wf["jobs"]["image-scan"]
+        table = self._step(job, "Scan image with Trivy (table")
+        self.assertIsNotNone(table, "zorlayıcı tabela adımı yok")
+        self.assertNotIn(
+            "continue-on-error", table,
+            "zorlayıcı tabela adımına tolerate eklenemez — job renginin "
+            "tek kaynağı bu adımdır (anti-weakening)")
+        self.assertEqual(str((table.get("with") or {}).get("exit-code")), "1",
+                         "zorlayıcı kapı exit-code 1'de kalmalı")
+        sarif = self._step(job, "Scan image with Trivy (SARIF)")
+        self.assertIsNotNone(sarif, "SARIF adımı yok")
+        self.assertIs(sarif.get("continue-on-error"), True,
+                      "SARIF adımı yorum girdisidir — tolerate kalmalı")
+
+    def test_comment_leg_reports_but_cannot_redden_ci(self):
+        # Senaryo: tablo Clean, PR yorumu bloklayıcı bulgu BİLDİRİYOR —
+        # CI rengi yine de yeşil kalmalı (yapısal: tolerate).
+        job = self.wf["jobs"]["image-scan"]
+        annotate = self._step(job, "Annotate PR with Trivy findings")
+        self.assertIsNotNone(annotate, "PR yorum adımı yok")
+        self.assertIs(
+            annotate.get("continue-on-error"), True,
+            "yorum bacağı tablo temizken CI'yı kırmızıya düşüremez "
+            "(PR #54 regresyonu: run 36734468880 — tabela success, "
+            "yorum 25 sahte-blokaj ile job'ı kırmızıya çevirdi)")
+        # Rapor hâlâ canlı: bloklama setFailed ile duyurulur — tolerans
+        # workflow düzeyindedir, script'in fail-closed raporu silinmez.
+        self.assertIn("core.setFailed", self.src,
+                      "yorum script'i bloklamayı setFailed ile bildirmeye "
+                      "devam etmeli (sessiz rapor yasak)")
+        # always(): tablo kırmızıyken de kanıt yorumu düşer; PR dışı olayda
+        # yorum yazılmaz.
+        self.assertIn("github.event_name == 'pull_request'",
+                      str(annotate.get("if")))
+        script = str((annotate.get("with") or {}).get("script", ""))
+        self.assertIn("trivy_sarif_pr_comment.js", script,
+                      "yorum bacağı script'i tüketmeli — rapor kaybı sessizleşmez")
+
+
 if __name__ == "__main__":
     unittest.main()
