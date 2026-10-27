@@ -3,7 +3,7 @@
 [`docs/PUBLISH_SCENARIO.md`](../PUBLISH_SCENARIO.md) AŞAMA 1 (b) "Branch
 protection — web UI adım adım" bölümünün görsel karşılığı. GitHub'ın
 `Settings → Branches → Add branch protection rule` akışının her adımını
-sırayla gösterir (16 required check için).
+sırayla gösterir (18 required check için).
 
 > **Önemli şeffaflık notu:** Bu görseller GitHub arayüzünün **birebir
 > reprodüksiyonudur** — canlı ekran görüntüsü DEĞİL. Ayarlar sayfaları
@@ -31,7 +31,7 @@ Kural yalnızca `main` için; "All branches" seçeneğini kullanma.
 ![ADIM 3 — PR review](step-03-pr-review.png)
 
 ### 4 — Require status checks to pass before merging ✓
-Arama kutusuna 16 check adını tek tek yazıp seç (`status_checks.py --json`
+Arama kutusuna 18 check adını tek tek yazıp seç (`status_checks.py --json`
 çıktısı — tek kaynak) ve **"Require branches to be up to date before
 merging" (strict)** ✓ işaretle.
 
@@ -49,7 +49,7 @@ Tüm ayarlar tamam; **Create** ile kaydet.
 ![ADIM 6 — Create](step-06-create.png)
 
 ### 7 — Kural oluştu
-Listede `main` kuralı: "16 status checks · 1 approving review".
+Listede `main` kuralı: "18 status checks · 1 approving review".
 
 ![ADIM 7 — Result](step-07-result.png)
 
@@ -57,7 +57,7 @@ Listede `main` kuralı: "16 status checks · 1 approving review".
 ```bash
 python3 _calisma/CIKTI/status_checks.py --gh
 ```
-16 check + merge engeli smoke → `SONUÇ: PASS` (workflow ↔ GitHub birebir).
+18 check + merge engeli smoke → `SONUÇ: PASS` (workflow ↔ GitHub birebir).
 
 > **CI'da/gözetimsiz koşumda okuma:** `GITHUB_TOKEN` branch protection
 > okuyamaz (`administration` izni Actions `permissions:` bloğunda geçersizdir —

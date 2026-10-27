@@ -120,7 +120,10 @@ def main(argv=None):
                     help="kurulum sonrası status_checks.py --gh doğrulamasını atla")
     args = ap.parse_args(argv)
 
-    expected = list(sc.gate_jobs().values())
+    # Required set = verify.yml kapıları + beyan edilen ikincil workflow
+    # kapıları (status_checks.expected_checks). İkincil workflow'lar (bugün
+    # docker-security) buradan girmezse PR'lar gate kırmızıyken merge edilir.
+    expected = list(sc.expected_checks())
     if not expected:
         print("HATA: beklenen check listesi boş — workflow job adları okunamadı",
               file=sys.stderr)
@@ -136,7 +139,9 @@ def main(argv=None):
                   file=sys.stderr)
             return 2
 
-    print(f"Beklenen required check ({len(expected)}) — kaynak: {sc.WORKFLOW}")
+    print(f"Beklenen required check ({len(expected)}) — kaynak: {sc.WORKFLOW}"
+          + (" + " + ", ".join(sc.SECONDARY_WORKFLOWS)
+             if sc.SECONDARY_WORKFLOWS else ""))
     for c in expected:
         print(f"  • {c}")
 
