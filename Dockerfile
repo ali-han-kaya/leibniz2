@@ -106,9 +106,16 @@ RUN set -eux; \
 #     audit_live_ci_sync 2 gündür repo-geneli kırmızı; u2'ye taşındı.
 #     DERS: tam-sürüm pin'ler upstream güvenlik-sürümü yayınında çöker —
 #     pin rotasyonu defter + sözleşme testiyle birlikte güncellenir).
+#   libssl3/openssl: CVE-2026-84782 (DTLS handshake retransmission üzerinden
+#     bilgi sızıntısı) → floor 3.0.22-1~deb12u2
+#     (kanıt: 2026-10-26 docker-security smoke koşumu — base image
+#     `3.0.22-1~deb12u1` taşıyordu ve gate CRITICAL/HIGH'ta FAIL etti;
+#     aynı kaynak paket iki ayrı paket adıyla taranıyor, ikisi de floor'lanır.
+#     libssl3 `--only-upgrade` ile yükselir, openssl aynı sürüm çizgisini izler;
+#     ikisi de bookworm-security'den gelir).
 #     Girdi SECURITY_PATCH_PACKAGES default'unda yaşar — pasif kayıt,
 #     her build'de taze yama.
-ARG SECURITY_PATCH_PACKAGES="libpcre2-8-0=10.42-1+deb12u2"
+ARG SECURITY_PATCH_PACKAGES="libpcre2-8-0=10.42-1+deb12u2 libssl3=3.0.22-1~deb12u2 openssl=3.0.22-1~deb12u2"
 RUN set -eux; \
     if [ "$(printf '%s' "$SECURITY_PATCH_PACKAGES" | tr -d '[:space:]')" = "" ]; then \
       echo "SECURITY_PATCH_PACKAGES empty — no targeted apt patch"; \

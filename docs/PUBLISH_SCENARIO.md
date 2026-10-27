@@ -16,7 +16,7 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 > |---|---|
 > | AŞAMA 0 — ön-kontrol | ✅ araç hazır — her push öncesi koşulur |
 > | AŞAMA 1 (a) — repo oluşturma | ✅ **UYGULANDI** (2026-08-18, `gh repo create leibniz2 --public`) |
-> | AŞAMA 1 (b) — branch protection | ✅ **UYGULANDI** — Web UI ile 12 required check, `enforce_admins=true`, `allow_force_pushes=false` |
+> | AŞAMA 1 (b) — branch protection | ✅ **UYGULANDI** — Web UI ile kuruldu (2026-08-18: 12 required check); canlı required set **16** (hepsi `verify.yml`), `enforce_admins=true`, `allow_force_pushes=false` — `docker-security.yml`'in 2 job'ı **henüz required değil** (aşağıdaki 18'lik listeye geçiş, Trivy floor'u main'e girdikten sonra tek komutla yapılır) |
 > | AŞAMA 2 — remote + ilk push | ✅ **UYGULANDI** (2026-08-18) |
 > | AŞAMA 3 — CI doğrulama | 🔄 **aktif** — her push'ta tekrarlanır (incremental) |
 > | AŞAMA 4 — koruma kanıtı | ⏸️ opsiyonel (1 (b) sonrası) |
@@ -207,8 +207,8 @@ bash docs/publish_precheck.sh --allow-remote
 #    (geçici kapat → push → geri aç). Manuel push'ta önce kapatıp sonra geri açın.
 git push origin main
 
-# 3) CI'ı izle (24 job — 12 required + 10 advisory + 2 PR-only;
-#    aşağıdaki AŞAMA 3 job tablosu)
+# 3) CI'ı izle (verify.yml 32 job = 16 required + 16 advisory/PR-only;
+#    docker-security 2 required → toplam 18 required; aşağıdaki AŞAMA 3 tablosu)
 RUN_ID=$(gh run list --limit 1 --json databaseId -q '.[0].databaseId')
 gh run watch $RUN_ID --exit-status
 
@@ -366,7 +366,13 @@ open "https://github.com/ali-han-kaya/leibniz2/settings/branches"
 #       ✓ Disallow deletions
 ```
 
-### Branch protection — web UI adım adım (12 required check)
+### Branch protection — web UI adım adım (hedef: 18 required check)
+
+> ⚠️ **Sıra önemli:** 17-18. satırlar (`docker-security.yml`) yalnız
+> Dockerfile'daki CVE floor'ları main'deyken eklenmeli. Önce eklenirse açık
+> dalların Dockerfile'ı eski floor'u taşıdığı için smoke check'i onlarda
+> kırmızı kalır ve o PR'lar yeni bir push yapmadan merge edilemez.
+> Komut: `python3 _calisma/CIKTI/setup_branch_protection.py`.
 
 > 📷 **Görsel kılavuz:** her adımın ekran görüntüsü
 > [`docs/branch-protection-guide/`](branch-protection-guide/) altında (8
@@ -395,7 +401,10 @@ open "https://github.com/ali-han-kaya/leibniz2/settings/branches"
    - **Ön koşul:** check'lerin arama listesinde görünmesi için o branch'te CI'ın
      **en az bir kez koşmuş** olması gerekir. Yeni/boş repoda kural kuruyorsan önce
      bir push ya da PR ile workflow'u tetikle, yeşil run'ı bekle, sonra bu adıma dön.
-   -   Arama kutusuna şu **12 adı** tek tek yazıp seç (birebir, `—` karakteri dahil):
+   -   Arama kutusuna şu **18 adı** tek tek yazıp seç (birebir, `—` karakteri dahil).
+     Liste TEK KAYNAKTAN gelir: 16'sı `verify.yml`, 2'si `docker-security.yml`
+     (`status_checks.py` → `SECONDARY_WORKFLOWS`); elle kopyalama yerine
+     `python3 _calisma/CIKTI/status_checks.py` çıktısını kullan:
      1. `Delivery verification — K1-K19 (single entry point)`
      2. `Action runtime check (node24)`
      3. `Budget shield (aggregated)`
@@ -407,7 +416,13 @@ open "https://github.com/ali-han-kaya/leibniz2/settings/branches"
      9. `Config snapshot ↔ CONFIG_BASENAMES sync check`
      10. `Repack determinism + verify (sidecar sync)`
      11. `Online verification trend (refs-online across runs)`
-     12. `CI-SIMULATE (advisory)`
+     12. `Plist P1 drift gate (fail-closed, Linux)`
+     13. `Dashboard interaction E2E (node sandbox + Chromium CDP)`
+     14. `CI-SIMULATE (advisory)`
+     15. `TeXLive acceptance — CI-linux pinned (fail-closed)`
+     16. `A11y gate (axe-core, fail-closed)`
+     17. `Build and scan Docker image`
+     18. `Local security smoke (script parity)`
      > **Not:** Advisory'ler (precheck, plist-check, mirror-check, daemon-http,
      > audit-*) ve P1 label gate (opsiyonel) required DEĞİL.
      > `Commit-msg gate` ve `Pre-commit P0 label gate` PR-only'dir ama BİLEREK

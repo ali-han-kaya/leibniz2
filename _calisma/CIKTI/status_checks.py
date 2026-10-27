@@ -17,6 +17,12 @@ reviews` doluysa `strict=false` FAIL'dir (bayat PR dalı merge edilebilir).
 Doğrudan-push depolarında PR dalı olmadığı için strict uygulanmaz — orada
 `strict=false` (ya da alanın yokluğu) yanlış-kırmızı üretmez.
 
+İkincil kapı: required set yalnız verify.yml'den türetilmez. `SECONDARY_
+WORKFLOWS` (bugün `docker-security.yml`) beyan edilir ve onun job adları da
+beklenen sete girer; böylece docker-security PR'larda required check
+kurulabilir ve `--gh` onu "FAZLA" saymaz. Beyan edilen dosya ya da job adı
+okunamazsa fail-closed (kapı sessizce required setten düşmez).
+
 Kullanım:
   python3 _calisma/CIKTI/status_checks.py                  # beklenen adlar
   python3 _calisma/CIKTI/status_checks.py --gh             # GitHub ile doğrula
@@ -40,6 +46,7 @@ izni gerektirir, GITHUB_TOKEN'da yoktur.
 """
 import argparse
 import json
+import os
 import pathlib
 import subprocess
 import sys
@@ -55,6 +62,63 @@ except ImportError:  # pragma: no cover — stdlib-only runnerlarda yaml yok
 # CIKTI'dan da repo kökünden de koşabilsin).
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 WORKFLOW = str(_REPO_ROOT / ".github" / "workflows" / "verify.yml")
+
+# ── İkincil kapı workflow'ları ─────────────────────────────────────────────
+# Ölçülen boşluk (2026-10-26): required set yalnız verify.yml'den türetildiği
+# için docker-security kapısı GitHub'da required YAPILAMIYORDU — yapılsa
+# `--gh` onu "FAZLA" sayıp FAIL ederdi. Sonuç: PR'lar Trivy gate kırmızıyken
+# (#146, #147) ya da hiç koşum olmadan (#97) merge edildi. Bu yüzden ikincil
+# workflow'lar burada BEYAN edilir; job adları yine YAML'dan okunur (elle
+# kopyalanmaz → yeniden adlandırma sessizce kaymaz).
+SECONDARY_WORKFLOWS = ("docker-security.yml",)
+
+
+def _workflow_path(rel):
+    """İkincil workflow dosyasının mutlak yolu (repo kökünden)."""
+    return str(_REPO_ROOT / ".github" / "workflows" / rel)
+
+
+def secondary_gate_jobs():
+    """İkincil workflow'ların job adları: {rel: {job_id: name}}.
+
+    Fail-closed: beyan edilen dosya yoksa, YAML ayrıştırılamıyorsa ya da
+    adı boş job varsa RuntimeError — kapı sessizce required setten düşmesin.
+    """
+    _require_yaml()
+    out = {}
+    for rel in SECONDARY_WORKFLOWS:
+        path = _workflow_path(rel)
+        if not os.path.isfile(path):
+            raise RuntimeError(f"beyan edilen ikincil workflow yok: {rel}")
+        with open(path, encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+        jobs = data.get("jobs") or {}
+        named = {jid: (j or {}).get("name")
+                 for jid, j in jobs.items() if isinstance(j, dict)}
+        if not named or any(not nm for nm in named.values()):
+            raise RuntimeError(
+                f"{rel}: job adları okunamadı (required check türetilemez)")
+        out[rel] = named
+    return out
+
+
+def expected_checks():
+    """Required check adları: verify.yml kapıları + ikincil workflow kapıları.
+
+    Sıra deterministiktir (önce verify job sırası, sonra beyan sırası) —
+    `--gh` karşılaştırması ve `setup_branch_protection.py` PUT gövdesi
+    koşumdan koşuma değişmez. Aynı ad iki workflow'da yaşarsa fail-closed:
+    required set hangi kapıyı işaret ettiği belirsiz kalırdı.
+    """
+    primary = list(gate_jobs().values())
+    secondary = [nm for jobs in secondary_gate_jobs().values()
+                 for nm in jobs.values()]
+    dupes = sorted({nm for nm in primary if nm in secondary})
+    if dupes:
+        raise RuntimeError(
+            "aynı check adı iki workflow'da tanımlı: %s — required set "
+            "belirsiz (adları ayrıştırın)" % dupes)
+    return primary + secondary
 # Required check OLMAYAN job'lar: PR-only/advisory (banner kapı olmasın).
 GATE_EXCLUDE = {
     "manifest-comment",    # PR-only: yorum düşürme
@@ -331,12 +395,15 @@ def main(argv=None):
     args = ap.parse_args(argv)
 
     gates = gate_jobs()
-    expected = list(gates.values())
+    secondary = secondary_gate_jobs()
+    expected = expected_checks()
     contract = advisory_contract()
     payload = {
         "workflow": WORKFLOW,
         "gate_jobs": list(gates.keys()),
         "excluded": sorted(GATE_EXCLUDE),
+        "secondary_workflows": {rel: sorted(jobs)
+                                for rel, jobs in secondary.items()},
         "checks": expected,
         "all_jobs": contract["all_jobs"],
         "advisory": contract["advisory"],
@@ -363,6 +430,9 @@ def main(argv=None):
         print(f"Beklenen status check adları ({len(expected)}) — kaynak: {WORKFLOW}")
         print(f"  (required aday job'lar: {', '.join(gates)}; "
               f"hariç: {', '.join(sorted(GATE_EXCLUDE))})")
+        for rel, jobs in secondary.items():
+            print(f"  (ikincil workflow: {rel} — required job'lar: "
+                  f"{', '.join(jobs)})")
         for i, n in enumerate(expected, 1):
             print(f"  {i:2d}. {n}")
         print(format_contract(contract))

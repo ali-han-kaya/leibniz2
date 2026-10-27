@@ -345,7 +345,9 @@ class TestGhIntegration(unittest.TestCase):
 
     def test_full_pass_returns_none(self):
         # Beklenen 12 ad + tam enforcement → exit 0 (return None, SystemExit yok).
-        checks = list(sc.gate_jobs().values())
+        # Beklenen set = verify kapıları + ikincil workflow kapıları
+        # (docker-security). Yalnız gate_jobs() kullanmak artık eksik küme.
+        checks = sc.expected_checks()
         rc = self._run_main(_protection(checks))
         self.assertIsNone(rc)
 
@@ -357,7 +359,9 @@ class TestGhIntegration(unittest.TestCase):
         self.assertEqual(cm.exception.code, 1)
 
     def test_enforcement_fail_exits_1(self):
-        checks = list(sc.gate_jobs().values())
+        # Beklenen set = verify kapıları + ikincil workflow kapıları
+        # (docker-security). Yalnız gate_jobs() kullanmak artık eksik küme.
+        checks = sc.expected_checks()
         bad = _protection(checks, strict=False, enforce_admins=False)
         with mock.patch.object(sc, "run_gh",
                                return_value=json.dumps(bad)):
@@ -367,7 +371,9 @@ class TestGhIntegration(unittest.TestCase):
 
     def test_gh_strict_off_with_pr_flow_exits_1(self):
         """Regresyon: PR-akışlı repoda strict kapatılınca --gh KIRMIZI olmalı."""
-        checks = list(sc.gate_jobs().values())
+        # Beklenen set = verify kapıları + ikincil workflow kapıları
+        # (docker-security). Yalnız gate_jobs() kullanmak artık eksik küme.
+        checks = sc.expected_checks()
         bad = _protection(checks, strict=False, pr_reviews=True)
         buf = io.StringIO()
         with mock.patch.object(sc, "run_gh", return_value=json.dumps(bad)), \
@@ -385,7 +391,9 @@ class TestGhIntegration(unittest.TestCase):
 
     def test_gh_direct_push_repo_without_strict_passes(self):
         """Aynı ayar direct-push deposunda yeşil kalmalı (yanlış-kırmızı yok)."""
-        checks = list(sc.gate_jobs().values())
+        # Beklenen set = verify kapıları + ikincil workflow kapıları
+        # (docker-security). Yalnız gate_jobs() kullanmak artık eksik küme.
+        checks = sc.expected_checks()
         ok = _protection(checks, strict=False)  # reviews yok → direct-push
         buf = io.StringIO()
         with mock.patch.object(sc, "run_gh", return_value=json.dumps(ok)), \
@@ -410,7 +418,9 @@ class TestGhIntegration(unittest.TestCase):
         self.assertEqual(cm.exception.code, 1)
 
     def test_gh_json_pass(self):
-        checks = list(sc.gate_jobs().values())
+        # Beklenen set = verify kapıları + ikincil workflow kapıları
+        # (docker-security). Yalnız gate_jobs() kullanmak artık eksik küme.
+        checks = sc.expected_checks()
         buf = io.StringIO()
         with mock.patch.object(sc, "run_gh",
                                return_value=json.dumps(_protection(checks))), \
@@ -429,7 +439,9 @@ class TestGhIntegration(unittest.TestCase):
         self.assertIs(ac["plist_check"]["ok"], True)
 
     def test_gh_json_fail_exits_1(self):
-        checks = list(sc.gate_jobs().values())
+        # Beklenen set = verify kapıları + ikincil workflow kapıları
+        # (docker-security). Yalnız gate_jobs() kullanmak artık eksik küme.
+        checks = sc.expected_checks()
         bad = _protection(checks, enforce_admins=False)
         bad["required_status_checks"]["strict"] = None
         buf = io.StringIO()
@@ -505,6 +517,72 @@ class TestGhIntegration(unittest.TestCase):
             with self.assertRaises(SystemExit) as cm:
                 sc.main(["--gh", "--repo", "owner/name"])
         self.assertEqual(cm.exception.code, 1)
+
+
+@unittest.skipUnless(HAVE_YAML, "PyYAML gerekli")
+class TestSecondaryWorkflowGates(unittest.TestCase):
+    """İkincil workflow kapıları required sete girer (docker-security).
+
+    Ölçülen boşluk (2026-10-26): required set yalnız verify.yml'den
+    türetildiği için docker-security GitHub'da required yapılamıyordu;
+    yapılsa `--gh` "FAZLA" deyip FAIL ederdi. Pratik sonucu: gate PR'da
+    kırmızıyken (#146, #147) ya da hiç koşum yokken (#97) merge edildi.
+    Bu sınıf, ikincil workflow'un job adlarının YAML'dan türetildiğini ve
+    required sete girdiğini sabitler (elle kopyalanan ikinci liste yok).
+    """
+
+    def test_docker_security_is_declared(self):
+        self.assertIn("docker-security.yml", sc.SECONDARY_WORKFLOWS)
+
+    def test_job_names_come_from_the_workflow_yaml(self):
+        import yaml
+        path = pathlib.Path(sc._workflow_path("docker-security.yml"))
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        want = {jid: j["name"] for jid, j in data["jobs"].items()}
+        self.assertEqual(sc.secondary_gate_jobs()["docker-security.yml"], want)
+        self.assertEqual(set(want.values()),
+                         {"Build and scan Docker image",
+                          "Local security smoke (script parity)"})
+
+    def test_expected_set_is_primary_plus_secondary(self):
+        primary = list(sc.gate_jobs().values())
+        secondary = [nm for jobs in sc.secondary_gate_jobs().values()
+                     for nm in jobs.values()]
+        self.assertEqual(sc.expected_checks(), primary + secondary)
+        self.assertEqual(len(sc.expected_checks()),
+                         len(set(sc.expected_checks())),
+                         "required sette aynı ad iki kez — karşılaştırma "
+                         "belirsizleşir")
+
+    def test_expected_set_is_deterministic(self):
+        # PUT gövdesi ve --gh çıktısı koşumdan koşuma aynı sırada olmalı.
+        self.assertEqual(sc.expected_checks(), sc.expected_checks())
+
+    def test_missing_secondary_workflow_is_fail_closed(self):
+        with mock.patch.object(sc, "SECONDARY_WORKFLOWS", ("yok-boyle-bir.yml",)):
+            with self.assertRaises(RuntimeError) as ctx:
+                sc.secondary_gate_jobs()
+        self.assertIn("ikincil workflow yok", str(ctx.exception))
+
+    def test_duplicate_check_name_is_fail_closed(self):
+        # İki workflow'da aynı ad → required set hangi kapıyı işaret ettiği
+        # belirsizleşir; sessizce birini seçmek yerine ölçüm hatası.
+        colliding = {"docker-security.yml":
+                     {"image-scan": list(sc.gate_jobs().values())[0]}}
+        with mock.patch.object(sc, "secondary_gate_jobs", return_value=colliding):
+            with self.assertRaises(RuntimeError) as ctx:
+                sc.expected_checks()
+        self.assertIn("aynı check adı", str(ctx.exception))
+
+    def test_protection_with_full_expected_set_passes_names_check(self):
+        # GitHub'da 18 ad kurulduğunda evaluate_protection ad eşleşmesini
+        # PASS saymalı (docker-security adları "FAZLA" değil).
+        res = sc.evaluate_protection(
+            sc.expected_checks(),
+            _protection(contexts=sc.expected_checks()), pr_flow=False)
+        self.assertTrue(res["names_ok"], res)
+        self.assertEqual(res["missing"], [])
+        self.assertEqual(res["extra"], [])
 
 
 if __name__ == "__main__":
