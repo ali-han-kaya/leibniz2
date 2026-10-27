@@ -1585,7 +1585,7 @@ SCENARIOS = [
         },
     ),
     (
-        "trivy: seviye-yok sonucu default-deny (HIGH muamelesi) → setFailed",
+        "trivy: seviye-yok → açık 'bilinmiyor' işareti + fail-closed setFailed",
         "trivy_sarif_pr_comment.js",
         {"trivy.sarif": json.dumps({
             "runs": [{"tool": {"driver": {"name": "Trivy", "rules": []}},
@@ -1599,8 +1599,76 @@ SCENARIOS = [
         {
             "ok": True, "set_failed": True,
             "call_counts": {"issues.createComment": 1},
+            # Sessiz HIGH YOK: seviye okunamayan bulgu "bilinmiyor" diye
+            # işaretlenir, kapı eşiği ise TRIVY_GATE_SEVERITY'den gelir.
             "body_contains": {"issues.createComment": [
-                "CVE-2024-0002", "HIGH", "diff-dışı"]},
+                "CVE-2024-0002", "bilinmiyor",
+                "seviye okunamadı", "HIGH varsayılmıyor", "diff-dışı"]},
+            "set_failed_contains": [
+                "CRITICAL/HIGH bulgu", "seviye bilinmeyen: 1", "gate kırmızı"],
+        },
+    ),
+    # ── Kapı girdisi (TRIVY_GATE_*) — zorlayıcı adımla tek eşik ──────────
+    (
+        "trivy: kapı severity=CRITICAL (env) → HIGH bulgusu bloklanmaz",
+        "trivy_sarif_pr_comment.js",
+        {"trivy.sarif": json.dumps({
+            "runs": [{"tool": {"driver": {"name": "Trivy", "rules": []}},
+                      "results": [{
+                          "ruleId": "CVE-2024-7777",
+                          "level": "warning",
+                          "message": {"text": "Package: libbar\n"
+                                             "Severity: HIGH\n"},
+                          "locations": [{"physicalLocation": {
+                              "artifactLocation": {"uri": "debian/libbar"}}}]}]}]}),
+         "changed_files.txt": "debian/libbar\n"},
+        None, [], [],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.createComment": 1},
+            "env": {"TRIVY_GATE_SEVERITY": "CRITICAL"},
+            "body_contains": {"issues.createComment": [
+                "**CRITICAL bulgu yok**"]},
+        },
+    ),
+    (
+        "trivy: kapı severity=CRITICAL (env) + seviye bilinmiyor → yine FAIL",
+        "trivy_sarif_pr_comment.js",
+        {"trivy.sarif": json.dumps({
+            "runs": [{"tool": {"driver": {"name": "Trivy", "rules": []}},
+                      "results": [{
+                          "ruleId": "CVE-2024-7778",
+                          "message": {"text": "mystery finding"},
+                          "locations": [{"physicalLocation": {
+                              "artifactLocation": {"uri": "y.c"}}}]}]}]}),
+         "changed_files.txt": ""},
+        None, [], [],
+        {
+            "ok": True, "set_failed": True,
+            "call_counts": {"issues.createComment": 1},
+            "env": {"TRIVY_GATE_SEVERITY": "CRITICAL"},
+            # Bilinmeyen seviye kapı setine girmez ama fail-closed kalır:
+            # eksik veri "geçti" anlamına gelemez — ama HIGH da uydurulmaz.
+            "body_contains": {"issues.createComment": [
+                "bilinmiyor", "seviye okunamadı"]},
+            "set_failed_contains": [
+                "seviye bilinmeyen: 1", "gate kırmızı"],
+        },
+    ),
+    (
+        "trivy: kapı ignore-unfixed=false (env) → yorum eşiği yansıtır",
+        "trivy_sarif_pr_comment.js",
+        {"trivy.sarif": '{"runs": [{"tool": {"driver": {"name": "Trivy", "rules": []}}, "results": []}]}',
+         "changed_files.txt": "README.md\n"},
+        None, [], [],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.createComment": 1},
+            "env": {"TRIVY_GATE_IGNORE_UNFIXED": "false"},
+            "body_contains": {"issues.createComment": [
+                "CRITICAL/HIGH bulgu yok", "temiz (CRITICAL/HIGH)"]},
+            "body_not_contains": {"issues.createComment": [
+                "ignore-unfixed"]},
         },
     ),
     # ── Kota dayanıklılığı: PR yorumu yan fayda, kapı kararı yerel SARIF'ten
@@ -1631,11 +1699,16 @@ SCENARIOS = [
 ]
 
 
-def _run_scenario(node, script, fixture_dir, timeout=30):
-    """Harness'ı koş; (returncode, parsed JSON record) döndür."""
+def _run_scenario(node, script, fixture_dir, timeout=30, env=None):
+    """Harness'ı koş; (returncode, parsed JSON record) döndür.
+
+    env: senaryoya özel ortam değişkenleri (ör. TRIVY_GATE_SEVERITY) —
+    mevcut ortamla birleştirilir, üzerine yazılır (diğer her şey korunur).
+    """
+    run_env = {**os.environ, **env} if env else None
     r = subprocess.run(
         [node, HARNESS, script, fixture_dir],
-        capture_output=True, text=True, timeout=timeout)
+        capture_output=True, text=True, timeout=timeout, env=run_env)
     if r.returncode != 0:
         return r, None
     try:
@@ -1776,7 +1849,9 @@ def run_battery(node=None, scripts_dir=None, timeout=30):
                           encoding="utf-8") as f:
                     json.dump(comments, f)
             try:
-                r, rec = _run_scenario(node, script_path, tmp, timeout=timeout)
+                r, rec = _run_scenario(node, script_path, tmp,
+                                        timeout=timeout,
+                                        env=expect.get("env"))
             except (OSError, subprocess.TimeoutExpired) as e:
                 results.append((name, False, f"harness çalışmadı: {e}"))
                 continue

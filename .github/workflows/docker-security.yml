@@ -31,6 +31,14 @@ permissions:
   security-events: write
 
 env:
+  # ── Trivy kapısı girdileri — TEK KAYNAK ─────────────────────────────────
+  # Zorlayıcı tabela adımı (exit-code 1), SARIF adımı ve PR yorum script'i
+  # (trivy_sarif_pr_comment.js → process.env) bu iki değeri AYNI yerden okur:
+  # yorum-script'i bloklama eşiğini artık elle sabitlemez, kapı girdisiyle
+  # birlikte hareket eder. Değiştirirseniz üçü de birlikte değişir.
+  TRIVY_GATE_SEVERITY: "CRITICAL,HIGH"
+  TRIVY_GATE_IGNORE_UNFIXED: "true"
+
   # Build-arg override kanalı (tek yer): dispatch input > repo değişkeni.
   # Burada değer YALNIZ dolu geldiğinde kullanılır; çözümleyici boş değeri
   # "override yok" sayıp Dockerfile default'unu taşır (boş string'e çevirmek
@@ -100,8 +108,10 @@ jobs:
           image-ref: leibniz2/verify-dashboard:${{ github.sha }}
           format: sarif
           output: trivy.sarif
-          severity: CRITICAL,HIGH
-          ignore-unfixed: true
+          # Yorum-script'inin kapı eşiği de bu girdiyi okur (workflow-env):
+          # zorlayıcı adımla AYNI severity/ignore-unfixed — iki ayrı eşik yok.
+          severity: ${{ env.TRIVY_GATE_SEVERITY }}
+          ignore-unfixed: ${{ env.TRIVY_GATE_IGNORE_UNFIXED }}
           exit-code: 1
 
       - name: Scan image with Trivy (table — log kanıtı)
@@ -112,13 +122,16 @@ jobs:
         with:
           image-ref: leibniz2/verify-dashboard:${{ github.sha }}
           format: table
-          severity: CRITICAL,HIGH
-          ignore-unfixed: true
+          # Zorlayıcı kapı — SARIF adımıyla girdileri paylaşır (workflow-env).
+          severity: ${{ env.TRIVY_GATE_SEVERITY }}
+          ignore-unfixed: ${{ env.TRIVY_GATE_IGNORE_UNFIXED }}
           exit-code: 1
 
       - name: Annotate PR with Trivy findings (fail-closed)
         # always(): gate kırmızıyken de yorum DÜŞMELİ (bulgu-tablosu PR'a
         # görünür kalmalı) — aksi halde kırmızı PR'da kanıt yok olur.
+        # Kapı eşiği script'e ad-elle verilmez: workflow-env (TRIVY_GATE_*)
+        # her adıma otomatik aktarılır, script process.env'ten okur.
         if: always() && github.event_name == 'pull_request'
         uses: actions/github-script@v8
         with:

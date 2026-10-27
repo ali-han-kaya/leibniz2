@@ -3,9 +3,15 @@
 // Kaynak: trivy.sarif (trivy-action format: sarif, scan-type: fs).
 // Sözleşme (github_scripts_battery K16 senaryolarıyla sabit):
 //   • results: [] (temiz)   → temiz-yorum UPSERT, setFailed YOK
-//   • CRITICAL/HIGH bulgu   → bulgu-tablosu + diff-içi/diff-dışı damgası + setFailed
+//   • kapı setinde bulgu    → bulgu-tablosu + diff-içi/diff-dışı damgası + setFailed
 //   • bozuk SARIF (runs:[]) → setFailed, yanıltıcı yorum YOK (fail-closed)
-//   • seviye-yok            → default-deny (HIGH muamelesi; sessiz geçiş yok)
+//   • seviye-yok            → açık "bilinmiyor" işareti + fail-closed setFailed
+//     (SESSIZ HIGH YOK: kapı eşiği artık girdiden gelir, uydurma HIGH değil)
+// Kapı girdileri docker-security.yml'nin workflow-env'inden gelir:
+//   TRIVY_GATE_SEVERITY        → zorlayıcı tabela/SARIF adımının `severity` girdisi
+//   TRIVY_GATE_IGNORE_UNFIXED  → aynı adımın `ignore-unfixed` girdisi
+// Varsayılanlar workflow'daki değerlerle birebir (harness/lokal koşum);
+// workflow bunları değiştirirse yorum da eşlik eder — iki ayrı eşik KAYMAZ.
 // Upsert marker: <!-- trivy-sarif-pr-comment --> (pr_status_comment.js deseni).
 // Çağrım: github-script adımı gövdeyi fs.readFileSync + eval(async-wrap) ile
 // koşar (manifest_comment.js ile aynı desen) — module.exports YOKTUR.
@@ -16,16 +22,39 @@ const fs = require('fs');
 const MARKER = '<!-- trivy-sarif-pr-comment -->';
 const SARIF_PATH = 'trivy.sarif';
 const CHANGED_PATH = 'changed_files.txt';
-const BLOCKING = new Set(['CRITICAL', 'HIGH']);
-
 const SEVERITIES = new Set(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN']);
+// Seviye okunamadığının işareti (kaynakta 'UNKNOWN', yorumda 'bilinmiyor').
+const UNKNOWN = 'UNKNOWN';
+
+// Kapı eşiği — zorlayıcı adımla AYNI girdi (docker-security.yml env).
+// Tek kaynak oradadır; buradaki varsayılan yalnız harness/lojal koşum içindir
+// ve workflow env'iyle birebir tutulur (sözleşme testi pin'ler).
+const GATE_SEVERITY = String(
+  (process.env && process.env.TRIVY_GATE_SEVERITY) || 'CRITICAL,HIGH'
+)
+  .split(',')
+  .map((s) => s.trim().toUpperCase())
+  .filter(Boolean);
+const GATE_IGNORE_UNFIXED = /^(1|true|yes)$/i.test(
+  String(
+    process.env && process.env.TRIVY_GATE_IGNORE_UNFIXED !== undefined
+      ? process.env.TRIVY_GATE_IGNORE_UNFIXED
+      : 'true'
+  )
+);
+const GATE_LABEL = GATE_SEVERITY.join('/');
+const UNFIXED_LABEL = GATE_IGNORE_UNFIXED ? ', ignore-unfixed' : '';
 
 function severityOf(result) {
   // Önce properties.severity (fixture/test sözleşmesi); yoksa mesajdaki
   // "Severity: MEDIUM" (GERÇEK Trivy SARIF'i — canlı PR koşumunda ölçüldü:
   // properties.severity taşınmıyor, tüm sonuçlar HIGH sanılıyordu).
-  // İkisi de yoksa default-deny (HIGH) — 'error' seviyesi CRITICAL/HIGH'ı
-  // ayırt edemez, tahmin edilmez.
+  // İkisi de yoksa seviye BİLİNMEYEN ('UNKNOWN' → yorumda 'bilinmiyor').
+  // Eski davranış sessiz 'HIGH' döndürüyordu: kapı seti TRIVY_GATE_SEVERITY'den
+  // geldiği için bu ya sahte-blokaj ya da sahte-geçiş üretirdi (kapı CRITICAL
+  // iken HIGH bulgusu 'HIGH' diye bloklanır, kapı HIGH'ya daralınca da
+  // seviyesiz sonuç sessizce HIGH sanılırdı). Artık uydurma yok: eksik seviye
+  // açıkça 'bilinmiyor' diye etiketlenir ve fail-closed kapıya girer.
   const direct = String((result.properties && result.properties.severity) || '')
     .trim()
     .toUpperCase();
@@ -34,7 +63,7 @@ function severityOf(result) {
   const m = /Severity:\s*([A-Za-z]+)/.exec(text);
   const parsed = m ? m[1].toUpperCase() : '';
   if (SEVERITIES.has(parsed)) return parsed;
-  return 'HIGH';
+  return UNKNOWN;
 }
 
 function cell(text) {
@@ -110,29 +139,53 @@ try {
       inDiff: changed.has(file),
     });
   }
-  const blocking = findings.filter((f) => BLOCKING.has(f.severity));
+  // Bloklama eşiği kapı setinden: set üyesi YA DA seviye bilinmiyor
+  // (fail-closed — eksik veri "geçti" anlamına gelemez), ama asla
+  // uydurulan 'HIGH' üzerinden değil; bilinmiyor ayrı işaretlenir.
+  const blocking = findings.filter(
+    (f) => f.severity === UNKNOWN || GATE_SEVERITY.includes(f.severity)
+  );
+  const unknown = blocking.filter((f) => f.severity === UNKNOWN);
   const inDiff = blocking.filter((f) => f.inDiff);
 
   let body = MARKER + '\n## 🛡️ Trivy tarama raporu (docker-security)\n\n';
   if (!blocking.length) {
     body +=
-      '✅ **CRITICAL/HIGH bulgu yok** — Trivy temiz ' +
-      '(CRITICAL/HIGH, ignore-unfixed).\n';
+      '✅ **' +
+      GATE_LABEL +
+      ' bulgu yok** — Trivy temiz ' +
+      '(' +
+      GATE_LABEL +
+      UNFIXED_LABEL +
+      ').\n';
   } else {
     body +=
       '**' +
       blocking.length +
-      '** CRITICAL/HIGH bulgu ' +
+      '** ' +
+      GATE_LABEL +
+      ' bulgu ' +
       '(diff-içi: ' +
       inDiff.length +
       ')\n\n';
+    if (unknown.length) {
+      body +=
+        '> ⚠️ **' +
+        unknown.length +
+        ' bulgu için seviye okunamadı** — `bilinmiyor` olarak işaretlendi ve ' +
+        'fail-closed kapıya dahil edildi (HIGH varsayılmıyor). ' +
+        'SARIF girdisine bakın: ' +
+        '`severity=' +
+        GATE_LABEL +
+        '` (zorlayıcı adımla aynı).\n\n';
+    }
     body +=
       '| Seviye | Kural | Bulgu | Dosya | Kapsam |\n' +
       '|--------|-------|-------|-------|--------|\n';
     for (const f of blocking) {
       body +=
         '| ' +
-        f.severity +
+        (f.severity === UNKNOWN ? 'bilinmiyor' : f.severity) +
         ' | `' +
         cell(f.rule) +
         '` | ' +
@@ -144,7 +197,10 @@ try {
         ' |\n';
     }
     body +=
-      '\nKapı: CRITICAL/HIGH (ignore-unfixed) → gate kırmızı. ' +
+      '\nKapı: ' +
+      GATE_LABEL +
+      (GATE_IGNORE_UNFIXED ? ' (ignore-unfixed)' : '') +
+      ' → gate kırmızı. ' +
       'Çözüm: yamalı base-image / pkg yükseltmesi (DOCKER_SECURITY_PATCHING.md).\n';
   }
 
@@ -158,13 +214,21 @@ try {
     core.setFailed(
       'Trivy: ' +
         blocking.length +
-        ' CRITICAL/HIGH bulgu ' +
+        ' ' +
+        GATE_LABEL +
+        ' bulgu ' +
         '(diff-içi: ' +
         inDiff.length +
-        ') — gate kırmızı'
+        ')' +
+        (unknown.length
+          ? ' — seviye bilinmeyen: ' +
+            unknown.length +
+            ' (fail-closed, HIGH varsayılmadı)'
+          : '') +
+        ' — gate kırmızı'
     );
   } else {
-    console.log('Trivy temiz — CRITICAL/HIGH bulgu yok');
+    console.log('Trivy temiz — ' + GATE_LABEL + ' bulgu yok');
   }
 } catch (err) {
   // Okunamaz/çözümlenemez SARIF = yerel arıza: bulgu-yokluğu
