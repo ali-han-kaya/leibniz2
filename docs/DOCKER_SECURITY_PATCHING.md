@@ -35,10 +35,10 @@ hangi CVE'nin hangi floor'la kapatıldığı image'in kendisinde yaşar.
 
 ## İki katman
 
-| Katman | Nerede | Ne zaman | Desen |
-|---|---|---|---|
-| Sistem paketleri (apt) | Dockerfile runtime stage, `SECURITY_PATCH_PACKAGES` ARG | Debian kütüphane CVE'leri (ör. libpcre2-8-0) | `--only-upgrade <pkg>=<floor>`, `--no-install-recommends`, liste temizliği, kurulan sürüm kanıta yazılır |
-| Python zinciri (pip) | builder + runtime stage'lerde `PYTHON_SECURITY_PATCH_PACKAGES` ARG (global default + bare redeclare) | setuptools/wheel gibi image'e taşınan Python paketi CVE'leri | `--upgrade $PYTHON_SECURITY_PATCH_PACKAGES` — floor'lar ARG default'unda, asla floorsuz |
+| Katman                 | Nerede                                                                                               | Ne zaman                                                     | Desen                                                                                                    |
+| ---------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| Sistem paketleri (apt) | Dockerfile runtime stage, `SECURITY_PATCH_PACKAGES` ARG                                              | Debian kütüphane CVE'leri (ör. libpcre2-8-0)                 | `--only-upgrade <pkg>=<floor>`, `--no-install-recommends`, liste temizliği, kurulan sürüm kanıta yazılır |
+| Python zinciri (pip)   | builder + runtime stage'lerde `PYTHON_SECURITY_PATCH_PACKAGES` ARG (global default + bare redeclare) | setuptools/wheel gibi image'e taşınan Python paketi CVE'leri | `--upgrade $PYTHON_SECURITY_PATCH_PACKAGES` — floor'lar ARG default'unda, asla floorsuz                  |
 
 Aynı üç kural her iki katmanda da geçerli:
 
@@ -59,7 +59,7 @@ Aynı üç kural her iki katmanda da geçerli:
 ## Katkı sözleşmesi (yeni bulgu geldiğinde)
 
 1. Trivy gate'inin tablo çıktısındaki paket + "Fixed version" değerini al.
-2.   `SECURITY_PATCH_PACKAGES` default'una `paket=floor` ekle (aynı paketin
+2. `SECURITY_PATCH_PACKAGES` default'una `paket=floor` ekle (aynı paketin
    mevcut floor'u varsa yükselt) ve CVE-defteri bloğuna kaydı yaz
    (CVE kimlikleri + floor + kanıt tarihi).
 3. Sistem-paket katmanıysa aynı satırı bu dokümandaki CVE-defterine de işle;
@@ -73,9 +73,12 @@ Aynı üç kural her iki katmanda da geçerli:
 
 ## CVE-defteri
 
-| Paket | CVE'ler | Floor | Kanıt |
-|---|---|---|---|
-| libpcre2-8-0 | CVE-2026-86145 (OOB write), CVE-2026-89161 (pcre2_jit_match memory corruption) | 10.42-1+deb12u1 | 2026-09-16: yerel trivy 0.74.0 ilk koşumda 2 HIGH yakaladı → yama → 0 bulgu; CI koşum 35161423659 (13 Eylül kırmızı run'ı aynı CVE'lerle) before/after kanıtı. 2026-09-17: desenle yeniden doğrulandı (smoke PASS, 0 bulgu). |
+| Paket                          | CVE'ler                                                                                                                                                    | Floor                   | Kanıt                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| libpcre2-8-0                   | CVE-2026-86145 (OOB write), CVE-2026-89161 (pcre2_jit_match memory corruption)                                                                             | 10.42-1+deb12u2         | 2026-09-16: yerel trivy 0.74.0 ilk koşumda 2 HIGH yakaladı → yama → 0 bulgu; CI koşum 35161423659 (13 Eylül kırmızı run'ı aynı CVE'lerle) before/after kanıtı. 2026-09-17: desenle yeniden doğrulandı (smoke PASS, 0 bulgu). 2026-10-27: u1 → u2 (apt indeksi sürümü döndürdü; `apt-cache policy` adayı).                                                                                                                                                                                                               |
+| libssl3 / openssl              | CVE-2026-42767, CVE-2026-54874, CVE-2026-63072, CVE-2026-63074, CVE-2026-63076, CVE-2026-75803 (aynı kaynak paket iki adla taranıyor)                      | 3.0.22-1~deb12u2        | 2026-10-27: PR #54 trivy gate bulgusu (libssl3 ×6 + openssl ×6, kurulu 3.0.20-1~deb12u2) → iki ad da floor'lanarak yama → yerel build + trivy 0.74.0 kapı parametreleriyle yeniden tarama.                                                                                                                                                                                                                                                                                                                              |
+| tzdata                         | DLA-4792-1 (severity UNKNOWN; kurulu 2026b-0+deb12u1, düzeltme 2026c-0+deb12u1)                                                                            | 2026e-0+deb12u1         | 2026-10-27: PR #54 trivy gate bulgusu → yama; seviye-bilinmeyen sonuç kapı tarafından fail-closed bloklanır, floor `apt-cache policy` adayıyla sabitlendi.                                                                                                                                                                                                                                                                                                                                                              |
+| pip (venv + sistem, ×2 katman) | CVE-2025-8869 (25.3), CVE-2026-1703 (26.0), CVE-2026-3219 (26.1), CVE-2026-6357 (26.1), CVE-2026-8643 (26.1.2), CVE-2026-13346 (26.2.0) — hepsi MEDIUM/LOW | **eklenmedi (kasıtlı)** | 2026-10-27, PR #54 taraması: pip floor'u (>=26.1.2) pip'in kendi CVE'lerini kapatır ama pip'in son sürümü 26.2.2 vendor SBOM'unu (`pip/_vendor`: msgpack 1.1.2, urllib3 2.7.0, setuptools 70.3.0) kapı setinde 4 HIGH olarak taşıyor — kapı sürümü trivy 0.69.3 ile rc=1 ölçüldü, daha yeni pip yok. pip 24.0'ın kendi CVE'leri MEDIUM/LOW olduğundan kapı setine (CRITICAL,HIGH) girmez: floor **ekmemek** kapıya zarar vermez, **eklemek** kapıyı kırar. Bu kararı test de zorlar (`assertNotIn("pip>=", …)` ARG'de). |
 
 Yeni girdiler buraya ve Dockerfile'daki defter bloğuna eklenir.
 

@@ -63,9 +63,17 @@ class TestDockerfileSecurityPatching(unittest.TestCase):
     def test_patch_layer_present_with_cve_ledger_default(self):
         # ARG default'u floor girdisini taşır + defter CVE kimlikleriyle kayıtlı.
         self.assertIn("ARG SECURITY_PATCH_PACKAGES=", self._df)
-        self.assertIn("libpcre2-8-0=10.42-1+deb12u1", self._df)
+        self.assertIn("libpcre2-8-0=10.42-1+deb12u2", self._df)
         self.assertIn("CVE-2026-86145", self._df)
         self.assertIn("CVE-2026-89161", self._df)
+        # 2026-10-27 turu: PR #54 gate bulguları — aynı kaynak paket iki
+        # adla taranıyor (libssl3 + openssl), tzdata DLA'sı ise UNKNOWN
+        # seviye (fail-closed kapı onu da bloklar) — floor'lar kalıcı kayıt.
+        self.assertIn("libssl3=3.0.22-1~deb12u2", self._df)
+        self.assertIn("openssl=3.0.22-1~deb12u2", self._df)
+        self.assertIn("tzdata=2026e-0+deb12u1", self._df)
+        self.assertIn("DLA-4792-1", self._df)
+        self.assertIn("CVE-2026-63072", self._df)
 
     def test_targeted_only_upgrade_not_full_upgrade(self):
         # Yalnız etkilenen paket; genel upgrade/dist-upgrade yasak.
@@ -121,8 +129,14 @@ class TestDockerfileSecurityPatching(unittest.TestCase):
         # satırı dpkg-query karşılığı: pip show + floor ekranı kırpma.
         arg_line = next(ln for ln in self._df.splitlines()
                         if ln.startswith('ARG PYTHON_SECURITY_PATCH_PACKAGES='))
+        # 2026-10-27 kararı (PR #54): pip floor'u BİLEREK eklenmez — pip'in
+        # son sürümü (26.2.2) vendor SBOM'unda kapı setinde 4 HIGH taşıyor
+        # (trivy 0.69.3 ile rc=1 ölçüldü); pip 24.0'ın kendi CVE'leri ise
+        # MEDIUM/LOW → kapı setine girmez. Gerekçe: docs/DOCKER_SECURITY_PATCHING.md.
         for floor in ("setuptools>=80", "wheel>=0.46.2"):
             self.assertIn(floor, arg_line, f"CVE-defteri floor'u ARG'de: {floor}")
+        self.assertNotIn("pip>=", arg_line,
+                         "pip floor'u kasıtlı olarak eklenmemeli (vendor SBOM kapıyı kırar)")
         self.assertIn("pip show", self._df,
                       "pip katmanı kanıtı pip show ile (apt dpkg-query simetrisi)")
         self.assertIn("sed 's/[><=!~].*//'", self._df,
@@ -151,7 +165,8 @@ class TestDockerfileSecurityPatching(unittest.TestCase):
                       "CVE-defteri",
                       "libpcre2-8-0",
                       "CVE-2026-86145",
-                      "10.42-1+deb12u1",
+                      "10.42-1+deb12u2",
+                      "libssl3", "tzdata", "kasıtlı",
                       "docker_security_smoke.sh",
                       "Katkı sözleşmesi"):
             self.assertIn(token, self._doc,
