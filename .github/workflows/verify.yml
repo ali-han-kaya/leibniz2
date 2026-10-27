@@ -176,6 +176,24 @@ jobs:
         if: always()
         run: playwright install --with-deps chromium
 
+      # ─── PREVIEW MİROR (tasarım sistemi sheet'leri) ─────────────────────
+      # preview.html iki rotayı import eder (/design-system/tokens.css,
+      # /design-system/stripe-theme.css); preview_server bunları PREVIEW_DIR
+      # altındaki mirror kopyalarından servis eder (yoksa fail-closed 404).
+      # 404 gövdesi text/plain olduğundan tarayıcı strict MIME denetiminde
+      # "Refused to apply style … text/plain" hatası basar ve console-error
+      # smoke'u (test_dashboard_playwright_smoke) kırmızıya döner — sayfa
+      # gerçekten stilsiz kalır. Yerelde kopyaları sync_verify_mirror.sh
+      # üretir; CI'da runner çalışma alanı mirror rolündedir (a11y-gate
+      # job'ındaki tek-kaynak kopyasının aynısı).
+      - name: Prepare preview mirror (design-system sheets)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp design-system/tokens.css _calisma/CIKTI/design-system-tokens.css
+          cp design-system/stripe/theme.css \
+            _calisma/CIKTI/design-system-stripe-theme.css
+
       - name: Run CIKTI unit tests (test_*.py)
         shell: bash
         run: |
