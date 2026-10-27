@@ -48,7 +48,7 @@ zaman uygular*. İkisi karıştırılmamalıdır — biri dosya/içerik yüzeyi,
 
 | # | Kapı | Nerede tanımlı | Ne zaman koşar | Fail-closed kanıtı |
 |---|---|---|---|---|
-| 1 | **Smoke** — build + Trivy gate + canlı sağlık | CI: `docker-security.yml` → `smoke` job (`timeout-minutes: 30`). Yerel ikizi: `check-docker-security-smoke` (`bash _calisma/CIKTI/docker_security_smoke.sh`) | CI'da push + cron + `workflow_dispatch`; yerel ikiz yalnız `Dockerfile` stage'liyken | Kanıt dosyasında `verdict=PASS` yoksa `Assert real run` adımı `exit 1` — SKIP kanıt sayılmaz. Build/Trivy/sağlık hatasında script rc=1 |
+| 1 | **Smoke** — build + Trivy gate + canlı sağlık | CI: `docker-security.yml` → `smoke` job (`timeout-minutes: 30`). Yerel ikizi: `check-docker-security-smoke` (`bash _calisma/CIKTI/docker_security_smoke.sh`) | CI'da push + **`pull_request`** + cron + `workflow_dispatch`; yerel ikiz yalnız `Dockerfile` stage'liyken | Kanıt dosyasında `verdict=PASS` yoksa `Assert real run` adımı `exit 1` — SKIP kanıt sayılmaz. Build/Trivy/sağlık hatasında script rc=1 |
 | 2 | **Patching** — yama-desen sözleşmesi | `check-dockerfile-security-patching` (`python3 -m unittest _calisma.CIKTI.test_dockerfile_security_patching`, `files: (^|/)Dockerfile$`, `pass_filenames: false`) | Herhangi bir yolda `Dockerfile` stage'liyken (`always_run` yok — nedensel sinyal korunur) | Sözleşme satırı bozulursa test fail → commit blok. Kapsam dışı Dockerfile varsa `test_no_uncovered_dockerfile` da fail eder. Dosya manifest'te yer aldığı için `check-unit-tests` de koşar |
 | 3 | **Cron** — zamanlanmış tazeleme | `docker-security.yml` → `on.schedule: "43 3 * * 1"` | Pazartesi 03:43 UTC, push tetiklemesi olmadan | Hazırlıksız çıkan CVE'yi yakalar; koşum kaydına yazılır, sapma tablosu yönlendirir |
 
@@ -62,6 +62,47 @@ Kapı 1'in CI job'ı Trivy'yi `image-scan` işinin kullandığı
 kendisi kurar (URL + sürüm + sha256 üçü de pin'li). İki iş böylece farklı
 motorlarla değil aynı motorla döner; ayrıntı "Motor paritesi — ölçülmüş"
 bölümündedir.
+
+### PR kapısı — required check sözleşmesi (2026-10-26)
+
+**Ölçülen boşluk:** `pull_request` trigger'ı 2026-09-22'den beri var ve
+fiilen çalışıyordu (2026-10-10'dan sonra açılan 64 PR'ın 62'sinde
+`pull_request` koşumu), ama **kapı required değildi**: branch protection'ın
+16 context'i yalnız `verify.yml` job'larından türetiliyordu. Sonuç:
+`#146`/`#147` Trivy gate **kırmızıyken**, `#97` ise hiç docker-security
+koşumu olmadan merge edildi. Yani sorun tetikleme değil, **zorlama**ydı.
+
+**Sözleşme:** `_calisma/CIKTI/status_checks.py` required seti iki
+kaynaktan türetir:
+
+| Kaynak | Job adları |
+|---|---|
+| `verify.yml` (GATE_EXCLUDE dışı) | 16 check (bkz. `status_checks.py` çıktısı) |
+| `SECONDARY_WORKFLOWS = ("docker-security.yml",)` | `Build and scan Docker image`, `Local security smoke (script parity)` |
+
+Job adları YAML'dan okunur (elle kopyalanmaz); dosya ya da ad okunamazsa
+türetim **fail-closed** durur — kapı sessizce required setten düşmez. Aynı
+ad iki workflow'da tanımlıysa required set belirsizleşir ve yine
+fail-closed'dır.
+
+```bash
+# Kurulum (admin izni; 18 context + strict + enforce_admins)
+# ÖN KOŞUL: aşağıdaki libssl3/openssl floor'u main'de olmalı. Olmadan
+# kurulursa açık dallar eski floor'u taşıdığı için `Local security smoke`
+# onlarda kırmızı kalır — yeni push yapılmadan merge edilemezler.
+python3 _calisma/CIKTI/setup_branch_protection.py --repo ali-han-kaya/leibniz2
+# Doğrulama (eksik/fazla = exit 1)
+python3 _calisma/CIKTI/status_checks.py --gh
+```
+
+Bu geçiş penceresinde `check-status-check-names` pre-commit hook'u
+kırmızıdır: kod 18 bekliyor, canlı koruma 16 taşıyor. Sıra bu yüzden
+"önce floor + kod, sonra kurulum"dur.
+
+Bu iki check PR'da `pull_request` eventiyle koşar; kırmızı ya da hiç
+raporlanmamış (ör. run onay bekliyor → `action_required`) ise merge
+bloke olur. Ücret: her PR'da image build + Trivy taraması (~1-2 dk, GHA
+cache ile).
 
 ### Tetikleme yüzeyleri: ölçülen asimetri ve kapandığı
 
@@ -426,6 +467,7 @@ engelliyor: sürüm ayrışırsa iki tarama farklı motorlarla döner ve
 
 | Paket | CVE'ler | Floor | Kanıt |
 |---|---|---|---|
+| libssl3 / openssl | CVE-2026-84782 (DTLS handshake retransmission üzerinden bilgi sızıntısı) | 3.0.22-1~deb12u2 (önc. 3.0.22-1~deb12u1) | 2026-10-26: PR #147 `pull_request` koşumu (40369600858) smoke'ta 2 HIGH bulgu verdi (CRITICAL/HIGH, `fixed` var → ignore-unfixed kurtarmıyor; aynı gün main push koşumu DB eski olduğu için yeşildi). Yama: `libssl3` + `openssl` floor'u ARG default'una u2 olarak eklendi; aynı kaynak paket iki adla taranıyor, ikisi de floor'lanır. |
 | libpcre2-8-0 | CVE-2026-86145 (OOB write), CVE-2026-89161 (pcre2_jit_match memory corruption) | 10.42-1+deb12u2 (önc. 10.42-1+deb12u1) | 2026-09-16: yerel trivy 0.74.0 ilk koşumda 2 HIGH yakaladı → yama → 0 bulgu; CI koşum 35161423659 (13 Eylül kırmızı run'ı aynı CVE'lerle) before/after kanıtı. 2026-09-17: desenle yeniden doğrulandı (smoke PASS, 0 bulgu). 2026-10-09 ROTASYON: Debian u1'i depodan çekti (E: Version '10.42-1+deb12u1' ... was not found → apt 100) — docker-security + audit_live_ci_sync kırmızısının kök nedeni; u2'ye taşındı (aday: apt-cache policy, bookworm-security). |
 
 Yeni girdiler buraya ve Dockerfile'daki defter bloğuna eklenir.

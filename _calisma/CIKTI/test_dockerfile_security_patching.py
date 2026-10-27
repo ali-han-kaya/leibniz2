@@ -186,6 +186,11 @@ class TestDockerfileSecurityPatching(unittest.TestCase):
         self.assertIn("libpcre2-8-0=10.42-1+deb12u2", self._df)
         self.assertIn("CVE-2026-86145", self._df)
         self.assertIn("CVE-2026-89161", self._df)
+        # 2026-10-26 turu: aynı kaynak paket iki adla taranıyor (libssl3 +
+        # openssl) — yalnız birini floor'lamak gate'i açık bırakır.
+        self.assertIn("libssl3=3.0.22-1~deb12u2", self._df)
+        self.assertIn("openssl=3.0.22-1~deb12u2", self._df)
+        self.assertIn("CVE-2026-84782", self._df)
 
     def test_targeted_only_upgrade_not_full_upgrade(self):
         # Yalnız etkilenen paket; genel upgrade/dist-upgrade yasak.
@@ -272,6 +277,9 @@ class TestDockerfileSecurityPatching(unittest.TestCase):
                       "libpcre2-8-0",
                       "CVE-2026-86145",
                       "10.42-1+deb12u1",
+                      "libssl3",
+                      "CVE-2026-84782",
+                      "3.0.22-1~deb12u2",
                       "docker_security_smoke.sh",
                       "Katkı sözleşmesi"):
             self.assertIn(token, self._doc,

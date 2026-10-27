@@ -2,7 +2,7 @@
 """Deterministic ``status_checks --gh --json`` smoke contract.
 
 The test replaces the GitHub API response, not the production comparison logic:
-all 13 workflow-derived check names must render as PASS, while a single missing
+all 18 workflow-derived check names must render as PASS, while a single missing
 check must render as FAIL.  The separate UNREADABLE case remains explicit.
 """
 import io
@@ -47,22 +47,23 @@ class TestStatusChecksGhSmoke(unittest.TestCase):
                 self._exit_code = 0
         return json.loads(out.getvalue())
 
-    def test_real_13_rows_are_deterministic_pass_table(self):
-        checks = list(sc.gate_jobs().values())
-        # Current workflow: 16 required-check candidates (GitHub required
-        # contexts listinin birebir karşılığı; 14 -> 15: texlive-accept,
-        # 15 -> 16: webkit-smoke — protection contexts == gate_jobs).
-        self.assertEqual(len(checks), 16)
+    def test_real_18_rows_are_deterministic_pass_table(self):
+        # Beklenen set = verify.yml kapıları (16) + ikincil workflow kapıları
+        # (docker-security: 2) = 18; GitHub required contexts birebir bu küme.
+        checks = sc.expected_checks()
+        self.assertEqual(len(checks), 18)
+        self.assertIn("Build and scan Docker image", checks)
+        self.assertIn("Local security smoke (script parity)", checks)
         payload = self._json(self._protection(checks))
         self.assertEqual(payload["verdict"], "PASS")
         self.assertEqual(payload["configured"], sorted(checks))
-        self.assertEqual(len(payload["configured"]), 16)
-        self.assertEqual(len(payload["checks"]), 16)
+        self.assertEqual(len(payload["configured"]), 18)
+        self.assertEqual(len(payload["checks"]), 18)
         self.assertTrue(payload["names_ok"])
         self.assertTrue(payload["enforcement_ok"])
 
     def test_missing_row_is_fail(self):
-        checks = list(sc.gate_jobs().values())
+        checks = sc.expected_checks()
         payload = self._json(self._protection(checks[:-1]))
         self.assertEqual(self._exit_code, 1)
         self.assertEqual(payload["verdict"], "FAIL")
