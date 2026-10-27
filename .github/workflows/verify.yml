@@ -3719,7 +3719,7 @@ jobs:
         run: npx remotion browser ensure
 
       - name: Render 760 frames (h264)
-        run: npm run render --prefix _calisma/video
+        run: npm run render:mp4 --prefix _calisma/video
 
       # SÖZLEŞME ÖLÇÜMÜ: kare/süre/çözünürlük. Ayrıştırıcı stdlib mp4 kutu
       # ağacıdır (check_render.py) — paketlenmiş ffprobe macOS'ta

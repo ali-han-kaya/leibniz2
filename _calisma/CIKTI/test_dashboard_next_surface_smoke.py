@@ -58,6 +58,7 @@ DIŞINDA tutulur (sync_check_unit_tests.EXCLUDE): Next boot'u pre-commit'in
 `dashboard-next` job'ı koşar.
 """
 
+import json
 import os
 import re
 import shutil
@@ -80,6 +81,20 @@ THEME_INIT_TSX = os.path.join(NEXT_DIR, "components", "ThemeInit.tsx")
 THEME_LIB_TS = os.path.join(NEXT_DIR, "lib", "theme.ts")
 ROOT_LAYOUT = os.path.join(NEXT_DIR, "app", "layout.tsx")
 PREVIEW_JS = os.path.join(HERE, "preview.js")
+
+# Deterministik trend fixture — CI'da `_calisma/CIKTI/history.jsonl` YOKTUR
+# (gitignore'da; preview_server koşumlarıyla doğar). Tablo ve zaman-damgası
+# sözleşmesi boş geçmişle ÖLÇÜLEMEZ: boş tabloda ne satır ne `<time>` olur.
+# Bu yüzden preview_server'a tohumlanmış geçmiş verilir (`--preview-dir`
+# geçici dizin): repo ağacına yazılmaz, ağ/DB gerekmez, tekrar üretilebilir.
+FIXTURE_HISTORY = (
+    {"ts": "2026-10-01T08:00:00Z", "verdict": "PASS", "p0": 0, "p1": 1,
+     "duration_s": 212.5, "budget_usd": 0.42, "z3_total": 12, "lean_ok": True},
+    {"ts": "2026-10-02T09:30:00Z", "verdict": "PASS", "p0": 0, "p1": 0,
+     "duration_s": 208.0, "budget_usd": 0.39, "z3_total": 12, "lean_ok": True},
+    {"ts": "2026-10-03T11:15:00Z", "verdict": "FAIL", "p0": 2, "p1": 0,
+     "duration_s": 240.25, "budget_usd": 0.51, "z3_total": 11, "lean_ok": False},
+)
 
 # Sunucu kablosu TEK kaynaktan: aynı spawner'lar, aynı sıra.
 sys.path.insert(0, HERE)
@@ -282,9 +297,17 @@ class DashboardNextLightThemeTest(unittest.TestCase):
         logs = os.path.join(cls._tmp, "logs")
         os.makedirs(logs, exist_ok=True)
 
+        # Fixture'lı geçici preview dizini (gerekçe: FIXTURE_HISTORY notu).
+        # preview_server geçmişi `--preview-dir`/history.jsonl'dan okur.
+        preview_dir = os.path.join(cls._tmp, "preview")
+        os.makedirs(preview_dir, exist_ok=True)
+        with open(os.path.join(preview_dir, "history.jsonl"), "w",
+                  encoding="utf-8") as fh:
+            for row in FIXTURE_HISTORY:
+                fh.write(json.dumps(row, ensure_ascii=False) + "\n")
         preview_port = cwv_core.free_port()
         cls.preview_proc = cwv.spawn_preview_server(
-            HERE, preview_port, os.path.join(logs, "preview_server.log"))
+            preview_dir, preview_port, os.path.join(logs, "preview_server.log"))
         cls.addClassCleanup(cwv.terminate, cls.preview_proc)
 
         next_port = cwv_core.free_port()
@@ -454,6 +477,15 @@ class DashboardNextLightThemeTest(unittest.TestCase):
                 "paneller 20 sn içinde açılmadı (iskelet kaldı): %s"
                 % (path or self.base))
         if path is not None:
+            # SIRA ÖNEMLİ: iskelet beklemesi ESKİ sayfada da anında sağlanır
+            # (busy öğe sayısı 0). URL beklenmeden iddia edilirse yarış:
+            # client-side gezinme henüz commit etmemişken '/' okunur ve
+            # sonuç gezinmenin kendisinden değil ZAMANLAMADAN gelir.
+            try:
+                page.wait_for_function(
+                    "(p) => location.pathname === p", arg=path, timeout=20000)
+            except PlaywrightTimeoutError:
+                pass  # aşağıdaki assertEqual adı konmuş hatayı üretir
             actual = page.evaluate("() => location.pathname")
             self.assertEqual(
                 actual, path,
@@ -724,6 +756,14 @@ class DashboardNextLightThemeTest(unittest.TestCase):
                 )
                 page.on("pageerror", lambda exc: errors.append(str(exc)))
                 page.goto(self.base + "/", wait_until="domcontentloaded")
+                # Hydration kanıtı: `nav` Link'i ancak React bağlandıktan
+                # sonra client-side gezinme yapar. Bağlanmadan tıklamak TAM
+                # sayfa isteğine düşer → marker ölçümü vakum olur ve URL
+                # yarışı '/' görür. `_measure` ile AYNI sinyal.
+                page.wait_for_function(
+                    "() => document.documentElement.dataset.theme !== undefined",
+                    timeout=15000,
+                )
                 self._wait_panels(page)
                 page.evaluate("() => { window.__softNavProbe = 42; }")
                 before = self._probe_state(page)
