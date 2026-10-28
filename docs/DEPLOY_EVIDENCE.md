@@ -375,3 +375,4 @@ alanında görünür. `--gap-warn` her durumda **0** döner (ölçülemezse
 `UYARI: kanit boslugu olculemedi (...)` yazar) — bir uyarı yüzeyi commit'i
 kilitlememelidir; fail-closed yargı haftalık `deploy-evidence` koşumundadır.
 Eşik `--warn-head-gap` (varsayılan 2 = `--max-head-gap` − 1); `0` ile kapatılır.
+| 2026-10-26 | ab2f4610 | [success #40369559401](https://github.com/ali-han-kaya/leibniz2/actions/runs/40369559401) | [success #40369558837](https://github.com/ali-han-kaya/leibniz2/actions/runs/40369558837) | [success #40369558733](https://github.com/ali-han-kaya/leibniz2/actions/runs/40369558733) | [success #40296221973](https://github.com/ali-han-kaya/leibniz2/actions/runs/40296221973) |
