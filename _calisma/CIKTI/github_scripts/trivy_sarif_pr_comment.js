@@ -5,6 +5,8 @@
 //   • results: [] (temiz)   → temiz-yorum UPSERT, setFailed YOK
 //   • kapı-seviyesi bulgu   → bulgu-tablosu + diff-içi/diff-dışı damgası + setFailed
 //   • bozuk SARIF (runs:[]) → setFailed, yanıltıcı yorum YOK (fail-closed)
+//   • seviye mesajda yok    → SARIF `level` eşlemesi (warning→MEDIUM, note→LOW;
+//                             ölçüldü: trivy 0.74.0, 82 bulgu) → MEDIUM/LOW bloklamaz
 //   • seviye-okunamadı      → UNKNOWN etiketi + fail-closed (seviye UYDURULMAZ)
 //   • kapı girdileri yok    → setFailed (varsayılan severity YOK)
 //
@@ -50,14 +52,21 @@ function gateIgnoreUnfixed() {
   return null;
 }
 
+// SARIF `level` → seviye bandı. Trivy'nin gerçek çıktısı üzerinde ölçüldü
+// (trivy 0.74.0 fs-scan, 82 bulgu: 0/82 properties.severity; error↔9 CRITICAL
+// + 30 HIGH, warning↔37 MEDIUM, note↔6 LOW). `error` CRITICAL/HIGH'ı
+// ayıramaz → eşlenmez, UNKNOWN kalır (fail-closed).
+const LEVEL_SEVERITY = { warning: 'MEDIUM', note: 'LOW' };
+
 function severityOf(result) {
-  // Önce properties.severity (fixture/test sözleşmesi); yoksa mesajdaki
-  // "Severity: MEDIUM" (GERÇEK Trivy SARIF'i — canlı PR koşumunda ölçüldü:
-  // properties.severity taşınmıyor).
-  // İkisi de yoksa '' (BİLİNMİYOR) döner. Seviye UYDURULMAZ: buradaki eski
-  // 'HIGH' default'u, seviyesi okunamayan her bulguyu rapora "HIGH" yazıyor
-  // ve yorum ile gerçek Trivy seviyesini ayırıyordu. Kapı yine fail-closed
-  // (aşağıda UNKNOWN bloklar) ama etiket artık doğru: bilinmiyor.
+  // 1) properties.severity (fixture sözleşmesi; gerçek Trivy taşımıyor)
+  // 2) mesajdaki "Severity: MEDIUM" satırı (gerçek Trivy çıktısı)
+  // 3) SARIF `level` bandı → warning=MEDIUM, note=LOW
+  // Hiçbiri yoksa '' (BİLİNMİYOR) döner. Seviye UYDURULMAZ: buradaki eski
+  // 'HIGH' default'u, seviyesi okunamayan her bulguyu (gerçekte MEDIUM/LOW
+  // olanlar dahil) rapora "HIGH" yazıyor ve blokluyordu. `level` fallback'i
+  // o sınıfı kapatır; yalnız gerçekten bandı okunamayan (error/level-yok)
+  // sonuç UNKNOWN olarak fail-closed bloklar.
   const direct = String((result.properties && result.properties.severity) || '')
     .trim()
     .toUpperCase();
@@ -65,7 +74,11 @@ function severityOf(result) {
   const text = String((result.message && result.message.text) || '');
   const m = /Severity:\s*([A-Za-z]+)/.exec(text);
   const parsed = m ? m[1].toUpperCase() : '';
-  return SEVERITIES.has(parsed) ? parsed : '';
+  if (SEVERITIES.has(parsed)) return parsed;
+  const level = String(result.level || '')
+    .trim()
+    .toLowerCase();
+  return LEVEL_SEVERITY[level] || '';
 }
 
 function cell(text) {

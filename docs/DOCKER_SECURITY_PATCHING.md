@@ -77,6 +77,28 @@ fail-closed kırmızı (yorum da düşmez), bloklayan seviye kümesi env'den tü
 sonuç `UNKNOWN` etiketiyle bloklanır — eskiden olduğu gibi `HIGH` diye
 **uydurulmaz**.
 
+### Seviye kaynağı — ölçülmüş SARIF şekli
+
+Trivy SARIF'i `properties.severity` **taşımıyor** (trivy 0.74.0, `trivy fs
+--format sarif`, 82 zafiyet bulgusu: 0/82). Seviye sırayla üç yerden okunur:
+`properties.severity`, `message.text` içindeki `Severity: X` satırı (82/82
+bulguda var) ve son olarak `level` bandı. Ölçülen eşleme: `error` ↔
+CRITICAL/HIGH (9 CRITICAL + 30 HIGH), `warning` ↔ MEDIUM (37), `note` ↔ LOW
+(6).
+
+Zafiyet bulguları bugün `Severity:` satırını taşıdığı için `level` bandı
+yedek yoldur: mesajında bu satır olmayan bir sonucu (başka tarayıcı aileleri
+veya Trivy'nin ilerideki çıktı biçimi) band çözer. Bu yedek olmadan böyle bir
+sonucun seviyesi okunamaz ve `UNKNOWN` olarak bloklar; eşiğin dışındaki
+MEDIUM/LOW de bu yüzden bloklanıyordu (eski sürümde `HIGH` etiketiyle,
+#154 sonrası `UNKNOWN` etiketiyle). Ölçüm: aynı 82 bulgunun `Severity:`
+satırları silinerek band-only biçime sokulduğunda script **39 `error` bandı
+sonucu `UNKNOWN` olarak bloklar** (fail-closed) ve **43 `warning`/`note`
+sonucu tabloya hiç almaz**; yedek yol kapalıyken 82/82'si `UNKNOWN` diye
+bloklanıyordu. Gerçek (satırlı) koşuda 39 CRITICAL/HIGH bloklar, 43
+MEDIUM/LOW bloklamaz, `UNKNOWN` yoktur. `level: error` CRITICAL ile HIGH'ı
+ayırmadığı için eşleştirilmez — o sınıf `UNKNOWN` kalır.
+
 ### Tetikleme yüzeyleri: ölçülen asimetri ve kapandığı
 
 İki pre-commit kapısı aynı dosyaya bakar ama **eşleşme kalıpları
@@ -474,5 +496,6 @@ adımının `severity`/`ignore-unfixed` girdilerini, yorum adımının env
 geçişini ve script'in o env adlarını okuduğunu birlikte doğrular;
 `github_scripts_battery` senaryoları davranışı `mock_env.json` ile açar
 (kapı MEDIUM içeriyor → MEDIUM bloklar; seviye-okunamadı → `UNKNOWN` +
-fail-closed; env yok → yorum yok).
+fail-closed; env yok → yorum yok; `level: warning`/`note` (mesajda
+`Severity:` yok) → MEDIUM/LOW, bloklamaz ve `| HIGH |` satırı üretmez).
 
