@@ -206,6 +206,21 @@ class SnapshotFileTests(unittest.TestCase):
             raw_sha256="a" * 64, stripped_sha256="b" * 64))
         self.assertEqual(ps.load_snapshot_file(path)["verdict"], "PASS")
 
+    def test_null_stripped_hash_is_accepted(self):
+        # CI'da qpdf --remove-metadata koşamadığında history.jsonl
+        # "stripped_sha256": null yazar; bu bir bozulma değildir ve snapshot
+        # yüklemesini bloke etmemelidir (raw zorunlu, stripped isteğe bağlı).
+        path = self._write_snapshot(_rec(
+            "2026-09-25T12:00:00Z", exit_code=0,
+            raw_sha256="a" * 64, stripped_sha256=None))
+        self.assertEqual(ps.load_snapshot_file(path)["verdict"], "PASS")
+        # VARSA yine fail-closed: bozuk stripped reddedilir.
+        bad = self._write_snapshot(_rec(
+            "2026-09-25T13:00:00Z", exit_code=0,
+            raw_sha256="b" * 64, stripped_sha256="not-hex"))
+        with self.assertRaisesRegex(ValueError, "stripped_sha256 64 hex"):
+            ps.load_snapshot_file(bad)
+
     def test_nested_hash_conflict_is_rejected(self):
         rec = _rec("t", exit_code=0, raw_sha256="a" * 64,
                    stripped_sha256="b" * 64,

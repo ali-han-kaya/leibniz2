@@ -612,11 +612,21 @@ def _validate_snapshot_file_snapshot(value):
         raise ValueError("snapshot ts boş")
     nested = value.get("pdf_hash")
     nested = nested if isinstance(nested, dict) else {}
-    for field in ("raw_sha256", "stripped_sha256"):
+    # raw_sha256 ZORUNLU: teslim PDF'inin ham hash'i her verify koşumunda
+    # yazılır. stripped_sha256 ise İSTEĞE BAĞLI: qpdf --remove-metadata
+    # adımı koşamadığında (runner'daki qpdf sürümü farklı/desteklemiyorsa)
+    # verify_delivery alanı None yazar (ölçüldü — CI run-history:
+    # "stripped_sha256": null). Yokluğu bozulma değildir; VARSA 64-hex ve
+    # iç/dış değerleri tutarlı olmak zorundadır, aksi halde fail-closed.
+    for field, required in (("raw_sha256", True), ("stripped_sha256", False)):
         name = field.removesuffix("_sha256")
         values = [sha for sha in (value.get(field), nested.get(name))
                   if sha is not None]
-        if not values or any(
+        if not values:
+            if required:
+                raise ValueError("snapshot %s eksik" % field)
+            continue
+        if any(
                 not isinstance(sha, str) or
                 not re.fullmatch(r"[0-9a-fA-F]{64}", sha)
                 for sha in values):

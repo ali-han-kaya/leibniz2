@@ -3398,9 +3398,14 @@ jobs:
           set -euo pipefail
           report="lighthouse_dashboard_${A11Y_THEME}.json"
           url="http://127.0.0.1:${A11Y_PORT}/preview.html?theme=${A11Y_THEME}"
+          # --preset=desktop TEK BAŞINA yetmez: Lighthouse 13.5 formFactor ile
+          # screenEmulation.mobile çelişirse "Screen emulation mobile setting
+          # (true) does not match formFactor setting (desktop)" ile durur.
+          # Bu yüzden ikisi birlikte verilir (main ile aynı sözleşme).
           npx --yes lighthouse@13.5.0 "$url" \
             --only-categories=accessibility \
-            --form-factor=desktop \
+            --preset=desktop \
+            --screenEmulation.mobile=false \
             --output=json \
             --output-path="$report" \
             --chrome-flags="--headless --no-sandbox --disable-background-timer-throttling" \
