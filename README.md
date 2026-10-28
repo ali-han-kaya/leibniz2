@@ -686,6 +686,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-26 | fix | (changelog) heal bot PR kosumlarini onayla, dispatch yerine (#140) | [`8a62c96`](https://github.com/ali-han-kaya/leibniz2/commit/8a62c96) |
 | 2026-10-26 | fix | (changelog) approve yalniz bu commit'in kosumlarini onaylasin (#142) | [`65b4529`](https://github.com/ali-han-kaya/leibniz2/commit/65b4529) |
 | 2026-10-26 | chore | (determinism) backfill three missing weekly trend rows (#146) | [`ab2f461`](https://github.com/ali-han-kaya/leibniz2/commit/ab2f461) |
+| 2026-10-28 | docs | (deploy) record 2026-10-26 ab2f4610 run evidence (#151) | [`49fbf3e`](https://github.com/ali-han-kaya/leibniz2/commit/49fbf3e) |
 
 ### Regresyon notları
 
