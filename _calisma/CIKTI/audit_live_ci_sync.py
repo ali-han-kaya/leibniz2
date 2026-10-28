@@ -306,6 +306,27 @@ def get_run_job_conclusions(repo, run_id):
 
 
 # ── Karşılaştırma ────────────────────────────────────────────────────────
+def collapse_matrix_job_names(expected, live):
+    """GitHub matrix child adlarını doc'taki TEMEL ada indirger.
+
+    `strategy.matrix` ile tanımlanan job'lar GitHub'da "<Ad> (<değer>)"
+    biçiminde görünur (ör. "A11y gate (axe-core, fail-closed) (dark)").
+    Doc tablosu her zaman TEMEL adı listeler ve matrix child'larını satır
+    açıklamasında anlatır (docs/PUBLISH_SCENARIO.md §13). Yalnızca doc'ta
+    tanımlı bir temel ada genişleyen canlı ad çökertilir; diğer adlar aynen
+    kalır — yanlış eşleşme üretmez.
+    """
+    base_names = set(expected)
+    collapsed = []
+    for name in live:
+        m = re.match(r"^(.*) \(([^()]*)\)$", name)
+        if m and m.group(1) in base_names:
+            collapsed.append(m.group(1))
+        else:
+            collapsed.append(name)
+    return collapsed
+
+
 def compare(expected, live, label):
     exp = set(expected)
     liv = set(live)
@@ -528,7 +549,9 @@ def main(argv=None):
     doc_artifacts = [n for n in doc_artifacts if n != SELF_ARTIFACT]
 
     doc_job_names = [n for (_cat, n) in doc_jobs]
-    job_cmp = compare(doc_job_names, live_jobs, "jobs")
+    # Matrix child'ları ("<Ad> (<değer>)") doc'un temel adına çökertilir.
+    live_jobs_cmp = collapse_matrix_job_names(doc_job_names, live_jobs)
+    job_cmp = compare(doc_job_names, live_jobs_cmp, "jobs")
     art_cmp = classify_artifact_drift(doc_artifacts, live_artifacts, conclusions)
 
     # Sabitlenmiş artifact varlığı (doc + live) — fail-closed kapı.

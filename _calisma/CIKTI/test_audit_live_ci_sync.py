@@ -104,6 +104,22 @@ class TestCompare(unittest.TestCase):
         r = als.compare(["a"], ["a", "a"], "jobs")
         self.assertTrue(r["ok"])
 
+    def test_matrix_child_names_collapse_to_doc_base_name(self):
+        # GitHub matrix job'larını "<Ad> (<değer>)" olarak listeler; doc her
+        # zaman temel adı yazar (PUBLISH_SCENARIO.md §13 matrix child'ları
+        # anlatır). Çökertme yanlış eşleşme üretmemeli: doc'ta temel adı
+        # olmayan sonek aynen kalır.
+        base = "A11y gate (axe-core, fail-closed)"
+        live = [base + " (dark)", base + " (light)",
+                "Başka job (değer)"]
+        collapsed = als.collapse_matrix_job_names([base], live)
+        self.assertEqual(collapsed, [base, base, "Başka job (değer)"])
+        r = als.compare([base, "Başka job (değer)"], collapsed, "jobs")
+        self.assertTrue(r["ok"], r)
+        # Temel ad doc'ta yoksa çökertme YOK — gerçek sonek drift olarak kalır.
+        self.assertEqual(
+            als.collapse_matrix_job_names([], ["X (dark)"]), ["X (dark)"])
+
 
 class TestArtifactPagination(unittest.TestCase):
     def test_requests_enough_artifact_page_for_current_runs(self):

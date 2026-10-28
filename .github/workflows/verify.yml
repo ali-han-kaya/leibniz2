@@ -2251,8 +2251,8 @@ jobs:
     # job'lar skipped olarak yine listededir → isim eşleşmesi çalışır.
     needs: [verify, action-runtimes, budget, reports, reproducibility,
             config-drift, repack-verify, refs-trend, audit-refs-trend,
-            precheck, plist-check, daemon-http, mirror-check, label-gate,
-            label-gate-p1, commit-msg-gate, manifest-comment]
+            precheck, plist-check, daemon-http, mirror-check, a11y-gate,
+            label-gate, label-gate-p1, commit-msg-gate, manifest-comment]
     if: always()
     steps:
       - name: Checkout
