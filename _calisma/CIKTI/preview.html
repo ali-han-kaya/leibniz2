@@ -52,6 +52,13 @@
            background-size:cover; background-position:center right;
            opacity:.14; mix-blend-mode:luminosity; }
   :root[data-theme="light"] .header-decor { opacity:.22; mix-blend-mode:multiply; }
+  /* a11y (light, color-contrast): badge metni kendi tinted zemininde
+     esik altinda kaliyordu — ok 4.13, warn 3.67, unknown 4.15 (< 4.5).
+     Yalniz light temasinda metin tonu koyulasir; dark varsayilani DEGISMEZ.
+     Yeni oranlar: ok 5.07 · warn 5.35 · unknown 6.15. */
+  :root[data-theme="light"] .badge.ok { color:#1f6b32; }
+  :root[data-theme="light"] .badge.warn { color:#7a5205; }
+  :root[data-theme="light"] .badge.unknown { color:var(--fg-dimmed); }
   /* Stripe HDS varyantı (data-theme="stripe") — arşiv/kâğıt panelinin krema
      literallerini repo token'larına bağlar (koyu/açık varsayılanlar
      DEĞİŞMEZ; varyantta kâğıt HDS beyazına, mürekkep laciverte düşer).
