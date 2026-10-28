@@ -55,6 +55,14 @@ jobs:
       contents: read
       pull-requests: write
       security-events: write
+    # Kapı parametreleri TEK KAYNAK: Trivy tarama adımlarının severity/
+    # ignore-unfixed girdileri ve SARIF yorum script'i (TRIVY_SEVERITY /
+    # TRIVY_IGNORE_UNFIXED env'ini okur) aynı değerleri buradan alır.
+    # Script varsayılan eşik BİLMEZ: env eksikse fail-closed kırmızı —
+    # böylece "taranan seviye" ile "raporlanan/bloklanan seviye" ayrışamaz.
+    env:
+      TRIVY_SEVERITY: CRITICAL,HIGH
+      TRIVY_IGNORE_UNFIXED: "true"
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -100,8 +108,9 @@ jobs:
           image-ref: leibniz2/verify-dashboard:${{ github.sha }}
           format: sarif
           output: trivy.sarif
-          severity: CRITICAL,HIGH
-          ignore-unfixed: true
+          # Eşik job env'inden (tek kaynak) — yorum adımı aynı env'i okur.
+          severity: ${{ env.TRIVY_SEVERITY }}
+          ignore-unfixed: ${{ env.TRIVY_IGNORE_UNFIXED }}
           exit-code: 1
 
       - name: Scan image with Trivy (table — log kanıtı)
@@ -112,8 +121,8 @@ jobs:
         with:
           image-ref: leibniz2/verify-dashboard:${{ github.sha }}
           format: table
-          severity: CRITICAL,HIGH
-          ignore-unfixed: true
+          severity: ${{ env.TRIVY_SEVERITY }}
+          ignore-unfixed: ${{ env.TRIVY_IGNORE_UNFIXED }}
           exit-code: 1
 
       - name: Annotate PR with Trivy findings (fail-closed)
@@ -121,6 +130,12 @@ jobs:
         # görünür kalmalı) — aksi halde kırmızı PR'da kanıt yok olur.
         if: always() && github.event_name == 'pull_request'
         uses: actions/github-script@v8
+        # Zorlayıcı bacağın eşik girdileri script'e AÇIKÇA geçilir; script
+        # bunları okur (varsaymaz) → yorum metni ve blok kümesi Trivy'nin
+        # gerçekten taradığı seviyeyle aynı kaynaktan gelir.
+        env:
+          TRIVY_SEVERITY: ${{ env.TRIVY_SEVERITY }}
+          TRIVY_IGNORE_UNFIXED: ${{ env.TRIVY_IGNORE_UNFIXED }}
         with:
           script: |
             const fs = require('fs');

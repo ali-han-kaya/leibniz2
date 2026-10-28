@@ -62,6 +62,15 @@ MARKER_MANIFEST = "<!-- stoic-hume-v5-reproducibility-manifest -->"
 MARKER_CFGDIFF = "<!-- stoic-hume-v5-config-diff -->"
 MARKER_DRIFT = "<!-- stoic-hume-v5-config-drift -->"
 
+# Trivy kapı girdileri — workflow `image-scan` job env'inin (TEK KAYNAK)
+# gerçek adım ortamı: Trivy tarama adımlarının severity/ignore-unfixed
+# girdileri ve SARIF yorum adımı aynı değerleri alır. Senaryolar bunu
+# `mock_env.json` ile taklit eder; script env'i OKUR, varsaymaz.
+TRIVY_GATE_ENV = {
+    "TRIVY_SEVERITY": "CRITICAL,HIGH",
+    "TRIVY_IGNORE_UNFIXED": "true",
+}
+
 REPO_URL = "https://github.com/mock-owner/mock-repo"
 
 # Birleşik adım sarmalayıcısı — verify.yml'deki TEK github-script adımının
@@ -1478,7 +1487,8 @@ SCENARIOS = [
             "runs": [{"tool": {"driver": {"name": "Trivy",
                                            "rules": []}},
                       "results": []}]}),
-         "changed_files.txt": "README.md\n"},
+         "changed_files.txt": "README.md\n",
+         "mock_env.json": json.dumps(TRIVY_GATE_ENV)},
         None, [],
         [{"id": 501, "body": "eski " + MARKER_TRIVY}],
         {
@@ -1488,7 +1498,8 @@ SCENARIOS = [
                             "issues.createComment": 0},
             "target_ids": {"issues.updateComment": [501]},
             "body_contains": {"issues.updateComment": [
-                MARKER_TRIVY, "CRITICAL/HIGH bulgu yok"]},
+                MARKER_TRIVY, "CRITICAL/HIGH bulgu yok",
+                "(CRITICAL,HIGH, ignore-unfixed)"]},
         },
     ),
     (
@@ -1508,7 +1519,8 @@ SCENARIOS = [
                         "artifactLocation": {
                             "uri": "_calisma/CIKTI/base.c"}}}],
                     "properties": {"severity": "CRITICAL"}}]}]}),
-         "changed_files.txt": "_calisma/CIKTI/base.c\nREADME.md\n"},
+         "changed_files.txt": "_calisma/CIKTI/base.c\nREADME.md\n",
+         "mock_env.json": json.dumps(TRIVY_GATE_ENV)},
         None, [], [],
         {
             "ok": True, "set_failed": True,
@@ -1538,7 +1550,8 @@ SCENARIOS = [
                                   "uri": "opt/venv/lib/python3.11/"
                                          "site-packages/pip-24.0.dist-info/"
                                          "METADATA"}}}]}]}]}),
-         "changed_files.txt": "README.md\n"},
+         "changed_files.txt": "README.md\n",
+         "mock_env.json": json.dumps(TRIVY_GATE_ENV)},
         None, [], [],
         {
             "ok": True, "set_failed": False,
@@ -1562,7 +1575,8 @@ SCENARIOS = [
                           "locations": [{"physicalLocation": {
                               "artifactLocation": {
                                   "uri": "debian/libfoo"}}}]}]}]}),
-         "changed_files.txt": ""},
+         "changed_files.txt": "",
+         "mock_env.json": json.dumps(TRIVY_GATE_ENV)},
         None, [], [],
         {
             "ok": True, "set_failed": True,
@@ -1575,7 +1589,8 @@ SCENARIOS = [
     (
         "trivy: bozuk SARIF (runs boş) → setFailed, yanıltıcı yorum YOK",
         "trivy_sarif_pr_comment.js",
-        {"trivy.sarif": "{\"runs\": []}"},
+        {"trivy.sarif": "{\"runs\": []}",
+         "mock_env.json": json.dumps(TRIVY_GATE_ENV)},
         None, [], [],
         {
             "ok": True, "set_failed": True,
@@ -1585,7 +1600,10 @@ SCENARIOS = [
         },
     ),
     (
-        "trivy: seviye-yok sonucu default-deny (HIGH muamelesi) → setFailed",
+        # Severity okunamayan sonuç: fail-closed bloklar AMA etiket UNKNOWN.
+        # Eski davranış seviyeyi 'HIGH' diye UYDURUYORDU; yorum gerçek Trivy
+        # seviyesinden ayrışıyordu (bkz. severityOf).
+        "trivy: seviye-okunamadı → UNKNOWN etiketi + fail-closed (HIGH uydurulmaz)",
         "trivy_sarif_pr_comment.js",
         {"trivy.sarif": json.dumps({
             "runs": [{"tool": {"driver": {"name": "Trivy", "rules": []}},
@@ -1594,13 +1612,61 @@ SCENARIOS = [
                           "message": {"text": "mystery finding"},
                           "locations": [{"physicalLocation": {
                               "artifactLocation": {"uri": "x.c"}}}]}]}]}),
-         "changed_files.txt": ""},
+         "changed_files.txt": "",
+         "mock_env.json": json.dumps(TRIVY_GATE_ENV)},
         None, [], [],
         {
             "ok": True, "set_failed": True,
             "call_counts": {"issues.createComment": 1},
             "body_contains": {"issues.createComment": [
-                "CVE-2024-0002", "HIGH", "diff-dışı"]},
+                "CVE-2024-0002", "| UNKNOWN |", "diff-dışı",
+                "fail-closed olarak bloklar"]},
+            "body_not_contains": {"issues.createComment": ["| HIGH |"]},
+            "set_failed_contains": ["seviye-okunamadı: 1"],
+        },
+    ),
+    # ── Kapı eşiği ÇAĞIRANDAN gelir (workflow job env → SARIF adımı) ───────
+    (
+        "trivy: kapı eşiği MEDIUM içeriyor → MEDIUM bulgu bloklar (env'den)",
+        "trivy_sarif_pr_comment.js",
+        {"trivy.sarif": json.dumps({
+            "runs": [{"tool": {"driver": {"name": "Trivy", "rules": []}},
+                      "results": [{
+                          "ruleId": "CVE-2025-7777",
+                          "message": {"text": "Package: pip\n"
+                                             "Severity: MEDIUM\n"},
+                          "locations": [{"physicalLocation": {
+                              "artifactLocation": {"uri": "opt/pip"}}}]}]}]}),
+         "changed_files.txt": "",
+         "mock_env.json": json.dumps({
+             "TRIVY_SEVERITY": "CRITICAL,HIGH,MEDIUM",
+             "TRIVY_IGNORE_UNFIXED": "false"})},
+        None, [], [],
+        {
+            "ok": True, "set_failed": True,
+            "call_counts": {"issues.createComment": 1},
+            "body_contains": {"issues.createComment": [
+                "| MEDIUM |", "Kapı: CRITICAL,HIGH,MEDIUM → gate kırmızı"]},
+            "body_not_contains": {"issues.createComment": ["ignore-unfixed"]},
+        },
+    ),
+    (
+        # Env geçirilmemişse eşik BİLİNMİYOR: tahminle yorum/karar üretilmez.
+        "trivy: kapı girdileri yok (env geçirilmemiş) → fail-closed, yorum YOK",
+        "trivy_sarif_pr_comment.js",
+        {"trivy.sarif": json.dumps({
+            "runs": [{"tool": {"driver": {"name": "Trivy", "rules": []}},
+                      "results": []}]}),
+         "changed_files.txt": "README.md\n",
+         "mock_env.json": json.dumps({"TRIVY_SEVERITY": None,
+                                      "TRIVY_IGNORE_UNFIXED": None})},
+        None, [], [],
+        {
+            "ok": True, "set_failed": True,
+            "call_counts": {"issues.createComment": 0,
+                            "issues.listComments": 0,
+                            "issues.updateComment": 0},
+            "set_failed_contains": ["TRIVY_SEVERITY", "fail-closed"],
         },
     ),
     # ── Kota dayanıklılığı: PR yorumu yan fayda, kapı kararı yerel SARIF'ten
@@ -1609,6 +1675,7 @@ SCENARIOS = [
         "trivy_sarif_pr_comment.js",
         {"trivy.sarif": '{"runs": [{"tool": {"driver": {"name": "Trivy", "rules": []}}, "results": []}]}',
          "changed_files.txt": "README.md\n",
+         "mock_env.json": json.dumps(TRIVY_GATE_ENV),
          "mock_api_error.json": '{"fn": "issues.listComments", "message": "API rate limit exceeded for installation"}',
          },
         None, [], [],
@@ -1621,6 +1688,7 @@ SCENARIOS = [
         "trivy_sarif_pr_comment.js",
         {"trivy.sarif": '{"runs": [{"tool": {"driver": {"name": "Trivy", "rules": [{"id": "CVE-2024-0001", "shortDescription": {"text": "os-pkg vuln"}}]}}, "results": [{"ruleId": "CVE-2024-0001", "level": "error", "message": {"text": "libfoo 1.2 has CVE-2024-0001"}, "locations": [{"physicalLocation": {"artifactLocation": {"uri": "Dockerfile"}, "region": {"startLine": 3}}}]}]}]}',
          "changed_files.txt": "Dockerfile\n",
+         "mock_env.json": json.dumps(TRIVY_GATE_ENV),
          "mock_api_error.json": '{"fn": "issues.listComments", "message": "API rate limit exceeded for installation"}',
          },
         None, [], [],
