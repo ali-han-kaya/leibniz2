@@ -686,6 +686,8 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-26 | fix | (changelog) heal bot PR kosumlarini onayla, dispatch yerine (#140) | [`8a62c96`](https://github.com/ali-han-kaya/leibniz2/commit/8a62c96) |
 | 2026-10-26 | fix | (changelog) approve yalniz bu commit'in kosumlarini onaylasin (#142) | [`65b4529`](https://github.com/ali-han-kaya/leibniz2/commit/65b4529) |
 | 2026-10-26 | chore | (determinism) backfill three missing weekly trend rows (#146) | [`ab2f461`](https://github.com/ali-han-kaya/leibniz2/commit/ab2f461) |
+| 2026-10-28 | feat | (security) npm audit esik kapisini zorlayici hale getir | [`c15a37cb`](https://github.com/ali-han-kaya/leibniz2/commit/c15a37cb) |
+| 2026-10-27 | fix | (docker) pin libssl3/openssl/tzdata floors for trivy gate | [`9858ffd9`](https://github.com/ali-han-kaya/leibniz2/commit/9858ffd9) |
 
 ### Regresyon notları
 

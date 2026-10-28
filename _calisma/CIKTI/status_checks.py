@@ -55,29 +55,20 @@ except ImportError:  # pragma: no cover — stdlib-only runnerlarda yaml yok
 # CIKTI'dan da repo kökünden de koşabilsin).
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 WORKFLOW = str(_REPO_ROOT / ".github" / "workflows" / "verify.yml")
-# Required check OLMAYAN job'lar: PR-only/advisory (banner kapı olmasın).
-GATE_EXCLUDE = {
-    "manifest-comment",    # PR-only: yorum düşürme
-    "precheck",             # AŞAMA 0 advisory
-    "label-gate-p1",        # PR-only: P1 etiket opsiyonel blokaj (required DEĞİL)
-    "plist-check",          # macOS-advisory: push'ta çalışmaz
-    "mirror-check",         # macOS: sync sonrası K17 fail-closed (advisory)
-    "daemon-http",          # advisory: daemon-modu HTTP 200 smoke (advisory)
-    "fresh-clone-http",      # advisory: temiz clone + preview HTTP smoke
-    "audit-live-ci",        # advisory: doc↔GitHub senkron denetimi
-    "audit-refs-trend",     # advisory: refs-trend satırları ↔ kaynak denetimi
-    "override-trend",       # advisory: CLI override zaman serisi
-    "changelog-drift",      # advisory: gen_changelog --check drift bulguları
-    "pattern-drift",         # advisory: merge pattern ↔ ARTIFACT_JOBS drift
-    "budget-comment",        # PR-only: bütçe + pre-commit PR yorumu (bütçe kapısı ayrı job)
-    "preview-reload-smoke",  # advisory: job adı "Preview reload smoke (advisory, macOS)";
-                             #   macOS-only tarayıcı smoke'u — canlı protected sette YOK.
-    "webkit-smoke",          # advisory: job adı "WebKit smoke (advisory, Safari/safedriver)";
-                             #   macOS safedriver smoke'u — canlı protected sette YOK.
-    "lake-proof",            # ayrı-step K9 lake build (lean-toolchain v4.14.0);
-                             #   GitHub required kontrollerinde DEĞİL (advisory) —
-                             #   K9, verify job'unun --full içinde de koşar.
-}
+# ── Tek kaynak: GATE_EXCLUDE (required check OLMAYAN job id'leri) ───────
+# Karar ve her üyenin gerekçesi workflow_contract.py'de yaşar (verify.yml
+# sözleşme kümelerinin tek kaynağı). Burada kopya taşımak yerine oradan
+# alınıyor; test_workflow_contract nesne-özdeşliğini pin'ler (literal bir
+# kopya geri gelirse assertIs FAIL). Küme frozenset — yanlışlıkla mutasyon
+# required seti sessizce kaydıramaz.
+_CIKTI_DIR = str(pathlib.Path(__file__).resolve().parent)
+if _CIKTI_DIR not in sys.path:
+    sys.path.insert(0, _CIKTI_DIR)
+try:
+    from workflow_contract import GATE_EXCLUDE  # noqa: E402
+except ImportError:  # pragma: no cover — CIKTI sys.path'te değilse paket içi
+    from .workflow_contract import GATE_EXCLUDE  # noqa: E402
+
 # NOT (2026-10-25): `dashboard-smoke` ("Dashboard interaction E2E (node sandbox
 # + Chromium CDP)") EXCLUDE'dan ÇIKARILDI — canlı branch protection bu adı
 # required olarak tutuyor ve job fail-closed koşar (node katmanı tarayıcısız

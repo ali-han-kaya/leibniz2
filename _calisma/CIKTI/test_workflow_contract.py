@@ -7,8 +7,9 @@ Bu meta-test:
   1. Üretici modüllerin (summary_pattern_drift, check_pattern_consistency,
      check_workflow_artifact_docs) kendi EXCLUDED/muafiyet attr'larının
      fixture ile BİREBİR aynı olduğunu doğrular — biri kaçarsa drift FAIL.
-  2. Lazy re-export'ların (ARTIFACT_JOBS, GATE_EXCLUDE) üretici
-     attr'larıyla özdeş olduğunu doğrular.
+  2. Lazy re-export'un (ARTIFACT_JOBS) üretici attr'ıyla özdeş olduğunu ve
+     GATE_EXCLUDE'ın TEK KAYNAĞININ bu modül olduğunu (status_checks ondan
+     içe aktarır; oraya literal bir kopya geri gelirse FAIL) doğrular.
   3. Küme içi tutarlılığı pin'ler (DOC_ONLY ⊆ UPLOAD_EXCEPTIONS,
      merge-excluded kümesi ARTIFACT_JOBS ile kesişir vb.).
 
@@ -55,13 +56,16 @@ class TestProducersMatchFixture(unittest.TestCase):
 
 
 class TestLazyReExports(unittest.TestCase):
-    """ARTIFACT_JOBS / GATE_EXCLUDE re-export'ları üreticiyle özdeş."""
+    """ARTIFACT_JOBS re-export'u + GATE_EXCLUDE tek-kaynak bağlaması."""
 
     def test_artifact_jobs_is_same_object(self):
         import gen_repro_manifest as grm
         self.assertIs(wc.ARTIFACT_JOBS, grm.ARTIFACT_JOBS)
 
     def test_gate_exclude_is_same_object(self):
+        # Bağlama kapısı: status_checks kümeyi İÇE AKTARIR, kopyalamaz.
+        # status_checks.py'ye literal bir set geri eklenirse iki ayrı nesne
+        # olur ve required set sessizce kayar — assertIs bunu yakalar.
         try:
             import status_checks as sc  # noqa: E402
             self.assertIs(wc.GATE_EXCLUDE, sc.GATE_EXCLUDE)
@@ -94,6 +98,8 @@ class TestSetConsistency(unittest.TestCase):
         self.assertIsInstance(wc.MERGE_PATTERN_EXCLUDED, frozenset)
         self.assertIsInstance(wc.DOC_ONLY_ADVISORY, frozenset)
         self.assertIsInstance(wc.UPLOAD_EXCEPTIONS, frozenset)
+        # GATE_EXCLUDE da donuk: mutasyon required seti sessizce kaydıramaz.
+        self.assertIsInstance(wc.GATE_EXCLUDE, frozenset)
 
     def test_dir_includes_lazy_names(self):
         self.assertIn("ARTIFACT_JOBS", dir(wc))
