@@ -55,6 +55,7 @@ test_coordinator_loop.py
 test_coq_evidence_smoke.py
 test_coq_lake.py
 test_coverage_report.py
+test_daemon_http.py
 test_dashboard_k17_exit_sync.py
 test_dashboard_next_contract.py
 test_dashboard_smoke.py
