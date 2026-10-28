@@ -278,6 +278,7 @@ HOOK_COVERAGE = {
         "test_backfill_history_layers.py",
         "test_repack_idempotence.py",
         "test_two_write_kill_window.py",
+        "test_ci_full_discover_drift_guard.py",
     ],
 }
 
