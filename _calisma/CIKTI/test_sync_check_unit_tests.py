@@ -62,6 +62,19 @@ class TestDiscover(unittest.TestCase):
         for name in s.EXCLUDE:
             self.assertTrue(name.startswith("test_") and name.endswith(".py"), name)
 
+    def test_exclude_each_name_exists_on_disk(self):
+        """EXCLUDE'deki her test dosyası GERÇEKTEN var olmalı.
+
+        Bağlama denetimi (audit 1-2) yalnız "hedef bildirilmiş mi" ve "hedef
+        var mı" diye bakar; dosyası silinmiş bir test bildirimiyle birlikte
+        "bağlı" görünür. Ölçüldü (2026-10-28): test_repro_manifest_topology.py
+        diskte yoktu ama EXCLUDE_CI_JOBS'ta `verify` bağıyla duruyordu — hayalet
+        girdi, hiçbir yerde koşmayan bir satır gibi görünüyordu.
+        """
+        for name in sorted(s.EXCLUDE):
+            self.assertTrue(os.path.isfile(os.path.join(s.CIKTI, name)),
+                            f"EXCLUDE'da diskte olmayan test: {name}")
+
 
 class TestManifest(unittest.TestCase):
     def _tmp_env(self):

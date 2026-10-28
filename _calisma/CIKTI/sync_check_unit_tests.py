@@ -57,6 +57,28 @@ MANIFEST = os.path.join(CIKTI, "check_unit_tests.list")
 COVERAGE_FILE = os.path.join(CIKTI, "test_coverage_report.py")
 
 # ────────────────────────────────────────────────────────────────────────────
+# SINIFLANDIRMA KURALI (2026-10-28, ölçülmüş triyaj): EXCLUDE'a girmek için testin
+# manifest'te koşamıyor olması gerekir; "yavaş" tek başına gerekçe DEĞİLDİR.
+# Üç grup:
+#   A. KENDİ ORTAMINI KURAN (manifest'te): kendi klonunu/venv'ini/geçici HOME'unu
+#      kurar, dış ortam istemez → her yerde, zamanlaması kendi kontrolünde koşar.
+#      Ölçüm: test_daemon_http.py 9-10s/7 test (kendi sunucusunu geçici portta
+#      başlatır; `discover -p` ile 3 koşumda da 9-10s) → 2026-10-28'de
+#      EXCLUDE'dan ÇIKARILDI: CI'da `CI` env'i yüzünden SKIP'e düşüyordu,
+#      yani bildirilen `daemon-http` job'ı onu HİÇ koşmuyordu; gerçekten
+#      koşabileceği tek yer pre-commit.
+#      test_fresh_clone_setup.py ise DIŞARIDA KALDI ve gerekçesi artık ölçülü:
+#      aynı komutla 60.6s, 74s, 120s+ (timeout) — süresi 2-3x değişken. Commit
+#      bütçesini belirsizleştirdiği için "kendi ortamını kuruyor" olması tek
+#      başına yeterli değil; CI `fresh-clone-http` job'ında koşuyor.
+#   B. KENDİ HOOK'U OLAN (EXCLUDE_HOOKS): hafif, o hook zaten koşar → manifest'te
+#      tekrar koşmak çift maliyet, ek kapsam değil.
+#   C. DIŞ ORTAM BAĞIMLI (EXCLUDE_CI_JOBS): launchctl/macOS servisi, canlı sunucu,
+#      tarayıcı (Chromium), ağ. Pre-commit bunları garanti edemez; CI job'ı koşar.
+# Ayrıca: diskte olmayan bir girdi (test_repro_manifest_topology.py) 2026-10-28'de
+# hem EXCLUDE'dan hem bağlamasından düşürüldü — audit yalnız "bağ var mı" diye
+# baktığı için dosyası silinmiş bir test "bağlı" görünüyordu.
+# ────────────────────────────────────────────────────────────────────────────
 # EXCLUDE — pre-commit'te koşulmaması gereken testler (ortam-bağımlı):
 #  - launchctl/plist/daemon/canlı-sunucu gerektiren testler CI job'larında koşar
 #    (plist-check, daemon-http, preview-reload-smoke, refs-online)
@@ -79,12 +101,11 @@ EXCLUDE = {
     "test_check_plist_drift.py",      # launchctl (check-plist-drift)
     "test_doc_artifact_sync.py",      # kendi gate'i: check-doc-artifact-sync hook'u
     "test_gen_plist_golden.py",       # plist golden üretir (check-plist-drift)
-    "test_daemon_http.py",            # canlı daemon sunucusu (daemon-http job)
     "test_preview_reload_smoke.py",   # canlı preview (preview-reload-smoke job)
     "test_k18_daemon.py",             # canlı daemon smoke (CI)
     "test_cleanup.py",                # launchctl cleanup — ortam-etkili
-    "test_fresh_clone_setup.py",      # kurulum betiği — yavaş/CI advisory
     "test_check_history.py",          # daemon history sidecar (CI daemon job)
+    "test_fresh_clone_setup.py",      # kurulum betiği — süre 60s→120s+ değişken (ölçüldü); CI fresh-clone-http
     "test_preview_prestart.py",       # preview prestart — daemon zinciri (CI)
     "test_lake_evidence_smoke.py",    # lake/lean gerektirir (check-lake-evidence hook'u)
 
@@ -105,9 +126,6 @@ EXCLUDE = {
     "test_gen_config.py",                  # update-config
     "test_github_scripts_battery.py",      # verify-delivery-github-scripts
     "test_all_hooks_smoke.py",             # tüm hook'ları koşar (smoke) — kendini çağırır
-
-    # ağır/kataloglama testleri (manifest/repro) — ayrı job'lar
-    "test_repro_manifest_topology.py",
 
     # Dashboard ETKİLEŞİM E2E'si (hover tooltip / run-history filtresi /
     # lightbox): Playwright + Chromium ister ve kendi preview_server.py'sini
@@ -360,7 +378,6 @@ EXCLUDE_HOOKS = {
 EXCLUDE_CI_JOBS = {
     # ÖZEL CI job'ı olanlar — job id, .github/workflows/* içindeki jobs:
     # bloğunda yaşar. Yeniden adlandırılırsa kapı kırılır (istenen davranış).
-    "test_daemon_http.py":                   "daemon-http",
     "test_fresh_clone_setup.py":             "fresh-clone-http",
     "test_preview_reload_smoke.py":          "preview-reload-smoke",
     # Hermetic etkileşim E2E'si (hover tooltip / filtre / lightbox): kendi
@@ -379,7 +396,6 @@ EXCLUDE_CI_JOBS = {
     "test_dashboard_playwright_smoke.py":    "dashboard-smoke",
     "test_k18_daemon.py":                    "verify",
     "test_preview_prestart.py":              "verify",
-    "test_repro_manifest_topology.py":       "verify",
     "test_verify_refs.py":                   "verify",  # refs-online adımı verify içinde
 }
 
