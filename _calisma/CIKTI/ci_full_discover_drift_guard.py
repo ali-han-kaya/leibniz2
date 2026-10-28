@@ -224,6 +224,9 @@ def main(argv=None):
             "exit_code": exit_code,
             "tests_ran": count,
             "passed": full_discover_passed,
+            # Kırmızıysa ham çıktının kuyruğu (hangi test düştü) kanıta girer.
+            "stdout_tail": [] if full_discover_passed
+                            else (stdout or stderr or "").strip().splitlines()[-30:],
         },
         "registered_battery": {
             "files_in_scope": sorted(should_run),
@@ -264,7 +267,9 @@ def main(argv=None):
     # (drift tanımı batarya YEŞİL iken discover KIRMIZI), ama o zaman
     # "kayıtlı batarya: GREEN (0/195 passed)" gibi çelişkili kanıt yazılmaz.
     print("CI-FULL-DISCOVER-DRIFT-GUARD: PASS", file=sys.stderr)
-    print(f"  full discover: GREEN (exit 0, {count} tests)", file=sys.stderr)
+    discover_state = "GREEN" if full_discover_passed else "RED"
+    print(f"  full discover: {discover_state} (exit {exit_code}, {count} tests)",
+          file=sys.stderr)
     battery_state = "GREEN" if registered_battery_green else "RED"
     print(f"  kayıtlı batarya: {battery_state} "
           f"({summary['registered_battery']['files_passed']}/{len(should_run)} passed)",
