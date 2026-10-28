@@ -12,19 +12,20 @@ Bu gate, "kayıtlı batarya yeşil ama tüm discover kırmızı" durumunu yakala
 CI'yi fail eder. Böylece yeni test dosyası ekledikten sonra onu listeye
 eklemeyi unutan geliştirici CI'da derhal RED görür.
 
-Kullanım (verify.yml'de check-unit-tests job'unun içine, listedeki testlerin
-koşulmasının YANINDA):
-  python3 _calisma/CIKTI/ci_full_discover_drift_guard.py
+Kullanım (verify.yml `verify` job'ı, AYRI adım; bağlama kapısı:
+test_ci_full_discover_drift_guard.py bu adımın varlığını ve fail-closed
+kalduğını pin'ler):
+  python3 _calisma/CIKTI/ci_full_discover_drift_guard.py [--json-out PATH]
 
 Çıkış kodları:
-  0 — kayıtlı batarya + full discover aynı anda yeşil (veya full discover de
-      yeşil) → sorun yok
+  0 — kayıtlı batarya yeşil (veya full discover de yeşil) → drift yok
   1 — kayıtlı batarya yeşil ama full discover kırmızı → drift → FAIL
-  2 — çalma hatası (venv yok, discover kazanamaz, vb.) → CI'nin kendi
-      ortam hatásának α�ansı; fail-closed olabilir ama genelde ortam probl.
+  2 — ölçüm imkânsız (unittest alt süreçleri hiç başlamadı, liste okunamadı)
+      → ortam hatası; fail-closed yorumu CI'ya bırakılır
 """
 
 import json
+import os
 import pathlib
 import subprocess
 import sys
@@ -49,10 +50,22 @@ from sync_check_unit_tests import read_hook_coverage as _read_hook_coverage  # n
 
 
 def read_check_unit_tests_list():
+    """check_unit_tests.list → kayıtlı .py dosyaları.
+
+    Liste başında `#` yorum satırları taşır (otomatik üretilen başlık).
+    Bunlar eskiden kayıt sayılıyordu: `orphan_registrations_not_on_disk`
+    içinde "diskte olmayan kayıt" gibi iki yorum satırı çıkıyordu (ölçüldü)
+    — yani gate kendi kanıtını kirletiyordu.
+    """
     if not CHECK_UNIT_TESTS_LIST.exists():
         return set()
-    return {ln.strip() for ln in CHECK_UNIT_TESTS_LIST.read_text(encoding="utf-8").splitlines()
-            if ln.strip()}
+    entries = set()
+    for raw in CHECK_UNIT_TESTS_LIST.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        entries.add(line)
+    return entries
 
 
 def read_hook_coverage_check_unit_tests():
@@ -153,11 +166,23 @@ def main(argv=None):
     # --- a) ayrı ayrı koş (CI budget içinde, her biri queue'da~) ---
     individual_results = {}
     failed_or_error_files = []
+    # Dosya adı MODÜL ADI DEĞİL: eski hâl `python -m unittest test_x.py`
+    # çağırıyordu ve repo kökünden hiçbir modül import edilemediği için
+    # HER dosya ERROR dönüyordu (ölçüldü: 0/195 passed) — yani "batarya yeşil"
+    # koşulu hiç sağlanamıyordu ve gate asla FAIL veremiyordu (fail-open).
+    # Görünüm CI'ın `discover -s _calisma/CIKTI` koşumuyla aynı olmalı:
+    # cwd = repo kökü (bazı testler `.github/workflows` gibi göreli yolları
+    # cwd'den çözer) + PYTHONPATH'te CIKTI (modül import edilebilsin).
+    # Ölçüldü: yalnız cwd=CIKTI yapmak test_check_python3_shell'i 4 testle
+    # kırdı (glob boş dönüyordu) — yani ortam seçimi gate'in kendisini bozar.
+    env = dict(os.environ)
+    env["PYTHONPATH"] = (str(TEST_DIR) + os.pathsep + env["PYTHONPATH"]
+                         if env.get("PYTHONPATH") else str(TEST_DIR))
     for name in sorted(should_run):
-        # isinstance discovery per-file: `python -m unittest test_X`
         r = subprocess.run(
-            [sys.executable, "-m", "unittest", name],
-            capture_output=True, text=True, cwd=str(REPO_ROOT), timeout=120)
+            [sys.executable, "-m", "unittest", name[:-3]],
+            capture_output=True, text=True, cwd=str(REPO_ROOT), timeout=300,
+            env=env)
         individual_results[name] = r.returncode
         if r.returncode != 0:
             failed_or_error_files.append(name)
@@ -224,7 +249,7 @@ def main(argv=None):
               file=sys.stderr)
         for f in sorted(untracked_test_files - EXEMPT_FROM_DIFF_GUARD):
             print(f"    - {f}", file=sys.stderr)
-        print(f"  kayıtlı BATARYA'nın ayrı ayrı sonucu FAILED dosyalar (regitred):",
+        print("  kayıtlı BATARYA'da kırmızı dosyalar (registered):",
               file=sys.stderr)
         for f in failed_or_error_files:
             print(f"    - {f}", file=sys.stderr)
@@ -235,16 +260,19 @@ def main(argv=None):
               file=sys.stderr)
         return 1
 
-    # PASS
+    # PASS — batarya durumu DÜRÜST yazılır: kırmızı batarya da PASS verebilir
+    # (drift tanımı batarya YEŞİL iken discover KIRMIZI), ama o zaman
+    # "kayıtlı batarya: GREEN (0/195 passed)" gibi çelişkili kanıt yazılmaz.
     print("CI-FULL-DISCOVER-DRIFT-GUARD: PASS", file=sys.stderr)
     print(f"  full discover: GREEN (exit 0, {count} tests)", file=sys.stderr)
-    print(f"  kayıtlı batarya: GREEN ({summary['registered_battery']['files_passed']}/{len(should_run)} passed)",
+    battery_state = "GREEN" if registered_battery_green else "RED"
+    print(f"  kayıtlı batarya: {battery_state} "
+          f"({summary['registered_battery']['files_passed']}/{len(should_run)} passed)",
           file=sys.stderr)
     if untracked_test_files - EXEMPT_FROM_DIFF_GUARD:
-        print(f"  not: {len(untracked_test_files - EXEMPT_FROM_DIFF_GUARD)} untracked test file(s) —"
-              " bunlar CI'da ayrı job'larda olsa da full discover'da da yeşil yok"
-              " → kayıtlı batarya ile full discover arasındaki fark yok"
-              " (zaten tüm discover GREEN)", file=sys.stderr)
+        print(f"  not: {len(untracked_test_files - EXEMPT_FROM_DIFF_GUARD)} test dosyası hiçbir "
+              "registry'de yok (discover yeşil olduğu için drift değil); kayıt için "
+              "check_unit_tests.list / HOOK_COVERAGE'a eklenebilir", file=sys.stderr)
     return 0
 
 
