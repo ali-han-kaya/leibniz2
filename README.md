@@ -688,6 +688,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-26 | chore | (determinism) backfill three missing weekly trend rows (#146) | [`ab2f461`](https://github.com/ali-han-kaya/leibniz2/commit/ab2f461) |
 | 2026-10-28 | docs | (deploy) record 2026-10-26 ab2f4610 run evidence (#151) | [`49fbf3e`](https://github.com/ali-han-kaya/leibniz2/commit/49fbf3e) |
 | 2026-10-28 | ci | (exclude) make every manifest exclusion an owned, documented claim (#150) | [`9b802db`](https://github.com/ali-han-kaya/leibniz2/commit/9b802db) |
+| 2026-10-28 | fix | (ci) feed Trivy gate inputs to the SARIF comment script (#154) | [`9f7a367`](https://github.com/ali-han-kaya/leibniz2/commit/9f7a367) |
 
 ### Regresyon notları
 
