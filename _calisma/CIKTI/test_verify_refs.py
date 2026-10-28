@@ -965,6 +965,17 @@ class TestFallbackEvidenceSection(unittest.TestCase):
                             for f in findings),
                         f"Fine 2012 fallback P1 bulunamadı: {findings}")
 
+    def test_fallback_section_unverified_adds_no_p1(self):
+        # Ağ/timeout kaynaklı UNVERIFIED içerik hatası DEĞİLDİR: ana döngü
+        # bunu SKIP sayar (P1 yok). Fallback bölümü de aynı sözleşmeyi izler —
+        # tek bir host zaman aşımı tüm K6 katmanını kırmızıya çevirmemeli.
+        fb = [self._fb_result("Fine 2012", "UNVERIFIED", "openlibrary",
+                              "ağ hatası: <urlopen error timed out>")]
+        results, findings = self._run_audit(fb)
+        self.assertEqual(len(results), 61)
+        self.assertEqual(findings, [],
+                         f"UNVERIFIED fallback P1 üretmemeli: {findings}")
+
     def test_fallback_section_empty_when_no_evidence(self):
         results, findings = self._run_audit([])
         self.assertEqual(len(results), 61)

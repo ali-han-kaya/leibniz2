@@ -1730,7 +1730,11 @@ def run_reference_audit(tex_text, add, quiet=False):
             if r.get("loc_url") and r.get("lccn"):
                 loc_cell = f" (LoC: {r['lccn']})"
             say(f"  [{tag}] {r['source']:<12} {r['key']:<30} -> {r['detail'][:60]}{loc_cell}")
-            if r["verdict"] != "PASS":
+            # Yalnız MISMATCH fail-closed'dır. UNVERIFIED (ağ/timeout/bütçe)
+            # ana döngüdeki SKIP sözleşmesiyle aynı kalır: bu bölüm GÖRÜNTÜ
+            # amaçlıdır ve tek bir zaman aşımı tüm K6 katmanını kırmızıya
+            # çevirmemeli (host erişilemezse kanıt yokluğu içerik hatası değil).
+            if r["verdict"] not in ("PASS", "UNVERIFIED"):
                 add("P1", "K6-REF", "K6 referans",
                     f"{r['key']} fallback kanıtı: {r['verdict']} ({r['detail'][:80]})")
         fb_pass = sum(1 for r in fb_results if r["verdict"] == "PASS")
@@ -5835,7 +5839,10 @@ def main():
             t = refs_online_report["total_online"]
             u = refs_online_report["unverified"]
             m = refs_online_report["mismatch"]
-            verdict_tag = "PASS" if (u == 0 and m == 0) else "FAIL"
+            # Etiket YALNIZ içerik uyuşmazlığını gösterir; erişilemeyen
+            # host'lar (timeout/rate-limit/bütçe) SKIP sayılır ve P1 üretmez,
+            # sayı parantezde dürüstçe görünür.
+            verdict_tag = "FAIL" if m else "PASS"
             print(f"[K6] referans denetimi: {v}/{t} {verdict_tag}"
                   + (f" (unverified={u}, mismatch={m})" if u or m else ""))
         if pdf_meta_report and pdf_meta_report.get("stripped"):
